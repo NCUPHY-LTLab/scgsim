@@ -992,8 +992,17 @@ class HfssDrivenGeometrySpec:
         if all(isinstance(port, TerminalPort) for port in ports):
             if {port.side for port in ports} != {"-X", "+X"}:
                 raise ValueError("Wave V1 requires -X/+X port sides")
-            if ports[0].reference_objects != ports[1].reference_objects:
-                raise ValueError("Wave ports must share ordered reference conductors")
+        references = tuple(
+            port.reference_entity_ids
+            if isinstance(port, LumpedTerminalPort)
+            else port.reference_objects
+            for port in ports
+        )
+        if references[0] != references[1]:
+            raise ValueError(
+                f"Terminal ports {ports[0].name!r} and {ports[1].name!r} "
+                "must share ordered source reference conductors"
+            )
         object.__setattr__(self, "ports", ports)
 
     def to_payload(self) -> dict[str, Any]:

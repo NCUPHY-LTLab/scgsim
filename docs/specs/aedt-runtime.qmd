@@ -236,9 +236,24 @@ assignment and a required `impedance_ohm`. It has no RLC-network field. A value
 such as 50 ohm is an operation input, not a package default. There is no
 conversion from a Lumped request to a Wave port.
 
+Every `HfssDrivenGeometrySpec` Terminal port must use the same ordered source
+Entity reference tuple: `LumpedTerminalPort.reference_entity_ids` for Lumped
+ports and `TerminalPort.reference_objects` for Wave ports. This applies to
+Lumped, Wave and mixed requests; selectors are neither sorted nor merged.
+Existing ownership, port-family and all-Wave side checks run first. Native
+readback verifies the design-level `TerminalReferenceConductors` inventory;
+it does not establish distinct per-port reference assignments. Historical
+payloads with different reference tuples are rejected by current constructors,
+including payload decoding; their original execution evidence remains historical.
+
 `LumpedRlc` requires an explicit `series` or `parallel` topology. Its R, L and
 C components are independently selected; `None` disables the corresponding
-component. The single source of these loads is
+component. Each enabled generic R, L or C value must be finite after numeric
+conversion. Zero remains enabled, and finite negative values are preserved.
+Historical generic RLC payloads containing nonfinite values are rejected by
+current constructors, including payload decoding. This restriction applies
+only to these generic RLC components, not to other circuit or EPR quantities.
+The single source of these loads is
 `PreparedPlanarGeometry.lumped_rlcs`. `EigenmodeSim.add_lumped_rlc()` adds to
 that model-owned collection; `HfssEprSpec` only projects the prepared list and
 does not introduce a second editable copy. The model-source hash includes the

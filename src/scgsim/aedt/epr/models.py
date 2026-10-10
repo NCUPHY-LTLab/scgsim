@@ -119,7 +119,10 @@ class LumpedRlc:
             if value is not None:
                 if isinstance(value, bool) or not isinstance(value, (int, float)):
                     raise TypeError(f"{key} must be numeric or None")
-                object.__setattr__(self, key, float(value))
+                value = float(value)
+                if not math.isfinite(value):
+                    raise ValueError(f"{key} must be finite")
+                object.__setattr__(self, key, value)
         if all(getattr(self, key) is None for key in ("resistance_ohm", "inductance_h", "capacitance_f")):
             raise ValueError("lumped RLC requires an enabled component")
 
