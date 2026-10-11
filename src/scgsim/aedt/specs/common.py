@@ -13,7 +13,43 @@ from pathlib import Path
 
 from typing import Any, Literal
 
-from scgsim.aedt.epr.models import LumpedRlc as LumpedRlc
+from scgsim.aedt._data import _text as _rlc_text
+
+
+@dataclass(frozen=True)
+class LumpedRlc:
+    """Electrical treatment of a neutral support; None disables a component."""
+
+    support_id: str
+    topology: Literal["series", "parallel"]
+    resistance_ohm: float | None = None
+    inductance_h: float | None = None
+    capacitance_f: float | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "support_id", _rlc_text(self.support_id, "support_id"))
+        if self.topology not in {"series", "parallel"}:
+            raise ValueError("lumped topology must be series or parallel")
+        for key in ("resistance_ohm", "inductance_h", "capacitance_f"):
+            value = getattr(self, key)
+            if value is not None:
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    raise TypeError(f"{key} must be numeric or None")
+                value = float(value)
+                if not math.isfinite(value):
+                    raise ValueError(f"{key} must be finite")
+                object.__setattr__(self, key, value)
+        if all(getattr(self, key) is None for key in ("resistance_ohm", "inductance_h", "capacitance_f")):
+            raise ValueError("lumped RLC requires an enabled component")
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"support_id": self.support_id, "topology": self.topology,
+                "resistance_ohm": self.resistance_ohm, "inductance_h": self.inductance_h,
+                "capacitance_f": self.capacitance_f}
+
+    @classmethod
+    def from_payload(cls, value: Mapping[str, Any]) -> LumpedRlc:
+        return cls(**dict(value))
 
 
 HfssDrivenMode = Literal["terminal", "modal"]

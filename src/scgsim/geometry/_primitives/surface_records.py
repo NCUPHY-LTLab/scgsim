@@ -10,6 +10,7 @@ from scgsim.geometry._primitives.constants import _INTERFACE_KIND_ORDER
 from scgsim.geometry._primitives.entities import _unique_ids
 from scgsim.geometry._primitives.spatial import _coordinate_key
 from scgsim.geometry.models.common import RouteLiteral
+from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.input import SemanticEntitySpec
 from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
 from scgsim.semantics import EvidenceResult
@@ -126,14 +127,24 @@ def _interface_kinds(interface: InterfacePlanRecord) -> tuple[str, ...]:
 
 
 def _is_route_a_sheet_interface(
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     interface: InterfacePlanRecord,
+    *,
+    representation_context: RepresentationContext | None = None,
 ) -> bool:
-    return (
-        route in {"A", "_effective"}
-        and interface.metadata.get("recognition_rule")
-        == "route_a_surface_sheet_polygon"
-    )
+    recognition_rule = interface.metadata.get("recognition_rule")
+    if route == "A" and recognition_rule == "route_a_surface_sheet_polygon":
+        return True
+    if route is None and representation_context is not None:
+        generated = (
+            interface.metadata.get("intent_origin")
+            == "generated_representation_context_surface_sheet"
+            and recognition_rule == "representation_context_surface_sheet_polygon"
+        )
+        owner_id = interface.owner_semantic_ids[0]
+        owner = representation_context.entities.get(owner_id)
+        return generated and owner is not None and owner.representation == "sheet"
+    return False
 
 
 def _canonical_face_signature_3d(
@@ -152,13 +163,16 @@ def _canonical_face_signature_3d(
 
 
 def _conductor_boundary_surface_id(
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     entity: SemanticEntitySpec,
     representation: str,
     shell_part: str,
 ) -> str:
     surface_kind = "SHELL" if representation == "cutout_boundary_shell" else "MAT"
-    return f"SURF__{route}__{surface_kind}__{entity.semantic_id}__{shell_part.upper()}"
+    route_id = route or "REPRESENTATION"
+    return (
+        f"SURF__{route_id}__{surface_kind}__{entity.semantic_id}__{shell_part.upper()}"
+    )
 
 
 def _surface_boundary_volume_ids(

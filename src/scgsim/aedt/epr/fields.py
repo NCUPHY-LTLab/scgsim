@@ -344,7 +344,9 @@ def create_verified_face_list(
     if [int(value) for value in members or ()] != ids:
         raise RuntimeError(f"HFSS face-list membership differs: {name!r}")
     return {
-        "name": name, "native_id": native_id, "face_ids": ids,
+        "name": name,
+        "native_id": native_id,
+        "face_ids": ids,
         "assignment_basis": (
             "PyAEDT created/restored List property; not independent native membership"
         ),

@@ -50,7 +50,12 @@ from scgsim.aedt.runtime.benchmark import BENCHMARK_RELATIVE
 
 from scgsim.aedt.specs.common import ModalPort
 
-from scgsim.aedt.specs.hfss import HfssDrivenGeometrySpec, HfssDrivenSpec, HfssEigenmodeSpec, HfssEprSpec
+from scgsim.aedt.specs.hfss import (
+    HfssDrivenGeometrySpec,
+    HfssDrivenSpec,
+    HfssEigenmodeSpec,
+    HfssEprSpec,
+)
 
 from scgsim.aedt.specs.parse import parse_aedt_spec
 
@@ -135,7 +140,11 @@ class ResolvedRun:
 
         if self.mode == "q2d":
             root = self.receipt_path.parent.parent
-            spec = parse_aedt_spec(read_json(self._verified_spec()), base_dir=root, allow_historical_modeling=True)
+            spec = parse_aedt_spec(
+                read_json(self._verified_spec()),
+                base_dir=root,
+                allow_historical_modeling=True,
+            )
             if not isinstance(spec, Q2dSpec):
                 raise RuntimeError("resolved Q2D result has a non-Q2D spec")
             rows, _ = read_q2d_rlgc_matrix(self.primary_csv, spec)
@@ -145,7 +154,11 @@ class ResolvedRun:
 
         if self.mode == "q3d":
             root = self.receipt_path.parent.parent
-            spec = parse_aedt_spec(read_json(self._verified_spec()), base_dir=root, allow_historical_modeling=True)
+            spec = parse_aedt_spec(
+                read_json(self._verified_spec()),
+                base_dir=root,
+                allow_historical_modeling=True,
+            )
             if not isinstance(spec, Q3dSpec):
                 raise RuntimeError("resolved Q3D result has a non-Q3D spec")
             if not spec.solve_ac_rl:
@@ -227,7 +240,9 @@ def _captured_fields(
         and spec.epr_request is not None,
         "_epr_result": epr_result,
         "_lumped_boundaries": tuple(receipt.get("geometry", {}).get("lumped_rlcs", ()))
-        + tuple(item for item in receipt.get("ports", ()) if item.get("kind") == "lumped"),
+        + tuple(
+            item for item in receipt.get("ports", ()) if item.get("kind") == "lumped"
+        ),
     }
 
 
@@ -298,7 +313,9 @@ def resolve_results(run_dir: str | Path) -> ResolvedRun:
     if not isinstance(source, dict) or source.get("spec") != "aedt_spec.json":
         raise RuntimeError("receipt source paths are not canonical")
     spec_path = _verified(root, "aedt_spec.json", source, "spec_sha256")
-    spec = parse_aedt_spec(read_json(spec_path), base_dir=root, allow_historical_modeling=True)
+    spec = parse_aedt_spec(
+        read_json(spec_path), base_dir=root, allow_historical_modeling=True
+    )
     if receipt_schema in {RECEIPT_V2, RECEIPT_V3}:
         _validate_completion_cohort(root, receipt, spec)
     if isinstance(spec, (HfssEprSpec, HfssDrivenGeometrySpec)):
@@ -636,9 +653,15 @@ def _validate_completion_cohort(root: Path, receipt: dict[str, Any], spec: Any) 
     }
     if mode not in {"q2d", "q3d"} and not epr:
         expected_files["gds"] = "geometry/design.gds"
-    if isinstance(spec, HfssDrivenGeometrySpec) and metadata.get("workflow") != "body_first_driven_terminal":
+    if (
+        isinstance(spec, HfssDrivenGeometrySpec)
+        and metadata.get("workflow") != "body_first_driven_terminal"
+    ):
         raise RuntimeError("body-first Driven Terminal preparation workflow is invalid")
-    if isinstance(spec, HfssEprSpec) and metadata.get("workflow") not in {"body_first_eigenmode", "epr"}:
+    if isinstance(spec, HfssEprSpec) and metadata.get("workflow") not in {
+        "body_first_eigenmode",
+        "epr",
+    }:
         raise RuntimeError("body-first Eigenmode preparation workflow is invalid")
     if metadata.get("files") != expected_files:
         raise RuntimeError(f"completed {version} preparation file map is not canonical")
@@ -1234,7 +1257,7 @@ def _validate_q3d_readback(root: Path, receipt: dict[str, Any], spec: Q3dSpec) -
                     else {body["body_id"]: body for body in spec.effective_bodies}
                 )
                 if effective and effective[object_name]["representation"] == "sheet":
-                    from scgsim.aedt.runtime.native.q3d_bodies import (
+                    from scgsim.aedt._terminal_chain import (
                         q3d_terminal_segments,
                     )
 
@@ -1953,8 +1976,8 @@ def _validate_modal_native_evidence(ports: Any, spec: HfssDrivenSpec) -> None:
 
 def _validate_lumped_readback(receipt: dict[str, Any], prepared: Any) -> None:
     """Bind current generic loads/supports; historical empty treatment is unchanged."""
-    from scgsim.aedt.epr.models import detached
-    from scgsim.aedt.runtime.native.hfss_lumped import rlc_scalar_si
+    from scgsim.aedt._data import detached
+    from scgsim.aedt._rlc import rlc_native_topology, rlc_scalar_si
 
     supports = prepared.source.get("lumped_supports", ())
     if not supports and not prepared.lumped_rlcs:
@@ -1989,9 +2012,7 @@ def _validate_lumped_readback(receipt: dict[str, Any], prepared: Any) -> None:
         support = by_id[treatment.support_id]
         expected = {
             "topology": treatment.topology,
-            "native_topology": {"series": "Serial", "parallel": "Parallel"}[
-                treatment.topology
-            ],
+            "native_topology": rlc_native_topology(treatment.topology),
             "contact_points_um": support["effective"]["contact_points_um"],
             "resistance_ohm": treatment.resistance_ohm,
             "inductance_h": treatment.inductance_h,
@@ -2180,13 +2201,95 @@ def _validate_body_terminal_readback(
             record.get("face_id")
         ]:
             raise RuntimeError("body-first Terminal native support face differs")
-        edges = native.get("terminal_edges", [])
-        if not edges or [item["edge_id"] for item in edges] != [
-            int(value) for value in terminal.get("Edges", ())
-        ]:
-            raise RuntimeError("body-first Terminal native edge assignment differs")
-        if set(item["object_name"] for item in edges) != set(native["signal_objects"]):
-            raise RuntimeError("body-first Terminal contact ownership differs")
+        assignment_kind = native.get("terminal_assignment_kind")
+        if assignment_kind == "Faces":
+            face_records = native.get("terminal_faces")
+            raw_faces = terminal.get("Faces")
+            if (
+                "terminal_edges" in native
+                or not isinstance(face_records, list)
+                or not face_records
+                or not isinstance(raw_faces, list)
+                or not raw_faces
+                or terminal.get("Edges") not in (None, [], ())
+            ):
+                raise RuntimeError(
+                    "body-first Terminal native face assignment is invalid"
+                )
+            try:
+                raw_face_ids = [int(value) for value in raw_faces]
+            except (TypeError, ValueError) as exc:
+                raise RuntimeError(
+                    "body-first Terminal saved face IDs are invalid"
+                ) from exc
+            conductor_objects = [
+                item
+                for item in objects
+                if isinstance(item, dict) and item.get("kind") == "conductor"
+            ]
+            face_ids = []
+            face_owners = []
+            for face_record in face_records:
+                if (
+                    not isinstance(face_record, dict)
+                    or set(face_record)
+                    != {"face_id", "object_name", "native_object_id"}
+                    or not isinstance(face_record.get("face_id"), int)
+                    or isinstance(face_record.get("face_id"), bool)
+                    or not isinstance(face_record.get("object_name"), str)
+                    or not face_record["object_name"]
+                    or not isinstance(face_record.get("native_object_id"), int)
+                    or isinstance(face_record.get("native_object_id"), bool)
+                ):
+                    raise RuntimeError(
+                        "body-first Terminal native face owner record is invalid"
+                    )
+                face_id = face_record["face_id"]
+                owners = [
+                    item
+                    for item in conductor_objects
+                    if isinstance(item.get("native_face_ids"), list)
+                    and face_id in item["native_face_ids"]
+                ]
+                if len(owners) != 1:
+                    raise RuntimeError(
+                        "body-first Terminal native face ownership is ambiguous"
+                    )
+                owner = owners[0]
+                if (
+                    owner.get("object_name") != face_record["object_name"]
+                    or owner.get("native_object_id")
+                    != face_record["native_object_id"]
+                ):
+                    raise RuntimeError(
+                        "body-first Terminal native face owner differs from geometry"
+                    )
+                face_ids.append(face_id)
+                face_owners.append(face_record["object_name"])
+            if face_ids != raw_face_ids:
+                raise RuntimeError(
+                    "body-first Terminal native face assignment differs"
+                )
+            if set(face_owners) != set(native["signal_objects"]):
+                raise RuntimeError("body-first Terminal contact ownership differs")
+        elif assignment_kind is None:
+            if terminal.get("Faces") not in (None, [], ()):
+                raise RuntimeError(
+                    "body-first Terminal child assignment kind is ambiguous"
+                )
+            edges = native.get("terminal_edges", [])
+            if not edges or [item["edge_id"] for item in edges] != [
+                int(value) for value in terminal.get("Edges", ())
+            ]:
+                raise RuntimeError(
+                    "body-first Terminal native edge assignment differs"
+                )
+            if set(item["object_name"] for item in edges) != set(
+                native["signal_objects"]
+            ):
+                raise RuntimeError("body-first Terminal contact ownership differs")
+        else:
+            raise RuntimeError("body-first Terminal native assignment kind is invalid")
         properties = native.get("boundary_properties", {})
         terminal_properties = native.get("terminal_properties", {})
         renorm = port.renormalize if isinstance(port, LumpedTerminalPort) else False

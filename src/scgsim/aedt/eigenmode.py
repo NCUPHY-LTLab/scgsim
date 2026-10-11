@@ -19,15 +19,21 @@ from scgsim.geometry import (
 from scgsim.semantics.epr import film_assumptions
 
 from .epr.analysis import reanalyze_epr
-from .epr.geometry import prepare_planar_geometry_input, validate_geometry_workers
-from .epr.models import (
+from .preparation.planar import prepare_planar_geometry_input, validate_geometry_workers
+from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
-    EprResult,
     ExpressionCacheConvergence,
     PlanarJunction,
-    LumpedRlc,
-    PreparedPlanarGeometry,
     SurfaceEprSpec,
+)
+from scgsim.aedt.epr.models import (
+    EprResult,
+)
+from scgsim.aedt.specs.common import (
+    LumpedRlc,
+)
+from scgsim.aedt.specs.geometry import (
+    PreparedPlanarGeometry,
 )
 from .preparation.handoff import HandoffPlan
 from .preparation.geometry import prepare_hfss_eigenmode_from_geometry

@@ -19,13 +19,19 @@ from scgsim.geometry import GeometryPlanSnapshot
 
 from scgsim.aedt._io import file_sha256, write_json
 
-from scgsim.aedt.epr.geometry import validate_geometry_workers
+from scgsim.aedt.preparation.planar import validate_geometry_workers
 
-from scgsim.aedt.epr.models import (
+from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
     ExpressionCacheConvergence,
+)
+from scgsim.aedt.specs.common import (
     LumpedRlc,
+)
+from scgsim.aedt.specs.geometry import (
     PreparedPlanarGeometry,
+)
+from scgsim.aedt._data import (
     detached,
 )
 

@@ -1,4 +1,4 @@
-"""Source-domain EPR junction partitioning."""
+"""Source-domain junction partitioning; independent of native and EPR analysis."""
 
 from __future__ import annotations
 
@@ -30,7 +30,8 @@ from scgsim.geometry._primitives.loops import (
     _simple_planar_loops_from_edges,
 )
 
-from scgsim.aedt.epr.models import PlanarJunction, canonical_sha256
+from scgsim.aedt.specs.epr import PlanarJunction
+from scgsim.aedt._data import canonical_sha256
 
 
 METHOD = "scgsim.aedt.junction-partition.v1"

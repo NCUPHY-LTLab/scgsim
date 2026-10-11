@@ -7,6 +7,8 @@ from dataclasses import asdict
 from typing import Any, Literal
 
 from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.models.representation import RepresentationContext
+from scgsim.geometry.planning.representation import planned_conductor_representation
 from scgsim.semantics import (
     EvidenceResult,
     SemanticEvidenceFacade,
@@ -50,7 +52,8 @@ def _upstream_plain(value: Any) -> Any:
 def _project_semantic_facts(
     build_input: GeometryBuildInput,
     *,
-    route: str,
+    route: str | None,
+    representation_context: RepresentationContext | None = None,
 ) -> dict[str, Any]:
     polygon_by_id = {polygon.polygon_id: polygon for polygon in build_input.polygons}
     entities: dict[str, dict[str, Any]] = {}
@@ -81,11 +84,10 @@ def _project_semantic_facts(
             for polygon_id in polygon_ids
             if polygon_id in polygon_by_id and polygon_by_id[polygon_id].holes
         )
-        sheet_owner = (
-            entity.semantic_id
-            if entity.route_representations.get(route) == "surface_sheet"
-            else None
+        representation = planned_conductor_representation(
+            entity, route=route, context=representation_context
         )
+        sheet_owner = entity.semantic_id if representation == "surface_sheet" else None
         side = (
             metadata.get("surface_side")
             if isinstance(metadata.get("surface_side"), str)
@@ -109,7 +111,7 @@ def _project_semantic_facts(
             "outer_source_ids": list(polygon_ids) if polygon_ids else None,
             "hole_source_ids": list(hole_ids) if polygon_ids else None,
             "seam_source_ids": list(seam_ids) if seam_ids is not None else None,
-            "route_representation": entity.route_representations.get(route),
+            "route_representation": representation,
             "geometry": entity.geometry,
             "polygon_ids": polygon_ids,
         }
@@ -169,10 +171,13 @@ def _source_revision(
 def build_semantic_evidence_facade(
     build_input: GeometryBuildInput,
     *,
-    route: str,
+    route: str | None,
+    representation_context: RepresentationContext | None = None,
 ) -> SemanticEvidenceFacade:
     """Snapshot one effective build input for reuse during one planning call."""
-    projected = _project_semantic_facts(build_input, route=route)
+    projected = _project_semantic_facts(
+        build_input, route=route, representation_context=representation_context
+    )
     source_revision, source_revision_kind = _source_revision(build_input)
     snapshot = create_snapshot(
         projected,
@@ -189,15 +194,20 @@ def build_semantic_evidence_facade(
 def require_semantic_evidence_facade(
     build_input: GeometryBuildInput,
     *,
-    route: str,
+    route: str | None,
     facade: SemanticEvidenceFacade | None,
+    representation_context: RepresentationContext | None = None,
 ) -> SemanticEvidenceFacade:
     """Create once when absent, otherwise verify exact projected build identity."""
     if facade is None:
-        return build_semantic_evidence_facade(build_input, route=route)
+        return build_semantic_evidence_facade(
+            build_input, route=route, representation_context=representation_context
+        )
     if not isinstance(facade, SemanticEvidenceFacade):
         raise TypeError("semantic_facts must be a SemanticEvidenceFacade")
-    projected = _project_semantic_facts(build_input, route=route)
+    projected = _project_semantic_facts(
+        build_input, route=route, representation_context=representation_context
+    )
     expected_digest = canonical_sha256(projected)
     snapshot = facade.snapshot
     if snapshot.projection_version != PROJECTION_VERSION:

@@ -2,23 +2,13 @@
 
 from __future__ import annotations
 
-
 import json
-
 import shutil
-
 import time
-
-from dataclasses import dataclass
-
 from pathlib import Path
-
 from typing import Any
-
 from scgsim.aedt._io import file_sha256, write_json
-
 from scgsim.aedt.epr.analysis import combine_epr_mode
-
 from scgsim.aedt.epr.cache import (
     _SURFACE_ANALYSIS_SCOPE,
     _adaptive_epr_result,
@@ -26,79 +16,54 @@ from scgsim.aedt.epr.cache import (
     _attach_saved_native_surface_membership,
     _author_epr_expressions,
     _canonical_integral,
-    _create_setup,
     _empty_raw_integrals,
     _integral_target,
     _prepare_expressions_and_cache,
     _read_cache,
-    _read_setup,
     _store_integral,
 )
-
 from scgsim.aedt.epr.fields import install_variables, parse_native_scalar
-
-from scgsim.aedt.epr.models import EprResult, detached
-
-from scgsim.aedt.epr.native import (
+from scgsim.aedt.epr.models import (
+    EprResult,
+)
+from scgsim.aedt._data import (
+    detached,
+)
+from scgsim.aedt.runtime.native.hfss_geometry import (
     _read_saved_junction_lines,
     bind_saved_planar_geometry,
-    prepare_native_planar_geometry,
+)
+from scgsim.aedt.epr.native import (
     verify_saved_native_surface_references,
 )
-
-from scgsim.aedt.results.convergence.hfss import read_hfss_convergence
-
-from scgsim.aedt.runtime.benchmark import export_simulation_benchmark
-
 from scgsim.aedt.runtime.families.hfss import _export_eigenmode
-
 from scgsim.aedt.preparation.handoff import _prepare_epr_analysis_handoff
-
-from scgsim.aedt.epr.models import (
+from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
-    PreparedPlanarGeometry,
     SavedSolution,
 )
-
+from scgsim.aedt.specs.geometry import (
+    PreparedPlanarGeometry,
+)
 from scgsim.aedt.runtime.native.common import (
-    BoundAedtRequest,
-    analyze_with_resources,
     detached_data,
     pyaedt_version,
 )
-
-from scgsim.aedt.specs.common import AedtResources, REQUIRED_AEDT_VERSION
-
+from scgsim.aedt.specs.common import REQUIRED_AEDT_VERSION, AedtResources
 from scgsim.aedt.specs.hfss import (
     EigenmodeRunControl,
     HfssEprAnalysisSpec,
     HfssEprSpec,
 )
-
-
-@dataclass(frozen=True)
-class PreparedEprHfss:
-    """Carrier for one mutable native application and detached preparation evidence."""
-
-    app: Any
-    request: BoundAedtRequest
-    project_path: Path
-    geometry: dict[str, Any]
-    setup: dict[str, Any]
-    expressions: tuple[dict[str, Any], ...]
-    cache: dict[str, Any]
-    timings: dict[str, Any]
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.request, BoundAedtRequest):
-            raise TypeError("PreparedEprHfss requires a bound AEDT request")
-        object.__setattr__(self, "geometry", detached_data(self.geometry))
-        object.__setattr__(self, "setup", detached_data(self.setup))
-        object.__setattr__(
-            self, "expressions", tuple(detached_data(item) for item in self.expressions)
-        )
-        object.__setattr__(self, "cache", detached_data(self.cache))
-        object.__setattr__(self, "timings", detached_data(self.timings))
+from scgsim.aedt.runtime.native.hfss_lumped import _bind_saved_generic_rlcs
+from scgsim.aedt.runtime.families.hfss import (
+    read_body_eigenmode_setup,
+    PreparedBodyEigenmode,
+    prepare_body_eigenmode,
+    prepared_body_eigenmode_result,
+    solve_and_export_body_eigenmode,
+)
+from scgsim.aedt.epr.native import add_analysis_surfaces, bind_saved_analysis_surfaces
 
 
 def analyze_epr(
@@ -139,426 +104,6 @@ def analyze_epr(
             "saved EPR analysis failed; inspect the prepared run receipt for the exact native error"
         )
     return resolve_epr_result(plan.run_dir / "results/epr/epr-result.json")
-
-
-def _assign_generic_rlcs(app: Any, spec: HfssEprSpec, geometry: dict[str, Any]) -> None:
-    """Electrical loads use neutral source supports, independently of JJ EPR."""
-    from scgsim.aedt.epr.geometry import _native_name
-    from scgsim.aedt.runtime.native.hfss_lumped import assign_rlc
-
-    supports = {
-        item["support_id"]: item for item in geometry.get("lumped_supports", ())
-    }
-    if spec.lumped_rlcs:
-        geometry["lumped_rlcs"] = []
-    for treatment in spec.lumped_rlcs:
-        support = supports[treatment.support_id]
-        try:
-            record = assign_rlc(
-                app,
-                app.modeler[support["object_name"]],
-                name=_native_name("rlc", treatment.support_id),
-                contact_points_um=support["effective"]["contact_points_um"],
-                topology=treatment.topology,
-                resistance_ohm=treatment.resistance_ohm,
-                inductance_h=treatment.inductance_h,
-                capacitance_f=treatment.capacitance_f,
-            )
-        except Exception as exc:
-            exc.add_note(
-                "generic RLC assignment: "
-                + json.dumps(
-                    {"source": treatment.to_payload(), "support": support},
-                    default=str,
-                    sort_keys=True,
-                )
-            )
-            raise
-        geometry["lumped_rlcs"].append(
-            {
-                "support_id": treatment.support_id,
-                "source": treatment.to_payload(),
-                **record,
-            }
-        )
-
-
-def _bind_saved_generic_rlcs(
-    app: Any, prepared: PreparedPlanarGeometry, geometry: dict[str, Any]
-) -> None:
-    from scgsim.aedt.epr.geometry import _native_name
-    from scgsim.aedt.runtime.native.hfss_lumped import rlc_record
-
-    supports = {
-        item["support_id"]: item for item in geometry.get("lumped_supports", ())
-    }
-    if prepared.lumped_rlcs:
-        geometry["lumped_rlcs"] = []
-    for treatment in prepared.lumped_rlcs:
-        support = supports[treatment.support_id]
-        record = rlc_record(
-            app.modeler[support["object_name"]],
-            name=_native_name("rlc", treatment.support_id),
-            contact_points_um=support["effective"]["contact_points_um"],
-            topology=treatment.topology,
-            resistance_ohm=treatment.resistance_ohm,
-            inductance_h=treatment.inductance_h,
-            capacitance_f=treatment.capacitance_f,
-        )
-        geometry["lumped_rlcs"].append(
-            {
-                "support_id": treatment.support_id,
-                "source": treatment.to_payload(),
-                **record,
-            }
-        )
-    _read_generic_rlcs(app, geometry)
-
-
-def _read_generic_rlcs(app: Any, geometry: dict[str, Any]) -> None:
-    from scgsim.aedt.runtime.native.hfss_lumped import read_rlc_parameters
-
-    records = geometry.get("lumped_rlcs", ())
-    if not records:
-        return
-    from scgsim.aedt.epr.native import _read_saved_hfss_design
-
-    digest, design = _read_saved_hfss_design(
-        Path(app.project_file), app.design_name, purpose="generic RLC"
-    )
-    boundaries = design["BoundarySetup"]["Boundaries"]
-    for record in records:
-        try:
-            read_rlc_parameters(app, record)
-            boundary = detached_data(boundaries[record["boundary"]])
-            record["saved_boundary"] = boundary
-            record["saved_project_sha256"] = digest
-            if boundary["BoundType"] != "Lumped RLC":
-                raise RuntimeError("saved generic RLC boundary type differs")
-            record["saved_model_units"] = design["ModelSetup"]["GeometryCore"]["Units"]
-            if record["saved_model_units"] != "um":
-                raise RuntimeError("saved generic RLC model units differ")
-            record["attached_contact_edges"] = []
-            positions = boundary["CurrentLine"]["GeometryPosition"]
-            observed = []
-            for position in positions:
-                if (
-                    position.get("IsAttachedToEntity") is False
-                    and position.get("PositionType") == "AbsolutePosition"
-                ):
-                    point = [float(position[axis + "Position"]) for axis in "XYZ"]
-                elif (
-                    position.get("IsAttachedToEntity") is True
-                    and position.get("PositionType") == "EdgeCenter"
-                ):
-                    edge_id = position["EntityID"]
-                    edges = [
-                        edge
-                        for edge in app.modeler[record["object_name"]].edges
-                        if int(edge.id) == edge_id
-                    ]
-                    if len(edges) != 1:
-                        raise RuntimeError(
-                            "saved generic RLC contact edge does not belong to its support"
-                        )
-                    point = list(edges[0].midpoint)
-                    record["attached_contact_edges"].append(
-                        {
-                            "edge_id": edge_id,
-                            "object_name": record["object_name"],
-                            "native_object_id": record["native_object_id"],
-                            "midpoint_um": point,
-                        }
-                    )
-                else:
-                    raise RuntimeError(
-                        "saved generic RLC line position kind is unsupported"
-                    )
-                observed.append(point)
-            record["saved_contact_points_um"] = observed
-            if observed != record["requested"]["contact_points_um"]:
-                raise RuntimeError("saved generic RLC directed contact line differs")
-        except Exception as exc:
-            exc.add_note(
-                "generic RLC readback: "
-                + json.dumps(record, default=str, sort_keys=True)
-            )
-            raise
-
-
-def prepare_epr_hfss(
-    Hfss: Any,
-    run_dir: Path,
-    spec: HfssEprSpec,
-    inset_plan: dict[tuple[str, float], dict[str, Any]] | None = None,
-) -> PreparedEprHfss:
-    """Create, save, and read back one body-first no-solve Eigenmode model."""
-
-    request = BoundAedtRequest.bind(run_dir, spec)
-    bound = request.parse()
-    if not isinstance(bound, HfssEprSpec):
-        raise TypeError("bound EPR request did not retain its schema")
-    if bound.modeling not in {"solid", "thin_film"} or (
-        bound.geometry.modeling != bound.modeling
-    ):
-        raise ValueError("new EPR HFSS preparation requires explicit modeling")
-    project_path = request.workspace / f"{bound.project_name}.aedt"
-    timings: dict[str, Any] = {}
-    preparation_started = time.perf_counter()
-    started = time.perf_counter()
-    app = Hfss(
-        project=str(project_path),
-        design=bound.design_name,
-        solution_type="Eigenmode",
-        new_desktop=False,
-        close_on_exit=False,
-    )
-    timings["native_open_seconds"] = round(time.perf_counter() - started, 6)
-    if app.desktop_class.aedt_version_id != REQUIRED_AEDT_VERSION:
-        raise RuntimeError("HFSS EPR did not bind the owned AEDT 2024.2 desktop")
-    app.modeler.model_units = "um"
-    started = time.perf_counter()
-    geometry = prepare_native_planar_geometry(app, bound.geometry)
-    _assign_generic_rlcs(app, bound, geometry)
-    timings["geometry_seconds"] = round(time.perf_counter() - started, 6)
-    timings["geometry_phases"] = geometry.pop("geometry_phases")
-    started = time.perf_counter()
-    _create_setup(app, bound)
-    timings["setup_seconds"] = round(time.perf_counter() - started, 6)
-    started = time.perf_counter()
-    if bound.epr_request is None:
-        expressions: list[dict[str, Any]] = []
-        cache = {
-            "schema_version": "scgsim.aedt.epr-cache-request.v1",
-            "status": "disabled",
-            "reason": "no EPR analysis request was supplied",
-        }
-    else:
-        expressions, cache, phase_timings = _prepare_expressions_and_cache(
-            app, request.workspace, bound, geometry, inset_plan
-        )
-        timings["epr_authoring_phases"] = phase_timings
-    timings["epr_authoring_seconds"] = round(time.perf_counter() - started, 6)
-    started = time.perf_counter()
-    if not app.save_project() or not project_path.is_file():
-        raise RuntimeError("HFSS EPR project was not saved after preparation")
-    timings["save_seconds"] = round(time.perf_counter() - started, 6)
-    started = time.perf_counter()
-    _read_saved_junction_lines(
-        app, project_path, bound.design_name, bound.geometry, geometry
-    )
-    _read_generic_rlcs(app, geometry)
-    setup = _read_setup(app, bound)
-    if bound.epr_request is not None:
-        cache["serialized_readback"] = _read_cache(app, bound, cache["items"])
-        native_references = cache["native_surface_references"]
-        if native_references:
-            cache["native_surface_references"] = verify_saved_native_surface_references(
-                project_path, bound.design_name, native_references
-            )
-    timings["readback_seconds"] = round(time.perf_counter() - started, 6)
-    preparation_wall = time.perf_counter() - preparation_started
-    timings["preparation_wall_seconds"] = round(preparation_wall, 6)
-    timings["preparation_residual_seconds"] = round(
-        max(
-            0.0,
-            preparation_wall
-            - sum(
-                timings[key]
-                for key in (
-                    "native_open_seconds",
-                    "geometry_seconds",
-                    "setup_seconds",
-                    "epr_authoring_seconds",
-                    "save_seconds",
-                    "readback_seconds",
-                )
-            ),
-        ),
-        6,
-    )
-    return PreparedEprHfss(
-        app,
-        request,
-        project_path,
-        geometry,
-        setup,
-        tuple(expressions),
-        cache,
-        timings,
-    )
-
-
-def prepared_epr_result(prepared: PreparedEprHfss) -> dict[str, Any]:
-    """Return the canonical no-solve result without impersonating completion."""
-
-    spec = prepared.request.parse()
-    if not isinstance(spec, HfssEprSpec):
-        raise TypeError("bound EPR request did not retain its schema")
-    if not prepared.app.save_project() or not prepared.project_path.is_file():
-        raise RuntimeError("HFSS EPR project final preparation save failed")
-    native_references = prepared.cache.get("native_surface_references", [])
-    if native_references:
-        prepared.cache["native_surface_references"] = (
-            verify_saved_native_surface_references(
-                prepared.project_path,
-                spec.design_name,
-                native_references,
-            )
-        )
-    relative = prepared.project_path.relative_to(prepared.request.workspace).as_posix()
-    digest = file_sha256(prepared.project_path)
-    result = {
-        "workflow_status": "native_preparation_only",
-        "solver_invoked": False,
-        "outputs": {relative: digest},
-        "connected": {
-            "aedt_version": prepared.app.desktop_class.aedt_version_id,
-            "pyaedt_version": pyaedt_version(),
-        },
-        "project": relative,
-        "geometry": detached_data(prepared.geometry),
-        "setup": detached_data(prepared.setup),
-        "expressions": detached_data(prepared.expressions),
-        "cache": detached_data(prepared.cache),
-        "timings": detached_data(prepared.timings),
-        "save": {"ok": True, "project_sha256": digest},
-    }
-    if spec.epr_request is not None:
-        result["surface_analysis_scope"] = _SURFACE_ANALYSIS_SCOPE
-    return result
-
-
-def solve_and_export_epr(
-    prepared: PreparedEprHfss,
-    resources: AedtResources | None = None,
-    resource_evidence: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Run the explicit setup once and export native final/history evidence."""
-
-    spec = prepared.request.parse()
-    if not isinstance(spec, HfssEprSpec):
-        raise TypeError("body-first solve/export requires HfssEprSpec")
-    timings = detached_data(prepared.timings)
-    started = time.perf_counter()
-    solved = analyze_with_resources(
-        prepared.app,
-        spec.run_control.setup_name,
-        prepared.request.workspace,
-        resources,
-        resource_evidence if resource_evidence is not None else {},
-    )
-    timings["solve_seconds"] = round(time.perf_counter() - started, 6)
-    if not solved:
-        raise RuntimeError(
-            f"HFSS failed to analyze setup {spec.run_control.setup_name!r}"
-        )
-    started = time.perf_counter()
-    if not prepared.app.save_project() or not prepared.project_path.is_file():
-        raise RuntimeError("HFSS EPR solved project save failed")
-    timings["post_solve_save_seconds"] = round(time.perf_counter() - started, 6)
-    run_dir = prepared.request.workspace
-    output_dir = run_dir / "results/epr"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    started = time.perf_counter()
-    outputs, final_modes = _export_eigenmode(prepared.app, run_dir, output_dir, spec)
-    timings["final_export_seconds"] = round(time.perf_counter() - started, 6)
-    convergence_path = output_dir / "adaptive-convergence.prop"
-    started = time.perf_counter()
-    returned = prepared.app.export_convergence(
-        spec.run_control.setup_name,
-        variations="",
-        output_file=str(convergence_path),
-    )
-    if (
-        Path(returned).resolve() != convergence_path.resolve()
-        or not convergence_path.is_file()
-    ):
-        raise RuntimeError("HFSS adaptive convergence export is missing")
-    outputs[convergence_path.relative_to(run_dir).as_posix()] = file_sha256(
-        convergence_path
-    )
-    convergence = read_hfss_convergence(run_dir, spec)
-    timings["convergence_export_seconds"] = round(time.perf_counter() - started, 6)
-    saved_field_evidence = (
-        _saved_field_evidence(prepared.app, spec, convergence)
-        if spec.epr_request is not None
-        else None
-    )
-    cache_items = prepared.cache["items"] if spec.epr_request is not None else []
-    persisted_cache_items = (
-        prepared.cache["serialized_readback"]["items"]
-        if spec.epr_request is not None
-        else []
-    )
-    started = time.perf_counter()
-    history = _adaptive_mode_history(
-        prepared.app, spec, cache_items, persisted_cache_items
-    )
-    history_path = output_dir / "adaptive-mode-history.json"
-    write_json(history_path, history)
-    outputs[history_path.relative_to(run_dir).as_posix()] = file_sha256(history_path)
-    adaptive_result: EprResult | None = None
-    if spec.epr_request is not None:
-        adaptive_result = _adaptive_epr_result(
-            spec,
-            history,
-            convergence,
-            native_surface_references=prepared.cache.get(
-                "native_surface_references", []
-            ),
-        )
-        adaptive_result_path = output_dir / "adaptive-epr-result.json"
-        write_json(adaptive_result_path, adaptive_result.to_payload())
-        outputs[adaptive_result_path.relative_to(run_dir).as_posix()] = file_sha256(
-            adaptive_result_path
-        )
-    timings["history_export_seconds"] = round(time.perf_counter() - started, 6)
-    started = time.perf_counter()
-    if not prepared.app.save_project() or not prepared.project_path.is_file():
-        raise RuntimeError("HFSS EPR final project save failed")
-    timings["final_save_seconds"] = round(time.perf_counter() - started, 6)
-    relative = prepared.project_path.relative_to(run_dir).as_posix()
-    outputs[relative] = file_sha256(prepared.project_path)
-    benchmark_relative, benchmark_digest, benchmark = export_simulation_benchmark(
-        prepared.app, run_dir, spec.run_control.setup_name
-    )
-    outputs[benchmark_relative] = benchmark_digest
-    return {
-        "workflow_status": "completed",
-        "solver_invoked": True,
-        "outputs": outputs,
-        "benchmark": benchmark,
-        "connected": {
-            "aedt_version": prepared.app.desktop_class.aedt_version_id,
-            "pyaedt_version": pyaedt_version(),
-        },
-        "project": relative,
-        "geometry": detached_data(prepared.geometry),
-        "setup": detached_data(prepared.setup),
-        "expressions": detached_data(prepared.expressions),
-        "cache": detached_data(prepared.cache),
-        **(
-            {"surface_analysis_scope": _SURFACE_ANALYSIS_SCOPE}
-            if spec.epr_request is not None
-            else {}
-        ),
-        "timings": timings,
-        "convergence": convergence,
-        "result_readback": {
-            "final_modes": final_modes,
-            "adaptive_history": history,
-            "adaptive_epr_result": (
-                None if adaptive_result is None else adaptive_result.to_payload()
-            ),
-        },
-        "save": {"ok": True, "project_sha256": outputs[relative]},
-        **(
-            {"saved_field_evidence": saved_field_evidence}
-            if saved_field_evidence is not None
-            else {}
-        ),
-    }
 
 
 def _saved_field_evidence(
@@ -720,6 +265,7 @@ def analyze_saved_epr(
         raise RuntimeError("saved EPR field solution is unavailable on the workcopy")
     started = time.perf_counter()
     geometry = bind_saved_planar_geometry(app, spec.geometry)
+    bind_saved_analysis_surfaces(app, spec.geometry, geometry)
     _bind_saved_generic_rlcs(app, spec.geometry, geometry)
     _read_saved_junction_lines(
         app, project_path, spec.design_name, spec.geometry, geometry
@@ -842,9 +388,96 @@ def analyze_saved_epr(
         },
         "project": project_relative,
         "geometry": geometry,
-        "setup": _read_setup(app, spec),
+        "setup": read_body_eigenmode_setup(app, spec),
         "expressions": expressions,
         "cache": cache,
         "result": result.to_payload(),
         "timings": timings,
     }
+
+
+def _analysis_readback(app, spec, cache, project_path):
+    cache["serialized_readback"] = _read_cache(app, spec, cache["items"])
+    references = cache["native_surface_references"]
+    if references:
+        cache["native_surface_references"] = verify_saved_native_surface_references(
+            project_path, spec.design_name, references
+        )
+
+
+def _prepared_analysis_readback(app, spec, cache, project_path):
+    references = cache.get("native_surface_references", [])
+    if references:
+        cache["native_surface_references"] = verify_saved_native_surface_references(
+            project_path, spec.design_name, references
+        )
+
+
+def prepare_epr_hfss(
+    Hfss: Any,
+    run_dir: Path,
+    spec: HfssEprSpec,
+    inset_plan: dict[tuple[str, float], dict[str, Any]] | None = None,
+) -> PreparedBodyEigenmode:
+    """Compose EPR analysis authoring with common body-first HFSS preparation."""
+    return prepare_body_eigenmode(
+        Hfss,
+        run_dir,
+        spec,
+        geometry_extension=add_analysis_surfaces,
+        analysis_author=lambda app, workspace, bound, geometry: (
+            _prepare_expressions_and_cache(app, workspace, bound, geometry, inset_plan)
+        ),
+        analysis_readback=_analysis_readback,
+    )
+
+
+def prepared_epr_result(prepared: PreparedBodyEigenmode) -> dict[str, Any]:
+    result = prepared_body_eigenmode_result(
+        prepared, analysis_readback=_prepared_analysis_readback
+    )
+    result["surface_analysis_scope"] = _SURFACE_ANALYSIS_SCOPE
+    return result
+
+
+def _export_epr_analysis(prepared, spec, convergence, outputs, output_dir, timings):
+    saved_field_evidence = _saved_field_evidence(prepared.app, spec, convergence)
+    started = time.perf_counter()
+    history = _adaptive_mode_history(
+        prepared.app,
+        spec,
+        prepared.cache["items"],
+        prepared.cache["serialized_readback"]["items"],
+    )
+    run_dir = prepared.request.workspace
+    history_path = output_dir / "adaptive-mode-history.json"
+    write_json(history_path, history)
+    outputs[history_path.relative_to(run_dir).as_posix()] = file_sha256(history_path)
+    adaptive_result = _adaptive_epr_result(
+        spec,
+        history,
+        convergence,
+        native_surface_references=prepared.cache.get("native_surface_references", []),
+    )
+    result_path = output_dir / "adaptive-epr-result.json"
+    write_json(result_path, adaptive_result.to_payload())
+    outputs[result_path.relative_to(run_dir).as_posix()] = file_sha256(result_path)
+    timings["history_export_seconds"] = round(time.perf_counter() - started, 6)
+    return (
+        history,
+        adaptive_result.to_payload(),
+        {
+            "surface_analysis_scope": _SURFACE_ANALYSIS_SCOPE,
+            "saved_field_evidence": saved_field_evidence,
+        },
+    )
+
+
+def solve_and_export_epr(
+    prepared: PreparedBodyEigenmode,
+    resources: AedtResources | None = None,
+    resource_evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return solve_and_export_body_eigenmode(
+        prepared, resources, resource_evidence, analysis_export=_export_epr_analysis
+    )

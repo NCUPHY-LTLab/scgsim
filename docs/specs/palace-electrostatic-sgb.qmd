@@ -103,6 +103,17 @@ performs the chosen optimization once, and then saves the final mesh. Native
 construction or fitting errors propagate as errors; the preparation path does
 not replace a curved mesh with a straight or lower-order fallback.
 
+For the converging Gmsh-isolation scope, SCGSim-owned Gmsh sessions initialize
+with `readConfigFiles=False`, so Gmsh system configuration files do not silently
+change the owned worker's starting options. Geometry helpers that find Gmsh
+already initialized continue to skip initialization; this flag affects only
+SCGSim-owned initialization, leaving the existing borrowed-session option,
+model, and finalization behavior unchanged.
+The detached `meshing.effective` record reads back Gmsh's actual
+`Mesh.MeshSizeFactor`. This value is observational metadata, not a public mesh
+control or requested setting. Historical records without the field remain
+without it; readers do not infer a value for them.
+
 ## Mesh manifest and detached summary (1.1.0) {#mesh-manifest-and-detached-summary-110-candidate}
 
 The mesh manifest retains its existing groups and adds `meshing` evidence for

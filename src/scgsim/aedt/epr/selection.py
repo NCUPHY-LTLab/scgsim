@@ -13,11 +13,15 @@ from collections.abc import Mapping
 
 from typing import Any
 
-from scgsim.aedt.epr.models import (
+from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
-    PreparedPlanarGeometry,
-    detached,
     surface_evaluations,
+)
+from scgsim.aedt.specs.geometry import (
+    PreparedPlanarGeometry,
+)
+from scgsim.aedt._data import (
+    detached,
 )
 
 

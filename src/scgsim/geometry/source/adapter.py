@@ -19,17 +19,21 @@ from scgsim.geometry.models.input import (
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
 from scgsim.geometry.source._occurrence import (
     _entity_from_layer_record,
-    _fused_gdstk_components,
     _gds_polygons_for_entity,
     _is_record_sequence,
     _occurrence_ground_polygons_for_entity,
     _occurrence_include_polygon,
     _occurrence_polygons_for_entity,
     _occurrence_port_polygon,
-    _point_in_layout_polygon,
-    _point_in_ring,
     _polygons_by_layer,
     _resolve_material_kind,
+)
+from scgsim.geometry.source.ground import (
+    _derived_ground_polygons,
+    _layout_polygon_region,
+)
+from scgsim.geometry.source._polygon_ops import (
+    _point_in_ring,
     _ring_from_gdstk_polygon,
 )
 from scgsim.geometry.source.stack import build_component_stack
@@ -263,20 +267,33 @@ def build_gds_stack_geometry_input(
                     "GeometryPlan ground contribution lineage metadata differs"
                 )
             if geometry.get("geometry_source", "gds_polygon") != "gds_polygon" and not (
-                geometry.get("geometry_source") == "die_face_minus_ground_mask" and path != root_path
+                geometry.get("geometry_source") == "die_face_minus_ground_mask"
+                and path != root_path
             ):
                 continue
-            local_ground = (geometry.get("geometry_source") == "die_face_minus_ground_mask"
-                            and path != root_path)
-            selector = (_occurrence_ground_polygons_for_entity if local_ground
-                        else _occurrence_polygons_for_entity)
+            local_ground = (
+                geometry.get("geometry_source") == "die_face_minus_ground_mask"
+                and path != root_path
+            )
+            selector = (
+                _occurrence_ground_polygons_for_entity
+                if local_ground
+                else _occurrence_polygons_for_entity
+            )
             expected = selector(
                 _entity_from_layer_record(record, materials=materials),
                 cell=source_cells[occurrence["cell_name"]],
                 transform=occurrence["transform"],
                 excluded_reference_indexes=child_reference_indexes[path],
-                **({"plane_layer": solution_regions[geometry["plane_bounds_ref"]]
-                    ["metadata"]["source_layer_datatype"]} if local_ground else {}),
+                **(
+                    {
+                        "plane_layer": solution_regions[geometry["plane_bounds_ref"]][
+                            "metadata"
+                        ]["source_layer_datatype"]
+                    }
+                    if local_ground
+                    else {}
+                ),
             )
             if record["geometry"].get("source_occurrence_polygons_um") != expected:
                 raise ValueError(
@@ -715,13 +732,18 @@ def _entities_and_polygons_from_layer_record(
     if geometry_source == "die_face_minus_ground_mask":
         occurrence_polygons = entity.geometry.get("source_occurrence_polygons_um")
         if occurrence_polygons is not None:
-            entity_polygons = tuple(LayoutPolygonSpec(
-                polygon_id=f"{entity.semantic_id}__P{index:04d}",
-                layer=f"{record['layer']}/{record['datatype']}",
-                exterior=region["exterior"], holes=region["holes"],
-                object_name=entity.semantic_id, net_name=entity.net_id,
-                metadata={"source": "die_face_minus_ground_mask"},
-            ) for index, region in enumerate(occurrence_polygons))
+            entity_polygons = tuple(
+                LayoutPolygonSpec(
+                    polygon_id=f"{entity.semantic_id}__P{index:04d}",
+                    layer=f"{record['layer']}/{record['datatype']}",
+                    exterior=region["exterior"],
+                    holes=region["holes"],
+                    object_name=entity.semantic_id,
+                    net_name=entity.net_id,
+                    metadata={"source": "die_face_minus_ground_mask"},
+                )
+                for index, region in enumerate(occurrence_polygons)
+            )
         else:
             entity_polygons = _derived_ground_polygons(
                 entity,
@@ -863,177 +885,6 @@ def _validate_plan_ground_contribution_ownership(
                             f"ground contribution {contribution['source_local_id']!r} "
                             f"also contains local Entity {other['semantic_id']!r}"
                         )
-
-
-def _derived_ground_polygons(
-    entity: SemanticEntitySpec,
-    *,
-    polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
-    cell_bounds_um: Mapping[str, float],
-    domain_bounds_by_semantic_id: Mapping[str, Mapping[str, Any]],
-    plane_polygons: Sequence[Any] | None = None,
-) -> tuple[LayoutPolygonSpec, ...]:
-    import gdstk
-
-    from scgsim.geometry._primitives.loops import (
-        _canonical_loop_sort_key,
-        _split_gdstk_cutline_loop,
-    )
-
-    mask_layer = entity.geometry.get("mask_layer")
-    if mask_layer is None:
-        mask_key = (
-            int(entity.geometry["gds_layer"]),
-            int(entity.geometry["gds_datatype"]),
-        )
-    else:
-        mask_key = (int(mask_layer[0]), int(mask_layer[1]))
-    if plane_polygons is None:
-        exterior = _rectangle_ring(
-            _ground_plane_bounds(entity, domain_bounds_by_semantic_id, cell_bounds_um)
-        )
-        base = (gdstk.Polygon(exterior),)
-    else:
-        base = tuple(plane_polygons)
-    without_mask = gdstk.boolean(
-        base,
-        _merged_gdstk_polygons(polygons_by_layer.get(mask_key, ())),
-        "not",
-        precision=1e-9,
-    )
-    include_layer = entity.geometry.get("include_layer")
-    include_points = entity.geometry.get("include_selector_points_um", ())
-    if include_layer is None and include_points:
-        raise ValueError(
-            f"{entity.semantic_id} include_selector_points_um requires include_layer"
-        )
-    included: list[Any] = []
-    source_includes = entity.geometry.get("source_occurrence_includes", ())
-    if source_includes and (include_layer is not None or include_points):
-        raise ValueError(
-            f"{entity.semantic_id} mixes source contributions with global includes"
-        )
-    for contribution in source_includes:
-        polygon = (
-            contribution.get("polygon") if isinstance(contribution, Mapping) else None
-        )
-        if not isinstance(polygon, Mapping):
-            raise ValueError(
-                f"{entity.semantic_id} has an incomplete source contribution"
-            )
-        included.extend(
-            _layout_polygon_region(
-                gdstk,
-                LayoutPolygonSpec(
-                    polygon_id=f"{entity.semantic_id}__INCLUDE__{len(included):04d}",
-                    layer=f"{mask_key[0]}/{mask_key[1]}",
-                    exterior=polygon["exterior"],
-                    holes=polygon["holes"],
-                ),
-            )
-        )
-    if include_layer is not None:
-        if (
-            not isinstance(include_layer, Sequence)
-            or isinstance(include_layer, str | bytes)
-            or len(include_layer) != 2
-        ):
-            raise TypeError(
-                f"{entity.semantic_id} include_layer must be a GDS layer pair"
-            )
-        candidates = polygons_by_layer.get(
-            (int(include_layer[0]), int(include_layer[1])), ()
-        )
-        # The public PDK may represent one logical conductor with adjacent
-        # source polygons.  Fuse exact geometric contacts before applying an
-        # explicit topology selector; this is mechanical normalization, not
-        # identity inference.
-        components = _fused_gdstk_components(candidates)
-        for point in include_points:
-            if (
-                not isinstance(point, Sequence)
-                or isinstance(point, str | bytes)
-                or len(point) != 2
-            ):
-                raise TypeError(
-                    f"{entity.semantic_id} include_selector_points_um requires 2D points"
-                )
-            selector = (float(point[0]), float(point[1]))
-            matches = [
-                polygon
-                for polygon, _, _ in components
-                if _point_in_layout_polygon(selector, polygon)
-            ]
-            if len(matches) != 1:
-                raise ValueError(
-                    f"{entity.semantic_id} include selector {tuple(point)!r} matched {len(matches)} source polygons"
-                )
-            included.extend(_layout_polygon_region(gdstk, matches[0]))
-    regions = gdstk.boolean(without_mask or (), tuple(included), "or", precision=1e-9)
-    normalized_regions = sorted(
-        (
-            _split_gdstk_cutline_loop(_ring_from_gdstk_polygon(region))
-            for region in regions or ()
-        ),
-        key=lambda region: (
-            _canonical_loop_sort_key(region[0]),
-            tuple(_canonical_loop_sort_key(hole) for hole in region[1]),
-        ),
-    )
-    if not normalized_regions:
-        raise ValueError(
-            f"{entity.semantic_id} derived ground must lower to at least one planar region"
-        )
-    return tuple(
-        LayoutPolygonSpec(
-            polygon_id=f"{entity.semantic_id}__P{index:04d}",
-            layer=f"{mask_key[0]}/{mask_key[1]}",
-            exterior=outer,
-            holes=holes,
-            object_name=entity.semantic_id,
-            net_name=entity.net_id,
-            metadata={
-                "gds_layer": mask_key[0],
-                "gds_datatype": mask_key[1],
-                "source": "die_face_minus_ground_mask",
-                "include_layer": include_layer,
-            },
-        )
-        for index, (outer, holes) in enumerate(normalized_regions)
-    )
-
-
-def _merged_gdstk_polygons(polygons: Sequence[Any]) -> tuple[Any, ...]:
-    if not polygons:
-        return ()
-    import gdstk
-
-    merged = gdstk.boolean(
-        polygons,
-        (),
-        "or",
-        precision=1e-9,
-    )
-    return tuple(merged or ())
-
-
-def _ground_plane_bounds(
-    entity: SemanticEntitySpec,
-    domain_bounds_by_semantic_id: Mapping[str, Mapping[str, Any]],
-    cell_bounds_um: Mapping[str, float],
-) -> Mapping[str, Any]:
-    plane_bounds_ref = entity.geometry.get("plane_bounds_ref")
-    if plane_bounds_ref is None:
-        return cell_bounds_um
-    if not isinstance(plane_bounds_ref, str):
-        raise TypeError(f"{entity.semantic_id} plane_bounds_ref must be a string")
-    try:
-        return domain_bounds_by_semantic_id[plane_bounds_ref]
-    except KeyError as exc:
-        raise ValueError(
-            f"{entity.semantic_id} plane_bounds_ref {plane_bounds_ref!r} "
-            "does not match a solution region"
-        ) from exc
 
 
 def _entity_with_polygon_geometry(
@@ -1333,20 +1184,3 @@ def _is_port_sheet_host_entity(entity: SemanticEntitySpec) -> bool:
         return False
     geometry_source = str(entity.geometry.get("geometry_source", "gds_polygon"))
     return geometry_source in {"gds_polygon", "die_face_minus_ground_mask"}
-
-
-def _layout_polygon_region(gdstk: Any, polygon: LayoutPolygonSpec) -> tuple[Any, ...]:
-    outer = gdstk.Polygon(polygon.exterior)
-    holes = tuple(gdstk.Polygon(hole) for hole in polygon.holes)
-    if not holes:
-        return (outer,)
-    return tuple(gdstk.boolean((outer,), holes, "not", precision=1e-9) or ())
-
-
-def _rectangle_ring(bounds: Mapping[str, float]) -> tuple[tuple[float, float], ...]:
-    return (
-        (float(bounds["x_min_um"]), float(bounds["y_min_um"])),
-        (float(bounds["x_max_um"]), float(bounds["y_min_um"])),
-        (float(bounds["x_max_um"]), float(bounds["y_max_um"])),
-        (float(bounds["x_min_um"]), float(bounds["y_max_um"])),
-    )

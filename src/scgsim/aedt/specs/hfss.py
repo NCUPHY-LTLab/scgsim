@@ -539,11 +539,8 @@ class HfssEprSpec:
 
     def __post_init__(self) -> None:
         _request_modeling(self)
-        from scgsim.aedt.epr.models import (
-            EprAnalysisRequest,
-            ExpressionCacheConvergence,
-            PreparedPlanarGeometry,
-        )
+        from scgsim.aedt.specs.epr import EprAnalysisRequest, ExpressionCacheConvergence
+        from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 
         if (
             str(self.aedt_version) != REQUIRED_AEDT_VERSION
@@ -614,11 +611,8 @@ class HfssEprSpec:
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any], *, allow_historical_modeling: bool = False) -> HfssEprSpec:
-        from scgsim.aedt.epr.models import (
-            EprAnalysisRequest,
-            ExpressionCacheConvergence,
-            PreparedPlanarGeometry,
-        )
+        from scgsim.aedt.specs.epr import EprAnalysisRequest, ExpressionCacheConvergence
+        from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 
         schema = payload.get("schema_version")
         if schema not in {
@@ -705,11 +699,9 @@ class HfssEprAnalysisSpec:
         return "eigenmode"
 
     def __post_init__(self) -> None:
-        from scgsim.aedt.epr.models import (
-            EprAnalysisRequest,
-            PreparedPlanarGeometry,
-            SavedSolution,
-        )
+        from scgsim.aedt.specs.epr import EprAnalysisRequest
+        from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
+        from scgsim.aedt.specs.epr import SavedSolution
 
         if (
             str(self.aedt_version) != REQUIRED_AEDT_VERSION
@@ -766,11 +758,9 @@ class HfssEprAnalysisSpec:
     def from_payload(
         cls, payload: dict[str, Any], *, base_dir: Path | None
     ) -> HfssEprAnalysisSpec:
-        from scgsim.aedt.epr.models import (
-            EprAnalysisRequest,
-            PreparedPlanarGeometry,
-            SavedSolution,
-        )
+        from scgsim.aedt.specs.epr import EprAnalysisRequest
+        from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
+        from scgsim.aedt.specs.epr import SavedSolution
 
         schema = payload.get("schema_version")
         if schema not in {EPR_ANALYSIS_SCHEMA_VERSION, EPR_ANALYSIS_SCHEMA_VERSION_V2}:
@@ -816,7 +806,7 @@ class HfssEprAnalysisSpec:
 
 
 def _validate_epr_selection(spec: HfssEprSpec | HfssEprAnalysisSpec) -> None:
-    from scgsim.aedt.epr.models import NormalizedSurfaceEprTotal
+    from scgsim.aedt.specs.epr import NormalizedSurfaceEprTotal
     from scgsim.aedt.epr.selection import surface_integral_groups
 
     request = spec.epr_request
@@ -943,7 +933,7 @@ class HfssDrivenGeometrySpec:
         return "terminal"
 
     def __post_init__(self) -> None:
-        from scgsim.aedt.epr.models import PreparedPlanarGeometry
+        from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 
         if not isinstance(self.geometry, PreparedPlanarGeometry):
             raise TypeError("geometry must be PreparedPlanarGeometry")
@@ -1015,7 +1005,7 @@ class HfssDrivenGeometrySpec:
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, Any]) -> HfssDrivenGeometrySpec:
-        from scgsim.aedt.epr.models import PreparedPlanarGeometry
+        from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 
         if payload.get("schema_version") != DRIVEN_GEOMETRY_SCHEMA_VERSION or payload.get("mode") != "terminal":
             raise ValueError("unsupported body-first Driven schema")

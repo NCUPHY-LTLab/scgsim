@@ -60,7 +60,9 @@ SOURCE_SCHEMA_V16 = "scgsim.aedt.runtime-source.v16"
 
 SOURCE_SCHEMA_V17 = "scgsim.aedt.runtime-source.v17"
 
-SOURCE_SCHEMA = SOURCE_SCHEMA_V17
+SOURCE_SCHEMA_V18 = "scgsim.aedt.runtime-source.v18"
+
+SOURCE_SCHEMA = SOURCE_SCHEMA_V18
 
 _RUNTIME_SOURCE_V1_MODULES = (
     "_hfss_convergence.py",
@@ -250,6 +252,35 @@ _RUNTIME_SOURCE_V17_PATHS = tuple(sorted((
     "src/scgsim/aedt/runtime/native/hfss_lumped.py",
 )))
 
+# V17 remains a frozen historical inventory. V18 follows the current AEDT
+# ownership split and declares the relocated helpers and neutral geometry
+# representation used by the current candidate.
+_RUNTIME_SOURCE_V18_PATHS = tuple(
+    sorted(
+        (
+            set(_RUNTIME_SOURCE_V17_PATHS)
+            - {"src/scgsim/aedt/epr/junction_partition.py"}
+            | {
+                "src/scgsim/aedt/_data.py",
+                "src/scgsim/aedt/_rlc.py",
+                "src/scgsim/aedt/_terminal_chain.py",
+                "src/scgsim/aedt/specs/geometry.py",
+                "src/scgsim/aedt/specs/epr.py",
+                "src/scgsim/aedt/specs/_support.py",
+                "src/scgsim/aedt/preparation/modeling.py",
+                "src/scgsim/aedt/preparation/planar.py",
+                "src/scgsim/aedt/preparation/junction_partition.py",
+                "src/scgsim/aedt/runtime/native/hfss_geometry.py",
+                "src/scgsim/geometry/models/representation.py",
+                "src/scgsim/geometry/planning/representation.py",
+                "src/scgsim/geometry/source/ground.py",
+                "src/scgsim/geometry/source/_polygon_ops.py",
+            }
+        )
+    )
+)
+
+
 def _module_manifest() -> list[dict[str, str]]:
     source_root = Path(__file__).resolve().parents[3]
     return [
@@ -258,7 +289,7 @@ def _module_manifest() -> list[dict[str, str]]:
             "path": path,
             "sha256": file_sha256(source_root / path.removeprefix("src/")),
         }
-        for path in _RUNTIME_SOURCE_V17_PATHS
+        for path in _RUNTIME_SOURCE_V18_PATHS
     ]
 
 
@@ -365,6 +396,7 @@ def validate_runtime_source(
         SOURCE_SCHEMA_V15: _RUNTIME_SOURCE_V15_PATHS,
         SOURCE_SCHEMA_V16: _RUNTIME_SOURCE_V16_PATHS,
         SOURCE_SCHEMA_V17: _RUNTIME_SOURCE_V17_PATHS,
+        SOURCE_SCHEMA_V18: _RUNTIME_SOURCE_V18_PATHS,
     }.get(schema)
     if (
         expected_paths is None
@@ -386,7 +418,16 @@ def validate_runtime_source(
             or item["module"] != expected_module
             or not isinstance(item["path"], str)
             or not item["path"].startswith(
-                "src/scgsim/" if schema in {SOURCE_SCHEMA_V13, SOURCE_SCHEMA_V15, SOURCE_SCHEMA_V16, SOURCE_SCHEMA_V17} else "scgsim/"
+                "src/scgsim/"
+                if schema
+                in {
+                    SOURCE_SCHEMA_V13,
+                    SOURCE_SCHEMA_V15,
+                    SOURCE_SCHEMA_V16,
+                    SOURCE_SCHEMA_V17,
+                    SOURCE_SCHEMA_V18,
+                }
+                else "scgsim/"
             )
             or Path(item["path"]).is_absolute()
             or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"])
@@ -407,7 +448,13 @@ def validate_runtime_source(
         }:
             raise RuntimeError("prepared runtime source provenance is invalid")
         _validate_revision_observation(value.get("revision_observation"), stage=stage)
-    elif schema in {SOURCE_SCHEMA_V13, SOURCE_SCHEMA_V15, SOURCE_SCHEMA_V16, SOURCE_SCHEMA_V17}:
+    elif schema in {
+        SOURCE_SCHEMA_V13,
+        SOURCE_SCHEMA_V15,
+        SOURCE_SCHEMA_V16,
+        SOURCE_SCHEMA_V17,
+        SOURCE_SCHEMA_V18,
+    }:
         if set(value) != {
             "schema_version",
             "stage",

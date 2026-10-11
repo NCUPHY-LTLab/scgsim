@@ -15,11 +15,15 @@ from pathlib import Path
 
 from scgsim.aedt._io import file_sha256, write_json
 
-from scgsim.aedt.epr.geometry import validate_geometry_workers
-from scgsim.aedt.epr.models import (
+from scgsim.aedt.preparation.planar import validate_geometry_workers
+from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
+)
+from scgsim.aedt.specs.geometry import (
     PreparedPlanarGeometry,
-    SavedSolution,
+)
+from scgsim.aedt.specs.epr import SavedSolution
+from scgsim.aedt._data import (
     detached,
 )
 

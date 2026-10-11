@@ -584,7 +584,7 @@ def build_curved_construction_plan(build_input, *, route):
     entities = {e.semantic_id: e for e in prepared.entities}
     initialized = bool(gmsh.isInitialized())
     if not initialized:
-        gmsh.initialize()
+        gmsh.initialize(readConfigFiles=False)
     previous = gmsh.model.getCurrent()
     gmsh.model.add("scgsim-curved-arrangement")
     terminal = gmsh.option.getNumber("General.Terminal")

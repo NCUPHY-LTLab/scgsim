@@ -2,25 +2,15 @@
 
 from __future__ import annotations
 
-
 import hashlib
-
 import json
-
 import math
-
 import re
-
 import time
-
 from collections.abc import Mapping
-
 from dataclasses import dataclass
-
 from pathlib import Path
-
 from typing import Any, Literal
-
 from scgsim.aedt.epr.analysis import (
     _electric_domain_energy_coefficient,
     _epr_domain_context,
@@ -28,7 +18,6 @@ from scgsim.aedt.epr.analysis import (
     _surface_energy_coefficients,
     combine_epr_mode,
 )
-
 from scgsim.aedt.epr.fields import (
     compile_named_expression,
     field_integral_operations,
@@ -36,35 +25,34 @@ from scgsim.aedt.epr.fields import (
     junction_voltage_operations,
     load_compiled_expressions,
 )
-
 from scgsim.aedt.epr.geometry import plan_inset_sheet_names
-
 from scgsim.aedt.epr.models import (
     EprResult,
+)
+from scgsim.aedt.specs.epr import (
     ExpressionCacheConvergence,
     NativeExpressionDefinition,
     NormalizedSurfaceEprTotal,
-    _freeze,
-    detached,
     surface_evaluations,
 )
-
+from scgsim.aedt._data import (
+    _freeze,
+    detached,
+)
 from scgsim.aedt.epr.native import (
     bind_inset_surface_selections,
     bind_native_surface_references,
 )
-
 from scgsim.aedt.epr.selection import surface_integral_groups
-
 from scgsim.aedt.runtime.native.common import detached_data, saved_setup_properties
-
 from scgsim.aedt.runtime.native.hfss_eigenmode import (
-    create_eigenmode_setup,
-    read_eigenmode_setup,
     submit_eigenmode_cache,
 )
-
-from scgsim.aedt.specs.hfss import HfssEprAnalysisSpec, HfssEprSpec
+from scgsim.aedt.specs.hfss import HfssEprSpec
+from scgsim.aedt.runtime.families.hfss import (
+    _solution_trace,
+    read_body_eigenmode_history,
+)
 
 
 _SURFACE_ANALYSIS_SCOPE = {
@@ -341,110 +329,6 @@ def _empty_raw_integrals() -> dict[str, Any]:
         "native_surface_references": {},
         "junction_integrals_v_m": {},
     }
-
-
-def _solution_trace(data: Any, expression: str) -> dict[str, Any]:
-    """Detach one native trace while retaining its coordinate columns."""
-
-    real, imaginary = data.full_matrix_real_imag
-    variation_keys = tuple(data.variations[0]) if data.variations else ()
-    intrinsic_keys = tuple(data.intrinsics_by_variation(0)) if data.variations else ()
-    if any(
-        tuple(variation) != variation_keys
-        or tuple(data.intrinsics_by_variation(index)) != intrinsic_keys
-        for index, variation in enumerate(data.variations)
-    ):
-        raise RuntimeError(
-            "native adaptive trace coordinate columns differ by variation"
-        )
-    columns = [*variation_keys, *intrinsic_keys, "value"]
-    real_rows = real[expression].tolist()
-    imaginary_rows = imaginary[expression].tolist()
-    if any(len(row) != len(columns) for row in (*real_rows, *imaginary_rows)):
-        raise RuntimeError("native adaptive trace coordinate width differs")
-    return {
-        "columns": columns,
-        "real_rows": real_rows,
-        "imaginary_rows": imaginary_rows,
-        "unit": data.units_data.get(expression),
-    }
-
-
-def _frequency_solution_trace(
-    data: Any, expression: str, *, category: str, solution: str
-) -> dict[str, Any]:
-    """Retain raw frequency and optional explicit native SI evidence."""
-
-    trace = _solution_trace(data, expression)
-    if trace["unit"] != "":
-        return trace
-    evidence: dict[str, Any] = {
-        "status": "unavailable",
-        "query": {
-            "category": category,
-            "solution": solution,
-            "expression": expression,
-            "sweeps": {"Pass": "All"},
-            "si_value": True,
-            "real_method": "GetRealDataValues",
-            "imaginary_method": "GetImagDataValues",
-        },
-        "unit": "Hz",
-        "variations": [],
-    }
-    trace["si_evidence"] = evidence
-    # SI evidence is optional; failure must retain the original partial trace.
-    try:
-        import numpy as np
-
-        if len(data._original_data) != len(data.variations):
-            raise RuntimeError("native SI frequency variation count differs")
-        real_rows: list[list[Any]] = []
-        imaginary_rows: list[list[Any]] = []
-        for index, native in enumerate(data._original_data):
-            variation = data.variations[index]
-            observed: dict[str, Any] = {
-                "index": index,
-                "coordinates": dict(variation),
-                "intrinsics": {
-                    name: values.tolist()
-                    for name, values in data.intrinsics_by_variation(index).items()
-                },
-            }
-            evidence["variations"].append(observed)
-            observed["real_values"] = list(native.GetRealDataValues(expression, True))
-            observed["imaginary_values"] = list(
-                native.GetImagDataValues(expression, True)
-            )
-            real_rows.extend(
-                data._full_keys(
-                    variation, np.asarray(observed["real_values"], dtype=float), index
-                ).tolist()
-            )
-            imaginary_rows.extend(
-                data._full_keys(
-                    variation,
-                    np.asarray(observed["imaginary_values"], dtype=float),
-                    index,
-                ).tolist()
-            )
-        coordinates = [row[:-1] for row in trace["real_rows"]]
-        if not (
-            coordinates
-            == [row[:-1] for row in real_rows]
-            == [row[:-1] for row in imaginary_rows]
-            == [row[:-1] for row in trace["imaginary_rows"]]
-        ):
-            raise RuntimeError("native SI frequency coordinates differ from raw trace")
-        evidence.update(
-            status="available",
-            columns=trace["columns"],
-            real_rows=real_rows,
-            imaginary_rows=imaginary_rows,
-        )
-    except Exception as exc:  # noqa: BLE001 -- retain optional native SI failure.
-        evidence["error"] = f"{type(exc).__name__}: {exc}"
-    return trace
 
 
 def _trace_by_pass(trace: dict[str, Any], *, final_pass: int) -> dict[int, float]:
@@ -777,49 +661,10 @@ def _adaptive_mode_history(
 ) -> dict[str, Any]:
     """Return raw frequency and cache traces without positional joins."""
 
-    category = "Eigenmode Parameters"
-    solution = f"{spec.run_control.setup_name} : AdaptivePass"
-    frequency_solutions = [
-        str(item) for item in app.post.available_report_solutions(category) or ()
-    ]
-    field_solutions = [
-        str(item) for item in app.post.available_report_solutions("Fields") or ()
-    ]
-    if solution not in frequency_solutions:
-        raise RuntimeError(
-            f"native adaptive solution is unavailable for {category!r}: {frequency_solutions!r}"
-        )
-    quantities: list[str] = []
-    for quantity_category in (
-        app.post.available_quantities_categories(category, solution=solution) or ()
-    ):
-        for quantity in (
-            app.post.available_report_quantities(
-                category,
-                solution=solution,
-                quantities_category=quantity_category,
-            )
-            or ()
-        ):
-            if str(quantity).startswith("Mode(") and quantity not in quantities:
-                quantities.append(str(quantity))
-    expected = [f"Mode({index})" for index in range(1, spec.run_control.num_modes + 1)]
-    if len(quantities) != len(expected) or set(quantities) != set(expected):
-        raise RuntimeError(
-            f"native adaptive Eigenmode quantities differ: {quantities!r}"
-        )
-    data = app.post.get_solution_data_per_variation(
-        category, solution, [], {"Pass": "All"}, quantities
-    )
-    if not data:
-        raise RuntimeError("native adaptive Eigenmode history is unavailable")
-    data.primary_sweep = "Pass"
-    rows = {
-        quantity: _frequency_solution_trace(
-            data, quantity, category=category, solution=solution
-        )
-        for quantity in expected
-    }
+    history = read_body_eigenmode_history(app, spec)
+    category = history["category"]
+    solution = history["solution"]
+    frequency_solutions = history["report_inventory"]["eigenmode_parameter_solutions"]
     cache_titles = [item["title"] for item in cache_items]
     cache_observation: dict[str, Any] = {
         "status": "not_requested" if not cache_titles else "unavailable",
@@ -933,21 +778,8 @@ def _adaptive_mode_history(
             )
         except Exception as exc:  # noqa: BLE001 -- partial native history is evidence.
             cache_observation["error"] = f"{type(exc).__name__}: {exc}"
-    return {
-        "schema_version": "scgsim.aedt.epr-adaptive-history.v1",
-        "category": category,
-        "solution": solution,
-        "primary_sweep": data.primary_sweep,
-        "pass_axis": data.primary_sweep_values.tolist(),
-        "pass_unit": data.units_sweeps.get("Pass"),
-        "frequency_traces": rows,
-        "cache_integral_traces": cache_observation,
-        "report_inventory": {
-            "eigenmode_parameter_solutions": frequency_solutions,
-            "field_solutions": field_solutions,
-        },
-        "frequency_unit_status": "native_reported_only",
-    }
+    history["cache_integral_traces"] = cache_observation
+    return history
 
 
 def _identity_sha256(value: Any) -> str:
@@ -1673,38 +1505,6 @@ def _prepare_expressions_and_cache(
     cache = _submit_epr_cache(app, spec, expressions, authoring)
     phase_timings["cache_seconds"] = round(time.perf_counter() - started, 6)
     return expressions, cache, phase_timings
-
-
-def _create_setup(app: Any, spec: HfssEprSpec) -> None:
-    create_eigenmode_setup(app, spec.run_control)
-
-
-def _read_setup(app: Any, spec: HfssEprSpec | HfssEprAnalysisSpec) -> dict[str, Any]:
-    setup = read_eigenmode_setup(app, spec.run_control)
-    raw = saved_setup_properties(app, spec.run_control.setup_name)
-    creating_setup = isinstance(spec, HfssEprSpec)
-    saved_field_properties = {
-        "basis": (
-            "completed Eigenmode LastAdaptive Fields evidence is checked after solve"
-            if creating_setup
-            else "existing saved-field analysis does not re-author setup field policy"
-        ),
-        "serialized": {
-            key: raw[key]
-            for key in ("SaveAnyFields", "SaveRadFieldsOnly")
-            if key in raw
-        },
-        "status": (
-            "unexposed_pending_postsolve"
-            if creating_setup
-            else "not_reauthored_existing_saved_solution"
-        ),
-    }
-    return {
-        "name": setup["name"],
-        "native": setup["native"],
-        "saved_fields": saved_field_properties,
-    }
 
 
 def _read_cache(

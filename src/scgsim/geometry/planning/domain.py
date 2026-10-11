@@ -50,7 +50,6 @@ from scgsim.geometry._primitives.spatial import (
     _range_within_bounds,
     _same_z,
     _segment_overlap_interval,
-    _undirected_xy_edge,
 )
 from scgsim.geometry._primitives.surface_records import (
     _canonical_face_signature_3d,
@@ -62,8 +61,10 @@ from scgsim.geometry._primitives.surface_records import (
 )
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
 from scgsim.geometry.planning.evidence import solution_solution_evidence
+from scgsim.geometry.planning.representation import planned_conductor_representation
 from scgsim.geometry.planning.topology import _surface_ring3d_specs
 from scgsim.semantics import (
     EvidenceResult,
@@ -159,9 +160,10 @@ def verified_route_a_substrate_support(
 
 def _prepare_auto_vacuum_solution_regions(
     build_input: GeometryBuildInput,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     *,
     native_complement: bool = False,
+    representation_context: RepresentationContext | None = None,
 ) -> GeometryBuildInput:
     """Replace auto VACUUM_REGION with planner-side complement components."""
     auto_region = _auto_vacuum_solution_region(build_input)
@@ -174,13 +176,21 @@ def _prepare_auto_vacuum_solution_regions(
 
     auto_metadata = dict(auto_region.metadata)
     auto_padding = _auto_vacuum_padding(auto_metadata, auto_region.semantic_id)
-    declared_effective = auto_metadata.get("aedt_effective_envelope")
-    if route == "_effective" and isinstance(declared_effective, Mapping):
-        # Prepared coordinate-map facts own this complete enclosure. The
-        # original padding recipe remains source provenance, not a second map.
-        auto_bounds = dict(declared_effective["effective_bounds_um"])
+    enclosure = (
+        representation_context.enclosures.get(auto_region.semantic_id)
+        if representation_context is not None
+        else None
+    )
+    if route is None and enclosure is not None:
+        # The prepared context owns these complete effective bounds. Source
+        # padding remains provenance and is not mapped a second time here.
+        auto_bounds = dict(enclosure.effective_bounds_um)
     else:
-        auto_bounds = _auto_vacuum_envelope_bounds(build_input, route=route)
+        auto_bounds = _auto_vacuum_envelope_bounds(
+            build_input,
+            route=route,
+            representation_context=representation_context,
+        )
         auto_bounds = {
             "x_min_um": auto_bounds["x_min_um"] - auto_padding["x_minus_um"],
             "y_min_um": auto_bounds["y_min_um"] - auto_padding["y_minus_um"],
@@ -229,7 +239,11 @@ def _prepare_auto_vacuum_solution_regions(
     obstacle_entities = tuple(
         entity
         for entity in all_entities
-        if _is_auto_vacuum_subtractor(entity, route=route)
+        if _is_auto_vacuum_subtractor(
+            entity,
+            route=route,
+            representation_context=representation_context,
+        )
         and entity.semantic_id != auto_region.semantic_id
         and not bool(entity.metadata.get("is_auto_vacuum_region"))
     )
@@ -279,11 +293,8 @@ def _prepare_auto_vacuum_solution_regions(
                 or obstacle_z_max_um <= z_start + _TOPOLOGY_EPS_UM
             ):
                 continue
-            subtractor_regions = _solution_entity_xy_region(
-                gdstk,
-                entity,
-                z_min_um=z_start,
-                z_max_um=z_end,
+            subtractor_regions = _auto_vacuum_subtractor_xy_region(
+                gdstk, build_input, entity
             )
             if not subtractor_regions:
                 continue
@@ -321,6 +332,7 @@ def _prepare_auto_vacuum_solution_regions(
                     for entity in active_subtractors
                     if _auto_vacuum_component_contacts_subtractor(
                         gdstk,
+                        build_input=build_input,
                         component_geometry_ref=geometry_ref,
                         subtractor=entity,
                     )
@@ -336,7 +348,9 @@ def _prepare_auto_vacuum_solution_regions(
                     boundary_key = "top"
                 if boundary_key is None:
                     continue
-                entity_region = _solution_entity_xy_region(gdstk, entity)
+                entity_region = _auto_vacuum_subtractor_xy_region(
+                    gdstk, build_input, entity
+                )
                 if _boolean_gdstk_region(
                     gdstk,
                     component_region,
@@ -413,22 +427,36 @@ def _prepare_auto_vacuum_solution_regions(
 
 def _is_auto_vacuum_subtractor(
     entity: SemanticEntitySpec,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
+    *,
+    representation_context: RepresentationContext | None = None,
 ) -> bool:
     if bool(entity.metadata.get("is_auto_vacuum_region")):
         return False
     if _is_solution_entity(entity):
         return True
 
-    representation = entity.route_representations.get(route)
+    representation = planned_conductor_representation(
+        entity, route=route, context=representation_context
+    )
     return representation in {"cutout_boundary_shell", "material_volume"}
 
 
 def _auto_vacuum_surface_sheet_for_xy_envelope(
     entity: SemanticEntitySpec,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
+    *,
+    representation_context: RepresentationContext | None = None,
 ) -> bool:
-    return route in {"A", "_effective"} and entity.route_representations.get(route) == "surface_sheet"
+    return (
+        route == "A" and entity.route_representations.get(route) == "surface_sheet"
+    ) or (
+        route is None
+        and planned_conductor_representation(
+            entity, route=route, context=representation_context
+        )
+        == "surface_sheet"
+    )
 
 
 def _auto_vacuum_entity_xy_bounds(
@@ -560,12 +588,17 @@ def _auto_vacuum_padding(
 def _auto_vacuum_envelope_bounds(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
+    representation_context: RepresentationContext | None = None,
 ) -> dict[str, float]:
     bounds: list[dict[str, float]] = []
     for entity in build_input.entities:
-        is_subtractor = _is_auto_vacuum_subtractor(entity, route=route)
-        include_for_xy = _auto_vacuum_surface_sheet_for_xy_envelope(entity, route)
+        is_subtractor = _is_auto_vacuum_subtractor(
+            entity, route=route, representation_context=representation_context
+        )
+        include_for_xy = _auto_vacuum_surface_sheet_for_xy_envelope(
+            entity, route, representation_context=representation_context
+        )
         if not is_subtractor and not include_for_xy:
             continue
         if bool(entity.metadata.get("is_auto_vacuum_region")):
@@ -584,12 +617,10 @@ def _auto_vacuum_envelope_bounds(
                 )
             entry["z_min_um"] = float(z_min_um)
             entry["z_max_um"] = float(z_max_um)
-        elif (
-            route in {"A", "_effective"}
-            and entity.route_representations.get(route) == "surface_sheet"
-            and not is_subtractor
-        ):
-            sheet_z_um = _auto_vacuum_sheet_z(build_input, entity)
+        elif include_for_xy and not is_subtractor:
+            sheet_z_um = _auto_vacuum_sheet_z(
+                build_input, entity, representation_context=representation_context
+            )
             entry["z_min_um"] = sheet_z_um
             entry["z_max_um"] = sheet_z_um
 
@@ -616,11 +647,18 @@ def _auto_vacuum_envelope_bounds(
 
 
 def _auto_vacuum_sheet_z(
-    build_input: GeometryBuildInput, entity: SemanticEntitySpec
+    build_input: GeometryBuildInput,
+    entity: SemanticEntitySpec,
+    *,
+    representation_context: RepresentationContext | None = None,
 ) -> float:
-    effective = entity.metadata.get("aedt_effective_layer")
-    if isinstance(effective, Mapping) and effective.get("representation") == "sheet":
-        return float(effective["effective_z_min_um"])
+    context_record = (
+        representation_context.entities.get(entity.semantic_id)
+        if representation_context is not None
+        else None
+    )
+    if context_record is not None and context_record.representation == "sheet":
+        return float(context_record.effective_z_interval_um[0])
     provenance = build_input.metadata.get("route_a_thin_film")
     if not isinstance(provenance, Mapping):
         raise ValueError(
@@ -675,27 +713,65 @@ def _solution_entity_xy_region(
     del z_min_um, z_max_um
     geometry = entity.geometry
     if "outer_loop" in geometry:
-        outer_loop = _clean_loop(geometry["outer_loop"])
-        split_outer_loop, *split_hole_loops = _split_gdstk_cutline_loop(outer_loop)
-        holes = tuple(
-            _clean_loop(loop)
-            for loop in (
-                tuple(geometry.get("hole_loops", ())) + tuple(split_hole_loops)
-            )
-            if len(loop) >= 3
-        )
-        if not holes:
-            return (gdstk.Polygon(split_outer_loop),)
-        return _filter_gdstk_polygons(
-            gdstk.boolean(
-                (gdstk.Polygon(split_outer_loop),),
-                tuple(gdstk.Polygon(hole_loop) for hole_loop in holes),
-                "not",
-                precision=1e-9,
-            )
+        return _xy_region_from_loops(
+            gdstk,
+            geometry["outer_loop"],
+            tuple(geometry.get("hole_loops", ())),
         )
     bounds = _solution_bounds(entity)
     return (gdstk.Polygon(_domain_bounds_loop(bounds)),)
+
+
+def _auto_vacuum_subtractor_xy_region(
+    gdstk: Any,
+    build_input: GeometryBuildInput,
+    entity: SemanticEntitySpec,
+) -> tuple[Any, ...]:
+    """Use the normalized polygons for a source entity lacking a planned loop."""
+    if _is_solution_entity(entity) or "outer_loop" in entity.geometry:
+        return _solution_entity_xy_region(gdstk, entity)
+
+    polygons_by_id = {polygon.polygon_id: polygon for polygon in build_input.polygons}
+    region: tuple[Any, ...] = ()
+    for polygon_id in entity.polygon_ids:
+        polygon = polygons_by_id[polygon_id]
+        polygon_region = _xy_region_from_loops(
+            gdstk,
+            polygon.exterior,
+            polygon.holes,
+        )
+        region = (
+            polygon_region
+            if not region
+            else _boolean_gdstk_region(gdstk, region, polygon_region, "or")
+        )
+    if not entity.polygon_ids:
+        return _solution_entity_xy_region(gdstk, entity)
+    return region
+
+
+def _xy_region_from_loops(
+    gdstk: Any,
+    outer_loop: Any,
+    hole_loops: Sequence[Any],
+) -> tuple[Any, ...]:
+    outer = _clean_loop(outer_loop)
+    split_outer, *split_holes = _split_gdstk_cutline_loop(outer)
+    holes = tuple(
+        _clean_loop(loop)
+        for loop in tuple(hole_loops) + tuple(split_holes)
+        if len(loop) >= 3
+    )
+    if not holes:
+        return (gdstk.Polygon(split_outer),)
+    return _filter_gdstk_polygons(
+        gdstk.boolean(
+            (gdstk.Polygon(split_outer),),
+            tuple(gdstk.Polygon(hole_loop) for hole_loop in holes),
+            "not",
+            precision=1e-9,
+        )
+    )
 
 
 def _loop_domain_bounds(
@@ -773,13 +849,16 @@ def _planar_side_solution_regions(
 def _conductor_face_solution_pieces(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     entity: SemanticEntitySpec,
     shell_part: str,
     geometry_refs: Sequence[Mapping[str, Any]],
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[tuple[str, dict[str, Any]], ...]:
     """Partition Route-A/B planar faces by exact local solution adjacency."""
-    if route not in {"A", "B", "_effective"}:
+    if route not in {"A", "B"} and not (
+        route is None and representation_context is not None
+    ):
         adjacent_id = _conductor_face_adjacent_solution_id(
             build_input,
             entity,
@@ -819,32 +898,53 @@ def _conductor_face_solution_pieces(
 
 def _active_route_conductor_entities(
     build_input: GeometryBuildInput,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
+    *,
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[SemanticEntitySpec, ...]:
+    if route is None and representation_context is not None:
+        return _route_conductor_contact_footprints(
+            build_input,
+            route,
+            representation_context=representation_context,
+        )
     return tuple(
         entity
         for entity in build_input.entities
         if not _is_solution_entity(entity)
-        and entity.route_representations.get(route) is not None
+        and planned_conductor_representation(
+            entity, route=route, context=representation_context
+        )
+        is not None
         and "outer_loop" in entity.geometry
     )
 
 
 def _route_conductor_contact_footprints(
     build_input: GeometryBuildInput,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
+    *,
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[SemanticEntitySpec, ...]:
     """Recognize effective contacts on each declared source polygon.
 
     Temporary footprints retain parent Entity identity and original holes;
     they neither replace source bodies nor invent a bounding exterior.
     """
-    if route != "_effective":
+    if route is not None:
         return _active_route_conductor_entities(build_input, route)
+    if representation_context is None:
+        return ()
     polygons = {polygon.polygon_id: polygon for polygon in build_input.polygons}
     footprints: list[SemanticEntitySpec] = []
     for entity in build_input.entities:
-        if _is_solution_entity(entity) or entity.route_representations.get(route) is None:
+        if (
+            _is_solution_entity(entity)
+            or planned_conductor_representation(
+                entity, route=route, context=representation_context
+            )
+            is None
+        ):
             continue
         if "outer_loop" in entity.geometry:
             footprints.append(entity)
@@ -925,16 +1025,19 @@ def _route_a_sheet_boundary_volume_ids_from_solutions(
 def _interface_surface_kinds(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     interface: InterfacePlanRecord,
     route_a_evidence: tuple[EvidenceResult, ...] = (),
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[str, ...]:
     raw_kinds = interface.metadata.get("interface_kinds")
     if raw_kinds is not None:
         if isinstance(raw_kinds, str):
             raw_kinds = (raw_kinds,)
         return tuple(kind for kind in _INTERFACE_KIND_ORDER if kind in set(raw_kinds))
-    if _is_route_a_sheet_interface(route, interface):
+    if _is_route_a_sheet_interface(
+        route, interface, representation_context=representation_context
+    ):
         derived = (
             tuple(result.classification for result in route_a_evidence)
             if route_a_evidence
@@ -956,14 +1059,19 @@ def _interface_surface_kinds(
 def _plan_substrate_air_surfaces(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     semantic_facts: SemanticEvidenceFacade | None = None,
     route_a_sheet_patches: Sequence[_RouteASheetPatch] = (),
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[SurfacePlanRecord, ...]:
     import gdstk
 
     records: list[SurfacePlanRecord] = list(
-        _plan_solution_domain_boundary_surfaces(build_input, route=route)
+        _plan_solution_domain_boundary_surfaces(
+            build_input,
+            route=route,
+            representation_context=representation_context,
+        )
     )
     surface_index = 0
     for lower, upper, z_um, bounds in _solution_interface_planes(build_input):
@@ -1012,6 +1120,7 @@ def _plan_substrate_air_surfaces(
             plane_conductors = _conductor_entities_on_solution_plane(
                 build_input,
                 route=route,
+                representation_context=representation_context,
                 lower=lower,
                 upper=upper,
                 z_um=z_um,
@@ -1049,7 +1158,7 @@ def _plan_substrate_air_surfaces(
                         surface_role="solution_interface",
                         geometry_ref=geometry_ref,
                         interface_id=interface_id,
-                        valid_routes=(route,),
+                        valid_routes=() if route is None else (route,),
                         solver_use="solver_active",
                         metadata={
                             "interface_kinds": (kind,),
@@ -1117,6 +1226,7 @@ def _solution_interface_geometry_refs(
 def _auto_vacuum_component_contacts_subtractor(
     gdstk: Any,
     *,
+    build_input: GeometryBuildInput,
     component_geometry_ref: Mapping[str, Any],
     subtractor: SemanticEntitySpec,
 ) -> bool:
@@ -1128,18 +1238,13 @@ def _auto_vacuum_component_contacts_subtractor(
     active in the slab.  This remains geometry/topology bookkeeping; semantic
     identity comes from the pre-existing structured entity record.
     """
-    subtractor_region = _solution_entity_xy_region(gdstk, subtractor)
+    subtractor_region = _auto_vacuum_subtractor_xy_region(
+        gdstk, build_input, subtractor
+    )
     if not subtractor_region:
         return False
-    base_geometry_ref: dict[str, Any]
-    if "outer_loop" in subtractor.geometry:
-        base_geometry_ref = {"outer_loop": subtractor.geometry["outer_loop"]}
-    else:
-        base_geometry_ref = {
-            "outer_loop": _domain_bounds_loop(_solution_bounds(subtractor))
-        }
     subtractor_refs = _geometry_refs_from_gdstk_region(
-        base_geometry_ref,
+        {},
         subtractor_region,
     )
     component_loops = (
@@ -1173,11 +1278,12 @@ def _entity_occupied_region(gdstk: Any, entity: SemanticEntitySpec) -> tuple[Any
 def _solution_domain_sidewall_geometry_refs(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     solution: SemanticEntitySpec,
     outer_loop: tuple[tuple[float, float], ...],
     z_min_um: float,
     z_max_um: float,
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[dict[str, Any], ...]:
     refs: list[dict[str, Any]] = []
     for ring_role, ring_loop in (
@@ -1194,6 +1300,7 @@ def _solution_domain_sidewall_geometry_refs(
                 solution=solution,
                 start=start,
                 end=end,
+                representation_context=representation_context,
             )
             for first, second in pairwise(parameters):
                 segment_start = _interpolate_2d(start, end, first)
@@ -1213,6 +1320,7 @@ def _solution_domain_sidewall_geometry_refs(
                     start=segment_start,
                     end=segment_end,
                     default_z_min_um=z_min_um,
+                    representation_context=representation_context,
                 )
                 edge_z_max_um = _solution_boundary_edge_z_max_um(
                     build_input,
@@ -1221,6 +1329,7 @@ def _solution_domain_sidewall_geometry_refs(
                     start=segment_start,
                     end=segment_end,
                     default_z_max_um=z_max_um,
+                    representation_context=representation_context,
                 )
                 if edge_z_max_um - edge_z_min_um <= _TOPOLOGY_EPS_UM:
                     continue
@@ -1242,19 +1351,26 @@ def _solution_domain_sidewall_geometry_refs(
 def _solution_boundary_edge_parameters(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     solution: SemanticEntitySpec,
     start: tuple[float, float],
     end: tuple[float, float],
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[float, ...]:
     """Split a vacuum exterior edge at exact finite-conductor endpoints."""
-    if route not in {"B", "_effective"} or not _is_vacuum_solution_entity(solution):
+    if not (
+        route == "B" or (route is None and representation_context is not None)
+    ) or not _is_vacuum_solution_entity(solution):
         return (0.0, 1.0)
     parameters = {0.0, 1.0}
     solution_z_min = float(solution.geometry["z_min_um"])
     solution_z_max = float(solution.geometry["z_max_um"])
-    for entity in _active_route_conductor_entities(build_input, route):
-        if entity.route_representations[route] not in {
+    for entity in _active_route_conductor_entities(
+        build_input, route, representation_context=representation_context
+    ):
+        if planned_conductor_representation(
+            entity, route=route, context=representation_context
+        ) not in {
             "cutout_boundary_shell",
             "material_volume",
         }:
@@ -1277,19 +1393,24 @@ def _solution_boundary_edge_parameters(
 def _solution_boundary_edge_z_min_um(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     solution: SemanticEntitySpec,
     start: tuple[float, float],
     end: tuple[float, float],
     default_z_min_um: float,
+    representation_context: RepresentationContext | None = None,
 ) -> float:
     if not _is_vacuum_solution_entity(solution):
         return default_z_min_um
     z_min_um = default_z_min_um
-    for entity in build_input.entities:
+    for entity in _active_route_conductor_entities(
+        build_input, route, representation_context=representation_context
+    ):
         if (
             _is_solution_entity(entity)
-            or entity.route_representations.get(route)
+            or planned_conductor_representation(
+                entity, route=route, context=representation_context
+            )
             not in {
                 "cutout_boundary_shell",
                 "material_volume",
@@ -1308,19 +1429,24 @@ def _solution_boundary_edge_z_min_um(
 def _solution_boundary_edge_z_max_um(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     solution: SemanticEntitySpec,
     start: tuple[float, float],
     end: tuple[float, float],
     default_z_max_um: float,
+    representation_context: RepresentationContext | None = None,
 ) -> float:
     if not _is_vacuum_solution_entity(solution):
         return default_z_max_um
     z_max_um = default_z_max_um
-    for entity in build_input.entities:
+    for entity in _active_route_conductor_entities(
+        build_input, route, representation_context=representation_context
+    ):
         if (
             _is_solution_entity(entity)
-            or entity.route_representations.get(route)
+            or planned_conductor_representation(
+                entity, route=route, context=representation_context
+            )
             not in {
                 "cutout_boundary_shell",
                 "material_volume",
@@ -1581,7 +1707,8 @@ def _reconcile_solution_domain_boundaries(
 def _plan_solution_domain_boundary_surfaces(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[SurfacePlanRecord, ...]:
     records: list[SurfacePlanRecord] = []
     for entity in build_input.entities:
@@ -1619,7 +1746,7 @@ def _plan_solution_domain_boundary_surfaces(
                         owner_semantic_id=entity.semantic_id,
                         surface_role="domain_boundary",
                         geometry_ref=geometry_ref,
-                        valid_routes=(route,),
+                        valid_routes=() if route is None else (route,),
                         metadata={
                             "owner_semantic_ids": (entity.semantic_id,),
                             "boundary_volume_ids": (entity.semantic_id,),
@@ -1635,6 +1762,7 @@ def _plan_solution_domain_boundary_surfaces(
                 outer_loop=loop,
                 z_min_um=z_min_um,
                 z_max_um=z_max_um,
+                representation_context=representation_context,
             )
         ):
             records.append(
@@ -1646,7 +1774,7 @@ def _plan_solution_domain_boundary_surfaces(
                     owner_semantic_id=entity.semantic_id,
                     surface_role="domain_boundary",
                     geometry_ref=geometry_ref,
-                    valid_routes=(route,),
+                    valid_routes=() if route is None else (route,),
                     metadata={
                         "owner_semantic_ids": (entity.semantic_id,),
                         "boundary_volume_ids": (entity.semantic_id,),
@@ -1681,12 +1809,16 @@ def _route_a_sheet_boundary_volume_ids(
 def _route_a_sheet_plane_z_um(
     build_input: GeometryBuildInput,
     entity: SemanticEntitySpec,
+    *,
+    representation_context: RepresentationContext | None = None,
 ) -> float:
     if any(
         solution.metadata.get("auto_vacuum_group_id") == entity.host_void_semantic_id
         for solution in _solution_entities(build_input)
     ):
-        return _auto_vacuum_sheet_z(build_input, entity)
+        return _auto_vacuum_sheet_z(
+            build_input, entity, representation_context=representation_context
+        )
     z_min_um, z_max_um = _entity_z_range_um(entity)
     for boundary_id, z_um in (
         (
@@ -2077,7 +2209,7 @@ def _sidewall_is_auto_vacuum_envelope_edge(
     entity: SemanticEntitySpec,
     geometry_ref: Mapping[str, Any],
 ) -> bool:
-    """Return whether one exact sidewall base edge is on an auto envelope."""
+    """Return whether an auto-envelope edge fully covers this sidewall."""
     host_id = entity.host_void_semantic_id
     envelopes = {
         tuple(tuple(float(value) for value in point) for point in loop)
@@ -2098,10 +2230,7 @@ def _sidewall_is_auto_vacuum_envelope_edge(
     start = (float(quad[0][0]), float(quad[0][1]))
     end = (float(quad[1][0]), float(quad[1][1]))
     envelope = next(iter(envelopes))
-    return _undirected_xy_edge(start, end) in {
-        _undirected_xy_edge(envelope_start, envelope_end)
-        for envelope_start, envelope_end in _ring_edges(envelope)
-    }
+    return _edge_is_covered_by_loop_edge(start, end, envelope)
 
 
 def _solution_id_for_entity_coverage(
@@ -2213,12 +2342,13 @@ def _solution_interface_planes(
 def _conductor_entities_on_solution_plane(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     lower: SemanticEntitySpec,
     upper: SemanticEntitySpec,
     z_um: float,
     base_loop: tuple[tuple[float, float], ...] | None = None,
     base_region: tuple[Any, ...] | None = None,
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[SemanticEntitySpec, ...]:
     import gdstk
 
@@ -2233,10 +2363,22 @@ def _conductor_entities_on_solution_plane(
         if base_region is not None
         else (gdstk.Polygon(_clean_loop(base_loop)),)
     )
-    for entity in build_input.entities:
+    candidate_entities = (
+        _route_conductor_contact_footprints(
+            build_input,
+            route,
+            representation_context=representation_context,
+        )
+        if route is None and representation_context is not None
+        else build_input.entities
+    )
+    for entity in candidate_entities:
         if (
             _is_solution_entity(entity)
-            or entity.route_representations.get(route) is None
+            or planned_conductor_representation(
+                entity, route=route, context=representation_context
+            )
+            is None
             or "outer_loop" not in entity.geometry
             or not _boolean_gdstk_region(
                 gdstk,
@@ -2246,16 +2388,26 @@ def _conductor_entities_on_solution_plane(
             )
         ):
             continue
-        representation = entity.route_representations.get(route)
+        representation = planned_conductor_representation(
+            entity, route=route, context=representation_context
+        )
         if representation == "surface_sheet":
             # Route-A sheets are removed by exact local patch geometry in
             # `_plan_substrate_air_surfaces`; whole-entity coverage cannot
             # represent a sheet spanning supported and exposed regions.
             if (
-                route not in {"A", "_effective"}
+                route != "A"
+                and not (route is None and representation_context is not None)
                 and set(_route_a_sheet_boundary_volume_ids(build_input, entity))
                 == pair_ids
-                and _same_z(_route_a_sheet_plane_z_um(build_input, entity), z_um)
+                and _same_z(
+                    _route_a_sheet_plane_z_um(
+                        build_input,
+                        entity,
+                        representation_context=representation_context,
+                    ),
+                    z_um,
+                )
             ):
                 records.append(entity)
             continue

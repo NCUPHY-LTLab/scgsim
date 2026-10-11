@@ -15,7 +15,15 @@ from pathlib import Path
 
 from scgsim.aedt._io import file_sha256, read_json, write_json
 
-from scgsim.aedt.epr.models import EprResult, SavedSolution, detached
+from scgsim.aedt.epr.models import (
+    EprResult,
+)
+from scgsim.aedt.specs.epr import (
+    SavedSolution,
+)
+from scgsim.aedt._data import (
+    detached,
+)
 
 from scgsim.aedt.epr.selection import _exact_mapping
 

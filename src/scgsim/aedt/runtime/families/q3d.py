@@ -30,7 +30,8 @@ from scgsim.aedt.runtime.native.common import (
     saved_setup_properties as _saved_setup_properties,
 )
 
-from scgsim.aedt.runtime.native.q3d_bodies import construct_q3d_bodies, q3d_terminal_segments
+from scgsim.aedt.runtime.native.q3d_bodies import construct_q3d_bodies
+from scgsim.aedt._terminal_chain import q3d_terminal_segments
 
 from scgsim.aedt.specs.common import AedtResources, REQUIRED_AEDT_VERSION
 

@@ -19,11 +19,12 @@ from scgsim.geometry import GeometryPlanSnapshot
 
 from scgsim.aedt._io import file_sha256, write_json
 
-from scgsim.aedt.epr.models import canonical_sha256, detached
+from scgsim.aedt._data import canonical_sha256, detached
 
 from scgsim.aedt.specs.common import MatrixRunControl, PdkMaterial
 
-from scgsim.aedt.specs.modeling import Modeling, _source_physical_layers
+from scgsim.aedt.specs.modeling import Modeling
+from scgsim.aedt.preparation.modeling import _source_physical_layers
 
 from scgsim.aedt.specs.q3d import Q3dBodySpec, Q3dNetSpec, Q3dSpec
 

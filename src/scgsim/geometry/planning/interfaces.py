@@ -30,6 +30,7 @@ from scgsim.geometry._primitives.loops import (
 from scgsim.geometry._primitives.spatial import _bounds_overlap, _same_z, _z_key
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import (
     InterfacePlanRecord,
     MMContactRecord,
@@ -48,6 +49,9 @@ from scgsim.geometry.planning.domain import (
 from scgsim.geometry.planning.topology import (
     _surface_interface_record_owners,
     _surface_owner_ids,
+)
+from scgsim.geometry.planning.representation import (
+    planned_conductor_representation,
 )
 
 
@@ -96,7 +100,8 @@ def complete_interface_plan_from_surfaces(
 def recognize_route_interfaces(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[InterfacePlanRecord, ...]:
     """Recognize interfaces before creating OCC geometry.
 
@@ -111,7 +116,9 @@ def recognize_route_interfaces(
     for index, intent in enumerate(intents.get("interfaces", ())):
         if not isinstance(intent, Mapping):
             raise TypeError("interfaces entries must be mappings")
-        if not _intent_supports_route(intent, route):
+        if not _intent_supports_context_or_route(
+            intent, route=route, representation_context=representation_context
+        ):
             continue
         kind = str(intent.get("kind", ""))
         if kind not in _INTERFACE_KIND_ORDER:
@@ -136,7 +143,9 @@ def recognize_route_interfaces(
     for index, intent in enumerate(intents.get("metal_metal_contact_edges", ())):
         if not isinstance(intent, Mapping):
             raise TypeError("metal_metal_contact_edges entries must be mappings")
-        if not _intent_supports_route(intent, route):
+        if not _intent_supports_context_or_route(
+            intent, route=route, representation_context=representation_context
+        ):
             continue
         owners = tuple(str(owner) for owner in intent.get("owner_semantic_ids", ()))
         if len(owners) != 2:
@@ -158,7 +167,9 @@ def recognize_route_interfaces(
     for index, intent in enumerate(intents.get("metal_ground_contact_patches", ())):
         if not isinstance(intent, Mapping):
             raise TypeError("metal_ground_contact_patches entries must be mappings")
-        if not _intent_supports_route(intent, route):
+        if not _intent_supports_context_or_route(
+            intent, route=route, representation_context=representation_context
+        ):
             continue
         owners = tuple(str(owner) for owner in intent.get("owner_semantic_ids", ()))
         if len(owners) != 2:
@@ -180,37 +191,65 @@ def recognize_route_interfaces(
     return tuple(records)
 
 
+def _intent_supports_context_or_route(
+    intent: Mapping[str, Any],
+    *,
+    route: RouteLiteral | None,
+    representation_context: RepresentationContext | None,
+) -> bool:
+    if route is not None:
+        return _intent_supports_route(intent, route)
+    if representation_context is None:
+        return False
+    if intent.get("intent_origin") == "generated_representation_context_surface_sheet":
+        owners = intent.get("owner_semantic_ids")
+        if (
+            not isinstance(owners, Sequence)
+            or isinstance(owners, (str, bytes))
+            or not owners
+        ):
+            return False
+        owner = representation_context.entities.get(str(owners[0]))
+        return owner is not None and owner.representation == "sheet"
+    return "valid_routes" not in intent
+
+
 def _same_declared_effective_sheet_plane(
-    lower: SemanticEntitySpec, upper: SemanticEntitySpec
+    lower: SemanticEntitySpec,
+    upper: SemanticEntitySpec,
+    *,
+    representation_context: RepresentationContext | None,
 ) -> bool:
     """Identify one declared source film, without inferring layer or connectivity."""
-    traces = tuple(entity.metadata.get("aedt_effective_layer") for entity in (lower, upper))
-    if any(not isinstance(trace, Mapping) for trace in traces):
+    if representation_context is None:
         return False
-    left, right = traces
-    identity = left.get("physical_layer_id")
+    records = tuple(
+        representation_context.entities.get(entity.semantic_id)
+        for entity in (lower, upper)
+    )
+    if any(record is None for record in records):
+        return False
+    left, right = records
+    identity = left.physical_layer_id
     if (
         not identity
-        or identity != right.get("physical_layer_id")
-        or left.get("representation") != "sheet"
-        or right.get("representation") != "sheet"
+        or identity != right.physical_layer_id
+        or left.representation != "sheet"
+        or right.representation != "sheet"
         or not lower.net_id
         or lower.net_id != upper.net_id
     ):
         return False
-    source_geometries = tuple(trace.get("source_geometry") for trace in traces)
-    if any(not isinstance(geometry, Mapping) for geometry in source_geometries):
-        return False
-    source_intervals = tuple(
-        _entity_z_range_um(replace(entity, geometry=geometry))
-        for entity, geometry in zip((lower, upper), source_geometries)
+    return (
+        left.source_z_interval_um == right.source_z_interval_um
+        and left.effective_z_interval_um == right.effective_z_interval_um
+        and left.effective_z_interval_um[0] == left.effective_z_interval_um[1]
     )
-    lower_z = _entity_z_range_um(lower)
-    upper_z = _entity_z_range_um(upper)
-    return source_intervals[0] == source_intervals[1] and lower_z == upper_z and lower_z[0] == lower_z[1]
 
 
-def _sheet_loops_share_positive_edge(lower: SemanticEntitySpec, upper: SemanticEntitySpec) -> bool:
+def _sheet_loops_share_positive_edge(
+    lower: SemanticEntitySpec, upper: SemanticEntitySpec
+) -> bool:
     """Exact positive-length lateral incidence, excluding a point-only touch."""
     lower_loops = (lower.geometry["outer_loop"], *lower.geometry.get("hole_loops", ()))
     upper_loops = (upper.geometry["outer_loop"], *upper.geometry.get("hole_loops", ()))
@@ -222,11 +261,16 @@ def _sheet_loops_share_positive_edge(lower: SemanticEntitySpec, upper: SemanticE
                 if length_sq == 0:
                     continue
                 for first, second in _ring_edges(right):
-                    if any((point[0] - start[0]) * dy - (point[1] - start[1]) * dx != 0
-                           for point in (first, second)):
+                    if any(
+                        (point[0] - start[0]) * dy - (point[1] - start[1]) * dx != 0
+                        for point in (first, second)
+                    ):
                         continue
-                    parameters = tuple(((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / length_sq
-                                       for point in (first, second))
+                    parameters = tuple(
+                        ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy)
+                        / length_sq
+                        for point in (first, second)
+                    )
                     if min(1.0, max(parameters)) > max(0.0, min(parameters)):
                         return True
     return False
@@ -235,8 +279,9 @@ def _sheet_loops_share_positive_edge(lower: SemanticEntitySpec, upper: SemanticE
 def plan_conductor_contact_patches(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     interfaces: tuple[InterfacePlanRecord, ...],
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[InterfacePlanRecord, ...]:
     """Recognize coplanar conductor contact patches from planned conductors.
 
@@ -262,7 +307,9 @@ def plan_conductor_contact_patches(
         list[tuple[SemanticEntitySpec, Any, Mapping[str, float]]],
     ] = {}
 
-    for entity in _route_conductor_contact_footprints(build_input, route):
+    for entity in _route_conductor_contact_footprints(
+        build_input, route, representation_context=representation_context
+    ):
         region = _entity_occupied_region(gdstk, entity)
         if not region:
             continue
@@ -278,14 +325,24 @@ def plan_conductor_contact_patches(
                 if lower.semantic_id == upper.semantic_id:
                     continue
                 overlap_region = None
-                if route == "_effective" and _same_declared_effective_sheet_plane(lower, upper):
+                if (
+                    route is None
+                    and representation_context is not None
+                    and _same_declared_effective_sheet_plane(
+                        lower,
+                        upper,
+                        representation_context=representation_context,
+                    )
+                ):
                     overlap_region = _boolean_gdstk_region(
                         gdstk, lower_region, upper_region, "and"
                     )
                     # One collapsed source film may have a lateral seam between
                     # distinct same-Net bodies. It has no horizontal MM area;
                     # keep both source bodies and their actual boundary rings.
-                    if not overlap_region and _sheet_loops_share_positive_edge(lower, upper):
+                    if not overlap_region and _sheet_loops_share_positive_edge(
+                        lower, upper
+                    ):
                         continue
                 if not _bounds_overlap(lower_bounds, upper_bounds):
                     if _loops_touch_without_area(
@@ -339,6 +396,7 @@ def plan_conductor_contact_patches(
                     metadata = _contact_patch_metadata(
                         build_input,
                         route=route,
+                        representation_context=representation_context,
                         solution_entities=solution_entities,
                         lower=lower,
                         upper=upper,
@@ -477,8 +535,9 @@ def _route_c_contact_patch_metadata(
 def plan_mm_contact_records(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     interfaces: tuple[InterfacePlanRecord, ...],
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[tuple[InterfacePlanRecord, ...], tuple[MMContactRecord, ...]]:
     """Turn finite-area same-net contact into hidden component provenance.
 
@@ -486,9 +545,32 @@ def plan_mm_contact_records(
     record remains present for both Route A and Route B while its internal face
     is deliberately absent from solver physical groups.
     """
+    enriched, records, _ = _plan_mm_contact_records_with_components(
+        build_input,
+        route=route,
+        interfaces=interfaces,
+        representation_context=representation_context,
+    )
+    return enriched, records
+
+
+def _plan_mm_contact_records_with_components(
+    build_input: GeometryBuildInput,
+    *,
+    route: RouteLiteral | None,
+    interfaces: tuple[InterfacePlanRecord, ...],
+    representation_context: RepresentationContext | None = None,
+) -> tuple[
+    tuple[InterfacePlanRecord, ...],
+    tuple[MMContactRecord, ...],
+    tuple[dict[str, Any], ...],
+]:
+    """Return MM contacts and their single source-owned component ledger."""
     live_ids = {
         entity.semantic_id
-        for entity in _route_conductor_contact_footprints(build_input, route)
+        for entity in _route_conductor_contact_footprints(
+            build_input, route, representation_context=representation_context
+        )
     }
     # Component ownership retains the original Entity and every source polygon,
     # rather than whichever temporary contact footprint was processed last.
@@ -518,7 +600,10 @@ def plan_mm_contact_records(
         contacts.append((interface, lower, upper))
 
     normalizations = _validate_volumetric_conductor_contacts(
-        build_input, route=route, entities=entities
+        build_input,
+        route=route,
+        entities=entities,
+        representation_context=representation_context,
     )
     parent = {entity_id: entity_id for entity_id in entities}
 
@@ -611,7 +696,8 @@ def plan_mm_contact_records(
                     "conductor_component_id": component_id,
                     "net_id": component_net,
                     "equipotential_id": component_equipotential,
-                    "hidden_solver_contact": route in {"A", "B", "_effective"},
+                    "hidden_solver_contact": route in {"A", "B"}
+                    or (route is None and representation_context is not None),
                 },
             )
         )
@@ -651,7 +737,30 @@ def plan_mm_contact_records(
                     },
                 )
             )
-    return tuple(enriched), tuple(records)
+    records_tuple = tuple(records)
+    component_ledger = tuple(
+        {
+            "conductor_component_id": component_id,
+            "members": tuple(
+                sorted(
+                    entity_id
+                    for entity_id, owner_component_id in component_ids.items()
+                    if owner_component_id == component_id
+                )
+            ),
+            "contact_ids": tuple(
+                sorted(
+                    record.contact_id
+                    for record in records_tuple
+                    if record.conductor_component_id == component_id
+                )
+            ),
+            "net_id": component_values[component_id][0],
+            "equipotential_id": component_values[component_id][1],
+        }
+        for component_id in sorted(component_values)
+    )
+    return tuple(enriched), records_tuple, component_ledger
 
 
 def _source_layer_provenance(entity: SemanticEntitySpec) -> dict[str, Any]:
@@ -666,8 +775,9 @@ def _source_layer_provenance(entity: SemanticEntitySpec) -> dict[str, Any]:
 def _validate_volumetric_conductor_contacts(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     entities: Mapping[str, SemanticEntitySpec],
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[
     tuple[
         SemanticEntitySpec,
@@ -676,11 +786,13 @@ def _validate_volumetric_conductor_contacts(
     ],
     ...,
 ]:
-    """Reject ambiguous body overlap before a route can hide it as a PEC void."""
+    """Reject body overlap without explicit stacked-contact normalization."""
     import gdstk
 
     footprint_regions: dict[str, list[Any]] = {}
-    for footprint in _route_conductor_contact_footprints(build_input, route):
+    for footprint in _route_conductor_contact_footprints(
+        build_input, route, representation_context=representation_context
+    ):
         footprint_regions.setdefault(footprint.semantic_id, []).extend(
             _entity_occupied_region(gdstk, footprint)
         )
@@ -734,7 +846,7 @@ def _validate_volumetric_overlap_ownership(
     finite_overlap: Callable[[SemanticEntitySpec, SemanticEntitySpec], bool]
     | None = None,
 ) -> None:
-    """Apply contact ownership after the caller establishes actual body overlap."""
+    """Require explicit stacked-contact ownership of actual body overlap."""
     if not lower.net_id or not upper.net_id:
         raise ValueError(
             f"{lower.semantic_id}/{upper.semantic_id} volumetric overlap "
@@ -885,25 +997,29 @@ def _sort_contact_loops(
 def _contact_patch_metadata(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     solution_entities: Sequence[SemanticEntitySpec],
     lower: SemanticEntitySpec,
     upper: SemanticEntitySpec,
     contact_z_um: float,
     contact_loop: tuple[tuple[float, float], ...],
     contact_index: int,
+    representation_context: RepresentationContext | None = None,
 ) -> Mapping[str, Any]:
     plane_z_um = contact_z_um
     boundary_volume_ids: tuple[str, ...]
     interface_kinds: tuple[str, ...] = ("MM",)
     export_surface = route != "B"
 
-    if route in {"A", "_effective"}:
+    if route == "A" or (route is None and representation_context is not None):
         sheet = next(
             (
                 entity
                 for entity in (lower, upper)
-                if entity.route_representations.get(route) == "surface_sheet"
+                if planned_conductor_representation(
+                    entity, route=route, context=representation_context
+                )
+                == "surface_sheet"
             ),
             None,
         )
@@ -930,12 +1046,15 @@ def _contact_patch_metadata(
             )
         )
 
-    contact_policy = {
-        "A": "sheet_contact_patch",
-        "_effective": "sheet_contact_patch",
-        "B": "hidden_cutout_contact",
-        "C": "retained_material_contact",
-    }[route]
+    contact_policy = (
+        "representation_context_contact_patch"
+        if route is None
+        else {
+            "A": "sheet_contact_patch",
+            "B": "hidden_cutout_contact",
+            "C": "retained_material_contact",
+        }[route]
+    )
     interface_type = "_".join(interface_kinds)
     return {
         "recognition_rule": "coplanar_conductor_contact_patch",

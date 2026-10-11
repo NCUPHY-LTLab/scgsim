@@ -179,15 +179,17 @@ layer does not implicitly choose the target conductor face.
 
 Preparation uses the selector to resolve one connected occurrence-local metal
 region on the declared source GDS layer. That region can contain multiple
-fused raw GDS polygons. GeometryPlan applies the occurrence transform once,
-verifies the resulting exterior and hole loops against the paired GDS, and
-records them in the root plane's `geometry.source_occurrence_includes`. The
-root plane's `metadata.ground_plane_contribution_sources` retains the
-occurrence path, local ID, physical level, and source layer. A selected region
-that contains a separately declared local conductor on the same physical level
-is rejected. These includes become part of the residual plane before polygon
-lowering; they are not separate conductor Entities or Net assignments, and
-GeometryPlan does not infer connectivity or promise separate measurements.
+fused raw GDS polygons. The root-plane and occurrence paths use the same local
+plane/mask/include geometry recipe. GeometryPlan applies the occurrence
+transform once, verifies the resulting exterior and hole loops against the
+paired GDS, and records them in the root plane's
+`geometry.source_occurrence_includes`. The root plane's
+`metadata.ground_plane_contribution_sources` retains the occurrence path, local
+ID, physical level, and source layer. A selected region that contains a
+separately declared local conductor on the same physical level is rejected.
+These includes become part of the residual plane before polygon lowering; they
+are not separate conductor Entities or Net assignments, and GeometryPlan does
+not infer connectivity or promise separate measurements.
 
 The plan owns the shared outer vacuum envelope. Set it before `prepare()` with
 `plan.set_vacuum_region(padding=...)`, using the existing scalar, X/Y/Z tuple,
@@ -351,6 +353,16 @@ junction declarations retain their terminal nets, direction, dimensions,
 inductance, and capacitance; those fields are not retroactively attributed to
 the normalized `GeometryBuildInput`. AEDT does not consume
 `ConstructionPlanRecord`, Gmsh surfaces, physical groups, or native tags.
+
+AEDT preparation also builds a private, in-process representation context from
+the explicit source/effective layer records. It binds each semantic entity's
+physical-layer identity, source and effective Z intervals, and sheet/solid
+representation, plus the already-mapped outer enclosure. The shared planar
+contribution planner consumes those facts directly; it does not infer AEDT
+modeling from entity metadata or treat the context as a Palace Route A, B, or
+C selection. The context does not alter the public plan snapshot, source GDS,
+or serialized source schema. Palace compilation continues to use its explicit
+Route A/B/C contract.
 
 An AEDT-owned binding sidecar must separately record each created body, sheet,
 face, material side, selection, and saved-field expression against those

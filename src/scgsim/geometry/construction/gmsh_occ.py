@@ -53,7 +53,7 @@ def write_occ_geometry_from_plan(
             gmsh = gmsh_module
             was_initialized = bool(gmsh.isInitialized())
             if not was_initialized:
-                gmsh.initialize()
+                gmsh.initialize(readConfigFiles=False)
             gmsh.clear()
             gmsh.option.setNumber("General.Terminal", 1 if debug_logging else 0)
             _apply_gmsh_number_option(

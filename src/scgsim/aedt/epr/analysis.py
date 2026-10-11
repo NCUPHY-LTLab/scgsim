@@ -15,10 +15,16 @@ from typing import Any
 
 from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
 
-from scgsim.aedt.epr.models import (
+from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
+)
+from scgsim.aedt.epr.models import (
     EprResult,
+)
+from scgsim.aedt.specs.geometry import (
     PreparedPlanarGeometry,
+)
+from scgsim.aedt._data import (
     detached,
 )
 

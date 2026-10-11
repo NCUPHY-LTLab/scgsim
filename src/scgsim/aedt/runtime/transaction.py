@@ -21,6 +21,8 @@ from scgsim.aedt._io import file_sha256, read_json, write_json
 
 from scgsim.aedt.epr.geometry import (
     precompute_inset_surfaces,
+)
+from scgsim.aedt.preparation.planar import (
     validate_geometry_workers,
 )
 
@@ -47,7 +49,13 @@ from scgsim.aedt.results.provenance import (
     validate_runtime_source,
 )
 
-from scgsim.aedt.runtime.families.hfss import prepare_hfss, run_hfss
+from scgsim.aedt.runtime.families.hfss import (
+    prepare_hfss,
+    run_hfss,
+    prepare_body_eigenmode,
+    prepared_body_eigenmode_result,
+    solve_and_export_body_eigenmode,
+)
 
 from scgsim.aedt.runtime.families.q2d import run_q2d
 
@@ -64,7 +72,13 @@ from scgsim.aedt.runtime.native.common import (
 
 from scgsim.aedt.specs.common import AedtResources, LOCKED_PYAEDT, REQUIRED_AEDT_VERSION
 
-from scgsim.aedt.specs.hfss import HfssDrivenGeometrySpec, HfssDrivenSpec, HfssEigenmodeSpec, HfssEprAnalysisSpec, HfssEprSpec
+from scgsim.aedt.specs.hfss import (
+    HfssDrivenGeometrySpec,
+    HfssDrivenSpec,
+    HfssEigenmodeSpec,
+    HfssEprAnalysisSpec,
+    HfssEprSpec,
+)
 
 from scgsim.aedt.specs.parse import AedtSpec, parse_aedt_spec
 
@@ -150,13 +164,31 @@ def _execute(
     spec = parse_aedt_spec(_object(read_json(spec_path), "spec"), base_dir=run_dir)
     resources = _execution_resources(metadata, spec, cores, ram_limit_percent)
     if (
-        not isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec, HfssDrivenGeometrySpec, Q2dSpec, Q3dSpec))
+        not isinstance(
+            spec,
+            (
+                HfssEprAnalysisSpec,
+                HfssEprSpec,
+                HfssDrivenGeometrySpec,
+                Q2dSpec,
+                Q3dSpec,
+            ),
+        )
         and spec.gds_path.resolve() != (run_dir / "geometry/design.gds").resolve()
     ):
         raise RuntimeError("prepared spec must use geometry/design.gds")
     valid_flags = (
         (
-            isinstance(spec, (HfssEprSpec, HfssDrivenGeometrySpec, HfssDrivenSpec, HfssEigenmodeSpec, Q3dSpec))
+            isinstance(
+                spec,
+                (
+                    HfssEprSpec,
+                    HfssDrivenGeometrySpec,
+                    HfssDrivenSpec,
+                    HfssEigenmodeSpec,
+                    Q3dSpec,
+                ),
+            )
             and not analyze_epr
         )
         or (isinstance(spec, HfssEprAnalysisSpec) and analyze_epr and not prepare_only)
@@ -289,15 +321,33 @@ def _execute(
             )
             status = "epr_analysis_completed"
         elif isinstance(spec, HfssEprSpec):
-            prepared = prepare_epr_hfss(
-                owned_application_constructor(Hfss, desktop), run_dir, spec, inset_plan
-            )
+            if spec.epr_request is None:
+                prepared = prepare_body_eigenmode(
+                    owned_application_constructor(Hfss, desktop), run_dir, spec
+                )
+            else:
+                prepared = prepare_epr_hfss(
+                    owned_application_constructor(Hfss, desktop),
+                    run_dir,
+                    spec,
+                    inset_plan,
+                )
             if prepare_only:
-                result = prepared_epr_result(prepared)
+                result = (
+                    prepared_body_eigenmode_result(prepared)
+                    if spec.epr_request is None
+                    else prepared_epr_result(prepared)
+                )
                 status = "native_preparation_only"
             else:
                 epr_solver_attempted = True
-                result = solve_and_export_epr(prepared, resources, receipt["resources"])
+                result = (
+                    solve_and_export_body_eigenmode(
+                        prepared, resources, receipt["resources"]
+                    )
+                    if spec.epr_request is None
+                    else solve_and_export_epr(prepared, resources, receipt["resources"])
+                )
                 status = "completed"
         elif isinstance(spec, Q3dSpec):
             if prepare_only:
@@ -395,7 +445,10 @@ def _execute(
             receipt["solver_invoked"] = epr_solver_attempted
         if (
             result is not None
-            and isinstance(spec, (Q3dSpec, HfssDrivenGeometrySpec, HfssDrivenSpec, HfssEigenmodeSpec))
+            and isinstance(
+                spec,
+                (Q3dSpec, HfssDrivenGeometrySpec, HfssDrivenSpec, HfssEigenmodeSpec),
+            )
             and prepare_only
         ):
             if receipt.get("release") == {"ok": True}:
@@ -481,7 +534,9 @@ def _record_result_before_release(
     """Copy returned facts before releasing the one transaction-owned Desktop."""
 
     if (
-        isinstance(spec, (Q3dSpec, HfssDrivenGeometrySpec, HfssDrivenSpec, HfssEigenmodeSpec))
+        isinstance(
+            spec, (Q3dSpec, HfssDrivenGeometrySpec, HfssDrivenSpec, HfssEigenmodeSpec)
+        )
         and result.get("solver_invoked") is False
     ):
         for name in (
@@ -638,7 +693,8 @@ def _canonical_metadata_files(
                 raise RuntimeError("analysis handoff saved paths are not canonical")
             expected[key] = value
     if (schema == "scgsim.aedt.handoff.v2") != (
-        workflow in {"body_first_driven_terminal", "body_first_eigenmode", "epr", "epr_analysis"}
+        workflow
+        in {"body_first_driven_terminal", "body_first_eigenmode", "epr", "epr_analysis"}
     ):
         raise RuntimeError("handoff metadata workflow is inconsistent")
     if files != expected:

@@ -105,7 +105,7 @@ New handoffs retain `scgsim.aedt.handoff.v1` and
 `scgsim.aedt.handoff-manifest.v1`. Both records add
 `expected_receipt_schema: scgsim.aedt.receipt.v3`, and the initial receipt is
 V3. It contains `prepared_runtime_source`: a deterministic, sorted
-`runtime-source.v15` manifest for the current candidate. The record fields are
+`runtime-source.v18` manifest for the current candidate. The record fields are
 `schema_version`, `stage`, `modules`, `content_sha256`, and
 `revision_observation`; there is no helper-hash map. Each declared module has
 measured bytes and the content digest binds that inventory. The Git observation
@@ -137,8 +137,8 @@ partial markers, noncanonical members, and hash mismatches reject before
 receipt mutation.
 
 Every new completed V3 receipt has a separate `runtime_source` manifest using
-`runtime-source.v15` and a content digest for the code that actually executed
-it. Declared module bytes and the digest are mandatory; V15 has no redundant
+`runtime-source.v18` and a content digest for the code that actually executed
+it. Declared module bytes and the digest are mandatory; V18 has no redundant
 helper-hash fields. `revision_observation` carries the actual 40-hex commit
 when available and records `unavailable` truthfully for an immutable wheel
 without VCS metadata. Missing or corrupt declared module bytes, digest, schema,
@@ -167,11 +167,18 @@ enumeration rule. The V2–V14 inventories are frozen as well. V4 added
 `scgsim/aedt/_handoff_cohort.py` to V9; V11 added
 `scgsim/aedt/_q3d_bodies.py` to V10. V12 is frozen with V11's exact path
 membership. V13 retains its frozen inventory, mandatory declared module bytes
-and digest, and optional `revision_observation`; V1–V13 retain their frozen path
+and digest, and optional `revision_observation`; V1–V17 retain their frozen path
 membership, field meanings, and version-specific reader rules. V14 is reserved
-for held PR35. The current candidate uses V15 with the five fields described
-above and no helper-hash map; its precise path list is the frozen
-implementation inventory. These manifests bind their
+for held PR35. V16 added the HFSS Eigenmode native implementation module to the
+V15 inventory. V17 added the shared lumped-model and HFSS lumped-native modules,
+plus the AEDT specs package initializer, to V16. The current V18 inventory
+removes the former EPR-private `epr/junction_partition.py` path and includes
+`preparation/junction_partition.py`, the relocated AEDT data/RLC/terminal
+helpers, geometry/EPR/support specs, modeling/planar preparation, HFSS geometry
+runtime, neutral geometry representation modules, and the shared source-ground
+construction helper with its polygon-operation leaf. V18 uses the same five
+record fields described above and no helper-hash map; its exact path list is
+the declared implementation inventory. These manifests bind their
 declared file inventories, not an exhaustive transitive dependency
 attestation. The frozen V12 inventory, for example, does not separately hash
 `scgsim/sgb/engine_gates.py`. They do not change the V3 receipt schema. A pure
@@ -183,10 +190,10 @@ historical hashes with the installed package.
 
 Execution computes mandatory runtime-source provenance inside the receipt-bound
 failure transaction, before importing PyAEDT or constructing Desktop. Current
-V15 may record `revision_observation` as unavailable; that alone does not fail
+V18 may record `revision_observation` as unavailable; that alone does not fail
 byte-bound identity or prevent execution. Missing or corrupt declared module
 bytes, digest, schema, or cohort still yield a failed V3 receipt without a
-Desktop launch rather than escaping receipt finalization. V1–V14 retain their
+Desktop launch rather than escaping receipt finalization. V1–V17 retain their
 version-specific historical validation rules, including revision requirements
 where declared.
 
@@ -245,6 +252,11 @@ readback verifies the design-level `TerminalReferenceConductors` inventory;
 it does not establish distinct per-port reference assignments. Historical
 payloads with different reference tuples are rejected by current constructors,
 including payload decoding; their original execution evidence remains historical.
+Saved body-first Terminal child assignments are read back as native `Edges` or
+`Faces`, with each assigned ID resolved to exactly one source-built conductor
+object. Missing or ambiguous assignment kinds and owners fail readback. The
+parent port's `Faces` support assignment remains separate from child signal
+ownership.
 
 `LumpedRlc` requires an explicit `series` or `parallel` topology. Its R, L and
 C components are independently selected; `None` disables the corresponding

@@ -429,7 +429,7 @@ def _mesh_xao_in_current_process(
     mesh_path.parent.mkdir(parents=True, exist_ok=True)
     import gmsh
 
-    gmsh.initialize()
+    gmsh.initialize(readConfigFiles=False)
     try:
         gmsh.open(str(xao_path))
         gmsh.option.setNumber("General.Terminal", 0)
@@ -497,6 +497,7 @@ def _mesh_xao_in_current_process(
                     "automatic_high_order_optimize": "Mesh.HighOrderOptimize",
                     "refined_mesh_size": "Mesh.MeshSizeMin",
                     "max_mesh_size": "Mesh.MeshSizeMax",
+                    "mesh_size_factor": "Mesh.MeshSizeFactor",
                 }.items()
             }
         )

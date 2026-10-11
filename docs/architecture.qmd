@@ -56,10 +56,10 @@ scgsim/
 │   └── presentation/ # Palace-specific reports and figures
 ├── aedt/
 │   ├── eigenmode.py  # retained mutable high-level state facade
-│   ├── specs/        # common and HFSS/Q2D/Q3D request records and parsing
-│   ├── preparation/ # portable handoff, geometry and cohort membership
+│   ├── specs/        # detached requests, prepared geometry and parsing
+│   ├── preparation/ # source binding, effective geometry, handoff and cohorts
 │   ├── runtime/     # sole transaction and family-native owners
-│   ├── epr/         # EPR source geometry, fields/cache and workflow
+│   ├── epr/         # EPR surface support, fields/cache and analysis composition
 │   ├── results/     # strict readers and convergence observations
 │   ├── presentation/
 │   └── run.py       # supported CLI, delegates to transaction owner
@@ -70,6 +70,31 @@ scgsim/
 │   └── rendering.py
 └── presentation/     # shared physics-neutral notebook formatting
 ```
+
+The responsibility correction keeps one definition for every detached AEDT
+request record. `aedt.specs.geometry` owns `PreparedPlanarGeometry`;
+`aedt.specs.epr` owns junction, surface and analysis declarations; shared
+request primitives own generic `LumpedRlc`. Existing public imports re-export
+these same classes. Payload members, historical markers and model/source hash
+rules remain unchanged. Private stdlib data helpers own freeze, detachment and
+canonical hashing; pure support projection is shared by preparation and
+request decoding without importing a preparation or native workflow.
+
+`aedt.specs.modeling` owns physical-layer declarations and the pure Z map.
+`aedt.preparation` owns source acquisition, Entity binding and effective
+geometry, stack and enclosure conversion. It supplies the backend-neutral
+private representation context consumed by the shared geometry planner;
+serialized AEDT provenance remains source-bound data, rather than a planner
+route or a second coordinate-map authority. Palace route orchestration and
+explicit effective-representation planning share one contact/coverage algorithm.
+
+The HFSS family owns ordinary source-backed Eigenmode preparation, solve and
+export. EPR composes that workflow with integration surfaces, fields, cache and
+analysis. Junction declarations control junction construction independently of
+an EPR analysis request: omitting analysis never removes a declared junction.
+The transaction retains sole Desktop and receipt ownership. General body,
+support, material and enclosure native operations belong to `runtime.native`;
+generic RLC assignment and saved readback belong to the native lumped owner.
 
 Only create a leaf when it owns real implementation. Geometry planning and
 construction primitives have one shared lower-level owner; backend families
@@ -140,14 +165,16 @@ Within Palace, `results.report_data` owns detached report records and snapshot
 readers; `presentation.reports` owns trust/physics views and figures. The
 package facade retains the existing public result and report names.
 
-The current v2 AEDT producer emits `scgsim.aedt.runtime-source.v13` with 61
+The accepted v2 starting producer emitted `scgsim.aedt.runtime-source.v13` with 61
 canonical declared module paths, including 41 AEDT modules. Its records carry
 `schema_version`, `stage`, `modules`, `content_sha256`, and
 `revision_observation`; module bytes and their digest are mandatory, while the
 truthful Git observation may be unavailable. V13 has no helper-hash map and
 does not claim exhaustive transitive-source coverage. Historical runtime-source
-v1–v12 continue to interpret their original module paths and identities; V13
-does not rewrite or reinterpret historical receipts.
+inventories continue to interpret their original module paths and identities;
+relocation does not rewrite or reinterpret their receipts. The responsibility
+correction advances the prior v17 producer to runtime-source v18 while retaining
+receipt V3; its declared inventory binds the relocated implementation.
 
 The flow below shows the accepted source structure. Geometry source preparation
 and compiler planning have separate owners, and neither backend defines source

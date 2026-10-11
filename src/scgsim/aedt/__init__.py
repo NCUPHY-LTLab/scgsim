@@ -2,18 +2,23 @@
 
 from .eigenmode import EigenmodeSim
 from .epr.analysis import combine_epr_mode, combine_surface_epr_mode, reanalyze_epr
-from .epr.geometry import planar_junction_from_port, prepare_planar_geometry_input
-from .epr.models import (
+from .epr.geometry import planar_junction_from_port
+from .preparation.planar import prepare_planar_geometry_input
+from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
-    EprResult,
     ExpressionCacheConvergence,
     NativeExpressionDefinition,
     NormalizedSurfaceEprTotal,
     PlanarJunction,
-    LumpedRlc,
-    PreparedPlanarGeometry,
-    SavedSolution,
     SurfaceEprSpec,
+)
+from scgsim.aedt.epr.models import EprResult
+from scgsim.aedt.specs.epr import SavedSolution
+from scgsim.aedt.specs.common import (
+    LumpedRlc,
+)
+from scgsim.aedt.specs.geometry import (
+    PreparedPlanarGeometry,
 )
 from .epr.workflow import analyze_epr
 from .preparation.geometry import (
