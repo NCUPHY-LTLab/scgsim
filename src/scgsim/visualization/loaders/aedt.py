@@ -27,6 +27,7 @@ def inspect_aedt_geometry(
 ) -> GeometryPreview:
     """Open one AEDT project headlessly and bind native geometry readback."""
     source_path = Path(source).expanduser().resolve()
+    source_conductors: tuple[Mapping[str, Any], ...] = ()
     if source_path.is_file():
         if source_path.suffix.lower() != ".aedt":
             raise ValueError("raw AEDT geometry source must be an .aedt project")
@@ -52,6 +53,22 @@ def inspect_aedt_geometry(
         receipt_path = root / "metadata/aedt_run_receipt.json"
         receipt = _json(receipt_path) if receipt_path.is_file() else None
         if receipt is not None:
+            if receipt.get("status") == "native_preparation_only":
+                from scgsim.aedt.results.prepared import resolve_prepared_model
+
+                resolve_prepared_model(root)
+            geometry = spec.get("geometry")
+            if isinstance(geometry, Mapping):
+                source_geometry = _mapping(
+                    geometry.get("source"), "spec.geometry.source"
+                )
+                source_conductors = tuple(source_geometry.get("conductors", ()))
+                if receipt.get("status") != "native_preparation_only":
+                    recorded_source = _mapping(receipt.get("source"), "receipt.source")
+                    if recorded_source.get("spec_sha256") != _sha256(spec_path):
+                        raise ValueError(
+                            "AEDT source spec hash disagrees with the receipt"
+                        )
             if receipt.get("project") != project_path.relative_to(root).as_posix():
                 raise ValueError(
                     "AEDT receipt project identity disagrees with the spec"
@@ -119,7 +136,7 @@ def inspect_aedt_geometry(
         native_boundaries: Mapping[str, Mapping[str, Any]] = {}
         if receipt is not None:
             native_boundaries = _validate_native_receipt(app, receipt)
-        materials = _materials(app, datasets, receipt)
+        materials = _materials(app, datasets, receipt, source_conductors)
         boundaries = _boundaries(app, datasets, receipt, pv, native_boundaries)
     finally:
         if desktop is not None:
@@ -176,7 +193,7 @@ def _validate_native_receipt(
                 str(item.get("observed", {}).get("native_pec_boundary")),
                 tuple(item.get("observed", {}).get("native_pec_objects", ())),
             )
-            for item in receipt.get("materials", ())
+            for item in _material_records(receipt)
             if item.get("observed", {}).get("native_pec_boundary")
         }
         for boundary_name, object_names in pec_records:
@@ -186,6 +203,31 @@ def _validate_native_receipt(
             expected_ids = sorted(object_ids[name] for name in object_names)
             if sorted(int(value) for value in props.get("Objects", ())) != expected_ids:
                 raise ValueError("native AEDT PEC object assignment changed")
+        geometry = receipt.get("geometry")
+        if isinstance(geometry, Mapping):
+            for item in geometry.get("objects", ()):
+                name = _text(item.get("object_name"), "native object name")
+                if object_ids.get(name) != item.get("native_object_id"):
+                    raise ValueError("native AEDT body identity changed")
+                observed = item.get("observed", {})
+                boundary_name = item.get("boundary_name")
+                if boundary_name:
+                    props = native_boundaries.get(boundary_name)
+                    if props is None or props.get("BoundType") != "Perfect E":
+                        raise ValueError("native Sheet PEC boundary changed")
+                    faces = {int(value) for value in props.get("Faces", ())}
+                    objects = {int(value) for value in props.get("Objects", ())}
+                    if faces != set(item["native_face_ids"]) and objects != {
+                        item["native_object_id"]
+                    }:
+                        raise ValueError("native Sheet PEC assignment changed")
+                if observed.get("native_solve_inside") is False:
+                    obj = app.modeler[name]
+                    if (
+                        str(obj.material_name).casefold() != "pec"
+                        or obj.solve_inside is not False
+                    ):
+                        raise ValueError("native Solid PEC material changed")
         for port in receipt.get("ports", ()):
             boundary_name = _text(port.get("boundary"), "receipt port boundary")
             props = native_boundaries.get(boundary_name)
@@ -250,8 +292,19 @@ def _validate_native_receipt(
     return native_boundaries
 
 
+def _material_records(receipt: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...]:
+    """Use body-first object records; imported models retain their material rows."""
+    geometry = receipt.get("geometry")
+    if isinstance(geometry, Mapping):
+        return tuple(geometry.get("objects", ()))
+    return tuple(receipt.get("materials", ()))
+
+
 def _materials(
-    app: Any, datasets: Mapping[str, Any], receipt: dict[str, Any] | None
+    app: Any,
+    datasets: Mapping[str, Any],
+    receipt: dict[str, Any] | None,
+    source_conductors: tuple[Mapping[str, Any], ...],
 ) -> list[_Part]:
     receipt_items: dict[str, Mapping[str, Any]] = {}
     pdk_materials: Mapping[str, Any] = {}
@@ -259,7 +312,7 @@ def _materials(
     if receipt is not None:
         receipt_items = {
             _text(item.get("object_name"), "receipt.materials.object_name"): item
-            for item in receipt.get("materials", ())
+            for item in _material_records(receipt)
         }
         pdk_materials = _mapping(
             receipt.get("pdk_materials", {}), "receipt.pdk_materials"
@@ -270,7 +323,24 @@ def _materials(
         native_material = str(app.modeler[object_name].material_name).lower()
         item = receipt_items.get(object_name)
         if item is not None:
-            material_id = _text(item.get("material_id"), "receipt material_id")
+            if item.get("kind") == "conductor" and "physical_layer" in item:
+                # Native PEC treatment is separate from the source material identity.
+                matches = [
+                    conductor
+                    for conductor in source_conductors
+                    if conductor["semantic_id"] == item["semantic_id"]
+                    and item["source_polygon_id"] in conductor["polygon_ids"]
+                    and conductor["physical_layer"] == item["physical_layer"]
+                ]
+                if len(matches) != 1:
+                    raise ValueError(
+                        "native conductor has no unique source material binding"
+                    )
+                material_id = _text(
+                    matches[0].get("material_id"), "source conductor material_id"
+                )
+            else:
+                material_id = _text(item.get("material_id"), "receipt material_id")
             material = _mapping(pdk_materials.get(material_id), "receipt PDK material")
             kind = _text(material.get("kind"), "receipt material kind")
             observed = _mapping(item.get("observed", {}), "receipt material observed")
@@ -317,7 +387,7 @@ def _boundaries(
     if receipt is not None:
         mode = receipt.get("mode")
         if mode in {"terminal", "modal", "eigenmode"}:
-            for item in receipt.get("materials", ()):
+            for item in _material_records(receipt):
                 observed = _mapping(item.get("observed", {}), "receipt observed")
                 native_objects = tuple(observed.get("native_pec_objects", ()))
                 if native_objects:
@@ -327,6 +397,15 @@ def _boundaries(
                             "AEDT PEC receipt object readback is inconsistent"
                         )
                     _append_object(parts, datasets, assigned, object_name, "PEC", "PEC")
+                elif (
+                    item.get("boundary_name")
+                    or observed.get("native_solve_inside") is False
+                ):
+                    object_name = _text(item.get("object_name"), "receipt object_name")
+                    label = (
+                        item.get("boundary_name") or "PEC material / SolveInside=false"
+                    )
+                    _append_object(parts, datasets, assigned, object_name, label, "PEC")
             for port in receipt.get("ports", ()):
                 face_id = int(port["face_id"])
                 face = app.modeler.get_face_by_id(face_id)

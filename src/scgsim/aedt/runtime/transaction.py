@@ -162,6 +162,8 @@ def _execute(
         raise RuntimeError("one-shot handoff is not in not_run state")
     spec_path = run_dir / files["spec"]
     spec = parse_aedt_spec(_object(read_json(spec_path), "spec"), base_dir=run_dir)
+    if not prepare_only and not analyze_epr and spec.run_control is None:
+        raise ValueError("solving requires an explicit complete run_control")
     resources = _execution_resources(metadata, spec, cores, ram_limit_percent)
     if (
         not isinstance(
@@ -268,6 +270,9 @@ def _execute(
     }
     if prepare_only:
         receipt["solver_invoked"] = False
+        receipt["model_stage"] = (
+            "model_only" if spec.run_control is None else "model_with_setup"
+        )
     write_json(receipt_path, receipt)
 
     desktop: Any | None = None
@@ -447,7 +452,13 @@ def _execute(
             result is not None
             and isinstance(
                 spec,
-                (Q3dSpec, HfssDrivenGeometrySpec, HfssDrivenSpec, HfssEigenmodeSpec),
+                (
+                    Q3dSpec,
+                    HfssDrivenGeometrySpec,
+                    HfssDrivenSpec,
+                    HfssEigenmodeSpec,
+                    HfssEprSpec,
+                ),
             )
             and prepare_only
         ):

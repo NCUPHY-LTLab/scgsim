@@ -71,7 +71,7 @@ class PreparedHfss:
     region: dict[str, Any]
     mesh: dict[str, Any]
     ports: list[dict[str, Any]]
-    setup: dict[str, Any]
+    setup: dict[str, Any] | None
     geometry: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -89,6 +89,8 @@ def run_hfss(
     resource_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Use the same preparation stage as diagnostics, then solve and export."""
+    if spec.run_control is None:
+        raise ValueError("solving requires an explicit complete run_control")
     prepared = prepare_hfss(Hfss, run_dir, spec)
     solve_hfss(prepared, resources, resource_evidence)
     result = export_hfss(prepared)
@@ -141,10 +143,11 @@ def prepare_hfss(Hfss: Any, run_dir: Path, spec: HfssSpec) -> PreparedHfss:
         region = _create_region(app, spec)
         mesh = _assign_mesh(app, spec)
         ports = _assign_ports(app, spec)
-    _setup(app, spec)
+    if spec.run_control is not None:
+        _setup(app, spec)
     if not app.save_project() or not project_path.is_file():
         raise RuntimeError("HFSS project was not saved before native port readback")
-    setup = _read_hfss_setup(app, spec)
+    setup = _read_hfss_setup(app, spec) if spec.run_control is not None else None
     ports = (
         _bind_body_terminal_evidence(app, spec, geometry, ports)
         if isinstance(spec, HfssDrivenGeometrySpec)
@@ -172,6 +175,8 @@ def solve_hfss(
     spec = prepared.request.parse()
     if not isinstance(spec, HfssSpec):
         raise TypeError("bound HFSS request did not retain an HFSS spec")
+    if spec.run_control is None:
+        raise ValueError("HFSS solving requires an explicit complete run_control")
     if not analyze_with_resources(
         prepared.app,
         spec.run_control.setup_name,
@@ -457,9 +462,7 @@ def _bind_body_terminal_evidence(
                 if key not in native_terminal:
                     return None
                 values = native_terminal[key]
-                if not isinstance(values, Sequence) or isinstance(
-                    values, (str, bytes)
-                ):
+                if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
                     raise RuntimeError(
                         f"saved Terminal {key} assignment is invalid: {port.name!r}"
                     )
@@ -575,18 +578,38 @@ def _bind_body_terminal_evidence(
                 {
                     "Type": expected_type,
                     "Renorm All Terminals": renorm,
-                    "Deembed": not isinstance(port, LumpedTerminalPort),
+                    **(
+                        {"Deembed": False}
+                        if isinstance(port, LumpedTerminalPort)
+                        else {}
+                    ),
                 },
                 port.name,
             )
-            impedance = (
-                port.impedance_ohm if isinstance(port, LumpedTerminalPort) else 50
-            )
-            _require_native_properties(
-                native["terminal_properties"],
-                {"Terminal Renormalizing Impedance": f"{impedance:g}ohm"},
-                terminal_name,
-            )
+            if isinstance(port, LumpedTerminalPort):
+                _require_native_properties(
+                    native["terminal_properties"],
+                    {"Terminal Renormalizing Impedance": f"{port.impedance_ohm:g}ohm"},
+                    terminal_name,
+                )
+            else:
+                # With renormalization disabled this is native metadata, not a
+                # source-authored load or solved characteristic impedance.
+                if native["boundary_properties"].get("Deembed") not in (
+                    True,
+                    False,
+                    "true",
+                    "false",
+                ):
+                    raise RuntimeError("native Wave deembed flag is unavailable")
+                native["inactive_renormalizing_impedance"] = native[
+                    "terminal_properties"
+                ].get("Terminal Renormalizing Impedance")
+                _require_native_properties(
+                    native["boundary_properties"],
+                    {"Deembed Dist": f"{port.deembed_um:g}um"},
+                    port.name,
+                )
         except Exception as exc:
             exc.add_note(
                 "saved body-first Terminal readback: "
@@ -1194,7 +1217,6 @@ def _native_terminal_readback(
             "Type": "Wave Port",
             "Wave Port Type": "Terminal",
             "Num Terminals": 1,
-            "Deembed": True,
             "Deembed Dist": f"{port.deembed_um:g}um",
             "Renorm All Terminals": False,
         },
@@ -1205,11 +1227,16 @@ def _native_terminal_readback(
         {"Name": terminal_name, "Port Name": boundary_name, "Type": "Terminal"},
         f"terminal child {terminal_name!r}",
     )
+    if boundary_properties.get("Deembed") not in (True, False, "true", "false"):
+        raise RuntimeError("native Wave deembed flag is unavailable")
     return {
         "excitation_names": excitation_names,
         "terminal_names": terminal_names,
         "boundary_properties": boundary_properties,
         "terminal_properties": terminal_properties,
+        "inactive_renormalizing_impedance": terminal_properties.get(
+            "Terminal Renormalizing Impedance"
+        ),
     }
 
 
@@ -1629,7 +1656,7 @@ class PreparedBodyEigenmode:
     request: BoundAedtRequest
     project_path: Path
     geometry: dict[str, Any]
-    setup: dict[str, Any]
+    setup: dict[str, Any] | None
     expressions: tuple[dict[str, Any], ...]
     cache: dict[str, Any]
     timings: dict[str, Any]
@@ -1694,15 +1721,20 @@ def prepare_body_eigenmode(
     timings["geometry_seconds"] = round(time.perf_counter() - started, 6)
     timings["geometry_phases"] = geometry.pop("geometry_phases")
     started = time.perf_counter()
-    create_eigenmode_setup(app, bound.run_control)
+    if bound.run_control is not None:
+        create_eigenmode_setup(app, bound.run_control)
     timings["setup_seconds"] = round(time.perf_counter() - started, 6)
     started = time.perf_counter()
-    if analysis_author is None:
+    if analysis_author is None or bound.run_control is None:
         expressions: list[dict[str, Any]] = []
         cache = {
             "schema_version": "scgsim.aedt.epr-cache-request.v1",
             "status": "disabled",
-            "reason": "no EPR analysis request was supplied",
+            "reason": (
+                "no solve setup was supplied"
+                if bound.run_control is None
+                else "no EPR analysis request was supplied"
+            ),
         }
     else:
         expressions, cache, phase_timings = analysis_author(
@@ -1719,8 +1751,10 @@ def prepare_body_eigenmode(
         app, project_path, bound.design_name, bound.geometry, geometry
     )
     _read_generic_rlcs(app, geometry)
-    setup = read_body_eigenmode_setup(app, bound)
-    if analysis_readback is not None:
+    setup = (
+        read_body_eigenmode_setup(app, bound) if bound.run_control is not None else None
+    )
+    if analysis_readback is not None and bound.run_control is not None:
         analysis_readback(app, bound, cache, project_path)
     timings["readback_seconds"] = round(time.perf_counter() - started, 6)
     preparation_wall = time.perf_counter() - preparation_started
@@ -1768,7 +1802,7 @@ def prepared_body_eigenmode_result(
         raise TypeError("bound EPR request did not retain its schema")
     if not prepared.app.save_project() or not prepared.project_path.is_file():
         raise RuntimeError("HFSS EPR project final preparation save failed")
-    if analysis_readback is not None:
+    if analysis_readback is not None and spec.run_control is not None:
         analysis_readback(prepared.app, spec, prepared.cache, prepared.project_path)
     relative = prepared.project_path.relative_to(prepared.request.workspace).as_posix()
     digest = file_sha256(prepared.project_path)
@@ -1814,6 +1848,8 @@ def solve_and_export_body_eigenmode(
     spec = prepared.request.parse()
     if not isinstance(spec, HfssEprSpec):
         raise TypeError("body-first solve/export requires HfssEprSpec")
+    if spec.run_control is None:
+        raise ValueError("Eigenmode solving requires an explicit complete run_control")
     timings = detached_data(prepared.timings)
     started = time.perf_counter()
     solved = analyze_with_resources(

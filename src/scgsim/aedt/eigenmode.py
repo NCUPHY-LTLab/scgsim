@@ -173,10 +173,11 @@ class EigenmodeSim:
         *,
         project_name: str,
         design_name: str,
-        run_control: EigenmodeRunControl,
+        run_control: EigenmodeRunControl | None = None,
         resources: AedtResources | None = None,
         geometry_workers: int | None = None,
     ) -> None:
+        """Declare the native model identity and optional complete solve setup."""
         if (
             not isinstance(project_name, str)
             or not project_name.strip()
@@ -186,8 +187,8 @@ class EigenmodeSim:
             raise ValueError("project_name must be a plain project stem")
         if not isinstance(design_name, str) or not design_name.strip():
             raise ValueError("design_name must be non-empty text")
-        if not isinstance(run_control, EigenmodeRunControl):
-            raise TypeError("run_control must be EigenmodeRunControl")
+        if run_control is not None and not isinstance(run_control, EigenmodeRunControl):
+            raise TypeError("run_control must be EigenmodeRunControl or None")
         _modeling(self.modeling)
         if resources is not None and not isinstance(resources, AedtResources):
             raise TypeError("resources must be AedtResources or None")
@@ -350,10 +351,9 @@ class EigenmodeSim:
             or self.output_dir is None
             or self.project_name is None
             or self.design_name is None
-            or self.run_control is None
         ):
             raise ValueError(
-                "geometry, stack, output_dir, and eigenmode controls are required"
+                "geometry, stack, output_dir, project_name, and design_name are required"
             )
         geometry = self.prepared_geometry
         if geometry is None:

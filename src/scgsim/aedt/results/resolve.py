@@ -41,6 +41,7 @@ from scgsim.aedt.results.provenance import (
     RECEIPT_V1,
     RECEIPT_V2,
     RECEIPT_V3,
+    SOURCE_SCHEMA_V19,
     initial_receipt_payload,
     initial_receipt_sha256,
     validate_runtime_source,
@@ -847,7 +848,12 @@ def _validate_readback(root: Path, receipt: dict[str, Any], spec: Any) -> None:
         if isinstance(spec, HfssDrivenGeometrySpec):
             _validate_body_terminal_readback(receipt, spec)
         else:
-            _validate_terminal_native_evidence(ports, spec)
+            _validate_terminal_native_evidence(
+                ports,
+                spec,
+                current=receipt.get("runtime_source", {}).get("schema_version")
+                == SOURCE_SCHEMA_V19,
+            )
     else:
         _validate_modal_native_evidence(ports, spec)
     _validate_hfss_setup_and_convergence(root, receipt, spec)
@@ -1112,10 +1118,8 @@ def _validate_hfss_pec_bindings(
             raise RuntimeError("HFSS V3 per-sheet PEC evidence is inconsistent")
 
 
-def _validate_hfss_setup_and_convergence(
-    root: Path, receipt: dict[str, Any], spec: HfssDrivenSpec | HfssEigenmodeSpec
-) -> None:
-    if isinstance(spec, HfssEigenmodeSpec):
+def _validate_hfss_setup(receipt: dict[str, Any], spec: Any) -> None:
+    if isinstance(spec, (HfssEigenmodeSpec, HfssEprSpec)):
         native = {
             "minimum_frequency": f"{spec.run_control.minimum_frequency_ghz:g}GHz",
             "num_modes": spec.run_control.num_modes,
@@ -1138,8 +1142,24 @@ def _validate_hfss_setup_and_convergence(
             "minimum_converged_passes": spec.run_control.minimum_converged_passes,
             "percent_refinement": spec.run_control.percent_refinement,
         }
-    if receipt.get("setup") != {"name": spec.run_control.setup_name, "native": native}:
+    setup = receipt.get("setup")
+    expected = {"name": spec.run_control.setup_name, "native": native}
+    if (
+        not isinstance(setup, dict)
+        or (
+            {key: setup.get(key) for key in expected}
+            if isinstance(spec, HfssEprSpec)
+            else setup
+        )
+        != expected
+    ):
         raise RuntimeError("HFSS native setup evidence is invalid")
+
+
+def _validate_hfss_setup_and_convergence(
+    root: Path, receipt: dict[str, Any], spec: HfssDrivenSpec | HfssEigenmodeSpec
+) -> None:
+    _validate_hfss_setup(receipt, spec)
     historical_profile = (
         _eigenmode_convergence_source(receipt) == "profile"
         if isinstance(spec, HfssEigenmodeSpec)
@@ -1220,8 +1240,11 @@ def _validate_q2d_readback(root: Path, receipt: dict[str, Any], spec: Q2dSpec) -
         raise RuntimeError("Q2D matrix readback is invalid")
 
 
-def _validate_q3d_readback(root: Path, receipt: dict[str, Any], spec: Q3dSpec) -> None:
-    if receipt.get("ports") != []:
+def _validate_q3d_model_readback(
+    root: Path, receipt: dict[str, Any], spec: Q3dSpec, *, prepared: bool = False
+) -> None:
+    """Bind model assignments separately from setup and matrix evidence."""
+    if ("ports" in receipt or not prepared) and receipt.get("ports") != []:
         raise RuntimeError("Q3D receipt must not contain HFSS ports")
     nets = receipt.get("nets")
     if not isinstance(nets, list) or len(nets) != len(spec.nets):
@@ -1297,34 +1320,11 @@ def _validate_q3d_readback(root: Path, receipt: dict[str, Any], spec: Q3dSpec) -
         raise RuntimeError("Q3D native object IDs must be unique across nets")
     _validate_q3d_body_bindings(receipt, spec, nets, root)
     _validate_q3d_region_ground(receipt, spec, nets)
-    expected_setup = {
-        "name": spec.run_control.setup_name,
-        "native": {
-            "adaptive_frequency": f"{spec.run_control.frequency_ghz:g}GHz",
-            "capacitance_maximum_passes": spec.run_control.maximum_passes,
-            "capacitance_minimum_passes": spec.run_control.minimum_passes,
-            "capacitance_minimum_converged_passes": (
-                spec.run_control.minimum_converged_passes
-            ),
-            "capacitance_convergence_percent": spec.run_control.convergence_percent,
-            "capacitance_percent_refinement": spec.run_control.percent_refinement,
-            "dc_enabled": False,
-        },
-    }
-    if spec.solve_ac_rl:
-        expected_setup["native"].update(
-            {
-                "ac_rl_maximum_passes": spec.run_control.maximum_passes,
-                "ac_rl_minimum_passes": spec.run_control.minimum_passes,
-                "ac_rl_minimum_converged_passes": (
-                    spec.run_control.minimum_converged_passes
-                ),
-                "ac_rl_convergence_percent": spec.run_control.convergence_percent,
-                "ac_rl_percent_refinement": spec.run_control.percent_refinement,
-            }
-        )
-    if receipt.get("setup") != expected_setup:
-        raise RuntimeError("Q3D native setup evidence is invalid")
+
+
+def _validate_q3d_readback(root: Path, receipt: dict[str, Any], spec: Q3dSpec) -> None:
+    _validate_q3d_model_readback(root, receipt, spec)
+    _validate_q3d_setup(receipt, spec)
     if receipt.get("convergence") != read_q3d_convergence(root, spec):
         raise RuntimeError("Q3D native convergence evidence is invalid")
     readback = receipt.get("result_readback")
@@ -1354,6 +1354,37 @@ def _validate_q3d_readback(root: Path, receipt: dict[str, Any], spec: Q3dSpec) -
     }
     if matrices != expected_matrices:
         raise RuntimeError("Q3D capacitance-only matrix readback is invalid")
+
+
+def _validate_q3d_setup(receipt: dict[str, Any], spec: Q3dSpec) -> None:
+    expected_setup = {
+        "name": spec.run_control.setup_name,
+        "native": {
+            "adaptive_frequency": f"{spec.run_control.frequency_ghz:g}GHz",
+            "capacitance_maximum_passes": spec.run_control.maximum_passes,
+            "capacitance_minimum_passes": spec.run_control.minimum_passes,
+            "capacitance_minimum_converged_passes": (
+                spec.run_control.minimum_converged_passes
+            ),
+            "capacitance_convergence_percent": spec.run_control.convergence_percent,
+            "capacitance_percent_refinement": spec.run_control.percent_refinement,
+            "dc_enabled": False,
+        },
+    }
+    if spec.solve_ac_rl:
+        expected_setup["native"].update(
+            {
+                "ac_rl_maximum_passes": spec.run_control.maximum_passes,
+                "ac_rl_minimum_passes": spec.run_control.minimum_passes,
+                "ac_rl_minimum_converged_passes": (
+                    spec.run_control.minimum_converged_passes
+                ),
+                "ac_rl_convergence_percent": spec.run_control.convergence_percent,
+                "ac_rl_percent_refinement": spec.run_control.percent_refinement,
+            }
+        )
+    if receipt.get("setup") != expected_setup:
+        raise RuntimeError("Q3D native setup evidence is invalid")
 
 
 def _read_q3d_original_cg(
@@ -2258,8 +2289,7 @@ def _validate_body_terminal_readback(
                 owner = owners[0]
                 if (
                     owner.get("object_name") != face_record["object_name"]
-                    or owner.get("native_object_id")
-                    != face_record["native_object_id"]
+                    or owner.get("native_object_id") != face_record["native_object_id"]
                 ):
                     raise RuntimeError(
                         "body-first Terminal native face owner differs from geometry"
@@ -2267,9 +2297,7 @@ def _validate_body_terminal_readback(
                 face_ids.append(face_id)
                 face_owners.append(face_record["object_name"])
             if face_ids != raw_face_ids:
-                raise RuntimeError(
-                    "body-first Terminal native face assignment differs"
-                )
+                raise RuntimeError("body-first Terminal native face assignment differs")
             if set(face_owners) != set(native["signal_objects"]):
                 raise RuntimeError("body-first Terminal contact ownership differs")
         elif assignment_kind is None:
@@ -2281,9 +2309,7 @@ def _validate_body_terminal_readback(
             if not edges or [item["edge_id"] for item in edges] != [
                 int(value) for value in terminal.get("Edges", ())
             ]:
-                raise RuntimeError(
-                    "body-first Terminal native edge assignment differs"
-                )
+                raise RuntimeError("body-first Terminal native edge assignment differs")
             if set(item["object_name"] for item in edges) != set(
                 native["signal_objects"]
             ):
@@ -2293,20 +2319,49 @@ def _validate_body_terminal_readback(
         properties = native.get("boundary_properties", {})
         terminal_properties = native.get("terminal_properties", {})
         renorm = port.renormalize if isinstance(port, LumpedTerminalPort) else False
-        impedance = port.impedance_ohm if isinstance(port, LumpedTerminalPort) else 50
+        current_wave = (
+            not isinstance(port, LumpedTerminalPort)
+            and receipt.get("runtime_source", {}).get("schema_version")
+            == SOURCE_SCHEMA_V19
+        )
         if (
             properties.get("Type") != expected_type
             or properties.get("Renorm All Terminals") != renorm
-            or properties.get("Deembed") != (not isinstance(port, LumpedTerminalPort))
-            or terminal_properties.get("Terminal Renormalizing Impedance")
-            != f"{impedance:g}ohm"
+            or (
+                properties.get("Deembed") not in (True, False, "true", "false")
+                if current_wave
+                else properties.get("Deembed")
+                != (not isinstance(port, LumpedTerminalPort))
+            )
+            or (
+                isinstance(port, LumpedTerminalPort)
+                and terminal_properties.get("Terminal Renormalizing Impedance")
+                != f"{port.impedance_ohm:g}ohm"
+            )
+            or (
+                current_wave
+                and native.get("inactive_renormalizing_impedance")
+                != terminal_properties.get("Terminal Renormalizing Impedance")
+            )
+            or (
+                not isinstance(port, LumpedTerminalPort)
+                and not current_wave
+                and terminal_properties.get("Terminal Renormalizing Impedance")
+                != "50ohm"
+            )
+            or (
+                current_wave
+                and properties.get("Deembed Dist") != f"{port.deembed_um:g}um"
+            )
         ):
             raise RuntimeError(
                 "body-first Terminal native electrical treatment differs"
             )
 
 
-def _validate_terminal_native_evidence(ports: Any, spec: HfssDrivenSpec) -> None:
+def _validate_terminal_native_evidence(
+    ports: Any, spec: HfssDrivenSpec, *, current: bool = False
+) -> None:
     if not isinstance(ports, list) or len(ports) != 2:
         raise RuntimeError("completed receipt has invalid terminal ports")
     for record, port in zip(ports, spec.ports, strict=True):
@@ -2349,20 +2404,35 @@ def _validate_terminal_native_evidence(ports: Any, spec: HfssDrivenSpec) -> None
             raise RuntimeError("completed receipt terminal native identity mismatch")
         boundary = native.get("boundary_properties")
         terminal = native.get("terminal_properties")
-        if boundary != {
-            "Deembed": True,
+        expected_boundary = {
+            "Deembed": boundary.get("Deembed") if current else True,
             "Deembed Dist": f"{port.deembed_um:g}um",
             "Name": port.name,
             "Num Terminals": "1",
             "Renorm All Terminals": False,
             "Type": "Wave Port",
             "Wave Port Type": "Terminal",
-        } or terminal != {
+        }
+        expected_terminal = {
             "Name": terminal_name,
             "Port Name": port.name,
-            "Terminal Renormalizing Impedance": "50ohm",
+            "Terminal Renormalizing Impedance": (
+                terminal.get("Terminal Renormalizing Impedance") if current else "50ohm"
+            ),
             "Type": "Terminal",
-        }:
+        }
+        if (
+            boundary != expected_boundary
+            or terminal != expected_terminal
+            or (
+                current
+                and (
+                    boundary.get("Deembed") not in (True, False, "true", "false")
+                    or native.get("inactive_renormalizing_impedance")
+                    != terminal.get("Terminal Renormalizing Impedance")
+                )
+            )
+        ):
             raise RuntimeError("completed receipt terminal native property mismatch")
 
 

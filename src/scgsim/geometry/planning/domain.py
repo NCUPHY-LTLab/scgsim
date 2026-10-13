@@ -2054,19 +2054,20 @@ def _auto_vacuum_host_component_id(
     return True, components[0] if components else None
 
 
-def _auto_vacuum_sidewall_ref_solution_id(
+def _conductor_sidewall_ref_solution_id(
     build_input: GeometryBuildInput,
     *,
     entity: SemanticEntitySpec,
     geometry_ref: Mapping[str, Any],
 ) -> tuple[bool, str | None]:
-    """Resolve one retained sidewall segment to one explicit vacuum child.
+    """Bind one sidewall to its source dielectric cavity or vacuum child.
 
-    Auto-vacuum parents may deliberately contain disconnected components.  A
-    finite conductor can then have opposite sidewalls adjacent to different
-    components.  This resolver uses the per-component subtractor ledger and
-    complete canonical boundary-segment coverage for *this* sidewall, never a
-    centroid, bounding box, physical label, or parent-level choice.
+    A conductor's host names the background complement, not the material on
+    every wall. Its outer wall can coincide with an authored dielectric bore;
+    its inner wall remains adjacent to a ledger-bound vacuum component. Both
+    use complete canonical segment coverage and the declared Z interval, not
+    a point, name, bounds proxy, or a guessed conductor role. The boolean result
+    distinguishes this exact binding from legacy whole-footprint coverage.
     """
     host_id = entity.host_void_semantic_id
     if not isinstance(host_id, str) or not host_id:
@@ -2086,31 +2087,41 @@ def _auto_vacuum_sidewall_ref_solution_id(
     has_parent = False
     for solution in _solution_entities(build_input):
         metadata = solution.metadata
-        if metadata.get("auto_vacuum_group_id") != host_id:
-            continue
-        has_parent = True
-        entity_ids = metadata.get("auto_vacuum_subtracting_entity_ids")
-        if isinstance(entity_ids, str | bytes) or not isinstance(entity_ids, Sequence):
-            raise TypeError(
-                f"auto-vacuum component {solution.semantic_id!r} lacks an entity subtractor ledger"
-            )
-        if entity.semantic_id not in entity_ids:
+        is_host_child = metadata.get("auto_vacuum_group_id") == host_id
+        if is_host_child:
+            has_parent = True
+            entity_ids = metadata.get("auto_vacuum_subtracting_entity_ids")
+            if isinstance(entity_ids, str | bytes) or not isinstance(entity_ids, Sequence):
+                raise TypeError(
+                    f"auto-vacuum component {solution.semantic_id!r} lacks an entity subtractor ledger"
+                )
+            if entity.semantic_id not in entity_ids:
+                continue
+        elif solution.material_kind != "dielectric":
             continue
         solution_z_min_um = float(solution.geometry["z_min_um"])
         solution_z_max_um = float(solution.geometry["z_max_um"])
-        if not (
-            _same_z(solution_z_min_um, z_min_um)
-            and _same_z(solution_z_max_um, z_max_um)
+        if is_host_child:
+            if not (
+                _same_z(solution_z_min_um, z_min_um)
+                and _same_z(solution_z_max_um, z_max_um)
+            ):
+                continue
+        elif not _range_within_bounds(
+            z_min_um, z_max_um, solution_z_min_um, solution_z_max_um
         ):
             continue
-        if _sidewall_segment_is_component_boundary(start, end, solution):
+        if _sidewall_segment_is_component_boundary(
+            start, end, solution, holes_only=not is_host_child
+        ):
             matches.append(solution.semantic_id)
-    if not has_parent:
+    if not has_parent and not matches:
         return False, None
     if len(matches) != 1:
         raise ValueError(
             f"{entity.semantic_id} sidewall segment {start!r}->{end!r} requires "
-            f"exactly one auto-vacuum child for parent {host_id!r}; got {matches!r}."
+            f"exactly one source dielectric cavity or auto-vacuum child "
+            f"for parent {host_id!r}; got {matches!r}."
         )
     return True, matches[0]
 
@@ -2159,16 +2170,21 @@ def _sidewall_segment_is_component_boundary(
     start: tuple[float, float],
     end: tuple[float, float],
     solution: SemanticEntitySpec,
+    *,
+    holes_only: bool = False,
 ) -> bool:
-    """Require a component's canonical outer/hole edges to cover one segment."""
-    outer_loop = solution.geometry.get("outer_loop")
-    if outer_loop is None:
-        raise ValueError(
-            f"auto-vacuum component {solution.semantic_id!r} lacks outer_loop."
-        )
+    """Require complete canonical edge coverage, retaining outer/hole roles."""
+    loops = tuple(solution.geometry.get("hole_loops", ()))
+    if not holes_only:
+        outer_loop = solution.geometry.get("outer_loop")
+        if outer_loop is None:
+            raise ValueError(
+                f"solution component {solution.semantic_id!r} lacks outer_loop."
+            )
+        loops = (outer_loop, *loops)
     intervals = tuple(
         interval
-        for loop in (outer_loop, *solution.geometry.get("hole_loops", ()))
+        for loop in loops
         for edge_start, edge_end in _ring_edges(_clean_loop(loop))
         if (interval := _segment_overlap_interval(start, end, edge_start, edge_end))
         is not None

@@ -62,7 +62,9 @@ SOURCE_SCHEMA_V17 = "scgsim.aedt.runtime-source.v17"
 
 SOURCE_SCHEMA_V18 = "scgsim.aedt.runtime-source.v18"
 
-SOURCE_SCHEMA = SOURCE_SCHEMA_V18
+SOURCE_SCHEMA_V19 = "scgsim.aedt.runtime-source.v19"
+
+SOURCE_SCHEMA = SOURCE_SCHEMA_V19
 
 _RUNTIME_SOURCE_V1_MODULES = (
     "_hfss_convergence.py",
@@ -231,26 +233,39 @@ _RUNTIME_SOURCE_V13_PATHS = (
 )
 
 
-_RUNTIME_SOURCE_V15_PATHS = tuple(sorted((*_RUNTIME_SOURCE_V13_PATHS,
-    "src/scgsim/aedt/specs/modeling.py",
-    "src/scgsim/geometry/_primitives/geometry_refs.py",
-    "src/scgsim/geometry/_primitives/surface_records.py",
-    "src/scgsim/geometry/planning/evidence.py",
-    "src/scgsim/geometry/source/intents.py",
-    "src/scgsim/geometry/source/_normalization.py",
-)))
+_RUNTIME_SOURCE_V15_PATHS = tuple(
+    sorted(
+        (
+            *_RUNTIME_SOURCE_V13_PATHS,
+            "src/scgsim/aedt/specs/modeling.py",
+            "src/scgsim/geometry/_primitives/geometry_refs.py",
+            "src/scgsim/geometry/_primitives/surface_records.py",
+            "src/scgsim/geometry/planning/evidence.py",
+            "src/scgsim/geometry/source/intents.py",
+            "src/scgsim/geometry/source/_normalization.py",
+        )
+    )
+)
 
-_RUNTIME_SOURCE_V16_PATHS = tuple(sorted((
-    *_RUNTIME_SOURCE_V15_PATHS,
-    "src/scgsim/aedt/runtime/native/hfss_eigenmode.py",
-)))
+_RUNTIME_SOURCE_V16_PATHS = tuple(
+    sorted(
+        (
+            *_RUNTIME_SOURCE_V15_PATHS,
+            "src/scgsim/aedt/runtime/native/hfss_eigenmode.py",
+        )
+    )
+)
 
-_RUNTIME_SOURCE_V17_PATHS = tuple(sorted((
-    *_RUNTIME_SOURCE_V16_PATHS,
-    "src/scgsim/geometry/models/lumped.py",
-    "src/scgsim/aedt/specs/__init__.py",
-    "src/scgsim/aedt/runtime/native/hfss_lumped.py",
-)))
+_RUNTIME_SOURCE_V17_PATHS = tuple(
+    sorted(
+        (
+            *_RUNTIME_SOURCE_V16_PATHS,
+            "src/scgsim/geometry/models/lumped.py",
+            "src/scgsim/aedt/specs/__init__.py",
+            "src/scgsim/aedt/runtime/native/hfss_lumped.py",
+        )
+    )
+)
 
 # V17 remains a frozen historical inventory. V18 follows the current AEDT
 # ownership split and declares the relocated helpers and neutral geometry
@@ -281,6 +296,12 @@ _RUNTIME_SOURCE_V18_PATHS = tuple(
 )
 
 
+# V1–V18 inventories remain historical; V19 adds the public model-stage reader.
+_RUNTIME_SOURCE_V19_PATHS = tuple(
+    sorted((*_RUNTIME_SOURCE_V18_PATHS, "src/scgsim/aedt/results/prepared.py"))
+)
+
+
 def _module_manifest() -> list[dict[str, str]]:
     source_root = Path(__file__).resolve().parents[3]
     return [
@@ -289,7 +310,7 @@ def _module_manifest() -> list[dict[str, str]]:
             "path": path,
             "sha256": file_sha256(source_root / path.removeprefix("src/")),
         }
-        for path in _RUNTIME_SOURCE_V18_PATHS
+        for path in _RUNTIME_SOURCE_V19_PATHS
     ]
 
 
@@ -397,6 +418,7 @@ def validate_runtime_source(
         SOURCE_SCHEMA_V16: _RUNTIME_SOURCE_V16_PATHS,
         SOURCE_SCHEMA_V17: _RUNTIME_SOURCE_V17_PATHS,
         SOURCE_SCHEMA_V18: _RUNTIME_SOURCE_V18_PATHS,
+        SOURCE_SCHEMA_V19: _RUNTIME_SOURCE_V19_PATHS,
     }.get(schema)
     if (
         expected_paths is None
@@ -426,6 +448,7 @@ def validate_runtime_source(
                     SOURCE_SCHEMA_V16,
                     SOURCE_SCHEMA_V17,
                     SOURCE_SCHEMA_V18,
+                    SOURCE_SCHEMA_V19,
                 }
                 else "scgsim/"
             )
@@ -454,6 +477,7 @@ def validate_runtime_source(
         SOURCE_SCHEMA_V16,
         SOURCE_SCHEMA_V17,
         SOURCE_SCHEMA_V18,
+        SOURCE_SCHEMA_V19,
     }:
         if set(value) != {
             "schema_version",

@@ -1,7 +1,8 @@
 """Plan contribution surfaces from source ownership and exposed-side adjacency.
 
 Effective mixed Sheet/Solid contacts exclude their typed metal footprints before
-solution coverage is resolved; Palace route policies remain caller-owned.
+solution coverage is resolved. Finite walls bind authored dielectric cavity
+boundaries or ledger-bound vacuum children; Palace route policies remain caller-owned.
 """
 
 from __future__ import annotations
@@ -69,7 +70,7 @@ from scgsim.geometry.models.topology import (
 )
 from scgsim.geometry.planning.domain import (
     _adjacent_auto_vacuum_sidewall_component_id,
-    _auto_vacuum_sidewall_ref_solution_id,
+    _conductor_sidewall_ref_solution_id,
     _conductor_face_solution_pieces,
     _conductor_sidewall_adjacent_solution_id,
     _interface_surface_kinds,
@@ -2110,23 +2111,23 @@ def _conductor_sidewall_geometry_refs(
             continue
         # Exact same-z conductor contacts remove their shared MM segment
         # before solution adjacency is selected.  One raw sidewall can span
-        # contact and vacuum portions; only each retained topology segment is
-        # eligible for a unique auto-vacuum child.
+        # contact and solution portions; each retained topology segment binds
+        # an authored dielectric cavity or a ledger-bound vacuum child.
         for geometry_ref in _trim_sidewall_ref_against_route_conductors(
             geometry_ref=raw_geometry_ref,
             edge_index=edge_index,
         ):
-            auto_parent, ref_adjacent_solution_id = (
-                _auto_vacuum_sidewall_ref_solution_id(
+            exact_adjacency, ref_adjacent_solution_id = (
+                _conductor_sidewall_ref_solution_id(
                     build_input,
                     entity=entity,
                     geometry_ref=geometry_ref,
                 )
             )
-            if auto_parent:
+            if exact_adjacency:
                 if ref_adjacent_solution_id is None:
                     raise ValueError(
-                        f"{entity.semantic_id} sidewall has no exact auto-vacuum child."
+                        f"{entity.semantic_id} sidewall has no exact solution boundary."
                     )
             else:
                 if adjacent_solution_id is None:
@@ -2138,11 +2139,11 @@ def _conductor_sidewall_geometry_refs(
                     continue
                 ref_adjacent_solution_id = adjacent_solution_id
             adjacent_solution = _entity_by_id(build_input, ref_adjacent_solution_id)
-            # The explicit parent-envelope check above is the only exterior rule
-            # for auto-vacuum children. A disconnected child's rectangular bounds
+            # The explicit parent-envelope check above remains the exterior rule
+            # for exact source boundaries. A disconnected child's rectangular bounds
             # can coincide with a conductor hole edge, which is not an exterior
             # boundary and must retain its exact child adjacency.
-            if not auto_parent and _sidewall_on_solution_outer_boundary(
+            if not exact_adjacency and _sidewall_on_solution_outer_boundary(
                 geometry_ref, adjacent_solution
             ):
                 ref_adjacent_solution_id = _adjacent_auto_vacuum_sidewall_component_id(

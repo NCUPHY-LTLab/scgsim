@@ -80,6 +80,33 @@ to HFSS Eigenmode, Driven Modal and Driven Terminal. The usual `--execute`
 family behavior remains unchanged, and neither path creates a second Desktop
 owner.
 
+### Model-only preparation and physics resolution {#aedt-model-only-preparation}
+
+The public geometry-preparation helpers for Q3D, HFSS Eigenmode, and HFSS
+Driven, and `EigenmodeSim.set_eigenmode()`, accept `run_control=None` when the
+request is to build and read back the native model without solving. The
+canonical JSON spec still contains its `run_control` member; `null` is the
+explicit model-only value. Existing non-null payload encoding and hash meaning
+are unchanged. With `null`, preparation creates no solver setup, EPR cache, or
+frequency sweep. It constructs the requested model and assignments, saves the
+project, releases the owned Desktop, and records the actual preparation
+readback.
+
+Supplying complete run controls still authors the requested setup when
+execution is preparation-only. `--prepare-only` selects the execution stage;
+it does not remove or invent request controls. A solve request without complete
+controls fails before opening AEDT. A no-analysis, model-only `HfssEprSpec`
+carrier accepts `run_control=None`. An EPR analysis/cache request requires
+complete Eigenmode controls; `run_control=None` cannot be used to skip its
+setup.
+
+A successful model-only handoff records the `native_preparation_only` stage.
+`resolve_prepared_model(run_dir)` returns a `PreparedModel` from that saved
+handoff and its native preparation/readback evidence. This reader reports the
+prepared-model stage; it does not report a completed physics result.
+`resolve_results()` remains the strict reader for completed solver results and
+does not treat a model-only receipt as a completed solve.
+
 Each family binds its request once before native preparation. The private bound
 request fixes the absolute run workspace and a detached immutable spec payload;
 relative spec paths remain relative to that workspace across later `chdir`,
@@ -105,7 +132,7 @@ New handoffs retain `scgsim.aedt.handoff.v1` and
 `scgsim.aedt.handoff-manifest.v1`. Both records add
 `expected_receipt_schema: scgsim.aedt.receipt.v3`, and the initial receipt is
 V3. It contains `prepared_runtime_source`: a deterministic, sorted
-`runtime-source.v18` manifest for the current candidate. The record fields are
+`runtime-source.v19` manifest for the current candidate. The record fields are
 `schema_version`, `stage`, `modules`, `content_sha256`, and
 `revision_observation`; there is no helper-hash map. Each declared module has
 measured bytes and the content digest binds that inventory. The Git observation
@@ -137,8 +164,8 @@ partial markers, noncanonical members, and hash mismatches reject before
 receipt mutation.
 
 Every new completed V3 receipt has a separate `runtime_source` manifest using
-`runtime-source.v18` and a content digest for the code that actually executed
-it. Declared module bytes and the digest are mandatory; V18 has no redundant
+`runtime-source.v19` and a content digest for the code that actually executed
+it. Declared module bytes and the digest are mandatory; V19 has no redundant
 helper-hash fields. `revision_observation` carries the actual 40-hex commit
 when available and records `unavailable` truthfully for an immutable wheel
 without VCS metadata. Missing or corrupt declared module bytes, digest, schema,
@@ -171,14 +198,15 @@ and digest, and optional `revision_observation`; V1–V17 retain their frozen pa
 membership, field meanings, and version-specific reader rules. V14 is reserved
 for held PR35. V16 added the HFSS Eigenmode native implementation module to the
 V15 inventory. V17 added the shared lumped-model and HFSS lumped-native modules,
-plus the AEDT specs package initializer, to V16. The current V18 inventory
-removes the former EPR-private `epr/junction_partition.py` path and includes
+plus the AEDT specs package initializer, to V16. V18 removed the former
+EPR-private `epr/junction_partition.py` path and included
 `preparation/junction_partition.py`, the relocated AEDT data/RLC/terminal
 helpers, geometry/EPR/support specs, modeling/planar preparation, HFSS geometry
 runtime, neutral geometry representation modules, and the shared source-ground
-construction helper with its polygon-operation leaf. V18 uses the same five
-record fields described above and no helper-hash map; its exact path list is
-the declared implementation inventory. These manifests bind their
+construction helper with its polygon-operation leaf. The current V19 inventory
+adds the model-only prepared-model reader. V19 uses the same five record fields
+described above and no helper-hash map; its exact path list is the declared
+implementation inventory. These manifests bind their
 declared file inventories, not an exhaustive transitive dependency
 attestation. The frozen V12 inventory, for example, does not separately hash
 `scgsim/sgb/engine_gates.py`. They do not change the V3 receipt schema. A pure
@@ -190,7 +218,7 @@ historical hashes with the installed package.
 
 Execution computes mandatory runtime-source provenance inside the receipt-bound
 failure transaction, before importing PyAEDT or constructing Desktop. Current
-V18 may record `revision_observation` as unavailable; that alone does not fail
+V19 may record `revision_observation` as unavailable; that alone does not fail
 byte-bound identity or prevent execution. Missing or corrupt declared module
 bytes, digest, schema, or cohort still yield a failed V3 receipt without a
 Desktop launch rather than escaping receipt finalization. V1–V17 retain their
@@ -205,14 +233,16 @@ partial-success receipt or infer that native project bytes are usable.
 ## Solver-specific contracts
 
 The following semantics remain separate even though they share packaging,
-version checks, receipts, and path/hash validation:
+version checks, receipts, and path/hash validation. The table describes
+solve-bearing requests and their returned physics data. Model-only preparation
+uses the separate `run_control=None` path described above.
 
 | Family | Required model semantics | Required returned data |
 |---|---|---|
-| HFSS Driven Terminal | explicit `modeling="solid"` or `modeling="thin_film"`; existing Wave `TerminalPort` or separately declared `LumpedTerminalPort` with explicit signal/reference identity | ordered terminal S-parameters and Touchstone |
-| HFSS Driven Modal | explicit `modeling="solid"` or `modeling="thin_film"`; modal ports with exact integration lines | ordered modal S-parameters, impedance, and Touchstone |
-| HFSS Eigenmode | explicit `modeling="solid"` or `modeling="thin_film"`; the existing runtime remains port-free, with explicit mode count and search frequency; generic RLC model elements are distinct from `PlanarJunction` and EPR junction records | ordinary real mode frequency, native Q, and convergence evidence; EPR history and saved-field results use their separate result contract |
-| Q3D | explicit `modeling="solid"` or `modeling="thin_film"`; exact conductor Net membership; real Signal source/sink pairs for AC/RL; terminal-free C/G is supported; optional exact six-face Region ground seal | native capacitance and, when enabled, resistance/inductance matrices |
+| HFSS Driven Terminal | explicit `modeling="solid"` or `modeling="thin_film"`; existing Wave `TerminalPort` or separately declared `LumpedTerminalPort` with explicit signal/reference identity; complete `HfssRunControl` for solving | ordered terminal S-parameters and Touchstone |
+| HFSS Driven Modal | explicit `modeling="solid"` or `modeling="thin_film"`; modal ports with exact integration lines; complete `HfssRunControl` for solving | ordered modal S-parameters, impedance, and Touchstone |
+| HFSS Eigenmode | explicit `modeling="solid"` or `modeling="thin_film"`; the existing runtime remains port-free; complete `EigenmodeRunControl`, including mode count and search frequency, for solving; generic RLC model elements are distinct from `PlanarJunction` and EPR junction records | ordinary real mode frequency, native Q, and convergence evidence; EPR history and saved-field results use their separate result contract |
+| Q3D | explicit `modeling="solid"` or `modeling="thin_film"`; exact conductor Net membership; real Signal source/sink pairs for AC/RL; terminal-free C/G is supported; optional exact six-face Region ground seal; complete family controls for solving | native capacitance and, when enabled, resistance/inductance matrices |
 | Q2D | explicit cross-section geometry and conductor/reference assignments | per-unit-length capacitance/conductance and resistance/inductance matrices |
 
 ### Shared lumped support and terminal RLC {#hfss-shared-lumped-support}
@@ -242,6 +272,14 @@ separate Driven Terminal input with explicit support, terminal and reference
 assignment and a required `impedance_ohm`. It has no RLC-network field. A value
 such as 50 ohm is an operation input, not a package default. There is no
 conversion from a Lumped request to a Wave port.
+
+For the current Wave Terminal contract, the source-directed pair annotation
+records Wave-port reference provenance; it is not a Modal `IntLine`. The
+request uses renormalization disabled and a physical de-embedding shift of
+zero. An inactive native 50-ohm setting in this state is not a source load,
+renormalization target, or solved characteristic impedance. The actual native
+de-embedding-enabled flag is recorded separately; a zero shift does not imply
+that the flag is disabled.
 
 Every `HfssDrivenGeometrySpec` Terminal port must use the same ordered source
 Entity reference tuple: `LumpedTerminalPort.reference_entity_ids` for Lumped

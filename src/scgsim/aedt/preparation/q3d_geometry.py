@@ -56,7 +56,7 @@ def lower_q3d_geometry(
     materials: Mapping[str, PdkMaterial],
     net_types: Mapping[str, Literal["Signal", "Ground"]],
     physical_ground_nets: Sequence[str],
-    run_control: MatrixRunControl,
+    run_control: MatrixRunControl | None = None,
     region_padding_um: Sequence[float],
 ) -> Q3dSpec:
     """Write canonical source provenance and body declarations; never open AEDT."""

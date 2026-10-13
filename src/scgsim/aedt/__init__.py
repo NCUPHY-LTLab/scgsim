@@ -30,6 +30,7 @@ from .preparation.handoff import HandoffPlan, prepare_handoff
 from .presentation.epr import plot_epr_result, show_epr
 from .results.epr import resolve_epr_result, resolve_saved_solution
 from .results.resolve import ResolvedRun, resolve_results
+from .results.prepared import PreparedModel, resolve_prepared_model
 from .specs.common import (
     AedtResources,
     HfssDrivenMode,
@@ -89,6 +90,7 @@ __all__ = [
     "PhysicalLayerSpec",
     "PlanarJunction",
     "PreparedPlanarGeometry",
+    "PreparedModel",
     "Q2dConductorSpec",
     "Q2dRectangleSpec",
     "Q2dSpec",
@@ -113,6 +115,7 @@ __all__ = [
     "reanalyze_epr",
     "resolve_epr_result",
     "resolve_results",
+    "resolve_prepared_model",
     "resolve_saved_solution",
     "show_epr",
 ]

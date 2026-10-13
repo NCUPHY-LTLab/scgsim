@@ -60,7 +60,7 @@ class PreparedQ3d:
     materials: list[dict[str, Any]]
     region: dict[str, Any]
     nets: list[dict[str, Any]]
-    setup: dict[str, Any]
+    setup: dict[str, Any] | None
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, BoundAedtRequest):
@@ -77,6 +77,8 @@ def run_q3d(
     resource_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Use the same preparation stage as diagnostics, then solve and export."""
+    if spec.run_control is None:
+        raise ValueError("solving requires an explicit complete run_control")
     prepared = prepare_q3d(Q3d, run_dir, spec)
     solve_q3d(prepared, resources, resource_evidence)
     result = export_q3d(prepared)
@@ -111,11 +113,12 @@ def prepare_q3d(Q3d: Any, run_dir: Path, spec: Q3dSpec) -> PreparedQ3d:
         region["native_region_object_id"] = grounded_region["native_region_object_id"]
         region["native_bounding_box_um"] = grounded_region["native_bounding_box_um"]
         region["grounded_region"] = grounded_region
-    _setup_q3d(app, spec)
+    if spec.run_control is not None:
+        _setup_q3d(app, spec)
     if not app.save_project() or not project_path.is_file():
         raise RuntimeError("Q3D project was not saved before solve")
     _verify_saved_q3d_sheet_terminals(app, nets)
-    setup = _read_q3d_setup(app, spec)
+    setup = _read_q3d_setup(app, spec) if spec.run_control is not None else None
     if spec.grounded_region_net is not None:
         region["grounded_region"] = _read_q3d_region_ground(app, spec, region)
         region["native_region_object_id"] = region["grounded_region"][
@@ -170,6 +173,8 @@ def solve_q3d(
     spec = prepared.request.parse()
     if not isinstance(spec, Q3dSpec):
         raise TypeError("bound Q3D request did not retain a Q3D spec")
+    if spec.run_control is None:
+        raise ValueError("Q3D solving requires an explicit complete run_control")
     if not analyze_with_resources(
         prepared.app,
         spec.run_control.setup_name,

@@ -277,7 +277,11 @@ def _q3d_geometry_source(
 
 @dataclass(frozen=True)
 class Q3dSpec:
-    """One body-backed Q3D capacitance and optional AC R/L request (v3 only)."""
+    """One body-backed Q3D model with optional matrix setup (v3 only).
+
+    Explicit run_control=None declares model preparation without solve setup.
+    Non-null controls retain the existing C/G and optional AC R/L payload.
+    """
 
     modeling: Modeling
     project_name: str
@@ -286,7 +290,7 @@ class Q3dSpec:
     vacuum_material_id: str
     bodies: tuple[Q3dBodySpec, ...]
     nets: tuple[Q3dNetSpec, ...]
-    run_control: MatrixRunControl
+    run_control: MatrixRunControl | None
     region_padding_um: tuple[float, float, float, float, float, float]
     physical_layers: tuple[PhysicalLayerSpec, ...] = ()
     _historical_modeling: bool = False
@@ -306,6 +310,10 @@ class Q3dSpec:
         if self.schema_version != Q3D_SCHEMA_VERSION:
             raise ValueError("unsupported Q3D schema")
         materials = _normalize_common_spec(self)
+        if self.run_control is not None and not isinstance(self.run_control, MatrixRunControl):
+            raise TypeError("run_control must be MatrixRunControl or None")
+        if self.run_control is None and self._historical_modeling:
+            raise ValueError("historical Q3D requests require run_control")
         bodies = tuple(self.bodies)
         if not bodies or any(not isinstance(body, Q3dBodySpec) for body in bodies):
             raise TypeError("Q3D bodies must contain Q3dBodySpec records")
@@ -393,7 +401,7 @@ class Q3dSpec:
             "bodies": (list(self.effective_bodies) if self.modeling is not None
                        else [body.to_payload() for body in self.bodies]),
             "nets": [net.to_payload() for net in self.nets],
-            "run_control": self.run_control.to_payload(),
+            "run_control": None if self.run_control is None else self.run_control.to_payload(),
             "region_padding_um": list(self.region_padding_um),
             "solve_ac_rl": self.solve_ac_rl,
             "grounded_region_net": self.grounded_region_net,
@@ -426,7 +434,8 @@ class Q3dSpec:
             vacuum_material_id=payload["vacuum_material_id"],
             bodies=tuple(Q3dBodySpec(**_source_record_payload(body)) for body in payload["bodies"]),
             nets=tuple(Q3dNetSpec(**net) for net in payload["nets"]),
-            run_control=MatrixRunControl(**payload["run_control"]),
+            run_control=(None if payload["run_control"] is None
+                         else MatrixRunControl(**payload["run_control"])),
             region_padding_um=tuple(payload["region_padding_um"]),
             solve_ac_rl=payload.get("solve_ac_rl", True),
             grounded_region_net=payload.get("grounded_region_net"),

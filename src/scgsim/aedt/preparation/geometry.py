@@ -76,7 +76,7 @@ def prepare_q3d_from_geometry(
     materials: Mapping[str, PdkMaterial],
     net_types: Mapping[str, Literal["Signal", "Ground"]],
     physical_ground_nets: Sequence[str],
-    run_control: MatrixRunControl,
+    run_control: MatrixRunControl | None = None,
     region_padding_um: Sequence[float],
     resources: AedtResources | None = None,
 ) -> HandoffPlan:
@@ -85,6 +85,7 @@ def prepare_q3d_from_geometry(
     The caller owns final Net membership and native net types independently
     of physical ground roles. Component/PDK source geometry remains unchanged;
     generated import layers, source trace and originals travel in the handoff.
+    Omitted run_control declares model-only preparation without solve setup.
     """
     from scgsim.aedt.preparation.q3d_geometry import lower_q3d_geometry
 
@@ -110,7 +111,7 @@ def prepare_hfss_eigenmode_from_geometry(
     geometry: PreparedPlanarGeometry,
     project_name: str,
     design_name: str,
-    run_control: EigenmodeRunControl,
+    run_control: EigenmodeRunControl | None = None,
     output_dir: str | Path,
     epr_request: EprAnalysisRequest | None = None,
     lumped_rlcs: Sequence[LumpedRlc] | None = None,
@@ -118,7 +119,7 @@ def prepare_hfss_eigenmode_from_geometry(
     geometry_workers: int | None = None,
     resources: AedtResources | None = None,
 ) -> HandoffPlan:
-    """Prepare one portable body-first Eigenmode handoff without GDS."""
+    """Prepare a body-first model; omitted run_control authors no solve setup."""
 
     if lumped_rlcs is not None:
         geometry = geometry.with_lumped_rlcs(lumped_rlcs)
@@ -140,11 +141,11 @@ def prepare_hfss_eigenmode_from_geometry(
 
 def prepare_hfss_driven_from_geometry(
     *, modeling: Modeling, geometry: PreparedPlanarGeometry,
-    project_name: str, design_name: str, run_control: HfssRunControl,
+    project_name: str, design_name: str, run_control: HfssRunControl | None = None,
     ports: Sequence[TerminalPort | LumpedTerminalPort], output_dir: str | Path,
     geometry_workers: int | None = None, resources: AedtResources | None = None,
 ) -> HandoffPlan:
-    """Prepare a body-first Driven Terminal request with explicit port treatment."""
+    """Prepare a Terminal model and ports, with optional complete solve setup."""
     spec = HfssDrivenGeometrySpec(
         modeling=modeling, geometry=geometry, project_name=project_name,
         design_name=design_name, run_control=run_control, ports=tuple(ports),

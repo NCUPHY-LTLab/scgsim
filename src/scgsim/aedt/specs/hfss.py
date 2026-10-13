@@ -514,13 +514,17 @@ class HfssEigenmodeSpec:
 
 @dataclass(frozen=True)
 class HfssEprSpec:
-    """One body-first HFSS Eigenmode request with embedded planar authority."""
+    """One body-first Eigenmode model with optional solve setup.
+
+    An explicit null run_control declares model-only preparation; EPR analysis
+    and cache requests retain their complete setup requirement.
+    """
 
     modeling: Modeling
     project_name: str
     design_name: str
     geometry: Any
-    run_control: EigenmodeRunControl
+    run_control: EigenmodeRunControl | None = None
     physical_layers: tuple[PhysicalLayerSpec, ...] = ()
     _historical_modeling: bool = False
     epr_request: Any = None
@@ -560,8 +564,17 @@ class HfssEprSpec:
                 raise ValueError("request physical layers differ from prepared source map")
             object.__setattr__(self, "physical_layers", declared)
 
-        if not isinstance(self.run_control, EigenmodeRunControl):
-            raise TypeError("run_control must be EigenmodeRunControl")
+        if self.run_control is not None and not isinstance(
+            self.run_control, EigenmodeRunControl
+        ):
+            raise TypeError("run_control must be EigenmodeRunControl or None")
+        if self.run_control is None and (
+            self.epr_request is not None
+            or self.expression_convergence is not None
+            or self._legacy_payload
+            or self._historical_modeling
+        ):
+            raise ValueError("EPR analysis/cache and historical requests require run_control")
         if self.epr_request is not None and not isinstance(
             self.epr_request, EprAnalysisRequest
         ):
@@ -596,7 +609,9 @@ class HfssEprSpec:
                 "official_source": OFFICIAL_PYAEDT_SOURCE_URL,
             },
             "project": {"name": self.project_name, "design": self.design_name},
-            "run_control": self.run_control.to_payload(),
+            "run_control": (
+                None if self.run_control is None else self.run_control.to_payload()
+            ),
             "geometry": self.geometry.to_payload(),
 
             "epr": (
@@ -642,8 +657,8 @@ class HfssEprSpec:
         if set(payload) != expected or payload.get("mode") != "eigenmode":
             raise ValueError("HFSS EPR payload members are not canonical")
         run = payload.get("run_control")
-        if not isinstance(run, dict):
-            raise TypeError("run_control must be a JSON object")
+        if run is not None and not isinstance(run, dict):
+            raise TypeError("run_control must be a JSON object or null")
         project = payload.get("project")
         if not isinstance(project, dict):
             raise TypeError("project must be a JSON object")
@@ -655,7 +670,7 @@ class HfssEprSpec:
             project_name=_project_name_from_payload(project.get("name")),
             design_name=_text(project.get("design"), "project.design"),
             geometry=geometry,
-            run_control=EigenmodeRunControl(**run),
+            run_control=None if run is None else EigenmodeRunControl(**run),
             epr_request=(
                 None
                 if payload.get("epr") is None
@@ -915,14 +930,14 @@ class LengthMeshSpec:
 
 @dataclass(frozen=True)
 class HfssDrivenGeometrySpec:
-    """Body-first Driven Terminal request; supports never masquerade as GDS."""
+    """Body-first Terminal model with optional setup; no synthetic solve controls."""
 
     modeling: Modeling
     project_name: str
     design_name: str
     geometry: Any
     ports: tuple[TerminalPort | LumpedTerminalPort, ...]
-    run_control: HfssRunControl
+    run_control: HfssRunControl | None = None
     physical_layers: tuple[PhysicalLayerSpec, ...] = ()
     aedt_version: str = REQUIRED_AEDT_VERSION
     pyaedt_version: str = LOCKED_PYAEDT
@@ -950,8 +965,8 @@ class HfssDrivenGeometrySpec:
             raise ValueError("V1 requires AEDT 2024.2 and PyAEDT 1.3.0")
         object.__setattr__(self, "project_name", _project_filename(self.project_name, "project_name").stem)
         object.__setattr__(self, "design_name", _text(self.design_name, "design_name"))
-        if not isinstance(self.run_control, HfssRunControl):
-            raise TypeError("run_control must be HfssRunControl")
+        if self.run_control is not None and not isinstance(self.run_control, HfssRunControl):
+            raise TypeError("run_control must be HfssRunControl or None")
         ports = tuple(self.ports)
         if tuple(port.index for port in ports) != (1, 2) or len({port.name for port in ports}) != 2:
             raise ValueError("V1 requires unique ordered ports 1 and 2")
@@ -1001,7 +1016,7 @@ class HfssDrivenGeometrySpec:
                 "pyaedt": {"locked_version": self.pyaedt_version, "official_source": OFFICIAL_PYAEDT_SOURCE_URL},
                 "project": {"name": self.project_name, "design": self.design_name},
                 "geometry": self.geometry.to_payload(), "ports": [port.to_payload() for port in self.ports],
-                "run_control": self.run_control.to_payload()}
+                "run_control": None if self.run_control is None else self.run_control.to_payload()}
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, Any]) -> HfssDrivenGeometrySpec:
@@ -1011,13 +1026,15 @@ class HfssDrivenGeometrySpec:
             raise ValueError("unsupported body-first Driven schema")
         if set(payload) != {"modeling", "physical_layers", "schema_version", "mode", "aedt", "pyaedt", "project", "geometry", "ports", "run_control"}:
             raise ValueError("body-first Driven payload members are not canonical")
-        run = dict(payload["run_control"])
-        run["sweep"] = FrequencySweepSpec(**run["sweep"])
+        run = payload["run_control"]
+        if run is not None:
+            run = dict(run)
+            run["sweep"] = FrequencySweepSpec(**run["sweep"])
         return cls(modeling=payload["modeling"], project_name=payload["project"]["name"],
                    design_name=payload["project"]["design"], geometry=PreparedPlanarGeometry.from_payload(payload["geometry"]),
                    ports=tuple(LumpedTerminalPort.from_payload(item) if item.get("kind") == "lumped"
                                else TerminalPort(**item) for item in payload["ports"]),
-                   run_control=HfssRunControl(**run), physical_layers=tuple(PhysicalLayerSpec(**item) for item in payload["physical_layers"]),
+                   run_control=None if run is None else HfssRunControl(**run), physical_layers=tuple(PhysicalLayerSpec(**item) for item in payload["physical_layers"]),
                    aedt_version=payload["aedt"]["requested_version"], pyaedt_version=payload["pyaedt"]["locked_version"])
 
 
