@@ -719,7 +719,7 @@ The structured frontend is
 output_dir,
 project_name, design_name, materials: Mapping[str, PdkMaterial],
 net_types: Mapping[str, Literal["Signal", "Ground"]],
-physical_ground_nets: Sequence[str], run_control: MatrixRunControl,
+physical_ground_nets: Sequence[str], run_control: MatrixRunControl | None = None,
 region_padding_um: Sequence[float], resources: AedtResources | None = None)
 -> HandoffPlan`. It consumes the immutable GeometryPlan snapshot and returns a
 portable v3 handoff for C/G only (`solve_ac_rl=False`). The snapshot owns
