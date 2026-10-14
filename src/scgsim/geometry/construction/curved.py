@@ -566,7 +566,7 @@ def _detached_edge(
     ), dict(zip(pids, endpoints))
 
 
-def build_curved_construction_plan(build_input, *, route):
+def build_curved_construction_plan(build_input, *, route, representation_context=None):
     """Compile source curves globally before naming shared material surfaces."""
     import gmsh
 
@@ -576,9 +576,9 @@ def build_curved_construction_plan(build_input, *, route):
     from scgsim.geometry.planning.tags import plan_route_tags
 
     prepared = _prepare_auto_vacuum_solution_regions(
-        build_input, route=route, native_complement=True
+        build_input, route=route, native_complement=True, representation_context=representation_context
     )
-    validate_selected_route(prepared, route)
+    validate_selected_route(prepared, route, representation_context=representation_context)
     rings = _source_rings(prepared)
     chains, operations = _boundaries(prepared, rings)
     entities = {e.semantic_id: e for e in prepared.entities}

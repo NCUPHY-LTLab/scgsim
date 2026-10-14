@@ -29,13 +29,13 @@ from ..mesh.build import MeshBuildResult, build_route_mesh
 from ..mesh.controls import MESH_CONTROL_KEYS
 from .transforms import (
     RouteAThinFilm,
-    apply_airbox_to_stack,
     normalize_route_a_thin_film,
     validate_non_negative_int,
     validate_nonempty_string,
     validate_positive_number,
 )
 from .workflow import persist_problem_files, prepare_mesh_input
+from scgsim.geometry.models.physical import ApproximationProfile
 from ..execution.handoff import HandoffPlan, prepare_handoff
 
 
@@ -49,6 +49,7 @@ class ElectrostaticSim:
     airbox: dict[str, float] = field(default_factory=dict)
     route: Literal["A", "B"] = "B"
     route_a_thin_film: RouteAThinFilm | None = None
+    approximation_profile: ApproximationProfile | None = None
     terminals: list[TerminalBinding] = field(default_factory=list)
     ground_net_ids: list[str] = field(default_factory=list)
     surface_epr_specs: dict[str, dict[str, Any]] | None = None
@@ -214,6 +215,7 @@ class ElectrostaticSim:
         representation: str,
         specs: Mapping[str, Mapping[str, Any]],
         route_a_thin_film: RouteAThinFilm | None = None,
+        approximation_profile: ApproximationProfile | None = None,
     ) -> None:
         """Configure Surface EPR and the required Route-A thin-film lowering."""
         route = (
@@ -223,10 +225,15 @@ class ElectrostaticSim:
             raise ValueError("Surface EPR representation must be 'A' or 'B'.")
         if self._materials is None:
             raise ValueError("set_stack() must run before set_surface_epr().")
-        normalized_thin_film = normalize_route_a_thin_film(route, route_a_thin_film)
+        normalized_thin_film = (normalize_route_a_thin_film(route, route_a_thin_film)
+                                if route_a_thin_film is not None else None)
+        if approximation_profile is not None and not isinstance(approximation_profile, ApproximationProfile):
+            raise TypeError("approximation_profile must be ApproximationProfile")
         normalized_specs = normalize_surface_epr_specs(specs, materials=self._materials)
         self.route = route  # type: ignore[assignment]
         self.route_a_thin_film = normalized_thin_film
+        if approximation_profile is not None:
+            self.approximation_profile = approximation_profile
         self.surface_epr_specs = normalized_specs
         self._invalidate_mesh()
 
@@ -384,6 +391,8 @@ class ElectrostaticSim:
                 stack=self._plan_snapshot.stack,
                 route=self.route,
                 route_a_thin_film=self.route_a_thin_film,
+                approximation_profile=self.approximation_profile,
+                airbox=self.airbox,
                 vacuum_region=(
                     None
                     if "VACUUM_REGION" in self._plan_snapshot.stack["solution_regions"]
@@ -396,14 +405,15 @@ class ElectrostaticSim:
                 self._materials = prepared.materials
             self._mesh_result = build_route_mesh(
                 component=None,
-                stack=apply_airbox_to_stack(prepared.stack, self.airbox),
+                stack=prepared.stack,
                 route=self.route,
                 output_dir=self.output_dir,
                 refined_mesh_size=self.numerical["refined_mesh_size"],
                 max_mesh_size=self.numerical["max_mesh_size"],
                 **{key: self.numerical[key] for key in MESH_CONTROL_KEYS},
                 source_gds_bytes=self._plan_snapshot.gds_bytes,
-                source_geometry_input=self._plan_snapshot.geometry_input,
+                source_geometry_input=prepared.geometry_input,
+                representation_context=prepared.physical_plan.context,
             )
             return self._mesh_result.mesh_path
         prepared = prepare_mesh_input(
@@ -411,6 +421,8 @@ class ElectrostaticSim:
             stack=self.stack,
             route=self.route,
             route_a_thin_film=self.route_a_thin_film,
+                approximation_profile=self.approximation_profile,
+                airbox=self.airbox,
             vacuum_region=self.vacuum_region,
             indium_ground_bumps=self.indium_ground_bumps,
         )
@@ -418,13 +430,15 @@ class ElectrostaticSim:
             self._materials = prepared.materials
         self._mesh_result = build_route_mesh(
             component=prepared.component,
-            stack=apply_airbox_to_stack(prepared.stack, self.airbox),
+            stack=prepared.stack,
             route=self.route,
             output_dir=self.output_dir,
             refined_mesh_size=self.numerical["refined_mesh_size"],
             max_mesh_size=self.numerical["max_mesh_size"],
             **{key: self.numerical[key] for key in MESH_CONTROL_KEYS},
             indium_ground_bump_fill=prepared.indium_ground_bump_fill,
+            source_geometry_input=prepared.geometry_input,
+            representation_context=prepared.physical_plan.context,
         )
         return self._mesh_result.mesh_path
 

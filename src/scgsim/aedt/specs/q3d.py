@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from scgsim.aedt.specs.modeling import (
-    Modeling, PhysicalLayerSpec, _request_modeling, _modeling_payload, _effective_record, _source_record_payload, _verify_effective_records,
+    Modeling, PhysicalLayerSpec, PhysicalLayerDeclaration, PhysicalRepresentationPlan, _physical_layers_from_payload, _request_modeling, _modeling_payload, _effective_record, _source_record_payload, _verify_effective_records,
 )
 
 from scgsim.aedt.specs.common import (
@@ -292,7 +292,9 @@ class Q3dSpec:
     nets: tuple[Q3dNetSpec, ...]
     run_control: MatrixRunControl | None
     region_padding_um: tuple[float, float, float, float, float, float]
-    physical_layers: tuple[PhysicalLayerSpec, ...] = ()
+    physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
+    physical_representation: PhysicalRepresentationPlan | None = None
+    _historical_physical: bool = False
     _historical_modeling: bool = False
     solve_ac_rl: bool = True
     grounded_region_net: str | None = None
@@ -383,6 +385,40 @@ class Q3dSpec:
             raise ValueError("historical requests have no new execution modeling map")
         return tuple(_effective_record(item, mapping) for item in self.bodies)
 
+    @property
+    def effective_region(self) -> dict[str, Any] | None:
+        """Project the complete originally requested envelope with the common plan."""
+        if self._historical_physical or self._historical_modeling:
+            return None
+        mapping = _request_modeling(self)
+        def bounds(records):
+            points = [point for body in records for point in body["exterior_um"]]
+            return {
+                "x_min_um": min(point[0] for point in points),
+                "x_max_um": max(point[0] for point in points),
+                "y_min_um": min(point[1] for point in points),
+                "y_max_um": max(point[1] for point in points),
+                "z_min_um": min(body["z_min_um"] for body in records),
+                "z_max_um": max(body["z_max_um"] for body in records),
+            }
+        original = [item.to_payload() for item in self.bodies]
+        effective = [{**record, "z_min_um": record["effective_z_min_um"],
+                      "z_max_um": record["effective_z_max_um"]}
+                     for record in self.effective_bodies]
+        keys = ("x_plus_um", "x_minus_um", "y_plus_um", "y_minus_um", "z_plus_um", "z_minus_um")
+        return mapping.project_enclosure(
+            source_body_bounds_um=bounds(original), effective_body_bounds_um=bounds(effective),
+            source_padding_um=dict(zip(keys, self.region_padding_um, strict=True)),
+        )
+
+    @property
+    def effective_region_padding_um(self) -> tuple[float, ...]:
+        trace = self.effective_region
+        if trace is None:
+            return self.region_padding_um
+        return tuple(trace["effective_padding_um"][key] for key in
+                     ("x_plus_um", "x_minus_um", "y_plus_um", "y_minus_um", "z_plus_um", "z_minus_um"))
+
     def to_payload(self) -> dict[str, Any]:
         payload = {
             **_modeling_payload(self),
@@ -420,7 +456,9 @@ class Q3dSpec:
             raise ValueError("Q3D v3 does not accept GDS-piece inputs")
         result = cls(
             modeling=payload.get("modeling"),
-            physical_layers=tuple(PhysicalLayerSpec(**item) for item in payload.get("physical_layers", ())),
+            physical_layers=_physical_layers_from_payload(payload, allow_historical=allow_historical_modeling),
+            physical_representation=(PhysicalRepresentationPlan.from_payload(payload["physical_representation"]) if "physical_representation" in payload else None),
+            _historical_physical=allow_historical_modeling and "physical_representation" not in payload,
             _historical_modeling=allow_historical_modeling and "modeling" not in payload,
             project_name=_project_name_from_payload(
                 payload.get("project", {}).get("name")

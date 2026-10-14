@@ -37,8 +37,12 @@ _INTERFACE_KINDS = {"MM", "SS", "AA", "MS", "MA", "SA"}
 def validate_selected_route(
     build_input: GeometryBuildInput,
     route: RouteLiteral,
+    *, representation_context=None,
 ) -> None:
     """Validate that every conductor has an explicit representation for route."""
+    if representation_context is None:
+        raise ValueError("current compilation requires interpret_physical_geometry() and plan.context")
+    from scgsim.geometry.planning.representation import planned_conductor_representation
     allowed = ROUTE_ALLOWED_REPRESENTATIONS.get(route)
     if allowed is None:
         raise ValueError(f"Unsupported route: {route}")
@@ -49,7 +53,7 @@ def validate_selected_route(
     for entity in build_input.entities:
         if not _requires_route_representation(entity):
             continue
-        representation = entity.route_representations.get(route)
+        representation = planned_conductor_representation(entity, route=route, context=representation_context)
         if representation is None:
             errors.append(f"{entity.semantic_id} does not define Route {route}")
         elif representation not in allowed:

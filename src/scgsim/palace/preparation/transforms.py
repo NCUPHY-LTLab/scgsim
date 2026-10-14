@@ -3,20 +3,13 @@
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Literal
 
-from scgsim.semantics.route_a import (
-    apply_thin_film_profile,
-    derive_thin_film_facts,
-    normalize_optional_profile,
-    validate_single_face_metal_records,
-)
 from scgsim.geometry.models.input import GeometryBuildInput
 
 SCHEMA_VERSION = "v0.16.0"
@@ -64,10 +57,7 @@ def normalize_route_a_thin_film(route: str, value: str | None) -> RouteAThinFilm
         return None
     if route != "A":
         raise ValueError("route must be either 'A' or 'B'.")
-    try:
-        normalized = normalize_optional_profile(value)
-    except ValueError:
-        normalized = None
+    normalized = value if value in {"substrate_face", "metal_gap_equivalent"} else None
     if normalized is not None:
         return normalized
     raise ValueError(
@@ -75,220 +65,34 @@ def normalize_route_a_thin_film(route: str, value: str | None) -> RouteAThinFilm
     )
 
 
-def apply_route_a_thin_film_to_stack(
-    stack: Mapping[str, Any],
-    *,
-    source_stack: Mapping[str, Any],
-    variant: str | None,
-    component: Any | None = None,
-    build_input: GeometryBuildInput | None = None,
-) -> Mapping[str, Any]:
-    """Return a Route-A stack with one explicit thin-film coordinate contract.
-
-    ``substrate_face`` preserves physical coordinates and lets Route A lower
-    face metal to the adjacent substrate faces. ``metal_gap_equivalent``
-    collapses both face-metal intervals and applies the same monotone Z map to
-    every solution and conductor range. The source mappings are never mutated.
-    """
-    normalized = normalize_route_a_thin_film("A", variant)
-    if not isinstance(stack, Mapping) or not isinstance(source_stack, Mapping):
-        raise TypeError("Route-A thin-film lowering requires mapping stacks.")
-    layers = stack.get("layers", ())
-    if isinstance(layers, str | bytes) or not isinstance(layers, Sequence):
-        raise TypeError("Route-A thin-film lowering requires structured layers.")
-    if component is not None and build_input is not None:
-        raise ValueError(
-            "Route A accepts either a component or normalized geometry input"
-        )
-    if build_input is not None:
-        from scgsim.geometry.planning.domain import verified_route_a_substrate_support
-
-        substrate_support = verified_route_a_substrate_support(build_input, stack)
-    else:
-        substrate_support = (
-            _normalized_route_a_support(component, stack)
-            if component is not None
-            else None
-        )
-    facts = _route_a_thin_film_facts(
-        stack,
-        allow_single_face=normalized == "substrate_face",
-        substrate_support=substrate_support,
-    )
-    work = dict(
-        apply_thin_film_profile(
-            stack,
-            profile=normalized,
-            facts=facts,
-        )
-    )
-    source_hash = _canonical_mapping_sha256(source_stack)
-    provenance = _route_a_thin_film_provenance(
-        normalized,
-        facts=facts,
-        source_hash=source_hash,
-    )
-    metadata = work.get("metadata", {})
-    if not isinstance(metadata, Mapping):
-        raise TypeError("stack metadata must be a mapping.")
-    if "route_a_thin_film" in metadata:
-        raise ValueError("stack already defines route_a_thin_film provenance.")
-    work["metadata"] = {**dict(metadata), "route_a_thin_film": provenance}
-    return work
 
 
-def _route_a_thin_film_provenance(
-    variant: RouteAThinFilm,
-    *,
-    facts: Mapping[str, Any],
-    source_hash: str,
-) -> dict[str, Any]:
-    face_ranges = facts["physical_face_metal_z_ranges_um"]
-    if len(face_ranges) == 1:
-        side = next(iter(face_ranges))
-        return {
-            "schema_version": 1,
-            "variant": variant,
-            "display_label": "A_PRIME",
-            "source_stack": {
-                "revision": f"sha256:{source_hash}",
-                "sha256": source_hash,
-            },
-            "host_solution_volume_id": facts["host_solution_volume_id"],
-            **(
-                {"host_reference_origin": facts["host_reference_origin"]}
-                if "host_reference_origin" in facts
-                else {}
-            ),
-            "physical_substrate_z_ranges_um": facts["physical_substrate_z_ranges_um"],
-            "physical_face_metal_z_ranges_um": face_ranges,
-            "physical_substrate_face_gap_um": None,
-            "physical_metal_gap_um": None,
-            "effective_sheet_z_um": {side: facts["physical_face_z_um"]},
-            "effective_gap_um": None,
-            "collapsed_thickness_um": 0.0,
-            "mapping": {
-                "kind": "identity_thin_sheet",
-                "summary": "Physical Z coordinates are preserved; face films lower to sheets at their substrate faces.",
-            },
-        }
-    collapsed = 0.0
-    if variant == "metal_gap_equivalent":
-        collapsed = (
-            facts["lower_metal_thickness_um"] + facts["upper_metal_thickness_um"]
-        )
-    effective_gap = facts["physical_substrate_face_gap_um"] - collapsed
-    return {
-        "schema_version": 1,
-        "variant": variant,
-        "display_label": "A_PRIME" if variant == "substrate_face" else "A",
-        "source_stack": {
-            "revision": f"sha256:{source_hash}",
-            "sha256": source_hash,
-        },
-        "host_solution_volume_id": facts["host_solution_volume_id"],
-        **(
-            {"host_reference_origin": facts["host_reference_origin"]}
-            if "host_reference_origin" in facts
-            else {}
-        ),
-        "physical_substrate_z_ranges_um": facts["physical_substrate_z_ranges_um"],
-        "physical_face_metal_z_ranges_um": face_ranges,
-        "physical_substrate_face_gap_um": facts["physical_substrate_face_gap_um"],
-        "physical_metal_gap_um": facts["physical_metal_gap_um"],
-        "effective_sheet_z_um": {
-            "lower": facts["lower_substrate_face_z_um"],
-            "upper": facts["lower_substrate_face_z_um"] + effective_gap,
-        },
-        "effective_gap_um": effective_gap,
-        "collapsed_thickness_um": collapsed,
-        "mapping": (
-            {
-                "kind": "identity_thin_sheet",
-                "summary": "Physical Z coordinates are preserved; face films lower to sheets at their substrate faces.",
-            }
-            if variant == "substrate_face"
-            else {
-                "kind": "piecewise_coordinate_normalization",
-                "summary": "Both face-metal intervals collapse to sheets; the inter-metal cavity becomes the effective gap and all upper material shifts by the collapsed thickness.",
-                "source_breakpoints_um": [
-                    facts["lower_substrate_face_z_um"],
-                    facts["lower_metal_outer_z_um"],
-                    facts["upper_metal_outer_z_um"],
-                    facts["upper_substrate_face_z_um"],
-                ],
-                "target_breakpoints_um": [
-                    facts["lower_substrate_face_z_um"],
-                    facts["lower_substrate_face_z_um"],
-                    facts["lower_substrate_face_z_um"] + effective_gap,
-                    facts["lower_substrate_face_z_um"] + effective_gap,
-                ],
-                "exposed_opening_statement": "The exposed opening silicon gap is coordinate-normalized with the same map.",
-                "model_scope": "Sensitivity model; not full physical finite-thickness geometry.",
-            }
-        ),
-    }
-
-
-def _route_a_thin_film_facts(
-    stack: Mapping[str, Any],
-    *,
-    allow_single_face: bool = False,
-    substrate_support: Mapping[str, Mapping[str, str]] | None = None,
-) -> dict[str, Any]:
-    return derive_thin_film_facts(
-        stack,
-        allow_single_face=allow_single_face,
-        substrate_support=substrate_support,
-    )
-
-
-def _normalized_route_a_support(
-    component: Any | None,
-    stack: Mapping[str, Any],
-) -> Mapping[str, Mapping[str, str]]:
+def _normalized_component_input(component: Any, stack: Mapping[str, Any]) -> GeometryBuildInput:
+    """Acquire the existing public component/stack source before interpretation."""
     if component is None:
-        raise ValueError(
-            "generated-background Route A requires the component's normalized layout polygons."
-        )
+        raise ValueError("Palace preparation requires component or normalized geometry input")
     from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
-    from scgsim.geometry.planning.domain import verified_route_a_substrate_support
-
     from ..mesh.build import _component_gds_top_cell_name, _write_component_gds
 
-    with TemporaryDirectory(prefix="scgsim-auto-route-a-") as directory:
+    with TemporaryDirectory(prefix="scgsim-physical-source-") as directory:
         gds_path = Path(directory) / "design.gds"
         stack_path = Path(directory) / "design.stack.json"
         _write_component_gds(component, gds_path)
-        stack_path.write_text(
-            json.dumps(dict(stack), indent=2) + "\n", encoding="utf-8"
+        stack_path.write_text(json.dumps(dict(stack)) + "\n", encoding="utf-8")
+        return build_gds_stack_geometry_input(
+            gds_file=gds_path, stack_file=stack_path,
+            top_cell_name=_component_gds_top_cell_name(component=component, gds_path=gds_path),
         )
-        build_input = build_gds_stack_geometry_input(
-            gds_file=gds_path,
-            stack_file=stack_path,
-            top_cell_name=_component_gds_top_cell_name(
-                component=component, gds_path=gds_path
-            ),
-        )
-        return verified_route_a_substrate_support(build_input, stack)
 
 
-def _validate_single_face_metal_records(
-    semantic_ids: Sequence[str],
-    *,
-    records: Mapping[str, Mapping[str, Any]],
-    materials: Mapping[str, Any],
-) -> None:
-    validate_single_face_metal_records(
-        semantic_ids, records=records, materials=materials
-    )
 
 
-def _canonical_mapping_sha256(payload: Mapping[str, Any]) -> str:
-    canonical = json.dumps(
-        dict(payload), sort_keys=True, separators=(",", ":"), allow_nan=False
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+
+
+
+
 
 
 def apply_airbox_to_stack(

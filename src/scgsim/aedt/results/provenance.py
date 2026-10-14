@@ -64,7 +64,11 @@ SOURCE_SCHEMA_V18 = "scgsim.aedt.runtime-source.v18"
 
 SOURCE_SCHEMA_V19 = "scgsim.aedt.runtime-source.v19"
 
-SOURCE_SCHEMA = SOURCE_SCHEMA_V19
+SOURCE_SCHEMA_V20 = "scgsim.aedt.runtime-source.v20"
+
+SOURCE_SCHEMA_V21 = "scgsim.aedt.runtime-source.v21"
+
+SOURCE_SCHEMA = SOURCE_SCHEMA_V21
 
 _RUNTIME_SOURCE_V1_MODULES = (
     "_hfss_convergence.py",
@@ -302,6 +306,21 @@ _RUNTIME_SOURCE_V19_PATHS = tuple(
 )
 
 
+# V1–V19 remain exact historical inventories. V20 binds the sole neutral
+# physical interpreter and its source serialization dependency.
+_RUNTIME_SOURCE_V20_PATHS = tuple(sorted((*_RUNTIME_SOURCE_V19_PATHS,
+    "src/scgsim/geometry/models/physical.py",
+    "src/scgsim/geometry/planning/physical.py",
+    "src/scgsim/semantics/snapshot.py",
+)))
+
+
+# V1–V20 retain exact historical scopes; V21 adds shared memory attribution.
+_RUNTIME_SOURCE_V21_PATHS = tuple(
+    sorted((*_RUNTIME_SOURCE_V20_PATHS, "src/scgsim/aedt/_benchmark.py"))
+)
+
+
 def _module_manifest() -> list[dict[str, str]]:
     source_root = Path(__file__).resolve().parents[3]
     return [
@@ -310,7 +329,7 @@ def _module_manifest() -> list[dict[str, str]]:
             "path": path,
             "sha256": file_sha256(source_root / path.removeprefix("src/")),
         }
-        for path in _RUNTIME_SOURCE_V19_PATHS
+        for path in _RUNTIME_SOURCE_V21_PATHS
     ]
 
 
@@ -419,6 +438,8 @@ def validate_runtime_source(
         SOURCE_SCHEMA_V17: _RUNTIME_SOURCE_V17_PATHS,
         SOURCE_SCHEMA_V18: _RUNTIME_SOURCE_V18_PATHS,
         SOURCE_SCHEMA_V19: _RUNTIME_SOURCE_V19_PATHS,
+        SOURCE_SCHEMA_V20: _RUNTIME_SOURCE_V20_PATHS,
+        SOURCE_SCHEMA_V21: _RUNTIME_SOURCE_V21_PATHS,
     }.get(schema)
     if (
         expected_paths is None
@@ -449,6 +470,8 @@ def validate_runtime_source(
                     SOURCE_SCHEMA_V17,
                     SOURCE_SCHEMA_V18,
                     SOURCE_SCHEMA_V19,
+                    SOURCE_SCHEMA_V20,
+                    SOURCE_SCHEMA_V21,
                 }
                 else "scgsim/"
             )
@@ -478,6 +501,8 @@ def validate_runtime_source(
         SOURCE_SCHEMA_V17,
         SOURCE_SCHEMA_V18,
         SOURCE_SCHEMA_V19,
+        SOURCE_SCHEMA_V20,
+        SOURCE_SCHEMA_V21,
     }:
         if set(value) != {
             "schema_version",

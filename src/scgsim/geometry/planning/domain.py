@@ -1262,9 +1262,17 @@ def _auto_vacuum_component_contacts_subtractor(
     )
 
 
-def _entity_occupied_region(gdstk: Any, entity: SemanticEntitySpec) -> tuple[Any, ...]:
+def _entity_occupied_region(
+    gdstk: Any,
+    entity: SemanticEntitySpec,
+    *,
+    build_input: GeometryBuildInput | None = None,
+) -> tuple[Any, ...]:
+    """Use planned loops or the complete explicitly bound source polygon set."""
     if "outer_loop" not in entity.geometry:
-        return ()
+        if build_input is None or not entity.polygon_ids:
+            return ()
+        return _auto_vacuum_subtractor_xy_region(gdstk, build_input, entity)
     outer = gdstk.Polygon(_clean_loop(entity.geometry["outer_loop"]))
     holes = tuple(
         gdstk.Polygon(_clean_loop(hole_loop))
@@ -2266,7 +2274,7 @@ def _solution_id_for_entity_coverage(
     """
     import gdstk
 
-    occupied_region = _entity_occupied_region(gdstk, entity)
+    occupied_region = _entity_occupied_region(gdstk, entity, build_input=build_input)
     if not occupied_region:
         raise ValueError(f"{entity.semantic_id} has no occupied geometry region.")
     candidates: list[str] = []

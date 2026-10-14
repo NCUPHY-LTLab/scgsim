@@ -13,7 +13,6 @@ from typing import Any
 from scgsim.geometry.compiler.dispatch import build_route_construction_plan
 from scgsim.geometry.compiler.validation import (
     validate_backend_tag_ledger,
-    validate_selected_route,
 )
 from scgsim.geometry.construction.conformality import (
     assert_engine_gate_pass,
@@ -58,8 +57,11 @@ class SemanticGeometryBuilder:
         *,
         route: RouteLiteral,
         run_folder: PathInput,
+        representation_context=None,
     ) -> tuple[FinalPhysicalGroupRecord, ...]:
         """Validate input, plan geometry, build OCC, then export groups."""
+        if representation_context is None:
+            raise ValueError("interpret_physical_geometry() and pass plan.context before native compilation")
         run_path = Path(run_folder)
         metadata_dir = run_path / RUN_METADATA_DIR / SEMANTIC_GEOMETRY_METADATA_DIR
         geometry_dir = run_path / "geometry"
@@ -77,11 +79,6 @@ class SemanticGeometryBuilder:
             )
             _timed(
                 timings,
-                "validate_selected_route",
-                lambda: validate_selected_route(validated_input, route),
-            )
-            _timed(
-                timings,
                 "write_01_validate_geometry_input",
                 lambda: _write_stage_sidecar(
                     metadata_dir,
@@ -93,7 +90,9 @@ class SemanticGeometryBuilder:
             plan = _timed(
                 timings,
                 "build_route_construction_plan",
-                lambda: build_route_construction_plan(validated_input, route=route),
+                lambda: build_route_construction_plan(
+                    validated_input, route=route, representation_context=representation_context
+                ),
             )
             _timed(
                 timings,

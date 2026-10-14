@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from scgsim.aedt.specs.modeling import (
-    Modeling, PhysicalLayerSpec, _request_modeling, _modeling_payload, _effective_record, _source_record_payload, _verify_effective_records,
+    Modeling, PhysicalLayerSpec, PhysicalLayerDeclaration, PhysicalRepresentationPlan, _physical_layers_from_payload, _source_plan_layers, _request_modeling, _modeling_payload, _effective_record, _source_record_payload, _verify_effective_records,
 )
 
 from scgsim.aedt.specs.common import (
@@ -47,6 +47,43 @@ from scgsim.aedt.specs.common import (
     _text,
 )
 
+
+
+def _direct_hfss_enclosure(spec: Any) -> dict[str, Any] | None:
+    """Project selected GDS geometry's original full envelope exactly once."""
+    if spec._historical_physical or spec._historical_modeling:
+        return None
+    import gdstk
+
+    library = gdstk.read_gds(spec.gds_path)
+    scale = library.unit * 1e6
+    selected = []
+    for record in spec.effective_layer_imports:
+        polygons = tuple(polygon for cell in library.top_level()
+                         for polygon in cell.get_polygons(
+                             layer=record["native_import_layer"], datatype=0))
+        if polygons:
+            selected.append((record, tuple(point for polygon in polygons
+                                           for point in polygon.points)))
+    if not selected:
+        raise ValueError("selected HFSS import layers have no source polygons")
+    xy = {
+        f"{axis}_{edge}_um": operation(float(point[index]) * scale
+                                     for _, points in selected for point in points)
+        for index, axis in enumerate(("x", "y"))
+        for edge, operation in (("min", min), ("max", max))
+    }
+    source_bounds = {**xy,
+        "z_min_um": min(record["z_min_um"] for record, _ in selected),
+        "z_max_um": max(record["z_max_um"] for record, _ in selected)}
+    effective_bounds = {**xy,
+        "z_min_um": min(record["effective_z_min_um"] for record, _ in selected),
+        "z_max_um": max(record["effective_z_max_um"] for record, _ in selected)}
+    keys = ("x_plus_um", "x_minus_um", "y_plus_um", "y_minus_um", "z_plus_um", "z_minus_um")
+    return spec.physical_representation.project_enclosure(
+        source_body_bounds_um=source_bounds, effective_body_bounds_um=effective_bounds,
+        source_padding_um=dict(zip(keys, spec.region_padding_um, strict=True)),
+    )
 
 @dataclass(frozen=True)
 class FrequencySweepSpec:
@@ -140,7 +177,9 @@ class HfssDrivenSpec:
     ports: tuple[TerminalPort, TerminalPort] | tuple[ModalPort, ModalPort]
     run_control: HfssRunControl
     region_padding_um: tuple[float, float, float, float, float, float]
-    physical_layers: tuple[PhysicalLayerSpec, ...] = ()
+    physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
+    physical_representation: PhysicalRepresentationPlan | None = None
+    _historical_physical: bool = False
     _historical_modeling: bool = False
     length_mesh: LengthMeshSpec | None = None
     aedt_version: str = REQUIRED_AEDT_VERSION
@@ -209,6 +248,10 @@ class HfssDrivenSpec:
             )) if isinstance(port, ModalPort) else port
             for port in self.ports
         )
+
+    @property
+    def effective_region(self) -> dict[str, Any] | None:
+        return _direct_hfss_enclosure(self)
 
     @property
     def effective_layer_imports(self) -> tuple[dict[str, Any], ...]:
@@ -287,7 +330,9 @@ class HfssDrivenSpec:
         length = payload.get("length_mesh")
         result = cls(
             modeling=payload.get("modeling"),
-            physical_layers=tuple(PhysicalLayerSpec(**item) for item in payload.get("physical_layers", ())),
+            physical_layers=_physical_layers_from_payload(payload, allow_historical=allow_historical_modeling),
+            physical_representation=(PhysicalRepresentationPlan.from_payload(payload["physical_representation"]) if "physical_representation" in payload else None),
+            _historical_physical=allow_historical_modeling and "physical_representation" not in payload,
             _historical_modeling=allow_historical_modeling and "modeling" not in payload,
             mode=mode,  # type: ignore[arg-type]
             gds_path=gds,
@@ -392,7 +437,9 @@ class HfssEigenmodeSpec:
     object_bindings: tuple[ObjectBinding, ...]
     run_control: EigenmodeRunControl
     region_padding_um: tuple[float, float, float, float, float, float]
-    physical_layers: tuple[PhysicalLayerSpec, ...] = ()
+    physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
+    physical_representation: PhysicalRepresentationPlan | None = None
+    _historical_physical: bool = False
     _historical_modeling: bool = False
     length_mesh: LengthMeshSpec | None = None
     aedt_version: str = REQUIRED_AEDT_VERSION
@@ -413,6 +460,10 @@ class HfssEigenmodeSpec:
             raise ValueError(
                 "length mesh targets must be declared ground/signal objects"
             )
+
+    @property
+    def effective_region(self) -> dict[str, Any] | None:
+        return _direct_hfss_enclosure(self)
 
     @property
     def effective_layer_imports(self) -> tuple[dict[str, Any], ...]:
@@ -477,7 +528,9 @@ class HfssEigenmodeSpec:
         length = payload.get("length_mesh")
         result = cls(
             modeling=payload.get("modeling"),
-            physical_layers=tuple(PhysicalLayerSpec(**item) for item in payload.get("physical_layers", ())),
+            physical_layers=_physical_layers_from_payload(payload, allow_historical=allow_historical_modeling),
+            physical_representation=(PhysicalRepresentationPlan.from_payload(payload["physical_representation"]) if "physical_representation" in payload else None),
+            _historical_physical=allow_historical_modeling and "physical_representation" not in payload,
             _historical_modeling=allow_historical_modeling and "modeling" not in payload,
             gds_path=gds,
             project_name=_project_name_from_payload(
@@ -525,7 +578,9 @@ class HfssEprSpec:
     design_name: str
     geometry: Any
     run_control: EigenmodeRunControl | None = None
-    physical_layers: tuple[PhysicalLayerSpec, ...] = ()
+    physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
+    physical_representation: PhysicalRepresentationPlan | None = None
+    _historical_physical: bool = False
     _historical_modeling: bool = False
     epr_request: Any = None
     aedt_version: str = REQUIRED_AEDT_VERSION
@@ -559,7 +614,7 @@ class HfssEprSpec:
         if not self._historical_modeling and self.geometry.modeling != self.modeling:
             raise ValueError("request and prepared geometry modeling differ")
         if not self._historical_modeling:
-            declared = tuple(PhysicalLayerSpec(**item) for item in self.geometry.source["modeling"]["source_layers"])
+            declared = _source_plan_layers(self.geometry.source)
             if self.physical_layers and {item.physical_layer_id: item for item in self.physical_layers} != {item.physical_layer_id: item for item in declared}:
                 raise ValueError("request physical layers differ from prepared source map")
             object.__setattr__(self, "physical_layers", declared)
@@ -648,6 +703,8 @@ class HfssEprSpec:
         }
         if "modeling" in payload:
             expected.update({"modeling", "physical_layers"})
+        if "physical_representation" in payload:
+            expected.add("physical_representation")
         if schema == EPR_EIGENMODE_SCHEMA_VERSION_V3:
             expected.add("expression_convergence")
             if payload.get("expression_convergence") is None:
@@ -665,7 +722,9 @@ class HfssEprSpec:
         geometry = PreparedPlanarGeometry.from_payload(payload.get("geometry"))
         return cls(
             modeling=payload.get("modeling"),
-            physical_layers=tuple(PhysicalLayerSpec(**item) for item in payload.get("physical_layers", ())),
+            physical_layers=_physical_layers_from_payload(payload, allow_historical=allow_historical_modeling),
+            physical_representation=(PhysicalRepresentationPlan.from_payload(payload["physical_representation"]) if "physical_representation" in payload else None),
+            _historical_physical=allow_historical_modeling and "physical_representation" not in payload,
             _historical_modeling=allow_historical_modeling and "modeling" not in payload,
             project_name=_project_name_from_payload(project.get("name")),
             design_name=_text(project.get("design"), "project.design"),
@@ -938,7 +997,9 @@ class HfssDrivenGeometrySpec:
     geometry: Any
     ports: tuple[TerminalPort | LumpedTerminalPort, ...]
     run_control: HfssRunControl | None = None
-    physical_layers: tuple[PhysicalLayerSpec, ...] = ()
+    physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
+    physical_representation: PhysicalRepresentationPlan | None = None
+    _historical_physical: bool = False
     aedt_version: str = REQUIRED_AEDT_VERSION
     pyaedt_version: str = LOCKED_PYAEDT
     _historical_modeling: bool = False
@@ -956,7 +1017,7 @@ class HfssDrivenGeometrySpec:
             raise ValueError("request and prepared geometry modeling differ")
         if self.geometry.junctions or self.geometry.lumped_rlcs or self.geometry.contributions:
             raise ValueError("Driven geometry cannot contain Eigenmode treatments or EPR requests")
-        declared = tuple(PhysicalLayerSpec(**item) for item in self.geometry.source["modeling"]["source_layers"])
+        declared = _source_plan_layers(self.geometry.source)
         if self.physical_layers and self.physical_layers != declared:
             raise ValueError("request physical layers differ from prepared source map")
         object.__setattr__(self, "physical_layers", declared)
@@ -1019,12 +1080,15 @@ class HfssDrivenGeometrySpec:
                 "run_control": None if self.run_control is None else self.run_control.to_payload()}
 
     @classmethod
-    def from_payload(cls, payload: Mapping[str, Any]) -> HfssDrivenGeometrySpec:
+    def from_payload(cls, payload: Mapping[str, Any], *, allow_historical_modeling: bool = False) -> HfssDrivenGeometrySpec:
         from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 
         if payload.get("schema_version") != DRIVEN_GEOMETRY_SCHEMA_VERSION or payload.get("mode") != "terminal":
             raise ValueError("unsupported body-first Driven schema")
-        if set(payload) != {"modeling", "physical_layers", "schema_version", "mode", "aedt", "pyaedt", "project", "geometry", "ports", "run_control"}:
+        expected = {"modeling", "physical_layers", "schema_version", "mode", "aedt", "pyaedt", "project", "geometry", "ports", "run_control"}
+        if "physical_representation" in payload:
+            expected.add("physical_representation")
+        if set(payload) != expected:
             raise ValueError("body-first Driven payload members are not canonical")
         run = payload["run_control"]
         if run is not None:
@@ -1034,7 +1098,9 @@ class HfssDrivenGeometrySpec:
                    design_name=payload["project"]["design"], geometry=PreparedPlanarGeometry.from_payload(payload["geometry"]),
                    ports=tuple(LumpedTerminalPort.from_payload(item) if item.get("kind") == "lumped"
                                else TerminalPort(**item) for item in payload["ports"]),
-                   run_control=None if run is None else HfssRunControl(**run), physical_layers=tuple(PhysicalLayerSpec(**item) for item in payload["physical_layers"]),
+                   run_control=None if run is None else HfssRunControl(**run), physical_layers=_physical_layers_from_payload(payload, allow_historical=allow_historical_modeling),
+                   physical_representation=(PhysicalRepresentationPlan.from_payload(payload["physical_representation"]) if "physical_representation" in payload else None),
+                   _historical_physical=allow_historical_modeling and "physical_representation" not in payload,
                    aedt_version=payload["aedt"]["requested_version"], pyaedt_version=payload["pyaedt"]["locked_version"])
 
 

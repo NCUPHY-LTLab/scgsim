@@ -27,6 +27,7 @@ from scgsim.geometry._primitives.spatial import _geometry_ref_surface_z_um
 from scgsim.geometry.planning.surfaces import plan_representation_contribution_geometry
 from scgsim.aedt.specs.modeling import Modeling
 from scgsim.aedt.preparation.modeling import _effective_geometry_input
+from scgsim.aedt.specs.modeling import _native_physical_record
 
 from scgsim.aedt.preparation.junction_partition import (
     _closed_contact,
@@ -94,7 +95,6 @@ def _source_payload(
     build_input: GeometryBuildInput,
     prepared_stack: Mapping[str, Any],
     *,
-    route: str,
     source_dbu_um: float,
 ) -> dict[str, Any]:
     materials = prepared_stack.get("materials")
@@ -158,10 +158,8 @@ def _source_payload(
                 "material_id": item.material_id,
                 "material_kind": item.material_kind,
                 "part_role": item.part_role,
-                "representation": item.metadata.get("aedt_effective_layer", {}).get(
-                    "representation", item.route_representations.get(route)
-                ),
-                "physical_layer": _plain(item.metadata.get("aedt_effective_layer")),
+                "representation": item.metadata["physical_representation"]["representation"],
+                "physical_layer": _native_physical_record(item.metadata["physical_representation"]),
                 "net_id": item.net_id,
                 "polygon_ids": list(item.polygon_ids),
                 "geometry": _plain(item.geometry),
@@ -206,7 +204,7 @@ def _source_payload(
                 "semantic_id": semantic_id,
                 "material_id": entity.material_id,
                 "material_kind": entity.material_kind,
-                "representation": entity.route_representations.get(route),
+                "representation": "solution_domain",
                 "geometry": _plain(geometry),
                 "metadata": _plain(entity.metadata),
             }
@@ -245,12 +243,10 @@ def _source_payload(
         or len(padding_records) != 1
     ):
         raise ValueError("EPR auto vacuum components disagree on Region identity")
-    envelope_trace = auto_vacuum_regions[0]["metadata"].get("aedt_effective_envelope")
-    padding = (
-        envelope_trace["effective_padding_um"]
-        if isinstance(envelope_trace, Mapping)
-        else auto_vacuum_regions[0]["metadata"].get("vacuum_region_padding_um")
-    )
+    envelope_trace = metadata["physical_representation"]["enclosures"][
+        auto_vacuum_regions[0]["semantic_id"]
+    ]
+    padding = envelope_trace["effective_padding_um"]
     if not isinstance(padding, Mapping) or set(padding) != {
         "x_plus_um",
         "x_minus_um",
@@ -311,10 +307,10 @@ def _source_payload(
     }
     return {
         "schema_version": "scgsim.aedt.epr-planar-source.v1",
-        "modeling": _plain(metadata.get("aedt_modeling")),
+        "modeling": _plain(metadata.get("physical_representation")),
         "source_dbu_um": source_dbu_um,
         "prepared_stack_sha256": canonical_sha256(_plain(prepared_stack)),
-        "source_stack_sha256": metadata["aedt_modeling"]["source_stack_sha256"],
+        "source_stack_sha256": metadata["physical_source_stack_sha256"],
         "materials": material_catalog,
         "solution_regions": normalized_regions,
         "native_region": native_region,
@@ -622,7 +618,6 @@ def prepare_planar_geometry_input(
         raise NotImplementedError(
             "AEDT planar lowering does not support active source curve intent"
         )
-    route = "_effective"
     if not isinstance(prepared_stack, Mapping):
         raise TypeError("prepared_stack must be a mapping")
     recorded_dbu = build_input.metadata.get("source_dbu_um")
@@ -702,9 +697,6 @@ def prepare_planar_geometry_input(
                 {"exterior": polygon.exterior, "holes": polygon.holes}, junction, 0.0
             )
         partition_source = {
-            "route_a_thin_film": prepared_stack.get("metadata", {}).get(
-                "route_a_thin_film"
-            ),
             "conductors": [
                 {
                     "semantic_id": e.semantic_id,
@@ -714,8 +706,8 @@ def prepare_planar_geometry_input(
                     )
                     if "split_polygon_index" in e.metadata
                     else e.semantic_id,
-                    "representation": e.route_representations.get(route),
-                    "physical_layer": e.metadata.get("aedt_effective_layer"),
+                    "representation": e.metadata["physical_representation"]["representation"],
+                    "physical_layer": _native_physical_record(e.metadata["physical_representation"]),
                     "geometry": e.geometry,
                 }
                 for e in build_input.entities
@@ -798,7 +790,7 @@ def prepare_planar_geometry_input(
             record["surface_roles"].append(item["surface_role"])
     contribution_catalog = tuple(catalog_by_id[key] for key in sorted(catalog_by_id))
     source = _source_payload(
-        build_input, prepared_stack, route=route, source_dbu_um=source_dbu_um
+        build_input, prepared_stack, source_dbu_um=source_dbu_um
     )
     if build_input.lumped_supports:
         source["lumped_supports"] = _prepared_lumped_supports(
@@ -1049,7 +1041,7 @@ def _junction_partition_plane(
             and _entity_z_range(owner)[1] <= positions[0]
         ):
             raise ValueError(
-                "junction Route B source Entity has no positive solid thickness"
+                "junction Solid source Entity has no positive thickness"
             )
     return positions[0]
 

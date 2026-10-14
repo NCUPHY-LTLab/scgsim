@@ -58,6 +58,20 @@ class PreparedPlanarGeometry:
         )
         object.__setattr__(self, "contributions", contributions)
         source = _freeze(self.source)
+        from scgsim.geometry.models.physical import PLAN_SCHEMA, PhysicalRepresentationPlan
+        from scgsim.aedt.specs.modeling import _native_physical_record
+
+        trace = source.get("modeling")
+        if isinstance(trace, Mapping) and trace.get("schema_version") == PLAN_SCHEMA:
+            plan = PhysicalRepresentationPlan.from_payload(trace)
+            if plan.profile.name != self.modeling:
+                raise ValueError("prepared geometry modeling differs from its neutral profile")
+            for entity in source["conductors"]:
+                expected = _native_physical_record(plan.entities[entity["semantic_id"]])
+                if detached(entity["physical_layer"]) != expected:
+                    raise ValueError("prepared conductor physical evidence differs from the neutral plan")
+                if entity["representation"] != expected["representation"]:
+                    raise ValueError("prepared conductor representation differs from the neutral plan")
         if "lumped_supports" in source:
             from scgsim.geometry.models.lumped import LumpedSupport
             from scgsim.aedt.specs._support import _prepared_lumped_supports

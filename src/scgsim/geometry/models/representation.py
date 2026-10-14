@@ -10,6 +10,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal
+from types import MappingProxyType
+from scgsim.semantics.snapshot import freeze_plain
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +22,10 @@ class EntityRepresentation:
     representation: Literal["sheet", "solid"]
     source_z_interval_um: tuple[float, float]
     effective_z_interval_um: tuple[float, float]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "source_z_interval_um", tuple(self.source_z_interval_um))
+        object.__setattr__(self, "effective_z_interval_um", tuple(self.effective_z_interval_um))
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +38,10 @@ class EffectiveEnclosure:
     source_padding_um: Mapping[str, float]
     effective_padding_um: Mapping[str, float]
 
+    def __post_init__(self) -> None:
+        for name in self.__dataclass_fields__:
+            object.__setattr__(self, name, freeze_plain(getattr(self, name)))
+
 
 @dataclass(frozen=True, slots=True)
 class RepresentationContext:
@@ -39,3 +49,7 @@ class RepresentationContext:
 
     entities: Mapping[str, EntityRepresentation]
     enclosures: Mapping[str, EffectiveEnclosure] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "entities", MappingProxyType(dict(self.entities)))
+        object.__setattr__(self, "enclosures", MappingProxyType(dict(self.enclosures)))

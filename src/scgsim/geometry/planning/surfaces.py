@@ -113,7 +113,8 @@ from scgsim.semantics.ownership import interface_surface_owner_ids
 
 
 def plan_surface_contribution_patches(
-    build_input: GeometryBuildInput, *, route: RouteLiteral
+    build_input: GeometryBuildInput, *, route: RouteLiteral,
+    representation_context: RepresentationContext | None = None
 ) -> tuple[GeometryBuildInput, tuple[SurfacePlanRecord, ...]]:
     """Derive local physical-side evidence without a backend construction plan.
 
@@ -122,13 +123,15 @@ def plan_surface_contribution_patches(
     port lowering, volumes, tags, or backend identifiers.
     """
 
-    build_input = _prepare_auto_vacuum_solution_regions(build_input, route=route)
-    if route == "A":
-        build_input = _refresh_generated_route_a_sheet_interfaces(build_input)
+    if representation_context is None:
+        raise ValueError("interpret_physical_geometry() and pass plan.context for current contribution planning")
     from scgsim.geometry.compiler.validation import validate_selected_route
-
-    validate_selected_route(build_input, route)
-    return _plan_surface_contribution_geometry(build_input, route=route)
+    from scgsim.geometry.planning.representation import project_native_route_representations
+    build_input = project_native_route_representations(build_input, route, representation_context)
+    validate_selected_route(build_input, route, representation_context=representation_context)
+    return _plan_surface_contribution_geometry(
+        build_input, route=route, representation_context=representation_context
+    )
 
 
 def _plan_surface_contribution_geometry(
@@ -138,13 +141,13 @@ def _plan_surface_contribution_geometry(
     representation_context: RepresentationContext | None = None,
 ) -> tuple[GeometryBuildInput, tuple[SurfacePlanRecord, ...]]:
     """Shared geometric contribution primitive with an explicit geometry authority."""
-    if route is None:
+    if route is None or representation_context is not None:
         if representation_context is None:
             raise ValueError(
                 "route-neutral contribution planning requires representation context"
             )
         build_input = _prepare_auto_vacuum_solution_regions(
-            build_input, route=None, representation_context=representation_context
+            build_input, route=route, representation_context=representation_context
         )
         build_input = _refresh_generated_context_sheet_interfaces(
             build_input, representation_context=representation_context

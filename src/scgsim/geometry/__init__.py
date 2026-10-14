@@ -19,7 +19,11 @@ from scgsim.geometry.models.input import (
     VacuumRegionSpec,
 )
 from scgsim.geometry.models.lumped import LumpedSupport
+from scgsim.geometry.models.physical import (
+    ApproximationProfile, PhysicalLayerDeclaration, PhysicalRepresentationPlan,
+)
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
+from scgsim.geometry.planning.physical import interpret_physical_geometry, interpret_physical_layers
 from scgsim.geometry.source.adapter import (
     build_gds_stack_geometry_input,
     build_gdsfactory_geometry_input,
@@ -31,6 +35,11 @@ from scgsim.geometry.source.summary import InputSummary, summarize_geometry_inpu
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 
 __all__ = [
+    "interpret_physical_geometry",
+    "interpret_physical_layers",
+    "ApproximationProfile",
+    "PhysicalLayerDeclaration",
+    "PhysicalRepresentationPlan",
     "BoundaryCurveChainSpec",
     "Coordinate",
     "CurveKindLiteral",

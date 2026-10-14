@@ -26,6 +26,7 @@ from scgsim.geometry.models.construction import (
     RouteABConstructionPlanRecord,
 )
 from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.planning.representation import project_native_route_representations
 from scgsim.geometry.planning.domain import (
     _merge_solution_sidewall_interfaces,
     _prepare_auto_vacuum_solution_regions,
@@ -61,6 +62,7 @@ def build_route_construction_plan(
     build_input: GeometryBuildInput,
     *,
     route: RouteLiteral,
+    representation_context=None,
 ) -> ConstructionPlanRecord:
     """Build the route-aware plan consumed by bottom-up OCC construction.
 
@@ -77,6 +79,7 @@ def build_route_construction_plan(
     `SurfacePlanRecord` or `VolumePlanRecord` must either get a `TagPlanRecord`
     or be explicitly marked `construction_only`.
     """
+    build_input = project_native_route_representations(build_input, route, representation_context)
     if build_input.boundary_curves or build_input.boundary_reconstruction:
         if route == "C":
             raise NotImplementedError(
@@ -84,20 +87,20 @@ def build_route_construction_plan(
             )
         from scgsim.geometry.construction.curved import build_curved_construction_plan
 
-        return build_curved_construction_plan(build_input, route=route)
+        return build_curved_construction_plan(build_input, route=route, representation_context=representation_context)
 
     timings: list[dict[str, Any]] = []
-    build_input = _prepare_auto_vacuum_solution_regions(build_input, route=route)
+    build_input = _prepare_auto_vacuum_solution_regions(build_input, route=route, representation_context=representation_context)
     _timed(
         timings,
         "validate_selected_route",
-        lambda: validate_selected_route(build_input, route),
+        lambda: validate_selected_route(build_input, route, representation_context=representation_context),
     )
-    semantic_facts = build_semantic_evidence_facade(build_input, route=route)
+    semantic_facts = build_semantic_evidence_facade(build_input, route=route, representation_context=representation_context)
     interfaces = _timed(
         timings,
         "recognize_route_interfaces",
-        lambda: recognize_route_interfaces(build_input, route=route),
+        lambda: recognize_route_interfaces(build_input, route=route, representation_context=representation_context),
     )
     interfaces = _timed(
         timings,
@@ -105,6 +108,7 @@ def build_route_construction_plan(
         lambda: plan_conductor_contact_patches(
             build_input,
             route=route,
+                representation_context=representation_context,
             interfaces=interfaces,
         ),
     )
@@ -115,6 +119,7 @@ def build_route_construction_plan(
             lambda: plan_mm_contact_records(
                 build_input,
                 route=route,
+                representation_context=representation_context,
                 interfaces=interfaces,
             ),
         )
@@ -144,6 +149,7 @@ def build_route_construction_plan(
         lambda: plan_route_surfaces(
             build_input,
             route=route,
+                representation_context=representation_context,
             interfaces=interfaces,
             surface_partitions=surface_partitions,
             construction_bodies=construction_bodies,

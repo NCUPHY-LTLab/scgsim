@@ -40,6 +40,9 @@ from scgsim.geometry.models.input import (
     VacuumRegionSpec,
 )
 from scgsim.geometry.models.lumped import LumpedSupport
+from scgsim.geometry.models.physical import (
+    ApproximationProfile, PhysicalLayerDeclaration, PhysicalRepresentationPlan,
+)
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
 from scgsim.geometry.models.tags import (
     BackendEntityTagRecord,
@@ -62,6 +65,9 @@ from scgsim.geometry.models.topology import (
 )
 
 __all__ = [
+    "ApproximationProfile",
+    "PhysicalLayerDeclaration",
+    "PhysicalRepresentationPlan",
     "DEFAULT_INTERFACE_SOLVER_USE",
     "HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES",
     "ROUTE_ALLOWED_REPRESENTATIONS",

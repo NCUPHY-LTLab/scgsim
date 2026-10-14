@@ -408,6 +408,18 @@ def display_resolved_run(
         result.provenance["solver_last_completed_pass"] if result is not None else None
     )
     modes = result.provenance["requested_modes"] if result is not None else None
+    pass_cards = (("Observed final pass", final_pass),)
+    if resolved.mode == "q3d":
+        # Independent native problems need their own pass attribution, never a maximum.
+        histories = resolved.convergence or {}
+        pass_cards = tuple(
+            (label, histories[problem].get("final_pass"))
+            for problem, label in (
+                ("capacitance", "Capacitance observed final pass"),
+                ("ac_rl", "AC/RL observed final pass"),
+            )
+            if problem in histories
+        ) or (("Q3D observed final pass", None),)
     display(
         HTML(
             section(
@@ -424,7 +436,7 @@ def display_resolved_run(
                             if modes is not None
                             else "not requested",
                         ),
-                        ("Observed final pass", final_pass),
+                        *pass_cards,
                         ("Completion", "completed"),
                     )
                 ),

@@ -11,12 +11,14 @@ from pathlib import Path
 
 from typing import Any
 
+from scgsim.aedt._benchmark import (
+    BENCHMARK_RELATIVE,
+    BENCHMARK_SCHEMA,
+    NATIVE_PROFILE_SOURCE,
+    attribute_profile_memory,
+)
 from scgsim.aedt._io import file_sha256, write_json
 
-
-BENCHMARK_RELATIVE = "results/simulation-benchmark.v1.json"
-
-BENCHMARK_SCHEMA = "scgsim.aedt.simulation-benchmark.v1"
 
 _METRIC_LABELS = {
     "Real time": "real_seconds",
@@ -71,7 +73,6 @@ def _metrics(properties: Any) -> dict[str, Any]:
             result["memory_unit_alias"] = (
                 "native GB is canonicalized to SDK G (decimal gigabytes)"
             )
-        result["memory_scope"] = "individual task executable peak, not whole host"
     for label, key in _COUNT_LABELS.items():
         if label in properties:
             native = properties[label]
@@ -115,22 +116,6 @@ def _node(name: str, native: Any) -> dict[str, Any]:
     ]
     if children:
         result["children"] = children
-    if children:
-        stages = []
-        pending = list(children)
-        while pending:
-            child = pending.pop()
-            if "memory_gb_sdk" in child["metrics"]:
-                stages.append(child)
-            pending.extend(child.get("children", []))
-        if stages:
-            peak = max(stages, key=lambda child: child["metrics"]["memory_gb_sdk"])
-            result["stage_memory_peak"] = {
-                "stage": peak["name"],
-                "memory_native": peak["metrics"]["memory_native"],
-                "memory_gb_sdk": peak["metrics"]["memory_gb_sdk"],
-                "scope": "maximum available descendant stage task memory, not host peak",
-            }
     return result
 
 
@@ -201,12 +186,13 @@ def export_simulation_benchmark(
     payload: dict[str, Any] = {
         "schema_version": BENCHMARK_SCHEMA,
         "setup_name": setup_name,
-        "native_source": "AEDT results/profile native OO tree GetChildNames/GetPropNames/GetPropValue",
+        "native_source": NATIVE_PROFILE_SOURCE,
         "memory_conversion": "PyAEDT 1.3.0 MemoryGB.value; native GB spelling normalized to SDK G, raw retained",
     }
     try:
         payload["design_name"] = app.design_name
         payload.update(_native_profile(app, setup_name))
+        payload = attribute_profile_memory(payload)
     except (
         Exception
     ) as exc:  # Profile failure must not change the physics solve result.

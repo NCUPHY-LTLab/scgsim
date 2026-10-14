@@ -1,0 +1,169 @@
+---
+title: "Shared physical representation"
+description: "Source physical declarations and one selected-profile interpretation consumed by solver preparation."
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/specs/physical-representation"
+---
+
+Physical classification belongs to the source author. A selected source input
+uses one LayerStack assembly frame and one physical layer identity for each
+physical film, shared across its Entities, polygons and child occurrences.
+Placement applies once before profile interpretation. Independent stack frames
+require explicit source association and are outside this contract.
+
+A physical declaration distinguishes stack films, local films and finite
+volumes. Original material, normal film thickness, attachment face, source
+interval, Entity identity, polygon holes and actual body endpoints remain
+source facts. A finite volume's nominal layer interval does not replace an
+individual body's interval. A TSV wall's radial thickness is distinct from
+its axial span. Nonmetal support locators do not become conductor films.
+
+One neutral physical representation plan owns the selected profile, source to
+effective coordinate trace, per-body representation, support projection and
+complete enclosure mapping. Palace and AEDT consume that plan; backend
+construction, final Nets, ports, junctions, RLC treatments and numerical
+controls retain their own owners. Neither a Net, role, material name nor body
+size supplies a missing physical classification.
+
+The explicit profiles `solid`, `thin_film`, `substrate_face` and
+`metal_gap_equivalent` and `route_b` describe explicit profiles. They are not aliases.
+Stack-film removal occurs once per physical identity. Local-film sheet
+projection uses its authored attachment face and does not remove thickness
+from unrelated intervals. Retained volumes map their actual endpoints. The
+complete requested source enclosure maps once, rather than reapplying source
+padding around already shortened bodies in a backend.
+
+Actual contact and host incidence remain source-bound records. Missing
+qualified incidence stays missing; it does not block independent physical
+lowering. A consumer requiring unavailable incidence reports that specific
+limitation and does not guess from proximity, names or Net membership. Source
+contact normals do not establish HFSS calculator Surface/Adjacent field-side
+semantics or native electrical continuity.
+
+Historical requests, source hashes, runtime inventories and sealed cohorts
+retain their recorded interpretation. They are not a second authority for
+fresh physical-source preparation. The current scope remains CONVERGING;
+source preparation and offline traces do not prove native construction,
+convergence or numerical accuracy.
+
+## Typed source carrier and plan
+
+The source owner's `LayerLevel.info["physical_layer"]` contains the serialized
+neutral declaration. Preserve all original Level arguments and existing info
+when adding that carrier; no solver target material is written into it.
+
+```python
+from gdsfactory.technology import LayerLevel
+from scgsim.geometry.models.physical import (
+    ApproximationProfile, PhysicalLayerDeclaration, PhysicalRepresentationPlan,
+)
+from scgsim.geometry.planning.physical import interpret_physical_geometry
+
+declaration = PhysicalLayerDeclaration.from_payload(authored_declaration)
+level = LayerLevel(
+    **authored_level_arguments,  # existing source arguments, excluding info
+    info={**authored_level_info, "physical_layer": declaration.to_payload()},
+)
+profile = ApproximationProfile("thin_film", "v1", {})
+effective_input, effective_stack, plan = interpret_physical_geometry(
+    normalized_source_input, source_stack, profile,
+)
+recorded_plan = plan.to_payload()
+read_plan = PhysicalRepresentationPlan.from_payload(recorded_plan)
+body = read_plan.map_body(
+    declared_physical_layer_id, actual_source_interval_um, original_source_geometry,
+)
+```
+
+`PhysicalLayerDeclaration` has these exact fields:
+
+- `physical_layer_id`, `source_level_id`, `source_level_and_gds_pair` and
+  `source_interval_um`: source identity, selector association and nominal span.
+- `material_id` and `feature_kind`: original material and `stack_film`,
+  `local_film` or `finite_volume` classification.
+- `physical_dimensions`: source normal film thickness or finite-volume facts;
+  radial wall thickness and axial span remain distinct.
+- `source_contact_facts`: authored attachment face and available source normals.
+- `actual_entity_contact_graph`: the existing authored graph, or `None` when
+  unavailable. Process-connectivity descriptions are not qualified placed
+  footprint/contact proof.
+
+The plan uses schema `scgsim.geometry.physical-representation.v1`. Its tagged
+payload records the explicit profile, source identity, declarations, collapse
+intervals, sheet anchors, per-Entity facts and complete enclosure traces.
+`context` projects those facts for shared planning; `map_body()`,
+`project_support_point()` and `project_enclosure()` supply consumer projections
+without a second profile interpreter.
+
+The declaration's original `material_id` stays source identity. Native AEDT
+PEC material or Perfect E/ThinConductor assignments are backend realization
+and separately observed evidence; they never replace that source identity.
+
+## Selected declarations and source incidence
+
+A declaration catalogue is not the selected model. Consume only the physical
+levels explicitly bound by the selected source; an unused catalogue film does
+not create a collapse event. The selected bridge assembly now supplies qualified
+M1-to-substrate, post-to-Ground and deck-to-post source incidence. Preserve those
+source records and their qualified body/occurrence ownership. They establish
+source incidence, not native continuity or HFSS calculator field-side proof.
+Generic bridge/bump incidence still remains unavailable where it is unauthored;
+missing records are neither invented nor made prerequisites for independent
+physical lowering. TSV solve controls are selected by separate Human authoring
+authority; this physical-source contract does not admit native jobs.
+
+## Candidate migration
+
+Fresh physical-source preparation consumes neutral `PhysicalLayerDeclaration`
+records and an explicit `ApproximationProfile`. Fresh `aedt_modeling` metadata
+and role-derived route classification are not adapters. Existing
+`PhysicalLayerSpec` records retain their original serialization and coordinate
+meaning for version-bound historical readers only; using them for a new
+physical-source execution requires replacing them with neutral declarations.
+Explicit Solid bodies without layer declarations retain their finite source
+geometry through the shared identity plan, without minted physical IDs.
+
+The selected plan's tagged payload is the current prepared physical trace.
+Historical untagged traces remain readable under their original contract and
+retain their original hashes; they do not authorize fresh execution.
+
+## Palace caller profile
+
+`ElectrostaticSim` and `EigenmodeSim` accept the typed
+`approximation_profile` constructor field. `set_surface_epr()` accepts the same
+keyword and replaces the selected profile when supplied; omitting it retains
+the constructor-selected profile. The source-authorized bindings
+identify actual normalized supporting Entities and their `lower` or `upper`
+faces; they are not reconstructed from layer names, roles or equal Z values.
+
+```python
+from scgsim.geometry.models.physical import ApproximationProfile
+
+profile = ApproximationProfile(
+    name="substrate_face",
+    revision="v1",
+    parameters={"film_bindings": authored_film_bindings},
+)
+sim.set_surface_epr(
+    representation="A",
+    specs=authored_surface_specs,
+    approximation_profile=profile,
+)
+```
+
+Each `authored_film_bindings` entry is keyed by a declared physical layer ID
+and contains exactly `supporting_entity_id` and `supporting_side`.
+`metal_gap_equivalent` needs its two explicitly bound opposing films. Missing
+bindings fail preparation with a replacement call shape before native work.
+The old `route_a_thin_film` string can disclose or check the selected name; it
+does not author bindings or own coordinate arithmetic. Existing Route B
+selection uses the shared identity `route_b` profile when no explicit profile
+is supplied. Low-level fresh `build_route_mesh()` requires preparation's
+effective normalized input and representation context.
+
+The unversioned semantic `apply_thin_film_profile`, `derive_thin_film_facts`
+and `normalize_optional_profile` exports are retired in this candidate. Use
+neutral declarations with `interpret_physical_layers()` or
+`interpret_physical_geometry()`; original pinned source and frozen historical
+artifacts retain their original code and payload identities.

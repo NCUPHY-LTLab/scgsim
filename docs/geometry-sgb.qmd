@@ -40,6 +40,21 @@ automatically. The Notebook owns the final `Net -> Entity` map across the
 common planes, local device Entities, and named ground connections. Geometry
 does not infer electrical connectivity or merge child net maps.
 
+## Shared physical source and representation {#physical-representation}
+
+The shared physical-source/profile scope is **CONVERGING**. Its
+[physical representation contract](specs/physical-representation.qmd) separates
+source physical classification from selected solver representation. One neutral
+plan binds each original Entity and physical layer to its effective geometry,
+support and complete enclosure trace. A body retains its actual source
+endpoints and holes; a nominal layer span is not a replacement body. Missing
+qualified contact or host incidence remains absent rather than inferred.
+
+Palace and AEDT consume the same chosen interpretation. Different explicit
+profiles retain their different approximation meanings; source attachment
+normals do not decide native HFSS field-side selection. Historical recorded
+source and runtime cohorts retain their original interpretation and identity.
+
 ## Source curves and native shared topology {#source-curves}
 
 The curve scope is **ACCEPTED**. Polygon-only inputs retain their polygon

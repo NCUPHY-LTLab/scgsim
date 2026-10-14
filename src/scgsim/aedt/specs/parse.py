@@ -42,7 +42,7 @@ def parse_aedt_spec(
 ) -> AedtSpec:
     """Dispatch one explicit AEDT schema without inferring solver family."""
     if payload.get("schema_version") == DRIVEN_GEOMETRY_SCHEMA_VERSION:
-        return HfssDrivenGeometrySpec.from_payload(payload)
+        return HfssDrivenGeometrySpec.from_payload(payload, allow_historical_modeling=allow_historical_modeling)
     if payload.get("schema_version") == SCHEMA_VERSION:
         return HfssDrivenSpec.from_payload(payload, base_dir=base_dir, allow_historical_modeling=allow_historical_modeling)
     if payload.get("schema_version") == EIGENMODE_SCHEMA_VERSION:

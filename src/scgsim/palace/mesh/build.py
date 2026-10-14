@@ -87,9 +87,12 @@ def build_route_mesh(
     indium_ground_bump_fill: Mapping[str, Any] | None = None,
     source_gds_bytes: bytes | None = None,
     source_geometry_input: Any | None = None,
+    representation_context: Any | None = None,
 ) -> MeshBuildResult:
     """Lower Route-A/Route-B SGB geometry, mesh it, and emit artifacts."""
 
+    if representation_context is None or source_geometry_input is None:
+        raise ValueError("fresh Palace mesh requires neutral effective geometry input and representation_context from preparation")
     if not isinstance(stack, Mapping):
         raise TypeError("stack must be a mapping after set_stack processing.")
     if route not in {"A", "B"}:
@@ -154,21 +157,9 @@ def build_route_mesh(
         gds_path.write_bytes(source_gds_bytes)
     stack_path.write_text(json.dumps(dict(stack), indent=2) + "\n", encoding="utf-8")
     from scgsim.geometry.compiler.builder import SemanticGeometryBuilder
-    from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
 
-    build_input = build_gds_stack_geometry_input(
-        gds_file=gds_path,
-        stack_file=stack_path,
-        top_cell_name=top_cell,
-        metadata={
-            "scgsim": {"version": _scgsim_version(), "route": route},
-            "source": "scgsim.palace.mesh.build.build_route_mesh",
-        },
-    )
-    if source_geometry_input is not None:
-        from scgsim.geometry.source.curves import bind_source_curves
-
-        build_input = bind_source_curves(build_input, source_geometry_input)
+    # Source placement, curves, holes and endpoint projection are already bound.
+    build_input = source_geometry_input
     source_curve_provenance = {
         "boundary_curves": [asdict(r) for r in build_input.boundary_curves],
         "boundary_reconstruction": [
@@ -176,19 +167,6 @@ def build_route_mesh(
         ],
     }
     if indium_ground_bump_fill is not None:
-        from scgsim.geometry.models.input import GeometryBuildInput
-
-        injected_entities = tuple(indium_ground_bump_fill.get("injected_entities", ()))
-        injected_polygons = tuple(indium_ground_bump_fill.get("injected_polygons", ()))
-        build_input = GeometryBuildInput(
-            polygons=(*build_input.polygons, *injected_polygons),
-            entities=(*build_input.entities, *injected_entities),
-            solution_regions=build_input.solution_regions,
-            metadata=build_input.metadata,
-            port_sheet_regions=build_input.port_sheet_regions,
-            boundary_curves=build_input.boundary_curves,
-            boundary_reconstruction=build_input.boundary_reconstruction,
-        )
         receipt = indium_ground_bump_fill.get("receipt")
         if not isinstance(receipt, Mapping):
             raise TypeError("indium ground bump fill requires a structured receipt.")
@@ -200,7 +178,10 @@ def build_route_mesh(
 
     # SGB/OCC construction remains in the calling process. Only Gmsh lowering
     # receives a fresh native-process boundary after an XAO has been written.
-    SemanticGeometryBuilder().build(build_input, route=route, run_folder=run_dir)
+    SemanticGeometryBuilder().build(
+        build_input, route=route, run_folder=run_dir,
+        representation_context=representation_context,
+    )
     if not xao_path.is_file():
         raise FileNotFoundError(f"SGB Route-{route} XAO not generated: {xao_path}")
     if not sidecar_path.is_file():
@@ -1662,6 +1643,14 @@ def _route_a_thin_film_provenance(
     if not isinstance(value, Mapping):
         raise TypeError("Route A route_a_thin_film provenance must be a mapping.")
     result = copy.deepcopy(dict(value))
+    physical = metadata.get("physical_representation")
+    if isinstance(physical, Mapping):
+        from scgsim.geometry.models.physical import PhysicalRepresentationPlan
+
+        plan = PhysicalRepresentationPlan.from_payload(physical)
+        if result.get("variant") != plan.profile.name:
+            raise ValueError("Palace profile provenance differs from the neutral physical plan")
+        return result
     variant = result.get("variant")
     expected_label = {
         "substrate_face": "A_PRIME",

@@ -570,8 +570,12 @@ def import_and_bind(hfss: Any, spec: HfssSpec) -> list[dict[str, Any]]:
 def create_region(hfss: Any, spec: HfssSpec | Q3dSpec) -> dict[str, Any]:
     if hfss.modeler.get_object_from_name("Region") is not None:
         raise RuntimeError("new V1 design unexpectedly already has Region")
+    envelope = spec.effective_region
+    keys = ("x_plus_um", "x_minus_um", "y_plus_um", "y_minus_um", "z_plus_um", "z_minus_um")
+    effective_padding = (tuple(envelope["effective_padding_um"][key] for key in keys)
+                         if envelope is not None else spec.region_padding_um)
     region = hfss.modeler.create_region(
-        pad_value=list(spec.region_padding_um),
+        pad_value=list(effective_padding),
         pad_type="Absolute Offset",
         name="Region",
     )
@@ -593,9 +597,15 @@ def create_region(hfss: Any, spec: HfssSpec | Q3dSpec) -> dict[str, Any]:
         "observed_material_name": observed_material,
         "padding_um": list(spec.region_padding_um),
     }
+    if envelope is not None:
+        result["requested_padding_um"] = list(spec.region_padding_um)
+        result["padding_um"] = list(effective_padding)
+        result["source_effective_envelope"] = envelope
+        result["native_bounding_box_um"] = list(q3d_region_bounds(region))
     if isinstance(spec, Q3dSpec):
         result["native_region_object_id"] = int(region.id)
-        result["native_bounding_box_um"] = list(q3d_region_bounds(region))
+        if envelope is None:
+            result["native_bounding_box_um"] = list(q3d_region_bounds(region))
         result["requested_padding_um"] = list(spec.region_padding_um)
     return result
 

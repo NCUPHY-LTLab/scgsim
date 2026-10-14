@@ -11,7 +11,7 @@ from typing import Any
 
 from scgsim.aedt._io import read_json
 
-from scgsim.aedt.runtime.benchmark import BENCHMARK_SCHEMA
+from scgsim.aedt._benchmark import BENCHMARK_SCHEMA, attribute_profile_memory
 
 
 def read_simulation_benchmark(path: Path, setup_name: str) -> dict[str, Any]:
@@ -67,4 +67,4 @@ def read_simulation_benchmark(path: Path, setup_name: str) -> dict[str, Any]:
         or payload["profiles"]
     ):
         raise RuntimeError("claimed AEDT benchmark unavailability is invalid")
-    return payload
+    return attribute_profile_memory(payload)

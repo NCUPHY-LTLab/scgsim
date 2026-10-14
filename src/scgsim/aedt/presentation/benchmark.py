@@ -4,9 +4,11 @@ from __future__ import annotations
 
 
 import html
+import re
 
 from typing import Any
 
+from scgsim.aedt._benchmark import attribute_profile_memory
 from scgsim.presentation.notebook import (
     cards,
     checked_theme,
@@ -33,9 +35,24 @@ def _benchmark_view(data: dict[str, Any], *, show_details: bool) -> dict[str, An
         group: str,
         branch: str,
         pass_id: int | None = None,
+        inside_adaptive_meshing: bool = False,
     ) -> None:
         name = str(node["name"])
         pass_id = node.get("adaptive_pass", pass_id)
+        inside_adaptive_meshing = (
+            inside_adaptive_meshing or name == "Adaptive Meshing Group"
+        )
+        native_pass_group = False
+        if (
+            "adaptive_pass" not in node
+            and data["mode"] == "q3d"
+            and inside_adaptive_meshing
+        ):
+            match = re.fullmatch(r"Pass (\d+) Group", name)
+            if match is not None:
+                # This literal native group owns its descendant stages, not all problems.
+                pass_id = int(match[1])
+                native_pass_group = True
         kind = (
             "adaptive"
             if pass_id is not None
@@ -59,7 +76,7 @@ def _benchmark_view(data: dict[str, Any], *, show_details: bool) -> dict[str, An
                     **node["metrics"],
                 }
             )
-        if "adaptive_pass" in node:
+        if "adaptive_pass" in node or native_pass_group:
             peak = node.get("stage_memory_peak", {})
             pass_rows.append(
                 {
@@ -68,12 +85,13 @@ def _benchmark_view(data: dict[str, Any], *, show_details: bool) -> dict[str, An
                     "scope": "adaptive",
                     "stage": name,
                     "pass": pass_id,
-                    "memory_native": peak.get("memory_native", ""),
+                    "memory_native": peak.get("memory_native"),
+                    "memory_scope": peak.get("scope"),
                     **node["metrics"],
                 }
             )
         for child in node.get("children", []):
-            visit(child, profile, group, kind, pass_id)
+            visit(child, profile, group, kind, pass_id, inside_adaptive_meshing)
 
     for profile in benchmark["profiles"]:
         for group in profile["process_groups"]:
@@ -178,6 +196,7 @@ def display_benchmark(
     """Display recorded benchmark evidence; preserve the table without Plotly."""
 
     checked_theme(theme)
+    data = {**data, "benchmark": attribute_profile_memory(data["benchmark"])}
     from IPython.display import HTML, display
 
     benchmark = data["benchmark"]
@@ -223,6 +242,7 @@ def display_benchmark(
             "elapsed_seconds",
             "cpu_seconds",
             "memory_native",
+            "memory_scope",
             "tetrahedra",
             "solved_elements",
             "elements",
