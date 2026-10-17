@@ -101,7 +101,8 @@ completed solve and it consumes the prepared run's execution state. Prepare a
 **separate new handoff** for the later solve; do not assume the prepared-only
 receipt can be executed again as pristine input.
 
-Inspect the saved project with its explicit design:
+Inspect the sealed run directory; its bound spec supplies the requested AEDT
+version, so the preview does not accept a separate version override:
 
 ```python
 import json
@@ -117,15 +118,16 @@ receipt = json.loads(
     (native_run_dir / "metadata/aedt_run_receipt.json").read_text(encoding="utf-8")
 )
 project_path = native_run_dir / receipt["project"]
-preview = inspect_aedt_geometry(project_path, design=native_spec.design_name)
+preview = inspect_aedt_geometry(native_run_dir)
 preview.show_materials()
 preview.show_boundaries()
 ```
 
-Here `project_path` is the actual saved `.aedt` file from the native preparation,
-not a source GDS or an invented project filename. Raw-project inspection
-requires the design selection and opens native AEDT for readback; Surface-EPR
-or mesh views can remain unavailable. It does not turn a screenshot into a
+`project_path` above identifies the actual saved `.aedt` file for reference.
+Passing the sealed run directory binds preview readback to its recorded spec
+and opens native AEDT; Surface-EPR or mesh views can remain unavailable. If you
+instead pass `project_path` directly, supply its design and an explicit
+`aedt_version` matching the target Desktop. It does not turn a screenshot into a
 completed run. The [preview contract](../geometry-preview.qmd) specifies source
 hashes, manifest custody and unavailable modes.
 

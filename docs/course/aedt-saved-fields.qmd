@@ -15,9 +15,12 @@ saved-field evidence must identify the same model, design, setup, variation and
 pass.
 
 This stage evaluates fields through **native AEDT** in an owned disposable
-workcopy. It does not solve again, but it requires AEDT 2024.2, PyAEDT 1.3.0 and
-a license. The next lesson's JSON loss reanalysis is the operation that can run
-without opening the solver.
+workcopy. It does not solve again, but it requires a request that explicitly
+selects AEDT 2023.2 or 2024.2, PyAEDT 1.3.0 and a license. If the saved artifact
+has no recorded source-version origin, that origin stays unknown; analysis is
+still allowed and uses the explicitly requested local version without looking
+up or guessing the historical origin. The next lesson's JSON loss reanalysis is
+the operation that can run without opening the solver.
 
 ## Recover the exact prepared model
 
@@ -49,7 +52,9 @@ an ordinary Eigenmode spec cannot acquire them by reading this lesson.
 ```python
 from scgsim.aedt import analyze_epr
 
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 final_epr = analyze_epr(
+    aedt_version=AEDT_VERSION,
     saved_solution=saved,
     geometry=spec.geometry,
     project_name=spec.project_name,

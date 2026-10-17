@@ -43,6 +43,7 @@ from .results.resolve import ResolvedRun, resolve_results
 from .specs.common import AedtResources
 from .specs.modeling import Modeling, _modeling
 from .specs.hfss import EigenmodeRunControl
+from .versions import normalize_aedt_version
 
 
 @dataclass
@@ -50,6 +51,7 @@ class EigenmodeSim:
     """Configure ordinary and EPR Eigenmode on one body-first HFSS source."""
 
     modeling: Modeling
+    aedt_version: str = field(kw_only=True)
     component: Any | None = None
     build_input: GeometryBuildInput | None = None
     stack: Mapping[str, Any] | None = None
@@ -73,6 +75,13 @@ class EigenmodeSim:
 
     def __post_init__(self) -> None:
         _modeling(self.modeling)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "aedt_version":
+            value = normalize_aedt_version(value)
+            if "aedt_version" in self.__dict__ and self.aedt_version != value:
+                self.handoff_plan = None
+        object.__setattr__(self, name, value)
 
     def _invalidate_model(self) -> None:
         self.prepared_geometry = None
@@ -98,7 +107,7 @@ class EigenmodeSim:
         """Consume one immutable normalized source and its paired stack."""
         if not isinstance(snapshot, GeometryPlanSnapshot):
             raise TypeError("set_plan requires a GeometryPlanSnapshot")
-        trial = EigenmodeSim(modeling=self.modeling)
+        trial = EigenmodeSim(modeling=self.modeling, aedt_version=self.aedt_version)
         trial.set_stack(snapshot.stack)
         build_input = snapshot.geometry_input
         self.component = None
@@ -316,6 +325,7 @@ class EigenmodeSim:
         data = summarize_geometry_input(source, prepared_stack=stack).data
         data["backend"] = {
             "name": "aedt",
+            "aedt_version": self.aedt_version,
             "modeling": self.modeling,
             "project_name": self.project_name,
             "design_name": self.design_name,
@@ -368,6 +378,7 @@ class EigenmodeSim:
                 contributions=self.surface_contributions,
             )
         plan = prepare_hfss_eigenmode_from_geometry(
+            aedt_version=self.aedt_version,
             modeling=self.modeling,
             geometry=geometry,
             project_name=self.project_name,

@@ -28,6 +28,29 @@ from scgsim.presentation.notebook import (
 from scgsim.aedt.epr.models import EprResult, detached
 
 
+def _saved_solution_version_text(provenance: Mapping[str, Any]) -> str:
+    """Describe the captured solution's recorded origin, including missingness."""
+
+    source = provenance.get("saved_solution_aedt_version")
+    if isinstance(source, str) and source:
+        return f"Source AEDT version: {html.escape(source)}"
+    return "Source AEDT version not recorded (來源版本未記錄)"
+
+
+def _saved_solution_versions_text(provenance: Mapping[str, Any]) -> str:
+    """Keep saved origin, requested release, and connected release distinct."""
+
+    parts = [_saved_solution_version_text(provenance)]
+    for key, label in (
+        ("requested_aedt_version", "Requested AEDT version"),
+        ("connected_aedt_version", "Connected AEDT version"),
+    ):
+        value = provenance.get(key)
+        if isinstance(value, str) and value:
+            parts.append(f"{label}: {html.escape(value)}")
+    return " · ".join(parts)
+
+
 def _usable_frequency(value: Any) -> float | None:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return None
@@ -845,6 +868,12 @@ def show_epr(
     title = f"EPR mode {row['mode']}" + (
         f" pass {row['native_pass']}" if "native_pass" in row else " saved field"
     )
+    if result.result_kind == "saved_field":
+        title += (
+            "<br><sup>"
+            + _saved_solution_versions_text(result.provenance)
+            + "</sup>"
+        )
     figure.update_layout(
         title={
             "text": title,

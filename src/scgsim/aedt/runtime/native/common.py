@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.aedt.versions import AedtVersionProfile
+
 
 import hashlib
 
@@ -162,7 +164,7 @@ def _native_desktop_process_id(desktop: Any, label: str) -> int:
 
 
 def owned_application_constructor(
-    factory: Callable[..., Any], desktop: Any
+    factory: Callable[..., Any], desktop: Any, *, profile: AedtVersionProfile
 ) -> Callable[..., Any]:
     """Pin one family application constructor to the transaction-owned Desktop."""
 
@@ -180,12 +182,13 @@ def owned_application_constructor(
         raise RuntimeError("owned AEDT Desktop native process identity is inconsistent")
 
     def construct(*args: Any, **kwargs: Any) -> Any:
-        if "aedt_process_id" in kwargs or "port" in kwargs:
+        if any(name in kwargs for name in ("aedt_process_id", "port", "version")):
             raise TypeError(
-                "family application cannot override the owned AEDT identity"
+                "family application cannot override the owned AEDT identity or version"
             )
         app = factory(
             *args,
+            version=profile.requested_version,
             aedt_process_id=expected_pid,
             port=expected_port,
             **kwargs,

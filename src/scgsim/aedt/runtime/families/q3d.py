@@ -33,7 +33,7 @@ from scgsim.aedt.runtime.native.common import (
 from scgsim.aedt.runtime.native.q3d_bodies import construct_q3d_bodies
 from scgsim.aedt._terminal_chain import q3d_terminal_segments
 
-from scgsim.aedt.specs.common import AedtResources, REQUIRED_AEDT_VERSION
+from scgsim.aedt.specs.common import AedtResources
 
 from scgsim.aedt.specs.q3d import Q3dSpec
 
@@ -102,8 +102,6 @@ def prepare_q3d(Q3d: Any, run_dir: Path, spec: Q3dSpec) -> PreparedQ3d:
         new_desktop=False,
         close_on_exit=False,
     )
-    if app.desktop_class.aedt_version_id != REQUIRED_AEDT_VERSION:
-        raise RuntimeError("Q3D did not bind the owned AEDT 2024.2 desktop")
     app.modeler.model_units = "um"
     materials = construct_q3d_bodies(app, spec)
     region = _create_region(app, spec)

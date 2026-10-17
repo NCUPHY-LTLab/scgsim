@@ -8,7 +8,9 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
-from scgsim.aedt.specs.common import LOCKED_PYAEDT, REQUIRED_AEDT_VERSION
+from scgsim.aedt.runtime.native.compatibility import native_compatibility
+from scgsim.aedt.specs.common import LOCKED_PYAEDT
+from scgsim.aedt.versions import resolve_aedt_version
 
 from ..preview import GeometryPreview
 from ..scene import _FIXED_COLORS, _Mode, _Part, _color
@@ -24,15 +26,20 @@ def inspect_aedt_geometry(
     source: str | Path,
     *,
     design: str | None = None,
+    aedt_version: str | None = None,
 ) -> GeometryPreview:
-    """Open one AEDT project headlessly and bind native geometry readback."""
+    """Open one explicitly versioned AEDT project and bind native geometry."""
     source_path = Path(source).expanduser().resolve()
     source_conductors: tuple[Mapping[str, Any], ...] = ()
+    receipt_connected_version: str | None = None
     if source_path.is_file():
         if source_path.suffix.lower() != ".aedt":
             raise ValueError("raw AEDT geometry source must be an .aedt project")
+        if aedt_version is None:
+            raise TypeError("raw .aedt preview requires an explicit aedt_version")
         if not design or not design.strip():
             raise ValueError("raw .aedt preview requires an explicit design")
+        profile = resolve_aedt_version(aedt_version)
         root = source_path.parent
         project_path = source_path
         receipt: dict[str, Any] | None = None
@@ -43,6 +50,14 @@ def inspect_aedt_geometry(
         if not spec_path.is_file():
             raise FileNotFoundError("AEDT run folder has no aedt_spec.json")
         spec = _json(spec_path)
+        aedt = _mapping(spec.get("aedt"), "spec.aedt")
+        profile = resolve_aedt_version(aedt.get("requested_version"))
+        if (
+            aedt_version is not None
+            and resolve_aedt_version(aedt_version).requested_version
+            != profile.requested_version
+        ):
+            raise ValueError("explicit AEDT version disagrees with the run spec")
         project = _mapping(spec.get("project"), "spec.project")
         recorded_design = _text(project.get("design"), "spec.project.design")
         if design is not None and design != recorded_design:
@@ -53,6 +68,11 @@ def inspect_aedt_geometry(
         receipt_path = root / "metadata/aedt_run_receipt.json"
         receipt = _json(receipt_path) if receipt_path.is_file() else None
         if receipt is not None:
+            connected = receipt.get("connected")
+            if isinstance(connected, Mapping) and "aedt_version" in connected:
+                receipt_connected_version = resolve_aedt_version(
+                    connected["aedt_version"]
+                ).requested_version
             if receipt.get("status") == "native_preparation_only":
                 from scgsim.aedt.results.prepared import resolve_prepared_model
 
@@ -97,52 +117,64 @@ def inspect_aedt_geometry(
 
     desktop = None
     app = None
-    try:
-        desktop = Desktop(
-            version=REQUIRED_AEDT_VERSION,
-            non_graphical=True,
-            new_desktop=True,
-            close_on_exit=False,
-        )
-        if desktop.aedt_version_id != REQUIRED_AEDT_VERSION:
-            raise RuntimeError("AEDT Desktop release does not match the locked runtime")
-        app = desktop.load_project(str(project_path), design_name=design)
-        if app is False or app is None:
-            raise RuntimeError("PyAEDT could not open the requested project/design")
-        if str(app.design_name) != design:
-            raise ValueError("native AEDT design readback disagrees with the request")
-        app.modeler.refresh_all_ids()
-        object_names = tuple(str(name) for name in app.modeler.object_names)
-        if not object_names:
-            raise ValueError("AEDT design contains no model objects")
-        with tempfile.TemporaryDirectory(prefix="scgsim-aedt-preview-") as raw:
-            exported = app.post.export_model_obj(
-                assignment=list(object_names),
-                export_path=raw,
-                export_as_multiple_objects=True,
-                air_objects=True,
+    connected_aedt_version: str | None = None
+    with native_compatibility(profile):
+        try:
+            desktop = Desktop(
+                version=profile.requested_version,
+                non_graphical=True,
+                new_desktop=True,
+                close_on_exit=False,
             )
-            datasets: dict[str, Any] = {}
-            for item in exported:
-                path = Path(item[0])
-                name = path.stem
-                if name in datasets:
-                    raise ValueError(f"AEDT exported duplicate object {name}")
-                datasets[name] = pv.read(path).copy(deep=True)
-        missing = sorted(set(object_names) - set(datasets))
-        if missing:
-            raise ValueError(f"AEDT OBJ export omitted native objects: {missing!r}")
+            connected_aedt_version = resolve_aedt_version(
+                desktop.aedt_version_id
+            ).requested_version
+            if connected_aedt_version != profile.requested_version:
+                raise RuntimeError(
+                    "AEDT Desktop release does not match the selected runtime"
+                )
+            if (
+                receipt_connected_version is not None
+                and connected_aedt_version != receipt_connected_version
+            ):
+                raise RuntimeError("AEDT Desktop release disagrees with the run receipt")
+            app = desktop.load_project(str(project_path), design_name=design)
+            if app is False or app is None:
+                raise RuntimeError("PyAEDT could not open the requested project/design")
+            if str(app.design_name) != design:
+                raise ValueError("native AEDT design readback disagrees with the request")
+            app.modeler.refresh_all_ids()
+            object_names = tuple(str(name) for name in app.modeler.object_names)
+            if not object_names:
+                raise ValueError("AEDT design contains no model objects")
+            with tempfile.TemporaryDirectory(prefix="scgsim-aedt-preview-") as raw:
+                exported = app.post.export_model_obj(
+                    assignment=list(object_names),
+                    export_path=raw,
+                    export_as_multiple_objects=True,
+                    air_objects=True,
+                )
+                datasets: dict[str, Any] = {}
+                for item in exported:
+                    path = Path(item[0])
+                    name = path.stem
+                    if name in datasets:
+                        raise ValueError(f"AEDT exported duplicate object {name}")
+                    datasets[name] = pv.read(path).copy(deep=True)
+            missing = sorted(set(object_names) - set(datasets))
+            if missing:
+                raise ValueError(f"AEDT OBJ export omitted native objects: {missing!r}")
 
-        native_boundaries: Mapping[str, Mapping[str, Any]] = {}
-        if receipt is not None:
-            native_boundaries = _validate_native_receipt(app, receipt)
-        materials = _materials(app, datasets, receipt, source_conductors)
-        boundaries = _boundaries(app, datasets, receipt, pv, native_boundaries)
-    finally:
-        if desktop is not None:
-            released = desktop.release_desktop(close_projects=True, close_on_exit=True)
-            if released is False:
-                raise RuntimeError("AEDT Desktop did not confirm release after preview")
+            native_boundaries: Mapping[str, Mapping[str, Any]] = {}
+            if receipt is not None:
+                native_boundaries = _validate_native_receipt(app, receipt)
+            materials = _materials(app, datasets, receipt, source_conductors)
+            boundaries = _boundaries(app, datasets, receipt, pv, native_boundaries)
+        finally:
+            if desktop is not None:
+                released = desktop.release_desktop(close_projects=True, close_on_exit=True)
+                if released is False:
+                    raise RuntimeError("AEDT Desktop did not confirm release after preview")
 
     source_hashes = {project_path.relative_to(root).as_posix(): _sha256(project_path)}
     if root != project_path.parent or (root / "aedt_spec.json").is_file():
@@ -152,7 +184,9 @@ def inspect_aedt_geometry(
                 source_hashes[relative] = _sha256(path)
     source_identity: dict[str, Any] = {
         "design": design,
-        "aedt_version": REQUIRED_AEDT_VERSION,
+        "aedt_version": connected_aedt_version,
+        "requested_aedt_version": profile.requested_version,
+        "connected_aedt_version": connected_aedt_version,
         "pyaedt_version": LOCKED_PYAEDT,
     }
     if receipt_path is not None and receipt is not None:

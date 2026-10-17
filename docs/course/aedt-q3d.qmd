@@ -23,6 +23,8 @@ from scgsim.aedt import (
     MatrixRunControl, Q3dBodySpec, Q3dNetSpec, Q3dSpec, prepare_handoff,
 )
 
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
+
 bodies = (
     Q3dBodySpec(
         body_id="signal",
@@ -59,6 +61,7 @@ nets = (
     Q3dNetSpec("Ground", "Ground", ("ground_upper", "ground_lower")),
 )
 spec = Q3dSpec(
+    aedt_version=AEDT_VERSION,
     modeling="solid",
     project_name="public_cpw_q3d",
     design_name="CpwFiniteGroundQ3d",
@@ -131,6 +134,7 @@ from scgsim.aedt import MatrixRunControl, prepare_q3d_from_geometry
 
 handoff = prepare_q3d_from_geometry(
     snapshot,
+    aedt_version=AEDT_VERSION,
     modeling="solid",
     output_dir=Path(".artifacts/public-xmon-q3d-cg"),
     project_name="public_xmon_q3d_cg",

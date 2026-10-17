@@ -13,6 +13,8 @@ from dataclasses import dataclass
 
 from pathlib import Path
 
+from scgsim.aedt.versions import normalize_aedt_version
+
 from scgsim.aedt._io import file_sha256, write_json
 
 from scgsim.aedt.preparation.planar import validate_geometry_workers
@@ -43,7 +45,6 @@ from scgsim.aedt.specs.common import (
     AedtResources,
     LOCKED_PYAEDT,
     OFFICIAL_PYAEDT_SOURCE_URL,
-    REQUIRED_AEDT_VERSION,
 )
 
 from scgsim.aedt.specs.hfss import EigenmodeRunControl, HfssEprAnalysisSpec
@@ -227,6 +228,7 @@ def prepare_handoff(
 
 def _prepare_epr_analysis_handoff(
     *,
+    aedt_version: str,
     saved_solution: SavedSolution,
     geometry: PreparedPlanarGeometry,
     project_name: str,
@@ -241,6 +243,7 @@ def _prepare_epr_analysis_handoff(
     if not isinstance(saved_solution, SavedSolution):
         raise TypeError("saved_solution must be SavedSolution")
     validate_geometry_workers(geometry_workers)
+    aedt_version = normalize_aedt_version(aedt_version)
     run_dir = Path(output_dir).expanduser().resolve()
     if run_dir.exists():
         raise FileExistsError(
@@ -274,8 +277,10 @@ def _prepare_epr_analysis_handoff(
         members=saved_solution.members,
         content_sha256=saved_solution.content_sha256,
         identity=saved_solution.identity,
+        aedt_version=saved_solution.aedt_version,
     )
     spec = HfssEprAnalysisSpec(
+        aedt_version=aedt_version,
         project_name=project_name,
         design_name=design_name,
         geometry=geometry,
@@ -344,7 +349,7 @@ def _prepare_epr_analysis_handoff(
                 schema_version=RECEIPT_V3,
                 mode=spec.mode,
                 requested={
-                    "aedt_version": REQUIRED_AEDT_VERSION,
+                    "aedt_version": spec.aedt_version,
                     "pyaedt_version": LOCKED_PYAEDT,
                     "official_source": OFFICIAL_PYAEDT_SOURCE_URL,
                     "workflow": "epr_analysis",

@@ -28,6 +28,7 @@ from scgsim.aedt.presentation.epr import (
     _history_view,
     _native_reference_html,
     _ranking_height,
+    _saved_solution_version_text,
     _show_view,
     _surface_hover,
     _surface_key,
@@ -408,6 +409,30 @@ def display_resolved_run(
         result.provenance["solver_last_completed_pass"] if result is not None else None
     )
     modes = result.provenance["requested_modes"] if result is not None else None
+    version_cards = (
+        (
+            "Requested AEDT version",
+            resolved._requested_aedt_version or "not recorded",
+        ),
+        (
+            "Connected AEDT version",
+            resolved._connected_aedt_version or "not recorded",
+        ),
+    )
+    if resolved._epr_requested:
+        version_cards = (
+            (
+                "Saved-solution AEDT version",
+                _saved_solution_version_text(
+                    {
+                        "saved_solution_aedt_version": resolved._saved_solution_aedt_version,
+                        "requested_aedt_version": resolved._requested_aedt_version,
+                        "connected_aedt_version": resolved._connected_aedt_version,
+                    }
+                ),
+            ),
+            *version_cards,
+        )
     pass_cards = (("Observed final pass", final_pass),)
     if resolved.mode == "q3d":
         # Independent native problems need their own pass attribution, never a maximum.
@@ -430,6 +455,7 @@ def display_resolved_run(
                         ("Project", resolved.project_path.name),
                         ("Analysis", resolved.mode),
                         ("Setup", resolved._setup_name),
+                        *version_cards,
                         (
                             "Requested modes",
                             ", ".join(map(str, modes))

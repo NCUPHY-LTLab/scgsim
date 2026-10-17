@@ -27,8 +27,8 @@ execution; a Git revision is recorded only when truthfully available.
 Human accepted the SCGSim 2.0 implementation/API on 2026-10-09 at source
 candidate `a932a173edb5c56ae14740ff5177190996255bdd` (tree
 `2745321736e53e2a4fe8d150f2e9d8bd176669db`). The candidate used
-`2.0.0.dev1` metadata; the current develop prerelease metadata advances to
-`2.0.0rc1` without rewriting earlier artifact identity. Runtime-source v13
+`2.0.0.dev1` metadata; the current dual-version candidate metadata advances to
+`2.0.0rc3` without rewriting earlier artifact identity. Runtime-source v13
 records its declared module bytes and content digest as measured, while its
 Git revision observation may truthfully be unavailable; it does not attest
 the complete transitive dependency tree. The six earlier full native

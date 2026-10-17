@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 import argparse
+from contextlib import ExitStack
 
 import os
 
@@ -70,7 +71,9 @@ from scgsim.aedt.runtime.native.common import (
     pyaedt_version,
 )
 
-from scgsim.aedt.specs.common import AedtResources, LOCKED_PYAEDT, REQUIRED_AEDT_VERSION
+from scgsim.aedt.specs.common import AedtResources, LOCKED_PYAEDT
+from scgsim.aedt.versions import resolve_aedt_version
+from scgsim.aedt.runtime.native.compatibility import native_compatibility
 
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
@@ -162,6 +165,7 @@ def _execute(
         raise RuntimeError("one-shot handoff is not in not_run state")
     spec_path = run_dir / files["spec"]
     spec = parse_aedt_spec(_object(read_json(spec_path), "spec"), base_dir=run_dir)
+    profile = resolve_aedt_version(spec.aedt_version)
     if not prepare_only and not analyze_epr and spec.run_control is None:
         raise ValueError("solving requires an explicit complete run_control")
     resources = _execution_resources(metadata, spec, cores, ram_limit_percent)
@@ -228,7 +232,8 @@ def _execute(
                 "ThinFilm Surface-EPR uses FacePrimitive.normal as a geometric "
                 "direction, not native calculator-side readback. The "
                 "Surface/Adjacent mapping is empirical for pinned PyAEDT 1.3.0 / "
-                "AEDT 2024.2 and may select the wrong material side; ThinFilm "
+                "AEDT 2024.2; it is unverified for 2023.2 and may select the "
+                "wrong material side; ThinFilm "
                 "MA/MS participation and loss are not physically validated.",
                 UserWarning,
                 stacklevel=2,
@@ -273,9 +278,15 @@ def _execute(
         receipt["model_stage"] = (
             "model_only" if spec.run_control is None else "model_with_setup"
         )
+    receipt["requested_aedt_version"] = profile.requested_version
+    receipt["connected_aedt_version"] = None
+    if isinstance(spec, HfssEprAnalysisSpec):
+        receipt["saved_solution_aedt_version"] = spec.saved_solution.aedt_version
     write_json(receipt_path, receipt)
 
     desktop: Any | None = None
+    actual_aedt_version: str | None = None
+    transport_stack = ExitStack()
     status = "failed"
     failure: str | None = None
     result: dict[str, Any] | None = None
@@ -284,7 +295,7 @@ def _execute(
         receipt["mode"] = spec.mode
         _verify_prepared_hashes(metadata, spec_path, spec)
         receipt["runtime_source"] = _runtime_source_identity()
-        if _pyaedt_version() != LOCKED_PYAEDT:
+        if _pyaedt_version() != profile.pyaedt_version:
             raise RuntimeError("PyAEDT lock mismatch")
         setting = metadata.get("execution", {}).get("geometry_workers")
         workers = geometry_workers if geometry_workers is not None else setting
@@ -303,17 +314,23 @@ def _execute(
                 "members": len(inset_plan),
                 "requested_workers": workers,
             }
+        receipt["native_compatibility"] = {}
+        transport_stack.enter_context(
+            native_compatibility(profile, evidence=receipt["native_compatibility"])
+        )
         from ansys.aedt.core import Desktop, Hfss, Q2d, Q3d
 
         desktop_started = time.perf_counter()
         desktop = Desktop(
-            version=REQUIRED_AEDT_VERSION,
+            version=profile.requested_version,
             non_graphical=True,
             new_desktop=True,
             close_on_exit=False,
         )
-        if desktop.aedt_version_id != REQUIRED_AEDT_VERSION:
-            raise RuntimeError(f"AEDT version mismatch: {desktop.aedt_version_id!r}")
+        actual_aedt_version = desktop.aedt_version_id
+        receipt["connected_aedt_version"] = actual_aedt_version
+        if actual_aedt_version != profile.requested_version:
+            raise RuntimeError(f"AEDT version mismatch: {actual_aedt_version!r}")
         if isinstance(spec, (HfssEprSpec, HfssEprAnalysisSpec)):
             receipt.setdefault("timings", {})["desktop_startup_seconds"] = round(
                 time.perf_counter() - desktop_started, 6
@@ -322,17 +339,21 @@ def _execute(
             from scgsim.aedt.epr.workflow import analyze_saved_epr
 
             result = analyze_saved_epr(
-                owned_application_constructor(Hfss, desktop), run_dir, spec, inset_plan
+                owned_application_constructor(Hfss, desktop, profile=profile),
+                run_dir,
+                spec,
+                inset_plan,
+                connected_aedt_version=actual_aedt_version,
             )
             status = "epr_analysis_completed"
         elif isinstance(spec, HfssEprSpec):
             if spec.epr_request is None:
                 prepared = prepare_body_eigenmode(
-                    owned_application_constructor(Hfss, desktop), run_dir, spec
+                    owned_application_constructor(Hfss, desktop, profile=profile), run_dir, spec
                 )
             else:
                 prepared = prepare_epr_hfss(
-                    owned_application_constructor(Hfss, desktop),
+                    owned_application_constructor(Hfss, desktop, profile=profile),
                     run_dir,
                     spec,
                     inset_plan,
@@ -357,13 +378,13 @@ def _execute(
         elif isinstance(spec, Q3dSpec):
             if prepare_only:
                 prepared = prepare_q3d(
-                    owned_application_constructor(Q3d, desktop), run_dir, spec
+                    owned_application_constructor(Q3d, desktop, profile=profile), run_dir, spec
                 )
                 result = prepared_q3d_result(prepared)
                 status = "native_preparation_only"
             else:
                 result = _solve_q3d(
-                    owned_application_constructor(Q3d, desktop),
+                    owned_application_constructor(Q3d, desktop, profile=profile),
                     run_dir,
                     spec,
                     resources,
@@ -371,7 +392,7 @@ def _execute(
                 )
         elif isinstance(spec, Q2dSpec):
             result = _solve_q2d(
-                owned_application_constructor(Q2d, desktop),
+                owned_application_constructor(Q2d, desktop, profile=profile),
                 run_dir,
                 spec,
                 resources,
@@ -379,7 +400,7 @@ def _execute(
             )
         elif prepare_only:
             prepared = prepare_hfss(
-                owned_application_constructor(Hfss, desktop), run_dir, spec
+                owned_application_constructor(Hfss, desktop, profile=profile), run_dir, spec
             )
             result = {
                 "outputs": {},
@@ -402,7 +423,7 @@ def _execute(
             status = "native_preparation_only"
         else:
             result = _solve(
-                owned_application_constructor(Hfss, desktop),
+                owned_application_constructor(Hfss, desktop, profile=profile),
                 run_dir,
                 spec,
                 resources,
@@ -422,27 +443,40 @@ def _execute(
             if notes:
                 failure += "\n" + "\n".join(notes)
     finally:
-        if result is not None:
-            _record_result_before_release(receipt, result, spec)
-        if desktop is not None:
-            release_started = time.perf_counter()
-            try:
-                released = bool(
-                    desktop.release_desktop(close_projects=True, close_on_exit=True)
+        try:
+            if result is not None:
+                try:
+                    _record_result_before_release(receipt, result, spec)
+                except Exception as exc:
+                    receipt["result_record_error"] = f"{type(exc).__name__}: {exc}"
+                    if failure is None:
+                        failure = receipt["result_record_error"]
+            if desktop is not None:
+                release_started = time.perf_counter()
+                try:
+                    released = bool(
+                        desktop.release_desktop(close_projects=True, close_on_exit=True)
+                    )
+                    receipt["release"] = {"ok": released}
+                    if not released:
+                        raise RuntimeError("owned AEDT Desktop release returned false")
+                except Exception as exc:  # noqa: BLE001 -- receipt records release failure.
+                    receipt["release"] = {
+                        "ok": False,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                    if failure is None:
+                        failure = receipt["release"]["error"]
+                receipt.setdefault("timings", {})["release_seconds"] = round(
+                    time.perf_counter() - release_started, 6
                 )
-                receipt["release"] = {"ok": released}
-                if not released:
-                    raise RuntimeError("owned AEDT Desktop release returned false")
-            except Exception as exc:  # noqa: BLE001 -- receipt records release failure.
-                receipt["release"] = {
-                    "ok": False,
-                    "error": f"{type(exc).__name__}: {exc}",
-                }
+        finally:
+            try:
+                transport_stack.close()
+            except Exception as exc:
+                receipt["native_compatibility_restore_error"] = f"{type(exc).__name__}: {exc}"
                 if failure is None:
-                    failure = receipt["release"]["error"]
-            receipt.setdefault("timings", {})["release_seconds"] = round(
-                time.perf_counter() - release_started, 6
-            )
+                    failure = receipt["native_compatibility_restore_error"]
         if failure is not None:
             status = "failed"
             receipt["error"] = failure
@@ -501,6 +535,7 @@ def _execute(
                             setup_name=spec.run_control.setup_name,
                             model_source_sha256=spec.geometry.model_sha256,
                             evidence=result["saved_field_evidence"],
+                            aedt_version=actual_aedt_version,
                         )
                         result["outputs"].update(
                             {

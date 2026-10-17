@@ -22,6 +22,7 @@ from scgsim.aedt import (
     LengthMeshSpec, ModalPort, PhysicalLayerSpec, prepare_handoff,
 )
 
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 metal_thickness_um = 0.2
 physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
 physical_layer = PhysicalLayerSpec(
@@ -44,6 +45,7 @@ ports = (
     ModalPort(2, "o2", "+X", ((250.0, 0.0, 0.0), (250.0, 20.0, 0.0))),
 )
 spec = HfssDrivenSpec(
+    aedt_version=AEDT_VERSION,
     mode="modal", gds_path=source_gds, modeling="thin_film",
     project_name="public_cpw_modal", design_name="CpwFiniteGroundModal",
     materials=materials, vacuum_material_id="vacuum",

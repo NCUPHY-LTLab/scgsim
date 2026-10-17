@@ -1,4 +1,4 @@
-"""Owned AEDT 2024.2/PyAEDT 1.3 Eigenmode setup construction and readback.
+"""Owned selected AEDT/PyAEDT 1.3 Eigenmode setup construction and readback.
 
 Ordinary Eigenmode and EPR share this base. EPR owns its explicit cache extension;
 Driven and sweep properties never enter this payload through mutable setup caches.
@@ -9,7 +9,6 @@ from __future__ import annotations
 from typing import Any
 
 from scgsim.aedt.runtime.native.common import saved_setup_properties
-from scgsim.aedt.specs.common import REQUIRED_AEDT_VERSION
 from scgsim.aedt.specs.hfss import EigenmodeRunControl
 
 
@@ -47,8 +46,6 @@ def eigenmode_setup_payload(control: EigenmodeRunControl) -> dict[str, Any]:
 
 
 def _require_eigenmode(app: Any) -> None:
-    if app.desktop_class.aedt_version_id != REQUIRED_AEDT_VERSION:
-        raise RuntimeError("Eigenmode setup requires the owned AEDT 2024.2 desktop")
     if app.solution_type != "Eigenmode":
         raise RuntimeError("Eigenmode setup authoring requires an Eigenmode design")
 

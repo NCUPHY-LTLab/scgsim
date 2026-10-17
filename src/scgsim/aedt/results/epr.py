@@ -21,6 +21,7 @@ from scgsim.aedt.epr.models import (
 from scgsim.aedt.specs.epr import (
     SavedSolution,
 )
+from scgsim.aedt.versions import normalize_aedt_version
 from scgsim.aedt._data import (
     detached,
 )
@@ -53,19 +54,31 @@ def resolve_saved_solution(manifest_path: str | Path) -> SavedSolution:
         "receipt",
         "receipt_sha256",
     }
-    if (
-        set(manifest) != expected
-        or manifest.get("schema_version") != "scgsim.aedt.saved-solution-manifest.v1"
-    ):
+    schema = manifest.get("schema_version")
+    if schema == "scgsim.aedt.saved-solution-manifest.v1":
+        if set(manifest) != expected:
+            raise ValueError("saved-solution manifest members are not canonical")
+        aedt_version = None
+    elif schema == "scgsim.aedt.saved-solution-manifest.v2":
+        if set(manifest) != expected | {"aedt_version"}:
+            raise ValueError("saved-solution manifest members are not canonical")
+        aedt_version = normalize_aedt_version(manifest["aedt_version"])
+    else:
         raise ValueError("saved-solution manifest members are not canonical")
     payload = {
-        "schema_version": "scgsim.aedt.saved-solution.v1",
+        "schema_version": (
+            "scgsim.aedt.saved-solution.v1"
+            if aedt_version is None
+            else "scgsim.aedt.saved-solution.v2"
+        ),
         "project": manifest["project"],
         "results": manifest["results"],
         "members": manifest["members"],
         "content_sha256": manifest["content_sha256"],
         "identity": manifest["identity"],
     }
+    if aedt_version is not None:
+        payload["aedt_version"] = aedt_version
     saved = SavedSolution.from_payload(base, payload)
     if saved.project_path.is_symlink() or saved.result_path.is_symlink():
         raise RuntimeError("saved-solution project/results cannot be symlinks")
@@ -86,10 +99,18 @@ def resolve_saved_solution(manifest_path: str | Path) -> SavedSolution:
         raise RuntimeError("saved-solution receipt hash mismatch")
     receipt_payload = _exact_mapping(read_json(receipt), "saved-solution receipt")
     if (
-        receipt_payload.get("status") != "completed"
+        receipt_payload.get("schema_version")
+        != (
+            "scgsim.aedt.saved-solution-receipt.v1"
+            if aedt_version is None
+            else "scgsim.aedt.saved-solution-receipt.v2"
+        )
+        or receipt_payload.get("status") != "completed"
         or receipt_payload.get("saved_fields") is not True
     ):
         raise RuntimeError("saved-solution receipt does not attest completed fields")
+    if aedt_version is not None and receipt_payload.get("aedt_version") != aedt_version:
+        raise RuntimeError("saved-solution receipt AEDT version mismatch")
     if receipt_payload.get("identity") != detached(saved.identity):
         raise RuntimeError("saved-solution receipt identity mismatch")
     observed_members: list[dict[str, Any]] = []
@@ -140,9 +161,11 @@ def seal_saved_solution(
     setup_name: str,
     model_source_sha256: str,
     evidence: Mapping[str, Any],
+    aedt_version: str,
 ) -> dict[str, Any]:
     """Seal a released project and its complete saved-result inventory."""
 
+    aedt_version = normalize_aedt_version(aedt_version)
     root = Path(run_dir).resolve()
     project = root / f"{project_name}.aedt"
     results = root / f"{project_name}.aedtresults"
@@ -203,7 +226,8 @@ def seal_saved_solution(
     receipt_path = root / "metadata/saved-solution-receipt.json"
     manifest_path = root / "saved-solution-manifest.json"
     receipt_payload = {
-        "schema_version": "scgsim.aedt.saved-solution-receipt.v1",
+        "schema_version": "scgsim.aedt.saved-solution-receipt.v2",
+        "aedt_version": aedt_version,
         "status": "completed",
         "saved_fields": True,
         "identity": identity,
@@ -212,7 +236,8 @@ def seal_saved_solution(
     }
     write_json(receipt_path, receipt_payload)
     manifest_payload = {
-        "schema_version": "scgsim.aedt.saved-solution-manifest.v1",
+        "schema_version": "scgsim.aedt.saved-solution-manifest.v2",
+        "aedt_version": aedt_version,
         "project": project.relative_to(root).as_posix(),
         "results": results.relative_to(root).as_posix(),
         "members": members,
@@ -224,6 +249,7 @@ def seal_saved_solution(
     write_json(manifest_path, manifest_payload)
     return {
         "status": "complete",
+        "aedt_version": aedt_version,
         "manifest": manifest_path.relative_to(root).as_posix(),
         "manifest_sha256": file_sha256(manifest_path),
         "receipt": receipt_path.relative_to(root).as_posix(),
