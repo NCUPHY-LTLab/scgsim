@@ -15,6 +15,7 @@ from scgsim.aedt.specs.common import (
     EPR_EIGENMODE_SCHEMA_VERSION,
     EPR_EIGENMODE_SCHEMA_VERSION_V2,
     EPR_EIGENMODE_SCHEMA_VERSION_V3,
+    EPR_EIGENMODE_SCHEMA_VERSION_V4,
     Q2D_SCHEMA_VERSION,
     Q3D_SCHEMA_VERSION,
     SCHEMA_VERSION,
@@ -51,6 +52,7 @@ def parse_aedt_spec(
         EPR_EIGENMODE_SCHEMA_VERSION,
         EPR_EIGENMODE_SCHEMA_VERSION_V2,
         EPR_EIGENMODE_SCHEMA_VERSION_V3,
+        EPR_EIGENMODE_SCHEMA_VERSION_V4,
     }:
         return HfssEprSpec.from_payload(payload, allow_historical_modeling=allow_historical_modeling)
     if payload.get("schema_version") in {

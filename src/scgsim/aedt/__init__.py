@@ -7,6 +7,7 @@ from .preparation.planar import prepare_planar_geometry_input
 from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
     ExpressionCacheConvergence,
+    ExpressionCacheConvergenceSet,
     NativeExpressionDefinition,
     NormalizedSurfaceEprTotal,
     PlanarJunction,
@@ -66,6 +67,7 @@ __all__ = [
     "EprAnalysisRequest",
     "EprResult",
     "ExpressionCacheConvergence",
+    "ExpressionCacheConvergenceSet",
     "FrequencySweepSpec",
     "HandoffPlan",
     "HfssDrivenMode",

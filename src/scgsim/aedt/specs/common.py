@@ -71,6 +71,7 @@ EPR_ANALYSIS_SCHEMA_VERSION = "scgsim.aedt.hfss-eigenmode-epr-analysis.v1"
 EPR_EIGENMODE_SCHEMA_VERSION_V2 = "scgsim.aedt.hfss-eigenmode-epr.v2"
 
 EPR_EIGENMODE_SCHEMA_VERSION_V3 = "scgsim.aedt.hfss-eigenmode-epr.v3"
+EPR_EIGENMODE_SCHEMA_VERSION_V4 = "scgsim.aedt.hfss-eigenmode-epr.v4"
 
 DRIVEN_GEOMETRY_SCHEMA_VERSION = "scgsim.aedt.hfss-driven-geometry.v1"
 

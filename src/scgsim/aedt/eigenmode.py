@@ -23,6 +23,7 @@ from .preparation.planar import prepare_planar_geometry_input, validate_geometry
 from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
     ExpressionCacheConvergence,
+    ExpressionCacheConvergenceSet,
     PlanarJunction,
     SurfaceEprSpec,
 )
@@ -63,7 +64,7 @@ class EigenmodeSim:
     junctions: tuple[PlanarJunction, ...] = ()
     lumped_rlcs: tuple[LumpedRlc, ...] = ()
     epr_request: EprAnalysisRequest | None = None
-    expression_convergence: ExpressionCacheConvergence | None = None
+    expression_convergence: ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None = None
     prepared_geometry: PreparedPlanarGeometry | None = field(default=None, init=False)
     handoff_plan: HandoffPlan | None = field(default=None, init=False)
     _plan_snapshot: GeometryPlanSnapshot | None = field(
@@ -263,10 +264,10 @@ class EigenmodeSim:
         self.handoff_plan = None
 
     def set_expression_cache_convergence(
-        self, control: ExpressionCacheConvergence | None
+        self, control: ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None
     ) -> None:
-        if control is not None and not isinstance(control, ExpressionCacheConvergence):
-            raise TypeError("control must be ExpressionCacheConvergence or None")
+        if control is not None and not isinstance(control, (ExpressionCacheConvergence, ExpressionCacheConvergenceSet)):
+            raise TypeError("control must be a unit expression control, collection, or None")
         self.expression_convergence = control
         self.handoff_plan = None
 

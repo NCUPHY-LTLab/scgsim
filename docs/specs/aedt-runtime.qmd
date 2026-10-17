@@ -934,17 +934,81 @@ a solve. A cache item is identified by its namespaced definition plus bound
 context, never by a display title alone. Multi-face quantities use a verified
 native face list or an explicit sum of individually bound faces.
 
+#### Independent expression-cache convergence targets
+
+`ExpressionCacheConvergenceSet(controls=(...))` carries a nonempty ordered
+collection of unit `ExpressionCacheConvergence` controls. The public setter and
+preparation helper accept either a unit or a collection. A collection serializes
+as `scgsim.aedt.hfss-eigenmode-epr.v4`; singleton V3 and historical V1/V2 payloads
+retain their existing serialization. Duplicate target/mode pairs are rejected.
+
+```python
+from scgsim.aedt import (
+    ExpressionCacheConvergence, ExpressionCacheConvergenceSet, NormalizedSurfaceEprTotal,
+)
+
+sim.set_expression_cache_convergence(ExpressionCacheConvergenceSet(controls=tuple(
+    ExpressionCacheConvergence(
+        mode=mode_index,
+        target=NormalizedSurfaceEprTotal(interface, "requested_margin", margin_um),
+        criterion=criterion_percent,
+        use_relative_convergence=True,
+    )
+    for interface in interface_kinds
+)))
+```
+
+The caller supplies `mode_index`, `margin_um`, `criterion_percent` and
+`interface_kinds`. The EPR request must include each target's prepared margin
+evaluation. Each interface is an independent normalized total with its own
+native criterion; the interfaces are never summed into one convergence target. Caller frequency, minimum,
+maximum and consecutive-pass settings remain unchanged. [AEDT 2024.2 documents
+that Eigenmode also requires frequency convergence in addition to its enabled
+expression criteria](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/Subsystems/HFSS/Content/HFSS/SpecifyingExpressionsforAdaptiveConvergence.htm).
+This documented conjunction is the requested native rule, not an observed
+combined-convergence result. Completion or frequency convergence alone does not
+establish that all targets converged; missing native stop evidence stays missing.
+Near-zero native percentage behavior is not replaced with an epsilon or absolute
+criterion.
+
+Each active item retains its control identity, expression/cache identity, mode,
+requested criterion and separately observed saved criterion fields. Native
+`Pass=All` cache rows retain their returned coordinates, values and missingness
+for each target. Configuration readback parses the exact saved project with
+PyAEDT's pinned, uncached `load_entire_aedt_file` reader, selects the bound HFSS
+design and setup, and records that file's hash. It does not use `setup.props` or
+the application project-properties cache. Requested native fields, actual saved
+fields, raw representation differences and unavailable fields remain separate.
+Saved frequency/pass controls are recorded alongside them. Matching setup
+configuration does not establish that a target met its criterion.
+
+Per-pass field retention is unknown; LastAdaptive saved-field identity is
+separate. No offline percentage delta is fabricated.
+
 #### Selecting an expression-cache convergence target {#epr-expression-cache-convergence}
 
-`EigenmodeSim.set_expression_cache_convergence()` optionally enables one
-expression-cache item for a caller-selected mode and explicit criterion. The
-mode must also be selected by the configured `EprAnalysisRequest`. With this
-setting omitted, SCGSim authors no auxiliary expression and submits the same
-non-converging primitive cache items as before. The handoff records a configured
-setting in `scgsim.aedt.hfss-eigenmode-epr.v3`; V1/V2 handoffs remain readable
-and retain their prior schema on round trip. The low-level
+`EigenmodeSim.set_expression_cache_convergence(control)` replaces the current
+selection; repeated calls do not accumulate controls. Omit the setting or pass
+`None` to select no expression-convergence criterion, pass one
+`ExpressionCacheConvergence` for a singleton, or pass an
+`ExpressionCacheConvergenceSet` containing the chosen subset of targets. Routine
+EPR computation and reporting do not automatically enable convergence criteria.
+Each selected control's mode must also be selected by the configured
+`EprAnalysisRequest`.
+
+For the singleton case, the setter enables one expression-cache item for a
+caller-selected mode and explicit criterion, and the handoff records that
+setting in `scgsim.aedt.hfss-eigenmode-epr.v3`. A collection uses V4 as described
+above. V1/V2 handoffs remain readable and retain their prior schema on round
+trip. With no control selected, SCGSim authors no auxiliary expression and
+submits the same non-converging primitive cache items as before. The low-level
 `prepare_hfss_eigenmode_from_geometry()` also requires `modeling` and accepts
 the same `expression_convergence` argument.
+
+Native frequency convergence controls remain separate and unchanged. AEDT
+requires those frequency criteria together with only the explicitly selected,
+enabled expression criteria; unselected computed EPR quantities are not added
+to that conjunction.
 
 `criterion` is passed to AEDT without scaling. With
 `use_relative_convergence=True`, it is the native **Max Percent Delta** in

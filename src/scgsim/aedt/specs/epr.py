@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 from pathlib import Path
 from scgsim.semantics.epr import film_assumptions
-from scgsim.aedt._data import _text, _number, _freeze, detached
+from scgsim.aedt._data import _text, _number, _freeze, detached, canonical_sha256
 
 InterfaceKind = Literal["MA", "MS", "SA", "MM"]
 FieldSide = Literal["top", "bottom", "sidewall"]
@@ -409,6 +409,57 @@ class ExpressionCacheConvergence:
             criterion=value["criterion"],
             use_relative_convergence=value["use_relative_convergence"],
         )
+
+
+@dataclass(frozen=True)
+class ExpressionCacheConvergenceSet:
+    """Independent native expression criteria; frequency controls remain separate."""
+
+    controls: tuple[ExpressionCacheConvergence, ...]
+
+    def __post_init__(self) -> None:
+        controls = tuple(self.controls)
+        if not controls or any(
+            not isinstance(item, ExpressionCacheConvergence) for item in controls
+        ):
+            raise TypeError("controls must be a nonempty collection of ExpressionCacheConvergence")
+        identities = [
+            (item.mode, canonical_sha256(item.target.to_payload())) for item in controls
+        ]
+        if len(set(identities)) != len(identities):
+            raise ValueError("expression convergence target/mode pairs must be unique")
+        object.__setattr__(self, "controls", controls)
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "kind": "expression_cache_convergence_set",
+            "controls": [item.to_payload() for item in self.controls],
+        }
+
+    @classmethod
+    def from_payload(cls, value: Any) -> ExpressionCacheConvergenceSet:
+        if (
+            not isinstance(value, Mapping)
+            or set(value) != {"kind", "controls"}
+            or value["kind"] != "expression_cache_convergence_set"
+        ):
+            raise ValueError("expression convergence collection members are not canonical")
+        return cls(controls=tuple(
+            ExpressionCacheConvergence.from_payload(item) for item in value["controls"]
+        ))
+
+
+def iter_expression_convergence(
+    control: ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None,
+) -> tuple[ExpressionCacheConvergence, ...]:
+    """One normalization path without rewriting historical singleton requests."""
+    if control is None:
+        return ()
+    if isinstance(control, ExpressionCacheConvergence):
+        return (control,)
+    if isinstance(control, ExpressionCacheConvergenceSet):
+        return control.controls
+    raise TypeError("expression convergence must be a unit control, collection, or None")
 
 
 @dataclass(frozen=True)

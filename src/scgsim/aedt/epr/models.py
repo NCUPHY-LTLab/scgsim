@@ -29,6 +29,7 @@ from scgsim.aedt.specs.epr import (
     NativeExpressionDefinition as NativeExpressionDefinition,
     NormalizedSurfaceEprTotal as NormalizedSurfaceEprTotal,
     ExpressionCacheConvergence as ExpressionCacheConvergence,
+    ExpressionCacheConvergenceSet as ExpressionCacheConvergenceSet,
     SavedSolution as SavedSolution,
     _contained_relative_path as _contained_relative_path,
 )

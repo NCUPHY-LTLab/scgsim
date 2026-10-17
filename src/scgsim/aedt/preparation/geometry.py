@@ -24,6 +24,7 @@ from scgsim.aedt.preparation.planar import validate_geometry_workers
 from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
     ExpressionCacheConvergence,
+    ExpressionCacheConvergenceSet,
 )
 from scgsim.aedt.specs.common import (
     LumpedRlc,
@@ -115,7 +116,7 @@ def prepare_hfss_eigenmode_from_geometry(
     output_dir: str | Path,
     epr_request: EprAnalysisRequest | None = None,
     lumped_rlcs: Sequence[LumpedRlc] | None = None,
-    expression_convergence: ExpressionCacheConvergence | None = None,
+    expression_convergence: ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None = None,
     geometry_workers: int | None = None,
     resources: AedtResources | None = None,
 ) -> HandoffPlan:

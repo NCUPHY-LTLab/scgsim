@@ -31,9 +31,11 @@ from scgsim.aedt.epr.models import (
 )
 from scgsim.aedt.specs.epr import (
     ExpressionCacheConvergence,
+    ExpressionCacheConvergenceSet,
     NativeExpressionDefinition,
     NormalizedSurfaceEprTotal,
     surface_evaluations,
+    iter_expression_convergence,
 )
 from scgsim.aedt._data import (
     _freeze,
@@ -44,7 +46,7 @@ from scgsim.aedt.epr.native import (
     bind_native_surface_references,
 )
 from scgsim.aedt.epr.selection import surface_integral_groups
-from scgsim.aedt.runtime.native.common import detached_data, saved_setup_properties
+from scgsim.aedt.runtime.native.common import detached_data
 from scgsim.aedt.runtime.native.hfss_eigenmode import (
     submit_eigenmode_cache,
 )
@@ -641,6 +643,10 @@ def _adaptive_epr_result(
             "solver_last_completed_pass": convergence["final_pass"],
             "requested_modes": list(selected_modes),
             "cache_status": cache["status"],
+            "expression_convergence_targets": history.get("expression_convergence_targets", []),
+            "combined_expression_convergence_status": history.get(
+                "combined_expression_convergence_status", "unknown"
+            ),
             "report_inventory": history["report_inventory"],
             "join_identity": [
                 "setup",
@@ -779,6 +785,21 @@ def _adaptive_mode_history(
         except Exception as exc:  # noqa: BLE001 -- partial native history is evidence.
             cache_observation["error"] = f"{type(exc).__name__}: {exc}"
     history["cache_integral_traces"] = cache_observation
+    history["expression_convergence_targets"] = [
+        {
+            "control_id": item["control_id"],
+            "mode": item["mode"],
+            "title": item["title"],
+            "expression": item["expression"],
+            "expression_identity_sha256": item["expression_identity_sha256"],
+            "requested_control": item["requested_control"],
+            "native_trace": cache_observation["traces"].get(item["title"]),
+            "query": cache_observation["queries"].get(item["title"]),
+            "per_pass_fields_status": "unknown",
+        }
+        for item in cache_items if item["is_convergence"]
+    ]
+    history["combined_expression_convergence_status"] = "unknown"
     return history
 
 
@@ -971,7 +992,7 @@ def _cache_items(
     expressions: list[dict[str, Any]],
     mode_count: int,
     selected_modes: tuple[int, ...],
-    convergence: ExpressionCacheConvergence | None = None,
+    convergence: ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None = None,
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for mode in selected_modes:
@@ -998,14 +1019,16 @@ def _cache_items(
             item = items[-1]
             if expression.get("cache_only"):
                 item["cache_only"] = True
-            if (
-                expression.get("cache_only")
-                and convergence is not None
-                and mode == convergence.mode
-            ):
-                item["is_convergence"] = True
-                item["use_relative_convergence"] = convergence.use_relative_convergence
-                item["criterion"] = convergence.criterion
+            for control in iter_expression_convergence(convergence):
+                if (
+                    expression.get("convergence_target") == control.target.to_payload()
+                    and mode == control.mode
+                ):
+                    item["is_convergence"] = True
+                    item["use_relative_convergence"] = control.use_relative_convergence
+                    item["criterion"] = control.criterion
+                    item["control_id"] = _identity_sha256(control.to_payload())
+                    item["requested_control"] = control.to_payload()
     if len({item["title"] for item in items}) != len(items):
         raise RuntimeError("compiled EPR cache titles are not unique")
     return items
@@ -1370,9 +1393,16 @@ def _author_epr_expressions(
                     namespace=namespace,
                 )
             )
-    convergence = spec.expression_convergence if isinstance(spec, HfssEprSpec) else None
-    if convergence is not None:
+    authored_targets: set[str] = set()
+    convergence_control = (
+        spec.expression_convergence if isinstance(spec, HfssEprSpec) else None
+    )
+    for convergence in iter_expression_convergence(convergence_control):
         target = convergence.target
+        target_id = _identity_sha256(target.to_payload())
+        if target_id in authored_targets:
+            continue
+        authored_targets.add(target_id)
         if isinstance(target, NormalizedSurfaceEprTotal):
             purpose = "normalized_surface_epr_total"
             selection = {
@@ -1402,6 +1432,7 @@ def _author_epr_expressions(
             namespace=namespace,
         )
         authored["cache_only"] = True
+        authored["convergence_target"] = target.to_payload()
         expressions.append(authored)
     batch = load_compiled_expressions(app, compiled, evidence_dir)
     for key in (
@@ -1510,7 +1541,23 @@ def _prepare_expressions_and_cache(
 def _read_cache(
     app: Any, spec: HfssEprSpec, submitted: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    raw = saved_setup_properties(app, spec.run_control.setup_name)
+    # Fresh saved-file evidence must not use PyAEDT's project-properties cache.
+    from scgsim.aedt.runtime.native.hfss_geometry import _read_saved_hfss_design
+
+    if app.design_name != spec.design_name:
+        raise RuntimeError("EPR cache readback design differs from the bound request")
+    project_sha256, design = _read_saved_hfss_design(
+        app.project_file, spec.design_name, purpose="EPR expression-cache configuration"
+    )
+    analysis = design.get("AnalysisSetup")
+    setups = analysis.get("SolveSetups") if isinstance(analysis, Mapping) else None
+    setup_names = (
+        [name for name, value in setups.items() if isinstance(value, Mapping)]
+        if isinstance(setups, Mapping) else []
+    )
+    if setup_names != [spec.run_control.setup_name]:
+        raise RuntimeError("saved EPR project does not contain one exact setup")
+    raw = setups[spec.run_control.setup_name]
     use_cache_for = raw.get("UseCacheFor")
     if isinstance(use_cache_for, str):
         use_cache_for = [use_cache_for]
@@ -1561,7 +1608,53 @@ def _read_cache(
     ]
     if use_cache_for != ["Pass"] or persisted != expected:
         raise RuntimeError("saved EPR cache persisted-subset readback mismatch")
+    by_title = {item["title"]: item for item in convergence_fields}
+    targets = []
+    for item in submitted:
+        if not item["is_convergence"]:
+            continue
+        native_request = _native_expression_cache([item])[1]
+        requested_fields = {
+            name: native_request[native_request.index(f"{name}:=") + 1]
+            for name in convergence_field_names
+        }
+        observation = by_title[item["title"]]
+        targets.append({
+            "control_id": item["control_id"],
+            "mode": item["mode"],
+            "title": item["title"],
+            "expression": item["expression"],
+            "expression_identity_sha256": item["expression_identity_sha256"],
+            "requested_control": item["requested_control"],
+            "requested_native_fields": requested_fields,
+            "observed_fields": observation,
+            "raw_representation_differences": [
+                name for name, value in observation["values"].items()
+                if value != requested_fields[name]
+            ],
+            "comparison_qualification": (
+                "Raw native/request representations only; missing fields stay unavailable, "
+                "configuration equality is not convergence evidence"
+            ),
+        })
+    frequency_fields = (
+        "MaxDeltaFreq", "MaximumPasses", "MinimumPasses",
+        "MinimumConvergedPasses", "PercentRefinement",
+    )
     return {
+        "convergence_targets": targets,
+        "saved_configuration_source": {
+            "project_sha256": project_sha256,
+            "project_file_name": Path(app.project_file).name,
+            "design_name": spec.design_name,
+            "setup_name": spec.run_control.setup_name,
+            "basis": "uncached pinned load_entire_aedt_file of exact saved project",
+        },
+        "frequency_control": {
+            "requested": spec.run_control.to_payload(),
+            "observed_fields": {name: raw[name] for name in frequency_fields if name in raw},
+            "unavailable": [name for name in frequency_fields if name not in raw],
+        },
         "use_cache_for": use_cache_for,
         "items": persisted,
         "convergence_fields": convergence_fields,
