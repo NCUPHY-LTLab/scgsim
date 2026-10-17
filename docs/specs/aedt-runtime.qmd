@@ -1257,6 +1257,45 @@ identifies a candidate binding but does not qualify the final partition.
 Preparation separately checks complete coverage of the designated central end
 edge.
 
+Both this binder and `prepare_planar_geometry_input()` accept the complete
+source input. Do not omit other-face conductors or prepare a same-face submodel
+to bypass contact checks. One shared per-junction inventory resolves the
+physical source support plane before considering projected XY contact. Exact
+port overlap host Entity/polygon references establish the source hosts; their
+authored `PhysicalLayerDeclaration` film attachment planes, or genuine
+zero-thickness source sheet planes, must agree. Finite body intervals can
+confirm incidence but do not invent a support plane. With boundary-only
+contacts or a manually constructed `PlanarJunction`, the same resolver requires
+one unique authored support-plane candidate incident to the closed-XY contacts
+of both explicit terminal Nets. Missing or ambiguous binding fails explicitly;
+a layer name, Net, projected overlap, or a Solid's lower endpoint alone is not
+a plane binding.
+
+The source interval is the actual body interval, preserved in
+`physical_representation.source_interval_um` after lowering. A source-disjoint
+conductor is excluded from this junction's contact inventory even if Thin Film
+collapse places it at the same effective Z. Source interval endpoints are
+included. For source-incident candidates, effective incidence is also required.
+The existing common `PhysicalRepresentationPlan` projects the support through
+`project_support_point()` with its bound host physical identity; no separate
+junction profile/Z map is introduced. Genuine same-plane terminal, third-net,
+end/corner and open-side failures remain unchanged.
+
+The public helper records the source binding in the existing
+`PlanarJunction.metadata["junction_support_plane"]` mapping, with schema
+`scgsim.aedt.junction-support-plane.v1`, source polygon/plane, binding basis and
+exact source host Entity/polygon/physical-layer/actual-interval records. The
+constructor and canonical payload shape are unchanged. Preparation recomputes
+these facts and rejects a conflicting recorded binding; older manually authored
+junctions without that metadata derive available source evidence through the
+same resolver or fail if it is missing or ambiguous. Partition provenance
+retains this source binding, its effective plane and eligible original Entity
+IDs under `support_plane`; `z_um` is that effective plane. These same per-junction
+IDs govern initial contact classification, reconstructed arm/sheet incidence
+and Booleans, and final emitted-geometry checks, including derived ends through
+their original Entity lineage. All other conductors remain in the full model.
+These source/projection records do not prove native contact or field side.
+
 #### Automatic rectangular junction partition {#aedt-automatic-junction-partition}
 
 For this AEDT path, the authored rectangular junction sheet is partitioned into

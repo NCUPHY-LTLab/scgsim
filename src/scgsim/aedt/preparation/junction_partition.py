@@ -24,6 +24,11 @@ from typing import Any
 import gdstk
 
 from scgsim.geometry import GeometryBuildInput, LayoutPolygonSpec
+from scgsim.geometry.models.physical import (
+    PhysicalLayerDeclaration,
+    PhysicalRepresentationPlan,
+)
+from scgsim.semantics.route_a import geometry_z_range
 
 from scgsim.geometry._primitives.loops import (
     _cancel_reversed_planar_edges,
@@ -47,6 +52,222 @@ def _plain(value: Any) -> Any:
     if isinstance(value, (tuple, list)):
         return [_plain(item) for item in value]
     return value
+
+
+_SUPPORT_PLANE_SCHEMA = "scgsim.aedt.junction-support-plane.v1"
+
+
+def _junction_contact_inventory(
+    build_input: GeometryBuildInput,
+    source_polygon_id: str,
+    terminal_a_net: str,
+    terminal_b_net: str,
+    stored_binding: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Resolve one authored support and its source/effective incident conductors.
+
+    A projected overlap alone is not a contact. Source intervals remain
+    authoritative when profile collapse makes disjoint films share effective Z.
+    The common physical plan alone projects an explicitly bound support.
+    """
+    regions = [
+        region for region in build_input.port_sheet_regions
+        if region.source_polygon_id == source_polygon_id
+    ]
+    if len(regions) > 1:
+        raise ValueError("junction source sheet has ambiguous port-region identity")
+    polygons = {polygon.polygon_id: polygon for polygon in build_input.polygons}
+    region = regions[0] if regions else None
+    sheet = region if region is not None else polygons[source_polygon_id]
+    sheet_rings = _source_contact_rings(sheet)
+    raw_plan = build_input.metadata.get("physical_representation")
+    plan = (
+        PhysicalRepresentationPlan.from_payload(raw_plan)
+        if raw_plan is not None else None
+    )
+    facts = {}
+    for entity in build_input.entities:
+        if entity.material_kind != "conductor":
+            continue
+        projection = entity.metadata.get("physical_representation")
+        if projection is not None:
+            if plan is None:
+                raise ValueError("junction lowered source requires its common physical plan")
+            source_interval = tuple(projection["source_interval_um"])
+            physical_id = projection["physical_layer_id"]
+            declaration = (
+                plan.declaration_index[physical_id] if physical_id is not None else None
+            )
+        else:
+            source_interval = geometry_z_range(entity.geometry, entity.semantic_id)
+            raw = entity.metadata.get("physical_layer")
+            declaration = (
+                PhysicalLayerDeclaration.from_payload(raw) if raw is not None else None
+            )
+            physical_id = (
+                declaration.physical_layer_id if declaration is not None else None
+            )
+        anchor = None
+        if declaration is not None and declaration.feature_kind in {
+            "stack_film", "local_film"
+        }:
+            authored = declaration.attachment_z_um
+            if source_interval[0] <= authored <= source_interval[1]:
+                anchor = authored
+        elif source_interval[0] == source_interval[1]:
+            anchor = source_interval[0]
+        facts[entity.semantic_id] = {
+            "entity": entity,
+            "source_interval_um": source_interval,
+            "effective_interval_um": geometry_z_range(entity.geometry, entity.semantic_id),
+            "physical_layer_id": physical_id,
+            "anchor": anchor,
+        }
+
+    def contains(interval, z):
+        return interval[0] <= z <= interval[1]
+
+    def host_record(eid, pid):
+        fact = facts[eid]
+        return {
+            "source_entity_id": eid,
+            "source_polygon_id": pid,
+            "physical_layer_id": fact["physical_layer_id"],
+            "source_interval_um": list(fact["source_interval_um"]),
+        }
+
+    hosts = []
+    if region is not None and region.overlaps:
+        for overlap in region.overlaps:
+            if (
+                overlap.port_sheet_id != region.port_sheet_id
+                or overlap.port_polygon_id != source_polygon_id
+            ):
+                raise ValueError("junction port overlap references another source sheet")
+            matches = [
+                eid for eid, fact in facts.items()
+                if (
+                    eid == overlap.host_semantic_id
+                    or fact["entity"].metadata.get("source_semantic_id")
+                    == overlap.host_semantic_id
+                )
+                and overlap.host_polygon_id in fact["entity"].polygon_ids
+            ]
+            if len(matches) != 1 or overlap.host_polygon_id not in polygons:
+                raise ValueError("junction port host lacks exact Entity/polygon ownership")
+            hosts.append(host_record(matches[0], overlap.host_polygon_id))
+        anchors = {
+            facts[host["source_entity_id"]]["anchor"]
+            for host in hosts
+            if facts[host["source_entity_id"]]["anchor"] is not None
+        }
+        if len(anchors) != 1:
+            raise ValueError("junction port hosts lack one common authored support plane")
+        source_z = next(iter(anchors))
+        if any(
+            not contains(facts[host["source_entity_id"]]["source_interval_um"], source_z)
+            for host in hosts
+        ):
+            raise ValueError("junction port host is disjoint from its authored support plane")
+        basis = "port_overlap_hosts"
+    else:
+        contacting = []
+        for eid, fact in facts.items():
+            entity = fact["entity"]
+            if entity.net_id not in {terminal_a_net, terminal_b_net}:
+                continue
+            for pid in entity.polygon_ids:
+                if pid != source_polygon_id and _closed_contact(
+                    [sheet_rings], [_source_contact_rings(polygons[pid])]
+                ):
+                    contacting.append((eid, pid))
+        candidates = {
+            facts[eid]["anchor"] for eid, _ in contacting
+            if facts[eid]["anchor"] is not None
+        }
+        candidates = {
+            z for z in candidates
+            if all(
+                any(
+                    facts[eid]["entity"].net_id == net
+                    and contains(facts[eid]["source_interval_um"], z)
+                    and facts[eid]["anchor"] in {None, z}
+                    for eid, _ in contacting
+                )
+                for net in (terminal_a_net, terminal_b_net)
+            )
+        }
+        if len(candidates) != 1:
+            raise ValueError("junction terminal contacts lack a unique authored support plane")
+        source_z = next(iter(candidates))
+        hosts = [
+            host_record(eid, pid) for eid, pid in contacting
+            if contains(facts[eid]["source_interval_um"], source_z)
+            and facts[eid]["anchor"] in {None, source_z}
+        ]
+        basis = "terminal_closed_contact"
+    # Store source facts only: a later approximation may change effective Z.
+    hosts = sorted(
+        {canonical_sha256(host): host for host in hosts}.values(),
+        key=lambda item: (item["source_entity_id"], item["source_polygon_id"]),
+    )
+    binding = {
+        "schema_version": _SUPPORT_PLANE_SCHEMA,
+        "source_polygon_id": source_polygon_id,
+        "source_z_um": source_z,
+        "basis": basis,
+        "source_hosts": hosts,
+    }
+    if stored_binding is not None and _plain(stored_binding) != binding:
+        raise ValueError("junction stored support-plane binding differs from current source")
+    effective_planes = set()
+    for host in hosts:
+        fact = facts[host["source_entity_id"]]
+        if fact["anchor"] is None:
+            continue
+        if plan is None:
+            effective_z = source_z
+        elif fact["physical_layer_id"] is None:
+            effective_z = plan.map_point((0.0, 0.0, source_z))[2]
+        else:
+            effective_z = plan.project_support_point(
+                (0.0, 0.0, source_z), fact["physical_layer_id"]
+            )[2]
+        effective_planes.add(effective_z)
+    if len(effective_planes) != 1:
+        raise ValueError("junction anchor hosts map to different effective support planes")
+    effective_z = next(iter(effective_planes))
+    if any(
+        not contains(facts[host["source_entity_id"]]["effective_interval_um"], effective_z)
+        for host in hosts
+    ):
+        raise ValueError("junction host does not meet its mapped effective support plane")
+    eligible = sorted(
+        eid for eid, fact in facts.items()
+        if contains(fact["source_interval_um"], source_z)
+        and contains(fact["effective_interval_um"], effective_z)
+    )
+    return {
+        **binding,
+        "effective_z_um": effective_z,
+        "eligible_entity_ids": eligible,
+    }
+
+
+def _source_contact_rings(polygon):
+    return tuple(
+        tuple(tuple(Fraction(str(float(value))) for value in point) for point in ring)
+        for ring in (polygon.exterior, *polygon.holes)
+    )
+
+
+def _junction_source_binding(inventory):
+    return {
+        name: _plain(inventory[name])
+        for name in (
+            "schema_version", "source_polygon_id", "source_z_um", "basis", "source_hosts"
+        )
+    }
 
 
 def _edges(rings):
@@ -328,13 +549,20 @@ def _end_candidate(free, own, foreign, cut, span, width, *, left):
 def _model_geometry(build_input, originals, records):
     """Trace source incidences and owned seams before topology, then slice at two cuts."""
     authored = {r["authored_polygon_id"] for r in records.values()}
-    metal_ids = {
-        pid
-        for e in build_input.entities
-        if e.material_kind == "conductor"
-        for pid in e.polygon_ids
-        if pid not in authored
+    eligible_polygons = {
+        jid: {
+            pid
+            for entity in build_input.entities
+            if entity.semantic_id in record["support_plane"]["eligible_entity_ids"]
+            for pid in entity.polygon_ids
+            if pid not in authored
+        }
+        for jid, record in records.items()
     }
+    sheet_metals = defaultdict(set)
+    for jid, record in records.items():
+        sheet_metals[record["authored_polygon_id"]].update(eligible_polygons[jid])
+    metal_ids = set().union(*eligible_polygons.values())
     needed = metal_ids | authored
     rings = {
         pid: tuple(
@@ -376,7 +604,7 @@ def _model_geometry(build_input, originals, records):
             continue
         ab = b[0] - a[0], b[1] - a[1]
         for sheet, (c, d) in edges.items():
-            if sheet[0] not in authored:
+            if arm[0] not in sheet_metals.get(sheet[0], ()):
                 continue
             if (
                 max(a[0], b[0]) < min(c[0], d[0])
@@ -439,10 +667,12 @@ def _model_geometry(build_input, originals, records):
                             event(key, point, parameter)
     raw_free = {}
     for jid, record in records.items():
+        contact_ids = eligible_polygons[jid]
+        source_ids = contact_ids | {record["authored_polygon_id"]}
         free = _rings(
             _boolean(
                 _region([rings[record["authored_polygon_id"]]]),
-                _region([rings[pid] for pid in metal_ids]),
+                _region([rings[pid] for pid in contact_ids]),
                 "not",
             )
         )
@@ -457,7 +687,11 @@ def _model_geometry(build_input, originals, records):
                     # subedge to have its pre-recorded source-edge incidence.
                     delta = b[0] - a[0], b[1] - a[1]
                     nodes = sorted(
-                        (point for point in members if _on(point, a, b)),
+                        (
+                            point for point, incident in members.items()
+                            if any(edge[0] in source_ids for edge in incident)
+                            and _on(point, a, b)
+                        ),
                         key=lambda point: (
                             (point[0] - a[0]) * delta[0] + (point[1] - a[1]) * delta[1]
                         ),
@@ -467,7 +701,10 @@ def _model_geometry(build_input, originals, records):
                             "numerical junction Boolean boundary has untraceable source incidence"
                         )
                     for start, finish in pairwise(nodes):
-                        source = members[start] & members[finish]
+                        source = {
+                            edge for edge in members[start] & members[finish]
+                            if edge[0] in source_ids
+                        }
                         if not source:
                             raise ValueError(
                                 "numerical junction Boolean boundary has untraceable source incidence"
@@ -796,13 +1033,14 @@ def _model_geometry(build_input, originals, records):
         )
         for pid, polygon in model.items()
     }
-    conductors = [
-        (e.net_id, pid, actual_rings[pid])
-        for e in entities
-        if e.material_kind == "conductor"
-        for pid in e.polygon_ids
-    ]
     for record in records.values():
+        conductors = [
+            (e.net_id, pid, actual_rings[pid])
+            for e in entities
+            if e.material_kind == "conductor"
+            and e.semantic_id in record["support_plane"]["eligible_entity_ids"]
+            for pid in e.polygon_ids
+        ]
         c = actual_rings[record["central_polygon_id"]][0]
         midpoint = tuple(sum(point[i] for point in c) / 4 for i in (0, 1))
 
@@ -979,6 +1217,13 @@ def partition_junctions(
     entities = {e.semantic_id: e for e in build_input.entities}
     records = {}
     for junction in junctions:
+        support_plane = _junction_contact_inventory(
+            build_input,
+            junction.source_polygon_id,
+            junction.terminal_a_net,
+            junction.terminal_b_net,
+            junction.metadata.get("junction_support_plane"),
+        )
         sheet = originals[junction.source_polygon_id]
         dx, dy = junction.direction_xy
         px, py = -dy, dx
@@ -1027,7 +1272,7 @@ def partition_junctions(
                 local(originals[p]) for p in e.polygon_ids if p not in authored_ids
             ]
             for e in entities.values()
-            if e.material_kind == "conductor"
+            if e.semantic_id in support_plane["eligible_entity_ids"]
         }
         by_net = defaultdict(list)
         for eid, polygons in by_entity.items():
@@ -1177,6 +1422,8 @@ def partition_junctions(
         )
         records[junction.junction_id] = {
             "method": METHOD,
+            "support_plane": support_plane,
+            "z_um": support_plane["effective_z_um"],
             "authored_polygon_id": junction.source_polygon_id,
             "central_polygon_id": cid,
             "direction_xy": [dx, dy],
