@@ -28,6 +28,7 @@ from scgsim.aedt import (
     prepare_handoff,
 )
 
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 metal_thickness_um = 0.2
 physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
 physical_layer = PhysicalLayerSpec(
@@ -46,6 +47,7 @@ layer_imports = (
 )
 
 spec = HfssEigenmodeSpec(
+    aedt_version=AEDT_VERSION,
     modeling="thin_film",
     gds_path=source_gds,
     project_name="public_cpw_eigenmode",

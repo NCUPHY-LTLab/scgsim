@@ -26,7 +26,7 @@ from scgsim.aedt.runtime.native.common import (
     saved_setup_properties as _saved_setup_properties,
 )
 
-from scgsim.aedt.specs.common import AedtResources, REQUIRED_AEDT_VERSION
+from scgsim.aedt.specs.common import AedtResources
 
 from scgsim.aedt.specs.q2d import Q2dSpec
 
@@ -81,8 +81,6 @@ def prepare_q2d(Q2d: Any, run_dir: Path, spec: Q2dSpec) -> PreparedQ2d:
         new_desktop=False,
         close_on_exit=False,
     )
-    if app.desktop_class.aedt_version_id != REQUIRED_AEDT_VERSION:
-        raise RuntimeError("Q2D did not bind the owned AEDT 2024.2 desktop")
     app.modeler.model_units = "um"
     materials, objects = _create_q2d_geometry(app, spec)
     region = _create_q2d_region(app, spec)

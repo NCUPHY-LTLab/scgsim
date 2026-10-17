@@ -1,6 +1,6 @@
 ---
 title: "SCGSim 2.0 API Migration Map"
-description: "Current public geometry, AEDT, Palace and visualization symbols mapped to the accepted SCGSim 2.0 structure and the converging AEDT modeling extension."
+description: "Current public geometry, AEDT, Palace and visualization symbols mapped to SCGSim 2.0, including converging AEDT modeling and release-selection contracts."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/api-migration"
@@ -28,6 +28,23 @@ remain readable only under their original family/schema reader with their raw
 payload and hash preserved. This does not change the shared versioned handoff
 compatibility of unchanged families such as Q2D. Q2D and Palace contracts are
 otherwise unchanged.
+
+## AEDT release selection
+
+The current AEDT native-request, saved-field analysis, and handoff APIs require
+an explicit `aedt_version` with exactly `"2023.2"` or `"2024.2"`; no release
+is inferred or selected by default. This request value travels with the handoff and selects the local
+transaction runtime. Both choices use PyAEDT 1.3.0 and run a local AEDT Desktop
+on the same host as SCGSim.
+
+AEDT 2023.2 uses PyAEDT's same-node gRPC compatibility settings, scoped to the
+transaction and restored through cleanup: `use_grpc_api=True`,
+`grpc_secure_mode=False`, `grpc_local=True`, `grpc_listen_all=False`, and
+`PYAEDT_USE_PRE_GRPC_ARGS="True"`. AEDT 2024.2 uses no transport overrides.
+There is no fallback or downgrade between the requested releases. A saved
+artifact's source-version origin is separate from the request and actual
+connected version. An unknown origin remains `None`; analysis can still run
+using its separately explicit requested release, without lookup or migration.
 
 Package-level facades remain the supported high-level entrypoints. The move
 does not add compatibility wrappers for old internal paths. Existing consumer
@@ -304,7 +321,10 @@ not compatibility surfaces.
 
 - **`GeometryPreview`, `GeometryPreviewArtifact` → `scgsim.visualization.preview`.** Responsibility: Source-bound preview object and returned artifact/unavailable mode.
 - **`inspect_palace_geometry` → `scgsim.visualization.loaders.palace`.** Responsibility: Read the Palace mesh, manifest, index map and config into semantic preview modes.
-- **`inspect_aedt_geometry` → `scgsim.visualization.loaders.aedt`.** Responsibility: Bind AEDT native/receipt identity and load solver-assigned geometry.
+- **`inspect_aedt_geometry` → `scgsim.visualization.loaders.aedt`.**
+  Responsibility: Bind AEDT native/receipt identity and load solver-assigned
+  geometry. A raw `.aedt` path requires explicit `aedt_version` and design; a
+  sealed run directory uses its bound spec version without an override.
 - **Scene records and shared rendering → `scgsim.visualization.scene`, `scgsim.visualization.rendering`.** Responsibility: Keep scene construction and rendering reusable without taking solver physics or simulation status ownership.
 - **Shared loader file-identity helpers → `scgsim.visualization.loaders._common`.** Responsibility: One loader-level implementation for JSON, hash and confined-path observations.
 

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from scgsim.aedt._data import _text as _rlc_text
+from scgsim.aedt.versions import normalize_aedt_version
 
 
 @dataclass(frozen=True)
@@ -86,8 +87,6 @@ Q2D_SCHEMA_VERSION = "scgsim.aedt.q2d.v1"
 OFFICIAL_PYAEDT_SOURCE_URL = "https://github.com/ansys/pyaedt/tree/v1.3.0"
 
 LOCKED_PYAEDT = "1.3.0"
-
-REQUIRED_AEDT_VERSION = "2024.2"
 
 POINT_COUNT = 20_000
 
@@ -432,11 +431,9 @@ def _padding_2d(
 
 
 def _normalize_common_spec(spec: Any) -> dict[str, PdkMaterial]:
-    if (
-        str(spec.aedt_version) != REQUIRED_AEDT_VERSION
-        or str(spec.pyaedt_version) != LOCKED_PYAEDT
-    ):
-        raise ValueError("V1 requires AEDT 2024.2 and PyAEDT 1.3.0")
+    object.__setattr__(spec, "aedt_version", normalize_aedt_version(spec.aedt_version))
+    if spec.pyaedt_version != LOCKED_PYAEDT:
+        raise ValueError("V1 requires PyAEDT 1.3.0")
     project = _project_filename(spec.project_name, "project_name")
     object.__setattr__(spec, "project_name", project.stem)
     object.__setattr__(spec, "design_name", _text(spec.design_name, "design_name"))

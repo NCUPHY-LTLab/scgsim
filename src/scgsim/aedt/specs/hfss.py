@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from numbers import Number
 
@@ -16,6 +16,8 @@ from typing import Any, Literal
 from scgsim.aedt.specs.modeling import (
     Modeling, PhysicalLayerSpec, PhysicalLayerDeclaration, PhysicalRepresentationPlan, _physical_layers_from_payload, _source_plan_layers, _request_modeling, _modeling_payload, _effective_record, _source_record_payload, _verify_effective_records,
 )
+
+from scgsim.aedt.versions import normalize_aedt_version
 
 from scgsim.aedt.specs.common import (
     EIGENMODE_SCHEMA_VERSION,
@@ -36,7 +38,6 @@ from scgsim.aedt.specs.common import (
     ObjectBinding,
     POINT_COUNT,
     PdkMaterial,
-    REQUIRED_AEDT_VERSION,
     SCHEMA_VERSION,
     TerminalPort,
     _adaptive_controls,
@@ -183,7 +184,7 @@ class HfssDrivenSpec:
     _historical_physical: bool = False
     _historical_modeling: bool = False
     length_mesh: LengthMeshSpec | None = None
-    aedt_version: str = REQUIRED_AEDT_VERSION
+    aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
 
     def __post_init__(self) -> None:
@@ -362,10 +363,7 @@ class HfssDrivenSpec:
             ),
             region_padding_um=tuple(payload.get("region_padding_um", ())),  # type: ignore[arg-type]
             length_mesh=LengthMeshSpec(**length) if length is not None else None,
-            aedt_version=_text(
-                payload.get("aedt", {}).get("requested_version"),
-                "aedt.requested_version",
-            ),
+            aedt_version=payload.get("aedt", {}).get("requested_version"),
             pyaedt_version=_text(
                 payload.get("pyaedt", {}).get("locked_version"), "pyaedt.locked_version"
             ),
@@ -443,7 +441,7 @@ class HfssEigenmodeSpec:
     _historical_physical: bool = False
     _historical_modeling: bool = False
     length_mesh: LengthMeshSpec | None = None
-    aedt_version: str = REQUIRED_AEDT_VERSION
+    aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
 
     @property
@@ -553,10 +551,7 @@ class HfssEigenmodeSpec:
             run_control=EigenmodeRunControl(**run),
             region_padding_um=tuple(payload.get("region_padding_um", ())),  # type: ignore[arg-type]
             length_mesh=LengthMeshSpec(**length) if length is not None else None,
-            aedt_version=_text(
-                payload.get("aedt", {}).get("requested_version"),
-                "aedt.requested_version",
-            ),
+            aedt_version=payload.get("aedt", {}).get("requested_version"),
             pyaedt_version=_text(
                 payload.get("pyaedt", {}).get("locked_version"), "pyaedt.locked_version"
             ),
@@ -584,7 +579,7 @@ class HfssEprSpec:
     _historical_physical: bool = False
     _historical_modeling: bool = False
     epr_request: Any = None
-    aedt_version: str = REQUIRED_AEDT_VERSION
+    aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
     _legacy_payload: bool = False
     expression_convergence: Any = None
@@ -604,11 +599,9 @@ class HfssEprSpec:
         )
         from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 
-        if (
-            str(self.aedt_version) != REQUIRED_AEDT_VERSION
-            or str(self.pyaedt_version) != LOCKED_PYAEDT
-        ):
-            raise ValueError("EPR V1 requires AEDT 2024.2 and PyAEDT 1.3.0")
+        object.__setattr__(self, "aedt_version", normalize_aedt_version(self.aedt_version))
+        if self.pyaedt_version != LOCKED_PYAEDT:
+            raise ValueError("EPR V1 requires PyAEDT 1.3.0")
         project = _project_filename(self.project_name, "project_name")
         object.__setattr__(self, "project_name", project.stem)
         object.__setattr__(self, "design_name", _text(self.design_name, "design_name"))
@@ -754,10 +747,7 @@ class HfssEprSpec:
                     payload.get("expression_convergence")
                 )
             ),
-            aedt_version=_text(
-                payload.get("aedt", {}).get("requested_version"),
-                "aedt.requested_version",
-            ),
+            aedt_version=payload.get("aedt", {}).get("requested_version"),
             pyaedt_version=_text(
                 payload.get("pyaedt", {}).get("locked_version"),
                 "pyaedt.locked_version",
@@ -776,7 +766,7 @@ class HfssEprAnalysisSpec:
     run_control: EigenmodeRunControl
     epr_request: Any
     saved_solution: Any
-    aedt_version: str = REQUIRED_AEDT_VERSION
+    aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
     _legacy_payload: bool = False
 
@@ -789,11 +779,9 @@ class HfssEprAnalysisSpec:
         from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
         from scgsim.aedt.specs.epr import SavedSolution
 
-        if (
-            str(self.aedt_version) != REQUIRED_AEDT_VERSION
-            or str(self.pyaedt_version) != LOCKED_PYAEDT
-        ):
-            raise ValueError("EPR V1 requires AEDT 2024.2 and PyAEDT 1.3.0")
+        object.__setattr__(self, "aedt_version", normalize_aedt_version(self.aedt_version))
+        if self.pyaedt_version != LOCKED_PYAEDT:
+            raise ValueError("EPR V1 requires PyAEDT 1.3.0")
         project = _project_filename(self.project_name, "project_name")
         object.__setattr__(self, "project_name", project.stem)
         object.__setattr__(self, "design_name", _text(self.design_name, "design_name"))
@@ -879,10 +867,7 @@ class HfssEprAnalysisSpec:
             saved_solution=SavedSolution.from_payload(
                 base_dir / "saved", payload.get("saved_solution")
             ),
-            aedt_version=_text(
-                payload.get("aedt", {}).get("requested_version"),
-                "aedt.requested_version",
-            ),
+            aedt_version=payload.get("aedt", {}).get("requested_version"),
             pyaedt_version=_text(
                 payload.get("pyaedt", {}).get("locked_version"),
                 "pyaedt.locked_version",
@@ -1011,7 +996,7 @@ class HfssDrivenGeometrySpec:
     physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
     physical_representation: PhysicalRepresentationPlan | None = None
     _historical_physical: bool = False
-    aedt_version: str = REQUIRED_AEDT_VERSION
+    aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
     _historical_modeling: bool = False
 
@@ -1033,8 +1018,9 @@ class HfssDrivenGeometrySpec:
             raise ValueError("request physical layers differ from prepared source map")
         object.__setattr__(self, "physical_layers", declared)
         _request_modeling(self)
-        if self.aedt_version != REQUIRED_AEDT_VERSION or self.pyaedt_version != LOCKED_PYAEDT:
-            raise ValueError("V1 requires AEDT 2024.2 and PyAEDT 1.3.0")
+        object.__setattr__(self, "aedt_version", normalize_aedt_version(self.aedt_version))
+        if self.pyaedt_version != LOCKED_PYAEDT:
+            raise ValueError("V1 requires PyAEDT 1.3.0")
         object.__setattr__(self, "project_name", _project_filename(self.project_name, "project_name").stem)
         object.__setattr__(self, "design_name", _text(self.design_name, "design_name"))
         if self.run_control is not None and not isinstance(self.run_control, HfssRunControl):

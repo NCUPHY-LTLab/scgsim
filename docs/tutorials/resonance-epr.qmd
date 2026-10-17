@@ -346,7 +346,8 @@ for record in prepared.contribution_catalog:
         loss_tangent=preset["loss_tangent"], source=preset["source"],
         preset=preset_name,
     ))
-sim = EigenmodeSim(modeling="solid")
+AEDT_VERSION = "2024.2"  # This example explicitly selects AEDT 2024.2.
+sim = EigenmodeSim(modeling="solid", aedt_version=AEDT_VERSION)
 sim.set_plan(snapshot)
 sim.set_output_dir(output_root / run_id)
 sim.set_surface_epr(contributions=surface_specs)

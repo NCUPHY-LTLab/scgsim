@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from typing import Any, Literal
 
@@ -15,7 +15,6 @@ from scgsim.aedt.specs.common import (
     OFFICIAL_PYAEDT_SOURCE_URL,
     PdkMaterial,
     Q2D_SCHEMA_VERSION,
-    REQUIRED_AEDT_VERSION,
     _normalize_common_spec,
     _number,
     _padding_2d,
@@ -101,7 +100,7 @@ class Q2dSpec:
     conductors: tuple[Q2dConductorSpec, ...]
     run_control: MatrixRunControl
     region_padding_um: tuple[float, float, float, float]
-    aedt_version: str = REQUIRED_AEDT_VERSION
+    aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
 
     @property
@@ -209,10 +208,7 @@ class Q2dSpec:
             ),
             run_control=MatrixRunControl(**run),
             region_padding_um=tuple(payload.get("region_padding_um", ())),  # type: ignore[arg-type]
-            aedt_version=_text(
-                payload.get("aedt", {}).get("requested_version"),
-                "aedt.requested_version",
-            ),
+            aedt_version=payload.get("aedt", {}).get("requested_version"),
             pyaedt_version=_text(
                 payload.get("pyaedt", {}).get("locked_version"), "pyaedt.locked_version"
             ),

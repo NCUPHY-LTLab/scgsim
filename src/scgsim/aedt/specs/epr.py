@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pathlib import Path
 from scgsim.semantics.epr import film_assumptions
 from scgsim.aedt._data import _text, _number, _freeze, detached, canonical_sha256
+from scgsim.aedt.versions import normalize_aedt_version
 
 InterfaceKind = Literal["MA", "MS", "SA", "MM"]
 FieldSide = Literal["top", "bottom", "sidewall"]
@@ -472,6 +473,7 @@ class SavedSolution:
     members: tuple[Mapping[str, Any], ...]
     content_sha256: str
     identity: Mapping[str, Any]
+    aedt_version: str | None = None
 
     def __post_init__(self) -> None:
         root = Path(self.root).resolve()
@@ -515,16 +517,27 @@ class SavedSolution:
         if identity["saved_fields"] is not True:
             raise ValueError("saved solution must explicitly attest saved fields")
         object.__setattr__(self, "identity", identity)
+        if self.aedt_version is not None:
+            object.__setattr__(
+                self, "aedt_version", normalize_aedt_version(self.aedt_version)
+            )
 
     def to_payload(self) -> dict[str, Any]:
-        return {
-            "schema_version": "scgsim.aedt.saved-solution.v1",
+        payload = {
+            "schema_version": (
+                "scgsim.aedt.saved-solution.v2"
+                if self.aedt_version is not None
+                else "scgsim.aedt.saved-solution.v1"
+            ),
             "project": self.project_path.relative_to(self.root).as_posix(),
             "results": self.result_path.relative_to(self.root).as_posix(),
             "members": [detached(item) for item in self.members],
             "content_sha256": self.content_sha256,
             "identity": detached(self.identity),
         }
+        if self.aedt_version is not None:
+            payload["aedt_version"] = self.aedt_version
+        return payload
 
     @classmethod
     def from_payload(cls, root: str | Path, value: Any) -> SavedSolution:
@@ -538,10 +551,16 @@ class SavedSolution:
             "content_sha256",
             "identity",
         }
-        if (
-            set(value) != expected
-            or value.get("schema_version") != "scgsim.aedt.saved-solution.v1"
-        ):
+        schema = value.get("schema_version")
+        if schema == "scgsim.aedt.saved-solution.v1":
+            if set(value) != expected:
+                raise ValueError("saved solution payload is not canonical")
+            aedt_version = None
+        elif schema == "scgsim.aedt.saved-solution.v2":
+            if set(value) != expected | {"aedt_version"}:
+                raise ValueError("saved solution payload is not canonical")
+            aedt_version = normalize_aedt_version(value["aedt_version"])
+        else:
             raise ValueError("saved solution payload is not canonical")
         base = Path(root)
         project = _contained_relative_path(value["project"], "saved solution project")
@@ -553,6 +572,7 @@ class SavedSolution:
             members=tuple(value["members"]),
             content_sha256=value["content_sha256"],
             identity=value["identity"],
+            aedt_version=aedt_version,
         )
 
 def _contained_relative_path(value: Any, name: str) -> Path:

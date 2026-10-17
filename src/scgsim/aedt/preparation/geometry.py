@@ -57,7 +57,6 @@ from scgsim.aedt.specs.common import (
     MatrixRunControl,
     OFFICIAL_PYAEDT_SOURCE_URL,
     PdkMaterial,
-    REQUIRED_AEDT_VERSION,
 )
 
 from scgsim.aedt.specs.modeling import Modeling
@@ -70,6 +69,7 @@ from scgsim.aedt.specs.common import LumpedTerminalPort, TerminalPort
 def prepare_q3d_from_geometry(
     snapshot: GeometryPlanSnapshot,
     *,
+    aedt_version: str,
     modeling: Modeling,
     output_dir: str | Path,
     project_name: str,
@@ -93,6 +93,7 @@ def prepare_q3d_from_geometry(
     with TemporaryDirectory(prefix="scgsim-q3d-geometry-") as temporary:
         spec = lower_q3d_geometry(
             snapshot,
+            aedt_version=aedt_version,
             modeling=modeling,
             directory=Path(temporary),
             project_name=project_name,
@@ -108,6 +109,7 @@ def prepare_q3d_from_geometry(
 
 def prepare_hfss_eigenmode_from_geometry(
     *,
+    aedt_version: str,
     modeling: Modeling,
     geometry: PreparedPlanarGeometry,
     project_name: str,
@@ -125,6 +127,7 @@ def prepare_hfss_eigenmode_from_geometry(
     if lumped_rlcs is not None:
         geometry = geometry.with_lumped_rlcs(lumped_rlcs)
     spec = HfssEprSpec(
+        aedt_version=aedt_version,
         modeling=modeling,
         project_name=project_name,
         design_name=design_name,
@@ -141,13 +144,14 @@ def prepare_hfss_eigenmode_from_geometry(
 
 
 def prepare_hfss_driven_from_geometry(
-    *, modeling: Modeling, geometry: PreparedPlanarGeometry,
+    *, aedt_version: str, modeling: Modeling, geometry: PreparedPlanarGeometry,
     project_name: str, design_name: str, run_control: HfssRunControl | None = None,
     ports: Sequence[TerminalPort | LumpedTerminalPort], output_dir: str | Path,
     geometry_workers: int | None = None, resources: AedtResources | None = None,
 ) -> HandoffPlan:
     """Prepare a Terminal model and ports, with optional complete solve setup."""
     spec = HfssDrivenGeometrySpec(
+        aedt_version=aedt_version,
         modeling=modeling, geometry=geometry, project_name=project_name,
         design_name=design_name, run_control=run_control, ports=tuple(ports),
     )
@@ -227,7 +231,7 @@ def _prepare_body_hfss_handoff(*, spec, geometry, output_dir, workflow, geometry
                 schema_version=RECEIPT_V3,
                 mode=spec.mode,
                 requested={
-                    "aedt_version": REQUIRED_AEDT_VERSION,
+                    "aedt_version": spec.aedt_version,
                     "pyaedt_version": LOCKED_PYAEDT,
                     "official_source": OFFICIAL_PYAEDT_SOURCE_URL,
                     "workflow": workflow,

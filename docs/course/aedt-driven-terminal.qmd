@@ -22,6 +22,7 @@ from scgsim.aedt import (
     LengthMeshSpec, PhysicalLayerSpec, TerminalPort, prepare_handoff,
 )
 
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 metal_thickness_um = 0.2
 physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
 physical_layer = PhysicalLayerSpec(
@@ -44,6 +45,7 @@ ports = (
     TerminalPort(2, "o2", "+X", ground_objects),
 )
 spec = HfssDrivenSpec(
+    aedt_version=AEDT_VERSION,
     mode="terminal", gds_path=source_gds, modeling="thin_film",
     project_name="public_cpw_terminal", design_name="CpwFiniteGroundTerminal",
     materials=materials, vacuum_material_id="vacuum",

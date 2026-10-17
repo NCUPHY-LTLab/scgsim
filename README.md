@@ -75,10 +75,11 @@ a convenient interface rather than a required runtime.
 
 Explore the [OrPen SimplePad model and notebooks](https://github.com/OrPenStrike/orpen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad).
 
-Palace needs its native executable on the solver host. AEDT workflows need
-AEDT 2024.2, PyAEDT 1.3.0 and a suitable license. Installing a Python extra does
-not install a solver. The preparation, solver and analysis computers may be
-one machine or separate hosts.
+Palace needs its native executable on the solver host. Each AEDT request
+must explicitly select AEDT 2023.2 or 2024.2; both use PyAEDT 1.3.0 and need a
+suitable license. Installing a Python extra does not install a solver. Geometry
+preparation may run elsewhere, but each AEDT Desktop transaction runs locally
+on the same host as SCGSim.
 
 ## Understand the model
 

@@ -11,6 +11,8 @@ from dataclasses import asdict
 
 from pathlib import Path
 
+from scgsim.aedt.versions import normalize_aedt_version
+
 from typing import Literal
 
 from scgsim.semantics.route_a import geometry_z_range
@@ -49,6 +51,7 @@ def _entity_polygons(entity, polygons):
 def lower_q3d_geometry(
     snapshot: GeometryPlanSnapshot,
     *,
+    aedt_version: str,
     modeling: Modeling,
     directory: Path,
     project_name: str,
@@ -60,6 +63,7 @@ def lower_q3d_geometry(
     region_padding_um: Sequence[float],
 ) -> Q3dSpec:
     """Write canonical source provenance and body declarations; never open AEDT."""
+    aedt_version = normalize_aedt_version(aedt_version)
     if not isinstance(snapshot, GeometryPlanSnapshot):
         raise TypeError("snapshot must be GeometryPlanSnapshot")
     source = snapshot.geometry_input
@@ -215,6 +219,7 @@ def lower_q3d_geometry(
         )
     }
     return Q3dSpec(
+        aedt_version=aedt_version,
         modeling=modeling,
         physical_layers=physical_layers,
         physical_representation=physical_plan,

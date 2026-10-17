@@ -68,7 +68,9 @@ SOURCE_SCHEMA_V20 = "scgsim.aedt.runtime-source.v20"
 
 SOURCE_SCHEMA_V21 = "scgsim.aedt.runtime-source.v21"
 
-SOURCE_SCHEMA = SOURCE_SCHEMA_V21
+SOURCE_SCHEMA_V22 = "scgsim.aedt.runtime-source.v22"
+
+SOURCE_SCHEMA = SOURCE_SCHEMA_V22
 
 _RUNTIME_SOURCE_V1_MODULES = (
     "_hfss_convergence.py",
@@ -321,6 +323,19 @@ _RUNTIME_SOURCE_V21_PATHS = tuple(
 )
 
 
+# V1–V21 remain exact historical inventories; V22 binds explicit version
+# selection and the native compatibility routing used by that selection.
+_RUNTIME_SOURCE_V22_PATHS = tuple(
+    sorted(
+        (
+            *_RUNTIME_SOURCE_V21_PATHS,
+            "src/scgsim/aedt/versions.py",
+            "src/scgsim/aedt/runtime/native/compatibility.py",
+        )
+    )
+)
+
+
 def _module_manifest() -> list[dict[str, str]]:
     source_root = Path(__file__).resolve().parents[3]
     return [
@@ -329,7 +344,7 @@ def _module_manifest() -> list[dict[str, str]]:
             "path": path,
             "sha256": file_sha256(source_root / path.removeprefix("src/")),
         }
-        for path in _RUNTIME_SOURCE_V21_PATHS
+        for path in _RUNTIME_SOURCE_V22_PATHS
     ]
 
 
@@ -440,6 +455,7 @@ def validate_runtime_source(
         SOURCE_SCHEMA_V19: _RUNTIME_SOURCE_V19_PATHS,
         SOURCE_SCHEMA_V20: _RUNTIME_SOURCE_V20_PATHS,
         SOURCE_SCHEMA_V21: _RUNTIME_SOURCE_V21_PATHS,
+        SOURCE_SCHEMA_V22: _RUNTIME_SOURCE_V22_PATHS,
     }.get(schema)
     if (
         expected_paths is None
@@ -472,6 +488,7 @@ def validate_runtime_source(
                     SOURCE_SCHEMA_V19,
                     SOURCE_SCHEMA_V20,
                     SOURCE_SCHEMA_V21,
+                    SOURCE_SCHEMA_V22,
                 }
                 else "scgsim/"
             )
@@ -503,6 +520,7 @@ def validate_runtime_source(
         SOURCE_SCHEMA_V19,
         SOURCE_SCHEMA_V20,
         SOURCE_SCHEMA_V21,
+        SOURCE_SCHEMA_V22,
     }:
         if set(value) != {
             "schema_version",

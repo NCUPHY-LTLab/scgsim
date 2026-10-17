@@ -343,6 +343,29 @@ family-specific setup translations. Shared Desktop, ACF/resource, and raw
 saved-setup helpers do not define solver-specific setup fields; see the
 [AEDT setup-control contract](specs/aedt-runtime.qmd#aedt-family-setup-controls).
 
+### Request-scoped AEDT version selection (CONVERGING)
+
+The dual-version request requires `aedt_version` explicitly as either
+`"2023.2"` or `"2024.2"`; it has no default or cross-version fallback. The
+selected value belongs to one request and transaction, not a process-wide
+setting. Both releases use the same transaction owner, run profile, and pinned
+PyAEDT 1.3.0. AEDT must run locally on the same node as that transaction.
+
+For `2023.2`, the transaction uses PyAEDT's same-node gRPC compatibility
+settings: `use_grpc_api=True`, `grpc_secure_mode=False`, `grpc_local=True`,
+and `grpc_listen_all=False`, with `PYAEDT_USE_PRE_GRPC_ARGS="True"`. It
+snapshots and restores the prior transport environment, including when
+execution or Desktop release fails. The `2024.2` path uses no such overrides;
+it does not silently substitute for a `2023.2` request. Neither selection
+introduces a remote Desktop or scheduler path.
+
+Saved origin, requested version, and actual connected AEDT version remain
+separate facts. If a saved artifact has no recorded origin, that origin remains
+`None`; analysis is still allowed. SCGSim does not look up, guess, or migrate an
+unknown origin. The request selects the local runtime, and the actual version
+is established from the connected AEDT application rather than inferred from
+the request.
+
 At family entry, one private bound request fixes the absolute run workspace and
 detaches the parsed spec payload. Relative source paths are interpreted against
 that bound workspace even if the process working directory later changes;

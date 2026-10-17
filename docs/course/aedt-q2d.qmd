@@ -22,6 +22,8 @@ from scgsim.aedt import (
     Q2dRectangleSpec, Q2dSpec, prepare_handoff,
 )
 
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
+
 orpen_sc_pdk.activate()
 records = get_material_records()
 materials = {
@@ -41,6 +43,7 @@ conductors = (
     Q2dConductorSpec("Ground", "ReferenceGround", ("GroundLeft", "GroundRight"), 0.2),
 )
 spec = Q2dSpec(
+    aedt_version=AEDT_VERSION,
     project_name="public_cpw_q2d", design_name="CpwFiniteGroundQ2d",
     materials=materials, vacuum_material_id="vacuum",
     rectangles=rectangles, conductors=conductors,

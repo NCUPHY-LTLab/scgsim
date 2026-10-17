@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 from pathlib import Path
 
@@ -23,7 +23,6 @@ from scgsim.aedt.specs.common import (
     PdkMaterial,
     Q3D_GEOMETRY_SOURCE_SCHEMA_VERSION,
     Q3D_SCHEMA_VERSION,
-    REQUIRED_AEDT_VERSION,
     Side,
     _normalize_common_spec,
     _number,
@@ -298,7 +297,7 @@ class Q3dSpec:
     _historical_modeling: bool = False
     solve_ac_rl: bool = True
     grounded_region_net: str | None = None
-    aedt_version: str = REQUIRED_AEDT_VERSION
+    aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
     schema_version: Literal["scgsim.aedt.q3d.v3"] = Q3D_SCHEMA_VERSION
     geometry_source: Mapping[str, Any] | None = None

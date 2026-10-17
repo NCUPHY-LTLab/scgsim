@@ -93,6 +93,9 @@ class ResolvedRun:
     _spec_sha256: str | None = None
     _execution_seconds: float | None = None
     _setup_name: str | None = None
+    _saved_solution_aedt_version: str | None = None
+    _requested_aedt_version: str | None = None
+    _connected_aedt_version: str | None = None
     _epr_requested: bool = False
     _epr_result: EprResult | None = None
     _lumped_boundaries: tuple[dict[str, Any], ...] = ()
@@ -229,6 +232,7 @@ def _captured_fields(
     spec: Any,
     *,
     epr_result: EprResult | None = None,
+    saved_solution_aedt_version: str | None = None,
 ) -> dict[str, Any]:
     """Keep the identities needed by later report reads without replaying a run."""
 
@@ -237,6 +241,9 @@ def _captured_fields(
         "_spec_sha256": receipt["source"]["spec_sha256"],
         "_execution_seconds": receipt.get("execution_seconds"),
         "_setup_name": spec.run_control.setup_name,
+        "_saved_solution_aedt_version": saved_solution_aedt_version,
+        "_requested_aedt_version": spec.aedt_version,
+        "_connected_aedt_version": receipt["connected"]["aedt_version"],
         "_epr_requested": isinstance(spec, HfssEprSpec)
         and spec.epr_request is not None,
         "_epr_result": epr_result,
@@ -436,6 +443,14 @@ def resolve_results(run_dir: str | Path) -> ResolvedRun:
         )
     if mode == "eigenmode":
         if isinstance(spec, HfssEprSpec):
+            connected = receipt.get("connected")
+            if connected != {
+                "aedt_version": spec.aedt_version,
+                "pyaedt_version": spec.pyaedt_version,
+            }:
+                raise RuntimeError(
+                    "completed receipt has invalid connected version identity"
+                )
             saved_manifest = "saved-solution-manifest.json"
             saved_receipt = "metadata/saved-solution-receipt.json"
             expected = {
@@ -447,6 +462,7 @@ def resolve_results(run_dir: str | Path) -> ResolvedRun:
             }
             if benchmark_path is not None:
                 expected.add(BENCHMARK_RELATIVE)
+            saved_solution_aedt_version = None
             if spec.epr_request is not None:
                 expected.add("results/epr/adaptive-epr-result.json")
                 saved_summary = receipt.get("saved_solution")
@@ -467,10 +483,13 @@ def resolve_results(run_dir: str | Path) -> ResolvedRun:
                         "identity": dict(saved.identity),
                         "member_count": len(saved.members),
                     }
+                    if saved.aedt_version is not None:
+                        expected_saved_summary["aedt_version"] = saved.aedt_version
                     if saved_summary != expected_saved_summary:
                         raise RuntimeError(
                             "completed EPR saved-solution binding is invalid"
                         )
+                    saved_solution_aedt_version = saved.aedt_version
                     expected.update({saved_manifest, saved_receipt})
                 elif not (
                     isinstance(saved_summary, dict)
@@ -513,7 +532,13 @@ def resolve_results(run_dir: str | Path) -> ResolvedRun:
                 receipt_path,
                 convergence=receipt["convergence"],
                 benchmark_path=benchmark_path,
-                **_captured_fields(receipt, outputs, spec, epr_result=adaptive_result),
+                **_captured_fields(
+                    receipt,
+                    outputs,
+                    spec,
+                    epr_result=adaptive_result,
+                    saved_solution_aedt_version=saved_solution_aedt_version,
+                ),
             )
         expected = {
             project_relative,

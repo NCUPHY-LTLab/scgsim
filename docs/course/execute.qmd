@@ -67,7 +67,9 @@ solve. Retrieve the full returned directory, including metadata and logs.
 
 The AEDT lesson's `handoff` contains copied geometry where needed, spec,
 metadata, initial receipt, manifest and `run_aedt.sh`. Transfer the full package
-to the AEDT 2024.2 / PyAEDT 1.3.0 host and run from the extracted directory:
+to a host with the handoff's explicitly selected AEDT 2023.2 or 2024.2
+release and PyAEDT 1.3.0. The Desktop transaction runs locally on that same
+host. Run from the extracted directory:
 
 ```bash
 bash run_aedt.sh

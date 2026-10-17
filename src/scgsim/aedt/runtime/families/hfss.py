@@ -34,7 +34,6 @@ from scgsim.aedt.specs.common import (
     AedtResources,
     ModalPort,
     LumpedTerminalPort,
-    REQUIRED_AEDT_VERSION,
     SURFACE_APPROXIMATION_LEVEL,
     TerminalPort,
 )
@@ -121,8 +120,6 @@ def prepare_hfss(Hfss: Any, run_dir: Path, spec: HfssSpec) -> PreparedHfss:
         new_desktop=False,
         close_on_exit=False,
     )
-    if app.desktop_class.aedt_version_id != REQUIRED_AEDT_VERSION:
-        raise RuntimeError("HFSS did not bind the owned AEDT 2024.2 desktop")
     app.modeler.model_units = "um"
     geometry: dict[str, Any] = {}
     if isinstance(spec, HfssDrivenGeometrySpec):
@@ -1710,8 +1707,6 @@ def prepare_body_eigenmode(
         close_on_exit=False,
     )
     timings["native_open_seconds"] = round(time.perf_counter() - started, 6)
-    if app.desktop_class.aedt_version_id != REQUIRED_AEDT_VERSION:
-        raise RuntimeError("HFSS EPR did not bind the owned AEDT 2024.2 desktop")
     app.modeler.model_units = "um"
     started = time.perf_counter()
     geometry = prepare_native_planar_geometry(app, bound.geometry)

@@ -159,10 +159,11 @@ For Palace, make your executable or wrapper available and configure the
 launch resources and setup commands for your computer. SCGSim generates the
 local or selected Slurm launch script; Palace itself is installed separately.
 
-For AEDT, use **AEDT 2024.2**, **PyAEDT 1.3.0** and an appropriate license.
-The generated script starts its Desktop session, saves the project and
-releases the session. Reading returned results later does not require opening
-Desktop.
+For AEDT, use **AEDT 2023.2 or 2024.2**, **PyAEDT 1.3.0** and an appropriate
+license. Select the target release explicitly in each request; there is no
+default or cross-version fallback. The generated script starts a local Desktop
+on the same host, saves the project and releases the session. Reading returned
+results later does not require opening Desktop.
 
 Next [extract a pad capacitance](../tutorials/capacitance.qmd) or
 [find a resonance and read EPR](../tutorials/resonance-epr.qmd). If you already

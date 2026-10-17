@@ -25,9 +25,12 @@ you need, then choose the appropriate source and boundary model.
 :::
 
 Every new Q3D and HFSS 3D request must select its modeling representation
-explicitly; there is no default. The Solid/Thin-Film extension is
-**CONVERGING**. The table describes supported request families and intended
-returned quantities, not solver results observed for the new representation.
+explicitly; there is no default. AEDT requests also require an explicit
+`aedt_version` of `"2023.2"` or `"2024.2"`; both use PyAEDT 1.3.0, with the
+selected AEDT Desktop running on the same host as SCGSim. The Solid/Thin-Film
+extension is **CONVERGING**. The table describes supported request families
+and intended returned quantities, not solver results observed for the new
+representation.
 
 Palace Driven and Magnetostatic are not implemented; Meep is outside SCGSim's
 scope. Palace's [native problem types](https://awslabs.github.io/palace/stable/guide/problem/)

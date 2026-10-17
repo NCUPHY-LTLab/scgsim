@@ -49,7 +49,7 @@ from scgsim.aedt.runtime.native.common import (
     detached_data,
     pyaedt_version,
 )
-from scgsim.aedt.specs.common import REQUIRED_AEDT_VERSION, AedtResources
+from scgsim.aedt.specs.common import AedtResources
 from scgsim.aedt.specs.hfss import (
     EigenmodeRunControl,
     HfssEprAnalysisSpec,
@@ -69,6 +69,7 @@ from scgsim.aedt.epr.native import add_analysis_surfaces, bind_saved_analysis_su
 def analyze_epr(
     *,
     saved_solution: SavedSolution,
+    aedt_version: str,
     geometry: PreparedPlanarGeometry,
     project_name: str,
     design_name: str,
@@ -81,6 +82,7 @@ def analyze_epr(
 
     plan = _prepare_epr_analysis_handoff(
         saved_solution=saved_solution,
+        aedt_version=aedt_version,
         geometry=geometry,
         project_name=project_name,
         design_name=design_name,
@@ -201,6 +203,8 @@ def analyze_saved_epr(
     run_dir: Path,
     spec: HfssEprAnalysisSpec,
     inset_plan: dict[tuple[str, float], dict[str, Any]],
+    *,
+    connected_aedt_version: str,
 ) -> dict[str, Any]:
     """Analyze an immutable saved-field cohort through a disposable project copy."""
 
@@ -244,8 +248,6 @@ def analyze_saved_epr(
         close_on_exit=False,
     )
     timings["native_reopen_seconds"] = round(time.perf_counter() - started, 6)
-    if app.desktop_class.aedt_version_id != REQUIRED_AEDT_VERSION:
-        raise RuntimeError("saved EPR analysis did not bind AEDT 2024.2")
     if spec.run_control.setup_name not in app.setup_names:
         raise RuntimeError("saved EPR analysis setup is missing")
     observed_variation = detached_data(app.available_variations.nominal_values)
@@ -333,6 +335,9 @@ def analyze_saved_epr(
         "surface_analysis_scope": _SURFACE_ANALYSIS_SCOPE,
         "saved_solution_content_sha256": spec.saved_solution.content_sha256,
         "saved_solution_identity": detached(spec.saved_solution.identity),
+        "saved_solution_aedt_version": spec.saved_solution.aedt_version,
+        "requested_aedt_version": spec.aedt_version,
+        "connected_aedt_version": connected_aedt_version,
         "requested_modes": list(selected_modes),
         "request": spec.epr_request.to_payload(),
         "raw_integral_evidence": raw_evidence,
@@ -383,7 +388,7 @@ def analyze_saved_epr(
         "solver_invoked": False,
         "outputs": outputs,
         "connected": {
-            "aedt_version": app.desktop_class.aedt_version_id,
+            "aedt_version": connected_aedt_version,
             "pyaedt_version": pyaedt_version(),
         },
         "project": project_relative,
