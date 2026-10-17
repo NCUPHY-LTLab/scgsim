@@ -102,7 +102,12 @@ class PlanarJunction:
 
 @dataclass(frozen=True)
 class SurfaceEprSpec:
-    """One requested physical-side contribution and its alternative margins."""
+    """One complete physical-side contribution group and its alternative margins.
+
+    ``source_polygon_id`` anchors provenance in the group's catalogue union; it
+    does not filter patches. Each resolved binding retains its own contribution
+    evidence and geometry reference for per-patch provenance.
+    """
 
     contribution_id: str
     source_polygon_id: str

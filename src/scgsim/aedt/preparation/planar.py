@@ -854,6 +854,15 @@ def prepare_planar_geometry_input(
                 f"contribution {requested.contribution_id!r} is not established by "
                 "the shared source topology"
             )
+        # The catalogue union includes every group member and SA fallback surface ID.
+        source_polygon_ids = catalog_by_id.get(requested.contribution_id, {}).get(
+            "source_polygon_ids", ()
+        )
+        if requested.source_polygon_id not in source_polygon_ids:
+            raise ValueError(
+                f"contribution {requested.contribution_id!r} does not retain "
+                f"source polygon {requested.source_polygon_id!r}"
+            )
         for match in matches:
             evidence = match["contribution"]
             if evidence.get("classification") != requested.interface_kind:
@@ -865,16 +874,6 @@ def prepare_planar_geometry_input(
                 raise ValueError(
                     f"contribution {requested.contribution_id!r} side contradicts "
                     "shared source evidence"
-                )
-            source_polygon_ids = tuple(evidence.get("outer_source_ids") or ()) + tuple(
-                evidence.get("hole_source_ids") or ()
-            )
-            if not source_polygon_ids and requested.interface_kind == "SA":
-                source_polygon_ids = (match["surface_id"],)
-            if requested.source_polygon_id not in source_polygon_ids:
-                raise ValueError(
-                    f"contribution {requested.contribution_id!r} does not retain "
-                    f"source polygon {requested.source_polygon_id!r}"
                 )
             effective_domains = tuple(evidence.get("effective_domain_ids", ()))
             expected_domain_count = 2 if requested.interface_kind == "SA" else 1

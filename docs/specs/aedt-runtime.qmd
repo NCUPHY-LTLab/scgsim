@@ -1374,6 +1374,15 @@ and a source ID not retained by the selected row fail before constructing
 caller. Supply an explicit `modeling` value; Thin Film additionally requires
 the source PDK's qualified physical-layer declarations.
 
+`contribution_id` selects every existing patch in that catalogue group.
+`SurfaceEprSpec.source_polygon_id` is a group provenance anchor: it must be
+retained by at least one member of the selected group's catalogue union,
+including the existing planned SA surface-ID fallback. It does not filter,
+split or omit other group members. Each resolved binding keeps its own
+`contribution` evidence and `geometry_ref` as the true per-patch provenance;
+classification, side, adjacent domains, materials and masks remain validated
+for each patch.
+
 The catalogue is built from the geometry compiler's physical
 surface-contribution ledger. A generic declaration without physical ledger evidence remains
 semantic metadata and does not add a numeric EPR contribution. For Route B
