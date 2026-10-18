@@ -1825,12 +1825,23 @@ field plane; the unmasked baseline is also a separate non-model integration
 sheet over the unoffset support, not a sample of a native model face. Model
 CAD, boundaries, and mesh are unchanged. Split components are integrated
 separately and summed; an empty intersection is an explicit zero.
-Native analysis-sheet names identify their physical owner/support,
+Generated analysis-sheet names are human-readable labels, not source
+authority. The existing readable form identifies physical owner/support,
 classification and field side, then `Unmasked` or the effective margin in
-nanometres. A `PartNN` suffix appears only when there are multiple pieces.
-When one geometry serves multiple contributions, its single sheet name
-identifies the complete shared membership rather than an arbitrary first
-contribution; full internal identities remain in preparation evidence.
+nanometres. A `PartNN` suffix appears only when there are multiple pieces;
+when one geometry serves multiple contributions, its name identifies the
+complete shared membership rather than an arbitrary first contribution.
+Previously successful names remain byte-identical. SCG applies an internal
+60-character generated-identifier budget; the inspected AEDT documentation
+does not establish 60 characters as a universal native object-name limit. If
+the readable semantic and `PartNN` tail exceeds SCG's budget, the generated
+name is `EPR_` plus the 52-character base32 encoding of the full canonical
+SHA256 naming identity, for 56 ASCII characters total. The canonical identity
+binds the source geometry SHA256, sorted full member tuples, and sorted part
+indices. Existing preparation/native provenance retains the full geometry
+SHA256, member tuples, part indices, and full naming-identity SHA256. Distinct
+identities that collide at the generated name fail explicitly; names never
+merge memberships or replace the retained identity evidence.
 ThinFilm Surface-EPR remains available under the supported PyAEDT 1.3.0 /
 AEDT 2024.2 profile with its current normal-based side selector. Interpret each
 standalone planar analysis sheet's `FacePrimitive.normal` as its

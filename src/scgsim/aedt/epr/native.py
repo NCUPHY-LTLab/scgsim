@@ -220,6 +220,8 @@ def bind_inset_surface_selections(
             facts = {
                 "contour_sha256": contour_sha256,
                 "shared_sheet_members": planned_name["members"],
+                "naming_identity_sha256": planned_name["naming_identity_sha256"],
+                "aggregated_parts": planned_name["aggregated_parts"],
                 "native": native,
                 "native_normal": [float(value) for value in normal],
             }
@@ -249,6 +251,9 @@ def bind_inset_surface_selections(
             {
                 "selection_name": name,
                 "component_index": index,
+                "shared_sheet_members": planned_name["members"],
+                "naming_identity_sha256": planned_name["naming_identity_sha256"],
+                "aggregated_parts": planned_name["aggregated_parts"],
                 "contour_sha256": contour_sha256,
                 "contour": region,
                 "adjacent_side": adjacent_side,
@@ -617,6 +622,8 @@ def add_analysis_surfaces(
                 "contribution_id": binding["contribution"]["contribution_id"],
                 "selection_name": sheet.name,
                 "shared_sheet_members": planned_name["members"],
+                "naming_identity_sha256": planned_name["naming_identity_sha256"],
+                "aggregated_parts": planned_name["aggregated_parts"],
                 "effective_domain_id": binding["effective_domain_id"],
                 "adjacent_side": adjacent_side,
                 "field_side": field_side,
@@ -681,6 +688,8 @@ def bind_saved_analysis_surfaces(
                 "contribution_id": binding["contribution"]["contribution_id"],
                 "selection_name": name,
                 "shared_sheet_members": planned_name["members"],
+                "naming_identity_sha256": planned_name["naming_identity_sha256"],
+                "aggregated_parts": planned_name["aggregated_parts"],
                 "effective_domain_id": binding["effective_domain_id"],
                 "adjacent_side": adjacent_side,
                 **({"field_selector_binding": selector_evidence} if selector_evidence else {}),

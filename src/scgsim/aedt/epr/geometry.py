@@ -6,6 +6,7 @@ helpers are direct reexports of those same function objects.
 
 from __future__ import annotations
 
+import base64
 import math
 import os
 from collections.abc import Mapping, Sequence
@@ -45,6 +46,15 @@ def _sheet_member(binding: Mapping[str, Any], margin_label: str) -> tuple[str, .
     )
 
 
+def _sheet_naming_identity(
+    members: set[tuple[str, ...]], geometry_sha256: str, *, parts: set[int]
+) -> str:
+    """Bind the complete physical membership independently of its native label."""
+    return canonical_sha256(
+        {"geometry_sha256": geometry_sha256, "members": sorted(members), "parts": sorted(parts)}
+    )
+
+
 def _sheet_name(
     members: set[tuple[str, ...]], geometry_sha256: str, *, parts: set[int]
 ) -> str:
@@ -69,9 +79,8 @@ def _sheet_name(
     classification, side, margin = (
         label({member[index] for member in ordered}) for index in (2, 3, 4)
     )
-    digest = canonical_sha256(
-        {"geometry_sha256": geometry_sha256, "members": ordered, "parts": sorted(parts)}
-    )[:12]
+    identity_sha256 = _sheet_naming_identity(members, geometry_sha256, parts=parts)
+    digest = identity_sha256[:12]
     part_label = (
         ""
         if not parts
@@ -80,9 +89,10 @@ def _sheet_name(
     tail = f"_{classification}_{side}_{margin}{part_label}_{digest}"
     owner_budget = 60 - len("EPR_") - len(tail)
     if owner_budget < 1:
-        raise ValueError(
-            "EPR analysis sheet semantic labels exceed AEDT's 60-character limit"
-        )
+        # Preserve successful legacy labels; compact only overflow of SCG's
+        # inherited identifier budget, not an asserted native naming limit.
+        token = base64.b32encode(bytes.fromhex(identity_sha256)).decode("ascii").rstrip("=")
+        return f"EPR_{token}"
     return f"EPR_{owner[:owner_budget].rstrip('_')}{tail}"
 
 
@@ -107,6 +117,10 @@ def _base_sheet_plan(
             "name": names[key],
             "members": sorted(by_geometry[key]),
             "geometry_sha256": key,
+            "naming_identity_sha256": _sheet_naming_identity(
+                by_geometry[key], key, parts=set()
+            ),
+            "aggregated_parts": [],
         }
         for binding_id, key in keys.items()
     }
@@ -159,6 +173,10 @@ def plan_inset_sheet_names(
             "name": names[key],
             "members": sorted(record["members"]),
             "geometry_sha256": key,
+            "naming_identity_sha256": _sheet_naming_identity(
+                record["members"], key, parts=record["parts"]
+            ),
+            "aggregated_parts": sorted(record["parts"]),
         }
         for key, record in grouped.items()
     }
