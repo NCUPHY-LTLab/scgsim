@@ -1233,6 +1233,37 @@ filling missing values; this is not artifact authentication. A detached EPR
 record retains its recorded source identities and, where present, the
 saved-solution content hash, but these values do not authenticate the detached
 JSON.
+
+### Explicit native field selectors for saved analysis (CONVERGING)
+
+`analyze_epr()` accepts the optional
+`surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None`
+keyword. Keys are existing selected `contribution_id` values in the EPR
+request. `"surface"` requests the native `EnterSurface` selector and
+`"adjacent"` requests `EnterAdjacentSurface`. A supplied choice applies to
+every binding, component, evaluation, and margin for that contribution; it
+does not filter or combine requested patches or margins. Unspecified
+contributions retain the existing normal-derived selector behavior. Unknown
+or unselected contribution IDs and unsupported values fail explicitly.
+
+The override changes only the native one-sided field selector used during
+saved-field analysis. The original `SurfaceEprSpec.field_side` and its source
+meaning remain unchanged. Requested selector, applied native carrier binding,
+and actual calculator command/name readback remain distinct provenance. The
+readback establishes which selector was requested by the native calculator;
+it does not establish that the sampled field is on the intended material
+side. No automatic material-side correction or certainty is implied. Analysis
+continues on the verified saved `LastAdaptive` workcopy without another
+Eigenmode `Analyze`, mesh operation, or physical geometry rebuild, and keeps
+the existing grouping and normalization. A nonempty override uses the explicit
+saved-analysis request codec; `None` or an empty mapping retains the existing
+no-override codec and selector behavior.
+
+For example, a caller may pass
+`surface_field_selectors={contribution_id: "surface"}` after choosing an
+existing contribution ID from its request. The choice is caller-owned; the
+producer does not infer or supply it.
+
 `reanalyze_epr()` recomputes film estimates from stored evidence without
 reopening AEDT, and `show_epr()` gives a standalone surface/bulk/junction
 Plotly view. Neither is wired into the unified Visualizer. The older

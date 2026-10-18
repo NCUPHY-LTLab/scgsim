@@ -2,7 +2,7 @@
 title: "AEDT: analyze a sealed saved-field solution"
 description: "Verify a saved cohort and evaluate EPR in a native workcopy without requesting another solve."
 scgsim-kind: "course"
-scgsim-status: "STABILIZED"
+scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-saved-fields"
 ---
 
@@ -64,6 +64,18 @@ final_epr = analyze_epr(
     output_dir=Path(".artifacts/public-xmon-saved-field-analysis"),
 )
 ```
+
+An explicit native sheet-field selector is optional. Pass
+`surface_field_selectors={contribution_id: "surface"}` or use `"adjacent"`
+for an existing selected contribution ID when the caller wants to choose the
+native calculator side. Each entry applies to every binding and requested
+component, evaluation, and margin for that contribution. Unknown or unselected
+IDs and unsupported values fail explicitly. Omitting a contribution preserves
+its existing normal-derived selector behavior. This choice does not change
+the source `SurfaceEprSpec.field_side` and does not verify the sampled material
+side. Native command/name readback records the selector operation, not a
+material-side identity proof. The choice does not trigger another solve or
+geometry rebuild.
 
 The new output directory preserves the original released solution and normal
 run receipt. SCGSim archives/copies the immutable evidence, reopens the working

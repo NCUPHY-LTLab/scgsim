@@ -10,7 +10,7 @@ import math
 import time
 from collections.abc import Mapping, Sequence
 from importlib.metadata import version
-from typing import Any
+from typing import Any, Literal
 from scgsim.geometry._primitives.spatial import _geometry_ref_surface_z_um
 from scgsim.aedt.epr.geometry import (
     _INSET_CIRCLE_POINTS,
@@ -122,6 +122,28 @@ def _native_sheet_side_binding(
     return desired, adjacent_side
 
 
+def _resolve_surface_field_selector(
+    default_adjacent_side: bool,
+    requested_selector: Literal["surface", "adjacent"] | None,
+    *,
+    source_field_side: str,
+) -> dict[str, Any]:
+    """Resolve a native field selector without reinterpreting the physical side."""
+    default_selector = "adjacent" if default_adjacent_side else "surface"
+    applied = default_selector if requested_selector is None else requested_selector
+    return {
+        "source_field_side": source_field_side,
+        "default_native_selector": default_selector,
+        "requested_native_selector": requested_selector,
+        "applied_native_selector": applied,
+        "applied_native_token": {
+            "surface": "EnterSurface", "adjacent": "EnterAdjacentSurface"
+        }[applied],
+        "physical_material_side": "unverified",
+        "scope": "surface_field_quantities_only; masked area is side-independent",
+    }
+
+
 def _lift_inset_ring(
     plane: Mapping[str, Any], ring: Sequence[Sequence[float]]
 ) -> list[list[float]]:
@@ -147,6 +169,7 @@ def bind_inset_surface_selections(
     sheet_names: Mapping[str, Mapping[str, Any]],
     *,
     modeling: str | None,
+    surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None = None,
 ) -> list[dict[str, Any]]:
     """Create or rebind non-model inset sheets without changing solver CAD."""
 
@@ -214,6 +237,14 @@ def bind_inset_surface_selections(
                 f"inset EPR selection {name!r} has ambiguous field side"
             ),
         )
+        selector_evidence = {}
+        if surface_field_selectors:
+            selector_evidence = _resolve_surface_field_selector(
+                adjacent_side,
+                surface_field_selectors.get(str(binding["contribution"]["contribution_id"])),
+                source_field_side=field_side,
+            )
+            adjacent_side = selector_evidence["applied_native_selector"] == "adjacent"
         result.append(
             {
                 "selection_name": name,
@@ -221,6 +252,7 @@ def bind_inset_surface_selections(
                 "contour_sha256": contour_sha256,
                 "contour": region,
                 "adjacent_side": adjacent_side,
+                **({"field_selector_binding": selector_evidence} if selector_evidence else {}),
                 "native_normal": native_normal,
                 "polygon_approximation": {
                     "method": _INSET_METHOD,
@@ -603,7 +635,8 @@ def add_analysis_surfaces(
 
 
 def bind_saved_analysis_surfaces(
-    app: Any, prepared: PreparedPlanarGeometry, geometry: dict[str, Any]
+    app: Any, prepared: PreparedPlanarGeometry, geometry: dict[str, Any],
+    *, surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None = None,
 ) -> None:
     """Read EPR selection sheets from the saved common native model."""
     selections: list[dict[str, Any]] = []
@@ -634,6 +667,14 @@ def bind_saved_analysis_surfaces(
             unknown_side_error=f"saved analysis surface {name!r} has unknown side",
             ambiguous_side_error=(f"saved analysis surface {name!r} side is ambiguous"),
         )
+        selector_evidence = {}
+        if surface_field_selectors:
+            selector_evidence = _resolve_surface_field_selector(
+                adjacent_side,
+                surface_field_selectors.get(str(binding["contribution"]["contribution_id"])),
+                source_field_side=side,
+            )
+            adjacent_side = selector_evidence["applied_native_selector"] == "adjacent"
         selections.append(
             {
                 "binding_id": binding_id,
@@ -642,6 +683,7 @@ def bind_saved_analysis_surfaces(
                 "shared_sheet_members": planned_name["members"],
                 "effective_domain_id": binding["effective_domain_id"],
                 "adjacent_side": adjacent_side,
+                **({"field_selector_binding": selector_evidence} if selector_evidence else {}),
                 "field_side": side,
                 "native_normal": list(native_normal),
                 "desired_field_side_normal": list(desired),
