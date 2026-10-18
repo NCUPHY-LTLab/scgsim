@@ -78,6 +78,8 @@ DRIVEN_GEOMETRY_SCHEMA_VERSION = "scgsim.aedt.hfss-driven-geometry.v1"
 
 EPR_ANALYSIS_SCHEMA_VERSION_V2 = "scgsim.aedt.hfss-eigenmode-epr-analysis.v2"
 
+EPR_ANALYSIS_SCHEMA_VERSION_V3 = "scgsim.aedt.hfss-eigenmode-epr-analysis.v3"
+
 Q3D_SCHEMA_VERSION = "scgsim.aedt.q3d.v3"
 
 Q3D_GEOMETRY_SOURCE_SCHEMA_VERSION = "scgsim.aedt.q3d-geometry-source.v3"

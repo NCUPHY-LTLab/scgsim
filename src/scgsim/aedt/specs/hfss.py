@@ -10,6 +10,7 @@ from dataclasses import dataclass, field, replace
 from numbers import Number
 
 from pathlib import Path
+from types import MappingProxyType
 
 from typing import Any, Literal
 
@@ -26,6 +27,7 @@ from scgsim.aedt.specs.common import (
     LumpedTerminalPort,
     EPR_ANALYSIS_SCHEMA_VERSION,
     EPR_ANALYSIS_SCHEMA_VERSION_V2,
+    EPR_ANALYSIS_SCHEMA_VERSION_V3,
     EPR_EIGENMODE_SCHEMA_VERSION,
     EPR_EIGENMODE_SCHEMA_VERSION_V2,
     EPR_EIGENMODE_SCHEMA_VERSION_V3,
@@ -769,6 +771,9 @@ class HfssEprAnalysisSpec:
     aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
     _legacy_payload: bool = False
+    surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None = field(
+        default=None, kw_only=True
+    )
 
     @property
     def mode(self) -> Literal["eigenmode"]:
@@ -794,6 +799,26 @@ class HfssEprAnalysisSpec:
         if not isinstance(self.epr_request, EprAnalysisRequest):
             raise TypeError("epr_request must be EprAnalysisRequest")
         _validate_epr_selection(self)
+        requested = self.surface_field_selectors
+        if requested is None:
+            requested = {}
+        if not isinstance(requested, Mapping) or any(
+            not isinstance(key, str) for key in requested
+        ):
+            raise TypeError("surface_field_selectors must be a contribution-ID mapping or None")
+        selectors = dict(requested)
+        if any(value not in ("surface", "adjacent") for value in selectors.values()):
+            raise ValueError("surface field selectors must be 'surface' or 'adjacent'")
+        selected = (
+            {item.contribution_id for item in self.geometry.contributions}
+            if self.epr_request.surface_contribution_ids is None
+            else set(self.epr_request.surface_contribution_ids)
+        )
+        if not set(selectors) <= selected:
+            raise ValueError("surface field selectors reference unknown or unselected contributions")
+        if self._legacy_payload and selectors:
+            raise ValueError("legacy saved-analysis payload cannot add surface field selectors")
+        object.__setattr__(self, "surface_field_selectors", MappingProxyType(selectors))
         if self.saved_solution.project_path.stem != self.project_name:
             raise ValueError("saved solution project does not match project_name")
         identity = self.saved_solution.identity
@@ -813,7 +838,8 @@ class HfssEprAnalysisSpec:
             "schema_version": (
                 EPR_ANALYSIS_SCHEMA_VERSION
                 if self._legacy_payload
-                else EPR_ANALYSIS_SCHEMA_VERSION_V2
+                else (EPR_ANALYSIS_SCHEMA_VERSION_V3
+                      if self.surface_field_selectors else EPR_ANALYSIS_SCHEMA_VERSION_V2)
             ),
             "mode": self.mode,
             "aedt": {"requested_version": self.aedt_version},
@@ -826,6 +852,8 @@ class HfssEprAnalysisSpec:
             "geometry": self.geometry.to_payload(),
             "epr": self.epr_request.to_payload(),
             "saved_solution": self.saved_solution.to_payload(),
+            **({"surface_field_selectors": dict(self.surface_field_selectors)}
+               if self.surface_field_selectors else {}),
         }
 
     @classmethod
@@ -837,7 +865,7 @@ class HfssEprAnalysisSpec:
         from scgsim.aedt.specs.epr import SavedSolution
 
         schema = payload.get("schema_version")
-        if schema not in {EPR_ANALYSIS_SCHEMA_VERSION, EPR_ANALYSIS_SCHEMA_VERSION_V2}:
+        if schema not in {EPR_ANALYSIS_SCHEMA_VERSION, EPR_ANALYSIS_SCHEMA_VERSION_V2, EPR_ANALYSIS_SCHEMA_VERSION_V3}:
             raise ValueError("unsupported HFSS EPR analysis schema")
         if base_dir is None:
             raise ValueError("HFSS EPR analysis requires a bound base directory")
@@ -852,6 +880,10 @@ class HfssEprAnalysisSpec:
             "epr",
             "saved_solution",
         }
+        if schema == EPR_ANALYSIS_SCHEMA_VERSION_V3:
+            expected.add("surface_field_selectors")
+            if not isinstance(payload.get("surface_field_selectors"), Mapping) or not payload["surface_field_selectors"]:
+                raise ValueError("saved-analysis v3 requires nonempty surface field selectors")
         if set(payload) != expected or payload.get("mode") != "eigenmode":
             raise ValueError("HFSS EPR analysis payload members are not canonical")
         project = payload.get("project")
@@ -873,6 +905,8 @@ class HfssEprAnalysisSpec:
                 "pyaedt.locked_version",
             ),
             _legacy_payload=schema == EPR_ANALYSIS_SCHEMA_VERSION,
+            surface_field_selectors=(payload["surface_field_selectors"]
+                                     if schema == EPR_ANALYSIS_SCHEMA_VERSION_V3 else None),
         )
 
 

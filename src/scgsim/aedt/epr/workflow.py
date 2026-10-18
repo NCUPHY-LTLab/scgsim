@@ -6,7 +6,8 @@ import json
 import shutil
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+from collections.abc import Mapping
 from scgsim.aedt._io import file_sha256, write_json
 from scgsim.aedt.epr.analysis import combine_epr_mode
 from scgsim.aedt.epr.cache import (
@@ -77,11 +78,13 @@ def analyze_epr(
     epr_request: EprAnalysisRequest,
     output_dir: str | Path,
     geometry_workers: int | None = None,
+    surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None = None,
 ) -> Any:
     """Analyze one sealed saved-field cohort in an owned disposable workcopy."""
 
     plan = _prepare_epr_analysis_handoff(
         saved_solution=saved_solution,
+        surface_field_selectors=surface_field_selectors,
         aedt_version=aedt_version,
         geometry=geometry,
         project_name=project_name,
@@ -267,7 +270,10 @@ def analyze_saved_epr(
         raise RuntimeError("saved EPR field solution is unavailable on the workcopy")
     started = time.perf_counter()
     geometry = bind_saved_planar_geometry(app, spec.geometry)
-    bind_saved_analysis_surfaces(app, spec.geometry, geometry)
+    bind_saved_analysis_surfaces(
+        app, spec.geometry, geometry,
+        surface_field_selectors=spec.surface_field_selectors,
+    )
     _bind_saved_generic_rlcs(app, spec.geometry, geometry)
     _read_saved_junction_lines(
         app, project_path, spec.design_name, spec.geometry, geometry
@@ -342,6 +348,25 @@ def analyze_saved_epr(
         "request": spec.epr_request.to_payload(),
         "raw_integral_evidence": raw_evidence,
     }
+    if spec.surface_field_selectors:
+        native_readback = authoring["native_expression_readback"]
+        readback_path = work_root / native_readback["path"]
+        outputs[readback_path.relative_to(run_dir).as_posix()] = native_readback["sha256"]
+        result_provenance["surface_field_selectors"] = dict(spec.surface_field_selectors)
+        result_provenance["surface_field_selector_bindings"] = [
+            {
+                **item,
+                "native_readback": {
+                    **item["native_readback"],
+                    "path": (work_root / item["native_readback"]["path"]).relative_to(run_dir).as_posix(),
+                },
+            }
+            for item in authoring["surface_field_selector_bindings"]
+        ]
+        result_provenance["native_expression_readback"] = {
+            **native_readback,
+            "path": readback_path.relative_to(run_dir).as_posix(),
+        }
     result = EprResult(
         result_kind="saved_field",
         setup_name=spec.run_control.setup_name,

@@ -50,7 +50,7 @@ from scgsim.aedt.runtime.native.common import detached_data
 from scgsim.aedt.runtime.native.hfss_eigenmode import (
     submit_eigenmode_cache,
 )
-from scgsim.aedt.specs.hfss import HfssEprSpec
+from scgsim.aedt.specs.hfss import HfssEprSpec, HfssEprAnalysisSpec
 from scgsim.aedt.runtime.families.hfss import (
     _solution_trace,
     read_body_eigenmode_history,
@@ -1065,13 +1065,16 @@ def _native_expression_cache(items: list[dict[str, Any]]) -> list[Any]:
 def _author_epr_expressions(
     app: Any,
     run_dir: Path,
-    spec: HfssEprSpec,
+    spec: HfssEprSpec | HfssEprAnalysisSpec,
     native_geometry: dict[str, Any],
     inset_plan: dict[tuple[str, float], dict[str, Any]],
     *,
     namespace: str = "prepared",
 ) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
     request = spec.epr_request
+    surface_field_selectors = (
+        spec.surface_field_selectors if isinstance(spec, HfssEprAnalysisSpec) else None
+    )
     if request is None:
         raise RuntimeError("EPR expression preparation requires an analysis request")
     solution = f"{spec.run_control.setup_name} : LastAdaptive"
@@ -1250,6 +1253,7 @@ def _author_epr_expressions(
                 sheet_facts,
                 sheet_names,
                 modeling=spec.geometry.modeling,
+                surface_field_selectors=surface_field_selectors,
             )
             phase_seconds["sheet_binding_seconds"] += time.perf_counter() - started
             member_components[member_key] = components
@@ -1283,7 +1287,11 @@ def _author_epr_expressions(
                         solution=solution,
                         phase_degrees=0.0,
                         dependencies=pp_observed,
-                        selection=component_selection,
+                        selection={
+                            **component_selection,
+                            **({"field_quantity": quantity}
+                               if surface_field_selectors and quantity != "masked_area" else {}),
+                        },
                         namespace=namespace,
                         adjacent_selection_name=(
                             component["selection_name"]
@@ -1443,6 +1451,26 @@ def _author_epr_expressions(
         "native_definition_readback_seconds",
     ):
         phase_seconds[key] = batch[key]
+    selector_bindings = []
+    if surface_field_selectors:
+        for expression, _, _ in compiled:
+            selection = expression["identity"]["selection"]
+            if selection.get("field_quantity") not in {"electric_normal", "electric_tangential"}:
+                continue
+            selector_bindings.append({
+                "binding_id": selection["binding_id"],
+                "contribution_id": selection["contribution_id"],
+                "component_index": selection["component_index"],
+                "margin_um": selection["margin_um"],
+                "evaluation_kind": selection["evaluation_kind"],
+                "selection_name": selection["selection_name"],
+                "field_quantity": selection["field_quantity"],
+                "field_selector_binding": selection["field_selector_binding"],
+                "expression_name": expression["name"],
+                "expression_identity_sha256": expression["identity"]["sha256"],
+                # Existing SaveNamedExpressions readback, not a reconstructed claim.
+                "native_readback": expression["native_readback"],
+            })
     authoring_seconds = time.perf_counter() - authoring_started
     other_seconds = max(0.0, authoring_seconds - sum(phase_seconds.values()))
     return (
@@ -1451,6 +1479,8 @@ def _author_epr_expressions(
             "source_assignment": source_assignment,
             "postprocessing_variables": pp_observed,
             "native_expression_readback": batch["native_expression_readback"],
+            **({"surface_field_selector_bindings": selector_bindings}
+               if surface_field_selectors else {}),
             "native_surface_references": detached_data(native_references),
         },
         {

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Literal
+
 
 import shutil
 
@@ -237,6 +240,7 @@ def _prepare_epr_analysis_handoff(
     epr_request: EprAnalysisRequest,
     output_dir: str | Path,
     geometry_workers: int | None,
+    surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None = None,
 ) -> HandoffPlan:
     """Prepare one private workcopy-only saved-field analysis transaction."""
 
@@ -280,6 +284,7 @@ def _prepare_epr_analysis_handoff(
         aedt_version=saved_solution.aedt_version,
     )
     spec = HfssEprAnalysisSpec(
+        surface_field_selectors=surface_field_selectors,
         aedt_version=aedt_version,
         project_name=project_name,
         design_name=design_name,

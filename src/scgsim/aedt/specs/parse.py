@@ -12,6 +12,7 @@ from scgsim.aedt.specs.common import (
     DRIVEN_GEOMETRY_SCHEMA_VERSION,
     EPR_ANALYSIS_SCHEMA_VERSION,
     EPR_ANALYSIS_SCHEMA_VERSION_V2,
+    EPR_ANALYSIS_SCHEMA_VERSION_V3,
     EPR_EIGENMODE_SCHEMA_VERSION,
     EPR_EIGENMODE_SCHEMA_VERSION_V2,
     EPR_EIGENMODE_SCHEMA_VERSION_V3,
@@ -58,6 +59,7 @@ def parse_aedt_spec(
     if payload.get("schema_version") in {
         EPR_ANALYSIS_SCHEMA_VERSION,
         EPR_ANALYSIS_SCHEMA_VERSION_V2,
+        EPR_ANALYSIS_SCHEMA_VERSION_V3,
     }:
         return HfssEprAnalysisSpec.from_payload(payload, base_dir=base_dir)
     if payload.get("schema_version") == Q3D_SCHEMA_VERSION:
