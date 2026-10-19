@@ -9,12 +9,13 @@ from __future__ import annotations
 import json
 
 import math
+import sys
 
 import time
 
 from collections.abc import Mapping, Sequence
 
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Decimal, localcontext
 
 from fractions import Fraction
 
@@ -1249,12 +1250,13 @@ def _native_junction_live_readback(
         },
         "available_property_names": None,
         "normalized": {},
+        "scalar_comparisons": {},
         "checks": {
             name: {"status": "not_evaluated"}
             for name in (
                 "parallel_type", "inductance_enabled", "resistance_disabled",
-                "inductance_equal_si", "capacitance_enable_equal",
-                "capacitance_available", "capacitance_equal_si",
+                "inductance_matches_si", "capacitance_enable_equal",
+                "capacitance_available", "capacitance_matches_si",
             )
         },
         "failed_checks": [],
@@ -1298,8 +1300,8 @@ def _native_junction_live_readback(
             raise RuntimeError("native RLC enabled property is invalid")
 
         def scalar(value, unit, property_name):
-            # Exact decimal SI equality avoids binary unit-conversion roundoff;
-            # the length comparison policy never applies to electrical parameters.
+            # Preserve the raw normalized SI value; representation equivalence
+            # is applied only to comparison operands below, never authoring.
             rlc_readback["stage"] = f"parse_scalar:{property_name}"
             number, observed_unit = decompose_variable_value(value)
             parsed = {
@@ -1321,15 +1323,53 @@ def _native_junction_live_readback(
             rlc_readback["stage"] = f"compare_scalar:{property_name}"
             return result
 
+        def matches_si(property_name, observed, requested):
+            """Apply SCG's comparison resolution, not a native precision claim."""
+            comparison = {
+                "observed_si_decimal": str(observed),
+                "requested_si_decimal": str(requested),
+                "exact_equal_si": observed == requested,
+                "policy": "binary64_decimal_roundtrip",
+                "significant_digits": sys.float_info.dig,
+                "rounding": "ROUND_HALF_EVEN",
+                "canonical_observed_si": None,
+                "canonical_requested_si": None,
+                "representation_equal_si": None,
+                "matches_si": False,
+                "method": "exact_si",
+            }
+            rlc_readback["scalar_comparisons"][property_name] = comparison
+            if comparison["exact_equal_si"]:
+                comparison["matches_si"] = True
+                return True
+            comparison["method"] = "comparison_operand_canonicalization"
+            if not observed.is_finite() or not requested.is_finite():
+                comparison["method"] = "nonfinite_operands"
+                return False
+            # Only the comparison operands are rounded into explicit decimal
+            # bins. Agreement is neither source bit identity nor AEDT precision.
+            with localcontext() as context:
+                context.prec = sys.float_info.dig
+                context.rounding = ROUND_HALF_EVEN
+                canonical_observed = +observed
+                canonical_requested = +requested
+            comparison["canonical_observed_si"] = str(canonical_observed)
+            comparison["canonical_requested_si"] = str(canonical_requested)
+            comparison["representation_equal_si"] = canonical_observed == canonical_requested
+            comparison["matches_si"] = comparison["representation_equal_si"]
+            return comparison["matches_si"]
+
         rlc_readback["stage"] = "compare_parallel_L_R"
         if (
             failed("parallel_type", values["RLC Type"] != "Parallel")
             or failed("inductance_enabled", not enabled(values["Use Induct"]))
             or failed("resistance_disabled", enabled(values["Use Resist"]))
             or failed(
-                "inductance_equal_si",
-                scalar(values["Inductance"], "H", "Inductance")
-                != Decimal(str(junction.inductance_h)),
+                "inductance_matches_si",
+                not matches_si(
+                    "Inductance", scalar(values["Inductance"], "H", "Inductance"),
+                    Decimal(str(junction.inductance_h)),
+                ),
             )
         ):
             raise RuntimeError("native junction parallel L/R parameters differ")
@@ -1350,9 +1390,11 @@ def _native_junction_live_readback(
                 "value": capacitance, "type": type(capacitance).__name__,
             }
             if failed(
-                "capacitance_equal_si",
-                scalar(capacitance, "F", "Capacitance")
-                != Decimal(str(junction.capacitance_f)),
+                "capacitance_matches_si",
+                not matches_si(
+                    "Capacitance", scalar(capacitance, "F", "Capacitance"),
+                    Decimal(str(junction.capacitance_f)),
+                ),
             ):
                 raise RuntimeError("native junction capacitance differs")
     except Exception as exc:
@@ -1380,6 +1422,7 @@ def _native_junction_live_readback(
         "native_geometry_observations": observations,
         "edge_contacts": edge_evidence,
         "boundary_name": boundary_name,
+        "electrical_readback": rlc_readback,
     }
 
 
