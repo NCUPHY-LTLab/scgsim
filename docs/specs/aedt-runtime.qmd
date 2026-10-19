@@ -1505,6 +1505,22 @@ verified working copy before expression authoring. Neither path substitutes the
 creation dictionary or cached boundary properties for saved-file evidence, and
 this check adds no save/reopen cycle.
 
+If live junction RLC properties are missing, cannot be interpreted, or differ
+from the request, the existing readback exception carries a
+`junction_rlc_readback=<JSON>` note into the failed receipt's `error`. Its
+top-level keys are `requested`, `observed` (availability, raw value, value type
+and read status), `available_property_names`, `normalized` (parsed number,
+type, unit, scale and SI decimal string only when reached), `checks` (evaluated
+and passed state, with remaining checks marked not evaluated), `failed_checks`,
+and `stage`. Requested settings remain distinct from native properties actually
+obtained. A property not available, not read, or not successfully converted is
+reported as such rather than replaced with an assumed default. The original
+readback exception remains first in `error`, and transaction save/release and
+transport-restoration handling remains unchanged. This note explains a failed
+preparation; it does not relax readback, establish that a prepared project was
+saved, or identify a physical cause before the observed values are available.
+It authorizes no automatic retry or solver `Analyze`.
+
 This reads the saved file with PyAEDT 1.3.0's [`load_entire_aedt_file()` parser](https://github.com/ansys/pyaedt/blob/7084127f52679a70b52e0a550d039673171caefe/src/ansys/aedt/core/internal/load_aedt_file.py).
 A [public saved-project example](https://github.com/zlatko-minev/pyEPR/blob/97be9f15212e6ddd427e7ee310dacfa778240fe0/_example_files/pyEPR_tutorial1.aedt)
 shows `CurrentLine` stored as entity-attached `GeometryPosition` records. That

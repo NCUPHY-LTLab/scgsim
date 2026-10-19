@@ -1226,10 +1226,6 @@ def _native_junction_live_readback(
 
     boundary_name = _native_name("junction_rlc", junction.junction_id)
     assignment(boundary_name, central_name, "Lumped RLC")
-    live = BoundaryObject(app, boundary_name, auto_update=False)._child_object
-    if live is None:
-        raise RuntimeError("native live junction RLC property object unavailable")
-    available = [str(v) for v in live.GetPropNames()]
     required = (
         "RLC Type",
         "Use Induct",
@@ -1237,48 +1233,137 @@ def _native_junction_live_readback(
         "Use Cap",
         "Use Resist",
     )
-    if any(name not in available for name in required):
-        raise RuntimeError(
-            f"native live RLC readback lacks required properties; available={available!r}"
-        )
-    values = {name: live.GetPropValue(name) for name in required}
+    # Record only reads and comparisons reached by the existing strict checks.
+    # Diagnostic collection never performs an additional native query.
+    rlc_readback = {
+        "requested": {
+            "RLC Type": "Parallel",
+            "Use Induct": True,
+            "Inductance": {"value": junction.inductance_h, "unit": "H"},
+            "Use Resist": False,
+            "Use Cap": bool(junction.capacitance_f),
+            "Capacitance": {"value": junction.capacitance_f, "unit": "F"},
+        },
+        "observed": {
+            name: {"status": "not_read"} for name in (*required, "Capacitance")
+        },
+        "available_property_names": None,
+        "normalized": {},
+        "checks": {
+            name: {"status": "not_evaluated"}
+            for name in (
+                "parallel_type", "inductance_enabled", "resistance_disabled",
+                "inductance_equal_si", "capacitance_enable_equal",
+                "capacitance_available", "capacitance_equal_si",
+            )
+        },
+        "failed_checks": [],
+        "stage": "live_property_object",
+    }
 
-    def enabled(value):
-        if value in (True, "true", "True", 1):
-            return True
-        if value in (False, "false", "False", 0):
-            return False
-        raise RuntimeError("native RLC enabled property is invalid")
+    def failed(name, condition):
+        rlc_readback["checks"][name] = {"status": "evaluated", "passed": not condition}
+        if condition:
+            rlc_readback["failed_checks"].append(name)
+        return condition
 
-    def scalar(value, unit):
-        # Exact decimal SI equality avoids binary unit-conversion roundoff;
-        # the length comparison policy never applies to electrical parameters.
-        number, observed_unit = decompose_variable_value(value)
-        system = {"H": "Inductance", "F": "Capacitance"}[unit]
+    try:
+        live = BoundaryObject(app, boundary_name, auto_update=False)._child_object
+        if live is None:
+            raise RuntimeError("native live junction RLC property object unavailable")
+        rlc_readback["stage"] = "property_names"
+        available = [str(v) for v in live.GetPropNames()]
+        rlc_readback["available_property_names"] = available
+        for name in rlc_readback["observed"]:
+            rlc_readback["observed"][name]["available"] = name in available
+        if any(name not in available for name in required):
+            raise RuntimeError(
+                f"native live RLC readback lacks required properties; available={available!r}"
+            )
+        values = {}
+        for name in required:
+            rlc_readback["stage"] = f"read_property:{name}"
+            value = live.GetPropValue(name)
+            values[name] = value
+            rlc_readback["observed"][name] = {
+                "status": "read", "available": True,
+                "value": value, "type": type(value).__name__,
+            }
+
+        def enabled(value):
+            if value in (True, "true", "True", 1):
+                return True
+            if value in (False, "false", "False", 0):
+                return False
+            raise RuntimeError("native RLC enabled property is invalid")
+
+        def scalar(value, unit, property_name):
+            # Exact decimal SI equality avoids binary unit-conversion roundoff;
+            # the length comparison policy never applies to electrical parameters.
+            rlc_readback["stage"] = f"parse_scalar:{property_name}"
+            number, observed_unit = decompose_variable_value(value)
+            parsed = {
+                "number": number, "number_type": type(number).__name__,
+                "observed_unit": observed_unit, "target_unit": unit,
+            }
+            rlc_readback["normalized"][property_name] = parsed
+            system = {"H": "Inductance", "F": "Capacitance"}[unit]
+            if (
+                observed_unit not in AEDT_UNITS[system]
+                or not isinstance(number, (int, float))
+                or isinstance(number, bool)
+                or not math.isfinite(number)
+            ):
+                raise RuntimeError("native RLC scalar unit/value unavailable")
+            result = Decimal(str(number)) * Decimal(str(AEDT_UNITS[system][observed_unit]))
+            parsed["unit_scale"] = str(AEDT_UNITS[system][observed_unit])
+            parsed["value_si_decimal"] = str(result)
+            rlc_readback["stage"] = f"compare_scalar:{property_name}"
+            return result
+
+        rlc_readback["stage"] = "compare_parallel_L_R"
         if (
-            observed_unit not in AEDT_UNITS[system]
-            or not isinstance(number, (int, float))
-            or isinstance(number, bool)
-            or not math.isfinite(number)
+            failed("parallel_type", values["RLC Type"] != "Parallel")
+            or failed("inductance_enabled", not enabled(values["Use Induct"]))
+            or failed("resistance_disabled", enabled(values["Use Resist"]))
+            or failed(
+                "inductance_equal_si",
+                scalar(values["Inductance"], "H", "Inductance")
+                != Decimal(str(junction.inductance_h)),
+            )
         ):
-            raise RuntimeError("native RLC scalar unit/value unavailable")
-        return Decimal(str(number)) * Decimal(str(AEDT_UNITS[system][observed_unit]))
-
-    if (
-        values["RLC Type"] != "Parallel"
-        or not enabled(values["Use Induct"])
-        or enabled(values["Use Resist"])
-        or scalar(values["Inductance"], "H") != Decimal(str(junction.inductance_h))
-    ):
-        raise RuntimeError("native junction parallel L/R parameters differ")
-    if enabled(values["Use Cap"]) != bool(junction.capacitance_f):
-        raise RuntimeError("native junction capacitance enable state differs")
-    if junction.capacitance_f and (
-        "Capacitance" not in available
-        or scalar(live.GetPropValue("Capacitance"), "F")
-        != Decimal(str(junction.capacitance_f))
-    ):
-        raise RuntimeError("native junction capacitance differs")
+            raise RuntimeError("native junction parallel L/R parameters differ")
+        rlc_readback["stage"] = "compare_capacitance_enable"
+        if failed(
+            "capacitance_enable_equal",
+            enabled(values["Use Cap"]) != bool(junction.capacitance_f),
+        ):
+            raise RuntimeError("native junction capacitance enable state differs")
+        if junction.capacitance_f:
+            rlc_readback["stage"] = "compare_capacitance"
+            if failed("capacitance_available", "Capacitance" not in available):
+                raise RuntimeError("native junction capacitance differs")
+            rlc_readback["stage"] = "read_property:Capacitance"
+            capacitance = live.GetPropValue("Capacitance")
+            rlc_readback["observed"]["Capacitance"] = {
+                "status": "read", "available": True,
+                "value": capacitance, "type": type(capacitance).__name__,
+            }
+            if failed(
+                "capacitance_equal_si",
+                scalar(capacitance, "F", "Capacitance")
+                != Decimal(str(junction.capacitance_f)),
+            ):
+                raise RuntimeError("native junction capacitance differs")
+    except Exception as exc:
+        try:
+            exc.add_note("junction_rlc_readback=" + json.dumps(rlc_readback, sort_keys=True))
+        except Exception:
+            try:
+                exc.add_note("junction_rlc_readback=unavailable: diagnostic serialization failed")
+            except Exception:
+                pass
+        raise
     deviations.extend(
         observation["maximum_plane_coordinate_deviation_um"]
         for observation in observations
