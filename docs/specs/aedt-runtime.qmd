@@ -1505,21 +1505,49 @@ verified working copy before expression authoring. Neither path substitutes the
 creation dictionary or cached boundary properties for saved-file evidence, and
 this check adds no save/reopen cycle.
 
-If live junction RLC properties are missing, cannot be interpreted, or differ
-from the request, the existing readback exception carries a
-`junction_rlc_readback=<JSON>` note into the failed receipt's `error`. Its
-top-level keys are `requested`, `observed` (availability, raw value, value type
-and read status), `available_property_names`, `normalized` (parsed number,
-type, unit, scale and SI decimal string only when reached), `checks` (evaluated
+A junction RLC readback remains a fail-fast preparation error when required
+native properties are unavailable or unreadable, the existing type, flag, unit,
+finite-value, or geometry checks fail, or the selected scalar comparison does
+not match. For normalized SI inductance and capacitance, exact equality is the
+fast path and is recorded as `method="exact_si"`; canonical values are marked
+not performed on that path. Otherwise, for finite operands, only the comparison
+operands are symmetrically canonicalized to `sys.float_info.dig` significant
+decimal digits using a local `Decimal` context with `ROUND_HALF_EVEN`. Exact
+equality of the canonical operands determines `representation_equal_si` and
+`matches_si`; `exact_equal_si` remains false if the original normalized SI
+values differed. The authored request and native value are never rounded or
+rewritten, and there is no absolute or relative tolerance or per-study override.
+Values on opposite sides of a rounding-bin boundary can remain unequal under
+this rule.
+
+The successful `electrical_readback.scalar_comparisons` records each
+scalar comparison's observed and requested SI decimal values, `exact_equal_si`,
+policy, method, selected significant digits and rounding mode, canonical
+observed and requested operands, `representation_equal_si`, and `matches_si`.
+The same comparison evidence is retained in the failed
+`junction_rlc_readback=<JSON>` exception note; the successful saved
+`partition_readback` carries the electrical evidence forward unchanged. The
+failed note also retains `requested`, `observed` (availability, raw value, value
+type, and read status), `available_property_names`, `normalized` (parsed number,
+type, unit, scale, and SI decimal string only when reached), `checks` (evaluated
 and passed state, with remaining checks marked not evaluated), `failed_checks`,
-and `stage`. Requested settings remain distinct from native properties actually
-obtained. A property not available, not read, or not successfully converted is
-reported as such rather than replaced with an assumed default. The original
-readback exception remains first in `error`, and transaction save/release and
-transport-restoration handling remains unchanged. This note explains a failed
-preparation; it does not relax readback, establish that a prepared project was
-saved, or identify a physical cause before the observed values are available.
-It authorizes no automatic retry or solver `Analyze`.
+and `stage`. A property not available, not read, or not successfully converted
+is reported as such rather than replaced with an assumed default. The original
+readback exception remains first in `error`; transaction save/release and
+transport-restoration handling remain unchanged. Nonfinite operands are not
+canonicalized, and existing fail-fast checks remain in force.
+
+This comparison rule is an SCG-selected floating-representation policy, not an
+AEDT storage-precision guarantee or a claim of physical accuracy. Python's
+[`sys.float_info.dig` documentation](https://docs.python.org/3.12/library/sys.html#sys.float_info)
+defines the selected decimal round-trip precision; it says nothing about
+AEDT's internal storage or formatting. AEDT's `GetPropValue` documentation
+does not promise an exact textual or decimal representation for these
+properties. Canonical agreement therefore does not establish native bit
+identity, and the rounding-bin boundary remains a comparison-resolution limit.
+This diagnostic repair does not establish actual native success or identify a
+physical cause before the observed values are available. It authorizes no
+automatic retry or solver `Analyze`.
 
 This reads the saved file with PyAEDT 1.3.0's [`load_entire_aedt_file()` parser](https://github.com/ansys/pyaedt/blob/7084127f52679a70b52e0a550d039673171caefe/src/ansys/aedt/core/internal/load_aedt_file.py).
 A [public saved-project example](https://github.com/zlatko-minev/pyEPR/blob/97be9f15212e6ddd427e7ee310dacfa778240fe0/_example_files/pyEPR_tutorial1.aedt)
