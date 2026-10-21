@@ -1871,15 +1871,12 @@ def solve_and_export_body_eigenmode(
     timings["final_export_seconds"] = round(time.perf_counter() - started, 6)
     convergence_path = output_dir / "adaptive-convergence.prop"
     started = time.perf_counter()
-    returned = prepared.app.export_convergence(
-        spec.run_control.setup_name,
-        variations="",
-        output_file=str(convergence_path),
+    # Native empty VariationKeys selects the current nominal variation without
+    # PyAEDT evaluating postprocessing variables before the export.
+    prepared.app.odesign.ExportConvergence(
+        spec.run_control.setup_name, "", str(convergence_path)
     )
-    if (
-        Path(returned).resolve() != convergence_path.resolve()
-        or not convergence_path.is_file()
-    ):
+    if not convergence_path.is_file():
         raise RuntimeError("HFSS adaptive convergence export is missing")
     outputs[convergence_path.relative_to(run_dir).as_posix()] = file_sha256(
         convergence_path

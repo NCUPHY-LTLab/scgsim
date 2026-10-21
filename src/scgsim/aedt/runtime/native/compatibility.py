@@ -2,6 +2,7 @@
 
 Native operation semantics remain shared. The 2024.2 path leaves transport
 configuration untouched; 2023.2 temporarily uses the pre-secure gRPC arguments.
+Both keep exception cleanup with the transaction instead of SDK-wide release.
 No installation discovery, SDK instance or connection is performed here.
 """
 
@@ -16,6 +17,45 @@ from scgsim.aedt.versions import AedtVersionProfile
 
 @contextmanager
 def native_compatibility(
+    profile: AedtVersionProfile, *, evidence: dict[str, Any] | None = None
+) -> Iterator[dict[str, Any]]:
+    """Keep the transaction sole release owner until its cleanup has completed."""
+    # This context is entered only at the explicit native execution boundary.
+    from ansys.aedt.core.generic.settings import settings
+
+    if evidence is None:
+        evidence = {}
+    previous_release = settings.release_on_exception
+    release_evidence = {
+        "requested": False, "previous": previous_release, "state": "not_selected"
+    }
+    evidence["release_on_exception"] = release_evidence
+    primary: BaseException | None = None
+    try:
+        settings.release_on_exception = False
+        release_evidence["state"] = "selected"
+        with _native_transport_compatibility(profile, evidence=evidence):
+            yield evidence
+    except BaseException as exc:
+        primary = exc
+        raise
+    finally:
+        try:
+            settings.release_on_exception = previous_release
+            release_evidence["state"] = "restored"
+        except Exception as exc:
+            release_evidence["state"] = "restore_failed"
+            release_evidence["error"] = f"{type(exc).__name__}: {exc}"
+            if primary is not None:
+                primary.add_note(
+                    "SDK release-on-exception restoration: " + release_evidence["error"]
+                )
+            else:
+                raise RuntimeError("failed to restore SDK release-on-exception policy") from exc
+
+
+@contextmanager
+def _native_transport_compatibility(
     profile: AedtVersionProfile, *, evidence: dict[str, Any] | None = None
 ) -> Iterator[dict[str, Any]]:
     """Hold process-local transport overrides through the owned Desktop release."""

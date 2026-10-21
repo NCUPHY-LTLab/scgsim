@@ -1788,11 +1788,25 @@ last completed solver pass comes from independent solver/convergence evidence
 and is not inferred from the largest cached pass. Adaptive history and a
 separately reopened `LastAdaptive` saved-field evaluation are different
 evidence surfaces and never substitute for each other.
-For Eigenmode, the exact-setup native `ExportConvergence` property file supplies
-the pass, delta-frequency, status, and solved-element count. Its solved-element
-count is not relabeled as a tetrahedron count from a solver profile. A
-successful solve is saved before fallible result exports, so an export failure
-does not discard the native solved project.
+For Eigenmode, SCGSim saves the solved project before requesting the exact-setup
+native `ExportConvergence` property file. It passes empty `VariationKeys`, so
+HFSS uses the current nominal variation, then requires the file to exist and
+the convergence parser to succeed. The parser supplies the pass,
+delta-frequency, status, and solved-element count; that count is not relabeled
+as a tetrahedron count from a solver profile. An export or parse failure fails
+the operation without skipping convergence evidence or substituting a fallback.
+
+The transaction temporarily disables PyAEDT's `release_on_exception` while it
+owns the Desktop, then restores its prior value after SCGSim cleanup. The
+original native error remains the operation's primary failure. On a failed
+export, `save.ok` may remain at its initial `false` even when the family saved
+the project before the export failed. `release.ok` records the result of the
+SDK Desktop-release call; it does not establish that every operating-system
+descendant exited. Failed runs remain failed and are not rewritten or sealed
+as successful saved-solution manifests; retained native files are diagnostic
+artifacts. ⚠️ Native verification: this source
+change was not checked in a new AEDT run, and behavior across AEDT versions is
+not established.
 Historical profile-backed receipts remain bound to their recorded profile
 sources; they are not reinterpreted as new property-file exports.
 
