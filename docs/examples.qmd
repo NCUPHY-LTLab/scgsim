@@ -60,7 +60,10 @@ Choose another physical task when appropriate:
 ## Advanced
 
 [Execute a portable handoff](course/execute.qmd) locally or with the selected
-Palace Slurm profile. [Analyze sealed AEDT fields](course/aedt-saved-fields.qmd)
+Palace Slurm profile. For HFSS EPR, the
+[HPC sweep guide](course/aedt-hpc-sweep.qmd) prepares independent native model
+packages, transfers them together, and solves and collects each package
+separately on its assigned hosts. [Analyze sealed AEDT fields](course/aedt-saved-fields.qmd)
 when the returned solution supports new EPR evaluation, or
 [change loss assumptions offline](course/offline-epr.qmd) on recorded EPR data.
 These are distinct operations with different native prerequisites.

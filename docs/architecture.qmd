@@ -371,18 +371,21 @@ the request.
 
 ### Prepared-native HFSS EPR batch workflow
 
-The existing AEDT transaction prepares and releases the EPR model. The batch
-API then packages that completed prepare-only run, executes one native
-BatchSolve/PPE process without constructing a PyAEDT Desktop, and collects the
-returned project through the existing transaction owner. Collection uses
-owned copies and existing saved-field postprocessing; it does not rebuild the
-geometry or run Analyze. The exact stage inputs and completion rules are in
-the [AEDT runtime contract](specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch).
+The AEDT transaction prepares and releases each native EPR model on the
+workstation. `scgsim.aedt.batch` packages one completed native project and its
+bound source, setup/cache/calculator readback, and declared dependencies. Its
+standalone runner executes one native BatchSolve/PPE process on a solver host
+without constructing a PyAEDT Desktop; collection returns through the
+existing transaction owner on an owned copy, without rebuilding geometry or
+running Analyze.
 
-Package, solve, and collection are separate artifacts and lifecycle stages.
-A successful external process exit permits collection, but full adaptive
-history and saved-field EPR readback must still pass the strict resolver before
-the run is a completed result.
+Each package, attempt, and collected result belongs to one model. A parameter
+sweep uses independent model requests and packages; callers may transfer those
+archives together, but run and collect each package separately. A successful
+external process exit permits collection, but complete adaptive history and
+saved-field EPR readback must still pass the strict resolver before a run is a
+completed result. The [AEDT runtime contract](specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)
+defines the package, attempt, and collection boundaries.
 
 At family entry, one private bound request fixes the absolute run workspace and
 detaches the parsed spec payload. Relative source paths are interpreted against

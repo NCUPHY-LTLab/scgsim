@@ -23,8 +23,10 @@ builder and solver APIs; it is not an official gsim distribution.
   the detached mesh summary.
 - **Study energy and loss.** Inspect surface, bulk and junction/port
   participation, and change loss assumptions without repeating an available field solve.
-- **Move computation to its host.** Prepare portable solver inputs locally,
-  run explicitly on an AEDT workstation or Palace local/HPC host, and load the return.
+- **Move an HFSS EPR solve to HPC.** Prepare and read back each native model on
+  a workstation, run its package with one-host AEDT BatchSolve without a Desktop
+  session on the solver host, then collect the complete return for EPR analysis.
+  Palace handoffs retain their separate local/HPC procedures.
 - **Read results in context.** Keep units, port/conductor order, mode identity,
   numerical history and available cost information beside the physics.
 
@@ -72,6 +74,9 @@ preview, not a computed field or solver result.*
 The course explains preparation, explicit execution and result reading in one
 sequence. Python scripts and notebooks use the same public APIs; notebooks are
 a convenient interface rather than a required runtime.
+For many parameter choices, the [HPC EPR sweep guide](docs/course/aedt-hpc-sweep.qmd)
+shows how to prepare independent model packages, transfer them together, and
+solve and collect each result separately.
 
 Explore the [OrPen SimplePad model and notebooks](https://github.com/OrPenStrike/orpen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad).
 
@@ -79,7 +84,8 @@ Palace needs its native executable on the solver host. Each AEDT request
 must explicitly select AEDT 2023.2 or 2024.2; both use PyAEDT 1.3.0 and need a
 suitable license. Installing a Python extra does not install a solver. Geometry
 preparation may run elsewhere, but each AEDT Desktop transaction runs locally
-on the same host as SCGSim.
+on the same host as SCGSim. The prepared-native EPR workflow carries only the
+solver stage to HPC; see the [batch EPR and sweep guide](docs/course/aedt-hpc-sweep.qmd).
 
 ## Understand the model
 

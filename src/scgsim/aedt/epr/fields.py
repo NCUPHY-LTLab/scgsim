@@ -444,26 +444,8 @@ def _field_selection_operations(block: str) -> list[dict[str, str]]:
     return selections
 
 
-def _read_native_named_expressions(
-    app: Any,
-    *,
-    names: Sequence[str],
-    definitions: Sequence[tuple[str, str]],
-    evidence_dir: Path,
-    expected_readback: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Save and bind AEDT's actual CLC definitions for the loaded expressions."""
-
-    path = evidence_dir / "scgsim_epr_native_readback.clc"
-    if path.exists():
-        raise FileExistsError("native EPR expression readback already exists")
-    reporter = app.post.fields_calculator.ofieldsreporter
-    saved = reporter.SaveNamedExpressions(str(path), list(names), True)
-    if saved is False:
-        raise RuntimeError("HFSS native named-expression readback save returned false")
-    if not path.is_file() or path.stat().st_size == 0:
-        raise RuntimeError("HFSS native named-expression readback is missing or empty")
-    payload = path.read_bytes()
+def _parse_native_expression_readback(payload: bytes) -> dict[str, dict[str, Any]]:
+    """Parse saved native CLC definitions without opening AEDT."""
     text = payload.decode("utf-8")
     block_pattern = re.compile(
         r"(?ms)^\$begin 'Named_Expression'\s*(.*?)^\$end 'Named_Expression'\s*$"
@@ -491,6 +473,120 @@ def _read_native_named_expressions(
             "sha256": hashlib.sha256(block.encode("utf-8")).hexdigest(),
             "field_selection_operations": _field_selection_operations(block),
         }
+    return native_definitions
+
+
+def _validated_expression_readback(
+    expressions: Sequence[Mapping[str, Any]],
+    cache: Mapping[str, Any],
+    *,
+    evidence_root: Path,
+) -> dict[str, dict[str, Any]]:
+    """Bind retained per-expression evidence to actual saved CLC bytes.
+
+    evidence_root is the original or packaged copy of metadata/epr_expressions.
+    The original receipt is never amended to manufacture an aggregate record.
+    """
+    parsed_files: dict[str, dict[str, dict[str, Any]]] = {}
+    file_identities: dict[str, tuple[Any, Any]] = {}
+    definitions: dict[str, dict[str, Any]] = {}
+
+    def read_record(record: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+        if (record.get("status") != "native_clc_saved_and_field_selection_read_back"
+                or record.get("api") != "FieldsReporter.SaveNamedExpressions"):
+            raise RuntimeError("prepared CLC readback operation is unavailable")
+        relative = record.get("path")
+        if not isinstance(relative, str):
+            raise RuntimeError("prepared CLC readback path is unavailable")
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts:
+            raise RuntimeError("prepared CLC readback path is not contained")
+        try:
+            suffix = path.relative_to("metadata/epr_expressions")
+            actual = (evidence_root / suffix).resolve()
+            actual.relative_to(evidence_root.resolve())
+        except ValueError as exc:
+            raise RuntimeError("prepared CLC readback path is not contained") from exc
+        identity = (record.get("sha256"), record.get("bytes"))
+        if relative in file_identities and file_identities[relative] != identity:
+            raise RuntimeError("prepared CLC artifact identities conflict")
+        if relative not in parsed_files:
+            payload = actual.read_bytes()
+            if (not payload or len(payload) != record.get("bytes")
+                    or hashlib.sha256(payload).hexdigest() != record.get("sha256")):
+                raise RuntimeError("prepared CLC readback artifact is missing or changed")
+            parsed_files[relative] = _parse_native_expression_readback(payload)
+            file_identities[relative] = identity
+        return parsed_files[relative]
+
+    if not expressions:
+        raise RuntimeError("native preparation lacks saved CLC expression evidence")
+    for expression in expressions:
+        if expression.get("definition_status") != "native_readback_verified":
+            raise RuntimeError("native preparation lacks saved CLC definition readback")
+        record = expression.get("native_readback")
+        if not isinstance(record, Mapping):
+            raise RuntimeError("prepared expression CLC readback is unavailable")
+        actual = read_record(record)
+        names = record.get("expression_definition_names")
+        recorded = record.get("definitions")
+        if (not isinstance(names, list) or not names
+                or any(not isinstance(name, str) for name in names)
+                or len(set(names)) != len(names)
+                or not isinstance(recorded, Mapping) or set(recorded) != set(names)):
+            raise RuntimeError("prepared expression definition membership differs")
+        parent_name = expression.get("name")
+        if not isinstance(parent_name, str) or parent_name not in recorded:
+            raise RuntimeError("prepared parent expression lacks its own native definition")
+        for name in names:
+            if name not in actual or recorded[name] != actual[name]:
+                raise RuntimeError("prepared expression differs from native CLC readback")
+            if name in definitions and definitions[name] != actual[name]:
+                raise RuntimeError("prepared expression definitions conflict")
+            definitions[name] = actual[name]
+    actual_union: dict[str, dict[str, Any]] = {}
+    for actual in parsed_files.values():
+        for name, value in actual.items():
+            if name in actual_union and actual_union[name] != value:
+                raise RuntimeError("prepared native CLC artifacts conflict")
+            actual_union[name] = value
+    if actual_union != definitions:
+        raise RuntimeError("prepared native CLC membership differs from expressions")
+    if "native_expression_readback" in cache:
+        aggregate = cache["native_expression_readback"]
+        if not isinstance(aggregate, Mapping):
+            raise RuntimeError("prepared aggregate CLC readback is invalid")
+        actual = read_record(aggregate)
+        names = aggregate.get("definition_names")
+        if (not isinstance(names, list) or len(names) != len(definitions)
+                or any(not isinstance(name, str) for name in names)
+                or set(names) != set(definitions)
+                or aggregate.get("definitions") != definitions or actual != definitions):
+            raise RuntimeError("prepared aggregate CLC readback conflicts with expressions")
+    return definitions
+
+
+def _read_native_named_expressions(
+    app: Any,
+    *,
+    names: Sequence[str],
+    definitions: Sequence[tuple[str, str]],
+    evidence_dir: Path,
+    expected_readback: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Save and bind AEDT's actual CLC definitions for the loaded expressions."""
+
+    path = evidence_dir / "scgsim_epr_native_readback.clc"
+    if path.exists():
+        raise FileExistsError("native EPR expression readback already exists")
+    reporter = app.post.fields_calculator.ofieldsreporter
+    saved = reporter.SaveNamedExpressions(str(path), list(names), True)
+    if saved is False:
+        raise RuntimeError("HFSS native named-expression readback save returned false")
+    if not path.is_file() or path.stat().st_size == 0:
+        raise RuntimeError("HFSS native named-expression readback is missing or empty")
+    payload = path.read_bytes()
+    native_definitions = _parse_native_expression_readback(payload)
     if set(native_definitions) != set(names):
         raise RuntimeError(
             "HFSS native expression readback names differ from the loaded definitions"

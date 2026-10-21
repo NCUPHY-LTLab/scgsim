@@ -1,6 +1,6 @@
 ---
-title: "Execute a handoff locally or on Slurm"
-description: "Transfer complete prepared inputs, launch explicitly and retain the returned run identity."
+title: "Execute a handoff locally or on its solver host"
+description: "Run a prepared model locally or transfer the complete native package to its solver host and return the results."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/execute"
@@ -94,3 +94,37 @@ that saved fields exist, and an isolated EPR JSON cannot replace full-run
 resolution. The next lesson [restarts and resolves the return](returned-results.qmd)
 without opening a solver. Additional saved-field EPR evaluation has its own
 [native analysis lesson](aedt-saved-fields.qmd).
+
+## AEDT: run a prepared-native EPR package on HPC
+
+The Desktop route above remains the direct AEDT workflow. For HPC BatchSolve,
+first prepare and read back the native HFSS EPR model on a workstation using
+the AEDT version selected in its request. A JSON handoff by itself is not a
+native model package: package the released preparation with its saved project,
+source, setup/cache/calculator readback, and required dependencies using
+`prepare_native_batch()`.
+
+Transfer the package archive to a solver host with the same selected AEDT
+release, its command-line solver, and an available solver license. This stage
+uses the standalone `run_batch.py`; it needs no SCGSim, PyAEDT, model-building
+environment, or usable Desktop session on that host:
+
+```bash
+python run_batch.py solve --package "$PACKAGE_DIR" --output "$ATTEMPT_DIR"
+```
+
+The command runs the packaged design and setup with the one-host BatchSolve
+recipe. It does not submit a scheduler job. Return the full package and attempt
+to the workstation, including the returned `.aedt` project, complete
+`.aedtresults` directory, attempt record, and raw solver output. On the
+workstation, `collect_native_batch()` opens owned copies through the normal
+transaction, reads the complete adaptive cache history and saved-field EPR,
+then seals and resolves the result without rebuilding geometry or running
+Analyze. The [AEDT runtime contract](../specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)
+defines the required evidence and failure rules.
+
+For a parameter sweep, repeat native preparation and packaging for each model
+with separate output directories. Transfer the independent archives together,
+then run and collect each package separately; the batch API does not combine
+multiple models into one solver project. See the
+[HPC EPR sweep guide](aedt-hpc-sweep.qmd) for the complete repeated workflow.

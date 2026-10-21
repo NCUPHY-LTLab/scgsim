@@ -168,14 +168,11 @@ def prepare_native_batch(
         raise RuntimeError("native preparation lacks setup/cache/expression readback")
     if not cache.get("serialized_readback", {}).get("saved_configuration_source"):
         raise RuntimeError("native preparation lacks fresh saved cache readback")
-    for expression in expressions:
-        if expression.get("definition_status") != "native_readback_verified":
-            raise RuntimeError("native preparation lacks saved CLC definition readback")
-    native_readback = cache.get("native_expression_readback", {})
-    readback_path = _inside(root, native_readback.get("path", ""))
-    if (not native_readback.get("definitions") or not readback_path.is_file()
-            or _sha(readback_path) != native_readback.get("sha256")):
-        raise RuntimeError("prepared CLC readback artifact is missing or changed")
+    from scgsim.aedt.epr.fields import _validated_expression_readback
+
+    _validated_expression_readback(
+        expressions, cache, evidence_root=root / "metadata/epr_expressions",
+    )
     output = _fresh(output_dir, root)
     try:
         inputs = output / "inputs"

@@ -144,6 +144,8 @@ The preparation must include its bound source and project, setup and cache
 readback, and native calculator-definition evidence. Packaging does not open
 Desktop or alter the authored model, setup, margins, modes, or EPR criteria.
 
+For a complete multi-model procedure, follow [Parameter sweep with a Desktop-free HPC solver](../course/aedt-hpc-sweep.qmd). It creates one native package per model, transports them in one ordinary archive, and collects each returned attempt separately. The outer archive and serial loop are caller composition; the public batch API continues to own one model per package.
+
 The public Python entry points are:
 
 ```python
@@ -170,10 +172,15 @@ def collect_native_batch(
 `run_native_batch` returns the path to `batch-attempt.json`.
 
 `prepare_native_batch` accepts only a completed prepare-only HFSS EPR handoff
-with its setup, cache, saved configuration, and calculator definitions read
-back. It packages the source/spec and handoff evidence, native project,
-calculator evidence, declared dependencies, and the full `.aedtresults`
-directory when present. A dependency path is relative to the prepared run.
+with serialized saved setup/cache evidence and calculator definitions read
+back. A pending cache marker does not establish saved setup/cache readback.
+For every expression, packaging verifies the recorded CLC artifact status,
+path, byte size, SHA-256, and named definition; if an aggregate is supplied,
+it must agree with those per-expression records. These checks do not rewrite
+the original receipt. The package contains the source/spec and handoff
+evidence, native project, calculator evidence, declared dependencies, and the
+full `.aedtresults` directory when present. A dependency path is relative to
+the prepared run.
 For this batch recipe, `cores` must be a positive integer and
 `ram_limit_percent` must be an integer from 1 through 99; 100 is not
 representable by the native machine-list syntax. The `solver_executable` value
@@ -191,12 +198,13 @@ and raw solver output. Neither a zero exit code nor a frequency CSV alone
 establishes a completed result.
 
 `collect_native_batch` requires the matching settled attempt, returned `.aedt`
-project, and complete `.aedtresults` directory. It opens an owned copy through
-the existing transaction and collects full adaptive mode/pass cache history
-and saved-field EPR without rebuilding geometry or running Analyze. It releases
-Desktop, seals the run, and applies the strict result resolver. Missing native
-history or saved-field evidence remains a failure; LastAdaptive-only data does
-not replace the complete cache.
+project, and complete `.aedtresults` directory. It verifies the per-expression
+CLC readbacks and any supplied aggregate against the package records, then
+opens an owned copy through the existing transaction and collects full
+adaptive mode/pass cache history and saved-field EPR without rebuilding
+geometry or running Analyze. It releases Desktop, seals the run, and applies
+the strict result resolver. Missing native history or saved-field evidence
+remains a failure; LastAdaptive-only data does not replace the complete cache.
 
 The package and collection commands use `python -m scgsim.aedt.batch` in the
 SCGSim environment. Each stage writes to a fresh output directory:

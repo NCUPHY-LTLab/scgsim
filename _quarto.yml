@@ -71,6 +71,7 @@ website:
         - section: "Advanced"
           contents:
             - docs/course/execute.qmd
+            - docs/course/aedt-hpc-sweep.qmd
             - docs/course/aedt-saved-fields.qmd
             - docs/course/offline-epr.qmd
             - section: "Flip-chip Xmon example"

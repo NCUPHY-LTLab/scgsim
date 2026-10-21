@@ -32,6 +32,17 @@ extension is **CONVERGING**. The table describes supported request families
 and intended returned quantities, not solver results observed for the new
 representation.
 
+Prepared-native BatchSolve is a separate execution route for the existing
+HFSS EPR workflow. Prepare and collect the native model in Desktop transactions
+on the workstation; run only the packaged solver stage on a host with the same
+explicitly requested AEDT release, its command-line solver, and an available
+solver license. The solver host does not need PyAEDT or a usable Desktop
+session. This route does not change the HFSS model or EPR request and does not
+submit a scheduler job. The [HPC EPR sweep guide](course/aedt-hpc-sweep.qmd)
+shows how to transfer independent packages together; the
+[AEDT runtime contract](specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)
+records the current native-verification status and complete-return rules.
+
 Palace Driven and Magnetostatic are not implemented; Meep is outside SCGSim's
 scope. Palace's [native problem types](https://awslabs.github.io/palace/stable/guide/problem/)
 include calculations beyond this table. The [PyAEDT user guide](https://aedt.docs.pyansys.com/version/stable/User_guide/index.html)

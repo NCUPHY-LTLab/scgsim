@@ -52,7 +52,8 @@ establish them as complete or failed. See the
 | `scgsim.palace.presentation` | Palace trust, physics and cost projections and report figures | A common cross-solver physical quantity model |
 | `scgsim.aedt.specs` | Canonical request and prepared-geometry declarations, shared electrical records, and explicit parser dispatch | Runtime/Desktop state or Q3D input-v1/v2 |
 | `scgsim.aedt.preparation` | Source binding, effective geometry and physical-layer mapping, portable handoff, canonical cohort membership | Desktop lifetime, mutable EigenmodeSim state, or solve results |
-| `scgsim.aedt.runtime` | Sole transaction/receipt coordinator and one Desktop lifecycle; family-specific native prepare/solve/export/readback | Shared geometry source ownership or family-crossing physics |
+| `scgsim.aedt.runtime` | Sole transaction/receipt coordinator and Desktop lifecycle for preparation, direct runs, and batch collection; dispatches the family-specific native flow | Shared geometry source ownership or family-crossing physics |
+| `scgsim.aedt.batch` | One-model native EPR package, standalone solver-only attempt and return validation; delegates full native collection to the runtime transaction | Desktop/model construction, scheduler submission, or a combined multi-model solver project |
 | `scgsim.aedt.runtime.native` | Common body/support/material/enclosure construction, declared junction and generic RLC assignment, and saved native geometry readback | EPR analysis requests or source preparation |
 | `scgsim.aedt.epr` | Analysis selections, fields/cache, EPR analysis and saved-field composition of the HFSS family flow | Generic Eigenmode construction/solve/export, Desktop lifecycle, or general result custody |
 | `scgsim.aedt.results` | Strict run/EPR resolution, provenance readers, convergence and matrix observations | Solver execution or display state |
