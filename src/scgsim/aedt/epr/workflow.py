@@ -511,3 +511,93 @@ def solve_and_export_epr(
     return solve_and_export_body_eigenmode(
         prepared, resources, resource_evidence, analysis_export=_export_epr_analysis
     )
+
+
+def collect_batch_epr(Hfss, run_dir, spec, prepared_receipt):
+    """Bind saved batch outputs and collect full history without native authoring."""
+    from scgsim.aedt.runtime.families.hfss import collect_body_eigenmode
+    from scgsim.aedt.runtime.native.common import BoundAedtRequest
+    from scgsim.aedt.epr.fields import _read_native_named_expressions
+
+    if not isinstance(spec, HfssEprSpec) or spec.epr_request is None or spec.run_control is None:
+        raise TypeError("batch collection requires the original complete EPR request")
+    project_path = run_dir / f"{spec.project_name}.aedt"
+    app = Hfss(project=str(project_path), design=spec.design_name,
+               solution_type="Eigenmode", new_desktop=False, close_on_exit=False)
+    if app.design_name != spec.design_name or app.design_type != "HFSS":
+        raise RuntimeError("returned batch design identity differs")
+    geometry = bind_saved_planar_geometry(app, spec.geometry)
+    bind_saved_analysis_surfaces(app, spec.geometry, geometry)
+    _bind_saved_generic_rlcs(app, spec.geometry, geometry)
+    _read_saved_junction_lines(app, project_path, spec.design_name, spec.geometry, geometry)
+    setup = read_body_eigenmode_setup(app, spec)
+    expressions = detached_data(prepared_receipt["expressions"])
+    cache = detached_data(prepared_receipt["cache"])
+    original_definitions = cache["native_expression_readback"]["definitions"]
+    evidence_dir = run_dir / "metadata/epr_expressions"
+    evidence_dir.mkdir(parents=True, exist_ok=False)
+    observed = _read_native_named_expressions(
+        app, names=list(original_definitions), definitions=[],
+        evidence_dir=evidence_dir, expected_readback=original_definitions,
+    )
+    # Compare independent saved definitions; do not load or regenerate a CLC.
+    cache["native_expression_readback"] = observed
+    for expression in expressions:
+        previous = expression["native_readback"]
+        names = previous["expression_definition_names"]
+        expression["native_readback"] = {
+            **previous, "path": observed["path"], "sha256": observed["sha256"],
+            "bytes": observed["bytes"], "status": observed["status"],
+            "definitions": {name: observed["definitions"][name] for name in names},
+        }
+    cache["serialized_readback"] = _read_cache(app, spec, cache["items"])
+    references = cache.get("native_surface_references", [])
+    if references:
+        cache["native_surface_references"] = verify_saved_native_surface_references(
+            project_path, spec.design_name, references
+        )
+    prepared = PreparedBodyEigenmode(
+        app, BoundAedtRequest.bind(run_dir, spec), project_path,
+        geometry, setup, tuple(expressions), cache, {},
+    )
+
+    def complete_analysis(prepared, bound, convergence, outputs, output_dir, timings):
+        history, payload, evidence = _export_epr_analysis(
+            prepared, bound, convergence, outputs, output_dir, timings
+        )
+        _require_complete_batch_history(bound, prepared.cache, convergence, history, payload)
+        return history, payload, evidence
+
+    return collect_body_eigenmode(prepared, analysis_export=complete_analysis)
+
+
+def _require_complete_batch_history(spec, cache, convergence, history, payload):
+    """Require the requested original cache history, never a LastAdaptive substitute."""
+    from scgsim.aedt.epr.cache import _trace_for_cache_context, _trace_by_pass
+
+    final_pass = convergence["final_pass"]
+    expected_passes = set(range(1, final_pass + 1))
+    selected_modes = (
+        tuple(range(1, spec.run_control.num_modes + 1))
+        if spec.epr_request.mode_indices is None else spec.epr_request.mode_indices
+    )
+    cache_history = history["cache_integral_traces"]
+    requested_titles = {item["title"] for item in cache["items"]}
+    if (cache_history.get("status") != "complete"
+            or set(cache_history.get("traces", {})) != requested_titles):
+        raise RuntimeError("batch collection lacks the complete requested expression-cache history")
+    for item in cache["items"]:
+        title = item["title"]
+        trace, context = _trace_for_cache_context(
+            cache_history["traces"][title], item, cache_history["queries"].get(title, {})
+        )
+        if not context["status"].startswith("verified"):
+            raise RuntimeError(f"batch cache context is unverified: {title}")
+        if set(_trace_by_pass(trace, final_pass=final_pass)) != expected_passes:
+            raise RuntimeError(f"batch cache pass history is incomplete: {title}")
+    rows = payload["rows"]
+    expected_rows = {(mode, native_pass) for mode in selected_modes for native_pass in expected_passes}
+    if ({(row["mode"], row["native_pass"]) for row in rows} != expected_rows
+            or len(rows) != len(expected_rows)
+            or any(row["status"] != "complete" for row in rows)):
+        raise RuntimeError("batch collection lacks complete per-mode/per-pass adaptive EPR")

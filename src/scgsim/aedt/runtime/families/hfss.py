@@ -1859,6 +1859,22 @@ def solve_and_export_body_eigenmode(
         raise RuntimeError(
             f"HFSS failed to analyze setup {spec.run_control.setup_name!r}"
         )
+    return collect_body_eigenmode(
+        prepared, analysis_export=analysis_export, timings=timings
+    )
+
+
+def collect_body_eigenmode(
+    prepared: PreparedBodyEigenmode,
+    *,
+    analysis_export: Callable | None = None,
+    timings: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Export one already-solved owned project without Analyze or model creation."""
+    spec = prepared.request.parse()
+    if not isinstance(spec, HfssEprSpec) or spec.run_control is None:
+        raise TypeError("native collection requires a complete body-first Eigenmode request")
+    timings = detached_data(prepared.timings) if timings is None else timings
     started = time.perf_counter()
     if not prepared.app.save_project() or not prepared.project_path.is_file():
         raise RuntimeError("HFSS EPR solved project save failed")

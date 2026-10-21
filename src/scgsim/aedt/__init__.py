@@ -125,3 +125,20 @@ __all__ = [
 from .specs.modeling import PhysicalLayerSpec
 
 from scgsim.geometry.models.lumped import LumpedSupport
+
+__all__ += [
+    "NativeBatchPackage", "prepare_native_batch", "run_native_batch", "collect_native_batch",
+]
+
+def __getattr__(name: str):
+    # Keep the standalone batch CLI unimported until a facade export is used.
+    if name in {
+        "NativeBatchPackage", "prepare_native_batch",
+        "run_native_batch", "collect_native_batch",
+    }:
+        from importlib import import_module
+
+        value = getattr(import_module(".batch", __name__), name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -450,6 +450,7 @@ def _read_native_named_expressions(
     names: Sequence[str],
     definitions: Sequence[tuple[str, str]],
     evidence_dir: Path,
+    expected_readback: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Save and bind AEDT's actual CLC definitions for the loaded expressions."""
 
@@ -494,6 +495,8 @@ def _read_native_named_expressions(
         raise RuntimeError(
             "HFSS native expression readback names differ from the loaded definitions"
         )
+    if expected_readback is not None and native_definitions != expected_readback:
+        raise RuntimeError("returned native CLC definitions differ from prepared readback")
     for name, expected_block in definitions:
         expected_selectors = _field_selection_operations(expected_block)
         actual_selectors = native_definitions[name]["field_selection_operations"]

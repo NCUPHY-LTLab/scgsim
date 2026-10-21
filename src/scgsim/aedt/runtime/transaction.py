@@ -152,6 +152,7 @@ def _execute(
     geometry_workers: int | None = None,
     cores: int | None = None,
     ram_limit_percent: int | None = None,
+    batch_collection: dict[str, Any] | None = None,
 ) -> int:
     run_dir = metadata_path.parent.parent
     os.chdir(run_dir)
@@ -208,7 +209,19 @@ def _execute(
         raise RuntimeError(
             "EPR execution flags do not match the prepared handoff workflow"
         )
-    _require_pristine_run(run_dir, spec)
+    batch_parent = None
+    if batch_collection is None:
+        _require_pristine_run(run_dir, spec)
+    else:
+        if prepare_only or analyze_epr or not isinstance(spec, HfssEprSpec) or spec.epr_request is None:
+            raise ValueError("external batch collection requires the original full EPR workflow")
+        from scgsim.aedt.batch import _collection_source
+        batch_parent = _collection_source(run_dir, batch_collection)
+        package, attempt, prepared_receipt = batch_parent
+        if (package["spec_sha256"] != file_sha256(spec_path)
+                or package["requested_aedt_version"] != spec.aedt_version
+                or prepared_receipt["connected"]["aedt_version"] != spec.aedt_version):
+            raise RuntimeError("batch collection source/version differs from the prepared request")
     cohort = _verify_prepared_cohort(run_dir, metadata, receipt, spec)
     if isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec)):
         geometry = spec.geometry
@@ -278,6 +291,24 @@ def _execute(
         receipt["model_stage"] = (
             "model_only" if spec.run_control is None else "model_with_setup"
         )
+    if batch_parent is not None:
+        package, attempt, prepared_receipt = batch_parent
+        receipt["native_batch"] = {
+            "source": batch_collection,
+            "package_id": package["package_id"], "attempt_id": attempt["attempt_id"],
+            "native_preparation": "released_verified",
+            "external_solve": "process_terminal_native_results_pending_collection",
+            "collection": "running", "collector_analyze_invoked": False,
+            "external_execution_location": attempt["execution_location"],
+            "external_requested_aedt_version": attempt["requested_aedt_version"],
+            "external_actual_aedt_version": attempt["actual_aedt_version"],
+            "resources_requested": attempt["resources_requested"],
+        }
+        receipt["resources"] = {
+            "requested": attempt["resources_requested"],
+            "status": "external_native_recipe; not applied to collector",
+            "request_source": "native_batch_package",
+        }
     receipt["requested_aedt_version"] = profile.requested_version
     receipt["connected_aedt_version"] = None
     if isinstance(spec, HfssEprAnalysisSpec):
@@ -302,7 +333,8 @@ def _execute(
         validate_geometry_workers(workers)
         inset_plan = None
         if (
-            isinstance(spec, (HfssEprSpec, HfssEprAnalysisSpec))
+            batch_parent is None
+            and isinstance(spec, (HfssEprSpec, HfssEprAnalysisSpec))
             and spec.epr_request is not None
         ):
             geometry_started = time.perf_counter()
@@ -335,7 +367,15 @@ def _execute(
             receipt.setdefault("timings", {})["desktop_startup_seconds"] = round(
                 time.perf_counter() - desktop_started, 6
             )
-        if isinstance(spec, HfssEprAnalysisSpec):
+        if batch_parent is not None:
+            from scgsim.aedt.epr.workflow import collect_batch_epr
+            epr_solver_attempted = True  # The bound external attempt ran the solver.
+            result = collect_batch_epr(
+                owned_application_constructor(Hfss, desktop, profile=profile),
+                run_dir, spec, batch_parent[2],
+            )
+            status = "completed"
+        elif isinstance(spec, HfssEprAnalysisSpec):
             from scgsim.aedt.epr.workflow import analyze_saved_epr
 
             result = analyze_saved_epr(
@@ -558,6 +598,14 @@ def _execute(
         elif result is not None:
             _record_ordinary_result_after_release(receipt, result)
         receipt["diagnostics"] = _read_physics_warnings(run_dir)
+        if batch_parent is not None:
+            receipt["native_batch"]["collection"] = (
+                "collected_sealed" if status == "completed" else "failed"
+            )
+            receipt["native_batch"]["external_solve"] = (
+                "native_results_collected" if status == "completed"
+                else "process_terminal_collection_failed"
+            )
         receipt["status"] = status
         receipt["finished_at_utc"] = _utc_now()
         receipt["execution_seconds"] = round(time.perf_counter() - execution_started, 6)
