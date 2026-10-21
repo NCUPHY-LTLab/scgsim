@@ -349,15 +349,18 @@ The dual-version request requires `aedt_version` explicitly as either
 `"2023.2"` or `"2024.2"`; it has no default or cross-version fallback. The
 selected value belongs to one request and transaction, not a process-wide
 setting. Both releases use the same transaction owner, run profile, and pinned
-PyAEDT 1.3.0. AEDT must run locally on the same node as that transaction.
+PyAEDT 1.3.0. The PyAEDT Desktop for a transaction runs locally on that same
+node.
 
 For `2023.2`, the transaction uses PyAEDT's same-node gRPC compatibility
 settings: `use_grpc_api=True`, `grpc_secure_mode=False`, `grpc_local=True`,
 and `grpc_listen_all=False`, with `PYAEDT_USE_PRE_GRPC_ARGS="True"`. It
 snapshots and restores the prior transport environment, including when
 execution or Desktop release fails. The `2024.2` path uses no such overrides;
-it does not silently substitute for a `2023.2` request. Neither selection
-introduces a remote Desktop or scheduler path.
+it does not silently substitute for a `2023.2` request. This version path
+keeps Desktop on the transaction's local node. The separate prepared-native
+batch workflow below runs a solver process on one host and does not submit
+scheduler jobs.
 
 Saved origin, requested version, and actual connected AEDT version remain
 separate facts. If a saved artifact has no recorded origin, that origin remains
@@ -365,6 +368,21 @@ separate facts. If a saved artifact has no recorded origin, that origin remains
 unknown origin. The request selects the local runtime, and the actual version
 is established from the connected AEDT application rather than inferred from
 the request.
+
+### Prepared-native HFSS EPR batch workflow
+
+The existing AEDT transaction prepares and releases the EPR model. The batch
+API then packages that completed prepare-only run, executes one native
+BatchSolve/PPE process without constructing a PyAEDT Desktop, and collects the
+returned project through the existing transaction owner. Collection uses
+owned copies and existing saved-field postprocessing; it does not rebuild the
+geometry or run Analyze. The exact stage inputs and completion rules are in
+the [AEDT runtime contract](specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch).
+
+Package, solve, and collection are separate artifacts and lifecycle stages.
+A successful external process exit permits collection, but full adaptive
+history and saved-field EPR readback must still pass the strict resolver before
+the run is a completed result.
 
 At family entry, one private bound request fixes the absolute run workspace and
 detaches the parsed spec payload. Relative source paths are interpreted against

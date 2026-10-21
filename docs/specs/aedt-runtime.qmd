@@ -133,6 +133,109 @@ prepared-model stage; it does not report a completed physics result.
 `resolve_results()` remains the strict reader for completed solver results and
 does not treat a model-only receipt as a completed solve.
 
+## Prepared-native HFSS EPR batch {#prepared-native-hfss-epr-batch}
+
+⚠️ **CONVERGING:** AEDT 2023.2 native BatchSolve execution has not yet been
+observed.
+
+Use this workflow for a complete, released HFSS EPR preparation when the
+solver-only process must run separately from the local PyAEDT transaction.
+The preparation must include its bound source and project, setup and cache
+readback, and native calculator-definition evidence. Packaging does not open
+Desktop or alter the authored model, setup, margins, modes, or EPR criteria.
+
+The public Python entry points are:
+
+```python
+def prepare_native_batch(
+    prepared_run: str | Path,
+    *,
+    output_dir: str | Path,
+    solver_executable: str,
+    resources: AedtResources,
+    dependencies: Sequence[str] = (),
+) -> NativeBatchPackage: ...
+
+def run_native_batch(package_dir: str | Path, *, output_dir: str | Path) -> Path: ...
+
+def collect_native_batch(
+    package_dir: str | Path,
+    attempt_dir: str | Path,
+    *,
+    output_dir: str | Path,
+) -> ResolvedRun: ...
+```
+
+`NativeBatchPackage` returns `root`, `manifest_path`, and `archive_path`;
+`run_native_batch` returns the path to `batch-attempt.json`.
+
+`prepare_native_batch` accepts only a completed prepare-only HFSS EPR handoff
+with its setup, cache, saved configuration, and calculator definitions read
+back. It packages the source/spec and handoff evidence, native project,
+calculator evidence, declared dependencies, and the full `.aedtresults`
+directory when present. A dependency path is relative to the prepared run.
+For this batch recipe, `cores` must be a positive integer and
+`ram_limit_percent` must be an integer from 1 through 99; 100 is not
+representable by the native machine-list syntax. The `solver_executable` value
+is recorded for the solver host and need not resolve on the packaging host.
+
+`run_native_batch` copies the packaged project into a fresh attempt directory
+and starts one solver process. It uses the bound executable and prepared
+design/setup with AEDT's one-host `-ng -UseElectronicsPPE -distributed -auto`
+BatchSolve recipe and a machine entry of
+`list=<host>:-1:<cores>:<ram_limit_percent>%`. It does not import PyAEDT,
+construct Desktop, submit a scheduler job, retry, or accept arbitrary solver
+arguments. The RAM percentage is the native per-host solver limit; it is not
+an operating-system memory cap. The attempt retains its process return code
+and raw solver output. Neither a zero exit code nor a frequency CSV alone
+establishes a completed result.
+
+`collect_native_batch` requires the matching settled attempt, returned `.aedt`
+project, and complete `.aedtresults` directory. It opens an owned copy through
+the existing transaction and collects full adaptive mode/pass cache history
+and saved-field EPR without rebuilding geometry or running Analyze. It releases
+Desktop, seals the run, and applies the strict result resolver. Missing native
+history or saved-field evidence remains a failure; LastAdaptive-only data does
+not replace the complete cache.
+
+The package and collection commands use `python -m scgsim.aedt.batch` in the
+SCGSim environment. Each stage writes to a fresh output directory:
+
+```sh
+python -m scgsim.aedt.batch package \
+  --prepared-run "$PREPARED_RUN" --output "$PACKAGE_DIR" \
+  --solver-executable "$AEDT_SOLVER" --cores "$AEDT_CORES" \
+  --ram-limit-percent "$AEDT_RAM_LIMIT_PERCENT"
+
+python -m scgsim.aedt.batch solve \
+  --package "$PACKAGE_DIR" --output "$ATTEMPT_DIR"
+
+python -m scgsim.aedt.batch collect \
+  --package "$PACKAGE_DIR" --attempt "$ATTEMPT_DIR" \
+  --output "$COLLECTED_RUN_DIR"
+```
+
+The package stage requires `--prepared-run`, `--output`,
+`--solver-executable`, `--cores`, and `--ram-limit-percent`; `--dependency`
+may be repeated. The solve stage takes `--package` and `--output`. Collection
+takes `--package`, `--attempt`, and `--output`.
+
+The package archive contains the immutable package and standalone
+`run_batch.py`. Transfer and extract it to the solver host using the operator's
+separate transfer and job controls. Run the copied script there; it uses only
+Python's standard library, so that host does not need SCGSim or PyAEDT:
+
+```sh
+python "$PACKAGE_DIR/run_batch.py" solve \
+  --package "$PACKAGE_DIR" --output "$ATTEMPT_DIR"
+```
+
+The solver executable path is resolved on that host. Return the full package
+and attempt to the collection host, including the returned `.aedt` project,
+complete `.aedtresults` directory, attempt record, and raw solver output.
+Collect from those returned directories; a frequency-only export is
+insufficient.
+
 Each family binds its request once before native preparation. The private bound
 request fixes the absolute run workspace and a detached immutable spec payload;
 relative spec paths remain relative to that workspace across later `chdir`,
