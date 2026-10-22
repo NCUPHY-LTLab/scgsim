@@ -1,0 +1,94 @@
+---
+title: "Engineering convergence status"
+description: "Current engineering scope, retained format readers and unresolved maintenance items."
+scgsim-kind: "project"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/convergence-status"
+---
+
+SCGSim engineering-convergence work remains `CONVERGING`. This page records
+current maintenance scope; the
+[backend support table](backend-support.qmd) remains the authority for supported
+calculations.
+
+## Current state
+
+| Area | Status | Current meaning |
+|---|---|---|
+| Semantics | `CONVERGING` | This work has not been marked `ACCEPTED` or `STABILIZED`. |
+| Delivery | `IN PROGRESS` | Required hosted checks and develop integration are tracked with the active pull request. |
+| Branch protection | `CONFIGURED` | The develop branch has a required check and no-bypass protection; the hosted check for this candidate is still pending. |
+| Public CI | Solver-free | CI checks public source/package behavior; it does not invoke AEDT or Palace or use private golden data. |
+| Analytic correctness | `TARGETED` | Fourteen independently reviewed public cases cover normalization, participation, and group identities; the current local suite result is below. |
+| Returned-data compatibility | `SCOPED CHECK PASSED` | See the scoped positive and negative observations below. |
+| Native solver operation | `OUT OF SCOPE` | This closeout does not launch a native solver operation. |
+| Site and runbook completion | `OUT OF SCOPE` | Site and environment-specific runbook work is separate from this closeout. |
+| Follow-on platform work | `AFTER TOOLCHAIN` | macOS voice/AI work follows completion of the shared toolchain. |
+| Tier B | `SUPPORTED` | This convergence work does not withdraw or reclassify Tier B support. |
+
+Pull request events, including drafts, pushes to `develop` or `main`, and
+manual dispatch run a Python 3.12/3.13 matrix that checks the package-version
+contract, builds the distribution, and verifies editable-source and wheel
+imports. The Python 3.12 offline job runs the full
+public non-native test suite, strict Pyright on the three configured modules,
+and Ruff F on tracked Python files. A separate Python 3.12 `docs-smoke` job
+runs current source examples through file-only preparation with the pinned
+public PDK. The required job fails unless all three jobs succeed. CI does not
+invoke AEDT or Palace native solvers or use private golden data. Pages
+rendering on `develop` and `main` pushes or manual dispatch is separate and
+has code execution disabled.
+
+## Current check status
+
+| Check | Status | Current meaning |
+|---|---|---|
+| Public non-native suite | `PASSED` · local · 2026-10-22 | 107 passed; one `private_golden` test was deselected. The hosted required check remains pending. |
+| Ruff F | `PASSED` · local · 2026-10-22 | Zero findings across 184 explicitly selected Python files. |
+| Strict Pyright | `PASSED` · local · 2026-10-22 | Zero errors or warnings on the three configured modules. |
+| Private returned-data compatibility | `SCOPED CHECK PASSED` | One positive strict resolve preserved raw physics/EPR records in the public result; three missing/content/identity cases were rejected at the shared earliest integrity predicates. |
+
+## Prior check snapshots
+
+| Observation | Result | Disposition |
+|---|---:|---|
+| Baseline test run | 28 passed, 23 failed | Historical baseline. |
+| Earlier package run | 37 passed across 43 subtests | Separate historical run. |
+| Earlier full non-native package run | 85 passed across 57 subtests | Historical result; not the final current run. |
+| Ruff F findings | 5 findings fixed | Historical source check across tracked Python files. |
+| Ruff `B023` | 12 findings reviewed | Individual review found no confirmed bug. |
+| Ruff `B905` | 59 findings | Pending disposition. |
+| Strict Pyright source check | 0 errors, 0 warnings | Prior local check of the three modules configured in offline CI. |
+| Documentation file-only smoke | Preparation completed | Local smoke used current source without a native solver; hosted `docs-smoke` execution remains pending. |
+
+## Historical format readers
+
+The selected source retains these versioned readers. The list describes
+in-tree dispatch, not a promise to migrate every older artifact.
+
+| Format family | Reachable in-tree formats | Current handling |
+|---|---|---|
+| Run receipts | `receipt.v1`, `receipt.v2`, `receipt.v3` | The resolver retains exact cohort and marker rules; new handoffs write V3 initial receipts. |
+| Handoffs | `handoff.v1` with manifest V1; `handoff.v2` with manifest V2 | Ordinary handoffs use V1; body-first HFSS and saved-field EPR workflows use V2. |
+| Runtime source provenance | `runtime-source.v1`–`v13`, `v15`–`v24` | Each recognized version binds its own declared module inventory. V14 is not accepted by the current reader; V23 remains a frozen historical inventory. |
+| EPR requests | Eigenmode EPR V1–V4; saved-analysis V1–V3; embedded planar geometry V1–V2 | Legacy payload shapes retain their version-specific decoding and serialization behavior. |
+| Q2D and Q3D requests | Q2D V1; Q3D V3 | Q3D input V1/V2 are not dispatched. A historical Q3D V3 result without modeling is readable only through its result path, not as a new execution request. |
+| Prepared models | Preparation-only `receipt.v3` | The model-only reader requires the explicit preparation-only receipt and verifies the saved model; it does not reinterpret older completed receipts as prepared models. |
+| Saved-field cohorts and EPR results | Saved-solution manifest/receipt V1 and V2; EPR result V1 and V2 | V1 saved-solution records may have no recorded AEDT version; that origin remains unknown. Current sealing writes V2. |
+| Q2D matrix outputs | Combined `rlgc_matrix.csv` | Older separate CG/RL and normalized matrix files are not decoded; their presence in a Q2D run is rejected. |
+
+External artifact owners and consumers are `UNKNOWN`. The in-tree inventory does
+not establish that external archives are unused. No additional reader is retired
+by this work. Retirement requires identifying the affected artifacts and
+consumers, providing an agreed migration or retention path, and an explicit
+scope decision; age alone is not a retirement condition.
+
+## Open engineering work
+
+| Item | Status | Basis and next disposition |
+|---|---|---|
+| Source-maintenance review | Pending disposition | 59 `B905` items and three large functions remain for disposition. |
+| Existing test findings | Separate snapshots | Baseline and package outcomes above belong to separate runs and are not aggregated. |
+| Required PR check run | Pending | Develop protection is configured; the required hosted check for this candidate has not completed. |
+
+Use the [maintainer guide](../MAINTAINING.md) for contribution and evidence
+expectations.

@@ -30,6 +30,7 @@ from scgsim.aedt.specs.q2d import Q2dConductorSpec, Q2dRectangleSpec, Q2dSpec
 
 def _gds_inputs():
     return dict(
+        modeling="solid", aedt_version="2024.2",
         gds_path="synthetic.gds", project_name="Synthetic", design_name="Design",
         materials={"vacuum": PdkMaterial("vacuum", "vacuum", False, "Vacuum"),
                    "silicon": PdkMaterial("silicon", "dielectric", False, "Silicon"),
@@ -91,7 +92,7 @@ def _write_eigenmode(root, *, status="Yes", current=.2, consecutive=2,
 def _matrix_spec():
     control = MatrixRunControl("Setup", 6, 3, 1)
     inputs = _gds_inputs()
-    return Q2dSpec(project_name=inputs["project_name"], design_name=inputs["design_name"],
+    return Q2dSpec(aedt_version="2024.2", project_name=inputs["project_name"], design_name=inputs["design_name"],
                    materials=inputs["materials"], vacuum_material_id="vacuum",
                    rectangles=(Q2dRectangleSpec("Substrate", (0, -10), (20, 10), "silicon"),
                                Q2dRectangleSpec("Signal", (8, 0), (4, .2), "metal"),

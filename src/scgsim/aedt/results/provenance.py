@@ -72,7 +72,9 @@ SOURCE_SCHEMA_V22 = "scgsim.aedt.runtime-source.v22"
 
 SOURCE_SCHEMA_V23 = "scgsim.aedt.runtime-source.v23"
 
-SOURCE_SCHEMA = SOURCE_SCHEMA_V23
+SOURCE_SCHEMA_V24 = "scgsim.aedt.runtime-source.v24"
+
+SOURCE_SCHEMA = SOURCE_SCHEMA_V24
 
 _RUNTIME_SOURCE_V1_MODULES = (
     "_hfss_convergence.py",
@@ -343,6 +345,13 @@ _RUNTIME_SOURCE_V23_PATHS = tuple(
 )
 
 
+_RUNTIME_SOURCE_V24_PATHS = tuple(sorted((
+    *_RUNTIME_SOURCE_V23_PATHS,
+    "src/scgsim/aedt/epr/evidence.py",
+    "src/scgsim/aedt/runtime/batch_protocol.py",
+    "src/scgsim/aedt/runtime/batch_runner.py",
+)))
+
 def _module_manifest() -> list[dict[str, str]]:
     source_root = Path(__file__).resolve().parents[3]
     return [
@@ -351,7 +360,7 @@ def _module_manifest() -> list[dict[str, str]]:
             "path": path,
             "sha256": file_sha256(source_root / path.removeprefix("src/")),
         }
-        for path in _RUNTIME_SOURCE_V23_PATHS
+        for path in _RUNTIME_SOURCE_V24_PATHS
     ]
 
 
@@ -464,6 +473,7 @@ def validate_runtime_source(
         SOURCE_SCHEMA_V21: _RUNTIME_SOURCE_V21_PATHS,
         SOURCE_SCHEMA_V22: _RUNTIME_SOURCE_V22_PATHS,
         SOURCE_SCHEMA_V23: _RUNTIME_SOURCE_V23_PATHS,
+        SOURCE_SCHEMA_V24: _RUNTIME_SOURCE_V24_PATHS,
     }.get(schema)
     if (
         expected_paths is None
@@ -498,6 +508,7 @@ def validate_runtime_source(
                     SOURCE_SCHEMA_V21,
                     SOURCE_SCHEMA_V22,
                     SOURCE_SCHEMA_V23,
+                    SOURCE_SCHEMA_V24,
                 }
                 else "scgsim/"
             )
@@ -531,6 +542,7 @@ def validate_runtime_source(
         SOURCE_SCHEMA_V21,
         SOURCE_SCHEMA_V22,
         SOURCE_SCHEMA_V23,
+        SOURCE_SCHEMA_V24,
     }:
         if set(value) != {
             "schema_version",

@@ -22,6 +22,7 @@ from scgsim.aedt._io import file_sha256, write_json
 
 def _spec(project_name: str = "PublicQ2dRun") -> Q2dSpec:
     return Q2dSpec(
+        aedt_version="2024.2",
         project_name=project_name,
         design_name="Q2DDesign1",
         materials={
@@ -209,6 +210,10 @@ Signal,2.0
                     "schema_version": "scgsim.aedt.receipt.v1",
                     "status": "completed",
                     "mode": "q2d",
+                    "connected": {
+                        "aedt_version": spec.aedt_version,
+                        "pyaedt_version": spec.pyaedt_version,
+                    },
                     "source": {
                         "spec": "aedt_spec.json",
                         "spec_sha256": file_sha256(spec_path),

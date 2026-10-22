@@ -517,18 +517,18 @@ def collect_batch_epr(Hfss, run_dir, spec, prepared_receipt):
     """Bind saved batch outputs and collect full history without native authoring."""
     from scgsim.aedt.runtime.families.hfss import collect_body_eigenmode
     from scgsim.aedt.runtime.native.common import BoundAedtRequest
-    from scgsim.aedt.epr.fields import (
-        _read_native_named_expressions, _validated_expression_readback,
-    )
+    from scgsim.aedt.epr.fields import _read_native_named_expressions
+    from scgsim.aedt.epr.evidence import PreparedEprEvidence
 
     if not isinstance(spec, HfssEprSpec) or spec.epr_request is None or spec.run_control is None:
         raise TypeError("batch collection requires the original complete EPR request")
-    expressions = detached_data(prepared_receipt["expressions"])
-    cache = detached_data(prepared_receipt["cache"])
-    original_definitions = _validated_expression_readback(
-        expressions, cache,
+    evidence = PreparedEprEvidence.from_payload(
+        prepared_receipt,
         evidence_root=run_dir / "batch-source/package/epr-expressions",
     )
+    expressions = evidence.expression_payloads()
+    cache = evidence.cache_payload()
+    original_definitions = evidence.required_definitions_payload()
     project_path = run_dir / f"{spec.project_name}.aedt"
     app = Hfss(project=str(project_path), design=spec.design_name,
                solution_type="Eigenmode", new_desktop=False, close_on_exit=False)

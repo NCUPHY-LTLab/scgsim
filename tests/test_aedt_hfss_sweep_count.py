@@ -34,6 +34,7 @@ def _spec(points=3, mode="modal"):
         for i, side, x in ((1, "-X", 0), (2, "+X", 10))
     )
     return HfssDrivenSpec(
+        modeling="solid", aedt_version="2024.2",
         mode=mode, gds_path="synthetic.gds", project_name="Synthetic",
         design_name="Design", materials={
             "vacuum": PdkMaterial("vacuum", "vacuum", False, "Vacuum"),
@@ -120,6 +121,7 @@ class HfssSweepCountTests(unittest.TestCase):
                     "index": port.index, "boundary": port.name,
                     "modal_excitation": port.name, "face_id": port.index,
                     "face_center_um": [0, 0, 0],
+                    "effective": {"integration_line_um": line},
                     "requested": {"integration_line_um": line, "modes": 1,
                                   "renormalize": False, "deembed_um": 0.0,
                                   "characteristic_impedance": "Zpi"},

@@ -79,11 +79,9 @@ jobs:
           PY
 
       - name: Build distribution artifacts
-        if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
         run: uv build --no-sources
 
       - name: Inspect wheel contents
-        if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
         run: |
           python - <<'PY'
           import glob
@@ -96,9 +94,9 @@ jobs:
               with zipfile.ZipFile(wheel) as zf:
                   for name in zf.namelist():
                       print(name)
+          PY
 
       - name: Verify wheel import in isolated environment
-        if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
         run: |
           uv venv --clear --python ${{ matrix.python-version }} .venv-wheel
           uv pip install --python .venv-wheel/bin/python dist/*.whl
@@ -117,3 +115,109 @@ jobs:
                 ElectrostaticSim.__name__, EigenmodeSim.__name__)
           print(pathlib.Path(scgsim.__file__).resolve())
           PY
+  offline:
+    name: Offline tests and Ruff F (Python 3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up UV and Python
+        uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d # v10.0.0
+        with:
+          version: "0.12.4"
+          python-version: "3.12"
+      - name: Install locked offline test and quality dependencies
+        run: uv sync --locked --group test --group quality --extra aedt-epr
+      - name: Run the complete public non-native suite
+        run: uv run --locked --no-sync python -m pytest tests -m 'not private_golden'
+      - name: Check typed stage contracts with Pyright strict
+        run: uv run --locked --no-sync python -m pyright --pythonversion 3.12
+      - name: Check every tracked Python file with Ruff F
+        run: |
+          uv run --locked --no-sync python - <<'PYTHON'
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          root = Path.cwd().resolve()
+          git_root = Path(subprocess.run(
+              ["git", "rev-parse", "--show-toplevel"],
+              check=True, capture_output=True, text=True,
+          ).stdout.strip()).resolve()
+          if git_root != root:
+              raise SystemExit("Quality scope must be the checkout root, not an ancestor repository")
+          tracked = subprocess.run(
+              ["git", "ls-files", "-z", "--", "*.py"],
+              check=True, capture_output=True,
+          ).stdout.decode("utf-8").split("\0")
+          paths = [path for path in tracked if path]
+          if not paths:
+              raise SystemExit("No tracked Python files were selected")
+          subprocess.run(
+              [sys.executable, "-m", "ruff", "check", "--select", "F", "--", *paths],
+              check=True,
+          )
+          PYTHON
+
+  docs-smoke:
+    name: Current documentation file-only preparation (Python 3.12)
+    runs-on: ubuntu-latest
+    env:
+      UV_PROJECT_ENVIRONMENT: ${{ github.workspace }}/.venv-docs
+      UV_CACHE_DIR: ${{ runner.temp }}/scgsim-doc-cache
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out the pinned public PDK dependency
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: OrPenStrike/orcapen-sc-pdk
+          ref: 35b4dc1cdd3f921badcac2fe57a98366315ae8d9
+          path: .ci/orca
+          persist-credentials: false
+      - name: Set up the documentation toolchain
+        uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d # v10.0.0
+        with:
+          version: "0.11.18"
+          python-version: "3.12.14"
+      - name: Verify the dependency inputs
+        run: |
+          echo '2b1241347cae9067b5d40fb4a303b77b0842f0159e5c569b2c14bbd287a5c7ea  .ci/orca/pyproject.toml' | sha256sum --check
+          echo 'af86fe9928acee91eb23adeb6375b1a6802ec0d12f5093c911b1348e4702e860  .ci/orca/uv.lock' | sha256sum --check
+      - name: Install the frozen documentation dependencies
+        run: >-
+          uv sync --project .ci/orca --frozen --group aedt-notebooks
+          --no-install-project --no-install-package scgsim --python 3.12.14
+      - name: Build and install the pinned PDK without changing dependencies
+        run: |
+          uv build --python 3.12.14 --wheel --out-dir .ci/orca-wheel .ci/orca
+          uv pip install --python .venv-docs/bin/python --no-deps .ci/orca-wheel/orpen_sc_pdk-0.1.0-py3-none-any.whl
+      - name: Run current source documentation through file-only preparation
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: .venv-docs/bin/python scripts/check_docs_examples.py
+
+  required:
+    name: required
+    if: ${{ always() }}
+    needs: [build-and-import, offline, docs-smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every necessary job to succeed
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          python - <<'PYTHON'
+          import json
+          import os
+
+          results = json.loads(os.environ["NEEDS_JSON"])
+          expected = {"build-and-import", "offline", "docs-smoke"}
+          if set(results) != expected:
+              raise SystemExit("Required job result inventory differs")
+          unsuccessful = {
+              name: job["result"] for name, job in results.items()
+              if job["result"] != "success"
+          }
+          if unsuccessful:
+              raise SystemExit(f"Required jobs did not succeed: {unsuccessful}")
+          PYTHON

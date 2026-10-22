@@ -71,8 +71,9 @@ from scgsim.aedt.runtime.native.common import (
     pyaedt_version,
 )
 
-from scgsim.aedt.specs.common import AedtResources, LOCKED_PYAEDT
+from scgsim.aedt.specs.common import AedtResources
 from scgsim.aedt.versions import resolve_aedt_version
+from scgsim.aedt.runtime.batch_protocol import CollectionContext, collection_source, object_payload
 from scgsim.aedt.runtime.native.compatibility import native_compatibility
 
 from scgsim.aedt.specs.hfss import (
@@ -152,7 +153,7 @@ def _execute(
     geometry_workers: int | None = None,
     cores: int | None = None,
     ram_limit_percent: int | None = None,
-    batch_collection: dict[str, Any] | None = None,
+    batch_collection: CollectionContext | None = None,
 ) -> int:
     run_dir = metadata_path.parent.parent
     os.chdir(run_dir)
@@ -215,11 +216,10 @@ def _execute(
     else:
         if prepare_only or analyze_epr or not isinstance(spec, HfssEprSpec) or spec.epr_request is None:
             raise ValueError("external batch collection requires the original full EPR workflow")
-        from scgsim.aedt.batch import _collection_source
-        batch_parent = _collection_source(run_dir, batch_collection)
+        batch_parent = collection_source(run_dir, batch_collection)
         package, attempt, prepared_receipt = batch_parent
-        if (package["spec_sha256"] != file_sha256(spec_path)
-                or package["requested_aedt_version"] != spec.aedt_version
+        if (package.spec_sha256 != file_sha256(spec_path)
+                or package.requested_aedt_version != spec.aedt_version
                 or prepared_receipt["connected"]["aedt_version"] != spec.aedt_version):
             raise RuntimeError("batch collection source/version differs from the prepared request")
     cohort = _verify_prepared_cohort(run_dir, metadata, receipt, spec)
@@ -294,18 +294,18 @@ def _execute(
     if batch_parent is not None:
         package, attempt, prepared_receipt = batch_parent
         receipt["native_batch"] = {
-            "source": batch_collection,
-            "package_id": package["package_id"], "attempt_id": attempt["attempt_id"],
+            "source": batch_collection.to_payload(),
+            "package_id": package.package_id, "attempt_id": attempt.attempt_id,
             "native_preparation": "released_verified",
             "external_solve": "process_terminal_native_results_pending_collection",
             "collection": "running", "collector_analyze_invoked": False,
-            "external_execution_location": attempt["execution_location"],
-            "external_requested_aedt_version": attempt["requested_aedt_version"],
-            "external_actual_aedt_version": attempt["actual_aedt_version"],
-            "resources_requested": attempt["resources_requested"],
+            "external_execution_location": object_payload(attempt.execution_location),
+            "external_requested_aedt_version": attempt.requested_aedt_version,
+            "external_actual_aedt_version": attempt.actual_aedt_version,
+            "resources_requested": attempt.resources_requested.to_payload(),
         }
         receipt["resources"] = {
-            "requested": attempt["resources_requested"],
+            "requested": attempt.resources_requested.to_payload(),
             "status": "external_native_recipe; not applied to collector",
             "request_source": "native_batch_package",
         }

@@ -174,10 +174,15 @@ def collect_native_batch(
 `prepare_native_batch` accepts only a completed prepare-only HFSS EPR handoff
 with serialized saved setup/cache evidence and calculator definitions read
 back. A pending cache marker does not establish saved setup/cache readback.
-For every expression, packaging verifies the recorded CLC artifact status,
-path, byte size, SHA-256, and named definition; if an aggregate is supplied,
-it must agree with those per-expression records. These checks do not rewrite
-the original receipt. The package contains the source/spec and handoff
+Packaging retains the complete shared CLC artifact and verifies its recorded
+status, path, byte size, and SHA-256. It starts with the required expression
+definitions and follows their named-helper references; every required root and
+helper must be present with a consistent definition. Missing or conflicting
+required definitions fail. Unreferenced extra definitions may remain in the
+shared file. If an aggregate is supplied, it must cover the required roots and
+agree on shared definitions, but need not be an exclusive inventory of the
+file. These checks do not rewrite the original receipt. The package contains
+the source/spec and handoff
 evidence, native project, calculator evidence, declared dependencies, and the
 full `.aedtresults` directory when present. A dependency path is relative to
 the prepared run.
@@ -198,8 +203,8 @@ and raw solver output. Neither a zero exit code nor a frequency CSV alone
 establishes a completed result.
 
 `collect_native_batch` requires the matching settled attempt, returned `.aedt`
-project, and complete `.aedtresults` directory. It verifies the per-expression
-CLC readbacks and any supplied aggregate against the package records, then
+project, and complete `.aedtresults` directory. It verifies the required CLC
+roots and named-helper closure, plus any supplied aggregate, against the package records, then
 opens an owned copy through the existing transaction and collects full
 adaptive mode/pass cache history and saved-field EPR without rebuilding
 geometry or running Analyze. It releases Desktop, seals the run, and applies
@@ -269,7 +274,7 @@ New handoffs retain `scgsim.aedt.handoff.v1` and
 `scgsim.aedt.handoff-manifest.v1`. Both records add
 `expected_receipt_schema: scgsim.aedt.receipt.v3`, and the initial receipt is
 V3. It contains `prepared_runtime_source`: a deterministic, sorted
-`runtime-source.v19` manifest for the current candidate. The record fields are
+`runtime-source.v24` manifest for the current source. The record fields are
 `schema_version`, `stage`, `modules`, `content_sha256`, and
 `revision_observation`; there is no helper-hash map. Each declared module has
 measured bytes and the content digest binds that inventory. The Git observation
@@ -301,8 +306,8 @@ partial markers, noncanonical members, and hash mismatches reject before
 receipt mutation.
 
 Every new completed V3 receipt has a separate `runtime_source` manifest using
-`runtime-source.v19` and a content digest for the code that actually executed
-it. Declared module bytes and the digest are mandatory; V19 has no redundant
+`runtime-source.v24` and a content digest for the code that actually executed
+it. Declared module bytes and the digest are mandatory; V24 has no redundant
 helper-hash fields. `revision_observation` carries the actual 40-hex commit
 when available and records `unavailable` truthfully for an immutable wheel
 without VCS metadata. Missing or corrupt declared module bytes, digest, schema,
@@ -321,7 +326,7 @@ These unsigned consistency checks do not authenticate an artifact set against
 an actor able to rewrite every member.
 
 `runtime-source.v1` is a frozen thirteen-module reader contract, not a live
-enumeration rule. The V2–V14 inventories are frozen as well. V4 added
+enumeration rule. The V2–V23 inventories are frozen as well. V4 added
 `scgsim/aedt/_presentation.py`; V5 added `scgsim/sgb/geometry_plan.py` and
 `scgsim/sgb/__init__.py`. V7 added
 `scgsim/_notebook_presentation.py` to V6. V8 added
@@ -340,10 +345,14 @@ EPR-private `epr/junction_partition.py` path and included
 `preparation/junction_partition.py`, the relocated AEDT data/RLC/terminal
 helpers, geometry/EPR/support specs, modeling/planar preparation, HFSS geometry
 runtime, neutral geometry representation modules, and the shared source-ground
-construction helper with its polygon-operation leaf. The current V19 inventory
-adds the model-only prepared-model reader. V19 uses the same five record fields
-described above and no helper-hash map; its exact path list is the declared
-implementation inventory. These manifests bind their
+construction helper with its polygon-operation leaf. V19 added the model-only
+prepared-model reader; V20–V22 retain their separate declared historical
+inventories. V23 is the frozen inventory immediately preceding the current
+V24. V24 adds `scgsim/aedt/runtime/batch_protocol.py`,
+`scgsim/aedt/runtime/batch_runner.py`, and `scgsim/aedt/epr/evidence.py` to the
+V23 inventory. V23 and V24 use the same five record fields described above,
+with no helper-hash map. Each version's exact path list is its
+declared implementation inventory. These manifests bind their
 declared file inventories, not an exhaustive transitive dependency
 attestation. The frozen V12 inventory, for example, does not separately hash
 `scgsim/sgb/engine_gates.py`. They do not change the V3 receipt schema. A pure
@@ -355,7 +364,7 @@ historical hashes with the installed package.
 
 Execution computes mandatory runtime-source provenance inside the receipt-bound
 failure transaction, before importing PyAEDT or constructing Desktop. Current
-V19 may record `revision_observation` as unavailable; that alone does not fail
+V24 may record `revision_observation` as unavailable; that alone does not fail
 byte-bound identity or prevent execution. Missing or corrupt declared module
 bytes, digest, schema, or cohort still yield a failed V3 receipt without a
 Desktop launch rather than escaping receipt finalization. V1–V17 retain their
@@ -1871,18 +1880,24 @@ offline APIs substitutes a historical cache row for a final saved-field row.
 The EPR authoring path writes dependency-ordered CLC definitions and a combined
 `metadata/epr_expressions/scgsim_epr_batch.clc` library, then submits the
 requested definitions through `FieldsReporter.LoadNamedExpressions`. Adjacent
-side integrals use the native `EnterAdjacentSurface` command. After checking
-that every requested definition is present, the path calls
-`FieldsReporter.SaveNamedExpressions` and records the returned artifact at
-`metadata/epr_expressions/scgsim_epr_native_readback.clc`. Its readback record
-binds the file's SHA-256 and byte count, returned definition names, each
-definition's digest, and its field-selection operations; the operations must
-match those authored for the requested definitions. Names are derived from
-each expression's identity and are enumerated in the record, rather than being
-a fixed global list. Preparation and saved-field analysis use this same
-authoring/readback path. These source-level requirements describe what an
-execution must observe; they do not themselves claim that a native load or
-readback has succeeded. Native expression failures remain fatal.
+side integrals use the native `EnterAdjacentSurface` command. The required
+definitions are the requested expression roots and their recursively
+referenced named helpers. Missing or conflicting root/helper definitions
+remain fatal. The native `SaveNamedExpressions` readback still requires the
+returned definition names to match the exact requested native names. Separately,
+the retained `validated_expression_readback` treats its complete shared CLC as
+a library: it must contain the required roots and helper closure, while
+unrelated extra definitions are retained and allowed. The native exact-name
+check is not relaxed by this package-evidence rule. The native path records the
+returned artifact at `metadata/epr_expressions/scgsim_epr_native_readback.clc`.
+Its readback record binds the file's SHA-256 and byte count, returned definition
+names, each definition's digest, and its field-selection operations; the
+operations must match those authored for the requested definitions. Names are
+derived from each expression's identity and are enumerated in the record,
+rather than being a fixed global list. Preparation and saved-field analysis use
+this same authoring/readback path. These source-level requirements describe
+what an execution must observe; they do not themselves claim that a native
+load or readback has succeeded. Native expression failures remain fatal.
 
 History export starts from the native available solutions and selects the
 declared setup's adaptive passes. It records actual categories, quantities,

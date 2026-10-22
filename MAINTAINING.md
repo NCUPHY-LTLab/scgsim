@@ -58,37 +58,76 @@ They explain origin, not runtime dependencies, support expansion or API
 compatibility. Current source geometry uses the in-tree `scgsim.geometry` API
 and `scgsim.geometry.compiler` for route planning and derived construction.
 
-## Accepted SCGSim 2.0 structure
+## Engineering convergence
 
-Human accepted the structural/API implementation on 2026-10-09 at candidate
-`a932a173edb5c56ae14740ff5177190996255bdd`, tree
-`2745321736e53e2a4fe8d150f2e9d8bd176669db`. Its semantic state is `ACCEPTED`,
-not `STABILIZED`; delivery is not yet integrated. The frozen intake baseline is
-`develop@3a52fb1`, tree `96adcf8672b497a29dd0a6b43043cca11efc3043`. Consumers
-keep their existing pins. The current develop prerelease metadata is
-`2.0.0rc1`; this does not represent a stable release or publication.
+The current engineering-convergence work remains `CONVERGING`. Track semantic
+state and repository delivery separately in
+[the convergence status page](docs/convergence-status.qmd).
 
-The responsibility tree, ownership rules and baseline-to-current public
-submodule/symbol inventory are recorded in
-[API migration](docs/api-migration.qmd). Implement one authority per accepted
-responsibility, without old `scgsim.sgb` compatibility wrappers, revived Q3D
-input-v1/v2, or a common solver `Simulation`/physical-result abstraction. Keep
-`python -m scgsim.aedt.run` as the supported AEDT transaction CLI. The current
-v2 AEDT producer records runtime-source v13 with 61 canonical declared module
-paths, including 41 AEDT modules. Its measured module bytes and content digest
-are required; truthful Git revision observation may be unavailable. V13 does
-not include a helper-hash map or claim transitive-source coverage. Readers
-retain the exact v1–v12 historical path and identity rules. Q3D body-v3 has an
-observed build-only native readback/save/release path, but no completed C/G
-solve; see the [Q3D contract](docs/specs/aedt-runtime.qmd#q3d-body-input-v3).
-The Xmon Route A, CircularPad Route B and HFSS Eigenmode/saved-field EPR/offline
-loss full endpoints remain deferred.
+The required delivery route is a pull request with required checks and no
+bypass. Develop branch protection is configured with a required check and no
+bypass; the hosted required check for a candidate must still complete before
+integration. Public CI uses repository-visible inputs. Pull request events,
+including drafts, pushes to `develop` or `main`, and manual dispatch run a
+Python 3.12/3.13 matrix that checks the package-version contract, builds the
+distribution, and verifies editable-source and wheel imports. A Python 3.12
+offline job runs the full public non-native test suite,
+strict Pyright on the three configured modules, and Ruff F on tracked Python
+files. A separate Python 3.12 `docs-smoke` job runs current source examples
+through file-only preparation with the pinned public PDK. The required job
+passes only when all three jobs succeed. CI does not run AEDT or Palace native
+solvers or private golden data. The Pages render runs on `develop` and `main`
+pushes or manual dispatch, with code execution disabled; it is not a
+pull-request check.
 
-The Development Lead retains tracked-source and integration ownership. Fixed
-workers use disjoint, time-bounded path leases. Human Plan §4 authorizes
-maintaining only affected existing tests' import and patch locations and
-running those affected tests after acceptance, without changing expectations.
-The scoped test observation found inherited legacy Q3D GDS-constructor uses and
-hand-built fixtures missing the current mesh-summary or custody metadata; these
-remain distinct from the accepted v3 behavior, and strict product checks are
-not weakened to satisfy them. Consumer pins and environments remain unchanged.
+For each fix pull request, include a regression case or explain why one is not
+included, the alternative evidence used, and any remaining gap. For calculation
+changes, use independent public analytic regressions to establish normalization,
+participation, and group identities, and report them separately from returned-data
+compatibility. A historical aggregate whose calculation procedure is unknown is
+not a correctness oracle; preserve it as history and do not derive a tolerance
+from it.
+
+For an authorized real-data compatibility check, report only permitted artifact
+hashes, identity, and receipt references. State whether raw records, including
+unknown values, are preserved through the public result, and report missing-input,
+content-mismatch, and identity-mismatch negatives. Keep private values, names,
+paths, and payloads out of public text. If the check has not finished, mark it
+`IN PROGRESS`.
+
+For an affected Tier A change, report the assigned private golden status. If
+required data or access are unavailable, record `NOT RUN` and leave the
+associated claim open. An owner-authorized run uses the public test entry point
+with an explicit run flag and manifest:
+
+```sh
+python -m pytest tests/test_private_golden.py \
+  --run-private-golden \
+  --private-golden-manifest /path/to/authorized-manifest.json
+```
+
+The manifest is an input to the reader, not permission to access or publish
+its data. Missing required manifest input is a usage error; a skipped test is
+`NOT RUN`, not a golden result. Public CI excludes the `private_golden` marker.
+Keep golden data outside the public repository. Tier B remains supported and
+is not reclassified by this convergence work. Use the
+[pull request template](.github/PULL_REQUEST_TEMPLATE.md) and the
+[convergence status page](docs/convergence-status.qmd) for current scope and
+open items.
+
+## Larger proposals across projects
+
+Send a major architecture, cross-package contract, or system-wide proposal to
+the nearest owning Lead. Before writing an execution plan, that Lead checks the
+repository, branch and base revision, related source, open work, contracts, and
+existing capabilities. Keep the plan in the current work packet. For authorized
+delivery, the repository's Git owner completes the assigned branch and push
+steps and reads back the remote result; a proposal does not transfer that
+ownership.
+
+## Historical structural acceptance
+
+The v2 module and API structure was accepted on 2026-10-09 and later integrated
+through PR34. That historical milestone describes the structure only; it does
+not set the semantic or delivery state of the separate engineering-convergence
+work.

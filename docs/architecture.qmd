@@ -16,6 +16,14 @@ execution, result loading, and presentation distinguishable. A solver backend
 may implement its own physics, but it must not redefine geometry identity, run
 identity, or common provenance.
 
+The current implementation separates source geometry, solver preparation,
+native execution, result collection, and offline resolution. Palace and AEDT
+retain separate solver lifecycles; one AEDT transaction owns each Desktop and
+receipt. Prepared-native HFSS EPR can run through local preparation, a
+standalone solver process, and collection on the requested AEDT version. Follow
+the [convergence status](convergence-status.qmd) for current implementation and
+delivery state.
+
 ## Accepted SCGSim 2.0 structure
 
 Human accepted the current v2 structural/API implementation on 2026-10-09:
@@ -23,17 +31,7 @@ candidate `a932a173edb5c56ae14740ff5177190996255bdd`, tree
 `2745321736e53e2a4fe8d150f2e9d8bd176669db`. Its semantic state is `ACCEPTED`,
 not `STABILIZED`. The implementation was integrated into `develop` through
 PR34 at `cc1424c84ffe9d295a57dbabb3c2ab6431110f6c` (tree
-`f9ecfe49df4c79be84a7991e44cc50c2602e3adb`). This closeout starts from the
-later `develop` slimming successor `b46bcc7d64fbb8bab181c0da2b9234a003a20adf`
-(tree `c99c670927e877fb407aa4c73de32793e86a4460`). The original migration
-baseline remains `develop@3a52fb1`, tree
-`96adcf8672b497a29dd0a6b43043cca11efc3043`; existing consumer pins remain
-unchanged. The accepted Q3D body-v3 scope includes a native
-build-only/readback/save/release operation, not a completed C/G solve. The full
-Xmon Route A, CircularPad Route B, and HFSS Eigenmode/saved-field EPR/offline-loss
-operations have not been observed as complete native-to-Resolve-to-Report
-workflows. They are outside this closeout; partial observations do not establish
-full completion, and this status does not label them failed or complete.
+`f9ecfe49df4c79be84a7991e44cc50c2602e3adb`).
 
 The accepted responsibility tree is:
 
@@ -58,7 +56,9 @@ scgsim/
 │   ├── eigenmode.py  # retained mutable high-level state facade
 │   ├── specs/        # detached requests, prepared geometry and parsing
 │   ├── preparation/ # source binding, effective geometry, handoff and cohorts
-│   ├── runtime/     # sole transaction and family-native owners
+│   ├── runtime/     # transaction, family-native and batch owners
+│   │   ├── batch_protocol.py # stdlib package/file protocol
+│   │   └── batch_runner.py   # standalone process and CLI
 │   ├── epr/         # EPR surface support, fields/cache and analysis composition
 │   ├── results/     # strict readers and convergence observations
 │   ├── presentation/
@@ -387,6 +387,25 @@ saved-field EPR readback must still pass the strict resolver before a run is a
 completed result. The [AEDT runtime contract](specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)
 defines the package, attempt, and collection boundaries.
 
+| Stage | Owner | Responsibility and boundary |
+|---|---|---|
+| Geometry and model preparation | SCGSim geometry and AEDT family preparation | Convert the caller's source model into a saved native project. AEDT preparation runs in the transaction that owns its Desktop and requires the requested AEDT version. |
+| Package and transfer | The batch package operation; the caller controls transfer | Bind one model, its source and saved native data, setup and calculator readback, and declared dependencies. A sweep may group independent packages for transfer, while each model keeps its own package and result identity. |
+| Standalone solve | The packaged runner and the host's AEDT solver | Run the prepared design on one solver host without constructing a PyAEDT Desktop or importing SCGSim. This stage does not create geometry or submit scheduler jobs. |
+| Return and collection | The existing AEDT transaction | On a fresh owned copy, collect the returned native project, complete result directory, adaptive cache history, and saved-field EPR data. Collection requires AEDT for the bound version and does not rebuild geometry or run Analyze. |
+| Resolution and presentation | Offline result readers and presentation | After collection releases Desktop, resolve returned artifacts strictly and build reports from resolved results. These readers do not start a solver. |
+
+The dependency direction is source model → local native preparation → immutable
+per-model package → standalone solve → complete return → Desktop collection →
+offline resolution and presentation. The transfer archive and sweep loop are
+caller composition; neither replaces the per-model package or result.
+
+`scgsim.aedt.batch` owns package, solve, and collection orchestration.
+`aedt.runtime.batch_protocol` implements the standard-library package and file
+protocol; `aedt.runtime.batch_runner` is copied with the package and runs the
+external solver process without importing PyAEDT. The batch package carries
+these two modules from the same source revision.
+
 At family entry, one private bound request fixes the absolute run workspace and
 detaches the parsed spec payload. Relative source paths are interpreted against
 that bound workspace even if the process working directory later changes;
@@ -397,14 +416,14 @@ carrier and cannot reinterpret a caller spec or workspace.
 
 New preparation keeps the handoff and handoff-manifest schemas at V1 while both
 declare that the mutable run receipt uses `scgsim.aedt.receipt.v3`. The initial
-V3 receipt records a declared `runtime-source.v13` preparation-time SCGSim module
+V3 receipt records a declared `runtime-source.v24` preparation-time SCGSim module
 manifest and content digest. Before mutation, execution verifies the canonical
 manifest and binds the initial-receipt and prepared-manifest hashes. A canonical historical
 V1 `not_run` handoff with neither marker remains executable, but its resulting
 V3 receipt records preparation provenance as `legacy_v1_not_recorded`; it does
 not fabricate history.
 
-Every new completed V3 receipt records a separate declared `runtime-source.v13`
+Every new completed V3 receipt records a separate declared `runtime-source.v24`
 execution-time module manifest and digest. Its measured module bytes and
 content digest are mandatory; it has no helper-hash map. Preparation and
 execution identities are not required to match: their separation records what
@@ -417,7 +436,7 @@ consistency contract is not source authenticity for an actor able
 to rewrite the entire unsigned artifact set.
 
 The [AEDT receipt/provenance contract](specs/aedt-runtime.qmd#receipt-cohorts-and-source-provenance)
-is the unique authority for the exact current V13 inventory and frozen
+is the unique authority for the exact current V24 inventory and frozen
 historical reader evolution. V1–V12 retain their exact prior path assignments
 and reader interpretations; V13 binds its declared file set, not every
 transitive dependency. One pure, versioned initial-receipt codec owns historical
@@ -467,3 +486,15 @@ not invented pass history.
 See [Folder tree and ownership](ownership.qmd) for repository placement and
 [Headless Geometry Preview](geometry-preview.qmd) for the static and connected
 Notebook inspection contract.
+
+## Historical closeout snapshot
+
+An earlier closeout used `develop` slimming successor
+`b46bcc7d64fbb8bab181c0da2b9234a003a20adf` (tree
+`c99c670927e877fb407aa4c73de32793e86a4460`) and migration baseline
+`develop@3a52fb1` (tree `96adcf8672b497a29dd0a6b43043cca11efc3043`). At that
+snapshot, Q3D body-v3 had build-only/readback/save/release evidence, while a
+completed C/G solve was not observed. Xmon Route A, CircularPad Route B, and
+HFSS Eigenmode/saved-field EPR/offline-loss had not yet been observed as full
+native-to-report workflows. These are historical observations for that
+snapshot; current work is tracked on the [convergence status page](convergence-status.qmd).

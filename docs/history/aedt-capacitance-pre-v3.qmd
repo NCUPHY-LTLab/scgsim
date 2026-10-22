@@ -1,0 +1,83 @@
+---
+title: "Historical SimplePad Q3D capacitance (pre-v3)"
+description: "Preserve the earlier SimplePad GDS-import Q3D C/G request, result and native readback."
+scgsim-kind: "course"
+scgsim-status: "HISTORICAL"
+scgsim-id: "docs/history/aedt-capacitance-pre-v3"
+---
+
+This page preserves the earlier SimplePad Q3D capacitance example and its
+reported native observations. For current Q3D input authoring, use the
+[body-backed Q3D lesson](../course/aedt-q3d.qmd).
+
+## Model and source
+
+The example uses a centered square pad surrounded by Ground on one square die.
+Its authored inputs are:
+
+| Layout or material | Input |
+|---|---|
+| Single die | 1000 µm × 1000 µm |
+| Centered pad | 200 µm × 200 µm |
+| Pad-to-Ground gap | Uniform 20 µm around the pad |
+| Top metal | Aluminum, 0.2 µm thick |
+| Substrate | Silicon, 500 µm thick |
+
+The canonical public source is OrPen's pinned revision
+[`51985d9`](https://github.com/OrPenStrike/orpen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9).
+Its [`aedt_q3d.ipynb`](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/aedt_q3d.ipynb)
+and [editable QMD](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_q3d.qmd)
+define the earlier GDS-import workflow.
+
+![The public SimplePad layout: centered pad, surrounding Ground and authored east-edge lumped-port locator.](../assets/simple-pad-layout.png){#fig-simple-pad-layout}
+
+The locator is part of the source layout. The Q3D request below is C/G only;
+it does not add an inductive branch. The Aluminum mapping to native PEC and the
+open Q3D Region are part of this recorded solver model.
+The model has no second die, backside metal, readout or bumps. An outer
+grounded enclosure is not part of this open-Region request; the dimensions and
+stack are model inputs, not measured capacitance or an accuracy claim.
+
+## Historical Q3D request
+
+The notebook requested these extraction and adaptive controls:
+
+| Setting | Value |
+|---|---:|
+| `EXTRACTION_FREQUENCY_GHZ` | 5.0 |
+| `SOLVE_AC_RL` | `False` |
+| `GROUNDED_REGION_NET` | `None` |
+| `MAXIMUM_PASSES` | 10 |
+| `CONVERGENCE_PERCENT` | 1.0 |
+
+Its host request used `AEDT_VERSION = "2024.2"`,
+`PYAEDT_VERSION = "1.3.0"`, and
+`RESOURCES = AedtResources(cores=4, ram_limit_percent=80)`. The public
+notebook is the source for the original cell sequence and settings.
+
+## Reported capacitance
+
+The historical result report identified `PAD` as Signal and `GROUND` as
+Ground. Read the `pad` row and `pad` column in the report's conductor order;
+the reported entry is $C_{\mathrm{pad,pad}}$.
+
+| Calculation | Report entry | Capacitance |
+|---|---|---:|
+| Q3D, pre-v3 C/G at 5 GHz | Pad row and pad column, $C_{\mathrm{pad,pad}}$ | 87.00027087746 fF |
+| Palace Electrostatic comparison | Ground-referenced pad diagonal, $C_{11}$ | 95.36383731153 fF |
+
+The native material readback recorded Silicon relative permittivity 11.9 and
+Aluminum represented as PEC. Palace uses the natural electrostatic exterior;
+this Q3D request used an open Region. The two results describe their respective
+model and boundary choices, not a required numerical agreement.
+
+The reference output context and full-precision rows are available in the
+public [SimplePad evidence README](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/README.md)
+and [results CSV](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/results.csv).
+The recorded SimplePad source is `24ae5a4`, with the same component and
+notebook bytes as public OrPen revision `51985d9`; the SCGSim source was
+`1.0.1` at `9c032e3`.
+
+These values are observations of the documented model, not numerical targets
+for a new run. The earlier GDS-import request is distinct from the current
+body-backed Q3D inputs described in the [Q3D lesson](../course/aedt-q3d.qmd).

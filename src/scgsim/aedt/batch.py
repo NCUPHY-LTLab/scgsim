@@ -1,20 +1,13 @@
 """Prepared-native HFSS EPR packaging, solver-only attempts and owned collection.
 
-This file is also copied verbatim into each package as run_batch.py. Its solve
-path uses only the standard library and never imports the AEDT Python backend.
 Native model preparation and collection remain transaction-owned operations.
+The installed and transported solver runners share one standard-library protocol.
 """
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
-import os
 from pathlib import Path
 import shutil
-import socket
-import subprocess
-import sys
 import tarfile
 import time
 import uuid
@@ -22,104 +15,53 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .runtime import batch_protocol as protocol
+from .runtime.batch_runner import run_native_batch as _run_native_batch
+
 if TYPE_CHECKING:
     from scgsim.aedt.specs.common import AedtResources
     from scgsim.aedt.results.resolve import ResolvedRun
 
-_PACKAGE = "scgsim.aedt.native-batch-package.v1"
-_ATTEMPT = "scgsim.aedt.native-batch-attempt.v1"
-_MANIFEST = "native-batch-package.json"
+_PACKAGE = protocol.PACKAGE_SCHEMA
+_ATTEMPT = protocol.ATTEMPT_SCHEMA
+_MANIFEST = protocol.MANIFEST
 
 
+# Compatibility helpers delegate to the one internal file protocol codec.
 def _sha(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
+    return protocol.sha256(path)
 
 
 def _read(path: Path) -> dict:
-    value = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(value, dict):
-        raise TypeError(f"expected JSON object: {path.name}")
-    return value
+    return protocol.object_payload(protocol.read_json(path))
 
 
 def _write(path: Path, value: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(path.name + ".tmp")
-    with temporary.open("x", encoding="utf-8") as stream:
-        json.dump(value, stream, indent=2, sort_keys=True)
-        stream.write("\n")
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(temporary, path)
+    protocol.write_json(path, value)
 
 
 def _inside(root: Path, relative: str) -> Path:
-    rel = Path(relative)
-    if rel.is_absolute() or ".." in rel.parts or not rel.parts:
-        raise ValueError("batch member must be a contained relative path")
-    path = root / rel
-    if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
-        raise ValueError("batch member escapes its root or is a symlink")
-    return path
+    return protocol.inside(root, relative)
 
 
 def _fresh(path: str | Path, *sources: Path) -> Path:
-    result = Path(path).expanduser().resolve()
-    for source in sources:
-        if result.is_relative_to(source) or source.is_relative_to(result):
-            raise ValueError("batch output and input roots must not overlap")
-    result.mkdir(parents=True, exist_ok=False)
-    return result
+    return protocol.fresh(path, *sources)
 
 
 def _inventory(root: Path) -> list[dict]:
-    records = []
-    for path in sorted(root.rglob("*")):
-        if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
-            raise ValueError("batch inventory contains a symlink or escaping member")
-        if path.is_file():
-            records.append({"path": path.relative_to(root).as_posix(),
-                            "bytes": path.stat().st_size, "sha256": _sha(path)})
-    return records
+    return [item.to_payload() for item in protocol.inventory(root)]
 
 
 def _verify(root: Path, records: list[dict]) -> None:
-    if not isinstance(records, list):
-        raise TypeError("batch inventory must be a list")
-    names = set()
-    for item in records:
-        if not isinstance(item, dict) or set(item) != {"path", "bytes", "sha256"}:
-            raise ValueError("batch inventory member is not canonical")
-        path = _inside(root, item["path"])
-        if item["path"] in names:
-            raise ValueError("batch inventory repeats a member")
-        names.add(item["path"])
-        if not path.is_file() or path.stat().st_size != item["bytes"] or _sha(path) != item["sha256"]:
-            raise RuntimeError(f"batch member identity differs: {item['path']}")
+    protocol.verify_members(root, protocol.members(records))
 
 
 def _copy_members(source: Path, target: Path, records: list[dict]) -> None:
-    _verify(source, records)
-    for item in records:
-        destination = _inside(target, item["path"])
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(_inside(source, item["path"]), destination)
-    _verify(target, records)
+    protocol.copy_members(source, target, protocol.members(records))
 
 
 def _resources(value: dict) -> dict:
-    if not isinstance(value, dict) or set(value) != {"cores", "ram_limit_percent"}:
-        raise ValueError("batch resources require cores and ram_limit_percent")
-    if type(value["cores"]) is not int or value["cores"] < 1:
-        raise ValueError("batch cores must be a positive integer")
-    # v232 MachineList explicitly represents integer percentages 1..99.
-    if type(value["ram_limit_percent"]) is not int or not 1 <= value["ram_limit_percent"] <= 99:
-        raise ValueError("native MachineList RAM percentage must be in 1..99")
-    return dict(value)
+    return protocol.Resources.from_payload(value).to_payload()
 
 
 @dataclass(frozen=True)
@@ -161,17 +103,10 @@ def prepare_native_batch(
         raise ValueError("solver_executable must be an explicit executable path or command")
     if isinstance(dependencies, (str, bytes)):
         raise TypeError("dependencies must be a sequence of run-relative paths")
-    setup = receipt.get("setup")
-    cache = receipt.get("cache")
-    expressions = receipt.get("expressions")
-    if not setup or not isinstance(cache, dict) or not cache.get("items") or not expressions:
-        raise RuntimeError("native preparation lacks setup/cache/expression readback")
-    if not cache.get("serialized_readback", {}).get("saved_configuration_source"):
-        raise RuntimeError("native preparation lacks fresh saved cache readback")
-    from scgsim.aedt.epr.fields import _validated_expression_readback
+    from scgsim.aedt.epr.evidence import PreparedEprEvidence
 
-    _validated_expression_readback(
-        expressions, cache, evidence_root=root / "metadata/epr_expressions",
+    PreparedEprEvidence.from_payload(
+        receipt, evidence_root=root / "metadata/epr_expressions",
     )
     output = _fresh(output_dir, root)
     try:
@@ -227,7 +162,9 @@ def prepare_native_batch(
                     copied.add(relative)
             else:
                 raise FileNotFoundError(f"declared native dependency unavailable: {relative}")
-        shutil.copy2(Path(__file__), output / "run_batch.py")
+        runtime_dir = Path(protocol.__file__).parent
+        shutil.copy2(runtime_dir / "batch_runner.py", output / "run_batch.py")
+        shutil.copy2(runtime_dir / "batch_protocol.py", output / "batch_protocol.py")
         manifest = {
             "schema_version": _PACKAGE, "status": "prepared_native",
             "package_id": str(uuid.uuid4()), "created_at_unix": time.time(),
@@ -246,7 +183,8 @@ def prepare_native_batch(
             "declared_dependencies": list(dependencies),
             "members": _inventory(output),
         }
-        _write(output / _MANIFEST, manifest)
+        typed_manifest = protocol.PackageManifest.from_payload(manifest)
+        _write(output / _MANIFEST, typed_manifest.to_payload())
         archive = output / "native_batch.tar.gz"
         with tarfile.open(archive, "w:gz") as stream:
             for item in [*manifest["members"], {"path": _MANIFEST}]:
@@ -257,124 +195,17 @@ def prepare_native_batch(
         raise
 
 
-def _package(root: Path) -> dict:
-    value = _read(root / _MANIFEST)
-    if value.get("schema_version") != _PACKAGE or value.get("status") != "prepared_native":
-        raise ValueError("native batch package is not prepared")
-    _verify(root, value["members"])
-    observed = [item for item in _inventory(root)
-                if item["path"] not in {_MANIFEST, "native_batch.tar.gz"}]
-    if observed != value["members"]:
-        raise RuntimeError("batch package contains undeclared or changed files")
-    _resources(value["resources"])
-    recipe = value["recipe"]
-    if recipe.get("mode") != "prepared_project_batchsolve_ppe" or recipe.get("allocation") != "one_host_native_auto":
-        raise ValueError("unsupported native batch execution recipe")
-    if recipe.get("target") != f"{value['design']}:Nominal:{value['setup']}":
-        raise ValueError("batch target differs from prepared design/setup")
-    if _sha(root / "inputs/aedt_spec.json") != value["spec_sha256"]:
-        raise RuntimeError("batch spec identity differs")
-    # The manifest selects execution, but the preserved scientific request and
-    # released native preparation own the design/setup/project identity.
-    spec = _read(root / "inputs/aedt_spec.json")
-    prepared = _read(root / "native-preparation-receipt.json")
-    expected = {
-        "design": spec["project"]["design"],
-        "setup": spec["run_control"]["setup_name"],
-        "project": f"{spec['project']['name']}.aedt",
-        "requested_aedt_version": spec["aedt"]["requested_version"],
-    }
-    if any(value[key] != item for key, item in expected.items()):
-        raise RuntimeError("batch execution identity differs from packaged request")
-    if (prepared.get("status") != "native_preparation_only"
-            or prepared.get("release") != {"ok": True}
-            or prepared.get("save", {}).get("ok") is not True
-            or prepared.get("solver_invoked") is not False
-            or prepared.get("source", {}).get("spec_sha256") != value["spec_sha256"]
-            or prepared.get("project") != expected["project"]
-            or prepared.get("setup", {}).get("name") != expected["setup"]
-            or prepared.get("requested", {}).get("aedt_version") != expected["requested_aedt_version"]
-            or prepared.get("connected") != value["prepared_connected"]
-            or _sha(_inside(root / "native", expected["project"])) != prepared["save"]["project_sha256"]):
-        raise RuntimeError("batch execution identity differs from released native preparation")
-    return value
+def _package(root: Path) -> protocol.PackageManifest:
+    return protocol.read_package(root)
 
 
 def run_native_batch(package_dir: str | Path, *, output_dir: str | Path) -> Path:
-    """Run exactly one solver-only process in a fresh attempt, without PyAEDT.
-
-    No shell, scheduler, retry or arbitrary argument passthrough is used. The
-    RAM setting is the native per-host solver budget, not an OS process cap.
-    """
-    package_root = Path(package_dir).expanduser().resolve()
-    package = _package(package_root)
-    output = _fresh(output_dir, package_root)
-    attempt = {
-        "schema_version": _ATTEMPT, "attempt_id": str(uuid.uuid4()),
-        "package_sha256": _sha(package_root / _MANIFEST),
-        "package_id": package["package_id"], "status": "not_started",
-        "requested_aedt_version": package["requested_aedt_version"],
-        "actual_aedt_version": None,
-        "version_observation": "not_queried; raw solver stdout/stderr retained",
-        "execution_location": {"hostname": socket.gethostname(), "directory": str(output)},
-        "resources_requested": package["resources"],
-        "resource_semantics": "native MachineList per-host solver limits; not an OS hard cap",
-        "started_at_unix": time.time(),
-    }
-    _write(output / "batch-attempt.json", attempt)
-    process = None
-    try:
-        work = output / "work"
-        native = package_root / "native"
-        _copy_members(native, work, _inventory(native))
-        resource = package["resources"]
-        machine = f"list={socket.gethostname()}:-1:{resource['cores']}:{resource['ram_limit_percent']}%"
-        executable = shutil.which(package["recipe"]["executable"])
-        if executable is None:
-            raise FileNotFoundError("bound AEDT batch executable is unavailable")
-        argv = [executable, "-ng", "-UseElectronicsPPE", "-distributed", "-auto",
-                "-machinelist", machine, "-BatchSolve", package["recipe"]["target"],
-                str(_inside(work, package["project"]))]
-        attempt.update(argv=argv, executable_sha256=_sha(Path(executable)), status="starting")
-        _write(output / "batch-attempt.json", attempt)
-        with (output / "solver.stdout").open("xb") as stdout, (output / "solver.stderr").open("xb") as stderr:
-            process = subprocess.Popen(argv, cwd=work, stdout=stdout, stderr=stderr)
-            attempt.update(status="running", child_pid=process.pid)
-            _write(output / "batch-attempt.json", attempt)
-            returncode = process.wait()
-        attempt.update(status="external_process_terminal", returncode=returncode,
-                       finished_at_unix=time.time(), work_members=_inventory(work),
-                       raw_evidence=[{"path": name, "bytes": (output / name).stat().st_size,
-                                      "sha256": _sha(output / name)}
-                                     for name in ("solver.stdout", "solver.stderr")])
-        _write(output / "batch-attempt.json", attempt)
-        return output / "batch-attempt.json"
-    except BaseException as exc:
-        # Interruption is not a terminal solver observation and never kills or
-        # relaunches the child. Preserve ownership information for the operator.
-        attempt.update(status="unsettled" if process is not None and process.returncode is None else "failed",
-                       error=f"{type(exc).__name__}: {exc}")
-        _write(output / "batch-attempt.json", attempt)
-        raise
+    """Delegate one standard-library solver-only attempt to its runner."""
+    return _run_native_batch(package_dir, output_dir=output_dir)
 
 
-def _attempt(package_root: Path, attempt_root: Path, package: dict) -> dict:
-    value = _read(attempt_root / "batch-attempt.json")
-    if (value.get("schema_version") != _ATTEMPT
-            or value.get("status") != "external_process_terminal"
-            or value.get("returncode") != 0
-            or value.get("package_sha256") != _sha(package_root / _MANIFEST)
-            or value.get("package_id") != package["package_id"]):
-        raise RuntimeError("batch attempt is not a matching settled zero-exit process")
-    _verify(attempt_root / "work", value["work_members"])
-    if _inventory(attempt_root / "work") != value["work_members"]:
-        raise RuntimeError("returned batch inventory changed after process settlement")
-    _verify(attempt_root, value["raw_evidence"])
-    project = _inside(attempt_root / "work", package["project"])
-    results = _inside(attempt_root / "work", package["results"])
-    if not project.is_file() or not results.is_dir():
-        raise RuntimeError("batch return lacks the saved project or complete results directory")
-    return value
+def _attempt(package_root: Path, attempt_root: Path, package: protocol.PackageManifest) -> protocol.BatchAttempt:
+    return protocol.read_attempt(package_root, attempt_root, package)
 
 
 def collect_native_batch(
@@ -391,24 +222,27 @@ def collect_native_batch(
     package_root = Path(package_dir).expanduser().resolve()
     attempt_root = Path(attempt_dir).expanduser().resolve()
     package = _package(package_root)
-    _attempt(package_root, attempt_root, package)
+    attempt = _attempt(package_root, attempt_root, package)
     output = _fresh(output_dir, package_root, attempt_root)
     try:
         _copy_members(package_root / "inputs", output, _inventory(package_root / "inputs"))
         parent = output / "batch-source"
-        _copy_members(package_root, parent / "package", [*package["members"],
+        _copy_members(package_root, parent / "package", [*[item.to_payload() for item in package.members],
                       {"path": _MANIFEST, "bytes": (package_root / _MANIFEST).stat().st_size,
                        "sha256": _sha(package_root / _MANIFEST)}])
         _copy_members(attempt_root / "work", parent / "attempt/work", _inventory(attempt_root / "work"))
-        attempt = _read(attempt_root / "batch-attempt.json")
-        evidence = [*attempt["raw_evidence"], {"path": "batch-attempt.json",
+        # read_attempt established these inventories before creating the child stage.
+        assert attempt.raw_evidence is not None and attempt.work_members is not None
+        evidence = [*[item.to_payload() for item in attempt.raw_evidence], {"path": "batch-attempt.json",
                     "bytes": (attempt_root / "batch-attempt.json").stat().st_size,
                     "sha256": _sha(attempt_root / "batch-attempt.json")}]
         _copy_members(attempt_root, parent / "attempt", evidence)
-        _copy_members(attempt_root / "work", output, attempt["work_members"])
-        context = {"package_sha256": _sha(package_root / _MANIFEST),
-                   "attempt_sha256": _sha(attempt_root / "batch-attempt.json")}
-        _write(output / "metadata/batch-collection.json", context)
+        protocol.copy_members(attempt_root / "work", output, attempt.work_members)
+        context = protocol.CollectionContext(
+            package_sha256=_sha(package_root / _MANIFEST),
+            attempt_sha256=_sha(attempt_root / "batch-attempt.json"),
+        )
+        _write(output / "metadata/batch-collection.json", context.to_payload())
         rc = _execute(output / "metadata/aedt_handoff_metadata.json", batch_collection=context)
         if rc:
             raise RuntimeError("native batch collection failed; inspect its retained run receipt")
@@ -419,32 +253,8 @@ def collect_native_batch(
         raise
 
 
-def _collection_source(run_dir: Path, context: dict) -> tuple[dict, dict, dict]:
-    """Verify immutable parent copies before native open and offline Resolve."""
-    package_root = run_dir / "batch-source/package"
-    attempt_root = run_dir / "batch-source/attempt"
-    if (context != _read(run_dir / "metadata/batch-collection.json")
-            or context.get("package_sha256") != _sha(package_root / _MANIFEST)
-            or context.get("attempt_sha256") != _sha(attempt_root / "batch-attempt.json")):
-        raise RuntimeError("native batch collection parent identity differs")
-    package = _package(package_root)
-    attempt = _attempt(package_root, attempt_root, package)
-    prepared = _read(package_root / "native-preparation-receipt.json")
-    if (prepared.get("status") != "native_preparation_only"
-            or prepared.get("release") != {"ok": True}
-            or prepared.get("save", {}).get("ok") is not True
-            or prepared.get("solver_invoked") is not False
-            or prepared.get("source", {}).get("spec_sha256") != package["spec_sha256"]
-            or prepared.get("source", {}).get("planar_model_sha256") != package["model_sha256"]
-            or prepared.get("source", {}).get("planar_source_sha256") != package["source_sha256"]
-            or _sha(package_root / "native" / package["project"]) != prepared["save"]["project_sha256"]):
-        raise RuntimeError("batch parent is not the released original prepared native model")
-    for item in package["members"]:
-        if item["path"].startswith("inputs/") and item["path"] != "inputs/metadata/aedt_run_receipt.json":
-            local = _inside(run_dir, item["path"].removeprefix("inputs/"))
-            if not local.is_file() or _sha(local) != item["sha256"]:
-                raise RuntimeError("collection input differs from original prepared source")
-    return package, attempt, prepared
+def _collection_source(run_dir: Path, context: dict):
+    return protocol.collection_source(run_dir, protocol.CollectionContext.from_payload(context))
 
 
 def main(argv: list[str] | None = None) -> int:
