@@ -79,7 +79,7 @@ include = [
     "src/scgsim/aedt/runtime/batch_runner.py",
 ]
 typeCheckingMode = "strict"
-extraPaths = ["src/scgsim/aedt/runtime"]
+extraPaths = ["src", "src/scgsim/aedt/runtime"]
 
 [tool.pytest.ini_options]
 markers = [
