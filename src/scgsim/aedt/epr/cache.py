@@ -1628,16 +1628,6 @@ def _read_cache(
                 "intrinsics": str(item.get("Intrinsics", "")).replace("\\'", "'"),
             }
         )
-    expected = [
-        {
-            "title": item["title"],
-            "expression": item["expression"],
-            "intrinsics": item["intrinsics"],
-        }
-        for item in submitted
-    ]
-    if use_cache_for != ["Pass"] or persisted != expected:
-        raise RuntimeError("saved EPR cache persisted-subset readback mismatch")
     by_title = {item["title"]: item for item in convergence_fields}
     targets = []
     for item in submitted:
@@ -1671,7 +1661,9 @@ def _read_cache(
         "MaxDeltaFreq", "MaximumPasses", "MinimumPasses",
         "MinimumConvergedPasses", "PercentRefinement",
     )
-    return {
+    from scgsim.aedt.epr.evidence import SavedCacheEvidence
+
+    return SavedCacheEvidence.from_payload(submitted, {
         "convergence_targets": targets,
         "saved_configuration_source": {
             "project_sha256": project_sha256,
@@ -1688,4 +1680,4 @@ def _read_cache(
         "use_cache_for": use_cache_for,
         "items": persisted,
         "convergence_fields": convergence_fields,
-    }
+    }).to_payload()

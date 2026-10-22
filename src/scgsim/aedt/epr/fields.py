@@ -444,18 +444,19 @@ def _field_selection_operations(block: str) -> list[dict[str, str]]:
     return selections
 
 
-def _parse_native_expression_readback(payload: bytes) -> dict[str, dict[str, Any]]:
-    """Parse saved native CLC definitions without opening AEDT."""
+def _parse_native_expression_artifact(
+    payload: bytes,
+) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    """Decode definition evidence and reference-bearing bodies in one pass."""
     text = payload.decode("utf-8")
     block_pattern = re.compile(
         r"(?ms)^\$begin 'Named_Expression'\s*(.*?)^\$end 'Named_Expression'\s*$"
     )
     name_pattern = re.compile(r"(?m)^\s*Name\(['\"]([^'\"]+)['\"]\)\s*$")
     native_definitions: dict[str, dict[str, Any]] = {}
-    serialized_definitions: dict[str, str] = {}
+    blocks: dict[str, str] = {}
     for match in block_pattern.finditer(text):
         block = match.group(1)
-        serialized_block = match.group(0)
         name_match = name_pattern.search(block)
         if name_match is None:
             raise RuntimeError(
@@ -463,20 +464,69 @@ def _parse_native_expression_readback(payload: bytes) -> dict[str, dict[str, Any
             )
         name = name_match.group(1)
         if name in native_definitions:
-            if serialized_definitions[name] != serialized_block:
+            if blocks[name] != block:
                 raise RuntimeError(
                     f"HFSS native expression readback conflicts for {name!r}"
                 )
             continue
-        serialized_definitions[name] = serialized_block
+        blocks[name] = block
         native_definitions[name] = {
             "sha256": hashlib.sha256(block.encode("utf-8")).hexdigest(),
             "field_selection_operations": _field_selection_operations(block),
         }
-    return native_definitions
+    return native_definitions, blocks
 
 
-def _validated_expression_readback(
+def _parse_native_expression_readback(payload: bytes) -> dict[str, dict[str, Any]]:
+    """Parse saved native CLC definitions without changing their evidence schema."""
+    return _parse_native_expression_artifact(payload)[0]
+
+
+def _required_native_definitions(
+    definitions: Mapping[str, dict[str, Any]],
+    blocks: Mapping[str, str],
+    roots: Sequence[str],
+) -> dict[str, dict[str, Any]]:
+    """Follow required named helpers, leaving unrelated shared definitions alone."""
+    reference_pattern = re.compile(
+        r"\s*NameOfExpression\s*\(\s*(['\"])([^'\"\r\n]+)\1\s*\)\s*"
+    )
+    # field_integral_operations emits this native magnetic vector, not a helper.
+    intrinsic_names = {"<Hx,Hy,Hz>"}
+    required: dict[str, dict[str, Any]] = {}
+    active: set[str] = set()
+    visited: set[str] = set()
+    pending = [(name, False) for name in reversed(roots)]
+    while pending:
+        name, leaving = pending.pop()
+        if leaving:
+            active.remove(name)
+            visited.add(name)
+            continue
+        if name in visited:
+            continue
+        if name in active:
+            raise RuntimeError(f"required native CLC named references cycle at {name!r}")
+        if name not in definitions or name not in blocks:
+            raise RuntimeError(f"required native CLC named reference is unresolved: {name!r}")
+        active.add(name)
+        required[name] = definitions[name]
+        pending.append((name, True))
+        references = []
+        for line in blocks[name].splitlines():
+            if not re.match(r"\s*NameOfExpression\b", line):
+                continue
+            match = reference_pattern.fullmatch(line)
+            if match is None:
+                raise RuntimeError("required native CLC named reference grammar is unsupported")
+            reference = match.group(2)
+            if reference not in intrinsic_names:
+                references.append(reference)
+        pending.extend((reference, False) for reference in reversed(references))
+    return {name: required[name] for name in sorted(required)}
+
+
+def validated_expression_readback(
     expressions: Sequence[Mapping[str, Any]],
     cache: Mapping[str, Any],
     *,
@@ -488,6 +538,7 @@ def _validated_expression_readback(
     The original receipt is never amended to manufacture an aggregate record.
     """
     parsed_files: dict[str, dict[str, dict[str, Any]]] = {}
+    parsed_blocks: dict[str, dict[str, str]] = {}
     file_identities: dict[str, tuple[Any, Any]] = {}
     definitions: dict[str, dict[str, Any]] = {}
 
@@ -515,7 +566,7 @@ def _validated_expression_readback(
             if (not payload or len(payload) != record.get("bytes")
                     or hashlib.sha256(payload).hexdigest() != record.get("sha256")):
                 raise RuntimeError("prepared CLC readback artifact is missing or changed")
-            parsed_files[relative] = _parse_native_expression_readback(payload)
+            parsed_files[relative], parsed_blocks[relative] = _parse_native_expression_artifact(payload)
             file_identities[relative] = identity
         return parsed_files[relative]
 
@@ -544,26 +595,36 @@ def _validated_expression_readback(
             if name in definitions and definitions[name] != actual[name]:
                 raise RuntimeError("prepared expression definitions conflict")
             definitions[name] = actual[name]
-    actual_union: dict[str, dict[str, Any]] = {}
-    for actual in parsed_files.values():
-        for name, value in actual.items():
-            if name in actual_union and actual_union[name] != value:
-                raise RuntimeError("prepared native CLC artifacts conflict")
-            actual_union[name] = value
-    if actual_union != definitions:
-        raise RuntimeError("prepared native CLC membership differs from expressions")
+    # Expression records identify the required roots. An aggregate may describe
+    # the complete shared library; its unrelated entries are not extra roots.
+    roots = list(definitions)
     if "native_expression_readback" in cache:
         aggregate = cache["native_expression_readback"]
         if not isinstance(aggregate, Mapping):
             raise RuntimeError("prepared aggregate CLC readback is invalid")
         actual = read_record(aggregate)
         names = aggregate.get("definition_names")
-        if (not isinstance(names, list) or len(names) != len(definitions)
+        recorded = aggregate.get("definitions")
+        if (not isinstance(names, list) or not names
                 or any(not isinstance(name, str) for name in names)
-                or set(names) != set(definitions)
-                or aggregate.get("definitions") != definitions or actual != definitions):
-            raise RuntimeError("prepared aggregate CLC readback conflicts with expressions")
-    return definitions
+                or len(set(names)) != len(names)
+                or not isinstance(recorded, Mapping) or set(names) != set(recorded)
+                or not set(definitions).issubset(recorded)):
+            raise RuntimeError("prepared aggregate CLC readback membership differs")
+        for name in names:
+            if name not in actual or recorded[name] != actual[name]:
+                raise RuntimeError("prepared aggregate differs from native CLC readback")
+            if name in definitions and definitions[name] != recorded[name]:
+                raise RuntimeError("prepared aggregate CLC readback conflicts with expressions")
+    actual_union: dict[str, dict[str, Any]] = {}
+    block_union: dict[str, str] = {}
+    for relative, actual in parsed_files.items():
+        for name, value in actual.items():
+            if name in actual_union and actual_union[name] != value:
+                raise RuntimeError("prepared native CLC artifacts conflict")
+            actual_union[name] = value
+            block_union[name] = parsed_blocks[relative][name]
+    return _required_native_definitions(actual_union, block_union, roots)
 
 
 def _read_native_named_expressions(

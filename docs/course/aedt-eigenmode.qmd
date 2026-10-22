@@ -24,19 +24,23 @@ claiming that c997 embeds this declaration.
 ```python
 from pathlib import Path
 from scgsim.aedt import (
-    EigenmodeRunControl, HfssEigenmodeSpec, LayerImport, PhysicalLayerSpec,
+    EigenmodeRunControl, HfssEigenmodeSpec, LayerImport,
     prepare_handoff,
 )
+from scgsim.geometry import PhysicalLayerDeclaration
 
 AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 metal_thickness_um = 0.2
 physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
-physical_layer = PhysicalLayerSpec(
+physical_layer = PhysicalLayerDeclaration(
     physical_layer_id=physical_layer_id,
-    kind="stack_film",
-    z_min_um=0.0,
-    z_max_um=metal_thickness_um,
-    contact_side="lower",
+    source_level_id="D0_TOP_M1",
+    source_level_and_gds_pair={"layer": 1, "datatype": 0},
+    source_interval_um=(0.0, metal_thickness_um),
+    material_id="Nb",
+    feature_kind="stack_film",
+    physical_dimensions={"normal_thickness_um": metal_thickness_um},
+    source_contact_facts={"layer_attachment_face": "lower"},
 )
 layer_imports = (
     LayerImport(

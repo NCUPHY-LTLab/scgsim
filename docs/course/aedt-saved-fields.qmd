@@ -91,3 +91,19 @@ assumptions. Continue to [offline EPR](offline-epr.qmd), where `reanalyze_epr`
 updates assumptions on these recorded numerators without native execution.
 The [runtime contract](../specs/aedt-runtime.qmd) owns exact saved-field context,
 material-side support and analysis failure behavior.
+
+## Optional project-instruction block
+
+Optionally copy this guidance into the study's own project instructions or
+`LESSONS` when an authorized saved-field comparison needs careful SurfaceEPR
+interpretation:
+
+```markdown
+For an authorized SurfaceEPR saved-field comparison:
+- Preserve the original completed run, exact final saved-field cohort, source/spec, and result files. The public `scgsim.aedt.analyze_epr()` function analyzes a resolved `SavedSolution` in an owned workcopy; pass the same prepared geometry, run control, EPR request, an explicit AEDT version, and a new output directory. This saved-field analysis call does not request another solve. If choosing `surface_field_selectors`, set only the caller-selected contributions; `surface` and `adjacent` select calculator operations, not physical material sides.
+- Compare with the original final saved-field result for the same geometry, mode, and pass. Report the recorded mode and pass identities for both results; if either is missing or differs, state that instead of treating them as a matched comparison.
+- For each contribution and binding, inspect the returned evaluation and binding/selection evidence to establish the support actually used. `evaluation_kind` and `margin_um` label an evaluation; they do not by themselves establish that one mask is nested in another. If available support evidence cannot establish nesting, report it as unknown. Treat requested masks as alternative evaluations of the same physical interface, not as additional physical films. An unmasked baseline is a reference evaluation, not another chosen mask.
+- For each compared contribution, inspect `interface_kind`, source `field_side`, effective/substrate domain and material IDs, source support/selection evidence, the saved analysis carrier's `native_normal`, and the recorded requested/applied calculator selector and CLC operation. Compare expression identity and evaluation/margin context with raw integral values and units and recorded normalization. A normal, selector name, or frequency record alone does not establish material-side correspondence.
+- Preserve and link the original and new outputs. Report observed changes, limits, and missingness. Do not swap labels or values, clamp results, choose the smaller result, or introduce a tolerance. Geometry, materials, mode, pass controls, masks/evaluation criteria, EPR request, environment, resources, or replacing/writing source data require their separate authorization.
+- Use only the study's existing permission and resource allocation. SCGSim records caller choices; it does not choose a physical side or grant compute permission.
+```

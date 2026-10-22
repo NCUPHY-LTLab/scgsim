@@ -61,3 +61,27 @@ scgsim = [
     "_agent_knowledge/docs/assets/*",
     "_agent_knowledge/docs/assets/**/*",
 ]
+
+[dependency-groups]
+test = [
+    "pytest",
+    "ipython",
+]
+quality = [
+    "ruff",
+    "pyright",
+]
+
+[tool.pyright]
+include = [
+    "src/scgsim/aedt/epr/evidence.py",
+    "src/scgsim/aedt/runtime/batch_protocol.py",
+    "src/scgsim/aedt/runtime/batch_runner.py",
+]
+typeCheckingMode = "strict"
+extraPaths = ["src", "src/scgsim/aedt/runtime"]
+
+[tool.pytest.ini_options]
+markers = [
+    "private_golden: owner-authorized external returned-data fixtures; explicit manifest required; excluded from public CI",
+]

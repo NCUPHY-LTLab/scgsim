@@ -305,13 +305,13 @@ def resolve_results(run_dir: str | Path) -> ResolvedRun:
     if receipt.get("status") != "completed":
         raise RuntimeError("handoff has not completed successfully")
     if "native_batch" in receipt:
-        from scgsim.aedt.batch import _collection_source
+        from scgsim.aedt.runtime.batch_protocol import CollectionContext, collection_source
         batch = receipt["native_batch"]
         if (batch.get("collection") != "collected_sealed"
                 or batch.get("collector_analyze_invoked") is not False):
             raise RuntimeError("batch collection did not complete its native collection/seal")
-        package, attempt, _ = _collection_source(root, batch["source"])
-        if batch.get("package_id") != package["package_id"] or batch.get("attempt_id") != attempt["attempt_id"]:
+        package, attempt, _ = collection_source(root, CollectionContext.from_payload(batch["source"]))
+        if batch.get("package_id") != package.package_id or batch.get("attempt_id") != attempt.attempt_id:
             raise RuntimeError("batch collection lineage differs")
     receipt_schema = receipt["schema_version"]
     if receipt_schema == RECEIPT_V1:
