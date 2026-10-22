@@ -195,10 +195,12 @@ jobs:
         run: |
           uv build --python 3.12.14 --wheel --out-dir .ci/orca-wheel .ci/orca
           uv pip install --python .venv-docs/bin/python --no-deps .ci/orca-wheel/orpen_sc_pdk-0.1.0-py3-none-any.whl
-      - name: Run current source documentation through file-only preparation
-        env:
-          PYTHONPATH: ${{ github.workspace }}/src
-        run: .venv-docs/bin/python scripts/check_docs_examples.py
+      - name: Build and install the current SCGSim wheel after dependency sync
+        run: |
+          uv build --python 3.12.14 --wheel --out-dir .ci/scgsim-wheel .
+          uv pip install --python .venv-docs/bin/python --no-deps .ci/scgsim-wheel/scgsim-*.whl
+      - name: Run installed SCGSim documentation through file-only preparation
+        run: .venv-docs/bin/python -I -B scripts/check_docs_examples.py
 
   required:
     name: required
