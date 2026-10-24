@@ -244,3 +244,227 @@ def test_explicit_iteration_refuses_changed_missing_or_relabelled_data(
         (tmp_path / "results/palace/iteration01/domain-E.csv").unlink()
     with pytest.raises(ValueError, match="artifact|metadata"):
         epr_result(resolved, palace_iteration=1)
+
+
+def _shared_parent_case():
+    """Generic table-reader fixture: two semantic rows per physical fragment.
+
+    These are authored offline inputs, not completed native-run evidence.
+    MS uses twice the raw participation of MA with the same normalization.
+    """
+    from dataclasses import replace
+
+    resolved, _, _, _, _, entries, energies = _resolved_producer_band_run(wall=False)
+    shared_entries = []
+    surface_row = {"m": 1}
+    for interface, scale in (("MA", 1), ("MS", 2)):
+        for entry in entries:
+            item = deepcopy(entry)
+            item["index"] = len(shared_entries) + 1
+            item["entry_name"] += "__" + interface
+            item["metadata"]["interface_type"] = interface
+            item["metadata"]["face_kind"] = "interface"
+            shared_entries.append(item)
+            energy = energies[item["metadata"]["surface_id"]] * scale
+            number = item["index"]
+            surface_row[f"p_surf[{number}]"] = energy / 16
+            surface_row[f"Q_surf[{number}]"] = 1 / (energy / 16 * 0.125)
+    index = deepcopy(resolved.provenance.index_map)
+    index["entries"] = shared_entries
+    tables = dict(resolved.tables)
+    tables["surface-Q"] = replace(
+        tables["surface-Q"], headers=tuple(surface_row), rows=(surface_row,)
+    )
+    result = epr_result(replace(
+        resolved, tables=tables,
+        provenance=replace(resolved.provenance, index_map=index),
+    ))
+    parent = result.provenance["surface_distance_bands"][0]["parent_surface_id"]
+    selections = tuple(
+        SurfaceBandSelection(parent, kind, "interface") for kind in ("MS", "MA")
+    )
+    return result, selections, entries, energies
+
+
+def test_shared_parent_ms_ma_totals_include_each_fragment_once_per_interface():
+    result, selections, entries, energies = _shared_parent_case()
+    totals = _aggregate(result, selections)
+    assert len(totals.totals) == 4
+    for total in totals.totals:
+        included = {
+            entry["metadata"]["surface_id"]
+            for entry in entries
+            if entry["metadata"]["surface_distance_band"]["lower_um"]
+            >= total["cutoff_um"]
+        }
+        # The table fixture declares MS energy=2*MA and one mode energy=16 J.
+        scale = 2 if total["interface_kind"] == "MS" else 1
+        energy = sum(energies[identity] for identity in included) * scale
+        assert total["energy_j"] == energy
+        assert total["participation"] == energy / 16
+        assert total["inverse_q"] == energy / 16 * 0.125
+        assert {member["surface_id"] for member in total["members"]} == included
+        assert len(total["members"]) == len(included)
+        assert {member["field_side"] for member in total["members"]} == {"interface"}
+    assert PalaceSurfaceBandTotals.from_payload(totals.to_payload()) == totals
+    # Selecting either interface from the unchanged full result is also valid.
+    for selection in selections:
+        single = _aggregate(result, (selection,))
+        assert single.totals == tuple(
+            total for total in totals.totals
+            if total["interface_kind"] == selection.interface_kind
+        )
+
+
+@pytest.mark.parametrize(
+    "defect,match",
+    (
+        ("selection", "selection is duplicated"),
+        ("fragment", "fragment is duplicated"),
+        ("attribute", "attribute is duplicated"),
+        ("side", "field side"),
+        ("absent_kind", "interface kind is unavailable"),
+        ("component", "components"),
+        ("source", "source/interval"),
+        ("owner", "owner identity"),
+        ("component_index", "component identities"),
+        ("mode", "mode"),
+        ("iteration", "iteration"),
+        ("normalization", "normalization"),
+    ),
+)
+def test_shared_parent_preserves_selection_and_member_failures(defect, match):
+    result, selections, _, _ = _shared_parent_case()
+    payload = result.to_payload()
+    surfaces = payload["rows"][0]["surface"]
+    ms = [surface for surface in surfaces if surface["interface_kind"] == "MS"]
+    options = {}
+    if defect == "selection":
+        selections = (*selections, selections[0])
+    elif defect == "fragment":
+        surfaces.append(deepcopy(ms[0]))
+    elif defect == "attribute":
+        ms[1]["attributes"] = deepcopy(ms[0]["attributes"])
+    elif defect == "side":
+        selections = (
+            SurfaceBandSelection(selections[0].parent_surface_id, "MS", "other"),
+            selections[1],
+        )
+    elif defect == "absent_kind":
+        payload["rows"][0]["surface"] = [
+            surface for surface in surfaces if surface["interface_kind"] != "MS"
+        ]
+    elif defect == "component":
+        surfaces.remove(ms[-1])
+    elif defect == "source":
+        ms[0]["surface_distance_band"]["source_polygon_id"] = "other_public_polygon"
+    elif defect == "owner":
+        ms[0]["owner_semantic_ids"] = ["other_public_owner"]
+    elif defect == "component_index":
+        band = ms[0]["surface_distance_band"]
+        summary = next(
+            item for item in payload["provenance"]["surface_distance_bands"]
+            if item["parent_surface_id"] == band["parent_surface_id"]
+            and item["band_index"] == band["band_index"]
+        )
+        band["component_index"] = summary["component_count"]
+    elif defect == "mode":
+        options["mode"] = 2
+    elif defect == "iteration":
+        options["palace_iteration"] = 3
+    elif defect == "normalization":
+        options["expected_normalization_energy_j"] = 8
+    with pytest.raises(ValueError, match=match):
+        _aggregate(PalaceEprResult.from_payload(payload), selections, **options)
+
+
+def test_actual_ms_ma_producer_aliases_reach_shared_parent_totals():
+    """Real alias/config/reader functions over generic authored transport records.
+
+    Attribute tokens and mode tables are explicit fixture inputs, not native
+    mesh/solver observations. Physical band children come from the existing
+    public source-partition fixture; no geometry is split per interface.
+    """
+    from dataclasses import replace
+
+    from scgsim.palace.mesh.build import _add_surface_group_records
+    from scgsim.palace.preparation.surface_epr import (
+        build_surface_epr_postprocessing, normalize_surface_epr_specs,
+    )
+
+    resolved, _, _, _, _, original_entries, energies = _resolved_producer_band_run(wall=False)
+    groups = {"boundary_surfaces": {}, "pec_surfaces": {}, "surface_groups": {}}
+    for entry in original_entries:
+        metadata = entry["metadata"]
+        surface_id = metadata["surface_id"]
+        provenance = {
+            **deepcopy(metadata["source_provenance"]),
+            "conductor_source_layer_name": "generic_metal_layer",
+            "surface_contribution_schema": "scgsim.surface-contributions.v1",
+            "surface_contribution_ledger": [
+                {"contribution_id": f"{surface_id}:MS", "classification": "MS",
+                 "side": "bottom", "snapshot_reference": {"source_entity_id": "entity_1"},
+                 "effective_domain_ids": ["substrate"]},
+                {"contribution_id": f"{surface_id}:MA", "classification": "MA",
+                 "side": "top", "snapshot_reference": {"source_entity_id": "entity_1"},
+                 "effective_domain_ids": ["vacuum"]},
+            ],
+            "native_aggregation": {"policy": "one_row_per_interface_kind",
+                "contribution_count": 2, "interface_kinds": ["MS", "MA"],
+                "surface_epr_interface_kinds": ["MS", "MA"], "native_row_count": 2,
+                "side_resolved_numeric_output": False},
+            "mask_support": {"zero_inset_supported": True, "positive_inset_supported": True,
+                             "sides": ["bottom", "top"]},
+        }
+        record = {"surface_id": surface_id, "interface_type": "MS_MA",
+            "face_kind": "interface", "representation": "surface_sheet", "route": "A",
+            "owner_semantic_ids": metadata["owner_semantic_ids"],
+            "adjacent_solution_volume_ids": ["substrate", "vacuum"],
+            "conductor_component_id": "generic_component", "net_id": "generic_net",
+            "equipotential_id": "generic_net", "contact_kind": "interface",
+            "physical_attribute": metadata["physical_attribute"],
+            "source_provenance": provenance,
+            "metadata": {"surface_distance_band": metadata["surface_distance_band"]}}
+        attribute = entry["attributes"][0]
+        _add_surface_group_records(groups=groups, name=surface_id, phys_group=attribute,
+            entity_tags=(attribute,), record=record, route="A",
+            solution_material_kinds={"substrate": "dielectric", "vacuum": "vacuum"})
+        for kind in ("MS", "MA"):
+            alias = groups["boundary_surfaces"][f"{surface_id}__{kind}"]
+            assert alias["surface_id"] == surface_id
+            assert alias["phys_group"] == attribute
+            assert alias["face_kind"] == "interface"
+            assert alias["source_provenance"] == provenance
+
+    specs = normalize_surface_epr_specs({kind: {"thickness": .5, "permittivity": 4,
+        "loss_tangent": .125} for kind in ("MS", "MA")}, materials={})
+    native_rows, entries = build_surface_epr_postprocessing(groups, specs)
+    assert len(native_rows) == 2 * len(original_entries)
+    assert all("Mask" not in native for native in native_rows)
+    surface_row = {"m": 1}
+    for entry in entries:
+        kind = entry["metadata"]["interface_type"]
+        energy = energies[entry["metadata"]["surface_id"]] * (2 if kind == "MS" else 1)
+        surface_row[f"p_surf[{entry['index']}]"] = energy / 16
+        surface_row[f"Q_surf[{entry['index']}]"] = 1 / (energy / 16 * .125)
+    index = deepcopy(resolved.provenance.index_map)
+    index["entries"] = entries
+    tables = dict(resolved.tables)
+    tables["surface-Q"] = replace(tables["surface-Q"], headers=tuple(surface_row), rows=(surface_row,))
+    result = epr_result(replace(resolved, tables=tables,
+        provenance=replace(resolved.provenance, index_map=index)))
+    parent = index["surface_distance_bands"][0]["parent_surface_id"]
+    selections = tuple(SurfaceBandSelection(parent, kind, "interface") for kind in ("MS", "MA"))
+    totals = _aggregate(result, selections)
+    for total in totals.totals:
+        included = {entry["metadata"]["surface_id"] for entry in original_entries
+                    if entry["metadata"]["surface_distance_band"]["lower_um"] >= total["cutoff_um"]}
+        expected_energy = sum(energy for name, energy in energies.items() if name in included)
+        if total["interface_kind"] == "MS":
+            expected_energy *= 2
+        assert total["energy_j"] == expected_energy
+        assert total["participation"] == expected_energy / 16
+        assert len(total["members"]) == len(included)
+        assert {member["surface_id"] for member in total["members"]} == included
+        assert all(member["members"]["surface_contribution_schema"] == "scgsim.surface-contributions.v1"
+                   for member in total["members"])

@@ -182,9 +182,8 @@ def aggregate_surface_bands(
         not isinstance(item, SurfaceBandSelection) for item in selected
     ):
         raise TypeError("explicit source-parent selections are required")
-    parent_ids = [item.parent_surface_id for item in selected]
-    if len(parent_ids) != len(set(parent_ids)):
-        raise ValueError("a parent must be selected once with one interface/field side")
+    if len(selected) != len(set(selected)):
+        raise ValueError("a parent/interface/field-side selection is duplicated")
     cutoffs = tuple(_number(value, "cutoff_um") for value in cutoffs_um)
     if not cutoffs or len(cutoffs) != len(set(cutoffs)):
         raise ValueError("cutoffs must be explicit and unique")
@@ -201,6 +200,7 @@ def aggregate_surface_bands(
         if not set(cutoffs).issubset({0.0, *geometry.distances_um}):
             raise ValueError("cutoff must match a declared source-band boundary")
         components = {}
+        matched_interface = False
         for surface in row["surface"]:
             band = surface.get("surface_distance_band")
             if (
@@ -208,10 +208,12 @@ def aggregate_surface_bands(
                 or band.get("parent_surface_id") != selection.parent_surface_id
             ):
                 continue
-            if (
-                surface["interface_kind"] != selection.interface_kind
-                or surface["field_side"] != selection.field_side
-            ):
+            # One physical parent may carry distinct MS and MA contributions.
+            # A sibling kind is not a member of this semantic selection.
+            if surface["interface_kind"] != selection.interface_kind:
+                continue
+            matched_interface = True
+            if surface["field_side"] != selection.field_side:
                 raise ValueError(
                     "selected parent interface/field side differs from result"
                 )
@@ -238,6 +240,8 @@ def aggregate_surface_bands(
                     )
                 physical_attributes.add((selection.interface_kind, attribute))
             components.setdefault(index, []).append(surface)
+        if not matched_interface:
+            raise ValueError("selected parent interface kind is unavailable")
         for index, summary in sorted(inventory.items()):
             members = components.get(index, [])
             if {member["surface_id"] for member in members} != set(
