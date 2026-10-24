@@ -2620,7 +2620,7 @@ wheels = [
 
 [[package]]
 name = "scgsim"
-version = "2.0.0rc13"
+version = "2.0.0rc14"
 source = { editable = "." }
 dependencies = [
     { name = "numpy" },

@@ -729,3 +729,127 @@ def test_selected_sa_boundary_band_still_requires_ledger_and_material_adjacency(
             groups={"boundary_surfaces": {}, "surface_groups": {}, "pec_surfaces": {}},
             name=record["physical_name"], phys_group=0, entity_tags=(), record=record,
             route="B", solution_material_kinds=material_kinds)
+
+
+@pytest.mark.parametrize("role,hole_index", (("exterior", None), ("hole", 0)))
+def test_ambiguous_lineage_note_preserves_context_and_traceback(role, hole_index):
+    import json
+    import traceback
+    from scgsim.geometry.planning.surface_bands import _restore_parent_boundary
+
+    context = {
+        "parent_surface_id": "generic_parent",
+        "band_index": 1,
+        "lower_um": 0.5,
+        "upper_um": 1.0,
+        "component_index": 2,
+        "ring_role": role,
+        "hole_index": hole_index,
+    }
+    ring = ((0.0001, 0.0001), (0.0002, 0.0002), (1, 1))
+    with pytest.raises(ValueError) as captured:
+        _restore_parent_boundary(ring, (SQUARE,), 0.001, diagnostic_context=context)
+    error = captured.value
+    assert type(error) is ValueError
+    assert str(error) == "Boolean boundary lineage is ambiguous at declared precision"
+    note = json.loads(error.__notes__[0])
+    assert {key: note[key] for key in context} == context
+    assert note["stage"] == "restore_parent_boundary.source_run_candidates"
+    assert note["precision_um"] == 0.001
+    assert note["generated_edge_index"] == 0
+    assert note["candidate_count"] == 2
+    assert note["zero_length_generated_edge"] is False
+    assert note["generated_start_is_original_vertex"] is False
+    assert note["generated_end_is_original_vertex"] is False
+    assert {item["source_run_index"] for item in note["candidates"]} == {0, 3}
+    assert note["candidate_relations"] == [{
+        "source_run_indices": [0, 3],
+        "same_source_ring": True,
+        "adjacent_source_runs": True,
+        "shared_endpoint_count": 1,
+        "shared_source_vertex_count": 1,
+    }]
+    rendered = "".join(traceback.format_exception(error))
+    assert error.__notes__[0] in rendered
+    assert "0.0001" not in error.__notes__[0]
+    assert "0.0002" not in error.__notes__[0]
+    if role == "exterior":
+        print("BOUNDARY_LINEAGE_DIAGNOSTIC=" + error.__notes__[0])
+
+
+def test_ambiguous_lineage_distinguishes_original_hole_and_exterior_runs():
+    import json
+    from scgsim.geometry.planning.surface_bands import _restore_parent_boundary
+
+    hole = ((1, 0.0001), (7, 0.0001), (7, 1), (1, 1))
+    ring = ((2, 0.0002), (3, 0.0002), (3, 2))
+    with pytest.raises(ValueError, match="lineage is ambiguous") as captured:
+        _restore_parent_boundary(ring, (SQUARE, hole), 0.001)
+    note = json.loads(captured.value.__notes__[0])
+    assert note["candidate_count"] == 2
+    assert {(item["source_ring_role"], item["source_hole_index"])
+            for item in note["candidates"]} == {("exterior", None), ("hole", 0)}
+    assert note["candidate_relations"] == [{
+        "source_run_indices": [0, 4],
+        "same_source_ring": False,
+        "adjacent_source_runs": False,
+        "shared_endpoint_count": 0,
+        "shared_source_vertex_count": 0,
+    }]
+
+
+def test_ambiguous_lineage_reports_zero_edge_and_exact_endpoint_incidence():
+    import json
+    from scgsim.geometry.planning.surface_bands import _restore_parent_boundary
+
+    ring = ((0, 0), (0, 0), (1, 1))
+    with pytest.raises(ValueError, match="lineage is ambiguous") as captured:
+        _restore_parent_boundary(ring, (SQUARE,), 0.001)
+    note = json.loads(captured.value.__notes__[0])
+    assert note["zero_length_generated_edge"] is True
+    assert note["generated_start_is_original_vertex"] is True
+    assert note["generated_end_is_original_vertex"] is True
+    for item in note["candidates"]:
+        assert item["zero_length_source_run"] is False
+        assert item["generated_start_is_run_endpoint"] is True
+        assert item["generated_end_is_run_endpoint"] is True
+
+
+def test_ambiguous_lineage_retains_collinear_original_segment_identities():
+    import json
+    from scgsim.geometry.planning.surface_bands import _restore_parent_boundary
+
+    outer = ((0, 0), (4, 0), (8, 0), (8, 8), (0, 8))
+    hole = ((1, 0.0001), (7, 0.0001), (7, 1), (1, 1))
+    ring = ((4, 0), (4, 0.0001), (4, 2))
+    with pytest.raises(ValueError, match="lineage is ambiguous") as captured:
+        _restore_parent_boundary(ring, (outer, hole), 0.001)
+    note = json.loads(captured.value.__notes__[0])
+    original = next(item for item in note["candidates"]
+                    if item["source_ring_role"] == "exterior")
+    assert original["source_segment_indices"] == [0, 1]
+    assert original["start_vertex_index"] == 0
+    assert original["end_vertex_index"] == 2
+    assert original["generated_start_is_source_run_vertex"] is True
+    assert original["generated_start_is_run_endpoint"] is False
+
+
+def test_diagnostic_serialization_failure_retains_original_geometric_error():
+    from scgsim.geometry.planning.surface_bands import _restore_parent_boundary
+
+    ring = ((0.0001, 0.0001), (0.0002, 0.0002), (1, 1))
+    with pytest.raises(ValueError) as captured:
+        _restore_parent_boundary(
+            ring, (SQUARE,), 0.001,
+            diagnostic_context={"parent_surface_id": object()},
+        )
+    assert str(captured.value) == "Boolean boundary lineage is ambiguous at declared precision"
+    assert captured.value.__notes__ == [
+        '{"diagnostic":"surface_band_boundary_lineage","status":"unavailable"}'
+    ]
+
+
+def test_unambiguous_original_boundary_keeps_exact_points():
+    from scgsim.geometry.planning.surface_bands import _restore_parent_boundary
+
+    assert _restore_parent_boundary(SQUARE, (SQUARE,), 0.001) == SQUARE
