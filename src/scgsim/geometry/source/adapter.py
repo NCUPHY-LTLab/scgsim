@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.diagnostics import _stage, _progress
+
 from scgsim.geometry._primitives.grid import polygon_boolean
 
 from scgsim.geometry._primitives.grid import current_grid_size_um
@@ -47,6 +49,7 @@ if TYPE_CHECKING:
     from gdsfactory.technology import LayerStack
 
 
+@_stage("geometry.source.adapter")
 def build_gds_stack_geometry_input(
     *,
     gds_file: PathInput,
@@ -370,16 +373,18 @@ def build_gds_stack_geometry_input(
             if isinstance(entity.geometry.get("domain_bounds_um"), Mapping)
         }
 
-        for record in raw_layers:
-            for entity, entity_polygons in _entities_and_polygons_from_layer_record(
-                record,
-                materials=materials,
-                polygons_by_layer=polygons_by_layer,
-                cell_bounds_um=cell_bounds,
-                domain_bounds_by_semantic_id=domain_bounds_by_semantic_id,
-            ):
-                polygons.extend(entity_polygons)
-                entities.append(entity)
+        with _stage("geometry.source.lower_layers", counts={"layers": len(raw_layers)}):
+            for diagnostic_index, record in enumerate(raw_layers):
+                _progress(diagnostic_index, len(raw_layers))
+                for entity, entity_polygons in _entities_and_polygons_from_layer_record(
+                    record,
+                    materials=materials,
+                    polygons_by_layer=polygons_by_layer,
+                    cell_bounds_um=cell_bounds,
+                    domain_bounds_by_semantic_id=domain_bounds_by_semantic_id,
+                ):
+                    polygons.extend(entity_polygons)
+                    entities.append(entity)
 
         combined_metadata = {
             **dict(stack_metadata),

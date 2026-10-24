@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.diagnostics import _stage
+
 import json
 import re
 import time
@@ -51,6 +53,7 @@ class SemanticGeometryBuilder:
     One call writes one route XAO file. Mesh generation is downstream.
     """
 
+    @_stage("geometry.compiler.build")
     def build(
         self,
         build_input: GeometryBuildInput,

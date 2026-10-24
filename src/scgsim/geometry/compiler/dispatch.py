@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.diagnostics import _stage
+
 import time
 from scgsim.geometry._primitives.grid import with_input_grid
 
@@ -64,6 +66,7 @@ from scgsim.geometry.planning.volumes import (
 
 
 @with_input_grid
+@_stage("geometry.compiler.plan")
 def build_route_construction_plan(
     build_input: GeometryBuildInput,
     *,
@@ -204,10 +207,12 @@ def build_route_construction_plan(
             semantic_facts=semantic_facts,
         ),
     )
-    surfaces, distance_partitions, distance_band_summary = partition_surface_distance_bands(
-        build_input, surfaces=surfaces,
-    )
-    surface_partitions = synchronize_distance_partitions(surface_partitions, distance_partitions)
+    with _stage("geometry.compiler.surface_bands"):
+        surfaces, distance_partitions, distance_band_summary = partition_surface_distance_bands(
+            build_input, surfaces=surfaces,
+        )
+    with _stage("geometry.compiler.synchronize_bands"):
+        surface_partitions = synchronize_distance_partitions(surface_partitions, distance_partitions)
     interfaces = _timed(
         timings,
         "complete_interface_plan_from_surfaces",
@@ -392,7 +397,8 @@ def _timed(
 ) -> Any:
     started = time.perf_counter()
     try:
-        result = fn()
+        with _stage("geometry.compiler." + stage):
+            result = fn()
     except Exception:
         timings.append(
             {

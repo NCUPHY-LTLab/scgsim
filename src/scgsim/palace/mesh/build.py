@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.diagnostics import _stage, _worker_config
+
 import copy
 import hashlib
 import json
@@ -72,6 +74,7 @@ class MeshBuildResult:
     sidecar_path: Path
 
 
+@_stage("palace.mesh.prepare")
 def build_route_mesh(
     *,
     component: Any,
@@ -310,6 +313,9 @@ def _mesh_from_route_xao(
             key: value for key, value in mesh_controls.items() if key != "size_policy"
         },
     }
+    diagnostic_config = _worker_config()
+    if diagnostic_config is not None:
+        request["preparation_diagnostics"] = diagnostic_config
     result = _run_gmsh_worker(request=request, run_dir=mesh_path.parent)
     groups = result.get("groups")
     if not isinstance(groups, dict):
@@ -322,6 +328,7 @@ def _mesh_from_route_xao(
     return mesh_path, groups, meshing
 
 
+@_stage("palace.mesh.worker_wait")
 def _run_gmsh_worker(*, request: Mapping[str, Any], run_dir: Path) -> Mapping[str, Any]:
     """Run unchanged gsim-derived XAO lowering in a fresh process."""
     with TemporaryDirectory(prefix="scgsim-gmsh-worker-", dir=run_dir) as temporary:
@@ -398,6 +405,7 @@ def _private_worker_environment() -> dict[str, str]:
     }
 
 
+@_stage("palace.mesh.worker")
 def _mesh_xao_in_current_process(
     *,
     xao_path: Path,
@@ -426,7 +434,8 @@ def _mesh_xao_in_current_process(
 
     gmsh.initialize(readConfigFiles=False)
     try:
-        gmsh.open(str(xao_path))
+        with _stage("palace.mesh.open_xao"):
+            gmsh.open(str(xao_path))
         gmsh.option.setNumber("General.Terminal", 0)
 
         route = _sgb_records_route_context(records, route)
@@ -455,22 +464,27 @@ def _mesh_xao_in_current_process(
         gmsh.option.setNumber("Mesh.MaxNumThreads2D", mesh_controls["surface_threads"])
         gmsh.option.setNumber("Mesh.ElementOrder", 1)
         gmsh.option.setNumber("Mesh.HighOrderOptimize", 0)
-        gmsh.model.mesh.generate(3)
+        with _stage("palace.mesh.generate"):
+            gmsh.model.mesh.generate(3)
         geometry_order = mesh_controls["geometry_order"]
         optimization = {"status": "not_applicable", "invocation_count": 0}
         if geometry_order > 1:
-            gmsh.model.mesh.setOrder(geometry_order)
+            with _stage("palace.mesh.set_order"):
+                gmsh.model.mesh.setOrder(geometry_order)
             optimization["status"] = "skipped"
             if mesh_controls["high_order_optimize"]:
-                gmsh.model.mesh.optimize("HighOrder")
+                with _stage("palace.mesh.optimize_high_order"):
+                    gmsh.model.mesh.optimize("HighOrder")
                 optimization = {"status": "completed", "invocation_count": 1}
-        _validate_tetrahedral_solution_groups(groups=groups, live=live)
-        _validate_port_tetrahedron_face_conformality(groups)
-        _validate_port_pec_node_intersections(groups)
+        with _stage("palace.mesh.validate"):
+            _validate_tetrahedral_solution_groups(groups=groups, live=live)
+            _validate_port_tetrahedron_face_conformality(groups)
+            _validate_port_pec_node_intersections(groups)
         gmsh.option.setNumber("Mesh.Binary", 0)
         gmsh.option.setNumber("Mesh.SaveAll", 0)
         gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)
-        gmsh.write(str(mesh_path))
+        with _stage("palace.mesh.write_mesh"):
+            gmsh.write(str(mesh_path))
         from .summary import observe_native_mesh
 
         requested = dict(mesh_controls)
@@ -498,7 +512,8 @@ def _mesh_xao_in_current_process(
         # Read the written artifact, including only entities retained by SaveAll=0.
         gmsh.clear()
         gmsh.open(str(mesh_path))
-        statistics = observe_native_mesh(groups)
+        with _stage("palace.mesh.saved_mesh_readback"):
+            statistics = observe_native_mesh(groups)
         orders = sorted(
             {r["order"] for r in statistics["element_types"] if r["dimension"] == 3}
         )
