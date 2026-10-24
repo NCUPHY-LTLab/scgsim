@@ -268,6 +268,45 @@ solve or returned matrix observation.
 
 Only Route A and Route B are in the current direction.
 
+## Planar surface-distance bands (CONVERGING) {#surface-distance-bands}
+
+`GeometryPlan.set_surface_distance_bands(...)` requests a geometric partition
+of an exact, unpartitioned planar parent surface. Use
+`surface_distance_band_catalogue(...)` on the route construction plan to read
+the available parent IDs, source-owner bindings, any source-polygon IDs,
+provenance, and original 3D boundary rings before choosing a request. The
+`source_polygon_id` argument and serialized key are required. Use the actual
+polygon ID for a polygon-backed parent. For an entity-only parent with no
+polygon provenance, pass explicit `None`; `source_entity_id` must still name
+an actual parent owner. Never create a substitute polygon ID. These anchors
+identify the parent group; they do not filter other members or rings out of it.
+
+`SurfaceDistanceBandSpec` binds the parent ID and source anchor to ordered
+`distances_um`, a Boolean `precision_um`, and an optional exact subset of
+`SourceBoundarySegment` records. With cuts at 0.5 µm and 1.0 µm, the resulting
+bands are 0–0.5 µm, 0.5–1.0 µm, and 1.0 µm outward. `boundary_segments=None`
+uses every original exterior and hole edge. An explicit segment identifies
+its original `ring`, `segment_index`, and, for a hole, `hole_index`; generated
+band seams never become new distance origins. For port-split walls, retain the
+unsplit original wall boundary as distance-origin lineage and clip child
+regions from that parent; split seams are not new inset origins. The requested
+precision sets the polygon Boolean grid and round-cap chord error.
+
+Each child retains its parent and source-owner identity, any source-polygon
+provenance, selected source segments, interval, component index, and child
+surface ID.
+The band summary is carried with the construction metadata and copied to the
+mesh manifest and Palace index when present. These records define geometric
+regions; a Surface EPR value must still come from the corresponding solver
+calculation. Distance partitions currently require planar polygon parents;
+active curves and non-planar parents are unsupported.
+
+For the separate EPR correction, use the returned parent and child identities
+with `SurfaceEprParentSelection` and `SurfaceEprCorrectionRule`; the geometry
+plan does not choose a Palace field side or apply a Q2D factor. See the
+[Palace surface-band correction](eigenmode-epr.qmd#surface-distance-band-correction)
+for the result binding and calculation.
+
 ## Internal semantic projection
 
 SGB projects already-validated source facts once per source/model revision into

@@ -17,6 +17,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Literal
 
+from .controls import MeshSizing
+
 GSIM_SHA = "8f5dc6c05255d003a9c6d8959537bcf8068379d3"
 GSIM_HIGH_ORDER_DERIVATION_SHA = "00444a5fa343e2024ccf4f1fb6a3f50170166be4"
 SGB_RUNTIME_AUTHORITY = "scgsim.geometry.compiler"
@@ -76,8 +78,9 @@ def build_route_mesh(
     stack: Mapping[str, Any],
     route: str,
     output_dir: str | Path,
-    refined_mesh_size: float = 5.0,
-    max_mesh_size: float = 300.0,
+    size_policy: str = "scgsim_default",
+    refined_mesh_size: float | None = None,
+    max_mesh_size: float | None = None,
     algorithm_3d: str = "Delaunay",
     threads: int = 1,
     surface_threads: int = 1,
@@ -97,9 +100,17 @@ def build_route_mesh(
         raise TypeError("stack must be a mapping after set_stack processing.")
     if route not in {"A", "B"}:
         raise ValueError("route must be either 'A' or 'B'.")
-    from .controls import mesh_controls
+    from .controls import mesh_controls, normalize_mesh_sizing
 
+    sizing = normalize_mesh_sizing(
+        size_policy=size_policy,
+        refined_mesh_size=refined_mesh_size,
+        max_mesh_size=max_mesh_size,
+    )
+    refined_mesh_size = sizing.refined_mesh_size
+    max_mesh_size = sizing.max_mesh_size
     controls = mesh_controls(
+        size_policy=sizing.size_policy,
         algorithm_3d=algorithm_3d,
         threads=threads,
         surface_threads=surface_threads,
@@ -107,14 +118,6 @@ def build_route_mesh(
         high_order_optimize=high_order_optimize,
     )
     thin_film = _route_a_thin_film_provenance(stack, route)
-    if (
-        refined_mesh_size <= 0
-        or max_mesh_size <= 0
-        or max_mesh_size < refined_mesh_size
-    ):
-        raise ValueError(
-            "mesh sizes must be positive and max_mesh_size >= refined_mesh_size"
-        )
     stack = _with_port_sheet_metadata(stack, port_sheet_source_layers)
     run_dir = Path(output_dir).expanduser().resolve()
     if run_dir.exists() and any(run_dir.iterdir()):
@@ -217,6 +220,10 @@ def build_route_mesh(
             encoding="utf-8"
         )
     )
+    if "surface_distance_bands" in construction_plan.get("metadata", {}):
+        manifest["surface_distance_bands"] = copy.deepcopy(
+            construction_plan["metadata"]["surface_distance_bands"]
+        )
     native_curves = construction_plan.get("metadata", {}).get("curved_arrangement")
     if native_curves is not None:
         manifest["curved_arrangement"] = copy.deepcopy(native_curves)
@@ -279,8 +286,8 @@ def _mesh_from_route_xao(
     records: Sequence[Any],
     stack: Mapping[str, Any],
     mesh_path: Path,
-    refined_mesh_size: float,
-    max_mesh_size: float,
+    refined_mesh_size: float | None,
+    max_mesh_size: float | None,
     mesh_controls: Mapping[str, Any],
 ) -> tuple[Path, dict[str, dict[str, Any]], dict[str, Any]]:
     """Mesh an SGB XAO in one fresh Gmsh process.
@@ -291,15 +298,17 @@ def _mesh_from_route_xao(
     refinement, Algorithm3D and validations remain the same mesh path for both
     routes.
     """
+    sizing = MeshSizing(mesh_controls["size_policy"], refined_mesh_size, max_mesh_size)
     request = {
         "xao_path": xao_path.relative_to(mesh_path.parent).as_posix(),
         "route": route,
         "records": list(records),
         "stack": dict(stack),
         "mesh_path": mesh_path.relative_to(mesh_path.parent).as_posix(),
-        "refined_mesh_size": refined_mesh_size,
-        "max_mesh_size": max_mesh_size,
-        "mesh_controls": dict(mesh_controls),
+        **sizing.to_payload(),
+        "mesh_controls": {
+            key: value for key, value in mesh_controls.items() if key != "size_policy"
+        },
     }
     result = _run_gmsh_worker(request=request, run_dir=mesh_path.parent)
     groups = result.get("groups")
@@ -396,12 +405,17 @@ def _mesh_xao_in_current_process(
     records: Sequence[Any],
     stack: Mapping[str, Any],
     mesh_path: Path,
-    refined_mesh_size: float,
-    max_mesh_size: float,
+    refined_mesh_size: float | None,
+    max_mesh_size: float | None,
     mesh_controls: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Current-process implementation used only by the private fresh worker."""
 
+    sizing = MeshSizing(
+        mesh_controls.get("size_policy", "scgsim_default"),
+        refined_mesh_size,
+        max_mesh_size,
+    )
     route = route.upper()
     _sgb_records_route_context(records, route)
     groups = _build_groups_from_sgb_records()
@@ -414,8 +428,6 @@ def _mesh_xao_in_current_process(
     try:
         gmsh.open(str(xao_path))
         gmsh.option.setNumber("General.Terminal", 0)
-        gmsh.option.setNumber("Mesh.MeshSizeMin", refined_mesh_size)
-        gmsh.option.setNumber("Mesh.MeshSizeMax", max_mesh_size)
 
         route = _sgb_records_route_context(records, route)
         live = _live_physical_groups()
@@ -434,7 +446,7 @@ def _mesh_xao_in_current_process(
 
         _embed_route_b_port_surfaces(groups)
         live = _live_physical_groups()
-        _setup_xao_refinement(groups, refined_mesh_size, max_mesh_size)
+        _apply_mesh_sizing(groups, sizing)
         native_algorithm = {"Delaunay": 1, "HXT": 10}[mesh_controls["algorithm_3d"]]
         gmsh.option.setNumber("Mesh.Algorithm3D", native_algorithm)
         gmsh.option.setNumber("General.NumThreads", mesh_controls["threads"])
@@ -462,9 +474,7 @@ def _mesh_xao_in_current_process(
         from .summary import observe_native_mesh
 
         requested = dict(mesh_controls)
-        requested.update(
-            refined_mesh_size=refined_mesh_size, max_mesh_size=max_mesh_size
-        )
+        requested.update(sizing.to_payload())
         effective = dict(requested)
         effective.update(
             {
@@ -479,6 +489,9 @@ def _mesh_xao_in_current_process(
                     "refined_mesh_size": "Mesh.MeshSizeMin",
                     "max_mesh_size": "Mesh.MeshSizeMax",
                     "mesh_size_factor": "Mesh.MeshSizeFactor",
+                    "mesh_size_from_points": "Mesh.MeshSizeFromPoints",
+                    "mesh_size_from_curvature": "Mesh.MeshSizeFromCurvature",
+                    "mesh_size_extend_from_boundary": "Mesh.MeshSizeExtendFromBoundary",
                 }.items()
             }
         )
@@ -675,7 +688,15 @@ def _add_surface_group_records(
         else ()
     )
 
-    if role == "domain_boundary":
+    selected_distance_sa = (
+        role == "domain_boundary"
+        and str(record.get("interface_type", "")).upper() == "SA"
+        and isinstance(metadata, Mapping)
+        and isinstance(metadata.get("surface_distance_band"), Mapping)
+    )
+    # Selected shared dielectric/air bands use the same ledger and adjacency
+    # authority as other SA interfaces. Exterior cuts retain their boundary policy.
+    if role == "domain_boundary" and not selected_distance_sa:
         _validate_structured_domain_boundary_record(name, record)
         info = {
             "phys_group": phys_group,
@@ -734,6 +755,12 @@ def _add_surface_group_records(
     if interface_type not in _STRUCTURED_INTERFACE_TYPES:
         raise ValueError(
             f"SGB surface {name!r} has unsupported interface_type {interface_type!r}."
+        )
+    if selected_distance_sa and not _surface_contribution_sources(
+        record["source_provenance"]
+    ):
+        raise ValueError(
+            f"SGB selected SA boundary band {name!r} requires contribution provenance."
         )
     _validate_surface_contribution_ledger(name, record, interface_type)
 
@@ -936,6 +963,17 @@ def _add_port_surface_group(
         "net_id": record.get("net_id"),
         "equipotential_id": record.get("equipotential_id"),
     }
+
+
+def _apply_mesh_sizing(groups: Mapping[str, Any], sizing: MeshSizing) -> None:
+    """Apply SCG sizing only when selected; native sizing is left untouched."""
+    if sizing.size_policy == "gmsh_default":
+        return
+    import gmsh
+
+    gmsh.option.setNumber("Mesh.MeshSizeMin", sizing.refined_mesh_size)
+    gmsh.option.setNumber("Mesh.MeshSizeMax", sizing.max_mesh_size)
+    _setup_xao_refinement(groups, sizing.refined_mesh_size, sizing.max_mesh_size)
 
 
 def _setup_xao_refinement(
@@ -1313,6 +1351,7 @@ def _structured_surface_info(
         "net_id": _optional_string(record.get("net_id")),
         "equipotential_id": _optional_string(record.get("equipotential_id")),
         "physical_attribute": dict(record.get("physical_attribute", {})),
+        "metadata": dict(record.get("metadata", {})),
         "source_id": source_id or _optional_string(record.get("surface_id")) or name,
         "face_kind": face_kind or _optional_string(record.get("face_kind")),
         "contact_kind": _optional_string(record.get("contact_kind")),

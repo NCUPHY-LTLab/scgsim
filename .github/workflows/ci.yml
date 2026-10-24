@@ -125,8 +125,12 @@ jobs:
         with:
           version: "0.12.4"
           python-version: "3.12"
+      - name: Install the Gmsh wheel system runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libglu1-mesa
       - name: Install locked offline test and quality dependencies
-        run: uv sync --locked --group test --group quality --extra aedt-epr
+        run: uv sync --locked --group test --group quality --extra aedt-epr --extra palace
       - name: Run the complete public non-native suite
         run: uv run --locked --no-sync python -m pytest tests -m 'not private_golden'
       - name: Check typed stage contracts with Pyright strict

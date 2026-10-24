@@ -92,9 +92,42 @@ ambiguous origin. The reader preserves the raw value but treats its effective
 loss as unknown; the inverse-$Q$ contribution remains unavailable.
 :::
 
-Mask margins provide alternative interface estimates. Read the unmasked
-baseline and each requested margin separately, including a requested zero
-margin; do not add them as disjoint bands. AEDT evaluates horizontal top/bottom
+## Palace surface-distance-band results {#surface-distance-band-correction}
+
+Geometry-based distance bands are disjoint regions cut from an actual SGB
+parent boundary. The Palace-only result path returns a cumulative
+`distance >= cutoff` total for each selected interface and cutoff. With three
+interfaces and two cutoffs, it returns six totals. A lower-cutoff total
+includes the higher-cutoff total, so do not add them. Read each value with its
+source parent, mode, native iteration, interface, cutoff and normalization.
+This aggregation uses returned Palace EPR values and does not require a Q2D
+result or change the Palace field calculation. See the
+[Palace surface-bands course](course/palace-surface-bands.qmd) for the current
+workflow.
+
+Previously saved native mask-margin results remain readable in their recorded
+format. The current producer rejects non-empty `inset_margins_um`; those
+results are historical alternatives, not additional disjoint bands.
+
+⏳ A complete Palace surface-band EPR return is pending.
+
+### Future Q2D correction (paused)
+
+Q2D follow-up is paused and is not part of the Palace-only band workflow. The
+same-basis relation previously considered for a separate Q2D correction was
+
+$$
+F = \frac{I_{0-1}}{I_{0.5-1}}, \qquad
+p_{\mathrm{corrected}} = p_{\geq 1} + F p_{0.5-1}.
+$$
+
+This relation is not part of the current Palace band results. The Palace
+cutoff totals are direct Palace EPR outputs; they are not converted by this
+Q2D relation.
+
+Archived mask margins are alternative interface estimates. Read a saved
+unmasked baseline and its requested margins separately; do not add them as
+disjoint bands. AEDT evaluates horizontal top/bottom
 interfaces and does not calculate sidewall film energy. Palace sidewalls also
 remain uncomputed where they were not selected. Changing a film-loss assumption
 on stored evidence can revise the loss estimate without another field solve;

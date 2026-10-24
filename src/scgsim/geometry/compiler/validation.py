@@ -640,7 +640,15 @@ def validate_surface_partition_coverage(
     )
     errors: list[str] = []
     for partition in surface_partitions:
-        if partition.parent_interface_id not in interface_ids:
+        child = surfaces_by_id.get(partition.child_surface_id)
+        band = partition.metadata.get("surface_distance_band")
+        is_bound_surface_partition = (
+            isinstance(band, Mapping) and child is not None
+            and band.get("parent_surface_id") == child.parent_surface_id
+            and partition.parent_interface_id == child.parent_surface_id
+            and child.interface_id is None
+        )
+        if partition.parent_interface_id not in interface_ids and not is_bound_surface_partition:
             errors.append(
                 f"{partition.partition_id} references unknown parent interface "
                 f"{partition.parent_interface_id}"
@@ -654,7 +662,8 @@ def validate_surface_partition_coverage(
             continue
         geometry_ref = child_surface.geometry_ref
         if (
-            "outer_loop" not in geometry_ref
+            "planar_loops_3d" not in geometry_ref
+            and "outer_loop" not in geometry_ref
             and "loop_geometry_ref" not in geometry_ref
             and "quad_points" not in geometry_ref
         ):

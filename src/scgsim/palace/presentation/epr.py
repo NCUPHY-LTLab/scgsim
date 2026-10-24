@@ -32,6 +32,9 @@ def _show_view(result: Any, *, mode: int | None) -> dict[str, Any]:
         "coverage": {
             "surface_rows": len(surface),
             "source_surfaces": len({item["surface_id"] for item in surface}),
+            "geometric_bands": sum(
+                item["evaluation_kind"] == "geometric_band" for item in surface
+            ),
             "bulk_domains": len(row["bulk"]),
             "ports": len(row["junction"]),
             "known_baseline_subtotal": (
@@ -42,6 +45,16 @@ def _show_view(result: Any, *, mode: int | None) -> dict[str, Any]:
             ),
         },
     }
+
+
+def _surface_label(item: Mapping[str, Any]) -> str:
+    owners = ",".join(item["owner_semantic_ids"])
+    label = f"{owners} / {item['interface_kind']} / {item['evaluation_kind']}"
+    if item["evaluation_kind"] == "geometric_band":
+        band = item["surface_distance_band"]
+        upper = "∞" if band["upper_um"] is None else f"{band['upper_um']:g}"
+        return f"{label} [{band['lower_um']:g}, {upper}) µm"
+    return f"{label} {item['margin_um']:g} µm"
 
 
 def show_epr(result: Any, *, mode: int | None = None) -> Any:
@@ -59,10 +72,7 @@ def show_epr(result: Any, *, mode: int | None = None) -> Any:
     figure.add_trace(
         go.Bar(
             x=[item["participation"] for item in surface],
-            y=[
-                f"{','.join(item['owner_semantic_ids'])} / {item['interface_kind']} / {item['evaluation_kind']} {item['margin_um']:g} µm"
-                for item in surface
-            ],
+            y=[_surface_label(item) for item in surface],
             customdata=[
                 json.dumps(
                     _plain_view(
@@ -70,6 +80,7 @@ def show_epr(result: Any, *, mode: int | None = None) -> Any:
                             "group_id": item["group_id"],
                             "index": item["index"],
                             "surface_id": item["surface_id"],
+                            "surface_distance_band": item.get("surface_distance_band"),
                             "field_side": item["field_side"],
                             "members": item["members"],
                             "inverse_q": item["inverse_q"],
@@ -121,6 +132,8 @@ def show_epr(result: Any, *, mode: int | None = None) -> Any:
             f"{coverage['bulk_domains']} bulk domains; {coverage['ports']} ports. "
             f"Known baseline 1/Q subtotal: {coverage['known_baseline_subtotal']}; "
             f"{coverage['unknown_baseline_losses']} baseline losses unknown. "
+            f"{coverage['geometric_bands']} geometric bands are displayed separately "
+            "and excluded from the unmasked baseline subtotal. "
             "Sidewalls uncomputed when unselected; requested margins are alternatives."
         ),
         xref="paper",
@@ -131,3 +144,5 @@ def show_epr(result: Any, *, mode: int | None = None) -> Any:
     )
     figure.update_layout(title=f"Palace EPR mode {row['mode']}", height=900)
     return figure
+
+

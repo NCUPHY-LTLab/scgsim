@@ -64,6 +64,7 @@ website:
             - docs/course/aedt-inputs.qmd
             - docs/course/palace-electrostatic.qmd
             - docs/course/palace-eigenmode.qmd
+            - docs/course/palace-surface-bands.qmd
             - docs/course/aedt-eigenmode.qmd
             - docs/course/aedt-driven-modal.qmd
             - docs/course/aedt-driven-terminal.qmd

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from ..execution.archive import logical_tar_member_name, resolve_run_archive_path
+from ..execution.returned_receipt import _adapted_mesh_output_paths
 
 _RUNTIME_COMPATIBILITY_PATH = "metadata/palace_runtime_compatibility.json"
 _RUNTIME_COMPATIBILITY_SCHEMA = "palace-runtime-compatibility.v1"
@@ -1844,6 +1845,9 @@ def _validate_receipt_payload(
         index_counts=_index_counts(index_map),
         masks_configured=bool(_surface_mask_entries(index_map)),
     )
+    if handoff_metadata.get("palace_identity", {}).get("config_schema") == "1-7-0":
+        config = _read_json(root / "config.json")
+        required_outputs += tuple({"path": relative} for relative in _adapted_mesh_output_paths(root, config))
     for expected in required_outputs:
         rel = expected["path"]
         if rel not in output_map:
@@ -2116,6 +2120,9 @@ def _validate_runtime_compatibility(
         not isinstance(native_git_tag, str) or not native_git_tag
     ):
         raise ValueError("Palace observed native GitTag must be a non-empty string.")
+    native_schema_version = observed.get("native_schema_version")
+    if native_schema_version is not None and (not isinstance(native_schema_version, str) or not native_schema_version):
+        raise ValueError("Palace observed native schema version must be non-empty text or null")
     version_probe_exit_code = observed.get("version_probe_exit_code")
     if version_probe_exit_code is not None and (
         isinstance(version_probe_exit_code, bool)

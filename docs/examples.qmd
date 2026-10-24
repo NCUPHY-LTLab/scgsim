@@ -53,6 +53,7 @@ Choose another physical task when appropriate:
 | Task | Procedure |
 |---|---|
 | Ordinary port-free mode calculation | [HFSS Eigenmode](course/aedt-eigenmode.qmd) |
+| Palace surface-distance-band EPR totals | [Palace surface bands](course/palace-surface-bands.qmd) |
 | Driven two-port response | [Driven Modal](course/aedt-driven-modal.qmd) or [Driven Terminal](course/aedt-driven-terminal.qmd) |
 | Finite three-dimensional conductor matrices | [Q3D](course/aedt-q3d.qmd) |
 | Per-unit-length line matrices | [Q2D cross sections](course/aedt-q2d.qmd) |
@@ -90,7 +91,7 @@ the current SCGSim API reference.
 The specimen dimensions and presets are public model inputs, not measured
 process/device evidence. An old notebook's comments do not replace the current
 package contract: for example, 3D Region padding uses the native
-`(+X,-X,+Y,-Y,+Z,-Z)` order, while Q2D uses `(-X,+X,-Y,+Y)`.
+`(+X,-X,+Y,-Y,+Z,-Z)` order, while Q2D uses `(+X,-X,+Y,-Y)`.
 
 
 [Concept](concepts/problems.qmd) explains model choices and quantities;

@@ -17,7 +17,7 @@ ordinary sequence; [Xmon EPR](../tutorial-xmon-palace.qmd) adds optional physics
 | Standalone source | `set_geometry(component)` and `set_stack(stack)` on a fresh unbound simulation |
 | Output | `set_output_dir(path)` |
 | Eigenmode | `set_eigenmode(*, num_modes=10, target=None, tolerance=1e-6, save=0)` |
-| Mesh controls | `set_mesh(...)` retains sizes and accepts the shared Palace meshing controls |
+| Mesh controls | `set_mesh(...)` accepts the shared mesh-size policy and Palace meshing controls |
 | Mesh summary | `mesh_summary()` returns detached meshing evidence |
 | Numerical controls | `set_numerical(...)` retains explicit order, linear solver, AMR and output choices |
 | Source/settings view | `input_summary()` returns detached source plus settings, no file/native I/O |
@@ -30,8 +30,20 @@ SCGSim 1.1.0 adds Gmsh algorithm, thread, surface-thread, geometric
 order and high-order optimization controls to `set_mesh(...)`. Geometric order
 is distinct from the FEM order configured through `set_numerical(...)`; solver
 settings preserve the current mesh controls. The shared
-[Palace mesh contract](palace-electrostatic-sgb.qmd#palace-mesh-controls-110-candidate)
-owns defaults, invalidation, native generation and manifest behavior.
+[Palace mesh controls](palace-electrostatic-sgb.qmd#palace-mesh-controls-110-candidate)
+and [mesh-size policy](palace-electrostatic-sgb.qmd#palace-mesh-size-policy)
+define defaults, invalidation, native generation and manifest behavior.
+
+## Eigenmode mesh and AMR defaults (CONVERGING)
+
+A fresh `EigenmodeSim` selects `gmsh_default` sizing and writes
+`Model.Refinement.Nonconformal=true`. Before `write_config()`, provide
+`amr_max_passes` through `set_numerical(...)`. For a positive pass limit, also
+provide `amr_tolerance` and `amr_update_fraction`; setting
+`amr_max_passes=0` disables adaptive refinement and allows those two values to
+remain unset. Omitted values in later `set_numerical(...)` calls retain their
+current settings. These are input controls, not adequacy recommendations.
+Electrostatic retains its existing AMR defaults in the shared contract.
 
 `mesh_summary()` reports recorded meshing controls, native element and region
 counts, and mesh identities. Its Nédélec degree-of-freedom value is a
@@ -56,6 +68,26 @@ configured `LayoutPortBinding.name` values. `None` selects all configured
 entries, `()` selects none, and a subset must resolve against the exact written
 index. Unknown selections fail during config writing or result extraction.
 Filtering output does not delete physical domains/ports or change normalization.
+
+### Surface-distance bands (CONVERGING)
+
+Surface-distance bands are a geometry-level partition, not an additional
+`MA`/`MS`/`SA` selector and not a set of mask-margin outputs. The exact parent
+surface, source-bound cuts, and child identities come from the
+[GeometryPlan contract](../geometry-sgb.qmd#surface-distance-bands). EPR
+results retain those identities with their mode, native iteration, interface,
+cutoff, and normalization context. For each selected interface and cutoff,
+the Palace-only result path returns a cumulative `distance >= cutoff` total.
+With three interfaces and two cutoffs it returns six totals; the lower-cutoff
+value includes the higher-cutoff value, so these totals are not additive.
+Aggregation does not require Q2D and does not change the Palace field
+calculation. Use the [Palace surface-bands course](../course/palace-surface-bands.qmd)
+for the current workflow.
+
+Previously saved native mask-margin results remain readable in their recorded
+format, but the current producer rejects non-empty `inset_margins_um`. The
+current surface-band result path is CONVERGING; a complete Palace return is
+pending.
 
 The unspecified external Eigenmode vacuum boundary retains native Palace PMC.
 This is different from the current AEDT EPR default Perfect E choice; a shared

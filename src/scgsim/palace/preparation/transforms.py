@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from scgsim.geometry.models.input import GeometryBuildInput
 
-SCHEMA_VERSION = "v0.16.0"
+SCHEMA_VERSION = "1-7-0"
 
 RouteAThinFilm = Literal["substrate_face", "metal_gap_equivalent"]
 
