@@ -20,24 +20,34 @@ sim = EigenmodeSim()
 sim.set_plan(snapshot)
 sim.set_output_dir(Path(".artifacts/public-xmon-palace-modes"))
 sim.set_eigenmode(num_modes=2, target=2e9, tolerance=1e-6, save=0)
-sim.set_mesh(refined_mesh_size=5.0, max_mesh_size=300.0)
+sim.set_mesh(
+    size_policy="scgsim_default",
+    refined_mesh_size=5.0,
+    max_mesh_size=300.0,
+)
+sim.set_numerical(amr_max_passes=0)
 display(sim.input_summary())
 ```
 
-Use `set_mesh(...)` to choose `algorithm_3d`, `threads`, `surface_threads`,
-`geometry_order`, and `high_order_optimize`. Geometric order controls the mesh
-representation; FEM order remains a separate numerical setting. Initial values
-and update behavior are in the shared
-[Palace mesh contract](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls-110-candidate).
+Use `set_mesh(...)` to choose `size_policy`, `algorithm_3d`, `threads`,
+`surface_threads`, `geometry_order`, and `high_order_optimize`. A fresh
+`EigenmodeSim` uses Gmsh native sizing; this example explicitly selects
+`scgsim_default` and its `5 µm` and `300 µm` size pair. Geometric order controls
+the mesh representation; FEM order remains a separate numerical setting.
+Policy defaults and transitions are in the shared
+[Palace mesh contract](../specs/palace-electrostatic-sgb.qmd#palace-mesh-size-policy).
 
 These are explicit example controls: target is in hertz and mesh sizes are in
 micrometres. Choose them in relation to the mode and quantities your
 SCQ study needs, and retain the chosen settings and any later changes in the
-study notes. `save` controls native saved-field output. Your study may
-set numerical order, solver, AMR and output controls with `set_numerical()`;
-record them beside the action they govern rather than hiding them in notebook
-helpers. The generated `Nonconformal` key defaults to false in SCGSim; native
-Palace defaults must not be substituted silently.
+study notes. `save` controls native saved-field output. A fresh
+`EigenmodeSim` writes `Nonconformal=true`. This single-mesh example explicitly
+sets `amr_max_passes=0`, which disables adaptive refinement. Before
+`write_config()`, provide `amr_max_passes` through `set_numerical(...)`; a
+positive pass limit also requires caller-selected `amr_tolerance` and
+`amr_update_fraction`. Later calls that omit these controls retain their
+current values. Record selected numerical and output controls beside the
+action they govern rather than hiding them in notebook helpers.
 
 Read the summary's configured mode/search/resource choices against your study.
 It displays normalized source and settings without meshing or solving. The
@@ -91,6 +101,25 @@ quantities; they do not delete physical domains or change normalization.
 The [EPR concept](../eigenmode-epr.qmd) explains the quantities you will later
 interpret, including why signed native port participation differs from AEDT's
 nonnegative junction participation.
+
+## Geometry-based surface bands
+
+Surface-distance bands are formed from the original SGB parent boundary before
+Palace meshing. Choose the parent and original boundary segments from the
+[GeometryPlan surface-band catalogue](../geometry-sgb.qmd#surface-distance-bands).
+The Palace-only result path reports one cumulative `distance >= cutoff` total
+for each selected interface and cutoff. With three interfaces and two cutoffs,
+it returns six totals. A lower-cutoff total includes the higher-cutoff total;
+do not add them. Read each total with its parent, mode, native iteration,
+interface, cutoff and normalization. No Q2D result is required, and aggregation
+does not change the Palace field model. Previously saved native
+mask-margin results remain readable, while the current producer rejects
+non-empty `inset_margins_um`.
+
+For source preparation and band-result reading, use the
+[Palace surface-bands course](palace-surface-bands.qmd). A complete Palace EPR
+return is pending. NC AMR is a distinct second stage, not part of the ordinary
+single-mesh sequence.
 
 ## Circular Pad LC study
 

@@ -37,6 +37,7 @@ from scgsim.geometry._primitives.spatial import (
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.regions import PortSheetRegionRecord
+from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import (
     CurvePlanRecord,
     MMContactRecord,
@@ -46,7 +47,9 @@ from scgsim.geometry.models.topology import (
     VolumePlanRecord,
 )
 from scgsim.geometry.planning.domain import _solution_entity_xy_region
+from scgsim.geometry.planning.surface_bands import partition_source_boundary
 from scgsim.geometry.planning.topology import _surface_owner_ids
+from scgsim.geometry.planning.representation import planned_conductor_representation
 
 
 def _lower_port_sheet_regions(
@@ -55,6 +58,7 @@ def _lower_port_sheet_regions(
     route: RouteLiteral,
     mm_contacts: tuple[MMContactRecord, ...],
     planned_surfaces: Sequence[SurfacePlanRecord] = (),
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[SurfacePlanRecord, ...]:
     """Lower the one accepted Palace port-sheet shape before canonical topology."""
     entities = {entity.semantic_id: entity for entity in build_input.entities}
@@ -98,8 +102,9 @@ def _lower_port_sheet_regions(
         if any(
             host.part_role != "face_metal"
             or not _port_sheet_target_layer_matches(host, target_layer)
-            or host.route_representations.get("A") != "surface_sheet"
-            or host.route_representations.get("B") != "cutout_boundary_shell"
+            or planned_conductor_representation(
+                host, route=route, context=representation_context
+            ) != {"A": "surface_sheet", "B": "cutout_boundary_shell"}[route]
             for host in host_entities
         ):
             raise ValueError(
@@ -417,6 +422,17 @@ def _partition_route_b_port_sheet_sidewalls(
             binding=binding,
             port_z_um=port_z_um,
         )
+        # Capture only a genuine original wall; existing child seams cannot
+        # establish missing source lineage. Further port splits retain it.
+        if (
+            "surface_partition_origin" not in partition_metadata
+            and surface.parent_surface_id is None
+            and surface.partition_label is None
+            and not surface.geometry_ref.get("partition_id")
+        ):
+            origin = partition_source_boundary(surface.geometry_ref, surface.surface_id)
+            if origin is not None:
+                partition_metadata["surface_partition_origin"] = origin
         result.extend(
             (
                 replace(

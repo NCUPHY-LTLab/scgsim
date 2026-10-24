@@ -18,6 +18,9 @@ from scgsim.geometry.models.input import (
     SourceCurveSpec,
     VacuumRegionSpec,
 )
+from scgsim.geometry.models.surface_bands import SourceBoundarySegment, SurfaceDistanceBandSpec
+from scgsim.geometry.source.surface_bands import with_surface_distance_bands
+from scgsim.geometry.planning.surface_bands import surface_distance_band_catalogue
 from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.models.physical import (
     ApproximationProfile, PhysicalLayerDeclaration, PhysicalRepresentationPlan,
@@ -35,6 +38,10 @@ from scgsim.geometry.source.summary import InputSummary, summarize_geometry_inpu
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 
 __all__ = [
+    "surface_distance_band_catalogue",
+    "SourceBoundarySegment",
+    "SurfaceDistanceBandSpec",
+    "with_surface_distance_bands",
     "interpret_physical_geometry",
     "interpret_physical_layers",
     "ApproximationProfile",

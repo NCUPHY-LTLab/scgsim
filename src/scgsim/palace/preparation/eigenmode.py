@@ -5,6 +5,8 @@ This class prepares geometry and manual handoff files; it never runs Palace.
 
 from __future__ import annotations
 
+import json
+
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -24,7 +26,7 @@ from .config import (
 )
 from .surface_epr import normalize_surface_epr_specs
 from ..mesh.build import MeshBuildResult, build_route_mesh
-from ..mesh.controls import MESH_CONTROL_KEYS
+from ..mesh.controls import MESH_CONTROL_KEYS, MeshSizing, update_mesh_sizing
 from .transforms import (
     RouteAThinFilm,
     normalize_route_a_thin_film,
@@ -68,7 +70,15 @@ class EigenmodeSim:
     target_hz: float | None = None
     eigenmode_tolerance: float = 1e-6
     save_fields: int = 0
-    numerical: dict[str, Any] = field(default_factory=configure_numerical_controls)
+    numerical: dict[str, Any] = field(
+        default_factory=lambda: configure_numerical_controls(
+            size_policy="gmsh_default",
+            amr_nonconformal=True,
+            amr_max_passes=None,
+            amr_tolerance=None,
+            amr_update_fraction=None,
+        )
+    )
     _materials: dict[str, Mapping[str, Any]] | None = field(default=None, init=False)
     _resolved_ports: list[LayoutPortBinding] = field(default_factory=list, init=False)
     vacuum_region: VacuumRegionSpec | None = None
@@ -370,6 +380,7 @@ class EigenmodeSim:
     def set_mesh(
         self,
         *,
+        size_policy: str | None = None,
         refined_mesh_size: float | None = None,
         max_mesh_size: float | None = None,
         algorithm_3d: str | None = None,
@@ -380,16 +391,23 @@ class EigenmodeSim:
     ) -> None:
         """Set geometry-mesh controls; every omitted value retains its setting.
 
+        Selecting ``gmsh_default`` clears SCG sizes and rejects explicit sizes.
+        Switching back to ``scgsim_default`` restores 5/300 unless sizes are given.
         Geometry order is independent of ``set_numerical(order=...)``. Elevated
         geometry is optimized with Gmsh HighOrder once when enabled.
         """
+        sizing = update_mesh_sizing(
+            MeshSizing.from_payload(self.numerical),
+            size_policy=size_policy,
+            refined_mesh_size=refined_mesh_size,
+            max_mesh_size=max_mesh_size,
+        )
         proposed = dict(self.numerical)
+        proposed.update(sizing.to_payload())
         proposed.update(
             {
                 key: value
                 for key, value in {
-                    "refined_mesh_size": refined_mesh_size,
-                    "max_mesh_size": max_mesh_size,
                     "algorithm_3d": algorithm_3d,
                     "threads": threads,
                     "surface_threads": surface_threads,
@@ -415,9 +433,9 @@ class EigenmodeSim:
         device: str = "CPU",
         refined_mesh_size: float | None = None,
         max_mesh_size: float | None = None,
-        amr_max_passes: int = 0,
-        amr_nonconformal: bool = False,
-        amr_tolerance: float = 1e-2,
+        amr_max_passes: int | None = None,
+        amr_nonconformal: bool | None = None,
+        amr_tolerance: float | None = None,
         amr_update_fraction: float | None = None,
         save_adapt_iterations: bool | None = None,
         save_adapt_mesh: bool | None = None,
@@ -428,8 +446,9 @@ class EigenmodeSim:
         """Set solver, FEM, AMR, and output controls for the next config write.
 
         ``amr_max_passes`` is Palace ``MaxIts``. ``amr_nonconformal`` is Palace
-        ``Model.Refinement.Nonconformal`` and defaults to ``False``. Set
-        ``True`` only to opt into nonconformal AMR.
+        ``Model.Refinement.Nonconformal``. Omitted AMR controls retain their
+        settings. New Eigenmode requests use NC and require explicit case
+        controls before config generation; max passes zero disables AMR.
         """
         if (refined_mesh_size is None) != (max_mesh_size is None):
             raise ValueError(
@@ -439,12 +458,15 @@ class EigenmodeSim:
             "refined_mesh_size": self.numerical["refined_mesh_size"],
             "max_mesh_size": self.numerical["max_mesh_size"],
         }
-        mesh_sizes = previous_mesh_sizes
-        if refined_mesh_size is not None:
-            mesh_sizes = {
-                "refined_mesh_size": refined_mesh_size,
-                "max_mesh_size": max_mesh_size,
-            }
+        sizing = update_mesh_sizing(
+            MeshSizing.from_payload(self.numerical),
+            refined_mesh_size=refined_mesh_size,
+            max_mesh_size=max_mesh_size,
+        )
+        mesh_sizes = {
+            "refined_mesh_size": sizing.refined_mesh_size,
+            "max_mesh_size": sizing.max_mesh_size,
+        }
         self.numerical = configure_numerical_controls(
             order=order,
             tolerance=tolerance,
@@ -454,10 +476,18 @@ class EigenmodeSim:
             device=device,
             **mesh_sizes,
             **{key: self.numerical[key] for key in MESH_CONTROL_KEYS},
-            amr_max_passes=amr_max_passes,
-            amr_nonconformal=amr_nonconformal,
-            amr_tolerance=amr_tolerance,
-            amr_update_fraction=amr_update_fraction,
+            amr_max_passes=(
+                self.numerical["amr_max_passes"] if amr_max_passes is None else amr_max_passes
+            ),
+            amr_nonconformal=(
+                self.numerical["amr_nonconformal"] if amr_nonconformal is None else amr_nonconformal
+            ),
+            amr_tolerance=(
+                self.numerical["amr_tolerance"] if amr_tolerance is None else amr_tolerance
+            ),
+            amr_update_fraction=(
+                self.numerical["amr_update_fraction"] if amr_update_fraction is None else amr_update_fraction
+            ),
             save_adapt_iterations=save_adapt_iterations,
             save_adapt_mesh=save_adapt_mesh,
             estimator_mg=estimator_mg,
@@ -647,6 +677,9 @@ class EigenmodeSim:
                 if chosen is not None and set(chosen) - configured:
                     raise ValueError(f"EPR request selects an unknown {name} binding")
         index_payload = {"schema_version": 1, "entries": result.index_entries}
+        mesh_manifest = json.loads(self._mesh_result.mesh_manifest_path.read_text(encoding="utf-8"))
+        if "surface_distance_bands" in mesh_manifest:
+            index_payload["surface_distance_bands"] = mesh_manifest["surface_distance_bands"]
         if request is not None:
             index_payload["epr_request"] = {
                 "schema_version": "scgsim.palace.epr-selection.v1",

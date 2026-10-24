@@ -48,6 +48,9 @@ from scgsim.geometry.planning.surfaces import (
     plan_route_surfaces,
     plan_surface_partitions,
 )
+from scgsim.geometry.planning.surface_bands import (
+    partition_surface_distance_bands, synchronize_distance_partitions,
+)
 from scgsim.geometry.planning.tags import plan_route_tags
 from scgsim.geometry.planning.topology import plan_canonical_topology
 from scgsim.geometry.planning.volumes import (
@@ -81,6 +84,8 @@ def build_route_construction_plan(
     """
     build_input = project_native_route_representations(build_input, route, representation_context)
     if build_input.boundary_curves or build_input.boundary_reconstruction:
+        if build_input.metadata.get("surface_distance_bands"):
+            raise NotImplementedError("surface distance bands currently support polygon-only construction plans")
         if route == "C":
             raise NotImplementedError(
                 "active source curves support Palace Route A/B, not Route C"
@@ -141,6 +146,7 @@ def build_route_construction_plan(
             build_input,
             route=route,
             interfaces=interfaces,
+            representation_context=representation_context,
         ),
     )
     surfaces = _timed(
@@ -174,6 +180,7 @@ def build_route_construction_plan(
                 route=route,
                 mm_contacts=mm_contacts,
                 planned_surfaces=surfaces,
+                representation_context=representation_context,
             ),
         )
     _timed(
@@ -194,6 +201,10 @@ def build_route_construction_plan(
             semantic_facts=semantic_facts,
         ),
     )
+    surfaces, distance_partitions, distance_band_summary = partition_surface_distance_bands(
+        build_input, surfaces=surfaces,
+    )
+    surface_partitions = synchronize_distance_partitions(surface_partitions, distance_partitions)
     interfaces = _timed(
         timings,
         "complete_interface_plan_from_surfaces",
@@ -339,6 +350,7 @@ def build_route_construction_plan(
         "tags": tags,
         "metadata": {
             "backend_strategy": "surface_plan_first_bottom_up_occ",
+            "surface_distance_bands": distance_band_summary,
             "port_sheet_region_layer": {
                 "source": "GeometryBuildInput.port_sheet_regions",
                 "backend_live_surface_records": (

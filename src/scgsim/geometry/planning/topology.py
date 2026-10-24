@@ -347,6 +347,11 @@ def _surface_ring3d_specs(
     surface: SurfacePlanRecord,
 ) -> tuple[tuple[str, int, tuple[tuple[float, float, float], ...]], ...]:
     geometry_ref = surface.geometry_ref
+    if "planar_loops_3d" in geometry_ref:
+        return tuple(
+            ("outer" if index == 0 else "hole", max(0, index-1), _clean_ring3d(ring))
+            for index, ring in enumerate(geometry_ref["planar_loops_3d"])
+        )
     if "quad_points" in geometry_ref:
         return (("outer", 0, _clean_ring3d(geometry_ref["quad_points"])),)
     if "outer_loop" not in geometry_ref:

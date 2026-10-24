@@ -291,7 +291,8 @@ def plan_conductor_contact_patches(
     """
     if route == "C":
         return _plan_route_c_conductor_contact_patches(
-            build_input, route=route, interfaces=interfaces
+            build_input, route=route, interfaces=interfaces,
+            representation_context=representation_context,
         )
     import gdstk
 
@@ -429,6 +430,7 @@ def _plan_route_c_conductor_contact_patches(
     *,
     route: RouteLiteral,
     interfaces: tuple[InterfacePlanRecord, ...],
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[InterfacePlanRecord, ...]:
     """Preserve the pre-A/B Route-C rectangular-contact behavior exactly."""
     import gdstk
@@ -442,7 +444,9 @@ def _plan_route_c_conductor_contact_patches(
     bottom_faces: dict[
         float, list[tuple[SemanticEntitySpec, Any, Mapping[str, float]]]
     ] = {}
-    for entity in _active_route_conductor_entities(build_input, route):
+    for entity in _active_route_conductor_entities(
+        build_input, route, representation_context=representation_context
+    ):
         region = _entity_occupied_region(gdstk, entity)
         if not region:
             continue

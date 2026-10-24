@@ -123,6 +123,19 @@ def _required_output_paths(
     return paths
 
 
+def _iteration_directories(root: Path) -> list[Path]:
+    results = root / "results/palace"
+    if not _confined_path(root, "results/palace").is_dir():
+        return []
+    directories = []
+    for path in results.iterdir():
+        if not path.name.startswith("iteration") or not path.name.removeprefix("iteration").isdigit():
+            continue
+        if _confined_path(root, path.relative_to(root).as_posix()).is_dir():
+            directories.append(path)
+    return sorted(directories, key=lambda path: int(path.name.removeprefix("iteration")))
+
+
 def _iteration_output_paths(
     root: Path,
     problem: str,
@@ -135,20 +148,8 @@ def _iteration_output_paths(
         if config is not None
         else _REQUIRED_OUTPUT_FAMILIES[problem]
     )
-    results = root / "results" / "palace"
-    if not results.is_dir():
-        return []
     paths: list[str] = []
-    for directory in sorted(
-        (
-            path
-            for path in results.iterdir()
-            if path.is_dir()
-            and path.name.startswith("iteration")
-            and path.name.removeprefix("iteration").isdigit()
-        ),
-        key=lambda path: int(path.name.removeprefix("iteration")),
-    ):
+    for directory in _iteration_directories(root):
         names = [*families, "palace"]
         if masks_configured:
             names.extend(("surface-mask-Q", "surface-mask-energy"))
@@ -157,6 +158,43 @@ def _iteration_output_paths(
             if path.is_file():
                 paths.append(path.relative_to(root).as_posix())
     return paths
+
+
+def _adapted_mesh_output_paths(root: Path, config: dict[str, Any]) -> list[str]:
+    """Bind native-declared adapted meshes without replacing sealed input meshes.
+
+    Palace 0.18.1 writes Model.Mesh.stem plus .meshgz (zlib) or .mesh next
+    to palace.json. SaveAdaptIterations can leave confined top-level links.
+    Without a SavedAdaptedMesh block no adaptation output is assumed.
+    """
+    if config.get("Model", {}).get("Refinement", {}).get("SaveAdaptMesh") is not True:
+        return []
+    mesh_name = Path(config["Model"]["Mesh"]).stem
+    results = root / "results/palace"
+    if not _confined_path(root, "results/palace").is_dir():
+        return []
+    directories = [results, *_iteration_directories(root)]
+    outputs: list[str] = []
+    for directory in directories:
+        metadata_relative = (directory / "palace.json").relative_to(root).as_posix()
+        metadata_path = _confined_path(root, metadata_relative)
+        if not metadata_path.is_file():
+            continue  # The existing required metadata inventory handles missing metadata.
+        metadata = _read_json(metadata_path)
+        if "SavedAdaptedMesh" not in metadata:
+            continue
+        if not isinstance(metadata["SavedAdaptedMesh"], dict):
+            raise TypeError("native SavedAdaptedMesh must be a JSON object")
+        alternatives = [(directory / f"{mesh_name}{suffix}").relative_to(root).as_posix()
+                        for suffix in (".meshgz", ".mesh")]
+        present = [relative for relative in alternatives if _confined_path(root, relative).is_file()]
+        if len(present) > 1:
+            raise ValueError("native adapted mesh has ambiguous compression variants")
+        # Missing alternatives remain explicit failed output records, not an
+        # invented choice of the native build's compression configuration.
+        outputs.append(metadata_relative)
+        outputs.extend(present if present else alternatives)
+    return outputs
 
 
 def _record_for_path(run_dir: Path, relative_path: str) -> dict[str, Any]:
@@ -339,6 +377,9 @@ def main() -> int:
         ),
         *([RUNTIME_COMPATIBILITY_PATH] if compatibility_required is not None else []),
     ]
+    if handoff_metadata.get("palace_identity", {}).get("config_schema") == "1-7-0":
+        output_paths.extend(_adapted_mesh_output_paths(root, config))
+        output_paths = list(dict.fromkeys(output_paths))
     output_records = [_record_for_path(root, path) for path in output_paths]
     log_record = _record_for_path(root, args.log_path)
     completed_outputs = all(record["present"] is True for record in output_records)
@@ -528,6 +569,21 @@ def _resolved_executable(executable: str) -> Path | None:
     return resolved if resolved.is_file() else None
 
 
+_SUPPORTED_PALACE_RELEASE = "0.18.1"
+_SUPPORTED_PALACE_COMMIT = "0dc74cdf8c36c58b69b21c4a06e816048ec0b83f"
+
+
+def _supported_palace_release(native_git_tag: str | None) -> bool:
+    """Recognize the supported upstream release, without attesting build provenance."""
+    if native_git_tag in {_SUPPORTED_PALACE_RELEASE, "v" + _SUPPORTED_PALACE_RELEASE}:
+        return True
+    return (
+        native_git_tag is not None
+        and re.fullmatch(r"[0-9a-f]{7,40}", native_git_tag) is not None
+        and _SUPPORTED_PALACE_COMMIT.startswith(native_git_tag)
+    )
+
+
 def _verify_config_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description="Verify that Palace accepts the sealed config before solving."
@@ -546,6 +602,8 @@ def _verify_config_main(argv: list[str]) -> int:
     version_exit_code, version_output = _run_probe(version_command)
     matches = re.findall(r"(?m)^Palace version: ([^\s]+)\s*$", version_output)
     native_git_tag = matches[0] if len(matches) == 1 else None
+    schema_matches = re.findall(r"(?m)^Schema version: ([^\s]+)\s*$", version_output)
+    native_schema_version = schema_matches[0] if len(schema_matches) == 1 else None
     runtime_binary = (
         _resolved_executable(args.executable)
         if args.command_style == "binary"
@@ -563,8 +621,10 @@ def _verify_config_main(argv: list[str]) -> int:
     dry_run_exit_code, _ = _run_probe(dry_run_command)
 
     config_record = _record_for_path(root, args.config_path)
+    supported_release = version_exit_code == 0 and _supported_palace_release(native_git_tag)
     compatible = (
-        dry_run_exit_code == 0
+        supported_release
+        and dry_run_exit_code == 0
         and config_record["present"] is True
         and config_record == config_before
     )
@@ -583,6 +643,10 @@ def _verify_config_main(argv: list[str]) -> int:
         },
         "observed_identity": {
             "native_git_tag": native_git_tag,
+            "supported_upstream_release": (
+                _SUPPORTED_PALACE_RELEASE if supported_release else None
+            ),
+            "native_schema_version": native_schema_version,
             "version_probe_exit_code": version_exit_code,
             "runtime_binary_identity": binary_identity,
             "runtime_binary_sha256": binary_sha256,

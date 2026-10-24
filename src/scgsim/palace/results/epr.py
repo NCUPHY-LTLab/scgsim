@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -28,6 +28,54 @@ def _number(value: Any, name: str, *, positive: bool = False) -> float:
             f"{name} must be finite and {'positive' if positive else 'non-negative'}"
         )
     return float(value)
+
+
+def _surface_distance_band(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise TypeError("Palace geometric-band provenance must be a mapping")
+    required = {
+        "parent_surface_id",
+        "source_entity_id",
+        "source_polygon_id",
+        "lower_um",
+        "upper_um",
+        "band_index",
+        "component_index",
+        "precision_um",
+    }
+    missing = required.difference(value)
+    if missing:
+        raise ValueError(
+            f"Palace geometric-band provenance is missing fields: {sorted(missing)}"
+        )
+    canonical_fields = {"distances_um", "boundary_segments"}
+    if canonical_fields.issubset(value):
+        if not isinstance(value["distances_um"], (list, tuple)):
+            raise TypeError("Palace geometric-band distances_um must be a sequence")
+        if not isinstance(value["boundary_segments"], (list, tuple)):
+            raise TypeError(
+                "Palace geometric-band boundary_segments must be a sequence"
+            )
+    elif not canonical_fields.isdisjoint(value) or "origin_segments" not in value:
+        raise ValueError("Palace geometric-band source-boundary schema is invalid")
+    elif not isinstance(value["origin_segments"], (list, tuple)):
+        raise TypeError("Palace geometric-band origin_segments must be a sequence")
+    for name in ("parent_surface_id", "source_entity_id"):
+        if not isinstance(value[name], str) or not value[name]:
+            raise ValueError(f"Palace geometric-band {name} must be non-empty text")
+    source_polygon_id = value["source_polygon_id"]
+    if source_polygon_id is not None and not isinstance(source_polygon_id, str):
+        raise TypeError("Palace geometric-band source_polygon_id must be text or None")
+    if source_polygon_id == "":
+        raise ValueError("Palace geometric-band source_polygon_id must not be empty")
+    for name in ("band_index", "component_index"):
+        if type(value[name]) is not int or value[name] < 0:
+            raise ValueError(f"Palace geometric-band {name} must be non-negative")
+    _number(value["lower_um"], "geometric-band lower_um")
+    if value["upper_um"] is not None:
+        _number(value["upper_um"], "geometric-band upper_um")
+    _number(value["precision_um"], "geometric-band precision_um", positive=True)
+    return dict(value)
 
 
 def _plain(value: Any) -> Any:
@@ -106,8 +154,21 @@ class PalaceEprResult:
                         raise ValueError(f"Palace EPR surface {name} is missing")
                 if surface["interface_kind"] not in {"MA", "MS", "SA"} or surface[
                     "evaluation_kind"
-                ] not in {"unmasked_baseline", "requested_margin"}:
+                ] not in {
+                    "unmasked_baseline",
+                    "requested_margin",
+                    "geometric_band",
+                }:
                     raise ValueError("Palace EPR surface identity is invalid")
+                is_band = surface["evaluation_kind"] == "geometric_band"
+                if is_band:
+                    _surface_distance_band(surface.get("surface_distance_band"))
+                    if surface.get("margin_um") is not None:
+                        raise ValueError(
+                            "Palace geometric-band result must not claim a margin"
+                        )
+                else:
+                    _number(surface.get("margin_um"), "surface margin")
                 if not isinstance(surface.get("members"), Mapping):
                     raise TypeError("Palace EPR source provenance must be a mapping")
                 owners = surface.get("owner_semantic_ids")
@@ -117,7 +178,6 @@ class PalaceEprResult:
                     or any(not isinstance(owner, str) or not owner for owner in owners)
                 ):
                     raise ValueError("Palace EPR surface owners are invalid")
-                _number(surface.get("margin_um"), "surface margin")
                 _number(surface.get("original_participation"), "original participation")
                 _number(surface.get("participation"), "participation")
                 assumption = film_assumptions(
@@ -226,11 +286,99 @@ def resolve_epr_result(path: str | Path) -> PalaceEprResult:
     return PalaceEprResult.from_payload(json.loads(source.read_text(encoding="utf-8")))
 
 
-def epr_result(result: ResolvedPalaceResult) -> PalaceEprResult:
-    """Extract compact verified final Eigenmode quantities and source bindings."""
+def _iteration_result(
+    result: ResolvedPalaceResult, iteration: int
+) -> tuple[ResolvedPalaceResult, str]:
+    """Read one sealed native iteration with the existing table validators."""
+    from ..execution.returned_receipt import _confined_path, _sha256
+    from .resolve import (
+        _eigenmode_count,
+        _index_counts,
+        _output_families,
+        _read_csv_table,
+        _surface_mask_entries,
+        _validate_surface_mask_table,
+        _validate_table,
+    )
+
+    if type(iteration) is not int or iteration <= 0:
+        raise ValueError("palace_iteration must be a positive integer")
+    records = {item["path"]: item for item in result.returned_receipt.output_files}
+    prefixes = set()
+    for path in records:
+        parts = Path(path).parts
+        if (
+            len(parts) != 4
+            or parts[:2] != ("results", "palace")
+            or parts[3] != "palace.json"
+        ):
+            continue
+        suffix = parts[2].removeprefix("iteration")
+        if (
+            parts[2].startswith("iteration")
+            and suffix.isdigit()
+            and int(suffix) == iteration
+        ):
+            prefixes.add("/".join(parts[:3]))
+    if len(prefixes) != 1:
+        raise ValueError("requested native iteration lacks one receipt-bound directory")
+    prefix = prefixes.pop()
+
+    def verified(name: str) -> Path:
+        relative = f"{prefix}/{name}"
+        record = records.get(relative)
+        path = _confined_path(result.run_dir, relative)
+        if (
+            record is None
+            or record.get("present") is not True
+            or not path.is_file()
+            or path.stat().st_size != record.get("bytes")
+            or _sha256(path) != record.get("sha256")
+        ):
+            raise ValueError(
+                f"native iteration artifact is missing or changed: {relative}"
+            )
+        return path
+
+    native = json.loads(verified("palace.json").read_text(encoding="utf-8"))
+    if (
+        not isinstance(native, dict)
+        or not isinstance(native.get("Problem"), dict)
+        or native["Problem"].get("Iteration") != iteration
+    ):
+        raise ValueError("native iteration metadata disagrees with selected directory")
+    counts = _index_counts(result.provenance.index_map)
+    tables = {}
+    for family in _output_families(result.problem, counts):
+        table = _read_csv_table(verified(f"{family}.csv"))
+        _validate_table(result.problem, table, counts, result.provenance.config)
+        tables[family] = table
+    masks = _surface_mask_entries(result.provenance.index_map)
+    if masks:
+        for family in ("surface-mask-Q", "surface-mask-energy"):
+            table = _read_csv_table(verified(f"{family}.csv"))
+            _validate_surface_mask_table(
+                table,
+                problem=result.problem,
+                expected_rows=_eigenmode_count(result.provenance.config),
+                entries=masks,
+            )
+            tables[family] = table
+    return replace(
+        result, tables=tables, provenance=replace(result.provenance, palace_json=native)
+    ), prefix
+
+
+def epr_result(
+    result: ResolvedPalaceResult, *, palace_iteration: int | None = None
+) -> PalaceEprResult:
+    """Extract final or explicitly selected sealed-iteration Eigenmode EPR."""
 
     if not isinstance(result, ResolvedPalaceResult) or result.problem != "Eigenmode":
         raise TypeError("a resolved Palace Eigenmode run is required")
+    output_prefix = "results/palace"
+    if palace_iteration is not None:
+        result, output_prefix = _iteration_result(result, palace_iteration)
     index = result.provenance.index_map
     config = result.provenance.config
     l0 = _number(config["Model"]["L0"], "Model.L0", positive=True)
@@ -374,6 +522,15 @@ def epr_result(result: ResolvedPalaceResult) -> PalaceEprResult:
                 }
             )
             mask = entry.get("mask")
+            distance_band = (
+                _surface_distance_band(metadata["surface_distance_band"])
+                if "surface_distance_band" in metadata
+                else None
+            )
+            if distance_band is not None and mask is not None:
+                raise ValueError(
+                    "Palace geometric bands cannot use fork-only mask rows"
+                )
             participation = _number(
                 (
                     mask_q_row[f"p_surf_mask[{number}]"]
@@ -392,11 +549,29 @@ def epr_result(result: ResolvedPalaceResult) -> PalaceEprResult:
                     "field_side": metadata["face_kind"],
                     "surface_id": metadata["surface_id"],
                     "members": metadata["source_provenance"],
-                    "evaluation_kind": "requested_margin"
+                    **(
+                        {"attributes": list(entry["attributes"])}
+                        if "attributes" in entry
+                        else {}
+                    ),
+                    "evaluation_kind": "geometric_band"
+                    if distance_band is not None
+                    else "requested_margin"
                     if mask is not None
                     else "unmasked_baseline",
-                    "margin_um": float(mask["margin_um"]) if mask is not None else 0.0,
+                    "margin_um": (
+                        None
+                        if distance_band is not None
+                        else float(mask["margin_um"])
+                        if mask is not None
+                        else 0.0
+                    ),
                     "margin_index": mask["margin_index"] if mask is not None else None,
+                    **(
+                        {"surface_distance_band": distance_band}
+                        if distance_band is not None
+                        else {}
+                    ),
                     "original_participation": participation,
                     "participation": participation,
                     "original_assumptions": assumption,
@@ -456,7 +631,7 @@ def epr_result(result: ResolvedPalaceResult) -> PalaceEprResult:
         )
     source_inputs = {"config.json", "metadata/palace_index_map.json"}
     source_outputs = {
-        f"results/palace/{name}.csv"
+        f"{output_prefix}/{name}.csv"
         for name in (
             "eig",
             "domain-E",
@@ -466,31 +641,53 @@ def epr_result(result: ResolvedPalaceResult) -> PalaceEprResult:
             "surface-mask-energy",
         )
     }
-    return PalaceEprResult(
-        tuple(rows),
-        {
-            "handoff_id": result.returned_receipt.handoff_id,
-            "route": result.route,
-            "source": "verified_final_palace_tables",
-            "analysis_request": request,
-            "surface_scope": "recorded_native_MA_MS_SA; sidewalls_uncomputed_if_unselected",
-            "source_reference": {
-                "receipt_schema": result.returned_receipt.schema,
-                "receipt_timestamp_utc": result.returned_receipt.timestamp_utc,
-                "solver_identity": result.returned_receipt.solver_identity,
-                "input_files": [
-                    item
-                    for item in result.returned_receipt.input_hashes
-                    if item.get("path") in source_inputs
-                ],
-                "output_files": [
-                    item
-                    for item in result.returned_receipt.output_files
-                    if item.get("path") in source_outputs
-                ],
-            },
-        },
+    source_outputs.add(f"{output_prefix}/palace.json")
+    palace_output = next(
+        (
+            item
+            for item in result.returned_receipt.output_files
+            if item.get("path") == f"{output_prefix}/palace.json"
+        ),
+        None,
     )
+    palace_problem = result.provenance.palace_json.get("Problem")
+    palace_iteration = (
+        palace_problem.get("Iteration") if isinstance(palace_problem, Mapping) else None
+    )
+    provenance = {
+        "handoff_id": result.returned_receipt.handoff_id,
+        "route": result.route,
+        "source": "verified_final_palace_tables"
+        if output_prefix == "results/palace"
+        else "verified_iteration_palace_tables",
+        "analysis_request": request,
+        "surface_scope": "recorded_native_MA_MS_SA; sidewalls_uncomputed_if_unselected",
+        "palace_native_iteration": palace_iteration,
+        "palace_json_sha256": (
+            palace_output.get("sha256") if palace_output is not None else None
+        ),
+        **(
+            {"surface_distance_bands": index["surface_distance_bands"]}
+            if "surface_distance_bands" in index
+            else {}
+        ),
+        "source_reference": {
+            "receipt_schema": result.returned_receipt.schema,
+            "receipt_timestamp_utc": result.returned_receipt.timestamp_utc,
+            "solver_identity": result.returned_receipt.solver_identity,
+            "input_files": [
+                item
+                for item in result.returned_receipt.input_hashes
+                if item.get("path") in source_inputs
+            ],
+            "output_files": [
+                item
+                for item in result.returned_receipt.output_files
+                if item.get("path") in source_outputs
+            ],
+        },
+    }
+    return PalaceEprResult(tuple(rows), provenance)
 
 
 def reanalyze_epr(

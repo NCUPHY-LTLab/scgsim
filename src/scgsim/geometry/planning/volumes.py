@@ -28,6 +28,7 @@ from scgsim.geometry.models.construction import (
     CutHostOperationRecord,
 )
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import (
     InnerPecVoidShellRecord,
     InterfacePlanRecord,
@@ -63,6 +64,7 @@ def plan_route_construction_bodies(
     *,
     route: RouteLiteral,
     interfaces: tuple[InterfacePlanRecord, ...] = (),
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[ConstructionBodyPlanRecord, ...]:
     """Plan Route A/B cutter bodies without making them final geometry.
 
@@ -108,6 +110,7 @@ def plan_route_construction_bodies(
                         entity,
                         interfaces=interfaces,
                         contact_faces=contact_faces,
+                        representation_context=representation_context,
                     )
                 ),
                 valid_routes=(route,),
@@ -427,6 +430,7 @@ def _cutout_shell_surface_ids(
     entity: SemanticEntitySpec,
     *,
     interfaces: tuple[InterfacePlanRecord, ...] = (),
+    representation_context: RepresentationContext | None = None,
     contact_faces: Mapping[
         tuple[str, str],
         tuple[tuple[tuple[float, float], ...], ...],
@@ -477,6 +481,7 @@ def _cutout_shell_surface_ids(
             entity=entity,
             representation="cutout_boundary_shell",
             adjacent_solution_id=sidewall_adjacent_id,
+            representation_context=representation_context,
             interfaces=interfaces,
         )
     )

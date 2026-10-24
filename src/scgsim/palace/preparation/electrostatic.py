@@ -5,6 +5,8 @@ This class prepares geometry and manual handoff files; it never runs Palace.
 
 from __future__ import annotations
 
+import json
+
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,7 +28,7 @@ from .inputs import (
     _validate_stack_material_kinds,
 )
 from ..mesh.build import MeshBuildResult, build_route_mesh
-from ..mesh.controls import MESH_CONTROL_KEYS
+from ..mesh.controls import MESH_CONTROL_KEYS, MeshSizing, update_mesh_sizing
 from .transforms import (
     RouteAThinFilm,
     normalize_route_a_thin_film,
@@ -263,6 +265,7 @@ class ElectrostaticSim:
     def set_mesh(
         self,
         *,
+        size_policy: str | None = None,
         refined_mesh_size: float | None = None,
         max_mesh_size: float | None = None,
         algorithm_3d: str | None = None,
@@ -273,16 +276,23 @@ class ElectrostaticSim:
     ) -> None:
         """Set geometry-mesh controls; every omitted value retains its setting.
 
+        Selecting ``gmsh_default`` clears SCG sizes and rejects explicit sizes.
+        Switching back to ``scgsim_default`` restores 5/300 unless sizes are given.
         Geometry order is independent of ``set_numerical(order=...)``. Elevated
         geometry is optimized with Gmsh HighOrder once when enabled.
         """
+        sizing = update_mesh_sizing(
+            MeshSizing.from_payload(self.numerical),
+            size_policy=size_policy,
+            refined_mesh_size=refined_mesh_size,
+            max_mesh_size=max_mesh_size,
+        )
         proposed = dict(self.numerical)
+        proposed.update(sizing.to_payload())
         proposed.update(
             {
                 key: value
                 for key, value in {
-                    "refined_mesh_size": refined_mesh_size,
-                    "max_mesh_size": max_mesh_size,
                     "algorithm_3d": algorithm_3d,
                     "threads": threads,
                     "surface_threads": surface_threads,
@@ -332,12 +342,15 @@ class ElectrostaticSim:
             "refined_mesh_size": self.numerical["refined_mesh_size"],
             "max_mesh_size": self.numerical["max_mesh_size"],
         }
-        mesh_sizes = previous_mesh_sizes
-        if refined_mesh_size is not None:
-            mesh_sizes = {
-                "refined_mesh_size": refined_mesh_size,
-                "max_mesh_size": max_mesh_size,
-            }
+        sizing = update_mesh_sizing(
+            MeshSizing.from_payload(self.numerical),
+            refined_mesh_size=refined_mesh_size,
+            max_mesh_size=max_mesh_size,
+        )
+        mesh_sizes = {
+            "refined_mesh_size": sizing.refined_mesh_size,
+            "max_mesh_size": sizing.max_mesh_size,
+        }
         self.numerical = configure_numerical_controls(
             order=order,
             tolerance=tolerance,
@@ -500,6 +513,9 @@ class ElectrostaticSim:
             ],
             "ground_boundary": result.ground_boundary_resolution,
         }
+        mesh_manifest = json.loads(self._mesh_result.mesh_manifest_path.read_text(encoding="utf-8"))
+        if "surface_distance_bands" in mesh_manifest:
+            index_payload["surface_distance_bands"] = mesh_manifest["surface_distance_bands"]
         material_payload = {
             "schema_version": 1,
             "solution_volumes": result.material_resolution,

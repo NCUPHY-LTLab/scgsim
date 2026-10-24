@@ -189,6 +189,15 @@ def build_eigenmode_config(
     mesh_path: Path,
 ) -> EigenmodeConfigBuildResult:
     """Build one non-Floquet Eigenmode config from SGB-authored groups."""
+    if numerical.get("amr_max_passes") is None:
+        raise ValueError("Eigenmode requires explicit amr_max_passes before config generation.")
+    if numerical["amr_max_passes"] > 0 and (
+        numerical.get("amr_tolerance") is None
+        or numerical.get("amr_update_fraction") is None
+    ):
+        raise ValueError(
+            "Enabled Eigenmode AMR requires explicit amr_tolerance and amr_update_fraction."
+        )
     if not isinstance(num_modes, int) or isinstance(num_modes, bool) or num_modes < 1:
         raise ValueError("num_modes must be a positive integer.")
     if not _positive_finite(eigenmode_tolerance):
@@ -564,15 +573,16 @@ def _linear_solver(numerical: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _build_refinement(numerical: Mapping[str, Any]) -> dict[str, Any]:
-    # Palace defaults Model.Refinement.Nonconformal to true if the key is omitted.
-    # SCGSim always writes the key. The default is false (conformal tet AMR);
-    # notebooks may set amr_nonconformal=True to opt into NC AMR.
+    max_passes = numerical.get("amr_max_passes")
+    if max_passes is None:
+        raise ValueError("amr_max_passes must be explicitly set before config generation.")
     refinement = {
         "UniformLevels": 0,
-        "Tol": float(numerical["amr_tolerance"]),
-        "MaxIts": int(numerical["amr_max_passes"]),
+        "MaxIts": int(max_passes),
         "Nonconformal": bool(numerical.get("amr_nonconformal", False)),
     }
+    if numerical.get("amr_tolerance") is not None:
+        refinement["Tol"] = float(numerical["amr_tolerance"])
     if numerical.get("save_adapt_iterations") is not None:
         refinement["SaveAdaptIterations"] = bool(numerical["save_adapt_iterations"])
     if numerical.get("save_adapt_mesh") is not None:
@@ -603,16 +613,17 @@ def configure_numerical_controls(
     solver_type: str = "Default",
     preconditioner: str = "Default",
     device: str = "CPU",
-    refined_mesh_size: float = 5.0,
-    max_mesh_size: float = 300.0,
+    size_policy: str = "scgsim_default",
+    refined_mesh_size: float | None = None,
+    max_mesh_size: float | None = None,
     algorithm_3d: str = "Delaunay",
     threads: int = 1,
     surface_threads: int = 1,
     geometry_order: int = 1,
     high_order_optimize: bool = True,
-    amr_max_passes: int = 0,
+    amr_max_passes: int | None = 0,
     amr_nonconformal: bool = False,
-    amr_tolerance: float = 1e-2,
+    amr_tolerance: float | None = 1e-2,
     amr_update_fraction: float | None = None,
     save_adapt_iterations: bool | None = None,
     save_adapt_mesh: bool | None = None,
@@ -647,22 +658,22 @@ def configure_numerical_controls(
     if solver_type == "MUMPS":
         max_iterations = 1
 
-    if not _positive_finite(refined_mesh_size):
-        raise ValueError("refined_mesh_size must be finite and > 0.")
-    if not _positive_finite(max_mesh_size):
-        raise ValueError("max_mesh_size must be finite and > 0.")
-    refined = float(refined_mesh_size)
-    maximum = float(max_mesh_size)
-    if maximum < refined:
-        raise ValueError("max_mesh_size must be >= refined_mesh_size.")
+    from ..mesh.controls import normalize_mesh_sizing
 
-    if not isinstance(amr_max_passes, int) or isinstance(amr_max_passes, bool):
-        raise TypeError("amr_max_passes must be an integer.")
-    if amr_max_passes < 0:
-        raise ValueError("amr_max_passes must be >= 0.")
+    sizing = normalize_mesh_sizing(
+        size_policy=size_policy,
+        refined_mesh_size=refined_mesh_size,
+        max_mesh_size=max_mesh_size,
+    )
+
+    if amr_max_passes is not None:
+        if not isinstance(amr_max_passes, int) or isinstance(amr_max_passes, bool):
+            raise TypeError("amr_max_passes must be an integer.")
+        if amr_max_passes < 0:
+            raise ValueError("amr_max_passes must be >= 0.")
     if not isinstance(amr_nonconformal, bool):
         raise TypeError("amr_nonconformal must be a bool.")
-    if not _positive_finite(amr_tolerance):
+    if amr_tolerance is not None and not _positive_finite(amr_tolerance):
         raise ValueError("amr_tolerance must be finite and positive.")
     if amr_update_fraction is not None:
         if not isinstance(amr_update_fraction, Real) or isinstance(
@@ -691,6 +702,7 @@ def configure_numerical_controls(
 
     controls = {
         **mesh_controls(
+            size_policy=sizing.size_policy,
             algorithm_3d=algorithm_3d,
             threads=threads,
             surface_threads=surface_threads,
@@ -703,11 +715,11 @@ def configure_numerical_controls(
         "solver_type": str(solver_type),
         "preconditioner": str(preconditioner),
         "device": str(device),
-        "refined_mesh_size": refined,
-        "max_mesh_size": maximum,
-        "amr_max_passes": int(amr_max_passes),
+        "refined_mesh_size": sizing.refined_mesh_size,
+        "max_mesh_size": sizing.max_mesh_size,
+        "amr_max_passes": int(amr_max_passes) if amr_max_passes is not None else None,
         "amr_nonconformal": bool(amr_nonconformal),
-        "amr_tolerance": float(amr_tolerance),
+        "amr_tolerance": float(amr_tolerance) if amr_tolerance is not None else None,
         "amr_update_fraction": (
             float(amr_update_fraction) if amr_update_fraction is not None else None
         ),

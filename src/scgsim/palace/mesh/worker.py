@@ -25,17 +25,20 @@ def _run_request(request: Any, result_path: Path) -> int:
     """Validate and execute one decoded worker request."""
     if not isinstance(request, Mapping):
         raise TypeError("Gmsh worker request must be a mapping.")
-    from .controls import mesh_controls
+    from .controls import MeshSizing, mesh_controls
 
-    controls = mesh_controls(**_required(request, "mesh_controls", dict))
+    sizing = MeshSizing.from_payload(request)
+    controls = mesh_controls(
+        size_policy=sizing.size_policy, **_required(request, "mesh_controls", dict)
+    )
     result = _mesh_xao_in_current_process(
         xao_path=Path(_required(request, "xao_path", str)),
         route=_required(request, "route", str),
         records=_required(request, "records", list),
         stack=_required(request, "stack", dict),
         mesh_path=Path(_required(request, "mesh_path", str)),
-        refined_mesh_size=float(_required(request, "refined_mesh_size", int | float)),
-        max_mesh_size=float(_required(request, "max_mesh_size", int | float)),
+        refined_mesh_size=sizing.refined_mesh_size,
+        max_mesh_size=sizing.max_mesh_size,
         mesh_controls=controls,
     )
     result_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
