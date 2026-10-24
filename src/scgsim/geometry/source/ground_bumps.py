@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.geometry._primitives.grid import polygon_boolean
+
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
@@ -179,7 +181,7 @@ def _prepare_indium_ground_bump_fill(
                 )
                 candidate_id = _fill_id(fill_prefix, i, j)
                 blocker_ids: tuple[str, ...] = ()
-                if gdstk.boolean(expanded, ground, "not", precision=1e-9):
+                if polygon_boolean(expanded, ground, "not", precision=1e-9):
                     reason = "outside_d0_d1_ground_intersection"
                     blocker_ids = ("D0_D1_GROUND_INTERSECTION",)
                 else:
@@ -317,7 +319,6 @@ def _audit_authored_indium_sites(
     role and host remain structured adapter records and ambiguous facts fail
     before a candidate can be emitted.
     """
-    import gdstk
 
     polygons_by_id = {polygon.polygon_id: polygon for polygon in build_input.polygons}
     entities = {entity.semantic_id: entity for entity in build_input.entities}
@@ -359,7 +360,7 @@ def _audit_authored_indium_sites(
         raise ValueError(
             "structured ground owners disagree on exact net/equipotential or host."
         )
-    ground = gdstk.boolean(owners[0][1], owners[1][1], "and", precision=1e-9)
+    ground = polygon_boolean(owners[0][1], owners[1][1], "and", precision=1e-9)
     if not ground:
         raise ValueError("D0/D1 structured Ground intersection is empty.")
 
@@ -445,7 +446,7 @@ def _audit_authored_indium_sites(
             matching = [
                 index
                 for index, under in enumerate(under_polygons)
-                if not gdstk.boolean((bump,), (under,), "not", precision=1e-9)
+                if not polygon_boolean((bump,), (under,), "not", precision=1e-9)
             ]
             if len(matching) != 1 or matching[0] in used_under:
                 raise ValueError(
@@ -471,7 +472,7 @@ def _audit_authored_indium_sites(
         site_id = f"AUTHORED_INDIUM_SITE__{index:04d}"
         center = _polygon_center(bump)
         footprint = (under,)
-        if gdstk.boolean(footprint, ground, "not", precision=1e-9):
+        if polygon_boolean(footprint, ground, "not", precision=1e-9):
             raise ValueError(f"authored site {site_id!r} is outside D0/D1 Ground.")
         sources = _intersecting_blocker_ids(footprint, blockers)
         if sources:
@@ -481,7 +482,7 @@ def _audit_authored_indium_sites(
         for other_index, (_, other_under, _, _) in enumerate(ordered_pairs):
             if index == other_index:
                 continue
-            if gdstk.boolean(footprint, (other_under,), "and", precision=1e-9):
+            if polygon_boolean(footprint, (other_under,), "and", precision=1e-9):
                 raise ValueError(
                     f"authored site {site_id!r} overlaps another authored UBM."
                 )
@@ -536,12 +537,11 @@ def _polygon_points(polygon: Any) -> list[list[float]]:
 def _intersecting_blocker_ids(
     footprint: Sequence[Any], blockers: Sequence[tuple[str, Sequence[Any]]]
 ) -> tuple[str, ...]:
-    import gdstk
 
     return tuple(
         source_id
         for source_id, polygons in blockers
-        if polygons and gdstk.boolean(footprint, polygons, "and", precision=1e-9)
+        if polygons and polygon_boolean(footprint, polygons, "and", precision=1e-9)
     )
 
 
@@ -678,7 +678,7 @@ def _gdstk_polygons(polygons: Sequence[Any]) -> list[Any]:
         outer = [gdstk.Polygon(polygon.exterior)]
         holes = [gdstk.Polygon(hole) for hole in polygon.holes]
         result.extend(
-            outer if not holes else gdstk.boolean(outer, holes, "not", precision=1e-9)
+            outer if not holes else polygon_boolean(outer, holes, "not", precision=1e-9)
         )
     return result
 
@@ -694,7 +694,6 @@ def _authored_bump_source_identity(
     This is a lossless source-record lookup: GDS geometry identifies only the
     already-authored structured polygon, never a net, owner, or host.
     """
-    import gdstk
 
     layer_name = f"{bump_layer[0]}/{bump_layer[1]}"
     polygons_by_id = {polygon.polygon_id: polygon for polygon in build_input.polygons}
@@ -707,9 +706,9 @@ def _authored_bump_source_identity(
             if polygon is None or polygon.layer != layer_name:
                 continue
             candidate = tuple(_gdstk_polygons((polygon,)))
-            if not gdstk.boolean(
+            if not polygon_boolean(
                 (bump,), candidate, "not", precision=1e-9
-            ) and not gdstk.boolean(candidate, (bump,), "not", precision=1e-9):
+            ) and not polygon_boolean(candidate, (bump,), "not", precision=1e-9):
                 matches.append((entity.semantic_id, polygon_id))
     if len(matches) != 1:
         raise ValueError(

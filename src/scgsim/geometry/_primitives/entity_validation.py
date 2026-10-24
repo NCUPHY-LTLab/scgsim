@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.geometry._primitives.grid import polygon_boolean
+
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -88,9 +90,8 @@ def _entity_z_range(entity: SemanticEntitySpec) -> tuple[float, float]:
 def _entities_have_finite_overlap(
     first: SemanticEntitySpec, second: SemanticEntitySpec
 ) -> bool:
-    import gdstk
 
-    overlap = gdstk.boolean(
+    overlap = polygon_boolean(
         _entity_occupied_region(first),
         _entity_occupied_region(second),
         "and",
@@ -113,7 +114,7 @@ def _entity_occupied_region(entity: SemanticEntitySpec) -> tuple[Any, ...]:
     holes = tuple(gdstk.Polygon(loop) for loop in entity.geometry.get("hole_loops", ()))
     if not holes:
         return (outer,)
-    return tuple(gdstk.boolean((outer,), holes, "not", precision=1e-9) or ())
+    return tuple(polygon_boolean((outer,), holes, "not", precision=1e-9) or ())
 
 
 def _polygon_area(points: Sequence[Sequence[float]]) -> float:

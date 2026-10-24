@@ -156,16 +156,34 @@ immutable `GeometryPlanSnapshot`; `GeometryBuildInput` remains the normalized
 geometry boundary consumed by the backend preparation paths.
 
 Create the plan with `GeometryPlan(component=assembled, root_id="chip",
-layer_stack=..., material_records=..., coupon_padding_um=...)`. Register each
-named reference occurrence in parent-first order with
-`register_instance("chip/q0", q0_ref)`. `plan.entities` exposes the existing
-semantic entity inventory with slash-qualified `.semantic_id` values. The
-Notebook supplies the final map with
+layer_stack=..., material_records=..., coupon_padding_um=...,
+grid_size_um=layoutgrid_um)`. Set the source layout DBU to the selected
+`layoutgrid_um` before constructing cells. Register each named reference
+occurrence in parent-first order with `register_instance("chip/q0", q0_ref)`.
+`plan.entities` exposes the existing semantic entity inventory with
+slash-qualified `.semantic_id` values. The Notebook supplies the final map with
 `set_nets({NetID: tuple(qualified_entity_ids)})`; `prepare()` returns a frozen
 `GeometryPlanSnapshot` containing the normalized `geometry_input`, stack, GDS
 bytes and digest, and detached source-occurrence records. It retains no live
 component references. Palace and AEDT consume that exact snapshot through
 `EigenmodeSim.set_plan(snapshot)`.
+
+`GeometryPlan`, `build_gds_stack_geometry_input(...)`, and
+`build_gdsfactory_geometry_input(...)` accept `grid_size_um=None`. With `None`,
+the actual emitted `source_dbu_um` supplies the shared layout grid; an explicit
+mismatch raises an error naming `grid_size_um` and `source_dbu_um`. SCGSim
+checks the source DBU and does not mutate shared PDK or global state.
+`metadata.geometry_grid` records `schema_version` with value
+`scgsim.geometry.grid.v1`, the selected `grid_size_um`, and `coordinate_frame`
+with value `assembly_xy`. It identifies the shared fixed-precision grid for
+assembly XY/layer arrangement. Saved inputs without `metadata.geometry_grid`
+retain historical interpretation. Original source identity is retained alongside the
+computational change ledger, and walls inherit their snapped layout endpoints.
+Z coordinates, film thickness, mesh, quadrature, and solver tolerances remain
+separate; the XY grid does not assert that every 3D coordinate lies on it.
+Fixed-precision arrangement fails explicitly if physical contacts change,
+holes are lost, or positive-area components are removed. It does not attribute
+by nearest edge or silently remove small regions.
 
 For component-semantics schema v2, the paired stack adds derived source
 occurrence records, not a new user polygon-selection API. Each
@@ -314,15 +332,20 @@ an actual parent owner. Never create a substitute polygon ID. These anchors
 identify the parent group; they do not filter other members or rings out of it.
 
 `SurfaceDistanceBandSpec` binds the parent ID and source anchor to ordered
-`distances_um`, a Boolean `precision_um`, and an optional exact subset of
-`SourceBoundarySegment` records. With cuts at 0.5 µm and 1.0 µm, the resulting
-bands are 0–0.5 µm, 0.5–1.0 µm, and 1.0 µm outward. `boundary_segments=None`
-uses every original exterior and hole edge. An explicit segment identifies
-its original `ring`, `segment_index`, and, for a hole, `hole_index`; generated
-band seams never become new distance origins. For port-split walls, retain the
-unsplit original wall boundary as distance-origin lineage and clip child
-regions from that parent; split seams are not new inset origins. The requested
-precision sets the polygon Boolean grid and round-cap chord error.
+`distances_um`, the required `precision_um` equal to the plan's shared
+`grid_size_um`, and an optional exact subset of `SourceBoundarySegment` records.
+With cuts at 0.5 µm and 1.0 µm, the resulting bands are 0–0.5 µm, 0.5–1.0 µm,
+and 1.0 µm outward. `boundary_segments=None` uses every original exterior and
+hole edge. An explicit segment identifies its original `ring`,
+`segment_index`, and, for a hole, `hole_index`; generated band seams never
+become new distance origins. For port-split walls, retain the unsplit original
+wall boundary as distance-origin lineage and clip child regions from that
+parent; split seams are not new inset origins. The shared precision sets the
+XY polygon Boolean grid. The optional `chord_error_um: float | None = None`
+field follows `boundary_segments` and independently controls arc and cap
+approximation; `None` retains the previous chord magnitude of
+`precision_um`. Distance partitions remain limited to planar polygon parents;
+this does not add curve-band capability.
 
 Each child retains its parent and source-owner identity, any source-polygon
 provenance, selected source segments, interval, component index, and child

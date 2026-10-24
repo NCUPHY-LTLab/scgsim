@@ -224,6 +224,7 @@ def _producer_band_fixture(
     wall=True,
     constructed_sa=False,
     interface_kind="MA",
+    grid_bound=False,
 ):
     """Real source partition -> export metadata -> mesh-info -> Palace preparation.
 
@@ -310,6 +311,11 @@ def _producer_band_fixture(
             )
             for parent in parents
         )
+        if grid_bound:
+            from scgsim.geometry.models.grid import GeometryGridContext
+            from scgsim.geometry.source.grid import apply_geometry_grid
+
+            build = apply_geometry_grid(build, GeometryGridContext(0.001))
         build = with_surface_distance_bands(build, specs)
         children, _, summaries = partition_surface_distance_bands(
             build, surfaces=tuple(parents)
@@ -358,6 +364,7 @@ def _resolved_producer_band_run(
     wall=True,
     constructed_sa=False,
     interface_kind="MA",
+    grid_bound=False,
 ):
     from dataclasses import replace
 
@@ -367,6 +374,7 @@ def _resolved_producer_band_run(
         wall=wall,
         constructed_sa=constructed_sa,
         interface_kind=interface_kind,
+        grid_bound=grid_bound,
     )
     original = _resolved_band_run()
     index_map = {

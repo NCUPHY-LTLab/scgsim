@@ -7,6 +7,8 @@ transforms remain at the occurrence boundary and are applied exactly once.
 
 from __future__ import annotations
 
+from scgsim.geometry._primitives.grid import polygon_boolean, preserve_declared_source
+
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -18,6 +20,7 @@ from scgsim.geometry.source._polygon_ops import (
 )
 
 
+@preserve_declared_source
 def _derived_ground_polygons(
     entity: SemanticEntitySpec,
     *,
@@ -49,7 +52,7 @@ def _derived_ground_polygons(
         base = (gdstk.Polygon(exterior),)
     else:
         base = tuple(plane_polygons)
-    without_mask = gdstk.boolean(
+    without_mask = polygon_boolean(
         base,
         _merged_gdstk_polygons(polygons_by_layer.get(mask_key, ())),
         "not",
@@ -121,7 +124,7 @@ def _derived_ground_polygons(
                     f"{entity.semantic_id} include selector {tuple(point)!r} matched {len(matches)} source polygons"
                 )
             included.extend(_layout_polygon_region(gdstk, matches[0]))
-    regions = gdstk.boolean(without_mask or (), tuple(included), "or", precision=1e-9)
+    regions = polygon_boolean(without_mask or (), tuple(included), "or", precision=1e-9)
     normalized_regions = sorted(
         (
             _split_gdstk_cutline_loop(_ring_from_gdstk_polygon(region))
@@ -158,9 +161,8 @@ def _derived_ground_polygons(
 def _merged_gdstk_polygons(polygons: Sequence[Any]) -> tuple[Any, ...]:
     if not polygons:
         return ()
-    import gdstk
 
-    merged = gdstk.boolean(
+    merged = polygon_boolean(
         polygons,
         (),
         "or",
@@ -193,7 +195,7 @@ def _layout_polygon_region(gdstk: Any, polygon: LayoutPolygonSpec) -> tuple[Any,
     holes = tuple(gdstk.Polygon(hole) for hole in polygon.holes)
     if not holes:
         return (outer,)
-    return tuple(gdstk.boolean((outer,), holes, "not", precision=1e-9) or ())
+    return tuple(polygon_boolean((outer,), holes, "not", precision=1e-9) or ())
 
 
 def _rectangle_ring(bounds: Mapping[str, float]) -> tuple[tuple[float, float], ...]:

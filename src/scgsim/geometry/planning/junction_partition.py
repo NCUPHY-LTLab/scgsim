@@ -24,6 +24,10 @@ from typing import Any
 import gdstk
 
 from scgsim.geometry.models.input import GeometryBuildInput, LayoutPolygonSpec
+from scgsim.geometry.models.grid import geometry_grid_context
+from scgsim.geometry._primitives.grid import (
+    PolygonRegion, polygon_boolean, polygon_world_frame, with_input_grid,
+)
 from scgsim.geometry.models.physical import (
     PhysicalLayerDeclaration,
     PhysicalRepresentationPlan,
@@ -482,12 +486,17 @@ def _region(polygons):
 def _boolean(left, right, operation):
     # SGB's Boolean wrapper filters small areas. Partitioning must retain every
     # residual, so reuse its precision and loop lowering without that filter.
-    return list(gdstk.boolean(left, right, operation, precision=PRECISION_UM) or ())
+    return list(polygon_boolean(left, right, operation, precision=PRECISION_UM) or ())
 
 
 def _rings(region):
     result = []
     for polygon in region:
+        if isinstance(polygon, PolygonRegion):
+            result.append(tuple(tuple((round(x / PRECISION_UM), round(y / PRECISION_UM))
+                               for x,y in ring)
+                               for ring in (polygon.exterior, *polygon.holes)))
+            continue
         points = tuple(
             (round(x / PRECISION_UM), round(y / PRECISION_UM))
             for x, y in polygon.points
@@ -1258,6 +1267,7 @@ def _model_edge_contacts(regions, start, finish):
     return any(any(_model_edge_section(region, start, finish)) for region in regions)
 
 
+@with_input_grid
 def partition_junctions(
     build_input: GeometryBuildInput,
     junctions: Sequence[JunctionGeometry],
@@ -1336,185 +1346,189 @@ def partition_junctions(
                     )
             return tuple(rings)
 
-        by_entity = {
-            e.semantic_id: [
-                local(originals[p]) for p in e.polygon_ids if p not in authored_ids
+        transform = (dx, px, dy, py,
+                     origin[0]*dx + origin[1]*px,
+                     origin[0]*dy + origin[1]*py)
+        with polygon_world_frame(transform):
+            by_entity = {
+                e.semantic_id: [
+                    local(originals[p]) for p in e.polygon_ids if p not in authored_ids
+                ]
+                for e in entities.values()
+                if e.semantic_id in support_plane["eligible_entity_ids"]
+            }
+            by_net = defaultdict(list)
+            for eid, polygons in by_entity.items():
+                by_net[entities[eid].net_id].extend(polygons)
+            own_a, own_b = by_net[junction.terminal_a_net], by_net[junction.terminal_b_net]
+            if not own_a or not own_b:
+                raise ValueError(
+                    "junction requires both explicit terminal conductor geometries"
+                )
+            other = [
+                p
+                for net, polygons in by_net.items()
+                if net not in {junction.terminal_a_net, junction.terminal_b_net}
+                for p in polygons
             ]
-            for e in entities.values()
-            if e.semantic_id in support_plane["eligible_entity_ids"]
-        }
-        by_net = defaultdict(list)
-        for eid, polygons in by_entity.items():
-            by_net[entities[eid].net_id].extend(polygons)
-        own_a, own_b = by_net[junction.terminal_a_net], by_net[junction.terminal_b_net]
-        if not own_a or not own_b:
-            raise ValueError(
-                "junction requires both explicit terminal conductor geometries"
-            )
-        other = [
-            p
-            for net, polygons in by_net.items()
-            if net not in {junction.terminal_a_net, junction.terminal_b_net}
-            for p in polygons
-        ]
-        if _contacts(other, span, width) is not None:
-            raise ValueError("third-net closed contact with authored junction sheet")
-        ca, cb = _contacts(own_a, span, width), _contacts(own_b, span, width)
-        if ca is None or cb is None or ca[1] >= cb[0]:
-            raise ValueError("unsupported junction contact ordering or clear corridor")
-        lower, upper = ca[1], cb[0]
-        for polygons in (own_a, own_b, other):
-            for rings in polygons:
-                for y in (0, width):
-                    intervals, points = _section(rings, 1, y, lower, upper)
-                    if any(a < b for a, b in intervals) or any(
-                        lower < v < upper for v in points
-                    ):
-                        raise ValueError(
-                            "unsupported corridor side-boundary metal contact"
-                        )
-        sheet_region = _region(_rectangle(0, 0, span, width))
-        free = _boolean(sheet_region, _region([*own_a, *own_b]), "not")
-        corridor = _region(_rectangle(lower, 0, upper, width))
-        if _boolean(corridor, free, "not"):
-            raise ValueError(
-                "unsupported corridor containment; no general search performed"
-            )
-        choices = []
-        checks = []
-        for left, bound, own, foreign in (
-            (True, lower, own_a, own_b + other),
-            (False, upper, own_b, own_a + other),
-        ):
-            chosen = None
-            for index in _candidate_indices(bound, step, left=left):
-                requested, cut = _cut(index, step)
-                interior = (
-                    (Decimal(index) * Decimal(str(step)) > _bound_decimal(bound))
-                    if left
-                    else (Decimal(index) * Decimal(str(step)) < _bound_decimal(bound))
+            if _contacts(other, span, width) is not None:
+                raise ValueError("third-net closed contact with authored junction sheet")
+            ca, cb = _contacts(own_a, span, width), _contacts(own_b, span, width)
+            if ca is None or cb is None or ca[1] >= cb[0]:
+                raise ValueError("unsupported junction contact ordering or clear corridor")
+            lower, upper = ca[1], cb[0]
+            for polygons in (own_a, own_b, other):
+                for rings in polygons:
+                    for y in (0, width):
+                        intervals, points = _section(rings, 1, y, lower, upper)
+                        if any(a < b for a, b in intervals) or any(
+                            lower < v < upper for v in points
+                        ):
+                            raise ValueError(
+                                "unsupported corridor side-boundary metal contact"
+                            )
+            sheet_region = _region(_rectangle(0, 0, span, width))
+            free = _boolean(sheet_region, _region([*own_a, *own_b]), "not")
+            corridor = _region(_rectangle(lower, 0, upper, width))
+            if _boolean(corridor, free, "not"):
+                raise ValueError(
+                    "unsupported corridor containment; no general search performed"
                 )
-                if interior and cut == bound:
-                    raise ValueError(
-                        "numerical junction geometry failure: interior grid cut collapses to boundary"
+            choices = []
+            checks = []
+            for left, bound, own, foreign in (
+                (True, lower, own_a, own_b + other),
+                (False, upper, own_b, own_a + other),
+            ):
+                chosen = None
+                for index in _candidate_indices(bound, step, left=left):
+                    requested, cut = _cut(index, step)
+                    interior = (
+                        (Decimal(index) * Decimal(str(step)) > _bound_decimal(bound))
+                        if left
+                        else (Decimal(index) * Decimal(str(step)) < _bound_decimal(bound))
                     )
-                if (
-                    cut < lower
-                    or cut > upper
-                    or (interior and (cut <= lower or cut >= upper))
-                ):
-                    continue
-                end, evidence = _end_candidate(
-                    free, own, foreign, cut, span, width, left=left
+                    if interior and cut == bound:
+                        raise ValueError(
+                            "numerical junction geometry failure: interior grid cut collapses to boundary"
+                        )
+                    if (
+                        cut < lower
+                        or cut > upper
+                        or (interior and (cut <= lower or cut >= upper))
+                    ):
+                        continue
+                    end, evidence = _end_candidate(
+                        free, own, foreign, cut, span, width, left=left
+                    )
+                    checks.append(
+                        {
+                            "side": "A" if left else "B",
+                            "index": index,
+                            "requested_s_um": requested,
+                            "actual_s_um": cut * PRECISION_UM,
+                            "deviation_um": cut * PRECISION_UM - requested,
+                            **evidence,
+                        }
+                    )
+                    if end is not None:
+                        chosen = (cut, end, index)
+                        break
+                if chosen is None:
+                    raise ValueError(
+                        "unsupported junction end topology on verified corridor/grid"
+                    )
+                choices.append(chosen)
+            (a, end_a, ka), (b, end_b, kb) = choices
+            if a >= b:
+                raise ValueError("junction DBU grid has no positive central span")
+            central = _rectangle(a, 0, b, width)
+            for y in (0, width):
+                for rings in [*own_a, *own_b, *other, *end_a, *end_b]:
+                    intervals, points = _section(rings, 1, y, a, b)
+                    if any(x < z for x, z in intervals) or any(a < v < b for v in points):
+                        raise ValueError(
+                            "RLC open side has forbidden line or point contact"
+                        )
+            for cut, wrong in ((a, own_b + other + end_b), (b, own_a + other + end_a)):
+                if any(any(_section(rings, 0, cut, 0, width)) for rings in wrong):
+                    raise ValueError("wrong-net RLC end/corner contact")
+            parts = [_region(end_a), _region(central), _region(end_b)]
+            union = _boolean([p for part in parts for p in part], [], "or")
+            if _boolean(union, free, "xor") or any(
+                _boolean(parts[i], parts[j], "and") for i, j in ((0, 1), (0, 2), (1, 2))
+            ):
+                raise ValueError(
+                    "numerical junction geometry failure: partition coverage/interiors differ"
                 )
-                checks.append(
+
+            end_records = []
+            for label, end, own, cut, net in (
+                ("A", end_a, own_a, a, junction.terminal_a_net),
+                ("B", end_b, own_b, b, junction.terminal_b_net),
+            ):
+                owners = [
+                    eid
+                    for eid, polygons in by_entity.items()
+                    if entities[eid].net_id == net
+                    and (
+                        _positive_boundary_contact(end, polygons)
+                        if end
+                        else _covered(polygons, 0, cut, 0, width)
+                    )
+                ]
+                if len(owners) != 1:
+                    raise ValueError(
+                        "junction end lacks an unambiguous source Entity/material/Z lineage"
+                    )
+                owner = entities[owners[0]]
+                polygon_id = (
+                    f"{output_format.id_prefix}_{canonical_sha256([junction.junction_id, label, owner.semantic_id])[:24]}"
+                    if end
+                    else None
+                )
+                end_records.append(
                     {
-                        "side": "A" if left else "B",
-                        "index": index,
-                        "requested_s_um": requested,
-                        "actual_s_um": cut * PRECISION_UM,
-                        "deviation_um": cut * PRECISION_UM - requested,
-                        **evidence,
+                        "side": label,
+                        "source_entity_id": owner.semantic_id,
+                        "net_id": net,
+                        "material_id": owner.material_id,
+                        "geometry": _plain(owner.geometry),
+                        "representation": dict(owner.route_representations),
+                        "polygon_id": polygon_id,
+                        "empty_residual": not end,
+                        "local_regions": _plain(end),
                     }
                 )
-                if end is not None:
-                    chosen = (cut, end, index)
-                    break
-            if chosen is None:
-                raise ValueError(
-                    "unsupported junction end topology on verified corridor/grid"
-                )
-            choices.append(chosen)
-        (a, end_a, ka), (b, end_b, kb) = choices
-        if a >= b:
-            raise ValueError("junction DBU grid has no positive central span")
-        central = _rectangle(a, 0, b, width)
-        for y in (0, width):
-            for rings in [*own_a, *own_b, *other, *end_a, *end_b]:
-                intervals, points = _section(rings, 1, y, a, b)
-                if any(x < z for x, z in intervals) or any(a < v < b for v in points):
-                    raise ValueError(
-                        "RLC open side has forbidden line or point contact"
-                    )
-        for cut, wrong in ((a, own_b + other + end_b), (b, own_a + other + end_a)):
-            if any(any(_section(rings, 0, cut, 0, width)) for rings in wrong):
-                raise ValueError("wrong-net RLC end/corner contact")
-        parts = [_region(end_a), _region(central), _region(end_b)]
-        union = _boolean([p for part in parts for p in part], [], "or")
-        if _boolean(union, free, "xor") or any(
-            _boolean(parts[i], parts[j], "and") for i, j in ((0, 1), (0, 2), (1, 2))
-        ):
-            raise ValueError(
-                "numerical junction geometry failure: partition coverage/interiors differ"
-            )
-
-        end_records = []
-        for label, end, own, cut, net in (
-            ("A", end_a, own_a, a, junction.terminal_a_net),
-            ("B", end_b, own_b, b, junction.terminal_b_net),
-        ):
-            owners = [
-                eid
-                for eid, polygons in by_entity.items()
-                if entities[eid].net_id == net
-                and (
-                    _positive_boundary_contact(end, polygons)
-                    if end
-                    else _covered(polygons, 0, cut, 0, width)
-                )
-            ]
-            if len(owners) != 1:
-                raise ValueError(
-                    "junction end lacks an unambiguous source Entity/material/Z lineage"
-                )
-            owner = entities[owners[0]]
-            polygon_id = (
-                f"{output_format.id_prefix}_{canonical_sha256([junction.junction_id, label, owner.semantic_id])[:24]}"
-                if end
-                else None
-            )
-            end_records.append(
-                {
-                    "side": label,
-                    "source_entity_id": owner.semantic_id,
-                    "net_id": net,
-                    "material_id": owner.material_id,
-                    "geometry": _plain(owner.geometry),
-                    "representation": dict(owner.route_representations),
-                    "polygon_id": polygon_id,
-                    "empty_residual": not end,
-                    "local_regions": _plain(end),
-                }
-            )
-        cid = f"{output_format.id_prefix}_{canonical_sha256([junction.junction_id, 'central'])[:24]}"
-        records[junction.junction_id] = {
-            "method": output_format.method,
-            "support_plane": support_plane,
-            "z_um": support_plane["effective_z_um"],
-            "authored_polygon_id": junction.source_polygon_id,
-            "central_polygon_id": cid,
-            "direction_xy": [dx, dy],
-            "local_origin_projection_um": list(origin),
-            "source_dbu_um": step,
-            "boolean_precision_um": PRECISION_UM,
-            "span_um": span * PRECISION_UM,
-            "width_um": width * PRECISION_UM,
-            "corridor_um": [lower * PRECISION_UM, upper * PRECISION_UM],
-            "cut_indices": [ka, kb],
-            "actual_cuts_um": [a * PRECISION_UM, b * PRECISION_UM],
-            "candidate_checks": checks,
-            "candidate_count": len(checks),
-            "proof_conditions": {
-                "full_width_corridor_containment": True,
-                "closed_corridor_side_clearance": True,
-                "terminal_contact_ordering": "A_left_B_right",
-                "partition_coverage_and_disjoint_interiors": True,
-            },
-            "maximum_input_coordinate_deviation_um": max(deviations, default=0.0),
-            "ends": end_records,
-            "free_local_regions": _plain(_rings(free)),
-            "central_local_regions": _plain(central),
-        }
+            cid = f"{output_format.id_prefix}_{canonical_sha256([junction.junction_id, 'central'])[:24]}"
+            records[junction.junction_id] = {
+                "method": output_format.method,
+                "support_plane": support_plane,
+                "z_um": support_plane["effective_z_um"],
+                "authored_polygon_id": junction.source_polygon_id,
+                "central_polygon_id": cid,
+                "direction_xy": [dx, dy],
+                "local_origin_projection_um": list(origin),
+                "source_dbu_um": step,
+                "boolean_precision_um": PRECISION_UM,
+                "span_um": span * PRECISION_UM,
+                "width_um": width * PRECISION_UM,
+                "corridor_um": [lower * PRECISION_UM, upper * PRECISION_UM],
+                "cut_indices": [ka, kb],
+                "actual_cuts_um": [a * PRECISION_UM, b * PRECISION_UM],
+                "candidate_checks": checks,
+                "candidate_count": len(checks),
+                "proof_conditions": {
+                    "full_width_corridor_containment": True,
+                    "closed_corridor_side_clearance": True,
+                    "terminal_contact_ordering": "A_left_B_right",
+                    "partition_coverage_and_disjoint_interiors": True,
+                },
+                "maximum_input_coordinate_deviation_um": max(deviations, default=0.0),
+                "ends": end_records,
+                "free_local_regions": _plain(_rings(free)),
+                "central_local_regions": _plain(central),
+            }
     model, derived_entities = _model_geometry(
         build_input, originals, records, output_format
     )
@@ -1537,13 +1551,47 @@ def partition_junctions(
         else r
         for r in build_input.port_sheet_regions
     )
-    return replace(
+    result = replace(
         build_input,
         polygons=derived_polygons,
         entities=derived_entities,
         port_sheet_regions=regions,
         metadata=metadata,
     )
+    context = geometry_grid_context(build_input)
+    if context is not None:
+        from scgsim.geometry.source.grid import apply_geometry_grid
+        result = apply_geometry_grid(result, context)
+        actual = {p.polygon_id: p for p in result.polygons}
+        for junction in junctions:
+            record = records[junction.junction_id]
+            polygon = actual[record["central_polygon_id"]]
+            try:
+                junction_terminal_line({"exterior": polygon.exterior, "holes": polygon.holes},
+                                       junction, record["z_um"])
+                ends = [actual[end["polygon_id"]] for end in record["ends"] if end["polygon_id"]]
+                emitted = [(p.exterior, *p.holes) for p in ends]
+                emitted.append((polygon.exterior, *polygon.holes))
+                if not _emitted_partition_coverage(record["free_model_regions"], emitted):
+                    raise ValueError("junction grid realization changes partition coverage")
+            except ValueError as error:
+                error.add_note(json.dumps({"junction_id": junction.junction_id,
+                    "geometry_grid": context.to_payload(),
+                    "requested_direction_xy": list(junction.direction_xy),
+                    "requested_width_um": junction.width_um,
+                    "realization_status": "incompatible_with_existing_shape_contract"}, sort_keys=True))
+                raise
+            record["geometry_grid"] = context.to_payload()
+            record["requested_central_model_regions"] = record["central_model_regions"]
+            record["central_model_regions"] = [[list(polygon.exterior), *map(list, polygon.holes)]]
+            record["realized_central_geometry_sha256"] = canonical_sha256(
+                {"exterior": polygon.exterior, "holes": polygon.holes})
+            for end in record["ends"]:
+                if end["polygon_id"]:
+                    piece = actual[end["polygon_id"]]
+                    end["requested_model_regions"] = end["model_regions"]
+                    end["model_regions"] = [[list(piece.exterior), *map(list, piece.holes)]]
+    return result
 
 
 def junction_terminal_line(
@@ -1552,6 +1600,15 @@ def junction_terminal_line(
     exterior = tuple(
         (float(point[0]), float(point[1])) for point in polygon["exterior"]
     )
+    # A common arrangement retains contact nodes on rectangle edges. Use an
+    # exact, non-mutating corner witness for shape validation; the physical
+    # polygon and all its shared subdivisions remain unchanged.
+    rational = lambda p: tuple(Fraction(str(v)) for v in p)
+    witness = tuple(point for index, point in enumerate(exterior)
+                    if point != exterior[index-1])
+    exterior = tuple(point for index, point in enumerate(witness)
+                     if _cross(rational(witness[index-1]), rational(point),
+                               rational(witness[(index+1) % len(witness)])) != 0)
     if len(exterior) != 4 or polygon.get("holes"):
         raise ValueError(
             f"junction {junction.junction_id!r} requires one rectangular polygon without holes"
@@ -1597,6 +1654,7 @@ def junction_terminal_line(
     return line, along_max - along_min
 
 
+@with_input_grid
 def derive_rectangular_junctions(build_input):
     """Derive once after the single physical interpretation, before any surfaces."""
     requests = tuple(
@@ -1621,9 +1679,18 @@ def derive_rectangular_junctions(build_input):
             (dx, dy),
             max(across) - min(across),
         )
-        junction_terminal_line(
-            {"exterior": region.exterior, "holes": region.holes}, geometry, 0.0
-        )
+        try:
+            junction_terminal_line(
+                {"exterior": region.exterior, "holes": region.holes}, geometry, 0.0
+            )
+        except ValueError as error:
+            context = geometry_grid_context(build_input)
+            if context is not None:
+                error.add_note(json.dumps({"junction_id": request.junction_id,
+                    "geometry_grid": context.to_payload(),
+                    "requested_direction_xy": list(geometry.direction_xy),
+                    "realization_status": "incompatible_with_existing_shape_contract"}, sort_keys=True))
+            raise
         geometries.append(geometry)
     result = partition_junctions(
         build_input, geometries, build_input.metadata["source_dbu_um"]

@@ -378,7 +378,8 @@ def test_shared_parent_preserves_selection_and_member_failures(defect, match):
         _aggregate(PalaceEprResult.from_payload(payload), selections, **options)
 
 
-def test_actual_ms_ma_producer_aliases_reach_shared_parent_totals():
+@pytest.mark.parametrize("grid_bound", (False, True))
+def test_actual_ms_ma_producer_aliases_reach_shared_parent_totals(grid_bound):
     """Real alias/config/reader functions over generic authored transport records.
 
     Attribute tokens and mode tables are explicit fixture inputs, not native
@@ -392,7 +393,7 @@ def test_actual_ms_ma_producer_aliases_reach_shared_parent_totals():
         build_surface_epr_postprocessing, normalize_surface_epr_specs,
     )
 
-    resolved, _, _, _, _, original_entries, energies = _resolved_producer_band_run(wall=False)
+    resolved, _, _, _, _, original_entries, energies = _resolved_producer_band_run(wall=False, grid_bound=grid_bound)
     groups = {"boundary_surfaces": {}, "pec_surfaces": {}, "surface_groups": {}}
     for entry in original_entries:
         metadata = entry["metadata"]

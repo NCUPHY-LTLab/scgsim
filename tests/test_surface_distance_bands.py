@@ -194,7 +194,8 @@ def test_nonplanar_parent_is_explicitly_unsupported():
 
 
 @pytest.mark.parametrize("route", ("B", "C"))
-def test_partitioned_top_and_rotated_wall_close_native_volume_and_mesh(tmp_path, route):
+@pytest.mark.parametrize("grid_bound", (False, True), ids=("historical", "bound"))
+def test_partitioned_top_and_rotated_wall_close_native_volume_and_mesh(tmp_path, route, grid_bound):
     import gmsh
     from scgsim.geometry.construction.gmsh_occ import write_occ_geometry_from_plan
     from scgsim.geometry.compiler.validation import validate_volume_surface_closure
@@ -231,7 +232,12 @@ def test_partitioned_top_and_rotated_wall_close_native_volume_and_mesh(tmp_path,
                 },
             )
         )
-    build, _ = fixture()
+    build, _ = fixture(outer=tuple((x, y) for x, y, _ in base)) if grid_bound else fixture()
+    if grid_bound:
+        from scgsim.geometry.models.grid import GeometryGridContext
+        from scgsim.geometry.source.grid import apply_geometry_grid
+
+        build = apply_geometry_grid(build, GeometryGridContext(0.001))
     specs = (
         SurfaceDistanceBandSpec("parent", "entity", "polygon", (1, 2), 0.001),
         SurfaceDistanceBandSpec("wall0", "entity", "polygon", (1, 2), 0.001),
@@ -853,3 +859,161 @@ def test_unambiguous_original_boundary_keeps_exact_points():
     from scgsim.geometry.planning.surface_bands import _restore_parent_boundary
 
     assert _restore_parent_boundary(SQUARE, (SQUARE,), 0.001) == SQUARE
+
+
+
+def test_collinear_wall_anchors_share_banded_cap_and_unbanded_neighbor_chain():
+    from collections import Counter
+    from fractions import Fraction
+
+    from scgsim.geometry.compiler.validation import validate_volume_surface_closure
+    from scgsim.geometry.models.grid import GeometryGridContext
+    from scgsim.geometry.models.topology import SurfaceRefRecord, VolumePlanRecord
+    from scgsim.geometry.planning.surface_bands import partition_source_boundary
+    from scgsim.geometry.planning.volumes import _surface_normal_vector
+    from scgsim.geometry.source.grid import apply_geometry_grid
+
+    base = ((0, 0, 0), (8, 4, 0), (4, 12, 0), (-4, 8, 0))
+    anchor = (4, 2, 0)
+    base_ring = (base[0], anchor, *base[1:])
+    top_ring = tuple((x, y, 8) for x, y, _ in base_ring)
+    cap_origin = partition_source_boundary({"planar_loops_3d": (top_ring,)}, "full_cap")
+    caps = (
+        ("parent", ((0, 0, 8), (4, 2, 8), (0, 10, 8), (-4, 8, 8))),
+        ("neighbor", ((4, 2, 8), (8, 4, 8), (4, 12, 8), (0, 10, 8))),
+    )
+    faces = [
+        SurfacePlanRecord(
+            "bottom",
+            "entity",
+            "domain_boundary",
+            {"planar_loops_3d": (tuple(reversed(base_ring)),)},
+        )
+    ]
+    faces.extend(
+        SurfacePlanRecord(
+            name,
+            "entity",
+            "domain_boundary",
+            {"planar_loops_3d": (ring,), "source_polygon_ids": ("polygon",)},
+            parent_surface_id="full_cap",
+            partition_label=name,
+            metadata={"surface_partition_origin": cap_origin},
+        )
+        for name, ring in caps
+    )
+    for index in range(4):
+        first, last = base[index], base[(index + 1) % 4]
+        ring = (first, last, (*last[:2], 8), (*first[:2], 8))
+        if index == 0:
+            ring = (
+                first,
+                anchor,
+                last,
+                (*last[:2], 8),
+                (*anchor[:2], 8),
+                (*first[:2], 8),
+            )
+        faces.append(
+            SurfacePlanRecord(
+                f"wall{index}",
+                "entity",
+                "domain_boundary",
+                {"planar_loops_3d": (ring,)},
+            )
+        )
+    build, _ = fixture(outer=tuple(point[:2] for point in base_ring))
+    build = apply_geometry_grid(build, GeometryGridContext(0.001))
+    build = with_surface_distance_bands(
+        build,
+        (
+            SurfaceDistanceBandSpec(
+                "parent",
+                "entity",
+                "polygon",
+                (1, 2),
+                0.001,
+                (SourceBoundarySegment("exterior", 4),),
+            ),
+        ),
+    )
+    children, _, summary = partition_surface_distance_bands(
+        build, surfaces=tuple(faces)
+    )
+    walls = [surface for surface in children if surface.parent_surface_id == "wall0"]
+    assert walls
+    assert all(
+        surface.metadata["layout_grid_realization"]["source_xy_anchors"]
+        == tuple(
+            dict.fromkeys(
+                point[:2] for point in faces[3].geometry_ref["planar_loops_3d"][0]
+            )
+        )
+        for surface in walls
+    )
+
+    def edges(surfaces, z):
+        counts = Counter()
+        for surface in surfaces:
+            for ring in surface.geometry_ref["planar_loops_3d"]:
+                for first, last in zip(ring, (*ring[1:], ring[0])):
+                    if first[2] == last[2] == z:
+                        counts[tuple(sorted((first[:2], last[:2])))] += 1
+        return {edge for edge, count in counts.items() if count == 1}
+
+    wall_top = edges(walls, 8)
+    wall_bottom = edges(walls, 0)
+    assert wall_top == wall_bottom
+    assert wall_top <= edges(
+        [
+            surface
+            for surface in children
+            if all(
+                point[2] == 8
+                for ring in surface.geometry_ref["planar_loops_3d"]
+                for point in ring
+            )
+        ],
+        8,
+    )
+    assert wall_bottom <= edges(
+        [
+            surface
+            for surface in children
+            if all(
+                point[2] == 0
+                for ring in surface.geometry_ref["planar_loops_3d"]
+                for point in ring
+            )
+        ],
+        0,
+    )
+    actual_xy = {point for edge in wall_top for point in edge}
+    assert {(0, 0), anchor[:2], (8, 4)} <= actual_xy
+    assert any(2 * Fraction(str(y)) != Fraction(str(x)) for x, y in actual_xy)
+    assert all(
+        {point[2] for ring in surface.geometry_ref["planar_loops_3d"] for point in ring}
+        <= {0, 8}
+        for surface in children
+    )
+    assert {row["parent_surface_id"] for row in summary} == {"parent"}
+    points, curves, loops, canonical = plan_canonical_topology(surfaces=children)
+    refs = []
+    for surface in canonical:
+        ring = surface.geometry_ref["planar_loops_3d"][0]
+        center = tuple(sum(point[i] for point in ring) / len(ring) for i in range(3))
+        normal = _surface_normal_vector(surface)
+        outward = sum(normal[i] * (center[i] - (2, 6, 4)[i]) for i in range(3))
+        refs.append(
+            SurfaceRefRecord(
+                surface.surface_id,
+                "forward" if outward > 0 else "reversed",
+                "planned_boundary",
+            )
+        )
+    assert points and curves and loops
+    validate_volume_surface_closure(
+        volumes=(VolumePlanRecord("volume", "entity", "Si", tuple(refs)),),
+        surfaces=canonical,
+        surface_loops=loops,
+    )

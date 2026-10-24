@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.geometry._primitives.grid import polygon_boolean
+
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from itertools import pairwise
@@ -765,7 +767,7 @@ def _xy_region_from_loops(
     if not holes:
         return (gdstk.Polygon(split_outer),)
     return _filter_gdstk_polygons(
-        gdstk.boolean(
+        polygon_boolean(
             (gdstk.Polygon(split_outer),),
             tuple(gdstk.Polygon(hole_loop) for hole_loop in holes),
             "not",

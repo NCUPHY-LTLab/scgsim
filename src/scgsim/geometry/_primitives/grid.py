@@ -1,0 +1,543 @@
+"""Shared fixed-precision noding, atomic faces and full operand membership."""
+
+from collections.abc import Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
+from hashlib import sha256
+import json
+
+from scgsim.geometry.models.grid import GeometryGridContext
+
+_ACTIVE_GRID = ContextVar("scgsim_geometry_grid", default=None)
+_SOURCE_INTENT = ContextVar("scgsim_source_intent_overlay", default=False)
+_SOURCE_AUDITS = ContextVar("scgsim_source_grid_audits", default=None)
+
+
+def current_grid_context():
+    return _ACTIVE_GRID.get()
+
+
+def with_input_grid(function):
+    """Scope existing leaf operations to the explicit input policy only."""
+    from functools import wraps
+    from scgsim.geometry.models.grid import geometry_grid_context
+
+    @wraps(function)
+    def scoped(build_input, *args, **kwargs):
+        with geometry_grid_scope(geometry_grid_context(build_input)):
+            return function(build_input, *args, **kwargs)
+
+    return scoped
+
+
+def current_grid_size_um():
+    context = _ACTIVE_GRID.get()
+    # Retained only for historical inputs that have no declared grid context.
+    return 1e-9 if context is None else context.grid_size_um
+
+
+@contextmanager
+def geometry_grid_scope(context):
+    same = context is not None and context == _ACTIVE_GRID.get()
+    token = _ACTIVE_GRID.set(context)
+    audit_token = (
+        None if same else _SOURCE_AUDITS.set([] if context is not None else None)
+    )
+    try:
+        yield
+    finally:
+        if audit_token is not None:
+            _SOURCE_AUDITS.reset(audit_token)
+        _ACTIVE_GRID.reset(token)
+
+
+@dataclass(frozen=True)
+class GridOperand:
+    operand_id: str
+    exterior: tuple
+    holes: tuple = ()
+    physical: bool = True
+    contact: bool = True
+
+    def __post_init__(self):
+        object.__setattr__(self, "exterior", tuple(map(tuple, self.exterior)))
+        object.__setattr__(
+            self, "holes", tuple(tuple(map(tuple, r)) for r in self.holes)
+        )
+
+
+@dataclass(frozen=True)
+class GridFace:
+    face_id: str
+    exterior: tuple
+    holes: tuple
+    operand_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class GridOperandAudit:
+    operand_id: str
+    source_area_um2: float
+    effective_area_um2: float
+    geometry_changed: bool
+    duplicate_vertex_count: int
+
+
+def _polygons(geometry):
+    if geometry.is_empty:
+        return ()
+    if geometry.geom_type == "Polygon":
+        return (geometry,)
+    if geometry.geom_type not in {"MultiPolygon", "GeometryCollection"}:
+        return ()
+    return tuple(p for g in geometry.geoms for p in _polygons(g))
+
+
+def _ring(coords):
+    points = tuple(tuple(p) for p in coords)[:-1]
+    start = min(range(len(points)), key=points.__getitem__)
+    return points[start:] + points[:start]
+
+
+def _regions(geometry, vertices=(), grid_size=None):
+    def atomic(coords):
+        ring = _ring(coords)
+        output = []
+        for a, b in zip(ring, (*ring[1:], ring[0])):
+            output.append(a)
+
+            # Shared noded vertices already lie on the fixed-precision lattice.
+            def key(p):
+                from fractions import Fraction
+
+                return (
+                    tuple(round(v / grid_size) for v in p)
+                    if grid_size is not None
+                    else tuple(Fraction(v) for v in p)
+                )
+
+            ak, bk = key(a), key(b)
+            along = [
+                p
+                for p in vertices
+                if p != a
+                and p != b
+                and (key(p)[0] - ak[0]) * (bk[1] - ak[1])
+                == (key(p)[1] - ak[1]) * (bk[0] - ak[0])
+                and min(a[0], b[0]) <= p[0] <= max(a[0], b[0])
+                and min(a[1], b[1]) <= p[1] <= max(a[1], b[1])
+            ]
+            axis = 0 if a[0] != b[0] else 1
+            output.extend(
+                sorted(along, key=lambda p: p[axis], reverse=b[axis] < a[axis])
+            )
+        return tuple(output)
+
+    return tuple(
+        sorted(
+            (
+                atomic(p.exterior.coords),
+                tuple(sorted(atomic(h.coords) for h in p.interiors)),
+            )
+            for p in _polygons(geometry)
+        )
+    )
+
+
+@dataclass(frozen=True)
+class GridArrangement:
+    context: GeometryGridContext
+    faces: tuple[GridFace, ...]
+    vertices: tuple
+    edges: tuple
+    audits: tuple[GridOperandAudit, ...]
+    grid_applied: bool = True
+
+    def face_regions(self, face_ids):
+        from shapely import Polygon, union_all
+
+        selected = [
+            Polygon(f.exterior, f.holes) for f in self.faces if f.face_id in face_ids
+        ]
+        grid = self.context.grid_size_um if self.grid_applied else None
+        return _regions(union_all(selected, grid_size=grid), self.vertices, grid)
+
+    def operand_regions(self, operand_id):
+        from shapely import Polygon, union_all
+
+        selected = [
+            Polygon(f.exterior, f.holes)
+            for f in self.faces
+            if operand_id in f.operand_ids
+        ]
+        grid = self.context.grid_size_um if self.grid_applied else None
+        return _regions(union_all(selected, grid_size=grid), self.vertices, grid)
+
+    @property
+    def metadata(self):
+        return {
+            "geometry_grid": self.context.to_payload(),
+            "method": "geos_labelled_polygon_overlay",
+            "grid_scope": "assembly_xy"
+            if self.grid_applied
+            else "parent_plane_unquantized",
+            "face_memberships": [
+                {"face_id": f.face_id, "operand_ids": list(f.operand_ids)}
+                for f in self.faces
+            ],
+            "vertex_count": len(self.vertices),
+            "edge_count": len(self.edges),
+            "operands": [
+                dict(
+                    operand_id=a.operand_id,
+                    source_area_um2=a.source_area_um2,
+                    effective_area_um2=a.effective_area_um2,
+                    geometry_changed=a.geometry_changed,
+                    duplicate_vertex_count=a.duplicate_vertex_count,
+                )
+                for a in self.audits
+            ],
+        }
+
+
+def build_grid_arrangement(operands, context, *, apply_grid=True):
+    """Construct labelled cells by common-policy polygon overlay.
+
+    Membership is carried by intersection/difference construction, never
+    recovered from samples or independently rounded linework faces. Every
+    existing cell and the new operand are updated in the same subdivision.
+    """
+    from shapely import Polygon, difference, intersection, union_all
+
+    grid = context.grid_size_um if apply_grid else None
+    values = (
+        tuple(operands.values()) if isinstance(operands, Mapping) else tuple(operands)
+    )
+    ids = [v.operand_id for v in values]
+    if len(ids) != len(set(ids)):
+        raise ValueError("common grid operand identities are duplicated")
+    geometries = {v.operand_id: Polygon(v.exterior, v.holes) for v in values}
+    cells = []
+    for value in values:
+        original = geometries[value.operand_id]
+        overlay_operand = intersection(original, original, grid_size=grid)
+        pending = overlay_operand
+        divided = []
+        for cell, labels in cells:
+            # All complementary pieces must use this same realized operand.
+            # Mixing its raw and realized boundaries creates inconsistent seams.
+            common = intersection(cell, overlay_operand, grid_size=grid)
+            residual = difference(cell, overlay_operand, grid_size=grid)
+            pending = difference(pending, cell, grid_size=grid)
+            divided.extend((part, labels) for part in _polygons(residual))
+            divided.extend(
+                (part, (*labels, value.operand_id)) for part in _polygons(common)
+            )
+        # The first operand also goes through GEOS at the shared grid; this is
+        # an overlay operation, not an independently cleaned precision copy.
+        pending = union_all([pending], grid_size=grid)
+        divided.extend((part, (value.operand_id,)) for part in _polygons(pending))
+        cells = divided
+    vertices = tuple(
+        sorted(
+            {
+                tuple(p)
+                for cell, _ in cells
+                for ring in (cell.exterior, *cell.interiors)
+                for p in ring.coords
+            }
+        )
+    )
+    faces = []
+    for cell, members in cells:
+        outer, holes = _regions(cell, vertices, grid)[0]
+        identity = sha256(
+            json.dumps([outer, holes], separators=(",", ":")).encode()
+        ).hexdigest()
+        faces.append(
+            GridFace(
+                "GRID_FACE__" + identity[:24], outer, holes, tuple(sorted(members))
+            )
+        )
+    faces = tuple(sorted(faces, key=lambda f: f.face_id))
+    effective = {
+        v.operand_id: union_all(
+            [
+                Polygon(f.exterior, f.holes)
+                for f in faces
+                if v.operand_id in f.operand_ids
+            ],
+            grid_size=grid,
+        )
+        for v in values
+    }
+    audits = []
+    for value in values:
+        raw, final = geometries[value.operand_id], effective[value.operand_id]
+        if value.physical and (
+            final.is_empty
+            or len(_polygons(raw)) != len(_polygons(final))
+            or sum(len(p.interiors) for p in _polygons(raw))
+            != sum(len(p.interiors) for p in _polygons(final))
+        ):
+            raise ValueError(
+                f"physical geometry collapsed or changed component/hole topology at grid: {value.operand_id}"
+            )
+        audits.append(
+            GridOperandAudit(
+                value.operand_id,
+                raw.area,
+                final.area,
+                not raw.equals(final),
+                sum(len(r) - len(set(r)) for r in (value.exterior, *value.holes)),
+            )
+        )
+    contacts = [v for v in values if v.contact]
+    for i, first in enumerate(contacts):
+        for second in contacts[i + 1 :]:
+            before = geometries[first.operand_id].relate(geometries[second.operand_id])
+            after = effective[first.operand_id].relate(effective[second.operand_id])
+            if before != after:
+                raise ValueError(
+                    f"physical contact changed at grid: {first.operand_id}, {second.operand_id}"
+                )
+    edges = tuple(
+        sorted(
+            {
+                tuple(sorted((a, b)))
+                for f in faces
+                for ring in (f.exterior, *f.holes)
+                for a, b in zip(ring, (*ring[1:], ring[0]))
+            }
+        )
+    )
+    return GridArrangement(context, faces, vertices, edges, tuple(audits), apply_grid)
+
+
+@dataclass(frozen=True)
+class PolygonRegion:
+    """Simple exterior/holes; cutline walk is mechanical legacy serialization."""
+
+    exterior: tuple
+    holes: tuple = ()
+
+    @property
+    def points(self):
+        def area(ring):
+            return sum(
+                a[0] * b[1] - a[1] * b[0] for a, b in zip(ring, (*ring[1:], ring[0]))
+            )
+
+        outer = (
+            self.exterior if area(self.exterior) > 0 else tuple(reversed(self.exterior))
+        )
+        walk = [outer[0]]
+        for hole in self.holes:
+            ring = hole if area(hole) < 0 else tuple(reversed(hole))
+            # Both copies of this serialization connector cancel exactly. It
+            # has no physical boundary/origin identity and performs no clipping.
+            walk.extend((*ring, ring[0], outer[0]))
+        return (*walk, *outer[1:])
+
+    def area(self):
+        def area(ring):
+            return (
+                abs(
+                    sum(
+                        a[0] * b[1] - a[1] * b[0]
+                        for a, b in zip(ring, (*ring[1:], ring[0]))
+                    )
+                )
+                / 2
+            )
+
+        return area(self.exterior) - sum(area(r) for r in self.holes)
+
+
+def polygon_rings(polygon):
+    if isinstance(polygon, PolygonRegion):
+        return polygon.exterior, polygon.holes
+    from scgsim.geometry._primitives.loops import _split_gdstk_cutline_loop
+
+    return _split_gdstk_cutline_loop(
+        tuple(tuple(map(float, p)) for p in polygon.points)
+    )
+
+
+_POLYGON_FRAME = ContextVar("scgsim_polygon_world_frame", default=None)
+
+
+@contextmanager
+def polygon_world_frame(transform):
+    token = _POLYGON_FRAME.set(tuple(transform))
+    try:
+        yield
+    finally:
+        _POLYGON_FRAME.reset(token)
+
+
+def in_occurrence_frame(function):
+    from functools import wraps
+
+    @wraps(function)
+    def framed(*args, transform, **kwargs):
+        with polygon_world_frame(transform):
+            return function(*args, transform=transform, **kwargs)
+
+    return framed
+
+
+def _frame_point(point, inverse=False):
+    frame = _POLYGON_FRAME.get()
+    if frame is None:
+        return tuple(point)
+    a, b, c, d, x, y = frame
+    u, v = point
+    if inverse:
+        determinant = a * d - b * c
+        return (
+            (d * (u - x) - b * (v - y)) / determinant,
+            (-c * (u - x) + a * (v - y)) / determinant,
+        )
+    return a * u + b * v + x, c * u + d * v + y
+
+
+def polygon_boolean(left, right, operation, *, precision=1e-9):
+    """One GEOS labelled overlay for bound data; historical gdstk unchanged."""
+    context = current_grid_context()
+    if context is None:
+        import gdstk
+
+        return gdstk.boolean(left, right, operation, precision=precision)
+    values = []
+    for label, polygons in (("L", left), ("R", right)):
+        for index, polygon in enumerate(polygons):
+            outer, holes = polygon_rings(polygon)
+            values.append(
+                GridOperand(
+                    f"{label}{index}",
+                    tuple(_frame_point(p) for p in outer),
+                    tuple(tuple(_frame_point(p) for p in ring) for ring in holes),
+                    physical=False,
+                    contact=False,
+                )
+            )
+    arrangement = build_grid_arrangement(
+        values, context, apply_grid=not _SOURCE_INTENT.get()
+    )
+    selected = []
+    for face in arrangement.faces:
+        first = any(name.startswith("L") for name in face.operand_ids)
+        second = any(name.startswith("R") for name in face.operand_ids)
+        retain = {
+            "and": first and second,
+            "or": first or second,
+            "not": first and not second,
+            "xor": first != second,
+        }[operation]
+        if retain:
+            selected.append(face.face_id)
+    return [
+        PolygonRegion(
+            tuple(_frame_point(p, True) for p in outer),
+            tuple(tuple(_frame_point(p, True) for p in ring) for ring in holes),
+        )
+        for outer, holes in arrangement.face_regions(selected)
+    ]
+
+
+def source_grid_audits():
+    return tuple(_SOURCE_AUDITS.get() or ())
+
+
+def preserve_declared_source(function):
+    """Compare declared physical source result before destructive quantization.
+
+    The reference evaluates the SAME declared mask/include/selector recipe in
+    unquantized coordinates solely for its preservation audit. It is never
+    substituted for the actual shared-grid geometry.
+    """
+    from functools import wraps
+    from dataclasses import replace
+
+    @wraps(function)
+    def preserved(entity, *args, **kwargs):
+        context = current_grid_context()
+        if context is None or _SOURCE_INTENT.get():
+            return function(entity, *args, **kwargs)
+        token = _SOURCE_INTENT.set(True)
+        try:
+            requested = function(entity, *args, **kwargs)
+        finally:
+            _SOURCE_INTENT.reset(token)
+        realized = function(entity, *args, **kwargs)
+        from shapely import Polygon, union_all
+
+        def geometry(polygons):
+            return union_all(
+                [
+                    Polygon(
+                        tuple(_frame_point(p) for p in v.exterior),
+                        tuple(tuple(_frame_point(p) for p in r) for r in v.holes),
+                    )
+                    for v in polygons
+                ]
+            )
+
+        raw, final = geometry(requested), geometry(realized)
+        before = (len(_polygons(raw)), sum(len(p.interiors) for p in _polygons(raw)))
+        after = (len(_polygons(final)), sum(len(p.interiors) for p in _polygons(final)))
+        if before != after:
+            raise ValueError(
+                f"declared physical source component/hole topology changed at grid: {entity.semantic_id}"
+            )
+        raw_regions = _regions(raw)
+        requested_by_id = {p.polygon_id: p for p in requested}
+        if set(requested_by_id) != {p.polygon_id for p in realized}:
+            raise ValueError(
+                f"declared source polygon identity changed at grid: {entity.semantic_id}"
+            )
+        requested_polygons = [
+            {
+                "source_polygon_id": p.polygon_id,
+                "exterior": tuple(_frame_point(v) for v in p.exterior),
+                "holes": tuple(tuple(_frame_point(v) for v in r) for r in p.holes),
+            }
+            for p in requested
+        ]
+        ledger = {
+            "source_entity_id": entity.semantic_id,
+            "operation": function.__name__,
+            "geometry_grid": context.to_payload(),
+            "requested_regions": raw_regions,
+            "requested_polygons": requested_polygons,
+            "requested_geometry_sha256": sha256(
+                json.dumps(raw_regions, separators=(",", ":")).encode()
+            ).hexdigest(),
+            "requested_area_um2": raw.area,
+            "realized_area_um2": final.area,
+            "requested_components": before[0],
+            "realized_components": after[0],
+            "requested_holes": before[1],
+            "realized_holes": after[1],
+            "geometry_changed": not raw.equals(final),
+        }
+        audits = _SOURCE_AUDITS.get()
+        if audits is not None and ledger not in audits:
+            audits.append(ledger)
+        return tuple(
+            replace(
+                p,
+                metadata={
+                    **p.metadata,
+                    "geometry_grid_source_identity": {
+                        "source_entity_id": entity.semantic_id,
+                        "source_polygon_id": p.polygon_id,
+                    },
+                },
+            )
+            for p in realized
+        )
+
+    return preserved
