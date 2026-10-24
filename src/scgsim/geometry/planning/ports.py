@@ -149,16 +149,32 @@ def _lower_port_sheet_regions(
             raise ValueError(
                 f"{region.port_sheet_id} references an unknown host polygon"
             )
-        remainder = _port_sheet_remainder_geometry(region)
-        if not all(
-            _port_sheet_boundary_shares_segment(remainder, overlap.overlap_loop)
-            for host_id in host_ids
-            for overlap in region.overlaps
-            if overlap.host_semantic_id == host_id
-        ):
+        rectangle_id = region.metadata.get("rectangular_junction_partition")
+        if rectangle_id is None:
+            remainder = _port_sheet_remainder_geometry(region)
+            contact_loops = tuple(overlap.overlap_loop for overlap in region.overlaps)
+        else:
+            partition = build_input.metadata["junction_partitions"][rectangle_id]
+            central = next(polygon for polygon in build_input.polygons
+                           if polygon.polygon_id == partition["central_polygon_id"])
+            if region.exterior != central.exterior or region.holes != central.holes:
+                raise ValueError("rectangular port differs from its derived central rectangle")
+            remainder = {"outer_loop": central.exterior, "hole_loops": central.holes}
+            contact_loops = tuple(
+                loop for host in hosts
+                for loop in (host.geometry["outer_loop"], *host.geometry.get("hole_loops", ()))
+            )
+        if rectangle_id is None:
+            contacting = all(_port_sheet_boundary_shares_segment(remainder, loop)
+                             for loop in contact_loops)
+        else:
+            contacting = all(any(
+                _port_sheet_boundary_shares_segment(remainder, loop)
+                for loop in (host.geometry["outer_loop"], *host.geometry.get("hole_loops", ()))
+            ) for host in hosts)
+        if not contacting:
             raise ValueError(
-                f"{region.port_sheet_id} remainder must share a finite segment "
-                "with each host"
+                f"{region.port_sheet_id} active sheet must share a finite segment with each host"
             )
         host_polygon_ids = tuple(overlap.host_polygon_id for overlap in region.overlaps)
         owner_provenance = tuple(
@@ -209,6 +225,12 @@ def _lower_port_sheet_regions(
             plane_z_um = z_values[0] + thickness_values[0] / 2.0
             boundary_volume_ids = (host_void_ids[0],)
             embedded_volume_id = str(host_void_ids[0])
+        if rectangle_id is not None:
+            source_provenance = {
+                **source_provenance,
+                "rectangular_junction_binding": region.metadata["rectangular_junction_binding"],
+                "junction_partition": partition,
+            }
         port_surface = SurfacePlanRecord(
             surface_id=f"SURF__LUMPED_PORT__{_safe_port_sheet_name(source_name)}",
             owner_semantic_id=host_ids[0],
@@ -679,7 +701,8 @@ def _route_a_port_sheet_sheet_contract(
             boundary_volume_ids = candidate_boundary_ids
         elif boundary_volume_ids != candidate_boundary_ids:
             raise ValueError(
-                "Route A lumped-port hosts require common boundary volumes"
+                "Route A lumped-port hosts require common boundary volumes: "
+                f"{boundary_volume_ids!r} != {candidate_boundary_ids!r}"
             )
     if not _same_z(host_planes[0], host_planes[1]):
         raise ValueError("Route A lumped-port hosts require one common sheet plane")

@@ -227,6 +227,38 @@ example, `chip/q0/o_junction_lumped`. Palace binds that qualified port name to
 its target logical layer; an AEDT junction uses the same normalized source
 sheet and its recorded overlaps.
 
+### Explicit rectangular junctions
+
+Use `JunctionTerminalBinding` and `RectangularJunctionSpec` from
+`scgsim.geometry` when a source port sheet represents a rectangular junction.
+First prepare the plan to inspect its exact port-sheet, source-polygon,
+occurrence, conductor-Entity, and Net identities. Bind the selected sheet and
+both terminal owners explicitly, then call
+`GeometryPlan.set_rectangular_junctions(specs)` before the next `prepare()`.
+For a normalized `GeometryBuildInput`, `with_rectangular_junctions(build_input,
+specs)` returns the corresponding detached request.
+
+`RectangularJunctionSpec` names `junction_id`, `port_sheet_id`,
+`source_polygon_id`, and `source_occurrence_path`, plus `terminal_a` and
+`terminal_b`. Each `JunctionTerminalBinding` names one `source_entity_id`, its
+`source_occurrence_path`, and its `net_id`. The two terminal Entities and Nets
+must be distinct and must match the source plan. This explicit binding selects
+the actual source overlap for each terminal; the planner does not search other
+occurrences or infer owners from proximity.
+
+The shared geometry interpreter derives the complete central rectangle and
+terminal-owned end metals once, from the source database units and existing
+physical attachment, before planning contacts, interfaces, construction
+catalogues, or surface bands. Palace Route A continues to apply its existing
+host-interface, common-plane, and common-volume rules. Palace and AEDT consume
+the same derived source partition; AEDT validates that request rather than
+deriving another rectangle. Palace `add_port(...)` still binds inductance to an
+authored port name and does not choose the physical terminal owners.
+
+Surface-band origins follow the final physical support's exterior and hole
+edges. Joins canceled inside a terminal's combined source-and-end support are
+internal seams, not additional surface intent or distance origins.
+
 | Fact or operation | Accepted contract |
 |---|---|
 | Component definition | Holds local polygons, source Entity IDs, ports, topology selectors, and local component facts. Reusing a component does not rewrite its local IDs. Schema v2 does not assign final Nets or expose a public `Group` API inside the component. |
@@ -301,11 +333,13 @@ regions; a Surface EPR value must still come from the corresponding solver
 calculation. Distance partitions currently require planar polygon parents;
 active curves and non-planar parents are unsupported.
 
-For the separate EPR correction, use the returned parent and child identities
-with `SurfaceEprParentSelection` and `SurfaceEprCorrectionRule`; the geometry
-plan does not choose a Palace field side or apply a Q2D factor. See the
-[Palace surface-band correction](eigenmode-epr.qmd#surface-distance-band-correction)
-for the result binding and calculation.
+For offline EPR totals, select the returned parents with Palace's
+`SurfaceBandSelection` and `aggregate_surface_bands(...)`. Each selection names
+the exact parent, interface kind, and recorded field-side label; each cutoff
+must match a declared source-band boundary. Aggregation sums complete
+`distance >= cutoff` bands for one mode, iteration, and normalization. It does
+not create native masks, apply Q2D factors, or change the Palace field
+calculation; see the [Palace surface-band course](course/palace-surface-bands.qmd).
 
 ## Internal semantic projection
 

@@ -236,6 +236,20 @@ class GeometryPlan:
         self._boundary_reconstruction = ()
         self._lumped_supports = ()
         self._surface_distance_bands = ()
+        self._rectangular_junctions = ()
+
+    def set_rectangular_junctions(self, specs) -> None:
+        """Replace explicit source-sheet/terminal bindings for subsequent snapshots."""
+        from scgsim.geometry.models.junctions import RectangularJunctionSpec
+
+        requests = tuple(specs)
+        if any(not isinstance(item, RectangularJunctionSpec) for item in requests):
+            raise TypeError("rectangular junctions require RectangularJunctionSpec")
+        for field in ("junction_id", "port_sheet_id"):
+            identities = [getattr(item, field) for item in requests]
+            if len(set(identities)) != len(identities):
+                raise ValueError(f"duplicate rectangular junction {field}")
+        self._rectangular_junctions = requests
 
     def set_surface_distance_bands(self, specs) -> None:
         """Replace planar distance requests carried by subsequent snapshots.
@@ -803,6 +817,10 @@ class GeometryPlan:
             boundary_reconstruction=tuple(reconstruction),
             lumped_supports=tuple(lumped_supports),
         )
+        if self._rectangular_junctions:
+            from scgsim.geometry.source.junctions import with_rectangular_junctions
+
+            build_input = with_rectangular_junctions(build_input, self._rectangular_junctions)
         if self._surface_distance_bands:
             from scgsim.geometry.source.surface_bands import with_surface_distance_bands
 

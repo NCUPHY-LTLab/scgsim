@@ -135,7 +135,7 @@ def _is_route_a_sheet_interface(
     recognition_rule = interface.metadata.get("recognition_rule")
     if route == "A" and recognition_rule == "route_a_surface_sheet_polygon":
         return True
-    if route is None and representation_context is not None:
+    if route in (None, "A") and representation_context is not None:
         generated = (
             interface.metadata.get("intent_origin")
             == "generated_representation_context_surface_sheet"

@@ -1320,10 +1320,41 @@ def _validate_surface_mask_config(
     config_declares_masks = isinstance(declared_rows, list) and any(
         isinstance(row, dict) and "Mask" in row for row in declared_rows
     )
+    current_entries = [
+        entry
+        for entry in index_map["entries"]
+        if entry.get("section") == "Boundaries.Postprocessing.Dielectric"
+        and isinstance(entry.get("epr_spec"), dict)
+        and entry["epr_spec"].get("schema_version") == "scgsim.palace.surface-film.v2"
+    ]
     if not masks:
         if config_declares_masks:
             raise ValueError("config contains unindexed surface EPR masks.")
-        return
+        if not current_entries:
+            return
+    # Current unmasked integrations use the same config/index binding as historical Masks.
+    identities: set[tuple[str, str]] = set()
+    physical_members: set[tuple[str, int]] = set()
+    for entry in current_entries:
+        if "mask" in entry:
+            continue
+        metadata = _expect_mapping(entry.get("metadata"), "surface EPR metadata")
+        interface = _expect_scalar(metadata, "interface_type", str)
+        surface_id = _expect_scalar(metadata, "surface_id", str)
+        if interface not in {"MA", "MS", "SA"} or not surface_id:
+            raise ValueError("surface EPR integration identity is invalid.")
+        identity = (interface, surface_id)
+        if identity in identities:
+            raise ValueError("surface EPR surface identity is duplicated.")
+        identities.add(identity)
+        attributes = _expect_list(entry.get("attributes"), "surface EPR attributes")
+        for attribute in attributes:
+            if type(attribute) is not int or attribute <= 0:
+                raise ValueError("surface EPR attributes must be positive integers.")
+            member = (interface, attribute)
+            if member in physical_members:
+                raise ValueError("surface EPR physical attribute is duplicated.")
+            physical_members.add(member)
     rows = _expect_list(
         postprocessing.get("Dielectric"),
         "config.Boundaries.Postprocessing.Dielectric",

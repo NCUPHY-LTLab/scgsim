@@ -35,13 +35,19 @@ def _route_a_sheet_interfaces(
             recognition_rule = "representation_context_surface_sheet_polygon"
             valid_routes = None
             z_um = float(representation.effective_z_interval_um[0])
-        for index, polygon_id in enumerate(entity.polygon_ids):
-            polygon = polygons_by_id.get(polygon_id)
-            if polygon is None:
-                raise ValueError(
-                    f"{entity.semantic_id} sheet intent references missing "
-                    f"polygon {polygon_id!r}"
-                )
+        if entity.metadata.get("junction_derived_support"):
+            supports = ((entity.polygon_ids, entity.geometry["outer_loop"],
+                         entity.geometry.get("hole_loops", ())),)
+        else:
+            supports = []
+            for polygon_id in entity.polygon_ids:
+                polygon = polygons_by_id.get(polygon_id)
+                if polygon is None:
+                    raise ValueError(
+                        f"{entity.semantic_id} sheet intent references missing polygon {polygon_id!r}"
+                    )
+                supports.append(((polygon_id,), polygon.exterior, polygon.holes))
+        for index, (source_ids, exterior, holes) in enumerate(supports):
             interfaces.append(
                 {
                     "interface_id": f"MA__{entity.semantic_id}__AIR__{index:04d}",
@@ -50,15 +56,15 @@ def _route_a_sheet_interfaces(
                     "interface_kinds": ("MS", "MA"),
                     "recognition_rule": recognition_rule,
                     "intent_origin": intent_origin,
-                    "source_polygon_ids": (polygon_id,),
+                    "source_polygon_ids": source_ids,
                     **(
                         {"valid_routes": valid_routes}
                         if valid_routes is not None
                         else {}
                     ),
                     "plane": {"axis": "z", "value_um": z_um},
-                    "outer_loop": polygon.exterior,
-                    "hole_loops": polygon.holes,
+                    "outer_loop": exterior,
+                    "hole_loops": holes,
                 }
             )
     return {"interfaces": tuple(interfaces)}
