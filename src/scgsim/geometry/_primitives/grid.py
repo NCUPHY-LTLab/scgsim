@@ -5,11 +5,12 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from hashlib import sha256
+from functools import cached_property
 import json
 
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.diagnostics import _progress, _stage
-from scgsim.preparation import _ordered_map
+from scgsim.preparation import _ordered_map, current_preparation_workers
 
 _ACTIVE_GRID = ContextVar("scgsim_geometry_grid", default=None)
 _SOURCE_INTENT = ContextVar("scgsim_source_intent_overlay", default=False)
@@ -109,6 +110,7 @@ class _RegionVertexIndex:
     by_y: tuple
     xs: tuple
     ys: tuple
+    coordinates: Mapping
 
 
 def _region_key(point, grid_size):
@@ -121,8 +123,29 @@ def _region_key(point, grid_size):
     )
 
 
+def _canonical_grid_point(point, grid_size):
+    if grid_size is None:
+        return tuple(point)
+    from decimal import Decimal
+
+    # Decimal spelling is the declared layout step; avoid introducing a second
+    # binary multiplication spelling for an otherwise identical lattice node.
+    step = Decimal(str(grid_size))
+    return tuple(float(value * step) for value in _region_key(point, grid_size))
+
+
 def _region_vertex_index(vertices, grid_size):
-    # Original occurrence order and duplicate entries belong to the index.
+    # Only realized lattice nodes share one key-to-coordinate identity. Parent
+    # planes without a layout grid retain their original coordinates/occurrences.
+    from types import MappingProxyType
+
+    coordinates = {}
+    if grid_size is not None:
+        for point in vertices:
+            key = _region_key(point, grid_size)
+            if key not in coordinates:
+                coordinates[key] = _canonical_grid_point(point, grid_size)
+        vertices = tuple(coordinates.values())
     rows = tuple(
         (index, point, _region_key(point, grid_size))
         for index, point in enumerate(vertices)
@@ -135,6 +158,7 @@ def _region_vertex_index(vertices, grid_size):
         by_y,
         tuple(row[1][0] for row in by_x),
         tuple(row[1][1] for row in by_y),
+        MappingProxyType(coordinates),
     )
 
 
@@ -150,6 +174,22 @@ def _regions_indexed(geometry, vertex_index):
     xs, ys = vertex_index.xs, vertex_index.ys
 
     def atomic(coords):
+        if vertex_index.grid_size is not None:
+            points = []
+            for point in coords:
+                key = _region_key(point, vertex_index.grid_size)
+                canonical = vertex_index.coordinates.get(key)
+                points.append(
+                    _canonical_grid_point(point, vertex_index.grid_size)
+                    if canonical is None
+                    else canonical
+                )
+            points = tuple(points)
+            coords = tuple(
+                point
+                for index, point in enumerate(points)
+                if index == 0 or point != points[index - 1]
+            )
         ring = _ring(coords)
         if not by_x:
             return ring
@@ -255,6 +295,12 @@ class _OverlayParts:
 class _ZeroAreaResidue:
     geometry: object
     operand_ids: tuple
+
+    @cached_property
+    def exact_key(self):
+        # Records survive disjoint cuts unchanged. Cache only their immutable
+        # exact identity, never geometry from another arrangement or process.
+        return self.operand_ids, self.geometry.normalize().wkb
 
 
 @dataclass(frozen=True)
@@ -366,7 +412,7 @@ def _deduplicate_residues(residues):
     seen = set()
     output = []
     for residue in residues:
-        key = residue.operand_ids, residue.geometry.normalize().wkb
+        key = residue.exact_key
         if key not in seen:
             seen.add(key)
             output.append(residue)
@@ -422,6 +468,37 @@ def _parts_union(parts, grid, operand_index):
     return _OverlayParts(tuple(output))
 
 
+@dataclass(frozen=True)
+class _CellOverlayOutcome:
+    common: object
+    residual: object
+    error: BaseException | None = None
+    traceback: object = None
+
+
+def _cell_overlay_pair(cell, operand, grid, operand_index, cell_index):
+    parts = _OverlayParts((cell,))
+    try:
+        common = _parts_overlay(
+            "intersection", parts, operand, grid, operand_index, cell_index
+        )
+        residual = _parts_overlay(
+            "difference", parts, operand, grid, operand_index, cell_index
+        )
+        return _CellOverlayOutcome(common, residual)
+    except BaseException as error:
+        # A later cell's failure must not overtake an earlier pending difference.
+        return _CellOverlayOutcome(None, None, error, error.__traceback__)
+
+
+def _cell_overlay_chunk(work):
+    rows, operand, grid, operand_index = work
+    return tuple(
+        (index, _cell_overlay_pair(cell, operand, grid, operand_index, index))
+        for index, cell in rows
+    )
+
+
 def _subdivide_grid(values, geometries, grid):
     from shapely import STRtree
 
@@ -454,17 +531,42 @@ def _subdivide_grid(values, geometries, grid):
             }
             candidate_count += len(candidates)
             skipped_count += len(previous) - len(candidates)
+            workers = current_preparation_workers()
+            pairs = {}
+            if workers is not None and workers > 1 and candidates:
+                rows = tuple(
+                    (index, previous[index][0]) for index in sorted(candidates)
+                )
+                chunk_size = (len(rows) + workers - 1) // workers
+                work = tuple(
+                    (rows[start : start + chunk_size], operand, grid, operand_index)
+                    for start in range(0, len(rows), chunk_size)
+                )
+                # Wait for all immutable pair work before doing serial pending
+                # updates; caller CPU and pool never process overlay concurrently.
+                pairs = dict(
+                    row
+                    for chunk in _ordered_map(_cell_overlay_chunk, work)
+                    for row in chunk
+                )
             for cell_index, (cell, labels) in enumerate(previous):
                 if cell_index not in candidates:
-                    retain(_OverlayParts((cell,)), labels)
+                    if cell_index < len(cells):
+                        divided.append((cell, labels))
+                    else:
+                        # Preserve the immutable record and cached exact key;
+                        # no dimension dispatch or GEOS normalization is needed.
+                        sideband.append(residues[cell_index - len(cells)])
                     continue
                 cell_parts = _OverlayParts((cell,))
-                common = _parts_overlay(
-                    "intersection", cell_parts, operand, grid, operand_index, cell_index
-                )
-                residual = _parts_overlay(
-                    "difference", cell_parts, operand, grid, operand_index, cell_index
-                )
+                pair = pairs.get(cell_index)
+                if pair is None:
+                    pair = _cell_overlay_pair(
+                        cell, operand, grid, operand_index, cell_index
+                    )
+                if pair.error is not None:
+                    raise pair.error.with_traceback(pair.traceback)
+                common, residual = pair.common, pair.residual
                 pending = _parts_overlay(
                     "difference", pending, cell_parts, grid, operand_index, cell_index
                 )
@@ -511,7 +613,7 @@ def _account_zero_area(residues, cells, grid):
     geometries = {}
     labeled = []
     for residue in _deduplicate_residues(residues):
-        key = residue.geometry.normalize().wkb
+        key = residue.exact_key[1]
         geometries.setdefault(key, residue.geometry)
         labeled.append((key, residue.operand_ids))
 
@@ -649,17 +751,56 @@ def build_grid_arrangement(operands, context, *, apply_grid=True):
                             "area_um2": float(shape.area),
                         }
 
+                    metrics = {
+                        "operand_index": operand_index,
+                        "grid_size_um": grid,
+                        "requested": summary(raw),
+                        "realized": summary(final),
+                    }
+                    # Error-only witnesses separate input rounding, subdivision
+                    # coverage, and final re-union. They never enter the output
+                    # or change the original physical preservation decision.
+                    stages = (
+                        (
+                            "initial_grid_realization",
+                            lambda: _overlay_call(
+                                "intersection", raw, raw, grid, operand_index, None
+                            ),
+                        ),
+                        (
+                            "labelled_cells_without_resnap",
+                            lambda: union_all(
+                                [
+                                    cell
+                                    for cell, labels in cells
+                                    if value.operand_id in labels
+                                ],
+                                grid_size=0,
+                            ),
+                        ),
+                        (
+                            "reconstructed_faces_without_resnap",
+                            lambda: union_all(
+                                [
+                                    Polygon(face.exterior, face.holes)
+                                    for face in faces
+                                    if value.operand_id in face.operand_ids
+                                ],
+                                grid_size=0,
+                            ),
+                        ),
+                    )
+                    for name, operation in stages:
+                        try:
+                            metrics[name] = summary(operation())
+                        except Exception as diagnostic_error:
+                            metrics[name] = {
+                                "unavailable": True,
+                                "error_type": type(diagnostic_error).__name__,
+                            }
                     error.add_note(
                         "scgsim.grid.physical_topology: "
-                        + json.dumps(
-                            {
-                                "operand_index": operand_index,
-                                "grid_size_um": grid,
-                                "requested": summary(raw),
-                                "realized": summary(final),
-                            },
-                            sort_keys=True,
-                        )
+                        + json.dumps(metrics, sort_keys=True)
                     )
                 except Exception:
                     error.add_note("scgsim.grid.physical_topology: metrics unavailable")
@@ -835,6 +976,45 @@ def polygon_boolean(left, right, operation, *, precision=1e-9):
 
 def source_grid_audits():
     return tuple(_SOURCE_AUDITS.get() or ())
+
+
+@dataclass(frozen=True)
+class _SourceRecipeOutcome:
+    result: object
+    audits: tuple
+    error: BaseException | None
+    traceback: object
+
+
+def _source_recipe_map(function, items):
+    """Run independent recipes with isolated audits and source-order merging."""
+    parent_audits = _SOURCE_AUDITS.get()
+
+    def execute(item):
+        local_audits = [] if parent_audits is not None else None
+        token = _SOURCE_AUDITS.set(local_audits)
+        try:
+            try:
+                result = function(item)
+            except BaseException as error:
+                return _SourceRecipeOutcome(
+                    None, tuple(local_audits or ()), error, error.__traceback__
+                )
+            return _SourceRecipeOutcome(result, tuple(local_audits or ()), None, None)
+        finally:
+            _SOURCE_AUDITS.reset(token)
+
+    outcomes = _ordered_map(execute, items)
+    results = []
+    for outcome in outcomes:
+        if parent_audits is not None:
+            for row in outcome.audits:
+                if row not in parent_audits:
+                    parent_audits.append(row)
+        if outcome.error is not None:
+            raise outcome.error.with_traceback(outcome.traceback)
+        results.append(outcome.result)
+    return results
 
 
 def preserve_declared_source(function):

@@ -694,6 +694,21 @@ def test_topology_failure_note_keeps_requested_and_realized_counts():
         "holes": 0,
         "area_um2": 0,
     }
+    # Self-realization preserves a nonempty zero-area line, while the labelled
+    # positive-area cell inventory is empty. Neither is accepted as physical area.
+    for stage, empty in (
+        ("initial_grid_realization", False),
+        ("labelled_cells_without_resnap", True),
+        ("reconstructed_faces_without_resnap", True),
+    ):
+        assert metrics[stage] == {
+            "empty": empty,
+            "is_valid": True,
+            "components": 0,
+            "holes": 0,
+            "area_um2": 0,
+        }
+        assert set(metrics[stage]) == set(metrics["requested"])
     assert metrics["operand_index"] == 0
     assert metrics["grid_size_um"] == 1
     assert "thin" not in note
@@ -716,3 +731,285 @@ def test_parallel_grid_is_identical_for_mixed_sidebands_and_contact_nodes():
     with preparation_resources(max_workers=2):
         parallel = build_grid_arrangement(contacts, GeometryGridContext(1))
     assert parallel == serial
+
+
+def test_crossing_cut_partition_conserves_parent_at_each_union_stage():
+    from shapely import Polygon, intersection, union_all
+    from scgsim.geometry._primitives.grid import _subdivide_grid
+
+    # Public coarse lattice makes snapping visible; no study geometry/values.
+    context = GeometryGridContext(1)
+    operands = (
+        GridOperand("parent", rectangle(0, 0, 10, 10), contact=False),
+        GridOperand("cutA", ((1, 1), (9, 2), (3, 9)), physical=False, contact=False),
+        GridOperand("cutB", ((1, 8), (8, 1), (9, 9)), physical=False, contact=False),
+        GridOperand("remote", rectangle(20, 20, 21, 21), contact=False),
+    )
+    shapes = {
+        value.operand_id: Polygon(value.exterior, value.holes) for value in operands
+    }
+    subdivision = _subdivide_grid(operands, shapes, 1)
+    selected = [cell for cell, labels in subdivision.cells if "parent" in labels]
+    raw = shapes["parent"]
+    self_realized = intersection(raw, raw, grid_size=1)
+    unsnapped_cell_union = union_all(selected)
+    effective_union = union_all(selected, grid_size=1)
+    arrangement = build_grid_arrangement(operands, context)
+    reconstructed = union_all(
+        [
+            Polygon(outer, holes)
+            for outer, holes in arrangement.operand_regions("parent")
+        ]
+    )
+    for stage in (self_realized, unsnapped_cell_union, effective_union, reconstructed):
+        assert stage.equals(raw)
+        assert stage.area == 100
+        assert stage.geom_type == "Polygon"
+        assert stage.is_valid
+        assert len(stage.interiors) == 0
+    # This is a direct area-partition witness before another fixed-precision
+    # operation can change a cut boundary. Every cell retains its parent label.
+    assert sum(cell.area for cell in selected) == 100
+    for index, cell in enumerate(selected):
+        for other in selected[index + 1 :]:
+            assert intersection(cell, other).area == 0
+
+
+@pytest.mark.parametrize("workers", (1, 2))
+def test_source_recipe_map_isolates_context_and_merges_audits_in_source_order(workers):
+    from scgsim.preparation import preparation_resources
+    from scgsim.geometry._primitives.grid import (
+        _SOURCE_AUDITS,
+        _SOURCE_INTENT,
+        _frame_point,
+        _source_recipe_map,
+        current_grid_context,
+        geometry_grid_scope,
+        polygon_world_frame,
+        source_grid_audits,
+    )
+
+    with geometry_grid_scope(GRID), polygon_world_frame((1, 0, 0, 1, 3, 4)):
+        parent = _SOURCE_AUDITS.get()
+        parent.append({"seed": 0})
+        intent = _SOURCE_INTENT.set(True)
+        try:
+
+            def recipe(index):
+                local = _SOURCE_AUDITS.get()
+                assert local is not parent
+                assert local == []
+                assert current_grid_context() == GRID
+                assert _SOURCE_INTENT.get() is True
+                assert _frame_point((0, 0)) == (3, 4)
+                local.extend(({"seed": 0}, {"recipe": index}))
+                assert parent == [{"seed": 0}]
+                return index * 2
+
+            with preparation_resources(max_workers=workers):
+                assert _source_recipe_map(recipe, (2, 0, 1)) == [4, 0, 2]
+            assert source_grid_audits() == (
+                {"seed": 0},
+                {"recipe": 2},
+                {"recipe": 0},
+                {"recipe": 1},
+            )
+            assert _SOURCE_AUDITS.get() is parent
+        finally:
+            _SOURCE_INTENT.reset(intent)
+    assert _SOURCE_AUDITS.get() is None
+
+    def disabled(index):
+        assert _SOURCE_AUDITS.get() is None
+        return index
+
+    with preparation_resources(max_workers=workers):
+        assert _source_recipe_map(disabled, (1, 2)) == [1, 2]
+    assert _SOURCE_AUDITS.get() is None
+
+
+@pytest.mark.parametrize("workers", (1, 2))
+def test_source_recipe_map_preserves_first_error_and_audit_prefix_then_cleans_up(
+    workers,
+):
+    from scgsim.preparation import preparation_resources
+    from scgsim.geometry._primitives.grid import (
+        _SOURCE_AUDITS,
+        _source_recipe_map,
+        geometry_grid_scope,
+        source_grid_audits,
+    )
+
+    first, later = ValueError("first recipe"), ValueError("later recipe")
+    with geometry_grid_scope(GRID):
+        parent = _SOURCE_AUDITS.get()
+
+        def recipe(index):
+            _SOURCE_AUDITS.get().append({"recipe": index})
+            assert parent == []
+            if index == 1:
+                raise first
+            if index == 2:
+                raise later
+            return index
+
+        with preparation_resources(max_workers=workers):
+            with pytest.raises(ValueError) as caught:
+                _source_recipe_map(recipe, (0, 1, 2))
+            assert caught.value is first
+            assert source_grid_audits() == ({"recipe": 0}, {"recipe": 1})
+            assert _SOURCE_AUDITS.get() is parent
+
+            def clean(index):
+                assert _SOURCE_AUDITS.get() == []
+                return index
+
+            assert _source_recipe_map(clean, (3, 4)) == [3, 4]
+            assert source_grid_audits() == ({"recipe": 0}, {"recipe": 1})
+    assert _SOURCE_AUDITS.get() is None
+
+
+def test_realized_grid_nodes_use_one_coordinate_per_integer_key():
+    from shapely import Polygon
+    from scgsim.geometry._primitives.grid import _regions, _region_key
+
+    grid = 0.1
+    endpoint = (3 * grid, 3 * grid)
+    same_key = (3 / 10, 3 / 10)
+    assert endpoint != same_key
+    assert _region_key(endpoint, grid) == _region_key(same_key, grid)
+    triangle = Polygon(((0, 0), endpoint, (0, 1)))
+    realized = _regions(triangle, (same_key, endpoint), grid)[0][0]
+    keys = tuple(_region_key(point, grid) for point in realized)
+    assert len(keys) == len(set(keys)) == 3
+    assert realized == ((0, 0), same_key, (0, 1))
+    assert Polygon(realized).equals(Polygon(((0, 0), same_key, (0, 1))))
+    assert tuple(triangle.exterior.coords)[1] == endpoint
+    assert _regions(Polygon(realized), (same_key, endpoint), grid)[0][0] == realized
+    # The same distinction remains real in an ungridded parent plane; its
+    # original coordinates are not rounded by this layout-node identity rule.
+    untouched = _regions(triangle, (), None)[0][0]
+    assert untouched == ((0, 0), endpoint, (0, 1))
+    separate_triangle = Polygon(((0, 0), same_key, (0, 1)))
+    assert _regions(separate_triangle, (), None)[0][0][1] == same_key
+
+
+def test_horizontal_node_plane_keeps_raw_subgrid_physical_guard():
+    from scgsim.geometry.planning.surface_bands import _node_band_planes
+
+    build, parent = band_fixture()
+    bound = apply_geometry_grid(build, GRID)
+    children, _, summaries = partition_surface_distance_bands(bound, surfaces=(parent,))
+    thin = replace(
+        parent,
+        surface_id="thin_neighbor",
+        geometry_ref={**parent.geometry_ref, "outer_loop": rectangle(0, 0, 0.0002, 1)},
+    )
+    # Genuine generated band children activate common horizontal noding, while
+    # the unbanded source operand must retain its positive-area raw baseline.
+    with pytest.raises(ValueError, match="physical geometry collapsed.*thin_neighbor"):
+        _node_band_planes((thin, *children), summaries, GRID)
+    assert thin.geometry_ref["outer_loop"] == rectangle(0, 0, 0.0002, 1)
+
+
+def test_horizontal_node_plane_emits_canonical_xy_without_reverting_raw_spelling():
+    from scgsim.geometry._primitives.grid import _canonical_grid_point
+    from scgsim.geometry.planning.surface_bands import _node_band_planes
+
+    endpoint = 571 * GRID.grid_size_um
+    assert endpoint != 0.571
+    build, parent = band_fixture(outer=rectangle(0, 0, endpoint, 1), cuts=(0.1,))
+    bound = apply_geometry_grid(build, GRID)
+    children, _, summaries = partition_surface_distance_bands(bound, surfaces=(parent,))
+    emitted, _, _ = _node_band_planes((parent, *children), summaries, GRID)
+    points = [
+        point
+        for surface in emitted
+        for ring in surface.geometry_ref["planar_loops_3d"]
+        for point in ring
+    ]
+    assert points
+    assert any(point[0] == 0.571 for point in points)
+    assert all(
+        point[:2] == _canonical_grid_point(point[:2], GRID.grid_size_um)
+        for point in points
+    )
+    assert {point[2] for point in points} == {0}
+    assert parent.geometry_ref["outer_loop"][1][0] == endpoint
+
+
+def test_candidate_pairs_parallelize_real_work_with_identical_subdivision_and_graph():
+    import threading
+    from shapely import Polygon
+    from scgsim.preparation import preparation_resources
+    from scgsim.geometry._primitives.grid import _cell_overlay_chunk, _subdivide_grid
+
+    values = _mixed_bridge_operands()
+    shapes = {
+        value.operand_id: Polygon(value.exterior, value.holes) for value in values
+    }
+    serial = _subdivide_grid(values, shapes, 1)
+    serial_graph = build_grid_arrangement(values, GeometryGridContext(1))
+    main_thread = threading.get_ident()
+    seen = set()
+    lock = threading.Lock()
+    old_profile = threading.getprofile()
+
+    def observe(frame, event, arg):
+        if event == "call" and frame.f_code is _cell_overlay_chunk.__code__:
+            with lock:
+                seen.add(threading.get_ident())
+
+    threading.setprofile(observe)
+    try:
+        with preparation_resources(max_workers=2):
+            parallel = _subdivide_grid(values, shapes, 1)
+            parallel_graph = build_grid_arrangement(values, GeometryGridContext(1))
+    finally:
+        threading.setprofile(old_profile)
+    assert seen
+    assert main_thread not in seen
+    assert [(cell.wkb, labels) for cell, labels in parallel.cells] == [
+        (cell.wkb, labels) for cell, labels in serial.cells
+    ]
+    assert [residue.exact_key for residue in parallel.residues] == [
+        residue.exact_key for residue in serial.residues
+    ]
+    assert parallel_graph == serial_graph
+
+
+def test_candidate_pair_chunks_retain_real_geos_failures_at_original_ordinals():
+    from shapely import Polygon
+    from shapely.errors import GEOSException
+    from scgsim.geometry._primitives.grid import _OverlayParts, _cell_overlay_chunk
+    from scgsim.preparation import _ordered_map, preparation_resources
+
+    invalid = Polygon(((0, 0), (2, 2), (0, 2), (2, 0)))
+    valid = Polygon(rectangle(0, 0, 4, 4))
+    operand = _OverlayParts((valid,))
+    work = (
+        (((3, invalid), (4, valid)), operand, 1, 7),
+        (((5, invalid),), operand, 1, 7),
+    )
+    serial = [_cell_overlay_chunk(chunk) for chunk in work]
+    with preparation_resources(max_workers=2):
+        parallel = _ordered_map(_cell_overlay_chunk, work)
+    for expected_chunk, actual_chunk in zip(serial, parallel, strict=True):
+        assert [index for index, _ in actual_chunk] == [
+            index for index, _ in expected_chunk
+        ]
+        for (index, expected), (_, actual) in zip(
+            expected_chunk, actual_chunk, strict=True
+        ):
+            if index == 4:
+                assert actual.error is None
+                assert actual.common == expected.common
+            else:
+                assert isinstance(actual.error, GEOSException)
+                assert type(actual.error) is type(expected.error)
+                assert actual.error.__notes__ == expected.error.__notes__
+                note = json.loads(actual.error.__notes__[0].split(": ", 1)[1])
+                assert note["cell_index"] == index
+                assert note["operand_index"] == 7
+                assert note["operation"] == "intersection"
+                assert actual.traceback is actual.error.__traceback__

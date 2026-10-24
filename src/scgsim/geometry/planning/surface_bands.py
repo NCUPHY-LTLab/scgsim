@@ -899,7 +899,7 @@ def _node_band_planes(surfaces, summaries, context):
     """Share incident vertices among all actual coplanar band/neighbor faces."""
     from fractions import Fraction
     from collections import defaultdict
-    from scgsim.geometry._primitives.grid import GridOperand, build_grid_arrangement
+    from scgsim.geometry._primitives.grid import GridOperand, build_grid_arrangement, _canonical_grid_point
 
     def plane_key(rings):
         points = [tuple(Fraction(str(v)) for v in p) for r in rings for p in r]
@@ -940,9 +940,13 @@ def _node_band_planes(surfaces, summaries, context):
             local = tuple(tuple(project(p) for p in ring) for ring in rings)
             for source, projected in zip(rings, local):
                 for world, point in zip(source, projected):
-                    if point in original and original[point] != world:
+                    # Raw projected operands below remain the physical baseline.
+                    # Only the post-arrangement lookup/emission shares canonical XY.
+                    key = _canonical_grid_point(point, context.grid_size_um) if horizontal else point
+                    emitted = lift(key) if horizontal else world
+                    if key in original and original[key] != emitted:
                         raise ValueError("shared parent-plane vertices disagree on source coordinates")
-                    original[point] = world
+                    original[key] = emitted
             operands.append(GridOperand(surface.surface_id, local[0], local[1:],
                 physical="surface_distance_band" not in surface.metadata, contact=False))
         arrangement = build_grid_arrangement(operands, context, apply_grid=horizontal)
@@ -997,7 +1001,7 @@ def _layout_band_construction(surfaces, requests, context):
     """Realize shared XY boundaries before emitting any incident wall facets."""
     from math import acos, ceil, pi
     from shapely import LineString, Point, intersection, union_all
-    from scgsim.geometry._primitives.grid import GridOperand, build_grid_arrangement, _polygons
+    from scgsim.geometry._primitives.grid import GridOperand, build_grid_arrangement, _polygons, _canonical_grid_point
     horizontal = [(surface, _rings3d(surface)) for surface in surfaces
                   if len({p[2] for r in _rings3d(surface) for p in r}) == 1]
     if not any(surface.surface_id in requests for surface, _ in horizontal):
@@ -1044,7 +1048,7 @@ def _layout_band_construction(surfaces, requests, context):
     parents, realized, chains, ledger = {}, {}, {}, []
     def normalized(point):
         value = intersection(Point(point[:2]), Point(point[:2]), grid_size=context.grid_size_um)
-        return tuple(value.coords[0])
+        return _canonical_grid_point(value.coords[0], context.grid_size_um)
     for surface, source in horizontal:
         regions = arrangement.operand_regions(parent_keys[surface.surface_id])
         if len(regions) != 1:

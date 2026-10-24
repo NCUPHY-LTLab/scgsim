@@ -8,6 +8,7 @@ from scgsim.geometry._primitives.grid import (
 )
 
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
@@ -25,6 +26,58 @@ from scgsim.geometry.source._polygon_ops import (
     _point_in_ring,
     _ring_from_gdstk_polygon,
 )
+
+
+@dataclass(frozen=True)
+class _SourceRecipeJob:
+    function: Any = None
+    args: tuple = ()
+    kwargs: Mapping[str, Any] = field(default_factory=dict)
+    expected: Any = None
+    comparison_error: str | None = None
+    error: Exception | None = None
+    traceback: Any = None
+
+
+def _source_recipe_job(
+    function,
+    *args,
+    source_cell=None,
+    source_polygons=None,
+    excluded_reference_indexes=(),
+    expected=None,
+    comparison_error=None,
+    **kwargs,
+):
+    """Prepare worker-owned inputs on the source thread, before pool dispatch."""
+    if source_cell is not None:
+        source_polygons = _polygons_by_layer(
+            source_cell, excluded_reference_indexes=excluded_reference_indexes
+        )
+        kwargs["cell"] = None
+    copied = deepcopy(kwargs)
+    if source_polygons is not None:
+        copied["polygons_by_layer"] = {
+            layer: tuple(polygon.copy() for polygon in polygons)
+            for layer, polygons in source_polygons.items()
+        }
+    return _SourceRecipeJob(
+        function, deepcopy(args), copied, deepcopy(expected), comparison_error
+    )
+
+
+def _failed_source_recipe(error):
+    # Preparation errors join the same source-order failure stream as recipes.
+    return _SourceRecipeJob(error=error, traceback=error.__traceback__)
+
+
+def _run_source_recipe(job):
+    if job.error is not None:
+        raise job.error.with_traceback(job.traceback)
+    result = job.function(*job.args, **job.kwargs)
+    if job.comparison_error is not None and result != job.expected:
+        raise ValueError(job.comparison_error)
+    return result
 
 
 def _resolve_material_kind(
@@ -398,7 +451,12 @@ def _occurrence_polygons_for_entity(
     cell: Any,
     transform: Sequence[float],
     excluded_reference_indexes: Sequence[int] = (),
+    polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]] | None = None,
 ) -> list[dict[str, Any]]:
+    if polygons_by_layer is None:
+        polygons_by_layer = _polygons_by_layer(
+            cell, excluded_reference_indexes=excluded_reference_indexes
+        )
     geometry = dict(entity.geometry)
     geometry.pop("source_occurrence_polygons_um", None)
     for key in ("selector_point_um",):
@@ -412,9 +470,7 @@ def _occurrence_polygons_for_entity(
     local_entity = replace(entity, geometry=geometry)
     selected = _gds_polygons_for_entity(
         local_entity,
-        polygons_by_layer=_polygons_by_layer(
-            cell, excluded_reference_indexes=excluded_reference_indexes
-        ),
+        polygons_by_layer=polygons_by_layer,
     )
     return [_occurrence_polygon_record(polygon, transform) for polygon in selected]
 
@@ -427,12 +483,17 @@ def _occurrence_ground_polygons_for_entity(
     transform: Sequence[float],
     plane_layer: Sequence[int],
     excluded_reference_indexes: Sequence[int] = (),
+    polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]] | None = None,
 ) -> list[dict[str, Any]]:
     """Derive an occurrence's own positive Ground before its one affine map.
 
     The explicit PDK plane layer supplies the actual local outline; registered
     descendants supply neither that outline nor the local mask/include recipe.
     """
+    if polygons_by_layer is None:
+        polygons_by_layer = _polygons_by_layer(
+            cell, excluded_reference_indexes=excluded_reference_indexes
+        )
     from scgsim.geometry.source.ground import _derived_ground_polygons
 
     geometry = dict(entity.geometry)
@@ -445,9 +506,7 @@ def _occurrence_ground_polygons_for_entity(
             geometry[key] = [
                 _occurrence_inverse_point(transform, point) for point in geometry[key]
             ]
-    polygons = _polygons_by_layer(
-        cell, excluded_reference_indexes=excluded_reference_indexes
-    )
+    polygons = polygons_by_layer
     plane = polygons.get(_gds_layer(plane_layer, entity.semantic_id), ())
     if not plane:
         raise ValueError(
@@ -469,14 +528,17 @@ def _occurrence_port_polygon(
     cell: Any,
     transform: Sequence[float],
     excluded_reference_indexes: Sequence[int] = (),
+    polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]] | None = None,
 ) -> dict[str, Any]:
+    if polygons_by_layer is None:
+        polygons_by_layer = _polygons_by_layer(
+            cell, excluded_reference_indexes=excluded_reference_indexes
+        )
     layer = (record["layer"], record["datatype"])
     point = _occurrence_inverse_point(transform, record["selector_point_um"])
     selected = [
         polygon
-        for polygon in _polygons_by_layer(
-            cell, excluded_reference_indexes=excluded_reference_indexes
-        ).get(layer, ())
+        for polygon in polygons_by_layer.get(layer, ())
         if _point_in_ring(point, _ring_from_gdstk_polygon(polygon))
     ]
     if len(selected) != 1:
@@ -537,17 +599,18 @@ def _occurrence_include_polygon(
     cell: Any,
     transform: Sequence[float],
     excluded_reference_indexes: Sequence[int] = (),
+    polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]] | None = None,
 ) -> dict[str, Any]:
     """Select one connected local metal region, including its authored pieces."""
+    if polygons_by_layer is None:
+        polygons_by_layer = _polygons_by_layer(
+            cell, excluded_reference_indexes=excluded_reference_indexes
+        )
     layer = _gds_layer(
         record.get("layer"), str(record.get("source_local_id", "ground contribution"))
     )
     point = _occurrence_inverse_point(transform, record["selector_point_um"])
-    components = _fused_gdstk_components(
-        _polygons_by_layer(
-            cell, excluded_reference_indexes=excluded_reference_indexes
-        ).get(layer, ())
-    )
+    components = _fused_gdstk_components(polygons_by_layer.get(layer, ()))
     selected = [
         polygon
         for polygon, _, _ in components
