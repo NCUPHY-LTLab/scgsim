@@ -423,3 +423,139 @@ def test_public_ground_recipe_retains_pre_lowering_contact_identity(
         assert {row["source_entity_id"] for row in audits} == {"left", "right"}
         assert all(row["requested_polygons"] for row in audits)
         assert geometry_grid_context(result) == GRID
+
+
+def _mixed_bridge_operands(*, physical=False):
+    # A valid polygon whose sub-grid neck becomes line support at the grid.
+    bridge = (
+        (0, 0),
+        (2, 0),
+        (2, 1.1),
+        (4, 1.1),
+        (4, 0),
+        (6, 0),
+        (6, 4),
+        (4, 4),
+        (4, 1.2),
+        (2, 1.2),
+        (2, 4),
+        (0, 4),
+    )
+    return (
+        GridOperand("left", rectangle(0, 0, 1, 4), contact=False),
+        GridOperand("cutoff", bridge, physical=physical, contact=False),
+        GridOperand("right", rectangle(5, 0, 6, 4), contact=False),
+    )
+
+
+def test_mixed_intermediate_chain_preserves_area_and_auxiliary_residue():
+    from shapely import Polygon, intersection
+
+    operands = _mixed_bridge_operands()
+    grid = GeometryGridContext(1)
+    source = Polygon(operands[1].exterior)
+    assert source.is_valid
+    mixed = intersection(source, source, grid_size=1)
+    assert mixed.geom_type == "GeometryCollection"
+    assert {p.geom_type for p in mixed.geoms} == {"Polygon", "LineString"}
+
+    result = build_grid_arrangement(operands, grid)
+    areas = {}
+    for face in result.faces:
+        areas[face.operand_ids] = areas.get(face.operand_ids, 0) + ring_area(
+            face.exterior
+        )
+    assert areas == {("cutoff", "left"): 4, ("cutoff",): 8, ("cutoff", "right"): 4}
+    assert set(result.edges) == {
+        tuple(sorted((a, b)))
+        for face in result.faces
+        for ring in (face.exterior, *face.holes)
+        for a, b in zip(ring, (*ring[1:], ring[0]))
+    }
+    assert set(result.vertices) == {
+        p
+        for face in result.faces
+        for ring in (face.exterior, *face.holes)
+        for p in ring
+    }
+
+    from scgsim.geometry._primitives.grid import _account_zero_area, _subdivide_grid
+
+    shapes = {v.operand_id: Polygon(v.exterior, v.holes) for v in operands}
+    subdivision = _subdivide_grid(operands, shapes, 1)
+    accounting = _account_zero_area(subdivision.residues, subdivision.cells, 1)
+    assert sum(r.geometry.length for r in accounting.auxiliary) == 2
+    assert all(r.operand_ids == ("cutoff",) for r in accounting.auxiliary)
+    assert {tuple(p) for r in accounting.auxiliary for p in r.geometry.coords} == {
+        (2, 1),
+        (4, 1),
+    }
+
+
+def test_zero_area_contact_sideband_nodes_faces_without_orphan_edges():
+    from shapely import Polygon
+    from scgsim.geometry._primitives.grid import _account_zero_area, _subdivide_grid
+
+    operands = (
+        GridOperand("A", rectangle(0, 0, 4, 4)),
+        GridOperand("B", rectangle(4, 1, 6, 3)),
+        GridOperand("C", rectangle(6, 3, 8, 5)),
+    )
+    result = build_grid_arrangement(operands, GeometryGridContext(1))
+    assert {f.operand_ids: ring_area(f.exterior) for f in result.faces} == {
+        ("A",): 16,
+        ("B",): 4,
+        ("C",): 4,
+    }
+    assert {(4, 1), (4, 3), (6, 3)} <= set(result.vertices)
+    shapes = {v.operand_id: Polygon(v.exterior, v.holes) for v in operands}
+    subdivision = _subdivide_grid(operands, shapes, 1)
+    accounting = _account_zero_area(subdivision.residues, subdivision.cells, 1)
+    assert not accounting.auxiliary
+    assert any(
+        r.geometry.geom_type == "LineString" and r.geometry.length == 2
+        for r in accounting.boundary
+    )
+    assert any(
+        r.geometry.geom_type == "Point" and tuple(r.geometry.coords[0]) == (6, 3)
+        for r in accounting.boundary
+    )
+    assert set(result.edges) == {
+        tuple(sorted((a, b)))
+        for face in result.faces
+        for ring in (face.exterior, *face.holes)
+        for a, b in zip(ring, (*ring[1:], ring[0]))
+    }
+
+
+def test_mixed_residue_does_not_hide_physical_component_loss():
+    with pytest.raises(ValueError, match="component/hole"):
+        build_grid_arrangement(
+            _mixed_bridge_operands(physical=True), GeometryGridContext(1)
+        )
+
+
+def test_overlay_native_error_retains_coordinate_free_boundary_context():
+    from shapely.errors import GEOSException
+
+    invalid = GridOperand("source", ((0, 0), (2, 2), (0, 2), (2, 0)))
+    with pytest.raises(GEOSException) as caught:
+        build_grid_arrangement((invalid,), GeometryGridContext(1))
+    import json
+
+    note = next(
+        note
+        for note in caught.value.__notes__
+        if note.startswith("scgsim.grid.overlay_failure: ")
+    )
+    context = json.loads(note.split(": ", 1)[1])
+    assert context["operation"] == "intersection"
+    assert context["left"] == {
+        "geom_type": "Polygon",
+        "component_dimensions": [2],
+        "component_count": 1,
+    }
+    assert context["operand_index"] == 0
+    assert context["cell_index"] is None
+    assert context["grid_size_um"] == 1
+    assert "source" not in context

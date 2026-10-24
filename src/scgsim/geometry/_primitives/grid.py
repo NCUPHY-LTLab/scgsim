@@ -245,6 +245,219 @@ class GridArrangement:
         }
 
 
+@dataclass(frozen=True)
+class _OverlayParts:
+    geometries: tuple
+
+
+@dataclass(frozen=True)
+class _ZeroAreaResidue:
+    geometry: object
+    operand_ids: tuple
+
+
+@dataclass(frozen=True)
+class _Subdivision:
+    cells: tuple
+    residues: tuple[_ZeroAreaResidue, ...]
+
+
+@dataclass(frozen=True)
+class _ZeroAreaAccounting:
+    boundary: tuple[_ZeroAreaResidue, ...]
+    auxiliary: tuple[_ZeroAreaResidue, ...]
+
+
+def _overlay_parts(geometry):
+    # A result collection is not necessarily a legal input to OverlayNG.
+    # Keep every nonempty dimension; homogeneous multi-geometries stay intact.
+    if geometry.is_empty:
+        return _OverlayParts(())
+    if geometry.geom_type == "GeometryCollection":
+        return _OverlayParts(
+            tuple(
+                part
+                for child in geometry.geoms
+                for part in _overlay_parts(child).geometries
+            )
+        )
+    return _OverlayParts((geometry,))
+
+
+def _geometry_dimension(geometry):
+    return {
+        "Polygon": 2,
+        "MultiPolygon": 2,
+        "LineString": 1,
+        "LinearRing": 1,
+        "MultiLineString": 1,
+        "Point": 0,
+        "MultiPoint": 0,
+    }[geometry.geom_type]
+
+
+def _overlay_call(operation, left, right, grid, operand_index, cell_index):
+    from shapely import difference, intersection, union_all
+
+    try:
+        if operation == "union_all":
+            return union_all(left, grid_size=grid)
+        function = {"intersection": intersection, "difference": difference}[operation]
+        return function(left, right, grid_size=grid)
+    except Exception as error:
+        # Diagnostic failure must never replace the original native exception.
+        try:
+
+            def describe(geometry):
+                def components(value):
+                    if value.is_empty:
+                        return ()
+                    if value.geom_type in {
+                        "GeometryCollection",
+                        "MultiPolygon",
+                        "MultiLineString",
+                        "MultiPoint",
+                    }:
+                        return tuple(
+                            part for child in value.geoms for part in components(child)
+                        )
+                    return (value,)
+
+                parts = components(geometry)
+                return {
+                    "geom_type": geometry.geom_type,
+                    "component_dimensions": [_geometry_dimension(p) for p in parts],
+                    "component_count": len(parts),
+                }
+
+            note = {
+                "operation": operation,
+                "operand_index": operand_index,
+                "cell_index": cell_index,
+                "grid_size_um": grid,
+                "left": [describe(p) for p in left]
+                if operation == "union_all"
+                else describe(left),
+                "right": None if right is None else describe(right),
+            }
+            error.add_note(
+                "scgsim.grid.overlay_failure: " + json.dumps(note, sort_keys=True)
+            )
+        except Exception:
+            try:
+                error.add_note(
+                    "scgsim.grid.overlay_failure: diagnostic context unavailable"
+                )
+            except Exception:
+                pass
+        raise
+
+
+def _parts_overlay(operation, left, right, grid, operand_index, cell_index):
+    if operation == "intersection":
+        return _OverlayParts(
+            tuple(
+                part
+                for a in left.geometries
+                for b in right.geometries
+                for part in _overlay_parts(
+                    _overlay_call(operation, a, b, grid, operand_index, cell_index)
+                ).geometries
+            )
+        )
+    parts = left.geometries
+    for b in right.geometries:
+        parts = tuple(
+            part
+            for a in parts
+            for part in _overlay_parts(
+                _overlay_call(operation, a, b, grid, operand_index, cell_index)
+            ).geometries
+        )
+    return _OverlayParts(parts)
+
+
+def _parts_union(parts, grid, operand_index):
+    # Unary union is homogeneous too; do not reassemble a mixed input.
+    output = []
+    dimensions = tuple(dict.fromkeys(_geometry_dimension(p) for p in parts.geometries))
+    for dimension in dimensions:
+        group = [p for p in parts.geometries if _geometry_dimension(p) == dimension]
+        output.extend(
+            _overlay_parts(
+                _overlay_call("union_all", group, None, grid, operand_index, None)
+            ).geometries
+        )
+    return _OverlayParts(tuple(output))
+
+
+def _subdivide_grid(values, geometries, grid):
+    cells, residues = [], []
+    with _stage("geometry.grid.overlay", counts={"operands": len(values)}):
+        for operand_index, value in enumerate(values):
+            original = geometries[value.operand_id]
+            operand = _overlay_parts(
+                _overlay_call(
+                    "intersection", original, original, grid, operand_index, None
+                )
+            )
+            pending = operand
+            divided, sideband = [], []
+
+            def retain(parts, labels):
+                for part in parts.geometries:
+                    if _geometry_dimension(part) == 2:
+                        divided.extend((p, labels) for p in _polygons(part))
+                    else:
+                        sideband.append(_ZeroAreaResidue(part, labels))
+
+            # Area order is unchanged. Lower-dimensional cells are retained and
+            # subdivided separately; they can never create positive-area labels.
+            previous = (*cells, *((r.geometry, r.operand_ids) for r in residues))
+            for cell_index, (cell, labels) in enumerate(previous):
+                cell_parts = _OverlayParts((cell,))
+                common = _parts_overlay(
+                    "intersection", cell_parts, operand, grid, operand_index, cell_index
+                )
+                residual = _parts_overlay(
+                    "difference", cell_parts, operand, grid, operand_index, cell_index
+                )
+                pending = _parts_overlay(
+                    "difference", pending, cell_parts, grid, operand_index, cell_index
+                )
+                retain(residual, labels)
+                retain(common, (*labels, value.operand_id))
+            retain(_parts_union(pending, grid, operand_index), (value.operand_id,))
+            cells, residues = divided, sideband
+            _progress(operand_index + 1, len(values))
+    return _Subdivision(tuple(cells), tuple(residues))
+
+
+def _residue_coordinates(geometry):
+    if geometry.geom_type in {"LineString", "LinearRing", "Point"}:
+        return tuple(tuple(p) for p in geometry.coords)
+    return tuple(p for child in geometry.geoms for p in _residue_coordinates(child))
+
+
+def _account_zero_area(residues, cells, grid):
+    if not residues:
+        return _ZeroAreaAccounting((), ())
+    boundaries = tuple(cell.boundary for cell, _ in cells)
+    wire = _parts_union(_OverlayParts(boundaries), grid, None)
+    incident, auxiliary = [], []
+    for residue in residues:
+        parts = _OverlayParts((residue.geometry,))
+        common = _parts_overlay("intersection", parts, wire, grid, None, None)
+        remainder = _parts_overlay("difference", parts, wire, grid, None, None)
+        incident.extend(
+            _ZeroAreaResidue(p, residue.operand_ids) for p in common.geometries
+        )
+        auxiliary.extend(
+            _ZeroAreaResidue(p, residue.operand_ids) for p in remainder.geometries
+        )
+    return _ZeroAreaAccounting(tuple(incident), tuple(auxiliary))
+
+
 def build_grid_arrangement(operands, context, *, apply_grid=True):
     """Construct labelled cells by common-policy polygon overlay.
 
@@ -252,7 +465,7 @@ def build_grid_arrangement(operands, context, *, apply_grid=True):
     recovered from samples or independently rounded linework faces. Every
     existing cell and the new operand are updated in the same subdivision.
     """
-    from shapely import Polygon, difference, intersection, union_all
+    from shapely import Polygon, union_all
 
     grid = context.grid_size_um if apply_grid else None
     values = (
@@ -263,29 +476,17 @@ def build_grid_arrangement(operands, context, *, apply_grid=True):
         raise ValueError("common grid operand identities are duplicated")
     with _stage("geometry.grid.inputs", counts={"operands": len(values)}):
         geometries = {v.operand_id: Polygon(v.exterior, v.holes) for v in values}
-    cells = []
-    with _stage("geometry.grid.overlay", counts={"operands": len(values)}):
-        for operand_index, value in enumerate(values):
-            original = geometries[value.operand_id]
-            overlay_operand = intersection(original, original, grid_size=grid)
-            pending = overlay_operand
-            divided = []
-            for cell, labels in cells:
-                # All complementary pieces must use this same realized operand.
-                # Mixing its raw and realized boundaries creates inconsistent seams.
-                common = intersection(cell, overlay_operand, grid_size=grid)
-                residual = difference(cell, overlay_operand, grid_size=grid)
-                pending = difference(pending, cell, grid_size=grid)
-                divided.extend((part, labels) for part in _polygons(residual))
-                divided.extend(
-                    (part, (*labels, value.operand_id)) for part in _polygons(common)
-                )
-            # The first operand also goes through GEOS at the shared grid; this is
-            # an overlay operation, not an independently cleaned precision copy.
-            pending = union_all([pending], grid_size=grid)
-            divided.extend((part, (value.operand_id,)) for part in _polygons(pending))
-            cells = divided
-            _progress(operand_index + 1, len(values))
+    subdivision = _subdivide_grid(values, geometries, grid)
+    cells = subdivision.cells
+    with _stage(
+        "geometry.grid.zero_area", counts={"residues": len(subdivision.residues)}
+    ):
+        zero_area = _account_zero_area(subdivision.residues, cells, grid)
+    residue_points = {
+        point
+        for residue in (*zero_area.boundary, *zero_area.auxiliary)
+        for point in _residue_coordinates(residue.geometry)
+    }
     with _stage("geometry.grid.vertices", counts={"cells": len(cells)}):
         vertices = tuple(
             sorted(
@@ -295,6 +496,7 @@ def build_grid_arrangement(operands, context, *, apply_grid=True):
                     for ring in (cell.exterior, *cell.interiors)
                     for p in ring.coords
                 }
+                | residue_points
             )
         )
     with _stage(
@@ -315,6 +517,18 @@ def build_grid_arrangement(operands, context, *, apply_grid=True):
             )
             _progress(cell_index + 1, len(cells))
         faces = tuple(sorted(faces, key=lambda f: f.face_id))
+        vertices = tuple(
+            sorted(
+                {
+                    p
+                    for face in faces
+                    for ring in (face.exterior, *face.holes)
+                    for p in ring
+                }
+            )
+        )
+    # Boundary and auxiliary residues remain inspectable internally through
+    # the exact physical audits; neither can create an orphan area-graph edge.
     with _stage("geometry.grid.effective", counts={"operands": len(values)}):
         effective = {
             v.operand_id: union_all(
