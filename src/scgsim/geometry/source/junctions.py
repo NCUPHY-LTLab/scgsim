@@ -1,5 +1,7 @@
 """Bind exact source terminals and derive rectangular junctions before planning."""
 
+from scgsim.geometry._primitives.grid import with_input_grid
+
 from dataclasses import replace
 
 from scgsim.geometry.models.input import LayoutPolygonSpec
@@ -7,6 +9,7 @@ from scgsim.geometry.models.junctions import RectangularJunctionSpec
 from scgsim.geometry.source.adapter import _port_sheet_overlaps
 
 
+@with_input_grid
 def with_rectangular_junctions(build_input, specs):
     """Bind caller-selected source owners without searching other occurrences."""
     requests = tuple(specs)

@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from scgsim.geometry._primitives.grid import (
+    in_occurrence_frame,
+    preserve_declared_source,
+)
+
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from math import isfinite
@@ -147,6 +152,7 @@ def _entity_from_layer_record(
     )
 
 
+@preserve_declared_source
 def _gds_polygons_for_entity(
     entity: SemanticEntitySpec,
     *,
@@ -327,6 +333,7 @@ def _occurrence_polygon_record(
     }
 
 
+@in_occurrence_frame
 def _occurrence_polygons_for_entity(
     entity: SemanticEntitySpec,
     *,
@@ -354,6 +361,7 @@ def _occurrence_polygons_for_entity(
     return [_occurrence_polygon_record(polygon, transform) for polygon in selected]
 
 
+@in_occurrence_frame
 def _occurrence_ground_polygons_for_entity(
     entity: SemanticEntitySpec,
     *,

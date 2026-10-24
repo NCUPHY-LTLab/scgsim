@@ -7,6 +7,8 @@ contact evidence. Specific missing contact graphs are not fabricated here.
 
 from __future__ import annotations
 
+from scgsim.geometry._primitives.grid import with_input_grid
+
 from collections.abc import Mapping, Sequence
 from dataclasses import fields, is_dataclass, replace
 from typing import Any
@@ -180,6 +182,7 @@ def interpret_physical_layers(
     )
 
 
+@with_input_grid
 def interpret_physical_geometry(
     build_input: Any, stack: Mapping[str, Any], profile: ApproximationProfile
 ):

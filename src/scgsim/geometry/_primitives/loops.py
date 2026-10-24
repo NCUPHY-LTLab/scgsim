@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.geometry._primitives.grid import polygon_boolean
+
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from itertools import pairwise
@@ -358,7 +360,7 @@ def _boolean_gdstk_region(
         return ()
     if operation == "not" and not right:
         return _filter_gdstk_polygons(left)
-    result = gdstk.boolean(
+    result = polygon_boolean(
         left,
         right,
         operation,

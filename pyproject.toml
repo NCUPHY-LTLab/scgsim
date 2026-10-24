@@ -5,7 +5,7 @@ backend-path = ["."]
 
 [project]
 name = "scgsim"
-version = "2.0.0rc14"
+version = "2.0.0rc15"
 description = "Research-first electromagnetic simulation workflows for superconducting circuits."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
@@ -20,10 +20,12 @@ license-files = ["LICENSE", "NOTICE"]
 aedt = [
     "gdstk",
     "pyaedt==1.3.0",
+    "shapely==2.1.2",
 ]
 aedt-epr = [
     "gdstk",
     "pyaedt==1.3.0",
+    "shapely==2.1.2",
     "gdsfactory>=9,<10",
     "klayout>=0.30,<0.31",
 ]
@@ -31,6 +33,7 @@ palace = [
     "gdsfactory>=9,<10",
     "gdstk",
     "gmsh",
+    "shapely==2.1.2",
 ]
 visualization = [
     "meshio>=5.3,<6",

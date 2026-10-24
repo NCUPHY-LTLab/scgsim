@@ -19,9 +19,27 @@ band workflow.
 
 ## Build the geometry bands
 
-1. Build the normal source-backed `GeometryPlan`, including its original Nets
-   and vacuum region. Call `snapshot0 = plan.prepare()` once, then use its
-   detached `snapshot0.geometry_input` and `snapshot0.stack`.
+1. Before constructing source cells, define `layoutgrid_um = 0.001` (1 nm in
+   µm) and set the source layout DBU to that value through its layout API. The
+   focused setup below assumes the reader's normal prepared model inputs
+   `assembled`, `layer_stack`, `material_records`, and `coupon_padding_um`; it
+   does not construct those inputs. Build the normal source-backed
+   `GeometryPlan`, including its original Nets and vacuum region:
+
+   ```python
+   layoutgrid_um = 0.001  # 1 nm in µm
+   plan = GeometryPlan(
+       component=assembled,
+       root_id="chip",
+       layer_stack=layer_stack,
+       material_records=material_records,
+       coupon_padding_um=coupon_padding_um,
+       grid_size_um=layoutgrid_um,
+   )
+   ```
+
+   Call `snapshot0 = plan.prepare()` once, then use its detached
+   `snapshot0.geometry_input` and `snapshot0.stack`.
 2. Call `interpret_physical_geometry(...)` on those inputs. Pass its effective
    input and representation context to `build_route_construction_plan(...)`,
    then build the catalogue with `surface_distance_band_catalogue(...)`.
@@ -33,14 +51,17 @@ band workflow.
    `metadata.source_provenance.surface_contribution_ledger[*].side`.
    Treat these as distinct selections and provenance.
 4. Create one `SurfaceDistanceBandSpec` per selected parent. Supply ordered
-   positive cuts, Boolean precision, and either all original boundary edges or
-   an exact subset of original exterior/hole segments. The required
-   `source_polygon_id` argument is the actual polygon ID for polygon-backed
-   parents. For an entity-only parent with no polygon provenance, pass explicit
-   `None`; the source entity must still own that parent. Do not invent a polygon
-   ID. Port-split walls retain the unsplit original boundary as the distance
-   origin while child regions are clipped from the parent; split seams are not
-   inset origins.
+   positive cuts and set the required `precision_um` equal to the plan's shared
+   `layoutgrid_um`. Use all original boundary edges or an exact subset of
+   original exterior/hole segments. The optional `chord_error_um` follows
+   `boundary_segments`; leave it as `None` to retain the previous chord
+   magnitude of `precision_um`, or set it independently to control arc and cap
+   approximation. The required `source_polygon_id` argument is the actual
+   polygon ID for polygon-backed parents. For an entity-only parent with no
+   polygon provenance, pass explicit `None`; the source entity must still own
+   that parent. Do not invent a polygon ID. Port-split walls retain the unsplit
+   original boundary as the distance origin while child regions are clipped
+   from the parent; split seams are not inset origins.
 5. Call `plan.set_surface_distance_bands(...)`, then prepare again to obtain
    `snapshot1 = plan.prepare()`.
 6. Give that snapshot to the Palace simulation with `sim.set_plan(snapshot1)`

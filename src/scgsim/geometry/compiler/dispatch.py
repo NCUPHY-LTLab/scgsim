@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import time
+from scgsim.geometry._primitives.grid import with_input_grid
+
 from typing import Any
 
 from scgsim.geometry._primitives.entities import _component_metadata
@@ -61,6 +63,7 @@ from scgsim.geometry.planning.volumes import (
 )
 
 
+@with_input_grid
 def build_route_construction_plan(
     build_input: GeometryBuildInput,
     *,
@@ -350,6 +353,9 @@ def build_route_construction_plan(
         "tags": tags,
         "metadata": {
             "backend_strategy": "surface_plan_first_bottom_up_occ",
+            **({key: build_input.metadata[key] for key in (
+                "geometry_grid", "geometry_grid_arrangement", "unquantized_source_sha256"
+            ) if key in build_input.metadata}),
             "surface_distance_bands": distance_band_summary,
             **({
                 "rectangular_junctions": build_input.metadata["rectangular_junctions"],

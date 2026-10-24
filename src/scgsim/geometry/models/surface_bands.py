@@ -27,7 +27,8 @@ class SourceBoundarySegment:
 class SurfaceDistanceBandSpec:
     """Partition one planar parent by distance from its original boundary edges.
 
-    precision_um is the declared polygon Boolean grid and round-cap chord error.
+    precision_um is the declared layout Boolean grid. chord_error_um controls
+    round-cap approximation; omitted chord_error_um retains precision_um.
     For an existing partition, boundary indices address the retained original
     rings exposed as catalogue distance_origin_rings_3d_um. Missing lineage is
     unsupported; child seams never become distance origins.
@@ -41,8 +42,13 @@ class SurfaceDistanceBandSpec:
     distances_um: tuple[float, ...]
     precision_um: float
     boundary_segments: tuple[SourceBoundarySegment, ...] | None = None
+    chord_error_um: float | None = None
 
     def __post_init__(self) -> None:
+        if self.chord_error_um is not None:
+            from math import isfinite
+            if not isfinite(self.chord_error_um) or self.chord_error_um <= 0:
+                raise ValueError("chord_error_um must be positive and finite")
         object.__setattr__(self, "distances_um", tuple(self.distances_um))
         if self.boundary_segments is not None:
             object.__setattr__(self, "boundary_segments", tuple(self.boundary_segments))
@@ -72,6 +78,7 @@ class SurfaceDistanceBandSpec:
             "source_polygon_id": self.source_polygon_id,
             "distances_um": list(self.distances_um),
             "precision_um": self.precision_um,
+            **({"chord_error_um": self.chord_error_um} if self.chord_error_um is not None else {}),
             "boundary_segments": None
             if self.boundary_segments is None
             else [
@@ -93,6 +100,7 @@ class SurfaceDistanceBandSpec:
             source_polygon_id=value["source_polygon_id"],
             distances_um=tuple(value["distances_um"]),
             precision_um=value["precision_um"],
+            chord_error_um=value.get("chord_error_um"),
             boundary_segments=None
             if edges is None
             else tuple(SourceBoundarySegment(**edge) for edge in edges),

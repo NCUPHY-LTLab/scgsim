@@ -36,6 +36,7 @@ from scgsim.geometry.source._occurrence import (
     _occurrence_lumped_polygon,
 )
 from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
+from scgsim.geometry.source.grid import with_source_grid
 from scgsim.geometry.source.curves import boundary_binding, transform_boundary
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 
@@ -214,9 +215,11 @@ class GeometryPlan:
         layer_stack: Any,
         material_records: Mapping[str, Mapping[str, Any]],
         coupon_padding_um: float,
+        grid_size_um: float | None = None,
     ) -> None:
         if not callable(getattr(component, "write_gds", None)):
             raise TypeError("component must be an assembled GDSFactory Component")
+        self._grid_size_um = grid_size_um
         self.root_id = _path(root_id)
         if "/" in self.root_id:
             raise ValueError("root_id must be one path segment")
@@ -618,6 +621,7 @@ class GeometryPlan:
             },
         }
 
+    @with_source_grid
     def prepare(self) -> GeometryPlanSnapshot:
         self._validate_registered_sources()
         stack = self._stack()
@@ -727,6 +731,7 @@ class GeometryPlan:
                 gds_file=gds_file,
                 stack_file=stack_file,
                 top_cell_name=self._component.name,
+                grid_size_um=self._grid_size_um,
             )
             lumped_supports = []
             entities = {entity.semantic_id: entity for entity in build_input.entities}
@@ -825,6 +830,10 @@ class GeometryPlan:
             from scgsim.geometry.source.surface_bands import with_surface_distance_bands
 
             build_input = with_surface_distance_bands(build_input, self._surface_distance_bands)
+        stack = {**stack, "metadata": {**stack["metadata"],
+            "geometry_grid": build_input.metadata["geometry_grid"],
+            "source_dbu_um": build_input.metadata["source_dbu_um"],
+            "unquantized_source_sha256": build_input.metadata["unquantized_source_sha256"]}}
         return GeometryPlanSnapshot(
             build_input,
             json.dumps(stack, sort_keys=True),

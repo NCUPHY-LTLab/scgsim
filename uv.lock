@@ -2620,7 +2620,7 @@ wheels = [
 
 [[package]]
 name = "scgsim"
-version = "2.0.0rc14"
+version = "2.0.0rc15"
 source = { editable = "." }
 dependencies = [
     { name = "numpy" },
@@ -2631,12 +2631,14 @@ dependencies = [
 aedt = [
     { name = "gdstk" },
     { name = "pyaedt" },
+    { name = "shapely" },
 ]
 aedt-epr = [
     { name = "gdsfactory" },
     { name = "gdstk" },
     { name = "klayout" },
     { name = "pyaedt" },
+    { name = "shapely" },
 ]
 dev = [
     { name = "jupytext" },
@@ -2646,6 +2648,7 @@ palace = [
     { name = "gdsfactory" },
     { name = "gdstk" },
     { name = "gmsh" },
+    { name = "shapely" },
 ]
 visualization = [
     { name = "meshio" },
@@ -2681,6 +2684,9 @@ requires-dist = [
     { name = "pyaedt", marker = "extra == 'aedt'", specifier = "==1.3.0" },
     { name = "pyaedt", marker = "extra == 'aedt-epr'", specifier = "==1.3.0" },
     { name = "pyvista", extras = ["jupyter"], marker = "extra == 'visualization'", specifier = ">=0.48,<0.49" },
+    { name = "shapely", marker = "extra == 'aedt'", specifier = "==2.1.2" },
+    { name = "shapely", marker = "extra == 'aedt-epr'", specifier = "==2.1.2" },
+    { name = "shapely", marker = "extra == 'palace'", specifier = "==2.1.2" },
 ]
 provides-extras = ["aedt", "aedt-epr", "palace", "visualization", "dev"]
 

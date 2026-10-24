@@ -7,6 +7,10 @@ recipe and occurrence selectors.
 
 from __future__ import annotations
 
+from scgsim.geometry._primitives.grid import polygon_boolean
+
+from scgsim.geometry._primitives.grid import current_grid_size_um, current_grid_context
+
 from collections.abc import Sequence
 from typing import Any
 
@@ -35,7 +39,9 @@ def _fused_gdstk_components(
 
     for index, polygon in enumerate(candidates):
         for other_index, other in enumerate(candidates[index + 1 :], index + 1):
-            overlap = gdstk.boolean((polygon,), (other,), "and", precision=1e-9)
+            overlap = polygon_boolean(
+                (polygon,), (other,), "and", precision=current_grid_size_um()
+            )
             if overlap or _rings_share_edge(
                 _ring_from_gdstk_polygon(polygon), _ring_from_gdstk_polygon(other)
             ):
@@ -46,16 +52,19 @@ def _fused_gdstk_components(
         members.setdefault(find(index), []).append(index)
     result: list[tuple[LayoutPolygonSpec, tuple[int, ...], float]] = []
     for indexes in members.values():
-        regions = gdstk.boolean(
+        regions = polygon_boolean(
             tuple(candidates[index] for index in indexes),
             (),
             "or",
-            precision=1e-9,
+            precision=current_grid_size_um(),
         )
         # GDS permits conductor fragments to share an exact edge. gdstk's
         # boolean union may retain them separately; normalize this mechanical
         # source fact without using layout names or proximity inference.
-        regions = gdstk.offset(regions or (), 0.0, join="miter", precision=1e-9)
+        if current_grid_context() is None:
+            regions = gdstk.offset(
+                regions or (), 0.0, join="miter", precision=current_grid_size_um()
+            )
         if not regions or len(regions) != 1:
             raise ValueError("fused selector component must lower to one polygon")
         outer, holes = _split_gdstk_cutline_loop(_ring_from_gdstk_polygon(regions[0]))
