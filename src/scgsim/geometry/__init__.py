@@ -21,6 +21,8 @@ from scgsim.geometry.models.input import (
 from scgsim.geometry.models.surface_bands import SourceBoundarySegment, SurfaceDistanceBandSpec
 from scgsim.geometry.source.surface_bands import with_surface_distance_bands
 from scgsim.geometry.planning.surface_bands import surface_distance_band_catalogue
+from scgsim.geometry.models.junctions import JunctionTerminalBinding, RectangularJunctionSpec
+from scgsim.geometry.source.junctions import with_rectangular_junctions
 from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.models.physical import (
     ApproximationProfile, PhysicalLayerDeclaration, PhysicalRepresentationPlan,
@@ -38,6 +40,9 @@ from scgsim.geometry.source.summary import InputSummary, summarize_geometry_inpu
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 
 __all__ = [
+    "JunctionTerminalBinding",
+    "RectangularJunctionSpec",
+    "with_rectangular_junctions",
     "surface_distance_band_catalogue",
     "SourceBoundarySegment",
     "SurfaceDistanceBandSpec",

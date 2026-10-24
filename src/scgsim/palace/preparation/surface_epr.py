@@ -164,6 +164,8 @@ def build_surface_epr_postprocessing(
             "Declare source geometric surface-distance bands and use "
             "scgsim.palace.results.aggregate_surface_bands with explicit cutoffs instead."
         )
+    identities: set[tuple[str, str]] = set()
+    physical_members: set[tuple[str, int]] = set()
     for interface_type, preset in sorted(specs.items()):
         matches = []
         for name, info in sorted(groups.get("boundary_surfaces", {}).items()):
@@ -194,6 +196,18 @@ def build_surface_epr_postprocessing(
         for name, info in matches:
             index = len(rows) + 1
             attrs = _attributes(info.get("phys_group"))
+            surface_id = info.get("surface_id")
+            if not isinstance(surface_id, str) or not surface_id:
+                raise ValueError("Surface EPR group requires an exact surface_id.")
+            identity = (interface_type, surface_id)
+            if identity in identities:
+                raise ValueError("Surface EPR surface identity is duplicated.")
+            identities.add(identity)
+            for attribute in attrs:
+                member = (interface_type, attribute)
+                if member in physical_members:
+                    raise ValueError("Surface EPR physical attribute is duplicated.")
+                physical_members.add(member)
             rows.append(
                 {
                     "Index": index,
@@ -261,14 +275,13 @@ def _surface_distance_band(info: Mapping[str, Any]) -> dict[str, Any] | None:
 
 def _attributes(raw: Any) -> list[int]:
     values = raw if isinstance(raw, (list, tuple, set)) else (raw,)
-    result = [
-        int(value)
-        for value in values
-        if isinstance(value, int) and not isinstance(value, bool)
-    ]
-    if not result:
-        raise ValueError("Surface EPR group requires physical attributes.")
-    return sorted(set(result))
+    if not values or any(type(value) is not int or value <= 0 for value in values):
+        raise ValueError(
+            "Surface EPR group requires positive integer physical attributes."
+        )
+    if len(values) != len(set(values)):
+        raise ValueError("Surface EPR group physical attributes are duplicated.")
+    return sorted(values)
 
 
 def _positive(value: Any) -> bool:

@@ -351,6 +351,11 @@ def build_route_construction_plan(
         "metadata": {
             "backend_strategy": "surface_plan_first_bottom_up_occ",
             "surface_distance_bands": distance_band_summary,
+            **({
+                "rectangular_junctions": build_input.metadata["rectangular_junctions"],
+                "junction_partitions": build_input.metadata["junction_partitions"],
+                "junction_authored_input_sha256": build_input.metadata["junction_authored_input_sha256"],
+            } if build_input.metadata.get("rectangular_junctions") else {}),
             "port_sheet_region_layer": {
                 "source": "GeometryBuildInput.port_sheet_regions",
                 "backend_live_surface_records": (

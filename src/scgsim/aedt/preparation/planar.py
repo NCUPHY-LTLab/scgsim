@@ -20,6 +20,9 @@ from typing import Any
 from scgsim.semantics.route_a import geometry_z_range
 
 from scgsim.geometry import GeometryBuildInput
+from scgsim.geometry.planning.junction_partition import (
+    junction_terminal_line as _junction_terminal_line,
+)
 from scgsim.geometry.source.validation import validate_geometry_input
 
 from scgsim.geometry._primitives.spatial import _geometry_ref_surface_z_um
@@ -1009,55 +1012,6 @@ def _junction_polygon(
     return polygons[record["central_polygon_id"]], record
 
 
-def _junction_terminal_line(
-    polygon: Mapping[str, Any], junction: PlanarJunction, z_um: float
-) -> tuple[list[list[float]], float]:
-    exterior = tuple(
-        (float(point[0]), float(point[1])) for point in polygon["exterior"]
-    )
-    if len(exterior) != 4 or polygon.get("holes"):
-        raise ValueError(
-            f"junction {junction.junction_id!r} requires one rectangular polygon without holes"
-        )
-    dx, dy = junction.direction_xy
-    px, py = -dy, dx
-    along = tuple(x * dx + y * dy for x, y in exterior)
-    across = tuple(x * px + y * py for x, y in exterior)
-    along_min, along_max = min(along), max(along)
-    across_min, across_max = min(across), max(across)
-    tolerance = 1e-9 * max(
-        1.0, abs(along_min), abs(along_max), abs(across_min), abs(across_max)
-    )
-    if along_max - along_min <= tolerance or across_max - across_min <= tolerance:
-        raise ValueError(
-            f"junction {junction.junction_id!r} polygon has empty projected extent"
-        )
-    expected = {
-        (along_min, across_min),
-        (along_min, across_max),
-        (along_max, across_min),
-        (along_max, across_max),
-    }
-    if any(
-        not any(
-            abs(u - eu) <= tolerance and abs(v - ev) <= tolerance for eu, ev in expected
-        )
-        for u, v in zip(along, across)
-    ):
-        raise ValueError(
-            f"junction {junction.junction_id!r} polygon is not rectangular in its declared direction"
-        )
-    width = across_max - across_min
-    if not math.isclose(width, junction.width_um, rel_tol=1e-9, abs_tol=1e-9):
-        raise ValueError(
-            f"junction {junction.junction_id!r} width disagrees with its polygon"
-        )
-    across_mid = (across_min + across_max) / 2.0
-    line = [
-        [along_min * dx + across_mid * px, along_min * dy + across_mid * py, z_um],
-        [along_max * dx + across_mid * px, along_max * dy + across_mid * py, z_um],
-    ]
-    return line, along_max - along_min
 
 
 def planar_junction_from_port(

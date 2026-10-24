@@ -286,12 +286,29 @@ def interpret_physical_geometry(
         **effective_stack.get("metadata", {}),
         "physical_representation": payload,
     }
-    return (
-        replace(
-            effective_input,
-            solution_regions=effective_stack["solution_regions"],
-            metadata={**build_input.metadata, "physical_representation": payload},
-        ),
-        effective_stack,
-        plan,
+    effective_input = replace(
+        effective_input,
+        solution_regions=effective_stack["solution_regions"],
+        metadata={**build_input.metadata, "physical_representation": payload},
     )
+    from scgsim.geometry.planning.junction_partition import derive_rectangular_junctions
+
+    effective_input = derive_rectangular_junctions(effective_input)
+    if effective_input.metadata.get("rectangular_junctions"):
+        from scgsim.geometry.source.intents import _route_a_sheet_interfaces
+
+        intents = dict(effective_input.metadata.get("interface_intents_2d", {}))
+        explicit = tuple(item for item in intents.get("interfaces", ())
+                         if item.get("intent_origin") not in {
+                             "generated_route_a_surface_sheet",
+                             "generated_representation_context_surface_sheet",
+                         })
+        generated = _route_a_sheet_interfaces(
+            effective_input.entities, effective_input.polygons,
+            representation_context=plan.context,
+        )["interfaces"]
+        intents["interfaces"] = (*explicit, *generated)
+        effective_input = replace(effective_input, metadata={
+            **effective_input.metadata, "interface_intents_2d": intents,
+        })
+    return effective_input, effective_stack, plan
