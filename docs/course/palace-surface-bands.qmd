@@ -103,21 +103,9 @@ from scgsim.palace.results import SurfaceBandSelection, aggregate_surface_bands
 from scgsim.palace.results.epr import epr_result
 ```
 
-Read the selected iteration with `epr_result(resolved,
-palace_iteration=iteration)`. Build one
-`SurfaceBandSelection(parent_surface_id, interface_kind, field_side)` for each
-selected parent using its source-bound catalogue row and matching
-`construction.surfaces` metadata. Pass those selections, the selected mode,
-`palace_iteration=iteration`, and `cutoffs_um=(0.5, 1.0)` to
-`aggregate_surface_bands(...)`. Each cutoff must match a declared source-band
-boundary, and the selected parent must have its complete recorded band and
-component inventory. The result is a `PalaceSurfaceBandTotals` value that can
-be retained with `to_payload()`.
+Read the selected iteration with `epr_result(resolved, palace_iteration=iteration)`. Create one `SurfaceDistanceBandSpec` for each geometric parent. For each selected parent, interface kind, and recorded side, create one `SurfaceBandSelection(parent_surface_id, interface_kind, field_side)` using the source-bound catalogue, matching `construction.surfaces` metadata, and full source/contribution ledger. A shared `MS_MA` parent uses separate `MS` and `MA` selections over the same geometry; this adapter records `field_side="interface"` for both, so use the recorded value rather than inferring top or bottom.
 
-For three selected interfaces it contains six cumulative cutoff totals. Each
-value records its source parent, mode, native iteration, interface, cutoff and
-normalization. The `>= 0.5 µm` value includes the `>= 1 µm` value; do not add
-them. This offline aggregation reads existing Palace results and does not run
+Pass the selections, selected mode, `palace_iteration=iteration`, and `cutoffs_um=(0.5, 1.0)` to `aggregate_surface_bands(...)`. Cutoffs must match declared source-band boundaries; the aggregation requires the complete band and component inventory and counts each physical fragment once per interface per cutoff. The totals retain source parent, interface, recorded side, mode, native iteration, and normalization. Keep the `PalaceSurfaceBandTotals` value and `to_payload()` output with that identity. The `>= 0.5 µm` total includes the `>= 1 µm` total; do not add these cumulative tails. This offline aggregation reads existing Palace results and does not run
 Palace or apply a Q2D correction.
 
 Previously saved native mask-margin results remain readable in their historical
