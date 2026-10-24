@@ -71,7 +71,7 @@ def _simple_boundary_loops(points):
     return tuple(loops)
 
 
-def _restore_parent_boundary(ring, parent_rings, precision):
+def _restore_parent_boundary(ring, parent_rings, precision, *, diagnostic_context=None):
     """Intersect generated contour lines with uniquely attributable source edges.
 
     The only association bound is the caller-declared Boolean grid. It is not
@@ -83,7 +83,8 @@ def _restore_parent_boundary(ring, parent_rings, precision):
 
     source_edges = []
     source_edge_vertices = []
-    for source in parent_rings:
+    source_edge_identities = []
+    for ring_index, source in enumerate(parent_rings):
         # Boolean output may cross several collinear original segments without
         # retaining their contact vertices. Associate the complete exact run,
         # then restore every original vertex below; the parent is unchanged.
@@ -102,16 +103,27 @@ def _restore_parent_boundary(ring, parent_rings, precision):
         for index, start in enumerate(corners):
             stop = corners[(index + 1) % len(corners)]
             vertices = [source[start]]
+            segments = [start]
             cursor = (start + 1) % len(source)
             while cursor != stop:
                 vertices.append(source[cursor])
+                segments.append(cursor)
                 cursor = (cursor + 1) % len(source)
             vertices.append(source[stop])
             source_edges.append((vertices[0], vertices[-1]))
             source_edge_vertices.append(tuple(vertices))
+            source_edge_identities.append({
+                "source_run_index": len(source_edges) - 1,
+                "source_ring_index": ring_index,
+                "source_ring_role": "exterior" if ring_index == 0 else "hole",
+                "source_hole_index": None if ring_index == 0 else ring_index - 1,
+                "start_vertex_index": start,
+                "end_vertex_index": stop,
+                "source_segment_indices": segments,
+            })
     bound = precision / sqrt(2)
 
-    def candidates(a, b):
+    def candidates(a, b, edge_index):
         found = []
         for index, (c, d) in enumerate(source_edges):
             dx, dy = d[0] - c[0], d[1] - c[1]
@@ -128,12 +140,68 @@ def _restore_parent_boundary(ring, parent_rings, precision):
             if incident(a) and incident(b):
                 found.append(index)
         if len(found) > 1:
-            raise ValueError(
+            error = ValueError(
                 "Boolean boundary lineage is ambiguous at declared precision"
             )
+            # Enrich only this unchanged failure; retain indices and exact
+            # relations rather than transporting source/generated coordinates.
+            try:
+                import json
+                from itertools import combinations
+
+                context = diagnostic_context or {}
+                candidates_detail = []
+                for index in found:
+                    endpoints = source_edges[index]
+                    candidates_detail.append({
+                        **source_edge_identities[index],
+                        "zero_length_source_run": endpoints[0] == endpoints[1],
+                        "generated_start_is_run_endpoint": a in endpoints,
+                        "generated_end_is_run_endpoint": b in endpoints,
+                        "generated_start_is_source_run_vertex": a in source_edge_vertices[index],
+                        "generated_end_is_source_run_vertex": b in source_edge_vertices[index],
+                    })
+                relations = []
+                for first, second in combinations(found, 2):
+                    left, right = source_edge_identities[first], source_edge_identities[second]
+                    same_ring = left["source_ring_index"] == right["source_ring_index"]
+                    relations.append({
+                        "source_run_indices": [first, second],
+                        "same_source_ring": same_ring,
+                        "adjacent_source_runs": same_ring and (
+                            left["end_vertex_index"] == right["start_vertex_index"]
+                            or right["end_vertex_index"] == left["start_vertex_index"]
+                        ),
+                        "shared_endpoint_count": len(set(source_edges[first]) & set(source_edges[second])),
+                        "shared_source_vertex_count": len(set(source_edge_vertices[first]) & set(source_edge_vertices[second])),
+                    })
+                note = {
+                    "diagnostic": "surface_band_boundary_lineage",
+                    "stage": "restore_parent_boundary.source_run_candidates",
+                    **{key: context.get(key) for key in (
+                        "parent_surface_id", "band_index", "lower_um", "upper_um",
+                        "component_index", "ring_role", "hole_index",
+                    )},
+                    "precision_um": precision,
+                    "generated_edge_index": edge_index,
+                    "zero_length_generated_edge": a == b,
+                    "generated_start_is_original_vertex": any(a in source for source in parent_rings),
+                    "generated_end_is_original_vertex": any(b in source for source in parent_rings),
+                    "candidate_count": len(found),
+                    "candidates": candidates_detail,
+                    "candidate_relations": relations,
+                }
+                error.add_note(json.dumps(note, sort_keys=True, separators=(",", ":")))
+            except Exception:
+                # Diagnostics must not replace the original geometric failure.
+                error.add_note('{"diagnostic":"surface_band_boundary_lineage","status":"unavailable"}')
+            raise error
         return found[0] if found else None
 
-    owners = [candidates(a, b) for a, b in zip(ring, (*ring[1:], ring[0]))]
+    owners = [
+        candidates(a, b, edge_index)
+        for edge_index, (a, b) in enumerate(zip(ring, (*ring[1:], ring[0])))
+    ]
     restored = []
     for index, p in enumerate(ring):
         before, after = owners[index - 1], owners[index]
@@ -606,7 +674,16 @@ def partition_surface_distance_bands(
                 # wire; native surface construction assigns the hole role.
                 local_rings = tuple(
                     _restore_parent_boundary(
-                        ring if index == 0 else tuple(reversed(ring)), rings, precision
+                        ring if index == 0 else tuple(reversed(ring)), rings, precision,
+                        diagnostic_context={
+                            "parent_surface_id": parent.surface_id,
+                            "band_index": summary["band_index"],
+                            "lower_um": lower,
+                            "upper_um": upper,
+                            "component_index": component,
+                            "ring_role": "exterior" if index == 0 else "hole",
+                            "hole_index": None if index == 0 else index - 1,
+                        },
                     )
                     for index, ring in enumerate(piece)
                 )
