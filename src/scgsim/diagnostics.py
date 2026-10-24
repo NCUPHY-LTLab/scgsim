@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
+from threading import Lock
 from typing import Iterator, Mapping, TextIO
 from uuid import uuid4
 
@@ -70,26 +71,28 @@ class _Recorder:
     config: _DiagnosticConfig
     stream: TextIO
     errors: list[str] = field(default_factory=list)
+    lock: Lock = field(default_factory=Lock)
 
     def emit(self, event: str, span: _Span, **values: object) -> None:
-        try:
-            row = {
-                "event": event,
-                "session_id": self.config.session_id,
-                "span_id": span.span_id,
-                "parent_span_id": span.parent_span_id,
-                "stage": span.name,
-                "pid": os.getpid(),
-                "wall_time_ns": time.time_ns(),
-                "elapsed_wall_s": time.perf_counter() - span.started_wall,
-                "elapsed_process_cpu_s": time.process_time() - span.started_cpu,
-                **_rss(),
-                **values,
-            }
-            self.stream.write(json.dumps(row, allow_nan=False) + "\n")
-            self.stream.flush()
-        except Exception as error:
-            self.errors.append(type(error).__name__)
+        with self.lock:
+            try:
+                row = {
+                    "event": event,
+                    "session_id": self.config.session_id,
+                    "span_id": span.span_id,
+                    "parent_span_id": span.parent_span_id,
+                    "stage": span.name,
+                    "pid": os.getpid(),
+                    "wall_time_ns": time.time_ns(),
+                    "elapsed_wall_s": time.perf_counter() - span.started_wall,
+                    "elapsed_process_cpu_s": time.process_time() - span.started_cpu,
+                    **_rss(),
+                    **values,
+                }
+                self.stream.write(json.dumps(row, allow_nan=False) + "\n")
+                self.stream.flush()
+            except Exception as error:
+                self.errors.append(type(error).__name__)
 
 
 def _rss() -> dict[str, object]:

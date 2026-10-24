@@ -483,6 +483,40 @@ profile normalization still happens once at the shared frontend boundary, and
 Route-B finite-body facts stay distinct from PEC approximation and the AEDT
 implementation that realizes them.
 
+## Preparation resources (CONVERGING) {#preparation-resources}
+
+Use `scgsim.preparation.preparation_resources(max_workers=...)` around source
+preparation and meshing to share one preparation worker budget. Without this
+scope, preparation runs serially.
+
+```python
+from scgsim.preparation import preparation_resources
+
+with preparation_resources(max_workers=30):
+    snapshot = plan.prepare()
+    sim.set_plan(snapshot)
+    sim.set_mesh(threads=30, surface_threads=30)
+    sim.mesh()
+```
+
+The scope reuses one pool for independent zero-area support classification and
+per-operand result unions, collecting results in input order. The incremental
+shared subdivision retains its ordered dependencies, common grid, source
+labels and topology checks. Nested work reuses the budget rather than creating
+another pool. Preparation tasks finish before the Gmsh child starts; its
+requested thread limits must be positive and fit the explicit scope's budget.
+
+This setting bounds SCGSim preparation workers; allocate the corresponding
+CPUs through the scheduler separately. Gmsh thread limits and Palace MPI/OpenMP
+settings control their own stages. `preparation_diagnostics(output_dir, profile=False)`
+can record stage timings alongside this scope without selecting parallelism.
+
+Each source-preparation call also reuses hierarchy extraction for the same
+freshly read GDS cell and excluded-reference list. The cache ends with that
+call; selectors, source-record comparisons and raw-versus-realized topology
+audits still execute. A topology failure retains its original exception and
+adds counts, validity, area and grid information without coordinates.
+
 ## Pre-solve input summary
 
 `scgsim.geometry.summarize_geometry_input(build_input, *, prepared_stack)` returns an

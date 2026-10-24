@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.preparation import _native_preparation
+
 from scgsim.diagnostics import _stage, _worker_config
 
 import copy
@@ -316,7 +318,8 @@ def _mesh_from_route_xao(
     diagnostic_config = _worker_config()
     if diagnostic_config is not None:
         request["preparation_diagnostics"] = diagnostic_config
-    result = _run_gmsh_worker(request=request, run_dir=mesh_path.parent)
+    with _native_preparation(mesh_controls):
+        result = _run_gmsh_worker(request=request, run_dir=mesh_path.parent)
     groups = result.get("groups")
     if not isinstance(groups, dict):
         raise TypeError("fresh Gmsh mesh worker result lacks structured groups.")

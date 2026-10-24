@@ -31,6 +31,7 @@ from scgsim.geometry.source._normalization import (
 )
 from scgsim.geometry.source._occurrence import (
     _entity_from_layer_record,
+    _with_occurrence_extraction_cache,
     _occurrence_ground_polygons_for_entity,
     _occurrence_include_polygon,
     _occurrence_polygons_for_entity,
@@ -625,6 +626,7 @@ class GeometryPlan:
 
     @with_source_grid
     @_stage("geometry.plan.prepare")
+    @_with_occurrence_extraction_cache
     def prepare(self) -> GeometryPlanSnapshot:
         self._validate_registered_sources()
         stack = self._stack()

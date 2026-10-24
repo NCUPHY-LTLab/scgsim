@@ -559,3 +559,160 @@ def test_overlay_native_error_retains_coordinate_free_boundary_context():
     assert context["cell_index"] is None
     assert context["grid_size_um"] == 1
     assert "source" not in context
+
+
+def test_cut_subdivision_keeps_unselected_enclosing_parent_topology():
+    from shapely import Polygon
+
+    def rotate(ring):
+        return tuple(
+            (cos(0.37) * x - sin(0.37) * y, sin(0.37) * x + cos(0.37) * y)
+            for x, y in ring
+        )
+
+    operands = (
+        GridOperand("lower", rectangle(-2, -2, 4, 4), contact=False),
+        GridOperand("upper", rectangle(-2, -2, 4, 4), contact=False),
+        GridOperand(
+            "cut_A", rotate(rectangle(0, 0, 2, 2)), physical=False, contact=False
+        ),
+        GridOperand(
+            "cut_B", rotate(rectangle(1, -1, 3, 1)), physical=False, contact=False
+        ),
+    )
+    result = build_grid_arrangement(operands, GRID)
+    assert all({"lower", "upper"} <= set(face.operand_ids) for face in result.faces)
+    for parent in ("lower", "upper"):
+        regions = result.operand_regions(parent)
+        assert len(regions) == 1
+        assert not regions[0][1]
+        assert Polygon(*regions[0]).area == 36
+
+
+def test_realized_envelope_candidates_keep_snapped_touching_support():
+    from shapely import Polygon
+    from scgsim.geometry._primitives.grid import _account_zero_area, _subdivide_grid
+
+    operands = (
+        GridOperand("A", rectangle(0, 0, 1.4, 2), contact=False),
+        GridOperand("B", rectangle(1.49, 0, 3, 2), contact=False),
+    )
+    result = build_grid_arrangement(operands, GeometryGridContext(1))
+    assert {face.operand_ids: ring_area(face.exterior) for face in result.faces} == {
+        ("A",): 2,
+        ("B",): 4,
+    }
+    assert {(1, 0), (1, 2)} <= set(result.vertices)
+    shapes = {value.operand_id: Polygon(value.exterior) for value in operands}
+    subdivision = _subdivide_grid(operands, shapes, 1)
+    accounting = _account_zero_area(subdivision.residues, subdivision.cells, 1)
+    assert any(
+        residue.geometry.length == 2 and residue.operand_ids == ("A", "B")
+        for residue in accounting.boundary
+    )
+
+
+def test_area_minus_line_keeps_hole_and_all_contact_nodes():
+    from shapely import LineString, Point, Polygon
+    from scgsim.geometry._primitives.grid import (
+        _OverlayParts,
+        _parts_overlay,
+        _regions,
+    )
+
+    area = Polygon(rectangle(0, 0, 8, 8), (rectangle(2, 2, 6, 6),))
+    line = LineString(((-1, 4), (9, 4)))
+    left, right = _OverlayParts((area,)), _OverlayParts((line,))
+    remaining = _parts_overlay("difference", left, right, 1, 0, 0)
+    assert remaining.geometries == (area,)
+    assert remaining.geometries[0] is area
+    contact = _parts_overlay("intersection", left, right, 1, 0, 0)
+    nodes = tuple(
+        tuple(point)
+        for geometry in contact.geometries
+        for part in (
+            geometry.geoms if geometry.geom_type == "MultiLineString" else (geometry,)
+        )
+        for point in part.coords
+    )
+    outer, holes = _regions(area, nodes, 1)[0]
+    assert {(0, 4), (8, 4)} <= set(outer)
+    assert {(2, 4), (6, 4)} <= set(holes[0])
+    assert Polygon(outer, holes).area == 48
+    # A genuine line/line difference must still split at the exact crossing.
+    split = _parts_overlay(
+        "difference", right, _OverlayParts((LineString(((4, 0), (4, 8))),)), 1, 0, 0
+    )
+    assert len(split.geometries) == 1
+    assert split.geometries[0].geom_type == "MultiLineString"
+    assert len(split.geometries[0].geoms) == 2
+    assert (
+        _parts_overlay("intersection", right, _OverlayParts((Point(4, 4),)), 1, 0, 0)
+        .geometries[0]
+        .equals(Point(4, 4))
+    )
+
+
+def test_zero_area_dedup_keeps_labels_and_retained_collinear_vertices():
+    from shapely import LineString
+    from scgsim.geometry._primitives.grid import _ZeroAreaResidue, _deduplicate_residues
+
+    line = LineString(((0, 0), (1, 0), (2, 0)))
+    first = _ZeroAreaResidue(line, ("A",))
+    duplicate = _ZeroAreaResidue(LineString(tuple(reversed(line.coords))), ("A",))
+    other_label = _ZeroAreaResidue(line, ("B",))
+    other_nodes = _ZeroAreaResidue(LineString(((0, 0), (2, 0))), ("A",))
+    result = _deduplicate_residues((first, duplicate, other_label, other_nodes))
+    assert result == (first, other_label, other_nodes)
+    assert result[0] is first
+    assert tuple(result[0].geometry.coords) == ((0, 0), (1, 0), (2, 0))
+
+
+def test_topology_failure_note_keeps_requested_and_realized_counts():
+    import json
+
+    operand = GridOperand("thin", rectangle(0, 0, 0.25, 4), contact=False)
+    with pytest.raises(ValueError, match="physical geometry collapsed") as caught:
+        build_grid_arrangement((operand,), GeometryGridContext(1))
+    note = next(
+        note
+        for note in caught.value.__notes__
+        if note.startswith("scgsim.grid.physical_topology: ")
+    )
+    metrics = json.loads(note.split(": ", 1)[1])
+    assert metrics["requested"] == {
+        "empty": False,
+        "is_valid": True,
+        "components": 1,
+        "holes": 0,
+        "area_um2": 1,
+    }
+    assert metrics["realized"] == {
+        "empty": True,
+        "is_valid": True,
+        "components": 0,
+        "holes": 0,
+        "area_um2": 0,
+    }
+    assert metrics["operand_index"] == 0
+    assert metrics["grid_size_um"] == 1
+    assert "thin" not in note
+
+
+def test_parallel_grid_is_identical_for_mixed_sidebands_and_contact_nodes():
+    from scgsim.preparation import preparation_resources
+
+    operands = _mixed_bridge_operands()
+    serial = build_grid_arrangement(operands, GeometryGridContext(1))
+    with preparation_resources(max_workers=2):
+        parallel = build_grid_arrangement(operands, GeometryGridContext(1))
+    assert parallel == serial
+    contacts = (
+        GridOperand("A", rectangle(0, 0, 4, 4)),
+        GridOperand("B", rectangle(4, 1, 6, 3)),
+        GridOperand("C", rectangle(6, 3, 8, 5)),
+    )
+    serial = build_grid_arrangement(contacts, GeometryGridContext(1))
+    with preparation_resources(max_workers=2):
+        parallel = build_grid_arrangement(contacts, GeometryGridContext(1))
+    assert parallel == serial

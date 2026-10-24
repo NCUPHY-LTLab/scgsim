@@ -25,6 +25,7 @@ from scgsim.geometry.models.input import (
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
 from scgsim.geometry.source._occurrence import (
     _entity_from_layer_record,
+    _with_occurrence_extraction_cache,
     _gds_polygons_for_entity,
     _is_record_sequence,
     _occurrence_ground_polygons_for_entity,
@@ -50,6 +51,7 @@ if TYPE_CHECKING:
 
 
 @_stage("geometry.source.adapter")
+@_with_occurrence_extraction_cache
 def build_gds_stack_geometry_input(
     *,
     gds_file: PathInput,

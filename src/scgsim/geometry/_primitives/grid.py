@@ -9,6 +9,7 @@ import json
 
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.diagnostics import _progress, _stage
+from scgsim.preparation import _ordered_map
 
 _ACTIVE_GRID = ContextVar("scgsim_geometry_grid", default=None)
 _SOURCE_INTENT = ContextVar("scgsim_source_intent_overlay", default=False)
@@ -353,6 +354,25 @@ def _overlay_call(operation, left, right, grid, operand_index, cell_index):
         raise
 
 
+def _bounds_disjoint(left, right):
+    ax0, ay0, ax1, ay1 = left.bounds
+    bx0, by0, bx1, by1 = right.bounds
+    return ax1 < bx0 or bx1 < ax0 or ay1 < by0 or by1 < ay0
+
+
+def _deduplicate_residues(residues):
+    # Canonical exact coordinates include every retained collinear vertex.
+    # Equal support with different labels remains a distinct semantic record.
+    seen = set()
+    output = []
+    for residue in residues:
+        key = residue.operand_ids, residue.geometry.normalize().wkb
+        if key not in seen:
+            seen.add(key)
+            output.append(residue)
+    return tuple(output)
+
+
 def _parts_overlay(operation, left, right, grid, operand_index, cell_index):
     if operation == "intersection":
         return _OverlayParts(
@@ -360,6 +380,7 @@ def _parts_overlay(operation, left, right, grid, operand_index, cell_index):
                 part
                 for a in left.geometries
                 for b in right.geometries
+                if not _bounds_disjoint(a, b)
                 for part in _overlay_parts(
                     _overlay_call(operation, a, b, grid, operand_index, cell_index)
                 ).geometries
@@ -367,13 +388,23 @@ def _parts_overlay(operation, left, right, grid, operand_index, cell_index):
         )
     parts = left.geometries
     for b in right.geometries:
-        parts = tuple(
-            part
-            for a in parts
-            for part in _overlay_parts(
-                _overlay_call(operation, a, b, grid, operand_index, cell_index)
-            ).geometries
-        )
+        next_parts = []
+        for a in parts:
+            if (
+                _geometry_dimension(a) == 2
+                and _geometry_dimension(b) < 2
+                or _bounds_disjoint(a, b)
+            ):
+                # Zero-area support cannot subtract positive-area interior.
+                # Its contacts/nodes are retained by the common sideband.
+                next_parts.append(a)
+            else:
+                next_parts.extend(
+                    _overlay_parts(
+                        _overlay_call(operation, a, b, grid, operand_index, cell_index)
+                    ).geometries
+                )
+        parts = tuple(next_parts)
     return _OverlayParts(parts)
 
 
@@ -392,7 +423,10 @@ def _parts_union(parts, grid, operand_index):
 
 
 def _subdivide_grid(values, geometries, grid):
+    from shapely import STRtree
+
     cells, residues = [], []
+    candidate_count = skipped_count = residues_before_dedup = 0
     with _stage("geometry.grid.overlay", counts={"operands": len(values)}):
         for operand_index, value in enumerate(values):
             original = geometries[value.operand_id]
@@ -414,7 +448,16 @@ def _subdivide_grid(values, geometries, grid):
             # Area order is unchanged. Lower-dimensional cells are retained and
             # subdivided separately; they can never create positive-area labels.
             previous = (*cells, *((r.geometry, r.operand_ids) for r in residues))
+            tree = STRtree([cell for cell, _ in previous])
+            candidates = {
+                int(index) for part in operand.geometries for index in tree.query(part)
+            }
+            candidate_count += len(candidates)
+            skipped_count += len(previous) - len(candidates)
             for cell_index, (cell, labels) in enumerate(previous):
+                if cell_index not in candidates:
+                    retain(_OverlayParts((cell,)), labels)
+                    continue
                 cell_parts = _OverlayParts((cell,))
                 common = _parts_overlay(
                     "intersection", cell_parts, operand, grid, operand_index, cell_index
@@ -428,9 +471,19 @@ def _subdivide_grid(values, geometries, grid):
                 retain(residual, labels)
                 retain(common, (*labels, value.operand_id))
             retain(_parts_union(pending, grid, operand_index), (value.operand_id,))
-            cells, residues = divided, sideband
+            residues_before_dedup += len(sideband)
+            cells, residues = divided, _deduplicate_residues(sideband)
             _progress(operand_index + 1, len(values))
-    return _Subdivision(tuple(cells), tuple(residues))
+    with _stage(
+        "geometry.grid.overlay_work",
+        counts={
+            "candidate_cells": candidate_count,
+            "disjoint_cells": skipped_count,
+            "residues_before_dedup": residues_before_dedup,
+            "final_residues": len(residues),
+        },
+    ):
+        return _Subdivision(tuple(cells), tuple(residues))
 
 
 def _residue_coordinates(geometry):
@@ -440,22 +493,51 @@ def _residue_coordinates(geometry):
 
 
 def _account_zero_area(residues, cells, grid):
+    from shapely import LineString, STRtree
+
     if not residues:
         return _ZeroAreaAccounting((), ())
-    boundaries = tuple(cell.boundary for cell, _ in cells)
-    wire = _parts_union(_OverlayParts(boundaries), grid, None)
-    incident, auxiliary = [], []
-    for residue in residues:
-        parts = _OverlayParts((residue.geometry,))
+    # Exact face edges give a tight broad-phase instead of overlaying each
+    # residue against the full all-face wire. Touching envelopes are included.
+    edges = {}
+    for cell, _ in cells:
+        for ring in (cell.exterior, *cell.interiors):
+            points = tuple(tuple(p) for p in ring.coords)
+            for a, b in zip(points, points[1:]):
+                if a != b:
+                    edges.setdefault(tuple(sorted((a, b))), LineString((a, b)))
+    boundaries = tuple(edges.values())
+    tree = STRtree(boundaries)
+    geometries = {}
+    labeled = []
+    for residue in _deduplicate_residues(residues):
+        key = residue.geometry.normalize().wkb
+        geometries.setdefault(key, residue.geometry)
+        labeled.append((key, residue.operand_ids))
+
+    def classify(geometry):
+        indices = sorted(int(index) for index in tree.query(geometry))
+        wire = _parts_union(
+            _OverlayParts(tuple(boundaries[i] for i in indices)), grid, None
+        )
+        parts = _OverlayParts((geometry,))
         common = _parts_overlay("intersection", parts, wire, grid, None, None)
         remainder = _parts_overlay("difference", parts, wire, grid, None, None)
-        incident.extend(
-            _ZeroAreaResidue(p, residue.operand_ids) for p in common.geometries
-        )
-        auxiliary.extend(
-            _ZeroAreaResidue(p, residue.operand_ids) for p in remainder.geometries
-        )
-    return _ZeroAreaAccounting(tuple(incident), tuple(auxiliary))
+        return common, remainder
+
+    # Classifications are geometric only. Reattach every exact semantic label
+    # in original order after ordered independent work; never merge labels.
+    classified = dict(
+        zip(geometries, _ordered_map(classify, tuple(geometries.values())), strict=True)
+    )
+    incident, auxiliary = [], []
+    for key, labels in labeled:
+        common, remainder = classified[key]
+        incident.extend(_ZeroAreaResidue(p, labels) for p in common.geometries)
+        auxiliary.extend(_ZeroAreaResidue(p, labels) for p in remainder.geometries)
+    return _ZeroAreaAccounting(
+        _deduplicate_residues(incident), _deduplicate_residues(auxiliary)
+    )
 
 
 def build_grid_arrangement(operands, context, *, apply_grid=True):
@@ -530,17 +612,18 @@ def build_grid_arrangement(operands, context, *, apply_grid=True):
     # Boundary and auxiliary residues remain inspectable internally through
     # the exact physical audits; neither can create an orphan area-graph edge.
     with _stage("geometry.grid.effective", counts={"operands": len(values)}):
-        effective = {
-            v.operand_id: union_all(
+
+        def realize(value):
+            return union_all(
                 [
                     Polygon(f.exterior, f.holes)
                     for f in faces
-                    if v.operand_id in f.operand_ids
+                    if value.operand_id in f.operand_ids
                 ],
                 grid_size=grid,
             )
-            for v in values
-        }
+
+        effective = dict(zip(ids, _ordered_map(realize, values), strict=True))
     with _stage("geometry.grid.physical_audit", counts={"operands": len(values)}):
         audits = []
         for operand_index, value in enumerate(values):
@@ -551,9 +634,36 @@ def build_grid_arrangement(operands, context, *, apply_grid=True):
                 or sum(len(p.interiors) for p in _polygons(raw))
                 != sum(len(p.interiors) for p in _polygons(final))
             ):
-                raise ValueError(
+                error = ValueError(
                     f"physical geometry collapsed or changed component/hole topology at grid: {value.operand_id}"
                 )
+                try:
+
+                    def summary(shape):
+                        polygons = _polygons(shape)
+                        return {
+                            "empty": bool(shape.is_empty),
+                            "is_valid": bool(shape.is_valid),
+                            "components": len(polygons),
+                            "holes": sum(len(p.interiors) for p in polygons),
+                            "area_um2": float(shape.area),
+                        }
+
+                    error.add_note(
+                        "scgsim.grid.physical_topology: "
+                        + json.dumps(
+                            {
+                                "operand_index": operand_index,
+                                "grid_size_um": grid,
+                                "requested": summary(raw),
+                                "realized": summary(final),
+                            },
+                            sort_keys=True,
+                        )
+                    )
+                except Exception:
+                    error.add_note("scgsim.grid.physical_topology: metrics unavailable")
+                raise error
             audits.append(
                 GridOperandAudit(
                     value.operand_id,

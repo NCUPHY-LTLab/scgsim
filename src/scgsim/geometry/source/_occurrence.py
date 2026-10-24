@@ -8,7 +8,12 @@ from scgsim.geometry._primitives.grid import (
 )
 
 from collections.abc import Mapping, Sequence
-from dataclasses import replace
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field, replace
+from functools import wraps
+from threading import get_ident
+from types import MappingProxyType
 from math import isfinite
 from typing import Any
 
@@ -60,7 +65,60 @@ def _is_record_sequence(value: Any) -> bool:
     return isinstance(value, Sequence) and not isinstance(value, str | bytes)
 
 
+@dataclass
+class _OccurrenceExtractionCache:
+    owner_thread: int = field(default_factory=get_ident)
+    entries: dict = field(default_factory=dict)
+
+
+_EXTRACTION_CACHE: ContextVar[_OccurrenceExtractionCache | None] = ContextVar(
+    "scgsim_occurrence_extraction_cache", default=None
+)
+
+
+@contextmanager
+def _occurrence_extraction_scope():
+    """Own read-only extracted polygons for one fresh source-library lifetime."""
+    token = _EXTRACTION_CACHE.set(_OccurrenceExtractionCache())
+    try:
+        yield
+    finally:
+        _EXTRACTION_CACHE.reset(token)
+
+
+def _with_occurrence_extraction_cache(function):
+    @wraps(function)
+    def scoped(*args, **kwargs):
+        # Nested adapter reads own another library and therefore get a fresh cache.
+        with _occurrence_extraction_scope():
+            return function(*args, **kwargs)
+
+    return scoped
+
+
 def _polygons_by_layer(
+    cell: Any, *, excluded_reference_indexes: Sequence[int] = ()
+) -> Mapping[tuple[int, int], tuple[Any, ...]]:
+    cache = _EXTRACTION_CACHE.get()
+    if cache is None or cache.owner_thread != get_ident():
+        return _extract_polygons_by_layer(
+            cell, excluded_reference_indexes=excluded_reference_indexes
+        )
+    exclusions = tuple(excluded_reference_indexes)
+    key = (id(cell), exclusions)
+    found = cache.entries.get(key)
+    if found is not None:
+        return found[1]
+    result = MappingProxyType(
+        _extract_polygons_by_layer(cell, excluded_reference_indexes=exclusions)
+    )
+    # Retain the exact cell strongly: an id cannot be reused within this scope.
+    # Polygons remain private/read-only until callers convert them to source rings.
+    cache.entries[key] = (cell, result)
+    return result
+
+
+def _extract_polygons_by_layer(
     cell: Any, *, excluded_reference_indexes: Sequence[int] = ()
 ) -> dict[tuple[int, int], tuple[Any, ...]]:
     result: dict[tuple[int, int], list[Any]] = {}
