@@ -18,7 +18,7 @@ from scgsim.geometry.compiler.validation import (
     validate_route_volume_surface_refs,
     validate_selected_route,
     validate_surface_deduplication,
-    validate_surface_partition_coverage,
+    _validate_surface_partition_coverage,
     validate_surface_sheet_interface_coverage,
     validate_surface_use_counts,
     validate_tag_plan_coverage,
@@ -207,6 +207,8 @@ def build_route_construction_plan(
             semantic_facts=semantic_facts,
         ),
     )
+    partition_parents = surfaces
+    parent_partitions = surface_partitions
     with _stage("geometry.compiler.surface_bands"):
         surfaces, distance_partitions, distance_band_summary = partition_surface_distance_bands(
             build_input, surfaces=surfaces,
@@ -317,7 +319,9 @@ def build_route_construction_plan(
     _timed(
         timings,
         "validate_surface_partition_coverage",
-        lambda: validate_surface_partition_coverage(
+        lambda: _validate_surface_partition_coverage(
+            parent_surfaces=partition_parents,
+            parent_partitions=parent_partitions,
             interfaces=interfaces,
             surface_partitions=surface_partitions,
             surfaces=surfaces,
