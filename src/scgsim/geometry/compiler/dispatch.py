@@ -210,11 +210,15 @@ def build_route_construction_plan(
     partition_parents = surfaces
     parent_partitions = surface_partitions
     with _stage("geometry.compiler.surface_bands"):
-        surfaces, distance_partitions, distance_band_summary = partition_surface_distance_bands(
-            build_input, surfaces=surfaces,
+        surfaces, distance_partitions, distance_band_summary = _timed(
+            timings, "partition_surface_distance_bands",
+            lambda: partition_surface_distance_bands(build_input, surfaces=surfaces),
         )
     with _stage("geometry.compiler.synchronize_bands"):
-        surface_partitions = synchronize_distance_partitions(surface_partitions, distance_partitions)
+        surface_partitions = _timed(
+            timings, "synchronize_distance_partitions",
+            lambda: synchronize_distance_partitions(surface_partitions, distance_partitions),
+        )
     interfaces = _timed(
         timings,
         "complete_interface_plan_from_surfaces",

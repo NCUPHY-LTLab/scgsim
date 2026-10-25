@@ -520,6 +520,19 @@ CPUs through the scheduler separately. Gmsh thread limits and Palace MPI/OpenMP
 settings control their own stages. `preparation_diagnostics(output_dir, profile=False)`
 can record stage timings alongside this scope without selecting parallelism.
 
+`metadata/semantic_geometry/00_timing.json` records band partition and
+synchronization alongside the other planning stages. The complete construction
+plan and layout ledger remain unchanged; build-local reuse covers pure
+conversion and query work, while each invocation retains its audits.
+
+- `partition_surface_distance_bands` and `synchronize_distance_partitions`:
+  separate entries in the planning timings.
+- `sidecar_bytes`: completed sidecar stage names mapped to actual UTF-8 file
+  sizes; excludes `00_timing.json` itself and files whose write failed.
+- Opt-in `preparation_diagnostics` spans
+  `geometry.compiler.sidecar.redaction`, `.json` and `.write`: separate path
+  redaction/conversion, JSON encoding and file writing.
+
 Each source-preparation call also reuses hierarchy extraction for the same
 freshly read GDS cell and excluded-reference list. The cache ends with that
 call.

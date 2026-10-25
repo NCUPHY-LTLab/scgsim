@@ -111,6 +111,7 @@ class _RegionVertexIndex:
     xs: tuple
     ys: tuple
     coordinates: Mapping
+    point_keys: Mapping
 
 
 def _region_key(point, grid_size):
@@ -140,15 +141,22 @@ def _region_vertex_index(vertices, grid_size):
     from types import MappingProxyType
 
     coordinates = {}
+    point_keys = {}
     if grid_size is not None:
+        from decimal import Decimal
+
+        step = Decimal(str(grid_size))
         for point in vertices:
             key = _region_key(point, grid_size)
             if key not in coordinates:
-                coordinates[key] = _canonical_grid_point(point, grid_size)
+                canonical = tuple(float(value * step) for value in key)
+                coordinates[key] = canonical
+                point_keys[canonical] = key
         vertices = tuple(coordinates.values())
+    else:
+        point_keys = {tuple(point): _region_key(point, None) for point in vertices}
     rows = tuple(
-        (index, point, _region_key(point, grid_size))
-        for index, point in enumerate(vertices)
+        (index, point, point_keys[tuple(point)]) for index, point in enumerate(vertices)
     )
     by_x = tuple(sorted(rows, key=lambda row: row[1][0]))
     by_y = tuple(sorted(rows, key=lambda row: row[1][1]))
@@ -159,6 +167,7 @@ def _region_vertex_index(vertices, grid_size):
         tuple(row[1][0] for row in by_x),
         tuple(row[1][1] for row in by_y),
         MappingProxyType(coordinates),
+        MappingProxyType(point_keys),
     )
 
 
@@ -172,12 +181,23 @@ def _regions_indexed(geometry, vertex_index):
 
     by_x, by_y = vertex_index.by_x, vertex_index.by_y
     xs, ys = vertex_index.xs, vertex_index.ys
+    extra_keys = {}
+
+    def point_key(point):
+        point = tuple(point)
+        key = vertex_index.point_keys.get(point)
+        if key is None:
+            key = extra_keys.get(point)
+            if key is None:
+                key = _region_key(point, vertex_index.grid_size)
+                extra_keys[point] = key
+        return key
 
     def atomic(coords):
         if vertex_index.grid_size is not None:
             points = []
             for point in coords:
-                key = _region_key(point, vertex_index.grid_size)
+                key = point_key(point)
                 canonical = vertex_index.coordinates.get(key)
                 points.append(
                     _canonical_grid_point(point, vertex_index.grid_size)
@@ -193,7 +213,7 @@ def _regions_indexed(geometry, vertex_index):
         ring = _ring(coords)
         if not by_x:
             return ring
-        ring_keys = tuple(_region_key(point, vertex_index.grid_size) for point in ring)
+        ring_keys = tuple(point_key(point) for point in ring)
         output = []
         for index, (a, b) in enumerate(zip(ring, (*ring[1:], ring[0]))):
             output.append(a)
@@ -239,31 +259,62 @@ class GridArrangement:
     audits: tuple[GridOperandAudit, ...]
     grid_applied: bool = True
 
-    def face_regions(self, face_ids):
+    @cached_property
+    def _vertex_index(self):
+        grid = self.context.grid_size_um if self.grid_applied else None
+        return _region_vertex_index(self.vertices, grid)
+
+    @cached_property
+    def _operand_faces(self):
+        from types import MappingProxyType
+
+        selected = {}
+        for index, face in enumerate(self.faces):
+            for operand_id in face.operand_ids:
+                selected.setdefault(operand_id, []).append(index)
+        return MappingProxyType({key: tuple(value) for key, value in selected.items()})
+
+    @cached_property
+    def _region_work(self):
+        # Per-arrangement successful pure results only. Concurrent readers may
+        # compute the same miss; immutable geometry/results are never mutated.
+        return {}, {}
+
+    def _regions_for_faces(self, indices):
         from shapely import Polygon, coverage_union_all, union_all
 
-        selected = [
-            Polygon(f.exterior, f.holes) for f in self.faces if f.face_id in face_ids
-        ]
-        grid = self.context.grid_size_um if self.grid_applied else None
-        merged = (
-            coverage_union_all(selected) if self.grid_applied else union_all(selected)
+        polygons, regions = self._region_work
+        if indices in regions:
+            return regions[indices]
+        selected = []
+        for index in indices:
+            polygon = polygons.get(index)
+            if polygon is None:
+                face = self.faces[index]
+                polygon = Polygon(face.exterior, face.holes)
+                polygons[index] = polygon
+            selected.append(polygon)
+        with _stage("geometry.grid.regions"):
+            merged = (
+                coverage_union_all(selected)
+                if self.grid_applied
+                else union_all(selected)
+            )
+            result = _regions_indexed(merged, self._vertex_index)
+        regions[indices] = result
+        return result
+
+    def face_regions(self, face_ids):
+        return self._regions_for_faces(
+            tuple(
+                index
+                for index, face in enumerate(self.faces)
+                if face.face_id in face_ids
+            )
         )
-        return _regions(merged, self.vertices, grid)
 
     def operand_regions(self, operand_id):
-        from shapely import Polygon, coverage_union_all, union_all
-
-        selected = [
-            Polygon(f.exterior, f.holes)
-            for f in self.faces
-            if operand_id in f.operand_ids
-        ]
-        grid = self.context.grid_size_um if self.grid_applied else None
-        merged = (
-            coverage_union_all(selected) if self.grid_applied else union_all(selected)
-        )
-        return _regions(merged, self.vertices, grid)
+        return self._regions_for_faces(self._operand_faces.get(operand_id, ()))
 
     @property
     def metadata(self):
@@ -758,12 +809,17 @@ def build_grid_arrangement(operands, context, *, apply_grid=True):
     # Boundary and auxiliary residues remain inspectable internally through
     # the exact physical audits; neither can create an orphan area-graph edge.
     with _stage("geometry.grid.effective", counts={"operands": len(values)}):
+        # One immutable polygon per atomic face, including multiply-labelled
+        # cells. Preserve face order within each operand's exact union.
+        face_polygons = tuple(Polygon(face.exterior, face.holes) for face in faces)
+        operand_faces = {operand_id: [] for operand_id in ids}
+        for index, face in enumerate(faces):
+            for operand_id in face.operand_ids:
+                operand_faces[operand_id].append(index)
 
         def realize(value):
             selected = [
-                Polygon(f.exterior, f.holes)
-                for f in faces
-                if value.operand_id in f.operand_ids
+                face_polygons[index] for index in operand_faces[value.operand_id]
             ]
             return coverage_union_all(selected) if apply_grid else union_all(selected)
 

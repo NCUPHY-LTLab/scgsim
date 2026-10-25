@@ -3,6 +3,7 @@
 from dataclasses import replace
 from math import hypot
 
+from scgsim.diagnostics import _stage
 from scgsim.geometry.models.construction import SurfacePartitionRecord
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.surface_bands import (
@@ -514,7 +515,8 @@ def partition_surface_distance_bands(
         )
     from scgsim.geometry.models.grid import geometry_grid_context
     grid_context = geometry_grid_context(build_input)
-    layout = _layout_band_construction(surfaces, requests, grid_context) if grid_context is not None else None
+    with _stage("geometry.surface_bands.layout_construction"):
+        layout = _layout_band_construction(surfaces, requests, grid_context) if grid_context is not None else None
     entities = {entity.semantic_id: entity for entity in build_input.entities}
     polygon_ids = {polygon.polygon_id for polygon in build_input.polygons}
     result, partitions, summaries = [], [], []
@@ -792,9 +794,11 @@ def partition_surface_distance_bands(
     from scgsim.geometry.models.grid import geometry_grid_context
     context = geometry_grid_context(build_input)
     if context is not None:
-        result, partitions, summaries = _node_band_planes(result, summaries, context)
+        with _stage("geometry.surface_bands.node_planes"):
+            result, partitions, summaries = _node_band_planes(result, summaries, context)
         if layout is not None:
-            result, partitions, summaries = _emit_layout_wall_facets(result, summaries, layout)
+            with _stage("geometry.surface_bands.emit_walls"):
+                result, partitions, summaries = _emit_layout_wall_facets(result, summaries, layout)
     return tuple(result), tuple(partitions), tuple(summaries)
 
 
@@ -1002,8 +1006,11 @@ def _layout_band_construction(surfaces, requests, context):
     from math import acos, ceil, pi
     from shapely import LineString, Point, intersection, union_all
     from scgsim.geometry._primitives.grid import GridOperand, build_grid_arrangement, _polygons, _canonical_grid_point
-    horizontal = [(surface, _rings3d(surface)) for surface in surfaces
-                  if len({p[2] for r in _rings3d(surface) for p in r}) == 1]
+    horizontal = []
+    for surface in surfaces:
+        rings = _rings3d(surface)
+        if len({p[2] for ring in rings for p in ring}) == 1:
+            horizontal.append((surface, rings))
     if not any(surface.surface_id in requests for surface, _ in horizontal):
         return None
     operands, parent_keys, cut_keys = [], {}, {}
@@ -1134,7 +1141,54 @@ def _layout_surface(surface, layout):
     return replace(surface, geometry_ref=ref, outer_loop_ref=None,hole_loop_refs=())
 
 
-def _wall_construction_chain(source_xy, layout, surface_id):
+def _source_line_key(left, right):
+    """Exact unoriented supporting line; source endpoints remain unmodified."""
+    from fractions import Fraction
+
+    a, b = (tuple(Fraction(str(value)) for value in point) for point in (left, right))
+    coefficients = (b[1] - a[1], a[0] - b[0], b[0] * a[1] - a[0] * b[1])
+    pivot = next((value for value in coefficients[:2] if value), None)
+    if pivot is None:
+        return None
+    return tuple(value / pivot for value in coefficients)
+
+
+class _WallConstructionIndex:
+    """One layout's exact source incidences and successful wall-chain work."""
+
+    def __init__(self, layout):
+        from collections import defaultdict
+        from fractions import Fraction
+
+        rows = defaultdict(list)
+        for order, record in enumerate(layout["ledger"]):
+            left, right = tuple(point[:2] for point in record["source_endpoints"])
+            key = _source_line_key(left, right)
+            if key is None:
+                continue  # A zero source segment never passes strict overlap below.
+            axis = 0 if left[0] != right[0] else 1
+            lo, hi = sorted((Fraction(str(left[axis])), Fraction(str(right[axis]))))
+            rows[key].append((lo, hi, order, record))
+        self.lines = {}
+        for key, values in rows.items():
+            values.sort(key=lambda row: (row[0], row[2]))
+            self.lines[key] = tuple(row[0] for row in values), tuple(values)
+        self.chains = {}
+
+    def candidates(self, a, b):
+        from bisect import bisect_left
+        from fractions import Fraction
+
+        starts, rows = self.lines.get(_source_line_key(a, b), ((), ()))
+        axis = 0 if a[0] != b[0] else 1
+        lo, hi = sorted((Fraction(str(a[axis])), Fraction(str(b[axis]))))
+        # Keep the old strict positive source-span overlap, and ledger order.
+        selected = [row for row in rows[:bisect_left(starts, hi)] if row[1] > lo]
+        selected.sort(key=lambda row: row[2])
+        return tuple(row[3] for row in selected)
+
+
+def _wall_construction_chain(source_xy, layout, surface_id, *, index=None):
     """Join exact original-segment incidences, retaining collinear anchors."""
     from collections import defaultdict, deque
     from fractions import Fraction
@@ -1159,8 +1213,15 @@ def _wall_construction_chain(source_xy, layout, surface_id):
 
     if not all(collinear(point) for point in source_xy):
         return None
+    if index is None:
+        index = _WallConstructionIndex(layout)
+    # All retained anchors and their source order participate in the cache key.
+    # Only successful work is reused; a failure keeps the current surface ID.
+    cache_key = tuple(source_xy)
+    if cache_key in index.chains:
+        return index.chains[cache_key]
     chains = []
-    for record in layout["ledger"]:
+    for record in index.candidates(a, b):
         left, right = tuple(p[:2] for p in record["source_endpoints"])
         if not collinear(left) or not collinear(right):
             continue
@@ -1173,14 +1234,15 @@ def _wall_construction_chain(source_xy, layout, surface_id):
     vertices = set(anchors)
     vertices.update(point for chain in chains for point in chain)
     graph = defaultdict(set)
+    exact_vertices = {point: exact(point) for point in vertices}
     for chain in chains:
         for left, right in zip(chain, chain[1:]):
-            el, er = exact(left), exact(right)
+            el, er = exact_vertices[left], exact_vertices[right]
             direction = 0 if el[0] != er[0] else 1
             along = [point for point in vertices
-                     if (exact(point)[0]-el[0])*(er[1]-el[1]) ==
-                        (exact(point)[1]-el[1])*(er[0]-el[0])
-                     and all(min(el[i], er[i]) <= exact(point)[i] <= max(el[i], er[i])
+                     if (exact_vertices[point][0]-el[0])*(er[1]-el[1]) ==
+                        (exact_vertices[point][1]-el[1])*(er[0]-el[0])
+                     and all(min(el[i], er[i]) <= exact_vertices[point][i] <= max(el[i], er[i])
                              for i in range(2))]
             along.sort(key=lambda point: point[direction])
             for first, second in zip(along, along[1:]):
@@ -1207,7 +1269,9 @@ def _wall_construction_chain(source_xy, layout, surface_id):
     chain.reverse()
     if any(anchor not in chain for anchor in anchors):
         raise ValueError(f"wall retained anchors are outside its construction chain: {surface_id}")
-    return a, b, tuple(chain)
+    result = a, b, tuple(chain)
+    index.chains[cache_key] = result
+    return result
 
 
 def _emit_layout_wall_facets(surfaces, summaries, layout):
@@ -1216,6 +1280,7 @@ def _emit_layout_wall_facets(surfaces, summaries, layout):
     from shapely import Polygon, box, intersection
     from scgsim.geometry._primitives.grid import _regions
     output=[];extra=[]
+    wall_index = _WallConstructionIndex(layout)
     for surface in surfaces:
         rings=_rings3d(surface)
         if len({p[2] for r in rings for p in r}) == 1:
@@ -1226,7 +1291,7 @@ def _emit_layout_wall_facets(surfaces, summaries, layout):
         band=surface.metadata.get("surface_distance_band")
         source = band["distance_origin_rings_3d_um"] if band else origin["rings_3d_um"] if origin else rings
         source_xy=tuple(dict.fromkeys(p[:2] for r in source for p in r))
-        construction = _wall_construction_chain(source_xy, layout, surface.surface_id)
+        construction = _wall_construction_chain(source_xy, layout, surface.surface_id, index=wall_index)
         if construction is None:
             output.append(surface);continue
         a,b,chain=construction
