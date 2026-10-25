@@ -101,7 +101,6 @@ from scgsim.geometry.planning.interfaces import (
     plan_mm_contact_records,
     recognize_route_interfaces,
 )
-from scgsim.geometry.planning.surface_bands import partition_source_boundary
 from scgsim.geometry.planning.tags import (
     _entity_physical_group_id,
     _physical_group_owner_ids,
@@ -892,7 +891,6 @@ def plan_route_surfaces(
         partitions = partitions_by_interface.get(interface.interface_id, ())
         if partitions:
             parent_surface_id = f"SURF__{surface_interface_id}"
-            partition_origin = partition_source_boundary(geometry_ref, parent_surface_id)
             for partition in partitions:
                 child_geometry_ref = {
                     **geometry_ref,
@@ -921,8 +919,6 @@ def plan_route_surfaces(
                             "physical_owner_semantic_ids": physical_owner_semantic_ids,
                             "boundary_volume_ids": boundary_volume_ids,
                             "embedded_surface_sheet": embedded_sheet,
-                            **({"surface_partition_origin": partition_origin}
-                               if partition_origin is not None else {}),
                         },
                     )
                 )

@@ -47,7 +47,6 @@ from scgsim.geometry.models.topology import (
     VolumePlanRecord,
 )
 from scgsim.geometry.planning.domain import _solution_entity_xy_region
-from scgsim.geometry.planning.surface_bands import partition_source_boundary
 from scgsim.geometry.planning.topology import _surface_owner_ids
 from scgsim.geometry.planning.representation import planned_conductor_representation
 
@@ -444,17 +443,6 @@ def _partition_route_b_port_sheet_sidewalls(
             binding=binding,
             port_z_um=port_z_um,
         )
-        # Capture only a genuine original wall; existing child seams cannot
-        # establish missing source lineage. Further port splits retain it.
-        if (
-            "surface_partition_origin" not in partition_metadata
-            and surface.parent_surface_id is None
-            and surface.partition_label is None
-            and not surface.geometry_ref.get("partition_id")
-        ):
-            origin = partition_source_boundary(surface.geometry_ref, surface.surface_id)
-            if origin is not None:
-                partition_metadata["surface_partition_origin"] = origin
         result.extend(
             (
                 replace(

@@ -225,10 +225,6 @@ def build_route_mesh(
             encoding="utf-8"
         )
     )
-    if "surface_distance_bands" in construction_plan.get("metadata", {}):
-        manifest["surface_distance_bands"] = copy.deepcopy(
-            construction_plan["metadata"]["surface_distance_bands"]
-        )
     native_curves = construction_plan.get("metadata", {}).get("curved_arrangement")
     if native_curves is not None:
         manifest["curved_arrangement"] = copy.deepcopy(native_curves)
@@ -706,15 +702,7 @@ def _add_surface_group_records(
         else ()
     )
 
-    selected_distance_sa = (
-        role == "domain_boundary"
-        and str(record.get("interface_type", "")).upper() == "SA"
-        and isinstance(metadata, Mapping)
-        and isinstance(metadata.get("surface_distance_band"), Mapping)
-    )
-    # Selected shared dielectric/air bands use the same ledger and adjacency
-    # authority as other SA interfaces. Exterior cuts retain their boundary policy.
-    if role == "domain_boundary" and not selected_distance_sa:
+    if role == "domain_boundary":
         _validate_structured_domain_boundary_record(name, record)
         info = {
             "phys_group": phys_group,
@@ -773,12 +761,6 @@ def _add_surface_group_records(
     if interface_type not in _STRUCTURED_INTERFACE_TYPES:
         raise ValueError(
             f"SGB surface {name!r} has unsupported interface_type {interface_type!r}."
-        )
-    if selected_distance_sa and not _surface_contribution_sources(
-        record["source_provenance"]
-    ):
-        raise ValueError(
-            f"SGB selected SA boundary band {name!r} requires contribution provenance."
         )
     _validate_surface_contribution_ledger(name, record, interface_type)
 

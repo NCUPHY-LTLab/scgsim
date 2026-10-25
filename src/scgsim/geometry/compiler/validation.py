@@ -632,250 +632,15 @@ def validate_surface_partition_coverage(
     surface_partitions: tuple[SurfacePartitionRecord, ...],
     surfaces: tuple[SurfacePlanRecord, ...],
 ) -> None:
-    """Validate public interface/explicit band records without retired inventory."""
-    _validate_surface_partition_coverage(
-        interfaces=interfaces, surface_partitions=surface_partitions, surfaces=surfaces
-    )
-
-
-def _validate_surface_partition_coverage(
-    *,
-    interfaces: tuple[InterfacePlanRecord, ...],
-    surface_partitions: tuple[SurfacePartitionRecord, ...],
-    surfaces: tuple[SurfacePlanRecord, ...],
-    parent_surfaces: tuple[SurfacePlanRecord, ...] | None = None,
-    parent_partitions: tuple[SurfacePartitionRecord, ...] = (),
-) -> None:
     """Validate that partition records point to real parent/child plan ids."""
-    errors: list[str] = []
-
-    def inventory(records, field, label):
-        known = {}
-        for record in records:
-            identity = getattr(record, field)
-            if (
-                parent_surfaces is not None
-                and identity in known
-                and known[identity] != record
-            ):
-                errors.append(f"conflicting {label} identity {identity}")
-            known[identity] = record
-        return known
-
-    surfaces_by_id = inventory(surfaces, "surface_id", "child surface")
-    parents = (
-        None
-        if parent_surfaces is None
-        else inventory(parent_surfaces, "surface_id", "parent surface")
-    )
-    inventory(parent_partitions, "partition_id", "ancestor partition")
-    inventory(surface_partitions, "partition_id", "partition")
-    inventory(surface_partitions, "child_surface_id", "partition child")
+    surfaces_by_id = {surface.surface_id: surface for surface in surfaces}
     interface_ids = {interface.interface_id for interface in interfaces}
     interface_ids.update(
         surface.interface_id for surface in surfaces if surface.interface_id is not None
     )
+    errors: list[str] = []
     for partition in surface_partitions:
-        child = surfaces_by_id.get(partition.child_surface_id)
-        band = partition.metadata.get("surface_distance_band")
-        is_bound_surface_partition = (
-            isinstance(band, Mapping)
-            and child is not None
-            and band.get("parent_surface_id") == child.parent_surface_id
-            and partition.parent_interface_id == child.parent_surface_id
-            and child.interface_id is None
-        )
-        is_real_surface_parent = False
-        if parents is not None and child is not None:
-            keys = tuple(
-                key
-                for key in ("surface_distance_band", "layout_grid_realization")
-                if key in partition.metadata
-            )
-            if len(keys) > 1:
-                errors.append(
-                    f"{partition.partition_id} has conflicting generated parent lineage"
-                )
-            elif keys:
-                key = keys[0]
-                identity = partition.metadata[key]
-                if not isinstance(identity, Mapping):
-                    errors.append(
-                        f"{partition.partition_id} generated parent lineage is not a mapping"
-                    )
-                else:
-                    parent_id = identity.get("parent_surface_id")
-                    parent = (
-                        parents.get(parent_id) if isinstance(parent_id, str) else None
-                    )
-                    if parent is None:
-                        errors.append(
-                            f"{partition.partition_id} references unknown construction parent {parent_id}"
-                        )
-                    else:
-                        expected_child_parent = (
-                            parent.surface_id
-                            if key == "surface_distance_band"
-                            else parent.parent_surface_id or parent.surface_id
-                        )
-                        if (
-                            child.metadata.get(key) != identity
-                            or child.parent_surface_id != expected_child_parent
-                        ):
-                            errors.append(
-                                f"{partition.partition_id} child construction parent lineage mismatch"
-                            )
-                        if key == "layout_grid_realization":
-                            origin = child.metadata.get("surface_partition_origin")
-                            retained_origin = parent.metadata.get(
-                                "surface_partition_origin"
-                            )
-                            if not isinstance(origin, Mapping) or (
-                                origin != retained_origin
-                                if retained_origin is not None
-                                else origin.get("parent_surface_id")
-                                != parent.surface_id
-                            ):
-                                errors.append(
-                                    f"{partition.partition_id} construction source ancestry mismatch"
-                                )
-                        else:
-                            origin = parent.metadata.get("surface_partition_origin")
-                            expected_origin = (
-                                origin.get("parent_surface_id")
-                                if isinstance(origin, Mapping)
-                                else parent.surface_id
-                            )
-                            if (
-                                identity.get("distance_origin_parent_surface_id")
-                                != expected_origin
-                            ):
-                                errors.append(
-                                    f"{partition.partition_id} band source ancestry mismatch"
-                                )
-                        fields = (
-                            "owner_semantic_id",
-                            "surface_role",
-                            "interface_id",
-                            "valid_routes",
-                            "solver_use",
-                            "construction_only",
-                        )
-                        if any(
-                            getattr(child, field) != getattr(parent, field)
-                            for field in fields
-                        ):
-                            errors.append(
-                                f"{partition.partition_id} child construction ownership or role mismatch"
-                            )
-                        inherited = {
-                            name: value
-                            for name, value in parent.metadata.items()
-                            if name
-                            not in {
-                                "physical_name",
-                                "surface_distance_band",
-                                "layout_grid_realization",
-                                "surface_partition_origin",
-                            }
-                        }
-                        if any(
-                            name not in child.metadata or child.metadata[name] != value
-                            for name, value in inherited.items()
-                        ):
-                            errors.append(
-                                f"{partition.partition_id} child construction semantic metadata mismatch"
-                            )
-                        if (
-                            partition.label != child.partition_label
-                            or partition.valid_routes != child.valid_routes
-                        ):
-                            errors.append(
-                                f"{partition.partition_id} child partition label or route mismatch"
-                            )
-                        ancestors = tuple(
-                            record
-                            for record in parent_partitions
-                            if record.child_surface_id == parent.surface_id
-                        )
-                        if ancestors:
-                            expected_lineage = tuple(
-                                {
-                                    "partition_id": record.partition_id,
-                                    "parent_interface_id": record.parent_interface_id,
-                                    "child_surface_id": record.child_surface_id,
-                                    "label": record.label,
-                                    "valid_routes": record.valid_routes,
-                                    "metadata": dict(record.metadata),
-                                }
-                                for record in ancestors
-                            )
-                            ancestry_ids = {
-                                record.parent_interface_id for record in ancestors
-                            }
-                            if (
-                                len(ancestry_ids) != 1
-                                or partition.parent_interface_id not in ancestry_ids
-                                or partition.metadata.get("ancestor_surface_partitions")
-                                != expected_lineage
-                            ):
-                                errors.append(
-                                    f"{partition.partition_id} construction ancestor partition mismatch"
-                                )
-                        elif partition.parent_interface_id != (
-                            parent.interface_id or parent.surface_id
-                        ) or partition.metadata.get("ancestor_surface_partitions"):
-                            errors.append(
-                                f"{partition.partition_id} construction parent reference mismatch"
-                            )
-                        is_real_surface_parent = (
-                            parent.interface_id is None
-                            and partition.parent_interface_id == parent.surface_id
-                        )
-            elif child.surface_id not in parents or any(
-                key in child.metadata
-                for key in ("surface_distance_band", "layout_grid_realization")
-            ):
-                errors.append(
-                    f"{partition.partition_id} lacks generated construction parent lineage"
-                )
-            else:
-                parent = parents[child.surface_id]
-                if partition not in parent_partitions:
-                    errors.append(
-                        f"{partition.partition_id} is not a declared retained partition"
-                    )
-                fields = (
-                    "owner_semantic_id",
-                    "surface_role",
-                    "interface_id",
-                    "parent_surface_id",
-                    "partition_label",
-                    "valid_routes",
-                    "solver_use",
-                    "construction_only",
-                )
-                if any(
-                    getattr(child, field) != getattr(parent, field) for field in fields
-                ):
-                    errors.append(
-                        f"{partition.partition_id} retained child ownership or ancestry mismatch"
-                    )
-                if any(
-                    name not in child.metadata or child.metadata[name] != value
-                    for name, value in parent.metadata.items()
-                ):
-                    errors.append(
-                        f"{partition.partition_id} retained child semantic metadata mismatch"
-                    )
-        # The public no-inventory contract is retained. Compiler-generated
-        # surface parents are accepted only against its actual retired records.
-        is_bound_surface_partition = is_bound_surface_partition and parents is None
-        if (
-            partition.parent_interface_id not in interface_ids
-            and not is_bound_surface_partition
-            and not is_real_surface_parent
-        ):
+        if partition.parent_interface_id not in interface_ids:
             errors.append(
                 f"{partition.partition_id} references unknown parent interface "
                 f"{partition.parent_interface_id}"
@@ -898,6 +663,10 @@ def _validate_surface_partition_coverage(
 
     if errors:
         raise ValueError("Invalid surface partition plan: " + "; ".join(errors))
+
+# Internal dispatcher spelling retained for existing callers.
+_validate_surface_partition_coverage = validate_surface_partition_coverage
+
 
 def validate_tag_plan_coverage(
     *,

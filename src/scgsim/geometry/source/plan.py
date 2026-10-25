@@ -247,7 +247,6 @@ class GeometryPlan:
         self._boundary_curves = ()
         self._boundary_reconstruction = ()
         self._lumped_supports = ()
-        self._surface_distance_bands = ()
         self._rectangular_junctions = ()
 
     def set_rectangular_junctions(self, specs) -> None:
@@ -263,20 +262,6 @@ class GeometryPlan:
                 raise ValueError(f"duplicate rectangular junction {field}")
         self._rectangular_junctions = requests
 
-    def set_surface_distance_bands(self, specs) -> None:
-        """Replace planar distance requests carried by subsequent snapshots.
-
-        Select exact parent/ring identities from surface_distance_band_catalogue
-        on the corresponding public construction plan before setting requests.
-        """
-        from scgsim.geometry.models.surface_bands import SurfaceDistanceBandSpec
-
-        records = tuple(specs)
-        if any(not isinstance(record, SurfaceDistanceBandSpec) for record in records):
-            raise TypeError("surface distance bands must be SurfaceDistanceBandSpec records")
-        if len({record.parent_surface_id for record in records}) != len(records):
-            raise ValueError("each parent surface may have only one distance request")
-        self._surface_distance_bands = records
 
     def set_lumped_supports(self, supports: Sequence[LumpedSupport]) -> None:
         """Bind caller-declared local nonmetal supports; no excitation is inferred."""
@@ -912,10 +897,6 @@ class GeometryPlan:
             from scgsim.geometry.source.junctions import with_rectangular_junctions
 
             build_input = with_rectangular_junctions(build_input, self._rectangular_junctions)
-        if self._surface_distance_bands:
-            from scgsim.geometry.source.surface_bands import with_surface_distance_bands
-
-            build_input = with_surface_distance_bands(build_input, self._surface_distance_bands)
         stack = {**stack, "metadata": {**stack["metadata"],
             "geometry_grid": build_input.metadata["geometry_grid"],
             "source_dbu_um": build_input.metadata["source_dbu_um"],

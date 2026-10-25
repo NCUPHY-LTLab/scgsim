@@ -62,9 +62,7 @@ def _route_c_group(
         source_record_id=first.physical_name,
         solver_use=first.solver_use,
         entity_tags=entity_tags,
-        metadata={"source_record_ids": tuple(tag.source_record_id for tag in tags),
-                  **_surface_band_metadata(tuple(surface for surface in plan.surfaces
-                      if surface.surface_id in {tag.source_record_id for tag in tags}))},
+        metadata={"source_record_ids": tuple(tag.source_record_id for tag in tags)},
     )
 
 
@@ -180,7 +178,6 @@ def _structured_surface_group(
             first.metadata.get("equipotential_id"), "equipotential_id", first
         ),
         source_provenance=provenance,
-        metadata=_surface_band_metadata(sources),
         physical_attribute={
             "solver_use": first.solver_use,
             "surface_role": first.surface_role,
@@ -363,11 +360,3 @@ def _custom_physical_attribute(surface: SurfacePlanRecord) -> dict[str, Any]:
     return dict(raw)
 
 
-def _surface_band_metadata(sources: Sequence[SurfacePlanRecord]) -> dict[str, Any]:
-    bands = [surface.metadata["surface_distance_band"] for surface in sources
-             if "surface_distance_band" in surface.metadata]
-    if not bands:
-        return {}
-    if len(sources) != 1:
-        raise ValueError("distance band physical groups must bind one exact child surface")
-    return {"surface_distance_band": dict(bands[0])}

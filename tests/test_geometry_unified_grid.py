@@ -11,11 +11,10 @@ from scgsim.geometry._primitives.grid import GridOperand, build_grid_arrangement
 from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
 from scgsim.geometry.source.grid import apply_geometry_grid, source_grid_context
 from scgsim.geometry.planning.junction_partition import derive_rectangular_junctions
-from scgsim.geometry.planning.surface_bands import partition_surface_distance_bands
 from scgsim.geometry.planning.topology import plan_canonical_topology
 from scgsim.geometry import with_rectangular_junctions
 from test_rectangular_junction_geometry import fixture as junction_fixture
-from test_surface_distance_bands import fixture as band_fixture
+from scgsim.geometry import GeometryBuildInput, LayoutPolygonSpec, SemanticEntitySpec
 
 
 GRID = GeometryGridContext(0.001)
@@ -46,7 +45,9 @@ def test_context_codec_and_source_propagation(requested):
         GeometryGridContext.from_payload(json.loads(json.dumps(context.to_payload())))
         == GRID
     )
-    build, _ = band_fixture()
+    polygon = LayoutPolygonSpec("polygon", "layer", rectangle(0, 0, 8, 8))
+    entity = SemanticEntitySpec("entity", "substrate", "Si", "dielectric", 0, "polygon", polygon_ids=("polygon",))
+    build = GeometryBuildInput((polygon,), (entity,))
     assert geometry_grid_context(build) is None
     bound = apply_geometry_grid(build, context)
     assert geometry_grid_context(bound) == GRID
@@ -174,77 +175,6 @@ def test_junction_keeps_declared_terminal_identity_and_central_rectangle():
     assert geometry_grid_context(partitioned) == GRID
 
 
-@pytest.mark.parametrize("neighboring", (False, True))
-def test_band_context_mismatch_and_shared_atomic_topology(neighboring):
-    from scgsim.geometry import (
-        SourceBoundarySegment,
-        SurfaceDistanceBandSpec,
-        with_surface_distance_bands,
-    )
-    from scgsim.geometry.planning.surface_bands import partition_source_boundary
-
-    build, parent = band_fixture()
-    parents = (parent,)
-    if neighboring:
-        origin = partition_source_boundary(parent.geometry_ref, parent.surface_id)
-        parents = tuple(
-            replace(
-                parent,
-                surface_id=name,
-                parent_surface_id=parent.surface_id,
-                partition_label=name,
-                geometry_ref={
-                    **parent.geometry_ref,
-                    "outer_loop": rectangle(x0, 0, x1, 8),
-                },
-                metadata={"surface_partition_origin": origin},
-            )
-            for name, x0, x1 in (("left", 0, 4), ("right", 4, 8))
-        )
-        build = with_surface_distance_bands(
-            build,
-            tuple(
-                SurfaceDistanceBandSpec(
-                    name,
-                    "entity",
-                    "polygon",
-                    (cut,),
-                    0.001,
-                    (SourceBoundarySegment("exterior", 0),),
-                )
-                for name, cut in (("left", 0.5), ("right", 1.0))
-            ),
-        )
-    bound = apply_geometry_grid(build, GRID)
-    children, _, summary = partition_surface_distance_bands(bound, surfaces=parents)
-    if neighboring:
-        edge_nodes = {}
-        for name in ("left", "right"):
-            edge_nodes[name] = {
-                y
-                for child in children
-                if child.parent_surface_id == name
-                for ring in child.geometry_ref["planar_loops_3d"]
-                for x, y, z in ring
-                if x == 4
-            }
-        assert edge_nodes["left"] == edge_nodes["right"] == {0, 0.5, 1.0, 8}
-    points, curves, loops, canonical = plan_canonical_topology(surfaces=children)
-    assert points and curves and loops
-    assert {child.parent_surface_id for child in canonical} == {
-        p.surface_id for p in parents
-    }
-    assert all(row["precision_um"] == GRID.grid_size_um for row in summary)
-    assert_lattice(p.coordinate for p in points)
-    bad = replace(
-        bound,
-        metadata={
-            **bound.metadata,
-            "geometry_grid": GeometryGridContext(0.002).to_payload(),
-        },
-    )
-    with pytest.raises(ValueError, match="precision_um"):
-        partition_surface_distance_bands(bad, surfaces=parents)
 
 
 @pytest.mark.parametrize("requested", (None, 0.001))
@@ -897,48 +827,8 @@ def test_realized_grid_nodes_use_one_coordinate_per_integer_key():
     assert _regions(separate_triangle, (), None)[0][0][1] == same_key
 
 
-def test_horizontal_node_plane_keeps_raw_subgrid_physical_guard():
-    from scgsim.geometry.planning.surface_bands import _node_band_planes
-
-    build, parent = band_fixture()
-    bound = apply_geometry_grid(build, GRID)
-    children, _, summaries = partition_surface_distance_bands(bound, surfaces=(parent,))
-    thin = replace(
-        parent,
-        surface_id="thin_neighbor",
-        geometry_ref={**parent.geometry_ref, "outer_loop": rectangle(0, 0, 0.0002, 1)},
-    )
-    # Genuine generated band children activate common horizontal noding, while
-    # the unbanded source operand must retain its positive-area raw baseline.
-    with pytest.raises(ValueError, match="physical geometry collapsed.*thin_neighbor"):
-        _node_band_planes((thin, *children), summaries, GRID)
-    assert thin.geometry_ref["outer_loop"] == rectangle(0, 0, 0.0002, 1)
 
 
-def test_horizontal_node_plane_emits_canonical_xy_without_reverting_raw_spelling():
-    from scgsim.geometry._primitives.grid import _canonical_grid_point
-    from scgsim.geometry.planning.surface_bands import _node_band_planes
-
-    endpoint = 571 * GRID.grid_size_um
-    assert endpoint != 0.571
-    build, parent = band_fixture(outer=rectangle(0, 0, endpoint, 1), cuts=(0.1,))
-    bound = apply_geometry_grid(build, GRID)
-    children, _, summaries = partition_surface_distance_bands(bound, surfaces=(parent,))
-    emitted, _, _ = _node_band_planes((parent, *children), summaries, GRID)
-    points = [
-        point
-        for surface in emitted
-        for ring in surface.geometry_ref["planar_loops_3d"]
-        for point in ring
-    ]
-    assert points
-    assert any(point[0] == 0.571 for point in points)
-    assert all(
-        point[:2] == _canonical_grid_point(point[:2], GRID.grid_size_um)
-        for point in points
-    )
-    assert {point[2] for point in points} == {0}
-    assert parent.geometry_ref["outer_loop"][1][0] == endpoint
 
 
 def test_candidate_pairs_parallelize_real_work_with_identical_subdivision_and_graph():

@@ -66,16 +66,16 @@ def test_supported_upstream_identity_requires_and_records_native_dry_run(monkeyp
     "0.16.0", "0.18.1-dirty", "0dc74cd-dirty", "0dc74cd-1-gabcdef0",
     "abcdef0", OFFICIAL_COMMIT[:6], OFFICIAL_COMMIT + "0",
 ))
-def test_other_versions_forks_dirty_and_invalid_commit_forms_fail_closed(monkeypatch, tmp_path, tag):
+def test_explicit_native_binary_is_checked_by_exact_config_not_upstream_stamp(monkeypatch, tmp_path, tag):
     rc, payload = _preflight(monkeypatch, tmp_path, tag=tag)
-    assert rc == 78
-    assert payload["compatibility"]["verified"] is False
+    assert rc == 0
+    assert payload["compatibility"]["verified"] is True
     assert payload["observed_identity"]["native_git_tag"] == tag
     assert payload["observed_identity"]["supported_upstream_release"] is None
 
 
 @pytest.mark.parametrize("failure", (
-    {"version_rc": 1}, {"dry_run_rc": 1},
+    {"dry_run_rc": 1},
     {"mutate_config": True}, {"config_present": False},
 ))
 def test_supported_label_cannot_bypass_probe_dry_run_or_config_identity(monkeypatch, tmp_path, failure):
@@ -84,7 +84,7 @@ def test_supported_label_cannot_bypass_probe_dry_run_or_config_identity(monkeypa
     assert payload["compatibility"]["verified"] is False
 
 
-def test_new_handoff_declares_release_and_keeps_historical_identity_contract(tmp_path):
+def test_new_handoff_uses_explicit_native_compatibility_and_records_identity(tmp_path):
     # Opaque files test the real file-only producer; no mesh or native result is claimed.
     from scgsim.palace.execution.handoff import prepare_handoff
     from scgsim.palace.mesh.build import MeshBuildResult
@@ -116,8 +116,8 @@ def test_new_handoff_declares_release_and_keeps_historical_identity_contract(tmp
     handoff = json.loads(plan.metadata_path.read_text())
     run = json.loads(plan.run_metadata_path.read_text())
     identity = handoff["palace_identity"]
-    assert identity["requested_release"] == "0.18.1"
-    assert identity["release_selection_semantics"] == "required_before_solve"
+    assert "requested_release" not in identity
+    assert "release_selection_semantics" not in identity
     assert identity["runtime_identity_semantics"] == "observed_provenance_only"
     assert identity["config_compatibility_probe"] == "native_dry_run"
     assert run["palace_identity"] == identity
@@ -132,3 +132,14 @@ def test_new_handoff_declares_release_and_keeps_historical_identity_contract(tmp
     }}
     _validate_palace_identity(historical)
     assert returned_receipt._compatibility_required({"palace_identity": historical}) == identity["config_schema"]
+
+
+def test_version_probe_failure_stays_observed_and_dry_run_required(monkeypatch, tmp_path):
+    rc, payload = _preflight(monkeypatch, tmp_path, version_rc=1)
+    assert rc == 0
+    assert payload["observed_identity"]["version_probe_exit_code"] == 1
+    assert payload["compatibility"]["method"] == "native_dry_run"
+    assert payload["compatibility"]["verified"] is True
+    rc, payload = _preflight(monkeypatch, tmp_path, version_rc=1, dry_run_rc=1)
+    assert rc == 78
+    assert payload["compatibility"]["verified"] is False

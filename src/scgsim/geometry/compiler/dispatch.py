@@ -52,9 +52,6 @@ from scgsim.geometry.planning.surfaces import (
     plan_route_surfaces,
     plan_surface_partitions,
 )
-from scgsim.geometry.planning.surface_bands import (
-    partition_surface_distance_bands, synchronize_distance_partitions,
-)
 from scgsim.geometry.planning.tags import plan_route_tags
 from scgsim.geometry.planning.topology import plan_canonical_topology
 from scgsim.geometry.planning.volumes import (
@@ -88,10 +85,10 @@ def build_route_construction_plan(
     `SurfacePlanRecord` or `VolumePlanRecord` must either get a `TagPlanRecord`
     or be explicitly marked `construction_only`.
     """
+    if build_input.metadata.get("surface_distance_bands"):
+        raise ValueError("SGB surface-distance geometry bands have been withdrawn; use Palace native inset_margins_um.")
     build_input = project_native_route_representations(build_input, route, representation_context)
     if build_input.boundary_curves or build_input.boundary_reconstruction:
-        if build_input.metadata.get("surface_distance_bands"):
-            raise NotImplementedError("surface distance bands currently support polygon-only construction plans")
         if route == "C":
             raise NotImplementedError(
                 "active source curves support Palace Route A/B, not Route C"
@@ -207,18 +204,6 @@ def build_route_construction_plan(
             semantic_facts=semantic_facts,
         ),
     )
-    partition_parents = surfaces
-    parent_partitions = surface_partitions
-    with _stage("geometry.compiler.surface_bands"):
-        surfaces, distance_partitions, distance_band_summary = _timed(
-            timings, "partition_surface_distance_bands",
-            lambda: partition_surface_distance_bands(build_input, surfaces=surfaces),
-        )
-    with _stage("geometry.compiler.synchronize_bands"):
-        surface_partitions = _timed(
-            timings, "synchronize_distance_partitions",
-            lambda: synchronize_distance_partitions(surface_partitions, distance_partitions),
-        )
     interfaces = _timed(
         timings,
         "complete_interface_plan_from_surfaces",
@@ -324,8 +309,6 @@ def build_route_construction_plan(
         timings,
         "validate_surface_partition_coverage",
         lambda: _validate_surface_partition_coverage(
-            parent_surfaces=partition_parents,
-            parent_partitions=parent_partitions,
             interfaces=interfaces,
             surface_partitions=surface_partitions,
             surfaces=surfaces,
@@ -369,7 +352,6 @@ def build_route_construction_plan(
             **({key: build_input.metadata[key] for key in (
                 "geometry_grid", "geometry_grid_arrangement", "unquantized_source_sha256"
             ) if key in build_input.metadata}),
-            "surface_distance_bands": distance_band_summary,
             **({
                 "rectangular_junctions": build_input.metadata["rectangular_junctions"],
                 "junction_partitions": build_input.metadata["junction_partitions"],
