@@ -15,13 +15,14 @@ from scgsim.aedt import (
     Q2dSpec,
     resolve_results,
 )
-from scgsim.aedt._matrix_export import parse_matrix_export, read_q2d_rlgc_matrix
-from scgsim.aedt.run import _export_q2d
-from scgsim.aedt.util import file_sha256, write_json
+from scgsim.aedt.results.matrices import parse_matrix_export, read_q2d_rlgc_matrix
+from scgsim.aedt.runtime.families.q2d import _export_q2d
+from scgsim.aedt._io import file_sha256, write_json
 
 
 def _spec(project_name: str = "PublicQ2dRun") -> Q2dSpec:
     return Q2dSpec(
+        aedt_version="2024.2",
         project_name=project_name,
         design_name="Q2DDesign1",
         materials={
@@ -209,6 +210,10 @@ Signal,2.0
                     "schema_version": "scgsim.aedt.receipt.v1",
                     "status": "completed",
                     "mode": "q2d",
+                    "connected": {
+                        "aedt_version": spec.aedt_version,
+                        "pyaedt_version": spec.pyaedt_version,
+                    },
                     "source": {
                         "spec": "aedt_spec.json",
                         "spec_sha256": file_sha256(spec_path),
@@ -226,7 +231,7 @@ Signal,2.0
                     },
                 },
             )
-            with patch("scgsim.aedt.resolve._validate_readback"):
+            with patch("scgsim.aedt.results.resolve._validate_readback"):
                 result = resolve_results(root)
                 self.assertEqual(result.primary_csv, matrix_path)
                 before = sorted(path.relative_to(root) for path in root.rglob("*"))

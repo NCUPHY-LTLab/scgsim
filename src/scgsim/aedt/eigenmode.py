@@ -1,4 +1,4 @@
-"""One mutable Eigenmode preparation facade over the existing AEDT handoff."""
+"""One mutable Eigenmode preparation facade over the AEDT owners."""
 
 from __future__ import annotations
 
@@ -7,36 +7,51 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Literal
+from typing import Any
 
-from scgsim.semantics.epr import film_assumptions
-from scgsim.sgb import (
+from scgsim.geometry import (
     GeometryBuildInput,
     GeometryPlanSnapshot,
     InputSummary,
     build_gds_stack_geometry_input,
     summarize_geometry_input,
 )
+from scgsim.semantics.epr import film_assumptions
 
-from ._epr_geometry import prepare_planar_geometry_input, validate_geometry_workers
-from ._epr_models import (
+from .epr.analysis import reanalyze_epr
+from .preparation.planar import prepare_planar_geometry_input, validate_geometry_workers
+from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
-    EprResult,
     ExpressionCacheConvergence,
+    ExpressionCacheConvergenceSet,
     PlanarJunction,
-    PreparedPlanarGeometry,
     SurfaceEprSpec,
 )
-from ._epr_results import reanalyze_epr, show_epr
-from .handoff import HandoffPlan, prepare_hfss_eigenmode_from_geometry
-from .resolve import ResolvedRun, resolve_results
-from .spec import AedtResources, EigenmodeRunControl
+from scgsim.aedt.epr.models import (
+    EprResult,
+)
+from scgsim.aedt.specs.common import (
+    LumpedRlc,
+)
+from scgsim.aedt.specs.geometry import (
+    PreparedPlanarGeometry,
+)
+from .preparation.handoff import HandoffPlan
+from .preparation.geometry import prepare_hfss_eigenmode_from_geometry
+from .presentation.epr import show_epr
+from .results.resolve import ResolvedRun, resolve_results
+from .specs.common import AedtResources
+from .specs.modeling import Modeling, _modeling
+from .specs.hfss import EigenmodeRunControl
+from .versions import normalize_aedt_version
 
 
 @dataclass
 class EigenmodeSim:
     """Configure ordinary and EPR Eigenmode on one body-first HFSS source."""
 
+    modeling: Modeling
+    aedt_version: str = field(kw_only=True)
     component: Any | None = None
     build_input: GeometryBuildInput | None = None
     stack: Mapping[str, Any] | None = None
@@ -44,18 +59,29 @@ class EigenmodeSim:
     project_name: str | None = None
     design_name: str | None = None
     run_control: EigenmodeRunControl | None = None
-    route: Literal["A", "B"] = "B"
-    route_a_profile: str | None = None
     resources: AedtResources | None = None
     geometry_workers: int | None = None
     surface_contributions: tuple[SurfaceEprSpec, ...] = ()
     surface_defaults: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     junctions: tuple[PlanarJunction, ...] = ()
+    lumped_rlcs: tuple[LumpedRlc, ...] = ()
     epr_request: EprAnalysisRequest | None = None
-    expression_convergence: ExpressionCacheConvergence | None = None
+    expression_convergence: ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None = None
     prepared_geometry: PreparedPlanarGeometry | None = field(default=None, init=False)
     handoff_plan: HandoffPlan | None = field(default=None, init=False)
-    _plan_snapshot: GeometryPlanSnapshot | None = field(default=None, init=False, repr=False)
+    _plan_snapshot: GeometryPlanSnapshot | None = field(
+        default=None, init=False, repr=False
+    )
+
+    def __post_init__(self) -> None:
+        _modeling(self.modeling)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "aedt_version":
+            value = normalize_aedt_version(value)
+            if "aedt_version" in self.__dict__ and self.aedt_version != value:
+                self.handoff_plan = None
+        object.__setattr__(self, name, value)
 
     def _invalidate_model(self) -> None:
         self.prepared_geometry = None
@@ -63,7 +89,9 @@ class EigenmodeSim:
 
     def set_geometry(self, component: Any | GeometryBuildInput) -> None:
         if self._plan_snapshot is not None:
-            raise ValueError("GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim")
+            raise ValueError(
+                "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
+            )
         if isinstance(component, GeometryBuildInput):
             self.build_input, self.component = component, None
         elif callable(getattr(component, "write_gds", None)):
@@ -79,7 +107,7 @@ class EigenmodeSim:
         """Consume one immutable normalized source and its paired stack."""
         if not isinstance(snapshot, GeometryPlanSnapshot):
             raise TypeError("set_plan requires a GeometryPlanSnapshot")
-        trial = EigenmodeSim()
+        trial = EigenmodeSim(modeling=self.modeling, aedt_version=self.aedt_version)
         trial.set_stack(snapshot.stack)
         build_input = snapshot.geometry_input
         self.component = None
@@ -90,7 +118,9 @@ class EigenmodeSim:
 
     def set_stack(self, stack: Mapping[str, Any] | str | Path) -> None:
         if self._plan_snapshot is not None:
-            raise ValueError("GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim")
+            raise ValueError(
+                "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
+            )
         if isinstance(stack, Mapping):
             payload = dict(stack)
         elif isinstance(stack, (str, Path)):
@@ -116,16 +146,25 @@ class EigenmodeSim:
             or isinstance(layers, (str, bytes))
             or not isinstance(metadata, Mapping)
         ):
-            raise TypeError("stack materials, solution_regions, and metadata must be mappings; layers must be a sequence")
+            raise TypeError(
+                "stack materials, solution_regions, and metadata must be mappings; layers must be a sequence"
+            )
         if any(not isinstance(item, Mapping) for item in materials.values()):
             raise TypeError("stack materials must contain mappings")
         if any(not isinstance(item, Mapping) for item in regions.values()):
             raise TypeError("stack solution_regions must contain mappings")
         if any(not isinstance(item, Mapping) for item in layers):
             raise TypeError("stack layers must contain mappings")
-        if any(record.get("material_id", semantic_id) not in materials for semantic_id, record in regions.items()):
+        if any(
+            record.get("material_id", semantic_id) not in materials
+            for semantic_id, record in regions.items()
+        ):
             raise ValueError("stack solution region references an unknown material")
-        if any(record.get("material_id") not in materials for record in layers if "material_id" in record):
+        if any(
+            record.get("material_id") not in materials
+            for record in layers
+            if "material_id" in record
+        ):
             raise ValueError("stack layer references an unknown material")
         detached = json.loads(json.dumps(payload, allow_nan=False))
         self.stack = detached
@@ -144,12 +183,11 @@ class EigenmodeSim:
         *,
         project_name: str,
         design_name: str,
-        run_control: EigenmodeRunControl,
-        route: Literal["A", "B"] = "B",
-        route_a_profile: str | None = None,
+        run_control: EigenmodeRunControl | None = None,
         resources: AedtResources | None = None,
         geometry_workers: int | None = None,
     ) -> None:
+        """Declare the native model identity and optional complete solve setup."""
         if (
             not isinstance(project_name, str)
             or not project_name.strip()
@@ -159,32 +197,19 @@ class EigenmodeSim:
             raise ValueError("project_name must be a plain project stem")
         if not isinstance(design_name, str) or not design_name.strip():
             raise ValueError("design_name must be non-empty text")
-        if not isinstance(run_control, EigenmodeRunControl):
-            raise TypeError("run_control must be EigenmodeRunControl")
-        if route not in {"A", "B"}:
-            raise ValueError("route must be A or B")
-        if route == "A" and route_a_profile not in {
-            "substrate_face",
-            "metal_gap_equivalent",
-        }:
-            raise ValueError("Route A requires an explicit supported thin-film profile")
-        if route == "B" and route_a_profile is not None:
-            raise ValueError("Route B cannot use route_a_profile")
+        if run_control is not None and not isinstance(run_control, EigenmodeRunControl):
+            raise TypeError("run_control must be EigenmodeRunControl or None")
+        _modeling(self.modeling)
         if resources is not None and not isinstance(resources, AedtResources):
             raise TypeError("resources must be AedtResources or None")
         validate_geometry_workers(geometry_workers)
-        model_changed = (route, route_a_profile) != (self.route, self.route_a_profile)
         self.project_name, self.design_name, self.run_control = (
             project_name,
             design_name,
             run_control,
         )
-        self.route, self.route_a_profile = route, route_a_profile
         self.resources, self.geometry_workers = resources, geometry_workers
-        if model_changed:
-            self._invalidate_model()
-        else:
-            self.handoff_plan = None
+        self.handoff_plan = None
 
     def set_surface_epr(
         self,
@@ -224,6 +249,15 @@ class EigenmodeSim:
         self.surface_contributions, self.surface_defaults = resolved, normalized
         self._invalidate_model()
 
+    def add_lumped_rlc(self, treatment: LumpedRlc) -> None:
+        """Apply an electrical treatment to an explicitly declared neutral support."""
+        if not isinstance(treatment, LumpedRlc):
+            raise TypeError("treatment must be LumpedRlc")
+        if treatment.support_id in {item.support_id for item in self.lumped_rlcs}:
+            raise ValueError("support already has an RLC treatment")
+        self.lumped_rlcs = (*self.lumped_rlcs, treatment)
+        self._invalidate_model()
+
     def add_junction(self, junction: PlanarJunction) -> None:
         if not isinstance(junction, PlanarJunction):
             raise TypeError("junction must be PlanarJunction")
@@ -239,10 +273,10 @@ class EigenmodeSim:
         self.handoff_plan = None
 
     def set_expression_cache_convergence(
-        self, control: ExpressionCacheConvergence | None
+        self, control: ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None
     ) -> None:
-        if control is not None and not isinstance(control, ExpressionCacheConvergence):
-            raise TypeError("control must be ExpressionCacheConvergence or None")
+        if control is not None and not isinstance(control, (ExpressionCacheConvergence, ExpressionCacheConvergenceSet)):
+            raise TypeError("control must be a unit expression control, collection, or None")
         self.expression_convergence = control
         self.handoff_plan = None
 
@@ -276,7 +310,10 @@ class EigenmodeSim:
         """Show configured normalized inputs without writing GDS or preparing HFSS."""
 
         if self._plan_snapshot is not None:
-            source, stack = self._plan_snapshot.geometry_input, self._plan_snapshot.stack
+            source, stack = (
+                self._plan_snapshot.geometry_input,
+                self._plan_snapshot.stack,
+            )
         elif self.build_input is not None and self.stack is not None:
             source, stack = self.build_input, self.stack
         else:
@@ -288,20 +325,23 @@ class EigenmodeSim:
         data = summarize_geometry_input(source, prepared_stack=stack).data
         data["backend"] = {
             "name": "aedt",
-            "route": self.route,
-            "route_a_profile": self.route_a_profile,
+            "aedt_version": self.aedt_version,
+            "modeling": self.modeling,
             "project_name": self.project_name,
             "design_name": self.design_name,
             "run_control": (
                 None if self.run_control is None else self.run_control.to_payload()
             ),
-            "resources": None if self.resources is None else self.resources.to_payload(),
+            "resources": None
+            if self.resources is None
+            else self.resources.to_payload(),
             "geometry_workers": self.geometry_workers,
             "surface_contributions": [
                 item.to_payload() for item in self.surface_contributions
             ],
             "surface_defaults": self.surface_defaults,
             "junctions": [item.to_payload() for item in self.junctions],
+            "lumped_rlcs": [item.to_payload() for item in self.lumped_rlcs],
             "epr_request": (
                 None if self.epr_request is None else self.epr_request.to_payload()
             ),
@@ -314,16 +354,17 @@ class EigenmodeSim:
         return InputSummary(data)
 
     def prepare_handoff(self) -> HandoffPlan:
-        source_stack = self._plan_snapshot.stack if self._plan_snapshot is not None else self.stack
+        source_stack = (
+            self._plan_snapshot.stack if self._plan_snapshot is not None else self.stack
+        )
         if (
             source_stack is None
             or self.output_dir is None
             or self.project_name is None
             or self.design_name is None
-            or self.run_control is None
         ):
             raise ValueError(
-                "geometry, stack, output_dir, and eigenmode controls are required"
+                "geometry, stack, output_dir, project_name, and design_name are required"
             )
         geometry = self.prepared_geometry
         if geometry is None:
@@ -331,12 +372,14 @@ class EigenmodeSim:
             geometry = prepare_planar_geometry_input(
                 source,
                 prepared_stack=source_stack,
-                route=self.route,
-                route_a_profile=self.route_a_profile,
+                modeling=self.modeling,
                 junctions=self.junctions,
+                lumped_rlcs=self.lumped_rlcs,
                 contributions=self.surface_contributions,
             )
         plan = prepare_hfss_eigenmode_from_geometry(
+            aedt_version=self.aedt_version,
+            modeling=self.modeling,
             geometry=geometry,
             project_name=self.project_name,
             design_name=self.design_name,
@@ -370,7 +413,10 @@ class EigenmodeSim:
 
     @staticmethod
     def show_epr(
-        result: EprResult, *, mode: int | None = None, native_pass: int | None = None,
+        result: EprResult,
+        *,
+        mode: int | None = None,
+        native_pass: int | None = None,
         theme: str = "light",
     ) -> Any:
         return show_epr(result, mode=mode, native_pass=native_pass, theme=theme)

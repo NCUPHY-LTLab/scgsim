@@ -6,23 +6,31 @@ state without silently changing behavior. Mesh-quality warnings describe the
 stored mesh and are not workflow failures or acceptance thresholds.
 """
 
-from scgsim._mesh_quality import MeshQualityReport, check_mesh_quality
+from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
 
-from .eigenmode import EigenmodeSim
-from ._epr_results import PalaceEprResult, epr_result, reanalyze_epr, resolve_epr_result, show_epr
-from .electrostatic import ElectrostaticSim
-from .report import (
-    PalaceFailureDiagnosis,
-    PalaceResultSelection,
+from .preparation.eigenmode import EigenmodeSim
+from .preparation.electrostatic import ElectrostaticSim
+from .presentation.reports import (
     PalaceTrustReport,
-    PassCostRecord,
     PhysicsQuantitiesReport,
     SimulationBenchmarkReport,
-    SurfaceMaskEprRecord,
-    SurfaceMaskEprSeriesSnapshot,
     inspect_run_trustworthiness,
 )
-from .resolve import (
+from .results.epr import (
+    PalaceEprResult,
+    epr_result,
+    reanalyze_epr,
+    resolve_epr_result,
+    show_epr,
+)
+from .results.report_data import (
+    PalaceFailureDiagnosis,
+    PalaceResultSelection,
+    PassCostRecord,
+    SurfaceMaskEprRecord,
+    SurfaceMaskEprSeriesSnapshot,
+)
+from .results.resolve import (
     PalaceCost,
     PalacePerformance,
     PalaceProvenance,
@@ -34,10 +42,10 @@ from .resolve import (
 
 __all__ = [
     "EigenmodeSim",
-    "PalaceEprResult",
     "ElectrostaticSim",
     "MeshQualityReport",
     "PalaceCost",
+    "PalaceEprResult",
     "PalaceFailureDiagnosis",
     "PalacePerformance",
     "PalaceProvenance",
@@ -52,10 +60,10 @@ __all__ = [
     "SurfaceMaskEprRecord",
     "SurfaceMaskEprSeriesSnapshot",
     "check_mesh_quality",
-    "inspect_run_trustworthiness",
-    "resolve_palace_result",
     "epr_result",
+    "inspect_run_trustworthiness",
     "reanalyze_epr",
     "resolve_epr_result",
+    "resolve_palace_result",
     "show_epr",
 ]

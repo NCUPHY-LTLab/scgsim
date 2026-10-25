@@ -1,0 +1,225 @@
+---
+title: "萃取 CPW 傳輸線參數"
+description: "準備明確的有限接地 CPW 橫截面，並讀取回傳的 Q2D 單位長度 RLGC 矩陣。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/transmission-line"
+jupyter:
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+execute:
+  enabled: false
+---
+
+## 1. 本流程會得到什麼 {#1-what-you-will-get}
+
+本筆記本會為 AEDT Q2D 準備明確的矩形 CPW 橫截面，並讀取回傳的單位長度電容、電導、電感與電阻矩陣。橫截面依明確尺寸建立；SCGSim 不會從 GDS 或 3D 版圖推測切片。
+
+![宣告的 Q2D CPW 橫截面：矽基板、訊號線與兩個參考接地矩形。為呈現 0.2 µm 金屬厚度，圖中放大垂直比例；這是來源幾何，不是求解結果。](../assets/q2d-cross-section.svg){#fig-q2d-cpw-cross-section}
+
+模型使用寬 200 µm、厚 500 µm 的 Si 基板、寬 10 µm 的 Nb 訊號線、兩條寬 40 µm 的 Nb 接地、10 µm 間隙及 0.2 µm 金屬厚度。[OrcaPen Q2D 筆記本](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/CrossSectionSimulation/CpwFiniteGround/aedt_q2d.ipynb)是由 PDK 維護的橫截面範例。
+
+## 2. 準備環境 {#2-prepare-your-environment}
+
+使用 Python 3.12 或 3.13。安裝 Git 與 [uv](https://docs.astral.sh/uv/getting-started/installation/)，再以固定版本的 SCGSim 與 OrcaPen 來源建立研究環境。
+
+```bash
+uv init --python 3.12 cpw-line-parameters
+cd cpw-line-parameters
+uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@90fb50ef9de80fa6e556d2f2a09fb45707efeea0' \
+  'orpen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@35b4dc1cdd3f921badcac2fe57a98366315ae8d9' \
+  ipykernel
+uv run python -c "from importlib.metadata import version; print(version('scgsim')); print(version('orpen-sc-pdk'))"
+uv run --with jupyter jupyter lab
+```
+
+SCGSim 固定於 `2.0.0rc11`；所選公開 PDK 來源固定於 `35b4dc1cdd3f921badcac2fe57a98366315ae8d9`，匯入名稱為 `orpen_sc_pdk`。請在求解主機安裝 AEDT 2023.2 或 2024.2、PyAEDT 1.3.0，並備妥可用授權。Python 套件負責準備請求，不會安裝 AEDT。
+
+檢查：兩個套件版本都能列印，且 Jupyter 使用本專案的 `.venv`。
+
+## 3. 選擇設定 {#3-choose-your-settings}
+
+準備新的執行前，請先編輯中央設定。矩形位置與尺寸使用微米，設定頻率使用 GHz。Q2D Region 留白的四個值依序為 `(+X, -X, +Y, -Y)`。
+
+```{python}
+#| id: line-parameter-settings
+from pathlib import Path
+
+AEDT_VERSION = "2024.2"  # Select 2023.2 or 2024.2 for the licensed host.
+OUTPUT_DIR = Path(".artifacts/public-cpw-q2d")
+PROJECT_NAME = "public_cpw_q2d"
+DESIGN_NAME = "CpwFiniteGroundQ2d"
+SETUP_NAME = "Setup1"
+FREQUENCY_GHZ = 6.0
+MAXIMUM_PASSES = 3
+REGION_PADDING_UM = (100.0, 100.0, 1000.0, 100.0)
+SUBSTRATE_WIDTH_UM = 200.0
+SUBSTRATE_THICKNESS_UM = 500.0
+SUBSTRATE_ORIGIN_UM = (-SUBSTRATE_WIDTH_UM / 2, -SUBSTRATE_THICKNESS_UM)
+SUBSTRATE_SIZE_UM = (SUBSTRATE_WIDTH_UM, SUBSTRATE_THICKNESS_UM)
+SIGNAL_WIDTH_UM = 10.0
+GROUND_GAP_UM = 10.0
+GROUND_WIDTH_UM = 40.0
+METAL_THICKNESS_UM = 0.2
+SIGNAL_ORIGIN_UM = (-SIGNAL_WIDTH_UM / 2, 0.0)
+GROUND_LEFT_ORIGIN_UM = (
+    -SIGNAL_WIDTH_UM / 2 - GROUND_GAP_UM - GROUND_WIDTH_UM, 0.0
+)
+GROUND_RIGHT_ORIGIN_UM = (SIGNAL_WIDTH_UM / 2 + GROUND_GAP_UM, 0.0)
+AEDT_CORES = 4
+AEDT_RAM_LIMIT_PERCENT = 80
+```
+
+留白值依公開 tuple 順序列出；Q2D 會在內部轉換成原生 Region 呼叫。本例正、負 Y 留白不同，這是明確的模型輸入，不是座標轉換慣例。
+
+檢查：確認 AEDT 版本、頻率、通過次數上限、留白順序及新的輸出資料夾。
+
+## 4. 建立完整橫截面 {#build-cross-section}
+
+使用 PDK 材料記錄，再逐一宣告矩形與導體群組。Q2D 會將真空指定給 Region，因此不需要另外建立真空矩形。
+
+```{python}
+#| id: line-parameter-source
+import orpen_sc_pdk
+from orpen_sc_pdk.materials import get_material_records
+from scgsim.aedt import (
+    AedtResources, MatrixRunControl, PdkMaterial, Q2dConductorSpec,
+    Q2dRectangleSpec, Q2dSpec, prepare_handoff,
+)
+
+orpen_sc_pdk.activate()
+records = get_material_records()
+materials = {
+    name: PdkMaterial(
+        name,
+        records[name]["material_kind"],
+        records[name]["is_superconducting"],
+        records[name]["aedt_library_name"],
+    )
+    for name in ("vacuum", "Si", "Nb")
+}
+rectangles = (
+    Q2dRectangleSpec("Substrate", SUBSTRATE_ORIGIN_UM, SUBSTRATE_SIZE_UM, "Si"),
+    Q2dRectangleSpec(
+        "Signal", SIGNAL_ORIGIN_UM, (SIGNAL_WIDTH_UM, METAL_THICKNESS_UM), "Nb"
+    ),
+    Q2dRectangleSpec(
+        "GroundLeft", GROUND_LEFT_ORIGIN_UM,
+        (GROUND_WIDTH_UM, METAL_THICKNESS_UM), "Nb",
+    ),
+    Q2dRectangleSpec(
+        "GroundRight", GROUND_RIGHT_ORIGIN_UM,
+        (GROUND_WIDTH_UM, METAL_THICKNESS_UM), "Nb",
+    ),
+)
+conductors = (
+    Q2dConductorSpec("Signal", "SignalLine", ("Signal",), METAL_THICKNESS_UM),
+    Q2dConductorSpec(
+        "Ground", "ReferenceGround", ("GroundLeft", "GroundRight"),
+        METAL_THICKNESS_UM,
+    ),
+)
+```
+
+矩形位置代表左下角座標。訊號線與各接地相隔 10 µm；兩個接地矩形共同組成一個 `ReferenceGround`。500 µm 基板向金屬平面下方延伸。真空屬於 Region，導體歸屬則明確列出。
+
+檢查：對照圖示確認每個矩形的材料、原點、尺寸及兩個已宣告導體群組。
+
+## 5. 設定 Q2D 請求 {#configure-the-extraction}
+
+Q2D 前端接收明確的矩形模型與矩陣執行控制。它不會產生 GDS 切片，也不會重用另一個 3D Q3D 模型。
+
+```{python}
+#| id: line-parameter-config
+spec = Q2dSpec(
+    aedt_version=AEDT_VERSION,
+    project_name=PROJECT_NAME,
+    design_name=DESIGN_NAME,
+    materials=materials,
+    vacuum_material_id="vacuum",
+    rectangles=rectangles,
+    conductors=conductors,
+    run_control=MatrixRunControl(
+        SETUP_NAME,
+        frequency_ghz=FREQUENCY_GHZ,
+        maximum_passes=MAXIMUM_PASSES,
+    ),
+    region_padding_um=REGION_PADDING_UM,
+)
+print(spec.to_payload())
+```
+
+檢查：確認儲存的請求明確列出 AEDT 版本、頻率、導體順序、矩形歸屬與公開留白順序。
+
+## 6. 檢查、準備與執行 {#prepare-and-execute}
+
+準備流程會建立求解器套件；下一個儲存格則在具授權的 AEDT 主機上另行執行。若使用遠端求解器，請傳送完整套件，在解壓縮資料夾中執行 `run_aedt.sh`，並取回完整輸出資料夾。
+
+```{python}
+#| id: line-parameter-prepare
+resources = AedtResources(
+    cores=AEDT_CORES,
+    ram_limit_percent=AEDT_RAM_LIMIT_PERCENT,
+)
+handoff = prepare_handoff(
+    spec=spec,
+    output_dir=OUTPUT_DIR,
+    resources=resources,
+)
+print(handoff.spec_path, handoff.archive_path)
+```
+
+執行前請檢查規格與封存檔。已準備的套件或已送出的工作都不代表結果已完成。
+
+```{python}
+#| id: line-parameter-execute
+import subprocess
+
+subprocess.run(
+    ["bash", str(handoff.script_path)],
+    cwd=handoff.run_dir,
+    check=True,
+)
+```
+
+AEDT Desktop 與執行器在同一台具授權的主機上運作。傳輸界線請見[執行與交接](../reference.qmd#execution-handoff)。
+
+檢查：原生執行器已完成，且所選輸出資料夾中有完整回傳內容。
+
+## 7. 解析並解讀 RLGC {#resolve-the-matrix}
+
+請開啟新的分析工作階段並解析回傳資料夾。下方預設路徑是步驟 6 準備的輸出資料夾；若在遠端執行，請改指向完整回傳資料夾。
+
+```{python}
+#| id: line-parameter-results
+from pathlib import Path
+from scgsim.aedt import resolve_results
+
+RETURNED_RUN_DIR = Path(".artifacts/public-cpw-q2d")
+resolved = resolve_results(RETURNED_RUN_DIR)
+physics_rows = resolved.physics_results()
+resolved.show_all_results(show_details=True)
+physics_rows
+```
+
+原生檔案 `results/q2d/rlgc_matrix.csv` 包含主要 C、G、L 與 R 矩陣區塊。請保留其矩陣標籤、導體順序與原生單位長度單位：
+
+| 矩陣區塊 | 原生單位 |
+| --- | --- |
+| 電容 C | pF/meter |
+| 電導 G | mho/meter |
+| 電感 L | nH/meter |
+| 電阻 R | ohm/meter |
+
+解析器也會回報頻率、`LastAdaptive` 解與原生狀態。請依線路模型用途解讀實際變化；本頁不會將 RLGC 轉換為阻抗、傳播常數或相速度。
+
+檢查：報表與資料列應識別回傳執行、導體順序、矩陣區塊、單位及原生狀態。另見 [Q2D 匯出契約](../specs/aedt-runtime.qmd#q2d-native-combined-matrix-export)。
+
+## 8. 調整本筆記本 {#8-adapt-this-notebook}
+
+請明確修改矩形尺寸或材料記錄；中央儲存格會依指定寬度與間隙計算基板、訊號線及接地的原點。尺寸改變時，請更新基準圖示。
+矩形用途改變時，請同步更新導體歸屬，並清楚區分訊號與各參考導體。每次準備都使用新的輸出資料夾；比較不同執行結果時，保留原生矩陣單位。
+
+檢查：準備下一次執行前，先檢視橫截面與序列化請求。後端細節請閱讀 [Q2D 後端課程](../course/aedt-q2d.qmd)；物理問題的區分則見[物理問題概念](../concepts/problems.qmd#finite-extraction-versus-a-cross-section)。

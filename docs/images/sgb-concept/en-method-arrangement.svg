@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" role="img" aria-labelledby="title desc"><title id="title">Source membership of the closed cells</title><desc id="desc">A-only: 8 µm²; intersection: 3 µm²; M-only: 7 µm². The hole and exterior both have membership (0,0).</desc><defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="context-stroke"/></marker></defs><rect width="900" height="620" fill="#fff"/><g font-family="Noto Sans CJK TC, sans-serif" font-size="22" fill="#16324a">
+<path d="M71.0,592.5L838.0,592.5" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M71.0,592.5L71.0,137.40000000000003" fill="none" stroke="#42576b" stroke-width="3" />
+<text x="110" y="612.5" text-anchor="middle" font-size="19">0</text>
+<text x="240" y="612.5" text-anchor="middle" font-size="19">1</text>
+<text x="370" y="612.5" text-anchor="middle" font-size="19">2</text>
+<text x="500" y="612.5" text-anchor="middle" font-size="19">3</text>
+<text x="630" y="612.5" text-anchor="middle" font-size="19">4</text>
+<text x="760" y="612.5" text-anchor="middle" font-size="19">5</text>
+<text x="780" y="610" font-size="20">x (µm)</text>
+<text x="18" y="60" font-size="20">y (µm)</text>
+<text x="59.0" y="578" text-anchor="end" font-size="19">-1</text>
+<text x="59.0" y="496" text-anchor="end" font-size="19">0</text>
+<text x="59.0" y="414" text-anchor="end" font-size="19">1</text>
+<text x="59.0" y="332" text-anchor="end" font-size="19">2</text>
+<text x="59.0" y="250" text-anchor="end" font-size="19">3</text>
+<text x="59.0" y="168" text-anchor="end" font-size="19">4</text>
+<path d="M110,490L500,490L500,244L110,244ZM240,408L240,326L370,326L370,408Z" fill="#1468a0" fill-opacity=".23" fill-rule="evenodd" stroke="#1468a0" stroke-width="3"/>
+<path d="M500,490L630,490L630,244L500,244Z" fill="#238a60" fill-opacity=".23" fill-rule="evenodd" stroke="#238a60" stroke-width="3"/>
+<path d="M500,572L760,572L760,162L500,162L500,244L630,244L630,490L500,490Z" fill="#b56b16" fill-opacity=".23" fill-rule="evenodd" stroke="#b56b16" stroke-width="3"/>
+<text x="155.5" y="276.79999999999995" text-anchor="start" font-size="22">R_A: A=1, M=0</text>
+<text x="565.0" y="326" text-anchor="middle" font-size="22">R_AM</text>
+<text x="565.0" y="354.70000000000005" text-anchor="middle" font-size="22">A=1</text>
+<text x="565.0" y="383.4" text-anchor="middle" font-size="22">M=1</text>
+<text x="695.0" y="268.6" text-anchor="middle" font-size="22">R_M</text>
+<text x="695.0" y="297.29999999999995" text-anchor="middle" font-size="22">A=0</text>
+<text x="695.0" y="326" text-anchor="middle" font-size="22">M=1</text>
+<text x="305.0" y="354.70000000000005" text-anchor="middle" font-size="22">H</text>
+<text x="305.0" y="387.5" text-anchor="middle" font-size="22">0,0</text>
+<text x="214.0" y="190.7" text-anchor="start" font-size="22">Exterior E: 0,0</text>
+<path d="M84.0,449.0L805.5,449.0" fill="none" stroke="#c33936" stroke-width="3" marker-end="url(#arrow)" stroke-dasharray="8 5"/>
+<circle cx="500" cy="490" r="5" fill="#16324a"/><text x="470" y="478" font-size="20">X0</text>
+<circle cx="500" cy="244" r="5" fill="#16324a"/><text x="470" y="232" font-size="20">X1</text>
+<text x="130" y="44" font-size="25">Outside → A only → A∩M → M only → outside</text>
+</g></svg>

@@ -1,0 +1,64 @@
+---
+title: "執行設定檔與本機／手動 HPC 交接"
+description: "精確的啟動設定檔、呼叫端資源、交接識別資訊與回傳要求。"
+lang: zh-TW
+scgsim-kind: "contract"
+scgsim-status: "STABILIZED"
+scgsim-id: "docs/execution-profiles"
+---
+
+準備至回傳的操作流程請依照[執行交接](course/execute.qmd)。本頁規範設定檔／資源與識別資訊要求。
+
+SCGSim 會準備可攜式交接套件；呼叫端負責選擇已準備求解器的執行位置與方式。設定檔記錄啟動形式與呼叫端提供的資源，不會提交排程工作或開啟原生桌面環境。
+
+## 固定交接設定檔 {#fixed-handoff-profiles}
+
+設定檔名稱描述啟動形式，不代表特定網站或主機名稱。
+
+| 設定檔 | 預定用途 | 記錄的證據 |
+|---|---|---|
+| `direct-local` | 在單一主機執行產生的 Palace shell 指令碼 | 執行檔、輸入、環境、結束狀態與產物 |
+| `slurm-single-node` | 提交產生的 Palace 批次指令碼，以使用單一節點 | 工作識別資訊、要求的資源、啟動形式與產物 |
+| `slurm-multi-node` | 提交產生的 Palace 批次指令碼，以使用多個節點 | 工作識別資訊、節點／資源要求、啟動形式與產物 |
+
+Palace 呼叫端必須提供非空的資源對應。Slurm 設定檔要求 `ntasks`、`cpus_per_task` 與 `nodes`。`slurm-single-node` 必須使用一個節點；`slurm-multi-node` 必須至少使用兩個節點，並要求 `mem` 或 `mem_per_cpu`。資源大小由呼叫端負責。`ntasks`、`cpus_per_task`、`nodes` 與 `mem` 等 Slurm 配置鍵會轉成 `#SBATCH` 指令。排程器的輸出與錯誤記錄仍會綁定至交接套件的 Palace 記錄。呼叫端也要提供執行檔、任何主機設定指令，以及可選的啟動器參數。這些值都不是 SCGSim 的全站預設值。
+
+## Palace 指令形式 {#palace-command-shapes}
+
+產生的指令會依設定檔與 `resources.command_style` 而異：
+
+| 選擇 | 產生的啟動行為 |
+|---|---|
+| `direct-local` + `binary` | 使用 `config.json` 呼叫已設定的執行檔；`threads` 會設定 `OMP_NUM_THREADS`。SCGSim 不會加入 MPI 啟動器或 rank 參數，因此只有在直接呼叫符合主機 Palace 建置方式時才使用。 |
+| `direct-local` + `wrapper` | 使用 `-np <processes> -nt <threads> config.json` 呼叫已設定的 Palace MPI wrapper。已安裝的 `palace` 指令碼會包裝 MPI 啟動器（預設為 `mpirun`），並接受這些控制參數；請參閱 [Palace 執行指南](https://awslabs.github.io/palace/stable/run/)與[平行處理指南](https://awslabs.github.io/palace/stable/guide/parallelism/)。 |
+| 任一 Slurm 設定檔 | 產生含呼叫端排程器資源的 `run_palace.sbatch`，並在 Palace 執行檔及 `config.json` 之前呼叫已設定的啟動器（預設為 `srun`）。Slurm 設定檔要求 `command_style="binary"`；不接受 wrapper 模式。 |
+
+使用 Slurm 時，使用者以 `sbatch` 提交準備好的指令碼；指令碼的預設 `srun` 會在資源配置中啟動 Palace 執行檔。`srun` 是排程器啟動器，不是 Palace MPI wrapper。不要在 Slurm 啟動器外再疊加 Palace `-np`／`-nt` wrapper。除非呼叫端另外提供 `threads` 值，否則必要的 `cpus_per_task` 會設定 `OMP_NUM_THREADS`；若覆寫此值，請使其符合排程器配置。已設定的執行檔、啟動器與主機設定指令必須符合目標主機。SCGSim 不會推測 MPI 設定。
+
+Palace 指令碼會在求解指令之前，針對確切的交接 `config.json` 執行原生 `--dry-run` 相容性檢查。若檢查失敗，系統會記錄預檢失敗，且不會呼叫求解器。準備成功本身無法證明執行檔、設定檔或原生幾何有效。
+
+上述命名設定檔描述 Palace 啟動形式。AEDT prepared-native BatchSolve 是另一種 EPR 套件工作流程，不是新的 `ExecutionProfile`，也不會由 SCGSim 提交排程工作。
+
+## 交接生命週期 {#handoff-lifecycle}
+
+```text
+configure model -> inspect input summary -> prepare handoff
+-> transfer the complete package -> run on the target host
+-> retrieve the complete returned package -> resolve and show results
+```
+
+對 Palace 而言，請將 `handoff.handoff_id` 保留在準備端筆記中，不要放進傳送的套件。完整回傳的執行目錄取回後，`resolve_palace_result(run_dir, expected_handoff_id=...)` 會在顯示結果前，使用這筆獨立保留的識別資訊進行核對。不要從回傳套件內的檔案取得預期識別資訊。
+
+### AEDT prepared-native EPR 階段 {#aedt-prepared-native-epr-stages}
+
+| 階段 | 主機責任 | Desktop 與套件界線 |
+|---|---|---|
+| 準備與封裝 | 工作站準備選定版本的模型、儲存並讀回原生 EPR 模型，然後為每個模型建立一個 `NativeBatchPackage` | Desktop 由 PyAEDT 交易控制；僅含 JSON 的交接檔不是原生專案套件 |
+| 求解 | 求解主機使用相同且明確指定的 AEDT 版本及其求解器授權，執行獨立的單主機 AEDT BatchSolve 配方 | 使用套件中的 `.aedt` 與相依項目；此階段不需要 SCGSim、PyAEDT、模型建置環境或可用的 Desktop 工作階段 |
+| 收集與解析 | 工作站取回完整套件與執行嘗試資料，再收集完整自適應歷程與儲存場 EPR | 現有交易會在複本上控制 Desktop；不重建幾何、不執行 Analyze；收集後進行嚴格結果解析 |
+
+每個套件都是獨立模型。參數掃描可以一併傳送數個分開的套件封存檔，但每個套件都有自己的求解嘗試與收集流程。[HPC EPR 參數掃描指南](course/aedt-hpc-sweep.qmd)提供操作順序；[AEDT 執行環境契約](specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)定義套件內容與完成要求。只複製 EPR JSON 或頻率匯出檔，不能取代完整回傳資料。
+
+若使用直接 AEDT 路徑，請將已準備的執行目錄傳送至 AEDT 主機，並取回完整回傳執行目錄。`resolve_results(run_dir)` 會驗證收據綁定的產物；`ResolvedRun.show_all_results()` 會顯示已驗證的主要、基準與指定 EPR 證據。只複製 EPR JSON 檔案並不能取代回傳套件的解析。
+
+不支援外部 gdsfactory／雲端執行，也不會將其作為後備方式。Palace 準備流程不會暗中提交排程工作或開啟 AEDT。[Palace 教學](tutorial-xmon-palace.qmd)與 [AEDT 教學](tutorial-xmon-aedt.qmd)說明各後端專屬的交接與回傳步驟。

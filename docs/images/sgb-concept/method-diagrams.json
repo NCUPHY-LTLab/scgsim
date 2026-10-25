@@ -1,0 +1,141 @@
+{
+  "kind": "method_teaching_schematics",
+  "runtime_output": false,
+  "method_source_commit": "40a7b5721c89907f03c327f6151c2f750fbf8e44",
+  "units": "um",
+  "operands": {
+    "A": {
+      "outer": [
+        [
+          0,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ],
+      "holes": [
+        [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            1
+          ]
+        ]
+      ]
+    },
+    "M": {
+      "outer": [
+        [
+          3,
+          -1
+        ],
+        [
+          5,
+          -1
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          3,
+          4
+        ]
+      ]
+    }
+  },
+  "shared_nodes": {
+    "X0": [
+      3,
+      0
+    ],
+    "X1": [
+      3,
+      3
+    ]
+  },
+  "membership_cells": {
+    "R_A": {
+      "membership": [
+        1,
+        0
+      ],
+      "area_um2": 8
+    },
+    "R_AM": {
+      "membership": [
+        1,
+        1
+      ],
+      "area_um2": 3
+    },
+    "R_M": {
+      "membership": [
+        0,
+        1
+      ],
+      "area_um2": 7
+    },
+    "H": {
+      "membership": [
+        0,
+        0
+      ],
+      "area_um2": 1
+    }
+  },
+  "shared_3d_edge": {
+    "points": {
+      "p0": [
+        0,
+        0,
+        1
+      ],
+      "p1": [
+        2,
+        0,
+        1
+      ],
+      "p2": [
+        4,
+        0,
+        1
+      ]
+    },
+    "top_refs": [
+      "+e01",
+      "+e12"
+    ],
+    "wall_refs": [
+      "-e12",
+      "-e01"
+    ]
+  },
+  "images": {
+    "method-arrangement.svg": "789b395fa065a692de75d43c28e7ba5afc6ff22c83020cd9689e82e25df3499a",
+    "method-shared-edge.svg": "749bc533be5c6019f3c62e6039970be4d26cd44cb59a4d10568383557d7ed641",
+    "method-shared-network.svg": "2cf5c25517f828e40b7e548acf6e35b40e9676d96253584296b037dc4e43ef43",
+    "method-source-edges.svg": "e01766812bdbb00de939a02861bed518c4897beece7255216e2700e8f4d36c9a"
+  }
+}

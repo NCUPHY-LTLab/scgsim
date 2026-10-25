@@ -2,11 +2,13 @@
 title: "AEDT: analyze a sealed saved-field solution"
 description: "Verify a saved cohort and evaluate EPR in a native workcopy without requesting another solve."
 scgsim-kind: "course"
-scgsim-status: "STABILIZED"
+scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-saved-fields"
 ---
 
-Prerequisite: a completed source-first
+For the complete mode-and-participation workflow, start with
+[read mode energy participation](../tutorials/resonance-epr.qmd). This saved-field
+reference requires a completed source-first
 [AEDT Eigenmode/EPR run](../tutorial-xmon-aedt.qmd), the complete returned
 saved-field cohort, and its matching prepared geometry and request. Follow
 [full-run resolution](returned-results.qmd) first. A project file alone is
@@ -15,9 +17,12 @@ saved-field evidence must identify the same model, design, setup, variation and
 pass.
 
 This stage evaluates fields through **native AEDT** in an owned disposable
-workcopy. It does not solve again, but it requires AEDT 2024.2, PyAEDT 1.3.0 and
-a license. The next lesson's JSON loss reanalysis is the operation that can run
-without opening the solver.
+workcopy. It does not solve again, but it requires a request that explicitly
+selects AEDT 2023.2 or 2024.2, PyAEDT 1.3.0 and a license. If the saved artifact
+has no recorded source-version origin, that origin stays unknown; analysis is
+still allowed and uses the explicitly requested local version without looking
+up or guessing the historical origin. The next lesson's JSON loss reanalysis is
+the operation that can run without opening the solver.
 
 ## Recover the exact prepared model
 
@@ -49,7 +54,9 @@ an ordinary Eigenmode spec cannot acquire them by reading this lesson.
 ```python
 from scgsim.aedt import analyze_epr
 
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 final_epr = analyze_epr(
+    aedt_version=AEDT_VERSION,
     saved_solution=saved,
     geometry=spec.geometry,
     project_name=spec.project_name,
@@ -59,6 +66,18 @@ final_epr = analyze_epr(
     output_dir=Path(".artifacts/public-xmon-saved-field-analysis"),
 )
 ```
+
+An explicit native sheet-field selector is optional. Pass
+`surface_field_selectors={contribution_id: "surface"}` or use `"adjacent"`
+for an existing selected contribution ID when the caller wants to choose the
+native calculator side. Each entry applies to every binding and requested
+component, evaluation, and margin for that contribution. Unknown or unselected
+IDs and unsupported values fail explicitly. Omitting a contribution preserves
+its existing normal-derived selector behavior. This choice does not change
+the source `SurfaceEprSpec.field_side` and does not verify the sampled material
+side. Native command/name readback records the selector operation, not a
+material-side identity proof. The choice does not trigger another solve or
+geometry rebuild.
 
 The new output directory preserves the original released solution and normal
 run receipt. SCGSim archives/copies the immutable evidence, reopens the working
@@ -74,3 +93,19 @@ assumptions. Continue to [offline EPR](offline-epr.qmd), where `reanalyze_epr`
 updates assumptions on these recorded numerators without native execution.
 The [runtime contract](../specs/aedt-runtime.qmd) owns exact saved-field context,
 material-side support and analysis failure behavior.
+
+## Optional project-instruction block
+
+Optionally copy this guidance into the study's own project instructions or
+`LESSONS` when an authorized saved-field comparison needs careful SurfaceEPR
+interpretation:
+
+```markdown
+For an authorized SurfaceEPR saved-field comparison:
+- Preserve the original completed run, exact final saved-field cohort, source/spec, and result files. The public `scgsim.aedt.analyze_epr()` function analyzes a resolved `SavedSolution` in an owned workcopy; pass the same prepared geometry, run control, EPR request, an explicit AEDT version, and a new output directory. This saved-field analysis call does not request another solve. If choosing `surface_field_selectors`, set only the caller-selected contributions; `surface` and `adjacent` select calculator operations, not physical material sides.
+- Compare with the original final saved-field result for the same geometry, mode, and pass. Report the recorded mode and pass identities for both results; if either is missing or differs, state that instead of treating them as a matched comparison.
+- For each contribution and binding, inspect the returned evaluation and binding/selection evidence to establish the support actually used. `evaluation_kind` and `margin_um` label an evaluation; they do not by themselves establish that one mask is nested in another. If available support evidence cannot establish nesting, report it as unknown. Treat requested masks as alternative evaluations of the same physical interface, not as additional physical films. An unmasked baseline is a reference evaluation, not another chosen mask.
+- For each compared contribution, inspect `interface_kind`, source `field_side`, effective/substrate domain and material IDs, source support/selection evidence, the saved analysis carrier's `native_normal`, and the recorded requested/applied calculator selector and CLC operation. Compare expression identity and evaluation/margin context with raw integral values and units and recorded normalization. A normal, selector name, or frequency record alone does not establish material-side correspondence.
+- Preserve and link the original and new outputs. Report observed changes, limits, and missingness. Do not swap labels or values, clamp results, choose the smaller result, or introduce a tolerance. Geometry, materials, mode, pass controls, masks/evaluation criteria, EPR request, environment, resources, or replacing/writing source data require their separate authorization.
+- Use only the study's existing permission and resource allocation. SCGSim records caller choices; it does not choose a physical side or grant compute permission.
+```

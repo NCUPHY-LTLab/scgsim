@@ -1,0 +1,180 @@
+---
+title: "GeometryPlan 與 SGB Route A／B"
+description: "GeometryPlan 來源身分、出現實例與 Net 歸屬、路徑轉換及輸入摘要。"
+scgsim-kind: "contract"
+scgsim-status: "ACCEPTED"
+scgsim-id: "docs/geometry-sgb"
+lang: zh-TW
+---
+
+來源順序請見[共用 Xmon 輸入](tutorial-xmon-input.qmd)及[來源觀察](course/source-observations.qmd)。[SGB 幾何概念](concepts/geometry.qmd#source-stage) 說明來源、規劃及建構階段；本頁負責它們的確切契約。
+
+樹內 `scgsim.geometry` API 是 SCGSim 目前的來源幾何權威。它使用結構化 PDK 與元件語意，不從求解器產生的標籤重建幾何意義。
+
+`scgsim.geometry` 是面向來源的外觀介面：`GeometryPlan`、獨立快照、正規化輸入模型、轉接器、堆疊／真空／曲線準備及摘要。`scgsim.geometry.compiler` 負責進階路徑建構器、衍生建構紀錄、階段驗證器及分派。來源驗證器定義於 `scgsim.geometry.source.validation`，由編譯器外觀介面重新匯出。直接定義模組及模型別名列於 [API 遷移參考](api-migration.qmd#geometry-and-compiler-api)。
+
+`build_component_stack()` 組合兩個明確權威。PDK `LayerStack` 紀錄提供材料、製程層、Z／厚度、導體／求解角色及確切宿主體積。元件註記提供局部實體身分、埠、功能導體區域及拓撲選取器。Notebook 組合具名出現實例並指派最終 Net 映射，不手動指定 PDK 或元件事實。
+
+公開 Xmon 組合中的可重用子元件保留局部焊墊、耦合器、遮罩及接地臂金屬貢獻。該臂與殘餘接地平面重疊，因此不是獨立導體 Entity；若將它建模為獨立 Entity，就會重複金屬。根組合透過既有堆疊配方提供一個 D0 與一個 D1 平面，再使用明確物理導體層綁定，將出現實例局部的接地臂幾何聯集至 D1 平面；繪圖或遮罩層不隱含該目標。它不將完整接地平面 Entity 複製至每個子出現實例，也不自動建立平面。Notebook 負責共同平面、局部裝置 Entity 及具名接地連接之間的最終 `Net -> Entity` 映射。幾何不推論電氣連通性，也不合併子 Net 映射。
+
+## 共用物理來源與表示 {#physical-representation}
+
+共用物理來源／近似設定範圍為 **CONVERGING**。其[物理表示契約](specs/physical-representation.qmd) 區分來源物理分類及選定求解器表示。單一中性計畫將每個原始 Entity 與物理層，綁定至有效幾何、支撐及完整包絡追蹤。本體保留實際來源端點及孔洞；名義層跨度不能取代本體。缺少合格接觸或宿主關聯時，保留缺項，不加推論。
+
+Palace 與 AEDT 使用同一個選定解讀。不同明確近似設定保留不同近似意義；來源附著法向不決定原生 HFSS 場側選取。歷史紀錄的來源與執行期同批產物，保留原始解讀與身分。
+
+## 來源曲線與原生共用拓撲 {#source-curves}
+
+曲線範圍為 **ACCEPTED**。只有多邊形的輸入保留多邊形邊界。曲線是明確來源宣告，不是從繪出版圖或網格推論的平滑化。
+
+`SourceCurveSpec` 以微米描述 XY 座標。支援類型為 `line_segment`（兩端點）、`circular_arc`（起點、弧上點、終點）、`interpolation_spline`（通過提供點的原生插值），以及 `bspline`（控制點及明確階數，並在提供時包含有理權重、不同節點及重數）。選用的 `parameter_interval` 修剪原生來源曲線，不縮放或重新擬合幾何。控制點不是拓撲頂點。`circular_arc` 轉換為原生定義域 `[0, 1]` 上單一精確複合有理 B-spline；內部節點分隔精確區段，修剪可跨越這些節點。呼叫端指定 `bspline` 時，所提供階數、權重、節點、重數及原生參數定義域維持權威。
+
+`BoundaryCurveChainSpec` 將有序閉合邊界綁定至 `entity_id`、`boundary_id` 及 `selector_point_um`。選取點位於所選 Entity 擁有的**正導體區域**。複合來源多邊形在選取前先聯集為邏輯多邊形，包含以橋接方式編碼的 GDS 孔洞。`role="outer"` 選取外環；`role="hole", hole_index=0` 選取同一多邊形紀錄的第一個孔洞。孔洞選取點仍位於導體內，不在空孔內。孔洞順序與來源方向隨出現實例傳遞；原生標記不識別 Entity、Net 或來源邊界。
+
+元件語意的 `boundary_curves` 與 `boundary_reconstruction` 紀錄使用局部 Entity 及邊界 ID。GeometryPlan 以已註冊出現實例限定它們，並將剛體 XY 轉換套用一次。組裝輸入請使用帶限定 ID 的 `plan.set_boundary_curves(records)` 或 `plan.set_boundary_reconstruction(records)`。獨立快照保留來源多邊形、宣告及出現實例來源資訊；來源快照沒有即時 Gmsh 模型。
+
+`GdsBoundaryReconstructionSpec` 要求明確有序的 `segment_indices`：索引 `i` 表示由頂點 `i` 至 `(i + 1) % N` 的原始邊。選定連續鏈可跨越索引零。`closed=True` 選取整個環；部分鏈保留原端點，每個未選取直線段維持不變。`anchor_indices` 識別重建使用的原始頂點，`degree` 及 `parameter_interval` 保留要求的樣條操作。閉合圓重建使用三個明確錨點；開放弧使用起點、弧上點及終點錨點。重疊替換鏈或互相競爭的整體邊界宣告，不能擁有相同來源線段。
+
+對啟用的宣告，樹內編譯器在指派材料介面前建立單一原生 OCC 平面排列。原生布林歷史保留來源成員及修剪參數區間。相同排列曲線構成金屬、介電與真空補集及埠分割的邊界。指定堆疊提供 Z；共用排列邊的集體原生 1D 至 2D 掃掠建立精確直紋壁，並保留修剪曲線幾何。它保留共用上緣，以及每個來源頂點的一條垂直邊。由表面起始的殼接著形成求解體積，包含內部 PEC 空腔殼。原生建構錯誤向外傳遞；沒有直線邊備援、逐表面重新擬合或全域體積修復。
+
+標準 Gmsh 殼 AutoFix 修正殼方向時可能替換原生面標記。SGB 透過完整原生線框／邊對應，將各修復面重新綁定至來源 `SurfaceID`，再將來源映射帶入匯出與後端建構。來源身分固定，數值 Gmsh 標記可以改變；不使用標記、座標、面積或順序猜測替代面。已觀察的 Circle Route B 建構中，共用面與金屬切口邊界仍綁定來源，埠薄片保持獨立表示。若無法保留對應或必要拓撲，原生建構會失敗，不輸出備援幾何。
+
+隱藏的同 Net 接觸保留型別化 `MMContactRecord` 歸屬，不成為 MM 物理群組。其新增的 `geometry_ref` 包含獨立的正規點、曲線及表面環定義，並具有可解析的 `outer_loop_ref` 與 `hole_loop_refs`。共用即時邊界曲線使用相同正規 ID。真正的多邊形接觸保留 `outer_loop`；真正的曲線接觸則記為 `None`。平面接觸可記錄平面法向；曲壁記錄 `normal=None` 及實際表面幾何，不虛構固定方向。實際接觸幾何不指派 Net，不同 Net 接觸仍是物理短路錯誤。
+
+建構計畫的 `metadata.curved_arrangement` 區分要求的來源綁定／重建，以及實際原生區間、成員與 Z 掃掠。其獨立邊界傳輸保留共用原生面與邊；求解器／網格標記仍屬轉換資料。幾何階數與有限元素階數是不同選擇。曲面模型幾何不會讓正表面內縮成為精確曲線周界距離；請見 [EPR 解讀](eigenmode-epr.qmd#surface-identity-masks-and-loss-assumptions)。
+
+Palace Route A／B 透過既有幾何入口使用啟用的曲線意圖。既有路徑分派拒絕保留導體的 Route C 上啟用曲線意圖；只有多邊形的 Route C 行為不變。目前 AEDT 平面轉換明確拒絕啟用宣告，不默默替代為診斷用多邊形。
+
+## 元件至後端幾何契約 {#component-to-backend-geometry-contract}
+
+已接受契約在 Palace 或 AEDT 準備之前，明確建立元件局部幾何與階層。公開 `scgsim.geometry.GeometryPlan` 是可變 Notebook 建構器：建立展開元件實體清單，並儲存最終 `Net -> Entity` 指派。其 `prepare()` 方法回傳不可變 `GeometryPlanSnapshot`；`GeometryBuildInput` 仍是後端準備路徑使用的正規化幾何邊界。
+
+以 `GeometryPlan(component=assembled, root_id="chip", layer_stack=..., material_records=..., coupon_padding_um=..., grid_size_um=layoutgrid_um)` 建立計畫。在建構儲存格之前，先將來源版圖 DBU 設為選定的 `layoutgrid_um`。使用 `register_instance("chip/q0", q0_ref)`，依父實例優先順序註冊每個具名參考出現實例。`plan.entities` 提供既有語意實體清單，其 `.semantic_id` 以斜線限定。Notebook 以 `set_nets({NetID: tuple(qualified_entity_ids)})` 提供最終映射；`prepare()` 回傳凍結的 `GeometryPlanSnapshot`，包含正規化 `geometry_input`、堆疊、GDS 位元組與摘要，以及獨立來源出現實例紀錄，不保留即時元件參照。Palace 與 AEDT 透過 `EigenmodeSim.set_plan(snapshot)` 使用該確切快照。
+
+`GeometryPlan`、`build_gds_stack_geometry_input(...)` 與 `build_gdsfactory_geometry_input(...)` 接受 `grid_size_um=None`。使用 `None` 時，實際輸出的 `source_dbu_um` 提供共用版圖格距；明確不符時會引發錯誤，指出 `grid_size_um` 與 `source_dbu_um`。SCGSim 檢查來源 DBU，不改動共用 PDK 或全域狀態。`metadata.geometry_grid` 記錄值為 `scgsim.geometry.grid.v1` 的 `schema_version`、選定的 `grid_size_um`，以及值為 `assembly_xy` 的 `coordinate_frame`。它識別組裝 XY／層排列共用的固定精度格點。缺少 `metadata.geometry_grid` 的儲存輸入保留歷史解讀。原始來源身分與計算變更帳冊一同保留，壁面繼承吸附至格點的版圖端點。Z 座標、薄膜厚度、網格、積分及求解器容差維持分開；XY 格點不宣稱每個 3D 座標都位於其上。固定格點 XY 邊界形成單一共用節點化網路。每條原始有向環邊，透過明確格點像素關聯攜帶其運算元、環及線段順序；重合邊保留全部來源。原始交點與原生格點近頂點事件，在捨入之前分割這些有向路徑。
+
+有向邊轉換決定面成員資格，每個運算元由相同單元重建，不再進行另一次格點吸附。來源路徑不明確或標籤不一致會明確失敗。物理接觸、孔洞及分量檢查仍與原始輸入比較。
+
+對元件語意結構 v2，配對堆疊加入衍生來源出現實例紀錄，不新增使用者多邊形選取 API。每列 `metadata.source_occurrences` 將註冊路徑與父路徑綁定至儲存格名稱、組合轉換及 `reference_index`：此值為父儲存格內從零起算的參考序號，根則為 `null`。一個註冊出現實例命名一個實際 GDS 參考。使用端必須先將陣列展開為明確個別參考；`GeometryPlan` 不自動展開陣列。各層 `geometry.source_occurrence_polygons_um` 及各 `metadata.port_sheet_source_layers` 項目的 `source_occurrence_polygon_um`，以微米保留選定外環與孔洞環。讀取器檢查配對 GDS 雜湊，將各路徑綁定至紀錄的父參考與子儲存格，轉換來源資料庫單位、重新套用組合轉換，並重新計算環線。這讓不同具名出現實例中相接的同層幾何保持區別。既有 schema-v1 堆疊讀取器保留其選取器解碼行為。
+
+元件語意 v2 也接受 `component_semantics.ground_plane_contributions`。每筆紀錄恰好包含 `local_id`、`plane_id`、`level`、`layer` 及 `selector_point_um`。局部 ID 命名元件局部金屬貢獻；`plane_id` 命名根局部衍生平面。`level` 是物理導體層級，必須符合目標平面的 `metadata.logical_layer_id`；`layer` 是與局部選取點搭配的來源 GDS layer／datatype 配對。因此繪圖或遮罩層不會隱含選擇目標導體面。
+
+準備使用選取器，在宣告的來源 GDS 層解析出一個連通的出現實例局部金屬區域。此區域可包含多個融合的原始 GDS 多邊形。根平面與出現實例路徑使用相同局部平面／遮罩／納入幾何配方。GeometryPlan 套用出現實例轉換一次，依配對 GDS 驗證所得外環與孔洞環，並記錄於根平面的 `geometry.source_occurrence_includes`。根平面 `metadata.ground_plane_contribution_sources` 保留出現實例路徑、局部 ID、物理層級及來源層。選定區域若包含同一物理層級另外宣告的局部導體，會遭拒。這些納入區域在多邊形轉換前成為殘餘平面的一部分；它們不是獨立導體 Entity 或 Net 指派，GeometryPlan 不推論連通性或保證分開量測。
+
+計畫負責共用外部真空包絡。在 `prepare()` 之前，以 `plan.set_vacuum_region(padding=...)` 設定，使用既有純量、X／Y／Z 元組，或六面微米映射形式。兩個後端取得相同包絡；`Sim` 使用計畫快照後，嘗試加入獨立 `set_geometry()` 或 `set_stack()` 輸入，或衝突的 Palace `set_vacuum_region()`／`set_airbox()` 值，都會以原子方式失敗。不能只替換部分綁定來源。若要變更元件、堆疊或邊界，請更新計畫並準備新快照，再以新快照呼叫 `set_plan()`。舊式獨立輸入流程使用新的 `Sim`。不推論預設留白。來源指定的 `D0_TO_D1_GAP` 仍是外部區域內獨立真空實體。
+
+元件註記結構 v2 將導體區域身分、層級、層及拓撲選取器保留在元件局部，移除元件層級 Net 及群組指派。選用埠紀錄識別局部來源層及目標邏輯層。計畫準備驗證每個來源埠與薄片，並轉換薄片一次。限定譜系可識別如 `chip/q0/o_junction_lumped` 的項目。Palace 將此限定埠名綁定至目標邏輯層；AEDT 接面使用相同正規化來源薄片及紀錄的重疊。
+
+### 明確矩形接面 {#explicit-rectangular-junctions}
+
+來源埠薄片代表矩形接面時，使用 `scgsim.geometry` 的 `JunctionTerminalBinding` 與 `RectangularJunctionSpec`。先準備計畫，檢查確切埠薄片、來源多邊形、出現實例、導體 Entity 及 Net 身分。明確綁定選定薄片及兩端子擁有者，再於下次 `prepare()` 前呼叫 `GeometryPlan.set_rectangular_junctions(specs)`。對正規化 `GeometryBuildInput`，`with_rectangular_junctions(build_input, specs)` 回傳對應的獨立要求。
+
+`RectangularJunctionSpec` 命名 `junction_id`、`port_sheet_id`、`source_polygon_id`、`source_occurrence_path`，以及 `terminal_a`、`terminal_b`。每個 `JunctionTerminalBinding` 命名一個 `source_entity_id`、其 `source_occurrence_path` 與 `net_id`。兩端子 Entity 與 Net 必須不同，且符合來源計畫。此明確綁定選取各端子的實際來源重疊；規劃器不搜尋其他出現實例，也不依距離推論擁有者。
+
+共用幾何解讀器在規劃接觸、介面與建構目錄之前，依來源資料庫單位及既有物理附著，一次推導完整中央矩形與端子擁有的端部金屬。Palace Route A 繼續套用既有宿主介面、共同平面與共同體積規則。Palace 與 AEDT 使用相同衍生來源分割；AEDT 驗證該要求，不另推導矩形。Palace `add_port(...)` 仍將電感綁定至來源指定埠名，不選擇物理端子擁有者。
+
+端子合併來源與端部支撐後，內部抵消的接縫不是新增表面意圖。
+
+| 事實或操作 | 已接受契約 |
+|---|---|
+| 元件定義 | 持有局部多邊形、來源 Entity ID、埠、拓撲選取器及局部元件事實。重用元件不改寫局部 ID。結構 v2 不指派最終 Net，也不在元件內提供公開 `Group` API。 |
+| 元件出現實例 | `register_instance(path, reference)` 將具名路徑綁定至實際 GDSFactory 出現實例。父路徑區段先於子區段註冊。路徑在展平之前限定實體與多邊形身分；旋轉及反射一致套用至幾何、選取器及埠。 |
+| Notebook Net 映射 | 只在 `GeometryPlan` 指定最終 `Net -> Entity` 映射；元件不攜帶中間或子 Net 指派。成員只能指派至一個 Net；同 Net 重複成員會去重。沒有公開元件 `Group` API、隱含連通性或子 Net 合併框架。 |
+| 指派驗證 | 映射更新具有原子性。未知或不明確實體參照，以及同一實體跨不同 Net 指派，會拒絕整次更新。未映射實體保持未指派（`None`）；後端只在操作需要時要求 Net 綁定。 |
+| 來源譜系 | 不可變快照將來源 Entity 及多邊形身分，與衍生群組成員分開保留。Entity 是譜系，不保證原始逐 Entity 量測或場運算式。`semantic_group_id` 不重用為 Entity 身分或來源譜系。 |
+| 計算群組 | 新物理網格分組只服務高數量幾何。只有明確 Net、材料、局部來源 Entity ID、父出現實例內容及角色全部相符時，副本才可共用計算物理群組。限定 Entity／成員譜系仍可取得；未指派 Net 維持分開。例如此試片中八個同層級 Ground 凸塊映射至一個物理群組，同時保留八個 Entity ID。舊紀錄物理群組策略維持版本專屬。AEDT 擁有者／介面／積分群組維持後端專屬及既有策略。 |
+| 後端轉換 | Palace 與 AEDT 透過既有準備路徑使用同一準備來源快照。原生彙總保留來源成員與涵蓋範圍。不保證逐片原生結果、逐 Entity 原始量測或逐 Entity 場運算式。 |
+| 真空幾何 | 來源指定的真空實體保留名稱、材料、宿主及逐域分析身分。在來源輸入層級，計畫依既有 SGB 優先序／切割規則，加入一個外部背景域，作為已建模本體及自訂區域的語意補集。後端負責原生分割表示。公開 `D0_TO_D1_GAP` 保持獨立真空實體。 |
+| AEDT 物件名稱 | 新原生名稱可讀且可重現，依需要清理及消除歧義，仍綁定原始限定 Entity ID。歷史準備名稱保留版本專屬讀取器策略。 |
+| 邊界預設值 | Palace 將未指定的外部真空邊界保留為自然 PMC 條件。AEDT 使用 HFSS 預設 Perfect E。共用輸入不將一種政策轉成另一種。 |
+
+以上為已接受的 V1 語意。來源準備建立幾何輸入契約，不代表原生幾何驗證或求解器執行。
+
+### 已接受的 Q3D 來源正規化 {#accepted-q3d-source-normalization}
+
+Q3D GeometryPlan 前端屬於已接受的 v2 實作／API（2026-10-09 接受，候選版本 `a932a173edb5c56ae14740ff5177190996255bdd`）。識別的 `airbridge_deck` 及 `airbridge_post` 紀錄，在正規化快照中仍是角色中立的來源幾何；正規化不賦予 Palace 路徑表示或原生導體角色。選定的 Palace 路徑繼續拒絕無法表示的導體。AEDT Q3D 透過獨立有限 C／G 來源前端，使用快照中呼叫端指定的最終 Net 成員及明確物理接地角色。目前 AEDT 轉換仍拒絕來源曲線意圖，不默默線性化。此已接受來源契約不宣稱 Q3D 求解完成或已觀察回傳矩陣。
+
+## 目前 Surface-EPR 方向 {#current-surface-epr-direction}
+
+| 路徑 | 公開意圖 | 目前狀態 |
+|---|---|---|
+| Route A | 零厚度面金屬 PEC 薄片與有限凸塊殼 | 已實作、已接受 |
+| Route B | 有限建構金屬體積的閉合外部邊界殼為 PEC；其內部從 Palace 求解域排除，不產生四面體 | 已實作、已接受 |
+
+目前方向只包含 Route A 與 Route B。
+
+## 歷史 SGB 幾何距離帶（已撤回） {#surface-distance-bands}
+
+SCGSim 已不再提供 SGB 幾何距離帶產生器。本節保留舊設計範圍，供閱讀舊資料時參考；`GeometryPlan.set_surface_distance_bands(...)`、`SurfaceDistanceBandSpec` 與 Palace 彙總 API 都不是現行介面。
+
+已撤回的設計會從指定平面父面及原始外環、孔環邊界切出幾何區域，為各子區保留來源譜系，並將區域送入 CAD 與網格流程。其 EPR 彙總依賴已完成的 Palace 結果，不需要 Q2D。這些歷史區域不同於 Palace 原生 Mask／Inset 資料列：當指定的 Palace 可執行檔支援時，仍可透過 `inset_margins_um` 要求原生 Mask／Inset。請見現行 [Palace Electrostatic 契約](specs/palace-electrostatic-sgb.qmd#native-mask-inset)。
+
+## 內部語意投影 {#internal-semantic-projection}
+
+SGB 對每個來源／模型版本，將已驗證來源事實投影至 `scgsim.semantics` 一次。規劃模型時重用不可變投影，不為每個介面配對深複製完整堆疊來重建。介面分類及每個擁有者投影仍是不同操作：求解實體／真空排序，不能與宣告表面擁有者、舊式雙擁有者紀錄、薄片擁有者或彙總物理群組擁有者互換。
+
+投影可表達有限 PEC、表面薄片 MA／MS、局部 MM／MA 片段資料、明確側別意義，以及外環／孔洞／接縫譜系，不將分類當成接觸證明。宣告、規劃與觀察紀錄仍可區分。原生標記與群組是不透明觀察，不是重建的成功結果；重複觀察不會倍增單一語意貢獻。
+
+`plan_route_surfaces()` 負責公開投影邊界：省略外觀物件時建立一次，提供時則驗證相同路徑及建構輸入指紋，再於既有鄰接呼叫位置重用。明確指定的介面種類及擁有者中繼資料，優先於衍生預設值。Route-A 薄片接觸平面範圍維持 `MM` 拓撲關係，但轉換為既有 `MS` 端帽並使用既定物理名稱前綴；周圍薄片仍可攜帶獨立分類的 MA／MS 資料。
+
+直接語意核心使用端可選擇不提供 Route-A 近似設定。既有明確 Palace Route-A 入口仍要求 `substrate_face` 或 `metal_gap_equivalent`，Route B 仍拒絕這兩者。核心沒有近似設定時，座標不變且不記錄壓縮。`metal_gap_equivalent` 保持既有有效座標正規化，不宣稱可逆壓縮。
+
+堆疊沒有 PDK 真空層時，只有呼叫端選用 `set_vacuum_region()`，省略導體宿主宣告才綁定至內部產生的背景。相同正規化多邊形對基板區域接觸檢查，同時為指定宿主與產生背景的堆疊提供 Route-A 物理支撐。它考慮完整外環與孔洞，要求唯一正面積接觸；包圍盒相交、點／邊接觸或自動區域邊不足以成立。已指定但無法解析的宿主名稱仍失敗，不默默重新綁定。單基板 `substrate_face` 沒有相對晶粒或間隙值；兩個相對基板保留物理 `substrate_face`，以及不同且限雙面的 `metal_gap_equivalent` 正規化。產生的 Region 在來源幾何之後套用近似設定，並繞實際介電與有限 PEC 佔據區分割。Route-A 薄片不扣除虛構體積。
+
+Route-A 支撐是局部的，不是整片標籤。薄片多邊形在建立裸露 SA／AA 表面之前，先依確切底部／頂部求解覆蓋分割，因此基板孔洞保持為孔洞，部分支撐的壓力測試案例保留支撐與暴露的不同子表面。每個子表面保留有序底部／頂部資料；MM 接觸端帽只保留接觸切割後剩餘側別。埠平面範圍選取相交子表面，若跨越不相容局部域配對則失敗。不支援完全懸空薄片。
+
+從 SA 片段移除導體面時使用相同局部域分割。即使單一導體橫跨數個相鄰域，規劃器只扣除與該確切求解配對片段的面重疊。AEDT 接面分割後，只有轉接器產生的 Route-A 薄片平面範圍，會從最終導體多邊形重建；呼叫端指定的介面宣告保留不變。
+
+Route B 保留有限幾何，並記錄局部頂部、底部及側壁的材料側資料。幾何鄰接仍是集合，新增貢獻帳冊則保留語意重數。同一 Route-A 子表面的兩個同類 MA 側，共用單一原生表面及單一彙總 Palace 資料列，不重複或倍增。該彙總需要 Palace 內部邊界切開，不代表側別解析數值輸出。AEDT 貢獻目錄來自物理規劃帳冊項目，依貢獻身分分組為一列目錄，同時保留每個不同片段綁定。沒有物理帳冊資料的一般宣告，仍是語意中繼資料，不產生額外數值 EPR 貢獻。
+
+## 身分要求 {#identity-requirements}
+
+交接保留：
+
+- 來源 SGB 版本；
+- 語意表面及體積身分；
+- 路徑選擇及拓撲憑證；
+- 產生的網格／設定身分；
+- 從求解器實體回到語意幾何的映射。
+
+外部 SGB 版本仍僅屬衍生歷史。樹內 `scgsim.geometry` API 是目前權威，其面向來源的計畫與編譯器階段維持分開。不隱含直接外部使用端或備援路徑。
+
+## AEDT 共用來源事實 {#shared-source-facts-for-aedt}
+
+`GeometryPlan` 是 Palace 與 AEDT 的共用來源前端。準備快照包含正規化 `GeometryBuildInput` 多邊形（含孔洞環）、實體、求解區域、來源資訊及路徑近似設定，以及準備堆疊與來源出現實例紀錄。連結來源的接面宣告保留端子 Net、方向、尺寸、電感與電容；這些欄位不追溯歸屬至正規化 `GeometryBuildInput`。AEDT 不使用 `ConstructionPlanRecord`、Gmsh 表面、物理群組或原生標記。
+
+AEDT 準備也從明確來源／有效層紀錄，建立私有程序內表示內容。它綁定各語意實體的物理層身分、來源與有效 Z 區間及薄片／實體表示，以及已映射外部包絡。共用平面貢獻規劃器直接使用這些事實，不從實體中繼資料推論 AEDT 建模，也不將內容視為 Palace Route A、B 或 C 選取。此內容不改變公開計畫快照、來源 GDS 或序列化來源結構。Palace 編譯繼續使用明確 Route A／B／C 契約。
+
+AEDT 負責的綁定附屬檔，必須另外記錄每個建立的本體、薄片、面、材料側、選取及已儲存場運算式與來源身分的關係。原生面重疊或鄰接查詢是觀察幾何資料，不能製造來源接觸意圖。Route-A 近似設定正規化仍在共用前端邊界只發生一次；Route-B 有限本體事實仍與 PEC 近似及實現它們的 AEDT 實作區分。
+
+## 準備資源（CONVERGING） {#preparation-resources}
+
+在來源準備及網格產生外層使用 `scgsim.preparation.preparation_resources(max_workers=...)`，共用單一準備工作者預算。未使用此範圍時，準備採序列執行。
+
+```python
+from scgsim.preparation import preparation_resources
+
+with preparation_resources(max_workers=30):
+    snapshot = plan.prepare()
+    sim.set_plan(snapshot)
+    sim.set_mesh(threads=30, surface_threads=30)
+    sim.mesh()
+```
+
+此範圍對獨立來源配方、具索引的來源路徑批次、零面積支撐分類及逐運算元重建，重用單一執行緒池。結果與工作區域來源稽核依輸入順序合併。固定格點運算元共用相同邊界網路及標記單元；來源路徑歸屬及面轉換維持可重現。未量化父平面保留獨立建構路徑。巢狀工作重用預算，不建立另一個池。準備工作在 Gmsh 子程序啟動前完成；其要求執行緒上限必須為正值，且符合明確範圍的預算。
+
+此設定限制 SCGSim 準備工作者；對應 CPU 請另透過排程器配置。Gmsh 執行緒上限與 Palace MPI／OpenMP 設定控制各自階段。`preparation_diagnostics(output_dir, profile=False)` 可在此範圍旁記錄階段時間，不選擇平行度。
+
+每次來源準備呼叫，也會對同一個新讀取 GDS 儲存格及排除參考清單重用階層擷取。快取隨該次呼叫結束。
+
+在單次準備、轉接器或編譯器呼叫內，完整有序運算元與格點內容相符時，也重用不可變原始多邊形及純分割。選取器、來源紀錄比較及物理／接觸稽核仍於每次呼叫執行。
+
+重建的已套用格點面，對每個整數格點鍵使用單一座標表示，包含邊界鏈錨點；原始來源座標及非格點局部平面維持分開。
+
+拓撲失敗保留原始例外，並加入不含座標的數量、有效性、面積及格點資訊。僅在錯誤時提供的見證資料，區分最終共用單元重建之前的初始格點實現、標記單元與重建面。這些見證不取代模型或其檢查。
+
+## 求解前輸入摘要 {#pre-solve-input-summary}
+
+`scgsim.geometry.summarize_geometry_input(build_input, *, prepared_stack)` 回傳 `InputSummary`，具備獨立 `.data` 及供 Notebook 顯示的 HTML 表示。兩個 Eigenmode 外觀介面都提供 `input_summary()`，將此正規化來源與設定的後端選項組合。AEDT 摘要使用正規化建構輸入及堆疊；Palace 要求綁定的 `GeometryPlan`。傳入未明確正規化的原始元件會失敗，不猜測堆疊。摘要記錄來源、實體、Net、材料、Z／真空、埠、EPR 及執行控制輸入；未設定或未知值保持明確。它不進行檔案 I/O、網格產生、目錄重建或原生求解器檢查，也不宣稱原生幾何或執行資料。來源摘要的 `source.top_cell_name` 優先使用有效轉接器選定的 `selected_cell_name`；選定名稱不可用時，退回舊式 `top_cell_name`，否則為 `None`。此顯示選擇不改動來源中繼資料或重讀 GDS。
+
+Notebook HTML 先呈現來源、後端、路徑及數量卡片，接著是 Entity／出現實例／Net／材料／來源 Z、埠／宿主／方向、接面 A／B／L／C、分析選擇、薄膜／損耗／來源／邊距假設，以及求解器／資源表格。原始獨立 JSON 放在收合區。未知值仍與零不同；只有在選取語意中，`None` 才表示全部，空元組表示不選取，缺少要求則標為未要求。HTML 沒有主題引數，繼承前端淺色／深色調色盤；獨立 `.data` 契約不變。

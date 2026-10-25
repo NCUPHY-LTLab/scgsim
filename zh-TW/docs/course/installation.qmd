@@ -1,0 +1,107 @@
+---
+lang: zh-TW
+title: "安裝 SCGSim"
+description: "安裝工作流程所需的 Python 工具，並了解準備與原生執行的差異。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/installation"
+---
+
+請在一台電腦上準備 Python **3.12 或 3.13**、全新環境，以及所選後端的 Python 工具。執行計算前，請另外安裝原生 Palace 或 AEDT 求解器。日後若要使用遠端求解器主機，[可攜式交接教學](execute.qmd)會說明操作流程。
+
+## 建立全新環境 {#create-a-fresh-environment}
+
+請選擇目前文件版本所記錄的 SCGSim 來源修訂版；版本選擇器與頁尾會標示該修訂版。建立環境與安裝套件前，先切換至該來源。下方通用範例使用穩定的 `main`；執行特定版本的工作流程時，請使用對應版本的 checkout。
+
+```bash
+git clone --branch main https://github.com/OrPenStrike/scgsim.git
+cd scgsim
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[palace]'
+```
+
+請依要進行的工作選擇安裝 extra：
+
+::: {.table-responsive}
+
+| 在此電腦上進行的工作 | 從相符的 checkout 安裝 | 安裝內容 |
+|---|---|---|
+| 解析並繪製回傳結果 | `pip install -e .` | SCGSim、NumPy 與 Plotly |
+| 準備 Palace 幾何／網格／設定 | `pip install -e '.[palace]'` | GDSFactory 9.x、GDS 讀取器與 Gmsh |
+| 準備一般 HFSS 或 Q3D；使用 Q2D | `pip install -e '.[aedt]'` | GDS 讀取器與 PyAEDT 1.3.0 |
+| 準備 source-first AEDT Surface EPR | `pip install -e '.[aedt-epr]'` | AEDT 相依項目、GDSFactory 9.x 與 KLayout 0.30.x |
+| 檢視送交求解器的幾何 | `pip install -e '.[visualization]'` | 網格讀取器、影像工具與 PyVista；請搭配後端 extra 安裝 |
+
+:::
+
+例如，可使用 `pip install -e ".[palace,visualization]"` 將視覺化功能與後端一併安裝。若要繪製原生幾何，請使用具備可運作 OpenGL/EGL 環境的電腦；[預覽參考](../geometry-preview.qmd)說明可用模式。
+
+## 使用公開模型輸入 {#use-the-public-model-inputs}
+
+入門教學使用 [OrPen SC PDK 修訂版 `51985d9`](https://github.com/OrPenStrike/orpen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9)中的公開 SimplePad 元件與可執行 Notebook。請將該 PDK 與 SCGSim 安裝在同一環境並使用一致的相依項目解析，確保兩者共用的 GDSFactory、kfactory 與 KLayout 版本相符。在 SCGSim checkout 中執行下列命令，可安裝兩種入門後端流程及 Notebook 核心工具：
+
+```bash
+python -m pip install -e '.[palace,aedt-epr,visualization]' 'orpen-sc-pdk @ git+https://github.com/OrPenStrike/orpen-sc-pdk.git@51985d9507025e8241205712e866c0b804de29b9' ipykernel
+```
+
+### 選擇曲線來源元件 {#select-the-curved-source-cell}
+
+SimplePad 入門 Notebook 請維持使用上方固定的 `51985d9`，曲線來源研究則使用獨立環境。目前 OrPen SC PDK 的教學修訂版為 [`ecc9062`](https://github.com/OrPenStrike/orpen-sc-pdk/tree/ecc90623b62e55f95afaa5a1f1048a71f81cae52)，其中包含目前的 Circular Pad 來源教學、衍生的可執行 Notebook，以及公開 Fresh08 結果圖表：[來源 QMD](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/src/ComponentSimulation/CircularPad/palace_eigenmode.qmd)、[IPYNB](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/palace_eigenmode.ipynb)與[證據](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/README.md)。QMD 是來源依據；IPYNB 由它衍生。Fresh08 使用較早的 OrPen `c79b91e` 產生器匯出；精確的執行來源資訊見連結的結果教學。
+
+此處使用的曲線來源 API 已包含在 SCGSim 公開 develop 修訂版 `2eed1eb`（`1.1.0rc1`）中；穩定版 `1.0.2` 不包含這些 API。若使用已發布的文件版本，請採用上方版本選擇器／頁尾所記錄的 SCGSim 來源修訂版。從選定 checkout 的根目錄建立此獨立環境。OrPen 不會以 pip 相依項目安裝 SCGSim；OrPen 自行的工作流程則由 `uv` Notebook 群組與鎖定檔選用 SCGSim 修訂版 `2eed1eb`。下列 pip 命令會明確從選定 checkout 安裝 SCGSim，並安裝目前教學版本的 OrPen：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[palace,visualization]' \
+  'orpen-sc-pdk @ git+https://github.com/OrPenStrike/orpen-sc-pdk.git@ecc90623b62e55f95afaa5a1f1048a71f81cae52' \
+  ipykernel
+```
+
+::: {.callout-note title="選用目前的開發來源" collapse="true"}
+目前公開的 SCGSim 開發來源是 commit [`2eed1eb`](https://github.com/OrPenStrike/scgsim/tree/2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71)（套件版本 `1.1.0rc1`，可安裝的 develop 修訂版，並非穩定版）。若要重現開發版本，請先選定此確切來源，再建立曲線研究環境：
+
+```bash
+git clone --branch develop https://github.com/OrPenStrike/scgsim.git scgsim-development
+cd scgsim-development
+git switch --detach 2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71
+```
+
+接著執行上方的曲線研究安裝命令。此為選用的開發來源，並非依版本選擇安裝時的預設來源。
+:::
+
+::: {#native-palace-for-this-curved-uniform-port .callout-note title="此曲線 Uniform 埠所需的原生 Palace"}
+請使用以[修訂版 `4e9e1b7`](https://github.com/arfiligol/palace/tree/4e9e1b7232b4c8ca8b964be7e70f1848f578de37)建置的原生 Palace 執行檔，或包含[曲線埠範圍修正](https://github.com/arfiligol/palace/blob/4e9e1b7232b4c8ca8b964be7e70f1848f578de37/palace/utils/geodata_impl.cpp)的後續版本。上方 SCGSim Python extra 不會安裝或更新原生 Palace 執行檔。請將此研究設定為使用該執行檔，或使用會呼叫該檔的包裝程式。此需求只適用於此曲線 Uniform 埠範例，不適用於一般 Palace 幾何準備或 AEDT 工作流程。
+:::
+
+請在 Notebook 前端開啟連結的 IPYNB，並選用此 checkout 的 `.venv` 核心，即 `.venv/bin/python`。其預設的 `analyze_handoff` 動作會讀取保留的 `.artifacts` 執行資料樹；公開來源與圖表不含此資料。若要準備或執行自己的工作，請在 Notebook 中選擇 `prepare_handoff` 或 `run`，並指定新的執行 ID；`run` 會使用上方所述、另行安裝的原生 Palace 執行檔。
+
+目前 Fresh08 結果顯示，經四次細化與五次求解／估算快照後，模態 1 的頻率為 5.573354161115 GHz。最終原生指標 0.1186681863426 仍高於設定值 0.02；原生執行紀錄／記錄檔也記載 PCG 警告。這些觀測無法證明網格已收斂或數值具有足夠精度。[Palace 教學](palace-eigenmode.qmd#circular-pad-lc-study)展示結果及其限制。
+
+確認已安裝的 SCGSim 版本：
+
+```python
+from importlib.metadata import version
+print(version("scgsim"))
+```
+
+請在研究紀錄中保留此版本及模型來源修訂版。
+
+::: {.callout-note title="安裝深入的 Xmon 範例" collapse="true"}
+深入的 Xmon 教學使用另一個 PDK 修訂版。依照該教學操作時，請一併安裝其固定版本輸入與適用的 SCGSim extra：
+
+```bash
+python -m pip install -e '.[palace]' 'orpen-sc-pdk @ git+https://github.com/OrPenStrike/orpen-sc-pdk.git@35b4dc1cdd3f921badcac2fe57a98366315ae8d9'
+```
+
+請讓 PDK 修訂版與所執行的範例相符。
+:::
+
+## 另外準備求解器主機 {#prepare-the-solver-host-separately}
+
+使用 Palace 時，請備妥執行檔或包裝程式，並依電腦環境設定啟動資源與設定命令。SCGSim 會產生本機或所選 Slurm 啟動指令稿；Palace 本身須另外安裝。
+
+使用 AEDT 時，請備妥 **AEDT 2023.2 或 2024.2**、**PyAEDT 1.3.0** 及適用授權。每個請求都必須明確選定目標版本；沒有預設版本或跨版本回退。產生的指令稿會在同一主機啟動本機 Desktop、儲存專案並釋放工作階段。日後讀取回傳結果不需開啟 Desktop。
+
+接著可[擷取焊墊電容](../tutorials/capacitance.qmd)，或[尋找共振並讀取 EPR](../tutorials/resonance-epr.qmd)。若已有回傳套件，請從[讀取結果](returned-results.qmd)開始。

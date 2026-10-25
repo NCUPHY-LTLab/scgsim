@@ -2,17 +2,41 @@
 title: "AEDT Runtime Families"
 description: "AEDT family specifications, native readback, receipt cohorts and saved-field analysis."
 scgsim-kind: "contract"
-scgsim-status: "STABILIZED"
+scgsim-status: "CONVERGING"
 scgsim-id: "docs/specs/aedt-runtime"
 ---
 
 The [course map](../examples.qmd) links every implemented AEDT family lesson. This page owns exact specifications, failure rules and historical reader contracts.
 
-::: {.callout-note title="Stabilized V1 contract"}
-HFSS Driven Terminal/Modal, HFSS Eigenmode, Q3D, and Q2D have live run and
-strict resolve evidence. These semantics are Human-accepted; stabilization and release delivery
-remain separate.
+::: {.callout-note title="Accepted implementation/API scope and evidence"}
+Human accepted the v2 implementation/API on 2026-10-09 at candidate
+`a932a173edb5c56ae14740ff5177190996255bdd` (tree
+`2745321736e53e2a4fe8d150f2e9d8bd176669db`). The semantic state is `ACCEPTED`,
+not `STABILIZED`. Six earlier full native-to-Resolve-to-Report observations
+belong to the earlier wheel SHA256
+`48963671d4f854c185b8f95f3cd8000960355a7c48550b9ccf19b739b49f8df3` and
+runtime-source v13 content digest
+`42b48f3d5946fadb1e93e92a1d3eb2a55f72ff00fc41aeccf71c0fded5919fa1`; those
+observations do not establish execution from the accepted candidate wheel.
+The accepted frozen `2.0.0.dev1` candidate wheel SHA256
+`e0ab1117aad4e5578ec98251732d33f6faa2fe7524dd70dcbc44891ed024824d` has a
+separate Q3D build-only/readback/save/release observation and geometry preview,
+without `Analyze`, solve, or C/G matrix export. The full Xmon Palace Eigenmode
+Route A, CircularPad Palace Eigenmode Route B, and HFSS Eigenmode/saved-field
+EPR/offline-loss endpoints remain deferred.
 :::
+
+The Solid/Thin-Film modeling extension below is a separate `CONVERGING` scope.
+It does not revise the accepted v2 transaction, historical-reader, or Q3D
+body-v3 contracts except where this page explicitly describes the new required
+3D modeling selection.
+
+The current continuation targets terminal-free Q3D C/G, HFSS Eigenmode with
+EPR/saved-field analysis, and HFSS Driven Terminal, including the assigned
+short-solve observations. Q3D AC/RL and HFSS Driven Modal are deferred from
+this continuation; their existing request and result contracts remain in
+force and are not removed. These are candidate scope boundaries, not claims
+that the native operations have completed.
 
 ## One shared lifecycle
 
@@ -27,12 +51,38 @@ PDK geometry and material identities
 -> strict result resolution
 ```
 
-The lifecycle fixes AEDT 2024.2 and PyAEDT 1.3.0, copies all required inputs,
-opens a new AEDT Desktop only on explicit execution, saves and releases the
-owned project, and fails closed on missing native evidence or result bytes.
-The package permits Python 3.12 and 3.13 with this unchanged PyAEDT pin;
-interpreter compatibility and native AEDT expression correctness are separate
-claims.
+The dual-version candidate supports AEDT 2023.2 and 2024.2 with the same
+PyAEDT 1.3.0 pin. It copies all required inputs, opens a new local AEDT Desktop
+only on explicit execution, saves and releases the owned project, and fails
+closed on missing native evidence or result bytes. The package permits Python
+3.12 and 3.13 with this unchanged PyAEDT pin; interpreter compatibility and
+native AEDT expression correctness are separate claims.
+
+### Explicit AEDT version selection (CONVERGING) {#aedt-version-selection}
+
+Every new AEDT-native preparation, execution, or saved-field analysis request
+and every handoff requires the `aedt_version` keyword with exactly `"2023.2"`
+or `"2024.2"`. Missing or unsupported values fail before PyAEDT
+import or Desktop construction. There is no default and no fallback between
+releases. The selector is transaction-local; both releases use the existing
+transaction owner and run profile, and the selected AEDT Desktop runs on the
+same node as SCGSim.
+
+For AEDT 2023.2, PyAEDT 1.3.0 is configured for the same-node gRPC
+compatibility path with `use_grpc_api=True`, `grpc_secure_mode=False`,
+`grpc_local=True`, and `grpc_listen_all=False`. The transaction sets
+`PYAEDT_USE_PRE_GRPC_ARGS="True"` for that operation. It snapshots and restores
+the prior transport environment through owned Desktop release, including
+failure cleanup. AEDT 2024.2 uses no transport overrides. A 2023.2 request is
+never downgraded or silently redirected to 2024.2, and the contract adds no
+remote Desktop or scheduler execution path.
+
+Saved source origin, the requested AEDT version, and the actual connected AEDT
+version are distinct. If a saved artifact has no recorded origin, its origin
+remains `None`; analysis is allowed and does not require recovering that
+historical fact. SCGSim does not look up, guess, or migrate an unknown origin.
+The explicit request selects the local runtime, while the actual version comes
+from the connected AEDT application rather than from the request value.
 PDK superconductors lower to PEC without replacing their source-material
 identity. Native HFSS solids use the `pec` material with Solve Inside disabled;
 native HFSS sheets use the `SCGSimPEC` Perfect E boundary. Completion requires
@@ -49,13 +99,155 @@ family: prepare native model -> solve explicit setup -> export/read back
 run.py: release Desktop -> write final receipt
 ```
 
-The normal command and diagnostic instrumentation use the same private family
-preparation functions. The EPR path adds `--execute --prepare-only`
-through this same transaction and native builder. It saves and reads back the
-prepared model, releases the owned Desktop, and reports
-`native_preparation_only` with `solver_invoked=false`; it is a native
-preparation, not a mock solve. The ordinary one-shot families keep their
-existing solve/export behavior and do not acquire a second Desktop owner.
+The normal command and preparation-only paths use the same private family
+preparation functions and transaction owner. EPR and Q3D already support
+`--execute --prepare-only`; the Solid/Thin-Film scope extends that operation
+to HFSS Eigenmode, Driven Modal and Driven Terminal. The usual `--execute`
+family behavior remains unchanged, and neither path creates a second Desktop
+owner.
+
+### Model-only preparation and physics resolution {#aedt-model-only-preparation}
+
+The public geometry-preparation helpers for Q3D, HFSS Eigenmode, and HFSS
+Driven, and `EigenmodeSim.set_eigenmode()`, accept `run_control=None` when the
+request is to build and read back the native model without solving. The
+canonical JSON spec still contains its `run_control` member; `null` is the
+explicit model-only value. Existing non-null payload encoding and hash meaning
+are unchanged. With `null`, preparation creates no solver setup, EPR cache, or
+frequency sweep. It constructs the requested model and assignments, saves the
+project, releases the owned Desktop, and records the actual preparation
+readback.
+
+Supplying complete run controls still authors the requested setup when
+execution is preparation-only. `--prepare-only` selects the execution stage;
+it does not remove or invent request controls. A solve request without complete
+controls fails before opening AEDT. A no-analysis, model-only `HfssEprSpec`
+carrier accepts `run_control=None`. An EPR analysis/cache request requires
+complete Eigenmode controls; `run_control=None` cannot be used to skip its
+setup.
+
+A successful model-only handoff records the `native_preparation_only` stage.
+`resolve_prepared_model(run_dir)` returns a `PreparedModel` from that saved
+handoff and its native preparation/readback evidence. This reader reports the
+prepared-model stage; it does not report a completed physics result.
+`resolve_results()` remains the strict reader for completed solver results and
+does not treat a model-only receipt as a completed solve.
+
+## Prepared-native HFSS EPR batch {#prepared-native-hfss-epr-batch}
+
+⚠️ **CONVERGING:** AEDT 2023.2 native BatchSolve execution has not yet been
+observed.
+
+Use this workflow for a complete, released HFSS EPR preparation when the
+solver-only process must run separately from the local PyAEDT transaction.
+The preparation must include its bound source and project, setup and cache
+readback, and native calculator-definition evidence. Packaging does not open
+Desktop or alter the authored model, setup, margins, modes, or EPR criteria.
+
+For a complete multi-model procedure, follow [Parameter sweep with a Desktop-free HPC solver](../course/aedt-hpc-sweep.qmd). It creates one native package per model, transports them in one ordinary archive, and collects each returned attempt separately. The outer archive and serial loop are caller composition; the public batch API continues to own one model per package.
+
+The public Python entry points are:
+
+```python
+def prepare_native_batch(
+    prepared_run: str | Path,
+    *,
+    output_dir: str | Path,
+    solver_executable: str,
+    resources: AedtResources,
+    dependencies: Sequence[str] = (),
+) -> NativeBatchPackage: ...
+
+def run_native_batch(package_dir: str | Path, *, output_dir: str | Path) -> Path: ...
+
+def collect_native_batch(
+    package_dir: str | Path,
+    attempt_dir: str | Path,
+    *,
+    output_dir: str | Path,
+) -> ResolvedRun: ...
+```
+
+`NativeBatchPackage` returns `root`, `manifest_path`, and `archive_path`;
+`run_native_batch` returns the path to `batch-attempt.json`.
+
+`prepare_native_batch` accepts only a completed prepare-only HFSS EPR handoff
+with serialized saved setup/cache evidence and calculator definitions read
+back. A pending cache marker does not establish saved setup/cache readback.
+Packaging retains the complete shared CLC artifact and verifies its recorded
+status, path, byte size, and SHA-256. It starts with the required expression
+definitions and follows their named-helper references; every required root and
+helper must be present with a consistent definition. Missing or conflicting
+required definitions fail. Unreferenced extra definitions may remain in the
+shared file. If an aggregate is supplied, it must cover the required roots and
+agree on shared definitions, but need not be an exclusive inventory of the
+file. These checks do not rewrite the original receipt. The package contains
+the source/spec and handoff
+evidence, native project, calculator evidence, declared dependencies, and the
+full `.aedtresults` directory when present. A dependency path is relative to
+the prepared run.
+For this batch recipe, `cores` must be a positive integer and
+`ram_limit_percent` must be an integer from 1 through 99; 100 is not
+representable by the native machine-list syntax. The `solver_executable` value
+is recorded for the solver host and need not resolve on the packaging host.
+
+`run_native_batch` copies the packaged project into a fresh attempt directory
+and starts one solver process. It uses the bound executable and prepared
+design/setup with AEDT's one-host `-ng -UseElectronicsPPE -distributed -auto`
+BatchSolve recipe and a machine entry of
+`list=<host>:-1:<cores>:<ram_limit_percent>%`. It does not import PyAEDT,
+construct Desktop, submit a scheduler job, retry, or accept arbitrary solver
+arguments. The RAM percentage is the native per-host solver limit; it is not
+an operating-system memory cap. The attempt retains its process return code
+and raw solver output. Neither a zero exit code nor a frequency CSV alone
+establishes a completed result.
+
+`collect_native_batch` requires the matching settled attempt, returned `.aedt`
+project, and complete `.aedtresults` directory. It verifies the required CLC
+roots and named-helper closure, plus any supplied aggregate, against the package records, then
+opens an owned copy through the existing transaction and collects full
+adaptive mode/pass cache history and saved-field EPR without rebuilding
+geometry or running Analyze. It releases Desktop, seals the run, and applies
+the strict result resolver. Missing native history or saved-field evidence
+remains a failure; LastAdaptive-only data does not replace the complete cache.
+
+The package and collection commands use `python -m scgsim.aedt.batch` in the
+SCGSim environment. Each stage writes to a fresh output directory:
+
+```sh
+python -m scgsim.aedt.batch package \
+  --prepared-run "$PREPARED_RUN" --output "$PACKAGE_DIR" \
+  --solver-executable "$AEDT_SOLVER" --cores "$AEDT_CORES" \
+  --ram-limit-percent "$AEDT_RAM_LIMIT_PERCENT"
+
+python -m scgsim.aedt.batch solve \
+  --package "$PACKAGE_DIR" --output "$ATTEMPT_DIR"
+
+python -m scgsim.aedt.batch collect \
+  --package "$PACKAGE_DIR" --attempt "$ATTEMPT_DIR" \
+  --output "$COLLECTED_RUN_DIR"
+```
+
+The package stage requires `--prepared-run`, `--output`,
+`--solver-executable`, `--cores`, and `--ram-limit-percent`; `--dependency`
+may be repeated. The solve stage takes `--package` and `--output`. Collection
+takes `--package`, `--attempt`, and `--output`.
+
+The package archive contains the immutable package and standalone
+`run_batch.py`. Transfer and extract it to the solver host using the operator's
+separate transfer and job controls. Run the copied script there; it uses only
+Python's standard library, so that host does not need SCGSim or PyAEDT:
+
+```sh
+python "$PACKAGE_DIR/run_batch.py" solve \
+  --package "$PACKAGE_DIR" --output "$ATTEMPT_DIR"
+```
+
+The solver executable path is resolved on that host. Return the full package
+and attempt to the collection host, including the returned `.aedt` project,
+complete `.aedtresults` directory, attempt record, and raw solver output.
+Collect from those returned directories; a frequency-only export is
+insufficient.
 
 Each family binds its request once before native preparation. The private bound
 request fixes the absolute run workspace and a detached immutable spec payload;
@@ -82,39 +274,46 @@ New handoffs retain `scgsim.aedt.handoff.v1` and
 `scgsim.aedt.handoff-manifest.v1`. Both records add
 `expected_receipt_schema: scgsim.aedt.receipt.v3`, and the initial receipt is
 V3. It contains `prepared_runtime_source`: a deterministic, sorted
-`runtime-source.v8` manifest of the SCGSim transaction, family, common, spec,
-persistence, native-readback, and AEDT presentation modules, a content digest
-over that manifest, and a truthful preparation Git observation when one is
-available. Git observation may be explicitly unavailable; module hashes and
-the content digest are mandatory.
+`runtime-source.v24` manifest for the current source. The record fields are
+`schema_version`, `stage`, `modules`, `content_sha256`, and
+`revision_observation`; there is no helper-hash map. Each declared module has
+measured bytes and the content digest binds that inventory. The Git observation
+is either available with the actual 40-hex commit or explicitly unavailable.
+A source checkout or fabricated revision is not required for byte-bound
+identity.
 
-Before writing `running`, execution accepts exactly one of three cohorts:
+Before writing `running`, the shared transaction accepts its established
+initial-receipt cohorts: a V3 receipt with both V3 expectation markers and a
+canonical manifest; a V2 receipt with both V2 markers and a canonical
+manifest; or an exact V1 `not_run` receipt with both markers absent and the
+canonical historical manifest. A historical handoff may continue through its
+supported family path under those cohort rules; this does not bypass family
+request requirements.
 
-- a new V3 initial receipt with both V3 expectation markers and a canonical
-  manifest;
-- a historical V2 initial receipt with both V2 expectation markers and a canonical
-  manifest; or
-- an exact historical V1 `not_run` receipt with both markers absent and the
-  canonical historical manifest members and hashes.
+Every new Q3D or HFSS 3D execution requires explicit `modeling`; a
+`thin_film` request also needs its corresponding source declarations before
+receipt mutation. A previously supported Q3D/HFSS result payload without
+`modeling` remains under its original reader and hash interpretation and cannot
+start a new execution. The shared V1/V2 handoff compatibility remains
+available to unchanged families such as Q2D, but does not bypass the current
+Q3D/HFSS request requirement. Q3D input-v1 and input-v2 request schemas remain
+removed.
 
-Unknown versions, mixed or partial markers, noncanonical members, and hash
-mismatches reject before receipt mutation. The verified initial-receipt hash
-and prepared-manifest hash are copied into the mutable V3 receipt. The final
-receipt is intentionally not compared with its initial hash because execution
-must mutate it. A verified historical handoff is upgraded in place to a V3 run
-receipt and records `prepared_runtime_source.status` as
-`legacy_v1_not_recorded`; missing history is never inferred or fabricated. A
-V2 handoff retains its prepared V2 provenance cohort when execution emits V3;
-it is not relabeled as new V3 preparation.
+The verified initial-receipt hash and prepared-manifest hash are copied into
+the mutable V3 receipt. The final receipt is intentionally not compared with
+its initial hash because execution must mutate it. Unknown versions, mixed or
+partial markers, noncanonical members, and hash mismatches reject before
+receipt mutation.
 
 Every new completed V3 receipt has a separate `runtime_source` manifest using
-`runtime-source.v8` and a content digest for the code that actually executed
-it, while retaining the historical `revision`, `run_py_sha256`,
-`spec_py_sha256`, convergence, and matrix-helper keys. Execution provenance
-failure therefore produces a failed receipt, never a strict-resolvable
-completed one. Preparation and execution hashes are evidence with different
-timing, not an equality requirement, and historical hashes are not compared to
-the currently installed package.
+`runtime-source.v24` and a content digest for the code that actually executed
+it. Declared module bytes and the digest are mandatory; V24 has no redundant
+helper-hash fields. `revision_observation` carries the actual 40-hex commit
+when available and records `unavailable` truthfully for an immutable wheel
+without VCS metadata. Missing or corrupt declared module bytes, digest, schema,
+or cohort still fails closed. Preparation and execution hashes are evidence
+with different timing, not an equality requirement, and historical hashes are
+not compared to the currently installed package.
 
 `resolve_results()` preserves the existing rules for genuine historical
 completed V1 and V2 receipts. A receipt relabeled below its preparation markers
@@ -127,24 +326,50 @@ These unsigned consistency checks do not authenticate an artifact set against
 an actor able to rewrite every member.
 
 `runtime-source.v1` is a frozen thirteen-module reader contract, not a live
-enumeration rule. The V2–V6 inventories are also frozen. V4 added
+enumeration rule. The V2–V23 inventories are frozen as well. V4 added
 `scgsim/aedt/_presentation.py`; V5 added `scgsim/sgb/geometry_plan.py` and
 `scgsim/sgb/__init__.py`. V7 added
-`scgsim/_notebook_presentation.py` to V6. Current producer receipts use V8,
-which adds `scgsim/aedt/_junction_partition.py` to V7. The V1–V7 module membership and hashes
-retain their historical meaning. These manifests bind their exact declared file inventory, not an exhaustive
-transitive dependency attestation; for example, the current frozen inventory
-does not separately hash `scgsim/sgb/engine_gates.py`. They do not change the V3
-receipt schema. A pure initial-receipt codec owns exact V1/V2/V3 member order,
-two-space JSON indentation, and the trailing newline. V1 omits prepared
+`scgsim/_notebook_presentation.py` to V6. V8 added
+`scgsim/aedt/_junction_partition.py` to V7. V9 added
+`scgsim/aedt/__init__.py`, `scgsim/aedt/_q3d_geometry.py`,
+`scgsim/sgb/adapter.py`, and `scgsim/sgb/stack.py` to V8. V10 added the shared
+`scgsim/aedt/_handoff_cohort.py` to V9; V11 added
+`scgsim/aedt/_q3d_bodies.py` to V10. V12 is frozen with V11's exact path
+membership. V13 retains its frozen inventory, mandatory declared module bytes
+and digest, and optional `revision_observation`; V1–V17 retain their frozen path
+membership, field meanings, and version-specific reader rules. V14 is reserved
+for held PR35. V16 added the HFSS Eigenmode native implementation module to the
+V15 inventory. V17 added the shared lumped-model and HFSS lumped-native modules,
+plus the AEDT specs package initializer, to V16. V18 removed the former
+EPR-private `epr/junction_partition.py` path and included
+`preparation/junction_partition.py`, the relocated AEDT data/RLC/terminal
+helpers, geometry/EPR/support specs, modeling/planar preparation, HFSS geometry
+runtime, neutral geometry representation modules, and the shared source-ground
+construction helper with its polygon-operation leaf. V19 added the model-only
+prepared-model reader; V20–V22 retain their separate declared historical
+inventories. V23 is the frozen inventory immediately preceding the current
+V24. V24 adds `scgsim/aedt/runtime/batch_protocol.py`,
+`scgsim/aedt/runtime/batch_runner.py`, and `scgsim/aedt/epr/evidence.py` to the
+V23 inventory. V23 and V24 use the same five record fields described above,
+with no helper-hash map. Each version's exact path list is its
+declared implementation inventory. These manifests bind their
+declared file inventories, not an exhaustive transitive dependency
+attestation. The frozen V12 inventory, for example, does not separately hash
+`scgsim/sgb/engine_gates.py`. They do not change the V3 receipt schema. A pure
+initial-receipt codec owns exact V1/V2/V3 member
+order, two-space JSON indentation, and the trailing newline. V1 omits prepared
 provenance; V2 and V3 insert it between `source` and `outputs`. Reading
 historical evidence uses the declared frozen schema and does not compare
 historical hashes with the installed package.
 
 Execution computes mandatory runtime-source provenance inside the receipt-bound
-failure transaction, before importing PyAEDT or constructing Desktop. Missing
-revision or module evidence therefore yields a failed V3 receipt without a
-Desktop launch rather than escaping receipt finalization.
+failure transaction, before importing PyAEDT or constructing Desktop. Current
+V24 may record `revision_observation` as unavailable; that alone does not fail
+byte-bound identity or prevent execution. Missing or corrupt declared module
+bytes, digest, schema, or cohort still yield a failed V3 receipt without a
+Desktop launch rather than escaping receipt finalization. V1–V17 retain their
+version-specific historical validation rules, including revision requirements
+where declared.
 
 The family save contract remains fail-closed. `save_project()` returning false
 before solve aborts before native execution; returning false after export aborts
@@ -154,15 +379,106 @@ partial-success receipt or infer that native project bytes are usable.
 ## Solver-specific contracts
 
 The following semantics remain separate even though they share packaging,
-version checks, receipts, and path/hash validation:
+version checks, receipts, and path/hash validation. The table describes
+solve-bearing requests and their returned physics data. Model-only preparation
+uses the separate `run_control=None` path described above.
 
 | Family | Required model semantics | Required returned data |
 |---|---|---|
-| HFSS Driven Terminal | terminal ports with explicit reference conductors | ordered terminal S-parameters and Touchstone |
-| HFSS Driven Modal | modal ports with exact integration lines | ordered modal S-parameters, impedance, and Touchstone |
-| HFSS Eigenmode | the existing runtime remains port-free, with explicit mode count and search frequency; the EPR frontend separately declares linearized Lumped RLC junction sheets as model elements, not driven excitation ports | ordinary real mode frequency, native Q, and convergence evidence; EPR history and saved-field results use their separate result contract |
-| Q3D | exact nets with source/sink assignments; optional exact six-face Region ground seal | native capacitance and, when enabled, resistance/inductance matrices |
+| HFSS Driven Terminal | explicit `modeling="solid"` or `modeling="thin_film"`; existing Wave `TerminalPort` or separately declared `LumpedTerminalPort` with explicit signal/reference identity; complete `HfssRunControl` for solving | ordered terminal S-parameters and Touchstone |
+| HFSS Driven Modal | explicit `modeling="solid"` or `modeling="thin_film"`; modal ports with exact integration lines; complete `HfssRunControl` for solving | ordered modal S-parameters, impedance, and Touchstone |
+| HFSS Eigenmode | explicit `modeling="solid"` or `modeling="thin_film"`; the existing runtime remains port-free; complete `EigenmodeRunControl`, including mode count and search frequency, for solving; generic RLC model elements are distinct from `PlanarJunction` and EPR junction records | ordinary real mode frequency, native Q, and convergence evidence; EPR history and saved-field results use their separate result contract |
+| Q3D | explicit `modeling="solid"` or `modeling="thin_film"`; exact conductor Net membership; real Signal source/sink pairs for AC/RL; terminal-free C/G is supported; optional exact six-face Region ground seal; complete family controls for solving | native capacitance and, when enabled, resistance/inductance matrices |
 | Q2D | explicit cross-section geometry and conductor/reference assignments | per-unit-length capacitance/conductance and resistance/inductance matrices |
+
+### Shared lumped support and terminal RLC {#hfss-shared-lumped-support}
+
+This HFSS lumped-element scope is `CONVERGING`. It adds generic circuit
+elements while preserving the existing Wave Terminal and Josephson-junction
+contracts.
+
+`LumpedSupport` and `set_lumped_supports()` declare source-backed support
+geometry in the caller's model snapshot. The body-first workflow uses
+`HfssDrivenGeometrySpec` with `mode="terminal"` and schema
+`hfss-driven-geometry.v1`, through `prepare_hfss_driven_from_geometry()`.
+`body_first_driven_terminal` names the preparation workflow, not the spec mode.
+The geometry request carries no RLC field. Existing Wave
+`TerminalPort.signal_entity_ids` remains optional in
+legacy payloads; it is required when using the body-first route, whose
+frontend declares the Signal and references explicitly. The legacy GDS
+reference binding is unchanged.
+
+Keep a source metal body distinct from a nonmetal support/locator sheet. The
+locator's actual nonmetal `source_level` determines its plane; the separate
+`contact_physical_layer_id` binds the M1 physical contact and effective Z. Do
+not infer a film thickness from a material name or hard-code 100 nm.
+
+`TerminalPort` remains the existing Wave-port input. `LumpedTerminalPort` is a
+separate Driven Terminal input with explicit support, terminal and reference
+assignment and a required `impedance_ohm`. It has no RLC-network field. A value
+such as 50 ohm is an operation input, not a package default. There is no
+conversion from a Lumped request to a Wave port.
+
+For the current Wave Terminal contract, the source-directed pair annotation
+records Wave-port reference provenance; it is not a Modal `IntLine`. The
+request uses renormalization disabled and a physical de-embedding shift of
+zero. An inactive native 50-ohm setting in this state is not a source load,
+renormalization target, or solved characteristic impedance. The actual native
+de-embedding-enabled flag is recorded separately; a zero shift does not imply
+that the flag is disabled.
+
+Every `HfssDrivenGeometrySpec` Terminal port must use the same ordered source
+Entity reference tuple: `LumpedTerminalPort.reference_entity_ids` for Lumped
+ports and `TerminalPort.reference_objects` for Wave ports. This applies to
+Lumped, Wave and mixed requests; selectors are neither sorted nor merged.
+Existing ownership, port-family and all-Wave side checks run first. Native
+readback verifies the design-level `TerminalReferenceConductors` inventory;
+it does not establish distinct per-port reference assignments. Historical
+payloads with different reference tuples are rejected by current constructors,
+including payload decoding; their original execution evidence remains historical.
+Saved body-first Terminal child assignments are read back as native `Edges` or
+`Faces`, with each assigned ID resolved to exactly one source-built conductor
+object. Missing or ambiguous assignment kinds and owners fail readback. The
+parent port's `Faces` support assignment remains separate from child signal
+ownership.
+
+`LumpedRlc` requires an explicit `series` or `parallel` topology. Its R, L and
+C components are independently selected; `None` disables the corresponding
+component. Each enabled generic R, L or C value must be finite after numeric
+conversion. Zero remains enabled, and finite negative values are preserved.
+Historical generic RLC payloads containing nonfinite values are rejected by
+current constructors, including payload decoding. This restriction applies
+only to these generic RLC components, not to other circuit or EPR quantities.
+The single source of these loads is
+`PreparedPlanarGeometry.lumped_rlcs`. `EigenmodeSim.add_lumped_rlc()` adds to
+that model-owned collection; `HfssEprSpec` only projects the prepared list and
+does not introduce a second editable copy. The model-source hash includes the
+RLC records. This generic linear network is not a Josephson junction and does
+not create a `PlanarJunction`, junction participation, or an EPR contribution.
+Existing junction and saved-field EPR result contracts remain separate.
+
+### Family-specific setup controls {#aedt-family-setup-controls}
+
+Public run-control models express caller intent; they do not expose a mutable
+AEDT setup-property dictionary. The private family mappings translate each
+typed control into that solver's native setup and saved-property readback.
+The dual-version runtime contract above keeps this run-control vocabulary
+unchanged under AEDT 2023.2 or 2024.2 and PyAEDT 1.3.0.
+
+| Family | Public run control | Native setup mapping |
+|---|---|---|
+| HFSS Eigenmode, including EPR | `EigenmodeRunControl` | One private mapping in `scgsim.aedt.runtime.native.hfss_eigenmode` maps the seven controls to `MinimumFrequency`, `NumModes`, `MaxDeltaFreq`, `MaximumPasses`, `MinimumPasses`, `MinimumConvergedPasses`, and `PercentRefinement` for ordinary Eigenmode and EPR. |
+| HFSS Driven Modal and Terminal | `HfssRunControl` | The Driven-HFSS adaptive setup and frequency sweep are translated within the HFSS family; Modal and Terminal retain their distinct design and port semantics. |
+| Q3D | `MatrixRunControl` | Q3D owns its `Cap`, `AC`, and `DC` blocks and their enable states. |
+| Q2D | `MatrixRunControl` | Q2D owns its `CGDataBlock` and `RLDataBlock` controls. |
+
+The shared Q3D and Q2D request vocabulary does not make their native blocks
+interchangeable. Likewise, the shared native runtime owns Desktop lifecycle,
+ACF/resource handling, and access to the saved `AnalysisSetup` tree; raw
+property retrieval does not interpret solver fields or replace each family's
+own saved-setup reader. EPR adds its expression-cache items to the shared
+Eigenmode base setup and owns that extension, not a second adaptive-field
+mapping.
 
 No family may report completion from requested PyAEDT object properties alone.
 The receipt records direct AEDT state and hashes every resolved output. A
@@ -171,6 +487,113 @@ unresolved native assignments, and path/hash mismatches.
 Likewise, a `completed` label and an `.aedt` file alone do not prove that saved
 fields are present or reusable; only the versioned family evidence sealed and
 checked by the resolver has that meaning.
+
+## Solid and thin-film 3D modeling {#aedt-solid-thin-film}
+
+The shared physical-source/profile scope is **CONVERGING**. Every fresh Q3D
+or HFSS 3D request explicitly selects `modeling="solid"` or `"thin_film"`;
+there is no inferred mode or public A/B/C execution alias. Current family
+schema identifiers remain in use. Fresh requests carry the tagged
+`physical_representation` plan alongside their source declaration records.
+Planar source stores that same tagged interpretation in its canonical
+`source["modeling"]` location. See the
+[shared physical representation contract](physical-representation.qmd) for the
+neutral ABI and the explicit Palace profile interface; Q2D remains a separate
+cross-section contract.
+
+The selected PDK/source declares `PhysicalLayerDeclaration` records containing
+physical identity, source level/selector, source interval, material identity,
+`feature_kind`, physical dimensions and authored contact facts. The feature
+kinds are `stack_film`, `local_film` and `finite_volume`. The source carrier is
+`physical_layer`; fresh `aedt_modeling` metadata and role-derived route
+classification are retired. Classification is not inferred from names, Nets,
+materials, size, proximity or equal Z values. One physical layer identity is
+shared across its polygons and placed occurrences, without a separate stack
+identifier. The input uses one explicitly authored LayerStack assembly frame.
+
+Only source-selected physical levels enter the interpreted declaration set;
+unused catalogue films do not collapse the model. Selected source-qualified
+bridge incidence is retained as source evidence, while generic unauthored
+bridge/bump contact remains missing. Neither establishes native continuity or
+HFSS field-side correspondence.
+
+An explicit `ApproximationProfile` and the common
+`PhysicalRepresentationPlan` own coordinate mapping, per-body interpretation,
+layer-bound support projection and the full requested enclosure. Source body
+and `LayerImport` records retain their original endpoints and physical layer
+binding; `effective_bodies` and `effective_layer_imports` expose derived native
+intervals. Finite volumes map their actual body endpoints rather than taking
+the whole nominal layer span. Film physical thickness remains the source's
+normal thickness. A TSV wall's radial thickness is not its axial span.
+Explicit Solid geometry without layer declarations can use the common
+identity plan without inventing physical IDs.
+
+Historical `PhysicalLayerSpec` payloads and untagged coordinate traces retain
+their original interpretation and hash meaning through reader-only,
+version-bound decoding. They are not silently converted into fresh neutral
+declarations. Fresh execution of an old physical-source request fails before
+Desktop creation with a replacement preparation instruction. Existing pinned
+source and sealed artifacts are unchanged. Historical zero-width conductor
+imports remain their recorded Sheet representation and are not relabeled as
+Solid volumes.
+
+In `solid` mode, the model retains source physical Z intervals. In
+`thin_film` mode, a stack-bearing film is represented as a sheet and its
+declared thickness is removed from the cumulative stack height. The resulting
+effective Z map is applied to every layer above it in that stack. A local
+film/deck becomes a sheet at its declared contact side after the stack map is
+applied; its own thickness does not compress the stack. A finite volume stays
+three-dimensional with its actual body endpoints mapped. Posts and bumps remain solids
+with mapped endpoints and receive no inferred extension. These mappings are
+derived from authored declarations; there is no hard-coded layer identity or
+film thickness.
+
+Both modes preserve source XY outlines, holes, material identity, object and
+Net names, and the Net-to-Objects one-to-many relationship. Geometry is not
+united at the Net level. Source geometry, effective geometry, dielectric
+interfaces, ports, Region placement and EPR geometry use the same effective
+stack map while retaining separate source/effective provenance. Physical
+source facts are not overwritten by their effective representation.
+
+For GeometryPlan-backed lowering, a derived child's Ground identity remains
+local to that source occurrence. Preserve its source outline and holes, caller
+Net membership, and recorded occurrence transform; apply that transform once.
+Do not infer physical Ground from a parent, Net name, or bounding box. The
+physical Ground role and the solver's native Net type are separate explicit
+facts.
+
+The conductor's source normal thickness or `physical_thickness_um` is not the
+interface-film thickness used by the EPR model. `SurfaceEprSpec.film_thickness_m`
+is an independent model input for the selected MA, MS, or SA contribution. Do
+not substitute the conductor thickness for that interface assumption.
+
+An ideal superconductor is determined by the source PDK material declaration,
+including `PdkMaterial.is_superconducting`; the original material ID (such as
+Al or Nb) remains recorded. A solid maps to native `pec`. A thin Q3D body uses
+`ThinConductor` with material `pec` and the declared physical thickness with
+explicit units. A thin HFSS body uses `Perfect E`. Non-superconducting
+dielectric and vacuum assignments use explicit PDK AEDT library mappings.
+Unsupported material models fail explicitly; no room-temperature material or
+loss model is substituted.
+
+Q3D AC/RL retains the requested Signal Net and ConstantVoltage source/sink
+semantics. Solid terminals bind to native faces; thin-film terminals bind to
+native `AssignSource`/`AssignSink` edges. A `+X`, `-X`, `+Y`, or `-Y` selector is
+used only when the corresponding source exterior terminal is unambiguous; the
+adapter does not choose a nearest edge or use a hole boundary. A `+Z` or `-Z`
+terminal on a sheet is an input error because a sheet has no separate
+thickness faces. C/G-only Q3D does not require dummy terminals. Existing HFSS
+mode-specific port and reference contracts remain in force under the same
+coordinate map.
+
+The existing `python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only`
+operation prepares, reads back, saves and releases a model for Q3D C/G or
+AC/RL, HFSS Eigenmode, HFSS Driven Modal, and HFSS Driven Terminal. It does not
+call `Analyze`, create a solver mesh, solve, or export fields or result
+matrices. Its preparation-only receipt is not a completed solve result; strict
+result resolution remains unchanged. The ordinary explicit solve path remains
+available, but this modeling scope does not claim a solver result or numerical
+accuracy for either representation.
 
 ### HFSS Driven caller-owned sweep count {#hfss-driven-sweep-count}
 
@@ -304,8 +727,8 @@ missing or hash-mismatched benchmark is rejected by `resolve_results()`.
 
 The benchmark preserves exact native setup, variation, solution-process group,
 adaptive pass, and stage identities. It records only available native real or
-elapsed and CPU times, task-executable peak memory with the native formatted
-string and PyAEDT conversion, and explicitly labeled tetrahedra, solved
+elapsed and CPU times, native Memory with its formatted string and PyAEDT
+conversion, and explicitly labeled tetrahedra, solved
 elements, or linear matrix size. A terminal result-matrix dimension is never
 called a solver matrix size. Stage peaks are maxima, not sums; parent and child
 times are not added because they may overlap. Missing metrics and Q3D adaptive
@@ -314,6 +737,22 @@ stay separate from native task times. Profile capture traverses the native
 `results/profile` OO tree directly so native read failures become benchmark
 errors rather than silently omitted groups; it also retains scalar setup-root
 properties carrying native variation identity.
+
+Memory conversion does not establish quantity scope. The
+[v242 HFSS task-profile definition](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/Subsystems/HFSS/Content/ReportsandPostProc/ViewingaSolutionProfile.htm)
+defines Memory as peak physical RAM for the executable performing that task.
+SCGSim qualifies a captured `results/profile` row only when its native `Name`
+matches the row identity, its `Real time`, `Cpu time`, and `Memory` task columns
+are present with parsed timing metrics, and it is outside the explicit HPC
+resource subtree. Unqualified Memory, including HPC Machine information, retains
+its native value with unknown scope; no host-capacity or usage meaning is inferred.
+Stage memory peaks include only qualified task rows and remain unavailable when
+none exist. They are maxima of observed task peaks, not a whole-host peak or sum.
+One pure detached projection serves capture, verified offline reading, and direct
+Report display. Historical receipt-bound files stay unchanged; their returned
+interpretation corrects prior unconditional scope and descendant aggregates.
+Runtime source V21 adds this shared attribution leaf while preserving V1–V20
+inventories and readers. Receipt V3 and benchmark v1 remain unchanged.
 
 `ResolvedRun.simulation_benchmark()` retains its four existing summary keys and
 adds the verified benchmark record.
@@ -333,9 +772,10 @@ existing `.data` and carries the selected theme.
 ## Q2D native combined matrix export
 
 For new Q2D runs, the canonical result set contains exactly one matrix
-artifact: `results/q2d/rlgc_matrix.csv`. AEDT 2024.2 produces this native file
-through PyAEDT 1.3.0
-`Q2d.export_matrix_data(problem_type="CG, RL")`. Its primary result blocks are
+artifact: `results/q2d/rlgc_matrix.csv`. The existing 2024.2 native export
+mapping uses PyAEDT 1.3.0 `Q2d.export_matrix_data(problem_type="CG, RL")`.
+This version-specific method reference does not set a default; requests select
+the AEDT release explicitly as above. The artifact's primary result blocks are
 the capacitance (C), conductance (G), inductance (L), and resistance (R)
 matrices. Native coupling or Spice blocks may coexist in the same export, but
 they are not additional primary result matrices.
@@ -354,6 +794,25 @@ This Q2D contract is accepted V1 behavior; the broader implemented AEDT surface 
 `STABILIZED`, with stabilization and release delivery tracked separately.
 
 ## Q3D extraction and Region-ground contract {#q3d-extraction-and-region-ground-candidate}
+
+The current Q3D request uses only `scgsim.aedt.q3d.v3`. A `Q3dSpec` contains
+explicit `Q3dBodySpec` records in `bodies`; it has no GDS import or per-piece
+binding fields. Each body declares an XY `exterior_um` ring, zero or more
+`holes_um`, its `z_min_um` and `z_max_um`, `material_id`, `physical_role`, and
+final `net_id`. Source-free callers author these normalized body facts
+directly. Optional source identity fields are present only when supplied by a
+source-backed preparation; SCGSim does not infer them for source-free bodies.
+The remaining project, material, Net, run-control, Region and extraction
+controls described below retain their existing meanings.
+
+`Q3dNetSpec.object_names` names body IDs, so one Net may own several distinct
+conductor bodies and every conductor body belongs to exactly one final Net.
+Substrate bodies use dielectric material and no Net. A C/G request may leave
+Signal terminals absent; an AC/RL request requires each Signal Net's complete
+source/sink object and side pair. This body-v3 request and lowering behavior is
+part of the accepted v2 implementation/API. Its native observation is limited
+to the build-only operation below; no completed C/G solve or matrix result is
+claimed for the accepted candidate.
 
 `Q3dSpec.solve_ac_rl` is a strict boolean and defaults to `true`. The default
 therefore preserves the existing combined capacitance/conductance plus AC
@@ -403,7 +862,193 @@ the requested padding and this zero-offset finalization explicitly.
 
 The prior failed `_01` project remains immutable diagnostic evidence. There is
 no compatibility fallback, physical bridge, or unite path. This replacement
-contract is `STABILIZED`; historical diagnostic evidence is not relabeled.
+Region-ground contract is `STABILIZED`; historical diagnostic evidence is not
+relabeled.
+
+### Q3D body-backed input v3 {#q3d-body-input-v3}
+
+Q3D has one current input contract, `scgsim.aedt.q3d.v3`; v1/v2 Q3D
+deserialization, GDS imports and per-piece binding are not current input
+paths. There is no automatic conversion from an earlier Q3D request. A
+source-free caller authors `Q3dBodySpec` records directly in the same v3
+`Q3dSpec`. Each body supplies its complete normalized exterior and hole rings,
+Z interval in micrometres, material ID, physical role (`signal`, `ground`, or
+`substrate`), and final Net ID for conductors. A substrate body uses a
+dielectric material and no Net. Optional source fields such as
+`source_entity_id`, `source_polygon_id`, `source_occurrence_path`,
+`source_local_entity_id`, `source_level`, and `source_layer_datatype` remain
+absent for a source-free body.
+
+The structured frontend is
+`prepare_q3d_from_geometry(snapshot: GeometryPlanSnapshot, *,
+aedt_version: str, modeling, output_dir, project_name, design_name,
+materials: Mapping[str, PdkMaterial],
+net_types: Mapping[str, Literal["Signal", "Ground"]],
+physical_ground_nets: Sequence[str], run_control: MatrixRunControl | None = None,
+region_padding_um: Sequence[float], resources: AedtResources | None = None)
+-> HandoffPlan`. It consumes the immutable GeometryPlan snapshot and returns a
+portable v3 handoff for C/G only (`solve_ac_rl=False`). The snapshot owns
+source geometry and final Net membership. `net_types` must cover exactly its
+conductor Net IDs; `physical_ground_nets` explicitly identifies a subset of
+those IDs independently of their requested native type. Materials, run
+control, Region padding and optional resources remain caller inputs. The
+frontend does not infer connectivity, rewrite Net membership or create
+terminals. A C/G Signal Net may have no terminals; AC/RL requires a complete
+source/sink pair for each Signal Net. Source curves are not silently
+linearized; the existing AEDT curve-intent exclusion remains in force.
+
+For source-backed requests, `geometry_source` uses
+`scgsim.aedt.q3d-geometry-source.v3`. It binds the canonical GDS, detached
+stack and source trace by path and SHA-256 and records the declared bodies and
+their normalized source lineage. Source attachment files are relocated into
+the portable handoff. The accepted source-backed representation preserves
+complete outer and inner rings as one body footprint; its native construction
+uses a covered outer sheet, subtraction of the hole regions, and a +Z sweep
+through the declared interval. The build-only observation below includes
+native body, holes, and Z readback plus a geometry preview for its tested case;
+it is not a general topology claim or a successful solve. No triangulation or
+GDS-piece import, Net Unite, coordinate repair, or generic feature-size policy
+is part of this input-v3 contract. Source- and lowered-geometry width/sliver DRC is
+deferred outside this package and is not a blocker to the body correction. No
+DRC coverage or Layout-validation claim is made, and no universal
+minimum-feature rule is applied.
+
+Source-backed Q3D constructs each normalized whole body directly, without a
+GDS import or object rename. It then reads the complete raw native object
+inventory and attributes the required native body identities before material
+or Net assignment, setup, or solve. A successful body-construction call alone
+does not establish that every required body arrived. Missing or ambiguous
+required bodies, or extra unattributed objects, fail at the body inventory
+and readback phase. The original exception stays primary in receipt `error`;
+phase detail retains body attribution, raw inventory and native IDs when
+readable, plus available native warning/error context. If a diagnostic read
+fails, its context is unavailable and cannot replace the primary failure.
+Warning presence alone does not reject a complete inventory. The source
+contract defines body attribution and failure behavior; the scoped build-only
+observation below confirms readback for its tested candidate operation, not a
+solver completion or returned matrices.
+
+#### Q3D native build-only execution
+
+Q3D v3 has an opt-in native build-only operation using the existing
+`python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --execute --prepare-only`
+entrypoint. It follows the same body construction, material and Net assignment,
+Region and setup creation/readback, project save, and owned Desktop release as
+the solver path. It does not call native `Analyze`, create a solver mesh, solve,
+or export matrices or convergence data. The receipt records
+`status="native_preparation_only"`, `solver_invoked=false`, and
+`resources.status="not_used_prepare_only"`; the saved AEDT project is the only
+native output. This execution consumes the one-shot handoff, so a later solve
+requires a newly prepared handoff. The strict `resolve_results` entrypoint
+continues to require a completed solver result; it does not resolve a
+preparation-only receipt as a result. On the accepted frozen candidate wheel,
+the observed build-only operation read back body and hole geometry, Z intervals,
+materials, all-Signal net assignments, Region and setup; it saved the project,
+released its owned Desktop, and had a separate top/isometric geometry preview.
+It did not call `Analyze`, solve, or export C/G matrices. Normal Q3D
+`--execute` behavior is unchanged.
+
+The v3 handoff keeps the five ordinary allowed paths in their established
+order. A source-backed cohort appends `geometry/source.gds`,
+`metadata/geometry_stack.json`, and `metadata/geometry_trace.json`; the
+manifest's `members` sequence omits its own path wherever it appears in
+`allowed_paths` and preserves the order, hashes and declaration checks of the
+other files. Thus a source-free handoff has five allowed paths and four member
+records, while source-backed v3 has eight allowed paths and seven records.
+
+#### Q3D user-requested Stop/Abort and save — CONVERGING
+
+The candidate exposes two mutually exclusive operations:
+`scgsim.aedt.request_q3d_stop_and_save(handoff)` requests Clean Stop, allowing
+the current pass to finish, while
+`scgsim.aedt.request_q3d_abort_and_save(handoff)` requests Abort of current
+work. The current receipt uses one `termination` carrier with an explicit
+mode; it does not add a clean-only `normal_stop` alias. Existing sealed
+receipts and reader rules remain unchanged, with no conversion adapter. Their
+direct CLI actions are:
+
+```sh
+python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --stop-and-save
+python -m scgsim.aedt.run --handoff <run-dir>/metadata/aedt_handoff_metadata.json --abort-and-save
+```
+
+Use either request action instead of `--execute`; the two modes are mutually
+exclusive with each other and with `--prepare-only`, analyze/solve controls,
+and resource overrides such as `--cores` or `--ram-limit-percent`. Each mode
+uses the same private control ledger and stable lock. A requester is a separate
+local Linux process bound to the exact active transaction: Desktop creation
+identity (start time, boot identity, and UID), PID, port, full project, design,
+setup, runtime/input identity, and nonce. It never attaches to a default/latest
+Desktop. Repeating the committed mode is idempotent; a conflicting mode is
+refused without another native RPC.
+Unsupported platforms fail before Desktop attachment.
+
+On Linux, execute-mode stop-managed Q3D refuses PyAEDT documentation mode
+(`PYAEDT_DOC_GENERATION`) before creating a Desktop. That mode overrides the
+Desktop close flags required for exclusive transaction ownership.
+
+The recorder retains the blocking Analyze. Clean Stop calls PyAEDT
+`Desktop.stop_simulations(clean_stop=True)` (native
+`oDesktop.StopSimulations(True)`); Abort calls it with
+`clean_stop=False` to interrupt current work. The receipt records mode/intent,
+RPC outcome, and raw native response separately. A returned RPC is not an
+acknowledgment: its response is uninterpreted and proves neither interruption
+nor success. Neither the Analyze return/exception nor the Stop/Abort RPC
+proves native inactivity or successful saving.
+
+After Analyze settles, the recorder closes admission and makes one native
+`odesktop.AreThereSimulationsRunning(True)` observation. Its `True` argument
+includes running and pending simulations; only native `False` confirms
+inactivity. Active, unknown, or unavailable native state, or uncertain
+control-ledger closure/read/write/readback, fails the workflow and defers
+Save/export with
+`attempted=false` and `native_not_confirmed_inactive`, and preserves the owned
+Desktop through non-closing detach with `release.ok=false`. It does not
+fabricate a committed intent,
+`normal_stop_saved`, or `abort_saved` status, write a post-release seal, or
+clean up the preserved Desktop automatically. Later owner action remains
+explicit.
+
+With confirmed inactivity and known control-ledger state, the recorder first
+attempts the explicit transaction Save; a preparation-time save cannot satisfy
+this requirement. Requested available completed-result matrices and native
+convergence exports are then attempted and recorded independently. Any raw
+native files actually produced remain retained even if export/readback parsing
+fails, with availability and errors recorded truthfully. Optional outputs do
+not prove that an interrupted pass completed or promise recovery/completeness.
+The owned Desktop is closed/released only if this explicit Save succeeds. If
+Save fails, the receipt is `FAILED`; the recorder performs a non-closing
+detach with `release.ok=false` and reason `save_failed`. The project and
+Desktop remain preserved, actual recoverable artifacts and ownership/error
+evidence are retained, and no post-release seal or automatic cleanup occurs.
+A successful release is required before sealing the actual released
+identities.
+
+The mode-specific `normal_stop_saved` and `abort_saved` statuses require the
+committed matching intent, returned RPC, Analyze returning true, confirmed
+native inactivity, successful explicit Save and Desktop release, and
+post-release seal. They describe only the finalized Stop/Abort-and-save
+workflow, not physics completion or proof that the request caused termination;
+Analyze can finish naturally. Analyze false/exception remains the primary
+failure with causality unknown; control-mode/intent, ACF restoration, RPC,
+Save/export, and release errors remain separately recorded. Optional export
+errors do not define the Stop/Abort-save workflow status or make it a completed
+solver result.
+Strict `resolve_results()` and Report behavior remain unchanged, with no new
+partial-result reader or Report API. No polling, wait loop, additional Stop/Abort, retry, or automatic cleanup is performed. The native
+Stop/Abort/save operations remain unobserved. These
+controls apply only to new executions registered by this runtime; old runs are
+not retrofitted. Ordinary Q3D without request intent, HFSS, Q2D, Eigenmode EPR,
+and non-Linux solver flows are unchanged. The Eigenmode EPR
+no-automatic-partial-save rule remains unchanged.
+
+The v3 handoff keeps the five ordinary allowed paths in their established
+order. A source-backed cohort appends `geometry/source.gds`,
+`metadata/geometry_stack.json`, and `metadata/geometry_trace.json`; the
+manifest's `members` sequence omits its own path wherever it appears in
+`allowed_paths` and preserves the order, hashes and declaration checks of the
+other files. Thus a source-free handoff has five allowed paths and four member
+records, while source-backed v3 has eight allowed paths and seven records.
 
 ## Eigenmode saved fields and Surface-EPR direction
 
@@ -431,17 +1076,73 @@ sidewall Surface-EPR requests; there is no sidewall-selection switch or
 legacy authoring path. Historical result artifacts retain their
 original scope and are read without rewriting their values.
 
+MA and MS remain separate field-side evaluations even when they use the same
+physical sheet footprint: each contribution carries its own `field_side` and
+native side selection. Sharing a footprint does not merge their integrals or
+make the conductor's physical thickness the interface-film thickness.
+
+For an explicit Solid EPR request selecting MA, MS, or SA contributions, the
+specified path records a native-face reference for each selected contribution.
+It resolves the source-bound Solid owner and source cap from the constructed
+model. The required readback at the existing post-save checkpoint, before
+Analyze, is the matching native design `EntityList` record, with its native
+name, type, ID, and face IDs verified. Assignment-time `props.List` is cached
+property state, not independent native-member readback. The existing save is
+reused; this adds no save, solve, or getter. An earlier native attempt failed
+before Solve on the incorrect property read. A subsequent SimplePad Solid run
+completed native solve, save, and release; both of its two adaptive passes
+recorded six raw native-face references, with FaceList membership matching
+the saved design's `EntityList`. It did not converge at its two-pass maximum
+(delta 79.181). These observations establish neither accuracy nor
+incident-material equivalence. A separate mode 1, pass 2 saved-field analysis
+completed with `epr_analysis_completed`, `Analyze0`, save, and release; it
+retained six raw references and the saved-membership evidence. The 35 original
+sealed project members remained unchanged.
+
+For the current horizontal constant-section swept or box construction, native
+face centers identify the upper or lower source cap; this does not establish a
+general normal or face-orientation rule. The reference uses the existing normal
+and tangential quadratic integrands with `EnterSurface` on the face list and no
+Sheet `Adjacent` selector. Native normals define projection only and do not
+prove which incident material supplied the field. No nearest-point selection,
+normal-to-Sheet-side inference, or convenience selector resolves a reference.
+
+The distinct `native_surface_references` mapping is retained in each raw
+integral record and as a sequence on combined result rows. Each reference
+retains its identity, selected contribution IDs, native owner/face-list/face
+membership, source and native support, incident-domain and projection basis,
+normal and tangential integrals in V^2, native area in m^2, and expression
+identity evidence. Native reference support can differ from the masked Sheet
+support; SA records its actual dielectric-owner basis separately from the
+existing vacuum-formula basis. Presentation labels those supports separately
+beside the masked Sheet results so users can inspect their trends without
+assuming equivalence.
+
+References are raw measurements, not participation, loss, inverse-Q, or a
+universal material-side equivalence. They are not added to masked surface
+maps, energy or loss totals, or the normalization denominator. Margins do not
+create duplicate native-face references, and references add no convergence
+condition. Public `resolve_results()` and `show_all_results()` completed in a
+fresh kernel and presented the raw V^2/m^2 values and face membership. Report
+generation used no native operations and produced HTML with 12 Plotly figures;
+the existing Plotly JSON data and layout were unchanged, and all 56 original
+inputs remained preserved. Report generation does not establish accuracy or
+incident-material equivalence.
+
 Each required field quantity is evaluated in an explicitly bound setup,
 `LastAdaptive` solution, mode, frequency, phase, and excitation context. That
 context is read back with the value: a saved expression name or expression
 digest alone is not solution identity because an unevaluated calculator stack
 can follow later context changes. Both Route A and Route B currently use
-analysis non-model sheets and a normal-based rule to choose the native side or
-adjacent side from the source `field_side`. The stored `effective_domain_id` is
-binding metadata, not a native domain restriction and not proof that the
-selected field belongs to that material. `Smooth` and field magnitude are not
-substitutes for side selection. The latest native expression and side behavior
-remain unverified; no field-success claim is made.
+non-model analysis sheets for masked evaluations and the unmasked baseline.
+Their `Surface`/`Adjacent` selector is distinct from geometric normal
+projection, and the ThinFilm mapping remains empirical as described below.
+The stored `effective_domain_id` is binding metadata, not a native domain
+restriction and not proof that the selected field belongs to that material.
+`Smooth` and field magnitude are not substitutes for side selection. Solid
+native-face references are a separate raw measurement path using verified
+source-bound face lists. The recorded raw values do not establish
+incident-material field ownership or resolve the Sheet-side ambiguity.
 
 ### Mode binding and pass cache
 
@@ -474,17 +1175,81 @@ a solve. A cache item is identified by its namespaced definition plus bound
 context, never by a display title alone. Multi-face quantities use a verified
 native face list or an explicit sum of individually bound faces.
 
+#### Independent expression-cache convergence targets
+
+`ExpressionCacheConvergenceSet(controls=(...))` carries a nonempty ordered
+collection of unit `ExpressionCacheConvergence` controls. The public setter and
+preparation helper accept either a unit or a collection. A collection serializes
+as `scgsim.aedt.hfss-eigenmode-epr.v4`; singleton V3 and historical V1/V2 payloads
+retain their existing serialization. Duplicate target/mode pairs are rejected.
+
+```python
+from scgsim.aedt import (
+    ExpressionCacheConvergence, ExpressionCacheConvergenceSet, NormalizedSurfaceEprTotal,
+)
+
+sim.set_expression_cache_convergence(ExpressionCacheConvergenceSet(controls=tuple(
+    ExpressionCacheConvergence(
+        mode=mode_index,
+        target=NormalizedSurfaceEprTotal(interface, "requested_margin", margin_um),
+        criterion=criterion_percent,
+        use_relative_convergence=True,
+    )
+    for interface in interface_kinds
+)))
+```
+
+The caller supplies `mode_index`, `margin_um`, `criterion_percent` and
+`interface_kinds`. The EPR request must include each target's prepared margin
+evaluation. Each interface is an independent normalized total with its own
+native criterion; the interfaces are never summed into one convergence target. Caller frequency, minimum,
+maximum and consecutive-pass settings remain unchanged. [AEDT 2024.2 documents
+that Eigenmode also requires frequency convergence in addition to its enabled
+expression criteria](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/Subsystems/HFSS/Content/HFSS/SpecifyingExpressionsforAdaptiveConvergence.htm).
+This documented conjunction is the requested native rule, not an observed
+combined-convergence result. Completion or frequency convergence alone does not
+establish that all targets converged; missing native stop evidence stays missing.
+Near-zero native percentage behavior is not replaced with an epsilon or absolute
+criterion.
+
+Each active item retains its control identity, expression/cache identity, mode,
+requested criterion and separately observed saved criterion fields. Native
+`Pass=All` cache rows retain their returned coordinates, values and missingness
+for each target. Configuration readback parses the exact saved project with
+PyAEDT's pinned, uncached `load_entire_aedt_file` reader, selects the bound HFSS
+design and setup, and records that file's hash. It does not use `setup.props` or
+the application project-properties cache. Requested native fields, actual saved
+fields, raw representation differences and unavailable fields remain separate.
+Saved frequency/pass controls are recorded alongside them. Matching setup
+configuration does not establish that a target met its criterion.
+
+Per-pass field retention is unknown; LastAdaptive saved-field identity is
+separate. No offline percentage delta is fabricated.
+
 #### Selecting an expression-cache convergence target {#epr-expression-cache-convergence}
 
-`EigenmodeSim.set_expression_cache_convergence()` optionally enables one
-expression-cache item for a caller-selected mode and explicit criterion. The
-mode must also be selected by the configured `EprAnalysisRequest`. With this
-setting omitted, SCGSim authors no auxiliary expression and submits the same
-non-converging primitive cache items as before. The handoff records a configured
-setting in `scgsim.aedt.hfss-eigenmode-epr.v3`; V1/V2 handoffs remain readable
-and retain their prior schema on round trip. The low-level
-`prepare_hfss_eigenmode_from_geometry()` accepts the same
-`expression_convergence` argument.
+`EigenmodeSim.set_expression_cache_convergence(control)` replaces the current
+selection; repeated calls do not accumulate controls. Omit the setting or pass
+`None` to select no expression-convergence criterion, pass one
+`ExpressionCacheConvergence` for a singleton, or pass an
+`ExpressionCacheConvergenceSet` containing the chosen subset of targets. Routine
+EPR computation and reporting do not automatically enable convergence criteria.
+Each selected control's mode must also be selected by the configured
+`EprAnalysisRequest`.
+
+For the singleton case, the setter enables one expression-cache item for a
+caller-selected mode and explicit criterion, and the handoff records that
+setting in `scgsim.aedt.hfss-eigenmode-epr.v3`. A collection uses V4 as described
+above. V1/V2 handoffs remain readable and retain their prior schema on round
+trip. With no control selected, SCGSim authors no auxiliary expression and
+submits the same non-converging primitive cache items as before. The low-level
+`prepare_hfss_eigenmode_from_geometry()` requires both `aedt_version` and
+`modeling`, and accepts the same `expression_convergence` argument.
+
+Native frequency convergence controls remain separate and unchanged. AEDT
+requires those frequency criteria together with only the explicitly selected,
+enabled expression criteria; unselected computed EPR quantities are not added
+to that conjunction.
 
 `criterion` is passed to AEDT without scaling. With
 `use_relative_convergence=True`, it is the native **Max Percent Delta** in
@@ -575,16 +1340,20 @@ those outcomes require an actual target-run observation.
 
 ### Public EPR surface {#public-epr-candidate-surface}
 
-`prepare_planar_geometry_input()` validates and detaches shared source
-polygons, holes, entities, solution domains, Route A/B selection, junctions,
-and surface-analysis requests. `prepare_hfss_eigenmode_from_geometry()` binds
-that source request to an HFSS Eigenmode spec and emits one portable handoff;
-the old GDS authoring API remains available and unchanged.
+`prepare_planar_geometry_input()` requires an explicit `modeling` choice and
+validates/detaches shared source polygons, holes, entities, solution domains,
+junctions, and surface-analysis requests. Any Route A/B choice belongs to the
+upstream geometry compiler; it is not an AEDT preparation argument.
+`prepare_hfss_eigenmode_from_geometry()` requires `aedt_version` and `modeling`,
+binds the prepared source request to an HFSS Eigenmode spec, and emits one
+portable handoff. Direct GDS authoring remains available; its 3D spec now also requires
+the explicit modeling choice.
 
-For AEDT EPR, the preparation order is source geometry, any requested Route A
-profile, declared junction partition into local PEC ends and the central RLC
-rectangle, then SGB surface planning and the contribution catalogue. Route A
-adapter-generated sheet footprints are refreshed from that final conductor
+For AEDT EPR, the preparation order is source geometry and an explicit
+`modeling` choice, declared junction partition into local PEC ends and the
+central RLC rectangle, then geometry-compiler surface planning and the
+contribution catalogue. Any Route A/B choice belongs to the upstream source.
+Route A adapter-generated sheet footprints are refreshed from that final conductor
 geometry; caller-authored declarations remain present. The catalogue carries
 only physically planned ledger evidence, so generic declarations without a
 physical ledger entry do not add numeric contributions. Palace keeps its
@@ -603,7 +1372,7 @@ flowchart TB
   INPUT["GeometryBuildInput<br/>normalized polygons, Entities, domains"]
   PALACE["Palace preparation<br/>existing port and junction model"]
   PARTITION["AEDT junction partition<br/>local PEC ends + central RLC rectangle"]
-  PLAN["SGB SurfacePlanRecord + contribution ledger<br/>surface patches and source evidence"]
+  PLAN["geometry compiler SurfacePlanRecord + contribution ledger<br/>surface patches and source evidence"]
   PREPARED["PreparedPlanarGeometry<br/>detached source, catalogue, bindings, hashes"]
   NATIVE["PreparedEprHfss<br/>native model, non-model sheets, expressions/cache"]
   RAW["Native raw integrals + evaluation evidence"]
@@ -623,7 +1392,7 @@ flowchart TB
 |---|---|
 | `GeometryBuildInput` | Shared normalized source polygons, semantic Entities, solution domains, material and provenance facts. It is input to the backend planners. |
 | Final AEDT junction geometry | `prepare_planar_geometry_input()` partitions declared junction sheets before surface planning. Derived PEC ends and the central RLC rectangle retain source-owner and material lineage; original source input remains unchanged. |
-| `SurfacePlanRecord` and `surface_contribution_ledger` | SGB plans physical surface patches and records owner, interface, side, effective domain, source and aggregation evidence. The ledger is the authority for numeric surface catalog entries; a semantic declaration alone adds none. |
+| `SurfacePlanRecord` and `surface_contribution_ledger` | The geometry compiler plans physical surface patches and records owner, interface, side, effective domain, source and aggregation evidence. The ledger is the authority for numeric surface catalog entries; a semantic declaration alone adds none. |
 | `PreparedPlanarGeometry` | Detached pre-native AEDT request containing source/junction facts, catalog, selected contributions, surface bindings, and model/source digests. It does not claim that native geometry or a solve was validated. |
 | `PreparedEprHfss` | In-process owner of the active AEDT application handle, prepared geometry and setup records, non-model sheets, expressions/cache, and timing/readback state. It is not a portable result or evidence of a completed solve. |
 | `EprResult` | Detached per-mode or per-mode/pass rows. `raw_integrals` and `raw_integral_evidence` retain observed quantities and evaluation context; the existing combination step computes domain, surface, and junction values with the model-wide normalization. |
@@ -678,6 +1447,37 @@ filling missing values; this is not artifact authentication. A detached EPR
 record retains its recorded source identities and, where present, the
 saved-solution content hash, but these values do not authenticate the detached
 JSON.
+
+### Explicit native field selectors for saved analysis (CONVERGING)
+
+`analyze_epr()` accepts the optional
+`surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None`
+keyword. Keys are existing selected `contribution_id` values in the EPR
+request. `"surface"` requests the native `EnterSurface` selector and
+`"adjacent"` requests `EnterAdjacentSurface`. A supplied choice applies to
+every binding, component, evaluation, and margin for that contribution; it
+does not filter or combine requested patches or margins. Unspecified
+contributions retain the existing normal-derived selector behavior. Unknown
+or unselected contribution IDs and unsupported values fail explicitly.
+
+The override changes only the native one-sided field selector used during
+saved-field analysis. The original `SurfaceEprSpec.field_side` and its source
+meaning remain unchanged. Requested selector, applied native carrier binding,
+and actual calculator command/name readback remain distinct provenance. The
+readback establishes which selector was requested by the native calculator;
+it does not establish that the sampled field is on the intended material
+side. No automatic material-side correction or certainty is implied. Analysis
+continues on the verified saved `LastAdaptive` workcopy without another
+Eigenmode `Analyze`, mesh operation, or physical geometry rebuild, and keeps
+the existing grouping and normalization. A nonempty override uses the explicit
+saved-analysis request codec; `None` or an empty mapping retains the existing
+no-override codec and selector behavior.
+
+For example, a caller may pass
+`surface_field_selectors={contribution_id: "surface"}` after choosing an
+existing contribution ID from its request. The choice is caller-owned; the
+producer does not infer or supply it.
+
 `reanalyze_epr()` recomputes film estimates from stored evidence without
 reopening AEDT, and `show_epr()` gives a standalone surface/bulk/junction
 Plotly view. Neither is wired into the unified Visualizer. The older
@@ -728,6 +1528,45 @@ terminal-owner geometry, including area overlap or boundary contact. This
 identifies a candidate binding but does not qualify the final partition.
 Preparation separately checks complete coverage of the designated central end
 edge.
+
+Both this binder and `prepare_planar_geometry_input()` accept the complete
+source input. Do not omit other-face conductors or prepare a same-face submodel
+to bypass contact checks. One shared per-junction inventory resolves the
+physical source support plane before considering projected XY contact. Exact
+port overlap host Entity/polygon references establish the source hosts; their
+authored `PhysicalLayerDeclaration` film attachment planes, or genuine
+zero-thickness source sheet planes, must agree. Finite body intervals can
+confirm incidence but do not invent a support plane. With boundary-only
+contacts or a manually constructed `PlanarJunction`, the same resolver requires
+one unique authored support-plane candidate incident to the closed-XY contacts
+of both explicit terminal Nets. Missing or ambiguous binding fails explicitly;
+a layer name, Net, projected overlap, or a Solid's lower endpoint alone is not
+a plane binding.
+
+The source interval is the actual body interval, preserved in
+`physical_representation.source_interval_um` after lowering. A source-disjoint
+conductor is excluded from this junction's contact inventory even if Thin Film
+collapse places it at the same effective Z. Source interval endpoints are
+included. For source-incident candidates, effective incidence is also required.
+The existing common `PhysicalRepresentationPlan` projects the support through
+`project_support_point()` with its bound host physical identity; no separate
+junction profile/Z map is introduced. Genuine same-plane terminal, third-net,
+end/corner and open-side failures remain unchanged.
+
+The public helper records the source binding in the existing
+`PlanarJunction.metadata["junction_support_plane"]` mapping, with schema
+`scgsim.aedt.junction-support-plane.v1`, source polygon/plane, binding basis and
+exact source host Entity/polygon/physical-layer/actual-interval records. The
+constructor and canonical payload shape are unchanged. Preparation recomputes
+these facts and rejects a conflicting recorded binding; older manually authored
+junctions without that metadata derive available source evidence through the
+same resolver or fail if it is missing or ambiguous. Partition provenance
+retains this source binding, its effective plane and eligible original Entity
+IDs under `support_plane`; `z_um` is that effective plane. These same per-junction
+IDs govern initial contact classification, reconstructed arm/sheet incidence
+and Booleans, and final emitted-geometry checks, including derived ends through
+their original Entity lineage. All other conductors remain in the full model.
+These source/projection records do not prove native contact or field side.
 
 #### Automatic rectangular junction partition {#aedt-automatic-junction-partition}
 
@@ -880,6 +1719,50 @@ verified working copy before expression authoring. Neither path substitutes the
 creation dictionary or cached boundary properties for saved-file evidence, and
 this check adds no save/reopen cycle.
 
+A junction RLC readback remains a fail-fast preparation error when required
+native properties are unavailable or unreadable, the existing type, flag, unit,
+finite-value, or geometry checks fail, or the selected scalar comparison does
+not match. For normalized SI inductance and capacitance, exact equality is the
+fast path and is recorded as `method="exact_si"`; canonical values are marked
+not performed on that path. Otherwise, for finite operands, only the comparison
+operands are symmetrically canonicalized to `sys.float_info.dig` significant
+decimal digits using a local `Decimal` context with `ROUND_HALF_EVEN`. Exact
+equality of the canonical operands determines `representation_equal_si` and
+`matches_si`; `exact_equal_si` remains false if the original normalized SI
+values differed. The authored request and native value are never rounded or
+rewritten, and there is no absolute or relative tolerance or per-study override.
+Values on opposite sides of a rounding-bin boundary can remain unequal under
+this rule.
+
+The successful `electrical_readback.scalar_comparisons` records each
+scalar comparison's observed and requested SI decimal values, `exact_equal_si`,
+policy, method, selected significant digits and rounding mode, canonical
+observed and requested operands, `representation_equal_si`, and `matches_si`.
+The same comparison evidence is retained in the failed
+`junction_rlc_readback=<JSON>` exception note; the successful saved
+`partition_readback` carries the electrical evidence forward unchanged. The
+failed note also retains `requested`, `observed` (availability, raw value, value
+type, and read status), `available_property_names`, `normalized` (parsed number,
+type, unit, scale, and SI decimal string only when reached), `checks` (evaluated
+and passed state, with remaining checks marked not evaluated), `failed_checks`,
+and `stage`. A property not available, not read, or not successfully converted
+is reported as such rather than replaced with an assumed default. The original
+readback exception remains first in `error`; transaction save/release and
+transport-restoration handling remain unchanged. Nonfinite operands are not
+canonicalized, and existing fail-fast checks remain in force.
+
+This comparison rule is an SCG-selected floating-representation policy, not an
+AEDT storage-precision guarantee or a claim of physical accuracy. Python's
+[`sys.float_info.dig` documentation](https://docs.python.org/3.12/library/sys.html#sys.float_info)
+defines the selected decimal round-trip precision; it says nothing about
+AEDT's internal storage or formatting. AEDT's `GetPropValue` documentation
+does not promise an exact textual or decimal representation for these
+properties. Canonical agreement therefore does not establish native bit
+identity, and the rounding-bin boundary remains a comparison-resolution limit.
+This diagnostic repair does not establish actual native success or identify a
+physical cause before the observed values are available. It authorizes no
+automatic retry or solver `Analyze`.
+
 This reads the saved file with PyAEDT 1.3.0's [`load_entire_aedt_file()` parser](https://github.com/ansys/pyaedt/blob/7084127f52679a70b52e0a550d039673171caefe/src/ansys/aedt/core/internal/load_aedt_file.py).
 A [public saved-project example](https://github.com/zlatko-minev/pyEPR/blob/97be9f15212e6ddd427e7ee310dacfa778240fe0/_example_files/pyEPR_tutorial1.aedt)
 shows `CurrentLine` stored as entity-attached `GeometryPosition` records. That
@@ -894,8 +1777,10 @@ recorded geometry.
 #### Catalogue-driven handoff
 
 The inputs below are the real `GeometryBuildInput` and prepared-stack mapping
-from the existing in-tree SGB workflow, including the selected route and its
-material, vacuum-region, and (for Route A) thin-film provenance. See
+from the existing in-tree geometry workflow. They carry the source geometry,
+material and vacuum-region facts; the AEDT request separately selects its
+`modeling` representation. Route A/B is not an argument to this AEDT helper.
+See
 [Geometry and SGB Route A/B](../geometry-sgb.qmd#shared-source-facts-for-aedt).
 The first call requests no analysis contributions and exposes the horizontal
 top/bottom `contribution_catalog` after applying the declared junctions. A row
@@ -904,13 +1789,21 @@ this helper, the caller selects one contribution and explicitly supplies a
 source ID retained by that catalogue row; the ID need not belong to the
 original `build_input.polygons`. Missing or ambiguous contribution selection
 and a source ID not retained by the selected row fail before constructing
-`SurfaceEprSpec`. The helper does not choose a source for the caller. Supply the
-existing Route A profile
-(`substrate_face` or `metal_gap_equivalent`) explicitly as `route_a_profile`;
-no profile is defaulted.
+`SurfaceEprSpec`. The helper does not choose a source or modeling mode for the
+caller. Supply an explicit `modeling` value; Thin Film additionally requires
+the source PDK's qualified physical-layer declarations.
 
-The catalogue is built from the SGB planner's physical surface-contribution
-ledger. A generic declaration without physical ledger evidence remains
+`contribution_id` selects every existing patch in that catalogue group.
+`SurfaceEprSpec.source_polygon_id` is a group provenance anchor: it must be
+retained by at least one member of the selected group's catalogue union,
+including the existing planned SA surface-ID fallback. It does not filter,
+split or omit other group members. Each resolved binding keeps its own
+`contribution` evidence and `geometry_ref` as the true per-patch provenance;
+classification, side, adjacent domains, materials and masks remain validated
+for each patch.
+
+The catalogue is built from the geometry compiler's physical
+surface-contribution ledger. A generic declaration without physical ledger evidence remains
 semantic metadata and does not add a numeric EPR contribution. For Route B
 finite-shell top and bottom patches, the mask and analysis-sheet plane use the
 same resolved source Z: `z_max_um` (or `z_min_um + thickness_um`) for the top,
@@ -920,7 +1813,7 @@ physical face rather than on the shell's lower plane.
 ```python
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from scgsim.aedt import (
     AedtResources,
@@ -933,15 +1826,16 @@ from scgsim.aedt import (
     prepare_hfss_eigenmode_from_geometry,
     prepare_planar_geometry_input,
 )
-from scgsim.sgb import GeometryBuildInput
+from scgsim.geometry import GeometryBuildInput
 
 
 def prepare_surface_epr_handoff(
     *,
+    aedt_version: str,
     build_input: GeometryBuildInput,
     prepared_stack: Mapping[str, Any],
     junctions: tuple[PlanarJunction, ...],
-    route_a_profile: str,
+    modeling: Literal["solid", "thin_film"],
     contribution_id: str,
     source_polygon_id: str,
     film_thickness_m: float,
@@ -957,8 +1851,7 @@ def prepare_surface_epr_handoff(
     catalogue_geometry = prepare_planar_geometry_input(
         build_input,
         prepared_stack=prepared_stack,
-        route="A",
-        route_a_profile=route_a_profile,
+        modeling=modeling,
         junctions=junctions,
     )
     for record in catalogue_geometry.contribution_catalog:
@@ -992,8 +1885,7 @@ def prepare_surface_epr_handoff(
     geometry = prepare_planar_geometry_input(
         build_input,
         prepared_stack=prepared_stack,
-        route="A",
-        route_a_profile=route_a_profile,
+        modeling=modeling,
         junctions=junctions,
         contributions=(surface,),
     )
@@ -1003,6 +1895,8 @@ def prepare_surface_epr_handoff(
         junction_ids=tuple(item.junction_id for item in junctions),
     )
     handoff = prepare_hfss_eigenmode_from_geometry(
+        aedt_version=aedt_version,
+        modeling=modeling,
         geometry=geometry,
         project_name=project_name,
         design_name=design_name,
@@ -1019,11 +1913,13 @@ def prepare_surface_epr_handoff(
     return geometry, request, handoff
 ```
 
-Call this local example with the existing SGB outputs, the exact IDs printed
-from the catalogue, the same declared `PlanarJunction` objects for both
-geometry preparations, PDK film properties, the selected
-`EigenmodeRunControl`, the existing Route A profile passed as
-`route_a_profile`, and a new path such as `runs/cpw-epr-prepare-only`. On the AEDT host, the
+Call this local example with the existing geometry outputs, an explicit
+`modeling` choice, the exact IDs printed from the catalogue, the same declared
+`PlanarJunction` objects for both geometry preparations, PDK film properties,
+the selected `EigenmodeRunControl`, and a new path such as
+`runs/cpw-epr-prepare-only`. For `thin_film`, the source must also carry the
+qualified physical-layer interval, kind, and contact declarations described
+above. On the AEDT host, the
 generated script's explicit preparation-only invocation is
 `<handoff.run_dir>/run_aedt.sh --prepare-only`; this saves and releases the
 prepared model but does not solve or produce field integrals. Preparation
@@ -1075,16 +1971,27 @@ permittivity can reuse the raw surface integrals; changing a margin changes the
 integration domain and requires a new saved-field evaluation. None of these
 offline APIs substitutes a historical cache row for a final saved-field row.
 
-The earlier A-r5 no-solve attempt loaded same-side surface expressions but
-failed to load an opposite-side sheet expression written with an unverified
-CLC command. The current implementation compiles dependency-ordered CLC definitions
-locally, including an adjacent-side integrand and the native-serialized
-`EnterAdjacentSurface` command, then submits the complete definition library
-through one native `LoadNamedExpressions` call. Preparation and saved-field
-analysis use the same authoring path. A small unsolved native probe loaded and
-reopened four locally authored dependent definitions; the full inset-sheet
-library has not been verified. Authoring does not prove field-side selection or
-numerical EPR correctness, and a native expression failure remains fatal.
+The EPR authoring path writes dependency-ordered CLC definitions and a combined
+`metadata/epr_expressions/scgsim_epr_batch.clc` library, then submits the
+requested definitions through `FieldsReporter.LoadNamedExpressions`. Adjacent
+side integrals use the native `EnterAdjacentSurface` command. The required
+definitions are the requested expression roots and their recursively
+referenced named helpers. Missing or conflicting root/helper definitions
+remain fatal. The native `SaveNamedExpressions` readback still requires the
+returned definition names to match the exact requested native names. Separately,
+the retained `validated_expression_readback` treats its complete shared CLC as
+a library: it must contain the required roots and helper closure, while
+unrelated extra definitions are retained and allowed. The native exact-name
+check is not relaxed by this package-evidence rule. The native path records the
+returned artifact at `metadata/epr_expressions/scgsim_epr_native_readback.clc`.
+Its readback record binds the file's SHA-256 and byte count, returned definition
+names, each definition's digest, and its field-selection operations; the
+operations must match those authored for the requested definitions. Names are
+derived from each expression's identity and are enumerated in the record,
+rather than being a fixed global list. Preparation and saved-field analysis use
+this same authoring/readback path. These source-level requirements describe
+what an execution must observe; they do not themselves claim that a native
+load or readback has succeeded. Native expression failures remain fatal.
 
 History export starts from the native available solutions and selects the
 declared setup's adaptive passes. It records actual categories, quantities,
@@ -1101,11 +2008,25 @@ last completed solver pass comes from independent solver/convergence evidence
 and is not inferred from the largest cached pass. Adaptive history and a
 separately reopened `LastAdaptive` saved-field evaluation are different
 evidence surfaces and never substitute for each other.
-For Eigenmode, the exact-setup native `ExportConvergence` property file supplies
-the pass, delta-frequency, status, and solved-element count. Its solved-element
-count is not relabeled as a tetrahedron count from a solver profile. A
-successful solve is saved before fallible result exports, so an export failure
-does not discard the native solved project.
+For Eigenmode, SCGSim saves the solved project before requesting the exact-setup
+native `ExportConvergence` property file. It passes empty `VariationKeys`, so
+HFSS uses the current nominal variation, then requires the file to exist and
+the convergence parser to succeed. The parser supplies the pass,
+delta-frequency, status, and solved-element count; that count is not relabeled
+as a tetrahedron count from a solver profile. An export or parse failure fails
+the operation without skipping convergence evidence or substituting a fallback.
+
+The transaction temporarily disables PyAEDT's `release_on_exception` while it
+owns the Desktop, then restores its prior value after SCGSim cleanup. The
+original native error remains the operation's primary failure. On a failed
+export, `save.ok` may remain at its initial `false` even when the family saved
+the project before the export failed. `release.ok` records the result of the
+SDK Desktop-release call; it does not establish that every operating-system
+descendant exited. Failed runs remain failed and are not rewritten or sealed
+as successful saved-solution manifests; retained native files are diagnostic
+artifacts. ⚠️ Native verification: this source
+change was not checked in a new AEDT run, and behavior across AEDT versions is
+not established.
 Historical profile-backed receipts remain bound to their recorded profile
 sources; they are not reinterpreted as new property-file exports.
 
@@ -1177,18 +2098,64 @@ than a native solver-domain restriction. In each source plane, preparation
 unites the complete physical support, applies a constant-distance inward
 offset for a positive margin, and only then intersects the result with the
 owner attribution. Margin zero uses the unoffset support intersection. The
-resulting contours become non-model integration sheets at the original field
-plane; model CAD, boundaries, and mesh are unchanged. Split components are
-integrated separately and summed; an empty intersection is an explicit zero.
-Native analysis-sheet names identify their physical owner/support,
+resulting contours become non-model integration sheets at the original
+field plane; the unmasked baseline is also a separate non-model integration
+sheet over the unoffset support, not a sample of a native model face. Model
+CAD, boundaries, and mesh are unchanged. Split components are integrated
+separately and summed; an empty intersection is an explicit zero.
+Generated analysis-sheet names are human-readable labels, not source
+authority. The existing readable form identifies physical owner/support,
 classification and field side, then `Unmasked` or the effective margin in
-nanometres. A `PartNN` suffix appears only when there are multiple pieces.
-When one geometry serves multiple contributions, its single sheet name
-identifies the complete shared membership rather than an arbitrary first
-contribution; full internal identities remain in preparation evidence.
-The original field-side normal and adjacent-side selection remain bound to each
-sheet. The same geometry construction serves preparation and saved-field
-analysis; the former point-to-edge calculator mask is not a fallback.
+nanometres. A `PartNN` suffix appears only when there are multiple pieces;
+when one geometry serves multiple contributions, its name identifies the
+complete shared membership rather than an arbitrary first contribution.
+Previously successful names remain byte-identical. SCG applies an internal
+60-character generated-identifier budget; the inspected AEDT documentation
+does not establish 60 characters as a universal native object-name limit. If
+the readable semantic and `PartNN` tail exceeds SCG's budget, the generated
+name is `EPR_` plus the 52-character base32 encoding of the full canonical
+SHA256 naming identity, for 56 ASCII characters total. The canonical identity
+binds the source geometry SHA256, sorted full member tuples, and sorted part
+indices. Existing preparation/native provenance retains the full geometry
+SHA256, member tuples, part indices, and full naming-identity SHA256. Distinct
+identities that collide at the generated name fail explicitly; names never
+merge memberships or replace the retained identity evidence.
+ThinFilm Surface-EPR remains available under the supported PyAEDT 1.3.0 /
+AEDT 2024.2 profile with its current normal-based side selector. Interpret each
+standalone planar analysis sheet's `FacePrimitive.normal` as its
+`Adjacent`-side direction. Derive the requested material side from that
+binding's source contribution side/effective domain: for ThinFilm, a positive
+normal dot product with the requested side selects `Adjacent`, while an
+opposed direction selects `Surface`. The calculator selector chooses the
+one-sided field sample independently of geometric normal projection. Resolve
+each actual sheet independently, including insets and saved-copy reconstruction;
+do not transfer a base sheet's direction to an inset. Keep the projection
+`native_normal` distinct from this calculator selector. Solid mode and
+historical records retain the previous inverse selector convention and their
+original identity. Preserve the existing unavailable/ambiguous-normal failure
+behavior.
+
+This mapping is empirical, not a validated general native calculator-side
+query. The two observed unsolved Ground and Pad sheets support the current
+rule, but do not establish it for arbitrary AEDT versions or polygon orderings,
+non-model sheets, or sheets with holes. A ThinFilm Surface-EPR call emits a
+warning about this side-selection risk. Ansys documents `Adjacent` as using
+field data from the adjacent side of a sheet, while `Normal` computes a vector
+component along the surface unit normal ([Geometry Command](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/Subsystems/HFSS/Content/ReportsandPostProc/GeometryCommand.htm),
+[Normal Command](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/Subsystems/HFSS/Content/ReportsandPostProc/NormalCommand.htm)).
+These are distinct calculator operations and do not define a universal mapping
+from `FacePrimitive.normal` to the sampled material side. Flipping the
+projection normal changes the projected component's sign; it does not change
+which one-sided field `Surface` or `Adjacent` samples. Selecting the wrong
+material side can change the MA/MS integrals and the resulting participation
+or loss. These observations do not establish numerical accuracy, convergence,
+or speed, and add no new
+evidence for Solid mode. Inspect MA/MS/SA trends across margin, mode, and
+adaptive pass for consistency when those records are available. These trends
+have no automatic pass/fail interpretation; no equality, tolerance, or
+monotonicity requirement is imposed. The same geometry construction serves
+preparation and saved-field analysis; the former point-to-edge calculator
+mask is not a fallback.
 
 For a continuous physical planar patch, the mask is
 
@@ -1309,18 +2276,23 @@ $\operatorname{copysign}(p_L,\operatorname{Re}I_L)$, which is not invariant
 under arbitrary phase rotation. The junction contract does not silently add
 resistance, Kerr, or a Palace port result.
 
-Execution does not inject `SaveAnyFields` or `SaveRadFieldsOnly` into the
-Eigenmode setup without established solver-specific support.
-[General AEDT 2024 R2 HFSS documentation](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/Subsystems/HFSS/Content/HFSS/SpecifyingSolutionSettings.htm)
-describes Save Fields as a default, not as a verified Eigenmode setup readback;
-the actual completed saved-field inventory remains required evidence. It must
-save both the project and complete result directory,
-close the owned Desktop, archive immutable bytes, copy them to a
-working analysis location, reopen that copy, and perform analysis without any
-solve or export call. A missing result directory, unavailable expression
-definition, context mismatch, or guarded solver attempt fails closed. The
-analysis receipt keeps declared, planned, observed, and evaluated evidence
-separate and never rewrites the normal run receipt into success.
+EPR uses the same `EigenmodeRunControl` setup mapping and saved readback as an
+ordinary Eigenmode run; its only setup extension is the expression-cache
+configuration. Preparation reads back the seven Eigenmode control values. It
+does not author `SaveAnyFields` or `SaveRadFieldsOnly`; if AEDT serializes
+either property, it remains an observed value, while an absent property stays
+missing. Neither setup readback nor a requested policy proves that field data
+were saved.
+
+After the actual solve, EPR verifies the exact setup's `LastAdaptive` Fields
+solution. It then saves the project and complete result directory, releases the
+owned Desktop, and seals the saved bytes. Saved-field analysis opens a verified
+copy and validates the requested calculator definitions and saved-field
+evaluations there, without solving again. Analysis of an existing solution
+does not re-author setup properties. A missing result directory, unavailable
+expression definition, context mismatch, or guarded solver attempt fails
+closed. The analysis receipt keeps declared, planned, observed, and evaluated
+evidence separate and never rewrites the normal run receipt into success.
 
 Ordinary result resolution defaults to the last completed solver pass. A caller
 may explicitly select another recorded pass and mode, but a missing value never

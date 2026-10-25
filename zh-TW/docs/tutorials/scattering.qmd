@@ -1,0 +1,356 @@
+---
+title: "萃取 CPW 散射響應"
+description: "以完整公開 CPW 來源比較 HFSS Driven Modal 積分線埠與 Wave Terminal 參考導體。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/scattering"
+jupyter:
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+execute:
+  enabled: false
+---
+
+## 1. 本流程會得到什麼 {#1-what-you-will-get}
+
+本筆記本會準備一個有限接地共平面波導（CPW），並讀取其 HFSS 雙埠散射響應。積分線埠請選 Modal；使用具明確接地參考的 Wave 埠請選 Terminal。兩種埠模型與各自回傳的證據彼此不同。
+
+![公開有限接地 CPW 的來源幾何：基板、中央訊號線、兩條接地帶及 Modal 積分線位置。此圖呈現宣告的版圖，不是求解結果。](../assets/cpw-source.svg){#fig-public-cpw-source}
+
+基準樣本長 500 µm。其 10 µm 訊號線與兩條 80 µm 接地帶間隔 6 µm，並位於 500 µm 矽基板上。圖中矩形與埠座標依據此基準幾何，不含模擬場或響應曲線。[OrcaPen CPW Modal 來源](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/ComponentSimulation/CpwFiniteGround/aedt_hfss_driven_modal.ipynb)與 [Terminal 來源](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/ComponentSimulation/CpwFiniteGround/aedt_hfss_driven_terminal.ipynb)仍由 PDK 維護筆記本來源。
+
+## 2. 準備環境 {#2-prepare-your-environment}
+
+使用 Python 3.12 或 3.13。安裝 Git 與 [uv](https://docs.astral.sh/uv/getting-started/installation/)，再以本筆記本指定的 SCGSim 與 OrcaPen 版本建立研究環境。
+
+```bash
+uv init --python 3.12 cpw-scattering
+cd cpw-scattering
+uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@90fb50ef9de80fa6e556d2f2a09fb45707efeea0' \
+  'orpen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@35b4dc1cdd3f921badcac2fe57a98366315ae8d9' \
+  ipykernel
+uv run python -c "from importlib.metadata import version; print(version('scgsim')); print(version('orpen-sc-pdk'))"
+uv run --with jupyter jupyter lab
+```
+
+SCGSim 固定於 `2.0.0rc11`；所選公開 PDK 來源固定於 `35b4dc1cdd3f921badcac2fe57a98366315ae8d9`，匯入名稱為 `orpen_sc_pdk`。請在求解主機安裝 AEDT 2023.2 或 2024.2、PyAEDT 1.3.0，並備妥可用授權。Python 套件負責準備請求，不會安裝原生求解器。
+
+檢查：兩個套件版本都能列印，且 Jupyter 使用本專案的 `.venv`。
+
+## 3. 選擇設定 {#3-choose-your-settings}
+
+建立新請求前請編輯此儲存格。幾何尺寸與埠線長度使用微米，掃頻範圍使用 GHz。兩種埠選擇共用此設定。
+
+```{python}
+#| id: scattering-settings
+from pathlib import Path
+
+AEDT_VERSION = "2024.2"  # Select 2023.2 or 2024.2 for the licensed host.
+OUTPUT_ROOT = Path(".artifacts/finite-cpw-scattering")
+SOURCE_GDS = OUTPUT_ROOT / "source" / "cpw.gds"
+MODAL_RUN_ID = "cpw-modal-01"
+TERMINAL_RUN_ID = "cpw-terminal-01"
+CPW_LENGTH_UM = 500.0
+SIGNAL_WIDTH_UM = 10.0
+GAP_UM = 6.0
+GROUND_WIDTH_UM = 80.0
+SUBSTRATE_WIDTH_UM = SIGNAL_WIDTH_UM + 2 * (GAP_UM + GROUND_WIDTH_UM)
+SUBSTRATE_THICKNESS_UM = 500.0
+GROUND_CENTER_OFFSET_UM = SIGNAL_WIDTH_UM / 2 + GAP_UM + GROUND_WIDTH_UM / 2
+FREQUENCY_START_GHZ = 3.0
+FREQUENCY_STOP_GHZ = 8.0
+SWEEP_POINTS = 20_000
+METAL_THICKNESS_UM = 0.2
+PORT_LINE_HEIGHT_UM = 20.0
+LENGTH_MESH_UM = 10.0
+AEDT_CORES = 4
+AEDT_RAM_LIMIT_PERCENT = 80
+```
+
+執行識別碼會分別指定輸出資料夾，避免兩種埠定義互相覆寫。Modal 積分線位於 CPW 兩端面；Terminal 使用相同端面，並以兩個明確指定的接地物件作為參考。
+
+檢查：確認 AEDT 版本、頻率範圍、掃頻點數，並為研究問題指定新的執行識別碼。
+
+## 4. 建立完整 CPW 來源 {#build-cpw-source}
+
+此儲存格建立公開矩形來源、寫出 GDS，並將匯入圖層與物件綁定至 PDK 材料。請將這些定義與所選埠模型一併使用；兩種流程都不依賴另一份準備教學。
+
+```{python}
+#| id: scattering-cpw-source
+import gdsfactory as gf
+import orpen_sc_pdk
+from orpen_sc_pdk.materials import get_material_records
+from orpen_sc_pdk.tech import LAYER
+from scgsim.aedt import (
+    AedtResources, FrequencySweepSpec, HfssDrivenSpec, HfssRunControl,
+    LayerImport, LengthMeshSpec, ModalPort, ObjectBinding, PdkMaterial,
+    PhysicalLayerSpec, TerminalPort, prepare_handoff,
+)
+
+orpen_sc_pdk.activate()
+coupon = gf.Component()
+coupon << gf.components.rectangle(
+    size=(CPW_LENGTH_UM, SIGNAL_WIDTH_UM), centered=True,
+    layer=LAYER.D0_TOP_M1_DRAW,
+)
+upper = coupon << gf.components.rectangle(
+    size=(CPW_LENGTH_UM, GROUND_WIDTH_UM), centered=True,
+    layer=LAYER.D0_TOP_M1_DRAW,
+)
+upper.movey(GROUND_CENTER_OFFSET_UM)
+lower = coupon << gf.components.rectangle(
+    size=(CPW_LENGTH_UM, GROUND_WIDTH_UM), centered=True,
+    layer=LAYER.D0_TOP_M1_DRAW,
+)
+lower.movey(-GROUND_CENTER_OFFSET_UM)
+coupon << gf.components.rectangle(
+    size=(CPW_LENGTH_UM, SUBSTRATE_WIDTH_UM), centered=True,
+    layer=LAYER.D0_SUBSTRATE_AREA,
+)
+SOURCE_GDS.parent.mkdir(parents=True, exist_ok=True)
+coupon.write_gds(SOURCE_GDS, with_metadata=False)
+
+records = get_material_records()
+materials = {
+    name: PdkMaterial(
+        name,
+        records[name]["material_kind"],
+        records[name]["is_superconducting"],
+        records[name]["aedt_library_name"],
+    )
+    for name in ("vacuum", "Si", "Nb")
+}
+object_bindings = (
+    ObjectBinding("D0_TOP_M1_1", 1, "signal", "Nb"),
+    ObjectBinding("D0_TOP_M1_2", 1, "ground", "Nb"),
+    ObjectBinding("D0_TOP_M1_3", 1, "ground", "Nb"),
+    ObjectBinding("D0_SUBSTRATE_4", 201, "substrate", "Si"),
+)
+ground_objects = ("D0_TOP_M1_2", "D0_TOP_M1_3")
+```
+
+匯入物件名稱依宣告的來源與匯入順序決定。GDS 包含金屬薄片與基板外框；下方 Thin Film 模型另行宣告金屬厚度區間與下側接觸面。請勿從圖片推定厚度區間或原生材料指派。
+
+檢查：`SOURCE_GDS` 存在，且來源包含一個訊號物件、兩個不同的接地物件，以及一個基板物件。
+
+## 5. 設定埠模型 {#configure-port-models}
+
+選擇一種埠模型。兩個範例使用相同匯入物件、明確的 `NB_FILM` 圖層區間及相同掃頻設定。Modal 指定積分線；Wave Terminal 則指定兩個接地參考物件。
+
+:::: {.panel-tabset group="scattering-solver"}
+
+### HFSS Modal
+
+```{python}
+#| id: scattering-modal-config
+physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
+physical_layer = PhysicalLayerSpec(
+    physical_layer_id=physical_layer_id,
+    kind="stack_film",
+    z_min_um=0.0,
+    z_max_um=METAL_THICKNESS_UM,
+    contact_side="lower",
+)
+layer_imports = (
+    LayerImport(
+        1, 0, "D0_TOP_M1", 0.0, METAL_THICKNESS_UM,
+        physical_layer_id=physical_layer_id,
+    ),
+        LayerImport(201, 0, "D0_SUBSTRATE", -SUBSTRATE_THICKNESS_UM, 0.0),
+)
+modal_ports = (
+    ModalPort(
+        1, "o1", "-X",
+        ((-CPW_LENGTH_UM / 2, 0.0, 0.0),
+         (-CPW_LENGTH_UM / 2, PORT_LINE_HEIGHT_UM, 0.0)),
+    ),
+    ModalPort(
+        2, "o2", "+X",
+        ((CPW_LENGTH_UM / 2, 0.0, 0.0),
+         (CPW_LENGTH_UM / 2, PORT_LINE_HEIGHT_UM, 0.0)),
+    ),
+)
+modal_spec = HfssDrivenSpec(
+    aedt_version=AEDT_VERSION,
+    mode="modal",
+    gds_path=SOURCE_GDS,
+    modeling="thin_film",
+    project_name="public_cpw_modal",
+    design_name="CpwFiniteGroundModal",
+    materials=materials,
+    vacuum_material_id="vacuum",
+    layer_imports=layer_imports,
+    object_bindings=object_bindings,
+    physical_layers=(physical_layer,),
+    ports=modal_ports,
+    run_control=HfssRunControl(
+        "Setup1", "Fast20000",
+        FrequencySweepSpec(FREQUENCY_START_GHZ, FREQUENCY_STOP_GHZ, SWEEP_POINTS),
+    ),
+    region_padding_um=(0.0, 0.0, 100.0, 100.0, 1000.0, 1000.0),
+    length_mesh=LengthMeshSpec(("D0_TOP_M1_1",), ground_objects, LENGTH_MESH_UM),
+)
+```
+
+Modal 埠 1 與 2 分別在 `-X` 與 `+X` 端面使用明確的積分線。埠順序與線段方向都是請求的一部分。
+
+### HFSS Terminal
+
+```{python}
+#| id: scattering-terminal-config
+physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
+physical_layer = PhysicalLayerSpec(
+    physical_layer_id=physical_layer_id,
+    kind="stack_film",
+    z_min_um=0.0,
+    z_max_um=METAL_THICKNESS_UM,
+    contact_side="lower",
+)
+layer_imports = (
+    LayerImport(
+        1, 0, "D0_TOP_M1", 0.0, METAL_THICKNESS_UM,
+        physical_layer_id=physical_layer_id,
+    ),
+        LayerImport(201, 0, "D0_SUBSTRATE", -SUBSTRATE_THICKNESS_UM, 0.0),
+)
+terminal_ports = (
+    TerminalPort(1, "o1", "-X", ground_objects),
+    TerminalPort(2, "o2", "+X", ground_objects),
+)
+terminal_spec = HfssDrivenSpec(
+    aedt_version=AEDT_VERSION,
+    mode="terminal",
+    gds_path=SOURCE_GDS,
+    modeling="thin_film",
+    project_name="public_cpw_terminal",
+    design_name="CpwFiniteGroundTerminal",
+    materials=materials,
+    vacuum_material_id="vacuum",
+    layer_imports=layer_imports,
+    object_bindings=object_bindings,
+    physical_layers=(physical_layer,),
+    ports=terminal_ports,
+    run_control=HfssRunControl(
+        "Setup1", "Fast20000",
+        FrequencySweepSpec(FREQUENCY_START_GHZ, FREQUENCY_STOP_GHZ, SWEEP_POINTS),
+    ),
+    region_padding_um=(0.0, 0.0, 100.0, 100.0, 1000.0, 1000.0),
+    length_mesh=LengthMeshSpec(("D0_TOP_M1_1",), ground_objects, LENGTH_MESH_UM),
+)
+```
+
+每個 Wave Terminal 埠都參照依序列出的 tuple `("D0_TOP_M1_2", "D0_TOP_M1_3")`。這些名稱必須與明確的來源綁定相符。Lumped Terminal 埠是另一種模型，需要不同的支撐與阻抗輸入，因此本例不以它取代 Wave 埠。
+
+::::
+
+檢查：準備前確認所選模式、AEDT 版本、圖層區間、埠順序或參考物件，以及掃頻設定。[Driven 契約](../specs/aedt-runtime.qmd#hfss-driven-sweep-count)定義掃頻點數輸入。
+
+## 6. 檢查、準備與執行 {#prepare-and-execute}
+
+準備流程會寫出求解器套件；執行則是在具授權的 AEDT 主機上另行進行。請先檢查複製出的規格與封存檔。若要遠端執行，請傳送完整套件、在指定主機執行其中的 `run_aedt.sh`，並取回完整輸出資料夾。
+
+:::: {.panel-tabset group="scattering-solver"}
+
+### HFSS Modal
+
+```{python}
+#| id: scattering-modal-prepare
+modal_handoff = prepare_handoff(
+    spec=modal_spec,
+    output_dir=OUTPUT_ROOT / MODAL_RUN_ID,
+    resources=AedtResources(cores=AEDT_CORES, ram_limit_percent=AEDT_RAM_LIMIT_PERCENT),
+)
+print(modal_handoff.spec_path, modal_handoff.archive_path)
+```
+
+```{python}
+#| id: scattering-modal-execute
+import subprocess
+
+subprocess.run(
+    ["bash", str(modal_handoff.script_path)],
+    cwd=modal_handoff.run_dir,
+    check=True,
+)
+```
+
+### HFSS Terminal
+
+```{python}
+#| id: scattering-terminal-prepare
+terminal_handoff = prepare_handoff(
+    spec=terminal_spec,
+    output_dir=OUTPUT_ROOT / TERMINAL_RUN_ID,
+    resources=AedtResources(cores=AEDT_CORES, ram_limit_percent=AEDT_RAM_LIMIT_PERCENT),
+)
+print(terminal_handoff.spec_path, terminal_handoff.archive_path)
+```
+
+```{python}
+#| id: scattering-terminal-execute
+import subprocess
+
+subprocess.run(
+    ["bash", str(terminal_handoff.script_path)],
+    cwd=terminal_handoff.run_dir,
+    check=True,
+)
+```
+
+::::
+
+AEDT Desktop 與執行器都在同一台具授權的主機上運作。已準備的套件或已送出的排程工作都不代表結果已完成。傳輸界線請見[執行與交接](../reference.qmd#execution-handoff)。
+
+檢查：所選執行器已完成，且執行路徑中有完整回傳資料夾。
+
+## 7. 解析並解讀響應 {#resolve-the-response}
+
+執行完成後，請開啟新的分析工作階段。下方本機回傳路徑與步驟 6 建立的輸出資料夾相同；若在遠端執行，請改指向完整回傳資料夾。
+
+:::: {.panel-tabset group="scattering-solver"}
+
+### HFSS Modal
+
+```{python}
+#| id: scattering-modal-results
+from pathlib import Path
+from scgsim.aedt import resolve_results
+
+RETURNED_RUN_DIR = Path(".artifacts/finite-cpw-scattering/cpw-modal-01")
+resolved = resolve_results(RETURNED_RUN_DIR)
+physics_rows = resolved.physics_results()
+resolved.show_all_results(show_details=True)
+physics_rows
+```
+
+請一併保留頻率、Modal 埠順序、積分線慣例與回報單位。S 參數沒有量綱；阻抗相關量請以報表與回傳資料列為準，不要將曲線視為 Terminal 參考結果。
+
+### HFSS Terminal
+
+```{python}
+#| id: scattering-terminal-results
+from pathlib import Path
+from scgsim.aedt import resolve_results
+
+RETURNED_RUN_DIR = Path(".artifacts/finite-cpw-scattering/cpw-terminal-01")
+resolved = resolve_results(RETURNED_RUN_DIR)
+physics_rows = resolved.physics_results()
+resolved.show_all_results(show_details=True)
+physics_rows
+```
+
+請一併保留頻率、埠順序、確切共用接地參考及回報單位。S 參數沒有量綱。Terminal 參考具有自己的原生讀回與結果意義；響應曲線相似並不能證明與 Modal 等價。
+
+::::
+
+報表會在響應旁記錄原生狀態與可用的自適應變化。請依這些觀測量與研究目的，判斷回傳證據是否適用；SCGSim 不提供通用的精度門檻。[結果與報表參考](../reference.qmd#results-reports)說明共用結果檢視。
+
+檢查：解析後的報表應顯示回傳執行識別、埠慣例、頻率資料與原生狀態。
+
+## 8. 調整本筆記本 {#8-adapt-this-notebook}
+
+修改 CPW 版圖時，請一併更新公開矩形及其材料／物件綁定。Modal 流程需重新檢視積分線端點；Wave Terminal 流程需檢查明確的參考物件組。每次準備都使用新的執行識別碼；尺寸改變時同步更新基準示意圖，並依所選埠模型解讀回傳結果。
+
+檢查：再次準備前，先檢視重建的版圖與複製出的請求。後端細節請繼續閱讀 [Modal 課程參考](../course/aedt-driven-modal.qmd)、[Terminal 課程參考](../course/aedt-driven-terminal.qmd)及 [AEDT 執行階段契約](../specs/aedt-runtime.qmd)。

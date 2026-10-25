@@ -21,7 +21,7 @@ to one electrical conductor Net without losing their individual lineage.
 For a semantic component assembly, `GeometryPlan` makes those choices explicit:
 
 ```python
-from scgsim.sgb import GeometryPlan
+from scgsim.geometry import GeometryPlan
 
 plan = GeometryPlan(
     component=component,
@@ -85,7 +85,7 @@ component = gf.get_component(
 ![The Circular Pad source layout on a 1000 µm die; the detail marks the east-side non-metal junction locator.](../assets/circular-pad-layout.png){#fig-circular-pad-source-layout}
 
 Source layout from the [current public OrPen Circular Pad study at
-`ecc9062`](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/source_layout.png).
+`ecc9062`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/source_layout.png).
 It shows the authored source geometry and locator, not the solved field.
 
 This is the Circle Pad source used by the linked LC workflow, not the optional
@@ -131,7 +131,7 @@ as an override. To reconstruct from polygon data, create a detached raw
 authored curve declaration, then pass it to the existing public
 `SemanticGeometryBuilder` API. `set_plan(snapshot)` continues to honor the
 snapshot's declarations. See the
-[GeometryPlan and SGB source-curve contract](../geometry-sgb.qmd#source-curves)
+[GeometryPlan and geometry source-curve contract](../geometry-sgb.qmd#source-curves)
 for curve record and boundary ownership. This does not mutate the component or
 its snapshot.
 :::
@@ -146,17 +146,19 @@ Use [Concept](../concepts/problems.qmd) to separate those physical choices from
 their backend API representation.
 
 ::: {.callout-note title="Q3D and Q2D have their own inputs"}
-Q3D uses GDS imports with explicit finite-thickness layers, object/material
-bindings and net/source/sink definitions. Q2D uses explicit cross-section
-rectangles and conductor groups. Neither reads your GeometryPlan through a
-`set_plan` method, and Q2D does not generate a slice of it.
+Q3D v3 uses explicit finite-thickness bodies with rings, materials, physical
+roles and final Net membership. A separate source-first frontend can prepare
+those bodies from a GeometryPlan snapshot; source-free callers author the
+bodies directly. AC/RL requests also provide complete Signal source/sink
+terminals. Q2D uses explicit cross-section rectangles and conductor groups; it
+does not generate a slice of the GeometryPlan.
 :::
 
 For another network question, continue to [Driven Modal](aedt-driven-modal.qmd)
 or [Driven Terminal](aedt-driven-terminal.qmd). For finite conductor extraction,
 use [Q3D](aedt-q3d.qmd); for per-unit-length line matrices, use [Q2D](aedt-q2d.qmd).
-Their shared [CPW source example](aedt-inputs.qmd) preserves the explicit import
-mapping rather than repeating it in every solver lesson.
+The [CPW inputs](aedt-inputs.qmd) lesson supplies direct-GDS mappings for HFSS;
+Q3D has a separate body-backed input contract.
 
 ## Change a solver request
 

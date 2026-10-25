@@ -1,0 +1,68 @@
+---
+title: "AEDT：分析已封存的儲存場解算結果"
+description: "驗證已儲存的 cohort，並在原生工作複本中評估 EPR，無須再次求解。"
+lang: zh-TW
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/aedt-saved-fields"
+---
+
+先決條件：已完成以來源為起點的 [AEDT Eigenmode／EPR 執行](../tutorial-xmon-aedt.qmd)、已完整取回儲存場 cohort，以及與其相符的已準備幾何與請求。請先依照[完整執行解析](returned-results.qmd)。只有專案檔並不足夠：已釋出的專案、完整結果目錄與封存的原生儲存場證據，必須識別出相同的模型、設計、設定、變化與通過項目。
+
+此階段會透過**原生 AEDT**，在專屬且可丟棄的工作複本中評估場。它不會再次求解，但要求請求明確選取 AEDT 2023.2 或 2024.2、PyAEDT 1.3.0 與有效授權。若儲存產物沒有記錄來源版本，該來源仍屬未知；仍可執行分析，並使用明確指定的本機版本，不查找或猜測歷史來源。下一課的 JSON 損耗重新分析才是不必開啟求解器的操作。
+
+## 還原完全相同的已準備模型 {#recover-the-exact-prepared-model}
+
+請將可攜式規格與回傳執行資料一併保留。重新解析該規格，不要從顯示標籤重建幾何，也不要重新執行可能已變更的 PDK 元件。EPR 規格會保留確切的 `geometry`、`run_control` 與 `epr_request`：
+
+```python
+import json
+from pathlib import Path
+from scgsim.aedt import parse_aedt_spec, resolve_saved_solution
+
+returned_run_dir = Path(".artifacts/returned-aedt-epr")
+spec = parse_aedt_spec(json.loads(
+    (returned_run_dir / "aedt_spec.json").read_text(encoding="utf-8")
+))
+saved = resolve_saved_solution(returned_run_dir / "saved-solution-manifest.json")
+```
+
+請使用實際回傳目錄。此區塊會在開啟 Desktop 前離線驗證已封存的儲存場 cohort。其 manifest 會識別每個保留的結果成員；位元組損毀、結果缺漏或識別資訊不符時，都會明確失敗。初始求解必須已產生 EPR 儲存場 cohort 與請求；一般本徵模規格無法只靠閱讀本課程取得這些資料。
+
+## 在新的分析目錄中評估 {#evaluate-in-a-new-analysis-directory}
+
+```python
+from scgsim.aedt import analyze_epr
+
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
+final_epr = analyze_epr(
+    aedt_version=AEDT_VERSION,
+    saved_solution=saved,
+    geometry=spec.geometry,
+    project_name=spec.project_name,
+    design_name=spec.design_name,
+    run_control=spec.run_control,
+    epr_request=spec.epr_request,
+    output_dir=Path(".artifacts/public-xmon-saved-field-analysis"),
+)
+```
+
+可選擇明確指定原生薄片場選擇器。若呼叫端要選擇原生計算器所用的一側，可傳入 `surface_field_selectors={contribution_id: "surface"}`，或對現有且已選取的貢獻 ID 使用 `"adjacent"`。每個項目會套用至該貢獻的所有綁定與指定元件、評估及遮罩邊距。未知或未選取的 ID，以及不支援的值，都會明確失敗。若省略貢獻項目，則保留現有依據法向量的選擇器行為。此選擇不會變更來源 `SurfaceEprSpec.field_side`，也不會驗證取樣的材料側。原生命令／名稱讀回資料記錄選擇器操作，不是材料側識別證明。此選擇不會觸發再次求解或重建幾何。
+
+新的輸出目錄會保留原始已釋出解算結果與一般執行收據。SCGSim 會封存／複製不可變證據、重新開啟工作複本、檢查已綁定的背景資料與運算式定義，接著不求解、不呼叫匯出而評估指定場。若場或定義無法取得，流程會明確失敗，不會從自適應歷程虛構 EPR。
+
+獨立的分析收據與 `results/epr/epr-result.json` 描述最終儲存場評估。新要求的遮罩／內縮邊距使用此最終場結果；不得將其插入較早自適應通過時彷彿已量得的結果。套用損耗假設前，請確認實際選取的模態與涵蓋範圍。接著閱讀[離線 EPR](offline-epr.qmd)，其中 `reanalyze_epr` 會在不執行原生分析的情況下，更新這些已記錄分子的假設。[執行環境契約](../specs/aedt-runtime.qmd)規範確切的儲存場背景、材料側支援與分析失敗行為。
+
+## 可選的專案指示區塊 {#optional-project-instruction-block}
+
+若經授權的儲存場比較需要謹慎解讀 SurfaceEPR，可將以下指引複製到研究自己的專案指示或 `LESSONS`：
+
+```markdown
+For an authorized SurfaceEPR saved-field comparison:
+- Preserve the original completed run, exact final saved-field cohort, source/spec, and result files. The public `scgsim.aedt.analyze_epr()` function analyzes a resolved `SavedSolution` in an owned workcopy; pass the same prepared geometry, run control, EPR request, an explicit AEDT version, and a new output directory. This saved-field analysis call does not request another solve. If choosing `surface_field_selectors`, set only the caller-selected contributions; `surface` and `adjacent` select calculator operations, not physical material sides.
+- Compare with the original final saved-field result for the same geometry, mode, and pass. Report the recorded mode and pass identities for both results; if either is missing or differs, state that instead of treating them as a matched comparison.
+- For each contribution and binding, inspect the returned evaluation and binding/selection evidence to establish the support actually used. `evaluation_kind` and `margin_um` label an evaluation; they do not by themselves establish that one mask is nested in another. If available support evidence cannot establish nesting, report it as unknown. Treat requested masks as alternative evaluations of the same physical interface, not as additional physical films. An unmasked baseline is a reference evaluation, not another chosen mask.
+- For each compared contribution, inspect `interface_kind`, source `field_side`, effective/substrate domain and material IDs, source support/selection evidence, the saved analysis carrier's `native_normal`, and the recorded requested/applied calculator selector and CLC operation. Compare expression identity and evaluation/margin context with raw integral values and units and recorded normalization. A normal, selector name, or frequency record alone does not establish material-side correspondence.
+- Preserve and link the original and new outputs. Report observed changes, limits, and missingness. Do not swap labels or values, clamp results, choose the smaller result, or introduce a tolerance. Geometry, materials, mode, pass controls, masks/evaluation criteria, EPR request, environment, resources, or replacing/writing source data require their separate authorization.
+- Use only the study's existing permission and resource allocation. SCGSim records caller choices; it does not choose a physical side or grant compute permission.
+```

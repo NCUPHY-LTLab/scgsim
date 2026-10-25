@@ -92,9 +92,27 @@ ambiguous origin. The reader preserves the raw value but treats its effective
 loss as unknown; the inverse-$Q$ contribution remains unavailable.
 :::
 
-Mask margins provide alternative interface estimates. Read the unmasked
-baseline and each requested margin separately, including a requested zero
-margin; do not add them as disjoint bands. AEDT evaluates horizontal top/bottom
+## Historical SGB geometry distance bands {#surface-distance-band-correction}
+
+SGB geometry-level distance bands were a withdrawn geometry partition and Palace aggregation path. They are not part of the current producer. Palace native Mask/Inset margins remain a separate Surface EPR option through `inset_margins_um`; the selected Palace executable must implement that native configuration. An unmasked baseline is requested by omitting the margin field. Native margins are alternative evaluations, not disjoint geometry regions, so do not add them as bands.
+
+### Future Q2D correction (paused)
+
+Q2D follow-up is paused and is not part of the Palace-only band workflow. The
+same-basis relation previously considered for a separate Q2D correction was
+
+$$
+F = \frac{I_{0-1}}{I_{0.5-1}}, \qquad
+p_{\mathrm{corrected}} = p_{\geq 1} + F p_{0.5-1}.
+$$
+
+This relation is not part of the current Palace band results. The Palace
+cutoff totals are direct Palace EPR outputs; they are not converted by this
+Q2D relation.
+
+Archived mask margins are alternative interface estimates. Read a saved
+unmasked baseline and its requested margins separately; do not add them as
+disjoint bands. AEDT evaluates horizontal top/bottom
 interfaces and does not calculate sidewall film energy. Palace sidewalls also
 remain uncomputed where they were not selected. Changing a film-loss assumption
 on stored evidence can revise the loss estimate without another field solve;

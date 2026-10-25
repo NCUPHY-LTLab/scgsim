@@ -14,12 +14,16 @@ from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
-from scgsim.aedt import _hfss_runtime as runtime
-from scgsim.aedt._hfss_convergence import read_hfss_convergence
-from scgsim.aedt.resolve import _validate_readback
-from scgsim.aedt.spec import (
-    FrequencySweepSpec, HfssDrivenSpec, HfssRunControl, LayerImport,
-    ModalPort, ObjectBinding, PdkMaterial, TerminalPort,
+from scgsim.aedt.runtime.families import hfss as runtime
+from scgsim.aedt.results.convergence.hfss import read_hfss_convergence
+from scgsim.aedt.results.resolve import _validate_readback
+from scgsim.aedt.specs.hfss import FrequencySweepSpec, HfssDrivenSpec, HfssRunControl
+from scgsim.aedt.specs.common import (
+    LayerImport,
+    ModalPort,
+    ObjectBinding,
+    PdkMaterial,
+    TerminalPort,
 )
 
 
@@ -30,6 +34,7 @@ def _spec(points=3, mode="modal"):
         for i, side, x in ((1, "-X", 0), (2, "+X", 10))
     )
     return HfssDrivenSpec(
+        modeling="solid", aedt_version="2024.2",
         mode=mode, gds_path="synthetic.gds", project_name="Synthetic",
         design_name="Design", materials={
             "vacuum": PdkMaterial("vacuum", "vacuum", False, "Vacuum"),
@@ -116,6 +121,7 @@ class HfssSweepCountTests(unittest.TestCase):
                     "index": port.index, "boundary": port.name,
                     "modal_excitation": port.name, "face_id": port.index,
                     "face_center_um": [0, 0, 0],
+                    "effective": {"integration_line_um": line},
                     "requested": {"integration_line_um": line, "modes": 1,
                                   "renormalize": False, "deembed_um": 0.0,
                                   "characteristic_impedance": "Zpi"},

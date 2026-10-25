@@ -2,12 +2,12 @@
 title: "Maintainer guide"
 description: "Secondary implementation, project and documentation-build references for contributors."
 scgsim-kind: "project"
-scgsim-status: "CONVERGING"
+scgsim-status: "ACCEPTED"
 scgsim-id: "docs/ownership"
 ---
 
 SCGSim owns the reusable geometry, solver preparation, handoff, result and
-report APIs. [OrPen SC PDK](https://github.com/OrPenStrike/orpen-sc-pdk) owns public
+report APIs. [OrPen SC PDK](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk) owns public
 component geometry, material/stack facts and executable component notebooks.
 A Python script or notebook can call SCGSim; no parent workspace is required.
 
@@ -17,7 +17,83 @@ provides exact interface references. Existing document URLs remain available.
 
 Repository layout, implementation responsibilities, documentation builds and
 release procedures belong to the secondary
-[maintainer entry](https://github.com/OrPenStrike/scgsim/blob/develop/MAINTAINING.md).
+[maintainer entry](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md).
+
+## Accepted SCGSim 2.0 ownership
+
+Human accepted the v2 module and API structure on 2026-10-09 as candidate
+`a932a173edb5c56ae14740ff5177190996255bdd` (tree
+`2745321736e53e2a4fe8d150f2e9d8bd176669db`). Its semantic state is `ACCEPTED`,
+not `STABILIZED`. The implementation was integrated into `develop` through
+PR34 at `cc1424c84ffe9d295a57dbabb3c2ab6431110f6c` (tree
+`f9ecfe49df4c79be84a7991e44cc50c2602e3adb`). This closeout starts from the
+later `develop` slimming successor `b46bcc7d64fbb8bab181c0da2b9234a003a20adf`
+(tree `c99c670927e877fb407aa4c73de32793e86a4460`). The intake/migration
+baseline remains `develop@3a52fb1`, tree
+`96adcf8672b497a29dd0a6b43043cca11efc3043`. Existing consumers remain on their
+recorded pins until they choose a migration. Accepted API scope does not imply
+completion of the full native-to-Resolve-to-Report operations for Xmon Palace
+Eigenmode Route A, CircularPad Palace Eigenmode Route B, or HFSS Eigenmode
+saved-field EPR/offline loss. Those operations were not observed as complete
+workflows and are outside this closeout; earlier partial evidence does not
+establish them as complete or failed. See the
+[migration reference](api-migration.qmd#accepted-scope-and-evidence-status).
+
+| Target area | Owns | Must not take ownership of |
+|---|---|---|
+| `scgsim.geometry` | Source-facing component/occurrence and stack adaptation, GeometryPlan/snapshot, normalized inputs, vacuum/curve preparation and detached summaries | Compiler stage orchestration, Palace/AEDT physics or execution state |
+| `scgsim.geometry.compiler` | Advanced builder, derived records, pipeline validators and construction dispatch | Component source ownership or solver state |
+| `scgsim.geometry.models` and lower primitives | One canonical model/type definition and shared source/compiler primitives | Duplicate definitions, source-to-planning dependency cycles |
+| `scgsim.semantics` | Stdlib-only immutable, revision-bound facts | Mutable backend objects, solver tags interpreted as source truth |
+| `scgsim.palace.preparation` | Separate Electrostatic and Eigenmode setup objects, mutable state/invalidation, and shared preparation functions | A common Simulation base, Palace submission, or merged state owners |
+| `scgsim.palace.mesh` | Route build, dynamic Gmsh worker, native mesh summaries, and offline mesh-quality reader | Result receipt custody or physical convergence judgments |
+| `scgsim.palace.execution` | Manual handoff packages and standalone host receipt recording | Automatic solver submission or result interpretation |
+| `scgsim.palace.results` | Returned artifact/custody validation, result data, and detached EPR | Solver execution or plotting state |
+| `scgsim.palace.presentation` | Palace trust, physics and cost projections and report figures | A common cross-solver physical quantity model |
+| `scgsim.aedt.specs` | Canonical request and prepared-geometry declarations, shared electrical records, and explicit parser dispatch | Runtime/Desktop state or Q3D input-v1/v2 |
+| `scgsim.aedt.preparation` | Source binding, effective geometry and physical-layer mapping, portable handoff, canonical cohort membership | Desktop lifetime, mutable EigenmodeSim state, or solve results |
+| `scgsim.aedt.runtime` | Sole transaction/receipt coordinator and Desktop lifecycle for preparation, direct runs, and batch collection; dispatches the family-specific native flow | Shared geometry source ownership or family-crossing physics |
+| `scgsim.aedt.batch` | One-model native EPR package, standalone solver-only attempt and return validation; delegates full native collection to the runtime transaction | Desktop/model construction, scheduler submission, or a combined multi-model solver project |
+| `scgsim.aedt.runtime.native` | Common body/support/material/enclosure construction, declared junction and generic RLC assignment, and saved native geometry readback | EPR analysis requests or source preparation |
+| `scgsim.aedt.epr` | Analysis selections, fields/cache, EPR analysis and saved-field composition of the HFSS family flow | Generic Eigenmode construction/solve/export, Desktop lifecycle, or general result custody |
+| `scgsim.aedt.results` | Strict run/EPR resolution, provenance readers, convergence and matrix observations | Solver execution or display state |
+| `scgsim.aedt.presentation` | Display-only projections and plotting with lazy optional imports | Native calculations or result validation |
+| `scgsim.visualization` | Backend-bound source/receipt loaders, detached scene/preview objects, and rendering | Solver state, simulation status or physical acceptance |
+| `scgsim.presentation` | Shared, solver-physics-neutral notebook formatting | Domain projections or scientific calculations |
+
+Source-backed Eigenmode preparation, solve and export belong to the HFSS
+family even when no EPR analysis is requested. Declared junctions and generic
+RLC loads are constructed independently of that request. EPR adds its analysis
+selections and field/cache work to the same native model and solve lifecycle.
+Pure RLC unit/topology interpretation and Q3D source exterior-chain selection
+are shared by native writers and offline readers through stdlib-only private
+helpers; shared interpretation does not replace independent native receipt
+and source-attribution checks.
+
+The baseline facade and direct-submodule symbol maps for geometry, AEDT, Palace
+and visualization, with their accepted destinations, are in the
+[API migration reference](api-migration.qmd).
+Publicness comes from documented facades/contracts and declared exports, not
+from whether a Python module happens to be importable. The v2 change
+intentionally does not preserve `scgsim.sgb` compatibility wrappers or Q3D
+input-v1/v2 paths; the public AEDT command `python -m scgsim.aedt.run` remains
+a supported entry and delegates to the transaction owner.
+
+State boundaries remain observable. Palace Electrostatic and Eigenmode
+preparation retain separate mutable state and invalidation/failure ordering;
+the Gmsh worker is a process boundary, and its mesh observer is not the offline
+quality reader. AEDT `EigenmodeSim` retains mutable configuration and
+invalidation state, while one transaction owns receipt transitions and Desktop
+release precedence. Geometry snapshots remain detached; compiler records are
+derived outputs, and backend tags remain observations rather than source
+authority. Relocation must preserve these ownership and failure contracts.
+
+The SCGSim Development Lead owns tracked source. A fixed worker may write only
+its assigned paths under a bounded lease; shared facade, receipt and package
+metadata paths have one writer at a time. The architecture and complete
+submodule migration contract are recorded alongside the accepted source tree.
+Native observations and solver-specific result interpretation remain
+separately owned and must not be implied by a directory reorganization.
 
 ## Implementation and project references
 
@@ -28,7 +104,7 @@ release procedures belong to the secondary
 | [Goals and derivation](goals-and-upstream.qmd) | Current scope and upstream relationship |
 | [Roadmap](roadmap.qmd) | Deferred families and documentation direction |
 | [Historical errors](errors.qmd) | Revision-bound diagnostic observations |
-| [Repository maintenance](https://github.com/OrPenStrike/scgsim/blob/develop/MAINTAINING.md) | Build, version catalogue and publication procedure |
+| [Repository maintenance](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md) | Build, version catalogue and publication procedure |
 
 These secondary references retain implementation detail outside the researcher
 learning sequence. Contract pages specify public APIs and physical result

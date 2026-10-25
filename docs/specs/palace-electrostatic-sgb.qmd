@@ -63,7 +63,7 @@ preflight and pipeline exit codes, and `solver_exit_code=null`. Receipts use
 | Physical Ground binding | `add_ground` | Select conductor components for Palace Ground by exact SGB net identity. |
 | Problem controls | `set_electrostatic` | Declare Electrostatic-specific config controls. |
 | Output identity | `set_output_dir` | Bind the mesh/config/handoff output location. |
-| Mesh controls | `set_mesh(...)` | Set retained mesh sizes and Palace meshing controls. |
+| Mesh controls | `set_mesh(...)` | Select the shared size policy, optional explicit sizes and Palace meshing controls. |
 | Mesh | `mesh` | Request the SGB-backed Palace mesh path. |
 | Config | `write_config` | Write the Palace Electrostatic configuration for the reviewed mesh identities. |
 
@@ -103,6 +103,49 @@ performs the chosen optimization once, and then saves the final mesh. Native
 construction or fitting errors propagate as errors; the preparation path does
 not replace a curved mesh with a straight or lower-order fallback.
 
+For the converging Gmsh-isolation scope, SCGSim-owned Gmsh sessions initialize
+with `readConfigFiles=False`, so Gmsh system configuration files do not silently
+change the owned worker's starting options. Geometry helpers that find Gmsh
+already initialized continue to skip initialization; this flag affects only
+SCGSim-owned initialization, leaving the existing borrowed-session option,
+model, and finalization behavior unchanged.
+The detached `meshing.effective` record reads back Gmsh's actual
+`Mesh.MeshSizeFactor`. This value is observational metadata, not a public mesh
+control or requested setting. Historical records without the field remain
+without it; readers do not infer a value for them.
+
+## Mesh-size policy (CONVERGING) {#palace-mesh-size-policy}
+
+Both Palace facades accept `size_policy` through `set_mesh(...)`. A fresh
+`EigenmodeSim` starts with `gmsh_default`; a fresh `ElectrostaticSim` keeps its
+existing `scgsim_default` sizing. `scgsim_default` uses `5 µm` refined and
+`300 µm` maximum mesh sizes unless the caller supplies an explicit pair. An
+example that passes `10` and `200` overrides those sizes for that example; it
+does not change the package defaults.
+
+Select `gmsh_default` to use Gmsh 4.15.2's native size selection. SCGSim does
+not add mesh-size fields or callbacks. It leaves Gmsh's native minimum,
+maximum, factor, point, curvature and boundary sizing options untouched, and
+does not apply SCGSim's size overrides. The policy leaves the geometry,
+physical groups, junctions or Surface EPR requests. Mesh sizing
+remains separate from the 3D meshing algorithm and Palace FEM or AMR controls;
+choosing this policy does not promise fewer elements.
+
+Omitting `size_policy` (or passing `None`) retains the selected policy.
+Omitting size arguments while `scgsim_default` is active retains its current
+pair, including caller-supplied values. Selecting `gmsh_default` clears
+retained SCGSim size overrides. Selecting `scgsim_default` again restores
+`5 µm` and `300 µm` unless the same call provides an explicit pair. Supplying
+mesh sizes while `gmsh_default` is active is rejected without changing prior
+settings. `set_numerical(...)` continues to configure FEM and AMR; it cannot
+add explicit mesh sizes while `gmsh_default` is active.
+
+The requested mesh record retains the selected policy and size values,
+including `None`. The effective mesh record reads Gmsh's native minimum,
+maximum and factor, plus its point, curvature and boundary sizing options.
+These records distinguish caller settings from the native options observed
+for that mesh.
+
 ## Mesh manifest and detached summary (1.1.0) {#mesh-manifest-and-detached-summary-110-candidate}
 
 The mesh manifest retains its existing groups and adds `meshing` evidence for
@@ -122,97 +165,26 @@ H1 estimate is unavailable. The existing linear-tetrahedron
 [mesh-quality reader](../mesh-quality.qmd) does not calculate curved-element
 quality.
 
-## Native multi-margin Surface EPR
+## Native Mask/Inset and withdrawn geometry bands {#native-mask-inset}
 
-The Electrostatic and Eigenmode `set_surface_epr(...)` specifications for each
-MA, MS, or SA interface may include `inset_margins_um`. When present, its value
-is an ordered, nonempty list or tuple of finite, nonnegative real values.
-Request order is preserved, and equal values at different ordinals remain
-distinct requested observations. Omitting the field preserves the existing
-unmasked behavior.
+Palace native Mask/Inset margins remain available through `inset_margins_um`; omit the field for an unmasked baseline. A non-empty request requires a Palace executable that supports the native Mask/Inset configuration. These margins do not modify SGB source geometry.
 
-For each exact source interface, SCGSim retains one logical unmasked baseline
-and lowers every requested margin ordinal to a separate native masked
-dielectric index that refers back to that baseline index. Masking does not
-change the source interface attributes, type, thickness, relative
-permittivity, or loss tangent. The generated native mask is
-`{Type: Inset, Margin: ...}`.
-
-Palace reads `Margin` in the same coordinate units as the input mesh: units of
-`Model.L0`. SCGSim uses `Model.L0 = 1e-6 m`, so the configured input value is
-
-$$
-\mathrm{Margin}
-= \frac{\texttt{margin\_um}\,10^{-6}\ \mathrm{m}}{\mathrm{Model.L0}}.
-$$
-
-Palace then nondimensionalizes both mesh coordinates and `Margin` by the same
-relative mesh-length scale, $L_c / \mathrm{Model.L0}$. It does not divide the
-configured `Margin` by `Model.L0` as a separate conversion.
-
-At each retained pass, all baseline and masked coefficients are evaluated from
-the same field solution; no margin requests another PDE solve.
-
-### Positive inset on curved boundaries {#curved-positive-inset-distance}
-
-For straight polygonal boundaries, positive `Inset` distance follows the
-retained straight boundary segments. On a curved boundary, quadrature evaluates
-the actual curved surface, while the perimeter-distance calculation uses
-straight segments between retained boundary vertices. Positive inset therefore
-uses a polyline approximation rather than exact distance to the curved
-perimeter. This distance calculation does not alter the PDE, mesh, or notebook
-model. An unmasked baseline and zero margin continue to use the native
-full-integration coefficient; zero margin must equal the unmasked integration
-for the same interface.
-
-A positive margin requires an open three-dimensional selected patch with a
-perimeter; the native no-perimeter error remains a truthful failure rather
-than an approximated result.
-
-Local sheet patches may retain more than one semantic side contribution. MS
-and MA contributions continue to use their existing separate native types. If
-both sides are MA on the same native surface, SCGSim records both ordered
-contributions but emits one aggregate MA row and enables Palace internal
-boundary cracking; it does not duplicate the row, multiply a result, or claim
-side-resolved native output. A zero inset remains the same unmasked aggregate.
-A positive inset for that shared aggregate is rejected at configuration time
-because the current native attribute cannot express different per-side masked
-support. The error identifies the selected aggregate and sides. Historical
-artifacts without the additive ledger remain readable without inferred sides.
-
-A complete masked snapshot requires both native files from the same retained
-`final` or `iterationNN` result source:
-
-- `surface-mask-Q.csv`, whose indexed columns are `p_surf_mask[Index]` and
-  `Q_surf_mask[Index]`; and
-- `surface-mask-energy.csv`, whose indexed columns are
-  `E_surf_mask[Index] (J)`.
-
-Both files use `m` as the first column for Eigenmode or `i` for Electrostatic.
-If either file is missing or unreadable, the masked snapshot for that source is
-unavailable; a valid baseline snapshot remains readable.
-
-The index map and receipt bind every masked index to its exact baseline index,
-interface owner and type, requested margin value and ordinal, mode or
-excitation, refinement pass, and retained result source. Required masked files
-are artifact-hash sealed for a completed result that requested masks; a hash
-mismatch remains fatal. Repeated unmasked values or columns in native
-`surface-Q.csv` are one logical baseline, not additional loss terms. Neither
-repeated baselines nor alternative margins may be summed into the physical
-loss total.
-
-This multi-margin Surface EPR surface is **STABILIZED**. It is not a
-cumulative disjoint edge-band contract and introduces no scientific
-acceptance, convergence threshold, or geometry-exclusion claim.
+The separate SGB geometry-level distance-band producer has been withdrawn. Older pages describing `GeometryPlan.set_surface_distance_bands(...)` are historical references and do not describe a current producer. Native Mask/Inset rows must not be interpreted as disjoint geometry bands.
 
 ## Source and geometry authority
+
+Read the [SGB geometry concept](../concepts/geometry.qmd#source-stage) for the
+source-to-construction explanation. The contracts below define the supported
+preparation paths.
 
 Prefer `set_plan(snapshot)` for the shared source-first course. The standalone
 `set_geometry(component)` / `set_stack(stack)` / explicit envelope APIs remain
 supported on a fresh unbound simulation; do not mix them with a plan snapshot.
 The [GeometryPlan contract](../geometry-sgb.qmd) owns occurrence/Nets, generated
-vacuum, contact and Route-A/B semantics. In-tree `scgsim.sgb` is the current
-geometry authority; external SGB and gsim are derivation history only.
+vacuum, contact and Route-A/B semantics. The current source-facing geometry
+authority is `scgsim.geometry`; route planning and derived construction are
+owned by `scgsim.geometry.compiler`. External SGB and gsim are derivation
+history only.
 
 The [Electrostatic lesson](../course/palace-electrostatic.qmd) teaches exact Net
 terminals/ground and the real mesh/config sequence. The separate
@@ -258,8 +230,8 @@ schema-v1 read support for sealed historical runs, but only schema v2 carries
 and can claim the physical-versus-exterior Ground split.
 
 External gsim and historical SGB revisions are derivation evidence only. The
-runtime authority is the in-tree `scgsim.sgb` Core and the current
-`scgsim.palace` implementation.
+runtime geometry authority is the in-tree `scgsim.geometry.compiler` and the
+current `scgsim.palace` implementation.
 
 See [Geometry and SGB Route A/B](../geometry-sgb.qmd),
 [Headless Geometry Preview](../geometry-preview.qmd),

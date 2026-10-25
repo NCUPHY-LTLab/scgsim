@@ -5,7 +5,7 @@ backend-path = ["."]
 
 [project]
 name = "scgsim"
-version = "1.1.0"
+version = "2.0.0"
 description = "Research-first electromagnetic simulation workflows for superconducting circuits."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
@@ -20,10 +20,12 @@ license-files = ["LICENSE", "NOTICE"]
 aedt = [
     "gdstk",
     "pyaedt==1.3.0",
+    "shapely==2.1.2",
 ]
 aedt-epr = [
     "gdstk",
     "pyaedt==1.3.0",
+    "shapely==2.1.2",
     "gdsfactory>=9,<10",
     "klayout>=0.30,<0.31",
 ]
@@ -31,6 +33,7 @@ palace = [
     "gdsfactory>=9,<10",
     "gdstk",
     "gmsh",
+    "shapely==2.1.2",
 ]
 visualization = [
     "meshio>=5.3,<6",
@@ -60,4 +63,28 @@ scgsim = [
     "_agent_knowledge/docs/**/*.qmd",
     "_agent_knowledge/docs/assets/*",
     "_agent_knowledge/docs/assets/**/*",
+]
+
+[dependency-groups]
+test = [
+    "pytest",
+    "ipython",
+]
+quality = [
+    "ruff",
+    "pyright",
+]
+
+[tool.pyright]
+include = [
+    "src/scgsim/aedt/epr/evidence.py",
+    "src/scgsim/aedt/runtime/batch_protocol.py",
+    "src/scgsim/aedt/runtime/batch_runner.py",
+]
+typeCheckingMode = "strict"
+extraPaths = ["src", "src/scgsim/aedt/runtime"]
+
+[tool.pytest.ini_options]
+markers = [
+    "private_golden: owner-authorized external returned-data fixtures; explicit manifest required; excluded from public CI",
 ]

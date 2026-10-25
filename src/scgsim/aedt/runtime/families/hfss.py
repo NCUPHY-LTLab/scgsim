@@ -1,0 +1,1951 @@
+"""HFSS preparation, solve, export, and readback for each supported request family.
+
+Body-first Eigenmode owns its native model and ordinary solve/export here. EPR
+composes explicit analysis extensions; generic execution never calls EPR workflows.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import re
+from dataclasses import dataclass, field
+from itertools import pairwise
+from pathlib import Path
+from typing import Any
+from collections.abc import Callable, Sequence
+from scgsim.aedt._io import file_sha256, write_csv
+from scgsim.aedt.results.convergence.hfss import read_hfss_convergence
+from scgsim.aedt.runtime.benchmark import attach_simulation_benchmark
+from scgsim.aedt.runtime.native.common import (
+    BoundAedtRequest,
+    analyze_with_resources,
+    create_region as _create_region,
+    detached_data,
+    import_and_bind as _import_and_bind,
+    pyaedt_version as _pyaedt_version,
+    saved_setup_properties as _saved_setup_properties,
+)
+from scgsim.aedt.runtime.native.hfss_eigenmode import (
+    create_eigenmode_setup,
+    read_eigenmode_setup,
+)
+from scgsim.aedt.specs.common import (
+    AedtResources,
+    ModalPort,
+    LumpedTerminalPort,
+    SURFACE_APPROXIMATION_LEVEL,
+    TerminalPort,
+)
+from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
+from scgsim.aedt.specs.hfss import (
+    HfssDrivenGeometrySpec,
+    HfssDrivenSpec,
+    HfssEigenmodeSpec,
+    HfssSpec,
+)
+import time
+from scgsim.aedt._io import write_json
+from scgsim.aedt.runtime.benchmark import export_simulation_benchmark
+from scgsim.aedt.specs.hfss import HfssEprSpec, HfssEprAnalysisSpec
+from scgsim.aedt.runtime.native.hfss_geometry import (
+    prepare_native_planar_geometry,
+    _read_saved_junction_lines,
+)
+from scgsim.aedt.runtime.native.hfss_lumped import (
+    _assign_generic_rlcs,
+    _read_generic_rlcs,
+)
+from scgsim.aedt.runtime.native.common import pyaedt_version, saved_setup_properties
+
+
+@dataclass(frozen=True)
+class PreparedHfss:
+    """Carrier for one prepared HFSS app and its native readback records."""
+
+    app: Any
+    request: BoundAedtRequest
+    project_path: Path
+    materials: list[dict[str, Any]] | dict[str, Any]
+    region: dict[str, Any]
+    mesh: dict[str, Any]
+    ports: list[dict[str, Any]]
+    setup: dict[str, Any] | None
+    geometry: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, BoundAedtRequest):
+            raise TypeError("PreparedHfss requires a bound AEDT request")
+        for name in ("materials", "region", "mesh", "ports", "setup", "geometry"):
+            object.__setattr__(self, name, detached_data(getattr(self, name)))
+
+
+def run_hfss(
+    Hfss: Any,
+    run_dir: Path,
+    spec: HfssSpec,
+    resources: AedtResources | None = None,
+    resource_evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Use the same preparation stage as diagnostics, then solve and export."""
+    if spec.run_control is None:
+        raise ValueError("solving requires an explicit complete run_control")
+    prepared = prepare_hfss(Hfss, run_dir, spec)
+    solve_hfss(prepared, resources, resource_evidence)
+    result = export_hfss(prepared)
+    return attach_simulation_benchmark(
+        result, prepared.app, run_dir, spec.run_control.setup_name
+    )
+
+
+def prepare_hfss(Hfss: Any, run_dir: Path, spec: HfssSpec) -> PreparedHfss:
+    """Construct and read back the HFSS model before the explicit solve stage."""
+    request = BoundAedtRequest.bind(run_dir, spec)
+    bound_spec = request.parse()
+    if not isinstance(bound_spec, HfssSpec):
+        raise TypeError("bound HFSS request did not retain an HFSS spec")
+    run_dir = request.workspace
+    spec = bound_spec
+    if spec.modeling not in {"solid", "thin_film"}:
+        raise ValueError("new HFSS preparation requires explicit modeling")
+    project_path = run_dir / f"{spec.project_name}.aedt"
+    app = Hfss(
+        project=str(project_path),
+        design=spec.design_name,
+        solution_type={
+            "terminal": "DrivenTerminal",
+            "modal": "DrivenModal",
+            "eigenmode": "Eigenmode",
+        }[spec.mode],
+        new_desktop=False,
+        close_on_exit=False,
+    )
+    app.modeler.model_units = "um"
+    geometry: dict[str, Any] = {}
+    if isinstance(spec, HfssDrivenGeometrySpec):
+        from scgsim.aedt.runtime.native.hfss_geometry import (
+            prepare_native_planar_geometry,
+        )
+
+        geometry = prepare_native_planar_geometry(app, spec.geometry)
+        materials = geometry["material_readback"]
+        region = geometry["closed_enclosure"]
+        mesh = {
+            "status": "not_requested",
+            "reason": "body-first request uses native adaptive mesh",
+        }
+        ports = _assign_body_terminal_ports(app, spec, geometry)
+    else:
+        materials = _import_and_bind(app, spec)
+        region = _create_region(app, spec)
+        mesh = _assign_mesh(app, spec)
+        ports = _assign_ports(app, spec)
+    if spec.run_control is not None:
+        _setup(app, spec)
+    if not app.save_project() or not project_path.is_file():
+        raise RuntimeError("HFSS project was not saved before native port readback")
+    setup = _read_hfss_setup(app, spec) if spec.run_control is not None else None
+    ports = (
+        _bind_body_terminal_evidence(app, spec, geometry, ports)
+        if isinstance(spec, HfssDrivenGeometrySpec)
+        else _bind_port_evidence(app, spec, ports)
+    )
+    return PreparedHfss(
+        app,
+        request,
+        project_path,
+        materials,
+        region,
+        mesh,
+        ports,
+        setup,
+        geometry,
+    )
+
+
+def solve_hfss(
+    prepared: PreparedHfss,
+    resources: AedtResources | None = None,
+    resource_evidence: dict[str, Any] | None = None,
+) -> None:
+    """Run the one explicit HFSS setup solve."""
+    spec = prepared.request.parse()
+    if not isinstance(spec, HfssSpec):
+        raise TypeError("bound HFSS request did not retain an HFSS spec")
+    if spec.run_control is None:
+        raise ValueError("HFSS solving requires an explicit complete run_control")
+    if not analyze_with_resources(
+        prepared.app,
+        spec.run_control.setup_name,
+        prepared.request.workspace,
+        resources,
+        resource_evidence if resource_evidence is not None else {},
+    ):
+        raise RuntimeError(
+            f"HFSS failed to analyze setup {spec.run_control.setup_name!r}"
+        )
+    if not prepared.app.save_project() or not prepared.project_path.is_file():
+        raise RuntimeError("HFSS solved project save failed")
+
+
+def export_hfss(prepared: PreparedHfss) -> dict[str, Any]:
+    """Export the saved solve and bind convergence readback."""
+    run_dir = prepared.request.workspace
+    spec = prepared.request.parse()
+    if not isinstance(spec, HfssSpec):
+        raise TypeError("bound HFSS request did not retain an HFSS spec")
+    outputs, result_readback = _export(
+        prepared.app, run_dir, spec, detached_data(prepared.ports)
+    )
+    outputs = detached_data(outputs)
+    result_readback = detached_data(result_readback)
+    if isinstance(spec, HfssEigenmodeSpec):
+        convergence_path = run_dir / "results/eigenmode/adaptive-convergence.prop"
+        returned = prepared.app.export_convergence(
+            spec.run_control.setup_name,
+            variations="",
+            output_file=str(convergence_path),
+        )
+        if (
+            not returned
+            or Path(returned).resolve() != convergence_path.resolve()
+            or not convergence_path.is_file()
+        ):
+            raise RuntimeError("HFSS Eigenmode adaptive convergence export is missing")
+        outputs[convergence_path.relative_to(run_dir).as_posix()] = file_sha256(
+            convergence_path
+        )
+    saved = bool(prepared.app.save_project())
+    if not saved or not prepared.project_path.is_file():
+        raise RuntimeError("HFSS project was not saved")
+    convergence = read_hfss_convergence(run_dir, spec)
+    relative = prepared.project_path.relative_to(run_dir).as_posix()
+    outputs[relative] = file_sha256(prepared.project_path)
+    return {
+        "outputs": outputs,
+        "connected": {
+            "aedt_version": prepared.app.desktop_class.aedt_version_id,
+            "pyaedt_version": _pyaedt_version(),
+        },
+        "project": relative,
+        "ports": detached_data(prepared.ports),
+        "mesh": detached_data(prepared.mesh),
+        "materials": detached_data(prepared.materials),
+        **({"geometry": detached_data(prepared.geometry)} if prepared.geometry else {}),
+        "region": detached_data(prepared.region),
+        "setup": detached_data(prepared.setup),
+        "convergence": convergence,
+        "result_readback": result_readback,
+        "save": {"ok": True, "project_sha256": outputs[relative]},
+    }
+
+
+def _assign_mesh(hfss: Any, spec: HfssSpec) -> dict[str, Any]:
+    grounds = [
+        item.object_name for item in spec.object_bindings if item.role == "ground"
+    ]
+    signals = [
+        item.object_name for item in spec.object_bindings if item.role == "signal"
+    ]
+    result: dict[str, Any] = {"surface": {}, "length": {}}
+    for role, objects, name in (
+        ("signal", signals, "SignalSurfaceApprox9"),
+        ("ground", grounds, "GroundSurfaceApprox9"),
+    ):
+        operation = hfss.mesh.assign_surface_mesh(
+            objects, SURFACE_APPROXIMATION_LEVEL, name
+        )
+        if operation is None or name not in _native_mesh_operation_names(hfss):
+            raise RuntimeError(f"{role} surface mesh readback failed")
+        native = _native_mesh_readback(hfss, name, objects)
+        _require_native_mesh_properties(
+            native,
+            {
+                "Name": name,
+                "Type": "Surface Approximation Based",
+                "Region": "On Selection",
+                "Curved Mesh Approximation Type": "Use Slider",
+                "Curved Surface Mesh Resolution": SURFACE_APPROXIMATION_LEVEL,
+            },
+            f"{role} surface mesh",
+        )
+        result["surface"][role] = {
+            "requested": {
+                "name": name,
+                "objects": objects,
+                "level": SURFACE_APPROXIMATION_LEVEL,
+            },
+            "native": native,
+        }
+    if spec.length_mesh is not None:
+        for role, objects, name in (
+            ("signal", list(spec.length_mesh.signal_objects), "UniformCpwSignalLength"),
+            ("ground", list(spec.length_mesh.ground_objects), "UniformCpwGroundLength"),
+        ):
+            operation = hfss.mesh.assign_length_mesh(
+                objects,
+                inside_selection=False,
+                maximum_length=f"{spec.length_mesh.maximum_length_um:g}um",
+                maximum_elements=1_000_000,
+                name=name,
+            )
+            requested = {
+                "Objects": objects,
+                "MaxLength": f"{spec.length_mesh.maximum_length_um:g}um",
+                "NumMaxElem": "1000000",
+                "RestrictElem": True,
+                "RestrictLength": True,
+                "RefineInside": False,
+                "Enabled": True,
+            }
+            if operation is None or name not in _native_mesh_operation_names(hfss):
+                raise RuntimeError(f"uniform CPW {role} length mesh readback failed")
+            native = _native_mesh_readback(hfss, name, objects)
+            _require_native_mesh_properties(
+                native,
+                {
+                    "Name": name,
+                    "Type": "Length Based",
+                    "Region": "On Selection",
+                    "Enabled": True,
+                    "Restrict Length": True,
+                    "Max Length": f"{spec.length_mesh.maximum_length_um:g}um",
+                    "Restrict Max Elems": True,
+                    "Max Elems": 1_000_000,
+                },
+                f"uniform CPW {role} length mesh",
+            )
+            result["length"][role] = {
+                "requested": {"name": name, "properties": requested},
+                "native": native,
+            }
+    return result
+
+
+def _assign_body_terminal_ports(
+    hfss: Any, spec: HfssDrivenGeometrySpec, geometry: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Use authored Entities and supports; AutoIdentify does not author ownership."""
+    from scgsim.aedt.runtime.native.hfss_geometry import native_conductor_objects
+    from scgsim.aedt.runtime.native.hfss_lumped import assign_terminal_lumped
+
+    supports = {
+        item["support_id"]: item for item in geometry.get("lumped_supports", ())
+    }
+    records = []
+    for port in spec.ports:
+        record: dict[str, Any] = {}
+        try:
+            signal_ids = port.signal_entity_ids
+            reference_ids = (
+                port.reference_entity_ids
+                if isinstance(port, LumpedTerminalPort)
+                else port.reference_objects
+            )
+            signals = native_conductor_objects(spec.geometry, geometry, signal_ids)
+            references = native_conductor_objects(
+                spec.geometry, geometry, reference_ids
+            )
+            if isinstance(port, LumpedTerminalPort):
+                support = supports[port.support_id]
+                record = assign_terminal_lumped(
+                    hfss,
+                    hfss.modeler[support["object_name"]],
+                    name=port.name,
+                    reference_objects=references,
+                    impedance_ohm=port.impedance_ohm,
+                    renormalize=port.renormalize,
+                    deembed_um=port.deembed_um,
+                )
+                record["support"] = detached_data(support)
+            else:
+                region = hfss.modeler["Region"]
+                faces = [
+                    (int(face.id), tuple(float(value) for value in face.center))
+                    for face in region.faces
+                ]
+                face_id = _face_for_side(faces, port.side)
+                before = set(hfss.oboundary.GetExcitationsOfType("Terminal"))
+                boundary = hfss.wave_port(
+                    face_id,
+                    reference=references,
+                    name=port.name,
+                    renormalize=False,
+                    deembed=f"{port.deembed_um:g}um",
+                    terminals_rename=False,
+                )
+                terminals = sorted(
+                    set(hfss.oboundary.GetExcitationsOfType("Terminal")) - before
+                )
+                if boundary is False or boundary is None or len(terminals) != 1:
+                    raise RuntimeError(
+                        f"body-first Wave Terminal assignment failed: {port.name!r}"
+                    )
+                record = {
+                    "boundary": boundary.name,
+                    "terminal_excitation": terminals[0],
+                    "face_id": face_id,
+                    "native_terminal_names": terminals,
+                    "face_center_um": list(dict(faces)[face_id]),
+                    "assignment_api": "wave_port",
+                }
+            records.append(
+                {
+                    "index": port.index,
+                    "kind": "lumped"
+                    if isinstance(port, LumpedTerminalPort)
+                    else "wave",
+                    "requested": port.to_payload()
+                    if isinstance(port, LumpedTerminalPort)
+                    else {
+                        "index": port.index,
+                        "name": port.name,
+                        "side": port.side,
+                        "reference_objects": list(port.reference_objects),
+                        "signal_entity_ids": list(signal_ids),
+                        "renormalize": False,
+                        "deembed_um": port.deembed_um,
+                    },
+                    "source_binding": {
+                        "signal_entity_ids": list(signal_ids),
+                        "reference_entity_ids": list(reference_ids),
+                        "signal_objects": signals,
+                        "reference_objects": references,
+                    },
+                    **record,
+                }
+            )
+        except Exception as exc:
+            exc.add_note(
+                "body-first Terminal assignment: "
+                + json.dumps(
+                    {
+                        "port_index": port.index,
+                        "port_name": port.name,
+                        "record": record,
+                    },
+                    default=str,
+                    sort_keys=True,
+                )
+            )
+            raise
+    return records
+
+
+def _bind_body_terminal_evidence(
+    hfss: Any,
+    spec: HfssDrivenGeometrySpec,
+    geometry: dict[str, Any],
+    ports: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Read saved Terminal assignments and their actual conductor owners."""
+    boundaries = hfss.design_properties["BoundarySetup"]["Boundaries"]
+    reference_ids = _native_terminal_reference_ids(hfss)
+    reference_names = [hfss.oeditor.GetObjectNameByID(value) for value in reference_ids]
+    for record, port in zip(ports, spec.ports, strict=True):
+        try:
+            terminal_name = record["terminal_excitation"]
+            native_terminal = boundaries[terminal_name]
+            native_boundary = boundaries[record["boundary"]]
+            native = {
+                "saved_boundary": detached_data(native_boundary),
+                "saved_terminal": detached_data(native_terminal),
+            }
+            # Retain the raw child record before reading its assignment list so
+            # any malformed or unsupported native shape remains in the error.
+            record["native"] = native
+
+            def assignment_ids(key: str) -> list[int] | None:
+                if key not in native_terminal:
+                    return None
+                values = native_terminal[key]
+                if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
+                    raise RuntimeError(
+                        f"saved Terminal {key} assignment is invalid: {port.name!r}"
+                    )
+                if not values:
+                    return None
+                return [int(value) for value in values]
+
+            edges = assignment_ids("Edges")
+            faces = assignment_ids("Faces")
+            if (edges is None) == (faces is None):
+                raise RuntimeError(
+                    f"saved Terminal child assignment must have exactly one "
+                    f"nonempty Edges or Faces list: {port.name!r}"
+                )
+            owners = []
+            if edges is not None:
+                edge_records = []
+                native["terminal_edges"] = edge_records
+                for edge_id in edges:
+                    matches = [
+                        item["object_name"]
+                        for item in geometry["objects"]
+                        if item["kind"] == "conductor"
+                        and edge_id
+                        in {
+                            int(edge.id)
+                            for edge in hfss.modeler[item["object_name"]].edges
+                        }
+                    ]
+                    if len(matches) != 1:
+                        raise RuntimeError(
+                            f"native Terminal edge owner is ambiguous: {edge_id}"
+                        )
+                    edge_records.append(
+                        {
+                            "edge_id": edge_id,
+                            "object_name": matches[0],
+                            "native_object_id": int(hfss.modeler[matches[0]].id),
+                        }
+                    )
+                    if matches[0] not in owners:
+                        owners.append(matches[0])
+            else:
+                if faces is None:
+                    raise RuntimeError(
+                        f"saved Terminal child assignment is unavailable: {port.name!r}"
+                    )
+                face_records = []
+                native["terminal_assignment_kind"] = "Faces"
+                native["terminal_faces"] = face_records
+                for face_id in faces:
+                    matches = [
+                        item["object_name"]
+                        for item in geometry["objects"]
+                        if item["kind"] == "conductor"
+                        and face_id
+                        in {
+                            int(face.id)
+                            for face in hfss.modeler[item["object_name"]].faces
+                        }
+                    ]
+                    if len(matches) != 1:
+                        raise RuntimeError(
+                            f"native Terminal face owner is ambiguous: {face_id}"
+                        )
+                    face_records.append(
+                        {
+                            "face_id": face_id,
+                            "object_name": matches[0],
+                            "native_object_id": int(hfss.modeler[matches[0]].id),
+                        }
+                    )
+                    if matches[0] not in owners:
+                        owners.append(matches[0])
+            native["signal_objects"] = owners
+            native["reference_conductor_ids"] = reference_ids
+            native["reference_conductors"] = reference_names
+            native["boundary_properties"] = _native_oo_properties(
+                hfss, f"Excitations\\{record['boundary']}"
+            )
+            native["terminal_properties"] = _native_oo_properties(
+                hfss, f"Excitations\\{record['boundary']}\\{terminal_name}"
+            )
+            if not owners or not set(owners).issubset(
+                record["source_binding"]["signal_objects"]
+            ):
+                raise RuntimeError(
+                    f"native Terminal signal ownership differs: {port.name!r}"
+                )
+            if not set(record["source_binding"]["reference_objects"]).issubset(
+                reference_names
+            ):
+                raise RuntimeError(f"native Terminal references differ: {port.name!r}")
+            expected_type = (
+                "Lumped Port" if isinstance(port, LumpedTerminalPort) else "Wave Port"
+            )
+            if (
+                native_boundary["BoundType"] != expected_type
+                or native["terminal_properties"].get("Port Name") != port.name
+            ):
+                raise RuntimeError(
+                    f"saved Terminal family/parent differs: {port.name!r}"
+                )
+            if [int(value) for value in native_boundary["Faces"]] != [
+                record["face_id"]
+            ]:
+                raise RuntimeError(
+                    f"saved Terminal support assignment differs: {port.name!r}"
+                )
+            renorm = port.renormalize if isinstance(port, LumpedTerminalPort) else False
+            _require_native_properties(
+                native["boundary_properties"],
+                {
+                    "Type": expected_type,
+                    "Renorm All Terminals": renorm,
+                    **(
+                        {"Deembed": False}
+                        if isinstance(port, LumpedTerminalPort)
+                        else {}
+                    ),
+                },
+                port.name,
+            )
+            if isinstance(port, LumpedTerminalPort):
+                _require_native_properties(
+                    native["terminal_properties"],
+                    {"Terminal Renormalizing Impedance": f"{port.impedance_ohm:g}ohm"},
+                    terminal_name,
+                )
+            else:
+                # With renormalization disabled this is native metadata, not a
+                # source-authored load or solved characteristic impedance.
+                if native["boundary_properties"].get("Deembed") not in (
+                    True,
+                    False,
+                    "true",
+                    "false",
+                ):
+                    raise RuntimeError("native Wave deembed flag is unavailable")
+                native["inactive_renormalizing_impedance"] = native[
+                    "terminal_properties"
+                ].get("Terminal Renormalizing Impedance")
+                _require_native_properties(
+                    native["boundary_properties"],
+                    {"Deembed Dist": f"{port.deembed_um:g}um"},
+                    port.name,
+                )
+        except Exception as exc:
+            exc.add_note(
+                "saved body-first Terminal readback: "
+                + json.dumps(
+                    {
+                        "port_index": port.index,
+                        "port_name": port.name,
+                        "record": record,
+                    },
+                    default=str,
+                    sort_keys=True,
+                )
+            )
+            raise
+    expected_references = {
+        name
+        for record in ports
+        for name in record["source_binding"]["reference_objects"]
+    }
+    if set(reference_names) != expected_references:
+        raise RuntimeError(
+            "body-first global native Terminal reference inventory differs"
+        )
+    return ports
+
+
+def _assign_ports(hfss: Any, spec: HfssSpec) -> list[dict[str, Any]]:
+    if isinstance(spec, HfssEigenmodeSpec):
+        if hfss.get_oo_name(hfss.odesign, "Excitations"):
+            raise RuntimeError("HFSS Eigenmode design must not contain excitations")
+        return []
+    region = hfss.modeler.get_object_from_name("Region")
+    if region is None:
+        raise RuntimeError("Region is missing")
+    faces = [
+        (int(face.id), tuple(float(value) for value in face.center))
+        for face in region.faces
+    ]
+    centers = {face_id: center for face_id, center in faces}
+    records: list[dict[str, Any]] = []
+    for port, effective_port in zip(spec.ports, spec.effective_ports, strict=True):
+        face_id = _face_for_side(faces, port.side)
+        if isinstance(port, TerminalPort):
+            before = set(hfss.oboundary.GetExcitationsOfType("Terminal"))
+            boundary = hfss.wave_port(
+                face_id,
+                reference=list(port.reference_objects),
+                name=port.name,
+                renormalize=False,
+                deembed=f"{port.deembed_um:g}um",
+                terminals_rename=False,
+            )
+            after = set(hfss.oboundary.GetExcitationsOfType("Terminal"))
+            names = sorted(after - before)
+            if boundary is None or len(names) != 1:
+                raise RuntimeError(
+                    f"terminal excitation readback failed for {port.name!r}: {names!r}"
+                )
+            boundary_name = _text(getattr(boundary, "name", port.name), "boundary.name")
+            native = _native_terminal_readback(hfss, boundary_name, names[0], port)
+            records.append(
+                {
+                    "index": port.index,
+                    "boundary": boundary_name,
+                    "terminal_excitation": names[0],
+                    "face_id": face_id,
+                    "face_center_um": list(centers[face_id]),
+                    "native_terminal_names": names,
+                    "requested": {
+                        "reference_objects": list(port.reference_objects),
+                        "renormalize": False,
+                        "deembed_um": port.deembed_um,
+                    },
+                    "native": native,
+                }
+            )
+        elif isinstance(port, ModalPort):
+            if not isinstance(effective_port, ModalPort):
+                raise TypeError("modal effective port must preserve ModalPort type")
+            before = set(hfss.get_oo_name(hfss.odesign, "Excitations"))
+            boundary = hfss.wave_port(
+                face_id,
+                integration_line=[
+                    list(point) for point in effective_port.integration_line_um
+                ],
+                modes=1,
+                impedance=50,
+                name=port.name,
+                renormalize=False,
+                deembed=0,
+                characteristic_impedance="Zpi",
+            )
+            after = set(hfss.get_oo_name(hfss.odesign, "Excitations"))
+            names = sorted(after - before)
+            if boundary is None or names != [port.name]:
+                raise RuntimeError(
+                    f"modal excitation readback failed for {port.name!r}: {names!r}"
+                )
+            native = _native_modal_oo_readback(hfss, port.name)
+            records.append(
+                {
+                    "index": port.index,
+                    "boundary": port.name,
+                    "modal_excitation": port.name,
+                    "face_id": face_id,
+                    "face_center_um": list(centers[face_id]),
+                    "requested": {
+                        "integration_line_um": [
+                            list(point) for point in port.integration_line_um
+                        ],
+                        "modes": 1,
+                        "renormalize": False,
+                        "deembed_um": 0.0,
+                        "characteristic_impedance": "Zpi",
+                    },
+                    "effective": {
+                        "integration_line_um": [
+                            list(point) for point in effective_port.integration_line_um
+                        ]
+                    },
+                    "native": native,
+                }
+            )
+        else:  # pragma: no cover - HfssDrivenSpec already closes this boundary.
+            raise TypeError("unsupported HFSS driven port type")
+    return records
+
+
+def _face_for_side(
+    faces: list[tuple[int, tuple[float, float, float]]], side: str
+) -> int:
+    axis, sign = {
+        "-X": (0, -1),
+        "+X": (0, 1),
+        "-Y": (1, -1),
+        "+Y": (1, 1),
+        "-Z": (2, -1),
+        "+Z": (2, 1),
+    }[side]
+    edge = (
+        max(center[axis] for _, center in faces)
+        if sign > 0
+        else min(center[axis] for _, center in faces)
+    )
+    matches = [face_id for face_id, center in faces if abs(center[axis] - edge) <= 1e-9]
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"expected exactly one Region face on {side}, got {matches!r}"
+        )
+    return matches[0]
+
+
+def _setup(hfss: Any, spec: HfssSpec) -> None:
+    if isinstance(spec, HfssEigenmodeSpec):
+        create_eigenmode_setup(hfss, spec.run_control)
+        return
+    if hfss.setup_names:
+        raise RuntimeError("new V1 design must not inherit a setup")
+    setup = hfss.create_setup(spec.run_control.setup_name)
+    setup.props["SolveType"] = (
+        "DrivenTerminal" if spec.mode == "terminal" else "DrivenModal"
+    )
+    if not setup.enable_adaptive_setup_broadband(
+        f"{spec.run_control.sweep.start_ghz}GHz",
+        f"{spec.run_control.sweep.stop_ghz}GHz",
+        max_passes=spec.run_control.maximum_passes,
+        max_delta_s=spec.run_control.maximum_delta_s,
+    ):
+        raise RuntimeError("adaptive setup initialization failed")
+    setup.props["MinimumPasses"] = spec.run_control.minimum_passes
+    setup.props["MinimumConvergedPasses"] = spec.run_control.minimum_converged_passes
+    setup.props["PercentRefinement"] = spec.run_control.percent_refinement
+    if not setup.update():
+        raise RuntimeError("HFSS Driven adaptive setup update failed")
+    point_count = int(spec.run_control.sweep.points)
+    sweep = hfss.create_linear_count_sweep(
+        spec.run_control.setup_name,
+        "GHz",
+        spec.run_control.sweep.start_ghz,
+        spec.run_control.sweep.stop_ghz,
+        num_of_freq_points=point_count,
+        name=spec.run_control.sweep_name,
+        save_fields=False,
+        sweep_type="Fast",
+    )
+    if sweep is None:
+        raise RuntimeError("Fast sweep creation failed")
+    actual = (
+        str(sweep.props.get("Type")),
+        str(sweep.props.get("RangeStart")),
+        str(sweep.props.get("RangeEnd")),
+        int(sweep.props.get("RangeCount")),
+    )
+    expected = (
+        "Fast",
+        f"{spec.run_control.sweep.start_ghz}GHz",
+        f"{spec.run_control.sweep.stop_ghz}GHz",
+        point_count,
+    )
+    if actual != expected:
+        raise RuntimeError(f"Fast sweep readback mismatch: {actual!r} != {expected!r}")
+
+
+def _read_hfss_setup(hfss: Any, spec: HfssSpec) -> dict[str, Any]:
+    if isinstance(spec, HfssEigenmodeSpec):
+        return read_eigenmode_setup(hfss, spec.run_control)
+    raw = _saved_setup_properties(hfss, spec.run_control.setup_name)
+    frequencies = raw.get("MultipleAdaptiveFreqsSetup")
+    if not isinstance(frequencies, dict):
+        raise TypeError("HFSS Driven saved setup lacks broadband frequencies")
+    native = {
+        "solve_type": raw.get("SolveType"),
+        "low_frequency": frequencies.get("Low"),
+        "high_frequency": frequencies.get("High"),
+        "maximum_delta_s": raw.get("MaxDeltaS"),
+        "maximum_passes": raw.get("MaximumPasses"),
+        "minimum_passes": raw.get("MinimumPasses"),
+        "minimum_converged_passes": raw.get("MinimumConvergedPasses"),
+        "percent_refinement": raw.get("PercentRefinement"),
+    }
+    expected = {
+        "solve_type": "Broadband",
+        "low_frequency": f"{spec.run_control.sweep.start_ghz:g}GHz",
+        "high_frequency": f"{spec.run_control.sweep.stop_ghz:g}GHz",
+        "maximum_delta_s": spec.run_control.maximum_delta_s,
+        "maximum_passes": spec.run_control.maximum_passes,
+        "minimum_passes": spec.run_control.minimum_passes,
+        "minimum_converged_passes": spec.run_control.minimum_converged_passes,
+        "percent_refinement": spec.run_control.percent_refinement,
+    }
+    if native != expected:
+        raise RuntimeError(f"HFSS saved setup readback mismatch: {native!r}")
+    return {"name": spec.run_control.setup_name, "native": native}
+
+
+def _export(
+    hfss: Any, run_dir: Path, spec: HfssSpec, ports: list[dict[str, Any]]
+) -> tuple[dict[str, str], dict[str, Any]]:
+    output_dir = run_dir / "results" / spec.mode
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if isinstance(spec, HfssEigenmodeSpec):
+        return _export_eigenmode(hfss, run_dir, output_dir, spec)
+    setup_sweep = f"{spec.run_control.setup_name} : {spec.run_control.sweep_name}"
+    terminal = spec.mode == "terminal"
+    names = [
+        record["terminal_excitation" if terminal else "modal_excitation"]
+        for record in ports
+    ]
+    hashes: dict[str, str] = {}
+    readback: dict[str, Any] = {}
+    touchstone = output_dir / f"{spec.mode}.s2p"
+    if (
+        not hfss.export_touchstone(
+            setup=spec.run_control.setup_name,
+            sweep=spec.run_control.sweep_name,
+            output_file=str(touchstone),
+        )
+        or not touchstone.is_file()
+    ):
+        raise RuntimeError(f"{spec.mode} Touchstone export failed")
+    readback["touchstone"] = _verify_touchstone(touchstone, spec, names)
+    prefix = "St" if terminal else "S"
+    expressions = [f"{prefix}({left},{right})" for left in names for right in names]
+    data = hfss.post.get_solution_data(
+        expressions=expressions,
+        setup_sweep_name=setup_sweep,
+        report_category=(
+            "Terminal Solution Data" if terminal else "Modal Solution Data"
+        ),
+    )
+    csv_path = output_dir / f"{spec.mode}_{prefix.casefold()}.csv"
+    readback[f"{spec.mode}_{prefix.casefold()}"] = _write_complex_csv(
+        data, expressions, csv_path, suffix="", spec=spec
+    )
+    hashes[touchstone.relative_to(run_dir).as_posix()] = file_sha256(touchstone)
+    hashes[csv_path.relative_to(run_dir).as_posix()] = file_sha256(csv_path)
+    return hashes, readback
+
+
+def _export_eigenmode(
+    hfss: Any,
+    run_dir: Path,
+    output_dir: Path,
+    spec: HfssEigenmodeSpec,
+) -> tuple[dict[str, str], dict[str, Any]]:
+    setup = f"{spec.run_control.setup_name} : LastAdaptive"
+    raw = output_dir / "eigenmodes.eig"
+    hfss.osolution.ExportEigenmodes(setup, "", str(raw))
+    if not raw.is_file() or raw.stat().st_size == 0:
+        raise RuntimeError("HFSS Eigenmode native export is missing or empty")
+    rows = _parse_eigenmode_export(raw, spec)
+    path = output_dir / "eigenmodes.csv"
+    write_csv(path, rows, fieldnames=["mode", "frequency_ghz", "q_factor"])
+    raw_relative = raw.relative_to(run_dir).as_posix()
+    path_relative = path.relative_to(run_dir).as_posix()
+    return {
+        raw_relative: file_sha256(raw),
+        path_relative: file_sha256(path),
+    }, {
+        "eigenmodes": {
+            "modes": len(rows),
+            "frequency_unit": "GHz",
+            "mode_indices": [row["mode"] for row in rows],
+            "frequencies_ghz": [row["frequency_ghz"] for row in rows],
+            "q_factors": [row["q_factor"] for row in rows],
+            "native_export": raw.name,
+            "native_export_bytes": raw.stat().st_size,
+        }
+    }
+
+
+def _parse_eigenmode_export(
+    path: Path, spec: HfssEigenmodeSpec
+) -> list[dict[str, Any]]:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    table_header = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if "Mode" in line and "Frequency (GHz)" in line and "Q" in line
+        ),
+        None,
+    )
+    if (
+        not lines
+        or lines[0] != "# Ansys eigenmode data file.  Version 2.0"
+        or f"# Design:     {spec.design_name}" not in lines
+        or f"# Solution:   {spec.run_control.setup_name} : LastAdaptive" not in lines
+        or table_header is None
+    ):
+        raise RuntimeError("HFSS Eigenmode native export header is invalid")
+    rows: list[dict[str, Any]] = []
+    for line_number, line in enumerate(
+        lines[table_header + 1 :], start=table_header + 2
+    ):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        tokens = line.split()
+        if (
+            not tokens
+            or re.fullmatch(r"[0-9]+", tokens[0]) is None
+            or len(tokens) not in {3, 6}
+        ):
+            raise RuntimeError(
+                f"HFSS Eigenmode native mode row at line {line_number} is malformed"
+            )
+        mode = int(tokens[0])
+        if mode <= 0:
+            raise RuntimeError(
+                f"HFSS Eigenmode native mode row at line {line_number} is malformed"
+            )
+        try:
+            frequency = float(tokens[1])
+            if len(tokens) == 3:
+                q_factor = float(tokens[2])
+                imaginary_frequency = None
+            else:
+                if tokens[2] not in {"+", "-"} or tokens[4] != "j":
+                    raise ValueError
+                imaginary_magnitude = float(tokens[3])
+                imaginary_frequency = (
+                    imaginary_magnitude if tokens[2] == "+" else -imaginary_magnitude
+                )
+                q_factor = float(tokens[5])
+        except ValueError:
+            raise RuntimeError(
+                f"HFSS Eigenmode native mode row at line {line_number} is malformed"
+            ) from None
+        if (
+            not math.isfinite(frequency)
+            or frequency <= 0
+            or not math.isfinite(q_factor)
+            or q_factor < 0
+            or (
+                imaginary_frequency is not None
+                and not math.isfinite(imaginary_frequency)
+            )
+        ):
+            raise RuntimeError(
+                "HFSS Eigenmode native mode row at line "
+                f"{line_number} has invalid numeric values"
+            )
+        rows.append({"mode": mode, "frequency_ghz": frequency, "q_factor": q_factor})
+    if [row["mode"] for row in rows] != list(range(1, spec.run_control.num_modes + 1)):
+        raise RuntimeError("HFSS Eigenmode native mode count/order is invalid")
+    return rows
+
+
+def _write_complex_csv(
+    data: Any, expressions: list[str], path: Path, *, suffix: str, spec: HfssDrivenSpec
+) -> dict[str, Any]:
+    if not data:
+        raise RuntimeError("solution-data extraction failed")
+    point_count = int(spec.run_control.sweep.points)
+    frequency, _ = data.get_expression_data(expressions[0], "real")
+    if len(frequency) != point_count:
+        raise RuntimeError(
+            f"extracted point count must be {point_count}, got {len(frequency)}"
+        )
+    unit = data.units_sweeps.get(data.primary_sweep)
+    values = [float(value) for value in frequency]
+    if (
+        data.primary_sweep != "Freq"
+        or unit != "GHz"
+        or not math.isclose(values[0], spec.run_control.sweep.start_ghz, abs_tol=1e-9)
+        or not math.isclose(values[-1], spec.run_control.sweep.stop_ghz, abs_tol=1e-9)
+        or any(right <= left for left, right in pairwise(values))
+    ):
+        raise RuntimeError(
+            "solution frequency records have invalid units, endpoints, or ordering"
+        )
+    columns: dict[str, tuple[Any, Any]] = {
+        expression: (
+            data.get_expression_data(expression, "real")[1],
+            data.get_expression_data(expression, "imag")[1],
+        )
+        for expression in expressions
+    }
+    if any(
+        len(real) != point_count or len(imag) != point_count
+        for real, imag in columns.values()
+    ):
+        raise RuntimeError("solution-data expression length mismatch")
+    names = [
+        "frequency_ghz",
+        *[
+            name
+            for expression in expressions
+            for name in (f"Re({expression}){suffix}", f"Im({expression}){suffix}")
+        ],
+    ]
+    rows = []
+    for index in range(point_count):
+        row: dict[str, Any] = {"frequency_ghz": frequency[index]}
+        for expression, (real, imag) in columns.items():
+            row[f"Re({expression}){suffix}"] = real[index]
+            row[f"Im({expression}){suffix}"] = imag[index]
+        rows.append(row)
+    write_csv(path, rows, fieldnames=names)
+    return {
+        "records": len(values),
+        "frequency_unit": unit,
+        "first_frequency_ghz": values[0],
+        "last_frequency_ghz": values[-1],
+        "strictly_increasing": True,
+    }
+
+
+def _verify_touchstone(
+    path: Path, spec: HfssDrivenSpec, native_port_names: list[str]
+) -> dict[str, Any]:
+    if path.suffix.lower() != ".s2p" or path.stat().st_size == 0:
+        raise RuntimeError("Touchstone must be a nonempty .s2p file")
+    if len(native_port_names) != 2 or len(set(native_port_names)) != 2:
+        raise RuntimeError("Touchstone requires two ordered native port names")
+    point_count = int(spec.run_control.sweep.points)
+    unit: str | None = None
+    frequencies: list[float] = []
+    header_ports: dict[int, str] = {}
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("!"):
+            match = re.fullmatch(r"!\s*Port\[(1|2)]\s*=\s*(.+?)\s*", stripped)
+            if match:
+                index, name = int(match.group(1)), match.group(2)
+                if index in header_ports:
+                    raise RuntimeError("Touchstone repeats an indexed port-name header")
+                header_ports[index] = name
+            continue
+        if stripped.startswith("#"):
+            tokens = stripped[1:].split()
+            if not tokens or tokens[0].casefold() != "ghz":
+                raise RuntimeError("Touchstone frequency unit must be GHz")
+            unit = "GHz"
+            continue
+        if stripped.startswith("["):
+            continue
+        tokens = stripped.split()
+        try:
+            frequency = float(tokens[0])
+        except (IndexError, ValueError):
+            continue
+        if len(tokens) != 9:
+            raise RuntimeError("Touchstone is not a two-port data record")
+        frequencies.append(frequency)
+    if (
+        unit != "GHz"
+        or len(frequencies) != point_count
+        or not math.isclose(
+            frequencies[0], spec.run_control.sweep.start_ghz, abs_tol=1e-9
+        )
+        or not math.isclose(
+            frequencies[-1], spec.run_control.sweep.stop_ghz, abs_tol=1e-9
+        )
+        or any(right <= left for left, right in pairwise(frequencies))
+    ):
+        raise RuntimeError(
+            "Touchstone records have invalid count, units, endpoints, or ordering"
+        )
+    if [header_ports.get(1), header_ports.get(2)] != native_port_names:
+        raise RuntimeError(
+            "Touchstone indexed port-name order does not match native ports"
+        )
+    return {
+        "path": path.name,
+        "ports": 2,
+        "records": len(frequencies),
+        "frequency_unit": unit,
+        "first_frequency_ghz": frequencies[0],
+        "last_frequency_ghz": frequencies[-1],
+        "strictly_increasing": True,
+        "port_order": native_port_names,
+        "bytes": path.stat().st_size,
+    }
+
+
+def _native_mesh_operation_names(hfss: Any) -> list[str]:
+    names = hfss.get_oo_name(hfss.odesign, "Mesh")
+    if not isinstance(names, list):
+        raise TypeError("AEDT native mesh operation collection is unavailable")
+    return names
+
+
+def _native_mesh_readback(
+    hfss: Any, expected_name: str, expected_objects: list[str]
+) -> dict[str, Any]:
+    """Read AEDT OOP mesh properties and MeshSetup assignments directly."""
+    operation_names = _native_mesh_operation_names(hfss)
+    if expected_name not in operation_names:
+        raise RuntimeError(f"mesh operation is missing natively: {expected_name}")
+    property_names = hfss.get_oo_properties(hfss.odesign, f"Mesh/{expected_name}")
+    if not property_names:
+        raise RuntimeError(
+            f"mesh operation native properties are unavailable: {expected_name}"
+        )
+    properties = {
+        property_name: hfss.get_oo_property_value(
+            hfss.odesign, f"Mesh/{expected_name}", property_name
+        )
+        for property_name in property_names
+    }
+    assigned_ids = [
+        int(object_id)
+        for object_id in hfss.mesh.omeshmodule.GetMeshOpAssignment(expected_name)
+    ]
+    objects = [hfss.oeditor.GetObjectNameByID(object_id) for object_id in assigned_ids]
+    if objects != expected_objects:
+        raise RuntimeError(
+            f"mesh operation native assignment mismatch: {expected_name}"
+        )
+    return {
+        "operation_names": operation_names,
+        "properties": properties,
+        "object_ids": assigned_ids,
+        "objects": objects,
+    }
+
+
+def _require_native_mesh_properties(
+    native: dict[str, Any], expected: dict[str, Any], context: str
+) -> None:
+    """Compare required settings while retaining AEDT's raw native properties."""
+    observed = native["properties"]
+    mismatches = {
+        key: {"expected": value, "observed": observed.get(key)}
+        for key, value in expected.items()
+        if key not in observed or not _native_value_matches(observed[key], value)
+    }
+    if mismatches:
+        raise RuntimeError(f"{context} native property mismatch: {mismatches!r}")
+
+
+def _native_value_matches(observed: Any, expected: Any) -> bool:
+    """Accept AEDT native scalar spelling without converting its recorded value."""
+    if isinstance(expected, bool):
+        return observed is expected or observed == str(expected).lower()
+    if isinstance(expected, int):
+        return observed == expected or observed == str(expected)
+    return observed == expected
+
+
+def _native_terminal_readback(
+    hfss: Any, boundary_name: str, terminal_name: str, port: TerminalPort
+) -> dict[str, Any]:
+    """Read port and terminal state from AEDT's Excitations object tree."""
+    excitation_names = hfss.get_oo_name(hfss.odesign, "Excitations")
+    if boundary_name not in excitation_names:
+        raise RuntimeError(f"AEDT terminal boundary is missing: {boundary_name!r}")
+    terminal_names = hfss.get_oo_name(hfss.odesign, f"Excitations\\{boundary_name}")
+    if terminal_names != [terminal_name]:
+        raise RuntimeError(
+            f"AEDT terminal child mismatch for {boundary_name!r}: {terminal_names!r}"
+        )
+    boundary_properties = _native_oo_properties(hfss, f"Excitations\\{boundary_name}")
+    terminal_properties = _native_oo_properties(
+        hfss, f"Excitations\\{boundary_name}\\{terminal_name}"
+    )
+    _require_native_properties(
+        boundary_properties,
+        {
+            "Name": boundary_name,
+            "Type": "Wave Port",
+            "Wave Port Type": "Terminal",
+            "Num Terminals": 1,
+            "Deembed Dist": f"{port.deembed_um:g}um",
+            "Renorm All Terminals": False,
+        },
+        f"terminal boundary {boundary_name!r}",
+    )
+    _require_native_properties(
+        terminal_properties,
+        {"Name": terminal_name, "Port Name": boundary_name, "Type": "Terminal"},
+        f"terminal child {terminal_name!r}",
+    )
+    if boundary_properties.get("Deembed") not in (True, False, "true", "false"):
+        raise RuntimeError("native Wave deembed flag is unavailable")
+    return {
+        "excitation_names": excitation_names,
+        "terminal_names": terminal_names,
+        "boundary_properties": boundary_properties,
+        "terminal_properties": terminal_properties,
+        "inactive_renormalizing_impedance": terminal_properties.get(
+            "Terminal Renormalizing Impedance"
+        ),
+    }
+
+
+def _native_modal_oo_readback(hfss: Any, boundary_name: str) -> dict[str, Any]:
+    """Read the direct AEDT object-tree state of one modal wave port."""
+    excitation_names = hfss.get_oo_name(hfss.odesign, "Excitations")
+    if boundary_name not in excitation_names:
+        raise RuntimeError(f"AEDT modal boundary is missing: {boundary_name!r}")
+    properties = _native_oo_properties(hfss, f"Excitations\\{boundary_name}")
+    _require_native_properties(
+        properties,
+        {
+            "Name": boundary_name,
+            "Type": "Wave Port",
+            "Num Modes": 1,
+            "Deembed": False,
+            "Renorm All Modes": False,
+        },
+        f"modal boundary {boundary_name!r}",
+    )
+    return {
+        "excitation_names": excitation_names,
+        "boundary_properties": properties,
+    }
+
+
+def _bind_port_evidence(
+    hfss: Any, spec: HfssSpec, ports: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    if isinstance(spec, HfssEigenmodeSpec):
+        if ports:
+            raise RuntimeError("HFSS Eigenmode must not bind port evidence")
+        return ports
+    if spec.mode == "terminal":
+        return _bind_terminal_reference_evidence(hfss, spec, ports)
+    return _bind_modal_evidence(hfss, spec, ports)
+
+
+def _bind_modal_evidence(
+    hfss: Any, spec: HfssDrivenSpec, ports: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Bind modal integration lines from AEDT's saved native design state."""
+    try:
+        boundaries = hfss.design_properties["BoundarySetup"]["Boundaries"]
+    except (KeyError, TypeError) as exc:
+        raise RuntimeError("AEDT native modal boundaries are unavailable") from exc
+    if not isinstance(boundaries, dict):
+        raise TypeError("AEDT native modal boundary data is invalid")
+    for record, port, effective_port in zip(
+        ports, spec.ports, spec.effective_ports, strict=True
+    ):
+        if not isinstance(port, ModalPort):
+            raise TypeError("modal evidence requires ModalPort entries")
+        if not isinstance(effective_port, ModalPort):
+            raise TypeError("modal effective evidence requires ModalPort entries")
+        boundary = boundaries.get(port.name)
+        try:
+            mode = boundary["Modes"]["Mode1"]
+            positions = mode["IntLine"]["GeometryPosition"]
+        except (KeyError, TypeError) as exc:
+            raise RuntimeError(
+                f"AEDT native modal integration line is unavailable: {port.name!r}"
+            ) from exc
+        observed = [
+            [_native_position_um(item[f"{axis}Position"]) for axis in "XYZ"]
+            for item in positions
+        ]
+        expected = [list(point) for point in effective_port.integration_line_um]
+        if (
+            boundary.get("BoundType") != "Wave Port"
+            or boundary.get("WavePortType") != "Modal"
+            or boundary.get("NumModes") != 1
+            or boundary.get("Faces") != [record["face_id"]]
+            or boundary.get("DoDeembed") is not False
+            or mode.get("ModeNum") != 1
+            or mode.get("UseIntLine") is not True
+            or mode.get("CharImp") != "Zpi"
+            or len(observed) != 2
+            or any(
+                not math.isclose(actual, wanted, abs_tol=1e-9)
+                for actual_point, expected_point in zip(observed, expected, strict=True)
+                for actual, wanted in zip(actual_point, expected_point, strict=True)
+            )
+        ):
+            raise RuntimeError(
+                f"AEDT native modal port readback mismatch: {port.name!r}"
+            )
+        native = record.get("native")
+        if not isinstance(native, dict):
+            raise TypeError("modal native OO evidence is unavailable")
+        native["saved_boundary"] = {
+            "bound_type": boundary["BoundType"],
+            "wave_port_type": boundary["WavePortType"],
+            "faces": boundary["Faces"],
+            "num_modes": boundary["NumModes"],
+            "deembed": boundary["DoDeembed"],
+            "mode_number": mode["ModeNum"],
+            "use_integration_line": mode["UseIntLine"],
+            "integration_line_um": observed,
+            "characteristic_impedance": mode["CharImp"],
+        }
+    return ports
+
+
+def _native_position_um(value: Any) -> float:
+    """Read one saved AEDT modal coordinate as a finite micrometer value."""
+    if isinstance(value, bool):
+        raise ValueError("AEDT modal coordinate must be a finite length")
+    if isinstance(value, str):
+        match = re.fullmatch(
+            r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*([A-Za-z]+)",
+            value.strip(),
+        )
+        if match:
+            from ansys.aedt.core.generic.constants import AEDT_UNITS, unit_converter
+
+            units = match.group(2)
+            if units not in AEDT_UNITS["Length"]:
+                raise ValueError("AEDT modal coordinate units must be a length")
+            value = unit_converter(
+                float(match.group(1)),
+                unit_system="Length",
+                input_units=units,
+                output_units="um",
+            )
+    try:
+        result = float(value)
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ValueError("AEDT modal coordinate must be a finite length") from exc
+    if not math.isfinite(result):
+        raise ValueError("AEDT modal coordinate must be a finite length")
+    return result
+
+
+def _bind_terminal_reference_evidence(
+    hfss: Any, spec: HfssDrivenSpec, ports: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Bind global AEDT terminal reference IDs after saving the owned project."""
+    if len(ports) != len(spec.ports):
+        raise RuntimeError("terminal port evidence count is invalid")
+    reference_ids = _native_terminal_reference_ids(hfss)
+    reference_objects = [
+        hfss.oeditor.GetObjectNameByID(object_id) for object_id in reference_ids
+    ]
+    expected = list(spec.ports[0].reference_objects)
+    if reference_objects != expected:
+        raise RuntimeError("AEDT native terminal reference conductor mismatch")
+    for record, port in zip(ports, spec.ports, strict=True):
+        if (
+            not isinstance(port, TerminalPort)
+            or list(port.reference_objects) != expected
+        ):
+            raise RuntimeError("terminal reference contract is not globally consistent")
+        native = record.get("native")
+        if not isinstance(native, dict):
+            raise TypeError("terminal native evidence is unavailable")
+        native["reference_conductor_ids"] = reference_ids
+        native["reference_conductors"] = reference_objects
+    return ports
+
+
+def _native_terminal_reference_ids(hfss: Any) -> list[int]:
+    """Read terminal reference conductors from HFSS native design properties."""
+    try:
+        values = hfss.design_properties["BoundarySetup"]["ProductSpecificData"][
+            "TerminalReferenceConductors"
+        ]
+    except (KeyError, TypeError) as exc:
+        raise RuntimeError(
+            "AEDT native terminal reference conductors are unavailable"
+        ) from exc
+    if not isinstance(values, list) or not values:
+        raise RuntimeError("AEDT native terminal reference conductors are invalid")
+    try:
+        return [int(value) for value in values]
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("AEDT native terminal reference IDs are invalid") from exc
+
+
+def _native_oo_properties(hfss: Any, path: str) -> dict[str, Any]:
+    """Return properties directly from an AEDT object-oriented child object."""
+    child = hfss.get_oo_object(hfss.odesign, path)
+    if not child:
+        raise RuntimeError(f"AEDT native child object is unavailable: {path!r}")
+    names = child.GetPropNames()
+    if not names:
+        raise RuntimeError(f"AEDT native child has no properties: {path!r}")
+    return {name: child.GetPropValue(name) for name in names}
+
+
+def _require_native_properties(
+    observed: dict[str, Any], expected: dict[str, Any], context: str
+) -> None:
+    """Require semantic settings from their direct AEDT native representation."""
+    mismatches = {
+        key: {"expected": value, "observed": observed.get(key)}
+        for key, value in expected.items()
+        if key not in observed or not _native_value_matches(observed[key], value)
+    }
+    if mismatches:
+        raise RuntimeError(f"{context} native property mismatch: {mismatches!r}")
+
+
+def _text(value: Any, field: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{field} must be non-empty text")
+    return value
+
+
+def read_body_eigenmode_setup(
+    app: Any, spec: HfssEprSpec | HfssEprAnalysisSpec
+) -> dict[str, Any]:
+    setup = read_eigenmode_setup(app, spec.run_control)
+    raw = saved_setup_properties(app, spec.run_control.setup_name)
+    creating_setup = isinstance(spec, HfssEprSpec)
+    saved_field_properties = {
+        "basis": (
+            "completed Eigenmode LastAdaptive Fields evidence is checked after solve"
+            if creating_setup
+            else "existing saved-field analysis does not re-author setup field policy"
+        ),
+        "serialized": {
+            key: raw[key]
+            for key in ("SaveAnyFields", "SaveRadFieldsOnly")
+            if key in raw
+        },
+        "status": (
+            "unexposed_pending_postsolve"
+            if creating_setup
+            else "not_reauthored_existing_saved_solution"
+        ),
+    }
+    return {
+        "name": setup["name"],
+        "native": setup["native"],
+        "saved_fields": saved_field_properties,
+    }
+
+
+def _frequency_solution_trace(
+    data: Any, expression: str, *, category: str, solution: str
+) -> dict[str, Any]:
+    """Retain raw frequency and optional explicit native SI evidence."""
+
+    trace = _solution_trace(data, expression)
+    if trace["unit"] != "":
+        return trace
+    evidence: dict[str, Any] = {
+        "status": "unavailable",
+        "query": {
+            "category": category,
+            "solution": solution,
+            "expression": expression,
+            "sweeps": {"Pass": "All"},
+            "si_value": True,
+            "real_method": "GetRealDataValues",
+            "imaginary_method": "GetImagDataValues",
+        },
+        "unit": "Hz",
+        "variations": [],
+    }
+    trace["si_evidence"] = evidence
+    # SI evidence is optional; failure must retain the original partial trace.
+    try:
+        import numpy as np
+
+        if len(data._original_data) != len(data.variations):
+            raise RuntimeError("native SI frequency variation count differs")
+        real_rows: list[list[Any]] = []
+        imaginary_rows: list[list[Any]] = []
+        for index, native in enumerate(data._original_data):
+            variation = data.variations[index]
+            observed: dict[str, Any] = {
+                "index": index,
+                "coordinates": dict(variation),
+                "intrinsics": {
+                    name: values.tolist()
+                    for name, values in data.intrinsics_by_variation(index).items()
+                },
+            }
+            evidence["variations"].append(observed)
+            observed["real_values"] = list(native.GetRealDataValues(expression, True))
+            observed["imaginary_values"] = list(
+                native.GetImagDataValues(expression, True)
+            )
+            real_rows.extend(
+                data._full_keys(
+                    variation, np.asarray(observed["real_values"], dtype=float), index
+                ).tolist()
+            )
+            imaginary_rows.extend(
+                data._full_keys(
+                    variation,
+                    np.asarray(observed["imaginary_values"], dtype=float),
+                    index,
+                ).tolist()
+            )
+        coordinates = [row[:-1] for row in trace["real_rows"]]
+        if not (
+            coordinates
+            == [row[:-1] for row in real_rows]
+            == [row[:-1] for row in imaginary_rows]
+            == [row[:-1] for row in trace["imaginary_rows"]]
+        ):
+            raise RuntimeError("native SI frequency coordinates differ from raw trace")
+        evidence.update(
+            status="available",
+            columns=trace["columns"],
+            real_rows=real_rows,
+            imaginary_rows=imaginary_rows,
+        )
+    except Exception as exc:  # noqa: BLE001 -- retain optional native SI failure.
+        evidence["error"] = f"{type(exc).__name__}: {exc}"
+    return trace
+
+
+def _solution_trace(data: Any, expression: str) -> dict[str, Any]:
+    """Detach one native trace while retaining its coordinate columns."""
+
+    real, imaginary = data.full_matrix_real_imag
+    variation_keys = tuple(data.variations[0]) if data.variations else ()
+    intrinsic_keys = tuple(data.intrinsics_by_variation(0)) if data.variations else ()
+    if any(
+        tuple(variation) != variation_keys
+        or tuple(data.intrinsics_by_variation(index)) != intrinsic_keys
+        for index, variation in enumerate(data.variations)
+    ):
+        raise RuntimeError(
+            "native adaptive trace coordinate columns differ by variation"
+        )
+    columns = [*variation_keys, *intrinsic_keys, "value"]
+    real_rows = real[expression].tolist()
+    imaginary_rows = imaginary[expression].tolist()
+    if any(len(row) != len(columns) for row in (*real_rows, *imaginary_rows)):
+        raise RuntimeError("native adaptive trace coordinate width differs")
+    return {
+        "columns": columns,
+        "real_rows": real_rows,
+        "imaginary_rows": imaginary_rows,
+        "unit": data.units_data.get(expression),
+    }
+
+
+def read_body_eigenmode_history(app: Any, spec: HfssEprSpec) -> dict[str, Any]:
+    """Read native adaptive frequency history independently of EPR cache analysis."""
+    category = "Eigenmode Parameters"
+    solution = f"{spec.run_control.setup_name} : AdaptivePass"
+    frequency_solutions = [
+        str(item) for item in app.post.available_report_solutions(category) or ()
+    ]
+    field_solutions = [
+        str(item) for item in app.post.available_report_solutions("Fields") or ()
+    ]
+    if solution not in frequency_solutions:
+        raise RuntimeError(
+            f"native adaptive solution is unavailable for {category!r}: {frequency_solutions!r}"
+        )
+    quantities: list[str] = []
+    for quantity_category in (
+        app.post.available_quantities_categories(category, solution=solution) or ()
+    ):
+        for quantity in (
+            app.post.available_report_quantities(
+                category,
+                solution=solution,
+                quantities_category=quantity_category,
+            )
+            or ()
+        ):
+            if str(quantity).startswith("Mode(") and quantity not in quantities:
+                quantities.append(str(quantity))
+    expected = [f"Mode({index})" for index in range(1, spec.run_control.num_modes + 1)]
+    if len(quantities) != len(expected) or set(quantities) != set(expected):
+        raise RuntimeError(
+            f"native adaptive Eigenmode quantities differ: {quantities!r}"
+        )
+    data = app.post.get_solution_data_per_variation(
+        category, solution, [], {"Pass": "All"}, quantities
+    )
+    if not data:
+        raise RuntimeError("native adaptive Eigenmode history is unavailable")
+    data.primary_sweep = "Pass"
+    rows = {
+        quantity: _frequency_solution_trace(
+            data, quantity, category=category, solution=solution
+        )
+        for quantity in expected
+    }
+    return {
+        "schema_version": "scgsim.aedt.epr-adaptive-history.v1",
+        "category": category,
+        "solution": solution,
+        "primary_sweep": data.primary_sweep,
+        "pass_axis": data.primary_sweep_values.tolist(),
+        "pass_unit": data.units_sweeps.get("Pass"),
+        "frequency_traces": rows,
+        "cache_integral_traces": {
+            "status": "not_requested",
+            "requested_titles": [],
+            "items": [],
+            "traces": {},
+            "queries": {},
+        },
+        "report_inventory": {
+            "eigenmode_parameter_solutions": frequency_solutions,
+            "field_solutions": field_solutions,
+        },
+        "frequency_unit_status": "native_reported_only",
+    }
+
+
+@dataclass(frozen=True)
+class PreparedBodyEigenmode:
+    """Carrier for one mutable native application and detached preparation evidence."""
+
+    app: Any
+    request: BoundAedtRequest
+    project_path: Path
+    geometry: dict[str, Any]
+    setup: dict[str, Any] | None
+    expressions: tuple[dict[str, Any], ...]
+    cache: dict[str, Any]
+    timings: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, BoundAedtRequest):
+            raise TypeError("PreparedBodyEigenmode requires a bound AEDT request")
+        object.__setattr__(self, "geometry", detached_data(self.geometry))
+        object.__setattr__(self, "setup", detached_data(self.setup))
+        object.__setattr__(
+            self, "expressions", tuple(detached_data(item) for item in self.expressions)
+        )
+        object.__setattr__(self, "cache", detached_data(self.cache))
+        object.__setattr__(self, "timings", detached_data(self.timings))
+
+
+def prepare_body_eigenmode(
+    Hfss: Any,
+    run_dir: Path,
+    spec: HfssEprSpec,
+    *,
+    geometry_extension: Callable[[Any, PreparedPlanarGeometry, dict[str, Any]], None]
+    | None = None,
+    analysis_author: Callable[
+        [Any, Path, HfssEprSpec, dict[str, Any]],
+        tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]],
+    ]
+    | None = None,
+    analysis_readback: Callable[[Any, HfssEprSpec, dict[str, Any], Path], None]
+    | None = None,
+) -> PreparedBodyEigenmode:
+    """Create, save, and read back one body-first no-solve Eigenmode model."""
+
+    request = BoundAedtRequest.bind(run_dir, spec)
+    bound = request.parse()
+    if not isinstance(bound, HfssEprSpec):
+        raise TypeError("bound EPR request did not retain its schema")
+    if bound.modeling not in {"solid", "thin_film"} or (
+        bound.geometry.modeling != bound.modeling
+    ):
+        raise ValueError("new EPR HFSS preparation requires explicit modeling")
+    project_path = request.workspace / f"{bound.project_name}.aedt"
+    timings: dict[str, Any] = {}
+    preparation_started = time.perf_counter()
+    started = time.perf_counter()
+    app = Hfss(
+        project=str(project_path),
+        design=bound.design_name,
+        solution_type="Eigenmode",
+        new_desktop=False,
+        close_on_exit=False,
+    )
+    timings["native_open_seconds"] = round(time.perf_counter() - started, 6)
+    app.modeler.model_units = "um"
+    started = time.perf_counter()
+    geometry = prepare_native_planar_geometry(app, bound.geometry)
+    if geometry_extension is not None:
+        geometry_extension(app, bound.geometry, geometry)
+    _assign_generic_rlcs(app, bound, geometry)
+    timings["geometry_seconds"] = round(time.perf_counter() - started, 6)
+    timings["geometry_phases"] = geometry.pop("geometry_phases")
+    started = time.perf_counter()
+    if bound.run_control is not None:
+        create_eigenmode_setup(app, bound.run_control)
+    timings["setup_seconds"] = round(time.perf_counter() - started, 6)
+    started = time.perf_counter()
+    if analysis_author is None or bound.run_control is None:
+        expressions: list[dict[str, Any]] = []
+        cache = {
+            "schema_version": "scgsim.aedt.epr-cache-request.v1",
+            "status": "disabled",
+            "reason": (
+                "no solve setup was supplied"
+                if bound.run_control is None
+                else "no EPR analysis request was supplied"
+            ),
+        }
+    else:
+        expressions, cache, phase_timings = analysis_author(
+            app, request.workspace, bound, geometry
+        )
+        timings["epr_authoring_phases"] = phase_timings
+    timings["epr_authoring_seconds"] = round(time.perf_counter() - started, 6)
+    started = time.perf_counter()
+    if not app.save_project() or not project_path.is_file():
+        raise RuntimeError("HFSS EPR project was not saved after preparation")
+    timings["save_seconds"] = round(time.perf_counter() - started, 6)
+    started = time.perf_counter()
+    _read_saved_junction_lines(
+        app, project_path, bound.design_name, bound.geometry, geometry
+    )
+    _read_generic_rlcs(app, geometry)
+    setup = (
+        read_body_eigenmode_setup(app, bound) if bound.run_control is not None else None
+    )
+    if analysis_readback is not None and bound.run_control is not None:
+        analysis_readback(app, bound, cache, project_path)
+    timings["readback_seconds"] = round(time.perf_counter() - started, 6)
+    preparation_wall = time.perf_counter() - preparation_started
+    timings["preparation_wall_seconds"] = round(preparation_wall, 6)
+    timings["preparation_residual_seconds"] = round(
+        max(
+            0.0,
+            preparation_wall
+            - sum(
+                timings[key]
+                for key in (
+                    "native_open_seconds",
+                    "geometry_seconds",
+                    "setup_seconds",
+                    "epr_authoring_seconds",
+                    "save_seconds",
+                    "readback_seconds",
+                )
+            ),
+        ),
+        6,
+    )
+    return PreparedBodyEigenmode(
+        app,
+        request,
+        project_path,
+        geometry,
+        setup,
+        tuple(expressions),
+        cache,
+        timings,
+    )
+
+
+def prepared_body_eigenmode_result(
+    prepared: PreparedBodyEigenmode,
+    *,
+    analysis_readback: Callable[[Any, HfssEprSpec, dict[str, Any], Path], None]
+    | None = None,
+) -> dict[str, Any]:
+    """Return the canonical no-solve result without impersonating completion."""
+
+    spec = prepared.request.parse()
+    if not isinstance(spec, HfssEprSpec):
+        raise TypeError("bound EPR request did not retain its schema")
+    if not prepared.app.save_project() or not prepared.project_path.is_file():
+        raise RuntimeError("HFSS EPR project final preparation save failed")
+    if analysis_readback is not None and spec.run_control is not None:
+        analysis_readback(prepared.app, spec, prepared.cache, prepared.project_path)
+    relative = prepared.project_path.relative_to(prepared.request.workspace).as_posix()
+    digest = file_sha256(prepared.project_path)
+    result = {
+        "workflow_status": "native_preparation_only",
+        "solver_invoked": False,
+        "outputs": {relative: digest},
+        "connected": {
+            "aedt_version": prepared.app.desktop_class.aedt_version_id,
+            "pyaedt_version": pyaedt_version(),
+        },
+        "project": relative,
+        "geometry": detached_data(prepared.geometry),
+        "setup": detached_data(prepared.setup),
+        "expressions": detached_data(prepared.expressions),
+        "cache": detached_data(prepared.cache),
+        "timings": detached_data(prepared.timings),
+        "save": {"ok": True, "project_sha256": digest},
+    }
+    return result
+
+
+def solve_and_export_body_eigenmode(
+    prepared: PreparedBodyEigenmode,
+    resources: AedtResources | None = None,
+    resource_evidence: dict[str, Any] | None = None,
+    *,
+    analysis_export: Callable[
+        [
+            PreparedBodyEigenmode,
+            HfssEprSpec,
+            dict[str, Any],
+            dict[str, str],
+            Path,
+            dict[str, Any],
+        ],
+        tuple[dict[str, Any], dict[str, Any] | None, dict[str, Any]],
+    ]
+    | None = None,
+) -> dict[str, Any]:
+    """Run the explicit setup once and export native final/history evidence."""
+
+    spec = prepared.request.parse()
+    if not isinstance(spec, HfssEprSpec):
+        raise TypeError("body-first solve/export requires HfssEprSpec")
+    if spec.run_control is None:
+        raise ValueError("Eigenmode solving requires an explicit complete run_control")
+    timings = detached_data(prepared.timings)
+    started = time.perf_counter()
+    solved = analyze_with_resources(
+        prepared.app,
+        spec.run_control.setup_name,
+        prepared.request.workspace,
+        resources,
+        resource_evidence if resource_evidence is not None else {},
+    )
+    timings["solve_seconds"] = round(time.perf_counter() - started, 6)
+    if not solved:
+        raise RuntimeError(
+            f"HFSS failed to analyze setup {spec.run_control.setup_name!r}"
+        )
+    return collect_body_eigenmode(
+        prepared, analysis_export=analysis_export, timings=timings
+    )
+
+
+def collect_body_eigenmode(
+    prepared: PreparedBodyEigenmode,
+    *,
+    analysis_export: Callable | None = None,
+    timings: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Export one already-solved owned project without Analyze or model creation."""
+    spec = prepared.request.parse()
+    if not isinstance(spec, HfssEprSpec) or spec.run_control is None:
+        raise TypeError("native collection requires a complete body-first Eigenmode request")
+    timings = detached_data(prepared.timings) if timings is None else timings
+    started = time.perf_counter()
+    if not prepared.app.save_project() or not prepared.project_path.is_file():
+        raise RuntimeError("HFSS EPR solved project save failed")
+    timings["post_solve_save_seconds"] = round(time.perf_counter() - started, 6)
+    run_dir = prepared.request.workspace
+    output_dir = run_dir / "results/epr"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    started = time.perf_counter()
+    outputs, final_modes = _export_eigenmode(prepared.app, run_dir, output_dir, spec)
+    timings["final_export_seconds"] = round(time.perf_counter() - started, 6)
+    convergence_path = output_dir / "adaptive-convergence.prop"
+    started = time.perf_counter()
+    # Native empty VariationKeys selects the current nominal variation without
+    # PyAEDT evaluating postprocessing variables before the export.
+    prepared.app.odesign.ExportConvergence(
+        spec.run_control.setup_name, "", str(convergence_path)
+    )
+    if not convergence_path.is_file():
+        raise RuntimeError("HFSS adaptive convergence export is missing")
+    outputs[convergence_path.relative_to(run_dir).as_posix()] = file_sha256(
+        convergence_path
+    )
+    convergence = read_hfss_convergence(run_dir, spec)
+    timings["convergence_export_seconds"] = round(time.perf_counter() - started, 6)
+    started = time.perf_counter()
+    if analysis_export is None:
+        history = read_body_eigenmode_history(prepared.app, spec)
+        adaptive_payload = None
+        analysis_evidence: dict[str, Any] = {}
+        history_path = output_dir / "adaptive-mode-history.json"
+        write_json(history_path, history)
+        outputs[history_path.relative_to(run_dir).as_posix()] = file_sha256(
+            history_path
+        )
+    else:
+        history, adaptive_payload, analysis_evidence = analysis_export(
+            prepared, spec, convergence, outputs, output_dir, timings
+        )
+    if analysis_export is None:
+        timings["history_export_seconds"] = round(time.perf_counter() - started, 6)
+    started = time.perf_counter()
+    if not prepared.app.save_project() or not prepared.project_path.is_file():
+        raise RuntimeError("HFSS EPR final project save failed")
+    timings["final_save_seconds"] = round(time.perf_counter() - started, 6)
+    relative = prepared.project_path.relative_to(run_dir).as_posix()
+    outputs[relative] = file_sha256(prepared.project_path)
+    benchmark_relative, benchmark_digest, benchmark = export_simulation_benchmark(
+        prepared.app, run_dir, spec.run_control.setup_name
+    )
+    outputs[benchmark_relative] = benchmark_digest
+    return {
+        "workflow_status": "completed",
+        "solver_invoked": True,
+        "outputs": outputs,
+        "benchmark": benchmark,
+        "connected": {
+            "aedt_version": prepared.app.desktop_class.aedt_version_id,
+            "pyaedt_version": pyaedt_version(),
+        },
+        "project": relative,
+        "geometry": detached_data(prepared.geometry),
+        "setup": detached_data(prepared.setup),
+        "expressions": detached_data(prepared.expressions),
+        "cache": detached_data(prepared.cache),
+        **analysis_evidence,
+        "timings": timings,
+        "convergence": convergence,
+        "result_readback": {
+            "final_modes": final_modes,
+            "adaptive_history": history,
+            "adaptive_epr_result": (adaptive_payload),
+        },
+        "save": {"ok": True, "project_sha256": outputs[relative]},
+    }

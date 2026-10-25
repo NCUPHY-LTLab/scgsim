@@ -6,17 +6,40 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-driven-terminal"
 ---
 
-Continue from [CPW inputs](aedt-inputs.qmd). Terminal ports identify reference
+For a complete workflow, start with the [CPW scattering tutorial](../tutorials/scattering.qmd#configure-port-models).
+This page remains the detailed Driven Terminal reference and links to the
+shared [CPW input lesson](aedt-inputs.qmd). Terminal ports identify reference
 conductors explicitly. They use the same source GDS and PDK material mapping as
 Modal, but this model's reference assignment has its own native evidence and
 result meaning. A similar network curve would not make the two port models
-identical.
+identical. As in the Eigenmode lesson, replace the inputs page's legacy
+zero-thickness M1 sheet interval with the CPW source owner's explicit `NB_FILM`
+interval and lower contact side. This preserves the existing sheet plane and
+does not claim that c997 embeds the declaration.
 
 ```python
 from pathlib import Path
 from scgsim.aedt import (
-    FrequencySweepSpec, HfssDrivenSpec, HfssRunControl,
-    LengthMeshSpec, TerminalPort, prepare_handoff,
+    FrequencySweepSpec, HfssDrivenSpec, HfssRunControl, LayerImport,
+    LengthMeshSpec, PhysicalLayerSpec, TerminalPort, prepare_handoff,
+)
+
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
+metal_thickness_um = 0.2
+physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
+physical_layer = PhysicalLayerSpec(
+    physical_layer_id=physical_layer_id,
+    kind="stack_film",
+    z_min_um=0.0,
+    z_max_um=metal_thickness_um,
+    contact_side="lower",
+)
+layer_imports = (
+    LayerImport(
+        1, 0, "D0_TOP_M1", 0.0, metal_thickness_um,
+        physical_layer_id=physical_layer_id,
+    ),
+    LayerImport(201, 0, "D0_SUBSTRATE", -500.0, 0.0),
 )
 
 ports = (
@@ -24,10 +47,12 @@ ports = (
     TerminalPort(2, "o2", "+X", ground_objects),
 )
 spec = HfssDrivenSpec(
-    mode="terminal", gds_path=source_gds,
+    aedt_version=AEDT_VERSION,
+    mode="terminal", gds_path=source_gds, modeling="thin_film",
     project_name="public_cpw_terminal", design_name="CpwFiniteGroundTerminal",
     materials=materials, vacuum_material_id="vacuum",
     layer_imports=layer_imports, object_bindings=object_bindings,
+    physical_layers=(physical_layer,),
     ports=ports,
     run_control=HfssRunControl(
         "Setup1", "Fast20000", FrequencySweepSpec(3.0, 8.0, 20_000)
@@ -66,3 +91,17 @@ rather than treating this output as the modal integration-line model.
 Use [Modal](aedt-driven-modal.qmd) when the intended model calls for explicit
 integration lines. The [runtime contract](../specs/aedt-runtime.qmd) owns
 failure behavior and the bounded two-port interface.
+
+### Wave and Lumped Terminal ports
+
+The example above uses Wave `TerminalPort` inputs. A Lumped excitation uses a
+separate `LumpedTerminalPort` declaration with explicit source-backed support,
+terminal and reference assignments and a required `impedance_ohm`. The two
+port kinds have distinct native models, so a Lumped request does not fall back
+to Wave-port creation. Generic Series/Parallel RLC model elements belong to
+the Eigenmode model's `PreparedPlanarGeometry.lumped_rlcs` collection; they
+are separate from a Driven Terminal's scalar port impedance and from
+Josephson-junction/EPR models. The runtime reference describes source-backed
+support identity and the body-first path. In that body-first route,
+`TerminalPort.signal_entity_ids` is required so the declared Signal and its
+references are explicit; the existing GDS reference binding is unchanged.

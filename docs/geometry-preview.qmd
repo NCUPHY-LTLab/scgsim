@@ -18,6 +18,9 @@ or stable-release delivery.
 
 ## Purpose and ownership
 
+The [SGB geometry concept](concepts/geometry.qmd#construction-stage) explains
+how the source becomes the solver-bound geometry inspected here.
+
 SCGSim provides two views of the same solver-bound semantic scene. An inline
 Notebook viewer supports interactive rotation, pan, zoom, and camera reset.
 Deterministic headless contact sheets remain the portable, hash-bound review
@@ -28,8 +31,11 @@ Palace previews read a Palace `.msh` file through `meshio` and render with
 PyVista off-screen. Their authority is the mesh tags together with the mesh
 manifest and the config/index mapping. AEDT previews use PyAEDT 1.3.0 in
 non-graphical mode: assignments and identity come from native readback, and
-each native object is exported as OBJ before off-screen rendering. Inspecting a
-raw `.aedt` project requires the caller to select the design explicitly.
+each native object is exported as OBJ before off-screen rendering. A raw `.aedt`
+source requires explicit `aedt_version` and design selection. A sealed run
+source uses the version recorded in its bound spec and accepts no version
+override. Both paths use the selected same-node AEDT compatibility context and
+the owned-Desktop cleanup lifecycle.
 Palace previews retain high-order connectivity and curved boundary
 representation. The preview does not compute mesh quality. The separate
 [tetrahedron diagnostic](mesh-quality.qmd) computes
@@ -42,7 +48,7 @@ higher-order tetrahedra has no 3D quality metric.
 | Surface | Contract |
 |---|---|
 | `inspect_palace_geometry(run_dir)` | Bind a Palace run directory and its authoritative mesh metadata. |
-| `inspect_aedt_geometry(source, ...)` | Bind an AEDT source; a raw `.aedt` source requires an explicit design. |
+| `inspect_aedt_geometry(source, ...)` | Bind an AEDT source; raw `.aedt` requires explicit `aedt_version` and design, while a sealed run uses its bound spec version. |
 | `preview.show_materials()` | Render the available material assignments. |
 | `preview.show_boundaries()` | Render the available boundary assignments. |
 | `preview.show_surface_epr()` | Render the available Surface-EPR assignments. |

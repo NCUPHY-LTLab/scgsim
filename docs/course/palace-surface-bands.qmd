@@ -1,0 +1,142 @@
+---
+title: "Historical Palace surface-distance bands"
+description: "Historical reference for a withdrawn SGB geometry-band producer."
+scgsim-kind: "course"
+scgsim-status: "HISTORICAL"
+scgsim-id: "docs/course/palace-surface-bands"
+---
+
+This page documents a withdrawn SGB geometry-band workflow. Current SCGSim source does not provide its geometry producer or result aggregation API. The steps and code below are historical records, not current instructions. Native Palace Mask/Inset margins remain available separately when the selected executable supports them; see the [current contract](../specs/palace-electrostatic-sgb.qmd#native-mask-inset).
+
+The former workflow partitioned a planar Palace EPR parent by distance from its
+original boundary and read six returned band totals. It used a geometry plan
+and one completed Palace EPR result. The following archived steps describe
+that withdrawn producer, not current operation. The
+[distance-band concept](../concepts/geometry.qmd#distance-bands) gives its
+historical geometric context.
+
+✅ The geometry handoff and official Palace 0.18.1 preflight completed.
+
+⏳ Q2D follow-up is paused. A Q2D result is not an input to this Palace-only
+band workflow.
+
+⏳ A complete Palace EPR return with six band totals is pending.
+
+## Build the geometry bands
+
+1. Before constructing source cells, define `layoutgrid_um = 0.001` (1 nm in
+   µm) and set the source layout DBU to that value through its layout API. The
+   focused setup below assumes the reader's normal prepared model inputs
+   `assembled`, `layer_stack`, `material_records`, and `coupon_padding_um`; it
+   does not construct those inputs. Build the normal source-backed
+   `GeometryPlan`, including its original Nets and vacuum region:
+
+   ```python
+   layoutgrid_um = 0.001  # 1 nm in µm
+   plan = GeometryPlan(
+       component=assembled,
+       root_id="chip",
+       layer_stack=layer_stack,
+       material_records=material_records,
+       coupon_padding_um=coupon_padding_um,
+       grid_size_um=layoutgrid_um,
+   )
+   ```
+
+   Call `snapshot0 = plan.prepare()` once, then use its detached
+   `snapshot0.geometry_input` and `snapshot0.stack`.
+2. Call `interpret_physical_geometry(...)` on those inputs. Pass its effective
+   input and representation context to `build_route_construction_plan(...)`,
+   then build the catalogue with `surface_distance_band_catalogue(...)`.
+3. Inspect the unbanded catalogue and select a real parent and source-entity
+   owner. For each catalogue row, find the matching
+   `construction.surfaces` record by `parent_surface_id`; its
+   `metadata.face_kind` supplies the `field_side` used by the result. Physical
+   contribution side is recorded separately in
+   `metadata.source_provenance.surface_contribution_ledger[*].side`.
+   Treat these as distinct selections and provenance.
+4. Create one `SurfaceDistanceBandSpec` per selected parent. Supply ordered
+   positive cuts and set the required `precision_um` equal to the plan's shared
+   `layoutgrid_um`. Use all original boundary edges or an exact subset of
+   original exterior/hole segments. The optional `chord_error_um` follows
+   `boundary_segments`; leave it as `None` to retain the previous chord
+   magnitude of `precision_um`, or set it independently to control arc and cap
+   approximation. The required `source_polygon_id` argument is the actual
+   polygon ID for polygon-backed parents. For an entity-only parent with no
+   polygon provenance, pass explicit `None`; the source entity must still own
+   that parent. Do not invent a polygon ID. Port-split walls retain the unsplit
+   original boundary as the distance origin while child regions are clipped
+   from the parent; split seams are not inset origins.
+5. Call `plan.set_surface_distance_bands(...)`, then prepare again to obtain
+   `snapshot1 = plan.prepare()`.
+6. Give that snapshot to the Palace simulation with `sim.set_plan(snapshot1)`
+   and configure the EPR request. Choose mesh and numerical controls before
+   building the mesh and writing config. The plan owns its vacuum region, so do
+   not add a second simulation airbox. The partition is planar polygon
+   geometry; the [GeometryPlan contract](../geometry-sgb.qmd#surface-distance-bands)
+   covers source identity, edge selection and precision.
+
+## Choose mesh sizing
+
+The shared `size_policy` selects how Gmsh chooses element sizes. To use its
+native sizing while keeping the Delaunay 3D algorithm, call:
+
+```python
+sim.set_mesh(size_policy="gmsh_default", algorithm_3d="Delaunay")
+```
+
+For this example, select the Eigenmode AMR settings before writing config:
+
+```python
+sim.set_numerical(
+    amr_nonconformal=True,
+    amr_max_passes=20,
+    amr_tolerance=0.02,
+    amr_update_fraction=0.7,
+)
+```
+
+Those values are caller choices for this example, not library defaults or
+adequacy criteria. A positive pass limit requires both tolerance and update
+fraction. Later calls may omit these controls to retain the selected values;
+`amr_max_passes=0` disables adaptive refinement and allows tolerance and update
+fraction to remain unset. Mesh sizing does not change physical groups,
+junctions or the surface-band partition. Palace band totals are direct EPR
+contributions; no Q2D factor is applied. Returned totals are cumulative tails
+(`distance >= cutoff`): the `0.5 µm` total includes the `1 µm` total, so do not
+add the two values. See the [distance-band concept](../concepts/geometry.qmd#distance-bands)
+for the interval diagram and the shared
+[Palace mesh-size policy](../specs/palace-electrostatic-sgb.qmd#palace-mesh-size-policy)
+for defaults, state transitions and retained mesh evidence.
+
+After setting these controls, call `sim.mesh()` and `sim.write_config()` before
+preparing the Palace handoff.
+
+## Prepare and read the Palace result
+
+Configure Palace EPR from the same source geometry and prepare its handoff
+using the mesh and config above. Run the handoff as a separate action with the
+supported Palace executable. The geometry-band entries use the official
+Palace 0.18.1 surface-EPR path. For solver setup, handoff and return reading,
+see the [Palace Eigenmode course](palace-eigenmode.qmd).
+
+After `resolve_palace_result` returns a `ResolvedPalaceResult`, select a native
+iteration number from its retained return receipt or native metadata; there
+is no iteration-discovery function. The public readers are:
+
+```python
+from scgsim.palace.results import SurfaceBandSelection, aggregate_surface_bands
+from scgsim.palace.results.epr import epr_result
+```
+
+Read the selected iteration with `epr_result(resolved, palace_iteration=iteration)`. Create one `SurfaceDistanceBandSpec` for each geometric parent. For each selected parent, interface kind, and recorded side, create one `SurfaceBandSelection(parent_surface_id, interface_kind, field_side)` using the source-bound catalogue, matching `construction.surfaces` metadata, and full source/contribution ledger. A shared `MS_MA` parent uses separate `MS` and `MA` selections over the same geometry; this adapter records `field_side="interface"` for both, so use the recorded value rather than inferring top or bottom.
+
+Pass the selections, selected mode, `palace_iteration=iteration`, and `cutoffs_um=(0.5, 1.0)` to `aggregate_surface_bands(...)`. Cutoffs must match declared source-band boundaries; the aggregation requires the complete band and component inventory and counts each physical fragment once per interface per cutoff. The totals retain source parent, interface, recorded side, mode, native iteration, and normalization. Keep the `PalaceSurfaceBandTotals` value and `to_payload()` output with that identity. The `>= 0.5 µm` total includes the `>= 1 µm` total; do not add these cumulative tails. This offline aggregation reads existing Palace results and does not run
+Palace or apply a Q2D correction.
+
+Native Mask/Inset remains available separately through `inset_margins_um` when the selected Palace executable supports it; it does not create these withdrawn geometry bands. The pinned
+[SimplePad SurfaceBands workflow](https://github.com/OrPenStrike/orcapen-sc-pdk/blob/d413d04565b3ff6946fd8b6ef237283dc187e552/notebooks/src/SCGSimExamples/SurfaceBands/SimplePad/palace_eigenmode_bands.qmd)
+and [shared interface model](https://github.com/OrPenStrike/orcapen-sc-pdk/blob/d413d04565b3ff6946fd8b6ef237283dc187e552/notebooks/src/SCGSimExamples/SurfaceBands/SimplePad/simplepad_interface_model.json)
+are historical references to an earlier paired-Q2D workflow. Follow the
+GeometryPlan and result-reading steps on this page for the current Palace-only
+band workflow.

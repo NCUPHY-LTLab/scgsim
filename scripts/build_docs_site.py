@@ -21,12 +21,12 @@ import tomllib
 import urllib.request
 from pathlib import Path
 
-REPOSITORY = "OrPenStrike/scgsim"
+REPOSITORY = "NCUPHY-LTLab/scgsim"
 REPO_URL = f"https://github.com/{REPOSITORY}"
-SITE_URL = "https://orpenstrike.github.io/scgsim/"
+SITE_URL = "https://ncuphy-ltlab.github.io/scgsim/"
 PREFIX = "/scgsim/"
 QUARTO_VERSION = "1.10.18"
-ASKR_COMMIT = "611f537ca3ec7089f7b5daf983f1554f8c98a8dd"
+ASKR_COMMIT = "d4a0b7ac664f783304a761e307414b9fff16e977"
 
 
 def resolve_branches() -> dict[str, str]:
@@ -98,24 +98,27 @@ def historical_website(website: str, source: Path) -> str:
     """Apply the publisher menu only to pages owned by this historical source."""
     # Area landings follow the first available entry in that same current sidebar.
     # The publisher configuration remains the sole maintained navigation authority.
-    sidebars = list(re.finditer(r"(?m)^    - id: ([^\n]+)\n", website))
+    sidebars = list(re.finditer(r"(?m)^[ ]+- id: ([^\n]+)\n", website))
     landings = {}
     for index, match in enumerate(sidebars):
         end = sidebars[index + 1].start() if index + 1 < len(sidebars) else len(website)
         pages = re.findall(r"(?m)^\s+- (\S+\.qmd)\s*$", website[match.end():end])
-        landings[match[1]] = next((page for page in pages if (source / page).is_file()), None)
+        destination = next((page for page in pages if (source / page).is_file()), None)
+        landings[match[1]] = destination
+        for page in pages:
+            landings[page] = destination
 
     def landing(match: re.Match[str]) -> str:
-        area, page = match[1], match[2]
+        area, page = match["label"].strip("\"' "), match["page"]
         if (source / page).is_file():
             return match[0]
-        replacement = landings[area.lower()]
+        replacement = landings.get(page, landings.get(area.lower()))
         if replacement is None:
             raise RuntimeError(f"historical source has no page for the {area} Area")
         return match[0].replace(page, replacement)
 
     website = re.sub(
-        r'(?m)^      - text: "([^"\n]+)"\n        href: (\S+\.qmd)\s*$',
+        r'(?m)^(?P<indent>[ ]+)- text: (?P<label>[^\n]+)\n(?P=indent)  href: (?P<page>\S+\.qmd)[ ]*$',
         landing, website,
     )
     return "".join(
@@ -194,29 +197,60 @@ def render_source(source: Path, entry: dict, presentation_identity: dict, quarto
         display = f'presentation <a href="{REPO_URL}/tree/{presentation}">{display_identity(presentation)}</a>'
     else:
         display = "unpublished presentation · export " + display_identity(presentation_identity["presentation_export_sha256"])
+    extension = (source / "_extensions/arfiligol/askr/_extension.yml").read_text()
+    match = re.search(r"(?m)^version:\s*([^\s]+)\s*$", extension)
+    if match is None:
+        raise RuntimeError("source Askr version is missing")
+    theme_version = match[1]
+    entry["askr_version"] = theme_version
     website = {
-        "site-url": "https://orpenstrike.github.io" + root,
-        "page-footer": {"center": f'SCGSim {entry["package_version"]} · {attribution} · {display} · Askr {display_identity(ASKR_COMMIT)}'},
+        "site-url": "https://ncuphy-ltlab.github.io" + root,
+        "page-footer": {"center": f'SCGSim {entry["package_version"]} · {attribution} · {display} · Askr {theme_version}'},
     }
     if content:
         website["repo-branch"] = content
-    else:
-        # Preview links must not pretend the unpublished bodies exist on GitHub.
-        website["repo-actions"] = ["issue"]
-    # Quarto's repository-link postprocessor reads the base project mapping.
-    # Bind these actions there as well as in the render profile.
-    config_path = source / "_quarto.yml"
-    config = config_path.read_text()
-    config = re.sub(r"(?m)^  repo-actions:.*$",
-                    "  repo-actions: [source, issue]" if content else "  repo-actions: [issue]", config)
-    if content:
-        config = re.sub(r"(?m)^  repo-branch:.*\n", "", config)
-        config = re.sub(r"(?m)^(  repo-url:.*)$", r"\1\n  repo-branch: " + content, config)
-    config_path.write_text(config)
+
+    def bind_project(config_path: Path) -> None:
+        # Bind arrays in the base mapping: profile arrays append in Quarto.
+        config = config_path.read_text()
+        config = re.sub(
+            r"(?m)^  repo-actions:[^\n]*(?:\n[ ]{2,4}-[^\n]*)*\n?",
+            "  repo-actions: [source, issue]\n" if content else "  repo-actions: [issue]\n",
+            config,
+        )
+        if content:
+            config = re.sub(r"(?m)^  repo-branch:.*\n", "", config)
+            config = re.sub(r"(?m)^(  repo-url:.*)$", r"\1\n  repo-branch: " + content, config)
+
+        def language_roots(block: re.Match[str]) -> str:
+            return re.sub(
+                r"(?m)^([ ]+href:[ ]*)/(zh-TW/)?[ ]*$",
+                lambda link: link[1] + root + (link[2] or ""),
+                block[0],
+            )
+
+        config = re.sub(
+            r"(?ms)^askr:\n.*?(?=^[A-Za-z][\w-]*:|\Z)", language_roots, config
+        )
+        config_path.write_text(config)
+
+    bind_project(source / "_quarto.yml")
     profile = source / "_quarto-pages.yml"
     if profile.exists():
         raise RuntimeError("source already owns the Pages profile name")
-    profile.write_text(json.dumps({"project": {"output-dir": "_site"}, "execute": {"enabled": False}, "website": website}))
+    profile_data = {"project": {"output-dir": "_site"}, "execute": {"enabled": False}, "website": website}
+    chinese = source / "zh-TW"
+    if (chinese / "_quarto.yml").is_file():
+        bind_project(chinese / "_quarto.yml")
+        child_profile = chinese / "_quarto-pages.yml"
+        if child_profile.exists():
+            raise RuntimeError("Chinese source already owns the Pages profile name")
+        child_profile.write_text(json.dumps({
+            "project": {"output-dir": "../_site/zh-TW"},
+            "execute": {"enabled": False},
+            "website": {**website, "site-url": website["site-url"] + "zh-TW/"},
+        }))
+    profile.write_text(json.dumps(profile_data))
     subprocess.run([quarto, "render", str(source), "--profile", "pages", "--no-execute"], check=True)
     if not (source / "_site/index.html").is_file():
         raise RuntimeError("render did not produce its home page")
