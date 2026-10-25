@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.geometry._primitives._grid_cache import with_grid_work_cache
+
 from scgsim.diagnostics import _stage, _progress
 
 import copy
@@ -628,6 +630,7 @@ class GeometryPlan:
             },
         }
 
+    @with_grid_work_cache
     @with_source_grid
     @_stage("geometry.plan.prepare")
     @_with_occurrence_extraction_cache

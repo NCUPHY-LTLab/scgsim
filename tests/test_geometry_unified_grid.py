@@ -538,9 +538,12 @@ def test_mixed_residue_does_not_hide_physical_component_loss():
 def test_overlay_native_error_retains_coordinate_free_boundary_context():
     from shapely.errors import GEOSException
 
-    invalid = GridOperand("source", ((0, 0), (2, 2), (0, 2), (2, 0)))
+    from shapely import Polygon
+    from scgsim.geometry._primitives.grid import _overlay_call
+
+    invalid = Polygon(((0, 0), (2, 2), (0, 2), (2, 0)))
     with pytest.raises(GEOSException) as caught:
-        build_grid_arrangement((invalid,), GeometryGridContext(1))
+        _overlay_call("intersection", invalid, invalid, 1, 0, None)
     import json
 
     note = next(

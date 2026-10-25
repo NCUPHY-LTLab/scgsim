@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.geometry._primitives._grid_cache import with_grid_work_cache
+
 from functools import partial
 from scgsim.geometry._primitives.grid import _source_recipe_map
 
@@ -56,6 +58,7 @@ if TYPE_CHECKING:
     from gdsfactory.technology import LayerStack
 
 
+@with_grid_work_cache
 @_stage("geometry.source.adapter")
 @_with_occurrence_extraction_cache
 def build_gds_stack_geometry_input(

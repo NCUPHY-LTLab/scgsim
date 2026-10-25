@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.geometry._primitives._grid_cache import with_grid_work_cache
+
 from scgsim.diagnostics import _stage
 
 import json
@@ -54,6 +56,7 @@ class SemanticGeometryBuilder:
     """
 
     @_stage("geometry.compiler.build")
+    @with_grid_work_cache
     def build(
         self,
         build_input: GeometryBuildInput,

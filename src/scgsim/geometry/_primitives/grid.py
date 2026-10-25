@@ -240,16 +240,19 @@ class GridArrangement:
     grid_applied: bool = True
 
     def face_regions(self, face_ids):
-        from shapely import Polygon, union_all
+        from shapely import Polygon, coverage_union_all, union_all
 
         selected = [
             Polygon(f.exterior, f.holes) for f in self.faces if f.face_id in face_ids
         ]
         grid = self.context.grid_size_um if self.grid_applied else None
-        return _regions(union_all(selected, grid_size=grid), self.vertices, grid)
+        merged = (
+            coverage_union_all(selected) if self.grid_applied else union_all(selected)
+        )
+        return _regions(merged, self.vertices, grid)
 
     def operand_regions(self, operand_id):
-        from shapely import Polygon, union_all
+        from shapely import Polygon, coverage_union_all, union_all
 
         selected = [
             Polygon(f.exterior, f.holes)
@@ -257,7 +260,10 @@ class GridArrangement:
             if operand_id in f.operand_ids
         ]
         grid = self.context.grid_size_um if self.grid_applied else None
-        return _regions(union_all(selected, grid_size=grid), self.vertices, grid)
+        merged = (
+            coverage_union_all(selected) if self.grid_applied else union_all(selected)
+        )
+        return _regions(merged, self.vertices, grid)
 
     @property
     def metadata(self):
@@ -304,15 +310,18 @@ class _ZeroAreaResidue:
 
 
 @dataclass(frozen=True)
-class _Subdivision:
-    cells: tuple
-    residues: tuple[_ZeroAreaResidue, ...]
-
-
-@dataclass(frozen=True)
 class _ZeroAreaAccounting:
     boundary: tuple[_ZeroAreaResidue, ...]
     auxiliary: tuple[_ZeroAreaResidue, ...]
+
+
+@dataclass(frozen=True)
+class _Subdivision:
+    cells: tuple
+    residues: tuple[_ZeroAreaResidue, ...]
+    accounting: _ZeroAreaAccounting | None = None
+    source_paths: tuple = ()
+    edge_origins: tuple = ()
 
 
 def _overlay_parts(geometry):
@@ -643,13 +652,13 @@ def _account_zero_area(residues, cells, grid):
 
 
 def build_grid_arrangement(operands, context, *, apply_grid=True):
-    """Construct labelled cells by common-policy polygon overlay.
+    """Construct one labelled fixed-grid network or an ungridded plane overlay.
 
-    Membership is carried by intersection/difference construction, never
-    recovered from samples or independently rounded linework faces. Every
-    existing cell and the new operand are updated in the same subdivision.
+    Fixed-grid membership follows directed source paths and face transitions.
+    Ungridded parent planes retain their distinct existing overlay contract.
     """
-    from shapely import Polygon, union_all
+    from shapely import Polygon, coverage_union_all, union_all
+    from scgsim.geometry._primitives._grid_cache import cached_subdivision
 
     grid = context.grid_size_um if apply_grid else None
     values = (
@@ -660,12 +669,35 @@ def build_grid_arrangement(operands, context, *, apply_grid=True):
         raise ValueError("common grid operand identities are duplicated")
     with _stage("geometry.grid.inputs", counts={"operands": len(values)}):
         geometries = {v.operand_id: Polygon(v.exterior, v.holes) for v in values}
-    subdivision = _subdivide_grid(values, geometries, grid)
+
+    def construct():
+        if not apply_grid:
+            return _subdivide_grid(values, geometries, None)
+        from scgsim.geometry._primitives._tagged_grid import build_tagged_subdivision
+
+        result = build_tagged_subdivision(values, geometries, grid)
+        accounting = _ZeroAreaAccounting(
+            tuple(_ZeroAreaResidue(*row) for row in result.boundary),
+            tuple(_ZeroAreaResidue(*row) for row in result.auxiliary),
+        )
+        return _Subdivision(
+            result.cells,
+            (*accounting.boundary, *accounting.auxiliary),
+            accounting,
+            result.source_paths,
+            result.edge_origins,
+        )
+
+    subdivision = cached_subdivision(
+        values, context, apply_grid=apply_grid, build=construct
+    )
     cells = subdivision.cells
     with _stage(
         "geometry.grid.zero_area", counts={"residues": len(subdivision.residues)}
     ):
-        zero_area = _account_zero_area(subdivision.residues, cells, grid)
+        zero_area = subdivision.accounting
+        if zero_area is None:
+            zero_area = _account_zero_area(subdivision.residues, cells, grid)
     residue_points = {
         point
         for residue in (*zero_area.boundary, *zero_area.auxiliary)
@@ -716,14 +748,12 @@ def build_grid_arrangement(operands, context, *, apply_grid=True):
     with _stage("geometry.grid.effective", counts={"operands": len(values)}):
 
         def realize(value):
-            return union_all(
-                [
-                    Polygon(f.exterior, f.holes)
-                    for f in faces
-                    if value.operand_id in f.operand_ids
-                ],
-                grid_size=grid,
-            )
+            selected = [
+                Polygon(f.exterior, f.holes)
+                for f in faces
+                if value.operand_id in f.operand_ids
+            ]
+            return coverage_union_all(selected) if apply_grid else union_all(selected)
 
         effective = dict(zip(ids, _ordered_map(realize, values), strict=True))
     with _stage("geometry.grid.physical_audit", counts={"operands": len(values)}):
