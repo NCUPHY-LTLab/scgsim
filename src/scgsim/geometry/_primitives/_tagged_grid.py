@@ -120,50 +120,176 @@ def _refuse(reason, **context):
     raise error
 
 
-def _source_paths(rows, index, scale):
+def _raw_chain(a, b, nodes):
+    # Segment direction defines a geometric lexicographic order, including
+    # off-line near vertices with equal dominant coordinate. No identity tie.
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    axis = 0 if abs(dx) >= abs(dy) else 1
+    signs = (1 if dx >= 0 else -1, 1 if dy >= 0 else -1)
+    ordered = tuple(
+        sorted(
+            nodes, key=lambda p: (signs[axis] * p[axis], signs[1 - axis] * p[1 - axis])
+        )
+    )
+    if not ordered or (ordered[0], ordered[-1]) != (a, b):
+        _refuse("directed raw source node order")
+    return ordered
+
+
+def _intersection_nodes(value):
+    if value.is_empty:
+        return ()
+    if value.geom_type == "Point":
+        return (tuple(value.coords[0]),)
+    if value.geom_type in {"LineString", "LinearRing"}:
+        return (tuple(value.coords[0]), tuple(value.coords[-1]))
+    return tuple(point for child in value.geoms for point in _intersection_nodes(child))
+
+
+def _raw_context(segments, grid):
+    """Recover pair-known pre-snap nodes without attributing native edges.
+
+    The near-interior width is the existing native snap-rounding context rule,
+    not an SCG physical tolerance. The final graph certificate remains binding.
+    """
+    from shapely import LineString, Point, STRtree, box, intersection
+
+    lines = tuple(LineString(edge) for edge in segments)
+    index = STRtree(lines)
+    width = grid / 100
+    nodes = [set(edge) for edge in segments]
+
+    def events(i):
+        a, b = segments[i]
+        xmin, ymin, xmax, ymax = lines[i].bounds
+        candidates = sorted(
+            int(j)
+            for j in index.query(
+                box(xmin - width, ymin - width, xmax + width, ymax + width)
+            )
+            if int(j) > i
+        )
+        output = []
+        for j in candidates:
+            c, d = segments[j]
+            try:
+                common = _intersection_nodes(
+                    intersection(lines[i], lines[j], grid_size=0)
+                )
+            except Exception as error:
+                try:
+                    error.add_note(
+                        "scgsim.grid.tagged_raw_context: "
+                        + json.dumps(
+                            dict(
+                                operation="intersection",
+                                input_dimension=1,
+                                segment_ordinals=(i, j),
+                                grid_size_um=grid,
+                            ),
+                            sort_keys=True,
+                        )
+                    )
+                except Exception:
+                    pass
+                raise
+            if any(p not in (a, b) or p not in (c, d) for p in common):
+                output.extend((owner, p) for owner in (i, j) for p in common)
+                continue
+            for p, target, ends in (
+                (a, j, (c, d)),
+                (b, j, (c, d)),
+                (c, i, (a, b)),
+                (d, i, (a, b)),
+            ):
+                point = Point(p)
+                if (
+                    all(point.distance(Point(end)) >= width for end in ends)
+                    and point.distance(lines[target]) < width
+                ):
+                    output.append((target, p))
+        return tuple(output)
+
+    workers = current_preparation_workers() or 1
+    size = max(1, (len(segments) + workers - 1) // workers)
+    chunks = tuple(
+        range(start, min(start + size, len(segments)))
+        for start in range(0, len(segments), size)
+    )
+
+    def chunk_events(chunk):
+        return tuple(row for i in chunk for row in events(i))
+
+    with _stage("geometry.grid.tagged_raw_context", counts={"segments": len(segments)}):
+        for rows in _ordered_map(chunk_events, chunks):
+            for owner, point in rows:
+                nodes[owner].add(point)
+    return tuple(
+        _raw_chain(a, b, points) for (a, b), points in zip(segments, nodes, strict=True)
+    )
+
+
+def _pixel_path(a, b, endpoints, index, scale, context):
+    if endpoints[0] == endpoints[1]:
+        return (endpoints[0],)
     half = Fraction(1, 2)
+    # Bind native scale-first binary64 arithmetic before exact predicates.
+    start, end = (tuple(Fraction(v * scale) for v in point) for point in (a, b))
+    candidates = index.candidates(
+        min(start[0], end[0]) - half,
+        min(start[1], end[1]) - half,
+        max(start[0], end[0]) + half,
+        max(start[1], end[1]) + half,
+    )
+    hits = []
+    for pixel in candidates:
+        interval = _pixel_interval(start, end, pixel)
+        if interval is not None:
+            hits.append((*interval, pixel))
+    hits.sort()
+    path = tuple(pixel for _, _, pixel in hits)
+    if not path or (path[0], path[-1]) != endpoints:
+        _refuse("source endpoint pixel incidence", **context)
+    if any(second[0] < first[1] for first, second in zip(hits, hits[1:])):
+        _refuse("unique source pixel order", **context)
+    return path
+
+
+def _source_paths(rows, index, scale):
     output = []
-    for (
-        value,
-        operand_index,
-        ring_index,
-        segment_index,
-        a,
-        b,
-        endpoints,
-        orientation,
-    ) in rows:
-        # Bind the native scale-first binary64 operation; exact predicates start
-        # after this operation, including decimal half ties.
-        start, end = (
-            tuple(Fraction(v * scale) for v in a),
-            tuple(Fraction(v * scale) for v in b),
-        )
-        candidates = index.candidates(
-            min(start[0], end[0]) - half,
-            min(start[1], end[1]) - half,
-            max(start[0], end[0]) + half,
-            max(start[1], end[1]) + half,
-        )
-        hits = []
-        for pixel in candidates:
-            interval = _pixel_interval(start, end, pixel)
-            if interval is not None:
-                hits.append((*interval, pixel))
-        hits.sort()
-        path = tuple(pixel for _, _, pixel in hits)
+    for row in rows:
+        (
+            value,
+            operand_index,
+            ring_index,
+            segment_index,
+            a,
+            b,
+            endpoints,
+            orientation,
+        ) = row[:8]
+        chain = row[8] if len(row) == 9 else ((a, endpoints[0]), (b, endpoints[1]))
         context = dict(
             operand_index=operand_index,
             ring_index=ring_index,
             segment_index=segment_index,
         )
-        if not path or (path[0], path[-1]) != endpoints:
+        path = [chain[0][1]] if len(chain) == 1 else []
+        for (start, first), (end, last) in zip(chain, chain[1:]):
+            piece = _pixel_path(start, end, (first, last), index, scale, context)
+            if path and path[-1] != piece[0]:
+                _refuse("continuous raw split source path", **context)
+            path.extend(piece[1:] if path else piece)
+        if not path:
             _refuse("source endpoint pixel incidence", **context)
-        if any(second[0] < first[1] for first, second in zip(hits, hits[1:])):
-            _refuse("unique source pixel order", **context)
         output.append(
             SourcePath(
-                value, operand_index, ring_index, segment_index, path, orientation
+                value,
+                operand_index,
+                ring_index,
+                segment_index,
+                tuple(path),
+                orientation,
             )
         )
     return tuple(output)
@@ -214,11 +340,10 @@ def build_tagged_subdivision(values, geometries, grid):
                 vertices.extend((a, b))
     if not raw_rows:
         return TaggedSubdivision((), (), (), (), ())
+    unique = tuple(dict.fromkeys(tuple(sorted((row[4], row[5]))) for row in raw_rows))
     with _stage("geometry.grid.tagged_network", counts={"segments": len(raw_rows)}):
         try:
-            native = union_all(
-                [LineString((row[4], row[5])) for row in raw_rows], grid_size=grid
-            )
+            native = union_all([LineString(edge) for edge in unique], grid_size=grid)
         except Exception as error:
             try:
                 error.add_note(
@@ -250,9 +375,29 @@ def build_tagged_subdivision(values, geometries, grid):
             if key(a) != key(b)
         )
         pixels = {key(tuple(p)) for p in get_coordinates(native)} | set(endpoint_keys)
+    chains = dict(zip(unique, _raw_context(unique, native_grid), strict=True))
+    context_points = tuple(
+        dict.fromkeys(point for chain in chains.values() for point in chain)
+    )
+    context_rounded = set_precision(make_points(context_points), grid, mode="pointwise")
+    context_keys = dict(
+        zip(context_points, (key(p.coords[0]) for p in context_rounded), strict=True)
+    )
+    pixels.update(context_keys.values())
     point_index = _PointIndex.build(pixels)
+
+    def source_chain(row):
+        edge = tuple(sorted((row[4], row[5])))
+        chain = _raw_chain(row[4], row[5], chains[edge])
+        return tuple((point, context_keys[point]) for point in chain)
+
     rows = tuple(
-        (*row[:6], (endpoint_keys[2 * i], endpoint_keys[2 * i + 1]), row[6])
+        (
+            *row[:6],
+            (endpoint_keys[2 * i], endpoint_keys[2 * i + 1]),
+            row[6],
+            source_chain(row),
+        )
         for i, row in enumerate(raw_rows)
     )
     workers = current_preparation_workers() or 1

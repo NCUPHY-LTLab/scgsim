@@ -651,6 +651,12 @@ def _account_zero_area(residues, cells, grid):
     )
 
 
+@dataclass(frozen=True)
+class _GridWork:
+    raw_polygons: tuple
+    subdivision: _Subdivision
+
+
 def build_grid_arrangement(operands, context, *, apply_grid=True):
     """Construct one labelled fixed-grid network or an ungridded plane overlay.
 
@@ -667,12 +673,15 @@ def build_grid_arrangement(operands, context, *, apply_grid=True):
     ids = [v.operand_id for v in values]
     if len(ids) != len(set(ids)):
         raise ValueError("common grid operand identities are duplicated")
-    with _stage("geometry.grid.inputs", counts={"operands": len(values)}):
-        geometries = {v.operand_id: Polygon(v.exterior, v.holes) for v in values}
 
     def construct():
+        with _stage("geometry.grid.inputs", counts={"operands": len(values)}):
+            raw_polygons = tuple(
+                (v.operand_id, Polygon(v.exterior, v.holes)) for v in values
+            )
+        geometries = dict(raw_polygons)
         if not apply_grid:
-            return _subdivide_grid(values, geometries, None)
+            return _GridWork(raw_polygons, _subdivide_grid(values, geometries, None))
         from scgsim.geometry._primitives._tagged_grid import build_tagged_subdivision
 
         result = build_tagged_subdivision(values, geometries, grid)
@@ -680,17 +689,20 @@ def build_grid_arrangement(operands, context, *, apply_grid=True):
             tuple(_ZeroAreaResidue(*row) for row in result.boundary),
             tuple(_ZeroAreaResidue(*row) for row in result.auxiliary),
         )
-        return _Subdivision(
-            result.cells,
-            (*accounting.boundary, *accounting.auxiliary),
-            accounting,
-            result.source_paths,
-            result.edge_origins,
+        return _GridWork(
+            raw_polygons,
+            _Subdivision(
+                result.cells,
+                (*accounting.boundary, *accounting.auxiliary),
+                accounting,
+                result.source_paths,
+                result.edge_origins,
+            ),
         )
 
-    subdivision = cached_subdivision(
-        values, context, apply_grid=apply_grid, build=construct
-    )
+    work = cached_subdivision(values, context, apply_grid=apply_grid, build=construct)
+    geometries = dict(work.raw_polygons)
+    subdivision = work.subdivision
     cells = subdivision.cells
     with _stage(
         "geometry.grid.zero_area", counts={"residues": len(subdivision.residues)}

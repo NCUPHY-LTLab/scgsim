@@ -214,7 +214,83 @@ def test_cached_pure_partition_does_not_cache_or_skip_physical_failure_audits():
             errors.append(caught.value)
             cached = tuple(_ACTIVE.get().values.values())
             assert len(cached) == 1
-            assert len(cached[0].source_paths) == 4
+            assert len(cached[0].subdivision.source_paths) == 4
         assert errors[0] is not errors[1]
         assert errors[0].__notes__ == errors[1].__notes__
     assert _ACTIVE.get() is None
+
+
+@pytest.mark.parametrize(
+    "polygons",
+    (
+        (
+            Polygon(((0, 0), (11, 1), (0, -2))),
+            Polygon(((5.5, 0.499), (6, -1), (5, -1))),
+        ),
+        (
+            Polygon(((0, 0), (101, 1), (0, -2))),
+            Polygon(((100, 1), (99, 2), (100, 2))),
+            Polygon(((50, 1), (49, 2), (50, 2))),
+        ),
+    ),
+)
+def test_presnap_raw_context_recovers_public_native_network(polygons):
+    # These raw source edges need native pre-snap nodes before pixel traversal.
+    # The second case has integer-grid input, including a remote affected pixel.
+    values, result = construct(polygons, 1)
+    assert all(origins for _, origins in result.edge_origins)
+    assert len(result.source_paths) == sum(len(p.exterior.coords) - 1 for p in polygons)
+    for owner in range(len(polygons)):
+        paths = [p for p in result.source_paths if p.operand_index == owner]
+        assert all(
+            a.nodes[-1] == b.nodes[0] for a, b in zip(paths, (*paths[1:], paths[0]))
+        )
+    parent = union_all([cell for cell, owners in result.cells if "0" in owners])
+    assert parent.geom_type == "Polygon" and not parent.interiors
+    if len(polygons) == 3:
+        assert parent.area == 125
+        assert (50, 1) in result.source_paths[0].nodes
+        assert (100, 1) in result.source_paths[0].nodes
+    else:
+        assert parent.area == 8
+    with preparation_resources(max_workers=2):
+        _, parallel = construct(polygons, 1)
+    assert parallel.source_paths == result.source_paths
+    assert parallel.edge_origins == result.edge_origins
+    assert [(p.wkb, labels) for p, labels in parallel.cells] == [
+        (p.wkb, labels) for p, labels in result.cells
+    ]
+
+
+def test_directed_offline_nodes_use_geometric_secondary_order():
+    from scgsim.geometry._primitives._tagged_grid import _raw_chain
+
+    # Equal dominant coordinates must use direction-aware geometry, not tag ID.
+    nodes = {(0, 0), (10, 1), (5, 0.51), (5, 0.49)}
+    assert _raw_chain((0, 0), (10, 1), nodes) == ((0, 0), (5, 0.49), (5, 0.51), (10, 1))
+    assert _raw_chain((10, 1), (0, 0), nodes) == ((10, 1), (5, 0.51), (5, 0.49), (0, 0))
+
+
+def test_cache_reuses_raw_polygons_but_repeats_contact_audit():
+    from scgsim.geometry._primitives._grid_cache import _ACTIVE, grid_work_cache_scope
+
+    values = (
+        GridOperand("A", rectangle(0, 0, 1.1, 1)),
+        GridOperand("B", rectangle(1.2, 0, 2, 1)),
+    )
+    with grid_work_cache_scope():
+        work = None
+        errors = []
+        for _ in range(2):
+            with pytest.raises(ValueError, match="contact changed") as caught:
+                build_grid_arrangement(values, GeometryGridContext(1))
+            errors.append(caught.value)
+            current = next(iter(_ACTIVE.get().values.values()))
+            if work is not None:
+                assert current is work
+                assert all(
+                    a[1] is b[1]
+                    for a, b in zip(current.raw_polygons, work.raw_polygons)
+                )
+            work = current
+        assert errors[0] is not errors[1]

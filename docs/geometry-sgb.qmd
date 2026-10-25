@@ -183,8 +183,11 @@ Z coordinates, film thickness, mesh, quadrature, and solver tolerances remain
 separate; the XY grid does not assert that every 3D coordinate lies on it.
 The fixed-grid XY boundaries form one shared noded network. Each original
 directed ring edge carries its operand, ring and segment order through
-explicit grid-pixel incidence; coincident edges retain every source. Directed
-edge transitions determine face membership, and each operand is reconstructed
+explicit grid-pixel incidence; coincident edges retain every source. Raw
+intersection and native-grid near-vertex events split these directed paths
+before rounding.
+
+Directed edge transitions determine face membership, and each operand is reconstructed
 from those same cells without another grid snap. Ambiguous source paths or
 inconsistent labels fail explicitly. Physical contact, hole and component
 checks still compare against the original inputs.
@@ -519,12 +522,19 @@ can record stage timings alongside this scope without selecting parallelism.
 
 Each source-preparation call also reuses hierarchy extraction for the same
 freshly read GDS cell and excluded-reference list. The cache ends with that
-call. Pure subdivisions are also reused within a prepare, adapter or compiler
-call when the complete ordered operands and grid context match. Selectors,
+call.
+
+Immutable raw polygons and pure subdivisions are also reused within a prepare,
+adapter or compiler call when the complete ordered operands and grid context
+match. Selectors,
 source-record comparisons and physical/contact audits still execute on each
-invocation. Reconstructed grid-applied faces use one coordinate
+invocation.
+
+Reconstructed grid-applied faces use one coordinate
 representation per integer grid key, including their boundary-chain anchors;
-raw source coordinates and non-grid local planes remain separate. A topology
+raw source coordinates and non-grid local planes remain separate.
+
+A topology
 failure retains its original exception and adds counts, validity, area and
 grid information without coordinates. Error-only witnesses distinguish the
 initial grid realization, labelled cells and reconstructed faces from the
