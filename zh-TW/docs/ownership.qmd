@@ -1,0 +1,61 @@
+---
+title: "維護者指南"
+description: "提供貢獻者參考的次要實作、專案與文件建置資料。"
+lang: zh-TW
+scgsim-kind: "project"
+scgsim-status: "ACCEPTED"
+scgsim-id: "docs/ownership"
+---
+
+SCGSim 擁有可重用的幾何、求解器準備、交接、結果與報告 API。[OrPen SC PDK](https://github.com/OrPenStrike/orpen-sc-pdk)擁有公開元件幾何、材料／堆疊資料及可執行的元件 Notebook。Python 指令碼或 Notebook 可直接呼叫 SCGSim，不需要上層工作區。
+
+網站使用 Askr 原生呈現方式。Overview 介紹套件；Tutorial 引導使用者完成計算；Concept 說明模型；Contract 提供精確的介面參考。既有文件網址仍可使用。
+
+儲存庫配置、實作責任、文件建置與發行程序，列於次要的[維護者入口](https://github.com/OrPenStrike/scgsim/blob/develop/MAINTAINING.md)。
+
+## 已接受的 SCGSim 2.0 所有權 {#accepted-scgsim-2.0-ownership}
+
+Human 於 2026-10-09 接受 v2 模組與 API 結構，候選版本為 `a932a173edb5c56ae14740ff5177190996255bdd`（tree `2745321736e53e2a4fe8d150f2e9d8bd176669db`）。其語意狀態為 `ACCEPTED`，不是 `STABILIZED`。此實作透過 PR34 整合至 `develop`，修訂版本為 `cc1424c84ffe9d295a57dbabb3c2ab6431110f6c`（tree `f9ecfe49df4c79be84a7991e44cc50c2602e3adb`）。本次收尾工作從較後續的 `develop` 瘦身版本 `b46bcc7d64fbb8bab181c0da2b9234a003a20adf`（tree `c99c670927e877fb407aa4c73de32793e86a4460`）開始。匯入／遷移基準仍為 `develop@3a52fb1`，tree `96adcf8672b497a29dd0a6b43043cca11efc3043`。既有使用者會繼續使用其記錄的固定版本，直到自行選擇遷移。已接受的 API 範圍不代表 Xmon Palace Eigenmode Route A、CircularPad Palace Eigenmode Route B，或 HFSS 本徵模儲存場 EPR／離線損耗的完整原生至 Resolve 再至 Report 操作已完成。這些操作尚未被觀察為完整工作流程，且不屬於本次收尾範圍；先前的部分證據不能證明它們已完成或失敗。請參閱[遷移參考](api-migration.qmd#accepted-scope-and-evidence-status)。
+
+| 目標區域 | 負責範圍 | 不得接管的範圍 |
+|---|---|---|
+| `scgsim.geometry` | 面向來源的元件／出現位置與堆疊調適、GeometryPlan／snapshot、正規化輸入、真空／曲線準備及脫離原物件的摘要 | 編譯器階段協調、Palace／AEDT 物理或執行狀態 |
+| `scgsim.geometry.compiler` | 進階建構器、衍生記錄、管線驗證器與建構派送 | 元件來源所有權或求解器狀態 |
+| `scgsim.geometry.models` 與較低層原語 | 單一標準模型／型別定義，以及共用來源／編譯器原語 | 重複定義、來源至規劃的相依循環 |
+| `scgsim.semantics` | 僅使用標準函式庫、不可變且受修訂版本約束的事實 | 可變後端物件、將求解器標記解讀為來源真實資料 |
+| `scgsim.palace.preparation` | 分開的 Electrostatic 與 Eigenmode 設定物件、可變狀態／失效處理，以及共用準備函式 | 共用 Simulation 基底、Palace 提交，或合併狀態擁有者 |
+| `scgsim.palace.mesh` | 路徑建置、動態 Gmsh 工作程序、原生網格摘要與離線網格品質讀取器 | 結果收據保管或物理收斂判定 |
+| `scgsim.palace.execution` | 手動交接套件及獨立主機收據記錄 | 自動提交求解器或解讀結果 |
+| `scgsim.palace.results` | 回傳產物／保管驗證、結果資料及脫離原物件的 EPR | 求解器執行或繪圖狀態 |
+| `scgsim.palace.presentation` | Palace 信任度、物理與成本投影，以及報告圖表 | 共用的跨求解器物理量模型 |
+| `scgsim.aedt.specs` | 標準請求與已準備幾何宣告、共用電性記錄及明確解析器派送 | 執行階段／Desktop 狀態，或 Q3D 輸入 v1／v2 |
+| `scgsim.aedt.preparation` | 來源綁定、有效幾何與物理層對應、可攜式交接及標準 cohort 成員資格 | Desktop 生命週期、可變 EigenmodeSim 狀態或求解結果 |
+| `scgsim.aedt.runtime` | 準備、直接執行與批次收集的唯一交易／收據協調器及 Desktop 生命週期；派送至各家族的原生流程 | 共用幾何來源所有權或跨家族物理 |
+| `scgsim.aedt.batch` | 單一模型原生 EPR 套件、僅限求解器的獨立執行嘗試與回傳驗證；將完整原生收集交由執行階段交易處理 | Desktop／模型建構、排程提交，或合併的多模型求解專案 |
+| `scgsim.aedt.runtime.native` | 共用實體／支撐／材料／外殼建構、已宣告接面與一般 RLC 指派，以及已儲存原生幾何讀回 | EPR 分析請求或來源準備 |
+| `scgsim.aedt.epr` | 分析選擇、場／快取、EPR 分析，以及 HFSS 家族流程中的儲存場組合 | 一般本徵模建構／求解／匯出、Desktop 生命週期或一般結果保管 |
+| `scgsim.aedt.results` | 嚴格執行／EPR 解析、來源沿革讀取器、收斂與矩陣觀察 | 求解器執行或顯示狀態 |
+| `scgsim.aedt.presentation` | 顯示專用投影與採延遲載入的選擇性匯入繪圖功能 | 原生計算或結果驗證 |
+| `scgsim.visualization` | 綁定後端的來源／收據載入器、脫離原物件的場景／預覽物件及呈現 | 求解器狀態、模擬狀態或物理驗收 |
+| `scgsim.presentation` | 與求解器物理中立的共用 Notebook 格式化 | 領域投影或科學計算 |
+
+以來源為基礎的本徵模準備、求解與匯出，屬於 HFSS 家族，即使沒有要求 EPR 分析也一樣。已宣告的接面與一般 RLC 負載會獨立於該請求建構。EPR 會將分析選擇與場／快取工作加入同一個原生模型及求解生命週期。純 RLC 單位／拓撲解讀與 Q3D 來源外部鏈選擇，由僅使用標準函式庫的私有輔助工具供原生寫入器與離線讀取器共用；共用解讀方式不會取代各自獨立的原生收據與來源歸屬檢查。
+
+幾何、AEDT、Palace 與 visualization 的基準 facade 和直接子模組符號對應，以及已接受的目的位置，列於 [API 遷移參考](api-migration.qmd)。公開性取決於文件所述的 facade／契約與宣告的匯出項目，不取決於 Python 模組是否剛好可匯入。v2 刻意不保留 `scgsim.sgb` 相容包裝器或 Q3D 輸入 v1／v2 路徑；公開 AEDT 指令 `python -m scgsim.aedt.run` 仍受支援，並會交由交易擁有者處理。
+
+狀態界線必須保持可觀察。Palace Electrostatic 與 Eigenmode 準備流程各自保留可變狀態及失效／失敗順序；Gmsh 工作程序是程序界線，其網格觀察器不是離線品質讀取器。AEDT `EigenmodeSim` 保留可變設定與失效狀態；單一交易則負責收據狀態轉換與 Desktop 釋放優先順序。幾何 snapshot 保持脫離原物件；編譯器記錄是衍生輸出；後端標記是觀察資料，不是來源權威。搬移程式碼時必須保留這些所有權與失敗契約。
+
+SCGSim Development Lead 擁有受追蹤的來源。固定工作者只能在有限工作期間內寫入指派的路徑；共用 facade、收據與套件中繼資料路徑，同一時間只能有一位寫入者。架構與完整子模組遷移契約，與已接受的來源樹一同記錄。原生觀察與求解器專屬結果解讀仍由不同負責方管理，不得因目錄重整而暗示這些工作已完成。
+
+## 實作與專案參考資料 {#implementation-and-project-references}
+
+| 參考資料 | 用途 |
+|---|---|
+| [架構](architecture.qmd) | 模組與狀態界線、準備與執行流程 |
+| [來源沿革](provenance.qmd) | 來源／結果識別資訊與公開資料界線 |
+| [目標與衍生來源](goals-and-upstream.qmd) | 目前範圍與上游關係 |
+| [路線圖](roadmap.qmd) | 延後實作的類別與文件方向 |
+| [歷史錯誤](errors.qmd) | 依修訂版本記錄的診斷觀察 |
+| [儲存庫維護](https://github.com/OrPenStrike/scgsim/blob/develop/MAINTAINING.md) | 建置、版本目錄與發布程序 |
+
+這些次要參考資料將實作細節保留在研究者學習流程之外。契約頁面會說明公開 API 與物理結果意義；它們不是發行檢查清單。

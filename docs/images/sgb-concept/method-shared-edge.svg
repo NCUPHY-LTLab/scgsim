@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" role="img" aria-labelledby="title desc"><title id="title">同一接點、同一邊的反向引用</title><desc id="desc">教學示意：頂面與前側壁共同使用 p0、p1、p2；頂面走 +e01,+e12，側壁走 -e12,-e01。</desc><defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="context-stroke"/></marker></defs><rect width="900" height="620" fill="#fff"/><g font-family="Noto Sans CJK TC, sans-serif" font-size="22" fill="#16324a">
+<polygon points="125,310 585,310 705,214 245,214" fill="#dcebf6" stroke="#1468a0" stroke-width="3"/>
+<polygon points="125,310 125,440 585,440 585,310" fill="#fae6ce" stroke="#b56b16" stroke-width="3"/>
+<path d="M125,310L355,310" stroke="#b83b35" stroke-width="5"/>
+<text x="240.0" y="294" text-anchor="middle" font-size="25">e01</text>
+<path d="M355,310L585,310" stroke="#b83b35" stroke-width="5"/>
+<text x="470.0" y="294" text-anchor="middle" font-size="25">e12</text>
+<circle cx="125" cy="310" r="7" fill="#b83b35"/>
+<text x="125" y="342" text-anchor="middle" font-size="21">p0 (0,0,1)</text>
+<circle cx="355" cy="310" r="7" fill="#b83b35"/>
+<text x="355" y="342" text-anchor="middle" font-size="21">p1 (2,0,1)</text>
+<circle cx="585" cy="310" r="7" fill="#b83b35"/>
+<text x="585" y="342" text-anchor="middle" font-size="21">p2 (4,0,1)</text>
+<text x="365" y="140" font-size="27">頂面：+e01，+e12</text>
+<text x="220" y="420" font-size="27">側壁：−e12，−e01</text>
+<text x="65" y="530" font-size="25">點的座標相同還不夠：兩個面須引用同一組邊。</text>
+<text x="65" y="575" font-size="22">此圖僅說明共享邊；不是三維網格或原生 CAD 讀回。</text>
+</g></svg>

@@ -1,0 +1,34 @@
+---
+title: "選擇物理問題"
+description: "依電路所需物理量，連結電容、共振、端口響應與矩陣萃取。"
+lang: zh-TW
+scgsim-kind: "concept"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/concepts/problems"
+---
+
+同一張圖可以支援多種計算。物理問題決定激發方式、施加哪些邊界，以及答案代表什麼。
+
+## 電容：導體電壓引起的電荷響應 {#capacitance-charge-response-to-conductor-voltage}
+
+靜電萃取會在指定端點電壓下求解導體電荷。電容矩陣描述電荷與電壓的關係，模型也會保留導體順序與接地選擇。此矩陣可提供電路的焊盤對地電容或互電容。Palace Electrostatic 與 Q3D 是已實作的途徑。外殼外部接地的有限模型，與只將選定實體導體接地的模型不同。
+
+## 共振：場與電路模型的模態 {#resonance-modes-of-a-field-and-circuit-model}
+
+本徵模計算會找出指定模型的共振頻率與場。線性化接面可用電感支路表示；該支路會參與模態，不能只靠圖中的焊盤表示。理想集總 LC 模型的 $f_0=1/(2\pi\sqrt{LC})$ 可作為解讀參考；電磁模型則包含分布場與所選邊界。
+
+Palace 與 HFSS 提供已實作的本徵模途徑。可選的 EPR 分析會詢問模態中的能量分布，以及指定損耗假設代表什麼。解讀這些比例前，請先閱讀[能量參與](../eigenmode-epr.qmd)。
+
+## 驅動響應：以特定頻率激發端口 {#driven-response-excite-a-port-at-a-frequency}
+
+驅動問題探討模型對外加激發的響應。HFSS Modal 與 Terminal 工作流程會提供複數 S 參數。端口模型、參考導體或積分方向都是問題定義的一部分。驅動響應中的峰值，與本徵模結果不是相同的資料結構。
+
+## 有限模型萃取與截面萃取 {#finite-extraction-versus-a-cross-section}
+
+Q3D 會為有限三維模型萃取導體矩陣。Q2D 會為明確定義的截面萃取每單位長度性質。兩者不能自動互相取代；僅憑每單位長度矩陣，無法還原有限長度、端部幾何與端口處理方式。
+
+::: {.callout-tip title="先選擇物理量，再選擇求解器"}
+先寫下所需的導體配對、模態或端口響應、單位，以及預定的電路模型用途，再從[能力表](../backend-support.qmd)選擇支援的工作流程。
+:::
+
+原生公式說明請參閱 [Palace 問題類型](https://awslabs.github.io/palace/stable/guide/problem/)與 [PyAEDT 使用者指南](https://aedt.docs.pyansys.com/version/stable/User_guide/index.html)。

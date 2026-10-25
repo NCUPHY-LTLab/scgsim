@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" role="img" aria-labelledby="title desc"><title id="title">交點切開來源邊，形成同一份分段線網</title><desc id="desc">X0=(3,0)，X1=(3,3) 同時切開 A 與 M 的來源邊，每個接點為共同座標。</desc><defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="context-stroke"/></marker></defs><rect width="900" height="620" fill="#fff"/><g font-family="Noto Sans CJK TC, sans-serif" font-size="22" fill="#16324a">
+<path d="M71.0,592.5L838.0,592.5" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M71.0,592.5L71.0,137.40000000000003" fill="none" stroke="#42576b" stroke-width="3" />
+<text x="110" y="612.5" text-anchor="middle" font-size="19">0</text>
+<text x="240" y="612.5" text-anchor="middle" font-size="19">1</text>
+<text x="370" y="612.5" text-anchor="middle" font-size="19">2</text>
+<text x="500" y="612.5" text-anchor="middle" font-size="19">3</text>
+<text x="630" y="612.5" text-anchor="middle" font-size="19">4</text>
+<text x="760" y="612.5" text-anchor="middle" font-size="19">5</text>
+<text x="780" y="610" font-size="20">x（µm）</text>
+<text x="18" y="60" font-size="20">y（µm）</text>
+<text x="59.0" y="578" text-anchor="end" font-size="19">-1</text>
+<text x="59.0" y="496" text-anchor="end" font-size="19">0</text>
+<text x="59.0" y="414" text-anchor="end" font-size="19">1</text>
+<text x="59.0" y="332" text-anchor="end" font-size="19">2</text>
+<text x="59.0" y="250" text-anchor="end" font-size="19">3</text>
+<text x="59.0" y="168" text-anchor="end" font-size="19">4</text>
+<path d="M110,490L500,490" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M500,490L630,490" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M630,490L630,244" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M630,244L500,244" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M500,244L110,244" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M110,244L110,490" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M240,408L240,326" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M240,326L370,326" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M370,326L370,408" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M370,408L240,408" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M500,572L760,572" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M760,572L760,162" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M760,162L500,162" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M500,162L500,244" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M500,244L500,490" fill="none" stroke="#42576b" stroke-width="3" />
+<path d="M500,490L500,572" fill="none" stroke="#42576b" stroke-width="3" />
+<circle cx="110" cy="490" r="5" fill="#16324a"/>
+<circle cx="110" cy="244" r="5" fill="#16324a"/>
+<circle cx="240" cy="408" r="5" fill="#16324a"/>
+<circle cx="240" cy="326" r="5" fill="#16324a"/>
+<circle cx="370" cy="408" r="5" fill="#16324a"/>
+<circle cx="370" cy="326" r="5" fill="#16324a"/>
+<circle cx="500" cy="572" r="5" fill="#16324a"/>
+<circle cx="500" cy="490" r="5" fill="#16324a"/>
+<circle cx="500" cy="244" r="5" fill="#16324a"/>
+<circle cx="500" cy="162" r="5" fill="#16324a"/>
+<circle cx="630" cy="490" r="5" fill="#16324a"/>
+<circle cx="630" cy="244" r="5" fill="#16324a"/>
+<circle cx="760" cy="572" r="5" fill="#16324a"/>
+<circle cx="760" cy="162" r="5" fill="#16324a"/>
+<circle cx="500" cy="490" r="9" fill="#d54138"/>
+<text x="485" y="472" text-anchor="end" font-size="22">X0 (3,0)</text>
+<circle cx="500" cy="244" r="9" fill="#d54138"/>
+<text x="485" y="226" text-anchor="end" font-size="22">X1 (3,3)</text>
+<circle cx="110" cy="490" r="5" fill="#16324a"/><text x="120" y="514" font-size="20">a0</text>
+<circle cx="630" cy="490" r="5" fill="#16324a"/><text x="640" y="514" font-size="20">a1</text>
+<circle cx="630" cy="244" r="5" fill="#16324a"/><text x="640" y="232" font-size="20">a2</text>
+<circle cx="110" cy="244" r="5" fill="#16324a"/><text x="120" y="232" font-size="20">a3</text>
+<text x="130" y="44" font-size="25">a0 → X0 → a1；a2 → X1 → a3</text>
+<text x="130" y="81" font-size="22">M 的左邊也使用相同的 X1、X0。</text>
+</g></svg>

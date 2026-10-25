@@ -1,0 +1,70 @@
+---
+lang: zh-TW
+title: "AEDT：一般 HFSS Eigenmode"
+description: "準備無埠模態請求，並在回傳時保留原生頻率與 Q。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/aedt-eigenmode"
+---
+
+在同一工作階段接續[CPW 輸入](aedt-inputs.qmd)。一般 HFSS Eigenmode 不使用驅動激發埠，而是透過明確的自適應設定搜尋指定模態；名稱中有 Eigenmode，不代表它會建立 source-first Surface-EPR 目錄或儲存場分析請求。Eigenmode API 可透過 `EigenmodeSim.add_lumped_rlc()` 加入一般線性 RLC 模型元件。這與 Josephson 接面不同：它不會建立 `PlanarJunction`、接面參與量或 EPR 貢獻。負載儲存在 `PreparedPlanarGeometry.lumped_rlcs`；`HfssEprSpec` 會投影已準備的值，不會成為第二個可編輯來源。EPR 接面契約仍獨立處理。輸入頁面的等 Z M1 對應是歷史上的薄片請求。目前的 Thin Film 範例新增 CPW 來源擁有者明確指定的 `NB_FILM` 區間與下方接觸側，以保留既有薄片平面；這不表示 c997 已包含此宣告。
+
+```python
+from pathlib import Path
+from scgsim.aedt import (
+    EigenmodeRunControl, HfssEigenmodeSpec, LayerImport,
+    prepare_handoff,
+)
+from scgsim.geometry import PhysicalLayerDeclaration
+
+AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
+metal_thickness_um = 0.2
+physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
+physical_layer = PhysicalLayerDeclaration(
+    physical_layer_id=physical_layer_id,
+    source_level_id="D0_TOP_M1",
+    source_level_and_gds_pair={"layer": 1, "datatype": 0},
+    source_interval_um=(0.0, metal_thickness_um),
+    material_id="Nb",
+    feature_kind="stack_film",
+    physical_dimensions={"normal_thickness_um": metal_thickness_um},
+    source_contact_facts={"layer_attachment_face": "lower"},
+)
+layer_imports = (
+    LayerImport(
+        1, 0, "D0_TOP_M1", 0.0, metal_thickness_um,
+        physical_layer_id=physical_layer_id,
+    ),
+    LayerImport(201, 0, "D0_SUBSTRATE", -500.0, 0.0),
+)
+
+spec = HfssEigenmodeSpec(
+    aedt_version=AEDT_VERSION,
+    modeling="thin_film",
+    gds_path=source_gds,
+    project_name="public_cpw_eigenmode",
+    design_name="CpwFiniteGroundEigenmode",
+    materials=materials,
+    vacuum_material_id="vacuum",
+    layer_imports=layer_imports,
+    physical_layers=(physical_layer,),
+    object_bindings=object_bindings,
+    run_control=EigenmodeRunControl(
+        setup_name="Setup1", minimum_frequency_ghz=3.0, num_modes=2,
+        maximum_passes=6, maximum_delta_frequency_percent=5.0,
+    ),
+    region_padding_um=(100.0, 100.0, 100.0, 100.0, 1000.0, 1000.0),
+)
+handoff = prepare_handoff(
+    spec=spec, output_dir=Path(".artifacts/public-cpw-eigenmode")
+)
+print(handoff.spec_path, handoff.archive_path)
+```
+
+公開 CPW 範例提供這些搜尋／自適應迭代控制值。它們是請求控制項，不是保證的模態頻率，也不是通用的 SCQ 充分性規則。請在 Notebook 中保留實際控制項及任何變更。回傳後，依[預期研究用途](returned-results.qmd#interpret-for-scq-use)讀取指定模態及可取得的變化量；保留原生收斂狀態，但不要將它當作研究結論。Region 依輸入教學所述的原生六面順序包住模型。在[明確於主機執行](execute.qmd)前，請檢查序列化規格與複製的來源。準備套件不會開啟 Desktop。
+
+在[回傳並嚴格解析](returned-results.qmd)後，正規化的 `eigenmodes.csv` 會保留有序模態索引、實數 `frequency_ghz` 與原生 `q_factor`。具雜湊的 `eigenmodes.eig` 會保留原生原始頻率輸出，包括可能存在的複數分量。SCGSim 不會計算阻尼，也不會根據該分量取代原生 Q。數值歷程與基準資料可用性是分開的證據。
+
+解讀頻率與 Q 時，請將回傳模態與實際控制項一併檢視。報告會保留原生分類；雜湊綁定的 `adaptive-convergence.prop` 也會保留原生歷程與連續通過次數，現有正規化結果／報告不會重現這些內容。[執行階段參考](../specs/aedt-runtime.qmd#hfss-convergence-observations)說明這些紀錄與失敗行為。請使用研究所需物理量的可用變化量，不要將原生分類視為精度建議。
+
+`.aedt` 檔案與已完成的一般收據，無法證明存在可重用的儲存場 EPR。若這是你的工作，請先閱讀[source-first Xmon EPR 模型](../tutorial-xmon-aedt.qmd)，再於求解後依其獨立的[儲存場分析](aedt-saved-fields.qmd)操作。[AEDT 契約](../specs/aedt-runtime.qmd)定義這兩條路徑，兩者結果不可互換。

@@ -1,0 +1,33 @@
+---
+title: "曲線來源的歷史 Palace 設定"
+description: "Circular Pad Uniform-port 研究所記錄的固定來源與原生求解器設定。"
+scgsim-kind: "history"
+scgsim-status: "HISTORICAL"
+scgsim-id: "docs/history/curved-source-installation"
+---
+
+本頁僅供重現歷史 Circular Pad Uniform-port 研究。內容記錄 SCGSim `1.1.0rc1`、執行時使用的 OrPen SC PDK 產生器，以及特定 Palace 分支；請在獨立的專案環境中重現此研究。
+
+## 選擇來源與 PDK 版本 {#select-the-source-and-pdk-revisions}
+
+連結的 [`palace_eigenmode.qmd`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/src/ComponentSimulation/CircularPad/palace_eigenmode.qmd)與其[衍生筆記本](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/palace_eigenmode.ipynb)，是較晚的 PDK 教學與呈現版本 `ecc90623b62e55f95afaa5a1f1048a71f81cae52`，不是執行 Fresh08 時使用的產生器。[證據 README](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/README.md)指出，實際執行所用的 OrPen 產生器是 [`c79b91ef882079d937fce20129f3cbd477e8438d`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/c79b91ef882079d937fce20129f3cbd477e8438d)。
+
+封存執行所用的 SCGSim 版本為 [`2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71`](https://github.com/NCUPHY-LTLab/scgsim/tree/2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71)（`1.1.0rc1`），包含穩定版 `1.0.2` 尚未提供的曲線來源 API。請為這兩個確切版本建立獨立專案：
+
+```bash
+uv init --python 3.12 curved-source-study
+cd curved-source-study
+uv add 'scgsim[palace,visualization] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71' \
+  'orpen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@c79b91ef882079d937fce20129f3cbd477e8438d' \
+  ipykernel
+```
+
+檢查：`uv run python -c "from importlib.metadata import version; print(version('scgsim'))"` 顯示 `1.1.0rc1`。
+
+## 此曲線 Uniform 埠研究所用的原生 Palace {#native-palace-for-this-curved-uniform-port}
+
+此研究記錄的 Palace 分支版本為 [`4e9e1b7232b4c8ca8b964be7e70f1848f578de37`](https://github.com/arfiligol/palace/tree/4e9e1b7232b4c8ca8b964be7e70f1848f578de37)，或包含其[曲線埠範圍修正](https://github.com/arfiligol/palace/blob/4e9e1b7232b4c8ca8b964be7e70f1848f578de37/palace/utils/geodata_impl.cpp)的後續版本。Python 套件不會安裝原生 Palace。重現記錄中的執行時，請將 Palace MPI 包裝程式設為指定的可執行檔。
+
+筆記本的預設 `analyze_handoff` 動作會讀取保留的 `.artifacts` 執行目錄；該目錄未隨來源與圖表提供。若要準備或執行新的計算，請在筆記本選擇 `prepare_handoff` 或 `run`，並指定新的執行識別碼。
+
+已發布的 Fresh08 執行記錄顯示，模態 1 在四次細化與五份求解／估計快照後為 `5.573354161115 GHz`。其最終原生指標為 `0.1186681863426`，對照設定值 `0.02`；原生記錄中也有 PCG 警告。

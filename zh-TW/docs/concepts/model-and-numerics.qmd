@@ -1,0 +1,36 @@
+---
+title: "邊界、近似與數值結果"
+description: "區分物理模型、幾何近似與數值計算。"
+lang: zh-TW
+scgsim-kind: "concept"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/concepts/model-and-numerics"
+---
+
+結果由三項選擇共同決定：物理模型、模型的表示方式，以及數值計算。改變其中一項，不等同於細化另一項。
+
+## 定義物理模型 {#define-the-physical-model}
+
+記錄導體接地方式、外部邊界、基板與真空範圍、端口或接面元件，以及材料假設。變更接地導體或接面電感，就會改變所研究的問題。共用版圖不代表外部條件相同：未指定時，Palace 本徵模使用自然 PMC 條件；目前以來源為起點的 HFSS EPR 模型則使用已記錄的 HFSS 預設 Perfect E 外部邊界。
+
+## 選擇幾何近似 {#choose-the-geometric-approximation}
+
+Route A 使用零厚度面金屬 PEC 薄片，並明確指定幾何近似設定。Route B 使用有限厚度金屬及其外部 PEC 表面。在 Palace Route B 中，導體內部不納入求解四面體。這兩種方法都不會把理想 PEC 近似轉變為實測導體損耗模型。
+
+Route A 的 `substrate_face` 與 `metal_gap_equivalent` 近似設定，在座標與正規化上的意義不同。請依預期模型選擇設定；遇到難以處理的網格時，切換路徑不會自動修復問題。確切支援形式請參閱[幾何參考](../geometry-sgb.qmd)。
+
+## 對照物理量判讀數值變化 {#read-numerical-changes-beside-the-quantity}
+
+網格大小、幾何網格階數、有限元素階數、自適應通過次數、求解器設定與搜尋控制，分別決定數值計算的不同部分。Palace 的幾何階數控制網格表示法；FEM 階數控制場近似。原生停止旗標描述設定的停止準則。判讀時應一併檢視目標電容、頻率或參與率的實際變化。
+
+1.1.0 版 Palace 網格摘要會記錄原生網格控制項與拓撲。本徵模的自由度數值是依拓撲估算，並非原生求解器計數，也不是收斂度量。線性四面體品質報告也不會評估曲線高階元素的品質。
+
+請分別處理三種高階控制：`geometry_order` 建立網格幾何，FEM 階數控制場近似，而 Palace `HighOrderOutput` 控制序列化。Palace 原生匯入預設值 `RemoveCurvature=false` 會保留匯入的高階幾何節點。Palace Surface EPR 的原生 Mask／Inset 邊距是與 SGB 幾何分區不同的評估。指定的 Palace 可執行檔必須支援 Mask／Inset；請見[Palace Electrostatic 契約](../specs/palace-electrostatic-sgb.qmd#native-mask-inset)。先前的 SGB 幾何距離帶產生器已撤回。
+
+代數本徵對殘差與自適應網格指標描述的是不同物理量。頻率可能變化很小，但對場敏感的表面貢獻仍可能變動。請檢視該貢獻可取得的歷程，不要以其他觀測量的穩定性代替判斷。
+
+::: {.callout-note title="分開比較模型與數值結果"}
+細化網格是在研究同一模型的離散化。變更外殼、材料或端口假設則是在研究不同模型。請分開標示這些研究，並在比較結果時保留單位及模態／導體識別資訊。
+:::
+
+來源預覽呈現已宣告的幾何；網格／原生讀回資料呈現後端建立的內容；求解場則支援物理後處理。即使其他結果可讀，缺少的側壁能量或未知的損耗正切值仍然是缺少或未知。請接著閱讀 [EPR 解讀](../eigenmode-epr.qmd)或[結果判讀](../course/returned-results.qmd)。

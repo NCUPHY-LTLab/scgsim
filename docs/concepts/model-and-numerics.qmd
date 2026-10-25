@@ -48,10 +48,7 @@ quality report also does not evaluate curved high-order element quality.
 Keep the three high-order controls separate: `geometry_order` creates the mesh
 geometry, FEM order controls the field approximation, and Palace
 `HighOrderOutput` controls serialization. Palace's native import default
-`RemoveCurvature=false` preserves imported high-order geometry nodes. For EPR,
-the [Palace Surface EPR contract](../specs/palace-electrostatic-sgb.qmd#curved-positive-inset-distance)
-explains the positive-inset perimeter approximation and the unchanged unmasked
-and zero-margin path.
+`RemoveCurvature=false` preserves imported high-order geometry nodes. For Palace Surface EPR, native Mask/Inset margins are separate evaluations from SGB geometry. The selected Palace executable must support Mask/Inset; see the [Palace Electrostatic contract](../specs/palace-electrostatic-sgb.qmd#native-mask-inset). The former SGB geometry-distance-band producer is withdrawn.
 
 An algebraic eigenpair residual and an adaptive mesh indicator describe
 different quantities. A frequency can change little while a field-sensitive

@@ -1,0 +1,57 @@
+---
+title: "歷史 SimplePad Q3D 電容（v3 之前）"
+description: "保留較早的 SimplePad GDS 匯入 Q3D C/G 請求、結果與原生讀回資料。"
+lang: zh-TW
+scgsim-kind: "course"
+scgsim-status: "HISTORICAL"
+scgsim-id: "docs/history/aedt-capacitance-pre-v3"
+---
+
+本頁保留較早的 SimplePad Q3D 電容範例及其原生觀察結果。目前 Q3D 輸入撰寫方式請參閱[以實體為來源的 Q3D 課程](../course/aedt-q3d.qmd)。
+
+## 模型與來源 {#model-and-source}
+
+此範例使用單一方形晶粒，中央為方形焊盤，周圍為 Ground。輸入設定如下：
+
+| 版圖或材料 | 輸入 |
+|---|---|
+| 單一晶粒 | 1000 µm × 1000 µm |
+| 中央焊盤 | 200 µm × 200 µm |
+| 焊盤至 Ground 間距 | 焊盤周圍均為 20 µm |
+| 頂層金屬 | 鋁，厚 0.2 µm |
+| 基板 | 矽，厚 500 µm |
+
+標準公開來源為 OrPen 固定版本 [`51985d9`](https://github.com/OrPenStrike/orpen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9)。其中 [`aedt_q3d.ipynb`](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/aedt_q3d.ipynb) 與[可編輯 QMD](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_q3d.qmd)定義較早的 GDS 匯入工作流程。
+
+![公開 SimplePad 版圖：中央焊盤、周圍 Ground，以及已定義的東側邊緣集總端口定位器。](../assets/simple-pad-layout.png){#fig-simple-pad-layout}
+
+定位器是來源版圖的一部分。以下 Q3D 請求只計算 C/G，不會加入電感支路。將鋁映射至原生 PEC，以及使用開放 Q3D Region，都是此已記錄求解器模型的一部分。模型沒有第二個晶粒、背面金屬、讀出結構或凸塊。此開放 Region 請求不包含外部接地外殼；尺寸與堆疊是模型輸入，不代表實測電容或準確度主張。
+
+## 歷史 Q3D 請求 {#historical-q3d-request}
+
+Notebook 要求以下萃取與自適應控制：
+
+| 設定 | 數值 |
+|---|---:|
+| `EXTRACTION_FREQUENCY_GHZ` | 5.0 |
+| `SOLVE_AC_RL` | `False` |
+| `GROUNDED_REGION_NET` | `None` |
+| `MAXIMUM_PASSES` | 10 |
+| `CONVERGENCE_PERCENT` | 1.0 |
+
+主機請求使用 `AEDT_VERSION = "2024.2"`、`PYAEDT_VERSION = "1.3.0"`，以及 `RESOURCES = AedtResources(cores=4, ram_limit_percent=80)`。原始 Notebook 是取得原始儲存格順序與設定的來源。
+
+## 回報的電容 {#reported-capacitance}
+
+歷史結果報告將 `PAD` 標示為 Signal，將 `GROUND` 標示為 Ground。請依報告中的導體順序讀取 `pad` 列與 `pad` 欄；該項數值為 $C_{\mathrm{pad,pad}}$。
+
+| 計算方式 | 報告項目 | 電容 |
+|---|---|---:|
+| Q3D，v3 之前的 C/G，5 GHz | `pad` 列與 `pad` 欄，$C_{\mathrm{pad,pad}}$ | 87.00027087746 fF |
+| Palace Electrostatic 比較值 | 以 Ground 為參考的焊盤對角項，$C_{11}$ | 95.36383731153 fF |
+
+原生材料讀回記錄的矽相對介電率為 11.9，鋁則以 PEC 表示。Palace 使用自然靜電外部邊界；此 Q3D 請求使用開放 Region。兩個結果分別描述各自的模型與邊界選擇，不代表必須達成數值一致。
+
+參考輸出背景與完整精度資料列見公開的 [SimplePad 證據 README](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/README.md)與[結果 CSV](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/results.csv)。記錄中的 SimplePad 來源為 `24ae5a4`，其元件與 Notebook 位元組和公開 OrPen `51985d9` 相同；SCGSim 來源為 `1.0.1`，修訂版本為 `9c032e3`。
+
+這些數值是文件所述模型的觀察結果，不是新執行的數值目標。較早的 GDS 匯入請求，與目前[Q3D 課程](../course/aedt-q3d.qmd)說明的實體來源輸入不同。

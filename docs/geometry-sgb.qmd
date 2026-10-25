@@ -7,7 +7,9 @@ scgsim-id: "docs/geometry-sgb"
 ---
 
 Learn the source sequence in [shared Xmon inputs](tutorial-xmon-input.qmd) and
-[source observations](course/source-observations.qmd). The [geometry concept](concepts/geometry.qmd) explains the identities; this page owns their exact contract.
+[source observations](course/source-observations.qmd). The
+[SGB geometry concept](concepts/geometry.qmd#source-stage) explains the source,
+planning and construction stages; this page owns their exact contract.
 
 The in-tree `scgsim.geometry` API is SCGSim's current source-geometry
 authority. It consumes structured PDK and component semantics and must not
@@ -273,16 +275,13 @@ occurrences or infer owners from proximity.
 
 The shared geometry interpreter derives the complete central rectangle and
 terminal-owned end metals once, from the source database units and existing
-physical attachment, before planning contacts, interfaces, construction
-catalogues, or surface bands. Palace Route A continues to apply its existing
+physical attachment, before planning contacts, interfaces, and construction
+catalogues. Palace Route A continues to apply its existing
 host-interface, common-plane, and common-volume rules. Palace and AEDT consume
 the same derived source partition; AEDT validates that request rather than
 deriving another rectangle. Palace `add_port(...)` still binds inductance to an
 authored port name and does not choose the physical terminal owners.
 
-Surface-band origins follow the final physical support's exterior and hole
-edges. Joins canceled inside a terminal's combined source-and-end support are
-internal seams, not additional surface intent or distance origins.
 
 | Fact or operation | Accepted contract |
 |---|---|
@@ -325,51 +324,11 @@ solve or returned matrix observation.
 
 Only Route A and Route B are in the current direction.
 
-## Planar surface-distance bands (CONVERGING) {#surface-distance-bands}
+## Historical SGB geometry distance bands (WITHDRAWN) {#surface-distance-bands}
 
-`GeometryPlan.set_surface_distance_bands(...)` requests a geometric partition
-of an exact, unpartitioned planar parent surface. Use
-`surface_distance_band_catalogue(...)` on the route construction plan to read
-the available parent IDs, source-owner bindings, any source-polygon IDs,
-provenance, and original 3D boundary rings before choosing a request. The
-`source_polygon_id` argument and serialized key are required. Use the actual
-polygon ID for a polygon-backed parent. For an entity-only parent with no
-polygon provenance, pass explicit `None`; `source_entity_id` must still name
-an actual parent owner. Never create a substitute polygon ID. These anchors
-identify the parent group; they do not filter other members or rings out of it.
+SCGSim no longer exposes the SGB geometry-level distance-band producer. This section preserves the former design boundary for readers of older material; its `GeometryPlan.set_surface_distance_bands(...)`, `SurfaceDistanceBandSpec`, and Palace aggregation APIs are not current interfaces.
 
-`SurfaceDistanceBandSpec` binds the parent ID and source anchor to ordered
-`distances_um`, the required `precision_um` equal to the plan's shared
-`grid_size_um`, and an optional exact subset of `SourceBoundarySegment` records.
-With cuts at 0.5 µm and 1.0 µm, the resulting bands are 0–0.5 µm, 0.5–1.0 µm,
-and 1.0 µm outward. `boundary_segments=None` uses every original exterior and
-hole edge. An explicit segment identifies its original `ring`,
-`segment_index`, and, for a hole, `hole_index`; generated band seams never
-become new distance origins. For port-split walls, retain the unsplit original
-wall boundary as distance-origin lineage and clip child regions from that
-parent; split seams are not new inset origins. The shared precision sets the
-XY polygon Boolean grid. The optional `chord_error_um: float | None = None`
-field follows `boundary_segments` and independently controls arc and cap
-approximation; `None` retains the previous chord magnitude of
-`precision_um`. Distance partitions remain limited to planar polygon parents;
-this does not add curve-band capability.
-
-Each child retains its parent and source-owner identity, any source-polygon
-provenance, selected source segments, interval, component index, and child
-surface ID.
-The band summary is carried with the construction metadata and copied to the
-mesh manifest and Palace index when present. These records define geometric
-regions; a Surface EPR value must still come from the corresponding solver
-calculation. Distance partitions currently require planar polygon parents;
-active curves and non-planar parents are unsupported.
-
-For offline EPR totals, select the returned parents with Palace's
-`SurfaceBandSelection` and `aggregate_surface_bands(...)`. Each selection names
-the exact parent, interface kind, and recorded field-side label; each cutoff
-must match a declared source-band boundary. Aggregation sums complete
-`distance >= cutoff` bands for one mode, iteration, and normalization. It does
-not create native masks, apply Q2D factors, or change the Palace field
-calculation; see the [Palace surface-band course](course/palace-surface-bands.qmd).
+The withdrawn design partitioned an explicitly selected planar parent surface from its original exterior and hole edges, retained source lineage for each child, and passed those geometric regions into CAD and meshing. Its cumulative EPR aggregation depended on a completed Palace result and did not require Q2D. These historical regions were distinct from native Palace Mask/Inset rows: native Mask/Inset requests remain available through `inset_margins_um` when the selected Palace executable supports them. See the current [Palace Electrostatic contract](specs/palace-electrostatic-sgb.qmd#native-mask-inset) for that path.
 
 ## Internal semantic projection
 
@@ -519,19 +478,6 @@ This setting bounds SCGSim preparation workers; allocate the corresponding
 CPUs through the scheduler separately. Gmsh thread limits and Palace MPI/OpenMP
 settings control their own stages. `preparation_diagnostics(output_dir, profile=False)`
 can record stage timings alongside this scope without selecting parallelism.
-
-`metadata/semantic_geometry/00_timing.json` records band partition and
-synchronization alongside the other planning stages. The complete construction
-plan and layout ledger remain unchanged; build-local reuse covers pure
-conversion and query work, while each invocation retains its audits.
-
-- `partition_surface_distance_bands` and `synchronize_distance_partitions`:
-  separate entries in the planning timings.
-- `sidecar_bytes`: completed sidecar stage names mapped to actual UTF-8 file
-  sizes; excludes `00_timing.json` itself and files whose write failed.
-- Opt-in `preparation_diagnostics` spans
-  `geometry.compiler.sidecar.redaction`, `.json` and `.write`: separate path
-  redaction/conversion, JSON encoding and file writing.
 
 Each source-preparation call also reuses hierarchy extraction for the same
 freshly read GDS cell and excluded-reference list. The cache ends with that

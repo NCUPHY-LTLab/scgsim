@@ -1,0 +1,49 @@
+---
+title: "文件導覽圖"
+description: "了解 SCGSim 各主題的閱讀路徑與 OrcaPen 原始頁面。"
+sidebar: contribution
+---
+
+請從「教學」選擇五種完整計算流程之一。各後端課程頁保留原有網址與定位點，作為細節參考。
+
+## 頁面調整方式 {#page-migration}
+
+| 目前頁面 | 本網站的安排 |
+| --- | --- |
+| `README.md`、`index.qmd`、`docs/course/installation.qmd` | 保留為套件總覽與安裝入口。 |
+| `docs/examples.qmd` | 改寫為依模擬目標選擇流程的入口。 |
+| `docs/course/*.qmd` | 保留各後端與工作細節的原網址，並連結至完整目標教學。 |
+| `docs/tutorials/*.qmd` | 保留五份完整目標教學，並從「教學」及參考索引連結。 |
+| `docs/concepts/*.qmd`、`docs/eigenmode-epr.qmd` | 保留於「概念」。 |
+| `docs/backend-support.qmd`、`docs/specs/*.qmd`、`docs/execution-profiles.qmd`、`docs/mesh-quality.qmd`、`docs/report-model.qmd`、`docs/api-migration.qmd`、`docs/notebook-ux.qmd` | 保留於「契約」，作為支援行為與詳細介面的依據。 |
+| `docs/architecture.qmd`、`docs/goals-and-upstream.qmd`、`docs/provenance.qmd`、`docs/roadmap.qmd`、`docs/errors.qmd`、`docs/convergence-status.qmd`、`docs/ownership.qmd` | 保留原網址，並歸入「貢獻」中的專案與維護參考。 |
+| `docs/history/aedt-capacitance-pre-v3.qmd` | 保留於歷史參考。 |
+| `docs/history/curved-source-installation.qmd` | 保留為 Circular Pad 研究所固定的歷史環境與 Palace 原生設定。 |
+
+## 目標教學版本與 OrcaPen 來源連結 {#goal-versions-and-orcapen-source-links}
+
+每份教學使用 SCGSim `2.0.0rc11`，來源版本為 [`90fb50e`](https://github.com/NCUPHY-LTLab/scgsim/tree/90fb50ef9de80fa6e556d2f2a09fb45707efeea0)。連結的 OrcaPen 來源負責元件或橫截面資料；調整流程時，請使用該教學列出的 SCGSim 固定版本。
+
+| 目標 | SCGSim 完整教學 | OrcaPen 元件或橫截面來源 |
+| --- | --- | --- |
+| 電容 | [焊盤電容](tutorials/capacitance.qmd) | PDK [`51985d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9)：[SimplePad Palace 靜電分析](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/palace_electrostatic.qmd)、[Q3D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_q3d.qmd) |
+| 共振 | [共振模態](tutorials/resonance.qmd) | PDK [`51985d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9)：[SimplePad Palace Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/palace_eigenmode.qmd)、[HFSS Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd) |
+| EPR | [模態能量參與率](tutorials/resonance-epr.qmd) | PDK [`51985d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9)：[SimplePad Palace Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/palace_eigenmode.qmd)、[HFSS Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd) |
+| 散射 | [CPW 散射響應](tutorials/scattering.qmd) | PDK [`35b4dc1`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9)：[HFSS Driven Modal](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/ComponentSimulation/CpwFiniteGround/aedt_hfss_driven_modal.ipynb)、[HFSS Driven Terminal](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/ComponentSimulation/CpwFiniteGround/aedt_hfss_driven_terminal.ipynb) |
+| 傳輸線 | [CPW 單位長度 RLGC](tutorials/transmission-line.qmd) | PDK [`35b4dc1`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9)：[有限接地 CPW Q2D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/CrossSectionSimulation/CpwFiniteGround/aedt_q2d.ipynb) |
+
+教學插圖沿用已發布的來源圖片，或呈現明確宣告的幾何。本次文件更新檢查了來源、API 參照與網站連結，沒有新增原生求解器執行。
+
+## OrcaPen 與 SCGSim 主題對照 {#orcapen-to-scgsim-topics}
+
+OrcaPen 提供元件與製程案例。請從其頁面連至負責通用模型、求解器、網格、交接或結果細節的 SCGSim 主題。跨網站連結應指向所選 OrcaPen 教學指定的 SCGSim 版本。
+
+| OrcaPen 來源頁面 | SCGSim 主題入口 |
+| --- | --- |
+| `docs/notebooks.qmd` | [模擬總覽](examples.qmd)與[主題索引](reference.qmd)。 |
+| `docs/simulation/requirements/electrostatic-capacitance.qmd` | [模型與材料](reference.qmd#model-materials)及[導體與埠](reference.qmd#conductors-ports)。 |
+| `docs/simulation/requirements/eigenmode.qmd`、`docs/simulation/requirements/epr-loss.qmd` | [模型與材料](reference.qmd#model-materials)及[儲存場與離線損耗](reference.qmd#saved-fields-offline-loss)。 |
+| `docs/simulation/tools/mesh-fem-amr.qmd` | [網格與自適應](reference.qmd#mesh-adaptation)。 |
+| `docs/simulation/tools/handoff-resolve-report.qmd` | [執行與交接](reference.qmd#execution-handoff)及[結果與報表](reference.qmd#results-reports)。 |
+
+上表 OrcaPen 連結標示元件來源版本。SCGSim 介面細節請依各目標教學所固定的版本，並閱讀[SCGSim 參考索引](reference.qmd)中的對應主題。

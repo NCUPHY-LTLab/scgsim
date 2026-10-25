@@ -1,0 +1,49 @@
+---
+title: "錯誤紀錄"
+description: "依修訂版本記錄公開診斷觀察，不宣稱因果修復或驗收結果。"
+lang: zh-TW
+scgsim-kind: "historical"
+scgsim-status: "HISTORICAL"
+scgsim-id: "docs/errors"
+---
+
+本歷史紀錄是次要的貢獻者參考資料，並連結自[維護者入口](https://github.com/OrPenStrike/scgsim/blob/develop/MAINTAINING.md)。若要執行計算，請從[教學](examples.qmd)開始。
+
+本頁記錄公開的一般診斷案例，不將它們轉化為執行階段契約、驗收證據或指定修復方式。
+
+## 索引 {#index}
+
+| 日期 | 案例 | 狀態 | 最早確認的缺陷 |
+|---|---|---|---|
+| 2026-09-15 | [Gmsh 產生的記憶體內網格含零體積四面體](#zero-volume-tetrahedra-in-the-gmsh-generated-in-memory-mesh) | `CONVERGING`／診斷未結案 | 在匯出或 Palace 處理之前，Gmsh 產生的記憶體內網格已含完全共平面的零體積四面體。 |
+
+## Gmsh 產生的記憶體內網格含零體積四面體 {#zero-volume-tetrahedra-in-the-gmsh-generated-in-memory-mesh}
+
+在受控條件下，以相同 XAO 與相同已安裝後端重現，產生的匯出網格與歷史匯出檔位元組完全相同。匯出前檢查已發現相同的完全共平面、零體積四面體存在於 Gmsh 產生的記憶體內網格；重新載入 ASCII 網格後，其元素與連接識別資訊也都保留。因此在此重現案例中，ASCII 序列化不是問題來源。元素數量、座標、屬性、使用者及私有執行資料均刻意省略。
+
+檢查到的公開軟體識別資訊為：SCGSim `1.0.0.dev18`，修訂版本 `a8ff06f5f568ac2bdfdc4f6a1c686cac59b9ab5d`；Palace 來源 `1ea14a84f60f672ffe4ce12dad404bc82896ef11`；Palace 執行檔 SHA-256 `114157cd73ad45f74927d7840f8b72d8b0a306da7a60e3e93abf5e2c5f0c05e5`。Gmsh 版本為 `4.15.2`。這些識別資訊用於追溯來源，不是資格判定條件。
+
+### 已確認與尚未確認的事項 {#what-was-and-was-not-established}
+
+在該 SCGSim 修訂版本中，`src/scgsim/palace/_mesh.py` 的 `_validate_tetrahedral_solution_groups` 會驗證解算體積的所有權、四面體元素類型，以及 3D 元素是否存在；但不會檢查四面體有向體積或元素 Jacobian。原生方向處理可處理負方向，但不會讓零行列式變得有效。Palace `--dry-run` 會檢查設定及參照檔案是否存在，不會檢查已建立的執行階段網格品質。
+
+後續觀察包括處理後網格的極端 $\kappa$ 與 $h$ 指標、字面症狀 `PCG solver did NOT converge`（疊代 1000 次）、之後的 GMRES 失敗或 Arnoldi 進度緩慢，以及異常的表面能量或參與率。這些是相關症狀，不足以證明它們有單一共同成因。特別是，該 PCG 求解是無散度投影，不是 AMR 估算器，也不能證明預條件器故障。`eig.csv` 的 `Error (Abs.)` 是代數本徵對殘差，與 AMR 指標不同。
+
+受檢 CSV 中的表面能量、參與率、$Q$、單位、零邊距基準及邏輯基準去重彼此一致。薄膜替代模型在算術上可能產生大於一的參與率，但極大的數值不足以支持可信的弱微擾 $T_1$ 解讀。這些觀察不構成數值收斂、因果修復或科學結果的主張。
+
+此重現將最早確認的缺陷定位在 Gmsh 產生的記憶體內網格，但沒有確認網格退化的成因。匯出前與重新載入後的座標雜湊及部分浮點摘要會因表示方式不同，因此證據不宣稱所有記憶體內與重新載入後的位元組或場都相同。裂縫位移造成薄元素是另一項假設，必須用完整精度的裂縫前後元素沿革驗證。目前也未證明此缺陷與完整求解器及 Surface-EPR 觀察之間有因果關聯。
+
+### 合成行列式示例 {#synthetic-determinant-illustration}
+
+以下刻意合成的點 $(0,0,0)$、$(1,0,0)$、$(0,1,0)$ 與 $(1,1,0)$ 全部位於同一平面，因此
+
+$$
+V = \frac{\left|\det\!\left[\mathbf{p}_1-\mathbf{p}_0,
+\mathbf{p}_2-\mathbf{p}_0,\mathbf{p}_3-\mathbf{p}_0\right]\right|}{6}=0.
+$$
+
+這是無實際作用的代數示例，與上述證據擁有者的重現案例不同，也不是任何私有求解器或 Surface-EPR 失敗的重現。
+
+### 待續調查 {#remaining-investigation}
+
+證據擁有者曾執行範圍有限的較細邊比較，但尚未證明它是因果修復或已接受的 Surface-EPR 結果。依使用者而異的網格控制、執行結果、檢查或重新啟動程序，均不屬於此公開紀錄。完整精度的裂縫前後元素沿革，以及完整求解器與 Surface-EPR 的因果關係，仍待釐清。此次文件更新未執行網格或求解器實驗、未新增 SCGSim 驗證器，也未指定任何 Gate、調校、刪除或回退方式。

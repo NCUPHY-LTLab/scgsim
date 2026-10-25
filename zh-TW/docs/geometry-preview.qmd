@@ -1,0 +1,89 @@
+---
+title: "無顯示幾何預覽"
+description: "綁定求解器中繼資料的預覽 API、產物身分及明確的不可用模式。"
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/geometry-preview"
+lang: zh-TW
+---
+
+分階段使用方式請見[求解器觀察](course/solver-observations.qmd)。本頁負責預覽綁定與可用性。
+
+::: {.callout-note title="已穩定化的 V1 預覽契約"}
+公開 V1 預覽執行期屬於 Human 已接受的範圍。公開 Palace 與 AEDT 2024.2 無圖形模式預覽已產生，供 Human 視覺審閱。這些觀察保留原始範圍；接受狀態不另外確立數值準確性、已完成穩定化或穩定版交付。
+:::
+
+## 用途與責任 {#purpose-and-ownership}
+
+[SGB 幾何概念](concepts/geometry.qmd#construction-stage) 說明來源如何成為此處檢視的求解器綁定幾何。
+
+SCGSim 對同一個求解器綁定的語意場景提供兩種檢視。內嵌 Notebook 檢視器支援互動旋轉、平移、縮放及重設相機。可重現的無顯示圖集則是可攜、綁定雜湊的審閱產物。兩種介面都不重新定義 PDK 或元件語意、求解器幾何、執行狀態或科學資料。
+
+Palace 預覽透過 `meshio` 讀取 Palace `.msh` 檔案，並以 PyVista 離屏繪製。其依據是網格標記、網格清單及設定／索引映射。AEDT 預覽在無圖形模式使用 PyAEDT 1.3.0：指派及身分來自原生讀回，各原生物件先匯出為 OBJ，再離屏繪製。原始 `.aedt` 來源要求明確的 `aedt_version` 及設計選取。已封存執行來源使用綁定規格中紀錄的版本，不接受版本覆寫。兩條路徑都使用選定的同節點 AEDT 相容性內容及自行擁有的 Desktop 清理生命週期。
+
+Palace 預覽保留高階連接關係及曲面邊界表示。預覽不計算網格品質。獨立的[四面體診斷](mesh-quality.qmd) 僅對儲存的原生 type-4 四節點四面體計算指標；高階元素另行計數並排除，因此只有高階四面體的網格沒有 3D 品質指標。
+
+## 公開介面 {#public-surface}
+
+| 介面 | 契約 |
+|---|---|
+| `inspect_palace_geometry(run_dir)` | 綁定 Palace 執行資料夾及其權威網格中繼資料。 |
+| `inspect_aedt_geometry(source, ...)` | 綁定 AEDT 來源；原始 `.aedt` 要求明確的 `aedt_version` 及設計，已封存執行則使用綁定規格版本。 |
+| `preview.show_materials()` | 繪製可用的材料指派。 |
+| `preview.show_boundaries()` | 繪製可用的邊界指派。 |
+| `preview.show_surface_epr()` | 繪製可用的 Surface-EPR 指派。 |
+| `preview.show_mesh()` | 繪製可用的網格。 |
+| `preview.show_all_previews()` | 依序各呼叫一次 Materials、Boundaries、Surface EPR、Mesh，並回傳 `None`。 |
+| `preview.explore(mode)` | 對 `materials`、`boundaries`、`surface_epr` 或 `mesh` 顯示單一、自足的用戶端 VTK.js 場景。 |
+
+不可用的模式會明確回報。SCGSim 不推論缺少的指派，也不輸出看似成功的空白影像。因此，即使另一個 AEDT 預覽模式有效，AEDT Surface-EPR 與網格預覽仍可能不可用。
+
+## 內嵌 Notebook 檢視器 {#inline-notebook-viewer}
+
+`preview.explore(mode)` 在單一 PyVista 場景上方顯示語意表格。PyVista 的 `jupyter_backend="html"` 將場景幾何序列化至即時 Notebook 輸出，VTK.js 在其中提供旋轉、平移、縮放、座標軸及相機重設控制。因為不涉及 localhost Trame 伺服器或 `/proxy/<port>/` iframe，檢視器可在 VS Code Remote SSH Notebook 使用，不需要 sudo、GPU 裝置權限、連接埠轉送或 Jupyter Server Proxy。
+
+內嵌元件會驗證與可重現繪製器相同的綁定來源雜湊，但不建立 `.html` 附屬檔，也不變更憑證、封存檔、交接身分或模擬狀態。它是即時 Notebook 顯示，不是已儲存或匯出的可攜 HTML 產物。需要連線中的 Notebook 核心及 `scgsim[visualization]` 額外套件。
+
+## 原生無顯示 EGL 環境 {#native-headless-egl-context}
+
+SCGSim 保留既有的 `DISPLAY`、`VTK_DEFAULT_OPENGL_WINDOW` 或 `VTK_DEFAULT_EGL_DEVICE_INDEX` 覆寫值。當 `DISPLAY` 不存在，且 VTK 變數尚未設定時，SCGSim 在建立 PyVista 繪圖器之前選用 `vtkEGLRenderWindow` 及可用的軟體 EGL 裝置。此原生路徑不需要 sudo、GPU 裝置權限、OSMesa、背景 X 伺服器、連接埠轉送或 Jupyter Server Proxy。
+
+EGL 環境只提供無顯示 VTK 繪製；`jupyter_backend="html"` 仍是內嵌檢視器。SCGSim 不啟動 Xvfb 或 Trame，也不建立 `.html` 附屬檔。若沒有合適的 EGL 裝置，繪製會明確失敗，不輸出空白或虛構預覽。EGL 選取成功或失敗，都不變更預覽憑證、封存檔、交接身分或模擬狀態。
+
+## 精選視角與圖集 {#curated-views-and-contact-sheet}
+
+每個可用模式在 `previews/geometry/<mode>/` 下寫入 12 個固定淺色主題視角：
+
+- 六個軸向視角 `+X`、`-X`、`+Y`、`-Y`、`+Z`、`-Z`；
+- 四個對角視角；以及
+- X 中心與 Y 中心的視覺化剖切。
+
+預設單格大小為 1600 × 1200 像素。約 4800 × 4200 像素的圖集，在 4 × 3 視角網格上方放置圖例表格。圖例顯示每個確切語意 ID、顯示標籤、語意角色及物件或實體數量。不同語意 ID 不因標籤或顏色相同而合併。
+
+固定語意配色如下：
+
+| 語意角色 | 顏色 |
+|---|---|
+| Ground 或 PEC | 炭灰色 |
+| Lumped Port | 洋紅色 |
+| MA | 橘色 |
+| MS | 綠色 |
+| SA | 藍色 |
+| MS_MA | 紫色 |
+| 未指派 | 淺灰色 |
+
+其他材料及端子語意 ID 使用由 Matplotlib `tab20` 衍生、可重現的 20 色調色盤。在同一個已繪製模式或場景中，前 20 個不同的其他 ID 會取得不同色項，不是各自以雜湊取模指派。SCGSim 儲存公開的十六進位色值；本契約不要求 Matplotlib 作為執行期依賴。
+
+當場景含有超過 20 個其他 ID 時，顏色可能重複。圖例表格中的確切語意 ID、文字標籤、角色及數量仍是判讀依據；顏色本身不能識別語意物件。映射必須來自權威求解器中繼資料。未知或不明確映射會拒絕處理；名稱、包圍盒、既有顏色及繪製外觀都不是語意推論來源。
+
+## 清單與資料界線 {#manifest-and-evidence-boundary}
+
+`metadata/geometry_preview_manifest.json` 記錄預覽狀態、適用時的選定 AEDT 設計、工具版本、調色盤、有序視角及產生的產物。它對綁定來源、AEDT 憑證中具求解器權威的部分及每個產生的產物計算雜湊。AEDT 執行憑證加入 `geometry_preview` 綁定，包含清單及產物雜湊；此綁定不變更模擬狀態或憑證權威雜湊。原始 `.aedt` 檢查不編輯相鄰的執行憑證。
+
+在 `prepare_handoff()` 之前產生的 Palace 預覽，會自動包含於既有交接封存檔及其成員雜湊中。後來產生的診斷預覽維持為如實記錄的附屬產物，直到之後的封存作業將其納入並計算雜湊，才完成封存綁定。
+
+預覽產物不納入求解器及交接身分。繪製失敗會記錄為預覽失敗或不可用，不變更模擬的執行、完成或科學狀態。
+
+## V1 排除項目 {#v1-exclusions}
+
+V1 不包含 ParaView、Gmsh GUI 工作階段（包含在 Xvfb 下執行 Gmsh）、背景 X 伺服器、可攜互動 HTML、物件篩選器、自訂相機定義、互動剖切或深色繪製主題。上述原生 EGL 環境不增加 Gmsh GUI 或背景 X 伺服器流程。可攜 HTML 仍待 Human 審閱內嵌檢視器後另行決定。

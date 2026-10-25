@@ -1,0 +1,86 @@
+---
+lang: zh-TW
+title: "檢視已準備的後端"
+description: "解讀求解器結果前，先讀取已綁定網格或原生指派。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/solver-observations"
+---
+
+後端準備教學會產生網格／設定，或可攜式 AEDT 交接套件。接著可進一步確認來源摘要無法回答的問題：後端表示法中實際包含哪些幾何與指派？執行時不一定要讀本教學，但若來源宣告與產生的模型似乎不一致，檢視會很有幫助。此流程需要安裝[視覺化 extra](installation.qmd)。
+
+## Palace：檢視即將傳送的網格 {#palace-inspect-the-mesh-that-will-be-transferred}
+
+呼叫 Palace 教學中的 `mesh()` 與 `write_config()` 後，綁定實際執行資料夾。預覽會讀取網格標籤、manifest 與索引對照，不會根據顏色或物件名稱推斷語意指派。
+
+```python
+from scgsim.visualization import inspect_palace_geometry
+
+preview = inspect_palace_geometry(sim.output_dir)
+preview.show_materials()
+preview.show_boundaries()
+preview.show_surface_epr()
+preview.show_mesh()
+```
+
+在 Palace 1.1.0 工作流程中，預覽會保留高階網格連通性與曲線邊界表示。呼叫 `mesh()` 後，`sim.mesh_summary()` 會回傳與網格及 manifest 綁定的分離生成證據。紀錄包含選定控制項與原生元素／區域數量；邊長統計會標示為主角點間的弦長。預覽與摘要描述的是已準備的幾何，不是求解場，也不是曲線元素品質指標。
+
+已解析的 Palace 報告會將可見網格摘要保留為六張卡片：幾何／FEM 階數、原生節點／元素數量、3D 演算法、體積／表面執行緒選項、`HighOrder` 最佳化狀態，以及 ND 拓撲 DOF 估算值。Gmsh 詳細資料與分區表格位於可收合的「物理區域與網格離散化」區段。其邊數及以微米表示的最小／平均／最大長度，是主角點之間唯一的直線弦長，不是曲線弧長。點區域的邊數為零，也沒有長度極值；缺少的歷史觀測仍標示為 `not_recorded`。
+
+若要取得完整分離的控制紀錄，請直接選取請求值與有效值：
+
+```python
+summary = sim.mesh_summary()
+requested = summary["meshing"]["requested"]
+effective = summary["meshing"]["effective"]
+```
+
+摘要也會保留網格／manifest 識別及來源曲線脈絡；已解析結果與報告可透過各自的 `mesh_summary()` 方法提供相同資料。ND 卡片會根據施加邊界條件前、以主角點構成的四面體估算拓撲；它不是原生求解器 DOF 計數。Electrostatic 的 H1 估算不可用；執行緒選項也不是實測的執行緒使用率。
+
+請依已準備來源核對圖例中的確切語意 ID 與數量。不可用模式會明確標示。在 Notebook 中互動檢視時，`preview.explore("materials")` 會顯示已綁定場景，並可旋轉與縮放。固定的 `show_*` 檢視則會寫出可攜式聯絡圖與 manifest。在 `prepare_handoff()` 前產生這些檔案，會將它們納入既有 Palace 封存檔；事後建立的 sidecar 不會追溯納入該封存檔。
+
+網格診斷只回答儲存四面體的較狹義問題：
+
+```python
+quality = sim.check_mesh_quality()
+print(quality.show_summary())
+print(quality.show_worst_elements(metric="kappa_j", limit=10))
+quality.show_elements(metric="volume", limit=10).show()
+```
+
+請區分精確奇異、數值不可用與有限診斷值。厚度很薄但非零的四面體不會被重新標記為完全共平面。排序結果描述此檔案與指標，不會提供科學通過／失敗門檻，也不會修復網格。單位、選取／其餘項目限制與序列化方式由[網格契約](../mesh-quality.qmd)定義。
+
+## AEDT：來源準備與原生準備不同 {#aedt-source-preparation-and-native-preparation-differ}
+
+一般的 `prepare_handoff()` 會寫入檔案，但不會開啟 AEDT，因此無法提供原生 CAD 讀回資料。EPR 流程另提供一種明確的原生準備操作，需在 AEDT 主機上執行：
+
+```bash
+python -m scgsim.aedt.run --handoff metadata/aedt_handoff_metadata.json --execute --prepare-only
+```
+
+請使用交接套件的實際中繼資料路徑（`handoff.metadata_path`），路徑相對於已準備的執行資料夾，如上方命令所示。此操作需要原生執行環境，會建立並驗證 EPR 模型、儲存並釋放 Desktop，並記錄 `native_preparation_only` 與 `solver_invoked=false`。它不是已完成的求解，且會消耗已準備執行資料夾的執行狀態。後續求解請準備**另一個全新的交接套件**；不可假設僅準備收據還能再次當成全新輸入執行。
+
+請檢查已封存的執行資料夾；其綁定規格會提供請求的 AEDT 版本，因此預覽不接受額外的版本覆寫：
+
+```python
+import json
+from pathlib import Path
+from scgsim.aedt import parse_aedt_spec
+from scgsim.visualization import inspect_aedt_geometry
+
+native_run_dir = Path.cwd()  # Start this session in the prepared-only run directory.
+native_spec = parse_aedt_spec(json.loads(
+    (native_run_dir / "aedt_spec.json").read_text(encoding="utf-8")
+))
+receipt = json.loads(
+    (native_run_dir / "metadata/aedt_run_receipt.json").read_text(encoding="utf-8")
+)
+project_path = native_run_dir / receipt["project"]
+preview = inspect_aedt_geometry(native_run_dir)
+preview.show_materials()
+preview.show_boundaries()
+```
+
+上方的 `project_path` 指向實際儲存的 `.aedt` 檔案，供你參照。傳入已封存執行資料夾時，預覽讀回會綁定其紀錄規格並開啟原生 AEDT；Surface-EPR 或網格檢視仍可能不可用。若直接傳入 `project_path`，請同時提供其 design 及明確符合目標 Desktop 的 `aedt_version`。螢幕截圖不能因此成為已完成的執行結果。[預覽契約](../geometry-preview.qmd)說明來源雜湊、manifest 保管與不可用模式。
+
+接著請在主機上[執行全新的交接套件](execute.qmd)，或回到[課程索引](../examples.qmd)選擇其他後端模型。

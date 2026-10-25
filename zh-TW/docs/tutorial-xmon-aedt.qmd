@@ -1,0 +1,168 @@
+---
+title: "公開 Xmon：AEDT Route B 本徵模"
+description: "綁定接面感知的目錄來源，並準備共用來源的 AEDT EPR 請求。"
+lang: zh-TW
+scgsim-kind: "course"
+scgsim-status: "STABILIZED"
+scgsim-id: "docs/tutorial-xmon-aedt"
+execute:
+  enabled: false
+---
+
+請先在同一個 Python 工作階段執行[共用 Xmon 輸入教學](tutorial-xmon-input.qmd)。本頁使用其中不可變的 `snapshot`、`port_name` 與 `coupon`，準備可攜式 HFSS 本徵模交接套件，輸出表面、體積與接面 EPR。Python 輸入準備環境需要 SCGSim `aedt-epr` extra 與相符的公開 OrPen 輸入。此 extra 提供版圖幾何與 PyAEDT 的 Python 相依項目；不會安裝 AEDT 或提供授權。本範例明確選擇 AEDT 2024.2。目標執行主機需要該 AEDT 版本、PyAEDT 1.3.0 與適當授權。請使用[範例](examples.qmd)列出的相符 SCGSim 來源修訂版本。Quarto 不會開啟 AEDT、建立原生幾何或求解此模型。snapshot 保留其來源物理堆疊；本頁為 AEDT 選擇 `modeling="solid"`。Route A／B 描述上游幾何建構方式，不是 AEDT 準備參數。
+
+## 設定表面與接面 EPR {#configure-surface-and-junction-epr}
+
+共用 snapshot 會將已定義的 `D0_TO_D1_GAP` 與產生的外部真空區域分開。AEDT 契約記錄 HFSS 對背景暴露表面採用的預設 Perfect E 政策；Palace 則使用自然 PMC 邊界。這些後端選擇是刻意設定，不會自動轉換。[AEDT 執行環境參考](specs/aedt-runtime.qmd#public-epr-candidate-surface)說明原生 Region 表示方式。此靜態頁面不宣稱已檢查原生 HFSS 幾何。比較結果時，請記下外部邊界、Region 尺寸與後端設定。
+
+### 建立目錄前先綁定接面 {#bind-the-junction-before-building-the-catalogue}
+
+元件註記會識別已定義端口薄片及其主幾何；Notebook 的 `GeometryPlan` 提供最終端點 Nets。請先將該正規化薄片綁定至明確 Nets 與電路值，再建立表面目錄。以下目錄幾何會使用相同的 `junction`；最後準備交接套件前，也會將它加入 `EigenmodeSim`，因此兩次準備採用相同的分區請求。Closed-XY binder 接觸會找出可能的擁有者；準備階段仍會依共用輸出幾何，檢查完整的指定端邊。其共用座標建構、讀回解析、拓撲與搜尋假設，請參閱[分區契約](specs/aedt-runtime.qmd#aedt-automatic-junction-partition)。
+
+公開 Palace 範例以電感 $L=11.78\,\mathrm{nH}$ 模型化端口。此 AEDT 範例將 $C=0$ 設為僅含電感的明確電路模型假設；這不代表實體元件電容為零，也不表示曾量得電容。
+
+```python
+from scgsim.aedt import planar_junction_from_port
+
+junction = planar_junction_from_port(
+    snapshot.geometry_input,
+    port_name=port_name,
+    junction_id="jj",
+    terminal_a_net="Ground",
+    terminal_b_net="xmon_pad",
+    inductance_h=11.78e-9,
+    capacitance_f=0.0,  # Explicit inductive-only modeling assumption.
+)
+```
+
+請使用以相同 snapshot 與接面準備的目錄，建立每個 MA／MS／SA 貢獻。目錄來源識別資訊可以是原始導體多邊形、接面分區識別資訊，或 SA 拓撲表面 ID，不一定是原始 snapshot 中的多邊形。請保留各貢獻的場側與來源識別資訊；不要只因 SA 列的來源 ID 以 `SURF__SA__` 開頭就丟棄。
+
+對此固定版本的 Xmon 範例，選取目錄保留的第一個來源 ID，即可綁定每個要求的貢獻，包括 SA 拓撲列。這是受修訂版本限制的樣本選擇，不是適用所有元件的規則。其他研究應檢查完整資料列，並依契約選取該貢獻保留的來源識別資訊。薄膜厚度、介電率、損耗與來源來自 OrPen 合成的 `LiteratureCentral` 預設值；遮罩／內縮邊距則是相對於另行保留的未遮罩基準值所做的替代評估。
+
+```python
+from orpen_sc_pdk.materials import validate_interface_preset_records
+from scgsim.aedt import SurfaceEprSpec, prepare_planar_geometry_input
+
+prepared = prepare_planar_geometry_input(
+    snapshot.geometry_input,
+    prepared_stack=snapshot.stack,
+    modeling="solid",
+    junctions=(junction,),
+)
+catalogue = prepared.contribution_catalog
+presets = validate_interface_preset_records()
+margins_um = (0.01, 0.05, 0.1)
+surface_specs = []
+
+for record in catalogue:
+    kind = record["interface_kind"]
+    if kind not in {"MA", "MS", "SA"}:
+        continue
+    preset_name = f"LiteratureCentral_{kind}"
+    preset = presets[preset_name]
+    if preset["interface_type"] != kind:
+        raise ValueError(f"{preset_name} is not a {kind} preset")
+    source_polygon_id = record["source_polygon_ids"][0]
+    surface_specs.append(
+        SurfaceEprSpec(
+            contribution_id=record["contribution_id"],
+            source_polygon_id=source_polygon_id,
+            interface_kind=kind,
+            field_side=record["field_side"],
+            margins_um=margins_um,
+            film_thickness_m=preset["thickness"] * 1e-6,
+            film_relative_permittivity=preset["permittivity"],
+            loss_tangent=preset["loss_tangent"],
+            source=preset["source"],
+            preset=preset_name,
+        )
+    )
+
+print([(row["interface_kind"], row["field_side"], row["source_polygon_ids"])
+       for row in catalogue])
+```
+
+## 選取回報資料列並準備交接 {#select-reported-rows-and-prepare-a-handoff}
+
+以下選擇會要求模態 1、目錄衍生的所有表面貢獻、已宣告接面，以及已設定的體積區域。可用的體積 ID 來自已準備的解算記錄，並會以單一原生 `Region` 選擇器取代邏輯上的外部真空片段。此固定 Xmon 保留 `D0_SUBSTRATE`、`D0_TO_D1_GAP`、`D1_SUBSTRATE` 與 `Region`；取代外部區域不會刪除已定義的晶粒間隙。對 AEDT 請求而言，`None` 會選取所有已設定項目，`()` 不選取任何項目，而明確 tuple 會選取指定 ID。這些選擇只篩選回報資料列，不會移除物理區域、接面或表面模型，也不會改變正規化。請參閱 [EPR 物理量與選擇契約](eigenmode-epr.qmd#workflow-and-state-contract)。
+
+請提供目標 AEDT 主機或工作配置允許的資源。以下環境變數名稱由呼叫端管理，不是 SCGSim 預設值；`AedtResources` 會將選定的核心數與 RAM 限制百分比記錄在交接套件中。
+
+```python
+import os
+from pathlib import Path
+
+from scgsim.aedt import (
+    AedtResources,
+    EprAnalysisRequest,
+    EigenmodeRunControl,
+    EigenmodeSim,
+)
+
+aedt_run_dir = Path.cwd() / ".artifacts" / "public-xmon-aedt-route-b"
+aedt_resources = AedtResources(
+    cores=int(os.environ["SCGSIM_AEDT_CORES"]),
+    ram_limit_percent=int(os.environ["SCGSIM_AEDT_RAM_LIMIT_PERCENT"]),
+)
+bulk_ids = {row["semantic_id"] for row in prepared.source["solution_regions"]}
+native_region = prepared.source.get("native_region")
+if native_region is not None:
+    bulk_ids.difference_update(native_region["logical_vacuum_ids"])
+    bulk_ids.add("Region")
+bulk_domain_ids = tuple(sorted(bulk_ids))
+print(bulk_domain_ids)
+
+AEDT_VERSION = "2024.2"  # This example explicitly selects AEDT 2024.2.
+sim = EigenmodeSim(modeling="solid", aedt_version=AEDT_VERSION)
+sim.set_plan(snapshot)
+sim.set_output_dir(aedt_run_dir)
+sim.set_eigenmode(
+    project_name="public_xmon_route_b_eigenmode",
+    design_name="Xmon",
+    run_control=EigenmodeRunControl(
+        setup_name="Setup1",
+        minimum_frequency_ghz=3.0,
+        num_modes=1,
+        maximum_passes=20,
+        maximum_delta_frequency_percent=0.1,
+        minimum_passes=1,
+        minimum_converged_passes=1,
+    ),
+    resources=aedt_resources,
+)
+sim.set_surface_epr(contributions=surface_specs)
+sim.add_junction(junction)
+sim.set_epr_request(
+    EprAnalysisRequest(
+        mode_indices=(1,),
+        surface_contribution_ids=tuple(
+            item.contribution_id for item in surface_specs
+        ),
+        junction_ids=(junction.junction_id,),
+        bulk_domain_ids=bulk_domain_ids,
+    )
+)
+```
+
+建立網格或交接套件前，先檢查正規化來源與已設定的 AEDT 選項：
+
+```python
+from IPython.display import display
+
+display(sim.input_summary())
+```
+
+此摘要是在求解前檢視目前輸入，不會開啟 AEDT，也不代表已建立原生幾何。
+
+```python
+handoff = sim.prepare_handoff()
+print(handoff.run_dir, handoff.script_path, handoff.archive_path)
+```
+
+執行控制設定的是呼叫端要求的原生搜尋與停止條件。求解前無法據此確認研究是否充分。請在 Notebook 中，將實際準則及其變更與回傳的原生狀態及物理量歷程並列保留，再依[研究判讀流程](course/returned-results.qmd#interpret-for-scq-use)說明這些證據是否回答預定的 SCQ 問題。每次準備都使用新的輸出目錄；若路徑已存在，SCGSim 會拒絕。`prepare_handoff()` 會寫出可攜式套件，但不會開啟 AEDT、建立原生幾何或執行求解器。
+
+## 執行、解析並繼續分析 {#execute-resolve-and-continue-the-analysis}
+
+請在 AEDT 主機明確[執行完整套件](course/execute.qmd)，接著[重新啟動並解析回傳資料](course/returned-results.qmd)。報告會先讀取封存的識別資訊、數值／歷程與基準證據，再呈現物理結果。對本研究選取的模態與表面貢獻，除頻率外也請檢視參與率及其變化；只依頻率停止，不能說明另一項 EPR 物理量是否足夠。請將記錄的準則與原生狀態做為證據，不要將其轉化為通用驗收規則。此處的準備只會建立 Python 來源／目錄／請求記錄，不會建立原生 CAD，也不會確認計算器的場側準確度。
+
+自適應歷程與最終儲存場評估分開。使用[儲存場分析課程](course/aedt-saved-fields.qmd)，驗證已釋出的 cohort，並在原生工作複本中以相符的幾何／請求評估場，無須再次求解。完成後，才將最終的 `epr-result.json` 用於[離線 EPR](course/offline-epr.qmd)。新評估的遮罩／內縮邊距不會插入舊的自適應曲線。確切原生綁定、內縮建構與歷史收據規則，請參閱 [AEDT 契約](specs/aedt-runtime.qmd)。

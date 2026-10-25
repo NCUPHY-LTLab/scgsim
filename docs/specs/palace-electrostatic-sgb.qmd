@@ -127,7 +127,7 @@ Select `gmsh_default` to use Gmsh 4.15.2's native size selection. SCGSim does
 not add mesh-size fields or callbacks. It leaves Gmsh's native minimum,
 maximum, factor, point, curvature and boundary sizing options untouched, and
 does not apply SCGSim's size overrides. The policy leaves the geometry,
-physical groups, Josephson junctions and surface bands intact. Mesh sizing
+physical groups, junctions or Surface EPR requests. Mesh sizing
 remains separate from the 3D meshing algorithm and Palace FEM or AMR controls;
 choosing this policy does not promise fewer elements.
 
@@ -165,19 +165,17 @@ H1 estimate is unavailable. The existing linear-tetrahedron
 [mesh-quality reader](../mesh-quality.qmd) does not calculate curved-element
 quality.
 
-## Historical native multi-margin Surface EPR
+## Native Mask/Inset and withdrawn geometry bands {#native-mask-inset}
 
-Previously saved Palace results with native mask margins remain available to
-the offline readers. The current producer rejects a non-empty
-`inset_margins_um`; it does not generate new native mask-margin results.
+Palace native Mask/Inset margins remain available through `inset_margins_um`; omit the field for an unmasked baseline. A non-empty request requires a Palace executable that supports the native Mask/Inset configuration. These margins do not modify SGB source geometry.
 
-For new Palace surface-distance analysis, declare source-bound bands through
-the [GeometryPlan contract](../geometry-sgb.qmd#surface-distance-bands), then
-use the [Palace Eigenmode band workflow](../course/palace-surface-bands.qmd).
-This path aggregates returned Palace contributions and does not depend on a
-Q2D calculation. It does not reinterpret archived mask-margin rows as bands.
+The separate SGB geometry-level distance-band producer has been withdrawn. Older pages describing `GeometryPlan.set_surface_distance_bands(...)` are historical references and do not describe a current producer. Native Mask/Inset rows must not be interpreted as disjoint geometry bands.
 
 ## Source and geometry authority
+
+Read the [SGB geometry concept](../concepts/geometry.qmd#source-stage) for the
+source-to-construction explanation. The contracts below define the supported
+preparation paths.
 
 Prefer `set_plan(snapshot)` for the shared source-first course. The standalone
 `set_geometry(component)` / `set_stack(stack)` / explicit envelope APIs remain

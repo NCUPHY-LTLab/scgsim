@@ -1,0 +1,43 @@
+---
+title: "選擇模擬流程"
+description: "依照要計算的物理量，選擇一份完整的 SCGSim 筆記本。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/examples"
+---
+
+SCGSim 會準備幾何與求解器請求，再解析附有單位與模型識別資訊的回傳結果。請依所需物理量選擇筆記本；其中的後端分頁涵蓋從來源輸入到結果讀取的完整流程。
+
+## 選擇模擬目標 {#getting-started}
+
+| 目標 | 筆記本 | 結果 |
+|---|---|---|
+| 電容 | [Palace Electrostatic 或 AEDT Q3D](tutorials/capacitance.qmd) | 具標籤的導體電容矩陣 |
+| 共振模態 | [Palace 或 HFSS Eigenmode](tutorials/resonance.qmd) | 模態頻率與回傳模態報表 |
+| 能量參與率 | [Palace 或 HFSS EPR](tutorials/resonance-epr.qmd) | 依模態整理的表面、體積與支路參與率 |
+| Driven S 參數 | [HFSS Modal 或 Terminal](tutorials/scattering.qmd) | 使用所選埠類型的雙埠響應 |
+| 傳輸線參數 | [AEDT Q2D](tutorials/transmission-line.qmd) | 單位長度 C、G、L 與 R 矩陣 |
+
+## 準備模型並讀取回傳結果
+
+從[安裝](course/installation.qmd)開始，再依物理問題選擇明確的幾何、材料、導體與埠。[模型與材料參考](reference.qmd#model-materials)及[導體與埠參考](reference.qmd#conductors-ports)說明這些選擇。請使用[回傳結果教學](course/returned-results.qmd)，一併保留回傳量、單位、模態或導體識別資訊及求解器狀態。
+
+## 探索較大型範例 {#public-inputs}
+
+較深入的 Xmon 與 CPW 來源筆記本固定使用公開 OrPen SC PDK 版本 [`35b4dc1cdd3f921badcac2fe57a98366315ae8d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9)，該版本宣告 OrPen `0.1.0` 與 GDSFactory 9.48.x。請依各範例指定的來源版本操作。
+
+| 公開筆記本群組 | 用途 |
+|---|---|
+| [Kosen2024_Xmon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Electrostatic／Eigenmode 與以來源為起點的 Xmon 研究 |
+| [ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/CpwFiniteGround) | HFSS Eigenmode／Driven 與歷史 Q3D GDS 輸入來源 |
+| [CrossSectionSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/CrossSectionSimulation/CpwFiniteGround) | Q2D 矩形與導體群組 |
+
+來源尺寸與預設值是範例模型輸入。SCGSim 請求的現行用法請依相關教學與 API 參考操作。
+
+## 繼續閱讀主題參考
+
+- 準備後端前，先[檢查來源與幾何](course/source-observations.qmd)。
+- 請在請求與預期模型不同時[檢查準備後的輸入](course/solver-observations.qmd)。
+- 在指定求解主機上[準備並執行可攜式交接](course/execute.qmd)。
+- 請在已記錄的 EPR 資料上[讀取 AEDT 儲存場](course/aedt-saved-fields.qmd)或[離線更新損耗假設](course/offline-epr.qmd)。
+- 深入來源綁定時，請參閱 [Xmon 輸入](tutorial-xmon-input.qmd)、[Palace EPR](tutorial-xmon-palace.qmd)及 [HFSS EPR](tutorial-xmon-aedt.qmd)範例。

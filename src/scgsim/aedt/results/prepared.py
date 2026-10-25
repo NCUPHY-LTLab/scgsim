@@ -24,6 +24,8 @@ from scgsim.aedt.results.resolve import (
     _validate_hfss_setup,
     _validate_lumped_readback,
     _validate_modal_native_evidence,
+    _validate_q2d_model_readback,
+    _validate_q2d_setup,
     _validate_q3d_model_readback,
     _validate_q3d_setup,
     _validate_terminal_native_evidence,
@@ -36,6 +38,7 @@ from scgsim.aedt.specs.hfss import (
     HfssEprSpec,
 )
 from scgsim.aedt.specs.parse import parse_aedt_spec
+from scgsim.aedt.specs.q2d import Q2dSpec
 from scgsim.aedt.specs.q3d import Q3dSpec
 
 
@@ -100,6 +103,7 @@ def resolve_prepared_model(source: str | Path) -> PreparedModel:
     if not isinstance(
         spec,
         (
+            Q2dSpec,
             Q3dSpec,
             HfssEprSpec,
             HfssDrivenGeometrySpec,
@@ -138,6 +142,8 @@ def resolve_prepared_model(source: str | Path) -> PreparedModel:
             raise RuntimeError("model-only receipt must declare no authored setup")
     elif isinstance(spec, Q3dSpec):
         _validate_q3d_setup(receipt, spec)
+    elif isinstance(spec, Q2dSpec):
+        _validate_q2d_setup(receipt, spec)
     else:
         _validate_hfss_setup(receipt, spec)
     if isinstance(spec, (HfssEprSpec, HfssDrivenGeometrySpec)):
@@ -167,6 +173,10 @@ def resolve_prepared_model(source: str | Path) -> PreparedModel:
             raise RuntimeError("Q3D prepared source must not contain an imported GDS")
         validate_geometry_source(root, source_binding, spec)
         _validate_q3d_model_readback(root, receipt, spec, prepared=True)
+    elif isinstance(spec, Q2dSpec):
+        if set(source_binding) != {"spec", "spec_sha256"}:
+            raise RuntimeError("Q2D prepared source must not contain an imported GDS")
+        _validate_q2d_model_readback(receipt, spec, prepared=True)
     else:
         if source_binding.get("gds") != "geometry/design.gds":
             raise RuntimeError("prepared model imported source path differs")

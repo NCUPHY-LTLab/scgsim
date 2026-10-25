@@ -1,0 +1,90 @@
+---
+lang: zh-TW
+title: "不重新求解即可變更損耗假設"
+description: "離線重新分析已記錄的 EPR 證據，並匯出清楚標示歸屬的圖表。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/offline-epr"
+---
+
+開始前，請備妥經確認的 Palace Eigenmode 回傳資料中分離出的實際 EPR 結果、AEDT 自適應歷程紀錄，或獨立的 AEDT 最終[儲存場分析](aedt-saved-fields.qmd)。本教學會根據已記錄證據變更薄膜／損耗假設；不會改變區塊選擇、不會建立 CAD、不會重新開啟場資料，也不會求解。將參與量解讀為損耗前，請先閱讀 [EPR 概念](../eigenmode-epr.qmd)。
+
+## Palace：分離已確認的最終結果 {#palace-detach-the-verified-final-result}
+
+在[回傳資料教學](returned-results.qmd)中，嚴格解析 Palace Eigenmode 套件後：
+
+```python
+import json
+from pathlib import Path
+
+result = resolved.epr_result()
+epr_path = Path(".artifacts/palace-epr-result.json")
+epr_path.write_text(json.dumps(result.to_payload(), indent=2), encoding="utf-8")
+```
+
+此步驟需要可用的最終 Eigenmode EPR 結果；Electrostatic 回傳資料或不可用的 EPR 結果都不能作為此區塊的輸入。請另外保留分離出的 JSON，以供日後離線讀取；若需再次確認原始原生證據，也要保留完整回傳資料。
+
+稍後在另一個工作階段中，選取該結果實際記錄的模態：
+
+```python
+from scgsim.palace import resolve_epr_result, reanalyze_epr, show_epr
+
+from pathlib import Path
+epr_path = Path(".artifacts/palace-epr-result.json")
+result = resolve_epr_result(epr_path)
+print(sorted({row["mode"] for row in result.rows}))
+mode = 1  # Choose a recorded mode; public Xmon examples request mode 1.
+recorded = show_epr(result, mode=mode)
+updated = reanalyze_epr(
+    result, surface_defaults={"MA": {"loss_tangent": 2.0e-4}}
+)
+changed = show_epr(updated, mode=mode)
+recorded.write_html("palace-epr-recorded.html")
+changed.write_html("palace-epr-updated.html")
+```
+
+`2.0e-4` 是明確的示意建模假設，並非製程量測性質。兩張圖使用相同選定模態與保留的場證據。歸屬／介面標籤及游標提示資料會顯示來源成員與假設。色盤或長條順序無法識別貢獻項目；應以記錄的科學鍵值判讀。
+
+## AEDT：最終場資料與自適應歷程分開處理 {#aedt-final-fields-and-adaptive-history-stay-separate}
+
+從儲存場分析資料夾載入實際最終結果：
+
+```python
+from pathlib import Path
+from scgsim.aedt import resolve_epr_result, reanalyze_epr, show_epr
+
+result = resolve_epr_result(
+    Path(".artifacts/public-xmon-saved-field-analysis/results/epr/epr-result.json")
+)
+print(sorted({row["mode"] for row in result.rows}))
+mode = 1
+recorded = show_epr(result, mode=mode, theme="light")
+updated = reanalyze_epr(
+    result, surface_defaults={"MA": {"loss_tangent": 2.0e-4}}
+)
+changed = show_epr(updated, mode=mode, theme="dark")
+recorded.write_html("aedt-epr-recorded.html")
+changed.write_html("aedt-epr-updated.html")
+```
+
+最終儲存場結果沒有自適應通過次數。若要讀取已記錄的歷程，請改載入其獨立檔案，並明確選取實際回傳的模態／通過次數：
+
+```python
+from scgsim.aedt import plot_epr_result
+history = resolve_epr_result(
+    Path(".artifacts/returned-aedt-epr/results/epr/adaptive-epr-result.json")
+)
+print([(row["mode"], row["native_pass"], row["status"]) for row in history.rows])
+```
+
+從紀錄中選定 `mode` 與 `native_pass` 後，`show_epr(history, mode=mode, native_pass=native_pass)` 會顯示該確切快照，而 `plot_epr_result(history, mode=mode, native_pass=native_pass, show_convergence=True)` 會呈現其記錄歷程。即使頻率可讀取，缺漏的 EPR 值仍應保持為空缺。不要選擇較早的完整通過紀錄並將其標示為最終結果。新評估的邊界距離屬於最終儲存場分析，不屬於歷史曲線。
+
+## 依預期用途讀取 EPR 歷程 {#read-epr-history-for-the-intended-use}
+
+解讀損耗更新前，先確認研究所需的模態、歸屬／介面，以及基線或指定邊界距離的數值。請將參與量歷程及其變化與對應頻率歷程一併檢視；兩者不能互相替代。保留實際準則與原生狀態，不要只因收斂旗標就將某個快照判定為足夠。Notebook 中的判斷請依照[研究解讀流程](returned-results.qmd#interpret-for-scq-use)。離線假設變更會沿用相同場證據，無法補足尚未解析或不可用的參與量歷程。
+
+## 解讀假設變更 {#interpret-an-assumption-change}
+
+重新分析時依序套用已記錄假設、介面預設值，再套用精確群組覆寫。省略欄位會保留原值；`loss_tangent=None` 明確表示損耗未知，`0.0` 則表示已知為零。未知群組 ID 會導致失敗，不會遭到忽略。重新分析無法修補缺漏場資料，也無法還原未計算的側壁。
+
+Surface、bulk 與 port／junction 分區仍各自獨立。不同的內縮邊界距離是分開評估，不是可相加的邊緣帶；未遮罩基線也要分開保留，包括明確要求的零距離。已知基線的反 Q 小計不包含未知損耗與未計算通道；它不是元件總 Q 或 T1。[報告契約](../report-model.qmd)定義可見範圍與排序；[EPR 概念](../eigenmode-epr.qmd)定義正規化與假設。選擇下一個物理模型時，請回到[課程索引](../examples.qmd)。

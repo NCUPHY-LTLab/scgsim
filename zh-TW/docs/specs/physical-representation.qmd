@@ -1,0 +1,92 @@
+---
+title: "共用物理表示"
+description: "來源物理宣告，以及供求解器準備使用的單一選定近似設定解讀。"
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/specs/physical-representation"
+lang: zh-TW
+---
+
+物理分類由來源作者負責。選定的來源輸入使用單一 LayerStack 組裝座標系，每個實體薄膜具有一個物理層身分，並由其 Entity、多邊形及子出現實例共同使用。放置轉換在近似設定解讀之前只套用一次。獨立堆疊座標系需要明確的來源關聯，不在本契約範圍內。
+
+物理宣告區分堆疊薄膜、局部薄膜及有限體積。原始材料、薄膜法向厚度、附著面、來源區間、Entity 身分、多邊形孔洞及實際本體端點都保留為來源事實。有限體積的名義層區間不能取代個別本體的區間。TSV 壁的徑向厚度與軸向跨度不同。非金屬支撐定位點不會成為導體薄膜。
+
+單一中性的物理表示計畫負責選定的近似設定、來源至有效座標的追蹤、各本體表示、支撐投影及完整包絡映射。Palace 與 AEDT 使用此計畫；後端建構、最終 Net、埠、接面、RLC 處理及數值控制仍各有其負責者。Net、角色、材料名稱及本體大小都不能補足缺少的物理分類。
+
+`solid`、`thin_film`、`substrate_face`、`metal_gap_equivalent` 與 `route_b` 都是明確的近似設定，彼此不是別名。堆疊薄膜移除對每個物理身分只發生一次。局部薄膜的薄片投影使用來源指定的附著面，不會從無關區間扣除厚度。保留的體積映射其實際端點。完整的要求來源包絡只映射一次，後端不會對已縮短的本體再次套用來源留白。
+
+實際接觸及宿主關聯維持為綁定來源的紀錄。缺少合格關聯時就保留缺項，不阻擋獨立的物理轉換。需要該關聯的使用端應回報具體限制，不依距離、名稱或 Net 成員資格猜測。來源接觸法向不能確立 HFSS 計算器 Surface／Adjacent 的場側語意或原生電氣連續性。
+
+歷史要求、來源雜湊、執行期清單及已封存的同批產物保留其紀錄的解讀方式，不能成為新物理來源準備的第二個權威。現行範圍仍為 CONVERGING；來源準備及離線追蹤不代表已完成原生建構、收斂或數值準確性驗證。
+
+## 型別化來源載體與計畫 {#typed-source-carrier-and-plan}
+
+來源作者的 `LayerLevel.info["physical_layer"]` 存放序列化的中性宣告。加入此載體時，保留所有原始 Level 引數及既有 info；不將求解器目標材料寫入其中。
+
+```python
+from gdsfactory.technology import LayerLevel
+from scgsim.geometry.models.physical import (
+    ApproximationProfile, PhysicalLayerDeclaration, PhysicalRepresentationPlan,
+)
+from scgsim.geometry.planning.physical import interpret_physical_geometry
+
+declaration = PhysicalLayerDeclaration.from_payload(authored_declaration)
+level = LayerLevel(
+    **authored_level_arguments,  # existing source arguments, excluding info
+    info={**authored_level_info, "physical_layer": declaration.to_payload()},
+)
+profile = ApproximationProfile("thin_film", "v1", {})
+effective_input, effective_stack, plan = interpret_physical_geometry(
+    normalized_source_input, source_stack, profile,
+)
+recorded_plan = plan.to_payload()
+read_plan = PhysicalRepresentationPlan.from_payload(recorded_plan)
+body = read_plan.map_body(
+    declared_physical_layer_id, actual_source_interval_um, original_source_geometry,
+)
+```
+
+`PhysicalLayerDeclaration` 具有下列確切欄位：
+
+- `physical_layer_id`、`source_level_id`、`source_level_and_gds_pair` 及 `source_interval_um`：來源身分、選取器關聯及名義跨度。
+- `material_id` 與 `feature_kind`：原始材料，以及 `stack_film`、`local_film` 或 `finite_volume` 分類。
+- `physical_dimensions`：來源薄膜法向厚度或有限體積事實；徑向壁厚與軸向跨度維持區別。
+- `source_contact_facts`：來源指定的附著面及可用的來源法向。
+- `actual_entity_contact_graph`：既有的來源接觸圖；無法取得時為 `None`。製程連通性描述不是合格的放置後平面範圍或接觸證明。
+
+此計畫使用結構版本 `scgsim.geometry.physical-representation.v1`。其帶標記的酬載記錄明確近似設定、來源身分、宣告、壓縮區間、薄片錨點、各 Entity 事實及完整包絡追蹤。`context` 將這些事實投影供共用規劃使用；`map_body()`、`project_support_point()` 與 `project_enclosure()` 提供使用端投影，不另設第二個近似設定解讀器。
+
+宣告的原始 `material_id` 保留為來源身分。原生 AEDT PEC 材料或 Perfect E／ThinConductor 指派屬於後端實現與另外觀察的資料，永遠不取代來源身分。
+
+## 選定宣告與來源關聯 {#selected-declarations-and-source-incidence}
+
+宣告目錄不等於選定模型。只使用選定來源明確綁定的物理層；未使用的目錄薄膜不會產生壓縮事件。選定的橋接組裝目前提供合格的 M1 至基板、立柱至 Ground，以及橋面至立柱來源關聯。保留這些來源紀錄及其合格的本體／出現實例歸屬。它們建立的是來源關聯，不是原生連續性或 HFSS 計算器場側證明。一般橋接／凸塊關聯若未由來源指定，仍維持不可用；不虛構缺少的紀錄，也不將其變成獨立物理轉換的先決條件。TSV 求解控制由另外的 Human 指定權限選定；本物理來源契約不授權原生工作。
+
+## 候選版本遷移 {#candidate-migration}
+
+新的物理來源準備使用中性 `PhysicalLayerDeclaration` 紀錄及明確的 `ApproximationProfile`。新的 `aedt_modeling` 中繼資料及由角色推導的路徑分類不是轉接器。既有 `PhysicalLayerSpec` 紀錄僅供綁定版本的歷史讀取器保留原始序列化及座標意義；新物理來源執行若要使用它們，必須先換成中性宣告。沒有層宣告的明確 Solid 本體，透過共用恆等映射計畫保留有限來源幾何，不產生新的物理 ID。
+
+選定計畫的帶標記酬載是目前準備好的物理追蹤。歷史上未帶標記的追蹤依原契約保持可讀，並保留原始雜湊；它們不授權新執行。
+
+## Palace 呼叫端近似設定 {#palace-caller-profile}
+
+`ElectrostaticSim` 與 `EigenmodeSim` 接受型別化的 `approximation_profile` 建構子欄位。`set_surface_epr()` 接受同名關鍵字；提供時取代選定的近似設定，省略時保留建構子選定的設定。來源授權的綁定指出實際正規化支撐 Entity 及其 `lower` 或 `upper` 面，不從層名稱、角色或相同 Z 值重建。
+
+```python
+from scgsim.geometry.models.physical import ApproximationProfile
+
+profile = ApproximationProfile(
+    name="substrate_face",
+    revision="v1",
+    parameters={"film_bindings": authored_film_bindings},
+)
+sim.set_surface_epr(
+    representation="A",
+    specs=authored_surface_specs,
+    approximation_profile=profile,
+)
+```
+
+每個 `authored_film_bindings` 項目以宣告的物理層 ID 為索引，且恰好包含 `supporting_entity_id` 與 `supporting_side`。`metal_gap_equivalent` 需要兩個明確綁定且相對的薄膜。缺少綁定時，準備階段會在原生工作之前失敗，並提供替代呼叫形式。舊的 `route_a_thin_film` 字串可揭露或檢查選定名稱，但不負責指定綁定或座標運算。既有 Route B 選取若未提供明確近似設定，使用共用恆等映射 `route_b`。低階的新 `build_route_mesh()` 要求準備階段產生的有效正規化輸入及表示內容。
+
+未版本化的語意匯出 `apply_thin_film_profile`、`derive_thin_film_facts` 與 `normalize_optional_profile` 已在此候選版本退役。請搭配 `interpret_physical_layers()` 或 `interpret_physical_geometry()` 使用中性宣告；原始固定版本來源及凍結的歷史產物保留原始程式與酬載身分。

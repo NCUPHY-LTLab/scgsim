@@ -1,0 +1,43 @@
+---
+title: "SCGSim 參考索引"
+description: "找到所需的模型、網格、交接與結果主題。"
+sidebar: contract
+---
+
+使用本索引在概念、支援行為與詳細契約之間移動。各連結頁仍是其主題定義的依據。
+
+## 完整目標教學 {#goal-tutorials}
+
+依計算目標選擇一套完整閱讀流程：
+
+| 計算目標 | 教學 |
+| --- | --- |
+| 終端電容 | [萃取焊盤電容](tutorials/capacitance.qmd) |
+| 共振模態 | [尋找共振模態](tutorials/resonance.qmd) |
+| 模態能量參與率 | [讀取模態能量參與率](tutorials/resonance-epr.qmd) |
+| Driven CPW 散射響應 | [萃取 CPW 散射響應](tutorials/scattering.qmd) |
+| CPW 單位長度 RLGC | [萃取 CPW 傳輸線參數](tutorials/transmission-line.qmd) |
+
+## 模型與材料 {#model-materials}
+
+先閱讀[物理問題](concepts/problems.qmd)與[模型假設](concepts/model-and-numerics.qmd#define-the-physical-model)。[物理表示契約](specs/physical-representation.qmd#typed-source-carrier-and-plan)說明來源宣告如何進入後端準備流程。
+
+## 導體與埠 {#conductors-ports}
+
+閱讀[實體、出現項與電氣集合](concepts/geometry.qmd#entity-occurrence-and-net)，以及[Driven 響應概念](concepts/problems.qmd#driven-response-excite-a-port-at-a-frequency)。[模型準備教學](course/working-model.qmd)示範如何將這些選擇帶入指定案例；[CPW 散射教學](tutorials/scattering.qmd#configure-port-models)則比較 Modal 與 Wave Terminal 宣告。
+
+## 網格與自適應 {#mesh-adaptation}
+
+[網格診斷契約](mesh-quality.qmd#input-and-ownership)定義儲存網格讀取器測量的內容。[後端準備教學](course/solver-observations.qmd)示範執行前如何檢視網格與原生模型準備結果。
+
+## 執行與交接 {#execution-handoff}
+
+使用[執行設定檔契約](execution-profiles.qmd#handoff-lifecycle)了解可攜式交接與由呼叫端控制的求解器執行，再依照[交接教學](course/execute.qmd)操作。
+
+## 結果與報表 {#results-reports}
+
+[報表契約](report-model.qmd#common-envelope)說明結果識別、可用性與呈現方式。[回收結果教學](course/returned-results.qmd#interpret-for-scq-use)示範如何依預定用途讀取完整套件。
+
+## 儲存場與離線損耗 {#saved-fields-offline-loss}
+
+使用[儲存場教學](course/aedt-saved-fields.qmd#recover-the-exact-prepared-model)評估原生場，並使用[離線 EPR 教學](course/offline-epr.qmd#interpret-an-assumption-change)變更已記錄結果所採用的假設。

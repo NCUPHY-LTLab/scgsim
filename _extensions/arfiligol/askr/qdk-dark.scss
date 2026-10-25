@@ -1,22 +1,43 @@
 /* Dark values intentionally live beside the light token authority for native Quarto switching. */
 /*-- scss:defaults --*/
-$body-bg: #161618;
-$body-color: #d4d4d4;
-$link-color: #7b97aa;
-$navbar-bg: #161618;
-$navbar-fg: #ebebec;
-$navbar-hl: #7b97aa;
-$sidebar-bg: #161618;
-$sidebar-fg: #d4d4d4;
-$sidebar-hl: #7b97aa;
-$toc-color: #646464;
-$border-color: #393639;
-$headings-color: #ebebec;
-$table-border-color: #393639;
-$table-striped-bg: rgba(143, 159, 169, .15);
-$code-color: #ebebec;
-$code-block-bg: #1f1f22;
-$pre-color: #ebebec;
+$body-bg: #161618 !default;
+$body-color: #d4d4d4 !default;
+$link-color: #7b97aa !default;
+$navbar-bg: #161618 !default;
+$navbar-fg: #ebebec !default;
+$navbar-hl: #7b97aa !default;
+$sidebar-bg: #161618 !default;
+$sidebar-fg: #d4d4d4 !default;
+$sidebar-hl: #7b97aa !default;
+$toc-color: #646464 !default;
+$qdk-muted-text: #a0a0a0 !default;
+$qdk-muted-decoration: #646464 !default;
+$qdk-tertiary: #8fb7a8 !default;
+$qdk-border: #393639 !default;
+$callout-color-important: #c69af0 !default;
+$callout-color-caution: #ff8f8f !default;
+$border-color: #393639 !default;
+$headings-color: #ebebec !default;
+$table-border-color: #393639 !default;
+$table-striped-bg: rgba(143, 159, 169, .15) !default;
+$code-color: #ebebec !default;
+$code-block-bg: #1f1f22 !default;
+$pre-color: #ebebec !default;
+
+$qdk-divider-content: rgba(212, 212, 212, .24) !default;
+$qdk-divider-layout: rgba(212, 212, 212, .10) !default;
+$qdk-mark: #e5c76b33 !default;
+$qdk-code-color: var(--qdk-text) !default;
+
+$mermaid-bg-color: $body-bg !default;
+$mermaid-edge-color: $qdk-muted-decoration !default;
+$mermaid-node-fg-color: $body-color !default;
+$mermaid-fg-color: $body-color !default;
+$mermaid-fg-color--lighter: $qdk-muted-text !default;
+$mermaid-fg-color--lightest: $qdk-muted-decoration !default;
+$mermaid-label-bg-color: $body-bg !default;
+$mermaid-label-fg-color: $body-color !default;
+$mermaid-node-bg-color: $body-bg !default;
 
 /*-- scss:rules --*/
 html { color-scheme: dark; }
@@ -41,18 +62,21 @@ html { color-scheme: dark; }
 }
 
 :root {
-  --qdk-canvas: #161618;
-  --qdk-text: #d4d4d4;
-  --qdk-heading: #ebebec;
-  --qdk-muted: #646464;
-  --qdk-link: #7b97aa;
-  --qdk-tertiary: #84a59d;
-  --qdk-border: #393639;
-  --qdk-divider-content: rgba(212, 212, 212, .24);
-  --qdk-divider-layout: rgba(212, 212, 212, .10);
-  --qdk-highlight: rgba(143, 159, 169, .15);
-  --qdk-mark: #b3aa0288;
-  --qdk-focus: #7b97aa;
+  --qdk-canvas: #{$body-bg};
+  --qdk-text: #{$body-color};
+  --qdk-heading: #{$headings-color};
+  --qdk-muted: #{$qdk-muted-text};
+  --qdk-muted-decoration: #{$qdk-muted-decoration};
+  --qdk-link: #{$link-color};
+  --qdk-tertiary: #{$qdk-tertiary};
+  --qdk-border: #{$qdk-border};
+  --qdk-divider-content: #{$qdk-divider-content};
+  --qdk-divider-layout: #{$qdk-divider-layout};
+  --qdk-highlight: #{$code-bg};
+  --qdk-mark: #{$qdk-mark};
+  --qdk-focus: #{$link-color};
+  --qdk-callout-important: #{$callout-color-important};
+  --qdk-callout-caution: #{$callout-color-caution};
 }
 
 /*
@@ -64,17 +88,17 @@ html { color-scheme: dark; }
 div.sourceCode,
 pre.sourceCode,
 pre:has(code.sourceCode) {
-  background-color: #1f1f22;
+  background-color: var(--qdk-code-background);
   background-image: none;
-  border-color: #393639;
-  color: #d4d4d4;
+  border-color: var(--qdk-code-border);
+  color: var(--qdk-code-color);
 }
 
 div.sourceCode code,
 pre.sourceCode code,
 pre:has(code.sourceCode) code {
   background: transparent;
-  color: #d4d4d4;
+  color: var(--qdk-code-color);
 }
 
 /* The outer Quarto source wrapper owns the one dark frame. */
@@ -91,7 +115,7 @@ pre > code.sourceCode > span,
 code.sourceCode > span,
 div.sourceCode,
 code.sourceCode span {
-  color: #d4d4d4;
+  color: var(--qdk-code-color);
 }
 
 /* Pandoc/Quarto syntax classes: GitHub Dark-like hues, no neon fallback. */
@@ -133,14 +157,14 @@ code.sourceCode span.im {
 
 pre.numberSource,
 code.sourceCode > span > a:first-child {
-  border-color: #393639;
+  border-color: var(--qdk-code-border);
   color: #8b949e;
 }
 
 .code-copy-button {
-  background-color: #1f1f22;
-  border: 1px solid #393639;
-  color: #d4d4d4;
+  background-color: var(--qdk-code-copy-background);
+  border: 1px solid var(--qdk-code-border);
+  color: var(--qdk-code-copy-color);
 }
 
 .code-copy-button > .bi::before {
@@ -151,6 +175,6 @@ code.sourceCode > span > a:first-child {
 .code-copy-button:hover,
 .code-copy-button:focus-visible,
 .code-copy-button-checked {
-  background-color: #393639;
-  color: #e6edf3;
+  background-color: var(--qdk-code-copy-hover-background);
+  color: var(--qdk-code-copy-hover-color);
 }

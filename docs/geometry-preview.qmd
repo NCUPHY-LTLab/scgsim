@@ -18,6 +18,9 @@ or stable-release delivery.
 
 ## Purpose and ownership
 
+The [SGB geometry concept](concepts/geometry.qmd#construction-stage) explains
+how the source becomes the solver-bound geometry inspected here.
+
 SCGSim provides two views of the same solver-bound semantic scene. An inline
 Notebook viewer supports interactive rotation, pan, zoom, and camera reset.
 Deterministic headless contact sheets remain the portable, hash-bound review
