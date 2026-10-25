@@ -2,6 +2,9 @@
 title: "Contribute to SCGSim"
 description: "Set up the SCGSim development environment and find contributor references."
 sidebar: contribution
+scgsim-id: "docs/contributing"
+scgsim-kind: "contribution"
+scgsim-status: "CONVERGING"
 ---
 
 Use this page to prepare a SCGSim source checkout for documentation and package

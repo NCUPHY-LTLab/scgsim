@@ -1,367 +1,225 @@
 ---
-title: 'SGB: from layout sources to shared geometry'
-description: Follow one public example with a hole, two Nets and a rectangular junction
-  through source declarations, physical interpretation, shared topology, surface partitions
-  and CAD/meshing.
+title: "SGB: from layout sources to buildable geometry"
+description: "A worked explanation of how source shapes, process data and assembly declarations become shared CAD geometry for Gmsh and Palace."
 lang: en
 toc-title: On this page
 toc-depth: 3
 resources:
 - ../images/sgb-concept/*.html
 - ../images/sgb-concept/plotly.min.js
-scgsim-kind: concept
-scgsim-status: CONVERGING
-scgsim-id: docs/concepts/geometry
+scgsim-kind: "concept"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/concepts/geometry"
 ---
 
-SGB is SCGSim's semantic geometry construction process: it combines layout shapes, materials, electrical assignments and contact relationships into one geometry that can be built.
-The former surface-distance-band design is retained below as a historical reference.
-Bands are geometric partitions, not an automatic operation on every surface; the original materials, terminals and adjacent volumes must remain consistent after partitioning.
+SGB turns a declared layout and process into geometry that a solver backend can build. The key is to preserve **where each shape came from, what occupies it, which Net owns it, and which regions touch** all the way from the source model to CAD.
 
-This page follows one public example through **source → planning → CAD and meshing**.
-For the formal API and capability boundaries, see the [semantic geometry contract](../geometry-sgb.qmd); for module responsibilities, see [architecture and data flow](../architecture.qmd).
+This page follows one public example with a hole, two Nets, a substrate and vacuum, and an explicitly requested rectangular junction. It explains why each preparation step exists and what it passes to the next step. The worked geometric example stops at CAD construction; it is not a mesh or field-solution result.
 
-::: {.callout-note title="This page focuses on the Gmsh/Palace geometry path"}
-The main path described here builds CAD with Gmsh/OCC, generates a mesh with Gmsh and passes it to Palace.
-AEDT also uses source semantics and physical representations, but builds its project through the native AEDT Modeler; the semantic goals are similar, while construction and execution follow each backend's own contract.
+::: {.callout-note title="Backend focus: Gmsh and Palace"}
+The construction path described here builds CAD with Gmsh/OCC, creates a mesh with Gmsh and supplies it to Palace. AEDT uses the same source meanings where supported, but constructs its project with the native AEDT Modeler; its construction steps therefore differ. See the [physical representation contract](../specs/physical-representation.qmd) and [geometry contract](../geometry-sgb.qmd) for the shared and backend-specific boundaries.
 :::
 
-## Source stage: state the model's facts first {#source-stage}
+## 1. Start with the facts that define the model {#source-stage}
 
-### What shapes, process data and assembly each contribute
+A layout outline answers “where is the drawn shape?” It does not, by itself, answer “what material is here?”, “which electrical terminal owns it?”, or “what volume touches its upper face?” SGB keeps those answers as explicit source facts so later geometry operations do not have to guess from names or proximity.
 
-A user typically selects a component from a component library and creates a layout with GDSFactory.
-The component supplies its local shapes and their purpose: which region is a metal pad, which region supplies a junction, and which functional regions a port refers to. A GDS containing outlines alone cannot supply these meanings.
-These local declarations are reused with the component, rather than inferred from object names after a solver has created them.
+### Three sources contribute different facts
 
-A **PDK (process design kit)** provides components and process information.
-Its materials and layer stack define layer mappings, materials, conductor or solution-region roles, Z positions, thicknesses and the actual supporting bodies.
-An explicit process mapping therefore connects “which layer is drawn” to “which material occupies that location in three dimensions.”
+A component definition, often authored with GDSFactory, supplies **local geometry and local meaning**. Its polygons and holes describe shape; its component annotations identify source regions and functional selectors such as a port sheet. These declarations stay local to the component. The component itself does not decide the final Net of every placed copy. This public fixture starts from normalized source geometry rather than creating a live GDSFactory component in the documentation; it demonstrates the same source boundary that a component frontend prepares.
 
-Here, an **assembly model** means the model a user creates by placing multiple components together and adding declarations that span them.
-Two conductors on the same PDK metal layer can belong to Net A and Net B: the process supplies material and height, while the assembly model separately declares their final electrical assignments.
+A PDK (process design kit) supplies **process meaning**. Its layer stack maps source layers to materials, physical roles, Z intervals and thicknesses, and identifies supporting bodies. This connects a drawn layer to the material that occupies the corresponding place in three dimensions.
 
-The assembly model places the components and declares the final Nets, substrate/vacuum regions, physical representation and requested surface partitions.
-A Net is an electrical collection explicitly declared by the user; geometric contact does not rewrite that assignment.
-A shared Net name also does not replace subsequent checks of actual geometric contact.
+The assembly supplies **placement and model-wide decisions**. It identifies each placed component occurrence, applies its translation and rotation, assigns final Nets, declares substrate and vacuum regions, and selects an approximation profile that turns source films into the geometry used by this solve. It may also include an explicit junction request. These facts can span multiple components and therefore belong at assembly level.
 
-::: {.callout-important title="A short between different Nets stops preparation"}
-Under the current contact rules, recognized coplanar face contact or conductor-volume overlap across different Nets stops preparation with a short-circuit error, preserving the original Net declarations.
-Ordinary degenerate edge/point-only contacts are also rejected; a lateral seam within the same Net and effective film has a specific exception, described in the [semantic geometry contract](../geometry-sgb.qmd).
+| Source | Supplies | Example in this page |
+|---|---|---|
+| Component | Local polygons, holes, source Entity IDs, and functional selectors | A notched left pad, its hole and a source sheet for the junction |
+| PDK | Layer-to-material mapping, physical role, Z interval, thickness and support | A metal film above a Si substrate and surrounded by vacuum |
+| Assembly | Occurrence paths and transforms, final Nets, regions, approximation profile and explicit model requests | `chip/left` on Net A, `chip/right` on Net B, `substrate_face`, and a requested rectangular junction |
 
-If a direct electrical connection is intended, explicitly assign both conductors to the same Net first, then let the contact rules validate the geometry; a shared Net neither skips validation nor guarantees that every contact is acceptable.
-:::
+### Follow one model before looking at its records
 
-::: {#source-grid .callout-important title="Source DBU, shared XY precision and film thickness are different settings"}
-The GDS **database unit (DBU)** sets the coordinate increment the source can represent; when using GDSFactory, set the source DBU before creating components.
-`GeometryPlan` uses the actual emitted DBU when `grid_size_um=None`; an explicitly different value fails rather than changing the component library's global settings.
-The shared grid applies to assembled XY/layer polygons; Z, film thickness and the later finite-element mesh size each have a separate meaning.
-
-Even when source endpoints lie on the grid, computed intersections may not: the segment from $(0,0)$ to $(3,1)$ nm intersects $x=1$ nm at $(1,\frac13)$ nm. Rotation can also produce off-grid coordinates.
-:::
-
-### One model followed throughout the page
-
-The example has two separate metal pieces: the left one has a hole and an upper-right notch, while the right one has no hole. They are assigned to Net A and Net B, respectively.
-A complete rectangular **lumped port** is requested between them, providing a defined surface for a lumped electrical condition between the two terminals.
-The central port is not a metal bridge that merges A and B into one Net; any metal needed to complete a terminal belongs to that terminal's original owner.
-
-This public example starts directly from normalized source geometry input, rather than creating a new GDSFactory component on this page.
-The source, planning and CAD views below all continue from that same input; a component frontend first lowers its input to the same source boundary.
-The example code is in the [rectangular-junction and hole fixture](https://github.com/OrPenStrike/scgsim/blob/2ed85adc/tests/test_rectangular_junction_geometry.py#L230).
-
-Start with the original left metal in @fig-sgb-source. P1–P6 are its six authored exterior corners, and H1–H4 are the hole corners; coordinates are in µm.
+The left metal has six exterior corners, one enclosed hole and a notch that opens to the outside. The right metal is a separate piece. The assembly assigns them to Net A and Net B, places them over a Si substrate, and surrounds the modeled bodies with vacuum. @fig-sgb-source shows the left source polygon; @fig-sgb-source-context places both metals in the same assembly frame.
 
 ::: {#fig-sgb-source .askr-wide-figure}
 ```{=html}
-<iframe src="../images/sgb-concept/en-source-xy.html" title="Original source: six exterior corners and four hole corners of the left metal" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
+<iframe src="../images/sgb-concept/en-source-xy.html" title="Source polygon: six exterior corners and four hole corners" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
 ```
 
-Original source: six exterior corners and four hole corners of the left metal
+The left source polygon. P1–P6 mark its exterior and H1–H4 mark the enclosed hole; coordinates are in µm.
 :::
 
-The left metal's **outer ring** follows these points in order and closes back to its start; the **inner ring** encloses an area without metal.
-The upper-right notch opens to the exterior, whereas the hole is entirely surrounded by metal. They play different roles in subsequent contact and distance calculations.
+The exterior ring closes through P1–P6. The inner ring closes through H1–H4 and encloses an area with no metal. The notch is different: it connects the missing area to the outside.
 
 ```text
 Outer ring: P1(-2,0) → P2(3,0) → P3(3,1) → P4(2,1)
             → P5(2,2) → P6(-2,2) → back to P1
-Inner ring: H1(-1.5,0.5) → H2(-0.5,0.5) → H3(-0.5,1.5)
+Hole ring:  H1(-1.5,0.5) → H2(-0.5,0.5) → H3(-0.5,1.5)
             → H4(-1.5,1.5) → back to H1
 Units: µm
 ```
 
-The original left metal has a bounding rectangle of 10 µm²; subtracting the 1 µm² upper-right notch and the 1 µm² hole leaves 8 µm² of metal.
-Changing the hole changes this shape; moving the whole component changes its assembly position; changing its Net changes an electrical declaration without moving or joining the shape automatically.
-
-@fig-sgb-source-context shows the two metal pieces in plan view and the projection of the surrounding regions. Their vertical material relationship is shown later in @fig-sgb-physical.
+The bounding rectangle is 10 µm². Removing the 1 µm² notch and the 1 µm² hole leaves 8 µm² of source metal. Moving the component changes its assembly position; changing its Net changes an electrical declaration. Neither operation silently edits the local polygon.
 
 ::: {#fig-sgb-source-context .askr-wide-figure}
 ```{=html}
-<iframe src="../images/sgb-concept/en-context-xy.html" title="The complete source layout" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
+<iframe src="../images/sgb-concept/en-context-xy.html" title="Both metal sources and their assembly position" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
 ```
 
-The complete source layout
+Both source metals in the assembly frame, with the substrate and vacuum envelope.
 :::
 
-At this point, we know the source objects and shapes. The finite-thickness conductor has not yet been represented as a sheet, the junction terminals have not been completed, and distance bands have not been added.
+### Why SGB gives source facts names {#entity-occurrence-and-net}
 
-### Turn source facts into named objects {#entity-occurrence-and-net}
+The named object `chip/left` is an **Entity**: a stable source identity that associates a shape with its declared role and material. The substrate and vacuum are Entities too, so “Entity” does not mean “conductor.” A **Net** is the user-declared electrical network assignment for conductors; it does not say that their shapes touch. The assembly maps `chip/left` to Net A and `chip/right` to Net B.
 
-To keep referring to “this metal piece on the left” throughout preparation, SCGSim describes it as an **Entity** named `chip/left`.
-An Entity associates source shape, purpose and material; the substrate and vacuum regions also have Entities, so an Entity does not inherently mean a conductor.
-Here, `chip/left` and `chip/right` are bound to the final Nets A and B, separately from the polygon point lists.
+A component placed in the layout is an **occurrence**. Two copies of the same component share local design but have different occurrence paths and transforms. The path lets the prepared model tell which placed pad a selector or contact belongs to after placement. A component-local name alone cannot distinguish two copies.
 
-The same component can be placed twice; each placement is a **component occurrence**.
-The assembly model distinguishes them by occurrence paths, translation and rotation, so that pads with the same local name still refer to the correct placed metal.
-The component definition retains local identities, while the assembly model explicitly assigns final Nets across components.
+The preparation step combines these facts into a detached, immutable **snapshot**. The snapshot records the normalized polygons, Entity and occurrence identities, material stack, final Net map, physical-representation request and explicit port or junction declarations. Later edits to the original component do not alter this snapshot; prepare again to capture those edits.
 
-Source preparation combines this information with the material stack into a fixed copy called a **snapshot**.
-Editing the original component later does not change an existing snapshot; prepare again to use the new shape.
-This is the common source starting point for interface catalogues, distance bands and backend construction.
+| Term | What it identifies | Why it is kept separate |
+|---|---|---|
+| Polygon and ring | A local outline, hole and vertex order | Shape does not tell us material or electrical ownership |
+| Entity | A named source object and its declared role | It remains the source identity through derived geometry |
+| Occurrence | One placed copy, with path and transform | Reused component-local names stay unambiguous |
+| Net | The caller's electrical grouping | Geometry contact does not rewrite this declaration |
+| Snapshot | One prepared copy of all selected source facts | Downstream steps consume the same fixed input |
 
-::: {.callout-note collapse="true" title="Corresponding public interfaces"}
-The component frontend gathers its sources through `GeometryPlan(component=..., root_id=..., layer_stack=..., material_records=..., coupon_padding_um=...)`.
-`register_instance(path, reference)` binds an actual component occurrence, `plan.entities` exposes named Entities, and `set_nets(...)` takes the final `Net → Entity ID` mapping.
-`prepare()` returns a `GeometryPlanSnapshot`; the normalized input supplied directly by this example is a `GeometryBuildInput`. See the [component-to-backend contract](../geometry-sgb.qmd#component-to-backend-geometry-contract) for the full sequence.
+::: {.callout-important title="Different Nets do not merge when shapes touch"}
+SCGSim preserves the caller's Net assignments. Under the current contact rules, a recognized coplanar face contact or conductor-volume overlap between different Nets stops preparation with a short-circuit error; ordinary edge-only or point-only conductor contacts are rejected too. A same-Net lateral seam in the effective film has a specific accepted case. A shared Net still does not replace geometric contact checks. See the [contact rules in the geometry contract](../geometry-sgb.qmd#component-to-backend-geometry-contract).
 :::
 
-## Planning stage: determine the physical geometry to build {#planning-stage}
+::: {.callout-note title="The source DBU and the shared XY grid"}
+The GDS database unit (DBU) determines the coordinate step the source can express. For an assembled layout, SGB uses one fixed-precision grid in assembly XY; when `grid_size_um=None`, it takes the actual emitted source DBU. An explicitly different grid is rejected instead of rewriting a shared PDK or global GDSFactory setting. The public example recorded in the [case index](../images/sgb-concept/public-case-binding.json) uses `0.001 µm`, or `1 nm`.
 
-### A film has source thickness; a sheet has a real attachment plane
+A grid controls how assembled XY boundaries are noded and represented; it does not make every later calculation exact. For example, a segment from $(0,0)$ to $(3,1)$ nm meets $x=1$ nm at $(1,\frac13)$ nm. That intersection is off the 1 nm lattice and must be resolved as part of the shared arrangement. Z, film thickness and finite-element mesh size are separate quantities.
+:::
 
-The source model describes process objects; the simulation model must also choose how to represent them.
-It can retain a conductor's actual thickness, or use an explicit physical representation to map a film to a zero-thickness conductor sheet attached to its supporting surface.
-That choice uses the source material layer and attachment relationship, rather than moving metal to whichever plane looks closest.
+## 2. Interpret source facts as physical geometry {#planning-stage}
 
-The source metal film in this example occupies $z\in[0,0.25]$ µm. With the `substrate_face` representation, the effective conductor sheet lies on the substrate's upper surface at $z=0$.
-The source thickness describes the process film, while the zero-thickness sheet describes the representation being built; these values refer to different stages and do not conflict.
-@fig-sgb-physical shows the materials and conductor at $y=0.25$ µm. It opens in “Film detail”; select “Full section” to inspect the substrate and surrounding vacuum.
-Select “Effective: sheet” to compare the effective conductor sheet.
-The close-up uses different display scales on its two axes; read positions and thicknesses from the coordinates.
+The source says what the process contains. Planning answers what geometric representation this solve will build. It applies the selected physical profile, recognizes requested contacts and interfaces, and derives only the additional geometry required by explicit model requests.
+
+### A source film and a solver sheet are different things
+
+In this example, the source metal film occupies $z\in[0,0.25]$ µm. With the `substrate_face` representation, the effective conductor is a zero-thickness sheet attached to the substrate's upper face at $z=0$. The source interval remains a process fact; the sheet is the chosen solver geometry. One does not overwrite the other.
 
 ::: {#fig-sgb-physical .askr-wide-figure}
 ```{=html}
-<iframe src="../images/sgb-concept/en-cross-section.html" title="Source film and effective sheet: switch between material cross-sections" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
+<iframe src="../images/sgb-concept/en-cross-section.html" title="Source film, Si substrate and vacuum; switch to the effective sheet view" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
 ```
 
-Source film and effective sheet: switch between material cross-sections
+A cross-section through the source and effective model. Use the controls to compare the film with the effective sheet and to reveal the full substrate and vacuum section.
 :::
 
-In both the source and effective views of @fig-sgb-physical, `substrate` is Si in $z\in[-2,0]$ µm, and `upper_air` is the upper vacuum region in $z\in[0,4.25]$ µm.
-`lower_air` surrounds the sides of the substrate over the same lower height range; the entire lower half is not replaced with Si.
-Planning must therefore retain both the planar shapes and the materials above, below and beside them.
+In @fig-sgb-physical, Si occupies $z\in[-2,0]$ µm and the upper vacuum occupies $z\in[0,4.25]$ µm. `lower_air` is the vacuum beside the substrate's lateral faces over $z\in[-2,0]$ µm; there is no vacuum region underneath the substrate in this example. This distinction tells the planner which material borders each side of the conductor sheet.
 
-### Why the junction needs a complete rectangle and terminal supports
+### A junction changes geometry only when requested
 
-A Josephson junction can use a lumped representation in an electromagnetic model, with a specified port surface carrying the lumped electrical condition between its two terminals.
-This stage constructs the geometry; the backend still assigns inductance through the existing port name, rather than inferring it from shape.
-The example requests a complete central rectangle connected to two selected metal terminals, giving the port's full width a defined terminal contact support.
+A lumped port provides a surface on which the electromagnetic model can apply a lumped electrical condition. A rectangular junction request names the source sheet and binds its two terminals to exact Entities, occurrences and Nets. It is an explicit request, not a repair inferred from a visible gap.
 
-The request identifies the source sheet, both terminal Entities/occurrences and their Nets.
-Planning derives the central rectangle and terminal-owned end metals only for this explicit request and its actual attachment plane; it does not fill arbitrary gaps automatically.
-The original left notch leaves the requested terminal support incomplete, so an additional region $[2,3]\times[1,2]$ µm is derived. It fills the upper-right notch in @fig-sgb-source and remains in Net A.
-@fig-sgb-effective shows the original outline dashed and the left end addition in orange; the added metal still belongs to Net A.
+For this example, planning makes a complete central rectangle between the two terminal supports. The left source has a notch where the requested support must meet it, so planning derives a 1 µm² end region over $[2,3]\times[1,2]$ µm and assigns it to the existing left terminal, Net A. It does not join Net A and Net B. The right end belongs to the right terminal, Net B; the central port remains its own geometry.
 
 ::: {#fig-sgb-effective .askr-wide-figure}
 ```{=html}
-<iframe src="../images/sgb-concept/en-effective-xy.html" title="Left terminal completion: original outline, added metal and retained hole" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
+<iframe src="../images/sgb-concept/en-effective-xy.html" title="The requested left terminal support fills the notch and keeps its hole" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
 ```
 
-Left terminal completion: original outline, added metal and retained hole
+Effective left terminal support: the original outline is shown for comparison and the orange area is the explicitly derived end support.
 :::
 
-The left support thus grows from 8 µm² to $8+1=9$ µm², retaining its hole.
-Its new exterior is the rectangle $[-2,3]\times[0,2]$ µm; the original P5 remains on its upper boundary but is no longer a corner.
-The seam between original and added metal disappears inside their union and is no longer a physical edge.
-
-@fig-sgb-effective-port shows the full width of the same junction: the central rectangle covers $x\in[3,7]$, $y\in[0,2]$ µm.
-The right end addition belongs to Net B, while the central port remains distinct from the metal at either end.
-Interface recognition and distance bands use this final support geometry, rather than partitioning the old outline and adding terminal metal afterward.
+The left metal area grows from 8 to 9 µm² because of that explicit request. Its hole remains empty. The seam between original metal and the added support lies inside their union, so it is not a physical exterior edge.
 
 ::: {#fig-sgb-effective-port .askr-wide-figure}
 ```{=html}
-<iframe src="../images/sgb-concept/en-port-xy.html" title="Complete central port and terminal metal ownership" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
+<iframe src="../images/sgb-concept/en-port-xy.html" title="Central rectangular port between two separately owned terminal supports" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
 ```
 
-Complete central port and terminal metal ownership
+The complete rectangular port and the metal assigned to each terminal.
 :::
 
-### One geometric surface can carry two material interfaces {#regions-and-boundaries}
+For this request, the central rectangle spans $x\in[3,7]$ and $y\in[0,2]$ µm. The planner checks the named source sheet, terminal overlap, source occurrences, Entity owners and Net declarations before building the effective partition. If the request is absent, this terminal completion is absent too.
 
-A material interface describes what is on either side of a surface, not just a label on a plane.
-The substrate lies below the left metal in this example and vacuum lies above it, so the same support plane carries both metal–substrate (MS) and metal–air (MA) meanings.
-A substrate–air (SA) interface can also occur between substrate and vacuum.
+### One support plane can describe two material interfaces
 
-Shared geometry does not imply a shared field side: MS retains the substrate side, MA retains the vacuum side, and each retains its own material coefficients and selection.
-The band shapes can therefore be shared while the two interfaces' field-energy calculations remain separate; equal areas do not make their results identical or justify counting them twice.
+An interface says which materials meet across a surface. The support plane under the left metal touches Si on one side and vacuum on the other, so planning records separate metal–substrate (MS) and metal–air (MA) interfaces. The substrate–air (SA) boundary is a different interface.
 
-An exterior boundary is another case: a wall of the outer vacuum enclosure may belong to just one solution volume.
-It retains its actual construction surface and owner, without inventing a second material merely to obtain an interface name.
-Partitioning must retain this kind of wall's original parent–child relationship as well.
+MS and MA may refer to the same planar support geometry, but they keep different field sides and materials. Sharing a shape does not make their later field-energy contributions interchangeable. An outer vacuum wall can have only one adjacent solution volume; it remains a real boundary with its own owner rather than gaining an invented second material.
 
-### Shared topology gives adjacent surfaces the same edge
+### Use a shared planar arrangement to determine region membership
 
-The intersection example in the [source-precision note](#source-grid) explains the planning problem: if adjacent surfaces round their intersections independently, one original edge can acquire two sets of nodes.
+Before a planar subdivision operation can create its output faces, it must know where the relevant input polygons overlap and which inputs cover each resulting cell. SGB nodes the boundaries of those operands together and carries each operand's directed edge contribution into the resulting **arrangement** (the network of split edges and enclosed faces). This arrangement is local to that operation's planar inputs. It is not one global overlay of every model surface across different Z heights.
 
-SGB uses one shared noded network in assembly XY, retaining the source object, ring and segment of every original directed edge.
-Intersections and the native grid algorithm's near-vertex events first form subdivided source-edge paths; coincident edges retain all origins and directions.
-Membership transitions across those edges then determine the ownership of each complete cell, without sampling its centre or guessing from the nearest edge.
+For a small geometric demonstration, let **A** be the rectangle $[0,4]\times[0,3]$ µm with a square hole $[1,2]\times[1,2]$ µm. Let **M** be the rectangle $[3,5]\times[-1,4]$ µm. M is only a second geometry operand: it is not a metal, Net, native Mask setting or new SGB feature. The figures use these same coordinates to show the transition from source rings to split edges, then to faces and their membership.
 
-:::: {.askr-wide-figure aria-label="Source edges form one shared noded network; parent surfaces and bands use the same atomic cells"}
-::: {.askr-mermaid-view view-label="View the shared subdivision"}
-```{mermaid}
-flowchart LR
-  S["Named source boundaries<br/>Outer ring, inner rings, direction"] --> N["Shared noded network"]
-  N --> E["Shared atomic edges<br/>Retain every source origin"]
-  E --> C["Complete atomic cells<br/>Membership from directed edges"]
-  C --> P["Reconstruct parent surfaces"]
-  C --> B["Select distance bands"]
-  R["Original physical shapes"] -. "Hole, component and contact checks" .-> P
-```
-:::
-::::
+@fig-sgb-method-source-edges shows the original rings and their direction. The outer ring contributes entry into a polygon; the hole ring contributes the opposite transition. Where A and M boundaries intersect, both rings are split at the same coordinate. That shared split prevents one polygon from retaining a long edge where the other has inserted a T-junction.
 
-The parents and bands in the diagram use the same cells, with no independent second rounding during reconstruction.
-This **shared topology** gives adjacent geometry common points and edges; the original shapes remain available separately for hole, connected-component and contact checks.
-If source paths, directions or memberships cannot be established uniquely, preparation fails explicitly rather than filling holes with a tolerance or deleting small regions.
+![Schematic A and M boundaries with shared intersection points; M is a geometric operand only.](../images/sgb-concept/en-method-source-edges.svg){#fig-sgb-method-source-edges}
 
-### Historical design: SGB surface-distance bands (withdrawn) {#distance-bands}
+At $y=0.5$ µm, starting at the unbounded exterior face with membership $(0,0)$, a horizontal path crosses A's left boundary at $x=0$, enters A, then crosses the shared A/M boundaries at $x=3$ and $x=4$, and exits M at $x=5$. Thus the membership evolves as $(0,0)\rightarrow(1,0)\rightarrow(1,1)\rightarrow(0,1)\rightarrow(0,0)$. The first bit records A and the second M. The final transition returns to the unbounded exterior state.
 
-This section records an earlier design only. The current SCGSim source does not expose its geometry producer, so the API examples below are not current usage instructions. Native Palace Mask/Inset margins remain separate and require a Palace executable that supports them.
+Those crossings are represented by **atomic edges**: segments whose interiors contain no other boundary vertex. The next figure shows the noded edge network. The next step forms faces from this network; it does not yet assign their owners.
 
-The user first selects an actual **parent surface** from the effective model's surface catalogue, then specifies its source ownership, cut distances and original edges that define the distance origin.
-A parent is not a plane guessed from a metal name: the same object can have several surfaces, hole rings and walls.
-Selecting all original edges includes both exterior and hole rings; an explicit subset uses only those selected original edges.
+![Schematic shared network of split A/M source edges.](../images/sgb-concept/en-method-shared-network.svg){#fig-sgb-method-network}
 
-Here, the selected parent is the left support after terminal completion in @fig-sgb-effective, retaining its adjacency to the substrate and upper vacuum.
-On this plane, $d$ is the planar distance to the selected original boundary. Cuts at 0.125 and 0.25 µm produce the three disjoint bands in @fig-sgb-bands.
-These two distances are explicit requests for this example, not automatic defaults for every model.
+`polygonize` uses the closed edge network to form candidate faces. Membership comes from a separate propagation step. Each directed ring carries a signed contribution: an outer boundary changes membership from outside to inside, while a hole boundary reverses that change. The planner seeds the unbounded face with $(0,0)$ and propagates these changes across each shared edge into its adjacent face. It repeats the calculation along different paths; if a face gets inconsistent values, or a value is not binary, preparation fails. This makes the result depend on the declared rings and their shared topology rather than a sampled center point.
 
-::: {#fig-sgb-bands .askr-wide-figure}
-```{=html}
-<iframe src="../images/sgb-concept/en-planned-bands.html" title="Planned distance bands on the completed left parent surface" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
-```
+At $y=1.5$ µm, the path crosses the hole's left edge at $x=1$ and right edge at $x=2$. For A, the bit changes $1\rightarrow0\rightarrow1$: the region inside the outer ring but inside the hole has no A material, and A resumes on the far side. @fig-sgb-method-arrangement summarizes the resulting faces. The hole and unbounded exterior both have membership $(0,0)$, but they are different faces separated by the ring boundaries.
 
-Planned distance bands on the completed left parent surface
+![Schematic closed cells and their A/M membership.](../images/sgb-concept/en-method-arrangement.svg){#fig-sgb-method-arrangement}
+
+| Region | Membership (A, M) | Area |
+|---|---:|---:|
+| A only | (1, 0) | 8 µm² |
+| A and M | (1, 1) | 3 µm² |
+| M only | (0, 1) | 7 µm² |
+| Hole inside A | (0, 0) | 1 µm² |
+| Unbounded exterior | (0, 0) | Unbounded |
+
+The area check follows directly from the coordinates: A's $4\times3$ rectangle has area 12 µm²; its $1\times1$ hole leaves 11 µm². The overlap has width 1 µm and height 3 µm, so its area is 3 µm². Subtracting it from A leaves 8 µm²; subtracting the same overlap from M's $2\times5$ rectangle leaves 7 µm². SGB reconstructs each requested source region from the faces carrying that source's membership.
+
+::: {.callout-note title="This arrangement is geometry bookkeeping, not an FEM mesh"}
+The two-dimensional arrangement establishes polygon boundaries, cells and source membership. It does not create tetrahedra and does not decide material, Net or electromagnetic field meaning by itself. Those facts remain attached to the named source and physical plan.
 :::
 
-The parent in @fig-sgb-bands is the completed rectangle minus its hole, with a total area of 9 µm².
-Bands also form around the hole. Concave corners or holes can give a band more than one connected component, so the three bands produce six child surfaces here.
-P1, P2, P5 and P6 remain as reference points on the exterior boundary.
+## 3. From shared boundaries to three-dimensional CAD {#construction-stage}
 
-::: {.askr-table-compact .askr-table-numeric}
-| Band | Range | Child surfaces | Area (µm²) |
-|---|---|---:|---:|
-| C0 | $0\le d<0.125$ | 2 | 2.236324 |
-| C1 | $0.125\le d<0.25$ | 1 | 2.209366 |
-| C2 | $d\ge0.25$ | 3 | 4.554310 |
+After planar regions, material interfaces and volume boundaries are planned, SGB collects the live surface boundaries that participate in the construction into a three-dimensional topology. Within this boundary set, it creates one Point ID for each shared coordinate and one Curve ID for each shared segment. A T-junction or collinear overlap is split so every incident surface refers to the same atomic curve. This is a canonical boundary model for the planned surfaces, not a planar overlay across unrelated elevations.
+
+Consider three collinear points on a cap: $p_0=(0,0,1)$, $p_1=(2,0,1)$ and $p_2=(4,0,1)$ µm. Call them A, B and C. If the cap initially has the single edge A→C while the neighboring side wall records A→B→C, the cap has a T-junction at B. Canonicalization splits A→C into $e_{01}$ and $e_{12}$. Both surfaces now use those same curve identities; the wall references them in the reverse direction along the shared boundary.
+
+Each surface stores an ordered outer loop and, when present, ordered hole loops. A volume shell then stores oriented references to its bounding surfaces. The order and orientation distinguish the material-facing side of a boundary; adjacent volumes can share the same surface with opposite orientation. These relationships let construction close the intended volumes without guessing from nearby coordinates.
+
+@fig-sgb-method-shared-edge illustrates the split edge. Follow $p_0,p_1,p_2$ along the cap and then compare the signed curve-reference labels on the wall: the curve identities match, while each use records its own direction.
+
+![Schematic cap and side wall share the same edge IDs with opposite orientations.](../images/sgb-concept/en-method-shared-edge.svg){#fig-sgb-method-shared-edge}
+
+The current topology key rounds each 3D coordinate, in µm, to nine decimal places so planned points can reuse one identity. This is a coordinate identity rule, not the source DBU and not a second XY snap. The XY grid belongs to each relevant planar preparation operation; the canonical key is applied when the planned 3D surface boundaries are collected.
+
+### OCC realizes the plan that SGB already owns
+
+OCC (Open CASCADE) is the CAD kernel exposed through Gmsh. SGB passes it the planned points, lines, loops and surfaces, then uses those surfaces to form closed shells and solution volumes. The plan establishes ownership and adjacency first; CAD construction realizes those records. It does not depend on a global fragment operation to infer which material owns a newly discovered face.
+
+The returned native entity tags can change when CAD is exported and reopened. SCGSim therefore binds native entities to the stable planned surface and volume identities and uses the planned tag records to create named physical groups. A native integer tag is local to that imported model; it is not the enduring identity of a source Entity or surface.
+
+This section explains how the builder consumes a plan: it creates the planned CAD points, curves, loops, surfaces, shells and volumes, then binds exported native entities back to planned identities. The historical XAO view that showed the withdrawn distance-band children is retained on the [historical bands page](../history/sgb-geometric-bands.qmd).
+
+### Meshing uses the built geometry and its own size policy
+
+The Palace mesh-preparation step reads the exported XAO and its physical-group mapping in a fresh Gmsh process. It creates tetrahedra in solution volumes and checks required port-to-volume conformity before producing the mesh input for Palace. The chosen mesh-size policy belongs to this step: it controls element sizing, while the source DBU and assembly XY grid control geometry coordinates. A finer mesh does not repair missing source meaning or change a junction's ownership.
+
+For exact mesh controls, see the [Palace preparation contract](../specs/palace-electrostatic-sgb.qmd#palace-mesh-size-policy).
+
+## 4. Current capability and historical boundary {#distance-bands}
+
+The current SGB path carries source shapes, material/physical interpretation, final Net declarations, explicit port and junction requests, interface ownership, shared planar membership and canonical three-dimensional boundaries into backend construction. Gmsh/Palace and AEDT share those source facts where each backend supports them, while their native construction and execution remain separate.
+
+::: {.callout-warning title="SGB geometric distance bands are withdrawn"}
+SCGSim does not currently provide the former geometry-level surface-distance-band producer. Those old partitions and their child CAD surfaces are described for historical context on the [SGB geometric-bands page](../history/sgb-geometric-bands.qmd). Palace's native Mask/Inset setting is a separate solver input: it can select a region during Palace preparation when the chosen executable supports that setting. It does not ask SGB to cut the source geometry into geometric bands. See the [Palace Electrostatic contract](../specs/palace-electrostatic-sgb.qmd#native-mask-inset) for the current native-setting boundary.
 :::
 
-To inspect “at least 0.125 µm from the boundary,” select C1 and C2; “at least 0.25 µm” selects C2 alone.
-These cumulative selections overlap, so their separately calculated results cannot be added as though the regions were disjoint.
-The partition retains the original hole and the small connected regions within each band.
+Ordinary polygonal outlines remain polygon geometry. Explicitly declared curves use a separate OCC path and have their own route support; see the [curve contract](../geometry-sgb.qmd#source-curves). For the formal source, physical representation and backend contracts, continue to the [SGB geometry contract](../geometry-sgb.qmd).
 
-::: {.callout-note title="Partition seams are not new distance origins"}
-Distance origins come from the parent's original physical boundary.
-Neither the internal seam removed by the metal/end union nor the new seams between distance bands become additional edges from which to inset again.
-:::
-
-::: {.callout-note collapse="true" title="Pass the selection request to the source plan"}
-Use `surface_distance_band_catalogue(...)` to read actual parents from the corresponding construction plan, create a `SurfaceDistanceBandSpec`, then pass it to later snapshots through `GeometryPlan.set_surface_distance_bands(...)`.
-The catalogue name of this example's parent is `SURF__MS__chip/left__substrate__upper_air__0000`; `boundary_segments=None` includes all original exterior and hole edges, while an explicit subset uses `SourceBoundarySegment`.
-The example starts from normalized input and adds the same request with `with_surface_distance_bands(...)`. See the [planar distance-band contract](../geometry-sgb.qmd#surface-distance-bands) for exact parameters.
-:::
-
-### Connect caps, hole walls and exterior walls to the same nodes
-
-Distance bands are more than a display mask: they create real partition surfaces that subsequent CAD and meshing must respect.
-If a band adds a node to the upper cap, the sidewall and opposite cap must follow the same incident edge chain, or the volume boundary becomes inconsistent.
-SGB therefore retains the mapping from original edges to realized shared chains and propagates nodes to every incident surface.
-
-Wall distances are still classified in the original parent's plane and then mapped to realized facets through the existing construction correspondence; this does not introduce a different three-dimensional distance metric.
-Z and film thickness are not rounded again by the XY grid.
-This example's plan contains 12 such solution-region wall facets, which enclose three volumes together with their caps.
-
-Complete surfaces are also organized into shared points, curves and ordered loops.
-T-junctions and collinear overlapping edges are split into shared atomic curves; when two surfaces use the same edge in opposite directions, they retain directional references rather than creating another approximate edge.
-Outer and inner loops bound each surface, and oriented surface references enclose a shell for each volume.
-
-Before CAD construction, planning checks parent–child source relationships, materials and ownership, port adjacency, volume closure and group coverage.
-An actual exterior wall can be a geometric parent, while a material interface retains its interface identity; a complete parent replaced by children is not built again as another live surface.
-Adding bands thus changes the partition without silently adding material or losing original boundaries.
-
-## Construction and meshing: turn the plan into a native model {#construction-stage}
-
-### Build CAD from shared points and surfaces
-
-Planning has already determined materials, terminals, adjacent volumes and shared surfaces. OCC (Open CASCADE) realizes those relationships as CAD.
-The polygon path builds points, lines, curve loops and planes into shells and volumes, with incident volumes sharing one surface rather than separately constructing overlapping lookalikes.
-That is why shared topology is established first, instead of asking a final global CAD fragment operation to guess material ownership.
-
-This example passes the same effective input with its bands to the existing builder, which produces XAO geometry, physical groups and adjacency information.
-@fig-sgb-native-3d shows the full model's native wireframe and curve endpoints read after reopening that XAO; @fig-sgb-native-bands separately colours the selected parent's distance bands.
-
-::: {#fig-sgb-native-3d .askr-wide-figure}
-```{=html}
-<iframe src="../images/sgb-concept/en-native-cad-3d.html" title="Actual XAO: native curves and selected bands in the three-volume model" width="100%" height="720" style="border:0;" loading="lazy"></iframe>
-```
-
-Actual XAO: native curves and selected bands in the three-volume model
-:::
-
-The three volumes in @fig-sgb-native-3d are the Si substrate, upper vacuum and vacuum beside the substrate.
-The plan contains 118 points, 132 curves and 26 live surfaces; these have entered actual CAD construction, rather than remaining only a planning drawing.
-
-### Follow the same surface across native renumbering
-
-@fig-sgb-native-bands shows the native band edges and endpoints of the same left parent as @fig-sgb-bands, with colours corresponding to the same C0/C1/C2 bands.
-Rotate this three-dimensional view to see the shared $z=0$ plane. It displays read-back curves and endpoints, without adding invented filled CAD surfaces.
-Each band child is associated with a group through a stable name and retains native adjacency to the substrate and upper vacuum.
-
-::: {#fig-sgb-native-bands .askr-wide-figure}
-```{=html}
-<iframe src="../images/sgb-concept/en-native-bands-3d.html" title="Actual XAO: native band edges and nodes on the selected left parent" width="100%" height="720" style="border:0;" loading="lazy"></iframe>
-```
-
-Actual XAO: native band edges and nodes on the selected left parent
-:::
-
-CAD import renumbers integer **tags**, so “surface 19” is not a permanent name across export and import.
-For example, the following children become surfaces 7 and 8 in this import, but their full group names still identify the same geometry and adjacent volumes.
-
-::: {.askr-table-compact .askr-table-numeric}
-| Stable child-name suffix | Exported surface tag | Imported surface tag | Adjacent volumes |
-|---|---:|---:|---|
-| `__DIST_0000_0000` | 19 | 7 | `substrate`, `upper_air` |
-| `__DIST_0001_0000` | 27 | 8 | `substrate`, `upper_air` |
-:::
-
-Each full name begins with the selected left parent's name, while a native tag is meaningful only within its particular model.
-Native surfaces outside the physical groups remain CAD diagnostic data; they do not automatically become additional solver surfaces.
-
-### Meshing respects the geometry already established
-
-The Palace mesh builder reads the XAO, groups and controls in a fresh Gmsh process.
-`gmsh_default` uses Gmsh's native sizing behaviour without injecting SCGSim custom size fields. Holes, ports and bands are still real geometric constraints and affect the mesh.
-A small cut distance therefore adds more than an integration option: it can also add CAD partitions and conformal-meshing work.
-
-After three-dimensional mesh generation, checks still cover tetrahedra in solution volumes, conformity between port and volume faces, and node contact between ports and conductor boundaries.
-Only after these checks does the solver receive `palace.msh` and its group mapping.
-The worked example here reaches CAD/XAO and native adjacency; continue with the [Palace tutorial](../course/palace-eigenmode.qmd) for three-dimensional meshing and field solutions.
-
-## What a shared source covers—and what remains separate {#a-shared-source-has-a-specific-reach}
-
-A shared source lets Palace and AEDT use the same named objects, Nets, materials and physical-representation requests. Each backend still follows its own port and execution contracts to prepare a native project.
-The same source does not make construction plans for different physical representations interchangeable, or promise a separate native integral for every source Entity.
-
-### Polygons and explicit curves {#explicit-curved-boundaries}
-
-An ordinary GDS contour that approximates an arc is still a polygon with vertices.
-Explicitly declared arcs and other curves follow a separate OCC path that retains curve intent and native mappings; that path currently supports neither surface-distance bands nor Route C.
-To choose a representation and backend, consult the contracts for [physical representation](../geometry-sgb.qmd#physical-representation), [explicit curves](../geometry-sgb.qmd#source-curves) and [surface-distance bands](../geometry-sgb.qmd#surface-distance-bands).
-
-::: {.callout-note collapse="true" title="Public example and figure sources"}
-This page uses the public rectangular-junction, hole and band example, together with curves, groups and adjacency read from the same XAO construction.
-The [case data index](../images/sgb-concept/public-case-binding.json) records the source version and stage mappings; follow the source, planning and CAD stages on this page when reading the figures.
+::: {.callout-note collapse="true" title="Public example source and scope"}
+The worked case is the public rectangular-junction and hole fixture in [`tests/test_rectangular_junction_geometry.py`](https://github.com/OrPenStrike/scgsim/blob/2ed85adc/tests/test_rectangular_junction_geometry.py#L230). The [case index](../images/sgb-concept/public-case-binding.json) records its source revision, units, selected profile and figure-stage mapping. The fixture's band and XAO observations belong to the historical design page; this current concept page uses its source, physical and junction views to explain the retained pipeline.
 :::

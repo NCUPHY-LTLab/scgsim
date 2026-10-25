@@ -2,6 +2,9 @@
 title: "Documentation map"
 description: "Find the reader path for SCGSim topics and their OrcaPen source pages."
 sidebar: contribution
+scgsim-id: "docs/documentation-map"
+scgsim-kind: "contribution"
+scgsim-status: "CONVERGING"
 ---
 
 Use Tutorial to choose one of the five complete calculation workflows.

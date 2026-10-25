@@ -2,6 +2,9 @@
 title: "SCGSim reference"
 description: "Find the model, mesh, handoff, and result topic you need."
 sidebar: contract
+scgsim-id: "docs/reference"
+scgsim-kind: "reference"
+scgsim-status: "CONVERGING"
 ---
 
 Use this topic index to move between concepts, supported behavior, and detailed

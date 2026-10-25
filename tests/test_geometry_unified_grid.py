@@ -11,7 +11,6 @@ from scgsim.geometry._primitives.grid import GridOperand, build_grid_arrangement
 from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
 from scgsim.geometry.source.grid import apply_geometry_grid, source_grid_context
 from scgsim.geometry.planning.junction_partition import derive_rectangular_junctions
-from scgsim.geometry.planning.topology import plan_canonical_topology
 from scgsim.geometry import with_rectangular_junctions
 from test_rectangular_junction_geometry import fixture as junction_fixture
 from scgsim.geometry import GeometryBuildInput, LayoutPolygonSpec, SemanticEntitySpec

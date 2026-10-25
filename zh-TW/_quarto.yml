@@ -41,6 +41,10 @@ website:
     right:
     - text: 貢獻
       href: docs/contributing.qmd
+    left:
+    - icon: github
+      aria-label: GitHub 原始碼
+      href: https://github.com/NCUPHY-LTLab/scgsim
   navbar:
     left:
     - text: 總覽
@@ -53,6 +57,12 @@ website:
       href: docs/reference.qmd
     - text: 貢獻
       href: docs/contributing.qmd
+    tools-collapse: false
+    tools:
+    - icon: github
+      href: https://github.com/NCUPHY-LTLab/scgsim
+      text: GitHub 原始碼
+      aria-label: GitHub 原始碼
   sidebar:
   - id: overview
     title: 頁面

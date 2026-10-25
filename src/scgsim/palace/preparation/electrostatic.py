@@ -513,7 +513,7 @@ class ElectrostaticSim:
             ],
             "ground_boundary": result.ground_boundary_resolution,
         }
-        mesh_manifest = json.loads(self._mesh_result.mesh_manifest_path.read_text(encoding="utf-8"))
+        json.loads(self._mesh_result.mesh_manifest_path.read_text(encoding="utf-8"))
         material_payload = {
             "schema_version": 1,
             "solution_volumes": result.material_resolution,
