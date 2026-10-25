@@ -86,6 +86,8 @@ Q3D_GEOMETRY_SOURCE_SCHEMA_VERSION = "scgsim.aedt.q3d-geometry-source.v3"
 
 Q2D_SCHEMA_VERSION = "scgsim.aedt.q2d.v1"
 
+Q2D_SCHEMA_VERSION_V2 = "scgsim.aedt.q2d.v2"
+
 OFFICIAL_PYAEDT_SOURCE_URL = "https://github.com/ansys/pyaedt/tree/v1.3.0"
 
 LOCKED_PYAEDT = "1.3.0"

@@ -5,9 +5,12 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from hashlib import sha256
+from functools import cached_property
 import json
 
 from scgsim.geometry.models.grid import GeometryGridContext
+from scgsim.diagnostics import _progress, _stage
+from scgsim.preparation import _ordered_map, current_preparation_workers
 
 _ACTIVE_GRID = ContextVar("scgsim_geometry_grid", default=None)
 _SOURCE_INTENT = ContextVar("scgsim_source_intent_overlay", default=False)
@@ -100,33 +103,135 @@ def _ring(coords):
     return points[start:] + points[:start]
 
 
+@dataclass(frozen=True)
+class _RegionVertexIndex:
+    grid_size: float | None
+    by_x: tuple
+    by_y: tuple
+    xs: tuple
+    ys: tuple
+    coordinates: Mapping
+    point_keys: Mapping
+
+
+def _region_key(point, grid_size):
+    from fractions import Fraction
+
+    return (
+        tuple(round(value / grid_size) for value in point)
+        if grid_size is not None
+        else tuple(Fraction(value) for value in point)
+    )
+
+
+def _canonical_grid_point(point, grid_size):
+    if grid_size is None:
+        return tuple(point)
+    from decimal import Decimal
+
+    # Decimal spelling is the declared layout step; avoid introducing a second
+    # binary multiplication spelling for an otherwise identical lattice node.
+    step = Decimal(str(grid_size))
+    return tuple(float(value * step) for value in _region_key(point, grid_size))
+
+
+def _region_vertex_index(vertices, grid_size):
+    # Only realized lattice nodes share one key-to-coordinate identity. Parent
+    # planes without a layout grid retain their original coordinates/occurrences.
+    from types import MappingProxyType
+
+    coordinates = {}
+    point_keys = {}
+    if grid_size is not None:
+        from decimal import Decimal
+
+        step = Decimal(str(grid_size))
+        for point in vertices:
+            key = _region_key(point, grid_size)
+            if key not in coordinates:
+                canonical = tuple(float(value * step) for value in key)
+                coordinates[key] = canonical
+                point_keys[canonical] = key
+        vertices = tuple(coordinates.values())
+    else:
+        point_keys = {tuple(point): _region_key(point, None) for point in vertices}
+    rows = tuple(
+        (index, point, point_keys[tuple(point)]) for index, point in enumerate(vertices)
+    )
+    by_x = tuple(sorted(rows, key=lambda row: row[1][0]))
+    by_y = tuple(sorted(rows, key=lambda row: row[1][1]))
+    return _RegionVertexIndex(
+        grid_size,
+        by_x,
+        by_y,
+        tuple(row[1][0] for row in by_x),
+        tuple(row[1][1] for row in by_y),
+        MappingProxyType(coordinates),
+        MappingProxyType(point_keys),
+    )
+
+
 def _regions(geometry, vertices=(), grid_size=None):
+    with _stage("geometry.grid.regions"):
+        return _regions_indexed(geometry, _region_vertex_index(vertices, grid_size))
+
+
+def _regions_indexed(geometry, vertex_index):
+    from bisect import bisect_left, bisect_right
+
+    by_x, by_y = vertex_index.by_x, vertex_index.by_y
+    xs, ys = vertex_index.xs, vertex_index.ys
+    extra_keys = {}
+
+    def point_key(point):
+        point = tuple(point)
+        key = vertex_index.point_keys.get(point)
+        if key is None:
+            key = extra_keys.get(point)
+            if key is None:
+                key = _region_key(point, vertex_index.grid_size)
+                extra_keys[point] = key
+        return key
+
     def atomic(coords):
-        ring = _ring(coords)
-        output = []
-        for a, b in zip(ring, (*ring[1:], ring[0])):
-            output.append(a)
-
-            # Shared noded vertices already lie on the fixed-precision lattice.
-            def key(p):
-                from fractions import Fraction
-
-                return (
-                    tuple(round(v / grid_size) for v in p)
-                    if grid_size is not None
-                    else tuple(Fraction(v) for v in p)
+        if vertex_index.grid_size is not None:
+            points = []
+            for point in coords:
+                key = point_key(point)
+                canonical = vertex_index.coordinates.get(key)
+                points.append(
+                    _canonical_grid_point(point, vertex_index.grid_size)
+                    if canonical is None
+                    else canonical
                 )
-
-            ak, bk = key(a), key(b)
+            points = tuple(points)
+            coords = tuple(
+                point
+                for index, point in enumerate(points)
+                if index == 0 or point != points[index - 1]
+            )
+        ring = _ring(coords)
+        if not by_x:
+            return ring
+        ring_keys = tuple(point_key(point) for point in ring)
+        output = []
+        for index, (a, b) in enumerate(zip(ring, (*ring[1:], ring[0]))):
+            output.append(a)
+            ak, bk = ring_keys[index], ring_keys[(index + 1) % len(ring)]
+            xmin, xmax = min(a[0], b[0]), max(a[0], b[0])
+            ymin, ymax = min(a[1], b[1]), max(a[1], b[1])
+            xlo, xhi = bisect_left(xs, xmin), bisect_right(xs, xmax)
+            ylo, yhi = bisect_left(ys, ymin), bisect_right(ys, ymax)
+            candidates = by_x[xlo:xhi] if xhi - xlo <= yhi - ylo else by_y[ylo:yhi]
             along = [
-                p
-                for p in vertices
-                if p != a
-                and p != b
-                and (key(p)[0] - ak[0]) * (bk[1] - ak[1])
-                == (key(p)[1] - ak[1]) * (bk[0] - ak[0])
-                and min(a[0], b[0]) <= p[0] <= max(a[0], b[0])
-                and min(a[1], b[1]) <= p[1] <= max(a[1], b[1])
+                point
+                for _, point, point_key in sorted(candidates, key=lambda row: row[0])
+                if point != a
+                and point != b
+                and (point_key[0] - ak[0]) * (bk[1] - ak[1])
+                == (point_key[1] - ak[1]) * (bk[0] - ak[0])
+                and xmin <= point[0] <= xmax
+                and ymin <= point[1] <= ymax
             ]
             axis = 0 if a[0] != b[0] else 1
             output.extend(
@@ -154,25 +259,62 @@ class GridArrangement:
     audits: tuple[GridOperandAudit, ...]
     grid_applied: bool = True
 
-    def face_regions(self, face_ids):
-        from shapely import Polygon, union_all
-
-        selected = [
-            Polygon(f.exterior, f.holes) for f in self.faces if f.face_id in face_ids
-        ]
+    @cached_property
+    def _vertex_index(self):
         grid = self.context.grid_size_um if self.grid_applied else None
-        return _regions(union_all(selected, grid_size=grid), self.vertices, grid)
+        return _region_vertex_index(self.vertices, grid)
+
+    @cached_property
+    def _operand_faces(self):
+        from types import MappingProxyType
+
+        selected = {}
+        for index, face in enumerate(self.faces):
+            for operand_id in face.operand_ids:
+                selected.setdefault(operand_id, []).append(index)
+        return MappingProxyType({key: tuple(value) for key, value in selected.items()})
+
+    @cached_property
+    def _region_work(self):
+        # Per-arrangement successful pure results only. Concurrent readers may
+        # compute the same miss; immutable geometry/results are never mutated.
+        return {}, {}
+
+    def _regions_for_faces(self, indices):
+        from shapely import Polygon, coverage_union_all, union_all
+
+        polygons, regions = self._region_work
+        if indices in regions:
+            return regions[indices]
+        selected = []
+        for index in indices:
+            polygon = polygons.get(index)
+            if polygon is None:
+                face = self.faces[index]
+                polygon = Polygon(face.exterior, face.holes)
+                polygons[index] = polygon
+            selected.append(polygon)
+        with _stage("geometry.grid.regions"):
+            merged = (
+                coverage_union_all(selected)
+                if self.grid_applied
+                else union_all(selected)
+            )
+            result = _regions_indexed(merged, self._vertex_index)
+        regions[indices] = result
+        return result
+
+    def face_regions(self, face_ids):
+        return self._regions_for_faces(
+            tuple(
+                index
+                for index, face in enumerate(self.faces)
+                if face.face_id in face_ids
+            )
+        )
 
     def operand_regions(self, operand_id):
-        from shapely import Polygon, union_all
-
-        selected = [
-            Polygon(f.exterior, f.holes)
-            for f in self.faces
-            if operand_id in f.operand_ids
-        ]
-        grid = self.context.grid_size_um if self.grid_applied else None
-        return _regions(union_all(selected, grid_size=grid), self.vertices, grid)
+        return self._regions_for_faces(self._operand_faces.get(operand_id, ()))
 
     @property
     def metadata(self):
@@ -201,14 +343,379 @@ class GridArrangement:
         }
 
 
-def build_grid_arrangement(operands, context, *, apply_grid=True):
-    """Construct labelled cells by common-policy polygon overlay.
+@dataclass(frozen=True)
+class _OverlayParts:
+    geometries: tuple
 
-    Membership is carried by intersection/difference construction, never
-    recovered from samples or independently rounded linework faces. Every
-    existing cell and the new operand are updated in the same subdivision.
+
+@dataclass(frozen=True)
+class _ZeroAreaResidue:
+    geometry: object
+    operand_ids: tuple
+
+    @cached_property
+    def exact_key(self):
+        # Records survive disjoint cuts unchanged. Cache only their immutable
+        # exact identity, never geometry from another arrangement or process.
+        return self.operand_ids, self.geometry.normalize().wkb
+
+
+@dataclass(frozen=True)
+class _ZeroAreaAccounting:
+    boundary: tuple[_ZeroAreaResidue, ...]
+    auxiliary: tuple[_ZeroAreaResidue, ...]
+
+
+@dataclass(frozen=True)
+class _Subdivision:
+    cells: tuple
+    residues: tuple[_ZeroAreaResidue, ...]
+    accounting: _ZeroAreaAccounting | None = None
+    source_paths: tuple = ()
+    edge_origins: tuple = ()
+
+
+def _overlay_parts(geometry):
+    # A result collection is not necessarily a legal input to OverlayNG.
+    # Keep every nonempty dimension; homogeneous multi-geometries stay intact.
+    if geometry.is_empty:
+        return _OverlayParts(())
+    if geometry.geom_type == "GeometryCollection":
+        return _OverlayParts(
+            tuple(
+                part
+                for child in geometry.geoms
+                for part in _overlay_parts(child).geometries
+            )
+        )
+    return _OverlayParts((geometry,))
+
+
+def _geometry_dimension(geometry):
+    return {
+        "Polygon": 2,
+        "MultiPolygon": 2,
+        "LineString": 1,
+        "LinearRing": 1,
+        "MultiLineString": 1,
+        "Point": 0,
+        "MultiPoint": 0,
+    }[geometry.geom_type]
+
+
+def _overlay_call(operation, left, right, grid, operand_index, cell_index):
+    from shapely import difference, intersection, union_all
+
+    try:
+        if operation == "union_all":
+            return union_all(left, grid_size=grid)
+        function = {"intersection": intersection, "difference": difference}[operation]
+        return function(left, right, grid_size=grid)
+    except Exception as error:
+        # Diagnostic failure must never replace the original native exception.
+        try:
+
+            def describe(geometry):
+                def components(value):
+                    if value.is_empty:
+                        return ()
+                    if value.geom_type in {
+                        "GeometryCollection",
+                        "MultiPolygon",
+                        "MultiLineString",
+                        "MultiPoint",
+                    }:
+                        return tuple(
+                            part for child in value.geoms for part in components(child)
+                        )
+                    return (value,)
+
+                parts = components(geometry)
+                return {
+                    "geom_type": geometry.geom_type,
+                    "component_dimensions": [_geometry_dimension(p) for p in parts],
+                    "component_count": len(parts),
+                }
+
+            note = {
+                "operation": operation,
+                "operand_index": operand_index,
+                "cell_index": cell_index,
+                "grid_size_um": grid,
+                "left": [describe(p) for p in left]
+                if operation == "union_all"
+                else describe(left),
+                "right": None if right is None else describe(right),
+            }
+            error.add_note(
+                "scgsim.grid.overlay_failure: " + json.dumps(note, sort_keys=True)
+            )
+        except Exception:
+            try:
+                error.add_note(
+                    "scgsim.grid.overlay_failure: diagnostic context unavailable"
+                )
+            except Exception:
+                pass
+        raise
+
+
+def _bounds_disjoint(left, right):
+    ax0, ay0, ax1, ay1 = left.bounds
+    bx0, by0, bx1, by1 = right.bounds
+    return ax1 < bx0 or bx1 < ax0 or ay1 < by0 or by1 < ay0
+
+
+def _deduplicate_residues(residues):
+    # Canonical exact coordinates include every retained collinear vertex.
+    # Equal support with different labels remains a distinct semantic record.
+    seen = set()
+    output = []
+    for residue in residues:
+        key = residue.exact_key
+        if key not in seen:
+            seen.add(key)
+            output.append(residue)
+    return tuple(output)
+
+
+def _parts_overlay(operation, left, right, grid, operand_index, cell_index):
+    if operation == "intersection":
+        return _OverlayParts(
+            tuple(
+                part
+                for a in left.geometries
+                for b in right.geometries
+                if not _bounds_disjoint(a, b)
+                for part in _overlay_parts(
+                    _overlay_call(operation, a, b, grid, operand_index, cell_index)
+                ).geometries
+            )
+        )
+    parts = left.geometries
+    for b in right.geometries:
+        next_parts = []
+        for a in parts:
+            if (
+                _geometry_dimension(a) == 2
+                and _geometry_dimension(b) < 2
+                or _bounds_disjoint(a, b)
+            ):
+                # Zero-area support cannot subtract positive-area interior.
+                # Its contacts/nodes are retained by the common sideband.
+                next_parts.append(a)
+            else:
+                next_parts.extend(
+                    _overlay_parts(
+                        _overlay_call(operation, a, b, grid, operand_index, cell_index)
+                    ).geometries
+                )
+        parts = tuple(next_parts)
+    return _OverlayParts(parts)
+
+
+def _parts_union(parts, grid, operand_index):
+    # Unary union is homogeneous too; do not reassemble a mixed input.
+    output = []
+    dimensions = tuple(dict.fromkeys(_geometry_dimension(p) for p in parts.geometries))
+    for dimension in dimensions:
+        group = [p for p in parts.geometries if _geometry_dimension(p) == dimension]
+        output.extend(
+            _overlay_parts(
+                _overlay_call("union_all", group, None, grid, operand_index, None)
+            ).geometries
+        )
+    return _OverlayParts(tuple(output))
+
+
+@dataclass(frozen=True)
+class _CellOverlayOutcome:
+    common: object
+    residual: object
+    error: BaseException | None = None
+    traceback: object = None
+
+
+def _cell_overlay_pair(cell, operand, grid, operand_index, cell_index):
+    parts = _OverlayParts((cell,))
+    try:
+        common = _parts_overlay(
+            "intersection", parts, operand, grid, operand_index, cell_index
+        )
+        residual = _parts_overlay(
+            "difference", parts, operand, grid, operand_index, cell_index
+        )
+        return _CellOverlayOutcome(common, residual)
+    except BaseException as error:
+        # A later cell's failure must not overtake an earlier pending difference.
+        return _CellOverlayOutcome(None, None, error, error.__traceback__)
+
+
+def _cell_overlay_chunk(work):
+    rows, operand, grid, operand_index = work
+    return tuple(
+        (index, _cell_overlay_pair(cell, operand, grid, operand_index, index))
+        for index, cell in rows
+    )
+
+
+def _subdivide_grid(values, geometries, grid):
+    from shapely import STRtree
+
+    cells, residues = [], []
+    candidate_count = skipped_count = residues_before_dedup = 0
+    with _stage("geometry.grid.overlay", counts={"operands": len(values)}):
+        for operand_index, value in enumerate(values):
+            original = geometries[value.operand_id]
+            operand = _overlay_parts(
+                _overlay_call(
+                    "intersection", original, original, grid, operand_index, None
+                )
+            )
+            pending = operand
+            divided, sideband = [], []
+
+            def retain(parts, labels):
+                for part in parts.geometries:
+                    if _geometry_dimension(part) == 2:
+                        divided.extend((p, labels) for p in _polygons(part))
+                    else:
+                        sideband.append(_ZeroAreaResidue(part, labels))
+
+            # Area order is unchanged. Lower-dimensional cells are retained and
+            # subdivided separately; they can never create positive-area labels.
+            previous = (*cells, *((r.geometry, r.operand_ids) for r in residues))
+            tree = STRtree([cell for cell, _ in previous])
+            candidates = {
+                int(index) for part in operand.geometries for index in tree.query(part)
+            }
+            candidate_count += len(candidates)
+            skipped_count += len(previous) - len(candidates)
+            workers = current_preparation_workers()
+            pairs = {}
+            if workers is not None and workers > 1 and candidates:
+                rows = tuple(
+                    (index, previous[index][0]) for index in sorted(candidates)
+                )
+                chunk_size = (len(rows) + workers - 1) // workers
+                work = tuple(
+                    (rows[start : start + chunk_size], operand, grid, operand_index)
+                    for start in range(0, len(rows), chunk_size)
+                )
+                # Wait for all immutable pair work before doing serial pending
+                # updates; caller CPU and pool never process overlay concurrently.
+                pairs = dict(
+                    row
+                    for chunk in _ordered_map(_cell_overlay_chunk, work)
+                    for row in chunk
+                )
+            for cell_index, (cell, labels) in enumerate(previous):
+                if cell_index not in candidates:
+                    if cell_index < len(cells):
+                        divided.append((cell, labels))
+                    else:
+                        # Preserve the immutable record and cached exact key;
+                        # no dimension dispatch or GEOS normalization is needed.
+                        sideband.append(residues[cell_index - len(cells)])
+                    continue
+                cell_parts = _OverlayParts((cell,))
+                pair = pairs.get(cell_index)
+                if pair is None:
+                    pair = _cell_overlay_pair(
+                        cell, operand, grid, operand_index, cell_index
+                    )
+                if pair.error is not None:
+                    raise pair.error.with_traceback(pair.traceback)
+                common, residual = pair.common, pair.residual
+                pending = _parts_overlay(
+                    "difference", pending, cell_parts, grid, operand_index, cell_index
+                )
+                retain(residual, labels)
+                retain(common, (*labels, value.operand_id))
+            retain(_parts_union(pending, grid, operand_index), (value.operand_id,))
+            residues_before_dedup += len(sideband)
+            cells, residues = divided, _deduplicate_residues(sideband)
+            _progress(operand_index + 1, len(values))
+    with _stage(
+        "geometry.grid.overlay_work",
+        counts={
+            "candidate_cells": candidate_count,
+            "disjoint_cells": skipped_count,
+            "residues_before_dedup": residues_before_dedup,
+            "final_residues": len(residues),
+        },
+    ):
+        return _Subdivision(tuple(cells), tuple(residues))
+
+
+def _residue_coordinates(geometry):
+    if geometry.geom_type in {"LineString", "LinearRing", "Point"}:
+        return tuple(tuple(p) for p in geometry.coords)
+    return tuple(p for child in geometry.geoms for p in _residue_coordinates(child))
+
+
+def _account_zero_area(residues, cells, grid):
+    from shapely import LineString, STRtree
+
+    if not residues:
+        return _ZeroAreaAccounting((), ())
+    # Exact face edges give a tight broad-phase instead of overlaying each
+    # residue against the full all-face wire. Touching envelopes are included.
+    edges = {}
+    for cell, _ in cells:
+        for ring in (cell.exterior, *cell.interiors):
+            points = tuple(tuple(p) for p in ring.coords)
+            for a, b in zip(points, points[1:]):
+                if a != b:
+                    edges.setdefault(tuple(sorted((a, b))), LineString((a, b)))
+    boundaries = tuple(edges.values())
+    tree = STRtree(boundaries)
+    geometries = {}
+    labeled = []
+    for residue in _deduplicate_residues(residues):
+        key = residue.exact_key[1]
+        geometries.setdefault(key, residue.geometry)
+        labeled.append((key, residue.operand_ids))
+
+    def classify(geometry):
+        indices = sorted(int(index) for index in tree.query(geometry))
+        wire = _parts_union(
+            _OverlayParts(tuple(boundaries[i] for i in indices)), grid, None
+        )
+        parts = _OverlayParts((geometry,))
+        common = _parts_overlay("intersection", parts, wire, grid, None, None)
+        remainder = _parts_overlay("difference", parts, wire, grid, None, None)
+        return common, remainder
+
+    # Classifications are geometric only. Reattach every exact semantic label
+    # in original order after ordered independent work; never merge labels.
+    classified = dict(
+        zip(geometries, _ordered_map(classify, tuple(geometries.values())), strict=True)
+    )
+    incident, auxiliary = [], []
+    for key, labels in labeled:
+        common, remainder = classified[key]
+        incident.extend(_ZeroAreaResidue(p, labels) for p in common.geometries)
+        auxiliary.extend(_ZeroAreaResidue(p, labels) for p in remainder.geometries)
+    return _ZeroAreaAccounting(
+        _deduplicate_residues(incident), _deduplicate_residues(auxiliary)
+    )
+
+
+@dataclass(frozen=True)
+class _GridWork:
+    raw_polygons: tuple
+    subdivision: _Subdivision
+
+
+def build_grid_arrangement(operands, context, *, apply_grid=True):
+    """Construct one labelled fixed-grid network or an ungridded plane overlay.
+
+    Fixed-grid membership follows directed source paths and face transitions.
+    Ungridded parent planes retain their distinct existing overlay contract.
     """
-    from shapely import Polygon, difference, intersection, union_all
+    from shapely import Polygon, coverage_union_all, union_all
+    from scgsim.geometry._primitives._grid_cache import cached_subdivision
 
     grid = context.grid_size_um if apply_grid else None
     values = (
@@ -217,101 +724,219 @@ def build_grid_arrangement(operands, context, *, apply_grid=True):
     ids = [v.operand_id for v in values]
     if len(ids) != len(set(ids)):
         raise ValueError("common grid operand identities are duplicated")
-    geometries = {v.operand_id: Polygon(v.exterior, v.holes) for v in values}
-    cells = []
-    for value in values:
-        original = geometries[value.operand_id]
-        overlay_operand = intersection(original, original, grid_size=grid)
-        pending = overlay_operand
-        divided = []
-        for cell, labels in cells:
-            # All complementary pieces must use this same realized operand.
-            # Mixing its raw and realized boundaries creates inconsistent seams.
-            common = intersection(cell, overlay_operand, grid_size=grid)
-            residual = difference(cell, overlay_operand, grid_size=grid)
-            pending = difference(pending, cell, grid_size=grid)
-            divided.extend((part, labels) for part in _polygons(residual))
-            divided.extend(
-                (part, (*labels, value.operand_id)) for part in _polygons(common)
+
+    def construct():
+        with _stage("geometry.grid.inputs", counts={"operands": len(values)}):
+            raw_polygons = tuple(
+                (v.operand_id, Polygon(v.exterior, v.holes)) for v in values
             )
-        # The first operand also goes through GEOS at the shared grid; this is
-        # an overlay operation, not an independently cleaned precision copy.
-        pending = union_all([pending], grid_size=grid)
-        divided.extend((part, (value.operand_id,)) for part in _polygons(pending))
-        cells = divided
-    vertices = tuple(
-        sorted(
-            {
-                tuple(p)
-                for cell, _ in cells
-                for ring in (cell.exterior, *cell.interiors)
-                for p in ring.coords
-            }
+        geometries = dict(raw_polygons)
+        if not apply_grid:
+            return _GridWork(raw_polygons, _subdivide_grid(values, geometries, None))
+        from scgsim.geometry._primitives._tagged_grid import build_tagged_subdivision
+
+        result = build_tagged_subdivision(values, geometries, grid)
+        accounting = _ZeroAreaAccounting(
+            tuple(_ZeroAreaResidue(*row) for row in result.boundary),
+            tuple(_ZeroAreaResidue(*row) for row in result.auxiliary),
         )
-    )
-    faces = []
-    for cell, members in cells:
-        outer, holes = _regions(cell, vertices, grid)[0]
-        identity = sha256(
-            json.dumps([outer, holes], separators=(",", ":")).encode()
-        ).hexdigest()
-        faces.append(
-            GridFace(
-                "GRID_FACE__" + identity[:24], outer, holes, tuple(sorted(members))
-            )
+        return _GridWork(
+            raw_polygons,
+            _Subdivision(
+                result.cells,
+                (*accounting.boundary, *accounting.auxiliary),
+                accounting,
+                result.source_paths,
+                result.edge_origins,
+            ),
         )
-    faces = tuple(sorted(faces, key=lambda f: f.face_id))
-    effective = {
-        v.operand_id: union_all(
-            [
-                Polygon(f.exterior, f.holes)
-                for f in faces
-                if v.operand_id in f.operand_ids
-            ],
-            grid_size=grid,
-        )
-        for v in values
+
+    work = cached_subdivision(values, context, apply_grid=apply_grid, build=construct)
+    geometries = dict(work.raw_polygons)
+    subdivision = work.subdivision
+    cells = subdivision.cells
+    with _stage(
+        "geometry.grid.zero_area", counts={"residues": len(subdivision.residues)}
+    ):
+        zero_area = subdivision.accounting
+        if zero_area is None:
+            zero_area = _account_zero_area(subdivision.residues, cells, grid)
+    residue_points = {
+        point
+        for residue in (*zero_area.boundary, *zero_area.auxiliary)
+        for point in _residue_coordinates(residue.geometry)
     }
-    audits = []
-    for value in values:
-        raw, final = geometries[value.operand_id], effective[value.operand_id]
-        if value.physical and (
-            final.is_empty
-            or len(_polygons(raw)) != len(_polygons(final))
-            or sum(len(p.interiors) for p in _polygons(raw))
-            != sum(len(p.interiors) for p in _polygons(final))
-        ):
-            raise ValueError(
-                f"physical geometry collapsed or changed component/hole topology at grid: {value.operand_id}"
-            )
-        audits.append(
-            GridOperandAudit(
-                value.operand_id,
-                raw.area,
-                final.area,
-                not raw.equals(final),
-                sum(len(r) - len(set(r)) for r in (value.exterior, *value.holes)),
+    with _stage("geometry.grid.vertices", counts={"cells": len(cells)}):
+        vertices = tuple(
+            sorted(
+                {
+                    tuple(p)
+                    for cell, _ in cells
+                    for ring in (cell.exterior, *cell.interiors)
+                    for p in ring.coords
+                }
+                | residue_points
             )
         )
-    contacts = [v for v in values if v.contact]
-    for i, first in enumerate(contacts):
-        for second in contacts[i + 1 :]:
-            before = geometries[first.operand_id].relate(geometries[second.operand_id])
-            after = effective[first.operand_id].relate(effective[second.operand_id])
-            if before != after:
-                raise ValueError(
-                    f"physical contact changed at grid: {first.operand_id}, {second.operand_id}"
+    with _stage(
+        "geometry.grid.cell_regions",
+        counts={"cells": len(cells), "vertices": len(vertices)},
+    ):
+        faces = []
+        vertex_index = _region_vertex_index(vertices, grid)
+        for cell_index, (cell, members) in enumerate(cells):
+            outer, holes = _regions_indexed(cell, vertex_index)[0]
+            identity = sha256(
+                json.dumps([outer, holes], separators=(",", ":")).encode()
+            ).hexdigest()
+            faces.append(
+                GridFace(
+                    "GRID_FACE__" + identity[:24], outer, holes, tuple(sorted(members))
                 )
-    edges = tuple(
-        sorted(
-            {
-                tuple(sorted((a, b)))
-                for f in faces
-                for ring in (f.exterior, *f.holes)
-                for a, b in zip(ring, (*ring[1:], ring[0]))
-            }
+            )
+            _progress(cell_index + 1, len(cells))
+        faces = tuple(sorted(faces, key=lambda f: f.face_id))
+        vertices = tuple(
+            sorted(
+                {
+                    p
+                    for face in faces
+                    for ring in (face.exterior, *face.holes)
+                    for p in ring
+                }
+            )
         )
-    )
+    # Boundary and auxiliary residues remain inspectable internally through
+    # the exact physical audits; neither can create an orphan area-graph edge.
+    with _stage("geometry.grid.effective", counts={"operands": len(values)}):
+        # One immutable polygon per atomic face, including multiply-labelled
+        # cells. Preserve face order within each operand's exact union.
+        face_polygons = tuple(Polygon(face.exterior, face.holes) for face in faces)
+        operand_faces = {operand_id: [] for operand_id in ids}
+        for index, face in enumerate(faces):
+            for operand_id in face.operand_ids:
+                operand_faces[operand_id].append(index)
+
+        def realize(value):
+            selected = [
+                face_polygons[index] for index in operand_faces[value.operand_id]
+            ]
+            return coverage_union_all(selected) if apply_grid else union_all(selected)
+
+        effective = dict(zip(ids, _ordered_map(realize, values), strict=True))
+    with _stage("geometry.grid.physical_audit", counts={"operands": len(values)}):
+        audits = []
+        for operand_index, value in enumerate(values):
+            raw, final = geometries[value.operand_id], effective[value.operand_id]
+            if value.physical and (
+                final.is_empty
+                or len(_polygons(raw)) != len(_polygons(final))
+                or sum(len(p.interiors) for p in _polygons(raw))
+                != sum(len(p.interiors) for p in _polygons(final))
+            ):
+                error = ValueError(
+                    f"physical geometry collapsed or changed component/hole topology at grid: {value.operand_id}"
+                )
+                try:
+
+                    def summary(shape):
+                        polygons = _polygons(shape)
+                        return {
+                            "empty": bool(shape.is_empty),
+                            "is_valid": bool(shape.is_valid),
+                            "components": len(polygons),
+                            "holes": sum(len(p.interiors) for p in polygons),
+                            "area_um2": float(shape.area),
+                        }
+
+                    metrics = {
+                        "operand_index": operand_index,
+                        "grid_size_um": grid,
+                        "requested": summary(raw),
+                        "realized": summary(final),
+                    }
+                    # Error-only witnesses separate input rounding, subdivision
+                    # coverage, and final re-union. They never enter the output
+                    # or change the original physical preservation decision.
+                    stages = (
+                        (
+                            "initial_grid_realization",
+                            lambda: _overlay_call(
+                                "intersection", raw, raw, grid, operand_index, None
+                            ),
+                        ),
+                        (
+                            "labelled_cells_without_resnap",
+                            lambda: union_all(
+                                [
+                                    cell
+                                    for cell, labels in cells
+                                    if value.operand_id in labels
+                                ],
+                                grid_size=0,
+                            ),
+                        ),
+                        (
+                            "reconstructed_faces_without_resnap",
+                            lambda: union_all(
+                                [
+                                    Polygon(face.exterior, face.holes)
+                                    for face in faces
+                                    if value.operand_id in face.operand_ids
+                                ],
+                                grid_size=0,
+                            ),
+                        ),
+                    )
+                    for name, operation in stages:
+                        try:
+                            metrics[name] = summary(operation())
+                        except Exception as diagnostic_error:
+                            metrics[name] = {
+                                "unavailable": True,
+                                "error_type": type(diagnostic_error).__name__,
+                            }
+                    error.add_note(
+                        "scgsim.grid.physical_topology: "
+                        + json.dumps(metrics, sort_keys=True)
+                    )
+                except Exception:
+                    error.add_note("scgsim.grid.physical_topology: metrics unavailable")
+                raise error
+            audits.append(
+                GridOperandAudit(
+                    value.operand_id,
+                    raw.area,
+                    final.area,
+                    not raw.equals(final),
+                    sum(len(r) - len(set(r)) for r in (value.exterior, *value.holes)),
+                )
+            )
+            _progress(operand_index + 1, len(values))
+    contacts = [v for v in values if v.contact]
+    with _stage("geometry.grid.contact_audit", counts={"operands": len(contacts)}):
+        for i, first in enumerate(contacts):
+            for second in contacts[i + 1 :]:
+                before = geometries[first.operand_id].relate(
+                    geometries[second.operand_id]
+                )
+                after = effective[first.operand_id].relate(effective[second.operand_id])
+                if before != after:
+                    raise ValueError(
+                        f"physical contact changed at grid: {first.operand_id}, {second.operand_id}"
+                    )
+            _progress(i + 1, len(contacts))
+    with _stage("geometry.grid.edges", counts={"faces": len(faces)}):
+        edges = tuple(
+            sorted(
+                {
+                    tuple(sorted((a, b)))
+                    for f in faces
+                    for ring in (f.exterior, *f.holes)
+                    for a, b in zip(ring, (*ring[1:], ring[0]))
+                }
+            )
+        )
     return GridArrangement(context, faces, vertices, edges, tuple(audits), apply_grid)
 
 
@@ -451,6 +1076,45 @@ def source_grid_audits():
     return tuple(_SOURCE_AUDITS.get() or ())
 
 
+@dataclass(frozen=True)
+class _SourceRecipeOutcome:
+    result: object
+    audits: tuple
+    error: BaseException | None
+    traceback: object
+
+
+def _source_recipe_map(function, items):
+    """Run independent recipes with isolated audits and source-order merging."""
+    parent_audits = _SOURCE_AUDITS.get()
+
+    def execute(item):
+        local_audits = [] if parent_audits is not None else None
+        token = _SOURCE_AUDITS.set(local_audits)
+        try:
+            try:
+                result = function(item)
+            except BaseException as error:
+                return _SourceRecipeOutcome(
+                    None, tuple(local_audits or ()), error, error.__traceback__
+                )
+            return _SourceRecipeOutcome(result, tuple(local_audits or ()), None, None)
+        finally:
+            _SOURCE_AUDITS.reset(token)
+
+    outcomes = _ordered_map(execute, items)
+    results = []
+    for outcome in outcomes:
+        if parent_audits is not None:
+            for row in outcome.audits:
+                if row not in parent_audits:
+                    parent_audits.append(row)
+        if outcome.error is not None:
+            raise outcome.error.with_traceback(outcome.traceback)
+        results.append(outcome.result)
+    return results
+
+
 def preserve_declared_source(function):
     """Compare declared physical source result before destructive quantization.
 
@@ -468,10 +1132,12 @@ def preserve_declared_source(function):
             return function(entity, *args, **kwargs)
         token = _SOURCE_INTENT.set(True)
         try:
-            requested = function(entity, *args, **kwargs)
+            with _stage("geometry.grid.source_reference"):
+                requested = function(entity, *args, **kwargs)
         finally:
             _SOURCE_INTENT.reset(token)
-        realized = function(entity, *args, **kwargs)
+        with _stage("geometry.grid.source_realization"):
+            realized = function(entity, *args, **kwargs)
         from shapely import Polygon, union_all
 
         def geometry(polygons):
@@ -485,59 +1151,66 @@ def preserve_declared_source(function):
                 ]
             )
 
-        raw, final = geometry(requested), geometry(realized)
-        before = (len(_polygons(raw)), sum(len(p.interiors) for p in _polygons(raw)))
-        after = (len(_polygons(final)), sum(len(p.interiors) for p in _polygons(final)))
-        if before != after:
-            raise ValueError(
-                f"declared physical source component/hole topology changed at grid: {entity.semantic_id}"
+        with _stage("geometry.grid.source_audit"):
+            raw, final = geometry(requested), geometry(realized)
+            before = (
+                len(_polygons(raw)),
+                sum(len(p.interiors) for p in _polygons(raw)),
             )
-        raw_regions = _regions(raw)
-        requested_by_id = {p.polygon_id: p for p in requested}
-        if set(requested_by_id) != {p.polygon_id for p in realized}:
-            raise ValueError(
-                f"declared source polygon identity changed at grid: {entity.semantic_id}"
+            after = (
+                len(_polygons(final)),
+                sum(len(p.interiors) for p in _polygons(final)),
             )
-        requested_polygons = [
-            {
-                "source_polygon_id": p.polygon_id,
-                "exterior": tuple(_frame_point(v) for v in p.exterior),
-                "holes": tuple(tuple(_frame_point(v) for v in r) for r in p.holes),
+            if before != after:
+                raise ValueError(
+                    f"declared physical source component/hole topology changed at grid: {entity.semantic_id}"
+                )
+            raw_regions = _regions(raw)
+            requested_by_id = {p.polygon_id: p for p in requested}
+            if set(requested_by_id) != {p.polygon_id for p in realized}:
+                raise ValueError(
+                    f"declared source polygon identity changed at grid: {entity.semantic_id}"
+                )
+            requested_polygons = [
+                {
+                    "source_polygon_id": p.polygon_id,
+                    "exterior": tuple(_frame_point(v) for v in p.exterior),
+                    "holes": tuple(tuple(_frame_point(v) for v in r) for r in p.holes),
+                }
+                for p in requested
+            ]
+            ledger = {
+                "source_entity_id": entity.semantic_id,
+                "operation": function.__name__,
+                "geometry_grid": context.to_payload(),
+                "requested_regions": raw_regions,
+                "requested_polygons": requested_polygons,
+                "requested_geometry_sha256": sha256(
+                    json.dumps(raw_regions, separators=(",", ":")).encode()
+                ).hexdigest(),
+                "requested_area_um2": raw.area,
+                "realized_area_um2": final.area,
+                "requested_components": before[0],
+                "realized_components": after[0],
+                "requested_holes": before[1],
+                "realized_holes": after[1],
+                "geometry_changed": not raw.equals(final),
             }
-            for p in requested
-        ]
-        ledger = {
-            "source_entity_id": entity.semantic_id,
-            "operation": function.__name__,
-            "geometry_grid": context.to_payload(),
-            "requested_regions": raw_regions,
-            "requested_polygons": requested_polygons,
-            "requested_geometry_sha256": sha256(
-                json.dumps(raw_regions, separators=(",", ":")).encode()
-            ).hexdigest(),
-            "requested_area_um2": raw.area,
-            "realized_area_um2": final.area,
-            "requested_components": before[0],
-            "realized_components": after[0],
-            "requested_holes": before[1],
-            "realized_holes": after[1],
-            "geometry_changed": not raw.equals(final),
-        }
-        audits = _SOURCE_AUDITS.get()
-        if audits is not None and ledger not in audits:
-            audits.append(ledger)
-        return tuple(
-            replace(
-                p,
-                metadata={
-                    **p.metadata,
-                    "geometry_grid_source_identity": {
-                        "source_entity_id": entity.semantic_id,
-                        "source_polygon_id": p.polygon_id,
+            audits = _SOURCE_AUDITS.get()
+            if audits is not None and ledger not in audits:
+                audits.append(ledger)
+            return tuple(
+                replace(
+                    p,
+                    metadata={
+                        **p.metadata,
+                        "geometry_grid_source_identity": {
+                            "source_entity_id": entity.semantic_id,
+                            "source_polygon_id": p.polygon_id,
+                        },
                     },
-                },
+                )
+                for p in realized
             )
-            for p in realized
-        )
 
     return preserved

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.diagnostics import _worker_diagnostics
+
 import json
 import sys
 from collections.abc import Mapping
@@ -18,7 +20,13 @@ def main(arguments: list[str] | None = None) -> int:
         raise SystemExit("usage: python -m scgsim.palace.mesh.worker REQUEST RESULT")
     request_path, result_path = (Path(value) for value in values)
     request = json.loads(request_path.read_text(encoding="utf-8"))
-    return _run_request(request, result_path)
+    if not isinstance(request, Mapping):
+        raise TypeError("Gmsh worker request must be a mapping.")
+    diagnostic_config = request.get("preparation_diagnostics")
+    if diagnostic_config is not None and not isinstance(diagnostic_config, Mapping):
+        raise TypeError("Worker diagnostic configuration must be a mapping.")
+    with _worker_diagnostics(diagnostic_config):
+        return _run_request(request, result_path)
 
 
 def _run_request(request: Any, result_path: Path) -> int:

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from scgsim.geometry._primitives._grid_cache import with_grid_work_cache
+
+from scgsim.diagnostics import _stage
+
 import json
 import re
 import time
 from collections.abc import Mapping
-from dataclasses import asdict, is_dataclass
+from dataclasses import fields, is_dataclass
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +55,8 @@ class SemanticGeometryBuilder:
     One call writes one route XAO file. Mesh generation is downstream.
     """
 
+    @_stage("geometry.compiler.build")
+    @with_grid_work_cache
     def build(
         self,
         build_input: GeometryBuildInput,
@@ -67,6 +73,13 @@ class SemanticGeometryBuilder:
         geometry_dir = run_path / "geometry"
         geometry_dir.mkdir(parents=True, exist_ok=True)
         timings: list[dict[str, Any]] = []
+        sidecar_sizes: dict[str, int] = {}
+
+        def write_sidecar(stage_name, payload):
+            sidecar_sizes[stage_name] = _write_stage_sidecar(
+                metadata_dir, stage_name, payload
+            )
+
         plan = None
         built_plan = None
         started = time.perf_counter()
@@ -80,8 +93,7 @@ class SemanticGeometryBuilder:
             _timed(
                 timings,
                 "write_01_validate_geometry_input",
-                lambda: _write_stage_sidecar(
-                    metadata_dir,
+                lambda: write_sidecar(
                     "01_validate_geometry_input",
                     validated_input,
                 ),
@@ -97,8 +109,7 @@ class SemanticGeometryBuilder:
             _timed(
                 timings,
                 "write_02_build_route_construction_plan",
-                lambda: _write_stage_sidecar(
-                    metadata_dir,
+                lambda: write_sidecar(
                     "02_build_route_construction_plan",
                     plan,
                 ),
@@ -111,8 +122,7 @@ class SemanticGeometryBuilder:
             _timed(
                 timings,
                 "write_engine_gate_volume_adjacency_conformality",
-                lambda: _write_stage_sidecar(
-                    metadata_dir,
+                lambda: write_sidecar(
                     "engine_gate_volume_adjacency_conformality",
                     volume_adjacency_gate,
                 ),
@@ -136,8 +146,7 @@ class SemanticGeometryBuilder:
             _timed(
                 timings,
                 "write_03_build_occ_geometry",
-                lambda: _write_stage_sidecar(
-                    metadata_dir,
+                lambda: write_sidecar(
                     "03_build_occ_geometry",
                     built_plan,
                 ),
@@ -148,8 +157,7 @@ class SemanticGeometryBuilder:
             _timed(
                 timings,
                 "write_engine_gate_gmsh_brep_conformality",
-                lambda: _write_stage_sidecar(
-                    metadata_dir,
+                lambda: write_sidecar(
                     "engine_gate_gmsh_brep_conformality",
                     gmsh_brep_gate,
                 ),
@@ -175,8 +183,7 @@ class SemanticGeometryBuilder:
             _timed(
                 timings,
                 "write_04_export_physical_groups",
-                lambda: _write_stage_sidecar(
-                    metadata_dir,
+                lambda: write_sidecar(
                     "04_export_physical_groups",
                     physical_groups,
                 ),
@@ -186,7 +193,9 @@ class SemanticGeometryBuilder:
             _write_stage_sidecar(
                 metadata_dir,
                 "00_timing",
-                _timing_payload(route, timings, plan, built_plan, started),
+                _timing_payload(
+                    route, timings, plan, built_plan, started, sidecar_sizes
+                ),
             )
 
 
@@ -219,12 +228,14 @@ def _timing_payload(
     plan: Any,
     built_plan: Any,
     started: float,
+    sidecar_sizes: Mapping[str, int] | None = None,
 ) -> dict[str, Any]:
     return {
         "route": route,
         "total_seconds": round(time.perf_counter() - started, 6),
         "counts": _timing_counts(plan, built_plan),
         "stages": timings,
+        "sidecar_bytes": dict(sidecar_sizes or {}),
         "planning_stages": list(getattr(plan, "metadata", {}).get("timings", ())),
         "backend_stages": list(
             getattr(built_plan, "metadata", {}).get("backend_timings", ())
@@ -255,42 +266,57 @@ def _timing_counts(plan: Any, built_plan: Any) -> dict[str, Any]:
     return counts
 
 
-def _write_stage_sidecar(path: Path, stage_name: str, payload: Any) -> None:
+def _write_stage_sidecar(path: Path, stage_name: str, payload: Any) -> int:
     path.mkdir(parents=True, exist_ok=True)
-    # Sidecars are retained with handoff artifacts.  They may describe files
-    # the builder used locally, but must not publish a workstation path.  Keep
-    # paths inside this run addressable from the run root and reduce any
-    # external input to a non-location-bearing label.
-    public_payload = _redact_local_paths(payload, run_root=path.parents[1])
-    path.joinpath(f"{stage_name}.json").write_text(
-        json.dumps(public_payload, indent=2, sort_keys=True, default=asdict),
-        encoding="utf-8",
-    )
+    # Sidecars retain the full evidence, including repeated ledger references.
+    # Convert and redact shared records once without dataclasses.asdict's deep
+    # copy; JSON still emits every occurrence using the existing file format.
+    with _stage("geometry.compiler.sidecar.redaction"):
+        public_payload = _redact_local_paths(payload, run_root=path.parents[1])
+    with _stage("geometry.compiler.sidecar.json"):
+        text = json.dumps(public_payload, indent=2, sort_keys=True)
+    with _stage("geometry.compiler.sidecar.write", counts={"bytes": len(text.encode("utf-8"))}):
+        destination = path / f"{stage_name}.json"
+        destination.write_text(text, encoding="utf-8")
+    return destination.stat().st_size
 
 
 def _redact_local_paths(payload: Any, *, run_root: Path) -> Any:
-    """Return sidecar-safe data without machine-local absolute path strings."""
-    if is_dataclass(payload) and not isinstance(payload, type):
-        return _redact_local_paths(asdict(payload), run_root=run_root)
-    if isinstance(payload, str):
-        candidate = Path(payload)
-        if candidate.is_absolute():
-            return _redact_one_path(candidate, run_root=run_root)
-        return re.sub(
-            r"(?<!\S)(/[^\s]+)",
-            lambda match: _redact_one_path(Path(match.group(1)), run_root=run_root),
-            payload,
+    """Return sidecar-safe data, sharing pure conversion within this call."""
+    memo: dict[int, Any] = {}
+
+    def convert(value):
+        structured = (
+            (is_dataclass(value) and not isinstance(value, type))
+            or isinstance(value, (Mapping, tuple, list))
         )
-    if isinstance(payload, Mapping):
-        return {
-            key: _redact_local_paths(value, run_root=run_root)
-            for key, value in payload.items()
-        }
-    if isinstance(payload, tuple):
-        return tuple(_redact_local_paths(value, run_root=run_root) for value in payload)
-    if isinstance(payload, list):
-        return [_redact_local_paths(value, run_root=run_root) for value in payload]
-    return payload
+        key = id(value)
+        if structured and key in memo:
+            return memo[key]
+        if is_dataclass(value) and not isinstance(value, type):
+            result = {field.name: convert(getattr(value, field.name)) for field in fields(value)}
+        elif isinstance(value, str):
+            candidate = Path(value)
+            if candidate.is_absolute():
+                return _redact_one_path(candidate, run_root=run_root)
+            return re.sub(
+                r"(?<!\S)(/[^\s]+)",
+                lambda match: _redact_one_path(Path(match.group(1)), run_root=run_root),
+                value,
+            )
+        elif isinstance(value, Mapping):
+            result = {key: convert(item) for key, item in value.items()}
+        elif isinstance(value, tuple):
+            result = tuple(convert(item) for item in value)
+        elif isinstance(value, list):
+            result = [convert(item) for item in value]
+        else:
+            return value
+        if structured:
+            memo[key] = result
+        return result
+
+    return convert(payload)
 
 
 def _redact_one_path(candidate: Path, *, run_root: Path) -> str:

@@ -1,0 +1,208 @@
+{
+  "case_id": "public-attached-junction-hole-bands",
+  "classification": "PUBLIC_GENERIC_FIXTURE",
+  "repository": "https://github.com/OrPenStrike/scgsim",
+  "revision": "2ed85adc",
+  "source_file": "tests/test_rectangular_junction_geometry.py",
+  "source_file_sha256": "5bac5805e4530c54695c4dad544b2ef8c8ccd51b80a039d77dc6c97c213f309d",
+  "source_entry": "physical_fixture() plus its public hole modification, lines230-441",
+  "normalized_source_frontend": true,
+  "gds_generated": false,
+  "route": "A",
+  "units": "um",
+  "grid_size_um": 0.001,
+  "physical_profile": "substrate_face",
+  "source_film_interval_um": [
+    0,
+    0.25
+  ],
+  "band_cuts_um": [
+    0.125,
+    0.25
+  ],
+  "selected_parent": "SURF__MS__chip/left__substrate__upper_air__0000",
+  "shared_interface_kinds": [
+    "MS",
+    "MA"
+  ],
+  "planning_artifact_sha256": "e3e56877c76f5d39b1b2574072acc789edd6d1452f4fe746b3571bf432fff3b3",
+  "native_xao_sha256": "55375a9791f900a43cf1f8ad78dec595a9733f374bc199b509a5a3d24a370659",
+  "native_xao_bytes": 42978,
+  "native_readback_sha256": "77a5d91ea6ef181259dc1d4b0b79d53bd11542c6b42f6f6d127ec9a65c73d6d1",
+  "figure": {
+    "file": "public-junction-hole-sgip.png",
+    "sha256": "3f81f281fdb2ce775f0ddcc543bff2ea608a9f1eb829f61654457ffcab474575",
+    "panels": {
+      "A": "normalized source",
+      "B": "effective rectangular-junction geometry",
+      "C": "actual planned band children",
+      "D": "native XAO group-bound curves and nodes",
+      "E": "effective physical representation section",
+      "F": "actual native XAO line readback"
+    }
+  },
+  "native_group_binding": [
+    {
+      "surface_id": "SURF__MS__chip/left__substrate__upper_air__0000__DIST_0000_0000",
+      "band_index": 0,
+      "export_tags": [
+        19
+      ],
+      "imported_tags": [
+        7
+      ],
+      "adjacent_volume_tags": [
+        1,
+        3
+      ]
+    },
+    {
+      "surface_id": "SURF__MS__chip/left__substrate__upper_air__0000__DIST_0000_0001",
+      "band_index": 0,
+      "export_tags": [
+        20
+      ],
+      "imported_tags": [
+        9
+      ],
+      "adjacent_volume_tags": [
+        1,
+        3
+      ]
+    },
+    {
+      "surface_id": "SURF__MS__chip/left__substrate__upper_air__0000__DIST_0001_0000",
+      "band_index": 1,
+      "export_tags": [
+        27
+      ],
+      "imported_tags": [
+        8
+      ],
+      "adjacent_volume_tags": [
+        1,
+        3
+      ]
+    },
+    {
+      "surface_id": "SURF__MS__chip/left__substrate__upper_air__0000__DIST_0002_0000",
+      "band_index": 2,
+      "export_tags": [
+        22
+      ],
+      "imported_tags": [
+        11
+      ],
+      "adjacent_volume_tags": [
+        1,
+        3
+      ]
+    },
+    {
+      "surface_id": "SURF__MS__chip/left__substrate__upper_air__0000__DIST_0002_0001",
+      "band_index": 2,
+      "export_tags": [
+        23
+      ],
+      "imported_tags": [
+        12
+      ],
+      "adjacent_volume_tags": [
+        1,
+        3
+      ]
+    },
+    {
+      "surface_id": "SURF__MS__chip/left__substrate__upper_air__0000__DIST_0002_0002",
+      "band_index": 2,
+      "export_tags": [
+        24
+      ],
+      "imported_tags": [
+        13
+      ],
+      "adjacent_volume_tags": [
+        1,
+        3
+      ]
+    }
+  ],
+  "native_volume_names": {
+    "1": "substrate",
+    "2": "lower_air",
+    "3": "upper_air"
+  },
+  "inspection_scope": "Actual public source/planning and CAD/XAO readback; no3Dmesh or field solution",
+  "native_model_counts": {
+    "raw_surfaces": 27,
+    "physical_groups": 29,
+    "volumes": 3
+  },
+  "individual_figures": [
+    {
+      "file": "source-entities.png",
+      "sha256": "2d92f0fc58c0b8ec415f3b2ed23a83d9a7a0139874e6aad6b9769f8df027732d",
+      "derived_from": "source.polygons[].metadata.unquantized_source_geometry; source/entities context",
+      "rendering": "new independent Matplotlib figure, not cropped plate"
+    },
+    {
+      "file": "effective-junction.png",
+      "sha256": "28091cd8e40b0cb56a40daf66332e04c3d50db39d2b0d754e6bfa5463287aee1",
+      "derived_from": "effective.polygons; effective.metadata.junction_partitions.junction.ends; original raw dashed outline",
+      "rendering": "new independent Matplotlib figure, not cropped plate"
+    },
+    {
+      "file": "physical-section.png",
+      "sha256": "47115c831662fbed46b2bdb85fb87a0545924310a5c1d8ca90a342c07f3b8b3c",
+      "derived_from": "effective.entities[].geometry domain_bounds_um,z_min_um,z_max_um; effective.polygons section y=1",
+      "rendering": "new independent Matplotlib figure, not cropped plate"
+    },
+    {
+      "file": "planned-distance-bands.png",
+      "sha256": "974e15d338d719884223d0c78837d7173ce8701ba336a573ea7ba3d0a04d7876",
+      "derived_from": "final.surfaces[].geometry_ref.planar_loops_3d; metadata.surface_distance_band",
+      "rendering": "new independent Matplotlib figure, not cropped plate"
+    },
+    {
+      "file": "native-band-edges.png",
+      "sha256": "97f617f052935106a76b8eeb08238627d68f555f40efd948118a4057f7a6f9c3",
+      "derived_from": "native-cad-observation.curves[].points; CAD-BAND-BINDING native face boundary_curve_tags",
+      "rendering": "new independent Matplotlib figure, not cropped plate"
+    },
+    {
+      "file": "native-cad-3d.png",
+      "sha256": "8922ce2b56f8f5561049e1c654989a131e8bf0ab235a9c411e5d0cc6a559f58d",
+      "derived_from": "native-cad-observation.curves[].points only; native band group curve selection",
+      "rendering": "new independent Matplotlib figure, not cropped plate"
+    },
+    {
+      "file": "source-context.png",
+      "sha256": "ef82fe8263ac1f05d7282297bb11402bb957b134102e811f933fef7004bd1de1",
+      "derived_from": "source.polygons[].metadata.unquantized_source_geometry; source entity envelope",
+      "rendering": "independent standalone Matplotlib figure"
+    },
+    {
+      "file": "effective-port-context.png",
+      "sha256": "ad0f9af26e3e8d04f9b822f4c72c2dc99cf503aa08ca6e5ca26f0dd219d50227",
+      "derived_from": "effective.polygons; junction partition central and terminal-owned end IDs",
+      "rendering": "independent standalone Matplotlib figure"
+    }
+  ],
+  "figure_redraw": {
+    "original_source_outer_vertices": 6,
+    "original_source_hole_vertices": 4,
+    "source_left_area_um2": 8,
+    "added_left_end_area_um2": 1,
+    "effective_left_parent_area_um2": 9,
+    "upper_air_effective_z_um": [
+      0,
+      4.25
+    ],
+    "lower_region_effective_z_um": [
+      -2,
+      0
+    ],
+    "planning_or_native_rerun": false
+  },
+  "viewer_layout": "Eight independent figures in document order; source detail/context and effective left/full port each stacked as separate viewers"
+}

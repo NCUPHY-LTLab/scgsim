@@ -1,5 +1,7 @@
 """AEDT request, execution, analysis, and result APIs."""
 
+from .runtime.control import request_q3d_abort_and_save, request_q3d_stop_and_save
+
 from .eigenmode import EigenmodeSim
 from .epr.analysis import combine_epr_mode, combine_surface_epr_mode, reanalyze_epr
 from .epr.geometry import planar_junction_from_port
@@ -57,7 +59,7 @@ from .specs.hfss import (
 )
 from .specs.parse import AedtSpec, parse_aedt_spec
 from .specs.q2d import Q2dConductorSpec, Q2dRectangleSpec, Q2dSpec
-from .specs.q3d import Q3dBodySpec, Q3dNetSpec, Q3dSpec
+from .specs.q3d import Q3dBodySpec, Q3dNetSpec, Q3dSpec, Q3dTerminalPair
 
 __all__ = [
     "AedtResources",
@@ -99,6 +101,7 @@ __all__ = [
     "Q3dBodySpec",
     "Q3dNetSpec",
     "Q3dSpec",
+    "Q3dTerminalPair",
     "ResolvedRun",
     "SavedSolution",
     "SurfaceEprSpec",
@@ -115,6 +118,8 @@ __all__ = [
     "prepare_planar_geometry_input",
     "prepare_q3d_from_geometry",
     "reanalyze_epr",
+    "request_q3d_stop_and_save",
+    "request_q3d_abort_and_save",
     "resolve_epr_result",
     "resolve_results",
     "resolve_prepared_model",

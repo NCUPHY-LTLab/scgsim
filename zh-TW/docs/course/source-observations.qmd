@@ -1,0 +1,53 @@
+---
+lang: zh-TW
+title: "檢視並保留來源輸入"
+description: "讀取正規化來源資訊，並保存配對的 GDS 與堆疊資料。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/source-observations"
+---
+
+從提供已準備語意 `snapshot` 的模型開始，例如[入門範例](../examples.qmd#getting-started)或較深入的 [Xmon 建構](../tutorial-xmon-input.qmd)。要求後端建立幾何前，先檢查實際提供的內容。在來源邊界檢查，更容易發現 Net 遺漏、材料區間錯誤或非預期的真空包覆。
+
+```python
+from IPython.display import display
+from scgsim.geometry import summarize_geometry_input
+
+summary = summarize_geometry_input(
+    snapshot.geometry_input, prepared_stack=snapshot.stack
+)
+display(summary)
+source_data = summary.data
+```
+
+請依最終指派核對 Entity／occurrence／Net 表，再檢查材料、Z 與真空紀錄。埠表會標示編寫的薄片及其承載物／方向。未知值仍維持未知；未設定的請求不等於已知的零。`.data` 是分離資料，因此修改回傳字典不會改變保留的來源快照。
+
+設定完成後，兩種 Eigenmode 外觀介面也提供 `sim.input_summary()`。此檢視會在正規化來源資訊中加入後端設定。Electrostatic 沒有此介面方法：請使用上方獨立來源摘要，再檢查寫出的設定檔及確切端子／接地索引。
+
+## 保留可攜式配對來源 {#retain-a-portable-paired-source}
+
+快照不含即時元件參照。其 GDS 位元組與分離的堆疊資料構成可攜式配對，讓後續工作階段讀取相同來源，而不必在即時 GDSFactory 快取中重建試片。
+
+```python
+import json
+from pathlib import Path
+from scgsim.geometry import build_gds_stack_geometry_input
+
+source_dir = Path(".artifacts/study-source")
+source_dir.mkdir(parents=True, exist_ok=True)
+gds_path = source_dir / "model.gds"
+stack_path = source_dir / "model.stack.json"
+gds_path.write_bytes(snapshot.gds_bytes)
+stack_path.write_text(json.dumps(snapshot.stack, indent=2), encoding="utf-8")
+reloaded = build_gds_stack_geometry_input(
+    gds_file=gds_path,
+    stack_file=stack_path,
+    top_cell_name=snapshot.stack["metadata"]["top_cell_name"],
+)
+print(snapshot.gds_sha256)
+print(tuple(entity.semantic_id for entity in reloaded.entities))
+```
+
+保留先前的來源配對時，請選擇新的研究位置並將兩個檔案放在一起：堆疊讀取器會檢查紀錄中的 GDS 識別與已註冊的 occurrence 幾何。列印出的 Entity ID 表示來源脈絡，不代表每個 Entity 都有一筆場量測，也不代表求解器連通性。
+
+來源摘要與配對來源讀取可確認正規化輸入資訊；它們不會產生網格、不會查詢原生 AEDT，也無法證明已完成求解。下一階段需選擇物理模型：[Palace Electrostatic](palace-electrostatic.qmd)、[Palace Eigenmode](palace-eigenmode.qmd) 或 [AEDT source-first Eigenmode/EPR](../tutorial-xmon-aedt.qmd)。[幾何概念](../concepts/geometry.qmd)說明這些後端如何共用來源識別，同時採用不同原生表示法。

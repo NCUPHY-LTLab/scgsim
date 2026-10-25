@@ -122,8 +122,6 @@ def prepare_handoff(
         "config_compatibility_probe": "native_dry_run",
         "config_compatibility_semantics": "required_before_solve",
         "runtime_identity_semantics": "observed_provenance_only",
-        "requested_release": "0.18.1",
-        "release_selection_semantics": "required_before_solve",
     }
 
     if returned_receipt_recorder_path.is_file():

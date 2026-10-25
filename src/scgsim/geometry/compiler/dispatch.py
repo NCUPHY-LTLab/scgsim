@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.diagnostics import _stage
+
 import time
 from scgsim.geometry._primitives.grid import with_input_grid
 
@@ -16,7 +18,7 @@ from scgsim.geometry.compiler.validation import (
     validate_route_volume_surface_refs,
     validate_selected_route,
     validate_surface_deduplication,
-    validate_surface_partition_coverage,
+    _validate_surface_partition_coverage,
     validate_surface_sheet_interface_coverage,
     validate_surface_use_counts,
     validate_tag_plan_coverage,
@@ -50,9 +52,6 @@ from scgsim.geometry.planning.surfaces import (
     plan_route_surfaces,
     plan_surface_partitions,
 )
-from scgsim.geometry.planning.surface_bands import (
-    partition_surface_distance_bands, synchronize_distance_partitions,
-)
 from scgsim.geometry.planning.tags import plan_route_tags
 from scgsim.geometry.planning.topology import plan_canonical_topology
 from scgsim.geometry.planning.volumes import (
@@ -64,6 +63,7 @@ from scgsim.geometry.planning.volumes import (
 
 
 @with_input_grid
+@_stage("geometry.compiler.plan")
 def build_route_construction_plan(
     build_input: GeometryBuildInput,
     *,
@@ -85,10 +85,10 @@ def build_route_construction_plan(
     `SurfacePlanRecord` or `VolumePlanRecord` must either get a `TagPlanRecord`
     or be explicitly marked `construction_only`.
     """
+    if build_input.metadata.get("surface_distance_bands"):
+        raise ValueError("SGB surface-distance geometry bands have been withdrawn; use Palace native inset_margins_um.")
     build_input = project_native_route_representations(build_input, route, representation_context)
     if build_input.boundary_curves or build_input.boundary_reconstruction:
-        if build_input.metadata.get("surface_distance_bands"):
-            raise NotImplementedError("surface distance bands currently support polygon-only construction plans")
         if route == "C":
             raise NotImplementedError(
                 "active source curves support Palace Route A/B, not Route C"
@@ -204,10 +204,6 @@ def build_route_construction_plan(
             semantic_facts=semantic_facts,
         ),
     )
-    surfaces, distance_partitions, distance_band_summary = partition_surface_distance_bands(
-        build_input, surfaces=surfaces,
-    )
-    surface_partitions = synchronize_distance_partitions(surface_partitions, distance_partitions)
     interfaces = _timed(
         timings,
         "complete_interface_plan_from_surfaces",
@@ -312,7 +308,7 @@ def build_route_construction_plan(
     _timed(
         timings,
         "validate_surface_partition_coverage",
-        lambda: validate_surface_partition_coverage(
+        lambda: _validate_surface_partition_coverage(
             interfaces=interfaces,
             surface_partitions=surface_partitions,
             surfaces=surfaces,
@@ -356,7 +352,6 @@ def build_route_construction_plan(
             **({key: build_input.metadata[key] for key in (
                 "geometry_grid", "geometry_grid_arrangement", "unquantized_source_sha256"
             ) if key in build_input.metadata}),
-            "surface_distance_bands": distance_band_summary,
             **({
                 "rectangular_junctions": build_input.metadata["rectangular_junctions"],
                 "junction_partitions": build_input.metadata["junction_partitions"],
@@ -392,7 +387,8 @@ def _timed(
 ) -> Any:
     started = time.perf_counter()
     try:
-        result = fn()
+        with _stage("geometry.compiler." + stage):
+            result = fn()
     except Exception:
         timings.append(
             {

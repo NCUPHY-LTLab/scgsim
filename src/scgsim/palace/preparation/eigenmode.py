@@ -677,9 +677,7 @@ class EigenmodeSim:
                 if chosen is not None and set(chosen) - configured:
                     raise ValueError(f"EPR request selects an unknown {name} binding")
         index_payload = {"schema_version": 1, "entries": result.index_entries}
-        mesh_manifest = json.loads(self._mesh_result.mesh_manifest_path.read_text(encoding="utf-8"))
-        if "surface_distance_bands" in mesh_manifest:
-            index_payload["surface_distance_bands"] = mesh_manifest["surface_distance_bands"]
+        json.loads(self._mesh_result.mesh_manifest_path.read_text(encoding="utf-8"))
         if request is not None:
             index_payload["epr_request"] = {
                 "schema_version": "scgsim.palace.epr-selection.v1",

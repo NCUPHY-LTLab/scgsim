@@ -1,0 +1,122 @@
+---
+title: "Palace 靜電分析與 SGB"
+description: "靜電 Net 綁定、共用 Palace 網格控制、原生邊距及獨立網格摘要。"
+scgsim-kind: "contract"
+scgsim-status: "ACCEPTED"
+scgsim-id: "docs/specs/palace-electrostatic-sgb"
+lang: zh-TW
+---
+
+::: {.callout-note title="已接受行為與交付狀態"}
+後端、Route A／B 轉換、交接、Slurm 執行、嚴格結果解析及既有報告摘要，屬於已接受的 V1 範圍。下述 Palace 網格控制與獨立網格摘要，也已在 SCGSim 1.1.0 列為 ACCEPTED。紀錄的操作資料保留其限制；穩定化與版本交付仍是不同狀態。
+:::
+
+## 公開介面 {#candidate-surface}
+
+公開後端物件為 `scgsim.palace.ElectrostaticSim`。分階段呼叫揭露幾何、端子、求解器設定、網格、設定檔、交接及結果處理，不將整個流程隱藏於單一協調儲存格。
+
+預定的可見順序如下：
+
+```text
+prepare shared GeometryPlan snapshot
+-> set_plan (or fresh standalone geometry / stack / envelope)
+-> add exact-net terminals and physical grounds
+-> configure Electrostatic
+-> mesh / config
+-> common handoff
+-> resolve / results / report
+```
+
+交接準備不提交 Palace。產生的本機或 Slurm 腳本需明確執行，並寫入供解析器驗證的憑證。Slurm 腳本將 `#SBATCH --output` 與 `--error` 綁定至 `logs/palace-%j.log`，避免排程器另外寫出 `slurm-%j.out`。
+
+產生的腳本開始求解之前，會以原生 `--dry-run` 選項，將確切複製的 `config.json` 傳給選定 Palace 執行檔。只有對這些確切位元組成功執行 dry-run，才建立設定／執行期相容性。相容性產物及回傳憑證保留設定雜湊與觀察的原生 GitTag。若設定的執行檔可直接且如實解析為 Palace 二進位檔，也會保留其檔名與 SHA-256。SCGSim 不穿透包裝器尋找隱藏的二進位檔。GitTag、提交及可用的二進位雜湊，是供重現與診斷的來源資訊；其存在或數值不是執行期資格門檻。
+
+若此前置檢查失敗，回傳憑證記錄 `execution_stage="config_compatibility"`、`solver_invoked=false`、分開的前置檢查與管線結束碼，以及 `solver_exit_code=null`。只有實際呼叫求解器命令之後，憑證才使用 `execution_stage="solver"`。
+
+| 階段 | 公開方法 | 預定責任 |
+|---|---|---|
+| 共用來源 | `set_plan` | 綁定不可變的共用來源快照。 |
+| 獨立幾何 | `set_geometry` | 將公開 Component 輸入綁定至 SGB 幾何路徑。 |
+| 堆疊輸入 | `set_stack` | 綁定 SGB 使用的層堆疊輸入。 |
+| 空氣盒 | `set_airbox` | 在幾何產生前宣告模擬域包絡。 |
+| 端子綁定 | `add_terminal` | 依確切 SGB Net 身分選取端子。 |
+| 物理 Ground 綁定 | `add_ground` | 依確切 SGB Net 身分選取 Palace Ground 的導體分量。 |
+| 問題控制 | `set_electrostatic` | 宣告 Electrostatic 專屬設定控制。 |
+| 輸出身分 | `set_output_dir` | 綁定網格／設定／交接輸出位置。 |
+| 網格控制 | `set_mesh(...)` | 選取共用尺寸策略、選用明確尺寸及 Palace 網格控制。 |
+| 網格 | `mesh` | 要求以 SGB 為基礎的 Palace 網格路徑。 |
+| 設定 | `write_config` | 為已審閱網格身分寫入 Palace Electrostatic 設定。 |
+
+這些方法是已接受的公開 API。
+
+相對於此分階段狀態，設定器具有原子性。Airbox、Surface EPR 與 Eigenmode 控制先驗證所有提供值，才變更任何欄位。因此驗證失敗會保留原設定，以及快取網格、已解析埠、設定檔及交接狀態。成功變更保留既有網格／設定失效邊界；這不改變 `mesh()` 或 `write_config()` 內部的操作失敗行為。
+
+## Palace 網格控制（1.1.0） {#palace-mesh-controls-110-candidate}
+
+兩個 Palace 外觀介面均透過 `set_mesh(...)` 接受下列選用控制。省略的欄位保留目前有效設定；新增控制的初始值如下。
+
+| 控制 | 初始值 | 意義 |
+|---|---:|---|
+| `algorithm_3d` | `"Delaunay"` | 選取 3D Gmsh 演算法：Delaunay 或 HXT。 |
+| `threads` | `1` | 設定 Gmsh 一般及 3D 體積執行緒數。 |
+| `surface_threads` | `1` | 設定 Gmsh 1D／2D 表面執行緒數。 |
+| `geometry_order` | `1` | 設定網格幾何階數，獨立於 Palace FEM 階數。 |
+| `high_order_optimize` | `True` | 幾何階數提高時，選擇一次原生高階最佳化呼叫。 |
+
+幾何階數為 1 時，高階最佳化不適用。階數提高時，預設在升階後啟用一次明確的原生最佳化。工作程序會停用 Gmsh 自動最佳化，讓此選擇具有一個紀錄結果。`set_numerical(...)` 保留這些網格控制。有效的網格控制更新會使網格、設定及交接失效；無效的更新提案則保留原外觀介面狀態。
+
+網格建構會產生 3D 網格、套用選定幾何階數、執行選定最佳化一次，再儲存最終網格。原生建構或擬合錯誤會向外傳遞；準備路徑不以直線或低階備援取代曲面網格。
+
+在仍處於收斂中的 Gmsh 隔離範圍，SCGSim 自行擁有的 Gmsh 工作階段以 `readConfigFiles=False` 初始化，讓 Gmsh 系統設定檔不會默默改變工作程序的起始選項。幾何輔助函式若發現 Gmsh 已初始化，仍略過初始化；此旗標只影響 SCGSim 自行初始化的情況，不變更既有借用工作階段的選項、模型或結束行為。獨立的 `meshing.effective` 紀錄會讀回 Gmsh 實際的 `Mesh.MeshSizeFactor`。此值是觀察中繼資料，不是公開網格控制或要求設定。缺少此欄位的歷史紀錄維持缺項，讀取器不替它們推論數值。
+
+## 網格尺寸策略（CONVERGING） {#palace-mesh-size-policy}
+
+兩個 Palace 外觀介面都透過 `set_mesh(...)` 接受 `size_policy`。新的 `EigenmodeSim` 以 `gmsh_default` 開始；新的 `ElectrostaticSim` 保留既有的 `scgsim_default` 尺寸策略。除非呼叫端明確提供一組尺寸，`scgsim_default` 使用 `5 µm` 細化尺寸與 `300 µm` 最大網格尺寸。傳入 `10` 與 `200` 的範例只覆寫該範例尺寸，不變更套件預設值。
+
+選用 `gmsh_default` 以使用 Gmsh 4.15.2 的原生尺寸選取。SCGSim 不新增網格尺寸場或回呼，不變更 Gmsh 原生最小值、最大值、比例、點、曲率及邊界尺寸選項，也不套用 SCGSim 尺寸覆寫。此策略不改變幾何、物理群組、接面或 Surface EPR 請求。網格尺寸與 3D 網格演算法、Palace FEM 或 AMR 控制分開；選取此策略不保證元素較少。
+
+省略 `size_policy`（或傳入 `None`）會保留選定策略。`scgsim_default` 啟用時省略尺寸引數，會保留目前的一組尺寸，包含呼叫端指定值。選用 `gmsh_default` 會清除保留的 SCGSim 尺寸覆寫。再次選用 `scgsim_default` 會恢復 `5 µm` 與 `300 µm`，除非同一次呼叫明確提供一組尺寸。`gmsh_default` 啟用時提供網格尺寸會遭拒，原設定不變。`set_numerical(...)` 繼續設定 FEM 與 AMR；它不能在 `gmsh_default` 啟用時加入明確網格尺寸。
+
+要求網格紀錄保留選定策略與尺寸值，包含 `None`。有效網格紀錄讀取 Gmsh 原生最小值、最大值與比例，以及點、曲率與邊界尺寸選項。這些紀錄區分呼叫端設定及該網格實際觀察的原生選項。
+
+## 網格清單與獨立摘要（1.1.0） {#mesh-manifest-and-detached-summary-110-candidate}
+
+網格清單保留既有群組，並加入 `meshing` 資料，包含實際 Gmsh 版本、要求及有效控制、高階最佳化結果、節點與元素類型、物理區域元素數量及邊長統計。高階網格的邊長會明確標為主角點弦長，以微米回報；它們不是曲邊弧長。
+
+兩個 Palace 外觀介面及已解析的 Palace 執行都提供 `mesh_summary()`。它回傳綁定網格與清單身分的獨立值。Palace 報告讀取相同摘要依據。Eigenmode 包含根據主角點四面體拓撲與設定 FEM 階數計算的 Nédélec 拓撲自由度估計。這不是實際求解器自由度數量；變更 FEM 階數會更新估計，不重新產生網格。Electrostatic 的 H1 估計不可用。既有線性四面體[網格品質讀取器](../mesh-quality.qmd) 不計算曲面元素品質。
+
+## 原生 Mask／Inset 與已撤回的幾何距離帶 {#native-mask-inset}
+
+Palace 原生 Mask／Inset 邊距仍可透過 `inset_margins_um` 要求；省略此欄位可只產生未遮罩基準列。非空請求需要支援原生 Mask／Inset 設定的 Palace 可執行檔。這些邊距不會修改 SGB 來源幾何。
+
+另外，SGB 幾何距離帶產生器已撤回。舊頁面中描述 `GeometryPlan.set_surface_distance_bands(...)` 的內容僅供歷史參考，並非現行產生器。原生 Mask／Inset 資料列不可解讀成互斥的幾何帶。
+
+## 來源與幾何權威 {#source-and-geometry-authority}
+
+來源至建構的說明請見 [SGB 幾何概念](../concepts/geometry.qmd#source-stage)。下列契約定義支援的準備路徑。
+
+共用的來源優先課程建議使用 `set_plan(snapshot)`。獨立的 `set_geometry(component)`／`set_stack(stack)`／明確包絡 API，仍支援新的未綁定模擬；請將此路徑與計畫快照分開。[GeometryPlan 契約](../geometry-sgb.qmd) 負責出現實例／Net、產生的真空、接觸及 Route A／B 語意。目前面向來源的幾何權威為 `scgsim.geometry`；路徑規劃及衍生建構由 `scgsim.geometry.compiler` 負責。外部 SGB 與 gsim 僅屬衍生歷史。
+
+[Electrostatic 課程](../course/palace-electrostatic.qmd) 說明確切 Net 端子／接地及實際網格／設定順序。獨立的[本徵模態契約](palace-eigenmode.qmd) 定義模態與 EPR 輸出選取。兩條準備路徑都不啟動 Palace 或提交工作。共用私有狀態的失效處理／持久化實作位於[架構](../architecture.qmd#palace-preparation-lifecycle)。
+
+## 靜電預設值 {#candidate-electrostatic-defaults}
+
+下列為已接受的實作預設值，不是通用科學建議或充分性門檻：
+
+| 控制 | 預設值 |
+|---|---|
+| `save_fields` | `0` |
+| `unassigned_conductor_policy` | `"ground"` |
+| `exterior_boundary_policy` | `"none"` |
+| `Model.Refinement.Nonconformal` | `false`，除非 Notebook 設定 `amr_nonconformal=True` |
+| `Model.Refinement.SaveAdaptMesh` | 省略，除非 Notebook 設定 `save_adapt_mesh=True` 或 `False` |
+
+Palace 在省略 `Nonconformal` 鍵時預設為 `true`。SCGSim 一律寫出此鍵，預設為 `false`（共形四面體 AMR）。Notebook 可透過 `set_numerical(amr_nonconformal=True)` 啟用非共形 AMR。
+
+`set_numerical(save_adapt_mesh=...)` 只接受 `True`、`False` 或 `None`。`None`（包含省略）透過省略 `SaveAdaptMesh`，保留先前的 SCGSim 數值酬載及設定位元組；布林值則將該確切布林值寫至 `Model.Refinement.SaveAdaptMesh`。此控制詢問 Palace 是否儲存最終自適應網格，不保證每次求解或私有流程都產生檔案。
+
+`add_ground(net_id=...)` 是明確的物理導體路徑。它獨立於 `exterior_boundary_policy="ground"`，後者加入有限求解域的外部面。當 `unassigned_conductor_policy="error"` 時，每個導體分量必須恰好由一個 Terminal 或明確 Ground 綁定涵蓋。索引映射分別記錄物理 Ground 及外部 Ground 屬性，它們的確切聯集必須等於 `Boundaries.Ground.Attributes`。既有 `exterior_boundary_policy="none"` 搭配 `unassigned_conductor_policy="ground"`，仍是隱含接地路徑。新的 Electrostatic 指定使用索引映射結構 v2。解析器保留已封存歷史執行的 schema-v1 讀取支援，但只有結構 v2 攜帶並能宣稱物理與外部 Ground 的區分。
+
+外部 gsim 及歷史 SGB 版本只作為衍生資料。執行期幾何權威是樹內的 `scgsim.geometry.compiler` 及目前的 `scgsim.palace` 實作。
+
+周邊契約請見[幾何與 SGB Route A／B](../geometry-sgb.qmd)、[無顯示幾何預覽](../geometry-preview.qmd)、[執行設定與本機／手動 HPC 交接](../execution-profiles.qmd)，以及[來源與資料界線](../provenance.qmd)。

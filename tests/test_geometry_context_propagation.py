@@ -8,7 +8,6 @@ from scgsim.geometry import (
     LayoutPolygonSpec,
     SemanticEntitySpec,
     interpret_physical_geometry,
-    surface_distance_band_catalogue,
 )
 from scgsim.geometry.compiler import build_route_construction_plan
 
@@ -87,10 +86,8 @@ def test_public_conductor_catalogue_forwards_existing_physical_context(route, pr
     construction = build_route_construction_plan(
         effective, route=route, representation_context=original_context
     )
-    rows = surface_distance_band_catalogue(construction, build_input=effective)
-    assert rows
     assert construction.surfaces and construction.volumes and construction.tags
-    assert any("metal" in row["source_entity_ids"] for row in rows)
+    assert any(surface.owner_semantic_id == "metal" for surface in construction.surfaces)
     assert (
         tuple(map(tuple, effective.entities[0].geometry["outer_loop"]))
         == source.entities[0].geometry["outer_loop"]
@@ -278,110 +275,7 @@ def test_selected_route_keeps_existing_host_contracts(mutation, expected):
         )
 
 
-def test_polygonless_sa_catalogue_binding_partitions_actual_parent():
-    from dataclasses import replace
-    from scgsim.geometry import SurfaceDistanceBandSpec, with_surface_distance_bands
-
-    source, stack = conductor_input()
-    vacuum = source.entities[1]
-    substrate = replace(
-        vacuum, semantic_id="substrate", material_id="substrate_material",
-        material_kind="dielectric",
-        geometry={**vacuum.geometry, "z_min_um": -2, "z_max_um": 0,
-                  "thickness_um": 2,
-                  "domain_bounds_um": {**vacuum.geometry["domain_bounds_um"], "z_max_um": 0}},
-    )
-    vacuum = replace(
-        vacuum, geometry={**vacuum.geometry, "z_min_um": 0, "thickness_um": 6,
-                          "domain_bounds_um": {**vacuum.geometry["domain_bounds_um"], "z_min_um": 0}},
-    )
-    source = replace(source, polygons=(), entities=(substrate, vacuum))
-    stack = {**stack, "layers": [], "materials": {
-        **stack["materials"], "substrate_material": {"kind": "dielectric", "permittivity": 4}},
-        "solution_regions": {entity.semantic_id: {
-            "semantic_id": entity.semantic_id, "geometry": dict(entity.geometry), "metadata": {}}
-            for entity in source.entities}}
-    effective, _, physical = interpret_physical_geometry(
-        source, stack, ApproximationProfile("route_b", "v1", {})
-    )
-    construction = build_route_construction_plan(
-        effective, route="B", representation_context=physical.context
-    )
-    rows = surface_distance_band_catalogue(construction, build_input=effective)
-    row = next(row for row in rows if row["source_entity_ids"] == ("substrate", "vacuum"))
-    assert row["source_polygon_ids"] == ()
-    assert all(item["source_bindings"] for item in rows if not item["source_polygon_ids"])
-    assert {tuple(binding.items()) for binding in row["source_bindings"]} == {
-        (("source_entity_id", "substrate"), ("source_polygon_id", None)),
-        (("source_entity_id", "vacuum"), ("source_polygon_id", None)),
-    }
-    spec = SurfaceDistanceBandSpec(row["parent_surface_id"], "substrate", None, (1,), 0.001)
-    assert "source_polygon_id" in spec.to_payload()
-    assert SurfaceDistanceBandSpec.from_payload(spec.to_payload()) == spec
-    result = build_route_construction_plan(
-        with_surface_distance_bands(effective, (spec,)), route="B",
-        representation_context=physical.context,
-    )
-    summary = result.metadata["surface_distance_bands"]
-    assert summary and all(item["source_polygon_id"] is None for item in summary)
-    assert all(item["parent_source_polygon_ids"] == () for item in summary)
-    assert any(surface.metadata.get("surface_distance_band") for surface in result.surfaces)
-    assert len(result.volumes) == len(construction.volumes)
-    missing_key = spec.to_payload()
-    del missing_key["source_polygon_id"]
-    with pytest.raises(KeyError, match="source_polygon_id"):
-        SurfaceDistanceBandSpec.from_payload(missing_key)
 
 
-def test_polygon_backed_parent_rejects_null_anchor():
-    from scgsim.geometry import SurfaceDistanceBandSpec, with_surface_distance_bands
-
-    source, stack = conductor_input()
-    effective, _, physical = interpret_physical_geometry(
-        source, stack, ApproximationProfile("route_b", "v1", {})
-    )
-    construction = build_route_construction_plan(effective, route="B", representation_context=physical.context)
-    row = next(row for row in surface_distance_band_catalogue(construction, build_input=effective)
-               if "metal_polygon" in row["source_polygon_ids"])
-    spec = SurfaceDistanceBandSpec(row["parent_surface_id"], "metal", None, (0.25,), 0.001)
-    with pytest.raises(ValueError, match="polygon-backed parent"):
-        build_route_construction_plan(with_surface_distance_bands(effective, (spec,)), route="B",
-                                      representation_context=physical.context)
 
 
-def test_port_split_wall_retains_original_boundary_and_clips_each_child():
-    from scgsim.geometry import SurfaceDistanceBandSpec, with_surface_distance_bands
-
-    source, stack = conductor_port_input()
-    effective, _, physical = interpret_physical_geometry(
-        source, stack, ApproximationProfile("route_b", "v1", {})
-    )
-    construction = build_route_construction_plan(effective, route="B", representation_context=physical.context)
-    rows = {row["parent_surface_id"]: row for row in
-            surface_distance_band_catalogue(construction, build_input=effective)}
-    walls = [surface for surface in construction.surfaces
-             if surface.metadata.get("route_b_port_sheet_sidewall_partition")]
-    assert len(walls) == 4
-    for wall in walls:
-        row = rows[wall.surface_id]
-        assert row["distance_origin_status"] == "supported"
-        assert {point[2] for ring in row["distance_origin_rings_3d_um"] for point in ring} == {0, 1}
-        child_z = {point[2] for point in wall.geometry_ref["quad_points"]}
-        assert 0.5 in child_z
-        spec = SurfaceDistanceBandSpec(wall.surface_id, wall.owner_semantic_id,
-                                       rows[wall.surface_id]["source_bindings"][0]["source_polygon_id"],
-                                       (0.25,), 0.001)
-        result = build_route_construction_plan(with_surface_distance_bands(effective, (spec,)), route="B",
-                                              representation_context=physical.context)
-        bands = [surface for surface in result.surfaces if surface.metadata.get("surface_distance_band")]
-        assert bands
-        # A seam treated as an origin would consume this half-height child
-        # completely at cut 0.25; the original full wall leaves a live core.
-        assert result.metadata["surface_distance_bands"][-1]["child_surface_ids"]
-        assert all(min(child_z) <= point[2] <= max(child_z)
-                   for surface in bands for ring in surface.geometry_ref["planar_loops_3d"] for point in ring)
-        # An original full-height wall has no edge at the port's interior plane.
-        assert all(not (a[2] == b[2] == 0.5)
-                   for ring in row["distance_origin_rings_3d_um"]
-                   for a, b in zip(ring, (*ring[1:], ring[0])))
-        assert len(result.volumes) == len(construction.volumes)

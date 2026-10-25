@@ -4,6 +4,8 @@ from __future__ import annotations
 
 
 import argparse
+import json
+import sys
 from contextlib import ExitStack
 
 import os
@@ -58,7 +60,8 @@ from scgsim.aedt.runtime.families.hfss import (
     solve_and_export_body_eigenmode,
 )
 
-from scgsim.aedt.runtime.families.q2d import run_q2d
+from scgsim.aedt.runtime.families.q2d import (run_q2d, prepare_q2d, prepared_q2d_result)
+from scgsim.aedt.runtime.control import (request_q3d_stop_and_save, request_q3d_abort_and_save)
 
 from scgsim.aedt.runtime.families.q3d import (
     prepare_q3d,
@@ -106,10 +109,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Open local AEDT and solve the prepared handoff",
     )
+    termination = parser.add_mutually_exclusive_group()
+    termination.add_argument(
+        "--stop-and-save",
+        action="store_true",
+        help="Request normal stop and recorder save of an owned Linux-local Q3D solve",
+    )
+    termination.add_argument(
+        "--abort-and-save",
+        action="store_true",
+        help="Request immediate abort and recorder save of an owned Linux-local Q3D solve",
+    )
     parser.add_argument(
         "--prepare-only",
         action="store_true",
-        help="Create and verify an HFSS 3D or Q3D native model without solving it",
+        help="Create and verify an HFSS 3D, Q3D or Q2D native model without solving it",
     )
     parser.add_argument(
         "--analyze-epr",
@@ -128,6 +142,22 @@ def main(argv: list[str] | None = None) -> int:
         help="Override local solve RAM Limit Percentage",
     )
     args = parser.parse_args(argv)
+    if args.stop_and_save or args.abort_and_save:
+        if any((args.execute, args.prepare_only, args.analyze_epr)) or any(
+            value is not None
+            for value in (args.geometry_workers, args.cores, args.ram_limit_percent)
+        ):
+            parser.error(
+                "--stop-and-save/--abort-and-save are exclusive with other actions and overrides"
+            )
+        request = (
+            request_q3d_stop_and_save
+            if args.stop_and_save
+            else request_q3d_abort_and_save
+        )
+        state = request(args.handoff)
+        print(json.dumps(state, indent=2))
+        return 0 if state["intent"]["rpc_status"] == "returned" else 1
     metadata_path = Path(args.handoff).resolve()
     if not metadata_path.is_file():
         raise FileNotFoundError(f"handoff metadata is missing: {metadata_path}")
@@ -195,6 +225,7 @@ def _execute(
                     HfssDrivenSpec,
                     HfssEigenmodeSpec,
                     Q3dSpec,
+                    Q2dSpec,
                 ),
             )
             and not analyze_epr
@@ -328,6 +359,8 @@ def _execute(
         receipt["runtime_source"] = _runtime_source_identity()
         if _pyaedt_version() != profile.pyaedt_version:
             raise RuntimeError("PyAEDT lock mismatch")
+        if isinstance(spec, Q3dSpec) and not prepare_only:
+            write_json(receipt_path, receipt)
         setting = metadata.get("execution", {}).get("geometry_workers")
         workers = geometry_workers if geometry_workers is not None else setting
         validate_geometry_workers(workers)
@@ -350,6 +383,11 @@ def _execute(
         transport_stack.enter_context(
             native_compatibility(profile, evidence=receipt["native_compatibility"])
         )
+        if (
+            isinstance(spec, Q3dSpec) and not prepare_only and sys.platform == "linux"
+            and os.getenv("PYAEDT_DOC_GENERATION", "false").lower() in {"true", "1", "t"}
+        ):
+            raise RuntimeError("PyAEDT documentation mode cannot preserve stop-managed Desktop ownership")
         from ansys.aedt.core import Desktop, Hfss, Q2d, Q3d
 
         desktop_started = time.perf_counter()
@@ -429,15 +467,56 @@ def _execute(
                     spec,
                     resources,
                     receipt["resources"],
+                    control_metadata=metadata_path,
+                    runtime_source=receipt["runtime_source"],
                 )
+                if "termination" in result:
+                    workflow = result["termination"]
+                    intent = workflow["control"].get("intent")
+                    failure = workflow["primary_error"]
+                    if (
+                        failure is None
+                        and workflow["analysis"].get("native_return") is not True
+                    ):
+                        failure = (
+                            "Q3D Analyze did not return True after normal-stop intent"
+                        )
+                    if (
+                        failure is None
+                        and workflow["control"]
+                        .get("native_settlement", {})
+                        .get("status")
+                        != "inactive"
+                    ):
+                        failure = "Q3D native inactivity was not confirmed after Analyze settlement"
+                    if failure is None and intent["rpc_status"] != "returned":
+                        failure = intent.get("error", "Q3D stop RPC outcome is unknown")
+                    if failure is None and not result["save"]["ok"]:
+                        failure = result["save"]["error"]
+                    status = (
+                        (
+                            "abort_saved"
+                            if workflow["mode"] == "abort_and_save"
+                            else "normal_stop_saved"
+                        )
+                        if failure is None
+                        else "failed"
+                    )
         elif isinstance(spec, Q2dSpec):
-            result = _solve_q2d(
-                owned_application_constructor(Q2d, desktop, profile=profile),
-                run_dir,
-                spec,
-                resources,
-                receipt["resources"],
-            )
+            if prepare_only:
+                prepared = prepare_q2d(
+                    owned_application_constructor(Q2d, desktop, profile=profile), run_dir, spec
+                )
+                result = prepared_q2d_result(prepared)
+                status = "native_preparation_only"
+            else:
+                result = _solve_q2d(
+                    owned_application_constructor(Q2d, desktop, profile=profile),
+                    run_dir,
+                    spec,
+                    resources,
+                    receipt["resources"],
+                )
         elif prepare_only:
             prepared = prepare_hfss(
                 owned_application_constructor(Hfss, desktop, profile=profile), run_dir, spec
@@ -472,6 +551,7 @@ def _execute(
         if (
             not isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec))
             and not prepare_only
+            and not (result is not None and "termination" in result)
         ):
             status = "completed"
     except Exception as exc:  # noqa: BLE001 -- receipt must record any solver failure.
@@ -494,19 +574,10 @@ def _execute(
             if desktop is not None:
                 release_started = time.perf_counter()
                 try:
-                    released = bool(
-                        desktop.release_desktop(close_projects=True, close_on_exit=True)
-                    )
-                    receipt["release"] = {"ok": released}
-                    if not released:
-                        raise RuntimeError("owned AEDT Desktop release returned false")
-                except Exception as exc:  # noqa: BLE001 -- receipt records release failure.
-                    receipt["release"] = {
-                        "ok": False,
-                        "error": f"{type(exc).__name__}: {exc}",
-                    }
+                    _release_owned_desktop(desktop, receipt, result)
+                except Exception as exc:
                     if failure is None:
-                        failure = receipt["release"]["error"]
+                        failure = f"{type(exc).__name__}: {exc}"
                 receipt.setdefault("timings", {})["release_seconds"] = round(
                     time.perf_counter() - release_started, 6
                 )
@@ -524,10 +595,51 @@ def _execute(
             receipt["solver_invoked"] = epr_solver_attempted
         if (
             result is not None
+            and "termination" in result
+            and result["termination"]["control"]
+            .get("native_settlement", {})
+            .get("status")
+            == "inactive"
+            and result["termination"]["control"]
+            .get("request_readback", {})
+            .get("status")
+            != "unavailable"
+            and result["save"]["ok"] is True
+            and receipt.get("release", {}).get("ok") is True
+        ):
+            # Seal real released bytes independently, but do not overwrite the
+            # stop-save failure with success from an older preparation project.
+            try:
+                project = _contained(run_dir, result["project"])
+                if not project.is_file():
+                    raise RuntimeError(
+                        "Q3D project is missing after normal-stop release"
+                    )
+                digest = file_sha256(project)
+                result["outputs"][result["project"]] = digest
+                receipt["outputs"] = result["outputs"]
+                receipt["save"] = {
+                    **result["save"],
+                    "project_sha256": digest,
+                    "identity_stage": "after_owned_desktop_release",
+                }
+            except Exception as exc:
+                receipt["save"] = {
+                    **result["save"],
+                    "ok": False,
+                    "sealing_error": f"{type(exc).__name__}: {exc}",
+                }
+                status = "failed"
+                if failure is None:
+                    failure = receipt["save"]["sealing_error"]
+                    receipt["error"] = failure
+        elif (
+            result is not None
             and isinstance(
                 spec,
                 (
                     Q3dSpec,
+                    Q2dSpec,
                     HfssDrivenGeometrySpec,
                     HfssDrivenSpec,
                     HfssEigenmodeSpec,
@@ -595,7 +707,7 @@ def _execute(
                         if failure is None:
                             failure = seal_error
                             receipt["error"] = failure
-        elif result is not None:
+        elif result is not None and "termination" not in result:
             _record_ordinary_result_after_release(receipt, result)
         receipt["diagnostics"] = _read_physics_warnings(run_dir)
         if batch_parent is not None:
@@ -617,9 +729,71 @@ def _execute(
             "completed",
             "epr_analysis_completed",
             "native_preparation_only",
+            "normal_stop_saved",
+            "abort_saved",
         }
         else 1
     )
+
+
+def _release_owned_desktop(
+    desktop: Any, receipt: dict[str, Any], result: dict[str, Any] | None
+) -> None:
+    """Close saved work; detach without closing when stop-save remains unresolved."""
+    preserve_desktop = False
+    try:
+        preserve_desktop = (
+            result is not None
+            and "termination" in result
+            and (
+                result["termination"]["control"]
+                .get("native_settlement", {})
+                .get("status")
+                != "inactive"
+                or result["termination"]["control"]
+                .get("request_readback", {})
+                .get("status")
+                == "unavailable"
+                or result["save"]["ok"] is not True
+            )
+        )
+        if preserve_desktop:
+            receipt["release"] = {
+                "ok": False,
+                "reason": "save_failed"
+                if result["save"].get("attempted") and not result["save"]["ok"]
+                else "native_not_confirmed_inactive",
+                "preserved_desktop": result["termination"]["control"][
+                    "desktop"
+                ],
+                "ownership": "unresolved",
+            }
+            detached = desktop.release_desktop(
+                close_projects=False, close_on_exit=False
+            )
+            receipt["release"]["detach"] = {
+                "ok": detached is True,
+                "native_return": detached,
+            }
+        else:
+            released = bool(
+                desktop.release_desktop(close_projects=True, close_on_exit=True)
+            )
+            receipt["release"] = {"ok": released}
+            if not released:
+                raise RuntimeError("owned AEDT Desktop release returned false")
+    except Exception as exc:  # noqa: BLE001 -- receipt records release failure.
+        receipt["release"] = {
+            **receipt.get("release", {}),
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        if preserve_desktop:
+            receipt["release"]["detach"] = {
+                "ok": False,
+                "error": receipt["release"]["error"],
+            }
+        raise
 
 
 def _record_result_before_release(
@@ -627,9 +801,23 @@ def _record_result_before_release(
 ) -> None:
     """Copy returned facts before releasing the one transaction-owned Desktop."""
 
-    if (
+    if isinstance(spec, Q3dSpec) and "termination" in result:
+        for name in (
+            "outputs",
+            "connected",
+            "project",
+            "materials",
+            "region",
+            "nets",
+            "setup",
+            "save",
+            "solver_invoked",
+            "termination",
+        ):
+            receipt[name] = result[name]
+    elif (
         isinstance(
-            spec, (Q3dSpec, HfssDrivenGeometrySpec, HfssDrivenSpec, HfssEigenmodeSpec)
+            spec, (Q3dSpec, Q2dSpec, HfssDrivenGeometrySpec, HfssDrivenSpec, HfssEigenmodeSpec)
         )
         and result.get("solver_invoked") is False
     ):
@@ -644,7 +832,7 @@ def _record_result_before_release(
             "solver_invoked",
         ):
             receipt[name] = result[name]
-        for name in ("nets", "ports", "mesh", "geometry"):
+        for name in ("nets", "ports", "conductors", "mesh", "geometry"):
             if name in result:
                 receipt[name] = result[name]
     elif isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec)):
@@ -720,6 +908,8 @@ def _record_ordinary_result_after_release(
     receipt["region"] = result["region"]
     receipt["result_readback"] = result["result_readback"]
     receipt["setup"] = result.get("setup")
+    if "stop_control" in result:
+        receipt["stop_control"] = result["stop_control"]
     if "convergence" in result:
         receipt["convergence"] = result["convergence"]
 

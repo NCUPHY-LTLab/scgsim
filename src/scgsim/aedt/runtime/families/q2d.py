@@ -21,6 +21,7 @@ from scgsim.aedt.runtime.native.common import (
     BoundAedtRequest,
     analyze_with_resources,
     detached_data,
+    native_boundary_names,
     native_object_property as _native_object_property,
     pyaedt_version as _pyaedt_version,
     saved_setup_properties as _saved_setup_properties,
@@ -41,7 +42,7 @@ class PreparedQ2d:
     materials: list[dict[str, Any]]
     region: dict[str, Any]
     conductors: list[dict[str, Any]]
-    setup: dict[str, Any]
+    setup: dict[str, Any] | None
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, BoundAedtRequest):
@@ -58,6 +59,8 @@ def run_q2d(
     resource_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Use the same preparation stage as diagnostics, then solve and export."""
+    if spec.run_control is None:
+        raise ValueError("Q2D solving requires an explicit complete run_control")
     prepared = prepare_q2d(Q2d, run_dir, spec)
     solve_q2d(prepared, resources, resource_evidence)
     result = export_q2d(prepared)
@@ -85,10 +88,14 @@ def prepare_q2d(Q2d: Any, run_dir: Path, spec: Q2dSpec) -> PreparedQ2d:
     materials, objects = _create_q2d_geometry(app, spec)
     region = _create_q2d_region(app, spec)
     conductors = _assign_q2d_conductors(app, spec, objects)
-    _setup_q2d(app, spec)
+    if spec.run_control is not None:
+        _setup_q2d(app, spec)
+    elif app.setup_names:
+        raise RuntimeError("model-only Q2D design must not inherit a setup")
     if not app.save_project() or not project_path.is_file():
         raise RuntimeError("Q2D project was not saved before solve")
-    setup = _read_q2d_setup(app, spec)
+    setup = None if spec.run_control is None else _read_q2d_setup(app, spec)
+    _read_saved_q2d_conductors(app, conductors)
     return PreparedQ2d(
         app,
         request,
@@ -100,6 +107,28 @@ def prepare_q2d(Q2d: Any, run_dir: Path, spec: Q2dSpec) -> PreparedQ2d:
     )
 
 
+def prepared_q2d_result(prepared: PreparedQ2d) -> dict[str, Any]:
+    """Detach model-stage facts; the transaction seals the released project."""
+    return {
+        "outputs": {},
+        "connected": {
+            "aedt_version": prepared.app.desktop_class.aedt_version_id,
+            "pyaedt_version": _pyaedt_version(),
+        },
+        "project": prepared.project_path.relative_to(
+            prepared.request.workspace
+        ).as_posix(),
+        "materials": detached_data(prepared.materials),
+        "region": detached_data(prepared.region),
+        "conductors": detached_data(prepared.conductors),
+        "ports": [],
+        "nets": [],
+        "setup": detached_data(prepared.setup),
+        "save": {"ok": True},
+        "solver_invoked": False,
+    }
+
+
 def solve_q2d(
     prepared: PreparedQ2d,
     resources: AedtResources | None = None,
@@ -109,6 +138,8 @@ def solve_q2d(
     spec = prepared.request.parse()
     if not isinstance(spec, Q2dSpec):
         raise TypeError("bound Q2D request did not retain a Q2D spec")
+    if spec.run_control is None:
+        raise ValueError("Q2D solving requires an explicit complete run_control")
     if not analyze_with_resources(
         prepared.app,
         spec.run_control.setup_name,
@@ -127,6 +158,8 @@ def export_q2d(prepared: PreparedQ2d) -> dict[str, Any]:
     spec = prepared.request.parse()
     if not isinstance(spec, Q2dSpec):
         raise TypeError("bound Q2D request did not retain a Q2D spec")
+    if spec.run_control is None:
+        raise ValueError("Q2D result export requires an explicit complete run_control")
     outputs, result_readback = _export_q2d(prepared.app, run_dir, spec)
     outputs = detached_data(outputs)
     result_readback = detached_data(result_readback)
@@ -183,6 +216,9 @@ def _create_q2d_geometry(
         records.append(
             {
                 "object_name": rectangle.name,
+                "native_object_id": int(obj.id),
+                "native_object_type": obj.object_type,
+                "native_bounding_box_um": [float(value) for value in obj.bounding_box],
                 "origin_um": list(rectangle.origin_um),
                 "size_um": list(rectangle.size_um),
                 "material_id": material.material_id,
@@ -260,6 +296,45 @@ def _assign_q2d_conductors(
             }
         )
     return records
+
+
+def _read_saved_q2d_conductors(app: Any, records: list[dict[str, Any]]) -> None:
+    """Retain formal saved boundaries separately from the authored assignment."""
+    boundary_setup = app.design_properties.get("BoundarySetup")
+    boundaries = (
+        boundary_setup.get("Boundaries") if isinstance(boundary_setup, dict) else None
+    )
+    if not isinstance(boundaries, dict):
+        raise TypeError("Q2D saved boundary records are unavailable")
+    raw_boundaries = native_boundary_names(app)
+    if len(raw_boundaries) % 2:
+        raise RuntimeError("Q2D native boundary inventory is malformed")
+    boundary_types = dict(zip(raw_boundaries[::2], raw_boundaries[1::2], strict=True))
+    if len(raw_boundaries) != 2 * len(records) or set(boundary_types) != {
+        item["name"] for item in records
+    }:
+        raise RuntimeError("Q2D native conductor inventory differs from the request")
+    for record in records:
+        saved = boundaries.get(record["name"])
+        if not isinstance(saved, dict):
+            raise RuntimeError(f"Q2D saved conductor is missing: {record['name']!r}")
+        native_type = boundary_types[record["name"]]
+        if native_type != record["conductor_type"]:
+            raise RuntimeError(
+                f"Q2D native conductor type differs for {record['name']!r}: "
+                f"expected {record['conductor_type']!r}, observed {native_type!r}"
+            )
+        record["native_conductor_type"] = native_type
+        record["saved_boundary"] = detached_data(saved)
+        observed_fields = ("BoundType", "Objects", "SolveOption", "Thickness")
+        record["saved_properties"] = {
+            "values": {
+                name: detached_data(saved[name])
+                for name in observed_fields
+                if name in saved
+            },
+            "unavailable": [name for name in observed_fields if name not in saved],
+        }
 
 
 def _setup_q2d(app: Any, spec: Q2dSpec) -> None:

@@ -332,7 +332,6 @@ def physical_fixture():
 def test_physical_attachment_then_full_construction_uses_same_derived_rectangle():
     from scgsim.geometry import (
         interpret_physical_geometry,
-        surface_distance_band_catalogue,
     )
     from scgsim.geometry.compiler import build_route_construction_plan
 
@@ -355,89 +354,9 @@ def test_physical_attachment_then_full_construction_uses_same_derived_rectangle(
     assert port.geometry_ref["outer_loop"] == central.exterior
     assert port.geometry_ref["plane"]["value_um"] == 0
     assert len(port.metadata["boundary_volume_ids"]) == 2
-    catalogue = surface_distance_band_catalogue(construction)
-    assert catalogue
+    assert construction.surfaces
 
 
-def test_final_support_hole_and_canceled_piece_seam_are_catalogue_band_origins():
-    from scgsim.geometry import (
-        interpret_physical_geometry,
-        surface_distance_band_catalogue,
-        SurfaceDistanceBandSpec,
-        with_surface_distance_bands,
-    )
-    from scgsim.geometry.compiler import build_route_construction_plan
-
-    source, stack, profile = physical_fixture()
-    hole = ((-1.5, 0.5), (-0.5, 0.5), (-0.5, 1.5), (-1.5, 1.5))
-    polygons = tuple(
-        replace(item, holes=(hole,)) if item.polygon_id == "left" else item
-        for item in source.polygons
-    )
-    source = replace(source, polygons=polygons)
-    effective, _, physical = interpret_physical_geometry(source, stack, profile)
-    construction = build_route_construction_plan(
-        effective, route="A", representation_context=physical.context
-    )
-    support = next(
-        entity for entity in effective.entities if entity.semantic_id == "chip/left"
-    )
-    assert support.geometry["hole_loops"]
-    parent = next(
-        surface
-        for surface in construction.surfaces
-        if surface.owner_semantic_id == "chip/left"
-        and surface.surface_role == "A_planned_interface"
-    )
-    row = next(
-        row
-        for row in surface_distance_band_catalogue(construction)
-        if row["parent_surface_id"] == parent.surface_id
-    )
-    assert row["distance_origin_status"] == "supported"
-    # The old source-piece/end join across y=1, x=2..3 is inside final metal.
-    rings = (
-        parent.geometry_ref["outer_loop"],
-        *parent.geometry_ref.get("hole_loops", ()),
-    )
-    for ring in rings:
-        assert not any(
-            a[1] == b[1] == 1 and min(a[0], b[0]) <= 2 and max(a[0], b[0]) >= 3
-            for a, b in zip(ring, (*ring[1:], ring[0]))
-        )
-    selected = SurfaceDistanceBandSpec(
-        parent.surface_id, "chip/left", "left", (0.125, 0.25), 0.001
-    )
-    banded = build_route_construction_plan(
-        with_surface_distance_bands(effective, (selected,)),
-        route="A",
-        representation_context=physical.context,
-    )
-    children = [
-        item
-        for item in banded.surfaces
-        if item.metadata.get("surface_distance_band", {}).get("parent_surface_id")
-        == parent.surface_id
-    ]
-    assert children
-    regions = [
-        _region(
-            tuple(
-                tuple((x, y) for x, y, _ in ring)
-                for ring in item.geometry_ref["planar_loops_3d"]
-            )
-        )
-        for item in children
-    ]
-    union = gdstk.boolean(
-        [poly for region in regions for poly in region], [], "or", precision=0.001
-    )
-    expected = _region(rings)
-    assert sum(item.area() for item in union) == 9
-    assert not gdstk.boolean(union, expected, "xor", precision=0.001)
-    for i, region in enumerate(regions):
-        for other in regions[i + 1 :]:
-            assert not gdstk.boolean(region, other, "and", precision=0.001)
 
 
 def test_aedt_consumes_common_geometry_without_partitioning_twice():

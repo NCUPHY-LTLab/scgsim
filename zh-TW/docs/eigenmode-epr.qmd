@@ -1,0 +1,70 @@
+---
+title: "解讀本徵模 EPR"
+description: "能量正規化、物理分區、遮罩與歸因損耗假設。"
+lang: zh-TW
+scgsim-kind: "concept"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/eigenmode-epr"
+---
+
+共振模態會將能量儲存在場與電路元件中。能量參與率描述能量集中在哪些位置，並將模態場分布連結至特定介電質、介面與接面，協助判斷哪些模型通道可能造成損耗。
+
+[Minev 等人的能量參與方法](https://arxiv.org/abs/2010.00620)使用線性化 Josephson 電路的模態作為量子化輸入。SCGSim 提供支援的電磁參與率與損耗物理量；單靠參與率圖不會產生非線性 Hamiltonian、Kerr 係數或量子位元壽命。
+
+```{mermaid}
+flowchart TB
+  F["模態場"] --> P["能量分區"]
+  P --> V["體積／表面／接面"]
+  V --> L["已知損耗貢獻"]
+  A["材料損耗假設"] --> L
+```
+
+## 模態的三種檢視方式 {#workflow-and-state-contract}
+
+| 檢視方式 | 能量歸屬對象 | 物理問題 |
+|---|---|---|
+| 體積 | 模型中的介電質體積 | 此材料中有多少電能？ |
+| 表面 | 薄膜介面的估算值 | 場與此介面的作用有多強？ |
+| 接面／端口 | 宣告的線性化電路元件 | 此元件如何參與模態？ |
+
+表面估算會使用介面處的場，估計指定厚度與介電率薄膜中的能量。金屬－空氣、金屬－基板與基板－空氣代表不同介面及場分量。體積與表面檢視不會自動構成完整能量預算中互不重疊的部分。接面模型提供其電感及任何已宣告的電容；它代表電磁計算中使用的線性化元件。
+
+## 物理量與正規化 {#quantities-and-normalization}
+
+對能量分子 $U_i$，參與率為無因次量：
+
+$$
+p_i = \frac{U_i}{U_{\mathrm{norm}}}.
+$$
+
+請一併檢視分子與分母。AEDT 使用唯一物理區域的電能，加上已宣告的接面電容能量。Palace 使用其最終原生電能區域與電容能量表。薄膜能量估算是分子，不會加回上述分母。[表面與接面公式](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization)定義場慣例與各項支援物理量。
+
+各後端的物理意義也不同。Palace 回報帶正負號的原生端口參與率，數值取決於模態的相位慣例。AEDT 的電感 $p_L$ 與電容 $p_C$ 是非負能量比。這些量必須分別解讀，不應直接當作可互換的接面數值比較。
+
+請一併記錄外部邊界與真空區域尺寸。Palace 未指定的本徵模外部邊界使用自然 PMC。文件所述 AEDT EPR 政策，則將 HFSS 預設 Perfect E 套用在原生 Region 中暴露於背景的表面。個別研究的實際邊界由已準備的原生模型決定；版圖預覽本身無法確認邊界。共用版圖也不會讓這些場模型變得相同。
+
+## 介面與損耗假設 {#surface-identity-masks-and-loss-assumptions}
+
+對損耗正切值已知的介電通道，其模型貢獻為
+
+$$
+Q_i^{-1} = p_i\tan\delta_i.
+$$
+
+兩個因子都很重要：場作用很強的低損耗材料，與場作用很弱的高損耗薄膜，可能造成不同影響。薄膜厚度、介電率與損耗正切值都是模型假設，不能由版圖推得。已知損耗總和只涵蓋已評估且損耗已指定的通道，不代表元件總 $Q$ 或 $T_1$，也未涵蓋省略的機制。
+
+明確指定為零的損耗正切值，代表已知的零貢獻。未指定的損耗正切值則屬未知；即使已知參與率，也無法取得其逆 Q 貢獻。同理，未計算的能量不等於零能量。
+
+::: {.callout-note title="判讀較舊的 Palace 結果" collapse="true"}
+對 v2 之前的 Palace 表面薄膜記錄，所記錄的零損耗正切值來源不明。讀取器會保留原始值，但將有效損耗視為未知，因此無法取得逆 Q 貢獻。
+:::
+
+## 歷史 SGB 幾何距離帶 {#surface-distance-band-correction}
+
+SGB 幾何距離帶曾是幾何分區與 Palace 彙總流程，現已撤回，不屬於目前的產生器。Palace 原生 Mask／Inset 邊距仍是不同的 Surface EPR 選項，可透過 `inset_margins_um` 要求；指定的 Palace 可執行檔必須支援此原生設定。省略邊距欄位可要求未遮罩基準列。原生邊距是替代評估值，不是互斥幾何區域，因此不可當作距離帶相加。
+
+## 探索結果 {#explore-a-result}
+
+請先閱讀[共振／EPR 教學](tutorials/resonance-epr.qmd)，再使用[離線 EPR](course/offline-epr.qmd)檢視已記錄模態並修訂損耗假設。[範例](examples.qmd)會將物理模型與後端流程連結起來。
+
+綁定方式與 API 細節請參閱 [AEDT EPR 參考](specs/aedt-runtime.qmd#public-epr-candidate-surface)與 [Palace Eigenmode 參考](specs/palace-eigenmode.qmd)。[報告參考](report-model.qmd#eigenmode-epr-presentation)說明選取方式、排序，以及基準值、遮罩邊距與不可取得物理量之間的區別。

@@ -640,15 +640,7 @@ def validate_surface_partition_coverage(
     )
     errors: list[str] = []
     for partition in surface_partitions:
-        child = surfaces_by_id.get(partition.child_surface_id)
-        band = partition.metadata.get("surface_distance_band")
-        is_bound_surface_partition = (
-            isinstance(band, Mapping) and child is not None
-            and band.get("parent_surface_id") == child.parent_surface_id
-            and partition.parent_interface_id == child.parent_surface_id
-            and child.interface_id is None
-        )
-        if partition.parent_interface_id not in interface_ids and not is_bound_surface_partition:
+        if partition.parent_interface_id not in interface_ids:
             errors.append(
                 f"{partition.partition_id} references unknown parent interface "
                 f"{partition.parent_interface_id}"
@@ -671,6 +663,9 @@ def validate_surface_partition_coverage(
 
     if errors:
         raise ValueError("Invalid surface partition plan: " + "; ".join(errors))
+
+# Internal dispatcher spelling retained for existing callers.
+_validate_surface_partition_coverage = validate_surface_partition_coverage
 
 
 def validate_tag_plan_coverage(

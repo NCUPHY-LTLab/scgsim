@@ -42,6 +42,12 @@ from scgsim.aedt.results.provenance import (
     RECEIPT_V2,
     RECEIPT_V3,
     SOURCE_SCHEMA_V19,
+    SOURCE_SCHEMA_V20,
+    SOURCE_SCHEMA_V21,
+    SOURCE_SCHEMA_V22,
+    SOURCE_SCHEMA_V23,
+    SOURCE_SCHEMA_V24,
+    SOURCE_SCHEMA_V25,
     initial_receipt_payload,
     initial_receipt_sha256,
     validate_runtime_source,
@@ -66,6 +72,16 @@ from scgsim.aedt.specs.q3d import Q3dSpec
 
 
 _Q3D_REGION_DIRECTIONS = ("+X", "-X", "+Y", "-Y", "+Z", "-Z")
+
+_CURRENT_TERMINAL_NATIVE_SCHEMAS = {
+    SOURCE_SCHEMA_V19,
+    SOURCE_SCHEMA_V20,
+    SOURCE_SCHEMA_V21,
+    SOURCE_SCHEMA_V22,
+    SOURCE_SCHEMA_V23,
+    SOURCE_SCHEMA_V24,
+    SOURCE_SCHEMA_V25,
+}
 
 _Q3D_REGION_SHEET_NAMES = {
     "+X": ("SCGSimRegionGroundPX", "SCGSimRegionGroundPXThinConductor"),
@@ -886,7 +902,7 @@ def _validate_readback(root: Path, receipt: dict[str, Any], spec: Any) -> None:
                 ports,
                 spec,
                 current=receipt.get("runtime_source", {}).get("schema_version")
-                == SOURCE_SCHEMA_V19,
+                in _CURRENT_TERMINAL_NATIVE_SCHEMAS,
             )
     else:
         _validate_modal_native_evidence(ports, spec)
@@ -1231,42 +1247,8 @@ def _eigenmode_convergence_source(receipt: dict[str, Any]) -> str:
 
 
 def _validate_q2d_readback(root: Path, receipt: dict[str, Any], spec: Q2dSpec) -> None:
-    if receipt.get("ports") != [] or receipt.get("nets") != []:
-        raise RuntimeError("Q2D receipt must not contain HFSS ports or Q3D nets")
-    conductors = receipt.get("conductors")
-    if not isinstance(conductors, list) or len(conductors) != len(spec.conductors):
-        raise RuntimeError("Q2D receipt has invalid conductor evidence")
-    for record, expected in zip(conductors, spec.conductors, strict=True):
-        if (
-            not isinstance(record, dict)
-            or record.get("name") != expected.name
-            or record.get("conductor_type") != expected.conductor_type
-            or record.get("object_names") != list(expected.object_names)
-            or record.get("thickness_um") != expected.thickness_um
-            or record.get("solve_option") != "SolveOnBoundary"
-            or not isinstance(record.get("native_object_ids"), list)
-            or len(record["native_object_ids"]) != len(expected.object_names)
-            or not all(isinstance(value, int) for value in record["native_object_ids"])
-        ):
-            raise RuntimeError("Q2D native conductor evidence does not match the spec")
-    expected_setup = {
-        "name": spec.run_control.setup_name,
-        "native": {
-            "adaptive_frequency": f"{spec.run_control.frequency_ghz:g}GHz",
-            "cg_maximum_passes": spec.run_control.maximum_passes,
-            "cg_minimum_passes": spec.run_control.minimum_passes,
-            "cg_minimum_converged_passes": spec.run_control.minimum_converged_passes,
-            "cg_convergence_percent": spec.run_control.convergence_percent,
-            "cg_percent_refinement": spec.run_control.percent_refinement,
-            "rl_maximum_passes": spec.run_control.maximum_passes,
-            "rl_minimum_passes": spec.run_control.minimum_passes,
-            "rl_minimum_converged_passes": spec.run_control.minimum_converged_passes,
-            "rl_convergence_percent": spec.run_control.convergence_percent,
-            "rl_percent_refinement": spec.run_control.percent_refinement,
-        },
-    }
-    if receipt.get("setup") != expected_setup:
-        raise RuntimeError("Q2D native setup evidence is invalid")
+    _validate_q2d_model_readback(receipt, spec)
+    _validate_q2d_setup(receipt, spec)
     if receipt.get("convergence") != read_q2d_convergence(root, spec):
         raise RuntimeError("Q2D native convergence evidence is invalid")
     readback = receipt.get("result_readback")
@@ -1285,6 +1267,111 @@ def _validate_q2d_readback(root: Path, receipt: dict[str, Any], spec: Q2dSpec) -
     }
     if matrices != expected_matrices:
         raise RuntimeError("Q2D matrix readback is invalid")
+
+
+def _validate_q2d_model_readback(
+    receipt: dict[str, Any], spec: Q2dSpec, *, prepared: bool = False
+) -> None:
+    """Bind Q2D model assignments separately from setup and matrix evidence."""
+    if receipt.get("ports") != [] or receipt.get("nets") != []:
+        raise RuntimeError("Q2D receipt must not contain HFSS ports or Q3D nets")
+    conductors = receipt.get("conductors")
+    if not isinstance(conductors, list) or len(conductors) != len(spec.conductors):
+        raise RuntimeError("Q2D receipt has invalid conductor evidence")
+    for record, expected in zip(conductors, spec.conductors, strict=True):
+        if (
+            not isinstance(record, dict)
+            or record.get("name") != expected.name
+            or record.get("conductor_type") != expected.conductor_type
+            or record.get("object_names") != list(expected.object_names)
+            or record.get("thickness_um") != expected.thickness_um
+            or record.get("solve_option") != "SolveOnBoundary"
+            or not isinstance(record.get("native_object_ids"), list)
+            or len(record["native_object_ids"]) != len(expected.object_names)
+            or not all(isinstance(value, int) for value in record["native_object_ids"])
+        ):
+            raise RuntimeError("Q2D native conductor evidence does not match the spec")
+    if not prepared:
+        return
+    materials = receipt.get("materials")
+    if not isinstance(materials, list) or len(materials) != len(spec.rectangles):
+        raise RuntimeError("Q2D prepared model lacks its native rectangle inventory")
+    by_name: dict[str, int] = {}
+    for record, rectangle in zip(materials, spec.rectangles, strict=True):
+        material = spec.materials[rectangle.material_id]
+        observed = record.get("observed") if isinstance(record, dict) else None
+        if (
+            not isinstance(record, dict)
+            or record.get("object_name") != rectangle.name
+            or record.get("origin_um") != list(rectangle.origin_um)
+            or record.get("size_um") != list(rectangle.size_um)
+            or record.get("material_id") != material.material_id
+            or record.get("kind") != material.kind
+            or record.get("is_superconducting") != material.is_superconducting
+            or record.get("requested_library_name") != material.library_name
+            or not isinstance(observed, dict)
+            or str(observed.get("native_material_name", "")).casefold()
+            != ("pec" if material.is_superconducting else material.library_name).casefold()
+            or not _positive_unique_ids([record.get("native_object_id")], 1)
+            or record.get("native_object_type") != "Sheet"
+            or not isinstance(record.get("native_bounding_box_um"), list)
+            or len(record["native_bounding_box_um"]) != 6
+        ):
+            raise RuntimeError("Q2D prepared rectangle source/native evidence differs")
+        by_name[rectangle.name] = record["native_object_id"]
+    if len(set(by_name.values())) != len(by_name):
+        raise RuntimeError("Q2D prepared rectangle native IDs are not unique")
+    for record, conductor in zip(conductors, spec.conductors, strict=True):
+        saved = record.get("saved_boundary")
+        properties = record.get("saved_properties")
+        fields = ("BoundType", "Objects", "SolveOption", "Thickness")
+        if (
+            record.get("native_conductor_type") != conductor.conductor_type
+            or record["native_object_ids"]
+            != [by_name[name] for name in conductor.object_names]
+            or not isinstance(saved, dict)
+            or properties
+            != {
+                "values": {name: saved[name] for name in fields if name in saved},
+                "unavailable": [name for name in fields if name not in saved],
+            }
+        ):
+            raise RuntimeError("Q2D prepared saved conductor evidence differs")
+    region = receipt.get("region")
+    vacuum = spec.materials[spec.vacuum_material_id]
+    if (
+        not isinstance(region, dict)
+        or region.get("material_id") != vacuum.material_id
+        or region.get("requested_library_name") != vacuum.library_name
+        or str(region.get("observed_material_name", "")).casefold() != "vacuum"
+        or region.get("padding_um") != list(spec.region_padding_um)
+        or not isinstance(region.get("native_bounding_box_um"), list)
+        or len(region["native_bounding_box_um"]) != 6
+    ):
+        raise RuntimeError("Q2D prepared Region evidence differs")
+
+
+def _validate_q2d_setup(receipt: dict[str, Any], spec: Q2dSpec) -> None:
+    if spec.run_control is None:
+        raise ValueError("Q2D setup evidence requires complete run controls")
+    expected_setup = {
+        "name": spec.run_control.setup_name,
+        "native": {
+            "adaptive_frequency": f"{spec.run_control.frequency_ghz:g}GHz",
+            "cg_maximum_passes": spec.run_control.maximum_passes,
+            "cg_minimum_passes": spec.run_control.minimum_passes,
+            "cg_minimum_converged_passes": spec.run_control.minimum_converged_passes,
+            "cg_convergence_percent": spec.run_control.convergence_percent,
+            "cg_percent_refinement": spec.run_control.percent_refinement,
+            "rl_maximum_passes": spec.run_control.maximum_passes,
+            "rl_minimum_passes": spec.run_control.minimum_passes,
+            "rl_minimum_converged_passes": spec.run_control.minimum_converged_passes,
+            "rl_convergence_percent": spec.run_control.convergence_percent,
+            "rl_percent_refinement": spec.run_control.percent_refinement,
+        },
+    }
+    if receipt.get("setup") != expected_setup:
+        raise RuntimeError("Q2D native setup evidence is invalid")
 
 
 def _validate_q3d_model_readback(
@@ -2371,7 +2458,7 @@ def _validate_body_terminal_readback(
         current_wave = (
             not isinstance(port, LumpedTerminalPort)
             and receipt.get("runtime_source", {}).get("schema_version")
-            == SOURCE_SCHEMA_V19
+            in _CURRENT_TERMINAL_NATIVE_SCHEMAS
         )
         if (
             properties.get("Type") != expected_type

@@ -9,7 +9,7 @@ scgsim-id: "docs/architecture"
 This secondary implementation reference is for contributors. For a researcher
 introduction, start with [semantic geometry](concepts/geometry.qmd) or the
 [tutorials](examples.qmd). Repository procedures live in the
-[maintainer entry](https://github.com/OrPenStrike/scgsim/blob/develop/MAINTAINING.md).
+[maintainer entry](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md).
 
 SCGSim keeps PDK facts, component intent, semantic geometry, solver preparation,
 execution, result loading, and presentation distinguishable. A solver backend
@@ -342,6 +342,10 @@ its expression-cache extension. Driven HFSS and Q3D/Q2D retain their
 family-specific setup translations. Shared Desktop, ACF/resource, and raw
 saved-setup helpers do not define solver-specific setup fields; see the
 [AEDT setup-control contract](specs/aedt-runtime.qmd#aedt-family-setup-controls).
+
+The Q3D user-requested Stop/Abort-and-save scope remains `CONVERGING`; native operations are unobserved. It exposes `request_q3d_stop_and_save(handoff)` for Clean Stop after the current pass and `request_q3d_abort_and_save(handoff)` to interrupt current work, with exclusive CLI flags `--stop-and-save` and `--abort-and-save`. Both use one exact-target local-Linux requester, the owned Desktop and transaction identity/nonce, and the shared control ledger/lock. Repeating the same mode is idempotent; a conflicting committed mode is refused without another native RPC. Raw RPC responses are uninterpreted. Linux stop-managed Q3D refuses PyAEDT documentation mode before Desktop creation because it overrides the close flags needed for exclusive transaction ownership.
+
+The recorder retains blocking Analyze, then observes native `odesktop.AreThereSimulationsRunning(True)` once; `True` includes pending simulations and only native `False` confirms inactivity. Active, unknown, or unavailable state, or uncertain control-ledger closure/read/write/readback, fails and preserves the Desktop by non-closing detach with `release.ok=false`, defers Save/export, and writes no post-release seal or success status. With confirmed inactivity and known ledger state, the recorder attempts explicit Save first, independently records requested available completed-result matrix/convergence exports, retains any raw native files actually produced, and records errors separately. It closes/releases the Desktop only if that Save succeeds. Save failure yields `release.ok=false` with reason `save_failed` and a non-closing detach; it leaves the project/Desktop preserved, with no seal or automatic cleanup. Optional artifacts do not promise recovery or completeness for interrupted work, and their errors do not define the Stop/Abort-save workflow status. `normal_stop_saved` and `abort_saved` require the matching committed intent, returned RPC, Analyze true, confirmed inactivity, successful explicit Save/release, and post-release seal. They label finalized workflows, not physics completion or causal proof. Analyze false/exception stays primary with causality unknown; RPC, control-mode, ACF, Save/export, and release errors stay separately visible. Strict completed-result resolution and Report remain unchanged; there is no partial-result surface. Ordinary no-intent Q3D, other solver families, and non-Linux solver flows are unchanged.
 
 ### Request-scoped AEDT version selection (CONVERGING)
 

@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from scgsim.geometry._primitives._grid_cache import with_grid_work_cache
+
+from functools import partial
+from scgsim.geometry._primitives.grid import _source_recipe_map
+
+from scgsim.diagnostics import _stage, _progress
+
 from scgsim.geometry._primitives.grid import polygon_boolean
 
 from scgsim.geometry._primitives.grid import current_grid_size_um
@@ -23,6 +30,10 @@ from scgsim.geometry.models.input import (
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
 from scgsim.geometry.source._occurrence import (
     _entity_from_layer_record,
+    _source_recipe_job,
+    _failed_source_recipe,
+    _run_source_recipe,
+    _with_occurrence_extraction_cache,
     _gds_polygons_for_entity,
     _is_record_sequence,
     _occurrence_ground_polygons_for_entity,
@@ -47,6 +58,9 @@ if TYPE_CHECKING:
     from gdsfactory.technology import LayerStack
 
 
+@with_grid_work_cache
+@_stage("geometry.source.adapter")
+@_with_occurrence_extraction_cache
 def build_gds_stack_geometry_input(
     *,
     gds_file: PathInput,
@@ -202,156 +216,194 @@ def build_gds_stack_geometry_input(
                         )
                     physical_planes.add(level)
                     planes[record.get("semantic_id")] = record
-            for record in raw_layers:
-                if not isinstance(record, Mapping) or not isinstance(
-                    record.get("metadata"), Mapping
-                ):
-                    raise ValueError(
-                        "GeometryPlan layers need source occurrence metadata"
-                    )
-                path = record["metadata"].get("source_occurrence_path")
-                occurrence = by_path.get(path)
-                if (
-                    occurrence is None
-                    or occurrence.get("cell_name") not in source_cells
-                ):
-                    raise ValueError(
-                        "GeometryPlan layer has no recorded source occurrence"
-                    )
-                geometry = record.get("geometry", {})
-                source_summaries = []
-                for contribution in geometry.get("source_occurrence_includes", ()):
-                    if not isinstance(contribution, Mapping) or set(contribution) != {
-                        "source_occurrence_path",
-                        "source_local_id",
-                        "level",
-                        "layer",
-                        "selector_point_um",
-                        "polygon",
-                    }:
-                        raise ValueError(
-                            "GeometryPlan ground contribution has invalid fields"
-                        )
-                    if record.get("semantic_id") not in planes:
-                        raise ValueError(
-                            "GeometryPlan ground contribution targets no root derived plane"
-                        )
-                    if contribution["level"] != record["metadata"].get(
-                        "logical_layer_id"
+            pending_checks = []
+
+            def check_expected():
+                def jobs():
+                    for factory in pending_checks:
+                        try:
+                            job = factory()
+                        except Exception as error:
+                            yield _failed_source_recipe(error)
+                            return
+                        yield job
+
+                try:
+                    _source_recipe_map(_run_source_recipe, jobs())
+                finally:
+                    pending_checks.clear()
+
+            try:
+                for record in raw_layers:
+                    if not isinstance(record, Mapping) or not isinstance(
+                        record.get("metadata"), Mapping
                     ):
                         raise ValueError(
-                            "GeometryPlan ground contribution level differs from target plane"
+                            "GeometryPlan layers need source occurrence metadata"
                         )
+                    path = record["metadata"].get("source_occurrence_path")
+                    occurrence = by_path.get(path)
                     if (
-                        not isinstance(contribution["source_local_id"], str)
-                        or not contribution["source_local_id"]
-                        or "/" in contribution["source_local_id"]
+                        occurrence is None
+                        or occurrence.get("cell_name") not in source_cells
                     ):
                         raise ValueError(
-                            "GeometryPlan ground contribution local ID is invalid"
+                            "GeometryPlan layer has no recorded source occurrence"
                         )
-                    source_path = contribution.get("source_occurrence_path")
-                    source_occurrence = by_path.get(source_path)
-                    if (
-                        source_occurrence is None
-                        or source_occurrence.get("cell_name") not in source_cells
-                    ):
-                        raise ValueError(
-                            "GeometryPlan ground contribution has no source occurrence"
-                        )
-                    key = (source_path, contribution["source_local_id"])
-                    if key in contribution_ids:
-                        raise ValueError(
-                            "GeometryPlan ground contribution local ID is duplicated"
-                        )
-                    contribution_ids.add(key)
-                    expected = _occurrence_include_polygon(
-                        contribution,
-                        cell=source_cells[source_occurrence["cell_name"]],
-                        transform=source_occurrence["transform"],
-                        excluded_reference_indexes=child_reference_indexes[source_path],
-                    )
-                    if contribution.get("polygon") != expected:
-                        raise ValueError(
-                            "GeometryPlan ground contribution differs from GDS source"
-                        )
-                    source_summaries.append(
-                        {
-                            key: contribution[key]
-                            for key in (
-                                "source_occurrence_path",
-                                "source_local_id",
-                                "level",
-                                "layer",
+                    geometry = record.get("geometry", {})
+                    source_summaries = []
+                    for contribution in geometry.get("source_occurrence_includes", ()):
+                        if not isinstance(contribution, Mapping) or set(
+                            contribution
+                        ) != {
+                            "source_occurrence_path",
+                            "source_local_id",
+                            "level",
+                            "layer",
+                            "selector_point_um",
+                            "polygon",
+                        }:
+                            raise ValueError(
+                                "GeometryPlan ground contribution has invalid fields"
                             )
-                        }
+                        if record.get("semantic_id") not in planes:
+                            raise ValueError(
+                                "GeometryPlan ground contribution targets no root derived plane"
+                            )
+                        if contribution["level"] != record["metadata"].get(
+                            "logical_layer_id"
+                        ):
+                            raise ValueError(
+                                "GeometryPlan ground contribution level differs from target plane"
+                            )
+                        if (
+                            not isinstance(contribution["source_local_id"], str)
+                            or not contribution["source_local_id"]
+                            or "/" in contribution["source_local_id"]
+                        ):
+                            raise ValueError(
+                                "GeometryPlan ground contribution local ID is invalid"
+                            )
+                        source_path = contribution.get("source_occurrence_path")
+                        source_occurrence = by_path.get(source_path)
+                        if (
+                            source_occurrence is None
+                            or source_occurrence.get("cell_name") not in source_cells
+                        ):
+                            raise ValueError(
+                                "GeometryPlan ground contribution has no source occurrence"
+                            )
+                        key = (source_path, contribution["source_local_id"])
+                        if key in contribution_ids:
+                            raise ValueError(
+                                "GeometryPlan ground contribution local ID is duplicated"
+                            )
+                        contribution_ids.add(key)
+                        check_expected()
+                        expected = _occurrence_include_polygon(
+                            contribution,
+                            cell=source_cells[source_occurrence["cell_name"]],
+                            transform=source_occurrence["transform"],
+                            excluded_reference_indexes=child_reference_indexes[
+                                source_path
+                            ],
+                        )
+                        if contribution.get("polygon") != expected:
+                            raise ValueError(
+                                "GeometryPlan ground contribution differs from GDS source"
+                            )
+                        source_summaries.append(
+                            {
+                                key: contribution[key]
+                                for key in (
+                                    "source_occurrence_path",
+                                    "source_local_id",
+                                    "level",
+                                    "layer",
+                                )
+                            }
+                        )
+                    if (
+                        record["metadata"].get("ground_plane_contribution_sources", [])
+                        != source_summaries
+                    ):
+                        raise ValueError(
+                            "GeometryPlan ground contribution lineage metadata differs"
+                        )
+                    if geometry.get(
+                        "geometry_source", "gds_polygon"
+                    ) != "gds_polygon" and not (
+                        geometry.get("geometry_source") == "die_face_minus_ground_mask"
+                        and path != root_path
+                    ):
+                        continue
+                    local_ground = (
+                        geometry.get("geometry_source") == "die_face_minus_ground_mask"
+                        and path != root_path
                     )
-                if (
-                    record["metadata"].get("ground_plane_contribution_sources", [])
-                    != source_summaries
-                ):
-                    raise ValueError(
-                        "GeometryPlan ground contribution lineage metadata differs"
-                    )
-                if geometry.get(
-                    "geometry_source", "gds_polygon"
-                ) != "gds_polygon" and not (
-                    geometry.get("geometry_source") == "die_face_minus_ground_mask"
-                    and path != root_path
-                ):
-                    continue
-                local_ground = (
-                    geometry.get("geometry_source") == "die_face_minus_ground_mask"
-                    and path != root_path
-                )
-                selector = (
-                    _occurrence_ground_polygons_for_entity
-                    if local_ground
-                    else _occurrence_polygons_for_entity
-                )
-                expected = selector(
-                    _entity_from_layer_record(record, materials=materials),
-                    cell=source_cells[occurrence["cell_name"]],
-                    transform=occurrence["transform"],
-                    excluded_reference_indexes=child_reference_indexes[path],
-                    **(
-                        {
-                            "plane_layer": solution_regions[
-                                geometry["plane_bounds_ref"]
-                            ]["metadata"]["source_layer_datatype"]
-                        }
+                    selector = (
+                        _occurrence_ground_polygons_for_entity
                         if local_ground
-                        else {}
-                    ),
-                )
-                if record["geometry"].get("source_occurrence_polygons_um") != expected:
-                    raise ValueError(
-                        f"GeometryPlan polygon source differs for {record['semantic_id']!r}"
+                        else _occurrence_polygons_for_entity
                     )
-            for record in stack_metadata.get("port_sheet_source_layers", ()):
-                path = (
-                    record.get("source_occurrence_path")
-                    if isinstance(record, Mapping)
-                    else None
-                )
-                occurrence = by_path.get(path)
-                if (
-                    occurrence is None
-                    or occurrence.get("cell_name") not in source_cells
-                ):
-                    raise ValueError(
-                        "GeometryPlan port has no recorded source occurrence"
+                    pending_checks.append(
+                        partial(
+                            _source_recipe_job,
+                            selector,
+                            _entity_from_layer_record(record, materials=materials),
+                            source_cell=source_cells[occurrence["cell_name"]],
+                            transform=occurrence["transform"],
+                            excluded_reference_indexes=child_reference_indexes[path],
+                            **(
+                                {
+                                    "plane_layer": solution_regions[
+                                        geometry["plane_bounds_ref"]
+                                    ]["metadata"]["source_layer_datatype"]
+                                }
+                                if local_ground
+                                else {}
+                            ),
+                            expected=record["geometry"].get(
+                                "source_occurrence_polygons_um"
+                            ),
+                            comparison_error=f"GeometryPlan polygon source differs for {record['semantic_id']!r}",
+                        )
                     )
-                expected = _occurrence_port_polygon(
-                    record,
-                    cell=source_cells[occurrence["cell_name"]],
-                    transform=occurrence["transform"],
-                    excluded_reference_indexes=child_reference_indexes[path],
-                )
-                if record.get("source_occurrence_polygon_um") != expected:
-                    raise ValueError(
-                        f"GeometryPlan port source differs for {record.get('name')!r}"
+            except Exception:
+                check_expected()
+                raise
+            check_expected()
+            try:
+                for record in stack_metadata.get("port_sheet_source_layers", ()):
+                    path = (
+                        record.get("source_occurrence_path")
+                        if isinstance(record, Mapping)
+                        else None
                     )
+                    occurrence = by_path.get(path)
+                    if (
+                        occurrence is None
+                        or occurrence.get("cell_name") not in source_cells
+                    ):
+                        raise ValueError(
+                            "GeometryPlan port has no recorded source occurrence"
+                        )
+                    pending_checks.append(
+                        partial(
+                            _source_recipe_job,
+                            _occurrence_port_polygon,
+                            record,
+                            source_cell=source_cells[occurrence["cell_name"]],
+                            transform=occurrence["transform"],
+                            excluded_reference_indexes=child_reference_indexes[path],
+                            expected=record.get("source_occurrence_polygon_um"),
+                            comparison_error=f"GeometryPlan port source differs for {record.get('name')!r}",
+                        )
+                    )
+            except Exception:
+                check_expected()
+                raise
+            check_expected()
             _validate_plan_ground_contribution_ownership(raw_layers)
 
         polygons: list[LayoutPolygonSpec] = []
@@ -370,16 +422,29 @@ def build_gds_stack_geometry_input(
             if isinstance(entity.geometry.get("domain_bounds_um"), Mapping)
         }
 
-        for record in raw_layers:
-            for entity, entity_polygons in _entities_and_polygons_from_layer_record(
-                record,
-                materials=materials,
-                polygons_by_layer=polygons_by_layer,
-                cell_bounds_um=cell_bounds,
-                domain_bounds_by_semantic_id=domain_bounds_by_semantic_id,
-            ):
-                polygons.extend(entity_polygons)
-                entities.append(entity)
+        with _stage("geometry.source.lower_layers", counts={"layers": len(raw_layers)}):
+
+            def layer_jobs():
+                for diagnostic_index, record in enumerate(raw_layers):
+                    _progress(diagnostic_index, len(raw_layers))
+                    try:
+                        job = _source_recipe_job(
+                            _entities_and_polygons_from_layer_record,
+                            record,
+                            materials=materials,
+                            source_polygons=polygons_by_layer,
+                            cell_bounds_um=cell_bounds,
+                            domain_bounds_by_semantic_id=domain_bounds_by_semantic_id,
+                        )
+                    except Exception as error:
+                        yield _failed_source_recipe(error)
+                        return
+                    yield job
+
+            for rows in _source_recipe_map(_run_source_recipe, layer_jobs()):
+                for entity, entity_polygons in rows:
+                    polygons.extend(entity_polygons)
+                    entities.append(entity)
 
         combined_metadata = {
             **dict(stack_metadata),

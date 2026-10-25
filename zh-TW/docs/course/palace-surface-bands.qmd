@@ -1,0 +1,81 @@
+---
+lang: zh-TW
+title: "Palace 表面距離帶歷史參考"
+description: "已撤回的 SGB 幾何距離帶產生器之歷史參考。"
+scgsim-kind: "course"
+scgsim-status: "HISTORICAL"
+scgsim-id: "docs/course/palace-surface-bands"
+---
+
+本頁記錄已撤回的 SGB 幾何距離帶流程。現行 SCGSim 來源不再提供其幾何產生器或結果彙總 API。以下步驟與程式碼是歷史記錄，不是目前的操作指示。若所選 Palace 可執行檔支援原生 Mask／Inset，仍可另外使用原生邊距；請見[現行契約](../specs/palace-electrostatic-sgb.qmd#native-mask-inset)。
+
+先前流程會依平面 Palace EPR 父項至原始邊界的距離進行分區，並讀取六個回傳距離帶總量。該流程使用幾何計畫（GeometryPlan）與一筆已完成的 Palace EPR 結果。以下封存步驟描述已撤回的產生器，不是現行操作方式。[距離帶概念](../concepts/geometry.qmd#distance-bands)保留其歷史幾何背景。
+
+✅ 幾何交接已完成，且通過官方 Palace 0.18.1 預檢。
+
+⏳ Q2D 後續工作暫停。此僅使用 Palace 的距離帶流程不需要 Q2D 結果。
+
+⏳ 完整的 Palace EPR 回傳資料及六個距離帶總量仍待完成。
+
+## 建立幾何距離帶 {#build-the-geometry-bands}
+
+1. 建立來源 cell 前，先定義 `layoutgrid_um = 0.001`（以 µm 表示為 1 nm），並透過版圖 API 將來源版圖的 DBU 設為該值。下方精簡設定假設讀者已備妥一般模型輸入 `assembled`、`layer_stack`、`material_records` 與 `coupon_padding_um`；此處不會建立這些輸入。請建立一般有來源依據的 `GeometryPlan`，並包含原始 Nets 與真空區域：
+
+   ```python
+   layoutgrid_um = 0.001  # 1 nm in µm
+   plan = GeometryPlan(
+       component=assembled,
+       root_id="chip",
+       layer_stack=layer_stack,
+       material_records=material_records,
+       coupon_padding_um=coupon_padding_um,
+       grid_size_um=layoutgrid_um,
+   )
+   ```
+
+   呼叫一次 `snapshot0 = plan.prepare()`，接著使用其分離的 `snapshot0.geometry_input` 與 `snapshot0.stack`。
+2. 對這些輸入呼叫 `interpret_physical_geometry(...)`。將其有效輸入與表示脈絡傳入 `build_route_construction_plan(...)`，再以 `surface_distance_band_catalogue(...)` 建立目錄。
+3. 檢視尚未分帶的目錄，並選取實際父項及來源 Entity 擁有者。對每筆目錄資料，依 `parent_surface_id` 找到相符的 `construction.surfaces` 紀錄；其中的 `metadata.face_kind` 會提供結果使用的 `field_side`。物理貢獻側會另外記錄在 `metadata.source_provenance.surface_contribution_ledger[*].side`。請將這些視為不同的選擇與來源脈絡。
+4. 每個選定父項建立一個 `SurfaceDistanceBandSpec`。提供依序排列的正值距離，並將必要欄位 `precision_um` 設為與 plan 共用的 `layoutgrid_um` 相同。使用所有原始邊界邊，或精確選取原始外部／孔洞線段的子集。選用參數 `chord_error_um` 排在 `boundary_segments` 之後；若要保留先前以 `precision_um` 為弦長誤差的值，請維持 `None`，也可獨立設定此值以控制弧線與端蓋近似。若父項有多邊形來源，必要參數 `source_polygon_id` 必須填入實際 polygon ID。若父項只有 Entity 且沒有多邊形來源脈絡，請明確傳入 `None`；該父項仍須由來源 Entity 擁有。不可自行捏造 polygon ID。埠分割牆面仍以未分割的原始邊界作為距離起點，再從父項裁切子區域；分割接縫不是內縮起點。
+5. 呼叫 `plan.set_surface_distance_bands(...)`，再準備一次以取得 `snapshot1 = plan.prepare()`。
+6. 使用 `sim.set_plan(snapshot1)` 將該快照交給 Palace 模擬，並設定 EPR 請求。建立網格與寫入設定前，先選擇網格及數值控制項。plan 已包含其真空區域，因此不要再加入第二個模擬空氣盒。此分區是平面多邊形幾何；[GeometryPlan 契約](../geometry-sgb.qmd#surface-distance-bands)說明來源識別、邊線選擇與精度。
+
+## 選擇網格尺寸 {#choose-mesh-sizing}
+
+共用的 `size_policy` 用來選擇 Gmsh 決定元素尺寸的方式。若要使用其原生尺寸設定並保留 Delaunay 3D 演算法，請呼叫：
+
+```python
+sim.set_mesh(size_policy="gmsh_default", algorithm_3d="Delaunay")
+```
+
+此範例請在寫入設定前，選擇 Eigenmode AMR 設定：
+
+```python
+sim.set_numerical(
+    amr_nonconformal=True,
+    amr_max_passes=20,
+    amr_tolerance=0.02,
+    amr_update_fraction=0.7,
+)
+```
+
+這些是本範例由呼叫端選定的值，不是函式庫預設值，也不是充分性準則。通過次數上限大於零時，必須同時指定容差與更新比例。後續呼叫可省略這些控制項，以保留已選值；`amr_max_passes=0` 會停用自適應細化，並允許不設定容差與更新比例。網格尺寸不會改變物理群組、接面或表面距離帶分區。Palace 距離帶總量是直接的 EPR 貢獻，不套用 Q2D 因子。回傳總量是累積尾端值（`distance >= cutoff`）：`0.5 µm` 總量包含 `1 µm` 總量，因此不可將兩值相加。距離區間圖請見[距離帶概念](../concepts/geometry.qmd#distance-bands)；預設值、狀態轉換與保留的網格證據請見共用的 [Palace 網格尺寸政策](../specs/palace-electrostatic-sgb.qmd#palace-mesh-size-policy)。
+
+設定這些控制項後，請在準備 Palace 交接套件前呼叫 `sim.mesh()` 與 `sim.write_config()`。
+
+## 準備並讀取 Palace 結果 {#prepare-and-read-the-palace-result}
+
+使用相同來源幾何設定 Palace EPR，並以上方網格與設定準備交接套件。請以支援的 Palace 執行檔，另外執行此交接套件。幾何距離帶項目使用官方 Palace 0.18.1 surface-EPR 路徑。求解器設定、交接與回傳資料讀取方式，請參閱 [Palace Eigenmode 教學](palace-eigenmode.qmd)。
+
+`resolve_palace_result` 回傳 `ResolvedPalaceResult` 後，請從保留的回傳收據或原生中繼資料選取迭代次數；目前沒有探索迭代次數的函式。公開讀取器如下：
+
+```python
+from scgsim.palace.results import SurfaceBandSelection, aggregate_surface_bands
+from scgsim.palace.results.epr import epr_result
+```
+
+使用 `epr_result(resolved, palace_iteration=iteration)` 讀取選定迭代。每個幾何父項建立一個 `SurfaceDistanceBandSpec`。針對每個選定父項、介面類型與紀錄側，依有來源綁定的目錄、相符的 `construction.surfaces` 中繼資料，以及完整來源／貢獻 ledger，建立一個 `SurfaceBandSelection(parent_surface_id, interface_kind, field_side)`。共用的 `MS_MA` 父項會在相同幾何上分別使用 `MS` 與 `MA` 選擇；此介面對兩者都記錄 `field_side="interface"`，因此請採用紀錄值，不要自行推斷上側或下側。
+
+將選擇項、選定模態、`palace_iteration=iteration` 與 `cutoffs_um=(0.5, 1.0)` 傳入 `aggregate_surface_bands(...)`。門檻必須符合已宣告的來源距離帶邊界；彙總時需要完整的距離帶與元件清單，並針對每個介面與門檻，讓每個物理片段只計算一次。總量會保留來源父項、介面、紀錄側、模態、原生迭代與正規化方式。請連同這些識別資訊保留 `PalaceSurfaceBandTotals` 值與 `to_payload()` 輸出。`>= 0.5 µm` 總量包含 `>= 1 µm` 總量；不可將累積尾端值相加。此離線彙總會讀取現有 Palace 結果，不會執行 Palace，也不會套用 Q2D 修正。
+
+原生 Mask／Inset 仍可在所選 Palace 可執行檔支援時，另外透過 `inset_margins_um` 使用；它不會建立本頁所述且已撤回的幾何距離帶。固定版本的 [SimplePad SurfaceBands 工作流程](https://github.com/OrPenStrike/orcapen-sc-pdk/blob/d413d04565b3ff6946fd8b6ef237283dc187e552/notebooks/src/SCGSimExamples/SurfaceBands/SimplePad/palace_eigenmode_bands.qmd)與[共用介面模型](https://github.com/OrPenStrike/orcapen-sc-pdk/blob/d413d04565b3ff6946fd8b6ef237283dc187e552/notebooks/src/SCGSimExamples/SurfaceBands/SimplePad/simplepad_interface_model.json)，是較早 paired-Q2D 工作流程的歷史參考。執行目前僅使用 Palace 的距離帶流程時，請依本頁的 GeometryPlan 與結果讀取步驟操作。

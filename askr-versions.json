@@ -1,0 +1,30 @@
+{
+  "mode": "inline",
+  "versions": [
+    {
+      "label": "Preview",
+      "root": "/"
+    },
+    {
+      "label": "2.0.0 dev",
+      "href": "https://ncuphy-ltlab.github.io/scgsim/v2.0.0-dev/"
+    },
+    {
+      "label": "1.1.0",
+      "href": "https://ncuphy-ltlab.github.io/scgsim/v1.1.0/",
+      "latest": true
+    },
+    {
+      "label": "1.0.2",
+      "href": "https://ncuphy-ltlab.github.io/scgsim/v1.0.2/"
+    },
+    {
+      "label": "1.0.1",
+      "href": "https://ncuphy-ltlab.github.io/scgsim/v1.0.1/"
+    },
+    {
+      "label": "1.0.0",
+      "href": "https://ncuphy-ltlab.github.io/scgsim/v1.0.0/"
+    }
+  ]
+}

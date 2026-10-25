@@ -1,14 +1,19 @@
 ---
-title: "Palace surface-distance bands"
-description: "Prepare source-bound surface bands and inspect six Palace EPR band totals."
+title: "Historical Palace surface-distance bands"
+description: "Historical reference for a withdrawn SGB geometry-band producer."
 scgsim-kind: "course"
-scgsim-status: "CONVERGING"
+scgsim-status: "HISTORICAL"
 scgsim-id: "docs/course/palace-surface-bands"
 ---
 
-Use this workflow to partition a planar Palace EPR parent by distance from its
-original boundary and inspect the six returned band totals. The workflow uses
-the geometry plan and one completed Palace EPR result.
+This page documents a withdrawn SGB geometry-band workflow. Current SCGSim source does not provide its geometry producer or result aggregation API. The steps and code below are historical records, not current instructions. Native Palace Mask/Inset margins remain available separately when the selected executable supports them; see the [current contract](../specs/palace-electrostatic-sgb.qmd#native-mask-inset).
+
+The former workflow partitioned a planar Palace EPR parent by distance from its
+original boundary and read six returned band totals. It used a geometry plan
+and one completed Palace EPR result. The following archived steps describe
+that withdrawn producer, not current operation. The
+[distance-band concept](../concepts/geometry.qmd#distance-bands) gives its
+historical geometric context.
 
 ✅ The geometry handoff and official Palace 0.18.1 preflight completed.
 
@@ -97,10 +102,10 @@ fraction. Later calls may omit these controls to retain the selected values;
 `amr_max_passes=0` disables adaptive refinement and allows tolerance and update
 fraction to remain unset. Mesh sizing does not change physical groups,
 junctions or the surface-band partition. Palace band totals are direct EPR
-contributions; no Q2D factor is applied. The `0.5 µm` and `1 µm` cuts partition
-the geometry into adjacent intervals, while the returned cutoff totals are
-cumulative tails (`distance >= cutoff`). The `0.5 µm` total includes the
-`1 µm` total, so do not add the two values. See the shared
+contributions; no Q2D factor is applied. Returned totals are cumulative tails
+(`distance >= cutoff`): the `0.5 µm` total includes the `1 µm` total, so do not
+add the two values. See the [distance-band concept](../concepts/geometry.qmd#distance-bands)
+for the interval diagram and the shared
 [Palace mesh-size policy](../specs/palace-electrostatic-sgb.qmd#palace-mesh-size-policy)
 for defaults, state transitions and retained mesh evidence.
 
@@ -129,8 +134,7 @@ Read the selected iteration with `epr_result(resolved, palace_iteration=iteratio
 Pass the selections, selected mode, `palace_iteration=iteration`, and `cutoffs_um=(0.5, 1.0)` to `aggregate_surface_bands(...)`. Cutoffs must match declared source-band boundaries; the aggregation requires the complete band and component inventory and counts each physical fragment once per interface per cutoff. The totals retain source parent, interface, recorded side, mode, native iteration, and normalization. Keep the `PalaceSurfaceBandTotals` value and `to_payload()` output with that identity. The `>= 0.5 µm` total includes the `>= 1 µm` total; do not add these cumulative tails. This offline aggregation reads existing Palace results and does not run
 Palace or apply a Q2D correction.
 
-Previously saved native mask-margin results remain readable in their historical
-format; the current producer rejects non-empty `inset_margins_um`. The pinned
+Native Mask/Inset remains available separately through `inset_margins_um` when the selected Palace executable supports it; it does not create these withdrawn geometry bands. The pinned
 [SimplePad SurfaceBands workflow](https://github.com/OrPenStrike/orcapen-sc-pdk/blob/d413d04565b3ff6946fd8b6ef237283dc187e552/notebooks/src/SCGSimExamples/SurfaceBands/SimplePad/palace_eigenmode_bands.qmd)
 and [shared interface model](https://github.com/OrPenStrike/orcapen-sc-pdk/blob/d413d04565b3ff6946fd8b6ef237283dc187e552/notebooks/src/SCGSimExamples/SurfaceBands/SimplePad/simplepad_interface_model.json)
 are historical references to an earlier paired-Q2D workflow. Follow the

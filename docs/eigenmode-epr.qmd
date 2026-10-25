@@ -92,24 +92,9 @@ ambiguous origin. The reader preserves the raw value but treats its effective
 loss as unknown; the inverse-$Q$ contribution remains unavailable.
 :::
 
-## Palace surface-distance-band results {#surface-distance-band-correction}
+## Historical SGB geometry distance bands {#surface-distance-band-correction}
 
-Geometry-based distance bands are disjoint regions cut from an actual SGB
-parent boundary. The Palace-only result path returns a cumulative
-`distance >= cutoff` total for each selected interface and cutoff. With three
-interfaces and two cutoffs, it returns six totals. A lower-cutoff total
-includes the higher-cutoff total, so do not add them. Read each value with its
-source parent, mode, native iteration, interface, cutoff and normalization.
-This aggregation uses returned Palace EPR values and does not require a Q2D
-result or change the Palace field calculation. See the
-[Palace surface-bands course](course/palace-surface-bands.qmd) for the current
-workflow.
-
-Previously saved native mask-margin results remain readable in their recorded
-format. The current producer rejects non-empty `inset_margins_um`; those
-results are historical alternatives, not additional disjoint bands.
-
-⏳ A complete Palace surface-band EPR return is pending.
+SGB geometry-level distance bands were a withdrawn geometry partition and Palace aggregation path. They are not part of the current producer. Palace native Mask/Inset margins remain a separate Surface EPR option through `inset_margins_um`; the selected Palace executable must implement that native configuration. An unmasked baseline is requested by omitting the margin field. Native margins are alternative evaluations, not disjoint geometry regions, so do not add them as bands.
 
 ### Future Q2D correction (paused)
 

@@ -15,6 +15,7 @@ from scgsim.aedt.specs.common import (
     OFFICIAL_PYAEDT_SOURCE_URL,
     PdkMaterial,
     Q2D_SCHEMA_VERSION,
+    Q2D_SCHEMA_VERSION_V2,
     _normalize_common_spec,
     _number,
     _padding_2d,
@@ -90,7 +91,7 @@ class Q2dConductorSpec:
 
 @dataclass(frozen=True)
 class Q2dSpec:
-    """One explicit native Q2D cross-section matrix extraction."""
+    """Explicit Q2D section; null controls declare model-only preparation."""
 
     project_name: str
     design_name: str
@@ -98,7 +99,7 @@ class Q2dSpec:
     vacuum_material_id: str
     rectangles: tuple[Q2dRectangleSpec, ...]
     conductors: tuple[Q2dConductorSpec, ...]
-    run_control: MatrixRunControl
+    run_control: MatrixRunControl | None
     region_padding_um: tuple[float, float, float, float]
     aedt_version: str = field(kw_only=True)
     pyaedt_version: str = LOCKED_PYAEDT
@@ -109,6 +110,10 @@ class Q2dSpec:
 
     def __post_init__(self) -> None:
         materials = _normalize_common_spec(self)
+        if self.run_control is not None and not isinstance(
+            self.run_control, MatrixRunControl
+        ):
+            raise TypeError("Q2D run_control must be MatrixRunControl or None")
         rectangles = tuple(self.rectangles)
         if (
             not rectangles
@@ -156,7 +161,11 @@ class Q2dSpec:
 
     def to_payload(self) -> dict[str, Any]:
         return {
-            "schema_version": Q2D_SCHEMA_VERSION,
+            "schema_version": (
+                Q2D_SCHEMA_VERSION_V2
+                if self.run_control is None
+                else Q2D_SCHEMA_VERSION
+            ),
             "mode": self.mode,
             "aedt": {"requested_version": self.aedt_version},
             "pyaedt": {
@@ -171,13 +180,18 @@ class Q2dSpec:
             "vacuum_material_id": self.vacuum_material_id,
             "rectangles": [item.to_payload() for item in self.rectangles],
             "conductors": [item.to_payload() for item in self.conductors],
-            "run_control": self.run_control.to_payload(),
+            "run_control": (
+                None if self.run_control is None else self.run_control.to_payload()
+            ),
             "region_padding_um": list(self.region_padding_um),
         }
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> Q2dSpec:
-        if payload.get("schema_version") != Q2D_SCHEMA_VERSION:
+        if payload.get("schema_version") not in {
+            Q2D_SCHEMA_VERSION,
+            Q2D_SCHEMA_VERSION_V2,
+        }:
             raise ValueError("unsupported Q2D schema")
         raw_materials = payload.get("materials")
         if not isinstance(raw_materials, dict):
@@ -187,8 +201,13 @@ class Q2dSpec:
             for material_id, item in raw_materials.items()
         }
         run = payload.get("run_control")
-        if not isinstance(run, dict):
-            raise TypeError("run_control must be a JSON object")
+        if "run_control" not in payload:
+            raise ValueError("Q2D payload must explicitly declare run_control")
+        if payload["schema_version"] == Q2D_SCHEMA_VERSION_V2:
+            if run is not None:
+                raise ValueError("Q2D V2 declares a model-only null run_control")
+        elif not isinstance(run, dict):
+            raise TypeError("Q2D V1 run_control must be a JSON object")
         return cls(
             project_name=_project_name_from_payload(
                 payload.get("project", {}).get("name")
@@ -206,9 +225,12 @@ class Q2dSpec:
             conductors=tuple(
                 Q2dConductorSpec(**item) for item in payload.get("conductors", ())
             ),
-            run_control=MatrixRunControl(**run),
+            run_control=None if run is None else MatrixRunControl(**run),
             region_padding_um=tuple(payload.get("region_padding_um", ())),  # type: ignore[arg-type]
-            aedt_version=payload.get("aedt", {}).get("requested_version"),
+            aedt_version=_text(
+                payload.get("aedt", {}).get("requested_version"),
+                "aedt.requested_version",
+            ),
             pyaedt_version=_text(
                 payload.get("pyaedt", {}).get("locked_version"), "pyaedt.locked_version"
             ),

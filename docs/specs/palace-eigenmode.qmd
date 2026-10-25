@@ -79,8 +79,7 @@ resolves to an explicit dielectric. `loss_tangent` may be supplied directly or
 read from that material; an unknown value remains distinguishable in SCGSim's
 index. The current `surface-film.v2` producer rejects missing or duplicated
 surface and physical-attribute identities rather than dropping or deduplicating
-them. Film thickness sets the surface model; lateral exclusion is defined by
-the source surface-distance bands below.
+them. Film thickness sets the surface model. Native Mask/Inset margins set any requested lateral exclusion; the selected Palace executable must support that configuration. The SGB geometry-distance-band producer described below is withdrawn.
 
 Palace 0.18.1 forms native surface integrands from the configured type and the
 neighboring solution elements: `MA` and `SA` use the vacuum-side trace, while
@@ -89,34 +88,12 @@ the substrate-permittivity-weighted normal field, and `SA` combines tangential
 and normal terms with the film permittivity. See Palace 0.18.1's
 [configuration](https://github.com/awslabs/palace/blob/0dc74cdf8c36c58b69b21c4a06e816048ec0b83f/palace/utils/configfile.cpp#L624)
 and [neighbor-material rules](https://github.com/awslabs/palace/blob/0dc74cdf8c36c58b69b21c4a06e816048ec0b83f/palace/fem/coefficient.hpp#L331)
-for the native mapping. `SurfaceBandSelection.field_side` identifies a
-recorded result selection; it is not a native side selector and does not
-override Palace's adjacency rule. Choose `MA`, `MS`, or `SA` to match the
+for the native mapping. Choose `MA`, `MS`, or `SA` to match the
 intended native interface model.
 
-### Surface-distance bands (CONVERGING)
+### Historical SGB geometry distance bands (WITHDRAWN) {#surface-distance-bands-converging}
 
-Surface-distance bands are a geometry-level partition, not an additional
-`MA`/`MS`/`SA` selector and not a set of mask-margin outputs. The exact parent
-surface, source-bound cuts, and child identities come from the
-[GeometryPlan contract](../geometry-sgb.qmd#surface-distance-bands). EPR
-results retain those identities with their mode, native iteration, interface,
-cutoff, and normalization context. For each selected interface and cutoff,
-the Palace-only result path returns a cumulative `distance >= cutoff` total.
-With three interfaces and two cutoffs it returns six totals; the lower-cutoff
-value includes the higher-cutoff value, so these totals are not additive.
-Aggregation does not require Q2D and does not change the Palace field
-calculation. Use the [Palace surface-bands course](../course/palace-surface-bands.qmd)
-for the current workflow.
-
-Previously saved native mask-margin results remain readable in their recorded
-format, but the current producer rejects non-empty `inset_margins_um`. The
-current surface-band result path is CONVERGING; a complete Palace return is
-pending.
-
-The unspecified external Eigenmode vacuum boundary retains native Palace PMC.
-This is different from the current AEDT EPR default Perfect E choice; a shared
-source snapshot does not imply field-model equality.
+The former SGB geometry-level distance-band producer and its Palace result aggregation are withdrawn from the current SCGSim interface. The preserved [GeometryPlan section](../geometry-sgb.qmd#surface-distance-bands) records this historical design. Current native Mask/Inset margins remain a separate Surface EPR option; the configured Palace executable must support Mask/Inset. See the [Palace Electrostatic contract](palace-electrostatic-sgb.qmd#native-mask-inset). The former `SurfaceBandSelection.field_side` value named a result selection and did not override Palace native adjacency; it is not a current API.
 
 ## Results and offline analysis
 

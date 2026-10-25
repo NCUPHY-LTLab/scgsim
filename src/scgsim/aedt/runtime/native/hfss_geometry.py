@@ -61,6 +61,8 @@ from scgsim.aedt.runtime.native.common import (
     _native_object_evidence,
     _resolve_native_assignment,
     native_object_property,
+    read_native_material,
+    realize_source_material,
 )
 
 
@@ -256,14 +258,9 @@ def _material_readback(app: Any, materials: Mapping[str, Any]) -> dict[str, Any]
             "dielectric",
         }:
             continue
-        material = app.materials.exists_material(material_id)
-        if material is False or material is None:
-            raise RuntimeError(f"native material {material_id!r} is unavailable")
-        observed[material_id] = {
-            "relative_permittivity": float(material.permittivity.value),
-            "relative_permeability": float(material.permeability.value),
-        }
+        observed[material_id] = read_native_material(app, material_id)
     return observed
+
 
 
 def _native_solution_materials(source: Mapping[str, Any]) -> dict[str, Any]:
@@ -279,6 +276,7 @@ def _native_solution_materials(source: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _install_material_catalog(app: Any, materials: Mapping[str, Any]) -> dict[str, Any]:
+    observed: dict[str, Any] = {}
     for material_id, record in materials.items():
         if not isinstance(material_id, str) or not isinstance(record, Mapping):
             raise TypeError("prepared material catalog must be string-keyed mappings")
@@ -287,41 +285,17 @@ def _install_material_catalog(app: Any, materials: Mapping[str, Any]) -> dict[st
             continue
         if kind not in {"vacuum", "dielectric"}:
             raise ValueError(f"unsupported prepared material kind {kind!r}")
-        permittivity = record.get("permittivity", 1.0 if kind == "vacuum" else None)
-        if (
-            isinstance(permittivity, bool)
-            or not isinstance(permittivity, (int, float))
-            or not math.isfinite(float(permittivity))
-            or float(permittivity) <= 0.0
-        ):
-            raise ValueError(
-                f"prepared material {material_id!r} requires positive permittivity"
-            )
-        properties: dict[str, float] = {"permittivity": float(permittivity)}
-        loss = record.get("loss_tangent")
-        if loss is not None:
-            if (
-                isinstance(loss, bool)
-                or not isinstance(loss, (int, float))
-                or not math.isfinite(float(loss))
-                or float(loss) < 0.0
-            ):
+        requested = dict(record)
+        if "permittivity" not in requested:
+            if kind != "vacuum":
                 raise ValueError(
-                    f"prepared material {material_id!r} has invalid loss tangent"
+                    f"prepared material {material_id!r} requires positive permittivity"
                 )
-            properties["dielectric_loss_tangent"] = float(loss)
-        observed = app.materials.exists_material(material_id)
-        material = observed or app.materials.add_material(material_id, properties)
-        if material is False or material is None:
-            raise RuntimeError(f"failed to define native material {material_id!r}")
-        native_permittivity = float(material.permittivity.value)
-        if not math.isclose(
-            native_permittivity, float(permittivity), rel_tol=0.0, abs_tol=0.0
-        ):
-            raise RuntimeError(
-                f"native material {material_id!r} permittivity readback differs"
-            )
-    return _material_readback(app, materials)
+            # Preserve the existing vacuum-only preparation contract.
+            requested["permittivity"] = 1.0
+        observed[material_id] = realize_source_material(app, material_id, requested)
+    return observed
+
 
 
 def _native_coordinates_close(left, right) -> bool:

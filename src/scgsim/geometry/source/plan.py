@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from scgsim.geometry._primitives._grid_cache import with_grid_work_cache
+
+from scgsim.diagnostics import _stage, _progress
+
 import copy
 import hashlib
 import json
@@ -29,12 +33,17 @@ from scgsim.geometry.source._normalization import (
 )
 from scgsim.geometry.source._occurrence import (
     _entity_from_layer_record,
+    _source_recipe_job,
+    _failed_source_recipe,
+    _run_source_recipe,
+    _with_occurrence_extraction_cache,
     _occurrence_ground_polygons_for_entity,
     _occurrence_include_polygon,
     _occurrence_polygons_for_entity,
     _occurrence_port_polygon,
     _occurrence_lumped_polygon,
 )
+from scgsim.geometry._primitives.grid import _source_recipe_map
 from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
 from scgsim.geometry.source.grid import with_source_grid
 from scgsim.geometry.source.curves import boundary_binding, transform_boundary
@@ -238,7 +247,6 @@ class GeometryPlan:
         self._boundary_curves = ()
         self._boundary_reconstruction = ()
         self._lumped_supports = ()
-        self._surface_distance_bands = ()
         self._rectangular_junctions = ()
 
     def set_rectangular_junctions(self, specs) -> None:
@@ -254,20 +262,6 @@ class GeometryPlan:
                 raise ValueError(f"duplicate rectangular junction {field}")
         self._rectangular_junctions = requests
 
-    def set_surface_distance_bands(self, specs) -> None:
-        """Replace planar distance requests carried by subsequent snapshots.
-
-        Select exact parent/ring identities from surface_distance_band_catalogue
-        on the corresponding public construction plan before setting requests.
-        """
-        from scgsim.geometry.models.surface_bands import SurfaceDistanceBandSpec
-
-        records = tuple(specs)
-        if any(not isinstance(record, SurfaceDistanceBandSpec) for record in records):
-            raise TypeError("surface distance bands must be SurfaceDistanceBandSpec records")
-        if len({record.parent_surface_id for record in records}) != len(records):
-            raise ValueError("each parent surface may have only one distance request")
-        self._surface_distance_bands = records
 
     def set_lumped_supports(self, supports: Sequence[LumpedSupport]) -> None:
         """Bind caller-declared local nonmetal supports; no excitation is inferred."""
@@ -621,7 +615,10 @@ class GeometryPlan:
             },
         }
 
+    @with_grid_work_cache
     @with_source_grid
+    @_stage("geometry.plan.prepare")
+    @_with_occurrence_extraction_cache
     def prepare(self) -> GeometryPlanSnapshot:
         self._validate_registered_sources()
         stack = self._stack()
@@ -656,16 +653,18 @@ class GeometryPlan:
         with TemporaryDirectory(prefix="scgsim-geometry-plan-") as temporary:
             root = Path(temporary)
             gds_file, stack_file = root / "source.gds", root / "source.stack.json"
-            self._component.write_gds(gds_file)
+            with _stage("geometry.source.write_gds"):
+                self._component.write_gds(gds_file)
             gds_bytes = gds_file.read_bytes()
             gds_sha256 = hashlib.sha256(gds_bytes).hexdigest()
             stack["metadata"]["gds_sha256"] = gds_sha256
             stack["metadata"]["source_occurrences"] = occurrences
             import gdstk
 
-            source_cells = {
-                cell.name: cell for cell in gdstk.read_gds(str(gds_file)).cells
-            }
+            with _stage("geometry.source.read_gds"):
+                source_cells = {
+                    cell.name: cell for cell in gdstk.read_gds(str(gds_file)).cells
+                }
             child_reference_indexes = {
                 path: tuple(
                     row["reference_index"]
@@ -674,71 +673,143 @@ class GeometryPlan:
                 )
                 for path in self._instances
             }
-            for record in stack["layers"]:
-                geometry_source = record["geometry"].get("geometry_source", "gds_polygon")
-                path = record["metadata"]["source_occurrence_path"]
-                local_ground = geometry_source == "die_face_minus_ground_mask" and path != self.root_id
-                if geometry_source != "gds_polygon" and not local_ground:
-                    continue
-                cell, _, transform = self._instances[path]
-                if cell.name not in source_cells:
-                    raise ValueError(
-                        f"source occurrence {path!r} is absent from written GDS"
-                    )
-                selector = (_occurrence_ground_polygons_for_entity if local_ground
-                            else _occurrence_polygons_for_entity)
-                record["geometry"]["source_occurrence_polygons_um"] = (
-                    selector(
-                        _entity_from_layer_record(record, materials=stack["materials"]),
-                        cell=source_cells[cell.name],
-                        transform=transform,
-                        excluded_reference_indexes=child_reference_indexes[path],
-                        **({"plane_layer": stack["solution_regions"][record["geometry"]["plane_bounds_ref"]]
-                            ["metadata"]["source_layer_datatype"]} if local_ground else {}),
-                    )
-                )
-            for record in stack["layers"]:
-                for contribution in record["geometry"].get(
-                    "source_occurrence_includes", ()
-                ):
-                    path = contribution["source_occurrence_path"]
-                    cell, _, transform = self._instances[path]
-                    if cell.name not in source_cells:
-                        raise ValueError(
-                            f"ground contribution source {path!r} is absent from GDS"
-                        )
-                    contribution["polygon"] = _occurrence_include_polygon(
-                        contribution,
-                        cell=source_cells[cell.name],
-                        transform=transform,
-                        excluded_reference_indexes=child_reference_indexes[path],
-                    )
-            for record in stack["metadata"]["port_sheet_source_layers"]:
-                path = record["source_occurrence_path"]
-                cell, _, transform = self._instances[path]
-                if cell.name not in source_cells:
-                    raise ValueError(
-                        f"source port occurrence {path!r} is absent from written GDS"
-                    )
-                record["source_occurrence_polygon_um"] = _occurrence_port_polygon(
-                    record,
-                    cell=source_cells[cell.name],
-                    transform=transform,
-                    excluded_reference_indexes=child_reference_indexes[path],
-                )
+            with _stage("geometry.source.extract_occurrences"):
+                occurrence_targets = []
+
+                def occurrence_jobs():
+                    for diagnostic_index, record in enumerate(stack["layers"]):
+                        _progress(diagnostic_index, len(stack["layers"]))
+                        try:
+                            geometry_source = record["geometry"].get(
+                                "geometry_source", "gds_polygon"
+                            )
+                            path = record["metadata"]["source_occurrence_path"]
+                            local_ground = (
+                                geometry_source == "die_face_minus_ground_mask"
+                                and path != self.root_id
+                            )
+                            if geometry_source != "gds_polygon" and not local_ground:
+                                continue
+                            cell, _, transform = self._instances[path]
+                            if cell.name not in source_cells:
+                                raise ValueError(
+                                    f"source occurrence {path!r} is absent from written GDS"
+                                )
+                            selector = (
+                                _occurrence_ground_polygons_for_entity
+                                if local_ground
+                                else _occurrence_polygons_for_entity
+                            )
+                            job = _source_recipe_job(
+                                selector,
+                                _entity_from_layer_record(
+                                    record, materials=stack["materials"]
+                                ),
+                                source_cell=source_cells[cell.name],
+                                transform=transform,
+                                excluded_reference_indexes=child_reference_indexes[
+                                    path
+                                ],
+                                **(
+                                    {
+                                        "plane_layer": stack["solution_regions"][
+                                            record["geometry"]["plane_bounds_ref"]
+                                        ]["metadata"]["source_layer_datatype"]
+                                    }
+                                    if local_ground
+                                    else {}
+                                ),
+                            )
+                        except Exception as error:
+                            yield _failed_source_recipe(error)
+                            return
+                        occurrence_targets.append(record)
+                        yield job
+
+                values = _source_recipe_map(_run_source_recipe, occurrence_jobs())
+                for record, value in zip(occurrence_targets, values, strict=True):
+                    record["geometry"]["source_occurrence_polygons_um"] = value
+
+            with _stage("geometry.source.extract_includes"):
+                include_targets = []
+
+                def include_jobs():
+                    for record in stack["layers"]:
+                        for contribution in record["geometry"].get(
+                            "source_occurrence_includes", ()
+                        ):
+                            try:
+                                path = contribution["source_occurrence_path"]
+                                cell, _, transform = self._instances[path]
+                                if cell.name not in source_cells:
+                                    raise ValueError(
+                                        f"ground contribution source {path!r} is absent from GDS"
+                                    )
+                                job = _source_recipe_job(
+                                    _occurrence_include_polygon,
+                                    contribution,
+                                    source_cell=source_cells[cell.name],
+                                    transform=transform,
+                                    excluded_reference_indexes=child_reference_indexes[
+                                        path
+                                    ],
+                                )
+                            except Exception as error:
+                                yield _failed_source_recipe(error)
+                                return
+                            include_targets.append(contribution)
+                            yield job
+
+                values = _source_recipe_map(_run_source_recipe, include_jobs())
+                for contribution, value in zip(include_targets, values, strict=True):
+                    contribution["polygon"] = value
+
+            with _stage("geometry.source.extract_ports"):
+                port_targets = []
+
+                def port_jobs():
+                    for record in stack["metadata"]["port_sheet_source_layers"]:
+                        try:
+                            path = record["source_occurrence_path"]
+                            cell, _, transform = self._instances[path]
+                            if cell.name not in source_cells:
+                                raise ValueError(
+                                    f"source port occurrence {path!r} is absent from written GDS"
+                                )
+                            job = _source_recipe_job(
+                                _occurrence_port_polygon,
+                                record,
+                                source_cell=source_cells[cell.name],
+                                transform=transform,
+                                excluded_reference_indexes=child_reference_indexes[
+                                    path
+                                ],
+                            )
+                        except Exception as error:
+                            yield _failed_source_recipe(error)
+                            return
+                        port_targets.append(record)
+                        yield job
+
+                values = _source_recipe_map(_run_source_recipe, port_jobs())
+                for record, value in zip(port_targets, values, strict=True):
+                    record["source_occurrence_polygon_um"] = value
             stack_file.write_text(json.dumps(stack, sort_keys=True), encoding="utf-8")
-            build_input = build_gds_stack_geometry_input(
-                gds_file=gds_file,
-                stack_file=stack_file,
-                top_cell_name=self._component.name,
-                grid_size_um=self._grid_size_um,
-            )
+            with _stage("geometry.source.lower_stack"):
+                build_input = build_gds_stack_geometry_input(
+                    gds_file=gds_file,
+                    stack_file=stack_file,
+                    top_cell_name=self._component.name,
+                    grid_size_um=self._grid_size_um,
+                )
             lumped_supports = []
             entities = {entity.semantic_id: entity for entity in build_input.entities}
             for support in self._lumped_supports:
                 path = support.source_occurrence_path
                 if path not in self._instances:
-                    raise ValueError(f"lumped support occurrence {path!r} is not registered")
+                    raise ValueError(
+                        f"lumped support occurrence {path!r} is not registered"
+                    )
                 cell, _, transform = self._instances[path]
                 if support.source_level not in self._layer_stack.layers:
                     raise ValueError(f"lumped support level {support.source_level!r} is not declared")
@@ -826,10 +897,6 @@ class GeometryPlan:
             from scgsim.geometry.source.junctions import with_rectangular_junctions
 
             build_input = with_rectangular_junctions(build_input, self._rectangular_junctions)
-        if self._surface_distance_bands:
-            from scgsim.geometry.source.surface_bands import with_surface_distance_bands
-
-            build_input = with_surface_distance_bands(build_input, self._surface_distance_bands)
         stack = {**stack, "metadata": {**stack["metadata"],
             "geometry_grid": build_input.metadata["geometry_grid"],
             "source_dbu_um": build_input.metadata["source_dbu_um"],

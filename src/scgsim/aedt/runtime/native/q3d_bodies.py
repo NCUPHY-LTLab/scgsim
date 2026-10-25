@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 
+from collections.abc import Mapping
 from typing import Any
 
 from scgsim.aedt.runtime.native.common import (
@@ -215,7 +216,12 @@ def _assign_material(app: Any, body: Q3dBodySpec, material: Any) -> str:
     return observed
 
 
-def construct_q3d_bodies(app: Any, spec: Q3dSpec) -> list[dict[str, Any]]:
+def construct_q3d_bodies(
+    app: Any,
+    spec: Q3dSpec,
+    *,
+    material_realizations: Mapping[str, Mapping[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     """Build every declared body, inventory native identities, then assign materials."""
     effective_bodies = {record["body_id"]: record for record in spec.effective_bodies}
     for body in spec.bodies:
@@ -428,6 +434,13 @@ def construct_q3d_bodies(app: Any, spec: Q3dSpec) -> list[dict[str, Any]]:
                 observed_material = {
                     "native_material_name": _assign_material(app, body, material)
                 }
+                if (
+                    material_realizations is not None
+                    and not material.is_superconducting
+                ):
+                    observed_material["source_material_realization"] = (
+                        material_realizations[material.material_id]
+                    )
             observed.append(
                 {
                     "object_name": body.body_id,
@@ -457,3 +470,4 @@ def construct_q3d_bodies(app: Any, spec: Q3dSpec) -> list[dict[str, Any]]:
         )
         _note_native_failure(exc, app, spec, evidence)
         raise
+

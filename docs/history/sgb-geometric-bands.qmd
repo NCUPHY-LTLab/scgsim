@@ -1,0 +1,141 @@
+---
+title: "Historical SGB geometric distance bands"
+description: "Archived explanation of the withdrawn SGB geometry-level surface-distance-band design and its example observations."
+lang: en
+toc-title: On this page
+toc-depth: 3
+scgsim-kind: "history"
+scgsim-status: "HISTORICAL"
+scgsim-id: "docs/history/sgb-geometric-bands"
+---
+
+This page preserves the former SGB geometry-level surface-distance-band design for readers of older notes and results. The producer and its API have been withdrawn from current SCGSim; use the [current SGB concept](../concepts/geometry.qmd) for the retained source-to-CAD process. Palace native Mask/Inset is a separate solver setting, described in the [Palace contract](../specs/palace-electrostatic-sgb.qmd#native-mask-inset).
+
+::: {.callout-warning title="Historical design; not a current usage recipe"}
+The figures and observations below describe an earlier implementation. They do not establish that the current package can create these geometric bands or that a Palace executable accepts a native Mask/Inset setting. Check the current source contract and the exact Palace executable before preparing a new model.
+:::
+
+### Historical design: SGB surface-distance bands (withdrawn) {#distance-bands}
+
+This section records an earlier design only. The current SCGSim source does not expose its geometry producer, so the API examples below are not current usage instructions. Native Palace Mask/Inset margins remain separate and require a Palace executable that supports them.
+
+The user first selects an actual **parent surface** from the effective model's surface catalogue, then specifies its source ownership, cut distances and original edges that define the distance origin.
+A parent is not a plane guessed from a metal name: the same object can have several surfaces, hole rings and walls.
+Selecting all original edges includes both exterior and hole rings; an explicit subset uses only those selected original edges.
+
+Here, the selected parent is the left support after terminal completion in @fig-sgb-effective, retaining its adjacency to the substrate and upper vacuum.
+On this plane, $d$ is the planar distance to the selected original boundary. Cuts at 0.125 and 0.25 µm produce the three disjoint bands in @fig-sgb-bands.
+These two distances are explicit requests for this example, not automatic defaults for every model.
+
+::: {#fig-sgb-bands .askr-wide-figure}
+```{=html}
+<iframe src="../images/sgb-concept/en-planned-bands.html" title="Planned distance bands on the completed left parent surface" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
+```
+
+Planned distance bands on the completed left parent surface
+:::
+
+The parent in @fig-sgb-bands is the completed rectangle minus its hole, with a total area of 9 µm².
+Bands also form around the hole. Concave corners or holes can give a band more than one connected component, so the three bands produce six child surfaces here.
+P1, P2, P5 and P6 remain as reference points on the exterior boundary.
+
+::: {.askr-table-compact .askr-table-numeric}
+| Band | Range | Child surfaces | Area (µm²) |
+|---|---|---:|---:|
+| C0 | $0\le d<0.125$ | 2 | 2.236324 |
+| C1 | $0.125\le d<0.25$ | 1 | 2.209366 |
+| C2 | $d\ge0.25$ | 3 | 4.554310 |
+:::
+
+To inspect “at least 0.125 µm from the boundary,” select C1 and C2; “at least 0.25 µm” selects C2 alone.
+These cumulative selections overlap, so their separately calculated results cannot be added as though the regions were disjoint.
+The partition retains the original hole and the small connected regions within each band.
+
+::: {.callout-note title="Partition seams are not new distance origins"}
+Distance origins come from the parent's original physical boundary.
+Neither the internal seam removed by the metal/end union nor the new seams between distance bands become additional edges from which to inset again.
+:::
+
+::: {.callout-note collapse="true" title="Pass the selection request to the source plan"}
+Use `surface_distance_band_catalogue(...)` to read actual parents from the corresponding construction plan, create a `SurfaceDistanceBandSpec`, then pass it to later snapshots through `GeometryPlan.set_surface_distance_bands(...)`.
+The catalogue name of this example's parent is `SURF__MS__chip/left__substrate__upper_air__0000`; `boundary_segments=None` includes all original exterior and hole edges, while an explicit subset uses `SourceBoundarySegment`.
+The example starts from normalized input and adds the same request with `with_surface_distance_bands(...)`. See the [planar distance-band contract](../geometry-sgb.qmd#surface-distance-bands) for exact parameters.
+:::
+
+### Connect caps, hole walls and exterior walls to the same nodes
+
+Distance bands are more than a display mask: they create real partition surfaces that subsequent CAD and meshing must respect.
+If a band adds a node to the upper cap, the sidewall and opposite cap must follow the same incident edge chain, or the volume boundary becomes inconsistent.
+SGB therefore retains the mapping from original edges to realized shared chains and propagates nodes to every incident surface.
+
+Wall distances are still classified in the original parent's plane and then mapped to realized facets through the existing construction correspondence; this does not introduce a different three-dimensional distance metric.
+Z and film thickness are not rounded again by the XY grid.
+This example's plan contains 12 such solution-region wall facets, which enclose three volumes together with their caps.
+
+Complete surfaces are also organized into shared points, curves and ordered loops.
+T-junctions and collinear overlapping edges are split into shared atomic curves; when two surfaces use the same edge in opposite directions, they retain directional references rather than creating another approximate edge.
+Outer and inner loops bound each surface, and oriented surface references enclose a shell for each volume.
+
+Before CAD construction, planning checks parent–child source relationships, materials and ownership, port adjacency, volume closure and group coverage.
+An actual exterior wall can be a geometric parent, while a material interface retains its interface identity; a complete parent replaced by children is not built again as another live surface.
+Adding bands thus changes the partition without silently adding material or losing original boundaries.
+
+## Construction and meshing: turn the plan into a native model {#construction-stage}
+
+### Build CAD from shared points and surfaces
+
+Planning has already determined materials, terminals, adjacent volumes and shared surfaces. OCC (Open CASCADE) realizes those relationships as CAD.
+The polygon path builds points, lines, curve loops and planes into shells and volumes, with incident volumes sharing one surface rather than separately constructing overlapping lookalikes.
+That is why shared topology is established first, instead of asking a final global CAD fragment operation to guess material ownership.
+
+This example passes the same effective input with its bands to the existing builder, which produces XAO geometry, physical groups and adjacency information.
+@fig-sgb-native-3d shows the full model's native wireframe and curve endpoints read after reopening that XAO; @fig-sgb-native-bands separately colours the selected parent's distance bands.
+
+::: {#fig-sgb-native-3d .askr-wide-figure}
+```{=html}
+<iframe src="../images/sgb-concept/en-native-cad-3d.html" title="Actual XAO: native curves and selected bands in the three-volume model" width="100%" height="720" style="border:0;" loading="lazy"></iframe>
+```
+
+Actual XAO: native curves and selected bands in the three-volume model
+:::
+
+The three volumes in @fig-sgb-native-3d are the Si substrate, upper vacuum and vacuum beside the substrate.
+The plan contains 118 points, 132 curves and 26 live surfaces; these have entered actual CAD construction, rather than remaining only a planning drawing.
+
+### Follow the same surface across native renumbering
+
+@fig-sgb-native-bands shows the native band edges and endpoints of the same left parent as @fig-sgb-bands, with colours corresponding to the same C0/C1/C2 bands.
+Rotate this three-dimensional view to see the shared $z=0$ plane. It displays read-back curves and endpoints, without adding invented filled CAD surfaces.
+Each band child is associated with a group through a stable name and retains native adjacency to the substrate and upper vacuum.
+
+::: {#fig-sgb-native-bands .askr-wide-figure}
+```{=html}
+<iframe src="../images/sgb-concept/en-native-bands-3d.html" title="Actual XAO: native band edges and nodes on the selected left parent" width="100%" height="720" style="border:0;" loading="lazy"></iframe>
+```
+
+Actual XAO: native band edges and nodes on the selected left parent
+:::
+
+CAD import renumbers integer **tags**, so “surface 19” is not a permanent name across export and import.
+For example, the following children become surfaces 7 and 8 in this import, but their full group names still identify the same geometry and adjacent volumes.
+
+::: {.askr-table-compact .askr-table-numeric}
+| Stable child-name suffix | Exported surface tag | Imported surface tag | Adjacent volumes |
+|---|---:|---:|---|
+| `__DIST_0000_0000` | 19 | 7 | `substrate`, `upper_air` |
+| `__DIST_0001_0000` | 27 | 8 | `substrate`, `upper_air` |
+:::
+
+Each full name begins with the selected left parent's name, while a native tag is meaningful only within its particular model.
+Native surfaces outside the physical groups remain CAD diagnostic data; they do not automatically become additional solver surfaces.
+
+### Meshing respects the geometry already established
+
+The Palace mesh builder reads the XAO, groups and controls in a fresh Gmsh process.
+`gmsh_default` uses Gmsh's native sizing behaviour without injecting SCGSim custom size fields. Holes, ports and bands are still real geometric constraints and affect the mesh.
+A small cut distance therefore adds more than an integration option: it can also add CAD partitions and conformal-meshing work.
+
+After three-dimensional mesh generation, checks still cover tetrahedra in solution volumes, conformity between port and volume faces, and node contact between ports and conductor boundaries.
+Only after these checks does the solver receive `palace.msh` and its group mapping.
+The worked example here reaches CAD/XAO and native adjacency; continue with the [Palace tutorial](../course/palace-eigenmode.qmd) for three-dimensional meshing and field solutions.
+

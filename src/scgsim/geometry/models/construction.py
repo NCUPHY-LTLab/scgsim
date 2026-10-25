@@ -22,12 +22,13 @@ from scgsim.geometry.models.topology import (
 
 @dataclass(frozen=True)
 class SurfacePartitionRecord:
-    """Partition intent for one child surface of a parent interface.
+    """Partition intent for a live child of a semantic or construction parent.
 
-    This is not a backend geometry object and is not a physical group source.
-    It tells the planner why a parent interface is represented by one or more
-    child live surfaces. The child must be directly buildable; overlay masks are
-    not supported.
+    ``parent_interface_id`` identifies a semantic interface or a geometric
+    surface parent validated against the compiler's pre-partition inventory.
+    An exterior surface parent remains an exterior, not an invented interface.
+    This record is not backend geometry or a physical group source. The child
+    must be directly buildable; overlay masks are not supported.
     """
 
     partition_id: str

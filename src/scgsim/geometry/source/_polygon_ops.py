@@ -18,12 +18,47 @@ from scgsim.geometry._primitives.loops import _split_gdstk_cutline_loop
 from scgsim.geometry.models.input import LayoutPolygonSpec
 
 
+def _fused_boolean_candidates(candidates):
+    """Conservative world-frame broad phase for the expensive overlap test.
+
+    Raw shared-edge recognition still runs in original local coordinates for
+    every pair. The historical unbound gdstk path keeps its original calls.
+    """
+    if current_grid_context() is None:
+        return None
+    from math import isfinite
+    from shapely import STRtree, box
+    from scgsim.geometry._primitives.grid import _frame_point, _SOURCE_INTENT
+
+    # Native near-vertex insertion is within grid/100 and node rounding within
+    # half a grid step. A full step on EACH bound is a conservative candidate
+    # envelope, never an overlap/contact acceptance rule.
+    padding = 0.0 if _SOURCE_INTENT.get() else current_grid_size_um()
+    envelopes = []
+    for polygon in candidates:
+        points = tuple(_frame_point(tuple(map(float, p))) for p in polygon.points)
+        if not points:
+            return None
+        low = tuple(min(p[axis] for p in points) - padding for axis in (0, 1))
+        high = tuple(max(p[axis] for p in points) + padding for axis in (0, 1))
+        if not all(isfinite(v) for v in (*low, *high)):
+            # No new input rejection; uncertain envelopes use the original path.
+            return None
+        envelopes.append(box(*low, *high))
+    tree = STRtree(envelopes)
+    return tuple(
+        frozenset(int(other) for other in tree.query(envelope) if int(other) > index)
+        for index, envelope in enumerate(envelopes)
+    )
+
+
 def _fused_gdstk_components(
     candidates: Sequence[Any],
 ) -> tuple[tuple[LayoutPolygonSpec, tuple[int, ...], float], ...]:
     """Return stable occupied components for explicit source selectors."""
     import gdstk
 
+    overlap_candidates = _fused_boolean_candidates(candidates)
     parents = list(range(len(candidates)))
 
     def find(index: int) -> int:
@@ -39,9 +74,11 @@ def _fused_gdstk_components(
 
     for index, polygon in enumerate(candidates):
         for other_index, other in enumerate(candidates[index + 1 :], index + 1):
-            overlap = polygon_boolean(
-                (polygon,), (other,), "and", precision=current_grid_size_um()
-            )
+            overlap = ()
+            if overlap_candidates is None or other_index in overlap_candidates[index]:
+                overlap = polygon_boolean(
+                    (polygon,), (other,), "and", precision=current_grid_size_um()
+                )
             if overlap or _rings_share_edge(
                 _ring_from_gdstk_polygon(polygon), _ring_from_gdstk_polygon(other)
             ):

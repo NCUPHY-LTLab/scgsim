@@ -1,0 +1,12 @@
+---
+title: "專案方向"
+description: "目前的學習路徑與延後實作的求解器類別。"
+lang: zh-TW
+scgsim-kind: "project"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/roadmap"
+---
+
+目前的文件工作會將完整的**電容**與**共振／EPR**範例連結至公開元件 Notebook，接著介紹模型變更及進階執行／分析。這些教學改進不會新增求解器類別，也不會重新定義物理輸出。
+
+Palace Driven 與 Magnetostatic 仍屬後續工作。Meep 不在 SCGSim 範圍內。已實作的計算請參閱[支援表](backend-support.qmd)；儲存庫與發行工作請參閱[維護者入口](https://github.com/OrPenStrike/scgsim/blob/develop/MAINTAINING.md)。

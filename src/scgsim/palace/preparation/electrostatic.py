@@ -513,9 +513,7 @@ class ElectrostaticSim:
             ],
             "ground_boundary": result.ground_boundary_resolution,
         }
-        mesh_manifest = json.loads(self._mesh_result.mesh_manifest_path.read_text(encoding="utf-8"))
-        if "surface_distance_bands" in mesh_manifest:
-            index_payload["surface_distance_bands"] = mesh_manifest["surface_distance_bands"]
+        json.loads(self._mesh_result.mesh_manifest_path.read_text(encoding="utf-8"))
         material_payload = {
             "schema_version": 1,
             "solution_volumes": result.material_resolution,

@@ -7,7 +7,9 @@ scgsim-id: "docs/geometry-sgb"
 ---
 
 Learn the source sequence in [shared Xmon inputs](tutorial-xmon-input.qmd) and
-[source observations](course/source-observations.qmd). The [geometry concept](concepts/geometry.qmd) explains the identities; this page owns their exact contract.
+[source observations](course/source-observations.qmd). The
+[SGB geometry concept](concepts/geometry.qmd#source-stage) explains the source,
+planning and construction stages; this page owns their exact contract.
 
 The in-tree `scgsim.geometry` API is SCGSim's current source-geometry
 authority. It consumes structured PDK and component semantics and must not
@@ -181,9 +183,16 @@ retain historical interpretation. Original source identity is retained alongside
 computational change ledger, and walls inherit their snapped layout endpoints.
 Z coordinates, film thickness, mesh, quadrature, and solver tolerances remain
 separate; the XY grid does not assert that every 3D coordinate lies on it.
-Fixed-precision arrangement fails explicitly if physical contacts change,
-holes are lost, or positive-area components are removed. It does not attribute
-by nearest edge or silently remove small regions.
+The fixed-grid XY boundaries form one shared noded network. Each original
+directed ring edge carries its operand, ring and segment order through
+explicit grid-pixel incidence; coincident edges retain every source. Raw
+intersection and native-grid near-vertex events split these directed paths
+before rounding.
+
+Directed edge transitions determine face membership, and each operand is reconstructed
+from those same cells without another grid snap. Ambiguous source paths or
+inconsistent labels fail explicitly. Physical contact, hole and component
+checks still compare against the original inputs.
 
 For component-semantics schema v2, the paired stack adds derived source
 occurrence records, not a new user polygon-selection API. Each
@@ -266,16 +275,13 @@ occurrences or infer owners from proximity.
 
 The shared geometry interpreter derives the complete central rectangle and
 terminal-owned end metals once, from the source database units and existing
-physical attachment, before planning contacts, interfaces, construction
-catalogues, or surface bands. Palace Route A continues to apply its existing
+physical attachment, before planning contacts, interfaces, and construction
+catalogues. Palace Route A continues to apply its existing
 host-interface, common-plane, and common-volume rules. Palace and AEDT consume
 the same derived source partition; AEDT validates that request rather than
 deriving another rectangle. Palace `add_port(...)` still binds inductance to an
 authored port name and does not choose the physical terminal owners.
 
-Surface-band origins follow the final physical support's exterior and hole
-edges. Joins canceled inside a terminal's combined source-and-end support are
-internal seams, not additional surface intent or distance origins.
 
 | Fact or operation | Accepted contract |
 |---|---|
@@ -318,51 +324,11 @@ solve or returned matrix observation.
 
 Only Route A and Route B are in the current direction.
 
-## Planar surface-distance bands (CONVERGING) {#surface-distance-bands}
+## Historical SGB geometry distance bands (WITHDRAWN) {#surface-distance-bands}
 
-`GeometryPlan.set_surface_distance_bands(...)` requests a geometric partition
-of an exact, unpartitioned planar parent surface. Use
-`surface_distance_band_catalogue(...)` on the route construction plan to read
-the available parent IDs, source-owner bindings, any source-polygon IDs,
-provenance, and original 3D boundary rings before choosing a request. The
-`source_polygon_id` argument and serialized key are required. Use the actual
-polygon ID for a polygon-backed parent. For an entity-only parent with no
-polygon provenance, pass explicit `None`; `source_entity_id` must still name
-an actual parent owner. Never create a substitute polygon ID. These anchors
-identify the parent group; they do not filter other members or rings out of it.
+SCGSim no longer exposes the SGB geometry-level distance-band producer. This section preserves the former design boundary for readers of older material; its `GeometryPlan.set_surface_distance_bands(...)`, `SurfaceDistanceBandSpec`, and Palace aggregation APIs are not current interfaces.
 
-`SurfaceDistanceBandSpec` binds the parent ID and source anchor to ordered
-`distances_um`, the required `precision_um` equal to the plan's shared
-`grid_size_um`, and an optional exact subset of `SourceBoundarySegment` records.
-With cuts at 0.5 µm and 1.0 µm, the resulting bands are 0–0.5 µm, 0.5–1.0 µm,
-and 1.0 µm outward. `boundary_segments=None` uses every original exterior and
-hole edge. An explicit segment identifies its original `ring`,
-`segment_index`, and, for a hole, `hole_index`; generated band seams never
-become new distance origins. For port-split walls, retain the unsplit original
-wall boundary as distance-origin lineage and clip child regions from that
-parent; split seams are not new inset origins. The shared precision sets the
-XY polygon Boolean grid. The optional `chord_error_um: float | None = None`
-field follows `boundary_segments` and independently controls arc and cap
-approximation; `None` retains the previous chord magnitude of
-`precision_um`. Distance partitions remain limited to planar polygon parents;
-this does not add curve-band capability.
-
-Each child retains its parent and source-owner identity, any source-polygon
-provenance, selected source segments, interval, component index, and child
-surface ID.
-The band summary is carried with the construction metadata and copied to the
-mesh manifest and Palace index when present. These records define geometric
-regions; a Surface EPR value must still come from the corresponding solver
-calculation. Distance partitions currently require planar polygon parents;
-active curves and non-planar parents are unsupported.
-
-For offline EPR totals, select the returned parents with Palace's
-`SurfaceBandSelection` and `aggregate_surface_bands(...)`. Each selection names
-the exact parent, interface kind, and recorded field-side label; each cutoff
-must match a declared source-band boundary. Aggregation sums complete
-`distance >= cutoff` bands for one mode, iteration, and normalization. It does
-not create native masks, apply Q2D factors, or change the Palace field
-calculation; see the [Palace surface-band course](course/palace-surface-bands.qmd).
+The withdrawn design partitioned an explicitly selected planar parent surface from its original exterior and hole edges, retained source lineage for each child, and passed those geometric regions into CAD and meshing. Its cumulative EPR aggregation depended on a completed Palace result and did not require Q2D. These historical regions were distinct from native Palace Mask/Inset rows: native Mask/Inset requests remain available through `inset_margins_um` when the selected Palace executable supports them. See the current [Palace Electrostatic contract](specs/palace-electrostatic-sgb.qmd#native-mask-inset) for that path.
 
 ## Internal semantic projection
 
@@ -482,6 +448,57 @@ geometry evidence; it cannot manufacture source contact intent. Route-A
 profile normalization still happens once at the shared frontend boundary, and
 Route-B finite-body facts stay distinct from PEC approximation and the AEDT
 implementation that realizes them.
+
+## Preparation resources (CONVERGING) {#preparation-resources}
+
+Use `scgsim.preparation.preparation_resources(max_workers=...)` around source
+preparation and meshing to share one preparation worker budget. Without this
+scope, preparation runs serially.
+
+```python
+from scgsim.preparation import preparation_resources
+
+with preparation_resources(max_workers=30):
+    snapshot = plan.prepare()
+    sim.set_plan(snapshot)
+    sim.set_mesh(threads=30, surface_threads=30)
+    sim.mesh()
+```
+
+The scope reuses one pool for independent source recipes, indexed source-path
+batches, zero-area support classification and per-operand reconstruction.
+Results and task-local source audits merge in input order. Fixed-grid operands
+share the same boundary network and labelled cells; source-path ownership and
+face transitions remain deterministic. Unquantized parent planes keep their
+separate construction path. Nested work reuses the budget rather than creating
+another pool. Preparation tasks finish before the Gmsh child starts; its
+requested thread limits must be positive and fit the explicit scope's budget.
+
+This setting bounds SCGSim preparation workers; allocate the corresponding
+CPUs through the scheduler separately. Gmsh thread limits and Palace MPI/OpenMP
+settings control their own stages. `preparation_diagnostics(output_dir, profile=False)`
+can record stage timings alongside this scope without selecting parallelism.
+
+Each source-preparation call also reuses hierarchy extraction for the same
+freshly read GDS cell and excluded-reference list. The cache ends with that
+call.
+
+Immutable raw polygons and pure subdivisions are also reused within a prepare,
+adapter or compiler call when the complete ordered operands and grid context
+match. Selectors,
+source-record comparisons and physical/contact audits still execute on each
+invocation.
+
+Reconstructed grid-applied faces use one coordinate
+representation per integer grid key, including their boundary-chain anchors;
+raw source coordinates and non-grid local planes remain separate.
+
+A topology
+failure retains its original exception and adds counts, validity, area and
+grid information without coordinates. Error-only witnesses distinguish the
+initial grid realization, labelled cells and reconstructed faces from the
+final shared-cell reconstruction. These witnesses do not replace the model or
+its checks.
 
 ## Pre-solve input summary
 

@@ -623,8 +623,7 @@ def _verify_config_main(argv: list[str]) -> int:
     config_record = _record_for_path(root, args.config_path)
     supported_release = version_exit_code == 0 and _supported_palace_release(native_git_tag)
     compatible = (
-        supported_release
-        and dry_run_exit_code == 0
+        dry_run_exit_code == 0
         and config_record["present"] is True
         and config_record == config_before
     )
