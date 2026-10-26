@@ -57,6 +57,12 @@ permittivity and loss assumptions. AEDT surface estimates cover horizontal
 top/bottom interfaces, not sidewall film energy. A reported known-loss subtotal
 is therefore not automatically total device loss.
 
+The Palace executable's schema determines whether a configuration includes
+native Mask/Inset fields; SCGSim's Python release label is not a native-feature
+guarantee. See the
+[Palace capability matrix](course/palace-eigenmode.qmd#native-palace-capabilities)
+for the official 0.18.1 and historical-fork distinction.
+
 AEDT can evaluate EPR from retained native saved fields without a new eigensolve;
 that operation still needs AEDT. Offline reanalysis changes attributed loss
 assumptions on a recorded EPR result without native evaluation.

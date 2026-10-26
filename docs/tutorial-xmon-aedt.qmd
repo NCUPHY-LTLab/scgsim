@@ -124,6 +124,10 @@ print([(row["interface_kind"], row["field_side"], row["source_polygon_ids"])
        for row in catalogue])
 ```
 
+`field_side` belongs to the physical contribution record: `top`, `bottom` or `sidewall` identifies the source side associated with that interface. It is not the AEDT calculator command. In a later saved-field pass, `analyze_epr(..., surface_field_selectors={contribution_id: "surface"})` selects `EnterSurface`; `"adjacent"` selects `EnterAdjacentSurface`. The [focused API guide](api/analyze_epr.qmd) explains the inputs and returned analysis.
+
+Keep the two choices visible when interpreting a result. The selector records which calculator operation was requested; it does not prove that AEDT sampled the intended material side or automatically correct an incorrect side assignment. Thin-film top/bottom normal handling follows the pinned PyAEDT 1.3.0 and AEDT 2024.2 convention described in the [runtime contract](specs/aedt-runtime.qmd#explicit-native-field-selectors-for-saved-analysis-converging).
+
 ## Select reported rows and prepare a handoff
 
 The selection below requests mode 1, every catalogue-derived surface

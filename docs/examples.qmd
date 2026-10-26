@@ -1,16 +1,16 @@
 ---
 title: "Choose a simulation"
-description: "Select a complete SCGSim notebook by the physical quantity you want to calculate."
-scgsim-kind: "course"
+description: "Choose a complete workflow by the physical quantity you need, then open its backend lesson."
+scgsim-kind: "start"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/examples"
 ---
 
-SCGSim prepares a geometry and solver request, then resolves the returned results with their units and model identity. Choose a notebook by the quantity you need; its backend tabs carry the procedure from source inputs through result reading.
+Start with the quantity you need. Each goal links to a complete notebook path, with separate solver tabs where SCGSim has both backends.
 
-## Choose a simulation {#getting-started}
+## Choose a calculation {#getting-started}
 
-| Goal | Notebook | Result |
+| Goal | Workflow | Returned quantity |
 |---|---|---|
 | Capacitance | [Palace Electrostatic or AEDT Q3D](tutorials/capacitance.qmd) | Labeled conductor capacitance matrix |
 | Resonant modes | [Palace or HFSS Eigenmode](tutorials/resonance.qmd) | Mode frequencies and returned mode report |
@@ -18,26 +18,29 @@ SCGSim prepares a geometry and solver request, then resolves the returned result
 | Driven S-parameters | [HFSS Modal or Terminal](tutorials/scattering.qmd) | Two-port response with the selected port family |
 | Transmission-line parameters | [AEDT Q2D](tutorials/transmission-line.qmd) | Per-length C, G, L and R matrices |
 
-## Prepare a model and read its return
+## Prepare, execute, then read the return
 
-Start with [installation](course/installation.qmd), then select explicit geometry, materials, conductors and ports for your physical question. The [model and materials reference](reference.qmd#model-materials) and [conductors and ports reference](reference.qmd#conductors-ports) explain those choices. Use [returned results](course/returned-results.qmd) to keep the returned quantity, units, mode or conductor identity, and solver status together.
+Begin with [installation](course/installation.qmd), then follow the selected workflow's input, preparation and result-reading steps. The [model and materials reference](reference.qmd#model-materials) and [conductors and ports reference](reference.qmd#conductors-ports) explain the choices that determine the physical model. If you already have a returned package, start at [returned results](course/returned-results.qmd).
 
-## Explore larger examples {#public-inputs}
+## Public component source and version pairing {#public-inputs}
 
-The deeper Xmon and CPW source notebooks are pinned to public OrPen SC PDK revision [`35b4dc1cdd3f921badcac2fe57a98366315ae8d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9), which declares OrPen `0.1.0` and GDSFactory 9.48.x. Use the source revision named by each example.
+The Xmon documentation uses this exact public package pair. The OrPen entry is a public, independently parameterized adaptation; its defaults are not a paper mask or measured device. The source map records the package revisions and component metadata used here. It does not establish that the historical upstream notebook runs unchanged or report an installation, preparation, or solve.
 
-| Public notebook group | Use |
+| Role | Version and source |
 |---|---|
-| [Kosen2024_Xmon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Electrostatic/Eigenmode and source-first Xmon studies |
-| [ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/CpwFiniteGround) | HFSS Eigenmode/Driven and historical Q3D GDS-input source |
-| [CrossSectionSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/CrossSectionSimulation/CpwFiniteGround) | Q2D rectangles and conductor groups |
+| SCGSim source/API baseline | `2.0.0rc15`, commit [`0f6b4e5c54aff4891492976a5dd58387cc1a1787`](https://github.com/NCUPHY-LTLab/scgsim/tree/0f6b4e5c54aff4891492976a5dd58387cc1a1787) |
+| OrPen SC PDK | `0.1.0.dev2`, commit [`03b1bc783ba0372ba0df1a765aa5ee446b182080`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/03b1bc783ba0372ba0df1a765aa5ee446b182080) |
+| Documentation bundle | SCGSim `2.0.0rc16`, bundle manifest schema `1.0` |
+| Historical canonical OrPen lesson | [Kosen2024 Xmon Palace Route B QMD](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/03b1bc783ba0372ba0df1a765aa5ee446b182080/notebooks/src/ComponentSimulation/Kosen2024_Xmon/palace_route_b_eigenmode.qmd) (source reference; not a promise that its older SCGSim calls run unchanged) |
 
-The source dimensions and presets are example model inputs. For current SCGSim requests, follow the relevant tutorial and API references.
+The installation commands reconstruct the `0f6b4e5c` API-baseline pair; they do not imply that `2.0.0rc15` contains this `2.0.0rc16` documentation bundle. To record an installed bundle, read its package version and `bundle_id` from MCP `list_packages()` or from `importlib.metadata` and the installed bundle manifest; this needs no SCGSim import. Older CPW and Circular Pad notebooks remain tied to their own historical source revisions; do not mix their code and lockfiles with this Xmon pair.
 
-## Continue with a focused reference
+## Continue with focused references
 
+- Compare implemented solver workflows in [supported calculations](backend-support.qmd), including Palace's native Mask/Inset boundary.
 - [Inspect source and geometry](course/source-observations.qmd) before backend preparation.
 - [Inspect prepared inputs](course/solver-observations.qmd) when a request differs from the intended model.
 - [Prepare and execute a portable handoff](course/execute.qmd) on the selected solver host.
 - [Read saved AEDT fields](course/aedt-saved-fields.qmd) or [update loss assumptions offline](course/offline-epr.qmd) on recorded EPR data.
-- For deeper source bindings, see the [Xmon inputs](tutorial-xmon-input.qmd), [Palace EPR](tutorial-xmon-palace.qmd) and [HFSS EPR](tutorial-xmon-aedt.qmd) examples.
+- For the shared Xmon inputs, see [source preparation](tutorial-xmon-input.qmd), [Palace EPR](tutorial-xmon-palace.qmd), and [HFSS EPR](tutorial-xmon-aedt.qmd).
+- For Traditional Chinese terms and the current source vocabulary, open the [SCGSim knowledge guide](knowledge-guide.qmd).

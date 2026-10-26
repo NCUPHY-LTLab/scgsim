@@ -47,7 +47,6 @@ sim.set_surface_epr(
             "loss_tangent": record["loss_tangent"],
             "source": record["source"],
             "preset": preset_names[kind],
-            "inset_margins_um": (0.0, 0.01, 0.05, 0.1),
         }
         for kind, record in interface_presets.items()
     },
@@ -83,9 +82,9 @@ sim.set_numerical(
 )
 ```
 
-本例透過 `inset_margins_um` 要求 Palace 原生 Mask／Inset 邊距；`0.0` 項目是未遮罩基準。請使用支援原生 Mask／Inset 設定的 Palace 可執行檔。只需要基準時，請省略 `inset_margins_um`。這些邊距不會分割 SGB 幾何。
+本例省略 `inset_margins_um`，只要求未遮罩基準。官方 Palace 0.18.1 的上游設定結構沒有原生 Mask／Inset。選用歷史 fork 專屬流程前，請先閱讀[功能對照表](course/palace-eigenmode.qmd#native-palace-capabilities)。
 
-MA／MS／SA 記錄是 OrPen `LiteratureCentral` 建模預設值，不是材料量測值。只有在你的研究採用具明確來源歸屬的記錄時，才替換這些值。要求的四個遮罩／內縮邊距是未遮罩基準值以外的替代估算。`bulk_domain_ids=None` 會選取所有已設定的體積能量項目；此選擇不會移除物理區域，也不會改變正規化。若未另行指定，Palace 外部 Region 表面仍使用自然 PMC；邊界比較與解讀限制請見 [EPR 方法指南](eigenmode-epr.qmd#workflow-and-state-contract)。
+MA／MS／SA 記錄是 OrPen `LiteratureCentral` 建模預設值，不是材料量測值。只有在研究採用具明確來源歸屬的記錄時，才替換這些值。`bulk_domain_ids=None` 會選取所有已設定的體積能量項目；此選擇不會移除物理區域，也不會改變正規化。若未另行指定，Palace 外部 Region 表面仍使用自然 PMC；邊界比較與解讀限制請見 [EPR 方法指南](eigenmode-epr.qmd#workflow-and-state-contract)。
 
 ## 建立網格前檢視正規化輸入 {#review-normalized-inputs-before-meshing}
 

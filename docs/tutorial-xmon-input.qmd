@@ -1,5 +1,5 @@
 ---
-title: "Flip-chip Xmon: shared source inputs"
+title: "Kosen2024 Xmon: shared source inputs"
 description: "Author named public Xmon occurrences and final Nets into one immutable source snapshot."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
@@ -20,21 +20,13 @@ simulation inputs, not measured device data or paper-mask dimensions. Use the
 matched SCGSim and OrPen versions listed there. Quarto shows this code without
 executing it.
 
-The goal is one source snapshot shared by two backends. Start with
-[installation](course/installation.qmd), and retain `snapshot` in this session.
+The goal is one source snapshot shared by two backends. This lesson uses the SCGSim `2.0.0rc15` API baseline and OrPen SC PDK `0.1.0.dev2` package mapping in [Examples](examples.qmd#public-inputs). That mapping fixes the public package identity and component metadata; it is not an execution-compatibility result. Start with [installation](course/installation.qmd), then retain `snapshot` in this session.
 
-The [pinned public OrPen Xmon sources](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon)
-provide the Palace Route B lumped-port inductance of $11.78\,\mathrm{nH}$ used
-in the backend tutorials. The AEDT tutorial sets capacitance to zero as an
-explicit inductive-only circuit-model assumption; this is not a measured zero
-or a claim about the physical device. Its MA/MS/SA film values come from
-OrPen's validated synthetic `LiteratureCentral` presets and remain modeling
-assumptions, as described on the backend pages.
+The public OrPen Xmon mapping records the $11.78\,\mathrm{nH}$ inductance and the component's port and layer metadata used below. The AEDT tutorial sets capacitance to zero as an explicit inductive-only circuit-model assumption; this is neither a measured zero nor a claim about the physical device. MA/MS/SA film values are synthetic `LiteratureCentral` presets used as modeling assumptions.
 
 ## Build the component and named coupon occurrences
 
-The device component owns local Entity IDs for its pad and couplers, the
-junction port, and source geometry. Its junction ground arm is a local metal
+The public PDK registers the `kosen2024_flip_chip_xmon_qubit` cell and its local geometry, ports and layer-stack records. The component carries its own pad, coupler and junction-locator annotations; this lesson arranges that component with a named coupon. Its junction ground arm is a local metal
 contribution to the root D1 plane, not a separate conductor Entity. The
 `place_flip_chip_ground_short_bumps` helper returns a final coupon with named
 device and bump references and one root-local D0/D1 ground-plane pair, authored
@@ -44,13 +36,13 @@ flattened polygon names.
 
 ```python
 import gdsfactory as gf
-import orpen_sc_pdk
-from orpen_sc_pdk import LAYER_STACK, get_material_records
-from orpen_sc_pdk.helpers.assembly import place_flip_chip_ground_short_bumps
-from orpen_sc_pdk.tech import OUTER_VACUUM_THICKNESS_UM
+import orcapen_sc_pdk
+from orcapen_sc_pdk import LAYER_STACK, get_material_records
+from orcapen_sc_pdk.helpers.assembly import place_flip_chip_ground_short_bumps
+from orcapen_sc_pdk.tech import OUTER_VACUUM_THICKNESS_UM
 from scgsim.geometry import GeometryPlan
 
-orpen_sc_pdk.activate()
+orcapen_sc_pdk.activate()
 gf.clear_cache()
 device = gf.get_component(
     "kosen2024_flip_chip_xmon_qubit",
@@ -73,8 +65,7 @@ only bump instances. The helper may increase `coupon_padding_um` to fit them;
 `coupon.stack_coupon_padding_um` is the corresponding stack value. The common
 planes belong to the final coupon, while the device's local ground-arm
 contribution is resolved against its named occurrence and included in D1.
-The component, layer stack, and material records come from OrPen. SCGSim does
-not author a second copy of those PDK facts.
+The component default conductor face is `D1_BOTTOM_M1`. The forwarded `o_junction_lumped` locator is annotated on `D1_BOTTOM_SIM_BOUNDARY`; the Palace/AEDT workflow uses the locator to find the port sheet and separately binds the modeled metal to `D1_BOTTOM_M1`. A locator is a source reference, not the metal geometry itself. The component, stack and materials come from this pinned OrPen source; SCGSim does not duplicate PDK facts.
 
 ## Assign the final Net map and prepare one snapshot
 

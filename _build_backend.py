@@ -169,6 +169,9 @@ def _generate_knowledge() -> None:
     identifiers = [resource["id"] for resource in resources]
     if len(identifiers) != len(set(identifiers)):
         raise ValueError("Knowledge resource IDs must be unique")
+    starts = [resource["id"] for resource in resources if resource["kind"] == "start"]
+    if starts != ["docs/examples"]:
+        raise ValueError("Knowledge needs docs/examples as its sole start resource")
     resources.sort(key=lambda resource: resource["id"])
     manifest: dict[str, object] = {
         "schema_version": "1.0",

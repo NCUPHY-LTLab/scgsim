@@ -274,7 +274,7 @@ New handoffs retain `scgsim.aedt.handoff.v1` and
 `scgsim.aedt.handoff-manifest.v1`. Both records add
 `expected_receipt_schema: scgsim.aedt.receipt.v3`, and the initial receipt is
 V3. It contains `prepared_runtime_source`: a deterministic, sorted
-`runtime-source.v24` manifest for the current source. The record fields are
+`runtime-source.v25` manifest for the current source. The record fields are
 `schema_version`, `stage`, `modules`, `content_sha256`, and
 `revision_observation`; there is no helper-hash map. Each declared module has
 measured bytes and the content digest binds that inventory. The Git observation
@@ -306,8 +306,8 @@ partial markers, noncanonical members, and hash mismatches reject before
 receipt mutation.
 
 Every new completed V3 receipt has a separate `runtime_source` manifest using
-`runtime-source.v24` and a content digest for the code that actually executed
-it. Declared module bytes and the digest are mandatory; V24 has no redundant
+`runtime-source.v25` and a content digest for the code that actually executed
+it. Declared module bytes and the digest are mandatory; V25 has no redundant
 helper-hash fields. `revision_observation` carries the actual 40-hex commit
 when available and records `unavailable` truthfully for an immutable wheel
 without VCS metadata. Missing or corrupt declared module bytes, digest, schema,
@@ -351,7 +351,8 @@ inventories. V23 is the frozen inventory immediately preceding the current
 V24. V24 adds `scgsim/aedt/runtime/batch_protocol.py`,
 `scgsim/aedt/runtime/batch_runner.py`, and `scgsim/aedt/epr/evidence.py` to the
 V23 inventory. V23 and V24 use the same five record fields described above,
-with no helper-hash map. Each version's exact path list is its
+with no helper-hash map. V25 adds `scgsim/aedt/runtime/control.py` to the V24
+inventory and retains those five record fields. Each version's exact path list is its
 declared implementation inventory. These manifests bind their
 declared file inventories, not an exhaustive transitive dependency
 attestation. The frozen V12 inventory, for example, does not separately hash
@@ -364,7 +365,7 @@ historical hashes with the installed package.
 
 Execution computes mandatory runtime-source provenance inside the receipt-bound
 failure transaction, before importing PyAEDT or constructing Desktop. Current
-V24 may record `revision_observation` as unavailable; that alone does not fail
+V25 may record `revision_observation` as unavailable; that alone does not fail
 byte-bound identity or prevent execution. Missing or corrupt declared module
 bytes, digest, schema, or cohort still yield a failed V3 receipt without a
 Desktop launch rather than escaping receipt finalization. V1–V17 retain their
@@ -2249,6 +2250,17 @@ $$
 U_{SA}=\frac{\epsilon_0 t}{2}\int
 \left(\epsilon_f|E_{t,air}|^2+\frac{|E_{n,air}|^2}{\epsilon_f}\right)dA.
 $$
+
+For the peak-phasor junction voltage $V$ and declared branch capacitance $C$,
+the branch energy is $U_C=C|V|^2/2$. Thus $p_C=U_C/U_{norm}$ is a
+dimensionless participation, not a capacitance. If a study defines an
+effective capacitance from a selected energy $U$ and that voltage, the
+peak-phasor conversion is $C_{eff}=2U/|V|^2$; with RMS voltage it is
+$C_{eff}=U/|V_{rms}|^2$. State whether $U$ is total electric energy $U_E$,
+junction energy $U_C$, or another numerator. Using $U_C$ recovers the declared
+branch capacitance by construction; it is not an independently extracted
+mode capacitance. SCGSim records the underlying energies and junction voltage,
+but does not emit a `C_mode` field.
 
 The unique electric normalization is
 $U_E=\epsilon_0/2\sum_D\int_D\epsilon_r|E|^2dV$ and

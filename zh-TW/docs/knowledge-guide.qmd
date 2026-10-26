@@ -1,0 +1,83 @@
+---
+lang: zh-TW
+title: "SCGSim 知識指南"
+description: "查找目前公開來源與 API，並區分物理場側、AEDT 選擇器及已儲存場分析。"
+scgsim-kind: "reference"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/knowledge-guide"
+---
+
+當同一個詞同時出現在物理模型與 AEDT 命令時，請先用本頁區分模型宣告與求解器操作所選取的內容。
+
+## 目前公開 Xmon 來源配對
+
+Xmon 教學採用 SCGSim `2.0.0rc15` API 基準 commit [`0f6b4e5c54aff4891492976a5dd58387cc1a1787`](https://github.com/NCUPHY-LTLab/scgsim/tree/0f6b4e5c54aff4891492976a5dd58387cc1a1787)，以及 OrPen SC PDK `0.1.0.dev2` 公開來源 commit [`03b1bc783ba0372ba0df1a765aa5ee446b182080`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/03b1bc783ba0372ba0df1a765aa5ee446b182080)。[安裝頁](course/installation.qmd#install-the-xmon-source-pair)固定這兩個版本。此配對記錄範例採用的輸入與 API 基準；不代表已安裝或執行工作流程。
+
+## 表面 EPR 名詞
+
+| 名詞 | 此工作流程中的意義 |
+|---|---|
+| `field_side`（取場側／場側） | 表面貢獻所關聯的物理側別，例如 `top`、`bottom` 或 `sidewall`。它由已準備的貢獻記錄傳入 `SurfaceEprSpec`。 |
+| `surface_field_selectors`（表面場選擇器） | `analyze_epr()` 已儲存場分析可選的映射。`"surface"` 要求 AEDT 執行 `EnterSurface`；`"adjacent"` 要求 `EnterAdjacentSurface`。 |
+| 材料側驗證 | 另一個物理問題：取樣場屬於哪種材料。記錄計算器選擇器不能回答此問題，也不會自動修正 `field_side`。 |
+| `analyze_epr()` | 在工作複本中使用原生 AEDT 評估已儲存場。它重用已解析的保存解，不會再要求一次求解。 |
+| `reanalyze_epr()` | 根據已記錄的分子與變更後的損耗假設離線重算，不會開啟 AEDT。 |
+
+[專用 `analyze_epr` API 指南](api/analyze_epr.qmd)展示有型別的輸入及完整呼叫方式；[AEDT 執行契約](specs/aedt-runtime.qmd#explicit-native-field-selectors-for-saved-analysis-converging)規範來源綁定與讀回規則。
+
+## 能量、參與率與等效電容
+
+對選定接面 $j$，SCGSim 會記錄峰值相量電壓分量、支路能量 $U_{C,j}$、參與率 $p_{C,j}$ 與電能正規化 $U_{norm}$：
+
+$$
+U_{C,j}=\frac{C_j|V_j|^2}{2},\qquad
+p_{C,j}=\frac{U_{C,j}}{U_{norm}}.
+$$
+
+使用同一電壓參考，可推導等效模態電容與支路電容：
+
+$$
+C_{mode,j}=\frac{2U_{norm}}{|V_j|^2},\qquad
+C_j=\frac{2U_{C,j}}{|V_j|^2},\qquad
+p_{C,j}=\frac{C_j}{C_{mode,j}}.
+$$
+
+記錄的電壓採峰值相量。若研究改用 RMS 電壓，使用 $|V_{peak}|=\sqrt{2}|V_{rms}|$，即可寫成 $C_{mode,j}=U_{norm}/|V_{rms,j}|^2$、$C_j=U_{C,j}/|V_{rms,j}|^2$。此處的 $U_{norm}$ 是 SCGSim 的電能正規化，不是電能加磁能的總和。`C_mode` 是衍生值，不是 SCGSim 輸出的欄位。電壓、能量與參與率須取自同一筆完整 EPR 列及接面記錄；比較不同執行結果時，先依結果脈絡核對模態與執行通過身分。若 $|V_j|^2=0$，電容比值在數學上未定義；請標示未定義，不套用數值門檻。[專用 API 指南](api/analyze_epr.qmd)說明如何取得保存場結果。
+
+先載入保留的 EPR 結果，再推導比較數值：
+
+```python
+from pathlib import Path
+from scgsim.aedt import resolve_epr_result
+
+epr_result = resolve_epr_result(
+    Path(".artifacts/aedt-saved-field-analysis/results/epr/epr-result.json")
+)
+```
+
+```python
+for row in epr_result.rows:
+    if row["status"] != "complete":
+        continue
+    normalization_j = row["normalization_energy_j"]
+    for junction in row["junctions"]:
+        voltage_squared_v2 = (
+            junction["voltage_real_v"] ** 2
+            + junction["voltage_imag_v"] ** 2
+        )
+        if voltage_squared_v2 == 0:
+            c_mode_f = None  # 零電壓時未定義，不套用數值門檻。
+            c_branch_f = None
+        else:
+            c_mode_f = 2 * normalization_j / voltage_squared_v2
+            c_branch_f = 2 * junction["capacitive_energy_j"] / voltage_squared_v2
+        print(
+            row["mode"],
+            junction["junction_id"],
+            c_mode_f,
+            c_branch_f,
+            junction["capacitive_participation"],
+        )
+```
+
+[EPR 概念](eigenmode-epr.qmd)說明參與率的解讀；[AEDT 執行契約中的方程式](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization)列出來源定義。

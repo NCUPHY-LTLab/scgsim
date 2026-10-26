@@ -1,87 +1,75 @@
 ---
 title: "Install SCGSim"
-description: "Install SCGSim into a study project with uv and prepare the selected native solver separately."
+description: "Create a locked uv project for SCGSim and its public Xmon source inputs."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/installation"
 ---
 
-Install SCGSim into your study project with `uv` from the source revision documented here. SCGSim requires Python `>=3.12,<3.14`; `uv` manages the project environment in `.venv` and records resolved dependencies in `uv.lock`.
+Use `uv` to install the documented SCGSim and OrPen source revisions into one project. Keep `pyproject.toml` and `uv.lock` with the study so another machine can recreate the same Python environment.
 
-## Create a study project
+## Create the project
 
-1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git. Git lets `uv` fetch SCGSim from its source repository.
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git, then create a Python 3.12 project: 
 
-   Check: `uv --version` and `git --version` print installed versions.
+```bash
+uv init --python 3.12 scgsim-study
+cd scgsim-study
+```
 
-2. Create a project and add SCGSim with the Palace preparation tools. This uses package version `2.0.0rc11` from source commit `90fb50ef9de80fa6e556d2f2a09fb45707efeea0`.
+SCGSim supports Python `>=3.12,<3.14`; use `--python 3.13` if that is the interpreter selected for your study.
 
-   ```bash
-   uv init --python 3.12 scgsim-study
-   cd scgsim-study
-   uv add 'scgsim[palace] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@90fb50ef9de80fa6e556d2f2a09fb45707efeea0'
-   ```
+## Add the backend tools
 
-   Use `--python 3.13` if that is the interpreter selected for the study. For project setup details, see the [uv project guide](https://docs.astral.sh/uv/guides/projects/) and its [Git dependency syntax](https://docs.astral.sh/uv/concepts/projects/dependencies/#git).
+Choose the extra for the calculation. The base package resolves and plots returned results; solver-specific extras supply Python preparation libraries. They do not install the native Palace or AEDT applications.
 
-   Check: `uv run python -c "from importlib.metadata import version; print(version('scgsim'))"` prints `2.0.0rc11`.
-
-3. Keep `pyproject.toml` and `uv.lock` with the study. On another computer, run `uv sync` in the project folder to recreate its environment from the lock file.
-
-   ```bash
-   uv sync
-   ```
-
-   Check: the same `uv run` version command prints `2.0.0rc11`.
-
-## Select backend tools
-
-The base package supplies NumPy and Plotly for resolving and plotting returned results. Add the extras needed for your calculation.
-
-| Extra | Use | Python packages supplied |
+| Extra | Use | Main added libraries |
 |---|---|---|
 | `palace` | Prepare Palace geometry, mesh and configuration | GDSFactory 9, `gdstk`, Gmsh |
-| `aedt` | Prepare ordinary HFSS or Q3D models; use Q2D | `gdstk`, PyAEDT 1.3.0 |
-| `aedt-epr` | Prepare source-first AEDT surface EPR models | AEDT dependencies, GDSFactory 9 and KLayout 0.30.x |
-| `visualization` | Inspect solver-bound geometry | `meshio`, Pillow and PyVista; combine with the backend extra |
+| `aedt` | Prepare HFSS or Q3D models; use Q2D | `gdstk`, PyAEDT 1.3.0 |
+| `aedt-epr` | Prepare source-first AEDT surface EPR | AEDT dependencies, GDSFactory 9, KLayout 0.30.x |
+| `visualization` | Inspect solver-bound geometry | `meshio`, Pillow, PyVista |
 
-Use `uv add --extra` to select the extras from the pinned SCGSim source. This example includes both SimplePad beginner backend paths:
-
-```bash
-uv add --extra palace --extra aedt-epr --extra visualization \
-  'scgsim @ git+https://github.com/NCUPHY-LTLab/scgsim.git@90fb50ef9de80fa6e556d2f2a09fb45707efeea0'
-```
-
-Check: `uv run python -c "from importlib.metadata import version; print(version('scgsim'))"` prints `2.0.0rc11` after `uv` updates the environment.
-
-## Open a notebook
-
-Choose a goal from the [simulation chooser](../examples.qmd), then run that tutorial's exact PDK `uv add` command in this study project before launching Jupyter. Each tutorial pins the public component source for its workflow.
-
-Start Jupyter through `uv` from the study project. This runs it with the project's Python environment.
+For the Xmon lessons, add the Palace and AEDT EPR tools together with the exact public source pair from [Examples](../examples.qmd#public-inputs):
 
 ```bash
-uv run --with jupyter jupyter lab
+uv add 'scgsim[palace,aedt-epr,visualization] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@0f6b4e5c54aff4891492976a5dd58387cc1a1787' \
+  'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@03b1bc783ba0372ba0df1a765aa5ee446b182080'
 ```
 
-For details, see [Using uv with Jupyter](https://docs.astral.sh/uv/guides/integration/jupyter/).
+The SCGSim source/API baseline is version `2.0.0rc15`; the OrPen SC PDK is `0.1.0.dev2`. Its distribution name is `orcapen-sc-pdk`, while Python code imports `orcapen_sc_pdk`. The OrPen source requires Python `>=3.12,<3.14` and GDSFactory `~=9.48.0`. `uv add` records the resolved dependency set in the project's lockfile.
 
-Check: Jupyter opens from the study project and its notebook uses that project's Python environment.
+Check the installed distributions: 
 
-### Select the curved source cell {#select-the-curved-source-cell}
+```bash
+uv run python -c "from importlib.metadata import version; print('scgsim', version('scgsim')); print('orcapen-sc-pdk', version('orcapen-sc-pdk'))"
+```
 
-The Circular Pad source and its separate pinned environment are documented in the [historical curved-source setup](../history/curved-source-installation.qmd).
+The expected versions are `2.0.0rc15` and `0.1.0.dev2`. After adding a dependency, commit or retain the updated `pyproject.toml` and `uv.lock`; on another machine, run `uv sync` in the project directory.
 
-## Install the native solver separately
+## Install the Xmon source pair {#install-the-xmon-source-pair}
 
-Python extras supply Python libraries. Install native Palace 0.18.1 from its [official release](https://github.com/awslabs/palace/releases/tag/v0.18.1) on the solver host. For AEDT, use AEDT 2023.2 or 2024.2 with PyAEDT 1.3.0 and a suitable license. Select the AEDT release explicitly in each request; each AEDT Desktop transaction runs on the same host as SCGSim.
+The [shared Xmon input lesson](../tutorial-xmon-input.qmd) and its [Palace](../tutorial-xmon-palace.qmd) and [HFSS](../tutorial-xmon-aedt.qmd) extensions use the pair above. The source map binds the package versions, component factory and port/layer metadata used here. The canonical upstream notebook is a historical source; this pairing does not promise it runs unchanged, nor claim that it has been installed, prepared or solved.
 
-Check: confirm the Palace executable or wrapper, or the selected AEDT release and license, are available on the solver host before running the calculation.
+For other public notebooks, use the revision stated by that notebook. In particular, older CPW and Circular Pad examples have historical PDK revisions and may require a different SCGSim pairing; their pins are part of those examples, not defaults for new projects. See the [curved-source history](../history/curved-source-installation.qmd) for the separate Circular Pad environment.
 
-#### Native Palace for this curved Uniform port {#native-palace-for-this-curved-uniform-port}
+## Start Jupyter
 
-The [historical curved-source setup](../history/curved-source-installation.qmd#native-palace-for-this-curved-uniform-port) records the native Palace prerequisite for that specific study.
+Add Jupyter to the project and launch it from the same directory: 
+
+```bash
+uv add --dev jupyter ipykernel
+uv run jupyter lab
+```
+
+Select this project's `.venv` kernel. Check that `uv run python -c "from importlib.metadata import version; print(version('scgsim'))"` reports `2.0.0rc15`.
+
+## Install native solvers separately
+
+The `palace` extra prepares Palace inputs; install the native executable separately from the [official Palace 0.18.1 release](https://github.com/awslabs/palace/releases/tag/v0.18.1). For AEDT, use AEDT 2023.2 or 2024.2, PyAEDT 1.3.0 and a suitable license. Select the AEDT release explicitly in each request; each Desktop transaction runs on the same host as SCGSim.
+
+A version label is runtime provenance, not a capability guarantee for every optional native feature. For Palace Mask/Inset and curved-port requirements, see the [Palace capability table](palace-eigenmode.qmd#native-palace-capabilities).
 
 ## Contribute to SCGSim
 
-For a source checkout and contribution setup, see the [contributor guide](../contributing.qmd).
+For a source checkout and development environment, see the [contributor guide](../contributing.qmd).

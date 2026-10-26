@@ -1,7 +1,7 @@
 ---
 title: "選擇模擬流程"
 description: "依照要計算的物理量，選擇一份完整的 SCGSim 筆記本。"
-scgsim-kind: "course"
+scgsim-kind: "start"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/examples"
 ---
@@ -22,20 +22,22 @@ SCGSim 會準備幾何與求解器請求，再解析附有單位與模型識別�
 
 從[安裝](course/installation.qmd)開始，再依物理問題選擇明確的幾何、材料、導體與埠。[模型與材料參考](reference.qmd#model-materials)及[導體與埠參考](reference.qmd#conductors-ports)說明這些選擇。請使用[回傳結果教學](course/returned-results.qmd)，一併保留回傳量、單位、模態或導體識別資訊及求解器狀態。
 
-## 探索較大型範例 {#public-inputs}
+## 公開元件來源與版本配對 {#public-inputs}
 
-較深入的 Xmon 與 CPW 來源筆記本固定使用公開 OrPen SC PDK 版本 [`35b4dc1cdd3f921badcac2fe57a98366315ae8d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9)，該版本宣告 OrPen `0.1.0` 與 GDSFactory 9.48.x。請依各範例指定的來源版本操作。
+Xmon 文件採用下列公開套件版本配對。OrPen 元件是獨立參數化改編，不是論文遮罩或量測元件。來源對照列出範例採用的套件版本、元件工廠與埠／圖層中繼資料。歷史上游 Notebook 尚未確認可直接用此配對執行；本頁也不代表已安裝、準備或求解。
 
-| 公開筆記本群組 | 用途 |
+| 用途 | 版本與來源 |
 |---|---|
-| [Kosen2024_Xmon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Electrostatic／Eigenmode 與以來源為起點的 Xmon 研究 |
-| [ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/CpwFiniteGround) | HFSS Eigenmode／Driven 與歷史 Q3D GDS 輸入來源 |
-| [CrossSectionSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/CrossSectionSimulation/CpwFiniteGround) | Q2D 矩形與導體群組 |
+| SCGSim 來源／API 基準 | `2.0.0rc15`，commit [`0f6b4e5c54aff4891492976a5dd58387cc1a1787`](https://github.com/NCUPHY-LTLab/scgsim/tree/0f6b4e5c54aff4891492976a5dd58387cc1a1787) |
+| OrPen SC PDK | `0.1.0.dev2`，commit [`03b1bc783ba0372ba0df1a765aa5ee446b182080`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/03b1bc783ba0372ba0df1a765aa5ee446b182080) |
+| 文件套件 | SCGSim `2.0.0rc16`，套件清單格式 `1.0` |
+| 歷史 OrPen 正式教學來源 | [Kosen2024 Xmon Palace Route B QMD](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/03b1bc783ba0372ba0df1a765aa5ee446b182080/notebooks/src/ComponentSimulation/Kosen2024_Xmon/palace_route_b_eigenmode.qmd)（供追查來源；不保證較舊 SCGSim 呼叫可原樣執行） |
 
-來源尺寸與預設值是範例模型輸入。SCGSim 請求的現行用法請依相關教學與 API 參考操作。
+安裝指令會重建以 `0f6b4e5c` 為 API 基準的來源配對；這不表示 `2.0.0rc15` 已包含此 `2.0.0rc16` 文件套件。若要記錄實際安裝的文件套件，請從 MCP `list_packages()`，或從 `importlib.metadata` 與已安裝的套件清單讀取版本及 `bundle_id`；不需要匯入 SCGSim。較舊的 CPW 與 Circular Pad Notebook 綁定各自的歷史版本；請勿將那些程式碼與鎖定檔混入本 Xmon 配對。
 
 ## 繼續閱讀主題參考
 
+- 在[支援的計算](backend-support.qmd)中比較已實作的求解器流程與 Palace 原生 Mask／Inset 邊界。
 - 準備後端前，先[檢查來源與幾何](course/source-observations.qmd)。
 - 請在請求與預期模型不同時[檢查準備後的輸入](course/solver-observations.qmd)。
 - 在指定求解主機上[準備並執行可攜式交接](course/execute.qmd)。

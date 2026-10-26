@@ -9,6 +9,7 @@ project:
   - index.qmd
   - docs/*.qmd
   - docs/specs/*.qmd
+  - docs/api/*.qmd
   - docs/course/*.qmd
   - docs/tutorials/*.qmd
   - docs/history/*.qmd

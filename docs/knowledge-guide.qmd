@@ -1,0 +1,82 @@
+---
+title: "SCGSim knowledge guide"
+description: "Find the current source/API pair and distinguish physical field side, AEDT selectors and saved-field analysis."
+scgsim-kind: "reference"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/knowledge-guide"
+---
+
+Use this page when the same word appears in a physical model and an AEDT command. The terms below separate what the model declares from what a solver operation selects.
+
+## Current public Xmon source pair
+
+The Xmon documentation uses the SCGSim `2.0.0rc15` API baseline at commit [`0f6b4e5c54aff4891492976a5dd58387cc1a1787`](https://github.com/NCUPHY-LTLab/scgsim/tree/0f6b4e5c54aff4891492976a5dd58387cc1a1787) and the public OrPen SC PDK `0.1.0.dev2` source at commit [`03b1bc783ba0372ba0df1a765aa5ee446b182080`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/03b1bc783ba0372ba0df1a765aa5ee446b182080). The [installation page](course/installation.qmd#install-the-xmon-source-pair) pins both. The pairing records the inputs and API baseline used to author the examples; it does not report an installed or executed workflow.
+
+## Surface EPR terms
+
+| API term | 繁體中文名稱 | Meaning in this workflow |
+|---|---|---|
+| `field_side` | 取場側 | Physical side associated with a surface contribution, such as `top`, `bottom` or `sidewall`. It is carried by `SurfaceEprSpec` from the prepared contribution record. |
+| `surface_field_selectors` | 取場指令 | Optional mapping used by `analyze_epr()` for saved-field analysis. `"surface"` requests AEDT `EnterSurface`; `"adjacent"` requests `EnterAdjacentSurface`. |
+| Material-side validation | A separate physical question: which material's field was sampled. Recording a calculator selector does not answer this question or auto-correct `field_side`. |
+| `analyze_epr()` | Native AEDT saved-field evaluation in a workcopy. It reuses a resolved saved solution and does not request another solve. |
+| `reanalyze_epr()` | Offline recomputation from recorded numerators and changed loss assumptions; it does not open AEDT. |
+
+The [focused `analyze_epr` API guide](api/analyze_epr.qmd) shows the typed inputs and one complete call. The [AEDT runtime contract](specs/aedt-runtime.qmd#explicit-native-field-selectors-for-saved-analysis-converging) owns the binding and readback rules.
+
+## Energy, participation and effective capacitance
+
+For the selected junction $j$, SCGSim records the peak-phasor voltage components, branch energy $U_{C,j}$, participation $p_{C,j}$ and electric normalization $U_{norm}$. They obey
+
+$$
+U_{C,j}=\frac{C_j|V_j|^2}{2},\qquad
+p_{C,j}=\frac{U_{C,j}}{U_{norm}}.
+$$
+
+You can derive an equivalent mode capacitance and branch capacitance from the same voltage reference:
+
+$$
+C_{mode,j}=\frac{2U_{norm}}{|V_j|^2},\qquad
+C_j=\frac{2U_{C,j}}{|V_j|^2},\qquad
+p_{C,j}=\frac{C_j}{C_{mode,j}}.
+$$
+
+The recorded voltage uses peak phasors. If a study reports RMS voltage, use $|V_{peak}|=\sqrt{2}|V_{rms}|$, giving $C_{mode,j}=U_{norm}/|V_{rms,j}|^2$ and $C_j=U_{C,j}/|V_{rms,j}|^2$. Here $U_{norm}$ is SCGSim's electric normalization, not electric-plus-magnetic total energy. `C_mode` is a derived value, not a field emitted by SCGSim. Use voltage, energy and participation from the same complete EPR row and junction record; when comparing runs, first match the mode and run-pass identity from their result context. If $|V_j|^2=0$, the capacitance ratio is undefined; report it as undefined rather than applying a cutoff. The [focused API guide](api/analyze_epr.qmd) describes how to obtain saved-field results.
+
+Load the retained EPR result before deriving the comparison values:
+
+```python
+from pathlib import Path
+from scgsim.aedt import resolve_epr_result
+
+epr_result = resolve_epr_result(
+    Path(".artifacts/aedt-saved-field-analysis/results/epr/epr-result.json")
+)
+```
+
+```python
+for row in epr_result.rows:
+    if row["status"] != "complete":
+        continue
+    normalization_j = row["normalization_energy_j"]
+    for junction in row["junctions"]:
+        voltage_squared_v2 = (
+            junction["voltage_real_v"] ** 2
+            + junction["voltage_imag_v"] ** 2
+        )
+        if voltage_squared_v2 == 0:
+            c_mode_f = None  # Undefined at zero voltage; no numeric cutoff.
+            c_branch_f = None
+        else:
+            c_mode_f = 2 * normalization_j / voltage_squared_v2
+            c_branch_f = 2 * junction["capacitive_energy_j"] / voltage_squared_v2
+        print(
+            row["mode"],
+            junction["junction_id"],
+            c_mode_f,
+            c_branch_f,
+            junction["capacitive_participation"],
+        )
+```
+
+See the [EPR concept](eigenmode-epr.qmd) for participation interpretation and the [AEDT runtime equations](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization) for the source definitions.
