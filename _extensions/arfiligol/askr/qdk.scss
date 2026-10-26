@@ -954,7 +954,8 @@ div.sourceCode > pre.sourceCode, div.sourceCode > pre.sourceCode > code.sourceCo
 .askr-copy-button:hover, .askr-copy-button:focus-visible { background: var(--qdk-code-copy-hover-background); color: var(--qdk-code-copy-hover-color); }
 .askr-copy-button.is-copied { border-color: var(--qdk-tertiary); color: var(--qdk-tertiary); }
 .askr-copy-code { opacity: 0; position: absolute; right: 5px; top: 5px; z-index: 3; }
-.code-copy-outer-scaffold.askr-has-copy-control .sourceCode > pre.sourceCode { padding-block-start: 3rem; }
+// Keep the normal vertical padding; reserve a side lane outside the code scrollport.
+.code-copy-outer-scaffold.askr-has-copy-control .sourceCode > pre.sourceCode { margin-inline-end: 4rem; padding-inline-end: .5rem; }
 .code-copy-outer-scaffold:hover .askr-copy-code, .askr-copy-code:focus-visible { opacity: 1; }
 .code-copy-outer-scaffold + .askr-copy-status:not(:empty), .askr-copyable-math > .askr-copy-status:not(:empty) { display: block; margin-block: .25rem .5rem; }
 .askr-copy-status { color: var(--qdk-text); font-size: .7rem; }
