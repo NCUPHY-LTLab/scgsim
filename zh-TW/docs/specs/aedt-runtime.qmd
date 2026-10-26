@@ -129,7 +129,7 @@ python "$PACKAGE_DIR/run_batch.py" solve \
 
 ## 收據相容群組與來源資訊 {#receipt-cohorts-and-source-provenance}
 
-新交接沿用 `scgsim.aedt.handoff.v1` 與 `scgsim.aedt.handoff-manifest.v1`。兩份記錄都新增 `expected_receipt_schema: scgsim.aedt.receipt.v3`，初始收據為 V3。它包含 `prepared_runtime_source`：針對目前來源建立、具確定順序且排序過的 `runtime-source.v24` 清單。欄位為 `schema_version`、`stage`、`modules`、`content_sha256` 及 `revision_observation`，沒有輔助雜湊對照。每個宣告模組都有實測位元組，內容摘要綁定該清單。Git 觀察可提供實際 40 位十六進位 commit，或明確記為無法提供；逐位元組綁定身份不要求來源工作目錄，更不編造修訂。
+新交接沿用 `scgsim.aedt.handoff.v1` 與 `scgsim.aedt.handoff-manifest.v1`。兩份記錄都新增 `expected_receipt_schema: scgsim.aedt.receipt.v3`，初始收據為 V3。它包含 `prepared_runtime_source`：針對目前來源建立、具確定順序且排序過的 `runtime-source.v25` 清單。欄位為 `schema_version`、`stage`、`modules`、`content_sha256` 及 `revision_observation`，沒有輔助雜湊對照。每個宣告模組都有實測位元組，內容摘要綁定該清單。Git 觀察可提供實際 40 位十六進位 commit，或明確記為無法提供；逐位元組綁定身份不要求來源工作目錄，更不編造修訂。
 
 寫入 `running` 前，共用交易接受既有初始收據相容群組：具兩個 V3 預期標記與標準清單的 V3 收據；具兩個 V2 標記與標準清單的 V2 收據；或兩個標記皆不存在、且具有標準歷史清單的精確 V1 `not_run` 收據。歷史交接可依上述群組規則延續受支援系列路徑，但不能略過該系列的要求條件。
 
@@ -137,13 +137,13 @@ python "$PACKAGE_DIR/run_batch.py" solve \
 
 驗證過的初始收據雜湊及準備清單雜湊，會複製到可變 V3 收據。最終收據刻意不與初始雜湊比較，因為執行本來就必須修改收據。未知版本、混合或不完整標記、非標準成員與雜湊不符，都在修改收據前拒絕。
 
-每份新完成的 V3 收據都有另外的 `runtime_source` 清單，以 `runtime-source.v24` 與內容摘要識別實際執行程式。宣告模組位元組與摘要為必填；V24 沒有重複的輔助雜湊欄位。有 Git 資訊時，`revision_observation` 帶入實際 40 位十六進位 commit；沒有 VCS 中繼資料的不可變 wheel 則如實記錄 `unavailable`。宣告模組位元組、摘要、結構或相容群組缺少／損壞時，仍明確失敗。準備與執行雜湊代表不同時間的證據，不要求兩者相等，也不把歷史雜湊與目前安裝套件比較。
+每份新完成的 V3 收據都有另外的 `runtime_source` 清單，以 `runtime-source.v25` 與內容摘要識別實際執行程式。宣告模組位元組與摘要為必填；V25 沒有重複的輔助雜湊欄位。有 Git 資訊時，`revision_observation` 帶入實際 40 位十六進位 commit；沒有 VCS 中繼資料的不可變 wheel 則如實記錄 `unavailable`。宣告模組位元組、摘要、結構或相容群組缺少／損壞時，仍明確失敗。準備與執行雜湊代表不同時間的證據，不要求兩者相等，也不把歷史雜湊與目前安裝套件比較。
 
 `resolve_results()` 保留真實歷史 V1、V2 完成收據的既有規則。若收據被重新標示為比準備標記更舊的版本，屬不一致降版，會拒絕。V2、V3 解析先驗證精確相容群組、標記、標準準備清單、初始收據綁定及完整實際執行期清單，再套用各版本系列結果檢查。只有 V3 HFSS 完成要求封存的原生 PEC 綁定證據，不會把此要求投射到歷史 V1/V2 收據。這些無簽章的一致性檢查，無法對抗能重寫所有成員的行為者以驗證產物真偽。
 
-`runtime-source.v1` 是固定的十三模組讀取器契約，不是即時列舉規則。V2–V23 清單也已固定。V4 新增 `scgsim/aedt/_presentation.py`；V5 新增 `scgsim/sgb/geometry_plan.py` 與 `scgsim/sgb/__init__.py`。V7 在 V6 基礎新增 `scgsim/_notebook_presentation.py`。V8 在 V7 基礎新增 `scgsim/aedt/_junction_partition.py`。V9 在 V8 基礎新增 `scgsim/aedt/__init__.py`、`scgsim/aedt/_q3d_geometry.py`、`scgsim/sgb/adapter.py` 及 `scgsim/sgb/stack.py`。V10 在 V9 基礎新增共用 `scgsim/aedt/_handoff_cohort.py`；V11 在 V10 基礎新增 `scgsim/aedt/_q3d_bodies.py`。V12 固定保留 V11 的精確路徑成員。V13 保留固定清單、必要宣告模組位元組與摘要，以及可選 `revision_observation`；V1–V17 保留各自固定路徑、欄位意義與版本專屬讀取器規則。V14 保留給暫停的 PR35。V16 在 V15 清單新增 HFSS Eigenmode 原生實作模組。V17 在 V16 基礎新增共用集總模型、HFSS 集總原生模組與 AEDT specs 套件初始化模組。V18 移除原 EPR 私有路徑 `epr/junction_partition.py`，納入 `preparation/junction_partition.py`、移動後的 AEDT 資料／RLC／終端輔助函式、幾何／EPR／支撐規格、建模／平面準備、HFSS 幾何執行期、中立幾何表示模組，以及含多邊形操作葉節點的共用來源 Ground 建構輔助函式。V19 新增僅模型的已準備模型讀取器；V20–V22 保留各自宣告的歷史清單。V23 是目前 V24 之前的固定清單。V24 在 V23 清單新增 `scgsim/aedt/runtime/batch_protocol.py`、`scgsim/aedt/runtime/batch_runner.py` 與 `scgsim/aedt/epr/evidence.py`。V23、V24 都使用上述五個欄位，沒有輔助雜湊對照。各版本精確路徑清單是其宣告實作清單，綁定已宣告檔案而非認證完整傳遞相依性。例如固定 V12 清單不另外雜湊 `scgsim/sgb/engine_gates.py`；這些清單也不改變 V3 收據結構。純初始收據編解碼器負責精確 V1/V2/V3 成員順序、兩個空白的 JSON 縮排與結尾換行。V1 省略準備來源資訊；V2、V3 將它放在 `source` 與 `outputs` 之間。讀取歷史證據使用已宣告固定結構，不把歷史雜湊與已安裝套件比較。
+`runtime-source.v1` 是固定的十三模組讀取器契約，不是即時列舉規則。V2–V23 清單也已固定。V4 新增 `scgsim/aedt/_presentation.py`；V5 新增 `scgsim/sgb/geometry_plan.py` 與 `scgsim/sgb/__init__.py`。V7 在 V6 基礎新增 `scgsim/_notebook_presentation.py`。V8 在 V7 基礎新增 `scgsim/aedt/_junction_partition.py`。V9 在 V8 基礎新增 `scgsim/aedt/__init__.py`、`scgsim/aedt/_q3d_geometry.py`、`scgsim/sgb/adapter.py` 及 `scgsim/sgb/stack.py`。V10 在 V9 基礎新增共用 `scgsim/aedt/_handoff_cohort.py`；V11 在 V10 基礎新增 `scgsim/aedt/_q3d_bodies.py`。V12 固定保留 V11 的精確路徑成員。V13 保留固定清單、必要宣告模組位元組與摘要，以及可選 `revision_observation`；V1–V17 保留各自固定路徑、欄位意義與版本專屬讀取器規則。V14 保留給暫停的 PR35。V16 在 V15 清單新增 HFSS Eigenmode 原生實作模組。V17 在 V16 基礎新增共用集總模型、HFSS 集總原生模組與 AEDT specs 套件初始化模組。V18 移除原 EPR 私有路徑 `epr/junction_partition.py`，納入 `preparation/junction_partition.py`、移動後的 AEDT 資料／RLC／終端輔助函式、幾何／EPR／支撐規格、建模／平面準備、HFSS 幾何執行期、中立幾何表示模組，以及含多邊形操作葉節點的共用來源 Ground 建構輔助函式。V19 新增僅模型的已準備模型讀取器；V20–V22 保留各自宣告的歷史清單。V23 是目前 V24 之前的固定清單。V24 在 V23 清單新增 `scgsim/aedt/runtime/batch_protocol.py`、`scgsim/aedt/runtime/batch_runner.py` 與 `scgsim/aedt/epr/evidence.py`。V23、V24、V25 都使用上述五個欄位，沒有輔助雜湊對照；V25 在 V24 清單新增 scgsim/aedt/runtime/control.py。各版本精確路徑清單是其宣告實作清單，綁定已宣告檔案而非認證完整傳遞相依性。例如固定 V12 清單不另外雜湊 `scgsim/sgb/engine_gates.py`；這些清單也不改變 V3 收據結構。純初始收據編解碼器負責精確 V1/V2/V3 成員順序、兩個空白的 JSON 縮排與結尾換行。V1 省略準備來源資訊；V2、V3 將它放在 `source` 與 `outputs` 之間。讀取歷史證據使用已宣告固定結構，不把歷史雜湊與已安裝套件比較。
 
-執行在收據綁定的失敗交易內、匯入 PyAEDT 或建立 Desktop 前，計算必要執行期來源資訊。目前 V24 可將 `revision_observation` 記為無法提供；單憑此點不會使逐位元組身份失敗或阻止執行。宣告模組位元組、摘要、結構或相容群組缺少／損壞，仍會在不啟動 Desktop 的情況下產生失敗 V3 收據，而不是逸出收據收尾。V1–V17 保留各版本歷史驗證規則，包含已宣告的修訂要求。
+執行在收據綁定的失敗交易內、匯入 PyAEDT 或建立 Desktop 前，計算必要執行期來源資訊。目前 V25 可將 `revision_observation` 記為無法提供；單憑此點不會使逐位元組身份失敗或阻止執行。宣告模組位元組、摘要、結構或相容群組缺少／損壞，仍會在不啟動 Desktop 的情況下產生失敗 V3 收據，而不是逸出收據收尾。V1–V17 保留各版本歷史驗證規則，包含已宣告的修訂要求。
 
 系列儲存契約維持明確失敗原則。求解前 `save_project()` 回傳 false，會在原生執行前中止；匯出後回傳 false，則在報告完成前中止。SCGSim 不把任何一種狀態改成部分成功收據，也不推定原生專案位元組可用。
 
@@ -761,6 +761,14 @@ $$
 U_{SA}=\frac{\epsilon_0 t}{2}\int
 \left(\epsilon_f|E_{t,air}|^2+\frac{|E_{n,air}|^2}{\epsilon_f}\right)dA.
 $$
+
+對峰值相量接面電壓 $V$ 與已宣告的支路電容 $C$，支路能量為
+$U_C=C|V|^2/2$。因此 $p_C=U_C/U_{norm}$ 是無因次參與率，不是電容。
+若研究定義由選定能量 $U$ 與該電壓導出的等效電容，峰值相量換算為
+$C_{eff}=2U/|V|^2$；採 RMS 電壓時則為
+$C_{eff}=U/|V_{rms}|^2$。請註明 $U$ 是總電能 $U_E$、接面能量 $U_C$
+或其他分子。使用 $U_C$ 會依定義還原已宣告的支路電容，並非獨立萃取的
+模態電容。SCGSim 會記錄底層能量與接面電壓，但不會輸出 `C_mode` 欄位。
 
 唯一電能正規化為 $U_E=\epsilon_0/2\sum_D\int_D\epsilon_r|E|^2dV$ 與 $U_{norm}=U_E+\sum_j U_{C,j}$。薄膜估計不加回分母。MM 保留為語意資訊，但不納入介電薄膜能量。
 

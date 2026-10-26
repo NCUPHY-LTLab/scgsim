@@ -54,7 +54,6 @@ sim.set_surface_epr(
             "loss_tangent": record["loss_tangent"],
             "source": record["source"],
             "preset": preset_names[kind],
-            "inset_margins_um": (0.0, 0.01, 0.05, 0.1),
         }
         for kind, record in interface_presets.items()
     },
@@ -90,12 +89,11 @@ sim.set_numerical(
 )
 ```
 
-The example requests native Palace Mask/Inset margins through `inset_margins_um`; the `0.0` entry is the unmasked baseline. Use a Palace executable that supports the native Mask/Inset configuration. Omit `inset_margins_um` when only the baseline is needed. These margins do not partition SGB geometry.
+This example omits `inset_margins_um` and requests the unmasked baseline. Official Palace 0.18.1 does not define native Mask/Inset in its upstream configuration schema. See the [capability matrix](course/palace-eigenmode.qmd#native-palace-capabilities) before selecting a historical fork-specific workflow.
 
 The MA/MS/SA records are the OrPen `LiteratureCentral` modeling presets, not
 material measurements. Replace them only with source-attributed records for
-your study. The four requested margins are separate alternatives to the
-unmasked baseline. `bulk_domain_ids=None` selects all configured bulk energy
+your study. `bulk_domain_ids=None` selects all configured bulk energy
 entries, and the selection does not remove physical domains or change the
 normalization. Palace's external Region surface remains natural PMC when left
 unspecified; see the [EPR methods guide](eigenmode-epr.qmd#workflow-and-state-contract)

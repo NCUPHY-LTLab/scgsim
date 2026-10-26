@@ -1,5 +1,5 @@
 ---
-title: "Flip-chip Xmon：共用來源輸入"
+title: "Kosen2024 Xmon：共用來源輸入"
 description: "將具名的公開 Xmon 出現位置與最終 Nets 編寫至同一個不可變來源 snapshot。"
 lang: zh-TW
 scgsim-kind: "course"
@@ -11,23 +11,22 @@ execute:
 
 本頁會建立一個可重複使用的來源 snapshot，供 [Palace](tutorial-xmon-palace.qmd)與 [AEDT](tutorial-xmon-aedt.qmd)工作流程共用。起點是 OrPen 公開的 Kosen2024 Xmon 預覽元件與接地短路 coupon。此元件是依據 Kosen 等人論文 [PRX Quantum 5, 030350（2024）](https://doi.org/10.1103/PRXQuantum.5.030350)獨立參數化改編，並採用[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)授權；它不是作者提供的遮罩。尺寸與 coupon 設定遵循[範例](examples.qmd)所連結的公開 Palace Route B 範例；這些是公開模擬輸入，不是元件量測資料或論文遮罩尺寸。請使用該處列出的相符 SCGSim 與 OrPen 版本。Quarto 只顯示程式碼，不會執行。
 
-目標是建立一個由兩個後端共用的來源 snapshot。請先完成[安裝](course/installation.qmd)，並在此工作階段保留 `snapshot`。
+本頁使用[範例](examples.qmd#public-inputs)列出的 SCGSim `2.0.0rc15` API 基準與 OrPen SC PDK `0.1.0.dev2` 套件對照。該對照固定公開套件身分及元件中繼資料，不代表已確認程式碼可直接配合執行。請先完成[安裝](course/installation.qmd)，再於同一工作階段保留共用的 `snapshot`。
 
-[固定版本的公開 OrPen Xmon 來源](https://github.com/OrPenStrike/orpen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon)提供後端教學所使用的 Palace Route B 集總端口電感 $11.78\,\mathrm{nH}$。AEDT 教學將電容設為零，做為僅含電感的明確電路模型假設；這不是實測零值，也不代表實體元件電容為零。MA／MS／SA 薄膜數值來自 OrPen 已驗證的合成 `LiteratureCentral` 預設值，屬於建模假設，後端頁面另有說明。
-
+OrPen 公開 Xmon 來源對照記錄下文使用的 $11.78\,\mathrm{nH}$ 電感，以及元件埠與圖層中繼資料。AEDT 教學將電容設為零，作為僅含電感的電路模型假設；這不是實測零值，也不代表實體元件電容為零。MA／MS／SA 薄膜值是合成的 `LiteratureCentral` 預設值，屬於建模假設。
 ## 建立元件與具名 coupon 出現位置 {#build-the-component-and-named-coupon-occurrences}
 
-元件會為焊盤與耦合器、接面端口及來源幾何擁有本機 Entity ID。接地接面的接地臂是對根 D1 平面的局部金屬貢獻，不是獨立的導體 Entity。`place_flip_chip_ground_short_bumps` 輔助函式會回傳最終 coupon，其中有具名的元件與凸塊參照，以及由 OrPen `author_common_flip_chip_ground_planes` 輔助函式建立的一組根層 D0／D1 接地平面。請使用名稱註冊實際的元件與凸塊參照；不要從攤平的多邊形名稱重建階層。
+公開 PDK 註冊 `kosen2024_flip_chip_xmon_qubit` 元件及其局部幾何、埠與層堆疊紀錄。本教學將它與具名 coupon 組合。接地接面的接地臂是對根 D1 平面的局部金屬貢獻，不是獨立的導體 Entity。`place_flip_chip_ground_short_bumps` 輔助函式會回傳最終 coupon，其中有具名的元件與凸塊參照，以及由 OrPen `author_common_flip_chip_ground_planes` 輔助函式建立的一組根層 D0／D1 接地平面。請使用名稱註冊實際的元件與凸塊參照；不要從攤平的多邊形名稱重建階層。
 
 ```python
 import gdsfactory as gf
-import orpen_sc_pdk
-from orpen_sc_pdk import LAYER_STACK, get_material_records
-from orpen_sc_pdk.helpers.assembly import place_flip_chip_ground_short_bumps
-from orpen_sc_pdk.tech import OUTER_VACUUM_THICKNESS_UM
+import orcapen_sc_pdk
+from orcapen_sc_pdk import LAYER_STACK, get_material_records
+from orcapen_sc_pdk.helpers.assembly import place_flip_chip_ground_short_bumps
+from orcapen_sc_pdk.tech import OUTER_VACUUM_THICKNESS_UM
 from scgsim.geometry import GeometryPlan
 
-orpen_sc_pdk.activate()
+orcapen_sc_pdk.activate()
 gf.clear_cache()
 device = gf.get_component(
     "kosen2024_flip_chip_xmon_qubit",

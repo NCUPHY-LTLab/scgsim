@@ -35,6 +35,8 @@ Palace 與 HFSS 本徵模支援表面、體積及電感端口／接面分析。�
 
 AEDT 可使用保留的原生儲存場計算 EPR，無須重新求解本徵模；但此操作仍需要 AEDT。離線重新分析則可在不執行原生評估的情況下，變更已記錄 EPR 結果所採用的歸因損耗假設。
 
+原生 Palace 設定能否包含 Mask／Inset 欄位，取決於所選執行檔的設定結構；SCGSim 的 Python 版本標籤不能保證原生功能。請參閱[Palace 功能對照表](course/palace-eigenmode.qmd#native-palace-capabilities)，了解官方 0.18.1 與歷史 fork 的差異。
+
 ## 來源與結果的差異 {#source-and-result-differences}
 
 Palace、以來源為起點的 HFSS 本徵模，以及 Q3D C/G 準備前端共用 GeometryPlan。Q3D 也支援不依賴來源的 v3 實體定義；Q2D 接收明確定義的截面資料，不會推測切片。共用來源幾何不代表邊界條件相同，也不會讓集總電容、共振、S 參數與每單位長度矩陣彼此等價。請依各結果的單位，以及原生導體／端口／模態順序判讀。

@@ -82,6 +82,10 @@ print([(row["interface_kind"], row["field_side"], row["source_polygon_ids"])
        for row in catalogue])
 ```
 
+`field_side` 屬於物理貢獻記錄：`top`、`bottom` 或 `sidewall` 表示介面的來源側別。它不是 AEDT 場計算器的命令。後續分析已儲存場時，`analyze_epr(..., surface_field_selectors={contribution_id: "surface"})` 會選擇 `EnterSurface`；`"adjacent"` 會選擇 `EnterAdjacentSurface`。輸入與回傳分析見[專用 API 指南](api/analyze_epr.qmd)。
+
+判讀結果時請分開記錄這兩項選擇。selector 只記錄要求哪一種計算器操作，不能證明 AEDT 取樣的是預期材料側，也不會自動修正錯誤側別。薄膜 top／bottom 法向處理依據固定版 PyAEDT 1.3.0 與 AEDT 2024.2 慣例，詳見[執行契約](specs/aedt-runtime.qmd#explicit-native-field-selectors-for-saved-analysis-converging)。
+
 ## 選取回報資料列並準備交接 {#select-reported-rows-and-prepare-a-handoff}
 
 以下選擇會要求模態 1、目錄衍生的所有表面貢獻、已宣告接面，以及已設定的體積區域。可用的體積 ID 來自已準備的解算記錄，並會以單一原生 `Region` 選擇器取代邏輯上的外部真空片段。此固定 Xmon 保留 `D0_SUBSTRATE`、`D0_TO_D1_GAP`、`D1_SUBSTRATE` 與 `Region`；取代外部區域不會刪除已定義的晶粒間隙。對 AEDT 請求而言，`None` 會選取所有已設定項目，`()` 不選取任何項目，而明確 tuple 會選取指定 ID。這些選擇只篩選回報資料列，不會移除物理區域、接面或表面模型，也不會改變正規化。請參閱 [EPR 物理量與選擇契約](eigenmode-epr.qmd#workflow-and-state-contract)。
