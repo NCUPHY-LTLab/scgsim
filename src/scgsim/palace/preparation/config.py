@@ -190,7 +190,9 @@ def build_eigenmode_config(
 ) -> EigenmodeConfigBuildResult:
     """Build one non-Floquet Eigenmode config from SGB-authored groups."""
     if numerical.get("amr_max_passes") is None:
-        raise ValueError("Eigenmode requires explicit amr_max_passes before config generation.")
+        raise ValueError(
+            "Eigenmode requires explicit amr_max_passes before config generation."
+        )
     if numerical["amr_max_passes"] > 0 and (
         numerical.get("amr_tolerance") is None
         or numerical.get("amr_update_fraction") is None
@@ -335,10 +337,14 @@ def _electrostatic_boundaries(
     exterior_boundary_policy: str,
 ) -> tuple[dict[str, object], list[dict[str, Any]], dict[str, Any]]:
     """Map exact conductor_component_id/net_id pairs to terminal and ground boundaries."""
+    from ..mesh.build import _conductor_component_ids
+
     component_attrs: dict[str, set[int]] = {}
     component_nets: dict[str, str] = {}
     component_physical_names: dict[str, set[str]] = {}
-    attribute_components: dict[int, str] = {}
+    attribute_components: dict[int, set[str]] = {}
+    attribute_identity: dict[int, tuple[str, str | None]] = {}
+    component_equipotentials: dict[str, str | None] = {}
 
     for physical_name, info in groups.get("boundary_surfaces", {}).items():
         if not isinstance(info, Mapping):
@@ -351,39 +357,47 @@ def _electrostatic_boundaries(
         ):
             continue
 
-        component_id = _optional_string(info.get("conductor_component_id"))
+        component_ids = _conductor_component_ids(info, name=str(physical_name))
         net_id = _optional_string(info.get("net_id"))
-        if component_id is None:
+        equipotential_id = _optional_string(info.get("equipotential_id"))
+        if not component_ids:
             raise ValueError(
                 "SGB solver-active conductor surface missing conductor_component_id."
             )
         if net_id is None:
             raise ValueError(
-                f"SGB conductor component {component_id!r} missing exact net_id."
+                f"SGB conductor components {component_ids!r} missing exact net_id."
             )
-
         attrs = _physical_group_values(info.get("phys_group"))
         if not attrs:
             raise ValueError(
-                f"SGB conductor component {component_id!r} has no physical attributes."
+                f"SGB conductor components {component_ids!r} have no physical attributes."
             )
-
-        component_attrs.setdefault(component_id, set()).update(attrs)
-        if component_id in component_nets and component_nets[component_id] != net_id:
-            raise ValueError(
-                f"SGB conductor component {component_id!r} has conflicting net_id values."
-            )
-        component_nets[component_id] = net_id
-        component_physical_names.setdefault(component_id, set()).add(str(physical_name))
-
-        for attr in attrs:
-            existing = attribute_components.get(int(attr))
-            if existing is None:
-                attribute_components[int(attr)] = component_id
-            elif existing != component_id:
+        for component_id in component_ids:
+            component_attrs.setdefault(component_id, set()).update(attrs)
+            if component_id in component_nets and (
+                component_nets[component_id] != net_id
+                or component_equipotentials[component_id] != equipotential_id
+            ):
                 raise ValueError(
-                    f"SGB physical attribute {int(attr)} belongs to multiple conductor components."
+                    f"SGB conductor component {component_id!r} has conflicting net_id/equipotential_id values."
                 )
+            component_nets[component_id] = net_id
+            component_equipotentials[component_id] = equipotential_id
+            component_physical_names.setdefault(component_id, set()).add(
+                str(physical_name)
+            )
+        for attr in attrs:
+            identity = (net_id, equipotential_id)
+            if (
+                int(attr) in attribute_identity
+                and attribute_identity[int(attr)] != identity
+            ):
+                raise ValueError(
+                    f"SGB physical attribute {int(attr)} has conflicting net/equipotential assignments."
+                )
+            attribute_identity[int(attr)] = identity
+            attribute_components.setdefault(int(attr), set()).update(component_ids)
 
     if not component_attrs:
         raise ValueError(
@@ -418,9 +432,11 @@ def _electrostatic_boundaries(
             )
 
         attrs = sorted(
-            int(attr)
-            for component_id in matching
-            for attr in component_attrs[component_id]
+            {
+                int(attr)
+                for component_id in matching
+                for attr in component_attrs[component_id]
+            }
         )
         terminal_entries.append({"Index": index, "Attributes": attrs})
         terminal_index_map.append(
@@ -434,7 +450,11 @@ def _electrostatic_boundaries(
                     name
                     for name, info in groups.get("boundary_surfaces", {}).items()
                     if isinstance(info, Mapping)
-                    and _optional_string(info.get("conductor_component_id")) in matching
+                    and bool(
+                        set(
+                            _conductor_component_ids(info, name=str(name))
+                        ).intersection(matching)
+                    )
                 ),
                 "metadata": {
                     "net_id": net_id,
@@ -575,7 +595,9 @@ def _linear_solver(numerical: Mapping[str, Any]) -> dict[str, Any]:
 def _build_refinement(numerical: Mapping[str, Any]) -> dict[str, Any]:
     max_passes = numerical.get("amr_max_passes")
     if max_passes is None:
-        raise ValueError("amr_max_passes must be explicitly set before config generation.")
+        raise ValueError(
+            "amr_max_passes must be explicitly set before config generation."
+        )
     refinement = {
         "UniformLevels": 0,
         "MaxIts": int(max_passes),

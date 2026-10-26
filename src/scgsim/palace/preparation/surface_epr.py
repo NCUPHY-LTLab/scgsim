@@ -352,6 +352,8 @@ def _structured_metadata(info: Mapping[str, Any]) -> dict[str, Any]:
             "owner_semantic_ids",
             "adjacent_solution_volume_ids",
             "conductor_component_id",
+            "conductor_component_ids",
+            "conductor_component_ids_by_source",
             "net_id",
             "equipotential_id",
             "source_provenance",

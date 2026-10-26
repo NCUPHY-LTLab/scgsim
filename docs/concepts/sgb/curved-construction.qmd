@@ -1,0 +1,64 @@
+---
+title: "Curved construction: preserve native curve history"
+description: "How active source curves retain provenance through native planar arrangement and collective Z sweeps."
+lang: en
+askr:
+  languages:
+    current: en
+    items:
+      - code: en
+        label: English
+        href: /docs/concepts/sgb/curved-construction.html
+      - code: zh-TW
+        label: 繁體中文
+        href: /zh-TW/docs/concepts/sgb/curved-construction.html
+scgsim-id: "docs/concepts/sgb/curved-construction"
+scgsim-kind: "concept"
+scgsim-status: "CONVERGING"
+---
+
+## Purpose
+
+A source curve is authored geometry, not a rounded polygon edge. When active curve declarations are present, SGB selects a separate Route A/B construction path that keeps the curve's native history through planar ownership, Z placement and boundary creation. This route exists so material boundaries and shared walls can use the same curve instead of independently refitting or tessellating it.
+
+## Curve input and binding
+
+`SourceCurveSpec` can describe a line segment, circular arc, interpolation spline or B-spline. A `BoundaryCurveChainSpec` binds a closed source boundary to an Entity, boundary ID and a selector point inside that Entity's positive conductor region. Its role selects an outer ring or a specific hole ring. A selector in the empty hole does not bind the hole boundary.
+
+For reconstruction, the caller names original segment indices in ring order. A partial chain keeps its original endpoints and leaves unselected segments unchanged. Anchors must lie on that chain. A closed circular reconstruction uses three distinct anchors; the compiler builds an exact circular representation rather than fitting a polygonal approximation. A caller-authored B-spline retains its degree, weights, knots and multiplicities.
+
+Active source-curve intent is supported by Palace Route A/B. Route C rejects it. The current AEDT path also rejects active declarations rather than silently using a polygon witness.
+
+## One global XY arrangement retains source history
+
+The curved constructor places every Entity and port footprint in the common $z=0$ plane and submits them to one `occ.fragment` operation. Explicit authored or reconstructed curve segments replace the selected straight source spans before that operation. The fragment nodes all Entity and port boundaries together; its history maps each output edge and face back to the input Entity and curve intervals. Interface faces, metal regions and vacuum complements can therefore reuse the same split curve.
+
+This route is global across all source and port footprints in XY, even when those footprints later occupy different Z slabs. It is not a global 3D volume fragment: the native arrangement occurs once in the plane, then SGB assigns cells to Z slabs and sweeps the retained edges. The work scales with the global planar fragment and its provenance, followed by roughly $E\times K$ edge/slab sweeps, where $E$ is the retained planar edge count and $K$ is the number of Z intervals.
+
+## Sweep the complete edge complex through Z
+
+The stages now follow a concrete order:
+
+1. **Collect all planar footprints.** The input list includes source Entity polygons and port footprints. Every footprint is mapped to $z=0$ for arrangement, regardless of its eventual material height.
+2. **Apply and node source curves.** Authored or reconstructed curve spans replace their selected straight segments. One OCC fragment nodes their boundaries together and returns source-history maps.
+3. **Build the global Z partition.** The physical stack and port planes contribute a sorted set of Z boundaries. Consecutive values create slabs; each planar cell is assigned to the Entity and material that occupy it in that slab.
+4. **Sweep the retained edge set across all Z slabs.** The constructor processes the retained planar edges against the slab intervals. An edge creates the lateral boundary for its interval, and its endpoint participates in a vertical edge shared with adjacent walls. Caps reuse the same curve identities as the walls.
+5. **Assemble connected same-owner volumes.** Adjacent cells connect only where ownership and material allow. Source-to-native face bindings are carried into the surface and volume records.
+
+The sweep is collective. Independent extrusion of each surface could duplicate a vertical edge or leave a seam where two walls should be conformal. Its dominant combinatorial workload is retained planar edges times Z slabs, in addition to the global fragment and provenance work.
+
+The resulting native faces retain curve identity, surface role, owner, interface and volume-boundary information. Solution volumes are assembled from connected, same-owner cells and their source-bound faces. Contact and Net checks use those geometric cells and boundaries; equal Net names alone do not create a contact.
+
+::: {#fig-sgb-curved-construction}
+```{=html}
+<iframe src="../../images/sgb-concept/en-curved-construction-3d.html" title="Native curved-construction CAD with selectable geometry groups" width="100%" height="760" style="height:clamp(380px,70vw,760px)" loading="lazy"></iframe>
+```
+
+Native CAD readback for the public circular-hole curve fixture. Toggle points, curves and surfaces to follow a declared circular boundary into the shared wall and material volumes.
+:::
+
+In @fig-sgb-curved-construction, the public circular-hole fixture contains 90 points, 114 curves, 36 surfaces and 3 volumes. This shows the constructed geometry and its retained curve groups; it is not a mesh or field solution. The fixture binding and XAO association are listed in the [public case binding](../../images/sgb-concept/method-public-case.json).
+
+## Output and cost
+
+The result includes a route construction plan, native XAO boundary payload and source mappings for curves, faces and interfaces. Its workload includes the planar arrangement and provenance, curve interval handling, Z slab ownership, full edge sweeps and native face rebinding. The [performance chapter](performance.qmd) separates these actual stages from proposed optimizations and timing claims.

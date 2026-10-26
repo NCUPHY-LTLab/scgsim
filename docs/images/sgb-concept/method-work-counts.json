@@ -1,0 +1,135 @@
+{
+  "classification": "PUBLIC_GENERIC_FIXTURE",
+  "measurement": "actual public unbanded case observations; baseline full-loop visits calculated from original loop traversal and recorded model size",
+  "cases": [
+    {
+      "case": "junction-hole",
+      "source_surfaces": 21,
+      "source_loops": 25,
+      "live_volumes": 3,
+      "phases": {
+        "geometry.occ.index_shared_maps": [
+          {
+            "surfaces": 21,
+            "loops": 25
+          }
+        ],
+        "geometry.occ.rebind_affected_faces": [
+          {
+            "affected_surfaces": 10,
+            "affected_loops": 12,
+            "incident_surface_uses": 12
+          },
+          {
+            "affected_surfaces": 10,
+            "affected_loops": 12,
+            "incident_surface_uses": 12
+          },
+          {
+            "affected_surfaces": 11,
+            "affected_loops": 14,
+            "incident_surface_uses": 14
+          }
+        ]
+      },
+      "old_full_loop_visits": 75,
+      "new_initialized_loop_signatures": 25,
+      "new_affected_loop_visits": 38
+    },
+    {
+      "case": "circular-hole",
+      "source_surfaces": 36,
+      "source_loops": 45,
+      "live_volumes": 3,
+      "phases": {
+        "geometry.occ.index_shared_maps": [
+          {
+            "surfaces": 36,
+            "loops": 45
+          },
+          {
+            "surfaces": 36,
+            "loops": 45
+          }
+        ],
+        "geometry.occ.rebind_affected_faces": [
+          {
+            "affected_surfaces": 18,
+            "affected_loops": 22,
+            "incident_surface_uses": 22
+          },
+          {
+            "affected_surfaces": 10,
+            "affected_loops": 12,
+            "incident_surface_uses": 12
+          },
+          {
+            "affected_surfaces": 20,
+            "affected_loops": 26,
+            "incident_surface_uses": 26
+          },
+          {
+            "affected_surfaces": 18,
+            "affected_loops": 22,
+            "incident_surface_uses": 22
+          },
+          {
+            "affected_surfaces": 10,
+            "affected_loops": 12,
+            "incident_surface_uses": 12
+          },
+          {
+            "affected_surfaces": 20,
+            "affected_loops": 26,
+            "incident_surface_uses": 26
+          }
+        ],
+        "geometry.curved.retained_edge_sweep": [
+          {
+            "retained_edges": 34,
+            "slabs": 2,
+            "edge_slab_sweeps": 68
+          }
+        ],
+        "geometry.curved.sweep_work": [
+          {
+            "swept_walls": 68,
+            "used_walls": 12
+          }
+        ]
+      },
+      "old_full_loop_visits": 270,
+      "new_initialized_loop_signatures": 90,
+      "new_affected_loop_visits": 120
+    },
+    {
+      "case": "shared-volumes",
+      "source_surfaces": 11,
+      "source_loops": 11,
+      "live_volumes": 2,
+      "phases": {
+        "geometry.occ.index_shared_maps": [
+          {
+            "surfaces": 11,
+            "loops": 11
+          }
+        ],
+        "geometry.occ.rebind_affected_faces": [
+          {
+            "affected_surfaces": 6,
+            "affected_loops": 6,
+            "incident_surface_uses": 6
+          },
+          {
+            "affected_surfaces": 6,
+            "affected_loops": 6,
+            "incident_surface_uses": 6
+          }
+        ]
+      },
+      "old_full_loop_visits": 22,
+      "new_initialized_loop_signatures": 11,
+      "new_affected_loop_visits": 12
+    }
+  ]
+}

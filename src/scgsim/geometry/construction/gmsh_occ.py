@@ -13,9 +13,8 @@ from typing import Any
 from scgsim.geometry.construction.conformality import engine_gate_gmsh_brep_conformality
 from scgsim.geometry.construction.export import _group_tag_plans
 from scgsim.geometry.construction.native import (
-    _rebind_surface_loops,
     _rebind_volume_surface_refs,
-    _surface_outer_wire_edges,
+    _SurfaceRepairIndex,
     add_surface_first_volume,
 )
 from scgsim.geometry.models.common import GmshDimTag
@@ -202,7 +201,15 @@ def write_occ_geometry_from_plan(
             timings,
         ):
             largest_volume_boundary: tuple[int, str] = (0, "")
-            surface_basis_parity = {surface.surface_id: 1 for surface in plan.surfaces}
+            if plan.route in {"A", "B"}:
+                surface_tags = {
+                    sid: values[0][1]
+                    for (kind, sid), values in source_tags.items()
+                    if kind == "surface"
+                }
+                repair_index = _SurfaceRepairIndex(
+                    plan.surfaces, plan.surface_loops, curve_tags, surface_tags
+                )
             for volume in live_volumes:
                 if plan.route in {"A", "B"}:
                     exterior_refs = (
@@ -225,44 +232,14 @@ def write_occ_geometry_from_plan(
                 if len(exterior_tags) > largest_volume_boundary[0]:
                     largest_volume_boundary = (len(exterior_tags), volume.volume_id)
                 if plan.route in {"A", "B"}:
-                    surface_tags = {
-                        sid: values[0][1]
-                        for (kind, sid), values in source_tags.items()
-                        if kind == "surface"
-                    }
                     repaired = add_surface_first_volume(
                         gmsh,
                         shell_surfaces,
-                        outer_wire_edges=_surface_outer_wire_edges(
-                            plan.surfaces, plan.surface_loops, curve_tags, surface_tags
-                        ),
+                        outer_wire_edges=repair_index.outer_wire_edges,
                     )
-                    plan = replace(
-                        plan,
-                        surface_loops=_rebind_surface_loops(
-                            plan.surfaces,
-                            plan.surface_loops,
-                            curve_tags,
-                            surface_tags,
-                            repaired,
-                        ),
-                    )
-                    for sid, tag in surface_tags.items():
-                        if tag in repaired.face_bindings:
-                            surface_basis_parity[sid] *= repaired.face_bindings[tag][1]
+                    for sid, tag in repair_index.rebind(repaired).items():
+                        source_tags[("surface", sid)] = [(2, tag)]
                     volume_tag = repaired.volume_tag
-                    for key, values in tuple(source_tags.items()):
-                        if key[0] != "surface":
-                            continue
-                        source_tags[key] = [
-                            (
-                                dim,
-                                repaired.face_bindings[tag][0]
-                                if dim == 2 and tag in repaired.face_bindings
-                                else tag,
-                            )
-                            for dim, tag in values
-                        ]
                 else:
                     volume_tag = gmsh.model.occ.addVolume(shell_tags)
                 source_tags.setdefault(("volume", volume.volume_id), []).append(
@@ -279,7 +256,10 @@ def write_occ_geometry_from_plan(
         if plan.route in {"A", "B"}:
             plan = replace(
                 plan,
-                volumes=_rebind_volume_surface_refs(plan.volumes, surface_basis_parity),
+                surface_loops=repair_index.surface_loops,
+                volumes=_rebind_volume_surface_refs(
+                    plan.volumes, repair_index.basis_parity
+                ),
             )
         with _debug_stage(debug_logging, "synchronize OCC model", timings):
             gmsh.model.occ.synchronize()

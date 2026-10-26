@@ -5,6 +5,7 @@ project:
   - askr-versions.json
   - MAINTAINING.md
   - '!zh-TW/**'
+  - docs/images/sgb-concept/**
   render:
   - index.qmd
   - docs/*.qmd
@@ -13,6 +14,7 @@ project:
   - docs/tutorials/*.qmd
   - docs/history/*.qmd
   - docs/concepts/*.qmd
+  - docs/concepts/sgb/*.qmd
   - '!docs/concepts/geometry-en.qmd'
   - '!zh-TW/**'
   post-render: python3 scripts/build_bilingual_docs.py
@@ -122,7 +124,19 @@ website:
     collapse-level: 1
     contents:
     - docs/concepts/problems.qmd
-    - docs/concepts/geometry.qmd
+    - section: SGB
+      href: docs/concepts/geometry.qmd
+      contents:
+      - docs/concepts/geometry.qmd
+      - docs/concepts/sgb/sources.qmd
+      - docs/concepts/sgb/physical-model.qmd
+      - docs/concepts/sgb/planar-arrangement.qmd
+      - docs/concepts/sgb/shared-topology.qmd
+      - docs/concepts/sgb/polygon-construction.qmd
+      - docs/concepts/sgb/curved-construction.qmd
+      - docs/concepts/sgb/cad-mesh.qmd
+      - docs/concepts/sgb/performance.qmd
+      - docs/concepts/sgb/validation.qmd
     - docs/eigenmode-epr.qmd
     - docs/concepts/model-and-numerics.qmd
   - id: contract

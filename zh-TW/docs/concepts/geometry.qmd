@@ -1,227 +1,83 @@
 ---
-title: "SGB：從版圖來源到可建構幾何"
-description: "以一個公開案例說明元件形狀、製程資料與組裝宣告如何成為 Gmsh 和 Palace 可建構的共用幾何。"
+title: "SGB 方法：從來源到共用 CAD"
+description: "以易讀的完整方法索引說明 SGB 來源語意、物理解讀、共用拓樸與 CAD 建構。"
 lang: zh-TW
-toc-title: 本頁內容
-toc-depth: 3
-resources:
-- ../images/sgb-concept/*.html
-- ../images/sgb-concept/plotly.min.js
+askr:
+  languages:
+    current: zh-TW
+    items:
+      - code: en
+        label: English
+        href: /docs/concepts/geometry.html
+      - code: zh-TW
+        label: 繁體中文
+        href: /zh-TW/docs/concepts/geometry.html
+scgsim-id: "docs/concepts/geometry"
 scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
-scgsim-id: "docs/concepts/geometry"
 ---
 
-SGB 將明確宣告的版圖與製程資料整理成求解器後端可建構的幾何。整個流程的關鍵，是從來源模型到 CAD 都保留每個形狀的來源、所屬材料、使用者指定的 Net，以及它接觸哪些區域。
+SCGSim 的語意幾何（semantic geometry）建構流程 SGB，會把版圖與製程事實轉成物理模型，再整理成 CAD 後端能建構的邊界。接面要求也指定兩端終端所有者與中央集總（lumped）導體片（port sheet）；補足終端是為了讓導體片兩端都實際接觸正確歸屬的金屬。本頁是方法索引；各章都沿著一次資料交接，說明輸入、處理、輸出，以及為什麼需要這一步。
 
-本文以一個含孔洞、兩個 Net、基板與真空，並明確要求矩形接面的公開案例，逐步說明每個準備步驟為什麼存在，以及它交給下一步什麼資料。案例說明止於 CAD 建構，不代表已產生網格或場解結果。
+貫穿全文的是公開的缺角金屬模型：左側導體有一個孔洞，右側導體屬於另一個 Net，底下是 Si 基板，周圍是真空，並選定一種物理近似，明確要求矩形接面。左側來源多邊形面積為 8 µm²。接面要求為左端點補出 1 µm² 的支撐金屬，讓埠兩側的指定終端完整；它不會把兩個 Net 合併。
 
-::: {.callout-note title="本頁以 Gmsh 與 Palace 建構路徑為主"}
-本文描述的路徑由 Gmsh/OCC 建立 CAD、由 Gmsh 產生網格，再交給 Palace。AEDT 在支援範圍內使用相同來源語意，但透過 AEDT 原生 Modeler 建立工程，因此建構步驟不同。共用語意與後端界線請參閱[物理表示契約](../specs/physical-representation.qmd)及[幾何契約](../geometry-sgb.qmd)。
+::: {.callout-note title="本頁的後端範圍"}
+建構章節以 Gmsh/OCC 與 Palace 為主。AEDT 共用其支援的來源與物理語意，再透過 AEDT 原生 Modeler 建立模型。CAD 計畫是網格的輸入，並不是網格或場解本身。
 :::
 
-## 1. 先說清楚模型由哪些事實組成 {#source-stage}
+## 依序閱讀方法
 
-版圖輪廓只能回答「畫出的形狀在哪裡？」它本身無法回答「這裡是什麼材料？」「哪個電氣端點擁有它？」「它的上表面接著哪個體積？」SGB 將這些答案保留為明確的來源事實，讓後續幾何操作不必從名稱或距離猜測。
-
-### 三種來源提供不同資料
-
-元件定義通常由 GDSFactory 建立，提供**局部幾何與局部用途**。多邊形與孔洞描述形狀；元件標註則指出來源區域及功能選取位置，例如哪一片是埠的來源面。這些宣告屬於元件本身；元件不會替每個放置後的副本決定最終 Net。
-
-PDK（process design kit，製程設計套件）提供**製程意義**。層堆疊把來源圖層對應到材料、物理角色、Z 範圍與厚度，也指出材料實際附著的主體。這使「畫在哪一層」能對應到「三維空間中的哪種材料」。
-
-組裝模型提供**放置方式與全模型決策**。它標識每個元件實例，套用平移與旋轉，指定最終 Net、基板與真空區域，並選擇近似設定檔（approximation profile），決定來源薄膜如何轉成這次求解使用的幾何表示。它也可以明確提出接面要求。這些資料可能跨越多個元件，所以由組裝層級負責。
-
-| 來源 | 提供的資料 | 本頁案例 |
+| 章節 | 要回答的問題 | 交接結果 |
 |---|---|---|
-| 元件 | 局部多邊形、孔洞、來源 Entity ID、功能選取器 | 左側缺角金屬及其孔洞、接面的來源片 |
-| PDK | 圖層至材料的對應、物理角色、Z 範圍、厚度與支撐主體 | Si 基板上方的金屬膜與周圍真空 |
-| 組裝模型 | 元件實例路徑與變換、最終 Net、區域、近似設定檔（approximation profile）及明確模型要求 | `chip/left` 屬於 Net A、`chip/right` 屬於 Net B，選用 `substrate_face`，並要求矩形接面 |
+| [來源](sgb/sources.qmd) | 每個形狀、材料、放置位置與 Net 由哪個來源負責？ | 分離、正規化的幾何輸入 |
+| [物理模型](sgb/physical-model.qmd) | 這次求解採用哪種物理幾何？ | 有效物件、支撐面與介面 |
+| [平面排列](sgb/planar-arrangement.qmd) | 重疊的 XY 輸入如何切成來源歸屬正確的面？ | 共用切分邊與來源歸屬 |
+| [共用拓樸](sgb/shared-topology.qmd) | 多個表面如何共用同一組點、曲線與環？ | 正規化的三維邊界記錄 |
+| [多邊形建構](sgb/polygon-construction.qmd) | 計畫邊界如何成為一般 CAD？ | OCC 表面、殼、體積與標籤 |
+| [曲線建構](sgb/curved-construction.qmd) | 如何在建構中保留宣告或重建的曲線？ | 綁定來源的原生曲線與掃掠側壁 |
+| [CAD 與網格](sgb/cad-mesh.qmd) | 哪些檢查把 CAD 建構與網格分開？ | 匯出 XAO、實體群組與網格輸入 |
+| [效能](sgb/performance.qmd) | 哪些工作可以重用，哪些必須量測？ | 各階段成本的判讀方式 |
+| [驗證](sgb/validation.qmd) | 如何判斷每次交接成立或明確失敗？ | 可檢查的通過與失敗條件 |
 
-### 先沿著同一個模型看下去
+## 用一個模型看整體設計 {#fig-sgb-physical}
 
-左側金屬有六個外框角點、一個封閉孔洞，以及一個連通外部的缺口。右側金屬是另一個獨立形狀。組裝模型將它們指派到 Net A 與 Net B，放在 Si 基板上方，並以真空區域包圍建模物件。@fig-sgb-source 顯示左側來源多邊形；@fig-sgb-source-context 將兩片金屬放在同一組裝座標中。
+想像兩個相鄰的求解體積共用一個實體表面。這個面只建立一次，再由兩個體積以相反方向引用。兩個體積仍然分開，因為它們的材料與邊界不同；共用表面不會合併體積身分。這個簡單例子濃縮了整個方法的核心：先決定所有權與相鄰關係，再建構原生 CAD。
 
-::: {#fig-sgb-source .askr-wide-figure}
-```{=html}
-<iframe src="../images/sgb-concept/source-xy.html" title="來源多邊形：六個外框角點與四個孔洞角點" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
-```
+左側金屬也遵循同一原則。孔洞是在外環內、沒有導體的封閉區域；外側缺口則連通外部。元件描述這些局部輪廓與選取器；製程堆疊說明各宣告圖層的材料與 Z 範圍；組裝模型放置元件實例、指定最終 Net 並選擇物理近似。解讀記錄前，先讀[來源章](sgb/sources.qmd)。
 
-左側來源多邊形。P1–P6 是外框角點，H1–H4 是封閉孔洞角點；座標單位為 µm。
+近似設定會改變求解所用的幾何，不會改寫來源薄膜。本例選用 `substrate_face`，因此有效導體片位於 Si 的上表面。接面是明確的模型要求：規劃階段補完整左右終端支撐，並保留中央埠面。[物理模型章](sgb/physical-model.qmd)會把這些決策與來源輸入分開說明。
+
+## 從平面歸屬到共用邊界
+
+每次平面分割只整理該次操作相關的 XY 運算元。系統沿有向環傳播交界變化，替每個輸出面計算來源歸屬。孔洞和無界外部可能都不屬於導體，但仍是由邊界隔開的不同面。[平面排列章](sgb/planar-arrangement.qmd)會逐步追蹤變化，並用面積核對結果。
+
+物理表面確定後，相鄰表面的邊界也必須完全一致。如果一個面有長邊，另一個面在中間加入頂點，就要同步切分成相同的原子曲線；兩個表面才會引用同一條幾何邊。[共用拓樸章](sgb/shared-topology.qmd)會說明點身分、環的用途與體積方向。
+
+## 兩條建構路線
+
+一般多邊形輸入會經過路線規劃、所有權與介面檢查、邊界正規化，再把計畫點與曲線交給 OCC 建立表面和體積。啟用來源曲線宣告時，則走另一條曲線建構路線：建立共用平面排列、保留原生曲線歷史，並將完整邊網路掃掠到選定 Z 高度。兩條路線都從明確來源語意開始，不要求全域布林運算替模型猜測語意。
+
+[CAD 與網格章](sgb/cad-mesh.qmd)會清楚區分匯出 CAD 和後續網格。[效能章](sgb/performance.qmd)說明可重用工作與階段計時，不會把待驗證的設計推論寫成已量出的加速。[驗證章](sgb/validation.qmd)則說明哪個交接無法成立時，流程會在哪裡失敗。
+
+## 現行範圍與歷史 {#distance-bands}
+
+::: {.callout-warning title="幾何距離帶已撤回"}
+目前 SGB 不會把來源表面切成幾何距離帶。舊設計及其觀察保留在[幾何距離帶歷史頁](../history/sgb-geometric-bands.qmd)。Palace 原生 Mask／Inset 是另一個求解器輸入；只有所選執行檔支援該設定時，它才能選取區域。這項設定不會要求 SGB 切割來源幾何。
 :::
 
-外環依 P1–P6 的順序閉合。內環依 H1–H4 閉合，圈住沒有金屬的區域。缺口則不同：它連通金屬外部。
+<span id="source-stage"></span><span id="entity-occurrence-and-net"></span><span id="planning-stage"></span><span id="construction-stage"></span>
 
-```text
-外環：P1(-2,0) → P2(3,0) → P3(3,1) → P4(2,1)
-      → P5(2,2) → P6(-2,2) → 回到 P1
-孔環：H1(-1.5,0.5) → H2(-0.5,0.5) → H3(-0.5,1.5)
-      → H4(-1.5,1.5) → 回到 H1
-單位：µm
-```
+舊有來源階段錨點請見[來源宣告](sgb/sources.qmd#source-stage)；Entity／occurrence 討論移至[身分與所有權](sgb/sources.qmd#entity-occurrence-and-net)；原規劃階段錨點移至[物理解讀](sgb/physical-model.qmd#planning-stage)；原建構階段錨點移至[共用拓樸與建構](sgb/shared-topology.qmd#construction-stage)。
 
-外接矩形面積為 10 µm²。扣掉 1 µm² 缺口及 1 µm² 孔洞後，來源金屬面積為 8 µm²。移動元件會改變它在組裝中的位置；更改 Net 會改變電氣宣告。這兩種操作都不會暗中修改局部多邊形。
+## 實作入口
 
-::: {#fig-sgb-source-context .askr-wide-figure}
-```{=html}
-<iframe src="../images/sgb-concept/context-xy.html" title="兩片來源金屬在組裝中的位置" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
-```
+前文說明資料如何流動；下表列出對應的公開或編譯器入口，是快速索引，不取代前面的逐步解說。
 
-兩片來源金屬在組裝座標中的位置，以及基板與真空包絡。
-:::
-
-### 為什麼 SGB 要替來源事實命名 {#entity-occurrence-and-net}
-
-`chip/left` 是一個**實體（Entity）**：它是穩定的來源身分，將形狀與宣告用途、材料關聯起來。基板與真空也各自是 Entity，所以 Entity 不等於導體。Net 是使用者宣告導體所屬的電氣網路，不表示這些形狀實際接觸。Net 指派是另一種關係：組裝模型將 `chip/left` 對應至 Net A，將 `chip/right` 對應至 Net B。
-
-元件放進版圖中的一次放置稱為**元件實例（occurrence）**。同一元件的兩個副本可以共用局部設計，但有不同的實例路徑與座標變換。準備後，路徑仍可指出選取器或接觸關係屬於哪個放置位置；光靠元件內的局部名稱無法分辨副本。
-
-準備來源時，SCGSim 將這些資料整理成分離於原始元件的**快照（snapshot）**。快照記錄正規化後的多邊形、Entity 與 occurrence 身分、材料堆疊、最終 Net 對應、物理表示，以及明確宣告的埠或接面。之後修改原元件不會改寫既有快照；要納入修改，必須重新準備。
-
-| 名詞 | 它識別什麼 | 為什麼分開保存 |
+| 階段 | 入口 | 跨越此邊界的資料 |
 |---|---|---|
-| 多邊形與環 | 局部輪廓、孔洞及頂點順序 | 形狀本身不含材料或電氣所有者資訊 |
-| Entity | 有名稱的來源物件及其宣告角色 | 衍生幾何仍可追溯到原來源身分 |
-| 元件實例 | 一次放置及其路徑、座標變換 | 重複使用的局部名稱仍能明確區分 |
-| Net | 使用者宣告的電氣集合 | 幾何接觸不會改寫此宣告 |
-| 快照 | 一份已準備的來源事實副本 | 後續步驟讀取同一份固定輸入 |
+| 來源準備 | `GeometryPlan.prepare()` | 可變的元件、PDK 與組裝宣告成為不可變快照 |
+| 物理解讀 | `interpret_physical_geometry(...)` | 所選 profile 產生有效幾何、支撐與介面記錄 |
+| 邊界拓樸 | `plan_canonical_topology(...)` | 規劃表面成為共用點、曲線、邊界環與有向引用 |
+| 原生建構 | `SemanticGeometryBuilder.build(...)` | 已驗證計畫成為原生 CAD 與來源／tag 對應 |
 
-::: {.callout-important title="不同 Net 的形狀接觸時，不會自動合併"}
-SCGSim 保留呼叫者宣告的 Net。依目前接觸規則，不同 Net 的導體若被辨認為共平面的面接觸或導體體積重疊，準備階段會以短路錯誤停止並保留原 Net 宣告；一般的純邊接觸或純點接觸也會被拒絕。同一 Net、有效薄膜內的側向接縫有明確接受條件。同一 Net 仍不能取代幾何接觸檢查。詳見[幾何契約中的接觸規則](../geometry-sgb.qmd#component-to-backend-geometry-contract)。
-:::
-
-::: {.callout-note title="來源 DBU 與共用 XY 網格"}
-GDS 的資料庫單位（database unit，DBU）決定來源能表示的座標刻度。組裝版圖會在 XY 平面使用一套固定精度網格；當 `grid_size_um=None` 時，採用實際輸出的 source DBU。若明確指定不同網格，SCGSim 會報錯，不會改寫共用 PDK 或 GDSFactory 全域設定。本頁[案例索引](../images/sgb-concept/public-case-binding.json)記錄的公開案例使用 `0.001 µm`，也就是 `1 nm`。
-
-這套網格用來整理組裝後的 XY 邊界，不代表後續每個運算都精確落在同一刻度上。例如線段從 $(0,0)$ 到 $(3,1)$ nm，與 $x=1$ nm 相交於 $(1,\frac13)$ nm；這個交點不在 1 nm 網格上，必須由共用 arrangement 一起處理。Z、薄膜厚度與有限元素網格尺寸各有不同意義。
-:::
-
-## 2. 將來源事實解讀為物理幾何 {#planning-stage}
-
-來源模型說明製程中有什麼。規劃階段決定這次求解要建構哪一種幾何表示。它套用選定的物理表示、辨認明確要求的接觸與介面，並且只依明確模型要求推導額外幾何。
-
-### 來源薄膜與求解導體片不是同一件事
-
-本例來源金屬膜位於 $z\in[0,0.25]$ µm。選用 `substrate_face` 物理表示時，有效導體是附著於基板上表面 $z=0$ 的零厚度片。來源區間仍是製程事實；導體片則是選定的求解幾何，兩者不互相覆寫。
-
-::: {#fig-sgb-physical .askr-wide-figure}
-```{=html}
-<iframe src="../images/sgb-concept/cross-section.html" title="來源金屬膜、Si 基板與真空；切換檢視有效導體片" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
-```
-
-來源及有效模型的剖面。使用圖中的控制項比較薄膜與有效導體片，並顯示完整基板和真空剖面。
-:::
-
-在 @fig-sgb-physical 中，Si 範圍為 $z\in[-2,0]$ µm，上方真空範圍為 $z\in[0,4.25]$ µm。`lower_air` 是基板側面旁、$z\in[-2,0]$ µm 的真空；本例沒有基板下方的真空區域。這項區分能讓規劃正確辨認導體片兩側接觸的材料。
-
-### 只有明確要求時，規劃才會補出接面幾何
-
-集總埠（lumped port）提供一個面，讓電磁模型在兩個端點之間施加集總電氣條件。矩形接面要求會指定來源片，並將兩個端點明確綁定到 Entity、元件實例與 Net。這是使用者提出的模型要求，不是依可見縫隙自動推測的修補。
-
-本例要求兩個端點支撐之間有完整中央矩形。左側來源有一個缺口，無法提供要求的端點支撐，因此規劃會在 $[2,3]\times[1,2]$ µm 範圍推導一塊 1 µm² 的端點金屬，並指派給既有的左端點 Entity，也就是 Net A。它不會把 Net A 與 Net B 接成同一個 Net。右端補足金屬屬於 Net B；中央埠則仍是獨立幾何。
-
-::: {#fig-sgb-effective .askr-wide-figure}
-```{=html}
-<iframe src="../images/sgb-concept/effective-xy.html" title="明確要求的左端點支撐填入缺口並保留原孔洞" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
-```
-
-有效左端點支撐。虛線供對照原始輪廓，橘色區域是依明確要求推導的端點支撐。
-:::
-
-左側金屬面積因此由 8 µm² 增至 9 µm²，孔洞仍然保留。原金屬與新增支撐之間的接縫位於聯集內部，不再是外露的物理邊界。
-
-::: {#fig-sgb-effective-port .askr-wide-figure}
-```{=html}
-<iframe src="../images/sgb-concept/port-xy.html" title="兩個分別歸屬的端點支撐之間的完整矩形埠" width="100%" height="640" style="border:0;" loading="lazy"></iframe>
-```
-
-完整矩形埠，以及分別歸屬兩個端點的金屬。
-:::
-
-本例中央矩形範圍為 $x\in[3,7]$、$y\in[0,2]$ µm。建立有效分區前，規劃會核對指定來源片、端點重疊、來源 occurrence、Entity 所有者與 Net 宣告。若沒有提出這項接面要求，就不會產生這些端點補足幾何。
-
-### 同一支撐面可描述兩種材料介面
-
-材料介面描述某個面兩側接觸哪些材料。左側金屬下方是 Si、上方是真空，因此規劃記錄金屬–基板（MS）與金屬–空氣（MA）兩種介面。基板–空氣（SA）邊界則是另一個介面。
-
-MS 與 MA 可以指向同一平面支撐幾何，但保留不同的場側與材料。幾何相同不代表後續場能量貢獻可互換。外部真空包絡壁有時只鄰接一個求解體積；它仍是有幾何所有者的真實邊界，不需要虛構第二種材料。
-
-### 用共用平面排列找出區域歸屬
-
-在平面分割操作建立輸出面之前，必須先知道相關輸入多邊形在哪裡重疊，以及每個結果區塊由哪些輸入覆蓋。SGB 會一起節點化這些運算輸入的邊界，並把每個輸入沿有向邊的變化量帶進**平面排列（arrangement）**，也就是切分後的線網路與它圍出的面。這個排列只涵蓋該次操作使用的平面輸入，不是把不同 Z 高度的所有模型表面全域疊在一起。
-
-用一個簡單例子說明：**A** 是 $[0,4]\times[0,3]$ µm 的矩形，內有 $[1,2]\times[1,2]$ µm 的正方形孔洞；**M** 是 $[3,5]\times[-1,4]$ µm 的矩形。M 只是第二個幾何運算元，不代表金屬、Net、Palace 原生 Mask 設定或新增 SGB 功能。以下各圖使用同一組座標，依序從來源環、有向邊、切分線網路追到面及其來源歸屬。
-
-@fig-sgb-method-source-edges 顯示來源環與方向。外環表示穿越邊界時進入或離開多邊形；孔環的變化方向相反。A 與 M 的邊界相交時，兩個輸入都在相同座標切開，避免一方仍保留長邊、另一方卻在邊上新增 T 字接點。
-
-![A 與 M 的來源邊界，包含 A 的孔洞。](../images/sgb-concept/method-source-edges.svg){#fig-sgb-method-source-edges}
-
-在 $y=0.5$ µm 的水平路徑上，從歸屬為 $(0,0)$ 的無界外部面開始，依序在 $x=0$ 進入 A、在 $x=3$ 進入 M、在 $x=4$ 離開 A，最後在 $x=5$ 離開 M。因此來源歸屬依序變化為 $(0,0)\rightarrow(1,0)\rightarrow(1,1)\rightarrow(0,1)\rightarrow(0,0)$；第一個數字代表 A，第二個代表 M。最後回到無界外部的狀態。
-
-這些切點把邊界分成**原子邊**：線段內部沒有其他邊界頂點的短段。@fig-sgb-method-network 顯示切分後共用的線網路。下一步才會由線網路形成面；這一步本身還沒有判定面由誰覆蓋。
-
-![切分來源邊界後的共用線網路。](../images/sgb-concept/method-shared-network.svg){#fig-sgb-method-network}
-
-`polygonize` 只利用閉合線網路形成候選面；來源歸屬由另一個傳播步驟決定。每個有向環都帶有依環角色解讀的正負邊界變化：外環表示從外部跨入形狀，孔環則扣除該區域並反轉這項變化。規劃先將無界外部面設為 $(0,0)$，再沿共用邊將變化傳到相鄰面。它會沿不同路徑重算；若同一面得到不一致歸屬，或任何值不是 0／1，準備就會失敗。因此歸屬來自明確環方向與共享拓樸，不是取面中心點抽樣。
-
-在 $y=1.5$ µm 的路徑上，穿過孔洞左邊 $x=1$ 時，A 的位元由 $1$ 變為 $0$；穿過右邊 $x=2$ 時再由 $0$ 變為 $1$。外環內的孔洞沒有 A 金屬，越過孔洞後 A 又恢復。@fig-sgb-method-arrangement 彙整最後的面。孔洞與無界外部的歸屬都為 $(0,0)$，但兩者是被環分隔的不同面。
-
-![封閉區塊及其 A／M 歸屬。](../images/sgb-concept/method-arrangement.svg){#fig-sgb-method-arrangement}
-
-| 區域 | 歸屬（A，M） | 面積 |
-|---|---:|---:|
-| 只在 A | (1, 0) | 8 µm² |
-| 同時在 A、M | (1, 1) | 3 µm² |
-| 只在 M | (0, 1) | 7 µm² |
-| A 內的孔洞 | (0, 0) | 1 µm² |
-| 無界外部 | (0, 0) | 無界 |
-
-面積可直接由座標核對：A 的 $4\times3$ 矩形面積是 12 µm²，扣掉 $1\times1$ 孔洞後為 11 µm²。A 與 M 的重疊寬 1 µm、高 3 µm，面積是 3 µm²。從 A 扣掉重疊後剩 8 µm²；從 M 的 $2\times5$ 矩形扣掉同一重疊後剩 7 µm²。SGB 依照面所帶的來源歸屬，重建所需來源區域。
-
-::: {.callout-note title="平面排列整理幾何，不是有限元素網格"}
-二維排列建立多邊形邊界、面與來源歸屬。它不會產生四面體，也不會單獨決定材料、Net 或電磁場意義；這些事實仍附著在具名來源與物理計畫上。
-:::
-
-## 3. 從共用邊界到三維 CAD {#construction-stage}
-
-完成平面區域、材料介面與體積邊界規劃後，SGB 會整理參與建構的表面邊界，建立三維共用拓樸。在這組邊界中，每個共用座標對應一個 Point ID，每段共用線對應一個 Curve ID。遇到 T 字接點或共線重疊時，會先切分，讓每個相鄰面引用同一段原子曲線。這是針對待建構表面的邊界整理，不是把不同高度的所有表面投影到同一個平面排列。
-
-以蓋面上的三個共線點為例：$p_0=(0,0,1)$、$p_1=(2,0,1)$、$p_2=(4,0,1)$ µm，依序稱為 A、B、C。若蓋面原本只有 A→C 一條邊，鄰接側壁卻記錄 A→B→C，蓋面就會在 B 出現 T 字接點。共用拓樸會把 A→C 切成 $e_{01}$ 與 $e_{12}$。兩個面接著引用相同曲線身分；側壁沿共用邊界以相反方向引用它們。
-
-每個表面保存一條有序外環，以及零條或多條有序孔環。體積殼則保存其邊界表面的有向引用。順序與方向說明邊界朝向哪一側材料；相鄰體積可引用同一個表面，但方向相反。這些關係讓建構階段能封閉指定體積，而不必從附近座標猜測。
-
-@fig-sgb-method-shared-edge 示意切分後的共用邊。先沿蓋面看 $p_0,p_1,p_2$，再比較側壁上的正負曲線引用標記：曲線身分相同，但每次使用都記錄各自方向。
-
-
-
-![蓋面與側壁共用相同邊 ID，引用方向相反。](../images/sgb-concept/method-shared-edge.svg){#fig-sgb-method-shared-edge}
-
-目前三維拓樸鍵會將 µm 座標四捨五入到小數點後九位，讓規劃中的相同點共用一個身分。這是座標身分鍵，不是來源 DBU，也不是再做一次 XY 吸附。平面網格用於各次相關的平面準備操作；三維鍵則在收集已規劃的表面邊界時使用。
-
-### OCC 依 SGB 計畫實現 CAD
-
-OCC（Open CASCADE）是 Gmsh 使用的 CAD 核心。SGB 將已規劃的點、線、環與面交給它，再用這些面組成封閉殼與求解體積。SGB 先決定面所有者與相鄰關係，再讓 CAD 實現這些記錄；建構不依賴全域 fragment 操作事後猜測新面的材料所有者。
-
-匯出再讀回 CAD 時，原生實體的整數 tag 可能改變。因此 SCGSim 將原生實體回綁至穩定的規劃面與體積身分，再依標籤計畫建立具名實體群組。原生整數 tag 只在該次匯入模型中有效，不是 Entity 或表面的永久身分。
-
-本節說明建構器如何使用計畫：建立規劃中的 CAD 點、曲線、環、面、殼與體積，再將匯出的原生實體回綁到規劃身分。曾展示已撤回距離帶子面的歷史 XAO 圖，保留於[距離帶歷史頁](../history/sgb-geometric-bands.qmd)。
-
-### 網格階段使用已建構幾何及自己的尺寸政策
-
-Palace 網格準備會在新的 Gmsh 程序讀取匯出的 XAO 與實體群組對應，並在求解體積中建立四面體。產生交給 Palace 的網格輸入前，流程會檢查埠與體積面的必要共形關係。網格尺寸政策屬於這個階段：它控制元素尺寸；來源 DBU 與組裝 XY 網格則控制幾何座標。加密網格無法補上缺少的來源語意，也不會改變接面所有權。
-
-網格控制項請見[Palace 準備契約](../specs/palace-electrostatic-sgb.qmd#palace-mesh-size-policy)。
-
-## 4. 現行能力與歷史界線 {#distance-bands}
-
-目前 SGB 路徑會將來源形狀、材料與物理解讀、最終 Net 宣告、明確的埠與接面要求、介面所有權、共用平面歸屬及三維拓樸交給後端建構。Gmsh／Palace 與 AEDT 在各自支援範圍內共用來源事實，但原生建構與執行仍由各後端負責。
-
-::: {.callout-warning title="SGB 幾何距離帶已撤回"}
-SCGSim 目前不提供先前的幾何表面距離帶產生器。舊分區及其子 CAD 面保留在[距離帶歷史頁](../history/sgb-geometric-bands.qmd)。Palace 原生 Mask／Inset 設定是另一種求解器輸入：選定的 Palace 執行檔若支援該設定，準備流程可用它選取區域；它不會要求 SGB 將來源幾何切成距離帶。現行原生設定界線請見[Palace Electrostatic 契約](../specs/palace-electrostatic-sgb.qmd#native-mask-inset)。
-:::
-
-一般多邊形輪廓即使近似圓弧，仍是多邊形。明確宣告的曲線則走保留曲線意圖的獨立 OCC 路徑，並有各自的路線支援範圍；詳見[曲線契約](../geometry-sgb.qmd#source-curves)。來源、物理表示及後端的正式契約請參閱[SGB 幾何契約](../geometry-sgb.qmd)。
-
-::: {.callout-note collapse="true" title="公開案例來源與範圍"}
-本文案例來自公開的矩形接面與孔洞測試 [`tests/test_rectangular_junction_geometry.py`](https://github.com/OrPenStrike/scgsim/blob/2ed85adc/tests/test_rectangular_junction_geometry.py#L230)。[案例索引](../images/sgb-concept/public-case-binding.json)記錄來源版本、單位、物理表示及各圖對應階段。案例索引中與距離帶及 XAO 讀回有關的觀察屬於歷史設計頁；本頁以來源、物理表示及接面圖解釋目前保留的流程。
-:::
+精確欄位與後端交接見[幾何與編譯器契約](../geometry-sgb.qmd)、[物理表示契約](../specs/physical-representation.qmd)及[Palace 準備契約](../specs/palace-electrostatic-sgb.qmd)。

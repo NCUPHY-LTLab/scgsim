@@ -2,7 +2,7 @@
 
 from contextvars import ContextVar
 import json
-from threading import Barrier, Event, get_ident
+from threading import Barrier, Event, Lock, get_ident
 
 import pytest
 
@@ -56,8 +56,8 @@ def test_parallel_output_context_and_nested_budget():
         with preparation_resources(max_workers=3):
             with preparation_resources(max_workers=1):
                 assert current_preparation_workers() == 3
-                result = _ordered_map(task, range(3))
-            assert [row[0] for row in result] == [0, 1, 2]
+                result = _ordered_map(task, range(6))
+            assert [row[0] for row in result] == list(range(6))
             assert len({row[1] for row in result}) == 3
             assert marker.get() == "caller"
         assert current_preparation_workers() is None
@@ -65,12 +65,58 @@ def test_parallel_output_context_and_nested_budget():
         marker.reset(token)
 
 
-def test_failure_drains_owned_work_and_bounds_submission():
-    barrier = Barrier(2)
-    release = Event()
+
+def test_pool_reuse_empty_input_and_none_results(monkeypatch):
+    import scgsim.preparation as preparation
+
+    created = []
+    real_executor = preparation.ThreadPoolExecutor
+
+    def create_executor(**kwargs):
+        executor = real_executor(**kwargs)
+        created.append(executor)
+        return executor
+
+    monkeypatch.setattr(preparation, "ThreadPoolExecutor", create_executor)
+    with preparation_resources(max_workers=2):
+        assert _ordered_map(lambda n: n, []) == []
+        assert _ordered_map(lambda n: None, range(4)) == [None] * 4
+        assert _ordered_map(lambda n: n, range(4)) == list(range(4))
+        assert len(created) == 1
+
+def test_slow_first_input_does_not_block_refill():
+    third_started = Event()
+
+    def task(n):
+        if n == 0:
+            assert third_started.wait(timeout=5)
+        elif n == 2:
+            third_started.set()
+        return n
+
+    with preparation_resources(max_workers=2):
+        assert _ordered_map(task, range(6)) == list(range(6))
+
+
+def test_failure_drains_owned_work_and_stops_refill(monkeypatch):
+    import scgsim.preparation as preparation
+
+    observed_failure = Event()
+    both_started = Barrier(2)
     finished = Event()
     consumed = []
+    consumed_at_failure = []
     original = ValueError("independent task failure")
+    real_wait = preparation.wait
+
+    def observe_wait(*args, **kwargs):
+        done, pending = real_wait(*args, **kwargs)
+        if any(future.exception() is original for future in done):
+            consumed_at_failure.extend(consumed)
+            observed_failure.set()
+        return done, pending
+
+    monkeypatch.setattr(preparation, "wait", observe_wait)
 
     def items():
         for n in range(100):
@@ -78,11 +124,10 @@ def test_failure_drains_owned_work_and_bounds_submission():
             yield n
 
     def task(n):
-        barrier.wait(timeout=5)
+        both_started.wait(timeout=5)
         if n == 0:
-            release.set()
             raise original
-        assert release.wait(timeout=5)
+        assert observed_failure.wait(timeout=5)
         finished.set()
         return n
 
@@ -91,8 +136,167 @@ def test_failure_drains_owned_work_and_bounds_submission():
             _ordered_map(task, items())
         assert observed.value is original
         assert finished.is_set()
-        assert consumed == [0, 1]
+        assert consumed == consumed_at_failure
         assert _ordered_map(lambda n: n + 1, [1, 2]) == [2, 3]
+
+
+def test_out_of_order_errors_deliver_earliest_input_error(monkeypatch):
+    import scgsim.preparation as preparation
+
+    later_failure_observed = Event()
+    first = ValueError("first input")
+    second = RuntimeError("second input")
+    real_wait = preparation.wait
+
+    def observe_wait(*args, **kwargs):
+        done, pending = real_wait(*args, **kwargs)
+        if any(future.exception() is second for future in done):
+            later_failure_observed.set()
+        return done, pending
+
+    monkeypatch.setattr(preparation, "wait", observe_wait)
+
+    def task(n):
+        if n == 0:
+            assert later_failure_observed.wait(timeout=5)
+            raise first
+        raise second
+
+    with preparation_resources(max_workers=2):
+        with pytest.raises(ValueError) as observed:
+            _ordered_map(task, range(2))
+        assert observed.value is first
+
+
+@pytest.mark.parametrize("fail_after", (1, 3))
+def test_iterator_error_is_preserved_and_owned_tasks_drained(fail_after):
+    release = Event()
+    finished = []
+    original = LookupError("iterator failed")
+
+    def items():
+        for n in range(fail_after):
+            yield n
+        release.set()
+        raise original
+
+    def task(n):
+        if n == 1:
+            assert release.wait(timeout=5)
+        finished.append(n)
+        return n
+
+    with preparation_resources(max_workers=2):
+        with pytest.raises(LookupError) as observed:
+            _ordered_map(task, items())
+        assert observed.value is original
+        settled = list(finished)
+        assert _ordered_map(lambda n: n, [4, 5]) == [4, 5]
+        assert finished == settled
+
+
+def test_iterator_error_keeps_precedence_over_task_error():
+    release = Event()
+    iterator_error = LookupError("iterator failed")
+    task_error = ValueError("task failed")
+
+    def items():
+        yield 0
+        release.set()
+        raise iterator_error
+
+    def task(n):
+        assert release.wait(timeout=5)
+        raise task_error
+
+    with pytest.raises(LookupError) as observed:
+        with preparation_resources(max_workers=2):
+            _ordered_map(task, items())
+    assert observed.value is iterator_error
+    assert current_preparation_workers() is None
+
+
+def test_unfinished_submission_and_active_work_fit_budget():
+    lock = Lock()
+    barrier = Barrier(3)
+    submitted = 0
+    completed = 0
+    active = 0
+    peak = 0
+
+    def items():
+        nonlocal submitted
+        for n in range(12):
+            with lock:
+                submitted += 1
+                assert submitted - completed <= 3
+            yield n
+
+    def task(n):
+        nonlocal active, completed, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        barrier.wait(timeout=5)
+        with lock:
+            active -= 1
+            completed += 1
+        return n
+
+    with preparation_resources(max_workers=3):
+        assert _ordered_map(task, items()) == list(range(12))
+    assert peak == 3
+    assert active == 0
+
+
+def test_failure_cancels_unnecessary_queued_tasks_and_drains(monkeypatch):
+    import scgsim.preparation as preparation
+
+    submitted = Event()
+    cancelled_last = Event()
+    started = []
+    finished = []
+    original = ValueError("first failed")
+    real_executor = preparation.ThreadPoolExecutor
+
+    class QueuedExecutor(real_executor):
+        def __init__(self, **kwargs):
+            super().__init__(max_workers=1)
+            self.count = 0
+
+        def submit(self, *args, **kwargs):
+            future = super().submit(*args, **kwargs)
+            self.count += 1
+            if self.count == 3:
+                real_cancel = future.cancel
+
+                def cancel():
+                    result = real_cancel()
+                    cancelled_last.set()
+                    return result
+
+                future.cancel = cancel
+                submitted.set()
+            return future
+
+    monkeypatch.setattr(preparation, "ThreadPoolExecutor", QueuedExecutor)
+
+    def task(n):
+        started.append(n)
+        if n == 0:
+            assert submitted.wait(timeout=5)
+            raise original
+        assert cancelled_last.wait(timeout=5)
+        finished.append(n)
+        return n
+
+    with preparation_resources(max_workers=3):
+        with pytest.raises(ValueError) as observed:
+            _ordered_map(task, range(3))
+        assert observed.value is original
+        assert cancelled_last.is_set()
+        assert 2 not in started
+        assert finished == ([1] if 1 in started else [])
 
 
 @pytest.mark.parametrize(

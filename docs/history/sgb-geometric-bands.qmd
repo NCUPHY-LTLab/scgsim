@@ -23,7 +23,7 @@ The user first selects an actual **parent surface** from the effective model's s
 A parent is not a plane guessed from a metal name: the same object can have several surfaces, hole rings and walls.
 Selecting all original edges includes both exterior and hole rings; an explicit subset uses only those selected original edges.
 
-Here, the selected parent is the left support after terminal completion in @fig-sgb-effective, retaining its adjacency to the substrate and upper vacuum.
+Here, the selected parent is the completed left support: the rectangle $[-2,3]\times[0,2]$ µm with its original hole, retaining its adjacency to the substrate and upper vacuum.
 On this plane, $d$ is the planar distance to the selected original boundary. Cuts at 0.125 and 0.25 µm produce the three disjoint bands in @fig-sgb-bands.
 These two distances are explicit requests for this example, not automatic defaults for every model.
 

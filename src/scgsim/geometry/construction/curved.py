@@ -11,10 +11,10 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from scgsim.diagnostics import _stage
 from scgsim.geometry.construction.native import (
-    _rebind_surface_loops,
     _rebind_volume_surface_refs,
-    _surface_outer_wire_edges,
+    _SurfaceRepairIndex,
     add_surface_first_volume,
 )
 from scgsim.geometry.models.construction import (
@@ -592,182 +592,183 @@ def build_curved_construction_plan(build_input, *, route, representation_context
     try:
         kernel = _Kernel(gmsh)
         occ = kernel.occ
-        footprints = []
-        source_edges = []
-        for entity_id, records in rings.items():
-            for pid, outer, holes in records:
+        with _stage("geometry.curved.global_planar_arrangement", counts={"source_entities": len(rings), "port_sheets": len(prepared.port_sheet_regions)}):
+            footprints = []
+            source_edges = []
+            for entity_id, records in rings.items():
+                for pid, outer, holes in records:
+                    sources = []
+                    for role, index in [
+                        ("outer", None),
+                        *[("hole", i) for i in range(len(holes))],
+                    ]:
+                        key = (entity_id, pid, role, index)
+                        sources.append(
+                            (
+                                chains[key],
+                                {
+                                    "entity_id": entity_id,
+                                    "polygon_id": pid,
+                                    "role": role,
+                                    "hole_index": index,
+                                },
+                            )
+                        )
+                    face, edges = kernel.face(sources)
+                    footprints.append((face, entity_id))
+                    source_edges.extend(edges)
+            for port in prepared.port_sheet_regions:
                 sources = []
-                for role, index in [
-                    ("outer", None),
-                    *[("hole", i) for i in range(len(holes))],
+                for role, index, ring in [
+                    ("outer", None, port.exterior),
+                    *[("hole", i, h) for i, h in enumerate(port.holes)],
                 ]:
-                    key = (entity_id, pid, role, index)
+                    curves = tuple(
+                        SourceCurveSpec("line_segment", (tuple(a), tuple(b)))
+                        for a, b in zip(ring, (*ring[1:], ring[0]))
+                    )
                     sources.append(
                         (
-                            chains[key],
+                            curves,
                             {
-                                "entity_id": entity_id,
-                                "polygon_id": pid,
+                                "port_sheet_id": port.port_sheet_id,
                                 "role": role,
                                 "hole_index": index,
                             },
                         )
                     )
                 face, edges = kernel.face(sources)
-                footprints.append((face, entity_id))
+                footprints.append((face, "PORT::" + port.port_sheet_id))
                 source_edges.extend(edges)
-        for port in prepared.port_sheet_regions:
-            sources = []
-            for role, index, ring in [
-                ("outer", None, port.exterior),
-                *[("hole", i, h) for i, h in enumerate(port.holes)],
-            ]:
-                curves = tuple(
-                    SourceCurveSpec("line_segment", (tuple(a), tuple(b)))
-                    for a, b in zip(ring, (*ring[1:], ring[0]))
-                )
-                sources.append(
-                    (
-                        curves,
-                        {
-                            "port_sheet_id": port.port_sheet_id,
-                            "role": role,
-                            "hole_index": index,
-                        },
-                    )
-                )
-            face, edges = kernel.face(sources)
-            footprints.append((face, "PORT::" + port.port_sheet_id))
-            source_edges.extend(edges)
-        source_edges = list(dict.fromkeys(source_edges))
-        occ.synchronize()
-        source_footprints = [
-            {
-                "source_owner": owner,
-                "area_um2": occ.getMass(2, face),
-                "native_bounds_um": occ.getBoundingBox(2, face),
-            }
-            for face, owner in footprints
-        ]
-        references = {tag: occ.copy([(1, tag)])[0][1] for tag in source_edges}
-        output, mapping = occ.fragment(
-            [(2, face) for face, _ in footprints], [(1, tag) for tag in source_edges]
-        )
-        occ.synchronize()
-        cells = {tag for dim, tag in output if dim == 2}
-        membership = defaultdict(set)
-        for (_, owner), mapped in zip(footprints, mapping[: len(footprints)]):
-            for dim, tag in mapped:
-                if dim == 2:
-                    membership[tag].add(owner)
-        native_edges = defaultdict(list)
-        for source, mapped in zip(source_edges, mapping[len(footprints) :]):
-            reference = references[source]
-            for dim, tag in mapped:
-                if dim != 1:
-                    continue
-                bounds = gmsh.model.getParametrizationBounds(1, tag)
-                endpoint_values = [
-                    gmsh.model.getValue(1, tag, [float(u[0])]).tolist() for u in bounds
-                ]
-                source_interval = [
-                    float(gmsh.model.getParametrization(1, reference, xyz)[0])
-                    for xyz in endpoint_values
-                ]
-                native_edges[tag].append(
-                    {
-                        **kernel.source_edges[source],
-                        "source_parameter_interval": source_interval,
-                        "native_parameter_bounds": [float(u[0]) for u in bounds],
-                    }
-                )
-        cell_loops = {tag: _face_loops(gmsh, occ, tag) for tag in cells}
-        edge_cells = defaultdict(set)
-        for cell, loops in cell_loops.items():
-            for loop in loops:
-                for edge in loop:
-                    edge_cells[abs(edge)].add(cell)
-        # OCC may omit lower-dimensional history for an unchanged exterior
-        # wire while replacing its native tags during a face Boolean. Recover
-        # that history through native common geometry, never endpoint matching
-        # or a caller-chosen geometric tolerance.
-        for edge in edge_cells:
-            if native_edges[edge]:
-                continue
-            for source, reference in references.items():
-                existing = set(occ.getEntities())
-                common, _ = occ.intersect(
-                    [(1, edge)], [(1, reference)], removeObject=False, removeTool=False
-                )
-                occ.synchronize()
-                for dim, common_edge in common:
+            source_edges = list(dict.fromkeys(source_edges))
+            occ.synchronize()
+            source_footprints = [
+                {
+                    "source_owner": owner,
+                    "area_um2": occ.getMass(2, face),
+                    "native_bounds_um": occ.getBoundingBox(2, face),
+                }
+                for face, owner in footprints
+            ]
+            references = {tag: occ.copy([(1, tag)])[0][1] for tag in source_edges}
+            output, mapping = occ.fragment(
+                [(2, face) for face, _ in footprints], [(1, tag) for tag in source_edges]
+            )
+            occ.synchronize()
+            cells = {tag for dim, tag in output if dim == 2}
+            membership = defaultdict(set)
+            for (_, owner), mapped in zip(footprints, mapping[: len(footprints)]):
+                for dim, tag in mapped:
+                    if dim == 2:
+                        membership[tag].add(owner)
+            native_edges = defaultdict(list)
+            for source, mapped in zip(source_edges, mapping[len(footprints) :]):
+                reference = references[source]
+                for dim, tag in mapped:
                     if dim != 1:
                         continue
-                    bounds = gmsh.model.getParametrizationBounds(1, edge)
-                    common_bounds = gmsh.model.getParametrizationBounds(1, common_edge)
-                    values = [
-                        gmsh.model.getValue(1, common_edge, [float(u[0])])
-                        for u in common_bounds
+                    bounds = gmsh.model.getParametrizationBounds(1, tag)
+                    endpoint_values = [
+                        gmsh.model.getValue(1, tag, [float(u[0])]).tolist() for u in bounds
                     ]
-                    native_edges[edge].append(
+                    source_interval = [
+                        float(gmsh.model.getParametrization(1, reference, xyz)[0])
+                        for xyz in endpoint_values
+                    ]
+                    native_edges[tag].append(
                         {
                             **kernel.source_edges[source],
-                            "source_parameter_interval": [
-                                float(
-                                    gmsh.model.getParametrization(1, reference, xyz)[0]
-                                )
-                                for xyz in values
-                            ],
-                            "arrangement_parameter_interval": [
-                                float(gmsh.model.getParametrization(1, edge, xyz)[0])
-                                for xyz in values
-                            ],
+                            "source_parameter_interval": source_interval,
                             "native_parameter_bounds": [float(u[0]) for u in bounds],
-                            "native_history_method": "occ_common_geometry",
                         }
                     )
-                occ.remove(
-                    [entity for entity in common if entity not in existing],
-                    recursive=False,
-                )
-            if not native_edges[edge]:
-                raise ValueError(
-                    "native arrangement boundary has no source curve provenance"
-                )
-        # Remove only scratch source/reference entities after the Boolean history has been detached.
-        retained_edges = set(edge_cells)
-        occ.remove(
-            [(2, t) for _, t in occ.getEntities(2) if t not in cells], recursive=False
-        )
-        occ.remove(
-            [(1, t) for _, t in occ.getEntities(1) if t not in retained_edges],
-            recursive=False,
-        )
-        occ.synchronize()
-        curve_descriptors = {
-            edge: {
-                "native_type": gmsh.model.getType(1, edge),
-                "sources": native_edges[edge],
-                "native_bounds": [
-                    float(u[0]) for u in gmsh.model.getParametrizationBounds(1, edge)
-                ],
-            }
-            for edge in retained_edges
-        }
-        cell_ids = {
-            cell: _identity(
-                "CELL__",
-                {
-                    "curves": sorted(
-                        _identity("", curve_descriptors[abs(e)])
-                        for loop in loops
-                        for e in loop
-                    ),
-                    "source_owners": sorted(membership[cell]),
-                },
+            cell_loops = {tag: _face_loops(gmsh, occ, tag) for tag in cells}
+            edge_cells = defaultdict(set)
+            for cell, loops in cell_loops.items():
+                for loop in loops:
+                    for edge in loop:
+                        edge_cells[abs(edge)].add(cell)
+            # OCC may omit lower-dimensional history for an unchanged exterior
+            # wire while replacing its native tags during a face Boolean. Recover
+            # that history through native common geometry, never endpoint matching
+            # or a caller-chosen geometric tolerance.
+            for edge in edge_cells:
+                if native_edges[edge]:
+                    continue
+                for source, reference in references.items():
+                    existing = set(occ.getEntities())
+                    common, _ = occ.intersect(
+                        [(1, edge)], [(1, reference)], removeObject=False, removeTool=False
+                    )
+                    occ.synchronize()
+                    for dim, common_edge in common:
+                        if dim != 1:
+                            continue
+                        bounds = gmsh.model.getParametrizationBounds(1, edge)
+                        common_bounds = gmsh.model.getParametrizationBounds(1, common_edge)
+                        values = [
+                            gmsh.model.getValue(1, common_edge, [float(u[0])])
+                            for u in common_bounds
+                        ]
+                        native_edges[edge].append(
+                            {
+                                **kernel.source_edges[source],
+                                "source_parameter_interval": [
+                                    float(
+                                        gmsh.model.getParametrization(1, reference, xyz)[0]
+                                    )
+                                    for xyz in values
+                                ],
+                                "arrangement_parameter_interval": [
+                                    float(gmsh.model.getParametrization(1, edge, xyz)[0])
+                                    for xyz in values
+                                ],
+                                "native_parameter_bounds": [float(u[0]) for u in bounds],
+                                "native_history_method": "occ_common_geometry",
+                            }
+                        )
+                    occ.remove(
+                        [entity for entity in common if entity not in existing],
+                        recursive=False,
+                    )
+                if not native_edges[edge]:
+                    raise ValueError(
+                        "native arrangement boundary has no source curve provenance"
+                    )
+            # Remove only scratch source/reference entities after the Boolean history has been detached.
+            retained_edges = set(edge_cells)
+            occ.remove(
+                [(2, t) for _, t in occ.getEntities(2) if t not in cells], recursive=False
             )
-            for cell, loops in cell_loops.items()
-        }
+            occ.remove(
+                [(1, t) for _, t in occ.getEntities(1) if t not in retained_edges],
+                recursive=False,
+            )
+            occ.synchronize()
+            curve_descriptors = {
+                edge: {
+                    "native_type": gmsh.model.getType(1, edge),
+                    "sources": native_edges[edge],
+                    "native_bounds": [
+                        float(u[0]) for u in gmsh.model.getParametrizationBounds(1, edge)
+                    ],
+                }
+                for edge in retained_edges
+            }
+            cell_ids = {
+                cell: _identity(
+                    "CELL__",
+                    {
+                        "curves": sorted(
+                            _identity("", curve_descriptors[abs(e)])
+                            for loop in loops
+                            for e in loop
+                        ),
+                        "source_owners": sorted(membership[cell]),
+                    },
+                )
+                for cell, loops in cell_loops.items()
+            }
         # Route A face metal is a sheet; all other finite conductors remain excluded bodies.
         sheet_ids = {
             eid
@@ -840,43 +841,48 @@ def build_curved_construction_plan(build_input, *, route, representation_context
             }
             | set(port_planes.values())
         )
-        occupied = {}
-        owners = {}
-        for slab, (lo, hi) in enumerate(zip(z_values, z_values[1:])):
-            middle = (lo + hi) / 2
-            for cell in cells:
-                candidates = [
-                    eid
-                    for eid in membership[cell]
-                    if eid in entities
-                    and eid not in sheet_ids
-                    and ranges[eid][0] < middle < ranges[eid][1]
-                ]
-                metals = [
-                    eid
-                    for eid in candidates
-                    if entities[eid].material_kind == "conductor"
-                ]
-                if len({entities[eid].net_id for eid in metals}) > 1:
-                    raise ValueError(
-                        "native curved arrangement found overlapping conductors on different Nets"
-                    )
-                if metals:
-                    occupied[slab, cell] = sorted(metals)
-                    continue
-                domains = [
-                    eid for eid in candidates if entities[eid].role == "solution_region"
-                ]
-                if domains:
-                    owner = max(
-                        domains,
-                        key=lambda eid: (
-                            entities[eid].material_kind == "dielectric",
-                            entities[eid].priority,
-                            eid,
-                        ),
-                    )
-                    owners[slab, cell] = owner
+        with _stage("geometry.curved.classify_z_slabs", counts={"slabs": len(z_values) - 1, "cells": len(cells), "cell_slab_candidates": len(cells) * (len(z_values) - 1)}):
+            occupied = {}
+            owners = {}
+            for slab, (lo, hi) in enumerate(zip(z_values, z_values[1:])):
+                with _stage(
+                    "geometry.curved.classify_one_z_slab",
+                    counts={"slab_index": slab, "cells": len(cells)},
+                ):
+                    middle = (lo + hi) / 2
+                    for cell in cells:
+                        candidates = [
+                            eid
+                            for eid in membership[cell]
+                            if eid in entities
+                            and eid not in sheet_ids
+                            and ranges[eid][0] < middle < ranges[eid][1]
+                        ]
+                        metals = [
+                            eid
+                            for eid in candidates
+                            if entities[eid].material_kind == "conductor"
+                        ]
+                        if len({entities[eid].net_id for eid in metals}) > 1:
+                            raise ValueError(
+                                "native curved arrangement found overlapping conductors on different Nets"
+                            )
+                        if metals:
+                            occupied[slab, cell] = sorted(metals)
+                            continue
+                        domains = [
+                            eid for eid in candidates if entities[eid].role == "solution_region"
+                        ]
+                        if domains:
+                            owner = max(
+                                domains,
+                                key=lambda eid: (
+                                    entities[eid].material_kind == "dielectric",
+                                    entities[eid].priority,
+                                    eid,
+                                ),
+                            )
+                            owners[slab, cell] = owner
         # Connected planar/slab cells form solution shells; no 3D Boolean repair.
         parents = {key: key for key in owners}
 
@@ -916,81 +922,82 @@ def build_curved_construction_plan(build_input, *, route, representation_context
         # Sweep the entire shared curve complex together, strictly 1D -> 2D.
         # A native prism preserves trimmed rational/spline geometry and shares
         # the vertical edge of each source vertex across adjacent walls.
-        lifted = {}
-        lifted_vertices = {}
-        vertical = {}
-        swept_walls = {}
-        for edge in retained_edges:
-            tag = occ.copy([(1, edge)])[0][1]
-            occ.translate([(1, tag)], 0, 0, z_values[0])
-            lifted[0, edge] = tag
-        _, copied_history = occ.fragment(
-            [(1, lifted[0, edge]) for edge in retained_edges], []
-        )
-        for edge, history in zip(retained_edges, copied_history):
-            tags = [tag for dim, tag in history if dim == 1]
-            if len(tags) != 1:
-                raise ValueError("Z-copy changed an already arranged planar edge")
-            lifted[0, edge] = tags[0]
-        occ.synchronize()
-        for edge in retained_edges:
-            for source, copied in zip(
-                _edge_vertices(gmsh, edge), _edge_vertices(gmsh, lifted[0, edge])
-            ):
-                lifted_vertices[0, source] = copied
-        for slab, (lo, hi) in enumerate(zip(z_values, z_values[1:])):
-            source_by_tag = {lifted[slab, edge]: edge for edge in retained_edges}
-            source_by_vertex = {
-                tag: vertex
-                for (level, vertex), tag in lifted_vertices.items()
-                if level == slab
-            }
-            output = occ.extrude([(1, tag) for tag in source_by_tag], 0, 0, hi - lo)
+        with _stage("geometry.curved.retained_edge_sweep", counts={"retained_edges": len(retained_edges), "slabs": len(z_values) - 1, "edge_slab_sweeps": len(retained_edges) * (len(z_values) - 1)}):
+            lifted = {}
+            lifted_vertices = {}
+            vertical = {}
+            swept_walls = {}
+            for edge in retained_edges:
+                tag = occ.copy([(1, edge)])[0][1]
+                occ.translate([(1, tag)], 0, 0, z_values[0])
+                lifted[0, edge] = tag
+            _, copied_history = occ.fragment(
+                [(1, lifted[0, edge]) for edge in retained_edges], []
+            )
+            for edge, history in zip(retained_edges, copied_history):
+                tags = [tag for dim, tag in history if dim == 1]
+                if len(tags) != 1:
+                    raise ValueError("Z-copy changed an already arranged planar edge")
+                lifted[0, edge] = tags[0]
             occ.synchronize()
-            for dim, face in output:
-                if dim != 2:
-                    continue
-                boundary = [
-                    abs(tag)
-                    for d, tag in gmsh.model.getBoundary([(2, face)], oriented=True)
-                    if d == 1
-                ]
-                bottom_tags = [tag for tag in boundary if tag in source_by_tag]
-                if len(bottom_tags) != 1:
-                    raise ValueError(
-                        "native edge sweep did not retain one canonical source edge per wall"
-                    )
-                edge = source_by_tag[bottom_tags[0]]
-                swept_walls[slab, edge] = face
-                for tag in boundary:
-                    if tag == bottom_tags[0]:
+            for edge in retained_edges:
+                for source, copied in zip(
+                    _edge_vertices(gmsh, edge), _edge_vertices(gmsh, lifted[0, edge])
+                ):
+                    lifted_vertices[0, source] = copied
+            for slab, (lo, hi) in enumerate(zip(z_values, z_values[1:])):
+                source_by_tag = {lifted[slab, edge]: edge for edge in retained_edges}
+                source_by_vertex = {
+                    tag: vertex
+                    for (level, vertex), tag in lifted_vertices.items()
+                    if level == slab
+                }
+                output = occ.extrude([(1, tag) for tag in source_by_tag], 0, 0, hi - lo)
+                occ.synchronize()
+                for dim, face in output:
+                    if dim != 2:
                         continue
-                    vertices = _edge_vertices(gmsh, tag)
-                    lower_vertices = [v for v in vertices if v in source_by_vertex]
-                    if not lower_vertices:
-                        lifted[slab + 1, edge] = tag
-                    elif len(lower_vertices) == 1:
-                        lower = lower_vertices[0]
-                        vertex = source_by_vertex[lower]
-                        key = (slab, vertex)
-                        if key in vertical and vertical[key] != tag:
-                            raise ValueError(
-                                "native collective sweep duplicated a shared vertical edge"
-                            )
-                        vertical[key] = tag
-                        lifted_vertices[slab + 1, vertex] = next(
-                            v for v in vertices if v != lower
-                        )
-                    else:
+                    boundary = [
+                        abs(tag)
+                        for d, tag in gmsh.model.getBoundary([(2, face)], oriented=True)
+                        if d == 1
+                    ]
+                    bottom_tags = [tag for tag in boundary if tag in source_by_tag]
+                    if len(bottom_tags) != 1:
                         raise ValueError(
-                            "native edge sweep returned an unexpected horizontal boundary"
+                            "native edge sweep did not retain one canonical source edge per wall"
                         )
-                if (slab + 1, edge) not in lifted:
-                    raise ValueError("native edge sweep lost the canonical upper edge")
-            if any((slab, edge) not in swept_walls for edge in retained_edges):
-                raise ValueError(
-                    "native edge sweep did not cover the arranged curve complex"
-                )
+                    edge = source_by_tag[bottom_tags[0]]
+                    swept_walls[slab, edge] = face
+                    for tag in boundary:
+                        if tag == bottom_tags[0]:
+                            continue
+                        vertices = _edge_vertices(gmsh, tag)
+                        lower_vertices = [v for v in vertices if v in source_by_vertex]
+                        if not lower_vertices:
+                            lifted[slab + 1, edge] = tag
+                        elif len(lower_vertices) == 1:
+                            lower = lower_vertices[0]
+                            vertex = source_by_vertex[lower]
+                            key = (slab, vertex)
+                            if key in vertical and vertical[key] != tag:
+                                raise ValueError(
+                                    "native collective sweep duplicated a shared vertical edge"
+                                )
+                            vertical[key] = tag
+                            lifted_vertices[slab + 1, vertex] = next(
+                                v for v in vertices if v != lower
+                            )
+                        else:
+                            raise ValueError(
+                                "native edge sweep returned an unexpected horizontal boundary"
+                            )
+                    if (slab + 1, edge) not in lifted:
+                        raise ValueError("native edge sweep lost the canonical upper edge")
+                if any((slab, edge) not in swept_walls for edge in retained_edges):
+                    raise ValueError(
+                        "native edge sweep did not cover the arranged curve complex"
+                    )
         native_surfaces = {}
         surface_data = {}
         volume_refs = defaultdict(list)
@@ -1032,7 +1039,10 @@ def build_curved_construction_plan(build_input, *, route, representation_context
                 )
             return occ.addPlaneSurface(wires)
 
+        used_walls = set()
+
         def wall(edge, slab):
+            used_walls.add((slab, edge))
             return swept_walls[slab, edge]
 
         # Finite shared arrangement cells own contact normalization. Native
@@ -1325,6 +1335,11 @@ def build_curved_construction_plan(build_input, *, route, representation_context
                         )
                     )
         occ.synchronize()
+        with _stage(
+            "geometry.curved.sweep_work",
+            counts={"swept_walls": len(swept_walls), "used_walls": len(used_walls)},
+        ):
+            pass
         # Native history and geometry determine curve identity; endpoints alone cannot identify a curve.
         used_edges = {
             abs(t)
@@ -1701,7 +1716,10 @@ def build_curved_construction_plan(build_input, *, route, representation_context
             )
         volumes = []
         # Source identities survive native shell correction and face replacement.
-        surface_basis_parity = {sid: 1 for sid in native_surfaces}
+        repair_index = _SurfaceRepairIndex(
+            surfaces, loops, {cid: edge for edge, cid in curve_ids.items()}, native_surfaces
+        )
+        surface_basis_parity = repair_index.basis_parity
         for root, members in components.items():
             vid = volume_ids[root]
             refs = tuple(volume_refs[vid])
@@ -1726,26 +1744,10 @@ def build_curved_construction_plan(build_input, *, route, representation_context
                 repaired = add_surface_first_volume(
                     gmsh,
                     [[native_surfaces[ref.surface_id] for ref in shell]],
-                    outer_wire_edges=_surface_outer_wire_edges(
-                        surfaces,
-                        loops,
-                        {cid: edge for edge, cid in curve_ids.items()},
-                        native_surfaces,
-                    ),
+                    outer_wire_edges=repair_index.outer_wire_edges,
                 )
-                loops = _rebind_surface_loops(
-                    surfaces,
-                    loops,
-                    {cid: edge for edge, cid in curve_ids.items()},
-                    native_surfaces,
-                    repaired,
-                )
+                repair_index.rebind(repaired)
                 native_volume = repaired.volume_tag
-                for sid, old_tag in tuple(native_surfaces.items()):
-                    if old_tag in repaired.face_bindings:
-                        new_tag, parity = repaired.face_bindings[old_tag]
-                        native_surfaces[sid] = new_tag
-                        surface_basis_parity[sid] *= parity
                 signed_mass = occ.getMass(3, native_volume)
                 enclosed.append(abs(signed_mass))
                 occ.synchronize()
@@ -1832,6 +1834,7 @@ def build_curved_construction_plan(build_input, *, route, representation_context
                     },
                 )
             )
+        loops = repair_index.surface_loops
         # Rebase all retained observations only after the final global face map is known.
         volumes = _rebind_volume_surface_refs(volumes, surface_basis_parity)
         # Preserve exact shared boundary shapes in one detached XAO, before any volume exists.

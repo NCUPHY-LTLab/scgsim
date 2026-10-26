@@ -1474,19 +1474,103 @@ def _solution_boundary_edge_z_max_um(
     return z_max_um
 
 
+def _partition_solution_sidewalls(
+    surfaces: tuple[SurfacePlanRecord, ...],
+    solution_ids: set[str],
+) -> tuple[SurfacePlanRecord, ...]:
+    """Node matching XY wall supports at their existing source Z endpoints.
+
+    Only single-owner solution boundary quads participate. A child keeps its
+    source ring direction; no region, XY support, or material is changed.
+    """
+    supports: dict[tuple, set[float]] = {}
+    eligible: dict[int, tuple] = {}
+    for index, surface in enumerate(surfaces):
+        if (
+            surface.construction_only
+            or surface.surface_role != "domain_boundary"
+            or surface.metadata.get("boundary_role") != "sidewall"
+            or len(_surface_boundary_volume_ids(surface, known_entity_ids=solution_ids))
+            != 1
+        ):
+            continue
+        quad = tuple(
+            tuple(point) for point in surface.geometry_ref.get("quad_points", ())
+        )
+        if len(quad) != 4 or not (
+            quad[0][:2] == quad[3][:2]
+            and quad[1][:2] == quad[2][:2]
+            and quad[0][2] == quad[1][2]
+            and quad[2][2] == quad[3][2]
+            and quad[0][:2] != quad[1][:2]
+        ):
+            continue
+        lo, hi = sorted((quad[0][2], quad[2][2]))
+        if lo == hi:
+            continue
+        support = _canonical_face_signature_3d(
+            (
+                (*quad[0][:2], 0.0),
+                (*quad[1][:2], 0.0),
+                (*quad[1][:2], 1.0),
+                (*quad[0][:2], 1.0),
+            )
+        )
+        supports.setdefault(support, set()).update((lo, hi))
+        eligible[index] = (support, quad, lo, hi)
+
+    result: list[SurfacePlanRecord] = []
+    for index, surface in enumerate(surfaces):
+        if index not in eligible:
+            result.append(surface)
+            continue
+        support, quad, lo, hi = eligible[index]
+        levels = sorted(z for z in supports[support] if lo <= z <= hi)
+        if len(levels) == 2:
+            result.append(surface)
+            continue
+        for child_index, (bottom, top) in enumerate(pairwise(levels)):
+            label = f"Z{child_index:04d}"
+            result.append(
+                replace(
+                    surface,
+                    surface_id=f"{surface.surface_id}_{label}",
+                    parent_surface_id=surface.surface_id,
+                    partition_label=label,
+                    geometry_ref={
+                        **surface.geometry_ref,
+                        "quad_points": tuple(
+                            (*point[:2], bottom if point[2] == lo else top)
+                            for point in quad
+                        ),
+                    },
+                    metadata={
+                        **surface.metadata,
+                        "solution_sidewall_partition": {
+                            "source_surface_id": surface.surface_id,
+                            "source_quad_points": quad,
+                            "z_interval_um": (bottom, top),
+                        },
+                    },
+                )
+            )
+    return tuple(result)
+
+
 def _merge_solution_sidewall_interfaces(
     build_input: GeometryBuildInput,
     *,
     surfaces: tuple[SurfacePlanRecord, ...],
     semantic_facts: SemanticEvidenceFacade | None = None,
 ) -> tuple[SurfacePlanRecord, ...]:
-    """Merge coincident solution sidewalls into one shared interface surface."""
+    """Partition matching XY supports in Z, then merge shared solution walls."""
     entities = {entity.semantic_id: entity for entity in build_input.entities}
     solution_ids = {
         entity.semantic_id
         for entity in entities.values()
         if _is_solution_entity(entity)
     }
+    surfaces = _partition_solution_sidewalls(surfaces, solution_ids)
     non_merge: list[SurfacePlanRecord] = []
     sidewall_groups: dict[
         tuple[tuple[float, float, float], ...],
@@ -1567,6 +1651,7 @@ def _merge_solution_sidewall_interfaces(
         merged = replace(
             group[0],
             owner_semantic_id=owner_ids[0],
+            surface_role="solution_interface",
             interface_id=interface_id,
             metadata={
                 **group[0].metadata,
@@ -1574,6 +1659,22 @@ def _merge_solution_sidewall_interfaces(
                 "boundary_volume_ids": owner_ids,
                 "interface_kinds": (kind,),
                 "interface_type": kind,
+                "solution_sidewall_sources": tuple(
+                    {
+                        "source_surface_id": surface.metadata.get(
+                            "solution_sidewall_partition", {}
+                        ).get("source_surface_id", surface.surface_id),
+                        "parent_surface_id": surface.parent_surface_id,
+                        "child_surface_id": surface.surface_id,
+                        "owner_semantic_id": surface.owner_semantic_id,
+                        "source_quad_points": surface.metadata.get(
+                            "solution_sidewall_partition", {}
+                        ).get("source_quad_points", surface.geometry_ref["quad_points"]),
+                        "geometry_ref": dict(surface.geometry_ref),
+                        "metadata": dict(surface.metadata),
+                    }
+                    for surface in group
+                ),
                 "source_provenance": _surface_contribution_provenance(
                     parent_interface_id=(
                         f"solution-sidewall:{lower.semantic_id}:{upper.semantic_id}"
@@ -1598,8 +1699,8 @@ def _reconcile_solution_domain_boundaries(
     A domain boundary is only replaced by a surface that explicitly names the
     same solution volume in its structured boundary ownership. Horizontal
     regions are reconciled by exact planar Boolean residuals; sidewalls are
-    removed only for one-for-one canonical face equality. Partial vertical
-    overlap remains an error for the existing topology validators to expose.
+    removed only for one-for-one canonical face equality. Matching solution
+    boundary quads are partitioned separately before sidewall ownership merge.
     """
     import gdstk
 

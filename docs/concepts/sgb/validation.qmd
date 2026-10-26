@@ -1,0 +1,56 @@
+---
+title: "SGB validation: what each handoff must prove"
+description: "The source, arrangement, topology, CAD and mesh invariants checked at each SGB handoff."
+lang: en
+askr:
+  languages:
+    current: en
+    items:
+      - code: en
+        label: English
+        href: /docs/concepts/sgb/validation.html
+      - code: zh-TW
+        label: 繁體中文
+        href: /zh-TW/docs/concepts/sgb/validation.html
+scgsim-id: "docs/concepts/sgb/validation"
+scgsim-kind: "concept"
+scgsim-status: "CONVERGING"
+---
+
+## Purpose
+
+Validation checks that each handoff preserves the facts needed by the next stage. It does not ask whether a field solution is scientifically accurate; that requires a solver run and separate scientific review. The useful result is not just a final pass/fail: it is the earliest stage that could not establish its contract, plus the intermediate record needed to explain why.
+
+## 1. Validate the source boundary
+
+The normalized input must have unique source identities, valid polygon rings, resolvable occurrence paths, a consistent Net map, and complete data for the selected physical profile. The source grid must agree with the emitted DBU when the caller requests a shared fixed-precision XY grid. Missing source facts remain errors rather than being inferred from names or geometric proximity. For the running example this handoff combines the 8 µm² left pad, two Entity identities in occurrence `chip`, Net A/Net B, material intervals, port and explicit junction endpoints into one prepared input.
+
+## 2. Validate arrangement and ownership
+
+For each planar operation, directed source paths must form closed rings on the common noded network. Every atomic edge must have matching native-network provenance. Face propagation must reach all faces from the unbounded exterior, produce binary membership, and give the same result along every path. The reconstructed source regions must preserve the recorded input meaning.
+
+Source contacts are then checked independently from Net declarations. A geometric contact between different Nets is a short and fails; it is not relabeled as same-Net. Assigning disconnected objects to one Net also does not create missing geometry. Unsupported edge/point contacts fail under the applicable contact contract.
+
+## 3. Validate surfaces and volumes before CAD
+
+Each planned surface must have an outer loop and valid optional hole loops. Curves must close their directed loops, split edges must match across adjacent surfaces, and duplicate live surfaces must have been explicitly reconciled. Each volume must reference its planned surfaces with a closed shell and consistent orientation. Tag plans must cover every backend-live surface and volume.
+
+The volume-adjacency conformality Engine Gate checks planned shell relationships before native construction. This catches semantic/topological mismatches while source IDs are still available. Inspect the intermediate face owner, interface kind, ordered outer/hole loops, shared curve references and oriented volume boundary; changing mesh size cannot substitute for any of them.
+
+## 4. Validate native construction and export
+
+After OCC construction, the Gmsh BRep conformality Engine Gate checks native geometry against the expected volume adjacency. For Route A/B shell repair, complete boundary incidence must bind every repaired native face to exactly one planned surface. The backend tag ledger and exported physical groups must match the plan. Native tags may change; the source-bound association must not.
+
+For computational mesh groups, verify that every eligible source surface is covered exactly once, its scalar component assignment agrees with the sorted group component IDs and `conductor_component_ids_by_source`, and all grouped members meet the same explicit Net, material and grouping criteria. Equipotential ID is optional; if present, its value must match across members, while all-`None` is valid. Mixed `None`/present or conflicting values fail, and equipotential values never supply a missing Net. Palace aliases and EPR metadata preserve both new mappings; duplicate attributes for same-Net terminals and grounds are deduplicated. A group represents shared mesh bookkeeping, while each planned surface retains one conductor component. The geometry contract keeps older records with only `conductor_component_id` readable.
+
+## Failure is localized, not repaired by a later stage
+
+A missing face owner is a planning failure. An inconsistent ring transition is an arrangement failure. A duplicate or open loop is a topology failure. A repaired face with ambiguous source correspondence is a native construction failure. A mesh conformity issue belongs to mesh preparation. Changing mesh size cannot resolve an earlier source or CAD defect. Keep the failed stage's input, intermediate records, exception and timing together; a later successful phase does not erase an earlier failure.
+
+::: {.callout-note title="Geometry checks are not a solver acceptance result"}
+Passing source, plan, CAD and mesh checks establishes those specific handoffs. It does not establish modal convergence, EPR accuracy, frequency stability or solver performance.
+:::
+
+## Evidence to keep with a run
+
+Preserve the input and source revision, selected route/profile, stage timing and object counts, planned topology/ownership records, both Engine Gate results, native source-tag binding, physical groups, and mesh checks when a mesh was requested. This lets another reader identify exactly which boundary was accepted and where a failed run stopped. Field-solution and EPR interpretation belong to the separate [Eigenmode EPR guide](../../eigenmode-epr.qmd).
