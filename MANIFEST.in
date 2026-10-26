@@ -4,3 +4,4 @@ recursive-include docs *.qmd
 recursive-include docs/assets *
 recursive-include src/scgsim/_agent_knowledge *.json *.md *.qmd
 recursive-include src/scgsim/_agent_knowledge/docs/assets *
+include LICENSES/gsim-LICENSE.txt
