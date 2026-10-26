@@ -174,5 +174,5 @@ format:
     toc-location: right
     page-layout: article
     code-copy: true
-    code-overflow: wrap
+    code-overflow: scroll
     smooth-scroll: true
