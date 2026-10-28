@@ -1,6 +1,5 @@
 ---
 title: "SGB method: from sources to shared CAD"
-description: "A reader-first map of SGB source meaning, physical interpretation, shared topology and CAD construction."
 lang: en
 askr:
   languages:

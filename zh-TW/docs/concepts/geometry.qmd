@@ -1,6 +1,5 @@
 ---
 title: "SGB 方法：從來源到共用 CAD"
-description: "以易讀的完整方法索引說明 SGB 來源語意、物理解讀、共用拓樸與 CAD 建構。"
 lang: zh-TW
 askr:
   languages:
