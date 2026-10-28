@@ -181,7 +181,7 @@ format:
     respect-user-color-scheme: true
     toc: true
     toc-title: 本頁章節
-    toc-location: body
+    toc-location: right
     page-layout: article
     code-copy: true
     code-overflow: scroll
