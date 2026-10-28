@@ -23,17 +23,17 @@ Polygon construction turns a validated semantic plan into native CAD without ask
 
 ## The route selects the construction plan
 
-`SemanticGeometryBuilder.build()` requires the physical-representation context and a selected route. Source validation checks normalized geometry before dispatch. The dispatcher sends active source-curve declarations to the curved route; polygon-only input follows the polygon route described here.
+`SemanticGeometryBuilder.build()` receives the `GeometryBuildInput`, selected solve geometry route and physical-representation context. Source validation checks normalized geometry before dispatch. The construction branch is separate: active source-curve declarations select the curved branch; polygon-only input follows the polygon branch described here.
 
-Before Gmsh starts, the polygon route makes the physical decisions in a fixed sequence:
+Before final native volume construction, the polygon branch makes its physical and topological decisions in a fixed sequence. The curved branch has a different construction plan and begins its Gmsh arrangement earlier; see [curved construction](curved-construction.qmd).
 
 1. **Classify contacts and interfaces.** The plan checks declared support/host relationships and geometric contacts. A Net assignment never creates contact. A different-Net short or unsupported contact fails here, while valid MS, MA and SA interfaces retain their own meanings.
-2. **Complete explicit model requests.** The rectangular junction request supplies its central port sheet and both terminal bindings. The left support completion fills the source notch; the source polygon stays 8 µm² while planned completed left metal is 9 µm². No general operation fills other gaps.
-3. **Partition and own planar faces.** Relevant boundaries are cut into cells with source and interface membership. The port sheet `[3,7] × [0,2]` µm remains distinct from the metal terminal supports.
+2. **Complete explicit model requests.** The rectangular junction request supplies the source rectangle `[0,10] × [0,2]` µm and both terminal bindings. Planning derives the central lumped-port surface `[3,7] × [0,2]` µm and completes metal owned by each terminal. The left support completion fills the source notch; the source polygon stays 8 µm² while planned completed left metal is 9 µm². No general operation fills other gaps.
+3. **Partition and own planar faces.** Relevant boundaries are cut into cells with source and interface membership. The central lumped-port surface `[3,7] × [0,2]` µm remains distinct from terminal-owned metal; it carries the lumped boundary condition and is not PEC metal.
 4. **Canonicalize the boundary.** Points and edges that neighboring surfaces share become one planned point/curve set, with closed outer and hole loops.
 5. **Assemble material volumes.** The plan lists which surfaces enclose each owner and which shared interface appears with opposite orientation on adjacent volumes.
 
-This planning work precedes Gmsh. When construction starts, every planned surface and volume already has meaning and source ownership; OCC is not asked to decide which overlapping result is the conductor.
+For the polygon branch, the planning records are established before its OCC lowering begins. When that construction step starts, each planned surface and volume already has a defined source and role; OCC is not asked to decide which overlapping result is the conductor.
 
 ## Lower points, curves, loops and faces
 
@@ -45,13 +45,13 @@ For the two-volume example, the interface surface is constructed once. The volum
 
 ## Temporary shell repair and source rebinding
 
-Gmsh's stock `Geometry.OCCAutoFix` default is 0. During Route A/B surface-first volume assembly, SGB temporarily sets it to 1 for native shell creation, then restores the previous option. The repair may change native face tags while fixing shell orientation, so the builder does not treat a tag number as identity.
+The official Gmsh 4.15.2 manual lists `Geometry.OCCAutoFix` with a stock default of 1 ([Gmsh manual](https://gmsh.info/doc/texinfo/#index-Geometry_002eOCCAutoFix)). SCGSim's Gmsh entry sets its default to 0. During surface-first native shell creation, SGB temporarily sets it to 1 around `addSurfaceLoop` and `addVolume`, then restores the previous option. The repair may change native face tags while fixing shell orientation, so the builder does not treat a tag number as identity.
 
-Instead it compares complete wire/edge boundary incidence to bind each repaired native face to its planned source surface. It also records whether the outer wire's orientation changed, then rebinds planned surface loops and volume references. If a face has zero or multiple matching source boundaries, construction fails rather than choosing by area, order or nearby coordinates.
+Instead it compares each wire (closed boundary loop) and its constituent edges to bind each repaired native face to its planned source surface. It also records whether the outer wire's orientation changed, then rebinds planned surface loops and volume references. If a face has zero or multiple matching source boundaries, construction fails rather than choosing by area, order or nearby coordinates.
 
 ## Output and cost
 
-Construction returns a plan enriched with native entity tags and writes route XAO plus sidecars. Physical groups are attached from the planned tag ledger. The dominant work can include native point/edge/face creation, shell formation and source-rebinding checks; their relative cost depends on boundary and face counts. This stage produces CAD, not a mesh or a solved field.
+Construction returns a plan enriched with native entity tags and writes route XAO plus auxiliary mapping files. Physical groups are attached from the planned tag ledger. The dominant work can include native point/edge/face creation, shell formation and source-rebinding checks; their relative cost depends on boundary and face counts. This stage produces CAD, not a mesh or a solved field.
 
 ::: {.callout-note title="What construction does not do"}
 The polygon route does not discover ownership through a global `occ.fragment()` fallback. It consumes planned boundaries and volumes, and lets validation fail when those records cannot be realized conformally.

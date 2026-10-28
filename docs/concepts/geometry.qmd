@@ -17,9 +17,9 @@ scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
 ---
 
-SGB turns layout and process facts into a physical model, then into planned boundaries that a CAD backend can construct. A junction request also names the two terminal owners and the central lumped sheet; terminal completion exists to give that sheet real, correctly owned metal contacts at both ends. This page is the map for the method; each chapter follows one handoff from its inputs to its outputs and explains why that handoff exists.
+In Gmsh, a BRep model is built from points, curves, faces and volumes. Physical Groups label selected entities for meshing and solvers; the label does not merge the geometry. SGB organizes the layout, process stack and assembly declarations into a physical plan, records which source each planned boundary came from, and then constructs that plan as CAD.
 
-The running example is the public notched-pad model: a left conductor with one hole, a separate right conductor on another Net, a Si substrate, surrounding air, a selected physical approximation, and an explicitly requested rectangular junction. Its source polygon has area 8 µm². The junction request adds a 1 µm² terminal support to complete the left side; it does not merge the two Nets.
+The running example is the public notched-pad model: a left conductor with one hole, a separate right conductor on another Net, a Si substrate, surrounding air, a selected physical approximation, and an explicitly requested rectangular junction. Its source polygon has area 8 µm². The junction request supplies the source rectangle `[0,10] × [0,2]` µm and both terminal bindings. Planning derives a central lumped-port surface (lumped port sheet) at `[3,7] × [0,2]` µm, then adds a 1 µm² terminal support to complete the left side. The face carries a lumped boundary condition; it is not another piece of metal, and the request does not merge the two Nets.
 
 ::: {.callout-note title="Backend focus"}
 The construction chapters follow Gmsh/OCC and Palace. AEDT shares supported source and physical meanings, then builds with its native Modeler. A CAD plan is an input to meshing; it is not itself a mesh or field solution.
@@ -39,13 +39,13 @@ The construction chapters follow Gmsh/OCC and Palace. AEDT shares supported sour
 | [Performance](sgb/performance.qmd) | Where can work be reused, and what must be measured? | Stage-level cost interpretation |
 | [Validation](sgb/validation.qmd) | What makes each handoff acceptable or a clear failure? | Explicit pass/fail conditions |
 
-## The design in one model {#fig-sgb-physical}
+## Begin with the model Gmsh must represent {#fig-sgb-physical}
 
-Think of two adjacent solution volumes that share one physical face. The face is created once and referenced by both volumes with opposite orientation. The two volumes remain distinct because their materials and boundaries differ; sharing the face does not merge their identity. That small example captures the method's central rule: decide ownership and adjacency before native CAD construction.
+Start with a familiar Gmsh BRep: points define curves, curves bound faces, and faces bound volumes. A shared face is one geometric entity referenced by two neighboring volumes with opposite orientation. Physical Groups attach solver- or mesh-facing labels to selected entities; they do not merge those entities. SGB prepares the ownership and adjacency information that makes this construction possible.
 
-The same rule applies to the pad. A hole is empty space inside its outer ring; the exterior notch is open to the outside. The component describes those local outlines and selectors. The process stack says which material occupies each declared layer and where it sits in Z. The assembly places occurrences, assigns final Nets and selects the physical approximation. Read [Sources](sgb/sources.qmd) before interpreting the records.
+The running model has a notched, holed left pad and a separate right pad, plus Si and air regions. A hole is empty space enclosed by an inner ring; the notch opens to the exterior. The component supplies local outlines and selectors, the process stack supplies materials and Z ranges, and assembly declarations place the sources, assign final Nets and select the physical approximation. [Sources](sgb/sources.qmd) explains how these inputs become one prepared record.
 
-The profile changes the geometry used by a solve without rewriting the source film. For the running example, the selected `substrate_face` representation places the effective conductor sheet on the Si top face. The junction is an explicit model request: the planner completes the named terminal supports and preserves the central port surface. The [physical model chapter](sgb/physical-model.qmd) separates those decisions from their source inputs.
+The selected approximation changes the geometry used by the solve without rewriting the source film. Here `substrate_face` places the effective conductor sheet on the Si top face. A junction is a separate explicit request: it supplies a source rectangle and terminal bindings; planning derives the central lumped-port surface and completes the named terminal supports. The [physical model chapter](sgb/physical-model.qmd) follows these choices.
 
 ## From planar ownership to a shared boundary
 
@@ -53,9 +53,17 @@ A planar subdivision operation nodes only the relevant XY operands for that oper
 
 After the physical faces are known, neighboring surfaces must agree on their exact boundary. A long edge on one surface is split wherever another incident boundary introduces a point; both surfaces then refer to the same atomic curves. The [shared topology chapter](sgb/shared-topology.qmd) explains point keys, loop roles and volume orientation.
 
-## Two construction routes
+## Solve geometry and construction branches
 
-Ordinary polygonal input follows the route planner, validates ownership and interfaces, canonicalizes the boundary, then lowers planned points and curves into OCC surfaces and volumes. An active source-curve declaration selects a separate curved-construction route: it creates a shared planar arrangement, retains native curve history and sweeps the complete edge complex through the selected Z levels. Both routes start from explicit source meaning; neither asks a global Boolean operation to invent that meaning.
+Keep two choices separate.
+
+### Solve geometry
+
+Solve geometry describes which physical metal representation the solve uses. Current Surface-EPR directions A and B both use PEC (perfect electric conductor) boundaries: A uses zero-thickness metal faces with finite bump shells; B uses finite-thickness metal shells, whose interiors are excluded from the Palace tetrahedral solve domain. See the [current Surface-EPR direction](../geometry-sgb.qmd#current-surface-epr-direction) for the full contract.
+
+### Construction branch
+
+The construction branch describes how source boundaries are built. Polygon outlines use the polygon branch; explicitly declared source curves use the curved branch. Planning first determines regions, faces and adjacency. CAD construction then follows the dependency order from points to curves, faces and volumes. These choices answer different questions and do not conflict.
 
 The [CAD and mesh chapter](sgb/cad-mesh.qmd) draws the boundary between exported CAD and a later mesh. The [performance chapter](sgb/performance.qmd) explains reusable work and stage timing without treating a design hypothesis as a measured speedup. The [validation chapter](sgb/validation.qmd) shows how failures localize to the handoff that could not be established.
 
@@ -71,13 +79,13 @@ For the existing detailed source-stage anchor, continue to [source declarations]
 
 ## Implementation entry points
 
-The concepts above describe the data flow. These source entry points name the corresponding public or compiler operations; they are a compact map, not a substitute for the explanations above.
+The compiler-level `SemanticGeometryBuilder.build()` is the construction-flow entry point. It accepts a `GeometryBuildInput` together with the route, run folder and physical-representation context; validation, planning, native construction and export follow from that input. These implementation entry points correspond to the handoffs above; exact fields are in the linked contracts.
 
 | Stage | Entry point | What crosses the boundary |
 |---|---|---|
 | Source preparation | `GeometryPlan.prepare()` | Mutable component, PDK and assembly declarations become an immutable snapshot |
 | Physical interpretation | `interpret_physical_geometry(...)` | The selected profile produces effective geometry and support/interface records |
 | Boundary topology | `plan_canonical_topology(...)` | Planned surfaces become shared points, curves, edge rings and oriented references |
-| Native construction | `SemanticGeometryBuilder.build(...)` | The validated plan becomes native CAD plus source/tag mapping |
+| Construction-flow entry point | `SemanticGeometryBuilder.build(build_input, ...)` | A `GeometryBuildInput` is validated and carried through planning, native CAD and source/tag mapping |
 
 See the [geometry and compiler contract](../geometry-sgb.qmd), [physical representation contract](../specs/physical-representation.qmd), and [Palace preparation contract](../specs/palace-electrostatic-sgb.qmd) for exact fields and backend handoffs.

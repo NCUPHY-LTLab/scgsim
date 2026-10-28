@@ -23,17 +23,17 @@ CAD construction and mesh preparation are two different handoffs. CAD records co
 
 ## CAD build transaction
 
-The transaction follows the plan rather than deriving a second geometry:
+The CAD transaction follows the plan rather than deriving a second geometry:
 
-1. **Validate and plan.** `SemanticGeometryBuilder.build()` checks `GeometryBuildInput`, selects the route and writes typed construction records. A planned volume-adjacency conformality gate runs before Gmsh, so an ownership mismatch fails while source and Surface IDs remain available.
-2. **Lower shared records.** OCC creates native geometry from canonical Point, Curve and SurfaceLoop records. Adjacent surfaces reuse planned curve IDs; volume shells use the planned oriented surface references.
-3. **Repair and rebind when required.** Route A/B surface-first shell creation temporarily uses Gmsh `Geometry.OCCAutoFix=1`, then restores its previous option. The builder prepares one `SurfaceRepairIndex` per model and reuses it to compare complete planned wire/edge incidence with repaired faces. Since native tags can change, the complete boundary—not the tag number—maps each repaired face back to one planned surface.
+1. **Validate and plan.** `SemanticGeometryBuilder.build()` accepts `GeometryBuildInput`, checks it, selects the construction branch and writes construction records. The planned volume-adjacency conformality check runs before final native volume construction. Polygon construction is mainly data planning at this point; the curved branch has already used OCC during planning to create its shared planar boundary model.
+2. **Create or reuse native boundaries.** The polygon branch lowers canonical Point and Curve records, then creates faces from `SurfaceLoopRecord`s. The curved branch instead reads the named curves and faces from its boundary XAO and reuses them while assembling final volumes. Both preserve the planned adjacency and ownership.
+3. **Repair and rebind when required.** Surface-first shell creation temporarily uses Gmsh `Geometry.OCCAutoFix=1`, then restores its previous option. The builder prepares one `SurfaceRepairIndex` per model and reuses it to compare each planned wire (boundary loop) and its component edges with repaired faces. Since native tags can change, the complete boundary—not the tag number—maps each repaired face back to one planned surface.
 4. **Check the native BRep.** The Gmsh conformality gate checks native geometry against planned volume adjacency. Ambiguous or missing source correspondence fails; area or tag order is not a replacement identity.
 5. **Export the mapping.** XAO, physical groups and the plan-to-native tag ledger travel together. The ledger tells the next process which planned face and volume each exported tag represents.
 
-Stage metadata stores timings, object counts and sidecar sizes. Returned native integer tags are backend-local; source Entities, planned Surface IDs and tag names remain the stable semantic identity. When XAO is reopened, backend tags can differ, so the binding ledger travels with the geometry rather than being reconstructed from tag order.
+Stage metadata stores timings, object counts and auxiliary mapping-file sizes. Returned native integer tags are backend-local; source Entities, planned Surface IDs and tag names remain the stable semantic identity. When XAO is reopened, backend tags can differ, so the binding ledger travels with the geometry rather than being reconstructed from tag order.
 
-A computational mesh group can carry several disconnected conductor components when the explicit Net, material and other grouping criteria match. Equipotential ID is optional: members must share the same value if present, and all-`None` is valid. Each planned surface remains one component; the grouped record preserves the sorted component IDs and its source-surface mapping. This shares a backend mesh label without joining geometry. The [geometry contract](../../geometry-sgb.qmd) defines these fields and the older-record reader rule.
+A Gmsh Physical Group is a label consumed by mesh or solver input; it does not join the CAD entities assigned to it. A group can label several geometrically disconnected conductor components when the model criteria allow it, while each planned surface retains its own component and source mapping. See the [geometry contract](../../geometry-sgb.qmd#explicit-rectangular-junctions) for the precise group semantics.
 
 Construction work grows with planned points, curves, surfaces, shell relationships and native rebinding comparisons. Mesh work grows with solution-volume extent, local element size and conformity constraints. Reporting them separately prevents mesh cost from hiding repeated CAD cost.
 
@@ -53,7 +53,7 @@ The public notched-pad fixture shown here reads back as 32 points, 46 curves, 22
 
 Only after CAD output, mapping and geometry gates succeed does the flow hand off to meshing. Palace mesh preparation opens the exported XAO and physical-group mapping in a fresh Gmsh process, applies the selected initial-size policy, generates tetrahedra in solution volumes, and checks conformity at port surfaces and adjacent volumes. A fresh process keeps mesh generation state separate from CAD construction and makes the exported input the explicit handoff. The output is a mesh input for Palace; it is not the Palace solve, a convergence result or an EPR calculation.
 
-Source DBU, assembly XY grid, Z/thickness and mesh size have different roles. The mesh-size setting controls element sizing. It does not repair a missing shared curve, assign a material, change the physical profile or merge Nets.
+Source DBU and the shared XY coordinate grid set planar geometric precision. Z/thickness describe the physical model, while finite-element mesh size controls element sizing. It does not repair a missing shared curve, assign a material, change the physical profile or merge Nets.
 
 ## Output and diagnosis
 

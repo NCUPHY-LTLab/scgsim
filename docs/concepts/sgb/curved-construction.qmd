@@ -19,35 +19,35 @@ scgsim-status: "CONVERGING"
 
 ## Purpose
 
-A source curve is authored geometry, not a rounded polygon edge. When active curve declarations are present, SGB selects a separate Route A/B construction path that keeps the curve's native history through planar ownership, Z placement and boundary creation. This route exists so material boundaries and shared walls can use the same curve instead of independently refitting or tessellating it.
+A source curve is geometry declared by the author, not a rounded polygon edge. When active curve declarations are present, SGB selects the curved construction branch that keeps the curve's native history through planar ownership, Z placement and boundary creation. This route exists so material boundaries and shared walls can use the same curve instead of independently refitting or tessellating it.
 
 ## Curve input and binding
 
-`SourceCurveSpec` can describe a line segment, circular arc, interpolation spline or B-spline. A `BoundaryCurveChainSpec` binds a closed source boundary to an Entity, boundary ID and a selector point inside that Entity's positive conductor region. Its role selects an outer ring or a specific hole ring. A selector in the empty hole does not bind the hole boundary.
+`SourceCurveSpec` can describe a line segment, circular arc, interpolation spline or B-spline. A `BoundaryCurveChainSpec` binds a closed source boundary to an Entity, boundary ID and a selector point inside one of that Entity’s conductive polygons. The point first identifies the polygon; its role and `hole_index` then select the outer ring or a particular hole ring. Thus, a point selecting a hole boundary lies in the surrounding conductor, not in the empty hole.
 
 For reconstruction, the caller names original segment indices in ring order. A partial chain keeps its original endpoints and leaves unselected segments unchanged. Anchors must lie on that chain. A closed circular reconstruction uses three distinct anchors; the compiler builds an exact circular representation rather than fitting a polygonal approximation. A caller-authored B-spline retains its degree, weights, knots and multiplicities.
 
-Active source-curve intent is supported by Palace Route A/B. Route C rejects it. The current AEDT path also rejects active declarations rather than silently using a polygon witness.
+Active source-curve intent is supported by the current Palace A/B solve geometries. The advanced contract describes other geometry routes; they are outside the current Surface-EPR direction. The current AEDT path also rejects active declarations rather than silently using a polygon witness.
 
-## One global XY arrangement retains source history
+## The main source-region partition retains curve history
 
-The curved constructor places every Entity and port footprint in the common $z=0$ plane and submits them to one `occ.fragment` operation. Explicit authored or reconstructed curve segments replace the selected straight source spans before that operation. The fragment nodes all Entity and port boundaries together; its history maps each output edge and face back to the input Entity and curve intervals. Interface faces, metal regions and vacuum complements can therefore reuse the same split curve.
+During planning, the curved branch creates a Gmsh model, places every Entity and port footprint in the common $z=0$ plane, and submits them to one `occ.fragment` operation. Explicit authored or reconstructed curve segments replace the selected straight source spans before that operation. This main fragment nodes all Entity and port boundaries together; its history maps each output edge and face back to the input Entity and curve intervals. Interface faces, metal regions and vacuum complements can therefore reuse the same split curve.
 
-This route is global across all source and port footprints in XY, even when those footprints later occupy different Z slabs. It is not a global 3D volume fragment: the native arrangement occurs once in the plane, then SGB assigns cells to Z slabs and sweeps the retained edges. The work scales with the global planar fragment and its provenance, followed by roughly $E\times K$ edge/slab sweeps, where $E$ is the retained planar edge count and $K$ is the number of Z intervals.
+This main source-region partition is global across all source and port footprints in XY, even when those footprints later occupy different Z slabs. It is not a global 3D volume fragment. Other curve operations may also fragment geometry; this shared planar partition is the arrangement that establishes source-region ownership. SGB assigns its cells to Z slabs and sweeps the retained edges. The work scales with the global planar fragment and its provenance, followed by roughly $E\times K$ edge/slab sweeps, where $E$ is the retained planar edge count and $K$ is the number of Z intervals.
 
 ## Sweep the complete edge complex through Z
 
-The stages now follow a concrete order:
+The stages distinguish planning-time boundary construction from final volume construction:
 
 1. **Collect all planar footprints.** The input list includes source Entity polygons and port footprints. Every footprint is mapped to $z=0$ for arrangement, regardless of its eventual material height.
 2. **Apply and node source curves.** Authored or reconstructed curve spans replace their selected straight segments. One OCC fragment nodes their boundaries together and returns source-history maps.
-3. **Build the global Z partition.** The physical stack and port planes contribute a sorted set of Z boundaries. Consecutive values create slabs; each planar cell is assigned to the Entity and material that occupy it in that slab.
-4. **Sweep the retained edge set across all Z slabs.** The constructor processes the retained planar edges against the slab intervals. An edge creates the lateral boundary for its interval, and its endpoint participates in a vertical edge shared with adjacent walls. Caps reuse the same curve identities as the walls.
-5. **Assemble connected same-owner volumes.** Adjacent cells connect only where ownership and material allow. Source-to-native face bindings are carried into the surface and volume records.
+3. **Build the Z partition.** The physical stack and port planes contribute a sorted set of Z boundaries. Consecutive values create slabs; each planar cell is assigned to the Entity and material that occupy it in that slab.
+4. **Sweep the retained edge set across each Z interval.** The current strategy processes the retained planar edges as a batch for each interval. An edge creates the lateral boundary for its interval, and its endpoint participates in a vertical edge shared with adjacent walls. Caps reuse the same curve identities as the walls.
+5. **Save and reuse the boundary model.** The planning model stores its named `SGB_CURVE` and `SGB_SURFACE` groups in boundary XAO, including source mappings. Final volume construction merges that XAO and maps the saved curves and surfaces by group name before assembling the volumes.
 
-The sweep is collective. Independent extrusion of each surface could duplicate a vertical edge or leave a seam where two walls should be conformal. Its dominant combinatorial workload is retained planar edges times Z slabs, in addition to the global fragment and provenance work.
+For every Z interval, the current strategy extends the retained edges together so neighboring walls can share vertical edges. This is an implementation strategy, not a geometric theorem; any replacement must preserve the same boundaries. Its combinatorial workload is retained planar edges times Z intervals, in addition to the global fragment and provenance work.
 
-The resulting native faces retain curve identity, surface role, owner, interface and volume-boundary information. Solution volumes are assembled from connected, same-owner cells and their source-bound faces. Contact and Net checks use those geometric cells and boundaries; equal Net names alone do not create a contact.
+The saved boundary model and final volume model serve different construction stages. The boundary XAO retains named curve and surface groups; the final construction reuses those entities while adding and mapping volume boundaries. Solution volumes are assembled from connected, same-owner cells and their source-bound faces. Contact and Net checks use those geometric cells and boundaries; equal Net names alone do not create a contact.
 
 ::: {#fig-sgb-curved-construction}
 ```{=html}

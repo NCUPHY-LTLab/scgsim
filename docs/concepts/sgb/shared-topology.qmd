@@ -1,6 +1,6 @@
 ---
 title: "Shared topology: one boundary for neighboring faces"
-description: "How SGB canonicalizes points, edges, surface loops and volume references before CAD construction."
+description: "How SGB canonicalizes points, edges, surface loops and volume references before final volume construction."
 lang: en
 askr:
   languages:
@@ -19,7 +19,7 @@ scgsim-status: "CONVERGING"
 
 ## Purpose {#construction-stage}
 
-Planar faces describe who occupies each region, but a three-dimensional CAD model also needs neighboring surfaces to agree on their exact edges. Shared topology creates one canonical point/curve registry before Gmsh sees the surfaces. A vertex that splits one face's edge must split the adjacent face's edge too.
+Planar faces describe who occupies each region, but a three-dimensional CAD model also needs neighboring surfaces to agree on their exact edges. Shared topology creates one canonical point/curve registry before final volume construction. A vertex that splits one face's edge must split the adjacent face's edge too. In the polygon branch these records guide OCC lowering; in the curved branch the earlier Gmsh arrangement is saved in boundary XAO and reused when final volumes are assembled.
 
 ## Inputs
 
@@ -51,16 +51,16 @@ Each curve has one canonical identity, independent of traversal direction. A `Cu
 
 ## Rings, faces and volumes
 
-A `SurfaceLoopRecord` is one ordered edge ring that bounds a surface. Its role is `outer` or `hole`; it is not a Gmsh three-dimensional Surface Loop. A surface refers to one outer loop and zero or more hole loops. A volume, in turn, refers to surfaces with orientation. The same planar interface can bound two volumes; each volume references that surface in the direction that encloses its own material.
+A `SurfaceLoopRecord` is one ordered edge ring that bounds a surface. Its role is `outer` or `hole`; the lowerer maps this ring to a Gmsh Curve Loop. It is not the Gmsh three-dimensional Surface Loop that bounds a volume. A surface refers to one outer loop and zero or more hole loops. A volume, in turn, refers to surfaces with orientation. The same planar interface can bound two volumes; each volume references that surface in the direction that encloses its own material.
 
-Follow the records through the running model: (1) planar ownership cells provide ordered outer and hole edge sequences; (2) each shared coordinate maps to one canonical 3D point; (3) shared and T-junction-split segments map to one curve ID, with a sign at each use; (4) the ordered rings close each surface; and (5) each material volume lists its bounding surfaces with an orientation that closes its shell. At the Si/vacuum boundary, the face ID is reused on both sides and the two volume references have opposite signs. That is one common interface, not two surfaces separated by a small gap.
+Follow the records into Gmsh: (1) planar ownership cells provide ordered outer and hole boundary rings; (2) ring coordinates map to canonical points; (3) shared and T-junction-split edges map to shared curves, with a signed reference at each use; (4) each ring becomes a Gmsh Curve Loop and each planar region becomes a Gmsh face; (5) the face is mapped to its planned surface; and (6) each volume gathers its bounding faces into a Gmsh Surface Loop, then maps to a volume entity. In the curved branch, curve and face entities already saved in boundary XAO are mapped back by their named groups before the final volumes are assembled. At the Si/vacuum boundary, the face ID is reused on both sides and the two volume references have opposite signs. That is one common interface, not two surfaces separated by a small gap.
 
 ::: {#fig-sgb-shared-volumes}
 ```{=html}
 <iframe src="../../images/sgb-concept/en-shared-volumes.html" title="Two volumes sharing one face with opposite orientation" width="100%" height="700" style="height:clamp(380px,70vw,760px)" loading="lazy"></iframe>
 ```
 
-Native CAD readback from the small public fixture: two neighboring volumes reuse the same interface face with opposite orientation.
+Native CAD readback from the small public fixture: two neighboring volumes reuse one interface face with opposite orientation.
 :::
 
 In @fig-sgb-shared-volumes, follow the shared face boundary from the same corner on both sides. The geometric face is one object, but its signed reference reverses between the volumes. This is an actual native-CAD readback of a two-volume public fixture: 12 points, 20 curves, 11 surfaces and 2 volumes. It demonstrates the shared-boundary rule; it is not a mesh or field solution. The two material regions share one conformal face without becoming one volume.
@@ -69,6 +69,6 @@ In @fig-sgb-shared-volumes, follow the shared face boundary from the same corner
 
 The topology pass checks that each loop closes, each referenced curve exists, shared edges have consistent endpoints, and each surface/volume relation has the required orientation and ownership. It rejects zero-length edges, invalid loops, unrepresented splits and duplicate live surfaces that were not intentionally combined earlier.
 
-The output is planned points, canonical curves, `SurfaceLoopRecord`s and surfaces carrying loop references. These records can be validated before native geometry is created. Work grows with live boundary vertices and segments, plus searching for existing segments that contain each new boundary point. Once built, the registry is reused by adjacent surfaces; construction does not rediscover each edge separately for every face. Exact public record fields are in the [geometry contract](../../geometry-sgb.qmd#source-curves).
+The output is planned points, canonical curves, `SurfaceLoopRecord`s and surfaces carrying loop references. These records can be checked before final native volume construction. Work grows with live boundary vertices and segments, plus searching for existing segments that contain each new boundary point. Once built, the registry is reused by adjacent surfaces; construction does not rediscover each edge separately for every face. Exact public record fields are in the [geometry contract](../../geometry-sgb.qmd#source-curves).
 
 Continue to [polygon construction](polygon-construction.qmd) to see how these records become OCC entities.

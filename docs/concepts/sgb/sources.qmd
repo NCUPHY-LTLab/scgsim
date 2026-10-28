@@ -23,11 +23,11 @@ The source stage answers four different questions before geometry operations beg
 
 ## Inputs and ownership
 
-A component definition contributes local polygons, holes and annotations. Polygons say which XY points enclose positive shape; an outer ring and its hole rings distinguish material from empty regions. An annotation can select a functional region, such as a port sheet, or bind a source boundary curve. These names belong to the component and remain local when the component is reused.
+A component definition contributes local polygons, holes and annotations. Polygons say which XY points enclose positive shape; an outer ring and its hole rings distinguish material from empty regions. An annotation can identify a source region used to locate a port boundary, or bind a source boundary curve. These names belong to the component and remain local when the component is reused.
 
 The PDK `LayerStack` contributes process facts: source layer association, material identity, physical role, Z interval, film thickness, and any body that supports the layer. These facts answer what occupies a location and how far it extends through Z. They do not assign the final electrical Net.
 
-The assembly contributes occurrence paths and transforms, the final `Net -> Entity` map, substrate and vacuum regions, the approximation profile, and explicit model requests such as a rectangular junction. The same component can appear at two different paths; the path, not its local cell name, identifies a placed occurrence.
+The assembly contributes occurrence paths and transforms, the final assignment of Nets to Entities, substrate and vacuum regions, the approximation profile, and explicit model requests such as a rectangular junction. The same component can appear at two different paths; the path, not its local cell name, identifies a placed occurrence.
 
 | Input | Owner | Example | What it does not decide |
 |---|---|---|---|
@@ -65,14 +65,14 @@ An **Entity** is a named source object that carries role, material association a
 
 An **occurrence** is one placement of a component in the assembly. If a reusable cell is placed twice, both copies can retain the same local component names, but occurrence-qualified paths distinguish their positions, transforms and selectors. This lets a port or junction request refer to the intended placed object.
 
-The component declares local shapes and selectors; it does not declare a public `Group` of Nets. The assembly assigns final Net membership after each Entity has an occurrence-qualified identity. A conductor component ID is a geometry identity, distinct from a GDSFactory Component, a source Entity or a mesh physical group. Later, a backend may group qualifying conductor components for mesh bookkeeping while preserving each planned surface's component identity and source mapping. Group members need the same explicit Net; an optional equipotential ID, when present, must have the same value for all members, and an all-`None` group is valid. Neither field rewrites the source component or creates electrical contact; the [geometry contract](../../geometry-sgb.qmd) defines the exact grouping rule.
+The component declares local shapes and selectors; it does not declare a public `Group` of Nets. The assembly assigns final Net membership after each Entity has an occurrence-qualified identity. A conductor component ID identifies a geometrically connected piece of conductor; it is distinct from a GDSFactory Component, a source Entity or a Gmsh Physical Group. A Physical Group is a label for meshing or solver input, not a geometry operation. Several disconnected components may share a mesh label without becoming one connected conductor. The [geometry contract](../../geometry-sgb.qmd#explicit-rectangular-junctions) defines which components may share that label and how the source mapping is retained.
 
 ## Snapshot and grid
 
 `GeometryPlan` gathers these declarations. `prepare()` produces a detached immutable snapshot containing normalized polygons, selected Entities, occurrence records, the material stack, final Net assignments and explicit port or junction declarations. Editing the source component afterwards does not mutate that snapshot; a new preparation captures the edit.
 
 ::: {.callout-warning title="Source DBU and the shared XY grid have one explicit relationship"}
-DBU means database unit: the smallest coordinate step represented by the emitted GDS. When `grid_size_um=None`, the emitted source DBU supplies the shared assembly-XY grid. An explicitly different XY grid is rejected; SGB does not silently rescale the component or change its source precision. This grid is for planar XY coordinates only. Z positions, film thickness, mesh size and solver tolerances keep their own units and settings.
+DBU means database unit: the smallest coordinate step represented by the emitted GDS. When `grid_size_um=None`, the emitted source DBU supplies the shared assembly-XY grid. An explicitly different XY grid is rejected; SGB does not silently rescale the component or change its source precision. This shared XY coordinate grid sets geometric coordinate precision for planar operations; it is not the finite-element mesh that later divides solution volumes into elements. Z positions, film thickness, mesh size and solver tolerances keep their own units and settings.
 
 Even source vertices on their DBU lattice can produce an off-lattice intersection. For example, the segment from $(0,0)$ to $(3,1)$ nm crosses $x=1$ nm at $(1,1/3)$ nm. A rotation or Boolean intersection can create the same kind of coordinate. The shared-grid step records how those derived XY points are prepared; it does not assert that the original input contains sub-DBU geometry.
 :::

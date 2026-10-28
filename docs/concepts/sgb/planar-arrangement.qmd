@@ -23,7 +23,7 @@ A planar arrangement turns overlapping XY boundaries into a set of faces whose s
 
 ## Inputs and one-operation scope
 
-For one polygonal planar subdivision operation, SGB receives the relevant Entity-owned polygon rings, their operand identities, and the shared grid selected during source preparation. It nodes those operands together because this particular operation must return mutually conforming cells. This chapter's scope is not an automatic global overlay across every Entity at every Z height. The curved route has a distinct global-XY arrangement described in [curved construction](curved-construction.qmd); neither route performs a global 3D volume fragment to infer ownership.
+For one polygonal planar subdivision operation, SGB receives the relevant Entity-owned polygon rings, their operand identities, and the shared XY coordinate grid selected during source preparation. It nodes those operands together because this particular operation must return mutually conforming cells. This chapter's scope is not an automatic global overlay across every Entity at every Z height. The curved route has a distinct global-XY arrangement described in [curved construction](curved-construction.qmd); neither route performs a global 3D volume fragment to infer ownership.
 
 The running example follows the main left source pad. Its outer ring is P1(−2,0) → P2(3,0) → P3(3,1) → P4(2,1) → P5(2,2) → P6(−2,2) → P1, and its hole is [−1.5,−0.5] × [0.5,1.5] µm. The outer notched polygon has area 9 µm²; subtracting the 1 µm² hole gives A = 8 µm². For the arrangement calculation only, add M = [1,4] × [−1,3] µm. M is an auxiliary geometry operand that helps explain source membership; it is neither a material nor a current Mask feature.
 
@@ -39,7 +39,7 @@ Read @fig-sgb-planar-arrangement from the outside inward: the P1–P6 outline an
 
 ## From source rings to faces
 
-Each source ring is a closed ordered path. Its direction gives each edge a signed transition: crossing an outer ring changes membership into or out of the source; crossing a hole ring reverses that change. The planner first nodes intersections and coincident segments on the shared XY grid, then splits each directed source path at the resulting vertices. Each atomic edge retains the operand, ring, original segment and direction that contributed it. That provenance is the data needed to calculate membership later; merely tracing an outline would not say which side of a cut cell belongs to A or M.
+Each source ring is a closed ordered path. Its direction gives each edge a signed transition: crossing an outer ring changes membership into or out of the source; crossing a hole ring reverses that change. The planner first nodes intersections and coincident segments on the shared XY coordinate grid, then splits each directed source path at the resulting vertices. Each atomic edge retains the operand, ring, original segment and direction that contributed it. That provenance is the data needed to calculate membership later; merely tracing an outline would not say which side of a cut cell belongs to A or M.
 
 At $y=0.25$ µm, follow a horizontal path from the unbounded exterior state $(A,M)=(0,0)$. The main pad begins at $x=-2$; the path enters M at $x=1$, leaves A at the notch boundary $x=3$, and leaves M at $x=4$. Membership changes in order:
 
@@ -51,8 +51,8 @@ $$
 
 The membership calculation follows the face-adjacency graph rather than sampling one point per polygon:
 
-1. **Form candidate cells.** `polygonize` follows the closed atomic-edge graph and returns bounded faces and the unbounded exterior. This creates face shapes only; it has not assigned A or M.
-2. **Seed the exterior.** The unbounded face starts with $(A,M)=(0,0)$ because it lies outside both source rings.
+1. **Form candidate cells.** `polygonize` follows the closed atomic-edge graph and returns finite polygon faces only. The implementation adds the unbounded exterior as a separate graph node; polygonization itself does not return that node. This creates face shapes but does not assign A or M.
+2. **Seed the exterior.** The separately created exterior node starts with $(A,M)=(0,0)$ because it lies outside both source rings.
 3. **Cross one directed boundary at a time.** Each shared atomic edge says which source-ring transitions separate its two adjacent faces. The planner adds or subtracts those signed contributions to propagate the adjacent face's membership.
 4. **Check alternate paths.** If the graph reaches one face through another route, the calculated state must match. Conflicting values, a nonbinary value, missing source provenance or a face unreachable from the exterior stops preparation.
 
@@ -82,4 +82,4 @@ These faces are planar ownership regions. They do not yet contain material physi
 
 The result contains shared split boundaries, closed planar cells, and membership/provenance sufficient to reconstruct each requested operand region without another independent snap. The main costs are creating the common noded graph, preserving directed source paths and propagating face states. The arrangement avoids repeating independent polygon overlays for each surface that depends on the same planar subdivision.
 
-The input grid controls XY representation; the 3D topology identity key and all Z/mesh scales are separate. Continue to [shared topology](shared-topology.qmd) to see how cell boundaries become canonical 3D curves.
+The shared XY coordinate grid controls planar coordinate representation; the 3D topology identity key and all Z/mesh scales are separate. Continue to [shared topology](shared-topology.qmd) to see how cell boundaries become canonical 3D curves.
