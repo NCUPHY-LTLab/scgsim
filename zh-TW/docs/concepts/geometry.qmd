@@ -17,9 +17,9 @@ scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
 ---
 
-SCGSim 的語意幾何（semantic geometry）建構流程 SGB，會把版圖與製程事實轉成物理模型，再整理成 CAD 後端能建構的邊界。接面要求也指定兩端終端所有者與中央集總（lumped）導體片（port sheet）；補足終端是為了讓導體片兩端都實際接觸正確歸屬的金屬。本頁是方法索引；各章都沿著一次資料交接，說明輸入、處理、輸出，以及為什麼需要這一步。
+SGB（semantic geometry builder，語意幾何建構流程）會把版圖、製程與組裝模型中的事實整理成物理模型，再產生 CAD 後端所需的邊界。若模型指定接面，組裝模型也會說明兩端各由哪個終端支撐，並指定中央集總埠片（lumped port sheet）。補足兩端金屬，是為了讓埠片確實接觸各自指定的終端。本頁是方法索引；各章依序說明每一步接收哪些資料、如何處理，以及交給下一步什麼結果。
 
-貫穿全文的是公開的缺角金屬模型：左側導體有一個孔洞，右側導體屬於另一個 Net，底下是 Si 基板，周圍是真空，並選定一種物理近似，明確要求矩形接面。左側來源多邊形面積為 8 µm²。接面要求為左端點補出 1 µm² 的支撐金屬，讓埠兩側的指定終端完整；它不會把兩個 Net 合併。
+貫穿全文的是公開的缺角金屬模型：左側導體有一個孔洞，右側導體屬於另一個 Net，底下是 Si 基板，周圍是真空，並選定一種物理近似，明確要求矩形接面。左側來源多邊形面積為 8 µm²。接面要求會在左端補上 1 µm² 的金屬支撐，讓埠片兩側各自接上指定終端；Net A 與 Net B 仍維持分開。
 
 ::: {.callout-note title="本頁的後端範圍"}
 建構章節以 Gmsh/OCC 與 Palace 為主。AEDT 共用其支援的來源與物理語意，再透過 AEDT 原生 Modeler 建立模型。CAD 計畫是網格的輸入，並不是網格或場解本身。
@@ -27,35 +27,35 @@ SCGSim 的語意幾何（semantic geometry）建構流程 SGB，會把版圖與�
 
 ## 依序閱讀方法
 
-| 章節 | 要回答的問題 | 交接結果 |
+| 章節 | 要回答的問題 | 交給下一階段的結果 |
 |---|---|---|
-| [來源](sgb/sources.qmd) | 每個形狀、材料、放置位置與 Net 由哪個來源負責？ | 分離、正規化的幾何輸入 |
-| [物理模型](sgb/physical-model.qmd) | 這次求解採用哪種物理幾何？ | 有效物件、支撐面與介面 |
-| [平面排列](sgb/planar-arrangement.qmd) | 重疊的 XY 輸入如何切成來源歸屬正確的面？ | 共用切分邊與來源歸屬 |
-| [共用拓樸](sgb/shared-topology.qmd) | 多個表面如何共用同一組點、曲線與環？ | 正規化的三維邊界記錄 |
+| [來源](sgb/sources.qmd) | 形狀、材料、高度、放置位置與 Net 各由誰宣告？ | 獨立且整理成一致格式的幾何輸入 |
+| [物理模型](sgb/physical-model.qmd) | 這次求解採用哪種物理幾何？ | 有效物件、支撐面與材料界面 |
+| [平面分割](sgb/planar-arrangement.qmd) | 重疊的 XY 邊界如何切成來源清楚的面？ | 共用切分邊與來源歸屬 |
+| [共用拓樸](sgb/shared-topology.qmd) | 多個表面如何共用同一組點、曲線與環？ | 共用的三維邊界記錄 |
 | [多邊形建構](sgb/polygon-construction.qmd) | 計畫邊界如何成為一般 CAD？ | OCC 表面、殼、體積與標籤 |
-| [曲線建構](sgb/curved-construction.qmd) | 如何在建構中保留宣告或重建的曲線？ | 綁定來源的原生曲線與掃掠側壁 |
+| [曲線建構](sgb/curved-construction.qmd) | 如何在建構時保留宣告或重建的曲線？ | 保留來源對應的曲線與掃掠側壁 |
 | [CAD 與網格](sgb/cad-mesh.qmd) | 哪些檢查把 CAD 建構與網格分開？ | 匯出 XAO、實體群組與網格輸入 |
 | [效能](sgb/performance.qmd) | 哪些工作可以重用，哪些必須量測？ | 各階段成本的判讀方式 |
-| [驗證](sgb/validation.qmd) | 如何判斷每次交接成立或明確失敗？ | 可檢查的通過與失敗條件 |
+| [驗證](sgb/validation.qmd) | 如何確認每一步成立，或找出明確失敗點？ | 可檢查的通過與失敗條件 |
 
 ## 用一個模型看整體設計 {#fig-sgb-physical}
 
-想像兩個相鄰的求解體積共用一個實體表面。這個面只建立一次，再由兩個體積以相反方向引用。兩個體積仍然分開，因為它們的材料與邊界不同；共用表面不會合併體積身分。這個簡單例子濃縮了整個方法的核心：先決定所有權與相鄰關係，再建構原生 CAD。
+想像兩個相鄰的求解體積共用一個實體表面。這個面只建立一次，再由兩個體積以相反方向引用。兩個體積仍然分開，因為它們的材料與邊界不同；共用表面不會合併體積身分。這個簡單例子濃縮了整個方法的核心：先確定每個面屬於哪個來源、彼此如何相鄰，再建構原生 CAD。
 
-左側金屬也遵循同一原則。孔洞是在外環內、沒有導體的封閉區域；外側缺口則連通外部。元件描述這些局部輪廓與選取器；製程堆疊說明各宣告圖層的材料與 Z 範圍；組裝模型放置元件實例、指定最終 Net 並選擇物理近似。解讀記錄前，先讀[來源章](sgb/sources.qmd)。
+左側金屬也遵循同一原則。孔洞是外環內沒有導體的封閉區域；外側缺口則直接連到外部。元件宣告局部輪廓與選取器；製程堆疊說明各圖層的材料與 Z 範圍；組裝模型放置元件實例、指定最終 Net，並選擇物理近似。解讀這些記錄前，可先讀[來源章](sgb/sources.qmd)。
 
 近似設定會改變求解所用的幾何，不會改寫來源薄膜。本例選用 `substrate_face`，因此有效導體片位於 Si 的上表面。接面是明確的模型要求：規劃階段補完整左右終端支撐，並保留中央埠面。[物理模型章](sgb/physical-model.qmd)會把這些決策與來源輸入分開說明。
 
-## 從平面歸屬到共用邊界
+## 從平面分割到共用邊界
 
-每次平面分割只整理該次操作相關的 XY 運算元。系統沿有向環傳播交界變化，替每個輸出面計算來源歸屬。孔洞和無界外部可能都不屬於導體，但仍是由邊界隔開的不同面。[平面排列章](sgb/planar-arrangement.qmd)會逐步追蹤變化，並用面積核對結果。
+每次平面分割只處理該次操作需要的 XY 運算元。系統依有向環傳播跨越邊界時的變化，計算每個輸出面的來源歸屬。孔洞與無界外部都可能沒有導體，但它們仍是由不同邊界圍成的兩個面。[平面分割章](sgb/planar-arrangement.qmd)會逐步追蹤歸屬變化，並以面積核對結果。
 
 物理表面確定後，相鄰表面的邊界也必須完全一致。如果一個面有長邊，另一個面在中間加入頂點，就要同步切分成相同的原子曲線；兩個表面才會引用同一條幾何邊。[共用拓樸章](sgb/shared-topology.qmd)會說明點身分、環的用途與體積方向。
 
 ## 兩條建構路線
 
-一般多邊形輸入會經過路線規劃、所有權與介面檢查、邊界正規化，再把計畫點與曲線交給 OCC 建立表面和體積。啟用來源曲線宣告時，則走另一條曲線建構路線：建立共用平面排列、保留原生曲線歷史，並將完整邊網路掃掠到選定 Z 高度。兩條路線都從明確來源語意開始，不要求全域布林運算替模型猜測語意。
+一般多邊形輸入會先完成路線規劃、來源歸屬與材料界面檢查，再把邊界整理成可共用的格式，交由 OCC 建立表面和體積。若來源明確宣告曲線，則改走曲線建構路線：先建立共用平面分割，保留布林切分前後的曲線來源對應，再把共用邊網路沿 Z 延伸至各高度區間。兩條路線都從明確的來源語意出發，不靠全域布林運算猜測物理意義。
 
 [CAD 與網格章](sgb/cad-mesh.qmd)會清楚區分匯出 CAD 和後續網格。[效能章](sgb/performance.qmd)說明可重用工作與階段計時，不會把待驗證的設計推論寫成已量出的加速。[驗證章](sgb/validation.qmd)則說明哪個交接無法成立時，流程會在哪裡失敗。
 
@@ -67,17 +67,17 @@ SCGSim 的語意幾何（semantic geometry）建構流程 SGB，會把版圖與�
 
 <span id="source-stage"></span><span id="entity-occurrence-and-net"></span><span id="planning-stage"></span><span id="construction-stage"></span>
 
-舊有來源階段錨點請見[來源宣告](sgb/sources.qmd#source-stage)；Entity／occurrence 討論移至[身分與所有權](sgb/sources.qmd#entity-occurrence-and-net)；原規劃階段錨點移至[物理解讀](sgb/physical-model.qmd#planning-stage)；原建構階段錨點移至[共用拓樸與建構](sgb/shared-topology.qmd#construction-stage)。
+舊有來源階段錨點請見[來源宣告](sgb/sources.qmd#source-stage)；Entity／occurrence 討論移至[來源物件與放置身分](sgb/sources.qmd#entity-occurrence-and-net)；原規劃階段錨點移至[物理解讀](sgb/physical-model.qmd#planning-stage)；原建構階段錨點移至[共用拓樸與建構](sgb/shared-topology.qmd#construction-stage)。
 
-## 實作入口
+## 對應的程式入口
 
 前文說明資料如何流動；下表列出對應的公開或編譯器入口，是快速索引，不取代前面的逐步解說。
 
 | 階段 | 入口 | 跨越此邊界的資料 |
 |---|---|---|
 | 來源準備 | `GeometryPlan.prepare()` | 可變的元件、PDK 與組裝宣告成為不可變快照 |
-| 物理解讀 | `interpret_physical_geometry(...)` | 所選 profile 產生有效幾何、支撐與介面記錄 |
+| 物理解讀 | `interpret_physical_geometry(...)` | 所選近似設定產生有效幾何、支撐與材料界面記錄 |
 | 邊界拓樸 | `plan_canonical_topology(...)` | 規劃表面成為共用點、曲線、邊界環與有向引用 |
 | 原生建構 | `SemanticGeometryBuilder.build(...)` | 已驗證計畫成為原生 CAD 與來源／tag 對應 |
 
-精確欄位與後端交接見[幾何與編譯器契約](../geometry-sgb.qmd)、[物理表示契約](../specs/physical-representation.qmd)及[Palace 準備契約](../specs/palace-electrostatic-sgb.qmd)。
+精確欄位與傳給後端的資料見[幾何與編譯器契約](../geometry-sgb.qmd)、[物理表示契約](../specs/physical-representation.qmd)及[Palace 準備契約](../specs/palace-electrostatic-sgb.qmd)。
