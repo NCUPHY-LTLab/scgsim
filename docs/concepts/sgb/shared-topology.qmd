@@ -56,9 +56,9 @@ A `SurfaceLoopRecord` is one ordered edge ring that bounds a surface. Its role i
 Follow the records into Gmsh: (1) planar ownership cells provide ordered outer and hole boundary rings; (2) ring coordinates map to canonical points; (3) shared and T-junction-split edges map to shared curves, with a signed reference at each use; (4) each ring becomes a Gmsh Curve Loop and each planar region becomes a Gmsh face; (5) the face is mapped to its planned surface; and (6) each volume gathers its bounding faces into a Gmsh Surface Loop, then maps to a volume entity. In the curved branch, curve and face entities already saved in boundary XAO are mapped back by their named groups before the final volumes are assembled. At the Si/vacuum boundary, the face ID is reused on both sides and the two volume references have opposite signs. That is one common interface, not two surfaces separated by a small gap.
 
 ::: {#fig-sgb-shared-volumes}
-```{=html}
-<iframe src="../../images/sgb-concept/en-shared-volumes.html" title="Two volumes sharing one face with opposite orientation" width="100%" height="700" style="height:clamp(380px,70vw,760px)" loading="lazy"></iframe>
-```
+![Two volumes sharing one face with opposite orientation](../../images/sgb-concept/en-shared-volumes-preview.png){width="100%"}
+
+{{< askr-chart-view src="../../images/sgb-concept/en-shared-volumes.html" mode="button" label="Open interactive chart: Two volumes sharing one face with opposite orientation" >}}
 
 Native CAD readback from the small public fixture: two neighboring volumes reuse one interface face with opposite orientation.
 :::

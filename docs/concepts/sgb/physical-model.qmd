@@ -54,9 +54,9 @@ Imagine a Si volume below a vacuum volume. Their common planar boundary is one g
 @fig-sgb-physical shows the source film, substrate, upper air and the selected effective sheet. Use the controls to switch between the source and effective views; the side air occupies the substrate's lateral faces and is not a volume underneath the substrate.
 
 ::: {#fig-sgb-physical}
-```{=html}
-<iframe src="../../images/sgb-concept/en-cross-section.html" title="Source film and selected effective sheet over Si" width="100%" height="640" loading="lazy"></iframe>
-```
+![Source film and selected effective sheet over Si](../../images/sgb-concept/en-cross-section-preview.png){width="100%"}
+
+{{< askr-chart-view src="../../images/sgb-concept/en-cross-section.html" mode="button" label="Open interactive chart: Source film and selected effective sheet over Si" >}}
 
 Cross-section separating source intervals from the selected effective representation.
 :::

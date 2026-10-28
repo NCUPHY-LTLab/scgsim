@@ -1,0 +1,92 @@
+{
+  "schema": "scgsim.sgb.chart-previews.v1",
+  "width": 1500,
+  "height": 1050,
+  "view": "Default Plotly view; interactive HTML remains authoritative for chart controls.",
+  "figures": [
+    {
+      "chart": "source-xy.html",
+      "chart_sha256": "6026016e4d64947ba2a53f8db9bec2e3b08b8bb49c61d5d5bb9a982b26fbf5bd",
+      "preview": "source-xy-preview.png",
+      "preview_sha256": "06cb4d88012a22d1a205df2e47a45429c4858b45bbcc86afee8d2b0a362da173"
+    },
+    {
+      "chart": "context-xy.html",
+      "chart_sha256": "f9eb9ad6779ab1319033e76b1bda92732a2cf7ff82530295189badb40e002237",
+      "preview": "context-xy-preview.png",
+      "preview_sha256": "a7846adbe3a99f09632441684426f8f18bada6cc7dcbbfe84b08e880d442ce62"
+    },
+    {
+      "chart": "cross-section.html",
+      "chart_sha256": "83a3fbf8a2e27c64a8607082ed63bef1cfd380e80fdff3ee82d5d0c90efd3a43",
+      "preview": "cross-section-preview.png",
+      "preview_sha256": "bcc23012c8b0dfd7a6a7ff9c4786b97177f3c4b6e94da7e554a47d657914731b"
+    },
+    {
+      "chart": "planar-arrangement.html",
+      "chart_sha256": "2491551435e262c26259a408c073d4de53f365330934657c4c31545dbafecdb5",
+      "preview": "planar-arrangement-preview.png",
+      "preview_sha256": "4bf79830b784d0da279f72960e03f38b3a693e9de69794331ec0bc2fe45efd9e"
+    },
+    {
+      "chart": "shared-volumes.html",
+      "chart_sha256": "0caa71199111d4bd68218c743076a154df4b5eabb3b1ae51859a26ad48c489be",
+      "preview": "shared-volumes-preview.png",
+      "preview_sha256": "cecabaf0cfe1feb6ae84130f72c8d434566312bdcfb31d5151fc73f5e7f2552a"
+    },
+    {
+      "chart": "curved-construction-3d.html",
+      "chart_sha256": "870e525fe881eef1a51ca2910a99ec056d410ec1390012767e95e242d05461f2",
+      "preview": "curved-construction-3d-preview.png",
+      "preview_sha256": "dc3fabb55467184ebc991e090955a1bf81ab5c7b677cf66824310dcc5b912bec"
+    },
+    {
+      "chart": "construction-3d.html",
+      "chart_sha256": "1a8162b5cbeaf8a943952095e6735fd8418e462e3148af27350ce208ab559bf8",
+      "preview": "construction-3d-preview.png",
+      "preview_sha256": "9d81a45ce9670568ee3fa0267f4ab581972e6af57cb0bc3ddab39511e50670f7"
+    },
+    {
+      "chart": "en-source-xy.html",
+      "chart_sha256": "609864b2160b2df6240a05afaf1d66a46a9bcd126de0096b609c90674d36627b",
+      "preview": "en-source-xy-preview.png",
+      "preview_sha256": "fb9ce67cfdf8fff5998b6b58c938d8d6030267af50126d08e4a77fcdf32fe504"
+    },
+    {
+      "chart": "en-context-xy.html",
+      "chart_sha256": "43e4bafed93e262b24239ae554673f8afdd323dae6bde36fc45513fd79284ccc",
+      "preview": "en-context-xy-preview.png",
+      "preview_sha256": "339c7e815eb406ed17b7b7b88eeca28fb9074dc7e83979ed3d2ae1605fc74d30"
+    },
+    {
+      "chart": "en-cross-section.html",
+      "chart_sha256": "67cefbc26aedd8680f39379a58d8849ad3edbb27d38da920ec6484800ce5875b",
+      "preview": "en-cross-section-preview.png",
+      "preview_sha256": "5fd018d16f54316c1f6251da7a570ca31713dcf5ccb3d176f0da84191237264d"
+    },
+    {
+      "chart": "en-planar-arrangement.html",
+      "chart_sha256": "24f2833c2ceb6a4ae58bb56fdd4a288554e4ef8ce4e9c2e96a191aa2f1c21c50",
+      "preview": "en-planar-arrangement-preview.png",
+      "preview_sha256": "826c965ca9d4c916eeb3d040615fb0b3303f52dd34b10007f28f1e34f61f9a79"
+    },
+    {
+      "chart": "en-shared-volumes.html",
+      "chart_sha256": "f577eaa2db8ca95afa7f64630983aa8d24de82070e1ebecddd69d82dd0224c54",
+      "preview": "en-shared-volumes-preview.png",
+      "preview_sha256": "ed5fadae7db23ed678d6e6724733637a3a77ea212ed6db0d6838749ee2e63330"
+    },
+    {
+      "chart": "en-curved-construction-3d.html",
+      "chart_sha256": "d40872d38e04e4c08f25294d0b20fea2c15f0f005ca4ec5dd9138c07b46b820a",
+      "preview": "en-curved-construction-3d-preview.png",
+      "preview_sha256": "d54a576103d0b0ecf0107fb6d2e1a1baab854388f2f7a5acd475ab57cf3a9b40"
+    },
+    {
+      "chart": "en-construction-3d.html",
+      "chart_sha256": "f11fc1714bd3af716eee26f66510f481d5f061eb00460beb3759ef25a2aa3738",
+      "preview": "en-construction-3d-preview.png",
+      "preview_sha256": "d3f4322ab79ac2b0067d7a5c9e0ebd4da7bceeb4e26d4f09ad02636779be1c6b"
+    }
+  ]
+}

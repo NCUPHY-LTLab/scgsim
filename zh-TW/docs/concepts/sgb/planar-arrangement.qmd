@@ -32,9 +32,9 @@ scgsim-status: "CONVERGING"
 本例沿用主案例左側來源焊盤。外環依序為 P1(−2,0) → P2(3,0) → P3(3,1) → P4(2,1) → P5(2,2) → P6(−2,2) → P1；孔洞為 [−1.5,−0.5] × [0.5,1.5] µm。帶缺口的外框面積是 9 µm²，扣除 1 µm² 孔洞後，A 的面積是 8 µm²。只為了說明排列運算，再加入 M = [1,4] × [−1,3] µm。M 是輔助幾何運算元，用來說明來源歸屬；它不是材料，也不是現行 Mask 功能。
 
 ::: {#fig-sgb-planar-arrangement}
-```{=html}
-<iframe src="../../images/sgb-concept/planar-arrangement.html" title="帶缺口的來源焊盤與輔助運算元的平面分割" width="100%" height="640" style="height:clamp(440px,70vw,640px)" loading="lazy"></iframe>
-```
+![帶缺口的來源焊盤與輔助運算元的平面分割](../../images/sgb-concept/planar-arrangement-preview.png){width="100%"}
+
+{{< askr-chart-view src="../../images/sgb-concept/planar-arrangement.html" mode="button" label="開啟互動圖表：帶缺口的來源焊盤與輔助運算元的平面分割" >}}
 
 帶缺口的左側來源焊盤是 A；另一個矩形 M 只用來說明單次平面操作如何記錄重疊與非重疊來源區域。
 :::

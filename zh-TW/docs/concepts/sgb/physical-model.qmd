@@ -54,9 +54,9 @@ Net 指派與實際接觸是兩件事。不同 Net 的導體相接代表短路�
 @fig-sgb-physical 顯示來源薄膜、基板、上方空氣與選定的有效導體片。使用控制項切換來源與有效模型；側邊空氣鄰接基板側面，並不是基板下方的一個體積。
 
 ::: {#fig-sgb-physical}
-```{=html}
-<iframe src="../../images/sgb-concept/cross-section.html" title="來源薄膜與 Si 上方的有效導體片" width="100%" height="640" loading="lazy"></iframe>
-```
+![來源薄膜與 Si 上方的有效導體片](../../images/sgb-concept/cross-section-preview.png){width="100%"}
+
+{{< askr-chart-view src="../../images/sgb-concept/cross-section.html" mode="button" label="開啟互動圖表：來源薄膜與 Si 上方的有效導體片" >}}
 
 剖面圖區分來源範圍與選定的有效表示。
 :::

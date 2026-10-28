@@ -38,9 +38,9 @@ A Gmsh Physical Group is a label consumed by mesh or solver input; it does not j
 Construction work grows with planned points, curves, surfaces, shell relationships and native rebinding comparisons. Mesh work grows with solution-volume extent, local element size and conformity constraints. Reporting them separately prevents mesh cost from hiding repeated CAD cost.
 
 ::: {#fig-sgb-native-construction}
-```{=html}
-<iframe src="../../images/sgb-concept/en-construction-3d.html" title="Source-derived unbanded SGB construction with selectable geometry groups" width="100%" height="760" style="height:clamp(380px,70vw,760px)" loading="lazy"></iframe>
-```
+![Source-derived unbanded SGB construction with selectable geometry groups](../../images/sgb-concept/en-construction-3d-preview.png){width="100%"}
+
+{{< askr-chart-view src="../../images/sgb-concept/en-construction-3d.html" mode="button" label="Open interactive chart: Source-derived unbanded SGB construction with selectable geometry groups" >}}
 
 Source-derived three-dimensional construction view. Use the layer controls to inspect boundary, point, wire and surface groups separately.
 :::

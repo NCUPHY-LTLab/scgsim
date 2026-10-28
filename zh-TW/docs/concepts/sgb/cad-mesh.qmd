@@ -38,9 +38,9 @@ Gmsh Physical Group 是提供網格或求解器辨認區域的標記群組，不
 CAD 建構工作量隨規劃點、曲線、表面、殼關係及原生面重新對應來源的比對增加；網格工作量則受求解體積、局部元素尺寸和共形條件影響。分開報告兩階段，才能避免把網格成本誤當成重複 CAD 成本。
 
 ::: {#fig-sgb-native-construction}
-```{=html}
-<iframe src="../../images/sgb-concept/construction-3d.html" title="可切換幾何群組的來源綁定三維建構檢視" width="100%" height="760" style="height:clamp(380px,70vw,760px)" loading="lazy"></iframe>
-```
+![可切換幾何群組的來源綁定三維建構檢視](../../images/sgb-concept/construction-3d-preview.png){width="100%"}
+
+{{< askr-chart-view src="../../images/sgb-concept/construction-3d.html" mode="button" label="開啟互動圖表：可切換幾何群組的來源綁定三維建構檢視" >}}
 
 來源綁定的三維建構檢視。用圖層控制項分別檢視邊界、點、曲線與表面群組。
 :::

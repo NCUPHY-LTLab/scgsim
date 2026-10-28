@@ -74,17 +74,17 @@ H1(-1.5,0.5) → H2(-0.5,0.5) → H3(-0.5,1.5) → H4(-1.5,1.5) → H1
 @fig-sgb-source 顯示來源輪廓與孔洞；@fig-sgb-source-context 顯示兩個來源在組裝座標中的位置。
 
 ::: {#fig-sgb-source}
-```{=html}
-<iframe src="../../images/sgb-concept/source-xy.html" title="來源輪廓、缺角與孔洞" width="100%" height="640" loading="lazy"></iframe>
-```
+![來源輪廓、缺角與孔洞](../../images/sgb-concept/source-xy-preview.png){width="100%"}
+
+{{< askr-chart-view src="../../images/sgb-concept/source-xy.html" mode="button" label="開啟互動圖表：來源輪廓、缺角與孔洞" >}}
 
 包含外環與孔環的來源多邊形。
 :::
 
 ::: {#fig-sgb-source-context}
-```{=html}
-<iframe src="../../images/sgb-concept/context-xy.html" title="組裝座標中的兩個來源金屬" width="100%" height="640" loading="lazy"></iframe>
-```
+![組裝座標中的兩個來源金屬](../../images/sgb-concept/context-xy-preview.png){width="100%"}
+
+{{< askr-chart-view src="../../images/sgb-concept/context-xy.html" mode="button" label="開啟互動圖表：組裝座標中的兩個來源金屬" >}}
 
 已放置的來源金屬、基板與真空包絡。
 :::

@@ -185,7 +185,7 @@ format:
     respect-user-color-scheme: true
     toc: true
     toc-title: Sections
-    toc-location: right
+    toc-location: body
     page-layout: article
     code-copy: true
     code-overflow: scroll

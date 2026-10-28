@@ -56,9 +56,9 @@ $z=1$ 與 $z=2$ 已是相鄰區域的邊界。規劃階段會依這些既有高�
 沿著同一份主案例看資料如何成為 Gmsh 實體：(1) 平面分割提供有序外環與孔環；(2) 相同座標對應到共用點；(3) 共用邊及 T 接點切分後的線段對應到共用曲線，引用時另記正向或反向；(4) 每個環成為 Gmsh Curve Loop，平面區域成為 Gmsh 面；(5) 面對應到規劃表面；(6) 各材料體積收集其邊界面，形成 Gmsh Surface Loop，再對應到體積實體。曲線分支中，曲線與面已先存入邊界 XAO；最後組體積時會依具名群組找回並沿用這些實體。在 Si／真空界面兩側重用同一個面 ID，兩個體積以相反方向引用。這是同一個共用界面，不是兩個相近的面。
 
 ::: {#fig-sgb-shared-volumes}
-```{=html}
-<iframe src="../../images/sgb-concept/shared-volumes.html" title="兩個體積以相反方向共用一個面" width="100%" height="700" style="height:clamp(380px,70vw,760px)" loading="lazy"></iframe>
-```
+![兩個體積以相反方向共用一個面](../../images/sgb-concept/shared-volumes-preview.png){width="100%"}
+
+{{< askr-chart-view src="../../images/sgb-concept/shared-volumes.html" mode="button" label="開啟互動圖表：兩個體積以相反方向共用一個面" >}}
 
 小型公開案例的原生 CAD 讀回結果：相鄰體積共用同一個界面，並以相反方向引用。
 :::

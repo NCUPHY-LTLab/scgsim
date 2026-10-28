@@ -50,9 +50,9 @@ scgsim-status: "CONVERGING"
 邊界 XAO 與最後的體積模型用途不同：前者保留具名曲線／表面群組及來源對應；後者沿用這些實體，再加入並記錄體積邊界。接觸與 Net 檢查依據幾何區塊和邊界；Net 名稱相同本身不會建立幾何接觸。
 
 ::: {#fig-sgb-curved-construction}
-```{=html}
-<iframe src="../../images/sgb-concept/curved-construction-3d.html" title="可切換幾何群組的原生曲線建構 CAD" width="100%" height="760" style="height:clamp(380px,70vw,760px)" loading="lazy"></iframe>
-```
+![可切換幾何群組的原生曲線建構 CAD](../../images/sgb-concept/curved-construction-3d-preview.png){width="100%"}
+
+{{< askr-chart-view src="../../images/sgb-concept/curved-construction-3d.html" mode="button" label="開啟互動圖表：可切換幾何群組的原生曲線建構 CAD" >}}
 
 公開圓孔曲線案例的 XAO 幾何圖。切換點、曲線與表面群組，追蹤明確宣告的圓弧如何延伸成共用側壁，並成為材料體積的邊界。
 :::

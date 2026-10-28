@@ -32,9 +32,9 @@ For one polygonal planar subdivision operation, SGB receives the relevant Entity
 The running example follows the main left source pad. Its outer ring is P1(−2,0) → P2(3,0) → P3(3,1) → P4(2,1) → P5(2,2) → P6(−2,2) → P1, and its hole is [−1.5,−0.5] × [0.5,1.5] µm. The outer notched polygon has area 9 µm²; subtracting the 1 µm² hole gives A = 8 µm². For the arrangement calculation only, add M = [1,4] × [−1,3] µm. M is an auxiliary geometry operand that helps explain source membership; it is neither a material nor a current Mask feature.
 
 ::: {#fig-sgb-planar-arrangement}
-```{=html}
-<iframe src="../../images/sgb-concept/en-planar-arrangement.html" title="Planar arrangement of the notched source pad and auxiliary operand" width="100%" height="640" style="height:clamp(440px,70vw,640px)" loading="lazy"></iframe>
-```
+![Planar arrangement of the notched source pad and auxiliary operand](../../images/sgb-concept/en-planar-arrangement-preview.png){width="100%"}
+
+{{< askr-chart-view src="../../images/sgb-concept/en-planar-arrangement.html" mode="button" label="Open interactive chart: Planar arrangement of the notched source pad and auxiliary operand" >}}
 
 The notched left source pad is A; the separate rectangle M is used only to show how one planar operation records overlapping and non-overlapping source regions.
 :::

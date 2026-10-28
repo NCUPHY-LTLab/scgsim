@@ -50,9 +50,9 @@ For every Z interval, the current strategy extends the retained edges together s
 The saved boundary model and final volume model serve different construction stages. The boundary XAO retains named curve and surface groups; the final construction reuses those entities while adding and mapping volume boundaries. Solution volumes are assembled from connected, same-owner cells and their source-bound faces. Contact and Net checks use those geometric cells and boundaries; equal Net names alone do not create a contact.
 
 ::: {#fig-sgb-curved-construction}
-```{=html}
-<iframe src="../../images/sgb-concept/en-curved-construction-3d.html" title="Native curved-construction CAD with selectable geometry groups" width="100%" height="760" style="height:clamp(380px,70vw,760px)" loading="lazy"></iframe>
-```
+![Native curved-construction CAD with selectable geometry groups](../../images/sgb-concept/en-curved-construction-3d-preview.png){width="100%"}
+
+{{< askr-chart-view src="../../images/sgb-concept/en-curved-construction-3d.html" mode="button" label="Open interactive chart: Native curved-construction CAD with selectable geometry groups" >}}
 
 Native CAD readback for the public circular-hole curve fixture. Toggle points, curves and surfaces to follow a declared circular boundary into the shared wall and material volumes.
 :::

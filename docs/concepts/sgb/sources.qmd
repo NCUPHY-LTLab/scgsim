@@ -74,17 +74,17 @@ The right pad is a distinct placed source object. In this fixture both pads belo
 @fig-sgb-source shows the source outline and hole. @fig-sgb-source-context shows both placed sources in one assembly frame.
 
 ::: {#fig-sgb-source}
-```{=html}
-<iframe src="../../images/sgb-concept/en-source-xy.html" title="Source outline, notch and hole" width="100%" height="640" loading="lazy"></iframe>
-```
+![Source outline, notch and hole](../../images/sgb-concept/en-source-xy-preview.png){width="100%"}
+
+{{< askr-chart-view src="../../images/sgb-concept/en-source-xy.html" mode="button" label="Open interactive chart: Source outline, notch and hole" >}}
 
 Source polygon with its exterior and hole rings.
 :::
 
 ::: {#fig-sgb-source-context}
-```{=html}
-<iframe src="../../images/sgb-concept/en-context-xy.html" title="Two source pads in assembly coordinates" width="100%" height="640" loading="lazy"></iframe>
-```
+![Two source pads in assembly coordinates](../../images/sgb-concept/en-context-xy-preview.png){width="100%"}
+
+{{< askr-chart-view src="../../images/sgb-concept/en-context-xy.html" mode="button" label="Open interactive chart: Two source pads in assembly coordinates" >}}
 
 Placed source pads, substrate and vacuum envelope.
 :::
