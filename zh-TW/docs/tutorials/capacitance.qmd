@@ -137,7 +137,7 @@ Notebook 使用以下示範控制項。請連同結果保存；它們是宣告�
 
 ### Palace
 
-建立具有明確 Nets 與真空包覆的 GeometryPlan 快照。Route B 保留有限金屬幾何。此處激發焊墊、固定 Ground，外部沿用自然邊界而非接地包覆。
+建立具有明確 Nets 與真空包覆的 GeometryPlan 快照。PEC Shell（舊資料代碼 B）保留有限金屬幾何。此處激發焊墊、固定 Ground，外部沿用自然邊界而非接地包覆。
 
 ```python
 from scgsim.geometry import GeometryPlan

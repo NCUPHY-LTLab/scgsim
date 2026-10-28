@@ -340,7 +340,7 @@ Analyze 結束後，recorder 關閉新請求並觀察一次原生 `odesktop.AreT
 
 已接受的 Eigenmode Surface-EPR 路徑是新增生命週期，不重新解釋已完成 V1/V2/V3 收據。它從共用來源多邊形、孔洞、材料／區域事實、路徑設定檔與宣告接面意圖開始，再另外記錄這些事實到原生本體、片、面、材料側與計算器選取的 AEDT 綁定。原生相鄰關係是幾何觀察證據，不是來源接觸意圖的證明。
 
-原生建構目標為平面 Route A、Route B，採實數等向性介電材料與 PEC 導體。允許覆蓋多邊形片、局部扣孔、掃掠／加厚及明確盒體，不允許全面幾何聯集或扣除。曲線或傾斜幾何、異向性或色散材料、開放輻射模型、Driven EPR 及多片接面仍排除。
+原生建構目標為平面 Thin-Film（舊資料代碼 A）與 PEC Shell（舊資料代碼 B），採實數等向性介電材料與 PEC 導體。允許覆蓋多邊形片、局部扣孔、掃掠／加厚及明確盒體，不允許全面幾何聯集或扣除。曲線或傾斜幾何、異向性或色散材料、開放輻射模型、Driven EPR 及多片接面仍排除。
 
 目前 Surface-EPR 分析只涵蓋水平上／下表面的 MA、MS、SA 區塊。來源與原生求解器 CAD 仍含導體及基板側壁，但不建立側壁分析片、積分或快取項目。省略的側壁膜能量不是實測零，也不納入回報表面參與率。獨立 Q2D 側壁修正不在此 AEDT 工作流程內。新交接拒絕明確側壁 Surface-EPR 要求，沒有側壁選取開關或舊版編寫路徑。歷史結果保留原範圍，讀取時不重寫數值。
 
@@ -354,7 +354,7 @@ Analyze 結束後，recorder 關閉新請求並觀察一次原生 `odesktop.AreT
 
 參考是原始測量，不是參與率、損耗、inverse-Q 或通用材料側等價性。它們不加入遮罩表面圖、能量／損耗總和或正規化分母。margin 不重複建立原生面參考，參考也不新增收斂條件。公開 `resolve_results()` 與 `show_all_results()` 已在新核心中完成，呈現原始 V^2/m^2 數值及面成員。報告產生未執行原生作業，輸出含 12 張 Plotly 圖的 HTML；既有 Plotly JSON 資料／配置不變，全部 56 份原始輸入保留。報告產生不建立精確度或入射材料等價性。
 
-每個必要場量都在明確綁定的設定、`LastAdaptive` 解、模式、頻率、相位及激發脈絡中評估，並和數值一起讀回。單有儲存運算式名稱或摘要不是解身份，因為未評估的計算器堆疊可能隨後續脈絡改變。Route A、Route B 目前都對遮罩評估與無遮罩基準使用非模型分析片；其 `Surface`／`Adjacent` 選取器和幾何法向投影不同，ThinFilm 對應仍如後述屬經驗性。儲存的 `effective_domain_id` 是綁定中繼資料，不是原生區域限制，也不證明所選場屬於該材料。`Smooth` 與場幅值不能取代側選取。Solid 原生面參考是另一條原始測量路徑，使用已驗證來源綁定 face list；所記錄原始值不建立入射材料場所有權，也不解決 Sheet 側別歧義。
+每個必要場量都在明確綁定的設定、`LastAdaptive` 解、模式、頻率、相位及激發脈絡中評估，並和數值一起讀回。單有儲存運算式名稱或摘要不是解身份，因為未評估的計算器堆疊可能隨後續脈絡改變。Thin-Film 與 PEC Shell 目前都對遮罩評估與無遮罩基準使用非模型分析片；其 `Surface`／`Adjacent` 選取器和幾何法向投影不同，Thin-Film 的對應仍如後述屬經驗性。儲存的 `effective_domain_id` 是綁定中繼資料，不是原生區域限制，也不證明所選場屬於該材料。`Smooth` 與場幅值不能取代側選取。Solid 原生面參考是另一條原始測量路徑，使用已驗證來源綁定 face list；所記錄原始值不建立入射材料場所有權，也不解決 Sheet 側別歧義。
 
 ### 模式綁定與 pass 快取 {#mode-binding-and-pass-cache}
 
@@ -455,9 +455,9 @@ sim.set_expression_cache_convergence(
 
 ### 公開 EPR 介面 {#public-epr-candidate-surface}
 
-`prepare_planar_geometry_input()` 要求明確 `modeling`，並驗證／分離共用來源多邊形、孔洞、Entity、求解區域、接面與表面分析要求。Route A/B 選擇屬於上游幾何編譯器，不是 AEDT 準備引數。`prepare_hfss_eigenmode_from_geometry()` 要求 `aedt_version`、`modeling`，將已準備來源要求綁至 HFSS Eigenmode 規格，輸出單一可攜式交接。仍可直接編寫 GDS，但三維規格現在也必須明確選擇建模模式。
+`prepare_planar_geometry_input()` 要求明確 `modeling`，並驗證／分離共用來源多邊形、孔洞、Entity、求解區域、接面與表面分析要求。Thin-Film／PEC Shell 選擇屬於上游幾何編譯器，不是 AEDT 準備引數。`prepare_hfss_eigenmode_from_geometry()` 要求 `aedt_version`、`modeling`，將已準備來源要求綁至 HFSS Eigenmode 規格，輸出單一可攜式交接。仍可直接編寫 GDS，但三維規格現在也必須明確選擇建模模式。
 
-AEDT EPR 準備順序為來源幾何與明確 `modeling`，將宣告接面分成局部 PEC 端點及中央 RLC 矩形，再由幾何編譯器規劃表面與貢獻目錄。Route A/B 選擇屬於上游來源。Route A 轉接器產生的片足跡從最終導體幾何更新，呼叫者編寫的宣告仍保留。目錄只攜帶物理規劃 ledger 證據，沒有物理 ledger 項目的一般宣告不新增數值貢獻。Palace 保留既有接面模型；AEDT 局部分區不是跨後端幾何轉換。
+AEDT EPR 準備順序為來源幾何與明確 `modeling`，將宣告接面分成局部 PEC 端點及中央 RLC 矩形，再由幾何編譯器規劃表面與貢獻目錄。Thin-Film／PEC Shell 選擇屬於上游來源。Thin-Film 轉接器產生的薄片範圍從最終導體幾何更新，呼叫者編寫的宣告仍保留。目錄只攜帶物理規劃 ledger 證據，沒有物理 ledger 項目的一般宣告不新增數值貢獻。Palace 保留既有接面模型；AEDT 局部分區不是跨後端幾何轉換。
 
 #### 資料流與後端責任 {#data-flow-and-backend-responsibility}
 
@@ -546,13 +546,13 @@ flowchart TB
 
 擠出側關聯使用原生面—邊入射，不只依距離投影區間。PyAEDT 的 [`FacePrimitive.edges` API](https://aedt.docs.pyansys.com/version/stable/API/_autosummary/ansys.aedt.core.modeler.cad.elements_3d.FacePrimitive.edges.html)透過 `GetEdgeIDsFromFace` 回傳面的 `EdgePrimitive` 物件。只有兩面回報相同目前 `EdgePrimitive.id` 時，SCGSim 才將原始水平側邊關聯至端蓋邊，再以既有 `1e-5 µm` 絕對、零相對政策比較關聯 XYZ。每個實際端蓋邊必須恰有一次側面入射；缺失、重複入射及座標不符皆為硬性失敗。此方式保留原始細分並區隔鄰近邊界。僅依距離投影可能將鄰近平行側條帶錯配至端蓋區間，回報假重疊；那是關聯歧義，不是實體 CAD 缺陷證明。這些 ID 是目前物件的讀回資訊，不保證跨儲存穩定，也不屬來源／快取身分。
 
-邊界比較也容許等價直邊細分：其餘相符的直線鏈可以有不同數量的共線頂點。比較不重寫準備來源、實際原生座標或快取身分。中央 RLC 面仍為四邊矩形；真正轉角、孔洞、材料與 Z 指定、接觸及實際 Route B 擠出幾何，仍以相同 `1e-5 µm` 絕對、零相對座標政策檢查。此一般比較行為不是實際 AEDT 讀回或特定使用案例的證據。
+邊界比較也容許等價直邊細分：其餘相符的直線鏈可以有不同數量的共線頂點。比較不重寫準備來源、實際原生座標或快取身分。中央 RLC 面仍為四邊矩形；真正轉角、孔洞、材料與 Z 指定、接觸及實際 PEC Shell 擠出幾何，仍以相同 `1e-5 µm` 絕對、零相對座標政策檢查。此一般比較行為不是實際 AEDT 讀回或特定使用案例的證據。
 
 令 `S` 為宣告來源片，`Arm_A` 與 `Arm_B` 為已接受端點臂幾何。共用模型座標建構先形成有效片 `E = S - (Arm_A ∪ Arm_B)`，再分割為 `E = PEC_A ∪ R ∪ PEC_B`，其中 `R` 是完整寬度中央矩形。既有 2+2 來源局部切口選擇器不變。選定切口後，來源／臂交集及切口在模型座標中組裝，共用邊界節點只輸出一次。共邊抵消一次，建立原生 PEC 端部與 RLC 矩形及其擁有者／目錄支撐的迴圈。同一 Ground 上各接面節點先累積，再完成迴圈；接觸／覆蓋檢查使用這些輸出迴圈。支撐不獨立重新網格化，也不經局部座標往返重建。此修正改變既有介面背後的幾何建構，不增加公開 API 或結果結構。
 
 各片必須完整覆蓋 `E`，內部互不相交。不得丟棄細片或殘留袋狀區來強迫覆蓋。只有端部殘留幾何為空，且原始臂覆蓋完整指定中央端邊時，才可省略該端部。非空端部必須連通，僅點連接的碎片不算；孔洞與所有元件皆保留，無效拓樸失敗而不丟棄片段。覆蓋要求正確端點組件覆蓋精確指定端邊，不只總共邊長相等。指定端邊的兩角屬該邊，因此允許正確端點角接觸；錯誤 Net 的角、部分邊、孤立角，或開放側的線／點接觸皆拒絕。中央 RLC 矩形不含 PEC 面積。
 
-分割僅用於 AEDT，在擁有者／路徑正規化後、表面目錄、內縮與快取之前執行。每個端部繼承無歧義來源 Entity 的材料與幾何譜系；同 Net 擁有者若材料或高度不同，SCGSim 不任意選擇。衍生端部附加於該來源 Entity 下，沿用導體與介面支撐路徑，不創造另一個 Net 擁有者。Route A 端部繼承有效平面，Route B 端部保留來源實體的高度、厚度與材料。原始來源多邊形、材料／堆疊指定及快照不變，既有側壁 EPR 排除仍有效。版本化分割意圖與準備輸入資訊，以及來源／模型雜湊，將衍生幾何綁定至來源，不增加科學結果結構。原生 RLC 物件、集總線與面積積分選擇仍位於中央矩形，既有依寬度計算電壓與能量正規化不變。
+分割僅用於 AEDT，在擁有者／路徑正規化後、表面目錄、內縮與快取之前執行。每個端部繼承無歧義來源 Entity 的材料與幾何譜系；同 Net 擁有者若材料或高度不同，SCGSim 不任意選擇。衍生端部附加於該來源 Entity 下，沿用導體與介面支撐路徑，不創造另一個 Net 擁有者。Thin-Film 端部繼承有效平面，PEC Shell 端部保留來源實體的高度、厚度與材料。原始來源多邊形、材料／堆疊指定及快照不變，既有側壁 EPR 排除仍有效。版本化分割意圖與準備輸入資訊，以及來源／模型雜湊，將衍生幾何綁定至來源，不增加科學結果結構。原生 RLC 物件、集總線與面積積分選擇仍位於中央矩形，既有依寬度計算電壓與能量正規化不變。
 
 幾何綁定期間，建立 EPR 運算式或快取之前，`_native_junction_live_readback()` 檢查中央形狀、端點接觸、PEC／RLC 指定與目標，以及即時 `RLC Type`、`Use Induct`、`Use Resist`、`Use Cap` 屬性與電氣值。既有專案儲存後，`_read_saved_junction_lines()` 在回傳 `PreparedEprHfss` 或允許求解之前，對所有接面進行一次全新 `load_entire_aedt_file()` 解析。它將每個已儲存端點與來源推導線及實際中央端邊中點比較。對附著的 `EdgeCenter`，所記錄實體 ID 必須符合從實際中央面重新列舉的邊；端點來自該邊中點，忽略紀錄的 XYZ 欄位。未附著的 `AbsolutePosition` 使用專案模型單位的已記錄 XYZ。邊缺失或歧義、其他附著種類與端點不符皆封閉失敗。儲存場分析在建立運算式之前，也於已驗證工作副本重複此檢查。兩路徑皆不以建立字典或快取邊界屬性替代儲存檔資訊，且不增加儲存／重開循環。
 
@@ -568,11 +568,11 @@ flowchart TB
 
 #### 由目錄驅動交接 {#catalogue-driven-handoff}
 
-下列輸入是既有樹內幾何流程的實際 `GeometryBuildInput` 與準備堆疊映射，包含來源幾何、材料與真空區域事實；AEDT 請求另外選擇 `modeling` 表示。Route A/B 不是此 AEDT 輔助函式的參數。參見[幾何與 SGB Route A/B](../geometry-sgb.qmd#shared-source-facts-for-aedt)。首次呼叫不要求分析貢獻，在套用宣告接面後公開水平頂／底 `contribution_catalog`。資料列可保留原始或衍生多邊形 ID，或已規劃 SA 表面 ID。此輔助函式中，呼叫端選取一個貢獻，並明確提供該目錄列保留的來源 ID；ID 不必屬於原始 `build_input.polygons`。貢獻選取缺失或歧義，或來源 ID 未由選定列保留，皆在建立 `SurfaceEprSpec` 前失敗。輔助函式不代選來源或建模模式。請明確提供 `modeling`；Thin Film 另要求來源 PDK 的合格實體層宣告。
+下列輸入是既有樹內幾何流程的實際 `GeometryBuildInput` 與準備堆疊映射，包含來源幾何、材料與真空區域事實；AEDT 請求另外選擇 `modeling` 表示。Thin-Film／PEC Shell 不是此 AEDT 輔助函式的參數。參見[幾何與 SGB 求解幾何路線](../geometry-sgb.qmd#shared-source-facts-for-aedt)。首次呼叫不要求分析貢獻，在套用宣告接面後公開水平頂／底 `contribution_catalog`。資料列可保留原始或衍生多邊形 ID，或已規劃 SA 表面 ID。此輔助函式中，呼叫端選取一個貢獻，並明確提供該目錄列保留的來源 ID；ID 不必屬於原始 `build_input.polygons`。貢獻選取缺失或歧義，或來源 ID 未由選定列保留，皆在建立 `SurfaceEprSpec` 前失敗。輔助函式不代選來源或建模模式。請明確提供 `modeling`；Thin Film 另要求來源 PDK 的合格實體層宣告。
 
 `contribution_id` 選取目錄群組內每個既有面片。`SurfaceEprSpec.source_polygon_id` 是群組來源錨點，必須由選定群組目錄聯集的至少一個成員保留，包含既有已規劃 SA 表面 ID 備用來源。它不篩選、分割或省略其他群組成員。每個解析綁定保留自己的 `contribution` 資訊與 `geometry_ref`，作為真正逐面片來源；每個面片仍驗證分類、側別、相鄰區域、材料與遮罩。
 
-目錄來自幾何編譯器的實體表面貢獻帳本。沒有實體帳本資訊的一般宣告仍是語意中繼資料，不增加數值 EPR 貢獻。Route B 有限殼層頂／底面片的遮罩與分析片平面使用同一解析來源 Z：頂面為 `z_max_um`（或 `z_min_um + thickness_um`），底面為 `z_min_um`。如此非模型場片位於實體表面，不是殼層下平面。
+目錄來自幾何編譯器的實體表面貢獻帳本。沒有實體帳本資訊的一般宣告仍是語意中繼資料，不增加數值 EPR 貢獻。PEC Shell 有限殼層頂／底面片的遮罩與分析片平面使用同一解析來源 Z：頂面為 `z_max_um`（或 `z_min_um + thickness_um`），底面為 `z_min_um`。如此非模型場片位於實體表面，不是殼層下平面。
 
 ```python
 from collections.abc import Mapping

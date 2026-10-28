@@ -1,5 +1,5 @@
 ---
-title: "Public Xmon: Palace Route B Eigenmode"
+title: "Public Xmon: Palace PEC Shell Eigenmode"
 description: "Add attributed films and a source-linked inductive port to Palace Eigenmode."
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"

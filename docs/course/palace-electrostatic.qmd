@@ -51,9 +51,9 @@ owns these choices and their index-map meaning.
 
 ## Select the geometry approximation and build inputs
 
-The bound snapshot already supplies the outer envelope. Route B is the default
-finite-metal preparation. To explicitly select it without requesting surface
-films:
+The bound snapshot already supplies the outer envelope. **PEC Shell** (legacy
+code B) is the default finite-metal preparation. This lesson keeps its pinned
+package version and therefore uses that version’s representation code:
 
 ```python
 sim.set_surface_epr(representation="B", specs={})
@@ -62,8 +62,10 @@ config_path = sim.write_config()
 print(mesh_path, config_path)
 ```
 
-For a Route-A study, configure `representation="A"` with the appropriate
-explicit `route_a_thin_film` before meshing. `substrate_face` preserves physical
+For a **Thin-Film** study (legacy code A), configure
+`representation="A"` with the appropriate explicit `route_a_thin_film`
+before meshing. The code literal remains unchanged to match this lesson’s pinned
+package version. `substrate_face` preserves physical
 face coordinates; `metal_gap_equivalent` is the separate supported two-face
 normalization. Consult the [geometry contract](../geometry-sgb.qmd) before
 changing that approximation. Surface films and their native inset margins are

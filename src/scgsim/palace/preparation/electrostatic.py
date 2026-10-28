@@ -5,6 +5,8 @@ This class prepares geometry and manual handoff files; it never runs Palace.
 
 from __future__ import annotations
 
+from scgsim.geometry.models.common import GeometryRoute, _normalize_geometry_route
+
 import json
 
 from collections.abc import Mapping
@@ -214,17 +216,15 @@ class ElectrostaticSim:
     def set_surface_epr(
         self,
         *,
-        representation: str,
+        representation: str | GeometryRoute,
         specs: Mapping[str, Mapping[str, Any]],
         route_a_thin_film: RouteAThinFilm | None = None,
         approximation_profile: ApproximationProfile | None = None,
     ) -> None:
-        """Configure Surface EPR and the required Route-A thin-film lowering."""
-        route = (
-            representation.strip().upper() if isinstance(representation, str) else ""
-        )
+        """Choose thin_film or pec_shell geometry and configure Surface EPR."""
+        route = _normalize_geometry_route(representation)
         if route not in {"A", "B"}:
-            raise ValueError("Surface EPR representation must be 'A' or 'B'.")
+            raise ValueError("Surface EPR representation must be thin_film (A) or pec_shell (B).")
         if self._materials is None:
             raise ValueError("set_stack() must run before set_surface_epr().")
         normalized_thin_film = (normalize_route_a_thin_film(route, route_a_thin_film)

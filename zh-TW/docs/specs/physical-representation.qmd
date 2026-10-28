@@ -87,6 +87,6 @@ sim.set_surface_epr(
 )
 ```
 
-每個 `authored_film_bindings` 項目以宣告的物理層 ID 為索引，且恰好包含 `supporting_entity_id` 與 `supporting_side`。`metal_gap_equivalent` 需要兩個明確綁定且相對的薄膜。缺少綁定時，準備階段會在原生工作之前失敗，並提供替代呼叫形式。舊的 `route_a_thin_film` 字串可揭露或檢查選定名稱，但不負責指定綁定或座標運算。既有 Route B 選取若未提供明確近似設定，使用共用恆等映射 `route_b`。低階的新 `build_route_mesh()` 要求準備階段產生的有效正規化輸入及表示內容。
+每個 `authored_film_bindings` 項目以宣告的物理層 ID 為索引，且恰好包含 `supporting_entity_id` 與 `supporting_side`。`metal_gap_equivalent` 需要兩個明確綁定且相對的薄膜。缺少綁定時，準備階段會在原生工作之前失敗，並提供替代呼叫形式。舊的 `route_a_thin_film` 字串可揭露或檢查選定名稱，但不負責指定綁定或座標運算。既有 PEC Shell 選取（舊資料代碼 B）若未提供明確近似設定，使用共用恆等映射 `route_b`。低階的新 `build_route_mesh()` 要求準備階段產生的有效正規化輸入及表示內容。
 
 未版本化的語意匯出 `apply_thin_film_profile`、`derive_thin_film_facts` 與 `normalize_optional_profile` 已在此候選版本退役。請搭配 `interpret_physical_layers()` 或 `interpret_physical_geometry()` 使用中性宣告；原始固定版本來源及凍結的歷史產物保留原始程式與酬載身分。

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.geometry.models.common import GeometryRoute
+
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -62,7 +64,7 @@ class InputSummary:
             (
                 ("Source cell", source.get("top_cell_name")),
                 ("Backend", backend.get("name")),
-                ("Route", backend.get("route")),
+                ("Route", GeometryRoute(backend["route"]).display_name if backend.get("route") in {"A", "B", "C"} else backend.get("route")),
                 ("Entities", source.get("entity_count")),
                 ("Polygons", source.get("polygon_count")),
                 ("Ports", source.get("port_sheet_count")),

@@ -1,5 +1,5 @@
 ---
-title: "GeometryPlan 與 SGB Route A／B"
+title: "GeometryPlan 與 SGB 求解幾何路線"
 description: "GeometryPlan 來源身分、出現實例與 Net 歸屬、路徑轉換及輸入摘要。"
 scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
@@ -37,13 +37,13 @@ Palace 與 AEDT 使用同一個選定解讀。不同明確近似設定保留不�
 
 對啟用的宣告，樹內編譯器在指派材料介面前建立單一原生 OCC 平面排列。原生布林歷史保留來源成員及修剪參數區間。相同排列曲線構成金屬、介電與真空補集及埠分割的邊界。指定堆疊提供 Z；共用排列邊的集體原生 1D 至 2D 掃掠建立精確直紋壁，並保留修剪曲線幾何。它保留共用上緣，以及每個來源頂點的一條垂直邊。由表面起始的殼接著形成求解體積，包含內部 PEC 空腔殼。原生建構錯誤向外傳遞；沒有直線邊備援、逐表面重新擬合或全域體積修復。
 
-標準 Gmsh 殼 AutoFix 修正殼方向時可能替換原生面標記。SGB 透過完整原生線框／邊對應，將各修復面重新綁定至來源 `SurfaceID`，再將來源映射帶入匯出與後端建構。來源身分固定，數值 Gmsh 標記可以改變；不使用標記、座標、面積或順序猜測替代面。已觀察的 Circle Route B 建構中，共用面與金屬切口邊界仍綁定來源，埠薄片保持獨立表示。若無法保留對應或必要拓撲，原生建構會失敗，不輸出備援幾何。
+標準 Gmsh 殼 AutoFix 修正殼方向時可能替換原生面標記。SGB 透過完整原生線框／邊對應，將各修復面重新綁定至來源 `SurfaceID`，再將來源映射帶入匯出與後端建構。來源身分固定，數值 Gmsh 標記可以改變；不使用標記、座標、面積或順序猜測替代面。已觀察的 Circle PEC Shell 建構中，共用面與金屬切口邊界仍綁定來源，埠薄片保持獨立表示。若無法保留對應或必要拓撲，原生建構會失敗，不輸出備援幾何。
 
 隱藏的同 Net 接觸保留型別化 `MMContactRecord` 歸屬，不成為 MM 物理群組。其新增的 `geometry_ref` 包含獨立的正規點、曲線及表面環定義，並具有可解析的 `outer_loop_ref` 與 `hole_loop_refs`。共用即時邊界曲線使用相同正規 ID。真正的多邊形接觸保留 `outer_loop`；真正的曲線接觸則記為 `None`。平面接觸可記錄平面法向；曲壁記錄 `normal=None` 及實際表面幾何，不虛構固定方向。實際接觸幾何不指派 Net，不同 Net 接觸仍是物理短路錯誤。
 
 建構計畫的 `metadata.curved_arrangement` 區分要求的來源綁定／重建，以及實際原生區間、成員與 Z 掃掠。其獨立邊界傳輸保留共用原生面與邊；求解器／網格標記仍屬轉換資料。幾何階數與有限元素階數是不同選擇。曲面模型幾何不會讓正表面內縮成為精確曲線周界距離；請見 [EPR 解讀](eigenmode-epr.qmd#surface-identity-masks-and-loss-assumptions)。
 
-Palace Route A／B 透過既有幾何入口使用啟用的曲線意圖。既有路徑分派拒絕保留導體的 Route C 上啟用曲線意圖；只有多邊形的 Route C 行為不變。目前 AEDT 平面轉換明確拒絕啟用宣告，不默默替代為診斷用多邊形。
+Palace Thin-Film／PEC Shell 透過既有幾何入口使用啟用的曲線意圖。既有路徑分派拒絕保留導體的 Retained Solid 上啟用曲線意圖；只有多邊形的 Retained Solid 行為不變。目前 AEDT 平面轉換明確拒絕啟用宣告，不默默替代為診斷用多邊形。
 
 ## 元件至後端幾何契約 {#component-to-backend-geometry-contract}
 
@@ -71,7 +71,7 @@ Palace Route A／B 透過既有幾何入口使用啟用的曲線意圖。既有�
 
 `RectangularJunctionSpec` 命名 `junction_id`、`port_sheet_id`、`source_polygon_id`、`source_occurrence_path`，以及 `terminal_a`、`terminal_b`。每個 `JunctionTerminalBinding` 命名一個 `source_entity_id`、其 `source_occurrence_path` 與 `net_id`。兩端子 Entity 與 Net 必須不同，且符合來源計畫。此明確綁定選取各端子的實際來源重疊；規劃器不搜尋其他出現實例，也不依距離推論擁有者。
 
-共用幾何解讀器在規劃接觸、介面與建構目錄之前，依來源資料庫單位及既有物理附著，一次推導完整中央矩形與端子擁有的端部金屬。Palace Route A 繼續套用既有宿主介面、共同平面與共同體積規則。Palace 與 AEDT 使用相同衍生來源分割；AEDT 驗證該要求，不另推導矩形。Palace `add_port(...)` 仍將電感綁定至來源指定埠名，不選擇物理端子擁有者。
+共用幾何解讀器在規劃接觸、介面與建構目錄之前，依來源資料庫單位及既有物理附著，一次推導完整中央矩形與端子擁有的端部金屬。Palace Thin-Film 繼續套用既有宿主介面、共同平面與共同體積規則。Palace 與 AEDT 使用相同衍生來源分割；AEDT 驗證該要求，不另推導矩形。Palace `add_port(...)` 仍將電感綁定至來源指定埠名，不選擇物理端子擁有者。
 
 端子合併來源與端部支撐後，內部抵消的接縫不是新增表面意圖。
 
@@ -96,12 +96,26 @@ Q3D GeometryPlan 前端屬於已接受的 v2 實作／API（2026-10-09 接受，
 
 ## 目前 Surface-EPR 方向 {#current-surface-epr-direction}
 
-| 路徑 | 公開意圖 | 目前狀態 |
-|---|---|---|
-| Route A | 零厚度面金屬 PEC 薄片與有限凸塊殼 | 已實作、已接受 |
-| Route B | 有限建構金屬體積的閉合外部邊界殼為 PEC；其內部從 Palace 求解域排除，不產生四面體 | 已實作、已接受 |
+求解幾何路線決定物理模型中的金屬如何表示；近似設定檔則是另一項選擇。例如，`substrate_face` 指定薄膜在何處表示，Thin-Film 則指定採用哪種求解幾何。
 
-目前方向只包含 Route A 與 Route B。
+| 公開名稱 | 既有資料代碼 | 物理表示與範圍 |
+|---|---|---|
+| **Thin-Film（薄膜面）** | `A` | 零厚度面金屬 PEC 薄片，搭配有限高度的凸塊／柱體 PEC 殼。屬於目前 Palace Surface-EPR 方向。 |
+| **PEC Shell（金屬殼）** | `B` | 有限厚度金屬的閉合外部邊界作為 PEC；Palace 求解域排除金屬內部，不對其建立四面體。屬於目前 Palace Surface-EPR 方向。 |
+| **Retained Solid（保留金屬實體）** | `C` | 保留有限金屬體積，供進階多邊形 CAD 建構使用。它不是完整的 Palace Surface-EPR 路線；此路線不支援啟用來源曲線或 Palace 埠。 |
+
+`GeometryRoute` 是同一個 enum，並由 `scgsim.geometry`、
+`scgsim.geometry.models` 與 `scgsim.geometry.compiler` 重新匯出。進階編譯器呼叫可從 compiler facade 匯入：
+
+```python
+from scgsim.geometry.compiler import GeometryRoute
+
+route = GeometryRoute.THIN_FILM
+```
+
+其成員為 `THIN_FILM`、`PEC_SHELL` 與 `RETAINED_SOLID`，底層既有值仍是 A、B、C。Palace 的 `representation` 輸入接受 `thin_film` 與 `pec_shell`，也保留舊值 `A` 與 `B`。Retained Solid 是幾何編譯器的選擇，不是 Palace `representation` 可用值。既有序列化記錄與 XAO 命名仍使用 A／B／C，讓已儲存資料可繼續讀取。
+
+目前 Palace Surface-EPR 方向只包含 Thin-Film 與 PEC Shell。固定舊版的教學可能仍傳入 `representation="A"` 或 `representation="B"`；這是上表名稱的舊代碼。請保留教學固定版本所要求的值。
 
 ## 歷史 SGB 幾何距離帶（已撤回） {#surface-distance-bands}
 
@@ -115,17 +129,17 @@ SGB 對每個來源／模型版本，將已驗證來源事實投影至 `scgsim.s
 
 投影可表達有限 PEC、表面薄片 MA／MS、局部 MM／MA 片段資料、明確側別意義，以及外環／孔洞／接縫譜系，不將分類當成接觸證明。宣告、規劃與觀察紀錄仍可區分。原生標記與群組是不透明觀察，不是重建的成功結果；重複觀察不會倍增單一語意貢獻。
 
-`plan_route_surfaces()` 負責公開投影邊界：省略外觀物件時建立一次，提供時則驗證相同路徑及建構輸入指紋，再於既有鄰接呼叫位置重用。明確指定的介面種類及擁有者中繼資料，優先於衍生預設值。Route-A 薄片接觸平面範圍維持 `MM` 拓撲關係，但轉換為既有 `MS` 端帽並使用既定物理名稱前綴；周圍薄片仍可攜帶獨立分類的 MA／MS 資料。
+`plan_route_surfaces()` 負責公開投影邊界：省略外觀物件時建立一次，提供時則驗證相同路徑及建構輸入指紋，再於既有鄰接呼叫位置重用。明確指定的介面種類及擁有者中繼資料，優先於衍生預設值。Thin-Film 薄片接觸平面範圍維持 `MM` 拓撲關係，但轉換為既有 `MS` 端帽並使用既定物理名稱前綴；周圍薄片仍可攜帶獨立分類的 MA／MS 資料。
 
-直接語意核心使用端可選擇不提供 Route-A 近似設定。既有明確 Palace Route-A 入口仍要求 `substrate_face` 或 `metal_gap_equivalent`，Route B 仍拒絕這兩者。核心沒有近似設定時，座標不變且不記錄壓縮。`metal_gap_equivalent` 保持既有有效座標正規化，不宣稱可逆壓縮。
+直接語意核心使用端可選擇不提供 Thin-Film 近似設定。既有明確 Palace Thin-Film 入口仍要求 `substrate_face` 或 `metal_gap_equivalent`，PEC Shell 仍拒絕這兩者。核心沒有近似設定時，座標不變且不記錄壓縮。`metal_gap_equivalent` 保持既有有效座標正規化，不宣稱可逆壓縮。
 
-堆疊沒有 PDK 真空層時，只有呼叫端選用 `set_vacuum_region()`，省略導體宿主宣告才綁定至內部產生的背景。相同正規化多邊形對基板區域接觸檢查，同時為指定宿主與產生背景的堆疊提供 Route-A 物理支撐。它考慮完整外環與孔洞，要求唯一正面積接觸；包圍盒相交、點／邊接觸或自動區域邊不足以成立。已指定但無法解析的宿主名稱仍失敗，不默默重新綁定。單基板 `substrate_face` 沒有相對晶粒或間隙值；兩個相對基板保留物理 `substrate_face`，以及不同且限雙面的 `metal_gap_equivalent` 正規化。產生的 Region 在來源幾何之後套用近似設定，並繞實際介電與有限 PEC 佔據區分割。Route-A 薄片不扣除虛構體積。
+堆疊沒有 PDK 真空層時，只有呼叫端選用 `set_vacuum_region()`，省略導體宿主宣告才綁定至內部產生的背景。相同正規化多邊形對基板區域接觸檢查，同時為指定宿主與產生背景的堆疊提供 Thin-Film 物理支撐。它考慮完整外環與孔洞，要求唯一正面積接觸；包圍盒相交、點／邊接觸或自動區域邊不足以成立。已指定但無法解析的宿主名稱仍失敗，不默默重新綁定。單基板 `substrate_face` 沒有相對晶粒或間隙值；兩個相對基板保留物理 `substrate_face`，以及不同且限雙面的 `metal_gap_equivalent` 正規化。產生的 Region 在來源幾何之後套用近似設定，並繞實際介電與有限 PEC 佔據區分割。Thin-Film 薄片不扣除虛構體積。
 
-Route-A 支撐是局部的，不是整片標籤。薄片多邊形在建立裸露 SA／AA 表面之前，先依確切底部／頂部求解覆蓋分割，因此基板孔洞保持為孔洞，部分支撐的壓力測試案例保留支撐與暴露的不同子表面。每個子表面保留有序底部／頂部資料；MM 接觸端帽只保留接觸切割後剩餘側別。埠平面範圍選取相交子表面，若跨越不相容局部域配對則失敗。不支援完全懸空薄片。
+Thin-Film 支撐是局部的，不是整片標籤。薄片多邊形在建立裸露 SA／AA 表面之前，先依確切底部／頂部求解覆蓋分割，因此基板孔洞保持為孔洞，部分支撐的壓力測試案例保留支撐與暴露的不同子表面。每個子表面保留有序底部／頂部資料；MM 接觸端帽只保留接觸切割後剩餘側別。埠平面範圍選取相交子表面，若跨越不相容局部域配對則失敗。不支援完全懸空薄片。
 
-從 SA 片段移除導體面時使用相同局部域分割。即使單一導體橫跨數個相鄰域，規劃器只扣除與該確切求解配對片段的面重疊。AEDT 接面分割後，只有轉接器產生的 Route-A 薄片平面範圍，會從最終導體多邊形重建；呼叫端指定的介面宣告保留不變。
+從 SA 片段移除導體面時使用相同局部域分割。即使單一導體橫跨數個相鄰域，規劃器只扣除與該確切求解配對片段的面重疊。AEDT 接面分割後，只有轉接器產生的 Thin-Film 薄片平面範圍，會從最終導體多邊形重建；呼叫端指定的介面宣告保留不變。
 
-Route B 保留有限幾何，並記錄局部頂部、底部及側壁的材料側資料。幾何鄰接仍是集合，新增貢獻帳冊則保留語意重數。同一 Route-A 子表面的兩個同類 MA 側，共用單一原生表面及單一彙總 Palace 資料列，不重複或倍增。該彙總需要 Palace 內部邊界切開，不代表側別解析數值輸出。AEDT 貢獻目錄來自物理規劃帳冊項目，依貢獻身分分組為一列目錄，同時保留每個不同片段綁定。沒有物理帳冊資料的一般宣告，仍是語意中繼資料，不產生額外數值 EPR 貢獻。
+PEC Shell 保留有限幾何，並記錄局部頂部、底部及側壁的材料側資料。幾何鄰接仍是集合，新增貢獻帳冊則保留語意重數。同一 Thin-Film 子表面的兩個同類 MA 側，共用單一原生表面及單一彙總 Palace 資料列，不重複或倍增。該彙總需要 Palace 內部邊界切開，不代表側別解析數值輸出。AEDT 貢獻目錄來自物理規劃帳冊項目，依貢獻身分分組為一列目錄，同時保留每個不同片段綁定。沒有物理帳冊資料的一般宣告，仍是語意中繼資料，不產生額外數值 EPR 貢獻。
 
 ## 身分要求 {#identity-requirements}
 
@@ -143,9 +157,9 @@ Route B 保留有限幾何，並記錄局部頂部、底部及側壁的材料側
 
 `GeometryPlan` 是 Palace 與 AEDT 的共用來源前端。準備快照包含正規化 `GeometryBuildInput` 多邊形（含孔洞環）、實體、求解區域、來源資訊及路徑近似設定，以及準備堆疊與來源出現實例紀錄。連結來源的接面宣告保留端子 Net、方向、尺寸、電感與電容；這些欄位不追溯歸屬至正規化 `GeometryBuildInput`。AEDT 不使用 `ConstructionPlanRecord`、Gmsh 表面、物理群組或原生標記。
 
-AEDT 準備也從明確來源／有效層紀錄，建立私有程序內表示內容。它綁定各語意實體的物理層身分、來源與有效 Z 區間及薄片／實體表示，以及已映射外部包絡。共用平面貢獻規劃器直接使用這些事實，不從實體中繼資料推論 AEDT 建模，也不將內容視為 Palace Route A、B 或 C 選取。此內容不改變公開計畫快照、來源 GDS 或序列化來源結構。Palace 編譯繼續使用明確 Route A／B／C 契約。
+AEDT 準備也從明確來源／有效層紀錄，建立私有程序內表示內容。它綁定各語意實體的物理層身分、來源與有效 Z 區間及薄片／實體表示，以及已映射外部包絡。共用平面貢獻規劃器直接使用這些事實，不從實體中繼資料推論 AEDT 建模，也不將內容視為 Palace Thin-Film、PEC Shell 或 Retained Solid 選取。此內容不改變公開計畫快照、來源 GDS 或序列化來源結構。Palace 編譯繼續使用明確 Thin-Film／PEC Shell／Retained Solid 契約。
 
-AEDT 負責的綁定附屬檔，必須另外記錄每個建立的本體、薄片、面、材料側、選取及已儲存場運算式與來源身分的關係。原生面重疊或鄰接查詢是觀察幾何資料，不能製造來源接觸意圖。Route-A 近似設定正規化仍在共用前端邊界只發生一次；Route-B 有限本體事實仍與 PEC 近似及實現它們的 AEDT 實作區分。
+AEDT 負責的綁定附屬檔，必須另外記錄每個建立的本體、薄片、面、材料側、選取及已儲存場運算式與來源身分的關係。原生面重疊或鄰接查詢是觀察幾何資料，不能製造來源接觸意圖。Thin-Film 近似設定正規化仍在共用前端邊界只發生一次；PEC Shell 有限本體事實仍與 PEC 近似及實現它們的 AEDT 實作區分。
 
 ## 準備資源（CONVERGING） {#preparation-resources}
 

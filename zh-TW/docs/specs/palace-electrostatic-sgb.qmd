@@ -8,7 +8,7 @@ lang: zh-TW
 ---
 
 ::: {.callout-note title="已接受行為與交付狀態"}
-後端、Route A／B 轉換、交接、Slurm 執行、嚴格結果解析及既有報告摘要，屬於已接受的 V1 範圍。下述 Palace 網格控制與獨立網格摘要，也已在 SCGSim 1.1.0 列為 ACCEPTED。紀錄的操作資料保留其限制；穩定化與版本交付仍是不同狀態。
+後端、Thin-Film／PEC Shell 轉換（舊資料代碼 A／B）、交接、Slurm 執行、嚴格結果解析及既有報告摘要，屬於已接受的 V1 範圍。下述 Palace 網格控制與獨立網格摘要，也已在 SCGSim 1.1.0 列為 ACCEPTED。紀錄的操作資料保留其限制；穩定化與版本交付仍是不同狀態。
 :::
 
 ## 公開介面 {#candidate-surface}
@@ -95,7 +95,7 @@ Palace 原生 Mask／Inset 邊距仍可透過 `inset_margins_um` 要求；省略
 
 來源至建構的說明請見 [SGB 幾何概念](../concepts/geometry.qmd#source-stage)。下列契約定義支援的準備路徑。
 
-共用的來源優先課程建議使用 `set_plan(snapshot)`。獨立的 `set_geometry(component)`／`set_stack(stack)`／明確包絡 API，仍支援新的未綁定模擬；請將此路徑與計畫快照分開。[GeometryPlan 契約](../geometry-sgb.qmd) 負責出現實例／Net、產生的真空、接觸及 Route A／B 語意。目前面向來源的幾何權威為 `scgsim.geometry`；路徑規劃及衍生建構由 `scgsim.geometry.compiler` 負責。外部 SGB 與 gsim 僅屬衍生歷史。
+共用的來源優先課程建議使用 `set_plan(snapshot)`。獨立的 `set_geometry(component)`／`set_stack(stack)`／明確包絡 API，仍支援新的未綁定模擬；請將此路徑與計畫快照分開。[GeometryPlan 契約](../geometry-sgb.qmd) 負責出現實例／Net、產生的真空、接觸及 Thin-Film／PEC Shell 語意。目前面向來源的幾何權威為 `scgsim.geometry`；路徑規劃及衍生建構由 `scgsim.geometry.compiler` 負責。外部 SGB 與 gsim 僅屬衍生歷史。
 
 [Electrostatic 課程](../course/palace-electrostatic.qmd) 說明確切 Net 端子／接地及實際網格／設定順序。獨立的[本徵模態契約](palace-eigenmode.qmd) 定義模態與 EPR 輸出選取。兩條準備路徑都不啟動 Palace 或提交工作。共用私有狀態的失效處理／持久化實作位於[架構](../architecture.qmd#palace-preparation-lifecycle)。
 
@@ -119,4 +119,4 @@ Palace 在省略 `Nonconformal` 鍵時預設為 `true`。SCGSim 一律寫出此�
 
 外部 gsim 及歷史 SGB 版本只作為衍生資料。執行期幾何權威是樹內的 `scgsim.geometry.compiler` 及目前的 `scgsim.palace` 實作。
 
-周邊契約請見[幾何與 SGB Route A／B](../geometry-sgb.qmd)、[無顯示幾何預覽](../geometry-preview.qmd)、[執行設定與本機／手動 HPC 交接](../execution-profiles.qmd)，以及[來源與資料界線](../provenance.qmd)。
+周邊契約請見[幾何與 SGB 求解幾何路線](../geometry-sgb.qmd)、[無顯示幾何預覽](../geometry-preview.qmd)、[執行設定與本機／手動 HPC 交接](../execution-profiles.qmd)，以及[來源與資料界線](../provenance.qmd)。

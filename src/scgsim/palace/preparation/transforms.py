@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.geometry.models.common import GeometryRoute, _normalize_geometry_route
+
 import copy
 import json
 import math
@@ -49,14 +51,15 @@ def validate_non_negative_int(value: Any, field: str) -> int:
     return int(value)
 
 
-def normalize_route_a_thin_film(route: str, value: str | None) -> RouteAThinFilm | None:
-    """Validate the explicit Route-A thin-film lowering choice."""
+def normalize_route_a_thin_film(route: str | GeometryRoute, value: str | None) -> RouteAThinFilm | None:
+    """Validate the explicit thin_film geometry lowering choice."""
+    route = _normalize_geometry_route(route)
     if route == "B":
         if value is not None:
             raise ValueError("Route B does not accept route_a_thin_film.")
         return None
     if route != "A":
-        raise ValueError("route must be either 'A' or 'B'.")
+        raise ValueError("route must be thin_film (A) or pec_shell (B).")
     normalized = value if value in {"substrate_face", "metal_gap_equivalent"} else None
     if normalized is not None:
         return normalized

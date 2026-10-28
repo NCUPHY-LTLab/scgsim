@@ -1,5 +1,5 @@
 ---
-title: "GeometryPlan and SGB Route A/B"
+title: "GeometryPlan and SGB geometry routes"
 description: "GeometryPlan source identity, occurrence and Net ownership, route lowering and input summary."
 scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
@@ -119,7 +119,7 @@ orientation. SGB binds each repaired face back to its source `SurfaceID` by
 complete native wire/edge correspondence, then carries that source mapping
 through export and backend construction. Source identity remains fixed while
 numeric Gmsh tags may change; tags, coordinates, area, and ordering are not
-used to guess replacements. In the observed Circle Route B construction, shared
+used to guess replacements. In the observed Circle PEC Shell construction, shared
 faces and metal-cutout boundaries remained source-bound, while port sheets
 stayed separately represented. If correspondence or required topology cannot be
 preserved, native construction fails instead of emitting a fallback geometry.
@@ -142,9 +142,10 @@ element order are separate choices. Curved model geometry does not make a
 positive surface inset an exact curved-perimeter distance; see the
 [EPR interpretation](eigenmode-epr.qmd#surface-identity-masks-and-loss-assumptions).
 
-Palace Route A/B consumes active curve intent through its existing geometry entry paths.
-The existing route dispatch rejects active curve intent on retained-conductor
-Route C; polygon-only Route C behavior is unchanged.
+Palace Thin-Film and PEC Shell consume active curve intent through their
+existing geometry entry paths. The existing route dispatch rejects active
+curve intent on Retained Solid; polygon-only Retained Solid behavior is
+unchanged.
 AEDT's current planar lowering explicitly rejects active declarations; it does
 not silently substitute the diagnostic polygon witness.
 
@@ -276,7 +277,7 @@ occurrences or infer owners from proximity.
 The shared geometry interpreter derives the complete central rectangle and
 terminal-owned end metals once, from the source database units and existing
 physical attachment, before planning contacts, interfaces, and construction
-catalogues. Palace Route A continues to apply its existing
+catalogues. Palace Thin-Film continues to apply its existing
 host-interface, common-plane, and common-volume rules. Palace and AEDT consume
 the same derived source partition; AEDT validates that request rather than
 deriving another rectangle. Palace `add_port(...)` still binds inductance to an
@@ -315,14 +316,34 @@ intent is still rejected by current AEDT lowering rather than silently
 linearized. This accepted source contract does not assert completion of a Q3D
 solve or returned matrix observation.
 
-## Current Surface-EPR direction
+## Current Surface-EPR direction {#current-surface-epr-direction}
 
-| Route | Public intent | Current state |
+The solve geometry route chooses how the physical metal is represented. The approximation profile is a separate choice: for example, `substrate_face` says where a thin film is represented, while Thin-Film says which solve geometry is used.
+
+| Public name | Existing data code | Physical representation and scope |
 |---|---|---|
-| Route A | Zero-thickness face-metal PEC sheets with finite bump shells | Implemented, accepted |
-| Route B | The closed exterior boundary shell of a finite construction metal volume is PEC; its interior is excluded from Palace solution domains and receives no tetrahedra | Implemented, accepted |
+| **Thin-Film** | `A` | Zero-thickness face-metal PEC sheets with finite bump/post PEC shells. Current Palace Surface-EPR direction. |
+| **PEC Shell** | `B` | The closed exterior boundary of finite-thickness metal is PEC; Palace excludes the metal interior from its tetrahedral solve domain. Current Palace Surface-EPR direction. |
+| **Retained Solid** | `C` | Retains the finite metal volume for advanced polygon CAD construction. This is not a complete Palace Surface-EPR route; active source curves and Palace ports are not supported on this route. |
 
-Only Route A and Route B are in the current direction.
+The same `GeometryRoute` enum is re-exported from `scgsim.geometry`,
+`scgsim.geometry.models`, and `scgsim.geometry.compiler`. An advanced compiler
+call can import it from the compiler facade:
+
+```python
+from scgsim.geometry.compiler import GeometryRoute
+
+route = GeometryRoute.THIN_FILM
+```
+
+The enum members are `THIN_FILM`, `PEC_SHELL`, and `RETAINED_SOLID`; their
+stored values remain A, B, and C. The Palace-facing `representation` input
+accepts `thin_film` and `pec_shell` as well as the legacy values `A` and `B`.
+Retained Solid is a geometry compiler choice, not an available Palace
+`representation` value. Existing serialized records and XAO naming keep the
+legacy A/B/C codes so stored data remains readable.
+
+The current Palace Surface-EPR direction includes Thin-Film and PEC Shell only. Existing pinned examples may still pass `representation="A"` or `representation="B"`; those are the legacy codes for the names above. They should retain the value required by their pinned package version.
 
 ## Historical SGB geometry distance bands (WITHDRAWN) {#surface-distance-bands}
 
@@ -351,14 +372,14 @@ semantic contribution.
 facade once when omitted, or verifies a supplied facade against the same route
 and build-input fingerprint, then reuses it at the existing adjacency call
 sites. Explicit authored interface kind and owner metadata take precedence
-over derived defaults. Route-A sheet contact footprints remain an `MM`
+over derived defaults. Thin-Film sheet contact footprints remain an `MM`
 topology relation but lower as the existing `MS` cap with its established
 physical-name prefix; the surrounding sheet may still carry its independently
 classified MA/MS evidence.
 
-Route-A profile selection is optional for a direct semantic-core consumer.
-Existing explicit Palace Route-A entry points still require
-`substrate_face` or `metal_gap_equivalent`, and Route B still rejects either
+Thin-Film profile selection is optional for a direct semantic-core consumer.
+Existing explicit Palace Thin-Film entry points still require
+`substrate_face` or `metal_gap_equivalent`, and PEC Shell still rejects either
 profile. With no core profile, coordinates remain unchanged and no collapse is
 recorded. `metal_gap_equivalent` remains the existing effective coordinate
 normalization; no reversible-collapse claim is made.
@@ -366,7 +387,7 @@ normalization; no reversible-collapse claim is made.
 For a stack with no PDK vacuum layer, omitted conductor host declarations are
 bound to the internally generated background only when the caller selects
 `set_vacuum_region()`. The same normalized polygon-versus-substrate-region
-contact check supplies Route-A physical support for both authored-host and
+contact check supplies Thin-Film physical support for both authored-host and
 generated-background stacks. It considers complete exteriors and holes and
 requires a unique positive-area contact; a bounding-box intersection,
 point/edge touch, or auto-region edge is insufficient. An authored
@@ -375,9 +396,9 @@ Single-substrate `substrate_face` has no opposing die or gap value; two
 opposed substrates keep physical `substrate_face` and the distinct
 two-face-only `metal_gap_equivalent` normalization. The generated Region is
 profiled after the source geometry and partitioned around actual dielectric
-and finite-PEC occupancy. Route-A sheets do not subtract a fictitious volume.
+and finite-PEC occupancy. Thin-Film sheets do not subtract a fictitious volume.
 
-Route-A support is local rather than a whole-sheet label. The sheet polygon is
+Thin-Film support is local rather than a whole-sheet label. The sheet polygon is
 partitioned by exact bottom/top solution coverage before bare SA/AA surfaces
 are constructed, so substrate holes remain holes and a partly supported stress
 case retains separate supported and exposed children. Each child keeps ordered
@@ -389,14 +410,14 @@ unsupported.
 The same local-domain partition is used when conductor faces are removed from
 an SA patch. The planner subtracts only the face overlap with that exact
 solution-pair patch, even when one conductor spans several adjacent domains.
-After AEDT junction partitioning, only adapter-generated Route-A sheet
+After AEDT junction partitioning, only adapter-generated Thin-Film sheet
 footprints are rebuilt from the final conductor polygons; caller-authored
 interface declarations remain intact.
 
-Route B keeps finite geometry and records local top, bottom, and sidewall
+PEC Shell keeps finite geometry and records local top, bottom, and sidewall
 material-side evidence. Geometry adjacency remains a set, whereas the additive
 contribution ledger preserves semantic multiplicity. Two same-kind MA sides
-on one Route-A child share one native surface and one aggregate Palace row;
+on one Thin-Film child share one native surface and one aggregate Palace row;
 they are not duplicated or multiplied. That aggregate requires Palace's
 internal-boundary cracking and does not imply side-resolved numeric output.
 The AEDT contribution catalogue is sourced from physically planned ledger
@@ -436,17 +457,17 @@ the explicit source/effective layer records. It binds each semantic entity's
 physical-layer identity, source and effective Z intervals, and sheet/solid
 representation, plus the already-mapped outer enclosure. The shared planar
 contribution planner consumes those facts directly; it does not infer AEDT
-modeling from entity metadata or treat the context as a Palace Route A, B, or
-C selection. The context does not alter the public plan snapshot, source GDS,
+modeling from entity metadata or treat the context as a Palace Thin-Film,
+PEC Shell, or Retained Solid selection. The context does not alter the public plan snapshot, source GDS,
 or serialized source schema. Palace compilation continues to use its explicit
-Route A/B/C contract.
+Thin-Film / PEC Shell / Retained Solid contract.
 
 An AEDT-owned binding sidecar must separately record each created body, sheet,
 face, material side, selection, and saved-field expression against those
 source identities. A native face overlap or adjacency query is observed
-geometry evidence; it cannot manufacture source contact intent. Route-A
+geometry evidence; it cannot manufacture source contact intent. Thin-Film
 profile normalization still happens once at the shared frontend boundary, and
-Route-B finite-body facts stay distinct from PEC approximation and the AEDT
+PEC Shell finite-body facts stay distinct from PEC approximation and the AEDT
 implementation that realizes them.
 
 ## Preparation resources (CONVERGING) {#preparation-resources}

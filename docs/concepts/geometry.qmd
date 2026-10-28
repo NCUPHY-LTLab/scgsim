@@ -44,11 +44,11 @@ Start with a familiar Gmsh BRep: points define curves, curves bound faces, and f
 
 The running model has a notched, holed left pad and a separate right pad, plus Si and air regions. A hole is empty space enclosed by an inner ring; the notch opens to the exterior. The component supplies local outlines and selectors, the process stack supplies materials and Z ranges, and assembly declarations place the sources, assign final Nets and select the physical approximation. [Sources](sgb/sources.qmd) explains how these inputs become one prepared record.
 
-The selected approximation changes the geometry used by the solve without rewriting the source film. Here `substrate_face` places the effective conductor sheet on the Si top face. A junction is a separate explicit request: it supplies a source rectangle and terminal bindings; planning derives the central lumped-port surface and completes the named terminal supports. The [physical model chapter](sgb/physical-model.qmd) follows these choices.
+An approximation is a physical-model choice, not a mesh-size setting. In this example the process film occupies $z\in[0,0.25]$ µm, while `substrate_face` asks the solve to represent that film as a conductor face on the designated Si top surface at $z=0$. The profile names the support; SCGSim does not guess which material or face the film should attach to. See the definition of [approximation profile](sgb/physical-model.qmd#approximation-profile). A junction is a separate explicit request: it supplies a source rectangle and terminal bindings; planning derives the central lumped-port surface and completes the named terminal supports.
 
 ## From planar ownership to a shared boundary
 
-A planar subdivision operation nodes only the relevant XY operands for that operation. Each resulting face gets a membership vector from directed ring transitions. The hole and the unbounded exterior can both be outside the conductor while still being different faces. The [planar arrangement chapter](sgb/planar-arrangement.qmd) walks through those transitions and checks their area.
+For each planar subdivision, SGB compares only the named regions needed by that operation. It splits their boundaries at crossings and overlaps, then determines which source region contains each resulting cell. A hole and the unbounded exterior can both be outside the conductor while remaining different faces. The [planar arrangement chapter](sgb/planar-arrangement.qmd#planar-inputs) defines the inputs before walking through the example.
 
 After the physical faces are known, neighboring surfaces must agree on their exact boundary. A long edge on one surface is split wherever another incident boundary introduces a point; both surfaces then refer to the same atomic curves. The [shared topology chapter](sgb/shared-topology.qmd) explains point keys, loop roles and volume orientation.
 
@@ -58,11 +58,11 @@ Keep two choices separate.
 
 ### Solve geometry
 
-Solve geometry describes which physical metal representation the solve uses. Current Surface-EPR directions A and B both use PEC (perfect electric conductor) boundaries: A uses zero-thickness metal faces with finite bump shells; B uses finite-thickness metal shells, whose interiors are excluded from the Palace tetrahedral solve domain. See the [current Surface-EPR direction](../geometry-sgb.qmd#current-surface-epr-direction) for the full contract.
+Solve geometry describes how metal is represented in the physical model. The current Surface-EPR direction supports two choices: **Thin-Film** (legacy data code A) uses zero-thickness metal faces plus finite bump/post shells; **PEC Shell** (legacy data code B) uses the outer PEC boundary of finite-thickness metal and excludes its interior from Palace's tetrahedral solve domain. PEC means perfect electric conductor. See the [current Surface-EPR direction](../geometry-sgb.qmd#current-surface-epr-direction) for the full contract and [Retained Solid](../geometry-sgb.qmd#current-surface-epr-direction), an advanced polygon-CAD choice outside the complete Palace Surface-EPR direction.
 
 ### Construction branch
 
-The construction branch describes how source boundaries are built. Polygon outlines use the polygon branch; explicitly declared source curves use the curved branch. Planning first determines regions, faces and adjacency. CAD construction then follows the dependency order from points to curves, faces and volumes. These choices answer different questions and do not conflict.
+Construction branch is a separate choice: polygon outlines use the polygon branch, while explicitly declared source curves use the curved branch. A solve-geometry choice selects the physical representation; a construction branch selects how source boundaries are built. Planning first determines regions, faces and adjacency. CAD construction then follows its dependency order from points to curves, faces and volumes. The choices answer different questions and do not conflict.
 
 The [CAD and mesh chapter](sgb/cad-mesh.qmd) draws the boundary between exported CAD and a later mesh. The [performance chapter](sgb/performance.qmd) explains reusable work and stage timing without treating a design hypothesis as a measured speedup. The [validation chapter](sgb/validation.qmd) shows how failures localize to the handoff that could not be established.
 

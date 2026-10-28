@@ -1,5 +1,5 @@
 ---
-title: "公開 Xmon：Palace Route B 本徵模"
+title: "公開 Xmon：Palace PEC Shell 本徵模"
 description: "在 Palace 本徵模中加入具來源歸屬的薄膜與來源連結的電感端口。"
 lang: zh-TW
 scgsim-kind: "course"

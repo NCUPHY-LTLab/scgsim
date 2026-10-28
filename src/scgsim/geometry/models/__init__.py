@@ -1,6 +1,7 @@
 """Direct exports of canonical geometry definitions; no compatibility wrappers."""
 
 from scgsim.geometry.models.common import (
+    GeometryRoute,
     DEFAULT_INTERFACE_SOLVER_USE,
     HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES,
     ROUTE_ALLOWED_REPRESENTATIONS,
@@ -65,6 +66,7 @@ from scgsim.geometry.models.topology import (
 )
 
 __all__ = [
+    "GeometryRoute",
     "ApproximationProfile",
     "PhysicalLayerDeclaration",
     "PhysicalRepresentationPlan",

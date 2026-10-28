@@ -25,7 +25,13 @@ The physical-model stage answers a different question from the source stage. A s
 
 The stage receives the normalized source input, selected PDK stack and material declarations, source support/contact facts, and an `ApproximationProfile`. For the running example, the metal film spans $z\in[0,0.25]$ µm, the Si substrate spans $z\in[-2,0]$ µm, and `upper_air` spans $z\in[0,4.25]$ µm. `lower_air` occupies the substrate's side enclosure over the substrate's Z range; it is not a second volume underneath the Si. The chosen `substrate_face` profile binds the effective conductor sheet to the Si top face at $z=0$.
 
-An approximation profile has a name, revision and parameters. The profile is not inferred from a layer name, equal Z values or a rendering. A profile may require authored bindings that name the actual support Entity and the side (`lower` or `upper`) used by the physical interpretation. Missing support facts remain missing and cause an explicit failure where the chosen profile requires them.
+## Approximation profile: a physical choice {#approximation-profile}
+
+An approximation profile is a named physical-model choice that maps source geometry to the geometry used by a solve. It is not a mesh-size setting. In the running example, the process film occupies $z\in[0,0.25]$ µm, while `substrate_face` represents that film by a zero-thickness conductor face on the designated Si top surface at $z=0$.
+
+The profile does not guess the supporting material or face. The source must bind the film to its actual support Entity and identify the relevant side (`lower` or `upper`) when required. If the required support declaration is missing, interpretation fails rather than inferring a binding from a layer name, equal Z coordinates or a drawing.
+
+The profile has a name, revision and parameters. Keep it separate from the solve geometry route: the profile specifies the physical approximation, while the route chooses how the resulting metal is represented and built. Exact fields are in the [physical representation contract](../../specs/physical-representation.qmd).
 
 ::: {.callout-note title="Source fact and solver geometry are both retained"}
 The source layer still says that a metal film occupies its authored interval. The effective sheet is a separate result of the selected approximation. Keeping both records lets downstream planning use the chosen geometry without rewriting the process source.

@@ -39,7 +39,7 @@ scgsim-id: "docs/tutorials/resonance-epr"
 
 ::::
 
-兩個 Notebook 都使用 Route B 與已歸屬的 `LiteratureCentral` 介面假設。搜尋頻率、原生停止控制項及損耗假設都是宣告輸入，不是量測共振結果或精度建議。來源端選擇 Route B 的位置在 AEDT 之前；下方準備流程會另外為快照的物理堆疊選用 `modeling="solid"`。
+兩個 Notebook 都使用 PEC Shell（舊資料代碼 B）與已歸屬的 `LiteratureCentral` 材料界面假設。搜尋頻率、原生停止控制項及損耗假設都是宣告輸入，不是量測共振結果或精度建議。在 AEDT 之前，來源端先選擇 PEC Shell；下方準備流程會另外為快照的物理堆疊選用 `modeling="solid"`。
 
 ::: {.callout-note title="規劃參考執行所需資源"}
 參考 Palace Eigenmode 執行使用 8 個 MPI 程序 × 1 個 OMP 執行緒，經過時間為 14,385.602 s（約 4 小時），回報的節點記憶體峰值為 44,553.406 MB。選擇主機時可參考此成本紀錄；它既不是最低資源需求，也不保證你的執行時間或記憶體用量。

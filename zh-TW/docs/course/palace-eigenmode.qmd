@@ -63,7 +63,7 @@ Palace Surface EPR 可透過 `inset_margins_um` 要求原生 Mask／Inset 邊距
 此研究請使用以[修訂版 `4e9e1b7`](https://github.com/arfiligol/palace/tree/4e9e1b7232b4c8ca8b964be7e70f1848f578de37)建置的原生 Palace 執行檔，或包含[曲線埠範圍修正](https://github.com/arfiligol/palace/blob/4e9e1b7232b4c8ca8b964be7e70f1848f578de37/palace/utils/geodata_impl.cpp)的後續版本。SCGSim Python extra 無法取代原生執行檔；請參閱[安裝說明](installation.qmd#native-palace-for-this-curved-uniform-port)。此研究會透過原生 MPI 包裝程式啟動 8 個 MPI 程序 × 1 個 OpenMP 執行緒；直接執行 ELF 檔不能取代該包裝命令。此原生需求適用於此曲線 Uniform 埠範例。
 :::
 
-準備流程會透過 Palace Route B 傳遞編寫的曲線。網格設定使用 HXT、幾何階數 2，並執行一次 `HighOrder` 最佳化。這些設定描述網格幾何。Palace FEM 階數 2 是獨立的場近似設定；設定的 AMR 通過次數上限為四，只限制允許的適應工作量，不代表實際完成四次通過。
+準備流程會透過 Palace PEC Shell 傳遞編寫的曲線。網格設定使用 HXT、幾何階數 2，並執行一次 `HighOrder` 最佳化。這些設定描述網格幾何。Palace FEM 階數 2 是獨立的場近似設定；設定的 AMR 通過次數上限為四，只限制允許的適應工作量，不代表實際完成四次通過。
 
 ### 讀取並延續回傳研究 {#read-and-continue-the-returned-study}
 

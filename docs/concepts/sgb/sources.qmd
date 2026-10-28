@@ -17,29 +17,59 @@ scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
 ---
 
-## Purpose {#source-stage}
+::: {#source-stage .callout-note title="The source stage answers four questions"}
+Before SGB divides or builds geometry, identify:
 
-The source stage answers four different questions before geometry operations begin: where a shape was drawn, which process layer gives it material and height, which placed copy it belongs to, and which electrical Net the model author assigned. Keeping these answers separate prevents a later CAD label or a nearby coordinate from becoming an accidental source of physical meaning.
+- **Shape origin:** which component defines the local outline.
+- **Process data:** which process layer supplies its material identity and Z range.
+- **Placement:** which occurrence path and transform place the component.
+- **Electrical assignment:** which final Net the assembly author assigns to each placed source object.
 
-## Inputs and ownership
+These are separate inputs; CAD labels and nearby coordinates do not replace them.
+:::
 
-A component definition contributes local polygons, holes and annotations. Polygons say which XY points enclose positive shape; an outer ring and its hole rings distinguish material from empty regions. An annotation can identify a source region used to locate a port boundary, or bind a source boundary curve. These names belong to the component and remain local when the component is reused.
+## Three source types and what each provides
 
-The PDK `LayerStack` contributes process facts: source layer association, material identity, physical role, Z interval, film thickness, and any body that supports the layer. These facts answer what occupies a location and how far it extends through Z. They do not assign the final electrical Net.
+Component geometry and annotations
+: The component supplies local shape and selection information:
 
-The assembly contributes occurrence paths and transforms, the final assignment of Nets to Entities, substrate and vacuum regions, the approximation profile, and explicit model requests such as a rectangular junction. The same component can appear at two different paths; the path, not its local cell name, identifies a placed occurrence.
+    - **Geometry:** polygon rings define the occupied XY region; an outer ring and hole rings distinguish material from enclosed empty space.
+    - **Annotations:** selectors can identify a source region used to locate a port boundary or bind an authored source curve. Their names stay local to the component when it is reused.
 
-| Input | Owner | Example | What it does not decide |
-|---|---|---|---|
-| Component geometry and annotations | Component author | Left pad polygon, hole, port selector | Final Net of every placed copy |
-| PDK stack and material records | Process/PDK author | Metal film interval and Si support | Whether two conductors are electrically connected |
-| Occurrence, Net map and requests | Assembly author | `chip/left` on Net A; explicit junction endpoints | Material identity or local polygon shape |
+PDK process stack and material records
+: A PDK (process design kit) describes how drawn layers map to process materials and physical layers:
+
+    - **Layer mapping:** `LayerStack` maps source layers to process layers and links each layer's material identity to a material record.
+    - **Height:** the stack provides the Z interval and film thickness.
+    - **Physical role and support:** it records the layer's role and any body that supports it.
+    - **Material parameters:** the linked material record supplies the material parameters.
+
+    Together, these data say what occupies each region and how it extends through Z. They do not assign the final electrical Net.
+
+Assembly declarations
+: The assembly states how source objects are combined for one model:
+
+    - **Placement:** an occurrence path and transform specify where each component copy appears. A path distinguishes repeated placements even when local cell names match.
+    - **Electrical and region declarations:** the assembly assigns final Nets to placed source objects and identifies substrate and vacuum regions.
+    - **Model choices:** it selects an approximation profile and may request an operation such as a rectangular junction.
+
+    These declarations do not change a component's local polygon or the PDK's material identity.
 
 ## Build the running source model
 
-The left source outline follows `P1(-2,0) → P2(3,0) → P3(3,1) → P4(2,1) → P5(2,2) → P6(-2,2) → P1` in µm. Its enclosed hole follows `H1(-1.5,0.5) → H2(-0.5,0.5) → H3(-0.5,1.5) → H4(-1.5,1.5) → H1`. The missing notch connects to the outside; it is not a second enclosed hole. The outer bounding rectangle has area 10 µm². The 1 µm² notch and 1 µm² hole leave 8 µm² of positive source metal.
+The left source has an exterior notch and one enclosed hole. The notch opens to the exterior; the hole is a separate empty region enclosed by metal. The ordered source coordinates are:
 
-The right pad is a distinct source Entity. In this fixture both pads belong to the same `chip` component occurrence; `chip/left` and `chip/right` distinguish the Entities inside it. The assembly maps them to Net A and Net B. In a hierarchical design, one reusable component may be placed more than once; then an occurrence-qualified path distinguishes each placement and transform. That general capability is separate from this fixture's two-Entity example.
+```text
+Outer ring (µm):
+P1(-2,0) → P2(3,0) → P3(3,1) → P4(2,1) → P5(2,2) → P6(-2,2) → P1
+
+Hole ring (µm):
+H1(-1.5,0.5) → H2(-0.5,0.5) → H3(-0.5,1.5) → H4(-1.5,1.5) → H1
+```
+
+The outer bounding rectangle has area 10 µm². The 1 µm² notch and 1 µm² enclosed hole leave 8 µm² of source metal.
+
+The right pad is a distinct placed source object. In this fixture both pads belong to the same `chip` component occurrence; `chip/left` and `chip/right` distinguish the two objects inside it. The assembly maps them to Net A and Net B. In a hierarchical design, one reusable component may be placed more than once; then an occurrence-qualified path distinguishes each placement and transform. That general capability is separate from this fixture's two-object example.
 
 @fig-sgb-source shows the source outline and hole. @fig-sgb-source-context shows both placed sources in one assembly frame.
 

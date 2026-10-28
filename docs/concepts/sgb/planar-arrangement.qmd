@@ -23,6 +23,10 @@ A planar arrangement turns overlapping XY boundaries into a set of faces whose s
 
 ## Inputs and one-operation scope
 
+::: {#planar-inputs .callout-note title="What enters one planar subdivision"}
+**XY** means coordinates in the two-dimensional layout plane. An **operand** is one named region participating in this particular calculation. Here A is the notched pad and its hole; M is the auxiliary rectangle. Each operand consists of an outer boundary and, where present, hole boundaries. SGB's planar subdivision step compares these named regions, splits them at shared intersections and records which region contains each resulting cell.
+:::
+
 For one polygonal planar subdivision operation, SGB receives the relevant Entity-owned polygon rings, their operand identities, and the shared XY coordinate grid selected during source preparation. It nodes those operands together because this particular operation must return mutually conforming cells. This chapter's scope is not an automatic global overlay across every Entity at every Z height. The curved route has a distinct global-XY arrangement described in [curved construction](curved-construction.qmd); neither route performs a global 3D volume fragment to infer ownership.
 
 The running example follows the main left source pad. Its outer ring is P1(−2,0) → P2(3,0) → P3(3,1) → P4(2,1) → P5(2,2) → P6(−2,2) → P1, and its hole is [−1.5,−0.5] × [0.5,1.5] µm. The outer notched polygon has area 9 µm²; subtracting the 1 µm² hole gives A = 8 µm². For the arrangement calculation only, add M = [1,4] × [−1,3] µm. M is an auxiliary geometry operand that helps explain source membership; it is neither a material nor a current Mask feature.

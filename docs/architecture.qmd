@@ -218,7 +218,7 @@ On the Palace OCC path, stock shell AutoFix may replace native face tags while
 correcting shell orientation. Geometry construction maps repaired faces to source surfaces by
 complete native wire/edge correspondence and carries that mapping through
 export and backend construction. Source `SurfaceID`s remain authoritative;
-numeric Gmsh tags may change. In the observed Circle Route B construction,
+numeric Gmsh tags may change. In the observed Circle PEC Shell construction (legacy code B),
 shared faces and metal-cutout boundaries remained source-bound, with port
 sheets still separate. That observation is scoped to this geometry case. Construction fails
 when required correspondence cannot be established. The geometry contract
@@ -233,7 +233,7 @@ owns the exact behavior and failure boundary.
 | Named occurrences and the final `Net -> Entity` assignment | Notebook `GeometryPlan` |
 | Immutable normalized source geometry | `GeometryPlan` and `GeometryBuildInput` |
 | Revision-bound material, interface, owner, side, and evidence facts | `scgsim.semantics` internal stdlib core |
-| Geometry names, topology, Route A/B surfaces | `scgsim.geometry.compiler` |
+| Geometry names, topology, Thin-Film/PEC Shell surfaces | `scgsim.geometry.compiler` |
 | Palace and AEDT implementation | `scgsim.palace` and `scgsim.aedt` |
 | Native geometry bindings and derived aggregates | Backend adapters, with source members and coverage retained |
 | Solver-bound geometry inspection and preview evidence | `scgsim.visualization` |
@@ -289,7 +289,7 @@ only prepares values and persists caller-supplied JSON payloads; it is not a
 base simulation object and does not receive callbacks into simulation state.
 
 Both public `mesh()` methods invalidate derived state before checking
-prerequisites. Geometry preparation then applies the existing vacuum, Route-A,
+prerequisites. Geometry preparation then applies the existing vacuum, Thin-Film, (legacy code A),
 and indium-bump transformations in order and returns the prepared component,
 stack, bump-fill record, and optional material mapping before airbox lowering.
 The simulation conditionally stores that mapping at the existing point, so an

@@ -15,9 +15,9 @@ scgsim-id: "docs/concepts/model-and-numerics"
 
 ## 選擇幾何近似 {#choose-the-geometric-approximation}
 
-Route A 使用零厚度面金屬 PEC 薄片，並明確指定幾何近似設定。Route B 使用有限厚度金屬及其外部 PEC 表面。在 Palace Route B 中，導體內部不納入求解四面體。這兩種方法都不會把理想 PEC 近似轉變為實測導體損耗模型。
+求解幾何路線決定金屬如何表示；近似設定檔則決定如何從物理上解讀來源幾何。**Thin-Film（薄膜面，舊代碼 A）**使用零厚度面金屬 PEC 薄片與有限高度凸塊／柱體殼。**PEC Shell（金屬殼，舊代碼 B）**保留有限金屬的外部 PEC 邊界，並將金屬內部排除於 Palace 四面體求解域。PEC 是 perfect electric conductor（理想導體），代表理想邊界模型，不是實測導體損耗。
 
-Route A 的 `substrate_face` 與 `metal_gap_equivalent` 近似設定，在座標與正規化上的意義不同。請依預期模型選擇設定；遇到難以處理的網格時，切換路徑不會自動修復問題。確切支援形式請參閱[幾何參考](../geometry-sgb.qmd)。
+`substrate_face` 與 `metal_gap_equivalent` 是 Thin-Film 路線中的物理模型選擇，兩者將來源薄膜轉成求解幾何的方式不同。遇到難以處理的網格時，改換求解幾何路線不會自動修復問題。進階的 **Retained Solid（保留金屬實體，舊代碼 C）**會為多邊形 CAD 保留有限金屬體積，但不是完整的 Palace Surface-EPR 路線。確切支援形式請參閱[幾何參考](../geometry-sgb.qmd)。
 
 ## 對照物理量判讀數值變化 {#read-numerical-changes-beside-the-quantity}
 

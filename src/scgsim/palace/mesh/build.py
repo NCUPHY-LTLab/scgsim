@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.geometry.models.common import GeometryRoute, _normalize_geometry_route
+
 from scgsim.preparation import _native_preparation
 
 from scgsim.diagnostics import _stage, _worker_config
@@ -81,7 +83,7 @@ def build_route_mesh(
     *,
     component: Any,
     stack: Mapping[str, Any],
-    route: str,
+    route: str | GeometryRoute,
     output_dir: str | Path,
     size_policy: str = "scgsim_default",
     refined_mesh_size: float | None = None,
@@ -105,8 +107,9 @@ def build_route_mesh(
         )
     if not isinstance(stack, Mapping):
         raise TypeError("stack must be a mapping after set_stack processing.")
+    route = _normalize_geometry_route(route)
     if route not in {"A", "B"}:
-        raise ValueError("route must be either 'A' or 'B'.")
+        raise ValueError("Palace geometry route must be thin_film (A) or pec_shell (B).")
     from .controls import mesh_controls, normalize_mesh_sizing
 
     sizing = normalize_mesh_sizing(

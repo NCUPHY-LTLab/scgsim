@@ -62,11 +62,11 @@ component = gf.get_component(
 
 來源版圖取自[目前公開的 OrPen Circular Pad 研究修訂版 `ecc9062`](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/source_layout.png)。圖中顯示編寫的來源幾何與定位器，不是求解場。
 
-此為連結的 LC 工作流程所用 Circle Pad 來源，不是選用的環形示意。元件提供已編寫的圓形邊界紀錄；準備好的 `GeometryPlan` 快照會連同元件的 Entity 與 Net 識別，將它們帶入 Palace Route B。獨立的 GDS 邊界重建 API 僅供呼叫端選擇重建時使用，不會覆寫這些已編寫曲線。目前 OrPen 教學呈現 Fresh08 Palace 結果；其執行來源、觀測頻率、適應歷程與限制請參閱[共振模態教學](palace-eigenmode.qmd#circular-pad-lc-study)。
+此為連結的 LC 工作流程所用 Circle Pad 來源，不是選用的環形示意。元件提供已編寫的圓形邊界紀錄；準備好的 `GeometryPlan` 快照會連同元件的 Entity 與 Net 識別，將它們帶入 Palace PEC Shell。獨立的 GDS 邊界重建 API 僅供呼叫端選擇重建時使用，不會覆寫這些已編寫曲線。目前 OrPen 教學呈現 Fresh08 Palace 結果；其執行來源、觀測頻率、適應歷程與限制請參閱[共振模態教學](palace-eigenmode.qmd#circular-pad-lc-study)。
 
 請依手邊來源選擇曲線描述方式。對於已編寫幾何，元件可在 `component.info["component_semantics"]["boundary_curves"]` 中帶有 `BoundaryCurveChainSpec` 紀錄，列出既有 Entity 與邊界，並依序記錄線段、弧線或樣條曲線。GeometryPlan 會依註冊 occurrence 限定這些本地識別，並一併轉換曲線鏈。若在組合完成後才建立紀錄，請使用組合座標系中的限定 ID 呼叫 `plan.set_boundary_curves(...)`。若只有 GDS 邊界頂點，請在 `component.info["component_semantics"]["boundary_reconstruction"]` 選擇 `GdsBoundaryReconstructionSpec`，或將限定紀錄傳給 `plan.set_boundary_reconstruction(...)`。請使用來源邊界中的線段與錨點識別；未選取的線段維持直線。SCGSim 不會從預覽推斷曲線意圖，也不會自動平滑多邊形邊線。
 
-接續上方 plan 流程：註冊來源中的實際參照、檢查 `plan.entities`、使用 `plan.set_nets(net_membership)` 指派預期的最終 Net ID、設定真空區域，再呼叫 `plan.prepare()`。快照會保留選定的曲線宣告及其 Entity 和 occurrence 識別。Palace Route A 與 B 會降階處理啟用的曲線；Route C 與 AEDT 平面準備流程不會。未宣告曲線時，既有的純多邊形行為維持不變。
+接續上方 plan 流程：註冊來源中的實際參照、檢查 `plan.entities`、使用 `plan.set_nets(net_membership)` 指派預期的最終 Net ID、設定真空區域，再呼叫 `plan.prepare()`。快照會保留選定的曲線宣告及其 Entity 和 occurrence 識別。Palace Thin-Film 與 PEC Shell 會降階處理啟用的曲線；Retained Solid 與 AEDT 平面準備流程不會。未宣告曲線時，既有的純多邊形行為維持不變。
 
 ::: {.callout-note title="已編寫曲線與 GDS 重建是不同輸入"}
 兩個 `GeometryPlan` setter 只會替換呼叫端擁有的清單；`prepare()` 也會加入元件宣告。因此，`plan.set_boundary_curves([])` 不會移除 OrPen 編寫的曲線；若 GDS 重建結果與已編寫的完整環重疊，系統會拒絕而非將其視為覆寫。若要從多邊形資料重建，請建立分離的原始 `GeometryBuildInput`，其中包含選定的重建紀錄且不含已編寫曲線宣告，再傳給既有公開 `SemanticGeometryBuilder` API。`set_plan(snapshot)` 會繼續遵循快照宣告。曲線紀錄與邊界歸屬請參閱 [GeometryPlan 與幾何來源曲線契約](../geometry-sgb.qmd#source-curves)。這不會變更元件或其快照。

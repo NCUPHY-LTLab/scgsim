@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.geometry.models.common import GeometryRoute, _normalize_geometry_route
+
 from scgsim.geometry._primitives._grid_cache import with_grid_work_cache
 
 from scgsim.diagnostics import _stage
@@ -61,11 +63,12 @@ class SemanticGeometryBuilder:
         self,
         build_input: GeometryBuildInput,
         *,
-        route: RouteLiteral,
+        route: RouteLiteral | GeometryRoute | str,
         run_folder: PathInput,
         representation_context=None,
     ) -> tuple[FinalPhysicalGroupRecord, ...]:
         """Validate input, plan geometry, build OCC, then export groups."""
+        route = _normalize_geometry_route(route)
         if representation_context is None:
             raise ValueError("interpret_physical_geometry() and pass plan.context before native compilation")
         run_path = Path(run_folder)

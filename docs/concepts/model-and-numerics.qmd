@@ -21,15 +21,20 @@ HFSS default Perfect E exterior.
 
 ## Choose the geometric approximation
 
-Route A uses zero-thickness face-metal PEC sheets with an explicit profile.
-Route B uses finite metal and its exterior PEC surfaces. In Palace Route B,
-conductor interiors are excluded from solution tetrahedra. Neither approach
-turns the ideal PEC approximation into a measured conductor-loss model.
+The solve geometry route decides how metal is represented; an approximation
+profile decides how source geometry is interpreted physically. **Thin-Film**
+(legacy code A) uses zero-thickness face-metal PEC sheets and finite bump/post
+shells. **PEC Shell** (legacy code B) keeps the outer PEC boundary of finite
+metal and excludes its interior from Palace tetrahedral solution domains. PEC
+means perfect electric conductor, an ideal boundary model rather than a
+measured conductor-loss model.
 
-Route A's `substrate_face` and `metal_gap_equivalent` profiles have different
-coordinate/normalization meanings. Select them for the intended model; changing
-route is not an automatic repair for a difficult mesh. See the
-[geometry reference](../geometry-sgb.qmd) for exact supported forms.
+The `substrate_face` and `metal_gap_equivalent` profiles are physical-model
+choices within Thin-Film. They differ in how the source film maps to the
+solver geometry; changing the solve route does not automatically repair a
+difficult mesh. The advanced **Retained Solid** geometry choice (legacy code C)
+retains finite metal for polygon CAD, but is not a complete Palace Surface-EPR
+route. See the [geometry reference](../geometry-sgb.qmd) for the route contract.
 
 ## Read numerical changes beside the quantity
 

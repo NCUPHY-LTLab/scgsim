@@ -90,7 +90,7 @@ It shows the authored source geometry and locator, not the solved field.
 
 This is the Circle Pad source used by the linked LC workflow, not the optional
 ring illustration. The component supplies its authored circular boundary
-records; the prepared `GeometryPlan` snapshot carries them into Palace Route B
+records; the prepared `GeometryPlan` snapshot carries them into Palace PEC Shell
 with the component's Entity and Net identities. The separate GDS-boundary
 reconstruction API is for a caller-selected reconstruction and does not
 override these authored curves. The current OrPen lesson presents the Fresh08
@@ -117,8 +117,8 @@ Continue with the plan flow above: register the source's actual references,
 inspect `plan.entities`, assign the intended final Net IDs with
 `plan.set_nets(net_membership)`, set the vacuum region, and call
 `plan.prepare()`. The snapshot retains the selected curve declarations and
-their Entity and occurrence identities. Palace Routes A and B lower active
-curves; Route C and AEDT planar preparation do not. With no curve declaration,
+their Entity and occurrence identities. Palace Thin-Film and PEC Shell lower active
+curves; Retained Solid and AEDT planar preparation do not. With no curve declaration,
 existing polygon-only behavior is unchanged.
 
 ::: {.callout-note title="Authored curves and GDS reconstruction are separate inputs"}

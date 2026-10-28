@@ -1,5 +1,5 @@
 ---
-title: "Public Xmon: AEDT Route B Eigenmode"
+title: "Public Xmon: AEDT Eigenmode from PEC Shell source"
 description: "Bind junction-aware catalogue sources and prepare the shared-source AEDT EPR request."
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"
@@ -19,7 +19,7 @@ run host needs that AEDT release, PyAEDT 1.3.0, and an appropriate license. Use
 the matching SCGSim source revision listed in
 [Examples](examples.qmd). Quarto does not open AEDT, create native geometry, or
 solve this model. The snapshot retains its source physical stack; this page
-selects `modeling="solid"` for AEDT. A Route A/B choice describes upstream
+selects `modeling="solid"` for AEDT. A Thin-Film/PEC Shell choice describes upstream
 geometry construction and is not an AEDT preparation argument.
 
 ## Configure surface and junction EPR

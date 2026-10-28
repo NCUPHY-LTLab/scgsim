@@ -157,7 +157,7 @@ and contains exactly `supporting_entity_id` and `supporting_side`.
 `metal_gap_equivalent` needs its two explicitly bound opposing films. Missing
 bindings fail preparation with a replacement call shape before native work.
 The old `route_a_thin_film` string can disclose or check the selected name; it
-does not author bindings or own coordinate arithmetic. Existing Route B
+does not author bindings or own coordinate arithmetic. Existing PEC Shell (legacy data code B)
 selection uses the shared identity `route_b` profile when no explicit profile
 is supplied. Low-level fresh `build_route_mesh()` requires preparation's
 effective normalized input and representation context.

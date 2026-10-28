@@ -133,7 +133,7 @@ wrapper; a direct ELF is not an interchangeable wrapper command. This native
 prerequisite applies to this curved Uniform-port example.
 :::
 
-The preparation path carries the authored curves through Palace Route B. Its
+The preparation path carries the authored curves through Palace PEC Shell. Its
 mesh settings use HXT, geometric order 2 and one `HighOrder` optimization.
 These describe the mesh geometry. Palace FEM order 2 is a separate field
 approximation setting; the configured maximum of four AMR passes limits the

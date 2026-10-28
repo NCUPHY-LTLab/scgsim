@@ -9,11 +9,11 @@ execute:
   enabled: false
 ---
 
-本頁會建立一個可重複使用的來源 snapshot，供 [Palace](tutorial-xmon-palace.qmd)與 [AEDT](tutorial-xmon-aedt.qmd)工作流程共用。起點是 OrPen 公開的 Kosen2024 Xmon 預覽元件與接地短路 coupon。此元件是依據 Kosen 等人論文 [PRX Quantum 5, 030350（2024）](https://doi.org/10.1103/PRXQuantum.5.030350)獨立參數化改編，並採用[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)授權；它不是作者提供的遮罩。尺寸與 coupon 設定遵循[範例](examples.qmd)所連結的公開 Palace Route B 範例；這些是公開模擬輸入，不是元件量測資料或論文遮罩尺寸。請使用該處列出的相符 SCGSim 與 OrPen 版本。Quarto 只顯示程式碼，不會執行。
+本頁會建立一個可重複使用的來源 snapshot，供 [Palace](tutorial-xmon-palace.qmd)與 [AEDT](tutorial-xmon-aedt.qmd)工作流程共用。起點是 OrPen 公開的 Kosen2024 Xmon 預覽元件與接地短路 coupon。此元件是依據 Kosen 等人論文 [PRX Quantum 5, 030350（2024）](https://doi.org/10.1103/PRXQuantum.5.030350)獨立參數化改編，並採用[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)授權；它不是作者提供的遮罩。尺寸與 coupon 設定遵循[範例](examples.qmd)所連結的公開 Palace PEC Shell 範例；這些是公開模擬輸入，不是元件量測資料或論文遮罩尺寸。請使用該處列出的相符 SCGSim 與 OrPen 版本。Quarto 只顯示程式碼，不會執行。
 
 目標是建立一個由兩個後端共用的來源 snapshot。請先完成[安裝](course/installation.qmd)，並在此工作階段保留 `snapshot`。
 
-[固定版本的公開 OrPen Xmon 來源](https://github.com/OrPenStrike/orpen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon)提供後端教學所使用的 Palace Route B 集總端口電感 $11.78\,\mathrm{nH}$。AEDT 教學將電容設為零，做為僅含電感的明確電路模型假設；這不是實測零值，也不代表實體元件電容為零。MA／MS／SA 薄膜數值來自 OrPen 已驗證的合成 `LiteratureCentral` 預設值，屬於建模假設，後端頁面另有說明。
+[固定版本的公開 OrPen Xmon 來源](https://github.com/OrPenStrike/orpen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon)提供後端教學所使用的 Palace PEC Shell 集總端口電感 $11.78\,\mathrm{nH}$。AEDT 教學將電容設為零，做為僅含電感的明確電路模型假設；這不是實測零值，也不代表實體元件電容為零。MA／MS／SA 薄膜數值來自 OrPen 已驗證的合成 `LiteratureCentral` 預設值，屬於建模假設，後端頁面另有說明。
 
 ## 建立元件與具名 coupon 出現位置 {#build-the-component-and-named-coupon-occurrences}
 

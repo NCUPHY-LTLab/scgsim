@@ -27,7 +27,7 @@ A source curve is geometry declared by the author, not a rounded polygon edge. W
 
 For reconstruction, the caller names original segment indices in ring order. A partial chain keeps its original endpoints and leaves unselected segments unchanged. Anchors must lie on that chain. A closed circular reconstruction uses three distinct anchors; the compiler builds an exact circular representation rather than fitting a polygonal approximation. A caller-authored B-spline retains its degree, weights, knots and multiplicities.
 
-Active source-curve intent is supported by the current Palace A/B solve geometries. The advanced contract describes other geometry routes; they are outside the current Surface-EPR direction. The current AEDT path also rejects active declarations rather than silently using a polygon witness.
+Active source-curve intent is supported by the current Palace Thin-Film and PEC Shell solve geometries. The advanced contract describes other geometry routes; they are outside the current Surface-EPR direction. The current AEDT path also rejects active declarations rather than silently using a polygon witness.
 
 ## The main source-region partition retains curve history
 

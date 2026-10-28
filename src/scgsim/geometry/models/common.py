@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from os import PathLike
-from typing import Literal
+from typing import Literal, cast
 
 PathInput = str | PathLike[str]
 
@@ -15,6 +16,40 @@ SEMANTIC_GEOMETRY_METADATA_DIR = "semantic_geometry"
 
 
 RouteLiteral = Literal["A", "B", "C"]
+
+
+class GeometryRoute(str, Enum):
+    """Physical construction choices with unchanged serialized route codes."""
+
+    THIN_FILM = "A"
+    PEC_SHELL = "B"
+    RETAINED_SOLID = "C"
+
+    def __str__(self) -> str:
+        return self.value
+
+    @property
+    def display_name(self) -> str:
+        return {
+            "A": "Thin film",
+            "B": "PEC shell",
+            "C": "Retained solid",
+        }[self.value]
+
+
+def _normalize_geometry_route(value: str | GeometryRoute) -> RouteLiteral:
+    """Normalize caller input while keeping persisted A/B/C codes unchanged."""
+    if isinstance(value, str):
+        name = value.strip().upper().replace("-", "_")
+        names = {member.name: member.value for member in GeometryRoute}
+        code = names.get(name, name)
+        if code in {"A", "B", "C"}:
+            return cast(RouteLiteral, code)
+    raise ValueError(
+        "geometry route must be thin_film (A), pec_shell (B), "
+        "or retained_solid (C)"
+    )
+
 
 
 InterfaceKindLiteral = Literal["MS", "MA", "SA", "AA", "MM", "SS"]
