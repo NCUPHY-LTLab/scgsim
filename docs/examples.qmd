@@ -6,21 +6,21 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/examples"
 ---
 
-SCGSim prepares a geometry and solver request, then resolves the returned results with their units and model identity. Choose a notebook by the quantity you need; its backend tabs carry the procedure from source inputs through result reading.
+SCGSim prepares a geometry and solver request, then resolves the returned results with their units and model identity. Choose the quantity you need, then follow that tutorial’s environment steps to prepare its tools.
 
 ## Choose a simulation {#getting-started}
 
 | Goal | Notebook | Result |
 |---|---|---|
 | Capacitance | [Palace Electrostatic or AEDT Q3D](tutorials/capacitance.qmd) | Labeled conductor capacitance matrix |
-| Resonant modes | [Palace or HFSS Eigenmode](tutorials/resonance.qmd) | Mode frequencies and returned mode report |
-| Energy participation | [Palace or HFSS EPR](tutorials/resonance-epr.qmd) | Surface, bulk and branch participation by mode |
+| Resonant modes | [HFSS Eigenmode tutorial](tutorials/resonance.qmd); [Palace 200 nm historical reference](history/simplepad-eigenmode-200nm.qmd) | Mode frequencies and returned mode report |
+| Energy participation | [HFSS EPR tutorial](tutorials/resonance-epr.qmd); [Palace 200 nm historical reference](history/simplepad-epr-200nm.qmd) | Surface, bulk and junction participation by mode |
 | Driven S-parameters | [HFSS Modal or Terminal](tutorials/scattering.qmd) | Two-port response with the selected port family |
 | Transmission-line parameters | [AEDT Q2D](tutorials/transmission-line.qmd) | Per-length C, G, L and R matrices |
 
 ## Prepare a model and read its return
 
-Start with [installation](course/installation.qmd), then select explicit geometry, materials, conductors and ports for your physical question. The [model and materials reference](reference.qmd#model-materials) and [conductors and ports reference](reference.qmd#conductors-ports) explain those choices. Use [returned results](course/returned-results.qmd) to keep the returned quantity, units, mode or conductor identity, and solver status together.
+Follow the selected tutorial’s environment steps first; the [general installation guide](course/installation.qmd) is supplementary. Then select explicit geometry, materials, conductors and ports for your physical question. The [model and materials reference](reference.qmd#model-materials) and [conductors and ports reference](reference.qmd#conductors-ports) explain those choices. Use [returned results](course/returned-results.qmd) to keep the returned quantity, units, mode or conductor identity, and solver status together.
 
 ## Explore larger examples {#public-inputs}
 

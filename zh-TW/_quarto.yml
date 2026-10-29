@@ -11,6 +11,7 @@ project:
   - docs/specs/*.qmd
   - docs/course/*.qmd
   - docs/tutorials/*.qmd
+  - docs/tutorials/eigenmode/*.qmd
   - docs/history/*.qmd
   - docs/concepts/*.qmd
   - docs/concepts/sgb/*.qmd
@@ -83,8 +84,17 @@ website:
     - section: 依模擬目標
       contents:
       - docs/tutorials/capacitance.qmd
-      - docs/tutorials/resonance.qmd
-      - docs/tutorials/resonance-epr.qmd
+      - section: 共振模態與 Surface EPR
+        href: docs/tutorials/resonance.qmd
+        contents:
+        - text: 總覽
+          href: docs/tutorials/resonance.qmd
+        - text: 準備交接
+          href: docs/tutorials/eigenmode/prepare-handoff.qmd
+        - text: 同機執行
+          href: docs/tutorials/eigenmode/run-directly.qmd
+        - text: 分析
+          href: docs/tutorials/eigenmode/analyze.qmd
       - docs/tutorials/scattering.qmd
       - docs/tutorials/transmission-line.qmd
     - section: 準備與檢視模型

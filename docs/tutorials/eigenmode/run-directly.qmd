@@ -1,0 +1,61 @@
+---
+title: "Run Directly: solve on the model-building host"
+description: "Set up, run, and inspect a standalone SimplePad HFSS Eigenmode and Surface EPR notebook on an AEDT host."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/eigenmode/run-directly"
+---
+
+Use the standalone OrcaPen SimplePad HFSS DirectRun notebook when the model-building computer is also the licensed AEDT solver host. It creates the model, prepares a fresh handoff, runs it on that host, and reads the return without depending on another notebook. Open the [DirectRun Notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/15083c730d0a7ba925f18818e0b7206bb28c9e8e/notebooks/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_run_directly.ipynb) or its [source QMD](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/15083c730d0a7ba925f18818e0b7206bb28c9e8e/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_run_directly.qmd).
+
+## 1. Set up the environment and open DirectRun
+
+Follow the DirectRun notebook’s own “Environment and Public Version” section to create the isolated Python 3.12 environment, then select the `SimplePad HFSS` Jupyter kernel. Run its cells in order; it builds its own model and request. The solve requires AEDT 2024.2, PyAEDT 1.3.0, and a valid license.
+
+Check: the version cell shows the selected package versions and the notebook is using the intended kernel.
+
+::: {.callout-note title="Pinned public sources" collapse="true"}
+This notebook uses OrcaPen PDK [`71d60ca`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/71d60ca03831580866cac139e337146fdb17a66c) and SCGSim [`0f6b4e5`](https://github.com/NCUPHY-LTLab/scgsim/tree/0f6b4e5c54aff4891492976a5dd58387cc1a1787). Follow the notebook’s environment section to install these sources.
+:::
+
+## 2. Review the model and grouped inputs
+
+The notebook builds the SimplePad model from its own source cells. Review the controls by purpose before preparing the run:
+
+| Group | Example input | Check |
+|---|---|---|
+| Geometry and materials | 200 µm pad, 20 µm gap, 1000 µm die; PDK stack supplies 100 nm aluminum and 500 µm silicon | Pad and Ground have explicit Net assignments; metal thickness follows the PDK source |
+| Linear junction | East-side locator from pad to Ground, 10 nH and 0 F | The branch is a linear load, without Josephson nonlinearity |
+| Eigenmode | `solid` representation; AEDT 2024.2; 1 GHz minimum search frequency; one mode; up to 10 adaptive passes and 1% frequency-change target | The minimum is an input; inspect the returned mode frequency and recorded pass history |
+| Surface EPR | MA, MS, and SA `LiteratureCentral` source presets; 0 µm margin; sidewalls excluded | Film thickness, permittivity, and loss tangent follow the selected source preset |
+| Host and output | 4 cores, 30% RAM limit, new run ID and output directory | Confirm the host has the requested available resources and use a fresh directory for another run |
+
+Check: the notebook displays the component, source contribution catalogue, and input summary before handoff preparation.
+
+::: {.callout-note title="Metal and EPR film thickness" collapse="true"}
+The current source metal is 100 nm. EPR film thickness is a separate value supplied by each selected PDK interface preset; it is converted to metres for `SurfaceEprSpec.film_thickness_m`.
+:::
+
+## 3. Prepare and execute on this AEDT host
+
+Run the final preparation cell. It creates a new run directory and displays the paths for the handoff package. Review the prepared input summary, then run the next DirectRun cell on this same AEDT host. That cell invokes the public SCGSim CLI on the metadata for the handoff just created in this notebook; it executes the existing package without preparing it again.
+
+Check: the run cell completes and the output shows the returned run directory and execution record. If another solve is needed, start a fresh kernel and prepare a new run directory.
+
+::: {.callout-note title="Run from a terminal" collapse="true"}
+The DirectRun notebook is the main route. To execute the package it just prepared from a terminal, replace the example metadata path with the actual `metadata/aedt_handoff_metadata.json` path shown by that notebook:
+
+```bash
+python -m scgsim.aedt.run --handoff /absolute/path/to/run_dir/metadata/aedt_handoff_metadata.json --execute
+```
+:::
+
+## 4. Inspect the return and continue to Analyze
+
+The notebook resolves the run directory it prepared and displays the primary physics rows and simulation benchmark. The mode-frequency field `frequency_ghz` is in GHz. For detailed EPR interpretation, open the [Analyze notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_analyze.ipynb) in a fresh kernel, enter the returned directory, and follow the [Analyze guide](analyze.qmd).
+
+Check: keep the complete returned directory; the notebook reports its mode rows and execution summary. The Analyze guide shows how to select an actual EPR mode and native pass.
+
+::: {.callout-note title="Other AEDT release" collapse="true"}
+This route uses AEDT 2024.2. AEDT 2023.2 is also supported when selected explicitly in the notebook; use the same release installed on the solver host.
+:::

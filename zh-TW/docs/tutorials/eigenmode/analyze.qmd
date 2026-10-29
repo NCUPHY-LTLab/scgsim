@@ -1,0 +1,85 @@
+---
+lang: zh-TW
+title: "Analyze：讀取模態與 Surface EPR"
+description: "解析 SimplePad HFSS 回傳資料，選擇已記錄的模態與自適應回合，並解讀頻率及 EPR 量。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/eigenmode/analyze"
+---
+
+使用全新 Python 核心讀取完整回傳資料夾，查看實際模態頻率、原生自適應回合與表面能量參與率。讀取與解析可離線完成；此頁不啟動 AEDT 求解。
+
+## 1. 指定實際回傳資料夾
+
+從 Prepare Handoff 取回完整輸出，或使用 Run Directly 產生的 `run_dir`。在新的 Python 核心開啟 [Analyze Notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_analyze.ipynb)，填入實際回傳資料夾。讀取結果可離線完成。
+
+```python
+from pathlib import Path
+from scgsim.aedt import resolve_results
+
+RETURNED_RUN_DIR = Path("/absolute/path/to/returned/run_dir").expanduser().resolve()
+resolved = resolve_results(RETURNED_RUN_DIR)
+resolved.show_all_results(show_details=True)
+epr = resolved.epr_result()
+physics = resolved.physics_results()
+benchmark = resolved.simulation_benchmark()
+```
+
+確認：報告顯示執行收據、原生模態結果列、已要求時的 EPR 結果列，以及執行摘要。`physics` 是主要模態結果；`benchmark` 摘要本次執行成本。
+
+## 2. 選擇已記錄的 EPR 模態與自適應回合
+
+本 HFSS 流程會要求 Surface EPR。先確認 `epr` 存在，再檢查各列實際記錄的 `mode`、`native_pass` 與 `status`。請選擇同一列中的模態與正整數原生回合；不要把設定的回合上限當成實際完成的回合。
+
+```python
+if epr is None:
+    raise ValueError("No EPR result was requested; check the run request.")
+
+selections = [
+    {
+        "mode": row.get("mode"),
+        "native_pass": row.get("native_pass"),
+        "status": row.get("status"),
+    }
+    for row in epr.rows
+]
+print(selections)
+```
+
+從輸出選一列，將該列的模態與原生回合填入下方。
+
+```python
+MODE = 1          # 改成所選列的 mode。
+NATIVE_PASS = 1   # 改成同一列的 native_pass。
+```
+
+確認：所選組合符合一筆回傳列及其狀態。
+
+::: {.callout-note title="繪圖時選擇結果列" collapse="true"}
+`show_epr` 會把 `None` 當成萬用條件，因此必須傳入所選列的兩個值，且只能匹配一列。其他結果類型（例如 saved-field 列）可能沒有 `native_pass`；本頁分析的自適應求解會在 EPR 列記錄此欄位。
+:::
+
+## 3. 讀取頻率與參與量
+
+```python
+from scgsim.aedt import plot_epr_result, show_epr
+
+print(physics)
+show_epr(epr, mode=MODE, native_pass=NATIVE_PASS)
+plot_epr_result(epr, mode=MODE, native_pass=NATIVE_PASS, show_convergence=True)
+```
+
+| 報告項目 | 單位與判讀 |
+|---|---|
+| 主要模態結果 `frequency_ghz` | GHz；此欄是回傳的模態頻率。 |
+| EPR 列 `frequency_hz` | Hz；此頻率隨選定 EPR 列記錄。 |
+| 表面貢獻 | `participation` 為無因次量，`energy_j` 為 J；連同來源介面與場側標籤一起讀取。 |
+| 體積區域 | `energy_j` 為 J；顯示的參與量由區域能量除以正規化能量計算。 |
+| 接面 | `inductive_participation`（`pL`）與 `capacitive_participation`（`pC`）皆為無因次量。 |
+| 自適應歷程 | 頻率與 EPR 是不同結果列；EPR 選擇依其記錄的模態與原生回合。 |
+
+確認：依結果欄位名稱判讀單位，並保留該列的來源標籤及狀態。只解讀回傳請求實際包含的貢獻；缺少的項目不代表零。
+
+::: {.callout-note title="其他 EPR 分析" collapse="true"}
+表面參與量與頻率收斂是不同歷程。[儲存場分析指南](../../course/aedt-saved-fields.qmd)說明在 AEDT 評估已保存場；[離線 EPR 指南](../../course/offline-epr.qmd)說明以既有場積分更新損耗假設，兩者用途不同。
+:::

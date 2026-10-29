@@ -1,0 +1,62 @@
+---
+lang: zh-TW
+title: "Run Directly：在建模主機直接執行"
+description: "在 AEDT 主機設定、執行並檢查獨立的 SimplePad HFSS Eigenmode 與 Surface EPR 筆記本。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/eigenmode/run-directly"
+---
+
+當建模電腦同時是具授權的 AEDT 求解主機時，請使用 OrcaPen 獨立的 SimplePad HFSS DirectRun 筆記本。它會自行建立模型、準備新交接套件、在同一主機執行並讀取回傳結果，不依賴其他 Notebook。請開啟 [DirectRun Notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/15083c730d0a7ba925f18818e0b7206bb28c9e8e/notebooks/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_run_directly.ipynb) 或其[來源 QMD](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/15083c730d0a7ba925f18818e0b7206bb28c9e8e/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_run_directly.qmd)。
+
+## 1. 準備環境並開啟 DirectRun
+
+依 DirectRun 筆記本本身的「環境與公開版本」章建立獨立 Python 3.12 環境，再於 Jupyter 選擇 `SimplePad HFSS` 核心。依序執行筆記本儲存格；它會自行建立模型與請求。求解需要 AEDT 2024.2、PyAEDT 1.3.0 與有效授權。
+
+確認：版本儲存格顯示所選套件版本，且 Notebook 使用正確的核心。
+
+::: {.callout-note title="固定的公開來源版本" collapse="true"}
+本筆記本使用 OrcaPen PDK [`71d60ca`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/71d60ca03831580866cac139e337146fdb17a66c) 與 SCGSim [`0f6b4e5`](https://github.com/NCUPHY-LTLab/scgsim/tree/0f6b4e5c54aff4891492976a5dd58387cc1a1787)。請依筆記本的環境章安裝這些來源。
+:::
+
+## 2. 檢查模型與各類參數
+
+模型由筆記本自己的來源儲存格建立。準備執行前，按用途檢查各項設定：
+
+| 類別 | 本例輸入 | 確認方式 |
+|---|---|---|
+| 幾何與材料 | 焊墊 200 µm、間隙 20 µm、晶片 1000 µm；PDK 堆疊提供 100 nm 鋁與 500 µm 矽 | 焊墊與 Ground 明確指定 Net；金屬厚度依 PDK 來源設定 |
+| 線性接面 | 東側定位埠連接焊墊與 Ground，10 nH、0 F | 此支路是線性負載，不含 Josephson 非線性 |
+| Eigenmode | `solid` 表示法；AEDT 2024.2；最低搜尋頻率 1 GHz；一個模態；最多 10 個自適應回合、頻率變化目標 1% | 最低頻率是輸入；讀取求得模態頻率與實際回合歷程 |
+| Surface EPR | 來源預設 MA、MS、SA `LiteratureCentral`；退縮距離 0 µm；排除側壁 | 薄膜厚度、介電常數與損耗角正切依所選來源預設 |
+| 主機與輸出 | 4 核心、RAM 上限 30%、新的執行識別碼與輸出資料夾 | 確認主機可提供所需資源；另一次執行使用新的資料夾 |
+
+確認：準備交接前，筆記本顯示元件、來源貢獻目錄及輸入摘要。
+
+::: {.callout-note title="金屬與 EPR 薄膜厚度" collapse="true"}
+現行來源金屬厚度為 100 nm。EPR 薄膜厚度是獨立設定，依所選 PDK 介面預設值提供，再轉成公尺交給 `SurfaceEprSpec.film_thickness_m`。
+:::
+
+## 3. 在這台 AEDT 主機準備並執行
+
+執行最後的準備儲存格，建立新的執行資料夾並顯示交接套件路徑。確認輸入摘要後，在同一 AEDT 主機執行下一個 DirectRun 儲存格。該儲存格使用本筆記本剛建立的交接中介資料呼叫 SCGSim 公開 CLI，執行既有套件，不會再次準備。
+
+確認：執行儲存格完成，輸出顯示回傳資料夾與執行紀錄。若需再次求解，請開啟新核心並準備新的執行資料夾。
+
+::: {.callout-note title="從終端機執行" collapse="true"}
+主要流程請使用 DirectRun Notebook。若要從終端機執行剛才準備的套件，請將下方範例路徑換成筆記本顯示的 `metadata/aedt_handoff_metadata.json` 實際路徑：
+
+```bash
+python -m scgsim.aedt.run --handoff /absolute/path/to/run_dir/metadata/aedt_handoff_metadata.json --execute
+```
+:::
+
+## 4. 檢查回傳結果並前往 Analyze
+
+筆記本會解析本次建立的執行資料夾，顯示主要物理結果列與模擬效能摘要。模態頻率欄位 `frequency_ghz` 的單位是 GHz。若要詳細判讀 EPR，請在新核心開啟 [Analyze Notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_analyze.ipynb)，指定回傳資料夾，再依[Analyze 教學](analyze.qmd)操作。
+
+確認：保留完整回傳資料夾；筆記本顯示模態結果列與執行摘要。Analyze 教學會說明如何選擇實際存在的 EPR 模態及原生回合。
+
+::: {.callout-note title="其他 AEDT 版本" collapse="true"}
+本路徑使用 AEDT 2024.2。也支援明確選用 AEDT 2023.2；請使用與求解主機安裝版本相同的版本。
+:::

@@ -12,6 +12,7 @@ project:
   - docs/specs/*.qmd
   - docs/course/*.qmd
   - docs/tutorials/*.qmd
+  - docs/tutorials/eigenmode/*.qmd
   - docs/history/*.qmd
   - docs/concepts/*.qmd
   - docs/concepts/sgb/*.qmd
@@ -87,8 +88,17 @@ website:
     - section: By simulation goal
       contents:
       - docs/tutorials/capacitance.qmd
-      - docs/tutorials/resonance.qmd
-      - docs/tutorials/resonance-epr.qmd
+      - section: Eigenmode and Surface EPR
+        href: docs/tutorials/resonance.qmd
+        contents:
+        - text: Overview
+          href: docs/tutorials/resonance.qmd
+        - text: Prepare Handoff
+          href: docs/tutorials/eigenmode/prepare-handoff.qmd
+        - text: Run Directly
+          href: docs/tutorials/eigenmode/run-directly.qmd
+        - text: Analyze
+          href: docs/tutorials/eigenmode/analyze.qmd
       - docs/tutorials/scattering.qmd
       - docs/tutorials/transmission-line.qmd
     - section: Prepare and inspect a model

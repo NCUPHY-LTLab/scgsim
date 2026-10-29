@@ -1,52 +1,13 @@
 ---
 lang: zh-TW
-title: "準備、執行與分析 AEDT Eigenmode 和 EPR"
-description: "使用獨立 Notebook 準備 HFSS Eigenmode 交接套件、在 AEDT 執行，再分析回傳資料。"
+title: "AEDT Eigenmode 與 EPR Python API 參考"
+description: "補充 EigenmodeSim 的選用 Python API 片段；讀者流程由三階段教學引導。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-eigenmode-epr"
 ---
 
-依序使用三份彼此獨立的 Notebook：準備模型與交接套件、在具備 AEDT 授權的主機執行套件，再於新的工作階段分析完整回傳資料。一般 Eigenmode 會回報模態頻率與原生結果；加入 EPR 請求後，也會記錄所選表面、體積或接面參與量。請從 [OrcaPen 的公開範例](../examples.qmd#public-inputs)選擇來源模型，核對金屬層、介面與接面兩端的埠。
-
-| 階段 | 操作 | 產出檔案或結果 |
-|---|---|---|
-| Prepare Handoff（準備交接） | 選擇來源模型與研究設定，離線準備交接套件。 | 交接套件 |
-| Run（執行） | 在指定 AEDT 主機執行套件並取回完整回傳資料。 | 完整回傳資料夾 |
-| Analyze（分析） | 在新的工作階段讀取已記錄的模態頻率與 EPR 結果。 | 模態頻率與 EPR 報告 |
-
-::: {.callout-note title="各階段所需軟體"}
-Prepare 與 Analyze 可離線執行。Run 需要在求解主機安裝 AEDT 2023.2 或 2024.2、PyAEDT 1.3.0，並備妥授權。
-:::
-
-## Prepare Handoff（準備交接）
-
-開啟 Prepare Handoff Notebook，從 OrcaPen 公開範例選擇來源模型，再設定本次研究需要的項目：
-
-- **幾何、材料與接面：**選擇版圖、金屬／介面資料；若使用接面，指定接面與兩端埠。
-- **Eigenmode 數值設定：**選擇 AEDT 2023.2 或 2024.2、GHz 為單位的最低頻率、模態數、自適應迭代次數與頻率變化準則。
-- **表面 EPR 與損耗假設：**選擇介面、場側、薄膜厚度、介電常數與損耗角正切。
-- **主機資源與輸出：**設定 AEDT 資源與新的執行資料夾，再準備套件。
-
-準備可離線完成，會產生交接套件與 `HandoffPlan`。路徑包含執行資料夾、啟動指令稿、中介資料、規格、清單與套件檔；執行資料夾內含 `run_aedt.sh` 與 `metadata/aedt_handoff_metadata.json`。
-
-## Run（執行）
-
-在具備指定 AEDT 版本、PyAEDT 1.3.0 與可用授權的主機上，解壓縮準備好的套件，從執行資料夾執行其中一種命令，再取回完整回傳資料夾：
-
-```bash
-bash run_aedt.sh
-```
-
-```bash
-python -m scgsim.aedt.run --handoff metadata/aedt_handoff_metadata.json --execute
-```
-
-## Analyze（分析）
-
-在新的 Python 工作階段讀取模態頻率、原生狀態、要求的物理結果列與效能資料。EPR 的表面、體積及接面量分開查看，並使用結果實際記錄的模態與自適應迭代次數。頻率歷程與 Surface EPR 歷程也分別檢視。
-
-解析回傳結果可離線完成。若要評估最終儲存場，請在 AEDT 執行，詳見 [AEDT 儲存場指南](aedt-saved-fields.qmd)；[離線 EPR 指南](offline-epr.qmd)說明如何以已計算的積分重新計算不同損耗假設。
+一般研究流程請從[共振模態與 Surface EPR 總覽](../tutorials/resonance.qmd)開始，再依序選擇[準備交接](../tutorials/eigenmode/prepare-handoff.qmd)、[同機直接執行](../tutorials/eigenmode/run-directly.qmd)或[分析回傳結果](../tutorials/eigenmode/analyze.qmd)。本頁程式片段供自行整合使用，不是可獨立執行的完整範例。
 
 ## 選用：Python API 參考
 
