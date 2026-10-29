@@ -24,15 +24,17 @@ Start with [installation](course/installation.qmd), then select explicit geometr
 
 ## Explore larger examples {#public-inputs}
 
-The deeper Xmon and CPW source notebooks are pinned to public OrPen SC PDK revision [`35b4dc1cdd3f921badcac2fe57a98366315ae8d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9), which declares OrPen `0.1.0` and GDSFactory 9.48.x. Use the source revision named by each example.
+Choose an Xmon model, finite-ground CPW, or CPW cross-section example to match the subject of your study.
 
-| Public notebook group | Use |
+| Example group | Use |
 |---|---|
-| [Kosen2024_Xmon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Electrostatic/Eigenmode and source-first Xmon studies |
-| [ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/CpwFiniteGround) | HFSS Eigenmode/Driven and historical Q3D GDS-input source |
-| [CrossSectionSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/CrossSectionSimulation/CpwFiniteGround) | Q2D rectangles and conductor groups |
+| [Xmon model](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace electrostatic/Eigenmode and Xmon source studies |
+| [Finite-ground CPW](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/CpwFiniteGround) | HFSS Eigenmode/Driven and historical Q3D GDS input |
+| [CPW cross-section](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/CrossSectionSimulation/CpwFiniteGround) | Q2D rectangles and conductor groups |
 
-The source dimensions and presets are example model inputs. For current SCGSim requests, follow the relevant tutorial and API references.
+::: {.callout-note title="Source revision" collapse="true"}
+All three source groups use public OrPen SC PDK revision [`35b4dc1`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9), which declares OrPen `0.1.0` and GDSFactory 9.48.x. Example dimensions and presets are model inputs. For current SCGSim requests, follow the relevant tutorial and API references.
+:::
 
 ## Continue with a focused reference
 

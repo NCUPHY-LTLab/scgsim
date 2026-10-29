@@ -15,7 +15,7 @@ execute:
 
 ## 1. What you will get
 
-This notebook adds a linear inductive branch to a square pad and surrounding Ground, prepares an Eigenmode run, and reads the returned mode frequency. Choose Palace or HFSS; each route is complete from the shared component through result resolution.
+Use this tutorial to add a declared linear inductive branch to the pad, prepare one Eigenmode run, and read its returned mode frequency. Follow the notebook route in order: prepare the shared source, choose Palace or HFSS controls, inspect and run that handoff, then read the identified mode in a fresh analysis session.
 
 ![SimplePad Palace mode-1 frequency and adaptive indicators.](../assets/simple-pad-palace-em.png){#fig-simple-pad-palace-em}
 
@@ -90,7 +90,17 @@ AEDT_CORES = 4
 AEDT_RAM_LIMIT_PERCENT = 80
 ```
 
-The search target helps locate a mode; it is not the solved frequency. Mesh sizes, FEM order and adaptive controls have separate effects. Palace uses hertz for its target; HFSS uses GHz in its run-control record.
+Geometry
+: Pad, gap, die size and vacuum padding define the model snapshot.
+
+Circuit and mode
+: The branch inductance and requested mode count describe the linear model and requested output. The search target helps locate a mode; it is not the solved frequency.
+
+Numerical controls
+: Palace mesh, FEM order and adaptive iteration settings are separate controls. Its search target is in hertz; HFSS records the minimum frequency in GHz.
+
+Solver host
+: AEDT release, Palace executable, resources and each run ID belong to the selected host and output folder.
 
 Check: review the units and choose a fresh run ID before preparing another model.
 

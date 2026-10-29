@@ -1,5 +1,5 @@
 ---
-title: "Extract a CPW scattering response"
+title: "Calculate a CPW S-parameter response"
 description: "Compare HFSS Driven Modal integration-line ports with Wave Terminal reference conductors on a complete public CPW source."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
@@ -13,21 +13,38 @@ execute:
   enabled: false
 ---
 
-## 1. What you will get
+## 1. Choose the response question {#1-what-you-will-get}
 
-This notebook prepares one finite-ground coplanar waveguide (CPW) and reads its
-two-port HFSS scattering response. Choose Modal for integration-line ports or
-Terminal for Wave ports with explicit ground references; the port models and
-their returned evidence remain distinct.
+> If a signal enters port 1, how much reaches port 2 and how much is reflected?
+
+Follow this page from one declared coplanar waveguide (CPW) layout to its
+two-port S-parameter response. The example geometry is:
+
+| Quantity | Baseline value |
+|---|---:|
+| CPW length | 500 µm |
+| Signal width | 10 µm |
+| Gap to each ground | 6 µm |
+| Width of each ground | 80 µm |
+| Silicon substrate thickness | 500 µm |
+
+Choose the port model that matches the question. HFSS Modal uses integration
+lines; HFSS Terminal uses Wave ports with explicit ground references.
+
+| Port model | Reference definition |
+|---|---|
+| HFSS Modal | Integration lines at the two CPW end faces |
+| HFSS Terminal | Wave ports at the same end faces, with both ground objects as references |
 
 ![Source geometry for the public finite-ground CPW: substrate, center signal, two ground strips, and the modal integration-line locations. This is the declared layout, not a solver result.](../assets/cpw-source.svg){#fig-public-cpw-source}
 
-The baseline specimen is 500 µm long. Its 10 µm signal has 6 µm gaps to two
-80 µm ground strips over a 500 µm silicon substrate. The diagram follows those
-baseline rectangles and port coordinates; it contains no simulated fields or
-response curve. The [OrcaPen CPW Modal source](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/ComponentSimulation/CpwFiniteGround/aedt_hfss_driven_modal.ipynb)
-and [Terminal source](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/ComponentSimulation/CpwFiniteGround/aedt_hfss_driven_terminal.ipynb)
-remain the PDK-owned notebook sources.
+The figure shows the declared rectangles and Modal port coordinates, not a
+simulated field or response curve.
+
+::: {.callout-note title="Public source notebooks" collapse="true"}
+The PDK maintains the [HFSS Modal source notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/ComponentSimulation/CpwFiniteGround/aedt_hfss_driven_modal.ipynb)
+and [HFSS Terminal source notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/ComponentSimulation/CpwFiniteGround/aedt_hfss_driven_terminal.ipynb).
+:::
 
 ## 2. Prepare your environment
 
@@ -45,29 +62,37 @@ uv run python -c "from importlib.metadata import version; print(version('scgsim'
 uv run --with jupyter jupyter lab
 ```
 
-SCGSim is pinned to `2.0.0rc11`; the selected public PDK source is pinned to
-`35b4dc1cdd3f921badcac2fe57a98366315ae8d9` and imports as `orpen_sc_pdk`.
-Install AEDT 2023.2 or 2024.2, PyAEDT 1.3.0, and an available license on the
-solver host. Python packages prepare the request; they do not install the
-native solver.
-
 Check: both package versions print, and Jupyter uses this project's `.venv`.
 
-## 3. Choose your settings
+::: {.callout-note title="Pinned package sources" collapse="true"}
+The install command pins SCGSim `2.0.0rc11` and the public PDK source at
+revision `35b4dc1`, imported as `orpen_sc_pdk`.
+:::
 
-Edit this cell before building a new request. Geometry and port-line lengths
-are in micrometres; the sweep bounds are in GHz. The same settings apply to
-both port choices.
+## 3. Set the model and sweep {#3-choose-your-settings}
+
+Edit this cell before building a new request. It groups the layout dimensions,
+frequency sweep, and run resources used by both port choices. Lengths are in
+micrometres and sweep bounds are in GHz.
+
+| Settings group | Values to choose |
+|---|---|
+| Solver and output | AEDT release and a fresh run ID for each port model |
+| Geometry and material | CPW dimensions and metal thickness |
+| Sweep and ports | Frequency bounds, sweep points, integration-line height and length mesh |
+| Runtime resources | AEDT cores and RAM limit |
 
 ```{python}
 #| id: scattering-settings
 from pathlib import Path
 
+# Solver and output identity
 AEDT_VERSION = "2024.2"  # Select 2023.2 or 2024.2 for the licensed host.
 OUTPUT_ROOT = Path(".artifacts/finite-cpw-scattering")
 SOURCE_GDS = OUTPUT_ROOT / "source" / "cpw.gds"
 MODAL_RUN_ID = "cpw-modal-01"
 TERMINAL_RUN_ID = "cpw-terminal-01"
+# CPW geometry and material thickness
 CPW_LENGTH_UM = 500.0
 SIGNAL_WIDTH_UM = 10.0
 GAP_UM = 6.0
@@ -75,6 +100,7 @@ GROUND_WIDTH_UM = 80.0
 SUBSTRATE_WIDTH_UM = SIGNAL_WIDTH_UM + 2 * (GAP_UM + GROUND_WIDTH_UM)
 SUBSTRATE_THICKNESS_UM = 500.0
 GROUND_CENTER_OFFSET_UM = SIGNAL_WIDTH_UM / 2 + GAP_UM + GROUND_WIDTH_UM / 2
+# Frequency sweep, port line, and runtime resources
 FREQUENCY_START_GHZ = 3.0
 FREQUENCY_STOP_GHZ = 8.0
 SWEEP_POINTS = 20_000
@@ -85,20 +111,18 @@ AEDT_CORES = 4
 AEDT_RAM_LIMIT_PERCENT = 80
 ```
 
-The run IDs choose separate output folders, so the two port definitions do not
-overwrite one another. The modal integration lines use the two CPW end faces;
-Terminal uses the same end faces with the two explicit ground objects as its
-reference.
+The two run IDs keep each port model in its own output folder. Modal uses
+integration lines at the CPW end faces; Terminal uses the same end faces and
+the two explicit ground objects as its references.
 
 Check: confirm the AEDT release, frequency window, sweep size, and fresh run
 IDs for the question you plan to study.
 
-## 4. Build the complete CPW source {#build-cpw-source}
+## 4. Build the CPW geometry and material map {#build-cpw-source}
 
-This cell authors the public rectangular source, writes its GDS, and binds the
-imported layer and objects to the PDK materials. Keep these definitions with
-the selected port model; neither branch depends on a separate preparation
-lesson.
+This cell creates the public rectangular layout, writes its GDS, and binds the
+imported layer and objects to PDK materials. Both port models use this same
+geometry and material map.
 
 ```{python}
 #| id: scattering-cpw-source
@@ -154,19 +178,19 @@ object_bindings = (
 ground_objects = ("D0_TOP_M1_2", "D0_TOP_M1_3")
 ```
 
-The exact imported object names follow the declared source and import order.
-The GDS carries the metal sheets and substrate outline; the Thin Film model
-below separately declares the metal interval and lower contact side. Do not
-infer that interval or native material assignments from the picture.
+The imported object names follow source declaration and import order. GDS
+contains the metal sheets and substrate outline. The Thin Film model separately
+sets the metal interval and lower contact side, so use the request below for
+those facts rather than inferring them from the picture.
 
 Check: `SOURCE_GDS` exists and the source uses one signal, two distinct ground
 objects, and one substrate object.
 
-## 5. Configure the port model {#configure-port-models}
+## 5. Choose and define the port model {#configure-port-models}
 
-Choose one port model. Both examples use the explicit `NB_FILM` layer interval,
-the same imported objects, and the same frequency sweep. Modal specifies
-integration lines; Wave Terminal names its two ground references.
+Choose one branch for the study. Both examples use the same imported objects,
+explicit `NB_FILM` layer interval, and frequency sweep; they differ in how the
+ports define their reference.
 
 :::: {.panel-tabset group="scattering-solver"}
 
@@ -273,8 +297,13 @@ terminal_spec = HfssDrivenSpec(
 
 Wave Terminal ports each reference the ordered tuple
 `("D0_TOP_M1_2", "D0_TOP_M1_3")`. These names must match the explicit source
-bindings. A Lumped Terminal port is a separate model with different required
-support and impedance inputs, so this example does not substitute one for Wave.
+bindings.
+
+::: {.callout-note title="Keep the port models distinct"}
+The Wave Terminal result has explicit ground references. A Lumped Terminal
+port is a different model with different support and impedance inputs, so it
+cannot replace Wave in this example.
+:::
 
 ::::
 
@@ -283,12 +312,17 @@ references, and frequency sweep before preparation. The
 [Driven contract](../specs/aedt-runtime.qmd#hfss-driven-sweep-count)
 defines the sweep-count input.
 
-## 6. Inspect, prepare, and execute {#prepare-and-execute}
+## 6. Inspect, prepare, and run on AEDT {#prepare-and-execute}
 
-Preparation writes a solver package; execution is a separate action on the
-licensed AEDT host. Inspect the copied spec and archive first. For remote
-execution, transfer the complete package, run its `run_aedt.sh` on the selected
-host, and return the complete output directory.
+Preparation writes the solver package. Review its copied specification and
+archive, then run it explicitly on the licensed AEDT host. For a remote run,
+transfer the complete package, run `run_aedt.sh` on that host, and return the
+complete output directory.
+
+::: {.callout-important title="AEDT solver host requirements"}
+Run on a host with AEDT 2023.2 or 2024.2, PyAEDT 1.3.0, and an available AEDT
+license. Python packages prepare the request; they do not install AEDT.
+:::
 
 :::: {.panel-tabset group="scattering-solver"}
 
@@ -340,19 +374,34 @@ subprocess.run(
 
 ::::
 
-AEDT Desktop runs on the same licensed host as its runner. A prepared package
-or scheduler submission is not a completed result. See
+AEDT Desktop runs on the same licensed host as its runner. Preparation or
+scheduler submission alone does not produce a returned result. See
 [execution and handoff](../reference.qmd#execution-handoff) for the transfer
 boundary.
 
 Check: the selected runner finishes and the complete returned folder is
 available at its run path.
 
-## 7. Resolve and interpret the response {#resolve-the-response}
+## 7. Read the returned response {#resolve-the-response}
 
-Start a fresh analysis session after execution. The local return path below
-matches the output directory created in step 6; after a remote run, point it to
-the complete returned folder.
+After the run completes, open a fresh analysis kernel. The path below matches
+the output directory from step 6; for a remote run, point it to the complete
+returned folder, then run the cell.
+
+Both port models return dimensionless S-parameters. For port `k`, its
+S-parameter to port `j` is the outgoing wave divided by the incident wave at
+`k`, when all other ports have zero incident wave:
+
+$$
+S_{jk}=\frac{b_j}{a_k}
+$$
+
+Here `a_k` is the incident wave and `b_j` is the outgoing wave. Keep the port
+model and reference convention with each reported value.
+
+With port 1 excited, read `S11` as reflection at port 1 and `S21` as
+transmission from port 1 to port 2. Locate those named S-parameter results in
+the returned rows and report, and retain the selected port ordering.
 
 :::: {.panel-tabset group="scattering-solver"}
 
@@ -370,10 +419,8 @@ resolved.show_all_results(show_details=True)
 physics_rows
 ```
 
-Retain the frequency, ordered modal ports, integration-line convention and
-reported units together. S-parameters are dimensionless; use the report and
-returned rows for any impedance quantities rather than treating a curve as a
-terminal-reference result.
+Retain the frequency, ordered Modal ports, integration-line convention, and
+reported units together. Use the returned report for impedance quantities.
 
 ### HFSS Terminal
 
@@ -389,29 +436,27 @@ resolved.show_all_results(show_details=True)
 physics_rows
 ```
 
-Retain the frequency, ordered ports, exact shared ground references and
-reported units together. S-parameters are dimensionless. Terminal references
-have their own native readback and result meaning; similar response curves do
-not establish equivalence with Modal.
+Retain the frequency, ordered ports, exact shared ground references, and
+reported units together. Terminal results use their own native reference and
+readback; interpret them under that port model.
 
 ::::
 
-The report records native status and available adaptive changes beside the
-response. Use those observed quantities and the intended study to judge whether
-the returned evidence is useful; SCGSim does not provide a universal accuracy
-threshold. The [results and reports reference](../reference.qmd#results-reports)
-describes the shared result view.
+The report places native status and available adaptive changes beside the
+response. Read those with the intended study when deciding whether the result
+is useful. See the [results and reports reference](../reference.qmd#results-reports)
+for the shared result view.
 
 Check: the resolved report shows the returned run identity, port convention,
 frequency data and native status.
 
-## 8. Adapt this notebook
+## 8. Change the example for another CPW {#8-adapt-this-notebook}
 
-Change the public rectangles and their material/object bindings together when
-changing the CPW layout. Revisit integration-line endpoints for Modal or the
-explicit reference-object tuple for Wave Terminal. Use a new run ID for every
-preparation, update the baseline schematic to match changed dimensions, and
-interpret each return under its selected port model.
+When changing the CPW layout, update its rectangles and material/object
+bindings together. Revisit Modal integration-line endpoints or the Wave
+Terminal reference-object tuple, and use a new run ID for each preparation.
+Update the schematic to match the dimensions and interpret each return under
+its selected port model.
 
 Check: inspect the rebuilt layout and copied request before preparing another
 run. For backend-specific details, continue to the

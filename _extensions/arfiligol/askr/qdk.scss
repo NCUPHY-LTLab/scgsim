@@ -820,6 +820,7 @@ footer.footer .nav-link .bi { line-height: 1; font-size: 1rem; }
   #quarto-header .quarto-btn-toggle .bi { font-size: calc(var(--qdk-version-size) * var(--qdk-ui) * var(--_qdk-ui-scale)); line-height: 1; }
 }
 .sidebar-navigation .sidebar-item a.sidebar-link, #TOC a { color: var(--qdk-text); font-size: calc(15px * var(--qdk-ui) * var(--_qdk-ui-scale) - 2px); font-weight: 400; line-height: 1.35; }
+.sidebar-navigation .sidebar-item a.sidebar-link { border-radius: var(--qdk-radius); padding: .2rem .45rem; }
 // Areas has one panel presentation, independent of the Pages breakpoint.
 #quarto-header .navbar-brand { display: block; min-width: 0; max-width: 100%; }
 #quarto-header .navbar-title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -879,7 +880,12 @@ footer.footer .nav-link .bi { line-height: 1; font-size: 1rem; }
 @media (prefers-reduced-motion: reduce) {
   #quarto-header.askr-areas-collapsed .navbar-collapse, #qdk-area-glass { transition: none !important; }
 }
-.sidebar-navigation .sidebar-link.active, .navbar .nav-link.active, #TOC .active > a { color: var(--qdk-link); font-weight: 600; }
+.sidebar-navigation .sidebar-item a.sidebar-link.active {
+  background-color: color-mix(in srgb, var(--qdk-link) 10%, transparent);
+  color: var(--qdk-link);
+  font-weight: 600;
+}
+.navbar .nav-link.active, #TOC .active > a { color: var(--qdk-link); font-weight: 600; }
 #TOC { color: var(--qdk-muted); }
 
 h1, h2, h3, h4, h5, h6, .quarto-title .title { color: var(--qdk-heading); font-family: var(--qdk-heading-font); font-weight: var(--qdk-heading-weight); letter-spacing: -.018em; scroll-margin-top: 5rem; }

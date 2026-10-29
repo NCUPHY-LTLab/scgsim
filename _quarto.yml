@@ -107,6 +107,7 @@ website:
       contents:
       - docs/course/palace-electrostatic.qmd
       - docs/course/aedt-eigenmode.qmd
+      - docs/course/aedt-eigenmode-epr.qmd
       - docs/course/aedt-q3d.qmd
       - docs/course/aedt-hpc-sweep.qmd
     - section: Flip-chip Xmon examples

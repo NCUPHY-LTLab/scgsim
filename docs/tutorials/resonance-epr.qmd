@@ -15,7 +15,7 @@ execute:
 
 ## 1. What you will get
 
-This notebook builds a linear SimplePad resonator, solves one Eigenmode with Palace or HFSS, and plots the returned surface, bulk and branch participation for that mode. Each route includes source construction, native handoff and fresh-session result reading.
+Use this tutorial to prepare one linear SimplePad resonator, run an Eigenmode solve, and read its mode frequency and requested energy participation. Follow the notebook route in order: choose model and film inputs, prepare and run one backend handoff, then resolve the complete return in a fresh analysis session.
 
 ![SimplePad model layout used by the mode and EPR examples.](../assets/simple-pad-layout.png){#fig-epr-simple-pad-layout}
 
@@ -95,7 +95,17 @@ PRESET_NAMES = {
 }
 ```
 
-Mesh size, FEM order and adaptive controls affect different parts of the numerical request. A maximum pass count is a limit, not a statement that every pass will complete. Review actual returned mode and EPR rows with these settings.
+Geometry and circuit
+: Pad dimensions, gap, vacuum envelope and the declared inductive branch define the model.
+
+Eigenmode numerics
+: Search frequency, mode count, mesh, FEM order and adaptive controls define the requested solve. A maximum pass count is a limit; inspect the iterations actually returned.
+
+Surface and bulk assumptions
+: Choose the named interface films, thicknesses and margins from the source model. These are model assumptions used to evaluate participation.
+
+Host and output
+: Select the AEDT release, host resources and a fresh Palace or HFSS run ID.
 
 Check: choose the film preset, AEDT release and a fresh run ID before preparing the model.
 
@@ -157,6 +167,8 @@ Select one solver tab. Both request mode 1 with the same inductive source branch
 :::: {.panel-tabset group="epr-backend"}
 
 ### Palace
+
+Open [palace_eigenmode.ipynb](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/palace_eigenmode.ipynb) ([download](https://raw.githubusercontent.com/OrPenStrike/orpen-sc-pdk/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/palace_eigenmode.ipynb), [editable QMD](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/palace_eigenmode.qmd)).
 
 ```{python}
 #| id: epr-palace-config
@@ -225,6 +237,8 @@ palace_sim.set_numerical(
 The explicit `scgsim_default` mesh policy keeps the selected size controls active. Palace's port declares inductance in henries; it does not add a capacitive branch, so `PORT_CAPACITANCE_F = 0.0` remains a model note.
 
 ### HFSS
+
+Open [aedt_hfss_eigenmode.ipynb](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.ipynb) ([download](https://raw.githubusercontent.com/OrPenStrike/orpen-sc-pdk/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.ipynb), [editable QMD](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd)).
 
 ```{python}
 #| id: epr-hfss-config
@@ -394,6 +408,10 @@ Check: preparation prints a unique run directory; after execution retrieve the f
 ## 7. Read and plot results {#display-the-mode-and-participation}
 
 Use a fresh analysis kernel and the generated local run directory. For a transferred return, change only `RETURNED_RUN_DIR` to the returned folder; the independently saved Palace handoff note remains in the study project. Surface, bulk and branch participation are dimensionless. Keep mode identity and, for HFSS, native pass identity with each plotted record.
+
+::: {.callout-note title="Participation definition" collapse="true"}
+For an energy contribution $U_i$, participation is $p_i=U_i/U_{\mathrm{norm}}$. Here $U_{\mathrm{norm}}$ is the backend's documented normalization; see [quantities and normalization](../eigenmode-epr.qmd#quantities-and-normalization).
+:::
 
 :::: {.panel-tabset group="epr-backend"}
 

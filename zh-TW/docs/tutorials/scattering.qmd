@@ -1,5 +1,5 @@
 ---
-title: "萃取 CPW 散射響應"
+title: "計算 CPW 的 S 參數響應"
 description: "以完整公開 CPW 來源比較 HFSS Driven Modal 積分線埠與 Wave Terminal 參考導體。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
@@ -13,13 +13,35 @@ execute:
   enabled: false
 ---
 
-## 1. 本流程會得到什麼 {#1-what-you-will-get}
+## 1. 選擇要回答的問題 {#1-what-you-will-get}
 
-本筆記本會準備一個有限接地共平面波導（CPW），並讀取其 HFSS 雙埠散射響應。積分線埠請選 Modal；使用具明確接地參考的 Wave 埠請選 Terminal。兩種埠模型與各自回傳的證據彼此不同。
+> 從埠 1 送入訊號，有多少傳到埠 2、多少反射回來？
+
+本頁帶你從宣告共平面波導（CPW）版圖一路取得雙埠 S 參數響應。範例幾何如下：
+
+| 幾何量 | 基準值 |
+|---|---:|
+| CPW 長度 | 500 µm |
+| 訊號線寬度 | 10 µm |
+| 訊號線與各接地的間隙 | 6 µm |
+| 各接地寬度 | 80 µm |
+| 矽基板厚度 | 500 µm |
+
+請依研究問題選擇埠模型。HFSS Modal 使用積分線；HFSS Terminal 使用 Wave 埠與明確接地參考。
+
+| 埠模型 | 參考方式 |
+|---|---|
+| HFSS Modal | 在 CPW 兩端面設置積分線 |
+| HFSS Terminal | 在相同端面設置 Wave 埠，並以兩個接地物件作為參考 |
 
 ![公開有限接地 CPW 的來源幾何：基板、中央訊號線、兩條接地帶及 Modal 積分線位置。此圖呈現宣告的版圖，不是求解結果。](../assets/cpw-source.svg){#fig-public-cpw-source}
 
-基準樣本長 500 µm。其 10 µm 訊號線與兩條 80 µm 接地帶間隔 6 µm，並位於 500 µm 矽基板上。圖中矩形與埠座標依據此基準幾何，不含模擬場或響應曲線。[OrcaPen CPW Modal 來源](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/ComponentSimulation/CpwFiniteGround/aedt_hfss_driven_modal.ipynb)與 [Terminal 來源](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/ComponentSimulation/CpwFiniteGround/aedt_hfss_driven_terminal.ipynb)仍由 PDK 維護筆記本來源。
+圖中呈現宣告的矩形與 Modal 埠座標，不含模擬場或響應曲線。
+
+::: {.callout-note title="公開來源筆記本" collapse="true"}
+PDK 維護 [HFSS Modal 來源筆記本](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/ComponentSimulation/CpwFiniteGround/aedt_hfss_driven_modal.ipynb)
+與 [HFSS Terminal 來源筆記本](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/ComponentSimulation/CpwFiniteGround/aedt_hfss_driven_terminal.ipynb)。
+:::
 
 ## 2. 準備環境 {#2-prepare-your-environment}
 
@@ -35,23 +57,34 @@ uv run python -c "from importlib.metadata import version; print(version('scgsim'
 uv run --with jupyter jupyter lab
 ```
 
-SCGSim 固定於 `2.0.0rc11`；所選公開 PDK 來源固定於 `35b4dc1cdd3f921badcac2fe57a98366315ae8d9`，匯入名稱為 `orpen_sc_pdk`。請在求解主機安裝 AEDT 2023.2 或 2024.2、PyAEDT 1.3.0，並備妥可用授權。Python 套件負責準備請求，不會安裝原生求解器。
-
 檢查：兩個套件版本都能列印，且 Jupyter 使用本專案的 `.venv`。
 
-## 3. 選擇設定 {#3-choose-your-settings}
+::: {.callout-note title="固定的套件來源" collapse="true"}
+安裝指令固定使用 SCGSim `2.0.0rc11` 與 PDK 來源修訂版 `35b4dc1`，其匯入名稱為 `orpen_sc_pdk`。
+:::
 
-建立新請求前請編輯此儲存格。幾何尺寸與埠線長度使用微米，掃頻範圍使用 GHz。兩種埠選擇共用此設定。
+## 3. 設定模型與掃頻 {#3-choose-your-settings}
+
+建立新請求前請編輯此儲存格。設定分為版圖尺寸、頻率掃描與執行資源，兩種埠選擇共用這些值。長度單位為微米，掃頻範圍單位為 GHz。
+
+| 設定類別 | 要選擇的值 |
+|---|---|
+| 求解器與輸出 | AEDT 版本，以及各埠模型使用的新執行識別碼 |
+| 幾何與材料 | CPW 尺寸與金屬厚度 |
+| 掃頻與埠 | 頻率範圍、掃頻點數、積分線高度與網格長度 |
+| 執行資源 | AEDT 核心數與記憶體上限 |
 
 ```{python}
 #| id: scattering-settings
 from pathlib import Path
 
+# 求解器版本與輸出識別
 AEDT_VERSION = "2024.2"  # Select 2023.2 or 2024.2 for the licensed host.
 OUTPUT_ROOT = Path(".artifacts/finite-cpw-scattering")
 SOURCE_GDS = OUTPUT_ROOT / "source" / "cpw.gds"
 MODAL_RUN_ID = "cpw-modal-01"
 TERMINAL_RUN_ID = "cpw-terminal-01"
+# CPW 幾何與金屬厚度
 CPW_LENGTH_UM = 500.0
 SIGNAL_WIDTH_UM = 10.0
 GAP_UM = 6.0
@@ -59,6 +92,7 @@ GROUND_WIDTH_UM = 80.0
 SUBSTRATE_WIDTH_UM = SIGNAL_WIDTH_UM + 2 * (GAP_UM + GROUND_WIDTH_UM)
 SUBSTRATE_THICKNESS_UM = 500.0
 GROUND_CENTER_OFFSET_UM = SIGNAL_WIDTH_UM / 2 + GAP_UM + GROUND_WIDTH_UM / 2
+# 頻率掃描、埠線與執行資源
 FREQUENCY_START_GHZ = 3.0
 FREQUENCY_STOP_GHZ = 8.0
 SWEEP_POINTS = 20_000
@@ -69,13 +103,13 @@ AEDT_CORES = 4
 AEDT_RAM_LIMIT_PERCENT = 80
 ```
 
-執行識別碼會分別指定輸出資料夾，避免兩種埠定義互相覆寫。Modal 積分線位於 CPW 兩端面；Terminal 使用相同端面，並以兩個明確指定的接地物件作為參考。
+兩個執行識別碼會將不同埠模型存入各自的資料夾。Modal 在 CPW 端面使用積分線；Terminal 使用相同端面，並以兩個明確指定的接地物件作為參考。
 
 檢查：確認 AEDT 版本、頻率範圍、掃頻點數，並為研究問題指定新的執行識別碼。
 
-## 4. 建立完整 CPW 來源 {#build-cpw-source}
+## 4. 建立 CPW 幾何與材料對應 {#build-cpw-source}
 
-此儲存格建立公開矩形來源、寫出 GDS，並將匯入圖層與物件綁定至 PDK 材料。請將這些定義與所選埠模型一併使用；兩種流程都不依賴另一份準備教學。
+此儲存格建立公開矩形版圖、寫出 GDS，並將匯入圖層與物件綁定至 PDK 材料。兩種埠模型都使用相同的幾何與材料對應。
 
 ```{python}
 #| id: scattering-cpw-source
@@ -131,13 +165,13 @@ object_bindings = (
 ground_objects = ("D0_TOP_M1_2", "D0_TOP_M1_3")
 ```
 
-匯入物件名稱依宣告的來源與匯入順序決定。GDS 包含金屬薄片與基板外框；下方 Thin Film 模型另行宣告金屬厚度區間與下側接觸面。請勿從圖片推定厚度區間或原生材料指派。
+匯入物件名稱依來源宣告與匯入順序決定。GDS 包含金屬薄片與基板外框；Thin Film 模型會另外設定金屬厚度區間與下側接觸面。請依下方請求確認這些資料，不要從圖片推定。
 
 檢查：`SOURCE_GDS` 存在，且來源包含一個訊號物件、兩個不同的接地物件，以及一個基板物件。
 
-## 5. 設定埠模型 {#configure-port-models}
+## 5. 選擇並定義埠模型 {#configure-port-models}
 
-選擇一種埠模型。兩個範例使用相同匯入物件、明確的 `NB_FILM` 圖層區間及相同掃頻設定。Modal 指定積分線；Wave Terminal 則指定兩個接地參考物件。
+為這次研究選擇一種埠模型。兩個範例使用相同匯入物件、明確的 `NB_FILM` 圖層區間及掃頻設定；差異在於埠如何定義參考。
 
 :::: {.panel-tabset group="scattering-solver"}
 
@@ -241,15 +275,23 @@ terminal_spec = HfssDrivenSpec(
 )
 ```
 
-每個 Wave Terminal 埠都參照依序列出的 tuple `("D0_TOP_M1_2", "D0_TOP_M1_3")`。這些名稱必須與明確的來源綁定相符。Lumped Terminal 埠是另一種模型，需要不同的支撐與阻抗輸入，因此本例不以它取代 Wave 埠。
+每個 Wave Terminal 埠都參照依序列出的 tuple `("D0_TOP_M1_2", "D0_TOP_M1_3")`。這些名稱必須與明確的來源綁定相符。
+
+::: {.callout-note title="保持埠模型的定義一致"}
+Wave Terminal 結果使用明確的接地參考。Lumped Terminal 是另一種模型，需要不同的支撐與阻抗輸入，不能在本例中取代 Wave。
+:::
 
 ::::
 
 檢查：準備前確認所選模式、AEDT 版本、圖層區間、埠順序或參考物件，以及掃頻設定。[Driven 契約](../specs/aedt-runtime.qmd#hfss-driven-sweep-count)定義掃頻點數輸入。
 
-## 6. 檢查、準備與執行 {#prepare-and-execute}
+## 6. 檢查、準備並在 AEDT 執行 {#prepare-and-execute}
 
-準備流程會寫出求解器套件；執行則是在具授權的 AEDT 主機上另行進行。請先檢查複製出的規格與封存檔。若要遠端執行，請傳送完整套件、在指定主機執行其中的 `run_aedt.sh`，並取回完整輸出資料夾。
+準備流程會寫出求解器套件。先檢查複製出的規格與封存檔，再於具授權的 AEDT 主機明確執行。若要遠端執行，請傳送完整套件，在指定主機執行 `run_aedt.sh`，並取回完整輸出資料夾。
+
+::: {.callout-important title="AEDT 求解主機需求"}
+請在安裝 AEDT 2023.2 或 2024.2、PyAEDT 1.3.0，且具備可用 AEDT 授權的主機執行。Python 套件負責準備請求，不會安裝 AEDT。
+:::
 
 :::: {.panel-tabset group="scattering-solver"}
 
@@ -301,13 +343,23 @@ subprocess.run(
 
 ::::
 
-AEDT Desktop 與執行器都在同一台具授權的主機上運作。已準備的套件或已送出的排程工作都不代表結果已完成。傳輸界線請見[執行與交接](../reference.qmd#execution-handoff)。
+AEDT Desktop 與執行器都在同一台具授權的主機上運作。準備套件或送出排程工作本身不會產生回傳結果。傳輸界線請見[執行與交接](../reference.qmd#execution-handoff)。
 
 檢查：所選執行器已完成，且執行路徑中有完整回傳資料夾。
 
-## 7. 解析並解讀響應 {#resolve-the-response}
+## 7. 讀取回傳響應 {#resolve-the-response}
 
-執行完成後，請開啟新的分析工作階段。下方本機回傳路徑與步驟 6 建立的輸出資料夾相同；若在遠端執行，請改指向完整回傳資料夾。
+執行完成後，請開啟新的 Jupyter 核心。下方路徑與步驟 6 建立的輸出資料夾相同；若在遠端執行，請改為完整回傳資料夾，再執行儲存格。
+
+兩種埠模型都會回傳無量綱的 S 參數。當其他埠的入射波皆為零時，埠 `k` 的入射波為 `a_k`，埠 `j` 的出射波為 `b_j`，兩者的比值為：
+
+$$
+S_{jk}=\frac{b_j}{a_k}
+$$
+
+請將埠模型與參考慣例一併記錄，才能正確解讀回傳值。
+
+以埠 1 為輸入時，`S11` 表示埠 1 的反射，`S21` 表示從埠 1 傳到埠 2。請在回傳資料列與報表中找到這兩個 S 參數名稱，並保留埠順序。
 
 :::: {.panel-tabset group="scattering-solver"}
 
@@ -325,7 +377,7 @@ resolved.show_all_results(show_details=True)
 physics_rows
 ```
 
-請一併保留頻率、Modal 埠順序、積分線慣例與回報單位。S 參數沒有量綱；阻抗相關量請以報表與回傳資料列為準，不要將曲線視為 Terminal 參考結果。
+請一併保留頻率、Modal 埠順序、積分線慣例與回報單位。阻抗相關量請以回傳報表為準。
 
 ### HFSS Terminal
 
@@ -341,16 +393,16 @@ resolved.show_all_results(show_details=True)
 physics_rows
 ```
 
-請一併保留頻率、埠順序、確切共用接地參考及回報單位。S 參數沒有量綱。Terminal 參考具有自己的原生讀回與結果意義；響應曲線相似並不能證明與 Modal 等價。
+請一併保留頻率、埠順序、確切共用接地參考及回報單位。Terminal 結果使用自己的原生參考與讀回方式，請依所選埠模型解讀。
 
 ::::
 
-報表會在響應旁記錄原生狀態與可用的自適應變化。請依這些觀測量與研究目的，判斷回傳證據是否適用；SCGSim 不提供通用的精度門檻。[結果與報表參考](../reference.qmd#results-reports)說明共用結果檢視。
+報表會在響應旁列出原生狀態與可用的自適應變化。請配合研究目的判斷結果是否適用；共用結果檢視詳見[結果與報表參考](../reference.qmd#results-reports)。
 
-檢查：解析後的報表應顯示回傳執行識別、埠慣例、頻率資料與原生狀態。
+檢查：報表與資料列顯示回傳執行、埠慣例、頻率資料及原生狀態。
 
 ## 8. 調整本筆記本 {#8-adapt-this-notebook}
 
-修改 CPW 版圖時，請一併更新公開矩形及其材料／物件綁定。Modal 流程需重新檢視積分線端點；Wave Terminal 流程需檢查明確的參考物件組。每次準備都使用新的執行識別碼；尺寸改變時同步更新基準示意圖，並依所選埠模型解讀回傳結果。
+修改 CPW 版圖時，請一併更新矩形及其材料／物件綁定。Modal 流程需重新檢視積分線端點；Wave Terminal 流程需檢查參考物件組。每次準備都使用新的執行識別碼，並在尺寸改變時更新示意圖。
 
 檢查：再次準備前，先檢視重建的版圖與複製出的請求。後端細節請繼續閱讀 [Modal 課程參考](../course/aedt-driven-modal.qmd)、[Terminal 課程參考](../course/aedt-driven-terminal.qmd)及 [AEDT 執行階段契約](../specs/aedt-runtime.qmd)。

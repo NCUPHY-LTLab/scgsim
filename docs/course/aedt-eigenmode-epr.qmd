@@ -1,0 +1,112 @@
+---
+title: "Prepare, run, and analyze AEDT Eigenmode and EPR"
+description: "Use separate notebooks to prepare a portable HFSS Eigenmode handoff, run it in AEDT, and analyze the returned evidence."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/aedt-eigenmode-epr"
+---
+
+Use three independent notebooks in sequence to obtain an AEDT Eigenmode result: prepare the model and handoff, run that prepared package on a licensed AEDT host, then analyze the complete return in a fresh session. Ordinary Eigenmode reports mode frequencies and native results; an EPR request additionally records selected surface, bulk, or junction participation. Choose source geometry, net assignments, metal/interface identities and junction endpoint ports from the public [OrcaPen examples](../examples.qmd#public-inputs).
+
+| Stage | Action | Produced files or result |
+|---|---|---|
+| Prepare Handoff | Select the source model and study controls; prepare the package offline. | Handoff package |
+| Run | Execute that package on the selected AEDT host and retrieve the complete return. | Complete returned run directory |
+| Analyze | Read the recorded mode frequency and requested EPR results in a fresh session. | Mode frequency and EPR report |
+
+::: {.callout-note title="Software needed for each stage"}
+Prepare and Analyze can run offline. Run requires AEDT 2023.2 or 2024.2, PyAEDT 1.3.0 and a license on the solver host.
+:::
+
+## Prepare Handoff
+
+Open the Prepare Handoff notebook and select the public source model. Set the controls for this study:
+
+- **Geometry, materials and junctions:** select the layout, metal/interface records, and any junction plus its endpoint ports.
+- **Eigenmode numerics:** choose AEDT 2023.2 or 2024.2, minimum frequency in GHz, mode count, adaptive iterations, and frequency-change criterion.
+- **Surface EPR and loss assumptions:** choose the requested interfaces, field side, film thickness, permittivity, and loss tangent.
+- **Host resources and output:** set AEDT resources and the new run directory before preparing.
+
+Preparation runs offline. It produces an archive and a `HandoffPlan` with paths to the run directory, launch script, metadata, spec, manifest, and archive. The run directory includes `run_aedt.sh` and `metadata/aedt_handoff_metadata.json`.
+
+## Run
+
+Open the Run notebook on a host with the selected AEDT version, PyAEDT 1.3.0 and a license. In the extracted run directory, execute the existing package with either command, then retrieve its complete return directory:
+
+```bash
+bash run_aedt.sh
+```
+
+```bash
+python -m scgsim.aedt.run --handoff metadata/aedt_handoff_metadata.json --execute
+```
+
+## Analyze
+
+Open the Analyze notebook in a fresh Python session. Read the returned mode frequency, native status, requested physics rows and benchmark. For EPR, inspect surface, bulk and junction quantities separately; use the mode and adaptive iteration recorded for each result. Compare the frequency history separately from Surface EPR history.
+
+Result resolution is offline. Evaluating final saved fields is a separate AEDT operation described in the [AEDT saved-field guide](aedt-saved-fields.qmd). The [offline EPR guide](offline-epr.qmd) describes changing assumptions on already computed integrals.
+
+## Optional: Python API reference
+
+These partial SCGSim API sequences are for custom code; the three notebook stages above are the main workflow. The snippets are not standalone runnable examples.
+
+### Prepare with Python
+
+Supply `snapshot` from `GeometryPlan.prepare()`, `junction` from the selected source port and net endpoints, `surface_specs` from the source contribution catalogue and film assumptions, `epr_request` for requested result IDs, `run_control` with study settings, and `resources` as an `AedtResources` value. Set `MODELING`, `AEDT_VERSION`, run directory, project name and design name for the study.
+
+```python
+from scgsim.aedt import EigenmodeSim
+
+sim = EigenmodeSim(modeling=MODELING, aedt_version=AEDT_VERSION)
+sim.set_plan(snapshot)
+sim.set_output_dir(NEW_RUN_DIRECTORY)
+sim.add_junction(junction)
+sim.set_surface_epr(contributions=surface_specs)
+sim.set_epr_request(epr_request)
+sim.set_eigenmode(
+    project_name=PROJECT_NAME,
+    design_name=DESIGN_NAME,
+    run_control=run_control,
+    resources=resources,
+)
+handoff = sim.prepare_handoff()
+print(
+    handoff.run_dir, handoff.script_path, handoff.metadata_path,
+    handoff.spec_path, handoff.manifest_path, handoff.archive_path,
+)
+```
+
+Set `modeling` to the selected `"solid"` or `"thin_film"` representation, and choose AEDT `2023.2` or `2024.2` explicitly. `run_control` sets minimum frequency in GHz, requested mode count, adaptive iteration bounds, and frequency-change criterion. `resources` is an `AedtResources` record; geometry worker count is a separate preparation control.
+
+For EPR, `add_junction` declares a source-linked junction with inductance in H. `set_surface_epr` selects source-linked surface contributions and film assumptions; `SurfaceEprSpec.film_thickness_m` is in metres. `set_epr_request` selects mode indices and surface, junction, or bulk contribution IDs for analysis. Surface, bulk and junction quantities remain distinct; inspect their native histories separately from frequency convergence.
+
+### Analyze with Python
+
+Set `RETURNED_RUN_DIR` to the actual returned run directory. `RECORDED_MODE` and `RECORDED_PASS` must come from the resolved EPR result; they are values produced by the run, not defaults.
+
+```python
+from pathlib import Path
+from scgsim.aedt import resolve_results
+
+RETURNED_RUN_DIR = Path("/path/to/returned/run")  # Replace with the actual directory.
+resolved = resolve_results(RETURNED_RUN_DIR)
+resolved.show_all_results(show_details=True)
+rows = resolved.physics_results()
+benchmark = resolved.simulation_benchmark()
+epr = resolved.epr_result()  # None when this run did not request EPR
+```
+
+If EPR was requested, choose a mode and native pass present in `epr` before plotting:
+
+```python
+from scgsim.aedt import plot_epr_result, show_epr
+
+show_epr(epr, mode=RECORDED_MODE, native_pass=RECORDED_PASS)
+plot_epr_result(
+    epr, mode=RECORDED_MODE, native_pass=RECORDED_PASS,
+    show_convergence=True,
+)
+```
+
+Adaptive EPR history comes from the run's recorded fields.

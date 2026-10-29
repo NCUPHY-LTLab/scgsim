@@ -15,11 +15,17 @@ execute:
 
 ## 1. What you will get
 
-This notebook prepares a square pad and its surrounding Ground for an electrostatic extraction. Choose Palace Electrostatic or AEDT Q3D, run it on a host with the corresponding native solver, then read the returned capacitance matrix with its terminal labels and units.
+Use the SimplePad model to read the pad-to-Ground capacitance matrix. The physical question is: “How much charge does the pad store when a specified voltage is applied relative to Ground?”
+
+First complete the [installation](../course/installation.qmd), then open the canonical [Palace Electrostatic Notebook](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/palace_electrostatic.ipynb).
 
 ![SimplePad layout: a centered pad surrounded by Ground, with the authored port locator at the east edge.](../assets/simple-pad-layout.png){#fig-simple-pad-layout}
 
-The layout is a declared model: a 200 µm square pad, a 20 µm gap, a 1000 µm square die, 0.2 µm aluminum and 500 µm silicon. This calculation has no inductive branch. The backend boundary choices are different, so their matrices are separate results for their respective field models.
+The example layout has a 200 µm square pad, 20 µm gap, 1000 µm square die, 0.2 µm aluminum and 500 µm silicon. It has no inductive branch. The backend boundary choices differ, so each matrix belongs to its own field model.
+
+::: {.callout-note title="Capacitance definition" collapse="true"}
+For the stated excitation relative to Ground, $C=Q/V$, where pad charge $Q$ is in coulombs and pad-to-ground voltage $V$ is in volts.
+:::
 
 ## 2. Prepare your environment
 
@@ -86,7 +92,17 @@ Q3D_MAXIMUM_PASSES = 10
 Q3D_CONVERGENCE_PERCENT = 1.0
 ```
 
-The mesh pair controls Palace element sizing; FEM order controls field approximation separately. Q3D frequency and pass settings define the native matrix request. Keep these inputs with the returned run because they affect the extracted matrix.
+Geometry
+: Pad dimensions, gap and vacuum padding define the layout and surrounding field region.
+
+Palace numerical controls
+: Mesh sizes, FEM order and adaptive limits define separate parts of the field solve.
+
+Q3D numerical controls
+: Frequency and adaptive pass settings define the native matrix request.
+
+Host and output
+: Choose the licensed AEDT release, available cores and memory, and a fresh run ID. The Palace launcher and resources describe the solver host.
 
 Check: review units, choose solver controls for your model, and use a fresh run name for each preparation.
 
