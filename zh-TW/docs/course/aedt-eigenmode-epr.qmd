@@ -1,0 +1,74 @@
+---
+lang: zh-TW
+title: "AEDT Eigenmode 與 EPR Python API 參考"
+description: "補充 EigenmodeSim 的選用 Python API 片段；讀者流程由三階段教學引導。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/aedt-eigenmode-epr"
+---
+
+一般研究流程請從[共振模態與 Surface EPR 總覽](../tutorials/resonance.qmd)開始，再依序選擇[準備交接](../tutorials/eigenmode/prepare-handoff.qmd)、[同機直接執行](../tutorials/eigenmode/run-directly.qmd)或[分析回傳結果](../tutorials/eigenmode/analyze.qmd)。本頁程式片段供自行整合使用，不是可獨立執行的完整範例。
+
+## 選用：Python API 參考
+
+以下 SCGSim API 呼叫順序供自行整合程式使用；主要流程仍是上述三個 Notebook 階段。程式片段不是可獨立執行的完整範例。
+
+### 使用 Python 準備交接
+
+`snapshot` 來自 `GeometryPlan.prepare()`；`junction` 根據來源埠與兩端 Net 建立；`surface_specs` 來自來源貢獻目錄與薄膜假設；`epr_request` 指定結果識別碼；`run_control` 與 `resources` 則依研究設定提供。另須設定 `MODELING`、`AEDT_VERSION`、執行資料夾、專案名稱與設計名稱。
+
+```python
+from scgsim.aedt import EigenmodeSim
+
+sim = EigenmodeSim(modeling=MODELING, aedt_version=AEDT_VERSION)
+sim.set_plan(snapshot)
+sim.set_output_dir(NEW_RUN_DIRECTORY)
+sim.add_junction(junction)
+sim.set_surface_epr(contributions=surface_specs)
+sim.set_epr_request(epr_request)
+sim.set_eigenmode(
+    project_name=PROJECT_NAME,
+    design_name=DESIGN_NAME,
+    run_control=run_control,
+    resources=resources,
+)
+handoff = sim.prepare_handoff()
+print(
+    handoff.run_dir, handoff.script_path, handoff.metadata_path,
+    handoff.spec_path, handoff.manifest_path, handoff.archive_path,
+)
+```
+
+`modeling` 選擇 `"solid"` 或 `"thin_film"`；AEDT 版本明確指定 `2023.2` 或 `2024.2`。`run_control` 設定 GHz 為單位的最低頻率、要求模態數、自適應迭代次數範圍與頻率變化準則。`resources` 使用 `AedtResources`；幾何準備使用的程序數是另一項準備控制。
+
+若計算 EPR，`add_junction` 宣告接面與電感（H）；`set_surface_epr` 選擇表面貢獻與薄膜假設，`SurfaceEprSpec.film_thickness_m` 的單位是公尺；`set_epr_request` 選擇模態，以及表面、接面或體積貢獻識別碼。各類參與量分開解讀，並分別查看原生歷程。
+
+### 使用 Python 分析
+
+將 `RETURNED_RUN_DIR` 設為實際回傳資料夾。`RECORDED_MODE` 與 `RECORDED_PASS` 必須從 EPR 結果取得，並非預設值。
+
+```python
+from pathlib import Path
+from scgsim.aedt import resolve_results
+
+RETURNED_RUN_DIR = Path("/path/to/returned/run")  # 改為實際回傳資料夾。
+resolved = resolve_results(RETURNED_RUN_DIR)
+resolved.show_all_results(show_details=True)
+rows = resolved.physics_results()
+benchmark = resolved.simulation_benchmark()
+epr = resolved.epr_result()  # 此次執行未要求 EPR 時為 None
+```
+
+若有 EPR 結果，先從 `epr` 確認實際記錄的模態與迭代次數，再繪圖：
+
+```python
+from scgsim.aedt import plot_epr_result, show_epr
+
+show_epr(epr, mode=RECORDED_MODE, native_pass=RECORDED_PASS)
+plot_epr_result(
+    epr, mode=RECORDED_MODE, native_pass=RECORDED_PASS,
+    show_convergence=True,
+)
+```
+
+自適應 EPR 歷程使用執行時記錄的場資料。

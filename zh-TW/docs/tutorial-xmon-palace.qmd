@@ -1,6 +1,6 @@
 ---
 title: "公開 Xmon：Palace Route B 本徵模"
-description: "在 Palace 本徵模中加入具來源歸屬的薄膜與來源連結的電感端口。"
+description: "在 Palace 本徵模中加入具來源歸屬的薄膜與來源連結的電感埠，並設定能量參與率（EPR）輸出。"
 lang: zh-TW
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"
@@ -9,11 +9,11 @@ execute:
   enabled: false
 ---
 
-請先在同一個 Python 工作階段執行[共用 Xmon 輸入教學](tutorial-xmon-input.qmd)。該教學會使用公開元件與 coupon 輸入定義 `snapshot` 和 `port_name`。本頁以[一般 Palace 本徵模](course/palace-eigenmode.qmd)為基礎，加入具來源歸屬的薄膜與來源連結的電感端口。請在建立網格前完成設定。文件建置不會建立網格，也不會執行 Palace。
+請先在同一個 Python 工作階段執行[共用 Xmon 輸入教學](tutorial-xmon-input.qmd)。該教學會使用公開元件與 coupon 輸入定義 `snapshot` 和 `port_name`。本頁以[一般 Palace 本徵模](course/palace-eigenmode.qmd)為基礎，加入具來源歸屬的薄膜與來源連結的電感埠，並設定能量參與率（EPR）輸出。請在建立有限元素網格前完成設定。文件建置不會建立有限元素網格，也不會執行 Palace。
 
 ## 設定本徵模與 EPR 輸出 {#configure-eigenmode-and-epr-outputs}
 
-不可變的 snapshot 已包含 GDS、準備好的堆疊、最終 Net 對應，以及共用的外部真空範圍。Palace 會直接使用此真空範圍。此 coupon 已包含八個定義好的接地短路凸塊，因此本範例不會再加入第二組填充陣列。來源端口是已準備的 `chip/device/o_junction_lumped` 薄片；其限定名稱與目標層來自元件註記。
+不可變的 `snapshot` 已包含 GDS、準備好的堆疊、最終電氣網路對應，以及共用的外部真空範圍。Palace 會直接使用此真空範圍。此 coupon 已包含八個定義好的接地短路凸塊，因此本範例不會再加入第二組填充陣列。來源埠是已準備的 `chip/device/o_junction_lumped` 薄片；其限定名稱與目標層來自元件註記。
 
 ```python
 from pathlib import Path
@@ -83,13 +83,13 @@ sim.set_numerical(
 )
 ```
 
-本例透過 `inset_margins_um` 要求 Palace 原生 Mask／Inset 邊距；`0.0` 項目是未遮罩基準。請使用支援原生 Mask／Inset 設定的 Palace 可執行檔。只需要基準時，請省略 `inset_margins_um`。這些邊距不會分割 SGB 幾何。
+
 
 MA／MS／SA 記錄是 OrPen `LiteratureCentral` 建模預設值，不是材料量測值。只有在你的研究採用具明確來源歸屬的記錄時，才替換這些值。要求的四個遮罩／內縮邊距是未遮罩基準值以外的替代估算。`bulk_domain_ids=None` 會選取所有已設定的體積能量項目；此選擇不會移除物理區域，也不會改變正規化。若未另行指定，Palace 外部 Region 表面仍使用自然 PMC；邊界比較與解讀限制請見 [EPR 方法指南](eigenmode-epr.qmd#workflow-and-state-contract)。
 
-## 建立網格前檢視正規化輸入 {#review-normalized-inputs-before-meshing}
+## 建立有限元素網格前檢視正規化輸入 {#review-normalized-inputs-before-meshing}
 
-`input_summary()` 會顯示已綁定的正規化輸入與目前 Palace 設定。它不會建立網格或啟動求解器。
+`input_summary()` 會顯示已綁定的正規化輸入與目前 Palace 設定。它不會建立有限元素網格或啟動求解器。
 
 ```python
 from IPython.display import display
@@ -105,6 +105,6 @@ config_path = sim.write_config()
 print(mesh_path, config_path)
 ```
 
-這些都是實際的本機準備操作。寫出的索引會將每個表面基準值／遮罩邊距及已設定端口綁定至網格識別資訊；它不是場結果。如有需要，請[檢查後端](course/solver-observations.qmd)，再[準備並執行交接](course/execute.qmd)。請在準備端保留 Palace 交接 ID，且不要將它放進傳送套件。
+這些都是實際的本機準備操作。寫出的索引會將每個表面基準值／遮罩邊距及已設定埠綁定至有限元素網格識別資訊；它不是場結果。如有需要，請[檢查後端](course/solver-observations.qmd)，再[準備並執行模擬包](course/execute.qmd)。請在準備端保留 Palace 模擬包 ID，並將此 ID 保存在模擬包以外的位置。
 
-完整取回資料後，請[重新啟動並嚴格解析](course/returned-results.qmd)。報告會先呈現識別資訊／數值／成本證據，再呈現可用的物理結果。`resolved.epr_result()` 會脫離原物件並回傳可用的最終本徵模 EPR。接著使用[離線 EPR](course/offline-epr.qmd)保留結果、選擇已記錄模態，並在不重新求解的情況下變更具來源歸屬的假設。[Palace 本徵模契約](specs/palace-eigenmode.qmd)規範精確的選擇方式；[EPR 概念](eigenmode-epr.qmd)說明正規化與端口正負號的意義。
+完整取回資料後，請[重新啟動並嚴格解析](course/returned-results.qmd)。報告會先呈現識別資訊／數值／成本證據，再呈現可用的物理結果。`resolved.epr_result()` 會脫離原物件並回傳可用的最終本徵模 EPR。接著使用[離線 EPR](course/offline-epr.qmd)保留結果、選擇已記錄模態，並在不重新求解的情況下變更具來源歸屬的假設。[Palace 本徵模契約](specs/palace-eigenmode.qmd)規範精確的選擇方式；[EPR 概念](eigenmode-epr.qmd)說明正規化與埠正負號的意義。

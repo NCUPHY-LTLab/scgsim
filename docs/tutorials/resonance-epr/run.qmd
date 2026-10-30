@@ -1,0 +1,61 @@
+---
+title: "Resonance and EPR 2/3: Run the solver"
+description: "Run the prepared resonance run directory with Palace or AEDT."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/resonance-epr/run"
+---
+
+This page runs the directory written by [Prepare](prepare.qmd). It does not
+change the model or the settings. To change anything, go back to Prepare and
+write a new run directory.
+
+::: {.callout-note title="Before you start"}
+- The run directory from Prepare.
+- A computer with Palace, or with AEDT 2024.2 and a licence. See
+  [Install SCGSim, Step 5](../../course/installation.qmd#step-5-set-up-the-solver-host).
+- Plan for a long run. Our Palace run took about 4 hours on 8 MPI processes
+  and peaked at about 45 GB of memory.
+:::
+
+## Step 1: Run the solver
+
+If the solver runs on another computer, copy the **whole** run directory there
+first. Then, from the run directory:
+
+:::: {.panel-tabset group="solver"}
+
+### Palace
+
+```bash
+cd .artifacts/SimplePad/pad-resonance-palace-01
+bash run_palace.sh
+```
+
+The script first checks the configuration with `palace --dry-run`, then
+solves.
+
+### HFSS
+
+```bash
+cd .artifacts/SimplePad/pad-resonance-hfss-01
+bash run_aedt.sh
+```
+
+The script starts AEDT, builds the model, solves, exports the results, saves
+the project and closes AEDT.
+
+::::
+
+## Step 2: Return the directory
+
+If the solver ran on another computer, copy the whole directory back,
+including `metadata/` and the logs. A results file on its own cannot be
+loaded.
+
+For Slurm, MPI wrappers and failed runs, see
+[Run a prepared model](../../course/execute.qmd).
+
+## Next
+
+[Read the mode and its participation](analyze.qmd).

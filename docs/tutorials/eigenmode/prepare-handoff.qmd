@@ -1,0 +1,78 @@
+---
+title: "Prepare Handoff: package and run on an AEDT host"
+description: "Prepare the SimplePad HFSS Eigenmode and Surface EPR handoff, run it on an AEDT host, and retain the return."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/eigenmode/prepare-handoff"
+---
+
+This route prepares a SimplePad HFSS Eigenmode and Surface EPR package locally, then transfers it to a licensed AEDT host for execution. Work through setup, preparation, transfer, solve, and return; the final section uses the existing Run notebook so you do not prepare a second package.
+
+## 1. Set up the notebook environment and open the example
+
+Open [Prepare Handoff notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_prepare.ipynb) ([editable QMD](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_prepare.qmd)) and follow its “Environment and Public Version” section to create the isolated Python 3.12 environment and select the `SimplePad HFSS` kernel in Jupyter. 
+
+Check: the version cell lists the installed versions and the notebook runs in the `SimplePad HFSS` kernel.
+
+## 2. Keep the SimplePad model and adjust its inputs
+
+In the Prepare notebook, run the source, geometry, junction, mode, and surface-EPR setup cells in order. Review settings by purpose:
+
+| Group | Example settings | Check |
+|---|---|---|
+| Geometry and materials | 200 µm pad, 20 µm gap, 1000 µm die; the PDK stack has 100 nm aluminum and 500 µm silicon | Pad and Ground have explicit Net assignments; source-metal thickness comes from the PDK |
+| Linear junction | East-side locator port from pad to Ground; 10 nH and 0 F | This is a linear-load model without Josephson nonlinearity |
+| Eigenmode numerics | AEDT 2024.2; 1 GHz search minimum; 1 mode; up to 10 passes; 1% frequency-change target | The search minimum is an input; the returned mode frequency is the solved result |
+| Surface EPR | MA, MS, and SA `LiteratureCentral` presets from the source catalogue; 0 µm margin; sidewalls excluded | Film thickness, permittivity, and loss tangent follow the selected PDK presets |
+| Host and output | 4 cores, 30% memory limit, and a fresh `RUN_ID` | Choose resources before preparing; use a new run directory for another solve |
+
+Check: `display(component)` shows the pad and locator; the contribution catalogue lists the actual interfaces and field sides; the input summary contains mode, EPR, and resource settings.
+
+::: {.callout-note title="Pinned public sources" collapse="true"}
+This notebook uses OrcaPen PDK [`71d60ca`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/71d60ca03831580866cac139e337146fdb17a66c) and SCGSim [`0f6b4e5`](https://github.com/NCUPHY-LTLab/scgsim/tree/0f6b4e5c54aff4891492976a5dd58387cc1a1787). The environment commands in the notebook install these exact sources.
+:::
+
+::: {.callout-note title="Surface-film assumptions" collapse="true"}
+Source-metal thickness and EPR film thickness are independent inputs. The selected PDK interface preset supplies film thickness, converted to metres for `SurfaceEprSpec.film_thickness_m`; this guide does not apply one film thickness to every source.
+:::
+
+## 3. Prepare and save the handoff
+
+Run the final handoff cell in the Prepare notebook. The output directory must be new. Keep the displayed `run_dir` and `archive_path`; the archive is `<run_dir>/aedt_handoff.tar.gz`.
+
+Check: keep the displayed archive and `run_dir`. The archive records the selected inputs and resource settings.
+
+```text
+archive_path: <run_dir>/aedt_handoff.tar.gz
+archive contents:
+├── aedt_spec.json
+├── run_aedt.sh
+└── metadata/
+    ├── aedt_handoff_metadata.json
+    ├── aedt_run_receipt.json
+    └── aedt_handoff_manifest.json
+```
+
+Geometry is embedded in `aedt_spec.json`; there is no separate GDS file to transfer.
+
+## 4. Transfer the package and run it on AEDT
+
+1. Copy `aedt_handoff.tar.gz` to the AEDT 2024.2 host. Create a new empty destination directory and extract the archive there. It has no outer `run_dir` folder, so keep `metadata/` at the extraction root; the geometry is already embedded in the spec.
+2. Open the existing [Run notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_run.ipynb) ([editable QMD](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_run.qmd)) on that host and follow its environment section.
+3. Set `HANDOFF_RUN_DIR` to the extraction directory, then run the notebook cells that execute the existing package.
+
+Check: the notebook displays the complete returned run directory. Keep its AEDT project, solver output, metadata, and logs, then transfer the entire returned `run_dir` back for Analyze. The original archive is the pre-run input and does not include returned files. Execute each handoff once; prepare a new package for a rerun.
+
+::: {.callout-note title="Run from a terminal" collapse="true"}
+The Run notebook is the main route. On any supported host, the equivalent CLI command uses the metadata path inside the extracted directory; replace `/new/run_dir` with that directory's actual path:
+
+```bash
+python -m scgsim.aedt.run --handoff /new/run_dir/metadata/aedt_handoff_metadata.json --execute
+```
+
+On Linux, `bash run_aedt.sh` from the extracted directory is another option. Windows users can use the Python CLI or the Run notebook.
+:::
+
+## 5. Continue to Analyze
+
+In a fresh Python kernel, open the [Analyze guide](analyze.qmd) or [Analyze notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_analyze.ipynb) ([editable QMD](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_analyze.qmd)) and enter the actual returned directory. The next page explains how to select the recorded mode and adaptive pass for EPR.

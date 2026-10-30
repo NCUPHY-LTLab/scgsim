@@ -1,43 +1,79 @@
 ---
-title: "Choose a simulation"
-description: "Select a complete SCGSim notebook by the physical quantity you want to calculate."
+title: "Tutorials and guides"
+description: "Start with a capacitance or resonance tutorial, then use the how-to guides for your own model."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/examples"
 ---
 
-SCGSim prepares a geometry and solver request, then resolves the returned results with their units and model identity. Choose a notebook by the quantity you need; its backend tabs carry the procedure from source inputs through result reading.
+Start with the tutorials. Each one takes a small model from setup to a
+returned result. The how-to guides then show how to do one task with your own
+model.
 
-## Choose a simulation {#getting-started}
+## Tutorials
 
-| Goal | Notebook | Result |
-|---|---|---|
-| Capacitance | [Palace Electrostatic or AEDT Q3D](tutorials/capacitance.qmd) | Labeled conductor capacitance matrix |
-| Resonant modes | [Palace or HFSS Eigenmode](tutorials/resonance.qmd) | Mode frequencies and returned mode report |
-| Energy participation | [Palace or HFSS EPR](tutorials/resonance-epr.qmd) | Surface, bulk and branch participation by mode |
-| Driven S-parameters | [HFSS Modal or Terminal](tutorials/scattering.qmd) | Two-port response with the selected port family |
-| Transmission-line parameters | [AEDT Q2D](tutorials/transmission-line.qmd) | Per-length C, G, L and R matrices |
+Do these in order. Each tutorial has three pages: **Prepare** writes a run
+directory, **Run** runs the solver on it, and **Analyze** reads the result.
+You can prepare on one computer and run the solver on another.
 
-## Prepare a model and read its return
+1. [Install SCGSim](course/installation.qmd).
+2. [The SimplePad model](tutorials/simplepad-model.qmd): build the square-pad
+   model that both tutorials use.
+3. [Pad capacitance](tutorials/capacitance/prepare.qmd): compute the
+   capacitance of the pad to ground with Palace Electrostatic.
+4. [Resonance and EPR](tutorials/resonance-epr/prepare.qmd): add a junction
+   inductance to the same pad and compute its resonance and energy
+   participation with Palace or HFSS Eigenmode.
 
-Start with [installation](course/installation.qmd), then select explicit geometry, materials, conductors and ports for your physical question. The [model and materials reference](reference.qmd#model-materials) and [conductors and ports reference](reference.qmd#conductors-ports) explain those choices. Use [returned results](course/returned-results.qmd) to keep the returned quantity, units, mode or conductor identity, and solver status together.
+## How-to guides: your own model
 
-## Explore larger examples {#public-inputs}
+Use these after the tutorials.
 
-The deeper Xmon and CPW source notebooks are pinned to public OrPen SC PDK revision [`35b4dc1cdd3f921badcac2fe57a98366315ae8d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9), which declares OrPen `0.1.0` and GDSFactory 9.48.x. Use the source revision named by each example.
-
-| Public notebook group | Use |
+| Task | Guide |
 |---|---|
-| [Kosen2024_Xmon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Electrostatic/Eigenmode and source-first Xmon studies |
-| [ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/CpwFiniteGround) | HFSS Eigenmode/Driven and historical Q3D GDS-input source |
-| [CrossSectionSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/CrossSectionSimulation/CpwFiniteGround) | Q2D rectangles and conductor groups |
+| Assign your component's shapes to conductors and set up the model | [Work with your own model](course/working-model.qmd) |
+| Check the geometry and Nets before preparing a run | [Inspect the source model](course/source-observations.qmd) |
+| Check the mesh and solver input before running | [Inspect the prepared run](course/solver-observations.qmd) |
+| Load results and read them correctly | [Read returned results](course/returned-results.qmd) |
+| Run a prepared run directory locally or on a Slurm cluster | [Run a prepared model](course/execute.qmd) |
 
-The source dimensions and presets are example model inputs. For current SCGSim requests, follow the relevant tutorial and API references.
+## How-to guides: by solver
 
-## Continue with a focused reference
+| Calculation | Palace | AEDT |
+|---|---|---|
+| Capacitance matrix | [Palace Electrostatic](course/palace-electrostatic.qmd) | [Q3D](course/aedt-q3d.qmd) |
+| Resonant modes and EPR | [Palace Eigenmode](course/palace-eigenmode.qmd) | [HFSS Eigenmode](course/aedt-eigenmode.qmd) |
+| Port response (S-parameters) | | [Driven Modal](course/aedt-driven-modal.qmd), [Driven Terminal](course/aedt-driven-terminal.qmd) |
+| Per-unit-length line parameters | | [Q2D cross sections](course/aedt-q2d.qmd) |
+| AEDT model inputs shared by all families | | [AEDT inputs](course/aedt-inputs.qmd) |
 
-- [Inspect source and geometry](course/source-observations.qmd) before backend preparation.
-- [Inspect prepared inputs](course/solver-observations.qmd) when a request differs from the intended model.
-- [Prepare and execute a portable handoff](course/execute.qmd) on the selected solver host.
-- [Read saved AEDT fields](course/aedt-saved-fields.qmd) or [update loss assumptions offline](course/offline-epr.qmd) on recorded EPR data.
-- For deeper source bindings, see the [Xmon inputs](tutorial-xmon-input.qmd), [Palace EPR](tutorial-xmon-palace.qmd) and [HFSS EPR](tutorial-xmon-aedt.qmd) examples.
+## Advanced guides
+
+- [Compute EPR from saved AEDT fields](course/aedt-saved-fields.qmd) without
+  solving again. This still needs AEDT.
+- [Change loss assumptions offline](course/offline-epr.qmd) on an existing
+  EPR result. This needs no solver.
+
+## Larger example: flip-chip Xmon
+
+A full flip-chip Xmon qubit, adapted from the literature. It is not a
+prerequisite for the guides above.
+
+1. [Build the Xmon model](tutorial-xmon-input.qmd).
+2. [Palace EPR for the Xmon](tutorial-xmon-palace.qmd).
+3. [HFSS EPR for the Xmon](tutorial-xmon-aedt.qmd).
+
+## More public examples {#public-inputs}
+
+The OrPen SC PDK repository holds further example notebooks. They are pinned to
+OrPen revision
+[`35b4dc1`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9).
+
+| Notebook group | Shows |
+|---|---|
+| [Kosen2024_Xmon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Electrostatic and Eigenmode for the Xmon |
+| [ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/CpwFiniteGround) | HFSS Eigenmode and Driven for a CPW |
+| [CrossSectionSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/CrossSectionSimulation/CpwFiniteGround) | Q2D cross section of a CPW |
+
+These notebooks may use older SCGSim calls. Where they differ from these docs,
+the docs describe the current API.

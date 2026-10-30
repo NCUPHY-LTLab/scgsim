@@ -1,0 +1,80 @@
+---
+title: "SGB performance: where geometry work accumulates"
+description: "Read the work behind planning, topology, CAD and mesh preparation, and understand what reuse changes."
+lang: en
+askr:
+  languages:
+    current: en
+    items:
+      - code: en
+        label: English
+        href: /docs/concepts/sgb/performance.html
+      - code: zh-TW
+        label: 繁體中文
+        href: /zh-TW/docs/concepts/sgb/performance.html
+scgsim-id: "docs/concepts/sgb/performance"
+scgsim-kind: "concept"
+scgsim-status: "CONVERGING"
+---
+
+## Purpose
+
+SGB performance depends on how many geometric boundaries must be considered and how often the same preparation is repeated. The first opportunity is to construct only the boundaries implied by known sources, materials, Z ranges and adjacency. Reuse and dependency-aware scheduling can then reduce repeated setup and idle time without changing the required geometry.
+
+## 1. Construct only the required boundaries
+
+Source input supplies authored outlines, material associations, Z ranges and explicit support or contact declarations. Planning combines those declarations with geometric contact checks to establish which regions meet, then constructs only the required boundaries. Polygon planning is principally data preparation; the curved branch also uses Gmsh during planning to create and preserve a shared planar boundary model.
+
+The dependencies remain ordered: source declarations feed physical interpretation; physical interpretation determines regions and interfaces; these feed topology and final volume construction. Independent work may run at the same time only after its inputs are fixed and all prerequisites are ready. The dependency from points to curves to faces to volumes remains, while unrelated preparation tasks can proceed concurrently.
+
+| Stage | Work that grows | Reuse or dependency |
+|---|---|---|
+| Source normalization | Entities, rings, vertices and placed occurrences | One immutable snapshot feeds later stages |
+| Physical interpretation | Selected supports, material interfaces and enclosure records | Its physical-representation context feeds later planning |
+| Planar subdivision | Relevant segments, intersections, atomic edges and faces | One noded graph retains provenance for that operation's operands |
+| Shared topology | Live edges, split candidates, canonical points and loops | Incident surfaces refer to the same curve identity |
+| Native CAD | Points, curves, faces, shells and face-to-plan matching | OCC realizes planned ownership rather than rediscovering it |
+| Finite-element mesh preparation | Solution-volume extent, element size and conformity constraints | Begins after CAD in a separate Gmsh process |
+
+The shared XY coordinate grid sets planar coordinate precision. It is not the finite-element mesh, which later divides solution volumes into elements. Z ranges, mesh element size and solver tolerances also have distinct meanings.
+
+## 2. Reuse prepared inputs and geometry work
+
+An immutable source snapshot prevents later stages from repeatedly expanding and normalizing the same mutable declarations. The planar arranger nodes the relevant operands and propagates membership across neighboring faces. Shared topology then gives adjacent surfaces the same split points and canonical edge IDs: membership says which source covers each region; topology says which exact boundary the adjacent surfaces share.
+
+Within one outer preparation/build call, `_grid_cache.py` can reuse a successful planar subdivision when all inputs and precision match. Each caller still runs its own validation and source checks. The cache is cleared when the outer call exits; failures and caller-specific audits are not cached.
+
+After native shell repair, `SurfaceRepairIndex` prepares each planned loop signature once per model and compares affected loops against the complete wire/edge boundary. Reuse avoids repeating signature preparation without weakening the source-identity check.
+
+## 3. Dispatch independent preparation work
+
+The source-path worker pool bounds submitted tasks. When one finishes, its worker can take the next eligible task without waiting for the slowest task in a batch. Results return in input order, and the caller waits for submitted work to finish before it returns. This reduces idle time between independent source-path tasks; it does not mean every planar or OCC operation runs in parallel.
+
+## 4. Coordinate shared topology and native model changes
+
+Intersections and canonical point/edge IDs must come from one coordinated arrangement and topology result. Changes to the native Gmsh model also remain coordinated. The curved branch builds one global XY arrangement, then assigns it to Z ranges and extends retained edges through those ranges. These shared operations depend on common results and cannot be treated as independent per-surface tasks.
+
+## 5. Read public work counts by operation
+
+One source-side optimization combines raw-coordinate and world-coordinate candidates into one sorted, deduplicated list before comparison. In the reviewed public case, distant raw-coordinate comparisons fell from 28 to 0 while the existing tolerance, contact policy and candidate order stayed unchanged.
+
+For the public circular-hole case, 34 retained edges across 2 Z intervals yield 68 edge/interval wall constructions. The builder receives 12 distinct wall requests. The request count is not the final surface count and does not remove the per-edge, per-interval construction.
+
+| Public case and count scope | Planned surfaces / loops / live volumes | Earlier full-loop visits | Current one-time loop signatures + affected-loop visits |
+|---|---:|---:|---:|
+| Notched pad with rectangular junction; planned records | 21 / 25 / 3 | 75 | 25 + 38 |
+| Circular-hole fixture; planned records across two native models | 36 / 45 / 3 | 270 | 90 + 120 |
+
+The first row has 21 planned surface records; the reopened native XAO has 22 raw surfaces after healing. These are counts from different representations. The [work-count record](../../images/sgb-concept/method-work-counts.json) defines each count's scope; the [public case record](../../images/sgb-concept/method-public-case.json) associates the fixtures with their XAO files and visualizations.
+
+The loop-signature count is setup work; affected-loop visits are comparison work. Their sum describes operations performed, not a time ratio. The smaller polygon fixture spends most of its construction work on shell formation; larger models may spend more work on planar arrangements or native-face source rebinding.
+
+## Compare elapsed time separately
+
+For timing comparisons, hold input identity, source revision, solve geometry, construction branch, worker budget and machine limits constant. Record source preparation, physical planning, native CAD, finite-element mesh preparation and solver execution as separate stages. Keep duration beside object counts and peak memory; build records also retain stage status and auxiliary mapping-file sizes.
+
+::: {.callout-note title="Work counts are not seconds"}
+The fixture counts describe operations and geometry objects. They do not establish a wall-clock speedup, a complete-device initial-mesh time or a solver runtime. Compare elapsed time only across runs with matching inputs and execution conditions.
+:::
+
+The [validation chapter](validation.qmd) explains the geometry conditions these reductions must preserve. Formal stage and artifact fields are in the [geometry contract](../../geometry-sgb.qmd) and [physical representation contract](../../specs/physical-representation.qmd).

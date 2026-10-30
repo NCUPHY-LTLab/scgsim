@@ -1,50 +1,18 @@
 ---
-title: "SCGSim 2.0 API Migration Map"
-description: "Current public geometry, AEDT, Palace and visualization symbols mapped to SCGSim 2.0, including converging AEDT modeling and release-selection contracts."
+title: "API migration to SCGSim 2.0"
+description: "Where each SCGSim 1.x geometry, AEDT, Palace and visualization symbol lives in SCGSim 2.0."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/api-migration"
 ---
 
-This reference maps the frozen v1 API surfaces to the accepted SCGSim 2.0
-implementation. Human accepted candidate
-`a932a173edb5c56ae14740ff5177190996255bdd` (tree
-`2745321736e53e2a4fe8d150f2e9d8bd176669db`) on 2026-10-09. Its semantic
-state is `ACCEPTED`, not `STABILIZED`. Its implementation was integrated into
-`develop` through PR34 at `cc1424c84ffe9d295a57dbabb3c2ab6431110f6c` (tree
-`f9ecfe49df4c79be84a7991e44cc50c2602e3adb`). The current closeout starts from
-the later `develop` slimming successor `b46bcc7d64fbb8bab181c0da2b9234a003a20adf`
-(tree `c99c670927e877fb407aa4c73de32793e86a4460`). The original migration
-baseline remains `develop@3a52fb1`, tree
-`96adcf8672b497a29dd0a6b43043cca11efc3043`. Isolated wheel observations are
-specific to their frozen package and runtime-source identities; they do not
-establish a user installation or transfer native results to another wheel.
+This page lists where each public symbol of SCGSim 1.x lives in SCGSim 2.0.
+Use it when you upgrade an existing project.
 
-The Solid/Thin-Film 3D request extension is a separate `CONVERGING` API scope.
-It requires a request-level `modeling` value of `"solid"` or `"thin_film"` for
-every new Q3D and HFSS 3D request. The field has no default, and an absent mode
-is never inferred for those families. Previously supported result payloads
-remain readable only under their original family/schema reader with their raw
-payload and hash preserved. This does not change the shared versioned handoff
-compatibility of unchanged families such as Q2D. Q2D and Palace contracts are
-otherwise unchanged.
-
-## AEDT release selection
-
-The current AEDT native-request, saved-field analysis, and handoff APIs require
-an explicit `aedt_version` with exactly `"2023.2"` or `"2024.2"`; no release
-is inferred or selected by default. This request value travels with the handoff and selects the local
-transaction runtime. Both choices use PyAEDT 1.3.0 and run a local AEDT Desktop
-on the same host as SCGSim.
-
-AEDT 2023.2 uses PyAEDT's same-node gRPC compatibility settings, scoped to the
-transaction and restored through cleanup: `use_grpc_api=True`,
-`grpc_secure_mode=False`, `grpc_local=True`, `grpc_listen_all=False`, and
-`PYAEDT_USE_PRE_GRPC_ARGS="True"`. AEDT 2024.2 uses no transport overrides.
-There is no fallback or downgrade between the requested releases. A saved
-artifact's source-version origin is separate from the request and actual
-connected version. An unknown origin remains `None`; analysis can still run
-using its separately explicit requested release, without lookup or migration.
+The main change for AEDT users: every new Q3D and HFSS 3D request must set
+`modeling="solid"` or `"thin_film"`. There is no default. Old result files
+without `modeling` can still be read, but cannot start a new run. Q2D and
+Palace requests are unchanged.
 
 Package-level facades remain the supported high-level entrypoints. The move
 does not add compatibility wrappers for old internal paths. Existing consumer
@@ -61,13 +29,11 @@ the v2 package and the corresponding old-to-new map.
 - Move each supported symbol to its single responsibility owner and re-export
   the approved high-level symbols from the package facade. Do not leave a
   second old implementation or compatibility wrapper reachable.
-- Do not revive Q3D input-v1 or input-v2. Body-backed input-v3 is the accepted
-  Q3D contract. The accepted candidate has an observed native build-only
-  operation; that observation does not constitute a completed C/G solve or
-  matrix result.
+- Do not revive Q3D input-v1 or input-v2. Body-backed input-v3 is the
+  Q3D contract.
 - Preserve the formal `python -m scgsim.aedt.run` command as the AEDT
   transaction entrypoint. It is a supported CLI, not a legacy wrapper.
-- The accepted 2.0 baseline AEDT producer emits
+- The 2.0 baseline AEDT producer emits
   `scgsim.aedt.runtime-source.v13`. That frozen manifest has 61 declared paths,
   including 41 AEDT modules, and records `schema_version`, `stage`, `modules`,
   `content_sha256`, and `revision_observation`; module bytes and digest are
@@ -116,7 +82,7 @@ paths does not restore those Q3D request schemas or bypass the explicit-mode
 requirement.
 
 This extension uses the next declared AEDT runtime-source identity,
-`scgsim.aedt.runtime-source.v15`; V14 remains reserved for the held PR35, and
+`scgsim.aedt.runtime-source.v15`, and
 V1–V14 keep their existing contracts. V15 will bind the implemented module
 bytes and digest without claiming exhaustive transitive dependency coverage;
 its precise path list is owned by the frozen implementation inventory.
@@ -321,10 +287,7 @@ not compatibility surfaces.
 
 - **`GeometryPreview`, `GeometryPreviewArtifact` → `scgsim.visualization.preview`.** Responsibility: Source-bound preview object and returned artifact/unavailable mode.
 - **`inspect_palace_geometry` → `scgsim.visualization.loaders.palace`.** Responsibility: Read the Palace mesh, manifest, index map and config into semantic preview modes.
-- **`inspect_aedt_geometry` → `scgsim.visualization.loaders.aedt`.**
-  Responsibility: Bind AEDT native/receipt identity and load solver-assigned
-  geometry. A raw `.aedt` path requires explicit `aedt_version` and design; a
-  sealed run directory uses its bound spec version without an override.
+- **`inspect_aedt_geometry` → `scgsim.visualization.loaders.aedt`.** Responsibility: Bind AEDT native/receipt identity and load solver-assigned geometry.
 - **Scene records and shared rendering → `scgsim.visualization.scene`, `scgsim.visualization.rendering`.** Responsibility: Keep scene construction and rendering reusable without taking solver physics or simulation status ownership.
 - **Shared loader file-identity helpers → `scgsim.visualization.loaders._common`.** Responsibility: One loader-level implementation for JSON, hash and confined-path observations.
 
@@ -345,26 +308,3 @@ formatting helpers used by geometry and AEDT. Its current implementation is
 AEDT projections, calculations, or result status; their presentation remains
 solver-specific. Moving this private helper does not make its function names a
 new public API.
-
-## Accepted scope and evidence status
-
-The baseline facade exports and documented direct submodule surfaces for
-geometry/compiler, AEDT, Palace and visualization are mapped to their accepted
-source owners above. Six earlier full native-to-Resolve-to-Report observations
-are bound to the earlier wheel with SHA256
-`48963671d4f854c185b8f95f3cd8000960355a7c48550b9ccf19b739b49f8df3` and
-runtime-source v13 content digest
-`42b48f3d5946fadb1e93e92a1d3eb2a55f72ff00fc41aeccf71c0fded5919fa1`; those
-observations cover CPW Modal and Terminal, Q2D, Q3D AC/RL, SimplePad Q3D C/G,
-and Palace ES, and are not current-wheel execution evidence. Separately, the
-frozen `2.0.0.dev1` candidate wheel with SHA256
-`e0ab1117aad4e5578ec98251732d33f6faa2fe7524dd70dcbc44891ed024824d` had a
-Q3D build-only/readback/save/release observation and geometry preview, without
-`Analyze`, solve, or C/G matrices.
-
-The full Xmon Palace Eigenmode Route A, CircularPad Palace Eigenmode Route B,
-and HFSS Eigenmode saved-field EPR/offline-loss operations were not observed as
-complete native-to-Resolve-to-Report workflows. They are outside this
-closeout; earlier preparation and partial-native evidence does not establish
-those full outcomes. This status does not describe the operations as failed or
-complete. Q3D input-v1/v2 readers remain absent.

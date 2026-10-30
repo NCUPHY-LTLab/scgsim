@@ -94,7 +94,6 @@ def _structured_surface_group(
         "interface_type",
         "contact_kind",
         "face_kind",
-        "conductor_component_id",
         "net_id",
         "equipotential_id",
         "physical_attribute",
@@ -109,6 +108,7 @@ def _structured_surface_group(
         raise ValueError(
             f"{first.surface_id} physical group mixes ledgered and legacy sources"
         )
+    component_ids, component_bindings = _grouped_component_ids(sources, ledger_coverage)
     if all(ledger_coverage):
         owner_semantic_ids = _grouped_source_ids(sources, "owner_semantic_ids")
         boundary_volume_ids = _grouped_source_ids(sources, "boundary_volume_ids")
@@ -136,6 +136,11 @@ def _structured_surface_group(
             "native_partition_sources": tuple(
                 dict(source.metadata["source_provenance"]) for source in sources
             ),
+        }
+    if component_ids:
+        provenance = {
+            **provenance,
+            "source_record_ids": tuple(source.surface_id for source in sources),
         }
     port_hosts = {}
     if first.surface_role == "lumped_port" and plan.route == "B":
@@ -169,11 +174,9 @@ def _structured_surface_group(
         face_kind=str(first.metadata["face_kind"]),
         owner_semantic_ids=owner_semantic_ids,
         adjacent_solution_volume_ids=boundary_volume_ids,
-        conductor_component_id=_optional_string(
-            first.metadata.get("conductor_component_id"),
-            "conductor_component_id",
-            first,
-        ),
+        conductor_component_id=component_ids[0] if len(component_ids) == 1 else None,
+        conductor_component_ids=component_ids,
+        conductor_component_ids_by_source=component_bindings,
         equipotential_id=_optional_string(
             first.metadata.get("equipotential_id"), "equipotential_id", first
         ),
@@ -185,6 +188,44 @@ def _structured_surface_group(
             **port_hosts,
         },
     )
+
+
+def _grouped_component_ids(
+    sources: Sequence[SurfacePlanRecord], ledger_coverage: Sequence[bool]
+) -> tuple[tuple[str, ...], dict[str, str]]:
+    values = tuple(
+        _optional_string(
+            source.metadata.get("conductor_component_id"),
+            "conductor_component_id",
+            source,
+        )
+        for source in sources
+    )
+    if all(value is None for value in values):
+        return (), {}
+    if any(value is None for value in values):
+        raise ValueError(
+            f"{sources[0].surface_id} physical group mixes known and unknown "
+            "conductor components"
+        )
+    bindings = {
+        source.surface_id: value
+        for source, value in zip(sources, values)
+        if value is not None
+    }
+    if len(bindings) != len(sources):
+        raise ValueError("physical group repeats a source surface ID")
+    components = tuple(sorted(set(bindings.values())))
+    if len(components) > 1:
+        if not all(ledger_coverage):
+            raise ValueError(
+                "multiple conductor components require authoritative source "
+                "contribution ledgers"
+            )
+        for field in ("net_id",):
+            if _optional_string(sources[0].metadata.get(field), field, sources[0]) is None:
+                raise ValueError(f"multiple conductor components require explicit {field}")
+    return components, bindings
 
 
 def _grouped_source_ids(

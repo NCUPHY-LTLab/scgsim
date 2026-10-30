@@ -1,17 +1,15 @@
 ---
 title: "Project direction"
-description: "Current learning paths and deferred solver families."
+description: "What SCGSim plans to add, and what is out of scope."
 scgsim-kind: "project"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/roadmap"
 ---
 
-The current documentation work connects complete **capacitance** and
-**resonance/EPR** examples to the public component notebooks, then introduces
-model changes and advanced execution/analysis. These teaching improvements do
-not add solver families or redefine the physical outputs.
+**Planned:** Palace Driven and Palace Magnetostatic simulations.
 
-Palace Driven and Magnetostatic remain future work. Meep remains outside
-SCGSim's scope. Use the [support table](backend-support.qmd) for implemented
-calculations; use the [maintainer entry](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md)
-for repository and release work.
+**Out of scope:** Meep.
+
+The [supported calculations](backend-support.qmd) page lists what SCGSim does
+today. Repository and release work is described in
+[MAINTAINING.md](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md).

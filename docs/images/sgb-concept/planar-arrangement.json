@@ -1,0 +1,243 @@
+{
+  "schema": "scgsim.sgb.planar-method-example.v1",
+  "units": "um",
+  "grid_size_um": 0.001,
+  "source_fixture": "tests/sgb_method_cases.py:junction_hole_case",
+  "source_fixture_sha256": "ed8f3937f30512d0211f2c7544f344c27efb728ceb0f7bc1dbe3247e3197981c",
+  "operands": [
+    {
+      "operand_id": "A",
+      "exterior": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          3.0,
+          0.0
+        ],
+        [
+          3.0,
+          1.0
+        ],
+        [
+          2.0,
+          1.0
+        ],
+        [
+          2.0,
+          2.0
+        ],
+        [
+          0.0,
+          2.0
+        ],
+        [
+          -2.0,
+          2.0
+        ],
+        [
+          -2.0,
+          0.0
+        ]
+      ],
+      "holes": [
+        [
+          [
+            -1.5,
+            1.5
+          ],
+          [
+            -0.5,
+            1.5
+          ],
+          [
+            -0.5,
+            0.5
+          ],
+          [
+            -1.5,
+            0.5
+          ]
+        ]
+      ],
+      "physical": true,
+      "contact": true
+    },
+    {
+      "operand_id": "M",
+      "exterior": [
+        [
+          1,
+          -1
+        ],
+        [
+          4,
+          -1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          1,
+          3
+        ]
+      ],
+      "holes": [],
+      "physical": false,
+      "contact": false
+    }
+  ],
+  "faces": [
+    {
+      "face_id": "GRID_FACE__b00546a294dd7d3cbd55dda5",
+      "exterior": [
+        [
+          -2.0,
+          0.0
+        ],
+        [
+          -2.0,
+          2.0
+        ],
+        [
+          0.0,
+          2.0
+        ],
+        [
+          1.0,
+          2.0
+        ],
+        [
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ],
+      "holes": [
+        [
+          [
+            -1.5,
+            0.5
+          ],
+          [
+            -0.5,
+            0.5
+          ],
+          [
+            -0.5,
+            1.5
+          ],
+          [
+            -1.5,
+            1.5
+          ]
+        ]
+      ],
+      "operand_ids": [
+        "A"
+      ]
+    },
+    {
+      "face_id": "GRID_FACE__e491cf979e0fc7e5d36f8bf0",
+      "exterior": [
+        [
+          1.0,
+          0.0
+        ],
+        [
+          1.0,
+          2.0
+        ],
+        [
+          2.0,
+          2.0
+        ],
+        [
+          2.0,
+          1.0
+        ],
+        [
+          3.0,
+          1.0
+        ],
+        [
+          3.0,
+          0.0
+        ]
+      ],
+      "holes": [],
+      "operand_ids": [
+        "A",
+        "M"
+      ]
+    },
+    {
+      "face_id": "GRID_FACE__fed8e30e03fdf893de730b3f",
+      "exterior": [
+        [
+          1.0,
+          -1.0
+        ],
+        [
+          1.0,
+          0.0
+        ],
+        [
+          3.0,
+          0.0
+        ],
+        [
+          3.0,
+          1.0
+        ],
+        [
+          2.0,
+          1.0
+        ],
+        [
+          2.0,
+          2.0
+        ],
+        [
+          1.0,
+          2.0
+        ],
+        [
+          1.0,
+          3.0
+        ],
+        [
+          4.0,
+          3.0
+        ],
+        [
+          4.0,
+          -1.0
+        ]
+      ],
+      "holes": [],
+      "operand_ids": [
+        "M"
+      ]
+    }
+  ],
+  "areas_um2": {
+    "A": 5.0,
+    "A+M": 3.0,
+    "M": 9.0
+  },
+  "source_hole_area_um2": 1.0,
+  "membership_walk_y_um": [
+    0.25,
+    1.25
+  ],
+  "figure_sha256": {
+    "en-planar-arrangement.html": "24f2833c2ceb6a4ae58bb56fdd4a288554e4ef8ce4e9c2e96a191aa2f1c21c50",
+    "planar-arrangement.html": "2491551435e262c26259a408c073d4de53f365330934657c4c31545dbafecdb5"
+  }
+}

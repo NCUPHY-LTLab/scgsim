@@ -1,0 +1,79 @@
+---
+lang: zh-TW
+title: "Prepare Handoff：準備套件並在 AEDT 主機執行"
+description: "準備 SimplePad HFSS Eigenmode 與 Surface EPR 交接套件，在 AEDT 主機執行並保留回傳資料。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/eigenmode/prepare-handoff"
+---
+
+本路徑在本機準備 SimplePad HFSS Eigenmode 與 Surface EPR 套件，再移到有授權的 AEDT 主機執行。請按順序完成設定、準備、搬移、求解及結果交回；在最後一節使用既有的 Run Notebook，不需另外準備第二份套件。
+
+## 1. 建立 Notebook 環境並開啟範例
+
+先開啟 [Prepare Handoff notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_prepare.ipynb) ([來源 QMD](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_prepare.qmd))，依「環境與公開版本」章建立獨立的 Python 3.12 環境，並在 Jupyter 選擇 `SimplePad HFSS` 核心。
+
+確認：版本儲存格列出安裝版本，Notebook 使用 `SimplePad HFSS` 核心。
+
+## 2. 沿用 SimplePad 模型並調整參數
+
+在 Prepare Notebook 依序執行來源、幾何、接面、模態與表面 EPR 設定儲存格。參數按用途檢查：
+
+| 類別 | 本例設定 | 需要確認的內容 |
+|---|---|---|
+| 幾何與材料 | 焊墊 200 µm、間隙 20 µm、晶片 1000 µm；PDK 堆疊含 100 nm 鋁與 500 µm 矽 | 焊墊與 Ground 分屬明確 Net；來源金屬厚度由 PDK 決定 |
+| 線性接面 | 東側定位埠，焊墊接至 Ground；10 nH、0 F | 這是線性負載模型，不含 Josephson 非線性 |
+| Eigenmode 數值設定 | AEDT 2024.2；搜尋下限 1 GHz；1 個模態；最多 10 回合；頻率變化目標 1% | 搜尋下限是輸入，回傳的模態頻率才是求解結果 |
+| 表面 EPR | 來源目錄中的 MA、MS、SA `LiteratureCentral` 預設；退縮距離 0 µm；排除側壁 | 薄膜厚度、介電常數與損耗角正切沿用所選 PDK 預設值 |
+| 主機資源與輸出 | 4 核心、記憶體上限 30%；每次使用新 `RUN_ID` | 準備前選好資源；另一次求解請使用新的執行資料夾 |
+
+確認：`display(component)` 顯示焊墊與定位埠；貢獻目錄列出實際介面及所選場側；輸入摘要包含模態、EPR 與資源設定。
+
+::: {.callout-note title="固定的公開來源版本" collapse="true"}
+本筆記本使用 OrcaPen PDK [`71d60ca`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/71d60ca03831580866cac139e337146fdb17a66c) 與 SCGSim [`0f6b4e5`](https://github.com/NCUPHY-LTLab/scgsim/tree/0f6b4e5c54aff4891492976a5dd58387cc1a1787)。筆記本的環境指令會安裝這兩個精確來源版本。
+:::
+
+::: {.callout-note title="表面薄膜假設" collapse="true"}
+來源金屬厚度與 EPR 薄膜厚度是兩個獨立輸入。薄膜厚度使用所選 PDK 介面預設值轉為公尺後交給 `SurfaceEprSpec.film_thickness_m`；本頁不把單一膜厚套用到所有新來源。
+:::
+
+## 3. 準備並保存交接套件
+
+在 Prepare Notebook 執行最後的交接儲存格。輸出資料夾必須是新的；保留畫面顯示的 `run_dir` 與 `archive_path`。封存檔位於 `<run_dir>/aedt_handoff.tar.gz`。
+
+確認：保留畫面所列的封存檔及 `run_dir`。封存檔會記錄所選輸入與資源設定。
+
+```text
+archive_path：<run_dir>/aedt_handoff.tar.gz
+封存檔內容：
+├── aedt_spec.json
+├── run_aedt.sh
+└── metadata/
+    ├── aedt_handoff_metadata.json
+    ├── aedt_run_receipt.json
+    └── aedt_handoff_manifest.json
+```
+
+幾何已嵌入 `aedt_spec.json`，不需另外搬移 GDS 檔。
+
+## 4. 搬移套件並在 AEDT 主機執行
+
+1. 將 `aedt_handoff.tar.gz` 複製到 AEDT 2024.2 主機，建立新的空資料夾並在其中解壓縮。封存檔沒有外層 `run_dir` 資料夾，因此要讓 `metadata/` 留在解壓目的地的根目錄；幾何已嵌入規格檔。
+2. 在該主機開啟既有的 [Run Notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_run.ipynb)（[來源 QMD](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_run.qmd)），依其環境章準備相同 SCGSim 版本與 AEDT 環境。
+3. 將 `HANDOFF_RUN_DIR` 設為解壓縮目的資料夾，執行 Notebook 中執行既有套件的儲存格。
+
+確認：Notebook 顯示完整回傳資料夾。保留其中的 AEDT 專案、求解輸出、中介資料與紀錄檔，再把整個回傳 `run_dir` 搬回供 Analyze 使用。原始封存檔是求解前輸入，不含回傳檔案。每份交接只執行一次；需要重算時，請準備新套件。
+
+::: {.callout-note title="從終端機執行" collapse="true"}
+主要流程請使用 Run Notebook。任何支援的主機都可使用解壓資料夾內 metadata 路徑執行公開 CLI；請將 `/new/run_dir` 換成實際資料夾路徑：
+
+```bash
+python -m scgsim.aedt.run --handoff /new/run_dir/metadata/aedt_handoff_metadata.json --execute
+```
+
+Linux 也可在解壓資料夾執行 `bash run_aedt.sh`。Windows 請使用 Python CLI 或 Run Notebook。
+:::
+
+## 5. 交回 Analyze
+
+在新的 Python 核心開啟 [Analyze 教學](analyze.qmd)，或直接使用 [Analyze notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_analyze.ipynb) ([editable QMD](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_analyze.qmd))，指定實際回傳資料夾。下一頁會說明如何從記錄的模態與自適應回合選取 EPR 結果。

@@ -19,6 +19,8 @@ def stage_assets():
         source, destination = ROOT / relative, CHINESE / relative
         if source.is_dir():
             shutil.copytree(source, destination, dirs_exist_ok=True)
+    for name in ("LICENSE", "NOTICE"):
+        shutil.copy2(ROOT / name, CHINESE / name)
     labels = {
         "Source layout": "來源版圖",
         "Materials and electrical Nets": "材料與電氣網路",
@@ -28,7 +30,7 @@ def stage_assets():
         "Geometry, mesh or native spec": "幾何、網格或原生規格",
         "Run locally": "本機執行",
         "Native solver": "原生求解器",
-        "Transfer handoff": "傳送交接套件",
+        "Transfer handoff": "傳送模擬包",
         "Run on solver host": "在求解主機執行",
         "Read results and reports": "讀取結果與報表",
         "Returned outputs and interpretation": "回收輸出與解讀",

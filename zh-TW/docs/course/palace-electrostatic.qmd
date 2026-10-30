@@ -1,15 +1,17 @@
 ---
 lang: zh-TW
-title: "Palace：端子電容"
-description: "將精確 Net 綁定為端子與物理接地，再準備 Electrostatic 網格與設定。"
+title: "Palace Electrostatic：電容矩陣"
+description: "選擇端子與 Ground、設定邊界及有限元素網格，並準備 Palace Electrostatic 執行。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/palace-electrostatic"
 ---
 
-請使用[來源觀測](source-observations.qmd)中的 `snapshot`。此分支要求 Electrostatic 端子響應，而非共振模態。元件範例由公開的 OrPen [Xmon Notebook 群組](../examples.qmd#public-inputs)維護；本教學說明可重複使用的 SCGSim 階段。
+本頁示範如何為自己的模型設定電容計算。你需要已指派電氣網路的 `snapshot`；請參閱[使用自己的模型](working-model.qmd)。[電容教學](../tutorials/capacitance/prepare.qmd)會以單一焊墊示範相同步驟。
 
-Terminal 用來指定激發會進入原生矩陣的導體 Net。Physical Ground 則指定其他導體 Net。將外部求解邊界接地是另一種物理選擇，不能視為導體接地的另一種寫法。此處 Xmon 焊墊是端子，其已指派的 `Ground` Net 則是物理接地：
+範例使用名為 `xmon_pad` 的 Xmon 量子位焊墊，以及名為 `Ground` 的接地電氣網路。
+
+## 選擇端子與 Ground {#choose-terminals-and-ground}
 
 ```python
 from pathlib import Path
@@ -17,34 +19,64 @@ from scgsim.palace import ElectrostaticSim
 
 sim = ElectrostaticSim()
 sim.set_plan(snapshot)
-sim.set_output_dir(Path(".artifacts/public-xmon-electrostatic"))
+sim.set_output_dir(Path(".artifacts/xmon-electrostatic"))
+
 sim.add_terminal("xmon", net_id="xmon_pad")
 sim.add_ground(net_id="Ground")
+```
+
+- **端子**是 Palace 施加激發的電氣網路。每個端子會成為電容矩陣的一列與一行。每個電氣網路請呼叫一次 `add_terminal`。
+- **Ground** 是電壓固定為 0 V 的電氣網路。每個接地電氣網路都要呼叫 `add_ground`。
+
+請使用 plan 中精確的電氣網路 ID。
+
+## 設定邊界 {#set-the-boundary}
+
+```python
 sim.set_electrostatic(
     save_fields=0,
     unassigned_conductor_policy="error",
     exterior_boundary_policy="none",
 )
+```
+
+| 引數 | 選項 |
+|---|---|
+| `unassigned_conductor_policy` | `"error"`：若有導體未指派為端子或 Ground，就停止。`"ground"`：自動將這些導體接地。 |
+| `exterior_boundary_policy` | `"none"`：外層真空邊界保持浮接。`"ground"`：也將此外邊界接地，例如建立接地外殼時使用。此選項要求 `unassigned_conductor_policy="error"`。 |
+| `save_fields` | 要儲存供視覺化使用的場解數量；`0` 表示不儲存。 |
+
+將外邊界接地會增加該邊界的電容。只有當元件位於尺寸相符的接地外殼中時，才選擇此設定。
+
+## 設定有限元素網格 {#set-the-mesh}
+
+```python
 sim.set_mesh(refined_mesh_size=5.0, max_mesh_size=300.0)
 ```
 
-使用 `set_mesh(...)` 選擇 `algorithm_3d`、`threads`、`surface_threads`、`geometry_order` 與 `high_order_optimize`。幾何階數描述網格表示法，與 Palace 的 FEM 階數彼此獨立。初始值及更新行為見共用的 [Palace 網格契約](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls-110-candidate)。
+尺寸單位為微米：`refined_mesh_size` 適用於金屬邊緣附近，`max_mesh_size` 適用於較遠處。`set_mesh` 也接受 `algorithm_3d`、`threads`、`surface_threads`、`geometry_order` 與 `high_order_optimize`。`geometry_order` 決定元素貼合曲面的程度；它與 `set_numerical(order=...)` 設定的有限元素階數不同。詳見[網格設定參考](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls-110-candidate)。
 
-端子與接地選擇器使用確切的最終 Net ID，不是幾何中心的估計值。明確指定 `error` 政策會將未涵蓋的導體元件視為輸入錯誤；另一個支援的 `ground` 政策則會將未指派元件接地。請依實驗選擇政策。此處外部邊界不接地；`exterior_boundary_policy="ground"` 是另一種模型，且要求明確使用 error 政策。[契約](../specs/palace-electrostatic-sgb.qmd)說明這些選擇及其索引對照意義。
+若要以自適應方式細化有限元素網格，請如[電容教學](../tutorials/capacitance/prepare.qmd#step-1-set-up-the-electrostatic-problem)所示，使用 `sim.set_numerical(...)` 設定 `amr_max_passes` 與 `amr_tolerance`。
 
-## 選擇幾何近似並建立輸入 {#select-the-geometry-approximation-and-build-inputs}
-
-已綁定的快照已提供外部包覆。Route B 是預設的有限金屬準備方式。若要明確選取此方式且不要求表面薄膜：
+## 選擇金屬表示法並建立網格 {#choose-the-metal-representation-and-build-the-mesh}
 
 ```python
 sim.set_surface_epr(representation="B", specs={})
 mesh_path = sim.mesh()
 config_path = sim.write_config()
-print(mesh_path, config_path)
 ```
 
-進行 Route-A 研究時，請在產生網格前，使用適當且明確的 `route_a_thin_film` 設定 `representation="A"`。`substrate_face` 會保留物理表面座標；`metal_gap_equivalent` 則是另一種受支援的雙面正規化方式。變更此近似前請參閱[幾何契約](../geometry-sgb.qmd)。表面薄膜及其原生內縮距離是選用的後處理規格，須附上厚度／介電常數／損耗假設，不可推定為材料量測值。
+`representation` 決定金屬的建模方式：
 
-網格產生是真實的準備操作，可能發生原生失敗。寫入設定時會將端子與 Ground 屬性綁定至該網格。請一併檢查確切索引對照與設定檔：schema v2 會區分物理 Ground 與外部 Ground，讓你辨識哪些導體與邊界政策已降階。產生網格後，`sim.mesh_summary()` 會提供分離的原生產生觀測，包括網格控制項、元素／區域數量及精確網格識別。這些紀錄描述網格，不能判定其離散程度是否符合研究需求。[來源摘要](source-observations.qmd)仍是獨立的輸入檢視；`ElectrostaticSim` 沒有 `input_summary()` 方法。
+- `"B"`（預設值）：金屬是有限厚度的實體。
+- `"A"`：金屬是零厚度薄片。另須傳入 `route_a_thin_film`；請參閱[幾何參考](../geometry-sgb.qmd)。
 
-接著可視需要[檢視已準備的網格](solver-observations.qmd)，再[準備並執行交接套件](execute.qmd)。回傳後，請先[解析資料](returned-results.qmd)，再讀取電容矩陣。原生端子／激發順序與單位仍是判讀依據；已準備的設定不含電容量測值。先說明電路問題需要哪種端子響應，再依[研究解讀流程](returned-results.qmd#interpret-for-scq-use)讀取矩陣項目及可取得的細化歷程。保留端子激發、物理／外部接地選擇、實際準則與原生狀態；原生停止旗標本身無法判定電容是否足以供該電路模型使用。
+`specs={}` 表示不要求表面薄膜。薄膜不會影響電容。
+
+`mesh()` 會執行 Gmsh；若幾何無效，就可能失敗。`write_config()` 會寫入 Palace 設定，以及 `metadata/palace_index_map.json`，其中記錄各 Palace 屬性分別代表哪個端子與 Ground。
+
+## 下一步 {#next-steps}
+
+1. 可選擇[檢查已準備的模型](solver-observations.qmd)。
+2. [執行模擬包](execute.qmd)。
+3. [讀取結果](returned-results.qmd)。電容矩陣的行與列依端子順序排列，單位為法拉。

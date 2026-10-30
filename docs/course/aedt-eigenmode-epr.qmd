@@ -1,0 +1,72 @@
+---
+title: "AEDT Eigenmode and EPR Python API reference"
+description: "Optional EigenmodeSim Python API excerpts; the three-stage tutorial is the reader workflow."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/aedt-eigenmode-epr"
+---
+This page keeps optional EigenmodeSim Python API excerpts. For the reader workflow, start at the [Eigenmode and Surface EPR overview](../tutorials/resonance.qmd), then choose [handoff execution](../tutorials/eigenmode/prepare-handoff.qmd), [same-host direct execution](../tutorials/eigenmode/run-directly.qmd), and shared [result analysis](../tutorials/eigenmode/analyze.qmd).
+
+## Optional: EigenmodeSim Python API reference
+
+These partial SCGSim API sequences are for custom code; the three notebook stages above are the main workflow. The snippets are not standalone runnable examples.
+
+### Prepare with Python
+
+Supply `snapshot` from `GeometryPlan.prepare()`, `junction` from the selected source port and net endpoints, `surface_specs` from the source contribution catalogue and film assumptions, `epr_request` for requested result IDs, `run_control` with study settings, and `resources` as an `AedtResources` value. Set `MODELING`, `AEDT_VERSION`, run directory, project name and design name for the study.
+
+```python
+from scgsim.aedt import EigenmodeSim
+
+sim = EigenmodeSim(modeling=MODELING, aedt_version=AEDT_VERSION)
+sim.set_plan(snapshot)
+sim.set_output_dir(NEW_RUN_DIRECTORY)
+sim.add_junction(junction)
+sim.set_surface_epr(contributions=surface_specs)
+sim.set_epr_request(epr_request)
+sim.set_eigenmode(
+    project_name=PROJECT_NAME,
+    design_name=DESIGN_NAME,
+    run_control=run_control,
+    resources=resources,
+)
+handoff = sim.prepare_handoff()
+print(
+    handoff.run_dir, handoff.script_path, handoff.metadata_path,
+    handoff.spec_path, handoff.manifest_path, handoff.archive_path,
+)
+```
+
+Set `modeling` to the selected `"solid"` or `"thin_film"` representation, and choose AEDT `2023.2` or `2024.2` explicitly. `run_control` sets minimum frequency in GHz, requested mode count, adaptive iteration bounds, and frequency-change criterion. `resources` is an `AedtResources` record; geometry worker count is a separate preparation control.
+
+For EPR, `add_junction` declares a source-linked junction with inductance in H. `set_surface_epr` selects source-linked surface contributions and film assumptions; `SurfaceEprSpec.film_thickness_m` is in metres. `set_epr_request` selects mode indices and surface, junction, or bulk contribution IDs for analysis. Surface, bulk and junction quantities remain distinct; inspect their native histories separately from frequency convergence.
+
+### Analyze with Python
+
+Set `RETURNED_RUN_DIR` to the actual returned run directory. `RECORDED_MODE` and `RECORDED_PASS` must come from the resolved EPR result; they are values produced by the run, not defaults.
+
+```python
+from pathlib import Path
+from scgsim.aedt import resolve_results
+
+RETURNED_RUN_DIR = Path("/path/to/returned/run")  # Replace with the actual directory.
+resolved = resolve_results(RETURNED_RUN_DIR)
+resolved.show_all_results(show_details=True)
+rows = resolved.physics_results()
+benchmark = resolved.simulation_benchmark()
+epr = resolved.epr_result()  # None when this run did not request EPR
+```
+
+If EPR was requested, choose a mode and native pass present in `epr` before plotting:
+
+```python
+from scgsim.aedt import plot_epr_result, show_epr
+
+show_epr(epr, mode=RECORDED_MODE, native_pass=RECORDED_PASS)
+plot_epr_result(
+    epr, mode=RECORDED_MODE, native_pass=RECORDED_PASS,
+    show_convergence=True,
+)
+```
+
+Adaptive EPR history comes from the run's recorded fields.

@@ -1,81 +1,80 @@
 ---
 lang: zh-TW
-title: "在本機或求解器主機執行交接套件"
-description: "在本機執行已準備的模型，或將完整原生套件傳至求解器主機並取回結果。"
+title: "執行已準備的模擬包"
+description: "使用 Palace 在本機或 Slurm 上執行已準備的模擬包，或使用 AEDT 執行。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/execute"
 ---
 
-開始前，請先完成一篇後端教學並保留其 `handoff`。準備流程會建立輸入套件；執行則是另外呼叫原生求解器的操作。請保留準備階段的紀錄，並傳送完整套件，而非只傳網格、JSON 規格或專案檔名。
+SCGSim 不會自行啟動求解器。準備流程會建立模擬包資料夾，內含求解器所需檔案及啟動指令稿。本頁說明如何在求解器主機上執行該模擬包。
 
-## Palace：選擇主機的啟動方式 {#palace-select-the-hosts-launch-shape}
+請將**完整**模擬包資料夾複製到主機並取回。只有有限元素網格或專案檔，無法載入結果。
 
-Palace 教學會設定 `sim`、建立網格並寫入設定檔。接下來由你提供主機上的實際執行檔、資源與設定命令。這些值取決於你的環境，因此範例從研究專用的環境變數讀取，而不指定特定站台路徑或核心數。
+## Palace {#palace}
+
+### 依求解主機設定 {#prepare-for-your-host}
+
+`prepare_handoff()` 會接收執行 Palace 的電腦所需設定：
 
 ```python
-import json
-import os
-from pathlib import Path
-
 handoff = sim.prepare_handoff(
-    profile=os.environ["SCGSIM_PALACE_PROFILE"],
-    executable=os.environ["SCGSIM_PALACE_EXECUTABLE"],
-    resources=json.loads(os.environ["SCGSIM_PALACE_RESOURCES_JSON"]),
-    setup_commands=tuple(json.loads(
-        os.environ.get("SCGSIM_PALACE_SETUP_COMMANDS_JSON", "[]")
-    )),
+    profile="direct-local",
+    executable="palace",
+    resources={"processes": 8, "threads": 1, "command_style": "wrapper"},
+    setup_commands=("module load palace",),
 )
-identity_note = Path(".artifacts/palace-preparation-handoff-id.txt")
-identity_note.parent.mkdir(parents=True, exist_ok=True)
-identity_note.write_text(handoff.handoff_id + "\n", encoding="utf-8")
-print(handoff.script_path, handoff.archive_path)
+print(handoff.run_dir)
+print(handoff.handoff_id)
 ```
 
-請將此 ID 記錄保存在傳送套件之外。若後端教學已建立交接套件，請保留該套件的 ID，不要再準備第二份。[設定檔契約](../execution-profiles.qmd)列出精確的資源鍵。`direct-local` 可呼叫執行檔或 Palace 包裝程式。Slurm 會在排程器啟動器內執行執行檔；不要在 `srun` 外再疊加 MPI 包裝程式。資源請求由你決定配置，並非 SCGSim 的科學準則。
+| 引數 | 說明 |
+|---|---|
+| `profile` | `"direct-local"` 會直接執行 Palace。Slurm 設定檔則會寫入 `sbatch` 指令稿。 |
+| `executable` | Palace 執行檔，或會以 MPI 啟動它的包裝指令稿。 |
+| `resources` | MPI 程序數、每個程序的執行緒數及啟動方式。 |
+| `setup_commands` | 先執行的 Shell 命令，例如 `module load`。 |
 
-檢查產生的指令稿，傳送並解壓縮完整封存檔，然後在目標主機的封存資料夾中執行：
+[執行設定檔參考](../execution-profiles.qmd)列出所有設定檔與資源鍵。使用 Slurm 時，請指定 Palace 執行檔本身，不要指定 MPI 包裝程式，因為 `srun` 已會啟動 MPI 程序。
+
+請將 `handoff_id` 存在模擬包資料夾以外的位置，例如研究紀錄。載入結果時會用到此 ID。
+
+### 執行 {#run}
+
+在主機上切換至模擬包資料夾，然後執行：
 
 ```bash
 bash run_palace.sh
 ```
 
-若選用 Slurm 設定檔，請執行對應命令：
+Slurm 設定檔則使用：
 
 ```bash
 sbatch run_palace.sbatch
 ```
 
-送出作業只代表提出排程請求，不代表工作已完成。產生的指令稿會先對複製的確切設定檔執行原生 `--dry-run`，只有預檢成功才會開始求解。預檢失敗會記錄其失敗階段與 `solver_invoked=false`；這不代表 PDE 求解失敗。請取回完整的回傳資料夾，包括中繼資料與記錄檔。
+指令稿會先以 `palace --dry-run` 檢查設定。若檢查失敗，Palace 不會求解；本次執行會記錄為設定錯誤，而非求解器失敗。
 
-## AEDT：在本機執行已準備的套件 {#aedt-execute-the-prepared-package-locally}
+工作完成後，請取回整個資料夾，包含 `metadata/` 與記錄檔。
 
-AEDT 教學中的 `handoff` 會包含所需的複製幾何、規格、中繼資料、初始收據、manifest 與 `run_aedt.sh`。請將完整套件傳送至已安裝交接套件明確選定版本（AEDT 2023.2 或 2024.2）及 PyAEDT 1.3.0 的主機。Desktop 交易會在同一台主機本機執行。請在解壓縮的資料夾中執行：
+## AEDT {#aedt}
+
+AEDT 的 `prepare_handoff()` 會建立含模型、規格與 `run_aedt.sh` 的模擬包資料夾。請將資料夾複製到裝有 AEDT 2024.2 與 PyAEDT 1.3.0 的電腦，然後執行：
 
 ```bash
 bash run_aedt.sh
 ```
 
-此指令稿會明確執行共用交易。若直接使用 CLI，請保留實際中繼資料路徑：
+這相當於執行：
 
 ```bash
 python -m scgsim.aedt.run --handoff metadata/aedt_handoff_metadata.json --execute
 ```
 
-執行流程會開啟所管理的 Desktop、準備選定的原生模型、求解、匯出並讀回實際輸出，接著儲存／釋放 Desktop 並封存收據。原生失敗、缺少匯出資料或釋放失敗，都不會成為已完成的結果。每個執行資料夾都是單一的已準備執行單位；準備其他請求時請使用新的輸出資料夾，避免覆寫其收據／歷程。
+指令稿會啟動 AEDT、建立模型、求解、匯出結果、儲存專案並關閉 AEDT。若任一步驟失敗，本次執行就會記錄為失敗。
 
-請取回完整的回傳資料夾。只有 `.aedt` 檔案無法證明已儲存場資料；單獨的 EPR JSON 也不能取代完整執行資料的解析。下一篇教學會說明如何[重新啟動並解析回傳資料](returned-results.qmd)，過程不需開啟求解器。額外的儲存場 EPR 評估另有[原生分析教學](aedt-saved-fields.qmd)。
+每個模擬包只能執行一次。若要變更設定，請準備新的模擬包。
 
-## AEDT：在 HPC 執行原生準備的 EPR 套件 {#aedt-run-a-prepared-native-epr-package-on-hpc}
+## 下一步 {#next-steps}
 
-上方的 Desktop 路徑仍是直接使用 AEDT 的工作流程。若要在 HPC 使用 BatchSolve，請先在工作站上使用請求中選定的 AEDT 版本準備並讀回原生 HFSS EPR 模型。JSON 交接資料本身不是原生模型套件；請使用 `prepare_native_batch()`，將已釋放的準備結果、儲存的專案、來源、setup/cache/calculator 讀回資料及必要相依項目打包。
-
-請將套件封存檔傳送至安裝相同 AEDT 版本、命令列求解器且有可用求解器授權的主機。此階段使用獨立的 `run_batch.py`；該主機不需要 SCGSim、PyAEDT、模型建置環境或可用的 Desktop 工作階段：
-
-```bash
-python run_batch.py solve --package "$PACKAGE_DIR" --output "$ATTEMPT_DIR"
-```
-
-此命令會依單一主機的 BatchSolve 配方執行封裝的設計與設定，不會送出排程作業。請將完整套件與執行嘗試資料送回工作站，包括回傳的 `.aedt` 專案、完整 `.aedtresults` 資料夾、執行紀錄及求解器原始輸出。在工作站上，`collect_native_batch()` 會透過一般交易開啟受管理的副本，讀取完整自適應快取歷程與儲存場 EPR，接著封存並解析結果，不會重建幾何或執行 Analyze。[AEDT 執行階段契約](../specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)定義必要證據與失敗規則。
-
-進行參數掃描時，請為每個模型分別執行原生準備與封裝，並使用不同輸出資料夾。可一併傳送各自獨立的封存檔，再逐一執行及收集套件；批次 API 不會將多個模型合併成一個求解器專案。完整的重複作業流程請參閱 [HPC EPR 掃描指南](aedt-hpc-sweep.qmd)。
+請[讀取回傳結果](returned-results.qmd)。若使用 HFSS Eigenmode，也可以從[儲存場計算 EPR](aedt-saved-fields.qmd)。

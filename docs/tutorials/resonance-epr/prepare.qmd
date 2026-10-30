@@ -1,0 +1,206 @@
+---
+title: "Resonance and EPR 1/3: Prepare the run"
+description: "Add a junction inductance to the square pad, set up a Palace or HFSS Eigenmode calculation and write its run directory."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/resonance-epr/prepare"
+aliases:
+  - ../resonance-epr.html
+---
+
+In this tutorial you turn the square pad into a simple LC resonator by adding
+a 10 nH inductance across the gap. You then find its resonance and its
+**energy participation ratios** (EPR): what fraction of the mode's energy
+sits in the silicon, the vacuum, the surface films and the junction. It has
+three pages:
+
+1. **Prepare** (this page): set up an Eigenmode calculation with Palace or
+   HFSS and write a run directory.
+2. [**Run**](run.qmd): run the solver on that directory.
+3. [**Analyze**](analyze.qmd): read the frequency and the participation.
+
+The earlier reference runs gave one mode at about **5.1 GHz** (Palace) or
+**4.9 GHz** (HFSS), with over 99 % of the inductive energy in the junction.
+
+::: {.callout-note title="Before you start"}
+Build [the SimplePad model](../simplepad-model.qmd) and keep that Python
+session open. You need `snapshot`, `surface_films`, `presets` and
+`output_root` from it. The [capacitance tutorial](../capacitance/prepare.qmd)
+is a shorter first run, but not required.
+:::
+
+## The junction
+
+The short sheet across the east gap of the SimplePad (`x = 100…120 µm`,
+`y = −1…1 µm`) becomes a **lumped junction**: a 10 nH inductor between the pad
+and Ground. The sheet is not metal. It stands for a linearized Josephson
+junction and connects the pad and Ground only through its inductance.
+
+As a rough check, an ideal LC circuit with $C \approx 95$ fF and $L = 10$ nH
+resonates at $f_0 = 1/(2\pi\sqrt{LC}) \approx 5.2$ GHz. The field solution
+includes the real geometry, so it gives a slightly different value.
+
+## Step 1: Set up the Eigenmode calculation
+
+:::: {.panel-tabset group="solver"}
+
+### Palace
+
+```python
+from scgsim.palace import EigenmodeSim
+
+run_id = "pad-resonance-palace-01"
+sim = EigenmodeSim()
+sim.set_plan(snapshot)
+sim.set_output_dir(output_root / run_id)
+sim.set_surface_epr(representation="B", specs=surface_films)
+
+port_name = "chip/o_junction_lumped"
+sim.add_port(port_name, layer="D0_TOP_M1", layout_sheet=True, inductance=10e-9)
+sim.set_epr_request(
+    surface_interfaces=("MA", "MS", "SA"),
+    bulk_domain_ids=None,
+    port_names=(port_name,),
+)
+
+sim.set_eigenmode(num_modes=1, target=1e9, tolerance=1e-6, save=1)
+sim.set_mesh(refined_mesh_size=10.0, max_mesh_size=200.0)
+sim.set_numerical(
+    order=2, tolerance=1e-6, max_iterations=2000,
+    amr_max_passes=10, amr_tolerance=0.02, amr_update_fraction=0.15,
+    save_adapt_iterations=True, output_paraview=True,
+)
+mesh_path = sim.mesh()
+config_path = sim.write_config()
+```
+
+- `add_port(..., inductance=10e-9)` turns the sheet into a 10 nH lumped
+  inductor. Palace ports are inductive only.
+- `set_epr_request` selects what to report: all three surface films, every
+  bulk material (`bulk_domain_ids=None`), and the junction port.
+- `set_eigenmode(num_modes=1, target=1e9)` sets the target frequency in Hz.
+- The outer vacuum boundary is left unassigned. Palace then treats it as a
+  perfect magnetic conductor (PMC).
+
+### HFSS
+
+```python
+from scgsim.aedt import (
+    AedtResources, EigenmodeSim, EigenmodeRunControl, EprAnalysisRequest,
+    SurfaceEprSpec, planar_junction_from_port, prepare_planar_geometry_input,
+)
+
+run_id = "pad-resonance-hfss-01"
+junction = planar_junction_from_port(
+    snapshot.geometry_input, port_name="chip/o_junction_lumped",
+    junction_id="jj", terminal_a_net="pad", terminal_b_net="ground",
+    inductance_h=10e-9, capacitance_f=0.0,
+)
+prepared = prepare_planar_geometry_input(
+    snapshot.geometry_input, prepared_stack=snapshot.stack,
+    modeling="solid", junctions=(junction,),
+)
+```
+
+`prepare_planar_geometry_input` lists every surface where a film can be
+assigned (`prepared.contribution_catalog`). Assign the PDK preset to each MA,
+MS and SA surface:
+
+```python
+surface_specs = []
+for record in prepared.contribution_catalog:
+    kind = record["interface_kind"]
+    if kind not in ("MA", "MS", "SA"):
+        continue
+    preset_name = f"LiteratureCentral_{kind}"
+    preset = presets[preset_name]
+    surface_specs.append(SurfaceEprSpec(
+        contribution_id=record["contribution_id"],
+        source_polygon_id=record["source_polygon_ids"][0],
+        interface_kind=kind, field_side=record["field_side"],
+        margins_um=(0.0,),
+        film_thickness_m=preset["thickness"] * 1e-6,
+        film_relative_permittivity=preset["permittivity"],
+        loss_tangent=preset["loss_tangent"],
+        source=preset["source"], preset=preset_name,
+    ))
+```
+
+The PDK gives film thickness in micrometres; `SurfaceEprSpec` takes metres.
+Now set up the simulation:
+
+```python
+sim = EigenmodeSim(modeling="solid")
+sim.set_plan(snapshot)
+sim.set_output_dir(output_root / run_id)
+sim.set_surface_epr(contributions=surface_specs)
+sim.add_junction(junction)
+sim.set_epr_request(EprAnalysisRequest(
+    mode_indices=(1,),
+    surface_contribution_ids=tuple(s.contribution_id for s in surface_specs),
+    junction_ids=("jj",),
+    bulk_domain_ids=None,
+))
+sim.set_eigenmode(
+    project_name=run_id, design_name="SimplePadEigenmode",
+    run_control=EigenmodeRunControl(
+        setup_name="Setup1", minimum_frequency_ghz=1.0, num_modes=1,
+        maximum_passes=10, maximum_delta_frequency_percent=1.0,
+    ),
+    resources=AedtResources(cores=4, ram_limit_percent=80),
+)
+```
+
+- `modeling="solid"` builds the metal as 3D solids. Every HFSS and Q3D run
+  must choose `"solid"` or `"thin_film"`; there is no default.
+- HFSS refines the mesh up to 10 passes, stopping once the frequency changes
+  by less than 1 % between passes.
+
+::::
+
+## Step 2: Write the run directory
+
+:::: {.panel-tabset group="solver"}
+
+### Palace
+
+```python
+handoff = sim.prepare_handoff(
+    profile="direct-local",
+    executable="palace",
+    resources={"processes": 8, "threads": 1, "command_style": "wrapper"},
+)
+print(handoff.run_dir)
+print(handoff.handoff_id)
+```
+
+Write down both printed values. The Analyze page uses `handoff_id` to confirm
+that the results it loads came from this run directory. Change `executable`
+and `resources` to match your Palace host; see
+[Run a prepared model](../../course/execute.qmd#palace).
+
+### HFSS
+
+```python
+handoff = sim.prepare_handoff()
+print(handoff.run_dir)
+```
+
+This writes files only; it does not open AEDT. The settings from Step 1,
+including the resources, are stored in the run directory.
+
+::::
+
+## Use the notebook instead
+
+The OrPen SC PDK provides this tutorial as notebooks:
+[Palace](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/palace_eigenmode.ipynb)
+and
+[HFSS](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.ipynb).
+They call the same SCGSim functions. Set `WORKFLOW_ACTION` to
+`"prepare_handoff"` for this page, run the solver yourself, then switch to
+`"analyze_handoff"` for the Analyze page.
+
+## Next
+
+[Run the solver](run.qmd).

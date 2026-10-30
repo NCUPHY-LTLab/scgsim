@@ -1,6 +1,6 @@
 # 維護 SCGSim {#maintaining-scgsim}
 
-本參考頁說明文件建置與套件維護方式。次要的[維護者指南](docs/ownership.qmd)連結至實作與專案參考資料。研究者無須上層工作區，可從[課程](docs/examples.qmd)開始。
+本參考頁說明文件建置與套件維護方式。[維護者指南](docs/ownership.qmd)連結至實作與專案參考資料。研究者無須上層工作區，可從[教學](docs/examples.qmd)開始。
 
 ## 來源與產生輸出 {#sources-and-generated-output}
 
@@ -8,7 +8,7 @@
 
 ## 原生呈現 {#native-presentation}
 
-網站使用完整的上游 Askr 擴充功能，不含本地 CSS 或 JS。目前編輯固定版本為 Askr v0.12.0，修訂版本 `d4a0b7ac664f783304a761e307414b9fff16e977`，支援 Quarto >=1.9.38 且 <1.11。文件本機預覽使用 Quarto 1.10.19。後續正式的產生器更新必須保留自己的精確版本及修訂版本。表格、提示框與導覽請使用 Quarto 原生結構；來源識別資訊與產生的呈現識別資訊應分開處理。
+網站使用完整的上游 Askr 擴充功能，不含本地 CSS 或 JS。目前編輯固定版本為 Askr v0.13.3，修訂版本 `243d3dbdd234004bbe0538b9518fb76027903915`，支援 Quarto >=1.9.38 且 <1.11。文件本機預覽使用 Quarto 1.10.19。後續正式的產生器更新必須保留自己的精確版本及修訂版本。表格、提示框與導覽請使用 Quarto 原生結構；來源識別資訊與產生的呈現識別資訊應分開處理。
 
 ## 文件建置 {#documentation-builds}
 

@@ -16,8 +16,8 @@ Public component and executable notebook sources belong to OrPen SC PDK.
 ## Native presentation
 
 The site uses the complete upstream Askr extension without local CSS or JS.
-The current authoring pin is Askr v0.4.2 at
-`611f537ca3ec7089f7b5daf983f1554f8c98a8dd`, requiring Quarto 1.10.18.
+The current authoring pin is Askr v0.13.3 at
+`243d3dbdd234004bbe0538b9518fb76027903915`, requiring Quarto 1.10.18.
 A later formal producer update must retain its own exact version/commit.
 Use native Quarto structures for tables, callouts and navigation; keep source
 identity separate from generated presentation identity.

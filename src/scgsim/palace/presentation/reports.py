@@ -6,6 +6,8 @@ physical interpretation and simulation cost remain explicit separate calls.
 
 from __future__ import annotations
 
+from scgsim.geometry.models.common import GeometryRoute
+
 import html
 import json
 import math
@@ -282,7 +284,7 @@ class PalaceTrustReport:
     def _identity_html(self) -> str:
         cards = (
             ("Problem", self.problem),
-            ("Route", self.route),
+            ("Route", GeometryRoute(self.route).display_name if self.route in {"A", "B", "C"} else self.route),
             ("Profile", self.profile),
             ("Completeness", self.completeness),
             ("Latest snapshot", self.latest_source),

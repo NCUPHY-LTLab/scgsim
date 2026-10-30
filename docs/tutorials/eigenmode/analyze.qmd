@@ -1,0 +1,84 @@
+---
+title: "Analyze: read mode and Surface EPR results"
+description: "Resolve a returned SimplePad HFSS run, select recorded mode and adaptive pass, and interpret frequency and EPR quantities."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/eigenmode/analyze"
+---
+
+Use a fresh Python kernel to read the complete returned directory and inspect observed mode frequency, native adaptive passes, and Surface EPR. Resolution is offline; this page does not start an AEDT solve.
+
+## 1. Point to the actual returned directory
+
+Retrieve the complete output from Prepare Handoff, or use the `run_dir` produced by Run Directly. In a fresh Python kernel, open the [Analyze notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/f70c3b97f262d54701d710760086433d7ff6c7c1/notebooks/SCGSimExamples/ComponentSimulation/SimplePad/aedt_hfss_eigenmode_analyze.ipynb) and enter that returned directory. Reading results is offline.
+
+```python
+from pathlib import Path
+from scgsim.aedt import resolve_results
+
+RETURNED_RUN_DIR = Path("/absolute/path/to/returned/run_dir").expanduser().resolve()
+resolved = resolve_results(RETURNED_RUN_DIR)
+resolved.show_all_results(show_details=True)
+epr = resolved.epr_result()
+physics = resolved.physics_results()
+benchmark = resolved.simulation_benchmark()
+```
+
+Check: the report shows the run receipt, native mode rows, EPR rows when requested, and execution summary. `physics` contains the primary mode results; `benchmark` summarizes execution cost.
+
+## 2. Choose a recorded EPR mode and adaptive pass
+
+This HFSS workflow requests Surface EPR. First check that `epr` is present, then inspect the actual `mode`, `native_pass`, and `status` values in its rows. Use the mode and positive native pass from one row; do not substitute the configured pass limit for an observed pass.
+
+```python
+if epr is None:
+    raise ValueError("No EPR result was requested; check the run request.")
+
+selections = [
+    {
+        "mode": row.get("mode"),
+        "native_pass": row.get("native_pass"),
+        "status": row.get("status"),
+    }
+    for row in epr.rows
+]
+print(selections)
+```
+
+Choose one row from that output, then enter that row’s exact mode and native pass below.
+
+```python
+MODE = 1          # Replace with the selected row's mode.
+NATIVE_PASS = 1   # Replace with that same row's native_pass.
+```
+
+Check: the selected pair matches one returned row and its recorded status.
+
+::: {.callout-note title="Selecting a row for plotting" collapse="true"}
+`show_epr` treats `None` as a wildcard and requires exactly one matching row, so pass both selected values explicitly. Some other result types, such as saved-field rows, omit `native_pass`; this returned adaptive run reports it on EPR rows.
+:::
+
+## 3. Read frequency and participation
+
+```python
+from scgsim.aedt import plot_epr_result, show_epr
+
+print(physics)
+show_epr(epr, mode=MODE, native_pass=NATIVE_PASS)
+plot_epr_result(epr, mode=MODE, native_pass=NATIVE_PASS, show_convergence=True)
+```
+
+| Report item | Unit and interpretation |
+|---|---|
+| Primary mode result `frequency_ghz` | GHz; this is the reported mode frequency. |
+| EPR row `frequency_hz` | Hz; this value is recorded with the selected EPR row. |
+| Surface contribution | `participation` is dimensionless and `energy_j` is J; read the source interface and field-side labels with them. |
+| Bulk domain | `energy_j` is J; the displayed participation is calculated as domain energy divided by normalization energy. |
+| Junction | `inductive_participation` (`pL`) and `capacitive_participation` (`pC`) are dimensionless. |
+| Adaptive history | Frequency and EPR rows are separate records. The EPR selection uses its recorded mode and native pass. |
+
+Check: read each unit from its named result field and keep the row's source labels and status. Interpret only contributions present in the returned request; a missing contribution is not a zero result.
+
+::: {.callout-note title="Other EPR analyses" collapse="true"}
+Surface participation and frequency convergence are separate histories. The [saved-field guide](../../course/aedt-saved-fields.qmd) covers AEDT evaluation of saved fields; the [offline EPR guide](../../course/offline-epr.qmd) updates loss assumptions using existing field integrals. They serve different purposes.
+:::

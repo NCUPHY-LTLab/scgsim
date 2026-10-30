@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.geometry.models.common import GeometryRoute, _normalize_geometry_route
+
 from scgsim.preparation import _native_preparation
 
 from scgsim.diagnostics import _stage, _worker_config
@@ -81,7 +83,7 @@ def build_route_mesh(
     *,
     component: Any,
     stack: Mapping[str, Any],
-    route: str,
+    route: str | GeometryRoute,
     output_dir: str | Path,
     size_policy: str = "scgsim_default",
     refined_mesh_size: float | None = None,
@@ -100,11 +102,14 @@ def build_route_mesh(
     """Lower Route-A/Route-B SGB geometry, mesh it, and emit artifacts."""
 
     if representation_context is None or source_geometry_input is None:
-        raise ValueError("fresh Palace mesh requires neutral effective geometry input and representation_context from preparation")
+        raise ValueError(
+            "fresh Palace mesh requires neutral effective geometry input and representation_context from preparation"
+        )
     if not isinstance(stack, Mapping):
         raise TypeError("stack must be a mapping after set_stack processing.")
+    route = _normalize_geometry_route(route)
     if route not in {"A", "B"}:
-        raise ValueError("route must be either 'A' or 'B'.")
+        raise ValueError("Palace geometry route must be thin_film (A) or pec_shell (B).")
     from .controls import mesh_controls, normalize_mesh_sizing
 
     sizing = normalize_mesh_sizing(
@@ -187,7 +192,9 @@ def build_route_mesh(
     # SGB/OCC construction remains in the calling process. Only Gmsh lowering
     # receives a fresh native-process boundary after an XAO has been written.
     SemanticGeometryBuilder().build(
-        build_input, route=route, run_folder=run_dir,
+        build_input,
+        route=route,
+        run_folder=run_dir,
         representation_context=representation_context,
     )
     if not xao_path.is_file():
@@ -726,6 +733,14 @@ def _add_surface_group_records(
             "conductor_component_id": _optional_string(
                 record.get("conductor_component_id")
             ),
+            **{
+                key: copy.deepcopy(record[key])
+                for key in (
+                    "conductor_component_ids",
+                    "conductor_component_ids_by_source",
+                )
+                if key in record
+            },
             "net_id": _optional_string(record.get("net_id")),
             "equipotential_id": _optional_string(record.get("equipotential_id")),
             "sgb_record": "final_physical_group",
@@ -764,13 +779,13 @@ def _add_surface_group_records(
         )
     _validate_surface_contribution_ledger(name, record, interface_type)
 
-    component_id = _optional_string(record.get("conductor_component_id"))
+    component_ids = _conductor_component_ids(record, name=name)
     net_id = _optional_string(record.get("net_id"))
     if interface_type in {"MA", "MS", "MS_MA"} and (
-        component_id is None or net_id is None
+        not component_ids or net_id is None
     ):
         raise ValueError(
-            f"SGB conductor surface {name!r} must include conductor_component_id and net_id."
+            f"SGB conductor surface {name!r} must include conductor component membership and net_id."
         )
     if interface_type == "SA" and net_id is not None:
         raise ValueError(
@@ -822,7 +837,7 @@ def _add_surface_group_records(
             face_kind=face_kind,
         )
         groups["boundary_surfaces"][alias_name] = alias_info
-        if interface_type in {"MA", "MS"} and component_id is not None:
+        if interface_type in {"MA", "MS"} and component_ids:
             groups["pec_surfaces"][alias_name] = {
                 "phys_group": phys_group,
                 "tags": list(entity_tags),
@@ -960,6 +975,11 @@ def _add_port_surface_group(
         "source_provenance": dict(provenance),
         "physical_attribute": dict(attribute),
         "conductor_component_id": record.get("conductor_component_id"),
+        **{
+            key: copy.deepcopy(record[key])
+            for key in ("conductor_component_ids", "conductor_component_ids_by_source")
+            if key in record
+        },
         "net_id": record.get("net_id"),
         "equipotential_id": record.get("equipotential_id"),
     }
@@ -1348,6 +1368,11 @@ def _structured_surface_info(
         "conductor_component_id": _optional_string(
             record.get("conductor_component_id")
         ),
+        **{
+            key: copy.deepcopy(record[key])
+            for key in ("conductor_component_ids", "conductor_component_ids_by_source")
+            if key in record
+        },
         "net_id": _optional_string(record.get("net_id")),
         "equipotential_id": _optional_string(record.get("equipotential_id")),
         "physical_attribute": dict(record.get("physical_attribute", {})),
@@ -1359,9 +1384,12 @@ def _structured_surface_info(
         "route": _optional_string(record.get("route")),
         "source_provenance": dict(record.get("source_provenance", {})),
         "source_record_ids": tuple(
-            record.get("metadata", {}).get("source_record_ids", ())
+            record.get("metadata", {}).get(
+                "source_record_ids",
+                record.get("source_provenance", {}).get("source_record_ids", ()),
+            )
         )
-        if isinstance(record.get("metadata"), Mapping)
+        if isinstance(record.get("metadata", {}), Mapping)
         else (),
         "surface_id": _optional_string(record.get("surface_id")) or name,
         "owner_semantic_ids": tuple(record.get("owner_semantic_ids", ())),
@@ -1631,6 +1659,8 @@ def _build_mesh_manifest(
                 "owner_semantic_ids",
                 "adjacent_solution_volume_ids",
                 "conductor_component_id",
+                "conductor_component_ids",
+                "conductor_component_ids_by_source",
                 "net_id",
                 "equipotential_id",
                 "source_provenance",
@@ -1688,7 +1718,9 @@ def _route_a_thin_film_provenance(
 
         plan = PhysicalRepresentationPlan.from_payload(physical)
         if result.get("variant") != plan.profile.name:
-            raise ValueError("Palace profile provenance differs from the neutral physical plan")
+            raise ValueError(
+                "Palace profile provenance differs from the neutral physical plan"
+            )
         return result
     variant = result.get("variant")
     expected_label = {
@@ -1830,6 +1862,80 @@ def _component_gds_top_cell_name(*, component: Any, gds_path: Path) -> str:
     return top_cells[0].name
 
 
+def _conductor_component_ids(
+    record: Mapping[str, Any], *, name: str
+) -> tuple[str, ...]:
+    """Read additive group membership without inventing per-source identities."""
+    singular = _optional_string(record.get("conductor_component_id"))
+    has_ids = "conductor_component_ids" in record
+    has_sources = "conductor_component_ids_by_source" in record
+    if not has_ids and not has_sources:
+        return (singular,) if singular is not None else ()
+    ids = record.get("conductor_component_ids")
+    bindings = record.get("conductor_component_ids_by_source")
+    if (
+        not has_ids
+        or not has_sources
+        or not isinstance(ids, (list, tuple))
+        or any(not isinstance(value, str) or not value.strip() for value in ids)
+        or tuple(ids) != tuple(sorted(set(ids)))
+        or not isinstance(bindings, Mapping)
+        or any(
+            not isinstance(key, str)
+            or not key.strip()
+            or not isinstance(value, str)
+            or not value.strip()
+            for key, value in bindings.items()
+        )
+    ):
+        raise ValueError(
+            f"SGB surface {name!r} has invalid conductor component membership."
+        )
+    component_ids = tuple(ids)
+    if len(component_ids) > 1:
+        net_id = record.get("net_id")
+        equipotential_id = record.get("equipotential_id")
+        if not isinstance(net_id, str) or not net_id.strip():
+            raise ValueError(
+                f"SGB surface {name!r} plural components need exact net_id."
+            )
+        if equipotential_id is not None and (
+            not isinstance(equipotential_id, str) or not equipotential_id.strip()
+        ):
+            raise ValueError(
+                f"SGB surface {name!r} has invalid optional equipotential_id."
+            )
+    expected_singular = component_ids[0] if len(component_ids) == 1 else None
+    if singular != expected_singular or set(bindings.values()) != set(component_ids):
+        raise ValueError(
+            f"SGB surface {name!r} has inconsistent conductor component membership."
+        )
+    if component_ids:
+        metadata = record.get("metadata", {})
+        provenance = record.get("source_provenance", {})
+        source_lists = [
+            container["source_record_ids"]
+            for container in (record, metadata, provenance)
+            if isinstance(container, Mapping) and "source_record_ids" in container
+        ]
+        if not source_lists or any(
+            not isinstance(source_ids, (list, tuple))
+            or not source_ids
+            or any(not isinstance(value, str) or not value for value in source_ids)
+            or len(set(source_ids)) != len(source_ids)
+            or set(bindings) != set(source_ids)
+            for source_ids in source_lists
+        ):
+            raise ValueError(
+                f"SGB surface {name!r} needs exact per-source component coverage."
+            )
+    elif bindings:
+        raise ValueError(
+            f"SGB surface {name!r} has unexpected component source bindings."
+        )
+    return component_ids
+
+
 def _optional_string(value: Any) -> str | None:
     """Return trimmed text when present, else None."""
     if value is None:
@@ -1962,14 +2068,15 @@ def _validate_structured_surface_record(name: str, record: Mapping[str, Any]) ->
     for field in ("source_provenance", "physical_attribute"):
         if not isinstance(record.get(field), Mapping):
             raise TypeError(f"SGB surface {name!r} needs mapping {field}.")
+    _conductor_component_ids(record, name=name)
     face_kind = str(record.get("face_kind")).upper()
     if face_kind not in _STRUCTURED_FACE_KINDS:
         raise ValueError(
             f"SGB surface {name!r} has invalid face_kind {record.get('face_kind')!r}."
         )
     if interface_type == "SA":
-        component_id = _optional_string(record.get("conductor_component_id"))
-        if component_id is not None:
+        component_ids = _conductor_component_ids(record, name=name)
+        if component_ids:
             raise ValueError(
                 f"SGB SA surface {name!r} must not carry conductor_component_id."
             )

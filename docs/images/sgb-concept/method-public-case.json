@@ -1,0 +1,49 @@
+{
+  "schema": "scgsim.sgb.method-public-cases.v1",
+  "classification": "PUBLIC_GENERIC_FIXTURE",
+  "geometry_bands": false,
+  "cases": [
+    {
+      "case": "shared-volumes",
+      "fixture": "tests/sgb_method_cases.py",
+      "fixture_sha256": "ed8f3937f30512d0211f2c7544f344c27efb728ceb0f7bc1dbe3247e3197981c",
+      "xao_sha256": "9f670f9943182b8c9eb7ce530688c081cc4172c0041a4e3c07a9946a94193808",
+      "points": 12,
+      "curves": 20,
+      "surfaces": 11,
+      "volumes": 2,
+      "files": {
+        "shared-volumes.html": "0caa71199111d4bd68218c743076a154df4b5eabb3b1ae51859a26ad48c489be",
+        "en-shared-volumes.html": "f577eaa2db8ca95afa7f64630983aa8d24de82070e1ebecddd69d82dd0224c54"
+      }
+    },
+    {
+      "case": "junction-hole",
+      "fixture": "tests/sgb_method_cases.py",
+      "fixture_sha256": "ed8f3937f30512d0211f2c7544f344c27efb728ceb0f7bc1dbe3247e3197981c",
+      "xao_sha256": "2fc27b8e1d85f27419b69ef6b7af414d4c5804a7518b1cc21363172a618091fe",
+      "points": 32,
+      "curves": 46,
+      "surfaces": 22,
+      "volumes": 3,
+      "files": {
+        "construction-3d.html": "1a8162b5cbeaf8a943952095e6735fd8418e462e3148af27350ce208ab559bf8",
+        "en-construction-3d.html": "f11fc1714bd3af716eee26f66510f481d5f061eb00460beb3759ef25a2aa3738"
+      }
+    },
+    {
+      "case": "circular-hole",
+      "fixture": "tests/sgb_method_cases.py",
+      "fixture_sha256": "ed8f3937f30512d0211f2c7544f344c27efb728ceb0f7bc1dbe3247e3197981c",
+      "xao_sha256": "6a498ff02d7527d52fcb21464cd501444d6e039d041209c33857de12944b7cda",
+      "points": 90,
+      "curves": 114,
+      "surfaces": 36,
+      "volumes": 3,
+      "files": {
+        "curved-construction-3d.html": "870e525fe881eef1a51ca2910a99ec056d410ec1390012767e95e242d05461f2",
+        "en-curved-construction-3d.html": "d40872d38e04e4c08f25294d0b20fea2c15f0f005ca4ec5dd9138c07b46b820a"
+      }
+    }
+  ]
+}

@@ -1,130 +1,133 @@
 ---
-title: "Change loss assumptions without solving"
-description: "Reanalyze recorded EPR evidence and export honest owner-labeled figures offline."
+title: "Change loss assumptions offline"
+description: "Change loss tangents and film parameters on an existing EPR result and compare the figures, without a solver."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/offline-epr"
 ---
 
-For the complete mode-and-participation workflow, start with
-[read mode energy participation](../tutorials/resonance-epr.qmd). This offline
-reference requires an actual detached EPR result from a verified Palace Eigenmode
-return, an AEDT adaptive-history record, or the separate final AEDT
-[saved-field analysis](aedt-saved-fields.qmd). This lesson changes film/loss
-assumptions on recorded evidence. It does not change patch selection, build CAD,
-reopen fields or solve. Read the [EPR concept](../eigenmode-epr.qmd) before
-interpreting participation as loss.
+Participation ratios come from the field solution; loss tangents are your
+assumptions. You can therefore change the loss assumptions on an existing EPR
+result without solving again, and without Palace or AEDT. This guide shows
+how.
 
-## Palace: detach the verified final result
+You need an EPR result from one of:
 
-In the [returned-run lesson](returned-results.qmd), after strict resolution of
-your Palace Eigenmode package:
+- a Palace Eigenmode run with an EPR request,
+- an HFSS Eigenmode/EPR run, or
+- [EPR computed from saved AEDT fields](aedt-saved-fields.qmd).
+
+Offline reanalysis changes only loss assumptions. It cannot change which
+surfaces are evaluated, their margins, or the fields.
+
+## Palace results
+
+### Save the EPR result
+
+After [loading a Palace result](returned-results.qmd#load-a-palace-result),
+save its EPR data to a file you can reuse later:
 
 ```python
 import json
 from pathlib import Path
 
-result = resolved.epr_result()
+epr = result.epr_result()
 epr_path = Path(".artifacts/palace-epr-result.json")
-epr_path.write_text(json.dumps(result.to_payload(), indent=2), encoding="utf-8")
+epr_path.write_text(json.dumps(epr.to_payload(), indent=2), encoding="utf-8")
 ```
 
-This requires an available final Eigenmode EPR result; an Electrostatic return
-or an unavailable EPR result is not an input to this block. Retain that detached
-JSON independently of the full run for later offline reading, while preserving
-the full return if you need to reverify its original native evidence.
+### Change a loss tangent
 
-In a later session, select a mode actually recorded by that result:
+In any later session:
 
 ```python
 from scgsim.palace import resolve_epr_result, reanalyze_epr, show_epr
 
-from pathlib import Path
-epr_path = Path(".artifacts/palace-epr-result.json")
-result = resolve_epr_result(epr_path)
-print(sorted({row["mode"] for row in result.rows}))
-mode = 1  # Choose a recorded mode; public Xmon examples request mode 1.
-recorded = show_epr(result, mode=mode)
-updated = reanalyze_epr(
-    result, surface_defaults={"MA": {"loss_tangent": 2.0e-4}}
-)
-changed = show_epr(updated, mode=mode)
-recorded.write_html("palace-epr-recorded.html")
-changed.write_html("palace-epr-updated.html")
+epr = resolve_epr_result(".artifacts/palace-epr-result.json")
+print(sorted({row["mode"] for row in epr.rows}))   # modes in the result
+
+mode = 1
+before = show_epr(epr, mode=mode)
+updated = reanalyze_epr(epr, surface_defaults={"MA": {"loss_tangent": 2.0e-4}})
+after = show_epr(updated, mode=mode)
+before.write_html("palace-epr-before.html")
+after.write_html("palace-epr-after.html")
 ```
 
-The `2.0e-4` value is an explicit illustrative modeling assumption, not a
-measured process property. Both figures use the same selected mode and retained
-field evidence. Owner/interface labels and hover data keep source membership
-and assumptions visible. Palette or bar order does not identify a contribution;
-the recorded scientific keys do.
+This sets the metal–air (MA) loss tangent to $2 \times 10^{-4}$ and redraws
+the participation figure. The value is an example. Each bar is labelled with
+its surface or material; identify contributions by their labels, not their
+colour or position.
 
-## AEDT: final fields and adaptive history stay separate
+## AEDT results {#aedt-results}
 
-Load the actual final result from the saved-field analysis directory:
+### Final saved-field result
 
 ```python
-from pathlib import Path
 from scgsim.aedt import resolve_epr_result, reanalyze_epr, show_epr
 
-result = resolve_epr_result(
-    Path(".artifacts/public-xmon-saved-field-analysis/results/epr/epr-result.json")
+epr = resolve_epr_result(
+    ".artifacts/xmon-saved-field-analysis/results/epr/epr-result.json"
 )
-print(sorted({row["mode"] for row in result.rows}))
 mode = 1
-recorded = show_epr(result, mode=mode, theme="light")
-updated = reanalyze_epr(
-    result, surface_defaults={"MA": {"loss_tangent": 2.0e-4}}
-)
-changed = show_epr(updated, mode=mode, theme="dark")
-recorded.write_html("aedt-epr-recorded.html")
-changed.write_html("aedt-epr-updated.html")
+before = show_epr(epr, mode=mode)
+updated = reanalyze_epr(epr, surface_defaults={"MA": {"loss_tangent": 2.0e-4}})
+after = show_epr(updated, mode=mode)
 ```
 
-A final saved-field result has no adaptive pass. If your task is reading the
-recorded history instead, load its separate file and choose an actual returned
-mode/pass explicitly:
+### Adaptive-pass history
+
+An HFSS EPR run also records EPR at each adaptive pass, in a separate file:
 
 ```python
-from scgsim.aedt import plot_epr_result
+from scgsim.aedt import plot_epr_result, resolve_epr_result, show_epr
+
 history = resolve_epr_result(
-    Path(".artifacts/returned-aedt-epr/results/epr/adaptive-epr-result.json")
+    ".artifacts/returned-aedt-epr/results/epr/adaptive-epr-result.json"
 )
 print([(row["mode"], row["native_pass"], row["status"]) for row in history.rows])
 ```
 
-After selecting `mode` and `native_pass` from those records,
-`show_epr(history, mode=mode, native_pass=native_pass)` displays that exact
-snapshot, and `plot_epr_result(history, mode=mode, native_pass=native_pass,
-show_convergence=True)` presents its recorded history. Missing EPR values stay
-gaps even if a frequency is readable. Do not choose an earlier complete pass
-and label it the final result. A newly evaluated margin belongs to the final
-saved-field analysis, not the historical curve.
+Choose a mode and pass from that list, then:
 
-## Read EPR history for the intended use
+```python
+show_epr(history, mode=1, native_pass=6)
+plot_epr_result(history, mode=1, native_pass=6, show_convergence=True)
+```
 
-Before interpreting a loss update, identify the mode, owner/interface and
-baseline or requested-margin quantity that the study needs. Read its recorded
-participation history and changes with the corresponding frequency history;
-one does not stand in for the other. Retain the actual criteria and native
-status rather than labeling a selected snapshot sufficient because of a
-converged flag. Follow the [research interpretation sequence](returned-results.qmd#interpret-for-scq-use)
-for the Notebook's judgement. Offline assumption changes reuse the same field
-evidence and cannot improve an unresolved or unavailable participation history.
+`show_convergence=True` plots how each participation changed across passes.
+A pass where EPR was not computed shows as a gap. Do not present an earlier
+pass as the final result.
 
-## Interpret an assumption change
+## How assumptions are applied
 
-Reanalysis applies recorded assumptions, interface defaults, then exact group
-overrides. Omitted fields retain their values; `loss_tangent=None` explicitly
-marks loss unknown, while `0.0` is known zero. Unknown group IDs fail instead of
-being ignored. Reanalysis cannot repair missing fields or recover uncomputed
-sidewalls.
+`reanalyze_epr` applies values in this order:
 
-Surface, bulk and port/junction partitions remain separate. Alternative inset
-margins are separate evaluations, not additive edge bands; keep the unmasked
-baseline distinct, including an explicitly requested zero margin. The known
-baseline inverse-Q subtotal omits unknown loss and uncomputed channels. It is
-not total device Q or T1. The [report contract](../report-model.qmd) defines
-visible coverage and ordering; the [EPR concept](../eigenmode-epr.qmd) defines
-normalization and assumptions. Return to the [course map](../examples.qmd) when
-choosing the next physical model.
+1. the assumptions recorded in the result,
+2. `surface_defaults` for each film type (MA, MS, SA),
+3. overrides for individual surface groups.
+
+Fields you do not set keep their values. `loss_tangent=None` means *unknown*;
+`0.0` means *lossless*. An unknown group ID is an error.
+
+## What the loss total means
+
+The report adds up $p_i \tan\delta_i$ over the contributions with known loss
+tangents to give a partial inverse quality factor $1/Q$. This is the loss from
+the modeled channels only:
+
+- contributions with unknown loss tangents are left out,
+- HFSS does not compute film energy on metal sidewalls,
+- other loss mechanisms are not included.
+
+It is therefore a lower bound on loss from these films, not the device's Q or
+$T_1$.
+
+Different surface margins are separate estimates of the same film. Do not add
+them together. See [Energy participation and loss](../eigenmode-epr.qmd) for
+the definitions, and [Report model](../report-model.qmd) for the report
+layout.
+
+Before relying on a participation, check its history across passes, not only
+the frequency's; see
+[Decide whether the result is good enough](returned-results.qmd#interpret-for-scq-use).

@@ -1,61 +1,28 @@
 ---
-title: "AEDT: ordinary HFSS Eigenmode"
-description: "Prepare a port-free mode request and retain native frequency and Q on return."
+title: "HFSS Eigenmode: resonant modes"
+description: "Prepare an HFSS Eigenmode run from a GDS file and read mode frequencies and Q."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-eigenmode"
 ---
 
-For a complete mode workflow, start with [find a resonant mode](../tutorials/resonance.qmd).
-This backend reference continues from [CPW inputs](aedt-inputs.qmd). Ordinary
-HFSS Eigenmode has no driven excitation ports. It searches for the requested modes
-using an explicit adaptive setup; it does not create a source-first Surface-EPR
-catalogue or saved-field analysis request merely because its name is Eigenmode.
-The Eigenmode API can include a generic linear RLC model element through
-`EigenmodeSim.add_lumped_rlc()`. This is distinct from a Josephson junction:
-it does not create a `PlanarJunction`, junction participation, or an EPR
-contribution. The loads are stored in `PreparedPlanarGeometry.lumped_rlcs`;
-`HfssEprSpec` projects the prepared values without becoming a second editable
-source. The EPR junction contract remains separate.
-The inputs page's equal-Z M1 mapping is a historical sheet request. This
-current Thin Film example adds the CPW source owner's explicit `NB_FILM`
-interval and lower contact side, preserving the existing sheet plane without
-claiming that c997 embeds this declaration.
+This guide finds the resonant modes of the CPW from
+[AEDT inputs from a GDS file](aedt-inputs.qmd), in the same Python session.
+It reports frequencies and Q factors only. For energy participation (EPR),
+use the snapshot-based workflow in the
+[resonance tutorial](../tutorials/resonance-epr/prepare.qmd) or the
+[Xmon HFSS example](../tutorial-xmon-aedt.qmd).
+
+## Set up and prepare the run
 
 ```python
 from pathlib import Path
-from scgsim.aedt import (
-    EigenmodeRunControl, HfssEigenmodeSpec, LayerImport,
-    prepare_handoff,
-)
-from scgsim.geometry import PhysicalLayerDeclaration
-
-AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
-metal_thickness_um = 0.2
-physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
-physical_layer = PhysicalLayerDeclaration(
-    physical_layer_id=physical_layer_id,
-    source_level_id="D0_TOP_M1",
-    source_level_and_gds_pair={"layer": 1, "datatype": 0},
-    source_interval_um=(0.0, metal_thickness_um),
-    material_id="Nb",
-    feature_kind="stack_film",
-    physical_dimensions={"normal_thickness_um": metal_thickness_um},
-    source_contact_facts={"layer_attachment_face": "lower"},
-)
-layer_imports = (
-    LayerImport(
-        1, 0, "D0_TOP_M1", 0.0, metal_thickness_um,
-        physical_layer_id=physical_layer_id,
-    ),
-    LayerImport(201, 0, "D0_SUBSTRATE", -500.0, 0.0),
-)
+from scgsim.aedt import EigenmodeRunControl, HfssEigenmodeSpec, prepare_handoff
 
 spec = HfssEigenmodeSpec(
-    aedt_version=AEDT_VERSION,
     modeling="thin_film",
     gds_path=source_gds,
-    project_name="public_cpw_eigenmode",
+    project_name="cpw_eigenmode",
     design_name="CpwFiniteGroundEigenmode",
     materials=materials,
     vacuum_material_id="vacuum",
@@ -68,40 +35,52 @@ spec = HfssEigenmodeSpec(
     ),
     region_padding_um=(100.0, 100.0, 100.0, 100.0, 1000.0, 1000.0),
 )
-handoff = prepare_handoff(
-    spec=spec, output_dir=Path(".artifacts/public-cpw-eigenmode")
-)
-print(handoff.spec_path, handoff.archive_path)
+handoff = prepare_handoff(spec=spec, output_dir=Path(".artifacts/cpw-eigenmode"))
+print(handoff.run_dir)
 ```
 
-The public CPW example supplies these search/pass values. They are request
-controls, not a promised mode frequency or a universal SCQ sufficiency rule.
-Keep the actual controls and any changes in the Notebook. On return, read the
-requested mode and its available changes for the
-[intended research use](returned-results.qmd#interpret-for-scq-use); retain
-native convergence status without treating it as the research conclusion. The Region encloses the model in the six-face native order described
-in the input lesson. Review the serialized spec and copied source before
-[explicit host execution](execute.qmd). Preparing the package opens no Desktop.
+- `modeling` is required: `"thin_film"` or `"solid"`. See
+  [Solid and thin-film modeling](../specs/aedt-runtime.qmd#aedt-solid-thin-film).
+- `EigenmodeRunControl` finds `num_modes` modes above
+  `minimum_frequency_ghz`. HFSS refines the mesh for up to `maximum_passes`
+  passes, stopping once the frequency changes by less than
+  `maximum_delta_frequency_percent` between passes.
+- `region_padding_um` adds vacuum around the model, in the order
+  `(+X, -X, +Y, -Y, +Z, -Z)`.
 
-After [return and strict resolution](returned-results.qmd), the normalized
-`eigenmodes.csv` retains ordered mode index, real `frequency_ghz` and native
-`q_factor`. The hashed `eigenmodes.eig` preserves native raw frequency output,
-including a complex component where present. SCGSim does not calculate damping
-or replace native Q from that component. Numerical history and benchmark
-availability remain separate evidence.
+These settings are an example, not a recommendation. `prepare_handoff` writes
+files only; it does not open AEDT.
 
-Keep the returned mode and actual controls together when interpreting its
-frequency and Q. The report retains native classification; hash-bound
-`adaptive-convergence.prop` also preserves the native history and consecutive
-pass count, which the existing normalized result/report does not reproduce.
-The [runtime reference](../specs/aedt-runtime.qmd#hfss-convergence-observations)
-describes those records and failure behavior. Use the available changes in the
-quantity your study needs, rather than treating the native classification as
-an accuracy recommendation.
+### Add a lumped RLC element (optional)
 
-An `.aedt` file and a completed ordinary receipt do not establish reusable
-saved-field EPR. If that is your task, start with the
-[source-first Xmon EPR model](../tutorial-xmon-aedt.qmd), then follow its
-separate [saved-field analysis](aedt-saved-fields.qmd) after the solve. The
-[AEDT contract](../specs/aedt-runtime.qmd) defines both paths without treating
-them as interchangeable results.
+`EigenmodeSim.add_lumped_rlc()` adds a linear resistor, inductor or capacitor
+between two conductors. It is a plain circuit element: it does not produce
+junction participation. To model a Josephson junction with EPR, use
+`add_junction` as in the [resonance tutorial](../tutorials/resonance-epr/prepare.qmd).
+
+## Run and read the result
+
+[Run the directory](execute.qmd), then [load it](returned-results.qmd):
+
+```python
+from scgsim.aedt import resolve_results
+
+result = resolve_results(".artifacts/cpw-eigenmode")
+result.show_all_results()
+```
+
+The run directory contains:
+
+- `eigenmodes.csv`: mode number, `frequency_ghz` and the Q factor reported by
+  HFSS.
+- `eigenmodes.eig`: the raw HFSS output, including complex frequencies.
+  SCGSim does not compute Q from the imaginary part.
+- `adaptive-convergence.prop`: the full HFSS pass history. The report shows a
+  summary; this file has every pass.
+
+See [HFSS convergence records](../specs/aedt-runtime.qmd#hfss-convergence-observations)
+for what each file contains.
+
+To compute EPR afterwards from saved fields, the run must have been set up for
+EPR from the start. A plain Eigenmode run like this one cannot be used for
+[saved-field EPR](aedt-saved-fields.qmd).

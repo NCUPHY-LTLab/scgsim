@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from contextvars import ContextVar, copy_context
 from dataclasses import dataclass, field
 from threading import RLock
-from typing import TypeVar
+from typing import TypeVar, cast
 
 _T = TypeVar("_T")
 _R = TypeVar("_R")
@@ -91,40 +90,60 @@ def _ordered_map(function: Callable[[_T], _R], items: Iterable[_T]) -> list[_R]:
             state.executor = ThreadPoolExecutor(
                 max_workers=state.max_workers, thread_name_prefix="scgsim-preparation"
             )
-        pending: deque[Future[_R]] = deque()
+        pending: dict[Future[_R], int] = {}
         iterator = iter(items)
-        results = []
-        try:
-            for _ in range(state.max_workers):
+        results: list[_R | None] = []
+        failures: dict[int, BaseException] = {}
+        exhausted = False
+
+        def refill() -> None:
+            nonlocal exhausted
+            while not exhausted and len(pending) < state.max_workers:
                 try:
                     item = next(iterator)
                 except StopIteration:
+                    exhausted = True
                     break
                 context = copy_context()
-                pending.append(
-                    state.executor.submit(context.run, _in_worker, function, item)
-                )
+                future = state.executor.submit(context.run, _in_worker, function, item)
+                pending[future] = len(results)
+                results.append(None)
+
+        def collect(future: Future[_R]) -> None:
+            index = pending.pop(future)
+            if future.cancelled():
+                return
+            try:
+                results[index] = future.result()
+            except BaseException as error:
+                failures[index] = error
+
+        def drain(*, after: int) -> None:
+            for future, index in pending.items():
+                if index > after:
+                    future.cancel()
+            # Earlier inputs must settle to select the first input-order error.
+            # All running tasks own contextual state until they settle.
+            for future in list(pending):
+                collect(future)
+
+        try:
+            refill()
             while pending:
-                results.append(pending.popleft().result())
-                try:
-                    item = next(iterator)
-                except StopIteration:
-                    continue
-                context = copy_context()
-                pending.append(
-                    state.executor.submit(context.run, _in_worker, function, item)
-                )
+                done, _ = wait(pending, return_when=FIRST_COMPLETED)
+                for future in done:
+                    collect(future)
+                if failures:
+                    break
+                refill()
         except BaseException:
-            for future in pending:
-                future.cancel()
-            # Running tasks own contextual state until they settle; never return early.
-            for future in pending:
-                try:
-                    future.result()
-                except BaseException:
-                    pass
+            # Iterator and scheduling errors retain their original precedence.
+            drain(after=-1)
             raise
-        return results
+        if failures:
+            drain(after=min(failures))
+            raise failures[min(failures)]
+        return cast(list[_R], results)
 
 
 @contextmanager

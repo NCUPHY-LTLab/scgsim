@@ -56,10 +56,6 @@ exact handoff `config.json` before the solve command. A failed check records a
 preflight failure and does not invoke the solver. Successful preparation alone
 does not establish that the executable, config, or native geometry is valid.
 
-The named profiles above describe Palace launch shapes. AEDT prepared-native
-BatchSolve is a separate EPR package workflow, not a new `ExecutionProfile` or
-SCGSim scheduler submission.
-
 ## Handoff lifecycle
 
 ```text
@@ -74,29 +70,13 @@ transferred package. After the full returned run directory is retrieved,
 that independently retained identity before showing results. Do not learn the
 expected identity from files that arrived with the returned package.
 
-### AEDT prepared-native EPR stages
-
-| Stage | Host responsibility | Desktop and package boundary |
-|---|---|---|
-| Prepare and package | Workstation prepares the selected model version, saves and reads back the native EPR model, then creates one `NativeBatchPackage` per model | PyAEDT transaction owns Desktop; a JSON-only handoff is not the native project package |
-| Solve | Solver host runs the standalone one-host AEDT BatchSolve recipe with the same explicitly requested AEDT release and its solver license | Uses the packaged `.aedt` and dependencies; no SCGSim, PyAEDT, model-building environment, or usable Desktop session is needed for this stage |
-| Collect and resolve | Workstation returns the full package and attempt, then collects the complete adaptive history and saved-field EPR | Existing transaction owns a Desktop on copies; no geometry rebuild or Analyze; strict result resolution follows collection |
-
-Each package is one independent model. A sweep may transfer its separate
-package archives together, but each package has its own solver attempt and
-collection. The [HPC EPR sweep guide](course/aedt-hpc-sweep.qmd) gives the
-operation sequence; the [AEDT runtime contract](specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)
-defines its package and completion requirements. Copying only an EPR JSON or
-frequency export does not replace the full return.
-
-For the direct AEDT path, transfer the prepared run directory to the AEDT host
-and retrieve the complete returned run directory.
-`resolve_results(run_dir)` verifies the receipt-bound artifacts;
-`ResolvedRun.show_all_results()` displays the verified primary, benchmark, and
-requested EPR evidence. Copying only an EPR JSON file is not a substitute for
-resolving the returned package.
+For AEDT, transfer the prepared run directory to the AEDT host and retrieve
+the complete returned run directory. `resolve_results(run_dir)` verifies the
+receipt-bound artifacts; `ResolvedRun.show_all_results()` displays the
+verified primary, benchmark, and requested EPR evidence. Copying only an EPR
+JSON file is not a substitute for resolving the returned package.
 
 External gdsfactory/cloud execution is unsupported and is never a fallback.
-Palace preparation does not silently submit a scheduler job or open AEDT. The
+Preparation does not silently submit a scheduler job or open AEDT. The
 [Palace tutorial](tutorial-xmon-palace.qmd) and [AEDT tutorial](tutorial-xmon-aedt.qmd)
 show their backend-specific handoff and return steps.

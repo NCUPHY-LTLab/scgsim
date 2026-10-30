@@ -1,111 +1,79 @@
 ---
-title: "AEDT: analyze a sealed saved-field solution"
-description: "Verify a saved cohort and evaluate EPR in a native workcopy without requesting another solve."
+title: "Compute EPR from saved AEDT fields"
+description: "Evaluate energy participation from the fields saved by a finished HFSS Eigenmode/EPR run, without solving again."
 scgsim-kind: "course"
-scgsim-status: "CONVERGING"
+scgsim-status: "STABILIZED"
 scgsim-id: "docs/course/aedt-saved-fields"
 ---
 
-For the complete mode-and-participation workflow, start with
-[read mode energy participation](../tutorials/resonance-epr.qmd). This saved-field
-reference requires a completed source-first
-[AEDT Eigenmode/EPR run](../tutorial-xmon-aedt.qmd), the complete returned
-saved-field cohort, and its matching prepared geometry and request. Follow
-[full-run resolution](returned-results.qmd) first. A project file alone is
-insufficient: the released project, entire result directory and sealed native
-saved-field evidence must identify the same model, design, setup, variation and
-pass.
+An HFSS Eigenmode run set up for EPR saves its final fields. This guide
+evaluates EPR on those saved fields, for example with different surface
+margins, without solving again. It still opens AEDT, so it needs AEDT 2024.2,
+PyAEDT 1.3.0 and a licence. To change only loss tangents, no AEDT is needed;
+see [Change loss assumptions offline](offline-epr.qmd).
 
-This stage evaluates fields through **native AEDT** in an owned disposable
-workcopy. It does not solve again, but it requires a request that explicitly
-selects AEDT 2023.2 or 2024.2, PyAEDT 1.3.0 and a license. If the saved artifact
-has no recorded source-version origin, that origin stays unknown; analysis is
-still allowed and uses the explicitly requested local version without looking
-up or guessing the historical origin. The next lesson's JSON loss reanalysis is
-the operation that can run without opening the solver.
+::: {.callout-note title="Before you start"}
+- A finished HFSS Eigenmode run that was set up with an EPR request, such as
+  the [resonance tutorial](../tutorials/resonance-epr/prepare.qmd) HFSS tab or the
+  [Xmon HFSS example](../tutorial-xmon-aedt.qmd). A plain
+  [HFSS Eigenmode](aedt-eigenmode.qmd) run does not save the required fields.
+- The **whole** returned run directory. A `.aedt` project file alone is not
+  enough.
+:::
 
-## Recover the exact prepared model
+## Step 1: Load the run and its saved fields
 
-Retain the portable spec with the returned run. Reparse that spec rather than
-reconstructing geometry from display labels or rerunning a possibly changed PDK
-component. The EPR spec owns its exact `geometry`, `run_control` and
-`epr_request`:
+Read the specification from the run directory itself, so that the geometry
+and settings are exactly those of the run:
 
 ```python
 import json
 from pathlib import Path
 from scgsim.aedt import parse_aedt_spec, resolve_saved_solution
 
-returned_run_dir = Path(".artifacts/returned-aedt-epr")
-spec = parse_aedt_spec(json.loads(
-    (returned_run_dir / "aedt_spec.json").read_text(encoding="utf-8")
-))
-saved = resolve_saved_solution(returned_run_dir / "saved-solution-manifest.json")
+run_dir = Path(".artifacts/returned-aedt-epr")
+spec = parse_aedt_spec(json.loads((run_dir / "aedt_spec.json").read_text()))
+saved = resolve_saved_solution(run_dir / "saved-solution-manifest.json")
 ```
 
-Use the actual returned directory. This block verifies the sealed saved cohort
-offline before Desktop is opened. Its manifest identifies every retained result
-member; corrupt bytes, missing results or mismatched identities fail explicitly.
-The initial solve must have produced the EPR saved-field cohort and request;
-an ordinary Eigenmode spec cannot acquire them by reading this lesson.
+`resolve_saved_solution` checks, without opening AEDT, that every saved file
+is present and unchanged. It raises an error if anything is missing or
+modified.
 
-## Evaluate in a new analysis directory
+## Step 2: Evaluate EPR
 
 ```python
 from scgsim.aedt import analyze_epr
 
-AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 final_epr = analyze_epr(
-    aedt_version=AEDT_VERSION,
     saved_solution=saved,
     geometry=spec.geometry,
     project_name=spec.project_name,
     design_name=spec.design_name,
     run_control=spec.run_control,
     epr_request=spec.epr_request,
-    output_dir=Path(".artifacts/public-xmon-saved-field-analysis"),
+    output_dir=Path(".artifacts/xmon-saved-field-analysis"),
 )
 ```
 
-An explicit native sheet-field selector is optional. Pass
-`surface_field_selectors={contribution_id: "surface"}` or use `"adjacent"`
-for an existing selected contribution ID when the caller wants to choose the
-native calculator side. Each entry applies to every binding and requested
-component, evaluation, and margin for that contribution. Unknown or unselected
-IDs and unsupported values fail explicitly. Omitting a contribution preserves
-its existing normal-derived selector behavior. This choice does not change
-the source `SurfaceEprSpec.field_side` and does not verify the sampled material
-side. Native command/name readback records the selector operation, not a
-material-side identity proof. The choice does not trigger another solve or
-geometry rebuild.
+`analyze_epr` copies the saved project into the new `output_dir`, opens the
+copy in AEDT, and evaluates the requested EPR expressions on the saved
+fields. The original run directory is not changed. No solve runs. If the
+fields or expressions are not available, it raises an error.
 
-The new output directory preserves the original released solution and normal
-run receipt. SCGSim archives/copies the immutable evidence, reopens the working
-copy, checks bound context and expression definitions, then evaluates the
-requested fields without a solve or export call. If the fields or definitions
-are unavailable, it fails rather than inventing EPR from adaptive history.
+To evaluate different surface margins, pass a modified `epr_request`.
 
-The separate analysis receipt and `results/epr/epr-result.json` describe the
-final saved-field evaluation. Requested fresh margins use this final field
-result; they must not be inserted as though measured during an earlier adaptive
-pass. Read the actual selected mode and coverage before applying loss
-assumptions. Continue to [offline EPR](offline-epr.qmd), where `reanalyze_epr`
-updates assumptions on these recorded numerators without native execution.
-The [runtime contract](../specs/aedt-runtime.qmd) owns exact saved-field context,
-material-side support and analysis failure behavior.
+## Step 3: Read the result
 
-## Optional project-instruction block
+The result is written to `results/epr/epr-result.json` in the output
+directory. It describes the final fields only; it has no per-pass history.
+The adaptive-pass history of the original run is a separate file; see
+[Change loss assumptions offline](offline-epr.qmd#aedt-results).
 
-Optionally copy this guidance into the study's own project instructions or
-`LESSONS` when an authorized saved-field comparison needs careful SurfaceEPR
-interpretation:
+## Next steps
 
-```markdown
-For an authorized SurfaceEPR saved-field comparison:
-- Preserve the original completed run, exact final saved-field cohort, source/spec, and result files. The public `scgsim.aedt.analyze_epr()` function analyzes a resolved `SavedSolution` in an owned workcopy; pass the same prepared geometry, run control, EPR request, an explicit AEDT version, and a new output directory. This saved-field analysis call does not request another solve. If choosing `surface_field_selectors`, set only the caller-selected contributions; `surface` and `adjacent` select calculator operations, not physical material sides.
-- Compare with the original final saved-field result for the same geometry, mode, and pass. Report the recorded mode and pass identities for both results; if either is missing or differs, state that instead of treating them as a matched comparison.
-- For each contribution and binding, inspect the returned evaluation and binding/selection evidence to establish the support actually used. `evaluation_kind` and `margin_um` label an evaluation; they do not by themselves establish that one mask is nested in another. If available support evidence cannot establish nesting, report it as unknown. Treat requested masks as alternative evaluations of the same physical interface, not as additional physical films. An unmasked baseline is a reference evaluation, not another chosen mask.
-- For each compared contribution, inspect `interface_kind`, source `field_side`, effective/substrate domain and material IDs, source support/selection evidence, the saved analysis carrier's `native_normal`, and the recorded requested/applied calculator selector and CLC operation. Compare expression identity and evaluation/margin context with raw integral values and units and recorded normalization. A normal, selector name, or frequency record alone does not establish material-side correspondence.
-- Preserve and link the original and new outputs. Report observed changes, limits, and missingness. Do not swap labels or values, clamp results, choose the smaller result, or introduce a tolerance. Geometry, materials, mode, pass controls, masks/evaluation criteria, EPR request, environment, resources, or replacing/writing source data require their separate authorization.
-- Use only the study's existing permission and resource allocation. SCGSim records caller choices; it does not choose a physical side or grant compute permission.
-```
+- [Change loss assumptions offline](offline-epr.qmd) on this result.
+- [Energy participation and loss](../eigenmode-epr.qmd) explains the
+  quantities.
+- The [saved-field reference](../specs/aedt-runtime.qmd#eigenmode-saved-fields-and-surface-epr-direction)
+  gives the exact rules.

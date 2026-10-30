@@ -1,0 +1,82 @@
+---
+title: "Pad capacitance 3/3: Read the capacitance"
+description: "Load the returned Palace run directory and read the pad-to-ground capacitance."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/capacitance/analyze"
+---
+
+This page loads the run directory returned by [Run](run.qmd) and reads the
+pad-to-ground capacitance. It needs only SCGSim, not Palace, so you can start
+a new Python session.
+
+::: {.callout-note title="Before you start"}
+- The returned run directory `.artifacts/SimplePad/pad-capacitance-01`.
+- The `handoff_id` printed on the Prepare page.
+:::
+
+## Step 1: Load the result
+
+```python
+from scgsim.palace import resolve_palace_result
+
+result = resolve_palace_result(
+    ".artifacts/SimplePad/pad-capacitance-01",
+    expected_handoff_id="<the handoff_id from Prepare>",
+)
+result.show_all_results()
+```
+
+If any output file is missing, or the directory belongs to another run,
+`resolve_palace_result` stops with an error and does not return partial
+numbers.
+
+## Step 2: Read the capacitance
+
+The report contains the capacitance matrix referenced to Ground. This model
+has one terminal, so the matrix has a single entry, $C_{11}$: the pad-to-ground
+capacitance. The same values are in `results/palace/terminal-C.csv` in the run
+directory, in farads.
+
+![Report output for this tutorial: the pad capacitance and its value at each
+mesh refinement pass.](../../assets/simple-pad-capacitance.png){#fig-simple-pad-capacitance}
+
+The earlier reference run gave $C_{11} \approx 95.4$ fF. Compare your model,
+boundary and settings with that run, and review how $C_{11}$ changes across
+adaptive passes. A large difference can reflect different vacuum padding or
+Ground Net assignments.
+
+::: {.callout-tip title="Record the setup with the number"}
+A capacitance only has meaning together with its terminal and Ground choice.
+Keep the run directory, or at least `config.json` and the report, next to the
+value you use in a circuit model.
+:::
+
+The capacitance describes this geometry and this boundary choice. It is one
+input to a circuit model, not a prediction of a qubit's spectrum.
+
+## What changes the result
+
+- **Boundary choice.** With `exterior_boundary_policy="ground"`, the outer
+  vacuum boundary also becomes Ground. That adds capacitance to a distant
+  enclosure. Choose it only if your device sits in a grounded box at that
+  distance.
+- **Vacuum size.** Too little padding pushes the field against the outer
+  boundary and changes the value. Increase the padding until $C_{11}$ stops
+  changing at the precision you need.
+- **Mesh refinement.** Look at the per-pass history in the report. If
+  $C_{11}$ is still changing between the last passes, raise `amr_max_passes`
+  or tighten `amr_tolerance`.
+
+Each change needs a new run directory: go back to [Prepare](prepare.qmd).
+
+## Next steps
+
+- [Resonance and EPR](../resonance-epr/prepare.qmd) adds a junction
+  inductance to this same pad.
+- [Work with your own model](../../course/working-model.qmd) shows how to
+  assign Nets for your own components.
+- [Q3D capacitance](../../course/aedt-q3d.qmd) runs a similar extraction with
+  Ansys Q3D.
+- [Choose the physical problem](../../concepts/problems.qmd) explains when
+  capacitance is the right quantity for your circuit.

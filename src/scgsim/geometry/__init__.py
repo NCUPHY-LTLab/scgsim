@@ -1,6 +1,7 @@
 """Source-facing semantic geometry API; input ownership remains with caller/components."""
 
 from scgsim.geometry.models.common import (
+    GeometryRoute,
     Coordinate,
     CurveKindLiteral,
     CurveOrientationLiteral,
@@ -37,6 +38,7 @@ from scgsim.geometry.source.summary import InputSummary, summarize_geometry_inpu
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 
 __all__ = [
+    "GeometryRoute",
     "JunctionTerminalBinding",
     "RectangularJunctionSpec",
     "with_rectangular_junctions",

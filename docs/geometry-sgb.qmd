@@ -1,15 +1,18 @@
 ---
-title: "GeometryPlan and SGB Route A/B"
+title: "GeometryPlan and geometry reference"
 description: "GeometryPlan source identity, occurrence and Net ownership, route lowering and input summary."
 scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/geometry-sgb"
 ---
 
-Learn the source sequence in [shared Xmon inputs](tutorial-xmon-input.qmd) and
-[source observations](course/source-observations.qmd). The
-[SGB geometry concept](concepts/geometry.qmd#source-stage) explains the source,
-planning and construction stages; this page owns their exact contract.
+This page is the exact reference for `GeometryPlan`, Entity and Net
+assignment, curved boundaries, and how geometry is turned into a Palace mesh
+(Route A or B). For the steps, see [Work with your own model](course/working-model.qmd);
+for the ideas, see [Describing geometry](concepts/geometry.qmd).
+
+*SGB* (semantic geometry builder) is the internal name of the geometry
+compiler, `scgsim.geometry.compiler`.
 
 The in-tree `scgsim.geometry` API is SCGSim's current source-geometry
 authority. It consumes structured PDK and component semantics and must not
@@ -44,8 +47,7 @@ does not infer electrical connectivity or merge child net maps.
 
 ## Shared physical source and representation {#physical-representation}
 
-The shared physical-source/profile scope is **CONVERGING**. Its
-[physical representation contract](specs/physical-representation.qmd) separates
+The [physical representation contract](specs/physical-representation.qmd) separates
 source physical classification from selected solver representation. One neutral
 plan binds each original Entity and physical layer to its effective geometry,
 support and complete enclosure trace. A body retains its actual source
@@ -59,8 +61,7 @@ source and runtime cohorts retain their original interpretation and identity.
 
 ## Source curves and native shared topology {#source-curves}
 
-The curve scope is **ACCEPTED**. Polygon-only inputs retain their polygon
-boundaries. Curves are explicit source declarations, not smoothing inferred
+Polygon-only inputs keep their polygon boundaries. Curves are explicit source declarations, not smoothing inferred
 from a rendered layout or a mesh.
 
 `SourceCurveSpec` describes XY coordinates in micrometres. Supported kinds are
@@ -158,41 +159,16 @@ immutable `GeometryPlanSnapshot`; `GeometryBuildInput` remains the normalized
 geometry boundary consumed by the backend preparation paths.
 
 Create the plan with `GeometryPlan(component=assembled, root_id="chip",
-layer_stack=..., material_records=..., coupon_padding_um=...,
-grid_size_um=layoutgrid_um)`. Set the source layout DBU to the selected
-`layoutgrid_um` before constructing cells. Register each named reference
-occurrence in parent-first order with `register_instance("chip/q0", q0_ref)`.
-`plan.entities` exposes the existing semantic entity inventory with
-slash-qualified `.semantic_id` values. The Notebook supplies the final map with
+layer_stack=..., material_records=..., coupon_padding_um=...)`. Register each
+named reference occurrence in parent-first order with
+`register_instance("chip/q0", q0_ref)`. `plan.entities` exposes the existing
+semantic entity inventory with slash-qualified `.semantic_id` values. The
+Notebook supplies the final map with
 `set_nets({NetID: tuple(qualified_entity_ids)})`; `prepare()` returns a frozen
 `GeometryPlanSnapshot` containing the normalized `geometry_input`, stack, GDS
 bytes and digest, and detached source-occurrence records. It retains no live
 component references. Palace and AEDT consume that exact snapshot through
 `EigenmodeSim.set_plan(snapshot)`.
-
-`GeometryPlan`, `build_gds_stack_geometry_input(...)`, and
-`build_gdsfactory_geometry_input(...)` accept `grid_size_um=None`. With `None`,
-the actual emitted `source_dbu_um` supplies the shared layout grid; an explicit
-mismatch raises an error naming `grid_size_um` and `source_dbu_um`. SCGSim
-checks the source DBU and does not mutate shared PDK or global state.
-`metadata.geometry_grid` records `schema_version` with value
-`scgsim.geometry.grid.v1`, the selected `grid_size_um`, and `coordinate_frame`
-with value `assembly_xy`. It identifies the shared fixed-precision grid for
-assembly XY/layer arrangement. Saved inputs without `metadata.geometry_grid`
-retain historical interpretation. Original source identity is retained alongside the
-computational change ledger, and walls inherit their snapped layout endpoints.
-Z coordinates, film thickness, mesh, quadrature, and solver tolerances remain
-separate; the XY grid does not assert that every 3D coordinate lies on it.
-The fixed-grid XY boundaries form one shared noded network. Each original
-directed ring edge carries its operand, ring and segment order through
-explicit grid-pixel incidence; coincident edges retain every source. Raw
-intersection and native-grid near-vertex events split these directed paths
-before rounding.
-
-Directed edge transitions determine face membership, and each operand is reconstructed
-from those same cells without another grid snap. Ambiguous source paths or
-inconsistent labels fail explicitly. Physical contact, hole and component
-checks still compare against the original inputs.
 
 For component-semantics schema v2, the paired stack adds derived source
 occurrence records, not a new user polygon-selection API. Each
@@ -254,35 +230,6 @@ example, `chip/q0/o_junction_lumped`. Palace binds that qualified port name to
 its target logical layer; an AEDT junction uses the same normalized source
 sheet and its recorded overlaps.
 
-### Explicit rectangular junctions
-
-Use `JunctionTerminalBinding` and `RectangularJunctionSpec` from
-`scgsim.geometry` when a source port sheet represents a rectangular junction.
-First prepare the plan to inspect its exact port-sheet, source-polygon,
-occurrence, conductor-Entity, and Net identities. Bind the selected sheet and
-both terminal owners explicitly, then call
-`GeometryPlan.set_rectangular_junctions(specs)` before the next `prepare()`.
-For a normalized `GeometryBuildInput`, `with_rectangular_junctions(build_input,
-specs)` returns the corresponding detached request.
-
-`RectangularJunctionSpec` names `junction_id`, `port_sheet_id`,
-`source_polygon_id`, and `source_occurrence_path`, plus `terminal_a` and
-`terminal_b`. Each `JunctionTerminalBinding` names one `source_entity_id`, its
-`source_occurrence_path`, and its `net_id`. The two terminal Entities and Nets
-must be distinct and must match the source plan. This explicit binding selects
-the actual source overlap for each terminal; the planner does not search other
-occurrences or infer owners from proximity.
-
-The shared geometry interpreter derives the complete central rectangle and
-terminal-owned end metals once, from the source database units and existing
-physical attachment, before planning contacts, interfaces, and construction
-catalogues. Palace Route A continues to apply its existing
-host-interface, common-plane, and common-volume rules. Palace and AEDT consume
-the same derived source partition; AEDT validates that request rather than
-deriving another rectangle. Palace `add_port(...)` still binds inductance to an
-authored port name and does not choose the physical terminal owners.
-
-
 | Fact or operation | Accepted contract |
 |---|---|
 | Component definition | Holds local polygons, source Entity IDs, ports, topology selectors, and local component facts. Reusing a component does not rewrite its local IDs. Schema v2 does not assign final Nets or expose a public `Group` API inside the component. |
@@ -300,11 +247,9 @@ These are the accepted V1 semantics. Source preparation establishes
 the geometry input contract; it does not imply native geometry validation or
 solver execution.
 
-### Accepted Q3D source normalization
+### Q3D source normalization
 
-The Q3D GeometryPlan frontend is part of the accepted v2 implementation/API
-(accepted 2026-10-09, candidate
-`a932a173edb5c56ae14740ff5177190996255bdd`). Its recognized `airbridge_deck`
+In the Q3D GeometryPlan frontend, the recognized `airbridge_deck`
 and `airbridge_post` records remain role-neutral source
 geometry in the normalized snapshot; they are not given a Palace route
 representation or a native conductor role by normalization. A selected Palace
@@ -323,12 +268,6 @@ solve or returned matrix observation.
 | Route B | The closed exterior boundary shell of a finite construction metal volume is PEC; its interior is excluded from Palace solution domains and receives no tetrahedra | Implemented, accepted |
 
 Only Route A and Route B are in the current direction.
-
-## Historical SGB geometry distance bands (WITHDRAWN) {#surface-distance-bands}
-
-SCGSim no longer exposes the SGB geometry-level distance-band producer. This section preserves the former design boundary for readers of older material; its `GeometryPlan.set_surface_distance_bands(...)`, `SurfaceDistanceBandSpec`, and Palace aggregation APIs are not current interfaces.
-
-The withdrawn design partitioned an explicitly selected planar parent surface from its original exterior and hole edges, retained source lineage for each child, and passed those geometric regions into CAD and meshing. Its cumulative EPR aggregation depended on a completed Palace result and did not require Q2D. These historical regions were distinct from native Palace Mask/Inset rows: native Mask/Inset requests remain available through `inset_margins_um` when the selected Palace executable supports them. See the current [Palace Electrostatic contract](specs/palace-electrostatic-sgb.qmd#native-mask-inset) for that path.
 
 ## Internal semantic projection
 
@@ -448,57 +387,6 @@ geometry evidence; it cannot manufacture source contact intent. Route-A
 profile normalization still happens once at the shared frontend boundary, and
 Route-B finite-body facts stay distinct from PEC approximation and the AEDT
 implementation that realizes them.
-
-## Preparation resources (CONVERGING) {#preparation-resources}
-
-Use `scgsim.preparation.preparation_resources(max_workers=...)` around source
-preparation and meshing to share one preparation worker budget. Without this
-scope, preparation runs serially.
-
-```python
-from scgsim.preparation import preparation_resources
-
-with preparation_resources(max_workers=30):
-    snapshot = plan.prepare()
-    sim.set_plan(snapshot)
-    sim.set_mesh(threads=30, surface_threads=30)
-    sim.mesh()
-```
-
-The scope reuses one pool for independent source recipes, indexed source-path
-batches, zero-area support classification and per-operand reconstruction.
-Results and task-local source audits merge in input order. Fixed-grid operands
-share the same boundary network and labelled cells; source-path ownership and
-face transitions remain deterministic. Unquantized parent planes keep their
-separate construction path. Nested work reuses the budget rather than creating
-another pool. Preparation tasks finish before the Gmsh child starts; its
-requested thread limits must be positive and fit the explicit scope's budget.
-
-This setting bounds SCGSim preparation workers; allocate the corresponding
-CPUs through the scheduler separately. Gmsh thread limits and Palace MPI/OpenMP
-settings control their own stages. `preparation_diagnostics(output_dir, profile=False)`
-can record stage timings alongside this scope without selecting parallelism.
-
-Each source-preparation call also reuses hierarchy extraction for the same
-freshly read GDS cell and excluded-reference list. The cache ends with that
-call.
-
-Immutable raw polygons and pure subdivisions are also reused within a prepare,
-adapter or compiler call when the complete ordered operands and grid context
-match. Selectors,
-source-record comparisons and physical/contact audits still execute on each
-invocation.
-
-Reconstructed grid-applied faces use one coordinate
-representation per integer grid key, including their boundary-chain anchors;
-raw source coordinates and non-grid local planes remain separate.
-
-A topology
-failure retains its original exception and adds counts, validity, area and
-grid information without coordinates. Error-only witnesses distinguish the
-initial grid realization, labelled cells and reconstructed faces from the
-final shared-cell reconstruction. These witnesses do not replace the model or
-its checks.
 
 ## Pre-solve input summary
 

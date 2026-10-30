@@ -227,4 +227,4 @@ for row in sweep["cases"]:
 | External attempt actual version | May remain unknown; inspect retained solver evidence rather than substituting the requested version |
 | Collector connected version | Release actually opened by the collection transaction |
 
-Keep model parameters, numerical controls, EPR selection and resources separate when comparing cases. This example holds source geometry, material presets, modes, margins and adaptive controls fixed while changing the junction inductance. See the [batch API contract](../specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch) for package contents, failure behavior and resource semantics.
+Keep model parameters, numerical controls, EPR selection and resources separate when comparing cases. This example holds source geometry, material presets, modes, margins and adaptive controls fixed while changing the junction inductance. See the [batch API contract](../specs/aedt-runtime.qmd) for package contents, failure behavior and resource semantics.

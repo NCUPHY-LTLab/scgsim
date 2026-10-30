@@ -1,76 +1,88 @@
 ---
 lang: zh-TW
-title: "讀取完整回傳結果"
-description: "綁定回傳證據，再依指定的 SCQ 研究用途解讀數值與歷程。"
+title: "讀取回傳結果"
+description: "載入回傳的執行資料夾、讀取報告，並判斷結果是否足以回答研究問題。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/returned-results"
 ---
 
-請在主機上明確執行並取回完整執行資料夾後，使用本教學。請開啟新的分析工作階段：結果解讀不應依賴準備階段仍在執行的 `sim`、試片或 Desktop。請將回傳位元組與中繼資料放在一起保存。解析會離線檢查識別與產物，不會再次求解。
+求解器完成且你取回完整執行資料夾後，請使用本頁。載入結果不需要原始 `sim` 物件、求解器或 AEDT；你也可以另開一個 Python 工作階段。
 
-## Palace：綁定另行保留的準備 ID {#palace-bind-the-independently-retained-preparation-id}
+## 載入 Palace 結果 {#load-a-palace-result}
 
 ```python
-from pathlib import Path
 from scgsim.palace import resolve_palace_result
 
-returned_run_dir = Path(".artifacts/returned-palace")
-expected_id = Path(".artifacts/palace-preparation-handoff-id.txt").read_text(
-    encoding="utf-8"
-).strip()
-resolved = resolve_palace_result(
-    returned_run_dir, expected_handoff_id=expected_id
+result = resolve_palace_result(
+    ".artifacts/returned-palace",
+    expected_handoff_id="<the handoff_id printed when you prepared the run>",
 )
-resolved.show_all_results()
+result.show_all_results()
 ```
 
-請將路徑指向實際取回的套件與準備階段的 ID 記錄。不可從正在識別的回傳資料中取得預期 ID。嚴格解析器要求輸出已完成且綁定收據，幾何、設定、交接資料與雜湊都必須相符。即使失敗的執行資料夾中剛好有頻率 CSV，也不會接受該結果。
+`resolve_palace_result` 會檢查資料夾是否完整、檔案是否遭到變更，以及 ID 是否與你提供的值相符。請從準備階段自己的紀錄取得 ID，不要從回傳資料夾中讀取。若檢查未通過，函式會引發錯誤，不會回傳數值。
 
-在 Palace 中，`resolved.mesh_summary()` 會讀取已解析執行資料中的網格證據，並將它綁定至封存的網格與 manifest 識別。Eigenmode 自由度是依設定 FEM 階數計算的主角點拓撲估算值，不是原生求解器計數。早期執行資料若沒有這些新增網格欄位，會將其標示為未記錄而維持不可用。
+### 執行失敗或提早停止時 {#when-the-run-failed-or-stopped-early}
 
-請依報告顯示順序閱讀：識別／可信度、數值證據與成本，最後是可用的物理量。識別與完成狀態說明哪些證據可歸屬於本次執行；物理問題則決定要檢視哪些證據。Electrostatic 報告會為矩陣保留激發與端子順序。Eigenmode 報告會保留模態識別、頻率，以及原生能量／埠／表面意義。AMR 指標與代數 eigenpair 殘差是不同的數值。
-
-若 Palace 回傳資料失敗或不完整，請改用檢查介面：
+`resolve_palace_result` 只接受已完成的執行。若要查看失敗或未完成執行已產生的資料，請使用：
 
 ```python
-from scgsim.palace import inspect_run_trustworthiness
-report = inspect_run_trustworthiness(returned_run_dir)
 from IPython.display import display
-display(report)
+from scgsim.palace import inspect_run_trustworthiness
+
+display(inspect_run_trustworthiness(".artifacts/returned-palace"))
 ```
 
-此介面會保留已記錄狀態，並可將最新可讀迭代顯示為部分證據。它不會授予完成狀態，也不會在嚴格結果解析時以較早快照取代最終結果。請將 signal-kill 診斷與經雜湊確認的 OOM 標記分開判讀；僅有 exit 137 無法證明發生記憶體不足。
+此摘要會顯示記錄的狀態與最後一個可讀取的網格自適應迭代，並標記為部分結果。結束碼 137 表示程序遭到終止；只有執行紀錄含有記憶體不足標記時，才會將其判定為記憶體不足。
 
-## AEDT：讀取封存的模型證據 {#aedt-read-the-sealed-family-evidence}
+## 載入 AEDT 結果 {#load-an-aedt-result}
 
 ```python
-from pathlib import Path
 from scgsim.aedt import resolve_results
 
-returned_run_dir = Path(".artifacts/returned-aedt")
-resolved = resolve_results(returned_run_dir)
-resolved.show_all_results(show_details=False, theme="light")
-rows = resolved.physics_results()
-benchmark = resolved.simulation_benchmark()
+result = resolve_results(".artifacts/returned-aedt")
+result.show_all_results()
+rows = result.physics_results()
+benchmark = result.simulation_benchmark()
 ```
 
-解析器會驗證收據群組、複製輸入、實際輸出雜湊，以及各模型專屬的原生讀回資料。`physics_results()` 會回傳選定模型的資料列：Driven 的有序 S 參數、一般 Eigenmode 的模態頻率／原生 Q、Q3D 矩陣，或 Q2D 每單位長度矩陣區塊。將這些資料用於下游分析時，請保留原生單位及導體／埠順序。
+`physics_results()` 會依照你執行的計算回傳資料列：
 
-請將原生狀態、實際請求的控制項及可用歷程與這些數值一併保存。報告不會補上缺少的歷程，也不會將不完整回傳資料轉成已完成的求解。[執行階段參考](../specs/aedt-runtime.qmd)說明各模型保留哪些原始紀錄與正規化欄位。
+| 計算類型 | 資料列內容 |
+|---|---|
+| HFSS Eigenmode | 模態頻率與 Q 值 |
+| HFSS Driven | 依埠順序排列的 S 參數 |
+| Q3D | 電容／電導與電阻／電感矩陣 |
+| Q2D | 每單位長度的矩陣區塊 |
 
-基準紀錄會區分 SCGSim 實際經過時間與原生工作／階段時間；缺少的效能剖析資料仍維持不可用。缺少自適應剖析時不會憑空產生通過曲線；彼此重疊的階段時間或峰值也不可當成獨立數值相加。Details 會顯示來源資訊，主檢視則維持易讀。[報告契約](../report-model.qmd)定義精確排序與可用性。
+使用這些資料列時，請保留單位以及導體或埠的順序。`simulation_benchmark()` 會提供實際執行時間；若 AEDT 有記錄，也會提供各求解階段的時間與記憶體用量。階段時間可能重疊，請勿加總。
 
-## 依 SCQ 用途解讀數值 {#interpret-for-scq-use}
+## 讀取報告 {#read-the-report}
 
-解讀結果前，先在研究紀錄中說明研究用途，例如電路模型所需的端子電容、共振模態頻率，或特定介面與模態的參與量。確認實際數值、單位、導體或模態識別、邊界／模型假設，以及可用通道。僅有可讀數值無法證明它能回答該問題。
+報告依序包含三部分：
 
-請將同一數值的可用歷程與實際變化一併閱讀。進行模態研究時，請分別檢查指定模態的頻率與相關 EPR 貢獻；頻率變化很小，不代表表面參與量的變化也很小。進行擷取時，檢視矩陣項目須保留矩陣順序、激發方式與單位。請明確呈現缺漏或部分歷程；單一快照無法提供從未記錄的趨勢。
+1. **執行狀態**：執行是否完成，以及使用的設定。
+2. **數值歷程與成本**：結果如何隨每次有限元素網格細化而改變，以及時間與記憶體用量。
+3. **物理量**：電容矩陣、模態頻率、參與量或 S 參數，並附有導體、埠或模態標籤。
 
-請將實際停止控制項與任何變更連同回傳的原生狀態保存。該分類描述原生執行在這些控制項下的狀況；預期用途則決定哪些數值、假設與觀測變化值得關注。說明證據支持哪些結論，以及哪些部分仍未知。若證據無法回答問題，請指出缺少的證據，不要補上未記錄的趨勢或另訂通用精度門檻。
+Palace 的 `result.mesh_summary()` 會提供該次執行的有限元素網格摘要；請參閱[檢查已準備的模型](solver-observations.qmd#mesh-summary)。
 
-## 依實際可用證據繼續 {#continue-with-the-evidence-you-actually-have}
+[報告模型](../report-model.qmd)列出報告中的所有欄位。
 
-若 Palace Eigenmode EPR 結果可用，`resolved.epr_result()` 會回傳分離的最終結果。請保留該結果以供[離線 EPR](offline-epr.qmd)使用。AEDT 的自適應 EPR 歷程與獨立評估的最終儲存場 EPR 是不同產物。需要後者時，請使用[儲存場分析銜接流程](aedt-saved-fields.qmd)。已完成的一般 Eigenmode 收據不會補上缺少的儲存場群組，也不會追溯加入 EPR 請求。
+## 判斷結果是否足夠 {#interpret-for-scq-use}
 
-若工作目標是 Driven 或擷取結果，課程到此結束：請保留數值、可用歷程與識別，並說明該結果對指定用途是否足夠。這不表示 SCGSim 會將結果轉換成電路模型或估算元件總損耗。
+執行完成表示求解器已依照你設定的條件結束，但無法單獨說明數值是否符合研究用途。請自行檢查：
+
+1. **說明你需要的物理量。** 例如焊墊對地電容、模態 1 的頻率，或模態 1 的 MA 參與量。
+2. **確認讀取正確欄位。** 檢查矩陣列與行、模態編號、埠順序及單位。
+3. **查看數值歷程。** 在數值歷程區段確認該物理量在最近幾次網格自適應迭代中的變化。不同物理量收斂速度不同；頻率可能已穩定，但表面參與量仍在變化。
+4. **檢查模型假設。** 邊界、真空尺寸、接面值與薄膜參數都會影響結果。
+
+若數值仍在變動，請增加網格自適應迭代次數、縮小有限元素網格尺寸或提高元素階數後再比較。若本次執行沒有記錄該物理量的歷程，就無法只憑這次結果判斷其收斂情形。
+
+## 下一步 {#next-steps}
+
+- Palace Eigenmode 的 EPR：使用 `result.epr_result()` 取得參與量資料，再進行[離線損耗分析](offline-epr.qmd)。
+- HFSS Eigenmode：使用儲存場計算 EPR，請參閱[從 AEDT 儲存場計算 EPR](aedt-saved-fields.qmd)。
+- Driven 與矩陣計算結果的分析到此完成。SCGSim 不會將它們轉換成電路模型。

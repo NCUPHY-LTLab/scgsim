@@ -1,132 +1,113 @@
 ---
-title: "Read a complete returned result"
-description: "Bind returned evidence, then interpret quantities and history for the stated SCQ research use."
+title: "Read returned results"
+description: "Load a returned run directory, read its report, and decide whether the result answers your question."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/returned-results"
 ---
 
-Use this lesson after explicit host execution and retrieval of the complete run
-directory. Start a fresh analysis session: result interpretation should not
-depend on the live `sim`, coupon or Desktop from preparation. Keep the returned
-bytes and their metadata together. Resolving performs offline identity and
-artifact checks; it does not solve again.
+Use this guide after the solver has finished and you have the whole run
+directory back. Loading results does not need the original `sim` object, the
+solver or AEDT. Start a fresh Python session if you like.
 
-## Palace: bind the independently retained preparation ID
+## Load a Palace result
 
 ```python
-from pathlib import Path
 from scgsim.palace import resolve_palace_result
 
-returned_run_dir = Path(".artifacts/returned-palace")
-expected_id = Path(".artifacts/palace-preparation-handoff-id.txt").read_text(
-    encoding="utf-8"
-).strip()
-resolved = resolve_palace_result(
-    returned_run_dir, expected_handoff_id=expected_id
+result = resolve_palace_result(
+    ".artifacts/returned-palace",
+    expected_handoff_id="<the handoff_id printed when you prepared the run>",
 )
-resolved.show_all_results()
+result.show_all_results()
 ```
 
-Point the paths to your actual retrieved package and preparation-side note.
-Never obtain the expected ID from the return you are trying to identify. The
-strict resolver requires completed receipt-bound output, matching geometry,
-config, handoff and hashes. It does not accept a failed run because a frequency
-CSV happens to exist.
+`resolve_palace_result` checks that the directory is complete, that its files
+are unchanged, and that its ID matches the one you supply. Take the ID from
+your own notes from preparation, not from the returned directory. If a check
+fails, it raises an error and returns no numbers.
 
-For Palace, `resolved.mesh_summary()` reads meshing evidence
-from the resolved run and binds it to the sealed mesh and manifest identities.
-The Eigenmode degree-of-freedom value is a primary-corner topology estimate for
-the configured FEM order, not a native solver count. Historical runs without
-these added meshing fields keep them unavailable as not recorded.
+### When the run failed or stopped early
 
-Read the report in its displayed order: identity/trustworthiness, numerical
-evidence and cost, then the available physics. Identity and completion tell
-you what evidence you can attribute to this run; the physical question tells
-you what to examine in that evidence. Electrostatic reports retain excitation and
-terminal order for matrices. Eigenmode reports retain mode identity, frequency
-and native energy/port/surface meaning. An AMR indicator is not the same
-quantity as an algebraic eigenpair residual.
-
-For a failed or partial Palace return, use the inspection surface instead:
+`resolve_palace_result` accepts only completed runs. To see what a failed or
+partial run did produce:
 
 ```python
-from scgsim.palace import inspect_run_trustworthiness
-report = inspect_run_trustworthiness(returned_run_dir)
 from IPython.display import display
-display(report)
+from scgsim.palace import inspect_run_trustworthiness
+
+display(inspect_run_trustworthiness(".artifacts/returned-palace"))
 ```
 
-This preserves the recorded status and can expose the latest readable
-iteration as partial evidence. It does not grant completion or substitute an
-earlier snapshot into strict result resolution. Read a signal-kill diagnosis
-separately from a hash-verified OOM marker; exit 137 alone does not establish
-out-of-memory.
+This shows the recorded status and the last readable refinement pass, marked
+as partial. Exit code 137 means the process was killed; it is reported as out
+of memory only if the run recorded an out-of-memory marker.
 
-## AEDT: read the sealed family evidence
+## Load an AEDT result
 
 ```python
-from pathlib import Path
 from scgsim.aedt import resolve_results
 
-returned_run_dir = Path(".artifacts/returned-aedt")
-resolved = resolve_results(returned_run_dir)
-resolved.show_all_results(show_details=False, theme="light")
-rows = resolved.physics_results()
-benchmark = resolved.simulation_benchmark()
+result = resolve_results(".artifacts/returned-aedt")
+result.show_all_results()
+rows = result.physics_results()
+benchmark = result.simulation_benchmark()
 ```
 
-The resolver verifies the receipt cohort, copied inputs, actual output hashes
-and family-specific native readback. `physics_results()` returns the selected
-family's rows: ordered S-parameters for Driven, mode frequency/native Q for
-ordinary Eigenmode, Q3D matrices, or Q2D per-unit-length matrix blocks. Preserve
-native units and conductor/port order when using those rows downstream.
+`physics_results()` returns rows for the calculation you ran:
 
-Keep the native status, actual requested controls and available history beside
-these quantities. The report does not supply missing history or turn an
-incomplete return into a completed solve. The [runtime reference](../specs/aedt-runtime.qmd)
-describes which raw records and normalized fields each family retains.
+| Calculation | Rows |
+|---|---|
+| HFSS Eigenmode | Mode frequency and Q |
+| HFSS Driven | S-parameters in port order |
+| Q3D | Capacitance/conductance and resistance/inductance matrices |
+| Q2D | Per-unit-length matrix blocks |
 
-Benchmark records distinguish SCGSim wall time from native task/stage times;
-missing profile data stays unavailable. A missing adaptive profile does not
-invent a pass curve, and overlapping stage times or peaks must not be summed as
-though independent. Details exposes provenance while the main view stays
-readable. [Report contracts](../report-model.qmd) own exact ordering and
-availability.
+Keep the units and the conductor or port order when you use these rows.
+`simulation_benchmark()` gives wall time and, where AEDT recorded them, the
+time and memory of each solver stage. Stage times can overlap; do not add them.
 
-## Interpret the quantity for your SCQ use {#interpret-for-scq-use}
+## Read the report
 
-State the research use in your study notes before interpreting the result: for
-example, a terminal capacitance for a circuit model, a resonant mode frequency,
-or the participation of a specified interface and mode. Identify the actual
-quantity, units, conductor or mode identity, boundary/model assumptions and
-available channels. A readable number alone does not establish that it answers
-that question.
+The report has three parts, in this order:
 
-Read the available history of that same quantity beside its actual changes.
-For a mode study, inspect the requested mode's frequency and the relevant EPR
-contribution separately; a small frequency change need not describe the change
-in a surface participation. For extraction, preserve matrix order, excitation
-and units when examining an entry. Keep missing or partial history visible;
-one snapshot cannot supply a trend that was never recorded.
+1. **Run status.** Whether the run completed and which settings it used.
+2. **Numerical history and cost.** How the result changed with each mesh
+   refinement pass, and the time and memory used.
+3. **Physics.** Capacitance matrix, mode frequencies, participation ratios or
+   S-parameters, with conductor, port or mode labels.
 
-Retain the actual stopping controls and any changes beside the returned native
-status. That classification describes the native run under those controls;
-your intended use determines which quantity, assumptions and observed changes
-matter. Explain what the evidence supports and what remains unknown. If it
-cannot answer the question, name the missing evidence rather than supplying an
-unrecorded trend or a new universal accuracy cutoff.
+For Palace, `result.mesh_summary()` gives the mesh summary of the run; see
+[Inspect the prepared run](solver-observations.qmd#mesh-summary).
 
-## Continue with the evidence you actually have
+[Report model](../report-model.qmd) lists every field in the report.
 
-For Palace Eigenmode EPR, `resolved.epr_result()` returns a detached final result
-when available. Preserve it for [offline EPR](offline-epr.qmd). For AEDT,
-adaptive EPR history and independently evaluated final saved-field EPR are
-separate artifacts. Use the [saved-field analysis bridge](aedt-saved-fields.qmd)
-when you need the latter. A completed ordinary Eigenmode receipt does not
-supply a missing saved-field cohort or an EPR request retroactively.
+## Decide whether the result is good enough {#interpret-for-scq-use}
 
-If your task is a driven or extraction result, this is the course endpoint:
-retain the quantity, its available history and identity, and your explanation
-of its adequacy for the stated use. No SCGSim circuit-model conversion or
-total-device loss estimate is implied.
+A completed run tells you the solver finished with your settings. It does not
+tell you whether the number is accurate enough for your purpose. Check this
+yourself:
+
+1. **Name the quantity you need.** For example, the pad-to-ground
+   capacitance, the frequency of mode 1, or the MA participation of mode 1.
+2. **Check that it is the right entry.** Matrix row and column, mode number,
+   port order, units.
+3. **Look at its history.** In the numerical-history section, see how *that*
+   quantity changed over the last refinement passes. Different quantities
+   converge differently: a frequency can settle while a surface participation
+   is still changing.
+4. **Check the model assumptions.** Boundaries, vacuum size, junction values
+   and film parameters all affect the result.
+
+If the quantity is still changing, refine further (more passes, a smaller
+mesh, a higher element order) and compare. If the run did not record history
+for that quantity, you cannot judge its convergence from this run alone.
+
+## Next steps
+
+- Palace Eigenmode with EPR: `result.epr_result()` returns the participation
+  data for [offline loss analysis](offline-epr.qmd).
+- HFSS Eigenmode: compute EPR from the saved fields with
+  [Compute EPR from saved AEDT fields](aedt-saved-fields.qmd).
+- Driven and extraction results are complete at this point. SCGSim does not
+  convert them into a circuit model.

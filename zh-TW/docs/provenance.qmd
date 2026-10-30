@@ -1,17 +1,19 @@
 ---
-title: "來源沿革與資料界線"
-description: "來源與結果的識別類別，以及公開／私有發布界線。"
+title: "執行與結果來源沿革"
+description: "說明執行及結果的識別方式、AEDT 收據結構與可發布內容，供貢獻者參考。"
 lang: zh-TW
 scgsim-kind: "contract"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/provenance"
 ---
 
-## 公開來源沿革契約 {#public-provenance-contract}
+本頁供 SCGSim 貢獻者了解執行與結果如何識別。使用者只需閱讀[讀取回傳結果](course/returned-results.qmd)。
 
-執行或報告會視情況綁定下列資訊：
+## 執行識別資訊 {#what-identifies-a-run}
 
-- SCGSim 發行版本，以及經測量的執行階段來源模組／內容識別資訊；
+執行或報告會依適用情況綁定：
+
+- SCGSim 發行套件版本，以及實測的執行期來源模組／內容識別資訊；
 - 可取得時的 SCGSim Git 修訂版本觀察，以及後端修訂版本；
 - 幾何來源、編譯器與拓撲識別資訊；
 - 求解器與結構描述版本；
@@ -19,14 +21,40 @@ scgsim-id: "docs/provenance"
 - 設定、網格、交接、結果與報告產物識別資訊；
 - 驗證與失敗狀態。
 
-使用回傳套件時，請同時參照準備端的來源與模型筆記。單靠發行版本無法識別特定研究實際使用的執行程式碼位元組、版圖、設定或原生結果。目前的 runtime-source manifest 與內容摘要會識別執行所使用的模組位元組；只有在 Git 修訂版本資訊確實可取得時，才會記錄該資訊。
+使用回傳套件時，也要參照準備端的來源與模型筆記。單靠發行版本無法識別特定研究所用的執行程式碼位元組、版圖、設定或原生結果。目前的 runtime-source 清單與內容摘要會識別執行所用的模組位元組；只有在 Git 修訂版本資訊確實可得時，才會記錄該資訊。
 
-Human 於 2026-10-09 接受 SCGSim 2.0 實作／API；來源候選版本為 `a932a173edb5c56ae14740ff5177190996255bdd`（tree `2745321736e53e2a4fe8d150f2e9d8bd176669db`）。該候選版本使用 `2.0.0.dev1` 中繼資料；目前採用雙版本的候選版本中繼資料升至 `2.0.0rc3`，不會改寫較早產物的識別資訊。Runtime-source v13 會記錄其宣告的模組位元組與實測內容摘要，但其 Git 修訂版本觀察可能如實標示為無法取得；它不會證明完整的傳遞相依樹。先前六筆完整原生觀察，以及後續僅建置的 Q3D 觀察，仍分別綁定至[API 遷移證據](api-migration.qmd#accepted-scope-and-evidence-status)所述的執行環境識別資訊。
+目前 Palace 幾何權威來源為 `scgsim.geometry.compiler`。Palace 仍會序列化既有的 `scgsim_sgb` 欄位，其目前值會指向該權威來源。欄位名稱不代表要從舊套件匯入。歷史收據值與 runtime-source 清單保留其記錄的模組識別資訊，不會改寫為目前路徑。
 
-目前 Palace 幾何權威來源為 `scgsim.geometry.compiler`。Palace 仍會序列化既有的 `scgsim_sgb` 欄位，其目前值會指向該權威來源。欄位名稱不會要求從舊套件匯入內容。歷史收據值與 runtime-source 清單會保留其記錄的模組識別資訊，不會改寫為目前路徑。
+## AEDT 收據組別 {#aedt-receipt-cohorts}
+
+新交接維持 `scgsim.aedt.handoff.v1` 與 `scgsim.aedt.handoff-manifest.v1`。兩項記錄都新增 `expected_receipt_schema: scgsim.aedt.receipt.v3`，初始收據則為 V3。收據含有 `prepared_runtime_source`：一份排序確定的 `runtime-source.v19` 清單。記錄欄位為 `schema_version`、`stage`、`modules`、`content_sha256` 與 `revision_observation`，不含輔助雜湊對照。每個宣告模組都記錄實測位元組，內容摘要則綁定該清單。Git 觀察會記錄實際 40 位十六進位提交識別碼，或明確標示無法取得。位元組綁定識別不要求來源檢出資料夾或捏造修訂版本。
+
+在寫入 `running` 之前，共用交易接受既定的初始收據組別：具有兩個 V3 預期標記及標準清單的 V3 收據；具有兩個 V2 標記及標準清單的 V2 收據；或沒有任何標記且使用標準歷史清單的精確 V1 `not_run` 收據。歷史交接可依這些組別規則繼續走支援的系列路徑，但這不會略過系列要求。
+
+每次新的 Q3D 或 HFSS 3D 執行都必須明確提供 `modeling`；`thin_film` 要求也必須在修改收據前提供相應的來源宣告。既有但不含 `modeling` 的 Q3D／HFSS 結果酬載仍由原讀取器依原雜湊規則處理，不能啟動新執行。Q2D 等未變更系列仍可使用共用 V1/V2 交接相容性，但這不會略過目前 Q3D／HFSS 的要求。Q3D input-v1 與 input-v2 要求結構仍已移除。
+
+已驗證的初始收據雜湊與準備清單雜湊會複製至可變 V3 收據。執行中必須修改最終收據，因此不會再拿它與初始雜湊比較。未知版本、標記混用或不完整、非標準欄位，以及雜湊不符，都會在修改收據前遭拒。
+
+每份新完成的 V3 收據都有另一份 `runtime_source` 清單，使用 `runtime-source.v19` 與實際執行程式碼的內容摘要。必須提供宣告的模組位元組與摘要；V19 沒有重複的輔助雜湊欄位。若可取得，`revision_observation` 會記錄實際 40 位十六進位提交識別碼；若唯讀安裝套件沒有 VCS 中繼資料，則會如實記錄 `unavailable`。宣告的模組位元組、摘要、結構或組別缺漏／毀損時，仍會採取拒絕執行的處理。準備與執行雜湊記錄不同時間點，不要求彼此相同；也不會拿歷史雜湊與目前安裝的套件比較。
+
+`resolve_results()` 保留真正歷史 V1 與 V2 完成收據的既有規則。若收據版本低於其準備標記所示版本，則視為不一致的降版並拒絕。解析 V2 與 V3 時，會驗證各自精確的組別、標記、標準準備清單、初始收據綁定，以及完整的實際執行清單，再套用該版本的系列結果檢查。只有 V3 HFSS 完成收據要求封存的原生 PEC 綁定證據；不會把此要求套用到歷史 V1／V2 收據。這些無簽章的一致性檢查，無法防止有人改寫整組產物。
+
+`runtime-source.v1` 是固定的十三模組讀取契約，不是動態列舉規則。V2–V14 的清單也都已固定。V4 在 V3 增加 `scgsim/aedt/_presentation.py`；V5 在 V4 增加 `scgsim/sgb/geometry_plan.py` 與 `scgsim/sgb/__init__.py`。V7 在 V6 增加 `scgsim/_notebook_presentation.py`。V8 在 V7 增加 `scgsim/aedt/_junction_partition.py`。V9 在 V8 增加 `scgsim/aedt/__init__.py`、`scgsim/aedt/_q3d_geometry.py`、`scgsim/sgb/adapter.py` 與 `scgsim/sgb/stack.py`。V10 在 V9 增加共用的 `scgsim/aedt/_handoff_cohort.py`；V11 在 V10 增加 `scgsim/aedt/_q3d_bodies.py`。V12 沿用 V11 的完整路徑成員。V13 保留固定清單，要求提供宣告模組位元組與摘要，並允許 `revision_observation` 為選用欄位；V1–V17 保留固定路徑成員、欄位意義與各版本讀取規則。V16 在 V15 清單中增加 HFSS Eigenmode 原生實作模組。V17 在 V16 清單中增加共用 lumped-model 與 HFSS lumped-native 模組，以及 AEDT specs 套件初始檔。V18 移除先前 EPR 私有路徑 `epr/junction_partition.py`，並納入 `preparation/junction_partition.py`、搬移後的 AEDT 資料／RLC／terminal 輔助函式、幾何／EPR／支援規格、建模／平面準備、HFSS 幾何執行期、中立幾何表示模組，以及共用來源 Ground 建構輔助函式與其多邊形操作葉節點。目前 V19 清單增加僅供模型使用的準備模型讀取器。V19 使用上述相同五個記錄欄位，不含輔助雜湊對照；精確路徑清單由宣告的實作清單決定。這些清單綁定宣告的檔案集合，不代表完整傳遞相依性認證。例如，固定的 V12 清單不會另外雜湊 `scgsim/sgb/engine_gates.py`。這些變更不影響 V3 收據結構。純初始收據編碼器負責 V1／V2／V3 的精確欄位順序、兩空格 JSON 縮排與結尾換行。V1 不含準備來源沿革；V2 與 V3 將其插在 `source` 和 `outputs` 之間。讀取歷史證據時使用宣告的固定結構，不拿歷史雜湊與安裝套件比較。
+
+執行會在收據管理的失敗交易中，於匯入 PyAEDT 或建構 Desktop 之前計算必要的 runtime-source 來源資訊。目前 V19 的 `revision_observation` 可記錄為 unavailable；單是此狀態不會使位元組綁定識別失敗，也不會阻止執行。若宣告模組位元組、摘要、結構或組別缺漏／毀損，仍會產生失敗的 V3 收據，並在啟動 Desktop 前完成收據處理。V1–V17 仍依各版本歷史驗證規則處理，包括有宣告時的修訂版本要求。
+
+各系列的儲存契約採拒絕不完整狀態的方式。求解前若 `save_project()` 回傳 false，會在原生執行前中止；匯出後若回傳 false，則不會回報完成。SCGSim 不會將任一狀態轉成新的部分成功收據，也不會推定原生專案位元組可用。
+
+## 原生執行涵蓋範圍 {#native-run-coverage}
+
+哪些工作流程已端對端執行（準備、原生求解、解析、報告），以及使用哪個建置版本：
+
+幾何／編譯器、AEDT、Palace 與視覺化的基準門面匯出及文件化直接子模組介面，對照列於 [API 遷移](api-migration.qmd)。先前六次完整的 native-to-Resolve-to-Report 觀察，綁定舊 wheel SHA256 `48963671d4f854c185b8f95f3cd8000960355a7c48550b9ccf19b739b49f8df3` 與 runtime-source v13 內容摘要 `42b48f3d5946fadb1e93e92a1d3eb2a55f72ff00fc41aeccf71c0fded5919fa1`；涵蓋 CPW Modal 與 Terminal、Q2D、Q3D AC/RL、SimplePad Q3D C/G 及 Palace ES，並非目前 wheel 的執行證據。另外，固定的 `2.0.0.dev1` 候選 wheel SHA256 `e0ab1117aad4e5578ec98251732d33f6faa2fe7524dd70dcbc44891ed024824d` 曾有 Q3D 僅建置／讀回／儲存／釋放觀察及幾何預覽，未執行 `Analyze`、求解或產生 C/G 矩陣。
+
+Xmon Palace Eigenmode Route A、CircularPad Palace Eigenmode Route B，以及 HFSS Eigenmode 已儲存場 EPR／離線損耗作業，尚未觀察到完整的 native-to-Resolve-to-Report 流程。Q3D input-v1/v2 讀取器仍不存在。
 
 ## 發布界線 {#publication-boundary}
 
-公開的 SCGSim 文件與測試資料不得包含私有名稱、路徑、尺寸、螢幕截圖、網格、設定、收據、資料或產物。僅進行去識別化不代表取得發布授權。
+公開 SCGSim 文件與測試資料不得包含私有名稱、路徑、尺寸、螢幕截圖、網格、設定、收據、資料或產物。僅做去識別化不代表取得發布授權。
 
-只有在陳述另有發布授權，且不含私有識別資訊或內容時，私有使用者驗證才可用於公開的彙總敘述。
+私有使用者驗證只有在陳述另有發布授權，且不含私有識別資訊或內容時，才可用於公開彙總陳述。

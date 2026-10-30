@@ -1,0 +1,104 @@
+---
+title: "共振與 EPR 3/3：分析模態與參與率"
+description: "載入 Palace 或 HFSS 回傳的模擬資料夾，讀取共振頻率與能量參與率。"
+lang: zh-TW
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/resonance-epr/analyze"
+---
+
+本頁載入[執行模擬](run.qmd)後回傳的資料夾，讀取共振頻率與模態能量分布。只需 SCGSim，不需要求解器，因此可在新的 Python 工作階段操作。
+
+::: {.callout-note title="開始前"}
+- 求解器回傳的模擬資料夾。
+- Palace 模擬：準備頁列印的 `handoff_id`。
+:::
+
+## 步驟 1：載入結果 {#step-1-load-the-result}
+
+:::: {.panel-tabset group="solver"}
+
+### Palace
+
+```python
+from scgsim.palace import resolve_palace_result
+
+result = resolve_palace_result(
+    ".artifacts/SimplePad/pad-resonance-palace-01",
+    expected_handoff_id="<the handoff_id from Prepare>",
+)
+result.show_all_results()
+```
+
+### HFSS
+
+```python
+from scgsim.aedt import resolve_results
+
+result = resolve_results(".artifacts/SimplePad/pad-resonance-hfss-01")
+result.show_all_results(show_details=True)
+epr_rows = result.epr_result()
+```
+
+::::
+
+若缺少任何輸出檔，或資料夾屬於另一場模擬，載入會回報錯誤，不會回傳不完整數值。
+
+## 步驟 2：讀取頻率與參與率 {#step-2-read-the-frequency-and-participation}
+
+:::: {.panel-tabset group="solver"}
+
+### Palace
+
+先前的參考計算結果：
+
+| 模態 1 | 數值 |
+|---|---|
+| 頻率 | 5.138 GHz |
+| 矽的電能參與率 | 0.921 |
+| 真空的電能參與率 | 0.079 |
+| 接面端口參與率 | 0.994 |
+
+報告另列出八筆表面薄膜資料，分別對應各薄膜及其接觸的金屬側面。
+
+![Palace：模態 1 的頻率及各網格細化階段的誤差估計。](../../assets/simple-pad-palace-em.png){#fig-simple-pad-palace-em}
+
+### HFSS
+
+先前的參考計算結果：
+
+| 模態 1 | 數值 |
+|---|---|
+| 頻率 | 4.879 GHz |
+| 矽的電能參與率 | 0.893 |
+| 真空的電能參與率 | 0.107 |
+| 接面 `jj` 的電感參與率 $p_L$ | 0.996 |
+| 接面 `jj` 的電容參與率 $p_C$ | 0 |
+
+報告另列出五筆表面薄膜資料，每筆都標示其所屬表面。
+
+![HFSS：模態 1 的表面、體積與接面參與率。](../../assets/simple-pad-hfss-epr.png){#fig-simple-pad-hfss-epr}
+
+::::
+
+判讀方式如下：
+
+- **體積參與率總和為 1。** 約 90 % 的電能位於矽中，因為矽的介電率約為真空的 12 倍。
+- **接面參與率接近 1。** 如集總 LC 電路預期，幾乎所有電感能量都儲存在 10 nH 接面中。
+- **Palace 與 HFSS 的接面參與率定義不同。** Palace 回報帶正負號的端口參與率；HFSS 分別回報非負的電感與電容比例，兩者不能視為相同量比較。
+- **兩個求解器的頻率不同。** 外部邊界條件不同：Palace 使用 PMC，HFSS 使用其預設 Perfect E 邊界。兩者都描述線性 LC 模型，不是量子位元的 $f_{01}$ 躍遷頻率。
+
+請將你的模型、邊界與設定和參考計算對照，並檢視相關物理量在自適應細化各階段的變化。
+
+## 從參與率估算損耗 {#from-participation-to-loss}
+
+估算表面薄膜損耗時，將其參與率乘以損耗正切值。對已建模薄膜加總，只能得到這些薄膜的損耗；這不是元件總損耗、Q 或 $T_1$，因為其他損耗通道未納入，而且 HFSS 不會計算金屬側壁上的薄膜能量。定義請見[能量參與率與損耗](../../eigenmode-epr.qmd)。
+
+若要在不重新求解的情況下嘗試其他損耗正切值，請參閱[離線變更損耗假設](../../course/offline-epr.qmd)。
+
+## 接下來 {#next-steps}
+
+- [使用自己的模型](../../course/working-model.qmd)
+- [Palace Eigenmode](../../course/palace-eigenmode.qmd)與 [HFSS Eigenmode](../../course/aedt-eigenmode.qmd)：了解更多設定
+- [使用已儲存的 AEDT 場計算 EPR](../../course/aedt-saved-fields.qmd)：無須重新求解
+- [Flip-chip Xmon 範例](../../tutorial-xmon-input.qmd)：將相同步驟用於完整量子位元

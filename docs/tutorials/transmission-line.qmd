@@ -1,5 +1,5 @@
 ---
-title: "Extract CPW transmission-line parameters"
+title: "Calculate CPW per-unit-length RLGC matrices"
 description: "Prepare an explicit finite-ground CPW cross-section and read the returned Q2D per-unit-length RLGC matrices."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
@@ -13,19 +13,25 @@ execute:
   enabled: false
 ---
 
-## 1. What you will get
+## 1. Define the calculation {#1-what-you-will-get}
 
-This notebook prepares an explicit rectangular CPW cross-section for AEDT Q2D
-and reads its returned per-unit-length capacitance, conductance, inductance,
-and resistance matrices. The cross-section is authored from stated dimensions;
-SCGSim does not infer a slice from a GDS or 3D layout.
+> What capacitance, conductance, inductance, and resistance matrices does this
+> finite-ground CPW cross-section return per unit length at the chosen frequency?
+
+Follow this coplanar waveguide (CPW) cross-section through Q2D preparation, an
+explicit AEDT run, and reading the returned RLGC matrices. The model is an
+authored 2D cross-section; it does not infer a slice from a GDS or 3D layout.
 
 ![Declared Q2D CPW cross-section: silicon substrate, signal, and two reference-ground rectangles. Vertical scale is enlarged to show the 0.2 µm metal thickness; this is source geometry, not a solver result.](../assets/q2d-cross-section.svg){#fig-q2d-cpw-cross-section}
 
-The model uses a 200 µm wide by 500 µm thick Si substrate, a 10 µm Nb signal,
-two 40 µm Nb grounds, 10 µm gaps, and 0.2 µm metal thickness. The
-[OrcaPen Q2D notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/CrossSectionSimulation/CpwFiniteGround/aedt_q2d.ipynb)
-is the PDK-owned cross-section example.
+The example cross-section is:
+
+| Feature | Dimensions and material |
+|---|---|
+| Substrate | 200 µm wide × 500 µm thick Si |
+| Signal conductor | 10 µm wide, 0.2 µm thick Nb |
+| Each ground conductor | 40 µm wide, 0.2 µm thick Nb |
+| Signal-to-ground gap | 10 µm on each side |
 
 ## 2. Prepare your environment
 
@@ -42,31 +48,43 @@ uv run python -c "from importlib.metadata import version; print(version('scgsim'
 uv run --with jupyter jupyter lab
 ```
 
-SCGSim is pinned to `2.0.0rc11`; the selected public PDK source is pinned to
-`35b4dc1cdd3f921badcac2fe57a98366315ae8d9` and imports as `orpen_sc_pdk`.
-Install AEDT 2023.2 or 2024.2, PyAEDT 1.3.0, and an available license on the
-solver host. Python packages prepare the request; they do not install AEDT.
-
 Check: both package versions print, and Jupyter uses this project's `.venv`.
 
-## 3. Choose your settings
+::: {.callout-note title="Pinned package source" collapse="true"}
+The install command pins SCGSim `2.0.0rc11` and the PDK source notebook at
+revision `35b4dc1`, imported as `orpen_sc_pdk`. The PDK maintains the
+[Q2D cross-section notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/CrossSectionSimulation/CpwFiniteGround/aedt_q2d.ipynb).
+:::
 
-Edit the central settings before preparing a new run. Rectangle positions and
-sizes are in micrometres; the setup frequency is in GHz. The four-value Q2D
-Region padding order is `(+X, -X, +Y, -Y)`.
+## 3. Set the cross-section and run options {#3-choose-your-settings}
+
+Edit the settings before preparing a new run. They group the cross-section,
+Q2D frequency and adaptive limit, and solver resources/output. Rectangle
+positions and sizes are in micrometres, and frequency is in GHz. Region padding
+is ordered `(+X, -X, +Y, -Y)`.
+
+| Settings group | Values to choose |
+|---|---|
+| Solver and output | AEDT release, project/design names, and a fresh output directory |
+| Q2D run | Setup frequency, adaptive iteration limit, and Region padding |
+| Cross-section | Substrate, signal, ground, and gap dimensions |
+| Runtime resources | AEDT cores and RAM limit |
 
 ```{python}
 #| id: line-parameter-settings
 from pathlib import Path
 
+# Solver identity and output
 AEDT_VERSION = "2024.2"  # Select 2023.2 or 2024.2 for the licensed host.
 OUTPUT_DIR = Path(".artifacts/public-cpw-q2d")
 PROJECT_NAME = "public_cpw_q2d"
 DESIGN_NAME = "CpwFiniteGroundQ2d"
 SETUP_NAME = "Setup1"
+# Q2D frequency, adaptive limit, and Region
 FREQUENCY_GHZ = 6.0
 MAXIMUM_PASSES = 3
 REGION_PADDING_UM = (100.0, 100.0, 1000.0, 100.0)
+# Cross-section dimensions and positions
 SUBSTRATE_WIDTH_UM = 200.0
 SUBSTRATE_THICKNESS_UM = 500.0
 SUBSTRATE_ORIGIN_UM = (-SUBSTRATE_WIDTH_UM / 2, -SUBSTRATE_THICKNESS_UM)
@@ -80,18 +98,18 @@ GROUND_LEFT_ORIGIN_UM = (
     -SIGNAL_WIDTH_UM / 2 - GROUND_GAP_UM - GROUND_WIDTH_UM, 0.0
 )
 GROUND_RIGHT_ORIGIN_UM = (SIGNAL_WIDTH_UM / 2 + GROUND_GAP_UM, 0.0)
+# AEDT resources
 AEDT_CORES = 4
 AEDT_RAM_LIMIT_PERCENT = 80
 ```
 
-The padding values are listed in public tuple order; Q2D maps them to its
-native Region call internally. The unequal positive and negative Y padding in
-this example is explicit model input, not a conversion convention.
+The unequal positive and negative Y padding is explicit model input. The tuple
+uses its public order; Q2D maps it to the native Region call internally.
 
 Check: confirm the selected AEDT release, frequency, pass limit, padding order,
 and a fresh output directory.
 
-## 4. Build the complete cross-section {#build-cross-section}
+## 4. Build the cross-section and conductor map {#build-cross-section}
 
 Use PDK material records, then declare every rectangle and conductor group.
 The vacuum is assigned to the Region by Q2D and does not need an authored
@@ -140,18 +158,19 @@ conductors = (
 )
 ```
 
-Rectangle positions are lower-left coordinates. The signal is separated from
-each ground by 10 µm; the two ground rectangles form one `ReferenceGround`.
-The 500 µm substrate extends below the metal plane. The vacuum belongs to the
-Region, and conductor memberships remain explicit.
+Rectangle positions give their lower-left coordinates. The signal is 10 µm
+from each ground; both ground rectangles form the `ReferenceGround` conductor.
+The 500 µm substrate extends below the metal plane. Q2D assigns vacuum to the
+Region, while the two conductor memberships are explicit in the request.
 
 Check: review each rectangle's material, origin, size, and the two declared
 conductor groups against the figure.
 
-## 5. Configure the Q2D request {#configure-the-extraction}
+## 5. Set up the Q2D request {#configure-the-extraction}
 
-The Q2D frontend receives the explicit rectangle model and a matrix run
-control. It does not generate a GDS slice or reuse the separate 3D Q3D model.
+The Q2D request combines the explicit rectangles and conductor groups with a
+matrix run control. Its reported matrices describe the cross-section per unit
+length at the selected setup frequency.
 
 ```{python}
 #| id: line-parameter-config
@@ -173,15 +192,20 @@ spec = Q2dSpec(
 print(spec.to_payload())
 ```
 
-Check: confirm the saved request shows the explicit AEDT version, frequency,
-conductor order, rectangle membership and public padding order.
+Check: confirm the request shows the AEDT version, setup frequency, conductor
+order, rectangle membership, and public padding order.
 
-## 6. Inspect, prepare, and execute {#prepare-and-execute}
+## 6. Inspect, prepare, and run on AEDT {#prepare-and-execute}
 
-Preparation builds the solver package; the next cell executes it separately
-on the licensed AEDT host. For a remote solver, transfer the complete package,
-run its `run_aedt.sh` from the extracted folder, and return the complete
-output directory.
+Preparation builds the solver package. Review its specification and archive,
+then run it explicitly on the licensed AEDT host. For a remote solver, transfer
+the complete package, run `run_aedt.sh` from its extracted folder, and return
+the complete output directory.
+
+::: {.callout-important title="AEDT solver host requirements"}
+Run on a host with AEDT 2023.2 or 2024.2, PyAEDT 1.3.0, and an available AEDT
+license. Python packages prepare the request; they do not install AEDT Desktop.
+:::
 
 ```{python}
 #| id: line-parameter-prepare
@@ -197,8 +221,8 @@ handoff = prepare_handoff(
 print(handoff.spec_path, handoff.archive_path)
 ```
 
-Inspect the spec and archive before execution. A prepared package or submitted
-job is not a completed result.
+Review the specification and archive before execution. Preparation or job
+submission alone does not produce a returned result.
 
 ```{python}
 #| id: line-parameter-execute
@@ -218,11 +242,11 @@ boundary.
 Check: the native runner completes and the complete return is available at the
 chosen output directory.
 
-## 7. Resolve and interpret RLGC {#resolve-the-matrix}
+## 7. Read the returned RLGC matrices {#resolve-the-matrix}
 
-Start a fresh analysis session and resolve the returned folder. The default
-path below is the output directory prepared in step 6; for a remote run, point
-it to the complete returned folder.
+After the run completes, open a fresh analysis kernel. Point the path below to
+the output directory from step 6, or to the complete returned folder after a
+remote run, then run the cell.
 
 ```{python}
 #| id: line-parameter-results
@@ -236,9 +260,9 @@ resolved.show_all_results(show_details=True)
 physics_rows
 ```
 
-The native `results/q2d/rlgc_matrix.csv` contains the primary C, G, L and R
-blocks. Preserve their matrix labels, conductor order and native per-unit-length
-units:
+The native `results/q2d/rlgc_matrix.csv` contains the C, G, L, and R matrix
+blocks. Read each block with its conductor order and native per-unit-length
+unit:
 
 | Block | Native unit |
 | --- | --- |
@@ -247,22 +271,32 @@ units:
 | Inductance, L | nH/meter |
 | Resistance, R | ohm/meter |
 
-The resolver also reports frequency, `LastAdaptive` solution and native
-status. Read the actual changes beside the intended line-model use; this page
-does not convert RLGC into impedance, propagation constant, or phase velocity.
+Keep the matrix values and units with the run's frequency and conductor order
+when comparing cross-sections.
 
-Check: the report and rows identify the returned run, conductor order, matrix
-blocks, units, and native status. See the
+::: {.callout-note title="Result scope" collapse="true"}
+Q2D describes this explicit cross-section per unit length. A finite-length
+line's end geometry and port treatment require a separate model.
+:::
+
+The resolver also reports frequency, `LastAdaptive` solution, and native
+status. Interpret the returned matrices for the intended line model; this
+example does not convert RLGC into impedance, propagation constant, or phase
+velocity.
+
+In `physics_rows` and the report, identify the C, G, L, or R block and the
+conductor entry by its row and column order. Keep the returned run, native
+units, frequency, and status with the result. See the
 [Q2D export contract](../specs/aedt-runtime.qmd#q2d-native-combined-matrix-export).
 
-## 8. Adapt this notebook
+## 8. Change the cross-section {#8-adapt-this-notebook}
 
-Change rectangle dimensions or material records explicitly; the central cell
-derives the substrate, signal and ground origins from the stated widths and
-gap. Update the baseline figure if those dimensions change.
-Update conductor membership when a rectangle changes role, and keep the
-signal and each reference conductor unambiguous. Use a new output directory
-for every preparation and retain the native matrix units when comparing runs.
+Edit rectangle dimensions or material records explicitly. The settings cell
+derives the substrate and ground origins from the widths and gap; update the
+baseline figure when those dimensions change. If a rectangle changes role,
+update conductor membership so the signal and reference conductor stay clear.
+Use a new output directory for each preparation and retain native matrix units
+when comparing runs.
 
 Check: inspect the cross-section and serialized request before preparing the
 next run. Continue to the

@@ -1,0 +1,122 @@
+---
+title: "Resonance and EPR 3/3: Read the mode and its participation"
+description: "Load the returned Palace or HFSS run directory and read the resonance frequency and energy participation."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/resonance-epr/analyze"
+---
+
+This page loads the run directory returned by [Run](run.qmd) and reads the
+resonance frequency and where the mode's energy is stored. It needs only
+SCGSim, not the solver, so you can start a new Python session.
+
+::: {.callout-note title="Before you start"}
+- The returned run directory.
+- For Palace: the `handoff_id` printed on the Prepare page.
+:::
+
+## Step 1: Load the result
+
+:::: {.panel-tabset group="solver"}
+
+### Palace
+
+```python
+from scgsim.palace import resolve_palace_result
+
+result = resolve_palace_result(
+    ".artifacts/SimplePad/pad-resonance-palace-01",
+    expected_handoff_id="<the handoff_id from Prepare>",
+)
+result.show_all_results()
+```
+
+### HFSS
+
+```python
+from scgsim.aedt import resolve_results
+
+result = resolve_results(".artifacts/SimplePad/pad-resonance-hfss-01")
+result.show_all_results(show_details=True)
+epr_rows = result.epr_result()
+```
+
+::::
+
+If any output file is missing, or the directory belongs to another run,
+loading stops with an error and does not return partial numbers.
+
+## Step 2: Read the frequency and participation
+
+:::: {.panel-tabset group="solver"}
+
+### Palace
+
+The earlier reference run gave:
+
+| Mode 1 | Value |
+|---|---|
+| Frequency | 5.138 GHz |
+| Electric participation, silicon | 0.921 |
+| Electric participation, vacuum | 0.079 |
+| Junction port participation | 0.994 |
+
+The report also lists eight surface-film rows, one for each film and each side
+of the metal it touches.
+
+![Palace: mode-1 frequency and error estimate at each mesh refinement pass.](../../assets/simple-pad-palace-em.png){#fig-simple-pad-palace-em}
+
+### HFSS
+
+The earlier reference run gave:
+
+| Mode 1 | Value |
+|---|---|
+| Frequency | 4.879 GHz |
+| Electric participation, silicon | 0.893 |
+| Electric participation, vacuum | 0.107 |
+| Junction `jj`, inductive participation $p_L$ | 0.996 |
+| Junction `jj`, capacitive participation $p_C$ | 0 |
+
+The report also lists five surface-film rows, each labelled with its surface.
+
+![HFSS: mode-1 surface, bulk and junction participation.](../../assets/simple-pad-hfss-epr.png){#fig-simple-pad-hfss-epr}
+
+::::
+
+How to read these numbers:
+
+- **The bulk rows add up to 1.** About 90 % of the electric energy is in the
+  silicon because silicon's permittivity is about 12 times that of vacuum.
+- **The junction row is close to 1.** Almost all inductive energy is in the
+  10 nH junction, as expected for a lumped LC circuit.
+- **Palace and HFSS define junction participation differently.** Palace
+  reports a signed port participation. HFSS reports separate nonnegative
+  inductive and capacitive ratios. Do not compare them as the same quantity.
+- **The two solvers give different frequencies.** Their outer boundaries
+  differ: Palace uses PMC, HFSS uses its default Perfect E boundary. Both
+  results describe a linear LC model, not a qubit's $f_{01}$ transition.
+
+Compare your model, boundaries and settings with the reference run, and review
+how the relevant quantities change across adaptive passes.
+
+## From participation to loss
+
+To estimate loss from a surface film, multiply its participation by its loss
+tangent. Summing over the films you modeled gives the loss from those films
+only. It is not the device's total loss, Q or $T_1$: other loss channels are
+not included, and HFSS does not compute film energy on metal sidewalls. See
+[Energy participation and loss](../../eigenmode-epr.qmd) for the definitions.
+
+To try other loss tangents without solving again, see
+[Change loss assumptions offline](../../course/offline-epr.qmd).
+
+## Next steps
+
+- [Work with your own model](../../course/working-model.qmd).
+- [Palace Eigenmode](../../course/palace-eigenmode.qmd) and
+  [HFSS Eigenmode](../../course/aedt-eigenmode.qmd) guides for more options.
+- [Compute EPR from saved AEDT fields](../../course/aedt-saved-fields.qmd)
+  without solving again.
+- The [flip-chip Xmon example](../../tutorial-xmon-input.qmd) applies the same
+  steps to a full qubit.

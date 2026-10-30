@@ -1,24 +1,22 @@
 ---
 title: "Contribute to SCGSim"
-description: "Set up the SCGSim development environment and find contributor references."
+description: "Set up the SCGSim development checkout with uv and find contributor references."
 sidebar: contribution
 scgsim-id: "docs/contributing"
 scgsim-kind: "contribution"
 scgsim-status: "CONVERGING"
 ---
 
-Use this page to prepare a SCGSim source checkout for documentation and package
-contributions. Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
-and Git first; the [installation tutorial](course/installation.qmd) covers a
-study project's Python environment and native solver prerequisites.
+Use this page to prepare a SCGSim source checkout for documentation and package contributions. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git first. The [installation tutorial](course/installation.qmd) covers the separate Python environment for a simulation study and the native solver host.
+
+Clone the development branch, then sync the checkout using its `pyproject.toml` and `uv.lock`:
 
 ```bash
 git clone --branch develop https://github.com/NCUPHY-LTLab/scgsim.git
 cd scgsim
-uv sync --extra palace --extra dev
+uv sync --locked --extra palace --extra dev --all-groups
 ```
 
-Read [architecture and data flow](architecture.qmd) for module ownership,
-the [maintainer guide](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md)
-for repository and documentation maintenance, and the
-[documentation map](documentation-map.qmd) to find each page's role.
+`uv sync` creates the checkout's `.venv` and installs the project with the `palace` and `dev` extras plus all dependency groups declared in `pyproject.toml`. This includes the repository's test and quality tools. `--locked` uses the checked-in `uv.lock` and stops if it does not match the project metadata.
+
+Read [architecture and data flow](architecture.qmd) for module ownership, the [maintainer guide](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md) for repository and documentation maintenance, and the [documentation map](documentation-map.qmd) to find each page's role.

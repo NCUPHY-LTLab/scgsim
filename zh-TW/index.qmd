@@ -1,6 +1,7 @@
 ---
 title: ""
 output-file: index.html
+lang: zh-TW
 ---
 
 {{< include README.md >}}

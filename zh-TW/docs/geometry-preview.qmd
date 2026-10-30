@@ -1,5 +1,5 @@
 ---
-title: "無顯示幾何預覽"
+title: "幾何預覽"
 description: "綁定求解器中繼資料的預覽 API、產物身分及明確的不可用模式。"
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
@@ -15,7 +15,7 @@ lang: zh-TW
 
 ## 用途與責任 {#purpose-and-ownership}
 
-[SGB 幾何概念](concepts/geometry.qmd#construction-stage) 說明來源如何成為此處檢視的求解器綁定幾何。
+[SGB 幾何概念](concepts/sgb/cad-mesh.qmd) 說明來源如何成為此處檢視的求解器綁定幾何。
 
 SCGSim 對同一個求解器綁定的語意場景提供兩種檢視。內嵌 Notebook 檢視器支援互動旋轉、平移、縮放及重設相機。可重現的無顯示圖集則是可攜、綁定雜湊的審閱產物。兩種介面都不重新定義 PDK 或元件語意、求解器幾何、執行狀態或科學資料。
 

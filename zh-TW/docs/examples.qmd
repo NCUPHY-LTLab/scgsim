@@ -1,43 +1,66 @@
 ---
-title: "選擇模擬流程"
-description: "依照要計算的物理量，選擇一份完整的 SCGSim 筆記本。"
+title: "教學與操作指南"
+description: "先完成電容或共振教學，再使用操作指南處理自己的模型。"
+lang: zh-TW
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/examples"
 ---
 
-SCGSim 會準備幾何與求解器請求，再解析附有單位與模型識別資訊的回傳結果。請依所需物理量選擇筆記本；其中的後端分頁涵蓋從來源輸入到結果讀取的完整流程。
+請從教學開始。每個教學都會帶你從小型模型設定走到取得回傳結果；接著，操作指南會示範如何用自己的模型完成單一任務。
 
-## 選擇模擬目標 {#getting-started}
+## 教學 {#tutorials}
 
-| 目標 | 筆記本 | 結果 |
-|---|---|---|
-| 電容 | [Palace Electrostatic 或 AEDT Q3D](tutorials/capacitance.qmd) | 具標籤的導體電容矩陣 |
-| 共振模態 | [Palace 或 HFSS Eigenmode](tutorials/resonance.qmd) | 模態頻率與回傳模態報表 |
-| 能量參與率 | [Palace 或 HFSS EPR](tutorials/resonance-epr.qmd) | 依模態整理的表面、體積與支路參與率 |
-| Driven S 參數 | [HFSS Modal 或 Terminal](tutorials/scattering.qmd) | 使用所選埠類型的雙埠響應 |
-| 傳輸線參數 | [AEDT Q2D](tutorials/transmission-line.qmd) | 單位長度 C、G、L 與 R 矩陣 |
+請依序進行。每個教學分為三頁：**準備模擬包**會寫入模擬資料夾，**執行模擬**會執行求解器，**分析結果**會讀取結果。你可以在一台電腦準備，再到另一台電腦執行求解器。
 
-## 準備模型並讀取回傳結果
+1. [安裝 SCGSim](course/installation.qmd)。
+2. [SimplePad 模型](tutorials/simplepad-model.qmd)：建立兩個教學共用的方形焊墊模型。
+3. [焊墊電容](tutorials/capacitance/prepare.qmd)：使用 Palace Electrostatic 計算焊墊對地電容。
+4. [共振與 EPR](tutorials/resonance-epr/prepare.qmd)：在同一焊墊加入接面電感，並以 Palace 或 HFSS Eigenmode 計算共振與能量參與率。
 
-從[安裝](course/installation.qmd)開始，再依物理問題選擇明確的幾何、材料、導體與埠。[模型與材料參考](reference.qmd#model-materials)及[導體與埠參考](reference.qmd#conductors-ports)說明這些選擇。請使用[回傳結果教學](course/returned-results.qmd)，一併保留回傳量、單位、模態或導體識別資訊及求解器狀態。
+## 操作指南：使用自己的模型 {#how-to-guides-your-own-model}
 
-## 探索較大型範例 {#public-inputs}
+完成教學後，可使用以下指南。
 
-較深入的 Xmon 與 CPW 來源筆記本固定使用公開 OrPen SC PDK 版本 [`35b4dc1cdd3f921badcac2fe57a98366315ae8d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9)，該版本宣告 OrPen `0.1.0` 與 GDSFactory 9.48.x。請依各範例指定的來源版本操作。
-
-| 公開筆記本群組 | 用途 |
+| 任務 | 指南 |
 |---|---|
-| [Kosen2024_Xmon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Electrostatic／Eigenmode 與以來源為起點的 Xmon 研究 |
-| [ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/CpwFiniteGround) | HFSS Eigenmode／Driven 與歷史 Q3D GDS 輸入來源 |
-| [CrossSectionSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/CrossSectionSimulation/CpwFiniteGround) | Q2D 矩形與導體群組 |
+| 將元件形狀指派給導體並設定模型 | [使用自己的模型](course/working-model.qmd) |
+| 準備模擬前檢查幾何與 Net | [檢視來源模型](course/source-observations.qmd) |
+| 執行前檢查網格與求解器輸入 | [檢視已準備的模擬](course/solver-observations.qmd) |
+| 載入並正確判讀結果 | [讀取回傳結果](course/returned-results.qmd) |
+| 在本機或 Slurm 叢集執行模擬資料夾 | [執行已準備的模型](course/execute.qmd) |
 
-來源尺寸與預設值是範例模型輸入。SCGSim 請求的現行用法請依相關教學與 API 參考操作。
+## 操作指南：依求解器分類 {#how-to-guides-by-solver}
 
-## 繼續閱讀主題參考
+| 計算 | Palace | AEDT |
+|---|---|---|
+| 電容矩陣 | [Palace Electrostatic](course/palace-electrostatic.qmd) | [Q3D](course/aedt-q3d.qmd) |
+| 共振模態與 EPR | [Palace Eigenmode](course/palace-eigenmode.qmd) | [HFSS Eigenmode](course/aedt-eigenmode.qmd) |
+| 端口響應（S 參數） | | [Driven Modal](course/aedt-driven-modal.qmd)、[Driven Terminal](course/aedt-driven-terminal.qmd) |
+| 單位長度傳輸線參數 | | [Q2D 截面](course/aedt-q2d.qmd) |
+| 各 AEDT 類型共用的模型輸入 | | [AEDT 輸入](course/aedt-inputs.qmd) |
 
-- 準備後端前，先[檢查來源與幾何](course/source-observations.qmd)。
-- 請在請求與預期模型不同時[檢查準備後的輸入](course/solver-observations.qmd)。
-- 在指定求解主機上[準備並執行可攜式交接](course/execute.qmd)。
-- 請在已記錄的 EPR 資料上[讀取 AEDT 儲存場](course/aedt-saved-fields.qmd)或[離線更新損耗假設](course/offline-epr.qmd)。
-- 深入來源綁定時，請參閱 [Xmon 輸入](tutorial-xmon-input.qmd)、[Palace EPR](tutorial-xmon-palace.qmd)及 [HFSS EPR](tutorial-xmon-aedt.qmd)範例。
+## 進階指南 {#advanced-guides}
+
+- [使用已儲存的 AEDT 場計算 EPR](course/aedt-saved-fields.qmd)，無須重新求解；仍需 AEDT。
+- [離線變更損耗假設](course/offline-epr.qmd)，可在既有 EPR 結果上操作，無須求解器。
+
+## 大型範例：Flip-chip Xmon {#larger-example-flip-chip-xmon}
+
+此範例依據文獻改編完整的 flip-chip Xmon 量子位元，並非上述指南的先備要求。
+
+1. [建立 Xmon 模型](tutorial-xmon-input.qmd)。
+2. [使用 Palace 計算 Xmon EPR](tutorial-xmon-palace.qmd)。
+3. [使用 HFSS 計算 Xmon EPR](tutorial-xmon-aedt.qmd)。
+
+## 其他公開範例 {#public-inputs}
+
+OrPen SC PDK 儲存庫提供更多範例筆記本，版本固定在 OrPen revision [`35b4dc1`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9)。
+
+| 筆記本群組 | 內容 |
+|---|---|
+| [Kosen2024_Xmon](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Xmon 的 Palace Electrostatic 與 Eigenmode |
+| [ComponentSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/CpwFiniteGround) | CPW 的 HFSS Eigenmode 與 Driven |
+| [CrossSectionSimulation/CpwFiniteGround](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/CrossSectionSimulation/CpwFiniteGround) | CPW 的 Q2D 截面 |
+
+這些筆記本可能使用較舊的 SCGSim 呼叫方式。若與本文件不同，請以本文件描述的目前 API 為準。

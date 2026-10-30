@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scgsim.geometry.models.common import GeometryRoute, _normalize_geometry_route
+
 from scgsim.diagnostics import _stage
 
 import time
@@ -67,7 +69,7 @@ from scgsim.geometry.planning.volumes import (
 def build_route_construction_plan(
     build_input: GeometryBuildInput,
     *,
-    route: RouteLiteral,
+    route: RouteLiteral | GeometryRoute | str,
     representation_context=None,
 ) -> ConstructionPlanRecord:
     """Build the route-aware plan consumed by bottom-up OCC construction.
@@ -85,6 +87,7 @@ def build_route_construction_plan(
     `SurfacePlanRecord` or `VolumePlanRecord` must either get a `TagPlanRecord`
     or be explicitly marked `construction_only`.
     """
+    route = _normalize_geometry_route(route)
     if build_input.metadata.get("surface_distance_bands"):
         raise ValueError("SGB surface-distance geometry bands have been withdrawn; use Palace native inset_margins_um.")
     build_input = project_native_route_representations(build_input, route, representation_context)

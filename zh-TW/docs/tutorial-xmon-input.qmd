@@ -1,6 +1,6 @@
 ---
 title: "Flip-chip Xmon：共用來源輸入"
-description: "將具名的公開 Xmon 出現位置與最終 Nets 編寫至同一個不可變來源 snapshot。"
+description: "將公開 Xmon 的具名出現位置與最終電氣網路寫入同一個不可變來源快照。"
 lang: zh-TW
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
@@ -9,15 +9,19 @@ execute:
   enabled: false
 ---
 
-本頁會建立一個可重複使用的來源 snapshot，供 [Palace](tutorial-xmon-palace.qmd)與 [AEDT](tutorial-xmon-aedt.qmd)工作流程共用。起點是 OrPen 公開的 Kosen2024 Xmon 預覽元件與接地短路 coupon。此元件是依據 Kosen 等人論文 [PRX Quantum 5, 030350（2024）](https://doi.org/10.1103/PRXQuantum.5.030350)獨立參數化改編，並採用[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)授權；它不是作者提供的遮罩。尺寸與 coupon 設定遵循[範例](examples.qmd)所連結的公開 Palace Route B 範例；這些是公開模擬輸入，不是元件量測資料或論文遮罩尺寸。請使用該處列出的相符 SCGSim 與 OrPen 版本。Quarto 只顯示程式碼，不會執行。
+本頁會建立一個可重複使用的來源快照，供 [Palace](tutorial-xmon-palace.qmd)與 [AEDT](tutorial-xmon-aedt.qmd)工作流程共用。起點是 OrPen 公開的 Kosen2024 Xmon 預覽元件與接地短路 coupon。此元件是依據 Kosen 等人論文 [PRX Quantum 5, 030350（2024）](https://doi.org/10.1103/PRXQuantum.5.030350)獨立參數化改編，並採用[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)授權；它不是作者提供的遮罩。尺寸與 coupon 設定遵循[範例](examples.qmd)所連結的公開 Palace PEC Shell 範例；這些是公開模擬輸入，不是元件量測資料或論文遮罩尺寸。請使用該處列出的相符 SCGSim 與 OrPen 版本。Quarto 只顯示程式碼，不會執行。
 
-目標是建立一個由兩個後端共用的來源 snapshot。請先完成[安裝](course/installation.qmd)，並在此工作階段保留 `snapshot`。
+目標是建立一個由兩個後端共用的來源快照。請先完成[安裝](course/installation.qmd)，並在此工作階段保留 `snapshot`。
 
-[固定版本的公開 OrPen Xmon 來源](https://github.com/OrPenStrike/orpen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon)提供後端教學所使用的 Palace Route B 集總端口電感 $11.78\,\mathrm{nH}$。AEDT 教學將電容設為零，做為僅含電感的明確電路模型假設；這不是實測零值，也不代表實體元件電容為零。MA／MS／SA 薄膜數值來自 OrPen 已驗證的合成 `LiteratureCentral` 預設值，屬於建模假設，後端頁面另有說明。
+::: {.callout-note title="開始前"}
+請設定 Xmon 環境：[安裝 SCGSim](course/installation.qmd#env-xmon)。
+:::
+
+[固定版本的公開 OrPen Xmon 來源](https://github.com/OrPenStrike/orpen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon)提供後端教學所使用的 Palace Route B 集總埠電感 $11.78\,\mathrm{nH}$。AEDT 教學將電容設為零，做為僅含電感的明確電路模型假設；這不是實測零值，也不代表實體元件電容為零。MA／MS／SA 薄膜數值來自 OrPen 已驗證的合成 `LiteratureCentral` 預設值，屬於建模假設，後端頁面另有說明。
 
 ## 建立元件與具名 coupon 出現位置 {#build-the-component-and-named-coupon-occurrences}
 
-元件會為焊盤與耦合器、接面端口及來源幾何擁有本機 Entity ID。接地接面的接地臂是對根 D1 平面的局部金屬貢獻，不是獨立的導體 Entity。`place_flip_chip_ground_short_bumps` 輔助函式會回傳最終 coupon，其中有具名的元件與凸塊參照，以及由 OrPen `author_common_flip_chip_ground_planes` 輔助函式建立的一組根層 D0／D1 接地平面。請使用名稱註冊實際的元件與凸塊參照；不要從攤平的多邊形名稱重建階層。
+元件會為金屬焊墊與耦合器、接面端口及來源幾何擁有本機 Entity ID。接地接面的接地臂是對根 D1 平面的局部金屬貢獻，不是獨立的導體 Entity。`place_flip_chip_ground_short_bumps` 輔助函式會回傳最終 coupon，其中有具名的元件與凸塊參照，以及由 OrPen `author_common_flip_chip_ground_planes` 輔助函式建立的一組根層 D0／D1 接地平面。請使用名稱註冊實際的元件與凸塊參照；不要從攤平的多邊形名稱重建階層。
 
 ```python
 import gdsfactory as gf
@@ -47,9 +51,9 @@ component = coupon.component
 
 環形凸塊數量設為零後，公開元件中已定義的 coupon 短路凸塊會成為唯一的凸塊實例。輔助函式可能會增加 `coupon_padding_um` 以容納這些凸塊；對應的堆疊值為 `coupon.stack_coupon_padding_um`。共用平面屬於最終 coupon；元件的局部接地臂貢獻則依其具名出現位置解析，並納入 D1。元件、層堆疊與材料記錄均來自 OrPen。SCGSim 不會另行建立一份重複的 PDK 資料。
 
-## 指派最終 Net 對應並準備單一 snapshot {#assign-the-final-net-map-and-prepare-one-snapshot}
+## 指派最終電氣網路對應並準備單一快照 {#assign-the-final-net-map-and-prepare-one-snapshot}
 
-元件的本機 Entity ID 會依其出現位置路徑限定範圍。本範例將根層 D0 與 D1 平面、四個元件耦合器及八個同層短路凸塊指派至 `Ground`，並將元件的 `D1_XMON_PAD` Entity 指派至 `xmon_pad`。局部接地接面臂已包含在根 D1 平面，因此不會另外列為 Net 成員。最終 Net 指派是在 Notebook 中對 `GeometryPlan` 執行的操作。Entity ID 保留來源沿革，但不會為每個 Entity 建立個別量測或場運算式。實體網格群組是獨立的計算聚合：八個角色與材料相同的 Ground 凸塊 Entity 共用一個實體群組，同時仍保留八個具限定名稱的 Entity 成員。AEDT 的 EPR 擁有者／介面／積分分組仍依其後端契約處理。
+元件的本機 Entity ID 會依其出現位置路徑限定範圍。本範例將根層 D0 與 D1 平面、四個元件耦合器及八個同層短路凸塊指派至 `Ground`，並將元件的 `D1_XMON_PAD` Entity 指派至 `xmon_pad`。局部接地接面臂已包含在根 D1 平面，因此不會另外列為電氣網路成員。最終電氣網路指派是在 Notebook 中對 `GeometryPlan` 執行的操作。Entity ID 保留來源沿革，但不會為每個 Entity 建立個別量測或場運算式。實體有限元素網格群組是獨立的計算聚合：八個角色與材料相同的 Ground 凸塊 Entity 共用一個實體群組，同時仍保留八個具限定名稱的 Entity 成員。AEDT 的 EPR 擁有者／介面／積分分組仍依其後端契約處理。
 
 ```python
 plan = GeometryPlan(

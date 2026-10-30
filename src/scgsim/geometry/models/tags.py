@@ -99,3 +99,75 @@ class StructuredFinalPhysicalGroupRecord(FinalPhysicalGroupRecord):
     equipotential_id: str | None = None
     source_provenance: Mapping[str, Any] = field(default_factory=dict)
     physical_attribute: Mapping[str, Any] = field(default_factory=dict)
+    conductor_component_ids: tuple[str, ...] = ()
+    conductor_component_ids_by_source: Mapping[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        components = self.conductor_component_ids
+        bindings = self.conductor_component_ids_by_source
+        if (
+            not isinstance(components, tuple)
+            or any(not isinstance(value, str) or not value for value in components)
+            or tuple(sorted(set(components))) != components
+        ):
+            raise ValueError(
+                "conductor_component_ids must contain sorted unique nonempty IDs"
+            )
+        if not isinstance(bindings, Mapping) or any(
+            not isinstance(key, str)
+            or not key
+            or not isinstance(value, str)
+            or not value
+            for key, value in bindings.items()
+        ):
+            raise ValueError(
+                "component source bindings require nonempty source and component IDs"
+            )
+        if not components and not bindings:
+            # Existing singleton records remain readable without additive fields.
+            return
+        if not components or not bindings or set(bindings.values()) != set(components):
+            raise ValueError("component source bindings must cover every component exactly")
+        source_ids = self.source_provenance.get("source_record_ids")
+        if not isinstance(source_ids, (tuple, list)) or (
+            any(not isinstance(value, str) or not value for value in source_ids)
+            or len(source_ids) != len(set(source_ids))
+            or set(source_ids) != set(bindings)
+        ):
+            raise ValueError(
+                "component source bindings must cover every grouped source exactly"
+            )
+        expected_singular = components[0] if len(components) == 1 else None
+        if self.conductor_component_id != expected_singular:
+            raise ValueError("singular and plural conductor component identities disagree")
+        if len(components) > 1 and (
+            not isinstance(self.net_id, str)
+            or not self.net_id
+        ):
+            raise ValueError(
+                "multiple conductor components require one Net identity"
+            )
+        if self.equipotential_id is not None and (
+            not isinstance(self.equipotential_id, str) or not self.equipotential_id
+        ):
+            raise ValueError("equipotential_id must be a nonempty string when provided")
+        if len(components) > 1:
+            sources = self.source_provenance.get("sources")
+            if (
+                not isinstance(sources, (tuple, list))
+                or len(sources) != len(source_ids)
+                or any(
+                    not isinstance(source, Mapping)
+                    or source.get("surface_contribution_schema")
+                    != "scgsim.surface-contributions.v1"
+                    or not isinstance(
+                        source.get("surface_contribution_ledger"), (tuple, list)
+                    )
+                    or not source["surface_contribution_ledger"]
+                    for source in sources
+                )
+            ):
+                raise ValueError(
+                    "multiple conductor components require complete source contribution ledgers"
+                )

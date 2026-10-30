@@ -1,20 +1,20 @@
 ---
 title: "Notebook 使用者契約"
-description: "OrPen Notebook 擁有權與套件使用者在各階段的操作行為。"
+description: "OrPen Notebook 的所有權，以及各階段套件使用者的行為。"
 lang: zh-TW
 scgsim-kind: "contract"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/notebook-ux"
 ---
 
-公開元件模擬 Notebook 是 OrPen SC PDK 的介面。SCGSim 擁有可重用的執行階段 API，不維護重複的 Notebook 來源。[課程地圖](examples.qmd#public-inputs)連結至標準公開來源。
+公開元件模擬 Notebook 是 OrcaPen SC PDK 的介面。SCGSim 負責可重用的執行階段 API，不維護重複的 Notebook 原始碼。[課程地圖](examples.qmd#public-inputs)連結至標準公開來源。
 
-## 各階段的控制項 {#stage-local-controls}
+## 各階段控制項 {#stage-local-controls}
 
-全域使用者控制項只有工作流程動作、執行 ID 與執行根目錄。元件輸入、物理假設、網格、設定、資源與分析選項，應放在各自所屬的操作旁。畫面上的順序為：來源 → 模型／EPR → 網格（視需要）→ 設定／交接 → 明確指定主機執行 → 分析回傳執行結果。後端設定應保持可見；套件負責的交接、Desktop 所有權、讀回、雜湊與解析，不應另行實作成 Notebook 本機輔助工具。
+全域控制項只有工作流程動作、執行 ID 與執行根目錄。元件輸入、物理假設、網格、設定、資源與分析選項，應放在所屬操作旁。畫面順序為：來源 → 模型／EPR → 網格（如適用）→ 設定／交接 → 明確指定主機執行 → 分析回傳的執行結果。後端設定保持可見；由套件負責的交接、Desktop 所有權、讀回、雜湊與解析，不另做成 Notebook 本機輔助實作。
 
-準備之前先顯示來源摘要。回傳結果分析應先呈現識別資訊、數值證據與成本，再呈現物理結果。[報告契約](report-model.qmd)規範排序與資料可用性；[執行設定檔](execution-profiles.qmd)規範指令碼、資源與回傳識別資訊；後端契約則規範各項控制。Notebook 不得將未完成的收據或無法讀取的最終表格呈現為成功。
+準備前先顯示來源摘要。分析回傳結果時，先呈現識別資訊、數值證據與成本，再呈現物理結果。[報告契約](report-model.qmd)規定排序與資料可用性；[執行設定檔](execution-profiles.qmd)規定指令碼、資源與回傳識別資訊；後端契約規定各項控制。Notebook 不得將未完成的收據或無法讀取的最終表格呈現為成功。
 
 ## 來源與結果保管 {#source-and-result-custody}
 
-PDK 材料／製程及元件的區域語意由各自擁有者負責。Notebook 透過 GeometryPlan 指派具名出現位置與最終 Net 對應。公開 Notebook 不包含私有幾何、選擇器、尺寸、螢幕截圖、設定、網格、收據或產物。在 Git 中忽略產物目錄，不能保留檔案內容供日後解析；研究負責人必須保留相關證據。[來源沿革契約](provenance.qmd)定義發布界線。執行階段實作不代表 Notebook 已獲接受，也不代表原生求解器結果準確。
+PDK 材料／製程及元件在地語意由各自擁有者負責。Notebook 透過 GeometryPlan 指派具名出現位置與最終 Net 對應。公開 Notebook 不得包含私有幾何、選擇器、尺寸、螢幕截圖、設定、網格、收據或產物。在 Git 忽略產物資料夾，不會保留其中的檔案供日後解析；研究負責人必須保存證據。[來源沿革契約](provenance.qmd)定義發布界線。執行階段實作不代表 Notebook 已獲接受，也不代表原生求解器結果準確。

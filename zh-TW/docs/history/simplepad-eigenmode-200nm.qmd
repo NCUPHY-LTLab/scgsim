@@ -1,0 +1,400 @@
+---
+title: "SimplePad 歷史 Eigenmode 參考：200 nm 鋁金屬"
+description: "建立並讀取 SimplePad Palace 或 HFSS Eigenmode 的 200 nm 歷史配方與觀測值。"
+scgsim-kind: "course"
+scgsim-status: "HISTORICAL"
+scgsim-id: "docs/history/simplepad-eigenmode-200nm"
+jupyter:
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+execute:
+  enabled: false
+---
+
+目前 HFSS 流程請見[現行教學](../tutorials/resonance.qmd)。本頁保存來源金屬為 200 nm 的歷史配方及觀測值。
+
+## 1. 本流程會得到什麼 {#1-what-you-will-get}
+
+本教學帶你在焊墊與 Ground 間加入已宣告的線性電感支路，執行 Eigenmode 模擬並讀取模態頻率。依序準備共用來源、選擇 Palace 或 HFSS 控制項、執行交接，再於新的分析工作階段讀取指定模態。
+
+![SimplePad Palace 模態 1 的頻率與自適應指標。](../assets/simple-pad-palace-em.png){#fig-simple-pad-palace-em}
+
+模型使用 200 µm 焊墊、20 µm 間隙、10 nH 支路及 1 GHz 搜尋輸入。此支路是明確宣告的線性電路元件，不是實際量測值，也不是非線性量子位元模型。
+
+## 2. 準備環境 {#2-prepare-your-environment}
+
+建立使用 Python 3.12 或 3.13 的研究專案，並安裝 Git 與 [uv](https://docs.astral.sh/uv/getting-started/installation/)；uv 會將固定版本的 Git 來源下載至專案管理的環境。
+
+```bash
+uv init --python 3.12 pad-resonance
+cd pad-resonance
+uv add 'scgsim[palace,aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@90fb50ef9de80fa6e556d2f2a09fb45707efeea0' \
+  'orpen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@51985d9507025e8241205712e866c0b804de29b9' \
+  ipykernel
+uv run python -c "from importlib.metadata import version; print(version('scgsim'))"
+uv run --with jupyter jupyter lab
+```
+
+固定的 SCGSim 來源版本為 `2.0.0rc11`。SimplePad 元件來自 PDK 版本 `51985d9507025e8241205712e866c0b804de29b9`（套件為 `orpen-sc-pdk`，匯入名稱為 `orpen_sc_pdk`）。uv 會維護本專案的 `.venv` 與 `uv.lock`。
+
+| 後端 | 求解主機所需的原生軟體 |
+|---|---|
+| Palace | 官方 Palace 0.18.1，以及接受 `-np` 和 `-nt` 的站點 MPI 包裝程式 |
+| HFSS | AEDT 2023.2 或 2024.2、PyAEDT 1.3.0 與適用的授權 |
+
+請另行安裝 Python 以外的原生求解器。詳細說明請見 [SCGSim 安裝教學](../course/installation.qmd)。
+
+檢查：版本指令應顯示 `2.0.0rc11`，且 Jupyter 使用本專案的 `.venv`。
+
+## 3. 選擇設定 {#3-choose-your-settings}
+
+先編輯中央設定儲存格。長度單位為微米，電感單位為亨利，搜尋目標單位為赫茲；AEDT 模態控制值則使用 GHz 與百分比。
+
+```{python}
+#| id: resonance-settings
+from pathlib import Path
+
+PAD_SIDE_UM = 200.0
+GAP_UM = 20.0
+DIE_SIDE_UM = 1000.0
+PORT_LOCATOR_WIDTH_UM = 2.0
+VACUUM_PADDING_UM = (250.0, 250.0, 1000.0)
+
+PORT_INDUCTANCE_H = 10e-9
+PORT_CAPACITANCE_F = 0.0
+NUM_MODES = 1
+SEARCH_FREQUENCY_HZ = 1e9
+EIGENMODE_TOLERANCE = 1e-6
+
+REFINED_MESH_SIZE_UM = 10.0
+MAX_MESH_SIZE_UM = 200.0
+FEM_ORDER = 2
+AMR_MAX_PASSES = 10
+AMR_TOLERANCE = 0.02
+AEDT_MAXIMUM_PASSES = 10
+AEDT_DELTA_FREQUENCY_PERCENT = 1.0
+AEDT_VERSION = "2024.2"  # Select 2023.2 or 2024.2 for your licensed host.
+OUTPUT_ROOT = Path(".artifacts/SimplePad")
+PALACE_RUN_ID = "pad-resonance-palace-01"
+HFSS_RUN_ID = "pad-resonance-hfss-01"
+PALACE_HANDOFF_NOTE = OUTPUT_ROOT / f"{PALACE_RUN_ID}-handoff.json"
+
+PALACE_EXECUTABLE = "palace"  # Set to your site's MPI wrapper accepting -np/-nt.
+PALACE_RESOURCES = {
+    "processes": 8,
+    "threads": 1,
+    "command_style": "wrapper",
+}
+PALACE_SETUP_COMMANDS = ()
+AEDT_CORES = 4
+AEDT_RAM_LIMIT_PERCENT = 80
+```
+
+幾何
+: 焊墊尺寸、間隙、晶粒尺寸與真空補距定義模型快照。
+
+電路與模態
+: 支路電感及要求模態數定義線性模型與輸出。搜尋目標協助定位模態，不是求解所得的頻率。
+
+數值控制
+: Palace 網格、FEM 階數與自適應迭代控制各自影響不同環節。Palace 搜尋目標使用赫茲；HFSS 記錄 GHz 為單位的最低頻率。
+
+求解主機
+: AEDT 版本、Palace 執行檔、資源與執行識別碼應符合所選主機及輸出資料夾。
+
+檢查：確認單位，並在準備另一個模型前選擇新的執行識別碼。
+
+## 4. 建立模型 {#4-build-the-model}
+
+兩個後端都使用同一份 GeometryPlan 快照，其中明確指定焊墊與接地的 Net 歸屬，並共用同一個真空包絡。
+
+### 建立共用來源 {#create-the-shared-source}
+
+```{python}
+#| id: resonance-source
+import gdsfactory as gf
+import orpen_sc_pdk
+from orpen_sc_pdk import get_material_records
+from orpen_sc_pdk.tech import get_single_die_layer_stack
+from IPython.display import display
+from scgsim.geometry import GeometryPlan
+
+orpen_sc_pdk.activate()
+gf.clear_cache()
+component = gf.get_component(
+    "square_pad_capacitor",
+    pad_side_um=PAD_SIDE_UM,
+    gap_um=GAP_UM,
+    die_side_um=DIE_SIDE_UM,
+    junction_width_um=PORT_LOCATOR_WIDTH_UM,
+)
+layer_stack = get_single_die_layer_stack()
+material_records = get_material_records()
+plan = GeometryPlan(
+    component=component,
+    root_id="chip",
+    layer_stack=layer_stack,
+    material_records=material_records,
+    coupon_padding_um=0.0,
+)
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=VACUUM_PADDING_UM)
+snapshot = plan.prepare()
+display(component)
+print(component.dbbox())
+```
+
+元件會在東側邊緣間隙提供已繪製的非金屬埠定位片。支路加入宣告的電感，不會形成實際金屬橋接。
+
+檢查：預覽應顯示元件與已繪製的定位片；快照則包含明確指定的焊墊與接地 Net。另見[模型與材料](../reference.qmd#model-materials)及[導體與埠](../reference.qmd#conductors-ports)。
+
+## 5. 設定模擬 {#5-configure-the-simulation}
+
+選擇一個求解器分頁，依序執行其中的儲存格。Palace 與 HFSS 都會收到明確的 10 nH 支路、單模態請求及主機專用控制值。
+
+:::: {.panel-tabset group="resonance-backend"}
+
+### Palace
+
+```{python}
+#| id: resonance-palace-config
+from scgsim.palace import EigenmodeSim
+
+palace_sim = EigenmodeSim()
+palace_sim.set_plan(snapshot)
+palace_sim.set_output_dir(OUTPUT_ROOT / PALACE_RUN_ID)
+PORT_NAME = "chip/o_junction_lumped"
+palace_sim.add_port(
+    PORT_NAME,
+    layer="D0_TOP_M1",
+    layout_sheet=True,
+    inductance=PORT_INDUCTANCE_H,
+)
+palace_sim.set_eigenmode(
+    num_modes=NUM_MODES,
+    target=SEARCH_FREQUENCY_HZ,
+    tolerance=EIGENMODE_TOLERANCE,
+    save=1,
+)
+palace_sim.set_mesh(
+    size_policy="scgsim_default",
+    refined_mesh_size=REFINED_MESH_SIZE_UM,
+    max_mesh_size=MAX_MESH_SIZE_UM,
+)
+palace_sim.set_numerical(
+    order=FEM_ORDER,
+    tolerance=EIGENMODE_TOLERANCE,
+    max_iterations=2000,
+    solver_type="Default",
+    preconditioner="Default",
+    device="CPU",
+    amr_max_passes=AMR_MAX_PASSES,
+    amr_tolerance=AMR_TOLERANCE,
+    amr_update_fraction=0.15,
+    amr_nonconformal=False,
+    save_adapt_iterations=True,
+    output_paraview=True,
+    output_grid_function=False,
+)
+```
+
+明確選用 `scgsim_default` 網格策略後，10 µm 與 200 µm 尺寸控制才會生效。Palace 埠的電感單位為亨利；`PORT_CAPACITANCE_F` 為零，而且 Palace 不會透過此埠 API 加入電容支路。
+
+### HFSS
+
+```{python}
+#| id: resonance-hfss-config
+from scgsim.aedt import (
+    AedtResources,
+    EigenmodeRunControl,
+    EigenmodeSim as HfssEigenmodeSim,
+    planar_junction_from_port,
+)
+
+HFSS_RESOURCES = AedtResources(
+    cores=AEDT_CORES,
+    ram_limit_percent=AEDT_RAM_LIMIT_PERCENT,
+)
+junction = planar_junction_from_port(
+    snapshot.geometry_input,
+    port_name="chip/o_junction_lumped",
+    junction_id="jj",
+    terminal_a_net="pad",
+    terminal_b_net="ground",
+    inductance_h=PORT_INDUCTANCE_H,
+    capacitance_f=PORT_CAPACITANCE_F,
+)
+hfss_sim = HfssEigenmodeSim(modeling="solid", aedt_version=AEDT_VERSION)
+hfss_sim.set_plan(snapshot)
+hfss_sim.set_output_dir(OUTPUT_ROOT / HFSS_RUN_ID)
+hfss_sim.add_junction(junction)
+hfss_sim.set_eigenmode(
+    project_name=HFSS_RUN_ID,
+    design_name="SimplePadEigenmode",
+    run_control=EigenmodeRunControl(
+        setup_name="Setup1",
+        minimum_frequency_ghz=SEARCH_FREQUENCY_HZ / 1e9,
+        num_modes=NUM_MODES,
+        maximum_passes=AEDT_MAXIMUM_PASSES,
+        maximum_delta_frequency_percent=AEDT_DELTA_FREQUENCY_PERCENT,
+    ),
+    resources=HFSS_RESOURCES,
+)
+```
+
+HFSS 會在指定的 Net 之間記錄與來源連結的集總接面。最大頻率差是自適應停止條件之一；單靠此值無法判定結果是否符合研究需求。
+
+檢查：確認所選 AEDT 版本、接面 Net 識別資訊及 10 nH 請求。另見[網格與自適應](../reference.qmd#mesh-adaptation)。
+
+::::
+
+## 6. 檢查並執行 {#6-inspect-and-run}
+
+先準備所選後端，再檢查網格與產生的設定或請求，之後才執行。若 `command_style="wrapper"`，請將 `PALACE_EXECUTABLE` 設為接受 `-np` 與 `-nt` 的站點 Palace MPI 包裝程式；直接在本機執行時，讓 `PALACE_SETUP_COMMANDS` 保持空值；否則請填入站點文件記載的設定指令。若使用直接呼叫的 Palace ELF 執行檔，請依[執行與交接參考](../reference.qmd#execution-handoff)選擇相符的啟動器設定。
+
+:::: {.panel-tabset group="resonance-backend"}
+
+### Palace
+
+```{python}
+#| id: resonance-palace-run
+import json
+
+palace_mesh = palace_sim.mesh()
+palace_config = palace_sim.write_config()
+palace_handoff = palace_sim.prepare_handoff(
+    profile="direct-local",
+    executable=PALACE_EXECUTABLE,
+    resources=PALACE_RESOURCES,
+    setup_commands=PALACE_SETUP_COMMANDS,
+)
+PALACE_HANDOFF_NOTE.parent.mkdir(parents=True, exist_ok=True)
+PALACE_HANDOFF_NOTE.write_text(
+    json.dumps(
+        {
+            "run_dir": str(palace_handoff.run_dir),
+            "handoff_id": palace_handoff.handoff_id,
+        },
+        indent=2,
+    ),
+    encoding="utf-8",
+)
+print(palace_mesh, palace_config, palace_handoff.run_dir)
+print("Saved handoff identity:", PALACE_HANDOFF_NOTE)
+```
+
+### HFSS
+
+```{python}
+#| id: resonance-hfss-run
+hfss_handoff = hfss_sim.prepare_handoff()
+print(hfss_handoff.spec_path, hfss_handoff.archive_path)
+```
+
+::::
+
+檢查產生的網格、設定或 HFSS 規格及封存檔。若使用遠端主機，請傳送完整封存檔並在該主機執行其中的指令；接下來的儲存格會在所選求解主機本機執行。
+
+:::: {.panel-tabset group="resonance-backend"}
+
+### Palace
+
+```{python}
+#| id: resonance-palace-execute
+import subprocess
+
+subprocess.run(
+    ["bash", str(palace_handoff.script_path)],
+    cwd=palace_handoff.run_dir,
+    check=True,
+)
+```
+
+### HFSS
+
+```{python}
+#| id: resonance-hfss-execute
+import subprocess
+
+subprocess.run(
+    ["bash", str(hfss_handoff.script_path)],
+    cwd=hfss_handoff.run_dir,
+    check=True,
+)
+```
+
+::::
+
+請保留完整回傳資料夾，以便解析結果。
+
+檢查：準備流程會列印新的執行資料夾；執行完成後，請取回完整套件。另見[執行與交接](../reference.qmd#execution-handoff)。
+
+## 7. 讀取並繪製結果 {#7-read-and-plot-results}
+
+請在新的核心中解析本機產生的執行資料夾。若結果來自遠端回傳，只需將 `RETURNED_RUN_DIR` 改為回傳資料夾；另行儲存的 Palace 交接記錄仍保留在研究專案中。
+
+:::: {.panel-tabset group="resonance-backend"}
+
+### Palace
+
+```{python}
+#| id: resonance-palace-results
+import json
+from pathlib import Path
+from scgsim.palace import resolve_palace_result
+
+PALACE_HANDOFF_NOTE = Path(
+    ".artifacts/SimplePad/pad-resonance-palace-01-handoff.json"
+)
+handoff_record = json.loads(PALACE_HANDOFF_NOTE.read_text(encoding="utf-8"))
+RETURNED_RUN_DIR = Path(handoff_record["run_dir"])
+EXPECTED_HANDOFF_ID = handoff_record["handoff_id"]
+result = resolve_palace_result(
+    RETURNED_RUN_DIR,
+    expected_handoff_id=EXPECTED_HANDOFF_ID,
+)
+result.show_all_results()
+```
+
+從 Eigenmode 報表讀取模態 1 的頻率（GHz）。保留其模態識別資訊與記錄的原生控制值。
+
+### HFSS
+
+```{python}
+#| id: resonance-hfss-results
+from pathlib import Path
+from scgsim.aedt import resolve_results
+
+RETURNED_RUN_DIR = Path(".artifacts/SimplePad/pad-resonance-hfss-01")
+result = resolve_results(RETURNED_RUN_DIR)
+result.show_all_results(show_details=True)
+physics_rows = result.physics_results()
+physics_rows
+```
+
+從回傳的物理資料列與報表讀取指定模態頻率（GHz）。複製數值時，請一併保留模態編號與單位。
+
+::::
+
+檢查：解析後的報表應識別模態 1 及其頻率單位。另見[結果與報表](../reference.qmd#results-reports)。
+
+### SimplePad 歷史模態觀測 {#historical-simplepad-mode-observations}
+
+已發布數值使用 SCGSim 1.0.1。這些是報表範例，不是新執行的預期值，也不代表兩個後端共用相同的場模型。
+
+| 歷史模態 1 報表 | 頻率 |
+|---|---:|
+| Palace Eigenmode | 5.137791 GHz |
+| HFSS Eigenmode | 4.879060 GHz |
+
+## 8. 調整本筆記本 {#8-adapt-this-notebook}
+
+若要調整模型，請在中央設定儲存格修改焊墊尺寸、間隙、真空留白與電感，然後重建共用來源再準備下一次執行。請明確保留來源中的 `pad` 與 `ground` Net。只研究模態時可以省略接面；本例保留接面以表示線性 LC 支路。
+
+檢查：送出新的交接前，先檢視更新後的元件與模態請求。
+
+若要萃取 C/G，請使用獨立的[電容筆記本](../tutorials/capacitance/prepare.qmd)；若研究問題包含模態能量分配，請改用[共振與 EPR 筆記本](../tutorials/resonance-epr/prepare.qmd)。更多求解器控制項請見 [Palace Eigenmode 參考](../course/palace-eigenmode.qmd)與 [AEDT Eigenmode 參考](../course/aedt-eigenmode.qmd)。
+
+相同 PDK 版本的公開來源案例：[Palace SimplePad Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/palace_eigenmode.qmd)與 [AEDT HFSS Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd)。

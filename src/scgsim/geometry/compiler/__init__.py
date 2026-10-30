@@ -19,6 +19,7 @@ from scgsim.geometry.compiler.validation import (
 )
 from scgsim.geometry.construction.export import export_physical_group_records
 from scgsim.geometry.models.common import (
+    GeometryRoute,
     RUN_METADATA_DIR,
     SEMANTIC_GEOMETRY_METADATA_DIR,
     DimensionLiteral,
@@ -73,6 +74,7 @@ from scgsim.geometry.planning.volumes import (
 from scgsim.geometry.source.validation import validate_geometry_input
 
 __all__ = [
+    "GeometryRoute",
     "BackendEntityTagRecord",
     "ConstructionBodyPlanRecord",
     "ConstructionPlanRecord",

@@ -1,25 +1,31 @@
 ---
 lang: zh-TW
-title: "尋找共振並讀取 EPR"
-description: "使用 Palace 或 HFSS 求解簡單的焊墊與接地共振器，再讀取頻率與參與量報告。"
+title: "SimplePad 歷史 EPR 參考：200 nm 鋁金屬"
+description: "SimplePad Palace 或 HFSS 的 200 nm 歷史 EPR 配方與觀測值。"
 scgsim-kind: "course"
-scgsim-status: "CONVERGING"
-scgsim-id: "docs/tutorials/resonance-epr"
+scgsim-status: "HISTORICAL"
+scgsim-id: "docs/history/simplepad-epr-200nm"
 ---
 
-從[電容範例](capacitance.qmd)中的方形焊墊與周圍接地開始，並在兩者之間明確加入電感支路。焊墊的電能與支路的磁能構成簡單共振器；本教學會尋找其模態頻率，並讀取該模態的能量儲存位置。
+目前 HFSS 流程請見[現行教學](../tutorials/resonance-epr/prepare.qmd)。本頁保存來源金屬為 200 nm 的歷史配方及觀測值。
 
-沿用電容教學中的[版圖與材料輸入](capacitance.qmd#prepare-the-physical-model)：中央 200 µm 方形焊墊、四周均勻 20 µm 間隙、1000 µm 方形單一晶粒，以及 500 µm Silicon 基板上的 0.2 µm 頂層 Aluminum。僅在此 Eigenmode 模型中，於東側邊緣間隙加上編寫的集總薄片：`x = 100..120 µm`、`y = −1..1 µm`。請使用已編寫的非金屬埠，不要重新建立金屬橋接。其線性電路輸入為 **10 nH** 與 **C = 0 F**；電容擷取不包含此支路。
+本教學帶你取得指定模態的頻率與能量參與量。依序選擇來源範例、編輯模型及求解控制項、準備並執行一個後端，再於新的分析工作階段讀取回傳結果。
 
-::: {.callout-note title="宣告的線性共振器"}
-此薄片代表集總電感支路，不是實體導電短路，也不是量測所得的非線性量子位模型。此模型沒有第二個晶粒、背面金屬、讀出線或凸塊結構。這些輸入定義範例本身，不代表數值精度或實際元件量測結果。
+請從 [OrcaPen 的公開範例](../examples.qmd#public-inputs)選擇來源模型，並參閱[共用版圖圖示](../tutorials/simplepad-model.qmd#fig-simple-pad-layout)。下方兩個標準 Notebook 分別提供 Palace 與 HFSS 流程。
+
+1. 開啟所選後端的 SimplePad Notebook，確認焊墊、材料、介面與接面埠來源。
+2. 編輯模型、模態與執行控制項，準備並執行一次交接。
+3. 在新的分析工作階段讀取回傳模態頻率及所請求的 EPR 參與量。
+
+範例沿用電容教學的 [200 µm 焊墊、20 µm 間隙與材料輸入](../tutorials/simplepad-model.qmd#the-model)。Eigenmode 使用東側間隙的非金屬埠定位片，識別接上 10 nH、C = 0 F 線性支路的金屬端點。
+
+::: {.callout-note title="模型中的線性支路"}
+埠定位片用來連接集總電感支路，不是實體導電短路。模型也不含第二個晶粒、背面金屬、讀出線或凸塊。
 :::
 
-介面薄膜與體積損耗數值是額外的建模假設，並非從版圖推得的性質。請將這些數值、後端實際讀回的材料資料與 PDK 標稱堆疊一併保存，讓 EPR 報告具有明確物理意義。需要定義時，[EPR 概念](../eigenmode-epr.qmd)會說明表面、體積與接面參與量。
+介面薄膜與體積損耗是模型假設。讀取參與量時，請同時查看其材料、介面與側別標籤；定義見 [EPR 概念](../eigenmode-epr.qmd#quantities-and-normalization)。
 
-請使用[已發布的 SimplePad 來源 `51985d9`](https://github.com/OrPenStrike/orpen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9)與[共用版圖圖示](capacitance.qmd#fig-simple-pad-layout)。下方 Notebook 定義實際模型與控制項；參考觀測會展示模態頻率及能量儲存位置。
-
-## 準備、執行並讀取第一筆結果 {#prepare-run-and-read-your-first-result}
+## 主要流程：準備、執行並讀取結果 {#prepare-run-and-read-your-first-result}
 
 請使用所選後端的標準 SimplePad Notebook。其儲存格已定義元件、材料及後端綁定；第一次執行時只需編輯模型與執行控制項，不必重新建立這些綁定。下方連結可開啟或下載已發布 OrPen 修訂版的標準 Notebook。請將該修訂版與模型及控制項一併記錄。`OUTPUT_ROOT` 為 `Path.cwd() / ".artifacts" / "SimplePad"`；`RUN_ID` 是該資料夾下套件的名稱。
 
@@ -27,27 +33,39 @@ scgsim-id: "docs/tutorials/resonance-epr"
 
 ### Palace
 
-請選擇 [palace_eigenmode.ipynb](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/palace_eigenmode.ipynb)（[下載](https://raw.githubusercontent.com/OrPenStrike/orpen-sc-pdk/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/palace_eigenmode.ipynb)、[可編輯 QMD](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/palace_eigenmode.qmd)）。其模態控制項為 `NUM_MODES = 1`、`SEARCH_FREQUENCY_HZ = 1e9` 與 `EIGENMODE_TOLERANCE = 1e-6`。`PORT_INDUCTANCE_H = 10e-9` 提供已編寫的電感支路。網格尺寸為 `REFINED_MESH_SIZE_UM = 10.0` 與 `MAX_MESH_SIZE_UM = 200.0`；`FEM_ORDER = 2`、`AMR_MAX_PASSES = 10`、`AMR_TOLERANCE = 0.02` 與 `SAVE_FIELDS = 1` 設定數值請求與儲存場資料。外部邊界使用 Palace 自然 PMC 慣例。
+請開啟 [palace_eigenmode.ipynb](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/palace_eigenmode.ipynb)（[下載](https://raw.githubusercontent.com/OrPenStrike/orpen-sc-pdk/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/palace_eigenmode.ipynb)、[可編輯 QMD](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/palace_eigenmode.qmd)）。
 
-啟動控制項為 `MACHINE_PROFILE = "direct-local"`、`PALACE_EXECUTABLE = "palace"`、`SETUP_COMMANDS = ("module load palace",)` 與 `RESOURCES = {"processes": 8, "threads": 1, "command_style": "wrapper"}`；請依主機調整執行檔／模組與資源。
+| 類別 | Palace Notebook 控制項 |
+|---|---|
+| 模態與支路 | `NUM_MODES = 1`、`SEARCH_FREQUENCY_HZ = 1e9`、`EIGENMODE_TOLERANCE = 1e-6`、`PORT_INDUCTANCE_H = 10e-9` |
+| 網格與自適應 | `REFINED_MESH_SIZE_UM = 10.0`、`MAX_MESH_SIZE_UM = 200.0`、`FEM_ORDER = 2`、`AMR_MAX_PASSES = 10`、`AMR_TOLERANCE = 0.02`、`SAVE_FIELDS = 1` |
+| 主機 | `MACHINE_PROFILE = "direct-local"`、`PALACE_EXECUTABLE = "palace"`、`SETUP_COMMANDS = ("module load palace",)`、`RESOURCES = {"processes": 8, "threads": 1, "command_style": "wrapper"}`；依主機調整啟動方式與資源。 |
+
+外部邊界沿用 Palace 自然 PMC 慣例。
 
 ### AEDT
 
-請選擇 [aedt_hfss_eigenmode.ipynb](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.ipynb)（[下載](https://raw.githubusercontent.com/OrPenStrike/orpen-sc-pdk/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.ipynb)、[可編輯 QMD](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd)）。其控制項為 `NUM_MODES = 1`、`SEARCH_FREQUENCY_GHZ = 1.0`、`MAXIMUM_PASSES = 10` 與 `CONVERGENCE_PERCENT = 1.0`。已編寫接面使用 `PORT_INDUCTANCE_H = 10e-9` 與 `PORT_CAPACITANCE_F = 0.0`。
+請開啟 [aedt_hfss_eigenmode.ipynb](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.ipynb)（[下載](https://raw.githubusercontent.com/OrPenStrike/orpen-sc-pdk/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.ipynb)、[可編輯 QMD](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd)）。
 
-主機請求使用 `AEDT_VERSION = "2024.2"`、`PYAEDT_VERSION = "1.3.0"` 與 `RESOURCES = AedtResources(cores=4, ram_limit_percent=80)`。Notebook 不會明確指定外部包覆；不要從共用版圖推斷其隱含原生邊界類型。
+| 類別 | AEDT Notebook 控制項 |
+|---|---|
+| 模態與接面支路 | `NUM_MODES = 1`、`SEARCH_FREQUENCY_GHZ = 1.0`、`PORT_INDUCTANCE_H = 10e-9`、`PORT_CAPACITANCE_F = 0.0` |
+| 自適應 | `MAXIMUM_PASSES = 10`、`CONVERGENCE_PERCENT = 1.0` |
+| 主機 | `AEDT_VERSION = "2024.2"`、`PYAEDT_VERSION = "1.3.0"`、`RESOURCES = AedtResources(cores=4, ram_limit_percent=80)` |
+
+Notebook 未明確指定外部包覆；其原生邊界設定請以 Notebook 與回傳專案為準。
 
 ::::
 
-兩個 Notebook 都使用 Route B 與已歸屬的 `LiteratureCentral` 介面假設。搜尋頻率、原生停止控制項及損耗假設都是宣告輸入，不是量測共振結果或精度建議。來源端選擇 Route B 的位置在 AEDT 之前；下方準備流程會另外為快照的物理堆疊選用 `modeling="solid"`。
-
-::: {.callout-note title="規劃參考執行所需資源"}
-參考 Palace Eigenmode 執行使用 8 個 MPI 程序 × 1 個 OMP 執行緒，經過時間為 14,385.602 s（約 4 小時），回報的節點記憶體峰值為 44,553.406 MB。選擇主機時可參考此成本紀錄；它既不是最低資源需求，也不保證你的執行時間或記憶體用量。
-:::
+兩個 Notebook 都使用 PEC Shell（舊資料代碼 B）與已歸屬的 `LiteratureCentral` 材料界面假設。AEDT 的來源端選擇 PEC Shell；準備流程另為快照的物理堆疊選用 `modeling="solid"`。
 
 1. 在選定的 Notebook 中為 `RUN_ID` 設定新名稱，並選擇 `WORKFLOW_ACTION = "prepare_handoff"`。執行準備用儲存格以建立 `HANDOFF`，但不要啟動求解器。記下列印的執行資料夾；若使用 Palace，也要另外保留 `HANDOFF.handoff_id`。
 2. 在已設定的求解器主機上，從該資料夾執行產生的指令稿：`bash run_palace.sh` 或 `bash run_aedt.sh`。若主機是遠端，請先傳送完整套件。另一種方式是為 `RUN_ID` 設定新名稱、選擇 `WORKFLOW_ACTION = "run"` 並執行 Notebook；此操作會準備新套件並啟動其指令稿，不會接續已準備的執行。
 3. 取回完整回傳資料夾。在新的 Notebook 核心中設定 `WORKFLOW_ACTION = "analyze_handoff"`，並在環境中提供 `SIMPLE_PAD_RETURNED_RUN_DIR`。若使用 Palace，還要提供另外保留的 `SIMPLE_PAD_PALACE_HANDOFF_ID`。執行分析用儲存格，以讀取實際回傳資料並顯示報告。
+
+::: {.callout-note title="參考 Palace 執行資源"}
+參考 Palace Eigenmode 執行使用 8 個 MPI 程序 × 1 個 OMP 執行緒，經過時間為 14,385.602 s（約 4 小時），回報的節點記憶體峰值為 44,553.406 MB。這筆紀錄可協助規劃主機資源。
+:::
 
 必須備妥求解器執行檔、主機設定及所需授權。Palace Notebook 會先檢查回傳套件，再解析完整結果；不完整回傳仍會顯示為部分報告。AEDT 會先解析回傳套件再顯示結果。準備流程或失敗的執行都不會提供虛構結果。
 
@@ -55,7 +73,11 @@ scgsim-id: "docs/tutorials/resonance-epr"
 
 ### 讀取模態與能量 {#read-the-mode-and-its-energy}
 
-找出**模態 1**及其 GHz 頻率，再查看旁邊標示的材料、介面或電路元件歸屬。參與量為無因次數值。已完成的範例提供以下參考觀測，數值已四捨五入以便閱讀：
+找出**模態 1**及其 GHz 頻率，再查看旁邊標示的材料、介面或電路元件歸屬。已完成的範例提供以下參考觀測，數值已四捨五入以便閱讀：
+
+::: {.callout-note title="參與率定義" collapse="true"}
+$p_i=U_i/U_{\mathrm{norm}}$ 是無因次量；$U_i$ 是指定區域或元件的能量，$U_{\mathrm{norm}}$ 是該後端採用的正規化能量。詳見 [EPR 公式](../eigenmode-epr.qmd#quantities-and-normalization)。
+:::
 
 :::: {.panel-tabset group="solver"}
 
@@ -101,7 +123,7 @@ HFSS 參與量來自下方所述、針對既有原生解所做的獨立候選 EP
 ::: {.callout-note title="參考輸出說明" collapse="true"}
 原始模態計算使用 SCGSim `1.0.1`（`9c032e3`）與 SimplePad 來源 `24ae5a4`；其元件／Notebook 位元組與連結的 `51985d9` 修訂版相符。Palace 已完成回傳資料，並以預期交接識別解析後顯示於報告。HFSS 原始回傳結果報告包含模態頻率；原始 EPR 仍不完整。
 
-HFSS 參與量表使用 SCGSim `1.0.2rc1`，以既有解進行獨立衍生。十筆自適應通過 EPR 紀錄都已完成；分離的 `resolve_epr_result`、`plot_epr_result` 與 `show_epr` 流程讀取並呈現該衍生結果。此操作沒有再次 Analyze／求解，也沒有重新產生原始一般嚴格回傳收據或變更其原生狀態。下方手動的一般回傳呼叫仍維持各自範圍，不會以此獨立結果取代原始不完整 EPR。
+HFSS 參與量表使用 SCGSim `1.0.2rc1`，以既有解進行獨立衍生。十筆網格自適應迭代 EPR 紀錄都已完成；分離的 `resolve_epr_result`、`plot_epr_result` 與 `show_epr` 流程讀取並呈現該衍生結果。此操作沒有再次 Analyze／求解，也沒有重新產生原始一般嚴格回傳收據或變更其原生狀態。下方手動的一般回傳呼叫仍維持各自範圍，不會以此獨立結果取代原始不完整 EPR。
 
 這些數值是觀測結果，不是數值目標、精度準則，也不要求兩種後端結果一致。它們的外部場模型仍然不同。[EPR 概念](../eigenmode-epr.qmd)說明正規化與已知損耗範圍；[AEDT EPR 參考](../specs/aedt-runtime.qmd#public-epr-candidate-surface)說明公開分離結果介面。
 :::
@@ -113,15 +135,15 @@ HFSS 參與量表使用 SCGSim `1.0.2rc1`，以既有解進行獨立衍生。十
 
 接著請[修改模型](../course/working-model.qmd)。較深入的 [Palace EPR](../tutorial-xmon-palace.qmd) 與 [HFSS EPR](../tutorial-xmon-aedt.qmd) 範例會說明介面選擇與來源綁定。若要新增原生場評估，請使用[儲存場分析](../course/aedt-saved-fields.qmd)；若要變更已記錄 EPR 證據的損耗假設，請使用[離線重新分析](../course/offline-epr.qmd)。
 
-## Python API 替代方式 {#python-api-alternative}
+## 選用：Python API 參考 {#python-api-alternative}
 
-若要自行撰寫設定，可在指令稿或 Notebook 中使用這些 API。先準備共用來源，再依選定後端完成設定、交接與新工作階段解析。
+一般使用請沿用上方標準 Notebook。若要將同一模型流程整合進自己的指令稿或 Notebook，以下 API 參考提供來源、設定、交接及新工作階段解析步驟。
 
-::::: {.callout-note title="Python 設定、綁定與完整結果流程" collapse="true"}
+此段是 API 呼叫參考，需搭配前述共用幾何設定與來源記錄，不是可直接單獨執行的完整範例。
 
 ## 準備共用幾何 {#prepare-the-shared-geometry}
 
-在準備工作階段中執行[共用元件設定](capacitance.qmd#create-the-shared-source)。該設定會定義 `component`、`layer_stack`、`material_records` 與 `output_root`。接著兩種 Eigenmode 後端都會使用同一個具名 GeometryPlan 快照：
+在準備工作階段中執行[共用元件設定](../tutorials/simplepad-model.qmd#step-1-load-the-component)。該設定會定義 `component`、`layer_stack`、`material_records` 與 `output_root`。接著兩種 Eigenmode 後端都會使用同一個具名 GeometryPlan 快照：
 
 ```python
 from orpen_sc_pdk import (
@@ -326,4 +348,3 @@ epr_rows = result.epr_result()
 
 :::
 
-:::::
