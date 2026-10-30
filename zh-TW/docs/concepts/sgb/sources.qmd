@@ -95,7 +95,7 @@ H1(-1.5,0.5) → H2(-0.5,0.5) → H3(-0.5,1.5) → H4(-1.5,1.5) → H1
 
 元件在組裝模型中的每一次放置稱為**元件實例（occurrence）**。同一個可重用 cell 放置兩次時，兩個副本可以有相同的局部元件名稱，但不同的實例路徑會區分它們的位置、變換與選取器。埠或接面要求因此能指向正確的放置物件。
 
-元件會宣告局部形狀與選取器，但不會宣告公開的 `Group` Net 群組 API。幾何上連成一塊的導體稱為導體連通分量（connected component）。分量 ID 用來辨認這一塊導體，和 GDSFactory 的 Component、來源 Entity 各有不同用途。Gmsh Physical Group 是提供網格或求解器辨認區域的標記群組，不會把 CAD 幾何併成一體。多個互不相連的導體分量可在符合條件時共用這種標記，但不會因此互相接觸；完整群組條件與來源對應見[幾何契約](../../geometry-sgb.qmd#explicit-rectangular-junctions)。
+元件會宣告局部形狀與選取器，但不會宣告公開的 `Group` Net 群組 API。幾何上連成一塊的導體稱為導體連通分量（connected component）。分量 ID 用來辨認這一塊導體，和 GDSFactory 的 Component、來源 Entity 各有不同用途。Gmsh Physical Group 是提供網格或求解器辨認區域的標記群組，不會把 CAD 幾何併成一體。多個互不相連的導體分量可在符合條件時共用這種標記，但不會因此互相接觸；完整群組條件與來源對應見[幾何契約](../../geometry-sgb.qmd#component-to-backend-geometry-contract)。
 
 ## 快照：固定本次準備所讀取的來源
 
@@ -125,4 +125,4 @@ DBU 是 database unit（資料庫單位），表示輸出的 GDS 能記錄的最
 
 ### 舊來源階段連結
 
-總覽保留舊有[來源階段](../geometry.qmd#source-stage)與[Entity／occurrence／Net](../geometry.qmd#entity-occurrence-and-net)錨點；本章提供完整解說。
+[幾何概念](../geometry.qmd#entities-placements-and-nets)介紹 Entity、元件實例與 Net；本章進一步說明來源資料如何整理成建構輸入。

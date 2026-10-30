@@ -1,41 +1,100 @@
 project:
   type: website
   output-dir: _site
+  render:
+  - index.qmd
+  - docs/api-migration.qmd
+  - docs/architecture.qmd
+  - docs/backend-support.qmd
+  - docs/concepts/geometry.qmd
+  - docs/concepts/model-and-numerics.qmd
+  - docs/concepts/problems.qmd
+  - docs/concepts/sgb/cad-mesh.qmd
+  - docs/concepts/sgb/curved-construction.qmd
+  - docs/concepts/sgb/performance.qmd
+  - docs/concepts/sgb/physical-model.qmd
+  - docs/concepts/sgb/planar-arrangement.qmd
+  - docs/concepts/sgb/polygon-construction.qmd
+  - docs/concepts/sgb/shared-topology.qmd
+  - docs/concepts/sgb/sources.qmd
+  - docs/concepts/sgb/validation.qmd
+  - docs/contributing.qmd
+  - docs/convergence-status.qmd
+  - docs/course/aedt-driven-modal.qmd
+  - docs/course/aedt-driven-terminal.qmd
+  - docs/course/aedt-eigenmode-epr.qmd
+  - docs/course/aedt-eigenmode.qmd
+  - docs/course/aedt-hpc-sweep.qmd
+  - docs/course/aedt-inputs.qmd
+  - docs/course/aedt-q2d.qmd
+  - docs/course/aedt-q3d.qmd
+  - docs/course/aedt-saved-fields.qmd
+  - docs/course/execute.qmd
+  - docs/course/installation.qmd
+  - docs/course/offline-epr.qmd
+  - docs/course/palace-eigenmode.qmd
+  - docs/course/palace-electrostatic.qmd
+  - docs/course/palace-surface-bands.qmd
+  - docs/course/returned-results.qmd
+  - docs/course/solver-observations.qmd
+  - docs/course/source-observations.qmd
+  - docs/course/working-model.qmd
+  - docs/documentation-map.qmd
+  - docs/eigenmode-epr.qmd
+  - docs/errors.qmd
+  - docs/examples.qmd
+  - docs/execution-profiles.qmd
+  - docs/geometry-preview.qmd
+  - docs/geometry-sgb.qmd
+  - docs/goals-and-upstream.qmd
+  - docs/history/aedt-capacitance-pre-v3.qmd
+  - docs/history/curved-source-installation.qmd
+  - docs/history/sgb-geometric-bands.qmd
+  - docs/history/simplepad-eigenmode-200nm.qmd
+  - docs/history/simplepad-epr-200nm.qmd
+  - docs/mesh-quality.qmd
+  - docs/notebook-ux.qmd
+  - docs/ownership.qmd
+  - docs/provenance.qmd
+  - docs/reference.qmd
+  - docs/report-model.qmd
+  - docs/roadmap.qmd
+  - docs/specs/aedt-runtime.qmd
+  - docs/specs/material-realization.qmd
+  - docs/specs/palace-eigenmode.qmd
+  - docs/specs/palace-electrostatic-sgb.qmd
+  - docs/specs/physical-representation.qmd
+  - docs/tutorial-xmon-aedt.qmd
+  - docs/tutorial-xmon-input.qmd
+  - docs/tutorial-xmon-palace.qmd
+  - docs/tutorials/capacitance/analyze.qmd
+  - docs/tutorials/capacitance/prepare.qmd
+  - docs/tutorials/capacitance/run.qmd
+  - docs/tutorials/eigenmode/analyze.qmd
+  - docs/tutorials/eigenmode/prepare-handoff.qmd
+  - docs/tutorials/eigenmode/run-directly.qmd
+  - docs/tutorials/resonance-epr/analyze.qmd
+  - docs/tutorials/resonance-epr/prepare.qmd
+  - docs/tutorials/resonance-epr/run.qmd
+  - docs/tutorials/resonance.qmd
+  - docs/tutorials/scattering.qmd
+  - docs/tutorials/simplepad-model.qmd
+  - docs/tutorials/transmission-line.qmd
+  - '!zh-TW/**'
   resources:
   - askr-versions.json
   - MAINTAINING.md
+  - LICENSE
+  - NOTICE
   - '!zh-TW/**'
   - docs/images/sgb-concept/**
-  render:
-  - index.qmd
-  - docs/*.qmd
-  - docs/specs/*.qmd
-  - docs/course/*.qmd
-  - docs/tutorials/*.qmd
-  - docs/tutorials/eigenmode/*.qmd
-  - docs/history/*.qmd
-  - docs/concepts/*.qmd
-  - docs/concepts/sgb/*.qmd
-  - '!docs/concepts/geometry-en.qmd'
-  - '!zh-TW/**'
   post-render: python3 scripts/build_bilingual_docs.py
 execute:
   enabled: false
-lang: en
-askr:
-  languages:
-    current: en
-    items:
-    - code: en
-      label: English
-      href: /
-    - code: zh-TW
-      label: 繁體中文
-      href: /zh-TW/
 website:
   title: SCGSim
-  description: Source geometry, explicit solver handoffs and verified electromagnetic
-    results
+  description: Prepare electromagnetic simulations of superconducting circuits and
+    analyze the returned results.
   page-navigation: true
   search:
     location: navbar
@@ -45,24 +104,25 @@ website:
   - source
   - issue
   page-footer:
+    left:
+    - text: Apache-2.0
+      href: LICENSE
+    - text: Third-party notices
+      href: NOTICE
     right:
     - text: Contributing
       href: docs/contributing.qmd
-    left:
-    - icon: github
-      aria-label: GitHub repository
-      href: https://github.com/NCUPHY-LTLab/scgsim
   navbar:
     left:
     - text: Overview
       href: index.qmd
-    - text: Tutorial
+    - text: Tutorials
       href: docs/examples.qmd
-    - text: Concept
+    - text: Concepts
       href: docs/concepts/problems.qmd
-    - text: Contract
-      href: docs/reference.qmd
-    - text: Contribution
+    - text: Reference
+      href: docs/backend-support.qmd
+    - text: Contributing
       href: docs/contributing.qmd
     tools-collapse: false
     tools:
@@ -78,118 +138,140 @@ website:
     contents:
     - text: SCGSim overview
       href: index.qmd
-  - id: tutorial
+  - id: tutorials
     title: Pages
     style: floating
     collapse-level: 1
     contents:
     - docs/examples.qmd
-    - docs/course/installation.qmd
-    - section: By simulation goal
+    - section: Tutorials
       contents:
-      - docs/tutorials/capacitance.qmd
-      - section: Eigenmode and Surface EPR
-        href: docs/tutorials/resonance.qmd
+      - docs/course/installation.qmd
+      - docs/tutorials/simplepad-model.qmd
+      - section: Pad capacitance
         contents:
-        - text: Overview
-          href: docs/tutorials/resonance.qmd
-        - text: Prepare Handoff
-          href: docs/tutorials/eigenmode/prepare-handoff.qmd
-        - text: Run Directly
-          href: docs/tutorials/eigenmode/run-directly.qmd
-        - text: Analyze
-          href: docs/tutorials/eigenmode/analyze.qmd
-      - docs/tutorials/scattering.qmd
-      - docs/tutorials/transmission-line.qmd
-    - section: Prepare and inspect a model
+        - text: 1. Prepare
+          href: docs/tutorials/capacitance/prepare.qmd
+        - text: 2. Run
+          href: docs/tutorials/capacitance/run.qmd
+        - text: 3. Analyze
+          href: docs/tutorials/capacitance/analyze.qmd
+      - section: Resonance and EPR
+        contents:
+        - text: 1. Prepare
+          href: docs/tutorials/resonance-epr/prepare.qmd
+        - text: 2. Run
+          href: docs/tutorials/resonance-epr/run.qmd
+        - text: 3. Analyze
+          href: docs/tutorials/resonance-epr/analyze.qmd
+    - section: Your own model
       contents:
       - docs/course/working-model.qmd
       - docs/course/source-observations.qmd
-      - docs/course/aedt-inputs.qmd
       - docs/course/solver-observations.qmd
-    - section: Execute and read results
-      contents:
       - docs/course/execute.qmd
       - docs/course/returned-results.qmd
-      - docs/course/aedt-saved-fields.qmd
-      - docs/course/offline-epr.qmd
-    - section: Backend examples
+    - section: Palace
       contents:
       - docs/course/palace-electrostatic.qmd
+      - docs/course/palace-eigenmode.qmd
+    - section: AEDT
+      contents:
+      - docs/course/aedt-inputs.qmd
       - docs/course/aedt-eigenmode.qmd
-      - docs/course/aedt-eigenmode-epr.qmd
+      - docs/course/aedt-driven-modal.qmd
+      - docs/course/aedt-driven-terminal.qmd
       - docs/course/aedt-q3d.qmd
-      - docs/course/aedt-hpc-sweep.qmd
-    - section: Flip-chip Xmon examples
+      - docs/course/aedt-q2d.qmd
+    - section: EPR after the run
+      contents:
+      - docs/course/aedt-saved-fields.qmd
+      - docs/course/offline-epr.qmd
+    - section: 'Example: flip-chip Xmon'
       contents:
       - docs/tutorial-xmon-input.qmd
       - docs/tutorial-xmon-palace.qmd
       - docs/tutorial-xmon-aedt.qmd
-    - section: Historical reference
-      contents:
-      - docs/history/aedt-capacitance-pre-v3.qmd
-      - docs/course/palace-surface-bands.qmd
-  - id: concept
+  - id: concepts
     title: Pages
     style: floating
     collapse-level: 1
     contents:
     - docs/concepts/problems.qmd
-    - section: SGB
-      href: docs/concepts/geometry.qmd
-      contents:
-      - docs/concepts/geometry.qmd
-      - docs/concepts/sgb/sources.qmd
-      - docs/concepts/sgb/physical-model.qmd
-      - docs/concepts/sgb/planar-arrangement.qmd
-      - docs/concepts/sgb/shared-topology.qmd
-      - docs/concepts/sgb/polygon-construction.qmd
-      - docs/concepts/sgb/curved-construction.qmd
-      - docs/concepts/sgb/cad-mesh.qmd
-      - docs/concepts/sgb/performance.qmd
-      - docs/concepts/sgb/validation.qmd
+    - docs/concepts/geometry.qmd
     - docs/eigenmode-epr.qmd
     - docs/concepts/model-and-numerics.qmd
-  - id: contract
+    - section: SGB method chapters
+      contents:
+      - docs/concepts/sgb/cad-mesh.qmd
+      - docs/concepts/sgb/curved-construction.qmd
+      - docs/concepts/sgb/performance.qmd
+      - docs/concepts/sgb/physical-model.qmd
+      - docs/concepts/sgb/planar-arrangement.qmd
+      - docs/concepts/sgb/polygon-construction.qmd
+      - docs/concepts/sgb/shared-topology.qmd
+      - docs/concepts/sgb/sources.qmd
+      - docs/concepts/sgb/validation.qmd
+  - id: reference
     title: Pages
     style: floating
     collapse-level: 1
     contents:
     - docs/reference.qmd
     - docs/backend-support.qmd
-    - section: Geometry and physical model
+    - section: Geometry
       contents:
       - docs/geometry-sgb.qmd
-      - docs/geometry-preview.qmd
       - docs/specs/physical-representation.qmd
+      - docs/specs/material-realization.qmd
+    - section: Palace
+      contents:
       - docs/specs/palace-electrostatic-sgb.qmd
       - docs/specs/palace-eigenmode.qmd
-    - section: Execution and results
+      - docs/mesh-quality.qmd
+    - section: AEDT
       contents:
       - docs/specs/aedt-runtime.qmd
+    - section: Running and results
+      contents:
       - docs/execution-profiles.qmd
-      - docs/mesh-quality.qmd
+      - docs/geometry-preview.qmd
       - docs/report-model.qmd
-      - docs/api-migration.qmd
       - docs/notebook-ux.qmd
+      - docs/api-migration.qmd
   - id: contribution
     title: Pages
     style: floating
     collapse-level: 1
     contents:
     - docs/contributing.qmd
-    - docs/documentation-map.qmd
     - docs/ownership.qmd
-    - section: Project background
+    - docs/architecture.qmd
+    - docs/provenance.qmd
+    - docs/goals-and-upstream.qmd
+    - docs/roadmap.qmd
+    - docs/errors.qmd
+    - docs/documentation-map.qmd
+    - docs/convergence-status.qmd
+    - section: Historical examples
       contents:
-      - docs/architecture.qmd
-      - docs/goals-and-upstream.qmd
-      - docs/provenance.qmd
-      - docs/roadmap.qmd
-    - section: Maintenance records
+      - docs/course/palace-surface-bands.qmd
+      - docs/history/aedt-capacitance-pre-v3.qmd
+      - docs/history/curved-source-installation.qmd
+      - docs/history/sgb-geometric-bands.qmd
+      - docs/history/simplepad-eigenmode-200nm.qmd
+      - docs/history/simplepad-epr-200nm.qmd
+    - section: Other worked examples
       contents:
-      - docs/errors.qmd
-      - docs/convergence-status.qmd
+      - docs/course/aedt-eigenmode-epr.qmd
+      - docs/course/aedt-hpc-sweep.qmd
+      - docs/tutorials/eigenmode/analyze.qmd
+      - docs/tutorials/eigenmode/prepare-handoff.qmd
+      - docs/tutorials/eigenmode/run-directly.qmd
+      - docs/tutorials/resonance.qmd
+      - docs/tutorials/scattering.qmd
+      - docs/tutorials/transmission-line.qmd
+  repo-branch: codex/sgb-method-performance
 format:
   askr-html:
     html-math-method: mathjax
@@ -201,3 +283,14 @@ format:
     code-copy: true
     code-overflow: scroll
     smooth-scroll: true
+lang: en
+askr:
+  languages:
+    current: en
+    items:
+    - code: en
+      label: English
+      href: /
+    - code: zh-TW
+      label: 繁體中文
+      href: /zh-TW/

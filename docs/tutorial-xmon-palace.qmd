@@ -1,5 +1,5 @@
 ---
-title: "Public Xmon: Palace PEC Shell Eigenmode"
+title: "Public Xmon: Palace Route B Eigenmode"
 description: "Add attributed films and a source-linked inductive port to Palace Eigenmode."
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"
@@ -89,8 +89,6 @@ sim.set_numerical(
     output_grid_function=False,
 )
 ```
-
-The example requests native Palace Mask/Inset margins through `inset_margins_um`; the `0.0` entry is the unmasked baseline. Use a Palace executable that supports the native Mask/Inset configuration. Omit `inset_margins_um` when only the baseline is needed. These margins do not partition SGB geometry.
 
 The MA/MS/SA records are the OrPen `LiteratureCentral` modeling presets, not
 material measurements. Replace them only with source-attributed records for

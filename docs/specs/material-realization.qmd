@@ -1,0 +1,74 @@
+---
+title: "Source material realization"
+description: "Resolved source properties, native material identity, and observed evidence."
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/specs/material-realization"
+---
+
+## Source ownership
+
+Resolved source material records own their material IDs and explicitly supplied
+physical values. Transport preserves supplied scalar or structured shape and
+property presence. A native library name is a lookup or template binding; it
+does not take precedence over supplied numeric source properties. Original
+physical material identity remains distinct from a selected PEC approximation.
+
+The current project-local AEDT realization supports the following normalized
+scalar properties. Relative permittivity, relative permeability, and dielectric
+loss tangent are dimensionless.
+
+| Source record field | Native material property | Current realization |
+|---|---|---|
+| `permittivity` | `permittivity` | Scalar relative permittivity |
+| `permeability` | `permeability` | Scalar relative permeability |
+| `loss_tangent` | `dielectric_loss_tangent` | Scalar dielectric loss tangent |
+| `conductivity` | Unavailable | Source value retained; its unit contract is not established |
+
+Source normalization retains supported source declarations, including the
+existing `relative_permittivity` to `permittivity` normalization. This does not
+introduce additional aliases or a general unit conversion contract. Requested
+conductivity currently fails explicitly at realization rather than assuming
+units. Tensors, unit expressions, nonlinear or dispersive property shapes are
+not supported by this scalar realization and fail explicitly when requested.
+Shape-preserving transport does not establish anisotropic solver support.
+
+## Project-local application
+
+Body-first HFSS uses the prepared geometry's resolved material catalog. Q3D uses
+the canonical `metadata/geometry_stack.json` attachment already bound and verified
+by its geometry-source cohort. Q3D selects only material IDs referenced by
+non-PEC bodies and the background Region. No new public material constructor or
+spec field supplies a second catalog.
+
+The runtime applies supplied properties to the owned project's material,
+including when the native name already exists. Q3D retains each existing
+`PdkMaterial.library_name` assignment. It checks the complete selected catalog
+before material writes: two source IDs bound to the same case-insensitive native
+name cannot explicitly supply different values for the same native property.
+A missing optional property is not a conflicting value. The runtime neither
+renames the material to resolve a conflict nor changes global library files.
+
+Direct Q3D inputs without `geometry_source` retain their existing identity-only
+library material behavior. Historical inputs and their recorded results acquire
+no new numeric material or readback requirement.
+
+## Evidence and limits
+
+Material evidence separates requested properties, applied properties, and
+independent native material readback. Native readback uses the material manager's
+returned definition; cached material wrapper values do not become independent
+observations. Unavailable properties and readback errors remain explicit. An
+application record does not establish numerical agreement, convergence,
+accuracy, or a material trace on a particular field side.
+
+Conductors selected as PEC follow their existing body or boundary realization;
+source conductor identity and physical thickness remain separately recorded.
+This approximation does not suppress explicit dielectric loss. Bulk material
+loss and separately authored interface or offline EPR loss assumptions retain
+their own ownership.
+
+Palace's existing scalar dielectric configuration remains a separate backend
+lowering boundary. Preserving source values does not add tensor, dispersion,
+conductivity-unit, or general material-unit support to that backend.
+

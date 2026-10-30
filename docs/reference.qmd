@@ -1,63 +1,40 @@
 ---
-title: "SCGSim reference"
-description: "Find the model, mesh, handoff, and result topic you need."
-sidebar: contract
+title: "Reference topics"
+description: "Look up the model, mesh, execution and result interfaces."
+lang: en
 scgsim-id: "docs/reference"
 scgsim-kind: "reference"
 scgsim-status: "CONVERGING"
 ---
 
-Use this topic index to move between concepts, supported behavior, and detailed
-contracts. The linked pages remain the source for their respective definitions.
+Choose the topic you need. Each reference defines the accepted inputs, returned data and failure conditions for its API.
 
-## Complete goal tutorials {#goal-tutorials}
+## Tutorials {#goal-tutorials}
 
-Choose a complete reader workflow by calculation goal:
-
-| Calculation goal | Tutorial |
-| --- | --- |
-| Terminal capacitance | [Extract a pad capacitance](tutorials/capacitance.qmd) |
-| Resonant mode | [Find a resonant mode](tutorials/resonance.qmd) |
-| Mode energy participation | [Read mode energy participation](tutorials/resonance-epr.qmd) |
-| Driven CPW scattering response | [Extract a CPW scattering response](tutorials/scattering.qmd) |
-| CPW per-unit-length RLGC | [Extract CPW transmission-line parameters](tutorials/transmission-line.qmd) |
+For a complete calculation, start with [the tutorial index](examples.qmd). The beginner tutorials cover [capacitance](tutorials/capacitance/prepare.qmd) and [resonance with EPR](tutorials/resonance-epr/prepare.qmd).
 
 ## Model and materials {#model-materials}
 
-Start with the [physical problem](concepts/problems.qmd) and
-[model assumptions](concepts/model-and-numerics.qmd#define-the-physical-model).
-The [physical representation contract](specs/physical-representation.qmd#typed-source-carrier-and-plan)
-describes how source declarations reach backend preparation.
+- [Geometry and SGB](geometry-sgb.qmd)
+- [Physical representations](specs/physical-representation.qmd)
+- [Material realization](specs/material-realization.qmd)
 
 ## Conductors and ports {#conductors-ports}
 
-Read [Entities, occurrences, and Nets](concepts/geometry.qmd#entity-occurrence-and-net)
-with the [driven-response concept](concepts/problems.qmd#driven-response-excite-a-port-at-a-frequency).
-The [model preparation tutorial](course/working-model.qmd) shows how those
-choices enter a selected case; the [CPW scattering tutorial](tutorials/scattering.qmd#configure-port-models)
-compares its Modal and Wave Terminal declarations.
+[Working with your own model](course/working-model.qmd) explains Net and port declarations. [AEDT inputs](course/aedt-inputs.qmd) covers GDS-backed models, and the [AEDT runtime reference](specs/aedt-runtime.qmd) defines the supported solver families.
 
 ## Mesh and adaptation {#mesh-adaptation}
 
-The [mesh diagnostic contract](mesh-quality.qmd#input-and-ownership) defines
-what the stored-mesh reader measures. The [prepared-backend tutorial](course/solver-observations.qmd)
-shows where to inspect the mesh and native preparation before execution.
+Use the [mesh quality reference](mesh-quality.qmd) for stored-mesh diagnostics and the [prepared-model guide](course/solver-observations.qmd) to inspect inputs before execution.
 
 ## Execution and handoff {#execution-handoff}
 
-Use the [execution profile contract](execution-profiles.qmd#handoff-lifecycle)
-for portable handoffs and caller-controlled solver runs, then follow the
-[handoff tutorial](course/execute.qmd).
+[Execution profiles](execution-profiles.qmd) define simulation packages and launch controls. [Run a prepared model](course/execute.qmd) shows the commands.
 
 ## Results and reports {#results-reports}
 
-The [report contract](report-model.qmd#common-envelope) describes result
-identity, availability, and presentation. The
-[returned-results tutorial](course/returned-results.qmd#interpret-for-scq-use)
-shows how to read a completed package for a selected use.
+The [report model](report-model.qmd) defines quantities, units and availability. [Read returned results](course/returned-results.qmd) shows how to load and interpret a result.
 
 ## Saved fields and offline loss {#saved-fields-offline-loss}
 
-Use the [saved-field tutorial](course/aedt-saved-fields.qmd#recover-the-exact-prepared-model)
-for native field evaluation and the [offline EPR tutorial](course/offline-epr.qmd#interpret-an-assumption-change)
-for assumption changes on recorded results.
+[Saved AEDT fields](course/aedt-saved-fields.qmd) let you evaluate EPR from an existing field solution. [Offline loss analysis](course/offline-epr.qmd) changes loss assumptions on recorded EPR results.

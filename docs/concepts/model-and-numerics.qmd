@@ -1,73 +1,90 @@
 ---
-title: "Boundaries, approximations and numerical results"
-description: "Separate the physical model, its geometric approximation and the numerical calculation."
+title: "Boundaries and numerics"
+description: "Separate the physical model, how metal is represented, and the numerical settings, and know which one a change affects."
 scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/concepts/model-and-numerics"
 ---
 
-Three choices shape a result: the physical model, the representation of that
-model, and the numerical calculation. Changing one is not the same as refining
-another.
+Three separate choices determine a result:
 
-## Define the physical model
+1. **The physical model:** what is grounded, the outer boundary, the size of
+   the vacuum and substrate, junction values, and material properties.
+2. **The metal representation:** how the metal is turned into geometry for the
+   solver.
+3. **The numerical settings:** mesh, element order, adaptive refinement and
+   solver tolerances.
 
-Record the conductor grounds, exterior boundary, substrate and vacuum extent,
-port or junction elements, and material assumptions. Changing a grounded
-conductor or junction inductance changes the experiment. Shared layout does
-not imply matching exterior conditions: unspecified Palace Eigenmode uses its
-natural PMC condition; the current source-first HFSS EPR model uses the recorded
-HFSS default Perfect E exterior.
+Refining the mesh improves the solution *of one model*. Changing a boundary or
+a junction value creates *a different model*. Keep the two kinds of study
+separate when you compare results.
 
-## Choose the geometric approximation
+## The physical model
 
-The solve geometry route decides how metal is represented; an approximation
-profile decides how source geometry is interpreted physically. **Thin-Film**
-(legacy code A) uses zero-thickness face-metal PEC sheets and finite bump/post
-shells. **PEC Shell** (legacy code B) keeps the outer PEC boundary of finite
-metal and excludes its interior from Palace tetrahedral solution domains. PEC
-means perfect electric conductor, an ideal boundary model rather than a
-measured conductor-loss model.
+Record, for every result: which conductors are grounded, the outer boundary
+condition, the extent of the substrate and vacuum, any ports or junctions and
+their values, and the material properties used.
 
-The `substrate_face` and `metal_gap_equivalent` profiles are physical-model
-choices within Thin-Film. They differ in how the source film maps to the
-solver geometry; changing the solve route does not automatically repair a
-difficult mesh. The advanced **Retained Solid** geometry choice (legacy code C)
-retains finite metal for polygon CAD, but is not a complete Palace Surface-EPR
-route. See the [geometry reference](../geometry-sgb.qmd) for the route contract.
+The default outer boundary differs between solvers. A Palace Eigenmode model
+with no boundary assigned uses a perfect magnetic conductor (PMC). HFSS
+Eigenmode uses a perfect electric conductor (Perfect E). The same geometry
+therefore gives different frequencies in the two solvers.
 
-## Read numerical changes beside the quantity
+## Metal representation in Palace
 
-Mesh size, geometric mesh order, finite-element order, adaptive passes, solver
-settings and search controls determine different parts of the numerical
-calculation. Palace's geometric order controls the mesh representation; FEM
-order controls the field approximation. A native stopping flag describes its
-configured criterion. It is useful alongside the actual changes in the
-capacitance, frequency or participation you intend to use.
+Palace offers two representations, called **Route A** and **Route B**:
 
-The 1.1.0 Palace mesh summary records the native mesh controls and
-topology. Its Eigenmode degree-of-freedom value is a topology-based estimate,
-not a native solver count or a convergence measure. The linear-tetrahedron
-quality report also does not evaluate curved high-order element quality.
+| Route | Metal is | Notes |
+|---|---|---|
+| A | A zero-thickness PEC sheet | Needs a thin-film profile: `substrate_face` keeps the real face position; `metal_gap_equivalent` adjusts it to match the gap |
+| B (default) | A finite-thickness solid with a PEC surface | The metal interior is not meshed |
 
-Keep the three high-order controls separate: `geometry_order` creates the mesh
-geometry, FEM order controls the field approximation, and Palace
-`HighOrderOutput` controls serialization. Palace's native import default
-`RemoveCurvature=false` preserves imported high-order geometry nodes. For Palace Surface EPR, native Mask/Inset margins are separate evaluations from SGB geometry. The selected Palace executable must support Mask/Inset; see the [Palace Electrostatic contract](../specs/palace-electrostatic-sgb.qmd#native-mask-inset). The former SGB geometry-distance-band producer is withdrawn.
+Both treat the metal as a perfect conductor; neither models conductor loss.
+Switching route changes the model; it is not a way to fix a difficult mesh.
+See the [geometry reference](../geometry-sgb.qmd) for details.
 
-An algebraic eigenpair residual and an adaptive mesh indicator describe
-different quantities. A frequency can change little while a field-sensitive
-surface contribution still changes. Inspect that contribution's available
-history rather than borrowing confidence from a different observable.
+HFSS and Q3D have a similar choice, `modeling="solid"` or `"thin_film"`; see
+[Solid and thin-film modeling](../specs/aedt-runtime.qmd#aedt-solid-thin-film).
 
-::: {.callout-note title="Keep model and numerical comparisons separate"}
-Refining a mesh investigates one model's discretization. Changing enclosure,
-material or port assumptions investigates a different model. Label those studies
-separately and retain units and mode/conductor identity when comparing results.
-:::
+## Numerical settings
 
-A source preview displays declared geometry; a mesh/native readback displays
-backend construction; a solved field supports physical postprocessing. Missing
-sidewall energy or an unknown loss tangent remains missing or unknown, even if
-other parts of the result are readable. Continue with
-[EPR interpretation](../eigenmode-epr.qmd) or [result reading](../course/returned-results.qmd).
+| Setting | Controls |
+|---|---|
+| Mesh size | Element size near and far from the metal |
+| Geometry order (`geometry_order`) | How closely elements follow curved surfaces |
+| Element order (`order`) | Accuracy of the field approximation within each element |
+| Adaptive refinement (`amr_max_passes`, `amr_tolerance`) | How many times, and until what error estimate, the mesh is refined |
+| Solver tolerance | When the linear or eigenvalue solver stops |
+
+Geometry order and element order are independent. Palace's `HighOrderOutput`
+only affects how output files are written.
+
+### Judging convergence
+
+A solver's "converged" flag means its own stopping rule was met. It does not
+mean the quantity you need is accurate. Look at the history of that quantity
+across refinement passes:
+
+- An eigenvalue residual and an adaptive-mesh error estimate measure different
+  things.
+- A frequency can settle while a surface participation is still changing.
+  Check the quantity you use, not a different one.
+
+The Palace mesh summary reports element counts and an *estimate* of the
+number of unknowns; it is not a convergence measure. The mesh-quality report
+evaluates straight-sided tetrahedra and does not assess curved elements.
+
+For surface EPR near curved edges, see the
+[curved inset reference](../specs/palace-electrostatic-sgb.qmd#curved-positive-inset-distance).
+
+## What is unknown stays unknown
+
+Some quantities are not computed: HFSS does not compute film energy on metal
+sidewalls, and a loss tangent you did not set is unknown. SCGSim reports these
+as missing or unknown rather than zero, even when the rest of the result is
+available.
+
+## Next steps
+
+- [Energy participation and loss](../eigenmode-epr.qmd).
+- [Decide whether a result is good enough](../course/returned-results.qmd#interpret-for-scq-use).

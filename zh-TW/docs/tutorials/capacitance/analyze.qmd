@@ -1,0 +1,58 @@
+---
+title: "焊墊電容 3/3：分析電容"
+description: "載入 Palace 回傳的模擬資料夾，讀取焊墊對地電容。"
+lang: zh-TW
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/capacitance/analyze"
+---
+
+本頁載入[執行模擬](run.qmd)後回傳的資料夾，並讀取焊墊對地電容。只需 SCGSim，不需要 Palace，因此可在新的 Python 工作階段操作。
+
+::: {.callout-note title="開始前"}
+- Palace 回傳的模擬資料夾 `.artifacts/SimplePad/pad-capacitance-01`。
+- 準備頁列印的 `handoff_id`。
+:::
+
+## 步驟 1：載入結果 {#step-1-load-the-result}
+
+```python
+from scgsim.palace import resolve_palace_result
+
+result = resolve_palace_result(
+    ".artifacts/SimplePad/pad-capacitance-01",
+    expected_handoff_id="<the handoff_id from Prepare>",
+)
+result.show_all_results()
+```
+
+若缺少任何輸出檔，或資料夾屬於另一場模擬，`resolve_palace_result` 會停止並回報錯誤，不會回傳不完整數值。
+
+## 步驟 2：讀取電容 {#step-2-read-the-capacitance}
+
+報告中的電容矩陣以 Ground 為參考。本模型只有一個端點，因此矩陣只有一個元素 $C_{11}$，代表焊墊對地電容。相同數值也寫在模擬資料夾的 `results/palace/terminal-C.csv`，單位為法拉。
+
+![本教學的報告輸出：焊墊電容，以及各網格細化階段的數值。](../../assets/simple-pad-capacitance.png){#fig-simple-pad-capacitance}
+
+先前的參考計算得到 $C_{11} \approx 95.4$ fF。請將你的模型、邊界與設定和該次計算對照，並檢視 $C_{11}$ 在自適應細化各階段的變化。差異較大時，可能是真空延伸範圍或 Ground Net 指派不同。
+
+::: {.callout-tip title="連同數值記錄設定"}
+電容值必須連同端點與 Ground 的選擇一起判讀。請將模擬資料夾，或至少 `config.json` 與報告，保存在電路模型所用數值旁。
+:::
+
+此電容描述的是這個幾何與邊界條件，可作為電路模型的輸入之一，不是量子位元頻譜的預測值。
+
+## 哪些因素會改變結果 {#what-changes-the-result}
+
+- **邊界選擇。** 設定 `exterior_boundary_policy="ground"` 時，真空區域外邊界也會成為 Ground，增加對遠處外殼的電容。只有在元件實際位於該距離的接地外殼中時才採用此設定。
+- **真空範圍。** 延伸不足會使電場受到外邊界影響，改變結果。增加延伸距離，直到 $C_{11}$ 在所需精度下不再變化。
+- **網格細化。** 查看報告中各階段的歷史記錄。若最後幾次的 $C_{11}$ 仍持續變化，請增加 `amr_max_passes` 或調嚴 `amr_tolerance`。
+
+每次修改都需要新的模擬資料夾；請回到[準備模擬包](prepare.qmd)。
+
+## 接下來 {#next-steps}
+
+- [共振與 EPR](../resonance-epr/prepare.qmd)：在同一焊墊模型加入接面電感。
+- [使用自己的模型](../../course/working-model.qmd)：了解如何為自己的元件指派 Net。
+- [Q3D 電容](../../course/aedt-q3d.qmd)：使用 Ansys Q3D 進行類似萃取。
+- [選擇物理問題](../../concepts/problems.qmd)：了解何時應計算電容。

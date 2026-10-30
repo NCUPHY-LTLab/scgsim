@@ -1,0 +1,112 @@
+---
+title: "SimplePad 模型"
+description: "載入方形焊墊元件、命名導體並載入表面薄膜預設值。兩個入門教學都從此頁開始。"
+lang: zh-TW
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/simplepad-model"
+---
+
+兩個入門教學共用同一模型：接地平面中的方形金屬焊墊。此頁會建立一次模型，並在 Python 工作階段留下四個名稱供後續教學使用：
+
+| 名稱 | 說明 |
+|---|---|
+| `snapshot` | 已命名焊墊與 Ground 的固定幾何快照 |
+| `surface_films` | Palace 使用的表面薄膜設定 |
+| `presets` | HFSS 使用的 PDK 表面薄膜預設值 |
+| `output_root` | 寫入模擬資料夾的根目錄 |
+
+::: {.callout-note title="開始前"}
+先設定教學環境：[安裝 SCGSim](../course/installation.qmd)的步驟 1–3。
+:::
+
+## 模型 {#the-model}
+
+模型是在單一矽晶粒接地平面中央的 200 µm 見方焊墊：
+
+| 部分 | 數值 |
+|---|---|
+| 晶粒 | 1000 µm × 1000 µm |
+| 焊墊 | 200 µm × 200 µm，置中 |
+| 焊墊與 Ground 間隙 | 四邊皆為 20 µm |
+| 金屬 | 鋁，厚 0.2 µm |
+| 基板 | 矽，厚 500 µm |
+
+![SimplePad 版圖。東側間隙上的短定位片（`x = 100…120 µm`、`y = −1…1 µm`）供共振教學連接接面；電容教學會忽略此定位片。](../assets/simple-pad-layout.png){#fig-simple-pad-layout}
+
+## 步驟 1：載入元件 {#step-1-load-the-component}
+
+建立指令稿或筆記本，從 PDK 載入焊墊與材料堆疊：
+
+```python
+from pathlib import Path
+import gdsfactory as gf
+import orpen_sc_pdk
+from orpen_sc_pdk import (
+    get_material_records, get_interface_preset_records,
+    validate_interface_preset_records,
+)
+from orpen_sc_pdk.tech import get_single_die_layer_stack
+
+orpen_sc_pdk.activate()
+component = gf.get_component(
+    "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0,
+    die_side_um=1000.0, junction_width_um=2.0,
+)
+layer_stack = get_single_die_layer_stack()
+material_records = get_material_records()
+output_root = Path(".artifacts/SimplePad")
+```
+
+幾何與材料由 PDK 提供。SCGSim 會讀取這些資料，不會重新定義。
+
+## 步驟 2：命名導體 {#step-2-name-the-conductors}
+
+SCGSim 需要知道哪些繪製形狀組成各電氣導體。元件中的具名形狀稱為 **Entity**；**Net** 是一個導體，由一個或多個電位相同的 Entity 組成。
+
+建立 `GeometryPlan` 並列出其中的 Entity：
+
+```python
+from scgsim.geometry import GeometryPlan
+
+plan = GeometryPlan(
+    component=component, root_id="chip", layer_stack=layer_stack,
+    material_records=material_records, coupon_padding_um=0.0,
+)
+print(tuple(entity.semantic_id for entity in plan.entities))
+```
+
+輸出會列出 Entity ID，包括 `chip/PAD` 與 `chip/GROUND`。請將它們指派至兩個 Net，在晶粒上方與周圍加入真空區域，再固定模型：
+
+```python
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(250.0, 250.0, 1000.0))
+snapshot = plan.prepare()
+```
+
+`padding` 的單位是微米：晶粒側邊外延伸 250 µm，上下方各延伸 1000 µm。`prepare()` 會回傳固定快照。若之後變更幾何、Net 或真空區域，請再次呼叫 `prepare()`。
+
+## 步驟 3：載入表面薄膜預設值 {#step-3-load-the-surface-film-presets}
+
+真實元件在金屬、基板與空氣交界處有薄損耗膜：金屬－空氣（MA）、金屬－基板（MS）及基板－空氣（SA）。PDK 為各介面提供預設值，包括取自文獻的厚度、介電率與損耗正切值。這些是建模假設，並非你的製程量測值。
+
+```python
+presets = validate_interface_preset_records(get_interface_preset_records())
+surface_films = {
+    kind: {
+        **{key: presets[f"LiteratureCentral_{kind}"][key]
+           for key in ("thickness", "permittivity", "loss_tangent", "source")},
+        "preset": f"LiteratureCentral_{kind}",
+    }
+    for kind in ("MA", "MS", "SA")
+}
+```
+
+Palace 直接使用 `surface_films`。HFSS 會逐一為表面指派預設值，共振教學會示範做法。
+
+## 接下來 {#next-steps}
+
+保持此工作階段開啟，接著選擇一個教學：
+
+- [焊墊電容](capacitance/prepare.qmd)
+- [共振與 EPR](resonance-epr/prepare.qmd)

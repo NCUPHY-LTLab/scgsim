@@ -1,25 +1,15 @@
 ---
-title: "Headless Geometry Preview"
+title: "Geometry preview"
 description: "Solver-metadata-bound preview APIs, artifact identity and explicit unavailable modes."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/geometry-preview"
 ---
 
-For stage-by-stage use, follow [solver observations](course/solver-observations.qmd). This page owns preview binding and availability.
-
-::: {.callout-note title="Stabilized V1 preview contract"}
-The public V1 preview runtime is part of the Human-accepted scope.
-Public Palace and AEDT 2024.2 non-graphical previews have been produced for
-Human visual review. These observations retain their original scope; acceptance
-does not independently establish numerical accuracy, completed stabilization
-or stable-release delivery.
-:::
+This page is the exact reference for the geometry preview API. For the steps,
+see [Inspect the prepared run](course/solver-observations.qmd).
 
 ## Purpose and ownership
-
-The [SGB geometry concept](concepts/geometry.qmd#construction-stage) explains
-how the source becomes the solver-bound geometry inspected here.
 
 SCGSim provides two views of the same solver-bound semantic scene. An inline
 Notebook viewer supports interactive rotation, pan, zoom, and camera reset.
@@ -31,11 +21,8 @@ Palace previews read a Palace `.msh` file through `meshio` and render with
 PyVista off-screen. Their authority is the mesh tags together with the mesh
 manifest and the config/index mapping. AEDT previews use PyAEDT 1.3.0 in
 non-graphical mode: assignments and identity come from native readback, and
-each native object is exported as OBJ before off-screen rendering. A raw `.aedt`
-source requires explicit `aedt_version` and design selection. A sealed run
-source uses the version recorded in its bound spec and accepts no version
-override. Both paths use the selected same-node AEDT compatibility context and
-the owned-Desktop cleanup lifecycle.
+each native object is exported as OBJ before off-screen rendering. Inspecting a
+raw `.aedt` project requires the caller to select the design explicitly.
 Palace previews retain high-order connectivity and curved boundary
 representation. The preview does not compute mesh quality. The separate
 [tetrahedron diagnostic](mesh-quality.qmd) computes
@@ -48,7 +35,7 @@ higher-order tetrahedra has no 3D quality metric.
 | Surface | Contract |
 |---|---|
 | `inspect_palace_geometry(run_dir)` | Bind a Palace run directory and its authoritative mesh metadata. |
-| `inspect_aedt_geometry(source, ...)` | Bind an AEDT source; raw `.aedt` requires explicit `aedt_version` and design, while a sealed run uses its bound spec version. |
+| `inspect_aedt_geometry(source, ...)` | Bind an AEDT source; a raw `.aedt` source requires an explicit design. |
 | `preview.show_materials()` | Render the available material assignments. |
 | `preview.show_boundaries()` | Render the available boundary assignments. |
 | `preview.show_surface_epr()` | Render the available Surface-EPR assignments. |
@@ -157,5 +144,4 @@ V1 does not include ParaView, Gmsh GUI sessions (including running Gmsh under
 Xvfb), background X servers, portable interactive HTML, actor filters, custom
 camera definitions, interactive clipping, or a dark rendering theme. The
 native EGL context above does not add a Gmsh GUI or background-X-server
-workflow. Portable HTML remains a separate Human decision after review of the
-inline viewer.
+workflow.

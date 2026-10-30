@@ -1,28 +1,28 @@
 ---
 title: "專案範圍與衍生來源"
-description: "了解 SCGSim 與 gsim 的關係，以及支援的研究工作流程。"
+description: "了解 SCGSim 與 gsim 的關係，以及目前支援的研究工作流程。"
 lang: zh-TW
 scgsim-kind: "project"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/goals-and-upstream"
 ---
 
-SCGSim 是從 [gsim](https://github.com/gdsfactory/gsim) 衍生出的獨立下游工具套件。目前套件維護自己的樹內語意幾何建構器、支援的求解器介接器與結果讀取器。外部 gsim 與歷史 SGB 來源屬於衍生沿革，不是執行階段後備，也不代表 API 會自動相容。
+SCGSim 是一套獨立的下游工具組，衍生自 [gsim](https://github.com/gdsfactory/gsim)。目前套件維護自己的樹內語意幾何建構器、支援的求解器轉接器與結果讀取器。外部 gsim 與歷史 SGB 來源僅用於衍生來源追溯，不作為執行階段回退，也不代表自動相容其 API。
 
-套件會將幾何與材料資料連結至明確計算，接著保留回傳量的單位、來源與模型背景。請參閱[支援的計算](backend-support.qmd)與[教學](examples.qmd)。
+SCGSim 將幾何與材料事實連結到明確計算，並保留回傳物理量的單位、來源與模型脈絡。請參閱[支援的計算](backend-support.qmd)與[教學](examples.qmd)。
 
-已接受的 1.1.0 來源模型包含明確定義的曲線邊界，以及由呼叫端選擇的 GDS 邊界重建。曲線會綁定至來源 Entity 與放置的出現位置；僅含多邊形的輸入則保留其多邊形邊界。Palace 透過 `scgsim.geometry.compiler` 使用曲線意圖；AEDT 仍不支援曲線降階。已接受的 Palace 行為也會將 Gmsh 幾何階數與有限元素階數分開，並透過脫離原物件的摘要提供網格生成記錄。[GeometryPlan 契約](geometry-sgb.qmd)規範確切的曲線記錄；[Palace 契約](specs/palace-electrostatic-sgb.qmd)規範網格控制與摘要的意義。
+Palace 支援明確繪製的曲線邊界，以及配合選定 GDS 區段擬合的曲線；AEDT 使用多邊形。詳見[幾何參考](geometry-sgb.qmd#source-curves)。
 
 ## 範圍 {#scope}
 
-Palace Electrostatic／Eigenmode、AEDT HFSS Eigenmode／Driven、Q3D 與 Q2D 均已實作。公開元件 Notebook 由 OrPen 維護。Palace Driven 與 Magnetostatic 尚未實作；Meep 不屬於本套件範圍。
+目前已實作 Palace Electrostatic／Eigenmode，以及 AEDT HFSS Eigenmode／Driven、Q3D 與 Q2D。公開元件 Notebook 由 OrPen 負責。Palace Driven 與 Magnetostatic 尚未實作；Meep 不在套件範圍內。
 
-SCGSim 不會安裝原生求解器、不會暗中提交已準備的交接工作，也不會因計算完成就將結果視為普遍準確。研究作者負責選擇物理假設並解讀物理量。
+SCGSim 不會安裝原生求解器、不會自動提交已準備的交接，也不會因計算完成就將結果視為普遍準確。研究作者負責選擇物理假設並解讀物理量。
 
-## 衍生沿革 {#starting-source-identities}
+## 衍生歷史 {#starting-source-identities}
 
-歷史起始來源的識別資訊列於[儲存庫維護者記錄](https://github.com/OrPenStrike/scgsim/blob/develop/MAINTAINING.md#implementation-and-project-references)。這些資料說明來源沿革，不代表額外支援的 API。目前來源幾何使用 `scgsim.geometry` 及其 compiler 介面，不會直接使用外部 SGB。
+歷史起始來源的識別資訊列於[儲存庫維護者紀錄](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md#implementation-and-project-references)。這些資訊說明來源，不代表另有支援的 API。目前幾何來源使用 `scgsim.geometry` 及其編譯器介面，不直接使用外部 SGB。
 
-## 貢獻者參考資料 {#v1-acceptance-and-delivery}
+## 貢獻者參考 {#v1-acceptance-and-delivery}
 
-目前的實作參考資料與文件建置程序可由該次要維護者入口取得。這些內容與目前的教學及功能參考分開維護。
+實作與文件建置參考資料列於 [MAINTAINING.md](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md)。

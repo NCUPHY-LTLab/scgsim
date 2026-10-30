@@ -33,7 +33,7 @@ CAD 建構與網格準備是兩個不同階段。CAD 記錄共形表面、體積
 
 階段資料會記錄耗時、物件數量與附屬對照檔大小。原生整數 tag 只屬於後端；來源 Entity、計畫 Surface ID 與標籤名稱才是穩定的語意身分。重新讀取 XAO 後，後端 tag 可能改變，因此來源與 tag 對照表必須和幾何一起傳遞，不能再依 tag 排序猜測來源。
 
-Gmsh Physical Group 是提供網格或求解器辨認區域的標記群組，不會把被標記的 CAD 實體合併。符合模型條件時，一個群組可以標記多個幾何上不相連的導體分量；每個規劃表面仍保留自己的分量與來源對應。精確群組語意見[幾何契約](../../geometry-sgb.qmd#explicit-rectangular-junctions)。
+Gmsh Physical Group 是提供網格或求解器辨認區域的標記群組，不會把被標記的 CAD 實體合併。符合模型條件時，一個群組可以標記多個幾何上不相連的導體分量；每個規劃表面仍保留自己的分量與來源對應。精確群組語意見[幾何契約](../../geometry-sgb.qmd#component-to-backend-geometry-contract)。
 
 CAD 建構工作量隨規劃點、曲線、表面、殼關係及原生面重新對應來源的比對增加；網格工作量則受求解體積、局部元素尺寸和共形條件影響。分開報告兩階段，才能避免把網格成本誤當成重複 CAD 成本。
 
@@ -59,4 +59,4 @@ CAD 建構工作量隨規劃點、曲線、表面、殼關係及原生面重新�
 
 成功的 CAD 交接包含 XAO、實體群組對應、來源 tag 對照表與通過的幾何關卡。成功的網格階段還會附上網格與求解器共形證據。若 CAD 建構失敗，先檢查最後完成的規劃或原生建構階段；調整網格尺寸無法修正更早發生的來源歸屬或拓樸錯誤。
 
-初始網格政策與執行檔輸入請見[Palace 準備契約](../../specs/palace-electrostatic-sgb.qmd#palace-mesh-size-policy)。
+初始網格政策與執行檔輸入請見[Palace 準備契約](../../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls-110-candidate)。

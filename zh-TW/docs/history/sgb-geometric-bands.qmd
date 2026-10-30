@@ -9,7 +9,7 @@ scgsim-status: "HISTORICAL"
 scgsim-id: "docs/history/sgb-geometric-bands"
 ---
 
-本頁保留先前 SGB 幾何表面距離帶設計，供查閱舊文件與結果。距離帶產生器及其 API 已從目前 SCGSim 撤回；現行來源至 CAD 流程請讀[目前的 SGB 概念頁](../concepts/geometry.qmd)。Palace 原生 Mask／Inset 是不同的求解器設定，界線見[Palace 契約](../specs/palace-electrostatic-sgb.qmd#native-mask-inset)。
+本頁保留先前 SGB 幾何表面距離帶設計，供查閱舊文件與結果。距離帶產生器及其 API 已從目前 SCGSim 撤回；現行來源至 CAD 流程請讀[目前的 SGB 概念頁](../concepts/geometry.qmd)。Palace 原生 Mask／Inset 是不同的求解器設定，界線見[Palace 契約](../specs/palace-electrostatic-sgb.qmd#native-multi-margin-surface-epr)。
 
 ::: {.callout-warning title="歷史設計，不是目前的使用步驟"}
 以下圖例與觀察描述較早期實作，不代表目前套件可以產生這些幾何距離帶，也不代表任一 Palace 執行檔都接受原生 Mask／Inset 設定。準備新模型時，請依目前來源契約與實際使用的 Palace 執行檔確認能力。

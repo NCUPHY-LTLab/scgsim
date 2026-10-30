@@ -95,7 +95,7 @@ An **Entity** is a named source object that carries role, material association a
 
 An **occurrence** is one placement of a component in the assembly. If a reusable cell is placed twice, both copies can retain the same local component names, but occurrence-qualified paths distinguish their positions, transforms and selectors. This lets a port or junction request refer to the intended placed object.
 
-The component declares local shapes and selectors; it does not declare a public `Group` of Nets. The assembly assigns final Net membership after each Entity has an occurrence-qualified identity. A conductor component ID identifies a geometrically connected piece of conductor; it is distinct from a GDSFactory Component, a source Entity or a Gmsh Physical Group. A Physical Group is a label for meshing or solver input, not a geometry operation. Several disconnected components may share a mesh label without becoming one connected conductor. The [geometry contract](../../geometry-sgb.qmd#explicit-rectangular-junctions) defines which components may share that label and how the source mapping is retained.
+The component declares local shapes and selectors; it does not declare a public `Group` of Nets. The assembly assigns final Net membership after each Entity has an occurrence-qualified identity. A conductor component ID identifies a geometrically connected piece of conductor; it is distinct from a GDSFactory Component, a source Entity or a Gmsh Physical Group. A Physical Group is a label for meshing or solver input, not a geometry operation. Several disconnected components may share a mesh label without becoming one connected conductor. The [geometry contract](../../geometry-sgb.qmd#component-to-backend-geometry-contract) defines which components may share that label and how the source mapping is retained.
 
 ## Snapshot and grid
 
@@ -125,4 +125,4 @@ The cost is mainly hierarchy expansion, validation and coordinate normalization.
 
 ### Existing source-stage links
 
-The overview keeps the former [source-stage](../geometry.qmd#source-stage) and [Entity/occurrence/Net](../geometry.qmd#entity-occurrence-and-net) anchors; this chapter contains their full explanation.
+The [geometry concept](../geometry.qmd#entities-placements-and-nets) introduces Entities, placements and Nets; this chapter explains how source facts become construction inputs.

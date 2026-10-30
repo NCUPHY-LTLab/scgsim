@@ -13,7 +13,7 @@ execute:
   enabled: false
 ---
 
-For the current HFSS workflow, see the [current tutorial](../tutorials/resonance-epr.qmd). This page preserves the historical recipe and observations with 200 nm source metal.
+For the current HFSS workflow, see the [current tutorial](../tutorials/resonance-epr/prepare.qmd). This page preserves the historical recipe and observations with 200 nm source metal.
 
 ## 1. What you will get
 
@@ -500,7 +500,7 @@ The original mode returns used SCGSim 1.0.1; the HFSS EPR table was separately d
 
 Change the source dimensions, branch inductance, selected film records and run controls in the central settings cell. Rebuild the source and regenerate the handoff whenever the geometry or material stack changes. Keep the exact interface side, owner, mode and native pass when interpreting contributions.
 
-A zero-loss assumption is not a measured material value, and a participation by itself is not device Q or $T_1$. For the mode-frequency workflow without EPR, use the standalone [resonance notebook](../tutorials/resonance.qmd); for capacitance matrices, use [pad capacitance](../tutorials/capacitance.qmd). The [EPR concepts](../eigenmode-epr.qmd), [Palace Eigenmode reference](../course/palace-eigenmode.qmd) and [AEDT EPR guide](../course/offline-epr.qmd) explain result definitions and additional analysis paths. For later analysis of saved fields or an assumption-only update, see [saved fields and offline loss](../reference.qmd#saved-fields-offline-loss).
+A zero-loss assumption is not a measured material value, and a participation by itself is not device Q or $T_1$. For the mode-frequency workflow without EPR, use the standalone [resonance notebook](../tutorials/resonance.qmd); for capacitance matrices, use [pad capacitance](../tutorials/capacitance/prepare.qmd). The [EPR concepts](../eigenmode-epr.qmd), [Palace Eigenmode reference](../course/palace-eigenmode.qmd) and [AEDT EPR guide](../course/offline-epr.qmd) explain result definitions and additional analysis paths. For later analysis of saved fields or an assumption-only update, see [saved fields and offline loss](../reference.qmd#saved-fields-offline-loss).
 
 Public SimplePad sources at the same PDK revision: [Palace Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/palace_eigenmode.qmd) and [AEDT HFSS Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd); the [public evidence index](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/README.md) records the original HFSS EPR result as partial and the separate existing-solution observation.
 

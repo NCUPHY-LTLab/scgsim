@@ -24,13 +24,7 @@ lang: zh-TW
 | 輸出選取 | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |
 | 準備 | `mesh()`、`write_config()`，接著 `prepare_handoff(*, profile, executable, resources=None, setup_commands=(), petsc_options=())` |
 
-SCGSim 1.1.0 在 `set_mesh(...)` 加入 Gmsh 演算法、執行緒、表面執行緒、幾何階數及高階最佳化控制。幾何階數與透過 `set_numerical(...)` 設定的 FEM 階數不同；求解器設定會保留目前的網格控制。共用的 [Palace 網格控制](palace-electrostatic-sgb.qmd#palace-mesh-controls-110-candidate) 與[網格尺寸策略](palace-electrostatic-sgb.qmd#palace-mesh-size-policy) 定義預設值、失效處理、原生產生方式及清單行為。
-
-## 本徵模態網格與 AMR 預設值（CONVERGING） {#eigenmode-mesh-and-amr-defaults-converging}
-
-新的 `EigenmodeSim` 選用 `gmsh_default` 尺寸策略，並寫入 `Model.Refinement.Nonconformal=true`。在 `write_config()` 之前，透過 `set_numerical(...)` 提供 `amr_max_passes`。若迭代上限為正值，也必須提供 `amr_tolerance` 與 `amr_update_fraction`；設定 `amr_max_passes=0` 會停用自適應細化，並允許另外兩值維持未設定。之後的 `set_numerical(...)` 呼叫若省略某值，就保留目前設定。這些是輸入控制，不是充分性建議。Electrostatic 保留共用契約中既有的 AMR 預設值。
-
-`mesh_summary()` 回報紀錄的網格控制、原生元素與區域數量及網格身分。其 Nédélec 自由度值是根據主角點四面體及設定的 FEM 階數所做的拓撲估計，不是求解器回報的 DOF 數量。變更 FEM 階數會更新此估計，不重新產生網格。這些網格功能已為 ACCEPTED，但不確立數值充分性。
+SCGSim 1.1.0 在 `set_mesh(...)` 加入 Gmsh 演算法、執行緒、表面執行緒、幾何階數及高階最佳化控制。幾何階數與透過 `set_numerical(...)` 設定的 FEM 階數不同；求解器設定會保留目前的網格控制。共用的 [Palace 網格控制](palace-electrostatic-sgb.qmd#palace-mesh-controls-110-candidate) 與[網格摘要](palace-electrostatic-sgb.qmd#mesh-manifest-and-detached-summary-110-candidate) 定義預設值、失效處理、原生產生方式及清單行為。
 
 目標頻率單位為赫茲，網格長度為微米，電感為亨利。一般本徵模態分析不要求表面規格、埠或 EPR 要求。綁定的計畫攜帶共用包絡，不能用獨立幾何／堆疊或互相衝突的包絡設定器局部取代。[GeometryPlan 契約](../geometry-sgb.qmd) 負責來源身分及路徑準備。[Electrostatic／共用 Palace 契約](palace-electrostatic-sgb.qmd) 負責原生多邊距轉換與共用設定控制。
 
@@ -38,15 +32,9 @@ SCGSim 1.1.0 在 `set_mesh(...)` 加入 Gmsh 演算法、執行緒、表面執�
 
 表面選取器為 `MA`、`MS`、`SA`。體積選取器為 `Domains.Postprocessing.Energy` 中的 SGB 求解體積 `entry_name` 值。埠選取器為設定的 `LayoutPortBinding.name` 值。`None` 選取所有已設定項目，`()` 不選取任何項目，子集則必須在確切寫出的索引中解析成功。未知選取會在寫入設定或擷取結果時失敗。篩選輸出不會刪除物理域／埠，也不改變正規化。
 
-### 表面薄膜輸入與原生材料側 {#surface-film-inputs-and-native-material-side}
-
 表面薄膜輸入將確切的來源表面及物理屬性綁定至 Palace `MA`、`MS` 或 `SA` 類型及其薄膜假設。`thickness`（原生模型單位）與 `film_thickness_m`（透過 `Model.L0` 轉換）必須恰好提供一項；數值 `permittivity` 與能解析至明確介電材料的 `material_id` 也必須恰好提供一項。`loss_tangent` 可直接提供，或從該材料讀取；未知值在 SCGSim 索引中仍可辨別。目前的 `surface-film.v2` 產生器會拒絕缺少或重複的表面及物理屬性身分，不將它們丟棄或去重。薄膜厚度設定表面模型。若要求橫向排除，則使用原生 Mask／Inset 邊距；指定的 Palace 可執行檔必須支援此設定。下述 SGB 幾何距離帶產生器已撤回。
 
 Palace 0.18.1 根據設定類型及相鄰求解元素建立原生表面被積函數：`MA` 與 `SA` 使用真空側的場跡，`MS` 使用基板側的場跡。`MA` 使用法向電場；`MS` 使用基板介電率加權的法向場；`SA` 則依薄膜介電率結合切向與法向項。原生映射請見 Palace 0.18.1 的[設定](https://github.com/awslabs/palace/blob/0dc74cdf8c36c58b69b21c4a06e816048ec0b83f/palace/utils/configfile.cpp#L624)及[鄰接材料規則](https://github.com/awslabs/palace/blob/0dc74cdf8c36c58b69b21c4a06e816048ec0b83f/palace/fem/coefficient.hpp#L331)。請選擇符合預定原生介面模型的 `MA`、`MS` 或 `SA`。
-
-### 歷史 SGB 幾何距離帶（已撤回） {#surface-distance-bands-converging}
-
-先前的 SGB 幾何距離帶產生器及其 Palace 結果彙總已從目前 SCGSim 介面撤回。[GeometryPlan 區段](../geometry-sgb.qmd#surface-distance-bands)保留這項歷史設計。現行原生 Mask／Inset 邊距仍是不同的 Surface EPR 選項；指定的 Palace 可執行檔必須支援 Mask／Inset。請見 [Palace Electrostatic 契約](palace-electrostatic-sgb.qmd#native-mask-inset)。舊版 `SurfaceBandSelection.field_side` 用來指定結果選取，不會覆寫 Palace 原生鄰接規則；它不是現行 API。
 
 ## 結果與離線分析 {#results-and-offline-analysis}
 

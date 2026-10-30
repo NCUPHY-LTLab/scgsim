@@ -1,70 +1,70 @@
 ---
-title: "解讀本徵模 EPR"
-description: "能量正規化、物理分區、遮罩與歸因損耗假設。"
+title: "能量參與率與損耗"
+description: "說明能量參與率的意義、正規化方式，以及它與損耗的關係。"
 lang: zh-TW
 scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/eigenmode-epr"
 ---
 
-共振模態會將能量儲存在場與電路元件中。能量參與率描述能量集中在哪些位置，並將模態場分布連結至特定介電質、介面與接面，協助判斷哪些模型通道可能造成損耗。
+共振模態的能量分布在電磁場與接面等電路元件中。模型某部分的**能量參與率**（EPR）是該模態能量儲存在該處的比例。將此比例與該處的損耗正切值合併，可估算它對模態損耗的貢獻。
 
-[Minev 等人的能量參與方法](https://arxiv.org/abs/2010.00620)使用線性化 Josephson 電路的模態作為量子化輸入。SCGSim 提供支援的電磁參與率與損耗物理量；單靠參與率圖不會產生非線性 Hamiltonian、Kerr 係數或量子位元壽命。
+[Minev 等人的能量參與方法](https://arxiv.org/abs/2010.00620)以線性化 Josephson 電路的模態作為量子化輸入。SCGSim 會計算參與率及其推得的損耗，不會據此建立非線性 Hamiltonian、Kerr 係數或量子位元壽命。
 
 ```{mermaid}
 flowchart TB
-  F["模態場"] --> P["能量分區"]
-  P --> V["體積／表面／接面"]
-  V --> L["已知損耗貢獻"]
-  A["材料損耗假設"] --> L
+  F["Mode fields"] --> P["Energy partitions"]
+  P --> V["Bulk / surface / junction"]
+  V --> L["Known-loss contributions"]
+  A["Material loss assumptions"] --> L
 ```
 
-## 模態的三種檢視方式 {#workflow-and-state-contract}
+## 模態的三種觀察方式 {#workflow-and-state-contract}
 
-| 檢視方式 | 能量歸屬對象 | 物理問題 |
+| 類別 | 能量歸屬 | 要回答的物理問題 |
 |---|---|---|
 | 體積 | 模型中的介電質體積 | 此材料中有多少電能？ |
-| 表面 | 薄膜介面的估算值 | 場與此介面的作用有多強？ |
+| 表面 | 薄膜介面的估算值 | 場與此介面的耦合程度為何？ |
 | 接面／端口 | 宣告的線性化電路元件 | 此元件如何參與模態？ |
 
-表面估算會使用介面處的場，估計指定厚度與介電率薄膜中的能量。金屬－空氣、金屬－基板與基板－空氣代表不同介面及場分量。體積與表面檢視不會自動構成完整能量預算中互不重疊的部分。接面模型提供其電感及任何已宣告的電容；它代表電磁計算中使用的線性化元件。
+表面估算會使用介面處的場，推估特定厚度與介電率薄膜中的能量。金屬－空氣（MA）、金屬－基板（MS）及基板－空氣（SA）是不同介面。體積值與表面值會重疊，不能視為同一能量總帳中互不重疊的部分。接面則是你宣告的線性化元件，具有指定的電感與可選電容。
 
 ## 物理量與正規化 {#quantities-and-normalization}
 
-對能量分子 $U_i$，參與率為無因次量：
+若能量分子為 $U_i$，參與率為無因次量：
 
 $$
 p_i = \frac{U_i}{U_{\mathrm{norm}}}.
 $$
 
-請一併檢視分子與分母。AEDT 使用唯一物理區域的電能，加上已宣告的接面電容能量。Palace 使用其最終原生電能區域與電容能量表。薄膜能量估算是分子，不會加回上述分母。[表面與接面公式](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization)定義場慣例與各項支援物理量。
+不同求解器使用不同分母。AEDT 使用所有物理區域的電能加上接面電容能量；Palace 使用其電介質區域與電容能量表。薄膜能量只作為分子，不會加進分母。[表面與接面公式](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization)定義場的慣例及各項支援物理量。
 
-各後端的物理意義也不同。Palace 回報帶正負號的原生端口參與率，數值取決於模態的相位慣例。AEDT 的電感 $p_L$ 與電容 $p_C$ 是非負能量比。這些量必須分別解讀，不應直接當作可互換的接面數值比較。
+接面參與率的定義也不同。Palace 回報帶正負號的端口參與率，其正負取決於模態相位慣例；AEDT 回報非負的電感（$p_L$）與電容（$p_C$）能量比例。兩者不能當成相同數值比較。
 
-請一併記錄外部邊界與真空區域尺寸。Palace 未指定的本徵模外部邊界使用自然 PMC。文件所述 AEDT EPR 政策，則將 HFSS 預設 Perfect E 套用在原生 Region 中暴露於背景的表面。個別研究的實際邊界由已準備的原生模型決定；版圖預覽本身無法確認邊界。共用版圖也不會讓這些場模型變得相同。
+外部邊界也會影響結果。Palace Eigenmode 未指定邊界時使用 PMC；HFSS 則在其區域外表面使用 Perfect E（[HFSS 2024 R2 指南](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/PDFs/An%20Introduction%20to%20HFSS.pdf)）。每筆結果都應記錄邊界與真空尺寸。
 
 ## 介面與損耗假設 {#surface-identity-masks-and-loss-assumptions}
 
-對損耗正切值已知的介電通道，其模型貢獻為
+已知損耗正切值的介電通道，其模型損耗貢獻為：
 
 $$
 Q_i^{-1} = p_i\tan\delta_i.
 $$
 
-兩個因子都很重要：場作用很強的低損耗材料，與場作用很弱的高損耗薄膜，可能造成不同影響。薄膜厚度、介電率與損耗正切值都是模型假設，不能由版圖推得。已知損耗總和只涵蓋已評估且損耗已指定的通道，不代表元件總 $Q$ 或 $T_1$，也未涵蓋省略的機制。
+兩個因子都很重要：即使場很少接觸某材料，只要其損耗正切值夠大，仍可能主導總和。薄膜厚度、介電率與損耗正切值都是模型假設，無法從版圖推得。對已計算通道加總，只代表這些通道的損耗，不是元件總 $Q$ 或 $T_1$。
 
-明確指定為零的損耗正切值，代表已知的零貢獻。未指定的損耗正切值則屬未知；即使已知參與率，也無法取得其逆 Q 貢獻。同理，未計算的能量不等於零能量。
+損耗正切值設為零代表無損；未設定的值則未知，其貢獻不會納入總和。同樣地，未計算的能量不等於零。
 
 ::: {.callout-note title="判讀較舊的 Palace 結果" collapse="true"}
-對 v2 之前的 Palace 表面薄膜記錄，所記錄的零損耗正切值來源不明。讀取器會保留原始值，但將有效損耗視為未知，因此無法取得逆 Q 貢獻。
+Palace v2 之前的表面薄膜紀錄若損耗正切值為零，其來源可能有不同解讀。讀取器會保留原始值，但將有效損耗視為未知，因此無法提供反 $Q$ 貢獻。
 :::
 
-## 歷史 SGB 幾何距離帶 {#surface-distance-band-correction}
+**遮罩邊界距離**會由 SCGSim 以 `Mask: {Type: Inset, Margin: ...}` 傳給 Palace 原生 Inset 評估。請使用支援此評估的 Palace 版本。這些結果與已撤回的 SGB 幾何距離帶不同。請分別閱讀未遮罩基準值與各回傳邊界距離，不要彼此相加。AEDT 只評估水平（頂部與底部）介面，不計算側壁薄膜能量；Palace 只在選取側壁時才計算。你可以在儲存結果上變更損耗正切值，無須重新求解，請參閱[離線變更損耗假設](course/offline-epr.qmd)。
 
-SGB 幾何距離帶曾是幾何分區與 Palace 彙總流程，現已撤回，不屬於目前的產生器。Palace 原生 Mask／Inset 邊距仍是不同的 Surface EPR 選項，可透過 `inset_margins_um` 要求；指定的 Palace 可執行檔必須支援此原生設定。省略邊距欄位可要求未遮罩基準列。原生邊距是替代評估值，不是互斥幾何區域，因此不可當作距離帶相加。
+求解器自己的 $Q$ 與 $p\tan\delta$ 總和代表不同物理量。求解器 $Q$ 只涵蓋求解器模型中的損耗，例如有損材料或端口。模型無損時 Palace 會回報 $Q=+\infty$，但這不表示元件實際無損。請參閱[原生 Q 參考](specs/palace-eigenmode.qmd#native-eigenmode-q)。
 
 ## 探索結果 {#explore-a-result}
 
-請先閱讀[共振／EPR 教學](tutorials/resonance-epr.qmd)，再使用[離線 EPR](course/offline-epr.qmd)檢視已記錄模態並修訂損耗假設。[範例](examples.qmd)會將物理模型與後端流程連結起來。
+先完成[共振教學](tutorials/resonance-epr/prepare.qmd)，再使用[離線變更損耗假設](course/offline-epr.qmd)嘗試其他損耗值。
 
-綁定方式與 API 細節請參閱 [AEDT EPR 參考](specs/aedt-runtime.qmd#public-epr-candidate-surface)與 [Palace Eigenmode 參考](specs/palace-eigenmode.qmd)。[報告參考](report-model.qmd#eigenmode-epr-presentation)說明選取方式、排序，以及基準值、遮罩邊距與不可取得物理量之間的區別。
+繫結與 API 細節請見 [AEDT EPR 參考](specs/aedt-runtime.qmd#public-epr-candidate-surface)及 [Palace Eigenmode 參考](specs/palace-eigenmode.qmd)；[報告參考](report-model.qmd#eigenmode-epr-presentation)說明選取方式、排序，以及基準值、邊界距離與不可用物理量的區分。

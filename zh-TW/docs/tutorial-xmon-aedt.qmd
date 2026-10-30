@@ -1,5 +1,5 @@
 ---
-title: "公開 Xmon：以 PEC Shell 來源準備 AEDT 本徵模"
+title: "公開 Xmon：AEDT Route B 本徵模"
 description: "綁定接面感知的目錄來源，並準備共用來源的 AEDT EPR 請求。"
 lang: zh-TW
 scgsim-kind: "course"
@@ -9,7 +9,7 @@ execute:
   enabled: false
 ---
 
-請先在同一個 Python 工作階段執行[共用 Xmon 輸入教學](tutorial-xmon-input.qmd)。本頁使用其中不可變的 `snapshot`、`port_name` 與 `coupon`，準備可攜式 HFSS 本徵模交接套件，輸出表面、體積與接面 EPR。Python 輸入準備環境需要 SCGSim `aedt-epr` extra 與相符的公開 OrPen 輸入。此 extra 提供版圖幾何與 PyAEDT 的 Python 相依項目；不會安裝 AEDT 或提供授權。本範例明確選擇 AEDT 2024.2。目標執行主機需要該 AEDT 版本、PyAEDT 1.3.0 與適當授權。請使用[範例](examples.qmd)列出的相符 SCGSim 來源修訂版本。Quarto 不會開啟 AEDT、建立原生幾何或求解此模型。snapshot 保留其來源物理堆疊；本頁為 AEDT 選擇 `modeling="solid"`。Thin-Film／PEC Shell 描述上游幾何建構方式，不是 AEDT 準備參數。
+請先在同一個 Python 工作階段執行[共用 Xmon 輸入教學](tutorial-xmon-input.qmd)。本頁使用其中不可變的 `snapshot`、`port_name` 與 `coupon`，準備可攜式 HFSS 本徵模模擬包，輸出表面、體積與接面的能量參與率（EPR）。Python 輸入準備環境需要 SCGSim `aedt-epr` extra 與相符的公開 OrPen 輸入。此 extra 提供版圖幾何與 PyAEDT 的 Python 相依項目；不會安裝 AEDT 或提供授權。本範例明確選擇 AEDT 2024.2。目標執行主機需要該 AEDT 版本、PyAEDT 1.3.0 與適當授權。請使用[範例](examples.qmd)列出的相符 SCGSim 來源修訂版本。Quarto 不會開啟 AEDT、建立原生幾何或求解此模型。snapshot 保留其來源物理堆疊；本頁為 AEDT 選擇 `modeling="solid"`。Route A／Route B 描述上游幾何建構方式，不是 AEDT 準備參數。
 
 ## 設定表面與接面 EPR {#configure-surface-and-junction-epr}
 
@@ -17,7 +17,7 @@ execute:
 
 ### 建立目錄前先綁定接面 {#bind-the-junction-before-building-the-catalogue}
 
-元件註記會識別已定義端口薄片及其主幾何；Notebook 的 `GeometryPlan` 提供最終端點 Nets。請先將該正規化薄片綁定至明確 Nets 與電路值，再建立表面目錄。以下目錄幾何會使用相同的 `junction`；最後準備交接套件前，也會將它加入 `EigenmodeSim`，因此兩次準備採用相同的分區請求。Closed-XY binder 接觸會找出可能的擁有者；準備階段仍會依共用輸出幾何，檢查完整的指定端邊。其共用座標建構、讀回解析、拓撲與搜尋假設，請參閱[分區契約](specs/aedt-runtime.qmd#aedt-automatic-junction-partition)。
+元件註記會識別已定義端口薄片及其主幾何；Notebook 的 `GeometryPlan` 提供最終端點電氣網路。請先將該正規化薄片綁定至明確電氣網路 與電路值，再建立表面目錄。以下目錄幾何會使用相同的 `junction`；最後準備模擬包前，也會將它加入 `EigenmodeSim`，因此兩次準備採用相同的分區請求。Closed-XY binder 接觸會找出可能的擁有者；準備階段仍會依共用輸出幾何，檢查完整的指定端邊。其共用座標建構、讀回解析、拓撲與搜尋假設，請參閱[分區契約](specs/aedt-runtime.qmd#aedt-automatic-junction-partition)。
 
 公開 Palace 範例以電感 $L=11.78\,\mathrm{nH}$ 模型化端口。此 AEDT 範例將 $C=0$ 設為僅含電感的明確電路模型假設；這不代表實體元件電容為零，也不表示曾量得電容。
 
@@ -82,11 +82,11 @@ print([(row["interface_kind"], row["field_side"], row["source_polygon_ids"])
        for row in catalogue])
 ```
 
-## 選取回報資料列並準備交接 {#select-reported-rows-and-prepare-a-handoff}
+## 選取回報資料列並準備模擬包 {#select-reported-rows-and-prepare-a-handoff}
 
 以下選擇會要求模態 1、目錄衍生的所有表面貢獻、已宣告接面，以及已設定的體積區域。可用的體積 ID 來自已準備的解算記錄，並會以單一原生 `Region` 選擇器取代邏輯上的外部真空片段。此固定 Xmon 保留 `D0_SUBSTRATE`、`D0_TO_D1_GAP`、`D1_SUBSTRATE` 與 `Region`；取代外部區域不會刪除已定義的晶粒間隙。對 AEDT 請求而言，`None` 會選取所有已設定項目，`()` 不選取任何項目，而明確 tuple 會選取指定 ID。這些選擇只篩選回報資料列，不會移除物理區域、接面或表面模型，也不會改變正規化。請參閱 [EPR 物理量與選擇契約](eigenmode-epr.qmd#workflow-and-state-contract)。
 
-請提供目標 AEDT 主機或工作配置允許的資源。以下環境變數名稱由呼叫端管理，不是 SCGSim 預設值；`AedtResources` 會將選定的核心數與 RAM 限制百分比記錄在交接套件中。
+請提供目標 AEDT 主機或工作配置允許的資源。以下環境變數名稱由呼叫端管理，不是 SCGSim 預設值；`AedtResources` 會將選定的核心數與 RAM 限制百分比記錄在模擬包中。
 
 ```python
 import os
@@ -112,8 +112,7 @@ if native_region is not None:
 bulk_domain_ids = tuple(sorted(bulk_ids))
 print(bulk_domain_ids)
 
-AEDT_VERSION = "2024.2"  # This example explicitly selects AEDT 2024.2.
-sim = EigenmodeSim(modeling="solid", aedt_version=AEDT_VERSION)
+sim = EigenmodeSim(modeling="solid")
 sim.set_plan(snapshot)
 sim.set_output_dir(aedt_run_dir)
 sim.set_eigenmode(
@@ -144,7 +143,7 @@ sim.set_epr_request(
 )
 ```
 
-建立網格或交接套件前，先檢查正規化來源與已設定的 AEDT 選項：
+建立有限元素網格或模擬包前，先檢查正規化來源與已設定的 AEDT 選項：
 
 ```python
 from IPython.display import display
@@ -159,10 +158,10 @@ handoff = sim.prepare_handoff()
 print(handoff.run_dir, handoff.script_path, handoff.archive_path)
 ```
 
-執行控制設定的是呼叫端要求的原生搜尋與停止條件。求解前無法據此確認研究是否充分。請在 Notebook 中，將實際準則及其變更與回傳的原生狀態及物理量歷程並列保留，再依[研究判讀流程](course/returned-results.qmd#interpret-for-scq-use)說明這些證據是否回答預定的 SCQ 問題。每次準備都使用新的輸出目錄；若路徑已存在，SCGSim 會拒絕。`prepare_handoff()` 會寫出可攜式套件，但不會開啟 AEDT、建立原生幾何或執行求解器。
+執行控制設定的是呼叫端要求的原生搜尋與停止條件。求解前無法據此確認研究是否充分。請在 Notebook 中，將實際準則及其變更與回傳的原生狀態及物理量歷程並列保留，再依[研究判讀流程](course/returned-results.qmd#interpret-for-scq-use)說明這些證據是否回答預定的 SCQ 問題。每次準備都使用新的輸出目錄；若路徑已存在，SCGSim 會拒絕。`prepare_handoff()` 會寫出模擬包，但不會開啟 AEDT、建立原生幾何或執行求解器。
 
 ## 執行、解析並繼續分析 {#execute-resolve-and-continue-the-analysis}
 
-請在 AEDT 主機明確[執行完整套件](course/execute.qmd)，接著[重新啟動並解析回傳資料](course/returned-results.qmd)。報告會先讀取封存的識別資訊、數值／歷程與基準證據，再呈現物理結果。對本研究選取的模態與表面貢獻，除頻率外也請檢視參與率及其變化；只依頻率停止，不能說明另一項 EPR 物理量是否足夠。請將記錄的準則與原生狀態做為證據，不要將其轉化為通用驗收規則。此處的準備只會建立 Python 來源／目錄／請求記錄，不會建立原生 CAD，也不會確認計算器的場側準確度。
+請在 AEDT 主機明確[執行完整模擬包](course/execute.qmd)，接著[重新啟動並解析回傳資料](course/returned-results.qmd)。報告會先讀取封存的識別資訊、數值／歷程與基準證據，再呈現物理結果。對本研究選取的模態與表面貢獻，除頻率外也請檢視參與率及其變化；只依頻率停止，不能說明另一項 EPR 物理量是否足夠。請將記錄的準則與原生狀態做為證據，不要將其轉化為通用驗收規則。此處的準備只會建立 Python 來源／目錄／請求記錄，不會建立原生 CAD，也不會確認計算器的場側準確度。
 
-自適應歷程與最終儲存場評估分開。使用[儲存場分析課程](course/aedt-saved-fields.qmd)，驗證已釋出的 cohort，並在原生工作複本中以相符的幾何／請求評估場，無須再次求解。完成後，才將最終的 `epr-result.json` 用於[離線 EPR](course/offline-epr.qmd)。新評估的遮罩／內縮邊距不會插入舊的自適應曲線。確切原生綁定、內縮建構與歷史收據規則，請參閱 [AEDT 契約](specs/aedt-runtime.qmd)。
+自適應歷程與最終儲存場評估分開。使用[儲存場分析課程](course/aedt-saved-fields.qmd)，驗證已釋出的結果資料，並在原生工作複本中以相符的幾何／請求評估場，無須再次求解。完成後，才將最終的 `epr-result.json` 用於[離線 EPR](course/offline-epr.qmd)。新評估的遮罩／內縮邊距不會插入舊的自適應曲線。確切原生綁定、內縮建構與歷史收據規則，請參閱 [AEDT 契約](specs/aedt-runtime.qmd)。

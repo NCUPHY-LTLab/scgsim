@@ -1,22 +1,20 @@
 ---
-title: "Palace: terminal capacitance"
-description: "Bind exact Nets as terminals and physical grounds, then prepare an Electrostatic mesh and config."
+title: "Palace Electrostatic: capacitance matrix"
+description: "Choose terminals and Ground, set the boundary and mesh, and prepare a Palace Electrostatic run."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/palace-electrostatic"
 ---
 
-For a complete extraction workflow, start with [pad capacitance](../tutorials/capacitance.qmd).
-This backend reference uses the `snapshot` from [source observations](source-observations.qmd).
-The branch asks for Electrostatic terminal response rather than resonant modes.
-The public OrPen [Xmon notebook group](../examples.qmd#public-inputs) owns the
-component example; this lesson explains the reusable SCGSim stages.
+This guide sets up a capacitance calculation for your own model. You need a
+`snapshot` with Nets assigned; see [Work with your own model](working-model.qmd).
+The [capacitance tutorial](../tutorials/capacitance/prepare.qmd) walks through the
+same steps for a single pad.
 
-A Terminal identifies a conductor Net whose excitation enters the native
-matrix. Physical Ground identifies other conductor Nets. Grounding the outer
-solution boundary is a separate physical choice, not another spelling of a
-conductor ground. Here the Xmon pad is the terminal and its already assigned
-`Ground` Net is the physical ground:
+The example uses an Xmon qubit pad named `xmon_pad` and a ground Net named
+`Ground`.
+
+## Choose terminals and Ground
 
 ```python
 from pathlib import Path
@@ -24,72 +22,77 @@ from scgsim.palace import ElectrostaticSim
 
 sim = ElectrostaticSim()
 sim.set_plan(snapshot)
-sim.set_output_dir(Path(".artifacts/public-xmon-electrostatic"))
+sim.set_output_dir(Path(".artifacts/xmon-electrostatic"))
+
 sim.add_terminal("xmon", net_id="xmon_pad")
 sim.add_ground(net_id="Ground")
+```
+
+- A **terminal** is a Net that Palace excites. Each terminal becomes one row
+  and column of the capacitance matrix. Call `add_terminal` once per Net.
+- **Ground** is a Net held at 0 V. Call `add_ground` for each ground Net.
+
+Use the exact Net IDs from your plan.
+
+## Set the boundary
+
+```python
 sim.set_electrostatic(
     save_fields=0,
     unassigned_conductor_policy="error",
     exterior_boundary_policy="none",
 )
+```
+
+| Argument | Options |
+|---|---|
+| `unassigned_conductor_policy` | `"error"`: stop if any conductor is neither a terminal nor Ground. `"ground"`: ground such conductors automatically. |
+| `exterior_boundary_policy` | `"none"`: leave the outer vacuum boundary floating. `"ground"`: make it Ground too, as for a grounded enclosure. Requires `unassigned_conductor_policy="error"`. |
+| `save_fields` | Number of field solutions to save for visualization; `0` saves none. |
+
+Grounding the outer boundary adds capacitance to that boundary. Choose it only
+if your device sits in a grounded enclosure of that size.
+
+## Set the mesh
+
+```python
 sim.set_mesh(refined_mesh_size=5.0, max_mesh_size=300.0)
 ```
 
-Use `set_mesh(...)` to choose `algorithm_3d`, `threads`, `surface_threads`,
-`geometry_order`, and `high_order_optimize`. Geometric order describes the mesh
-representation and is independent of Palace's FEM order. Initial values and
-update behavior are in the shared
-[Palace mesh contract](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls-110-candidate).
+Sizes are in micrometres: `refined_mesh_size` near the metal edges,
+`max_mesh_size` far away. `set_mesh` also accepts `algorithm_3d`, `threads`,
+`surface_threads`, `geometry_order` and `high_order_optimize`. `geometry_order`
+sets how closely elements follow curved surfaces; it is separate from the
+finite-element order set in `set_numerical(order=...)`. See the
+[mesh settings reference](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls-110-candidate).
 
-The terminal and ground selectors are exact final Net IDs. They are not
-geometric center guesses. The explicit `error` policy makes uncovered conductor
-components an input error; the alternative supported `ground` policy grounds
-unassigned components. Choose the policy for your experiment. The exterior is
-left ungrounded here; `exterior_boundary_policy="ground"` is a separate model
-and requires the explicit error policy. [The contract](../specs/palace-electrostatic-sgb.qmd)
-owns these choices and their index-map meaning.
+To refine the mesh adaptively, set `amr_max_passes` and `amr_tolerance` with
+`sim.set_numerical(...)`, as in the
+[capacitance tutorial](../tutorials/capacitance/prepare.qmd#step-1-set-up-the-electrostatic-problem).
 
-## Select the geometry approximation and build inputs
-
-The bound snapshot already supplies the outer envelope. **PEC Shell** (legacy
-code B) is the default finite-metal preparation. This lesson keeps its pinned
-package version and therefore uses that version’s representation code:
+## Choose the metal representation and build the mesh
 
 ```python
 sim.set_surface_epr(representation="B", specs={})
 mesh_path = sim.mesh()
 config_path = sim.write_config()
-print(mesh_path, config_path)
 ```
 
-For a **Thin-Film** study (legacy code A), configure
-`representation="A"` with the appropriate explicit `route_a_thin_film`
-before meshing. The code literal remains unchanged to match this lesson’s pinned
-package version. `substrate_face` preserves physical
-face coordinates; `metal_gap_equivalent` is the separate supported two-face
-normalization. Consult the [geometry contract](../geometry-sgb.qmd) before
-changing that approximation. Surface films and their native inset margins are
-optional postprocessing specifications, with attributed thickness/permittivity/
-loss assumptions rather than inferred material measurements.
+`representation` chooses how metal is modelled:
 
-The mesh is a real preparation operation and can fail natively. Writing config
-binds terminal and Ground attributes to that mesh. Inspect the exact index map
-alongside the config: schema v2 distinguishes physical Ground from exterior
-Ground, so you can tell which conductor and boundary policy was lowered.
-After meshing, `sim.mesh_summary()` exposes detached native generation
-observations, including mesh controls, element/region counts and exact mesh
-identities. Those records describe the mesh; they do not decide whether its
-discretization is adequate for a study.
-The [source summary](source-observations.qmd) remains a separate input view;
-`ElectrostaticSim` has no `input_summary()` method.
+- `"B"` (default): metal is a finite-thickness solid.
+- `"A"`: metal is a zero-thickness sheet. Also pass `route_a_thin_film`; see
+  the [geometry reference](../geometry-sgb.qmd).
 
-Next [inspect the prepared mesh](solver-observations.qmd) if useful, then
-[prepare and execute the handoff](execute.qmd). On return,
-[resolve it](returned-results.qmd) before reading the capacitance matrix. Native
-terminal/excitation ordering and units remain authoritative; a prepared config
-contains no measured capacitance. State which terminal response your circuit
-question needs, then read that matrix entry and its available refinement
-history in the [research interpretation sequence](returned-results.qmd#interpret-for-scq-use).
-Retain terminal excitation, physical/exterior ground choices, actual criteria
-and native status; a native stopping flag alone does not decide whether the
-capacitance is adequate for that circuit-model use.
+`specs={}` requests no surface films. Films do not affect capacitance.
+
+`mesh()` runs Gmsh and can fail if the geometry is invalid. `write_config()`
+writes the Palace configuration and `metadata/palace_index_map.json`, which
+records which Palace attribute is each terminal and Ground.
+
+## Next steps
+
+1. Optionally, [inspect the prepared run](solver-observations.qmd).
+2. [Run it](execute.qmd).
+3. [Read the result](returned-results.qmd). The capacitance matrix rows and
+   columns follow your terminals, in farads.

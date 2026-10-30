@@ -1,37 +1,21 @@
 ---
 lang: zh-TW
-title: "AEDT：HFSS Driven Modal"
-description: "指定明確的積分線，並準備目前的雙埠模態網路請求。"
+title: "HFSS Driven Modal：使用波導埠計算 S 參數"
+description: "定義兩個模態波導埠及其積分線，並計算頻率掃描的 S 參數。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-driven-modal"
 ---
 
-接續[CPW 輸入](aedt-inputs.qmd)。Driven Modal 要求的是網路響應，而非未受激發的共振模態。其埠使用明確的積分線。CPW 端面上的兩個有序埠決定激發方式與回報的埠順序；間隙圖片無法取代這些線段端點。輸入頁面的等 Z M1 對應是歷史上的薄片請求。目前的 Thin Film 範例提供 CPW 來源擁有者明確指定的 `NB_FILM` 區間與下方接觸側；這不表示 c997 已包含此宣告。
+本頁會使用同一個 Python 工作階段中[由 GDS 檔案建立的 AEDT 輸入](aedt-inputs.qmd)，計算 CPW 的雙埠 S 參數。Driven Modal 使用波導埠；每個埠的**積分線**會定義跨越埠的電壓方向。若埠要參照具名接地導體，請參閱 [Driven Terminal](aedt-driven-terminal.qmd)。
+
+## 設定並準備模擬包 {#set-up-and-prepare-the-run}
 
 ```python
 from pathlib import Path
 from scgsim.aedt import (
-    FrequencySweepSpec, HfssDrivenSpec, HfssRunControl, LayerImport,
-    LengthMeshSpec, ModalPort, PhysicalLayerSpec, prepare_handoff,
-)
-
-AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
-metal_thickness_um = 0.2
-physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
-physical_layer = PhysicalLayerSpec(
-    physical_layer_id=physical_layer_id,
-    kind="stack_film",
-    z_min_um=0.0,
-    z_max_um=metal_thickness_um,
-    contact_side="lower",
-)
-layer_imports = (
-    LayerImport(
-        1, 0, "D0_TOP_M1", 0.0, metal_thickness_um,
-        physical_layer_id=physical_layer_id,
-    ),
-    LayerImport(201, 0, "D0_SUBSTRATE", -500.0, 0.0),
+    FrequencySweepSpec, HfssDrivenSpec, HfssRunControl, LengthMeshSpec,
+    ModalPort, prepare_handoff,
 )
 
 ports = (
@@ -39,9 +23,8 @@ ports = (
     ModalPort(2, "o2", "+X", ((250.0, 0.0, 0.0), (250.0, 20.0, 0.0))),
 )
 spec = HfssDrivenSpec(
-    aedt_version=AEDT_VERSION,
     mode="modal", gds_path=source_gds, modeling="thin_film",
-    project_name="public_cpw_modal", design_name="CpwFiniteGroundModal",
+    project_name="cpw_modal", design_name="CpwFiniteGroundModal",
     materials=materials, vacuum_material_id="vacuum",
     layer_imports=layer_imports, object_bindings=object_bindings,
     physical_layers=(physical_layer,),
@@ -52,16 +35,26 @@ spec = HfssDrivenSpec(
     region_padding_um=(0.0, 0.0, 100.0, 100.0, 1000.0, 1000.0),
     length_mesh=LengthMeshSpec(("D0_TOP_M1_1",), ground_objects, 10.0),
 )
-handoff = prepare_handoff(
-    spec=spec, output_dir=Path(".artifacts/public-cpw-modal")
-)
-print(handoff.spec_path, handoff.script_path)
+handoff = prepare_handoff(spec=spec, output_dir=Path(".artifacts/cpw-modal"))
+print(handoff.run_dir)
 ```
 
-端點與網格長度的單位是微米；掃頻範圍的單位是 GHz。埠 1 與埠 2 保留宣告順序。請依需要解析的網路響應區段選擇掃頻範圍與 `points`。範例要求 20,000 個點，這也是 `FrequencySweepSpec` 的預設值；原生設定與回傳資料使用相同點數。[掃頻參考](../specs/aedt-runtime.qmd#hfss-driven-sweep-count)列出精確輸入規則。線段座標與範圍來自固定版本的 OrPen CPW 樣本。宣告的埠側補距為零，因此這些面仍是預期端面。
+- `ModalPort(number, name, face, line)` 會在真空區域的 `-X` 或 `+X` 面放置埠。`line` 是積分線起點與終點的座標，單位為微米；此例的線段由訊號線跨越間隙。埠編號決定 S 矩陣的順序。
+- `region_padding_um` 在 `±X` 面設為零，讓埠位於 CPW 端面。
+- `FrequencySweepSpec(start_ghz, stop_ghz, points)` 會以 20,000 個點掃描 3–8 GHz。請依需要解析的特徵選擇範圍與點數。詳見[掃描點數](../specs/aedt-runtime.qmd#hfss-driven-sweep-count)。
+- `LengthMeshSpec(objects, ground_objects, length_um)` 會限制訊號與接地金屬的網格邊長為 10 µm。
 
-在[執行](execute.qmd)前，請檢查複製後規格中的埠側、線段方向與來源綁定。原生準備流程會讀回實際埠指派與設定；僅有 Python 請求物件不足以證明完成。[嚴格解析回傳資料](returned-results.qmd)時，請將有序模態 S 參數、阻抗與 Touchstone 視為此網路的輸出。埠順序不能當作端子參考證據，也不要將匯出結果轉成尚未實作的 SCGSim 電路模型。
+## 執行並讀取結果 {#run-and-read-the-result}
 
-請依其埠慣例與實際控制項讀取頻率相依響應，並一併保留原生狀態及可取得的回報變化量；[執行階段參考](../specs/aedt-runtime.qmd#hfss-convergence-observations)說明原始紀錄與失敗細節。
+[執行資料夾](execute.qmd)後，再[載入結果](returned-results.qmd)：
 
-若要在相同公開來源上使用參考導體埠，請選擇[Driven Terminal](aedt-driven-terminal.qmd)。兩者的精確差異與原生匯出要求見 [AEDT 契約](../specs/aedt-runtime.qmd)。
+```python
+from scgsim.aedt import resolve_results
+
+result = resolve_results(".artifacts/cpw-modal")
+result.show_all_results()
+```
+
+結果包含依埠順序排列的 S 參數與埠阻抗，以及可供電路模擬器使用的 Touchstone 檔案。SCGSim 不會根據這些資料建立電路模型。
+
+[HFSS 收斂紀錄](../specs/aedt-runtime.qmd#hfss-convergence-observations)說明網格自適應迭代歷程。

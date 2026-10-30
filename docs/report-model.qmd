@@ -201,9 +201,8 @@ contribution caused by unknown loss remains unavailable rather than being
 converted into a lifetime claim; participation and energy evidence stay
 visible.
 
-This report surface is **STABILIZED** and does not add a cumulative
-disjoint edge-band interpretation, portable export format, or scientific
-acceptance claim.
+The report does not add margins together as disjoint edge bands, and has no
+portable export format.
 
 ## Current Palace scope
 

@@ -1,17 +1,25 @@
 ---
 lang: zh-TW
-title: "AEDT 分支：準備公開 CPW 輸入"
-description: "準備一般 HFSS 教學使用的明確 GDS 與 PDK 對應。"
+title: "由 GDS 檔案準備 AEDT 輸入"
+description: "撰寫 GDS 檔案，並為 HFSS Eigenmode 與 Driven 執行對應圖層、物件及材料。"
 scgsim-kind: "course"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/course/aedt-inputs"
 ---
 
-完成[安裝](installation.qmd)後，使用此分支進行一般 HFSS Eigenmode 與 Driven Modal／Terminal。這些模型會直接匯入 GDS，並明確綁定圖層與物件；它們不會自動使用 Xmon GeometryPlan 或其 EPR 目錄。目前的 Q3D 使用 [Q3D 教學](aedt-q3d.qmd)所述的 v3 實體輸入，而非此 GDS 匯入對應；有來源依據的 Q3D 準備流程使用獨立的 GeometryPlan 前端。Q2D 則有專屬的[橫截面教學](aedt-q2d.qmd)。
+HFSS Eigenmode 與 Driven 執行可以直接匯入 GDS 檔案。接著你要告訴 SCGSim 三件事：要匯入哪些 GDS 圖層及其高度、匯入的物件分別代表哪個導體，以及每個物件使用哪種材料。本頁以共平面波導（CPW）示範如何準備這些輸入。[HFSS Eigenmode](aedt-eigenmode.qmd)、[Driven Modal](aedt-driven-modal.qmd) 與 [Driven Terminal](aedt-driven-terminal.qmd) 教學會接續使用此處的輸入。
 
-公開樣本與可執行 Notebook 來源屬於 [OrPen 固定版本的 CPW 群組](../examples.qmd#public-inputs)。其中 CPW 長 500 µm，訊號寬 10 µm、間隙 6 µm、接地寬 80 µm，基板厚 500 µm。這些是範例設計輸入，不是量測所得的元件幾何，也不是通用求解器設定。GDS 包含三個金屬矩形與基板區域；PDK 提供圖層配對及材料／函式庫資訊。
+其他 AEDT 輸入方式如下：
 
-## 建立共用來源與對應 {#make-the-shared-source-and-mapping}
+- **含 EPR 的 HFSS Eigenmode**：改用 GeometryPlan 快照；請參閱[共振教學](../tutorials/resonance-epr/prepare.qmd)。
+- **Q3D**：使用三維實體；請參閱 [Q3D](aedt-q3d.qmd)。
+- **Q2D**：使用繪製的橫截面；請參閱 [Q2D](aedt-q2d.qmd)。
+
+## 範例 CPW {#the-example-cpw}
+
+此 CPW 長 500 µm，訊號線寬 10 µm，間隙 6 µm，接地條寬 80 µm，置於厚 500 µm 的矽基板上。GDS 檔包含三個金屬矩形與一個基板矩形。
+
+## 步驟 1：撰寫 GDS 檔 {#step-1-write-the-gds}
 
 ```python
 from pathlib import Path
@@ -33,10 +41,16 @@ lower = coupon << gf.components.rectangle(size=(500.0, 80.0), centered=True,
 lower.movey(-51.0)
 coupon << gf.components.rectangle(size=(500.0, 182.0), centered=True,
                                   layer=LAYER.D0_SUBSTRATE_AREA)
-source_gds = Path(".artifacts/public-cpw-source/cpw.gds")
+source_gds = Path(".artifacts/cpw-source/cpw.gds")
 source_gds.parent.mkdir(parents=True, exist_ok=True)
 coupon.write_gds(source_gds, with_metadata=False)
+```
 
+## 步驟 2：對應材料 {#step-2-map-materials}
+
+請使用 PDK 提供的材料紀錄，並包含其 AEDT 函式庫名稱：
+
+```python
 records = get_material_records()
 materials = {
     name: PdkMaterial(name, records[name]["material_kind"],
@@ -44,8 +58,27 @@ materials = {
                       records[name]["aedt_library_name"])
     for name in ("vacuum", "Si", "Nb")
 }
+```
+
+Nb 等超導體在 AEDT 中會設為完美電導體（PEC）。矽與真空則使用 PDK 指定的 AEDT 函式庫材料。SCGSim 不會自行建立材料性質。
+
+## 步驟 3：對應圖層與物件 {#step-3-map-layers-and-objects}
+
+```python
+from scgsim.aedt import PhysicalLayerSpec
+
+metal_thickness_um = 0.2
+physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
+physical_layer = PhysicalLayerSpec(
+    physical_layer_id=physical_layer_id,
+    kind="stack_film",
+    z_min_um=0.0,
+    z_max_um=metal_thickness_um,
+    contact_side="lower",
+)
 layer_imports = (
-    LayerImport(1, 0, "D0_TOP_M1", 0.0, 0.0),
+    LayerImport(1, 0, "D0_TOP_M1", 0.0, metal_thickness_um,
+                physical_layer_id=physical_layer_id),
     LayerImport(201, 0, "D0_SUBSTRATE", -500.0, 0.0),
 )
 object_bindings = (
@@ -57,10 +90,20 @@ object_bindings = (
 ground_objects = ("D0_TOP_M1_2", "D0_TOP_M1_3")
 ```
 
-宣告的匯入物件名稱依照此固定樣本及匯入順序排列；SCGSim 後續要求原生讀回名稱完全相符，不會根據相似名稱推測語意。此處金屬 Z 厚度為零，表示 HFSS 薄片。此對應不會自動轉換成 Q3D 實體。即使超導近似會降階為 PEC，材料識別仍是 Nb。Si 與真空使用 PDK 中確切的 AEDT 函式庫名稱；SCGSim 不會自行建立其材料性質。
+- `PhysicalLayerSpec` 描述厚度為 0.2 µm 的 Nb 薄膜，包括其高度範圍。由於薄膜位於下方基板上，`contact_side="lower"`。
+- `LayerImport(gds_layer, datatype, name, z_min_um, z_max_um)` 會將 GDS 圖層放置在以微米表示的兩個高度之間。`physical_layer_id` 會將金屬圖層連結到其薄膜。
+- `ObjectBinding(object_name, gds_layer, role, material)` 為匯入物件指定名稱、角色（`signal`、`ground`、`substrate`）及材料。AEDT 會依匯入順序將物件命名為 `<layer name>_<n>`。匯入後，SCGSim 會確認每個名稱都存在，且物件類型及材料符合預期。
 
-請一起檢視 `layer_imports` 與 `object_bindings`。綁定中的 role 會告訴模型哪個匯入導體是訊號或接地，而 `material_id` 保留 PDK 來源資訊。每組 GDS layer/datatype 都必須符合宣告的匯入項目。檢視試片只是在觀察來源；實際原生物件類型、材料與指派會於執行時讀回。
+請保留 `source_gds`、`materials`、`physical_layer`、`layer_imports`、`object_bindings` 與 `ground_objects`，供下一篇教學使用。
 
-原生六面補距順序為 `(+X, -X, +Y, -Y, +Z, -Z)`，與 PyAEDT 相同。此順序不同於 Q2D 的四值順序。請依規格文件所列順序設定，不要複製其他模型的註解。
+每個 HFSS 與 Q3D 請求也必須選擇金屬建模方式：`"solid"`（三維實體）或 `"thin_film"`（指定厚度的薄膜）。此欄位沒有預設值。下方教學使用 `"thin_film"`；詳見[實體與薄膜模型](../specs/aedt-runtime.qmd#aedt-solid-thin-film)。
 
-在 HFSS 分支中保留 `source_gds`、`materials`、`layer_imports`、`object_bindings` 與 `ground_objects`。接著閱讀[一般 Eigenmode](aedt-eigenmode.qmd)、[Driven Modal](aedt-driven-modal.qmd)或 [Driven Terminal](aedt-driven-terminal.qmd)。Q3D 請使用獨立的 body-backed input-v3 教學。此共用教學不建立元件 Notebook；消費端工作流程仍以 OrPen 的標準 Notebook 為來源依據，該教學也會說明目前的 Q3D 遷移狀態。
+::: {.callout-note title="不同模型系列的補距順序"}
+HFSS 與 Q3D 使用六個補距值，順序為 `(+X, -X, +Y, -Y, +Z, -Z)`，與 PyAEDT 相同。Q2D 則使用四個值，順序為 `(-X, +X, -Y, +Y)`。
+:::
+
+## 下一步 {#next-steps}
+
+- [HFSS Eigenmode](aedt-eigenmode.qmd)
+- [HFSS Driven Modal](aedt-driven-modal.qmd)
+- [HFSS Driven Terminal](aedt-driven-terminal.qmd)

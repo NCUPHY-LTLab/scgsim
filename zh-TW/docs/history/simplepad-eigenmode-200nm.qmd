@@ -395,6 +395,6 @@ physics_rows
 
 檢查：送出新的交接前，先檢視更新後的元件與模態請求。
 
-若要萃取 C/G，請使用獨立的[電容筆記本](../tutorials/capacitance.qmd)；若研究問題包含模態能量分配，請改用[共振與 EPR 筆記本](../tutorials/resonance-epr.qmd)。更多求解器控制項請見 [Palace Eigenmode 參考](../course/palace-eigenmode.qmd)與 [AEDT Eigenmode 參考](../course/aedt-eigenmode.qmd)。
+若要萃取 C/G，請使用獨立的[電容筆記本](../tutorials/capacitance/prepare.qmd)；若研究問題包含模態能量分配，請改用[共振與 EPR 筆記本](../tutorials/resonance-epr/prepare.qmd)。更多求解器控制項請見 [Palace Eigenmode 參考](../course/palace-eigenmode.qmd)與 [AEDT Eigenmode 參考](../course/aedt-eigenmode.qmd)。
 
 相同 PDK 版本的公開來源案例：[Palace SimplePad Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/palace_eigenmode.qmd)與 [AEDT HFSS Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd)。

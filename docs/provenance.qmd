@@ -1,12 +1,15 @@
 ---
-title: "Provenance and Data Boundaries"
-description: "Source and result identity categories plus public/private publication boundaries."
+title: "Runtime and result provenance"
+description: "What identifies a run and its results, AEDT receipt schemas, and what may be published. For contributors."
 scgsim-kind: "contract"
 scgsim-status: "STABILIZED"
 scgsim-id: "docs/provenance"
 ---
 
-## Public provenance contract
+This page is for SCGSim contributors. It describes how runs and results are
+identified. Users only need [Read returned results](course/returned-results.qmd).
+
+## What identifies a run
 
 A run or report binds, as applicable:
 
@@ -24,23 +27,137 @@ layout, settings or native result of a particular study. The current
 runtime-source manifest and content digest identify the module bytes used for
 execution; a Git revision is recorded only when truthfully available.
 
-Human accepted the SCGSim 2.0 implementation/API on 2026-10-09 at source
-candidate `a932a173edb5c56ae14740ff5177190996255bdd` (tree
-`2745321736e53e2a4fe8d150f2e9d8bd176669db`). The candidate used
-`2.0.0.dev1` metadata; the current dual-version candidate metadata advances to
-`2.0.0rc3` without rewriting earlier artifact identity. Runtime-source v13
-records its declared module bytes and content digest as measured, while its
-Git revision observation may truthfully be unavailable; it does not attest
-the complete transitive dependency tree. The six earlier full native
-observations and the later build-only Q3D observation remain bound to their
-separate wheel/runtime identities described in the
-[API migration evidence](api-migration.qmd#accepted-scope-and-evidence-status).
-
 The current Palace geometry authority is `scgsim.geometry.compiler`. Palace
 continues to serialize the established `scgsim_sgb` field, whose current value
 names that authority. The field name does not request an import from the former
 package. Historical receipt values and runtime-source inventories retain the
 module identities they recorded and are not rewritten to the current paths.
+
+## AEDT receipt cohorts {#aedt-receipt-cohorts}
+
+New handoffs retain `scgsim.aedt.handoff.v1` and
+`scgsim.aedt.handoff-manifest.v1`. Both records add
+`expected_receipt_schema: scgsim.aedt.receipt.v3`, and the initial receipt is
+V3. It contains `prepared_runtime_source`: a deterministic, sorted
+`runtime-source.v19` manifest. The record fields are
+`schema_version`, `stage`, `modules`, `content_sha256`, and
+`revision_observation`; there is no helper-hash map. Each declared module has
+measured bytes and the content digest binds that inventory. The Git observation
+is either available with the actual 40-hex commit or explicitly unavailable.
+A source checkout or fabricated revision is not required for byte-bound
+identity.
+
+Before writing `running`, the shared transaction accepts its established
+initial-receipt cohorts: a V3 receipt with both V3 expectation markers and a
+canonical manifest; a V2 receipt with both V2 markers and a canonical
+manifest; or an exact V1 `not_run` receipt with both markers absent and the
+canonical historical manifest. A historical handoff may continue through its
+supported family path under those cohort rules; this does not bypass family
+request requirements.
+
+Every new Q3D or HFSS 3D execution requires explicit `modeling`; a
+`thin_film` request also needs its corresponding source declarations before
+receipt mutation. A previously supported Q3D/HFSS result payload without
+`modeling` remains under its original reader and hash interpretation and cannot
+start a new execution. The shared V1/V2 handoff compatibility remains
+available to unchanged families such as Q2D, but does not bypass the current
+Q3D/HFSS request requirement. Q3D input-v1 and input-v2 request schemas remain
+removed.
+
+The verified initial-receipt hash and prepared-manifest hash are copied into
+the mutable V3 receipt. The final receipt is intentionally not compared with
+its initial hash because execution must mutate it. Unknown versions, mixed or
+partial markers, noncanonical members, and hash mismatches reject before
+receipt mutation.
+
+Every new completed V3 receipt has a separate `runtime_source` manifest using
+`runtime-source.v19` and a content digest for the code that actually executed
+it. Declared module bytes and the digest are mandatory; V19 has no redundant
+helper-hash fields. `revision_observation` carries the actual 40-hex commit
+when available and records `unavailable` truthfully for an immutable wheel
+without VCS metadata. Missing or corrupt declared module bytes, digest, schema,
+or cohort still fails closed. Preparation and execution hashes are evidence
+with different timing, not an equality requirement, and historical hashes are
+not compared to the currently installed package.
+
+`resolve_results()` preserves the existing rules for genuine historical
+completed V1 and V2 receipts. A receipt relabeled below its preparation markers
+is an inconsistent downgrade and rejects. V2 and V3 resolution verify their
+exact cohorts, markers, canonical prepared manifest, initial-receipt binding,
+and complete actual runtime manifest before applying their version-specific
+family result checks. Only V3 HFSS completion requires sealed native PEC binding
+evidence; this requirement is never projected onto historical V1/V2 receipts.
+These unsigned consistency checks do not authenticate an artifact set against
+an actor able to rewrite every member.
+
+`runtime-source.v1` is a frozen thirteen-module reader contract, not a live
+enumeration rule. The V2–V14 inventories are frozen as well. V4 added
+`scgsim/aedt/_presentation.py`; V5 added `scgsim/sgb/geometry_plan.py` and
+`scgsim/sgb/__init__.py`. V7 added
+`scgsim/_notebook_presentation.py` to V6. V8 added
+`scgsim/aedt/_junction_partition.py` to V7. V9 added
+`scgsim/aedt/__init__.py`, `scgsim/aedt/_q3d_geometry.py`,
+`scgsim/sgb/adapter.py`, and `scgsim/sgb/stack.py` to V8. V10 added the shared
+`scgsim/aedt/_handoff_cohort.py` to V9; V11 added
+`scgsim/aedt/_q3d_bodies.py` to V10. V12 is frozen with V11's exact path
+membership. V13 retains its frozen inventory, mandatory declared module bytes
+and digest, and optional `revision_observation`; V1–V17 retain their frozen path
+membership, field meanings, and version-specific reader rules. V16 added the HFSS Eigenmode native implementation module to the
+V15 inventory. V17 added the shared lumped-model and HFSS lumped-native modules,
+plus the AEDT specs package initializer, to V16. V18 removed the former
+EPR-private `epr/junction_partition.py` path and included
+`preparation/junction_partition.py`, the relocated AEDT data/RLC/terminal
+helpers, geometry/EPR/support specs, modeling/planar preparation, HFSS geometry
+runtime, neutral geometry representation modules, and the shared source-ground
+construction helper with its polygon-operation leaf. The current V19 inventory
+adds the model-only prepared-model reader. V19 uses the same five record fields
+described above and no helper-hash map; its exact path list is the declared
+implementation inventory. These manifests bind their
+declared file inventories, not an exhaustive transitive dependency
+attestation. The frozen V12 inventory, for example, does not separately hash
+`scgsim/sgb/engine_gates.py`. They do not change the V3 receipt schema. A pure
+initial-receipt codec owns exact V1/V2/V3 member
+order, two-space JSON indentation, and the trailing newline. V1 omits prepared
+provenance; V2 and V3 insert it between `source` and `outputs`. Reading
+historical evidence uses the declared frozen schema and does not compare
+historical hashes with the installed package.
+
+Execution computes mandatory runtime-source provenance inside the receipt-bound
+failure transaction, before importing PyAEDT or constructing Desktop. Current
+V19 may record `revision_observation` as unavailable; that alone does not fail
+byte-bound identity or prevent execution. Missing or corrupt declared module
+bytes, digest, schema, or cohort still yield a failed V3 receipt without a
+Desktop launch rather than escaping receipt finalization. V1–V17 retain their
+version-specific historical validation rules, including revision requirements
+where declared.
+
+The family save contract remains fail-closed. `save_project()` returning false
+before solve aborts before native execution; returning false after export aborts
+before completion is reported. SCGSim does not turn either state into a new
+partial-success receipt or infer that native project bytes are usable.
+
+## Native run coverage {#native-run-coverage}
+
+Which workflows have been run end to end (prepare, native solve, resolve,
+report), and with which build:
+
+The baseline facade exports and documented direct submodule surfaces for
+geometry/compiler, AEDT, Palace and visualization are mapped in the
+[API migration](api-migration.qmd) page. Six earlier full native-to-Resolve-to-Report observations
+are bound to the earlier wheel with SHA256
+`48963671d4f854c185b8f95f3cd8000960355a7c48550b9ccf19b739b49f8df3` and
+runtime-source v13 content digest
+`42b48f3d5946fadb1e93e92a1d3eb2a55f72ff00fc41aeccf71c0fded5919fa1`; those
+observations cover CPW Modal and Terminal, Q2D, Q3D AC/RL, SimplePad Q3D C/G,
+and Palace ES, and are not current-wheel execution evidence. Separately, the
+frozen `2.0.0.dev1` candidate wheel with SHA256
+`e0ab1117aad4e5578ec98251732d33f6faa2fe7524dd70dcbc44891ed024824d` had a
+Q3D build-only/readback/save/release observation and geometry preview, without
+`Analyze`, solve, or C/G matrices.
+
+The full Xmon Palace Eigenmode Route A, CircularPad Palace Eigenmode Route B,
+and HFSS Eigenmode saved-field EPR/offline-loss operations were not observed as
+complete native-to-Resolve-to-Report workflows. Q3D input-v1/v2 readers remain absent.
 
 ## Publication boundary
 

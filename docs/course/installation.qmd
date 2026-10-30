@@ -1,87 +1,106 @@
 ---
 title: "Install SCGSim"
-description: "Install SCGSim into a study project with uv and prepare the selected native solver separately."
+description: "Install SCGSim and the public component library with uv, then set up the solver host."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/installation"
 ---
 
-Install SCGSim into your study project with `uv` from the source revision documented here. SCGSim requires Python `>=3.12,<3.14`; `uv` manages the project environment in `.venv` and records resolved dependencies in `uv.lock`.
+This page installs SCGSim 2.0.0 and the public component library used by the tutorials. Use a separate `uv` project for each study so its Python packages and lockfile stay together. Installing SCGSim does not install Palace or AEDT; set those up separately on the computer that runs the solver.
 
-## Create a study project
+The PDK installs as `orpen-sc-pdk` and imports as `orpen_sc_pdk`. The tutorial environment below uses the SimplePad source. Circular Pad and flip-chip Xmon examples use separate environments and PDK sources.
 
-1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git. Git lets `uv` fetch SCGSim from its source repository.
+::: {.callout-note title="Before you start"}
+- Python 3.12 or 3.13.
+- [uv](https://docs.astral.sh/uv/getting-started/installation/).
+- For AEDT workflows: a Windows or Linux computer with AEDT 2024.2 and a licence.
+:::
 
-   Check: `uv --version` and `git --version` print installed versions.
+## Step 1: Create a study environment {#step-1-create-a-study-environment}
 
-2. Create a project and add SCGSim with the Palace preparation tools. This uses package version `2.0.0rc11` from source commit `90fb50ef9de80fa6e556d2f2a09fb45707efeea0`.
+Create a project with Python 3.12. `uv` creates and manages its `.venv` and lockfile:
 
-   ```bash
-   uv init --python 3.12 scgsim-study
-   cd scgsim-study
-   uv add 'scgsim[palace] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@90fb50ef9de80fa6e556d2f2a09fb45707efeea0'
-   ```
+```bash
+uv init --python 3.12 scgsim-study
+cd scgsim-study
+```
 
-   Use `--python 3.13` if that is the interpreter selected for the study. For project setup details, see the [uv project guide](https://docs.astral.sh/uv/guides/projects/) and its [Git dependency syntax](https://docs.astral.sh/uv/concepts/projects/dependencies/#git).
+Python 3.13 is also supported. This example uses Python 3.12.
 
-   Check: `uv run python -c "from importlib.metadata import version; print(version('scgsim'))"` prints `2.0.0rc11`.
+## Step 2: Install SCGSim and the tutorial PDK {#step-2-install-scgsim-and-the-tutorial-pdk}
 
-3. Keep `pyproject.toml` and `uv.lock` with the study. On another computer, run `uv sync` in the project folder to recreate its environment from the lock file.
+Add the stable SCGSim source, the SimplePad PDK source, the extras used by the beginner tutorials and `ipykernel` to this project:
 
-   ```bash
-   uv sync
-   ```
+```bash
+uv add 'scgsim[palace,aedt-epr,visualization] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@e66c5641404c0d0baed023a2cf2bc9e1e798b2e2' \
+  'orpen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@51985d9507025e8241205712e866c0b804de29b9' \
+  ipykernel
+```
 
-   Check: the same `uv run` version command prints `2.0.0rc11`.
+`uv add` records these dependencies in `pyproject.toml` and `uv.lock`. Run Python commands from this project with `uv run` so they use this environment.
 
-## Select backend tools
-
-The base package supplies NumPy and Plotly for resolving and plotting returned results. Add the extras needed for your calculation.
-
-| Extra | Use | Python packages supplied |
+| Extra | Use it to | Adds |
 |---|---|---|
-| `palace` | Prepare Palace geometry, mesh and configuration | GDSFactory 9, `gdstk`, Gmsh |
-| `aedt` | Prepare ordinary HFSS or Q3D models; use Q2D | `gdstk`, PyAEDT 1.3.0 |
-| `aedt-epr` | Prepare source-first AEDT surface EPR models | AEDT dependencies, GDSFactory 9 and KLayout 0.30.x |
-| `visualization` | Inspect solver-bound geometry | `meshio`, Pillow and PyVista; combine with the backend extra |
+| *(none)* | Read returned results and show reports | NumPy, Plotly |
+| `palace` | Prepare Palace runs | GDSFactory 9.x, GDS reader, Gmsh |
+| `aedt` | Prepare HFSS, Q3D or Q2D runs | GDS reader, PyAEDT 1.3.0 |
+| `aedt-epr` | Prepare HFSS runs with surface EPR from a component | `aedt` plus GDSFactory 9.x and KLayout 0.30.x |
+| `visualization` | Render 3D previews of prepared geometry | Mesh reader, image tools, PyVista |
 
-Use `uv add --extra` to select the extras from the pinned SCGSim source. This example includes both SimplePad beginner backend paths:
+Combine extras with commas in the package requirement. Geometry previews need a working OpenGL or EGL context; see [Geometry preview](../geometry-preview.qmd) for headless options.
 
-```bash
-uv add --extra palace --extra aedt-epr --extra visualization \
-  'scgsim @ git+https://github.com/NCUPHY-LTLab/scgsim.git@90fb50ef9de80fa6e556d2f2a09fb45707efeea0'
-```
+## Step 3: Check the installation {#step-3-check-the-installation}
 
-Check: `uv run python -c "from importlib.metadata import version; print(version('scgsim'))"` prints `2.0.0rc11` after `uv` updates the environment.
-
-## Open a notebook
-
-Choose a goal from the [simulation chooser](../examples.qmd), then run that tutorial's exact PDK `uv add` command in this study project before launching Jupyter. Each tutorial pins the public component source for its workflow.
-
-Start Jupyter through `uv` from the study project. This runs it with the project's Python environment.
+Run this from the study project:
 
 ```bash
-uv run --with jupyter jupyter lab
+uv run python -c "from importlib.metadata import version; import orpen_sc_pdk; print(version('scgsim')); print(version('orpen-sc-pdk'))"
 ```
 
-For details, see [Using uv with Jupyter](https://docs.astral.sh/uv/guides/integration/jupyter/).
+The command prints the installed SCGSim and PDK versions and confirms that the PDK import works. Record both versions with your study.
 
-Check: Jupyter opens from the study project and its notebook uses that project's Python environment.
+<a id="step-5-set-up-the-solver-host"></a>
 
-### Select the curved source cell {#select-the-curved-source-cell}
+## Step 4: Set up the solver host {#step-4-set-up-the-solver-host}
 
-The Circular Pad source and its separate pinned environment are documented in the [historical curved-source setup](../history/curved-source-installation.qmd).
+You can prepare runs on one computer and run the solver on another. The solver host needs:
 
-## Install the native solver separately
+- **Palace:** a `palace` executable, or a wrapper script that starts it with MPI. If your cluster uses environment modules, note the `module load` command; you pass it to SCGSim when preparing a run. See the [Palace installation guide](https://awslabs.github.io/palace/stable/install/).
+- **AEDT:** AEDT 2024.2, a licence, and PyAEDT 1.3.0 in the Python environment that runs the generated script. The script starts AEDT, saves the project and closes AEDT when it finishes.
 
-Python extras supply Python libraries. Install native Palace 0.18.1 from its [official release](https://github.com/awslabs/palace/releases/tag/v0.18.1) on the solver host. For AEDT, use AEDT 2023.2 or 2024.2 with PyAEDT 1.3.0 and a suitable license. Select the AEDT release explicitly in each request; each AEDT Desktop transaction runs on the same host as SCGSim.
+Reading returned results needs only SCGSim; it does not need Palace or AEDT.
 
-Check: confirm the Palace executable or wrapper, or the selected AEDT release and license, are available on the solver host before running the calculation.
+## Environments for other examples {#example-environments}
 
-#### Native Palace for this curved Uniform port {#native-palace-for-this-curved-uniform-port}
+Create a separate `uv` project for each example below. Each project pins its own PDK source and adds the same stable SCGSim source with the extras that example needs. Keep these environments separate from the beginner tutorial project.
 
-The [historical curved-source setup](../history/curved-source-installation.qmd#native-palace-for-this-curved-uniform-port) records the native Palace prerequisite for that specific study.
+### Circular Pad {#env-circular-pad}
 
-## Contribute to SCGSim
+Used by the [Circular Pad LC study](palace-eigenmode.qmd#circular-pad-lc-study). Create a new environment for the Palace example:
 
-For a source checkout and contribution setup, see the [contributor guide](../contributing.qmd).
+```bash
+uv init --python 3.12 circular-pad-study
+cd circular-pad-study
+uv add 'scgsim[palace,visualization] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@e66c5641404c0d0baed023a2cf2bc9e1e798b2e2' \
+  'orpen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@ecc90623b62e55f95afaa5a1f1048a71f81cae52' \
+  ipykernel
+```
+
+### Flip-chip Xmon {#env-xmon}
+
+Used by the [flip-chip Xmon example](../tutorial-xmon-input.qmd). This environment includes both Palace and AEDT EPR preparation:
+
+```bash
+uv init --python 3.12 xmon-study
+cd xmon-study
+uv add 'scgsim[palace,aedt-epr,visualization] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@e66c5641404c0d0baed023a2cf2bc9e1e798b2e2' \
+  'orpen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@35b4dc1cdd3f921badcac2fe57a98366315ae8d9' \
+  ipykernel
+```
+
+## Next steps {#next-steps}
+
+- [The SimplePad model](../tutorials/simplepad-model.qmd): build the model both tutorials use.
+- [Pad capacitance](../tutorials/capacitance/prepare.qmd): your first calculation.
+- [Resonance and EPR](../tutorials/resonance-epr/prepare.qmd).
+- Already have a returned run directory? Go to [Read returned results](returned-results.qmd).

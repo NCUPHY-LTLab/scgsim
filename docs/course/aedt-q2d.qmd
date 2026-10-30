@@ -1,18 +1,20 @@
 ---
-title: "AEDT: Q2D cross-section extraction"
-description: "Author explicit rectangles and conductor groups, then read one native per-unit-length matrix export."
+title: "Q2D: per-unit-length line parameters"
+description: "Draw a transmission-line cross section with rectangles and extract its C, G, L and R per unit length."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-q2d"
 ---
 
-Start from the complete [CPW transmission-line tutorial](../tutorials/transmission-line.qmd).
-This page retains the backend-specific Q2D reference. Q2D takes explicit cross-section
-rectangles; it does not import a GDS, derive a slice from the Xmon snapshot or
-infer a transmission line from a 3D picture. The public
-[OrPen cross-section source](../examples.qmd#public-inputs) supplies this
-specimen: 10 µm signal width, 10 µm gaps, 40 µm grounds, 0.2 µm metal thickness,
-and a 200 µm wide, 500 µm thick substrate. These are model inputs.
+Q2D computes the capacitance, conductance, inductance and resistance per unit
+length of a transmission line from its 2D cross section. You draw the cross
+section as rectangles; Q2D does not slice a GDS file or a 3D model.
+
+This example is a CPW: 10 µm signal, 10 µm gaps, 40 µm ground strips,
+0.2 µm Nb on a 200 µm-wide, 500 µm-thick silicon substrate. It needs the
+`aedt` extra; see [Install SCGSim](installation.qmd).
+
+## Set up and prepare the run
 
 ```python
 from pathlib import Path
@@ -22,8 +24,6 @@ from scgsim.aedt import (
     MatrixRunControl, PdkMaterial, Q2dConductorSpec,
     Q2dRectangleSpec, Q2dSpec, prepare_handoff,
 )
-
-AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 
 orpen_sc_pdk.activate()
 records = get_material_records()
@@ -44,42 +44,49 @@ conductors = (
     Q2dConductorSpec("Ground", "ReferenceGround", ("GroundLeft", "GroundRight"), 0.2),
 )
 spec = Q2dSpec(
-    aedt_version=AEDT_VERSION,
-    project_name="public_cpw_q2d", design_name="CpwFiniteGroundQ2d",
+    project_name="cpw_q2d", design_name="CpwFiniteGroundQ2d",
     materials=materials, vacuum_material_id="vacuum",
     rectangles=rectangles, conductors=conductors,
     run_control=MatrixRunControl("Setup1", frequency_ghz=6.0, maximum_passes=3),
     region_padding_um=(100.0, 100.0, 1000.0, 100.0),
 )
-handoff = prepare_handoff(spec=spec, output_dir=Path(".artifacts/public-cpw-q2d"))
 print(spec.to_payload())
-print(handoff.spec_path, handoff.archive_path)
+handoff = prepare_handoff(spec=spec, output_dir=Path(".artifacts/cpw-q2d"))
+print(handoff.run_dir)
 ```
 
-Rectangle origins and sizes are micrometres. Read each lower-left position and
-size against the intended gaps; print the source spec before relying on native
-geometry. The vacuum belongs to the Region, not an authored vacuum rectangle.
-There is one `ReferenceGround` group covering both ground rectangles and at
-least one `SignalLine`; every superconducting rectangle belongs to exactly one
-group. The public four-value Q2D Region padding order is **(+X, -X, +Y, -Y)**;
-the runtime reorders it for the native Region call. The 3D input tuple is
-six-value **(+X, -X, +Y, -Y, +Z, -Z)**.
+- `Q2dRectangleSpec(name, lower_left_um, size_um, material)` is one
+  rectangle. Check each position and size against the gaps you intend;
+  `spec.to_payload()` prints the full specification.
+- `Q2dConductorSpec(name, kind, rectangles, thickness_um)` groups rectangles
+  into a conductor. You need exactly one `ReferenceGround` and at least one
+  `SignalLine`. Every metal rectangle must belong to exactly one conductor.
+- Do not draw vacuum; it comes from the region padding.
+- `region_padding_um` has four values in the order **(-X, +X, -Y, +Y)**. This
+  differs from the six-value order used by HFSS and Q3D.
 
-After [execution](execute.qmd), [resolve the full return](returned-results.qmd).
-Q2D writes one native `results/q2d/rlgc_matrix.csv`,
-containing primary C, G, L and R blocks. `resolved.physics_results()` reads those
-blocks without creating another normalized file. Native coupling or Spice
-blocks can coexist without becoming extra primary matrices. The resolver binds
-frequency, `LastAdaptive` solution, conductor order and per-unit-length units.
+To build the model in AEDT without solving, pass `run_control=None`; see
+[Q2D model-only preparation](../specs/aedt-runtime.qmd#q2d-native-model-only-preparation).
 
-Keep native status, reported delta and actual controls with the matrix result,
-as described by the [matrix observation contract](../specs/aedt-runtime.qmd#q2d-q3d-convergence-observations).
-Use that quantity and its available changes to judge whether its accuracy is
-adequate for your intended study.
+## Run and read the result
 
-Per-unit-length capacitance is not a lumped Electrostatic capacitance, and a
-Q2D cross-section is not the finite 3D Q3D experiment. Preserve those units and
-scope when interpreting the result. Historical separate CG/RL and normalized
-Q2D files are not emitted for new requests. The
-[AEDT contract](../specs/aedt-runtime.qmd#q2d-native-combined-matrix-export)
-owns the exact export, historical readers and failure behavior.
+[Run the directory](execute.qmd), then [load it](returned-results.qmd):
+
+```python
+from scgsim.aedt import resolve_results
+
+result = resolve_results(".artifacts/cpw-q2d")
+blocks = result.physics_results()
+```
+
+Q2D writes one file, `results/q2d/rlgc_matrix.csv`, with C, G, L and R
+blocks in conductor order, per unit length, at the extraction frequency.
+
+Per-unit-length capacitance is not the same as the total capacitance of a
+finite structure. For that, use [Q3D](aedt-q3d.qmd) or
+[Palace Electrostatic](palace-electrostatic.qmd).
+
+See the [Q2D export reference](../specs/aedt-runtime.qmd#q2d-native-combined-matrix-export)
+for the file format, and
+[matrix convergence records](../specs/aedt-runtime.qmd#q2d-q3d-convergence-observations)
+for the adaptive history.

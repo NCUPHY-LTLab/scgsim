@@ -1,13 +1,17 @@
 ---
 lang: zh-TW
-title: "AEDT：Q2D 橫截面擷取"
-description: "明確建立矩形與導體群組，再讀取一份原生每單位長度矩陣匯出資料。"
+title: "Q2D：每單位長度的傳輸線參數"
+description: "以矩形繪製傳輸線橫截面，並計算每單位長度的 C、G、L 與 R。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-q2d"
 ---
 
-請在[安裝](installation.qmd)後開始。Q2D 使用明確指定的橫截面矩形；它不會匯入 GDS、不會從 Xmon 快照切出截面，也不會從 3D 圖片推斷傳輸線。公開的 [OrPen 橫截面來源](../examples.qmd#public-inputs)提供此樣本：訊號寬 10 µm、間隙 10 µm、接地寬 40 µm、金屬厚 0.2 µm，基板寬 200 µm、厚 500 µm。這些都是模型輸入值。
+Q2D 會根據傳輸線的二維橫截面計算每單位長度的電容、電導、電感與電阻。你需要以矩形繪製橫截面；Q2D 不會切割 GDS 檔案或三維模型。
+
+本例是 CPW：訊號線寬 10 µm、間隙 10 µm、接地條寬 40 µm；基板為寬 200 µm、厚 500 µm 的矽，其上有厚 0.2 µm 的 Nb。此流程需要 `aedt` extra；請參閱[安裝 SCGSim](installation.qmd)。
+
+## 設定並準備模擬包 {#set-up-and-prepare-the-run}
 
 ```python
 from pathlib import Path
@@ -17,8 +21,6 @@ from scgsim.aedt import (
     MatrixRunControl, PdkMaterial, Q2dConductorSpec,
     Q2dRectangleSpec, Q2dSpec, prepare_handoff,
 )
-
-AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
 
 orpen_sc_pdk.activate()
 records = get_material_records()
@@ -39,22 +41,37 @@ conductors = (
     Q2dConductorSpec("Ground", "ReferenceGround", ("GroundLeft", "GroundRight"), 0.2),
 )
 spec = Q2dSpec(
-    aedt_version=AEDT_VERSION,
-    project_name="public_cpw_q2d", design_name="CpwFiniteGroundQ2d",
+    project_name="cpw_q2d", design_name="CpwFiniteGroundQ2d",
     materials=materials, vacuum_material_id="vacuum",
     rectangles=rectangles, conductors=conductors,
     run_control=MatrixRunControl("Setup1", frequency_ghz=6.0, maximum_passes=3),
     region_padding_um=(100.0, 100.0, 1000.0, 100.0),
 )
-handoff = prepare_handoff(spec=spec, output_dir=Path(".artifacts/public-cpw-q2d"))
 print(spec.to_payload())
-print(handoff.spec_path, handoff.archive_path)
+handoff = prepare_handoff(spec=spec, output_dir=Path(".artifacts/cpw-q2d"))
+print(handoff.run_dir)
 ```
 
-矩形原點與尺寸的單位是微米。請核對每個左下角位置與尺寸是否符合預期間隙；依賴原生幾何前，先列印來源規格。真空屬於 Region，不是自行建立的真空矩形。單一 `ReferenceGround` 群組涵蓋兩個接地矩形，且至少有一個 `SignalLine`；每個超導矩形都必須且只能屬於一個群組。Region 的四值補距順序是 **(-X, +X, -Y, +Y)**，與 3D 輸入教學中的原生六值順序不同。
+- `Q2dRectangleSpec(name, lower_left_um, size_um, material)` 定義一個矩形。請依預期的間隙檢查位置與尺寸；`spec.to_payload()` 會列印完整規格。
+- `Q2dConductorSpec(name, kind, rectangles, thickness_um)` 將多個矩形分組為一個導體。你必須提供且只提供一個 `ReferenceGround`，並至少提供一個 `SignalLine`。每個金屬矩形都必須且只能屬於一個導體。
+- 不需繪製真空；真空會由區域補距產生。
+- `region_padding_um` 有四個值，順序為 **(-X, +X, -Y, +Y)**。這與 HFSS 和 Q3D 使用的六值順序不同。
 
-在[執行](execute.qmd)後，請[解析完整回傳資料](returned-results.qmd)。Q2D 會寫入一份原生 `results/q2d/rlgc_matrix.csv`，其中包含主要的 C、G、L、R 區塊。`resolved.physics_results()` 會讀取這些區塊，不會另建正規化檔案。原生耦合或 Spice 區塊可同時存在，但不會成為額外的主要矩陣。解析器會綁定頻率、`LastAdaptive` 解、導體順序及每單位長度單位。
+若要在 AEDT 建立模型但不求解，請傳入 `run_control=None`；詳見 [Q2D 僅準備原生模型](../specs/aedt-runtime.qmd#q2d-native-model-only-preparation)。
 
-依[矩陣觀測契約](../specs/aedt-runtime.qmd#q2d-q3d-convergence-observations)所述，請將原生狀態、回報差值與實際控制項連同矩陣結果保存。請依該數值及可取得的變化量，判斷精度是否符合預期研究需求。
+## 執行並讀取結果 {#run-and-read-the-result}
 
-每單位長度電容不是集總 Electrostatic 電容；Q2D 橫截面也不是有限尺寸的 3D Q3D 實驗。解讀結果時，請保留其單位與適用範圍。新請求不會輸出歷史上分開的 CG／RL 檔案與正規化 Q2D 檔案。[AEDT 契約](../specs/aedt-runtime.qmd#q2d-native-combined-matrix-export)說明精確匯出格式、歷史讀取器與失敗行為。
+[執行資料夾](execute.qmd)後，再[載入結果](returned-results.qmd)：
+
+```python
+from scgsim.aedt import resolve_results
+
+result = resolve_results(".artifacts/cpw-q2d")
+blocks = result.physics_results()
+```
+
+Q2D 會在 `results/q2d/rlgc_matrix.csv` 寫入一個檔案，其中依導體順序列出求解頻率下的 C、G、L 與 R 矩陣區塊，數值均為每單位長度的參數。
+
+每單位長度的電容不等於有限尺寸結構的總電容。若要計算總電容，請使用 [Q3D](aedt-q3d.qmd) 或 [Palace Electrostatic](palace-electrostatic.qmd)。
+
+檔案格式請見 [Q2D 匯出參考](../specs/aedt-runtime.qmd#q2d-native-combined-matrix-export)；自適應歷程請見[矩陣收斂紀錄](../specs/aedt-runtime.qmd#q2d-q3d-convergence-observations)。

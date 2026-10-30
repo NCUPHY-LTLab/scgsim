@@ -1,0 +1,52 @@
+---
+title: "共振與 EPR 2/3：執行模擬"
+description: "使用 Palace 或 AEDT 執行已準備的共振模擬資料夾。"
+lang: zh-TW
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/resonance-epr/run"
+---
+
+本頁會執行[準備模擬包](prepare.qmd)寫入的資料夾，不會更改模型或設定。若要修改，請回到準備頁並重新寫入模擬資料夾。
+
+::: {.callout-note title="開始前"}
+- 準備頁建立的模擬資料夾。
+- 可執行 Palace 的電腦，或具有 AEDT 2024.2 與有效授權的電腦。請參閱[安裝 SCGSim，步驟 5](../../course/installation.qmd#step-5-set-up-the-solver-host)。
+- 模擬需要較長時間。Palace 範例使用 8 個 MPI 程序約需 4 小時，記憶體用量最高約 45 GB。
+:::
+
+## 步驟 1：執行求解器 {#step-1-run-the-solver}
+
+若求解器在另一台電腦執行，請先將**整個**模擬資料夾複製過去，再從該資料夾執行：
+
+:::: {.panel-tabset group="solver"}
+
+### Palace
+
+```bash
+cd .artifacts/SimplePad/pad-resonance-palace-01
+bash run_palace.sh
+```
+
+指令檔會先使用 `palace --dry-run` 檢查設定，再開始求解。
+
+### HFSS
+
+```bash
+cd .artifacts/SimplePad/pad-resonance-hfss-01
+bash run_aedt.sh
+```
+
+指令檔會啟動 AEDT、建立模型、執行求解、匯出結果、儲存專案，最後關閉 AEDT。
+
+::::
+
+## 步驟 2：取回資料夾 {#step-2-return-the-directory}
+
+若求解器在另一台電腦執行，請將整個資料夾複製回來，包含 `metadata/` 與記錄檔。單獨的結果檔無法載入。
+
+Slurm、MPI 包裝程式與失敗模擬的處理方式，請參閱[執行已準備的模型](../../course/execute.qmd)。
+
+## 下一步 {#next}
+
+[分析模態與參與率](analyze.qmd)。

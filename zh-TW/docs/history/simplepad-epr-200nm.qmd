@@ -7,17 +7,17 @@ scgsim-status: "HISTORICAL"
 scgsim-id: "docs/history/simplepad-epr-200nm"
 ---
 
-目前 HFSS 流程請見[現行教學](../tutorials/resonance-epr.qmd)。本頁保存來源金屬為 200 nm 的歷史配方及觀測值。
+目前 HFSS 流程請見[現行教學](../tutorials/resonance-epr/prepare.qmd)。本頁保存來源金屬為 200 nm 的歷史配方及觀測值。
 
 本教學帶你取得指定模態的頻率與能量參與量。依序選擇來源範例、編輯模型及求解控制項、準備並執行一個後端，再於新的分析工作階段讀取回傳結果。
 
-請從 [OrcaPen 的公開範例](../examples.qmd#public-inputs)選擇來源模型，並參閱[共用版圖圖示](../tutorials/capacitance.qmd#fig-simple-pad-layout)。下方兩個標準 Notebook 分別提供 Palace 與 HFSS 流程。
+請從 [OrcaPen 的公開範例](../examples.qmd#public-inputs)選擇來源模型，並參閱[共用版圖圖示](../tutorials/simplepad-model.qmd#fig-simple-pad-layout)。下方兩個標準 Notebook 分別提供 Palace 與 HFSS 流程。
 
 1. 開啟所選後端的 SimplePad Notebook，確認焊墊、材料、介面與接面埠來源。
 2. 編輯模型、模態與執行控制項，準備並執行一次交接。
 3. 在新的分析工作階段讀取回傳模態頻率及所請求的 EPR 參與量。
 
-範例沿用電容教學的 [200 µm 焊墊、20 µm 間隙與材料輸入](../tutorials/capacitance.qmd#prepare-the-physical-model)。Eigenmode 使用東側間隙的非金屬埠定位片，識別接上 10 nH、C = 0 F 線性支路的金屬端點。
+範例沿用電容教學的 [200 µm 焊墊、20 µm 間隙與材料輸入](../tutorials/simplepad-model.qmd#the-model)。Eigenmode 使用東側間隙的非金屬埠定位片，識別接上 10 nH、C = 0 F 線性支路的金屬端點。
 
 ::: {.callout-note title="模型中的線性支路"}
 埠定位片用來連接集總電感支路，不是實體導電短路。模型也不含第二個晶粒、背面金屬、讀出線或凸塊。
@@ -123,7 +123,7 @@ HFSS 參與量來自下方所述、針對既有原生解所做的獨立候選 EP
 ::: {.callout-note title="參考輸出說明" collapse="true"}
 原始模態計算使用 SCGSim `1.0.1`（`9c032e3`）與 SimplePad 來源 `24ae5a4`；其元件／Notebook 位元組與連結的 `51985d9` 修訂版相符。Palace 已完成回傳資料，並以預期交接識別解析後顯示於報告。HFSS 原始回傳結果報告包含模態頻率；原始 EPR 仍不完整。
 
-HFSS 參與量表使用 SCGSim `1.0.2rc1`，以既有解進行獨立衍生。十筆自適應通過 EPR 紀錄都已完成；分離的 `resolve_epr_result`、`plot_epr_result` 與 `show_epr` 流程讀取並呈現該衍生結果。此操作沒有再次 Analyze／求解，也沒有重新產生原始一般嚴格回傳收據或變更其原生狀態。下方手動的一般回傳呼叫仍維持各自範圍，不會以此獨立結果取代原始不完整 EPR。
+HFSS 參與量表使用 SCGSim `1.0.2rc1`，以既有解進行獨立衍生。十筆網格自適應迭代 EPR 紀錄都已完成；分離的 `resolve_epr_result`、`plot_epr_result` 與 `show_epr` 流程讀取並呈現該衍生結果。此操作沒有再次 Analyze／求解，也沒有重新產生原始一般嚴格回傳收據或變更其原生狀態。下方手動的一般回傳呼叫仍維持各自範圍，不會以此獨立結果取代原始不完整 EPR。
 
 這些數值是觀測結果，不是數值目標、精度準則，也不要求兩種後端結果一致。它們的外部場模型仍然不同。[EPR 概念](../eigenmode-epr.qmd)說明正規化與已知損耗範圍；[AEDT EPR 參考](../specs/aedt-runtime.qmd#public-epr-candidate-surface)說明公開分離結果介面。
 :::
@@ -143,7 +143,7 @@ HFSS 參與量表使用 SCGSim `1.0.2rc1`，以既有解進行獨立衍生。十
 
 ## 準備共用幾何 {#prepare-the-shared-geometry}
 
-在準備工作階段中執行[共用元件設定](../tutorials/capacitance.qmd#create-the-shared-source)。該設定會定義 `component`、`layer_stack`、`material_records` 與 `output_root`。接著兩種 Eigenmode 後端都會使用同一個具名 GeometryPlan 快照：
+在準備工作階段中執行[共用元件設定](../tutorials/simplepad-model.qmd#step-1-load-the-component)。該設定會定義 `component`、`layer_stack`、`material_records` 與 `output_root`。接著兩種 Eigenmode 後端都會使用同一個具名 GeometryPlan 快照：
 
 ```python
 from orpen_sc_pdk import (

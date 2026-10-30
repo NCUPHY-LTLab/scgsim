@@ -1,48 +1,24 @@
 ---
 lang: zh-TW
-title: "AEDT：一般 HFSS Eigenmode"
-description: "準備無埠模態請求，並在回傳時保留原生頻率與 Q。"
+title: "HFSS Eigenmode：共振模態"
+description: "從 GDS 檔案準備 HFSS Eigenmode 模擬，並讀取模態頻率與 Q 值。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/aedt-eigenmode"
 ---
 
-在同一工作階段接續[CPW 輸入](aedt-inputs.qmd)。一般 HFSS Eigenmode 不使用驅動激發埠，而是透過明確的自適應設定搜尋指定模態；名稱中有 Eigenmode，不代表它會建立 source-first Surface-EPR 目錄或儲存場分析請求。Eigenmode API 可透過 `EigenmodeSim.add_lumped_rlc()` 加入一般線性 RLC 模型元件。這與 Josephson 接面不同：它不會建立 `PlanarJunction`、接面參與量或 EPR 貢獻。負載儲存在 `PreparedPlanarGeometry.lumped_rlcs`；`HfssEprSpec` 會投影已準備的值，不會成為第二個可編輯來源。EPR 接面契約仍獨立處理。輸入頁面的等 Z M1 對應是歷史上的薄片請求。目前的 Thin Film 範例新增 CPW 來源擁有者明確指定的 `NB_FILM` 區間與下方接觸側，以保留既有薄片平面；這不表示 c997 已包含此宣告。
+本頁會使用同一個 Python 工作階段中[由 GDS 檔案建立的 AEDT 輸入](aedt-inputs.qmd)，尋找 CPW 的共振模態，並回報頻率與 Q 值。若要計算能量參與率（EPR），請使用[共振教學](../tutorials/resonance-epr/prepare.qmd)中的快照工作流程，或參閱 [Xmon HFSS 範例](../tutorial-xmon-aedt.qmd)。
+
+## 設定並準備模擬包 {#set-up-and-prepare-the-run}
 
 ```python
 from pathlib import Path
-from scgsim.aedt import (
-    EigenmodeRunControl, HfssEigenmodeSpec, LayerImport,
-    prepare_handoff,
-)
-from scgsim.geometry import PhysicalLayerDeclaration
-
-AEDT_VERSION = "2024.2"  # Choose explicitly: 2023.2 or 2024.2.
-metal_thickness_um = 0.2
-physical_layer_id = "orpen_sc_pdk:CpwFiniteGround:NB_FILM"
-physical_layer = PhysicalLayerDeclaration(
-    physical_layer_id=physical_layer_id,
-    source_level_id="D0_TOP_M1",
-    source_level_and_gds_pair={"layer": 1, "datatype": 0},
-    source_interval_um=(0.0, metal_thickness_um),
-    material_id="Nb",
-    feature_kind="stack_film",
-    physical_dimensions={"normal_thickness_um": metal_thickness_um},
-    source_contact_facts={"layer_attachment_face": "lower"},
-)
-layer_imports = (
-    LayerImport(
-        1, 0, "D0_TOP_M1", 0.0, metal_thickness_um,
-        physical_layer_id=physical_layer_id,
-    ),
-    LayerImport(201, 0, "D0_SUBSTRATE", -500.0, 0.0),
-)
+from scgsim.aedt import EigenmodeRunControl, HfssEigenmodeSpec, prepare_handoff
 
 spec = HfssEigenmodeSpec(
-    aedt_version=AEDT_VERSION,
     modeling="thin_film",
     gds_path=source_gds,
-    project_name="public_cpw_eigenmode",
+    project_name="cpw_eigenmode",
     design_name="CpwFiniteGroundEigenmode",
     materials=materials,
     vacuum_material_id="vacuum",
@@ -55,16 +31,37 @@ spec = HfssEigenmodeSpec(
     ),
     region_padding_um=(100.0, 100.0, 100.0, 100.0, 1000.0, 1000.0),
 )
-handoff = prepare_handoff(
-    spec=spec, output_dir=Path(".artifacts/public-cpw-eigenmode")
-)
-print(handoff.spec_path, handoff.archive_path)
+handoff = prepare_handoff(spec=spec, output_dir=Path(".artifacts/cpw-eigenmode"))
+print(handoff.run_dir)
 ```
 
-公開 CPW 範例提供這些搜尋／自適應迭代控制值。它們是請求控制項，不是保證的模態頻率，也不是通用的 SCQ 充分性規則。請在 Notebook 中保留實際控制項及任何變更。回傳後，依[預期研究用途](returned-results.qmd#interpret-for-scq-use)讀取指定模態及可取得的變化量；保留原生收斂狀態，但不要將它當作研究結論。Region 依輸入教學所述的原生六面順序包住模型。在[明確於主機執行](execute.qmd)前，請檢查序列化規格與複製的來源。準備套件不會開啟 Desktop。
+- `modeling` 為必填欄位，可設為 `"thin_film"` 或 `"solid"`。詳見[實體與薄膜模型](../specs/aedt-runtime.qmd#aedt-solid-thin-film)。
+- `EigenmodeRunControl` 會尋找高於 `minimum_frequency_ghz` 的 `num_modes` 個模態。HFSS 最多進行 `maximum_passes` 次網格自適應迭代；若相鄰兩次迭代的頻率變化小於 `maximum_delta_frequency_percent`，就會停止。
+- `region_padding_um` 會在模型周圍加入真空，數值順序為 `(+X, -X, +Y, -Y, +Z, -Z)`。
 
-在[回傳並嚴格解析](returned-results.qmd)後，正規化的 `eigenmodes.csv` 會保留有序模態索引、實數 `frequency_ghz` 與原生 `q_factor`。具雜湊的 `eigenmodes.eig` 會保留原生原始頻率輸出，包括可能存在的複數分量。SCGSim 不會計算阻尼，也不會根據該分量取代原生 Q。數值歷程與基準資料可用性是分開的證據。
+這些設定只是範例，不是建議值。`prepare_handoff` 只會寫入檔案，不會開啟 AEDT。
 
-解讀頻率與 Q 時，請將回傳模態與實際控制項一併檢視。報告會保留原生分類；雜湊綁定的 `adaptive-convergence.prop` 也會保留原生歷程與連續通過次數，現有正規化結果／報告不會重現這些內容。[執行階段參考](../specs/aedt-runtime.qmd#hfss-convergence-observations)說明這些紀錄與失敗行為。請使用研究所需物理量的可用變化量，不要將原生分類視為精度建議。
+### 加入集總 RLC 元件（選用） {#add-a-lumped-rlc-element-optional}
 
-`.aedt` 檔案與已完成的一般收據，無法證明存在可重用的儲存場 EPR。若這是你的工作，請先閱讀[source-first Xmon EPR 模型](../tutorial-xmon-aedt.qmd)，再於求解後依其獨立的[儲存場分析](aedt-saved-fields.qmd)操作。[AEDT 契約](../specs/aedt-runtime.qmd)定義這兩條路徑，兩者結果不可互換。
+`EigenmodeSim.add_lumped_rlc()` 會在兩個導體間加入線性電阻、電感或電容。這是一般電路元件，不會產生接面參與量。若要使用 EPR 建模 Josephson 接面，請依[共振教學](../tutorials/resonance-epr/prepare.qmd)使用 `add_junction`。
+
+## 執行並讀取結果 {#run-and-read-the-result}
+
+[執行資料夾](execute.qmd)後，再[載入結果](returned-results.qmd)：
+
+```python
+from scgsim.aedt import resolve_results
+
+result = resolve_results(".artifacts/cpw-eigenmode")
+result.show_all_results()
+```
+
+執行資料夾包含：
+
+- `eigenmodes.csv`：模態編號、`frequency_ghz` 與 HFSS 回報的 Q 值。
+- `eigenmodes.eig`：HFSS 原始輸出，包含複數頻率。SCGSim 不會從虛部計算 Q 值。
+- `adaptive-convergence.prop`：完整的 HFSS 網格自適應迭代歷程。報告提供摘要；此檔包含每次迭代的資料。
+
+各檔案內容請見 [HFSS 收斂紀錄](../specs/aedt-runtime.qmd#hfss-convergence-observations)。
+
+若要在求解後從儲存場計算 EPR，執行前就必須設定 EPR。像本例這樣的一般 Eigenmode 執行結果，無法用於[儲存場 EPR](aedt-saved-fields.qmd)。

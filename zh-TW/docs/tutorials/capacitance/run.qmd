@@ -1,0 +1,37 @@
+---
+title: "焊墊電容 2/3：執行模擬"
+description: "使用 Palace 執行已準備的焊墊電容模擬資料夾。"
+lang: zh-TW
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/capacitance/run"
+---
+
+本頁會執行[準備模擬包](prepare.qmd)寫入的資料夾，不會更改模型或設定。若要修改，請回到準備頁並重新寫入模擬資料夾。
+
+::: {.callout-note title="開始前"}
+- 準備頁建立的模擬資料夾 `.artifacts/SimplePad/pad-capacitance-01`。
+- 可執行 Palace 的電腦。請參閱[安裝 SCGSim，步驟 5](../../course/installation.qmd#step-5-set-up-the-solver-host)。
+- 使用 8 個 MPI 程序約需 30 分鐘。
+:::
+
+## 步驟 1：執行 Palace {#step-1-run-palace}
+
+若要在另一台電腦執行 Palace，請先將**整個**模擬資料夾複製過去。在 Palace 主機上切換至該資料夾：
+
+```bash
+cd .artifacts/SimplePad/pad-capacitance-01
+bash run_palace.sh
+```
+
+指令檔會先使用 `palace --dry-run` 檢查設定，再開始求解。
+
+## 步驟 2：取回資料夾 {#step-2-return-the-directory}
+
+若 Palace 在另一台電腦執行，請將整個資料夾複製回來，包含 `metadata/` 與記錄檔。單獨的結果檔無法載入。
+
+Slurm、MPI 包裝程式與失敗模擬的處理方式，請參閱[執行已準備的模型](../../course/execute.qmd)。
+
+## 下一步 {#next}
+
+[分析電容](analyze.qmd)。

@@ -9,7 +9,7 @@ scgsim-status: "HISTORICAL"
 scgsim-id: "docs/history/sgb-geometric-bands"
 ---
 
-This page preserves the former SGB geometry-level surface-distance-band design for readers of older notes and results. The producer and its API have been withdrawn from current SCGSim; use the [current SGB concept](../concepts/geometry.qmd) for the retained source-to-CAD process. Palace native Mask/Inset is a separate solver setting, described in the [Palace contract](../specs/palace-electrostatic-sgb.qmd#native-mask-inset).
+This page preserves the former SGB geometry-level surface-distance-band design for readers of older notes and results. The producer and its API have been withdrawn from current SCGSim; use the [current SGB concept](../concepts/geometry.qmd) for the retained source-to-CAD process. Palace native Mask/Inset is a separate solver setting, described in the [Palace contract](../specs/palace-electrostatic-sgb.qmd#native-multi-margin-surface-epr).
 
 ::: {.callout-warning title="Historical design; not a current usage recipe"}
 The figures and observations below describe an earlier implementation. They do not establish that the current package can create these geometric bands or that a Palace executable accepts a native Mask/Inset setting. Check the current source contract and the exact Palace executable before preparing a new model.
@@ -59,7 +59,7 @@ Neither the internal seam removed by the metal/end union nor the new seams betwe
 ::: {.callout-note collapse="true" title="Pass the selection request to the source plan"}
 Use `surface_distance_band_catalogue(...)` to read actual parents from the corresponding construction plan, create a `SurfaceDistanceBandSpec`, then pass it to later snapshots through `GeometryPlan.set_surface_distance_bands(...)`.
 The catalogue name of this example's parent is `SURF__MS__chip/left__substrate__upper_air__0000`; `boundary_segments=None` includes all original exterior and hole edges, while an explicit subset uses `SourceBoundarySegment`.
-The example starts from normalized input and adds the same request with `with_surface_distance_bands(...)`. See the [planar distance-band contract](../geometry-sgb.qmd#surface-distance-bands) for exact parameters.
+The example starts from normalized input and adds the same request with `with_surface_distance_bands(...)`. See the [planar distance-band contract](../history/sgb-geometric-bands.qmd) for exact parameters.
 :::
 
 ### Connect caps, hole walls and exterior walls to the same nodes

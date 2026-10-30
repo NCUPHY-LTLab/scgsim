@@ -1,0 +1,87 @@
+---
+title: "焊墊電容 1/3：準備模擬包"
+description: "設定方形焊墊的 Palace Electrostatic 計算，並寫入模擬資料夾。"
+lang: zh-TW
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/capacitance/prepare"
+aliases:
+  - ../capacitance.html
+---
+
+本教學會計算方形金屬焊墊與周圍接地平面之間的電容，共分三頁：
+
+1. **準備模擬包**（本頁）：設定 Palace Electrostatic 計算並寫入模擬資料夾。
+2. [**執行模擬**](run.qmd)：在該資料夾執行 Palace。
+3. [**分析結果**](analyze.qmd)：讀取焊墊對地電容。
+
+先前的參考計算結果接近 **95 fF**。
+
+::: {.callout-note title="開始前"}
+先建立 [SimplePad 模型](../simplepad-model.qmd)，並保持該 Python 工作階段開啟。你會使用其中的 `snapshot`、`surface_films` 與 `output_root`。
+:::
+
+## 步驟 1：設定靜電問題 {#step-1-set-up-the-electrostatic-problem}
+
+建立 `ElectrostaticSim`，將焊墊設為端點，並將接地平面設為 Ground：
+
+```python
+from scgsim.palace import ElectrostaticSim
+
+run_id = "pad-capacitance-01"
+sim = ElectrostaticSim()
+sim.set_plan(snapshot)
+sim.set_output_dir(output_root / run_id)
+
+sim.add_terminal("pad", net_id="pad")
+sim.add_ground(net_id="ground")
+sim.set_electrostatic(
+    save_fields=1,
+    unassigned_conductor_policy="error",
+    exterior_boundary_policy="none",
+)
+sim.set_surface_epr(representation="B", specs=surface_films)
+```
+
+- `unassigned_conductor_policy="error"` 會在有金屬未指派給端點或 Ground 時停止，讓你及早發現漏設 Net。
+- `exterior_boundary_policy="none"` 會讓真空區域外邊界不接地，因此只有繪製的接地平面是 Ground。
+- 即使只計算電容，網格化之前仍須呼叫 `set_surface_epr`。薄膜設定不會改變電容。
+
+## 步驟 2：設定網格與精度 {#step-2-set-the-mesh-and-accuracy}
+
+```python
+sim.set_mesh(refined_mesh_size=10.0, max_mesh_size=200.0)
+sim.set_numerical(
+    order=2, tolerance=1e-6, max_iterations=2000,
+    amr_max_passes=10, amr_tolerance=0.02, amr_update_fraction=0.15,
+    save_adapt_iterations=True, output_paraview=True,
+)
+mesh_path = sim.mesh()
+config_path = sim.write_config()
+```
+
+網格尺寸的單位是微米。`order=2` 會使用二階有限元素。`amr_max_passes=10` 表示 Palace 最多細化網格十次；若誤差估計先低於 `amr_tolerance`，便會提早停止。
+
+## 步驟 3：寫入模擬資料夾 {#step-3-write-the-run-directory}
+
+SCGSim 不會啟動 Palace，而會寫入包含網格、設定與啟動指令檔的完整模擬資料夾，供你在其他電腦執行求解器：
+
+```python
+handoff = sim.prepare_handoff(
+    profile="direct-local",
+    executable="palace",
+    resources={"processes": 8, "threads": 1, "command_style": "wrapper"},
+)
+print(handoff.run_dir)
+print(handoff.handoff_id)
+```
+
+請記下這兩個輸出值。分析頁會用 `handoff_id` 確認載入的結果來自此模擬資料夾。請依 Palace 主機調整 `executable` 與 `resources`。若主機透過環境模組載入 Palace，請加入 `setup_commands=("module load palace",)`。所有選項請見[執行已準備的模型](../../course/execute.qmd#palace)。
+
+## 改用筆記本 {#use-the-notebook-instead}
+
+OrPen SC PDK 以單一筆記本提供本教學：[`palace_electrostatic.ipynb`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/palace_electrostatic.ipynb)。它會呼叫相同的 SCGSim 函式。本頁將 `WORKFLOW_ACTION` 設為 `"prepare_handoff"`，自行執行 Palace，再於分析頁切換為 `"analyze_handoff"`。
+
+## 下一步 {#next}
+
+[執行 Palace](run.qmd)。

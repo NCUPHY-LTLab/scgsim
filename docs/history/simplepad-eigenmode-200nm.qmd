@@ -395,6 +395,6 @@ Change the pad dimensions, gap, vacuum padding and inductance in the central set
 
 Check: inspect the updated component and mode request before sending a new handoff.
 
-Use the standalone [capacitance notebook](../tutorials/capacitance.qmd) for a C/G extraction and the separate [resonance and EPR notebook](../tutorials/resonance-epr.qmd) when mode energy partition is part of the question. See the [Palace Eigenmode reference](../course/palace-eigenmode.qmd) and [AEDT Eigenmode reference](../course/aedt-eigenmode.qmd) for additional solver controls.
+Use the standalone [capacitance notebook](../tutorials/capacitance/prepare.qmd) for a C/G extraction and the separate [resonance and EPR notebook](../tutorials/resonance-epr/prepare.qmd) when mode energy partition is part of the question. See the [Palace Eigenmode reference](../course/palace-eigenmode.qmd) and [AEDT Eigenmode reference](../course/aedt-eigenmode.qmd) for additional solver controls.
 
 Public source cases at the same PDK revision: [Palace SimplePad Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/palace_eigenmode.qmd) and [AEDT HFSS Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd).

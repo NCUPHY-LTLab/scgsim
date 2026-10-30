@@ -1,49 +1,34 @@
 ---
-title: "文件導覽圖"
-description: "了解 SCGSim 各主題的閱讀路徑與 OrcaPen 原始頁面。"
-sidebar: contribution
+title: "文件導覽"
+description: "依照要完成的工作，找到對應的教學、操作指南與參考資料。"
+lang: zh-TW
+scgsim-id: "docs/documentation-map"
+scgsim-kind: "contribution"
+scgsim-status: "CONVERGING"
 ---
 
-請從「教學」選擇五種完整計算流程之一。各後端課程頁保留原有網址與定位點，作為細節參考。
+第一次使用時，先跟著教學完成一筆計算。改用自己的電路時，再查操作指南；需要確認參數或輸出格式時，則查參考資料。
 
-## 頁面調整方式 {#page-migration}
+## 依工作找文件 {#reader-paths}
 
-| 目前頁面 | 本網站的安排 |
-| --- | --- |
-| `README.md`、`index.qmd`、`docs/course/installation.qmd` | 保留為套件總覽與安裝入口。 |
-| `docs/examples.qmd` | 改寫為依模擬目標選擇流程的入口。 |
-| `docs/course/*.qmd` | 保留各後端與工作細節的原網址，並連結至完整目標教學。 |
-| `docs/tutorials/*.qmd` | 保留五份完整目標教學，並從「教學」及參考索引連結。 |
-| `docs/concepts/*.qmd`、`docs/eigenmode-epr.qmd` | 保留於「概念」。 |
-| `docs/backend-support.qmd`、`docs/specs/*.qmd`、`docs/execution-profiles.qmd`、`docs/mesh-quality.qmd`、`docs/report-model.qmd`、`docs/api-migration.qmd`、`docs/notebook-ux.qmd` | 保留於「契約」，作為支援行為與詳細介面的依據。 |
-| `docs/architecture.qmd`、`docs/goals-and-upstream.qmd`、`docs/provenance.qmd`、`docs/roadmap.qmd`、`docs/errors.qmd`、`docs/convergence-status.qmd`、`docs/ownership.qmd` | 保留原網址，並歸入「貢獻」中的專案與維護參考。 |
-| `docs/history/aedt-capacitance-pre-v3.qmd` | 保留於歷史參考。 |
-| `docs/history/curved-source-installation.qmd` | 保留為 Circular Pad 研究所固定的歷史環境與 Palace 原生設定。 |
+| 你要做什麼 | 從這裡開始 |
+|---|---|
+| 安裝套件與公開元件庫 | [安裝 SCGSim](course/installation.qmd) |
+| 建立入門教學共用的模型 | [SimplePad 模型](tutorials/simplepad-model.qmd) |
+| 計算電容 | [準備模擬包](tutorials/capacitance/prepare.qmd) → [執行模擬](tutorials/capacitance/run.qmd) → [分析結果](tutorials/capacitance/analyze.qmd) |
+| 計算共振與 EPR | [準備模擬包](tutorials/resonance-epr/prepare.qmd) → [執行模擬](tutorials/resonance-epr/run.qmd) → [分析結果](tutorials/resonance-epr/analyze.qmd) |
+| 調整模型、執行求解器或讀取結果 | [教學與操作指南](examples.qmd) |
+| 查輸入規則與輸出格式 | [參考主題](reference.qmd) |
+| 參與程式或文件開發 | [貢獻指南](contributing.qmd) |
 
-## 目標教學版本與 OrcaPen 來源連結 {#goal-versions-and-orcapen-source-links}
+## 內容由誰維護 {#source-ownership}
 
-每份教學使用 SCGSim `2.0.0rc11`，來源版本為 [`90fb50e`](https://github.com/NCUPHY-LTLab/scgsim/tree/90fb50ef9de80fa6e556d2f2a09fb45707efeea0)。連結的 OrcaPen 來源負責元件或橫截面資料；調整流程時，請使用該教學列出的 SCGSim 固定版本。
+SCGSim 文件說明幾何、準備模擬、執行與結果 API。[OrcaPen SC PDK](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk) 維護公開元件、製程堆疊及可執行的元件模擬 Notebook。每個範例的連結保留它使用的來源版本；對應環境的安裝方式集中在[安裝指南](course/installation.qmd#example-environments)。
 
-| 目標 | SCGSim 完整教學 | OrcaPen 元件或橫截面來源 |
-| --- | --- | --- |
-| 電容 | [焊盤電容](tutorials/capacitance.qmd) | PDK [`51985d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9)：[SimplePad Palace 靜電分析](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/palace_electrostatic.qmd)、[Q3D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_q3d.qmd) |
-| 共振 | [共振模態](tutorials/resonance.qmd) | PDK [`51985d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9)：[SimplePad Palace Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/palace_eigenmode.qmd)、[HFSS Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd) |
-| EPR | [模態能量參與率](tutorials/resonance-epr.qmd) | PDK [`51985d9`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9)：[SimplePad Palace Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/palace_eigenmode.qmd)、[HFSS Eigenmode](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad/aedt_hfss_eigenmode.qmd) |
-| 散射 | [CPW 散射響應](tutorials/scattering.qmd) | PDK [`35b4dc1`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9)：[HFSS Driven Modal](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/ComponentSimulation/CpwFiniteGround/aedt_hfss_driven_modal.ipynb)、[HFSS Driven Terminal](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/ComponentSimulation/CpwFiniteGround/aedt_hfss_driven_terminal.ipynb) |
-| 傳輸線 | [CPW 單位長度 RLGC](tutorials/transmission-line.qmd) | PDK [`35b4dc1`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9)：[有限接地 CPW Q2D](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/CrossSectionSimulation/CpwFiniteGround/aedt_q2d.ipynb) |
+修改 OrcaPen 範例時，要一併檢查連到它的 SCGSim 文件。修改 SCGSim API 時，則要檢查操作指南與對應範例。Notebook 的原始檔統一維護在 PDK 儲存庫。
 
-教學插圖沿用已發布的來源圖片，或呈現明確宣告的幾何。本次文件更新檢查了來源、API 參照與網站連結，沒有新增原生求解器執行。
+## 維護者資料 {#maintainer-references}
 
-## OrcaPen 與 SCGSim 主題對照 {#orcapen-to-scgsim-topics}
-
-OrcaPen 提供元件與製程案例。請從其頁面連至負責通用模型、求解器、網格、交接或結果細節的 SCGSim 主題。跨網站連結應指向所選 OrcaPen 教學指定的 SCGSim 版本。
-
-| OrcaPen 來源頁面 | SCGSim 主題入口 |
-| --- | --- |
-| `docs/notebooks.qmd` | [模擬總覽](examples.qmd)與[主題索引](reference.qmd)。 |
-| `docs/simulation/requirements/electrostatic-capacitance.qmd` | [模型與材料](reference.qmd#model-materials)及[導體與埠](reference.qmd#conductors-ports)。 |
-| `docs/simulation/requirements/eigenmode.qmd`、`docs/simulation/requirements/epr-loss.qmd` | [模型與材料](reference.qmd#model-materials)及[儲存場與離線損耗](reference.qmd#saved-fields-offline-loss)。 |
-| `docs/simulation/tools/mesh-fem-amr.qmd` | [網格與自適應](reference.qmd#mesh-adaptation)。 |
-| `docs/simulation/tools/handoff-resolve-report.qmd` | [執行與交接](reference.qmd#execution-handoff)及[結果與報表](reference.qmd#results-reports)。 |
-
-上表 OrcaPen 連結標示元件來源版本。SCGSim 介面細節請依各目標教學所固定的版本，並閱讀[SCGSim 參考索引](reference.qmd)中的對應主題。
+- [文件寫作規範](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/DOCS_STYLE.md)
+- [儲存庫維護](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md)
+- [模組分工](ownership.qmd)

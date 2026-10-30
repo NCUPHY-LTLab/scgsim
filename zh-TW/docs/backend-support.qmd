@@ -1,44 +1,67 @@
 ---
 title: "支援的計算"
-description: "依據物理問題、輸入資料與回傳量，選擇已實作的求解器工作流程。"
+description: "SCGSim 支援哪些計算、各自接受什麼輸入，以及會回傳什麼。"
 lang: zh-TW
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/backend-support"
 ---
 
-SCGSim 提供以下工作流程。求解器可能支援 SCGSim 尚未實作的其他問題類型。請先依所需物理量選擇計算方式，再選擇合適的來源與邊界模型。
+本頁列出 SCGSim 支援的所有計算，並連結至各項精確參考資料。Palace 與 AEDT 能處理更多問題；SCGSim 目前只支援下表列出的項目。
 
 ::: {.table-responsive}
 
-| 計算方式 | SCGSim 後端 | 輸入 | 回傳量 |
+| 計算 | 求解器 | 幾何輸入 | 結果 |
 |---|---|---|---|
-| 靜電 | Palace | GeometryPlan、端點與接地 Net | 有序電容矩陣 |
-| 本徵模 | Palace | GeometryPlan、可選的電感端口 | 模態頻率／原生 Q 值、能量；指定的 EPR |
-| 本徵模 | HFSS | `modeling="solid"` 或 `"thin_film"`；GDS 對應或以來源為起點的 GeometryPlan | 模態頻率／原生 Q 值；指定的 EPR |
-| 驅動模態 | HFSS | `modeling="solid"` 或 `"thin_film"`；GDS 對應與積分線端口 | 複數 S 參數、CSV 與 Touchstone |
-| 驅動端點 | HFSS | `modeling="solid"` 或 `"thin_film"`；GDS 對應與明確指定的參考導體 | 複數 S 參數、CSV 與 Touchstone |
-| 有限 3D 萃取 | Q3D | `modeling="solid"` 或 `"thin_film"`；`Q3dSpec` v3 實體，或由 GeometryPlan 支援的 C/G 準備資料 | C/G，以及可選的 AC/RL 萃取矩陣 |
-| 截面萃取 | Q2D | 明確指定的矩形與導體群組 | 每單位長度 C/G/L/R 區塊 |
+| 靜電 | Palace | GeometryPlan 快照；端點與接地 Net | 電容矩陣 |
+| 本徵模 | Palace | GeometryPlan 快照；可選電感端口 | 模態頻率、Q、能量；可選 EPR |
+| 本徵模 | HFSS | GDS 對應，或用於 EPR 的 GeometryPlan 快照 | 模態頻率、Q；可選 EPR |
+| Driven Modal | HFSS | GDS 對應；含積分線的端口 | S 參數、CSV 與 Touchstone |
+| Driven Terminal | HFSS | GDS 對應；含參考導體的端口 | S 參數、CSV 與 Touchstone |
+| 3D 萃取 | Q3D | 3D 實體（`Q3dSpec`），或用於 C/G 的 GeometryPlan 快照 | C/G；可選 AC R/L 矩陣 |
+| 截面萃取 | Q2D | 矩形與導體群組 | 單位長度 C/G/L/R |
 
 :::
 
-每個新的 Q3D 與 HFSS 3D 請求都必須明確選擇建模表示法，沒有預設值。AEDT 請求也必須明確指定 `aedt_version` 為 `"2023.2"` 或 `"2024.2"`；兩者都使用 PyAEDT 1.3.0，且所選 AEDT Desktop 必須與 SCGSim 在同一部主機上執行。Solid／Thin-Film 擴充功能目前狀態為 **CONVERGING**。此表列出支援的請求類型與預期回傳量，並非新表示法的求解器實測結果。
+每個 HFSS 與 Q3D 請求都必須設定 `modeling="solid"` 或 `"thin_film"`，沒有預設值。請參閱[實體與薄膜建模](specs/aedt-runtime.qmd#aedt-solid-thin-film)。
 
-Prepared-native BatchSolve 是既有 HFSS EPR 工作流程的另一種執行方式。請在工作站的 Desktop 交易中準備並收集原生模型；求解主機只執行封裝後的求解器階段，且須具備明確指定的相同 AEDT 版本、命令列求解器與可用的求解器授權。求解主機不需要 PyAEDT，也不需要可用的 Desktop 工作階段。此方式不會變更 HFSS 模型或 EPR 請求，也不會提交排程工作。[HPC EPR 參數掃描指南](course/aedt-hpc-sweep.qmd)說明如何一併傳送多個獨立套件；[AEDT 執行環境契約](specs/aedt-runtime.qmd#prepared-native-hfss-epr-batch)記錄目前的原生驗證狀態與完整回傳規則。
+**不支援：** Palace Driven、Palace Magnetostatic，以及 AEDT 曲線幾何（AEDT 模擬使用多邊形）。
 
-Palace Driven 與 Magnetostatic 尚未實作；Meep 不屬於 SCGSim 範圍。Palace 的[原生問題類型](https://awslabs.github.io/palace/stable/guide/problem/)涵蓋本表以外的計算。[PyAEDT 使用者指南](https://aedt.docs.pyansys.com/version/stable/User_guide/index.html)介紹底層 AEDT 自動化函式庫。
+## 能量參與率與損耗 {#energy-participation-and-loss}
 
-## 能量參與與損耗 {#energy-participation-and-loss}
+Palace 與 HFSS Eigenmode 可回報表面、體積與接面（端口）參與率。
 
-Palace 與 HFSS 本徵模支援表面、體積及電感端口／接面分析。請求會從已設定的物理模型中選取物理量；未提供的通道不會因此變成零。表面薄膜使用明確指定的厚度、介電率與損耗假設。AEDT 表面估算涵蓋水平的頂部／底部介面，不包含側壁薄膜能量。因此，已知損耗的小計不一定等於元件總損耗。
+- 只會回報你要求的項目；未要求的通道會缺漏，不會以零表示。
+- 表面薄膜須明確指定厚度、介電率與損耗正切值。
+- HFSS 只評估頂部與底部介面，不計算金屬側壁上的薄膜能量。
+- 損耗總和只涵蓋已評估通道，不代表元件總損耗。
 
-AEDT 可使用保留的原生儲存場計算 EPR，無須重新求解本徵模；但此操作仍需要 AEDT。離線重新分析則可在不執行原生評估的情況下，變更已記錄 EPR 結果所採用的歸因損耗假設。
+模擬後你可以：
 
-## 來源與結果的差異 {#source-and-result-differences}
+- **使用已儲存的 HFSS 場重新計算 EPR**，例如套用其他邊界距離。這需要 AEDT，但不需要重新求解。請見[使用已儲存的 AEDT 場計算 EPR](course/aedt-saved-fields.qmd)。
+- **變更既有 EPR 結果的損耗假設**，不需任何求解器。請見[離線變更損耗假設](course/offline-epr.qmd)。
 
-Palace、以來源為起點的 HFSS 本徵模，以及 Q3D C/G 準備前端共用 GeometryPlan。Q3D 也支援不依賴來源的 v3 實體定義；Q2D 接收明確定義的截面資料，不會推測切片。共用來源幾何不代表邊界條件相同，也不會讓集總電容、共振、S 參數與每單位長度矩陣彼此等價。請依各結果的單位，以及原生導體／端口／模態順序判讀。
+## 其他功能 {#other-features}
 
-1.1.0 版 Palace 來源路徑支援明確定義的曲線，以及由呼叫端選擇的 GDS 邊界重建。這些輸入會保留其來源 Entity 與出現位置識別資訊，再由 `scgsim.geometry.compiler` 降階處理。AEDT 不支援曲線意圖。Palace 的 `geometry_order` 控制幾何網格表示法，與場問題使用的 FEM 階數分開。這些控制項及回傳的網格摘要描述的是網格生成方式，不代表求解器準確度。
+- **曲線幾何（Palace）。** 明確繪製的曲線，或從指定 GDS 線段擬合的曲線，會保留 Entity 身分並以曲線方式建立網格。請見[來源曲線](geometry-sgb.qmd#source-curves)。
+- **網格控制（Palace）。** `geometry_order` 控制網格貼合曲面的程度，與有限元素階數分開設定。
+- **只準備模型（AEDT）。** Q3D、HFSS 與 Q2D 可在 AEDT 中建立模型、儲存並關閉，而不執行求解。請見[只準備模型](specs/aedt-runtime.qmd#aedt-model-only-preparation)。
 
-請從[教學](examples.qmd)開始。支援請求的確切規格見 [Palace Electrostatic](specs/palace-electrostatic-sgb.qmd)、[Palace Eigenmode](specs/palace-eigenmode.qmd) 與 [AEDT 執行環境類型](specs/aedt-runtime.qmd)。
+## 結果不可互換 {#results-are-not-interchangeable}
+
+同一快照可供多個求解器使用，但每種計算有自己的邊界條件與結果。集總電容、共振頻率、S 參數與單位長度矩陣回答不同問題。判讀結果時，請保留其單位及導體、端口或模態順序。
+
+## 參考頁面 {#reference-pages}
+
+- [GeometryPlan 與幾何](geometry-sgb.qmd)
+- [Palace Electrostatic](specs/palace-electrostatic-sgb.qmd)
+- [Palace Eigenmode](specs/palace-eigenmode.qmd)
+- [AEDT 執行環境](specs/aedt-runtime.qmd)
+- [物理表示法](specs/physical-representation.qmd)
+- [材料實現](specs/material-realization.qmd)
+- [執行設定檔](execution-profiles.qmd)
+- [幾何預覽](geometry-preview.qmd)
+- [網格品質](mesh-quality.qmd)
+- [報告模型](report-model.qmd)
+- [筆記本撰寫規則](notebook-ux.qmd)
+- [API 遷移](api-migration.qmd)

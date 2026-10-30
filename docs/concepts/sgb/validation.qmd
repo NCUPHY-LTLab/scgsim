@@ -41,7 +41,7 @@ The planned volume-adjacency conformality check runs before final native volume 
 
 After OCC construction, the Gmsh BRep conformality check compares native geometry with the expected volume adjacency. When surface-first shell construction repairs faces, complete boundary incidence must map each repaired native face to exactly one planned surface. The backend tag ledger and exported physical groups must match the plan. Native tags may change; the source-bound association must not.
 
-For computational mesh groups, confirm that planned source surfaces and their source mappings remain represented in the exported labels. A Gmsh Physical Group is a mesh/solver label, not a declaration that its members touch or form one connected conductor. The [geometry contract](../../geometry-sgb.qmd#explicit-rectangular-junctions) defines group membership and serialized fields.
+For computational mesh groups, confirm that planned source surfaces and their source mappings remain represented in the exported labels. A Gmsh Physical Group is a mesh/solver label, not a declaration that its members touch or form one connected conductor. The [geometry contract](../../geometry-sgb.qmd#component-to-backend-geometry-contract) defines group membership and serialized fields.
 
 ## Failure is localized, not repaired by a later stage
 

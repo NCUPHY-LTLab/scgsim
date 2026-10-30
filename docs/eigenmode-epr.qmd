@@ -1,21 +1,21 @@
 ---
-title: "Interpreting Eigenmode EPR"
-description: "Energy normalization, physical partitions, masks and attributed loss assumptions."
+title: "Energy participation and loss"
+description: "What energy participation ratios mean, how they are normalized, and how they relate to loss."
 scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/eigenmode-epr"
 ---
 
-A resonant mode stores energy in fields and circuit elements. Energy
-participation asks where that energy is concentrated. It connects a mode's
-field distribution to particular dielectrics, interfaces and junctions, helping
-you interpret which modeled channels could contribute to loss.
+A resonant mode stores energy in its fields and in circuit elements such as
+a junction. The **energy participation ratio** (EPR) of a part of the model is
+the fraction of the mode's energy stored there. Combined with that part's loss
+tangent, it tells you how much that part contributes to the mode's loss.
 
 The [energy-participation method of Minev et al.](https://arxiv.org/abs/2010.00620)
 uses modes of a linearized Josephson circuit as inputs to quantization.
-SCGSim provides the supported electromagnetic participation and loss quantities;
-a participation plot alone does not supply a nonlinear Hamiltonian, Kerr
-coefficients or a qubit lifetime.
+SCGSim computes the participation ratios and the loss they imply. It does not
+build the nonlinear Hamiltonian, Kerr coefficients or qubit lifetime from
+them.
 
 ```{mermaid}
 flowchart TB
@@ -33,12 +33,12 @@ flowchart TB
 | Surface | A thin-film interface estimate | How strongly does the field sample this interface? |
 | Junction/port | A declared linearized circuit element | How does this element participate in the mode? |
 
-A surface estimate uses the field at an interface to estimate energy in a film
-with specified thickness and permittivity. Metal-air, metal-substrate and
-substrate-air describe different interfaces and field components. Bulk and
-surface views are not automatically disjoint pieces of a complete energy budget.
-The junction model supplies its inductance and any declared capacitance; it
-represents the linearized element used in the electromagnetic calculation.
+A surface estimate takes the field at an interface and estimates the energy
+in a thin film of given thickness and permittivity there. Metal–air (MA),
+metal–substrate (MS) and substrate–air (SA) are different interfaces. Bulk and
+surface values overlap: they are not separate pieces of one energy budget.
+The junction is the linearized element you declared, with its inductance and
+optional capacitance.
 
 ## Quantities and normalization {#quantities-and-normalization}
 
@@ -48,25 +48,22 @@ $$
 p_i = \frac{U_i}{U_{\mathrm{norm}}}.
 $$
 
-Read the numerator and denominator together. AEDT uses the electric energy of
-unique physical domains plus declared junction capacitive energy. Palace uses
-its final native electric-domain and capacitive-energy tables. Thin-film energy
-estimates are numerators and are not added back into these denominators.
+The denominator differs between solvers. AEDT uses the electric energy of all
+physical domains plus the junction's capacitive energy. Palace uses its own
+electric-domain and capacitive-energy tables. Thin-film energies are only
+numerators; they are not added to the denominator.
 The [surface and junction formulas](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization)
 define the field convention and each supported quantity.
 
-The backends also differ physically. Palace reports signed native port
-participation, which depends on the mode's phase convention. AEDT's inductive
-$p_L$ and capacitive $p_C$ are nonnegative energy ratios. These quantities need
-their own interpretation rather than direct comparison as interchangeable
-junction numbers.
+Junction participation is also defined differently. Palace reports a signed
+port participation whose sign depends on the mode's phase convention. AEDT
+reports nonnegative inductive ($p_L$) and capacitive ($p_C$) energy ratios.
+Do not compare them as the same number.
 
-State the exterior boundary and vacuum-region size alongside the geometry.
-Palace's unspecified Eigenmode exterior uses natural PMC. The documented AEDT
-EPR policy uses HFSS's default Perfect E on background-exposed surfaces of its
-native Region. A particular study's prepared native model determines its actual
-boundary; a layout preview alone does not establish it. A shared layout does
-not equalize these field models.
+The outer boundary matters too. Palace Eigenmode without an assigned
+boundary uses PMC; HFSS uses Perfect E on the outer surfaces of its region
+([HFSS 2024 R2 guide](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/PDFs/An%20Introduction%20to%20HFSS.pdf)).
+Record the boundary and vacuum size with every result.
 
 ## Interfaces and loss assumptions {#surface-identity-masks-and-loss-assumptions}
 
@@ -76,15 +73,15 @@ $$
 Q_i^{-1} = p_i\tan\delta_i.
 $$
 
-Both factors matter: a strongly sampled low-loss material and a weakly sampled
-high-loss film can have different effects. Film thickness, permittivity and
-loss tangent are model assumptions, not quantities determined by the layout.
-A known-loss sum covers only evaluated channels with specified losses. It is
-not total device $Q$ or $T_1$, and does not account for omitted mechanisms.
+Both factors matter: a material the field barely touches can still dominate
+if its loss tangent is large. Film thickness, permittivity and loss tangent are
+your assumptions; the layout does not determine them. Summing over the
+evaluated channels gives the loss from those channels only. It is not the
+device's total $Q$ or $T_1$.
 
-An explicit zero loss tangent is a known zero contribution. An unspecified loss
-tangent is unknown, so its inverse-$Q$ contribution is unavailable even when
-participation is known. Likewise, uncomputed energy is not zero energy.
+A loss tangent set to zero means lossless. A loss tangent you did not set is
+unknown, and its contribution is left out of the sum. Likewise, energy that was
+not computed is not zero energy.
 
 ::: {.callout-note title="Reading older Palace results" collapse="true"}
 For Palace surface-film records preceding v2, a recorded zero loss tangent has
@@ -92,45 +89,26 @@ ambiguous origin. The reader preserves the raw value but treats its effective
 loss as unknown; the inverse-$Q$ contribution remains unavailable.
 :::
 
-## Historical SGB geometry distance bands {#surface-distance-band-correction}
+A **mask margin** is passed to Palace's native Inset evaluation as
+`Mask: {Type: Inset, Margin: ...}`. Use a Palace build that supports this
+evaluation. These results are separate from the retired SGB geometric distance
+bands. Read the unmasked baseline and each returned margin separately; do not
+add them. AEDT evaluates only horizontal (top and bottom) interfaces, not
+sidewalls. Palace sidewalls are computed only where selected. You can change
+loss tangents on a stored result without solving again; see
+[Change loss assumptions offline](course/offline-epr.qmd).
 
-SGB geometry-level distance bands were a withdrawn geometry partition and Palace aggregation path. They are not part of the current producer. Palace native Mask/Inset margins remain a separate Surface EPR option through `inset_margins_um`; the selected Palace executable must implement that native configuration. An unmasked baseline is requested by omitting the margin field. Native margins are alternative evaluations, not disjoint geometry regions, so do not add them as bands.
-
-### Future Q2D correction (paused)
-
-Q2D follow-up is paused and is not part of the Palace-only band workflow. The
-same-basis relation previously considered for a separate Q2D correction was
-
-$$
-F = \frac{I_{0-1}}{I_{0.5-1}}, \qquad
-p_{\mathrm{corrected}} = p_{\geq 1} + F p_{0.5-1}.
-$$
-
-This relation is not part of the current Palace band results. The Palace
-cutoff totals are direct Palace EPR outputs; they are not converted by this
-Q2D relation.
-
-Archived mask margins are alternative interface estimates. Read a saved
-unmasked baseline and its requested margins separately; do not add them as
-disjoint bands. AEDT evaluates horizontal top/bottom
-interfaces and does not calculate sidewall film energy. Palace sidewalls also
-remain uncomputed where they were not selected. Changing a film-loss assumption
-on stored evidence can revise the loss estimate without another field solve;
-it does not recompute the field or alter the modeled geometry.
-
-Native solver $Q$ and this model-derived loss budget answer different questions.
-Native $Q$ reflects the mechanisms represented in that solver calculation;
-$p\tan\delta$ attributes loss to the selected material model. Palace can report
-native infinite $Q$ without establishing a physically lossless device. Keep
-that observation separate from unknown losses and the finite-Q view described
-in the [native Q reference](specs/palace-eigenmode.qmd#native-eigenmode-q).
+The solver's own $Q$ and this $p\tan\delta$ sum are different quantities. The
+solver $Q$ includes only the losses in the solver's model, such as lossy
+materials or ports. Palace reports $Q = +\infty$ when the model has no loss;
+that does not mean the device is lossless. See the
+[native Q reference](specs/palace-eigenmode.qmd#native-eigenmode-q).
 
 ## Explore a result
 
-Start with the [resonance/EPR tutorial](tutorials/resonance-epr.qmd), then use
-[offline EPR](course/offline-epr.qmd) to inspect recorded modes and revise loss
-assumptions. The [examples](examples.qmd) connect the physical model to its
-backend workflow.
+Start with the [resonance tutorial](tutorials/resonance-epr/prepare.qmd), then use
+[Change loss assumptions offline](course/offline-epr.qmd) to try other loss
+values.
 
 For binding and API details, use the [AEDT EPR reference](specs/aedt-runtime.qmd#public-epr-candidate-surface)
 and [Palace Eigenmode reference](specs/palace-eigenmode.qmd). The

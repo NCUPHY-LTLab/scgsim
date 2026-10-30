@@ -1,13 +1,17 @@
 ---
 lang: zh-TW
-title: "Palace：共振模態"
-description: "先準備一般 Eigenmode 輸入，再加入選用的表面、體積及埠 EPR 請求。"
+title: "Palace Eigenmode：共振模態"
+description: "為自己的模型設定 Palace Eigenmode 執行，並可選擇加入接面埠與能量參與率。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/palace-eigenmode"
 ---
 
-開始前，請備妥[來源觀測](source-observations.qmd)中的共用 `snapshot`，並安裝 Palace preparation extra。Eigenmode 會搜尋所設定場模型的共振；單純執行時不需要表面損耗模型、接面埠或 EPR 請求。
+本頁會為自己的模型設定共振模態計算。你需要已指派電氣網路的 `snapshot`；請參閱[使用自己的模型](working-model.qmd)。[共振教學](../tutorials/resonance-epr/prepare.qmd)會以單一焊墊示範相同步驟。
+
+若沒有表面薄膜、接面埠或能量參與率（EPR）請求，Eigenmode 仍可執行。只有需要時才加入這些設定。
+
+## 設定模態搜尋 {#set-up-the-modes}
 
 ```python
 from pathlib import Path
@@ -16,73 +20,117 @@ from scgsim.palace import EigenmodeSim
 
 sim = EigenmodeSim()
 sim.set_plan(snapshot)
-sim.set_output_dir(Path(".artifacts/public-xmon-palace-modes"))
+sim.set_output_dir(Path(".artifacts/xmon-modes"))
 sim.set_eigenmode(num_modes=2, target=2e9, tolerance=1e-6, save=0)
-sim.set_mesh(
-    size_policy="scgsim_default",
-    refined_mesh_size=5.0,
-    max_mesh_size=300.0,
-)
-sim.set_numerical(amr_max_passes=0)
+sim.set_mesh(refined_mesh_size=5.0, max_mesh_size=300.0)
 display(sim.input_summary())
 ```
 
-使用 `set_mesh(...)` 選擇 `size_policy`、`algorithm_3d`、`threads`、`surface_threads`、`geometry_order` 與 `high_order_optimize`。全新的 `EigenmodeSim` 使用 Gmsh 原生尺寸設定；本範例明確選取 `scgsim_default`，並使用 5 µm 與 300 µm 的尺寸配對。幾何階數控制網格表示法；FEM 階數則是獨立的數值設定。政策預設值與狀態轉換見共用的 [Palace 網格契約](../specs/palace-electrostatic-sgb.qmd#palace-mesh-size-policy)。
+| 引數 | 說明 |
+|---|---|
+| `num_modes` | 要尋找的模態數量。 |
+| `target` | 模態搜尋的目標頻率，單位為 Hz。 |
+| `tolerance` | 特徵值求解器容差。 |
+| `save` | 要儲存供視覺化使用的模態場數量；`0` 表示不儲存。 |
 
-這些是範例明確指定的控制項：target 單位是 Hz，網格尺寸單位是微米。請依 SCQ 研究所需的模態與數量選擇設定，並在研究紀錄中保留所選值與後續變更。`save` 控制原生儲存場輸出。全新的 `EigenmodeSim` 會寫入 `Nonconformal=true`。此單網格範例明確設定 `amr_max_passes=0`，以停用自適應細化。呼叫 `write_config()` 前，請透過 `set_numerical(...)` 提供 `amr_max_passes`；若通過次數上限大於零，也必須由呼叫端選定 `amr_tolerance` 與 `amr_update_fraction`。後續呼叫若省略這些控制項，會沿用目前值。請在其所控制的操作旁記錄選用的數值與輸出控制項，不要將它們藏在 Notebook 輔助程式中。
+有限元素網格尺寸的單位為微米。`set_mesh` 也接受 `algorithm_3d`、`threads`、`surface_threads`、`geometry_order` 與 `high_order_optimize`；詳見[網格設定參考](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls-110-candidate)。元素階數與自適應細化請依[共振教學](../tutorials/resonance-epr/prepare.qmd#step-1-set-up-the-eigenmode-calculation)使用 `sim.set_numerical(...)` 設定。除非設定 `amr_nonconformal=True`，否則 SCGSim 會將 Palace 的 `Nonconformal` 細化設為 false。
 
-請依研究需求檢視摘要中的模態／搜尋／資源設定。摘要會顯示正規化來源與設定，但不會產生網格或求解。真空包覆來自 plan；未指定的外部 Eigenmode 表面沿用 Palace 的自然 PMC 條件。這與 AEDT EPR 模型預設的 Perfect E 外部邊界不同。
+`input_summary()` 會顯示模型與設定，不會建立有限元素網格。
 
-## 建立實際後端輸入 {#build-the-real-backend-inputs}
+**邊界。** 真空區域來自 plan。其外表面未指派條件，因此 Palace 會將它視為完美磁導體（PMC）。HFSS 預設使用 Perfect E 邊界；因此兩種求解器對相同幾何可能得到不同頻率。
+
+## 加入接面與 EPR（選用） {#add-a-junction-and-epr-optional}
+
+若要使用線性化 Josephson 接面，請在已編寫的薄片上加入電感埠，並指定要回報的參與量：
+
+```python
+sim.add_port("chip/o_junction_lumped", layer="D0_TOP_M1",
+             layout_sheet=True, inductance=10e-9)
+sim.set_epr_request(
+    surface_interfaces=("MA", "MS", "SA"),
+    bulk_domain_ids=None,
+    port_names=("chip/o_junction_lumped",),
+)
+```
+
+表面參與量也需要透過 `set_surface_epr` 設定薄膜參數；請參閱[共振教學](../tutorials/resonance-epr/prepare.qmd#step-1-set-up-the-eigenmode-calculation)與 [Xmon Palace 範例](../tutorial-xmon-palace.qmd)。EPR 請求只選擇要回報的項目，不會從模型中移除材料。
+
+Palace 會回報帶符號的埠參與量。HFSS 則回報非負的電感與電容比例。[能量參與率與損耗](../eigenmode-epr.qmd)說明兩者差異。
+
+## 建立有限元素網格 {#build-the-mesh}
 
 ```python
 mesh_path = sim.mesh()
 config_path = sim.write_config()
-print(mesh_path, config_path)
 ```
 
-產生網格後，`sim.mesh_summary()` 會提供分離的網格生成觀測。Eigenmode 也會回報依所設 FEM 階數估算的拓撲 Nédélec 自由度。此估算不是求解器的實際 DOF 數；變更 FEM 階數會更新估算值，但不會重新產生網格。
+`mesh()` 會使用 Gmsh 建立共形有限元素網格，並將金屬內部排除於求解區域之外。若之後變更幾何或網格設定，請再次呼叫 `mesh()`；若來源模型改變，請建立新的快照。
 
-產生網格時，來源幾何會經由 `scgsim.geometry.compiler` 降階為共形模型與實際 Gmsh 網格。有限金屬 PEC 殼會將導體內部排除於 Palace 求解區域。寫入設定時會使用產生後確切的網格／索引識別。變更來源幾何或網格控制項會使衍生狀態失效；共用來源變更時，請準備新的快照，不要只覆寫其堆疊或包覆。
+`sim.mesh_summary()` 會依所選元素階數回報元素數量及估算的未知數數量。執行後，Palace 會回報實際未知數數量。
 
-此時尚無 Eigenmode 頻率結果。請接著閱讀[求解器觀測](solver-observations.qmd)並[明確執行](execute.qmd)，再[解析回傳結果](returned-results.qmd)。依[預期 SCQ 用途](returned-results.qmd#interpret-for-scq-use)讀取指定模態頻率及選用的參與量歷程，同時保留原生準則／狀態。Eigenpair 殘差或 AMR 指標只描述各自的原生數值；單靠它們無法證明預計使用的頻率或 EPR 貢獻是否足夠。
+## 執行並讀取結果 {#run-and-read-the-result}
 
-回傳後，報告會將原生 `eig.csv` 中的 `Q=+inf` 保留為**原生回報的無限 Q**，因此無法提供有限 Q 檢視。請將此原生觀測與物理無損模型的主張分開；它不能補上缺少的損耗假設，也不能決定元件壽命。其他有效的頻率與能量通道仍可依既有契約讀取。[原生 Q 契約](../specs/palace-eigenmode.qmd#native-eigenmode-q)定義此有限例外；其他欄位及 NaN／負無限值仍遵循現行政策。
+1. 可選擇[檢查已準備的模型](solver-observations.qmd)。
+2. [執行模擬包](execute.qmd)。
+3. [讀取結果](returned-results.qmd)。
 
-若公開 Xmon 使用電感來源埠與已歸屬的薄膜，請在產生網格與準備交接套件**之前**，先使用 [Palace EPR 延伸教學](../tutorial-xmon-palace.qmd)。其中的 surface／bulk／port 選擇會篩選回報數量，不會刪除物理區域或改變正規化方式。[EPR 概念](../eigenmode-epr.qmd)說明後續要解讀的數值，包括為何原生埠參與量帶正負號，而 AEDT 接面參與量為非負值。
+報告會列出各模態的頻率、品質因子 Q，以及你要求的參與率。請同時檢查頻率與所用參與率在網格自適應迭代間的變化；它們的收斂速度可能不同。
 
-## Surface EPR 的原生 Mask／Inset
+若模型沒有損耗，Palace 會回報 $Q = +\infty$。報告會顯示「native-reported infinite Q」，並將由 Q 推導的數值留空。詳見[原生 Q 參考](../specs/palace-eigenmode.qmd#native-eigenmode-q)。
 
-Palace Surface EPR 可透過 `inset_margins_um` 要求原生 Mask／Inset 邊距資料列。省略此欄位即可只要求未遮罩基準列。非空請求需要支援原生 Mask／Inset 設定的 Palace 可執行檔；Python 準備流程不會提供該執行檔。這些資料列是原生邊距評估，不會分割 SGB 幾何，也不會建立距離帶。公開的 [Xmon EPR 延伸範例](../tutorial-xmon-palace.qmd)示範來源設定。
+## 範例：Circular Pad LC 研究 {#circular-pad-lc-study}
 
-## Circular Pad LC 研究 {#circular-pad-lc-study}
+本例將上述步驟用於具有曲線邊界的圓形焊墊。OrPen SC PDK 的相關教學位於修訂版 [`ecc9062`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/ecc90623b62e55f95afaa5a1f1048a71f81cae52)：[來源教學](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/src/ComponentSimulation/CircularPad/palace_eigenmode.qmd)、[Notebook](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/palace_eigenmode.ipynb)與[結果資料](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/README.md)。
 
-目前公開的 OrPen 教學版本為 [`ecc9062`](https://github.com/OrPenStrike/orpen-sc-pdk/tree/ecc90623b62e55f95afaa5a1f1048a71f81cae52)：[標準來源教學](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/src/ComponentSimulation/CircularPad/palace_eigenmode.qmd)、[衍生 Notebook](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/palace_eigenmode.ipynb)，以及 [Fresh08 結果證據](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/README.md)。來源定義半徑 100 µm 的焊墊及徑向間隙 20 µm，並使用含 500 µm Si 與 0.2 µm Al 的單晶粒堆疊。它建立寬 2 µm、朝東的接面埠，並宣告線性 10 nH 電感支路且 C=0（不增加電容支路）。目前來源選擇方式見[安裝教學](installation.qmd#select-the-curved-source-cell)。已發布結果來自較晚的教學修訂版；其實際執行輸入列於下方。
+![1000 µm 晶粒上的 Circular Pad 版圖。細節圖顯示東側接面薄片。](../assets/circular-pad-layout.png){#fig-circular-pad-source-layout}
 
-::: {.callout-note title="此曲線 Uniform 埠所需的原生 Palace"}
-此研究請使用以[修訂版 `4e9e1b7`](https://github.com/arfiligol/palace/tree/4e9e1b7232b4c8ca8b964be7e70f1848f578de37)建置的原生 Palace 執行檔，或包含[曲線埠範圍修正](https://github.com/arfiligol/palace/blob/4e9e1b7232b4c8ca8b964be7e70f1848f578de37/palace/utils/geodata_impl.cpp)的後續版本。SCGSim Python extra 無法取代原生執行檔；請參閱[安裝說明](installation.qmd#native-palace-for-this-curved-uniform-port)。此研究會透過原生 MPI 包裝程式啟動 8 個 MPI 程序 × 1 個 OpenMP 執行緒；直接執行 ELF 檔不能取代該包裝命令。此原生需求適用於此曲線 Uniform 埠範例。
+模型為半徑 100 µm 的焊墊，徑向間隙 20 µm；基板為厚 500 µm 的矽，並含厚 0.2 µm 的鋁。東側 2 µm 寬的薄片承載 10 nH 接面電感。焊墊的圓形邊緣是精確圓弧，Palace 使用二階幾何建立有限元素網格。
+
+### 載入元件 {#select-the-curved-source-cell}
+
+::: {.callout-note title="開始前"}
+請設定 Circular Pad 環境：[安裝 SCGSim](installation.qmd#env-circular-pad)。
 :::
 
-準備流程會透過 Palace PEC Shell 傳遞編寫的曲線。網格設定使用 HXT、幾何階數 2，並執行一次 `HighOrder` 最佳化。這些設定描述網格幾何。Palace FEM 階數 2 是獨立的場近似設定；設定的 AMR 通過次數上限為四，只限制允許的適應工作量，不代表實際完成四次通過。
+```python
+import gdsfactory as gf
+import orpen_sc_pdk
 
-### 讀取並延續回傳研究 {#read-and-continue-the-returned-study}
+orpen_sc_pdk.activate()
+component = gf.get_component(
+    "circular_pad_capacitor",
+    outer_radius_um=100.0,
+    inner_radius_um=0.0,
+    gap_um=20.0,
+    die_side_um=1000.0,
+    junction_width_um=2.0,
+)
+```
 
-Fresh08 完成一次原生執行、四次細化與五個求解／估算快照。收據綁定的 Resolve 選取完整最終快照，既有 Report 也已完成。模態 1 的最終頻率為 **5.573354161115 GHz**。圖中與[頻率／AMR CSV](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/frequency_amr.csv)列出頻率歷程與原生指標。
+接著依[使用自己的模型](working-model.qmd)建立 plan。元件已包含圓弧；快照會將其傳遞至 Palace。
 
-![Fresh08 五個快照中的模態 1 頻率與原生誤差指標。](../assets/circular-pad-frequency-amr.png){#fig-circular-pad-frequency-amr}
-
-最終指標為 **0.1186681863426**，高於設定值 **0.02**。Palace 在完成設定的四次細化後停止，並未證明已達到容差；此比較是觀測結果，不是充分性準則。五個後處理階段都在 10000 次迭代時回報兩次 PCG 未收斂，初始外部屬性 11 與 3 也保留自然 PMC／ZeroCharge 警告。程序正常結束且 Resolve 嚴格解析成功，仍無法消除這些警告或證明網格收斂。
-
-Notebook 開啟時會使用 `WORKFLOW_ACTION = "analyze_handoff"`，讀取公開套件未附上的保留執行產物。若要準備自己的模型，請選 `prepare_handoff`；若要準備並以全新的 `RUN_ID` 啟動 Palace，請選 `run`。原生 Palace 執行檔須依上方說明另行安裝。結果包含九個表面、兩個體積及一個接面貢獻。[具型別的 EPR CSV](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/typed_epr.csv)保留 Palace 的正負號慣例：接面值為 **−0.9948401783541**（`signed_palace=true`），不可取絕對值，也不可解讀為負的物理儲存能量。表面值是未遮罩、零內縮的基線；LiteratureCentral 損耗輸入是合成假設，不是製程量測值。已知損耗輸出不是元件 Q／T1；解讀方式請參閱 [EPR 概念](../eigenmode-epr.qmd)。
-
-::: {.callout-note title="Uniform 埠模型"}
-集總埠使用固定的 +x 方向，等效寬度為 $w=A/l$，其中 $A$ 是埠區塊面積，$l$ 是沿該方向的長度。此均勻投影不是曲線間隙兩側的精確局部電壓，也不是等電位端子電壓。宣告的 10 nH 是電路模型輸入，不是量測所得的電感。
+::: {#native-palace-for-this-curved-uniform-port .callout-important title="此範例需要修補版 Palace"}
+曲線接面埠需要以[修訂版 `4e9e1b7`](https://github.com/arfiligol/palace/tree/4e9e1b7232b4c8ca8b964be7e70f1848f578de37)或更新版本建置的 Palace，其中包含[曲線埠範圍修正](https://github.com/arfiligol/palace/blob/4e9e1b7232b4c8ca8b964be7e70f1848f578de37/palace/utils/geodata_impl.cpp)。其他 Palace 範例不需要此版本。
 :::
 
-::: {.callout-note title="原生執行細節" collapse="true"}
-最終中繼資料記錄 846008 個 ND 未知數與 114197 個四面體，使用 8 個 MPI 程序 × 1 個 OpenMP 執行緒。細化後，在另行雜湊且仍存在的最終邊界 VTU 中，一個有來源綁定的 Pad MA 側壁網格單元呈現局部非仿射座標。此 VTU 片段未列入嚴格回傳收據；單一網格單元無法證明精確的 R100 保真度、整體幾何精度或共用節點移動情況。詳情見[公開證據頁面](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/README.md)。
+Notebook 使用 HXT 演算法、二階幾何與一次高階最佳化，元素階數為 2，網格自適應迭代最多四次。它使用 8 個 MPI 程序，每個程序 1 個執行緒。
+
+Notebook 預設使用 `WORKFLOW_ACTION = "analyze_handoff"`，需要未公開的既有執行資料夾。若要自行執行，請選擇 `prepare_handoff` 或 `run`，並使用新的 `RUN_ID`。
+
+### 結果 {#result}
+
+本次執行在完成四次網格自適應迭代後結束，模態 1 頻率為 **5.573 GHz**。
+
+![網格自適應迭代期間的模態 1 頻率與 Palace 誤差估值。](../assets/circular-pad-frequency-amr.png){#fig-circular-pad-frequency-amr}
+
+此結果**尚未收斂**。最終誤差估值為 0.119，高於所要求的 0.02；Palace 因達到四次網格自適應迭代的上限而停止。記錄也顯示後處理期間線性求解器（PCG）收斂警告。採用此頻率前，請增加網格自適應迭代次數。
+
+接面參與量為 −0.995。負號是 Palace 的埠參與量慣例，不代表負能量。表面薄膜使用文獻數值，因此表面損耗圖只作示意，不能預測此元件的 Q 或 $T_1$。
+
+::: {.callout-note title="曲線埠的建模方式"}
+集總埠使用固定方向（+x）及等效寬度 $w = A/l$，其中 $A$ 是埠面積，$l$ 是沿該方向的長度。這是對曲線間隙電壓的近似。
 :::
 
-## 執行來源資訊 {#execution-provenance}
-
-Fresh08 使用固定版 OrPen `c79b91ef882079d937fce20129f3cbd477e8438d` 產生器匯出，以及 SHA-256 為 `925a096b4ae247fddc2ac357cdf8025979f50463721312a808ff4cefafc35b40` 的 SCGSim wheel；其執行階段位元組與公開 SCGSim develop commit `2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71` 相符（`1.1.0rc1`，可安裝的 develop 修訂版，非穩定版）。原生 Palace 來源為 `4e9e1b7232b4c8ca8b964be7e70f1848f578de37`；其 CLI 版本未確認。較晚的 OrPen checkpoint `1590199` 及本頁發布修訂版 `ecc9062` 都不是 Fresh08 的執行輸入。[公開執行 manifest](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/run_set.json)會綁定詳細來源與產物識別。
+::: {.callout-note title="執行細節" collapse="true"}
+最終有限元素網格有 114 197 個四面體與 846 008 個未知數。執行使用 SCGSim `1.1.0rc1` 的修訂版 [`2eed1eb`](https://github.com/NCUPHY-LTLab/scgsim/tree/2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71)，以及 Palace `4e9e1b7`。[執行 manifest](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/run_set.json)列出所有輸入。
+:::

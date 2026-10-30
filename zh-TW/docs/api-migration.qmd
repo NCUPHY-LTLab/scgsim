@@ -1,181 +1,157 @@
 ---
-title: "SCGSim 2.0 API 遷移對照"
+title: "SCGSim 2.0 API 遷移"
+description: "列出 SCGSim 1.x 的幾何、AEDT、Palace 與視覺化符號在 SCGSim 2.0 中的位置。"
 lang: zh-TW
-description: "目前公開的幾何、AEDT、Palace 與視覺化符號對應至 SCGSim 2.0，包含收斂中的 AEDT 建模與版本選擇契約。"
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/api-migration"
 ---
 
-本參考頁將已固定的 v1 API 介面對應至已接受的 SCGSim 2.0 實作。Human 於 2026-10-09 接受候選版本 `a932a173edb5c56ae14740ff5177190996255bdd`（tree `2745321736e53e2a4fe8d150f2e9d8bd176669db`），其語意狀態為 `ACCEPTED`，不是 `STABILIZED`。實作已透過 PR34 整合至 `develop` 的 `cc1424c84ffe9d295a57dbabb3c2ab6431110f6c`（tree `f9ecfe49df4c79be84a7991e44cc50c2602e3adb`）。目前收尾工作從後續精簡版 `develop` 的 `b46bcc7d64fbb8bab181c0da2b9234a003a20adf`（tree `c99c670927e877fb407aa4c73de32793e86a4460`）開始。原遷移基準仍為 `develop@3a52fb1`、tree `96adcf8672b497a29dd0a6b43043cca11efc3043`。隔離 wheel 的觀察只適用於其精確套件與執行期來源身份，不能據此認定使用者已安裝，也不能把原生結果移算到另一個 wheel。
+本頁列出 SCGSim 1.x 各公開符號在 SCGSim 2.0 中的位置，供升級既有專案時查閱。
 
-Solid/Thin-Film 三維要求擴充是獨立的 `CONVERGING` API 範圍。每個新的 Q3D 與 HFSS 三維要求，都必須在要求層級明確設定 `modeling` 為 `"solid"` 或 `"thin_film"`。此欄位沒有預設值，也不會替這些系列推定省略的模式。先前支援的結果酬載只能透過原系列／結構版本的讀取器讀取，原始酬載與雜湊保持不變。這不改變 Q2D 等未變更系列的共用版本化交接相容性；Q2D 與 Palace 的其餘契約也保持不變。
+AEDT 使用者最需要注意的變更是：每個新的 Q3D 與 HFSS 3D 要求都必須設定 `modeling="solid"` 或 `modeling="thin_film"`，沒有預設值。沒有 `modeling` 的舊結果檔仍可讀取，但不能啟動新執行。Q2D 與 Palace 要求不變。
 
-## AEDT 版本選擇 {#aedt-release-selection}
-
-目前 AEDT 原生要求、已儲存場分析與交接 API，都要求明確提供 `aedt_version`，且只能為 `"2023.2"` 或 `"2024.2"`；不會推定或預設選擇版本。此值隨交接資料傳遞，選擇本機交易執行期。兩個版本均使用 PyAEDT 1.3.0，並在與 SCGSim 相同的主機上執行本機 AEDT Desktop。
-
-AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並在清理時還原：`use_grpc_api=True`、`grpc_secure_mode=False`、`grpc_local=True`、`grpc_listen_all=False` 及 `PYAEDT_USE_PRE_GRPC_ARGS="True"`。AEDT 2024.2 不覆寫傳輸設定。要求的版本之間沒有備援切換或降版。已儲存產物的來源版本，與要求版本及實際連線版本各自獨立；未知來源維持 `None`，分析仍可使用另外明確指定的版本執行，不需查找或遷移。
-
-套件層級門面仍是受支援的高階入口。此移動不會替舊內部路徑新增相容包裝。既有消費端釘選保持不變；消費端只有在明確採用 v2 套件及其新舊對照時才遷移。
+套件層級 Facade 仍是受支援的高階進入點。此次搬移不會替舊內部路徑新增相容包裝。既有使用者的版本釘選維持不變；只有在使用者明確採用 v2 套件及相應的新舊對照時，才進行遷移。
 
 ## 遷移規則 {#migration-rules}
 
-- 保留 `scgsim.geometry`、`scgsim.palace`、`scgsim.aedt` 及 `scgsim.visualization` 作為套件入口；`scgsim.geometry.compiler` 保留為明確的進階編譯器介面。
-- 以文件列出的門面與宣告匯出為公開介面；私有或可匯入的實作模組不會自動成為受支援 API。
-- 將每個受支援符號移至單一責任模組，從套件門面重新匯出核准的高階符號；不保留可呼叫的第二份舊實作或相容包裝。
-- 不恢復 Q3D input-v1 或 input-v2；具本體支援的 input-v3 是已接受的 Q3D 契約。已接受候選版本有原生僅建構觀察，但不代表 C/G 求解或矩陣結果已完成。
-- 保留正式命令 `python -m scgsim.aedt.run` 作為 AEDT 交易入口；它是受支援 CLI，不是舊版包裝。
-- 已接受的 2.0 基準 AEDT 產生端輸出 `scgsim.aedt.runtime-source.v13`。該固定清單宣告 61 條路徑，其中有 41 個 AEDT 模組，並記錄 `schema_version`、`stage`、`modules`、`content_sha256` 及 `revision_observation`；模組位元組與摘要為必填，Git 觀察可如實記為無法提供。V13 不新增輔助雜湊對照，所列檔案也不是傳遞相依性認證。V1–V13 保留精確的歷史路徑與身份規則；遷移不重寫或重新解釋收據。
+- 保留 `scgsim.geometry`、`scgsim.palace`、`scgsim.aedt` 與 `scgsim.visualization` 作為套件進入點；`scgsim.geometry.compiler` 維持明確的進階編譯器介面。
+- 以文件化 Facade 與宣告的匯出項目為公開 API。私有或可匯入的實作模組不會自動成為受支援 API。
+- 將每個受支援符號移至單一責任模組，並從套件 Facade 重新匯出核准的高階符號。不要留下可觸及的第二份舊實作或相容包裝。
+- 不恢復 Q3D input-v1 或 input-v2。以實體為基礎的 input-v3 是 Q3D 契約。
+- 保留正式命令 `python -m scgsim.aedt.run` 作為 AEDT 交易進入點。這是受支援的 CLI，不是舊版包裝。
+- 2.0 基準 AEDT 產生器輸出 `scgsim.aedt.runtime-source.v13`。此固定清單宣告 61 條路徑，其中包含 41 個 AEDT 模組，並記錄 `schema_version`、`stage`、`modules`、`content_sha256` 與 `revision_observation`。模組位元組與摘要為必要欄位；Git 觀察可如實標示為無法取得。V13 不新增輔助雜湊對照表。宣告檔案不代表傳遞相依性認證。V1–V13 保留精確的歷史路徑與識別規則；遷移不會重寫或重新解讀其收據。
 
 ## 實體／薄膜要求遷移 {#solidthin-film-request-migration}
 
-新的 Q3D 與 HFSS 三維要求必須明確選擇 `modeling="solid"` 或 `modeling="thin_film"`。省略或提供其他模式不會啟用隱含相容路徑。PDK／來源契約也提供精確的物理層身份、層表示（承載堆疊的膜、局部膜／deck 或保留實體）、物理厚度，以及適用時的片接觸側。既有 Object、Net、埠、連通外框與孔洞身份，仍是要求的來源依據。
+新的 Q3D 與 HFSS 3D 要求必須明確設定 `modeling="solid"` 或 `modeling="thin_film"`，也就是明確指定 `"solid"` 或 `"thin_film"`。省略此欄位或提供其他模式，都不會啟用隱含相容路徑。PDK／來源契約也會提供精確的物理層識別、層表示方式（承載堆疊的薄膜、局部薄膜／deck 或保留實體）、物理厚度，以及適用時的薄片接觸側。既有 Object、Net、port、connected outline 與 hole 識別仍是要求的來源依據。
 
-此選擇沿用既有 Q3D body-v3 與 HFSS 系列結構識別字。受支援但沒有 `modeling` 的歷史 Q3D／HFSS 結果，只能透過原版本化結果讀取器讀取；其原始酬載與雜湊保留，且不能啟動新執行。新執行路徑不會推定或補上缺少的模式。層宣告在唯一編寫的 `LayerStack` 座標系中使用 `PhysicalLayerSpec(physical_layer_id, kind, z_min_um, z_max_um, contact_side, source_thickness_um=None)`。實體模式的 `physical_layers` 可為空；來源本體與 `LayerImport` 可用 `physical_layer_id` 指定層。準備結果透過 `effective_bodies` 與 `effective_layer_imports` 揭示來源及映射區間。同一物理層 ID 在多邊形、元件實例及 Net 成員間只計算一次，不新增每層 `stack_id`。GeometryPlan 準備會以 `source_thickness_um` 傳遞原 Level 厚度，直接呼叫者也可提供這項原始來源事實。膜物理厚度輸出保留此值，不取整，也不由端點重新計算；省略時表示厚度由端點定義，不能宣稱是原始 PDK 厚度。座標映射仍使用端點跨度；保留實體維持自己的本體範圍。
+此選擇沿用既有 Q3D body-v3 與 HFSS 家族結構識別碼。沒有 `modeling` 的受支援歷史 Q3D／HFSS 結果酬載，只能透過原版本的結果讀取器讀取；原始酬載與雜湊均保留，也不能啟動新執行。新執行路徑不會推定或補上缺少的模式。層宣告使用唯一編寫的 `LayerStack` 座標系，型別為 `PhysicalLayerSpec(physical_layer_id, kind, z_min_um, z_max_um, contact_side, source_thickness_um=None)`。實體模式的 `physical_layers` 集合可以為空；來源本體與 `LayerImport` 記錄可用 `physical_layer_id` 指定層。準備作業會在 `effective_bodies` 與 `effective_layer_imports` 中提供來源區間及映射區間。多邊形、元件實例與 Net 成員共同計算物理層 ID 時只計一次；不新增逐層 `stack_id`。GeometryPlan 準備會將原始 Level 厚度放入 `source_thickness_um`；直接呼叫者也可以提供這項原始來源事實。薄膜物理厚度輸出保留此值，不取整，也不從端點重新計算。若省略，厚度由端點定義，不代表原始 PDK 厚度。座標映射仍依端點跨度計算；保留實體則維持自身本體範圍。
 
-模式選擇決定幾何表示，不選擇求解器系列或公開 A/B/C 執行路徑。完整的座標轉換、材料、終端、僅建構與失敗行為，定義於 [AEDT 實體與薄膜契約](specs/aedt-runtime.qmd#aedt-solid-thin-film)。Q2D 與 Palace 不在這次遷移範圍。Q3D input-v1/v2 要求結構仍已移除；其他受支援系列路徑的共用 V1/V2 交接相容性，不會恢復這些 Q3D 要求結構，也不會略過明確模式要求。
+模式選擇決定幾何表示方式，不決定求解器家族或公開 A/B/C 執行路徑。完整的座標轉換、材料、終端、僅建構與失敗行為，定義於 [AEDT 實體與薄膜契約](specs/aedt-runtime.qmd#aedt-solid-thin-film)。Q2D 與 Palace 不在此次遷移範圍。Q3D input-v1/v2 要求結構仍已移除；其他受支援家族路徑的共用 V1/V2 交接相容性，不會恢復這些 Q3D 要求結構，也不會略過明確模式要求。
 
-此擴充使用下一個已宣告的 AEDT 執行期來源身份 `scgsim.aedt.runtime-source.v15`；V14 仍保留給暫停的 PR35，V1–V14 維持既有契約。V15 將綁定實作模組的位元組與摘要，不宣稱涵蓋完整傳遞相依性；精確路徑清單由固定實作清單負責。
+此擴充使用下一個已宣告的 AEDT runtime-source 識別 `scgsim.aedt.runtime-source.v15`，V1–V14 則維持既有契約。V15 會綁定已實作模組的位元組與摘要，但不宣稱完整涵蓋傳遞相依性；精確路徑清單由固定的實作清冊負責。
 
-目前延續工作的候選範圍包括無終端 Q3D C/G、含 EPR／已儲存場分析的 HFSS Eigenmode，以及 HFSS Driven Terminal。Q3D AC/RL 與 HFSS Driven Modal 在本次延續工作中延後；此範圍界線不移除既有要求或結果契約。下方執行期契約定義這些建模路徑中，元件實例局部 Ground、場側與厚度的區別。
+目前延續工作的候選範圍涵蓋無終端 Q3D C/G、具有 EPR／已儲存場分析的 HFSS Eigenmode，以及 HFSS Driven Terminal。Q3D AC/RL 與 HFSS Driven Modal 延至此次延續工作之後；此範圍界線不會移除既有要求或結果契約。下方執行期契約負責說明這些建模路徑中，元件實例局部 Ground、場側與厚度的差異。
 
 ## 幾何與編譯器 API {#geometry-and-compiler-api}
 
-此次遷移把基準 `scgsim.sgb` 門面分為兩個明確介面。`scgsim.geometry` 負責來源端規劃、快照、正規化輸入、轉接器、堆疊／真空／曲線準備及獨立摘要。`scgsim.geometry.compiler` 是進階建構介面，負責階段協調、衍生資料與驗證器。來源端與進階編譯器匯出保持分開。下列完整清單記錄基準門面與子模組匯出集合，包含模型與僅限管線的驗證器介面。重複名稱表示同一基準符號由多個已宣告介面匯出；每個符號只有一個現行定義，不保留舊路徑相容包裝。
+此次遷移將基準 `scgsim.sgb` Facade 劃分為兩個明確介面。`scgsim.geometry` 負責來源端規劃、快照、正規化輸入記錄、轉接器、堆疊／真空／曲線準備及分離摘要。`scgsim.geometry.compiler` 是進階建構介面，負責階段協調、衍生記錄與驗證器。來源端匯出與進階編譯器匯出彼此分開。下列完整清單列出基準 Facade 及子模組匯出集合，包含模型介面與僅供管線使用的驗證器介面。重複名稱表示同一基準符號由多個已宣告介面匯出；每個符號仍只有一個現行定義，不保留舊路徑相容包裝。
+
+- **基準 `scgsim.sgb` → 目前負責模組 `scgsim.geometry`。** 宣告名稱：`BoundaryCurveChainSpec`, `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `GeometryPlan`, `GeometryPlanSnapshot`, `InputSummary`, `LayoutPolygonSpec`, `PathInput`, `PolygonRing`, `PortSheetOverlapRecord`, `PortSheetRegionRecord`, `RouteLiteral`, `SemanticEntitySpec`, `SourceCurveSpec`, `VacuumRegionSpec`, `Vector3D`, `apply_vacuum_region_to_stack`, `bind_source_curves`, `build_component_stack`, `build_gds_stack_geometry_input`, `build_gdsfactory_geometry_input`, `summarize_geometry_input`。
+- **基準 `scgsim.sgb` → 目前負責模組 `scgsim.geometry.compiler`。** 宣告名稱：`BackendEntityTagRecord`, `ConstructionBodyPlanRecord`, `ConstructionPlanRecord`, `CurvePlanRecord`, `CurveRefRecord`, `CutHostOperationRecord`, `DimensionLiteral`, `FinalPhysicalGroupRecord`, `GmshDimTag`, `InnerPecVoidShellRecord`, `InterfaceKindLiteral`, `InterfacePlanRecord`, `MMContactRecord`, `PointPlanRecord`, `RUN_METADATA_DIR`, `SEMANTIC_GEOMETRY_METADATA_DIR`, `SemanticGeometryBuilder`, `SolverUseLiteral`, `SurfaceLoopRecord`, `SurfaceLoopRoleLiteral`, `SurfaceOrientationLiteral`, `SurfacePartitionRecord`, `SurfacePlanRecord`, `SurfaceRefRecord`, `TagPlanRecord`, `TagSourceKindLiteral`, `VolumePlanRecord`, `build_route_construction_plan`, `export_physical_group_records`, `plan_conductor_contact_patches`, `plan_cut_host_operations`, `plan_mm_contact_records`, `plan_route_construction_bodies`, `plan_route_surfaces`, `plan_route_tags`, `plan_route_volumes`, `plan_surface_partitions`, `recognize_route_interfaces`, `validate_backend_tag_ledger`, `validate_curve_plan_coverage`, `validate_geometry_input`, `validate_interface_surface_source_of_truth`, `validate_no_surface_overlap`, `validate_route_operation_coverage`, `validate_selected_route`, `validate_surface_deduplication`, `validate_surface_partition_coverage`, `validate_surface_use_counts`, `validate_tag_plan_coverage`, `validate_volume_surface_closure`。
+- **基準 `scgsim.sgb.geometry_plan` → 目前負責模組 `scgsim.geometry`。** 宣告名稱：`GeometryPlan`, `GeometryPlanSnapshot`。
+- **基準 `scgsim.sgb.models` → 目前負責模組 `scgsim.geometry.models`。** 宣告名稱：`BackendEntityTagRecord`, `BoundaryCurveChainSpec`, `ConductorPartRoleLiteral`, `ConductorRepresentationLiteral`, `ConstructionBodyPlanRecord`, `ConstructionPlanRecord`, `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `CurvePlanRecord`, `CurveRefRecord`, `CutHostOperationRecord`, `DEFAULT_INTERFACE_SOLVER_USE`, `DimensionLiteral`, `FinalPhysicalGroupRecord`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `GmshDimTag`, `HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES`, `InnerPecVoidShellRecord`, `InterfaceKindLiteral`, `InterfacePlanRecord`, `LayoutPolygonSpec`, `MMContactRecord`, `PathInput`, `PointPlanRecord`, `PolygonRing`, `PortSheetOverlapRecord`, `PortSheetRegionRecord`, `ROUTE_ALLOWED_REPRESENTATIONS`, `RUN_METADATA_DIR`, `RouteABConstructionPlanRecord`, `RouteABVolumePlanRecord`, `RouteLiteral`, `SEMANTIC_GEOMETRY_METADATA_DIR`, `SemanticEntitySpec`, `SolverUseLiteral`, `SourceCurveSpec`, `StructuredFinalPhysicalGroupRecord`, `SurfaceLoopRecord`, `SurfaceLoopRoleLiteral`, `SurfaceOrientationLiteral`, `SurfacePartitionRecord`, `SurfacePlanRecord`, `SurfaceRefRecord`, `TagPlanRecord`, `TagSourceKindLiteral`, `VacuumRegionSpec`, `Vector3D`, `VolumePlanRecord`。
+- **基準 `scgsim.sgb.pipeline` → 目前負責模組 `scgsim.geometry.compiler`。** 宣告名稱：`SemanticGeometryBuilder`, `build_route_construction_plan`, `export_physical_group_records`, `plan_conductor_contact_patches`, `plan_cut_host_operations`, `plan_mm_contact_records`, `plan_route_construction_bodies`, `plan_route_surfaces`, `plan_route_tags`, `plan_route_volumes`, `plan_surface_partitions`, `recognize_route_interfaces`, `validate_backend_tag_ledger`, `validate_curve_plan_coverage`, `validate_geometry_input`, `validate_interface_surface_source_of_truth`, `validate_no_surface_overlap`, `validate_route_operation_coverage`, `validate_route_volume_surface_refs`, `validate_selected_route`, `validate_surface_deduplication`, `validate_surface_partition_coverage`, `validate_surface_sheet_interface_coverage`, `validate_surface_use_counts`, `validate_tag_plan_coverage`, `validate_volume_surface_closure`。
+- **基準 `scgsim.sgb.vacuum` → 目前負責模組 `scgsim.geometry`。** 宣告名稱：`apply_vacuum_region_to_stack`。
+
+每個模型都在 `scgsim.geometry.models` 及其記錄模組中保有唯一的標準類別／型別定義。套件 Facade 重新匯出相同物件。下列直接別名列出基準子模組中的項目，包括模型別名、階段函式與驗證器。每個項目均列出建議的受支援 Facade；為維持相依方向，定義本身可能位於較低層模組。
+
+- **基準 `scgsim.sgb.adapter` → 現行定義模組 `scgsim.geometry.source.adapter`。** 宣告名稱：`build_gds_stack_geometry_input`, `build_gdsfactory_geometry_input`。建議 API：`scgsim.geometry`。
+- **基準 `scgsim.sgb.export` → 現行定義模組 `scgsim.geometry.construction.export`。** 宣告名稱：`export_physical_group_records`。建議 API：`scgsim.geometry.compiler`。
+- **基準 `scgsim.sgb.geometry_plan` → 現行定義模組 `scgsim.geometry.source.plan`。** 宣告名稱：`GeometryPlan`, `GeometryPlanSnapshot`。建議 API：`scgsim.geometry`。
+- **基準 `scgsim.sgb.models.common` → 現行定義模組 `scgsim.geometry.models.common`。** 宣告名稱：`Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `PathInput`, `PolygonRing`, `RouteLiteral`, `Vector3D`。建議 API：`scgsim.geometry`。
+- **基準 `scgsim.sgb.models.common` → 現行定義模組 `scgsim.geometry.models.common`。** 宣告名稱：`DimensionLiteral`, `GmshDimTag`, `InterfaceKindLiteral`, `RUN_METADATA_DIR`, `SEMANTIC_GEOMETRY_METADATA_DIR`, `SolverUseLiteral`, `SurfaceLoopRoleLiteral`, `SurfaceOrientationLiteral`, `TagSourceKindLiteral`。建議 API：`scgsim.geometry.compiler`。
+- **基準 `scgsim.sgb.models.common` → 現行定義模組 `scgsim.geometry.models.common`。** 宣告名稱：`ConductorPartRoleLiteral`, `ConductorRepresentationLiteral`, `DEFAULT_INTERFACE_SOLVER_USE`, `HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES`, `ROUTE_ALLOWED_REPRESENTATIONS`。建議 API：`scgsim.geometry.models`。
+- **基準 `scgsim.sgb.models.construction` → 現行定義模組 `scgsim.geometry.models.construction`。** 宣告名稱：`ConstructionBodyPlanRecord`, `ConstructionPlanRecord`, `CutHostOperationRecord`, `SurfacePartitionRecord`。建議 API：`scgsim.geometry.compiler`。
+- **基準 `scgsim.sgb.models.construction` → 現行定義模組 `scgsim.geometry.models.construction`。** 宣告名稱：`RouteABConstructionPlanRecord`。建議 API：`scgsim.geometry.models`。
+- **基準 `scgsim.sgb.models.input` → 現行定義模組 `scgsim.geometry.models.input`。** 宣告名稱：`BoundaryCurveChainSpec`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `LayoutPolygonSpec`, `SemanticEntitySpec`, `SourceCurveSpec`, `VacuumRegionSpec`。建議 API：`scgsim.geometry`。
+- **基準 `scgsim.sgb.models.regions` → 現行定義模組 `scgsim.geometry.models.regions`。** 宣告名稱：`PortSheetOverlapRecord`, `PortSheetRegionRecord`。建議 API：`scgsim.geometry`。
+- **基準 `scgsim.sgb.models.tags` → 現行定義模組 `scgsim.geometry.models.tags`。** 宣告名稱：`BackendEntityTagRecord`, `FinalPhysicalGroupRecord`, `TagPlanRecord`。建議 API：`scgsim.geometry.compiler`。
+- **基準 `scgsim.sgb.models.tags` → 現行定義模組 `scgsim.geometry.models.tags`。** 宣告名稱：`StructuredFinalPhysicalGroupRecord`。建議 API：`scgsim.geometry.models`。
+- **基準 `scgsim.sgb.models.topology` → 現行定義模組 `scgsim.geometry.models.topology`。** 宣告名稱：`CurvePlanRecord`, `CurveRefRecord`, `InnerPecVoidShellRecord`, `InterfacePlanRecord`, `MMContactRecord`, `PointPlanRecord`, `SurfaceLoopRecord`, `SurfacePlanRecord`, `SurfaceRefRecord`, `VolumePlanRecord`。建議 API：`scgsim.geometry.compiler`。
+- **基準 `scgsim.sgb.models.topology` → 現行定義模組 `scgsim.geometry.models.topology`。** 宣告名稱：`RouteABVolumePlanRecord`。建議 API：`scgsim.geometry.models`。
+- **基準 `scgsim.sgb.pipeline` → 現行定義模組 `scgsim.geometry.compiler.builder`。** 宣告名稱：`SemanticGeometryBuilder`。建議 API：`scgsim.geometry.compiler`。
+- **基準 `scgsim.sgb.planning` → 現行定義模組 `scgsim.geometry.compiler.dispatch`。** 宣告名稱：`build_route_construction_plan`。建議 API：`scgsim.geometry.compiler`。
+- **基準 `scgsim.sgb.planning` → 現行定義模組 `scgsim.geometry.planning.interfaces`。** 宣告名稱：`plan_conductor_contact_patches`, `plan_mm_contact_records`, `recognize_route_interfaces`。建議 API：`scgsim.geometry.compiler`。
+- **基準 `scgsim.sgb.planning` → 現行定義模組 `scgsim.geometry.planning.surfaces`。** 宣告名稱：`plan_route_surfaces`, `plan_surface_partitions`。建議 API：`scgsim.geometry.compiler`。
+- **基準 `scgsim.sgb.planning` → 現行定義模組 `scgsim.geometry.planning.tags`。** 宣告名稱：`plan_route_tags`。建議 API：`scgsim.geometry.compiler`。
+- **基準 `scgsim.sgb.planning` → 現行定義模組 `scgsim.geometry.planning.volumes`。** 宣告名稱：`plan_cut_host_operations`, `plan_route_construction_bodies`, `plan_route_volumes`。建議 API：`scgsim.geometry.compiler`。
+- **基準 `scgsim.sgb.source_curves` → 現行定義模組 `scgsim.geometry.source.curves`。** 宣告名稱：`bind_source_curves`。建議 API：`scgsim.geometry`。
+- **基準 `scgsim.sgb.stack` → 現行定義模組 `scgsim.geometry.source.stack`。** 宣告名稱：`build_component_stack`。建議 API：`scgsim.geometry`。
+- **基準 `scgsim.sgb.summary` → 現行定義模組 `scgsim.geometry.source.summary`。** 宣告名稱：`InputSummary`, `summarize_geometry_input`。建議 API：`scgsim.geometry`。
+- **基準 `scgsim.sgb.vacuum` → 現行定義模組 `scgsim.geometry.source.vacuum`。** 宣告名稱：`apply_vacuum_region_to_stack`。建議 API：`scgsim.geometry`。
+- **基準 `scgsim.sgb.validation` → 現行定義模組 `scgsim.geometry.compiler.validation`。** 宣告名稱：`validate_backend_tag_ledger`, `validate_curve_plan_coverage`, `validate_interface_surface_source_of_truth`, `validate_no_surface_overlap`, `validate_route_operation_coverage`, `validate_route_volume_surface_refs`, `validate_selected_route`, `validate_surface_deduplication`, `validate_surface_partition_coverage`, `validate_surface_sheet_interface_coverage`, `validate_surface_use_counts`, `validate_tag_plan_coverage`, `validate_volume_surface_closure`。建議 API：`scgsim.geometry.compiler`。
+- **基準 `scgsim.sgb.validation` → 現行定義模組 `scgsim.geometry.source.validation`。** 宣告名稱：`validate_geometry_input`。建議 API：`scgsim.geometry.compiler`。
+
+`validate_geometry_input` 是唯一只驗證輸入的驗證器：其定義移至編譯器協調層下方的 `scgsim.geometry.source.validation`，再由 `scgsim.geometry.compiler.validate_geometry_input` 重新匯出。其他階段驗證器仍由編譯器驗證模組負責。共用多邊形、空間與 Entity 基本操作位於來源層及編譯器層之下；來源程式碼不匯入規劃／編譯器。來源識別、快照分離、由呼叫端負責的最終 Net 成員、原生對應、標準 CAD 殼修復、曲線排列及 XAO／實體群組行為，都仍由各自既有責任模組負責。
+
+## AEDT API、交易與狀態所有權 {#aedt-api-transaction-and-state-ownership}
+
+下列清單將基準套件匯出項目對應至目前來源候選的負責模組，也列出 `run.main` 等僅供直接匯入的項目。套件根目錄匯出保留既有符號及語意。在此列出私有定義模組，不會使它們成為公開 API。
 
 
-- **基準 `scgsim.sgb` → 目前負責模組 `scgsim.geometry`.** 宣告名稱： `BoundaryCurveChainSpec`, `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `GeometryPlan`, `GeometryPlanSnapshot`, `InputSummary`, `LayoutPolygonSpec`, `PathInput`, `PolygonRing`, `PortSheetOverlapRecord`, `PortSheetRegionRecord`, `RouteLiteral`, `SemanticEntitySpec`, `SourceCurveSpec`, `VacuumRegionSpec`, `Vector3D`, `apply_vacuum_region_to_stack`, `bind_source_curves`, `build_component_stack`, `build_gds_stack_geometry_input`, `build_gdsfactory_geometry_input`, `summarize_geometry_input`.
-- **基準 `scgsim.sgb` → 目前負責模組 `scgsim.geometry.compiler`.** 宣告名稱： `BackendEntityTagRecord`, `ConstructionBodyPlanRecord`, `ConstructionPlanRecord`, `CurvePlanRecord`, `CurveRefRecord`, `CutHostOperationRecord`, `DimensionLiteral`, `FinalPhysicalGroupRecord`, `GmshDimTag`, `InnerPecVoidShellRecord`, `InterfaceKindLiteral`, `InterfacePlanRecord`, `MMContactRecord`, `PointPlanRecord`, `RUN_METADATA_DIR`, `SEMANTIC_GEOMETRY_METADATA_DIR`, `SemanticGeometryBuilder`, `SolverUseLiteral`, `SurfaceLoopRecord`, `SurfaceLoopRoleLiteral`, `SurfaceOrientationLiteral`, `SurfacePartitionRecord`, `SurfacePlanRecord`, `SurfaceRefRecord`, `TagPlanRecord`, `TagSourceKindLiteral`, `VolumePlanRecord`, `build_route_construction_plan`, `export_physical_group_records`, `plan_conductor_contact_patches`, `plan_cut_host_operations`, `plan_mm_contact_records`, `plan_route_construction_bodies`, `plan_route_surfaces`, `plan_route_tags`, `plan_route_volumes`, `plan_surface_partitions`, `recognize_route_interfaces`, `validate_backend_tag_ledger`, `validate_curve_plan_coverage`, `validate_geometry_input`, `validate_interface_surface_source_of_truth`, `validate_no_surface_overlap`, `validate_route_operation_coverage`, `validate_selected_route`, `validate_surface_deduplication`, `validate_surface_partition_coverage`, `validate_surface_use_counts`, `validate_tag_plan_coverage`, `validate_volume_surface_closure`.
-- **基準 `scgsim.sgb.geometry_plan` → 目前負責模組 `scgsim.geometry`.** 宣告名稱： `GeometryPlan`, `GeometryPlanSnapshot`.
-- **基準 `scgsim.sgb.models` → 目前負責模組 `scgsim.geometry.models`.** 宣告名稱： `BackendEntityTagRecord`, `BoundaryCurveChainSpec`, `ConductorPartRoleLiteral`, `ConductorRepresentationLiteral`, `ConstructionBodyPlanRecord`, `ConstructionPlanRecord`, `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `CurvePlanRecord`, `CurveRefRecord`, `CutHostOperationRecord`, `DEFAULT_INTERFACE_SOLVER_USE`, `DimensionLiteral`, `FinalPhysicalGroupRecord`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `GmshDimTag`, `HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES`, `InnerPecVoidShellRecord`, `InterfaceKindLiteral`, `InterfacePlanRecord`, `LayoutPolygonSpec`, `MMContactRecord`, `PathInput`, `PointPlanRecord`, `PolygonRing`, `PortSheetOverlapRecord`, `PortSheetRegionRecord`, `ROUTE_ALLOWED_REPRESENTATIONS`, `RUN_METADATA_DIR`, `RouteABConstructionPlanRecord`, `RouteABVolumePlanRecord`, `RouteLiteral`, `SEMANTIC_GEOMETRY_METADATA_DIR`, `SemanticEntitySpec`, `SolverUseLiteral`, `SourceCurveSpec`, `StructuredFinalPhysicalGroupRecord`, `SurfaceLoopRecord`, `SurfaceLoopRoleLiteral`, `SurfaceOrientationLiteral`, `SurfacePartitionRecord`, `SurfacePlanRecord`, `SurfaceRefRecord`, `TagPlanRecord`, `TagSourceKindLiteral`, `VacuumRegionSpec`, `Vector3D`, `VolumePlanRecord`.
-- **基準 `scgsim.sgb.pipeline` → 目前負責模組 `scgsim.geometry.compiler`.** 宣告名稱： `SemanticGeometryBuilder`, `build_route_construction_plan`, `export_physical_group_records`, `plan_conductor_contact_patches`, `plan_cut_host_operations`, `plan_mm_contact_records`, `plan_route_construction_bodies`, `plan_route_surfaces`, `plan_route_tags`, `plan_route_volumes`, `plan_surface_partitions`, `recognize_route_interfaces`, `validate_backend_tag_ledger`, `validate_curve_plan_coverage`, `validate_geometry_input`, `validate_interface_surface_source_of_truth`, `validate_no_surface_overlap`, `validate_route_operation_coverage`, `validate_route_volume_surface_refs`, `validate_selected_route`, `validate_surface_deduplication`, `validate_surface_partition_coverage`, `validate_surface_sheet_interface_coverage`, `validate_surface_use_counts`, `validate_tag_plan_coverage`, `validate_volume_surface_closure`.
-- **基準 `scgsim.sgb.vacuum` → 目前負責模組 `scgsim.geometry`.** 宣告名稱： `apply_vacuum_region_to_stack`.
+- **基準 `scgsim.aedt.spec` → 現行標準負責模組 `scgsim.aedt.specs.common`。** 基準名稱：`AedtResources`, `LayerImport`, `ObjectBinding`, `PdkMaterial`, `TerminalPort`, `ModalPort`, `MatrixRunControl`, `HfssDrivenMode`。
+- **基準 `scgsim.aedt.spec` → 現行標準負責模組 `scgsim.aedt.specs.hfss`。** 基準名稱：`FrequencySweepSpec`, `HfssRunControl`, `EigenmodeRunControl`, `HfssDrivenSpec`, `HfssSpec`, `HfssEigenmodeSpec`, `HfssEprSpec`, `HfssEprAnalysisSpec`, `LengthMeshSpec`。
+- **基準 `scgsim.aedt.spec` → 現行標準負責模組 `scgsim.aedt.specs.q2d`。** 基準名稱：`Q2dRectangleSpec`, `Q2dConductorSpec`, `Q2dSpec`。
+- **基準 `scgsim.aedt.spec` → 現行標準負責模組 `scgsim.aedt.specs.q3d`。** 基準名稱：`Q3dBodySpec`, `Q3dNetSpec`, `Q3dSpec`。
+- **基準 `scgsim.aedt.spec` → 現行標準負責模組 `scgsim.aedt.specs.parse`。** 基準名稱：`AedtSpec`, `parse_aedt_spec`。
+- **基準 `scgsim.aedt._epr_models` → 現行標準負責模組 `scgsim.aedt.epr.models`。** 基準名稱：`EprAnalysisRequest`, `EprResult`, `ExpressionCacheConvergence`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `PlanarJunction`, `PreparedPlanarGeometry`, `SavedSolution`, `SurfaceEprSpec`。
+- **基準 `scgsim.aedt.handoff` → 現行標準負責模組 `scgsim.aedt.preparation.handoff`。** 基準名稱：`HandoffPlan`, `prepare_handoff`。
+- **基準 `scgsim.aedt.handoff` → 現行標準負責模組 `scgsim.aedt.preparation.geometry`。** 基準名稱：`prepare_hfss_eigenmode_from_geometry`, `prepare_q3d_from_geometry`。
+- **基準 `scgsim.aedt.handoff` → 現行標準負責模組 `scgsim.aedt.epr.workflow`。** 基準名稱：`analyze_epr`。
+- **基準 `scgsim.aedt.eigenmode` → 現行標準負責模組 `scgsim.aedt.eigenmode`。** 基準名稱：`EigenmodeSim`。
+- **基準 `scgsim.aedt.resolve` → 現行標準負責模組 `scgsim.aedt.results.resolve`。** 基準名稱：`ResolvedRun`, `resolve_results`。
+- **基準 `scgsim.aedt._epr_geometry` → 現行標準負責模組 `scgsim.aedt.epr.geometry`。** 基準名稱：`planar_junction_from_port`, `prepare_planar_geometry_input`。
+- **基準 `scgsim.aedt._epr_results` → 現行標準負責模組 `scgsim.aedt.epr.analysis`。** 基準名稱：`combine_epr_mode`, `combine_surface_epr_mode`, `reanalyze_epr`。
+- **基準 `scgsim.aedt._epr_results` → 現行標準負責模組 `scgsim.aedt.results.epr`。** 基準名稱：`resolve_epr_result`, `resolve_saved_solution`。
+- **基準 `scgsim.aedt._epr_results and _presentation` → 現行標準負責模組 `scgsim.aedt.presentation.epr`。** 基準名稱：`plot_epr_result`, `show_epr`。
+- **基準 `scgsim.aedt.run` → 現行標準負責模組 `scgsim.aedt.run`。** 基準名稱：`main`。
 
+套件目前完整的 `__all__` 名稱清單為：`AedtResources`, `AedtSpec`, `EigenmodeRunControl`, `EigenmodeSim`, `EprAnalysisRequest`, `EprResult`, `ExpressionCacheConvergence`, `FrequencySweepSpec`, `HandoffPlan`, `HfssDrivenMode`, `HfssDrivenSpec`, `HfssEigenmodeSpec`, `HfssEprAnalysisSpec`, `HfssEprSpec`, `HfssRunControl`, `HfssSpec`, `LayerImport`, `LengthMeshSpec`, `MatrixRunControl`, `ModalPort`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `ObjectBinding`, `PdkMaterial`, `PlanarJunction`, `PreparedPlanarGeometry`, `Q2dConductorSpec`, `Q2dRectangleSpec`, `Q2dSpec`, `Q3dBodySpec`, `Q3dNetSpec`, `Q3dSpec`, `ResolvedRun`, `SavedSolution`, `SurfaceEprSpec`, `TerminalPort`, `analyze_epr`, `combine_epr_mode`, `combine_surface_epr_mode`, `parse_aedt_spec`, `planar_junction_from_port`, `plot_epr_result`, `prepare_handoff`, `prepare_hfss_eigenmode_from_geometry`, `prepare_planar_geometry_input`, `prepare_q3d_from_geometry`, `reanalyze_epr`, `resolve_epr_result`, `resolve_results`, `resolve_saved_solution`, `show_epr`。
 
-每個模型在 `scgsim.geometry.models` 及其資料模組中保留唯一的標準類別／型別定義，套件門面重新匯出同一個物件。下列直接別名列出基準子模組入口，包含模型別名、階段函式與驗證器。每筆都指出建議使用的受支援門面；定義可能位於較低層模組，以維持相依方向。
+新的責任結構沿用現有邊界：
 
+- `aedt.specs` 負責 common、HFSS、Q2D 與 Q3D-v3 要求記錄，以及明確的家族解析；不恢復 Q3D input-v1/v2。
+- `aedt.preparation` 負責可攜交接建立、具來源依據的幾何準備，以及標準組別成員關係。
+- `aedt.runtime.transaction` 是唯一的 Desktop 負責者與收據狀態協調者。家族執行期各自負責原生準備／求解／匯出／讀回；狹義的共用原生輔助模組不負責任何家族或 Desktop。
+- `aedt.epr` 負責 EPR 模型、來源幾何、場／快取與工作流程。`aedt.results` 負責嚴格的交接／結果解析、歷史來源沿革、收斂、矩陣及封存 EPR 讀取。結果模組不啟動求解。
+- `aedt.presentation` 負責僅供顯示的投影與繪圖，並以延遲匯入避免嚴格結果解析載入這些模組。
 
-- **基準 `scgsim.sgb.adapter` → 目前定義模組 `scgsim.geometry.source.adapter`.** 宣告名稱： `build_gds_stack_geometry_input`, `build_gdsfactory_geometry_input`. 建議 API： `scgsim.geometry`.
-- **基準 `scgsim.sgb.export` → 目前定義模組 `scgsim.geometry.construction.export`.** 宣告名稱： `export_physical_group_records`. 建議 API： `scgsim.geometry.compiler`.
-- **基準 `scgsim.sgb.geometry_plan` → 目前定義模組 `scgsim.geometry.source.plan`.** 宣告名稱： `GeometryPlan`, `GeometryPlanSnapshot`. 建議 API： `scgsim.geometry`.
-- **基準 `scgsim.sgb.models.common` → 目前定義模組 `scgsim.geometry.models.common`.** 宣告名稱： `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `PathInput`, `PolygonRing`, `RouteLiteral`, `Vector3D`. 建議 API： `scgsim.geometry`.
-- **基準 `scgsim.sgb.models.common` → 目前定義模組 `scgsim.geometry.models.common`.** 宣告名稱： `DimensionLiteral`, `GmshDimTag`, `InterfaceKindLiteral`, `RUN_METADATA_DIR`, `SEMANTIC_GEOMETRY_METADATA_DIR`, `SolverUseLiteral`, `SurfaceLoopRoleLiteral`, `SurfaceOrientationLiteral`, `TagSourceKindLiteral`. 建議 API： `scgsim.geometry.compiler`.
-- **基準 `scgsim.sgb.models.common` → 目前定義模組 `scgsim.geometry.models.common`.** 宣告名稱： `ConductorPartRoleLiteral`, `ConductorRepresentationLiteral`, `DEFAULT_INTERFACE_SOLVER_USE`, `HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES`, `ROUTE_ALLOWED_REPRESENTATIONS`. 建議 API： `scgsim.geometry.models`.
-- **基準 `scgsim.sgb.models.construction` → 目前定義模組 `scgsim.geometry.models.construction`.** 宣告名稱： `ConstructionBodyPlanRecord`, `ConstructionPlanRecord`, `CutHostOperationRecord`, `SurfacePartitionRecord`. 建議 API： `scgsim.geometry.compiler`.
-- **基準 `scgsim.sgb.models.construction` → 目前定義模組 `scgsim.geometry.models.construction`.** 宣告名稱： `RouteABConstructionPlanRecord`. 建議 API： `scgsim.geometry.models`.
-- **基準 `scgsim.sgb.models.input` → 目前定義模組 `scgsim.geometry.models.input`.** 宣告名稱： `BoundaryCurveChainSpec`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `LayoutPolygonSpec`, `SemanticEntitySpec`, `SourceCurveSpec`, `VacuumRegionSpec`. 建議 API： `scgsim.geometry`.
-- **基準 `scgsim.sgb.models.regions` → 目前定義模組 `scgsim.geometry.models.regions`.** 宣告名稱： `PortSheetOverlapRecord`, `PortSheetRegionRecord`. 建議 API： `scgsim.geometry`.
-- **基準 `scgsim.sgb.models.tags` → 目前定義模組 `scgsim.geometry.models.tags`.** 宣告名稱： `BackendEntityTagRecord`, `FinalPhysicalGroupRecord`, `TagPlanRecord`. 建議 API： `scgsim.geometry.compiler`.
-- **基準 `scgsim.sgb.models.tags` → 目前定義模組 `scgsim.geometry.models.tags`.** 宣告名稱： `StructuredFinalPhysicalGroupRecord`. 建議 API： `scgsim.geometry.models`.
-- **基準 `scgsim.sgb.models.topology` → 目前定義模組 `scgsim.geometry.models.topology`.** 宣告名稱： `CurvePlanRecord`, `CurveRefRecord`, `InnerPecVoidShellRecord`, `InterfacePlanRecord`, `MMContactRecord`, `PointPlanRecord`, `SurfaceLoopRecord`, `SurfacePlanRecord`, `SurfaceRefRecord`, `VolumePlanRecord`. 建議 API： `scgsim.geometry.compiler`.
-- **基準 `scgsim.sgb.models.topology` → 目前定義模組 `scgsim.geometry.models.topology`.** 宣告名稱： `RouteABVolumePlanRecord`. 建議 API： `scgsim.geometry.models`.
-- **基準 `scgsim.sgb.pipeline` → 目前定義模組 `scgsim.geometry.compiler.builder`.** 宣告名稱： `SemanticGeometryBuilder`. 建議 API： `scgsim.geometry.compiler`.
-- **基準 `scgsim.sgb.planning` → 目前定義模組 `scgsim.geometry.compiler.dispatch`.** 宣告名稱： `build_route_construction_plan`. 建議 API： `scgsim.geometry.compiler`.
-- **基準 `scgsim.sgb.planning` → 目前定義模組 `scgsim.geometry.planning.interfaces`.** 宣告名稱： `plan_conductor_contact_patches`, `plan_mm_contact_records`, `recognize_route_interfaces`. 建議 API： `scgsim.geometry.compiler`.
-- **基準 `scgsim.sgb.planning` → 目前定義模組 `scgsim.geometry.planning.surfaces`.** 宣告名稱： `plan_route_surfaces`, `plan_surface_partitions`. 建議 API： `scgsim.geometry.compiler`.
-- **基準 `scgsim.sgb.planning` → 目前定義模組 `scgsim.geometry.planning.tags`.** 宣告名稱： `plan_route_tags`. 建議 API： `scgsim.geometry.compiler`.
-- **基準 `scgsim.sgb.planning` → 目前定義模組 `scgsim.geometry.planning.volumes`.** 宣告名稱： `plan_cut_host_operations`, `plan_route_construction_bodies`, `plan_route_volumes`. 建議 API： `scgsim.geometry.compiler`.
-- **基準 `scgsim.sgb.source_curves` → 目前定義模組 `scgsim.geometry.source.curves`.** 宣告名稱： `bind_source_curves`. 建議 API： `scgsim.geometry`.
-- **基準 `scgsim.sgb.stack` → 目前定義模組 `scgsim.geometry.source.stack`.** 宣告名稱： `build_component_stack`. 建議 API： `scgsim.geometry`.
-- **基準 `scgsim.sgb.summary` → 目前定義模組 `scgsim.geometry.source.summary`.** 宣告名稱： `InputSummary`, `summarize_geometry_input`. 建議 API： `scgsim.geometry`.
-- **基準 `scgsim.sgb.vacuum` → 目前定義模組 `scgsim.geometry.source.vacuum`.** 宣告名稱： `apply_vacuum_region_to_stack`. 建議 API： `scgsim.geometry`.
-- **基準 `scgsim.sgb.validation` → 目前定義模組 `scgsim.geometry.compiler.validation`.** 宣告名稱： `validate_backend_tag_ledger`, `validate_curve_plan_coverage`, `validate_interface_surface_source_of_truth`, `validate_no_surface_overlap`, `validate_route_operation_coverage`, `validate_route_volume_surface_refs`, `validate_selected_route`, `validate_surface_deduplication`, `validate_surface_partition_coverage`, `validate_surface_sheet_interface_coverage`, `validate_surface_use_counts`, `validate_tag_plan_coverage`, `validate_volume_surface_closure`. 建議 API： `scgsim.geometry.compiler`.
-- **基準 `scgsim.sgb.validation` → 目前定義模組 `scgsim.geometry.source.validation`.** 宣告名稱： `validate_geometry_input`. 建議 API： `scgsim.geometry.compiler`.
+`EigenmodeSim` 維持幾何／堆疊、EPR 設定、準備及交接失效處理的高階可變狀態負責者。準備輔助函式不接管該狀態。交易順序明確：驗證要求與輸入組別，在 PyAEDT／Desktop 啟動前寫入執行中收據，執行一次家族交易，在 Desktop 釋放前保存回傳事實，最後封存已儲存的 EPR 結果。若釋放時也發生錯誤，先前的原生／家族錯誤仍優先；解析只驗證回傳產物，不執行 AEDT。不新增共用 Simulation 基底或共用物理結果模型。
 
+文件化的直接模組介面依下列方式遷移：`spec` 移至 `specs.common/hfss/q2d/q3d/parse`；`handoff` 分至 `preparation.handoff`、`preparation.geometry` 與 `epr.workflow`；`eigenmode` 維持負責狀態的 Facade；`resolve` 移至 `results.resolve`；`run.main` 留在 `scgsim.aedt.run` 作為薄型委派。可匯入但未匯出的 `aedt.util` 移至內部 I/O 葉節點，不保留包裝。EPR 分析、結果讀取器與呈現模組移至上述責任樹中的指定負責模組，不擴大套件 Facade。
 
-`validate_geometry_input` 是唯一只處理輸入的驗證器：定義移至位於編譯器協調層下方的 `scgsim.geometry.source.validation`，由 `scgsim.geometry.compiler.validate_geometry_input` 重新匯出。其他階段驗證器仍由編譯器驗證模組負責。共用多邊形、空間與 Entity 基元位於來源與編譯器下方；來源程式不匯入規劃／編譯器。來源身份、快照分離、呼叫者負責的最終 Net 成員、原生對應、標準 CAD 殼修復、曲線排列及 XAO／實體群組行為，維持目前各自的責任歸屬。
+保留 `python -m scgsim.aedt.run`、其 `main(argv)` 與 `__main__` 行為。產生的交接與 EPR 指令碼繼續以既有引數呼叫該命令；交易實作則移至 CLI 薄層之後。動態 EPR 工作流程匯入會呼叫唯一的交易負責者；EPR 對 HFSS 匯出／讀回的相依性成為明確的內部服務。視覺化從標準規格負責模組匯入目前的 PyAEDT 常數，不將它們列為公開匯出。
 
-## AEDT API、交易與狀態歸屬 {#aedt-api-transaction-and-state-ownership}
-
-下列清單將基準套件匯出對應至目前候選來源的負責模組，也記錄 `run.main` 等只能直接匯入的入口。套件根匯出維持既有符號與語意；在此列出私有定義模組，不會使其成為公開介面。
-
-
-- **基準 `scgsim.aedt.spec` → 目前標準負責模組 `scgsim.aedt.specs.common`.** 基準名稱： `AedtResources`, `LayerImport`, `ObjectBinding`, `PdkMaterial`, `TerminalPort`, `ModalPort`, `MatrixRunControl`, `HfssDrivenMode`.
-- **基準 `scgsim.aedt.spec` → 目前標準負責模組 `scgsim.aedt.specs.hfss`.** 基準名稱： `FrequencySweepSpec`, `HfssRunControl`, `EigenmodeRunControl`, `HfssDrivenSpec`, `HfssSpec`, `HfssEigenmodeSpec`, `HfssEprSpec`, `HfssEprAnalysisSpec`, `LengthMeshSpec`.
-- **基準 `scgsim.aedt.spec` → 目前標準負責模組 `scgsim.aedt.specs.q2d`.** 基準名稱： `Q2dRectangleSpec`, `Q2dConductorSpec`, `Q2dSpec`.
-- **基準 `scgsim.aedt.spec` → 目前標準負責模組 `scgsim.aedt.specs.q3d`.** 基準名稱： `Q3dBodySpec`, `Q3dNetSpec`, `Q3dSpec`.
-- **基準 `scgsim.aedt.spec` → 目前標準負責模組 `scgsim.aedt.specs.parse`.** 基準名稱： `AedtSpec`, `parse_aedt_spec`.
-- **基準 `scgsim.aedt._epr_models` → 目前標準負責模組 `scgsim.aedt.epr.models`.** 基準名稱： `EprAnalysisRequest`, `EprResult`, `ExpressionCacheConvergence`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `PlanarJunction`, `PreparedPlanarGeometry`, `SavedSolution`, `SurfaceEprSpec`.
-- **基準 `scgsim.aedt.handoff` → 目前標準負責模組 `scgsim.aedt.preparation.handoff`.** 基準名稱： `HandoffPlan`, `prepare_handoff`.
-- **基準 `scgsim.aedt.handoff` → 目前標準負責模組 `scgsim.aedt.preparation.geometry`.** 基準名稱： `prepare_hfss_eigenmode_from_geometry`, `prepare_q3d_from_geometry`.
-- **基準 `scgsim.aedt.handoff` → 目前標準負責模組 `scgsim.aedt.epr.workflow`.** 基準名稱： `analyze_epr`.
-- **基準 `scgsim.aedt.eigenmode` → 目前標準負責模組 `scgsim.aedt.eigenmode`.** 基準名稱： `EigenmodeSim`.
-- **基準 `scgsim.aedt.resolve` → 目前標準負責模組 `scgsim.aedt.results.resolve`.** 基準名稱： `ResolvedRun`, `resolve_results`.
-- **基準 `scgsim.aedt._epr_geometry` → 目前標準負責模組 `scgsim.aedt.epr.geometry`.** 基準名稱： `planar_junction_from_port`, `prepare_planar_geometry_input`.
-- **基準 `scgsim.aedt._epr_results` → 目前標準負責模組 `scgsim.aedt.epr.analysis`.** 基準名稱： `combine_epr_mode`, `combine_surface_epr_mode`, `reanalyze_epr`.
-- **基準 `scgsim.aedt._epr_results` → 目前標準負責模組 `scgsim.aedt.results.epr`.** 基準名稱： `resolve_epr_result`, `resolve_saved_solution`.
-- **基準 `scgsim.aedt._epr_results and _presentation` → 目前標準負責模組 `scgsim.aedt.presentation.epr`.** 基準名稱： `plot_epr_result`, `show_epr`.
-- **基準 `scgsim.aedt.run` → 目前標準負責模組 `scgsim.aedt.run`.** 基準名稱： `main`.
-
-
-套件目前完整的 `__all__` 清單為： `AedtResources`, `AedtSpec`, `EigenmodeRunControl`, `EigenmodeSim`, `EprAnalysisRequest`, `EprResult`, `ExpressionCacheConvergence`, `FrequencySweepSpec`, `HandoffPlan`, `HfssDrivenMode`, `HfssDrivenSpec`, `HfssEigenmodeSpec`, `HfssEprAnalysisSpec`, `HfssEprSpec`, `HfssRunControl`, `HfssSpec`, `LayerImport`, `LengthMeshSpec`, `MatrixRunControl`, `ModalPort`, `NativeExpressionDefinition`, `NormalizedSurfaceEprTotal`, `ObjectBinding`, `PdkMaterial`, `PlanarJunction`, `PreparedPlanarGeometry`, `Q2dConductorSpec`, `Q2dRectangleSpec`, `Q2dSpec`, `Q3dBodySpec`, `Q3dNetSpec`, `Q3dSpec`, `ResolvedRun`, `SavedSolution`, `SurfaceEprSpec`, `TerminalPort`, `analyze_epr`, `combine_epr_mode`, `combine_surface_epr_mode`, `parse_aedt_spec`, `planar_junction_from_port`, `plot_epr_result`, `prepare_handoff`, `prepare_hfss_eigenmode_from_geometry`, `prepare_planar_geometry_input`, `prepare_q3d_from_geometry`, `reanalyze_epr`, `resolve_epr_result`, `resolve_results`, `resolve_saved_solution`, `show_epr`.
-
-新的責任結構沿用既有邊界：
-
-- `aedt.specs` 負責共用、HFSS、Q2D 與 Q3D-v3 要求資料，以及明確系列解析；不恢復 Q3D input-v1/v2。
-- `aedt.preparation` 負責可攜式交接建立、來源幾何準備及標準相容群組成員。
-- `aedt.runtime.transaction` 是唯一 Desktop 負責者及收據狀態協調者。系列執行期各自負責原生準備／求解／匯出／讀回；狹義共用原生輔助模組不負責系列或 Desktop。
-- `aedt.epr` 負責 EPR 模型、來源幾何、場／快取及工作流程；`aedt.results` 負責嚴格交接／結果解析、歷史來源、收斂、矩陣及封存 EPR 讀取器。結果讀取不啟動求解。
-- `aedt.presentation` 負責純顯示投影與繪圖，嚴格結果解析不載入其延遲匯入。
-
-`EigenmodeSim` 仍是幾何／堆疊、EPR 設定、準備及交接失效處理的高階可變狀態負責者；準備輔助函式不接管該狀態。交易順序仍明確：驗證要求與輸入相容群組，在 PyAEDT／Desktop 之前寫入執行中收據，執行一次系列交易，在 Desktop 釋放前保存回傳事實，再封存已儲存的 EPR 結果。若釋放也失敗，先前的原生／系列錯誤仍為主要錯誤；解析只驗證回傳產物，不執行 AEDT。不新增共用 Simulation 基底或共用物理結果模型。
-
-文件列出的直接模組介面依下列方式遷移：`spec` 移至 `specs.common/hfss/q2d/q3d/parse`；`handoff` 分至 `preparation.handoff`、`preparation.geometry` 與 `epr.workflow`；`eigenmode` 維持負責狀態的門面；`resolve` 移至 `results.resolve`；`run.main` 留在 `scgsim.aedt.run` 作為輕量委派。可匯入但未匯出的 `aedt.util` 移至內部 I/O 葉節點，不保留包裝。EPR 分析、結果讀取器與呈現模組，移至上述責任結構中的具名負責模組，不擴大套件門面。
-
-保留 `python -m scgsim.aedt.run`、`main(argv)` 及 `__main__` 行為。產生的交接與 EPR 腳本繼續以既有引數呼叫此命令，交易實作移至 CLI 薄層之後。動態 EPR 工作流程匯入會呼叫唯一的交易負責者；EPR 對 HFSS 匯出／讀回的相依性成為明確內部服務。視覺化從標準規格負責模組匯入現行 PyAEDT 常數，而不把它們變成公開匯出。
-
-目前產生端使用 runtime-source v13；已宣告清單與內容摘要識別該來源快照中實測的模組，不把摘要當成永久程式常數，也不宣稱完整涵蓋傳遞相依性。歷史 v1–v12 讀取器保留原本的路徑、雜湊、修訂與結構意義。解析舊收據時，不把舊模組字串映射到新路徑。交接與收據歷史和 Q3D 要求版本分開；Q3D 仍只支援 v3。此對照不宣稱原生 Q3D 已完成。
+目前產生器使用 runtime-source v13；其宣告清單與內容摘要識別該來源快照中量測的模組，不會把摘要變成永久程式碼值，也不宣稱完整涵蓋傳遞相依性。歷史 v1–v12 讀取器保留原有路徑、雜湊、修訂版本與結構意義。解析舊收據時，不將舊模組字串映射到新路徑。交接與收據歷史和 Q3D 要求版本各自獨立；Q3D 僅維持 v3。此對照不宣稱原生 Q3D 已完成。
 
 ## Palace 套件符號 {#palace-package-symbols}
 
-`scgsim.palace` 保留目前 25 個套件門面名稱，下列清單依 v2 責任模組分組。
+`scgsim.palace` 保留目前 25 個套件 Facade 名稱。下列清單依 v2 責任模組整理這些匯出項目。
 
-
-- **目前負責模組與責任：** `scgsim.palace.preparation`; 保留分開的可變準備狀態負責者。 **門面匯出：** `ElectrostaticSim`, `EigenmodeSim`.
-- **目前負責模組與責任：** `scgsim.palace.results`; 依資料保管關係載入結果。 **門面匯出：** `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`.
-- **目前負責模組與責任：** `scgsim.palace.results`; 獨立 EPR 數值與離線重新分析。 **門面匯出：** `PalaceEprResult`, `epr_result`, `reanalyze_epr`, `resolve_epr_result`.
-- **目前負責模組與責任：** `scgsim.palace.presentation`; 依求解器對獨立 EPR 繪圖。 **門面匯出：** `show_epr`.
-- **目前負責模組與責任：** `scgsim.palace.results.report_data`; 供 Palace 呈現使用的獨立資料。 **門面匯出：** `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PassCostRecord`, `SurfaceMaskEprRecord`, `SurfaceMaskEprSeriesSnapshot`.
-- **目前負責模組與責任：** `scgsim.palace.presentation.reports`; 根據保留結果證據提供可信度、物理與效能比較檢視。 **門面匯出：** `PalaceTrustReport`, `PhysicsQuantitiesReport`, `SimulationBenchmarkReport`, `inspect_run_trustworthiness`.
-- **目前負責模組與責任：** `scgsim.palace.mesh.quality`; 離線檔案讀取器，與網格建構及求解器執行分開。 **門面匯出：** `MeshQualityReport`, `check_mesh_quality`.
-
+- **現行負責模組與職責：**`scgsim.palace.preparation`，維持分離的可變準備狀態負責者。**Facade 匯出：**`ElectrostaticSim`, `EigenmodeSim`。
+- **現行負責模組與職責：**`scgsim.palace.results`，依資料保管規則載入結果。**Facade 匯出：**`PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`。
+- **現行負責模組與職責：**`scgsim.palace.results`，提供分離的 EPR 數值與離線重新分析。**Facade 匯出：**`PalaceEprResult`, `epr_result`, `reanalyze_epr`, `resolve_epr_result`。
+- **現行負責模組與職責：**`scgsim.palace.presentation`，以分離的 EPR 結果繪製求解器專屬圖表。**Facade 匯出：**`show_epr`。
+- **現行負責模組與職責：**`scgsim.palace.results.report_data`，提供 Palace 呈現模組使用的分離資料記錄。**Facade 匯出：**`PalaceFailureDiagnosis`, `PalaceResultSelection`, `PassCostRecord`, `SurfaceMaskEprRecord`, `SurfaceMaskEprSeriesSnapshot`。
+- **現行負責模組與職責：**`scgsim.palace.presentation.reports`，根據保留的結果證據提供可信度、物理與效能檢視。**Facade 匯出：**`PalaceTrustReport`, `PhysicsQuantitiesReport`, `SimulationBenchmarkReport`, `inspect_run_trustworthiness`。
+- **現行負責模組與職責：**`scgsim.palace.mesh.quality`，提供與有限元素網格建構及求解器執行分離的離線檔案讀取器。**Facade 匯出：**`MeshQualityReport`, `check_mesh_quality`。
 
 ## Palace 直接子模組匯出 {#palace-direct-submodule-exports}
 
-這些名稱不以下劃線開頭的模組各自宣告 `__all__`，因此除了套件門面外，也需要明確的遷移項目。
+這些名稱不以下劃線開頭的模組會自行宣告 `__all__`，因此除了套件 Facade 之外，也必須明確列入遷移對照。
 
+- **基準直接匯入 `scgsim.palace.electrostatic` → 現行來源候選 `scgsim.palace.preparation.electrostatic`。** 宣告符號：`ElectrostaticSim`。
+- **基準直接匯入 `scgsim.palace.eigenmode` → 現行來源候選 `scgsim.palace.preparation.eigenmode`。** 宣告符號：`EigenmodeSim`。
+- **基準直接匯入 `scgsim.palace.handoff` → 現行來源候選 `scgsim.palace.execution.handoff`。** 宣告符號：`HandoffPlan`, `HandoffProfile`, `prepare_handoff`。
+- **基準直接匯入 `scgsim.palace.resolve` → 現行來源候選 `scgsim.palace.results.resolve`。** 宣告符號：`PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`。
+- **基準直接匯入 `scgsim.palace.report`。** 宣告符號：`AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`。現行來源候選 `scgsim.palace.presentation.reports` 保留這份直接匯出清單；資料記錄定義於 `scgsim.palace.results.report_data`。套件 Facade 保留其他報告匯出項目，包括 `SimulationBenchmarkReport` 與表面遮罩記錄。
 
-- **基準直接匯入 `scgsim.palace.electrostatic` → 目前候選來源 `scgsim.palace.preparation.electrostatic`.** 宣告符號： `ElectrostaticSim`.
-- **基準直接匯入 `scgsim.palace.eigenmode` → 目前候選來源 `scgsim.palace.preparation.eigenmode`.** 宣告符號： `EigenmodeSim`.
-- **基準直接匯入 `scgsim.palace.handoff` → 目前候選來源 `scgsim.palace.execution.handoff`.** 宣告符號： `HandoffPlan`, `HandoffProfile`, `prepare_handoff`.
-- **基準直接匯入 `scgsim.palace.resolve` → 目前候選來源 `scgsim.palace.results.resolve`.** 宣告符號： `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`.
-- **基準直接匯入 `scgsim.palace.report`.** 宣告符號： `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`. 目前候選來源： `scgsim.palace.presentation.reports` 保留此直接匯出清單；資料定義位於 `scgsim.palace.results.report_data`. 套件門面保留其他報告匯出，包含 `SimulationBenchmarkReport` 及表面遮罩資料。
+目前 `scgsim.palace.results.report_data` 直接模組匯出 `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PassCostRecord`, `SurfaceEprRecord`, `SurfaceEprSeriesSnapshot`, `SurfaceMaskEprRecord` 與 `SurfaceMaskEprSeriesSnapshot`。`scgsim.palace.presentation.reports` 模組保留上列七個直接匯出項目。
 
-
-目前 `scgsim.palace.results.report_data` 直接模組匯出 `AmrPassSnapshot`、`PalaceFailureDiagnosis`、`PalaceResultSelection`、`PassCostRecord`、`SurfaceEprRecord`、`SurfaceEprSeriesSnapshot`、`SurfaceMaskEprRecord` 及 `SurfaceMaskEprSeriesSnapshot`。`scgsim.palace.presentation.reports` 保留上列七個直接匯出。
-
-`scgsim.palace._epr_results` 與 `scgsim._mesh_quality` 是基準私有實作路徑，受支援名稱由 `scgsim.palace` 重新匯出。目前分別由 `scgsim.palace.results` 與 `scgsim.palace.mesh.quality` 負責；舊私有匯入路徑不是相容介面。
+`scgsim.palace._epr_results` 與 `scgsim._mesh_quality` 是基準私有實作路徑；其受支援名稱由 `scgsim.palace` 重新匯出。目前負責模組分別為 `scgsim.palace.results` 與 `scgsim.palace.mesh.quality`；舊私有匯入路徑不屬於相容介面。
 
 ## 視覺化符號 {#visualization-symbols}
 
+- **`GeometryPreview`, `GeometryPreviewArtifact` → `scgsim.visualization.preview`。** 職責：綁定來源的預覽物件，以及回傳產物／無法提供預覽的狀態。
+- **`inspect_palace_geometry` → `scgsim.visualization.loaders.palace`。** 職責：讀取 Palace 有限元素網格、清單、索引對照及設定，產生語意預覽模式。
+- **`inspect_aedt_geometry` → `scgsim.visualization.loaders.aedt`。** 職責：綁定 AEDT 原生／收據識別，並載入求解器指派的幾何。
+- **場景記錄與共用繪製 → `scgsim.visualization.scene`, `scgsim.visualization.rendering`。** 職責：讓場景建構與繪製可供重用，不接管求解器物理或模擬狀態。
+- **共用載入器的檔案識別輔助函式 → `scgsim.visualization.loaders._common`。** 職責：在載入器層以單一實作處理 JSON、雜湊與路徑範圍檢查。
 
-- **`GeometryPreview`, `GeometryPreviewArtifact` → `scgsim.visualization.preview`.** 責任： 綁定來源的預覽物件，以及回傳產物／無法提供模式。
-- **`inspect_palace_geometry` → `scgsim.visualization.loaders.palace`.** 責任： 讀取 Palace 網格、清單、索引對照與設定，產生語意預覽模式。
-- **`inspect_aedt_geometry` → `scgsim.visualization.loaders.aedt`.**
-  責任：綁定 AEDT 原生／收據身份並載入求解器指定的幾何。原始 `.aedt` 路徑需明確指定 `aedt_version` 與設計；已封存的執行資料夾使用綁定規格的版本，不允許覆寫。
-- **場景資料與共用繪製 → `scgsim.visualization.scene`, `scgsim.visualization.rendering`.** 責任： 維持場景建構與繪製可重用，不接管求解器物理或模擬狀態。
-- **共用載入器檔案身份輔助函式 → `scgsim.visualization.loaders._common`.** 責任： 在載入器層以單一實作處理 JSON、雜湊及受限路徑觀察。
-
-
-`scgsim.visualization` 套件門面繼續只匯出 `GeometryPreview`、`GeometryPreviewArtifact`、`inspect_aedt_geometry` 與 `inspect_palace_geometry`。預覽檔與其清單和求解器、交接身份分開。Palace 預覽保留高階元素連接與節點座標；來源曲線與原生曲線排列事實保留在網格清單及獨立網格摘要中，移動模組不會捨棄這些資料。
+`scgsim.visualization` 套件 Facade 仍只匯出 `GeometryPreview`, `GeometryPreviewArtifact`, `inspect_aedt_geometry` 與 `inspect_palace_geometry`。預覽檔與其清單和求解器／交接識別分開。Palace 預覽保留高階單元連接關係與節點座標；來源曲線與原生曲線排列資訊則保留在有限元素網格清單與分離的有限元素網格摘要中。搬移時不會捨棄這些資訊。
 
 ## 共用呈現 {#shared-presentation}
 
-基準 `scgsim._notebook_presentation` 包含幾何與 AEDT 使用、與物理無關的格式化輔助函式；現行實作位於 `scgsim.presentation.notebook`。格式化函式不負責 Palace／AEDT 投影、計算或結果狀態，這些呈現仍依求解器分開。移動私有輔助模組，不會把函式名稱變成新公開 API。
-
-## 已接受範圍與證據狀態 {#accepted-scope-and-evidence-status}
-
-幾何／編譯器、AEDT、Palace 與視覺化的基準門面匯出及文件化直接子模組介面，已對應至上述已接受的來源負責模組。六次較早的完整 native-to-Resolve-to-Report 觀察，綁定舊 wheel SHA256 `48963671d4f854c185b8f95f3cd8000960355a7c48550b9ccf19b739b49f8df3` 與 runtime-source v13 內容摘要 `42b48f3d5946fadb1e93e92a1d3eb2a55f72ff00fc41aeccf71c0fded5919fa1`，涵蓋 CPW Modal 與 Terminal、Q2D、Q3D AC/RL、SimplePad Q3D C/G 及 Palace ES，不是目前 wheel 的執行證據。另外，固定的 `2.0.0.dev1` 候選 wheel SHA256 `e0ab1117aad4e5578ec98251732d33f6faa2fe7524dd70dcbc44891ed024824d`，有 Q3D 僅建構／讀回／儲存／釋放觀察及幾何預覽，未執行 `Analyze`、求解或產生 C/G 矩陣。
-
-完整 Xmon Palace Eigenmode Route A、CircularPad Palace Eigenmode Route B，以及 HFSS Eigenmode 已儲存場 EPR／離線損耗作業，尚未觀察到完整 native-to-Resolve-to-Report 流程，且不在本次收尾範圍。較早的準備與部分原生證據不能建立上述完整成果；此狀態不表示這些作業已失敗或完成。Q3D input-v1/v2 讀取器仍不存在。
+基準模組 `scgsim._notebook_presentation` 包含幾何與 AEDT 共用、與物理無關的格式化輔助函式；目前實作位於 `scgsim.presentation.notebook`。這些格式化函式不負責 Palace／AEDT 投影、計算或結果狀態，相關呈現仍依求解器分開處理。搬移這個私有輔助模組，不會使其函式名稱成為新的公開 API。

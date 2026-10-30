@@ -1,90 +1,59 @@
 ---
-title: "SGB 方法：從來源到共用 CAD"
+title: "描述幾何"
+description: "了解 Entity、元件配置、Net 與快照如何將版圖轉成模擬模型。"
 lang: zh-TW
-askr:
-  languages:
-    current: zh-TW
-    items:
-      - code: en
-        label: English
-        href: /docs/concepts/geometry.html
-      - code: zh-TW
-        label: 繁體中文
-        href: /zh-TW/docs/concepts/geometry.html
-scgsim-id: "docs/concepts/geometry"
 scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
+scgsim-id: "docs/concepts/geometry"
 ---
 
-在 Gmsh 中，BRep 幾何由點、曲線、面與體積組成。Physical Group 則替選定幾何實體加上網格與求解器可讀取的標記；這些標記不會合併幾何。SGB（semantic geometry builder，語意幾何建構流程）會先整理版圖、製程堆疊與組裝宣告，形成物理計畫並記錄各規劃邊界的來源，再依計畫建構 CAD。
+版圖描述形狀的位置。模擬還需要知道哪些形狀彼此相連而形成導體、端口與接面位於何處，以及周圍空間填有哪些材料。SCGSim 明確記錄這些資訊，不會依形狀名稱或接觸關係猜測。
 
-貫穿全文的是公開的缺角金屬模型：左側導體有一個孔洞，右側導體屬於另一個 Net，底下是 Si 基板，周圍是真空，並選定一種物理近似，明確要求矩形接面。左側來源多邊形面積為 8 µm²。接面要求提供來源接面矩形 `[0,10] × [0,2]` µm 與左右兩個終端；規劃依終端幾何推得 `[3,7] × [0,2]` µm 的中央集總埠面（lumped port sheet），再於左端補上 1 µm² 的金屬支撐。中央面承載集總邊界條件，不是新增金屬；Net A 與 Net B 仍維持分開。
+## Entity、配置與 Net {#entities-placements-and-nets}
 
-::: {.callout-note title="本頁的後端範圍"}
-建構章節以 Gmsh/OCC 與 Palace 為主。AEDT 共用其支援的來源與物理語意，再透過 AEDT 原生 Modeler 建立模型。CAD 計畫是網格的輸入，並不是網格或場解本身。
-:::
+- **Entity** 是元件中具名的形狀，例如焊墊或接地平面。
+- 元件配置到另一個元件內時，Entity 會取得路徑，例如 `chip/device/D1_XMON_PAD`。因此，同一元件的兩個副本會有不同的 Entity ID。
+- **Net** 是一個電氣導體。你要自行將 Entity 指派到 Net，例如將焊墊指派給 `xmon_pad`，並將所有接地部分指派給 `Ground`。
 
-## 依序閱讀方法
+```{mermaid}
+flowchart TB
+  C["Component: Entities and ports"] --> O["Placed with a path"]
+  O --> N["Assigned to Nets"]
+  P["PDK: materials and layer stack"] --> S["GeometryPlan snapshot"]
+  N --> S
+  S --> B["Solver model"]
+```
 
-| 章節 | 要回答的問題 | 交給下一階段的結果 |
-|---|---|---|
-| [來源](sgb/sources.qmd) | 形狀、材料、高度、放置位置與 Net 各由誰宣告？ | 獨立且整理成一致格式的幾何輸入 |
-| [物理模型](sgb/physical-model.qmd) | 這次求解採用哪種物理幾何？ | 有效物件、支撐面與材料界面 |
-| [平面分割](sgb/planar-arrangement.qmd) | 重疊的 XY 邊界如何切成來源清楚的面？ | 共用切分邊與來源歸屬 |
-| [共用拓樸](sgb/shared-topology.qmd) | 多個表面如何共用同一組點、曲線與環？ | 共用的三維邊界記錄 |
-| [多邊形建構](sgb/polygon-construction.qmd) | 計畫邊界如何成為一般 CAD？ | OCC 表面、殼、體積與標籤 |
-| [曲線建構](sgb/curved-construction.qmd) | 如何在建構時保留宣告或重建的曲線？ | 保留來源對應的曲線與掃掠側壁 |
-| [CAD 與網格](sgb/cad-mesh.qmd) | 哪些檢查把 CAD 建構與網格分開？ | 匯出 XAO、實體群組與網格輸入 |
-| [效能](sgb/performance.qmd) | 哪些工作可以重用，哪些必須量測？ | 各階段成本的判讀方式 |
-| [驗證](sgb/validation.qmd) | 如何確認每一步成立，或找出明確失敗點？ | 可檢查的通過與失敗條件 |
+PDK 提供材料、層高與厚度；元件提供形狀。`GeometryPlan` 將這些資料與 Net 指派及真空區域組合起來。`plan.prepare()` 會產生固定的**快照**，內容包含 GDS 檔、堆疊描述與正規化幾何。上述資料有任何變更，都要重新建立快照。
 
-## 先看 Gmsh 最後需要的幾何 {#fig-sgb-physical}
+求解器可能會把多個 Entity 合併到同一網格區域，例如 `Ground` 的所有部分。快照仍會記錄每部分的來源 Entity，但求解器會依 Net 或區域回報結果，而非依 Entity 回報。
 
-想像兩個相鄰的求解體積共用一個實體表面。這個面只建立一次，再由兩個體積以相反方向引用。兩個體積仍然分開，因為它們的材料與邊界不同；共用表面不會合併體積身分。這個簡單例子濃縮了整個方法的核心：先確定每個面屬於哪個來源、彼此如何相鄰，再建構原生 CAD。
+## 區域與邊界 {#regions-and-boundaries}
 
-左側金屬也遵循同一原則。孔洞是外環內沒有導體的封閉區域；外側缺口則直接連到外部。元件宣告局部輪廓與選取器；製程堆疊說明各圖層的材料與 Z 範圍；組裝模型放置元件實例、指定最終 Net，並選擇物理近似。解讀這些記錄前，可先讀[來源章](sgb/sources.qmd)。
+真空區域屬於物理模型的一部分：區域大小與外部邊界條件會影響結果。基板、真空及各導體在網格中各自保有身分。
 
-近似是物理模型選擇，不是網格粗細設定。本例的製程金屬膜位於 $z\in[0,0.25]$ µm；選用 `substrate_face` 表示本次求解把薄膜改用導體面表示，並放在已指定的 Si 上表面 $z=0$。設定必須指出支撐面，SCGSim 不會猜測薄膜應附著在哪種材料或哪個面。詳見[近似設定檔的定義](sgb/physical-model.qmd#approximation-profile)。接面則是另一項明確要求：宣告來源矩形與終端後，規劃才會推得中央集總埠面並補足指定終端。
+邊界條件屬於計算設定，不屬於快照。同一快照搭配不同外部邊界，就代表不同模型；請參閱[邊界與數值方法](model-and-numerics.qmd)。
 
-## 從平面分割到共用邊界
+## 曲線邊界 {#curved-boundaries}
 
-每次平面分割只比較該次操作指定的區域。SGB 會把區域邊界在交點與重疊處切開，再判定切分後每個小區域來自哪些來源。孔洞與無界外部都不含導體，但由不同邊界圍成，因此仍是兩個不同的面。[平面分割章](sgb/planar-arrangement.qmd#planar-inputs)會先定義這一步的輸入，再用主案例逐步核對歸屬與面積。
+預設情況下，SCGSim 使用 GDS 檔中的多邊形。元件也可以為指定 Entity 的邊界附加精確曲線，包括直線、圓弧、插值樣條或 B 樣條。你也可以要求 SCGSim 將指定 GDS 邊界線段擬合成曲線。元件配置後，曲線會隨所屬 Entity 一起移動；除非你明確要求，SCGSim 不會平滑多邊形。
 
-物理表面確定後，相鄰表面的邊界也必須完全一致。如果一個面有長邊，另一個面在中間加入頂點，就要同步切分成相同的原子曲線；兩個表面才會引用同一條幾何邊。[共用拓樸章](sgb/shared-topology.qmd)會說明點身分、環的用途與體積方向。
+Palace 會將這些曲線納入網格；AEDT 不支援曲線，會改用多邊形。[使用自己的模型](../course/working-model.qmd#add-curved-boundaries)說明如何加入曲線；[幾何參考](../geometry-sgb.qmd#source-curves)列出精確規則。
 
-## 求解幾何選擇與建構分支
+## 哪些求解器讀取快照 {#which-solvers-read-a-snapshot}
 
-先分清兩種選擇。
+| 工作流程 | 幾何輸入 |
+|---|---|
+| Palace Electrostatic 與 Eigenmode | GeometryPlan 快照 |
+| 含 EPR 的 HFSS Eigenmode | GeometryPlan 快照 |
+| 一般 HFSS Eigenmode 與 Driven | 明確指定圖層與物件對應的 GDS 檔 |
+| Q3D | 直接撰寫的 3D 實體，或由快照建構的實體（僅 C/G） |
+| Q2D | 手動畫製的截面矩形 |
 
-### 求解幾何
+快照不會自動轉換成 Q2D 截面。
 
-求解幾何決定金屬如何表示在物理模型中。目前 Surface-EPR 方向支援兩種選擇：**Thin-Film（薄膜面，舊資料代碼 A）**以零厚度金屬面搭配有限高度的凸塊（bump）或柱體殼；**PEC Shell（金屬殼，舊資料代碼 B）**保留有限厚度金屬的外部 PEC 邊界，並將金屬內部排除於 Palace 四面體求解域。PEC 是 perfect electric conductor，意為理想導體。另有進階的 **Retained Solid（保留金屬實體，舊資料代碼 C）**，供多邊形 CAD 使用；它不是完整的 Palace Surface-EPR 路線，目前不支援啟用曲線與 Palace 埠。詳見[現行 Surface-EPR 方向](../geometry-sgb.qmd#current-surface-epr-direction)。
+## 接下來 {#next-steps}
 
-### 建構分支
-
-建構分支則決定如何建立來源邊界：多邊形輪廓走多邊形分支，明確宣告的來源曲線走曲線分支。求解幾何選擇決定物理模型中的金屬表示；建構分支決定來源邊界如何生成。規劃先決定區域、表面與相鄰關係；CAD 建構再依點、曲線、面、體積的依賴順序執行。兩者回答不同問題，並不矛盾。
-
-[CAD 與網格章](sgb/cad-mesh.qmd)會清楚區分匯出 CAD 和後續網格。[效能章](sgb/performance.qmd)說明可重用工作與階段計時，不會把待驗證的設計推論寫成已量出的加速。[驗證章](sgb/validation.qmd)則說明哪個交接無法成立時，流程會在哪裡失敗。
-
-## 現行範圍與歷史 {#distance-bands}
-
-::: {.callout-warning title="幾何距離帶已撤回"}
-目前 SGB 不會把來源表面切成幾何距離帶。舊設計及其觀察保留在[幾何距離帶歷史頁](../history/sgb-geometric-bands.qmd)。Palace 原生 Mask／Inset 是另一個求解器輸入；只有所選執行檔支援該設定時，它才能選取區域。這項設定不會要求 SGB 切割來源幾何。
-:::
-
-<span id="source-stage"></span><span id="entity-occurrence-and-net"></span><span id="planning-stage"></span><span id="construction-stage"></span>
-
-舊有來源階段錨點請見[來源宣告](sgb/sources.qmd#source-stage)；Entity／occurrence 討論移至[來源物件與放置身分](sgb/sources.qmd#entity-occurrence-and-net)；原規劃階段錨點移至[物理解讀](sgb/physical-model.qmd#planning-stage)；原建構階段錨點移至[共用拓樸與建構](sgb/shared-topology.qmd#construction-stage)。
-
-## 對應的程式入口
-
-`SemanticGeometryBuilder.build()` 是編譯器層級的建構流程總入口。它接收 `GeometryBuildInput`，以及路線、執行資料夾與物理表示 context；後續會依序進行驗證、規劃、原生建構與匯出。這裡的 `context` 是本次求解採用的物理表示資料，供規劃步驟使用。以下列出前述階段對應的程式入口；完整欄位請見連結契約。
-
-| 階段 | 入口 | 跨越此邊界的資料 |
-|---|---|---|
-| 來源準備 | `GeometryPlan.prepare()` | 可變的元件、PDK 與組裝宣告成為不可變快照 |
-| 物理解讀 | `interpret_physical_geometry(...)` | 所選近似設定產生有效幾何、支撐與材料界面記錄 |
-| 邊界拓樸 | `plan_canonical_topology(...)` | 規劃表面成為共用點、曲線、邊界環與有向引用 |
-| 建構流程總入口 | `SemanticGeometryBuilder.build(build_input, ...)` | 驗證 `GeometryBuildInput` 後，依序完成規劃、原生 CAD 與來源／tag 對應 |
-
-精確欄位與傳給後端的資料見[幾何與編譯器契約](../geometry-sgb.qmd)、[物理表示契約](../specs/physical-representation.qmd)及[Palace 準備契約](../specs/palace-electrostatic-sgb.qmd)。
+- [邊界與數值方法](model-and-numerics.qmd)
+- [幾何參考](../geometry-sgb.qmd#component-to-backend-geometry-contract)：精確規則
+- [使用自己的模型](../course/working-model.qmd)：操作步驟

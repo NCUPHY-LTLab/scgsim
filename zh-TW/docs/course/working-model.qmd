@@ -1,19 +1,17 @@
 ---
 lang: zh-TW
 title: "使用自己的模型"
-description: "變更來源幾何、Entity 至 Net 指派及求解器請求，並明確保留其識別。"
+description: "將元件形狀指派給導體、加入曲線邊界，並判斷模型變更後要重新執行哪些步驟。"
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/working-model"
 ---
 
-完成一個[電容](../tutorials/capacitance.qmd)或[共振／EPR](../tutorials/resonance-epr.qmd)範例後，再開始本教學。接著可變更模型的一個部分，並了解該變更會影響哪些輸入與結果。準備新執行前，請先保存原始模型與結果。
+本頁說明如何設定自己的元件模型，而非使用教學焊墊。開始前請先完成[電容教學](../tutorials/capacitance/prepare.qmd)。
 
-## 變更來源幾何 {#change-the-source-geometry}
+## 為元件建立 GeometryPlan {#build-a-geometryplan-for-your-component}
 
-元件會定義本地 Entity 識別與編寫的幾何。放置後的 occurrence 會透過其註冊路徑限定這些識別。最終 Net 指派屬於組合後的模型：多個來源 Entity 可屬於同一個導體 Net，同時保留各自的來源脈絡。
-
-對語意元件組合而言，`GeometryPlan` 會明確記錄這些選擇：
+`GeometryPlan` 會將元件連接至 SCGSim。你要提供元件、層堆疊與材料紀錄，再將形狀指派給導體。
 
 ```python
 from scgsim.geometry import GeometryPlan
@@ -27,75 +25,94 @@ plan = GeometryPlan(
 )
 ```
 
-此處的 `component`、stack、材料紀錄與補距是來源建構提供的實際模型輸入。請使用 `plan.register_instance(path, reference)` 註冊實際具名的參照；不要從展平多邊形名稱猜測路徑。Root-local Entity 已屬於 `chip`。指定電氣成員資格前，請先檢查限定後的識別：
+`component`、`layer_stack` 與 `material_records` 來自你的 PDK。`root_id` 是 SCGSim 為頂層元件設定的名稱；每個形狀 ID 都以它開頭。
+
+### 註冊已放置的子元件 {#register-placed-sub-components}
+
+若元件以參照方式放置其他元件，請將要保留的參照註冊為具名部分：
+
+```python
+plan.register_instance("chip/qubit", qubit_ref)
+```
+
+請使用實際的 GDSFactory 參照物件。不要根據攤平後的多邊形名稱猜測路徑。請先註冊父項，再註冊子項，例如先註冊 `chip/qubit`，再註冊 `chip/qubit/junction`。直接繪製在頂層元件中的形狀，路徑已包含 `chip`。
+
+### 列出形狀 {#list-the-shapes}
+
+每個具名形狀都是一個 **Entity**。列印其 ID：
 
 ```python
 print(tuple(entity.semantic_id for entity in plan.entities))
 ```
 
-使用 `plan.set_nets(net_membership)`，提供最終 Net ID 到清單中確切 Entity ID 的對應。請依預計建模的電路決定成員資格，包括哪些導體共用 Ground。[幾何參考](../geometry-sgb.qmd#component-to-backend-geometry-contract)說明指派契約；[Xmon 建構教學](../tutorial-xmon-input.qmd)提供更完整的階層範例。
+### 將形狀指派給電氣網路 {#assign-shapes-to-nets}
 
-使用 `plan.set_vacuum_region(...)` 宣告外部真空包覆，並呼叫 `plan.prepare()` 保留來源快照。幾何、材料堆疊、Net 指派或包覆一旦改變，就需要新的快照。修改分離的摘要字典不會改變求解器將收到的幾何。
-
-### 將曲線來源帶入 Palace plan {#carry-a-curved-source-into-the-palace-plan}
-
-圓形範例請使用 OrPen 的 `circular_pad_capacitor`，設定 `R=100 µm`、`gap=20 µm` 與 `die=1000 µm`。標準 Circle Pad LC 模型沒有內孔；`80 µm` 的內半徑屬於另外選用的環形示意。堆疊與材料定義請保留在 OrPen；GeometryPlan 會使用該來源提供的元件、堆疊與材料紀錄。
-
-公開的 OrPen Notebook 會使用 GDSFactory 註冊的 cell，並包含完整的來源至交接範例。確切修訂版與 Notebook 連結見[安裝教學](installation.qmd#select-the-curved-source-cell)。來源 cell 的建構方式如下：
+**電氣網路**是一個導電群組，可包含多個 Entity，例如所有接地平面部分。請將各電氣網路名稱對應至 Entity ID：
 
 ```python
-import gdsfactory as gf
-import orpen_sc_pdk
-
-orpen_sc_pdk.activate()
-component = gf.get_component(
-    "circular_pad_capacitor",
-    outer_radius_um=100.0,
-    inner_radius_um=0.0,
-    gap_um=20.0,
-    die_side_um=1000.0,
-    junction_width_um=2.0,
-)
+plan.set_nets({
+    "qubit": ("chip/qubit/PAD",),
+    "ground": ("chip/GROUND", "chip/qubit/GROUND"),
+})
 ```
 
-![1000 µm 晶粒上的 Circular Pad 來源版圖；細節圖標示東側非金屬接面定位器。](../assets/circular-pad-layout.png){#fig-circular-pad-source-layout}
+請依要建模的電路決定電氣網路。一個電氣網路中的形狀會處於相同電位。[幾何參考](../geometry-sgb.qmd#component-to-backend-geometry-contract)列出精確規則；[Xmon 模型](../tutorial-xmon-input.qmd)示範包含巢狀參照的較大型模型。
 
-來源版圖取自[目前公開的 OrPen Circular Pad 研究修訂版 `ecc9062`](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/source_layout.png)。圖中顯示編寫的來源幾何與定位器，不是求解場。
+### 加入真空並固定 plan {#add-vacuum-and-freeze-the-plan}
 
-此為連結的 LC 工作流程所用 Circle Pad 來源，不是選用的環形示意。元件提供已編寫的圓形邊界紀錄；準備好的 `GeometryPlan` 快照會連同元件的 Entity 與 Net 識別，將它們帶入 Palace PEC Shell。獨立的 GDS 邊界重建 API 僅供呼叫端選擇重建時使用，不會覆寫這些已編寫曲線。目前 OrPen 教學呈現 Fresh08 Palace 結果；其執行來源、觀測頻率、適應歷程與限制請參閱[共振模態教學](palace-eigenmode.qmd#circular-pad-lc-study)。
+```python
+plan.set_vacuum_region(padding=(250.0, 250.0, 1000.0))
+snapshot = plan.prepare()
+```
 
-請依手邊來源選擇曲線描述方式。對於已編寫幾何，元件可在 `component.info["component_semantics"]["boundary_curves"]` 中帶有 `BoundaryCurveChainSpec` 紀錄，列出既有 Entity 與邊界，並依序記錄線段、弧線或樣條曲線。GeometryPlan 會依註冊 occurrence 限定這些本地識別，並一併轉換曲線鏈。若在組合完成後才建立紀錄，請使用組合座標系中的限定 ID 呼叫 `plan.set_boundary_curves(...)`。若只有 GDS 邊界頂點，請在 `component.info["component_semantics"]["boundary_reconstruction"]` 選擇 `GdsBoundaryReconstructionSpec`，或將限定紀錄傳給 `plan.set_boundary_reconstruction(...)`。請使用來源邊界中的線段與錨點識別；未選取的線段維持直線。SCGSim 不會從預覽推斷曲線意圖，也不會自動平滑多邊形邊線。
+`padding` 的單位是微米。`prepare()` 會回傳固定的 **snapshot**。求解器讀取 snapshot，而非 plan。若變更幾何、堆疊、電氣網路或真空區域，請再次呼叫 `prepare()`。修改摘要字典不會改變 snapshot。
 
-接續上方 plan 流程：註冊來源中的實際參照、檢查 `plan.entities`、使用 `plan.set_nets(net_membership)` 指派預期的最終 Net ID、設定真空區域，再呼叫 `plan.prepare()`。快照會保留選定的曲線宣告及其 Entity 和 occurrence 識別。Palace Thin-Film 與 PEC Shell 會降階處理啟用的曲線；Retained Solid 與 AEDT 平面準備流程不會。未宣告曲線時，既有的純多邊形行為維持不變。
+## 加入曲線邊界 {#add-curved-boundaries}
 
-::: {.callout-note title="已編寫曲線與 GDS 重建是不同輸入"}
-兩個 `GeometryPlan` setter 只會替換呼叫端擁有的清單；`prepare()` 也會加入元件宣告。因此，`plan.set_boundary_curves([])` 不會移除 OrPen 編寫的曲線；若 GDS 重建結果與已編寫的完整環重疊，系統會拒絕而非將其視為覆寫。若要從多邊形資料重建，請建立分離的原始 `GeometryBuildInput`，其中包含選定的重建紀錄且不含已編寫曲線宣告，再傳給既有公開 `SemanticGeometryBuilder` API。`set_plan(snapshot)` 會繼續遵循快照宣告。曲線紀錄與邊界歸屬請參閱 [GeometryPlan 與幾何來源曲線契約](../geometry-sgb.qmd#source-curves)。這不會變更元件或其快照。
+SCGSim 預設使用 GDS 中的多邊形。對 Palace，你可以改為提供精確曲線：直線、圓弧與樣條曲線。接著 SCGSim 會依真實曲線建立有限元素網格，而不是使用多邊形近似。AEDT 不支援曲線；AEDT 執行會使用多邊形。
+
+提供曲線有兩種方式：
+
+- **在元件中繪製曲線。** 元件會將 `BoundaryCurveChainSpec` 紀錄存於 `component.info["component_semantics"]["boundary_curves"]`。每筆紀錄會指定 Entity、其一條邊界，以及用來取代該邊界的有序線段。組裝後若要加入曲線，請呼叫 `plan.set_boundary_curves(...)`，並提供完整 Entity ID 與組裝座標。
+- **依 GDS 點擬合曲線。** 如果只有多邊形頂點，請將 `GdsBoundaryReconstructionSpec` 加入 `component.info["component_semantics"]["boundary_reconstruction"]`，或呼叫 `plan.set_boundary_reconstruction(...)`。只有你選取的線段會成為曲線，其餘仍為直線。
+
+SCGSim 不會自行平滑多邊形。
+
+::: {.callout-note title="元件中繪製的曲線優先於擬合曲線"}
+`set_boundary_curves([])` 不會移除元件中已繪製的曲線；若將曲線擬合到已有繪製曲線的邊界，則會引發錯誤。若要改為擬合多邊形資料，請建立不含已繪製曲線的獨立 `GeometryBuildInput`，並傳給 `SemanticGeometryBuilder`。[來源曲線參考](../geometry-sgb.qmd#source-curves)詳述相關方式。
 :::
 
-## 變更物理模型 {#change-the-physical-model}
+完整曲線範例請見 [Circular Pad 研究](palace-eigenmode.qmd#circular-pad-lc-study)。
 
-先確認現在需要哪個數值。端子電容需要選擇端子與參考／接地。共振場模型還需要適當邊界與明確的集總支路。驅動響應需要埠與波參考；傳輸線擷取則需要定義橫截面。請使用[概念說明](../concepts/problems.qmd)，區分物理選擇與後端 API 表示法。
+## 變更物理問題 {#change-the-physical-problem}
 
-::: {.callout-note title="Q3D 與 Q2D 使用各自的輸入"}
-Q3D v3 使用明確的有限厚度實體，並指定環、多邊形、材料、物理角色與最終 Net 成員資格。獨立的 source-first 前端可從 GeometryPlan 快照準備這些實體；沒有來源的呼叫端則直接編寫實體。AC/RL 請求也要提供完整的 Signal 源端／汲端端子。Q2D 使用明確的橫截面矩形與導體群組，不會從 GeometryPlan 產生切片。
-:::
+不同研究問題需要不同輸入：
 
-若要研究其他網路問題，請接著閱讀 [Driven Modal](aedt-driven-modal.qmd)或 [Driven Terminal](aedt-driven-terminal.qmd)。有限導體擷取請使用 [Q3D](aedt-q3d.qmd)；每單位長度傳輸線矩陣則使用 [Q2D](aedt-q2d.qmd)。[CPW 輸入](aedt-inputs.qmd)教學提供 HFSS 的直接 GDS 對應；Q3D 則有獨立的 body-backed 輸入契約。
-
-## 變更求解器請求 {#change-a-solver-request}
-
-請將來源參數與原生控制項分開處理。網格尺寸／階數、Eigenmode 搜尋目標、請求模態數、自適應控制項與主機資源各自回答不同問題。請在預計檢視的數值旁，記錄每項變更的值與用途。教學中的範例控制項只是起始輸入，不是通用精度建議。
-
-請為變更後的請求準備新的執行資料夾與交接套件。檢視[來源摘要](source-observations.qmd)，必要時也檢查[已準備模型](solver-observations.qmd)，再執行確切的新套件。每筆結果都要連同各自設定保留，方便日後比較時指出幾何、邊界與請求的差異。
-
-## 判斷是否需要重新執行 {#decide-whether-a-rerun-is-needed}
-
-| 變更項目 | 下一步操作 |
+| 問題 | 另外需要 |
 |---|---|
-| 形狀、堆疊、Net 成員資格或外部區域 | 新的來源快照／匯入綁定、準備與求解 |
-| 邊界、端子／埠或接面電路模型 | 新的後端模型、準備與求解 |
-| 網格或原生求解控制項 | 準備並求解新的請求 |
-| 對已儲存 AEDT 場資料要求的場側／邊界距離評估 | 若封存場資料支援，請明確執行[原生儲存場分析](aedt-saved-fields.qmd) |
-| 既有分離 EPR 結果的損耗假設 | [離線重新分析](offline-epr.qmd)，並保留場證據 |
+| 電容 | 哪些電氣網路作為端子，哪些電氣網路接 Ground |
+| 共振模態 | 邊界條件，以及任何集總接面電感 |
+| 埠響應 | 埠與其參考導體 |
+| 每單位長度的傳輸線參數 | 二維橫截面 |
 
-每次執行後，請讀取實際選定的數值及其可用歷程。保留原生狀態並明確顯示缺少的通道。[結果讀取教學](returned-results.qmd#interpret-for-scq-use)會將這些證據連結至模型的工程或物理用途。
+[選擇物理問題](../concepts/problems.qmd)逐一說明。
+
+Q3D 與 Q2D 使用各自的輸入。Q3D 會建立有限厚度實體，可由快照產生或自行撰寫；請見 [Q3D](aedt-q3d.qmd)。Q2D 使用你繪製的橫截面矩形，不會切割元件；請見 [Q2D](aedt-q2d.qmd)。
+
+## 變更求解器設定 {#change-solver-settings}
+
+有限元素網格尺寸、元素階數、自適應細化、本徵模搜尋頻率與模態數量都是求解器設定，與模型本身分開。每次變更都請使用新的模擬包資料夾，並在結果旁記錄變更內容，以便比較。
+
+教學中的數值是起始設定，不是適用於所有模型的精度建議。
+
+## 變更後需要重新執行哪些步驟 {#what-to-rerun-after-a-change}
+
+| 變更項目 | 後續操作 |
+|---|---|
+| 幾何、堆疊、電氣網路或真空區域 | 再次呼叫 `plan.prepare()`，接著準備並執行新的求解 |
+| 邊界、端子、埠或接面值 | 準備並執行新的求解 |
+| 有限元素網格或求解器設定 | 準備並執行新的求解 |
+| 儲存 AEDT 場的表面薄膜邊距 | 使用[從 AEDT 儲存場計算 EPR](aedt-saved-fields.qmd)；不需重新求解 |
+| 既有 EPR 結果的損耗正切 | 使用[離線變更損耗假設](offline-epr.qmd)；不需使用求解器 |
+
+執行前，你可以先[檢查來源模型](source-observations.qmd)及[檢查已準備的模型](solver-observations.qmd)。

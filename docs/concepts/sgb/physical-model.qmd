@@ -75,4 +75,4 @@ The output is the effective source/stack projection plus a physical-representati
 
 ### Existing planning-stage link
 
-The overview keeps the former [planning-stage anchor](../geometry.qmd#planning-stage) and links readers here for the full explanation.
+[Model and numerics](../model-and-numerics.qmd) introduces physical approximations and boundaries; this chapter explains how those choices form effective geometry.

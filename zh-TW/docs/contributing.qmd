@@ -1,15 +1,23 @@
 ---
+lang: zh-TW
 title: "為 SCGSim 貢獻"
-description: "設定 SCGSim 開發環境，並找到貢獻者參考資料。"
+description: "使用 uv 設定 SCGSim 開發工作目錄，並查找貢獻者參考資料。"
 sidebar: contribution
+scgsim-id: "docs/contributing"
+scgsim-kind: "contribution"
+scgsim-status: "CONVERGING"
 ---
 
-本頁說明如何準備 SCGSim 原始碼工作目錄，以貢獻文件或套件內容。請先安裝 [uv](https://docs.astral.sh/uv/getting-started/installation/) 與 Git；[安裝教學](course/installation.qmd)則說明研究專案的 Python 環境與原生求解器需求。
+本頁說明如何準備 SCGSim 原始碼工作目錄，以貢獻文件或套件內容。請先安裝 [uv](https://docs.astral.sh/uv/getting-started/installation/) 與 Git。[安裝教學](course/installation.qmd)說明研究專案使用的獨立 Python 環境，以及原生求解器主機的設定。
+
+複製開發分支，接著依照工作目錄中的 `pyproject.toml` 與 `uv.lock` 同步環境：
 
 ```bash
 git clone --branch develop https://github.com/NCUPHY-LTLab/scgsim.git
 cd scgsim
-uv sync --extra palace --extra dev
+uv sync --locked --extra palace --extra dev --all-groups
 ```
 
-請閱讀[架構與資料流程](architecture.qmd)了解模組職責；[維護者指南](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md)說明儲存庫與文件維護方式；[文件導覽圖](documentation-map.qmd)則列出各頁用途。
+`uv sync` 會建立工作目錄的 `.venv`，並安裝專案的 `palace`、`dev` extra，以及 `pyproject.toml` 宣告的所有相依項目群組。這也會安裝儲存庫所需的測試與程式品質工具。`--locked` 會使用已提交的 `uv.lock`；若鎖定檔與專案中繼資料不相符，命令就會停止。
+
+請閱讀[架構與資料流程](architecture.qmd)了解模組職責；[維護者指南](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md)說明儲存庫與文件維護方式；[文件導覽圖](documentation-map.qmd)列出各頁用途。

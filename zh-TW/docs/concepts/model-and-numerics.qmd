@@ -1,36 +1,67 @@
 ---
-title: "邊界、近似與數值結果"
-description: "區分物理模型、幾何近似與數值計算。"
+title: "邊界與數值方法"
+description: "區分物理模型、金屬表示法與數值設定，並了解各種變更影響的項目。"
 lang: zh-TW
 scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/concepts/model-and-numerics"
 ---
 
-結果由三項選擇共同決定：物理模型、模型的表示方式，以及數值計算。改變其中一項，不等同於細化另一項。
+結果由三項選擇共同決定：物理模型、金屬表示法及數值設定。
 
-## 定義物理模型 {#define-the-physical-model}
+1. **物理模型：**哪些部分接地、外部邊界條件、真空與基板大小、接面數值及材料性質。
+2. **金屬表示法：**求解器使用何種幾何來表示金屬。
+3. **數值設定：**網格、元素階數、自適應細化與求解器容差。
 
-記錄導體接地方式、外部邊界、基板與真空範圍、端口或接面元件，以及材料假設。變更接地導體或接面電感，就會改變所研究的問題。共用版圖不代表外部條件相同：未指定時，Palace 本徵模使用自然 PMC 條件；目前以來源為起點的 HFSS EPR 模型則使用已記錄的 HFSS 預設 Perfect E 外部邊界。
+細化網格會改善**同一模型**的解；改變邊界或接面數值則會建立**不同模型**。比較結果時，請分開處理這兩類研究。
 
-## 選擇幾何近似 {#choose-the-geometric-approximation}
+## 物理模型 {#the-physical-model}
 
-求解幾何路線決定金屬如何表示；近似設定檔則決定如何從物理上解讀來源幾何。**Thin-Film（薄膜面，舊代碼 A）**使用零厚度面金屬 PEC 薄片與有限高度凸塊／柱體殼。**PEC Shell（金屬殼，舊代碼 B）**保留有限金屬的外部 PEC 邊界，並將金屬內部排除於 Palace 四面體求解域。PEC 是 perfect electric conductor（理想導體），代表理想邊界模型，不是實測導體損耗。
+每筆結果都要記錄接地導體、外部邊界條件、基板與真空的範圍、端口或接面及其數值，以及所用材料性質。
 
-`substrate_face` 與 `metal_gap_equivalent` 是 Thin-Film 路線中的物理模型選擇，兩者將來源薄膜轉成求解幾何的方式不同。遇到難以處理的網格時，改換求解幾何路線不會自動修復問題。進階的 **Retained Solid（保留金屬實體，舊代碼 C）**會為多邊形 CAD 保留有限金屬體積，但不是完整的 Palace Surface-EPR 路線。確切支援形式請參閱[幾何參考](../geometry-sgb.qmd)。
+求解器的預設外部邊界不同。未指定邊界的 Palace Eigenmode 模型使用理想磁導體（PMC）；HFSS Eigenmode 使用理想電導體（Perfect E）。因此，即使幾何相同，兩個求解器也可能得到不同頻率。
 
-## 對照物理量判讀數值變化 {#read-numerical-changes-beside-the-quantity}
+## Palace 的金屬表示法 {#metal-representation-in-palace}
 
-網格大小、幾何網格階數、有限元素階數、自適應通過次數、求解器設定與搜尋控制，分別決定數值計算的不同部分。Palace 的幾何階數控制網格表示法；FEM 階數控制場近似。原生停止旗標描述設定的停止準則。判讀時應一併檢視目標電容、頻率或參與率的實際變化。
+Palace 提供兩種金屬表示法，稱為 **Route A** 與 **Route B**：
 
-1.1.0 版 Palace 網格摘要會記錄原生網格控制項與拓撲。本徵模的自由度數值是依拓撲估算，並非原生求解器計數，也不是收斂度量。線性四面體品質報告也不會評估曲線高階元素的品質。
+| 路線 | 金屬表示法 | 說明 |
+|---|---|---|
+| A | 零厚度 PEC 薄片 | 需要薄膜設定檔：`substrate_face` 保留實際表面位置；`metal_gap_equivalent` 會調整位置以符合間隙 |
+| B（預設） | 具有 PEC 表面的有限厚度實體 | 不會對金屬內部建立網格 |
 
-請分別處理三種高階控制：`geometry_order` 建立網格幾何，FEM 階數控制場近似，而 Palace `HighOrderOutput` 控制序列化。Palace 原生匯入預設值 `RemoveCurvature=false` 會保留匯入的高階幾何節點。Palace Surface EPR 的原生 Mask／Inset 邊距是與 SGB 幾何分區不同的評估。指定的 Palace 可執行檔必須支援 Mask／Inset；請見[Palace Electrostatic 契約](../specs/palace-electrostatic-sgb.qmd#native-mask-inset)。先前的 SGB 幾何距離帶產生器已撤回。
+兩種方式都將金屬視為理想導體，不會模擬導體損耗。切換路線會改變模型，不能用來修復難以處理的網格。細節請見[幾何參考](../geometry-sgb.qmd)。
 
-代數本徵對殘差與自適應網格指標描述的是不同物理量。頻率可能變化很小，但對場敏感的表面貢獻仍可能變動。請檢視該貢獻可取得的歷程，不要以其他觀測量的穩定性代替判斷。
+HFSS 與 Q3D 也有 `modeling="solid"` 或 `"thin_film"` 的選擇，請參閱[實體與薄膜建模](../specs/aedt-runtime.qmd#aedt-solid-thin-film)。
 
-::: {.callout-note title="分開比較模型與數值結果"}
-細化網格是在研究同一模型的離散化。變更外殼、材料或端口假設則是在研究不同模型。請分開標示這些研究，並在比較結果時保留單位及模態／導體識別資訊。
-:::
+## 數值設定 {#numerical-settings}
 
-來源預覽呈現已宣告的幾何；網格／原生讀回資料呈現後端建立的內容；求解場則支援物理後處理。即使其他結果可讀，缺少的側壁能量或未知的損耗正切值仍然是缺少或未知。請接著閱讀 [EPR 解讀](../eigenmode-epr.qmd)或[結果判讀](../course/returned-results.qmd)。
+| 設定 | 控制項目 |
+|---|---|
+| 網格大小 | 金屬附近與遠處的元素大小 |
+| 幾何階數（`geometry_order`） | 元素貼合曲面的程度 |
+| 元素階數（`order`） | 每個元素內場近似的精度 |
+| 自適應細化（`amr_max_passes`、`amr_tolerance`） | 網格細化次數與誤差估計門檻 |
+| 求解器容差 | 線性或本徵值求解器的停止條件 |
+
+幾何階數與元素階數彼此獨立。Palace 的 `HighOrderOutput` 只影響輸出檔寫入方式。
+
+### 判斷收斂 {#judging-convergence}
+
+求解器的「收斂」旗標表示符合求解器自己的停止規則，不代表你關心的量已達所需精度。請檢視該物理量在各次網格細化之間的變化：
+
+- 本徵值殘差與自適應網格誤差估計衡量不同項目。
+- 頻率可能已穩定，但表面參與率仍在變化。請檢查實際使用的物理量。
+
+Palace 網格摘要會列出元素數量，並估計未知數數量；它不是收斂指標。網格品質報告評估直邊四面體，不評估曲線元素。
+
+曲線邊緣附近的表面 EPR 請參閱[曲線內縮距離參考](../specs/palace-electrostatic-sgb.qmd#curved-positive-inset-distance)。
+
+## 未知量仍應保持未知 {#what-is-unknown-stays-unknown}
+
+部分物理量不會計算：HFSS 不計算金屬側壁上的薄膜能量；未設定的損耗正切值也屬未知。即使其他結果可用，SCGSim 仍會將這些量標示為缺漏或未知，而非零。
+
+## 接下來 {#next-steps}
+
+- [能量參與率與損耗](../eigenmode-epr.qmd)
+- [判斷結果是否適用](../course/returned-results.qmd#interpret-for-scq-use)

@@ -33,7 +33,7 @@ The CAD transaction follows the plan rather than deriving a second geometry:
 
 Stage metadata stores timings, object counts and auxiliary mapping-file sizes. Returned native integer tags are backend-local; source Entities, planned Surface IDs and tag names remain the stable semantic identity. When XAO is reopened, backend tags can differ, so the binding ledger travels with the geometry rather than being reconstructed from tag order.
 
-A Gmsh Physical Group is a label consumed by mesh or solver input; it does not join the CAD entities assigned to it. A group can label several geometrically disconnected conductor components when the model criteria allow it, while each planned surface retains its own component and source mapping. See the [geometry contract](../../geometry-sgb.qmd#explicit-rectangular-junctions) for the precise group semantics.
+A Gmsh Physical Group is a label consumed by mesh or solver input; it does not join the CAD entities assigned to it. A group can label several geometrically disconnected conductor components when the model criteria allow it, while each planned surface retains its own component and source mapping. See the [geometry contract](../../geometry-sgb.qmd#component-to-backend-geometry-contract) for the precise group semantics.
 
 Construction work grows with planned points, curves, surfaces, shell relationships and native rebinding comparisons. Mesh work grows with solution-volume extent, local element size and conformity constraints. Reporting them separately prevents mesh cost from hiding repeated CAD cost.
 
@@ -59,4 +59,4 @@ Source DBU and the shared XY coordinate grid set planar geometric precision. Z/t
 
 A successful CAD handoff gives an XAO file, physical-group mapping, source-tag ledger and passing geometry gates. A successful mesh handoff adds a mesh and solver-specific conformity evidence. If CAD construction fails, inspect the last completed planning/native stage; changing mesh size cannot repair an earlier ownership or topology error.
 
-For initial size policies and executable inputs, see the [Palace preparation contract](../../specs/palace-electrostatic-sgb.qmd#palace-mesh-size-policy).
+For initial size policies and executable inputs, see the [Palace preparation contract](../../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls-110-candidate).

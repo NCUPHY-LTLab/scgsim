@@ -8,7 +8,7 @@ lang: zh-TW
 ---
 
 ::: {.callout-note title="已接受行為與交付狀態"}
-後端、Thin-Film／PEC Shell 轉換（舊資料代碼 A／B）、交接、Slurm 執行、嚴格結果解析及既有報告摘要，屬於已接受的 V1 範圍。下述 Palace 網格控制與獨立網格摘要，也已在 SCGSim 1.1.0 列為 ACCEPTED。紀錄的操作資料保留其限制；穩定化與版本交付仍是不同狀態。
+後端、Thin-Film／PEC 外殼 轉換（舊資料代碼 A／B）、交接、Slurm 執行、嚴格結果解析及既有報告摘要，屬於已接受的 V1 範圍。下述 Palace 網格控制與獨立網格摘要，也已在 SCGSim 1.1.0 列為 ACCEPTED。紀錄的操作資料保留其限制；穩定化與版本交付仍是不同狀態。
 :::
 
 ## 公開介面 {#candidate-surface}
@@ -69,33 +69,53 @@ prepare shared GeometryPlan snapshot
 
 在仍處於收斂中的 Gmsh 隔離範圍，SCGSim 自行擁有的 Gmsh 工作階段以 `readConfigFiles=False` 初始化，讓 Gmsh 系統設定檔不會默默改變工作程序的起始選項。幾何輔助函式若發現 Gmsh 已初始化，仍略過初始化；此旗標只影響 SCGSim 自行初始化的情況，不變更既有借用工作階段的選項、模型或結束行為。獨立的 `meshing.effective` 紀錄會讀回 Gmsh 實際的 `Mesh.MeshSizeFactor`。此值是觀察中繼資料，不是公開網格控制或要求設定。缺少此欄位的歷史紀錄維持缺項，讀取器不替它們推論數值。
 
-## 網格尺寸策略（CONVERGING） {#palace-mesh-size-policy}
-
-兩個 Palace 外觀介面都透過 `set_mesh(...)` 接受 `size_policy`。新的 `EigenmodeSim` 以 `gmsh_default` 開始；新的 `ElectrostaticSim` 保留既有的 `scgsim_default` 尺寸策略。除非呼叫端明確提供一組尺寸，`scgsim_default` 使用 `5 µm` 細化尺寸與 `300 µm` 最大網格尺寸。傳入 `10` 與 `200` 的範例只覆寫該範例尺寸，不變更套件預設值。
-
-選用 `gmsh_default` 以使用 Gmsh 4.15.2 的原生尺寸選取。SCGSim 不新增網格尺寸場或回呼，不變更 Gmsh 原生最小值、最大值、比例、點、曲率及邊界尺寸選項，也不套用 SCGSim 尺寸覆寫。此策略不改變幾何、物理群組、接面或 Surface EPR 請求。網格尺寸與 3D 網格演算法、Palace FEM 或 AMR 控制分開；選取此策略不保證元素較少。
-
-省略 `size_policy`（或傳入 `None`）會保留選定策略。`scgsim_default` 啟用時省略尺寸引數，會保留目前的一組尺寸，包含呼叫端指定值。選用 `gmsh_default` 會清除保留的 SCGSim 尺寸覆寫。再次選用 `scgsim_default` 會恢復 `5 µm` 與 `300 µm`，除非同一次呼叫明確提供一組尺寸。`gmsh_default` 啟用時提供網格尺寸會遭拒，原設定不變。`set_numerical(...)` 繼續設定 FEM 與 AMR；它不能在 `gmsh_default` 啟用時加入明確網格尺寸。
-
-要求網格紀錄保留選定策略與尺寸值，包含 `None`。有效網格紀錄讀取 Gmsh 原生最小值、最大值與比例，以及點、曲率與邊界尺寸選項。這些紀錄區分呼叫端設定及該網格實際觀察的原生選項。
-
 ## 網格清單與獨立摘要（1.1.0） {#mesh-manifest-and-detached-summary-110-candidate}
 
 網格清單保留既有群組，並加入 `meshing` 資料，包含實際 Gmsh 版本、要求及有效控制、高階最佳化結果、節點與元素類型、物理區域元素數量及邊長統計。高階網格的邊長會明確標為主角點弦長，以微米回報；它們不是曲邊弧長。
 
 兩個 Palace 外觀介面及已解析的 Palace 執行都提供 `mesh_summary()`。它回傳綁定網格與清單身分的獨立值。Palace 報告讀取相同摘要依據。Eigenmode 包含根據主角點四面體拓撲與設定 FEM 階數計算的 Nédélec 拓撲自由度估計。這不是實際求解器自由度數量；變更 FEM 階數會更新估計，不重新產生網格。Electrostatic 的 H1 估計不可用。既有線性四面體[網格品質讀取器](../mesh-quality.qmd) 不計算曲面元素品質。
 
-## 原生 Mask／Inset 與已撤回的幾何距離帶 {#native-mask-inset}
+## Palace 原生多邊距 Surface EPR {#native-multi-margin-surface-epr}
 
-Palace 原生 Mask／Inset 邊距仍可透過 `inset_margins_um` 要求；省略此欄位可只產生未遮罩基準列。非空請求需要支援原生 Mask／Inset 設定的 Palace 可執行檔。這些邊距不會修改 SGB 來源幾何。
+Electrostatic 與 Eigenmode 的 `set_surface_epr(...)` 規格可針對每個 MA、MS 或 SA 介面選擇提供 `inset_margins_um`。若提供，其值必須是非空的有序 list 或 tuple，且元素為有限、非負實數。要求順序會保留；不同序號上的相同數值仍是不同的要求觀察。省略欄位會保留既有未遮罩行為。
 
-另外，SGB 幾何距離帶產生器已撤回。舊頁面中描述 `GeometryPlan.set_surface_distance_bands(...)` 的內容僅供歷史參考，並非現行產生器。原生 Mask／Inset 資料列不可解讀成互斥的幾何帶。
+對每個確切來源介面，SCGSim 保留一個邏輯上的未遮罩基準，並將每個要求的邊距序號轉換成獨立的原生遮罩介電索引，且各索引都指回該基準索引。遮罩不會改變來源介面的屬性、類型、厚度、相對介電率或損耗正切。產生的原生遮罩為 `{Type: Inset, Margin: ...}`。
+
+Palace 以輸入網格相同的座標單位讀取 `Margin`，也就是 `Model.L0` 的單位。SCGSim 使用 `Model.L0 = 1e-6 m`，因此設定值如下：
+
+$$
+\mathrm{Margin}
+= \frac{\texttt{margin\_um}\,10^{-6}\ \mathrm{m}}{\mathrm{Model.L0}}.
+$$
+
+接著 Palace 以相同的相對網格長度比例 $L_c / \mathrm{Model.L0}$ 對網格座標及 `Margin` 進行無因次化。它不會再將設定的 `Margin` 除以 `Model.L0` 做第二次單位轉換。
+
+在每個保留的計算階段，所有基準係數與遮罩係數都由同一場解計算；邊距要求不會另行觸發 PDE 求解。
+
+### 曲面邊界上的正內縮距離 {#curved-positive-inset-distance}
+
+對直線多邊形邊界，正值 `Inset` 距離沿用保留的直線邊界線段。對曲面邊界，數值積分會評估實際曲面，但周界距離計算使用保留邊界頂點之間的直線線段。因此，正內縮採用折線近似，而非至曲線周界的精確距離。此距離計算不改變 PDE、網格或 Notebook 模型。未遮罩基準及零邊距仍使用原生完整積分係數；同一介面的零邊距必須等於未遮罩積分。
+
+正邊距要求具有周界的開放三維選取面片；若沒有周界，原生錯誤會如實傳遞，不以近似結果取代。
+
+局部薄片面片可能保留多個語意側貢獻。MS 與 MA 貢獻沿用各自既有的原生類型。若同一原生面上兩側皆為 MA，SCGSim 會記錄兩筆有序貢獻，但只輸出一筆彙總 MA 列並啟用 Palace 內部邊界裂分；不會重複資料列、倍增結果，或宣稱原生輸出具有側別解析度。同一彙總的零內縮仍是未遮罩彙總。由於目前原生屬性無法表達兩側不同的遮罩支撐範圍，設定時會拒絕該彙總的正內縮。錯誤會指出選取的彙總及側別。缺少新增帳本的歷史產物仍可讀取，但不推論側別。
+
+完整的遮罩快照必須在同一個保留的 `final` 或 `iterationNN` 結果來源中同時具備兩個原生檔案：
+
+- `surface-mask-Q.csv`，其索引欄為 `p_surf_mask[Index]` 與 `Q_surf_mask[Index]`；以及
+- `surface-mask-energy.csv`，其索引欄為 `E_surf_mask[Index] (J)`。
+
+Eigenmode 兩個檔案都以 `m` 為第一欄；Electrostatic 則以 `i` 為第一欄。任一檔案缺少或無法讀取時，該來源的遮罩快照即不可用；有效的基準快照仍可讀取。
+
+索引映射與回傳憑證會將每個遮罩索引綁定至確切基準索引、介面擁有者與類型、要求邊距值與序號、模態或激發、細化階段及保留的結果來源。要求遮罩的完成結果會將必要遮罩檔案納入產物雜湊封存；雜湊不符仍是致命錯誤。原生 `surface-Q.csv` 中重複的未遮罩值或欄位，只代表一個邏輯基準，不是額外損耗項。未遮罩基準與替代邊距都不得加總成物理損耗總量。
+
+邊距是替代估計，不是可相加的不重疊邊緣帶。此處不設定收斂門檻。
 
 ## 來源與幾何權威 {#source-and-geometry-authority}
 
-來源至建構的說明請見 [SGB 幾何概念](../concepts/geometry.qmd#source-stage)。下列契約定義支援的準備路徑。
+來源至建構的說明請見 [SGB 幾何概念](../concepts/geometry.qmd#entities-placements-and-nets)。下列契約定義支援的準備路徑。
 
-共用的來源優先課程建議使用 `set_plan(snapshot)`。獨立的 `set_geometry(component)`／`set_stack(stack)`／明確包絡 API，仍支援新的未綁定模擬；請將此路徑與計畫快照分開。[GeometryPlan 契約](../geometry-sgb.qmd) 負責出現實例／Net、產生的真空、接觸及 Thin-Film／PEC Shell 語意。目前面向來源的幾何權威為 `scgsim.geometry`；路徑規劃及衍生建構由 `scgsim.geometry.compiler` 負責。外部 SGB 與 gsim 僅屬衍生歷史。
+共用的來源優先課程建議使用 `set_plan(snapshot)`。獨立的 `set_geometry(component)`／`set_stack(stack)`／明確包絡 API，仍支援新的未綁定模擬；請將此路徑與計畫快照分開。[GeometryPlan 契約](../geometry-sgb.qmd) 負責出現實例／Net、產生的真空、接觸及 Thin-Film／PEC 外殼 語意。目前面向來源的幾何權威為 `scgsim.geometry`；路徑規劃及衍生建構由 `scgsim.geometry.compiler` 負責。外部 SGB 與 gsim 僅屬衍生歷史。
 
 [Electrostatic 課程](../course/palace-electrostatic.qmd) 說明確切 Net 端子／接地及實際網格／設定順序。獨立的[本徵模態契約](palace-eigenmode.qmd) 定義模態與 EPR 輸出選取。兩條準備路徑都不啟動 Palace 或提交工作。共用私有狀態的失效處理／持久化實作位於[架構](../architecture.qmd#palace-preparation-lifecycle)。
 
