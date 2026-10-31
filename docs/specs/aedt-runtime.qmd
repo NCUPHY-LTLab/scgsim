@@ -6,37 +6,13 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/specs/aedt-runtime"
 ---
 
-The [course map](../examples.qmd) links every implemented AEDT family lesson. This page owns exact specifications, failure rules and historical reader contracts.
+This page is the exact reference for SCGSim's AEDT workflows: HFSS Eigenmode,
+HFSS Driven Modal and Terminal, Q3D and Q2D. It covers request
+specifications, what each family returns, how runs fail, and EPR on saved
+fields. For step-by-step use, start with the
+[how-to guides](../examples.qmd#how-to-guides-by-solver).
 
-::: {.callout-note title="Accepted implementation/API scope and evidence"}
-Human accepted the v2 implementation/API on 2026-10-09 at candidate
-`a932a173edb5c56ae14740ff5177190996255bdd` (tree
-`2745321736e53e2a4fe8d150f2e9d8bd176669db`). The semantic state is `ACCEPTED`,
-not `STABILIZED`. Six earlier full native-to-Resolve-to-Report observations
-belong to the earlier wheel SHA256
-`48963671d4f854c185b8f95f3cd8000960355a7c48550b9ccf19b739b49f8df3` and
-runtime-source v13 content digest
-`42b48f3d5946fadb1e93e92a1d3eb2a55f72ff00fc41aeccf71c0fded5919fa1`; those
-observations do not establish execution from the accepted candidate wheel.
-The accepted frozen `2.0.0.dev1` candidate wheel SHA256
-`e0ab1117aad4e5578ec98251732d33f6faa2fe7524dd70dcbc44891ed024824d` has a
-separate Q3D build-only/readback/save/release observation and geometry preview,
-without `Analyze`, solve, or C/G matrix export. The full Xmon Palace Eigenmode
-Route A, CircularPad Palace Eigenmode Route B, and HFSS Eigenmode/saved-field
-EPR/offline-loss endpoints remain deferred.
-:::
-
-The Solid/Thin-Film modeling extension below is a separate `CONVERGING` scope.
-It does not revise the accepted v2 transaction, historical-reader, or Q3D
-body-v3 contracts except where this page explicitly describes the new required
-3D modeling selection.
-
-The current continuation targets terminal-free Q3D C/G, HFSS Eigenmode with
-EPR/saved-field analysis, and HFSS Driven Terminal, including the assigned
-short-solve observations. Q3D AC/RL and HFSS Driven Modal are deferred from
-this continuation; their existing request and result contracts remain in
-force and are not removed. These are candidate scope boundaries, not claims
-that the native operations have completed.
+Supported versions: AEDT 2024.2 with PyAEDT 1.3.0, on Python 3.12 or 3.13.
 
 ## One shared lifecycle
 
@@ -76,7 +52,8 @@ run.py: release Desktop -> write final receipt
 The normal command and preparation-only paths use the same private family
 preparation functions and transaction owner. EPR and Q3D already support
 `--execute --prepare-only`; the Solid/Thin-Film scope extends that operation
-to HFSS Eigenmode, Driven Modal and Driven Terminal. The usual `--execute`
+to HFSS Eigenmode, Driven Modal and Driven Terminal. Q2D uses the same
+owned preparation-only transaction for its explicit cross section. The usual `--execute`
 family behavior remains unchanged, and neither path creates a second Desktop
 owner.
 
@@ -84,7 +61,8 @@ owner.
 
 The public geometry-preparation helpers for Q3D, HFSS Eigenmode, and HFSS
 Driven, and `EigenmodeSim.set_eigenmode()`, accept `run_control=None` when the
-request is to build and read back the native model without solving. The
+request is to build and read back the native model without solving. `Q2dSpec`
+also accepts explicit `run_control=None` for that operation. The
 canonical JSON spec still contains its `run_control` member; `null` is the
 explicit model-only value. Existing non-null payload encoding and hash meaning
 are unchanged. With `null`, preparation creates no solver setup, EPR cache, or
@@ -126,109 +104,16 @@ preparation copies that canonical name unchanged and binds only the copied GDS
 path in its independent payload. It does not reinterpret old truncated names,
 rewrite existing artifacts, or provide a legacy-name fallback.
 
-## Receipt cohorts and source provenance
+## Run receipts
 
-New handoffs retain `scgsim.aedt.handoff.v1` and
-`scgsim.aedt.handoff-manifest.v1`. Both records add
-`expected_receipt_schema: scgsim.aedt.receipt.v3`, and the initial receipt is
-V3. It contains `prepared_runtime_source`: a deterministic, sorted
-`runtime-source.v19` manifest for the current candidate. The record fields are
-`schema_version`, `stage`, `modules`, `content_sha256`, and
-`revision_observation`; there is no helper-hash map. Each declared module has
-measured bytes and the content digest binds that inventory. The Git observation
-is either available with the actual 40-hex commit or explicitly unavailable.
-A source checkout or fabricated revision is not required for byte-bound
-identity.
+Every run directory carries a receipt that records its inputs, the SCGSim code
+that ran, the AEDT state read back after the run, and a hash of every output.
+`resolve_results()` checks the receipt before returning any result. The receipt
+schemas and their version history are described in
+[Runtime and result provenance](../provenance.qmd#aedt-receipt-cohorts).
 
-Before writing `running`, the shared transaction accepts its established
-initial-receipt cohorts: a V3 receipt with both V3 expectation markers and a
-canonical manifest; a V2 receipt with both V2 markers and a canonical
-manifest; or an exact V1 `not_run` receipt with both markers absent and the
-canonical historical manifest. A historical handoff may continue through its
-supported family path under those cohort rules; this does not bypass family
-request requirements.
-
-Every new Q3D or HFSS 3D execution requires explicit `modeling`; a
-`thin_film` request also needs its corresponding source declarations before
-receipt mutation. A previously supported Q3D/HFSS result payload without
-`modeling` remains under its original reader and hash interpretation and cannot
-start a new execution. The shared V1/V2 handoff compatibility remains
-available to unchanged families such as Q2D, but does not bypass the current
-Q3D/HFSS request requirement. Q3D input-v1 and input-v2 request schemas remain
-removed.
-
-The verified initial-receipt hash and prepared-manifest hash are copied into
-the mutable V3 receipt. The final receipt is intentionally not compared with
-its initial hash because execution must mutate it. Unknown versions, mixed or
-partial markers, noncanonical members, and hash mismatches reject before
-receipt mutation.
-
-Every new completed V3 receipt has a separate `runtime_source` manifest using
-`runtime-source.v19` and a content digest for the code that actually executed
-it. Declared module bytes and the digest are mandatory; V19 has no redundant
-helper-hash fields. `revision_observation` carries the actual 40-hex commit
-when available and records `unavailable` truthfully for an immutable wheel
-without VCS metadata. Missing or corrupt declared module bytes, digest, schema,
-or cohort still fails closed. Preparation and execution hashes are evidence
-with different timing, not an equality requirement, and historical hashes are
-not compared to the currently installed package.
-
-`resolve_results()` preserves the existing rules for genuine historical
-completed V1 and V2 receipts. A receipt relabeled below its preparation markers
-is an inconsistent downgrade and rejects. V2 and V3 resolution verify their
-exact cohorts, markers, canonical prepared manifest, initial-receipt binding,
-and complete actual runtime manifest before applying their version-specific
-family result checks. Only V3 HFSS completion requires sealed native PEC binding
-evidence; this requirement is never projected onto historical V1/V2 receipts.
-These unsigned consistency checks do not authenticate an artifact set against
-an actor able to rewrite every member.
-
-`runtime-source.v1` is a frozen thirteen-module reader contract, not a live
-enumeration rule. The V2–V14 inventories are frozen as well. V4 added
-`scgsim/aedt/_presentation.py`; V5 added `scgsim/sgb/geometry_plan.py` and
-`scgsim/sgb/__init__.py`. V7 added
-`scgsim/_notebook_presentation.py` to V6. V8 added
-`scgsim/aedt/_junction_partition.py` to V7. V9 added
-`scgsim/aedt/__init__.py`, `scgsim/aedt/_q3d_geometry.py`,
-`scgsim/sgb/adapter.py`, and `scgsim/sgb/stack.py` to V8. V10 added the shared
-`scgsim/aedt/_handoff_cohort.py` to V9; V11 added
-`scgsim/aedt/_q3d_bodies.py` to V10. V12 is frozen with V11's exact path
-membership. V13 retains its frozen inventory, mandatory declared module bytes
-and digest, and optional `revision_observation`; V1–V17 retain their frozen path
-membership, field meanings, and version-specific reader rules. V14 is reserved
-for held PR35. V16 added the HFSS Eigenmode native implementation module to the
-V15 inventory. V17 added the shared lumped-model and HFSS lumped-native modules,
-plus the AEDT specs package initializer, to V16. V18 removed the former
-EPR-private `epr/junction_partition.py` path and included
-`preparation/junction_partition.py`, the relocated AEDT data/RLC/terminal
-helpers, geometry/EPR/support specs, modeling/planar preparation, HFSS geometry
-runtime, neutral geometry representation modules, and the shared source-ground
-construction helper with its polygon-operation leaf. The current V19 inventory
-adds the model-only prepared-model reader. V19 uses the same five record fields
-described above and no helper-hash map; its exact path list is the declared
-implementation inventory. These manifests bind their
-declared file inventories, not an exhaustive transitive dependency
-attestation. The frozen V12 inventory, for example, does not separately hash
-`scgsim/sgb/engine_gates.py`. They do not change the V3 receipt schema. A pure
-initial-receipt codec owns exact V1/V2/V3 member
-order, two-space JSON indentation, and the trailing newline. V1 omits prepared
-provenance; V2 and V3 insert it between `source` and `outputs`. Reading
-historical evidence uses the declared frozen schema and does not compare
-historical hashes with the installed package.
-
-Execution computes mandatory runtime-source provenance inside the receipt-bound
-failure transaction, before importing PyAEDT or constructing Desktop. Current
-V19 may record `revision_observation` as unavailable; that alone does not fail
-byte-bound identity or prevent execution. Missing or corrupt declared module
-bytes, digest, schema, or cohort still yield a failed V3 receipt without a
-Desktop launch rather than escaping receipt finalization. V1–V17 retain their
-version-specific historical validation rules, including revision requirements
-where declared.
-
-The family save contract remains fail-closed. `save_project()` returning false
-before solve aborts before native execution; returning false after export aborts
-before completion is reported. SCGSim does not turn either state into a new
-partial-success receipt or infer that native project bytes are usable.
+If saving the AEDT project fails before the solve, the run stops before
+solving. If it fails after export, the run is not reported as complete.
 
 ## Solver-specific contracts
 
@@ -247,9 +132,8 @@ uses the separate `run_control=None` path described above.
 
 ### Shared lumped support and terminal RLC {#hfss-shared-lumped-support}
 
-This HFSS lumped-element scope is `CONVERGING`. It adds generic circuit
-elements while preserving the existing Wave Terminal and Josephson-junction
-contracts.
+Lumped elements are generic circuit elements. They are separate from Wave
+Terminal ports and from Josephson junctions.
 
 `LumpedSupport` and `set_lumped_supports()` declare source-backed support
 geometry in the caller's model snapshot. The body-first workflow uses
@@ -344,7 +228,7 @@ checked by the resolver has that meaning.
 
 ## Solid and thin-film 3D modeling {#aedt-solid-thin-film}
 
-The shared physical-source/profile scope is **CONVERGING**. Every fresh Q3D
+Every new Q3D
 or HFSS 3D request explicitly selects `modeling="solid"` or `"thin_film"`;
 there is no inferred mode or public A/B/C execution alias. Current family
 schema identifiers remain in use. Fresh requests carry the tagged
@@ -451,8 +335,8 @@ accuracy for either representation.
 
 ### HFSS Driven caller-owned sweep count {#hfss-driven-sweep-count}
 
-The Human-accepted V1 contract provides this behavior. `FrequencySweepSpec(start_ghz, stop_ghz, points=20000)` keeps its
-existing public `points` field and default. The caller chooses the sample count
+`FrequencySweepSpec(start_ghz, stop_ghz, points=20000)` takes the number of
+sweep points in `points`, with a default of 20 000. The caller chooses the sample count
 for the study. Exact whole-number numeric inputs, including `20000.0`, are
 accepted and converted losslessly to the native/count integer. A non-whole
 input is rejected rather than truncated. This contract adds no scientific
@@ -477,7 +361,7 @@ chosen by SCGSim.
 
 ### HFSS convergence observations {#hfss-convergence-observations}
 
-This accepted observation contract covers HFSS Driven and Eigenmode only. Native convergence status,
+This section covers HFSS Driven and Eigenmode. Native convergence status,
 caller-authored criteria and changes, reported delta, final pass and available
 native records remain observations. For Eigenmode, `Current Consecutive Passes`
 and native convergence history remain in the hash-bound
@@ -514,9 +398,7 @@ this direction adds no numerical sufficiency threshold or scientific certificati
 
 ### Q2D/Q3D convergence observations {#q2d-q3d-convergence-observations}
 
-The accepted Q2D/Q3D contract applies the native-observation direction to
-these two additional qualifications, separately from the earlier HFSS-only
-scope:
+Q2D and Q3D record convergence in the same way, with these additions:
 
 - A native converged classification is not rejected solely because its final
   reported delta exceeds the configured target.
@@ -623,6 +505,28 @@ The AEDT report methods accept keyword-only `theme="light"` or `theme="dark"`,
 default to light, and reject other values. `AedtBenchmarkReport` keeps its
 existing `.data` and carries the selected theme.
 
+## Q2D native model-only preparation
+
+`Q2dSpec` retains explicit rectangles, PDK materials, conductor groups, one
+`ReferenceGround`, and absolute Region padding. Use `run_control=None` and the
+ordinary `prepare_handoff(spec, output_dir=...)` API, then run its CLI with
+`--execute --prepare-only`. No frequency, adaptive pass, or convergence values
+are invented. A null-control Q2D request uses `scgsim.aedt.q2d.v2` with an
+explicit JSON `run_control: null`; existing complete-control requests keep
+`scgsim.aedt.q2d.v1` and their existing payload/hash meaning. V1 decoding still
+requires complete controls.
+
+Preparation creates the real section and materials, assigns the declared
+SignalLine/ReferenceGround groups using the existing SolveOnBoundary and
+physical-thickness semantics, reads native object IDs/bounds, conductor
+assignments and saved boundary records, saves and releases. With null controls
+it creates no setup and exports no solution or matrix. With complete controls,
+preparation-only also authors and reads back that setup, without Analyze.
+`resolve_prepared_model()` returns the saved unsolved Q2D model; the completed
+physics reader remains separate. Full execution without controls fails before
+Desktop construction. Native errors remain errors; source rectangles are not
+inferred from 3D geometry or modified to satisfy a solver.
+
 ## Q2D native combined matrix export
 
 For new Q2D runs, the canonical result set contains exactly one matrix
@@ -643,8 +547,6 @@ creating a second artifact.
 Resolution fails closed unless the connected AEDT/PyAEDT versions, declared
 setup and `LastAdaptive` solution, frequency, per-unit-length units, conductor
 order, and every primary matrix value match the sealed run and are finite.
-This Q2D contract is accepted V1 behavior; the broader implemented AEDT surface is also
-`STABILIZED`, with stabilization and release delivery tracked separately.
 
 ## Q3D extraction and Region-ground contract {#q3d-extraction-and-region-ground-candidate}
 
@@ -662,10 +564,7 @@ controls described below retain their existing meanings.
 conductor bodies and every conductor body belongs to exactly one final Net.
 Substrate bodies use dielectric material and no Net. A C/G request may leave
 Signal terminals absent; an AC/RL request requires each Signal Net's complete
-source/sink object and side pair. This body-v3 request and lowering behavior is
-part of the accepted v2 implementation/API. Its native observation is limited
-to the build-only operation below; no completed C/G solve or matrix result is
-claimed for the accepted candidate.
+source/sink object and side pair.
 
 `Q3dSpec.solve_ac_rl` is a strict boolean and defaults to `true`. The default
 therefore preserves the existing combined capacitance/conductance plus AC
@@ -713,10 +612,7 @@ sheets there, and rebuilds the final native Region with zero additional offset.
 The final Region has the requested expanded bounds; the receipt records both
 the requested padding and this zero-offset finalization explicitly.
 
-The prior failed `_01` project remains immutable diagnostic evidence. There is
-no compatibility fallback, physical bridge, or unite path. This replacement
-Region-ground contract is `STABILIZED`; historical diagnostic evidence is not
-relabeled.
+There is no fallback, physical bridge or unite path.
 
 ### Q3D body-backed input v3 {#q3d-body-input-v3}
 
@@ -777,9 +673,7 @@ phase detail retains body attribution, raw inventory and native IDs when
 readable, plus available native warning/error context. If a diagnostic read
 fails, its context is unavailable and cannot replace the primary failure.
 Warning presence alone does not reject a complete inventory. The source
-contract defines body attribution and failure behavior; the scoped build-only
-observation below confirms readback for its tested candidate operation, not a
-solver completion or returned matrices.
+contract defines body attribution and failure behavior.
 
 #### Q3D native build-only execution
 
@@ -794,11 +688,7 @@ or export matrices or convergence data. The receipt records
 native output. This execution consumes the one-shot handoff, so a later solve
 requires a newly prepared handoff. The strict `resolve_results` entrypoint
 continues to require a completed solver result; it does not resolve a
-preparation-only receipt as a result. On the accepted frozen candidate wheel,
-the observed build-only operation read back body and hole geometry, Z intervals,
-materials, all-Signal net assignments, Region and setup; it saved the project,
-released its owned Desktop, and had a separate top/isometric geometry preview.
-It did not call `Analyze`, solve, or export C/G matrices. Normal Q3D
+preparation-only receipt as a result. Normal Q3D
 `--execute` behavior is unchanged.
 
 The v3 handoff keeps the five ordinary allowed paths in their established
@@ -847,16 +737,7 @@ model. The required readback at the existing post-save checkpoint, before
 Analyze, is the matching native design `EntityList` record, with its native
 name, type, ID, and face IDs verified. Assignment-time `props.List` is cached
 property state, not independent native-member readback. The existing save is
-reused; this adds no save, solve, or getter. An earlier native attempt failed
-before Solve on the incorrect property read. A subsequent SimplePad Solid run
-completed native solve, save, and release; both of its two adaptive passes
-recorded six raw native-face references, with FaceList membership matching
-the saved design's `EntityList`. It did not converge at its two-pass maximum
-(delta 79.181). These observations establish neither accuracy nor
-incident-material equivalence. A separate mode 1, pass 2 saved-field analysis
-completed with `epr_analysis_completed`, `Analyze0`, save, and release; it
-retained six raw references and the saved-membership evidence. The 35 original
-sealed project members remained unchanged.
+reused; this adds no save, solve, or getter.
 
 For the current horizontal constant-section swept or box construction, native
 face centers identify the upper or lower source cap; this does not establish a
@@ -881,12 +762,8 @@ References are raw measurements, not participation, loss, inverse-Q, or a
 universal material-side equivalence. They are not added to masked surface
 maps, energy or loss totals, or the normalization denominator. Margins do not
 create duplicate native-face references, and references add no convergence
-condition. Public `resolve_results()` and `show_all_results()` completed in a
-fresh kernel and presented the raw V^2/m^2 values and face membership. Report
-generation used no native operations and produced HTML with 12 Plotly figures;
-the existing Plotly JSON data and layout were unchanged, and all 56 original
-inputs remained preserved. Report generation does not establish accuracy or
-incident-material equivalence.
+condition. `show_all_results()` presents the raw V^2/m^2 values and face membership
+beside the masked results.
 
 Each required field quantity is evaluated in an explicitly bound setup,
 `LastAdaptive` solution, mode, frequency, phase, and excitation context. That
@@ -934,81 +811,17 @@ a solve. A cache item is identified by its namespaced definition plus bound
 context, never by a display title alone. Multi-face quantities use a verified
 native face list or an explicit sum of individually bound faces.
 
-#### Independent expression-cache convergence targets
-
-`ExpressionCacheConvergenceSet(controls=(...))` carries a nonempty ordered
-collection of unit `ExpressionCacheConvergence` controls. The public setter and
-preparation helper accept either a unit or a collection. A collection serializes
-as `scgsim.aedt.hfss-eigenmode-epr.v4`; singleton V3 and historical V1/V2 payloads
-retain their existing serialization. Duplicate target/mode pairs are rejected.
-
-```python
-from scgsim.aedt import (
-    ExpressionCacheConvergence, ExpressionCacheConvergenceSet, NormalizedSurfaceEprTotal,
-)
-
-sim.set_expression_cache_convergence(ExpressionCacheConvergenceSet(controls=tuple(
-    ExpressionCacheConvergence(
-        mode=mode_index,
-        target=NormalizedSurfaceEprTotal(interface, "requested_margin", margin_um),
-        criterion=criterion_percent,
-        use_relative_convergence=True,
-    )
-    for interface in interface_kinds
-)))
-```
-
-The caller supplies `mode_index`, `margin_um`, `criterion_percent` and
-`interface_kinds`. The EPR request must include each target's prepared margin
-evaluation. Each interface is an independent normalized total with its own
-native criterion; the interfaces are never summed into one convergence target. Caller frequency, minimum,
-maximum and consecutive-pass settings remain unchanged. [AEDT 2024.2 documents
-that Eigenmode also requires frequency convergence in addition to its enabled
-expression criteria](https://ansyshelp.ansys.com/public/Views/Secured/Electronics/v242/en/Subsystems/HFSS/Content/HFSS/SpecifyingExpressionsforAdaptiveConvergence.htm).
-This documented conjunction is the requested native rule, not an observed
-combined-convergence result. Completion or frequency convergence alone does not
-establish that all targets converged; missing native stop evidence stays missing.
-Near-zero native percentage behavior is not replaced with an epsilon or absolute
-criterion.
-
-Each active item retains its control identity, expression/cache identity, mode,
-requested criterion and separately observed saved criterion fields. Native
-`Pass=All` cache rows retain their returned coordinates, values and missingness
-for each target. Configuration readback parses the exact saved project with
-PyAEDT's pinned, uncached `load_entire_aedt_file` reader, selects the bound HFSS
-design and setup, and records that file's hash. It does not use `setup.props` or
-the application project-properties cache. Requested native fields, actual saved
-fields, raw representation differences and unavailable fields remain separate.
-Saved frequency/pass controls are recorded alongside them. Matching setup
-configuration does not establish that a target met its criterion.
-
-Per-pass field retention is unknown; LastAdaptive saved-field identity is
-separate. No offline percentage delta is fabricated.
-
 #### Selecting an expression-cache convergence target {#epr-expression-cache-convergence}
 
-`EigenmodeSim.set_expression_cache_convergence(control)` replaces the current
-selection; repeated calls do not accumulate controls. Omit the setting or pass
-`None` to select no expression-convergence criterion, pass one
-`ExpressionCacheConvergence` for a singleton, or pass an
-`ExpressionCacheConvergenceSet` containing the chosen subset of targets. Routine
-EPR computation and reporting do not automatically enable convergence criteria.
-Each selected control's mode must also be selected by the configured
-`EprAnalysisRequest`.
-
-For the singleton case, the setter enables one expression-cache item for a
-caller-selected mode and explicit criterion, and the handoff records that
-setting in `scgsim.aedt.hfss-eigenmode-epr.v3`. A collection uses V4 as described
-above. V1/V2 handoffs remain readable and retain their prior schema on round
-trip. With no control selected, SCGSim authors no auxiliary expression and
-submits the same non-converging primitive cache items as before. The low-level
+`EigenmodeSim.set_expression_cache_convergence()` optionally enables one
+expression-cache item for a caller-selected mode and explicit criterion. The
+mode must also be selected by the configured `EprAnalysisRequest`. With this
+setting omitted, SCGSim authors no auxiliary expression and submits the same
+non-converging primitive cache items as before. The handoff records a configured
+setting in `scgsim.aedt.hfss-eigenmode-epr.v3`; V1/V2 handoffs remain readable
+and retain their prior schema on round trip. The low-level
 `prepare_hfss_eigenmode_from_geometry()` also requires `modeling` and accepts
 the same `expression_convergence` argument.
-
-Native frequency convergence controls remain separate and unchanged. AEDT
-requires those frequency criteria together with only the explicitly selected,
-enabled expression criteria; unselected computed EPR quantities are not added
-to that conjunction.
 
 `criterion` is passed to AEDT without scaling. With
 `use_relative_convergence=True`, it is the native **Max Percent Delta** in
@@ -1216,7 +1029,7 @@ $p\tan\delta$; an explicit zero produces zero, while an unknown value makes
 that contribution unavailable. See the [EPR Concept](../eigenmode-epr.qmd) for physical interpretation.
 Backend APIs are described in the [AEDT EPR reference](#public-epr-candidate-surface)
 and [Palace Eigenmode reference](palace-eigenmode.qmd#results-and-offline-analysis).
-The [offline EPR lesson](../course/offline-epr.qmd#interpret-an-assumption-change)
+The [offline EPR lesson](../course/offline-epr.qmd#how-assumptions-are-applied)
 explains reanalysis precedence; the [report reference](../report-model.qmd#eigenmode-epr-presentation)
 describes coverage.
 
@@ -1256,45 +1069,6 @@ terminal-owner geometry, including area overlap or boundary contact. This
 identifies a candidate binding but does not qualify the final partition.
 Preparation separately checks complete coverage of the designated central end
 edge.
-
-Both this binder and `prepare_planar_geometry_input()` accept the complete
-source input. Do not omit other-face conductors or prepare a same-face submodel
-to bypass contact checks. One shared per-junction inventory resolves the
-physical source support plane before considering projected XY contact. Exact
-port overlap host Entity/polygon references establish the source hosts; their
-authored `PhysicalLayerDeclaration` film attachment planes, or genuine
-zero-thickness source sheet planes, must agree. Finite body intervals can
-confirm incidence but do not invent a support plane. With boundary-only
-contacts or a manually constructed `PlanarJunction`, the same resolver requires
-one unique authored support-plane candidate incident to the closed-XY contacts
-of both explicit terminal Nets. Missing or ambiguous binding fails explicitly;
-a layer name, Net, projected overlap, or a Solid's lower endpoint alone is not
-a plane binding.
-
-The source interval is the actual body interval, preserved in
-`physical_representation.source_interval_um` after lowering. A source-disjoint
-conductor is excluded from this junction's contact inventory even if Thin Film
-collapse places it at the same effective Z. Source interval endpoints are
-included. For source-incident candidates, effective incidence is also required.
-The existing common `PhysicalRepresentationPlan` projects the support through
-`project_support_point()` with its bound host physical identity; no separate
-junction profile/Z map is introduced. Genuine same-plane terminal, third-net,
-end/corner and open-side failures remain unchanged.
-
-The public helper records the source binding in the existing
-`PlanarJunction.metadata["junction_support_plane"]` mapping, with schema
-`scgsim.aedt.junction-support-plane.v1`, source polygon/plane, binding basis and
-exact source host Entity/polygon/physical-layer/actual-interval records. The
-constructor and canonical payload shape are unchanged. Preparation recomputes
-these facts and rejects a conflicting recorded binding; older manually authored
-junctions without that metadata derive available source evidence through the
-same resolver or fail if it is missing or ambiguous. Partition provenance
-retains this source binding, its effective plane and eligible original Entity
-IDs under `support_plane`; `z_um` is that effective plane. These same per-junction
-IDs govern initial contact classification, reconstructed arm/sheet incidence
-and Booleans, and final emitted-geometry checks, including derived ends through
-their original Entity lineage. All other conductors remain in the full model.
-These source/projection records do not prove native contact or field side.
 
 #### Automatic rectangular junction partition {#aedt-automatic-junction-partition}
 
@@ -1476,15 +1250,6 @@ and a source ID not retained by the selected row fail before constructing
 `SurfaceEprSpec`. The helper does not choose a source or modeling mode for the
 caller. Supply an explicit `modeling` value; Thin Film additionally requires
 the source PDK's qualified physical-layer declarations.
-
-`contribution_id` selects every existing patch in that catalogue group.
-`SurfaceEprSpec.source_polygon_id` is a group provenance anchor: it must be
-retained by at least one member of the selected group's catalogue union,
-including the existing planned SA surface-ID fallback. It does not filter,
-split or omit other group members. Each resolved binding keeps its own
-`contribution` evidence and `geometry_ref` as the true per-patch provenance;
-classification, side, adjacent domains, materials and masks remain validated
-for each patch.
 
 The catalogue is built from the geometry compiler's physical
 surface-contribution ledger. A generic declaration without physical ledger evidence remains

@@ -1,13 +1,18 @@
 ---
-title: "GeometryPlan and SGB Route A/B"
+title: "GeometryPlan and geometry reference"
 description: "GeometryPlan source identity, occurrence and Net ownership, route lowering and input summary."
 scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/geometry-sgb"
 ---
 
-Learn the source sequence in [shared Xmon inputs](tutorial-xmon-input.qmd) and
-[source observations](course/source-observations.qmd). The [geometry concept](concepts/geometry.qmd) explains the identities; this page owns their exact contract.
+This page is the exact reference for `GeometryPlan`, Entity and Net
+assignment, curved boundaries, and how geometry is turned into a Palace mesh
+(Route A or B). For the steps, see [Work with your own model](course/working-model.qmd);
+for the ideas, see [Describing geometry](concepts/geometry.qmd).
+
+*SGB* (semantic geometry builder) is the internal name of the geometry
+compiler, `scgsim.geometry.compiler`.
 
 The in-tree `scgsim.geometry` API is SCGSim's current source-geometry
 authority. It consumes structured PDK and component semantics and must not
@@ -42,8 +47,7 @@ does not infer electrical connectivity or merge child net maps.
 
 ## Shared physical source and representation {#physical-representation}
 
-The shared physical-source/profile scope is **CONVERGING**. Its
-[physical representation contract](specs/physical-representation.qmd) separates
+The [physical representation contract](specs/physical-representation.qmd) separates
 source physical classification from selected solver representation. One neutral
 plan binds each original Entity and physical layer to its effective geometry,
 support and complete enclosure trace. A body retains its actual source
@@ -57,8 +61,7 @@ source and runtime cohorts retain their original interpretation and identity.
 
 ## Source curves and native shared topology {#source-curves}
 
-The curve scope is **ACCEPTED**. Polygon-only inputs retain their polygon
-boundaries. Curves are explicit source declarations, not smoothing inferred
+Polygon-only inputs keep their polygon boundaries. Curves are explicit source declarations, not smoothing inferred
 from a rendered layout or a mesh.
 
 `SourceCurveSpec` describes XY coordinates in micrometres. Supported kinds are
@@ -244,11 +247,9 @@ These are the accepted V1 semantics. Source preparation establishes
 the geometry input contract; it does not imply native geometry validation or
 solver execution.
 
-### Accepted Q3D source normalization
+### Q3D source normalization
 
-The Q3D GeometryPlan frontend is part of the accepted v2 implementation/API
-(accepted 2026-10-09, candidate
-`a932a173edb5c56ae14740ff5177190996255bdd`). Its recognized `airbridge_deck`
+In the Q3D GeometryPlan frontend, the recognized `airbridge_deck`
 and `airbridge_post` records remain role-neutral source
 geometry in the normalized snapshot; they are not given a Palace route
 representation or a native conductor role by normalization. A selected Palace

@@ -61,3 +61,10 @@ scgsim = [
     "_agent_knowledge/docs/assets/*",
     "_agent_knowledge/docs/assets/**/*",
 ]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "C901", "SLF", "BLE"]
+ignore = ["E501"]

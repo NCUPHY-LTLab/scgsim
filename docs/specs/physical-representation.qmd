@@ -43,9 +43,7 @@ semantics or native electrical continuity.
 
 Historical requests, source hashes, runtime inventories and sealed cohorts
 retain their recorded interpretation. They are not a second authority for
-fresh physical-source preparation. The current scope remains CONVERGING;
-source preparation and offline traces do not prove native construction,
-convergence or numerical accuracy.
+fresh physical-source preparation.
 
 ## Typed source carrier and plan
 
@@ -163,7 +161,7 @@ is supplied. Low-level fresh `build_route_mesh()` requires preparation's
 effective normalized input and representation context.
 
 The unversioned semantic `apply_thin_film_profile`, `derive_thin_film_facts`
-and `normalize_optional_profile` exports are retired in this candidate. Use
+and `normalize_optional_profile` exports have been removed. Use
 neutral declarations with `interpret_physical_layers()` or
 `interpret_physical_geometry()`; original pinned source and frozen historical
 artifacts retain their original code and payload identities.

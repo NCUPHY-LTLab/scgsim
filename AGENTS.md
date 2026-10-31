@@ -12,6 +12,7 @@ not duplicate those policies.
 Read first: `README.md`, `docs/goals-and-upstream.qmd`,
 `docs/architecture.qmd`, `docs/geometry-sgb.qmd`, and `docs/ownership.qmd`.
 Then read the smallest relevant technical contract before editing.
+Before editing `README.md` or anything under `docs/`, read `DOCS_STYLE.md`.
 
 External gsim and historical SGB are derivation provenance only: new SCGSim
 work must use the in-tree `scgsim.geometry` source APIs and the advanced

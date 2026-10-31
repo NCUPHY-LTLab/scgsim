@@ -6,7 +6,7 @@ scgsim-status: "STABILIZED"
 scgsim-id: "docs/notebook-ux"
 ---
 
-Public component-simulation notebooks are an OrPen SC PDK interface. SCGSim
+Public component-simulation notebooks are an OrcaPen SC PDK interface. SCGSim
 owns their reusable runtime APIs and keeps no duplicate notebook source.
 The [course map](examples.qmd#public-inputs) links the canonical public sources.
 

@@ -16,26 +16,9 @@ execution, result loading, and presentation distinguishable. A solver backend
 may implement its own physics, but it must not redefine geometry identity, run
 identity, or common provenance.
 
-## Accepted SCGSim 2.0 structure
+## Package structure
 
-Human accepted the current v2 structural/API implementation on 2026-10-09:
-candidate `a932a173edb5c56ae14740ff5177190996255bdd`, tree
-`2745321736e53e2a4fe8d150f2e9d8bd176669db`. Its semantic state is `ACCEPTED`,
-not `STABILIZED`. The implementation was integrated into `develop` through
-PR34 at `cc1424c84ffe9d295a57dbabb3c2ab6431110f6c` (tree
-`f9ecfe49df4c79be84a7991e44cc50c2602e3adb`). This closeout starts from the
-later `develop` slimming successor `b46bcc7d64fbb8bab181c0da2b9234a003a20adf`
-(tree `c99c670927e877fb407aa4c73de32793e86a4460`). The original migration
-baseline remains `develop@3a52fb1`, tree
-`96adcf8672b497a29dd0a6b43043cca11efc3043`; existing consumer pins remain
-unchanged. The accepted Q3D body-v3 scope includes a native
-build-only/readback/save/release operation, not a completed C/G solve. The full
-Xmon Route A, CircularPad Route B, and HFSS Eigenmode/saved-field EPR/offline-loss
-operations have not been observed as complete native-to-Resolve-to-Report
-workflows. They are outside this closeout; partial observations do not establish
-full completion, and this status does not label them failed or complete.
-
-The accepted responsibility tree is:
+The package tree and what each part is responsible for:
 
 ```text
 scgsim/
@@ -106,7 +89,7 @@ calculation. Visualization reads solver-authoritative metadata and artifacts;
 it does not start a solve or determine run status.
 
 Publicness follows explicit package facades, declared submodule exports and
-documented contracts—not mere importability. The accepted v2 source keeps the
+documented contracts—not mere importability. The v2 source keeps the
 high-level `scgsim.geometry`, `scgsim.palace`, `scgsim.aedt`, and
 `scgsim.visualization` entrypoints, and supplies an old-to-new submodule and
 symbol map in the [API migration reference](api-migration.qmd). Moved private
@@ -165,7 +148,7 @@ Within Palace, `results.report_data` owns detached report records and snapshot
 readers; `presentation.reports` owns trust/physics views and figures. The
 package facade retains the existing public result and report names.
 
-The accepted v2 starting producer emitted `scgsim.aedt.runtime-source.v13` with 61
+The v2 producer emitted `scgsim.aedt.runtime-source.v13` with 61
 canonical declared module paths, including 41 AEDT modules. Its records carry
 `schema_version`, `stage`, `modules`, `content_sha256`, and
 `revision_observation`; module bytes and their digest are mandatory, while the
@@ -202,7 +185,7 @@ flowchart LR
 The current geometry implementation starts from component-local source facts and
 named occurrences. A `GeometryPlan` holds the expanded entity inventory and
 the Notebook's final `Net -> Entity` map, then prepares one immutable source
-snapshot for the normalized `GeometryBuildInput` boundary. The accepted 1.1.0
+snapshot for the normalized `GeometryBuildInput` boundary. The 1.1.0
 source model includes authored curve declarations and explicit GDS
 reconstruction records in that snapshot while preserving Entity/Net ownership.
 `scgsim.geometry` owns the source-facing plan and snapshot; the
@@ -241,7 +224,7 @@ owns the exact behavior and failure boundary.
 | Physical result meaning | Solver-specific, never flattened into a false common quantity |
 | Report navigation, provenance, cost presentation | SCGSim report/resolver surfaces |
 | Offline tetrahedral mesh diagnostics | `scgsim.palace.mesh.quality`, exposed through `scgsim.palace` |
-| Public component-simulation notebook source | OrPen SC PDK |
+| Public component-simulation notebook source | OrcaPen SC PDK |
 
 ## Internal semantic facts
 
@@ -268,7 +251,7 @@ adds no solver execution or shared physics schema.
 
 ## Notebook and implementation boundaries
 
-OrPen SC PDK owns the public component examples and calls the shared runtime
+OrcaPen SC PDK owns the public component examples and calls the shared runtime
 directly. SCGSim owns the reusable package APIs, not a duplicate notebook source.
 
 The per-family supported calculations and current limits
@@ -315,14 +298,13 @@ problem-specific orchestration. The old direct problem-module paths were
 removed; their current defining modules are `preparation.electrostatic` and
 `preparation.eigenmode`.
 
-The accepted 1.1.0 Palace mesh behavior separates Gmsh geometric order from FEM
+The 1.1.0 Palace mesh behavior separates Gmsh geometric order from FEM
 order and keeps the Delaunay/HXT choice, thread settings and high-order
 optimization outcome with the generated mesh. `mesh_summary()` returns detached
 meshing evidence bound to the mesh and manifest identities; Palace report and
 resolved-result views read the same recorded authority. The Eigenmode summary's
 topological degree-of-freedom estimate is not an actual solver degree-of-freedom
-count, and Electrostatic does not claim an unavailable H1 estimate. These mesh
-and summary additions are ACCEPTED.
+count, and Electrostatic does not claim an unavailable H1 estimate.
 
 ## AEDT execution lifecycle
 
@@ -372,7 +354,7 @@ resolution rules; new V3-only native PEC checks do not reinterpret them. This
 consistency contract is not source authenticity for an actor able
 to rewrite the entire unsigned artifact set.
 
-The [AEDT receipt/provenance contract](specs/aedt-runtime.qmd#receipt-cohorts-and-source-provenance)
+The [AEDT receipt/provenance contract](provenance.qmd#aedt-receipt-cohorts)
 is the unique authority for the exact current V13 inventory and frozen
 historical reader evolution. V1–V12 retain their exact prior path assignments
 and reader interpretations; V13 binds its declared file set, not every
@@ -388,7 +370,7 @@ also keep source material identity distinct from verified native PEC
 implementation: solids are native `pec` with Solve Inside disabled, while
 sheets receive Perfect E and must have complete native face coverage.
 
-The accepted Eigenmode EPR lifecycle is an explicit additive path under that
+The Eigenmode EPR lifecycle is an explicit additive path under that
 same transaction owner. It does not reinterpret the historical one-shot
 prepare--solve--export path or broaden the meaning of an ordinary completed
 receipt. Before its one solve, the EPR path declares geometry bindings,

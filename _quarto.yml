@@ -7,6 +7,7 @@ project:
     - docs/specs/*.qmd
     - docs/course/*.qmd
     - docs/tutorials/*.qmd
+    - docs/tutorials/*/*.qmd
     - docs/concepts/*.qmd
 
 execute:
@@ -29,11 +30,11 @@ website:
     left:
       - text: "Overview"
         href: index.qmd
-      - text: "Tutorial"
+      - text: "Tutorials"
         href: docs/examples.qmd
-      - text: "Concept"
+      - text: "Concepts"
         href: docs/concepts/problems.qmd
-      - text: "Contract"
+      - text: "Reference"
         href: docs/backend-support.qmd
   sidebar:
     - id: overview
@@ -43,42 +44,61 @@ website:
       contents:
         - text: "SCGSim overview"
           href: index.qmd
-    - id: tutorial
+    - id: tutorials
       title: "Pages"
       style: floating
       collapse-level: 1
       contents:
         - docs/examples.qmd
-        - section: "Getting Started"
+        - section: "Tutorials"
           contents:
             - docs/course/installation.qmd
-            - docs/tutorials/capacitance.qmd
-            - docs/tutorials/resonance-epr.qmd
-        - section: "Working with Your Model"
+            - docs/tutorials/simplepad-model.qmd
+            - section: "Pad capacitance"
+              contents:
+                - text: "1. Prepare"
+                  href: docs/tutorials/capacitance/prepare.qmd
+                - text: "2. Run"
+                  href: docs/tutorials/capacitance/run.qmd
+                - text: "3. Analyze"
+                  href: docs/tutorials/capacitance/analyze.qmd
+            - section: "Resonance and EPR"
+              contents:
+                - text: "1. Prepare"
+                  href: docs/tutorials/resonance-epr/prepare.qmd
+                - text: "2. Run"
+                  href: docs/tutorials/resonance-epr/run.qmd
+                - text: "3. Analyze"
+                  href: docs/tutorials/resonance-epr/analyze.qmd
+        - section: "Your own model"
           contents:
             - docs/course/working-model.qmd
             - docs/course/source-observations.qmd
             - docs/course/solver-observations.qmd
+            - docs/course/execute.qmd
             - docs/course/returned-results.qmd
-            - docs/course/aedt-inputs.qmd
+        - section: "Palace"
+          contents:
             - docs/course/palace-electrostatic.qmd
             - docs/course/palace-eigenmode.qmd
+        - section: "AEDT"
+          contents:
+            - docs/course/aedt-inputs.qmd
             - docs/course/aedt-eigenmode.qmd
             - docs/course/aedt-driven-modal.qmd
             - docs/course/aedt-driven-terminal.qmd
             - docs/course/aedt-q3d.qmd
             - docs/course/aedt-q2d.qmd
-        - section: "Advanced"
+        - section: "EPR after the run"
           contents:
-            - docs/course/execute.qmd
             - docs/course/aedt-saved-fields.qmd
             - docs/course/offline-epr.qmd
-            - section: "Flip-chip Xmon example"
-              contents:
-                - docs/tutorial-xmon-input.qmd
-                - docs/tutorial-xmon-palace.qmd
-                - docs/tutorial-xmon-aedt.qmd
-    - id: concept
+        - section: "Example: flip-chip Xmon"
+          contents:
+            - docs/tutorial-xmon-input.qmd
+            - docs/tutorial-xmon-palace.qmd
+            - docs/tutorial-xmon-aedt.qmd
+    - id: concepts
       title: "Pages"
       style: floating
       collapse-level: 1
@@ -87,24 +107,43 @@ website:
         - docs/concepts/geometry.qmd
         - docs/eigenmode-epr.qmd
         - docs/concepts/model-and-numerics.qmd
-    - id: contract
+    - id: reference
       title: "Pages"
       style: floating
       collapse-level: 1
       contents:
         - docs/backend-support.qmd
-        - section: "Public contracts"
+        - section: "Geometry"
           contents:
             - docs/geometry-sgb.qmd
+            - docs/specs/physical-representation.qmd
+            - docs/specs/material-realization.qmd
+        - section: "Palace"
+          contents:
             - docs/specs/palace-electrostatic-sgb.qmd
             - docs/specs/palace-eigenmode.qmd
+            - docs/mesh-quality.qmd
+        - section: "AEDT"
+          contents:
             - docs/specs/aedt-runtime.qmd
-            - docs/api-migration.qmd
+        - section: "Running and results"
+          contents:
             - docs/execution-profiles.qmd
             - docs/geometry-preview.qmd
-            - docs/mesh-quality.qmd
             - docs/report-model.qmd
             - docs/notebook-ux.qmd
+            - docs/api-migration.qmd
+    - id: maintainer
+      title: "Maintainer pages"
+      style: floating
+      collapse-level: 1
+      contents:
+        - docs/ownership.qmd
+        - docs/architecture.qmd
+        - docs/provenance.qmd
+        - docs/goals-and-upstream.qmd
+        - docs/roadmap.qmd
+        - docs/errors.qmd
 
 format:
   askr-html:

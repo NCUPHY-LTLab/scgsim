@@ -15,8 +15,8 @@ from scgsim.aedt.specs.common import (
     EPR_EIGENMODE_SCHEMA_VERSION,
     EPR_EIGENMODE_SCHEMA_VERSION_V2,
     EPR_EIGENMODE_SCHEMA_VERSION_V3,
-    EPR_EIGENMODE_SCHEMA_VERSION_V4,
     Q2D_SCHEMA_VERSION,
+    Q2D_SCHEMA_VERSION_V2,
     Q3D_SCHEMA_VERSION,
     SCHEMA_VERSION,
 )
@@ -52,7 +52,6 @@ def parse_aedt_spec(
         EPR_EIGENMODE_SCHEMA_VERSION,
         EPR_EIGENMODE_SCHEMA_VERSION_V2,
         EPR_EIGENMODE_SCHEMA_VERSION_V3,
-        EPR_EIGENMODE_SCHEMA_VERSION_V4,
     }:
         return HfssEprSpec.from_payload(payload, allow_historical_modeling=allow_historical_modeling)
     if payload.get("schema_version") in {
@@ -62,6 +61,6 @@ def parse_aedt_spec(
         return HfssEprAnalysisSpec.from_payload(payload, base_dir=base_dir)
     if payload.get("schema_version") == Q3D_SCHEMA_VERSION:
         return Q3dSpec.from_payload(payload, base_dir=base_dir, allow_historical_modeling=allow_historical_modeling)
-    if payload.get("schema_version") == Q2D_SCHEMA_VERSION:
+    if payload.get("schema_version") in {Q2D_SCHEMA_VERSION, Q2D_SCHEMA_VERSION_V2}:
         return Q2dSpec.from_payload(payload)
     raise ValueError("unsupported AEDT schema")

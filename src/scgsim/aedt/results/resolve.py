@@ -1196,7 +1196,10 @@ def _eigenmode_convergence_source(receipt: dict[str, Any]) -> str:
     raise RuntimeError("Eigenmode convergence sources are not canonical")
 
 
-def _validate_q2d_readback(root: Path, receipt: dict[str, Any], spec: Q2dSpec) -> None:
+def _validate_q2d_model_readback(
+    receipt: dict[str, Any], spec: Q2dSpec, *, prepared: bool = False
+) -> None:
+    """Bind section and assignments separately from setup and solved matrices."""
     if receipt.get("ports") != [] or receipt.get("nets") != []:
         raise RuntimeError("Q2D receipt must not contain HFSS ports or Q3D nets")
     conductors = receipt.get("conductors")
@@ -1215,6 +1218,71 @@ def _validate_q2d_readback(root: Path, receipt: dict[str, Any], spec: Q2dSpec) -
             or not all(isinstance(value, int) for value in record["native_object_ids"])
         ):
             raise RuntimeError("Q2D native conductor evidence does not match the spec")
+    if not prepared:
+        return  # Historical solve records retain their original evidence scope.
+    materials = receipt.get("materials")
+    if not isinstance(materials, list) or len(materials) != len(spec.rectangles):
+        raise RuntimeError("Q2D prepared model lacks its native rectangle inventory")
+    by_name = {}
+    for record, rectangle in zip(materials, spec.rectangles, strict=True):
+        material = spec.materials[rectangle.material_id]
+        if (
+            not isinstance(record, dict)
+            or record.get("object_name") != rectangle.name
+            or record.get("origin_um") != list(rectangle.origin_um)
+            or record.get("size_um") != list(rectangle.size_um)
+            or record.get("material_id") != material.material_id
+            or record.get("kind") != material.kind
+            or record.get("is_superconducting") != material.is_superconducting
+            or record.get("requested_library_name") != material.library_name
+            or str(
+                record.get("observed", {}).get("native_material_name", "")
+            ).casefold()
+            != (
+                "pec" if material.is_superconducting else material.library_name
+            ).casefold()
+            or not _positive_unique_ids([record.get("native_object_id")], 1)
+            or record.get("native_object_type") != "Sheet"
+            or not isinstance(record.get("native_bounding_box_um"), list)
+            or len(record["native_bounding_box_um"]) != 6
+        ):
+            raise RuntimeError("Q2D prepared rectangle source/native evidence differs")
+        by_name[rectangle.name] = record["native_object_id"]
+    if len(set(by_name.values())) != len(by_name):
+        raise RuntimeError("Q2D prepared rectangle native IDs are not unique")
+    for record, conductor in zip(conductors, spec.conductors, strict=True):
+        saved = record.get("saved_boundary")
+        properties = record.get("saved_properties")
+        fields = ("BoundType", "Objects", "SolveOption", "Thickness")
+        if (
+            record.get("native_conductor_type") != conductor.conductor_type
+            or record["native_object_ids"]
+            != [by_name[name] for name in conductor.object_names]
+            or not isinstance(saved, dict)
+            or properties
+            != {
+                "values": {name: saved[name] for name in fields if name in saved},
+                "unavailable": [name for name in fields if name not in saved],
+            }
+        ):
+            raise RuntimeError("Q2D prepared saved conductor evidence differs")
+    region = receipt.get("region")
+    vacuum = spec.materials[spec.vacuum_material_id]
+    if (
+        not isinstance(region, dict)
+        or region.get("material_id") != vacuum.material_id
+        or region.get("requested_library_name") != vacuum.library_name
+        or str(region.get("observed_material_name", "")).casefold() != "vacuum"
+        or region.get("padding_um") != list(spec.region_padding_um)
+        or not isinstance(region.get("native_bounding_box_um"), list)
+        or len(region["native_bounding_box_um"]) != 6
+    ):
+        raise RuntimeError("Q2D prepared Region evidence differs")
+
+
+def _validate_q2d_setup(receipt: dict[str, Any], spec: Q2dSpec) -> None:
+    if spec.run_control is None:
+        raise ValueError("Q2D setup evidence requires complete run controls")
     expected_setup = {
         "name": spec.run_control.setup_name,
         "native": {
@@ -1233,6 +1301,11 @@ def _validate_q2d_readback(root: Path, receipt: dict[str, Any], spec: Q2dSpec) -
     }
     if receipt.get("setup") != expected_setup:
         raise RuntimeError("Q2D native setup evidence is invalid")
+
+
+def _validate_q2d_readback(root: Path, receipt: dict[str, Any], spec: Q2dSpec) -> None:
+    _validate_q2d_model_readback(receipt, spec)
+    _validate_q2d_setup(receipt, spec)
     if receipt.get("convergence") != read_q2d_convergence(root, spec):
         raise RuntimeError("Q2D native convergence evidence is invalid")
     readback = receipt.get("result_readback")

@@ -11,7 +11,8 @@ from pathlib import Path
 
 from typing import Any
 
-from scgsim.aedt._io import file_sha256, write_csv
+from scgsim.aedt._io import file_sha256, read_json, write_csv
+from scgsim.aedt.preparation.cohort import GEOMETRY_SOURCE_PATHS
 
 from scgsim.aedt.results.convergence.q3d import read_q3d_convergence
 
@@ -27,6 +28,8 @@ from scgsim.aedt.runtime.native.common import (
     native_object_property as _native_object_property,
     pyaedt_version as _pyaedt_version,
     q3d_region_bounds as _q3d_region_bounds,
+    realize_source_material,
+    source_material_properties,
     saved_setup_properties as _saved_setup_properties,
 )
 
@@ -87,6 +90,41 @@ def run_q3d(
     )
 
 
+def _source_material_bindings(
+    run_dir: Path, spec: Q3dSpec
+) -> dict[str, dict[str, Any]] | None:
+    """Select the transaction-verified stack's referenced non-PEC materials.
+
+    Validate all explicit same-name property bindings before writing any native
+    material. Optional missing properties do not conflict with supplied values.
+    """
+    if spec.geometry_source is None:
+        return None
+    catalog = read_json(run_dir / GEOMETRY_SOURCE_PATHS["stack"])["materials"]
+    referenced = {spec.vacuum_material_id} | {
+        body.material_id
+        for body in spec.bodies
+        if not spec.materials[body.material_id].is_superconducting
+    }
+    bindings: dict[str, dict[str, Any]] = {}
+    supplied: dict[str, dict[str, tuple[str, float]]] = {}
+    for material_id in sorted(referenced):
+        record = catalog[material_id]
+        native_name = spec.materials[material_id].library_name
+        properties = source_material_properties(record)
+        same_name = supplied.setdefault(native_name.casefold(), {})
+        for key, value in properties.items():
+            previous = same_name.get(key)
+            if previous is not None and previous[1] != value:
+                raise ValueError(
+                    f"Q3D source materials {previous[0]!r} and {material_id!r} "
+                    f"bind conflicting {key!r} values to native {native_name!r}"
+                )
+            same_name[key] = (material_id, value)
+        bindings[material_id] = {"record": record, "native_name": native_name}
+    return bindings
+
+
 def prepare_q3d(Q3d: Any, run_dir: Path, spec: Q3dSpec) -> PreparedQ3d:
     """Construct and read back the Q3D model before the explicit solve stage."""
     request = BoundAedtRequest.bind(run_dir, spec)
@@ -95,6 +133,7 @@ def prepare_q3d(Q3d: Any, run_dir: Path, spec: Q3dSpec) -> PreparedQ3d:
         raise TypeError("bound Q3D request did not retain a Q3D spec")
     run_dir = request.workspace
     spec = bound_spec
+    source_bindings = _source_material_bindings(run_dir, spec)
     project_path = run_dir / f"{spec.project_name}.aedt"
     app = Q3d(
         project=str(project_path),
@@ -105,8 +144,24 @@ def prepare_q3d(Q3d: Any, run_dir: Path, spec: Q3dSpec) -> PreparedQ3d:
     if app.desktop_class.aedt_version_id != REQUIRED_AEDT_VERSION:
         raise RuntimeError("Q3D did not bind the owned AEDT 2024.2 desktop")
     app.modeler.model_units = "um"
-    materials = construct_q3d_bodies(app, spec)
+    material_realizations = (
+        {
+            material_id: realize_source_material(
+                app, material_id, binding["record"], native_name=binding["native_name"]
+            )
+            for material_id, binding in source_bindings.items()
+        }
+        if source_bindings is not None
+        else None
+    )
+    materials = construct_q3d_bodies(
+        app, spec, material_realizations=material_realizations
+    )
     region = _create_region(app, spec)
+    if material_realizations is not None:
+        region["source_material_realization"] = material_realizations[
+            spec.vacuum_material_id
+        ]
     nets = _assign_q3d_nets(app, spec)
     if spec.grounded_region_net is not None:
         grounded_region = _seal_q3d_region(app, spec)

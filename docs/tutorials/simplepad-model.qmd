@@ -1,0 +1,130 @@
+---
+title: "The SimplePad model"
+description: "Load the square-pad component, name its conductors and load the surface-film presets. Both beginner tutorials start here."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/simplepad-model"
+---
+
+Both beginner tutorials use the same model: a square metal pad in a ground
+plane. This page builds it once. At the end you have four names in your Python
+session that the tutorials use:
+
+| Name | What it is |
+|---|---|
+| `snapshot` | The frozen geometry, with the pad and Ground named |
+| `surface_films` | The surface-film settings for Palace |
+| `presets` | The PDK's surface-film presets, for HFSS |
+| `output_root` | The folder where run directories are written |
+
+::: {.callout-note title="Before you start"}
+Set up the tutorial environment: [Install SCGSim](../course/installation.qmd),
+Steps 1–3.
+:::
+
+## The model
+
+The model is a 200 µm square pad centred in a ground plane on a single
+silicon die:
+
+| Part | Value |
+|---|---|
+| Die | 1000 µm × 1000 µm |
+| Pad | 200 µm × 200 µm, centred |
+| Gap between pad and Ground | 20 µm on every side |
+| Metal | Aluminium, 0.2 µm thick |
+| Substrate | Silicon, 500 µm thick |
+
+![The SimplePad layout. The short sheet across the east gap
+(`x = 100…120 µm`, `y = −1…1 µm`) is where the resonance tutorial attaches a
+junction; the capacitance tutorial ignores it.](../assets/simple-pad-layout.png){#fig-simple-pad-layout}
+
+## Step 1: Load the component
+
+Create a script or notebook and load the pad and its material stack from the
+PDK:
+
+```python
+from pathlib import Path
+import gdsfactory as gf
+import orpen_sc_pdk
+from orpen_sc_pdk import (
+    get_material_records, get_interface_preset_records,
+    validate_interface_preset_records,
+)
+from orpen_sc_pdk.tech import get_single_die_layer_stack
+
+orpen_sc_pdk.activate()
+component = gf.get_component(
+    "square_pad_capacitor", pad_side_um=200.0, gap_um=20.0,
+    die_side_um=1000.0, junction_width_um=2.0,
+)
+layer_stack = get_single_die_layer_stack()
+material_records = get_material_records()
+output_root = Path(".artifacts/SimplePad")
+```
+
+The PDK owns the geometry and the materials. SCGSim reads them; it does not
+redefine them.
+
+## Step 2: Name the conductors
+
+SCGSim needs to know which drawn shapes form each electrical conductor. In
+SCGSim, a named shape in the component is an **Entity**. A conductor is a
+**Net**: a group of one or more Entities that share a voltage.
+
+Build a `GeometryPlan` and list its Entities:
+
+```python
+from scgsim.geometry import GeometryPlan
+
+plan = GeometryPlan(
+    component=component, root_id="chip", layer_stack=layer_stack,
+    material_records=material_records, coupon_padding_um=0.0,
+)
+print(tuple(entity.semantic_id for entity in plan.entities))
+```
+
+The printout lists the Entity IDs, including `chip/PAD` and `chip/GROUND`.
+Assign them to two Nets, add vacuum above and around the die, and freeze the
+plan:
+
+```python
+plan.set_nets({"pad": ("chip/PAD",), "ground": ("chip/GROUND",)})
+plan.set_vacuum_region(padding=(250.0, 250.0, 1000.0))
+snapshot = plan.prepare()
+```
+
+`padding` is in micrometres: 250 µm beyond the die sideways, 1000 µm above
+and below it. `prepare()` returns a fixed snapshot. If you change the
+geometry, Nets or vacuum later, call `prepare()` again.
+
+## Step 3: Load the surface-film presets
+
+Real devices have thin lossy films where metal, substrate and air meet:
+metal–air (MA), metal–substrate (MS) and substrate–air (SA). The PDK provides
+a preset for each, with a thickness, permittivity and loss tangent taken from
+the literature. They are modeling assumptions, not measurements of your
+process.
+
+```python
+presets = validate_interface_preset_records(get_interface_preset_records())
+surface_films = {
+    kind: {
+        **{key: presets[f"LiteratureCentral_{kind}"][key]
+           for key in ("thickness", "permittivity", "loss_tangent", "source")},
+        "preset": f"LiteratureCentral_{kind}",
+    }
+    for kind in ("MA", "MS", "SA")
+}
+```
+
+Palace takes `surface_films` directly. HFSS assigns the presets surface by
+surface; the resonance tutorial shows how.
+
+## Next steps
+
+Keep this session open and continue with either tutorial:
+
+- [Pad capacitance](capacitance/prepare.qmd)
+- [Resonance and EPR](resonance-epr/prepare.qmd)

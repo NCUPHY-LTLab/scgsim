@@ -1,20 +1,13 @@
 ---
-title: "Headless Geometry Preview"
+title: "Geometry preview"
 description: "Solver-metadata-bound preview APIs, artifact identity and explicit unavailable modes."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/geometry-preview"
 ---
 
-For stage-by-stage use, follow [solver observations](course/solver-observations.qmd). This page owns preview binding and availability.
-
-::: {.callout-note title="Stabilized V1 preview contract"}
-The public V1 preview runtime is part of the Human-accepted scope.
-Public Palace and AEDT 2024.2 non-graphical previews have been produced for
-Human visual review. These observations retain their original scope; acceptance
-does not independently establish numerical accuracy, completed stabilization
-or stable-release delivery.
-:::
+This page is the exact reference for the geometry preview API. For the steps,
+see [Inspect the prepared run](course/solver-observations.qmd).
 
 ## Purpose and ownership
 
@@ -151,5 +144,4 @@ V1 does not include ParaView, Gmsh GUI sessions (including running Gmsh under
 Xvfb), background X servers, portable interactive HTML, actor filters, custom
 camera definitions, interactive clipping, or a dark rendering theme. The
 native EGL context above does not add a Gmsh GUI or background-X-server
-workflow. Portable HTML remains a separate Human decision after review of the
-inline viewer.
+workflow.

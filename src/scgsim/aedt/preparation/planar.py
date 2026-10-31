@@ -31,8 +31,6 @@ from scgsim.aedt.specs.modeling import _native_physical_record
 
 from scgsim.aedt.preparation.junction_partition import (
     _closed_contact,
-    _junction_contact_inventory,
-    _junction_source_binding,
     partition_junctions,
 )
 
@@ -698,6 +696,31 @@ def prepare_planar_geometry_input(
             _junction_terminal_line(
                 {"exterior": polygon.exterior, "holes": polygon.holes}, junction, 0.0
             )
+        partition_source = {
+            "conductors": [
+                {
+                    "semantic_id": e.semantic_id,
+                    "source_semantic_id": e.metadata.get(
+                        "source_semantic_id",
+                        e.metadata.get("semantic_group_id", e.semantic_id),
+                    )
+                    if "split_polygon_index" in e.metadata
+                    else e.semantic_id,
+                    "representation": e.metadata["physical_representation"]["representation"],
+                    "physical_layer": _native_physical_record(e.metadata["physical_representation"]),
+                    "geometry": e.geometry,
+                }
+                for e in build_input.entities
+                if e.material_kind == "conductor"
+            ],
+        }
+        records = _plain(build_input.metadata["aedt_junction_partitions"])
+        for record in records.values():
+            record["z_um"] = _junction_partition_plane(partition_source, record)
+        build_input = replace(
+            build_input,
+            metadata={**build_input.metadata, "aedt_junction_partitions": records},
+        )
     build_input, planned_surfaces = plan_representation_contribution_geometry(
         build_input, representation_context
     )
@@ -831,15 +854,6 @@ def prepare_planar_geometry_input(
                 f"contribution {requested.contribution_id!r} is not established by "
                 "the shared source topology"
             )
-        # The catalogue union includes every group member and SA fallback surface ID.
-        source_polygon_ids = catalog_by_id.get(requested.contribution_id, {}).get(
-            "source_polygon_ids", ()
-        )
-        if requested.source_polygon_id not in source_polygon_ids:
-            raise ValueError(
-                f"contribution {requested.contribution_id!r} does not retain "
-                f"source polygon {requested.source_polygon_id!r}"
-            )
         for match in matches:
             evidence = match["contribution"]
             if evidence.get("classification") != requested.interface_kind:
@@ -851,6 +865,16 @@ def prepare_planar_geometry_input(
                 raise ValueError(
                     f"contribution {requested.contribution_id!r} side contradicts "
                     "shared source evidence"
+                )
+            source_polygon_ids = tuple(evidence.get("outer_source_ids") or ()) + tuple(
+                evidence.get("hole_source_ids") or ()
+            )
+            if not source_polygon_ids and requested.interface_kind == "SA":
+                source_polygon_ids = (match["surface_id"],)
+            if requested.source_polygon_id not in source_polygon_ids:
+                raise ValueError(
+                    f"contribution {requested.contribution_id!r} does not retain "
+                    f"source polygon {requested.source_polygon_id!r}"
                 )
             effective_domains = tuple(evidence.get("effective_domain_ids", ()))
             expected_domain_count = 2 if requested.interface_kind == "SA" else 1
@@ -996,6 +1020,32 @@ def prepare_planar_geometry_input(
     )
 
 
+def _junction_partition_plane(
+    source: Mapping[str, Any], record: Mapping[str, Any]
+) -> float:
+    entities = {item["semantic_id"]: item for item in source["conductors"]}
+    owners = [entities[end["source_entity_id"]] for end in record["ends"]]
+    positions = [
+        _route_a_sheet_z(source, owner)
+        if owner["representation"] in {"surface_sheet", "sheet"}
+        else _entity_z_range(owner)[0]
+        for owner in owners
+    ]
+    if len(set(positions)) != 1:
+        raise ValueError(
+            "junction source Entity planes differ; no thickness or plane fallback"
+        )
+    for owner in owners:
+        if (
+            owner["representation"] not in {"surface_sheet", "sheet"}
+            and _entity_z_range(owner)[1] <= positions[0]
+        ):
+            raise ValueError(
+                "junction Solid source Entity has no positive thickness"
+            )
+    return positions[0]
+
+
 def _junction_polygon(
     source: Mapping[str, Any], junction: PlanarJunction, polygons: Mapping[str, Any]
 ):
@@ -1098,14 +1148,11 @@ def planar_junction_from_port(
             for ring in (exterior, *holes)
         )
 
-    inventory = _junction_contact_inventory(
-        build_input, region.source_polygon_id, terminal_a_net, terminal_b_net
-    )
     sheet = source_rings(region.exterior, region.holes)
     polygons = {polygon.polygon_id: polygon for polygon in build_input.polygons}
     overlap_nets = set()
     for entity in build_input.entities:
-        if entity.semantic_id not in inventory["eligible_entity_ids"]:
+        if entity.material_kind != "conductor":
             continue
         for pid in entity.polygon_ids:
             if pid == region.source_polygon_id:
@@ -1135,10 +1182,7 @@ def planar_junction_from_port(
         width_um=width_um,
         inductance_h=inductance_h,
         capacitance_f=capacitance_f,
-        metadata={
-            "source_port_name": port_name,
-            "junction_support_plane": _junction_source_binding(inventory),
-        },
+        metadata={"source_port_name": port_name},
     )
     _junction_terminal_line(
         {"exterior": region.exterior, "holes": region.holes}, junction, 0.0

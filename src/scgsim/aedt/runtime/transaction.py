@@ -57,7 +57,7 @@ from scgsim.aedt.runtime.families.hfss import (
     solve_and_export_body_eigenmode,
 )
 
-from scgsim.aedt.runtime.families.q2d import run_q2d
+from scgsim.aedt.runtime.families.q2d import prepare_q2d, prepared_q2d_result, run_q2d
 
 from scgsim.aedt.runtime.families.q3d import (
     prepare_q3d,
@@ -189,6 +189,7 @@ def _execute(
                     HfssDrivenSpec,
                     HfssEigenmodeSpec,
                     Q3dSpec,
+                    Q2dSpec,
                 ),
             )
             and not analyze_epr
@@ -370,13 +371,20 @@ def _execute(
                     receipt["resources"],
                 )
         elif isinstance(spec, Q2dSpec):
-            result = _solve_q2d(
-                owned_application_constructor(Q2d, desktop),
-                run_dir,
-                spec,
-                resources,
-                receipt["resources"],
-            )
+            if prepare_only:
+                prepared = prepare_q2d(
+                    owned_application_constructor(Q2d, desktop), run_dir, spec
+                )
+                result = prepared_q2d_result(prepared)
+                status = "native_preparation_only"
+            else:
+                result = _solve_q2d(
+                    owned_application_constructor(Q2d, desktop),
+                    run_dir,
+                    spec,
+                    resources,
+                    receipt["resources"],
+                )
         elif prepare_only:
             prepared = prepare_hfss(
                 owned_application_constructor(Hfss, desktop), run_dir, spec
@@ -454,6 +462,7 @@ def _execute(
                 spec,
                 (
                     Q3dSpec,
+                    Q2dSpec,
                     HfssDrivenGeometrySpec,
                     HfssDrivenSpec,
                     HfssEigenmodeSpec,
@@ -546,7 +555,14 @@ def _record_result_before_release(
 
     if (
         isinstance(
-            spec, (Q3dSpec, HfssDrivenGeometrySpec, HfssDrivenSpec, HfssEigenmodeSpec)
+            spec,
+            (
+                Q2dSpec,
+                Q3dSpec,
+                HfssDrivenGeometrySpec,
+                HfssDrivenSpec,
+                HfssEigenmodeSpec,
+            ),
         )
         and result.get("solver_invoked") is False
     ):
@@ -561,7 +577,7 @@ def _record_result_before_release(
             "solver_invoked",
         ):
             receipt[name] = result[name]
-        for name in ("nets", "ports", "mesh", "geometry"):
+        for name in ("nets", "ports", "conductors", "mesh", "geometry"):
             if name in result:
                 receipt[name] = result[name]
     elif isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec)):

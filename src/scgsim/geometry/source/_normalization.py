@@ -347,11 +347,26 @@ def _materials(records: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str, 
             permittivity = record.get(
                 "relative_permittivity", record.get("permittivity")
             )
-            if isinstance(permittivity, (int, float)):
-                item["permittivity"] = float(permittivity)
-        loss_tangent = record.get("loss_tangent")
-        if isinstance(loss_tangent, (int, float)):
-            item["loss_tangent"] = float(loss_tangent)
+            if "relative_permittivity" in record or "permittivity" in record:
+                item["permittivity"] = (
+                    float(permittivity)
+                    if isinstance(permittivity, (int, float))
+                    and not isinstance(permittivity, bool)
+                    else copy.deepcopy(permittivity)
+                )
+        if "loss_tangent" in record:
+            loss_tangent = record["loss_tangent"]
+            item["loss_tangent"] = (
+                float(loss_tangent)
+                if isinstance(loss_tangent, (int, float))
+                and not isinstance(loss_tangent, bool)
+                else copy.deepcopy(loss_tangent)
+            )
+        # These standard source fields are carried verbatim, including unsupported
+        # shapes, so the backend cannot silently replace them with library values.
+        for field in ("permeability", "conductivity", "aedt_library_name"):
+            if field in record:
+                item[field] = copy.deepcopy(record[field])
         result[str(name)] = item
     if not result:
         raise ValueError("material_records contain no supported material kinds.")

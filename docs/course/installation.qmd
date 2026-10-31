@@ -1,169 +1,130 @@
 ---
 title: "Install SCGSim"
-description: "Install the Python tools for your workflow and distinguish preparation from native execution."
+description: "Install SCGSim with the extras for your solver, and set up the solver host."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/course/installation"
 ---
 
-Start on one computer with Python **3.12 or 3.13**, a fresh environment and the
-Python tools for your chosen backend. Install the native Palace or AEDT solver
-separately before running a calculation. If you later use a remote solver host,
-the [portable handoff lesson](execute.qmd) explains that workflow.
+This page installs SCGSim and the public component library used by the
+tutorials. Installing SCGSim does not install Palace or AEDT; you set those up
+separately on the computer that runs the solver.
 
-## Create a fresh environment
+::: {.callout-note title="Before you start"}
+- Python 3.12 or 3.13.
+- Git.
+- For AEDT workflows: a Windows or Linux computer with AEDT 2024.2 and a
+  licence.
+:::
 
-Select the SCGSim source revision recorded for the documentation version you
-are using; the version selector and page footer identify that captured
-revision. Check out that source before creating the environment and
-installing. The general example below uses stable `main`; use the versioned
-checkout for version-specific workflows.
+## Step 1: Get the source
+
+Clone SCGSim and create a fresh virtual environment:
 
 ```bash
 git clone --branch main https://github.com/OrPenStrike/scgsim.git
 cd scgsim
 python3 -m venv .venv
 source .venv/bin/activate
+```
+
+The `main` branch is the latest stable release. If you are reading the docs
+for a specific version, use the version selector at the top of the site and
+check out the matching tag instead.
+
+## Step 2: Install SCGSim
+
+Install SCGSim with the extras for the work you do on this computer:
+
+```bash
 python -m pip install -e '.[palace]'
 ```
 
-Choose extras for the work you want to do:
-
 ::: {.table-responsive}
 
-| Work on this computer | Installation from the matching checkout | What it supplies |
+| Extra | Use it to | Adds |
 |---|---|---|
-| Resolve and plot returned results | `pip install -e .` | SCGSim, NumPy and Plotly |
-| Prepare Palace geometry/mesh/config | `pip install -e '.[palace]'` | GDSFactory 9.x, GDS reader and Gmsh |
-| Prepare ordinary HFSS or Q3D; use Q2D | `pip install -e '.[aedt]'` | GDS reader and PyAEDT 1.3.0 |
-| Prepare source-first AEDT Surface EPR | `pip install -e '.[aedt-epr]'` | AEDT dependencies plus GDSFactory 9.x and KLayout 0.30.x |
-| Inspect solver-bound geometry | `pip install -e '.[visualization]'` | Mesh reader, image tools and PyVista; combine with the backend extra |
+| *(none)* `.` | Read returned results and show reports | NumPy, Plotly |
+| `palace` | Prepare Palace runs | GDSFactory 9.x, GDS reader, Gmsh |
+| `aedt` | Prepare HFSS, Q3D or Q2D runs | GDS reader, PyAEDT 1.3.0 |
+| `aedt-epr` | Prepare HFSS runs with surface EPR from a component | `aedt` plus GDSFactory 9.x and KLayout 0.30.x |
+| `visualization` | Render 3D previews of the prepared geometry | Mesh reader, image tools, PyVista |
 
 :::
 
-Combine visualization with a backend using, for example,
-`pip install -e '.[palace,visualization]'`. For native geometry rendering, use
-a computer with a working OpenGL/EGL context; the
-[preview reference](../geometry-preview.qmd) describes the available modes.
+Combine extras with commas, for example `'.[palace,visualization]'`. Geometry
+previews need a working OpenGL or EGL context; see
+[Geometry preview](../geometry-preview.qmd) for headless options.
 
-## Use the public model inputs
+## Step 3: Install the tutorial components
 
-The beginner lessons use the public SimplePad component and executable
-notebooks from [OrPen SC PDK revision `51985d9`](https://github.com/OrPenStrike/orpen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9).
-Install that PDK with SCGSim in the same environment and dependency resolution,
-so their shared GDSFactory, kfactory and KLayout versions agree. From the
-SCGSim checkout, this command supplies both beginner backend paths and the
-notebook kernel tools:
+The tutorials use components from the OrPen SC PDK. Install it into the same
+environment so that SCGSim and the PDK resolve the same GDSFactory and KLayout
+versions. This command installs everything the beginner tutorials need, for
+both Palace and AEDT, plus a Jupyter kernel:
 
 ```bash
-python -m pip install -e '.[palace,aedt-epr,visualization]' 'orpen-sc-pdk @ git+https://github.com/OrPenStrike/orpen-sc-pdk.git@51985d9507025e8241205712e866c0b804de29b9' ipykernel
+python -m pip install -e '.[palace,aedt-epr,visualization]' 'orpen-sc-pdk @ git+https://github.com/OrPenStrike/orcapen-sc-pdk.git@51985d9507025e8241205712e866c0b804de29b9' ipykernel
 ```
 
-### Select the curved source cell
+Some larger examples need a different PDK revision. Their environments are
+listed in [Environments for other examples](#example-environments).
 
-Keep the `51985d9` pin above for the SimplePad beginner notebooks and use a
-separate environment for the curved-source study. The current OrPen SC PDK
-teaching revision is
-[`ecc9062`](https://github.com/OrPenStrike/orpen-sc-pdk/tree/ecc90623b62e55f95afaa5a1f1048a71f81cae52).
-It contains the current Circular Pad source lesson, its derived executable
-notebook, and public Fresh08 result figures and tables: [source
-QMD](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/src/ComponentSimulation/CircularPad/palace_eigenmode.qmd),
-[IPYNB](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/palace_eigenmode.ipynb),
-and [evidence](https://github.com/OrPenStrike/orpen-sc-pdk/blob/ecc90623b62e55f95afaa5a1f1048a71f81cae52/notebooks/ComponentSimulation/CircularPad/evidence/README.md).
-The QMD is the source authority; the IPYNB is derived from it. Fresh08 used
-the earlier OrPen `c79b91e` producer export; exact execution provenance is in
-the linked result lesson.
-
-The curved-source APIs used here are available in the SCGSim public develop
-revision `2eed1eb` (`1.1.0rc1`); stable `1.0.2` does not include them. For a
-released documentation version, use the SCGSim source revision captured for
-that version by the selector/footer above. From the root of the selected
-checkout, create this separate environment. OrPen does not install SCGSim as
-a pip dependency; its `uv` notebook group and lock select SCGSim revision
-`2eed1eb` for OrPen's own workflow. This pip command explicitly installs
-SCGSim from the selected checkout and OrPen at the current teaching revision:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[palace,visualization]' \
-  'orpen-sc-pdk @ git+https://github.com/OrPenStrike/orpen-sc-pdk.git@ecc90623b62e55f95afaa5a1f1048a71f81cae52' \
-  ipykernel
-```
-
-::: {.callout-note title="Select the current development source" collapse="true"}
-The current public SCGSim development source is commit
-[`2eed1eb`](https://github.com/OrPenStrike/scgsim/tree/2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71)
-(package version `1.1.0rc1`, an installable develop revision rather than a
-stable release). Select this exact source for a development reproduction
-before creating the curved-study environment:
-
-```bash
-git clone --branch develop https://github.com/OrPenStrike/scgsim.git scgsim-development
-cd scgsim-development
-git switch --detach 2eed1eb4a9bcc7b1b020feb4953d5ed27e7d7b71
-```
-
-Then run the curved-study install command above. This is an optional
-development source, not the default for version-selected installation.
-:::
-
-::: {#native-palace-for-this-curved-uniform-port .callout-note title="Native Palace for this curved Uniform port"}
-Use a native Palace executable built from [revision
-`4e9e1b7`](https://github.com/arfiligol/palace/tree/4e9e1b7232b4c8ca8b964be7e70f1848f578de37),
-or a descendant containing the [curved-port extent correction](https://github.com/arfiligol/palace/blob/4e9e1b7232b4c8ca8b964be7e70f1848f578de37/palace/utils/geodata_impl.cpp).
-The SCGSim Python extra above does not install or update the native Palace
-executable. Configure this study to use that executable or a wrapper that
-invokes it. This prerequisite is specific to this curved Uniform-port
-example, not ordinary Palace geometry preparation or AEDT workflows.
-:::
-
-Open the linked IPYNB in your notebook frontend and select this checkout's
-`.venv` kernel, using `.venv/bin/python`. Its default `analyze_handoff` action
-reads a retained `.artifacts` run tree, which is not included with the public
-source and figures. To prepare or execute your own run, select
-`prepare_handoff` or `run` in the notebook and choose a fresh run ID; `run`
-uses the separately installed native Palace executable described above.
-
-The current Fresh08 result reports mode 1 at 5.573354161115 GHz after four
-refinements and five solve/estimate snapshots. Its final native indicator
-0.1186681863426 remains above the configured 0.02; the native run/log also
-recorded PCG warnings. These observations do not establish mesh convergence or numerical
-accuracy. The
-[Palace lesson](palace-eigenmode.qmd#circular-pad-lc-study) shows the result
-and its limits.
-
-Check which SCGSim version you installed:
+## Step 4: Check the installation
 
 ```python
 from importlib.metadata import version
 print(version("scgsim"))
 ```
 
-Keep that version and the model's source revision with your study notes.
+Note this version, and the PDK revision, with your study. Results depend on
+both.
 
-::: {.callout-note title="Installing the deeper Xmon example" collapse="true"}
-The deeper Xmon lesson uses a separate PDK revision. When following it, install
-its pinned inputs and the appropriate SCGSim extra together:
+## Step 5: Set up the solver host
+
+You can prepare runs on one computer and run the solver on another. The
+solver host needs:
+
+- **Palace:** a `palace` executable, or a wrapper script that starts it with
+  MPI. If your cluster uses environment modules, note the `module load`
+  command; you pass it to SCGSim when preparing a run. See the
+  [Palace installation guide](https://awslabs.github.io/palace/stable/install/).
+- **AEDT:** AEDT 2024.2, a licence, and PyAEDT 1.3.0 in the Python environment
+  that runs the generated script. The script starts AEDT, saves the project
+  and closes AEDT when it finishes.
+
+Reading returned results needs only SCGSim; it does not need Palace or AEDT.
+
+## Environments for other examples {#example-environments}
+
+These examples use a different PDK revision from the tutorials. Give each its
+own virtual environment, created as in Step 1, and install with the command
+below instead of Step 3.
+
+### Circular Pad {#env-circular-pad}
+
+Used by the [Circular Pad LC study](palace-eigenmode.qmd#circular-pad-lc-study).
+Needs SCGSim 1.1.0rc1 or later:
 
 ```bash
-python -m pip install -e '.[palace]' 'orpen-sc-pdk @ git+https://github.com/OrPenStrike/orpen-sc-pdk.git@35b4dc1cdd3f921badcac2fe57a98366315ae8d9'
+python -m pip install -e '.[palace,visualization]' 'orpen-sc-pdk @ git+https://github.com/OrPenStrike/orcapen-sc-pdk.git@ecc90623b62e55f95afaa5a1f1048a71f81cae52' ipykernel
 ```
 
-Keep the PDK revision matched to the example you run.
-:::
+### Flip-chip Xmon {#env-xmon}
 
-## Prepare the solver host separately
+Used by the [flip-chip Xmon example](../tutorial-xmon-input.qmd). Replace
+`palace` with the extra for your backend:
 
-For Palace, make your executable or wrapper available and configure the
-launch resources and setup commands for your computer. SCGSim generates the
-local or selected Slurm launch script; Palace itself is installed separately.
+```bash
+python -m pip install -e '.[palace]' 'orpen-sc-pdk @ git+https://github.com/OrPenStrike/orcapen-sc-pdk.git@35b4dc1cdd3f921badcac2fe57a98366315ae8d9'
+```
 
-For AEDT, use **AEDT 2024.2**, **PyAEDT 1.3.0** and an appropriate license.
-The generated script starts its Desktop session, saves the project and
-releases the session. Reading returned results later does not require opening
-Desktop.
+## Next steps
 
-Next [extract a pad capacitance](../tutorials/capacitance.qmd) or
-[find a resonance and read EPR](../tutorials/resonance-epr.qmd). If you already
-have a returned package, start with [reading results](returned-results.qmd).
+- [The SimplePad model](../tutorials/simplepad-model.qmd): build the model
+  both tutorials use.
+- [Pad capacitance](../tutorials/capacitance/prepare.qmd): your first
+  calculation.
+- [Resonance and EPR](../tutorials/resonance-epr/prepare.qmd).
+- Already have a returned run directory? Go to
+  [Read returned results](returned-results.qmd).

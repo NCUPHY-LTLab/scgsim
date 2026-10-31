@@ -1,95 +1,79 @@
 ---
-title: "Tutorial"
-description: "Follow capacitance or resonance preparation, execution and result reading, then adapt the model and explore advanced analysis."
+title: "Tutorials and guides"
+description: "Start with a capacitance or resonance tutorial, then use the how-to guides for your own model."
 scgsim-kind: "course"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/examples"
 ---
 
-SCGSim takes a source model through backend preparation, explicit native
-execution and a result report. Start with one small physical question and
-follow it to the returned quantity before expanding the model.
+Start with the tutorials. Each one takes a small model from setup to a
+returned result. The how-to guides then show how to do one task with your own
+model.
 
-## Getting Started
+## Tutorials
 
-1. [Install SCGSim](course/installation.qmd) and the Python tools for your chosen
-   backend. Native Palace or AEDT is installed separately on the solver host.
-2. [Extract a pad capacitance](tutorials/capacitance.qmd): a square pad and
-   surrounding ground, using Palace Electrostatic and comparing the historical
-   Q3D observation with the current body-v3 input contract.
-3. [Find a resonance and read EPR](tutorials/resonance-epr.qmd): add an explicit
-   inductive branch and use Palace or HFSS Eigenmode to read mode and
-   participation quantities.
+Do these in order. Each tutorial has three pages: **Prepare** writes a run
+directory, **Run** runs the solver on it, and **Analyze** reads the result.
+You can prepare on one computer and run the solver on another.
 
-::: {.callout-tip title="Choose the backend where its procedure differs"}
-The beginner lessons share source/model explanations and use tabs for the
-backend-specific API steps. You can work in Python scripts or the public
-OrPen notebooks; the notebook is a convenient execution interface. The linked
-Q3D GDS-input notebooks remain historical source references and need a
-consumer-owned migration before execution with the current body-v3 runtime.
-:::
+1. [Install SCGSim](course/installation.qmd).
+2. [The SimplePad model](tutorials/simplepad-model.qmd): build the square-pad
+   model that both tutorials use.
+3. [Pad capacitance](tutorials/capacitance/prepare.qmd): compute the
+   capacitance of the pad to ground with Palace Electrostatic.
+4. [Resonance and EPR](tutorials/resonance-epr/prepare.qmd): add a junction
+   inductance to the same pad and compute its resonance and energy
+   participation with Palace or HFSS Eigenmode.
 
-The starter setup and didactic controls now follow the owner's four canonical
-SimplePad preparations: Palace Electrostatic, historical Q3D, Palace
-Eigenmode and HFSS Eigenmode/EPR. Their [published source at `51985d9`](https://github.com/OrPenStrike/orpen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9/notebooks/src/ComponentSimulation/SimplePad)
-and [downloadable notebooks](https://github.com/OrPenStrike/orpen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad)
-are linked by the lessons, with the shared layout picture and observed result
-figures. The [public output context and data](https://github.com/OrPenStrike/orpen-sc-pdk/blob/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad/evidence/README.md) accompany the
-reference runs; the resonance lesson distinguishes the original HFSS return
-from separately derived EPR. The Python blocks explain current SCGSim APIs.
-The SimplePad Q3D notebook remains OrPen's source authority for its historical
-GDS-input run; it is not a current body-v3 execution example.
+## How-to guides: your own model
 
-## Working with Your Model
+Use these after the tutorials.
 
-[Modify your own model](course/working-model.qmd) explains Entity/Net assignments,
-geometry changes and solver requests. [Inspect the source](course/source-observations.qmd)
-and [prepared backend](course/solver-observations.qmd) when a model does not
-match your intent. [Read returned results](course/returned-results.qmd) with
-units, conductor/mode identity and the quantity your study needs.
-
-Choose another physical task when appropriate:
-
-| Task | Procedure |
+| Task | Guide |
 |---|---|
-| Ordinary port-free mode calculation | [HFSS Eigenmode](course/aedt-eigenmode.qmd) |
-| Driven two-port response | [Driven Modal](course/aedt-driven-modal.qmd) or [Driven Terminal](course/aedt-driven-terminal.qmd) |
-| Finite three-dimensional conductor matrices | [Q3D](course/aedt-q3d.qmd) |
-| Per-unit-length line matrices | [Q2D cross sections](course/aedt-q2d.qmd) |
+| Assign your component's shapes to conductors and set up the model | [Work with your own model](course/working-model.qmd) |
+| Check the geometry and Nets before preparing a run | [Inspect the source model](course/source-observations.qmd) |
+| Check the mesh and solver input before running | [Inspect the prepared run](course/solver-observations.qmd) |
+| Load results and read them correctly | [Read returned results](course/returned-results.qmd) |
+| Run a prepared run directory locally or on a Slurm cluster | [Run a prepared model](course/execute.qmd) |
 
-## Advanced
+## How-to guides: by solver
 
-[Execute a portable handoff](course/execute.qmd) locally or with the selected
-Palace Slurm profile. [Analyze sealed AEDT fields](course/aedt-saved-fields.qmd)
-when the returned solution supports new EPR evaluation, or
-[change loss assumptions offline](course/offline-epr.qmd) on recorded EPR data.
-These are distinct operations with different native prerequisites.
+| Calculation | Palace | AEDT |
+|---|---|---|
+| Capacitance matrix | [Palace Electrostatic](course/palace-electrostatic.qmd) | [Q3D](course/aedt-q3d.qmd) |
+| Resonant modes and EPR | [Palace Eigenmode](course/palace-eigenmode.qmd) | [HFSS Eigenmode](course/aedt-eigenmode.qmd) |
+| Port response (S-parameters) | | [Driven Modal](course/aedt-driven-modal.qmd), [Driven Terminal](course/aedt-driven-terminal.qmd) |
+| Per-unit-length line parameters | | [Q2D cross sections](course/aedt-q2d.qmd) |
+| AEDT model inputs shared by all families | | [AEDT inputs](course/aedt-inputs.qmd) |
 
-The [Xmon source](tutorial-xmon-input.qmd), [Palace EPR](tutorial-xmon-palace.qmd)
-and [HFSS EPR](tutorial-xmon-aedt.qmd) lessons retain the larger flip-chip
-example, its literature adaptation and backend-specific geometry details.
-They are deeper examples rather than prerequisites to the beginner course.
+## Advanced guides
 
-## Larger public examples {#public-inputs}
+- [Compute EPR from saved AEDT fields](course/aedt-saved-fields.qmd) without
+  solving again. This still needs AEDT.
+- [Change loss assumptions offline](course/offline-epr.qmd) on an existing
+  EPR result. This needs no solver.
 
-The deeper Xmon and CPW inputs below are pinned to OrPen source
-[`35b4dc1cdd3f921badcac2fe57a98366315ae8d9`](https://github.com/OrPenStrike/orpen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9),
-which declares OrPen `0.1.0` and GDSFactory 9.48.x. Use that model revision
-when following these examples. The original notebook comments do not replace
-the current SCGSim API reference.
+## Larger example: flip-chip Xmon
 
-| Canonical public notebook group | Use |
+A full flip-chip Xmon qubit, adapted from the literature. It is not a
+prerequisite for the guides above.
+
+1. [Build the Xmon model](tutorial-xmon-input.qmd).
+2. [Palace EPR for the Xmon](tutorial-xmon-palace.qmd).
+3. [HFSS EPR for the Xmon](tutorial-xmon-aedt.qmd).
+
+## More public examples {#public-inputs}
+
+The OrPen SC PDK repository holds further example notebooks. They are pinned to
+OrPen revision
+[`35b4dc1`](https://github.com/OrPenStrike/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9).
+
+| Notebook group | Shows |
 |---|---|
-| [Kosen2024_Xmon](https://github.com/OrPenStrike/orpen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Route A/B Electrostatic/Eigenmode and source-first Xmon studies |
-| [ComponentSimulation/CpwFiniteGround](https://github.com/OrPenStrike/orpen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/CpwFiniteGround) | Ordinary HFSS Eigenmode/Driven; historical pre-v3 Q3D GDS-input source |
-| [CrossSectionSimulation/CpwFiniteGround](https://github.com/OrPenStrike/orpen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/CrossSectionSimulation/CpwFiniteGround) | Q2D rectangles and conductor groups |
+| [Kosen2024_Xmon](https://github.com/OrPenStrike/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/Kosen2024_Xmon) | Palace Electrostatic and Eigenmode for the Xmon |
+| [ComponentSimulation/CpwFiniteGround](https://github.com/OrPenStrike/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/ComponentSimulation/CpwFiniteGround) | HFSS Eigenmode and Driven for a CPW |
+| [CrossSectionSimulation/CpwFiniteGround](https://github.com/OrPenStrike/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9/notebooks/src/CrossSectionSimulation/CpwFiniteGround) | Q2D cross section of a CPW |
 
-The specimen dimensions and presets are public model inputs, not measured
-process/device evidence. An old notebook's comments do not replace the current
-package contract: for example, 3D Region padding uses the native
-`(+X,-X,+Y,-Y,+Z,-Z)` order, while Q2D uses `(-X,+X,-Y,+Y)`.
-
-
-[Concept](concepts/problems.qmd) explains model choices and quantities;
-[Contract](backend-support.qmd) provides the public API references. Repository
-architecture and delivery information live in the [Maintainer guide](ownership.qmd).
+These notebooks may use older SCGSim calls. Where they differ from these docs,
+the docs describe the current API.

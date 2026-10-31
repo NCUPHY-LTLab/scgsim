@@ -1,104 +1,99 @@
 # SCGSim
 
-SCGSim is a Python toolkit for electromagnetic modeling of superconducting
-circuits. It connects named layout geometry and material facts to Palace or
-Ansys Electronics Desktop, then helps you read the returned capacitance,
-resonance, network and energy-participation results.
+SCGSim is a Python toolkit for electromagnetic simulation of superconducting
+circuits. You describe a layout by its named conductors and materials; SCGSim
+prepares the input for Palace or Ansys Electronics Desktop (AEDT), and then
+loads the solver output into reports with units, conductor names and mode
+numbers attached.
 
-SCGSim is an independent downstream project derived from
-[gsim](https://github.com/gdsfactory/gsim). It maintains its own in-tree geometry
-builder and solver APIs; it is not an official gsim distribution.
+SCGSim started from [gsim](https://github.com/gdsfactory/gsim) and is now an
+independent project with its own geometry builder and solver APIs. It is not
+an official gsim distribution.
 
-## What you can do
-
-- **Describe a model by meaning.** Assign named component Entities to electrical
-  Nets and prepare a GeometryPlan snapshot with its material stack and vacuum region.
-- **Preserve authored curved boundaries.** Component source may declare lines,
-  arcs, interpolation splines, or B-splines, or explicitly request a GDS
-  boundary reconstruction. Polygon-only source remains polygonal.
-- **Choose the physical question.** Extract capacitance, find resonant modes,
-  calculate a port response, or extract conductor matrices.
-- **Control Palace mesh representation.** Select the 3D mesher, thread settings,
-  and geometric order independently of the finite-element order, then inspect
-  the detached mesh summary.
-- **Study energy and loss.** Inspect surface, bulk and junction/port
-  participation, and change loss assumptions without repeating an available field solve.
-- **Move computation to its host.** Prepare portable solver inputs locally,
-  run explicitly on an AEDT workstation or Palace local/HPC host, and load the return.
-- **Read results in context.** Keep units, port/conductor order, mode identity,
-  numerical history and available cost information beside the physics.
-
-Palace Routes A and B lower explicit curve intent. Curved Route C and AEDT
-curve lowering are unsupported; polygon-only inputs retain their existing
-behavior.
-
-## Choose a calculation
+## What you can compute
 
 <div class="table-responsive">
 
-| Question | SCGSim workflow | Main quantity | Typical use |
-|---|---|---|---|
-| How strongly do conductors couple electrically? | Palace Electrostatic or AEDT Q3D | Capacitance matrix, F | Circuit capacitance and electrostatic coupling |
-| Where are the resonances and their energy? | Palace Eigenmode or HFSS Eigenmode | Frequency, Hz; participation, dimensionless | Resonators and linearized junction circuits |
-| What is the response between ports? | HFSS Driven Modal or Terminal | Complex S-parameters versus frequency | Transmission, reflection and coupling |
-| What are the conductor matrices of a finite model? | AEDT Q3D | Native C/G and RL extraction matrices, with reported units | Finite interconnect extraction |
-| What are the properties per unit length? | AEDT Q2D | C/G/L/R per length | Transmission-line cross sections |
+| Question | Workflow | Result |
+|---|---|---|
+| How strongly are conductors coupled electrically? | Palace Electrostatic or AEDT Q3D | Capacitance matrix (F) |
+| Where are the resonances, and where is their energy? | Palace Eigenmode or HFSS Eigenmode | Mode frequencies (Hz), quality factors, energy participation |
+| How does the circuit respond between ports? | HFSS Driven Modal or Driven Terminal | S-parameters versus frequency |
+| What are the conductor matrices of a finite structure? | AEDT Q3D | C/G and R/L matrices |
+| What are the line properties per unit length? | AEDT Q2D | C/G/L/R per unit length |
 
 </div>
 
-Palace Driven and Magnetostatic are not implemented in SCGSim. Native solver
-features beyond the [supported workflows](docs/backend-support.qmd) are not
-made available merely by installing that solver.
+SCGSim does not support Palace Driven or Palace Magnetostatic simulations.
+See [Supported calculations](docs/backend-support.qmd) for the full list.
 
-## From model to results
+## How it works
 
-![Layout and materials define a physical question and settings. Prepare solver inputs, then explicitly run locally or transfer the handoff to a solver host. Read the returned results and reports.](docs/assets/scgsim-workflow.svg)
+![Layout and materials define the physical question. SCGSim prepares a run
+directory, you run the solver locally or on another host, and SCGSim reads
+the returned results.](docs/assets/scgsim-workflow.svg)
 
-## Start with a complete example
+1. **Describe the model.** Load a component from your PDK and assign its
+   shapes to electrical conductors (Nets), such as `pad` and `ground`.
+2. **Choose the calculation.** Set up an Electrostatic, Eigenmode, Driven,
+   Q3D or Q2D problem with its mesh and solver settings.
+3. **Prepare a run directory.** SCGSim writes the mesh, solver configuration
+   and a launch script. It never starts the solver on its own.
+4. **Run the solver** on the same computer, a workstation with AEDT, or an
+   HPC cluster.
+5. **Read the results.** Load the returned directory to get capacitance,
+   frequencies, participation ratios or S-parameters in a report.
 
-The public SimplePad model is a 200 µm square pad surrounded by Ground, with a
-20 µm gap, on a single silicon die. Its east-edge sheet locates the modeled
-junction/port; it is not a galvanic metal bridge.
+Other features:
 
-![OrPen SimplePad layout: square pad within Ground and a magnified east-edge sheet across the 20 µm gap.](docs/assets/simple-pad-layout.png)
+- **Curved geometry.** Palace models keep arcs and splines drawn in the
+  source component instead of turning them into polygons.
+- **Energy participation and loss.** Compute surface, bulk and junction
+  participation, and change loss assumptions without solving again.
+- **Mesh control.** Choose the Palace mesher, its threads and the geometric
+  order, and inspect a mesh summary before running.
 
-*OrPen SC PDK SimplePad: 0.2 µm aluminum on 500 µm silicon. Diagnostic layout
-preview, not a computed field or solver result.*
+## Get started
 
-[Install the tools](docs/course/installation.qmd), then choose the
-[capacitance](docs/tutorials/capacitance.qmd) or
-[resonance/EPR](docs/tutorials/resonance-epr.qmd) example in the
-[Getting Started course](docs/examples.qmd).
-The course explains preparation, explicit execution and result reading in one
-sequence. Python scripts and notebooks use the same public APIs; notebooks are
-a convenient interface rather than a required runtime.
+[Install SCGSim](docs/course/installation.qmd), then work through the first
+tutorial, [Pad capacitance](docs/tutorials/capacitance/prepare.qmd). It
+uses this model: a 200 µm square pad in a ground plane on a silicon die. Each
+tutorial has three steps: prepare a run directory, run the solver on it, and
+analyze the returned result.
 
-Explore the [OrPen SimplePad model and notebooks](https://github.com/OrPenStrike/orpen-sc-pdk/tree/51985d9507025e8241205712e866c0b804de29b9/notebooks/ComponentSimulation/SimplePad).
+![SimplePad: a square pad within Ground, and a short sheet across the east
+gap where the resonance tutorial attaches a junction.](docs/assets/simple-pad-layout.png)
 
-Palace needs its native executable on the solver host. AEDT workflows need
-AEDT 2024.2, PyAEDT 1.3.0 and a suitable license. Installing a Python extra does
-not install a solver. The preparation, solver and analysis computers may be
-one machine or separate hosts.
+The [tutorial overview](docs/examples.qmd) lists all tutorials and how-to
+guides.
 
-## Understand the model
+### Requirements
 
-Read [problem choices](docs/concepts/problems.qmd),
-[semantic geometry](docs/concepts/geometry.qmd),
-[energy participation and loss](docs/eigenmode-epr.qmd), and
-[boundaries and numerical interpretation](docs/concepts/model-and-numerics.qmd).
-Exact interfaces belong to the Contract reference. Repository contributors can
-use the separate [maintainer guide](docs/ownership.qmd).
+- Python 3.12 or 3.13.
+- For Palace calculations: a Palace executable on the computer that runs the
+  solver.
+- For AEDT calculations: AEDT 2024.2 with a licence, and PyAEDT 1.3.0.
+
+Installing SCGSim does not install Palace or AEDT. You can prepare runs on a
+laptop and run the solver elsewhere.
+
+## Documentation
+
+- [Tutorials and how-to guides](docs/examples.qmd): step-by-step
+  calculations.
+- Concepts: [choosing the physical problem](docs/concepts/problems.qmd),
+  [describing geometry](docs/concepts/geometry.qmd),
+  [energy participation and loss](docs/eigenmode-epr.qmd), and
+  [boundaries and numerics](docs/concepts/model-and-numerics.qmd).
+- [Reference](docs/backend-support.qmd): exact API and input rules.
+- [Maintainer guide](docs/ownership.qmd): for contributors to SCGSim.
 
 ## Python API
 
-Source geometry uses `scgsim.geometry`; advanced compilation uses
-`scgsim.geometry.compiler`:
-
 ```python
 from scgsim.geometry import GeometryPlan, VacuumRegionSpec
-from scgsim.geometry.compiler import SemanticGeometryBuilder
-from scgsim.palace import ElectrostaticSim, EigenmodeSim
+from scgsim.palace import ElectrostaticSim, EigenmodeSim, resolve_palace_result
 ```
 
-Palace and AEDT keep their separate solver APIs. For existing projects, see the
-[API migration reference](docs/api-migration.qmd).
+AEDT workflows live in `scgsim.aedt`. If you are upgrading an existing
+project, see the [API migration guide](docs/api-migration.qmd).

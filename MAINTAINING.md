@@ -22,6 +22,11 @@ A later formal producer update must retain its own exact version/commit.
 Use native Quarto structures for tables, callouts and navigation; keep source
 identity separate from generated presentation identity.
 
+## Writing documentation
+
+[DOCS_STYLE.md](DOCS_STYLE.md) defines the reader, page types and writing
+rules for README and `docs/`. Follow it for every documentation edit.
+
 ## Documentation builds
 
 `scripts/pages_versions.json` is the version catalogue.

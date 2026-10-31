@@ -1,76 +1,83 @@
 ---
-title: "Geometry with electrical meaning"
-description: "Understand component Entities, placed occurrences, Nets and the source snapshot consumed by a solver."
+title: "Describing geometry"
+description: "How Entities, placed components, Nets and the snapshot turn a layout into a simulation model."
 scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/concepts/geometry"
 ---
 
 A layout says where shapes are. A simulation also needs to know which shapes
-are conductors, which conductors share an electrical Net, where a port connects,
-and which materials occupy the surrounding space.
+are connected conductors, where ports and junctions sit, and which materials
+fill the space around them. SCGSim keeps that information explicit instead of
+guessing it from shape names or from which shapes touch.
 
-## Entity, occurrence and Net
+## Entities, placements and Nets
 
-An **Entity** is a named source part, such as a pad or a ground conductor.
-Placing a component creates an **occurrence** of its local Entities. A named
-path distinguishes repeated parts before flattening. The study assigns those
-qualified Entities to electrical **Nets**; similar labels or a visual impression
-of contact do not perform that assignment.
+- An **Entity** is a named shape in a component, such as a pad or a ground
+  plane.
+- When a component is placed inside another, its Entities get a path, such as
+  `chip/device/D1_XMON_PAD`. Two copies of the same component therefore have
+  distinct Entity IDs.
+- A **Net** is one electrical conductor. You assign Entities to Nets yourself,
+  for example `xmon_pad` for the pad, and `Ground` for all ground pieces.
 
 ```{mermaid}
 flowchart TB
-  C["Local Entities + ports"] --> O["Named occurrence"]
-  O --> N["Final Nets"]
-  P["PDK materials + stack"] --> S["GeometryPlan snapshot"]
+  C["Component: Entities and ports"] --> O["Placed with a path"]
+  O --> N["Assigned to Nets"]
+  P["PDK: materials and layer stack"] --> S["GeometryPlan snapshot"]
   N --> S
-  S --> B["Backend model"]
+  S --> B["Solver model"]
 ```
 
-The PDK supplies material identity, fabrication level, thickness and host-volume
-facts. The component supplies local polygons and selectors. GeometryPlan
-combines the actual placed source with a final Net map and an outer vacuum
-region. Preparing it produces detached GDS, stack and normalized geometry.
-Changing shared geometry requires a new snapshot.
+The PDK supplies the materials, layer heights and thicknesses. The component
+supplies the shapes. A `GeometryPlan` combines them with your Net assignments
+and a vacuum region. `plan.prepare()` produces a frozen **snapshot**: a GDS
+file, a stack description and the normalized geometry. Any change to these
+needs a new snapshot.
 
-A backend may combine several source members into one mesh group or field
-integral. Those computational groups do not erase source identity or promise
-one reported value for every Entity. In the existing Xmon example,
-`chip/device/D1_XMON_PAD` is an Entity and `xmon_pad` is its assigned Net;
-several Ground members can share a native group.
+A solver may merge several Entities into one mesh region, for example all
+pieces of `Ground`. The snapshot still records which Entity each piece came
+from, but the solver reports results per Net or region, not per Entity.
 
 ## Regions and boundaries
 
-The vacuum envelope is part of the field model, not the camera view. Substrate,
-vacuum gaps and conductor bodies retain their own identities. Boundary conditions
-belong to the physical calculation: the same snapshot can be used with different
-exterior conditions and produce different experiments.
+The vacuum region is part of the physical model: its size and its outer
+boundary condition affect the result. The substrate, vacuum and each conductor
+keep their own identity in the mesh.
 
-## Explicit curved boundaries
+The boundary condition belongs to the calculation, not to the snapshot. The
+same snapshot with a different outer boundary is a different model; see
+[Boundaries and numerics](model-and-numerics.qmd).
 
-Component source can attach authored line, circular-arc, interpolation-spline,
-or B-spline chains to selected Entity boundaries. A caller can also explicitly
-select a curve reconstruction for a GDS boundary. The source snapshot retains
-the polygon source and curve declarations; placing an occurrence transforms
-the ordered curve chain with its Entity. Curve intent does not assign a Net,
-and SCGSim does not smooth polygon edges implicitly. Polygon-only inputs remain
-polygonal.
+## Curved boundaries
 
-Palace Routes A and B lower active curve intent. Route C and AEDT planar
-preparation do not support curves. The [GeometryPlan contract](../geometry-sgb.qmd)
-describes how to author a chain or select GDS boundary segments, and how those
-boundaries retain their Entity and occurrence identities.
+By default, SCGSim uses the polygons in the GDS file. A component can instead
+attach exact curves (lines, circular arcs, interpolation splines or B-splines)
+to the boundaries of selected Entities. You can also ask SCGSim to fit curves
+to selected GDS boundary segments. Curves move with their Entity when the
+component is placed. SCGSim never smooths polygons unless asked.
 
-## A shared source has a specific reach
+Palace meshes these curves. AEDT does not support them and uses the polygons.
+[Work with your own model](../course/working-model.qmd#add-curved-boundaries)
+shows how to add curves; the
+[geometry reference](../geometry-sgb.qmd#source-curves) gives the exact rules.
 
-Palace Electrostatic/Eigenmode and source-first HFSS Eigenmode consume a
-GeometryPlan snapshot. Ordinary GDS-based HFSS workflows use explicit layer
-and object bindings. Q3D v3 uses explicit body rings, Z intervals, materials
-and final Net membership; its source-first C/G frontend can consume a
-GeometryPlan snapshot. Native Q3D body lowering remains **CONVERGING**. Q2D
-uses cross-section rectangles and conductor groups; there is no implicit
-GeometryPlan-to-Q2D slice.
+## Which solvers read a snapshot
 
-Read [model approximations](model-and-numerics.qmd) next, or use the
-[GeometryPlan contract](../geometry-sgb.qmd#component-to-backend-geometry-contract)
-for exact authoring rules. The [tutorials](../examples.qmd) show the sequence.
+| Workflow | Geometry input |
+|---|---|
+| Palace Electrostatic and Eigenmode | GeometryPlan snapshot |
+| HFSS Eigenmode with EPR | GeometryPlan snapshot |
+| HFSS Eigenmode and Driven (plain) | GDS file with explicit layer and object mapping |
+| Q3D | 3D bodies, written directly or built from a snapshot (C/G only) |
+| Q2D | Hand-drawn cross-section rectangles |
+
+There is no automatic conversion from a snapshot to a Q2D cross section.
+
+## Next steps
+
+- [Boundaries and numerics](model-and-numerics.qmd).
+- The [geometry reference](../geometry-sgb.qmd#component-to-backend-geometry-contract)
+  for exact rules.
+- [Work with your own model](../course/working-model.qmd) for the steps.

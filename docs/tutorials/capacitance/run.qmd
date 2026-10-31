@@ -1,0 +1,43 @@
+---
+title: "Pad capacitance 2/3: Run Palace"
+description: "Run the prepared pad-capacitance run directory with Palace."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/tutorials/capacitance/run"
+---
+
+This page runs the directory written by [Prepare](prepare.qmd). It does not
+change the model or the settings. To change anything, go back to Prepare and
+write a new run directory.
+
+::: {.callout-note title="Before you start"}
+- The run directory `.artifacts/SimplePad/pad-capacitance-01` from Prepare.
+- A computer with Palace. See
+  [Install SCGSim, Step 5](../../course/installation.qmd#step-5-set-up-the-solver-host).
+- Allow about 30 minutes on 8 MPI processes.
+:::
+
+## Step 1: Run Palace
+
+If Palace runs on another computer, copy the **whole** run directory there
+first. On the Palace computer, from the run directory:
+
+```bash
+cd .artifacts/SimplePad/pad-capacitance-01
+bash run_palace.sh
+```
+
+The script first checks the configuration with `palace --dry-run`, then
+solves.
+
+## Step 2: Return the directory
+
+If Palace ran on another computer, copy the whole directory back, including
+`metadata/` and the logs. A results file on its own cannot be loaded.
+
+For Slurm, MPI wrappers and failed runs, see
+[Run a prepared model](../../course/execute.qmd).
+
+## Next
+
+[Read the capacitance](analyze.qmd).

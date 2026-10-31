@@ -1,18 +1,14 @@
 ---
-title: "Palace Electrostatic + SGB"
+title: "Palace Electrostatic and mesh reference"
 description: "Electrostatic Net binding, shared Palace mesh controls, native margins and detached mesh summaries."
 scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/specs/palace-electrostatic-sgb"
 ---
 
-::: {.callout-note title="Accepted behavior and delivery status"}
-The backend, Route A/B lowering, handoff, Slurm execution, strict result
-resolution and existing report summaries are part of the accepted V1 scope.
-The Palace mesh controls and detached mesh summary documented below are also
-ACCEPTED for SCGSim 1.1.0. Recorded exercise evidence retains its limits;
-stabilization and release delivery remain separate.
-:::
+This page is the exact reference for `ElectrostaticSim`, and for the Palace
+mesh controls and mesh summary shared with `EigenmodeSim`. For the steps, see
+[Palace Electrostatic](../course/palace-electrostatic.qmd).
 
 ## Public surface {#candidate-surface}
 
@@ -212,9 +208,8 @@ mismatch remains fatal. Repeated unmasked values or columns in native
 repeated baselines nor alternative margins may be summed into the physical
 loss total.
 
-This multi-margin Surface EPR surface is **STABILIZED**. It is not a
-cumulative disjoint edge-band contract and introduces no scientific
-acceptance, convergence threshold, or geometry-exclusion claim.
+Margins are alternative estimates, not disjoint edge bands to be added. No
+convergence threshold is applied.
 
 ## Source and geometry authority
 
