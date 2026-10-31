@@ -49,9 +49,7 @@ class SourcedPatch:
 
     def __post_init__(self) -> None:
         if self.evidence_stage not in _STAGE_ORDER:
-            raise ValueError(
-                "evidence_stage must be declared, planned, or observed"
-            )
+            raise ValueError("evidence_stage must be declared, planned, or observed")
         for field_name in ("source_owner_ids", "aggregate_owner_ids"):
             object.__setattr__(self, field_name, tuple(getattr(self, field_name)))
         for field_name in (
@@ -175,7 +173,9 @@ class SemanticEvidenceFacade:
                 record.semantic_identity() != first.semantic_identity()
                 for record in records[1:]
             ):
-                raise ValueError(f"conflicting semantic evidence for {contribution_id!r}")
+                raise ValueError(
+                    f"conflicting semantic evidence for {contribution_id!r}"
+                )
             classification, source_owner_ids = _classify_patch(self.snapshot, first)
             stages = tuple(
                 stage
@@ -223,7 +223,9 @@ def _validate_snapshot_reference(
     expected_reference: SemanticSnapshotReference,
 ) -> None:
     if patch.snapshot_reference is None:
-        raise ValueError(f"semantic evidence {patch.patch_id!r} has no snapshot reference")
+        raise ValueError(
+            f"semantic evidence {patch.patch_id!r} has no snapshot reference"
+        )
     if patch.snapshot_reference != expected_reference:
         raise ValueError(
             f"semantic evidence {patch.patch_id!r} belongs to a different snapshot"
@@ -236,7 +238,9 @@ def _classify_patch(
     domains = patch.effective_domain_ids
     if patch.interface_intent == "conductor_solution":
         if domains is None or len(domains) != 1:
-            raise ValueError("conductor_solution evidence requires one effective domain")
+            raise ValueError(
+                "conductor_solution evidence requires one effective domain"
+            )
         material_kind = _material_kind(snapshot, domains[0])
         return conductor_solution_interface_kind(material_kind), patch.source_owner_ids
     if patch.interface_intent == "solution_solution":

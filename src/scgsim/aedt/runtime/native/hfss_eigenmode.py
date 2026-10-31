@@ -60,7 +60,9 @@ def _require_setup(setup: Any, control: EigenmodeRunControl) -> None:
         or setup.setuptype != 2
         or setup.name != control.setup_name
     ):
-        raise RuntimeError("native setup did not retain the requested HFSSEigen identity")
+        raise RuntimeError(
+            "native setup did not retain the requested HFSSEigen identity"
+        )
 
 
 def create_eigenmode_setup(app: Any, control: EigenmodeRunControl) -> None:
@@ -71,9 +73,7 @@ def create_eigenmode_setup(app: Any, control: EigenmodeRunControl) -> None:
     # create_setup batches keyword edits with auto_update=False internally.
     payload = eigenmode_setup_payload(control)
     payload.pop("Name")
-    setup = app.create_setup(
-        name=control.setup_name, setup_type="HFSSEigen", **payload
-    )
+    setup = app.create_setup(name=control.setup_name, setup_type="HFSSEigen", **payload)
     _require_setup(setup, control)
 
 

@@ -19,7 +19,9 @@ def entity_representation(
     context: RepresentationContext | None,
 ) -> EntityRepresentation | None:
     if context is None:
-        raise ValueError("current geometry planning requires an explicit physical representation context")
+        raise ValueError(
+            "current geometry planning requires an explicit physical representation context"
+        )
     return context.entities.get(entity.semantic_id)
 
 
@@ -56,8 +58,11 @@ def planned_conductor_representation(
     if record is None:
         return None
     return (
-        "surface_sheet" if record.representation == "sheet"
-        else "material_volume" if route == "C" else "cutout_boundary_shell"
+        "surface_sheet"
+        if record.representation == "sheet"
+        else "material_volume"
+        if route == "C"
+        else "cutout_boundary_shell"
     )
 
 
@@ -67,18 +72,23 @@ def is_sheet_context(context: RepresentationContext | None) -> bool:
     )
 
 
-
 def project_native_route_representations(build_input, route, context):
     """Ephemeral route primitive choices projected only from the common plan."""
     if context is None:
-        raise ValueError("interpret_physical_geometry() and pass plan.context before native compilation")
+        raise ValueError(
+            "interpret_physical_geometry() and pass plan.context before native compilation"
+        )
     entities = []
     for entity in build_input.entities:
         if entity.material_kind != "conductor":
             entities.append(entity)
             continue
-        primitive = planned_conductor_representation(entity, route=route, context=context)
+        primitive = planned_conductor_representation(
+            entity, route=route, context=context
+        )
         if primitive is None:
-            raise ValueError(f"common physical context lacks conductor {entity.semantic_id!r}")
+            raise ValueError(
+                f"common physical context lacks conductor {entity.semantic_id!r}"
+            )
         entities.append(replace(entity, route_representations={route: primitive}))
     return replace(build_input, entities=tuple(entities))

@@ -24,8 +24,12 @@ class EntityRepresentation:
     effective_z_interval_um: tuple[float, float]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "source_z_interval_um", tuple(self.source_z_interval_um))
-        object.__setattr__(self, "effective_z_interval_um", tuple(self.effective_z_interval_um))
+        object.__setattr__(
+            self, "source_z_interval_um", tuple(self.source_z_interval_um)
+        )
+        object.__setattr__(
+            self, "effective_z_interval_um", tuple(self.effective_z_interval_um)
+        )
 
 
 @dataclass(frozen=True, slots=True)

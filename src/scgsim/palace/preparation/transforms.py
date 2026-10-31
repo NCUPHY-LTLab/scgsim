@@ -65,12 +65,14 @@ def normalize_route_a_thin_film(route: str, value: str | None) -> RouteAThinFilm
     )
 
 
-
-
-def _normalized_component_input(component: Any, stack: Mapping[str, Any]) -> GeometryBuildInput:
+def _normalized_component_input(
+    component: Any, stack: Mapping[str, Any]
+) -> GeometryBuildInput:
     """Acquire the existing public component/stack source before interpretation."""
     if component is None:
-        raise ValueError("Palace preparation requires component or normalized geometry input")
+        raise ValueError(
+            "Palace preparation requires component or normalized geometry input"
+        )
     from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
     from ..mesh.build import _component_gds_top_cell_name, _write_component_gds
 
@@ -80,19 +82,12 @@ def _normalized_component_input(component: Any, stack: Mapping[str, Any]) -> Geo
         _write_component_gds(component, gds_path)
         stack_path.write_text(json.dumps(dict(stack)) + "\n", encoding="utf-8")
         return build_gds_stack_geometry_input(
-            gds_file=gds_path, stack_file=stack_path,
-            top_cell_name=_component_gds_top_cell_name(component=component, gds_path=gds_path),
+            gds_file=gds_path,
+            stack_file=stack_path,
+            top_cell_name=_component_gds_top_cell_name(
+                component=component, gds_path=gds_path
+            ),
         )
-
-
-
-
-
-
-
-
-
-
 
 
 def apply_airbox_to_stack(

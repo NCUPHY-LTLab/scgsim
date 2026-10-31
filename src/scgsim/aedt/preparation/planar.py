@@ -158,8 +158,12 @@ def _source_payload(
                 "material_id": item.material_id,
                 "material_kind": item.material_kind,
                 "part_role": item.part_role,
-                "representation": item.metadata["physical_representation"]["representation"],
-                "physical_layer": _native_physical_record(item.metadata["physical_representation"]),
+                "representation": item.metadata["physical_representation"][
+                    "representation"
+                ],
+                "physical_layer": _native_physical_record(
+                    item.metadata["physical_representation"]
+                ),
                 "net_id": item.net_id,
                 "polygon_ids": list(item.polygon_ids),
                 "geometry": _plain(item.geometry),
@@ -706,8 +710,12 @@ def prepare_planar_geometry_input(
                     )
                     if "split_polygon_index" in e.metadata
                     else e.semantic_id,
-                    "representation": e.metadata["physical_representation"]["representation"],
-                    "physical_layer": _native_physical_record(e.metadata["physical_representation"]),
+                    "representation": e.metadata["physical_representation"][
+                        "representation"
+                    ],
+                    "physical_layer": _native_physical_record(
+                        e.metadata["physical_representation"]
+                    ),
                     "geometry": e.geometry,
                 }
                 for e in build_input.entities
@@ -789,9 +797,7 @@ def prepare_planar_geometry_input(
         if item["surface_role"] not in record["surface_roles"]:
             record["surface_roles"].append(item["surface_role"])
     contribution_catalog = tuple(catalog_by_id[key] for key in sorted(catalog_by_id))
-    source = _source_payload(
-        build_input, prepared_stack, source_dbu_um=source_dbu_um
-    )
+    source = _source_payload(build_input, prepared_stack, source_dbu_um=source_dbu_um)
     if build_input.lumped_supports:
         source["lumped_supports"] = _prepared_lumped_supports(
             build_input.lumped_supports, source
@@ -1040,9 +1046,7 @@ def _junction_partition_plane(
             owner["representation"] not in {"surface_sheet", "sheet"}
             and _entity_z_range(owner)[1] <= positions[0]
         ):
-            raise ValueError(
-                "junction Solid source Entity has no positive thickness"
-            )
+            raise ValueError("junction Solid source Entity has no positive thickness")
     return positions[0]
 
 

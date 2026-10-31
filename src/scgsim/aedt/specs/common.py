@@ -39,13 +39,20 @@ class LumpedRlc:
                 if not math.isfinite(value):
                     raise ValueError(f"{key} must be finite")
                 object.__setattr__(self, key, value)
-        if all(getattr(self, key) is None for key in ("resistance_ohm", "inductance_h", "capacitance_f")):
+        if all(
+            getattr(self, key) is None
+            for key in ("resistance_ohm", "inductance_h", "capacitance_f")
+        ):
             raise ValueError("lumped RLC requires an enabled component")
 
     def to_payload(self) -> dict[str, Any]:
-        return {"support_id": self.support_id, "topology": self.topology,
-                "resistance_ohm": self.resistance_ohm, "inductance_h": self.inductance_h,
-                "capacitance_f": self.capacitance_f}
+        return {
+            "support_id": self.support_id,
+            "topology": self.topology,
+            "resistance_ohm": self.resistance_ohm,
+            "inductance_h": self.inductance_h,
+            "capacitance_f": self.capacitance_f,
+        }
 
     @classmethod
     def from_payload(cls, value: Mapping[str, Any]) -> LumpedRlc:
@@ -206,8 +213,11 @@ class LayerImport:
 
     def to_payload(self) -> dict[str, Any]:
         return {
-            **({"physical_layer_id": self.physical_layer_id}
-               if self.physical_layer_id is not None else {}),
+            **(
+                {"physical_layer_id": self.physical_layer_id}
+                if self.physical_layer_id is not None
+                else {}
+            ),
             "layer": self.layer,
             "datatype": self.datatype,
             "layer_name": self.layer_name,
@@ -307,7 +317,9 @@ class LumpedTerminalPort:
             if not values:
                 raise ValueError(f"{key} requires explicit conductor Entities")
             object.__setattr__(self, key, values)
-        if isinstance(self.impedance_ohm, bool) or not isinstance(self.impedance_ohm, (int, float)):
+        if isinstance(self.impedance_ohm, bool) or not isinstance(
+            self.impedance_ohm, (int, float)
+        ):
             raise TypeError("impedance_ohm must be explicitly numeric")
         if self.deembed_um != 0:
             raise NotImplementedError("Lumped Terminal supports deembed_um=0 only")
@@ -315,11 +327,17 @@ class LumpedTerminalPort:
             raise TypeError("renormalize must be bool")
 
     def to_payload(self) -> dict[str, Any]:
-        return {"kind": "lumped", "index": self.index, "name": self.name,
-                "support_id": self.support_id, "signal_entity_ids": list(self.signal_entity_ids),
-                "reference_entity_ids": list(self.reference_entity_ids),
-                "impedance_ohm": self.impedance_ohm, "renormalize": self.renormalize,
-                "deembed_um": self.deembed_um}
+        return {
+            "kind": "lumped",
+            "index": self.index,
+            "name": self.name,
+            "support_id": self.support_id,
+            "signal_entity_ids": list(self.signal_entity_ids),
+            "reference_entity_ids": list(self.reference_entity_ids),
+            "impedance_ohm": self.impedance_ohm,
+            "renormalize": self.renormalize,
+            "deembed_um": self.deembed_um,
+        }
 
     @classmethod
     def from_payload(cls, value: Mapping[str, Any]) -> LumpedTerminalPort:
@@ -352,8 +370,11 @@ class TerminalPort:
         if not references:
             raise ValueError("terminal port requires explicit reference_objects")
         object.__setattr__(self, "reference_objects", references)
-        object.__setattr__(self, "signal_entity_ids", tuple(
-            _text(value, "signal_entity_id") for value in self.signal_entity_ids))
+        object.__setattr__(
+            self,
+            "signal_entity_ids",
+            tuple(_text(value, "signal_entity_id") for value in self.signal_entity_ids),
+        )
         deembed = _number(self.deembed_um, "deembed_um")
         if deembed < 0:
             raise ValueError("deembed_um must be >= 0")
@@ -366,7 +387,11 @@ class TerminalPort:
             "side": self.side,
             "reference_objects": list(self.reference_objects),
             "deembed_um": self.deembed_um,
-            **({"signal_entity_ids": list(self.signal_entity_ids)} if self.signal_entity_ids else {}),
+            **(
+                {"signal_entity_ids": list(self.signal_entity_ids)}
+                if self.signal_entity_ids
+                else {}
+            ),
         }
 
 

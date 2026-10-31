@@ -10,7 +10,11 @@ from .interfaces import (
     solution_interface_kind,
     solution_interface_owner_ids,
 )
-from .materials import MATERIAL_KINDS, is_supported_material_kind, is_vacuum_material_kind
+from .materials import (
+    MATERIAL_KINDS,
+    is_supported_material_kind,
+    is_vacuum_material_kind,
+)
 from .snapshot import (
     SemanticFactsSnapshot,
     SemanticSnapshotReference,

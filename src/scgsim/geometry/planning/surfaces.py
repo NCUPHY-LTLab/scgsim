@@ -113,8 +113,10 @@ from scgsim.semantics.ownership import interface_surface_owner_ids
 
 
 def plan_surface_contribution_patches(
-    build_input: GeometryBuildInput, *, route: RouteLiteral,
-    representation_context: RepresentationContext | None = None
+    build_input: GeometryBuildInput,
+    *,
+    route: RouteLiteral,
+    representation_context: RepresentationContext | None = None,
 ) -> tuple[GeometryBuildInput, tuple[SurfacePlanRecord, ...]]:
     """Derive local physical-side evidence without a backend construction plan.
 
@@ -124,11 +126,20 @@ def plan_surface_contribution_patches(
     """
 
     if representation_context is None:
-        raise ValueError("interpret_physical_geometry() and pass plan.context for current contribution planning")
+        raise ValueError(
+            "interpret_physical_geometry() and pass plan.context for current contribution planning"
+        )
     from scgsim.geometry.compiler.validation import validate_selected_route
-    from scgsim.geometry.planning.representation import project_native_route_representations
-    build_input = project_native_route_representations(build_input, route, representation_context)
-    validate_selected_route(build_input, route, representation_context=representation_context)
+    from scgsim.geometry.planning.representation import (
+        project_native_route_representations,
+    )
+
+    build_input = project_native_route_representations(
+        build_input, route, representation_context
+    )
+    validate_selected_route(
+        build_input, route, representation_context=representation_context
+    )
     return _plan_surface_contribution_geometry(
         build_input, route=route, representation_context=representation_context
     )
@@ -985,8 +996,7 @@ def plan_route_surfaces(
                         normalized_sheet_loops.get(entity.semantic_id, ())
                         if route == "B" and entity.part_role == "face_metal"
                         else normalized_pad_loops.get(entity.semantic_id, ())
-                        if (route == "A" or context_planning)
-                        and shell_part == "bottom"
+                        if (route == "A" or context_planning) and shell_part == "bottom"
                         else ()
                     ),
                 )

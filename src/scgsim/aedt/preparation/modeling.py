@@ -4,6 +4,7 @@ Geometry planning owns classification, endpoint mapping and enclosure projection
 This consumer only selects the explicit AEDT profile and returns its context;
 historical coordinate maps remain in the version-bound request reader.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -19,7 +20,9 @@ def _interpret_geometry(build_input: Any, stack: Any, modeling: Modeling):
     effective_input, effective_stack, plan = interpret_physical_geometry(
         build_input, stack, ApproximationProfile(modeling, "v1", {})
     )
-    effective_stack["metadata"]["physical_source_stack_sha256"] = canonical_sha256(detached(stack))
+    effective_stack["metadata"]["physical_source_stack_sha256"] = canonical_sha256(
+        detached(stack)
+    )
     return effective_input, effective_stack, plan
 
 

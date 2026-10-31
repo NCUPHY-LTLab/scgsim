@@ -73,7 +73,9 @@ def _validate_revision(name: str, value: str, kind: RevisionKind) -> None:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{name} must be a non-empty string")
     if kind not in ("declared_revision", "content_hash_fallback"):
-        raise ValueError(f"{name}_kind must be declared_revision or content_hash_fallback")
+        raise ValueError(
+            f"{name}_kind must be declared_revision or content_hash_fallback"
+        )
     if kind == "content_hash_fallback":
         prefix, separator, digest = value.partition(":")
         if (

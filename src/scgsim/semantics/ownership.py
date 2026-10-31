@@ -77,4 +77,6 @@ def physical_group_owner_ids(
     owner_ids: Sequence[object],
     resolved_group_ids: dict[str, str],
 ) -> tuple[str, ...]:
-    return unique_ids(resolved_group_ids.get(str(owner), str(owner)) for owner in owner_ids)
+    return unique_ids(
+        resolved_group_ids.get(str(owner), str(owner)) for owner in owner_ids
+    )

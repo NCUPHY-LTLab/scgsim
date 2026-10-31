@@ -7,7 +7,10 @@ from collections.abc import Mapping, Sequence
 from math import isfinite
 from typing import Any
 
-from scgsim.geometry.models.physical import PHYSICAL_LAYER_FIELD, PhysicalLayerDeclaration
+from scgsim.geometry.models.physical import (
+    PHYSICAL_LAYER_FIELD,
+    PhysicalLayerDeclaration,
+)
 
 
 def _solution_regions(
@@ -55,7 +58,9 @@ def _solution_regions(
             "metadata": {
                 "pdk_level_id": semantic_id,
                 "pdk_semantic_authority": "layer_stack",
-                PHYSICAL_LAYER_FIELD: _physical_declaration(info, level_name, material_id),
+                PHYSICAL_LAYER_FIELD: _physical_declaration(
+                    info, level_name, material_id
+                ),
             },
         }
     return result
@@ -174,7 +179,9 @@ def _semantic_layer_records(
                 "pdk_semantic_authority": "layer_stack",
                 "component_semantic_authority": "component.info",
                 **component_metadata,
-                PHYSICAL_LAYER_FIELD: _physical_declaration(level_info, level_name, material_id),
+                PHYSICAL_LAYER_FIELD: _physical_declaration(
+                    level_info, level_name, material_id
+                ),
                 **(
                     {"host_reference_origin": "generated_background"}
                     if auto_host
@@ -282,16 +289,25 @@ def _gds_layer(value: Any, semantic_id: str) -> tuple[int, int]:
     return layer, datatype
 
 
-def _physical_declaration(info: Mapping[str, Any], level_name: str, material_id: str) -> dict[str, Any]:
+def _physical_declaration(
+    info: Mapping[str, Any], level_name: str, material_id: str
+) -> dict[str, Any]:
     """One neutral source carrier; old backend metadata is historical only."""
     if "aedt_modeling" in info:
         raise ValueError("fresh source must replace aedt_modeling with physical_layer")
     raw = info.get(PHYSICAL_LAYER_FIELD)
     if not isinstance(raw, Mapping):
-        raise ValueError(f"source level {level_name!r} lacks its neutral physical declaration")
+        raise ValueError(
+            f"source level {level_name!r} lacks its neutral physical declaration"
+        )
     declaration = PhysicalLayerDeclaration.from_payload(raw)
-    if declaration.source_level_id != level_name or declaration.material_id != material_id:
-        raise ValueError(f"physical declaration identity differs from source level {level_name!r}")
+    if (
+        declaration.source_level_id != level_name
+        or declaration.material_id != material_id
+    ):
+        raise ValueError(
+            f"physical declaration identity differs from source level {level_name!r}"
+        )
     return declaration.to_payload()
 
 

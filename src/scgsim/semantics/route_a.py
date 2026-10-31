@@ -4,6 +4,7 @@ Neutral physical declarations and selected-profile arithmetic belong to
 geometry.models.physical and geometry.planning.physical. This module does not
 classify source bodies from route roles or author approximation semantics.
 """
+
 from __future__ import annotations
 
 import math
@@ -29,6 +30,7 @@ def record_geometry(record: Mapping[str, Any], context: str) -> dict[str, Any]:
             geometry.setdefault(second, record[second])
     return geometry
 
+
 def geometry_z_range(geometry: Any, context: str) -> tuple[float, float]:
     if not isinstance(geometry, Mapping):
         raise TypeError(f"{context} geometry must be a mapping.")
@@ -43,8 +45,10 @@ def geometry_z_range(geometry: Any, context: str) -> tuple[float, float]:
         raise ValueError(f"{context} has a negative Z extent.")
     return z_min, z_max
 
+
 def same_z(left: float, right: float) -> bool:
     return math.isclose(left, right, rel_tol=0.0, abs_tol=_Z_TOLERANCE_UM)
+
 
 def _finite_z(value: Any, field: str) -> float:
     if (

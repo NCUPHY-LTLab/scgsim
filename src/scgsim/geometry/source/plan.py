@@ -531,10 +531,14 @@ class GeometryPlan:
 
                 bounds_ref = record["geometry"].get("plane_bounds_ref")
                 if bounds_ref not in regions or bounds_ref not in levels:
-                    raise ValueError("occurrence Ground requires its declared plane_bounds_ref")
+                    raise ValueError(
+                        "occurrence Ground requires its declared plane_bounds_ref"
+                    )
                 source_layer = levels[bounds_ref].layer
                 if not isinstance(source_layer, LogicalLayer):
-                    raise ValueError("occurrence Ground bounds require a source logical layer")
+                    raise ValueError(
+                        "occurrence Ground bounds require a source logical layer"
+                    )
                 regions[bounds_ref]["metadata"]["source_layer_datatype"] = list(
                     get_layer_tuple(source_layer.layer)
                 )
@@ -641,9 +645,14 @@ class GeometryPlan:
                 for path in self._instances
             }
             for record in stack["layers"]:
-                geometry_source = record["geometry"].get("geometry_source", "gds_polygon")
+                geometry_source = record["geometry"].get(
+                    "geometry_source", "gds_polygon"
+                )
                 path = record["metadata"]["source_occurrence_path"]
-                local_ground = geometry_source == "die_face_minus_ground_mask" and path != self.root_id
+                local_ground = (
+                    geometry_source == "die_face_minus_ground_mask"
+                    and path != self.root_id
+                )
                 if geometry_source != "gds_polygon" and not local_ground:
                     continue
                 cell, _, transform = self._instances[path]
@@ -651,17 +660,25 @@ class GeometryPlan:
                     raise ValueError(
                         f"source occurrence {path!r} is absent from written GDS"
                     )
-                selector = (_occurrence_ground_polygons_for_entity if local_ground
-                            else _occurrence_polygons_for_entity)
-                record["geometry"]["source_occurrence_polygons_um"] = (
-                    selector(
-                        _entity_from_layer_record(record, materials=stack["materials"]),
-                        cell=source_cells[cell.name],
-                        transform=transform,
-                        excluded_reference_indexes=child_reference_indexes[path],
-                        **({"plane_layer": stack["solution_regions"][record["geometry"]["plane_bounds_ref"]]
-                            ["metadata"]["source_layer_datatype"]} if local_ground else {}),
-                    )
+                selector = (
+                    _occurrence_ground_polygons_for_entity
+                    if local_ground
+                    else _occurrence_polygons_for_entity
+                )
+                record["geometry"]["source_occurrence_polygons_um"] = selector(
+                    _entity_from_layer_record(record, materials=stack["materials"]),
+                    cell=source_cells[cell.name],
+                    transform=transform,
+                    excluded_reference_indexes=child_reference_indexes[path],
+                    **(
+                        {
+                            "plane_layer": stack["solution_regions"][
+                                record["geometry"]["plane_bounds_ref"]
+                            ]["metadata"]["source_layer_datatype"]
+                        }
+                        if local_ground
+                        else {}
+                    ),
                 )
             for record in stack["layers"]:
                 for contribution in record["geometry"].get(
@@ -703,32 +720,62 @@ class GeometryPlan:
             for support in self._lumped_supports:
                 path = support.source_occurrence_path
                 if path not in self._instances:
-                    raise ValueError(f"lumped support occurrence {path!r} is not registered")
+                    raise ValueError(
+                        f"lumped support occurrence {path!r} is not registered"
+                    )
                 cell, _, transform = self._instances[path]
                 if support.source_level not in self._layer_stack.layers:
-                    raise ValueError(f"lumped support level {support.source_level!r} is not declared")
+                    raise ValueError(
+                        f"lumped support level {support.source_level!r} is not declared"
+                    )
                 level = self._layer_stack.layers[support.source_level]
                 from gdsfactory.pdk import get_layer_tuple
+
                 if get_layer_tuple(level.layer.layer) != support.source_layer:
-                    raise ValueError("lumped support source level/layer binding differs")
+                    raise ValueError(
+                        "lumped support source level/layer binding differs"
+                    )
                 source_z_um = float(level.zmin)
-                if support.source_z_um is not None and support.source_z_um != source_z_um:
-                    raise ValueError("lumped support source plane differs from locator Level")
+                if (
+                    support.source_z_um is not None
+                    and support.source_z_um != source_z_um
+                ):
+                    raise ValueError(
+                        "lumped support source plane differs from locator Level"
+                    )
                 if any(point[2] != source_z_um for point in support.contact_points_um):
-                    raise ValueError("lumped support contacts differ from locator plane")
-                for entity_id in (*support.terminal_a_entity_ids, *support.terminal_b_entity_ids):
-                    if entity_id not in entities or entities[entity_id].material_kind != "conductor":
-                        raise ValueError(f"lumped support terminal Entity {entity_id!r} is not a conductor")
+                    raise ValueError(
+                        "lumped support contacts differ from locator plane"
+                    )
+                for entity_id in (
+                    *support.terminal_a_entity_ids,
+                    *support.terminal_b_entity_ids,
+                ):
+                    if (
+                        entity_id not in entities
+                        or entities[entity_id].material_kind != "conductor"
+                    ):
+                        raise ValueError(
+                            f"lumped support terminal Entity {entity_id!r} is not a conductor"
+                        )
                     if entities[entity_id].net_id is None:
-                        raise ValueError(f"lumped support terminal Entity {entity_id!r} lacks final Net ownership")
+                        raise ValueError(
+                            f"lumped support terminal Entity {entity_id!r} lacks final Net ownership"
+                        )
                 polygon = _occurrence_lumped_polygon(
-                    support, cell=source_cells[cell.name],
+                    support,
+                    cell=source_cells[cell.name],
                     excluded_reference_indexes=child_reference_indexes[path],
                 )
-                lumped_supports.append(replace(
-                    support, exterior=polygon.exterior, holes=polygon.holes,
-                    source_transform=transform, source_z_um=source_z_um,
-                ))
+                lumped_supports.append(
+                    replace(
+                        support,
+                        exterior=polygon.exterior,
+                        holes=polygon.holes,
+                        source_transform=transform,
+                        source_z_um=source_z_um,
+                    )
+                )
         # The source is self-contained after temporary input files disappear.
         metadata = dict(build_input.metadata)
         metadata.pop("gds_file", None)

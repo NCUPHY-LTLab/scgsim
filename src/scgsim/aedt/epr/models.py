@@ -10,21 +10,25 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 
-
 from typing import Any, Literal
 
 from scgsim.semantics.epr import film_assumptions
 
 from scgsim.aedt._data import (
-    _text as _text, _number as _number, _freeze as _freeze,
-    detached as detached, canonical_sha256 as canonical_sha256,
+    _text as _text,
+    _number as _number,
+    _freeze as _freeze,
+    detached as detached,
+    canonical_sha256 as canonical_sha256,
 )
 from scgsim.aedt.specs.common import LumpedRlc as LumpedRlc
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry as PreparedPlanarGeometry
 from scgsim.aedt.specs.epr import (
-    InterfaceKind as InterfaceKind, FieldSide as FieldSide,
+    InterfaceKind as InterfaceKind,
+    FieldSide as FieldSide,
     surface_evaluations as surface_evaluations,
-    PlanarJunction as PlanarJunction, SurfaceEprSpec as SurfaceEprSpec,
+    PlanarJunction as PlanarJunction,
+    SurfaceEprSpec as SurfaceEprSpec,
     EprAnalysisRequest as EprAnalysisRequest,
     NativeExpressionDefinition as NativeExpressionDefinition,
     NormalizedSurfaceEprTotal as NormalizedSurfaceEprTotal,

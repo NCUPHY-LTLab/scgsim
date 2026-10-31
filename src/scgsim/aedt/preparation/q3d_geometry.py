@@ -70,7 +70,9 @@ def lower_q3d_geometry(
     stack = snapshot.stack
     _, _, physical_plan = _interpret_geometry(source, stack, modeling)
     physical_layers = physical_plan.declarations
-    layer_bindings = {key: value["physical_layer_id"] for key, value in physical_plan.entities.items()}
+    layer_bindings = {
+        key: value["physical_layer_id"] for key, value in physical_plan.entities.items()
+    }
     conductors = [
         entity for entity in source.entities if entity.material_kind == "conductor"
     ]

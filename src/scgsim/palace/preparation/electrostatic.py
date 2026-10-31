@@ -225,9 +225,14 @@ class ElectrostaticSim:
             raise ValueError("Surface EPR representation must be 'A' or 'B'.")
         if self._materials is None:
             raise ValueError("set_stack() must run before set_surface_epr().")
-        normalized_thin_film = (normalize_route_a_thin_film(route, route_a_thin_film)
-                                if route_a_thin_film is not None else None)
-        if approximation_profile is not None and not isinstance(approximation_profile, ApproximationProfile):
+        normalized_thin_film = (
+            normalize_route_a_thin_film(route, route_a_thin_film)
+            if route_a_thin_film is not None
+            else None
+        )
+        if approximation_profile is not None and not isinstance(
+            approximation_profile, ApproximationProfile
+        ):
             raise TypeError("approximation_profile must be ApproximationProfile")
         normalized_specs = normalize_surface_epr_specs(specs, materials=self._materials)
         self.route = route  # type: ignore[assignment]
@@ -421,8 +426,8 @@ class ElectrostaticSim:
             stack=self.stack,
             route=self.route,
             route_a_thin_film=self.route_a_thin_film,
-                approximation_profile=self.approximation_profile,
-                airbox=self.airbox,
+            approximation_profile=self.approximation_profile,
+            airbox=self.airbox,
             vacuum_region=self.vacuum_region,
             indium_ground_bumps=self.indium_ground_bumps,
         )

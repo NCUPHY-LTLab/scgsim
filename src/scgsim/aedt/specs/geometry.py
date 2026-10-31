@@ -1,4 +1,5 @@
 """Unique detached prepared geometry carrier; source/model identity is preserved."""
+
 from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -8,6 +9,7 @@ from scgsim.aedt.specs.common import LumpedRlc
 from scgsim.aedt.specs.epr import PlanarJunction, SurfaceEprSpec
 
 Route = Literal["A", "B"]
+
 
 @dataclass(frozen=True)
 class PreparedPlanarGeometry:
@@ -58,28 +60,42 @@ class PreparedPlanarGeometry:
         )
         object.__setattr__(self, "contributions", contributions)
         source = _freeze(self.source)
-        from scgsim.geometry.models.physical import PLAN_SCHEMA, PhysicalRepresentationPlan
+        from scgsim.geometry.models.physical import (
+            PLAN_SCHEMA,
+            PhysicalRepresentationPlan,
+        )
         from scgsim.aedt.specs.modeling import _native_physical_record
 
         trace = source.get("modeling")
         if isinstance(trace, Mapping) and trace.get("schema_version") == PLAN_SCHEMA:
             plan = PhysicalRepresentationPlan.from_payload(trace)
             if plan.profile.name != self.modeling:
-                raise ValueError("prepared geometry modeling differs from its neutral profile")
+                raise ValueError(
+                    "prepared geometry modeling differs from its neutral profile"
+                )
             for entity in source["conductors"]:
                 expected = _native_physical_record(plan.entities[entity["semantic_id"]])
                 if detached(entity["physical_layer"]) != expected:
-                    raise ValueError("prepared conductor physical evidence differs from the neutral plan")
+                    raise ValueError(
+                        "prepared conductor physical evidence differs from the neutral plan"
+                    )
                 if entity["representation"] != expected["representation"]:
-                    raise ValueError("prepared conductor representation differs from the neutral plan")
+                    raise ValueError(
+                        "prepared conductor representation differs from the neutral plan"
+                    )
         if "lumped_supports" in source:
             from scgsim.geometry.models.lumped import LumpedSupport
             from scgsim.aedt.specs._support import _prepared_lumped_supports
 
-            supports = tuple(LumpedSupport.from_payload(item["source"]) for item in source["lumped_supports"])
+            supports = tuple(
+                LumpedSupport.from_payload(item["source"])
+                for item in source["lumped_supports"]
+            )
             derived = _prepared_lumped_supports(supports, source)
             if detached(source["lumped_supports"]) != derived:
-                raise ValueError("serialized effective support geometry differs from its source map")
+                raise ValueError(
+                    "serialized effective support geometry differs from its source map"
+                )
         support_ids = {item["support_id"] for item in source.get("lumped_supports", ())}
         if any(item.support_id not in support_ids for item in rlcs):
             raise ValueError("RLC treatment references an undeclared neutral support")
@@ -117,22 +133,41 @@ class PreparedPlanarGeometry:
 
     @property
     def _rlc_payload(self) -> dict[str, Any]:
-        return ({"lumped_rlcs": [item.to_payload() for item in self.lumped_rlcs]}
-                if self.lumped_rlcs else {})
+        return (
+            {"lumped_rlcs": [item.to_payload() for item in self.lumped_rlcs]}
+            if self.lumped_rlcs
+            else {}
+        )
 
-    def with_lumped_rlcs(self, treatments: Sequence[LumpedRlc]) -> PreparedPlanarGeometry:
+    def with_lumped_rlcs(
+        self, treatments: Sequence[LumpedRlc]
+    ) -> PreparedPlanarGeometry:
         """Bind treatment before execution; saved analysis retains this model identity."""
         records = tuple(treatments)
         if any(not isinstance(item, LumpedRlc) for item in records):
             raise TypeError("treatments must contain LumpedRlc records")
-        model = {**self._modeling_identity, "source": self.source,
-                 "junctions": [item.to_payload() for item in self.junctions],
-                 **({"lumped_rlcs": [item.to_payload() for item in records]} if records else {})}
-        identity = {**model, "contribution_catalog": self.contribution_catalog,
-                    "contributions": [item.to_payload() for item in self.contributions],
-                    "surface_bindings": self.surface_bindings}
-        return replace(self, lumped_rlcs=records, model_sha256=canonical_sha256(model),
-                       source_sha256=canonical_sha256(identity))
+        model = {
+            **self._modeling_identity,
+            "source": self.source,
+            "junctions": [item.to_payload() for item in self.junctions],
+            **(
+                {"lumped_rlcs": [item.to_payload() for item in records]}
+                if records
+                else {}
+            ),
+        }
+        identity = {
+            **model,
+            "contribution_catalog": self.contribution_catalog,
+            "contributions": [item.to_payload() for item in self.contributions],
+            "surface_bindings": self.surface_bindings,
+        }
+        return replace(
+            self,
+            lumped_rlcs=records,
+            model_sha256=canonical_sha256(model),
+            source_sha256=canonical_sha256(identity),
+        )
 
     @property
     def _modeling_identity(self) -> dict[str, Any]:
@@ -189,7 +224,9 @@ class PreparedPlanarGeometry:
         }:
             raise ValueError("prepared planar payload is not canonical")
         return cls(
-            lumped_rlcs=tuple(LumpedRlc.from_payload(item) for item in value.get("lumped_rlcs", ())),
+            lumped_rlcs=tuple(
+                LumpedRlc.from_payload(item) for item in value.get("lumped_rlcs", ())
+            ),
             modeling=value.get("modeling"),
             route=value.get("route"),
             _historical_modeling="modeling" not in value,

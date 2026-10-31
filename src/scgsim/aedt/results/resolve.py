@@ -867,12 +867,20 @@ def _validate_hfss_pec_bindings(
     if not spec._historical_physical and not spec._historical_modeling:
         envelope = spec.effective_region
         region = receipt.get("region")
-        keys = ("x_plus_um", "x_minus_um", "y_plus_um", "y_minus_um", "z_plus_um", "z_minus_um")
+        keys = (
+            "x_plus_um",
+            "x_minus_um",
+            "y_plus_um",
+            "y_minus_um",
+            "z_plus_um",
+            "z_minus_um",
+        )
         if (
             not isinstance(region, dict)
             or region.get("requested_padding_um") != list(spec.region_padding_um)
             or region.get("source_effective_envelope") != envelope
-            or region.get("padding_um") != [envelope["effective_padding_um"][key] for key in keys]
+            or region.get("padding_um")
+            != [envelope["effective_padding_um"][key] for key in keys]
             or not isinstance(region.get("native_bounding_box_um"), list)
             or len(region["native_bounding_box_um"]) != 6
         ):
@@ -1704,8 +1712,13 @@ def _validate_q3d_region_ground(
         or region.get("requested_padding_um") != requested_padding
     ):
         raise RuntimeError("Q3D receipt Region padding does not match the spec")
-    if spec.effective_region is not None and region.get("source_effective_envelope") != spec.effective_region:
-        raise RuntimeError("Q3D Region envelope differs from the bound neutral physical plan")
+    if (
+        spec.effective_region is not None
+        and region.get("source_effective_envelope") != spec.effective_region
+    ):
+        raise RuntimeError(
+            "Q3D Region envelope differs from the bound neutral physical plan"
+        )
     evidence = region.get("grounded_region")
     if spec.grounded_region_net is None:
         if evidence is not None:

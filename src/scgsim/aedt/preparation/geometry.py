@@ -61,8 +61,12 @@ from scgsim.aedt.specs.common import (
 
 from scgsim.aedt.specs.modeling import Modeling
 
-from scgsim.aedt.specs.hfss import (EigenmodeRunControl, HfssEprSpec,
-                                     HfssDrivenGeometrySpec, HfssRunControl)
+from scgsim.aedt.specs.hfss import (
+    EigenmodeRunControl,
+    HfssEprSpec,
+    HfssDrivenGeometrySpec,
+    HfssRunControl,
+)
 from scgsim.aedt.specs.common import LumpedTerminalPort, TerminalPort
 
 
@@ -133,30 +137,49 @@ def prepare_hfss_eigenmode_from_geometry(
         expression_convergence=expression_convergence,
     )
     return _prepare_body_hfss_handoff(
-        spec=spec, geometry=geometry, output_dir=output_dir,
+        spec=spec,
+        geometry=geometry,
+        output_dir=output_dir,
         workflow="epr" if epr_request is not None else "body_first_eigenmode",
-        geometry_workers=geometry_workers, resources=resources,
+        geometry_workers=geometry_workers,
+        resources=resources,
     )
 
 
 def prepare_hfss_driven_from_geometry(
-    *, modeling: Modeling, geometry: PreparedPlanarGeometry,
-    project_name: str, design_name: str, run_control: HfssRunControl | None = None,
-    ports: Sequence[TerminalPort | LumpedTerminalPort], output_dir: str | Path,
-    geometry_workers: int | None = None, resources: AedtResources | None = None,
+    *,
+    modeling: Modeling,
+    geometry: PreparedPlanarGeometry,
+    project_name: str,
+    design_name: str,
+    run_control: HfssRunControl | None = None,
+    ports: Sequence[TerminalPort | LumpedTerminalPort],
+    output_dir: str | Path,
+    geometry_workers: int | None = None,
+    resources: AedtResources | None = None,
 ) -> HandoffPlan:
     """Prepare a Terminal model and ports, with optional complete solve setup."""
     spec = HfssDrivenGeometrySpec(
-        modeling=modeling, geometry=geometry, project_name=project_name,
-        design_name=design_name, run_control=run_control, ports=tuple(ports),
+        modeling=modeling,
+        geometry=geometry,
+        project_name=project_name,
+        design_name=design_name,
+        run_control=run_control,
+        ports=tuple(ports),
     )
     return _prepare_body_hfss_handoff(
-        spec=spec, geometry=geometry, output_dir=output_dir,
-        workflow="body_first_driven_terminal", geometry_workers=geometry_workers, resources=resources,
+        spec=spec,
+        geometry=geometry,
+        output_dir=output_dir,
+        workflow="body_first_driven_terminal",
+        geometry_workers=geometry_workers,
+        resources=resources,
     )
 
 
-def _prepare_body_hfss_handoff(*, spec, geometry, output_dir, workflow, geometry_workers, resources):
+def _prepare_body_hfss_handoff(
+    *, spec, geometry, output_dir, workflow, geometry_workers, resources
+):
     """One canonical portable cohort writer for body-first HFSS requests."""
     validate_geometry_workers(geometry_workers)
     if resources is not None and not isinstance(resources, AedtResources):

@@ -12,7 +12,16 @@ from pathlib import Path
 from typing import Any, Literal
 
 from scgsim.aedt.specs.modeling import (
-    Modeling, PhysicalLayerSpec, PhysicalLayerDeclaration, PhysicalRepresentationPlan, _physical_layers_from_payload, _request_modeling, _modeling_payload, _effective_record, _source_record_payload, _verify_effective_records,
+    Modeling,
+    PhysicalLayerSpec,
+    PhysicalLayerDeclaration,
+    PhysicalRepresentationPlan,
+    _physical_layers_from_payload,
+    _request_modeling,
+    _modeling_payload,
+    _effective_record,
+    _source_record_payload,
+    _verify_effective_records,
 )
 
 from scgsim.aedt.specs.common import (
@@ -312,7 +321,9 @@ class Q3dSpec:
         if self.schema_version != Q3D_SCHEMA_VERSION:
             raise ValueError("unsupported Q3D schema")
         materials = _normalize_common_spec(self)
-        if self.run_control is not None and not isinstance(self.run_control, MatrixRunControl):
+        if self.run_control is not None and not isinstance(
+            self.run_control, MatrixRunControl
+        ):
             raise TypeError("run_control must be MatrixRunControl or None")
         if self.run_control is None and self._historical_modeling:
             raise ValueError("historical Q3D requests require run_control")
@@ -391,6 +402,7 @@ class Q3dSpec:
         if self._historical_physical or self._historical_modeling:
             return None
         mapping = _request_modeling(self)
+
         def bounds(records):
             points = [point for body in records for point in body["exterior_um"]]
             return {
@@ -401,13 +413,27 @@ class Q3dSpec:
                 "z_min_um": min(body["z_min_um"] for body in records),
                 "z_max_um": max(body["z_max_um"] for body in records),
             }
+
         original = [item.to_payload() for item in self.bodies]
-        effective = [{**record, "z_min_um": record["effective_z_min_um"],
-                      "z_max_um": record["effective_z_max_um"]}
-                     for record in self.effective_bodies]
-        keys = ("x_plus_um", "x_minus_um", "y_plus_um", "y_minus_um", "z_plus_um", "z_minus_um")
+        effective = [
+            {
+                **record,
+                "z_min_um": record["effective_z_min_um"],
+                "z_max_um": record["effective_z_max_um"],
+            }
+            for record in self.effective_bodies
+        ]
+        keys = (
+            "x_plus_um",
+            "x_minus_um",
+            "y_plus_um",
+            "y_minus_um",
+            "z_plus_um",
+            "z_minus_um",
+        )
         return mapping.project_enclosure(
-            source_body_bounds_um=bounds(original), effective_body_bounds_um=bounds(effective),
+            source_body_bounds_um=bounds(original),
+            effective_body_bounds_um=bounds(effective),
             source_padding_um=dict(zip(keys, self.region_padding_um, strict=True)),
         )
 
@@ -416,8 +442,17 @@ class Q3dSpec:
         trace = self.effective_region
         if trace is None:
             return self.region_padding_um
-        return tuple(trace["effective_padding_um"][key] for key in
-                     ("x_plus_um", "x_minus_um", "y_plus_um", "y_minus_um", "z_plus_um", "z_minus_um"))
+        return tuple(
+            trace["effective_padding_um"][key]
+            for key in (
+                "x_plus_um",
+                "x_minus_um",
+                "y_plus_um",
+                "y_minus_um",
+                "z_plus_um",
+                "z_minus_um",
+            )
+        )
 
     def to_payload(self) -> dict[str, Any]:
         payload = {
@@ -434,10 +469,15 @@ class Q3dSpec:
                 key: item.to_payload() for key, item in self.materials.items()
             },
             "vacuum_material_id": self.vacuum_material_id,
-            "bodies": (list(self.effective_bodies) if self.modeling is not None
-                       else [body.to_payload() for body in self.bodies]),
+            "bodies": (
+                list(self.effective_bodies)
+                if self.modeling is not None
+                else [body.to_payload() for body in self.bodies]
+            ),
             "nets": [net.to_payload() for net in self.nets],
-            "run_control": None if self.run_control is None else self.run_control.to_payload(),
+            "run_control": None
+            if self.run_control is None
+            else self.run_control.to_payload(),
             "region_padding_um": list(self.region_padding_um),
             "solve_ac_rl": self.solve_ac_rl,
             "grounded_region_net": self.grounded_region_net,
@@ -448,7 +488,11 @@ class Q3dSpec:
 
     @classmethod
     def from_payload(
-        cls, payload: dict[str, Any], *, base_dir: Path | None = None, allow_historical_modeling: bool = False
+        cls,
+        payload: dict[str, Any],
+        *,
+        base_dir: Path | None = None,
+        allow_historical_modeling: bool = False,
     ) -> Q3dSpec:
         if payload.get("schema_version") != Q3D_SCHEMA_VERSION:
             raise ValueError("unsupported Q3D schema")
@@ -456,10 +500,20 @@ class Q3dSpec:
             raise ValueError("Q3D v3 does not accept GDS-piece inputs")
         result = cls(
             modeling=payload.get("modeling"),
-            physical_layers=_physical_layers_from_payload(payload, allow_historical=allow_historical_modeling),
-            physical_representation=(PhysicalRepresentationPlan.from_payload(payload["physical_representation"]) if "physical_representation" in payload else None),
-            _historical_physical=allow_historical_modeling and "physical_representation" not in payload,
-            _historical_modeling=allow_historical_modeling and "modeling" not in payload,
+            physical_layers=_physical_layers_from_payload(
+                payload, allow_historical=allow_historical_modeling
+            ),
+            physical_representation=(
+                PhysicalRepresentationPlan.from_payload(
+                    payload["physical_representation"]
+                )
+                if "physical_representation" in payload
+                else None
+            ),
+            _historical_physical=allow_historical_modeling
+            and "physical_representation" not in payload,
+            _historical_modeling=allow_historical_modeling
+            and "modeling" not in payload,
             project_name=_project_name_from_payload(
                 payload.get("project", {}).get("name")
             ),
@@ -470,10 +524,16 @@ class Q3dSpec:
                 key: PdkMaterial(**item) for key, item in payload["materials"].items()
             },
             vacuum_material_id=payload["vacuum_material_id"],
-            bodies=tuple(Q3dBodySpec(**_source_record_payload(body)) for body in payload["bodies"]),
+            bodies=tuple(
+                Q3dBodySpec(**_source_record_payload(body))
+                for body in payload["bodies"]
+            ),
             nets=tuple(Q3dNetSpec(**net) for net in payload["nets"]),
-            run_control=(None if payload["run_control"] is None
-                         else MatrixRunControl(**payload["run_control"])),
+            run_control=(
+                None
+                if payload["run_control"] is None
+                else MatrixRunControl(**payload["run_control"])
+            ),
             region_padding_um=tuple(payload["region_padding_um"]),
             solve_ac_rl=payload.get("solve_ac_rl", True),
             grounded_region_net=payload.get("grounded_region_net"),

@@ -1,4 +1,5 @@
 """Private stdlib detachment and canonical identity; no native or preparation imports."""
+
 from __future__ import annotations
 import hashlib
 import json
@@ -7,10 +8,12 @@ from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 from typing import Any
 
+
 def _text(value: Any, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be non-empty text")
     return value.strip()
+
 
 def _number(value: Any, name: str, *, minimum: float = 0.0) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -19,6 +22,7 @@ def _number(value: Any, name: str, *, minimum: float = 0.0) -> float:
     if not math.isfinite(result) or result < minimum:
         raise ValueError(f"{name} must be finite and >= {minimum:g}")
     return result
+
 
 def _freeze(value: Any, *, verified: Any = None) -> Any:
     if verified is not None and value is verified:
@@ -44,6 +48,7 @@ def _freeze(value: Any, *, verified: Any = None) -> Any:
         return value
     raise TypeError(f"EPR data contains unsupported {type(value).__name__}")
 
+
 def detached(value: Any) -> Any:
     """Return recursively detached plain containers."""
     if isinstance(value, Mapping):
@@ -53,6 +58,7 @@ def detached(value: Any) -> Any:
     if isinstance(value, list):
         return [detached(item) for item in value]
     return value
+
 
 def canonical_sha256(value: Any) -> str:
     encoded = json.dumps(

@@ -61,7 +61,9 @@ class SemanticGeometryBuilder:
     ) -> tuple[FinalPhysicalGroupRecord, ...]:
         """Validate input, plan geometry, build OCC, then export groups."""
         if representation_context is None:
-            raise ValueError("interpret_physical_geometry() and pass plan.context before native compilation")
+            raise ValueError(
+                "interpret_physical_geometry() and pass plan.context before native compilation"
+            )
         run_path = Path(run_folder)
         metadata_dir = run_path / RUN_METADATA_DIR / SEMANTIC_GEOMETRY_METADATA_DIR
         geometry_dir = run_path / "geometry"
@@ -91,7 +93,9 @@ class SemanticGeometryBuilder:
                 timings,
                 "build_route_construction_plan",
                 lambda: build_route_construction_plan(
-                    validated_input, route=route, representation_context=representation_context
+                    validated_input,
+                    route=route,
+                    representation_context=representation_context,
                 ),
             )
             _timed(

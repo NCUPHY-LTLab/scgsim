@@ -565,9 +565,7 @@ def import_and_bind(hfss: Any, spec: HfssSpec) -> list[dict[str, Any]]:
                 f"expected {binding.layer!r}, got {layer.layer!r}"
             )
         representation = effective["representation"]
-        expected_native_type = {"solid": "Solid", "sheet": "Sheet"}.get(
-            representation
-        )
+        expected_native_type = {"solid": "Solid", "sheet": "Sheet"}.get(representation)
         if expected_native_type is None:
             raise ValueError(
                 f"unsupported HFSS conductor representation: {representation!r}"
@@ -716,9 +714,19 @@ def create_region(hfss: Any, spec: HfssSpec | Q3dSpec) -> dict[str, Any]:
     if hfss.modeler.get_object_from_name("Region") is not None:
         raise RuntimeError("new V1 design unexpectedly already has Region")
     envelope = spec.effective_region
-    keys = ("x_plus_um", "x_minus_um", "y_plus_um", "y_minus_um", "z_plus_um", "z_minus_um")
-    effective_padding = (tuple(envelope["effective_padding_um"][key] for key in keys)
-                         if envelope is not None else spec.region_padding_um)
+    keys = (
+        "x_plus_um",
+        "x_minus_um",
+        "y_plus_um",
+        "y_minus_um",
+        "z_plus_um",
+        "z_minus_um",
+    )
+    effective_padding = (
+        tuple(envelope["effective_padding_um"][key] for key in keys)
+        if envelope is not None
+        else spec.region_padding_um
+    )
     region = hfss.modeler.create_region(
         pad_value=list(effective_padding),
         pad_type="Absolute Offset",

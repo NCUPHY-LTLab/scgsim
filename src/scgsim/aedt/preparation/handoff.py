@@ -123,8 +123,16 @@ def prepare_handoff(
         payload["gds"]["source_path"] = "geometry/source.gds"
         payload["gds"]["source_sha256"] = file_sha256(original_gds)
         payload["gds"]["import_layer_map"] = [
-            {key: item[key] for key in ("layer", "datatype", "layer_name",
-                                       "physical_layer_id", "native_import_layer")}
+            {
+                key: item[key]
+                for key in (
+                    "layer",
+                    "datatype",
+                    "layer_name",
+                    "physical_layer_id",
+                    "native_import_layer",
+                )
+            }
             for item in spec.effective_layer_imports
         ]
     if isinstance(spec, Q3dSpec) and spec.geometry_source is not None:
@@ -509,8 +517,10 @@ def _write_import_gds(source: Path, destination: Path, effective_imports) -> Non
     import gdstk
 
     library = gdstk.read_gds(source)
-    selectors = {(item["layer"], item["datatype"]): item["native_import_layer"]
-                 for item in effective_imports}
+    selectors = {
+        (item["layer"], item["datatype"]): item["native_import_layer"]
+        for item in effective_imports
+    }
     for cell in library.cells:
         for polygon in cell.polygons:
             polygon.layer = selectors[(polygon.layer, polygon.datatype)]

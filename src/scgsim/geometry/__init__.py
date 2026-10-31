@@ -20,10 +20,15 @@ from scgsim.geometry.models.input import (
 )
 from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.models.physical import (
-    ApproximationProfile, PhysicalLayerDeclaration, PhysicalRepresentationPlan,
+    ApproximationProfile,
+    PhysicalLayerDeclaration,
+    PhysicalRepresentationPlan,
 )
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
-from scgsim.geometry.planning.physical import interpret_physical_geometry, interpret_physical_layers
+from scgsim.geometry.planning.physical import (
+    interpret_physical_geometry,
+    interpret_physical_layers,
+)
 from scgsim.geometry.source.adapter import (
     build_gds_stack_geometry_input,
     build_gdsfactory_geometry_input,

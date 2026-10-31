@@ -13,7 +13,10 @@ from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 from scgsim.geometry.models.physical import (
-    PLAN_SCHEMA, ApproximationProfile, PhysicalLayerDeclaration, PhysicalRepresentationPlan,
+    PLAN_SCHEMA,
+    ApproximationProfile,
+    PhysicalLayerDeclaration,
+    PhysicalRepresentationPlan,
 )
 from scgsim.geometry.planning.physical import interpret_physical_layers
 
@@ -57,7 +60,9 @@ class PhysicalLayerSpec:
         object.__setattr__(self, "z_min_um", low)
         object.__setattr__(self, "z_max_um", high)
         if self.source_thickness_um is not None:
-            object.__setattr__(self, "source_thickness_um", float(self.source_thickness_um))
+            object.__setattr__(
+                self, "source_thickness_um", float(self.source_thickness_um)
+            )
         if self.kind in {"stack_film", "local_film"}:
             if self.contact_side not in {"lower", "upper"}:
                 raise ValueError("a film requires an explicit sheet contact side")
@@ -67,8 +72,11 @@ class PhysicalLayerSpec:
     @property
     def physical_thickness_um(self) -> float:
         """Retain an authored thickness; endpoint-only inputs define their own span."""
-        return (self.source_thickness_um if self.source_thickness_um is not None
-                else self.z_max_um - self.z_min_um)
+        return (
+            self.source_thickness_um
+            if self.source_thickness_um is not None
+            else self.z_max_um - self.z_min_um
+        )
 
     def to_payload(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -107,37 +115,60 @@ class _ZMap:
         self.layers: dict[str, PhysicalLayerSpec] = {}
         for layer in layers:
             if not isinstance(layer, PhysicalLayerSpec):
-                raise TypeError("physical_layers must contain PhysicalLayerSpec records")
+                raise TypeError(
+                    "physical_layers must contain PhysicalLayerSpec records"
+                )
             previous = self.layers.setdefault(layer.physical_layer_id, layer)
             if previous != layer:
-                raise ValueError("one physical layer identity has conflicting declarations")
-        self.removed = tuple(sorted(
-            (layer for layer in self.layers.values() if layer.kind == "stack_film"),
-            key=lambda layer: layer.z_min_um,
-        )) if modeling == "thin_film" else ()
+                raise ValueError(
+                    "one physical layer identity has conflicting declarations"
+                )
+        self.removed = (
+            tuple(
+                sorted(
+                    (
+                        layer
+                        for layer in self.layers.values()
+                        if layer.kind == "stack_film"
+                    ),
+                    key=lambda layer: layer.z_min_um,
+                )
+            )
+            if modeling == "thin_film"
+            else ()
+        )
         for lower, upper in zip(self.removed, self.removed[1:]):
             if lower.z_max_um > upper.z_min_um:
-                raise ValueError("distinct stack-film declarations overlap in the source stack")
+                raise ValueError(
+                    "distinct stack-film declarations overlap in the source stack"
+                )
 
     def map_z(self, source_z_um: float) -> float:
         value = float(source_z_um)
-        return value - sum(min(max(value - layer.z_min_um, 0.0),
-                               layer.z_max_um - layer.z_min_um) for layer in self.removed)
+        return value - sum(
+            min(max(value - layer.z_min_um, 0.0), layer.z_max_um - layer.z_min_um)
+            for layer in self.removed
+        )
 
     def layer(self, physical_layer_id: str) -> EffectiveLayer:
         source = self.layers[physical_layer_id]
         if self.modeling == "thin_film" and source.kind != "retained_solid":
-            contact = source.z_min_um if source.contact_side == "lower" else source.z_max_um
+            contact = (
+                source.z_min_um if source.contact_side == "lower" else source.z_max_um
+            )
             z = self.map_z(contact)
             return EffectiveLayer(source, "sheet", z, z)
-        return EffectiveLayer(source, "solid", self.map_z(source.z_min_um),
-                              self.map_z(source.z_max_um))
+        return EffectiveLayer(
+            source, "solid", self.map_z(source.z_min_um), self.map_z(source.z_max_um)
+        )
 
     def to_payload(self) -> dict[str, Any]:
         return {
             "modeling": self.modeling,
             "source_layers": [layer.to_payload() for layer in self.layers.values()],
-            "removed_physical_layer_ids": [layer.physical_layer_id for layer in self.removed],
+            "removed_physical_layer_ids": [
+                layer.physical_layer_id for layer in self.removed
+            ],
             "effective_layers": [self.layer(key).to_payload() for key in self.layers],
         }
 
@@ -158,8 +189,14 @@ def _native_physical_record(value: Any) -> dict[str, Any]:
 def _physical_layers_from_payload(payload: Any, *, allow_historical: bool):
     """Decode the recorded declaration era without converting its meaning."""
     if "physical_representation" not in payload and not allow_historical:
-        raise ValueError("fresh AEDT physical requests require a tagged neutral physical_representation; reprepare the source with PhysicalLayerDeclaration")
-    declaration = PhysicalLayerDeclaration if "physical_representation" in payload else PhysicalLayerSpec
+        raise ValueError(
+            "fresh AEDT physical requests require a tagged neutral physical_representation; reprepare the source with PhysicalLayerDeclaration"
+        )
+    declaration = (
+        PhysicalLayerDeclaration
+        if "physical_representation" in payload
+        else PhysicalLayerSpec
+    )
     return tuple(declaration(**item) for item in payload.get("physical_layers", ()))
 
 
@@ -178,19 +215,27 @@ def _request_modeling(spec: Any):
         return _ZMap(spec.modeling, spec.physical_layers)
     layers = tuple(spec.physical_layers)
     if any(not isinstance(item, PhysicalLayerDeclaration) for item in layers):
-        raise TypeError("fresh physical_layers require neutral PhysicalLayerDeclaration; PhysicalLayerSpec is historical-reader-only")
+        raise TypeError(
+            "fresh physical_layers require neutral PhysicalLayerDeclaration; PhysicalLayerSpec is historical-reader-only"
+        )
     plan = spec.physical_representation
     source = getattr(getattr(spec, "geometry", None), "source", None)
     if plan is None and source is not None:
         plan = PhysicalRepresentationPlan.from_payload(source["modeling"])
     if plan is None:
-        plan = interpret_physical_layers(layers, ApproximationProfile(spec.modeling, "v1", {}))
+        plan = interpret_physical_layers(
+            layers, ApproximationProfile(spec.modeling, "v1", {})
+        )
     if not isinstance(plan, PhysicalRepresentationPlan):
         raise TypeError("physical_representation must be PhysicalRepresentationPlan")
     if plan.profile.name != spec.modeling:
         raise ValueError("request modeling differs from its neutral physical profile")
-    if layers and {item.physical_layer_id: item for item in layers} != dict(plan.declaration_index):
-        raise ValueError("request physical declarations differ from the bound neutral plan")
+    if layers and {item.physical_layer_id: item for item in layers} != dict(
+        plan.declaration_index
+    ):
+        raise ValueError(
+            "request physical declarations differ from the bound neutral plan"
+        )
     object.__setattr__(spec, "physical_layers", plan.declarations)
     object.__setattr__(spec, "physical_representation", plan)
     return plan
@@ -199,40 +244,67 @@ def _request_modeling(spec: Any):
 def _modeling_payload(spec: Any) -> dict[str, Any]:
     if spec.modeling is None:
         return {}
-    payload = {"modeling": spec.modeling,
-               "physical_layers": [layer.to_payload() for layer in spec.physical_layers]}
+    payload = {
+        "modeling": spec.modeling,
+        "physical_layers": [layer.to_payload() for layer in spec.physical_layers],
+    }
     if not getattr(spec, "_historical_physical", False):
         payload["physical_representation"] = _request_modeling(spec).to_payload()
     return payload
 
 
-def _require_source_film_interval(low: float, high: float, source: PhysicalLayerSpec) -> None:
+def _require_source_film_interval(
+    low: float, high: float, source: PhysicalLayerSpec
+) -> None:
     """A film reference binds the authored interval, not another sheet plane."""
     if low != source.z_min_um or high != source.z_max_um:
         raise ValueError(
             f"source film interval differs from physical layer {source.physical_layer_id!r}"
         )
 
-def _effective_record(record: Any, mapping: _ZMap, *, retained_domain: bool = False) -> dict[str, Any]:
+
+def _effective_record(
+    record: Any, mapping: _ZMap, *, retained_domain: bool = False
+) -> dict[str, Any]:
     """Source coordinates and physical thickness accompany native geometry."""
     if isinstance(mapping, PhysicalRepresentationPlan):
-        if (record.physical_layer_id is None and mapping.profile.name == "thin_film"
-                and not retained_domain and getattr(record, "physical_role", None) != "substrate"):
-            raise ValueError("Thin Film source objects require a neutral physical_layer_id")
-        body = mapping.map_body(record.physical_layer_id,
-                                (record.z_min_um, record.z_max_um), record.to_payload())
-        return {**record.to_payload(), "physical_layer_id": record.physical_layer_id,
-                "physical_thickness_um": body["physical_thickness_um"],
-                "representation": body["representation"],
-                "effective_z_min_um": body["effective_interval_um"][0],
-                "effective_z_max_um": body["effective_interval_um"][1]}
+        if (
+            record.physical_layer_id is None
+            and mapping.profile.name == "thin_film"
+            and not retained_domain
+            and getattr(record, "physical_role", None) != "substrate"
+        ):
+            raise ValueError(
+                "Thin Film source objects require a neutral physical_layer_id"
+            )
+        body = mapping.map_body(
+            record.physical_layer_id,
+            (record.z_min_um, record.z_max_um),
+            record.to_payload(),
+        )
+        return {
+            **record.to_payload(),
+            "physical_layer_id": record.physical_layer_id,
+            "physical_thickness_um": body["physical_thickness_um"],
+            "representation": body["representation"],
+            "effective_z_min_um": body["effective_interval_um"][0],
+            "effective_z_max_um": body["effective_interval_um"][1],
+        }
     low, high = record.z_min_um, record.z_max_um
     identity = record.physical_layer_id
     thickness = high - low
     if identity is None:
-        if mapping.modeling == "thin_film" and not retained_domain and getattr(record, "physical_role", None) != "substrate":
+        if (
+            mapping.modeling == "thin_film"
+            and not retained_domain
+            and getattr(record, "physical_role", None) != "substrate"
+        ):
             raise ValueError("Thin Film source objects require physical_layer_id")
-        representation, effective_low, effective_high = "solid", mapping.map_z(low), mapping.map_z(high)
+        representation, effective_low, effective_high = (
+            "solid",
+            mapping.map_z(low),
+            mapping.map_z(high),
+        )
     else:
         effective = mapping.layer(identity)
         representation = effective.representation
@@ -243,21 +315,35 @@ def _effective_record(record: Any, mapping: _ZMap, *, retained_domain: bool = Fa
             effective_low, effective_high = effective.z_min_um, effective.z_max_um
         else:
             effective_low, effective_high = mapping.map_z(low), mapping.map_z(high)
-    return {**record.to_payload(), "physical_layer_id": identity,
-            "physical_thickness_um": thickness,
-            "representation": representation,
-            "effective_z_min_um": effective_low,
-            "effective_z_max_um": effective_high}
+    return {
+        **record.to_payload(),
+        "physical_layer_id": identity,
+        "physical_thickness_um": thickness,
+        "representation": representation,
+        "effective_z_min_um": effective_low,
+        "effective_z_max_um": effective_high,
+    }
 
 
 def _source_record_payload(value: dict[str, Any]) -> dict[str, Any]:
     """Decode source fields; native lowering always comes from the authored map."""
-    return {key: item for key, item in value.items()
-            if not (key == "physical_layer_id" and item is None) and key not in {
-        "representation", "effective_z_min_um", "effective_z_max_um",
-        "physical_thickness_um", "native_import_layer"}}
+    return {
+        key: item
+        for key, item in value.items()
+        if not (key == "physical_layer_id" and item is None)
+        and key
+        not in {
+            "representation",
+            "effective_z_min_um",
+            "effective_z_max_um",
+            "physical_thickness_um",
+            "native_import_layer",
+        }
+    }
 
 
 def _verify_effective_records(actual, expected) -> None:
     if list(actual) != list(expected):
-        raise ValueError("canonical native lowering records differ from authored modeling map")
+        raise ValueError(
+            "canonical native lowering records differ from authored modeling map"
+        )

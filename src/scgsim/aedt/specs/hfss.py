@@ -14,7 +14,17 @@ from pathlib import Path
 from typing import Any, Literal
 
 from scgsim.aedt.specs.modeling import (
-    Modeling, PhysicalLayerSpec, PhysicalLayerDeclaration, PhysicalRepresentationPlan, _physical_layers_from_payload, _source_plan_layers, _request_modeling, _modeling_payload, _effective_record, _source_record_payload, _verify_effective_records,
+    Modeling,
+    PhysicalLayerSpec,
+    PhysicalLayerDeclaration,
+    PhysicalRepresentationPlan,
+    _physical_layers_from_payload,
+    _source_plan_layers,
+    _request_modeling,
+    _modeling_payload,
+    _effective_record,
+    _source_record_payload,
+    _verify_effective_records,
 )
 
 from scgsim.aedt.specs.common import (
@@ -48,7 +58,6 @@ from scgsim.aedt.specs.common import (
 )
 
 
-
 def _direct_hfss_enclosure(spec: Any) -> dict[str, Any] | None:
     """Project selected GDS geometry's original full envelope exactly once."""
     if spec._historical_physical or spec._historical_modeling:
@@ -59,31 +68,53 @@ def _direct_hfss_enclosure(spec: Any) -> dict[str, Any] | None:
     scale = library.unit * 1e6
     selected = []
     for record in spec.effective_layer_imports:
-        polygons = tuple(polygon for cell in library.top_level()
-                         for polygon in cell.get_polygons(
-                             layer=record["native_import_layer"], datatype=0))
+        polygons = tuple(
+            polygon
+            for cell in library.top_level()
+            for polygon in cell.get_polygons(
+                layer=record["native_import_layer"], datatype=0
+            )
+        )
         if polygons:
-            selected.append((record, tuple(point for polygon in polygons
-                                           for point in polygon.points)))
+            selected.append(
+                (
+                    record,
+                    tuple(point for polygon in polygons for point in polygon.points),
+                )
+            )
     if not selected:
         raise ValueError("selected HFSS import layers have no source polygons")
     xy = {
-        f"{axis}_{edge}_um": operation(float(point[index]) * scale
-                                     for _, points in selected for point in points)
+        f"{axis}_{edge}_um": operation(
+            float(point[index]) * scale for _, points in selected for point in points
+        )
         for index, axis in enumerate(("x", "y"))
         for edge, operation in (("min", min), ("max", max))
     }
-    source_bounds = {**xy,
+    source_bounds = {
+        **xy,
         "z_min_um": min(record["z_min_um"] for record, _ in selected),
-        "z_max_um": max(record["z_max_um"] for record, _ in selected)}
-    effective_bounds = {**xy,
+        "z_max_um": max(record["z_max_um"] for record, _ in selected),
+    }
+    effective_bounds = {
+        **xy,
         "z_min_um": min(record["effective_z_min_um"] for record, _ in selected),
-        "z_max_um": max(record["effective_z_max_um"] for record, _ in selected)}
-    keys = ("x_plus_um", "x_minus_um", "y_plus_um", "y_minus_um", "z_plus_um", "z_minus_um")
+        "z_max_um": max(record["effective_z_max_um"] for record, _ in selected),
+    }
+    keys = (
+        "x_plus_um",
+        "x_minus_um",
+        "y_plus_um",
+        "y_minus_um",
+        "z_plus_um",
+        "z_minus_um",
+    )
     return spec.physical_representation.project_enclosure(
-        source_body_bounds_um=source_bounds, effective_body_bounds_um=effective_bounds,
+        source_body_bounds_um=source_bounds,
+        effective_body_bounds_um=effective_bounds,
         source_padding_um=dict(zip(keys, spec.region_padding_um, strict=True)),
     )
+
 
 @dataclass(frozen=True)
 class FrequencySweepSpec:
@@ -243,9 +274,14 @@ class HfssDrivenSpec:
         if mapping is None:
             raise ValueError("historical requests have no new execution modeling map")
         return tuple(
-            replace(port, integration_line_um=tuple(
-                (x, y, mapping.map_z(z)) for x, y, z in port.integration_line_um
-            )) if isinstance(port, ModalPort) else port
+            replace(
+                port,
+                integration_line_um=tuple(
+                    (x, y, mapping.map_z(z)) for x, y, z in port.integration_line_um
+                ),
+            )
+            if isinstance(port, ModalPort)
+            else port
             for port in self.ports
         )
 
@@ -258,16 +294,33 @@ class HfssDrivenSpec:
         mapping = _request_modeling(self)
         if mapping is None:
             raise ValueError("historical requests have no new execution modeling map")
-        pairs = {pair: index + 1 for index, pair in enumerate(sorted(
-            (item.layer, item.datatype) for item in self.layer_imports))}
-        domain_pairs = {(item.layer, item.datatype) for item in self.layer_imports
-                        if any(binding.role == "substrate"
-                               and binding.layer == item.layer
-                               and binding.object_name.startswith(f"{item.layer_name}_")
-                               for binding in self.object_bindings)}
-        return tuple({**_effective_record(item, mapping, retained_domain=(item.layer, item.datatype) in domain_pairs),
-                      "native_import_layer": pairs[(item.layer, item.datatype)]}
-                     for item in self.layer_imports)
+        pairs = {
+            pair: index + 1
+            for index, pair in enumerate(
+                sorted((item.layer, item.datatype) for item in self.layer_imports)
+            )
+        }
+        domain_pairs = {
+            (item.layer, item.datatype)
+            for item in self.layer_imports
+            if any(
+                binding.role == "substrate"
+                and binding.layer == item.layer
+                and binding.object_name.startswith(f"{item.layer_name}_")
+                for binding in self.object_bindings
+            )
+        }
+        return tuple(
+            {
+                **_effective_record(
+                    item,
+                    mapping,
+                    retained_domain=(item.layer, item.datatype) in domain_pairs,
+                ),
+                "native_import_layer": pairs[(item.layer, item.datatype)],
+            }
+            for item in self.layer_imports
+        )
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -286,12 +339,22 @@ class HfssDrivenSpec:
             },
             "vacuum_material_id": self.vacuum_material_id,
             "gds": {"path": self.gds_path.as_posix()},
-            "layer_imports": (list(self.effective_layer_imports) if self.modeling is not None
-                              else [item.to_payload() for item in self.layer_imports]),
+            "layer_imports": (
+                list(self.effective_layer_imports)
+                if self.modeling is not None
+                else [item.to_payload() for item in self.layer_imports]
+            ),
             "object_bindings": [item.to_payload() for item in self.object_bindings],
             "ports": [item.to_payload() for item in self.ports],
-            **({"effective_ports": [item.to_payload() for item in self.effective_ports]}
-               if self.modeling is not None else {}),
+            **(
+                {
+                    "effective_ports": [
+                        item.to_payload() for item in self.effective_ports
+                    ]
+                }
+                if self.modeling is not None
+                else {}
+            ),
             "run_control": self.run_control.to_payload(),
             "region_padding_um": list(self.region_padding_um),
             "length_mesh": self.length_mesh.to_payload() if self.length_mesh else None,
@@ -299,7 +362,11 @@ class HfssDrivenSpec:
 
     @classmethod
     def from_payload(
-        cls, payload: dict[str, Any], *, base_dir: Path | None = None, allow_historical_modeling: bool = False
+        cls,
+        payload: dict[str, Any],
+        *,
+        base_dir: Path | None = None,
+        allow_historical_modeling: bool = False,
     ) -> HfssDrivenSpec:
         if payload.get("schema_version") != SCHEMA_VERSION:
             raise ValueError("unsupported HFSS driven schema")
@@ -308,7 +375,8 @@ class HfssDrivenSpec:
         if base_dir is not None and not gds.is_absolute():
             gds = base_dir / gds
         imports = tuple(
-            LayerImport(**_source_record_payload(item)) for item in payload.get("layer_imports", ())
+            LayerImport(**_source_record_payload(item))
+            for item in payload.get("layer_imports", ())
         )
         bindings = tuple(
             ObjectBinding(**item) for item in payload.get("object_bindings", ())
@@ -330,10 +398,20 @@ class HfssDrivenSpec:
         length = payload.get("length_mesh")
         result = cls(
             modeling=payload.get("modeling"),
-            physical_layers=_physical_layers_from_payload(payload, allow_historical=allow_historical_modeling),
-            physical_representation=(PhysicalRepresentationPlan.from_payload(payload["physical_representation"]) if "physical_representation" in payload else None),
-            _historical_physical=allow_historical_modeling and "physical_representation" not in payload,
-            _historical_modeling=allow_historical_modeling and "modeling" not in payload,
+            physical_layers=_physical_layers_from_payload(
+                payload, allow_historical=allow_historical_modeling
+            ),
+            physical_representation=(
+                PhysicalRepresentationPlan.from_payload(
+                    payload["physical_representation"]
+                )
+                if "physical_representation" in payload
+                else None
+            ),
+            _historical_physical=allow_historical_modeling
+            and "physical_representation" not in payload,
+            _historical_modeling=allow_historical_modeling
+            and "modeling" not in payload,
             mode=mode,  # type: ignore[arg-type]
             gds_path=gds,
             project_name=_project_name_from_payload(
@@ -370,9 +448,13 @@ class HfssDrivenSpec:
             ),
         )
         if result.modeling is not None:
-            _verify_effective_records(payload["layer_imports"], result.effective_layer_imports)
-            _verify_effective_records(payload["effective_ports"],
-                                      [item.to_payload() for item in result.effective_ports])
+            _verify_effective_records(
+                payload["layer_imports"], result.effective_layer_imports
+            )
+            _verify_effective_records(
+                payload["effective_ports"],
+                [item.to_payload() for item in result.effective_ports],
+            )
         return result
 
 
@@ -470,16 +552,33 @@ class HfssEigenmodeSpec:
         mapping = _request_modeling(self)
         if mapping is None:
             raise ValueError("historical requests have no new execution modeling map")
-        pairs = {pair: index + 1 for index, pair in enumerate(sorted(
-            (item.layer, item.datatype) for item in self.layer_imports))}
-        domain_pairs = {(item.layer, item.datatype) for item in self.layer_imports
-                        if any(binding.role == "substrate"
-                               and binding.layer == item.layer
-                               and binding.object_name.startswith(f"{item.layer_name}_")
-                               for binding in self.object_bindings)}
-        return tuple({**_effective_record(item, mapping, retained_domain=(item.layer, item.datatype) in domain_pairs),
-                      "native_import_layer": pairs[(item.layer, item.datatype)]}
-                     for item in self.layer_imports)
+        pairs = {
+            pair: index + 1
+            for index, pair in enumerate(
+                sorted((item.layer, item.datatype) for item in self.layer_imports)
+            )
+        }
+        domain_pairs = {
+            (item.layer, item.datatype)
+            for item in self.layer_imports
+            if any(
+                binding.role == "substrate"
+                and binding.layer == item.layer
+                and binding.object_name.startswith(f"{item.layer_name}_")
+                for binding in self.object_bindings
+            )
+        }
+        return tuple(
+            {
+                **_effective_record(
+                    item,
+                    mapping,
+                    retained_domain=(item.layer, item.datatype) in domain_pairs,
+                ),
+                "native_import_layer": pairs[(item.layer, item.datatype)],
+            }
+            for item in self.layer_imports
+        )
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -498,8 +597,11 @@ class HfssEigenmodeSpec:
             },
             "vacuum_material_id": self.vacuum_material_id,
             "gds": {"path": self.gds_path.as_posix()},
-            "layer_imports": (list(self.effective_layer_imports) if self.modeling is not None
-                              else [item.to_payload() for item in self.layer_imports]),
+            "layer_imports": (
+                list(self.effective_layer_imports)
+                if self.modeling is not None
+                else [item.to_payload() for item in self.layer_imports]
+            ),
             "object_bindings": [item.to_payload() for item in self.object_bindings],
             "run_control": self.run_control.to_payload(),
             "region_padding_um": list(self.region_padding_um),
@@ -508,7 +610,11 @@ class HfssEigenmodeSpec:
 
     @classmethod
     def from_payload(
-        cls, payload: dict[str, Any], *, base_dir: Path | None = None, allow_historical_modeling: bool = False
+        cls,
+        payload: dict[str, Any],
+        *,
+        base_dir: Path | None = None,
+        allow_historical_modeling: bool = False,
     ) -> HfssEigenmodeSpec:
         if payload.get("schema_version") != EIGENMODE_SCHEMA_VERSION:
             raise ValueError("unsupported HFSS Eigenmode schema")
@@ -528,10 +634,20 @@ class HfssEigenmodeSpec:
         length = payload.get("length_mesh")
         result = cls(
             modeling=payload.get("modeling"),
-            physical_layers=_physical_layers_from_payload(payload, allow_historical=allow_historical_modeling),
-            physical_representation=(PhysicalRepresentationPlan.from_payload(payload["physical_representation"]) if "physical_representation" in payload else None),
-            _historical_physical=allow_historical_modeling and "physical_representation" not in payload,
-            _historical_modeling=allow_historical_modeling and "modeling" not in payload,
+            physical_layers=_physical_layers_from_payload(
+                payload, allow_historical=allow_historical_modeling
+            ),
+            physical_representation=(
+                PhysicalRepresentationPlan.from_payload(
+                    payload["physical_representation"]
+                )
+                if "physical_representation" in payload
+                else None
+            ),
+            _historical_physical=allow_historical_modeling
+            and "physical_representation" not in payload,
+            _historical_modeling=allow_historical_modeling
+            and "modeling" not in payload,
             gds_path=gds,
             project_name=_project_name_from_payload(
                 payload.get("project", {}).get("name")
@@ -544,7 +660,8 @@ class HfssEigenmodeSpec:
                 payload.get("vacuum_material_id"), "vacuum_material_id"
             ),
             layer_imports=tuple(
-                LayerImport(**_source_record_payload(item)) for item in payload.get("layer_imports", ())
+                LayerImport(**_source_record_payload(item))
+                for item in payload.get("layer_imports", ())
             ),
             object_bindings=tuple(
                 ObjectBinding(**item) for item in payload.get("object_bindings", ())
@@ -561,7 +678,9 @@ class HfssEigenmodeSpec:
             ),
         )
         if result.modeling is not None:
-            _verify_effective_records(payload["layer_imports"], result.effective_layer_imports)
+            _verify_effective_records(
+                payload["layer_imports"], result.effective_layer_imports
+            )
         return result
 
 
@@ -615,8 +734,12 @@ class HfssEprSpec:
             raise ValueError("request and prepared geometry modeling differ")
         if not self._historical_modeling:
             declared = _source_plan_layers(self.geometry.source)
-            if self.physical_layers and {item.physical_layer_id: item for item in self.physical_layers} != {item.physical_layer_id: item for item in declared}:
-                raise ValueError("request physical layers differ from prepared source map")
+            if self.physical_layers and {
+                item.physical_layer_id: item for item in self.physical_layers
+            } != {item.physical_layer_id: item for item in declared}:
+                raise ValueError(
+                    "request physical layers differ from prepared source map"
+                )
             object.__setattr__(self, "physical_layers", declared)
 
         if self.run_control is not None and not isinstance(
@@ -629,7 +752,9 @@ class HfssEprSpec:
             or self._legacy_payload
             or self._historical_modeling
         ):
-            raise ValueError("EPR analysis/cache and historical requests require run_control")
+            raise ValueError(
+                "EPR analysis/cache and historical requests require run_control"
+            )
         if self.epr_request is not None and not isinstance(
             self.epr_request, EprAnalysisRequest
         ):
@@ -668,7 +793,6 @@ class HfssEprSpec:
                 None if self.run_control is None else self.run_control.to_payload()
             ),
             "geometry": self.geometry.to_payload(),
-
             "epr": (
                 None if self.epr_request is None else self.epr_request.to_payload()
             ),
@@ -680,7 +804,9 @@ class HfssEprSpec:
         }
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any], *, allow_historical_modeling: bool = False) -> HfssEprSpec:
+    def from_payload(
+        cls, payload: dict[str, Any], *, allow_historical_modeling: bool = False
+    ) -> HfssEprSpec:
         from scgsim.aedt.specs.epr import EprAnalysisRequest, ExpressionCacheConvergence
         from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 
@@ -722,10 +848,20 @@ class HfssEprSpec:
         geometry = PreparedPlanarGeometry.from_payload(payload.get("geometry"))
         return cls(
             modeling=payload.get("modeling"),
-            physical_layers=_physical_layers_from_payload(payload, allow_historical=allow_historical_modeling),
-            physical_representation=(PhysicalRepresentationPlan.from_payload(payload["physical_representation"]) if "physical_representation" in payload else None),
-            _historical_physical=allow_historical_modeling and "physical_representation" not in payload,
-            _historical_modeling=allow_historical_modeling and "modeling" not in payload,
+            physical_layers=_physical_layers_from_payload(
+                payload, allow_historical=allow_historical_modeling
+            ),
+            physical_representation=(
+                PhysicalRepresentationPlan.from_payload(
+                    payload["physical_representation"]
+                )
+                if "physical_representation" in payload
+                else None
+            ),
+            _historical_physical=allow_historical_modeling
+            and "physical_representation" not in payload,
+            _historical_modeling=allow_historical_modeling
+            and "modeling" not in payload,
             project_name=_project_name_from_payload(project.get("name")),
             design_name=_text(project.get("design"), "project.design"),
             geometry=geometry,
@@ -1015,46 +1151,86 @@ class HfssDrivenGeometrySpec:
             raise TypeError("geometry must be PreparedPlanarGeometry")
         if self.geometry.modeling != self.modeling:
             raise ValueError("request and prepared geometry modeling differ")
-        if self.geometry.junctions or self.geometry.lumped_rlcs or self.geometry.contributions:
-            raise ValueError("Driven geometry cannot contain Eigenmode treatments or EPR requests")
+        if (
+            self.geometry.junctions
+            or self.geometry.lumped_rlcs
+            or self.geometry.contributions
+        ):
+            raise ValueError(
+                "Driven geometry cannot contain Eigenmode treatments or EPR requests"
+            )
         declared = _source_plan_layers(self.geometry.source)
         if self.physical_layers and self.physical_layers != declared:
             raise ValueError("request physical layers differ from prepared source map")
         object.__setattr__(self, "physical_layers", declared)
         _request_modeling(self)
-        if self.aedt_version != REQUIRED_AEDT_VERSION or self.pyaedt_version != LOCKED_PYAEDT:
+        if (
+            self.aedt_version != REQUIRED_AEDT_VERSION
+            or self.pyaedt_version != LOCKED_PYAEDT
+        ):
             raise ValueError("V1 requires AEDT 2024.2 and PyAEDT 1.3.0")
-        object.__setattr__(self, "project_name", _project_filename(self.project_name, "project_name").stem)
+        object.__setattr__(
+            self,
+            "project_name",
+            _project_filename(self.project_name, "project_name").stem,
+        )
         object.__setattr__(self, "design_name", _text(self.design_name, "design_name"))
-        if self.run_control is not None and not isinstance(self.run_control, HfssRunControl):
+        if self.run_control is not None and not isinstance(
+            self.run_control, HfssRunControl
+        ):
             raise TypeError("run_control must be HfssRunControl or None")
         ports = tuple(self.ports)
-        if tuple(port.index for port in ports) != (1, 2) or len({port.name for port in ports}) != 2:
+        if (
+            tuple(port.index for port in ports) != (1, 2)
+            or len({port.name for port in ports}) != 2
+        ):
             raise ValueError("V1 requires unique ordered ports 1 and 2")
-        supports = {item["support_id"]: item for item in self.geometry.source.get("lumped_supports", ())}
-        conductor_ids = {item["semantic_id"] for item in self.geometry.source["conductors"]}
-        conductor_ids.update(item["source_semantic_id"] for item in self.geometry.source["conductors"])
+        supports = {
+            item["support_id"]: item
+            for item in self.geometry.source.get("lumped_supports", ())
+        }
+        conductor_ids = {
+            item["semantic_id"] for item in self.geometry.source["conductors"]
+        }
+        conductor_ids.update(
+            item["source_semantic_id"] for item in self.geometry.source["conductors"]
+        )
         for port in ports:
             if isinstance(port, LumpedTerminalPort):
                 support = supports.get(port.support_id)
                 if support is None:
                     raise ValueError(f"terminal support {port.support_id!r} is missing")
                 original = support["source"]
-                if (port.signal_entity_ids != tuple(original["terminal_a_entity_ids"])
-                        or port.reference_entity_ids != tuple(original["terminal_b_entity_ids"])):
-                    raise ValueError("lumped terminal ownership differs from ordered source contacts")
+                if port.signal_entity_ids != tuple(
+                    original["terminal_a_entity_ids"]
+                ) or port.reference_entity_ids != tuple(
+                    original["terminal_b_entity_ids"]
+                ):
+                    raise ValueError(
+                        "lumped terminal ownership differs from ordered source contacts"
+                    )
             elif isinstance(port, TerminalPort):
-                if not port.signal_entity_ids or not set(port.signal_entity_ids).issubset(conductor_ids):
-                    raise ValueError("body-first Wave requires explicit source Signal Entities")
+                if not port.signal_entity_ids or not set(
+                    port.signal_entity_ids
+                ).issubset(conductor_ids):
+                    raise ValueError(
+                        "body-first Wave requires explicit source Signal Entities"
+                    )
                 if not set(port.reference_objects).issubset(conductor_ids):
-                    raise ValueError("Wave references must bind source conductor Entities")
+                    raise ValueError(
+                        "Wave references must bind source conductor Entities"
+                    )
                 padding = self.geometry.source["native_region"]["padding_um"]
                 # Match the existing native Region order, without extending Wave support.
-                index = {"+X": 0, "-X": 1, "+Y": 2, "-Y": 3, "+Z": 4, "-Z": 5}[port.side]
+                index = {"+X": 0, "-X": 1, "+Y": 2, "-Y": 3, "+Z": 4, "-Z": 5}[
+                    port.side
+                ]
                 if padding[index] != 0:
                     raise ValueError("Wave port side requires zero Region padding")
             else:
-                raise TypeError("Driven Terminal requires Wave or Lumped terminal records")
+                raise TypeError(
+                    "Driven Terminal requires Wave or Lumped terminal records"
+                )
         if all(isinstance(port, TerminalPort) for port in ports):
             if {port.side for port in ports} != {"-X", "+X"}:
                 raise ValueError("Wave V1 requires -X/+X port sides")
@@ -1072,20 +1248,46 @@ class HfssDrivenGeometrySpec:
         object.__setattr__(self, "ports", ports)
 
     def to_payload(self) -> dict[str, Any]:
-        return {**_modeling_payload(self), "schema_version": DRIVEN_GEOMETRY_SCHEMA_VERSION,
-                "mode": self.mode, "aedt": {"requested_version": self.aedt_version},
-                "pyaedt": {"locked_version": self.pyaedt_version, "official_source": OFFICIAL_PYAEDT_SOURCE_URL},
-                "project": {"name": self.project_name, "design": self.design_name},
-                "geometry": self.geometry.to_payload(), "ports": [port.to_payload() for port in self.ports],
-                "run_control": None if self.run_control is None else self.run_control.to_payload()}
+        return {
+            **_modeling_payload(self),
+            "schema_version": DRIVEN_GEOMETRY_SCHEMA_VERSION,
+            "mode": self.mode,
+            "aedt": {"requested_version": self.aedt_version},
+            "pyaedt": {
+                "locked_version": self.pyaedt_version,
+                "official_source": OFFICIAL_PYAEDT_SOURCE_URL,
+            },
+            "project": {"name": self.project_name, "design": self.design_name},
+            "geometry": self.geometry.to_payload(),
+            "ports": [port.to_payload() for port in self.ports],
+            "run_control": None
+            if self.run_control is None
+            else self.run_control.to_payload(),
+        }
 
     @classmethod
-    def from_payload(cls, payload: Mapping[str, Any], *, allow_historical_modeling: bool = False) -> HfssDrivenGeometrySpec:
+    def from_payload(
+        cls, payload: Mapping[str, Any], *, allow_historical_modeling: bool = False
+    ) -> HfssDrivenGeometrySpec:
         from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 
-        if payload.get("schema_version") != DRIVEN_GEOMETRY_SCHEMA_VERSION or payload.get("mode") != "terminal":
+        if (
+            payload.get("schema_version") != DRIVEN_GEOMETRY_SCHEMA_VERSION
+            or payload.get("mode") != "terminal"
+        ):
             raise ValueError("unsupported body-first Driven schema")
-        expected = {"modeling", "physical_layers", "schema_version", "mode", "aedt", "pyaedt", "project", "geometry", "ports", "run_control"}
+        expected = {
+            "modeling",
+            "physical_layers",
+            "schema_version",
+            "mode",
+            "aedt",
+            "pyaedt",
+            "project",
+            "geometry",
+            "ports",
+            "run_control",
+        }
         if "physical_representation" in payload:
             expected.add("physical_representation")
         if set(payload) != expected:
@@ -1094,14 +1296,39 @@ class HfssDrivenGeometrySpec:
         if run is not None:
             run = dict(run)
             run["sweep"] = FrequencySweepSpec(**run["sweep"])
-        return cls(modeling=payload["modeling"], project_name=payload["project"]["name"],
-                   design_name=payload["project"]["design"], geometry=PreparedPlanarGeometry.from_payload(payload["geometry"]),
-                   ports=tuple(LumpedTerminalPort.from_payload(item) if item.get("kind") == "lumped"
-                               else TerminalPort(**item) for item in payload["ports"]),
-                   run_control=None if run is None else HfssRunControl(**run), physical_layers=_physical_layers_from_payload(payload, allow_historical=allow_historical_modeling),
-                   physical_representation=(PhysicalRepresentationPlan.from_payload(payload["physical_representation"]) if "physical_representation" in payload else None),
-                   _historical_physical=allow_historical_modeling and "physical_representation" not in payload,
-                   aedt_version=payload["aedt"]["requested_version"], pyaedt_version=payload["pyaedt"]["locked_version"])
+        return cls(
+            modeling=payload["modeling"],
+            project_name=payload["project"]["name"],
+            design_name=payload["project"]["design"],
+            geometry=PreparedPlanarGeometry.from_payload(payload["geometry"]),
+            ports=tuple(
+                LumpedTerminalPort.from_payload(item)
+                if item.get("kind") == "lumped"
+                else TerminalPort(**item)
+                for item in payload["ports"]
+            ),
+            run_control=None if run is None else HfssRunControl(**run),
+            physical_layers=_physical_layers_from_payload(
+                payload, allow_historical=allow_historical_modeling
+            ),
+            physical_representation=(
+                PhysicalRepresentationPlan.from_payload(
+                    payload["physical_representation"]
+                )
+                if "physical_representation" in payload
+                else None
+            ),
+            _historical_physical=allow_historical_modeling
+            and "physical_representation" not in payload,
+            aedt_version=payload["aedt"]["requested_version"],
+            pyaedt_version=payload["pyaedt"]["locked_version"],
+        )
 
 
-HfssSpec = HfssDrivenGeometrySpec | HfssDrivenSpec | HfssEigenmodeSpec | HfssEprSpec | HfssEprAnalysisSpec
+HfssSpec = (
+    HfssDrivenGeometrySpec
+    | HfssDrivenSpec
+    | HfssEigenmodeSpec
+    | HfssEprSpec
+    | HfssEprAnalysisSpec
+)

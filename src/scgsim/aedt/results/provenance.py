@@ -308,11 +308,16 @@ _RUNTIME_SOURCE_V19_PATHS = tuple(
 
 # V1–V19 remain exact historical inventories. V20 binds the sole neutral
 # physical interpreter and its source serialization dependency.
-_RUNTIME_SOURCE_V20_PATHS = tuple(sorted((*_RUNTIME_SOURCE_V19_PATHS,
-    "src/scgsim/geometry/models/physical.py",
-    "src/scgsim/geometry/planning/physical.py",
-    "src/scgsim/semantics/snapshot.py",
-)))
+_RUNTIME_SOURCE_V20_PATHS = tuple(
+    sorted(
+        (
+            *_RUNTIME_SOURCE_V19_PATHS,
+            "src/scgsim/geometry/models/physical.py",
+            "src/scgsim/geometry/planning/physical.py",
+            "src/scgsim/semantics/snapshot.py",
+        )
+    )
+)
 
 
 # V1–V20 retain exact historical scopes; V21 adds shared memory attribution.

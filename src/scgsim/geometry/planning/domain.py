@@ -2099,7 +2099,9 @@ def _conductor_sidewall_ref_solution_id(
         if is_host_child:
             has_parent = True
             entity_ids = metadata.get("auto_vacuum_subtracting_entity_ids")
-            if isinstance(entity_ids, str | bytes) or not isinstance(entity_ids, Sequence):
+            if isinstance(entity_ids, str | bytes) or not isinstance(
+                entity_ids, Sequence
+            ):
                 raise TypeError(
                     f"auto-vacuum component {solution.semantic_id!r} lacks an entity subtractor ledger"
                 )

@@ -92,7 +92,9 @@ def build_route_mesh(
     """Lower Route-A/Route-B SGB geometry, mesh it, and emit artifacts."""
 
     if representation_context is None or source_geometry_input is None:
-        raise ValueError("fresh Palace mesh requires neutral effective geometry input and representation_context from preparation")
+        raise ValueError(
+            "fresh Palace mesh requires neutral effective geometry input and representation_context from preparation"
+        )
     if not isinstance(stack, Mapping):
         raise TypeError("stack must be a mapping after set_stack processing.")
     if route not in {"A", "B"}:
@@ -179,7 +181,9 @@ def build_route_mesh(
     # SGB/OCC construction remains in the calling process. Only Gmsh lowering
     # receives a fresh native-process boundary after an XAO has been written.
     SemanticGeometryBuilder().build(
-        build_input, route=route, run_folder=run_dir,
+        build_input,
+        route=route,
+        run_folder=run_dir,
         representation_context=representation_context,
     )
     if not xao_path.is_file():
@@ -1649,7 +1653,9 @@ def _route_a_thin_film_provenance(
 
         plan = PhysicalRepresentationPlan.from_payload(physical)
         if result.get("variant") != plan.profile.name:
-            raise ValueError("Palace profile provenance differs from the neutral physical plan")
+            raise ValueError(
+                "Palace profile provenance differs from the neutral physical plan"
+            )
         return result
     variant = result.get("variant")
     expected_label = {

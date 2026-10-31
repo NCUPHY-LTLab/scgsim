@@ -1,4 +1,5 @@
 """Detached EPR and junction declarations, independent of native execution."""
+
 from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
@@ -11,6 +12,7 @@ from scgsim.aedt._data import _text, _number, _freeze, detached
 InterfaceKind = Literal["MA", "MS", "SA", "MM"]
 FieldSide = Literal["top", "bottom", "sidewall"]
 
+
 def surface_evaluations(
     margins_um: Sequence[float], *, policy: str | None
 ) -> tuple[tuple[str, float], ...]:
@@ -22,6 +24,7 @@ def surface_evaluations(
     if policy != "unmasked_plus_requested.v1":
         raise ValueError("unsupported surface evaluation policy")
     return (("unmasked_baseline", 0.0), *requested)
+
 
 @dataclass(frozen=True)
 class PlanarJunction:
@@ -99,6 +102,7 @@ class PlanarJunction:
         if set(value) != expected:
             raise ValueError("junction payload members are not canonical")
         return cls(**dict(value))
+
 
 @dataclass(frozen=True)
 class SurfaceEprSpec:
@@ -203,6 +207,7 @@ class SurfaceEprSpec:
             raise ValueError("surface EPR payload members are not canonical")
         return cls(**dict(value), _legacy_payload=set(value) == expected)
 
+
 @dataclass(frozen=True)
 class EprAnalysisRequest:
     """Optional analysis/cache selection independent of model construction."""
@@ -270,6 +275,7 @@ class EprAnalysisRequest:
             raise ValueError("EPR analysis request members are not canonical")
         return cls(**dict(value), _legacy_payload=set(value) == expected)
 
+
 @dataclass(frozen=True)
 class NativeExpressionDefinition:
     """One caller-authored Field Calculator operation sequence."""
@@ -307,6 +313,7 @@ class NativeExpressionDefinition:
         ):
             raise ValueError("native expression definition members are not canonical")
         return cls(name=value["name"], operations=value["operations"])
+
 
 @dataclass(frozen=True)
 class NormalizedSurfaceEprTotal:
@@ -347,6 +354,7 @@ class NormalizedSurfaceEprTotal:
             evaluation_kind=value["evaluation_kind"],
             margin_um=value["margin_um"],
         )
+
 
 @dataclass(frozen=True)
 class ExpressionCacheConvergence:
@@ -498,6 +506,7 @@ class SavedSolution:
             content_sha256=value["content_sha256"],
             identity=value["identity"],
         )
+
 
 def _contained_relative_path(value: Any, name: str) -> Path:
     if not isinstance(value, str) or not value:
