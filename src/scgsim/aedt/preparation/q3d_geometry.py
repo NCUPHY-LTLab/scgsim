@@ -1,4 +1,11 @@
-"""Q3D v3 source-backed lowering into native preparation records."""
+"""Lower a Q3D geometry snapshot into a sealed `Q3dSpec`.
+
+Owns: checking that the caller's Net, material and ground declarations match the
+GeometryPlan, turning every imported Entity into body declarations, and writing the
+canonical source attachments (original GDS, stack, trace) that travel in the handoff.
+Does not own: classification or enclosure projection (the physical-geometry planner)
+or the handoff cohort itself (`handoff.py`). AEDT is never opened here.
+"""
 
 from __future__ import annotations
 
@@ -18,24 +25,7 @@ from scgsim.geometry import GeometryPlanSnapshot
 from scgsim.semantics.route_a import geometry_z_range
 
 
-def _entity_polygons(entity, polygons):
-    if entity.polygon_ids:
-        return [
-            (pid, polygons[pid].exterior, polygons[pid].holes)
-            for pid in sorted(entity.polygon_ids)
-        ]
-    if entity.material_kind == "conductor":
-        raise ValueError(f"Q3D conductor {entity.semantic_id!r} has no source polygons")
-    geometry = entity.geometry
-    if "outer_loop" in geometry:
-        return [(None, geometry["outer_loop"], geometry.get("hole_loops", ()))]
-    bounds = geometry["domain_bounds_um"]
-    xmin, ymin = bounds["x_min_um"], bounds["y_min_um"]
-    xmax, ymax = bounds["x_max_um"], bounds["y_max_um"]
-    return [(None, ((xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax)), ())]
-
-
-def lower_q3d_geometry(
+def lower_q3d_geometry(  # noqa: PLR0913 - public keyword-only preparation API
     snapshot: GeometryPlanSnapshot,
     *,
     modeling: Modeling,
@@ -58,10 +48,45 @@ def lower_q3d_geometry(
         )
     stack = snapshot.stack
     _, _, physical_plan = _interpret_geometry(source, stack, modeling)
-    physical_layers = physical_plan.declarations
     layer_bindings = {
         key: value["physical_layer_id"] for key, value in physical_plan.entities.items()
     }
+
+    net_ids, ground_nets = _declared_nets(source, net_types, physical_ground_nets)
+    _check_material_bindings(source, stack["materials"], materials)
+    vacuum_id = _vacuum_material_id(source, stack["materials"], materials)
+
+    dbu_um = source.metadata["source_dbu_um"]
+    bodies, members = _body_declarations(source, layer_bindings, ground_nets, net_ids)
+    geometry_source = _write_source_attachments(
+        snapshot, directory, dbu_um=dbu_um, ground_nets=ground_nets, bodies=bodies
+    )
+    return Q3dSpec(
+        modeling=modeling,
+        physical_layers=physical_plan.declarations,
+        physical_representation=physical_plan,
+        project_name=project_name,
+        design_name=design_name,
+        materials=materials,
+        vacuum_material_id=vacuum_id,
+        bodies=tuple(bodies),
+        nets=tuple(
+            Q3dNetSpec(net_id, net_types[net_id], tuple(members[net_id]))
+            for net_id in sorted(net_ids)
+        ),
+        run_control=run_control,
+        region_padding_um=region_padding_um,
+        solve_ac_rl=False,
+        geometry_source=geometry_source,
+    )
+
+
+def _declared_nets(source, net_types, physical_ground_nets):
+    """Return the final conductor Nets and the selected physical ground Nets.
+
+    The caller owns Net membership and native Net types independently of which
+    Nets are physical ground, so both must match the GeometryPlan exactly.
+    """
     conductors = [
         entity for entity in source.entities if entity.material_kind == "conductor"
     ]
@@ -75,15 +100,16 @@ def lower_q3d_geometry(
     ground_nets = tuple(physical_ground_nets)
     if isinstance(physical_ground_nets, str | bytes) or not set(ground_nets) <= net_ids:
         raise ValueError("physical_ground_nets must select final conductor Nets")
-    imported = [
-        entity
-        for entity in source.entities
-        if entity.material_kind in {"conductor", "dielectric"}
-    ]
-    source_materials = stack["materials"]
+    return net_ids, ground_nets
+
+
+def _check_material_bindings(source, source_materials, materials) -> None:
+    """Require each explicit material to restate the source stack's material."""
     for entity in source.entities:
         material = materials[entity.material_id]
         record = source_materials[entity.material_id]
+        # The caller's conductor materials are superconductors; the stack only
+        # records them as generic conductors.
         expected_kind = (
             "superconductor"
             if entity.material_kind == "conductor"
@@ -97,6 +123,10 @@ def lower_q3d_geometry(
             raise ValueError(
                 f"Q3D explicit material binding differs from source {entity.material_id!r}"
             )
+
+
+def _vacuum_material_id(source, source_materials, materials) -> str:
+    """Find the single vacuum material, preferring one an Entity already uses."""
     vacuum_ids = {
         entity.material_id
         for entity in source.entities
@@ -114,8 +144,19 @@ def lower_q3d_geometry(
         or materials[vacuum_id].material_id != vacuum_id
     ):
         raise ValueError("Q3D vacuum binding differs from source")
+    return vacuum_id
 
-    dbu_um = source.metadata["source_dbu_um"]
+
+def _body_declarations(source, layer_bindings, ground_nets, net_ids):
+    """Declare one body per source polygon of every conductor and dielectric Entity.
+
+    Returns the bodies and, for each Net, the ids of its conductor bodies.
+    """
+    imported = [
+        entity
+        for entity in source.entities
+        if entity.material_kind in {"conductor", "dielectric"}
+    ]
     polygons = {polygon.polygon_id: polygon for polygon in source.polygons}
     bodies = []
     members = {net_id: [] for net_id in sorted(net_ids)}
@@ -168,6 +209,35 @@ def lower_q3d_geometry(
             )
             if entity.material_kind == "conductor":
                 members[entity.net_id].append(body_id)
+    return bodies, members
+
+
+def _entity_polygons(entity, polygons):
+    """List `(source polygon id, exterior, holes)` for one Entity's body geometry.
+
+    Entities without source polygons fall back to the loop or domain box in their
+    geometry; a conductor must always have source polygons.
+    """
+    if entity.polygon_ids:
+        return [
+            (pid, polygons[pid].exterior, polygons[pid].holes)
+            for pid in sorted(entity.polygon_ids)
+        ]
+    if entity.material_kind == "conductor":
+        raise ValueError(f"Q3D conductor {entity.semantic_id!r} has no source polygons")
+    geometry = entity.geometry
+    if "outer_loop" in geometry:
+        return [(None, geometry["outer_loop"], geometry.get("hole_loops", ()))]
+    bounds = geometry["domain_bounds_um"]
+    xmin, ymin = bounds["x_min_um"], bounds["y_min_um"]
+    xmax, ymax = bounds["x_max_um"], bounds["y_max_um"]
+    return [(None, ((xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax)), ())]
+
+
+def _write_source_attachments(snapshot, directory, *, dbu_um, ground_nets, bodies):
+    """Write the original GDS, stack and trace, and return the sealed source record."""
+    source = snapshot.geometry_input
+    stack = snapshot.stack
     directory.mkdir(parents=True, exist_ok=True)
     original_path = directory / "source.gds"
     original_path.write_bytes(snapshot.gds_bytes)
@@ -205,21 +275,4 @@ def lower_q3d_geometry(
             ("trace", trace_path),
         )
     }
-    return Q3dSpec(
-        modeling=modeling,
-        physical_layers=physical_layers,
-        physical_representation=physical_plan,
-        project_name=project_name,
-        design_name=design_name,
-        materials=materials,
-        vacuum_material_id=vacuum_id,
-        bodies=tuple(bodies),
-        nets=tuple(
-            Q3dNetSpec(net_id, net_types[net_id], tuple(members[net_id]))
-            for net_id in sorted(net_ids)
-        ),
-        run_control=run_control,
-        region_padding_um=region_padding_um,
-        solve_ac_rl=False,
-        geometry_source=geometry_source,
-    )
+    return geometry_source

@@ -15,6 +15,7 @@ from scgsim.geometry.planning.physical import interpret_physical_geometry
 
 
 def _interpret_geometry(build_input: Any, stack: Any, modeling: Modeling):
+    """Run the physical planner and record which source stack it interpreted."""
     effective_input, effective_stack, plan = interpret_physical_geometry(
         build_input, stack, ApproximationProfile(modeling, "v1", {})
     )

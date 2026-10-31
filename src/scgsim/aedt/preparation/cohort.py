@@ -1,4 +1,9 @@
-"""Canonical prepared-input path and hash cohort ownership."""
+"""Which files a prepared handoff contains, and checks that bind them to the spec.
+
+Owns the canonical member list per spec family and the Q3D / HFSS source
+attachment checks. Does not write files (`handoff.py`) or hash receipts
+(`scgsim.aedt.results.provenance`).
+"""
 
 from __future__ import annotations
 
@@ -25,6 +30,11 @@ GEOMETRY_SOURCE_PATHS = {
 
 
 def canonical_handoff_paths(spec: AedtSpec) -> list[str]:
+    """Return every relative path a prepared handoff of this spec family contains.
+
+    Geometry-driven families (EPR, HFSS driven, Q2D, Q3D) carry no GDS pair;
+    Q3D with a geometry source carries the three source attachments instead.
+    """
     paths = ["run_aedt.sh", "aedt_spec.json"]
     if isinstance(spec, HfssEprAnalysisSpec):
         paths.extend(f"saved/{item['path']}" for item in spec.saved_solution.members)
@@ -44,6 +54,7 @@ def canonical_handoff_paths(spec: AedtSpec) -> list[str]:
 
 
 def canonical_member_paths(spec: AedtSpec) -> list[str]:
+    """Return the handoff paths the manifest hashes: all but the manifest itself."""
     return [path for path in canonical_handoff_paths(spec) if path != MANIFEST_PATH]
 
 
