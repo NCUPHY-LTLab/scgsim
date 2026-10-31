@@ -1,5 +1,11 @@
 """Physical-layer declarations and pure source-to-effective AEDT Z-map rules.
 
+Two approximations exist. "solid" keeps every layer at its real thickness.
+"thin_film" collapses film layers to zero-thickness sheets, which removes the
+film thickness from the Z axis. The Z map in this module moves every height above
+a collapsed film down by that film's thickness.
+TODO(human): state why Thin Film is used.
+
 Layer identities and film/contact roles belong to the source author. This
 module never classifies a layer from a Net, material name or geometric size.
 Source acquisition and Entity/stack conversion belong to preparation.modeling;
@@ -40,6 +46,11 @@ class PhysicalLayerSpec:
     declare their actual contact side and never compress the stack.
     source_thickness_um retains an independently authored physical fact;
     endpoint spans remain the coordinate-map authority.
+
+    `kind` is `stack_film` (a film spanning the stack, removed from Z in Thin
+    Film), `local_film` (a film only where drawn: it becomes a sheet at its contact
+    side without compressing the stack) or `retained_solid` (kept solid).
+    `contact_side` says which face of the film the sheet sits on.
     """
 
     physical_layer_id: str
@@ -79,6 +90,9 @@ class PhysicalLayerSpec:
         )
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize every field, leaving out `source_thickness_um` when it was never
+        authored.
+        """
         payload = asdict(self)
         if self.source_thickness_um is None:
             payload.pop("source_thickness_um")
@@ -95,6 +109,9 @@ class EffectiveLayer:
     z_max_um: float
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the source interval beside the effective (native) interval and the
+        contact side.
+        """
         return {
             "physical_layer_id": self.source.physical_layer_id,
             "representation": self.representation,
@@ -200,6 +217,29 @@ def _physical_layers_from_payload(payload: Any, *, allow_historical: bool):
     return tuple(declaration(**item) for item in payload.get("physical_layers", ()))
 
 
+def _physical_fields_from_payload(
+    payload: Any, *, allow_historical: bool
+) -> dict[str, Any]:
+    """Constructor fields that decode a payload's physical layers and neutral plan.
+
+    A historical payload may lack `physical_representation`, `modeling` or both;
+    the `_historical_*` flags record which, so a reader accepts exactly those.
+    """
+    return {
+        "physical_layers": _physical_layers_from_payload(
+            payload, allow_historical=allow_historical
+        ),
+        "physical_representation": (
+            PhysicalRepresentationPlan.from_payload(payload["physical_representation"])
+            if "physical_representation" in payload
+            else None
+        ),
+        "_historical_physical": allow_historical
+        and "physical_representation" not in payload,
+        "_historical_modeling": allow_historical and "modeling" not in payload,
+    }
+
+
 def _source_plan_layers(source: Any):
     trace = source["modeling"]
     if trace.get("schema_version") == PLAN_SCHEMA:
@@ -209,7 +249,8 @@ def _source_plan_layers(source: Any):
 
 def _request_modeling(spec: Any):
     """Use one fresh neutral plan; old maps are reader-only recorded meaning."""
-    if spec.modeling is None and spec._historical_modeling:
+    # `_historical_modeling` is a package-private flag on every request spec.
+    if spec.modeling is None and spec._historical_modeling:  # noqa: SLF001
         return None
     if getattr(spec, "_historical_physical", False):
         return _ZMap(spec.modeling, spec.physical_layers)

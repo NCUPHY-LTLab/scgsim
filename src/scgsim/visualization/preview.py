@@ -1,4 +1,9 @@
-"""Source-bound preview object and explicit rendered/unavailable artifacts."""
+"""Source-bound preview object and explicit rendered/unavailable artifacts.
+
+Owns: the public ``GeometryPreview``, source-hash verification before each render and
+the preview manifest. Does not own: reading solver output (``loaders/``) or drawing
+(``rendering.py``).
+"""
 
 from __future__ import annotations
 
@@ -91,15 +96,19 @@ class GeometryPreview:
         self._manifest_path = self.root / "metadata/geometry_preview_manifest.json"
 
     def show_materials(self) -> GeometryPreviewArtifact:
+        """Render the material view, or report why it is unavailable."""
         return self._show("materials")
 
     def show_boundaries(self) -> GeometryPreviewArtifact:
+        """Render the boundary view, or report why it is unavailable."""
         return self._show("boundaries")
 
     def show_surface_epr(self) -> GeometryPreviewArtifact:
+        """Render the Surface-EPR view, or report why it is unavailable."""
         return self._show("surface_epr")
 
     def show_mesh(self) -> GeometryPreviewArtifact:
+        """Render the mesh view, or report why it is unavailable."""
         return self._show("mesh")
 
     def explore(
@@ -137,6 +146,7 @@ class GeometryPreview:
         return plotter.show(jupyter_backend="html", return_viewer=True)
 
     def show_all_previews(self) -> None:
+        """Render all four views and display each one."""
         results = (
             self.show_materials(),
             self.show_boundaries(),

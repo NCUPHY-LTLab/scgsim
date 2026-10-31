@@ -64,14 +64,13 @@ from scgsim.aedt.specs.common import (
     TerminalPort,
 )
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-from scgsim.aedt.specs.hfss import (
+from scgsim.aedt.specs.hfss import HfssDrivenSpec, HfssEigenmodeSpec
+from scgsim.aedt.specs.hfss_prepared import (
     HfssDrivenGeometrySpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,
-    HfssSpec,
 )
+from scgsim.aedt.specs.parse import HfssSpec
 
 
 @dataclass(frozen=True)

@@ -45,12 +45,8 @@ from scgsim.aedt.specs.epr import (
 from scgsim.aedt.specs.geometry import (
     PreparedPlanarGeometry,
 )
-from scgsim.aedt.specs.hfss import (
-    EigenmodeRunControl,
-    HfssDrivenGeometrySpec,
-    HfssEprSpec,
-    HfssRunControl,
-)
+from scgsim.aedt.specs.hfss import EigenmodeRunControl, HfssRunControl
+from scgsim.aedt.specs.hfss_prepared import HfssDrivenGeometrySpec, HfssEprSpec
 from scgsim.aedt.specs.modeling import Modeling
 from scgsim.geometry import GeometryPlanSnapshot
 

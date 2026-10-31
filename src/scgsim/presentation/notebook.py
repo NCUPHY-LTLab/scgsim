@@ -99,6 +99,7 @@ def section(
 
 
 def cards(items: Sequence[tuple[str, Any]]) -> str:
+    """Render labelled values as a wrapping row of small cards."""
     return (
         '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px">'
         + "".join(
@@ -140,6 +141,7 @@ def table(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> str:
 
 
 def details(title: str, body: str, *, opened: bool = False) -> str:
+    """Wrap trusted markup in a collapsible section."""
     return (
         f"<details{' open' if opened else ''}>"
         f"<summary>{html.escape(title)}</summary>{body}</details>"
@@ -147,6 +149,7 @@ def details(title: str, body: str, *, opened: bool = False) -> str:
 
 
 def json_details(title: str, data: Mapping[str, Any], *, opened: bool = False) -> str:
+    """Show a mapping as pretty-printed, key-sorted JSON inside a collapsible section."""
     return details(
         title,
         "<pre style='white-space:pre-wrap;overflow-wrap:anywhere'>"

@@ -1,9 +1,15 @@
-"""AEDT request, execution, analysis, and result APIs."""
+"""Public AEDT API: build a request, hand it to AEDT, and read results back.
+
+Re-exports the user-facing pieces of the subpackages. The flow runs through them
+in this order: `specs` (immutable requests and their JSON payloads),
+`preparation` (turn a geometry into a request plus a hand-off folder), `runtime`
+(execute the hand-off inside AEDT, run as `python -m scgsim.aedt.run`),
+`results` (resolve and verify what AEDT wrote), and `epr` (energy participation
+ratio analysis of Eigenmode results). Import from the owning submodule for anything
+not listed in `__all__`.
+"""
 
 from scgsim.aedt.epr.models import EprResult
-from scgsim.aedt.specs.common import (
-    LumpedRlc,
-)
 from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
     ExpressionCacheConvergence,
@@ -16,6 +22,7 @@ from scgsim.aedt.specs.epr import (
 from scgsim.aedt.specs.geometry import (
     PreparedPlanarGeometry,
 )
+from scgsim.geometry.models.lumped import LumpedSupport
 
 from .eigenmode import EigenmodeSim
 from .epr.analysis import combine_epr_mode, combine_surface_epr_mode, reanalyze_epr
@@ -36,6 +43,7 @@ from .specs.common import (
     AedtResources,
     HfssDrivenMode,
     LayerImport,
+    LumpedRlc,
     LumpedTerminalPort,
     MatrixRunControl,
     ModalPort,
@@ -46,16 +54,18 @@ from .specs.common import (
 from .specs.hfss import (
     EigenmodeRunControl,
     FrequencySweepSpec,
-    HfssDrivenGeometrySpec,
     HfssDrivenSpec,
     HfssEigenmodeSpec,
-    HfssEprAnalysisSpec,
-    HfssEprSpec,
     HfssRunControl,
-    HfssSpec,
     LengthMeshSpec,
 )
-from .specs.parse import AedtSpec, parse_aedt_spec
+from .specs.hfss_prepared import (
+    HfssDrivenGeometrySpec,
+    HfssEprAnalysisSpec,
+    HfssEprSpec,
+)
+from .specs.modeling import PhysicalLayerSpec
+from .specs.parse import AedtSpec, HfssSpec, parse_aedt_spec
 from .specs.q2d import Q2dConductorSpec, Q2dRectangleSpec, Q2dSpec
 from .specs.q3d import Q3dBodySpec, Q3dNetSpec, Q3dSpec
 
@@ -120,7 +130,3 @@ __all__ = [
     "resolve_saved_solution",
     "show_epr",
 ]
-
-from scgsim.geometry.models.lumped import LumpedSupport
-
-from .specs.modeling import PhysicalLayerSpec

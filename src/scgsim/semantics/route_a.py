@@ -15,6 +15,7 @@ _Z_TOLERANCE_UM = 1e-9
 
 
 def record_geometry(record: Mapping[str, Any], context: str) -> dict[str, Any]:
+    """Return a record's geometry mapping, folding in top-level Z fields when the pair is complete."""
     raw = record.get("geometry")
     if raw is None:
         geometry = dict(record)
@@ -32,6 +33,7 @@ def record_geometry(record: Mapping[str, Any], context: str) -> dict[str, Any]:
 
 
 def geometry_z_range(geometry: Any, context: str) -> tuple[float, float]:
+    """Return (z_min, z_max) in micrometres from either explicit bounds or z plus thickness."""
     if not isinstance(geometry, Mapping):
         raise TypeError(f"{context} geometry must be a mapping.")
     if "z_min_um" in geometry or "z_max_um" in geometry:
@@ -47,6 +49,7 @@ def geometry_z_range(geometry: Any, context: str) -> tuple[float, float]:
 
 
 def same_z(left: float, right: float) -> bool:
+    """True when two Z values agree within the Z tolerance."""
     return math.isclose(left, right, rel_tol=0.0, abs_tol=_Z_TOLERANCE_UM)
 
 

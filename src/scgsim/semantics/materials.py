@@ -8,8 +8,10 @@ MATERIAL_KINDS: Final = frozenset({"vacuum", "dielectric", "conductor"})
 
 
 def is_supported_material_kind(value: object) -> bool:
+    """True for the three material kinds the solvers understand."""
     return isinstance(value, str) and value in MATERIAL_KINDS
 
 
 def is_vacuum_material_kind(value: object) -> bool:
+    """True when the material fills free space (no solid body)."""
     return value == "vacuum"

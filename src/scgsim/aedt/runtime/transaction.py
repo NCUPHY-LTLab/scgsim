@@ -63,7 +63,7 @@ from scgsim.aedt.runtime.receipts import (
     utc_now,
 )
 from scgsim.aedt.specs.common import LOCKED_PYAEDT, REQUIRED_AEDT_VERSION
-from scgsim.aedt.specs.hfss import (
+from scgsim.aedt.specs.hfss_prepared import (
     HfssDrivenGeometrySpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,

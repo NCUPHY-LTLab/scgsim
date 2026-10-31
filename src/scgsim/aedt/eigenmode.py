@@ -1,4 +1,14 @@
-"""One mutable Eigenmode preparation facade over the AEDT owners."""
+"""User-facing builder for an HFSS Eigenmode (and optional EPR) hand-off.
+
+`EigenmodeSim` collects the pieces a user sets one call at a time (geometry, stack,
+output folder, solve setup, surface and junction EPR inputs), then asks the
+preparation modules to build the immutable request and hand-off folder. It owns
+no physics and never talks to AEDT: validation of each piece lives in the spec
+classes, and executing the hand-off belongs to `runtime`.
+
+Changing any model input discards the prepared geometry and hand-off plan, so a
+stale plan can never be resolved against a changed model.
+"""
 
 from __future__ import annotations
 
@@ -77,11 +87,18 @@ class EigenmodeSim:
         self.prepared_geometry = None
         self.handoff_plan = None
 
-    def set_geometry(self, component: Any | GeometryBuildInput) -> None:
+    def _reject_when_plan_owns_source(self) -> None:
+        """Once a GeometryPlan is set, geometry and stack change only together."""
         if self._plan_snapshot is not None:
             raise ValueError(
                 "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
             )
+
+    def set_geometry(self, component: Any | GeometryBuildInput) -> None:
+        """Use a Component (anything with `write_gds`) or a ready `GeometryBuildInput` as
+        the source geometry. Refused once a GeometryPlan owns the source.
+        """
+        self._reject_when_plan_owns_source()
         if isinstance(component, GeometryBuildInput):
             self.build_input, self.component = component, None
         elif callable(getattr(component, "write_gds", None)):
@@ -107,10 +124,13 @@ class EigenmodeSim:
         self._invalidate_model()
 
     def set_stack(self, stack: Mapping[str, Any] | str | Path) -> None:
-        if self._plan_snapshot is not None:
-            raise ValueError(
-                "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
-            )
+        """Set the layer stack from a mapping or a JSON file path.
+
+        The stack needs `materials`, `solution_regions`, `layers` and `metadata`, and
+        every material reference must resolve. A detached JSON copy is stored. Refused
+        once a GeometryPlan owns the source.
+        """
+        self._reject_when_plan_owns_source()
         if isinstance(stack, Mapping):
             payload = dict(stack)
         elif isinstance(stack, (str, Path)):
@@ -120,48 +140,14 @@ class EigenmodeSim:
             payload = json.loads(source.read_text(encoding="utf-8"))
         else:
             raise TypeError("stack must be a mapping or JSON path")
-        if not isinstance(payload, Mapping):
-            raise TypeError("stack JSON root must be a mapping")
-        for key in ("materials", "solution_regions", "layers", "metadata"):
-            if key not in payload:
-                raise ValueError(f"stack lacks {key!r}")
-        materials = payload["materials"]
-        regions = payload["solution_regions"]
-        layers = payload["layers"]
-        metadata = payload["metadata"]
-        if (
-            not isinstance(materials, Mapping)
-            or not isinstance(regions, Mapping)
-            or not isinstance(layers, Sequence)
-            or isinstance(layers, (str, bytes))
-            or not isinstance(metadata, Mapping)
-        ):
-            raise TypeError(
-                "stack materials, solution_regions, and metadata must be mappings; layers must be a sequence"
-            )
-        if any(not isinstance(item, Mapping) for item in materials.values()):
-            raise TypeError("stack materials must contain mappings")
-        if any(not isinstance(item, Mapping) for item in regions.values()):
-            raise TypeError("stack solution_regions must contain mappings")
-        if any(not isinstance(item, Mapping) for item in layers):
-            raise TypeError("stack layers must contain mappings")
-        if any(
-            record.get("material_id", semantic_id) not in materials
-            for semantic_id, record in regions.items()
-        ):
-            raise ValueError("stack solution region references an unknown material")
-        if any(
-            record.get("material_id") not in materials
-            for record in layers
-            if "material_id" in record
-        ):
-            raise ValueError("stack layer references an unknown material")
-        detached = json.loads(json.dumps(payload, allow_nan=False))
-        self.stack = detached
+        self.stack = _checked_stack(payload)
         self._plan_snapshot = None
         self._invalidate_model()
 
     def set_output_dir(self, path: str | Path) -> None:
+        """Store the resolved hand-off folder. Only the hand-off plan is discarded, because
+        the folder does not change the model itself.
+        """
         if not isinstance(path, (str, Path)):
             raise TypeError("output_dir must be a path string or Path")
         resolved = Path(path).expanduser().resolve()
@@ -207,6 +193,12 @@ class EigenmodeSim:
         contributions: Sequence[SurfaceEprSpec] = (),
         defaults: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> None:
+        """Declare the surface-EPR contributions and per-interface film defaults.
+
+        Defaults are keyed by interface kind (MA metal-air, MS metal-substrate, SA
+        substrate-air) and fill only `loss_tangent`, `source` and `preset` that a
+        contribution left unset; an explicit value on a contribution always wins.
+        """
         if isinstance(contributions, (str, bytes)):
             raise TypeError("contributions must be SurfaceEprSpec records")
         selected = tuple(contributions)
@@ -249,6 +241,7 @@ class EigenmodeSim:
         self._invalidate_model()
 
     def add_junction(self, junction: PlanarJunction) -> None:
+        """Add one linearized junction sheet. Junction IDs must be unique."""
         if not isinstance(junction, PlanarJunction):
             raise TypeError("junction must be PlanarJunction")
         if junction.junction_id in {item.junction_id for item in self.junctions}:
@@ -257,6 +250,9 @@ class EigenmodeSim:
         self._invalidate_model()
 
     def set_epr_request(self, request: EprAnalysisRequest | None) -> None:
+        """Choose which modes, surface contributions, junctions and bulk domains the EPR
+        analysis covers. None removes the request.
+        """
         if request is not None and not isinstance(request, EprAnalysisRequest):
             raise TypeError("request must be EprAnalysisRequest or None")
         self.epr_request = request
@@ -265,6 +261,9 @@ class EigenmodeSim:
     def set_expression_cache_convergence(
         self, control: ExpressionCacheConvergence | None
     ) -> None:
+        """Set the native field expression and criterion that decide when the expression
+        cache has converged. None removes it.
+        """
         if control is not None and not isinstance(control, ExpressionCacheConvergence):
             raise TypeError("control must be ExpressionCacheConvergence or None")
         self.expression_convergence = control
@@ -343,6 +342,12 @@ class EigenmodeSim:
         return InputSummary(data)
 
     def prepare_handoff(self) -> HandoffPlan:
+        """Normalize the geometry, build the immutable request and return the hand-off
+        plan.
+
+        Requires a stack, `output_dir`, `project_name` and `design_name`. Prepared
+        geometry is reused until a model input changes.
+        """
         source_stack = (
             self._plan_snapshot.stack if self._plan_snapshot is not None else self.stack
         )
@@ -382,6 +387,9 @@ class EigenmodeSim:
         return plan
 
     def resolve_results(self, run_dir: str | Path | None = None) -> ResolvedRun:
+        """Read back a finished run, defaulting to the run folder of the current hand-off
+        plan.
+        """
         if run_dir is None:
             if self.handoff_plan is None:
                 raise ValueError("prepare_handoff() or an explicit run_dir is required")
@@ -395,6 +403,9 @@ class EigenmodeSim:
         surface_defaults: Mapping[str, Mapping[str, Any]] | None = None,
         group_overrides: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> EprResult:
+        """Recompute film estimates from a resolved EPR result with new defaults or per-
+        group overrides. Never reopens AEDT.
+        """
         return reanalyze_epr(
             result, surface_defaults=surface_defaults, group_overrides=group_overrides
         )
@@ -407,4 +418,46 @@ class EigenmodeSim:
         native_pass: int | None = None,
         theme: str = "light",
     ) -> Any:
+        """Show one exact solver pass and mode of an EPR result."""
         return show_epr(result, mode=mode, native_pass=native_pass, theme=theme)
+
+
+def _checked_stack(payload: Any) -> dict[str, Any]:
+    """Validate the stack's shape and cross-references, and return a detached copy."""
+    if not isinstance(payload, Mapping):
+        raise TypeError("stack JSON root must be a mapping")
+    for key in ("materials", "solution_regions", "layers", "metadata"):
+        if key not in payload:
+            raise ValueError(f"stack lacks {key!r}")
+    materials = payload["materials"]
+    regions = payload["solution_regions"]
+    layers = payload["layers"]
+    metadata = payload["metadata"]
+    if (
+        not isinstance(materials, Mapping)
+        or not isinstance(regions, Mapping)
+        or not isinstance(layers, Sequence)
+        or isinstance(layers, (str, bytes))
+        or not isinstance(metadata, Mapping)
+    ):
+        raise TypeError(
+            "stack materials, solution_regions, and metadata must be mappings; layers must be a sequence"
+        )
+    if any(not isinstance(item, Mapping) for item in materials.values()):
+        raise TypeError("stack materials must contain mappings")
+    if any(not isinstance(item, Mapping) for item in regions.values()):
+        raise TypeError("stack solution_regions must contain mappings")
+    if any(not isinstance(item, Mapping) for item in layers):
+        raise TypeError("stack layers must contain mappings")
+    if any(
+        record.get("material_id", semantic_id) not in materials
+        for semantic_id, record in regions.items()
+    ):
+        raise ValueError("stack solution region references an unknown material")
+    if any(
+        record.get("material_id") not in materials
+        for record in layers
+        if "material_id" in record
+    ):
+        raise ValueError("stack layer references an unknown material")
+    return json.loads(json.dumps(payload, allow_nan=False))

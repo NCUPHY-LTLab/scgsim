@@ -1,4 +1,8 @@
-"""Exact generic RLC scalar and topology interpretation without native imports."""
+"""Read AEDT lumped RLC values and topology names, with no AEDT imports.
+
+The live runtime and the offline result reader both decode RLC values here, so
+they cannot disagree. Values are exact `Decimal`s, never floats.
+"""
 
 import re
 from decimal import Decimal
@@ -11,7 +15,12 @@ def rlc_native_topology(topology: str) -> str:
 
 
 def rlc_scalar_si(value: Any, quantity: str) -> Decimal:
-    """Shared exact live/offline RLC unit decoding; raw evidence is retained."""
+    """Decode an AEDT value such as "1.5nH" into exact SI units (ohm, henry or farad).
+
+    `quantity` selects the accepted unit spellings. The caller keeps the raw
+    string as evidence. Anything that is not a number followed by a known unit
+    raises RuntimeError.
+    """
     units = {
         "resistance_ohm": {
             "uOhm": "1e-6",

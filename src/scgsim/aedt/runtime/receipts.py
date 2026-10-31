@@ -19,10 +19,9 @@ from typing import Any
 from scgsim.aedt._io import file_sha256
 from scgsim.aedt.results.provenance import RECEIPT_V3
 from scgsim.aedt.runtime.handoff_checks import VerifiedHandoff, contained_path
-from scgsim.aedt.specs.hfss import (
+from scgsim.aedt.specs.hfss import HfssDrivenSpec, HfssEigenmodeSpec
+from scgsim.aedt.specs.hfss_prepared import (
     HfssDrivenGeometrySpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,
 )

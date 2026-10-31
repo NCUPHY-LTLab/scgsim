@@ -61,11 +61,8 @@ from scgsim.aedt.specs.epr import (
 from scgsim.aedt.specs.geometry import (
     PreparedPlanarGeometry,
 )
-from scgsim.aedt.specs.hfss import (
-    EigenmodeRunControl,
-    HfssEprAnalysisSpec,
-    HfssEprSpec,
-)
+from scgsim.aedt.specs.hfss import EigenmodeRunControl
+from scgsim.aedt.specs.hfss_prepared import HfssEprAnalysisSpec, HfssEprSpec
 
 
 def analyze_epr(

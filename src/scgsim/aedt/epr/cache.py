@@ -53,7 +53,7 @@ from scgsim.aedt.specs.epr import (
     NormalizedSurfaceEprTotal,
     surface_evaluations,
 )
-from scgsim.aedt.specs.hfss import HfssEprSpec
+from scgsim.aedt.specs.hfss_prepared import HfssEprSpec
 
 _SURFACE_ANALYSIS_SCOPE = {
     "included_field_sides": ["top", "bottom"],

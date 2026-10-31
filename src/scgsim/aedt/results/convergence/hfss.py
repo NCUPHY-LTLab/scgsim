@@ -12,7 +12,9 @@ from scgsim.aedt.results.convergence._evidence_files import (
     read_evidence_text,
     source_record,
 )
-from scgsim.aedt.specs.hfss import HfssEigenmodeSpec, HfssEprSpec, HfssSpec
+from scgsim.aedt.specs.hfss import HfssEigenmodeSpec
+from scgsim.aedt.specs.hfss_prepared import HfssEprSpec
+from scgsim.aedt.specs.parse import HfssSpec
 
 
 def read_hfss_convergence(

@@ -1,4 +1,10 @@
-"""Q2D request contract and payload codec."""
+"""Q2D request: a 2D cross-section solved for per-unit-length parameters.
+
+Q2D extracts the capacitance, conductance, resistance and inductance per unit
+length of a conductor cross-section. The request lists the rectangles drawn in the
+cross-section and groups the conductor rectangles into signal lines and one
+reference ground. Nothing here talks to AEDT.
+"""
 
 from __future__ import annotations
 
@@ -24,7 +30,12 @@ from scgsim.aedt.specs.common import (
 
 @dataclass(frozen=True)
 class Q2dRectangleSpec:
-    """One explicit native Q2D cross-section rectangle."""
+    """One rectangle drawn in the Q2D cross-section plane.
+
+    `origin_um` is its origin and `size_um` its width and height, all in
+    micrometres. `material_id` is a PDK material; vacuum is not allowed because
+    the Region supplies it.
+    """
 
     name: str
     origin_um: tuple[float, float]
@@ -51,6 +62,7 @@ class Q2dRectangleSpec:
         )
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the rectangle with origin and size as `[x, y]` lists in micrometres."""
         return {
             "name": self.name,
             "origin_um": list(self.origin_um),
@@ -61,7 +73,12 @@ class Q2dRectangleSpec:
 
 @dataclass(frozen=True)
 class Q2dConductorSpec:
-    """One exact Q2D signal or the single reference-ground group."""
+    """A group of rectangles that form one Q2D conductor.
+
+    `SignalLine` conductors are the lines whose parameters are extracted, and the
+    single `ReferenceGround` is what they are measured against. `thickness_um` is
+    the conductor thickness in micrometres.
+    """
 
     name: str
     conductor_type: Literal["SignalLine", "ReferenceGround"]
@@ -85,6 +102,7 @@ class Q2dConductorSpec:
         object.__setattr__(self, "thickness_um", thickness)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the conductor group with its member rectangle names."""
         return {
             "name": self.name,
             "conductor_type": self.conductor_type,
@@ -95,7 +113,14 @@ class Q2dConductorSpec:
 
 @dataclass(frozen=True)
 class Q2dSpec:
-    """Explicit Q2D section; null controls declare model-only preparation."""
+    """A Q2D cross-section model.
+
+    `rectangles` and `conductors` define the section; every superconducting
+    rectangle must belong to exactly one conductor. `region_padding_um` pads the
+    solution Region on the +X, -X, +Y and -Y sides. A null `run_control` declares
+    model-only preparation: the model is built but no solve setup is created (schema
+    v2 instead of v1).
+    """
 
     project_name: str
     design_name: str
@@ -110,6 +135,7 @@ class Q2dSpec:
 
     @property
     def mode(self) -> Literal["q2d"]:
+        """Always `"q2d"`; written into the payload as `mode`."""
         return "q2d"
 
     def __post_init__(self) -> None:
@@ -164,6 +190,7 @@ class Q2dSpec:
         )
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize as schema v2 when `run_control` is null (model only) and v1 otherwise."""
         return {
             "schema_version": (
                 Q2D_SCHEMA_VERSION_V2
@@ -192,6 +219,9 @@ class Q2dSpec:
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> Q2dSpec:
+        """Rebuild from a v1 or v2 payload; `run_control` must be present, and null exactly
+        for v2.
+        """
         if payload.get("schema_version") not in {
             Q2D_SCHEMA_VERSION,
             Q2D_SCHEMA_VERSION_V2,

@@ -1,4 +1,8 @@
-"""Explicit AEDT family schema dispatch."""
+"""Turn a request payload into the right spec class from its `schema_version`.
+
+The schema version names the family. The family is never guessed from the other
+keys, so an unknown or mistyped version fails loudly.
+"""
 
 from __future__ import annotations
 
@@ -18,17 +22,22 @@ from scgsim.aedt.specs.common import (
     Q3D_SCHEMA_VERSION,
     SCHEMA_VERSION,
 )
-from scgsim.aedt.specs.hfss import (
+from scgsim.aedt.specs.hfss import HfssDrivenSpec, HfssEigenmodeSpec
+from scgsim.aedt.specs.hfss_prepared import (
     HfssDrivenGeometrySpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,
-    HfssSpec,
 )
 from scgsim.aedt.specs.q2d import Q2dSpec
 from scgsim.aedt.specs.q3d import Q3dSpec
 
+HfssSpec = (
+    HfssDrivenGeometrySpec
+    | HfssDrivenSpec
+    | HfssEigenmodeSpec
+    | HfssEprSpec
+    | HfssEprAnalysisSpec
+)
 AedtSpec = HfssSpec | Q3dSpec | Q2dSpec
 
 

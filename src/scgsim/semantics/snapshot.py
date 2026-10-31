@@ -54,6 +54,7 @@ def _detached(value: Any) -> Any:
 
 
 def canonical_sha256(value: Any) -> str:
+    """SHA-256 of the facts rendered as sorted, compact JSON, so equal facts always hash equal."""
     rendered = json.dumps(
         _plain_semantic_facts(value),
         sort_keys=True,
@@ -115,6 +116,7 @@ class SemanticSnapshotReference:
         _validate_sha256_digest("canonical_sha256", self.canonical_sha256)
 
     def detached(self) -> dict[str, str]:
+        """Plain-dict copy for JSON output."""
         return {
             "source_revision": self.source_revision,
             "source_revision_kind": self.source_revision_kind,
@@ -127,6 +129,8 @@ class SemanticSnapshotReference:
 
 @dataclass(frozen=True, slots=True)
 class SemanticFactsSnapshot:
+    """Frozen semantic facts plus the revisions and hash that identify them."""
+
     source_revision: str
     source_revision_kind: RevisionKind
     geometry_revision: str
@@ -152,6 +156,7 @@ class SemanticFactsSnapshot:
         object.__setattr__(self, "facts", freeze_plain(plain))
 
     def reference(self) -> SemanticSnapshotReference:
+        """The identity of this snapshot without the facts themselves."""
         return SemanticSnapshotReference(
             source_revision=self.source_revision,
             source_revision_kind=self.source_revision_kind,
@@ -162,6 +167,7 @@ class SemanticFactsSnapshot:
         )
 
     def detached(self) -> dict[str, Any]:
+        """Plain-dict copy including the facts, for JSON output."""
         return {
             "source_revision": self.source_revision,
             "source_revision_kind": self.source_revision_kind,
@@ -182,6 +188,7 @@ def create_snapshot(
     source_revision_kind: RevisionKind | None = None,
     geometry_revision_kind: RevisionKind | None = None,
 ) -> SemanticFactsSnapshot:
+    """Build a snapshot, using the content hash as the revision when none is declared."""
     plain = _plain_semantic_facts(facts)
     digest = canonical_sha256(plain)
     fallback = f"sha256:{digest}"

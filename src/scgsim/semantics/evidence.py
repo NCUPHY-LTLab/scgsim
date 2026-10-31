@@ -30,6 +30,12 @@ _INTERFACE_INTENTS = (
 
 @dataclass(frozen=True, slots=True)
 class SourcedPatch:
+    """One piece of interface evidence from a single stage (declared, planned or observed).
+
+    Patches that share a contribution_id describe the same interface and must
+    agree on everything in semantic_identity.
+    """
+
     patch_id: str
     contribution_id: str
     interface_intent: str
@@ -71,6 +77,7 @@ class SourcedPatch:
             )
 
     def semantic_identity(self) -> tuple[Any, ...]:
+        """Fields that must match across stages; patch_id, stage and observation may differ."""
         return (
             self.contribution_id,
             self.interface_intent,
@@ -89,6 +96,8 @@ class SourcedPatch:
 
 @dataclass(frozen=True, slots=True)
 class EvidenceResult:
+    """The classified contribution after merging every patch that shares its id."""
+
     contribution_id: str
     patch_ids: tuple[str, ...]
     classification: str
@@ -144,6 +153,7 @@ class SemanticEvidenceFacade:
         object.__setattr__(self, "_patches", tuple(patches))
 
     def material_kind(self, semantic_id: str) -> str | None:
+        """Material kind snapshotted for an entity, or None when it has none."""
         entity = self.snapshot.facts.get("entities", {}).get(semantic_id)
         return entity.get("material_kind") if isinstance(entity, Mapping) else None
 
@@ -157,6 +167,7 @@ class SemanticEvidenceFacade:
     def results(
         self, patches: Sequence[SourcedPatch] = ()
     ) -> tuple[EvidenceResult, ...]:
+        """Classify the facade's own patches plus the extra ones, one result per contribution id."""
         records_to_evaluate = (*self._patches, *tuple(patches))
         for patch in records_to_evaluate:
             _validate_interface_intent(patch)

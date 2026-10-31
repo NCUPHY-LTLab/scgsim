@@ -1,4 +1,10 @@
-"""Private stdlib detachment and canonical identity; no native or preparation imports."""
+"""Validation, freezing and hashing helpers for JSON-like request data.
+
+Standard library only, so every spec module can use it without import cycles. It
+owns three jobs: small field validators, turning data into a frozen read-only copy
+(`_freeze_str_keys_only`) or a plain mutable one (`detached`), and the canonical
+SHA-256 that identifies a payload (`canonical_sha256`).
+"""
 
 from __future__ import annotations
 
@@ -11,12 +17,14 @@ from typing import Any
 
 
 def _stripped_text(value: Any, name: str) -> str:
+    """Return `value` stripped of surrounding whitespace; it must be non-empty text."""
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be non-empty text")
     return value.strip()
 
 
 def _number_at_least(value: Any, name: str, *, minimum: float = 0.0) -> float:
+    """Return `value` as a float that is finite and at least `minimum`; bools are refused."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be numeric")
     result = float(value)
@@ -26,6 +34,12 @@ def _number_at_least(value: Any, name: str, *, minimum: float = 0.0) -> float:
 
 
 def _freeze_str_keys_only(value: Any, *, verified: Any = None) -> Any:
+    """Freeze JSON-like data: mappings become read-only views, sequences tuples.
+
+    Mapping keys must be strings, and leaves must be None, str, int, float or bool.
+    `verified` is an earlier frozen copy; any part of `value` that is the very same
+    object as the matching part of `verified` is returned as is, not copied.
+    """
     if verified is not None and value is verified:
         return verified
     if isinstance(value, Mapping):
@@ -67,6 +81,11 @@ def detached(value: Any) -> Any:
 
 
 def canonical_sha256(value: Any) -> str:
+    """SHA-256 of the sorted, compact, ASCII JSON of `value`.
+
+    Key order and tuple-versus-list do not change the digest, so the same data
+    hashes the same however it was assembled.
+    """
     encoded = json.dumps(
         detached(value), ensure_ascii=True, separators=(",", ":"), sort_keys=True
     ).encode("utf-8")

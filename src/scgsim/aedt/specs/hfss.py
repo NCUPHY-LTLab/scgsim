@@ -1,4 +1,11 @@
-"""HFSS request contracts and their family-specific decoding rules."""
+"""HFSS requests that import GDS pieces, plus the run controls every HFSS request shares.
+
+Owns the Driven (two-port, Terminal or Modal) and port-free Eigenmode requests
+that name a GDS file with layer imports and object bindings, the adaptive and
+sweep controls, and the uniform-CPW length-mesh exception. Requests built on an
+already-prepared body geometry are in `hfss_prepared.py`; schema dispatch is in
+`parse.py`. Nothing here talks to AEDT.
+"""
 
 from __future__ import annotations
 
@@ -10,13 +17,7 @@ from typing import Any, Literal
 
 from scgsim.aedt._data import _stripped_text
 from scgsim.aedt.specs.common import (
-    DRIVEN_GEOMETRY_SCHEMA_VERSION,
     EIGENMODE_SCHEMA_VERSION,
-    EPR_ANALYSIS_SCHEMA_VERSION,
-    EPR_ANALYSIS_SCHEMA_VERSION_V2,
-    EPR_EIGENMODE_SCHEMA_VERSION,
-    EPR_EIGENMODE_SCHEMA_VERSION_V2,
-    EPR_EIGENMODE_SCHEMA_VERSION_V3,
     LOCKED_PYAEDT,
     OFFICIAL_PYAEDT_SOURCE_URL,
     POINT_COUNT,
@@ -24,8 +25,6 @@ from scgsim.aedt.specs.common import (
     SCHEMA_VERSION,
     HfssDrivenMode,
     LayerImport,
-    LumpedRlc,
-    LumpedTerminalPort,
     ModalPort,
     ObjectBinding,
     PdkMaterial,
@@ -34,7 +33,6 @@ from scgsim.aedt.specs.common import (
     _coerced_finite_number,
     _normalize_gds_spec,
     _padding,
-    _project_filename,
     _project_name_from_payload,
 )
 from scgsim.aedt.specs.modeling import (
@@ -44,9 +42,8 @@ from scgsim.aedt.specs.modeling import (
     PhysicalRepresentationPlan,
     _effective_record,
     _modeling_payload,
-    _physical_layers_from_payload,
+    _physical_fields_from_payload,
     _request_modeling,
-    _source_plan_layers,
     _source_record_payload,
     _verify_effective_records,
 )
@@ -54,7 +51,8 @@ from scgsim.aedt.specs.modeling import (
 
 def _direct_hfss_enclosure(spec: Any) -> dict[str, Any] | None:
     """Project selected GDS geometry's original full envelope exactly once."""
-    if spec._historical_physical or spec._historical_modeling:
+    # `_historical_*` are package-private flags every request spec in this package carries.
+    if spec._historical_physical or spec._historical_modeling:  # noqa: SLF001
         return None
     import gdstk
 
@@ -110,9 +108,81 @@ def _direct_hfss_enclosure(spec: Any) -> dict[str, Any] | None:
     )
 
 
+def _materials_from_payload(payload: Mapping[str, Any]) -> dict[str, PdkMaterial]:
+    """Decode the `materials` object, one PDK material per string material_id."""
+    raw_materials = payload.get("materials")
+    if not isinstance(raw_materials, dict):
+        raise TypeError("materials must be a JSON object")
+    materials: dict[str, PdkMaterial] = {}
+    for material_id, item in raw_materials.items():
+        if not isinstance(material_id, str) or not isinstance(item, dict):
+            raise TypeError("materials must map string material_id values to objects")
+        materials[material_id] = PdkMaterial(**item)
+    return materials
+
+
+def _run_control_from_payload(
+    run: Mapping[str, Any], sweep: FrequencySweepSpec
+) -> HfssRunControl:
+    """Decode a Driven run control; an absent adaptive control takes its default."""
+    return HfssRunControl(
+        _stripped_text(run.get("setup_name"), "setup_name"),
+        _stripped_text(run.get("sweep_name"), "sweep_name"),
+        sweep,
+        maximum_passes=run.get("maximum_passes", 99),
+        minimum_passes=run.get("minimum_passes", 1),
+        minimum_converged_passes=run.get("minimum_converged_passes", 1),
+        percent_refinement=run.get("percent_refinement", 30.0),
+        maximum_delta_s=run.get("maximum_delta_s", 0.02),
+    )
+
+
+def _effective_layer_imports(spec: Any) -> tuple[dict[str, Any], ...]:
+    """Pair each requested layer import with its native layer number and effective Z.
+
+    AEDT numbers imported layers 1..N in ascending (layer, datatype) order, so
+    that order is the native import layer. A layer holding a substrate binding
+    whose object is named `<layer_name>_...` is the retained domain, which the
+    Thin Film approximation must not collapse to a sheet.
+    """
+    mapping = _request_modeling(spec)
+    if mapping is None:
+        raise ValueError("historical requests have no new execution modeling map")
+    pairs = {
+        pair: index + 1
+        for index, pair in enumerate(
+            sorted((item.layer, item.datatype) for item in spec.layer_imports)
+        )
+    }
+    domain_pairs = {
+        (item.layer, item.datatype)
+        for item in spec.layer_imports
+        if any(
+            binding.role == "substrate"
+            and binding.layer == item.layer
+            and binding.object_name.startswith(f"{item.layer_name}_")
+            for binding in spec.object_bindings
+        )
+    }
+    return tuple(
+        {
+            **_effective_record(
+                item,
+                mapping,
+                retained_domain=(item.layer, item.datatype) in domain_pairs,
+            ),
+            "native_import_layer": pairs[(item.layer, item.datatype)],
+        }
+        for item in spec.layer_imports
+    )
+
+
 @dataclass(frozen=True)
 class FrequencySweepSpec:
-    """One HFSS Fast sweep with a caller-authored output count."""
+    """One HFSS Fast frequency sweep from `start_ghz` to `stop_ghz`.
+
+    `points` is the number of output frequency points, an exact whole number.
+    """
 
     start_ghz: float
     stop_ghz: float
@@ -137,6 +207,9 @@ class FrequencySweepSpec:
         object.__setattr__(self, "stop_ghz", stop)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the sweep; `points` keeps the authored numeric type so historical
+        payload identity is unchanged.
+        """
         return {
             "start_ghz": self.start_ghz,
             "stop_ghz": self.stop_ghz,
@@ -147,7 +220,13 @@ class FrequencySweepSpec:
 
 @dataclass(frozen=True)
 class HfssRunControl:
-    """One Driven setup, adaptive convergence policy, and Fast sweep."""
+    """A Driven setup: adaptive meshing, its convergence test, and a Fast sweep.
+
+    The adaptive solve runs between `minimum_passes` and `maximum_passes`, refining
+    `percent_refinement` percent per pass. A pass is converged when the largest
+    S-parameter change since the previous pass is below `maximum_delta_s`;
+    `minimum_converged_passes` such passes are required.
+    """
 
     setup_name: str
     sweep_name: str
@@ -178,6 +257,7 @@ class HfssRunControl:
         object.__setattr__(self, "maximum_delta_s", delta)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the setup, sweep and adaptive-pass controls."""
         return {
             "setup_name": self.setup_name,
             "sweep_name": self.sweep_name,
@@ -192,7 +272,15 @@ class HfssRunControl:
 
 @dataclass(frozen=True)
 class HfssDrivenSpec:
-    """The complete two-port, one-mode, one-setup public CPW handoff spec."""
+    """A two-port Driven HFSS model imported from a GDS file.
+
+    `mode` is "terminal" (ports defined by conductor references) or "modal"
+    (ports defined by an integration line). The GDS layers named in
+    `layer_imports` are imported, `object_bindings` give each imported object a role
+    and material, and `ports` are on the -X and +X faces. `region_padding_um` pads
+    the solution Region on +X, -X, +Y, -Y, +Z, -Z and must be zero on each port's
+    face. `length_mesh` optionally adds the uniform-CPW length mesh.
+    """
 
     mode: HfssDrivenMode
     gds_path: Path | str
@@ -285,42 +373,20 @@ class HfssDrivenSpec:
 
     @property
     def effective_region(self) -> dict[str, Any] | None:
+        """The solution Region in effective coordinates, projected from the selected GDS
+        geometry. None for historical requests.
+        """
         return _direct_hfss_enclosure(self)
 
     @property
     def effective_layer_imports(self) -> tuple[dict[str, Any], ...]:
-        mapping = _request_modeling(self)
-        if mapping is None:
-            raise ValueError("historical requests have no new execution modeling map")
-        pairs = {
-            pair: index + 1
-            for index, pair in enumerate(
-                sorted((item.layer, item.datatype) for item in self.layer_imports)
-            )
-        }
-        domain_pairs = {
-            (item.layer, item.datatype)
-            for item in self.layer_imports
-            if any(
-                binding.role == "substrate"
-                and binding.layer == item.layer
-                and binding.object_name.startswith(f"{item.layer_name}_")
-                for binding in self.object_bindings
-            )
-        }
-        return tuple(
-            {
-                **_effective_record(
-                    item,
-                    mapping,
-                    retained_domain=(item.layer, item.datatype) in domain_pairs,
-                ),
-                "native_import_layer": pairs[(item.layer, item.datatype)],
-            }
-            for item in self.layer_imports
-        )
+        """Layer imports as AEDT will receive them, after the Z-map is applied."""
+        return _effective_layer_imports(self)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize with effective layer imports and ports when a modeling plan is bound,
+        and the authored ones otherwise.
+        """
         return {
             **_modeling_payload(self),
             "schema_version": SCHEMA_VERSION,
@@ -366,6 +432,9 @@ class HfssDrivenSpec:
         base_dir: Path | None = None,
         allow_historical_modeling: bool = False,
     ) -> HfssDrivenSpec:
+        """Rebuild from a driven v1 payload, then verify stored effective layers and ports
+        against the plan.
+        """
         if payload.get("schema_version") != SCHEMA_VERSION:
             raise ValueError("unsupported HFSS driven schema")
         mode = _stripped_text(payload.get("mode"), "mode")
@@ -379,16 +448,7 @@ class HfssDrivenSpec:
         bindings = tuple(
             ObjectBinding(**item) for item in payload.get("object_bindings", ())
         )
-        raw_materials = payload.get("materials")
-        if not isinstance(raw_materials, dict):
-            raise TypeError("materials must be a JSON object")
-        materials: dict[str, PdkMaterial] = {}
-        for material_id, item in raw_materials.items():
-            if not isinstance(material_id, str) or not isinstance(item, dict):
-                raise TypeError(
-                    "materials must map string material_id values to objects"
-                )
-            materials[material_id] = PdkMaterial(**item)
+        materials = _materials_from_payload(payload)
         port_type = TerminalPort if mode == "terminal" else ModalPort
         ports = tuple(port_type(**item) for item in payload.get("ports", ()))
         run = payload.get("run_control", {})
@@ -396,20 +456,9 @@ class HfssDrivenSpec:
         length = payload.get("length_mesh")
         result = cls(
             modeling=payload.get("modeling"),
-            physical_layers=_physical_layers_from_payload(
+            **_physical_fields_from_payload(
                 payload, allow_historical=allow_historical_modeling
             ),
-            physical_representation=(
-                PhysicalRepresentationPlan.from_payload(
-                    payload["physical_representation"]
-                )
-                if "physical_representation" in payload
-                else None
-            ),
-            _historical_physical=allow_historical_modeling
-            and "physical_representation" not in payload,
-            _historical_modeling=allow_historical_modeling
-            and "modeling" not in payload,
             mode=mode,  # type: ignore[arg-type]
             gds_path=gds,
             project_name=_project_name_from_payload(
@@ -425,16 +474,7 @@ class HfssDrivenSpec:
             layer_imports=imports,
             object_bindings=bindings,
             ports=ports,  # type: ignore[arg-type]
-            run_control=HfssRunControl(
-                _stripped_text(run.get("setup_name"), "setup_name"),
-                _stripped_text(run.get("sweep_name"), "sweep_name"),
-                sweep,
-                maximum_passes=run.get("maximum_passes", 99),
-                minimum_passes=run.get("minimum_passes", 1),
-                minimum_converged_passes=run.get("minimum_converged_passes", 1),
-                percent_refinement=run.get("percent_refinement", 30.0),
-                maximum_delta_s=run.get("maximum_delta_s", 0.02),
-            ),
+            run_control=_run_control_from_payload(run, sweep),
             region_padding_um=tuple(payload.get("region_padding_um", ())),  # type: ignore[arg-type]
             length_mesh=LengthMeshSpec(**length) if length is not None else None,
             aedt_version=_stripped_text(
@@ -458,7 +498,15 @@ class HfssDrivenSpec:
 
 @dataclass(frozen=True)
 class EigenmodeRunControl:
-    """One explicit HFSS Eigenmode adaptive setup."""
+    """An Eigenmode setup: how many modes to find, from where, and when to stop.
+
+    AEDT searches for `num_modes` modes above `minimum_frequency_ghz`. The adaptive
+    solve runs between `minimum_passes` and `maximum_passes`, refining
+    `percent_refinement` percent per pass, and a pass is converged when the
+    frequency change since the previous pass is below
+    `maximum_delta_frequency_percent`; `minimum_converged_passes` such passes are
+    required.
+    """
 
     setup_name: str
     minimum_frequency_ghz: float
@@ -495,6 +543,7 @@ class EigenmodeRunControl:
         object.__setattr__(self, "percent_refinement", refinement)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the Eigenmode setup and adaptive-pass controls."""
         return {
             "setup_name": self.setup_name,
             "minimum_frequency_ghz": self.minimum_frequency_ghz,
@@ -509,7 +558,12 @@ class EigenmodeRunControl:
 
 @dataclass(frozen=True)
 class HfssEigenmodeSpec:
-    """One port-free HFSS Eigenmode model with explicit native setup controls."""
+    """A port-free HFSS Eigenmode model imported from a GDS file.
+
+    Eigenmode finds the resonant frequencies and fields of the structure itself, so
+    there are no ports. Layer imports, bindings and Region padding work as in
+    `HfssDrivenSpec`; `run_control` is the Eigenmode setup.
+    """
 
     gds_path: Path | str
     modeling: Modeling
@@ -531,6 +585,7 @@ class HfssEigenmodeSpec:
 
     @property
     def mode(self) -> Literal["eigenmode"]:
+        """Always `"eigenmode"`; written into the payload as `mode`."""
         return "eigenmode"
 
     def __post_init__(self) -> None:
@@ -547,42 +602,20 @@ class HfssEigenmodeSpec:
 
     @property
     def effective_region(self) -> dict[str, Any] | None:
+        """The solution Region in effective coordinates, projected from the selected GDS
+        geometry. None for historical requests.
+        """
         return _direct_hfss_enclosure(self)
 
     @property
     def effective_layer_imports(self) -> tuple[dict[str, Any], ...]:
-        mapping = _request_modeling(self)
-        if mapping is None:
-            raise ValueError("historical requests have no new execution modeling map")
-        pairs = {
-            pair: index + 1
-            for index, pair in enumerate(
-                sorted((item.layer, item.datatype) for item in self.layer_imports)
-            )
-        }
-        domain_pairs = {
-            (item.layer, item.datatype)
-            for item in self.layer_imports
-            if any(
-                binding.role == "substrate"
-                and binding.layer == item.layer
-                and binding.object_name.startswith(f"{item.layer_name}_")
-                for binding in self.object_bindings
-            )
-        }
-        return tuple(
-            {
-                **_effective_record(
-                    item,
-                    mapping,
-                    retained_domain=(item.layer, item.datatype) in domain_pairs,
-                ),
-                "native_import_layer": pairs[(item.layer, item.datatype)],
-            }
-            for item in self.layer_imports
-        )
+        """Layer imports as AEDT will receive them, after the Z-map is applied."""
+        return _effective_layer_imports(self)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize with effective layer imports when a modeling plan is bound, and the
+        authored ones otherwise.
+        """
         return {
             **_modeling_payload(self),
             "schema_version": EIGENMODE_SCHEMA_VERSION,
@@ -618,6 +651,9 @@ class HfssEigenmodeSpec:
         base_dir: Path | None = None,
         allow_historical_modeling: bool = False,
     ) -> HfssEigenmodeSpec:
+        """Rebuild from an Eigenmode v1 payload, then verify stored effective layers
+        against the plan.
+        """
         if payload.get("schema_version") != EIGENMODE_SCHEMA_VERSION:
             raise ValueError("unsupported HFSS Eigenmode schema")
         gds = Path(_stripped_text(payload.get("gds", {}).get("path"), "gds.path"))
@@ -636,20 +672,9 @@ class HfssEigenmodeSpec:
         length = payload.get("length_mesh")
         result = cls(
             modeling=payload.get("modeling"),
-            physical_layers=_physical_layers_from_payload(
+            **_physical_fields_from_payload(
                 payload, allow_historical=allow_historical_modeling
             ),
-            physical_representation=(
-                PhysicalRepresentationPlan.from_payload(
-                    payload["physical_representation"]
-                )
-                if "physical_representation" in payload
-                else None
-            ),
-            _historical_physical=allow_historical_modeling
-            and "physical_representation" not in payload,
-            _historical_modeling=allow_historical_modeling
-            and "modeling" not in payload,
             gds_path=gds,
             project_name=_project_name_from_payload(
                 payload.get("project", {}).get("name")
@@ -687,415 +712,14 @@ class HfssEigenmodeSpec:
 
 
 @dataclass(frozen=True)
-class HfssEprSpec:
-    """One body-first Eigenmode model with optional solve setup.
-
-    An explicit null run_control declares model-only preparation; EPR analysis
-    and cache requests retain their complete setup requirement.
-    """
-
-    modeling: Modeling
-    project_name: str
-    design_name: str
-    geometry: Any
-    run_control: EigenmodeRunControl | None = None
-    physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
-    physical_representation: PhysicalRepresentationPlan | None = None
-    _historical_physical: bool = False
-    _historical_modeling: bool = False
-    epr_request: Any = None
-    aedt_version: str = REQUIRED_AEDT_VERSION
-    pyaedt_version: str = LOCKED_PYAEDT
-    _legacy_payload: bool = False
-    expression_convergence: Any = None
-
-    @property
-    def lumped_rlcs(self) -> tuple[LumpedRlc, ...]:
-        return self.geometry.lumped_rlcs
-
-    @property
-    def mode(self) -> Literal["eigenmode"]:
-        return "eigenmode"
-
-    def __post_init__(self) -> None:
-        _request_modeling(self)
-        from scgsim.aedt.specs.epr import EprAnalysisRequest, ExpressionCacheConvergence
-        from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-
-        if (
-            str(self.aedt_version) != REQUIRED_AEDT_VERSION
-            or str(self.pyaedt_version) != LOCKED_PYAEDT
-        ):
-            raise ValueError("EPR V1 requires AEDT 2024.2 and PyAEDT 1.3.0")
-        project = _project_filename(self.project_name, "project_name")
-        object.__setattr__(self, "project_name", project.stem)
-        object.__setattr__(
-            self, "design_name", _stripped_text(self.design_name, "design_name")
-        )
-        if not isinstance(self.geometry, PreparedPlanarGeometry):
-            raise TypeError("geometry must be PreparedPlanarGeometry")
-        if not self._historical_modeling and self.geometry.modeling != self.modeling:
-            raise ValueError("request and prepared geometry modeling differ")
-        if not self._historical_modeling:
-            declared = _source_plan_layers(self.geometry.source)
-            if self.physical_layers and {
-                item.physical_layer_id: item for item in self.physical_layers
-            } != {item.physical_layer_id: item for item in declared}:
-                raise ValueError(
-                    "request physical layers differ from prepared source map"
-                )
-            object.__setattr__(self, "physical_layers", declared)
-
-        if self.run_control is not None and not isinstance(
-            self.run_control, EigenmodeRunControl
-        ):
-            raise TypeError("run_control must be EigenmodeRunControl or None")
-        if self.run_control is None and (
-            self.epr_request is not None
-            or self.expression_convergence is not None
-            or self._legacy_payload
-            or self._historical_modeling
-        ):
-            raise ValueError(
-                "EPR analysis/cache and historical requests require run_control"
-            )
-        if self.epr_request is not None and not isinstance(
-            self.epr_request, EprAnalysisRequest
-        ):
-            raise TypeError("epr_request must be EprAnalysisRequest or None")
-        if self.expression_convergence is not None and not isinstance(
-            self.expression_convergence, ExpressionCacheConvergence
-        ):
-            raise TypeError(
-                "expression_convergence must be ExpressionCacheConvergence or None"
-            )
-        if self._legacy_payload and self.expression_convergence is not None:
-            raise ValueError("legacy EPR payload cannot add expression convergence")
-        _validate_epr_selection(self)
-
-    def to_payload(self) -> dict[str, Any]:
-        schema_version = (
-            EPR_EIGENMODE_SCHEMA_VERSION
-            if self._legacy_payload
-            else (
-                EPR_EIGENMODE_SCHEMA_VERSION_V3
-                if self.expression_convergence is not None
-                else EPR_EIGENMODE_SCHEMA_VERSION_V2
-            )
-        )
-        return {
-            **_modeling_payload(self),
-            "schema_version": schema_version,
-            "mode": self.mode,
-            "aedt": {"requested_version": self.aedt_version},
-            "pyaedt": {
-                "locked_version": self.pyaedt_version,
-                "official_source": OFFICIAL_PYAEDT_SOURCE_URL,
-            },
-            "project": {"name": self.project_name, "design": self.design_name},
-            "run_control": (
-                None if self.run_control is None else self.run_control.to_payload()
-            ),
-            "geometry": self.geometry.to_payload(),
-            "epr": (
-                None if self.epr_request is None else self.epr_request.to_payload()
-            ),
-            **(
-                {"expression_convergence": self.expression_convergence.to_payload()}
-                if self.expression_convergence is not None
-                else {}
-            ),
-        }
-
-    @classmethod
-    def from_payload(
-        cls, payload: dict[str, Any], *, allow_historical_modeling: bool = False
-    ) -> HfssEprSpec:
-        from scgsim.aedt.specs.epr import EprAnalysisRequest, ExpressionCacheConvergence
-        from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-
-        schema = payload.get("schema_version")
-        if schema not in {
-            EPR_EIGENMODE_SCHEMA_VERSION,
-            EPR_EIGENMODE_SCHEMA_VERSION_V2,
-            EPR_EIGENMODE_SCHEMA_VERSION_V3,
-        }:
-            raise ValueError("unsupported HFSS EPR schema")
-        expected = {
-            "schema_version",
-            "mode",
-            "aedt",
-            "pyaedt",
-            "project",
-            "run_control",
-            "geometry",
-            "epr",
-        }
-        if "modeling" in payload:
-            expected.update({"modeling", "physical_layers"})
-        if "physical_representation" in payload:
-            expected.add("physical_representation")
-        if schema == EPR_EIGENMODE_SCHEMA_VERSION_V3:
-            expected.add("expression_convergence")
-            if payload.get("expression_convergence") is None:
-                raise ValueError(
-                    "HFSS EPR V3 requires an expression convergence configuration"
-                )
-        if set(payload) != expected or payload.get("mode") != "eigenmode":
-            raise ValueError("HFSS EPR payload members are not canonical")
-        run = payload.get("run_control")
-        if run is not None and not isinstance(run, dict):
-            raise TypeError("run_control must be a JSON object or null")
-        project = payload.get("project")
-        if not isinstance(project, dict):
-            raise TypeError("project must be a JSON object")
-        geometry = PreparedPlanarGeometry.from_payload(payload.get("geometry"))
-        return cls(
-            modeling=payload.get("modeling"),
-            physical_layers=_physical_layers_from_payload(
-                payload, allow_historical=allow_historical_modeling
-            ),
-            physical_representation=(
-                PhysicalRepresentationPlan.from_payload(
-                    payload["physical_representation"]
-                )
-                if "physical_representation" in payload
-                else None
-            ),
-            _historical_physical=allow_historical_modeling
-            and "physical_representation" not in payload,
-            _historical_modeling=allow_historical_modeling
-            and "modeling" not in payload,
-            project_name=_project_name_from_payload(project.get("name")),
-            design_name=_stripped_text(project.get("design"), "project.design"),
-            geometry=geometry,
-            run_control=None if run is None else EigenmodeRunControl(**run),
-            epr_request=(
-                None
-                if payload.get("epr") is None
-                else EprAnalysisRequest.from_payload(payload.get("epr"))
-            ),
-            expression_convergence=(
-                None
-                if schema != EPR_EIGENMODE_SCHEMA_VERSION_V3
-                else ExpressionCacheConvergence.from_payload(
-                    payload.get("expression_convergence")
-                )
-            ),
-            aedt_version=_stripped_text(
-                payload.get("aedt", {}).get("requested_version"),
-                "aedt.requested_version",
-            ),
-            pyaedt_version=_stripped_text(
-                payload.get("pyaedt", {}).get("locked_version"),
-                "pyaedt.locked_version",
-            ),
-            _legacy_payload=schema == EPR_EIGENMODE_SCHEMA_VERSION,
-        )
-
-
-@dataclass(frozen=True)
-class HfssEprAnalysisSpec:
-    """One saved-copy-only Eigenmode EPR analysis request."""
-
-    project_name: str
-    design_name: str
-    geometry: Any
-    run_control: EigenmodeRunControl
-    epr_request: Any
-    saved_solution: Any
-    aedt_version: str = REQUIRED_AEDT_VERSION
-    pyaedt_version: str = LOCKED_PYAEDT
-    _legacy_payload: bool = False
-
-    @property
-    def mode(self) -> Literal["eigenmode"]:
-        return "eigenmode"
-
-    def __post_init__(self) -> None:
-        from scgsim.aedt.specs.epr import EprAnalysisRequest, SavedSolution
-        from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-
-        if (
-            str(self.aedt_version) != REQUIRED_AEDT_VERSION
-            or str(self.pyaedt_version) != LOCKED_PYAEDT
-        ):
-            raise ValueError("EPR V1 requires AEDT 2024.2 and PyAEDT 1.3.0")
-        project = _project_filename(self.project_name, "project_name")
-        object.__setattr__(self, "project_name", project.stem)
-        object.__setattr__(
-            self, "design_name", _stripped_text(self.design_name, "design_name")
-        )
-        if not isinstance(self.geometry, PreparedPlanarGeometry):
-            raise TypeError("geometry must be PreparedPlanarGeometry")
-        if not isinstance(self.run_control, EigenmodeRunControl):
-            raise TypeError("run_control must be EigenmodeRunControl")
-        if not isinstance(self.saved_solution, SavedSolution):
-            raise TypeError("saved_solution must be SavedSolution")
-        if not isinstance(self.epr_request, EprAnalysisRequest):
-            raise TypeError("epr_request must be EprAnalysisRequest")
-        _validate_epr_selection(self)
-        if self.saved_solution.project_path.stem != self.project_name:
-            raise ValueError("saved solution project does not match project_name")
-        identity = self.saved_solution.identity
-        expected = {
-            "model_source_sha256": self.geometry.model_sha256,
-            "project_name": self.project_name,
-            "design_name": self.design_name,
-            "setup_name": self.run_control.setup_name,
-        }
-        if any(identity.get(name) != value for name, value in expected.items()):
-            raise ValueError(
-                "saved solution identity does not match the analysis model"
-            )
-
-    def to_payload(self) -> dict[str, Any]:
-        return {
-            "schema_version": (
-                EPR_ANALYSIS_SCHEMA_VERSION
-                if self._legacy_payload
-                else EPR_ANALYSIS_SCHEMA_VERSION_V2
-            ),
-            "mode": self.mode,
-            "aedt": {"requested_version": self.aedt_version},
-            "pyaedt": {
-                "locked_version": self.pyaedt_version,
-                "official_source": OFFICIAL_PYAEDT_SOURCE_URL,
-            },
-            "project": {"name": self.project_name, "design": self.design_name},
-            "run_control": self.run_control.to_payload(),
-            "geometry": self.geometry.to_payload(),
-            "epr": self.epr_request.to_payload(),
-            "saved_solution": self.saved_solution.to_payload(),
-        }
-
-    @classmethod
-    def from_payload(
-        cls, payload: dict[str, Any], *, base_dir: Path | None
-    ) -> HfssEprAnalysisSpec:
-        from scgsim.aedt.specs.epr import EprAnalysisRequest, SavedSolution
-        from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-
-        schema = payload.get("schema_version")
-        if schema not in {EPR_ANALYSIS_SCHEMA_VERSION, EPR_ANALYSIS_SCHEMA_VERSION_V2}:
-            raise ValueError("unsupported HFSS EPR analysis schema")
-        if base_dir is None:
-            raise ValueError("HFSS EPR analysis requires a bound base directory")
-        expected = {
-            "schema_version",
-            "mode",
-            "aedt",
-            "pyaedt",
-            "project",
-            "run_control",
-            "geometry",
-            "epr",
-            "saved_solution",
-        }
-        if set(payload) != expected or payload.get("mode") != "eigenmode":
-            raise ValueError("HFSS EPR analysis payload members are not canonical")
-        project = payload.get("project")
-        run = payload.get("run_control")
-        if not isinstance(project, dict) or not isinstance(run, dict):
-            raise TypeError("project and run_control must be JSON objects")
-        return cls(
-            project_name=_project_name_from_payload(project.get("name")),
-            design_name=_stripped_text(project.get("design"), "project.design"),
-            geometry=PreparedPlanarGeometry.from_payload(payload.get("geometry")),
-            run_control=EigenmodeRunControl(**run),
-            epr_request=EprAnalysisRequest.from_payload(payload.get("epr")),
-            saved_solution=SavedSolution.from_payload(
-                base_dir / "saved", payload.get("saved_solution")
-            ),
-            aedt_version=_stripped_text(
-                payload.get("aedt", {}).get("requested_version"),
-                "aedt.requested_version",
-            ),
-            pyaedt_version=_stripped_text(
-                payload.get("pyaedt", {}).get("locked_version"),
-                "pyaedt.locked_version",
-            ),
-            _legacy_payload=schema == EPR_ANALYSIS_SCHEMA_VERSION,
-        )
-
-
-def _validate_epr_selection(spec: HfssEprSpec | HfssEprAnalysisSpec) -> None:
-    from scgsim.aedt.epr.selection import surface_integral_groups
-    from scgsim.aedt.specs.epr import NormalizedSurfaceEprTotal
-
-    request = spec.epr_request
-    if request is None:
-        if getattr(spec, "expression_convergence", None) is not None:
-            raise ValueError("expression convergence requires an EPR analysis request")
-        return
-    if any(
-        item.field_side == "sidewall" for item in spec.geometry.contributions
-    ) or any(
-        item["contribution"]["side"] == "sidewall"
-        for item in spec.geometry.surface_bindings
-    ):
-        raise ValueError(
-            "sidewall Surface-EPR is excluded; reprepare a horizontal-only "
-            "handoff before EPR execution"
-        )
-    modes = (
-        tuple(range(1, spec.run_control.num_modes + 1))
-        if request.mode_indices is None
-        else request.mode_indices
-    )
-    if not modes or any(mode > spec.run_control.num_modes for mode in modes):
-        raise ValueError("EPR mode_indices must select configured Eigenmodes")
-    surface_ids = {item.contribution_id for item in spec.geometry.contributions}
-    selected_surfaces = (
-        surface_ids
-        if request.surface_contribution_ids is None
-        else set(request.surface_contribution_ids)
-    )
-    if not selected_surfaces <= surface_ids:
-        raise ValueError("EPR request selects an unknown surface contribution")
-    junction_ids = {item.junction_id for item in spec.geometry.junctions}
-    selected_junctions = (
-        junction_ids if request.junction_ids is None else set(request.junction_ids)
-    )
-    if not selected_junctions <= junction_ids:
-        raise ValueError("EPR request selects an unknown junction")
-    source_domains = {
-        item["semantic_id"] for item in spec.geometry.source["solution_regions"]
-    }
-    native_region = spec.geometry.source.get("native_region")
-    if native_region is not None:
-        source_domains.difference_update(native_region["logical_vacuum_ids"])
-        source_domains.add("Region")
-    if (
-        request.bulk_domain_ids is not None
-        and not set(request.bulk_domain_ids) <= source_domains
-    ):
-        raise ValueError("EPR request selects an unknown bulk domain")
-    groups = surface_integral_groups(spec.geometry, request)
-    convergence = getattr(spec, "expression_convergence", None)
-    if convergence is None:
-        return
-    if convergence.mode not in modes:
-        raise ValueError("expression convergence mode must be selected for EPR")
-    target = convergence.target
-    if isinstance(target, NormalizedSurfaceEprTotal):
-        selected_groups = [
-            group
-            for group in groups
-            if group["interface_kind"] == target.interface_kind
-            and group.get("evaluation_kind", "requested_margin")
-            == target.evaluation_kind
-            and float(group["margin_um"]) == target.margin_um
-        ]
-        if not selected_groups:
-            raise ValueError(
-                "normalized surface convergence target selects no prepared owner groups"
-            )
-
-
-@dataclass(frozen=True)
 class LengthMeshSpec:
-    """The explicit uniform-CPW exception to the ordinary ground mesh rule."""
+    """A length-based mesh on the signal and ground objects of a uniform CPW.
+
+    CPW is a coplanar waveguide, and MTL a multiconductor transmission line
+    (`uniform_cpw_mtl` is always true). `maximum_length_um` caps the mesh element
+    length in micrometres on the named objects.
+    TODO(human): state the ordinary ground mesh rule this exception overrides.
+    """
 
     signal_objects: tuple[str, ...]
     ground_objects: tuple[str, ...]
@@ -1123,222 +747,10 @@ class LengthMeshSpec:
         object.__setattr__(self, "maximum_length_um", maximum)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the signal and ground object lists and the maximum element length."""
         return {
             "uniform_cpw_mtl": True,
             "signal_objects": list(self.signal_objects),
             "ground_objects": list(self.ground_objects),
             "maximum_length_um": self.maximum_length_um,
         }
-
-
-@dataclass(frozen=True)
-class HfssDrivenGeometrySpec:
-    """Body-first Terminal model with optional setup; no synthetic solve controls."""
-
-    modeling: Modeling
-    project_name: str
-    design_name: str
-    geometry: Any
-    ports: tuple[TerminalPort | LumpedTerminalPort, ...]
-    run_control: HfssRunControl | None = None
-    physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
-    physical_representation: PhysicalRepresentationPlan | None = None
-    _historical_physical: bool = False
-    aedt_version: str = REQUIRED_AEDT_VERSION
-    pyaedt_version: str = LOCKED_PYAEDT
-    _historical_modeling: bool = False
-
-    @property
-    def mode(self) -> Literal["terminal"]:
-        return "terminal"
-
-    def __post_init__(self) -> None:
-        from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-
-        if not isinstance(self.geometry, PreparedPlanarGeometry):
-            raise TypeError("geometry must be PreparedPlanarGeometry")
-        if self.geometry.modeling != self.modeling:
-            raise ValueError("request and prepared geometry modeling differ")
-        if (
-            self.geometry.junctions
-            or self.geometry.lumped_rlcs
-            or self.geometry.contributions
-        ):
-            raise ValueError(
-                "Driven geometry cannot contain Eigenmode treatments or EPR requests"
-            )
-        declared = _source_plan_layers(self.geometry.source)
-        if self.physical_layers and self.physical_layers != declared:
-            raise ValueError("request physical layers differ from prepared source map")
-        object.__setattr__(self, "physical_layers", declared)
-        _request_modeling(self)
-        if (
-            self.aedt_version != REQUIRED_AEDT_VERSION
-            or self.pyaedt_version != LOCKED_PYAEDT
-        ):
-            raise ValueError("V1 requires AEDT 2024.2 and PyAEDT 1.3.0")
-        object.__setattr__(
-            self,
-            "project_name",
-            _project_filename(self.project_name, "project_name").stem,
-        )
-        object.__setattr__(
-            self, "design_name", _stripped_text(self.design_name, "design_name")
-        )
-        if self.run_control is not None and not isinstance(
-            self.run_control, HfssRunControl
-        ):
-            raise TypeError("run_control must be HfssRunControl or None")
-        ports = tuple(self.ports)
-        if (
-            tuple(port.index for port in ports) != (1, 2)
-            or len({port.name for port in ports}) != 2
-        ):
-            raise ValueError("V1 requires unique ordered ports 1 and 2")
-        supports = {
-            item["support_id"]: item
-            for item in self.geometry.source.get("lumped_supports", ())
-        }
-        conductor_ids = {
-            item["semantic_id"] for item in self.geometry.source["conductors"]
-        }
-        conductor_ids.update(
-            item["source_semantic_id"] for item in self.geometry.source["conductors"]
-        )
-        for port in ports:
-            if isinstance(port, LumpedTerminalPort):
-                support = supports.get(port.support_id)
-                if support is None:
-                    raise ValueError(f"terminal support {port.support_id!r} is missing")
-                original = support["source"]
-                if port.signal_entity_ids != tuple(
-                    original["terminal_a_entity_ids"]
-                ) or port.reference_entity_ids != tuple(
-                    original["terminal_b_entity_ids"]
-                ):
-                    raise ValueError(
-                        "lumped terminal ownership differs from ordered source contacts"
-                    )
-            elif isinstance(port, TerminalPort):
-                if not port.signal_entity_ids or not set(
-                    port.signal_entity_ids
-                ).issubset(conductor_ids):
-                    raise ValueError(
-                        "body-first Wave requires explicit source Signal Entities"
-                    )
-                if not set(port.reference_objects).issubset(conductor_ids):
-                    raise ValueError(
-                        "Wave references must bind source conductor Entities"
-                    )
-                padding = self.geometry.source["native_region"]["padding_um"]
-                # Match the existing native Region order, without extending Wave support.
-                index = {"+X": 0, "-X": 1, "+Y": 2, "-Y": 3, "+Z": 4, "-Z": 5}[
-                    port.side
-                ]
-                if padding[index] != 0:
-                    raise ValueError("Wave port side requires zero Region padding")
-            else:
-                raise TypeError(
-                    "Driven Terminal requires Wave or Lumped terminal records"
-                )
-        if all(isinstance(port, TerminalPort) for port in ports):
-            if {port.side for port in ports} != {"-X", "+X"}:
-                raise ValueError("Wave V1 requires -X/+X port sides")
-        references = tuple(
-            port.reference_entity_ids
-            if isinstance(port, LumpedTerminalPort)
-            else port.reference_objects
-            for port in ports
-        )
-        if references[0] != references[1]:
-            raise ValueError(
-                f"Terminal ports {ports[0].name!r} and {ports[1].name!r} "
-                "must share ordered source reference conductors"
-            )
-        object.__setattr__(self, "ports", ports)
-
-    def to_payload(self) -> dict[str, Any]:
-        return {
-            **_modeling_payload(self),
-            "schema_version": DRIVEN_GEOMETRY_SCHEMA_VERSION,
-            "mode": self.mode,
-            "aedt": {"requested_version": self.aedt_version},
-            "pyaedt": {
-                "locked_version": self.pyaedt_version,
-                "official_source": OFFICIAL_PYAEDT_SOURCE_URL,
-            },
-            "project": {"name": self.project_name, "design": self.design_name},
-            "geometry": self.geometry.to_payload(),
-            "ports": [port.to_payload() for port in self.ports],
-            "run_control": None
-            if self.run_control is None
-            else self.run_control.to_payload(),
-        }
-
-    @classmethod
-    def from_payload(
-        cls, payload: Mapping[str, Any], *, allow_historical_modeling: bool = False
-    ) -> HfssDrivenGeometrySpec:
-        from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-
-        if (
-            payload.get("schema_version") != DRIVEN_GEOMETRY_SCHEMA_VERSION
-            or payload.get("mode") != "terminal"
-        ):
-            raise ValueError("unsupported body-first Driven schema")
-        expected = {
-            "modeling",
-            "physical_layers",
-            "schema_version",
-            "mode",
-            "aedt",
-            "pyaedt",
-            "project",
-            "geometry",
-            "ports",
-            "run_control",
-        }
-        if "physical_representation" in payload:
-            expected.add("physical_representation")
-        if set(payload) != expected:
-            raise ValueError("body-first Driven payload members are not canonical")
-        run = payload["run_control"]
-        if run is not None:
-            run = dict(run)
-            run["sweep"] = FrequencySweepSpec(**run["sweep"])
-        return cls(
-            modeling=payload["modeling"],
-            project_name=payload["project"]["name"],
-            design_name=payload["project"]["design"],
-            geometry=PreparedPlanarGeometry.from_payload(payload["geometry"]),
-            ports=tuple(
-                LumpedTerminalPort.from_payload(item)
-                if item.get("kind") == "lumped"
-                else TerminalPort(**item)
-                for item in payload["ports"]
-            ),
-            run_control=None if run is None else HfssRunControl(**run),
-            physical_layers=_physical_layers_from_payload(
-                payload, allow_historical=allow_historical_modeling
-            ),
-            physical_representation=(
-                PhysicalRepresentationPlan.from_payload(
-                    payload["physical_representation"]
-                )
-                if "physical_representation" in payload
-                else None
-            ),
-            _historical_physical=allow_historical_modeling
-            and "physical_representation" not in payload,
-            aedt_version=payload["aedt"]["requested_version"],
-            pyaedt_version=payload["pyaedt"]["locked_version"],
-        )
-
-
-HfssSpec = (
-    HfssDrivenGeometrySpec
-    | HfssDrivenSpec
-    | HfssEigenmodeSpec
-    | HfssEprSpec
-    | HfssEprAnalysisSpec
-)

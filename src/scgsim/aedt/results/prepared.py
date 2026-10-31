@@ -31,12 +31,8 @@ from scgsim.aedt.results.resolve import (
     _validate_terminal_native_evidence,
     _verified,
 )
-from scgsim.aedt.specs.hfss import (
-    HfssDrivenGeometrySpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
-    HfssEprSpec,
-)
+from scgsim.aedt.specs.hfss import HfssDrivenSpec, HfssEigenmodeSpec
+from scgsim.aedt.specs.hfss_prepared import HfssDrivenGeometrySpec, HfssEprSpec
 from scgsim.aedt.specs.parse import parse_aedt_spec
 from scgsim.aedt.specs.q2d import Q2dSpec
 from scgsim.aedt.specs.q3d import Q3dSpec

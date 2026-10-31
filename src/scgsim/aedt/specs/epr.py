@@ -1,4 +1,12 @@
-"""Detached EPR and junction declarations, independent of native execution."""
+"""Declarations for energy participation ratio (EPR) analysis of an Eigenmode model.
+
+EPR asks what share of a mode's electric energy sits in a junction or in a lossy
+surface layer, which sets that mode's inductive coupling and its loss. This module
+owns the user-authored inputs: junction sheets, surface contributions, the choice
+of what to analyze, the convergence target for the field-expression cache, and the
+record of a saved solution. It never opens AEDT; the analysis that consumes these
+is in `scgsim.aedt.epr`.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +24,8 @@ from scgsim.aedt._data import (
 )
 from scgsim.semantics.epr import film_assumptions
 
+# Interface of a surface contribution: MA metal-air, MS metal-substrate,
+# SA substrate-air, MM metal-metal contact.
 InterfaceKind = Literal["MA", "MS", "SA", "MM"]
 FieldSide = Literal["top", "bottom", "sidewall"]
 
@@ -35,7 +45,15 @@ def surface_evaluations(
 
 @dataclass(frozen=True)
 class PlanarJunction:
-    """One source-linked linearized Lumped RLC junction sheet."""
+    """A Josephson junction modeled as a linear lumped element on one sheet.
+
+    The junction is linearized to the inductance `inductance_h` (must be positive)
+    with a capacitance `capacitance_f` (zero or more). It sits on the layout
+    polygon `source_polygon_id` and connects the nets `terminal_a_net` and
+    `terminal_b_net`, which must differ. `direction_xy` is the in-plane direction
+    of the sheet, normalized on construction, and `width_um` is its width in
+    micrometres.
+    """
 
     junction_id: str
     source_polygon_id: str
@@ -85,6 +103,7 @@ class PlanarJunction:
         object.__setattr__(self, "metadata", _freeze_str_keys_only(self.metadata))
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the junction with its unit direction vector and detached metadata."""
         return {
             "junction_id": self.junction_id,
             "source_polygon_id": self.source_polygon_id,
@@ -99,6 +118,7 @@ class PlanarJunction:
 
     @classmethod
     def from_payload(cls, value: Any) -> PlanarJunction:
+        """Rebuild from a payload whose member set is exactly the canonical one."""
         if not isinstance(value, Mapping):
             raise TypeError("junction payload must be a mapping")
         expected = {
@@ -119,7 +139,16 @@ class PlanarJunction:
 
 @dataclass(frozen=True)
 class SurfaceEprSpec:
-    """One requested physical-side contribution and its alternative margins."""
+    """Surface participation of one polygon face, as a thin lossy film.
+
+    `interface_kind` and `field_side` say which interface and which face (top,
+    bottom or sidewall) of the polygon the film covers. The film is described by
+    `film_thickness_m` and `film_relative_permittivity`, both required for MA, MS
+    and SA, plus optional `loss_tangent`, `source` and `preset`. An MM contact
+    needs none of these. Each value of `margins_um` is a separate requested
+    evaluation, in micrometres, alongside an automatic unmasked baseline.
+    TODO(human): state what a margin masks.
+    """
 
     contribution_id: str
     source_polygon_id: str
@@ -187,6 +216,9 @@ class SurfaceEprSpec:
         object.__setattr__(self, "metadata", _freeze_str_keys_only(self.metadata))
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the contribution; the film-assumption keys (`loss_tangent`, `source`,
+        `preset`) are written only for non-legacy records.
+        """
         payload = {
             "contribution_id": self.contribution_id,
             "source_polygon_id": self.source_polygon_id,
@@ -205,6 +237,9 @@ class SurfaceEprSpec:
 
     @classmethod
     def from_payload(cls, value: Any) -> SurfaceEprSpec:
+        """Rebuild from either the legacy member set (no film assumptions) or the current
+        one; legacy records stay marked legacy.
+        """
         if not isinstance(value, Mapping):
             raise TypeError("surface EPR payload must be a mapping")
         expected = {
@@ -225,7 +260,13 @@ class SurfaceEprSpec:
 
 @dataclass(frozen=True)
 class EprAnalysisRequest:
-    """Optional analysis/cache selection independent of model construction."""
+    """Which part of a solved model the EPR analysis should cover.
+
+    Each field lists the 1-based Eigenmode numbers, surface contribution IDs,
+    junction IDs or bulk domain IDs to analyze; None means everything that is
+    configured. This choice does not change the model, so it can differ between
+    analyses of the same saved solution.
+    """
 
     mode_indices: tuple[int, ...] | None = None
     surface_contribution_ids: tuple[str, ...] | None = None
@@ -258,6 +299,9 @@ class EprAnalysisRequest:
             raise ValueError("legacy EPR request cannot select bulk domains")
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize each selection as a list, or null for "select all"; `bulk_domain_ids`
+        is written only for non-legacy records.
+        """
         payload = {
             "mode_indices": (
                 None if self.mode_indices is None else list(self.mode_indices)
@@ -279,6 +323,7 @@ class EprAnalysisRequest:
 
     @classmethod
     def from_payload(cls, value: Any) -> EprAnalysisRequest:
+        """Rebuild from the legacy member set (no bulk domains) or the current one."""
         if not isinstance(value, Mapping):
             raise TypeError("EPR analysis request must be a mapping")
         expected = {
@@ -293,7 +338,11 @@ class EprAnalysisRequest:
 
 @dataclass(frozen=True)
 class NativeExpressionDefinition:
-    """One caller-authored Field Calculator operation sequence."""
+    """A named expression for the HFSS Field Calculator.
+
+    `operations` are the native Field Calculator commands, run in order. Each must
+    be a single non-empty line.
+    """
 
     name: str
     operations: tuple[str, ...]
@@ -313,6 +362,9 @@ class NativeExpressionDefinition:
         object.__setattr__(self, "operations", operations)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize tagged `kind: "native_expression"` so a convergence target can be told
+        from a surface total.
+        """
         return {
             "kind": "native_expression",
             "name": self.name,
@@ -321,6 +373,7 @@ class NativeExpressionDefinition:
 
     @classmethod
     def from_payload(cls, value: Any) -> NativeExpressionDefinition:
+        """Rebuild from a payload tagged `native_expression`."""
         if (
             not isinstance(value, Mapping)
             or set(value) != {"kind", "name", "operations"}
@@ -332,7 +385,11 @@ class NativeExpressionDefinition:
 
 @dataclass(frozen=True)
 class NormalizedSurfaceEprTotal:
-    """Select one interface/evaluation/margin total for a single mode."""
+    """Convergence target: the surface-EPR total for one interface and margin.
+
+    `evaluation_kind` picks the unmasked baseline (margin exactly 0) or one of the
+    requested margins from a `SurfaceEprSpec`.
+    """
 
     interface_kind: Literal["MA", "MS", "SA"]
     evaluation_kind: Literal["unmasked_baseline", "requested_margin"]
@@ -349,6 +406,7 @@ class NormalizedSurfaceEprTotal:
         object.__setattr__(self, "margin_um", margin)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize tagged `kind: "normalized_surface_epr_total"`."""
         return {
             "kind": "normalized_surface_epr_total",
             "interface_kind": self.interface_kind,
@@ -358,6 +416,7 @@ class NormalizedSurfaceEprTotal:
 
     @classmethod
     def from_payload(cls, value: Any) -> NormalizedSurfaceEprTotal:
+        """Rebuild from a payload tagged `normalized_surface_epr_total`."""
         if (
             not isinstance(value, Mapping)
             or set(value) != {"kind", "interface_kind", "evaluation_kind", "margin_um"}
@@ -373,7 +432,12 @@ class NormalizedSurfaceEprTotal:
 
 @dataclass(frozen=True)
 class ExpressionCacheConvergence:
-    """Select one native expression and its explicit convergence criterion."""
+    """When the field-expression cache counts as converged for one mode.
+
+    `target` is either a native expression or a normalized surface total, and
+    `criterion` is the threshold; it is relative when `use_relative_convergence`
+    is true.
+    """
 
     mode: int
     target: NativeExpressionDefinition | NormalizedSurfaceEprTotal
@@ -397,6 +461,7 @@ class ExpressionCacheConvergence:
         object.__setattr__(self, "criterion", criterion)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the mode, the tagged target and the criterion."""
         return {
             "mode": self.mode,
             "target": self.target.to_payload(),
@@ -406,6 +471,7 @@ class ExpressionCacheConvergence:
 
     @classmethod
     def from_payload(cls, value: Any) -> ExpressionCacheConvergence:
+        """Rebuild the target by its `kind` tag, then the convergence record."""
         if not isinstance(value, Mapping) or set(value) != {
             "mode",
             "target",
@@ -433,7 +499,13 @@ class ExpressionCacheConvergence:
 
 @dataclass(frozen=True)
 class SavedSolution:
-    """Verified immutable saved project and complete result-directory inventory."""
+    """A saved AEDT project and its result folder, with a content hash.
+
+    `members` inventories every file in the result folder, and `content_sha256`
+    fingerprints them, so a later analysis can prove it reads the same solve.
+    `identity` ties the saved solution to its model and setup and records the
+    solver's last completed pass and the pass whose fields were saved. All paths must stay inside `root`.
+    """
 
     root: Path
     project_path: Path
@@ -488,6 +560,9 @@ class SavedSolution:
         object.__setattr__(self, "identity", identity)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize with project and results paths relative to the saved root, so the
+        record moves with its folder.
+        """
         return {
             "schema_version": "scgsim.aedt.saved-solution.v1",
             "project": self.project_path.relative_to(self.root).as_posix(),
@@ -499,6 +574,7 @@ class SavedSolution:
 
     @classmethod
     def from_payload(cls, root: str | Path, value: Any) -> SavedSolution:
+        """Rebuild against `root`; the stored paths must stay inside it."""
         if not isinstance(value, Mapping):
             raise TypeError("saved solution payload must be a mapping")
         expected = {

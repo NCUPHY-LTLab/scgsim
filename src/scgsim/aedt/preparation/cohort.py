@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from scgsim.aedt._io import file_sha256, read_json
-from scgsim.aedt.specs.hfss import (
+from scgsim.aedt.specs.hfss_prepared import (
     HfssDrivenGeometrySpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,

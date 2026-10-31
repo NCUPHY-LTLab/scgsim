@@ -26,10 +26,9 @@ from scgsim.aedt.preparation.cohort import (
 from scgsim.aedt.results.provenance import RECEIPT_V3, validate_runtime_source
 from scgsim.aedt.runtime._text import unstripped_nonempty_text
 from scgsim.aedt.specs.common import AedtResources
-from scgsim.aedt.specs.hfss import (
+from scgsim.aedt.specs.hfss import HfssDrivenSpec, HfssEigenmodeSpec
+from scgsim.aedt.specs.hfss_prepared import (
     HfssDrivenGeometrySpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,
 )

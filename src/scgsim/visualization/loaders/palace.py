@@ -1,8 +1,14 @@
-"""Load Palace mesh and metadata into detached semantic preview modes."""
+"""Load Palace mesh and metadata into detached semantic preview modes.
+
+Owns: reading a finished Palace run folder (mesh, config, mesh manifest, index map)
+and cross-checking them into materials, boundaries, Surface-EPR and mesh scenes.
+Does not own: rendering, the preview manifest, or running Palace.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -10,10 +16,49 @@ from ..preview import GeometryPreview
 from ..scene import _FIXED_COLORS, _color, _Mode, _Part
 from ._common import _json, _sha256
 
+_Records = Mapping[tuple[int, int], Mapping[str, Any]]
+
 
 def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
     """Bind one Palace mesh to its exact semantic/config metadata."""
     root = Path(run_dir).expanduser().resolve()
+    paths = _require_inputs(root)
+    meshio, np, pv = _import_mesh_readers()
+
+    mesh_manifest = _json(paths["metadata/mesh_manifest.json"])
+    index_map = _json(paths["metadata/palace_index_map.json"])
+    config = _json(paths["config.json"])
+    mesh = meshio.read(paths["palace.msh"])
+    grid = _high_order_grid(mesh, mesh_manifest, pv)
+    table = _CellTable.from_mesh(mesh, grid, np)
+    records, physical_groups, field_names = _physical_group_records(
+        mesh, mesh_manifest, table
+    )
+
+    materials = _palace_materials(config, records, table.cells)
+    boundaries = _palace_boundaries(config, index_map, records, table.cells)
+    surface_epr = _palace_surface_epr(config, index_map, records, table.cells)
+    mesh_parts = _mesh_parts(table, physical_groups, field_names)
+    return GeometryPreview(
+        root=root,
+        backend="palace",
+        source_hashes={name: _sha256(path) for name, path in paths.items()},
+        modes={
+            "materials": _Mode(tuple(materials)),
+            "boundaries": _Mode(tuple(boundaries)),
+            "surface_epr": (
+                _Mode(tuple(surface_epr))
+                if surface_epr
+                else _Mode(
+                    unavailable_reason="No structured Surface-EPR assignment is present."
+                )
+            ),
+            "mesh": _Mode(tuple(mesh_parts)),
+        },
+    )
+
+
+def _require_inputs(root: Path) -> dict[str, Path]:
     paths = {
         "palace.msh": root / "palace.msh",
         "config.json": root / "config.json",
@@ -23,7 +68,11 @@ def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
     missing = [name for name, path in paths.items() if not path.is_file()]
     if missing:
         raise FileNotFoundError(f"Palace preview inputs are missing: {missing!r}")
+    return paths
 
+
+def _import_mesh_readers() -> tuple[Any, Any, Any]:
+    """Import the optional visualization dependencies."""
     try:
         import meshio
         import numpy as np
@@ -32,28 +81,62 @@ def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
         raise RuntimeError(
             "Palace geometry preview requires scgsim[visualization]"
         ) from exc
+    return meshio, np, pv
 
-    mesh_manifest = _json(paths["metadata/mesh_manifest.json"])
-    index_map = _json(paths["metadata/palace_index_map.json"])
-    config = _json(paths["config.json"])
-    mesh = meshio.read(paths["palace.msh"])
-    grid = _high_order_grid(mesh, mesh_manifest, pv)
-    physical_blocks = mesh.cell_data.get("gmsh:physical")
-    if physical_blocks is None or len(physical_blocks) != len(mesh.cells):
-        raise ValueError("Palace mesh has no complete gmsh:physical cell tags")
-    dimensions: list[int] = []
-    cell_types: list[str] = []
-    physical: list[int] = []
-    for block, tags in zip(mesh.cells, physical_blocks, strict=True):
-        dimensions.extend([block.dim] * len(block.data))
-        cell_types.extend([block.type] * len(block.data))
-        physical.extend(int(value) for value in tags)
-    if len(physical) != grid.n_cells:
-        raise ValueError("Palace mesh cell-tag cardinality mismatch")
-    dimensions_array = np.asarray(dimensions)
-    physical_array = np.asarray(physical)
-    cell_types_array = np.asarray(cell_types)
 
+@dataclass(frozen=True)
+class _CellTable:
+    """Per-cell dimension, Gmsh physical tag and cell type, aligned with the grid."""
+
+    grid: Any
+    dimensions: Any
+    physical: Any
+    cell_types: Any
+
+    @classmethod
+    def from_mesh(cls, mesh: Any, grid: Any, np: Any) -> _CellTable:
+        physical_blocks = mesh.cell_data.get("gmsh:physical")
+        if physical_blocks is None or len(physical_blocks) != len(mesh.cells):
+            raise ValueError("Palace mesh has no complete gmsh:physical cell tags")
+        dimensions: list[int] = []
+        cell_types: list[str] = []
+        physical: list[int] = []
+        for block, tags in zip(mesh.cells, physical_blocks, strict=True):
+            dimensions.extend([block.dim] * len(block.data))
+            cell_types.extend([block.type] * len(block.data))
+            physical.extend(int(value) for value in tags)
+        if len(physical) != grid.n_cells:
+            raise ValueError("Palace mesh cell-tag cardinality mismatch")
+        return cls(
+            grid=grid,
+            dimensions=np.asarray(dimensions),
+            physical=np.asarray(physical),
+            cell_types=np.asarray(cell_types),
+        )
+
+    def mask(self, dimension: int, attribute: int) -> Any:
+        return (self.dimensions == dimension) & (self.physical == attribute)
+
+    def cells(self, dimension: int, attribute: int) -> Any:
+        """The sub-grid of one physical group (dimension, tag)."""
+        import numpy as np
+
+        ids = np.flatnonzero(self.mask(dimension, attribute))
+        if not len(ids):
+            raise ValueError(
+                f"Palace physical group {(dimension, attribute)} has no cells"
+            )
+        return self.grid.extract_cells(ids)
+
+
+def _physical_group_records(
+    mesh: Any, mesh_manifest: Mapping[str, Any], table: _CellTable
+) -> tuple[_Records, set[tuple[int, int]], dict[tuple[int, int], list[str]]]:
+    """Match mesh physical tags to manifest records and Gmsh field names.
+
+    Returns the manifest record for each (dimension, tag), the set of tags that
+    occur in the mesh, and the Gmsh names for each tag.
+    """
     grouped_records: dict[tuple[int, int], list[Mapping[str, Any]]] = {}
     for record in mesh_manifest.get("groups", ()):
         for attribute in record["attributes"]:
@@ -61,7 +144,9 @@ def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
             grouped_records.setdefault(key, []).append(record)
     actual = {
         (int(dim), int(attribute))
-        for dim, attribute in zip(dimensions, physical, strict=True)
+        for dim, attribute in zip(
+            table.dimensions.tolist(), table.physical.tolist(), strict=True
+        )
     }
     if actual != set(grouped_records):
         raise ValueError("Palace mesh physical tags do not match mesh manifest")
@@ -78,64 +163,32 @@ def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
         )
         for key, items in grouped_records.items()
     }
+    return records, actual, field_names
 
-    def cells(dimension: int, attribute: int) -> Any:
-        ids = np.flatnonzero(
-            (dimensions_array == dimension) & (physical_array == attribute)
-        )
-        if not len(ids):
-            raise ValueError(
-                f"Palace physical group {(dimension, attribute)} has no cells"
-            )
-        return grid.extract_cells(ids)
 
-    materials = _palace_materials(config, records, cells)
-    boundaries = _palace_boundaries(config, index_map, records, cells)
-    surface_epr = _palace_surface_epr(config, index_map, records, cells)
-    mesh_parts: list[_Part] = []
-    for dimension, attribute in sorted(actual):
-        types = sorted(
-            set(
-                cell_types_array[
-                    (dimensions_array == dimension) & (physical_array == attribute)
-                ]
-            )
-        )
+def _mesh_parts(
+    table: _CellTable,
+    physical_groups: set[tuple[int, int]],
+    field_names: Mapping[tuple[int, int], list[str]],
+) -> list[_Part]:
+    parts: list[_Part] = []
+    for dimension, attribute in sorted(physical_groups):
+        mask = table.mask(dimension, attribute)
+        types = sorted(set(table.cell_types[mask]))
         name = " / ".join(sorted(field_names[(dimension, attribute)]))
-        mesh_parts.append(
+        parts.append(
             _Part(
-                dataset=cells(dimension, attribute),
+                dataset=table.cells(dimension, attribute),
                 semantic_id=f"mesh:{dimension}:{attribute}",
                 label=f"{name} · dim {dimension} · {'/'.join(types)}",
                 role="solution physical group",
                 color=_color(name),
                 opacity=0.35 if dimension == 3 else 0.85,
-                count=int(
-                    (
-                        (dimensions_array == dimension) & (physical_array == attribute)
-                    ).sum()
-                ),
+                count=int(mask.sum()),
                 show_edges=True,
             )
         )
-    source_hashes = {name: _sha256(path) for name, path in paths.items()}
-    return GeometryPreview(
-        root=root,
-        backend="palace",
-        source_hashes=source_hashes,
-        modes={
-            "materials": _Mode(tuple(materials)),
-            "boundaries": _Mode(tuple(boundaries)),
-            "surface_epr": (
-                _Mode(tuple(surface_epr))
-                if surface_epr
-                else _Mode(
-                    unavailable_reason="No structured Surface-EPR assignment is present."
-                )
-            ),
-            "mesh": _Mode(tuple(mesh_parts)),
-        },
-    )
+    return parts
 
 
 def _palace_materials(
@@ -185,63 +238,17 @@ def _palace_materials(
 def _palace_boundaries(
     config: Mapping[str, Any],
     index_map: Mapping[str, Any],
-    records: Mapping[tuple[int, int], Mapping[str, Any]],
+    records: _Records,
     cells: Any,
 ) -> list[_Part]:
     boundary_root = config.get("Boundaries", {})
+    indexed = _index_map_identities(index_map)
     assignments: dict[int, tuple[str, str, str]] = {}
-    indexed: dict[tuple[str, int], Mapping[str, Any]] = {}
-    for item in index_map.get("entries", ()):
-        if item.get("index") is None:
-            continue
-        key = (str(item.get("section")), int(item["index"]))
-        if key in indexed:
-            raise ValueError(f"Palace index map has duplicate identity {key!r}")
-        indexed[key] = item
-
-    def add(attribute: int, semantic_id: str, label: str, role: str) -> None:
-        attribute = int(attribute)
-        previous = assignments.get(attribute)
-        value = (semantic_id, label, role)
-        if previous is not None and previous != value:
-            raise ValueError(f"Palace boundary {attribute} has conflicting assignments")
-        assignments[attribute] = value
-
-    for section, role in (("Ground", "Ground"), ("PEC", "PEC")):
+    for section in ("Ground", "PEC"):
         for attribute in boundary_root.get(section, {}).get("Attributes", ()):
-            add(int(attribute), role, role, role)
-    for section, role in (("Terminal", "Terminal"), ("LumpedPort", "LumpedPort")):
-        configured: set[int] = set()
-        for item in boundary_root.get(section, ()):
-            index = int(item["Index"])
-            if index in configured:
-                raise ValueError(f"Palace {section} index {index} is duplicated")
-            configured.add(index)
-            record = indexed.get((f"Boundaries.{section}", index))
-            if record is None:
-                raise ValueError(
-                    f"Palace {section} index {index} lacks index-map identity"
-                )
-            label = str(
-                record.get("entry_name")
-                or record.get("terminal_name")
-                or record.get("net_id")
-                or f"{section} {index}"
-            )
-            attributes = tuple(int(value) for value in item.get("Attributes", ()))
-            if attributes != tuple(
-                int(value) for value in record.get("attributes", ())
-            ):
-                raise ValueError(f"Palace {section} config/index-map mismatch")
-            for attribute in attributes:
-                add(int(attribute), f"{section}:{index}", label, role)
-        mapped = {
-            index
-            for (mapped_section, index) in indexed
-            if mapped_section == f"Boundaries.{section}"
-        }
-        if mapped != configured:
-            raise ValueError(f"Palace {section} config/index-map identities differ")
+            _assign_boundary(assignments, int(attribute), section, section, section)
+    for section in ("Terminal", "LumpedPort"):
+        _assign_indexed_boundaries(assignments, boundary_root, indexed, section)
     parts: list[_Part] = []
     surface_attributes = {
         attribute for dimension, attribute in records if dimension == 2
@@ -273,6 +280,74 @@ def _palace_boundaries(
             )
         )
     return parts
+
+
+def _index_map_identities(
+    index_map: Mapping[str, Any],
+) -> dict[tuple[str, int], Mapping[str, Any]]:
+    """Index-map entries keyed by (config section, config index)."""
+    indexed: dict[tuple[str, int], Mapping[str, Any]] = {}
+    for item in index_map.get("entries", ()):
+        if item.get("index") is None:
+            continue
+        key = (str(item.get("section")), int(item["index"]))
+        if key in indexed:
+            raise ValueError(f"Palace index map has duplicate identity {key!r}")
+        indexed[key] = item
+    return indexed
+
+
+def _assign_boundary(
+    assignments: dict[int, tuple[str, str, str]],
+    attribute: int,
+    semantic_id: str,
+    label: str,
+    role: str,
+) -> None:
+    """Record what a boundary tag means; two different meanings are an error."""
+    previous = assignments.get(attribute)
+    value = (semantic_id, label, role)
+    if previous is not None and previous != value:
+        raise ValueError(f"Palace boundary {attribute} has conflicting assignments")
+    assignments[attribute] = value
+
+
+def _assign_indexed_boundaries(
+    assignments: dict[int, tuple[str, str, str]],
+    boundary_root: Mapping[str, Any],
+    indexed: Mapping[tuple[str, int], Mapping[str, Any]],
+    section: str,
+) -> None:
+    """Assign Terminal or LumpedPort tags, checking config against the index map."""
+    configured: set[int] = set()
+    for item in boundary_root.get(section, ()):
+        index = int(item["Index"])
+        if index in configured:
+            raise ValueError(f"Palace {section} index {index} is duplicated")
+        configured.add(index)
+        record = indexed.get((f"Boundaries.{section}", index))
+        if record is None:
+            raise ValueError(f"Palace {section} index {index} lacks index-map identity")
+        label = str(
+            record.get("entry_name")
+            or record.get("terminal_name")
+            or record.get("net_id")
+            or f"{section} {index}"
+        )
+        attributes = tuple(int(value) for value in item.get("Attributes", ()))
+        if attributes != tuple(int(value) for value in record.get("attributes", ())):
+            raise ValueError(f"Palace {section} config/index-map mismatch")
+        for attribute in attributes:
+            _assign_boundary(
+                assignments, attribute, f"{section}:{index}", label, section
+            )
+    mapped = {
+        index
+        for (mapped_section, index) in indexed
+        if mapped_section == f"Boundaries.{section}"
+    }
+    if mapped != configured:
+        raise ValueError(f"Palace {section} config/index-map identities differ")
 
 
 def _palace_surface_epr(

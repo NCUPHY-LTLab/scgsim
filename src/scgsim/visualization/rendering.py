@@ -1,4 +1,9 @@
-"""Headless and interactive rendering of detached visualization scenes."""
+"""Headless and interactive rendering of detached visualization scenes.
+
+Owns: PyVista screenshots, the contact sheet and the notebook legend.
+Does not own: building scenes from solver output (``loaders/``) or the manifest that
+records what was rendered (``preview.py``).
+"""
 
 from __future__ import annotations
 
@@ -18,99 +23,25 @@ from .scene import _MODE_TITLES, _VIEWS, _Part
 def _render_mode(
     *, root: Path, mode_name: str, parts: tuple[_Part, ...]
 ) -> tuple[Path, list[dict[str, Any]]]:
+    """Render every view of one mode plus a contact sheet into previews/geometry/<mode>."""
     if not parts:
         raise ValueError(f"available preview mode {mode_name} has no geometry")
     try:
         import pyvista as pv
-        from PIL import Image, ImageDraw, ImageFont
+        from PIL import Image  # noqa: F401  - fail before rendering if Pillow is missing
     except ImportError as exc:
         raise RuntimeError("geometry rendering requires scgsim[visualization]") from exc
 
     final_dir = root / "previews/geometry" / mode_name
     final_dir.parent.mkdir(parents=True, exist_ok=True)
+    # Render into a sibling temporary folder so a failed render never leaves a
+    # half-written final folder; the copy at the end replaces it in one step.
     with tempfile.TemporaryDirectory(
         prefix=f".{mode_name}-", dir=final_dir.parent
     ) as raw:
         temporary = Path(raw)
-        bounds = _combined_bounds(parts)
-        center = (
-            (bounds[0] + bounds[1]) / 2,
-            (bounds[2] + bounds[3]) / 2,
-            (bounds[4] + bounds[5]) / 2,
-        )
-        span = max(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4])
-        _configure_headless_rendering()
-        for filename, label, direction, clip in _VIEWS:
-            plotter = pv.Plotter(off_screen=True, window_size=(1600, 1200))
-            plotter.set_background("white")
-            _add_parts(plotter, parts, clip=clip, center=center)
-            plotter.add_axes(line_width=3, labels_off=False)
-            plotter.add_text(label, position="upper_left", font_size=12, color="black")
-            vector = _unit(direction)
-            distance = max(span * 2.5, 1.0)
-            plotter.camera.position = tuple(
-                center[i] + vector[i] * distance for i in range(3)
-            )
-            plotter.camera.focal_point = center
-            plotter.camera.up = _camera_up(vector)
-            plotter.camera.parallel_projection = True
-            plotter.camera.parallel_scale = max(span * 0.62, 1.0)
-            plotter.reset_camera_clipping_range()
-            plotter.screenshot(temporary / f"{filename}.png")
-            plotter.close()
-
-        sheet = Image.new("RGB", (4800, 4200), "white")
-        draw = ImageDraw.Draw(sheet)
-        title_font = _font(ImageFont, 74)
-        header_font = _font(ImageFont, 42)
-        body_font = _font(ImageFont, 31)
-        draw.text(
-            (120, 70),
-            f"{_MODE_TITLES[mode_name]} — Geometry Preview",
-            fill="black",
-            font=title_font,
-        )
-        draw.text(
-            (120, 170),
-            "Color is presentation; semantic authority is solver metadata.",
-            fill="#444444",
-            font=body_font,
-        )
-        legend = _legend(parts)
-        columns = 4
-        column_width = 1140
-        rows = max(math.ceil(len(legend) / columns), 1)
-        row_height = min(220, 1080 // rows)
-        for index, item in enumerate(legend):
-            column = index % columns
-            row = index // columns
-            x = 120 + column * column_width
-            y = 270 + row * row_height
-            draw.rectangle(
-                (x, y + 8, x + 54, y + 62),
-                fill=item["color"],
-                outline="#333333",
-            )
-            wrapped = textwrap.wrap(item["label"], width=42) or [item["label"]]
-            semantic = textwrap.wrap(item["semantic_id"], width=42) or [
-                item["semantic_id"]
-            ]
-            text = "\n".join([*wrapped, *semantic, f"{item['role']} · {item['count']}"])
-            draw.multiline_text(
-                (x + 72, y), text, fill="black", font=body_font, spacing=2
-            )
-        draw.text(
-            (120, 1360),
-            "CURATED12 — cutaways are visualization clips, not solver boundaries",
-            fill="#333333",
-            font=header_font,
-        )
-        for index, (filename, _, _, _) in enumerate(_VIEWS):
-            tile = Image.open(temporary / f"{filename}.png").convert("RGB")
-            tile.thumbnail((1200, 900))
-            x = (index % 4) * 1200
-            y = 1500 + (index // 4) * 900
-            sheet.paste(tile, (x, y))
+        _screenshot_views(pv, parts, temporary)
+        sheet = _contact_sheet(mode_name, parts, temporary)
         sheet.save(temporary / "contact-sheet.png")
         if final_dir.exists():
             shutil.rmtree(final_dir)
@@ -126,6 +57,94 @@ def _render_mode(
             }
         )
     return final_dir / "contact-sheet.png", artifacts
+
+
+def _screenshot_views(pv: Any, parts: tuple[_Part, ...], directory: Path) -> None:
+    """Save one parallel-projection PNG per entry in _VIEWS."""
+    bounds = _combined_bounds(parts)
+    center = (
+        (bounds[0] + bounds[1]) / 2,
+        (bounds[2] + bounds[3]) / 2,
+        (bounds[4] + bounds[5]) / 2,
+    )
+    span = max(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4])
+    _configure_headless_rendering()
+    for filename, label, direction, clip in _VIEWS:
+        plotter = pv.Plotter(off_screen=True, window_size=(1600, 1200))
+        plotter.set_background("white")
+        _add_parts(plotter, parts, clip=clip, center=center)
+        plotter.add_axes(line_width=3, labels_off=False)
+        plotter.add_text(label, position="upper_left", font_size=12, color="black")
+        vector = _unit(direction)
+        distance = max(span * 2.5, 1.0)
+        plotter.camera.position = tuple(
+            center[i] + vector[i] * distance for i in range(3)
+        )
+        plotter.camera.focal_point = center
+        plotter.camera.up = _camera_up(vector)
+        plotter.camera.parallel_projection = True
+        plotter.camera.parallel_scale = max(span * 0.62, 1.0)
+        plotter.reset_camera_clipping_range()
+        plotter.screenshot(directory / f"{filename}.png")
+        plotter.close()
+
+
+def _contact_sheet(mode_name: str, parts: tuple[_Part, ...], directory: Path) -> Any:
+    """Title, legend and a grid of the view screenshots on one 4800x4200 sheet."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    sheet = Image.new("RGB", (4800, 4200), "white")
+    draw = ImageDraw.Draw(sheet)
+    title_font = _font(ImageFont, 74)
+    header_font = _font(ImageFont, 42)
+    body_font = _font(ImageFont, 31)
+    draw.text(
+        (120, 70),
+        f"{_MODE_TITLES[mode_name]} — Geometry Preview",
+        fill="black",
+        font=title_font,
+    )
+    draw.text(
+        (120, 170),
+        "Color is presentation; semantic authority is solver metadata.",
+        fill="#444444",
+        font=body_font,
+    )
+    _draw_legend(draw, _legend(parts), body_font)
+    draw.text(
+        (120, 1360),
+        "CURATED12 — cutaways are visualization clips, not solver boundaries",
+        fill="#333333",
+        font=header_font,
+    )
+    for index, (filename, _, _, _) in enumerate(_VIEWS):
+        tile = Image.open(directory / f"{filename}.png").convert("RGB")
+        tile.thumbnail((1200, 900))
+        x = (index % 4) * 1200
+        y = 1500 + (index // 4) * 900
+        sheet.paste(tile, (x, y))
+    return sheet
+
+
+def _draw_legend(draw: Any, legend: list[dict[str, Any]], font: Any) -> None:
+    columns = 4
+    column_width = 1140
+    rows = max(math.ceil(len(legend) / columns), 1)
+    row_height = min(220, 1080 // rows)
+    for index, item in enumerate(legend):
+        column = index % columns
+        row = index // columns
+        x = 120 + column * column_width
+        y = 270 + row * row_height
+        draw.rectangle(
+            (x, y + 8, x + 54, y + 62),
+            fill=item["color"],
+            outline="#333333",
+        )
+        wrapped = textwrap.wrap(item["label"], width=42) or [item["label"]]
+        semantic = textwrap.wrap(item["semantic_id"], width=42) or [item["semantic_id"]]
+        text = "\n".join([*wrapped, *semantic, f"{item['role']} · {item['count']}"])
+        draw.multiline_text((x + 72, y), text, fill="black", font=font, spacing=2)
 
 
 def _add_parts(

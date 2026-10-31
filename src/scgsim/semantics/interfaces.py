@@ -6,6 +6,7 @@ from .materials import is_supported_material_kind, is_vacuum_material_kind
 
 
 def conductor_solution_interface_kind(solution_material_kind: str) -> str:
+    """Classify a conductor surface by what touches it: MA (metal-air) for vacuum, MS (metal-substrate) otherwise."""
     if not is_supported_material_kind(solution_material_kind):
         raise ValueError(
             "solution material kind must be vacuum, dielectric, or conductor"
@@ -14,6 +15,7 @@ def conductor_solution_interface_kind(solution_material_kind: str) -> str:
 
 
 def solution_interface_kind(lower_material_kind: str, upper_material_kind: str) -> str:
+    """Classify a boundary between two solution domains: AA (air-air), SA (substrate-air) or SS (substrate-substrate)."""
     if not is_supported_material_kind(
         lower_material_kind
     ) or not is_supported_material_kind(upper_material_kind):
@@ -34,6 +36,7 @@ def solution_interface_owner_ids(
     *,
     lower_is_vacuum: bool,
 ) -> tuple[str, str]:
+    """Order the two owners of an interface; an SA interface lists the solid (substrate) side first."""
     if kind == "SA" and lower_is_vacuum:
         return (upper_id, lower_id)
     return (lower_id, upper_id)

@@ -1,4 +1,10 @@
-"""Q3D v3 request and source-geometry contract; no older Q3D parser."""
+"""Q3D request: extract the capacitance matrix (and optionally AC R/L) of a 3D model.
+
+Q3D solves electrostatics (capacitance C and conductance G) and, optionally,
+AC resistance and inductance (R and L) between named nets. The request describes
+the conductors as extruded planar bodies, groups them into nets, and records the
+layout source they came from. Only schema v3 is read. Nothing here talks to AEDT.
+"""
 
 from __future__ import annotations
 
@@ -30,7 +36,7 @@ from scgsim.aedt.specs.modeling import (
     PhysicalRepresentationPlan,
     _effective_record,
     _modeling_payload,
-    _physical_layers_from_payload,
+    _physical_fields_from_payload,
     _request_modeling,
     _source_record_payload,
     _verify_effective_records,
@@ -39,7 +45,12 @@ from scgsim.aedt.specs.modeling import (
 
 @dataclass(frozen=True)
 class Q3dNetSpec:
-    """One exact connected Q3D net and optional signal source/sink."""
+    """One Q3D net: the conductor bodies that are electrically one node.
+
+    A `Signal` net may name a `source_object` and `sink_object` with the Region
+    side each sits on; AC R/L needs them to define where current enters and leaves.
+    A `Ground` net never has terminals. Source and sink are all given or all absent.
+    """
 
     name: str
     net_type: Literal["Signal", "Ground"]
@@ -99,6 +110,9 @@ class Q3dNetSpec:
         object.__setattr__(self, "sink_object", sink)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the net with its source and sink terminal fields, which are null when
+        unused.
+        """
         return {
             "name": self.name,
             "net_type": self.net_type,
@@ -112,7 +126,7 @@ class Q3dNetSpec:
 
 @dataclass(frozen=True)
 class Q3dBodySpec:
-    """One normalized connected planar body, including holes, swept along +Z.
+    """One connected planar body, including holes, extruded along +Z.
 
     Body identity is independent of final Net ownership. Optional source fields
     are absent for explicitly authored source-free bodies, never inferred.
@@ -181,6 +195,9 @@ class Q3dBodySpec:
             object.__setattr__(self, "source_layer_datatype", tuple(pair))
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize every field, leaving out `physical_layer_id` when it is unset; points
+        become `[x, y]` lists.
+        """
         payload = asdict(self)
         if self.physical_layer_id is None:
             payload.pop("physical_layer_id")
@@ -220,47 +237,21 @@ def _q3d_geometry_source(
         "source_geometry_sha256",
         "source_stack_sha256",
     ):
-        digest = source[field]
-        if (
-            not isinstance(digest, str)
-            or len(digest) != 64
-            or any(character not in "0123456789abcdef" for character in digest)
-        ):
+        if not _is_sha256(source[field]):
             raise ValueError(f"Q3D geometry_source {field} is invalid")
-    files = source["files"]
-    if not isinstance(files, Mapping) or set(files) != {
-        "canonical_gds",
-        "stack",
-        "trace",
-    }:
-        raise ValueError("Q3D geometry_source files are invalid")
-    copied_files: dict[str, dict[str, str]] = {}
-    for key, reference in files.items():
-        if not isinstance(reference, Mapping) or set(reference) != {"path", "sha256"}:
-            raise ValueError(f"Q3D geometry_source file reference is invalid: {key}")
-        path = reference["path"]
-        digest = reference["sha256"]
-        if not isinstance(path, str) or not path:
-            raise ValueError(f"Q3D geometry_source file path is invalid: {key}")
-        if (
-            not isinstance(digest, str)
-            or len(digest) != 64
-            or any(character not in "0123456789abcdef" for character in digest)
-        ):
-            raise ValueError(f"Q3D geometry_source file hash is invalid: {key}")
-        copied_files[key] = {"path": path, "sha256": digest}
+    copied_files = _checked_source_files(source["files"])
     if copied_files["canonical_gds"]["sha256"] != source["source_gds_sha256"]:
         raise ValueError("Q3D source GDS digest differs from its file reference")
     if copied_files["stack"]["sha256"] != source["source_stack_sha256"]:
         raise ValueError("Q3D source stack digest differs from its file reference")
 
     physical_ground_nets = source["physical_ground_nets"]
-    net_by_name = {net.name: net for net in nets}
+    net_names = {net.name for net in nets}
     if (
         not isinstance(physical_ground_nets, list)
         or any(not isinstance(name, str) or not name for name in physical_ground_nets)
         or len(set(physical_ground_nets)) != len(physical_ground_nets)
-        or not set(physical_ground_nets) <= set(net_by_name)
+        or not set(physical_ground_nets) <= net_names
     ):
         raise ValueError("Q3D geometry_source physical_ground_nets are invalid")
 
@@ -283,12 +274,47 @@ def _q3d_geometry_source(
     return source
 
 
+def _is_sha256(value: Any) -> bool:
+    """True for a 64-character lowercase hexadecimal digest string."""
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _checked_source_files(files: Any) -> dict[str, dict[str, str]]:
+    """Validate the canonical GDS, stack and trace file references of a source."""
+    if not isinstance(files, Mapping) or set(files) != {
+        "canonical_gds",
+        "stack",
+        "trace",
+    }:
+        raise ValueError("Q3D geometry_source files are invalid")
+    copied: dict[str, dict[str, str]] = {}
+    for key, reference in files.items():
+        if not isinstance(reference, Mapping) or set(reference) != {"path", "sha256"}:
+            raise ValueError(f"Q3D geometry_source file reference is invalid: {key}")
+        path = reference["path"]
+        if not isinstance(path, str) or not path:
+            raise ValueError(f"Q3D geometry_source file path is invalid: {key}")
+        if not _is_sha256(reference["sha256"]):
+            raise ValueError(f"Q3D geometry_source file hash is invalid: {key}")
+        copied[key] = {"path": path, "sha256": reference["sha256"]}
+    return copied
+
+
 @dataclass(frozen=True)
 class Q3dSpec:
-    """One body-backed Q3D model with optional matrix setup (v3 only).
+    """A Q3D model built from extruded bodies, with an optional matrix setup.
 
-    Explicit run_control=None declares model preparation without solve setup.
-    Non-null controls retain the existing C/G and optional AC R/L payload.
+    `bodies` are the conductors and substrate; `nets` partition the conductor
+    bodies. `region_padding_um` pads the solution Region on +X, -X, +Y, -Y, +Z and
+    -Z. `run_control=None` declares preparation without a solve setup; otherwise the
+    setup solves C and G, plus AC R/L when `solve_ac_rl` is true. A
+    `grounded_region_net` names a new net for the Region boundary and is only
+    allowed when `solve_ac_rl` is false. `geometry_source` links the model back to
+    its GDS and stack files by digest.
     """
 
     modeling: Modeling
@@ -313,6 +339,7 @@ class Q3dSpec:
 
     @property
     def mode(self) -> Literal["q3d"]:
+        """Always `"q3d"`; written into the payload as `mode`."""
         return "q3d"
 
     def __post_init__(self) -> None:
@@ -326,6 +353,25 @@ class Q3dSpec:
             raise TypeError("run_control must be MatrixRunControl or None")
         if self.run_control is None and self._historical_modeling:
             raise ValueError("historical Q3D requests require run_control")
+        bodies = self._checked_bodies(materials)
+        object.__setattr__(self, "bodies", bodies)
+        object.__setattr__(self, "region_padding_um", _padding(self.region_padding_um))
+        nets = self._checked_nets(bodies)
+        if self.geometry_source is not None:
+            if not isinstance(self.geometry_source, Mapping):
+                raise TypeError("geometry_source must be a JSON object")
+            object.__setattr__(
+                self,
+                "geometry_source",
+                _q3d_geometry_source(self.geometry_source, bodies=bodies, nets=nets),
+            )
+        self._check_grounded_region_net(nets)
+        object.__setattr__(self, "nets", nets)
+
+    def _checked_bodies(
+        self, materials: Mapping[str, PdkMaterial]
+    ) -> tuple[Q3dBodySpec, ...]:
+        """Bodies are unique, and each material matches the body's physical role."""
         bodies = tuple(self.bodies)
         if not bodies or any(not isinstance(body, Q3dBodySpec) for body in bodies):
             raise TypeError("Q3D bodies must contain Q3dBodySpec records")
@@ -342,8 +388,10 @@ class Q3dSpec:
                 raise ValueError(
                     "Q3D conductor bodies require a PDK superconductor and final Net"
                 )
-        object.__setattr__(self, "bodies", bodies)
-        object.__setattr__(self, "region_padding_um", _padding(self.region_padding_um))
+        return bodies
+
+    def _checked_nets(self, bodies: tuple[Q3dBodySpec, ...]) -> tuple[Q3dNetSpec, ...]:
+        """Nets partition the conductor bodies exactly and agree with each body's Net."""
         nets = tuple(self.nets)
         if (
             not nets
@@ -363,33 +411,36 @@ class Q3dSpec:
             raise ValueError("Q3D body final Net differs from Net membership")
         if not isinstance(self.solve_ac_rl, bool):
             raise TypeError("solve_ac_rl must be boolean")
+        # AC R/L needs a source and sink on every Signal net to define the current path.
         if self.solve_ac_rl and any(
             net.net_type == "Signal" and net.source_object is None for net in nets
         ):
             raise ValueError(
                 "Q3D AC/RL requires complete terminals for every Signal net"
             )
-        if self.geometry_source is not None:
-            if not isinstance(self.geometry_source, Mapping):
-                raise TypeError("geometry_source must be a JSON object")
-            object.__setattr__(
-                self,
-                "geometry_source",
-                _q3d_geometry_source(self.geometry_source, bodies=bodies, nets=nets),
-            )
+        return nets
+
+    def _check_grounded_region_net(self, nets: tuple[Q3dNetSpec, ...]) -> None:
+        """The grounded-Region enclosure Net must be new and excludes AC R/L.
+
+        TODO(human): why the grounded Region cannot be combined with AC R/L.
+        """
         grounded_region_net = self.grounded_region_net
-        if grounded_region_net is not None:
-            _stripped_text(grounded_region_net, "grounded_region_net")
-            if self.solve_ac_rl:
-                raise ValueError("grounded_region_net requires solve_ac_rl=False")
-            if grounded_region_net in {net.name for net in nets}:
-                raise ValueError(
-                    "grounded_region_net must name a new dedicated enclosure net"
-                )
-        object.__setattr__(self, "nets", nets)
+        if grounded_region_net is None:
+            return
+        _stripped_text(grounded_region_net, "grounded_region_net")
+        if self.solve_ac_rl:
+            raise ValueError("grounded_region_net requires solve_ac_rl=False")
+        if grounded_region_net in {net.name for net in nets}:
+            raise ValueError(
+                "grounded_region_net must name a new dedicated enclosure net"
+            )
 
     @property
     def effective_bodies(self) -> tuple[dict[str, Any], ...]:
+        """Bodies with the physical-layer plan applied, carrying both source and effective
+        Z.
+        """
         mapping = _request_modeling(self)
         if mapping is None:
             raise ValueError("historical requests have no new execution modeling map")
@@ -438,6 +489,7 @@ class Q3dSpec:
 
     @property
     def effective_region_padding_um(self) -> tuple[float, ...]:
+        """Region padding in effective (native) space, ordered +X, -X, +Y, -Y, +Z, -Z."""
         trace = self.effective_region
         if trace is None:
             return self.region_padding_um
@@ -454,6 +506,9 @@ class Q3dSpec:
         )
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize with the effective bodies when a modeling plan is bound, and the
+        authored bodies otherwise.
+        """
         payload = {
             **_modeling_payload(self),
             "schema_version": self.schema_version,
@@ -493,26 +548,18 @@ class Q3dSpec:
         base_dir: Path | None = None,
         allow_historical_modeling: bool = False,
     ) -> Q3dSpec:
+        """Rebuild from a v3 payload and verify the stored effective bodies against the
+        plan.
+        """
         if payload.get("schema_version") != Q3D_SCHEMA_VERSION:
             raise ValueError("unsupported Q3D schema")
         if {"gds", "layer_imports", "object_bindings"} & set(payload):
             raise ValueError("Q3D v3 does not accept GDS-piece inputs")
         result = cls(
             modeling=payload.get("modeling"),
-            physical_layers=_physical_layers_from_payload(
+            **_physical_fields_from_payload(
                 payload, allow_historical=allow_historical_modeling
             ),
-            physical_representation=(
-                PhysicalRepresentationPlan.from_payload(
-                    payload["physical_representation"]
-                )
-                if "physical_representation" in payload
-                else None
-            ),
-            _historical_physical=allow_historical_modeling
-            and "physical_representation" not in payload,
-            _historical_modeling=allow_historical_modeling
-            and "modeling" not in payload,
             project_name=_project_name_from_payload(
                 payload.get("project", {}).get("name")
             ),

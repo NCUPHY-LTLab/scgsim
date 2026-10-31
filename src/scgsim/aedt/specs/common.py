@@ -1,4 +1,15 @@
-"""Immutable shared AEDT request records and schema constants."""
+"""Records and schema constants shared by every AEDT request family.
+
+Owns the small immutable pieces that more than one request is built from: lumped
+RLC treatments, solve resources, GDS layer imports, PDK materials, object
+bindings, the three kinds of port, matrix (Q3D/Q2D) run control, and the
+validators they share. Each record checks its own fields on construction and
+converts to and from a JSON payload with `to_payload`.
+
+Whole requests are in `hfss`, `hfss_prepared`, `q3d` and `q2d`. Nothing here
+talks to AEDT; the tool versions are pinned only so a request can refuse to run
+against a different AEDT or PyAEDT.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +24,15 @@ from scgsim.aedt._data import _stripped_text
 
 @dataclass(frozen=True)
 class LumpedRlc:
-    """Electrical treatment of a neutral support; None disables a component."""
+    """A resistor, inductor and capacitor placed on one neutral lumped support.
+
+    A neutral support is the sheet a lumped element occupies between two groups of
+    conductors. `topology` says whether the enabled components are wired in series
+    or in parallel; AEDT spells these "Serial" and "Parallel" (see `_rlc`). A
+    component left as None is absent, and at least one must be enabled. Units are
+    ohm, henry and farad. Values only have to be finite; this record does not
+    reject zero or negative values.
+    """
 
     support_id: str
     topology: Literal["series", "parallel"]
@@ -43,6 +62,7 @@ class LumpedRlc:
             raise ValueError("lumped RLC requires an enabled component")
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize all three components, writing null for a disabled one."""
         return {
             "support_id": self.support_id,
             "topology": self.topology,
@@ -53,6 +73,7 @@ class LumpedRlc:
 
     @classmethod
     def from_payload(cls, value: Mapping[str, Any]) -> LumpedRlc:
+        """Rebuild from a payload; an unknown key raises TypeError from the constructor."""
         return cls(**dict(value))
 
 
@@ -64,6 +85,9 @@ PdkMaterialKind = Literal["vacuum", "dielectric", "superconductor"]
 
 Side = Literal["+X", "-X", "+Y", "-Y", "+Z", "-Z"]
 
+# Schema identifiers. A payload's `schema_version` selects its parser (`parse.py`),
+# and a changed payload shape gets a new version instead of an edit. Older versions
+# stay listed because saved hand-offs still have to load.
 SCHEMA_VERSION = "scgsim.aedt.hfss-driven.v1"
 
 EIGENMODE_SCHEMA_VERSION = "scgsim.aedt.hfss-eigenmode.v1"
@@ -93,14 +117,21 @@ LOCKED_PYAEDT = "1.3.0"
 
 REQUIRED_AEDT_VERSION = "2024.2"
 
+# Default number of frequency points in a Fast sweep.
 POINT_COUNT = 20_000
 
+# Curved-surface approximation level given to AEDT when meshing curved GDS edges.
+# TODO(human): why level 9 and not another value.
 SURFACE_APPROXIMATION_LEVEL = 9
 
 
 @dataclass(frozen=True)
 class AedtResources:
-    """Explicit local AEDT solve resources, independent of model geometry."""
+    """How much of this machine one AEDT solve may use, independent of geometry.
+
+    `cores` is the number of solver cores; `ram_limit_percent` (1 to 100) is the
+    RAM limit AEDT is asked to respect, as a percentage.
+    """
 
     cores: int
     ram_limit_percent: int
@@ -120,6 +151,7 @@ class AedtResources:
             raise ValueError("ram_limit_percent must be an integer from 1 to 100")
 
     def to_payload(self) -> dict[str, int]:
+        """Serialize as `cores` and `ram_limit_percent`."""
         return {"cores": self.cores, "ram_limit_percent": self.ram_limit_percent}
 
 
@@ -161,6 +193,7 @@ def _adaptive_controls(
     minimum_converged_passes: Any,
     percent_refinement: Any,
 ) -> float:
+    """Check the adaptive-pass counts and return the validated refinement percent."""
     for field, value in (
         ("maximum_passes", maximum_passes),
         ("minimum_passes", minimum_passes),
@@ -178,7 +211,13 @@ def _adaptive_controls(
 
 @dataclass(frozen=True)
 class LayerImport:
-    """One numeric GDS layer and its explicit PyAEDT destination layer group."""
+    """One GDS (layer, datatype) pair and where AEDT should put it in Z.
+
+    `layer_name` is the PyAEDT layer the polygons are imported into. The metal
+    occupies `z_min_um` to `z_max_um`, in micrometres; equal values make a
+    zero-thickness conductor sheet. `physical_layer_id` ties the import to a
+    declared physical layer when a modeling plan is used.
+    """
 
     layer: int
     datatype: int
@@ -205,6 +244,7 @@ class LayerImport:
         object.__setattr__(self, "z_max_um", high)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize with `physical_layer_id` first, and only when it is set."""
         return {
             **(
                 {"physical_layer_id": self.physical_layer_id}
@@ -221,7 +261,12 @@ class LayerImport:
 
 @dataclass(frozen=True)
 class PdkMaterial:
-    """PDK-owned material identity consumed by AEDT without numeric properties."""
+    """A PDK material identity, without numeric properties.
+
+    The PDK owns what the material is (vacuum, dielectric or superconductor); AEDT
+    only needs a name. Dielectrics and vacuum name an AEDT library material through
+    `library_name`. A superconductor must not name an AEDT material at all.
+    """
 
     material_id: str
     kind: PdkMaterialKind
@@ -256,6 +301,9 @@ class PdkMaterial:
         object.__setattr__(self, "library_name", library_name)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize identity, kind, the superconducting flag and the AEDT library name
+        (null for a superconductor).
+        """
         return {
             "material_id": self.material_id,
             "kind": self.kind,
@@ -266,7 +314,12 @@ class PdkMaterial:
 
 @dataclass(frozen=True)
 class ObjectBinding:
-    """Exact object readback and PDK material reference after numeric-layer import."""
+    """What an imported object is, by name, once AEDT has read the GDS.
+
+    The GDS import produces objects named after their layer. Each binding records
+    the object's GDS layer number, its role (ground, signal or substrate) and the
+    PDK material it uses, so the model can be checked against what AEDT created.
+    """
 
     object_name: str
     layer: int
@@ -285,6 +338,7 @@ class ObjectBinding:
         )
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the object name with its layer, role and material."""
         return {
             "object_name": self.object_name,
             "layer": self.layer,
@@ -295,7 +349,14 @@ class ObjectBinding:
 
 @dataclass(frozen=True)
 class LumpedTerminalPort:
-    """Driven Terminal excitation on an explicit source support, not Region."""
+    """A lumped port on a neutral support, for a Driven Terminal solve.
+
+    The port sits on a lumped support rather than on a Region face. Its signal
+    entities must equal the support's terminal-A conductors and its reference
+    entities the terminal-B conductors, in the authored order. `impedance_ohm` is the
+    port impedance, `renormalize` asks AEDT to renormalize results to it, and
+    de-embedding is not supported (only 0 is accepted).
+    """
 
     index: int
     name: str
@@ -326,6 +387,9 @@ class LumpedTerminalPort:
             raise TypeError("renormalize must be bool")
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize with `kind: "lumped"`, which is how a port list tells lumped ports
+        from wave ports.
+        """
         return {
             "kind": "lumped",
             "index": self.index,
@@ -340,6 +404,7 @@ class LumpedTerminalPort:
 
     @classmethod
     def from_payload(cls, value: Mapping[str, Any]) -> LumpedTerminalPort:
+        """Rebuild from a payload whose `kind` must be `"lumped"`."""
         record = dict(value)
         if record.pop("kind") != "lumped":
             raise ValueError("lumped terminal kind differs")
@@ -348,7 +413,13 @@ class LumpedTerminalPort:
 
 @dataclass(frozen=True)
 class TerminalPort:
-    """Driven Terminal port facts; references are meaningful only in this mode."""
+    """A wave port on a Region face, for a Driven Terminal solve.
+
+    `side` is the Region face the port sits on. `reference_objects` are the ground
+    conductors the port voltage is measured against, and both ports of a model must
+    share the same ordered list. `deembed_um` de-embeds the port by that
+    distance in micrometres.
+    """
 
     index: int
     name: str
@@ -384,6 +455,7 @@ class TerminalPort:
         object.__setattr__(self, "deembed_um", deembed)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the wave port; `signal_entity_ids` is written only when non-empty."""
         return {
             "index": self.index,
             "name": self.name,
@@ -400,7 +472,11 @@ class TerminalPort:
 
 @dataclass(frozen=True)
 class ModalPort:
-    """Driven Modal port facts; an explicit integration line is required."""
+    """A wave port on a Region face, for a Driven Modal solve.
+
+    `integration_line_um` is the line, as two XYZ points in micrometres, that fixes
+    the port's voltage path and polarity. Modal ports have no reference objects.
+    """
 
     index: int
     name: str
@@ -430,6 +506,7 @@ class ModalPort:
         )
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the integration line as two XYZ points in micrometres."""
         return {
             "index": self.index,
             "name": self.name,
@@ -441,6 +518,7 @@ class ModalPort:
 def _padding(
     values: tuple[float, float, float, float, float, float],
 ) -> tuple[float, float, float, float, float, float]:
+    """Check the six Region padding values, in PyAEDT's face order +X,-X,+Y,-Y,+Z,-Z."""
     if len(values) != 6:
         raise ValueError(
             "region_padding_um requires six PyAEDT face values: +X,-X,+Y,-Y,+Z,-Z"
@@ -456,6 +534,7 @@ def _padding(
 def _padding_2d(
     values: tuple[float, float, float, float],
 ) -> tuple[float, float, float, float]:
+    """Check the four Q2D Region padding values, ordered +X,-X,+Y,-Y."""
     if len(values) != 4:
         raise ValueError("Q2D region_padding_um requires +X,-X,+Y,-Y values")
     result = tuple(
@@ -467,6 +546,10 @@ def _padding_2d(
 
 
 def _normalize_common_spec(spec: Any) -> dict[str, PdkMaterial]:
+    """Check tool versions, names, materials and vacuum; normalize them in place.
+
+    Shared by every request family. Returns the validated material mapping.
+    """
     if (
         str(spec.aedt_version) != REQUIRED_AEDT_VERSION
         or str(spec.pyaedt_version) != LOCKED_PYAEDT
@@ -563,7 +646,14 @@ def _normalize_gds_spec(spec: Any) -> tuple[set[str], set[str]]:
 
 @dataclass(frozen=True)
 class MatrixRunControl:
-    """One Q3D/Q2D matrix setup and shared adaptive convergence policy."""
+    """One Q3D or Q2D matrix setup with its adaptive meshing policy.
+
+    The matrix is solved at the single frequency `frequency_ghz`. AEDT refines the
+    mesh pass by pass: it runs between `minimum_passes` and `maximum_passes`,
+    refines `percent_refinement` percent per pass, and counts a pass as converged
+    when the change since the previous pass is below `convergence_percent`;
+    `minimum_converged_passes` such passes are required.
+    """
 
     setup_name: str
     frequency_ghz: float
@@ -596,6 +686,7 @@ class MatrixRunControl:
         object.__setattr__(self, "percent_refinement", refinement)
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the setup name, frequency and adaptive-pass controls."""
         return {
             "setup_name": self.setup_name,
             "frequency_ghz": self.frequency_ghz,

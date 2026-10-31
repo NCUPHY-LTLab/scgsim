@@ -34,12 +34,8 @@ from scgsim.aedt.results.provenance import (
 )
 from scgsim.aedt.runtime.benchmark import BENCHMARK_RELATIVE
 from scgsim.aedt.specs.common import ModalPort
-from scgsim.aedt.specs.hfss import (
-    HfssDrivenGeometrySpec,
-    HfssDrivenSpec,
-    HfssEigenmodeSpec,
-    HfssEprSpec,
-)
+from scgsim.aedt.specs.hfss import HfssDrivenSpec, HfssEigenmodeSpec
+from scgsim.aedt.specs.hfss_prepared import HfssDrivenGeometrySpec, HfssEprSpec
 from scgsim.aedt.specs.parse import parse_aedt_spec
 from scgsim.aedt.specs.q2d import Q2dSpec
 from scgsim.aedt.specs.q3d import Q3dSpec

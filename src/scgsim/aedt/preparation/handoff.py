@@ -36,7 +36,8 @@ from scgsim.aedt.specs.epr import (
 from scgsim.aedt.specs.geometry import (
     PreparedPlanarGeometry,
 )
-from scgsim.aedt.specs.hfss import EigenmodeRunControl, HfssEprAnalysisSpec
+from scgsim.aedt.specs.hfss import EigenmodeRunControl
+from scgsim.aedt.specs.hfss_prepared import HfssEprAnalysisSpec
 from scgsim.aedt.specs.parse import AedtSpec
 from scgsim.aedt.specs.q2d import Q2dSpec
 from scgsim.aedt.specs.q3d import Q3dSpec
