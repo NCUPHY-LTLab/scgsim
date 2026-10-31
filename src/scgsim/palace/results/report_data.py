@@ -9,13 +9,15 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
-from .resolve import (
+from ._artifact_files import (
     _compute_hash_entry,
     _confined_path,
     _extract_hash_map,
-    _read_csv_table,
     _read_json,
-    _validate_index_entries,
+)
+from ._index_map import _validate_index_entries
+from ._result_tables import (
+    _read_csv_table,
     _validate_surface_mask_table,
     _validate_surface_table,
 )
