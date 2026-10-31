@@ -9,6 +9,7 @@ an accident of implementation.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 
@@ -19,7 +20,7 @@ def _expect_mapping(value: Any, name: str) -> dict[str, Any]:
 
 
 def _expect_scalar(
-    payload: dict[str, Any],
+    payload: Mapping[str, Any],
     field: str,
     _type: type,
     *,

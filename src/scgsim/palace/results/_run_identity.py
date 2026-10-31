@@ -27,6 +27,7 @@ from ._expect import (
     _expect_scalar,
     _optional_dict,
 )
+from ._run_documents import HandoffMetadata, ResourceRecord, RunMetadata
 
 _REQUIRED_HASH_ENTRIES = (
     "palace.msh",
@@ -38,27 +39,26 @@ _REQUIRED_HASH_ENTRIES = (
 # ------------------------------------------------------ metadata headers
 
 
-def _validate_contract_schema(payload: dict[str, Any], label: str) -> None:
+def _validate_contract_schema(payload: Mapping[str, Any], label: str) -> None:
     if _expect_scalar(payload, "schema_version", int, fallback=0) != 1:
         raise ValueError(f"{label} schema_version must be integer 1.")
 
 
-# Two shapes of ``palace_identity`` are accepted:
-# - With ``config_compatibility_probe == 'native_dry_run'``: Palace's own --dry-run
-#   accepts the sealed config before solving. The runtime version and commit are
-#   provenance only, so declaring them as an eligibility gate is refused
-#   (docs/specs/palace-electrostatic-sgb.qmd).
-# - Without a probe: the older shape, which declares a ``runtime`` string.
-# TODO(human): confirm the no-probe shape is the older format and whether any
-# current writer still produces it.
+# ``palace_identity`` as ``execution/handoff.py`` writes it: Palace's own --dry-run
+# accepts the sealed config before solving (``config_compatibility_probe``). The
+# runtime version and commit are provenance only, so declaring them as an
+# eligibility gate is refused (docs/specs/palace-electrostatic-sgb.qmd). A run from
+# before the probe existed declared a ``runtime`` string instead; it is refused.
 def _validate_palace_identity(payload: Mapping[str, Any]) -> None:
     if not payload:
         raise ValueError("palace_identity must be a non-empty mapping.")
     _expect_scalar(payload, "config_schema", str)
     probe = payload.get("config_compatibility_probe")
     if probe is None:
-        _expect_scalar(payload, "runtime", str)
-        return
+        raise ValueError(
+            "palace_identity has no config_compatibility_probe; this run was written "
+            "by an older SCGSim. Supported: 'native_dry_run'. Prepare the handoff again."
+        )
     if probe != "native_dry_run":
         raise ValueError("palace_identity config compatibility probe is invalid.")
     if payload.get("config_compatibility_semantics") != "required_before_solve":
@@ -82,7 +82,7 @@ def _validate_palace_identity(payload: Mapping[str, Any]) -> None:
 
 
 def _validate_scalar_identity(
-    handoff_metadata: dict[str, Any], run_metadata: dict[str, Any]
+    handoff_metadata: HandoffMetadata, run_metadata: RunMetadata
 ) -> None:
     handoff_identity = handoff_metadata.get("source_revisions")
     run_identity = run_metadata.get("source_revisions")
@@ -128,7 +128,7 @@ def _validate_scalar_identity(
         )
 
 
-def _validate_execution_identity(root: Path, handoff_metadata: dict[str, Any]) -> None:
+def _validate_execution_identity(root: Path, handoff_metadata: HandoffMetadata) -> None:
     execution = _expect_mapping(
         handoff_metadata.get("execution_identity"), "handoff execution_identity"
     )
@@ -174,7 +174,7 @@ def _validate_execution_identity(root: Path, handoff_metadata: dict[str, Any]) -
 
 
 def _validate_handoff_id(
-    handoff_metadata: dict[str, Any], expected_handoff_id: str
+    handoff_metadata: HandoffMetadata, expected_handoff_id: str
 ) -> None:
     """Recompute the identity; colocated copied IDs are not evidence."""
 
@@ -213,7 +213,7 @@ def _validate_handoff_id(
 
 
 def _validate_resource_identity(
-    resource_record: dict[str, Any], handoff_metadata: dict[str, Any]
+    resource_record: ResourceRecord, handoff_metadata: HandoffMetadata
 ) -> None:
     for field in (
         "profile",
@@ -242,7 +242,9 @@ def _validate_resource_identity(
 
 # Every listed file is re-read and re-hashed. The metadata must also cover the mesh,
 # config, mesh manifest and index map.
-def _validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
+def _validate_hashes(
+    root: Path, metadata: HandoffMetadata | RunMetadata, label: str
+) -> None:
     hashes = _expect_list(metadata.get("hashes"), f"{label} metadata hashes")
     if not hashes:
         raise ValueError(f"{label} metadata has no hash entries.")
@@ -279,7 +281,7 @@ def _validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
         )
 
 
-def _validate_archive_record(root: Path, resource_record: dict[str, Any]) -> None:
+def _validate_archive_record(root: Path, resource_record: ResourceRecord) -> None:
     if resource_record.get("kind") != "manual_handoff":
         raise ValueError("resource record kind must be manual_handoff.")
 

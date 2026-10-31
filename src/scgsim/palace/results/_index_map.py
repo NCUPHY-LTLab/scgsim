@@ -19,6 +19,11 @@ import math
 from typing import Any, TypedDict
 
 from ._expect import _expect_list, _expect_mapping, _expect_scalar
+from ._run_documents import IndexMap
+
+# Film spec as ``preparation/surface_epr.py`` writes it. Version 2 added the SI
+# fields ``model_l0_m`` and ``film_thickness_m``.
+FILM_SPEC_SCHEMA = "scgsim.palace.surface-film.v2"
 
 
 class IndexCounts(TypedDict):
@@ -56,7 +61,7 @@ class SurfaceMaskEntry(TypedDict):
     mask: MaskEvidence
 
 
-def _index_counts(index_map: dict[str, Any]) -> IndexCounts:
+def _index_counts(index_map: IndexMap) -> IndexCounts:
     entries = _expect_list(index_map.get("entries"), "palace_index_map.entries")
     counts = {
         "terminal": 0,
@@ -78,7 +83,7 @@ def _index_counts(index_map: dict[str, Any]) -> IndexCounts:
     return counts
 
 
-def _validate_index_entries(index_map: dict[str, Any]) -> None:
+def _validate_index_entries(index_map: IndexMap) -> None:
     entries = index_map.get("entries")
     if not isinstance(entries, list) or not entries:
         raise ValueError("palace_index_map.json must include non-empty entries list.")
@@ -151,7 +156,7 @@ def _validate_index_entries(index_map: dict[str, Any]) -> None:
     _surface_mask_entries(index_map)
 
 
-def _surface_mask_entries(index_map: dict[str, Any]) -> tuple[SurfaceMaskEntry, ...]:
+def _surface_mask_entries(index_map: IndexMap) -> tuple[SurfaceMaskEntry, ...]:
     """Return validated native Inset rows without inferring identity from names."""
     entries = _expect_list(index_map.get("entries"), "palace_index_map.entries")
     dielectric = tuple(
@@ -202,45 +207,48 @@ def _check_baseline_rows(baselines: tuple[dict[str, Any], ...]) -> None:
         if not owners or not all(isinstance(owner, str) and owner for owner in owners):
             raise ValueError("surface EPR owners must be non-empty text.")
         _expect_mapping(metadata.get("source_provenance"), "surface EPR provenance")
-        epr_spec = _expect_mapping(baseline.get("epr_spec"), "surface EPR spec")
-        # Film schema v2 adds model_l0_m and film_thickness_m (SI) and lets loss_tangent be
-        # absent (config.json then gets LossTan 0.0). Any other spec is the older film shape:
-        # loss_tangent is required and no SI thickness is cross-checked.
-        film_v2 = epr_spec.get("schema_version") == "scgsim.palace.surface-film.v2"
-        for field, positive in (
-            ("thickness", True),
-            ("permittivity", True),
-            ("loss_tangent", False),
+        _check_film_spec(_expect_mapping(baseline.get("epr_spec"), "surface EPR spec"))
+
+
+def _check_film_spec(epr_spec: dict[str, Any]) -> None:
+    """The dielectric film of one surface: native and SI thickness must agree."""
+    found = epr_spec.get("schema_version")
+    if found != FILM_SPEC_SCHEMA:
+        raise ValueError(
+            f"surface EPR film spec schema_version is {found!r}; "
+            f"supported: {FILM_SPEC_SCHEMA!r}."
+        )
+    # A missing loss_tangent is allowed: config.json then gets LossTan 0.0.
+    for field, positive in (
+        ("thickness", True),
+        ("permittivity", True),
+        ("loss_tangent", False),
+    ):
+        value = epr_spec.get(field)
+        if field == "loss_tangent" and value is None:
+            continue
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+            or (value <= 0 if positive else value < 0)
         ):
-            value = epr_spec.get(field)
-            if field == "loss_tangent" and film_v2 and value is None:
-                continue
-            if (
-                isinstance(value, bool)
-                or not isinstance(value, (int, float))
-                or not math.isfinite(float(value))
-                or (value <= 0 if positive else value < 0)
-            ):
-                raise ValueError(f"surface EPR {field} has an invalid value.")
-        if film_v2:
-            scale = epr_spec.get("model_l0_m")
-            physical = epr_spec.get("film_thickness_m")
-            if (
-                isinstance(scale, bool)
-                or not isinstance(scale, (int, float))
-                or not math.isfinite(scale)
-                or scale <= 0
-                or isinstance(physical, bool)
-                or not isinstance(physical, (int, float))
-                or not math.isfinite(physical)
-                or physical <= 0
-                or not math.isclose(
-                    physical, epr_spec["thickness"] * scale, rel_tol=1e-12
-                )
-            ):
-                raise ValueError(
-                    "surface EPR SI thickness conflicts with recorded Model.L0"
-                )
+            raise ValueError(f"surface EPR {field} has an invalid value.")
+    # Native thickness is in Model.L0 units; the SI thickness must equal it times L0.
+    scale = epr_spec.get("model_l0_m")
+    physical = epr_spec.get("film_thickness_m")
+    if (
+        isinstance(scale, bool)
+        or not isinstance(scale, (int, float))
+        or not math.isfinite(scale)
+        or scale <= 0
+        or isinstance(physical, bool)
+        or not isinstance(physical, (int, float))
+        or not math.isfinite(physical)
+        or physical <= 0
+        or not math.isclose(physical, epr_spec["thickness"] * scale, rel_tol=1e-12)
+    ):
+        raise ValueError("surface EPR SI thickness conflicts with recorded Model.L0")
 
 
 def _check_baseline_links(

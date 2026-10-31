@@ -17,6 +17,7 @@ from typing import Any
 from ..execution.archive import logical_tar_member_name, resolve_run_archive_path
 from ._artifact_files import _extract_hash_map
 from ._expect import _expect_list, _expect_mapping, _expect_scalar
+from ._run_documents import ArchiveManifest, HandoffMetadata, ResourceRecord
 
 
 @dataclass(frozen=True)
@@ -30,9 +31,9 @@ class _ManifestMembers:
 
 def _validate_archive_manifest(
     root: Path,
-    manifest: dict[str, Any],
-    resource_record: dict[str, Any],
-    handoff_metadata: dict[str, Any],
+    manifest: ArchiveManifest,
+    resource_record: ResourceRecord,
+    handoff_metadata: HandoffMetadata,
 ) -> None:
     archive = _check_manifest_header(manifest, resource_record, handoff_metadata)
     members = _read_manifest_members(manifest)
@@ -41,9 +42,9 @@ def _validate_archive_manifest(
 
 
 def _check_manifest_header(
-    manifest: dict[str, Any],
-    resource_record: dict[str, Any],
-    handoff_metadata: dict[str, Any],
+    manifest: ArchiveManifest,
+    resource_record: ResourceRecord,
+    handoff_metadata: HandoffMetadata,
 ) -> dict[str, Any]:
     """Return the resource record's archive entry after the manifest agrees with it."""
     if _expect_scalar(manifest, "schema_version", int, fallback=0) != 1:
@@ -62,7 +63,7 @@ def _check_manifest_header(
     return archive
 
 
-def _read_manifest_members(manifest: dict[str, Any]) -> _ManifestMembers:
+def _read_manifest_members(manifest: ArchiveManifest) -> _ManifestMembers:
     members = _expect_list(manifest.get("members"), "handoff archive manifest members")
     member_paths: set[str] = set()
     member_types: dict[str, str] = {}
@@ -85,8 +86,8 @@ def _read_manifest_members(manifest: dict[str, Any]) -> _ManifestMembers:
 
 
 def _check_manifest_inputs(
-    manifest: dict[str, Any],
-    handoff_metadata: dict[str, Any],
+    manifest: ArchiveManifest,
+    handoff_metadata: HandoffMetadata,
     members: _ManifestMembers,
 ) -> None:
     """The files needed to rerun are listed as regular files with the hashed bytes."""
@@ -127,7 +128,7 @@ def _check_manifest_inputs(
 
 def _check_archive_matches_manifest(
     root: Path,
-    manifest: dict[str, Any],
+    manifest: ArchiveManifest,
     archive: dict[str, Any],
     members: _ManifestMembers,
 ) -> None:

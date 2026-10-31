@@ -205,13 +205,21 @@ def _solver_identity(root: Path) -> dict[str, Any]:
     }
 
 
-def _compatibility_required(handoff_metadata: dict[str, Any]) -> str | None:
+def _compatibility_required(handoff_metadata: dict[str, Any]) -> str:
+    """The config schema Palace's --dry-run must accept before the solve.
+
+    Every handoff declares the ``native_dry_run`` probe. A handoff without it was
+    written by an older SCGSim and is refused.
+    """
     palace_identity = handoff_metadata.get("palace_identity")
     if not isinstance(palace_identity, dict):
         raise TypeError("handoff palace_identity must be a mapping.")
     probe = palace_identity.get("config_compatibility_probe")
     if probe is None:
-        return None
+        raise ValueError(
+            "handoff has no config_compatibility_probe; it was written by an older "
+            "SCGSim. Supported: 'native_dry_run'."
+        )
     if probe != "native_dry_run":
         raise ValueError("unsupported Palace config compatibility probe.")
     if palace_identity.get("config_compatibility_semantics") != "required_before_solve":
@@ -226,21 +234,12 @@ def _compatibility_required(handoff_metadata: dict[str, Any]) -> str | None:
     return config_schema
 
 
-def _runtime_compatibility(
-    root: Path, handoff_metadata: dict[str, Any]
-) -> dict[str, Any]:
-    config_schema = _compatibility_required(handoff_metadata)
-    if config_schema is None:
-        return {}
+def _runtime_compatibility(root: Path) -> dict[str, Any]:
+    """The dry-run artifact, or ``{}`` when the run never wrote one."""
     path = _confined_path(root, RUNTIME_COMPATIBILITY_PATH)
     if not path.is_file():
         return {}
-    payload = _read_json(path)
-    if payload.get("schema") != RUNTIME_COMPATIBILITY_SCHEMA:
-        return payload
-    if payload.get("config", {}).get("declared_schema") != config_schema:
-        return payload
-    return payload
+    return _read_json(path)
 
 
 def _runtime_compatibility_verified(
@@ -249,9 +248,8 @@ def _runtime_compatibility_verified(
     handoff_metadata: dict[str, Any],
     runtime_compatibility: dict[str, Any],
 ) -> bool:
+    """Palace accepted exactly the sealed config bytes, declared under its schema."""
     config_schema = _compatibility_required(handoff_metadata)
-    if config_schema is None:
-        return True
     if runtime_compatibility.get("schema") != RUNTIME_COMPATIBILITY_SCHEMA:
         return False
     config = runtime_compatibility.get("config")
@@ -276,58 +274,25 @@ def _runtime_compatibility_verified(
     )
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Write a returned Palace run receipt for manual handoff.",
-    )
-    parser.add_argument("run_dir", type=Path, help="Manual handoff run directory.")
-    parser.add_argument("exit_code", type=int, help="Palace process exit code.")
-    parser.add_argument("--log-path", dest="log_path", required=True)
-    parser.add_argument("--job-id", default=None)
-    parser.add_argument("--job-name", default=None)
-    parser.add_argument(
-        "--execution-stage",
-        choices=("config_compatibility", "solver"),
-        required=True,
-    )
-    parser.add_argument("--preflight-exit-code", type=int, required=True)
-    parser.add_argument("--solver-exit-code", type=int, default=None)
-    parser.add_argument("--tee-exit-code", type=int, default=None)
-    parser.add_argument("--diagnostic-after-the-fact", action="store_true")
-    parser.add_argument(
-        "--receipt-path", default="metadata/palace_returned_run_receipt.json"
-    )
-    args = parser.parse_args()
+# ------------------------------------------------------------ the receipt, as steps
 
-    solver_invoked = args.execution_stage == "solver"
-    if solver_invoked:
-        if args.preflight_exit_code != 0:
-            raise ValueError("solver execution requires a successful preflight.")
-        if args.solver_exit_code is None:
-            raise ValueError("solver execution requires its exact exit code.")
-    elif args.solver_exit_code is not None:
-        raise ValueError("preflight failure must not declare a solver exit code.")
+
+def main() -> int:
+    """Write the receipt, update the run and resource records, return an exit code."""
+    args = _parse_arguments()
+    solver_invoked = _check_stage_arguments(args)
 
     root = args.run_dir.expanduser().resolve()
     handoff_metadata = _read_json(root / "metadata" / "palace_handoff_metadata.json")
-    route = handoff_metadata.get("route")
-    problem = handoff_metadata.get("problem")
-    if not isinstance(route, str) or route not in {"A", "B"}:
-        raise ValueError("run metadata route is missing or invalid.")
-    if not isinstance(problem, str) or not problem:
-        raise ValueError("run metadata problem is missing or invalid.")
+    route, problem = _read_route_and_problem(handoff_metadata)
     input_hashes = _hashes_from_metadata(root)
-    handoff_id = handoff_metadata.get("handoff_id")
-    if not isinstance(handoff_id, str) or not handoff_id:
-        if not args.diagnostic_after_the_fact:
-            raise ValueError("run metadata is missing handoff_id.")
-        handoff_id = _diagnostic_handoff_id(
-            route=route, problem=problem, input_hashes=input_hashes
-        )
+    handoff_id = _receipt_handoff_id(
+        handoff_metadata, args, route=route, problem=problem, input_hashes=input_hashes
+    )
 
     solver_identity = _solver_identity(root)
-    runtime_compatibility = _runtime_compatibility(root, handoff_metadata)
-    compatibility_required = _compatibility_required(handoff_metadata)
+    _compatibility_required(handoff_metadata)  # refuses a handoff without the probe
+    runtime_compatibility = _runtime_compatibility(root)
     masks_configured = _mask_outputs_configured(root)
     config = _read_json(root / "config.json")
     output_paths = [
@@ -337,7 +302,7 @@ def main() -> int:
         *_iteration_output_paths(
             root, problem, config=config, masks_configured=masks_configured
         ),
-        *([RUNTIME_COMPATIBILITY_PATH] if compatibility_required is not None else []),
+        RUNTIME_COMPATIBILITY_PATH,
     ]
     output_records = [_record_for_path(root, path) for path in output_paths]
     log_record = _record_for_path(root, args.log_path)
@@ -348,22 +313,13 @@ def main() -> int:
         handoff_metadata=handoff_metadata,
         runtime_compatibility=runtime_compatibility,
     )
-
-    if args.diagnostic_after_the_fact:
-        status = "diagnostic_unverified"
-    elif (
-        args.exit_code == 0
-        and solver_invoked
-        and args.preflight_exit_code == 0
-        and args.solver_exit_code == 0
-        and args.tee_exit_code == 0
-        and completed_inputs
-        and completed_outputs
-        and runtime_compatible
-    ):
-        status = "completed"
-    else:
-        status = "failed"
+    status = _run_status(
+        args,
+        solver_invoked=solver_invoked,
+        completed_inputs=completed_inputs,
+        completed_outputs=completed_outputs,
+        runtime_compatible=runtime_compatible,
+    )
 
     payload: dict[str, Any] = {
         "schema": SCHEMA,
@@ -388,31 +344,113 @@ def main() -> int:
         "output_files": output_records,
         "log": log_record,
         "solver_identity": solver_identity,
+        "runtime_compatibility": runtime_compatibility,
     }
-    if compatibility_required is not None:
-        payload["runtime_compatibility"] = runtime_compatibility
     if handoff_metadata.get("route_a_thin_film") is not None:
         payload["route_a_thin_film"] = handoff_metadata["route_a_thin_film"]
 
-    _update_resource_record(
-        root=root,
-        handoff_metadata=handoff_metadata,
-        status=status,
-        exit_code=args.exit_code,
-        job_identity=payload["job_identity"],
-    )
-    _update_run_metadata(
-        root=root,
-        handoff_metadata=handoff_metadata,
-        status=status,
-        exit_code=args.exit_code,
-        job_identity=payload["job_identity"],
-    )
-    receipt_path = _confined_path(root, args.receipt_path)
-    _write_json_atomic(receipt_path, payload)
+    for update in (_update_resource_record, _update_run_metadata):
+        update(
+            root=root,
+            handoff_metadata=handoff_metadata,
+            status=status,
+            exit_code=args.exit_code,
+            job_identity=payload["job_identity"],
+        )
+    _write_json_atomic(_confined_path(root, args.receipt_path), payload)
     if status == "completed" or args.diagnostic_after_the_fact:
         return 0
     return args.exit_code if args.exit_code != 0 else 3
+
+
+def _parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Write a returned Palace run receipt for manual handoff.",
+    )
+    parser.add_argument("run_dir", type=Path, help="Manual handoff run directory.")
+    parser.add_argument("exit_code", type=int, help="Palace process exit code.")
+    parser.add_argument("--log-path", dest="log_path", required=True)
+    parser.add_argument("--job-id", default=None)
+    parser.add_argument("--job-name", default=None)
+    parser.add_argument(
+        "--execution-stage",
+        choices=("config_compatibility", "solver"),
+        required=True,
+    )
+    parser.add_argument("--preflight-exit-code", type=int, required=True)
+    parser.add_argument("--solver-exit-code", type=int, default=None)
+    parser.add_argument("--tee-exit-code", type=int, default=None)
+    parser.add_argument("--diagnostic-after-the-fact", action="store_true")
+    parser.add_argument(
+        "--receipt-path", default="metadata/palace_returned_run_receipt.json"
+    )
+    return parser.parse_args()
+
+
+def _check_stage_arguments(args: argparse.Namespace) -> bool:
+    """Return whether the solver ran. The two stages carry different exit codes."""
+    solver_invoked = args.execution_stage == "solver"
+    if solver_invoked:
+        if args.preflight_exit_code != 0:
+            raise ValueError("solver execution requires a successful preflight.")
+        if args.solver_exit_code is None:
+            raise ValueError("solver execution requires its exact exit code.")
+    elif args.solver_exit_code is not None:
+        raise ValueError("preflight failure must not declare a solver exit code.")
+    return solver_invoked
+
+
+def _read_route_and_problem(handoff_metadata: dict[str, Any]) -> tuple[str, str]:
+    route = handoff_metadata.get("route")
+    problem = handoff_metadata.get("problem")
+    if not isinstance(route, str) or route not in {"A", "B"}:
+        raise ValueError("run metadata route is missing or invalid.")
+    if not isinstance(problem, str) or not problem:
+        raise ValueError("run metadata problem is missing or invalid.")
+    return route, problem
+
+
+def _receipt_handoff_id(
+    handoff_metadata: dict[str, Any],
+    args: argparse.Namespace,
+    *,
+    route: str,
+    problem: str,
+    input_hashes: list[dict[str, Any]],
+) -> str:
+    handoff_id = handoff_metadata.get("handoff_id")
+    if isinstance(handoff_id, str) and handoff_id:
+        return handoff_id
+    if not args.diagnostic_after_the_fact:
+        raise ValueError("run metadata is missing handoff_id.")
+    return _diagnostic_handoff_id(
+        route=route, problem=problem, input_hashes=input_hashes
+    )
+
+
+def _run_status(
+    args: argparse.Namespace,
+    *,
+    solver_invoked: bool,
+    completed_inputs: bool,
+    completed_outputs: bool,
+    runtime_compatible: bool,
+) -> str:
+    """``completed`` only if every exit code is zero and every check passed."""
+    if args.diagnostic_after_the_fact:
+        return "diagnostic_unverified"
+    if (
+        args.exit_code == 0
+        and solver_invoked
+        and args.preflight_exit_code == 0
+        and args.solver_exit_code == 0
+        and args.tee_exit_code == 0
+        and completed_inputs
+        and completed_outputs
+        and runtime_compatible
+    ):
+        return "completed"
+    return "failed"
 
 
 def _input_hashes_match(root: Path, input_hashes: list[dict[str, Any]]) -> bool:

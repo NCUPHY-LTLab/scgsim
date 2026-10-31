@@ -5,9 +5,10 @@ ran under, the hashes of its inputs and outputs, and the Palace log. This module
 checks it against the metadata and against the files on disk, so a receipt copied
 from another run, or one that claims files that are not there, is refused.
 
-Receipts for runs that preflight the config (``config_compatibility_probe``) carry
-extra fields: execution stage, solver invocation, and a runtime-compatibility
-artifact (docs/specs/palace-electrostatic-sgb.qmd, "native --dry-run").
+Every run preflights the config with Palace's ``--dry-run`` before it solves
+(``config_compatibility_probe``), so every receipt carries the execution stage, the
+solver invocation and a runtime-compatibility artifact
+(docs/specs/palace-electrostatic-sgb.qmd, "native --dry-run").
 """
 
 from __future__ import annotations
@@ -35,6 +36,12 @@ from ._expect import (
 from ._index_map import IndexCounts, _index_counts, _surface_mask_entries
 from ._result_tables import _output_families
 from ._result_types import PalaceReturnedReceipt
+from ._run_documents import (
+    HandoffMetadata,
+    ResourceRecord,
+    ReturnedReceiptPayload,
+    RunMetadata,
+)
 
 _RETURNED_RECEIPT_SCHEMA = "palace-returned-run-receipt.v1"
 
@@ -49,10 +56,10 @@ _RUNTIME_COMPATIBILITY_SCHEMA = "palace-runtime-compatibility.v1"
 
 def _validate_receipt_payload(
     *,
-    receipt_payload: dict[str, Any],
+    receipt_payload: ReturnedReceiptPayload,
     expected_handoff_id: str,
-    handoff_metadata: dict[str, Any],
-    run_metadata: dict[str, Any],
+    handoff_metadata: HandoffMetadata,
+    run_metadata: RunMetadata,
     problem: str,
     route: str,
     root: Path,
@@ -78,10 +85,10 @@ def _validate_receipt_payload(
 
 
 def _check_receipt_claims(
-    receipt_payload: dict[str, Any],
+    receipt_payload: ReturnedReceiptPayload,
     expected_handoff_id: str,
-    handoff_metadata: dict[str, Any],
-    run_metadata: dict[str, Any],
+    handoff_metadata: HandoffMetadata,
+    run_metadata: RunMetadata,
     problem: str,
     route: str,
 ) -> None:
@@ -140,7 +147,7 @@ def _check_receipt_claims(
         raise ValueError("returned run receipt tee_exit_code must be zero.")
 
 
-def _check_receipt_job(receipt_payload: dict[str, Any]) -> None:
+def _check_receipt_job(receipt_payload: ReturnedReceiptPayload) -> None:
     """The receipt has a UTC timestamp and a named job."""
     _validate_timestamp(
         _expect_scalar(receipt_payload, "timestamp_utc", str), "timestamp_utc"
@@ -155,9 +162,9 @@ def _check_receipt_job(receipt_payload: dict[str, Any]) -> None:
 
 
 def _check_receipt_inputs(
-    receipt_payload: dict[str, Any],
-    handoff_metadata: dict[str, Any],
-    run_metadata: dict[str, Any],
+    receipt_payload: ReturnedReceiptPayload,
+    handoff_metadata: HandoffMetadata,
+    run_metadata: RunMetadata,
     route: str,
     root: Path,
 ) -> None:
@@ -184,7 +191,7 @@ def _check_receipt_inputs(
 
 
 def _check_receipt_outputs(
-    receipt_payload: dict[str, Any], problem: str, root: Path
+    receipt_payload: ReturnedReceiptPayload, problem: str, root: Path
 ) -> dict[str, HashEntry]:
     """Every required output is listed, present and hashes as listed. Returns the map."""
     output_files = _expect_list(receipt_payload.get("output_files"), "output_files")
@@ -215,70 +222,72 @@ def _check_receipt_outputs(
 
 
 def _check_runtime_compatibility_probe(
-    receipt_payload: dict[str, Any],
-    handoff_metadata: dict[str, Any],
+    receipt_payload: ReturnedReceiptPayload,
+    handoff_metadata: HandoffMetadata,
     output_map: dict[str, HashEntry],
     root: Path,
 ) -> None:
-    """Runs that preflighted the config must prove Palace accepted those bytes."""
+    """The run must prove Palace accepted the sealed config before it solved.
+
+    Every handoff declares the ``native_dry_run`` probe; ``_validate_palace_identity``
+    has already refused any other identity.
+    """
     declared_palace_identity = _expect_mapping(
         handoff_metadata.get("palace_identity"), "handoff palace_identity"
     )
-    if declared_palace_identity.get("config_compatibility_probe") is not None:
-        if receipt_payload.get("execution_stage") != "solver":
-            raise ValueError("completed Palace receipt execution_stage must be solver.")
-        if receipt_payload.get("solver_invoked") is not True:
-            raise ValueError("completed Palace receipt must record solver invocation.")
-        if _expect_int(receipt_payload.get("preflight_exit_code")) != 0:
-            raise ValueError(
-                "completed Palace receipt config compatibility preflight must pass."
-            )
-        if _RUNTIME_COMPATIBILITY_PATH not in output_map:
-            raise ValueError(
-                "returned run receipt misses the Palace runtime compatibility artifact."
-            )
-        runtime_compatibility = _expect_mapping(
-            receipt_payload.get("runtime_compatibility"),
-            "receipt.runtime_compatibility",
+    if receipt_payload.get("execution_stage") != "solver":
+        raise ValueError("completed Palace receipt execution_stage must be solver.")
+    if receipt_payload.get("solver_invoked") is not True:
+        raise ValueError("completed Palace receipt must record solver invocation.")
+    if _expect_int(receipt_payload.get("preflight_exit_code")) != 0:
+        raise ValueError(
+            "completed Palace receipt config compatibility preflight must pass."
         )
-        runtime_artifact = _read_json(_confined_path(root, _RUNTIME_COMPATIBILITY_PATH))
-        if runtime_compatibility != runtime_artifact:
-            raise ValueError(
-                "returned run receipt Palace runtime compatibility does not match "
-                "its artifact."
-            )
-        _validate_runtime_compatibility(
-            runtime_compatibility, declared_palace_identity, root=root
+    if _RUNTIME_COMPATIBILITY_PATH not in output_map:
+        raise ValueError(
+            "returned run receipt misses the Palace runtime compatibility artifact."
         )
-        runtime_command = _expect_mapping(
-            runtime_compatibility.get("command"),
-            "receipt.runtime_compatibility.command",
+    runtime_compatibility = _expect_mapping(
+        receipt_payload.get("runtime_compatibility"),
+        "receipt.runtime_compatibility",
+    )
+    runtime_artifact = _read_json(_confined_path(root, _RUNTIME_COMPATIBILITY_PATH))
+    if runtime_compatibility != runtime_artifact:
+        raise ValueError(
+            "returned run receipt Palace runtime compatibility does not match "
+            "its artifact."
         )
-        execution_identity = _expect_mapping(
-            handoff_metadata.get("execution_identity"), "handoff execution_identity"
+    _validate_runtime_compatibility(
+        runtime_compatibility, declared_palace_identity, root=root
+    )
+    runtime_command = _expect_mapping(
+        runtime_compatibility.get("command"),
+        "receipt.runtime_compatibility.command",
+    )
+    execution_identity = _expect_mapping(
+        handoff_metadata.get("execution_identity"), "handoff execution_identity"
+    )
+    expected_command = _expect_mapping(
+        execution_identity.get("command"), "handoff execution command"
+    )
+    if runtime_command.get("executable_identity") != expected_command.get(
+        "executable_identity"
+    ):
+        raise ValueError(
+            "Palace compatibility probe executable does not match the handoff command."
         )
-        expected_command = _expect_mapping(
-            execution_identity.get("command"), "handoff execution command"
+    resources = _expect_mapping(
+        handoff_metadata.get("requested_resources"), "handoff requested_resources"
+    )
+    # The caller may leave command_style out of the resources: the handoff then
+    # writes a binary command (execution/handoff.py ``_validate_resources``).
+    if runtime_command.get("command_style") != resources.get("command_style", "binary"):
+        raise ValueError(
+            "Palace compatibility probe command style does not match the handoff."
         )
-        if runtime_command.get("executable_identity") != expected_command.get(
-            "executable_identity"
-        ):
-            raise ValueError(
-                "Palace compatibility probe executable does not match the handoff "
-                "command."
-            )
-        resources = _expect_mapping(
-            handoff_metadata.get("requested_resources"), "handoff requested_resources"
-        )
-        if runtime_command.get("command_style") != resources.get(
-            "command_style", "binary"
-        ):
-            raise ValueError(
-                "Palace compatibility probe command style does not match the handoff."
-            )
 
 
-def _check_receipt_log(receipt_payload: dict[str, Any], root: Path) -> None:
+def _check_receipt_log(receipt_payload: ReturnedReceiptPayload, root: Path) -> None:
     """The Palace log named in the receipt exists and hashes as recorded."""
     log = _expect_mapping(receipt_payload.get("log"), "return_receipt.log")
     if not log:
@@ -296,7 +305,9 @@ def _check_receipt_log(receipt_payload: dict[str, Any], root: Path) -> None:
 
 # palace.json is written by Palace itself, so it is the reference for the solver
 # identity the run script copied into the receipt.
-def _check_receipt_solver_identity(receipt_payload: dict[str, Any], root: Path) -> None:
+def _check_receipt_solver_identity(
+    receipt_payload: ReturnedReceiptPayload, root: Path
+) -> None:
     """The solver identity in the receipt is the one Palace wrote in palace.json."""
     receipt_identity = _expect_mapping(
         receipt_payload.get("solver_identity"), "receipt.solver_identity"
@@ -320,9 +331,9 @@ def _check_receipt_solver_identity(receipt_payload: dict[str, Any], root: Path) 
 # so they must repeat its status, exit code and job identity exactly.
 def _validate_returned_state_agreement(
     *,
-    receipt_payload: dict[str, Any],
-    run_metadata: dict[str, Any],
-    resource_record: dict[str, Any],
+    receipt_payload: ReturnedReceiptPayload,
+    run_metadata: RunMetadata,
+    resource_record: ResourceRecord,
 ) -> None:
     receipt_status = _expect_scalar(receipt_payload, "status", str)
     receipt_exit = _expect_int(receipt_payload.get("exit_code"))
@@ -439,7 +450,7 @@ def _validate_timestamp(value: str, label: str) -> None:
 # ------------------------------------------------- receipt as a value object
 
 
-def _build_returned_receipt(payload: dict[str, Any]) -> PalaceReturnedReceipt:
+def _build_returned_receipt(payload: ReturnedReceiptPayload) -> PalaceReturnedReceipt:
     return PalaceReturnedReceipt(
         schema=_expect_scalar(payload, "schema", str),
         schema_version=_expect_int(payload.get("schema_version")),
@@ -467,15 +478,11 @@ def _build_returned_receipt(payload: dict[str, Any]) -> PalaceReturnedReceipt:
                 payload.get("output_files"), "returned receipt output_files"
             )
         ),
-        log=_expect_mapping(payload.get("log"), "receipt.log")
-        if payload.get("log") is not None
-        else None,
+        log=_expect_mapping(payload.get("log"), "receipt.log"),
         solver_identity=_expect_mapping(
             payload.get("solver_identity"), "receipt.solver_identity"
         ),
-        execution_stage=_expect_scalar(payload, "execution_stage", str, fallback=None),
-        solver_invoked=_expect_scalar(payload, "solver_invoked", bool, fallback=None),
-        preflight_exit_code=_expect_int(
-            payload.get("preflight_exit_code"), optional=True
-        ),
+        execution_stage=_expect_scalar(payload, "execution_stage", str),
+        solver_invoked=_expect_scalar(payload, "solver_invoked", bool),
+        preflight_exit_code=_expect_int(payload.get("preflight_exit_code")),
     )

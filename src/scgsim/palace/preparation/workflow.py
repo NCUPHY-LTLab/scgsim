@@ -58,6 +58,63 @@ def prepare_mesh_input(
     port_sheet_source_layers: Sequence[Mapping[str, Any]] | None = None,
 ) -> PreparedMeshInput:
     """Apply the common transforms while preserving their established order."""
+    prepared_stack, prepared_component, indium_fill = _transform_stack(
+        component=component,
+        stack=stack,
+        vacuum_region=vacuum_region,
+        indium_ground_bumps=indium_ground_bumps,
+        airbox=airbox,
+        port_sheet_source_layers=port_sheet_source_layers,
+    )
+    if build_input is None:
+        build_input = _normalized_component_input(prepared_component, prepared_stack)
+    else:
+        # Synchronize caller source selections before the one physical interpretation.
+        build_input = _sync_solution_regions(build_input, prepared_stack)
+        if port_sheet_source_layers is not None:
+            build_input = _select_port_sheet_regions(
+                build_input, port_sheet_source_layers
+            )
+    if indium_fill is not None:
+        build_input = replace(
+            build_input,
+            polygons=(*build_input.polygons, *indium_fill.get("injected_polygons", ())),
+            entities=(*build_input.entities, *indium_fill.get("injected_entities", ())),
+        )
+    approximation_profile = _checked_approximation_profile(
+        approximation_profile, route, route_a_thin_film
+    )
+    effective_input, effective_stack, plan = interpret_physical_geometry(
+        build_input, prepared_stack, approximation_profile
+    )
+    prepared_stack = effective_stack
+    if route == "A":
+        prepared_stack["metadata"]["route_a_thin_film"] = _route_a_metadata(
+            stack, approximation_profile
+        )
+    return PreparedMeshInput(
+        component=prepared_component,
+        stack=prepared_stack,
+        indium_ground_bump_fill=indium_fill,
+        materials=_material_records(prepared_stack),
+        geometry_input=effective_input,
+        physical_plan=plan,
+    )
+
+
+def _transform_stack(
+    *,
+    component: Any,
+    stack: Mapping[str, Any],
+    vacuum_region: VacuumRegionSpec | None,
+    indium_ground_bumps: Mapping[str, Any] | None,
+    airbox: Mapping[str, Any] | None,
+    port_sheet_source_layers: Sequence[Mapping[str, Any]] | None,
+) -> tuple[Mapping[str, Any], Any, Mapping[str, Any] | None]:
+    """Vacuum region, indium bump fill, airbox, then port sheets, in that order.
+
+    Returns the stack, the component (the bump fill replaces it) and the fill.
+    """
     prepared_stack = stack
     if vacuum_region is not None:
         prepared_stack = apply_vacuum_region_to_stack(stack, vacuum_region)
@@ -83,69 +140,81 @@ def prepare_mesh_input(
         prepared_stack = _with_port_sheet_metadata(
             prepared_stack, port_sheet_source_layers
         )
-    if build_input is None:
-        build_input = _normalized_component_input(prepared_component, prepared_stack)
-    else:
-        # Synchronize caller source selections before the one physical interpretation.
-        if prepared_stack["solution_regions"] != build_input.solution_regions:
-            regions = tuple(
-                _solution_region_entity_from_record(
-                    key,
-                    record,
-                    materials=prepared_stack["materials"],
-                    cell_bounds_um=build_input.metadata["cell_bounds_um"],
-                )
-                for key, record in prepared_stack["solution_regions"].items()
+    return prepared_stack, prepared_component, indium_fill
+
+
+def _sync_solution_regions(
+    build_input: GeometryBuildInput, prepared_stack: Mapping[str, Any]
+) -> GeometryBuildInput:
+    """Make the caller's source entities agree with the stack's solution regions."""
+    if prepared_stack["solution_regions"] == build_input.solution_regions:
+        return build_input
+    regions = tuple(
+        _solution_region_entity_from_record(
+            key,
+            record,
+            materials=prepared_stack["materials"],
+            cell_bounds_um=build_input.metadata["cell_bounds_um"],
+        )
+        for key, record in prepared_stack["solution_regions"].items()
+    )
+    by_id = {entity.semantic_id: entity for entity in regions}
+    old_ids = set(build_input.solution_regions)
+    retained = tuple(
+        by_id.pop(entity.semantic_id) if entity.semantic_id in by_id else entity
+        for entity in build_input.entities
+        if entity.semantic_id not in old_ids or entity.semantic_id in by_id
+    )
+    return replace(
+        build_input,
+        entities=(*retained, *by_id.values()),
+        solution_regions=prepared_stack["solution_regions"],
+    )
+
+
+def _select_port_sheet_regions(
+    build_input: GeometryBuildInput,
+    port_sheet_source_layers: Sequence[Mapping[str, Any]],
+) -> GeometryBuildInput:
+    """Keep only the authored port regions the caller named, numbered in that order."""
+    selected = []
+    for source_index, record in enumerate(port_sheet_source_layers):
+        matches = tuple(
+            region
+            for region in build_input.port_sheet_regions
+            if region.metadata.get("source_name") == record["name"]
+        )
+        if not matches:
+            raise ValueError(
+                f"normalized source has no authored port {record['name']!r}"
             )
-            by_id = {entity.semantic_id: entity for entity in regions}
-            old_ids = set(build_input.solution_regions)
-            retained = tuple(
-                by_id.pop(entity.semantic_id) if entity.semantic_id in by_id else entity
-                for entity in build_input.entities
-                if entity.semantic_id not in old_ids or entity.semantic_id in by_id
-            )
-            build_input = replace(
-                build_input,
-                entities=(*retained, *by_id.values()),
-                solution_regions=prepared_stack["solution_regions"],
-            )
-        if port_sheet_source_layers is not None:
-            selected = []
-            for source_index, record in enumerate(port_sheet_source_layers):
-                matches = tuple(
-                    region
-                    for region in build_input.port_sheet_regions
-                    if region.metadata.get("source_name") == record["name"]
-                )
-                if not matches:
-                    raise ValueError(
-                        f"normalized source has no authored port {record['name']!r}"
-                    )
-                selected.extend(
-                    replace(
-                        region,
-                        metadata={
-                            **region.metadata,
-                            "source_index": source_index,
-                            "port_index": record["port_index"],
-                        },
-                    )
-                    for region in matches
-                )
-            build_input = replace(
-                build_input,
-                port_sheet_regions=tuple(selected),
+        selected.extend(
+            replace(
+                region,
                 metadata={
-                    **build_input.metadata,
-                    "port_sheet_source_layers": list(port_sheet_source_layers),
+                    **region.metadata,
+                    "source_index": source_index,
+                    "port_index": record["port_index"],
                 },
             )
-    if indium_fill is not None:
-        build_input = replace(
-            build_input,
-            polygons=(*build_input.polygons, *indium_fill.get("injected_polygons", ())),
-            entities=(*build_input.entities, *indium_fill.get("injected_entities", ())),
+            for region in matches
         )
+    return replace(
+        build_input,
+        port_sheet_regions=tuple(selected),
+        metadata={
+            **build_input.metadata,
+            "port_sheet_source_layers": list(port_sheet_source_layers),
+        },
+    )
+
+
+def _checked_approximation_profile(
+    approximation_profile: ApproximationProfile | None,
+    route: str,
+    route_a_thin_film: RouteAThinFilm | None,
+) -> ApproximationProfile:
+    """Route A must say how its thin film is lowered; Route B needs no such choice."""
     if approximation_profile is None:
         if route == "A":
             raise ValueError(
@@ -161,39 +230,36 @@ def prepare_mesh_input(
         raise ValueError(
             "route_a_thin_film selector differs from the explicit approximation profile"
         )
-    effective_input, effective_stack, plan = interpret_physical_geometry(
-        build_input, prepared_stack, approximation_profile
-    )
-    prepared_stack = effective_stack
-    if route == "A":
-        source_hash = canonical_sha256(_plain_semantic_facts(stack))
-        prepared_stack["metadata"]["route_a_thin_film"] = {
-            "schema_version": 1,
-            "variant": approximation_profile.name,
-            "display_label": "A_PRIME"
-            if approximation_profile.name == "substrate_face"
-            else "A",
-            "source_stack": {
-                "revision": f"sha256:{source_hash}",
-                "sha256": source_hash,
-            },
-        }
-    prepared_materials = prepared_stack.get("materials")
-    materials = None
-    if isinstance(prepared_materials, Mapping):
-        materials = {
-            str(material_id): dict(material)
-            for material_id, material in prepared_materials.items()
-            if isinstance(material, Mapping)
-        }
-    return PreparedMeshInput(
-        component=prepared_component,
-        stack=prepared_stack,
-        indium_ground_bump_fill=indium_fill,
-        materials=materials,
-        geometry_input=effective_input,
-        physical_plan=plan,
-    )
+    return approximation_profile
+
+
+def _route_a_metadata(
+    stack: Mapping[str, Any], approximation_profile: ApproximationProfile
+) -> dict[str, Any]:
+    """The thin-film identity recorded for Route A, bound to the source stack's hash."""
+    source_hash = canonical_sha256(_plain_semantic_facts(stack))
+    return {
+        "schema_version": 1,
+        "variant": approximation_profile.name,
+        "display_label": "A_PRIME"
+        if approximation_profile.name == "substrate_face"
+        else "A",
+        "source_stack": {
+            "revision": f"sha256:{source_hash}",
+            "sha256": source_hash,
+        },
+    }
+
+
+def _material_records(stack: Mapping[str, Any]) -> dict[str, Mapping[str, Any]] | None:
+    materials = stack.get("materials")
+    if not isinstance(materials, Mapping):
+        return None
+    return {
+        str(material_id): dict(material)
+        for material_id, material in materials.items()
+        if isinstance(material, Mapping)
+    }
 
 
 def persist_problem_files(

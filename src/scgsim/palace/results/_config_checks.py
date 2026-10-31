@@ -17,6 +17,7 @@ from ._index_map import (
     _surface_mask_entries,
     _validate_index_entries,
 )
+from ._run_documents import HandoffMetadata, IndexMap, RunMetadata
 
 # ------------------------------------------------- problem, route, mesh name
 
@@ -37,16 +38,23 @@ def _validate_config_problem(config: dict[str, Any], problem: str) -> None:
     if mesh_name != "palace.msh":
         raise ValueError("config Model.Mesh must reference palace.msh.")
 
-    if problem_block.get("Output") not in {"results/palace", "results/palace/", None}:
+    # Both config writers set Output to exactly this directory, and the result
+    # tables are read from it.
+    output = problem_block.get("Output")
+    if output is None:
+        raise ValueError(
+            "config Problem.Output is missing; supported: 'results/palace'."
+        )
+    if output != "results/palace":
         raise ValueError("config Problem.Output must be results/palace.")
 
 
 def _validate_route_consistency(
     route: str,
-    run_metadata: dict[str, Any],
-    handoff_metadata: dict[str, Any],
+    run_metadata: RunMetadata,
+    handoff_metadata: HandoffMetadata,
     mesh_manifest: dict[str, Any],
-    index_map: dict[str, Any],
+    index_map: IndexMap,
     index_counts: IndexCounts,
     problem: str,
 ) -> None:
@@ -68,28 +76,9 @@ def _validate_route_consistency(
     if run_route != route or handoff_route != route:
         raise ValueError("metadata route does not match resolved route.")
 
-    # Index-map schema 2 adds the Ground split (docs/specs/palace-electrostatic-sgb.qmd)
-    # and is written by Electrostatic authoring only. Schema 1 stays readable for sealed
-    # historical runs, and Eigenmode runs must use schema 1.
-    index_schema = _expect_scalar(index_map, "schema_version", int, fallback=0)
-    if index_schema not in {1, 2}:
-        raise ValueError("palace index map schema_version must be integer 1 or 2.")
-    if problem == "Eigenmode" and index_schema != 1:
-        raise ValueError("Eigenmode palace index map schema_version must be integer 1.")
+    _validate_index_map_schema(index_map, problem)
     _validate_index_entries(index_map)
-    # A route can sit in an entry's metadata or on the entry itself; metadata wins.
-    entries = _expect_list(index_map.get("entries"), "palace_index_map.entries")
-    for entry in entries:
-        candidate = _expect_scalar(
-            _optional_dict(entry).get("metadata", {}),
-            "route",
-            str,
-            fallback="",
-        )
-        if not candidate:
-            candidate = _expect_scalar(entry, "route", str, fallback="")
-        if candidate in {"A", "B"} and candidate != route:
-            raise ValueError("index map route is inconsistent with run route.")
+    _validate_index_routes(index_map, route)
 
     run_problem = _expect_scalar(run_metadata, "problem", str)
     handoff_problem = _expect_scalar(handoff_metadata, "problem", str)
@@ -97,12 +86,32 @@ def _validate_route_consistency(
         raise ValueError("metadata problem does not match resolved problem.")
 
 
+def _validate_index_map_schema(index_map: IndexMap, problem: str) -> None:
+    """Electrostatic writes index-map schema 2 (adds the Ground split), Eigenmode 1."""
+    supported = 1 if problem == "Eigenmode" else 2
+    found = _expect_scalar(index_map, "schema_version", int, fallback=0)
+    if found != supported:
+        raise ValueError(
+            f"palace index map schema_version is {found}; supported for {problem}: "
+            f"{supported}. Prepare the handoff again with the current SCGSim."
+        )
+
+
+def _validate_index_routes(index_map: IndexMap, route: str) -> None:
+    """An entry that records a route in its metadata must record the run's route."""
+    entries = _expect_list(index_map.get("entries"), "palace_index_map.entries")
+    for entry in entries:
+        recorded = _expect_scalar(entry["metadata"], "route", str, fallback="")
+        if recorded in {"A", "B"} and recorded != route:
+            raise ValueError("index map route is inconsistent with run route.")
+
+
 # ----------------------------------------- config sections vs index entries
 
 
 def _validate_config_index_correspondence(
     config: dict[str, Any],
-    index_map: dict[str, Any],
+    index_map: IndexMap,
     index_counts: IndexCounts,
     problem: str,
 ) -> None:
@@ -113,8 +122,7 @@ def _validate_config_index_correspondence(
         )
         if index_counts["terminal"] != len(terminals):
             raise ValueError("terminal count mismatch between config and index map.")
-        if _expect_scalar(index_map, "schema_version", int) == 2:
-            _validate_ground_boundary_resolution(boundaries, index_map)
+        _validate_ground_boundary_resolution(boundaries, index_map)
     else:
         ports = _expect_list(
             boundaries.get("LumpedPort", []),
@@ -191,10 +199,9 @@ def _check_indexed_sections(
 
 # The index map records physical-Ground and exterior-Ground attributes separately;
 # their union must equal ``Boundaries.Ground.Attributes``
-# (docs/specs/palace-electrostatic-sgb.qmd). Only Electrostatic index-map schema 2
-# carries this record.
+# (docs/specs/palace-electrostatic-sgb.qmd). Only Electrostatic index maps carry it.
 def _validate_ground_boundary_resolution(
-    boundaries: dict[str, Any], index_map: dict[str, Any]
+    boundaries: dict[str, Any], index_map: IndexMap
 ) -> None:
     record = _expect_mapping(
         index_map.get("ground_boundary"), "palace_index_map.ground_boundary"
@@ -256,9 +263,7 @@ def _validate_ground_boundary_resolution(
 # ------------------------------------------------- masked Surface EPR config
 
 
-def _validate_surface_mask_config(
-    config: dict[str, Any], index_map: dict[str, Any]
-) -> None:
+def _validate_surface_mask_config(config: dict[str, Any], index_map: IndexMap) -> None:
     masks = _surface_mask_entries(index_map)
     boundaries = _optional_dict(config.get("Boundaries")) or {}
     postprocessing = _optional_dict(boundaries.get("Postprocessing")) or {}
@@ -336,9 +341,7 @@ def _check_configured_dielectric_rows(
             )
         metadata = _expect_mapping(entry.get("metadata"), "surface EPR metadata")
         epr_spec = _expect_mapping(entry.get("epr_spec"), "surface EPR spec")
-        if epr_spec.get("schema_version") == "scgsim.palace.surface-film.v2" and float(
-            epr_spec["model_l0_m"]
-        ) != float(model_l0_m):
+        if float(epr_spec["model_l0_m"]) != float(model_l0_m):
             raise ValueError("surface film Model.L0 disagrees with config")
         expected_fields = {
             "Type": metadata.get("interface_type"),

@@ -20,15 +20,15 @@ from ..mesh.build import MeshBuildResult, build_route_mesh
 from ..mesh.controls import MESH_CONTROL_KEYS
 from .config import (
     _MODEL_L0_M,
-    TerminalBinding,
     build_electrostatic_config,
-    configure_numerical_controls,
 )
+from .electrostatic_boundaries import TerminalBinding
 from .inputs import (
     _load_stack,
     _non_negative_number,
     _validate_stack_material_kinds,
 )
+from .numerical import configure_numerical_controls
 from .surface_epr import normalize_surface_epr_specs
 from .transforms import (
     RouteAThinFilm,
@@ -78,6 +78,7 @@ class ElectrostaticSim:
         self.handoff_plan = None
 
     def set_geometry(self, component: Any) -> None:
+        """Use a component (it must provide write_gds) as the source geometry."""
         if self._plan_snapshot is not None:
             raise ValueError(
                 "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
@@ -105,6 +106,7 @@ class ElectrostaticSim:
         self._invalidate_mesh()
 
     def set_stack(self, stack: Mapping[str, Any] | str | Path) -> None:
+        """Load the layer stack; it must define explicit materials. Clears the mesh."""
         if self._plan_snapshot is not None:
             raise ValueError(
                 "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
@@ -129,6 +131,7 @@ class ElectrostaticSim:
         self._invalidate_mesh()
 
     def set_output_dir(self, path: str | Path) -> None:
+        """Choose the run directory the mesh, config and handoff are written to."""
         if not isinstance(path, (str, Path)):
             raise TypeError("output path must be a path string or Path.")
         self.output_dir = Path(path).expanduser().resolve()
@@ -142,6 +145,7 @@ class ElectrostaticSim:
         z_above: float | None = None,
         z_below: float | None = None,
     ) -> None:
+        """Pad the device with vacuum: equal in-plane margins, optional z extensions. Excludes set_vacuum_region()."""
         if (
             self._plan_snapshot is not None
             and "VACUUM_REGION" in self._plan_snapshot.stack["solution_regions"]
@@ -195,6 +199,7 @@ class ElectrostaticSim:
         self._invalidate_mesh()
 
     def add_terminal(self, name: str, *, net_id: str) -> None:
+        """Bind a named Palace Terminal to one conductor net; a repeated name replaces it."""
         binding = TerminalBinding(
             name=validate_nonempty_string(name, "terminal name"),
             net_id=validate_nonempty_string(net_id, "net_id"),
@@ -250,6 +255,7 @@ class ElectrostaticSim:
         unassigned_conductor_policy: Literal["ground", "error"] = "ground",
         exterior_boundary_policy: Literal["none", "ground"] = "none",
     ) -> None:
+        """Set the Electrostatic controls: saved fields and how unassigned conductors and the outer boundary are grounded."""
         if unassigned_conductor_policy not in {"ground", "error"}:
             raise ValueError("unassigned_conductor_policy must be 'ground' or 'error'.")
         if exterior_boundary_policy not in {"none", "ground"}:
@@ -373,6 +379,7 @@ class ElectrostaticSim:
             self._invalidate_config()
 
     def mesh(self) -> Path:
+        """Build the Palace mesh for the current inputs. Replaces any earlier mesh."""
         self._invalidate_mesh()
         if (
             (self.component is None and self._plan_snapshot is None)
@@ -471,6 +478,7 @@ class ElectrostaticSim:
         )
 
     def write_config(self) -> Path:
+        """Write config.json and the index map for the current mesh."""
         self._invalidate_config()
         if (
             self._mesh_result is None
@@ -531,6 +539,7 @@ class ElectrostaticSim:
         setup_commands: tuple[str, ...] = (),
         petsc_options: tuple[str, ...] = (),
     ) -> HandoffPlan:
+        """Seal the run directory for a manual Palace run (see execution/handoff.py)."""
         if self._mesh_result is None or self.config_path is None:
             raise ValueError(
                 "mesh() and write_config() must run before prepare_handoff()."

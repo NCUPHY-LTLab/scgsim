@@ -30,7 +30,7 @@ face-metal PEC sheets; Route B treats the closed shell of a finite metal volume 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from ._archive_manifest import _validate_archive_manifest
 from ._artifact_files import _read_json
@@ -62,6 +62,14 @@ from ._returned_receipt import (
     _build_returned_receipt,
     _validate_receipt_payload,
     _validate_returned_state_agreement,
+)
+from ._run_documents import (
+    ArchiveManifest,
+    HandoffMetadata,
+    IndexMap,
+    ResourceRecord,
+    ReturnedReceiptPayload,
+    RunMetadata,
 )
 from ._run_identity import (
     _validate_archive_record,
@@ -139,23 +147,38 @@ def _require_run_files(root: Path) -> None:
 
 
 def _read_provenance(root: Path) -> PalaceProvenance:
-    """Parse every metadata artifact. Read order decides which bad file errors first."""
+    """Parse every metadata artifact. Read order decides which bad file errors first.
+
+    The typed dicts name the fields the documents should have. Their shape is only
+    proven by the checks that follow, not by this read.
+    """
     return PalaceProvenance(
-        handoff_metadata=_read_json(root / "metadata" / "palace_handoff_metadata.json"),
-        run_metadata=_read_json(root / "metadata" / "palace_run_metadata.json"),
-        resource_record=_read_json(root / "metadata" / "palace_resource_record.json"),
-        handoff_archive_manifest=_read_json(
-            root / "metadata" / "palace_handoff_archive_manifest.json"
+        handoff_metadata=cast(
+            HandoffMetadata,
+            _read_json(root / "metadata" / "palace_handoff_metadata.json"),
         ),
-        index_map=_read_json(root / "metadata/palace_index_map.json"),
+        run_metadata=cast(
+            RunMetadata, _read_json(root / "metadata" / "palace_run_metadata.json")
+        ),
+        resource_record=cast(
+            ResourceRecord,
+            _read_json(root / "metadata" / "palace_resource_record.json"),
+        ),
+        handoff_archive_manifest=cast(
+            ArchiveManifest,
+            _read_json(root / "metadata" / "palace_handoff_archive_manifest.json"),
+        ),
+        index_map=cast(IndexMap, _read_json(root / "metadata/palace_index_map.json")),
         mesh_manifest=_read_json(root / "metadata/mesh_manifest.json"),
         config=_read_json(root / "config.json"),
         palace_json=_read_json(root / "results/palace/palace.json"),
-        returned_receipt=_read_json(root / _RETURNED_RECEIPT_FILE),
+        returned_receipt=cast(
+            ReturnedReceiptPayload, _read_json(root / _RETURNED_RECEIPT_FILE)
+        ),
     )
 
 
-def _read_route_and_problem(handoff_metadata: dict[str, Any]) -> tuple[str, str]:
+def _read_route_and_problem(handoff_metadata: HandoffMetadata) -> tuple[str, str]:
     route = _expect_scalar(handoff_metadata, "route", str)
     problem = _expect_scalar(handoff_metadata, "problem", str)
 

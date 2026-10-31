@@ -10,6 +10,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ._run_documents import (
+    ArchiveManifest,
+    HandoffMetadata,
+    IndexMap,
+    JobIdentity,
+    ResourceRecord,
+    ReturnedReceiptPayload,
+    RunMetadata,
+)
+
 
 @dataclass(frozen=True)
 class ParsedTable:
@@ -58,29 +68,29 @@ class PalaceReturnedReceipt:
     problem: str
     identity_verified: bool
     timestamp_utc: str
-    job_identity: dict[str, Any]
+    job_identity: JobIdentity
     input_hashes: tuple[dict[str, Any], ...]
     output_files: tuple[dict[str, Any], ...]
-    log: dict[str, Any] | None
+    log: dict[str, Any]
     solver_identity: dict[str, Any]
-    execution_stage: str | None = None
-    solver_invoked: bool | None = None
-    preflight_exit_code: int | None = None
+    execution_stage: str
+    solver_invoked: bool
+    preflight_exit_code: int
 
 
 @dataclass(frozen=True)
 class PalaceProvenance:
     """Resolved provenance payloads used to claim run identity."""
 
-    handoff_metadata: dict[str, Any]
-    run_metadata: dict[str, Any]
-    resource_record: dict[str, Any]
-    handoff_archive_manifest: dict[str, Any]
-    index_map: dict[str, Any]
+    handoff_metadata: HandoffMetadata
+    run_metadata: RunMetadata
+    resource_record: ResourceRecord
+    handoff_archive_manifest: ArchiveManifest
+    index_map: IndexMap
     mesh_manifest: dict[str, Any]
-    config: dict[str, Any]
-    palace_json: dict[str, Any]
-    returned_receipt: dict[str, Any]
+    config: dict[str, Any]  # Palace's own config.json
+    palace_json: dict[str, Any]  # Palace's own palace.json
+    returned_receipt: ReturnedReceiptPayload
 
 
 @dataclass(frozen=True)

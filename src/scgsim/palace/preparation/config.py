@@ -1,37 +1,57 @@
-"""Palace config construction and terminal/field validation."""
+"""Build the Palace ``config.json`` from SGB (geometry builder) physical groups.
+
+Palace reads boundaries and domains by integer attribute. This module turns the named
+physical groups SGB wrote into mesh attributes, and records in an index map which
+config entry stands for which named group, so a result column can be traced back.
+Two builders: ``build_electrostatic_config`` (terminal capacitance) and
+``build_eigenmode_config`` (lumped-port modes).
+
+Not here: meshing (``palace/mesh``), the numerical controls (``numerical.py``), the
+Terminal and Ground boundaries (``electrostatic_boundaries.py``), the domain and
+material rows (``solution_volumes.py``), the Surface EPR rows (``surface_epr.py``), and
+checking the finished config against the index map (``palace/results``).
+"""
 
 from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from numbers import Real
 from pathlib import Path
 from typing import Any, Literal
 
-from .._values import optional_stripped_string
+from .electrostatic_boundaries import (
+    GroundBoundaryResolution,
+    TerminalBinding,
+    TerminalIndexEntry,
+    _electrostatic_boundaries,
+)
+from .numerical import _positive_finite
+from .solution_volumes import (
+    _domain_energy_rows,
+    _domains_from_solution_volumes,
+    _material_resolution,
+    _materials_from_solution_volumes,
+    _physical_group_values,
+)
 from .surface_epr import build_surface_epr_postprocessing
 
+# Model.L0 in metres: the length unit of mesh coordinates and of lengths in the config
+# (1e-6 is one micrometre).
 _MODEL_L0_M = 1e-6
 
 
 @dataclass(frozen=True)
-class TerminalBinding:
-    """Exact net mapping record for a conductor terminal."""
-
-    name: str
-    net_id: str
-
-
-@dataclass(frozen=True)
 class ConfigBuildResult:
+    """An Electrostatic config and the records that explain its indices."""
+
     config: dict[str, Any]
     domain_names: list[str]
-    terminal_index_map: list[dict[str, Any]]
+    terminal_index_map: list[TerminalIndexEntry]
     surface_epr_index_map: list[dict[str, Any]]
     domain_energy_index_map: list[dict[str, Any]]
     material_resolution: list[dict[str, Any]]
-    ground_boundary_resolution: dict[str, Any]
+    ground_boundary_resolution: GroundBoundaryResolution
 
 
 @dataclass(frozen=True)
@@ -48,6 +68,8 @@ class LayoutPortBinding:
 
 @dataclass(frozen=True)
 class EigenmodeConfigBuildResult:
+    """An Eigenmode config and the records that explain its indices."""
+
     config: dict[str, Any]
     port_information: list[dict[str, Any]]
     index_entries: list[dict[str, Any]]
@@ -96,52 +118,13 @@ def build_electrostatic_config(
     epr_rows, epr_index_map = build_surface_epr_postprocessing(
         groups, surface_epr_specs, model_l0_m=_MODEL_L0_M
     )
-    energy_rows = [
-        {
-            "Index": index,
-            "Attributes": sorted(_physical_group_values(volume.get("phys_group"))),
-        }
-        for index, (_, volume) in enumerate(domain_volumes, start=1)
-    ]
-    energy_index_map = [
-        {
-            "section": "Domains.Postprocessing.Energy",
-            "index": index,
-            "entry_name": name,
-            "role": "domain_energy",
-            "physical_name": name,
-            "physical_names": [name],
-            "attributes": row["Attributes"],
-            "metadata": {
-                "physical_attribute": volume.get("physical_attribute", {}),
-                "material": _material_identity(volume, materials),
-                "source_provenance": volume.get("source_provenance", {}),
-                "representation": volume.get("representation"),
-                "route": volume.get("route"),
-            },
-        }
-        for index, ((name, volume), row) in enumerate(
-            zip(domain_volumes, energy_rows, strict=True), start=1
-        )
-    ]
+    energy_rows, energy_index_map = _domain_energy_rows(domain_volumes, materials)
 
-    linear = _linear_solver(numerical)
-    problem_block = _build_output_formats(numerical)
-    problem = {
-        "Type": "Electrostatic",
-        "Verbose": 3,
-        "Output": "results/palace",
-    }
-    problem.update(problem_block)
     config: dict[str, Any] = {
-        "Problem": problem,
-        "Model": {
-            "Mesh": str(mesh_path.name),
-            "L0": _MODEL_L0_M,
-            "Refinement": _build_refinement(numerical),
-        },
+        "Problem": _problem_block("Electrostatic", numerical),
+        "Model": _model_block(mesh_path, numerical),
         "Solver": {
-            "Linear": linear,
+            "Linear": _linear_solver(numerical),
             "Order": int(numerical["order"]),
             "Device": numerical["device"],
             "Electrostatic": {"Save": save_fields},
@@ -162,16 +145,7 @@ def build_electrostatic_config(
         terminal_index_map=terminal_index_map,
         surface_epr_index_map=epr_index_map,
         domain_energy_index_map=energy_index_map,
-        material_resolution=[
-            {
-                "solution_volume": name,
-                "attributes": sorted(_physical_group_values(volume.get("phys_group"))),
-                "physical_attribute": volume.get("physical_attribute", {}),
-                "material": _material_identity(volume, materials),
-                "source_provenance": volume.get("source_provenance", {}),
-            }
-            for name, volume in domain_volumes
-        ],
+        material_resolution=_material_resolution(domain_volumes, materials),
         ground_boundary_resolution=ground_boundary_resolution,
     )
 
@@ -244,20 +218,9 @@ def build_eigenmode_config(
         boundaries["LumpedPort"] = lumped_ports
     if epr_rows:
         boundaries["Postprocessing"] = {"Dielectric": epr_rows}
-    problem_block = _build_output_formats(numerical)
-    problem = {
-        "Type": "Eigenmode",
-        "Verbose": 3,
-        "Output": "results/palace",
-    }
-    problem.update(problem_block)
     config = {
-        "Problem": problem,
-        "Model": {
-            "Mesh": mesh_path.name,
-            "L0": _MODEL_L0_M,
-            "Refinement": _build_refinement(numerical),
-        },
+        "Problem": _problem_block("Eigenmode", numerical),
+        "Model": _model_block(mesh_path, numerical),
         "Solver": {
             "Linear": _linear_solver(numerical),
             "Order": int(numerical["order"]),
@@ -276,17 +239,26 @@ def build_eigenmode_config(
         config=config,
         port_information=port_info,
         index_entries=[*port_index, *energy_index, *epr_index],
-        material_resolution=[
-            {
-                "solution_volume": name,
-                "attributes": sorted(_physical_group_values(volume.get("phys_group"))),
-                "physical_attribute": volume.get("physical_attribute", {}),
-                "material": _material_identity(volume, materials),
-                "source_provenance": volume.get("source_provenance", {}),
-            }
-            for name, volume in domain_volumes
-        ],
+        material_resolution=_material_resolution(domain_volumes, materials),
     )
+
+
+def _problem_block(problem_type: str, numerical: Mapping[str, Any]) -> dict[str, Any]:
+    """``Problem``: the solver type and where Palace writes its tables."""
+    return {
+        "Type": problem_type,
+        "Verbose": 3,
+        "Output": "results/palace",
+        **_build_output_formats(numerical),
+    }
+
+
+def _model_block(mesh_path: Path, numerical: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "Mesh": str(mesh_path.name),
+        "L0": _MODEL_L0_M,
+        "Refinement": _build_refinement(numerical),
+    }
 
 
 def _requires_internal_boundary_cracking(
@@ -318,224 +290,7 @@ def _requires_internal_boundary_cracking(
     return False
 
 
-def _electrostatic_boundaries(
-    *,
-    groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
-    terminals: Sequence[TerminalBinding],
-    ground_net_ids: Sequence[str],
-    unassigned_conductor_policy: str,
-    exterior_boundary_policy: str,
-) -> tuple[dict[str, object], list[dict[str, Any]], dict[str, Any]]:
-    """Map exact conductor_component_id/net_id pairs to terminal and ground boundaries."""
-    component_attrs: dict[str, set[int]] = {}
-    component_nets: dict[str, str] = {}
-    component_physical_names: dict[str, set[str]] = {}
-    attribute_components: dict[int, str] = {}
-
-    for physical_name, info in groups.get("boundary_surfaces", {}).items():
-        if not isinstance(info, Mapping):
-            continue
-        if (
-            info.get("sgb_record") != "final_physical_group"
-            or info.get("source") != "volume_interface"
-            or info.get("solver_use") != "solver_active"
-            or str(info.get("interface_type")).upper() not in {"MA", "MS"}
-        ):
-            continue
-
-        component_id = optional_stripped_string(info.get("conductor_component_id"))
-        net_id = optional_stripped_string(info.get("net_id"))
-        if component_id is None:
-            raise ValueError(
-                "SGB solver-active conductor surface missing conductor_component_id."
-            )
-        if net_id is None:
-            raise ValueError(
-                f"SGB conductor component {component_id!r} missing exact net_id."
-            )
-
-        attrs = _physical_group_values(info.get("phys_group"))
-        if not attrs:
-            raise ValueError(
-                f"SGB conductor component {component_id!r} has no physical attributes."
-            )
-
-        component_attrs.setdefault(component_id, set()).update(attrs)
-        if component_id in component_nets and component_nets[component_id] != net_id:
-            raise ValueError(
-                f"SGB conductor component {component_id!r} has conflicting net_id values."
-            )
-        component_nets[component_id] = net_id
-        component_physical_names.setdefault(component_id, set()).add(str(physical_name))
-
-        for attr in attrs:
-            existing = attribute_components.get(int(attr))
-            if existing is None:
-                attribute_components[int(attr)] = component_id
-            elif existing != component_id:
-                raise ValueError(
-                    f"SGB physical attribute {int(attr)} belongs to multiple conductor components."
-                )
-
-    if not component_attrs:
-        raise ValueError(
-            "SGB config needs at least one solver-active conductor component."
-        )
-
-    terminal_entries: list[dict[str, object]] = []
-    terminal_index_map: list[dict[str, Any]] = []
-    assigned: set[str] = set()
-    seen_nets: set[str] = set()
-
-    for index, terminal in enumerate(terminals, start=1):
-        net_id = optional_stripped_string(terminal.net_id)
-        name = optional_stripped_string(terminal.name)
-        if net_id is None or name is None:
-            raise ValueError("terminal binding names and net ids must be non-empty.")
-        if net_id in seen_nets:
-            raise ValueError(f"SGB terminal net {net_id!r} is assigned more than once.")
-        seen_nets.add(net_id)
-
-        matching = sorted(
-            component_id
-            for component_id, value in component_nets.items()
-            if value == net_id
-        )
-        if not matching:
-            raise ValueError(f"SGB terminal {name!r} has no exact net match.")
-        overlap = assigned.intersection(matching)
-        if overlap:
-            raise ValueError(
-                f"SGB terminal {name!r} splits an already-assigned conductor component."
-            )
-
-        attrs = sorted(
-            int(attr)
-            for component_id in matching
-            for attr in component_attrs[component_id]
-        )
-        terminal_entries.append({"Index": index, "Attributes": attrs})
-        terminal_index_map.append(
-            {
-                "section": "Boundaries.Terminal",
-                "index": index,
-                "entry_name": name,
-                "role": "terminal",
-                "attributes": attrs,
-                "physical_names": sorted(
-                    name
-                    for name, info in groups.get("boundary_surfaces", {}).items()
-                    if isinstance(info, Mapping)
-                    and optional_stripped_string(info.get("conductor_component_id"))
-                    in matching
-                ),
-                "metadata": {
-                    "net_id": net_id,
-                    "conductor_component_ids": matching,
-                },
-                "terminal_name": name,
-                "net_id": net_id,
-                "conductor_component_ids": matching,
-                "terminal_attributes": attrs,
-            }
-        )
-        assigned.update(matching)
-
-    requested_ground_nets: list[str] = []
-    physical_ground_components: set[str] = set()
-    for value in ground_net_ids:
-        net_id = optional_stripped_string(value)
-        if net_id is None:
-            raise ValueError("physical Ground net ids must be non-empty.")
-        if net_id in requested_ground_nets:
-            raise ValueError(f"SGB physical Ground net {net_id!r} is repeated.")
-        matching = {
-            component_id
-            for component_id, candidate in component_nets.items()
-            if candidate == net_id
-        }
-        if not matching:
-            raise ValueError(f"SGB physical Ground net {net_id!r} has no exact match.")
-        overlap = assigned.intersection(matching)
-        if overlap:
-            raise ValueError(
-                f"SGB physical Ground net {net_id!r} overlaps a Terminal binding."
-            )
-        requested_ground_nets.append(net_id)
-        physical_ground_components.update(matching)
-        assigned.update(matching)
-
-    unassigned = set(component_attrs).difference(assigned)
-    if unassigned and unassigned_conductor_policy == "error":
-        raise ValueError(
-            "Unassigned conductor components: " + ", ".join(sorted(unassigned))
-        )
-
-    if unassigned_conductor_policy == "ground":
-        physical_ground_components.update(unassigned)
-
-    boundary_map: dict[str, object] = {"Terminal": terminal_entries}
-    physical_ground_attrs: set[int] = {
-        int(attr)
-        for component_id in physical_ground_components
-        for attr in component_attrs[component_id]
-    }
-    exterior_ground_attrs: set[int] = set()
-    exterior_physical_names: set[str] = set()
-
-    if exterior_boundary_policy == "ground":
-        for physical_name, info in groups.get("boundary_surfaces", {}).items():
-            if (
-                isinstance(info, Mapping)
-                and info.get("sgb_record") == "final_physical_group"
-                and info.get("source") == "domain_boundary"
-                and info.get("solver_use") == "solver_active"
-            ):
-                exterior_ground_attrs.update(
-                    _physical_group_values(info.get("phys_group"))
-                )
-                exterior_physical_names.add(str(physical_name))
-        if not exterior_ground_attrs:
-            raise ValueError(
-                "exterior_boundary_policy='ground' requires at least one exterior boundary."
-            )
-
-    if set(attribute_components).intersection(exterior_ground_attrs):
-        raise ValueError("conductor and exterior boundary attributes must be disjoint.")
-    ground_attrs = physical_ground_attrs | exterior_ground_attrs
-    if ground_attrs:
-        boundary_map["Ground"] = {"Attributes": sorted(ground_attrs)}
-
-    if sorted(
-        (entry["index"], list(entry["attributes"])) for entry in terminal_index_map
-    ) != sorted(
-        (entry["Index"], list(entry["Attributes"])) for entry in terminal_entries
-    ):
-        raise ValueError("Terminal-to-boundary mapping mismatch after synthesis.")
-
-    ground_components = sorted(physical_ground_components)
-    return (
-        boundary_map,
-        terminal_index_map,
-        {
-            "requested_net_ids": sorted(requested_ground_nets),
-            "physical_net_ids": sorted(
-                {component_nets[component_id] for component_id in ground_components}
-            ),
-            "conductor_component_ids": ground_components,
-            "physical_names": sorted(
-                {
-                    name
-                    for component_id in ground_components
-                    for name in component_physical_names[component_id]
-                }
-            ),
-            "physical_attributes": sorted(physical_ground_attrs),
-            "exterior_physical_names": sorted(exterior_physical_names),
-            "exterior_attributes": sorted(exterior_ground_attrs),
-            "union_attributes": sorted(ground_attrs),
-        },
-    )
+# ----------------------------------------------- Electrostatic boundary synthesis
 
 
 def _linear_solver(numerical: Mapping[str, Any]) -> dict[str, Any]:
@@ -595,167 +350,6 @@ def _build_output_formats(numerical: Mapping[str, Any]) -> dict[str, Any]:
     if not outputs:
         return {}
     return {"OutputFormats": outputs}
-
-
-def configure_numerical_controls(
-    *,
-    order: int = 1,
-    tolerance: float = 1e-6,
-    max_iterations: int = 400,
-    solver_type: str = "Default",
-    preconditioner: str = "Default",
-    device: str = "CPU",
-    refined_mesh_size: float = 5.0,
-    max_mesh_size: float = 300.0,
-    algorithm_3d: str = "Delaunay",
-    threads: int = 1,
-    surface_threads: int = 1,
-    geometry_order: int = 1,
-    high_order_optimize: bool = True,
-    amr_max_passes: int = 0,
-    amr_nonconformal: bool = False,
-    amr_tolerance: float = 1e-2,
-    amr_update_fraction: float | None = None,
-    save_adapt_iterations: bool | None = None,
-    save_adapt_mesh: bool | None = None,
-    estimator_mg: bool | None = None,
-    output_paraview: bool | None = None,
-    output_grid_function: bool | None = None,
-) -> dict[str, Any]:
-    """Validate notebook numerical controls for Palace config synthesis.
-
-    ``amr_max_passes`` becomes ``Model.Refinement.MaxIts``.
-    ``amr_nonconformal`` becomes ``Model.Refinement.Nonconformal`` and defaults
-    to ``False`` so generated configs do not inherit Palace's ``true`` default.
-    """
-    if not isinstance(order, int) or isinstance(order, bool) or not 1 <= order <= 4:
-        raise ValueError("order must be an integer from 1 through 4.")
-    if not _positive_finite(tolerance):
-        raise ValueError("tolerance must be finite and positive.")
-    if (
-        not isinstance(max_iterations, int)
-        or isinstance(max_iterations, bool)
-        or max_iterations <= 0
-    ):
-        raise ValueError("max_iterations must be a positive integer.")
-    if solver_type not in {"Default", "SuperLU", "STRUMPACK", "MUMPS"}:
-        raise ValueError("unsupported solver_type.")
-    if preconditioner not in {"Default", "AMS", "BoomerAMG"}:
-        raise ValueError("unsupported preconditioner.")
-    if device not in {"CPU", "GPU"}:
-        raise ValueError("unsupported device.")
-    if solver_type != "Default" and preconditioner != "Default":
-        raise ValueError("non-default preconditioner requires Default solver.")
-    if solver_type == "MUMPS":
-        max_iterations = 1
-
-    if not _positive_finite(refined_mesh_size):
-        raise ValueError("refined_mesh_size must be finite and > 0.")
-    if not _positive_finite(max_mesh_size):
-        raise ValueError("max_mesh_size must be finite and > 0.")
-    refined = float(refined_mesh_size)
-    maximum = float(max_mesh_size)
-    if maximum < refined:
-        raise ValueError("max_mesh_size must be >= refined_mesh_size.")
-
-    if not isinstance(amr_max_passes, int) or isinstance(amr_max_passes, bool):
-        raise TypeError("amr_max_passes must be an integer.")
-    if amr_max_passes < 0:
-        raise ValueError("amr_max_passes must be >= 0.")
-    if not isinstance(amr_nonconformal, bool):
-        raise TypeError("amr_nonconformal must be a bool.")
-    if not _positive_finite(amr_tolerance):
-        raise ValueError("amr_tolerance must be finite and positive.")
-    if amr_update_fraction is not None:
-        if not isinstance(amr_update_fraction, Real) or isinstance(
-            amr_update_fraction, bool
-        ):
-            raise TypeError("amr_update_fraction must be a real number.")
-        amr_update = float(amr_update_fraction)
-        if not math.isfinite(amr_update) or not 0.0 < amr_update < 1.0:
-            raise ValueError(
-                "amr_update_fraction must be finite and strictly between 0 and 1."
-            )
-    if save_adapt_iterations is not None and not isinstance(
-        save_adapt_iterations, bool
-    ):
-        raise TypeError("save_adapt_iterations must be bool or None.")
-    if save_adapt_mesh is not None and not isinstance(save_adapt_mesh, bool):
-        raise TypeError("save_adapt_mesh must be bool or None.")
-    if estimator_mg is not None and not isinstance(estimator_mg, bool):
-        raise TypeError("estimator_mg must be bool or None.")
-    if output_paraview is not None and not isinstance(output_paraview, bool):
-        raise TypeError("output_paraview must be bool or None.")
-    if output_grid_function is not None and not isinstance(output_grid_function, bool):
-        raise TypeError("output_grid_function must be bool or None.")
-
-    from ..mesh.controls import mesh_controls
-
-    controls = {
-        **mesh_controls(
-            algorithm_3d=algorithm_3d,
-            threads=threads,
-            surface_threads=surface_threads,
-            geometry_order=geometry_order,
-            high_order_optimize=high_order_optimize,
-        ),
-        "order": int(order),
-        "tolerance": float(tolerance),
-        "max_iterations": int(max_iterations),
-        "solver_type": str(solver_type),
-        "preconditioner": str(preconditioner),
-        "device": str(device),
-        "refined_mesh_size": refined,
-        "max_mesh_size": maximum,
-        "amr_max_passes": int(amr_max_passes),
-        "amr_nonconformal": bool(amr_nonconformal),
-        "amr_tolerance": float(amr_tolerance),
-        "amr_update_fraction": (
-            float(amr_update_fraction) if amr_update_fraction is not None else None
-        ),
-        "save_adapt_iterations": save_adapt_iterations,
-        "estimator_mg": estimator_mg,
-        "output_paraview": output_paraview,
-        "output_grid_function": output_grid_function,
-    }
-    if save_adapt_mesh is not None:
-        controls["save_adapt_mesh"] = save_adapt_mesh
-    return controls
-
-
-def _domain_energy_rows(
-    domain_volumes: list[tuple[str, Mapping[str, Any]]],
-    materials: Mapping[str, Mapping[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    rows = [
-        {
-            "Index": index,
-            "Attributes": sorted(_physical_group_values(info.get("phys_group"))),
-        }
-        for index, (_, info) in enumerate(domain_volumes, start=1)
-    ]
-    index_rows = [
-        {
-            "section": "Domains.Postprocessing.Energy",
-            "index": index,
-            "entry_name": name,
-            "role": "domain_energy",
-            "physical_name": name,
-            "physical_names": [name],
-            "attributes": row["Attributes"],
-            "metadata": {
-                "physical_attribute": info.get("physical_attribute", {}),
-                "material": _material_identity(info, materials),
-                "source_provenance": info.get("source_provenance", {}),
-                "representation": info.get("representation"),
-                "route": info.get("route"),
-            },
-        }
-        for index, ((name, info), row) in enumerate(
-            zip(domain_volumes, rows, strict=True), start=1
-        )
-    ]
-    return rows, index_rows
 
 
 def _eigenmode_lumped_ports(
@@ -856,129 +450,3 @@ def _direction_tuple(value: Any, name: str) -> tuple[float, float, float]:
     if not all(math.isfinite(item) for item in direction):
         raise ValueError(f"layout_sheet port {name!r} direction must be finite.")
     return direction
-
-
-def _positive_finite(value: Any) -> bool:
-    return (
-        isinstance(value, Real)
-        and not isinstance(value, bool)
-        and math.isfinite(float(value))
-        and float(value) > 0.0
-    )
-
-
-def _domains_from_solution_volumes(
-    groups: Mapping[str, Mapping[str, Any]],
-) -> list[tuple[str, Mapping[str, Any]]]:
-    """Sort solver volumes as deterministic domains."""
-    return sorted(
-        ((name, dict(info)) for name, info in groups.items()), key=lambda item: item[0]
-    )
-
-
-def _materials_from_solution_volumes(
-    *,
-    domain_volumes: list[tuple[str, Mapping[str, Any]]],
-    materials: Mapping[str, Mapping[str, Any]],
-) -> list[dict[str, Any]]:
-    """Build Palace-domain material rows from explicit material records."""
-    if not isinstance(materials, Mapping) or not materials:
-        raise ValueError(
-            "stack must include top-level materials mapping for config generation."
-        )
-
-    material_rows: list[dict[str, Any]] = []
-    for name, volume in domain_volumes:
-        attrs = _physical_group_values(volume.get("phys_group"))
-        physical_attribute = volume.get("physical_attribute")
-        if not isinstance(physical_attribute, Mapping):
-            raise TypeError(f"SGB solution volume {name!r} missing physical_attribute.")
-        material_ids = physical_attribute.get("material_ids")
-        if not isinstance(material_ids, (list, tuple)) or len(material_ids) != 1:
-            raise ValueError(
-                f"SGB solution volume {name!r} must define a single material_ids entry."
-            )
-        material_id = optional_stripped_string(material_ids[0])
-        if not material_id:
-            raise ValueError(
-                f"SGB solution volume {name!r} must define a non-empty material id."
-            )
-        material = materials.get(material_id)
-        if material is None:
-            raise ValueError(
-                f"SGB solution volume {name!r} references unknown material id {material_id!r}."
-            )
-        if not isinstance(material, Mapping):
-            raise TypeError(f"SGB material record {material_id!r} must be a mapping.")
-        if material.get("kind") not in {"vacuum", "dielectric"}:
-            raise ValueError(
-                f"SGB solution material {material_id!r} must have vacuum or dielectric kind."
-            )
-        permittivity = material.get("permittivity")
-        loss_tangent = material.get("loss_tangent")
-        if (
-            not isinstance(permittivity, Real)
-            or not math.isfinite(float(permittivity))
-            or float(permittivity) <= 0.0
-        ):
-            raise ValueError(
-                f"Material {material_id!r} requires finite positive permittivity."
-            )
-        if (
-            not isinstance(loss_tangent, Real)
-            or not math.isfinite(float(loss_tangent))
-            or float(loss_tangent) < 0.0
-        ):
-            raise ValueError(
-                f"Material {material_id!r} requires finite non-negative loss_tangent."
-            )
-        if material_rows and [
-            x for x in material_rows if list(x["Attributes"]) == list(attrs)
-        ]:
-            # allow only deterministic duplicate attributes if metadata diverges.
-            raise ValueError(
-                f"SGB solution volume {name!r} duplicates physical attributes {list(attrs)}."
-            )
-        material_rows.append(
-            {
-                "Attributes": sorted(int(item) for item in attrs),
-                "Permittivity": float(permittivity),
-                "LossTan": float(loss_tangent),
-            }
-        )
-
-    return material_rows
-
-
-def _material_identity(
-    volume: Mapping[str, Any], materials: Mapping[str, Mapping[str, Any]]
-) -> dict[str, str]:
-    ids = volume.get("physical_attribute", {}).get("material_ids")
-    if (
-        not isinstance(ids, (list, tuple))
-        or len(ids) != 1
-        or not isinstance(ids[0], str)
-    ):
-        raise ValueError("solution volume must carry one explicit material id.")
-    material_id = ids[0]
-    material = materials.get(material_id)
-    if not isinstance(material, Mapping) or material.get("kind") not in {
-        "vacuum",
-        "dielectric",
-    }:
-        raise ValueError(
-            f"solution material {material_id!r} must carry vacuum or dielectric kind."
-        )
-    return {"material_id": material_id, "kind": str(material["kind"])}
-
-
-def _physical_group_values(value: Any) -> tuple[int, ...]:
-    raw = value if isinstance(value, (list, tuple, set)) else (value,)
-    values = [
-        int(item)
-        for item in raw
-        if isinstance(item, int) and not isinstance(item, bool)
-    ]
-    if not values:
-        raise ValueError("Physical group must have at least one integer attribute.")
-    return tuple(values)

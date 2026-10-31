@@ -26,13 +26,13 @@ from .config import (
     _MODEL_L0_M,
     LayoutPortBinding,
     build_eigenmode_config,
-    configure_numerical_controls,
 )
 from .inputs import (
     _load_stack,
     _non_negative_number,
     _validate_stack_material_kinds,
 )
+from .numerical import configure_numerical_controls
 from .surface_epr import normalize_surface_epr_specs
 from .transforms import (
     RouteAThinFilm,
@@ -88,12 +88,14 @@ class EigenmodeSim:
         surface_defaults: Mapping[str, Mapping[str, Any]] | None = None,
         group_overrides: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> PalaceEprResult:
+        """Re-weight stored surface participation with other film assumptions, offline."""
         return reanalyze_epr(
             result, surface_defaults=surface_defaults, group_overrides=group_overrides
         )
 
     @staticmethod
     def show_epr(result: PalaceEprResult, *, mode: int | None = None) -> Any:
+        """Plot one mode with separate surface, bulk and port axes."""
         return show_epr(result, mode=mode)
 
     def _invalidate_mesh(self) -> None:
@@ -107,6 +109,7 @@ class EigenmodeSim:
         self.handoff_plan = None
 
     def set_geometry(self, component: Any) -> None:
+        """Use a component (it must provide write_gds) as the source geometry."""
         if self._plan_snapshot is not None:
             raise ValueError(
                 "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
@@ -173,6 +176,7 @@ class EigenmodeSim:
         return InputSummary(data)
 
     def set_stack(self, stack: Mapping[str, Any] | str | Path) -> None:
+        """Load the layer stack; it must define explicit materials. Clears the mesh."""
         if self._plan_snapshot is not None:
             raise ValueError(
                 "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
@@ -197,6 +201,7 @@ class EigenmodeSim:
         self._invalidate_mesh()
 
     def set_output_dir(self, path: str | Path) -> None:
+        """Choose the run directory the mesh, config and handoff are written to."""
         if not isinstance(path, (str, Path)):
             raise TypeError("output path must be a path string or Path.")
         self.output_dir = Path(path).expanduser().resolve()
@@ -210,6 +215,7 @@ class EigenmodeSim:
         z_above: float | None = None,
         z_below: float | None = None,
     ) -> None:
+        """Pad the device with vacuum: equal in-plane margins, optional z extensions. Excludes set_vacuum_region()."""
         if (
             self._plan_snapshot is not None
             and "VACUUM_REGION" in self._plan_snapshot.stack["solution_regions"]
@@ -359,6 +365,7 @@ class EigenmodeSim:
         tolerance: float = 1e-6,
         save: int = 0,
     ) -> None:
+        """Set the Eigenmode controls: mode count, target frequency, tolerance and saved fields."""
         if (
             not isinstance(num_modes, int)
             or isinstance(num_modes, bool)
@@ -482,6 +489,7 @@ class EigenmodeSim:
             self._invalidate_config()
 
     def mesh(self) -> Path:
+        """Build the Palace mesh for the current inputs. Replaces any earlier mesh."""
         self._invalidate_mesh()
         if (
             (self.component is None and self._plan_snapshot is None)
@@ -612,6 +620,7 @@ class EigenmodeSim:
         )
 
     def write_config(self) -> Path:
+        """Write config.json and the index map for the current mesh."""
         self._invalidate_config()
         if self._mesh_result is None or self._materials is None:
             raise ValueError("set_stack() and mesh() are required.")
@@ -698,6 +707,7 @@ class EigenmodeSim:
         setup_commands: tuple[str, ...] = (),
         petsc_options: tuple[str, ...] = (),
     ) -> HandoffPlan:
+        """Seal the run directory for a manual Palace run (see execution/handoff.py)."""
         if self._mesh_result is None or self.config_path is None:
             raise ValueError(
                 "mesh() and write_config() must run before prepare_handoff()."
