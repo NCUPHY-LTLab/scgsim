@@ -16,7 +16,7 @@ def _json(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
+def _write_sorted_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"

@@ -8,6 +8,7 @@ from numbers import Number
 from pathlib import Path
 from typing import Any, Literal
 
+from scgsim.aedt._data import _stripped_text
 from scgsim.aedt.specs.common import (
     DRIVEN_GEOMETRY_SCHEMA_VERSION,
     EIGENMODE_SCHEMA_VERSION,
@@ -30,12 +31,11 @@ from scgsim.aedt.specs.common import (
     PdkMaterial,
     TerminalPort,
     _adaptive_controls,
+    _coerced_finite_number,
     _normalize_gds_spec,
-    _number,
     _padding,
     _project_filename,
     _project_name_from_payload,
-    _text,
 )
 from scgsim.aedt.specs.modeling import (
     Modeling,
@@ -119,8 +119,8 @@ class FrequencySweepSpec:
     points: int = POINT_COUNT
 
     def __post_init__(self) -> None:
-        start = _number(self.start_ghz, "start_ghz")
-        stop = _number(self.stop_ghz, "stop_ghz")
+        start = _coerced_finite_number(self.start_ghz, "start_ghz")
+        stop = _coerced_finite_number(self.stop_ghz, "stop_ghz")
         if start <= 0 or stop <= start:
             raise ValueError("frequency sweep requires 0 < start_ghz < stop_ghz")
         if isinstance(self.points, bool) or not isinstance(self.points, Number):
@@ -159,15 +159,19 @@ class HfssRunControl:
     maximum_delta_s: float = 0.02
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "setup_name", _text(self.setup_name, "setup_name"))
-        object.__setattr__(self, "sweep_name", _text(self.sweep_name, "sweep_name"))
+        object.__setattr__(
+            self, "setup_name", _stripped_text(self.setup_name, "setup_name")
+        )
+        object.__setattr__(
+            self, "sweep_name", _stripped_text(self.sweep_name, "sweep_name")
+        )
         refinement = _adaptive_controls(
             self.maximum_passes,
             self.minimum_passes,
             self.minimum_converged_passes,
             self.percent_refinement,
         )
-        delta = _number(self.maximum_delta_s, "maximum_delta_s")
+        delta = _coerced_finite_number(self.maximum_delta_s, "maximum_delta_s")
         if delta <= 0:
             raise ValueError("maximum_delta_s must be > 0")
         object.__setattr__(self, "percent_refinement", refinement)
@@ -364,8 +368,8 @@ class HfssDrivenSpec:
     ) -> HfssDrivenSpec:
         if payload.get("schema_version") != SCHEMA_VERSION:
             raise ValueError("unsupported HFSS driven schema")
-        mode = _text(payload.get("mode"), "mode")
-        gds = Path(_text(payload.get("gds", {}).get("path"), "gds.path"))
+        mode = _stripped_text(payload.get("mode"), "mode")
+        gds = Path(_stripped_text(payload.get("gds", {}).get("path"), "gds.path"))
         if base_dir is not None and not gds.is_absolute():
             gds = base_dir / gds
         imports = tuple(
@@ -411,19 +415,19 @@ class HfssDrivenSpec:
             project_name=_project_name_from_payload(
                 payload.get("project", {}).get("name")
             ),
-            design_name=_text(
+            design_name=_stripped_text(
                 payload.get("project", {}).get("design"), "project.design"
             ),
             materials=materials,
-            vacuum_material_id=_text(
+            vacuum_material_id=_stripped_text(
                 payload.get("vacuum_material_id"), "vacuum_material_id"
             ),
             layer_imports=imports,
             object_bindings=bindings,
             ports=ports,  # type: ignore[arg-type]
             run_control=HfssRunControl(
-                _text(run.get("setup_name"), "setup_name"),
-                _text(run.get("sweep_name"), "sweep_name"),
+                _stripped_text(run.get("setup_name"), "setup_name"),
+                _stripped_text(run.get("sweep_name"), "sweep_name"),
                 sweep,
                 maximum_passes=run.get("maximum_passes", 99),
                 minimum_passes=run.get("minimum_passes", 1),
@@ -433,11 +437,11 @@ class HfssDrivenSpec:
             ),
             region_padding_um=tuple(payload.get("region_padding_um", ())),  # type: ignore[arg-type]
             length_mesh=LengthMeshSpec(**length) if length is not None else None,
-            aedt_version=_text(
+            aedt_version=_stripped_text(
                 payload.get("aedt", {}).get("requested_version"),
                 "aedt.requested_version",
             ),
-            pyaedt_version=_text(
+            pyaedt_version=_stripped_text(
                 payload.get("pyaedt", {}).get("locked_version"), "pyaedt.locked_version"
             ),
         )
@@ -466,9 +470,13 @@ class EigenmodeRunControl:
     percent_refinement: float = 30.0
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "setup_name", _text(self.setup_name, "setup_name"))
-        minimum = _number(self.minimum_frequency_ghz, "minimum_frequency_ghz")
-        delta = _number(
+        object.__setattr__(
+            self, "setup_name", _stripped_text(self.setup_name, "setup_name")
+        )
+        minimum = _coerced_finite_number(
+            self.minimum_frequency_ghz, "minimum_frequency_ghz"
+        )
+        delta = _coerced_finite_number(
             self.maximum_delta_frequency_percent,
             "maximum_delta_frequency_percent",
         )
@@ -612,7 +620,7 @@ class HfssEigenmodeSpec:
     ) -> HfssEigenmodeSpec:
         if payload.get("schema_version") != EIGENMODE_SCHEMA_VERSION:
             raise ValueError("unsupported HFSS Eigenmode schema")
-        gds = Path(_text(payload.get("gds", {}).get("path"), "gds.path"))
+        gds = Path(_stripped_text(payload.get("gds", {}).get("path"), "gds.path"))
         if base_dir is not None and not gds.is_absolute():
             gds = base_dir / gds
         raw_materials = payload.get("materials")
@@ -646,11 +654,11 @@ class HfssEigenmodeSpec:
             project_name=_project_name_from_payload(
                 payload.get("project", {}).get("name")
             ),
-            design_name=_text(
+            design_name=_stripped_text(
                 payload.get("project", {}).get("design"), "project.design"
             ),
             materials=materials,
-            vacuum_material_id=_text(
+            vacuum_material_id=_stripped_text(
                 payload.get("vacuum_material_id"), "vacuum_material_id"
             ),
             layer_imports=tuple(
@@ -663,11 +671,11 @@ class HfssEigenmodeSpec:
             run_control=EigenmodeRunControl(**run),
             region_padding_um=tuple(payload.get("region_padding_um", ())),  # type: ignore[arg-type]
             length_mesh=LengthMeshSpec(**length) if length is not None else None,
-            aedt_version=_text(
+            aedt_version=_stripped_text(
                 payload.get("aedt", {}).get("requested_version"),
                 "aedt.requested_version",
             ),
-            pyaedt_version=_text(
+            pyaedt_version=_stripped_text(
                 payload.get("pyaedt", {}).get("locked_version"), "pyaedt.locked_version"
             ),
         )
@@ -721,7 +729,9 @@ class HfssEprSpec:
             raise ValueError("EPR V1 requires AEDT 2024.2 and PyAEDT 1.3.0")
         project = _project_filename(self.project_name, "project_name")
         object.__setattr__(self, "project_name", project.stem)
-        object.__setattr__(self, "design_name", _text(self.design_name, "design_name"))
+        object.__setattr__(
+            self, "design_name", _stripped_text(self.design_name, "design_name")
+        )
         if not isinstance(self.geometry, PreparedPlanarGeometry):
             raise TypeError("geometry must be PreparedPlanarGeometry")
         if not self._historical_modeling and self.geometry.modeling != self.modeling:
@@ -857,7 +867,7 @@ class HfssEprSpec:
             _historical_modeling=allow_historical_modeling
             and "modeling" not in payload,
             project_name=_project_name_from_payload(project.get("name")),
-            design_name=_text(project.get("design"), "project.design"),
+            design_name=_stripped_text(project.get("design"), "project.design"),
             geometry=geometry,
             run_control=None if run is None else EigenmodeRunControl(**run),
             epr_request=(
@@ -872,11 +882,11 @@ class HfssEprSpec:
                     payload.get("expression_convergence")
                 )
             ),
-            aedt_version=_text(
+            aedt_version=_stripped_text(
                 payload.get("aedt", {}).get("requested_version"),
                 "aedt.requested_version",
             ),
-            pyaedt_version=_text(
+            pyaedt_version=_stripped_text(
                 payload.get("pyaedt", {}).get("locked_version"),
                 "pyaedt.locked_version",
             ),
@@ -913,7 +923,9 @@ class HfssEprAnalysisSpec:
             raise ValueError("EPR V1 requires AEDT 2024.2 and PyAEDT 1.3.0")
         project = _project_filename(self.project_name, "project_name")
         object.__setattr__(self, "project_name", project.stem)
-        object.__setattr__(self, "design_name", _text(self.design_name, "design_name"))
+        object.__setattr__(
+            self, "design_name", _stripped_text(self.design_name, "design_name")
+        )
         if not isinstance(self.geometry, PreparedPlanarGeometry):
             raise TypeError("geometry must be PreparedPlanarGeometry")
         if not isinstance(self.run_control, EigenmodeRunControl):
@@ -988,18 +1000,18 @@ class HfssEprAnalysisSpec:
             raise TypeError("project and run_control must be JSON objects")
         return cls(
             project_name=_project_name_from_payload(project.get("name")),
-            design_name=_text(project.get("design"), "project.design"),
+            design_name=_stripped_text(project.get("design"), "project.design"),
             geometry=PreparedPlanarGeometry.from_payload(payload.get("geometry")),
             run_control=EigenmodeRunControl(**run),
             epr_request=EprAnalysisRequest.from_payload(payload.get("epr")),
             saved_solution=SavedSolution.from_payload(
                 base_dir / "saved", payload.get("saved_solution")
             ),
-            aedt_version=_text(
+            aedt_version=_stripped_text(
                 payload.get("aedt", {}).get("requested_version"),
                 "aedt.requested_version",
             ),
-            pyaedt_version=_text(
+            pyaedt_version=_stripped_text(
                 payload.get("pyaedt", {}).get("locked_version"),
                 "pyaedt.locked_version",
             ),
@@ -1091,13 +1103,17 @@ class LengthMeshSpec:
     uniform_cpw_mtl: Literal[True] = True
 
     def __post_init__(self) -> None:
-        signals = tuple(_text(value, "signal_object") for value in self.signal_objects)
-        grounds = tuple(_text(value, "ground_object") for value in self.ground_objects)
+        signals = tuple(
+            _stripped_text(value, "signal_object") for value in self.signal_objects
+        )
+        grounds = tuple(
+            _stripped_text(value, "ground_object") for value in self.ground_objects
+        )
         if not signals or not grounds:
             raise ValueError(
                 "length mesh requires explicit signal_objects and ground_objects"
             )
-        maximum = _number(self.maximum_length_um, "maximum_length_um")
+        maximum = _coerced_finite_number(self.maximum_length_um, "maximum_length_um")
         if maximum <= 0:
             raise ValueError("maximum_length_um must be > 0")
         if self.uniform_cpw_mtl is not True:
@@ -1166,7 +1182,9 @@ class HfssDrivenGeometrySpec:
             "project_name",
             _project_filename(self.project_name, "project_name").stem,
         )
-        object.__setattr__(self, "design_name", _text(self.design_name, "design_name"))
+        object.__setattr__(
+            self, "design_name", _stripped_text(self.design_name, "design_name")
+        )
         if self.run_control is not None and not isinstance(
             self.run_control, HfssRunControl
         ):

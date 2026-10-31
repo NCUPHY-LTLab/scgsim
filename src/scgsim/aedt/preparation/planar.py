@@ -35,11 +35,11 @@ _KLAYOUT_COORD_MIN = -(2**31)
 _KLAYOUT_COORD_MAX = 2**31 - 1
 
 
-def _plain(value: Any) -> Any:
+def _plain_geometry_source(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return {str(key): _plain(item) for key, item in value.items()}
+        return {str(key): _plain_geometry_source(item) for key, item in value.items()}
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        return [_plain(item) for item in value]
+        return [_plain_geometry_source(item) for item in value]
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     raise TypeError(f"geometry source contains unsupported {type(value).__name__}")
@@ -95,7 +95,7 @@ def _source_payload(
         raise TypeError(
             "prepared_stack must contain materials, solution_regions, layers, and metadata"
         )
-    material_catalog = _plain(materials)
+    material_catalog = _plain_geometry_source(materials)
     for entity in build_input.entities:
         material = materials.get(entity.material_id)
         if not isinstance(material, Mapping):
@@ -150,9 +150,9 @@ def _source_payload(
                 ),
                 "net_id": item.net_id,
                 "polygon_ids": list(item.polygon_ids),
-                "geometry": _plain(item.geometry),
+                "geometry": _plain_geometry_source(item.geometry),
                 "metadata": {
-                    key: _plain(item.metadata[key])
+                    key: _plain_geometry_source(item.metadata[key])
                     for key in (
                         "semantic_group_id",
                         "source_semantic_id",
@@ -193,8 +193,8 @@ def _source_payload(
                 "material_id": entity.material_id,
                 "material_kind": entity.material_kind,
                 "representation": "solution_domain",
-                "geometry": _plain(geometry),
-                "metadata": _plain(entity.metadata),
+                "geometry": _plain_geometry_source(geometry),
+                "metadata": _plain_geometry_source(entity.metadata),
             }
         )
     missing_regions = set(solution_regions) - {
@@ -283,11 +283,11 @@ def _source_payload(
         ),
         "padding_um": padding_um,
         **(
-            {"source_effective_envelope": _plain(envelope_trace)}
+            {"source_effective_envelope": _plain_geometry_source(envelope_trace)}
             if isinstance(envelope_trace, Mapping)
             else {}
         ),
-        "envelope_outer_loop_um": _plain(envelope_loop),
+        "envelope_outer_loop_um": _plain_geometry_source(envelope_loop),
         "z_range_um": [
             envelope_bounds["z_min_um"],
             envelope_bounds["z_max_um"],
@@ -295,9 +295,11 @@ def _source_payload(
     }
     return {
         "schema_version": "scgsim.aedt.epr-planar-source.v1",
-        "modeling": _plain(metadata.get("physical_representation")),
+        "modeling": _plain_geometry_source(metadata.get("physical_representation")),
         "source_dbu_um": source_dbu_um,
-        "prepared_stack_sha256": canonical_sha256(_plain(prepared_stack)),
+        "prepared_stack_sha256": canonical_sha256(
+            _plain_geometry_source(prepared_stack)
+        ),
         "source_stack_sha256": metadata["physical_source_stack_sha256"],
         "materials": material_catalog,
         "solution_regions": normalized_regions,
@@ -310,7 +312,7 @@ def _source_payload(
         "surface_evaluation_policy": "unmasked_plus_requested.v1",
         **(
             {
-                "junction_partitions": _plain(
+                "junction_partitions": _plain_geometry_source(
                     build_input.metadata["aedt_junction_partitions"]
                 ),
                 "authored_input_sha256": build_input.metadata[
@@ -331,7 +333,7 @@ def _source_payload(
                 "host_semantic_ids": list(
                     dict.fromkeys(overlap.host_semantic_id for overlap in item.overlaps)
                 ),
-                "metadata": _plain(item.metadata),
+                "metadata": _plain_geometry_source(item.metadata),
             }
             for item in build_input.port_sheet_regions
         ],
@@ -370,8 +372,8 @@ def _surface_mask_plane(geometry_ref: Mapping[str, Any]) -> dict[str, Any]:
             "origin_um": [0.0, 0.0, z_um],
             "u": [1.0, 0.0, 0.0],
             "v": [0.0, 1.0, 0.0],
-            "exterior": _plain(outer),
-            "holes": _plain(geometry_ref.get("hole_loops", ())),
+            "exterior": _plain_geometry_source(outer),
+            "holes": _plain_geometry_source(geometry_ref.get("hole_loops", ())),
         }
     raise ValueError("horizontal EPR surface requires a planar loop")
 
@@ -706,7 +708,9 @@ def prepare_planar_geometry_input(
                 if e.material_kind == "conductor"
             ],
         }
-        records = _plain(build_input.metadata["aedt_junction_partitions"])
+        records = _plain_geometry_source(
+            build_input.metadata["aedt_junction_partitions"]
+        )
         for record in records.values():
             record["z_um"] = _junction_partition_plane(partition_source, record)
         build_input = replace(
@@ -733,11 +737,11 @@ def prepare_planar_geometry_input(
                 {
                     "surface_id": surface.surface_id,
                     "owner_semantic_id": surface.owner_semantic_id,
-                    "geometry_ref": _plain(surface.geometry_ref),
-                    "normal_hint": _plain(surface.normal_hint),
+                    "geometry_ref": _plain_geometry_source(surface.geometry_ref),
+                    "normal_hint": _plain_geometry_source(surface.normal_hint),
                     "surface_role": surface.surface_role,
                     "mask_plane": _surface_mask_plane(surface.geometry_ref),
-                    "contribution": _plain(record),
+                    "contribution": _plain_geometry_source(record),
                 }
             )
     catalog_by_id: dict[str, dict[str, Any]] = {}
@@ -957,9 +961,9 @@ def prepare_planar_geometry_input(
                         else None
                     ),
                     "effective_material_id": domain["material_id"],
-                    "effective_material": _plain(material),
+                    "effective_material": _plain_geometry_source(material),
                     "substrate_material": (
-                        _plain(substrate_material)
+                        _plain_geometry_source(substrate_material)
                         if substrate_material is not None
                         else None
                     ),

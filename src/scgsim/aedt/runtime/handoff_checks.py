@@ -24,6 +24,7 @@ from scgsim.aedt.preparation.cohort import (
     validate_hfss_import_source,
 )
 from scgsim.aedt.results.provenance import RECEIPT_V3, validate_runtime_source
+from scgsim.aedt.runtime._text import unstripped_nonempty_text
 from scgsim.aedt.specs.common import AedtResources
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
@@ -307,7 +308,9 @@ def verify_prepared_hashes(
     source = json_object(receipt.get("source"), "receipt.source")
     if source.get("spec") != SPEC_RELATIVE_PATH:
         raise RuntimeError("receipt source paths are not canonical")
-    if file_sha256(spec_path) != _text(source.get("spec_sha256"), "source.spec_sha256"):
+    if file_sha256(spec_path) != unstripped_nonempty_text(
+        source.get("spec_sha256"), "source.spec_sha256"
+    ):
         raise RuntimeError("prepared spec hash mismatch")
     if isinstance(spec, _PLANAR_SOURCE_SPECS):
         _verify_planar_source_hashes(metadata, source, spec)
@@ -353,9 +356,13 @@ def _verify_copied_gds_hashes(
 ) -> None:
     if source.get("gds") != GDS_RELATIVE_PATH:
         raise RuntimeError("receipt GDS path is not canonical")
-    if file_sha256(gds_path) != _text(metadata.get("gds_sha256"), "gds_sha256"):
+    if file_sha256(gds_path) != unstripped_nonempty_text(
+        metadata.get("gds_sha256"), "gds_sha256"
+    ):
         raise RuntimeError("copied GDS hash mismatch")
-    if file_sha256(gds_path) != _text(source.get("gds_sha256"), "source.gds_sha256"):
+    if file_sha256(gds_path) != unstripped_nonempty_text(
+        source.get("gds_sha256"), "source.gds_sha256"
+    ):
         raise RuntimeError("receipt GDS hash mismatch")
 
 
@@ -373,10 +380,4 @@ def contained_path(root: Path, relative: str) -> Path:
 def json_object(value: Any, field: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise TypeError(f"{field} must be a JSON object")
-    return value
-
-
-def _text(value: Any, field: str) -> str:
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"{field} must be non-empty text")
     return value

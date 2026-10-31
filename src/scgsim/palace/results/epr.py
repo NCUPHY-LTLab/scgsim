@@ -30,31 +30,33 @@ def _number(value: Any, name: str, *, positive: bool = False) -> float:
     return float(value)
 
 
-def _plain(value: Any) -> Any:
+def _plain_epr_value(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return {str(key): _plain(item) for key, item in value.items()}
+        return {str(key): _plain_epr_value(item) for key, item in value.items()}
     if isinstance(value, (tuple, list)):
-        return [_plain(item) for item in value]
+        return [_plain_epr_value(item) for item in value]
     if value is None or isinstance(value, (str, bool, int, float)):
         return value
     raise TypeError(f"unsupported EPR value {type(value).__name__}")
 
 
-def _freeze(value: Any, *, verified: Any = None) -> Any:
+def _freeze_coercing_keys(value: Any, *, verified: Any = None) -> Any:
     if verified is not None and value is verified:
         return verified
     if isinstance(value, Mapping):
         prior = verified if isinstance(verified, Mapping) else {}
         return MappingProxyType(
             {
-                str(key): _freeze(item, verified=prior.get(str(key)))
+                str(key): _freeze_coercing_keys(item, verified=prior.get(str(key)))
                 for key, item in value.items()
             }
         )
     if isinstance(value, (tuple, list)):
         prior = verified if isinstance(verified, (tuple, list)) else ()
         return tuple(
-            _freeze(item, verified=prior[index] if index < len(prior) else None)
+            _freeze_coercing_keys(
+                item, verified=prior[index] if index < len(prior) else None
+            )
             for index, item in enumerate(value)
         )
     if value is None or isinstance(value, (str, bool, int, float)):
@@ -182,7 +184,7 @@ class PalaceEprResult:
             self,
             "rows",
             tuple(
-                _freeze(
+                _freeze_coercing_keys(
                     row, verified=prior_rows[index] if index < len(prior_rows) else None
                 )
                 for index, row in enumerate(rows)
@@ -191,7 +193,7 @@ class PalaceEprResult:
         object.__setattr__(
             self,
             "provenance",
-            _freeze(
+            _freeze_coercing_keys(
                 self.provenance,
                 verified=self._verified_source.provenance
                 if self._verified_source is not None
@@ -202,8 +204,8 @@ class PalaceEprResult:
     def to_payload(self) -> dict[str, Any]:
         return {
             "schema_version": "scgsim.palace.epr-result.v1",
-            "rows": _plain(self.rows),
-            "provenance": _plain(self.provenance),
+            "rows": _plain_epr_value(self.rows),
+            "provenance": _plain_epr_value(self.provenance),
         }
 
     @classmethod

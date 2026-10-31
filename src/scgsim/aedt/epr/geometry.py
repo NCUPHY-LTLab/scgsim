@@ -23,7 +23,7 @@ from scgsim.aedt.preparation.planar import (
     _klayout_region as _klayout_region,
 )
 from scgsim.aedt.preparation.planar import (
-    _plain as _plain,
+    _plain_geometry_source as _plain_geometry_source,
 )
 from scgsim.aedt.preparation.planar import (
     _regions_from_klayout as _regions_from_klayout,
@@ -297,7 +297,7 @@ def precompute_inset_surfaces(
             and binding["contribution"]["contribution_id"] not in selected
         ):
             continue
-        support = _plain(binding["mask_support"])
+        support = _plain_geometry_source(binding["mask_support"])
         key = support["group_identity_sha256"]
         if key not in grouped:
             grouped[key] = (support, [])

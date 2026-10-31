@@ -7,7 +7,11 @@ import re
 from pathlib import Path
 from typing import Any
 
-from scgsim.aedt._io import file_sha256
+from scgsim.aedt.results.convergence._evidence_files import (
+    contained_evidence_path,
+    read_evidence_text,
+    source_record,
+)
 from scgsim.aedt.specs.q2d import Q2dSpec
 from scgsim.aedt.specs.q3d import Q3dSpec
 
@@ -21,18 +25,20 @@ def _read_convergence(
     forbidden_block_names: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     root = run_dir.resolve()
-    results_dir = _contained(root, f"{spec.project_name}.aedtresults", solver)
-    asol_path = _contained(results_dir, f"{spec.design_name}.asol", solver)
-    asol = _read(asol_path, solver)
+    results_dir = contained_evidence_path(
+        root, f"{spec.project_name}.aedtresults", solver
+    )
+    asol_path = contained_evidence_path(results_dir, f"{spec.design_name}.asol", solver)
+    asol = read_evidence_text(asol_path, solver)
     profile_names = set(re.findall(r"\bPRF\([^\n]*\bFile='([^']+\.profile)'", asol))
     if len(profile_names) != 1:
         raise RuntimeError(
             f"{solver} native solution does not identify exactly one profile"
         )
-    profile_path = _contained(
+    profile_path = contained_evidence_path(
         results_dir / f"{spec.design_name}.results", profile_names.pop(), solver
     )
-    profile = _read(profile_path, solver)
+    profile = read_evidence_text(profile_path, solver)
 
     block_names = {name for _, name, _, _ in problems}
     blocks: dict[str, tuple[str, str]] = {}
@@ -74,8 +80,8 @@ def _read_convergence(
     }
     return {
         "sources": {
-            "asol": _source(asol_path, root),
-            "profile": _source(profile_path, root),
+            "asol": source_record(asol_path, root),
+            "profile": source_record(profile_path, root),
         },
         **evidence,
     }
@@ -92,7 +98,9 @@ def _problem_evidence(
     delta_field: str,
     error_field: str | None,
 ) -> dict[str, Any]:
-    target = _float(_required(body, r"(?m)^\s*ConvTarget='([^']+)'\s*$"))
+    target = _matrix_convergence_float(
+        _required(body, r"(?m)^\s*ConvTarget='([^']+)'\s*$")
+    )
     maximum_passes = _int(_required(body, r"(?m)^\s*MaxPasses='([^']+)'\s*$"))
     if not math.isclose(target, expected_target, rel_tol=0.0, abs_tol=1e-12):
         raise RuntimeError(
@@ -109,8 +117,10 @@ def _problem_evidence(
     final = pass_rows[-1]
     final_pass = _int(_field(final, "p"))
     final_triangles = _int(_field(final, "tri"))
-    final_delta = _float(_field(final, delta_field))
-    final_error = _float(_field(final, error_field)) if error_field else None
+    final_delta = _matrix_convergence_float(_field(final, delta_field))
+    final_error = (
+        _matrix_convergence_float(_field(final, error_field)) if error_field else None
+    )
     if (
         final_pass <= 0
         or final_pass > maximum_passes
@@ -147,34 +157,6 @@ def _problem_evidence(
     return result
 
 
-def _source(path: Path, root: Path) -> dict[str, str | int]:
-    return {
-        "path": path.relative_to(root).as_posix(),
-        "bytes": path.stat().st_size,
-        "sha256": file_sha256(path),
-    }
-
-
-def _contained(root: Path, relative: str, solver: str) -> Path:
-    if not relative or Path(relative).is_absolute():
-        raise RuntimeError(f"{solver} native evidence path is invalid")
-    path = (root / relative).resolve()
-    if not path.is_relative_to(root.resolve()):
-        raise RuntimeError(f"{solver} native evidence escapes the run directory")
-    return path
-
-
-def _read(path: Path, solver: str) -> str:
-    if not path.is_file() or path.stat().st_size == 0:
-        raise RuntimeError(f"{solver} native convergence evidence is missing: {path}")
-    try:
-        return path.read_text(encoding="utf-8", errors="strict")
-    except UnicodeError as exc:
-        raise RuntimeError(
-            f"{solver} native convergence evidence is not UTF-8: {path}"
-        ) from exc
-
-
 def _block(text: str, name: str, solver: str) -> str:
     begin = f"$begin '{name}'"
     end = f"$end '{name}'"
@@ -203,7 +185,7 @@ def _field(row: str, name: str) -> str:
     return _required(row, rf"(?:^|,\s*){re.escape(name)}=([^,\s)]+)")
 
 
-def _float(value: str) -> float:
+def _matrix_convergence_float(value: str) -> float:
     try:
         result = float(value)
     except ValueError as exc:

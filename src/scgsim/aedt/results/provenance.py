@@ -317,6 +317,9 @@ _RUNTIME_SOURCE_V21_PATHS = tuple(
         (
             *_RUNTIME_SOURCE_V20_PATHS,
             "src/scgsim/aedt/_benchmark.py",
+            "src/scgsim/aedt/results/convergence/_evidence_files.py",
+            "src/scgsim/aedt/runtime/_text.py",
+            "src/scgsim/aedt/runtime/_timing.py",
             "src/scgsim/aedt/runtime/handoff_checks.py",
             "src/scgsim/aedt/runtime/receipts.py",
         )

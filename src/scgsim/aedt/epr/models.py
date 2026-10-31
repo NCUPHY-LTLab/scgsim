@@ -8,13 +8,13 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from scgsim.aedt._data import (
-    _freeze as _freeze,
+    _freeze_str_keys_only as _freeze_str_keys_only,
 )
 from scgsim.aedt._data import (
-    _number as _number,
+    _number_at_least as _number_at_least,
 )
 from scgsim.aedt._data import (
-    _text as _text,
+    _stripped_text as _stripped_text,
 )
 from scgsim.aedt._data import (
     canonical_sha256 as canonical_sha256,
@@ -76,7 +76,9 @@ class EprResult:
     def __post_init__(self) -> None:
         if self.result_kind not in {"adaptive_history", "saved_field"}:
             raise ValueError("unsupported EPR result kind")
-        object.__setattr__(self, "setup_name", _text(self.setup_name, "setup_name"))
+        object.__setattr__(
+            self, "setup_name", _stripped_text(self.setup_name, "setup_name")
+        )
         if isinstance(self.rows, (str, bytes)):
             raise TypeError("EPR result rows must be a sequence of mappings")
         rows = tuple(self.rows)
@@ -90,7 +92,7 @@ class EprResult:
             self._verified_source.rows if self._verified_source is not None else ()
         )
         frozen_rows = tuple(
-            _freeze(
+            _freeze_str_keys_only(
                 row, verified=prior_rows[index] if index < len(prior_rows) else None
             )
             for index, row in enumerate(rows)
@@ -168,7 +170,7 @@ class EprResult:
                     "junction_capacitive_energy_j",
                     "normalization_energy_j",
                 ):
-                    number = _number(row[name], f"EPR result row {name}")
+                    number = _number_at_least(row[name], f"EPR result row {name}")
                     if (
                         name in {"frequency_hz", "normalization_energy_j"}
                         and number <= 0
@@ -191,18 +193,18 @@ class EprResult:
                             f"complete EPR result row {name} must contain mappings"
                         )
                 for surface in row["surface_contributions"]:
-                    _number(
+                    _number_at_least(
                         surface.get("participation"),
                         "surface contribution participation",
                     )
                     if row["schema_version"].endswith(".v2"):
                         film_assumptions(surface.get("assumptions"), allow_unknown=True)
                 for junction in row["junctions"]:
-                    _number(
+                    _number_at_least(
                         junction.get("inductive_participation"),
                         "junction inductive participation",
                     )
-                    _number(
+                    _number_at_least(
                         junction.get("capacitive_participation"),
                         "junction capacitive participation",
                     )
@@ -247,7 +249,7 @@ class EprResult:
                         raise ValueError(
                             "native surface reference lacks canonical evidence"
                         )
-                    reference_id = _text(
+                    reference_id = _stripped_text(
                         reference["reference_id"], "native reference ID"
                     )
                     if reference_id in reference_ids:
@@ -259,7 +261,7 @@ class EprResult:
                         "area_m2",
                         "native_area_m2",
                     ):
-                        _number(
+                        _number_at_least(
                             reference[name],
                             f"native surface reference {name}",
                             minimum=-math.inf,
@@ -277,7 +279,7 @@ class EprResult:
                         raise ValueError(
                             "native surface reference expression evidence is invalid"
                         )
-        provenance = _freeze(
+        provenance = _freeze_str_keys_only(
             self.provenance,
             verified=(
                 self._verified_source.provenance

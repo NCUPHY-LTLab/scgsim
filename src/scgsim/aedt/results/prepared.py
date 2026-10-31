@@ -11,12 +11,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from scgsim.aedt._data import _freeze, detached
+from scgsim.aedt._data import _freeze_str_keys_only, detached
 from scgsim.aedt._io import file_sha256, read_json
 from scgsim.aedt.preparation.cohort import validate_geometry_source
 from scgsim.aedt.results.provenance import RECEIPT_V3, SOURCE_SCHEMA_V19
 from scgsim.aedt.results.resolve import (
-    _contained,
+    _contained_in_handoff_root,
     _positive_unique_ids,
     _validate_body_terminal_readback,
     _validate_completion_cohort,
@@ -53,7 +53,7 @@ class PreparedModel:
     _readback: Any
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "_readback", _freeze(self._readback))
+        object.__setattr__(self, "_readback", _freeze_str_keys_only(self._readback))
 
     @property
     def readback(self) -> dict[str, Any]:
@@ -71,7 +71,7 @@ def resolve_prepared_model(source: str | Path) -> PreparedModel:
         root = path.parent.parent
     else:
         root = path
-    receipt_path = _contained(root, "metadata/aedt_run_receipt.json")
+    receipt_path = _contained_in_handoff_root(root, "metadata/aedt_run_receipt.json")
     receipt = read_json(receipt_path)
     if (
         not isinstance(receipt, dict)

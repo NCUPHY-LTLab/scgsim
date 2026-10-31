@@ -27,13 +27,16 @@ METHOD = "scgsim.aedt.junction-partition.v1"
 PRECISION_UM = 1e-9
 
 
-def _plain(value: Any) -> Any:
+def _plain_with_dataclasses(value: Any) -> Any:
     if hasattr(value, "__dataclass_fields__"):
-        return {item.name: _plain(getattr(value, item.name)) for item in fields(value)}
+        return {
+            item.name: _plain_with_dataclasses(getattr(value, item.name))
+            for item in fields(value)
+        }
     if isinstance(value, Mapping):
-        return {str(key): _plain(item) for key, item in value.items()}
+        return {str(key): _plain_with_dataclasses(item) for key, item in value.items()}
     if isinstance(value, (tuple, list)):
-        return [_plain(item) for item in value]
+        return [_plain_with_dataclasses(item) for item in value]
     return value
 
 
@@ -688,7 +691,7 @@ def _model_geometry(build_input, originals, records):
                 physical_ends[end["source_entity_id"]].extend(
                     refine(sliced[jid][0 if n == 0 else 2])
                 )
-            end["model_regions"] = _plain(part)
+            end["model_regions"] = _plain_with_dataclasses(part)
         final_free = lower(refine(free_edges[jid]))
         if not _emitted_partition_coverage(
             final_free, [*parts[0], (corners,), *parts[2]]
@@ -696,7 +699,7 @@ def _model_geometry(build_input, originals, records):
             raise ValueError(
                 "numerical junction emitted partition does not cover source free boundary"
             )
-        record["free_model_regions"] = _plain(final_free)
+        record["free_model_regions"] = _plain_with_dataclasses(final_free)
         record["central_model_regions"] = [[list(corners)]]
         record["proof_conditions"]["emitted_partition_coverage"] = True
         record["model_coordinate_method"] = "source_edge_incidence_and_two_cuts.v1"
@@ -712,8 +715,8 @@ def _model_geometry(build_input, originals, records):
             intersection_deviation
         )
         record["authored_source_geometry"] = {
-            "exterior": _plain(sheet.exterior),
-            "holes": _plain(sheet.holes),
+            "exterior": _plain_with_dataclasses(sheet.exterior),
+            "holes": _plain_with_dataclasses(sheet.holes),
         }
         record["model_cut_projection_ranges_um"] = [
             [
@@ -1153,11 +1156,11 @@ def partition_junctions(
                     "source_entity_id": owner.semantic_id,
                     "net_id": net,
                     "material_id": owner.material_id,
-                    "geometry": _plain(owner.geometry),
+                    "geometry": _plain_with_dataclasses(owner.geometry),
                     "representation": dict(owner.route_representations),
                     "polygon_id": polygon_id,
                     "empty_residual": not end,
-                    "local_regions": _plain(end),
+                    "local_regions": _plain_with_dataclasses(end),
                 }
             )
         cid = (
@@ -1186,12 +1189,14 @@ def partition_junctions(
             },
             "maximum_input_coordinate_deviation_um": max(deviations, default=0.0),
             "ends": end_records,
-            "free_local_regions": _plain(_rings(free)),
-            "central_local_regions": _plain(central),
+            "free_local_regions": _plain_with_dataclasses(_rings(free)),
+            "central_local_regions": _plain_with_dataclasses(central),
         }
     model, derived_entities = _model_geometry(build_input, originals, records)
     metadata = dict(build_input.metadata)
-    metadata["aedt_authored_input_sha256"] = canonical_sha256(_plain(build_input))
+    metadata["aedt_authored_input_sha256"] = canonical_sha256(
+        _plain_with_dataclasses(build_input)
+    )
     metadata["aedt_junction_partitions"] = records
     original_ids = {p.polygon_id for p in build_input.polygons}
     derived_polygons = tuple(model[p.polygon_id] for p in build_input.polygons) + tuple(

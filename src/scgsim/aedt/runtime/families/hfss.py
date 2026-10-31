@@ -18,6 +18,8 @@ from typing import Any
 
 from scgsim.aedt._io import file_sha256, write_csv, write_json
 from scgsim.aedt.results.convergence.hfss import read_hfss_convergence
+from scgsim.aedt.runtime._text import unstripped_nonempty_text
+from scgsim.aedt.runtime._timing import elapsed_seconds
 from scgsim.aedt.runtime.benchmark import (
     attach_simulation_benchmark,
     export_simulation_benchmark,
@@ -680,7 +682,9 @@ def _assign_ports(hfss: Any, spec: HfssSpec) -> list[dict[str, Any]]:
                 raise RuntimeError(
                     f"terminal excitation readback failed for {port.name!r}: {names!r}"
                 )
-            boundary_name = _text(getattr(boundary, "name", port.name), "boundary.name")
+            boundary_name = unstripped_nonempty_text(
+                getattr(boundary, "name", port.name), "boundary.name"
+            )
             native = _native_terminal_readback(hfss, boundary_name, names[0], port)
             records.append(
                 {
@@ -1452,12 +1456,6 @@ def _require_native_properties(
         raise RuntimeError(f"{context} native property mismatch: {mismatches!r}")
 
 
-def _text(value: Any, field: str) -> str:
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"{field} must be non-empty text")
-    return value
-
-
 def read_body_eigenmode_setup(
     app: Any, spec: HfssEprSpec | HfssEprAnalysisSpec
 ) -> dict[str, Any]:
@@ -1721,7 +1719,7 @@ def prepare_body_eigenmode(
         new_desktop=False,
         close_on_exit=False,
     )
-    timings["native_open_seconds"] = round(time.perf_counter() - started, 6)
+    timings["native_open_seconds"] = elapsed_seconds(started)
     if app.desktop_class.aedt_version_id != REQUIRED_AEDT_VERSION:
         raise RuntimeError("HFSS EPR did not bind the owned AEDT 2024.2 desktop")
     app.modeler.model_units = "um"
@@ -1730,12 +1728,12 @@ def prepare_body_eigenmode(
     if geometry_extension is not None:
         geometry_extension(app, bound.geometry, geometry)
     _assign_generic_rlcs(app, bound, geometry)
-    timings["geometry_seconds"] = round(time.perf_counter() - started, 6)
+    timings["geometry_seconds"] = elapsed_seconds(started)
     timings["geometry_phases"] = geometry.pop("geometry_phases")
     started = time.perf_counter()
     if bound.run_control is not None:
         create_eigenmode_setup(app, bound.run_control)
-    timings["setup_seconds"] = round(time.perf_counter() - started, 6)
+    timings["setup_seconds"] = elapsed_seconds(started)
     started = time.perf_counter()
     if analysis_author is None or bound.run_control is None:
         expressions: list[dict[str, Any]] = []
@@ -1753,11 +1751,11 @@ def prepare_body_eigenmode(
             app, request.workspace, bound, geometry
         )
         timings["epr_authoring_phases"] = phase_timings
-    timings["epr_authoring_seconds"] = round(time.perf_counter() - started, 6)
+    timings["epr_authoring_seconds"] = elapsed_seconds(started)
     started = time.perf_counter()
     if not app.save_project() or not project_path.is_file():
         raise RuntimeError("HFSS EPR project was not saved after preparation")
-    timings["save_seconds"] = round(time.perf_counter() - started, 6)
+    timings["save_seconds"] = elapsed_seconds(started)
     started = time.perf_counter()
     _read_saved_junction_lines(
         app, project_path, bound.design_name, bound.geometry, geometry
@@ -1768,7 +1766,7 @@ def prepare_body_eigenmode(
     )
     if analysis_readback is not None and bound.run_control is not None:
         analysis_readback(app, bound, cache, project_path)
-    timings["readback_seconds"] = round(time.perf_counter() - started, 6)
+    timings["readback_seconds"] = elapsed_seconds(started)
     preparation_wall = time.perf_counter() - preparation_started
     timings["preparation_wall_seconds"] = round(preparation_wall, 6)
     timings["preparation_residual_seconds"] = round(
@@ -1871,7 +1869,7 @@ def solve_and_export_body_eigenmode(
         resources,
         resource_evidence if resource_evidence is not None else {},
     )
-    timings["solve_seconds"] = round(time.perf_counter() - started, 6)
+    timings["solve_seconds"] = elapsed_seconds(started)
     if not solved:
         raise RuntimeError(
             f"HFSS failed to analyze setup {spec.run_control.setup_name!r}"
@@ -1879,13 +1877,13 @@ def solve_and_export_body_eigenmode(
     started = time.perf_counter()
     if not prepared.app.save_project() or not prepared.project_path.is_file():
         raise RuntimeError("HFSS EPR solved project save failed")
-    timings["post_solve_save_seconds"] = round(time.perf_counter() - started, 6)
+    timings["post_solve_save_seconds"] = elapsed_seconds(started)
     run_dir = prepared.request.workspace
     output_dir = run_dir / "results/epr"
     output_dir.mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()
     outputs, final_modes = _export_eigenmode(prepared.app, run_dir, output_dir, spec)
-    timings["final_export_seconds"] = round(time.perf_counter() - started, 6)
+    timings["final_export_seconds"] = elapsed_seconds(started)
     convergence_path = output_dir / "adaptive-convergence.prop"
     started = time.perf_counter()
     returned = prepared.app.export_convergence(
@@ -1902,7 +1900,7 @@ def solve_and_export_body_eigenmode(
         convergence_path
     )
     convergence = read_hfss_convergence(run_dir, spec)
-    timings["convergence_export_seconds"] = round(time.perf_counter() - started, 6)
+    timings["convergence_export_seconds"] = elapsed_seconds(started)
     started = time.perf_counter()
     if analysis_export is None:
         history = read_body_eigenmode_history(prepared.app, spec)
@@ -1918,11 +1916,11 @@ def solve_and_export_body_eigenmode(
             prepared, spec, convergence, outputs, output_dir, timings
         )
     if analysis_export is None:
-        timings["history_export_seconds"] = round(time.perf_counter() - started, 6)
+        timings["history_export_seconds"] = elapsed_seconds(started)
     started = time.perf_counter()
     if not prepared.app.save_project() or not prepared.project_path.is_file():
         raise RuntimeError("HFSS EPR final project save failed")
-    timings["final_save_seconds"] = round(time.perf_counter() - started, 6)
+    timings["final_save_seconds"] = elapsed_seconds(started)
     relative = prepared.project_path.relative_to(run_dir).as_posix()
     outputs[relative] = file_sha256(prepared.project_path)
     benchmark_relative, benchmark_digest, benchmark = export_simulation_benchmark(

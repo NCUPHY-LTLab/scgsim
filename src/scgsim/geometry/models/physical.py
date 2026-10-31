@@ -16,7 +16,11 @@ from scgsim.geometry.models.representation import (
     EntityRepresentation,
     RepresentationContext,
 )
-from scgsim.semantics.snapshot import _plain, canonical_sha256, freeze_plain
+from scgsim.semantics.snapshot import (
+    _plain_semantic_facts,
+    canonical_sha256,
+    freeze_plain,
+)
 
 FeatureKind = Literal["stack_film", "local_film", "finite_volume"]
 ProfileName = Literal[
@@ -80,7 +84,10 @@ class PhysicalLayerDeclaration:
         return self.source_interval_um[0 if side == "lower" else 1]
 
     def to_payload(self) -> dict[str, Any]:
-        return {name: _plain(getattr(self, name)) for name in self.__dataclass_fields__}
+        return {
+            name: _plain_semantic_facts(getattr(self, name))
+            for name in self.__dataclass_fields__
+        }
 
     @classmethod
     def from_payload(cls, value: Mapping[str, Any]) -> PhysicalLayerDeclaration:
@@ -110,7 +117,7 @@ class ApproximationProfile:
         return {
             "name": self.name,
             "revision": self.revision,
-            "parameters": _plain(self.parameters),
+            "parameters": _plain_semantic_facts(self.parameters),
         }
 
     @classmethod
@@ -165,7 +172,7 @@ class PhysicalRepresentationPlan:
                 for key, value in self.entities.items()
             },
             enclosures={
-                key: EffectiveEnclosure(**_plain(value))
+                key: EffectiveEnclosure(**_plain_semantic_facts(value))
                 for key, value in self.enclosures.items()
             },
         )
@@ -210,7 +217,7 @@ class PhysicalRepresentationPlan:
             if film
             else source_geometry.get("thickness_um", high - low)
         )
-        geometry = _plain(source_geometry)
+        geometry = _plain_semantic_facts(source_geometry)
         geometry.update(z_min_um=effective_low, z_max_um=effective_high)
         if "z_um" in geometry:
             geometry["z_um"] = effective_low
@@ -221,16 +228,20 @@ class PhysicalRepresentationPlan:
             "representation": representation,
             "source_interval_um": [low, high],
             "effective_interval_um": [effective_low, effective_high],
-            "source_geometry": _plain(source_geometry),
+            "source_geometry": _plain_semantic_facts(source_geometry),
             "effective_geometry": geometry,
             "physical_thickness_um": physical_thickness,
             "physical_thickness_basis": "source_film_normal"
             if film
             else "source_body_axial",
-            "physical_dimensions": _plain(declaration.physical_dimensions)
+            "physical_dimensions": _plain_semantic_facts(
+                declaration.physical_dimensions
+            )
             if declaration
             else {},
-            "source_contact_facts": _plain(declaration.source_contact_facts)
+            "source_contact_facts": _plain_semantic_facts(
+                declaration.source_contact_facts
+            )
             if declaration
             else {},
             "material_id": declaration.material_id if declaration else None,
@@ -280,15 +291,15 @@ class PhysicalRepresentationPlan:
         return {
             "source_bounds_um": bounds,
             "effective_bounds_um": effective,
-            "effective_body_bounds_um": _plain(effective_body_bounds_um),
-            "source_padding_um": _plain(source_padding_um),
+            "effective_body_bounds_um": _plain_semantic_facts(effective_body_bounds_um),
+            "source_padding_um": _plain_semantic_facts(source_padding_um),
             "effective_padding_um": padding,
         }
 
     @classmethod
     def from_payload(cls, value: Mapping[str, Any]) -> PhysicalRepresentationPlan:
         # Frozen prepared provenance and JSON share one exact plain-container basis.
-        value = _plain(value)
+        value = _plain_semantic_facts(value)
         if value.get("schema_version") != PLAN_SCHEMA:
             raise ValueError("unsupported physical representation plan schema")
         expected = {
@@ -318,9 +329,12 @@ class PhysicalRepresentationPlan:
             source_sha256=value["source_sha256"],
         )
         if (
-            _plain(result.collapse_intervals) != value["collapse_intervals"]
-            or _plain(result.sheet_anchors_um) != value["sheet_anchors_um"]
-            or _plain(result.supporting_entities) != value["supporting_entities"]
+            _plain_semantic_facts(result.collapse_intervals)
+            != value["collapse_intervals"]
+            or _plain_semantic_facts(result.sheet_anchors_um)
+            != value["sheet_anchors_um"]
+            or _plain_semantic_facts(result.supporting_entities)
+            != value["supporting_entities"]
         ):
             raise ValueError(
                 "serialized profile coordinates differ from their source declarations"
@@ -396,8 +410,12 @@ class PhysicalRepresentationPlan:
             "representation": representation,
             "source_interval_um": list(declaration.source_interval_um),
             "effective_interval_um": [low, high],
-            "physical_dimensions": _plain(declaration.physical_dimensions),
-            "source_contact_facts": _plain(declaration.source_contact_facts),
+            "physical_dimensions": _plain_semantic_facts(
+                declaration.physical_dimensions
+            ),
+            "source_contact_facts": _plain_semantic_facts(
+                declaration.source_contact_facts
+            ),
             "material_id": declaration.material_id,
         }
 
@@ -407,11 +425,11 @@ class PhysicalRepresentationPlan:
             "source_sha256": self.source_sha256,
             "profile": self.profile.to_payload(),
             "declarations": [item.to_payload() for item in self.declarations],
-            "collapse_intervals": _plain(self.collapse_intervals),
-            "sheet_anchors_um": _plain(self.sheet_anchors_um),
-            "entities": _plain(self.entities),
-            "enclosures": _plain(self.enclosures),
-            "supporting_entities": _plain(self.supporting_entities),
+            "collapse_intervals": _plain_semantic_facts(self.collapse_intervals),
+            "sheet_anchors_um": _plain_semantic_facts(self.sheet_anchors_um),
+            "entities": _plain_semantic_facts(self.entities),
+            "enclosures": _plain_semantic_facts(self.enclosures),
+            "supporting_entities": _plain_semantic_facts(self.supporting_entities),
         }
 
     @property

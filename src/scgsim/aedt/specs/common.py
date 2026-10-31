@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from scgsim.aedt._data import _text as _rlc_text
+from scgsim.aedt._data import _stripped_text
 
 
 @dataclass(frozen=True)
@@ -22,7 +22,9 @@ class LumpedRlc:
     capacitance_f: float | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "support_id", _rlc_text(self.support_id, "support_id"))
+        object.__setattr__(
+            self, "support_id", _stripped_text(self.support_id, "support_id")
+        )
         if self.topology not in {"series", "parallel"}:
             raise ValueError("lumped topology must be series or parallel")
         for key in ("resistance_ohm", "inductance_h", "capacitance_f"):
@@ -121,14 +123,8 @@ class AedtResources:
         return {"cores": self.cores, "ram_limit_percent": self.ram_limit_percent}
 
 
-def _text(value: Any, field: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{field} must be non-empty text")
-    return value.strip()
-
-
 def _project_filename(value: Any, field: str) -> Path:
-    project = Path(_text(value, field))
+    project = Path(_stripped_text(value, field))
     if project.parent != Path(".") or project.name in {".", ".."}:
         raise ValueError("project_name must be a single project filename")
     if not project.stem:
@@ -141,7 +137,7 @@ def _project_name_from_payload(value: Any) -> str:
     return f"{_project_filename(value, 'project.name').name}.aedt"
 
 
-def _number(value: Any, field: str) -> float:
+def _coerced_finite_number(value: Any, field: str) -> float:
     if isinstance(value, bool):
         raise TypeError(f"{field} must be a finite number")
     try:
@@ -174,7 +170,7 @@ def _adaptive_controls(
             raise ValueError(f"{field} must be a positive integer")
         if field != "maximum_passes" and value > maximum_passes:
             raise ValueError(f"{field} must not exceed maximum_passes")
-    refinement = _number(percent_refinement, "percent_refinement")
+    refinement = _coerced_finite_number(percent_refinement, "percent_refinement")
     if not 0 < refinement <= 100:
         raise ValueError("percent_refinement must be in (0, 100]")
     return refinement
@@ -196,9 +192,11 @@ class LayerImport:
         object.__setattr__(
             self, "datatype", _nonnegative_int(self.datatype, "datatype")
         )
-        object.__setattr__(self, "layer_name", _text(self.layer_name, "layer_name"))
-        low = _number(self.z_min_um, "z_min_um")
-        high = _number(self.z_max_um, "z_max_um")
+        object.__setattr__(
+            self, "layer_name", _stripped_text(self.layer_name, "layer_name")
+        )
+        low = _coerced_finite_number(self.z_min_um, "z_min_um")
+        high = _coerced_finite_number(self.z_max_um, "z_max_um")
         if high < low:
             raise ValueError(
                 "z_max_um must be >= z_min_um; equal values are conductor sheets"
@@ -231,7 +229,9 @@ class PdkMaterial:
     library_name: str | None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "material_id", _text(self.material_id, "material_id"))
+        object.__setattr__(
+            self, "material_id", _stripped_text(self.material_id, "material_id")
+        )
         if self.kind not in {"vacuum", "dielectric", "superconductor"}:
             raise ValueError(
                 "material kind must be vacuum, dielectric, or superconductor"
@@ -245,7 +245,7 @@ class PdkMaterial:
         library_name = (
             None
             if self.library_name is None
-            else _text(self.library_name, "library_name")
+            else _stripped_text(self.library_name, "library_name")
         )
         if self.is_superconducting and library_name is not None:
             raise ValueError("superconducting PDK material must not name AEDT material")
@@ -274,11 +274,15 @@ class ObjectBinding:
     material_id: str
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "object_name", _text(self.object_name, "object_name"))
+        object.__setattr__(
+            self, "object_name", _stripped_text(self.object_name, "object_name")
+        )
         object.__setattr__(self, "layer", _nonnegative_int(self.layer, "binding.layer"))
         if self.role not in {"ground", "signal", "substrate"}:
             raise ValueError("role must be ground, signal, or substrate")
-        object.__setattr__(self, "material_id", _text(self.material_id, "material_id"))
+        object.__setattr__(
+            self, "material_id", _stripped_text(self.material_id, "material_id")
+        )
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -306,9 +310,9 @@ class LumpedTerminalPort:
         if self.index not in {1, 2}:
             raise ValueError("two-port V1 uses port indices 1 and 2")
         for key in ("name", "support_id"):
-            object.__setattr__(self, key, _text(getattr(self, key), key))
+            object.__setattr__(self, key, _stripped_text(getattr(self, key), key))
         for key in ("signal_entity_ids", "reference_entity_ids"):
-            values = tuple(_text(value, key) for value in getattr(self, key))
+            values = tuple(_stripped_text(value, key) for value in getattr(self, key))
             if not values:
                 raise ValueError(f"{key} requires explicit conductor Entities")
             object.__setattr__(self, key, values)
@@ -356,11 +360,12 @@ class TerminalPort:
     def __post_init__(self) -> None:
         if self.index not in {1, 2}:
             raise ValueError("two-port V1 uses port indices 1 and 2")
-        object.__setattr__(self, "name", _text(self.name, "port.name"))
+        object.__setattr__(self, "name", _stripped_text(self.name, "port.name"))
         if self.side not in {"+X", "-X", "+Y", "-Y", "+Z", "-Z"}:
             raise ValueError("port.side is invalid")
         references = tuple(
-            _text(value, "reference_object") for value in self.reference_objects
+            _stripped_text(value, "reference_object")
+            for value in self.reference_objects
         )
         if not references:
             raise ValueError("terminal port requires explicit reference_objects")
@@ -368,9 +373,12 @@ class TerminalPort:
         object.__setattr__(
             self,
             "signal_entity_ids",
-            tuple(_text(value, "signal_entity_id") for value in self.signal_entity_ids),
+            tuple(
+                _stripped_text(value, "signal_entity_id")
+                for value in self.signal_entity_ids
+            ),
         )
-        deembed = _number(self.deembed_um, "deembed_um")
+        deembed = _coerced_finite_number(self.deembed_um, "deembed_um")
         if deembed < 0:
             raise ValueError("deembed_um must be >= 0")
         object.__setattr__(self, "deembed_um", deembed)
@@ -402,7 +410,7 @@ class ModalPort:
     def __post_init__(self) -> None:
         if self.index not in {1, 2}:
             raise ValueError("two-port V1 uses port indices 1 and 2")
-        object.__setattr__(self, "name", _text(self.name, "port.name"))
+        object.__setattr__(self, "name", _stripped_text(self.name, "port.name"))
         if self.side not in {"+X", "-X", "+Y", "-Y", "+Z", "-Z"}:
             raise ValueError("port.side is invalid")
         if len(self.integration_line_um) != 2 or any(
@@ -413,7 +421,10 @@ class ModalPort:
             self,
             "integration_line_um",
             tuple(
-                tuple(_number(value, "integration_line_um") for value in point)
+                tuple(
+                    _coerced_finite_number(value, "integration_line_um")
+                    for value in point
+                )
                 for point in self.integration_line_um
             ),
         )
@@ -434,7 +445,9 @@ def _padding(
         raise ValueError(
             "region_padding_um requires six PyAEDT face values: +X,-X,+Y,-Y,+Z,-Z"
         )
-    result = tuple(_number(value, "region_padding_um") for value in values)
+    result = tuple(
+        _coerced_finite_number(value, "region_padding_um") for value in values
+    )
     if any(value < 0 for value in result):
         raise ValueError("region_padding_um values must be >= 0")
     return result
@@ -445,7 +458,9 @@ def _padding_2d(
 ) -> tuple[float, float, float, float]:
     if len(values) != 4:
         raise ValueError("Q2D region_padding_um requires +X,-X,+Y,-Y values")
-    result = tuple(_number(value, "region_padding_um") for value in values)
+    result = tuple(
+        _coerced_finite_number(value, "region_padding_um") for value in values
+    )
     if any(value < 0 for value in result):
         raise ValueError("region_padding_um values must be >= 0")
     return result
@@ -459,7 +474,9 @@ def _normalize_common_spec(spec: Any) -> dict[str, PdkMaterial]:
         raise ValueError("V1 requires AEDT 2024.2 and PyAEDT 1.3.0")
     project = _project_filename(spec.project_name, "project_name")
     object.__setattr__(spec, "project_name", project.stem)
-    object.__setattr__(spec, "design_name", _text(spec.design_name, "design_name"))
+    object.__setattr__(
+        spec, "design_name", _stripped_text(spec.design_name, "design_name")
+    )
     if not isinstance(spec.materials, Mapping):
         raise TypeError("materials must be a PDK material_id mapping")
     materials = dict(spec.materials)
@@ -469,7 +486,7 @@ def _normalize_common_spec(spec: Any) -> dict[str, PdkMaterial]:
         or set(materials) != {item.material_id for item in materials.values()}
     ):
         raise ValueError("materials must map each PDK material_id to its record")
-    vacuum_id = _text(spec.vacuum_material_id, "vacuum_material_id")
+    vacuum_id = _stripped_text(spec.vacuum_material_id, "vacuum_material_id")
     vacuum = materials.get(vacuum_id)
     if (
         vacuum is None
@@ -557,8 +574,10 @@ class MatrixRunControl:
     percent_refinement: float = 30.0
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "setup_name", _text(self.setup_name, "setup_name"))
-        frequency = _number(self.frequency_ghz, "frequency_ghz")
+        object.__setattr__(
+            self, "setup_name", _stripped_text(self.setup_name, "setup_name")
+        )
+        frequency = _coerced_finite_number(self.frequency_ghz, "frequency_ghz")
         if frequency <= 0:
             raise ValueError("matrix frequency_ghz must be > 0")
         refinement = _adaptive_controls(
@@ -567,7 +586,9 @@ class MatrixRunControl:
             self.minimum_converged_passes,
             self.percent_refinement,
         )
-        convergence = _number(self.convergence_percent, "convergence_percent")
+        convergence = _coerced_finite_number(
+            self.convergence_percent, "convergence_percent"
+        )
         if convergence <= 0:
             raise ValueError("matrix convergence_percent must be > 0")
         object.__setattr__(self, "frequency_ghz", frequency)

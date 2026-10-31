@@ -9,7 +9,7 @@ from typing import Any
 from scgsim.geometry.source._normalization import (
     _coupon_domain_bounds,
     _finite_number,
-    _mapping,
+    _mapping_as_dict,
     _materials,
     _semantic_layer_records,
     _solution_regions,
@@ -34,7 +34,7 @@ def build_component_stack(
         raise ValueError("coupon_padding_um must be a finite non-negative number.")
     bounds = _coupon_domain_bounds(component, padding)
     try:
-        spec = _mapping(
+        spec = _mapping_as_dict(
             component.info["component_semantics"], "component component_semantics"
         )
     except (AttributeError, KeyError) as exc:

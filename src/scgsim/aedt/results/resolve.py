@@ -264,7 +264,7 @@ def _resolved_adaptive_epr(
 def resolve_results(run_dir: str | Path) -> ResolvedRun:
     """Return results only when a complete exact receipt proves every artifact."""
     root = Path(run_dir).resolve()
-    receipt_path = _contained(root, "metadata/aedt_run_receipt.json")
+    receipt_path = _contained_in_handoff_root(root, "metadata/aedt_run_receipt.json")
     if not receipt_path.is_file():
         raise FileNotFoundError(f"run receipt is missing: {receipt_path}")
     receipt = read_json(receipt_path)
@@ -364,7 +364,10 @@ def resolve_results(run_dir: str | Path) -> ResolvedRun:
             "results/q2d/rl_matrix.csv",
             "results/q2d/matrices.csv",
         )
-        if any(_contained(root, relative).exists() for relative in superseded):
+        if any(
+            _contained_in_handoff_root(root, relative).exists()
+            for relative in superseded
+        ):
             raise RuntimeError("Q2D run contains superseded matrix artifacts")
         expected = {
             project_relative,
@@ -396,7 +399,7 @@ def resolve_results(run_dir: str | Path) -> ResolvedRun:
             )
             primary = "results/q3d/matrices.csv"
         elif any(
-            _contained(root, relative).exists()
+            _contained_in_handoff_root(root, relative).exists()
             for relative in ("results/q3d/ac_rl_matrix.csv", "results/q3d/matrices.csv")
         ):
             raise RuntimeError("Q3D capacitance-only run contains AC-RL artifacts")
@@ -562,7 +565,7 @@ def _resolved_benchmark(
     return path
 
 
-def _contained(root: Path, relative: str) -> Path:
+def _contained_in_handoff_root(root: Path, relative: str) -> Path:
     requested = Path(relative)
     if requested.is_absolute():
         raise RuntimeError(f"receipt path escapes handoff root: {relative!r}")
@@ -580,7 +583,7 @@ def _reject_legacy_v2_markers(root: Path, receipt: dict[str, Any]) -> None:
         "metadata/aedt_handoff_metadata.json",
         "metadata/aedt_handoff_manifest.json",
     ):
-        path = _contained(root, relative)
+        path = _contained_in_handoff_root(root, relative)
         if not path.is_file():
             continue
         try:
@@ -604,8 +607,12 @@ def _validate_completion_cohort(root: Path, receipt: dict[str, Any], spec: Any) 
     if mode not in {"terminal", "modal", "eigenmode", "q3d", "q2d"}:
         raise RuntimeError("AEDT receipt mode is invalid")
 
-    metadata_path = _contained(root, "metadata/aedt_handoff_metadata.json")
-    manifest_path = _contained(root, "metadata/aedt_handoff_manifest.json")
+    metadata_path = _contained_in_handoff_root(
+        root, "metadata/aedt_handoff_metadata.json"
+    )
+    manifest_path = _contained_in_handoff_root(
+        root, "metadata/aedt_handoff_manifest.json"
+    )
     if not metadata_path.is_file() or not manifest_path.is_file():
         raise RuntimeError(
             f"completed {version} receipt lacks preparation cohort files"
@@ -718,7 +725,7 @@ def _validate_completion_cohort(root: Path, receipt: dict[str, Any], spec: Any) 
                     f"completed {version} initial receipt binding is invalid"
                 )
             continue
-        path = _contained(root, relative)
+        path = _contained_in_handoff_root(root, relative)
         if (
             not path.is_file()
             or path.stat().st_size != member["bytes"]
@@ -1298,7 +1305,7 @@ def _validate_q2d_readback(root: Path, receipt: dict[str, Any], spec: Q2dSpec) -
     readback = receipt.get("result_readback")
     matrices = readback.get("matrices") if isinstance(readback, dict) else None
     rows, summary = read_q2d_rlgc_matrix(
-        _contained(root, "results/q2d/rlgc_matrix.csv"), spec
+        _contained_in_handoff_root(root, "results/q2d/rlgc_matrix.csv"), spec
     )
     expected_matrices = {
         "path": "results/q2d/rlgc_matrix.csv",
@@ -1412,7 +1419,7 @@ def _validate_q3d_readback(root: Path, receipt: dict[str, Any], spec: Q3dSpec) -
         ):
             raise RuntimeError("Q3D matrix readback is invalid")
         _validate_normalized_matrices(
-            _contained(root, "results/q3d/matrices.csv"),
+            _contained_in_handoff_root(root, "results/q3d/matrices.csv"),
             matrices["normalized_rows"],
             {"C", "AC RL"},
         )
@@ -1469,7 +1476,7 @@ def _read_q3d_original_cg(
         }
     }
     return parse_matrix_export(
-        _contained(root, "results/q3d/c_matrix.csv"),
+        _contained_in_handoff_root(root, "results/q3d/c_matrix.csv"),
         "Q3D",
         "C",
         spec.run_control.frequency_ghz,
@@ -2519,7 +2526,7 @@ def _validate_terminal_native_evidence(
 def _validate_diagnostics(root: Path, diagnostics: Any) -> None:
     if not isinstance(diagnostics, dict) or diagnostics.get("batch_log") != "batch.log":
         raise RuntimeError("completed receipt diagnostics are invalid")
-    batch_log = _contained(root, "batch.log")
+    batch_log = _contained_in_handoff_root(root, "batch.log")
     if (
         diagnostics.get("present") is not True
         or not batch_log.is_file()
@@ -2534,7 +2541,7 @@ def _verified(
 ) -> Path:
     if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
         raise RuntimeError("receipt has an invalid relative output path")
-    path = _contained(root, relative)
+    path = _contained_in_handoff_root(root, relative)
     expected = hashes.get(hash_key or relative)
     if (
         not isinstance(expected, str)

@@ -43,12 +43,16 @@ def inspect_aedt_geometry(
         if not spec_path.is_file():
             raise FileNotFoundError("AEDT run folder has no aedt_spec.json")
         spec = _json(spec_path)
-        project = _mapping(spec.get("project"), "spec.project")
-        recorded_design = _text(project.get("design"), "spec.project.design")
+        project = _mapping_checked(spec.get("project"), "spec.project")
+        recorded_design = _stripped_text_or_type_error(
+            project.get("design"), "spec.project.design"
+        )
         if design is not None and design != recorded_design:
             raise ValueError("explicit design disagrees with the AEDT run spec")
         design = recorded_design
-        project_name = _text(project.get("name"), "spec.project.name")
+        project_name = _stripped_text_or_type_error(
+            project.get("name"), "spec.project.name"
+        )
         project_path = _confined(root, f"{project_name}.aedt")
         receipt_path = root / "metadata/aedt_run_receipt.json"
         receipt = _json(receipt_path) if receipt_path.is_file() else None
@@ -59,12 +63,14 @@ def inspect_aedt_geometry(
                 resolve_prepared_model(root)
             geometry = spec.get("geometry")
             if isinstance(geometry, Mapping):
-                source_geometry = _mapping(
+                source_geometry = _mapping_checked(
                     geometry.get("source"), "spec.geometry.source"
                 )
                 source_conductors = tuple(source_geometry.get("conductors", ()))
                 if receipt.get("status") != "native_preparation_only":
-                    recorded_source = _mapping(receipt.get("source"), "receipt.source")
+                    recorded_source = _mapping_checked(
+                        receipt.get("source"), "receipt.source"
+                    )
                     if recorded_source.get("spec_sha256") != _sha256(spec_path):
                         raise ValueError(
                             "AEDT source spec hash disagrees with the receipt"
@@ -73,7 +79,7 @@ def inspect_aedt_geometry(
                 raise ValueError(
                     "AEDT receipt project identity disagrees with the spec"
                 )
-            outputs = _mapping(receipt.get("outputs", {}), "receipt.outputs")
+            outputs = _mapping_checked(receipt.get("outputs", {}), "receipt.outputs")
             relative = project_path.relative_to(root).as_posix()
             expected = outputs.get(relative)
             if not isinstance(expected, str) or _sha256(project_path) != expected:
@@ -206,7 +212,9 @@ def _validate_native_receipt(
         geometry = receipt.get("geometry")
         if isinstance(geometry, Mapping):
             for item in geometry.get("objects", ()):
-                name = _text(item.get("object_name"), "native object name")
+                name = _stripped_text_or_type_error(
+                    item.get("object_name"), "native object name"
+                )
                 if object_ids.get(name) != item.get("native_object_id"):
                     raise ValueError("native AEDT body identity changed")
                 observed = item.get("observed", {})
@@ -229,7 +237,9 @@ def _validate_native_receipt(
                     ):
                         raise ValueError("native Solid PEC material changed")
         for port in receipt.get("ports", ()):
-            boundary_name = _text(port.get("boundary"), "receipt port boundary")
+            boundary_name = _stripped_text_or_type_error(
+                port.get("boundary"), "receipt port boundary"
+            )
             props = native_boundaries.get(boundary_name)
             if props is None or props.get("BoundType") not in {
                 "Wave Port",
@@ -262,11 +272,13 @@ def _validate_native_receipt(
                 record = net.get(role)
                 if record is None:
                     continue
-                record = _mapping(record, f"receipt Q3D {role}")
+                record = _mapping_checked(record, f"receipt Q3D {role}")
                 native_faces = sorted(
                     int(value)
                     for value in app.oboundary.GetExcitationAssignment(
-                        _text(record.get("name"), f"receipt Q3D {role} name")
+                        _stripped_text_or_type_error(
+                            record.get("name"), f"receipt Q3D {role} name"
+                        )
                     )
                 )
                 if native_faces != sorted(
@@ -311,13 +323,15 @@ def _materials(
     region: Mapping[str, Any] = {}
     if receipt is not None:
         receipt_items = {
-            _text(item.get("object_name"), "receipt.materials.object_name"): item
+            _stripped_text_or_type_error(
+                item.get("object_name"), "receipt.materials.object_name"
+            ): item
             for item in _material_records(receipt)
         }
-        pdk_materials = _mapping(
+        pdk_materials = _mapping_checked(
             receipt.get("pdk_materials", {}), "receipt.pdk_materials"
         )
-        region = _mapping(receipt.get("region", {}), "receipt.region")
+        region = _mapping_checked(receipt.get("region", {}), "receipt.region")
     parts: list[_Part] = []
     for object_name, dataset in sorted(datasets.items()):
         native_material = str(app.modeler[object_name].material_name).lower()
@@ -336,14 +350,22 @@ def _materials(
                     raise ValueError(
                         "native conductor has no unique source material binding"
                     )
-                material_id = _text(
+                material_id = _stripped_text_or_type_error(
                     matches[0].get("material_id"), "source conductor material_id"
                 )
             else:
-                material_id = _text(item.get("material_id"), "receipt material_id")
-            material = _mapping(pdk_materials.get(material_id), "receipt PDK material")
-            kind = _text(material.get("kind"), "receipt material kind")
-            observed = _mapping(item.get("observed", {}), "receipt material observed")
+                material_id = _stripped_text_or_type_error(
+                    item.get("material_id"), "receipt material_id"
+                )
+            material = _mapping_checked(
+                pdk_materials.get(material_id), "receipt PDK material"
+            )
+            kind = _stripped_text_or_type_error(
+                material.get("kind"), "receipt material kind"
+            )
+            observed = _mapping_checked(
+                item.get("observed", {}), "receipt material observed"
+            )
             observed_name = observed.get("native_material_name")
             if (
                 observed_name is not None
@@ -351,9 +373,15 @@ def _materials(
             ):
                 raise ValueError(f"native AEDT material changed for {object_name}")
         elif object_name == "Region" and region:
-            material_id = _text(region.get("material_id"), "receipt region material_id")
-            material = _mapping(pdk_materials.get(material_id), "receipt PDK material")
-            kind = _text(material.get("kind"), "receipt material kind")
+            material_id = _stripped_text_or_type_error(
+                region.get("material_id"), "receipt region material_id"
+            )
+            material = _mapping_checked(
+                pdk_materials.get(material_id), "receipt PDK material"
+            )
+            kind = _stripped_text_or_type_error(
+                material.get("kind"), "receipt material kind"
+            )
             if str(region.get("observed_material_name", "")).lower() != native_material:
                 raise ValueError("native AEDT Region material changed")
         elif receipt is not None:
@@ -388,10 +416,14 @@ def _boundaries(
         mode = receipt.get("mode")
         if mode in {"terminal", "modal", "eigenmode"}:
             for item in _material_records(receipt):
-                observed = _mapping(item.get("observed", {}), "receipt observed")
+                observed = _mapping_checked(
+                    item.get("observed", {}), "receipt observed"
+                )
                 native_objects = tuple(observed.get("native_pec_objects", ()))
                 if native_objects:
-                    object_name = _text(item.get("object_name"), "receipt object_name")
+                    object_name = _stripped_text_or_type_error(
+                        item.get("object_name"), "receipt object_name"
+                    )
                     if object_name not in native_objects:
                         raise ValueError(
                             "AEDT PEC receipt object readback is inconsistent"
@@ -401,7 +433,9 @@ def _boundaries(
                     item.get("boundary_name")
                     or observed.get("native_solve_inside") is False
                 ):
-                    object_name = _text(item.get("object_name"), "receipt object_name")
+                    object_name = _stripped_text_or_type_error(
+                        item.get("object_name"), "receipt object_name"
+                    )
                     label = (
                         item.get("boundary_name") or "PEC material / SolveInside=false"
                     )
@@ -418,7 +452,9 @@ def _boundaries(
                 if len(points) < 3:
                     raise ValueError(f"AEDT native port face {face_id} is degenerate")
                 dataset = pv.PolyData(points, faces=[len(points), *range(len(points))])
-                label = _text(port.get("boundary"), "receipt port boundary")
+                label = _stripped_text_or_type_error(
+                    port.get("boundary"), "receipt port boundary"
+                )
                 boundary_type = str(native_boundaries[label]["BoundType"])
                 parts.append(
                     _Part(
@@ -433,10 +469,14 @@ def _boundaries(
                 )
         elif mode == "q3d":
             for net in receipt.get("nets", ()):
-                role = _text(net.get("net_type"), "receipt net_type")
-                name = _text(net.get("name"), "receipt net name")
+                role = _stripped_text_or_type_error(
+                    net.get("net_type"), "receipt net_type"
+                )
+                name = _stripped_text_or_type_error(net.get("name"), "receipt net name")
                 for object_name in net.get("object_names", ()):
-                    object_name = _text(object_name, "receipt net object")
+                    object_name = _stripped_text_or_type_error(
+                        object_name, "receipt net object"
+                    )
                     _append_object(
                         parts,
                         datasets,
@@ -447,10 +487,16 @@ def _boundaries(
                     )
         elif mode == "q2d":
             for conductor in receipt.get("conductors", ()):
-                role = _text(conductor.get("conductor_type"), "receipt conductor_type")
-                name = _text(conductor.get("name"), "receipt conductor name")
+                role = _stripped_text_or_type_error(
+                    conductor.get("conductor_type"), "receipt conductor_type"
+                )
+                name = _stripped_text_or_type_error(
+                    conductor.get("name"), "receipt conductor name"
+                )
                 for object_name in conductor.get("object_names", ()):
-                    object_name = _text(object_name, "receipt conductor object")
+                    object_name = _stripped_text_or_type_error(
+                        object_name, "receipt conductor object"
+                    )
                     _append_object(
                         parts,
                         datasets,
@@ -547,13 +593,13 @@ def _native_object_names(app: Any, values: Any) -> tuple[str, ...]:
     return tuple(names)
 
 
-def _mapping(value: Any, name: str) -> Mapping[str, Any]:
+def _mapping_checked(value: Any, name: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise TypeError(f"{name} must be a mapping")
     return value
 
 
-def _text(value: Any, name: str) -> str:
+def _stripped_text_or_type_error(value: Any, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise TypeError(f"{name} must be non-empty text")
     return value.strip()

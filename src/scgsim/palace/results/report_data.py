@@ -104,7 +104,7 @@ def _as_int(value: Any) -> int | None:
     return int(value)
 
 
-def _optional_string(value: Any) -> str | None:
+def _optional_identity_string(value: Any) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or not value:
@@ -894,8 +894,8 @@ def _read_surface_bindings(
                     "surface_id": surface_id,
                     "face_kind": face_kind,
                     "owner_semantic_ids": tuple(owners),
-                    "net_id": _optional_string(metadata.get("net_id")),
-                    "equipotential_id": _optional_string(
+                    "net_id": _optional_identity_string(metadata.get("net_id")),
+                    "equipotential_id": _optional_identity_string(
                         metadata.get("equipotential_id")
                     ),
                     "source_provenance": provenance,
@@ -970,8 +970,8 @@ def _read_surface_mask_bindings(
                     "surface_id": metadata["surface_id"],
                     "face_kind": metadata["face_kind"],
                     "owner_semantic_ids": tuple(owners),
-                    "net_id": _optional_string(metadata.get("net_id")),
-                    "equipotential_id": _optional_string(
+                    "net_id": _optional_identity_string(metadata.get("net_id")),
+                    "equipotential_id": _optional_identity_string(
                         metadata.get("equipotential_id")
                     ),
                     "source_provenance": provenance,

@@ -29,7 +29,7 @@ from scgsim.aedt.preparation.planar import (
     _junction_terminal_line,
     _native_entity_name,
     _native_name,
-    _plain,
+    _plain_geometry_source,
     _route_a_sheet_z,
 )
 from scgsim.aedt.runtime.native.common import (
@@ -1591,7 +1591,7 @@ def _enclosure_faces(app: Any, source: Mapping[str, Any]) -> dict[str, Any]:
         raise RuntimeError("native closed-enclosure face selection repeats a face")
     return {
         "face_records": face_records,
-        "envelope_outer_loop_um": _plain(
+        "envelope_outer_loop_um": _plain_geometry_source(
             source["native_region"]["envelope_outer_loop_um"]
         ),
         "z_range_um": [z_min, z_max],

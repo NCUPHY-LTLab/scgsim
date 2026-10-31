@@ -12,14 +12,14 @@ Not here: the returned receipt (``_returned_receipt.py``) and the tar archive
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from .._files import sha256_file
+from .._handoff_id import compute_handoff_id
 from ..execution.archive import resolve_run_archive_path
-from ._artifact_files import _confined_path, _sha256
+from ._artifact_files import _confined_path
 from ._expect import (
     _expect_int,
     _expect_list,
@@ -165,7 +165,9 @@ def _validate_execution_identity(root: Path, handoff_metadata: dict[str, Any]) -
                 f"handoff execution identity {field} path is inconsistent."
             )
         path = _confined_path(root, relative)
-        if not path.is_file() or _expect_scalar(item, "sha256", str) != _sha256(path):
+        if not path.is_file() or _expect_scalar(item, "sha256", str) != sha256_file(
+            path
+        ):
             raise ValueError(
                 f"handoff execution identity {field} hash is inconsistent."
             )
@@ -176,7 +178,7 @@ def _validate_handoff_id(
 ) -> None:
     """Recompute the identity; colocated copied IDs are not evidence."""
 
-    computed = _compute_handoff_id(
+    computed = compute_handoff_id(
         profile=_expect_scalar(handoff_metadata, "profile", str),
         route=_expect_scalar(handoff_metadata, "route", str),
         problem=_expect_scalar(handoff_metadata, "problem", str),
@@ -208,33 +210,6 @@ def _validate_handoff_id(
 
 # The ID is the SHA-256 of canonical JSON (sorted keys, no spaces). A copy of this
 # computation lives in palace/execution/handoff.py; the two must stay identical.
-def _compute_handoff_id(
-    *,
-    profile: str,
-    route: str,
-    problem: str,
-    source_revisions: Mapping[str, Any],
-    palace_identity: Mapping[str, Any],
-    hashes: list[Any],
-    execution_identity: Mapping[str, Any],
-    route_a_thin_film: Mapping[str, Any] | None = None,
-) -> str:
-    payload = {
-        "route": route,
-        "problem": problem,
-        "profile": profile,
-        "source_revisions": source_revisions,
-        "palace_identity": palace_identity,
-        "hashes": hashes,
-        "execution_identity": execution_identity,
-        **(
-            {"route_a_thin_film": route_a_thin_film}
-            if route_a_thin_film is not None
-            else {}
-        ),
-    }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _validate_resource_identity(
@@ -287,7 +262,7 @@ def _validate_hashes(root: Path, metadata: dict[str, Any], label: str) -> None:
 
         observed[path_name] = (
             _expect_int(file_path.stat().st_size),
-            _sha256(file_path),
+            sha256_file(file_path),
         )
         if bytes_value != observed[path_name][0]:
             raise ValueError(
@@ -327,5 +302,5 @@ def _validate_archive_record(root: Path, resource_record: dict[str, Any]) -> Non
         raise FileNotFoundError(
             f"resource record references missing archive payload {archive_path}"
         )
-    if _sha256(archive_path) != expected_sha:
+    if sha256_file(archive_path) != expected_sha:
         raise ValueError("resource record archive hash mismatch.")

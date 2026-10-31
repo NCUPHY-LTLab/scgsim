@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from scgsim.aedt._data import _stripped_text
 from scgsim.aedt.specs.common import (
     LOCKED_PYAEDT,
     OFFICIAL_PYAEDT_SOURCE_URL,
@@ -17,11 +18,10 @@ from scgsim.aedt.specs.common import (
     MatrixRunControl,
     PdkMaterial,
     Side,
+    _coerced_finite_number,
     _normalize_common_spec,
-    _number,
     _padding,
     _project_name_from_payload,
-    _text,
 )
 from scgsim.aedt.specs.modeling import (
     Modeling,
@@ -50,10 +50,12 @@ class Q3dNetSpec:
     sink_side: Side | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "name", _text(self.name, "net.name"))
+        object.__setattr__(self, "name", _stripped_text(self.name, "net.name"))
         if self.net_type not in {"Signal", "Ground"}:
             raise ValueError("Q3D net_type must be Signal or Ground")
-        objects = tuple(_text(value, "net.object_name") for value in self.object_names)
+        objects = tuple(
+            _stripped_text(value, "net.object_name") for value in self.object_names
+        )
         if not objects or len(set(objects)) != len(objects):
             raise ValueError("Q3D net object_names must be nonempty and unique")
         object.__setattr__(self, "object_names", objects)
@@ -73,8 +75,8 @@ class Q3dNetSpec:
             raise ValueError(
                 "Q3D Signal terminals must be all absent or a complete source/sink pair"
             )
-        source = _text(self.source_object, "net.source_object")
-        sink = _text(self.sink_object, "net.sink_object")
+        source = _stripped_text(self.source_object, "net.source_object")
+        sink = _stripped_text(self.sink_object, "net.sink_object")
         if source not in objects or sink not in objects:
             raise ValueError("Q3D source and sink objects must belong to their net")
         if self.source_side not in {
@@ -134,7 +136,7 @@ class Q3dBodySpec:
 
     def __post_init__(self) -> None:
         for field in ("body_id", "material_id"):
-            object.__setattr__(self, field, _text(getattr(self, field), field))
+            object.__setattr__(self, field, _stripped_text(getattr(self, field), field))
         if self.physical_role not in {"signal", "ground", "substrate"}:
             raise ValueError("Q3D body physical_role is invalid")
         for field in (
@@ -147,7 +149,7 @@ class Q3dBodySpec:
         ):
             value = getattr(self, field)
             if value is not None:
-                object.__setattr__(self, field, _text(value, field))
+                object.__setattr__(self, field, _stripped_text(value, field))
 
         def ring(value: Any) -> tuple[tuple[float, float], ...]:
             points = tuple(tuple(point) for point in value)
@@ -160,8 +162,8 @@ class Q3dBodySpec:
             self, "holes_um", tuple(ring(hole) for hole in self.holes_um)
         )
         low, high = (
-            _number(self.z_min_um, "z_min_um"),
-            _number(self.z_max_um, "z_max_um"),
+            _coerced_finite_number(self.z_min_um, "z_min_um"),
+            _coerced_finite_number(self.z_max_um, "z_max_um"),
         )
         if high <= low:
             raise ValueError("Q3D bodies require positive thickness")
@@ -262,7 +264,9 @@ def _q3d_geometry_source(
     ):
         raise ValueError("Q3D geometry_source physical_ground_nets are invalid")
 
-    dbu = _number(source["source_dbu_um"], "geometry_source.source_dbu_um")
+    dbu = _coerced_finite_number(
+        source["source_dbu_um"], "geometry_source.source_dbu_um"
+    )
     if dbu <= 0:
         raise ValueError("source_dbu_um must be positive")
     if source["bodies"] != [body.to_payload() for body in bodies]:
@@ -375,7 +379,7 @@ class Q3dSpec:
             )
         grounded_region_net = self.grounded_region_net
         if grounded_region_net is not None:
-            _text(grounded_region_net, "grounded_region_net")
+            _stripped_text(grounded_region_net, "grounded_region_net")
             if self.solve_ac_rl:
                 raise ValueError("grounded_region_net requires solve_ac_rl=False")
             if grounded_region_net in {net.name for net in nets}:
@@ -512,7 +516,7 @@ class Q3dSpec:
             project_name=_project_name_from_payload(
                 payload.get("project", {}).get("name")
             ),
-            design_name=_text(
+            design_name=_stripped_text(
                 payload.get("project", {}).get("design"), "project.design"
             ),
             materials={

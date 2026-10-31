@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from scgsim.aedt._data import _stripped_text
 from scgsim.aedt.specs.common import (
     LOCKED_PYAEDT,
     OFFICIAL_PYAEDT_SOURCE_URL,
@@ -14,11 +15,10 @@ from scgsim.aedt.specs.common import (
     REQUIRED_AEDT_VERSION,
     MatrixRunControl,
     PdkMaterial,
+    _coerced_finite_number,
     _normalize_common_spec,
-    _number,
     _padding_2d,
     _project_name_from_payload,
-    _text,
 )
 
 
@@ -32,18 +32,23 @@ class Q2dRectangleSpec:
     material_id: str
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "name", _text(self.name, "rectangle.name"))
+        object.__setattr__(self, "name", _stripped_text(self.name, "rectangle.name"))
         if len(self.origin_um) != 2 or len(self.size_um) != 2:
             raise ValueError("Q2D rectangle origin_um and size_um require x,y pairs")
         origin = tuple(
-            _number(value, "rectangle.origin_um") for value in self.origin_um
+            _coerced_finite_number(value, "rectangle.origin_um")
+            for value in self.origin_um
         )
-        size = tuple(_number(value, "rectangle.size_um") for value in self.size_um)
+        size = tuple(
+            _coerced_finite_number(value, "rectangle.size_um") for value in self.size_um
+        )
         if any(value <= 0 for value in size):
             raise ValueError("Q2D rectangle size_um values must be > 0")
         object.__setattr__(self, "origin_um", origin)
         object.__setattr__(self, "size_um", size)
-        object.__setattr__(self, "material_id", _text(self.material_id, "material_id"))
+        object.__setattr__(
+            self, "material_id", _stripped_text(self.material_id, "material_id")
+        )
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -64,15 +69,16 @@ class Q2dConductorSpec:
     thickness_um: float
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "name", _text(self.name, "conductor.name"))
+        object.__setattr__(self, "name", _stripped_text(self.name, "conductor.name"))
         if self.conductor_type not in {"SignalLine", "ReferenceGround"}:
             raise ValueError("Q2D conductor_type must be SignalLine or ReferenceGround")
         objects = tuple(
-            _text(value, "conductor.object_name") for value in self.object_names
+            _stripped_text(value, "conductor.object_name")
+            for value in self.object_names
         )
         if not objects or len(set(objects)) != len(objects):
             raise ValueError("Q2D conductor object_names must be nonempty and unique")
-        thickness = _number(self.thickness_um, "conductor.thickness_um")
+        thickness = _coerced_finite_number(self.thickness_um, "conductor.thickness_um")
         if thickness <= 0:
             raise ValueError("Q2D conductor thickness_um must be > 0")
         object.__setattr__(self, "object_names", objects)
@@ -210,11 +216,11 @@ class Q2dSpec:
             project_name=_project_name_from_payload(
                 payload.get("project", {}).get("name")
             ),
-            design_name=_text(
+            design_name=_stripped_text(
                 payload.get("project", {}).get("design"), "project.design"
             ),
             materials=materials,
-            vacuum_material_id=_text(
+            vacuum_material_id=_stripped_text(
                 payload.get("vacuum_material_id"), "vacuum_material_id"
             ),
             rectangles=tuple(
@@ -225,11 +231,11 @@ class Q2dSpec:
             ),
             run_control=None if run is None else MatrixRunControl(**run),
             region_padding_um=tuple(payload.get("region_padding_um", ())),  # type: ignore[arg-type]
-            aedt_version=_text(
+            aedt_version=_stripped_text(
                 payload.get("aedt", {}).get("requested_version"),
                 "aedt.requested_version",
             ),
-            pyaedt_version=_text(
+            pyaedt_version=_stripped_text(
                 payload.get("pyaedt", {}).get("locked_version"), "pyaedt.locked_version"
             ),
         )

@@ -26,7 +26,7 @@ from typing import Mapping
 
 import numpy as np
 
-from .reader import MeshData
+from .reader import MeshData, _readonly
 
 _U = 2.0**-53
 _EPS = 2.0**-52
@@ -129,11 +129,6 @@ class Measurements:
     centers: np.ndarray
     center_status: np.ndarray
     fallback_used: np.ndarray
-
-
-def _readonly(value: np.ndarray) -> np.ndarray:
-    value.flags.writeable = False
-    return value
 
 
 def _exact_determinant(points: np.ndarray) -> Fraction:

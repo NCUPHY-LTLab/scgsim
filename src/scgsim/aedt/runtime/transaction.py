@@ -35,6 +35,7 @@ from scgsim.aedt.epr.workflow import (
 from scgsim.aedt.preparation.planar import validate_geometry_workers
 from scgsim.aedt.results.epr import seal_saved_solution
 from scgsim.aedt.results.provenance import runtime_source_identity
+from scgsim.aedt.runtime._timing import elapsed_seconds
 from scgsim.aedt.runtime.families.hfss import (
     prepare_body_eigenmode,
     prepare_hfss,
@@ -243,8 +244,8 @@ def _run_on_owned_desktop(
             f"AEDT version mismatch: {attempt.desktop.aedt_version_id!r}"
         )
     if isinstance(spec, _EPR_SPECS):
-        receipt.setdefault("timings", {})["desktop_startup_seconds"] = round(
-            time.perf_counter() - desktop_started, 6
+        receipt.setdefault("timings", {})["desktop_startup_seconds"] = elapsed_seconds(
+            desktop_started
         )
     _run_solver_family(handoff, attempt, options.prepare_only, inset_plan)
 
@@ -262,7 +263,7 @@ def _precompute_epr_insets(handoff: VerifiedHandoff, options: _Options) -> Any |
     started = time.perf_counter()
     inset_plan = precompute_inset_surfaces(spec.geometry, spec.epr_request, workers)
     handoff.receipt["geometry_precompute"] = {
-        "seconds": round(time.perf_counter() - started, 6),
+        "seconds": elapsed_seconds(started),
         "members": len(inset_plan),
         "requested_workers": workers,
     }
@@ -416,7 +417,7 @@ def _close_transaction(
     receipt["diagnostics"] = read_physics_warnings(handoff.run_dir)
     receipt["status"] = attempt.status
     receipt["finished_at_utc"] = utc_now()
-    receipt["execution_seconds"] = round(time.perf_counter() - started, 6)
+    receipt["execution_seconds"] = elapsed_seconds(started)
     write_json(handoff.receipt_path, receipt)
 
 
@@ -436,9 +437,7 @@ def _release_desktop(attempt: _Attempt, receipt: dict[str, Any]) -> None:
         receipt["release"] = {"ok": False, "error": error}
         if attempt.failure is None:
             attempt.failure = error
-    receipt.setdefault("timings", {})["release_seconds"] = round(
-        time.perf_counter() - started, 6
-    )
+    receipt.setdefault("timings", {})["release_seconds"] = elapsed_seconds(started)
 
 
 def _record_after_release(

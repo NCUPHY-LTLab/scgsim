@@ -27,11 +27,11 @@ def _distribution_version() -> str:
         return "unavailable"
 
 
-def _plain(value: Any) -> Any:
+def _plain_tuples_to_lists(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return {str(key): _plain(item) for key, item in value.items()}
+        return {str(key): _plain_tuples_to_lists(item) for key, item in value.items()}
     if isinstance(value, tuple):
-        return [_plain(item) for item in value]
+        return [_plain_tuples_to_lists(item) for item in value]
     return value
 
 
@@ -250,7 +250,7 @@ class MeshQualityReport:
     def summary(self) -> dict[str, Any]:
         """Return detached aggregate data, not aliases to the retained snapshot."""
 
-        return _plain(self._summary)
+        return _plain_tuples_to_lists(self._summary)
 
     def _tags(self, row: int) -> list[int]:
         start, size = (int(value) for value in self._mesh.tag_offsets[row])

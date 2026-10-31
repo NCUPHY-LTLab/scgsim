@@ -8,11 +8,11 @@ raising.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Any, TypedDict
 
+from .._files import sha256_file
 from ._expect import _expect_int, _expect_scalar
 
 # (size in bytes, SHA-256 hex digest), or (None, None) for a file that is absent.
@@ -33,14 +33,6 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise TypeError(f"{path} must contain a JSON object.")
     return parsed
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 # Paths named inside metadata are untrusted text. Resolving before the containment
@@ -84,7 +76,7 @@ def _extract_hash_map(
 def _compute_hash_entry(path: Path) -> HashEntry:
     if not path.is_file():
         return None, None
-    return path.stat().st_size, _sha256(path)
+    return path.stat().st_size, sha256_file(path)
 
 
 def _compute_input_hash_entry(root: Path, rel: str) -> HashEntry:

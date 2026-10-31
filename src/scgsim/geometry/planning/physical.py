@@ -19,7 +19,7 @@ from scgsim.geometry.models.physical import (
     PhysicalRepresentationPlan,
 )
 from scgsim.semantics.route_a import geometry_z_range, same_z
-from scgsim.semantics.snapshot import _plain, canonical_sha256
+from scgsim.semantics.snapshot import _plain_semantic_facts, canonical_sha256
 
 
 def _source_plain(value: Any) -> Any:
@@ -32,7 +32,7 @@ def _source_plain(value: Any) -> Any:
         return {key: _source_plain(item) for key, item in value.items()}
     if isinstance(value, (tuple, list)):
         return [_source_plain(item) for item in value]
-    return _plain(value)
+    return _plain_semantic_facts(value)
 
 
 def interpret_physical_layers(

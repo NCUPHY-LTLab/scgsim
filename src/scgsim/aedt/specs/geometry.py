@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
-from scgsim.aedt._data import _freeze, canonical_sha256, detached
+from scgsim.aedt._data import _freeze_str_keys_only, canonical_sha256, detached
 from scgsim.aedt.specs.common import LumpedRlc
 from scgsim.aedt.specs.epr import PlanarJunction, SurfaceEprSpec
 
@@ -58,10 +58,12 @@ class PreparedPlanarGeometry:
             raise TypeError("surface_bindings must contain mappings")
         object.__setattr__(self, "junctions", junctions)
         object.__setattr__(
-            self, "contribution_catalog", tuple(_freeze(item) for item in catalog)
+            self,
+            "contribution_catalog",
+            tuple(_freeze_str_keys_only(item) for item in catalog),
         )
         object.__setattr__(self, "contributions", contributions)
-        source = _freeze(self.source)
+        source = _freeze_str_keys_only(self.source)
         from scgsim.aedt.specs.modeling import _native_physical_record
         from scgsim.geometry.models.physical import (
             PLAN_SCHEMA,
@@ -107,7 +109,7 @@ class PreparedPlanarGeometry:
         object.__setattr__(
             self,
             "surface_bindings",
-            tuple(_freeze(item) for item in bindings),
+            tuple(_freeze_str_keys_only(item) for item in bindings),
         )
         expected_model = canonical_sha256(
             {

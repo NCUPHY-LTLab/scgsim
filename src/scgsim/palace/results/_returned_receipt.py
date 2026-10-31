@@ -17,6 +17,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from .._files import sha256_file
 from ._artifact_files import (
     HashEntry,
     _compute_hash_entry,
@@ -24,7 +25,6 @@ from ._artifact_files import (
     _confined_path,
     _extract_hash_map,
     _read_json,
-    _sha256,
 )
 from ._expect import (
     _expect_int,
@@ -368,7 +368,7 @@ def _validate_runtime_compatibility(
     expected_config = {
         "path": "config.json",
         "bytes": (root / "config.json").stat().st_size,
-        "sha256": _sha256(root / "config.json"),
+        "sha256": sha256_file(root / "config.json"),
         "declared_schema": _expect_scalar(palace_identity, "config_schema", str),
     }
     if config != expected_config:

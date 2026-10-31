@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import shlex
 import shutil
@@ -13,6 +12,8 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Literal
 
+from .._files import sha256_file
+from .._handoff_id import compute_handoff_id
 from ..mesh.build import (
     GSIM_SHA,
     SGB_DERIVATION_BASE_SHA,
@@ -156,7 +157,7 @@ def prepare_handoff(
         script_path=script_path,
         recorder_path=returned_receipt_recorder_path,
     )
-    handoff_id = _compute_handoff_id(
+    handoff_id = compute_handoff_id(
         profile=profile,
         route=route,
         problem=problem,
@@ -268,7 +269,7 @@ def prepare_handoff(
             "resolved_resources": resource_map,
             "archive": {
                 "path": archive_relative,
-                "sha256": _sha256(archive_path),
+                "sha256": sha256_file(archive_path),
             },
         },
     )
@@ -577,35 +578,6 @@ def _identity() -> dict[str, str]:
     }
 
 
-def _compute_handoff_id(
-    *,
-    profile: str,
-    route: str,
-    problem: str,
-    source_revisions: Mapping[str, Any],
-    palace_identity: Mapping[str, Any],
-    hashes: Sequence[Mapping[str, Any]],
-    execution_identity: Mapping[str, Any],
-    route_a_thin_film: Mapping[str, Any] | None = None,
-) -> str:
-    payload = {
-        "route": route,
-        "problem": problem,
-        "profile": profile,
-        "source_revisions": source_revisions,
-        "palace_identity": palace_identity,
-        "hashes": list(hashes),
-        "execution_identity": execution_identity,
-        **(
-            {"route_a_thin_film": route_a_thin_film}
-            if route_a_thin_film is not None
-            else {}
-        ),
-    }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
 def _execution_identity(
     *,
     profile: str,
@@ -624,10 +596,10 @@ def _execution_identity(
         "setup_commands": list(setup),
         "petsc_options": list(petsc),
         "command": _redacted_command(profile, executable, resources),
-        "script": {"path": script_path.name, "sha256": _sha256(script_path)},
+        "script": {"path": script_path.name, "sha256": sha256_file(script_path)},
         "recorder": {
             "path": f"metadata/{recorder_path.name}",
-            "sha256": _sha256(recorder_path),
+            "sha256": sha256_file(recorder_path),
         },
     }
 
@@ -675,7 +647,7 @@ def _members(root: Path, *, exclude: set[Path]) -> list[dict[str, str | int]]:
                     "path": relative,
                     "type": "file",
                     "bytes": path.stat().st_size,
-                    "sha256": _sha256(path),
+                    "sha256": sha256_file(path),
                 }
             )
     return members
@@ -686,14 +658,10 @@ def _hashes(root: Path, paths: Sequence[Path]) -> list[dict[str, str | int]]:
         {
             "path": path.relative_to(root).as_posix(),
             "bytes": path.stat().st_size,
-            "sha256": _sha256(path),
+            "sha256": sha256_file(path),
         }
         for path in paths
     ]
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _route(mesh_result: MeshBuildResult) -> str:

@@ -10,11 +10,11 @@ from typing import Any, Literal
 
 from .loaders._common import (
     _artifact_matches,
-    _atomic_json,
     _confined,
     _json,
     _receipt_authority_sha256,
     _sha256,
+    _write_sorted_json_atomic,
 )
 from .rendering import (
     _add_parts,
@@ -264,7 +264,7 @@ class GeometryPreview:
             "identity_role": "preview receipt; excluded from solver and handoff identity",
         }
         self._manifest_path.parent.mkdir(parents=True, exist_ok=True)
-        _atomic_json(self._manifest_path, payload)
+        _write_sorted_json_atomic(self._manifest_path, payload)
         if self._bind_receipt:
             self._bind_aedt_receipt(payload)
 
@@ -287,4 +287,4 @@ class GeometryPreview:
             "artifacts": artifacts,
             "simulation_status_affected": False,
         }
-        _atomic_json(receipt_path, receipt)
+        _write_sorted_json_atomic(receipt_path, receipt)

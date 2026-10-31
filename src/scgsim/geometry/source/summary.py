@@ -12,11 +12,11 @@ from scgsim.geometry.source.validation import validate_geometry_input
 from scgsim.semantics.route_a import geometry_z_range
 
 
-def _plain(value: Any) -> Any:
+def _plain_input_summary(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return {str(key): _plain(item) for key, item in value.items()}
+        return {str(key): _plain_input_summary(item) for key, item in value.items()}
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        return [_plain(item) for item in value]
+        return [_plain_input_summary(item) for item in value]
     if value is None or isinstance(value, (str, bool, int, float)):
         return value
     raise TypeError(f"input summary cannot detach {type(value).__name__}")
@@ -34,7 +34,7 @@ class InputSummary:
         object.__setattr__(
             self,
             "_payload_json",
-            json.dumps(_plain(data), allow_nan=False, sort_keys=True),
+            json.dumps(_plain_input_summary(data), allow_nan=False, sort_keys=True),
         )
 
     @property

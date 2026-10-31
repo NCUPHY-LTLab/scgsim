@@ -9,6 +9,7 @@ from numbers import Real
 from pathlib import Path
 from typing import Any, Literal
 
+from .._values import optional_stripped_string
 from .surface_epr import build_surface_epr_postprocessing
 
 _MODEL_L0_M = 1e-6
@@ -342,8 +343,8 @@ def _electrostatic_boundaries(
         ):
             continue
 
-        component_id = _optional_string(info.get("conductor_component_id"))
-        net_id = _optional_string(info.get("net_id"))
+        component_id = optional_stripped_string(info.get("conductor_component_id"))
+        net_id = optional_stripped_string(info.get("net_id"))
         if component_id is None:
             raise ValueError(
                 "SGB solver-active conductor surface missing conductor_component_id."
@@ -387,8 +388,8 @@ def _electrostatic_boundaries(
     seen_nets: set[str] = set()
 
     for index, terminal in enumerate(terminals, start=1):
-        net_id = _optional_string(terminal.net_id)
-        name = _optional_string(terminal.name)
+        net_id = optional_stripped_string(terminal.net_id)
+        name = optional_stripped_string(terminal.name)
         if net_id is None or name is None:
             raise ValueError("terminal binding names and net ids must be non-empty.")
         if net_id in seen_nets:
@@ -425,7 +426,8 @@ def _electrostatic_boundaries(
                     name
                     for name, info in groups.get("boundary_surfaces", {}).items()
                     if isinstance(info, Mapping)
-                    and _optional_string(info.get("conductor_component_id")) in matching
+                    and optional_stripped_string(info.get("conductor_component_id"))
+                    in matching
                 ),
                 "metadata": {
                     "net_id": net_id,
@@ -442,7 +444,7 @@ def _electrostatic_boundaries(
     requested_ground_nets: list[str] = []
     physical_ground_components: set[str] = set()
     for value in ground_net_ids:
-        net_id = _optional_string(value)
+        net_id = optional_stripped_string(value)
         if net_id is None:
             raise ValueError("physical Ground net ids must be non-empty.")
         if net_id in requested_ground_nets:
@@ -896,7 +898,7 @@ def _materials_from_solution_volumes(
             raise ValueError(
                 f"SGB solution volume {name!r} must define a single material_ids entry."
             )
-        material_id = _optional_string(material_ids[0])
+        material_id = optional_stripped_string(material_ids[0])
         if not material_id:
             raise ValueError(
                 f"SGB solution volume {name!r} must define a non-empty material id."
@@ -980,10 +982,3 @@ def _physical_group_values(value: Any) -> tuple[int, ...]:
     if not values:
         raise ValueError("Physical group must have at least one integer attribute.")
     return tuple(values)
-
-
-def _optional_string(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None

@@ -7,7 +7,11 @@ import re
 from pathlib import Path
 from typing import Any
 
-from scgsim.aedt._io import file_sha256
+from scgsim.aedt.results.convergence._evidence_files import (
+    contained_evidence_path,
+    read_evidence_text,
+    source_record,
+)
 from scgsim.aedt.specs.hfss import HfssEigenmodeSpec, HfssEprSpec, HfssSpec
 
 
@@ -19,9 +23,11 @@ def read_hfss_convergence(
     if isinstance(spec, (HfssEigenmodeSpec, HfssEprSpec)) and not historical_profile:
         return _read_eigenmode_convergence(root, spec)
     solver = f"HFSS {spec.mode}"
-    results_dir = _contained(root, f"{spec.project_name}.aedtresults", solver)
-    asol_path = _contained(results_dir, f"{spec.design_name}.asol", solver)
-    asol = _read(asol_path, solver)
+    results_dir = contained_evidence_path(
+        root, f"{spec.project_name}.aedtresults", solver
+    )
+    asol_path = contained_evidence_path(results_dir, f"{spec.design_name}.asol", solver)
+    asol = read_evidence_text(asol_path, solver)
     if re.findall(r"(?m)^\s*SimSetupName='([^']+)'\s*$", asol) != [
         spec.run_control.setup_name
     ]:
@@ -31,10 +37,10 @@ def read_hfss_convergence(
         raise RuntimeError(
             f"{solver} native solution does not identify exactly one profile"
         )
-    profile_path = _contained(
+    profile_path = contained_evidence_path(
         results_dir / f"{spec.design_name}.results", profile_names[0], solver
     )
-    profile = _read(profile_path, solver)
+    profile = read_evidence_text(profile_path, solver)
 
     passes = [
         int(value)
@@ -53,7 +59,7 @@ def read_hfss_convergence(
     )
     label = "Max Delta Freq. %" if unit == "percent" else "Max Mag. Delta S"
     deltas = [
-        _float(value, solver)
+        _solver_convergence_float(value, solver)
         for value in re.findall(rf"\\'{re.escape(label)}\\',\s*([^,\s]+),", profile)
     ]
     if not deltas or deltas[-1] < 0:
@@ -78,8 +84,8 @@ def read_hfss_convergence(
 
     return {
         "sources": {
-            "asol": _source(asol_path, root),
-            "profile": _source(profile_path, root),
+            "asol": source_record(asol_path, root),
+            "profile": source_record(profile_path, root),
         },
         "quantity": metric,
         "unit": unit,
@@ -97,8 +103,10 @@ def _read_eigenmode_convergence(
 ) -> dict[str, Any]:
     solver = "HFSS Eigenmode"
     folder = "epr" if isinstance(spec, HfssEprSpec) else "eigenmode"
-    path = _contained(root, f"results/{folder}/adaptive-convergence.prop", solver)
-    native = _read(path, solver)
+    path = contained_evidence_path(
+        root, f"results/{folder}/adaptive-convergence.prop", solver
+    )
+    native = read_evidence_text(path, solver)
 
     def field(label: str) -> str:
         values = re.findall(
@@ -125,10 +133,13 @@ def _read_eigenmode_convergence(
         raise RuntimeError(f"{solver} native convergence pass count is invalid")
     target = spec.run_control.maximum_delta_frequency_percent
     if not math.isclose(
-        _float(field("Target"), solver), target, rel_tol=0, abs_tol=1e-12
+        _solver_convergence_float(field("Target"), solver),
+        target,
+        rel_tol=0,
+        abs_tol=1e-12,
     ):
         raise RuntimeError(f"{solver} native convergence target does not match")
-    current = _float(field("Current"), solver)
+    current = _solver_convergence_float(field("Current"), solver)
     consecutive_text = field("Current Consecutive Passes")
     if not re.fullmatch(r"\d+", consecutive_text):
         raise RuntimeError(f"{solver} native convergence count is invalid")
@@ -158,7 +169,7 @@ def _read_eigenmode_convergence(
         or parsed[0][2] != "N/A"
     ):
         raise RuntimeError(f"{solver} native convergence pass sequence is invalid")
-    deltas = [_float(row[2], solver) for row in parsed[1:]]
+    deltas = [_solver_convergence_float(row[2], solver) for row in parsed[1:]]
     if any(delta < 0 for delta in deltas) or current < 0:
         raise RuntimeError(f"{solver} native convergence delta is invalid")
     if completed > 1 and not math.isclose(
@@ -167,7 +178,7 @@ def _read_eigenmode_convergence(
         raise RuntimeError(f"{solver} native final convergence delta does not match")
     converged = status == "Yes"
     return {
-        "sources": {"export_convergence": _source(path, root)},
+        "sources": {"export_convergence": source_record(path, root)},
         "quantity": "maximum_delta_frequency",
         "unit": "percent",
         "target": target,
@@ -185,35 +196,7 @@ def _positive_int(value: str, solver: str) -> int:
     return int(value)
 
 
-def _source(path: Path, root: Path) -> dict[str, str | int]:
-    return {
-        "path": path.relative_to(root).as_posix(),
-        "bytes": path.stat().st_size,
-        "sha256": file_sha256(path),
-    }
-
-
-def _contained(root: Path, relative: str, solver: str) -> Path:
-    if not relative or Path(relative).is_absolute():
-        raise RuntimeError(f"{solver} native evidence path is invalid")
-    path = (root / relative).resolve()
-    if not path.is_relative_to(root.resolve()):
-        raise RuntimeError(f"{solver} native evidence escapes the run directory")
-    return path
-
-
-def _read(path: Path, solver: str) -> str:
-    if not path.is_file() or path.stat().st_size == 0:
-        raise RuntimeError(f"{solver} native convergence evidence is missing: {path}")
-    try:
-        return path.read_text(encoding="utf-8", errors="strict")
-    except UnicodeError as exc:
-        raise RuntimeError(
-            f"{solver} native convergence evidence is not UTF-8: {path}"
-        ) from exc
-
-
-def _float(value: str, solver: str) -> float:
+def _solver_convergence_float(value: str, solver: str) -> float:
     try:
         result = float(value)
     except ValueError as exc:

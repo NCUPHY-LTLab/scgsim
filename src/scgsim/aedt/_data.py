@@ -10,13 +10,13 @@ from types import MappingProxyType
 from typing import Any
 
 
-def _text(value: Any, name: str) -> str:
+def _stripped_text(value: Any, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be non-empty text")
     return value.strip()
 
 
-def _number(value: Any, name: str, *, minimum: float = 0.0) -> float:
+def _number_at_least(value: Any, name: str, *, minimum: float = 0.0) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be numeric")
     result = float(value)
@@ -25,7 +25,7 @@ def _number(value: Any, name: str, *, minimum: float = 0.0) -> float:
     return result
 
 
-def _freeze(value: Any, *, verified: Any = None) -> Any:
+def _freeze_str_keys_only(value: Any, *, verified: Any = None) -> Any:
     if verified is not None and value is verified:
         return verified
     if isinstance(value, Mapping):
@@ -33,7 +33,10 @@ def _freeze(value: Any, *, verified: Any = None) -> Any:
             raise TypeError("EPR mapping keys must be strings")
         prior = verified if isinstance(verified, Mapping) else {}
         return MappingProxyType(
-            {key: _freeze(item, verified=prior.get(key)) for key, item in value.items()}
+            {
+                key: _freeze_str_keys_only(item, verified=prior.get(key))
+                for key, item in value.items()
+            }
         )
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         prior = (
@@ -42,7 +45,9 @@ def _freeze(value: Any, *, verified: Any = None) -> Any:
             else ()
         )
         return tuple(
-            _freeze(item, verified=prior[index] if index < len(prior) else None)
+            _freeze_str_keys_only(
+                item, verified=prior[index] if index < len(prior) else None
+            )
             for index, item in enumerate(value)
         )
     if value is None or isinstance(value, (str, int, float, bool)):

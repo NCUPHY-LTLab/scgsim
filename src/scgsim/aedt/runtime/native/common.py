@@ -16,6 +16,7 @@ from typing import Any
 
 from scgsim.aedt._data import detached
 from scgsim.aedt._io import file_sha256
+from scgsim.aedt.runtime._timing import elapsed_seconds
 from scgsim.aedt.specs.common import LOCKED_PYAEDT, AedtResources
 from scgsim.aedt.specs.hfss import HfssSpec
 from scgsim.aedt.specs.parse import AedtSpec, parse_aedt_spec
@@ -180,7 +181,7 @@ def analyze_with_resources(
         try:
             return bool(app.analyze_setup(name=setup_name, blocking=True))
         finally:
-            evidence["solve_seconds"] = round(time.perf_counter() - solve_started, 6)
+            evidence["solve_seconds"] = elapsed_seconds(solve_started)
 
     desktop = app.desktop_class.odesktop
     design_type = app.design_type
@@ -220,7 +221,7 @@ def analyze_with_resources(
             "acf_sha256": file_sha256(acf_path),
             "design_type": design_type,
             "previous_active_configuration": previous,
-            "acf_generation_seconds": round(time.perf_counter() - acf_started, 6),
+            "acf_generation_seconds": elapsed_seconds(acf_started),
         }
     )
     started = time.perf_counter()
@@ -241,12 +242,12 @@ def analyze_with_resources(
             "use_auto_settings": False,
         }
         evidence["settings_evidence"] = "generated_acf_and_active_configuration_name"
-        evidence["activation_seconds"] = round(time.perf_counter() - started, 6)
+        evidence["activation_seconds"] = elapsed_seconds(started)
         solve_started = time.perf_counter()
         try:
             solved = app.analyze_setup(name=setup_name, blocking=True)
         finally:
-            evidence["solve_seconds"] = round(time.perf_counter() - solve_started, 6)
+            evidence["solve_seconds"] = elapsed_seconds(solve_started)
         evidence["analyze_returned"] = solved is True
         if solved is not True:
             raise RuntimeError(f"AEDT setup {setup_name!r} analysis returned false")
@@ -264,16 +265,12 @@ def analyze_with_resources(
             except Exception as exc:
                 evidence["restored_previous_configuration"] = False
                 evidence["restoration_error"] = f"{type(exc).__name__}: {exc}"
-                evidence["restoration_seconds"] = round(
-                    time.perf_counter() - restore_started, 6
-                )
+                evidence["restoration_seconds"] = elapsed_seconds(restore_started)
                 if not original_failure:
                     raise RuntimeError(
                         "AEDT active DSO configuration restoration failed"
                     ) from exc
-        evidence["restoration_seconds"] = round(
-            time.perf_counter() - restore_started, 6
-        )
+        evidence["restoration_seconds"] = elapsed_seconds(restore_started)
 
 
 def _positive_identity(value: Any, label: str) -> int:

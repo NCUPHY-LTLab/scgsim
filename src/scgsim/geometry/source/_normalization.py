@@ -127,10 +127,10 @@ def _semantic_layer_records(
                 f"semantic layer {semantic_id!r} host {host!r} is not a solution region."
             )
         layer, datatype = _gds_layer(declaration["gds_layer"], semantic_id)
-        pdk_geometry = _mapping(
+        pdk_geometry = _mapping_as_dict(
             level_info.get("geometry", {}), f"PDK level {level_name!r} geometry"
         )
-        component_geometry = _mapping(
+        component_geometry = _mapping_as_dict(
             declaration.get("geometry", {}), f"{semantic_id!r} geometry"
         )
         unknown_geometry = set(component_geometry) - {
@@ -149,7 +149,7 @@ def _semantic_layer_records(
             "geometry_source"
         ] != pdk_geometry.get("geometry_source"):
             pdk_geometry = {}
-        component_metadata = _mapping(
+        component_metadata = _mapping_as_dict(
             declaration.get("metadata", {}), f"{semantic_id!r} metadata"
         )
         part_role = _identifier(
@@ -195,7 +195,7 @@ def _semantic_layer_records(
             ),
         }
         if "ground_bump_fill_spec" in level_info:
-            record["metadata"]["ground_bump_fill_spec"] = _mapping(
+            record["metadata"]["ground_bump_fill_spec"] = _mapping_as_dict(
                 level_info["ground_bump_fill_spec"],
                 f"PDK level {level_name!r} ground_bump_fill_spec",
             )
@@ -242,7 +242,7 @@ def _level(levels: Mapping[str, Any], name: Any) -> Any:
 
 
 def _level_info(level: Any, name: Any) -> dict[str, Any]:
-    return _mapping(getattr(level, "info", None), f"PDK level {name!r} info")
+    return _mapping_as_dict(getattr(level, "info", None), f"PDK level {name!r} info")
 
 
 def _level_facts(level: Any, name: Any) -> tuple[str, float, float, int]:
@@ -311,7 +311,7 @@ def _physical_declaration(
     return declaration.to_payload()
 
 
-def _mapping(value: Any, name: str) -> dict[str, Any]:
+def _mapping_as_dict(value: Any, name: str) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         raise TypeError(f"{name} must be a mapping.")
     return dict(value)

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from scgsim.aedt._data import (
-    _freeze,
+    _freeze_str_keys_only,
     detached,
 )
 from scgsim.aedt.epr.analysis import (
@@ -141,7 +141,7 @@ def _integral_target(purpose: str, selection: Mapping[str, Any]) -> IntegralTarg
             raise RuntimeError(
                 "magnetic energy requires positive relative permeability"
             )
-    return IntegralTarget(kind, scope_id, _freeze(selection))
+    return IntegralTarget(kind, scope_id, _freeze_str_keys_only(selection))
 
 
 def _canonical_integral(

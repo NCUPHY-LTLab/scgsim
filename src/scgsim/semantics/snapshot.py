@@ -12,7 +12,7 @@ from typing import Any, Literal
 RevisionKind = Literal["declared_revision", "content_hash_fallback"]
 
 
-def _plain(value: Any) -> Any:
+def _plain_semantic_facts(value: Any) -> Any:
     if isinstance(value, Mapping):
         plain: dict[str, Any] = {}
         for key, item in value.items():
@@ -21,12 +21,12 @@ def _plain(value: Any) -> Any:
                     "semantic fact mapping keys must be strings, "
                     f"got {type(key).__name__}"
                 )
-            plain[key] = _plain(item)
+            plain[key] = _plain_semantic_facts(item)
         return plain
     if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
-        return [_plain(item) for item in value]
+        return [_plain_semantic_facts(item) for item in value]
     if isinstance(value, (set, frozenset)):
-        return sorted((_plain(item) for item in value), key=repr)
+        return sorted((_plain_semantic_facts(item) for item in value), key=repr)
     if value is None or isinstance(value, str | int | float | bool):
         return value
     raise TypeError(f"semantic facts require plain values, got {type(value).__name__}")
@@ -42,7 +42,7 @@ def _freeze(value: Any) -> Any:
 
 def freeze_plain(value: Any) -> Any:
     """Detach and recursively freeze one plain-data value."""
-    return _freeze(_plain(value))
+    return _freeze(_plain_semantic_facts(value))
 
 
 def _detached(value: Any) -> Any:
@@ -55,7 +55,10 @@ def _detached(value: Any) -> Any:
 
 def canonical_sha256(value: Any) -> str:
     rendered = json.dumps(
-        _plain(value), sort_keys=True, separators=(",", ":"), allow_nan=False
+        _plain_semantic_facts(value),
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
     )
     return hashlib.sha256(rendered.encode("utf-8")).hexdigest()
 
@@ -133,7 +136,7 @@ class SemanticFactsSnapshot:
     facts: Mapping[str, Any]
 
     def __post_init__(self) -> None:
-        plain = _plain(self.facts)
+        plain = _plain_semantic_facts(self.facts)
         digest = canonical_sha256(plain)
         _validate_sha256_digest("canonical_sha256", self.canonical_sha256)
         if self.canonical_sha256 != digest:
@@ -179,7 +182,7 @@ def create_snapshot(
     source_revision_kind: RevisionKind | None = None,
     geometry_revision_kind: RevisionKind | None = None,
 ) -> SemanticFactsSnapshot:
-    plain = _plain(facts)
+    plain = _plain_semantic_facts(facts)
     digest = canonical_sha256(plain)
     fallback = f"sha256:{digest}"
     resolved_source_revision, resolved_source_kind = _resolve_revision(

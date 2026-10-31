@@ -22,7 +22,7 @@ from scgsim.geometry.planning.physical import interpret_physical_geometry
 from scgsim.geometry.source.adapter import _solution_region_entity_from_record
 from scgsim.geometry.source.ground_bumps import _prepare_indium_ground_bump_fill
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
-from scgsim.semantics.snapshot import _plain, canonical_sha256
+from scgsim.semantics.snapshot import _plain_semantic_facts, canonical_sha256
 
 from ..mesh.build import _with_port_sheet_metadata
 from .transforms import (
@@ -166,7 +166,7 @@ def prepare_mesh_input(
     )
     prepared_stack = effective_stack
     if route == "A":
-        source_hash = canonical_sha256(_plain(stack))
+        source_hash = canonical_sha256(_plain_semantic_facts(stack))
         prepared_stack["metadata"]["route_a_thin_film"] = {
             "schema_version": 1,
             "variant": approximation_profile.name,
@@ -204,12 +204,12 @@ def persist_problem_files(
 ) -> Path:
     """Replace ordered metadata files independently, then replace config last."""
     for path, payload in metadata_files:
-        _atomic_json(path, payload)
-    _atomic_json(config_path, config)
+        _write_json_atomic_creating_parent(path, payload)
+    _write_json_atomic_creating_parent(config_path, config)
     return config_path
 
 
-def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
+def _write_json_atomic_creating_parent(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
     temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
