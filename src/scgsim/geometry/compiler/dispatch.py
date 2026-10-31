@@ -153,6 +153,7 @@ def build_route_construction_plan(
             build_input,
             route=route,
             interfaces=interfaces,
+            representation_context=representation_context,
         ),
     )
     surfaces = _timed(

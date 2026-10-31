@@ -98,8 +98,9 @@ def _lower_port_sheet_regions(
         if any(
             host.part_role != "face_metal"
             or not _port_sheet_target_layer_matches(host, target_layer)
-            or host.route_representations.get("A") != "surface_sheet"
-            or host.route_representations.get("B") != "cutout_boundary_shell"
+            # The build input is projected to one route, so only that key exists.
+            or host.route_representations.get(route)
+            != {"A": "surface_sheet", "B": "cutout_boundary_shell"}[route]
             for host in host_entities
         ):
             raise ValueError(
