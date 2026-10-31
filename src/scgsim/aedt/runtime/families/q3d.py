@@ -39,7 +39,7 @@ from scgsim.aedt.runtime.native.materials import (
 )
 from scgsim.aedt.runtime.native.q3d_bodies import construct_q3d_bodies
 from scgsim.aedt.specs.common import REQUIRED_AEDT_VERSION, AedtResources
-from scgsim.aedt.specs.q3d import Q3dSpec
+from scgsim.aedt.specs.q3d import Q3dNetSpec, Q3dSpec
 
 _Q3D_REGION_DIRECTIONS = ("+X", "-X", "+Y", "-Y", "+Z", "-Z")
 
@@ -283,9 +283,19 @@ def export_q3d(prepared: PreparedQ3d) -> dict[str, Any]:
 
 
 def _assign_sheet_terminal(
-    app: Any, spec: Q3dSpec, object_name: str, side: str, name: str, net_name: str
+    app: Any, spec: Q3dSpec, net: Q3dNetSpec, kind: str
 ) -> dict[str, Any]:
-    """Bind authored exterior segments to actual Sheet edges and native excitation."""
+    """Bind authored exterior segments to actual Sheet edges and native excitation.
+
+    ``kind`` is ``"source"`` or ``"sink"``: the end of ``net`` to assign.
+    """
+    net_name = net.name
+    name = f"{net_name}Source" if kind == "source" else f"{net_name}Sink"
+    object_name, side = (
+        (net.source_object, net.source_side)
+        if kind == "source"
+        else (net.sink_object, net.sink_side)
+    )
     body = next(body for body in spec.bodies if body.body_id == object_name)
     effective = next(
         record for record in spec.effective_bodies if record["body_id"] == object_name
@@ -427,9 +437,7 @@ def _assign_q3d_nets(app: Any, spec: Q3dSpec) -> list[dict[str, Any]]:
                 ("sink", net.sink_object, net.sink_side, sink_direction, sink_name),
             ):
                 if effective[object_name]["representation"] == "sheet":
-                    record[kind] = _assign_sheet_terminal(
-                        app, spec, object_name, side, terminal_name, net.name
-                    )
+                    record[kind] = _assign_sheet_terminal(app, spec, net, kind)
                     continue
                 assign = app.source if kind == "source" else app.sink
                 boundary = assign(

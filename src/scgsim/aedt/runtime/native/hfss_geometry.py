@@ -556,39 +556,9 @@ def _bind_saved_conductors(
                 boundary_name = _native_name(
                     "pec_boundary", entity["semantic_id"], polygon_id
                 )
-                if _native_boundary_type(app, boundary_name) != "Perfect E":
-                    raise RuntimeError(f"saved conductor {name!r} lacks Perfect E")
-                assigned = app.oboundary.GetBoundaryAssignment(boundary_name)
-                if assigned is None:
-                    raise RuntimeError(f"saved conductor {name!r} lacks PEC assignment")
-                try:
-                    raw_ids = [int(value) for value in assigned]
-                except (TypeError, ValueError) as exc:
-                    raise RuntimeError(
-                        f"saved conductor {name!r} has invalid PEC IDs"
-                    ) from exc
-                if not raw_ids or len(raw_ids) != len(set(raw_ids)):
-                    raise RuntimeError(f"saved conductor {name!r} has invalid PEC IDs")
-                _, _, assigned_objects = _resolve_native_assignment(app, raw_ids)
-                if assigned_objects != {name}:
-                    raise RuntimeError(f"saved conductor {name!r} PEC target differs")
+                _verify_saved_sheet_pec(app, name, boundary_name)
             else:
-                obj = app.modeler.get_object_from_name(name)
-                if obj is None:
-                    raise RuntimeError(f"saved conductor {name!r} is unavailable")
-                observed = {
-                    "native_material_name": native_object_property(
-                        obj, "Material"
-                    ).strip('"'),
-                    "native_solve_inside": _native_object_boolean_property(
-                        obj, "Solve Inside"
-                    ),
-                }
-                if (
-                    observed["native_material_name"].casefold() != "pec"
-                    or observed["native_solve_inside"] is not False
-                ):
-                    raise RuntimeError(f"saved conductor {name!r} PEC readback differs")
+                observed = _verify_saved_solid_pec(app, name)
             objects.append(
                 {
                     "kind": "conductor",
@@ -607,6 +577,41 @@ def _bind_saved_conductors(
                 }
             )
     return objects
+
+
+def _verify_saved_sheet_pec(app: Any, name: str, boundary_name: str) -> None:
+    """Require a sheet conductor to be the sole target of its Perfect E boundary."""
+    if _native_boundary_type(app, boundary_name) != "Perfect E":
+        raise RuntimeError(f"saved conductor {name!r} lacks Perfect E")
+    assigned = app.oboundary.GetBoundaryAssignment(boundary_name)
+    if assigned is None:
+        raise RuntimeError(f"saved conductor {name!r} lacks PEC assignment")
+    try:
+        raw_ids = [int(value) for value in assigned]
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"saved conductor {name!r} has invalid PEC IDs") from exc
+    if not raw_ids or len(raw_ids) != len(set(raw_ids)):
+        raise RuntimeError(f"saved conductor {name!r} has invalid PEC IDs")
+    _, _, assigned_objects = _resolve_native_assignment(app, raw_ids)
+    if assigned_objects != {name}:
+        raise RuntimeError(f"saved conductor {name!r} PEC target differs")
+
+
+def _verify_saved_solid_pec(app: Any, name: str) -> dict[str, Any]:
+    """Require a solid conductor to be ``pec`` with solve-inside off; return what was read."""
+    obj = app.modeler.get_object_from_name(name)
+    if obj is None:
+        raise RuntimeError(f"saved conductor {name!r} is unavailable")
+    observed = {
+        "native_material_name": native_object_property(obj, "Material").strip('"'),
+        "native_solve_inside": _native_object_boolean_property(obj, "Solve Inside"),
+    }
+    if (
+        observed["native_material_name"].casefold() != "pec"
+        or observed["native_solve_inside"] is not False
+    ):
+        raise RuntimeError(f"saved conductor {name!r} PEC readback differs")
+    return observed
 
 
 def _bind_saved_junctions(

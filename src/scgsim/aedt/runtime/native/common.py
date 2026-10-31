@@ -21,6 +21,19 @@ from scgsim.aedt.specs.parse import AedtSpec, HfssSpec, parse_aedt_spec
 from scgsim.aedt.specs.q3d import Q3dSpec
 
 
+@dataclass(frozen=True)
+class _ActiveDsoConfiguration:
+    """AEDT's active distributed-solve (DSO) configuration slot for one design type.
+
+    ``previous`` is the value to restore once the run-local configuration has been used.
+    """
+
+    desktop: Any
+    design_type: str
+    key: str
+    previous: str
+
+
 def analyze_with_resources(
     app: Any,
     setup_name: str,
@@ -28,16 +41,46 @@ def analyze_with_resources(
     resources: AedtResources | None,
     evidence: dict[str, Any],
 ) -> bool:
-    """Select one run-local DSO configuration only for the owned blocking solve."""
+    """Select one run-local DSO configuration only for the owned blocking solve.
+
+    The configuration is written as an ACF file (AEDT's analysis configuration
+    format) under ``run_dir`` and activated just for this solve. The previous
+    active configuration is restored afterwards, even when the solve fails.
+    """
     evidence["requested"] = resources.to_payload() if resources else None
     if resources is None:
         evidence["status"] = "aedt_active_configuration_unchanged"
-        solve_started = time.perf_counter()
-        try:
-            return bool(app.analyze_setup(name=setup_name, blocking=True))
-        finally:
-            evidence["solve_seconds"] = elapsed_seconds(solve_started)
+        return bool(_blocking_solve(app, setup_name, evidence))
 
+    configuration = _read_active_dso_configuration(app)
+    acf_path = _write_run_local_acf(app, run_dir, resources, configuration, evidence)
+    started = time.perf_counter()
+    try:
+        _activate_run_local_acf(app, configuration, acf_path, resources, evidence)
+        evidence["activation_seconds"] = elapsed_seconds(started)
+        solved = _blocking_solve(app, setup_name, evidence)
+        evidence["analyze_returned"] = solved is True
+        if solved is not True:
+            raise RuntimeError(f"AEDT setup {setup_name!r} analysis returned false")
+        return True
+    finally:
+        # Preserve a solve/activation error while still recording restoration failure.
+        _restore_dso_configuration(
+            configuration, evidence, original_failure=sys.exc_info()[0] is not None
+        )
+
+
+def _blocking_solve(app: Any, setup_name: str, evidence: dict[str, Any]) -> Any:
+    """Run the setup and record how long the solve took, even if it raises."""
+    solve_started = time.perf_counter()
+    try:
+        return app.analyze_setup(name=setup_name, blocking=True)
+    finally:
+        evidence["solve_seconds"] = elapsed_seconds(solve_started)
+
+
+def _read_active_dso_configuration(app: Any) -> _ActiveDsoConfiguration:
+    """Read the design type's current active DSO configuration name from the registry."""
     desktop = app.desktop_class.odesktop
     design_type = app.design_type
     if design_type not in {"HFSS", "Q3D Extractor", "2D Extractor"}:
@@ -48,6 +91,17 @@ def analyze_with_resources(
     previous = desktop.GetRegistryString(key)
     if not isinstance(previous, str):
         raise RuntimeError("previous AEDT active DSO configuration is unavailable")
+    return _ActiveDsoConfiguration(desktop, design_type, key, previous)
+
+
+def _write_run_local_acf(
+    app: Any,
+    run_dir: Path,
+    resources: AedtResources,
+    configuration: _ActiveDsoConfiguration,
+    evidence: dict[str, Any],
+) -> Path:
+    """Write the run-local ACF from PyAEDT's template and record it in ``evidence``."""
     acf_started = time.perf_counter()
     digest = hashlib.sha256(str(run_dir.resolve()).encode()).hexdigest()[:16]
     config_name = f"scgsim_{digest}"
@@ -55,7 +109,7 @@ def analyze_with_resources(
     content = template.read_text(encoding="utf-8")
     replacements = {
         "ConfigName": f"'{config_name}'",
-        "DesignType": f"'{design_type}'",
+        "DesignType": f"'{configuration.design_type}'",
         "NumCores": str(resources.cores),
         "NumEngines": "1",
         "NumGPUs": "0",
@@ -74,58 +128,66 @@ def analyze_with_resources(
             "status": "acf_written",
             "acf": acf_path.relative_to(run_dir).as_posix(),
             "acf_sha256": file_sha256(acf_path),
-            "design_type": design_type,
-            "previous_active_configuration": previous,
+            "design_type": configuration.design_type,
+            "previous_active_configuration": configuration.previous,
             "acf_generation_seconds": elapsed_seconds(acf_started),
         }
     )
-    started = time.perf_counter()
-    load_attempted = False
+    return acf_path
+
+
+def _activate_run_local_acf(
+    app: Any,
+    configuration: _ActiveDsoConfiguration,
+    acf_path: Path,
+    resources: AedtResources,
+    evidence: dict[str, Any],
+) -> None:
+    """Load the ACF into AEDT and confirm it became the active configuration."""
+    if app.set_hpc_from_file(acf_file=str(acf_path)) is not True:
+        raise RuntimeError("AEDT rejected the run-local ACF")
+    observed = configuration.desktop.GetRegistryString(configuration.key)
+    config_name = acf_path.stem
+    if observed != config_name:
+        raise RuntimeError(f"AEDT active DSO configuration mismatch: {observed!r}")
+    evidence["status"] = "configuration_selected"
+    evidence["observed_active_configuration"] = observed
+    evidence["selected_settings"] = {
+        **resources.to_payload(),
+        "tasks": 1,
+        "gpus": 0,
+        "use_auto_settings": False,
+    }
+    evidence["settings_evidence"] = "generated_acf_and_active_configuration_name"
+
+
+def _restore_dso_configuration(
+    configuration: _ActiveDsoConfiguration,
+    evidence: dict[str, Any],
+    *,
+    original_failure: bool,
+) -> None:
+    """Put the previous active DSO configuration back and record whether that worked.
+
+    A restoration failure is raised only when nothing else failed, so it never hides
+    the solve or activation error.
+    """
+    restore_started = time.perf_counter()
+    desktop, key = configuration.desktop, configuration.key
     try:
-        load_attempted = True
-        if app.set_hpc_from_file(acf_file=str(acf_path)) is not True:
-            raise RuntimeError("AEDT rejected the run-local ACF")
-        observed = desktop.GetRegistryString(key)
-        if observed != config_name:
-            raise RuntimeError(f"AEDT active DSO configuration mismatch: {observed!r}")
-        evidence["status"] = "configuration_selected"
-        evidence["observed_active_configuration"] = observed
-        evidence["selected_settings"] = {
-            **resources.to_payload(),
-            "tasks": 1,
-            "gpus": 0,
-            "use_auto_settings": False,
-        }
-        evidence["settings_evidence"] = "generated_acf_and_active_configuration_name"
-        evidence["activation_seconds"] = elapsed_seconds(started)
-        solve_started = time.perf_counter()
-        try:
-            solved = app.analyze_setup(name=setup_name, blocking=True)
-        finally:
-            evidence["solve_seconds"] = elapsed_seconds(solve_started)
-        evidence["analyze_returned"] = solved is True
-        if solved is not True:
-            raise RuntimeError(f"AEDT setup {setup_name!r} analysis returned false")
-        return True
-    finally:
-        # Preserve a solve/activation error while still recording restoration failure.
-        original_failure = sys.exc_info()[0] is not None
-        restore_started = time.perf_counter()
-        if load_attempted:
-            try:
-                desktop.SetRegistryString(key, previous)
-                if desktop.GetRegistryString(key) != previous:
-                    raise RuntimeError("AEDT active DSO configuration was not restored")
-                evidence["restored_previous_configuration"] = True
-            except Exception as exc:
-                evidence["restored_previous_configuration"] = False
-                evidence["restoration_error"] = f"{type(exc).__name__}: {exc}"
-                evidence["restoration_seconds"] = elapsed_seconds(restore_started)
-                if not original_failure:
-                    raise RuntimeError(
-                        "AEDT active DSO configuration restoration failed"
-                    ) from exc
+        desktop.SetRegistryString(key, configuration.previous)
+        if desktop.GetRegistryString(key) != configuration.previous:
+            raise RuntimeError("AEDT active DSO configuration was not restored")
+        evidence["restored_previous_configuration"] = True
+    except Exception as exc:
+        evidence["restored_previous_configuration"] = False
+        evidence["restoration_error"] = f"{type(exc).__name__}: {exc}"
         evidence["restoration_seconds"] = elapsed_seconds(restore_started)
+        if not original_failure:
+            raise RuntimeError(
+                "AEDT active DSO configuration restoration failed"
+            ) from exc
+    evidence["restoration_seconds"] = elapsed_seconds(restore_started)
 
 
 def _positive_identity(value: Any, label: str) -> int:
@@ -345,16 +407,52 @@ def _resolve_native_assignment(
     return resolved, covered_faces, covered_objects
 
 
-# Length: over 150 lines. The AEDT import call must come first, then the object
-# inventory is compared with the spec, then each declared object is bound and read
-# back; the check order decides which mismatch error is raised first.
-# TODO(human): split the per-object binding loop into its own function.
 def import_and_bind(hfss: Any, spec: HfssSpec) -> list[dict[str, Any]]:
-    """Import HFSS geometry using the spec's source-to-effective layer records."""
+    """Import HFSS geometry using the spec's source-to-effective layer records.
+
+    Imports the GDS, checks the object inventory against the spec, binds a
+    material to each declared object, then assigns one Perfect E boundary to all
+    superconducting sheets.
+    """
     effective_layers = {
         (int(item["layer"]), int(item["datatype"])): item
         for item in spec.effective_layer_imports
     }
+    _import_gds_layers(hfss, spec, effective_layers)
+    hfss.modeler.refresh_all_ids()
+    actual = set(hfss.modeler.object_names)
+    expected = {item.object_name for item in spec.object_bindings}
+    if actual != expected:
+        raise RuntimeError(
+            f"import object readback mismatch: expected {sorted(expected)!r}, got {sorted(actual)!r}"
+        )
+    materials = dict(spec.materials)
+    observed = [
+        _bind_imported_object(hfss, spec, binding, effective_layers, materials)
+        for binding in spec.object_bindings
+    ]
+    pec_implementations = [
+        record.get("hfss_pec_binding", {}).get("implementation") for record in observed
+    ]
+    pec_sheets = [
+        record["object_name"]
+        for record, implementation in zip(observed, pec_implementations, strict=True)
+        if implementation == "perfect_e_sheet"
+    ]
+    if pec_sheets:
+        _assign_pec_sheets(hfss, observed, pec_sheets)
+    elif (
+        "pec_material_solve_inside_false" in pec_implementations
+        and "SCGSimPEC" in native_boundary_names(hfss)
+    ):
+        raise RuntimeError("solid PEC binding unexpectedly has SCGSimPEC boundary")
+    return observed
+
+
+def _import_gds_layers(
+    hfss: Any, spec: HfssSpec, effective_layers: Mapping[tuple[int, int], Any]
+) -> None:
+    """Import the GDS with each source layer placed at its effective Z and thickness."""
     mapping = {
         effective_layers[(item.layer, item.datatype)]["native_import_layer"]: [
             (
@@ -368,186 +466,198 @@ def import_and_bind(hfss: Any, spec: HfssSpec) -> list[dict[str, Any]]:
     }
     if not hfss.import_gds_3d(str(spec.gds_path), mapping, units="um", import_method=1):
         raise RuntimeError("HFSS import_gds_3d failed")
-    hfss.modeler.refresh_all_ids()
-    actual = set(hfss.modeler.object_names)
-    expected = {item.object_name for item in spec.object_bindings}
-    if actual != expected:
+
+
+def _bind_imported_object(
+    hfss: Any,
+    spec: HfssSpec,
+    binding: Any,
+    effective_layers: Mapping[tuple[int, int], Any],
+    materials: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Check one imported object against its declared layer and bind its material."""
+    obj = hfss.modeler.get_object_from_name(binding.object_name)
+    if obj is None:
+        raise RuntimeError(f"missing declared object {binding.object_name!r}")
+    # AEDT's Geometry3D ``Group`` remains ``Model`` after GDS import. PyAEDT
+    # 1.3.0 exposes the explicit destination layer through the imported
+    # object-name prefix, so bind every declared object to its exact source
+    # layer/datatype record rather than the importer-only numeric layer.
+    destination_name = obj.name
+    matches = [
+        (candidate, effective_layers[(candidate.layer, candidate.datatype)])
+        for candidate in spec.layer_imports
+        if destination_name.startswith(f"{candidate.layer_name}_")
+    ]
+    if len(matches) != 1:
         raise RuntimeError(
-            f"import object readback mismatch: expected {sorted(expected)!r}, got {sorted(actual)!r}"
+            f"import destination-pair mismatch for {binding.object_name!r}: "
+            f"got {[candidate.layer_name for candidate, _ in matches]!r}"
         )
-    materials = dict(spec.materials)
-    pec_sheets: list[str] = []
-    pec_solids: list[str] = []
-    observed: list[dict[str, Any]] = []
-    for binding in spec.object_bindings:
-        obj = hfss.modeler.get_object_from_name(binding.object_name)
-        if obj is None:
-            raise RuntimeError(f"missing declared object {binding.object_name!r}")
-        # AEDT's Geometry3D ``Group`` remains ``Model`` after GDS import. PyAEDT
-        # 1.3.0 exposes the explicit destination layer through the imported
-        # object-name prefix, so bind every declared object to its exact source
-        # layer/datatype record rather than the importer-only numeric layer.
-        destination_name = obj.name
-        matches = [
-            (candidate, effective_layers[(candidate.layer, candidate.datatype)])
-            for candidate in spec.layer_imports
-            if destination_name.startswith(f"{candidate.layer_name}_")
-        ]
-        if len(matches) != 1:
+    layer, effective = matches[0]
+    if binding.layer != layer.layer:
+        raise RuntimeError(
+            f"import source-layer mismatch for {binding.object_name!r}: "
+            f"expected {binding.layer!r}, got {layer.layer!r}"
+        )
+    representation = effective["representation"]
+    expected_native_type = {"solid": "Solid", "sheet": "Sheet"}.get(representation)
+    if expected_native_type is None:
+        raise ValueError(
+            f"unsupported HFSS conductor representation: {representation!r}"
+        )
+    material = materials[binding.material_id]
+    native = _native_object_evidence(hfss, binding.object_name)
+    if native["native_object_type"] != expected_native_type:
+        raise RuntimeError(
+            f"HFSS imported representation mismatch for {binding.object_name!r}: "
+            f"expected {expected_native_type!r} from the declared effective layer, "
+            f"got {native['native_object_type']!r}"
+        )
+    record: dict[str, Any] = {
+        "object_name": binding.object_name,
+        "layer": binding.layer,
+        "datatype": layer.datatype,
+        "layer_name": layer.layer_name,
+        "native_import_layer": effective["native_import_layer"],
+        "role": binding.role,
+        "material_id": material.material_id,
+        "kind": material.kind,
+        "is_superconducting": material.is_superconducting,
+        "requested_library_name": material.library_name,
+        "native_destination_layer_prefix": layer.layer_name,
+        "physical_layer_id": effective["physical_layer_id"],
+        "representation": representation,
+        "source_z_min_um": effective["z_min_um"],
+        "source_z_max_um": effective["z_max_um"],
+        "physical_thickness_um": effective["physical_thickness_um"],
+        "effective_z_min_um": effective["effective_z_min_um"],
+        "effective_z_max_um": effective["effective_z_max_um"],
+        **native,
+    }
+    if material.is_superconducting:
+        _bind_superconductor(hfss, obj, material, record, native)
+    else:
+        _bind_library_material(hfss, obj, material, record)
+    return record
+
+
+def _bind_superconductor(
+    hfss: Any, obj: Any, material: Any, record: dict[str, Any], native: dict[str, Any]
+) -> None:
+    """Model a superconductor as PEC: a solid via material, a sheet via Perfect E.
+
+    A solid gets the ``pec`` material with solve-inside off and is read back here.
+    A sheet only records the request; ``_assign_pec_sheets`` assigns one shared
+    Perfect E boundary afterwards.
+    """
+    object_name = record["object_name"]
+    source = {
+        "source_object": object_name,
+        "source_material_id": material.material_id,
+        "source_material_kind": material.kind,
+        "source_library_name": material.library_name,
+    }
+    representation = record["representation"]
+    if representation == "solid":
+        obj.material_name = "pec"
+        obj.solve_inside = False
+        fresh = _native_object_evidence(hfss, object_name)
+        if (
+            fresh["native_object_id"] != native["native_object_id"]
+            or fresh["native_object_type"] != native["native_object_type"]
+            or set(fresh["native_face_ids"]) != set(native["native_face_ids"])
+        ):
             raise RuntimeError(
-                f"import destination-pair mismatch for {binding.object_name!r}: "
-                f"got {[candidate.layer_name for candidate, _ in matches]!r}"
+                f"HFSS PEC native object identity changed for {object_name!r}"
             )
-        layer, effective = matches[0]
-        if binding.layer != layer.layer:
-            raise RuntimeError(
-                f"import source-layer mismatch for {binding.object_name!r}: "
-                f"expected {binding.layer!r}, got {layer.layer!r}"
-            )
-        representation = effective["representation"]
-        expected_native_type = {"solid": "Solid", "sheet": "Sheet"}.get(representation)
-        if expected_native_type is None:
-            raise ValueError(
-                f"unsupported HFSS conductor representation: {representation!r}"
-            )
-        material = materials[binding.material_id]
-        native = _native_object_evidence(hfss, binding.object_name)
-        if native["native_object_type"] != expected_native_type:
-            raise RuntimeError(
-                f"HFSS imported representation mismatch for {binding.object_name!r}: "
-                f"expected {expected_native_type!r} from the declared effective layer, "
-                f"got {native['native_object_type']!r}"
-            )
-        record: dict[str, Any] = {
-            "object_name": binding.object_name,
-            "layer": binding.layer,
-            "datatype": layer.datatype,
-            "layer_name": layer.layer_name,
-            "native_import_layer": effective["native_import_layer"],
-            "role": binding.role,
-            "material_id": material.material_id,
-            "kind": material.kind,
-            "is_superconducting": material.is_superconducting,
-            "requested_library_name": material.library_name,
-            "native_destination_layer_prefix": layer.layer_name,
-            "physical_layer_id": effective["physical_layer_id"],
-            "representation": representation,
-            "source_z_min_um": effective["z_min_um"],
-            "source_z_max_um": effective["z_max_um"],
-            "physical_thickness_um": effective["physical_thickness_um"],
-            "effective_z_min_um": effective["effective_z_min_um"],
-            "effective_z_max_um": effective["effective_z_max_um"],
+        observed_material = native_object_property(obj, "Material").strip('"')
+        observed_solve_inside = _native_object_boolean_property(obj, "Solve Inside")
+        if observed_material.casefold() != "pec" or observed_solve_inside:
+            raise RuntimeError(f"HFSS solid PEC readback mismatch for {object_name!r}")
+        record["hfss_pec_binding"] = {
+            **source,
+            **fresh,
+            "implementation": "pec_material_solve_inside_false",
+            "verified_evidence": {
+                "native_material_name": observed_material,
+                "native_solve_inside": False,
+            },
+        }
+        record["observed"] = {
+            "native_material_name": observed_material,
+            "native_solve_inside": False,
+        }
+    elif representation == "sheet":
+        record["requested_pec_boundary"] = "SCGSimPEC"
+        record["hfss_pec_binding"] = {
+            **source,
             **native,
+            "implementation": "perfect_e_sheet",
         }
-        if material.is_superconducting:
-            if representation == "solid":
-                pec_solids.append(binding.object_name)
-                obj.material_name = "pec"
-                obj.solve_inside = False
-                fresh = _native_object_evidence(hfss, binding.object_name)
-                if (
-                    fresh["native_object_id"] != native["native_object_id"]
-                    or fresh["native_object_type"] != native["native_object_type"]
-                    or set(fresh["native_face_ids"]) != set(native["native_face_ids"])
-                ):
-                    raise RuntimeError(
-                        f"HFSS PEC native object identity changed for {binding.object_name!r}"
-                    )
-                observed_material = native_object_property(obj, "Material").strip('"')
-                observed_solve_inside = _native_object_boolean_property(
-                    obj, "Solve Inside"
-                )
-                if observed_material.casefold() != "pec" or observed_solve_inside:
-                    raise RuntimeError(
-                        f"HFSS solid PEC readback mismatch for {binding.object_name!r}"
-                    )
-                record["hfss_pec_binding"] = {
-                    "source_object": binding.object_name,
-                    "source_material_id": material.material_id,
-                    "source_material_kind": material.kind,
-                    "source_library_name": material.library_name,
-                    **fresh,
-                    "implementation": "pec_material_solve_inside_false",
-                    "verified_evidence": {
-                        "native_material_name": observed_material,
-                        "native_solve_inside": False,
-                    },
-                }
-                record["observed"] = {
-                    "native_material_name": observed_material,
-                    "native_solve_inside": False,
-                }
-            elif representation == "sheet":
-                pec_sheets.append(binding.object_name)
-                record["requested_pec_boundary"] = "SCGSimPEC"
-                record["hfss_pec_binding"] = {
-                    "source_object": binding.object_name,
-                    "source_material_id": material.material_id,
-                    "source_material_kind": material.kind,
-                    "source_library_name": material.library_name,
-                    **native,
-                    "implementation": "perfect_e_sheet",
-                }
-        else:
-            existing = hfss.materials.exists_material(material.library_name)
-            if not existing:
-                raise RuntimeError(
-                    f"AEDT library material is unavailable: {material.library_name!r}"
-                )
-            obj.material_name = material.library_name
-            observed_material = native_object_property(obj, "Material").strip('"')
-            if observed_material.casefold() != material.library_name.casefold():
-                raise RuntimeError(
-                    f"material readback mismatch for {binding.object_name!r}"
-                )
-            record["observed"] = {"native_material_name": observed_material}
-        observed.append(record)
-    if pec_sheets:
-        boundary = hfss.assign_perfect_e(pec_sheets, name="SCGSimPEC")
-        if boundary is None or "SCGSimPEC" not in native_boundary_names(hfss):
-            raise RuntimeError("PEC assignment readback failed")
-        boundary_type = _native_boundary_type(hfss, "SCGSimPEC")
-        if boundary_type != "Perfect E":
-            raise RuntimeError("PEC native boundary type mismatch")
-        raw_assignment_ids = [
-            int(native_id)
-            for native_id in hfss.oboundary.GetBoundaryAssignment("SCGSimPEC")
-        ]
-        resolved, covered_faces, covered_objects = _resolve_native_assignment(
-            hfss, raw_assignment_ids
+
+
+def _bind_library_material(
+    hfss: Any, obj: Any, material: Any, record: dict[str, Any]
+) -> None:
+    """Assign an AEDT library material to a normal conductor or dielectric and read it back."""
+    existing = hfss.materials.exists_material(material.library_name)
+    if not existing:
+        raise RuntimeError(
+            f"AEDT library material is unavailable: {material.library_name!r}"
         )
-        target_faces = {
-            int(face_id)
-            for record in observed
-            if record.get("hfss_pec_binding", {}).get("implementation")
-            == "perfect_e_sheet"
-            for face_id in record["hfss_pec_binding"]["native_face_ids"]
-        }
-        if covered_faces != target_faces or covered_objects != set(pec_sheets):
-            raise RuntimeError("PEC native assignment mismatch")
-        for record in observed:
-            binding = record.get("hfss_pec_binding")
-            if (
-                isinstance(binding, dict)
-                and binding.get("implementation") == "perfect_e_sheet"
-            ):
-                target = set(binding["native_face_ids"])
-                binding["verified_evidence"] = {
-                    "native_boundary_name": "SCGSimPEC",
-                    "native_boundary_type": boundary_type,
-                    "raw_assignment_ids": raw_assignment_ids,
-                    "typed_assignment": resolved,
-                    "covered_face_ids": sorted(covered_faces & target),
-                }
-                record["observed"] = {
-                    "native_pec_boundary": "SCGSimPEC",
-                    "native_pec_boundary_type": boundary_type,
-                    "native_pec_face_ids": sorted(covered_faces & target),
-                    "native_pec_objects": sorted(covered_objects),
-                }
-    elif pec_solids and "SCGSimPEC" in native_boundary_names(hfss):
-        raise RuntimeError("solid PEC binding unexpectedly has SCGSimPEC boundary")
-    return observed
+    obj.material_name = material.library_name
+    observed_material = native_object_property(obj, "Material").strip('"')
+    if observed_material.casefold() != material.library_name.casefold():
+        raise RuntimeError(f"material readback mismatch for {record['object_name']!r}")
+    record["observed"] = {"native_material_name": observed_material}
+
+
+def _assign_pec_sheets(
+    hfss: Any, observed: list[dict[str, Any]], pec_sheets: list[str]
+) -> None:
+    """Assign one Perfect E boundary to every PEC sheet and read it back per sheet."""
+    boundary = hfss.assign_perfect_e(pec_sheets, name="SCGSimPEC")
+    if boundary is None or "SCGSimPEC" not in native_boundary_names(hfss):
+        raise RuntimeError("PEC assignment readback failed")
+    boundary_type = _native_boundary_type(hfss, "SCGSimPEC")
+    if boundary_type != "Perfect E":
+        raise RuntimeError("PEC native boundary type mismatch")
+    raw_assignment_ids = [
+        int(native_id)
+        for native_id in hfss.oboundary.GetBoundaryAssignment("SCGSimPEC")
+    ]
+    resolved, covered_faces, covered_objects = _resolve_native_assignment(
+        hfss, raw_assignment_ids
+    )
+    target_faces = {
+        int(face_id)
+        for record in observed
+        if record.get("hfss_pec_binding", {}).get("implementation") == "perfect_e_sheet"
+        for face_id in record["hfss_pec_binding"]["native_face_ids"]
+    }
+    if covered_faces != target_faces or covered_objects != set(pec_sheets):
+        raise RuntimeError("PEC native assignment mismatch")
+    for record in observed:
+        pec_binding = record.get("hfss_pec_binding")
+        if (
+            isinstance(pec_binding, dict)
+            and pec_binding.get("implementation") == "perfect_e_sheet"
+        ):
+            target = set(pec_binding["native_face_ids"])
+            pec_binding["verified_evidence"] = {
+                "native_boundary_name": "SCGSimPEC",
+                "native_boundary_type": boundary_type,
+                "raw_assignment_ids": raw_assignment_ids,
+                "typed_assignment": resolved,
+                "covered_face_ids": sorted(covered_faces & target),
+            }
+            record["observed"] = {
+                "native_pec_boundary": "SCGSimPEC",
+                "native_pec_boundary_type": boundary_type,
+                "native_pec_face_ids": sorted(covered_faces & target),
+                "native_pec_objects": sorted(covered_objects),
+            }
 
 
 def create_region(hfss: Any, spec: HfssSpec | Q3dSpec) -> dict[str, Any]:

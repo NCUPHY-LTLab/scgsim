@@ -275,7 +275,7 @@ class PreparedBodyEigenmode:
         object.__setattr__(self, "timings", detached_data(self.timings))
 
 
-def prepare_body_eigenmode(
+def prepare_body_eigenmode(  # noqa: PLR0913 - three optional keyword-only hooks supplied by aedt/epr/workflow.py
     Hfss: Any,
     run_dir: Path,
     spec: HfssEprSpec,

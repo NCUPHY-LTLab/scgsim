@@ -12,7 +12,7 @@ from fractions import Fraction
 from itertools import pairwise
 from typing import Any
 
-from scgsim.aedt.preparation.junction_partition import (
+from scgsim.aedt.preparation.junction_exact import (
     _closed_contact,
     _cross,
     _inside_ring,
@@ -477,10 +477,7 @@ def _native_planar_loops(obj: Any, z_um: float, observations=None) -> list[tuple
     return loops
 
 
-# Length: over 150 lines. Order-dependent geometry kernel: it pairs side faces
-# with bottom and top cap edges, and the incidence bookkeeping is shared across
-# the steps, so the branch order fixes which incidence error is raised first.
-def _native_extrusion_sides(obj, bottom, top, z_range, thickness, observations):
+def _native_extrusion_sides(obj, z_range, thickness, observations):
     """Verify straight prism sides against actual caps, independent of subdivision.
 
     Each actual cap edge must belong to exactly one side face by native ID;
@@ -489,55 +486,122 @@ def _native_extrusion_sides(obj, bottom, top, z_range, thickness, observations):
     subdivision edges retain their own incidence. Side faces remain simple
     vertical quadrilaterals after comparison-only straight-chain reduction;
     general face tessellation is unsupported.
+
+    ``observations`` must end with the bottom and top cap observations; each side
+    face read here is appended to it.
     """
     from scgsim.geometry._primitives.loops import (
         _cancel_reversed_planar_edges,
         _simple_planar_loops_from_edges,
     )
 
-    cap_observations = observations[-2:]
-    cap_edges = ({}, {})
-    side_owners = ({}, {})
-    cap_z = [
-        [p[2] for p in observation["face_vertices_um"]]
-        for observation in cap_observations
-    ]
-    boundary_edges = [
-        tuple(tuple(Fraction(str(v)) for v in p) for p in edge["vertices_um"])
-        for observation in cap_observations
-        for edge in observation["edges"]
-    ]
-    if any(
-        not _native_coordinates_close((height,), (thickness,))
-        for height in (max(cap_z[1]) - min(cap_z[0]), min(cap_z[1]) - max(cap_z[0]))
-    ):
-        raise RuntimeError("native junction actual top/bottom extrusion differs")
+    prism = _ExtrusionCaps(obj, z_range, thickness, observations[-2:])
+    prism.check_cap_separation()
+    prism.index_cap_edges()
+    for face in obj.faces:
+        positions = [vertex.position for vertex in face.vertices]
+        if positions and any(
+            all(_native_coordinates_close((p[2],), (z,)) for p in positions)
+            for z in z_range
+        ):
+            continue  # Cap shape and straight edges were already read in full.
+        edges, edge_observations = _native_face_edges(face, obj.name)
+        rings = _simple_planar_loops_from_edges(_cancel_reversed_planar_edges(edges))
+        if len(rings) != 1:
+            raise RuntimeError("native junction extrusion side has unsupported loops")
+        corners, chains = _native_straight_ring(rings[0])
+        prism.check_vertical_quadrilateral(corners)
+        prism.link_side_to_caps(face, edges, edge_observations, chains)
+        prism.boundary_edges.extend(
+            zip(corners, (*corners[1:], corners[0]), strict=False)
+        )
+        observations.append(
+            {
+                "object_name": obj.name,
+                "extrusion_side_vertices_um": [list(map(float, p)) for p in rings[0]],
+                "edges": edge_observations,
+            }
+        )
+    prism.check_vertices_on_boundary()
+    prism.check_every_cap_edge_has_a_side()
 
-    def layer(point):
+
+class _ExtrusionCaps:
+    """Bottom and top cap edges of one extruded object, and which side face owns each.
+
+    Cap edges are keyed by native edge ID, scoped to this live object. Index 0 is
+    the bottom cap and index 1 the top cap in every pair below.
+    """
+
+    def __init__(self, obj, z_range, thickness, cap_observations):
+        self.obj = obj
+        self.z_range = z_range
+        self.thickness = thickness
+        self.cap_observations = cap_observations
+        self.cap_edges = ({}, {})
+        self.side_owners = ({}, {})
+        self.cap_z = [
+            [p[2] for p in observation["face_vertices_um"]]
+            for observation in cap_observations
+        ]
+        self.boundary_edges = [
+            tuple(tuple(Fraction(str(v)) for v in p) for p in edge["vertices_um"])
+            for observation in cap_observations
+            for edge in observation["edges"]
+        ]
+
+    def check_cap_separation(self):
+        """Require the caps to be one extrusion thickness apart."""
+        cap_z = self.cap_z
+        if any(
+            not _native_coordinates_close((height,), (self.thickness,))
+            for height in (
+                max(cap_z[1]) - min(cap_z[0]),
+                min(cap_z[1]) - max(cap_z[0]),
+            )
+        ):
+            raise RuntimeError("native junction actual top/bottom extrusion differs")
+
+    def index_cap_edges(self):
+        """Index every cap edge by its native ID, rejecting missing or reused IDs."""
+        for n, observation in enumerate(self.cap_observations):
+            for edge in observation["edges"]:
+                edge_id = edge.get("edge_id")
+                if isinstance(edge_id, bool) or not isinstance(edge_id, int):
+                    raise self.incidence_error("missing_cap_edge_id", n, cap_edge=edge)
+                if edge_id in self.cap_edges[0] or edge_id in self.cap_edges[1]:
+                    raise self.incidence_error(
+                        "duplicate_cap_edge_id", n, cap_edge=edge
+                    )
+                self.cap_edges[n][edge_id] = edge
+
+    def layer(self, point):
+        """Return 0 for a point on the bottom plane and 1 for the top plane."""
         found = [
             n
-            for n, z in enumerate(z_range)
+            for n, z in enumerate(self.z_range)
             if _native_coordinates_close((point[2],), (z,))
         ]
         if len(found) != 1 or any(
-            not _native_coordinates_close((point[2],), (z,)) for z in cap_z[found[0]]
+            not _native_coordinates_close((point[2],), (z,))
+            for z in self.cap_z[found[0]]
         ):
             raise RuntimeError("native junction actual extrusion vertex Z differs")
         return found[0]
 
     def incidence_error(
-        condition,
-        n,
-        cap_edge=None,
-        side_edge=None,
-        side_face_id=None,
-        prior_side_face_id=None,
+        self, condition, n, cap_edge=None, side_edge=None, side_faces=(None, None)
     ):
+        """Build the cap-side incidence error, carrying a JSON diagnostic.
+
+        ``side_faces`` is ``(side_face_id, prior_side_face_id)``.
+        """
+        side_face_id, prior_side_face_id = side_faces
         diagnostic = {
-            "object_name": obj.name,
+            "object_name": self.obj.name,
             "condition": condition,
             "cap_index": n,
-            "cap_face_id": cap_observations[n].get("face_id"),
+            "cap_face_id": self.cap_observations[n].get("face_id"),
             "edge_id": (cap_edge or side_edge or {}).get("edge_id"),
             "cap_edge_endpoints_um": (cap_edge or {}).get("vertices_um"),
             "side_edge_endpoints_um": (side_edge or {}).get("vertices_um"),
@@ -553,27 +617,9 @@ def _native_extrusion_sides(obj, bottom, top, z_range, thickness, observations):
             + json.dumps(diagnostic, allow_nan=False)
         )
 
-    for n, observation in enumerate(cap_observations):
-        for edge in observation["edges"]:
-            edge_id = edge.get("edge_id")
-            if isinstance(edge_id, bool) or not isinstance(edge_id, int):
-                raise incidence_error("missing_cap_edge_id", n, cap_edge=edge)
-            if edge_id in cap_edges[0] or edge_id in cap_edges[1]:
-                raise incidence_error("duplicate_cap_edge_id", n, cap_edge=edge)
-            cap_edges[n][edge_id] = edge
-
-    for face in obj.faces:
-        positions = [vertex.position for vertex in face.vertices]
-        if positions and any(
-            all(_native_coordinates_close((p[2],), (z,)) for p in positions)
-            for z in z_range
-        ):
-            continue  # Cap shape and straight edges were already read in full.
-        edges, edge_observations = _native_face_edges(face, obj.name)
-        rings = _simple_planar_loops_from_edges(_cancel_reversed_planar_edges(edges))
-        if len(rings) != 1:
-            raise RuntimeError("native junction extrusion side has unsupported loops")
-        corners, chains = _native_straight_ring(rings[0])
+    def check_vertical_quadrilateral(self, corners):
+        """Require two bottom corners and two top corners, joined by vertical edges."""
+        layer = self.layer
         sides = [[p for p in corners if layer(p) == n] for n in (0, 1)]
         if len(corners) != 4 or any(len(side) != 2 for side in sides):
             raise RuntimeError(
@@ -587,11 +633,14 @@ def _native_extrusion_sides(obj, bottom, top, z_range, thickness, observations):
         for point in sides[0]:
             mates = [p for p in sides[1] if _native_coordinates_close(point[:2], p[:2])]
             if len(mates) != 1 or not _native_coordinates_close(
-                (float(mates[0][2] - point[2]),), (thickness,)
+                (float(mates[0][2] - point[2]),), (self.thickness,)
             ):
                 raise RuntimeError(
                     "native junction actual top/bottom extrusion differs"
                 )
+
+    def link_side_to_caps(self, face, edges, edge_observations, chains):
+        """Match each side-face edge on a cap to the cap edge with the same native ID."""
         edge_records = {
             tuple(sorted(edge)): observation
             for edge, observation in zip(edges, edge_observations, strict=False)
@@ -603,23 +652,23 @@ def _native_extrusion_sides(obj, bottom, top, z_range, thickness, observations):
         face_state = getattr(face, "__dict__", {})
         face_id = face_state.get("_id", face_state.get("id"))
         for chain in chains:
-            n = layer(chain[0])
-            if layer(chain[-1]) != n:
+            n = self.layer(chain[0])
+            if self.layer(chain[-1]) != n:
                 continue  # Existing vertical-chain checks retain intermediate nodes.
             for a, b in pairwise(chain):
                 side_edge = edge_records[tuple(sorted((a, b)))]
                 edge_id = side_edge.get("edge_id")
                 cap_edge = (
-                    cap_edges[n].get(edge_id)
+                    self.cap_edges[n].get(edge_id)
                     if isinstance(edge_id, int) and not isinstance(edge_id, bool)
                     else None
                 )
                 if cap_edge is None:
-                    raise incidence_error(
+                    raise self.incidence_error(
                         "unmatched_side_edge",
                         n,
                         side_edge=side_edge,
-                        side_face_id=face_id,
+                        side_faces=(face_id, None),
                     )
                 wanted = cap_edge["vertices_um"]
                 actual = side_edge["vertices_um"]
@@ -630,41 +679,45 @@ def _native_extrusion_sides(obj, bottom, top, z_range, thickness, observations):
                     )
                     for ordering in (wanted, wanted[::-1])
                 ):
-                    raise incidence_error(
-                        "linked_edge_geometry_mismatch", n, cap_edge, side_edge, face_id
+                    raise self.incidence_error(
+                        "linked_edge_geometry_mismatch",
+                        n,
+                        cap_edge,
+                        side_edge,
+                        (face_id, None),
                     )
-                if edge_id in side_owners[n]:
-                    raise incidence_error(
+                if edge_id in self.side_owners[n]:
+                    raise self.incidence_error(
                         "duplicate_side_incidence",
                         n,
                         cap_edge,
                         side_edge,
-                        face_id,
-                        side_owners[n][edge_id],
+                        (face_id, self.side_owners[n][edge_id]),
                     )
-                side_owners[n][edge_id] = face_id
-        boundary_edges.extend(zip(corners, (*corners[1:], corners[0]), strict=False))
-        observations.append(
-            {
-                "object_name": obj.name,
-                "extrusion_side_vertices_um": [list(map(float, p)) for p in rings[0]],
-                "edges": edge_observations,
-            }
-        )
-    for vertex in obj.vertices:
-        position = vertex.position
-        if (
-            position is None
-            or len(position) != 3
-            or not _native_z_may_contact(
-                (position[2], position[2]), (min(cap_z[0]), max(cap_z[1]))
-            )
-            or not any(_native_on_segment(position, a, b) for a, b in boundary_edges)
-        ):
-            raise RuntimeError(
-                "native solid vertex differs from actual extrusion boundary"
-            )
-    for n, edges in enumerate(cap_edges):
-        for edge_id, edge in edges.items():
-            if edge_id not in side_owners[n]:
-                raise incidence_error("missing_side_incidence", n, cap_edge=edge)
+                self.side_owners[n][edge_id] = face_id
+
+    def check_vertices_on_boundary(self):
+        """Require every solid vertex to lie on a cap or side boundary edge."""
+        z_span = (min(self.cap_z[0]), max(self.cap_z[1]))
+        for vertex in self.obj.vertices:
+            position = vertex.position
+            if (
+                position is None
+                or len(position) != 3
+                or not _native_z_may_contact((position[2], position[2]), z_span)
+                or not any(
+                    _native_on_segment(position, a, b) for a, b in self.boundary_edges
+                )
+            ):
+                raise RuntimeError(
+                    "native solid vertex differs from actual extrusion boundary"
+                )
+
+    def check_every_cap_edge_has_a_side(self):
+        """Require every cap edge to have been claimed by exactly one side face."""
+        for n, edges in enumerate(self.cap_edges):
+            for edge_id, edge in edges.items():
+                if edge_id not in self.side_owners[n]:
+                    raise self.incidence_error(
+                        "missing_side_incidence", n, cap_edge=edge
+                    )

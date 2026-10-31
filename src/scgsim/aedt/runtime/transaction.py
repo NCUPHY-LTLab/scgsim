@@ -109,6 +109,7 @@ class _Attempt:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Command-line entry point: run one prepared handoff and return the exit code."""
     parser = argparse.ArgumentParser(description="Run one prepared SCGSim AEDT handoff")
     parser.add_argument("--handoff", required=True)
     parser.add_argument(

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from scgsim.aedt.runtime.families.hfss_readback import (
@@ -54,13 +55,7 @@ def _assign_body_terminal_ports(
             if isinstance(port, LumpedTerminalPort):
                 support = supports[port.support_id]
                 record = assign_terminal_lumped(
-                    hfss,
-                    hfss.modeler[support["object_name"]],
-                    name=port.name,
-                    reference_objects=references,
-                    impedance_ohm=port.impedance_ohm,
-                    renormalize=port.renormalize,
-                    deembed_um=port.deembed_um,
+                    hfss, hfss.modeler[support["object_name"]], port, references
                 )
                 record["support"] = detached_data(support)
             else:
@@ -137,9 +132,15 @@ def _assign_body_terminal_ports(
     return records
 
 
-# Length: over 150 lines. One loop over ports reads the saved boundary, terminal
-# and reference records and keeps the raw native record before any validation, so
-# a malformed record stays in the error; the validation order is the error order.
+@dataclass(frozen=True)
+class _SavedTerminalSetup:
+    """Saved boundary records and the global terminal reference conductors."""
+
+    boundaries: dict[str, Any]
+    reference_ids: list[int]
+    reference_names: list[str]
+
+
 def _bind_body_terminal_evidence(
     hfss: Any,
     spec: HfssDrivenGeometrySpec,
@@ -147,174 +148,10 @@ def _bind_body_terminal_evidence(
     ports: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Read saved Terminal assignments and their actual conductor owners."""
-    boundaries = hfss.design_properties["BoundarySetup"]["Boundaries"]
-    reference_ids = _native_terminal_reference_ids(hfss)
-    reference_names = [hfss.oeditor.GetObjectNameByID(value) for value in reference_ids]
+    saved = _read_saved_terminal_setup(hfss)
     for record, port in zip(ports, spec.ports, strict=True):
         try:
-            terminal_name = record["terminal_excitation"]
-            native_terminal = boundaries[terminal_name]
-            native_boundary = boundaries[record["boundary"]]
-            native = {
-                "saved_boundary": detached_data(native_boundary),
-                "saved_terminal": detached_data(native_terminal),
-            }
-            # Retain the raw child record before reading its assignment list so
-            # any malformed or unsupported native shape remains in the error.
-            record["native"] = native
-
-            def assignment_ids(key: str) -> list[int] | None:
-                if key not in native_terminal:  # noqa: B023 - called within the iteration that defines it
-                    return None
-                values = native_terminal[key]  # noqa: B023 - called within the iteration that defines it
-                if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
-                    raise RuntimeError(
-                        f"saved Terminal {key} assignment is invalid: {port.name!r}"  # noqa: B023 - called within the iteration that defines it
-                    )
-                if not values:
-                    return None
-                return [int(value) for value in values]
-
-            edges = assignment_ids("Edges")
-            faces = assignment_ids("Faces")
-            if (edges is None) == (faces is None):
-                raise RuntimeError(
-                    f"saved Terminal child assignment must have exactly one "
-                    f"nonempty Edges or Faces list: {port.name!r}"
-                )
-            owners = []
-            if edges is not None:
-                edge_records = []
-                native["terminal_edges"] = edge_records
-                for edge_id in edges:
-                    matches = [
-                        item["object_name"]
-                        for item in geometry["objects"]
-                        if item["kind"] == "conductor"
-                        and edge_id
-                        in {
-                            int(edge.id)
-                            for edge in hfss.modeler[item["object_name"]].edges
-                        }
-                    ]
-                    if len(matches) != 1:
-                        raise RuntimeError(
-                            f"native Terminal edge owner is ambiguous: {edge_id}"
-                        )
-                    edge_records.append(
-                        {
-                            "edge_id": edge_id,
-                            "object_name": matches[0],
-                            "native_object_id": int(hfss.modeler[matches[0]].id),
-                        }
-                    )
-                    if matches[0] not in owners:
-                        owners.append(matches[0])
-            else:
-                if faces is None:
-                    raise RuntimeError(
-                        f"saved Terminal child assignment is unavailable: {port.name!r}"
-                    )
-                face_records = []
-                native["terminal_assignment_kind"] = "Faces"
-                native["terminal_faces"] = face_records
-                for face_id in faces:
-                    matches = [
-                        item["object_name"]
-                        for item in geometry["objects"]
-                        if item["kind"] == "conductor"
-                        and face_id
-                        in {
-                            int(face.id)
-                            for face in hfss.modeler[item["object_name"]].faces
-                        }
-                    ]
-                    if len(matches) != 1:
-                        raise RuntimeError(
-                            f"native Terminal face owner is ambiguous: {face_id}"
-                        )
-                    face_records.append(
-                        {
-                            "face_id": face_id,
-                            "object_name": matches[0],
-                            "native_object_id": int(hfss.modeler[matches[0]].id),
-                        }
-                    )
-                    if matches[0] not in owners:
-                        owners.append(matches[0])
-            native["signal_objects"] = owners
-            native["reference_conductor_ids"] = reference_ids
-            native["reference_conductors"] = reference_names
-            native["boundary_properties"] = _native_oo_properties(
-                hfss, f"Excitations\\{record['boundary']}"
-            )
-            native["terminal_properties"] = _native_oo_properties(
-                hfss, f"Excitations\\{record['boundary']}\\{terminal_name}"
-            )
-            if not owners or not set(owners).issubset(
-                record["source_binding"]["signal_objects"]
-            ):
-                raise RuntimeError(
-                    f"native Terminal signal ownership differs: {port.name!r}"
-                )
-            if not set(record["source_binding"]["reference_objects"]).issubset(
-                reference_names
-            ):
-                raise RuntimeError(f"native Terminal references differ: {port.name!r}")
-            expected_type = (
-                "Lumped Port" if isinstance(port, LumpedTerminalPort) else "Wave Port"
-            )
-            if (
-                native_boundary["BoundType"] != expected_type
-                or native["terminal_properties"].get("Port Name") != port.name
-            ):
-                raise RuntimeError(
-                    f"saved Terminal family/parent differs: {port.name!r}"
-                )
-            if [int(value) for value in native_boundary["Faces"]] != [
-                record["face_id"]
-            ]:
-                raise RuntimeError(
-                    f"saved Terminal support assignment differs: {port.name!r}"
-                )
-            renorm = port.renormalize if isinstance(port, LumpedTerminalPort) else False
-            _require_native_properties(
-                native["boundary_properties"],
-                {
-                    "Type": expected_type,
-                    "Renorm All Terminals": renorm,
-                    **(
-                        {"Deembed": False}
-                        if isinstance(port, LumpedTerminalPort)
-                        else {}
-                    ),
-                },
-                port.name,
-            )
-            if isinstance(port, LumpedTerminalPort):
-                _require_native_properties(
-                    native["terminal_properties"],
-                    {"Terminal Renormalizing Impedance": f"{port.impedance_ohm:g}ohm"},
-                    terminal_name,
-                )
-            else:
-                # With renormalization disabled this is native metadata, not a
-                # source-authored load or solved characteristic impedance.
-                if native["boundary_properties"].get("Deembed") not in (
-                    True,
-                    False,
-                    "true",
-                    "false",
-                ):
-                    raise RuntimeError("native Wave deembed flag is unavailable")
-                native["inactive_renormalizing_impedance"] = native[
-                    "terminal_properties"
-                ].get("Terminal Renormalizing Impedance")
-                _require_native_properties(
-                    native["boundary_properties"],
-                    {"Deembed Dist": f"{port.deembed_um:g}um"},
-                    port.name,
-                )
+            _bind_port_terminal(hfss, geometry, record, port, saved)
         except Exception as exc:
             exc.add_note(
                 "saved body-first Terminal readback: "
@@ -334,8 +171,185 @@ def _bind_body_terminal_evidence(
         for record in ports
         for name in record["source_binding"]["reference_objects"]
     }
-    if set(reference_names) != expected_references:
+    if set(saved.reference_names) != expected_references:
         raise RuntimeError(
             "body-first global native Terminal reference inventory differs"
         )
     return ports
+
+
+def _read_saved_terminal_setup(hfss: Any) -> _SavedTerminalSetup:
+    """Read the saved boundary records and the conductors AEDT uses as references."""
+    boundaries = hfss.design_properties["BoundarySetup"]["Boundaries"]
+    reference_ids = _native_terminal_reference_ids(hfss)
+    reference_names = [hfss.oeditor.GetObjectNameByID(value) for value in reference_ids]
+    return _SavedTerminalSetup(boundaries, reference_ids, reference_names)
+
+
+def _bind_port_terminal(
+    hfss: Any,
+    geometry: dict[str, Any],
+    record: dict[str, Any],
+    port: Any,
+    saved: _SavedTerminalSetup,
+) -> None:
+    """Attach the saved boundary and terminal readback to ``record`` and verify it."""
+    terminal_name = record["terminal_excitation"]
+    native_terminal = saved.boundaries[terminal_name]
+    native_boundary = saved.boundaries[record["boundary"]]
+    native = {
+        "saved_boundary": detached_data(native_boundary),
+        "saved_terminal": detached_data(native_terminal),
+    }
+    # Retain the raw child record before reading its assignment list so
+    # any malformed or unsupported native shape remains in the error.
+    record["native"] = native
+
+    owners = _read_terminal_owners(hfss, geometry, native, native_terminal, port.name)
+    native["signal_objects"] = owners
+    native["reference_conductor_ids"] = saved.reference_ids
+    native["reference_conductors"] = saved.reference_names
+    native["boundary_properties"] = _native_oo_properties(
+        hfss, f"Excitations\\{record['boundary']}"
+    )
+    native["terminal_properties"] = _native_oo_properties(
+        hfss, f"Excitations\\{record['boundary']}\\{terminal_name}"
+    )
+    if not owners or not set(owners).issubset(
+        record["source_binding"]["signal_objects"]
+    ):
+        raise RuntimeError(f"native Terminal signal ownership differs: {port.name!r}")
+    if not set(record["source_binding"]["reference_objects"]).issubset(
+        saved.reference_names
+    ):
+        raise RuntimeError(f"native Terminal references differ: {port.name!r}")
+    _verify_terminal_family(native, native_boundary, record, port, terminal_name)
+
+
+def _terminal_assignment_ids(
+    native_terminal: dict[str, Any], key: str, port_name: str
+) -> list[int] | None:
+    """Return the ``Edges`` or ``Faces`` ID list of a saved terminal, or None if empty/absent."""
+    if key not in native_terminal:
+        return None
+    values = native_terminal[key]
+    if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
+        raise RuntimeError(f"saved Terminal {key} assignment is invalid: {port_name!r}")
+    if not values:
+        return None
+    return [int(value) for value in values]
+
+
+def _read_terminal_owners(
+    hfss: Any,
+    geometry: dict[str, Any],
+    native: dict[str, Any],
+    native_terminal: dict[str, Any],
+    port_name: str,
+) -> list[str]:
+    """Find the conductor object that owns each edge or face the terminal is assigned to.
+
+    A saved terminal carries exactly one nonempty ``Edges`` or ``Faces`` list. The
+    per-ID records are stored on ``native``; the owner names are returned in order of
+    first appearance.
+    """
+    edges = _terminal_assignment_ids(native_terminal, "Edges", port_name)
+    faces = _terminal_assignment_ids(native_terminal, "Faces", port_name)
+    if (edges is None) == (faces is None):
+        raise RuntimeError(
+            f"saved Terminal child assignment must have exactly one "
+            f"nonempty Edges or Faces list: {port_name!r}"
+        )
+    owners: list[str] = []
+    if edges is not None:
+        kind, ids = "edge", edges
+        owner_records = native["terminal_edges"] = []
+    else:
+        kind, ids = "face", faces
+        native["terminal_assignment_kind"] = "Faces"
+        owner_records = native["terminal_faces"] = []
+    for native_id in ids:
+        owner = _conductor_owning(hfss, geometry, kind, native_id)
+        owner_records.append(
+            {
+                f"{kind}_id": native_id,
+                "object_name": owner,
+                "native_object_id": int(hfss.modeler[owner].id),
+            }
+        )
+        if owner not in owners:
+            owners.append(owner)
+    return owners
+
+
+def _conductor_owning(
+    hfss: Any, geometry: dict[str, Any], kind: str, native_id: int
+) -> str:
+    """Return the one conductor object that has the native edge or face ``native_id``."""
+    matches = [
+        item["object_name"]
+        for item in geometry["objects"]
+        if item["kind"] == "conductor"
+        and native_id
+        in {
+            int(part.id)
+            for part in getattr(hfss.modeler[item["object_name"]], f"{kind}s")
+        }
+    ]
+    if len(matches) != 1:
+        raise RuntimeError(f"native Terminal {kind} owner is ambiguous: {native_id}")
+    return matches[0]
+
+
+def _verify_terminal_family(
+    native: dict[str, Any],
+    native_boundary: dict[str, Any],
+    record: dict[str, Any],
+    port: Any,
+    terminal_name: str,
+) -> None:
+    """Check the saved boundary type, parent and renormalization settings match the port."""
+    expected_type = (
+        "Lumped Port" if isinstance(port, LumpedTerminalPort) else "Wave Port"
+    )
+    if (
+        native_boundary["BoundType"] != expected_type
+        or native["terminal_properties"].get("Port Name") != port.name
+    ):
+        raise RuntimeError(f"saved Terminal family/parent differs: {port.name!r}")
+    if [int(value) for value in native_boundary["Faces"]] != [record["face_id"]]:
+        raise RuntimeError(f"saved Terminal support assignment differs: {port.name!r}")
+    renorm = port.renormalize if isinstance(port, LumpedTerminalPort) else False
+    _require_native_properties(
+        native["boundary_properties"],
+        {
+            "Type": expected_type,
+            "Renorm All Terminals": renorm,
+            **({"Deembed": False} if isinstance(port, LumpedTerminalPort) else {}),
+        },
+        port.name,
+    )
+    if isinstance(port, LumpedTerminalPort):
+        _require_native_properties(
+            native["terminal_properties"],
+            {"Terminal Renormalizing Impedance": f"{port.impedance_ohm:g}ohm"},
+            terminal_name,
+        )
+    else:
+        # With renormalization disabled this is native metadata, not a
+        # source-authored load or solved characteristic impedance.
+        if native["boundary_properties"].get("Deembed") not in (
+            True,
+            False,
+            "true",
+            "false",
+        ):
+            raise RuntimeError("native Wave deembed flag is unavailable")
+        native["inactive_renormalizing_impedance"] = native["terminal_properties"].get(
+            "Terminal Renormalizing Impedance"
+        )
+        _require_native_properties(
+            native["boundary_properties"],
+            {"Deembed Dist": f"{port.deembed_um:g}um"},
+            port.name,
+        )

@@ -14,20 +14,16 @@ from typing import Any
 
 from scgsim.aedt._data import detached as detached_data
 from scgsim.aedt._rlc import rlc_native_topology, rlc_scalar_si
+from scgsim.aedt.specs.common import LumpedRlc, LumpedTerminalPort
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 
 
 def assign_terminal_lumped(
-    app: Any,
-    sheet: Any,
-    *,
-    name: str,
-    reference_objects: list[str],
-    impedance_ohm: float,
-    renormalize: bool,
-    deembed_um: float,
+    app: Any, sheet: Any, port: LumpedTerminalPort, reference_objects: list[str]
 ) -> dict[str, Any]:
     """Use the pinned Terminal AutoIdentify route on one already-bound Sheet."""
+    name = port.name
+    deembed_um = port.deembed_um
     if app.solution_type != "Terminal":
         raise RuntimeError("source-bound Lumped ports require DrivenTerminal")
     if deembed_um != 0:
@@ -40,9 +36,9 @@ def assign_terminal_lumped(
         reference=reference_objects,
         create_port_sheet=False,
         auto_identify=True,
-        impedance=impedance_ohm,
+        impedance=port.impedance_ohm,
         name=name,
-        renormalize=renormalize,
+        renormalize=port.renormalize,
         deembed=bool(deembed_um),
         terminals_rename=False,
     )
@@ -68,13 +64,10 @@ def assign_rlc(
     *,
     name: str,
     contact_points_um: list[list[float]],
-    topology: str,
-    resistance_ohm: float | None,
-    inductance_h: float | None,
-    capacitance_f: float | None,
+    treatment: LumpedRlc,
 ) -> dict[str, Any]:
     """Assign exactly the authored enabled R/L/C branches on a bound support."""
-    native_topology = rlc_native_topology(topology)
+    native_topology = rlc_native_topology(treatment.topology)
     # The convenience writer rejects all-falsy values before native assignment.
     # Author the same native boundary once, with None alone disabling a branch.
     props = {
@@ -86,9 +79,9 @@ def assign_rlc(
         "RLC Type": native_topology,
     }
     for enabled, value_key, value, unit in (
-        ("UseResist", "Resistance", resistance_ohm, "ohm"),
-        ("UseInduct", "Inductance", inductance_h, "H"),
-        ("UseCap", "Capacitance", capacitance_f, "F"),
+        ("UseResist", "Resistance", treatment.resistance_ohm, "ohm"),
+        ("UseInduct", "Inductance", treatment.inductance_h, "H"),
+        ("UseCap", "Capacitance", treatment.capacitance_f, "F"),
     ):
         props[enabled] = value is not None
         if value is not None:
@@ -100,10 +93,7 @@ def assign_rlc(
         sheet,
         name=boundary.name,
         contact_points_um=contact_points_um,
-        topology=topology,
-        resistance_ohm=resistance_ohm,
-        inductance_h=inductance_h,
-        capacitance_f=capacitance_f,
+        treatment=treatment,
     )
 
 
@@ -112,10 +102,7 @@ def rlc_record(
     *,
     name: str,
     contact_points_um: list[list[float]],
-    topology: str,
-    resistance_ohm: float | None,
-    inductance_h: float | None,
-    capacitance_f: float | None,
+    treatment: LumpedRlc,
 ) -> dict[str, Any]:
     """The same authored request ledger is used on construction and saved rebind."""
     return {
@@ -124,12 +111,12 @@ def rlc_record(
         "native_object_id": int(sheet.id),
         "native_face_ids": [int(face.id) for face in sheet.faces],
         "requested": {
-            "topology": topology,
-            "native_topology": rlc_native_topology(topology),
+            "topology": treatment.topology,
+            "native_topology": rlc_native_topology(treatment.topology),
             "contact_points_um": contact_points_um,
-            "resistance_ohm": resistance_ohm,
-            "inductance_h": inductance_h,
-            "capacitance_f": capacitance_f,
+            "resistance_ohm": treatment.resistance_ohm,
+            "inductance_h": treatment.inductance_h,
+            "capacitance_f": treatment.capacitance_f,
         },
     }
 
@@ -203,10 +190,7 @@ def _assign_generic_rlcs(app: Any, spec: Any, geometry: dict[str, Any]) -> None:
                 app.modeler[support["object_name"]],
                 name=_native_name("rlc", treatment.support_id),
                 contact_points_um=support["effective"]["contact_points_um"],
-                topology=treatment.topology,
-                resistance_ohm=treatment.resistance_ohm,
-                inductance_h=treatment.inductance_h,
-                capacitance_f=treatment.capacitance_f,
+                treatment=treatment,
             )
         except Exception as exc:
             exc.add_note(
@@ -230,6 +214,7 @@ def _assign_generic_rlcs(app: Any, spec: Any, geometry: dict[str, Any]) -> None:
 def _bind_saved_generic_rlcs(
     app: Any, prepared: PreparedPlanarGeometry, geometry: dict[str, Any]
 ) -> None:
+    """Rebuild the generic RLC records from the saved project, then read them back."""
     from scgsim.aedt.preparation.planar import _native_name
 
     supports = {
@@ -243,10 +228,7 @@ def _bind_saved_generic_rlcs(
             app.modeler[support["object_name"]],
             name=_native_name("rlc", treatment.support_id),
             contact_points_um=support["effective"]["contact_points_um"],
-            topology=treatment.topology,
-            resistance_ohm=treatment.resistance_ohm,
-            inductance_h=treatment.inductance_h,
-            capacitance_f=treatment.capacitance_f,
+            treatment=treatment,
         )
         geometry["lumped_rlcs"].append(
             {
@@ -259,7 +241,7 @@ def _bind_saved_generic_rlcs(
 
 
 def _read_generic_rlcs(app: Any, geometry: dict[str, Any]) -> None:
-
+    """Check each generic RLC against the saved project and live native properties."""
     records = geometry.get("lumped_rlcs", ())
     if not records:
         return

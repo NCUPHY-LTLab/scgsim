@@ -206,6 +206,12 @@ def _same_q3d_bounds(observed: Any, expected: list[float]) -> bool:
 
 
 def _seal_q3d_region(app: Any, spec: Q3dSpec) -> dict[str, Any]:
+    """Replace the Region with six PEC sheets on its faces, grounded as one net.
+
+    The six sheets are created while the Region is deleted, then a zero-padding
+    Region is recreated on the same bounds. Declared net assignments must be
+    unchanged by all of this.
+    """
     initial_region = app.modeler.get_object_from_name("Region")
     if initial_region is None or initial_region.name != "Region":
         raise RuntimeError("Q3D Region is unavailable for grounding")
@@ -221,79 +227,11 @@ def _seal_q3d_region(app: Any, spec: Q3dSpec) -> dict[str, Any]:
     initial_sheets = set(app.modeler.sheet_names)
     if not app.modeler.delete("Region"):
         raise RuntimeError("Q3D initial Region could not be frozen for grounding")
-    created: dict[str, tuple[Any, list[float]]] = {}
-    for direction in _Q3D_REGION_DIRECTIONS:
-        sheet_name, _ = _Q3D_REGION_SHEET_NAMES[direction]
-        orientation, origin, sizes, expected_bounds = _q3d_region_sheet_geometry(
-            direction, intended_bounds
-        )
-        sheet = app.modeler.create_rectangle(
-            orientation=orientation,
-            origin=origin,
-            sizes=sizes,
-            name=sheet_name,
-            material="pec",
-        )
-        if (
-            sheet is None
-            or sheet.name != sheet_name
-            or sheet_name not in app.modeler.sheet_names
-            or not _same_q3d_bounds(sheet.bounding_box, expected_bounds)
-        ):
-            raise RuntimeError(
-                f"Q3D Region grounding sheet creation failed for {direction}"
-            )
-        created[direction] = (sheet, expected_bounds)
-    region = app.modeler.create_region(
-        pad_value=[0.0] * 6,
-        pad_type="Absolute Offset",
-        name="Region",
-    )
-    vacuum = spec.materials[spec.vacuum_material_id]
-    region.material_name = vacuum.library_name
-    if (
-        region.name != "Region"
-        or _native_object_property(region, "Material").strip('"').casefold()
-        != vacuum.library_name.casefold()
-        or not _same_q3d_bounds(region.bounding_box, list(intended_bounds))
-    ):
-        raise RuntimeError("Q3D final grounded Region readback failed")
+    created = _create_region_ground_sheets(app, intended_bounds)
+    region = _recreate_sealed_region(app, spec, intended_bounds)
     bounds = _q3d_region_bounds(region)
     faces = _q3d_region_faces(region, bounds)
-    records: list[dict[str, Any]] = []
-    for direction in _Q3D_REGION_DIRECTIONS:
-        source_face, source_center, source_normal = source_faces[direction]
-        sheet_name, boundary_name = _Q3D_REGION_SHEET_NAMES[direction]
-        sheet, expected_bounds = created[direction]
-        boundary = app.assign_thin_conductor(
-            assignment=sheet,
-            material="pec",
-            thickness=1,
-            name=boundary_name,
-        )
-        if not boundary or boundary.name != boundary_name:
-            raise RuntimeError(
-                f"Q3D Region thin conductor assignment failed for {direction}"
-            )
-        sheet_id = int(sheet.id)
-        if _q3d_assignment(app, boundary_name) != [sheet_id]:
-            raise RuntimeError(
-                f"Q3D Region thin conductor readback failed for {direction}"
-            )
-        records.append(
-            {
-                "direction": direction,
-                "source_region_object_id": int(initial_region.id),
-                "source_face_id": int(source_face.id),
-                "source_face_center_um": list(source_center),
-                "source_face_normal": list(source_normal),
-                "sheet_name": sheet_name,
-                "sheet_object_id": sheet_id,
-                "sheet_bounding_box_um": [float(value) for value in sheet.bounding_box],
-                "boundary_name": boundary_name,
-                "native_thin_conductor_object_ids": [sheet_id],
-            }
-        )
+    records = _assign_region_thin_conductors(app, initial_region, source_faces, created)
     if set(app.modeler.sheet_names) - initial_sheets != set(sheet_names):
         raise RuntimeError("Q3D Region grounding did not create exactly six sheets")
     target = app.assign_net(sheet_names, spec.grounded_region_net, "Ground")
@@ -327,6 +265,105 @@ def _seal_q3d_region(app: Any, spec: Q3dSpec) -> dict[str, Any]:
         "native_declared_net_object_ids": declared_net_ids,
         "native_target_net_object_ids": native_target_ids,
     }
+
+
+def _create_region_ground_sheets(
+    app: Any, intended_bounds: tuple[float, float, float, float, float, float]
+) -> dict[str, tuple[Any, list[float]]]:
+    """Create one PEC rectangle on each face of the old Region, keyed by direction."""
+    created: dict[str, tuple[Any, list[float]]] = {}
+    for direction in _Q3D_REGION_DIRECTIONS:
+        sheet_name, _ = _Q3D_REGION_SHEET_NAMES[direction]
+        orientation, origin, sizes, expected_bounds = _q3d_region_sheet_geometry(
+            direction, intended_bounds
+        )
+        sheet = app.modeler.create_rectangle(
+            orientation=orientation,
+            origin=origin,
+            sizes=sizes,
+            name=sheet_name,
+            material="pec",
+        )
+        if (
+            sheet is None
+            or sheet.name != sheet_name
+            or sheet_name not in app.modeler.sheet_names
+            or not _same_q3d_bounds(sheet.bounding_box, expected_bounds)
+        ):
+            raise RuntimeError(
+                f"Q3D Region grounding sheet creation failed for {direction}"
+            )
+        created[direction] = (sheet, expected_bounds)
+    return created
+
+
+def _recreate_sealed_region(
+    app: Any,
+    spec: Q3dSpec,
+    intended_bounds: tuple[float, float, float, float, float, float],
+) -> Any:
+    """Recreate the vacuum Region with zero padding on the old bounds."""
+    region = app.modeler.create_region(
+        pad_value=[0.0] * 6,
+        pad_type="Absolute Offset",
+        name="Region",
+    )
+    vacuum = spec.materials[spec.vacuum_material_id]
+    region.material_name = vacuum.library_name
+    if (
+        region.name != "Region"
+        or _native_object_property(region, "Material").strip('"').casefold()
+        != vacuum.library_name.casefold()
+        or not _same_q3d_bounds(region.bounding_box, list(intended_bounds))
+    ):
+        raise RuntimeError("Q3D final grounded Region readback failed")
+    return region
+
+
+def _assign_region_thin_conductors(
+    app: Any,
+    initial_region: Any,
+    source_faces: dict[
+        str, tuple[Any, tuple[float, float, float], tuple[float, float, float]]
+    ],
+    created: dict[str, tuple[Any, list[float]]],
+) -> list[dict[str, Any]]:
+    """Give each ground sheet a PEC ThinConductor boundary and record the source face."""
+    records: list[dict[str, Any]] = []
+    for direction in _Q3D_REGION_DIRECTIONS:
+        source_face, source_center, source_normal = source_faces[direction]
+        sheet_name, boundary_name = _Q3D_REGION_SHEET_NAMES[direction]
+        sheet, _ = created[direction]
+        boundary = app.assign_thin_conductor(
+            assignment=sheet,
+            material="pec",
+            thickness=1,
+            name=boundary_name,
+        )
+        if not boundary or boundary.name != boundary_name:
+            raise RuntimeError(
+                f"Q3D Region thin conductor assignment failed for {direction}"
+            )
+        sheet_id = int(sheet.id)
+        if _q3d_assignment(app, boundary_name) != [sheet_id]:
+            raise RuntimeError(
+                f"Q3D Region thin conductor readback failed for {direction}"
+            )
+        records.append(
+            {
+                "direction": direction,
+                "source_region_object_id": int(initial_region.id),
+                "source_face_id": int(source_face.id),
+                "source_face_center_um": list(source_center),
+                "source_face_normal": list(source_normal),
+                "sheet_name": sheet_name,
+                "sheet_object_id": sheet_id,
+                "sheet_bounding_box_um": [float(value) for value in sheet.bounding_box],
+                "boundary_name": boundary_name,
+                "native_thin_conductor_object_ids": [sheet_id],
+            }
+        )
+    return records
 
 
 def _read_q3d_region_ground(

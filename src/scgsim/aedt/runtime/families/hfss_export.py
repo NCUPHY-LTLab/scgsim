@@ -233,11 +233,51 @@ def _write_complex_csv(
 def _verify_touchstone(
     path: Path, spec: HfssDrivenSpec, native_port_names: list[str]
 ) -> dict[str, Any]:
+    """Check an exported two-port Touchstone file against the sweep and native port order."""
     if path.suffix.lower() != ".s2p" or path.stat().st_size == 0:
         raise RuntimeError("Touchstone must be a nonempty .s2p file")
     if len(native_port_names) != 2 or len(set(native_port_names)) != 2:
         raise RuntimeError("Touchstone requires two ordered native port names")
     point_count = int(spec.run_control.sweep.points)
+    unit, frequencies, header_ports = _read_touchstone_records(path)
+    if (
+        unit != "GHz"
+        or len(frequencies) != point_count
+        or not math.isclose(
+            frequencies[0], spec.run_control.sweep.start_ghz, abs_tol=1e-9
+        )
+        or not math.isclose(
+            frequencies[-1], spec.run_control.sweep.stop_ghz, abs_tol=1e-9
+        )
+        or any(right <= left for left, right in pairwise(frequencies))
+    ):
+        raise RuntimeError(
+            "Touchstone records have invalid count, units, endpoints, or ordering"
+        )
+    if [header_ports.get(1), header_ports.get(2)] != native_port_names:
+        raise RuntimeError(
+            "Touchstone indexed port-name order does not match native ports"
+        )
+    return {
+        "path": path.name,
+        "ports": 2,
+        "records": len(frequencies),
+        "frequency_unit": unit,
+        "first_frequency_ghz": frequencies[0],
+        "last_frequency_ghz": frequencies[-1],
+        "strictly_increasing": True,
+        "port_order": native_port_names,
+        "bytes": path.stat().st_size,
+    }
+
+
+def _read_touchstone_records(
+    path: Path,
+) -> tuple[str | None, list[float], dict[int, str]]:
+    """Read the frequency unit, data-record frequencies and ``! Port[n]`` names of a Touchstone file.
+
+    Lines that are neither headers nor numeric data records are skipped.
+    """
     unit: str | None = None
     frequencies: list[float] = []
     header_ports: dict[int, str] = {}
@@ -269,32 +309,4 @@ def _verify_touchstone(
         if len(tokens) != 9:
             raise RuntimeError("Touchstone is not a two-port data record")
         frequencies.append(frequency)
-    if (
-        unit != "GHz"
-        or len(frequencies) != point_count
-        or not math.isclose(
-            frequencies[0], spec.run_control.sweep.start_ghz, abs_tol=1e-9
-        )
-        or not math.isclose(
-            frequencies[-1], spec.run_control.sweep.stop_ghz, abs_tol=1e-9
-        )
-        or any(right <= left for left, right in pairwise(frequencies))
-    ):
-        raise RuntimeError(
-            "Touchstone records have invalid count, units, endpoints, or ordering"
-        )
-    if [header_ports.get(1), header_ports.get(2)] != native_port_names:
-        raise RuntimeError(
-            "Touchstone indexed port-name order does not match native ports"
-        )
-    return {
-        "path": path.name,
-        "ports": 2,
-        "records": len(frequencies),
-        "frequency_unit": unit,
-        "first_frequency_ghz": frequencies[0],
-        "last_frequency_ghz": frequencies[-1],
-        "strictly_increasing": True,
-        "port_order": native_port_names,
-        "bytes": path.stat().st_size,
-    }
+    return unit, frequencies, header_ports

@@ -377,6 +377,7 @@ def contained_path(root: Path, relative: str) -> Path:
 
 
 def json_object(value: Any, field: str) -> dict[str, Any]:
+    """Return ``value`` if it is a JSON object, else raise naming ``field``."""
     if not isinstance(value, dict):
         raise TypeError(f"{field} must be a JSON object")
     return value
