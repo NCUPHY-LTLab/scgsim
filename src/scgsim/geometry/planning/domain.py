@@ -932,7 +932,9 @@ def _route_conductor_contact_footprints(
     they neither replace source bodies nor invent a bounding exterior.
     """
     if route is not None:
-        return _active_route_conductor_entities(build_input, route)
+        return _active_route_conductor_entities(
+            build_input, route, representation_context=representation_context
+        )
     if representation_context is None:
         return ()
     polygons = {polygon.polygon_id: polygon for polygon in build_input.polygons}
