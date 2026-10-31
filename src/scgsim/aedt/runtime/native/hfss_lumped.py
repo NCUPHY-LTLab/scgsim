@@ -93,7 +93,7 @@ def assign_rlc(
         props[enabled] = value is not None
         if value is not None:
             props[value_key] = f"{value}{unit}"
-    boundary = app._create_boundary(name, props, "Lumped RLC")
+    boundary = app._create_boundary(name, props, "Lumped RLC")  # noqa: SLF001 - PyAEDT has no public API for this
     if boundary is False or boundary is None:
         raise RuntimeError(f"native generic RLC assignment failed: {name!r}")
     return rlc_record(
@@ -138,7 +138,7 @@ def read_rlc_parameters(app: Any, record: dict[str, Any]) -> dict[str, Any]:
     """Retain live native enable/value evidence; disabled branches stay disabled."""
     from ansys.aedt.core.modules.boundary.common import BoundaryObject
 
-    live = BoundaryObject(app, record["boundary"], auto_update=False)._child_object
+    live = BoundaryObject(app, record["boundary"], auto_update=False)._child_object  # noqa: SLF001 - PyAEDT has no public API for this
     if live is None:
         raise RuntimeError("native generic RLC property object is unavailable")
     names = list(live.GetPropNames())
@@ -263,7 +263,9 @@ def _read_generic_rlcs(app: Any, geometry: dict[str, Any]) -> None:
     records = geometry.get("lumped_rlcs", ())
     if not records:
         return
-    from scgsim.aedt.runtime.native.hfss_geometry import _read_saved_hfss_design
+    from scgsim.aedt.runtime.native.hfss_junction_readback import (
+        _read_saved_hfss_design,
+    )
 
     digest, design = _read_saved_hfss_design(
         Path(app.project_file), app.design_name, purpose="generic RLC"

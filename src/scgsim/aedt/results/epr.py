@@ -1,4 +1,10 @@
-"""Saved-solution and EPR artifact verification/readback."""
+"""Seal and verify saved field solutions, and load EPR result files.
+
+A saved solution is a released AEDT project plus its ``.aedtresults`` directory,
+listed member by member in a manifest with sizes and SHA-256 hashes. Owns: sealing
+that cohort after a run and verifying it offline. It does not decide whether a
+run needs a saved solution (``resolve``) or compute EPR (``scgsim.aedt.epr``).
+"""
 
 from __future__ import annotations
 
@@ -8,22 +14,38 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from scgsim.aedt._data import (
-    detached,
-)
+from scgsim.aedt._data import detached
 from scgsim.aedt._io import file_sha256, read_json, write_json
-from scgsim.aedt.epr.models import (
-    EprResult,
-)
+from scgsim.aedt.epr.models import EprResult
 from scgsim.aedt.epr.selection import _exact_mapping
-from scgsim.aedt.specs.epr import (
-    SavedSolution,
-)
+from scgsim.aedt.specs.epr import SavedSolution
 
 
 def resolve_saved_solution(manifest_path: str | Path) -> SavedSolution:
     """Verify one explicitly sealed saved-field cohort without opening AEDT."""
 
+    manifest_source = _located_manifest(manifest_path)
+    base = manifest_source.parent
+    manifest = _exact_mapping(read_json(manifest_source), "saved-solution manifest")
+    saved = _saved_solution_from_manifest(base, manifest)
+    _check_saved_paths(saved)
+    _check_saved_receipt(base, manifest, saved)
+    observed_members, declared_paths = _check_saved_members(base, saved)
+    _check_exact_inventory(base, saved, declared_paths)
+    if _members_digest(observed_members) != saved.content_sha256:
+        raise RuntimeError("saved-solution content digest mismatch")
+    return saved
+
+
+def _members_digest(members: list[dict[str, Any]]) -> str:
+    """SHA-256 of the canonical JSON of the member list (sorted keys, no spaces)."""
+    return hashlib.sha256(
+        json.dumps(members, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _located_manifest(manifest_path: str | Path) -> Path:
+    """The manifest must be a regular file reached without any symlink."""
     requested_manifest = Path(manifest_path).expanduser().absolute()
     manifest_source = requested_manifest.resolve()
     if (
@@ -34,8 +56,12 @@ def resolve_saved_solution(manifest_path: str | Path) -> SavedSolution:
         raise FileNotFoundError(
             f"saved-solution manifest is missing: {manifest_source}"
         )
-    base = manifest_source.parent
-    manifest = _exact_mapping(read_json(manifest_source), "saved-solution manifest")
+    return manifest_source
+
+
+def _saved_solution_from_manifest(
+    base: Path, manifest: Mapping[str, Any]
+) -> SavedSolution:
     expected = {
         "schema_version",
         "project",
@@ -59,7 +85,10 @@ def resolve_saved_solution(manifest_path: str | Path) -> SavedSolution:
         "content_sha256": manifest["content_sha256"],
         "identity": manifest["identity"],
     }
-    saved = SavedSolution.from_payload(base, payload)
+    return SavedSolution.from_payload(base, payload)
+
+
+def _check_saved_paths(saved: SavedSolution) -> None:
     if saved.project_path.is_symlink() or saved.result_path.is_symlink():
         raise RuntimeError("saved-solution project/results cannot be symlinks")
     if (
@@ -69,8 +98,12 @@ def resolve_saved_solution(manifest_path: str | Path) -> SavedSolution:
         raise RuntimeError("saved-solution project/results traverse a symlink")
     if not saved.project_path.is_file() or not saved.result_path.is_dir():
         raise FileNotFoundError("saved-solution project or result directory is missing")
-    receipt_relative = _safe_relative(manifest["receipt"], "receipt")
-    receipt = base / receipt_relative
+
+
+def _check_saved_receipt(
+    base: Path, manifest: Mapping[str, Any], saved: SavedSolution
+) -> None:
+    receipt = base / _safe_relative(manifest["receipt"], "receipt")
     if (
         not receipt.is_file()
         or receipt.is_symlink()
@@ -85,6 +118,12 @@ def resolve_saved_solution(manifest_path: str | Path) -> SavedSolution:
         raise RuntimeError("saved-solution receipt does not attest completed fields")
     if receipt_payload.get("identity") != detached(saved.identity):
         raise RuntimeError("saved-solution receipt identity mismatch")
+
+
+def _check_saved_members(
+    base: Path, saved: SavedSolution
+) -> tuple[list[dict[str, Any]], set[str]]:
+    """Each declared member must be a real file with the recorded size and hash."""
     observed_members: list[dict[str, Any]] = []
     declared_paths: set[str] = set()
     for member in saved.members:
@@ -105,6 +144,13 @@ def resolve_saved_solution(manifest_path: str | Path) -> SavedSolution:
         ):
             raise RuntimeError(f"saved-solution member mismatch: {relative}")
         observed_members.append(dict(item))
+    return observed_members, declared_paths
+
+
+def _check_exact_inventory(
+    base: Path, saved: SavedSolution, declared_paths: set[str]
+) -> None:
+    """The manifest must list every file under the results directory, and no other."""
     actual_paths = {saved.project_path.relative_to(base).as_posix()}
     for path in saved.result_path.rglob("*"):
         if path.is_symlink() or path.resolve() != path:
@@ -115,14 +161,6 @@ def resolve_saved_solution(manifest_path: str | Path) -> SavedSolution:
         raise RuntimeError(
             "saved-solution manifest does not cover the exact result inventory"
         )
-    digest = hashlib.sha256(
-        json.dumps(observed_members, sort_keys=True, separators=(",", ":")).encode(
-            "utf-8"
-        )
-    ).hexdigest()
-    if digest != saved.content_sha256:
-        raise RuntimeError("saved-solution content digest mismatch")
-    return saved
 
 
 def seal_saved_solution(
@@ -144,34 +182,8 @@ def seal_saved_solution(
     if results.is_symlink() or results.resolve() != results or not results.is_dir():
         raise RuntimeError("released saved-solution result directory is unavailable")
     evidence = _exact_mapping(evidence, "saved-field evidence")
-    expected_evidence = {
-        "saved_fields",
-        "solver_last_completed_pass",
-        "saved_fields_pass",
-        "fields_solution",
-        "physical_variation",
-    }
-    if set(evidence) != expected_evidence or evidence.get("saved_fields") is not True:
-        raise ValueError("saved-field evidence is not canonical")
-    for name in ("solver_last_completed_pass", "saved_fields_pass"):
-        if type(evidence.get(name)) is not int or evidence[name] <= 0:
-            raise ValueError(f"saved-field evidence {name} is invalid")
-    if (
-        not isinstance(evidence.get("fields_solution"), str)
-        or not evidence["fields_solution"]
-    ):
-        raise ValueError("saved-field evidence solution identity is invalid")
-    if not isinstance(evidence.get("physical_variation"), str):
-        raise TypeError("saved-field physical variation must be text")
-
-    inventory = [project]
-    for path in sorted(results.rglob("*")):
-        if path.is_symlink() or path.resolve() != path:
-            raise RuntimeError(f"saved solution contains a symlink: {path}")
-        if path.is_file():
-            inventory.append(path)
-    if len(inventory) == 1:
-        raise RuntimeError("saved-solution result inventory is empty")
+    _check_saved_field_evidence(evidence)
+    inventory = _released_inventory(project, results)
     members = [
         {
             "path": path.relative_to(root).as_posix(),
@@ -180,9 +192,7 @@ def seal_saved_solution(
         }
         for path in inventory
     ]
-    content_sha256 = hashlib.sha256(
-        json.dumps(members, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    content_sha256 = _members_digest(members)
     identity = {
         "model_source_sha256": model_source_sha256,
         "project_name": project_name,
@@ -227,7 +237,43 @@ def seal_saved_solution(
     }
 
 
+def _check_saved_field_evidence(evidence: Mapping[str, Any]) -> None:
+    expected_evidence = {
+        "saved_fields",
+        "solver_last_completed_pass",
+        "saved_fields_pass",
+        "fields_solution",
+        "physical_variation",
+    }
+    if set(evidence) != expected_evidence or evidence.get("saved_fields") is not True:
+        raise ValueError("saved-field evidence is not canonical")
+    for name in ("solver_last_completed_pass", "saved_fields_pass"):
+        if type(evidence.get(name)) is not int or evidence[name] <= 0:
+            raise ValueError(f"saved-field evidence {name} is invalid")
+    if (
+        not isinstance(evidence.get("fields_solution"), str)
+        or not evidence["fields_solution"]
+    ):
+        raise ValueError("saved-field evidence solution identity is invalid")
+    if not isinstance(evidence.get("physical_variation"), str):
+        raise TypeError("saved-field physical variation must be text")
+
+
+def _released_inventory(project: Path, results: Path) -> list[Path]:
+    """The project file, then every result file in sorted order; refuse symlinks."""
+    inventory = [project]
+    for path in sorted(results.rglob("*")):
+        if path.is_symlink() or path.resolve() != path:
+            raise RuntimeError(f"saved solution contains a symlink: {path}")
+        if path.is_file():
+            inventory.append(path)
+    if len(inventory) == 1:
+        raise RuntimeError("saved-solution result inventory is empty")
+    return inventory
+
+
 def _safe_relative(value: Any, name: str) -> Path:
+    """A non-empty relative path with no ``..`` part, so it stays inside the run."""
     if not isinstance(value, str) or not value:
         raise ValueError(f"{name} must be a non-empty relative path")
     relative = Path(value)

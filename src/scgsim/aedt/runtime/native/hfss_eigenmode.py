@@ -112,6 +112,6 @@ def submit_eigenmode_cache(
     if not expression_cache or expression_cache[0] != "NAME:ExpressionCache":
         raise ValueError("EPR cache extension must be a native ExpressionCache block")
     properties["UseCacheFor"] = list(use_cache_for)
-    args = setup._setup_dict_to_arg(name=control.setup_name, props=properties)
+    args = setup._setup_dict_to_arg(name=control.setup_name, props=properties)  # noqa: SLF001 - PyAEDT has no public API for this
     args.append(expression_cache)
     setup.omodule.EditSetup(control.setup_name, args)

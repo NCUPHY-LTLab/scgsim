@@ -43,7 +43,7 @@ from scgsim.geometry import (
 )
 from scgsim.semantics.epr import film_assumptions
 
-from .epr.analysis import reanalyze_epr
+from .epr.reanalysis import reanalyze_epr
 from .preparation.geometry import prepare_hfss_eigenmode_from_geometry
 from .preparation.handoff import HandoffPlan
 from .preparation.planar import prepare_planar_geometry_input, validate_geometry_workers

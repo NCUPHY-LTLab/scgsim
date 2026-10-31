@@ -1,7 +1,14 @@
-"""EPR analysis selections and native field-reference bindings.
+"""Native AEDT selections that the EPR field integrals are taken over.
 
-Common model construction and saved geometry readback belong to runtime.native.
-This module adds analysis selections to that source-bound model.
+Owns: the non-model sheets and face lists on which surface integrals are
+evaluated (inset sheets, whole-cap face references and per-binding analysis
+sheets), the choice of field side for each, and the readback that proves a face
+list was saved with the project.
+Does not own: common model construction and saved geometry readback
+(`runtime.native`), or the integrals themselves (`fields.py`, `cache.py`).
+
+MA (metal-air), MS (metal-substrate) and SA (substrate-air) are defined in
+docs/eigenmode-epr.qmd.
 """
 
 from __future__ import annotations
@@ -9,17 +16,16 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from importlib.metadata import version
 from typing import Any
 
 from scgsim.aedt._data import canonical_sha256, detached
 from scgsim.aedt.epr.fields import create_verified_face_list
-from scgsim.aedt.epr.geometry import (
+from scgsim.aedt.epr.geometry import _base_sheet_plan
+from scgsim.aedt.preparation.planar import (
     _INSET_CIRCLE_POINTS,
     _INSET_METHOD,
-    _base_sheet_plan,
-)
-from scgsim.aedt.preparation.planar import (
     _entity_z_range,
     _native_name,
 )
@@ -27,10 +33,10 @@ from scgsim.aedt.runtime.native.common import (
     _native_object_boolean_property,
     _native_object_evidence,
 )
-from scgsim.aedt.runtime.native.hfss_geometry import (
+from scgsim.aedt.runtime.native.hfss_bodies import (
     _native_conductor_geometry as _native_conductor_geometry,
 )
-from scgsim.aedt.runtime.native.hfss_geometry import (
+from scgsim.aedt.runtime.native.hfss_junction_readback import (
     _read_saved_hfss_design as _read_saved_hfss_design,
 )
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
@@ -40,6 +46,8 @@ from scgsim.geometry._primitives.spatial import _geometry_ref_surface_z_um
 def _analysis_surface_sheet(
     app: Any, geometry_ref: Mapping[str, Any], *, name: str
 ) -> tuple[Any, list[list[float]]]:
+    """Create a non-model, hole-cut sheet for a planar loop; return it and its points."""
+
     local_region = geometry_ref.get("local_region")
     plane_basis = geometry_ref.get("plane_basis")
     outer = geometry_ref.get("outer_loop")
@@ -129,6 +137,8 @@ def _native_sheet_side_binding(
 def _lift_inset_ring(
     plane: Mapping[str, Any], ring: Sequence[Sequence[float]]
 ) -> list[list[float]]:
+    """Map 2D (u, v) ring points onto the plane in 3D: origin + u*U + v*V."""
+
     origin = tuple(float(value) for value in plane["origin_um"])
     u = tuple(float(value) for value in plane["u"])
     v = tuple(float(value) for value in plane["v"])
@@ -141,24 +151,40 @@ def _lift_inset_ring(
     ]
 
 
+@dataclass(slots=True)
+class InsetSheetBook:
+    """Planned inset sheets for one analysis, plus the facts read back so far.
+
+    `facts` is filled as sheets are bound and reused within one authoring session;
+    the field side is still decided per binding, never cached with the sheet.
+    """
+
+    plan: Mapping[tuple[str, float], Mapping[str, Any]]
+    names: Mapping[str, Mapping[str, Any]]
+    facts: dict[str, dict[str, Any]]
+    modeling: str | None
+
+
 def bind_inset_surface_selections(
     app: Any,
     binding: Mapping[str, Any],
     base_selection: Mapping[str, Any],
     margin_um: float,
-    inset_plan: Mapping[tuple[str, float], Mapping[str, Any]],
-    sheet_facts: dict[str, dict[str, Any]],
-    sheet_names: Mapping[str, Mapping[str, Any]],
-    *,
-    modeling: str | None,
+    sheets: InsetSheetBook,
 ) -> list[dict[str, Any]]:
-    """Create or rebind non-model inset sheets without changing solver CAD."""
+    """Create or rebind non-model inset sheets without changing solver CAD.
+
+    An inset sheet is the part of a surface binding that lies `margin_um` away
+    from the conductor edge (the planned region, computed with KLayout). One
+    binding can yield several disjoint regions, so the result has one entry per
+    region ("component").
+    """
 
     plane = binding["mask_plane"]
-    # Keep the existing positional caller contract; direction comes from this
-    # source contribution, never from the base Sheet's orientation.
+    # Direction comes from this source contribution, never from the base Sheet's
+    # orientation.
     field_side = str(binding["contribution"]["side"])
-    planned = inset_plan[(str(binding["binding_id"]), margin_um)]
+    planned = sheets.plan[(str(binding["binding_id"]), margin_um)]
     regions = planned["regions"]
     dbu_um = float(binding["mask_support"]["source_dbu_um"])
     result: list[dict[str, Any]] = []
@@ -172,39 +198,14 @@ def bind_inset_surface_selections(
                 "klayout_version": version("klayout"),
             }
         )
-        planned_name = sheet_names[contour_sha256]
+        planned_name = sheets.names[contour_sha256]
         name = str(planned_name["name"])
-        facts = sheet_facts.get(name)
+        facts = sheets.facts.get(name)
         if facts is None:
-            sheet = app.modeler.get_object_from_name(name)
-            if sheet is None:
-                sheet, _ = _analysis_surface_sheet(
-                    app,
-                    {"plane_basis": plane, "local_region": region},
-                    name=name,
-                )
-            native = _native_object_evidence(app, name)
-            faces = sheet.faces
-            if native["native_object_type"] != "Sheet" or len(faces) != 1:
-                raise RuntimeError(f"inset EPR selection {name!r} is not one sheet")
-            if _native_object_boolean_property(sheet, "Model"):
-                raise RuntimeError(
-                    f"inset EPR selection {name!r} became model geometry"
-                )
-            normal = faces[0].normal
-            if (
-                normal is None
-                or len(normal) != 3
-                or not all(math.isfinite(float(value)) for value in normal)
-            ):
-                raise RuntimeError(f"inset EPR selection {name!r} has no native normal")
-            facts = {
-                "contour_sha256": contour_sha256,
-                "shared_sheet_members": planned_name["members"],
-                "native": native,
-                "native_normal": [float(value) for value in normal],
-            }
-            sheet_facts[name] = facts
+            facts = _read_inset_sheet(app, name, plane, region)
+            facts["contour_sha256"] = contour_sha256
+            facts["shared_sheet_members"] = planned_name["members"]
+            sheets.facts[name] = facts
         if facts["contour_sha256"] != contour_sha256:
             raise RuntimeError(f"inset EPR selection name collision: {name!r}")
         native = facts["native"]
@@ -212,7 +213,7 @@ def bind_inset_surface_selections(
         desired, adjacent_side = _native_sheet_side_binding(
             native_normal,
             field_side,
-            modeling,
+            sheets.modeling,
             unknown_side_error=f"inset EPR selection {name!r} has unknown field side",
             ambiguous_side_error=(
                 f"inset EPR selection {name!r} has ambiguous field side"
@@ -242,6 +243,40 @@ def bind_inset_surface_selections(
     return result
 
 
+def _read_inset_sheet(
+    app: Any, name: str, plane: Mapping[str, Any], region: Any
+) -> dict[str, Any]:
+    """Find or create one inset sheet and read back that it is a single sheet.
+
+    The sheet must stay non-model geometry, so the solver CAD is unchanged.
+    """
+
+    sheet = app.modeler.get_object_from_name(name)
+    if sheet is None:
+        sheet, _ = _analysis_surface_sheet(
+            app,
+            {"plane_basis": plane, "local_region": region},
+            name=name,
+        )
+    native = _native_object_evidence(app, name)
+    faces = sheet.faces
+    if native["native_object_type"] != "Sheet" or len(faces) != 1:
+        raise RuntimeError(f"inset EPR selection {name!r} is not one sheet")
+    if _native_object_boolean_property(sheet, "Model"):
+        raise RuntimeError(f"inset EPR selection {name!r} became model geometry")
+    normal = faces[0].normal
+    if (
+        normal is None
+        or len(normal) != 3
+        or not all(math.isfinite(float(value)) for value in normal)
+    ):
+        raise RuntimeError(f"inset EPR selection {name!r} has no native normal")
+    return {
+        "native": native,
+        "native_normal": [float(value) for value in normal],
+    }
+
+
 def bind_native_surface_references(
     app: Any,
     prepared: PreparedPlanarGeometry,
@@ -250,9 +285,12 @@ def bind_native_surface_references(
 ) -> list[dict[str, Any]]:
     """Bind whole Solid caps as references, separate from masked Sheet supports.
 
-    Source ownership and constant-section Z construction select the cap. Native
-    normals describe projection only; they do not establish an incident trace.
-    Saved reuse changes selection metadata, never CAD or solved field topology.
+    A cap is the top or bottom face of a Solid conductor (MA, metal-air, and MS,
+    metal-substrate) or of the substrate domain (SA, substrate-air); see
+    docs/eigenmode-epr.qmd. Source ownership and constant-section Z construction
+    select the cap. Native normals describe projection only; they do not establish
+    an incident trace. Saved reuse changes selection metadata, never CAD or solved
+    field topology.
     """
     if prepared.modeling != "solid":
         return []
@@ -261,195 +299,269 @@ def bind_native_surface_references(
         if request.surface_contribution_ids is None
         else set(request.surface_contribution_ids)
     )
-    source = prepared.source
     specs = {item.contribution_id: item for item in prepared.contributions}
-    objects = native_geometry["objects"]
     references: dict[str, dict[str, Any]] = {}
     for binding in prepared.surface_bindings:
         contribution = binding["contribution"]
-        cid = contribution["contribution_id"]
+        contribution_id = contribution["contribution_id"]
         kind = contribution["classification"]
-        if cid not in selected or kind not in {"MA", "MS", "SA"}:
+        if contribution_id not in selected or kind not in {"MA", "MS", "SA"}:
             continue
         z_um = _geometry_ref_surface_z_um(binding["geometry_ref"])
-        if kind == "SA":
-            owner = binding["substrate_domain_id"]
-            entities = [
-                item
-                for item in source["solution_regions"]
-                if item["semantic_id"] == owner
-            ]
-            candidates = [
-                item
-                for item in objects
-                if item["kind"] == "solution_domain" and item["semantic_id"] == owner
-            ]
-        else:
-            owner = binding["owner_semantic_id"]
-            entities = [
-                item for item in source["conductors"] if item["semantic_id"] == owner
-            ]
-            source_ids = {
-                specs[cid].source_polygon_id,
-                *(contribution.get("outer_source_ids") or ()),
-                *(contribution.get("hole_source_ids") or ()),
-            }
-            candidates = [
-                item
-                for item in objects
-                if item["kind"] == "conductor"
-                and item["semantic_id"] == owner
-                and item["source_polygon_id"] in source_ids
-            ]
+        owner, entities, candidates = _source_owned_solids(
+            prepared, native_geometry, binding, specs
+        )
         if len(entities) != 1 or not candidates:
             raise RuntimeError(
-                f"native reference {cid!r} lacks source-owned Solid {owner!r}"
+                f"native reference {contribution_id!r} lacks source-owned Solid {owner!r}"
             )
-        entity = entities[0]
-        if kind == "SA":
-            z_min, z_max = _entity_z_range(entity)
-        else:
-            representation, z_min, z_max = _native_conductor_geometry(source, entity)
-            if representation != "solid":
-                raise RuntimeError(f"native reference {cid!r} owner is not a Solid")
-        if z_um == z_max and z_um != z_min:
-            cap = "top"
-        elif z_um == z_min and z_um != z_max:
-            cap = "bottom"
-        else:
-            raise RuntimeError(
-                f"native reference {cid!r} is not a source cap of {owner!r}"
-            )
+        cap = _source_cap(prepared.source, entities[0], binding, z_um, owner)
         for native in candidates:
-            name = native["object_name"]
-            obj = app.modeler.get_object_from_name(name)
-            if obj is None or native["native_object_type"] != "Solid":
-                raise RuntimeError(f"native reference Solid {name!r} is unavailable")
-            centers = []
-            for face in obj.faces:
-                center = face.center_from_aedt
-                if center is False or center is None or len(center) != 3:
-                    raise RuntimeError(
-                        f"native reference {name!r} face {face.id} center unavailable"
-                    )
-                centers.append((float(center[2]), face, list(center)))
-            if not centers:
-                raise RuntimeError(f"native reference {name!r} has no faces")
-            extreme = (max if cap == "top" else min)(item[0] for item in centers)
-            matches = [item for item in centers if item[0] == extreme]
-            if len(matches) != 1:
-                raise RuntimeError(f"native reference {name!r} {cap} cap is ambiguous")
-            _, face, center = matches[0]
-            normal = face.normal
-            if normal is None or len(normal) != 3:
-                raise RuntimeError(
-                    f"native reference {name!r} cap projection unavailable"
-                )
-            normal = [float(value) for value in normal]
-            identity = {"object_name": name, "cap": cap, "projection_normal": normal}
+            face, center, normal = _native_cap_face(app, native, cap)
+            identity = {
+                "object_name": native["object_name"],
+                "cap": cap,
+                "projection_normal": normal,
+            }
             reference_id = "native_cap_" + canonical_sha256(identity)[:24]
             record = references.get(reference_id)
             if record is None:
-                edges = []
-                for edge in face.edges:
-                    vertices = []
-                    samples = []
-                    for vertex in edge.vertices:
-                        position = vertex.position
-                        if int(vertex.id) <= 0:
-                            # PyAEDT can synthesize an edge-parameter sample when
-                            # the native edge has no vertex IDs (e.g. a closed edge).
-                            samples.append(
-                                {
-                                    "basis": "PyAEDT synthesized edge-parameter sample",
-                                    "position_um": list(position)
-                                    if position is not None
-                                    else None,
-                                    "native_vertex_id": None,
-                                }
-                            )
-                            continue
-                        if position is None or len(position) != 3:
-                            raise RuntimeError(
-                                f"native reference {name!r} vertex {vertex.id} unavailable"
-                            )
-                        vertices.append(
-                            {"vertex_id": int(vertex.id), "position_um": list(position)}
-                        )
-                    edges.append(
-                        {
-                            "edge_id": int(edge.id),
-                            "vertices": vertices,
-                            "native_vertex_identity_available": bool(vertices)
-                            and not samples,
-                            "parametric_samples": samples,
-                        }
-                    )
-                area = face.area
-                if area is None or area is False:
-                    raise RuntimeError(
-                        f"native reference {name!r} cap area unavailable"
-                    )
-                face_ids = [int(face.id)]
-                face_list = create_verified_face_list(
-                    app,
-                    name=_native_name("reference", reference_id),
-                    face_ids=face_ids,
-                    reuse_existing=True,
+                record = _native_reference_record(
+                    app, native, face, center, normal, reference_id, owner, cap, z_um
                 )
-                record = {
-                    "reference_id": reference_id,
-                    "contribution_ids": [],
-                    "binding_ids": [],
-                    "interface_kinds": [],
-                    "selection_name": face_list["name"],
-                    "face_ids": face_ids,
-                    "face_list": face_list,
-                    "owner_semantic_id": owner,
-                    "source_polygon_id": native.get("source_polygon_id"),
-                    "object_name": name,
-                    "native_object_id": native["native_object_id"],
-                    "source_cap": cap,
-                    "source_z_um": z_um,
-                    "source_supports": [],
-                    "incident_domains": [],
-                    "native_normal": normal,
-                    "projection_normal": normal,
-                    "native_normal_basis": "PyAEDT FacePrimitive.normal geometric projection",
-                    "native_area_m2": float(area) * 1e-12,
-                    "native_faces": [
-                        {
-                            "face_id": int(face.id),
-                            "center_um": center,
-                            "edges": edges,
-                            "area_um2": float(area),
-                        }
-                    ],
-                    "support_kind": "whole_native_cap",
-                    "sampling_basis": "native_solid_owner_face; incident_trace_unproven",
-                }
                 references[reference_id] = record
-            for key, value in (
-                ("contribution_ids", cid),
-                ("binding_ids", binding["binding_id"]),
-                ("interface_kinds", kind),
-            ):
-                if value not in record[key]:
-                    record[key].append(value)
-            record["source_supports"].append(
-                {
-                    "binding_id": binding["binding_id"],
-                    "geometry_ref": binding["geometry_ref"],
-                }
-            )
-            incident = {
-                "effective_domain_id": binding["effective_domain_id"],
-                "effective_material_id": binding["effective_material_id"],
-                "substrate_domain_id": binding["substrate_domain_id"],
-            }
-            if incident not in record["incident_domains"]:
-                record["incident_domains"].append(incident)
+            _add_binding_support(record, binding)
     return detached([references[key] for key in sorted(references)])
+
+
+def _source_owned_solids(
+    prepared: PreparedPlanarGeometry,
+    native_geometry: Mapping[str, Any],
+    binding: Mapping[str, Any],
+    specs: Mapping[str, Any],
+) -> tuple[str, list[Any], list[Any]]:
+    """Find the source entity that owns a binding and its native Solid objects.
+
+    SA bindings belong to the substrate domain; MA and MS bindings to a conductor,
+    possibly built from several source polygons (outer and hole polygons).
+    """
+
+    source = prepared.source
+    objects = native_geometry["objects"]
+    contribution = binding["contribution"]
+    if contribution["classification"] == "SA":
+        owner = binding["substrate_domain_id"]
+        entities = [
+            item for item in source["solution_regions"] if item["semantic_id"] == owner
+        ]
+        candidates = [
+            item
+            for item in objects
+            if item["kind"] == "solution_domain" and item["semantic_id"] == owner
+        ]
+        return owner, entities, candidates
+    owner = binding["owner_semantic_id"]
+    entities = [item for item in source["conductors"] if item["semantic_id"] == owner]
+    source_ids = {
+        specs[contribution["contribution_id"]].source_polygon_id,
+        *(contribution.get("outer_source_ids") or ()),
+        *(contribution.get("hole_source_ids") or ()),
+    }
+    candidates = [
+        item
+        for item in objects
+        if item["kind"] == "conductor"
+        and item["semantic_id"] == owner
+        and item["source_polygon_id"] in source_ids
+    ]
+    return owner, entities, candidates
+
+
+def _source_cap(
+    source: Mapping[str, Any],
+    entity: Mapping[str, Any],
+    binding: Mapping[str, Any],
+    z_um: float,
+    owner: str,
+) -> str:
+    """Return "top" or "bottom": which Z extreme of the owner the binding sits on."""
+
+    contribution_id = binding["contribution"]["contribution_id"]
+    if binding["contribution"]["classification"] == "SA":
+        z_min, z_max = _entity_z_range(entity)
+    else:
+        representation, z_min, z_max = _native_conductor_geometry(source, entity)
+        if representation != "solid":
+            raise RuntimeError(
+                f"native reference {contribution_id!r} owner is not a Solid"
+            )
+    if z_um == z_max and z_um != z_min:
+        return "top"
+    if z_um == z_min and z_um != z_max:
+        return "bottom"
+    raise RuntimeError(
+        f"native reference {contribution_id!r} is not a source cap of {owner!r}"
+    )
+
+
+def _native_cap_face(
+    app: Any, native: Mapping[str, Any], cap: str
+) -> tuple[Any, list[float], list[float]]:
+    """Pick the native face at the top or bottom extreme of a Solid.
+
+    Returns the face, its center and its normal. The extreme face must be unique.
+    """
+
+    name = native["object_name"]
+    obj = app.modeler.get_object_from_name(name)
+    if obj is None or native["native_object_type"] != "Solid":
+        raise RuntimeError(f"native reference Solid {name!r} is unavailable")
+    centers = []
+    for face in obj.faces:
+        center = face.center_from_aedt
+        if center is False or center is None or len(center) != 3:
+            raise RuntimeError(
+                f"native reference {name!r} face {face.id} center unavailable"
+            )
+        centers.append((float(center[2]), face, list(center)))
+    if not centers:
+        raise RuntimeError(f"native reference {name!r} has no faces")
+    extreme = (max if cap == "top" else min)(item[0] for item in centers)
+    matches = [item for item in centers if item[0] == extreme]
+    if len(matches) != 1:
+        raise RuntimeError(f"native reference {name!r} {cap} cap is ambiguous")
+    _, face, center = matches[0]
+    normal = face.normal
+    if normal is None or len(normal) != 3:
+        raise RuntimeError(f"native reference {name!r} cap projection unavailable")
+    return face, center, [float(value) for value in normal]
+
+
+def _face_edges(face: Any, name: str) -> list[dict[str, Any]]:
+    """Describe a face's edges and vertices as evidence for the reference."""
+
+    edges = []
+    for edge in face.edges:
+        vertices = []
+        samples = []
+        for vertex in edge.vertices:
+            position = vertex.position
+            if int(vertex.id) <= 0:
+                # PyAEDT can synthesize an edge-parameter sample when
+                # the native edge has no vertex IDs (e.g. a closed edge).
+                samples.append(
+                    {
+                        "basis": "PyAEDT synthesized edge-parameter sample",
+                        "position_um": list(position) if position is not None else None,
+                        "native_vertex_id": None,
+                    }
+                )
+                continue
+            if position is None or len(position) != 3:
+                raise RuntimeError(
+                    f"native reference {name!r} vertex {vertex.id} unavailable"
+                )
+            vertices.append(
+                {"vertex_id": int(vertex.id), "position_um": list(position)}
+            )
+        edges.append(
+            {
+                "edge_id": int(edge.id),
+                "vertices": vertices,
+                "native_vertex_identity_available": bool(vertices) and not samples,
+                "parametric_samples": samples,
+            }
+        )
+    return edges
+
+
+def _native_reference_record(  # noqa: PLR0913 -- one argument per recorded fact.
+    app: Any,
+    native: Mapping[str, Any],
+    face: Any,
+    center: list[float],
+    normal: list[float],
+    reference_id: str,
+    owner: str,
+    cap: str,
+    z_um: float,
+) -> dict[str, Any]:
+    """Create the face list for one cap and the reference record that cites it.
+
+    Contribution, binding and support lists start empty and are filled by
+    `_add_binding_support` for every binding that shares this cap.
+    """
+
+    name = native["object_name"]
+    edges = _face_edges(face, name)
+    area = face.area
+    if area is None or area is False:
+        raise RuntimeError(f"native reference {name!r} cap area unavailable")
+    face_ids = [int(face.id)]
+    face_list = create_verified_face_list(
+        app,
+        name=_native_name("reference", reference_id),
+        face_ids=face_ids,
+        reuse_existing=True,
+    )
+    return {
+        "reference_id": reference_id,
+        "contribution_ids": [],
+        "binding_ids": [],
+        "interface_kinds": [],
+        "selection_name": face_list["name"],
+        "face_ids": face_ids,
+        "face_list": face_list,
+        "owner_semantic_id": owner,
+        "source_polygon_id": native.get("source_polygon_id"),
+        "object_name": name,
+        "native_object_id": native["native_object_id"],
+        "source_cap": cap,
+        "source_z_um": z_um,
+        "source_supports": [],
+        "incident_domains": [],
+        "native_normal": normal,
+        "projection_normal": normal,
+        "native_normal_basis": "PyAEDT FacePrimitive.normal geometric projection",
+        # PyAEDT reports the face area in um^2.
+        "native_area_m2": float(area) * 1e-12,
+        "native_faces": [
+            {
+                "face_id": int(face.id),
+                "center_um": center,
+                "edges": edges,
+                "area_um2": float(area),
+            }
+        ],
+        "support_kind": "whole_native_cap",
+        "sampling_basis": "native_solid_owner_face; incident_trace_unproven",
+    }
+
+
+def _add_binding_support(record: dict[str, Any], binding: Mapping[str, Any]) -> None:
+    """Record that this binding's surface is supported by the reference's cap."""
+
+    contribution = binding["contribution"]
+    for key, value in (
+        ("contribution_ids", contribution["contribution_id"]),
+        ("binding_ids", binding["binding_id"]),
+        ("interface_kinds", contribution["classification"]),
+    ):
+        if value not in record[key]:
+            record[key].append(value)
+    record["source_supports"].append(
+        {
+            "binding_id": binding["binding_id"],
+            "geometry_ref": binding["geometry_ref"],
+        }
+    )
+    incident = {
+        "effective_domain_id": binding["effective_domain_id"],
+        "effective_material_id": binding["effective_material_id"],
+        "substrate_domain_id": binding["substrate_domain_id"],
+    }
+    if incident not in record["incident_domains"]:
+        record["incident_domains"].append(incident)
 
 
 def verify_saved_native_surface_references(

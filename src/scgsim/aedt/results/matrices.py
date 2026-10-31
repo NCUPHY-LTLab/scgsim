@@ -1,4 +1,9 @@
-"""Strict AEDT matrix export parsers and canonical readback."""
+"""Strict parsers for AEDT matrix export text files.
+
+Owns: reading Q3D capacitance/conductance and Q2D combined RLGC exports into
+long-format rows, with exact header, unit and label checks. It does not decide
+which export a run must contain; the readback modules do.
+"""
 
 from __future__ import annotations
 
@@ -23,13 +28,17 @@ def parse_matrix_export(
     expected_labels: list[str] | None = None,
     expected_label_set: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Parse an AEDT matrix export text file into long-format rows plus a summary.
+
+    ``titles`` maps each matrix title in the file to its quantity letter, for
+    example ``{"Capacitance Matrix": "C"}``. Passing any ``expected_*`` argument
+    makes parsing strict: the header and every title must appear exactly once, and
+    nothing may follow a matrix. Rows are ``problem_type, quantity, row, column,
+    value, unit`` in file order.
+    """
     if not path.is_file() or path.stat().st_size == 0:
         raise RuntimeError(f"{solver} {problem} matrix export is missing or empty")
     lines = path.read_text(encoding="utf-8", errors="strict").splitlines()
-    required_lines = {
-        f"Problem Type:  {problem}",
-        f"Frequency:  {frequency_ghz:g}GHz",
-    }
     strict = any(
         value is not None
         for value in (
@@ -39,57 +48,43 @@ def parse_matrix_export(
             expected_label_set,
         )
     )
-    if any(line not in lines for line in required_lines):
-        raise RuntimeError(f"{solver} {problem} matrix header is invalid")
-    if strict:
-        required_lines.add("Reduce Matrix:  Original")
-        if expected_setup is not None:
-            required_lines.add(expected_setup)
-        if any(lines.count(line) != 1 for line in required_lines):
-            raise RuntimeError(f"{solver} {problem} matrix header is invalid")
-    unit_line = next((line for line in lines if " Units:" in line), None)
-    if unit_line is None or (
-        expected_unit_line is not None and unit_line != expected_unit_line
-    ):
-        raise RuntimeError(f"{solver} {problem} matrix units are invalid")
-    units = dict(re.findall(r"([CGRL]) Units:([^,]+)", unit_line))
+    required_lines = {
+        f"Problem Type:  {problem}",
+        f"Frequency:  {frequency_ghz:g}GHz",
+    }
+    _check_export_header(
+        lines,
+        f"{solver} {problem}",
+        required_lines,
+        strict=strict,
+        setup=expected_setup,
+    )
+    units = _export_units(lines, solver, problem, expected_unit_line)
     result: list[dict[str, Any]] = []
     labels_by_quantity: dict[str, list[str]] = {}
     for title, quantity in titles.items():
         if title not in lines or (strict and lines.count(title) != 1):
             raise RuntimeError(f"{solver} export must contain one exact {title!r}")
-        title_index = lines.index(title)
-        header_index = title_index + 1
-        while header_index < len(lines) and not lines[header_index].strip():
-            header_index += 1
-        header = next(csv.reader([lines[header_index]]))
-        labels = [value.strip() for value in header[1:] if value.strip()]
-        if (
-            not labels
-            or len(set(labels)) != len(labels)
-            or (expected_labels is not None and labels != expected_labels)
-            or (expected_label_set is not None and set(labels) != expected_label_set)
+        header_index = _matrix_header_index(lines, lines.index(title))
+        labels = _matrix_labels(lines[header_index], solver, title)
+        if (expected_labels is not None and labels != expected_labels) or (
+            expected_label_set is not None and set(labels) != expected_label_set
         ):
             raise RuntimeError(f"{solver} {title} labels are invalid")
         labels_by_quantity[quantity] = labels
-        for row_index, row_name in enumerate(labels, start=header_index + 1):
-            values = next(csv.reader([lines[row_index]]))
-            if values[0].strip() != row_name or len(values[1:]) != len(labels):
-                raise RuntimeError(f"{solver} {title} matrix is not square")
-            for column, raw in zip(labels, values[1:], strict=True):
-                value = float(raw)
-                if not math.isfinite(value):
-                    raise RuntimeError(f"{solver} {title} contains a non-finite value")
-                result.append(
-                    {
-                        "problem_type": problem,
-                        "quantity": quantity,
-                        "row": row_name,
-                        "column": column,
-                        "value": value,
-                        "unit": units[quantity],
-                    }
-                )
+        for row_name, column, value in _matrix_values(
+            lines, header_index, labels, f"{solver} {title}"
+        ):
+            result.append(
+                {
+                    "problem_type": problem,
+                    "quantity": quantity,
+                    "row": row_name,
+                    "column": column,
+                    "value": value,
+                    "unit": units[quantity],
+                }
+            )
         block_end = header_index + 1 + len(labels)
         if strict and block_end < len(lines) and lines[block_end].strip():
             raise RuntimeError(f"{solver} {title} contains unexpected matrix rows")
@@ -103,9 +98,78 @@ def parse_matrix_export(
     }
 
 
+def _export_units(
+    lines: list[str], solver: str, problem: str, expected_unit_line: str | None
+) -> dict[str, str]:
+    """Unit text per quantity letter, from the line such as ``C Units:pF, G Units:...``."""
+    unit_line = next((line for line in lines if " Units:" in line), None)
+    if unit_line is None or (
+        expected_unit_line is not None and unit_line != expected_unit_line
+    ):
+        raise RuntimeError(f"{solver} {problem} matrix units are invalid")
+    return dict(re.findall(r"([CGRL]) Units:([^,]+)", unit_line))
+
+
+def _check_export_header(
+    lines: list[str],
+    label: str,
+    required_lines: set[str],
+    *,
+    strict: bool,
+    setup: str | None,
+) -> None:
+    """The problem and frequency lines must be present; strict adds exactly-once."""
+    if any(line not in lines for line in required_lines):
+        raise RuntimeError(f"{label} matrix header is invalid")
+    if strict:
+        required_lines.add("Reduce Matrix:  Original")
+        if setup is not None:
+            required_lines.add(setup)
+        if any(lines.count(line) != 1 for line in required_lines):
+            raise RuntimeError(f"{label} matrix header is invalid")
+
+
+def _matrix_header_index(lines: list[str], title_index: int) -> int:
+    """Index of the column-label line: the first non-blank line after the title."""
+    header_index = title_index + 1
+    while header_index < len(lines) and not lines[header_index].strip():
+        header_index += 1
+    return header_index
+
+
+def _matrix_labels(header_line: str, solver: str, title: str) -> list[str]:
+    header = next(csv.reader([header_line]))
+    labels = [value.strip() for value in header[1:] if value.strip()]
+    if not labels or len(set(labels)) != len(labels):
+        raise RuntimeError(f"{solver} {title} labels are invalid")
+    return labels
+
+
+def _matrix_values(
+    lines: list[str], header_index: int, labels: list[str], where: str
+) -> list[tuple[str, str, float]]:
+    """(row, column, value) of one square matrix; ``where`` names it in messages."""
+    values_found: list[tuple[str, str, float]] = []
+    for row_index, row_name in enumerate(labels, start=header_index + 1):
+        values = next(csv.reader([lines[row_index]]))
+        if values[0].strip() != row_name or len(values[1:]) != len(labels):
+            raise RuntimeError(f"{where} matrix is not square")
+        for column, raw in zip(labels, values[1:], strict=True):
+            value = float(raw)
+            if not math.isfinite(value):
+                raise RuntimeError(f"{where} contains a non-finite value")
+            values_found.append((row_name, column, value))
+    return values_found
+
+
 def read_q2d_rlgc_matrix(
     path: Path, spec: Q2dSpec
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Parse the Q2D export that holds the CG and RL matrices in one file.
+
+    CG is the capacitance/conductance solve and RL the resistance/inductance solve.
+    Labels must be the signal lines of the spec, in spec order.
+    """
     if not path.is_file() or path.stat().st_size == 0:
         raise RuntimeError("Q2D combined CG/RL matrix export is missing or empty")
     expected_unit_line = (

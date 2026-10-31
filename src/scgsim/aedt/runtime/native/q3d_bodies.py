@@ -213,6 +213,10 @@ def _assign_material(app: Any, body: Q3dBodySpec, material: Any) -> str:
     return observed
 
 
+# Length: over 150 lines. The whole body loop sits in one try block that tracks the
+# current body, phase and operations so a failure can be reported with that
+# context; splitting it needs that tracking state passed between the pieces.
+# TODO(human): split per phase once the failure-context shape is agreed.
 def construct_q3d_bodies(
     app: Any,
     spec: Q3dSpec,

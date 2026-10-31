@@ -25,8 +25,9 @@ from scgsim.aedt.specs.geometry import (
 from scgsim.geometry.models.lumped import LumpedSupport
 
 from .eigenmode import EigenmodeSim
-from .epr.analysis import combine_epr_mode, combine_surface_epr_mode, reanalyze_epr
+from .epr.analysis import combine_epr_mode, combine_surface_epr_mode
 from .epr.geometry import planar_junction_from_port
+from .epr.reanalysis import reanalyze_epr
 from .epr.workflow import analyze_epr
 from .preparation.geometry import (
     prepare_hfss_driven_from_geometry,

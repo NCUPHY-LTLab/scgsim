@@ -1,4 +1,14 @@
-"""EPR handoff and native saved-field workflow orchestration."""
+"""Entry points of the EPR (energy participation ratio) workflow in AEDT.
+
+Owns the three ways an EPR run reaches AEDT, in the order a user meets them:
+`analyze_epr` re-analyzes a sealed saved solution in a disposable copy,
+`prepare_epr_hfss` / `solve_and_export_epr` author the expressions and then solve,
+and the helpers that export per-pass history and the final result rows.
+Does not own: the expressions (`cache.py`), reading traces (`history.py`),
+typing and storing integrals (`integrals.py`) or the energy arithmetic
+(`analysis.py`). MA (metal-air), MS (metal-substrate) and SA (substrate-air) are
+defined in docs/eigenmode-epr.qmd.
+"""
 
 from __future__ import annotations
 
@@ -13,20 +23,18 @@ from scgsim.aedt._data import (
 )
 from scgsim.aedt._io import file_sha256, write_json
 from scgsim.aedt.epr.analysis import combine_epr_mode
-from scgsim.aedt.epr.cache import (
+from scgsim.aedt.epr.cache import _prepare_expressions_and_cache, _read_cache
+from scgsim.aedt.epr.expressions import _author_epr_expressions
+from scgsim.aedt.epr.fields import install_variables, parse_native_scalar
+from scgsim.aedt.epr.history import _adaptive_epr_result, _adaptive_mode_history
+from scgsim.aedt.epr.integrals import (
     _SURFACE_ANALYSIS_SCOPE,
-    _adaptive_epr_result,
-    _adaptive_mode_history,
     _attach_saved_native_surface_membership,
-    _author_epr_expressions,
     _canonical_integral,
     _empty_raw_integrals,
     _integral_target,
-    _prepare_expressions_and_cache,
-    _read_cache,
     _store_integral,
 )
-from scgsim.aedt.epr.fields import install_variables, parse_native_scalar
 from scgsim.aedt.epr.models import (
     EprResult,
 )
@@ -36,22 +44,20 @@ from scgsim.aedt.epr.native import (
     verify_saved_native_surface_references,
 )
 from scgsim.aedt.preparation.handoff import _prepare_epr_analysis_handoff
-from scgsim.aedt.runtime.families.hfss import (
+from scgsim.aedt.runtime.families.hfss_body_eigenmode import (
     PreparedBodyEigenmode,
-    _export_eigenmode,
     prepare_body_eigenmode,
     prepared_body_eigenmode_result,
     read_body_eigenmode_setup,
     solve_and_export_body_eigenmode,
 )
+from scgsim.aedt.runtime.families.hfss_export import _export_eigenmode
 from scgsim.aedt.runtime.native.common import (
     detached_data,
     pyaedt_version,
 )
-from scgsim.aedt.runtime.native.hfss_geometry import (
-    _read_saved_junction_lines,
-    bind_saved_planar_geometry,
-)
+from scgsim.aedt.runtime.native.hfss_geometry import bind_saved_planar_geometry
+from scgsim.aedt.runtime.native.hfss_junction_readback import _read_saved_junction_lines
 from scgsim.aedt.runtime.native.hfss_lumped import _bind_saved_generic_rlcs
 from scgsim.aedt.specs.common import REQUIRED_AEDT_VERSION, AedtResources
 from scgsim.aedt.specs.epr import (
@@ -65,7 +71,7 @@ from scgsim.aedt.specs.hfss import EigenmodeRunControl
 from scgsim.aedt.specs.hfss_prepared import HfssEprAnalysisSpec, HfssEprSpec
 
 
-def analyze_epr(
+def analyze_epr(  # noqa: PLR0913 -- public keyword-only signature.
     *,
     saved_solution: SavedSolution,
     geometry: PreparedPlanarGeometry,
@@ -201,67 +207,21 @@ def analyze_saved_epr(
     spec: HfssEprAnalysisSpec,
     inset_plan: dict[tuple[str, float], dict[str, Any]],
 ) -> dict[str, Any]:
-    """Analyze an immutable saved-field cohort through a disposable project copy."""
+    """Analyze an immutable saved-field cohort through a disposable project copy.
+
+    The saved solution is never modified: its files are verified and copied, the
+    copy is reopened in AEDT, expressions are authored on the copy, and each mode
+    is evaluated at the saved last adaptive pass. No solve runs.
+    """
 
     if not isinstance(spec, HfssEprAnalysisSpec):
         raise TypeError("saved EPR analysis requires HfssEprAnalysisSpec")
     timings: dict[str, Any] = {}
     started = time.perf_counter()
-    work_root = Path(run_dir) / "analysis-work"
-    if work_root.exists():
-        raise FileExistsError("saved EPR analysis workcopy already exists")
-    work_root.mkdir(parents=True)
-    for member in spec.saved_solution.members:
-        relative = Path(str(member["path"]))
-        source = spec.saved_solution.root / relative
-        if (
-            source.is_symlink()
-            or source.resolve() != source
-            or not source.is_file()
-            or source.stat().st_size != member["bytes"]
-            or file_sha256(source) != member["sha256"]
-        ):
-            raise RuntimeError(
-                f"saved EPR member changed before workcopy: {relative.as_posix()}"
-            )
-        target = work_root / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
+    work_root = _copy_saved_solution(spec, Path(run_dir))
     timings["workcopy_seconds"] = round(time.perf_counter() - started, 6)
-    relative_project = spec.saved_solution.project_path.relative_to(
-        spec.saved_solution.root
-    )
-    project_path = work_root / relative_project
-    if not project_path.is_file():
-        raise RuntimeError("saved EPR analysis project copy is missing")
-    started = time.perf_counter()
-    app = Hfss(
-        project=str(project_path),
-        design=spec.design_name,
-        solution_type="Eigenmode",
-        new_desktop=False,
-        close_on_exit=False,
-    )
-    timings["native_reopen_seconds"] = round(time.perf_counter() - started, 6)
-    if app.desktop_class.aedt_version_id != REQUIRED_AEDT_VERSION:
-        raise RuntimeError("saved EPR analysis did not bind AEDT 2024.2")
-    if spec.run_control.setup_name not in app.setup_names:
-        raise RuntimeError("saved EPR analysis setup is missing")
-    observed_variation = detached_data(app.available_variations.nominal_values)
-    observed_variation_identity = json.dumps(
-        observed_variation, sort_keys=True, separators=(",", ":")
-    )
-    if (
-        observed_variation_identity
-        != spec.saved_solution.identity["physical_variation"]
-    ):
-        raise RuntimeError("saved EPR physical variation identity differs")
-    expected_fields_solution = f"{spec.run_control.setup_name} : LastAdaptive"
-    available_fields = [
-        str(item) for item in app.post.available_report_solutions("Fields") or ()
-    ]
-    if expected_fields_solution not in available_fields:
-        raise RuntimeError("saved EPR field solution is unavailable on the workcopy")
+    project_path = _workcopy_project_path(spec, work_root)
+    app = _reopen_workcopy(Hfss, spec, project_path, timings)
     started = time.perf_counter()
     geometry = bind_saved_planar_geometry(app, spec.geometry)
     bind_saved_analysis_surfaces(app, spec.geometry, geometry)
@@ -291,41 +251,18 @@ def analyze_saved_epr(
     started = time.perf_counter()
     outputs, final_modes = _export_eigenmode(app, Path(run_dir), output_dir, spec)
     timings["final_export_seconds"] = round(time.perf_counter() - started, 6)
-    frequencies = final_modes["eigenmodes"]["frequencies_ghz"]
     selected_modes = (
         tuple(range(1, spec.run_control.num_modes + 1))
         if spec.epr_request.mode_indices is None
         else spec.epr_request.mode_indices
     )
-    rows: list[dict[str, Any]] = []
-    raw_evidence: list[dict[str, Any]] = []
-    mode_timings: list[dict[str, Any]] = []
-    for mode in selected_modes:
-        mode_started = time.perf_counter()
-        raw, evidence = _evaluate_mode_integrals(
-            app,
-            spec,
-            expressions,
-            mode=mode,
-            frequency_hz=float(frequencies[mode - 1]) * 1e9,
-        )
-        rows.append(
-            {
-                "mode": mode,
-                "status": "complete",
-                "raw_integrals": raw,
-                "raw_integral_evidence": evidence,
-                **combine_epr_mode(spec.geometry, raw, request=spec.epr_request),
-            }
-        )
-        raw_evidence.append({"mode": mode, "expressions": evidence})
-        mode_timings.append(
-            {
-                "mode": mode,
-                "seconds": round(time.perf_counter() - mode_started, 6),
-            }
-        )
-    timings["mode_integrals"] = mode_timings
+    rows, raw_evidence, timings["mode_integrals"] = _evaluate_saved_modes(
+        app,
+        spec,
+        expressions,
+        selected_modes,
+        final_modes["eigenmodes"]["frequencies_ghz"],
+    )
     result_provenance = {
         "model_source_sha256": spec.geometry.model_sha256,
         "analysis_source_sha256": spec.geometry.source_sha256,
@@ -344,8 +281,7 @@ def analyze_saved_epr(
     )
     result_path = output_dir / "epr-result.json"
     started = time.perf_counter()
-    write_json(result_path, result.to_payload())
-    outputs[result_path.relative_to(run_dir).as_posix()] = file_sha256(result_path)
+    _write_result(result, result_path, run_dir, outputs)
     timings["result_write_seconds"] = round(time.perf_counter() - started, 6)
     started = time.perf_counter()
     if not app.save_project() or not project_path.is_file():
@@ -355,6 +291,8 @@ def analyze_saved_epr(
     outputs[project_relative] = file_sha256(project_path)
     native_references = cache.get("native_surface_references", [])
     if native_references:
+        # Face membership can only be read from the saved project, so the result
+        # is written a second time once it is known.
         native_references = verify_saved_native_surface_references(
             project_path, spec.design_name, native_references
         )
@@ -370,8 +308,7 @@ def analyze_saved_epr(
             provenance=result_provenance,
         )
         started = time.perf_counter()
-        write_json(result_path, result.to_payload())
-        outputs[result_path.relative_to(run_dir).as_posix()] = file_sha256(result_path)
+        _write_result(result, result_path, run_dir, outputs)
         timings["result_write_seconds"] = round(
             timings["result_write_seconds"] + time.perf_counter() - started, 6
         )
@@ -393,7 +330,138 @@ def analyze_saved_epr(
     }
 
 
+def _copy_saved_solution(spec: HfssEprAnalysisSpec, run_dir: Path) -> Path:
+    """Copy the sealed saved-solution files into a new `analysis-work` directory.
+
+    Each member is re-verified (not a symlink, size, SHA-256) immediately before
+    the copy, so a file that changed since sealing is never analyzed.
+    """
+
+    work_root = run_dir / "analysis-work"
+    if work_root.exists():
+        raise FileExistsError("saved EPR analysis workcopy already exists")
+    work_root.mkdir(parents=True)
+    for member in spec.saved_solution.members:
+        relative = Path(str(member["path"]))
+        source = spec.saved_solution.root / relative
+        if (
+            source.is_symlink()
+            or source.resolve() != source
+            or not source.is_file()
+            or source.stat().st_size != member["bytes"]
+            or file_sha256(source) != member["sha256"]
+        ):
+            raise RuntimeError(
+                f"saved EPR member changed before workcopy: {relative.as_posix()}"
+            )
+        target = work_root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+    return work_root
+
+
+def _workcopy_project_path(spec: HfssEprAnalysisSpec, work_root: Path) -> Path:
+    """Location of the saved project inside the workcopy; it must exist."""
+
+    project_path = work_root / spec.saved_solution.project_path.relative_to(
+        spec.saved_solution.root
+    )
+    if not project_path.is_file():
+        raise RuntimeError("saved EPR analysis project copy is missing")
+    return project_path
+
+
+def _write_result(
+    result: EprResult, result_path: Path, run_dir: Path, outputs: dict[str, str]
+) -> None:
+    """Write the result JSON and record its SHA-256 in `outputs`."""
+
+    write_json(result_path, result.to_payload())
+    outputs[result_path.relative_to(run_dir).as_posix()] = file_sha256(result_path)
+
+
+def _reopen_workcopy(
+    Hfss: Any,
+    spec: HfssEprAnalysisSpec,
+    project_path: Path,
+    timings: dict[str, Any],
+) -> Any:
+    """Open the copied project in AEDT and confirm it is the sealed solution."""
+
+    started = time.perf_counter()
+    app = Hfss(
+        project=str(project_path),
+        design=spec.design_name,
+        solution_type="Eigenmode",
+        new_desktop=False,
+        close_on_exit=False,
+    )
+    timings["native_reopen_seconds"] = round(time.perf_counter() - started, 6)
+    if app.desktop_class.aedt_version_id != REQUIRED_AEDT_VERSION:
+        raise RuntimeError("saved EPR analysis did not bind AEDT 2024.2")
+    if spec.run_control.setup_name not in app.setup_names:
+        raise RuntimeError("saved EPR analysis setup is missing")
+    observed_variation = detached_data(app.available_variations.nominal_values)
+    observed_variation_identity = json.dumps(
+        observed_variation, sort_keys=True, separators=(",", ":")
+    )
+    if (
+        observed_variation_identity
+        != spec.saved_solution.identity["physical_variation"]
+    ):
+        raise RuntimeError("saved EPR physical variation identity differs")
+    expected_fields_solution = f"{spec.run_control.setup_name} : LastAdaptive"
+    available_fields = [
+        str(item) for item in app.post.available_report_solutions("Fields") or ()
+    ]
+    if expected_fields_solution not in available_fields:
+        raise RuntimeError("saved EPR field solution is unavailable on the workcopy")
+    return app
+
+
+def _evaluate_saved_modes(
+    app: Any,
+    spec: HfssEprAnalysisSpec,
+    expressions: list[dict[str, Any]],
+    selected_modes: tuple[int, ...],
+    frequencies_ghz: list[float],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Evaluate every requested mode and combine its integrals into a result row."""
+
+    rows: list[dict[str, Any]] = []
+    raw_evidence: list[dict[str, Any]] = []
+    mode_timings: list[dict[str, Any]] = []
+    for mode in selected_modes:
+        mode_started = time.perf_counter()
+        raw, evidence = _evaluate_mode_integrals(
+            app,
+            spec,
+            expressions,
+            mode=mode,
+            frequency_hz=float(frequencies_ghz[mode - 1]) * 1e9,
+        )
+        rows.append(
+            {
+                "mode": mode,
+                "status": "complete",
+                "raw_integrals": raw,
+                "raw_integral_evidence": evidence,
+                **combine_epr_mode(spec.geometry, raw, request=spec.epr_request),
+            }
+        )
+        raw_evidence.append({"mode": mode, "expressions": evidence})
+        mode_timings.append(
+            {
+                "mode": mode,
+                "seconds": round(time.perf_counter() - mode_started, 6),
+            }
+        )
+    return rows, raw_evidence, mode_timings
+
+
 def _analysis_readback(app, spec, cache, project_path):
+    """Read the persisted cache and native face membership after the project save."""
+
     cache["serialized_readback"] = _read_cache(app, spec, cache["items"])
     references = cache["native_surface_references"]
     if references:
@@ -403,6 +471,8 @@ def _analysis_readback(app, spec, cache, project_path):
 
 
 def _prepared_analysis_readback(app, spec, cache, project_path):
+    """Result-time check of native face membership; the cache was read back earlier."""
+
     references = cache.get("native_surface_references", [])
     if references:
         cache["native_surface_references"] = verify_saved_native_surface_references(
@@ -430,6 +500,8 @@ def prepare_epr_hfss(
 
 
 def prepared_epr_result(prepared: PreparedBodyEigenmode) -> dict[str, Any]:
+    """Receipt payload of a prepared EPR run, tagged with its surface scope."""
+
     result = prepared_body_eigenmode_result(
         prepared, analysis_readback=_prepared_analysis_readback
     )
@@ -437,7 +509,11 @@ def prepared_epr_result(prepared: PreparedBodyEigenmode) -> dict[str, Any]:
     return result
 
 
-def _export_epr_analysis(prepared, spec, convergence, outputs, output_dir, timings):
+def _export_epr_analysis(  # noqa: PLR0913 -- signature fixed by `analysis_export`.
+    prepared, spec, convergence, outputs, output_dir, timings
+):
+    """Write per-pass history and the adaptive result after a completed solve."""
+
     saved_field_evidence = _saved_field_evidence(prepared.app, spec, convergence)
     started = time.perf_counter()
     history = _adaptive_mode_history(
@@ -475,6 +551,8 @@ def solve_and_export_epr(
     resources: AedtResources | None = None,
     resource_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Solve the prepared EPR setup, then export history and the adaptive result."""
+
     return solve_and_export_body_eigenmode(
         prepared, resources, resource_evidence, analysis_export=_export_epr_analysis
     )

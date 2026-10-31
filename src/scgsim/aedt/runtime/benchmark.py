@@ -1,4 +1,11 @@
-"""Native AEDT benchmark capture and attachment; does not own physics results."""
+"""Capture AEDT's own solve profile (timings, memory, mesh counts) as a benchmark file.
+
+Owns reading the native ``results/profile`` tree of a solved design, normalizing
+its formatted strings to numbers, and attaching the written file to a run result.
+It does not own physics results: a failed profile read is recorded as data in the
+benchmark file and never changes the solve outcome (see
+``export_simulation_benchmark``).
+"""
 
 from __future__ import annotations
 
@@ -15,6 +22,8 @@ from scgsim.aedt._benchmark import (
 )
 from scgsim.aedt._io import file_sha256, write_json
 
+# Native profile label -> key in the benchmark file. AEDT spells "Elapsed Time"
+# and "Elapsed time" both, depending on the profile node.
 _METRIC_LABELS = {
     "Real time": "real_seconds",
     "Elapsed Time": "elapsed_seconds",
@@ -31,6 +40,7 @@ _COUNT_LABELS = {
 
 
 def _seconds(value: Any, label: str) -> float:
+    """Convert AEDT's ``H:MM:SS[.fraction]`` time text to seconds."""
     if not isinstance(value, str):
         raise ValueError(f"native profile {label} is not formatted time")
     match = re.fullmatch(r"(\d+):(\d{2}):(\d{2})(?:\.(\d+))?", value)
@@ -41,6 +51,7 @@ def _seconds(value: Any, label: str) -> float:
 
 
 def _metrics(properties: Any) -> dict[str, Any]:
+    """Normalize one profile node's properties; native spellings are kept beside numbers."""
     if not isinstance(properties, dict):
         raise TypeError("native profile node has no properties")
     result: dict[str, Any] = {}
@@ -85,6 +96,7 @@ def _metrics(properties: Any) -> dict[str, Any]:
 
 
 def _node(name: str, native: Any) -> dict[str, Any]:
+    """Read one profile node and, recursively, its children."""
     properties = {
         str(label): native.GetPropValue(label) for label in native.GetPropNames()
     }
@@ -115,63 +127,67 @@ def _node(name: str, native: Any) -> dict[str, Any]:
 
 
 def _native_profile(app: Any, setup_name: str) -> dict[str, Any]:
-    try:
-        root = app.odesign.GetChildObject("results/profile")
-    except Exception:
-        # Native children distinguish an absent profile from a failed read.
-        root_names = [str(name).lower() for name in app.odesign.GetChildNames()]
-        if "results/profile" not in root_names and "results" not in root_names:
-            return {
-                "status": "unavailable",
-                "reason": "native results/profile tree is absent",
-                "profiles": [],
-            }
-        if "results" in root_names:
-            results = app.odesign.GetChildObject("results")
-            if "profile" not in [str(name).lower() for name in results.GetChildNames()]:
-                return {
-                    "status": "unavailable",
-                    "reason": "native results/profile tree is absent",
-                    "profiles": [],
-                }
-        raise
+    """Read every native profile belonging to ``setup_name``."""
+    root = _profile_root(app)
+    if isinstance(root, dict):
+        return root
     names = [str(item) for item in root.GetChildNames()]
+    # A setup with several sweeps appears as "<setup> <suffix>" nodes.
     selected = [
         name
         for name in names
         if name == setup_name or name.startswith(f"{setup_name} ")
     ]
     if not selected:
-        return {
-            "status": "unavailable",
-            "reason": "native setup profile is absent",
-            "profiles": [],
-        }
-    profiles = []
-    for name in selected:
-        setup_object = root.GetChildObject(name)
-        setup_properties = {
-            str(label): setup_object.GetPropValue(label)
-            for label in setup_object.GetPropNames()
-        }
-        groups = [
-            _node(str(group_name), setup_object.GetChildObject(group_name))
-            for group_name in setup_object.GetChildNames()
-        ]
-        if not groups:
-            raise RuntimeError(f"native setup profile has no process groups: {name!r}")
-        profiles.append(
-            {
-                "native_setup_profile": name,
-                "native_setup_properties": {
-                    str(label): value
-                    for label, value in setup_properties.items()
-                    if isinstance(value, (str, int, float, bool))
-                },
-                "process_groups": groups,
-            }
-        )
+        return _unavailable("native setup profile is absent")
+    profiles = [_setup_profile(root, name) for name in selected]
     return {"status": "complete", "profiles": profiles}
+
+
+def _unavailable(reason: str) -> dict[str, Any]:
+    return {"status": "unavailable", "reason": reason, "profiles": []}
+
+
+def _profile_root(app: Any) -> Any:
+    """Return the native ``results/profile`` object, or an "unavailable" record.
+
+    A failed read is re-raised unless the listed children show the profile tree
+    is simply absent; that distinguishes "never solved" from "read failed".
+    """
+    try:
+        return app.odesign.GetChildObject("results/profile")
+    except Exception:
+        root_names = [str(name).lower() for name in app.odesign.GetChildNames()]
+        if "results/profile" not in root_names and "results" not in root_names:
+            return _unavailable("native results/profile tree is absent")
+        if "results" in root_names:
+            results = app.odesign.GetChildObject("results")
+            if "profile" not in [str(name).lower() for name in results.GetChildNames()]:
+                return _unavailable("native results/profile tree is absent")
+        raise
+
+
+def _setup_profile(root: Any, name: str) -> dict[str, Any]:
+    setup_object = root.GetChildObject(name)
+    setup_properties = {
+        str(label): setup_object.GetPropValue(label)
+        for label in setup_object.GetPropNames()
+    }
+    groups = [
+        _node(str(group_name), setup_object.GetChildObject(group_name))
+        for group_name in setup_object.GetChildNames()
+    ]
+    if not groups:
+        raise RuntimeError(f"native setup profile has no process groups: {name!r}")
+    return {
+        "native_setup_profile": name,
+        "native_setup_properties": {
+            str(label): value
+            for label, value in setup_properties.items()
+            if isinstance(value, (str, int, float, bool))
+        },
+        "process_groups": groups,
+    }
 
 
 def export_simulation_benchmark(
@@ -188,9 +204,7 @@ def export_simulation_benchmark(
         payload["design_name"] = app.design_name
         payload.update(_native_profile(app, setup_name))
         payload = attribute_profile_memory(payload)
-    except (
-        Exception
-    ) as exc:  # Profile failure must not change the physics solve result.
+    except Exception as exc:  # noqa: BLE001 - profile failure must not change the physics solve result.
         payload.update(
             status="error", reason=f"{type(exc).__name__}: {exc}", profiles=[]
         )
@@ -206,6 +220,7 @@ def export_simulation_benchmark(
 def attach_simulation_benchmark(
     result: dict[str, Any], app: Any, run_dir: Path, setup_name: str
 ) -> dict[str, Any]:
+    """Write the benchmark file and record its digest and status on ``result``."""
     relative, digest, summary = export_simulation_benchmark(app, run_dir, setup_name)
     result["outputs"][relative] = digest
     result["benchmark"] = summary

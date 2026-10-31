@@ -1,4 +1,10 @@
-"""Strict HFSS adaptive-pass and native profile reader."""
+"""Read HFSS adaptive-pass convergence from AEDT's own result files.
+
+Driven runs are read from the ``.asol`` solution index and its ``.profile``; Eigenmode
+and EPR runs from the exported ``adaptive-convergence.prop`` table. Owns the parsing
+and the match against the spec's run control. It does not decide whether a run had
+to converge; the caller compares the record with the receipt.
+"""
 
 from __future__ import annotations
 
@@ -18,7 +24,10 @@ from scgsim.aedt.specs.parse import HfssSpec
 
 
 def read_hfss_convergence(run_dir: Path, spec: HfssSpec) -> dict[str, Any]:
-    """Parse and bind HFSS Driven or Eigenmode adaptive convergence."""
+    """Parse and bind HFSS Driven or Eigenmode adaptive convergence.
+
+    A returned record is evidence from native files, never a restatement of the spec.
+    """
     root = run_dir.resolve()
     if isinstance(spec, (HfssEigenmodeSpec, HfssEprSpec)):
         return _read_eigenmode_convergence(root, spec)
@@ -48,16 +57,14 @@ def read_hfss_convergence(run_dir: Path, spec: HfssSpec) -> dict[str, Any]:
     ]
     if not passes or passes != list(range(1, len(passes) + 1)):
         raise RuntimeError(f"{solver} native adaptive-pass sequence is invalid")
+    # Driven runs converge on the largest change in the magnitude of any S-parameter
+    # between passes; this reader is only reached for Driven specs.
     metric, unit, target = (
-        (
-            "maximum_delta_frequency",
-            "percent",
-            spec.run_control.maximum_delta_frequency_percent,
-        )
-        if isinstance(spec, (HfssEigenmodeSpec, HfssEprSpec))
-        else ("maximum_magnitude_delta_s", "ratio", spec.run_control.maximum_delta_s)
+        "maximum_magnitude_delta_s",
+        "ratio",
+        spec.run_control.maximum_delta_s,
     )
-    label = "Max Delta Freq. %" if unit == "percent" else "Max Mag. Delta S"
+    label = "Max Mag. Delta S"
     deltas = [
         _solver_convergence_float(value, solver)
         for value in re.findall(rf"\\'{re.escape(label)}\\',\s*([^,\s]+),", profile)
@@ -108,48 +115,93 @@ def _read_eigenmode_convergence(
     )
     native = read_evidence_text(path, solver)
 
-    def field(label: str) -> str:
-        values = re.findall(
-            rf"(?m)^{re.escape(label)}[ \t]*:[ \t]*([^\r\n]+)[ \t]*$", native
-        )
-        if len(values) != 1:
-            raise RuntimeError(
-                f"{solver} native convergence {label!r} is missing or ambiguous"
-            )
-        return values[0].strip()
+    completed, current = _check_eigenmode_controls(native, spec, solver)
+    status = _eigenmode_convergence_status(native, completed, solver)
+    parsed = _eigenmode_pass_table(native, completed, solver)
+    deltas = [_solver_convergence_float(row[2], solver) for row in parsed[1:]]
+    if any(delta < 0 for delta in deltas) or current < 0:
+        raise RuntimeError(f"{solver} native convergence delta is invalid")
+    if completed > 1 and not math.isclose(
+        current, deltas[-1], rel_tol=0, abs_tol=1e-12
+    ):
+        raise RuntimeError(f"{solver} native final convergence delta does not match")
+    converged = status == "Yes"
+    return {
+        "sources": {"export_convergence": source_record(path, root)},
+        "quantity": "maximum_delta_frequency",
+        "unit": "percent",
+        "target": spec.run_control.maximum_delta_frequency_percent,
+        "converged": converged,
+        "stop_reason": "Converged : Yes" if converged else "Converged : No",
+        "final_pass": completed,
+        "final_delta": current,
+        "final_solved_element_count": parsed[-1][1],
+    }
 
-    if field("Setup") != spec.run_control.setup_name:
+
+def _native_field(native: str, label: str, solver: str) -> str:
+    """The one ``label : value`` line of the exported convergence file."""
+    values = re.findall(
+        rf"(?m)^{re.escape(label)}[ \t]*:[ \t]*([^\r\n]+)[ \t]*$", native
+    )
+    if len(values) != 1:
+        raise RuntimeError(
+            f"{solver} native convergence {label!r} is missing or ambiguous"
+        )
+    return values[0].strip()
+
+
+def _check_eigenmode_controls(
+    native: str, spec: HfssEigenmodeSpec | HfssEprSpec, solver: str
+) -> tuple[int, float]:
+    """Match setup, pass limits and target to the spec; return (completed, current)."""
+    if _native_field(native, "Setup", solver) != spec.run_control.setup_name:
         raise RuntimeError(f"{solver} native convergence setup identity is invalid")
-    completed = _positive_int(field("Completed"), solver)
+    completed = _positive_int(_native_field(native, "Completed", solver), solver)
     if (
-        _positive_int(field("Maximum"), solver) != spec.run_control.maximum_passes
-        or _positive_int(field("Minimum"), solver) != spec.run_control.minimum_passes
-        or _positive_int(field("Target Consecutive Passes"), solver)
+        _positive_int(_native_field(native, "Maximum", solver), solver)
+        != spec.run_control.maximum_passes
+        or _positive_int(_native_field(native, "Minimum", solver), solver)
+        != spec.run_control.minimum_passes
+        or _positive_int(
+            _native_field(native, "Target Consecutive Passes", solver), solver
+        )
         != spec.run_control.minimum_converged_passes
-        or field("Criterion") != "Max Delta Freq. %"
+        or _native_field(native, "Criterion", solver) != "Max Delta Freq. %"
     ):
         raise RuntimeError(f"{solver} native convergence setup controls do not match")
     if completed > spec.run_control.maximum_passes:
         raise RuntimeError(f"{solver} native convergence pass count is invalid")
-    target = spec.run_control.maximum_delta_frequency_percent
     if not math.isclose(
-        _solver_convergence_float(field("Target"), solver),
-        target,
+        _solver_convergence_float(_native_field(native, "Target", solver), solver),
+        spec.run_control.maximum_delta_frequency_percent,
         rel_tol=0,
         abs_tol=1e-12,
     ):
         raise RuntimeError(f"{solver} native convergence target does not match")
-    current = _solver_convergence_float(field("Current"), solver)
-    consecutive_text = field("Current Consecutive Passes")
+    current = _solver_convergence_float(
+        _native_field(native, "Current", solver), solver
+    )
+    return completed, current
+
+
+def _eigenmode_convergence_status(native: str, completed: int, solver: str) -> str:
+    """The ``Converged`` flag, after checking the consecutive-pass counter."""
+    consecutive_text = _native_field(native, "Current Consecutive Passes", solver)
     if not re.fullmatch(r"\d+", consecutive_text):
         raise RuntimeError(f"{solver} native convergence count is invalid")
-    consecutive = int(consecutive_text)
-    if consecutive > completed:
+    if int(consecutive_text) > completed:
         raise RuntimeError(f"{solver} native convergence count is invalid")
-    status = field("Converged")
+    status = _native_field(native, "Converged", solver)
     if status not in {"Yes", "No"}:
         raise RuntimeError(f"{solver} native convergence status is invalid")
+    return status
 
+
+def _eigenmode_pass_table(
+    native: str, completed: int, solver: str
+) -> list[tuple[int, int, str]]:
+    """Rows of (pass number, solved elements, delta text); pass 1 has no delta."""
     header = "Pass Number|Solved Elements|Max Delta Freq. %|"
     if native.count(header) != 1:
         raise RuntimeError(
@@ -169,25 +221,7 @@ def _read_eigenmode_convergence(
         or parsed[0][2] != "N/A"
     ):
         raise RuntimeError(f"{solver} native convergence pass sequence is invalid")
-    deltas = [_solver_convergence_float(row[2], solver) for row in parsed[1:]]
-    if any(delta < 0 for delta in deltas) or current < 0:
-        raise RuntimeError(f"{solver} native convergence delta is invalid")
-    if completed > 1 and not math.isclose(
-        current, deltas[-1], rel_tol=0, abs_tol=1e-12
-    ):
-        raise RuntimeError(f"{solver} native final convergence delta does not match")
-    converged = status == "Yes"
-    return {
-        "sources": {"export_convergence": source_record(path, root)},
-        "quantity": "maximum_delta_frequency",
-        "unit": "percent",
-        "target": target,
-        "converged": converged,
-        "stop_reason": "Converged : Yes" if converged else "Converged : No",
-        "final_pass": completed,
-        "final_delta": current,
-        "final_solved_element_count": parsed[-1][1],
-    }
+    return parsed
 
 
 def _positive_int(value: str, solver: str) -> int:

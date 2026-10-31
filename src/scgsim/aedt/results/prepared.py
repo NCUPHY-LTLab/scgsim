@@ -1,6 +1,8 @@
 """Strict offline model-stage reading, independent of completed physics results.
 
-The transaction owns construction, save and release. This reader verifies those
+The model stage is a run that built and saved the AEDT model (optionally with its
+setup) but never invoked the solver. Owns: verifying that stage's receipt. The
+transaction owns construction, save and release. This reader verifies those
 recorded facts and detached source/native assignments; it does not open AEDT or
 claim native contact, meshing, fields or solved quantities from source intent.
 """
@@ -14,22 +16,31 @@ from typing import Any
 from scgsim.aedt._data import _freeze_str_keys_only, detached
 from scgsim.aedt._io import file_sha256, read_json
 from scgsim.aedt.preparation.cohort import validate_geometry_source
-from scgsim.aedt.results.provenance import RECEIPT_V3, SOURCE_SCHEMA_V19
-from scgsim.aedt.results.resolve import (
-    _contained_in_handoff_root,
-    _positive_unique_ids,
-    _validate_body_terminal_readback,
-    _validate_completion_cohort,
-    _validate_hfss_pec_bindings,
-    _validate_hfss_setup,
-    _validate_lumped_readback,
-    _validate_modal_native_evidence,
-    _validate_q2d_model_readback,
-    _validate_q2d_setup,
-    _validate_q3d_model_readback,
-    _validate_q3d_setup,
-    _validate_terminal_native_evidence,
-    _verified,
+from scgsim.aedt.results.body_first_readback import (
+    validate_body_terminal_readback,
+    validate_lumped_readback,
+)
+from scgsim.aedt.results.cohort import validate_completion_cohort
+from scgsim.aedt.results.hfss_pec import validate_hfss_pec_bindings
+from scgsim.aedt.results.hfss_readback import (
+    validate_hfss_setup,
+    validate_modal_native_evidence,
+    validate_terminal_native_evidence,
+)
+from scgsim.aedt.results.provenance import RECEIPT_V3
+from scgsim.aedt.results.q2d_readback import (
+    validate_q2d_model_readback,
+    validate_q2d_setup,
+)
+from scgsim.aedt.results.q3d_readback import (
+    validate_q3d_model_readback,
+    validate_q3d_setup,
+)
+from scgsim.aedt.results.readback_common import (
+    contained_in_handoff_root,
+    positive_unique_ids,
+    uses_current_terminal_rules,
+    verified_output,
 )
 from scgsim.aedt.specs.hfss import HfssDrivenSpec, HfssEigenmodeSpec
 from scgsim.aedt.specs.hfss_prepared import HfssDrivenGeometrySpec, HfssEprSpec
@@ -53,22 +64,37 @@ class PreparedModel:
 
     @property
     def readback(self) -> dict[str, Any]:
+        """A detached copy of the receipt's native readback."""
         return detached(self._readback)
 
 
 def resolve_prepared_model(source: str | Path) -> PreparedModel:
     """Verify one model-stage run directory or its handoff metadata path."""
-    path = Path(source).resolve()
-    if path.is_file():
-        if path.name != "aedt_handoff_metadata.json" or path.parent.name != "metadata":
-            raise ValueError(
-                "prepared model requires a run directory or handoff metadata"
-            )
-        root = path.parent.parent
-    else:
-        root = path
-    receipt_path = _contained_in_handoff_root(root, "metadata/aedt_run_receipt.json")
+    root = _handoff_root(source)
+    receipt_path = contained_in_handoff_root(root, "metadata/aedt_run_receipt.json")
     receipt = read_json(receipt_path)
+    _check_prepared_receipt_header(receipt)
+    source_binding = receipt["source"]
+    spec = _read_prepared_spec(root, source_binding)
+    validate_completion_cohort(root, receipt, spec)
+    expected_stage = _check_family_and_stage(receipt, spec)
+    project = _check_saved_project(root, receipt, spec)
+    _check_prepared_setup(receipt, spec)
+    _check_prepared_model(root, receipt, spec, source_binding)
+    return PreparedModel(spec.mode, project, receipt_path, expected_stage, receipt)
+
+
+def _handoff_root(source: str | Path) -> Path:
+    path = Path(source).resolve()
+    if not path.is_file():
+        return path
+    if path.name != "aedt_handoff_metadata.json" or path.parent.name != "metadata":
+        raise ValueError("prepared model requires a run directory or handoff metadata")
+    return path.parent.parent
+
+
+def _check_prepared_receipt_header(receipt: Any) -> None:
+    """The receipt must be a saved, released, never-solved model stage."""
     if (
         not isinstance(receipt, dict)
         or receipt.get("schema_version") != RECEIPT_V3
@@ -92,7 +118,10 @@ def resolve_prepared_model(source: str | Path) -> PreparedModel:
         or source_binding.get("spec") != "aedt_spec.json"
     ):
         raise RuntimeError("prepared model source paths are not canonical")
-    spec_path = _verified(root, "aedt_spec.json", source_binding, "spec_sha256")
+
+
+def _read_prepared_spec(root: Path, source_binding: dict[str, Any]) -> Any:
+    spec_path = verified_output(root, "aedt_spec.json", source_binding, "spec_sha256")
     spec = parse_aedt_spec(read_json(spec_path), base_dir=root)
     if not isinstance(
         spec,
@@ -106,7 +135,11 @@ def resolve_prepared_model(source: str | Path) -> PreparedModel:
         ),
     ):
         raise TypeError("this family has no supported prepared-model stage")
-    _validate_completion_cohort(root, receipt, spec)
+    return spec
+
+
+def _check_family_and_stage(receipt: dict[str, Any], spec: Any) -> str:
+    """Check mode and versions; return the stage, ``model_only`` or with a setup."""
     if receipt.get("mode") != spec.mode or receipt.get("connected") != {
         "aedt_version": spec.aedt_version,
         "pyaedt_version": spec.pyaedt_version,
@@ -120,6 +153,11 @@ def resolve_prepared_model(source: str | Path) -> PreparedModel:
             raise RuntimeError("prepared model stage differs from its declaration")
     elif spec.run_control is None:
         raise RuntimeError("model-only receipt lacks its explicit stage marker")
+    return expected_stage
+
+
+def _check_saved_project(root: Path, receipt: dict[str, Any], spec: Any) -> Path:
+    """The only output is the saved project, and its hash is the recorded save hash."""
     project_relative = f"{spec.project_name}.aedt"
     outputs = receipt.get("outputs")
     if (
@@ -128,67 +166,92 @@ def resolve_prepared_model(source: str | Path) -> PreparedModel:
         or set(outputs) != {project_relative}
     ):
         raise RuntimeError("prepared model must bind only its actual saved project")
-    project = _verified(root, project_relative, outputs)
-    if save.get("project_sha256") != file_sha256(project):
+    project = verified_output(root, project_relative, outputs)
+    if receipt["save"].get("project_sha256") != file_sha256(project):
         raise RuntimeError("prepared model saved-project identity differs")
+    return project
+
+
+def _check_prepared_setup(receipt: dict[str, Any], spec: Any) -> None:
     if spec.run_control is None:
         if "setup" not in receipt or receipt["setup"] is not None:
             raise RuntimeError("model-only receipt must declare no authored setup")
     elif isinstance(spec, Q3dSpec):
-        _validate_q3d_setup(receipt, spec)
+        validate_q3d_setup(receipt, spec)
     elif isinstance(spec, Q2dSpec):
-        _validate_q2d_setup(receipt, spec)
+        validate_q2d_setup(receipt, spec)
     else:
-        _validate_hfss_setup(receipt, spec)
+        validate_hfss_setup(receipt, spec)
+
+
+def _check_prepared_model(
+    root: Path, receipt: dict[str, Any], spec: Any, source_binding: dict[str, Any]
+) -> None:
     if isinstance(spec, (HfssEprSpec, HfssDrivenGeometrySpec)):
-        if set(source_binding) != {
-            "spec",
-            "spec_sha256",
-            "planar_source_sha256",
-            "planar_model_sha256",
-        } or (
-            source_binding["planar_source_sha256"] != spec.geometry.source_sha256
-            or source_binding["planar_model_sha256"] != spec.geometry.model_sha256
-        ):
-            raise RuntimeError("prepared model planar source identity differs")
-        _validate_planar_model(receipt, spec.geometry)
-        _validate_lumped_readback(receipt, spec.geometry)
-        if isinstance(spec, HfssDrivenGeometrySpec):
-            ports = receipt.get("ports")
-            if not isinstance(ports, list) or len(ports) != len(spec.ports):
-                raise RuntimeError("prepared model native port inventory differs")
-            _validate_body_terminal_readback(receipt, spec)
-        elif "ports" in receipt:
-            raise RuntimeError(
-                "body-first Eigenmode prepared receipt must not contain ports"
-            )
+        _check_body_first_model(receipt, spec, source_binding)
     elif isinstance(spec, Q2dSpec):
         if set(source_binding) != {"spec", "spec_sha256"}:
             raise RuntimeError("Q2D prepared source must not contain an imported GDS")
-        _validate_q2d_model_readback(receipt, spec, prepared=True)
+        validate_q2d_model_readback(receipt, spec, prepared=True)
     elif isinstance(spec, Q3dSpec):
         if set(source_binding) != {"spec", "spec_sha256"}:
             raise RuntimeError("Q3D prepared source must not contain an imported GDS")
         validate_geometry_source(root, source_binding, spec)
-        _validate_q3d_model_readback(root, receipt, spec, prepared=True)
+        validate_q3d_model_readback(root, receipt, spec, prepared=True)
     else:
-        if source_binding.get("gds") != "geometry/design.gds":
-            raise RuntimeError("prepared model imported source path differs")
-        _verified(root, "geometry/design.gds", source_binding, "gds_sha256")
-        _validate_hfss_pec_bindings(receipt, spec)
-        if isinstance(spec, HfssEigenmodeSpec):
-            if receipt.get("ports") != []:
-                raise RuntimeError("Eigenmode prepared receipt must have no ports")
-        elif spec.mode == "terminal":
-            _validate_terminal_native_evidence(
-                receipt.get("ports"),
-                spec,
-                current=receipt.get("runtime_source", {}).get("schema_version")
-                == SOURCE_SCHEMA_V19,
-            )
-        else:
-            _validate_modal_native_evidence(receipt.get("ports"), spec)
-    return PreparedModel(spec.mode, project, receipt_path, expected_stage, receipt)
+        _check_imported_hfss_model(root, receipt, spec, source_binding)
+
+
+def _check_body_first_model(
+    receipt: dict[str, Any],
+    spec: HfssEprSpec | HfssDrivenGeometrySpec,
+    source_binding: dict[str, Any],
+) -> None:
+    if set(source_binding) != {
+        "spec",
+        "spec_sha256",
+        "planar_source_sha256",
+        "planar_model_sha256",
+    } or (
+        source_binding["planar_source_sha256"] != spec.geometry.source_sha256
+        or source_binding["planar_model_sha256"] != spec.geometry.model_sha256
+    ):
+        raise RuntimeError("prepared model planar source identity differs")
+    _validate_planar_model(receipt, spec.geometry)
+    validate_lumped_readback(receipt, spec.geometry)
+    if isinstance(spec, HfssDrivenGeometrySpec):
+        ports = receipt.get("ports")
+        if not isinstance(ports, list) or len(ports) != len(spec.ports):
+            raise RuntimeError("prepared model native port inventory differs")
+        validate_body_terminal_readback(receipt, spec)
+    elif "ports" in receipt:
+        raise RuntimeError(
+            "body-first Eigenmode prepared receipt must not contain ports"
+        )
+
+
+def _check_imported_hfss_model(
+    root: Path,
+    receipt: dict[str, Any],
+    spec: HfssDrivenSpec | HfssEigenmodeSpec,
+    source_binding: dict[str, Any],
+) -> None:
+    """HFSS built from an imported GDS: PEC bindings, then ports for the mode."""
+    if source_binding.get("gds") != "geometry/design.gds":
+        raise RuntimeError("prepared model imported source path differs")
+    verified_output(root, "geometry/design.gds", source_binding, "gds_sha256")
+    validate_hfss_pec_bindings(receipt, spec)
+    if isinstance(spec, HfssEigenmodeSpec):
+        if receipt.get("ports") != []:
+            raise RuntimeError("Eigenmode prepared receipt must have no ports")
+    elif spec.mode == "terminal":
+        validate_terminal_native_evidence(
+            receipt.get("ports"),
+            spec,
+            current=uses_current_terminal_rules(receipt),
+        )
+    else:
+        validate_modal_native_evidence(receipt.get("ports"), spec)
 
 
 def _validate_planar_model(receipt: dict[str, Any], prepared: Any) -> None:
@@ -203,15 +266,35 @@ def _validate_planar_model(receipt: dict[str, Any], prepared: Any) -> None:
     objects = geometry.get("objects")
     if not isinstance(objects, list) or not objects:
         raise RuntimeError("prepared model lacks actual native object inventory")
+    _check_native_object_identities(objects)
+    source = prepared.source
+    conductors = _check_conductor_objects(objects, source, prepared)
+    _check_solution_domains(objects, source, len(conductors))
+    junctions = geometry.get("junctions")
+    if not isinstance(junctions, list) or [
+        item.get("junction_id") for item in junctions
+    ] != [item.junction_id for item in prepared.junctions]:
+        raise RuntimeError("prepared model declared junction inventory differs")
+    if not isinstance(geometry.get("closed_enclosure"), dict):
+        raise RuntimeError("prepared model lacks native enclosure readback")
+
+
+def _check_native_object_identities(objects: list[Any]) -> None:
     names = [item.get("object_name") for item in objects if isinstance(item, dict)]
     ids = [item.get("native_object_id") for item in objects if isinstance(item, dict)]
     if (
         len(names) != len(objects)
         or len(set(names)) != len(objects)
-        or not _positive_unique_ids(ids, len(objects))
+        or not positive_unique_ids(ids, len(objects))
     ):
         raise RuntimeError("prepared model native object identity is invalid")
-    source = prepared.source
+
+
+def _check_conductor_objects(
+    objects: list[Any], source: dict[str, Any], prepared: Any
+) -> dict[tuple[Any, Any], dict[str, Any]]:
+    """Each source conductor polygon has one native object; return them by key."""
+    # Junction polygons are modelled by the junction, not as conductor objects.
     junction_polygons = {item.source_polygon_id for item in prepared.junctions}
     wanted = {
         (entity["semantic_id"], pid): entity
@@ -236,17 +319,23 @@ def _validate_planar_model(receipt: dict[str, Any], prepared: Any) -> None:
             raise RuntimeError(
                 "prepared model conductor physical/native identity differs"
             )
+        # PEC is perfect electric conductor; a finite solid must not solve inside.
         if entity["representation"] == "solid" and (
             str(observed.get("native_material_name", "")).casefold() != "pec"
             or observed.get("native_solve_inside") is not False
         ):
             raise RuntimeError("prepared model finite PEC assignment differs")
-        if not isinstance(
-            item.get("native_face_ids"), list
-        ) or not _positive_unique_ids(
+        if not isinstance(item.get("native_face_ids"), list) or not positive_unique_ids(
             item["native_face_ids"], len(item["native_face_ids"])
         ):
             raise RuntimeError("prepared model conductor native faces are absent")
+    return actual
+
+
+def _check_solution_domains(
+    objects: list[Any], source: dict[str, Any], conductor_count: int
+) -> None:
+    """Dielectric solution regions plus the Region box are the remaining objects."""
     domains = {
         item["semantic_id"]: item
         for item in source["solution_regions"]
@@ -258,7 +347,7 @@ def _validate_planar_model(receipt: dict[str, Any], prepared: Any) -> None:
         for item in objects
         if item.get("kind") == "solution_domain"
     }
-    if set(native_domains) != set(domains) or len(objects) != len(actual) + len(
+    if set(native_domains) != set(domains) or len(objects) != conductor_count + len(
         native_domains
     ):
         raise RuntimeError("prepared model solution-domain inventory differs")
@@ -269,10 +358,3 @@ def _validate_planar_model(receipt: dict[str, Any], prepared: Any) -> None:
             or item.get("native_object_type") != "Solid"
         ):
             raise RuntimeError("prepared model domain material/native identity differs")
-    junctions = geometry.get("junctions")
-    if not isinstance(junctions, list) or [
-        item.get("junction_id") for item in junctions
-    ] != [item.junction_id for item in prepared.junctions]:
-        raise RuntimeError("prepared model declared junction inventory differs")
-    if not isinstance(geometry.get("closed_enclosure"), dict):
-        raise RuntimeError("prepared model lacks native enclosure readback")

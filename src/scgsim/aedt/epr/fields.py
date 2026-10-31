@@ -1,4 +1,11 @@
-"""HFSS named-expression authoring and native field-integral operations."""
+"""HFSS named-expression recipes: operation stacks, compilation and loading.
+
+Owns: the fields-calculator operation stacks for each raw EPR integral, compiling
+a recipe into a content-addressed named expression, and loading and reading back
+a batch of them in AEDT.
+Does not own: choosing which expressions an analysis needs (`cache.py`) or what
+the integrals mean physically (`analysis.py`).
+"""
 
 from __future__ import annotations
 
@@ -8,6 +15,7 @@ import math
 import re
 import time
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -98,6 +106,12 @@ def _validated_postprocessing_readback(
 
 
 def install_variables(app: Any, values: Mapping[str, str]) -> dict[str, str]:
+    """Create or confirm HFSS post-processing variables; return their read-back.
+
+    A variable that already holds an equal non-swept value is left alone. The
+    result is checked against AEDT's own read-back, not against the request.
+    """
+
     manager = app.variable_manager
     existing_names = set(manager.design_variable_names)
     existing_postprocessing = manager.post_processing_variables
@@ -163,15 +177,37 @@ def field_integral_operations(
     adjacent_side: bool = False,
     normal_vector: Sequence[float] | None = None,
 ) -> list[str]:
-    """Return the documented HFSS stack for one raw integral quantity."""
+    """Return the HFSS fields-calculator stack for one raw integral quantity.
+
+    Volume quantities integrate over a solution domain. Surface quantities
+    integrate the electric field on a face sheet. `adjacent_side` picks the field
+    on the far side of the sheet; it applies to surface field quantities only.
+    """
+
+    if quantity in {"effective_volume", "electric_volume", "magnetic_energy"}:
+        if adjacent_side:
+            raise ValueError("adjacent_side is valid only for surface field quantities")
+        return _volume_integral_operations(quantity, selection_name)
+    if quantity in {"electric_normal", "electric_tangential", "masked_area"}:
+        return _surface_integral_operations(
+            quantity, selection_name, adjacent_side, normal_vector
+        )
+    if quantity in {"junction_voltage_real", "junction_voltage_imag"}:
+        raise ValueError(
+            "junction voltage requires an explicit directed vector; use "
+            "junction_voltage_operations"
+        )
+    raise ValueError(f"unsupported HFSS EPR field quantity {quantity!r}")
+
+
+def _volume_integral_operations(quantity: str, selection_name: str) -> list[str]:
+    """Integrate 1, |E|^2 or |H|^2 over the named volume.
+
+    These are raw integrals only; `analysis.py` applies the material weights.
+    """
 
     if quantity == "effective_volume":
         value = _constant(1.0)
-        terminal = [
-            f"EnterVolume('{selection_name}')",
-            "Operation('VolumeValue')",
-            "Operation('Integrate')",
-        ]
     elif quantity == "electric_volume":
         value = [
             "Fundamental_Quantity('E')",
@@ -180,12 +216,7 @@ def field_integral_operations(
             "Operation('Dot')",
             "Operation('Real')",
         ]
-        terminal = [
-            f"EnterVolume('{selection_name}')",
-            "Operation('VolumeValue')",
-            "Operation('Integrate')",
-        ]
-    elif quantity == "magnetic_energy":
+    else:
         value = [
             "NameOfExpression('<Hx,Hy,Hz>')",
             "Operation('Conj')",
@@ -193,88 +224,96 @@ def field_integral_operations(
             "Operation('Dot')",
             "Operation('Real')",
         ]
-        terminal = [
-            f"EnterVolume('{selection_name}')",
-            "Operation('VolumeValue')",
-            "Operation('Integrate')",
-        ]
-    elif quantity in {"electric_normal", "electric_tangential", "masked_area"}:
-        # Area is independent of which field side is sampled.
-        enter_surface = (
-            "EnterAdjacentSurf"
-            if adjacent_side and quantity != "masked_area"
-            else "EnterSurface"
-        )
-        if quantity == "masked_area":
-            value = _constant(1.0)
-            terminal = [
-                f"{enter_surface}('{selection_name}')",
-                "Operation('SurfaceValue')",
-                "Operation('Integrate')",
-            ]
-            return [*value, *terminal]
-        if (
-            normal_vector is None
-            or len(normal_vector) != 3
-            or any(
-                isinstance(item, bool)
-                or not isinstance(item, (int, float))
-                or not math.isfinite(float(item))
-                for item in normal_vector
-            )
-        ):
-            raise ValueError("surface field integral requires a finite native normal")
-        length = math.sqrt(sum(float(item) ** 2 for item in normal_vector))
-        if not math.isfinite(length) or length == 0.0:
-            raise ValueError(
-                "surface field integral requires a finite nonzero native normal"
-            )
-        vector = (
-            "Vector_Constant("
-            + ", ".join(f"{float(item) / length:.17g}" for item in normal_vector)
-            + ")"
-        )
-        normal_real = [
-            "Fundamental_Quantity('E')",
-            "Operation('Real')",
-            vector,
-            "Operation('Dot')",
-        ]
-        normal_imag = [
-            "Fundamental_Quantity('E')",
-            "Operation('Imag')",
-            vector,
-            "Operation('Dot')",
-        ]
-        normal_square = _binary(_square(normal_real), _square(normal_imag), "+")
-        if quantity == "electric_normal":
-            value = normal_square
-        else:
-            full_real = ["Fundamental_Quantity('E')", "Operation('Real')"]
-            full_imag = ["Fundamental_Quantity('E')", "Operation('Imag')"]
-            full_square = _binary(
-                [*full_real, *full_real, "Operation('Dot')"],
-                [*full_imag, *full_imag, "Operation('Dot')"],
-                "+",
-            )
-            value = _binary(full_square, normal_square, "-")
-        # This reporter-operation spelling records side intent in the identity;
-        # the compiled CLC uses the native-saved EnterAdjacentSurface token.
-        terminal = [
-            f"{enter_surface}('{selection_name}')",
-            "Operation('SurfaceValue')",
-            "Operation('Integrate')",
-        ]
-    elif quantity in {"junction_voltage_real", "junction_voltage_imag"}:
-        raise ValueError(
-            "junction voltage requires an explicit directed vector; use "
-            "junction_voltage_operations"
-        )
-    else:
-        raise ValueError(f"unsupported HFSS EPR field quantity {quantity!r}")
-    if adjacent_side and quantity not in {"electric_normal", "electric_tangential"}:
-        raise ValueError("adjacent_side is valid only for surface field quantities")
+    terminal = [
+        f"EnterVolume('{selection_name}')",
+        "Operation('VolumeValue')",
+        "Operation('Integrate')",
+    ]
     return [*value, *terminal]
+
+
+def _surface_integral_operations(
+    quantity: str,
+    selection_name: str,
+    adjacent_side: bool,
+    normal_vector: Sequence[float] | None,
+) -> list[str]:
+    """Integrate area, |E_n|^2 or |E_t|^2 over a face sheet.
+
+    E_n is the field component along `normal_vector` and E_t is the remainder,
+    |E|^2 - |E_n|^2. The surface EPR formulas that weight these integrals for the
+    MA (metal-air), MS (metal-substrate) and SA (substrate-air) interfaces are in
+    docs/specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization.
+    """
+
+    # Area is independent of which field side is sampled.
+    enter_surface = (
+        "EnterAdjacentSurf"
+        if adjacent_side and quantity != "masked_area"
+        else "EnterSurface"
+    )
+    terminal = [
+        f"{enter_surface}('{selection_name}')",
+        "Operation('SurfaceValue')",
+        "Operation('Integrate')",
+    ]
+    if quantity == "masked_area":
+        return [*_constant(1.0), *terminal]
+    vector = _unit_normal_constant(normal_vector)
+    normal_real = [
+        "Fundamental_Quantity('E')",
+        "Operation('Real')",
+        vector,
+        "Operation('Dot')",
+    ]
+    normal_imag = [
+        "Fundamental_Quantity('E')",
+        "Operation('Imag')",
+        vector,
+        "Operation('Dot')",
+    ]
+    normal_square = _binary(_square(normal_real), _square(normal_imag), "+")
+    if quantity == "electric_normal":
+        value = normal_square
+    else:
+        full_real = ["Fundamental_Quantity('E')", "Operation('Real')"]
+        full_imag = ["Fundamental_Quantity('E')", "Operation('Imag')"]
+        full_square = _binary(
+            [*full_real, *full_real, "Operation('Dot')"],
+            [*full_imag, *full_imag, "Operation('Dot')"],
+            "+",
+        )
+        value = _binary(full_square, normal_square, "-")
+    # This reporter-operation spelling records side intent in the identity;
+    # the compiled CLC (calculator language) uses the native-saved
+    # EnterAdjacentSurface token.
+    return [*value, *terminal]
+
+
+def _unit_normal_constant(normal_vector: Sequence[float] | None) -> str:
+    """Format `normal_vector` as a normalized `Vector_Constant(...)` operation."""
+
+    if (
+        normal_vector is None
+        or len(normal_vector) != 3
+        or any(
+            isinstance(item, bool)
+            or not isinstance(item, (int, float))
+            or not math.isfinite(float(item))
+            for item in normal_vector
+        )
+    ):
+        raise ValueError("surface field integral requires a finite native normal")
+    length = math.sqrt(sum(float(item) ** 2 for item in normal_vector))
+    if not math.isfinite(length) or length == 0.0:
+        raise ValueError(
+            "surface field integral requires a finite nonzero native normal"
+        )
+    return (
+        "Vector_Constant("
+        + ", ".join(f"{float(item) / length:.17g}" for item in normal_vector)
+        + ")"
+    )
 
 
 def junction_voltage_operations(
@@ -343,73 +382,6 @@ def create_verified_face_list(
             "PyAEDT created/restored List property; not independent native membership"
         ),
     }
-
-
-def evaluate_named_expression(
-    app: Any,
-    *,
-    purpose: str,
-    operations: Sequence[str],
-    solution: str,
-    phase_degrees: float,
-    dependencies: Mapping[str, str],
-    selection: Mapping[str, Any],
-    evidence_dir: Path,
-) -> dict[str, Any]:
-    """Author and evaluate one immutable named expression in a bound context."""
-
-    authored = author_named_expression(
-        app,
-        purpose=purpose,
-        operations=operations,
-        solution=solution,
-        phase_degrees=phase_degrees,
-        dependencies=dependencies,
-        selection=selection,
-        evidence_dir=evidence_dir,
-    )
-    name = authored["name"]
-    raw = app.post.fields_calculator.evaluate(
-        name,
-        setup=solution,
-        intrinsics={"Phase": f"{phase_degrees:g}deg"},
-    )
-    return {
-        **authored,
-        "scalar": parse_native_scalar(raw),
-    }
-
-
-def author_named_expression(
-    app: Any,
-    *,
-    purpose: str,
-    operations: Sequence[str],
-    solution: str,
-    phase_degrees: float,
-    dependencies: Mapping[str, str],
-    selection: Mapping[str, Any],
-    evidence_dir: Path,
-    namespace: str = "prepared",
-    adjacent_selection_name: str | None = None,
-) -> dict[str, Any]:
-    """Author one immutable expression through the same local batch compiler."""
-
-    compiled = compile_named_expression(
-        purpose=purpose,
-        operations=operations,
-        solution=solution,
-        phase_degrees=phase_degrees,
-        dependencies=dependencies,
-        selection=selection,
-        namespace=namespace,
-        adjacent_selection_name=adjacent_selection_name,
-    )
-    load_compiled_expressions(app, [compiled], evidence_dir)
-    # Loading attaches the native CLC readback to the authored expression.
-    # ``compiled`` is (expression_dict, definitions, evidence), not a list of
-    # per-expression records.
-    return compiled[0]
 
 
 def _clc_block(
@@ -504,49 +476,50 @@ def _read_native_named_expressions(
     }
 
 
-def compile_named_expression(
-    *,
-    purpose: str,
-    operations: Sequence[str],
-    solution: str,
-    phase_degrees: float,
-    dependencies: Mapping[str, str],
-    selection: Mapping[str, Any],
-    namespace: str = "prepared",
-    adjacent_selection_name: str | None = None,
-) -> tuple[dict[str, Any], list[tuple[str, str]], dict[str, bytes]]:
-    """Compile one immutable field definition without an AEDT call."""
+@dataclass(frozen=True, slots=True)
+class ExpressionRecipe:
+    """Everything that identifies one named field expression.
 
-    if solution != str(solution).strip() or not solution:
-        raise ValueError("solution must be non-empty canonical text")
-    if not isinstance(purpose, str) or not purpose:
-        raise ValueError("purpose must be non-empty text")
-    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", namespace):
-        raise ValueError("expression namespace must be a safe native identifier")
-    if isinstance(operations, (str, bytes)) or any(
-        not isinstance(item, str) or not item or "\n" in item or "\0" in item
-        for item in operations
-    ):
-        raise ValueError("expression operations must be canonical text entries")
-    for key in ("object_name", "selection_name"):
-        value = selection.get(key)
-        if value is not None and (
-            not isinstance(value, str)
-            or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", value)
-        ):
-            raise ValueError(f"expression selection {key} is not a safe native name")
+    The compiled name is a hash of these fields, so equal recipes always produce the
+    same native name.
+    """
+
+    purpose: str
+    operations: Sequence[str]
+    solution: str
+    phase_degrees: float
+    dependencies: Mapping[str, str]
+    selection: Mapping[str, Any]
+    namespace: str = "prepared"
+    # Set only for a face sheet whose field is sampled on the adjacent side.
+    adjacent_selection_name: str | None = None
+
+
+def compile_named_expression(
+    recipe: ExpressionRecipe,
+) -> tuple[dict[str, Any], list[tuple[str, str]], dict[str, bytes]]:
+    """Compile one immutable field definition without an AEDT call.
+
+    Returns the expression record, its native (name, CLC block) definitions in
+    load order, and the evidence files to write beside them.
+    """
+
+    _validate_recipe(recipe)
+    operations = recipe.operations
+    selection = recipe.selection
     identity = {
         "schema_version": "scgsim.aedt.epr-expression.v1",
-        "namespace": namespace,
-        "purpose": purpose,
+        "namespace": recipe.namespace,
+        "purpose": recipe.purpose,
         "operations": list(operations),
-        "solution": solution,
-        "phase_degrees": float(phase_degrees),
-        "dependencies": dict(sorted(dependencies.items())),
+        "solution": recipe.solution,
+        "phase_degrees": float(recipe.phase_degrees),
+        "dependencies": dict(sorted(recipe.dependencies.items())),
         "selection": dict(selection),
     }
     identity["sha256"] = _digest(identity)
-    # AEDT resolves one-file CLC dependencies by native-name order, not file order.
+    # AEDT resolves one-file CLC dependencies by native-name order, not file order,
+    # so an expression that names others must sort after them.
     rank = {
         "surface_group": "20",
         "normalized_surface_total": "30",
@@ -555,46 +528,107 @@ def compile_named_expression(
     name = f"scgsim_epr_{rank}_{identity['sha256'][:24]}"
     definitions: list[tuple[str, str]] = []
     evidence: dict[str, bytes] = {}
-    if adjacent_selection_name is None:
+    if recipe.adjacent_selection_name is None:
         block = _clc_block(name, operations)
         definitions.append((name, block))
         evidence[f"{name}.clc"] = block.encode("utf-8")
     else:
-        if selection.get("selection_name") != adjacent_selection_name or list(
-            operations[-3:]
-        ) != [
-            f"EnterAdjacentSurf('{adjacent_selection_name}')",
-            "Operation('SurfaceValue')",
-            "Operation('Integrate')",
-        ]:
-            raise ValueError("adjacent surface expression selection is inconsistent")
-        integrand_name = f"scgsim_epr_00_{identity['sha256'][:24]}_integrand"
-        integrand_block = _clc_block(integrand_name, operations[:-3])
-        final_block = _clc_block(
-            name,
-            [
-                f"NameOfExpression('{integrand_name}')",
-                f"EnterAdjacentSurface('{adjacent_selection_name}')",
-                "Operation('SurfaceValue')",
-                "Operation('Integrate')",
-            ],
-            expression=(
-                f"Integrate(AdjacentSurface({adjacent_selection_name}), "
-                f"{integrand_name})"
-            ),
+        _compile_adjacent_surface(
+            name, identity, recipe, definitions=definitions, evidence=evidence
         )
-        definitions.extend(((integrand_name, integrand_block), (name, final_block)))
-        evidence[f"{integrand_name}.clc"] = integrand_block.encode("utf-8")
-        evidence[f"{name}.clc"] = (integrand_block + final_block).encode("utf-8")
     record = {
         "name": name,
         "identity": identity,
         "definition_sha256": hashlib.sha256(evidence[f"{name}.clc"]).hexdigest(),
         "definition_status": "authored_and_loaded",
-        "solution": solution,
-        "phase_degrees": float(phase_degrees),
+        "solution": recipe.solution,
+        "phase_degrees": float(recipe.phase_degrees),
     }
     return record, definitions, evidence
+
+
+def _validate_recipe(recipe: ExpressionRecipe) -> None:
+    """Reject recipes whose text could not be a safe native identifier or line."""
+
+    if recipe.solution != str(recipe.solution).strip() or not recipe.solution:
+        raise ValueError("solution must be non-empty canonical text")
+    if not isinstance(recipe.purpose, str) or not recipe.purpose:
+        raise ValueError("purpose must be non-empty text")
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", recipe.namespace):
+        raise ValueError("expression namespace must be a safe native identifier")
+    if isinstance(recipe.operations, (str, bytes)) or any(
+        not isinstance(item, str) or not item or "\n" in item or "\0" in item
+        for item in recipe.operations
+    ):
+        raise ValueError("expression operations must be canonical text entries")
+    for key in ("object_name", "selection_name"):
+        value = recipe.selection.get(key)
+        if value is not None and (
+            not isinstance(value, str)
+            or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", value)
+        ):
+            raise ValueError(f"expression selection {key} is not a safe native name")
+
+
+def _compile_adjacent_surface(
+    name: str,
+    identity: Mapping[str, Any],
+    recipe: ExpressionRecipe,
+    *,
+    definitions: list[tuple[str, str]],
+    evidence: dict[str, bytes],
+) -> None:
+    """Split an adjacent-side surface integral into integrand and integral blocks.
+
+    The adjacent-surface token cannot sit inside the main operation stack, so the
+    integrand is its own named expression and the integral refers to it by name.
+    """
+
+    operations = recipe.operations
+    adjacent_selection_name = recipe.adjacent_selection_name
+    if recipe.selection.get("selection_name") != adjacent_selection_name or list(
+        operations[-3:]
+    ) != [
+        f"EnterAdjacentSurf('{adjacent_selection_name}')",
+        "Operation('SurfaceValue')",
+        "Operation('Integrate')",
+    ]:
+        raise ValueError("adjacent surface expression selection is inconsistent")
+    integrand_name = f"scgsim_epr_00_{identity['sha256'][:24]}_integrand"
+    integrand_block = _clc_block(integrand_name, operations[:-3])
+    final_block = _clc_block(
+        name,
+        [
+            f"NameOfExpression('{integrand_name}')",
+            f"EnterAdjacentSurface('{adjacent_selection_name}')",
+            "Operation('SurfaceValue')",
+            "Operation('Integrate')",
+        ],
+        expression=(
+            f"Integrate(AdjacentSurface({adjacent_selection_name}), {integrand_name})"
+        ),
+    )
+    definitions.extend(((integrand_name, integrand_block), (name, final_block)))
+    evidence[f"{integrand_name}.clc"] = integrand_block.encode("utf-8")
+    evidence[f"{name}.clc"] = (integrand_block + final_block).encode("utf-8")
+
+
+def _load_named_expressions(calculator: Any, library: Path, names: list[str]) -> Any:
+    """Run AEDT's batch load; on failure say how many definitions got in."""
+
+    try:
+        return calculator.ofieldsreporter.LoadNamedExpressions(
+            str(library), "Fields", names
+        )
+    except Exception as exc:
+        try:
+            present = [name for name in names if calculator.is_expression_defined(name)]
+            progress = f"{len(present)}/{len(names)} definitions became present"
+        except Exception as readback_exc:  # noqa: BLE001 -- diagnostic only.
+            progress = f"{len(names)} requested definitions; partial readback unavailable: {readback_exc!r}"
+        raise RuntimeError(
+            f"HFSS batch named-expression load raised after {progress}"
+        ) from exc
 
 
 def load_compiled_expressions(
@@ -630,19 +664,7 @@ def load_compiled_expressions(
     library.write_bytes(library_bytes)
     evidence_write_seconds = time.perf_counter() - started
     started = time.perf_counter()
-    try:
-        result = calculator.ofieldsreporter.LoadNamedExpressions(
-            str(library), "Fields", names
-        )
-    except Exception as exc:
-        try:
-            present = [name for name in names if calculator.is_expression_defined(name)]
-            progress = f"{len(present)}/{len(names)} definitions became present"
-        except Exception as readback_exc:
-            progress = f"{len(names)} requested definitions; partial readback unavailable: {readback_exc!r}"
-        raise RuntimeError(
-            f"HFSS batch named-expression load raised after {progress}"
-        ) from exc
+    result = _load_named_expressions(calculator, library, names)
     batch_import_seconds = time.perf_counter() - started
     started = time.perf_counter()
     present = [name for name in names if calculator.is_expression_defined(name)]

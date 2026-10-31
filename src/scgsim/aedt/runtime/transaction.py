@@ -36,11 +36,10 @@ from scgsim.aedt.preparation.planar import validate_geometry_workers
 from scgsim.aedt.results.epr import seal_saved_solution
 from scgsim.aedt.results.provenance import runtime_source_identity
 from scgsim.aedt.runtime._timing import elapsed_seconds
-from scgsim.aedt.runtime.families.hfss import (
+from scgsim.aedt.runtime.families.hfss import prepare_hfss, run_hfss
+from scgsim.aedt.runtime.families.hfss_body_eigenmode import (
     prepare_body_eigenmode,
-    prepare_hfss,
     prepared_body_eigenmode_result,
-    run_hfss,
     solve_and_export_body_eigenmode,
 )
 from scgsim.aedt.runtime.families.q2d import prepare_q2d, prepared_q2d_result, run_q2d

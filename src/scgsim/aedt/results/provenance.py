@@ -1,4 +1,10 @@
-"""Versioned AEDT runtime source provenance and receipt codecs."""
+"""Runtime source provenance and the initial receipt codec.
+
+Owns: hashing the exact source files that produce an AEDT run (so a receipt proves
+which code made it), validating that record's shape, and the byte-exact encoding of
+the initial (not yet run) receipt whose hash the handoff manifest binds. It does
+not compare a record with the installed code; that is left to the reader.
+"""
 
 from __future__ import annotations
 
@@ -16,13 +22,16 @@ from scgsim.aedt._io import file_sha256
 RECEIPT_V3 = "scgsim.aedt.receipt.v3"
 
 # V19 is no longer written; the name stays only because the terminal-evidence
-# gates in `resolve.py` and `prepared.py` still compare against it.
+# gate in `readback_common.py` still compares against it.
 SOURCE_SCHEMA_V19 = "scgsim.aedt.runtime-source.v19"
 
 SOURCE_SCHEMA_V21 = "scgsim.aedt.runtime-source.v21"
 
 SOURCE_SCHEMA = SOURCE_SCHEMA_V21
 
+# Every module whose bytes are hashed into a receipt, in the order they are
+# recorded. Adding, moving or removing a module under aedt/ or geometry/ changes
+# the recorded source, so this list must follow the file layout.
 _RUNTIME_SOURCE_V21_PATHS = (
     "src/scgsim/aedt/__init__.py",
     "src/scgsim/aedt/_benchmark.py",
@@ -33,11 +42,17 @@ _RUNTIME_SOURCE_V21_PATHS = (
     "src/scgsim/aedt/eigenmode.py",
     "src/scgsim/aedt/epr/analysis.py",
     "src/scgsim/aedt/epr/cache.py",
+    "src/scgsim/aedt/epr/expressions.py",
     "src/scgsim/aedt/epr/fields.py",
     "src/scgsim/aedt/epr/geometry.py",
+    "src/scgsim/aedt/epr/history.py",
+    "src/scgsim/aedt/epr/integrals.py",
     "src/scgsim/aedt/epr/models.py",
     "src/scgsim/aedt/epr/native.py",
+    "src/scgsim/aedt/epr/normalized_total.py",
+    "src/scgsim/aedt/epr/reanalysis.py",
     "src/scgsim/aedt/epr/selection.py",
+    "src/scgsim/aedt/epr/surface_epr.py",
     "src/scgsim/aedt/epr/workflow.py",
     "src/scgsim/aedt/preparation/cohort.py",
     "src/scgsim/aedt/preparation/geometry.py",
@@ -52,28 +67,46 @@ _RUNTIME_SOURCE_V21_PATHS = (
     "src/scgsim/aedt/presentation/epr_surfaces.py",
     "src/scgsim/aedt/presentation/runs.py",
     "src/scgsim/aedt/results/benchmark.py",
+    "src/scgsim/aedt/results/body_first_readback.py",
+    "src/scgsim/aedt/results/cohort.py",
     "src/scgsim/aedt/results/convergence/_evidence_files.py",
     "src/scgsim/aedt/results/convergence/common.py",
     "src/scgsim/aedt/results/convergence/hfss.py",
     "src/scgsim/aedt/results/convergence/q2d.py",
     "src/scgsim/aedt/results/convergence/q3d.py",
     "src/scgsim/aedt/results/epr.py",
+    "src/scgsim/aedt/results/hfss_pec.py",
+    "src/scgsim/aedt/results/hfss_readback.py",
     "src/scgsim/aedt/results/matrices.py",
     "src/scgsim/aedt/results/prepared.py",
     "src/scgsim/aedt/results/provenance.py",
+    "src/scgsim/aedt/results/q2d_readback.py",
+    "src/scgsim/aedt/results/q3d_readback.py",
+    "src/scgsim/aedt/results/q3d_region.py",
+    "src/scgsim/aedt/results/readback_common.py",
     "src/scgsim/aedt/results/resolve.py",
     "src/scgsim/aedt/run.py",
     "src/scgsim/aedt/runtime/_text.py",
     "src/scgsim/aedt/runtime/_timing.py",
     "src/scgsim/aedt/runtime/benchmark.py",
     "src/scgsim/aedt/runtime/families/hfss.py",
+    "src/scgsim/aedt/runtime/families/hfss_body_eigenmode.py",
+    "src/scgsim/aedt/runtime/families/hfss_body_ports.py",
+    "src/scgsim/aedt/runtime/families/hfss_export.py",
+    "src/scgsim/aedt/runtime/families/hfss_readback.py",
     "src/scgsim/aedt/runtime/families/q2d.py",
     "src/scgsim/aedt/runtime/families/q3d.py",
+    "src/scgsim/aedt/runtime/families/q3d_region.py",
     "src/scgsim/aedt/runtime/handoff_checks.py",
     "src/scgsim/aedt/runtime/native/common.py",
+    "src/scgsim/aedt/runtime/native/hfss_bodies.py",
     "src/scgsim/aedt/runtime/native/hfss_eigenmode.py",
+    "src/scgsim/aedt/runtime/native/hfss_enclosure.py",
     "src/scgsim/aedt/runtime/native/hfss_geometry.py",
+    "src/scgsim/aedt/runtime/native/hfss_junction_readback.py",
     "src/scgsim/aedt/runtime/native/hfss_lumped.py",
+    "src/scgsim/aedt/runtime/native/hfss_planar_topology.py",
+    "src/scgsim/aedt/runtime/native/materials.py",
     "src/scgsim/aedt/runtime/native/q3d_bodies.py",
     "src/scgsim/aedt/runtime/receipts.py",
     "src/scgsim/aedt/runtime/transaction.py",
@@ -137,6 +170,7 @@ def _module_manifest() -> list[dict[str, str]]:
 
 
 def _content_digest(modules: list[dict[str, str]]) -> str:
+    """SHA-256 of the canonical JSON of the module list."""
     encoded = json.dumps(
         modules, ensure_ascii=True, separators=(",", ":"), sort_keys=True
     ).encode("utf-8")
@@ -144,6 +178,11 @@ def _content_digest(modules: list[dict[str, str]]) -> str:
 
 
 def _observed_revision() -> str | None:
+    """The commit of the installed package, or ``None`` if it cannot be observed.
+
+    Tries the installed distribution's recorded VCS info first, then asks Git in a
+    source checkout. Absence is reported, never guessed.
+    """
     try:
         direct_url = distribution("scgsim").read_text("direct_url.json")
     except PackageNotFoundError:
@@ -182,28 +221,20 @@ def _observed_revision() -> str | None:
 
 def prepared_runtime_source() -> dict[str, Any]:
     """Return complete module hashes plus an optional truthful Git observation."""
-    modules = _module_manifest()
-    revision = _observed_revision()
-    return {
-        "schema_version": SOURCE_SCHEMA,
-        "stage": "prepared",
-        "modules": modules,
-        "content_sha256": _content_digest(modules),
-        "revision_observation": (
-            {"status": "available", "revision": revision}
-            if revision is not None
-            else {"status": "unavailable"}
-        ),
-    }
+    return _measured_runtime_source("prepared")
 
 
 def runtime_source_identity() -> dict[str, Any]:
     """Bind execution to measured module bytes and a truthful Git observation."""
+    return _measured_runtime_source("actual")
+
+
+def _measured_runtime_source(stage: Literal["prepared", "actual"]) -> dict[str, Any]:
     modules = _module_manifest()
     revision = _observed_revision()
     return {
         "schema_version": SOURCE_SCHEMA,
-        "stage": "actual",
+        "stage": stage,
         "modules": modules,
         "content_sha256": _content_digest(modules),
         "revision_observation": (
