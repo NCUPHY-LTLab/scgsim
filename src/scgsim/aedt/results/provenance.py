@@ -313,7 +313,14 @@ _RUNTIME_SOURCE_V20_PATHS = tuple(
 
 # V1–V20 retain exact historical scopes; V21 adds shared memory attribution.
 _RUNTIME_SOURCE_V21_PATHS = tuple(
-    sorted((*_RUNTIME_SOURCE_V20_PATHS, "src/scgsim/aedt/_benchmark.py"))
+    sorted(
+        (
+            *_RUNTIME_SOURCE_V20_PATHS,
+            "src/scgsim/aedt/_benchmark.py",
+            "src/scgsim/aedt/runtime/handoff_checks.py",
+            "src/scgsim/aedt/runtime/receipts.py",
+        )
+    )
 )
 
 
