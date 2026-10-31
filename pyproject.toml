@@ -40,6 +40,7 @@ visualization = [
 dev = [
     "jupytext",
     "nbformat",
+    "ruff==0.17.3",
 ]
 
 [project.urls]
@@ -66,5 +67,29 @@ scgsim = [
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "C901", "SLF", "BLE"]
+select = [
+    "E",
+    "F",
+    "W",
+    "I",
+    "B",
+    "C901",
+    "SLF",
+    "BLE",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+]
 ignore = ["E501"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.lint.per-file-ignores]
+# The readability rules apply to the package; tests and scripts keep the original set.
+"tests/**" = ["PLR0912", "PLR0913", "PLR0915", "D100", "D101", "D102", "D103"]
+"scripts/**" = ["PLR0912", "PLR0913", "PLR0915", "D100", "D101", "D102", "D103"]

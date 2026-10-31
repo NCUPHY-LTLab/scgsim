@@ -33,7 +33,9 @@ uvx ruff@0.17.3 format --check src
    and a dataclass for data with its own behavior. Name repeated `isinstance` tuples
    by what they mean. Replace positional tuples with named records.
 8. **Names state the purpose.** Prefer a short purpose name to a long description of
-   the mechanism.
+   the mechanism. Keep standard-library and third-party names as they are
+   (`time.perf_counter`, not an alias); name the repeated pattern around them
+   instead, such as `_elapsed_seconds(started)`.
 9. **One copy of each helper.** Merge copies only when they really behave the same.
    When they differ, the names must say how.
 
