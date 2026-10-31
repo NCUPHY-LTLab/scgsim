@@ -635,7 +635,6 @@ def _adaptive_epr_result(
         result_kind="adaptive_history",
         setup_name=spec.run_control.setup_name,
         rows=tuple(rows),
-        _legacy_payload=spec._legacy_payload,
         provenance={
             "model_source_sha256": spec.geometry.model_sha256,
             "analysis_source_sha256": spec.geometry.source_sha256,

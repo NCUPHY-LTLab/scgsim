@@ -86,15 +86,11 @@ PdkMaterialKind = Literal["vacuum", "dielectric", "superconductor"]
 Side = Literal["+X", "-X", "+Y", "-Y", "+Z", "-Z"]
 
 # Schema identifiers. A payload's `schema_version` selects its parser (`parse.py`),
-# and a changed payload shape gets a new version instead of an edit. Older versions
-# stay listed because saved hand-offs still have to load.
+# and a changed payload shape gets a new version instead of an edit. Only versions
+# the writers still emit are listed; older hand-offs are rejected.
 SCHEMA_VERSION = "scgsim.aedt.hfss-driven.v1"
 
 EIGENMODE_SCHEMA_VERSION = "scgsim.aedt.hfss-eigenmode.v1"
-
-EPR_EIGENMODE_SCHEMA_VERSION = "scgsim.aedt.hfss-eigenmode-epr.v1"
-
-EPR_ANALYSIS_SCHEMA_VERSION = "scgsim.aedt.hfss-eigenmode-epr-analysis.v1"
 
 EPR_EIGENMODE_SCHEMA_VERSION_V2 = "scgsim.aedt.hfss-eigenmode-epr.v2"
 

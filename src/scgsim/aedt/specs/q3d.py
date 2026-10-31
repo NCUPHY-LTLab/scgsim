@@ -32,7 +32,6 @@ from scgsim.aedt.specs.common import (
 from scgsim.aedt.specs.modeling import (
     Modeling,
     PhysicalLayerDeclaration,
-    PhysicalLayerSpec,
     PhysicalRepresentationPlan,
     _effective_record,
     _modeling_payload,
@@ -326,10 +325,8 @@ class Q3dSpec:
     nets: tuple[Q3dNetSpec, ...]
     run_control: MatrixRunControl | None
     region_padding_um: tuple[float, float, float, float, float, float]
-    physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
+    physical_layers: tuple[PhysicalLayerDeclaration, ...] = ()
     physical_representation: PhysicalRepresentationPlan | None = None
-    _historical_physical: bool = False
-    _historical_modeling: bool = False
     solve_ac_rl: bool = True
     grounded_region_net: str | None = None
     aedt_version: str = REQUIRED_AEDT_VERSION
@@ -351,8 +348,6 @@ class Q3dSpec:
             self.run_control, MatrixRunControl
         ):
             raise TypeError("run_control must be MatrixRunControl or None")
-        if self.run_control is None and self._historical_modeling:
-            raise ValueError("historical Q3D requests require run_control")
         bodies = self._checked_bodies(materials)
         object.__setattr__(self, "bodies", bodies)
         object.__setattr__(self, "region_padding_um", _padding(self.region_padding_um))
@@ -442,15 +437,11 @@ class Q3dSpec:
         Z.
         """
         mapping = _request_modeling(self)
-        if mapping is None:
-            raise ValueError("historical requests have no new execution modeling map")
         return tuple(_effective_record(item, mapping) for item in self.bodies)
 
     @property
-    def effective_region(self) -> dict[str, Any] | None:
+    def effective_region(self) -> dict[str, Any]:
         """Project the complete originally requested envelope with the common plan."""
-        if self._historical_physical or self._historical_modeling:
-            return None
         mapping = _request_modeling(self)
 
         def bounds(records):
@@ -491,8 +482,6 @@ class Q3dSpec:
     def effective_region_padding_um(self) -> tuple[float, ...]:
         """Region padding in effective (native) space, ordered +X, -X, +Y, -Y, +Z, -Z."""
         trace = self.effective_region
-        if trace is None:
-            return self.region_padding_um
         return tuple(
             trace["effective_padding_um"][key]
             for key in (
@@ -506,9 +495,7 @@ class Q3dSpec:
         )
 
     def to_payload(self) -> dict[str, Any]:
-        """Serialize with the effective bodies when a modeling plan is bound, and the
-        authored bodies otherwise.
-        """
+        """Serialize with the effective bodies of the bound plan."""
         payload = {
             **_modeling_payload(self),
             "schema_version": self.schema_version,
@@ -523,11 +510,7 @@ class Q3dSpec:
                 key: item.to_payload() for key, item in self.materials.items()
             },
             "vacuum_material_id": self.vacuum_material_id,
-            "bodies": (
-                list(self.effective_bodies)
-                if self.modeling is not None
-                else [body.to_payload() for body in self.bodies]
-            ),
+            "bodies": list(self.effective_bodies),
             "nets": [net.to_payload() for net in self.nets],
             "run_control": None
             if self.run_control is None
@@ -546,7 +529,6 @@ class Q3dSpec:
         payload: dict[str, Any],
         *,
         base_dir: Path | None = None,
-        allow_historical_modeling: bool = False,
     ) -> Q3dSpec:
         """Rebuild from a v3 payload and verify the stored effective bodies against the
         plan.
@@ -557,9 +539,7 @@ class Q3dSpec:
             raise ValueError("Q3D v3 does not accept GDS-piece inputs")
         result = cls(
             modeling=payload.get("modeling"),
-            **_physical_fields_from_payload(
-                payload, allow_historical=allow_historical_modeling
-            ),
+            **_physical_fields_from_payload(payload),
             project_name=_project_name_from_payload(
                 payload.get("project", {}).get("name")
             ),
@@ -587,6 +567,5 @@ class Q3dSpec:
             pyaedt_version=payload["pyaedt"]["locked_version"],
             geometry_source=payload.get("geometry_source"),
         )
-        if result.modeling is not None:
-            _verify_effective_records(payload["bodies"], result.effective_bodies)
+        _verify_effective_records(payload["bodies"], result.effective_bodies)
         return result

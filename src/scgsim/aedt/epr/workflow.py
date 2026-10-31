@@ -340,7 +340,6 @@ def analyze_saved_epr(
         result_kind="saved_field",
         setup_name=spec.run_control.setup_name,
         rows=tuple(rows),
-        _legacy_payload=spec._legacy_payload,
         provenance=result_provenance,
     )
     result_path = output_dir / "epr-result.json"
@@ -368,7 +367,6 @@ def analyze_saved_epr(
             result_kind="saved_field",
             setup_name=spec.run_control.setup_name,
             rows=tuple(rows),
-            _legacy_payload=spec._legacy_payload,
             provenance=result_provenance,
         )
         started = time.perf_counter()

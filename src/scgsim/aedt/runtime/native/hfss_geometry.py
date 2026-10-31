@@ -24,13 +24,11 @@ from scgsim.aedt.preparation.junction_partition import (
     _section,
 )
 from scgsim.aedt.preparation.planar import (
-    _entity_z_range,
     _junction_polygon,
     _junction_terminal_line,
     _native_entity_name,
     _native_name,
     _plain_geometry_source,
-    _route_a_sheet_z,
 )
 from scgsim.aedt.runtime.native.common import (
     _native_boundary_type,
@@ -176,20 +174,14 @@ def _solution_body(
 
 
 def _prepared_modeling_identity(prepared: PreparedPlanarGeometry) -> dict[str, Any]:
-    """Keep legacy route labels on historical rebinds; new records name modeling."""
-    if prepared.modeling is not None:
-        return {"modeling": prepared.modeling}
-    return {"route": prepared.route}
+    """Name the modeling the prepared geometry was built with."""
+    return {"modeling": prepared.modeling}
 
 
 def _validate_native_modeling_source(
     prepared: PreparedPlanarGeometry, source: Mapping[str, Any]
 ) -> None:
-    """Keep current effective-layer provenance separate from legacy route reads."""
-    if prepared.modeling is None:
-        if "modeling" in source:
-            raise ValueError("historical EPR geometry has current modeling provenance")
-        return
+    """The prepared source must carry its effective-layer provenance."""
     if not isinstance(source.get("modeling"), Mapping):
         raise ValueError("prepared EPR effective-layer provenance is unavailable")
 
@@ -198,37 +190,27 @@ def _native_conductor_geometry(
     source: Mapping[str, Any], entity: Mapping[str, Any]
 ) -> tuple[str, float, float]:
     """Read the producer's effective native shape and Z without remapping it."""
-    if "modeling" in source:
-        modeling = source["modeling"]
-        if not isinstance(modeling, Mapping):
-            raise TypeError("prepared EPR modeling provenance is unavailable")
-        physical_layer = entity.get("physical_layer")
-        if not isinstance(physical_layer, Mapping):
-            raise ValueError(
-                f"EPR conductor {entity.get('semantic_id')!r} lacks "
-                "effective-layer provenance"
-            )
-        representation = physical_layer.get("representation")
-        if representation not in {"solid", "sheet"}:
-            raise ValueError("prepared EPR conductor representation is invalid")
-        if entity.get("representation") != representation:
-            raise ValueError(
-                f"EPR conductor {entity.get('semantic_id')!r} representation "
-                "differs from its effective layer"
-            )
-        return (
-            str(representation),
-            float(physical_layer["effective_z_min_um"]),
-            float(physical_layer["effective_z_max_um"]),
+    if not isinstance(source.get("modeling"), Mapping):
+        raise TypeError("prepared EPR modeling provenance is unavailable")
+    physical_layer = entity.get("physical_layer")
+    if not isinstance(physical_layer, Mapping):
+        raise ValueError(
+            f"EPR conductor {entity.get('semantic_id')!r} lacks "
+            "effective-layer provenance"
         )
-
-    # Historical saved-project reads retain the recorded route basis. New native
-    # construction is rejected before reaching this reader-only interpretation.
-    z_min_um, z_max_um = _entity_z_range(entity)
-    if entity["representation"] == "surface_sheet":
-        z_min_um = z_max_um = _route_a_sheet_z(source, entity)
-        return "sheet", z_min_um, z_max_um
-    return "solid", z_min_um, z_max_um
+    representation = physical_layer.get("representation")
+    if representation not in {"solid", "sheet"}:
+        raise ValueError("prepared EPR conductor representation is invalid")
+    if entity.get("representation") != representation:
+        raise ValueError(
+            f"EPR conductor {entity.get('semantic_id')!r} representation "
+            "differs from its effective layer"
+        )
+    return (
+        str(representation),
+        float(physical_layer["effective_z_min_um"]),
+        float(physical_layer["effective_z_max_um"]),
+    )
 
 
 def _material_readback(app: Any, materials: Mapping[str, Any]) -> dict[str, Any]:
@@ -2105,16 +2087,6 @@ def bind_saved_planar_geometry(
     if boundary_policy == "hfss_default.v1":
         enclosure = {
             **_implicit_closed_enclosure(app, source),
-            "binding_stage": "saved_project_readback_without_cad_creation",
-        }
-    elif "outer_boundary_policy" not in region_plan:
-        # Historical prepared source records an explicit named enclosure.
-        closed_type = _native_boundary_type(app, "SCGSimClosedEnclosure")
-        if closed_type != "Perfect E":
-            raise RuntimeError("saved EPR closed enclosure boundary differs")
-        enclosure = {
-            "boundary_name": "SCGSimClosedEnclosure",
-            "native_boundary_type": closed_type,
             "binding_stage": "saved_project_readback_without_cad_creation",
         }
     else:

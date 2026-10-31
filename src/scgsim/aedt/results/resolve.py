@@ -24,8 +24,6 @@ from scgsim.aedt.results.convergence.q2d import read_q2d_convergence
 from scgsim.aedt.results.convergence.q3d import read_q3d_convergence
 from scgsim.aedt.results.matrices import parse_matrix_export, read_q2d_rlgc_matrix
 from scgsim.aedt.results.provenance import (
-    RECEIPT_V1,
-    RECEIPT_V2,
     RECEIPT_V3,
     SOURCE_SCHEMA_V19,
     initial_receipt_payload,
@@ -119,7 +117,6 @@ class ResolvedRun:
             spec = parse_aedt_spec(
                 read_json(self._verified_spec()),
                 base_dir=root,
-                allow_historical_modeling=True,
             )
             if not isinstance(spec, Q2dSpec):
                 raise RuntimeError("resolved Q2D result has a non-Q2D spec")
@@ -133,7 +130,6 @@ class ResolvedRun:
             spec = parse_aedt_spec(
                 read_json(self._verified_spec()),
                 base_dir=root,
-                allow_historical_modeling=True,
             )
             if not isinstance(spec, Q3dSpec):
                 raise RuntimeError("resolved Q3D result has a non-Q3D spec")
@@ -264,17 +260,15 @@ def resolve_results(run_dir: str | Path) -> ResolvedRun:
     if not receipt_path.is_file():
         raise FileNotFoundError(f"run receipt is missing: {receipt_path}")
     receipt = read_json(receipt_path)
-    if not isinstance(receipt, dict) or receipt.get("schema_version") not in {
-        RECEIPT_V1,
-        RECEIPT_V2,
-        RECEIPT_V3,
-    }:
+    if not isinstance(receipt, dict):
         raise RuntimeError("handoff receipt schema is invalid")
+    if receipt.get("schema_version") != RECEIPT_V3:
+        raise RuntimeError(
+            f"handoff receipt schema {receipt.get('schema_version')!r} is "
+            f"unsupported; only {RECEIPT_V3!r} is supported"
+        )
     if receipt.get("status") != "completed":
         raise RuntimeError("handoff has not completed successfully")
-    receipt_schema = receipt["schema_version"]
-    if receipt_schema == RECEIPT_V1:
-        _reject_legacy_v2_markers(root, receipt)
     save = receipt.get("save")
     if (
         not isinstance(save, dict)
@@ -289,11 +283,8 @@ def resolve_results(run_dir: str | Path) -> ResolvedRun:
     if not isinstance(source, dict) or source.get("spec") != "aedt_spec.json":
         raise RuntimeError("receipt source paths are not canonical")
     spec_path = _verified(root, "aedt_spec.json", source, "spec_sha256")
-    spec = parse_aedt_spec(
-        read_json(spec_path), base_dir=root, allow_historical_modeling=True
-    )
-    if receipt_schema in {RECEIPT_V2, RECEIPT_V3}:
-        _validate_completion_cohort(root, receipt, spec)
+    spec = parse_aedt_spec(read_json(spec_path), base_dir=root)
+    _validate_completion_cohort(root, receipt, spec)
     if isinstance(spec, (HfssEprSpec, HfssDrivenGeometrySpec)):
         expected_source = {
             "spec",
@@ -338,9 +329,7 @@ def resolve_results(run_dir: str | Path) -> ResolvedRun:
             raise RuntimeError("body-first Eigenmode native readback is incomplete")
     else:
         _validate_readback(root, receipt, spec)
-    if receipt_schema == RECEIPT_V3 and isinstance(
-        spec, (HfssDrivenSpec, HfssEigenmodeSpec)
-    ):
+    if isinstance(spec, (HfssDrivenSpec, HfssEigenmodeSpec)):
         _validate_hfss_pec_bindings(receipt, spec)
     outputs = receipt.get("outputs")
     if not isinstance(outputs, dict):
@@ -465,11 +454,8 @@ def resolve_results(run_dir: str | Path) -> ResolvedRun:
                 )
             _verified(root, "results/epr/adaptive-convergence.prop", outputs)
             _verified(root, "results/epr/adaptive-mode-history.json", outputs)
-            if receipt.get("convergence") != read_hfss_convergence(
-                root,
-                spec,
-                historical_profile=_eigenmode_convergence_source(receipt) == "profile",
-            ):
+            _require_export_convergence_source(receipt)
+            if receipt.get("convergence") != read_hfss_convergence(root, spec):
                 raise RuntimeError(
                     "body-first Eigenmode convergence evidence is invalid"
                 )
@@ -500,12 +486,11 @@ def resolve_results(run_dir: str | Path) -> ResolvedRun:
         }
         if benchmark_path is not None:
             expected.add(BENCHMARK_RELATIVE)
-        if _eigenmode_convergence_source(receipt) == "export_convergence":
-            expected.add("results/eigenmode/adaptive-convergence.prop")
+        _require_export_convergence_source(receipt)
+        expected.add("results/eigenmode/adaptive-convergence.prop")
         if set(outputs) != expected:
             raise RuntimeError("Eigenmode output manifest is not canonical")
-        if "results/eigenmode/adaptive-convergence.prop" in expected:
-            _verified(root, "results/eigenmode/adaptive-convergence.prop", outputs)
+        _verified(root, "results/eigenmode/adaptive-convergence.prop", outputs)
         return ResolvedRun(
             "eigenmode",
             project,
@@ -571,34 +556,12 @@ def _contained_in_handoff_root(root: Path, relative: str) -> Path:
     return resolved
 
 
-def _reject_legacy_v2_markers(root: Path, receipt: dict[str, Any]) -> None:
-    """Reject partial receipt downgrades without burdening historical v1 runs."""
-    if "expected_receipt_schema" in receipt or "prepared_runtime_source" in receipt:
-        raise RuntimeError("legacy receipt conflicts with v2 expectation markers")
-    for relative in (
-        "metadata/aedt_handoff_metadata.json",
-        "metadata/aedt_handoff_manifest.json",
-    ):
-        path = _contained_in_handoff_root(root, relative)
-        if not path.is_file():
-            continue
-        try:
-            candidate = read_json(path)
-        except (OSError, TypeError, ValueError):
-            # Historical v1 resolution never required either preparation file.
-            continue
-        if isinstance(candidate, dict) and "expected_receipt_schema" in candidate:
-            raise RuntimeError("legacy receipt conflicts with v2 expectation markers")
-
-
 def _validate_completion_cohort(root: Path, receipt: dict[str, Any], spec: Any) -> None:
     """Verify the immutable preparation cohort and complete execution provenance."""
-    receipt_schema = receipt.get("schema_version")
-    if receipt_schema not in {RECEIPT_V2, RECEIPT_V3}:
+    if receipt.get("schema_version") != RECEIPT_V3:
         raise RuntimeError("completed receipt cohort schema is invalid")
-    version = receipt_schema.rsplit(".", 1)[-1]
-    if receipt.get("expected_receipt_schema") != receipt_schema:
-        raise RuntimeError(f"completed {version} receipt expectation marker is invalid")
+    if receipt.get("expected_receipt_schema") != RECEIPT_V3:
+        raise RuntimeError("completed v3 receipt expectation marker is invalid")
     mode = receipt.get("mode")
     if mode not in {"terminal", "modal", "eigenmode", "q3d", "q2d"}:
         raise RuntimeError("AEDT receipt mode is invalid")
@@ -610,9 +573,7 @@ def _validate_completion_cohort(root: Path, receipt: dict[str, Any], spec: Any) 
         root, "metadata/aedt_handoff_manifest.json"
     )
     if not metadata_path.is_file() or not manifest_path.is_file():
-        raise RuntimeError(
-            f"completed {version} receipt lacks preparation cohort files"
-        )
+        raise RuntimeError("completed v3 receipt lacks preparation cohort files")
     metadata = read_json(metadata_path)
     manifest = read_json(manifest_path)
     epr = isinstance(spec, (HfssEprSpec, HfssDrivenGeometrySpec))
@@ -628,7 +589,7 @@ def _validate_completion_cohort(root: Path, receipt: dict[str, Any], spec: Any) 
         or not isinstance(manifest, dict)
         or manifest.get("schema_version") != expected_manifest_schema
     ):
-        raise RuntimeError(f"completed {version} preparation cohort is invalid")
+        raise RuntimeError("completed v3 preparation cohort is invalid")
 
     expected_files = {
         "spec": "aedt_spec.json",
@@ -647,35 +608,16 @@ def _validate_completion_cohort(root: Path, receipt: dict[str, Any], spec: Any) 
     }:
         raise RuntimeError("body-first Eigenmode preparation workflow is invalid")
     if metadata.get("files") != expected_files:
-        raise RuntimeError(f"completed {version} preparation file map is not canonical")
+        raise RuntimeError("completed v3 preparation file map is not canonical")
 
-    metadata_has = "expected_receipt_schema" in metadata
-    manifest_has = "expected_receipt_schema" in manifest
-    preparation_cohort = receipt.get("preparation_cohort")
-    prepared_source = receipt.get("prepared_runtime_source")
-    if preparation_cohort == "prepared_v3" and receipt_schema == RECEIPT_V3:
-        if (
-            metadata.get("expected_receipt_schema") != RECEIPT_V3
-            or manifest.get("expected_receipt_schema") != RECEIPT_V3
-        ):
-            raise RuntimeError("completed v3 preparation markers are inconsistent")
-        validate_runtime_source(prepared_source, stage="prepared")
-    elif preparation_cohort == "prepared_v2":
-        if (
-            metadata.get("expected_receipt_schema") != RECEIPT_V2
-            or manifest.get("expected_receipt_schema") != RECEIPT_V2
-        ):
-            raise RuntimeError("completed v2 preparation markers are inconsistent")
-        validate_runtime_source(prepared_source, stage="prepared")
-    elif preparation_cohort == "verified_legacy_v1":
-        if metadata_has or manifest_has:
-            raise RuntimeError(
-                f"verified legacy cohort contains {version} preparation markers"
-            )
-        if prepared_source != {"status": "legacy_v1_not_recorded"}:
-            raise RuntimeError("verified legacy preparation provenance is invalid")
-    else:
-        raise RuntimeError(f"completed {version} preparation cohort is invalid")
+    if receipt.get("preparation_cohort") != "prepared_v3":
+        raise RuntimeError("completed v3 preparation cohort is invalid")
+    if (
+        metadata.get("expected_receipt_schema") != RECEIPT_V3
+        or manifest.get("expected_receipt_schema") != RECEIPT_V3
+    ):
+        raise RuntimeError("completed v3 preparation markers are inconsistent")
+    validate_runtime_source(receipt.get("prepared_runtime_source"), stage="prepared")
 
     validate_runtime_source(receipt.get("runtime_source"), stage="actual")
     prepared_receipt_sha = receipt.get("prepared_receipt_sha256")
@@ -686,15 +628,13 @@ def _validate_completion_cohort(root: Path, receipt: dict[str, Any], spec: Any) 
         or not isinstance(verified_manifest_sha, str)
         or not _sha256_text(verified_manifest_sha)
         or file_sha256(manifest_path) != verified_manifest_sha
-        or _initial_receipt_sha256(receipt, preparation_cohort) != prepared_receipt_sha
+        or _initial_receipt_sha256(receipt) != prepared_receipt_sha
     ):
-        raise RuntimeError(f"completed {version} preparation hash bindings are invalid")
+        raise RuntimeError("completed v3 preparation hash bindings are invalid")
 
     expected_paths = canonical_handoff_paths(spec)
     if manifest.get("allowed_paths") != expected_paths:
-        raise RuntimeError(
-            f"completed {version} manifest allowed paths are not canonical"
-        )
+        raise RuntimeError("completed v3 manifest allowed paths are not canonical")
     members = manifest.get("members")
     if (
         not isinstance(members, list)
@@ -702,7 +642,7 @@ def _validate_completion_cohort(root: Path, receipt: dict[str, Any], spec: Any) 
         or [item.get("path") if isinstance(item, dict) else None for item in members]
         != canonical_member_paths(spec)
     ):
-        raise RuntimeError(f"completed {version} manifest members are not canonical")
+        raise RuntimeError("completed v3 manifest members are not canonical")
     for member in members:
         if (
             not isinstance(member, dict)
@@ -713,13 +653,11 @@ def _validate_completion_cohort(root: Path, receipt: dict[str, Any], spec: Any) 
             or not isinstance(member.get("sha256"), str)
             or not _sha256_text(member["sha256"])
         ):
-            raise RuntimeError(f"completed {version} manifest member is invalid")
+            raise RuntimeError("completed v3 manifest member is invalid")
         relative = member["path"]
         if relative == "metadata/aedt_run_receipt.json":
             if member["sha256"] != prepared_receipt_sha:
-                raise RuntimeError(
-                    f"completed {version} initial receipt binding is invalid"
-                )
+                raise RuntimeError("completed v3 initial receipt binding is invalid")
             continue
         path = _contained_in_handoff_root(root, relative)
         if (
@@ -727,9 +665,7 @@ def _validate_completion_cohort(root: Path, receipt: dict[str, Any], spec: Any) 
             or path.stat().st_size != member["bytes"]
             or file_sha256(path) != member["sha256"]
         ):
-            raise RuntimeError(
-                f"completed {version} manifest member mismatch: {relative}"
-            )
+            raise RuntimeError(f"completed v3 manifest member mismatch: {relative}")
 
     validate_hfss_import_source(root, read_json(root / "aedt_spec.json"), spec)
 
@@ -740,24 +676,15 @@ def _sha256_text(value: str) -> bool:
     )
 
 
-def _initial_receipt_sha256(receipt: dict[str, Any], preparation_cohort: Any) -> str:
-    schema_by_cohort = {
-        "prepared_v3": RECEIPT_V3,
-        "prepared_v2": RECEIPT_V2,
-        "verified_legacy_v1": RECEIPT_V1,
-    }
+def _initial_receipt_sha256(receipt: dict[str, Any]) -> str:
     initial = initial_receipt_payload(
-        schema_version=schema_by_cohort.get(preparation_cohort, ""),
+        schema_version=RECEIPT_V3,
         mode=receipt.get("mode"),
         requested=receipt.get("requested"),
         pdk_materials=receipt.get("pdk_materials"),
         vacuum_material_id=receipt.get("vacuum_material_id"),
         source=receipt.get("source"),
-        prepared_runtime_source_value=(
-            receipt.get("prepared_runtime_source")
-            if preparation_cohort in {"prepared_v2", "prepared_v3"}
-            else None
-        ),
+        prepared_runtime_source_value=receipt.get("prepared_runtime_source"),
         outputs={},
         prepared_at_utc=receipt.get("prepared_at_utc"),
     )
@@ -846,75 +773,69 @@ def _validate_hfss_pec_bindings(
     receipt: dict[str, Any], spec: HfssDrivenSpec | HfssEigenmodeSpec
 ) -> None:
     """Verify V3 PEC evidence against source material and object bindings."""
-    if not spec._historical_physical and not spec._historical_modeling:
-        envelope = spec.effective_region
-        region = receipt.get("region")
-        keys = (
-            "x_plus_um",
-            "x_minus_um",
-            "y_plus_um",
-            "y_minus_um",
-            "z_plus_um",
-            "z_minus_um",
-        )
-        if (
-            not isinstance(region, dict)
-            or region.get("requested_padding_um") != list(spec.region_padding_um)
-            or region.get("source_effective_envelope") != envelope
-            or region.get("padding_um")
-            != [envelope["effective_padding_um"][key] for key in keys]
-            or not isinstance(region.get("native_bounding_box_um"), list)
-            or len(region["native_bounding_box_um"]) != 6
-        ):
-            raise RuntimeError("HFSS source/effective Region envelope evidence differs")
+    envelope = spec.effective_region
+    region = receipt.get("region")
+    keys = (
+        "x_plus_um",
+        "x_minus_um",
+        "y_plus_um",
+        "y_minus_um",
+        "z_plus_um",
+        "z_minus_um",
+    )
+    if (
+        not isinstance(region, dict)
+        or region.get("requested_padding_um") != list(spec.region_padding_um)
+        or region.get("source_effective_envelope") != envelope
+        or region.get("padding_um")
+        != [envelope["effective_padding_um"][key] for key in keys]
+        or not isinstance(region.get("native_bounding_box_um"), list)
+        or len(region["native_bounding_box_um"]) != 6
+    ):
+        raise RuntimeError("HFSS source/effective Region envelope evidence differs")
     records = receipt.get("materials")
     if not isinstance(records, list) or len(records) != len(spec.object_bindings):
         raise RuntimeError("HFSS V3 material binding evidence is invalid")
     materials = dict(spec.materials)
     layers = {layer.layer: layer for layer in spec.layer_imports}
-    effective_layers = (
-        {}
-        if spec.modeling is None
-        else {
-            (record["layer"], record["datatype"]): record
-            for record in spec.effective_layer_imports
-        }
-    )
+    effective_layers = {
+        (record["layer"], record["datatype"]): record
+        for record in spec.effective_layer_imports
+    }
     pec_records: list[dict[str, Any]] = []
     sheet_records: list[dict[str, Any]] = []
     for record, object_binding in zip(records, spec.object_bindings, strict=True):
         material = materials[object_binding.material_id]
         layer = layers[object_binding.layer]
-        if effective_layers:
-            candidates = [
-                item
-                for item in spec.layer_imports
-                if object_binding.object_name.startswith(f"{item.layer_name}_")
-            ]
-            if len(candidates) != 1:
-                raise RuntimeError("HFSS current source destination is ambiguous")
-            layer = candidates[0]
-            effective = effective_layers[(layer.layer, layer.datatype)]
-            expected_fields = {
-                "datatype": layer.datatype,
-                "native_import_layer": effective["native_import_layer"],
-                "physical_layer_id": effective["physical_layer_id"],
-                "representation": effective["representation"],
-                "source_z_min_um": effective["z_min_um"],
-                "source_z_max_um": effective["z_max_um"],
-                "physical_thickness_um": effective["physical_thickness_um"],
-                "effective_z_min_um": effective["effective_z_min_um"],
-                "effective_z_max_um": effective["effective_z_max_um"],
-                "native_object_type": "Sheet"
-                if effective["representation"] == "sheet"
-                else "Solid",
-            }
-            if not isinstance(record, dict) or any(
-                record.get(key) != value for key, value in expected_fields.items()
-            ):
-                raise RuntimeError(
-                    "HFSS effective material geometry differs from source mapping"
-                )
+        candidates = [
+            item
+            for item in spec.layer_imports
+            if object_binding.object_name.startswith(f"{item.layer_name}_")
+        ]
+        if len(candidates) != 1:
+            raise RuntimeError("HFSS current source destination is ambiguous")
+        layer = candidates[0]
+        effective = effective_layers[(layer.layer, layer.datatype)]
+        expected_fields = {
+            "datatype": layer.datatype,
+            "native_import_layer": effective["native_import_layer"],
+            "physical_layer_id": effective["physical_layer_id"],
+            "representation": effective["representation"],
+            "source_z_min_um": effective["z_min_um"],
+            "source_z_max_um": effective["z_max_um"],
+            "physical_thickness_um": effective["physical_thickness_um"],
+            "effective_z_min_um": effective["effective_z_min_um"],
+            "effective_z_max_um": effective["effective_z_max_um"],
+            "native_object_type": "Sheet"
+            if effective["representation"] == "sheet"
+            else "Solid",
+        }
+        if not isinstance(record, dict) or any(
+            record.get(key) != value for key, value in expected_fields.items()
+        ):
+            raise RuntimeError(
+                "HFSS effective material geometry differs from source mapping"
+            )
         if (
             not isinstance(record, dict)
             or record.get("object_name") != object_binding.object_name
@@ -932,18 +853,15 @@ def _validate_hfss_pec_bindings(
         if not material.is_superconducting:
             if binding is not None:
                 raise RuntimeError("non-PEC HFSS material has PEC binding evidence")
-            if effective_layers:
-                observed = record.get("observed")
-                if (
-                    not isinstance(observed, dict)
-                    or not isinstance(observed.get("native_material_name"), str)
-                    or observed["native_material_name"].casefold()
-                    != material.library_name.casefold()
-                    or not _positive_unique_ids([record.get("native_object_id")], 1)
-                ):
-                    raise RuntimeError(
-                        "HFSS dielectric material native binding differs"
-                    )
+            observed = record.get("observed")
+            if (
+                not isinstance(observed, dict)
+                or not isinstance(observed.get("native_material_name"), str)
+                or observed["native_material_name"].casefold()
+                != material.library_name.casefold()
+                or not _positive_unique_ids([record.get("native_object_id")], 1)
+            ):
+                raise RuntimeError("HFSS dielectric material native binding differs")
             continue
         face_ids = binding.get("native_face_ids") if isinstance(binding, dict) else None
         if not isinstance(binding, dict) or (
@@ -957,7 +875,7 @@ def _validate_hfss_pec_bindings(
             or not _positive_unique_ids(face_ids, len(face_ids))
         ):
             raise RuntimeError("HFSS V3 PEC source binding evidence is invalid")
-        if effective_layers and (
+        if (
             binding.get("native_object_id") != record.get("native_object_id")
             or binding.get("native_object_type") != record.get("native_object_type")
             or binding.get("native_face_ids") != record.get("native_face_ids")
@@ -1163,27 +1081,22 @@ def _validate_hfss_setup_and_convergence(
     root: Path, receipt: dict[str, Any], spec: HfssDrivenSpec | HfssEigenmodeSpec
 ) -> None:
     _validate_hfss_setup(receipt, spec)
-    historical_profile = (
-        _eigenmode_convergence_source(receipt) == "profile"
-        if isinstance(spec, HfssEigenmodeSpec)
-        else False
-    )
-    if receipt.get("convergence") != read_hfss_convergence(
-        root, spec, historical_profile=historical_profile
-    ):
+    if isinstance(spec, HfssEigenmodeSpec):
+        _require_export_convergence_source(receipt)
+    if receipt.get("convergence") != read_hfss_convergence(root, spec):
         raise RuntimeError("HFSS native convergence evidence is invalid")
 
 
-def _eigenmode_convergence_source(receipt: dict[str, Any]) -> str:
+def _require_export_convergence_source(receipt: dict[str, Any]) -> None:
     convergence = receipt.get("convergence")
     sources = convergence.get("sources") if isinstance(convergence, dict) else None
     if not isinstance(sources, dict):
         raise RuntimeError("Eigenmode convergence sources are invalid")
-    if set(sources) == {"export_convergence"}:
-        return "export_convergence"
-    if set(sources) == {"asol", "profile"}:
-        return "profile"
-    raise RuntimeError("Eigenmode convergence sources are not canonical")
+    if set(sources) != {"export_convergence"}:
+        raise RuntimeError(
+            f"Eigenmode convergence sources {sorted(sources)!r} are unsupported; "
+            "only ['export_convergence'] is supported"
+        )
 
 
 def _validate_q2d_model_readback(
@@ -1350,11 +1263,7 @@ def _validate_q3d_model_readback(
                     or terminal.get("side") != side
                 ):
                     raise RuntimeError("Q3D native terminal evidence is invalid")
-                effective = (
-                    {}
-                    if spec.modeling is None
-                    else {body["body_id"]: body for body in spec.effective_bodies}
-                )
+                effective = {body["body_id"]: body for body in spec.effective_bodies}
                 if effective and effective[object_name]["representation"] == "sheet":
                     from scgsim.aedt._terminal_chain import (
                         q3d_terminal_segments,
@@ -1508,13 +1417,7 @@ def _validate_q3d_body_bindings(
         body.body_id for body in spec.bodies
     }:
         raise RuntimeError("Q3D native body inventory differs from the spec")
-    historical = spec.modeling is None
-    raw_bodies = {
-        body["body_id"]: body for body in read_json(root / "aedt_spec.json")["bodies"]
-    }
-    effective_bodies = (
-        {} if historical else {body["body_id"]: body for body in spec.effective_bodies}
-    )
+    effective_bodies = {body["body_id"]: body for body in spec.effective_bodies}
     seen_native_ids = set()
     for body in spec.bodies:
         record = records[body.body_id]
@@ -1523,10 +1426,7 @@ def _validate_q3d_body_bindings(
         expected_native_material = (
             "pec" if material.is_superconducting else material.library_name
         )
-        sheet = (
-            not historical
-            and effective_bodies[body.body_id]["representation"] == "sheet"
-        )
+        sheet = effective_bodies[body.body_id]["representation"] == "sheet"
         observed_key = (
             "native_boundary_material_name" if sheet else "native_material_name"
         )
@@ -1554,14 +1454,12 @@ def _validate_q3d_body_bindings(
         native_id = evidence.get("native_object_id")
         faces = evidence.get("native_face_ids")
         if (
-            evidence.get("body")
-            != (raw_bodies[body.body_id] if historical else body.to_payload())
+            evidence.get("body") != body.to_payload()
             or evidence.get("object_name") != body.body_id
             or evidence.get("native_object_type")
             != (
                 "Sheet"
-                if not historical
-                and effective_bodies[body.body_id]["representation"] == "sheet"
+                if effective_bodies[body.body_id]["representation"] == "sheet"
                 else "Solid"
             )
             or not _positive_unique_ids([native_id], 1)
@@ -1577,90 +1475,83 @@ def _validate_q3d_body_bindings(
             raise RuntimeError(
                 "Q3D body binding differs from the native identity/source declaration"
             )
-        if not historical:
-            effective = effective_bodies[body.body_id]
-            if evidence.get("effective_geometry") != effective:
+        effective = effective_bodies[body.body_id]
+        if evidence.get("effective_geometry") != effective:
+            raise RuntimeError("Q3D effective geometry binding differs from the spec")
+        thin = evidence.get("thin_conductor")
+        if effective["representation"] == "sheet":
+            if not isinstance(thin, dict):
+                raise RuntimeError("Q3D ThinConductor evidence is not recorded")
+            raw_material = thin.get("material_raw")
+            if (
+                isinstance(raw_material, list)
+                and len(raw_material) == 2
+                and raw_material[0] == "Material:="
+            ):
+                raw_material = raw_material[1]
+            if not isinstance(raw_material, str):
                 raise RuntimeError(
-                    "Q3D effective geometry binding differs from the spec"
+                    "Q3D ThinConductor Material has unknown native shape"
                 )
-            thin = evidence.get("thin_conductor")
-            if effective["representation"] == "sheet":
-                if not isinstance(thin, dict):
-                    raise RuntimeError("Q3D ThinConductor evidence is not recorded")
-                raw_material = thin.get("material_raw")
-                if (
-                    isinstance(raw_material, list)
-                    and len(raw_material) == 2
-                    and raw_material[0] == "Material:="
-                ):
-                    raw_material = raw_material[1]
-                if not isinstance(raw_material, str):
-                    raise RuntimeError(
-                        "Q3D ThinConductor Material has unknown native shape"
-                    )
-                material_name = raw_material.strip('"')
-                # Offline replay of pinned PyAEDT 1.3 Length conversion, without AEDT.
-                raw_thickness = thin.get("thickness")
-                length = re.fullmatch(
-                    r"\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)([A-Za-z]+)",
-                    raw_thickness if isinstance(raw_thickness, str) else "",
+            material_name = raw_material.strip('"')
+            # Offline replay of pinned PyAEDT 1.3 Length conversion, without AEDT.
+            raw_thickness = thin.get("thickness")
+            length = re.fullmatch(
+                r"\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)([A-Za-z]+)",
+                raw_thickness if isinstance(raw_thickness, str) else "",
+            )
+            scales = {
+                "fm": 1e-15,
+                "pm": 1e-12,
+                "nm": 1e-9,
+                "um": 1e-6,
+                "mm": 1e-3,
+                "cm": 1e-2,
+                "dm": 1e-1,
+                "meter": 1.0,
+                "km": 1e3,
+                "uin": 0.0254 * 1e-6,
+                "mil": 0.0254 * 1e-3,
+                "in": 0.0254,
+                "ft": 0.0254 * 12,
+                "yd": 0.0254 * 36,
+                "mile": 0.0254 * 63360,
+            }
+            if length is None or length[2].lower() not in scales:
+                raise RuntimeError("Q3D ThinConductor Thickness is not a native length")
+            thickness_um = float(length[1]) * scales[length[2].lower()] / 1e-6
+            raw_ids = thin.get("native_assignment_ids_raw")
+            if not isinstance(raw_ids, list) or any(
+                not (
+                    type(value) is int
+                    or (isinstance(value, str) and re.fullmatch(r"[0-9]+", value))
                 )
-                scales = {
-                    "fm": 1e-15,
-                    "pm": 1e-12,
-                    "nm": 1e-9,
-                    "um": 1e-6,
-                    "mm": 1e-3,
-                    "cm": 1e-2,
-                    "dm": 1e-1,
-                    "meter": 1.0,
-                    "km": 1e3,
-                    "uin": 0.0254 * 1e-6,
-                    "mil": 0.0254 * 1e-3,
-                    "in": 0.0254,
-                    "ft": 0.0254 * 12,
-                    "yd": 0.0254 * 36,
-                    "mile": 0.0254 * 63360,
-                }
-                if length is None or length[2].lower() not in scales:
-                    raise RuntimeError(
-                        "Q3D ThinConductor Thickness is not a native length"
-                    )
-                thickness_um = float(length[1]) * scales[length[2].lower()] / 1e-6
-                raw_ids = thin.get("native_assignment_ids_raw")
-                if not isinstance(raw_ids, list) or any(
-                    not (
-                        type(value) is int
-                        or (isinstance(value, str) and re.fullmatch(r"[0-9]+", value))
-                    )
-                    for value in raw_ids
-                ):
-                    raise RuntimeError(
-                        "Q3D ThinConductor assignment readback is malformed"
-                    )
-                assigned_ids = [int(value) for value in raw_ids]
-                expected_thin = {
-                    "name": f"{body.body_id}ThinConductor",
-                    "bound_type": "ThinConductor",
-                    "material": material_name,
-                    "material_raw": thin.get("material_raw"),
-                    "thickness": raw_thickness,
-                    "thickness_um": thickness_um,
-                    "native_assignment_ids_raw": raw_ids,
-                    "native_object_ids": assigned_ids,
-                }
-                if (
-                    thin != expected_thin
-                    or material_name.casefold() != "pec"
-                    or material_name != observed[observed_key]
-                    or thickness_um != effective["physical_thickness_um"]
-                    or assigned_ids != [native_id]
-                ):
-                    raise RuntimeError(
-                        "Q3D ThinConductor binding differs from physical source"
-                    )
-            elif thin is not None:
-                raise RuntimeError("Q3D Solid body contains Sheet boundary evidence")
+                for value in raw_ids
+            ):
+                raise RuntimeError("Q3D ThinConductor assignment readback is malformed")
+            assigned_ids = [int(value) for value in raw_ids]
+            expected_thin = {
+                "name": f"{body.body_id}ThinConductor",
+                "bound_type": "ThinConductor",
+                "material": material_name,
+                "material_raw": thin.get("material_raw"),
+                "thickness": raw_thickness,
+                "thickness_um": thickness_um,
+                "native_assignment_ids_raw": raw_ids,
+                "native_object_ids": assigned_ids,
+            }
+            if (
+                thin != expected_thin
+                or material_name.casefold() != "pec"
+                or material_name != observed[observed_key]
+                or thickness_um != effective["physical_thickness_um"]
+                or assigned_ids != [native_id]
+            ):
+                raise RuntimeError(
+                    "Q3D ThinConductor binding differs from physical source"
+                )
+        elif thin is not None:
+            raise RuntimeError("Q3D Solid body contains Sheet boundary evidence")
         seen_native_ids.add(native_id)
         incidence = evidence.get("incidence")
         if not isinstance(incidence, dict):
@@ -2007,7 +1898,7 @@ def _validate_eigenmode_readback(
 def _validate_modal_native_evidence(ports: Any, spec: HfssDrivenSpec) -> None:
     if not isinstance(ports, list) or len(ports) != 2:
         raise RuntimeError("completed receipt has invalid modal ports")
-    native_ports = spec.ports if spec.modeling is None else spec.effective_ports
+    native_ports = spec.effective_ports
     for record, port, native_port in zip(ports, spec.ports, native_ports, strict=True):
         if not isinstance(port, ModalPort) or not isinstance(record, dict):
             raise TypeError("completed receipt has invalid modal port identity")
@@ -2030,7 +1921,7 @@ def _validate_modal_native_evidence(ports: Any, spec: HfssDrivenSpec) -> None:
             }
         ):
             raise RuntimeError("completed receipt modal request does not match spec")
-        if spec.modeling is not None and record.get("effective") != {
+        if record.get("effective") != {
             "integration_line_um": [
                 list(point) for point in native_port.integration_line_um
             ]
@@ -2089,7 +1980,7 @@ def _validate_modal_native_evidence(ports: Any, spec: HfssDrivenSpec) -> None:
 
 
 def _validate_lumped_readback(receipt: dict[str, Any], prepared: Any) -> None:
-    """Bind current generic loads/supports; historical empty treatment is unchanged."""
+    """Bind current generic loads/supports."""
     from scgsim.aedt._data import detached
     from scgsim.aedt._rlc import rlc_native_topology, rlc_scalar_si
 

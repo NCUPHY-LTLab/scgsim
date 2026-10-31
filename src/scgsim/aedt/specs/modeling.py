@@ -14,12 +14,10 @@ these pure rules also support canonical request decoding.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 from scgsim.geometry.models.physical import (
-    PLAN_SCHEMA,
     ApproximationProfile,
     PhysicalLayerDeclaration,
     PhysicalRepresentationPlan,
@@ -99,97 +97,6 @@ class PhysicalLayerSpec:
         return payload
 
 
-@dataclass(frozen=True)
-class EffectiveLayer:
-    """Derived native representation; its immutable physical source is retained."""
-
-    source: PhysicalLayerSpec
-    representation: Literal["solid", "sheet"]
-    z_min_um: float
-    z_max_um: float
-
-    def to_payload(self) -> dict[str, Any]:
-        """Serialize the source interval beside the effective (native) interval and the
-        contact side.
-        """
-        return {
-            "physical_layer_id": self.source.physical_layer_id,
-            "representation": self.representation,
-            "source_z_min_um": self.source.z_min_um,
-            "source_z_max_um": self.source.z_max_um,
-            "physical_thickness_um": self.source.physical_thickness_um,
-            "effective_z_min_um": self.z_min_um,
-            "effective_z_max_um": self.z_max_um,
-            "contact_side": self.source.contact_side,
-        }
-
-
-class _ZMap:
-    """Pure declared stack-height removal shared by preparation and decoding."""
-
-    def __init__(self, modeling: Modeling, layers: Sequence[PhysicalLayerSpec]):
-        self.modeling = _modeling(modeling)
-        self.layers: dict[str, PhysicalLayerSpec] = {}
-        for layer in layers:
-            if not isinstance(layer, PhysicalLayerSpec):
-                raise TypeError(
-                    "physical_layers must contain PhysicalLayerSpec records"
-                )
-            previous = self.layers.setdefault(layer.physical_layer_id, layer)
-            if previous != layer:
-                raise ValueError(
-                    "one physical layer identity has conflicting declarations"
-                )
-        self.removed = (
-            tuple(
-                sorted(
-                    (
-                        layer
-                        for layer in self.layers.values()
-                        if layer.kind == "stack_film"
-                    ),
-                    key=lambda layer: layer.z_min_um,
-                )
-            )
-            if modeling == "thin_film"
-            else ()
-        )
-        for lower, upper in zip(self.removed, self.removed[1:], strict=False):
-            if lower.z_max_um > upper.z_min_um:
-                raise ValueError(
-                    "distinct stack-film declarations overlap in the source stack"
-                )
-
-    def map_z(self, source_z_um: float) -> float:
-        value = float(source_z_um)
-        return value - sum(
-            min(max(value - layer.z_min_um, 0.0), layer.z_max_um - layer.z_min_um)
-            for layer in self.removed
-        )
-
-    def layer(self, physical_layer_id: str) -> EffectiveLayer:
-        source = self.layers[physical_layer_id]
-        if self.modeling == "thin_film" and source.kind != "retained_solid":
-            contact = (
-                source.z_min_um if source.contact_side == "lower" else source.z_max_um
-            )
-            z = self.map_z(contact)
-            return EffectiveLayer(source, "sheet", z, z)
-        return EffectiveLayer(
-            source, "solid", self.map_z(source.z_min_um), self.map_z(source.z_max_um)
-        )
-
-    def to_payload(self) -> dict[str, Any]:
-        return {
-            "modeling": self.modeling,
-            "source_layers": [layer.to_payload() for layer in self.layers.values()],
-            "removed_physical_layer_ids": [
-                layer.physical_layer_id for layer in self.removed
-            ],
-            "effective_layers": [self.layer(key).to_payload() for key in self.layers],
-        }
-
-
 def _native_physical_record(value: Any) -> dict[str, Any]:
     """Project common body facts into native assignment evidence without remapping."""
     from scgsim.aedt._data import detached
@@ -203,61 +110,37 @@ def _native_physical_record(value: Any) -> dict[str, Any]:
     }
 
 
-def _physical_layers_from_payload(payload: Any, *, allow_historical: bool):
-    """Decode the recorded declaration era without converting its meaning."""
-    if "physical_representation" not in payload and not allow_historical:
+def _physical_layers_from_payload(payload: Any):
+    """Decode the neutral physical-layer declarations of a request payload."""
+    if "physical_representation" not in payload:
         raise ValueError(
             "fresh AEDT physical requests require a tagged neutral physical_representation; reprepare the source with PhysicalLayerDeclaration"
         )
-    declaration = (
-        PhysicalLayerDeclaration
-        if "physical_representation" in payload
-        else PhysicalLayerSpec
+    return tuple(
+        PhysicalLayerDeclaration(**item) for item in payload.get("physical_layers", ())
     )
-    return tuple(declaration(**item) for item in payload.get("physical_layers", ()))
 
 
-def _physical_fields_from_payload(
-    payload: Any, *, allow_historical: bool
-) -> dict[str, Any]:
-    """Constructor fields that decode a payload's physical layers and neutral plan.
-
-    A historical payload may lack `physical_representation`, `modeling` or both;
-    the `_historical_*` flags record which, so a reader accepts exactly those.
-    """
+def _physical_fields_from_payload(payload: Any) -> dict[str, Any]:
+    """Constructor fields that decode a payload's physical layers and neutral plan."""
     return {
-        "physical_layers": _physical_layers_from_payload(
-            payload, allow_historical=allow_historical
+        "physical_layers": _physical_layers_from_payload(payload),
+        "physical_representation": PhysicalRepresentationPlan.from_payload(
+            payload["physical_representation"]
         ),
-        "physical_representation": (
-            PhysicalRepresentationPlan.from_payload(payload["physical_representation"])
-            if "physical_representation" in payload
-            else None
-        ),
-        "_historical_physical": allow_historical
-        and "physical_representation" not in payload,
-        "_historical_modeling": allow_historical and "modeling" not in payload,
     }
 
 
 def _source_plan_layers(source: Any):
-    trace = source["modeling"]
-    if trace.get("schema_version") == PLAN_SCHEMA:
-        return PhysicalRepresentationPlan.from_payload(trace).declarations
-    return tuple(PhysicalLayerSpec(**item) for item in trace["source_layers"])
+    return PhysicalRepresentationPlan.from_payload(source["modeling"]).declarations
 
 
 def _request_modeling(spec: Any):
-    """Use one fresh neutral plan; old maps are reader-only recorded meaning."""
-    # `_historical_modeling` is a package-private flag on every request spec.
-    if spec.modeling is None and spec._historical_modeling:  # noqa: SLF001
-        return None
-    if getattr(spec, "_historical_physical", False):
-        return _ZMap(spec.modeling, spec.physical_layers)
+    """Bind one neutral physical plan to the request."""
     layers = tuple(spec.physical_layers)
     if any(not isinstance(item, PhysicalLayerDeclaration) for item in layers):
         raise TypeError(
-            "fresh physical_layers require neutral PhysicalLayerDeclaration; PhysicalLayerSpec is historical-reader-only"
+            "fresh physical_layers require neutral PhysicalLayerDeclaration; PhysicalLayerSpec is not supported"
         )
     plan = spec.physical_representation
     source = getattr(getattr(spec, "geometry", None), "source", None)
@@ -283,86 +166,36 @@ def _request_modeling(spec: Any):
 
 
 def _modeling_payload(spec: Any) -> dict[str, Any]:
-    if spec.modeling is None:
-        return {}
-    payload = {
+    return {
         "modeling": spec.modeling,
         "physical_layers": [layer.to_payload() for layer in spec.physical_layers],
+        "physical_representation": _request_modeling(spec).to_payload(),
     }
-    if not getattr(spec, "_historical_physical", False):
-        payload["physical_representation"] = _request_modeling(spec).to_payload()
-    return payload
-
-
-def _require_source_film_interval(
-    low: float, high: float, source: PhysicalLayerSpec
-) -> None:
-    """A film reference binds the authored interval, not another sheet plane."""
-    if low != source.z_min_um or high != source.z_max_um:
-        raise ValueError(
-            f"source film interval differs from physical layer {source.physical_layer_id!r}"
-        )
 
 
 def _effective_record(
-    record: Any, mapping: _ZMap, *, retained_domain: bool = False
+    record: Any, mapping: PhysicalRepresentationPlan, *, retained_domain: bool = False
 ) -> dict[str, Any]:
     """Source coordinates and physical thickness accompany native geometry."""
-    if isinstance(mapping, PhysicalRepresentationPlan):
-        if (
-            record.physical_layer_id is None
-            and mapping.profile.name == "thin_film"
-            and not retained_domain
-            and getattr(record, "physical_role", None) != "substrate"
-        ):
-            raise ValueError(
-                "Thin Film source objects require a neutral physical_layer_id"
-            )
-        body = mapping.map_body(
-            record.physical_layer_id,
-            (record.z_min_um, record.z_max_um),
-            record.to_payload(),
-        )
-        return {
-            **record.to_payload(),
-            "physical_layer_id": record.physical_layer_id,
-            "physical_thickness_um": body["physical_thickness_um"],
-            "representation": body["representation"],
-            "effective_z_min_um": body["effective_interval_um"][0],
-            "effective_z_max_um": body["effective_interval_um"][1],
-        }
-    low, high = record.z_min_um, record.z_max_um
-    identity = record.physical_layer_id
-    thickness = high - low
-    if identity is None:
-        if (
-            mapping.modeling == "thin_film"
-            and not retained_domain
-            and getattr(record, "physical_role", None) != "substrate"
-        ):
-            raise ValueError("Thin Film source objects require physical_layer_id")
-        representation, effective_low, effective_high = (
-            "solid",
-            mapping.map_z(low),
-            mapping.map_z(high),
-        )
-    else:
-        effective = mapping.layer(identity)
-        representation = effective.representation
-        if effective.source.kind in {"stack_film", "local_film"}:
-            thickness = effective.source.physical_thickness_um
-        if representation == "sheet":
-            _require_source_film_interval(low, high, effective.source)
-            effective_low, effective_high = effective.z_min_um, effective.z_max_um
-        else:
-            effective_low, effective_high = mapping.map_z(low), mapping.map_z(high)
+    if (
+        record.physical_layer_id is None
+        and mapping.profile.name == "thin_film"
+        and not retained_domain
+        and getattr(record, "physical_role", None) != "substrate"
+    ):
+        raise ValueError("Thin Film source objects require a neutral physical_layer_id")
+    body = mapping.map_body(
+        record.physical_layer_id,
+        (record.z_min_um, record.z_max_um),
+        record.to_payload(),
+    )
     return {
         **record.to_payload(),
-        "physical_layer_id": identity,
-        "physical_thickness_um": thickness,
-        "representation": representation,
-        "effective_z_min_um": effective_low,
-        "effective_z_max_um": effective_high,
+        "physical_layer_id": record.physical_layer_id,
+        "physical_thickness_um": body["physical_thickness_um"],
+        "representation": body["representation"],
+        "effective_z_min_um": body["effective_interval_um"][0],
+        "effective_z_max_um": body["effective_interval_um"][1],
     }
 
 

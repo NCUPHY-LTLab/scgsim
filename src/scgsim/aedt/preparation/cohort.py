@@ -30,8 +30,7 @@ def canonical_handoff_paths(spec: AedtSpec) -> list[str]:
         paths.extend(f"saved/{item['path']}" for item in spec.saved_solution.members)
     elif not isinstance(spec, (HfssEprSpec, HfssDrivenGeometrySpec, Q2dSpec, Q3dSpec)):
         paths.append("geometry/design.gds")
-        if spec.modeling is not None:
-            paths.append("geometry/source.gds")
+        paths.append("geometry/source.gds")
     paths.extend(
         (
             "metadata/aedt_handoff_metadata.json",
@@ -93,8 +92,6 @@ def validate_hfss_import_source(
         (HfssEprSpec, HfssEprAnalysisSpec, HfssDrivenGeometrySpec, Q2dSpec, Q3dSpec),
     ):
         return
-    if spec.modeling is None:
-        return  # Historical inventories retain their original source contract.
     gds = raw_payload["gds"]
     if (
         gds.get("source_path") != "geometry/source.gds"

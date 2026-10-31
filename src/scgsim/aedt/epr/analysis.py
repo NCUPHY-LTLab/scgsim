@@ -313,15 +313,9 @@ def _surface_contributions(
                     ),
                     "energy_j": energy,
                     "participation": energy / normalization_j,
-                    **(
-                        {
-                            "assumptions": assumptions,
-                            "inverse_q": inverse_quality_factor(
-                                energy / normalization_j, loss_tangent
-                            ),
-                        }
-                        if not prepared._legacy_payload
-                        else {}
+                    "assumptions": assumptions,
+                    "inverse_q": inverse_quality_factor(
+                        energy / normalization_j, loss_tangent
                     ),
                 }
             )
@@ -441,23 +435,17 @@ def _surface_contributions(
                     ),
                     "energy_j": energy,
                     "participation": energy / normalization_j,
-                    **(
+                    "assumptions": film_assumptions(
                         {
-                            "assumptions": film_assumptions(
-                                {
-                                    "film_thickness_m": spec.film_thickness_m,
-                                    "film_relative_permittivity": spec.film_relative_permittivity,
-                                    "loss_tangent": spec.loss_tangent,
-                                    "source": spec.source,
-                                    "preset": spec.preset,
-                                }
-                            ),
-                            "inverse_q": inverse_quality_factor(
-                                energy / normalization_j, spec.loss_tangent
-                            ),
+                            "film_thickness_m": spec.film_thickness_m,
+                            "film_relative_permittivity": spec.film_relative_permittivity,
+                            "loss_tangent": spec.loss_tangent,
+                            "source": spec.source,
+                            "preset": spec.preset,
                         }
-                        if not prepared._legacy_payload
-                        else {}
+                    ),
+                    "inverse_q": inverse_quality_factor(
+                        energy / normalization_j, spec.loss_tangent
                     ),
                 }
             )
@@ -673,11 +661,7 @@ def combine_epr_mode(
     if not selected_domains <= set(domains):
         raise ValueError("EPR request selects an unknown bulk domain")
     result = {
-        "schema_version": (
-            "scgsim.aedt.epr-mode-energy.v1"
-            if prepared._legacy_payload
-            else "scgsim.aedt.epr-mode-energy.v2"
-        ),
+        "schema_version": "scgsim.aedt.epr-mode-energy.v2",
         "surface_granularity": granularity or "per_binding.v1",
         "frequency_hz": frequency_hz,
         "electric_energy_j": electric_energy_j,

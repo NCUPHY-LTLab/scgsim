@@ -161,7 +161,6 @@ class SurfaceEprSpec:
     source: str | None = None
     preset: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
-    _legacy_payload: bool = field(default=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         for name in ("contribution_id", "source_polygon_id"):
@@ -209,17 +208,11 @@ class SurfaceEprSpec:
             },
             partial=self.interface_kind == "MM",
         )
-        if self._legacy_payload and any(
-            value is not None for value in (self.loss_tangent, self.source, self.preset)
-        ):
-            raise ValueError("legacy surface payload cannot carry new film assumptions")
         object.__setattr__(self, "metadata", _freeze_str_keys_only(self.metadata))
 
     def to_payload(self) -> dict[str, Any]:
-        """Serialize the contribution; the film-assumption keys (`loss_tangent`, `source`,
-        `preset`) are written only for non-legacy records.
-        """
-        payload = {
+        """Serialize the contribution with its film-assumption keys."""
+        return {
             "contribution_id": self.contribution_id,
             "source_polygon_id": self.source_polygon_id,
             "interface_kind": self.interface_kind,
@@ -228,18 +221,14 @@ class SurfaceEprSpec:
             "film_thickness_m": self.film_thickness_m,
             "film_relative_permittivity": self.film_relative_permittivity,
             "metadata": detached(self.metadata),
+            "loss_tangent": self.loss_tangent,
+            "source": self.source,
+            "preset": self.preset,
         }
-        if not self._legacy_payload:
-            payload.update(
-                loss_tangent=self.loss_tangent, source=self.source, preset=self.preset
-            )
-        return payload
 
     @classmethod
     def from_payload(cls, value: Any) -> SurfaceEprSpec:
-        """Rebuild from either the legacy member set (no film assumptions) or the current
-        one; legacy records stay marked legacy.
-        """
+        """Rebuild from the canonical member set, including the film assumptions."""
         if not isinstance(value, Mapping):
             raise TypeError("surface EPR payload must be a mapping")
         expected = {
@@ -251,11 +240,13 @@ class SurfaceEprSpec:
             "film_thickness_m",
             "film_relative_permittivity",
             "metadata",
+            "loss_tangent",
+            "source",
+            "preset",
         }
-        new = expected | {"loss_tangent", "source", "preset"}
-        if set(value) not in (expected, new):
+        if set(value) != expected:
             raise ValueError("surface EPR payload members are not canonical")
-        return cls(**dict(value), _legacy_payload=set(value) == expected)
+        return cls(**dict(value))
 
 
 @dataclass(frozen=True)
@@ -272,7 +263,6 @@ class EprAnalysisRequest:
     surface_contribution_ids: tuple[str, ...] | None = None
     junction_ids: tuple[str, ...] | None = None
     bulk_domain_ids: tuple[str, ...] | None = None
-    _legacy_payload: bool = field(default=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         for name in (
@@ -295,14 +285,10 @@ class EprAnalysisRequest:
             else:
                 values = tuple(_stripped_text(item, name) for item in values)
             object.__setattr__(self, name, values)
-        if self._legacy_payload and self.bulk_domain_ids is not None:
-            raise ValueError("legacy EPR request cannot select bulk domains")
 
     def to_payload(self) -> dict[str, Any]:
-        """Serialize each selection as a list, or null for "select all"; `bulk_domain_ids`
-        is written only for non-legacy records.
-        """
-        payload = {
+        """Serialize each selection as a list, or null for "select all"."""
+        return {
             "mode_indices": (
                 None if self.mode_indices is None else list(self.mode_indices)
             ),
@@ -314,26 +300,25 @@ class EprAnalysisRequest:
             "junction_ids": (
                 None if self.junction_ids is None else list(self.junction_ids)
             ),
-        }
-        if not self._legacy_payload:
-            payload["bulk_domain_ids"] = (
+            "bulk_domain_ids": (
                 None if self.bulk_domain_ids is None else list(self.bulk_domain_ids)
-            )
-        return payload
+            ),
+        }
 
     @classmethod
     def from_payload(cls, value: Any) -> EprAnalysisRequest:
-        """Rebuild from the legacy member set (no bulk domains) or the current one."""
+        """Rebuild from the canonical member set, including `bulk_domain_ids`."""
         if not isinstance(value, Mapping):
             raise TypeError("EPR analysis request must be a mapping")
         expected = {
             "mode_indices",
             "surface_contribution_ids",
             "junction_ids",
+            "bulk_domain_ids",
         }
-        if set(value) not in (expected, expected | {"bulk_domain_ids"}):
+        if set(value) != expected:
             raise ValueError("EPR analysis request members are not canonical")
-        return cls(**dict(value), _legacy_payload=set(value) == expected)
+        return cls(**dict(value))
 
 
 @dataclass(frozen=True)

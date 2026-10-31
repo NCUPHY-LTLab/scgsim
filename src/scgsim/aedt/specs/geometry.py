@@ -11,8 +11,8 @@ layout is the job of `scgsim.aedt.preparation`.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field, replace
-from typing import Any, Literal
+from dataclasses import dataclass, replace
+from typing import Any
 
 from scgsim.aedt._data import _freeze_str_keys_only, canonical_sha256, detached
 from scgsim.aedt.specs._support import _prepared_lumped_supports
@@ -22,24 +22,18 @@ from scgsim.aedt.specs.modeling import _native_physical_record
 from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.models.physical import PLAN_SCHEMA, PhysicalRepresentationPlan
 
-# Historical requests recorded their modeling as a Route; new ones use "solid" or
-# "thin_film" (see `modeling.py`).
-# TODO(human): which of Route A and Route B corresponded to which modeling.
-Route = Literal["A", "B"]
-
 
 @dataclass(frozen=True)
 class PreparedPlanarGeometry:
     """Normalized layout source plus EPR inputs, before any AEDT object exists.
 
-    `modeling` is "solid" or "thin_film", or None for a historical record that
-    carries `route` instead. `source` is the frozen layout description (conductors,
+    `modeling` is "solid" or "thin_film". `source` is the frozen layout description (conductors,
     solution regions, native Region, lumped supports). `junctions`,
     `contribution_catalog`, `contributions` and `surface_bindings` are the EPR
     inputs; `lumped_rlcs` are treatments bound to lumped supports.
     """
 
-    modeling: str | None
+    modeling: str
     source: Mapping[str, Any]
     junctions: tuple[PlanarJunction, ...]
     contribution_catalog: tuple[Mapping[str, Any], ...]
@@ -47,9 +41,6 @@ class PreparedPlanarGeometry:
     surface_bindings: tuple[Mapping[str, Any], ...]
     model_sha256: str
     source_sha256: str
-    route: Route | None = None
-    _historical_modeling: bool = field(default=False, repr=False, compare=False)
-    _legacy_payload: bool = field(default=False, repr=False, compare=False)
     lumped_rlcs: tuple[LumpedRlc, ...] = ()
 
     def __post_init__(self) -> None:
@@ -72,13 +63,8 @@ class PreparedPlanarGeometry:
         self._check_digests(source)
 
     def _check_modeling_basis(self) -> None:
-        """A historical request keeps its Route; a new one must name its modeling."""
-        if self._historical_modeling:
-            if self.route not in {"A", "B"} or self.modeling is not None:
-                raise ValueError(
-                    "historical planar geometry requires its original route basis"
-                )
-        elif self.modeling not in {"solid", "thin_film"} or self.route is not None:
+        """Planar geometry must name its modeling explicitly."""
+        if self.modeling not in {"solid", "thin_film"}:
             raise ValueError(
                 "new planar geometry requires explicit modeling without route alias"
             )
@@ -175,22 +161,12 @@ class PreparedPlanarGeometry:
 
     @property
     def _modeling_identity(self) -> dict[str, Any]:
-        return (
-            {"route": self.route}
-            if self._historical_modeling
-            else {"modeling": self.modeling}
-        )
+        return {"modeling": self.modeling}
 
     def to_payload(self) -> dict[str, Any]:
-        """Serialize as `epr-planar.v1` or `.v2`, keyed by `route` for historical records
-        and `modeling` for new ones; `lumped_rlcs` appears only when present.
-        """
+        """Serialize as `epr-planar.v2`; `lumped_rlcs` appears only when present."""
         return {
-            "schema_version": (
-                "scgsim.aedt.epr-planar.v1"
-                if self._legacy_payload
-                else "scgsim.aedt.epr-planar.v2"
-            ),
+            "schema_version": "scgsim.aedt.epr-planar.v2",
             **self._modeling_identity,
             "source": detached(self.source),
             "junctions": [item.to_payload() for item in self.junctions],
@@ -213,7 +189,7 @@ class PreparedPlanarGeometry:
             raise TypeError("prepared planar payload must be a mapping")
         expected = {
             "schema_version",
-            "route",
+            "modeling",
             "source",
             "junctions",
             "contribution_catalog",
@@ -222,24 +198,21 @@ class PreparedPlanarGeometry:
             "model_sha256",
             "source_sha256",
         }
-        if "modeling" in value:
-            expected.remove("route")
-            expected.add("modeling")
         if "lumped_rlcs" in value:
             expected.add("lumped_rlcs")
         schema = value.get("schema_version")
-        if set(value) != expected or schema not in {
-            "scgsim.aedt.epr-planar.v1",
-            "scgsim.aedt.epr-planar.v2",
-        }:
+        if schema != "scgsim.aedt.epr-planar.v2":
+            raise ValueError(
+                f"prepared planar schema {schema!r} is unsupported; "
+                "only 'scgsim.aedt.epr-planar.v2' is supported"
+            )
+        if set(value) != expected:
             raise ValueError("prepared planar payload is not canonical")
         return cls(
             lumped_rlcs=tuple(
                 LumpedRlc.from_payload(item) for item in value.get("lumped_rlcs", ())
             ),
             modeling=value.get("modeling"),
-            route=value.get("route"),
-            _historical_modeling="modeling" not in value,
             source=value["source"],
             junctions=tuple(
                 PlanarJunction.from_payload(item) for item in value["junctions"]
@@ -251,15 +224,18 @@ class PreparedPlanarGeometry:
             surface_bindings=tuple(value["surface_bindings"]),
             model_sha256=value["model_sha256"],
             source_sha256=value["source_sha256"],
-            _legacy_payload=schema.endswith(".v1"),
         )
 
 
-def _check_source_matches_plan(source: Mapping[str, Any], modeling: str | None) -> None:
+def _check_source_matches_plan(source: Mapping[str, Any], modeling: str) -> None:
     """When the source carries a neutral physical plan, its conductors must match it."""
     trace = source.get("modeling")
-    if not (isinstance(trace, Mapping) and trace.get("schema_version") == PLAN_SCHEMA):
-        return
+    found = trace.get("schema_version") if isinstance(trace, Mapping) else None
+    if found != PLAN_SCHEMA:
+        raise ValueError(
+            f"prepared source physical plan schema {found!r} is unsupported; "
+            f"only {PLAN_SCHEMA!r} is supported"
+        )
     plan = PhysicalRepresentationPlan.from_payload(trace)
     if plan.profile.name != modeling:
         raise ValueError("prepared geometry modeling differs from its neutral profile")

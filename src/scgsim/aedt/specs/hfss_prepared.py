@@ -17,9 +17,7 @@ from scgsim.aedt._data import _stripped_text
 from scgsim.aedt.epr.selection import surface_integral_groups
 from scgsim.aedt.specs.common import (
     DRIVEN_GEOMETRY_SCHEMA_VERSION,
-    EPR_ANALYSIS_SCHEMA_VERSION,
     EPR_ANALYSIS_SCHEMA_VERSION_V2,
-    EPR_EIGENMODE_SCHEMA_VERSION,
     EPR_EIGENMODE_SCHEMA_VERSION_V2,
     EPR_EIGENMODE_SCHEMA_VERSION_V3,
     LOCKED_PYAEDT,
@@ -46,7 +44,6 @@ from scgsim.aedt.specs.hfss import (
 from scgsim.aedt.specs.modeling import (
     Modeling,
     PhysicalLayerDeclaration,
-    PhysicalLayerSpec,
     PhysicalRepresentationPlan,
     _modeling_payload,
     _physical_fields_from_payload,
@@ -70,14 +67,11 @@ class HfssEprSpec:
     design_name: str
     geometry: Any
     run_control: EigenmodeRunControl | None = None
-    physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
+    physical_layers: tuple[PhysicalLayerDeclaration, ...] = ()
     physical_representation: PhysicalRepresentationPlan | None = None
-    _historical_physical: bool = False
-    _historical_modeling: bool = False
     epr_request: Any = None
     aedt_version: str = REQUIRED_AEDT_VERSION
     pyaedt_version: str = LOCKED_PYAEDT
-    _legacy_payload: bool = False
     expression_convergence: Any = None
 
     @property
@@ -101,8 +95,6 @@ class HfssEprSpec:
         """Check the geometry and adopt the physical layers it was prepared with."""
         if not isinstance(self.geometry, PreparedPlanarGeometry):
             raise TypeError("geometry must be PreparedPlanarGeometry")
-        if self._historical_modeling:
-            return
         if self.geometry.modeling != self.modeling:
             raise ValueError("request and prepared geometry modeling differ")
         declared = _source_plan_layers(self.geometry.source)
@@ -119,14 +111,9 @@ class HfssEprSpec:
         ):
             raise TypeError("run_control must be EigenmodeRunControl or None")
         if self.run_control is None and (
-            self.epr_request is not None
-            or self.expression_convergence is not None
-            or self._legacy_payload
-            or self._historical_modeling
+            self.epr_request is not None or self.expression_convergence is not None
         ):
-            raise ValueError(
-                "EPR analysis/cache and historical requests require run_control"
-            )
+            raise ValueError("EPR analysis/cache requests require run_control")
         if self.epr_request is not None and not isinstance(
             self.epr_request, EprAnalysisRequest
         ):
@@ -137,21 +124,13 @@ class HfssEprSpec:
             raise TypeError(
                 "expression_convergence must be ExpressionCacheConvergence or None"
             )
-        if self._legacy_payload and self.expression_convergence is not None:
-            raise ValueError("legacy EPR payload cannot add expression convergence")
 
     def to_payload(self) -> dict[str, Any]:
-        """Serialize as EPR schema v1 (legacy), v2, or v3 when an expression convergence is
-        set.
-        """
+        """Serialize as EPR schema v2, or v3 when an expression convergence is set."""
         schema_version = (
-            EPR_EIGENMODE_SCHEMA_VERSION
-            if self._legacy_payload
-            else (
-                EPR_EIGENMODE_SCHEMA_VERSION_V3
-                if self.expression_convergence is not None
-                else EPR_EIGENMODE_SCHEMA_VERSION_V2
-            )
+            EPR_EIGENMODE_SCHEMA_VERSION_V3
+            if self.expression_convergence is not None
+            else EPR_EIGENMODE_SCHEMA_VERSION_V2
         )
         return {
             **_modeling_payload(self),
@@ -178,19 +157,20 @@ class HfssEprSpec:
         }
 
     @classmethod
-    def from_payload(
-        cls, payload: dict[str, Any], *, allow_historical_modeling: bool = False
-    ) -> HfssEprSpec:
-        """Rebuild from any EPR schema version, checking the member set matches that
+    def from_payload(cls, payload: dict[str, Any]) -> HfssEprSpec:
+        """Rebuild from an EPR v2 or v3 payload, checking the member set matches that
         version exactly.
         """
         schema = payload.get("schema_version")
         if schema not in {
-            EPR_EIGENMODE_SCHEMA_VERSION,
             EPR_EIGENMODE_SCHEMA_VERSION_V2,
             EPR_EIGENMODE_SCHEMA_VERSION_V3,
         }:
-            raise ValueError("unsupported HFSS EPR schema")
+            raise ValueError(
+                f"HFSS EPR schema {schema!r} is unsupported; only "
+                f"{EPR_EIGENMODE_SCHEMA_VERSION_V2!r} and "
+                f"{EPR_EIGENMODE_SCHEMA_VERSION_V3!r} are supported"
+            )
         expected = {
             "schema_version",
             "mode",
@@ -222,9 +202,7 @@ class HfssEprSpec:
         geometry = PreparedPlanarGeometry.from_payload(payload.get("geometry"))
         return cls(
             modeling=payload.get("modeling"),
-            **_physical_fields_from_payload(
-                payload, allow_historical=allow_historical_modeling
-            ),
+            **_physical_fields_from_payload(payload),
             project_name=_project_name_from_payload(project.get("name")),
             design_name=_stripped_text(project.get("design"), "project.design"),
             geometry=geometry,
@@ -249,7 +227,6 @@ class HfssEprSpec:
                 payload.get("pyaedt", {}).get("locked_version"),
                 "pyaedt.locked_version",
             ),
-            _legacy_payload=schema == EPR_EIGENMODE_SCHEMA_VERSION,
         )
 
 
@@ -270,7 +247,6 @@ class HfssEprAnalysisSpec:
     saved_solution: Any
     aedt_version: str = REQUIRED_AEDT_VERSION
     pyaedt_version: str = LOCKED_PYAEDT
-    _legacy_payload: bool = False
 
     @property
     def mode(self) -> Literal["eigenmode"]:
@@ -303,13 +279,9 @@ class HfssEprAnalysisSpec:
             )
 
     def to_payload(self) -> dict[str, Any]:
-        """Serialize as analysis schema v1 (legacy) or v2, with the saved-solution record."""
+        """Serialize as analysis schema v2, with the saved-solution record."""
         return {
-            "schema_version": (
-                EPR_ANALYSIS_SCHEMA_VERSION
-                if self._legacy_payload
-                else EPR_ANALYSIS_SCHEMA_VERSION_V2
-            ),
+            "schema_version": EPR_ANALYSIS_SCHEMA_VERSION_V2,
             "mode": self.mode,
             "aedt": {"requested_version": self.aedt_version},
             "pyaedt": {
@@ -329,8 +301,11 @@ class HfssEprAnalysisSpec:
     ) -> HfssEprAnalysisSpec:
         """Rebuild against `base_dir`, whose `saved` folder must hold the saved solution."""
         schema = payload.get("schema_version")
-        if schema not in {EPR_ANALYSIS_SCHEMA_VERSION, EPR_ANALYSIS_SCHEMA_VERSION_V2}:
-            raise ValueError("unsupported HFSS EPR analysis schema")
+        if schema != EPR_ANALYSIS_SCHEMA_VERSION_V2:
+            raise ValueError(
+                f"HFSS EPR analysis schema {schema!r} is unsupported; only "
+                f"{EPR_ANALYSIS_SCHEMA_VERSION_V2!r} is supported"
+            )
         if base_dir is None:
             raise ValueError("HFSS EPR analysis requires a bound base directory")
         expected = {
@@ -367,7 +342,6 @@ class HfssEprAnalysisSpec:
                 payload.get("pyaedt", {}).get("locked_version"),
                 "pyaedt.locked_version",
             ),
-            _legacy_payload=schema == EPR_ANALYSIS_SCHEMA_VERSION,
         )
 
 
@@ -472,12 +446,10 @@ class HfssDrivenGeometrySpec:
     geometry: Any
     ports: tuple[TerminalPort | LumpedTerminalPort, ...]
     run_control: HfssRunControl | None = None
-    physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
+    physical_layers: tuple[PhysicalLayerDeclaration, ...] = ()
     physical_representation: PhysicalRepresentationPlan | None = None
-    _historical_physical: bool = False
     aedt_version: str = REQUIRED_AEDT_VERSION
     pyaedt_version: str = LOCKED_PYAEDT
-    _historical_modeling: bool = False
 
     @property
     def mode(self) -> Literal["terminal"]:
@@ -590,9 +562,7 @@ class HfssDrivenGeometrySpec:
         }
 
     @classmethod
-    def from_payload(
-        cls, payload: Mapping[str, Any], *, allow_historical_modeling: bool = False
-    ) -> HfssDrivenGeometrySpec:
+    def from_payload(cls, payload: Mapping[str, Any]) -> HfssDrivenGeometrySpec:
         """Rebuild from a body-first Driven payload with exactly the canonical members."""
         if (
             payload.get("schema_version") != DRIVEN_GEOMETRY_SCHEMA_VERSION
@@ -631,18 +601,10 @@ class HfssDrivenGeometrySpec:
                 for item in payload["ports"]
             ),
             run_control=None if run is None else HfssRunControl(**run),
-            physical_layers=_physical_layers_from_payload(
-                payload, allow_historical=allow_historical_modeling
+            physical_layers=_physical_layers_from_payload(payload),
+            physical_representation=PhysicalRepresentationPlan.from_payload(
+                payload["physical_representation"]
             ),
-            physical_representation=(
-                PhysicalRepresentationPlan.from_payload(
-                    payload["physical_representation"]
-                )
-                if "physical_representation" in payload
-                else None
-            ),
-            _historical_physical=allow_historical_modeling
-            and "physical_representation" not in payload,
             aedt_version=payload["aedt"]["requested_version"],
             pyaedt_version=payload["pyaedt"]["locked_version"],
         )

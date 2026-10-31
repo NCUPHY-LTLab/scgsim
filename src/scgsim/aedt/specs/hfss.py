@@ -38,7 +38,6 @@ from scgsim.aedt.specs.common import (
 from scgsim.aedt.specs.modeling import (
     Modeling,
     PhysicalLayerDeclaration,
-    PhysicalLayerSpec,
     PhysicalRepresentationPlan,
     _effective_record,
     _modeling_payload,
@@ -49,11 +48,8 @@ from scgsim.aedt.specs.modeling import (
 )
 
 
-def _direct_hfss_enclosure(spec: Any) -> dict[str, Any] | None:
+def _direct_hfss_enclosure(spec: Any) -> dict[str, Any]:
     """Project selected GDS geometry's original full envelope exactly once."""
-    # `_historical_*` are package-private flags every request spec in this package carries.
-    if spec._historical_physical or spec._historical_modeling:  # noqa: SLF001
-        return None
     import gdstk
 
     library = gdstk.read_gds(spec.gds_path)
@@ -146,8 +142,6 @@ def _effective_layer_imports(spec: Any) -> tuple[dict[str, Any], ...]:
     Thin Film approximation must not collapse to a sheet.
     """
     mapping = _request_modeling(spec)
-    if mapping is None:
-        raise ValueError("historical requests have no new execution modeling map")
     pairs = {
         pair: index + 1
         for index, pair in enumerate(
@@ -294,10 +288,8 @@ class HfssDrivenSpec:
     ports: tuple[TerminalPort, TerminalPort] | tuple[ModalPort, ModalPort]
     run_control: HfssRunControl
     region_padding_um: tuple[float, float, float, float, float, float]
-    physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
+    physical_layers: tuple[PhysicalLayerDeclaration, ...] = ()
     physical_representation: PhysicalRepresentationPlan | None = None
-    _historical_physical: bool = False
-    _historical_modeling: bool = False
     length_mesh: LengthMeshSpec | None = None
     aedt_version: str = REQUIRED_AEDT_VERSION
     pyaedt_version: str = LOCKED_PYAEDT
@@ -357,8 +349,6 @@ class HfssDrivenSpec:
     def effective_ports(self) -> tuple[TerminalPort, ...] | tuple[ModalPort, ...]:
         """Native port coordinates derived from immutable authored endpoints."""
         mapping = _request_modeling(self)
-        if mapping is None:
-            raise ValueError("historical requests have no new execution modeling map")
         return tuple(
             replace(
                 port,
@@ -372,9 +362,9 @@ class HfssDrivenSpec:
         )
 
     @property
-    def effective_region(self) -> dict[str, Any] | None:
+    def effective_region(self) -> dict[str, Any]:
         """The solution Region in effective coordinates, projected from the selected GDS
-        geometry. None for historical requests.
+        geometry.
         """
         return _direct_hfss_enclosure(self)
 
@@ -384,9 +374,7 @@ class HfssDrivenSpec:
         return _effective_layer_imports(self)
 
     def to_payload(self) -> dict[str, Any]:
-        """Serialize with effective layer imports and ports when a modeling plan is bound,
-        and the authored ones otherwise.
-        """
+        """Serialize with the effective layer imports and ports of the bound plan."""
         return {
             **_modeling_payload(self),
             "schema_version": SCHEMA_VERSION,
@@ -403,22 +391,10 @@ class HfssDrivenSpec:
             },
             "vacuum_material_id": self.vacuum_material_id,
             "gds": {"path": self.gds_path.as_posix()},
-            "layer_imports": (
-                list(self.effective_layer_imports)
-                if self.modeling is not None
-                else [item.to_payload() for item in self.layer_imports]
-            ),
+            "layer_imports": list(self.effective_layer_imports),
             "object_bindings": [item.to_payload() for item in self.object_bindings],
             "ports": [item.to_payload() for item in self.ports],
-            **(
-                {
-                    "effective_ports": [
-                        item.to_payload() for item in self.effective_ports
-                    ]
-                }
-                if self.modeling is not None
-                else {}
-            ),
+            "effective_ports": [item.to_payload() for item in self.effective_ports],
             "run_control": self.run_control.to_payload(),
             "region_padding_um": list(self.region_padding_um),
             "length_mesh": self.length_mesh.to_payload() if self.length_mesh else None,
@@ -430,7 +406,6 @@ class HfssDrivenSpec:
         payload: dict[str, Any],
         *,
         base_dir: Path | None = None,
-        allow_historical_modeling: bool = False,
     ) -> HfssDrivenSpec:
         """Rebuild from a driven v1 payload, then verify stored effective layers and ports
         against the plan.
@@ -456,9 +431,7 @@ class HfssDrivenSpec:
         length = payload.get("length_mesh")
         result = cls(
             modeling=payload.get("modeling"),
-            **_physical_fields_from_payload(
-                payload, allow_historical=allow_historical_modeling
-            ),
+            **_physical_fields_from_payload(payload),
             mode=mode,  # type: ignore[arg-type]
             gds_path=gds,
             project_name=_project_name_from_payload(
@@ -485,14 +458,13 @@ class HfssDrivenSpec:
                 payload.get("pyaedt", {}).get("locked_version"), "pyaedt.locked_version"
             ),
         )
-        if result.modeling is not None:
-            _verify_effective_records(
-                payload["layer_imports"], result.effective_layer_imports
-            )
-            _verify_effective_records(
-                payload["effective_ports"],
-                [item.to_payload() for item in result.effective_ports],
-            )
+        _verify_effective_records(
+            payload["layer_imports"], result.effective_layer_imports
+        )
+        _verify_effective_records(
+            payload["effective_ports"],
+            [item.to_payload() for item in result.effective_ports],
+        )
         return result
 
 
@@ -575,10 +547,8 @@ class HfssEigenmodeSpec:
     object_bindings: tuple[ObjectBinding, ...]
     run_control: EigenmodeRunControl
     region_padding_um: tuple[float, float, float, float, float, float]
-    physical_layers: tuple[PhysicalLayerDeclaration | PhysicalLayerSpec, ...] = ()
+    physical_layers: tuple[PhysicalLayerDeclaration, ...] = ()
     physical_representation: PhysicalRepresentationPlan | None = None
-    _historical_physical: bool = False
-    _historical_modeling: bool = False
     length_mesh: LengthMeshSpec | None = None
     aedt_version: str = REQUIRED_AEDT_VERSION
     pyaedt_version: str = LOCKED_PYAEDT
@@ -601,9 +571,9 @@ class HfssEigenmodeSpec:
             )
 
     @property
-    def effective_region(self) -> dict[str, Any] | None:
+    def effective_region(self) -> dict[str, Any]:
         """The solution Region in effective coordinates, projected from the selected GDS
-        geometry. None for historical requests.
+        geometry.
         """
         return _direct_hfss_enclosure(self)
 
@@ -613,9 +583,7 @@ class HfssEigenmodeSpec:
         return _effective_layer_imports(self)
 
     def to_payload(self) -> dict[str, Any]:
-        """Serialize with effective layer imports when a modeling plan is bound, and the
-        authored ones otherwise.
-        """
+        """Serialize with the effective layer imports of the bound plan."""
         return {
             **_modeling_payload(self),
             "schema_version": EIGENMODE_SCHEMA_VERSION,
@@ -632,11 +600,7 @@ class HfssEigenmodeSpec:
             },
             "vacuum_material_id": self.vacuum_material_id,
             "gds": {"path": self.gds_path.as_posix()},
-            "layer_imports": (
-                list(self.effective_layer_imports)
-                if self.modeling is not None
-                else [item.to_payload() for item in self.layer_imports]
-            ),
+            "layer_imports": list(self.effective_layer_imports),
             "object_bindings": [item.to_payload() for item in self.object_bindings],
             "run_control": self.run_control.to_payload(),
             "region_padding_um": list(self.region_padding_um),
@@ -649,7 +613,6 @@ class HfssEigenmodeSpec:
         payload: dict[str, Any],
         *,
         base_dir: Path | None = None,
-        allow_historical_modeling: bool = False,
     ) -> HfssEigenmodeSpec:
         """Rebuild from an Eigenmode v1 payload, then verify stored effective layers
         against the plan.
@@ -672,9 +635,7 @@ class HfssEigenmodeSpec:
         length = payload.get("length_mesh")
         result = cls(
             modeling=payload.get("modeling"),
-            **_physical_fields_from_payload(
-                payload, allow_historical=allow_historical_modeling
-            ),
+            **_physical_fields_from_payload(payload),
             gds_path=gds,
             project_name=_project_name_from_payload(
                 payload.get("project", {}).get("name")
@@ -704,10 +665,9 @@ class HfssEigenmodeSpec:
                 payload.get("pyaedt", {}).get("locked_version"), "pyaedt.locked_version"
             ),
         )
-        if result.modeling is not None:
-            _verify_effective_records(
-                payload["layer_imports"], result.effective_layer_imports
-            )
+        _verify_effective_records(
+            payload["layer_imports"], result.effective_layer_imports
+        )
         return result
 
 

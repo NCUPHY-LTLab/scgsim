@@ -93,9 +93,7 @@ def resolve_prepared_model(source: str | Path) -> PreparedModel:
     ):
         raise RuntimeError("prepared model source paths are not canonical")
     spec_path = _verified(root, "aedt_spec.json", source_binding, "spec_sha256")
-    spec = parse_aedt_spec(
-        read_json(spec_path), base_dir=root, allow_historical_modeling=True
-    )
+    spec = parse_aedt_spec(read_json(spec_path), base_dir=root)
     if not isinstance(
         spec,
         (
