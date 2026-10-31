@@ -38,8 +38,8 @@ from scgsim.aedt.specs.hfss import (
     HfssEprSpec,
 )
 from scgsim.aedt.specs.parse import parse_aedt_spec
-from scgsim.aedt.specs.q3d import Q3dSpec
 from scgsim.aedt.specs.q2d import Q2dSpec
+from scgsim.aedt.specs.q3d import Q3dSpec
 
 
 @dataclass(frozen=True)

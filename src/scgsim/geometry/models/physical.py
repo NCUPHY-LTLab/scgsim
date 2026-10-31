@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from scgsim.geometry.models.representation import (
-    EntityRepresentation,
     EffectiveEnclosure,
+    EntityRepresentation,
     RepresentationContext,
 )
 from scgsim.semantics.snapshot import _plain, canonical_sha256, freeze_plain

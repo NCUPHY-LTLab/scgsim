@@ -9,19 +9,19 @@ stored mesh and are not workflow failures or acceptance thresholds.
 from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
 
 from .preparation.eigenmode import EigenmodeSim
-from .results.epr import (
-    PalaceEprResult,
-    epr_result,
-    reanalyze_epr,
-    resolve_epr_result,
-    show_epr,
-)
 from .preparation.electrostatic import ElectrostaticSim
 from .presentation.reports import (
     PalaceTrustReport,
     PhysicsQuantitiesReport,
     SimulationBenchmarkReport,
     inspect_run_trustworthiness,
+)
+from .results.epr import (
+    PalaceEprResult,
+    epr_result,
+    reanalyze_epr,
+    resolve_epr_result,
+    show_epr,
 )
 from .results.report_data import (
     PalaceFailureDiagnosis,

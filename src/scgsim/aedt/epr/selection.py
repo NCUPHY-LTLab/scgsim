@@ -2,26 +2,21 @@
 
 from __future__ import annotations
 
-
-import math
-
 import hashlib
-
 import json
-
+import math
 from collections.abc import Mapping
-
 from typing import Any
 
+from scgsim.aedt._data import (
+    detached,
+)
 from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
     surface_evaluations,
 )
 from scgsim.aedt.specs.geometry import (
     PreparedPlanarGeometry,
-)
-from scgsim.aedt._data import (
-    detached,
 )
 
 

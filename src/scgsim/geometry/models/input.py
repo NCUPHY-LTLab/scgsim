@@ -13,8 +13,8 @@ from scgsim.geometry.models.common import (
     PolygonRing,
     RouteLiteral,
 )
-from scgsim.geometry.models.regions import PortSheetRegionRecord
 from scgsim.geometry.models.lumped import LumpedSupport
+from scgsim.geometry.models.regions import PortSheetRegionRecord
 
 
 @dataclass(frozen=True)

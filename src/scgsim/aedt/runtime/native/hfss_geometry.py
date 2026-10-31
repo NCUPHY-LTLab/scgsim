@@ -5,31 +5,24 @@ Construction does not depend on whether an EPR analysis was requested.
 
 from __future__ import annotations
 
-
 import json
-
 import math
-
 import time
-
 from collections.abc import Mapping, Sequence
-
 from decimal import Decimal
-
 from fractions import Fraction
-
-
 from itertools import pairwise
-
 from pathlib import Path
-
 from typing import Any
 
-from scgsim.semantics.route_a import geometry_z_range
-
-
+from scgsim.aedt._data import detached
 from scgsim.aedt._io import file_sha256
-
+from scgsim.aedt.preparation.junction_partition import (
+    _closed_contact,
+    _cross,
+    _inside_ring,
+    _section,
+)
 from scgsim.aedt.preparation.planar import (
     _entity_z_range,
     _junction_polygon,
@@ -39,21 +32,6 @@ from scgsim.aedt.preparation.planar import (
     _plain,
     _route_a_sheet_z,
 )
-
-from scgsim.aedt.preparation.junction_partition import (
-    _closed_contact,
-    _cross,
-    _inside_ring,
-    _section,
-)
-
-from scgsim.aedt.specs.epr import (
-    PlanarJunction,
-)
-
-from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-from scgsim.aedt._data import detached
-
 from scgsim.aedt.runtime.native.common import (
     _native_boundary_type,
     _native_object_boolean_property,
@@ -63,7 +41,11 @@ from scgsim.aedt.runtime.native.common import (
     read_native_material,
     realize_source_material,
 )
-
+from scgsim.aedt.specs.epr import (
+    PlanarJunction,
+)
+from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
+from scgsim.semantics.route_a import geometry_z_range
 
 _NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM = 1e-5
 
@@ -300,7 +282,7 @@ def _native_coordinates_close(left, right) -> bool:
         math.isfinite(float(a))
         and math.isfinite(float(b))
         and abs(float(a) - float(b)) <= _NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM
-        for a, b in zip(left, right)
+        for a, b in zip(left, right, strict=False)
     )
 
 
@@ -309,11 +291,13 @@ def _native_straight_ring(ring):
     points = [tuple(Fraction(str(float(v))) for v in point) for point in ring]
     if len(points) > 1 and points[0] == points[-1]:
         points.pop()
-    if len(points) < 3 or any(a == b for a, b in zip(points, (*points[1:], points[0]))):
+    if len(points) < 3 or any(
+        a == b for a, b in zip(points, (*points[1:], points[0]), strict=False)
+    ):
         raise RuntimeError(
             "native junction boundary is unresolved at readback resolution"
         )
-    chains = [[a, b] for a, b in zip(points, (*points[1:], points[0]))]
+    chains = [[a, b] for a, b in zip(points, (*points[1:], points[0]), strict=False)]
     changed = True
     while changed and len(points) > 3:
         changed = False
@@ -332,7 +316,7 @@ def _native_straight_ring(ring):
                 break
     if any(
         _native_coordinates_close(a, b)
-        for a, b in zip(points, (*points[1:], points[0]))
+        for a, b in zip(points, (*points[1:], points[0]), strict=False)
     ):
         raise RuntimeError(
             "native junction boundary is unresolved at readback resolution"
@@ -363,7 +347,10 @@ def _native_polygon_correspondence(
             if subdivisions:
                 points, raw_chains = _native_straight_ring(points)
             else:
-                raw_chains = [[a, b] for a, b in zip(points, (*points[1:], points[0]))]
+                raw_chains = [
+                    [a, b]
+                    for a, b in zip(points, (*points[1:], points[0]), strict=False)
+                ]
             corners.extend(points)
             chains.update({tuple(sorted((c[0], c[-1]))): c for c in raw_chains})
         return corners, chains
@@ -378,7 +365,9 @@ def _native_polygon_correspondence(
                 f"native junction vertex correspondence is missing or ambiguous: {name!r}"
             )
         matches[candidates[0]] = point
-        deviations.append(max(abs(float(a - b)) for a, b in zip(point, candidates[0])))
+        deviations.append(
+            max(abs(float(a - b)) for a, b in zip(point, candidates[0], strict=False))
+        )
     if len(actual) != len(expected) or set(matches) != set(expected):
         raise RuntimeError(f"native junction vertex topology differs: {name!r}")
     if len(actual_chains) != len(actual) or len(expected_chains) != len(expected):
@@ -402,19 +391,24 @@ def _native_polygon_correspondence(
                     parameter, projected = _native_edge_projection(point, a, b)
                     nearest = a if parameter < 0 else b if parameter > 1 else projected
                     residuals.append(
-                        max(abs(float(p - q)) for p, q in zip(point, nearest))
+                        max(
+                            abs(float(p - q))
+                            for p, q in zip(point, nearest, strict=False)
+                        )
                     )
                 deviations.append(min(residuals))
     return matches
 
 
 def _native_edge_projection(point, start, end):
-    delta = tuple(b - a for a, b in zip(start, end))
+    delta = tuple(b - a for a, b in zip(start, end, strict=False))
     norm = sum(v * v for v in delta)
     if not norm:
         raise RuntimeError("native junction boundary has a collapsed edge")
-    parameter = sum((p - a) * v for p, a, v in zip(point, start, delta)) / norm
-    projected = tuple(a + parameter * v for a, v in zip(start, delta))
+    parameter = (
+        sum((p - a) * v for p, a, v in zip(point, start, delta, strict=False)) / norm
+    )
+    projected = tuple(a + parameter * v for a, v in zip(start, delta, strict=False))
     return parameter, projected
 
 
@@ -456,7 +450,7 @@ def _native_edge_section(bodies, start, end, *, boundary_only=False):
             intervals.extend((clamp(a), clamp(b)) for a, b in spans)
             contacts.update(clamp(v) for v in points)
         for ring in rings:
-            for a, b in zip(ring, (*ring[1:], ring[0])):
+            for a, b in zip(ring, (*ring[1:], ring[0]), strict=False):
                 ta, pa = _native_edge_projection(a, start, end)
                 tb, pb = _native_edge_projection(b, start, end)
                 near_a = _native_coordinates_close(a, pa)
@@ -481,8 +475,8 @@ def _native_edge_covered(bodies, start, end) -> bool:
     intervals, _ = _native_edge_section(bodies, start, end, boundary_only=True)
     reached = Fraction(0)
     for lo, hi in sorted(intervals):
-        left = tuple(a + lo * (b - a) for a, b in zip(start, end))
-        right = tuple(a + reached * (b - a) for a, b in zip(start, end))
+        left = tuple(a + lo * (b - a) for a, b in zip(start, end, strict=False))
+        right = tuple(a + reached * (b - a) for a, b in zip(start, end, strict=False))
         if lo > reached and not _native_coordinates_close(left, right):
             return False
         reached = max(reached, hi)
@@ -493,13 +487,17 @@ def _native_boundary_contact(left, right) -> bool:
     """Require a resolved positive span; tiny raw subdivisions cannot prove one."""
     for rings in left:
         for ring in rings:
-            for start, end in zip(ring, (*ring[1:], ring[0])):
+            for start, end in zip(ring, (*ring[1:], ring[0]), strict=False):
                 if start != end and _native_coordinates_close(start, end):
                     continue
                 spans, _ = _native_edge_section(right, start, end, boundary_only=True)
                 for lo, hi in spans:
-                    a = tuple(p + lo * (q - p) for p, q in zip(start, end))
-                    b = tuple(p + hi * (q - p) for p, q in zip(start, end))
+                    a = tuple(
+                        p + lo * (q - p) for p, q in zip(start, end, strict=False)
+                    )
+                    b = tuple(
+                        p + hi * (q - p) for p, q in zip(start, end, strict=False)
+                    )
                     if not _native_coordinates_close(a, b):
                         return True
     return False
@@ -514,7 +512,7 @@ def _native_closed_contact(left, right) -> bool:
         for point in ring
         for other in others
         for boundary in other
-        for a, b in zip(boundary, (*boundary[1:], boundary[0]))
+        for a, b in zip(boundary, (*boundary[1:], boundary[0]), strict=False)
     )
 
 
@@ -525,7 +523,7 @@ def _native_strict_inside(point, rings) -> bool:
         and not any(
             _native_on_segment(point, a, b)
             for ring in rings
-            for a, b in zip(ring, (*ring[1:], ring[0]))
+            for a, b in zip(ring, (*ring[1:], ring[0]), strict=False)
         )
     )
 
@@ -567,7 +565,9 @@ def _native_face_edges(face, name):
         if len(vertices) != 2 or any(p is None or len(p) != 3 for p in vertices):
             raise RuntimeError(f"native junction boundary is not polygonal: {name!r}")
         midpoint = edge.midpoint
-        expected_midpoint = [(float(a) + float(b)) / 2 for a, b in zip(*vertices)]
+        expected_midpoint = [
+            (float(a) + float(b)) / 2 for a, b in zip(*vertices, strict=False)
+        ]
         length = edge.length
         chord = math.dist(*vertices)
         try:
@@ -601,7 +601,10 @@ def _native_face_edges(face, name):
                 return repr(value)
 
             residuals = (
-                [a - b for a, b in zip(midpoint_values, expected_midpoint)]
+                [
+                    a - b
+                    for a, b in zip(midpoint_values, expected_midpoint, strict=False)
+                ]
                 if midpoint_valid
                 else None
             )
@@ -653,7 +656,7 @@ def _native_face_edges(face, name):
                 "chord_length_um": chord,
                 "maximum_midpoint_coordinate_deviation_um": max(
                     abs(float(a) - float(b))
-                    for a, b in zip(midpoint, expected_midpoint)
+                    for a, b in zip(midpoint, expected_midpoint, strict=False)
                 ),
             }
         )
@@ -716,7 +719,7 @@ def _native_planar_loops(obj: Any, z_um: float, observations=None) -> list[tuple
             return abs(
                 sum(
                     a[0] * b[1] - b[0] * a[1]
-                    for a, b in zip(ring, (*ring[1:], ring[0]))
+                    for a, b in zip(ring, (*ring[1:], ring[0]), strict=False)
                 )
             )
 
@@ -830,7 +833,7 @@ def _native_extrusion_sides(obj, bottom, top, z_range, thickness, observations):
             )
         if any(
             layer(a) != layer(b) and not _native_coordinates_close(a[:2], b[:2])
-            for a, b in zip(corners, (*corners[1:], corners[0]))
+            for a, b in zip(corners, (*corners[1:], corners[0]), strict=False)
         ):
             raise RuntimeError("native junction extrusion side has nonvertical edges")
         for point in sides[0]:
@@ -843,7 +846,7 @@ def _native_extrusion_sides(obj, bottom, top, z_range, thickness, observations):
                 )
         edge_records = {
             tuple(sorted(edge)): observation
-            for edge, observation in zip(edges, edge_observations)
+            for edge, observation in zip(edges, edge_observations, strict=False)
         }
         if len(edge_records) != len(edges):
             raise RuntimeError(
@@ -875,7 +878,7 @@ def _native_extrusion_sides(obj, bottom, top, z_range, thickness, observations):
                 if not any(
                     all(
                         _native_coordinates_close(p, q)
-                        for p, q in zip(actual, ordering)
+                        for p, q in zip(actual, ordering, strict=False)
                     )
                     for ordering in (wanted, wanted[::-1])
                 ):
@@ -892,7 +895,7 @@ def _native_extrusion_sides(obj, bottom, top, z_range, thickness, observations):
                         side_owners[n][edge_id],
                     )
                 side_owners[n][edge_id] = face_id
-        boundary_edges.extend(zip(corners, (*corners[1:], corners[0])))
+        boundary_edges.extend(zip(corners, (*corners[1:], corners[0]), strict=False))
         observations.append(
             {
                 "object_name": obj.name,
@@ -1107,8 +1110,8 @@ def _native_junction_live_readback(
             ):
                 raise RuntimeError("native PEC occupies central RLC interior")
             for ring in rings:
-                for a, b in zip(ring, (*ring[1:], ring[0])):
-                    for c, d in zip(points, (*points[1:], points[0])):
+                for a, b in zip(ring, (*ring[1:], ring[0]), strict=False):
+                    for c, d in zip(points, (*points[1:], points[0]), strict=False):
                         if (
                             _native_cross_sign(a, b, c) * _native_cross_sign(a, b, d)
                             < 0
@@ -1401,7 +1404,7 @@ def _read_saved_junction_lines(app, project_path, design_name, prepared, geometr
                 raise TypeError("saved junction actual terminal edge ID is invalid")
             terminal_edges.append(found[0])
         observed_line = []
-        for position, edge in zip(positions, terminal_edges):
+        for position, edge in zip(positions, terminal_edges, strict=False):
             if not isinstance(position, Mapping):
                 raise TypeError("saved junction line position is malformed")
             if (
@@ -1442,20 +1445,21 @@ def _read_saved_junction_lines(app, project_path, design_name, prepared, geometr
         line, _ = _junction_terminal_line(expected, junction, z_um)
         actual_midpoints = [edge["midpoint_um"] for edge in terminal_edges]
         if any(
-            not _native_coordinates_close(a, b) for a, b in zip(observed_line, line)
+            not _native_coordinates_close(a, b)
+            for a, b in zip(observed_line, line, strict=False)
         ):
             raise RuntimeError("saved junction integration line differs")
         if any(
             not _native_coordinates_close(a, b)
-            for a, b in zip(observed_line, actual_midpoints)
+            for a, b in zip(observed_line, actual_midpoints, strict=False)
         ):
             raise RuntimeError(
                 "saved junction integration line differs from actual terminal edges"
             )
         deviations.extend(
             abs(a - b)
-            for actual, wanted in zip(observed_line, line)
-            for a, b in zip(actual, wanted)
+            for actual, wanted in zip(observed_line, line, strict=False)
+            for a, b in zip(actual, wanted, strict=False)
         )
         completed.append(
             (
@@ -1512,7 +1516,7 @@ def _verified_region_bounds(region: Any, plan: Mapping[str, Any]) -> tuple[float
             rel_tol=0.0,
             abs_tol=max(1e-6, 1e-9 * max(abs(actual), abs(wanted))),
         )
-        for actual, wanted in zip(bounds, expected)
+        for actual, wanted in zip(bounds, expected, strict=False)
     ):
         raise RuntimeError("native EPR Region bounds differ from source envelope")
     return bounds

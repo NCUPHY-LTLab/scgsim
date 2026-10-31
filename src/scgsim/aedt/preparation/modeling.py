@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import Any
 
 from scgsim.aedt._data import canonical_sha256, detached
-
 from scgsim.aedt.specs.modeling import Modeling
 from scgsim.geometry.models.physical import ApproximationProfile
 from scgsim.geometry.planning.physical import interpret_physical_geometry

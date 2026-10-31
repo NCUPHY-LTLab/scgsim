@@ -2,47 +2,31 @@
 
 from __future__ import annotations
 
-
 import math
-
-
 from collections.abc import Mapping, Sequence
-
-
 from dataclasses import replace
-
 from fractions import Fraction
-
 from importlib.metadata import version
-
-
 from typing import Any
 
-from scgsim.semantics.route_a import geometry_z_range
-
-from scgsim.geometry import GeometryBuildInput
-from scgsim.geometry.source.validation import validate_geometry_input
-
-from scgsim.geometry._primitives.spatial import _geometry_ref_surface_z_um
-from scgsim.geometry.planning.surfaces import plan_representation_contribution_geometry
-from scgsim.aedt.specs.modeling import Modeling
-from scgsim.aedt.preparation.modeling import _effective_geometry_input
-from scgsim.aedt.specs.modeling import _native_physical_record
-
+from scgsim.aedt._data import canonical_sha256
 from scgsim.aedt.preparation.junction_partition import (
     _closed_contact,
     partition_junctions,
 )
-
+from scgsim.aedt.preparation.modeling import _effective_geometry_input
+from scgsim.aedt.specs._support import _prepared_lumped_supports
 from scgsim.aedt.specs.epr import (
     PlanarJunction,
     SurfaceEprSpec,
 )
-
-
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-from scgsim.aedt.specs._support import _prepared_lumped_supports
-from scgsim.aedt._data import canonical_sha256
+from scgsim.aedt.specs.modeling import Modeling, _native_physical_record
+from scgsim.geometry import GeometryBuildInput
+from scgsim.geometry._primitives.spatial import _geometry_ref_surface_z_um
+from scgsim.geometry.planning.surfaces import plan_representation_contribution_geometry
+from scgsim.geometry.source.validation import validate_geometry_input
+from scgsim.semantics.route_a import geometry_z_range
 
 _INSET_CIRCLE_POINTS = 128
 _INSET_METHOD = "klayout_complement_minkowski.v1"
@@ -1097,7 +1081,7 @@ def _junction_terminal_line(
         not any(
             abs(u - eu) <= tolerance and abs(v - ev) <= tolerance for eu, ev in expected
         )
-        for u, v in zip(along, across)
+        for u, v in zip(along, across, strict=False)
     ):
         raise ValueError(
             f"junction {junction.junction_id!r} polygon is not rectangular in its declared direction"

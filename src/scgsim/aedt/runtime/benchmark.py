@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-
 import math
-
 import re
-
 from pathlib import Path
-
 from typing import Any
 
 from scgsim.aedt._benchmark import (
@@ -18,7 +14,6 @@ from scgsim.aedt._benchmark import (
     attribute_profile_memory,
 )
 from scgsim.aedt._io import file_sha256, write_json
-
 
 _METRIC_LABELS = {
     "Real time": "real_seconds",

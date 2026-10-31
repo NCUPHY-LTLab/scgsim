@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-
 import math
-
 from pathlib import Path
-
 from typing import Any
 
-from scgsim.aedt._io import read_json
-
 from scgsim.aedt._benchmark import BENCHMARK_SCHEMA, attribute_profile_memory
+from scgsim.aedt._io import read_json
 
 
 def read_simulation_benchmark(path: Path, setup_name: str) -> dict[str, Any]:

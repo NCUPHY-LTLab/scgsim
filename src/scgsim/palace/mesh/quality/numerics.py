@@ -28,7 +28,6 @@ import numpy as np
 
 from .reader import MeshData
 
-
 _U = 2.0**-53
 _EPS = 2.0**-52
 _MIN_NORMAL = sys.float_info.min

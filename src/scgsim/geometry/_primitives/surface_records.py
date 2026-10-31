@@ -10,8 +10,8 @@ from scgsim.geometry._primitives.constants import _INTERFACE_KIND_ORDER
 from scgsim.geometry._primitives.entities import _unique_ids
 from scgsim.geometry._primitives.spatial import _coordinate_key
 from scgsim.geometry.models.common import RouteLiteral
-from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.input import SemanticEntitySpec
+from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
 from scgsim.semantics import EvidenceResult
 

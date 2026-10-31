@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-
 import html
 import re
-
 from typing import Any
 
 from scgsim.aedt._benchmark import attribute_profile_memory

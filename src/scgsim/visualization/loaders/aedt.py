@@ -11,7 +11,7 @@ from typing import Any
 from scgsim.aedt.specs.common import LOCKED_PYAEDT, REQUIRED_AEDT_VERSION
 
 from ..preview import GeometryPreview
-from ..scene import _FIXED_COLORS, _Mode, _Part, _color
+from ..scene import _FIXED_COLORS, _color, _Mode, _Part
 from ._common import (
     _confined,
     _json,

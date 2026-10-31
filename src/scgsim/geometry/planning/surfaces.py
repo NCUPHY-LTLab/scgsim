@@ -70,9 +70,9 @@ from scgsim.geometry.models.topology import (
 )
 from scgsim.geometry.planning.domain import (
     _adjacent_auto_vacuum_sidewall_component_id,
-    _conductor_sidewall_ref_solution_id,
     _conductor_face_solution_pieces,
     _conductor_sidewall_adjacent_solution_id,
+    _conductor_sidewall_ref_solution_id,
     _interface_surface_kinds,
     _merge_solution_sidewall_interfaces,
     _plan_substrate_air_surfaces,
@@ -91,15 +91,15 @@ from scgsim.geometry.planning.evidence import (
     metal_metal_evidence,
     require_semantic_evidence_facade,
 )
+from scgsim.geometry.planning.interfaces import (
+    _plan_mm_contact_records_with_components,
+    plan_conductor_contact_patches,
+    plan_mm_contact_records,
+    recognize_route_interfaces,
+)
 from scgsim.geometry.planning.representation import (
     is_sheet_context,
     planned_conductor_representation,
-)
-from scgsim.geometry.planning.interfaces import (
-    plan_conductor_contact_patches,
-    _plan_mm_contact_records_with_components,
-    plan_mm_contact_records,
-    recognize_route_interfaces,
 )
 from scgsim.geometry.planning.tags import (
     _entity_physical_group_id,

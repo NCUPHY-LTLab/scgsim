@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import SemanticEntitySpec
 from scgsim.geometry.models.representation import (
     EntityRepresentation,
     RepresentationContext,
 )
-from scgsim.geometry.models.common import RouteLiteral
 
 
 def entity_representation(

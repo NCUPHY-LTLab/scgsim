@@ -2,34 +2,26 @@
 
 from __future__ import annotations
 
-
-import math
-
 import hashlib
-
 import json
-
+import math
 from collections.abc import Mapping
-
 from typing import Any
 
-from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
-
-from scgsim.aedt.specs.epr import (
-    EprAnalysisRequest,
+from scgsim.aedt._data import (
+    detached,
 )
 from scgsim.aedt.epr.models import (
     EprResult,
 )
+from scgsim.aedt.epr.selection import _exact_mapping, _finite, surface_integral_groups
+from scgsim.aedt.specs.epr import (
+    EprAnalysisRequest,
+)
 from scgsim.aedt.specs.geometry import (
     PreparedPlanarGeometry,
 )
-from scgsim.aedt._data import (
-    detached,
-)
-
-from scgsim.aedt.epr.selection import _exact_mapping, _finite, surface_integral_groups
-
+from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
 
 _EPSILON_0_F_PER_M = 8.8541878128e-12
 

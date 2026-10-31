@@ -190,7 +190,7 @@ def _reconstruct(record, ring):
             f"{record.boundary_id} requires explicit original segment indices"
         )
     if len(set(segments)) != len(segments) or any(
-        b != (a + 1) % count for a, b in zip(segments, segments[1:])
+        b != (a + 1) % count for a, b in zip(segments, segments[1:], strict=False)
     ):
         raise ValueError(
             f"{record.boundary_id} segments must form one ordered source chain"
@@ -223,7 +223,8 @@ def _reconstruct(record, ring):
         start = points[0]
         angle = math.atan2(start[1] - center[1], start[0] - center[0])
         area = sum(
-            a[0] * b[1] - b[0] * a[1] for a, b in zip(ring, (*ring[1:], ring[0]))
+            a[0] * b[1] - b[0] * a[1]
+            for a, b in zip(ring, (*ring[1:], ring[0]), strict=False)
         )
         direction = 1 if area > 0 else -1
 
@@ -394,7 +395,7 @@ class _Kernel:
                 # Exact homogeneous degree elevation of a rational quadratic arc.
                 h = [
                     (*[v * weight for v in xyz], weight)
-                    for xyz, weight in zip(q, [1, w, 1])
+                    for xyz, weight in zip(q, [1, w, 1], strict=False)
                 ]
                 elevated = [
                     h[0],
@@ -513,7 +514,8 @@ class _Kernel:
             self.occ.synchronize()
             bounds = self.gmsh.model.getParametrizationBounds(2, orientation_face)
             normal = self.gmsh.model.getNormal(
-                orientation_face, [float((a + b) / 2) for a, b in zip(*bounds)]
+                orientation_face,
+                [float((a + b) / 2) for a, b in zip(*bounds, strict=False)],
             )
             self.occ.remove([(2, orientation_face)], recursive=False)
             # OCC's plane-surface constructor subtracts subsequent wires in the
@@ -563,7 +565,7 @@ def _detached_edge(
         *pids,
         geometry=geometry,
         parameter_interval=(float(bounds[0][0]), float(bounds[1][0])),
-    ), dict(zip(pids, endpoints))
+    ), dict(zip(pids, endpoints, strict=False))
 
 
 def build_curved_construction_plan(build_input, *, route, representation_context=None):
@@ -629,7 +631,7 @@ def build_curved_construction_plan(build_input, *, route, representation_context
             ]:
                 curves = tuple(
                     SourceCurveSpec("line_segment", (tuple(a), tuple(b)))
-                    for a, b in zip(ring, (*ring[1:], ring[0]))
+                    for a, b in zip(ring, (*ring[1:], ring[0]), strict=False)
                 )
                 sources.append(
                     (
@@ -661,12 +663,16 @@ def build_curved_construction_plan(build_input, *, route, representation_context
         occ.synchronize()
         cells = {tag for dim, tag in output if dim == 2}
         membership = defaultdict(set)
-        for (_, owner), mapped in zip(footprints, mapping[: len(footprints)]):
+        for (_, owner), mapped in zip(
+            footprints, mapping[: len(footprints)], strict=False
+        ):
             for dim, tag in mapped:
                 if dim == 2:
                     membership[tag].add(owner)
         native_edges = defaultdict(list)
-        for source, mapped in zip(source_edges, mapping[len(footprints) :]):
+        for source, mapped in zip(
+            source_edges, mapping[len(footprints) :], strict=False
+        ):
             reference = references[source]
             for dim, tag in mapped:
                 if dim != 1:
@@ -847,7 +853,7 @@ def build_curved_construction_plan(build_input, *, route, representation_context
         )
         occupied = {}
         owners = {}
-        for slab, (lo, hi) in enumerate(zip(z_values, z_values[1:])):
+        for slab, (lo, hi) in enumerate(zip(z_values, z_values[1:], strict=False)):
             middle = (lo + hi) / 2
             for cell in cells:
                 candidates = [
@@ -932,7 +938,7 @@ def build_curved_construction_plan(build_input, *, route, representation_context
         _, copied_history = occ.fragment(
             [(1, lifted[0, edge]) for edge in retained_edges], []
         )
-        for edge, history in zip(retained_edges, copied_history):
+        for edge, history in zip(retained_edges, copied_history, strict=False):
             tags = [tag for dim, tag in history if dim == 1]
             if len(tags) != 1:
                 raise ValueError("Z-copy changed an already arranged planar edge")
@@ -940,10 +946,12 @@ def build_curved_construction_plan(build_input, *, route, representation_context
         occ.synchronize()
         for edge in retained_edges:
             for source, copied in zip(
-                _edge_vertices(gmsh, edge), _edge_vertices(gmsh, lifted[0, edge])
+                _edge_vertices(gmsh, edge),
+                _edge_vertices(gmsh, lifted[0, edge]),
+                strict=False,
             ):
                 lifted_vertices[0, source] = copied
-        for slab, (lo, hi) in enumerate(zip(z_values, z_values[1:])):
+        for slab, (lo, hi) in enumerate(zip(z_values, z_values[1:], strict=False)):
             source_by_tag = {lifted[slab, edge]: edge for edge in retained_edges}
             source_by_vertex = {
                 tag: vertex

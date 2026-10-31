@@ -6,9 +6,9 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from ._common import _json, _sha256
 from ..preview import GeometryPreview
-from ..scene import _FIXED_COLORS, _Mode, _Part, _color
+from ..scene import _FIXED_COLORS, _color, _Mode, _Part
+from ._common import _json, _sha256
 
 
 def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
@@ -372,8 +372,8 @@ def _high_order_grid(mesh: Any, manifest: Mapping[str, Any], pv: Any) -> Any:
     from meshio._vtk_common import meshio_to_vtk_type
     from vtkmodules.vtkCommonDataModel import (
         vtkLagrangeCurve,
-        vtkLagrangeTriangle,
         vtkLagrangeTetra,
+        vtkLagrangeTriangle,
     )
 
     records = manifest.get("meshing", {}).get("statistics", {}).get("element_types", ())

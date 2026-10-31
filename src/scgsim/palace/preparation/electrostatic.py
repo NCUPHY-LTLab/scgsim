@@ -10,23 +10,26 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
-from scgsim.geometry.source.plan import GeometryPlanSnapshot
 from scgsim.geometry.models.input import VacuumRegionSpec
+from scgsim.geometry.models.physical import ApproximationProfile
+from scgsim.geometry.source.plan import GeometryPlanSnapshot
+from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
+
+from ..execution.handoff import HandoffPlan, prepare_handoff
+from ..mesh.build import MeshBuildResult, build_route_mesh
+from ..mesh.controls import MESH_CONTROL_KEYS
 from .config import (
     _MODEL_L0_M,
     TerminalBinding,
     build_electrostatic_config,
     configure_numerical_controls,
 )
-from .surface_epr import normalize_surface_epr_specs
 from .inputs import (
     _load_stack,
     _non_negative_number,
     _validate_stack_material_kinds,
 )
-from ..mesh.build import MeshBuildResult, build_route_mesh
-from ..mesh.controls import MESH_CONTROL_KEYS
+from .surface_epr import normalize_surface_epr_specs
 from .transforms import (
     RouteAThinFilm,
     normalize_route_a_thin_film,
@@ -35,8 +38,6 @@ from .transforms import (
     validate_positive_number,
 )
 from .workflow import persist_problem_files, prepare_mesh_input
-from scgsim.geometry.models.physical import ApproximationProfile
-from ..execution.handoff import HandoffPlan, prepare_handoff
 
 
 @dataclass

@@ -13,23 +13,34 @@ from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from importlib.metadata import version
 from multiprocessing import get_context
 from typing import Any
-from scgsim.aedt.specs.epr import (
-    surface_evaluations,
+
+from scgsim.aedt._data import canonical_sha256
+from scgsim.aedt.preparation.planar import (
+    _INSET_CIRCLE_POINTS,
+    _INSET_METHOD,
 )
 from scgsim.aedt.preparation.planar import (
     _klayout_region as _klayout_region,
+)
+from scgsim.aedt.preparation.planar import (
     _plain as _plain,
+)
+from scgsim.aedt.preparation.planar import (
     _regions_from_klayout as _regions_from_klayout,
+)
+from scgsim.aedt.preparation.planar import (
     planar_junction_from_port as planar_junction_from_port,
+)
+from scgsim.aedt.preparation.planar import (
     prepare_planar_geometry_input as prepare_planar_geometry_input,
+)
+from scgsim.aedt.preparation.planar import (
     validate_geometry_workers as validate_geometry_workers,
 )
-from scgsim.aedt._data import canonical_sha256
-from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-from scgsim.aedt.preparation.planar import (
-    _INSET_METHOD,
-    _INSET_CIRCLE_POINTS,
+from scgsim.aedt.specs.epr import (
+    surface_evaluations,
 )
+from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 
 
 def _sheet_member(binding: Mapping[str, Any], margin_label: str) -> tuple[str, ...]:
@@ -324,7 +335,7 @@ def precompute_inset_surfaces(
         ) as pool:
             pending = {
                 pool.submit(_inset_group_task, task)
-                for _, task in zip(range(2 * workers), task_iter)
+                for _, task in zip(range(2 * workers), task_iter, strict=False)
             }
             while pending:
                 done, pending = wait(pending, return_when=FIRST_COMPLETED)

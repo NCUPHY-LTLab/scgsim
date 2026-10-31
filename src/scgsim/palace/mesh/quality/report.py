@@ -17,7 +17,6 @@ import numpy as np
 from .numerics import Measurements, _decode_label, _StatusCode
 from .reader import MeshData
 
-
 _SCHEMA = "scgsim.mesh-quality.v1"
 
 

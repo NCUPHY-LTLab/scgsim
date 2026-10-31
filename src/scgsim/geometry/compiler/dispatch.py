@@ -26,7 +26,6 @@ from scgsim.geometry.models.construction import (
     RouteABConstructionPlanRecord,
 )
 from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.planning.representation import project_native_route_representations
 from scgsim.geometry.planning.domain import (
     _merge_solution_sidewall_interfaces,
     _prepare_auto_vacuum_solution_regions,
@@ -44,6 +43,7 @@ from scgsim.geometry.planning.ports import (
     _lower_port_sheet_regions,
     _validate_route_b_port_sheet_sidewall_topology,
 )
+from scgsim.geometry.planning.representation import project_native_route_representations
 from scgsim.geometry.planning.surfaces import (
     plan_route_surfaces,
     plan_surface_partitions,

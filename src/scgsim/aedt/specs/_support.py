@@ -4,7 +4,6 @@
 def _prepared_lumped_supports(supports, source):
     """Derive explicit support XY/Z from the same physical map as all bodies."""
     from scgsim.aedt.specs.modeling import PhysicalLayerSpec, _ZMap
-
     from scgsim.geometry.models.physical import PLAN_SCHEMA, PhysicalRepresentationPlan
 
     trace = source["modeling"]

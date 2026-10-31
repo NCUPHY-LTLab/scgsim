@@ -2,25 +2,18 @@
 
 from __future__ import annotations
 
-
 from collections.abc import Mapping
-
 from pathlib import Path
 
 from scgsim.aedt._io import file_sha256, read_json
-
 from scgsim.aedt.specs.hfss import (
+    HfssDrivenGeometrySpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,
-    HfssDrivenGeometrySpec,
 )
-
 from scgsim.aedt.specs.parse import AedtSpec
-
 from scgsim.aedt.specs.q2d import Q2dSpec
-
 from scgsim.aedt.specs.q3d import Q3dSpec
-
 
 MANIFEST_PATH = "metadata/aedt_handoff_manifest.json"
 

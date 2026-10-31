@@ -11,6 +11,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
+
+from scgsim.aedt._data import (
+    _freeze,
+    detached,
+)
 from scgsim.aedt.epr.analysis import (
     _electric_domain_energy_coefficient,
     _epr_domain_context,
@@ -29,31 +34,26 @@ from scgsim.aedt.epr.geometry import plan_inset_sheet_names
 from scgsim.aedt.epr.models import (
     EprResult,
 )
+from scgsim.aedt.epr.native import (
+    bind_inset_surface_selections,
+    bind_native_surface_references,
+)
+from scgsim.aedt.epr.selection import surface_integral_groups
+from scgsim.aedt.runtime.families.hfss import (
+    _solution_trace,
+    read_body_eigenmode_history,
+)
+from scgsim.aedt.runtime.native.common import detached_data, saved_setup_properties
+from scgsim.aedt.runtime.native.hfss_eigenmode import (
+    submit_eigenmode_cache,
+)
 from scgsim.aedt.specs.epr import (
     ExpressionCacheConvergence,
     NativeExpressionDefinition,
     NormalizedSurfaceEprTotal,
     surface_evaluations,
 )
-from scgsim.aedt._data import (
-    _freeze,
-    detached,
-)
-from scgsim.aedt.epr.native import (
-    bind_inset_surface_selections,
-    bind_native_surface_references,
-)
-from scgsim.aedt.epr.selection import surface_integral_groups
-from scgsim.aedt.runtime.native.common import detached_data, saved_setup_properties
-from scgsim.aedt.runtime.native.hfss_eigenmode import (
-    submit_eigenmode_cache,
-)
 from scgsim.aedt.specs.hfss import HfssEprSpec
-from scgsim.aedt.runtime.families.hfss import (
-    _solution_trace,
-    read_body_eigenmode_history,
-)
-
 
 _SURFACE_ANALYSIS_SCOPE = {
     "included_field_sides": ["top", "bottom"],
@@ -411,7 +411,9 @@ def _trace_for_cache_context(
         }
     selected_real: list[list[float]] = []
     selected_imaginary: list[list[float]] = []
-    for real, imaginary in zip(trace["real_rows"], trace["imaginary_rows"]):
+    for real, imaginary in zip(
+        trace["real_rows"], trace["imaginary_rows"], strict=False
+    ):
         if real[:-1] != imaginary[:-1]:
             return trace, {
                 "status": "mismatch",
@@ -596,7 +598,7 @@ def _adaptive_epr_result(
                 si_rows = {
                     int(real_row[pass_index]): (real_row, imaginary_row)
                     for real_row, imaginary_row in zip(
-                        si["real_rows"], si["imaginary_rows"]
+                        si["real_rows"], si["imaginary_rows"], strict=False
                     )
                 }
                 if pass_id not in si_rows:

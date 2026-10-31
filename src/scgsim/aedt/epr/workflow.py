@@ -7,6 +7,10 @@ import shutil
 import time
 from pathlib import Path
 from typing import Any
+
+from scgsim.aedt._data import (
+    detached,
+)
 from scgsim.aedt._io import file_sha256, write_json
 from scgsim.aedt.epr.analysis import combine_epr_mode
 from scgsim.aedt.epr.cache import (
@@ -26,18 +30,30 @@ from scgsim.aedt.epr.fields import install_variables, parse_native_scalar
 from scgsim.aedt.epr.models import (
     EprResult,
 )
-from scgsim.aedt._data import (
-    detached,
+from scgsim.aedt.epr.native import (
+    add_analysis_surfaces,
+    bind_saved_analysis_surfaces,
+    verify_saved_native_surface_references,
+)
+from scgsim.aedt.preparation.handoff import _prepare_epr_analysis_handoff
+from scgsim.aedt.runtime.families.hfss import (
+    PreparedBodyEigenmode,
+    _export_eigenmode,
+    prepare_body_eigenmode,
+    prepared_body_eigenmode_result,
+    read_body_eigenmode_setup,
+    solve_and_export_body_eigenmode,
+)
+from scgsim.aedt.runtime.native.common import (
+    detached_data,
+    pyaedt_version,
 )
 from scgsim.aedt.runtime.native.hfss_geometry import (
     _read_saved_junction_lines,
     bind_saved_planar_geometry,
 )
-from scgsim.aedt.epr.native import (
-    verify_saved_native_surface_references,
-)
-from scgsim.aedt.runtime.families.hfss import _export_eigenmode
-from scgsim.aedt.preparation.handoff import _prepare_epr_analysis_handoff
+from scgsim.aedt.runtime.native.hfss_lumped import _bind_saved_generic_rlcs
+from scgsim.aedt.specs.common import REQUIRED_AEDT_VERSION, AedtResources
 from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
     SavedSolution,
@@ -45,25 +61,11 @@ from scgsim.aedt.specs.epr import (
 from scgsim.aedt.specs.geometry import (
     PreparedPlanarGeometry,
 )
-from scgsim.aedt.runtime.native.common import (
-    detached_data,
-    pyaedt_version,
-)
-from scgsim.aedt.specs.common import REQUIRED_AEDT_VERSION, AedtResources
 from scgsim.aedt.specs.hfss import (
     EigenmodeRunControl,
     HfssEprAnalysisSpec,
     HfssEprSpec,
 )
-from scgsim.aedt.runtime.native.hfss_lumped import _bind_saved_generic_rlcs
-from scgsim.aedt.runtime.families.hfss import (
-    read_body_eigenmode_setup,
-    PreparedBodyEigenmode,
-    prepare_body_eigenmode,
-    prepared_body_eigenmode_result,
-    solve_and_export_body_eigenmode,
-)
-from scgsim.aedt.epr.native import add_analysis_surfaces, bind_saved_analysis_surfaces
 
 
 def analyze_epr(

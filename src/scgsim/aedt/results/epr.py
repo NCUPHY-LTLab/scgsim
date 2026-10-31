@@ -2,30 +2,23 @@
 
 from __future__ import annotations
 
-
 import hashlib
-
 import json
-
 from collections.abc import Mapping
-
+from pathlib import Path
 from typing import Any
 
-from pathlib import Path
-
-from scgsim.aedt._io import file_sha256, read_json, write_json
-
-from scgsim.aedt.epr.models import (
-    EprResult,
-)
-from scgsim.aedt.specs.epr import (
-    SavedSolution,
-)
 from scgsim.aedt._data import (
     detached,
 )
-
+from scgsim.aedt._io import file_sha256, read_json, write_json
+from scgsim.aedt.epr.models import (
+    EprResult,
+)
 from scgsim.aedt.epr.selection import _exact_mapping
+from scgsim.aedt.specs.epr import (
+    SavedSolution,
+)
 
 
 def resolve_saved_solution(manifest_path: str | Path) -> SavedSolution:

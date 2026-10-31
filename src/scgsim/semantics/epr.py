@@ -6,7 +6,6 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
-
 FILM_FIELDS = frozenset(
     {
         "film_thickness_m",

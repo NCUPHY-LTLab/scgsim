@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-
 import math
-
 import re
-
 from pathlib import Path
-
 from typing import Any
 
 from scgsim.aedt._io import file_sha256
-
 from scgsim.aedt.specs.hfss import HfssEigenmodeSpec, HfssEprSpec, HfssSpec
 
 

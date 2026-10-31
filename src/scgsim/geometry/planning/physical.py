@@ -11,13 +11,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import fields, is_dataclass, replace
 from typing import Any
 
+from scgsim.geometry._primitives.entity_validation import _requires_route_representation
 from scgsim.geometry.models.physical import (
     PHYSICAL_LAYER_FIELD,
     ApproximationProfile,
     PhysicalLayerDeclaration,
     PhysicalRepresentationPlan,
 )
-from scgsim.geometry._primitives.entity_validation import _requires_route_representation
 from scgsim.semantics.route_a import geometry_z_range, same_z
 from scgsim.semantics.snapshot import _plain, canonical_sha256
 
@@ -137,7 +137,7 @@ def interpret_physical_layers(
             if profile.name == "metal_gap_equivalent":
                 removed.append((physical_id, *item.source_interval_um))
     removed.sort(key=lambda item: item[1])
-    for lower, upper in zip(removed, removed[1:]):
+    for lower, upper in zip(removed, removed[1:], strict=False):
         if lower[2] > upper[1]:
             raise ValueError("distinct physical collapse intervals overlap")
     if profile.name == "metal_gap_equivalent":

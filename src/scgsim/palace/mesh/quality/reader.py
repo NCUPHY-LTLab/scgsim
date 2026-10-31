@@ -12,7 +12,6 @@ from typing import BinaryIO, Literal, Mapping, overload
 
 import numpy as np
 
-
 _PHYSICAL_NAME = re.compile(r'^\s*(\d+)\s+(\d+)\s+"(.*)"\s*$')
 # Public MSH element codes, dimensions, and arities from the Gmsh MSH format
 # reference. Unknown future codes remain unknown instead of acquiring a guessed

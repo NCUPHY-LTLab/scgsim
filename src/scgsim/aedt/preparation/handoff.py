@@ -2,56 +2,43 @@
 
 from __future__ import annotations
 
-
 import shutil
-
 import tarfile
-
 import time
-
 from dataclasses import dataclass
-
 from pathlib import Path
 
-from scgsim.aedt._io import file_sha256, write_json
-
-from scgsim.aedt.preparation.planar import validate_geometry_workers
-from scgsim.aedt.specs.epr import (
-    EprAnalysisRequest,
-)
-from scgsim.aedt.specs.geometry import (
-    PreparedPlanarGeometry,
-)
-from scgsim.aedt.specs.epr import SavedSolution
 from scgsim.aedt._data import (
     detached,
 )
-
+from scgsim.aedt._io import file_sha256, write_json
 from scgsim.aedt.preparation.cohort import (
     GEOMETRY_SOURCE_PATHS,
     canonical_handoff_paths,
 )
-
+from scgsim.aedt.preparation.planar import validate_geometry_workers
 from scgsim.aedt.results.provenance import (
     RECEIPT_V3,
     encode_initial_receipt,
     initial_receipt_payload,
     prepared_runtime_source,
 )
-
 from scgsim.aedt.specs.common import (
-    AedtResources,
     LOCKED_PYAEDT,
     OFFICIAL_PYAEDT_SOURCE_URL,
     REQUIRED_AEDT_VERSION,
+    AedtResources,
 )
-
+from scgsim.aedt.specs.epr import (
+    EprAnalysisRequest,
+    SavedSolution,
+)
+from scgsim.aedt.specs.geometry import (
+    PreparedPlanarGeometry,
+)
 from scgsim.aedt.specs.hfss import EigenmodeRunControl, HfssEprAnalysisSpec
-
 from scgsim.aedt.specs.parse import AedtSpec
-
 from scgsim.aedt.specs.q2d import Q2dSpec
-
 from scgsim.aedt.specs.q3d import Q3dSpec
 
 

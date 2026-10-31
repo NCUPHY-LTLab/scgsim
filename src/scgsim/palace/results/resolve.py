@@ -1731,7 +1731,7 @@ def _read_csv_table(path: Path) -> ParsedTable:
                 f"{path} contains malformed row with {len(values)} cells; expected {len(raw_headers)}."
             )
         parsed: dict[str, Any] = {}
-        for name, value in zip(raw_headers, values):
+        for name, value in zip(raw_headers, values, strict=False):
             parsed[name] = _parse_cell(value)
         parsed_rows.append(parsed)
 

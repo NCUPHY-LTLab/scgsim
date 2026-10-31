@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-
 from pathlib import Path
-
 from typing import Any
 
 from scgsim.aedt.results.convergence.common import _read_convergence
-
 from scgsim.aedt.specs.q2d import Q2dSpec
 
 

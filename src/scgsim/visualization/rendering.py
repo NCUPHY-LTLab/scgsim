@@ -11,8 +11,8 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
-from .scene import _MODE_TITLES, _VIEWS, _Part
 from .loaders._common import _sha256
+from .scene import _MODE_TITLES, _VIEWS, _Part
 
 
 def _render_mode(

@@ -1,6 +1,7 @@
 """Private stdlib detachment and canonical identity; no native or preparation imports."""
 
 from __future__ import annotations
+
 import hashlib
 import json
 import math

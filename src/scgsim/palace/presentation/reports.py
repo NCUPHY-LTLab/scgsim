@@ -22,13 +22,11 @@ from ..results.report_data import (
     SurfaceEprSeriesSnapshot,
     SurfaceMaskEprRecord,
     SurfaceMaskEprSeriesSnapshot,
-)
-from ..results.report_data import (
+    _as_int,
     _collect_amr_passes,
     _declares_surface_masks,
     _failure_diagnosis,
     _failure_payload,
-    _as_int,
     _mapping_max,
     _read_optional_json,
     _read_surface_bindings,

@@ -13,24 +13,23 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from scgsim.geometry.models.input import VacuumRegionSpec
-from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
-from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.source.ground_bumps import _prepare_indium_ground_bump_fill
-
-from .transforms import (
-    RouteAThinFilm,
-    _normalized_component_input,
-    apply_airbox_to_stack,
-)
-from ..mesh.build import _with_port_sheet_metadata
-from scgsim.geometry.source.adapter import _solution_region_entity_from_record
+from scgsim.geometry.models.input import GeometryBuildInput, VacuumRegionSpec
 from scgsim.geometry.models.physical import (
     ApproximationProfile,
     PhysicalRepresentationPlan,
 )
 from scgsim.geometry.planning.physical import interpret_physical_geometry
-from scgsim.semantics.snapshot import canonical_sha256, _plain
+from scgsim.geometry.source.adapter import _solution_region_entity_from_record
+from scgsim.geometry.source.ground_bumps import _prepare_indium_ground_bump_fill
+from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
+from scgsim.semantics.snapshot import _plain, canonical_sha256
+
+from ..mesh.build import _with_port_sheet_metadata
+from .transforms import (
+    RouteAThinFilm,
+    _normalized_component_input,
+    apply_airbox_to_stack,
+)
 
 
 @dataclass(frozen=True)

@@ -41,17 +41,17 @@ from scgsim.geometry.planning.domain import (
     _entity_loop_bounds,
     _entity_occupied_region,
     _required_host_solution_id,
-    _route_conductor_contact_footprints,
     _route_a_sheet_boundary_volume_ids_from_solutions,
     _route_a_sheet_plane_z_um_from_solutions,
+    _route_conductor_contact_footprints,
     _solution_entities,
+)
+from scgsim.geometry.planning.representation import (
+    planned_conductor_representation,
 )
 from scgsim.geometry.planning.topology import (
     _surface_interface_record_owners,
     _surface_owner_ids,
-)
-from scgsim.geometry.planning.representation import (
-    planned_conductor_representation,
 )
 
 

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-
 import json
-
 from collections.abc import Mapping
 from typing import Any
 
@@ -12,7 +10,6 @@ from scgsim.aedt.runtime.native.common import (
     _native_object_evidence,
     native_object_property,
 )
-
 from scgsim.aedt.specs.q3d import Q3dBodySpec, Q3dSpec
 
 

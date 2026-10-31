@@ -1,10 +1,12 @@
 """Unique detached prepared geometry carrier; source/model identity is preserved."""
 
 from __future__ import annotations
+
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
-from scgsim.aedt._data import _freeze, detached, canonical_sha256
+
+from scgsim.aedt._data import _freeze, canonical_sha256, detached
 from scgsim.aedt.specs.common import LumpedRlc
 from scgsim.aedt.specs.epr import PlanarJunction, SurfaceEprSpec
 
@@ -60,11 +62,11 @@ class PreparedPlanarGeometry:
         )
         object.__setattr__(self, "contributions", contributions)
         source = _freeze(self.source)
+        from scgsim.aedt.specs.modeling import _native_physical_record
         from scgsim.geometry.models.physical import (
             PLAN_SCHEMA,
             PhysicalRepresentationPlan,
         )
-        from scgsim.aedt.specs.modeling import _native_physical_record
 
         trace = source.get("modeling")
         if isinstance(trace, Mapping) and trace.get("schema_version") == PLAN_SCHEMA:
@@ -84,8 +86,8 @@ class PreparedPlanarGeometry:
                         "prepared conductor representation differs from the neutral plan"
                     )
         if "lumped_supports" in source:
-            from scgsim.geometry.models.lumped import LumpedSupport
             from scgsim.aedt.specs._support import _prepared_lumped_supports
+            from scgsim.geometry.models.lumped import LumpedSupport
 
             supports = tuple(
                 LumpedSupport.from_payload(item["source"])

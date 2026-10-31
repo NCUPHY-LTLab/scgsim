@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-
 from collections.abc import Mapping
-
 from dataclasses import dataclass
-
 from typing import Any, Literal
 
 from scgsim.aedt.specs.common import (
     LOCKED_PYAEDT,
-    MatrixRunControl,
     OFFICIAL_PYAEDT_SOURCE_URL,
-    PdkMaterial,
     Q2D_SCHEMA_VERSION,
     Q2D_SCHEMA_VERSION_V2,
     REQUIRED_AEDT_VERSION,
+    MatrixRunControl,
+    PdkMaterial,
     _normalize_common_spec,
     _number,
     _padding_2d,

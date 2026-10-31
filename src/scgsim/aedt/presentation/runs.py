@@ -2,28 +2,12 @@
 
 from __future__ import annotations
 
-
 import html
-
 import json
-
 from typing import Any
 
-from scgsim.presentation.notebook import (
-    INTERFACE_COLORS,
-    cards,
-    checked_theme,
-    details,
-    json_details,
-    section,
-    style_figure,
-    table,
-)
-
 from scgsim.aedt.epr.models import EprResult, detached
-
 from scgsim.aedt.presentation.benchmark import display_benchmark
-
 from scgsim.aedt.presentation.epr import (
     _history_view,
     _native_reference_html,
@@ -35,6 +19,16 @@ from scgsim.aedt.presentation.epr import (
     _surface_metadata,
     _surface_tick_label,
     _usable_frequency,
+)
+from scgsim.presentation.notebook import (
+    INTERFACE_COLORS,
+    cards,
+    checked_theme,
+    details,
+    json_details,
+    section,
+    style_figure,
+    table,
 )
 
 
@@ -347,7 +341,9 @@ def _physics_tables(
         ("Domain", "Energy (J)", "Participation"),
         [
             (item["domain_id"], item["energy_j"], participation)
-            for item, participation in zip(view["domains"], view["bulk_participations"])
+            for item, participation in zip(
+                view["domains"], view["bulk_participations"], strict=False
+            )
         ],
     )
     junction_table = table(

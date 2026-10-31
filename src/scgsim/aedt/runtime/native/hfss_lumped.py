@@ -7,12 +7,13 @@ Generic RLC boundaries remain separate from Josephson-junction EPR records.
 
 from __future__ import annotations
 
-from decimal import Decimal
-from typing import Any
-from scgsim.aedt._rlc import rlc_native_topology, rlc_scalar_si
-from pathlib import Path
 import json
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
+
 from scgsim.aedt._data import detached as detached_data
+from scgsim.aedt._rlc import rlc_native_topology, rlc_scalar_si
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 
 

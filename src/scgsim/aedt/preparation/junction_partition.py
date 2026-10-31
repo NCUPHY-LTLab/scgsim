@@ -2,37 +2,25 @@
 
 from __future__ import annotations
 
-
 import math
-
 from bisect import bisect_left, bisect_right
-
 from collections import defaultdict
-
 from collections.abc import Mapping, Sequence
-
 from dataclasses import fields, replace
-
 from decimal import ROUND_FLOOR, Decimal
-
 from fractions import Fraction
-
 from itertools import pairwise
-
 from typing import Any
 
 import gdstk
 
+from scgsim.aedt._data import canonical_sha256
+from scgsim.aedt.specs.epr import PlanarJunction
 from scgsim.geometry import GeometryBuildInput, LayoutPolygonSpec
-
 from scgsim.geometry._primitives.loops import (
     _cancel_reversed_planar_edges,
     _simple_planar_loops_from_edges,
 )
-
-from scgsim.aedt.specs.epr import PlanarJunction
-from scgsim.aedt._data import canonical_sha256
-
 
 METHOD = "scgsim.aedt.junction-partition.v1"
 
@@ -51,7 +39,7 @@ def _plain(value: Any) -> Any:
 
 def _edges(rings):
     for ring in rings:
-        yield from zip(ring, (*ring[1:], ring[0]))
+        yield from zip(ring, (*ring[1:], ring[0]), strict=False)
 
 
 def _cross(a, b, c):
@@ -658,7 +646,7 @@ def _model_geometry(build_input, originals, records):
         vmin, vmax = min(v for _, v in uv), max(v for _, v in uv)
         corners = tuple(
             min(
-                zip(central[0][0], uv),
+                zip(central[0][0], uv, strict=False),
                 key=lambda item: (item[1][0] - u) ** 2 + (item[1][1] - v) ** 2,
             )[0]
             for u, v in ((amin, vmin), (amax, vmin), (amax, vmax), (amin, vmax))

@@ -8,13 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from .scene import (
-    _FIXED_COLORS,
-    _MODES,
-    _MODE_TITLES,
-    _VIEWS,
-    _Mode,
-    _with_scene_palette,
+from .loaders._common import (
+    _artifact_matches,
+    _atomic_json,
+    _confined,
+    _json,
+    _receipt_authority_sha256,
+    _sha256,
 )
 from .rendering import (
     _add_parts,
@@ -23,13 +23,13 @@ from .rendering import (
     _legend,
     _render_mode,
 )
-from .loaders._common import (
-    _artifact_matches,
-    _atomic_json,
-    _confined,
-    _json,
-    _receipt_authority_sha256,
-    _sha256,
+from .scene import (
+    _FIXED_COLORS,
+    _MODE_TITLES,
+    _MODES,
+    _VIEWS,
+    _Mode,
+    _with_scene_palette,
 )
 
 

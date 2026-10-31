@@ -9,33 +9,56 @@ from __future__ import annotations
 import json
 import math
 import re
+import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable, Sequence
-from scgsim.aedt._io import file_sha256, write_csv
+
+from scgsim.aedt._io import file_sha256, write_csv, write_json
 from scgsim.aedt.results.convergence.hfss import read_hfss_convergence
-from scgsim.aedt.runtime.benchmark import attach_simulation_benchmark
+from scgsim.aedt.runtime.benchmark import (
+    attach_simulation_benchmark,
+    export_simulation_benchmark,
+)
 from scgsim.aedt.runtime.native.common import (
     BoundAedtRequest,
     analyze_with_resources,
-    create_region as _create_region,
     detached_data,
+    pyaedt_version,
+    saved_setup_properties,
+)
+from scgsim.aedt.runtime.native.common import (
+    create_region as _create_region,
+)
+from scgsim.aedt.runtime.native.common import (
     import_and_bind as _import_and_bind,
+)
+from scgsim.aedt.runtime.native.common import (
     pyaedt_version as _pyaedt_version,
+)
+from scgsim.aedt.runtime.native.common import (
     saved_setup_properties as _saved_setup_properties,
 )
 from scgsim.aedt.runtime.native.hfss_eigenmode import (
     create_eigenmode_setup,
     read_eigenmode_setup,
 )
+from scgsim.aedt.runtime.native.hfss_geometry import (
+    _read_saved_junction_lines,
+    prepare_native_planar_geometry,
+)
+from scgsim.aedt.runtime.native.hfss_lumped import (
+    _assign_generic_rlcs,
+    _read_generic_rlcs,
+)
 from scgsim.aedt.specs.common import (
-    AedtResources,
-    ModalPort,
-    LumpedTerminalPort,
     REQUIRED_AEDT_VERSION,
     SURFACE_APPROXIMATION_LEVEL,
+    AedtResources,
+    LumpedTerminalPort,
+    ModalPort,
     TerminalPort,
 )
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
@@ -43,21 +66,10 @@ from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
     HfssDrivenSpec,
     HfssEigenmodeSpec,
+    HfssEprAnalysisSpec,
+    HfssEprSpec,
     HfssSpec,
 )
-import time
-from scgsim.aedt._io import write_json
-from scgsim.aedt.runtime.benchmark import export_simulation_benchmark
-from scgsim.aedt.specs.hfss import HfssEprSpec, HfssEprAnalysisSpec
-from scgsim.aedt.runtime.native.hfss_geometry import (
-    prepare_native_planar_geometry,
-    _read_saved_junction_lines,
-)
-from scgsim.aedt.runtime.native.hfss_lumped import (
-    _assign_generic_rlcs,
-    _read_generic_rlcs,
-)
-from scgsim.aedt.runtime.native.common import pyaedt_version, saved_setup_properties
 
 
 @dataclass(frozen=True)

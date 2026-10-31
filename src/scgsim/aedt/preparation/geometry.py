@@ -2,39 +2,17 @@
 
 from __future__ import annotations
 
-
 import tarfile
-
 import time
-
 from collections.abc import Mapping, Sequence
-
 from pathlib import Path
-
 from tempfile import TemporaryDirectory
-
 from typing import Literal
 
-from scgsim.geometry import GeometryPlanSnapshot
-
-from scgsim.aedt._io import file_sha256, write_json
-
-from scgsim.aedt.preparation.planar import validate_geometry_workers
-
-from scgsim.aedt.specs.epr import (
-    EprAnalysisRequest,
-    ExpressionCacheConvergence,
-)
-from scgsim.aedt.specs.common import (
-    LumpedRlc,
-)
-from scgsim.aedt.specs.geometry import (
-    PreparedPlanarGeometry,
-)
 from scgsim.aedt._data import (
     detached,
 )
-
+from scgsim.aedt._io import file_sha256, write_json
 from scgsim.aedt.preparation.handoff import (
     HandoffPlan,
     _member,
@@ -42,32 +20,39 @@ from scgsim.aedt.preparation.handoff import (
     _write_script,
     prepare_handoff,
 )
-
+from scgsim.aedt.preparation.planar import validate_geometry_workers
 from scgsim.aedt.results.provenance import (
     RECEIPT_V3,
     encode_initial_receipt,
     initial_receipt_payload,
     prepared_runtime_source,
 )
-
 from scgsim.aedt.specs.common import (
-    AedtResources,
     LOCKED_PYAEDT,
-    MatrixRunControl,
     OFFICIAL_PYAEDT_SOURCE_URL,
-    PdkMaterial,
     REQUIRED_AEDT_VERSION,
+    AedtResources,
+    LumpedRlc,
+    LumpedTerminalPort,
+    MatrixRunControl,
+    PdkMaterial,
+    TerminalPort,
 )
-
-from scgsim.aedt.specs.modeling import Modeling
-
+from scgsim.aedt.specs.epr import (
+    EprAnalysisRequest,
+    ExpressionCacheConvergence,
+)
+from scgsim.aedt.specs.geometry import (
+    PreparedPlanarGeometry,
+)
 from scgsim.aedt.specs.hfss import (
     EigenmodeRunControl,
-    HfssEprSpec,
     HfssDrivenGeometrySpec,
+    HfssEprSpec,
     HfssRunControl,
 )
-from scgsim.aedt.specs.common import LumpedTerminalPort, TerminalPort
+from scgsim.aedt.specs.modeling import Modeling
+from scgsim.geometry import GeometryPlanSnapshot
 
 
 def prepare_q3d_from_geometry(

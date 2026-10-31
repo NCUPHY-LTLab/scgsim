@@ -1,13 +1,15 @@
 """Detached EPR and junction declarations, independent of native execution."""
 
 from __future__ import annotations
+
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal
 from pathlib import Path
+from typing import Any, Literal
+
+from scgsim.aedt._data import _freeze, _number, _text, detached
 from scgsim.semantics.epr import film_assumptions
-from scgsim.aedt._data import _text, _number, _freeze, detached
 
 InterfaceKind = Literal["MA", "MS", "SA", "MM"]
 FieldSide = Literal["top", "bottom", "sidewall"]

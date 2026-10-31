@@ -2,31 +2,20 @@
 
 from __future__ import annotations
 
-
 import hashlib
-
 from collections.abc import Mapping, Sequence
-
 from dataclasses import asdict
-
 from pathlib import Path
-
 from typing import Literal
 
-from scgsim.semantics.route_a import geometry_z_range
-
-from scgsim.geometry import GeometryPlanSnapshot
-
-from scgsim.aedt._io import file_sha256, write_json
-
 from scgsim.aedt._data import canonical_sha256, detached
-
-from scgsim.aedt.specs.common import MatrixRunControl, PdkMaterial
-
-from scgsim.aedt.specs.modeling import Modeling
+from scgsim.aedt._io import file_sha256, write_json
 from scgsim.aedt.preparation.modeling import _interpret_geometry
-
+from scgsim.aedt.specs.common import MatrixRunControl, PdkMaterial
+from scgsim.aedt.specs.modeling import Modeling
 from scgsim.aedt.specs.q3d import Q3dBodySpec, Q3dNetSpec, Q3dSpec
+from scgsim.geometry import GeometryPlanSnapshot
+from scgsim.semantics.route_a import geometry_z_range
 
 
 def _entity_polygons(entity, polygons):

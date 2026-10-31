@@ -11,7 +11,9 @@ import time
 from collections.abc import Mapping, Sequence
 from importlib.metadata import version
 from typing import Any
-from scgsim.geometry._primitives.spatial import _geometry_ref_surface_z_um
+
+from scgsim.aedt._data import canonical_sha256, detached
+from scgsim.aedt.epr.fields import create_verified_face_list
 from scgsim.aedt.epr.geometry import (
     _INSET_CIRCLE_POINTS,
     _INSET_METHOD,
@@ -21,17 +23,18 @@ from scgsim.aedt.preparation.planar import (
     _entity_z_range,
     _native_name,
 )
-from scgsim.aedt.epr.fields import create_verified_face_list
 from scgsim.aedt.runtime.native.common import (
     _native_object_boolean_property,
     _native_object_evidence,
 )
-from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-from scgsim.aedt._data import canonical_sha256, detached
 from scgsim.aedt.runtime.native.hfss_geometry import (
     _native_conductor_geometry as _native_conductor_geometry,
+)
+from scgsim.aedt.runtime.native.hfss_geometry import (
     _read_saved_hfss_design as _read_saved_hfss_design,
 )
+from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
+from scgsim.geometry._primitives.spatial import _geometry_ref_surface_z_um
 
 
 def _analysis_surface_sheet(
@@ -107,7 +110,8 @@ def _native_sheet_side_binding(
     else:
         raise RuntimeError(unknown_side_error)
     orientation = sum(
-        float(normal) * target for normal, target in zip(native_normal, desired)
+        float(normal) * target
+        for normal, target in zip(native_normal, desired, strict=False)
     )
     if abs(orientation) <= 1e-12:
         raise RuntimeError(ambiguous_side_error)

@@ -2,41 +2,27 @@
 
 from __future__ import annotations
 
-
 import csv
-
 import math
-
 import re
-
 from dataclasses import dataclass
 from decimal import Decimal
-
 from pathlib import Path
-
 from typing import Any, Literal
 
 from scgsim.aedt._io import file_sha256, read_json
-
 from scgsim.aedt.epr.models import EprResult
-
 from scgsim.aedt.preparation.cohort import (
     canonical_handoff_paths,
     canonical_member_paths,
     validate_geometry_source,
     validate_hfss_import_source,
 )
-
 from scgsim.aedt.results.benchmark import read_simulation_benchmark
-
 from scgsim.aedt.results.convergence.hfss import read_hfss_convergence
-
 from scgsim.aedt.results.convergence.q2d import read_q2d_convergence
-
 from scgsim.aedt.results.convergence.q3d import read_q3d_convergence
-
 from scgsim.aedt.results.matrices import parse_matrix_export, read_q2d_rlgc_matrix
-
 from scgsim.aedt.results.provenance import (
     RECEIPT_V1,
     RECEIPT_V2,
@@ -46,24 +32,17 @@ from scgsim.aedt.results.provenance import (
     initial_receipt_sha256,
     validate_runtime_source,
 )
-
 from scgsim.aedt.runtime.benchmark import BENCHMARK_RELATIVE
-
 from scgsim.aedt.specs.common import ModalPort
-
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
     HfssDrivenSpec,
     HfssEigenmodeSpec,
     HfssEprSpec,
 )
-
 from scgsim.aedt.specs.parse import parse_aedt_spec
-
 from scgsim.aedt.specs.q2d import Q2dSpec
-
 from scgsim.aedt.specs.q3d import Q3dSpec
-
 
 _Q3D_REGION_DIRECTIONS = ("+X", "-X", "+Y", "-Y", "+Z", "-Z")
 

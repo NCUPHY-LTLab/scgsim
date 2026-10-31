@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-
 import math
-
 from collections.abc import Mapping
-
 from dataclasses import dataclass
-
 from pathlib import Path
-
 from typing import Any, Literal
 
 from scgsim.aedt._data import _text as _rlc_text

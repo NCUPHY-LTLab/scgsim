@@ -31,9 +31,9 @@ from scgsim.geometry.source._occurrence import (
     _entity_from_layer_record,
     _occurrence_ground_polygons_for_entity,
     _occurrence_include_polygon,
+    _occurrence_lumped_polygon,
     _occurrence_polygons_for_entity,
     _occurrence_port_polygon,
-    _occurrence_lumped_polygon,
 )
 from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
 from scgsim.geometry.source.curves import boundary_binding, transform_boundary

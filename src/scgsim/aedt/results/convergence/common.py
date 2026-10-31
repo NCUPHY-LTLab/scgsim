@@ -2,19 +2,13 @@
 
 from __future__ import annotations
 
-
 import math
-
 import re
-
 from pathlib import Path
-
 from typing import Any
 
 from scgsim.aedt._io import file_sha256
-
 from scgsim.aedt.specs.q2d import Q2dSpec
-
 from scgsim.aedt.specs.q3d import Q3dSpec
 
 

@@ -74,6 +74,7 @@ def _normalized_component_input(
             "Palace preparation requires component or normalized geometry input"
         )
     from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
+
     from ..mesh.build import _component_gds_top_cell_name, _write_component_gds
 
     with TemporaryDirectory(prefix="scgsim-physical-source-") as directory:

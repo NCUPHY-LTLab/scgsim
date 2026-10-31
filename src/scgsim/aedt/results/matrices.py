@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-
 import csv
-
 import math
-
 import re
-
 from pathlib import Path
-
 from typing import Any
 
 from scgsim.aedt.specs.q2d import Q2dSpec

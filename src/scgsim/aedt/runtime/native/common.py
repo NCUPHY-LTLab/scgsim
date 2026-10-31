@@ -2,39 +2,23 @@
 
 from __future__ import annotations
 
-
 import hashlib
-
 import math
-
 import re
-
 import sys
-
 import time
-
 from collections.abc import Callable, Mapping
-
 from dataclasses import dataclass
-
 from importlib.metadata import PackageNotFoundError, version
-
 from pathlib import Path
-
 from types import MappingProxyType
-
 from typing import Any
 
 from scgsim.aedt._data import detached
-
 from scgsim.aedt._io import file_sha256
-
-from scgsim.aedt.specs.common import AedtResources, LOCKED_PYAEDT
-
+from scgsim.aedt.specs.common import LOCKED_PYAEDT, AedtResources
 from scgsim.aedt.specs.hfss import HfssSpec
-
 from scgsim.aedt.specs.parse import AedtSpec, parse_aedt_spec
-
 from scgsim.aedt.specs.q3d import Q3dSpec
 
 

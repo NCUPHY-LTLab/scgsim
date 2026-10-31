@@ -13,11 +13,6 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Literal
 
-from .archive import (
-    run_archive_arcname,
-    sibling_run_archive_path,
-    sibling_run_archive_relative,
-)
 from ..mesh.build import (
     GSIM_SHA,
     SGB_DERIVATION_BASE_SHA,
@@ -26,6 +21,11 @@ from ..mesh.build import (
     MeshBuildResult,
 )
 from ..preparation.transforms import SCHEMA_VERSION
+from .archive import (
+    run_archive_arcname,
+    sibling_run_archive_path,
+    sibling_run_archive_relative,
+)
 
 HandoffProfile = Literal["direct-local", "slurm-single-node", "slurm-multi-node"]
 _PROFILES = {"direct-local", "slurm-single-node", "slurm-multi-node"}

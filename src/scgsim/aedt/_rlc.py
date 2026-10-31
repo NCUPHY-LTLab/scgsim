@@ -1,7 +1,7 @@
 """Exact generic RLC scalar and topology interpretation without native imports."""
 
-from decimal import Decimal
 import re
+from decimal import Decimal
 from typing import Any
 
 

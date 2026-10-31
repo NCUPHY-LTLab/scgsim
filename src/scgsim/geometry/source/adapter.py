@@ -28,13 +28,13 @@ from scgsim.geometry.source._occurrence import (
     _polygons_by_layer,
     _resolve_material_kind,
 )
-from scgsim.geometry.source.ground import (
-    _derived_ground_polygons,
-    _layout_polygon_region,
-)
 from scgsim.geometry.source._polygon_ops import (
     _point_in_ring,
     _ring_from_gdstk_polygon,
+)
+from scgsim.geometry.source.ground import (
+    _derived_ground_polygons,
+    _layout_polygon_region,
 )
 from scgsim.geometry.source.stack import build_component_stack
 
@@ -611,7 +611,7 @@ def _validate_plan_occurrences(
                 or any(
                     abs(actual - expected) > 1e-9
                     for actual, expected in zip(
-                        transform, (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+                        transform, (1.0, 0.0, 0.0, 1.0, 0.0, 0.0), strict=False
                     )
                 )
             ):

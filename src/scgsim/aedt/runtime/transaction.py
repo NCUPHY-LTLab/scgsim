@@ -2,45 +2,33 @@
 
 from __future__ import annotations
 
-
 import argparse
-
 import os
-
 import re
-
 import time
-
 import warnings
-
 from pathlib import Path
-
 from typing import Any
 
 from scgsim.aedt._io import file_sha256, read_json, write_json
-
 from scgsim.aedt.epr.geometry import (
     precompute_inset_surfaces,
 )
-from scgsim.aedt.preparation.planar import (
-    validate_geometry_workers,
-)
-
 from scgsim.aedt.epr.workflow import (
     prepare_epr_hfss,
     prepared_epr_result,
     solve_and_export_epr,
 )
-
 from scgsim.aedt.preparation.cohort import (
     canonical_handoff_paths,
     canonical_member_paths,
     validate_geometry_source,
     validate_hfss_import_source,
 )
-
+from scgsim.aedt.preparation.planar import (
+    validate_geometry_workers,
+)
 from scgsim.aedt.results.epr import seal_saved_solution
-
 from scgsim.aedt.results.provenance import (
     RECEIPT_V1,
     RECEIPT_V2,
@@ -48,30 +36,24 @@ from scgsim.aedt.results.provenance import (
     runtime_source_identity,
     validate_runtime_source,
 )
-
 from scgsim.aedt.runtime.families.hfss import (
-    prepare_hfss,
-    run_hfss,
     prepare_body_eigenmode,
+    prepare_hfss,
     prepared_body_eigenmode_result,
+    run_hfss,
     solve_and_export_body_eigenmode,
 )
-
 from scgsim.aedt.runtime.families.q2d import prepare_q2d, prepared_q2d_result, run_q2d
-
 from scgsim.aedt.runtime.families.q3d import (
     prepare_q3d,
     prepared_q3d_result,
     run_q3d,
 )
-
 from scgsim.aedt.runtime.native.common import (
     owned_application_constructor,
     pyaedt_version,
 )
-
-from scgsim.aedt.specs.common import AedtResources, LOCKED_PYAEDT, REQUIRED_AEDT_VERSION
-
+from scgsim.aedt.specs.common import LOCKED_PYAEDT, REQUIRED_AEDT_VERSION, AedtResources
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
     HfssDrivenSpec,
@@ -79,13 +61,9 @@ from scgsim.aedt.specs.hfss import (
     HfssEprAnalysisSpec,
     HfssEprSpec,
 )
-
 from scgsim.aedt.specs.parse import AedtSpec, parse_aedt_spec
-
 from scgsim.aedt.specs.q2d import Q2dSpec
-
 from scgsim.aedt.specs.q3d import Q3dSpec
-
 
 _solve = run_hfss
 

@@ -137,7 +137,7 @@ class _ZMap:
             if modeling == "thin_film"
             else ()
         )
-        for lower, upper in zip(self.removed, self.removed[1:]):
+        for lower, upper in zip(self.removed, self.removed[1:], strict=False):
             if lower.z_max_um > upper.z_min_um:
                 raise ValueError(
                     "distinct stack-film declarations overlap in the source stack"

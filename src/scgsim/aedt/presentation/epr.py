@@ -2,19 +2,14 @@
 
 from __future__ import annotations
 
-
 import html
-
 import json
-
 import math
-
 import textwrap
-
 from collections.abc import Mapping
-
 from typing import Any
 
+from scgsim.aedt.epr.models import EprResult, detached
 from scgsim.presentation.notebook import (
     INTERFACE_COLORS,
     checked_theme,
@@ -24,8 +19,6 @@ from scgsim.presentation.notebook import (
     style_figure,
     table,
 )
-
-from scgsim.aedt.epr.models import EprResult, detached
 
 
 def _usable_frequency(value: Any) -> float | None:
@@ -817,7 +810,7 @@ def show_epr(
         native_references = view["native_references"]
         headers, native_rows = _native_reference_table_data(native_references or ())
         if native_rows:
-            columns = [list(column) for column in zip(*native_rows)]
+            columns = [list(column) for column in zip(*native_rows, strict=False)]
         else:
             columns = [[] for _ in headers]
         figure.add_trace(

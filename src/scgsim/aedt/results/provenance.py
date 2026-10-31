@@ -2,25 +2,16 @@
 
 from __future__ import annotations
 
-
 import hashlib
-
 import json
-
 import re
-
 import subprocess
-
 from collections.abc import Mapping
-
 from importlib.metadata import PackageNotFoundError, distribution
-
 from pathlib import Path
-
 from typing import Any, Literal
 
 from scgsim.aedt._io import file_sha256
-
 
 RECEIPT_V1 = "scgsim.aedt.receipt.v1"
 

@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-
 from pathlib import Path
-
 from typing import Any
 
 from scgsim.aedt.specs.common import (
-    EIGENMODE_SCHEMA_VERSION,
     DRIVEN_GEOMETRY_SCHEMA_VERSION,
+    EIGENMODE_SCHEMA_VERSION,
     EPR_ANALYSIS_SCHEMA_VERSION,
     EPR_ANALYSIS_SCHEMA_VERSION_V2,
     EPR_EIGENMODE_SCHEMA_VERSION,
@@ -20,20 +18,16 @@ from scgsim.aedt.specs.common import (
     Q3D_SCHEMA_VERSION,
     SCHEMA_VERSION,
 )
-
 from scgsim.aedt.specs.hfss import (
-    HfssDrivenSpec,
     HfssDrivenGeometrySpec,
+    HfssDrivenSpec,
     HfssEigenmodeSpec,
     HfssEprAnalysisSpec,
     HfssEprSpec,
     HfssSpec,
 )
-
 from scgsim.aedt.specs.q2d import Q2dSpec
-
 from scgsim.aedt.specs.q3d import Q3dSpec
-
 
 AedtSpec = HfssSpec | Q3dSpec | Q2dSpec
 

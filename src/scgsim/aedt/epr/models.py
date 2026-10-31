@@ -2,41 +2,62 @@
 
 from __future__ import annotations
 
-
 import math
-
 from collections.abc import Mapping, Sequence
-
 from dataclasses import dataclass, field
-
-
 from typing import Any, Literal
 
-from scgsim.semantics.epr import film_assumptions
-
+from scgsim.aedt._data import (
+    _freeze as _freeze,
+)
+from scgsim.aedt._data import (
+    _number as _number,
+)
 from scgsim.aedt._data import (
     _text as _text,
-    _number as _number,
-    _freeze as _freeze,
-    detached as detached,
+)
+from scgsim.aedt._data import (
     canonical_sha256 as canonical_sha256,
 )
+from scgsim.aedt._data import (
+    detached as detached,
+)
 from scgsim.aedt.specs.common import LumpedRlc as LumpedRlc
-from scgsim.aedt.specs.geometry import PreparedPlanarGeometry as PreparedPlanarGeometry
+from scgsim.aedt.specs.epr import (
+    EprAnalysisRequest as EprAnalysisRequest,
+)
+from scgsim.aedt.specs.epr import (
+    ExpressionCacheConvergence as ExpressionCacheConvergence,
+)
+from scgsim.aedt.specs.epr import (
+    FieldSide as FieldSide,
+)
 from scgsim.aedt.specs.epr import (
     InterfaceKind as InterfaceKind,
-    FieldSide as FieldSide,
-    surface_evaluations as surface_evaluations,
-    PlanarJunction as PlanarJunction,
-    SurfaceEprSpec as SurfaceEprSpec,
-    EprAnalysisRequest as EprAnalysisRequest,
+)
+from scgsim.aedt.specs.epr import (
     NativeExpressionDefinition as NativeExpressionDefinition,
+)
+from scgsim.aedt.specs.epr import (
     NormalizedSurfaceEprTotal as NormalizedSurfaceEprTotal,
-    ExpressionCacheConvergence as ExpressionCacheConvergence,
+)
+from scgsim.aedt.specs.epr import (
+    PlanarJunction as PlanarJunction,
+)
+from scgsim.aedt.specs.epr import (
     SavedSolution as SavedSolution,
+)
+from scgsim.aedt.specs.epr import (
+    SurfaceEprSpec as SurfaceEprSpec,
+)
+from scgsim.aedt.specs.epr import (
     _contained_relative_path as _contained_relative_path,
 )
-
+from scgsim.aedt.specs.epr import (
+    surface_evaluations as surface_evaluations,
+)
+from scgsim.aedt.specs.geometry import PreparedPlanarGeometry as PreparedPlanarGeometry
+from scgsim.semantics.epr import film_assumptions
 
 Route = Literal["A", "B"]
 

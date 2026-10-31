@@ -2,51 +2,32 @@
 
 from __future__ import annotations
 
-
 from collections.abc import Mapping
-
 from dataclasses import dataclass, replace
-
 from numbers import Number
-
 from pathlib import Path
-
 from typing import Any, Literal
 
-from scgsim.aedt.specs.modeling import (
-    Modeling,
-    PhysicalLayerSpec,
-    PhysicalLayerDeclaration,
-    PhysicalRepresentationPlan,
-    _physical_layers_from_payload,
-    _source_plan_layers,
-    _request_modeling,
-    _modeling_payload,
-    _effective_record,
-    _source_record_payload,
-    _verify_effective_records,
-)
-
 from scgsim.aedt.specs.common import (
-    EIGENMODE_SCHEMA_VERSION,
     DRIVEN_GEOMETRY_SCHEMA_VERSION,
-    LumpedRlc,
-    LumpedTerminalPort,
+    EIGENMODE_SCHEMA_VERSION,
     EPR_ANALYSIS_SCHEMA_VERSION,
     EPR_ANALYSIS_SCHEMA_VERSION_V2,
     EPR_EIGENMODE_SCHEMA_VERSION,
     EPR_EIGENMODE_SCHEMA_VERSION_V2,
     EPR_EIGENMODE_SCHEMA_VERSION_V3,
-    HfssDrivenMode,
     LOCKED_PYAEDT,
-    LayerImport,
-    ModalPort,
     OFFICIAL_PYAEDT_SOURCE_URL,
-    ObjectBinding,
     POINT_COUNT,
-    PdkMaterial,
     REQUIRED_AEDT_VERSION,
     SCHEMA_VERSION,
+    HfssDrivenMode,
+    LayerImport,
+    LumpedRlc,
+    LumpedTerminalPort,
+    ModalPort,
+    ObjectBinding,
+    PdkMaterial,
     TerminalPort,
     _adaptive_controls,
     _normalize_gds_spec,
@@ -55,6 +36,19 @@ from scgsim.aedt.specs.common import (
     _project_filename,
     _project_name_from_payload,
     _text,
+)
+from scgsim.aedt.specs.modeling import (
+    Modeling,
+    PhysicalLayerDeclaration,
+    PhysicalLayerSpec,
+    PhysicalRepresentationPlan,
+    _effective_record,
+    _modeling_payload,
+    _physical_layers_from_payload,
+    _request_modeling,
+    _source_plan_layers,
+    _source_record_payload,
+    _verify_effective_records,
 )
 
 
@@ -909,9 +903,8 @@ class HfssEprAnalysisSpec:
         return "eigenmode"
 
     def __post_init__(self) -> None:
-        from scgsim.aedt.specs.epr import EprAnalysisRequest
+        from scgsim.aedt.specs.epr import EprAnalysisRequest, SavedSolution
         from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-        from scgsim.aedt.specs.epr import SavedSolution
 
         if (
             str(self.aedt_version) != REQUIRED_AEDT_VERSION
@@ -968,9 +961,8 @@ class HfssEprAnalysisSpec:
     def from_payload(
         cls, payload: dict[str, Any], *, base_dir: Path | None
     ) -> HfssEprAnalysisSpec:
-        from scgsim.aedt.specs.epr import EprAnalysisRequest
+        from scgsim.aedt.specs.epr import EprAnalysisRequest, SavedSolution
         from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-        from scgsim.aedt.specs.epr import SavedSolution
 
         schema = payload.get("schema_version")
         if schema not in {EPR_ANALYSIS_SCHEMA_VERSION, EPR_ANALYSIS_SCHEMA_VERSION_V2}:
@@ -1016,8 +1008,8 @@ class HfssEprAnalysisSpec:
 
 
 def _validate_epr_selection(spec: HfssEprSpec | HfssEprAnalysisSpec) -> None:
-    from scgsim.aedt.specs.epr import NormalizedSurfaceEprTotal
     from scgsim.aedt.epr.selection import surface_integral_groups
+    from scgsim.aedt.specs.epr import NormalizedSurfaceEprTotal
 
     request = spec.epr_request
     if request is None:

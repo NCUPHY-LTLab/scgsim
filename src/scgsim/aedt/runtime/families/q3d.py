@@ -2,44 +2,42 @@
 
 from __future__ import annotations
 
-
 import math
-
 from dataclasses import dataclass
-
 from pathlib import Path
-
 from typing import Any
 
 from scgsim.aedt._io import file_sha256, read_json, write_csv
+from scgsim.aedt._terminal_chain import q3d_terminal_segments
 from scgsim.aedt.preparation.cohort import GEOMETRY_SOURCE_PATHS
-
 from scgsim.aedt.results.convergence.q3d import read_q3d_convergence
-
 from scgsim.aedt.results.matrices import parse_matrix_export
-
 from scgsim.aedt.runtime.benchmark import attach_simulation_benchmark
-
 from scgsim.aedt.runtime.native.common import (
     BoundAedtRequest,
     analyze_with_resources,
-    create_region as _create_region,
     detached_data,
-    native_object_property as _native_object_property,
-    pyaedt_version as _pyaedt_version,
-    q3d_region_bounds as _q3d_region_bounds,
     realize_source_material,
     source_material_properties,
+)
+from scgsim.aedt.runtime.native.common import (
+    create_region as _create_region,
+)
+from scgsim.aedt.runtime.native.common import (
+    native_object_property as _native_object_property,
+)
+from scgsim.aedt.runtime.native.common import (
+    pyaedt_version as _pyaedt_version,
+)
+from scgsim.aedt.runtime.native.common import (
+    q3d_region_bounds as _q3d_region_bounds,
+)
+from scgsim.aedt.runtime.native.common import (
     saved_setup_properties as _saved_setup_properties,
 )
-
 from scgsim.aedt.runtime.native.q3d_bodies import construct_q3d_bodies
-from scgsim.aedt._terminal_chain import q3d_terminal_segments
-
-from scgsim.aedt.specs.common import AedtResources, REQUIRED_AEDT_VERSION
-
+from scgsim.aedt.specs.common import REQUIRED_AEDT_VERSION, AedtResources
 from scgsim.aedt.specs.q3d import Q3dSpec
-
 
 _Q3D_REGION_DIRECTIONS = ("+X", "-X", "+Y", "-Y", "+Z", "-Z")
 

@@ -9,6 +9,21 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from scgsim.aedt.epr.models import (
+    EprResult,
+)
+from scgsim.aedt.specs.common import (
+    LumpedRlc,
+)
+from scgsim.aedt.specs.epr import (
+    EprAnalysisRequest,
+    ExpressionCacheConvergence,
+    PlanarJunction,
+    SurfaceEprSpec,
+)
+from scgsim.aedt.specs.geometry import (
+    PreparedPlanarGeometry,
+)
 from scgsim.geometry import (
     GeometryBuildInput,
     GeometryPlanSnapshot,
@@ -19,29 +34,14 @@ from scgsim.geometry import (
 from scgsim.semantics.epr import film_assumptions
 
 from .epr.analysis import reanalyze_epr
-from .preparation.planar import prepare_planar_geometry_input, validate_geometry_workers
-from scgsim.aedt.specs.epr import (
-    EprAnalysisRequest,
-    ExpressionCacheConvergence,
-    PlanarJunction,
-    SurfaceEprSpec,
-)
-from scgsim.aedt.epr.models import (
-    EprResult,
-)
-from scgsim.aedt.specs.common import (
-    LumpedRlc,
-)
-from scgsim.aedt.specs.geometry import (
-    PreparedPlanarGeometry,
-)
-from .preparation.handoff import HandoffPlan
 from .preparation.geometry import prepare_hfss_eigenmode_from_geometry
+from .preparation.handoff import HandoffPlan
+from .preparation.planar import prepare_planar_geometry_input, validate_geometry_workers
 from .presentation.epr import show_epr
 from .results.resolve import ResolvedRun, resolve_results
 from .specs.common import AedtResources
-from .specs.modeling import Modeling, _modeling
 from .specs.hfss import EigenmodeRunControl
+from .specs.modeling import Modeling, _modeling
 
 
 @dataclass

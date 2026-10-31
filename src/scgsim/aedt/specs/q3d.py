@@ -2,43 +2,38 @@
 
 from __future__ import annotations
 
-
 from collections.abc import Mapping
-
 from dataclasses import asdict, dataclass
-
 from pathlib import Path
-
 from typing import Any, Literal
-
-from scgsim.aedt.specs.modeling import (
-    Modeling,
-    PhysicalLayerSpec,
-    PhysicalLayerDeclaration,
-    PhysicalRepresentationPlan,
-    _physical_layers_from_payload,
-    _request_modeling,
-    _modeling_payload,
-    _effective_record,
-    _source_record_payload,
-    _verify_effective_records,
-)
 
 from scgsim.aedt.specs.common import (
     LOCKED_PYAEDT,
-    LayerRole,
-    MatrixRunControl,
     OFFICIAL_PYAEDT_SOURCE_URL,
-    PdkMaterial,
     Q3D_GEOMETRY_SOURCE_SCHEMA_VERSION,
     Q3D_SCHEMA_VERSION,
     REQUIRED_AEDT_VERSION,
+    LayerRole,
+    MatrixRunControl,
+    PdkMaterial,
     Side,
     _normalize_common_spec,
     _number,
     _padding,
     _project_name_from_payload,
     _text,
+)
+from scgsim.aedt.specs.modeling import (
+    Modeling,
+    PhysicalLayerDeclaration,
+    PhysicalLayerSpec,
+    PhysicalRepresentationPlan,
+    _effective_record,
+    _modeling_payload,
+    _physical_layers_from_payload,
+    _request_modeling,
+    _source_record_payload,
+    _verify_effective_records,
 )
 
 

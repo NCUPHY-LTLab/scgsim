@@ -2,32 +2,29 @@
 
 from __future__ import annotations
 
-
 from dataclasses import dataclass
-
 from pathlib import Path
-
 from typing import Any
 
 from scgsim.aedt._io import file_sha256
-
 from scgsim.aedt.results.convergence.q2d import read_q2d_convergence
-
 from scgsim.aedt.results.matrices import read_q2d_rlgc_matrix
-
 from scgsim.aedt.runtime.benchmark import attach_simulation_benchmark
-
 from scgsim.aedt.runtime.native.common import (
     BoundAedtRequest,
     analyze_with_resources,
     detached_data,
+)
+from scgsim.aedt.runtime.native.common import (
     native_object_property as _native_object_property,
+)
+from scgsim.aedt.runtime.native.common import (
     pyaedt_version as _pyaedt_version,
+)
+from scgsim.aedt.runtime.native.common import (
     saved_setup_properties as _saved_setup_properties,
 )
-
-from scgsim.aedt.specs.common import AedtResources, REQUIRED_AEDT_VERSION
-
+from scgsim.aedt.specs.common import REQUIRED_AEDT_VERSION, AedtResources
 from scgsim.aedt.specs.q2d import Q2dSpec
 
 
