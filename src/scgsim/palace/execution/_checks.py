@@ -1,4 +1,8 @@
-"""Input checks shared by the handoff and its run script."""
+"""Input checks shared by the handoff and its run script.
+
+Both values end up in a generated bash script, so a positive integer and a
+single-line string are the only shapes accepted.
+"""
 
 from __future__ import annotations
 

@@ -76,7 +76,7 @@ class EigenmodeConfigBuildResult:
     material_resolution: list[dict[str, Any]]
 
 
-def build_electrostatic_config(
+def build_electrostatic_config(  # noqa: PLR0913 - public keyword-only API, one argument per solver choice
     *,
     groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
     terminals: Sequence[TerminalBinding],
@@ -150,7 +150,7 @@ def build_electrostatic_config(
     )
 
 
-def build_eigenmode_config(
+def build_eigenmode_config(  # noqa: PLR0913 - public keyword-only API, one argument per solver choice
     *,
     groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
     ports: Sequence[LayoutPortBinding],
@@ -164,18 +164,7 @@ def build_eigenmode_config(
     mesh_path: Path,
 ) -> EigenmodeConfigBuildResult:
     """Build one non-Floquet Eigenmode config from SGB-authored groups."""
-    if not isinstance(num_modes, int) or isinstance(num_modes, bool) or num_modes < 1:
-        raise ValueError("num_modes must be a positive integer.")
-    if not _positive_finite(eigenmode_tolerance):
-        raise ValueError("Eigenmode tolerance must be finite and positive.")
-    if target_hz is not None and not _positive_finite(target_hz):
-        raise ValueError("Eigenmode target must be finite positive Hz.")
-    if (
-        not isinstance(save_fields, int)
-        or isinstance(save_fields, bool)
-        or save_fields < 0
-    ):
-        raise ValueError("save_fields must be a non-negative integer.")
+    _check_eigenmode_controls(num_modes, target_hz, eigenmode_tolerance, save_fields)
 
     domain_volumes = _domains_from_solution_volumes(groups.get("volumes", {}))
     material_rows = _materials_from_solution_volumes(
@@ -186,32 +175,16 @@ def build_eigenmode_config(
         groups, surface_epr_specs, model_l0_m=_MODEL_L0_M
     )
     lumped_ports, port_info, port_index = _eigenmode_lumped_ports(groups, ports)
-    epr_attributes = {
-        int(value) for row in epr_rows for value in row.get("Attributes", ())
-    }
-    port_attributes = {
-        int(value) for row in lumped_ports for value in row.get("Attributes", ())
-    }
-    if epr_attributes.intersection(port_attributes):
-        raise ValueError(
-            "LumpedPort attributes must not also be Surface-EPR loss groups."
-        )
+    _check_ports_are_not_loss_groups(lumped_ports, epr_rows)
 
-    pec_attributes = sorted(
-        {
-            int(value)
-            for info in groups.get("pec_surfaces", {}).values()
-            for value in _physical_group_values(info.get("phys_group"))
-        }
-    )
-    if not pec_attributes:
-        raise ValueError("Eigenmode config requires SGB-authored PEC surfaces.")
+    pec_attributes = _pec_attributes(groups)
     eigenmode: dict[str, Any] = {
         "N": num_modes,
         "Tol": float(eigenmode_tolerance),
         "Save": save_fields,
     }
     if target_hz is not None:
+        # Palace takes the target in GHz.
         eigenmode["Target"] = float(target_hz) / 1e9
     boundaries: dict[str, Any] = {"PEC": {"Attributes": pec_attributes}}
     if lumped_ports:
@@ -241,6 +214,58 @@ def build_eigenmode_config(
         index_entries=[*port_index, *energy_index, *epr_index],
         material_resolution=_material_resolution(domain_volumes, materials),
     )
+
+
+def _check_eigenmode_controls(
+    num_modes: int,
+    target_hz: float | None,
+    eigenmode_tolerance: float,
+    save_fields: int,
+) -> None:
+    if not isinstance(num_modes, int) or isinstance(num_modes, bool) or num_modes < 1:
+        raise ValueError("num_modes must be a positive integer.")
+    if not _positive_finite(eigenmode_tolerance):
+        raise ValueError("Eigenmode tolerance must be finite and positive.")
+    if target_hz is not None and not _positive_finite(target_hz):
+        raise ValueError("Eigenmode target must be finite positive Hz.")
+    if (
+        not isinstance(save_fields, int)
+        or isinstance(save_fields, bool)
+        or save_fields < 0
+    ):
+        raise ValueError("save_fields must be a non-negative integer.")
+
+
+def _check_ports_are_not_loss_groups(
+    lumped_ports: Sequence[Mapping[str, Any]], epr_rows: Sequence[Mapping[str, Any]]
+) -> None:
+    """A surface cannot be both a driven port and a lossy dielectric film."""
+    epr_attributes = {
+        int(value) for row in epr_rows for value in row.get("Attributes", ())
+    }
+    port_attributes = {
+        int(value) for row in lumped_ports for value in row.get("Attributes", ())
+    }
+    if epr_attributes.intersection(port_attributes):
+        raise ValueError(
+            "LumpedPort attributes must not also be Surface-EPR loss groups."
+        )
+
+
+def _pec_attributes(
+    groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
+) -> list[int]:
+    """Mesh attributes of the perfect-electric-conductor (PEC) surfaces."""
+    pec_attributes = sorted(
+        {
+            int(value)
+            for info in groups.get("pec_surfaces", {}).values()
+            for value in _physical_group_values(info.get("phys_group"))
+        }
+    )
+    if not pec_attributes:
+        raise ValueError("Eigenmode config requires SGB-authored PEC surfaces.")
+    return pec_attributes
 
 
 def _problem_block(problem_type: str, numerical: Mapping[str, Any]) -> dict[str, Any]:
@@ -356,35 +381,15 @@ def _eigenmode_lumped_ports(
     groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
     ports: Sequence[LayoutPortBinding],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return ``(Palace LumpedPort rows, port information, index-map rows)``."""
     rows: list[dict[str, Any]] = []
     information: list[dict[str, Any]] = []
     index_rows: list[dict[str, Any]] = []
     for port in ports:
         key = f"P{port.index}"
-        group = groups.get("port_surfaces", {}).get(key)
-        if group is None:
-            raise ValueError(f"layout_sheet port {port.name!r} has no SGB group {key}.")
-        if not isinstance(group, Mapping):
-            raise TypeError(f"SGB layout_sheet group {key} must be a mapping.")
-        attribute = group.get("physical_attribute")
-        if not isinstance(attribute, Mapping):
-            raise TypeError(
-                f"SGB layout_sheet port {port.name!r} lacks physical_attribute."
-            )
+        group = _port_group(groups, port, key)
         direction = _direction_tuple(group.get("direction"), port.name)
-        if (
-            attribute.get("port_index") != port.index
-            or attribute.get("port_name") != port.name
-            or attribute.get("source_layer") != port.source_layer
-            or attribute.get("target_layer") != port.target_layer
-            or not all(
-                math.isclose(a, b, rel_tol=1e-12, abs_tol=1e-12)
-                for a, b in zip(direction, port.direction, strict=True)
-            )
-        ):
-            raise ValueError(
-                f"layout_sheet port {port.name!r} does not match SGB-authored identity."
-            )
+        _check_port_identity(port, group, direction)
         attributes = sorted(_physical_group_values(group.get("phys_group")))
         rows.append(
             {
@@ -395,48 +400,95 @@ def _eigenmode_lumped_ports(
                 "L": port.inductance,
             }
         )
-        info = {
-            "portnumber": port.index,
-            "name": port.name,
-            "type": "lumped_sheet",
-            "direction": list(direction),
-            "physical_name": group.get("physical_name"),
-            "attributes": attributes,
-            "source_layer": port.source_layer,
-            "target_layer": port.target_layer,
-        }
-        information.append(info)
-        index_rows.append(
+        information.append(
             {
-                "section": "Boundaries.LumpedPort",
-                "index": port.index,
-                "entry_name": key,
-                "role": "port_surface",
+                "portnumber": port.index,
+                "name": port.name,
+                "type": "lumped_sheet",
+                "direction": list(direction),
+                "physical_name": group.get("physical_name"),
                 "attributes": attributes,
-                "physical_names": [group.get("physical_name")],
-                "port_name": port.name,
-                "metadata": {
-                    field: group[field]
-                    for field in (
-                        "surface_id",
-                        "owner_semantic_ids",
-                        "adjacent_solution_volume_ids",
-                        "embedded_volume_id",
-                        "interface_of",
-                        "source_provenance",
-                        "physical_attribute",
-                        "representation",
-                        "route",
-                    )
-                    if field in group
-                },
+                "source_layer": port.source_layer,
+                "target_layer": port.target_layer,
             }
         )
+        index_rows.append(_port_index_row(port, key, group, attributes))
     if len(groups.get("port_surfaces", {})) != len(ports):
         raise ValueError(
             "SGB produced unconfigured or missing layout-sheet port groups."
         )
     return rows, information, index_rows
+
+
+def _port_group(
+    groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
+    port: LayoutPortBinding,
+    key: str,
+) -> Mapping[str, Any]:
+    group = groups.get("port_surfaces", {}).get(key)
+    if group is None:
+        raise ValueError(f"layout_sheet port {port.name!r} has no SGB group {key}.")
+    if not isinstance(group, Mapping):
+        raise TypeError(f"SGB layout_sheet group {key} must be a mapping.")
+    if not isinstance(group.get("physical_attribute"), Mapping):
+        raise TypeError(
+            f"SGB layout_sheet port {port.name!r} lacks physical_attribute."
+        )
+    return group
+
+
+def _check_port_identity(
+    port: LayoutPortBinding,
+    group: Mapping[str, Any],
+    direction: tuple[float, float, float],
+) -> None:
+    """The SGB group must describe the same port the notebook authored."""
+    attribute = group["physical_attribute"]
+    if (
+        attribute.get("port_index") != port.index
+        or attribute.get("port_name") != port.name
+        or attribute.get("source_layer") != port.source_layer
+        or attribute.get("target_layer") != port.target_layer
+        or not all(
+            math.isclose(a, b, rel_tol=1e-12, abs_tol=1e-12)
+            for a, b in zip(direction, port.direction, strict=True)
+        )
+    ):
+        raise ValueError(
+            f"layout_sheet port {port.name!r} does not match SGB-authored identity."
+        )
+
+
+def _port_index_row(
+    port: LayoutPortBinding,
+    key: str,
+    group: Mapping[str, Any],
+    attributes: list[int],
+) -> dict[str, Any]:
+    return {
+        "section": "Boundaries.LumpedPort",
+        "index": port.index,
+        "entry_name": key,
+        "role": "port_surface",
+        "attributes": attributes,
+        "physical_names": [group.get("physical_name")],
+        "port_name": port.name,
+        "metadata": {
+            field: group[field]
+            for field in (
+                "surface_id",
+                "owner_semantic_ids",
+                "adjacent_solution_volume_ids",
+                "embedded_volume_id",
+                "interface_of",
+                "source_provenance",
+                "physical_attribute",
+                "representation",
+                "route",
+            )
+            if field in group
+        },
+    }
 
 
 def _direction_tuple(value: Any, name: str) -> tuple[float, float, float]:

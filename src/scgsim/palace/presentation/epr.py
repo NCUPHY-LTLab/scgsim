@@ -1,4 +1,9 @@
-"""Offline Palace EPR projection and Plotly rendering."""
+"""Offline Palace EPR projection and Plotly rendering.
+
+Owns: turning one row of a ``PalaceEprResult`` into the three-panel ``show_epr``
+figure (surface, bulk, port).  Does not own: computing participation or loss
+(``palace/results/epr.py``).  EPR is energy-participation ratio.
+"""
 
 from __future__ import annotations
 
@@ -55,44 +60,7 @@ def show_epr(result: Any, *, mode: int | None = None) -> Any:
     figure = make_subplots(
         rows=3, cols=1, subplot_titles=("Surface", "Bulk", "Palace port")
     )
-    surface = row["surface"]
-    figure.add_trace(
-        go.Bar(
-            x=[item["participation"] for item in surface],
-            y=[
-                f"{','.join(item['owner_semantic_ids'])} / {item['interface_kind']} / {item['evaluation_kind']} {item['margin_um']:g} µm"
-                for item in surface
-            ],
-            customdata=[
-                json.dumps(
-                    _plain_view(
-                        {
-                            "group_id": item["group_id"],
-                            "index": item["index"],
-                            "surface_id": item["surface_id"],
-                            "field_side": item["field_side"],
-                            "members": item["members"],
-                            "inverse_q": item["inverse_q"],
-                            "assumptions": item["assumptions"],
-                            "original_assumptions": item["original_assumptions"],
-                            "recorded_native_assumptions": item.get(
-                                "recorded_native_assumptions"
-                            ),
-                            "loss_provenance": item.get("loss_provenance"),
-                            "assumption_update": item.get("assumption_update"),
-                        }
-                    ),
-                    sort_keys=True,
-                )
-                for item in surface
-            ],
-            hovertemplate="%{y}<br>p=%{x:.6g}<br>%{customdata}<extra></extra>",
-            orientation="h",
-            name="surface p",
-        ),
-        row=1,
-        col=1,
-    )
+    figure.add_trace(_surface_bar(go, row["surface"]), row=1, col=1)
     figure.add_trace(
         go.Bar(
             x=[item["participation"] for item in row["bulk"]],
@@ -113,16 +81,8 @@ def show_epr(result: Any, *, mode: int | None = None) -> Any:
         row=3,
         col=1,
     )
-    coverage = view["coverage"]
     figure.add_annotation(
-        text=(
-            f"Coverage: {coverage['surface_rows']} surface rows / "
-            f"{coverage['source_surfaces']} source surfaces; "
-            f"{coverage['bulk_domains']} bulk domains; {coverage['ports']} ports. "
-            f"Known baseline 1/Q subtotal: {coverage['known_baseline_subtotal']}; "
-            f"{coverage['unknown_baseline_losses']} baseline losses unknown. "
-            "Sidewalls uncomputed when unselected; requested margins are alternatives."
-        ),
+        text=_coverage_text(view["coverage"]),
         xref="paper",
         yref="paper",
         x=0,
@@ -131,3 +91,51 @@ def show_epr(result: Any, *, mode: int | None = None) -> Any:
     )
     figure.update_layout(title=f"Palace EPR mode {row['mode']}", height=900)
     return figure
+
+
+def _surface_bar(go: Any, surface: list[Mapping[str, Any]]) -> Any:
+    """Surface participation; the hover text carries the full assumption record."""
+    return go.Bar(
+        x=[item["participation"] for item in surface],
+        y=[
+            f"{','.join(item['owner_semantic_ids'])} / {item['interface_kind']} / {item['evaluation_kind']} {item['margin_um']:g} µm"
+            for item in surface
+        ],
+        customdata=[
+            json.dumps(
+                _plain_view(
+                    {
+                        "group_id": item["group_id"],
+                        "index": item["index"],
+                        "surface_id": item["surface_id"],
+                        "field_side": item["field_side"],
+                        "members": item["members"],
+                        "inverse_q": item["inverse_q"],
+                        "assumptions": item["assumptions"],
+                        "original_assumptions": item["original_assumptions"],
+                        "recorded_native_assumptions": item.get(
+                            "recorded_native_assumptions"
+                        ),
+                        "loss_provenance": item.get("loss_provenance"),
+                        "assumption_update": item.get("assumption_update"),
+                    }
+                ),
+                sort_keys=True,
+            )
+            for item in surface
+        ],
+        hovertemplate="%{y}<br>p=%{x:.6g}<br>%{customdata}<extra></extra>",
+        orientation="h",
+        name="surface p",
+    )
+
+
+def _coverage_text(coverage: Mapping[str, Any]) -> str:
+    return (
+        f"Coverage: {coverage['surface_rows']} surface rows / "
+        f"{coverage['source_surfaces']} source surfaces; "
+        f"{coverage['bulk_domains']} bulk domains; {coverage['ports']} ports. "
+        f"Known baseline 1/Q subtotal: {coverage['known_baseline_subtotal']}; "
+        f"{coverage['unknown_baseline_losses']} baseline losses unknown. "
+        "Sidewalls uncomputed when unselected; requested margins are alternatives."
+    )

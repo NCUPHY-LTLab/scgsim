@@ -1,4 +1,9 @@
-"""Sibling `.tar.gz` layout for a prepared Palace run folder."""
+"""Where a prepared run's ``.tar.gz`` sits and how its member names map back.
+
+The archive is a sibling of the run folder, named after it.  Owns the naming and
+path rules only; writing the archive is ``handoff.py`` and checking it on return is
+``palace/results/_archive_manifest.py``.
+"""
 
 from __future__ import annotations
 

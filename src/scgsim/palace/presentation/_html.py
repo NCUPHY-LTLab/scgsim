@@ -130,6 +130,19 @@ def _fmt_mb(value: Any) -> str:
     return f"{mb:.3g} MiB"
 
 
+_MESH_REGION_COLUMNS = (
+    "Region",
+    "Dim",
+    "Elements",
+    "Gmsh type: count",
+    "Edges",
+    "Min",
+    "Mean",
+    "Max",
+    "Unit",
+)
+
+
 def _mesh_summary_html(
     summary: Mapping[str, Any], *, card_html: Callable[[str, Any], str]
 ) -> str:
@@ -137,63 +150,10 @@ def _mesh_summary_html(
     if summary["status"] == "not_recorded":
         return "<section><h4>Geometry mesh</h4><p>Mesh observations were not recorded in this historical manifest.</p></section>"
     meshing = summary["meshing"]
-    estimate = summary["dof_estimate"]
-    stats, effective = meshing["statistics"], meshing["effective"]
-    cards = [
-        (
-            "Geometry / FEM order",
-            f"{effective['geometry_order']} / {_fmt(summary['finite_element_order'])}",
-        ),
-        (
-            "Native nodes / elements",
-            f"{stats['node_count']} / {stats['element_count']}",
-        ),
-        ("3D algorithm", effective["algorithm_3d"]),
-        (
-            "Volume / surface thread options",
-            f"{_fmt(effective['volume_threads'])} / {_fmt(effective['surface_threads_2d'])}",
-        ),
-        ("HighOrder optimization", meshing["high_order_optimization"]["status"]),
-        ("ND topological DOF estimate", _fmt(estimate.get("value"))),
-    ]
-    items = "".join(card_html(label, value) for label, value in cards)
-    rows = []
-    for region in stats["physical_regions"]:
-        chords = region.get("corner_chord_edge_lengths")
-        values = [
-            region["name"],
-            region["dimension"],
-            region["element_count"],
-            ", ".join(
-                f"{code}: {count}" for code, count in region["element_types"].items()
-            ),
-        ]
-        values.extend(
-            [
-                chords["count"],
-                *(_fmt(chords[key]) for key in ("minimum", "mean", "maximum")),
-                chords["unit"],
-            ]
-            if chords is not None
-            else ["not recorded"] * 5
-        )
-        rows.append(
-            "<tr>" + "".join(_html_cell("td", str(value)) for value in values) + "</tr>"
-        )
-    header = "".join(
-        _html_cell("th", label)
-        for label in (
-            "Region",
-            "Dim",
-            "Elements",
-            "Gmsh type: count",
-            "Edges",
-            "Min",
-            "Mean",
-            "Max",
-            "Unit",
-        )
-    )
+    stats = meshing["statistics"]
+    items = "".join(card_html(label, value) for label, value in _mesh_cards(summary))
+    rows = [_mesh_region_row(region) for region in stats["physical_regions"]]
+    header = "".join(_html_cell("th", label) for label in _MESH_REGION_COLUMNS)
     types = ", ".join(
         f"{record['name']}: {record['count']}" for record in stats["element_types"]
     )
@@ -215,6 +175,51 @@ def _mesh_summary_html(
         f"<p>{html.escape(curve_context)}. Full controls and provenance remain available in mesh_summary() and report data.</p>"
         "</details></section>"
     )
+
+
+def _mesh_cards(summary: Mapping[str, Any]) -> list[tuple[str, Any]]:
+    meshing = summary["meshing"]
+    estimate = summary["dof_estimate"]
+    stats, effective = meshing["statistics"], meshing["effective"]
+    return [
+        (
+            "Geometry / FEM order",
+            f"{effective['geometry_order']} / {_fmt(summary['finite_element_order'])}",
+        ),
+        (
+            "Native nodes / elements",
+            f"{stats['node_count']} / {stats['element_count']}",
+        ),
+        ("3D algorithm", effective["algorithm_3d"]),
+        (
+            "Volume / surface thread options",
+            f"{_fmt(effective['volume_threads'])} / {_fmt(effective['surface_threads_2d'])}",
+        ),
+        ("HighOrder optimization", meshing["high_order_optimization"]["status"]),
+        ("ND topological DOF estimate", _fmt(estimate.get("value"))),
+    ]
+
+
+def _mesh_region_row(region: Mapping[str, Any]) -> str:
+    chords = region.get("corner_chord_edge_lengths")
+    values = [
+        region["name"],
+        region["dimension"],
+        region["element_count"],
+        ", ".join(
+            f"{code}: {count}" for code, count in region["element_types"].items()
+        ),
+    ]
+    values.extend(
+        [
+            chords["count"],
+            *(_fmt(chords[key]) for key in ("minimum", "mean", "maximum")),
+            chords["unit"],
+        ]
+        if chords is not None
+        else ["not recorded"] * 5
+    )
+    return "<tr>" + "".join(_html_cell("td", str(value)) for value in values) + "</tr>"
 
 
 def card_html(label: Any, value: Any) -> str:

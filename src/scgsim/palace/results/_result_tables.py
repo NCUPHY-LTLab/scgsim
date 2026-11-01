@@ -127,44 +127,57 @@ def _validate_table(
         raise ValueError(f"{table.path} has no result rows.")
 
     if problem == "Electrostatic":
-        expected_rows = index_counts["terminal"]
-        if table.name == "terminal-C":
-            _validate_matrix_table(table, "C[i][", index_counts["terminal"])
-        elif table.name == "terminal-Cm":
-            _validate_matrix_table(table, "C_m[i][", index_counts["terminal"])
-        elif table.name == "terminal-Cinv":
-            _validate_matrix_table(table, "C⁻¹[i][", index_counts["terminal"])
-        elif table.name == "terminal-V":
-            _validate_terminal_voltage_table(table, index_counts["terminal"])
-        elif table.name == "domain-E":
-            _validate_domain_table(table, index_counts["domain"], expected_rows)
-        elif table.name == "surface-Q":
-            _validate_surface_table(table, index_counts["surface"], expected_rows)
-        elif table.name == "error-indicators":
-            _validate_error_indicators(table)
-
+        _validate_electrostatic_table(table, index_counts)
     elif problem == "Eigenmode":
-        expected_rows = _eigenmode_count(config)
-        if table.name == "eig":
-            _validate_eig_table(table, expected_rows)
-        elif table.name == "port-EPR":
-            _validate_port_table(
-                table, index_counts["lumped_port"], expected_rows, kind="EPR"
-            )
-        elif table.name == "port-I":
-            _validate_port_table(
-                table, index_counts["lumped_port"], expected_rows, kind="I"
-            )
-        elif table.name == "port-V":
-            _validate_port_table(
-                table, index_counts["lumped_port"], expected_rows, kind="V"
-            )
-        elif table.name == "domain-E":
-            _validate_domain_table(table, index_counts["domain"], expected_rows)
-        elif table.name == "surface-Q":
-            _validate_surface_table(table, index_counts["surface"], expected_rows)
-        elif table.name == "error-indicators":
-            _validate_error_indicators(table)
+        _validate_eigenmode_table(table, index_counts, config)
+
+
+def _validate_electrostatic_table(
+    table: ParsedTable, index_counts: IndexCounts
+) -> None:
+    # One row per terminal in every Electrostatic table.
+    expected_rows = index_counts["terminal"]
+    if table.name == "terminal-C":
+        _validate_matrix_table(table, "C[i][", index_counts["terminal"])
+    elif table.name == "terminal-Cm":
+        _validate_matrix_table(table, "C_m[i][", index_counts["terminal"])
+    elif table.name == "terminal-Cinv":
+        _validate_matrix_table(table, "C⁻¹[i][", index_counts["terminal"])
+    elif table.name == "terminal-V":
+        _validate_terminal_voltage_table(table, index_counts["terminal"])
+    else:
+        _validate_shared_table(table, index_counts, expected_rows)
+
+
+def _validate_eigenmode_table(
+    table: ParsedTable, index_counts: IndexCounts, config: dict[str, Any]
+) -> None:
+    # One row per requested mode in every Eigenmode table.
+    expected_rows = _eigenmode_count(config)
+    port_kinds = {"port-EPR": "EPR", "port-I": "I", "port-V": "V"}
+    if table.name == "eig":
+        _validate_eig_table(table, expected_rows)
+    elif table.name in port_kinds:
+        _validate_port_table(
+            table,
+            index_counts["lumped_port"],
+            expected_rows,
+            kind=port_kinds[table.name],
+        )
+    else:
+        _validate_shared_table(table, index_counts, expected_rows)
+
+
+def _validate_shared_table(
+    table: ParsedTable, index_counts: IndexCounts, expected_rows: int
+) -> None:
+    """Tables both problems write; unknown names are accepted unchecked."""
+    if table.name == "domain-E":
+        _validate_domain_table(table, index_counts["domain"], expected_rows)
+    elif table.name == "surface-Q":
+        _validate_surface_table(table, index_counts["surface"], expected_rows)
+    elif table.name == "error-indicators":
+        _validate_error_indicators(table)
 
 
 # ----------------------------------------------------- Electrostatic tables
@@ -258,6 +271,13 @@ def _validate_eig_table(table: ParsedTable, expected_modes: int) -> None:
     _require_ordered_index(table, "m", expected_modes)
 
 
+def _require_port_rows(table: ParsedTable, expected_width: int) -> None:
+    for idx, row in enumerate(table.rows, start=1):
+        _require_finite_data(row)
+        if len(row) != expected_width:
+            raise ValueError(f"{table.path} row {idx} has malformed data width.")
+
+
 def _validate_port_table(
     table: ParsedTable, port_count: int, expected_modes: int, *, kind: str
 ) -> None:
@@ -272,10 +292,7 @@ def _validate_port_table(
         expected_headers = ("m", *(f"p[{idx}]" for idx in range(1, port_count + 1)))
         if table.headers != expected_headers:
             raise ValueError(f"{table.path} port-EPR headers are malformed.")
-        for idx, row in enumerate(table.rows, start=1):
-            _require_finite_data(row)
-            if len(row) != expected:
-                raise ValueError(f"{table.path} row {idx} has malformed data width.")
+        _require_port_rows(table, expected)
     elif kind in {"I", "V"}:
         expected = 1 + 2 * port_count
         if len(table.headers) != expected:
@@ -290,10 +307,7 @@ def _validate_port_table(
             )
         if table.headers != tuple(expected_headers):
             raise ValueError(f"{table.path} port-{kind} headers are malformed.")
-        for idx, row in enumerate(table.rows, start=1):
-            _require_finite_data(row)
-            if len(row) != expected:
-                raise ValueError(f"{table.path} row {idx} has malformed data width.")
+        _require_port_rows(table, expected)
     else:
         raise ValueError(f"unsupported port table kind {kind!r}.")
     if len(table.rows) != expected_modes:

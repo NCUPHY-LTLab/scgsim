@@ -49,7 +49,7 @@ def _validate_config_problem(config: dict[str, Any], problem: str) -> None:
         raise ValueError("config Problem.Output must be results/palace.")
 
 
-def _validate_route_consistency(
+def _validate_route_consistency(  # noqa: PLR0913 - one argument per run document being cross-checked
     route: str,
     run_metadata: RunMetadata,
     handoff_metadata: HandoffMetadata,

@@ -54,7 +54,7 @@ _RUNTIME_COMPATIBILITY_SCHEMA = "palace-runtime-compatibility.v1"
 # ------------------------------------------------------- the receipt checks
 
 
-def _validate_receipt_payload(
+def _validate_receipt_payload(  # noqa: PLR0913 - keyword-only; each argument is a distinct run document
     *,
     receipt_payload: ReturnedReceiptPayload,
     expected_handoff_id: str,
@@ -66,14 +66,11 @@ def _validate_receipt_payload(
 ) -> None:
     """Fail unless the receipt proves a completed run of exactly this handoff."""
 
-    _check_receipt_claims(
-        receipt_payload,
-        expected_handoff_id,
-        handoff_metadata,
-        run_metadata,
-        problem,
-        route,
+    _check_receipt_claims(receipt_payload, handoff_metadata, problem, route)
+    _check_handoff_id_chain(
+        receipt_payload, expected_handoff_id, handoff_metadata, run_metadata
     )
+    _check_receipt_exit_codes(receipt_payload)
     _check_receipt_job(receipt_payload)
     _check_receipt_inputs(receipt_payload, handoff_metadata, run_metadata, route, root)
     output_map = _check_receipt_outputs(receipt_payload, problem, root)
@@ -86,13 +83,11 @@ def _validate_receipt_payload(
 
 def _check_receipt_claims(
     receipt_payload: ReturnedReceiptPayload,
-    expected_handoff_id: str,
     handoff_metadata: HandoffMetadata,
-    run_metadata: RunMetadata,
     problem: str,
     route: str,
 ) -> None:
-    """The receipt says: completed, this handoff, this route and problem, exit 0."""
+    """The receipt says: completed, this route and problem, this thin-film identity."""
     if _expect_scalar(receipt_payload, "schema", str) != _RETURNED_RECEIPT_SCHEMA:
         raise ValueError("returned run receipt schema is invalid.")
     if _expect_int(receipt_payload.get("schema_version"), optional=False) != 1:
@@ -111,6 +106,14 @@ def _check_receipt_claims(
     ):
         raise ValueError("returned run receipt Route-A thin-film identity mismatch.")
 
+
+def _check_handoff_id_chain(
+    receipt_payload: ReturnedReceiptPayload,
+    expected_handoff_id: str,
+    handoff_metadata: HandoffMetadata,
+    run_metadata: RunMetadata,
+) -> None:
+    """Run metadata, handoff metadata and receipt must all carry the expected ID."""
     if (
         _expect_scalar(run_metadata, "handoff_id", str, fallback="")
         != expected_handoff_id
@@ -136,6 +139,9 @@ def _check_receipt_claims(
     if _expect_scalar(receipt_payload, "identity_verified", bool) is not True:
         raise ValueError("returned run receipt identity is not verified.")
 
+
+def _check_receipt_exit_codes(receipt_payload: ReturnedReceiptPayload) -> None:
+    """A completed run exited zero in Palace, in the solver and in output capture."""
     exit_code = _expect_int(receipt_payload.get("exit_code"))
     if exit_code != 0:
         raise ValueError(

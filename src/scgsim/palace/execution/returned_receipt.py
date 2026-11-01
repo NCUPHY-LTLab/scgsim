@@ -1,4 +1,10 @@
-"""Pure-stdlib recorder for completed manual Palace runs."""
+"""Pure-stdlib recorder for completed manual Palace runs.
+
+``handoff.py`` copies this file into the run directory and the generated run script
+calls it, so it must import nothing from SCGSim.  It hashes the inputs and outputs,
+records the exit codes and the dry-run result, and writes the returned-run receipt
+that ``palace/results`` later verifies.  It never starts Palace.
+"""
 
 from __future__ import annotations
 
@@ -294,17 +300,7 @@ def main() -> int:
     _compatibility_required(handoff_metadata)  # refuses a handoff without the probe
     runtime_compatibility = _runtime_compatibility(root)
     masks_configured = _mask_outputs_configured(root)
-    config = _read_json(root / "config.json")
-    output_paths = [
-        *_required_output_paths(
-            problem, args.log_path, config=config, masks_configured=masks_configured
-        ),
-        *_iteration_output_paths(
-            root, problem, config=config, masks_configured=masks_configured
-        ),
-        RUNTIME_COMPATIBILITY_PATH,
-    ]
-    output_records = [_record_for_path(root, path) for path in output_paths]
+    output_records = _output_records(root, args.log_path, problem, masks_configured)
     log_record = _record_for_path(root, args.log_path)
     completed_outputs = all(record["present"] is True for record in output_records)
     completed_inputs = _input_hashes_match(root, input_hashes)
@@ -361,6 +357,23 @@ def main() -> int:
     if status == "completed" or args.diagnostic_after_the_fact:
         return 0
     return args.exit_code if args.exit_code != 0 else 3
+
+
+def _output_records(
+    root: Path, log_path: str, problem: str, masks_configured: bool
+) -> list[dict[str, Any]]:
+    """Records for every file a finished run must have, plus the dry-run record."""
+    config = _read_json(root / "config.json")
+    output_paths = [
+        *_required_output_paths(
+            problem, log_path, config=config, masks_configured=masks_configured
+        ),
+        *_iteration_output_paths(
+            root, problem, config=config, masks_configured=masks_configured
+        ),
+        RUNTIME_COMPATIBILITY_PATH,
+    ]
+    return [_record_for_path(root, path) for path in output_paths]
 
 
 def _parse_arguments() -> argparse.Namespace:

@@ -1,4 +1,8 @@
-"""Private Palace problem-input parsing shared by the public problem classes."""
+"""Parse and check the layer stack and numbers a Palace problem class is given.
+
+Owns: loading a stack from a path or mapping and checking its materials.  Does not
+own: the setters themselves (``_sim_common.py``) or building the config.
+"""
 
 from __future__ import annotations
 

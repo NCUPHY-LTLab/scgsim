@@ -1,4 +1,10 @@
-"""Shared staged simulation primitives for Palace candidates."""
+"""Input validators and the airbox transform shared by Palace problem classes.
+
+Owns: the config ``SCHEMA_VERSION``, argument validators, Route-A thin-film
+normalization and padding the stack with an airbox.  Does not own: the vacuum
+region (``scgsim.geometry.source.vacuum``) or the order in which transforms run
+(``workflow.py``).
+"""
 
 from __future__ import annotations
 

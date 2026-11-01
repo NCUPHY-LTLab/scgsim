@@ -136,11 +136,28 @@ class _HandoffPaths:
     def relative(self, path: Path) -> str:
         return path.relative_to(self.run_dir).as_posix()
 
+    def plan(self, profile: str, handoff_id: str) -> HandoffPlan:
+        return HandoffPlan(
+            profile,
+            "prepared",
+            "manual_handoff",
+            handoff_id,
+            self.run_dir,
+            self.script,
+            self.metadata,
+            self.run_metadata,
+            self.resource_record,
+            self.manifest,
+            self.archive,
+            self.returned_receipt,
+            self.recorder,
+        )
+
 
 # ------------------------------------------------------------ the handoff, as steps
 
 
-def prepare_handoff(
+def prepare_handoff(  # noqa: PLR0913 - public keyword-only API, one argument per caller choice
     *,
     profile: str,
     mesh_result: MeshBuildResult,
@@ -152,29 +169,16 @@ def prepare_handoff(
     problem: Literal["Electrostatic", "Eigenmode"] = "Electrostatic",
 ) -> HandoffPlan:
     """Create only portable handoff artifacts; caller owns executable and resources."""
-    if profile not in _PROFILES:
-        raise ValueError(f"Unsupported handoff profile {profile!r}.")
-    if not config_path.is_file() or not mesh_result.mesh_path.is_file():
-        raise FileNotFoundError("handoff requires existing config.json and palace.msh.")
-
-    executable = single_line(executable, "executable")
-    setup = tuple(single_line(command, "setup command") for command in setup_commands)
-    petsc = tuple(single_line(option, "PETSc option") for option in petsc_options)
-    resource_map = _validate_resources(profile, resources)
-
-    run_dir = mesh_result.output_dir
-    _make_run_directories(run_dir, profile)
-    paths = _HandoffPaths.for_run(run_dir, profile)
-    _clear_previous_returned_outputs(
-        run_dir=run_dir, returned_receipt_path=paths.returned_receipt
+    _check_inputs_exist(profile, mesh_result, config_path)
+    request = _ExecutionRequest.validated(
+        profile, executable, resources, setup_commands, petsc_options
     )
-    if not paths.index_map.is_file():
-        raise FileNotFoundError("handoff requires metadata/palace_index_map.json.")
+    paths = _prepare_run_directory(mesh_result.output_dir, profile)
 
     route = _route(mesh_result)
     thin_film = _route_a_thin_film(mesh_result, route)
     hashes = _hashes(
-        run_dir,
+        paths.run_dir,
         (
             mesh_result.mesh_path,
             config_path,
@@ -182,22 +186,139 @@ def prepare_handoff(
             paths.index_map,
         ),
     )
-    identity = _identity()
-    palace_identity: _PalaceIdentity = {
+    source_revisions = _identity()
+    palace_identity = _palace_identity()
+
+    _write_run_script(paths, request, palace_identity)
+    execution_identity = _execution_identity(request, paths)
+    handoff_id = compute_handoff_id(
+        profile=profile,
+        route=route,
+        problem=problem,
+        source_revisions=source_revisions,
+        palace_identity=palace_identity,
+        hashes=hashes,
+        execution_identity=execution_identity,
+        route_a_thin_film=thin_film,
+    )
+    seal = _Seal(
+        # Fields every record repeats; each record adds its own.
+        shared={
+            "route": route,
+            **({"route_a_thin_film": thin_film} if thin_film is not None else {}),
+            "problem": problem,
+            "handoff_id": handoff_id,
+        },
+        palace_identity=palace_identity,
+        source_revisions=source_revisions,
+        execution_identity=execution_identity,
+        hashes=hashes,
+    )
+
+    _write_handoff_metadata(
+        paths,
+        request,
+        seal,
+        config_name=config_path.name,
+        mesh_name=mesh_result.mesh_path.name,
+    )
+    _write_run_metadata(paths, seal)
+    # The archive comes before the resource record because the record holds the
+    # archive's SHA-256.
+    _write_archive(paths, hashes)
+    _write_resource_record(paths, request, seal)
+
+    return paths.plan(profile, handoff_id)
+
+
+def _palace_identity() -> _PalaceIdentity:
+    return {
         "config_schema": SCHEMA_VERSION,
         "config_compatibility_probe": "native_dry_run",
         "config_compatibility_semantics": "required_before_solve",
         "runtime_identity_semantics": "observed_provenance_only",
     }
 
+
+def _check_inputs_exist(
+    profile: str, mesh_result: MeshBuildResult, config_path: Path
+) -> None:
+    if profile not in _PROFILES:
+        raise ValueError(f"Unsupported handoff profile {profile!r}.")
+    if not config_path.is_file() or not mesh_result.mesh_path.is_file():
+        raise FileNotFoundError("handoff requires existing config.json and palace.msh.")
+
+
+@dataclass(frozen=True)
+class _ExecutionRequest:
+    """What the caller chose to run: profile, executable, resources and extra lines."""
+
+    profile: str
+    executable: str
+    resources: dict[str, Any]
+    setup: tuple[str, ...]
+    petsc: tuple[str, ...]
+
+    @classmethod
+    def validated(
+        cls,
+        profile: str,
+        executable: str,
+        resources: Mapping[str, Any] | None,
+        setup_commands: Sequence[str],
+        petsc_options: Sequence[str],
+    ) -> _ExecutionRequest:
+        # Evaluation order is the order users see errors in.
+        checked_executable = single_line(executable, "executable")
+        setup = tuple(
+            single_line(command, "setup command") for command in setup_commands
+        )
+        petsc = tuple(single_line(option, "PETSc option") for option in petsc_options)
+        return cls(
+            profile=profile,
+            executable=checked_executable,
+            resources=_validate_resources(profile, resources),
+            setup=setup,
+            petsc=petsc,
+        )
+
+
+@dataclass(frozen=True)
+class _Seal:
+    """Identity values computed once and repeated across the metadata records."""
+
+    shared: Mapping[str, Any]
+    palace_identity: _PalaceIdentity
+    source_revisions: Mapping[str, Any]
+    execution_identity: Mapping[str, Any]
+    hashes: list[_HashRecord]
+
+
+def _prepare_run_directory(run_dir: Path, profile: str) -> _HandoffPaths:
+    _make_run_directories(run_dir, profile)
+    paths = _HandoffPaths.for_run(run_dir, profile)
+    _clear_previous_returned_outputs(
+        run_dir=run_dir, returned_receipt_path=paths.returned_receipt
+    )
+    if not paths.index_map.is_file():
+        raise FileNotFoundError("handoff requires metadata/palace_index_map.json.")
+    return paths
+
+
+def _write_run_script(
+    paths: _HandoffPaths,
+    request: _ExecutionRequest,
+    palace_identity: _PalaceIdentity,
+) -> None:
+    """Install the recorder, then render the script that calls it."""
     _install_recorder(paths.recorder)
     paths.script.write_text(
         render_script(
-            profile,
-            executable,
-            resource_map,
-            setup,
-            petsc,
+            request.profile,
+            request.executable,
+            request.resources,
+            request.setup,
+            request.petsc,
             returned_receipt_recorder_name=paths.recorder.name,
             palace_identity=palace_identity,
         )
@@ -205,83 +326,6 @@ def prepare_handoff(
         encoding="utf-8",
     )
     paths.script.chmod(paths.script.stat().st_mode | 0o755)
-
-    execution_identity = _execution_identity(
-        profile=profile,
-        resources=resource_map,
-        executable=executable,
-        setup=setup,
-        petsc=petsc,
-        script_path=paths.script,
-        recorder_path=paths.recorder,
-    )
-    handoff_id = compute_handoff_id(
-        profile=profile,
-        route=route,
-        problem=problem,
-        source_revisions=identity,
-        palace_identity=palace_identity,
-        hashes=hashes,
-        execution_identity=execution_identity,
-        route_a_thin_film=thin_film,
-    )
-    # Fields every record repeats; each record adds its own.
-    shared: dict[str, Any] = {
-        "route": route,
-        **({"route_a_thin_film": thin_film} if thin_film is not None else {}),
-        "problem": problem,
-        "handoff_id": handoff_id,
-    }
-
-    _write_handoff_metadata(
-        paths,
-        shared=shared,
-        profile=profile,
-        palace_identity=palace_identity,
-        source_revisions=identity,
-        execution_identity=execution_identity,
-        executable=executable,
-        resources=resource_map,
-        setup=setup,
-        petsc=petsc,
-        config_name=config_path.name,
-        mesh_name=mesh_result.mesh_path.name,
-        hashes=hashes,
-    )
-    _write_run_metadata(
-        paths,
-        shared=shared,
-        palace_identity=palace_identity,
-        source_revisions=identity,
-        execution_identity=execution_identity,
-        hashes=hashes,
-    )
-    _write_archive(paths, hashes)
-    _write_resource_record(
-        paths,
-        shared=shared,
-        profile=profile,
-        palace_identity=palace_identity,
-        source_revisions=identity,
-        execution_identity=execution_identity,
-        resources=resource_map,
-    )
-
-    return HandoffPlan(
-        profile,
-        "prepared",
-        "manual_handoff",
-        handoff_id,
-        run_dir,
-        paths.script,
-        paths.metadata,
-        paths.run_metadata,
-        paths.resource_record,
-        paths.manifest,
-        paths.archive,
-        paths.returned_receipt,
-        paths.recorder,
-    )
 
 
 def _script_name(profile: str) -> str:
@@ -313,21 +357,14 @@ def _install_recorder(recorder_path: Path) -> None:
 
 def _write_handoff_metadata(
     paths: _HandoffPaths,
+    request: _ExecutionRequest,
+    seal: _Seal,
     *,
-    shared: Mapping[str, Any],
-    profile: str,
-    palace_identity: _PalaceIdentity,
-    source_revisions: Mapping[str, Any],
-    execution_identity: Mapping[str, Any],
-    executable: str,
-    resources: Mapping[str, Any],
-    setup: Sequence[str],
-    petsc: Sequence[str],
     config_name: str,
     mesh_name: str,
-    hashes: list[_HashRecord],
 ) -> None:
     """What SCGSim prepared. The key order is the on-disk order."""
+    shared = seal.shared
     _write_json(
         paths.metadata,
         {
@@ -335,43 +372,34 @@ def _write_handoff_metadata(
             "status": "prepared",
             "kind": "manual_handoff",
             "manual_intent": True,
-            "profile": profile,
+            "profile": request.profile,
             "route": shared["route"],
-            **(
-                {"route_a_thin_film": shared["route_a_thin_film"]}
-                if "route_a_thin_film" in shared
-                else {}
-            ),
+            **_thin_film_field(shared),
             "problem": shared["problem"],
             "handoff_id": shared["handoff_id"],
             "returned_receipt_path": paths.relative(paths.returned_receipt),
             "returned_receipt_recorder": paths.relative(paths.recorder),
-            "palace_identity": palace_identity,
-            "source_revisions": source_revisions,
-            "execution_identity": execution_identity,
-            "command": _redacted_command(profile, executable, resources),
-            "setup_commands": list(setup),
-            "petsc_options": list(petsc),
-            "requested_resources": resources,
-            "resolved_resources": resources,
+            "palace_identity": seal.palace_identity,
+            "source_revisions": seal.source_revisions,
+            "execution_identity": seal.execution_identity,
+            "command": _redacted_command(
+                request.profile, request.executable, request.resources
+            ),
+            "setup_commands": list(request.setup),
+            "petsc_options": list(request.petsc),
+            "requested_resources": request.resources,
+            "resolved_resources": request.resources,
             "script": paths.script.name,
             "config": config_name,
             "mesh": mesh_name,
-            "hashes": hashes,
+            "hashes": seal.hashes,
         },
     )
 
 
-def _write_run_metadata(
-    paths: _HandoffPaths,
-    *,
-    shared: Mapping[str, Any],
-    palace_identity: _PalaceIdentity,
-    source_revisions: Mapping[str, Any],
-    execution_identity: Mapping[str, Any],
-    hashes: list[_HashRecord],
-) -> None:
+def _write_run_metadata(paths: _HandoffPaths, seal: _Seal) -> None:
     """The run's own record. The returned-receipt recorder later updates its status."""
+    shared = seal.shared
     _write_json(
         paths.run_metadata,
         {
@@ -379,20 +407,23 @@ def _write_run_metadata(
             "status": "not_run",
             "kind": "manual_handoff",
             "route": shared["route"],
-            **(
-                {"route_a_thin_film": shared["route_a_thin_film"]}
-                if "route_a_thin_film" in shared
-                else {}
-            ),
+            **_thin_film_field(shared),
             "problem": shared["problem"],
             "handoff_id": shared["handoff_id"],
             "returned_receipt_path": paths.relative(paths.returned_receipt),
-            "palace_identity": palace_identity,
-            "source_revisions": source_revisions,
-            "execution_identity": execution_identity,
-            "hashes": hashes,
+            "palace_identity": seal.palace_identity,
+            "source_revisions": seal.source_revisions,
+            "execution_identity": seal.execution_identity,
+            "hashes": seal.hashes,
         },
     )
+
+
+def _thin_film_field(shared: Mapping[str, Any]) -> dict[str, Any]:
+    """Route B has no thin-film identity, so its records omit the key entirely."""
+    if "route_a_thin_film" in shared:
+        return {"route_a_thin_film": shared["route_a_thin_film"]}
+    return {}
 
 
 def _write_archive(paths: _HandoffPaths, hashes: list[_HashRecord]) -> None:
@@ -433,36 +464,26 @@ def _write_archive(paths: _HandoffPaths, hashes: list[_HashRecord]) -> None:
 
 
 def _write_resource_record(
-    paths: _HandoffPaths,
-    *,
-    shared: Mapping[str, Any],
-    profile: str,
-    palace_identity: _PalaceIdentity,
-    source_revisions: Mapping[str, Any],
-    execution_identity: Mapping[str, Any],
-    resources: Mapping[str, Any],
+    paths: _HandoffPaths, request: _ExecutionRequest, seal: _Seal
 ) -> None:
     """What the scheduler or local script reports; the recorder updates it later."""
+    shared = seal.shared
     _write_json(
         paths.resource_record,
         {
             "schema_version": 1,
             "status": "not_submitted",
             "kind": "manual_handoff",
-            "profile": profile,
+            "profile": request.profile,
             "route": shared["route"],
-            **(
-                {"route_a_thin_film": shared["route_a_thin_film"]}
-                if "route_a_thin_film" in shared
-                else {}
-            ),
+            **_thin_film_field(shared),
             "problem": shared["problem"],
             "handoff_id": shared["handoff_id"],
-            "source_revisions": source_revisions,
-            "palace_identity": palace_identity,
-            "execution_identity": execution_identity,
-            "requested_resources": resources,
-            "resolved_resources": resources,
+            "source_revisions": seal.source_revisions,
+            "palace_identity": seal.palace_identity,
+            "execution_identity": seal.execution_identity,
+            "requested_resources": request.resources,
+            "resolved_resources": request.resources,
             "archive": {
                 "path": paths.archive_relative,
                 "sha256": sha256_file(paths.archive),
@@ -560,27 +581,21 @@ def _identity() -> dict[str, Any]:
 
 
 def _execution_identity(
-    *,
-    profile: str,
-    resources: Mapping[str, Any],
-    executable: str,
-    setup: Sequence[str],
-    petsc: Sequence[str],
-    script_path: Path,
-    recorder_path: Path,
+    request: _ExecutionRequest, paths: _HandoffPaths
 ) -> dict[str, Any]:
     """Bind the generated execution surface without recording an absolute path."""
-
     return {
-        "profile": profile,
-        "resources": dict(resources),
-        "setup_commands": list(setup),
-        "petsc_options": list(petsc),
-        "command": _redacted_command(profile, executable, resources),
-        "script": {"path": script_path.name, "sha256": sha256_file(script_path)},
+        "profile": request.profile,
+        "resources": dict(request.resources),
+        "setup_commands": list(request.setup),
+        "petsc_options": list(request.petsc),
+        "command": _redacted_command(
+            request.profile, request.executable, request.resources
+        ),
+        "script": {"path": paths.script.name, "sha256": sha256_file(paths.script)},
         "recorder": {
-            "path": f"metadata/{recorder_path.name}",
-            "sha256": sha256_file(recorder_path),
+            "path": f"metadata/{paths.recorder.name}",
+            "sha256": sha256_file(paths.recorder),
         },
     }
 

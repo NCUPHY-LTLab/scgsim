@@ -1,7 +1,13 @@
 """Palace-specific report projections, displays, and detached figures.
 
-Trust answers whether a run is usable from identity and AMR evidence. Latest
-physical interpretation and simulation cost remain explicit separate calls.
+Trust answers whether a run is usable from identity and AMR (adaptive mesh refinement)
+evidence. Latest physical interpretation and simulation cost remain explicit separate
+calls.
+
+Owns: the three report objects and their notebook display order.  Does not own:
+reading the run (``palace/results``), the AMR trend figures (``_convergence.py``),
+or the plot and HTML building blocks (``_figures.py``, ``_html.py``).
+``_show_figure`` is the single place a figure is shown, so tests patch it here.
 """
 
 from __future__ import annotations
@@ -36,27 +42,21 @@ from ._benchmark import (
     benchmark_time_figure,
     pass_cost_records,
 )
+from ._convergence import convergence_trend_items, single_pass_q_notice
 from ._figures import (
     _PLOTLY_CONFIG,
     _SURFACE_TYPES,
     ReportTheme,
-    _capacitance_traces,
     _checked_theme,
-    _delta_traces,
-    _line_figure,
-    _mode_traces,
     _series_label,
     _surface_mask_participation_figure,
     _surface_percentage_figure,
     _surface_ranking_figure,
     _surface_total_figure,
-    _traces_are_finite,
-    _yaxis_type,
 )
 from ._html import (
     _fmt,
     _mesh_summary_html,
-    _native_positive_infinity_q_notice,
     _surface_loss_html,
     _surface_mask_html,
     card_html,
@@ -68,10 +68,6 @@ from ._report_build import (
     _resolved_benchmark_data,
     _trust_report_fields,
 )
-
-_FREQ_HEADER = "Re{f} (GHz)"
-_SKIP_EIG_COLUMNS = {"Error (Bkwd.)", "Error (Abs.)"}
-_ERROR_INDICATOR_TRACES = ("Norm", "Maximum", "Mean")
 
 
 @dataclass(frozen=True)
@@ -289,128 +285,15 @@ class PalaceTrustReport:
 
     def _convergence_items(self) -> list[Any]:
         if len(self.passes) < 2:
+            # One pass cannot show adaptation, so the status card replaces the trends.
             items: list[Any] = [self._convergence_status_html()]
-            q_traces = _mode_traces(
-                self.passes,
-                lambda pass_: (
-                    None if pass_.eig_columns is None else pass_.eig_columns.get("Q")
-                ),
-            )
-            q_notice = _native_positive_infinity_q_notice(q_traces)
+            q_notice = single_pass_q_notice(self.passes)
             if q_notice is not None:
                 items.append(q_notice)
             return items
-        xs = tuple(pass_.pass_index for pass_ in self.passes)
-        items: list[Any] = []
-        for header in _union_mapping_keys(self.passes, "eig_columns"):
-            if header in _SKIP_EIG_COLUMNS:
-                continue
-            traces = _mode_traces(
-                self.passes,
-                lambda pass_, column=header: (
-                    None if pass_.eig_columns is None else pass_.eig_columns.get(column)
-                ),
-            )
-            if header == "Q" and not _traces_are_finite(traces):
-                items.append(
-                    _native_positive_infinity_q_notice(traces)
-                    or "<p style='opacity:0.75'>A finite Q convergence plot is "
-                    "unavailable because the Q trace contains non-finite or "
-                    "unavailable data.</p>"
-                )
-                continue
-            figure = _line_figure(
-                title=f"{header} vs AMR pass",
-                xlabel="AMR pass",
-                ylabel=header,
-                xs=xs,
-                traces=traces,
-                yaxis_type=_yaxis_type(header),
-                theme=self.theme,
-            )
-            if figure is not None:
-                items.append(figure)
-            if header == _FREQ_HEADER:
-                delta = _line_figure(
-                    title=f"|Δ {header}| vs AMR pass",
-                    xlabel="AMR pass",
-                    ylabel=f"|Δ {header}|",
-                    xs=xs[1:],
-                    traces=_delta_traces(traces),
-                    yaxis_type="log",
-                    theme=self.theme,
-                )
-                if delta is not None:
-                    items.append(delta)
-        for header in _union_mapping_keys(self.passes, "port_epr"):
-            traces = _mode_traces(
-                self.passes,
-                lambda pass_, column=header: (
-                    None if pass_.port_epr is None else pass_.port_epr.get(column)
-                ),
-            )
-            figure = _line_figure(
-                title=f"Port EPR {header} vs AMR pass",
-                xlabel="AMR pass",
-                ylabel=header,
-                xs=xs,
-                traces=traces,
-                theme=self.theme,
-            )
-            if figure is not None:
-                items.append(figure)
-        for label, traces in _capacitance_traces(self.passes):
-            figure = _line_figure(
-                title=f"{label} vs AMR pass",
-                xlabel="AMR pass",
-                ylabel="fF",
-                xs=xs,
-                traces=traces,
-                theme=self.theme,
-            )
-            if figure is not None:
-                items.append(figure)
-            if label == "Maxwell C_ij":
-                continue
-            delta = _line_figure(
-                title=f"|Δ {label}| vs AMR pass",
-                xlabel="AMR pass",
-                ylabel="|Δ| (fF)",
-                xs=xs[1:],
-                traces=_delta_traces(traces),
-                yaxis_type="log",
-                theme=self.theme,
-            )
-            if delta is not None:
-                items.append(delta)
-        traces = [
-            (
-                name,
-                [
-                    None
-                    if pass_.error_indicators is None
-                    else pass_.error_indicators.get(name)
-                    for pass_ in self.passes
-                ],
-            )
-            for name in _ERROR_INDICATOR_TRACES
-        ]
-        hline = None
-        if self.amr_tolerance is not None:
-            hline = (self.amr_tolerance, "configured AMR Tol")
-        figure = _line_figure(
-            title="AMR error indicator vs AMR pass",
-            xlabel="AMR pass",
-            ylabel="error indicator",
-            xs=xs,
-            traces=traces,
-            yaxis_type="log",
-            hline=hline,
-            theme=self.theme,
+        return convergence_trend_items(
+            self.passes, amr_tolerance=self.amr_tolerance, theme=self.theme
         )
-        if figure is not None:
-            items.append(figure)
-        return items
 
     def _convergence_heading_html(self) -> str:
         return (
@@ -779,22 +662,6 @@ def _max_abs_diagonal(matrix: Sequence[Sequence[float]]) -> float:
         if index < len(row):
             values.append(abs(row[index]))
     return max(values) if values else 0.0
-
-
-def _union_mapping_keys(
-    passes: Sequence[AmrPassSnapshot], attribute: str
-) -> tuple[str, ...]:
-    keys: list[str] = []
-    seen: set[str] = set()
-    for pass_ in passes:
-        mapping = getattr(pass_, attribute)
-        if not isinstance(mapping, dict):
-            continue
-        for key in mapping:
-            if key not in seen:
-                seen.add(key)
-                keys.append(key)
-    return tuple(keys)
 
 
 def _show_figure(fig: Any) -> None:

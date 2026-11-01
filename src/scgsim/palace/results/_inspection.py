@@ -28,8 +28,18 @@ def _validate_inspection_receipt(
     handoff: dict[str, Any],
     receipt: dict[str, Any] | None,
 ) -> frozenset[str]:
+    """Return the receipt paths whose files exist and match their recorded hash."""
     if receipt is None:
         return frozenset()
+    _check_receipt_matches_handoff(handoff, receipt)
+    _receipt_execution_state(receipt)
+    _check_input_hashes(root, handoff, receipt)
+    return _verified_output_paths(root, receipt)
+
+
+def _check_receipt_matches_handoff(
+    handoff: dict[str, Any], receipt: dict[str, Any]
+) -> None:
     for field in ("handoff_id", "route", "problem"):
         value = receipt.get(field)
         if not isinstance(value, str) or not value:
@@ -42,8 +52,12 @@ def _validate_inspection_receipt(
         raise ValueError("returned receipt Route-A thin-film identity mismatch.")
     if not isinstance(receipt.get("status"), str) or not receipt["status"]:
         raise ValueError("returned receipt status must be a non-empty string.")
-    _receipt_execution_state(receipt)
 
+
+def _check_input_hashes(
+    root: Path, handoff: dict[str, Any], receipt: dict[str, Any]
+) -> None:
+    """The receipt's input hashes must equal the handoff's and the files on disk."""
     input_entries = receipt.get("input_hashes")
     handoff_entries = handoff.get("hashes")
     if not isinstance(input_entries, list) or not isinstance(handoff_entries, list):
@@ -57,6 +71,9 @@ def _validate_inspection_receipt(
         if observed != expected:
             raise ValueError(f"returned receipt input hash mismatch for {relative}.")
 
+
+def _verified_output_paths(root: Path, receipt: dict[str, Any]) -> frozenset[str]:
+    """Paths of present output files and log that verify against the receipt."""
     output_entries = receipt.get("output_files")
     if not isinstance(output_entries, list):
         raise TypeError("returned receipt output_files must be a list.")

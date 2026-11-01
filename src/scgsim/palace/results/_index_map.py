@@ -83,77 +83,89 @@ def _index_counts(index_map: IndexMap) -> IndexCounts:
     return counts
 
 
+_EXPECTED_ROLES = {
+    "Boundaries.Terminal": "terminal",
+    "Boundaries.LumpedPort": "port_surface",
+    "Domains.Postprocessing.Energy": "domain_energy",
+    "Boundaries.Postprocessing.Dielectric": "surface_epr",
+}
+
+
 def _validate_index_entries(index_map: IndexMap) -> None:
     entries = index_map.get("entries")
     if not isinstance(entries, list) or not entries:
         raise ValueError("palace_index_map.json must include non-empty entries list.")
-    expected_roles = {
-        "Boundaries.Terminal": "terminal",
-        "Boundaries.LumpedPort": "port_surface",
-        "Domains.Postprocessing.Energy": "domain_energy",
-        "Boundaries.Postprocessing.Dielectric": "surface_epr",
-    }
-    indices: dict[str, list[int]] = {section: [] for section in expected_roles}
+    indices: dict[str, list[int]] = {section: [] for section in _EXPECTED_ROLES}
     names: set[tuple[str, str]] = set()
     for entry in entries:
         if not isinstance(entry, dict) or not entry:
             raise ValueError("index map entries must be non-empty mappings.")
-        section = _expect_scalar(entry, "section", str)
-        if section not in expected_roles:
-            raise ValueError(f"index map has unsupported section {section!r}.")
-        if _expect_scalar(entry, "role", str) != expected_roles[section]:
-            raise ValueError("index map section and role are inconsistent.")
-        index = _expect_scalar(entry, "index", int)
-        if index < 1:
-            raise ValueError("index map indices must be positive.")
+        section, index = _validate_entry_identity(entry, names)
         indices[section].append(index)
-        entry_name = _expect_scalar(entry, "entry_name", str)
-        if not entry_name or (section, entry_name) in names:
-            raise ValueError(
-                "index entry names must be non-empty and unique per section."
-            )
-        names.add((section, entry_name))
-        physical_names = _expect_list(
-            entry.get("physical_names"), "index physical_names"
-        )
-        if not all(isinstance(name, str) and name for name in physical_names):
-            raise ValueError("index physical_names must be non-empty strings.")
-        entry_attributes = _expect_list(entry.get("attributes"), "index attributes")
-        for attribute in entry_attributes:
-            if (
-                not isinstance(attribute, int)
-                or isinstance(attribute, bool)
-                or attribute < 1
-            ):
-                raise ValueError("index attributes must be positive integers.")
-        metadata = _expect_mapping(entry.get("metadata"), "index metadata")
-        if section == "Boundaries.Terminal":
-            _expect_scalar(entry, "terminal_name", str)
-            _expect_scalar(entry, "net_id", str)
-            _expect_list(
-                entry.get("conductor_component_ids"), "terminal conductor components"
-            )
-        elif section == "Boundaries.LumpedPort":
-            _expect_scalar(entry, "port_name", str)
-            owners = _expect_list(
-                metadata.get("owner_semantic_ids"), "port owner semantic ids"
-            )
-            if len(owners) != 2 or not all(
-                isinstance(owner, str) and owner for owner in owners
-            ):
-                raise ValueError(
-                    "lumped port index entry must have exactly two owners."
-                )
-        elif section == "Domains.Postprocessing.Energy":
-            _expect_mapping(metadata.get("material"), "domain index material")
-        elif section == "Boundaries.Postprocessing.Dielectric":
-            _expect_mapping(
-                metadata.get("physical_attribute"), "surface index attributes"
-            )
+        _validate_entry_targets(entry)
+        _validate_section_fields(section, entry)
     for section, values in indices.items():
         if values and sorted(values) != list(range(1, len(values) + 1)):
             raise ValueError(f"index map {section} entries must be ordered 1..N.")
     _surface_mask_entries(index_map)
+
+
+def _validate_entry_identity(
+    entry: dict[str, Any], names: set[tuple[str, str]]
+) -> tuple[str, int]:
+    """Check section, role, index and name; ``names`` collects names to find repeats."""
+    section = _expect_scalar(entry, "section", str)
+    if section not in _EXPECTED_ROLES:
+        raise ValueError(f"index map has unsupported section {section!r}.")
+    if _expect_scalar(entry, "role", str) != _EXPECTED_ROLES[section]:
+        raise ValueError("index map section and role are inconsistent.")
+    index = _expect_scalar(entry, "index", int)
+    if index < 1:
+        raise ValueError("index map indices must be positive.")
+    entry_name = _expect_scalar(entry, "entry_name", str)
+    if not entry_name or (section, entry_name) in names:
+        raise ValueError("index entry names must be non-empty and unique per section.")
+    names.add((section, entry_name))
+    return section, index
+
+
+def _validate_entry_targets(entry: dict[str, Any]) -> None:
+    """Physical names and mesh attributes the entry points at."""
+    physical_names = _expect_list(entry.get("physical_names"), "index physical_names")
+    if not all(isinstance(name, str) and name for name in physical_names):
+        raise ValueError("index physical_names must be non-empty strings.")
+    entry_attributes = _expect_list(entry.get("attributes"), "index attributes")
+    for attribute in entry_attributes:
+        if (
+            not isinstance(attribute, int)
+            or isinstance(attribute, bool)
+            or attribute < 1
+        ):
+            raise ValueError("index attributes must be positive integers.")
+
+
+def _validate_section_fields(section: str, entry: dict[str, Any]) -> None:
+    """Fields that only one kind of entry carries."""
+    metadata = _expect_mapping(entry.get("metadata"), "index metadata")
+    if section == "Boundaries.Terminal":
+        _expect_scalar(entry, "terminal_name", str)
+        _expect_scalar(entry, "net_id", str)
+        _expect_list(
+            entry.get("conductor_component_ids"), "terminal conductor components"
+        )
+    elif section == "Boundaries.LumpedPort":
+        _expect_scalar(entry, "port_name", str)
+        owners = _expect_list(
+            metadata.get("owner_semantic_ids"), "port owner semantic ids"
+        )
+        if len(owners) != 2 or not all(
+            isinstance(owner, str) and owner for owner in owners
+        ):
+            raise ValueError("lumped port index entry must have exactly two owners.")
+    elif section == "Domains.Postprocessing.Energy":
+        _expect_mapping(metadata.get("material"), "domain index material")
+    elif section == "Boundaries.Postprocessing.Dielectric":
+        _expect_mapping(metadata.get("physical_attribute"), "surface index attributes")
 
 
 def _surface_mask_entries(index_map: IndexMap) -> tuple[SurfaceMaskEntry, ...]:

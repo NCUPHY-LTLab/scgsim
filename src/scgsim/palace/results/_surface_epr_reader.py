@@ -204,7 +204,7 @@ def _read_surface_mask_bindings(
         return None
 
 
-def _read_surface_epr(
+def _read_surface_epr(  # noqa: PLR0913 - keyword-only; each argument is a separate fact about the pass
     path: Path,
     *,
     problem: str,
@@ -275,7 +275,7 @@ def _read_surface_epr(
         return None
 
 
-def _read_surface_mask_epr(
+def _read_surface_mask_epr(  # noqa: PLR0913 - keyword-only; each argument is a separate fact about the pass
     q_path: Path,
     energy_path: Path,
     *,

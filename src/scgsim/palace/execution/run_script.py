@@ -33,7 +33,7 @@ _NOT_SBATCH_DIRECTIVES = {
 }
 
 
-def render_script(
+def render_script(  # noqa: PLR0913 - one argument per script ingredient; callers pass each by name
     profile: str,
     executable: str,
     resources: Mapping[str, Any],

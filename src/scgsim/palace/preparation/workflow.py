@@ -44,7 +44,7 @@ class PreparedMeshInput:
     physical_plan: PhysicalRepresentationPlan
 
 
-def prepare_mesh_input(
+def prepare_mesh_input(  # noqa: PLR0913 - public keyword-only API, one argument per input
     *,
     component: Any,
     stack: Mapping[str, Any],
@@ -102,7 +102,7 @@ def prepare_mesh_input(
     )
 
 
-def _transform_stack(
+def _transform_stack(  # noqa: PLR0913 - one argument per transform, passed by keyword
     *,
     component: Any,
     stack: Mapping[str, Any],

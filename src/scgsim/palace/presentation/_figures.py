@@ -156,23 +156,7 @@ def _surface_mask_participation_figure(
             mode="lines+markers",
             name=label,
             line={"color": _COLORWAY[color_index % len(_COLORWAY)]},
-            customdata=[
-                [
-                    record.index,
-                    record.margin_index,
-                    record.energy_j,
-                    (
-                        "unavailable / +inf"
-                        if math.isinf(record.quality_factor)
-                        else f"{record.quality_factor:.6g}"
-                    ),
-                    record.contribution_status,
-                    record.retained_area_status,
-                    record.surface_id,
-                    ", ".join(record.owner_semantic_ids),
-                ]
-                for record in ordered
-            ],
+            customdata=_mask_hover_rows(ordered),
             hovertemplate=(
                 "margin=%{x:.6g} µm<br>participation=%{y:.6g}"
                 "<br>masked index=%{customdata[0]}<br>ordinal=%{customdata[1]}"
@@ -212,6 +196,27 @@ def _surface_mask_participation_figure(
     figure.update_yaxes(title="participation", rangemode="tozero")
     figure.update_layout(legend={"x": 1.02, "xanchor": "left", "y": 1})
     return figure
+
+
+def _mask_hover_rows(records: Sequence[SurfaceMaskEprRecord]) -> list[list[Any]]:
+    """Hover fields in the order the ``customdata[n]`` template indexes expect."""
+    return [
+        [
+            record.index,
+            record.margin_index,
+            record.energy_j,
+            (
+                "unavailable / +inf"
+                if math.isinf(record.quality_factor)
+                else f"{record.quality_factor:.6g}"
+            ),
+            record.contribution_status,
+            record.retained_area_status,
+            record.surface_id,
+            ", ".join(record.owner_semantic_ids),
+        ]
+        for record in records
+    ]
 
 
 def _surface_percentage_figure(
@@ -493,7 +498,7 @@ def _capacitance_traces(
     return per_element
 
 
-def _line_figure(
+def _line_figure(  # noqa: PLR0913 - keyword-only drawing options; each is independent
     *,
     title: str,
     xlabel: str,
@@ -572,7 +577,7 @@ def _line_figure(
     return fig
 
 
-def _style_figure(
+def _style_figure(  # noqa: PLR0913 - keyword-only layout options; each is independent
     fig: Any,
     *,
     title: str,

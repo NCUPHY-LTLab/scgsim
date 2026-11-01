@@ -17,7 +17,7 @@ from numbers import Real
 from typing import Any
 
 
-def configure_numerical_controls(
+def configure_numerical_controls(  # noqa: PLR0913 - public keyword-only API, one argument per notebook control
     *,
     order: int = 1,
     tolerance: float = 1e-6,
@@ -100,7 +100,7 @@ def configure_numerical_controls(
     return controls
 
 
-def _check_solver_controls(
+def _check_solver_controls(  # noqa: PLR0913 - one argument per control being checked
     order: int,
     tolerance: float,
     max_iterations: int,

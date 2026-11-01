@@ -18,7 +18,7 @@ import math
 import re
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from ._artifact_files import _read_json
 from ._report_types import (
@@ -180,7 +180,7 @@ def _collect_amr_passes(
     return _CollectedSnapshots((*snapshots, parent), "readable")
 
 
-def _load_optional_snapshot(
+def _load_optional_snapshot(  # noqa: PLR0913 - keyword-only; mirrors _load_snapshot
     *,
     pass_index: int,
     source: str,
@@ -202,7 +202,7 @@ def _load_optional_snapshot(
         return None
 
 
-def _load_snapshot(
+def _load_snapshot(  # noqa: PLR0913 - keyword-only; each argument is a separate fact about the pass
     *,
     pass_index: int,
     source: str,
@@ -255,17 +255,7 @@ def _load_snapshot(
         bindings=surface_mask_bindings,
     )
     error_norm = None if error_indicators is None else error_indicators.get("Norm")
-    palace_payload = _read_optional_json(path / "palace.json")
-    problem_block = palace_payload.get("Problem") if palace_payload else None
-    elapsed = None
-    if palace_payload is not None:
-        durations = palace_payload.get("ElapsedTime", {})
-        if isinstance(durations, dict):
-            duration_map = durations.get("Durations")
-            if isinstance(duration_map, dict) and isinstance(
-                duration_map.get("Total"), (int, float)
-            ):
-                elapsed = float(duration_map["Total"])
+    palace_cost = _read_palace_cost(path / "palace.json")
     return AmrPassSnapshot(
         pass_index=pass_index,
         source=source,
@@ -277,21 +267,45 @@ def _load_snapshot(
         surface_epr=surface_epr,
         error_indicators=error_indicators,
         error_norm=error_norm,
-        degrees_of_freedom=_as_int(
-            problem_block.get("DegreesOfFreedom")
-            if isinstance(problem_block, dict)
-            else None
-        ),
-        mesh_elements=_as_int(
-            problem_block.get("MeshElements")
-            if isinstance(problem_block, dict)
-            else None
-        ),
+        degrees_of_freedom=palace_cost.degrees_of_freedom,
+        mesh_elements=palace_cost.mesh_elements,
+        elapsed_total_s=palace_cost.elapsed_total_s,
+        peak_node_memory_mb=palace_cost.peak_node_memory_mb,
+        surface_mask_epr=surface_mask_epr,
+    )
+
+
+class _PalaceCost(NamedTuple):
+    """Size, time and memory that Palace recorded in one pass's ``palace.json``."""
+
+    degrees_of_freedom: int | None
+    mesh_elements: int | None
+    elapsed_total_s: float | None
+    peak_node_memory_mb: float | None
+
+
+def _read_palace_cost(path: Path) -> _PalaceCost:
+    """Every field is ``None`` when the file or the field is absent."""
+    payload = _read_optional_json(path)
+    problem_block = payload.get("Problem") if payload else None
+    if not isinstance(problem_block, dict):
+        problem_block = {}
+    elapsed = None
+    if payload is not None:
+        durations = payload.get("ElapsedTime", {})
+        if isinstance(durations, dict):
+            duration_map = durations.get("Durations")
+            if isinstance(duration_map, dict) and isinstance(
+                duration_map.get("Total"), (int, float)
+            ):
+                elapsed = float(duration_map["Total"])
+    return _PalaceCost(
+        degrees_of_freedom=_as_int(problem_block.get("DegreesOfFreedom")),
+        mesh_elements=_as_int(problem_block.get("MeshElements")),
         elapsed_total_s=elapsed,
         peak_node_memory_mb=_mapping_max(
-            palace_payload.get("PeakNodeMemoryMegabytes") if palace_payload else None
+            payload.get("PeakNodeMemoryMegabytes") if payload else None
         ),
-        surface_mask_epr=surface_mask_epr,
     )
 
 
