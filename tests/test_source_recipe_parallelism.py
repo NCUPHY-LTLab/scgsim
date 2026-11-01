@@ -22,11 +22,14 @@ from scgsim.geometry.primitives.grid import (
     source_recipe_map,
 )
 from scgsim.geometry.source import occurrence as occurrence
+from scgsim.geometry.source import occurrence_validation as occurrence_validation_module
+from scgsim.geometry.source import plan as plan_module
 from scgsim.preparation import preparation_resources
 
 
 @pytest.fixture
 def native_source():
+    """Build native source geometry used by serial and parallel recipes."""
     cell = gdstk.Cell("SOURCE")
     cell.add(gdstk.rectangle((0, 0), (2, 2), layer=1))
     cell.add(gdstk.rectangle((4, 0), (6, 2), layer=1))
@@ -34,6 +37,7 @@ def native_source():
 
 
 def entity(name, point):
+    """Create a conductor selector record at a world-frame point."""
     return occurrence.entity_from_layer_record(
         {
             "semantic_id": name,
@@ -55,6 +59,8 @@ def entity(name, point):
 def test_recipe_results_context_audits_and_serial_extraction_match(
     native_source, monkeypatch
 ):
+    """Preserve recipe output, audit order, and caller-thread extraction."""
+
     # Source selectors are world-frame facts; both execution paths use this transform.
     def prepared_jobs():
         for index, point in enumerate(((11, 21), (15, 21))):
@@ -67,7 +73,8 @@ def test_recipe_results_context_audits_and_serial_extraction_match(
 
     caller = get_ident()
     extraction_threads = []
-    original = occurrence._extract_polygons_by_layer
+    # White-box observation verifies worker recipes reuse caller-thread extraction.
+    original = occurrence._extract_polygons_by_layer  # noqa: SLF001 - observe private extraction boundary
 
     def extract(*args, **kwargs):
         extraction_threads.append(get_ident())
@@ -91,6 +98,7 @@ def test_recipe_results_context_audits_and_serial_extraction_match(
 
 
 def test_job_native_objects_and_record_inputs_are_isolated(native_source):
+    """Give parallel recipes detached records and native polygon copies."""
     original_points = [p.points.tolist() for p in native_source.polygons]
     record = {"nested": [1]}
 
@@ -117,6 +125,8 @@ def test_job_native_objects_and_record_inputs_are_isolated(native_source):
 def test_first_comparison_failure_keeps_audit_prefix_and_allows_clean_next_map(
     native_source,
 ):
+    """Retain source-order failure and audit behavior across the next map."""
+
     def invalid_jobs():
         for index, point in enumerate(((1, 1), (99, 99))):
             yield occurrence.source_recipe_job(
@@ -164,6 +174,7 @@ def test_first_comparison_failure_keeps_audit_prefix_and_allows_clean_next_map(
 
 
 def test_ground_include_and_port_recipe_outputs_match():
+    """Match serial and parallel outputs for ground, include, and port recipes."""
     cell = gdstk.Cell("GROUND_SOURCE")
     cell.add(gdstk.rectangle((1, 1), (2, 2), layer=1))
     cell.add(gdstk.rectangle((0, 0), (4, 4), layer=2))
@@ -227,6 +238,7 @@ def test_ground_include_and_port_recipe_outputs_match():
 
 
 def test_public_adapter_exact_metadata_and_audit_order(tmp_path):
+    """Preserve exact adapter metadata and source audit ordering."""
     library = gdstk.Library(unit=1e-6, precision=1e-9)
     cell = library.new_cell("ADAPTER")
     cell.add(gdstk.rectangle((0, 0), (2, 2), layer=1))
@@ -276,12 +288,28 @@ def test_public_adapter_exact_metadata_and_audit_order(tmp_path):
 def test_public_plan_exact_detached_snapshot_for_identical_emitted_fixture(
     tmp_path, monkeypatch
 ):
-    import gdsfactory as gf
+    """Compare detached plan snapshots from serial and parallel preparation."""
+    plan, plan_module, emitted, emitted_bytes = _build_plan_fixture(
+        tmp_path, monkeypatch
+    )
+    serial, parallel, worker_threads = _prepare_serial_and_parallel_plan(
+        plan, plan_module, monkeypatch
+    )
+    _assert_parallel_snapshot(serial, parallel, emitted_bytes, worker_threads)
+    _assert_error_priority_and_recovery(serial, emitted, tmp_path)
 
-    from scgsim.geometry.source import plan as plan_module
+
+def _build_plan_fixture(tmp_path, monkeypatch):
+    """Create a public plan and freeze its genuine GDS fixture bytes."""
+    # Keep optional gdsfactory loading inside the public-plan fixture test path.
+    import gdsfactory as gf  # noqa: PLC0415 - keep optional dependency local to this fixture
 
     # Restore process-local PDK state after this public generic fixture.
-    monkeypatch.setattr(gf.pdk, "_ACTIVE_PDK", gf.pdk._ACTIVE_PDK)
+    monkeypatch.setattr(
+        gf.pdk,
+        "_ACTIVE_PDK",
+        gf.pdk._ACTIVE_PDK,  # noqa: SLF001 - preserve active PDK during test setup
+    )
     gf.gpdk.PDK.activate()
     component = gf.Component()
     component.add_polygon(((0, 0), (2, 0), (2, 2), (0, 2)), layer=(1, 0))
@@ -348,11 +376,12 @@ def test_public_plan_exact_detached_snapshot_for_identical_emitted_fixture(
 
     monkeypatch.setattr(type(component), "write_gds", fixed_fixture_write)
     monkeypatch.setattr(plan_module, "TemporaryDirectory", fixed_fixture_directory)
-    serial = plan.prepare()
-    from scgsim.geometry.source import (
-        occurrence_validation as occurrence_validation_module,
-    )
+    return plan, plan_module, emitted, emitted_bytes
 
+
+def _prepare_serial_and_parallel_plan(plan, plan_module, monkeypatch):
+    """Prepare serially, then observe genuine selector work on worker threads."""
+    serial = plan.prepare()
     barrier = Barrier(2)
     worker_threads = []
     original_selector = plan_module.occurrence_polygons_for_entity
@@ -375,6 +404,11 @@ def test_public_plan_exact_detached_snapshot_for_identical_emitted_fixture(
         )
         with preparation_resources(max_workers=2):
             parallel = plan.prepare()
+    return serial, parallel, worker_threads
+
+
+def _assert_parallel_snapshot(serial, parallel, emitted_bytes, worker_threads):
+    """Check thread use, exact plan equality, and detached metadata."""
     assert (
         len(worker_threads) == 4
     )  # Plan extraction plus adapter expected-value batch.
@@ -388,6 +422,9 @@ def test_public_plan_exact_detached_snapshot_for_identical_emitted_fixture(
     copied.metadata["detached"] = True
     assert "detached" not in parallel.geometry_input.metadata
 
+
+def _assert_error_priority_and_recovery(serial, emitted, tmp_path):
+    """Keep source-order validation errors and permit a clean subsequent adapter."""
     # Keep current expected-record checks and source-order error priority.
     saved_stack = tmp_path / "saved.stack.json"
     broken = deepcopy(serial.stack)
@@ -399,7 +436,7 @@ def test_public_plan_exact_detached_snapshot_for_identical_emitted_fixture(
             ValueError, match="polygon source differs for 'coupon/first'"
         ):
             build_gds_stack_geometry_input(gds_file=emitted, stack_file=saved_stack)
-        assert occurrence._EXTRACTION_CACHE.get() is None
+        assert occurrence._EXTRACTION_CACHE.get() is None  # noqa: SLF001 - verify failed adapter scope cleanup
         saved_stack.write_text(json.dumps(serial.stack))
         assert build_gds_stack_geometry_input(
             gds_file=emitted, stack_file=saved_stack
