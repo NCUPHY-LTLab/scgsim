@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping
 from math import isfinite
 from typing import Any
 
@@ -55,7 +55,7 @@ def component_metadata(
 def _one_component_value(
     component_id: str,
     field: str,
-    values: Sequence[str | None],
+    values: Iterable[str | None],
 ) -> str | None:
     distinct = {value for value in values if value is not None}
     if len(distinct) > 1:
