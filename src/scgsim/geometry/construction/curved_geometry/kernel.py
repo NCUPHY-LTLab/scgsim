@@ -31,6 +31,11 @@ class GmshApi(Protocol):
         ...
 
     @property
+    def option(self) -> type[gmsh.option]:
+        """Expose native options used by shared surface-first shell correction."""
+        ...
+
+    @property
     def __version__(self) -> str:
         """Expose the native version recorded in the detached plan."""
         ...

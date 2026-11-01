@@ -3,150 +3,36 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import cast
+
+from scgsim.geometry.construction.native_types import GmshKernelApi, GmshModelApi
+from scgsim.geometry.models.topology import (
+    RouteABVolumePlanRecord,
+    SurfaceLoopRecord,
+    SurfacePlanRecord,
+    SurfaceRefRecord,
+    VolumePlanRecord,
+)
 
 
 @dataclass(frozen=True)
-class _SurfaceFirstResult:
+class SurfaceFirstResult:
+    """Native solid tag and complete source-face and directed-wire correspondence."""
+
     volume_tag: int
     # Original face -> (result face, typed outer-wire basis parity).
     face_bindings: dict[int, tuple[int, int]]
     wire_parities: dict[int, dict[tuple[int, ...], int]]
 
 
-def _wire_signature(loop: Sequence[int]) -> tuple[int, ...]:
-    edges = tuple(abs(int(edge)) for edge in loop)
-    # Native WireExplorer supplies cyclic incidence, not an outer-wire label.
-    return min(
-        sequence[i:] + sequence[:i]
-        for sequence in (edges, edges[::-1])
-        for i in range(len(edges))
-    )
-
-
-def _face_boundary(gmsh: Any, tag: int) -> dict[tuple[int, ...], Counter]:
-    """Complete per-wire directed incidence, without geometry matching."""
-    directed = Counter(
-        int(edge)
-        for dim, edge in gmsh.model.getBoundary(
-            [(2, tag)], combined=False, oriented=True
-        )
-        if dim == 1
-    )
-    wires = {}
-    used = Counter()
-    for loop in gmsh.model.occ.getCurveLoops(tag)[1]:
-        signature = _wire_signature(loop)
-        edges = Counter(abs(int(edge)) for edge in loop)
-        if signature in wires or used.keys() & edges.keys():
-            raise ValueError(f"native face wire incidence is ambiguous: face={tag}")
-        wire = Counter(
-            {edge: count for edge, count in directed.items() if abs(edge) in edges}
-        )
-        if Counter(abs(edge) for edge in wire.elements()) != edges:
-            raise ValueError(f"native face wire incidence is incomplete: face={tag}")
-        wires[signature] = wire
-        used.update(edges)
-    if used != Counter(abs(edge) for edge in directed.elements()):
-        raise ValueError(f"native face wire incidence is incomplete: face={tag}")
-    return wires
-
-
-def surface_outer_wire_edges(surfaces, loops, curve_tags, surface_tags):
-    """Bind the existing typed outer loop to current native edges."""
-    loops_by_id = {loop.loop_id: loop for loop in loops}
-    return {
-        surface_tags[surface.surface_id]: tuple(
-            curve_tags[ref.curve_id]
-            for ref in loops_by_id[surface.outer_loop_ref].curve_refs
-        )
-        for surface in surfaces
-        if surface.surface_id in surface_tags
-    }
-
-
-def rebind_surface_loops(surfaces, loops, curve_tags, surface_tags, repaired):
-    """Consume wire reversal only when every use of a canonical loop agrees."""
-    uses = {}
-    for surface in surfaces:
-        if surface.construction_only:
-            continue
-        for loop_id in (surface.outer_loop_ref, *surface.hole_loop_refs):
-            uses.setdefault(loop_id, []).append(surface.surface_id)
-    result = []
-    for loop in loops:
-        signature = _wire_signature(
-            tuple(curve_tags[ref.curve_id] for ref in loop.curve_refs)
-        )
-        requirements = {}
-        for sid in uses.get(loop.loop_id, ()):
-            tag = surface_tags[sid]
-            if tag in repaired.wire_parities:
-                parities = repaired.wire_parities[tag]
-                if signature not in parities:
-                    raise ValueError(
-                        f"native repair lost source loop correspondence: {loop.loop_id}, surface={sid}"
-                    )
-                requirements[sid] = parities[signature]
-            else:
-                # This construction did not replace or reverse that incident face.
-                requirements[sid] = 1
-        if len(set(requirements.values())) > 1:
-            raise ValueError(
-                f"native repair has conflicting shared loop directions: "
-                f"loop={loop.loop_id}, surfaces={requirements}"
-            )
-        if requirements and next(iter(requirements.values())) < 0:
-            loop = replace(
-                loop,
-                curve_refs=tuple(
-                    replace(ref, orientation=-ref.orientation)
-                    for ref in reversed(loop.curve_refs)
-                ),
-            )
-        result.append(loop)
-    return tuple(result)
-
-
-def rebind_volume_surface_refs(volumes, parities):
-    """Express retained shell directions in the final typed outer-wire basis."""
-
-    def rebind(ref):
-        return (
-            ref
-            if parities[ref.surface_id] > 0
-            else replace(
-                ref,
-                orientation="reversed" if ref.orientation == "forward" else "forward",
-            )
-        )
-
-    return tuple(
-        replace(
-            volume,
-            surface_refs=tuple(rebind(ref) for ref in volume.surface_refs),
-            exterior_surface_refs=tuple(
-                rebind(ref) for ref in volume.exterior_surface_refs
-            ),
-            inner_pec_void_shells=tuple(
-                replace(
-                    void, surface_refs=tuple(rebind(ref) for ref in void.surface_refs)
-                )
-                for void in volume.inner_pec_void_shells
-            ),
-        )
-        for volume in volumes
-    )
-
-
 def add_surface_first_volume(
-    gmsh: Any,
+    gmsh: GmshKernelApi,
     shell_surfaces: Sequence[Sequence[int]],
     *,
     outer_wire_edges: Mapping[int, Sequence[int]],
-) -> _SurfaceFirstResult:
+) -> SurfaceFirstResult:
     """Construct with stock correction and return unique canonical face bindings.
 
     Native errors propagate and the caller's AutoFix option is restored on
@@ -219,4 +105,143 @@ def add_surface_first_volume(
         raise ValueError(
             f"native repair boundary correspondence is incomplete: volume={volume}"
         )
-    return _SurfaceFirstResult(volume, bindings, wire_parities)
+    return SurfaceFirstResult(volume, bindings, wire_parities)
+
+
+def _wire_signature(loop: Iterable[int]) -> tuple[int, ...]:
+    edges = tuple(abs(int(edge)) for edge in loop)
+    # Native WireExplorer supplies cyclic incidence, not an outer-wire label.
+    return min(
+        sequence[i:] + sequence[:i]
+        for sequence in (edges, edges[::-1])
+        for i in range(len(edges))
+    )
+
+
+def _face_boundary(gmsh: GmshModelApi, tag: int) -> dict[tuple[int, ...], Counter[int]]:
+    """Complete per-wire directed incidence, without geometry matching."""
+    directed = Counter(
+        int(edge)
+        for dim, edge in gmsh.model.getBoundary(
+            [(2, tag)], combined=False, oriented=True
+        )
+        if dim == 1
+    )
+    wires: dict[tuple[int, ...], Counter[int]] = {}
+    used: Counter[int] = Counter()
+    for loop in gmsh.model.occ.getCurveLoops(tag)[1]:
+        signature = _wire_signature(loop)
+        edges = Counter(abs(int(edge)) for edge in loop)
+        if signature in wires or used.keys() & edges.keys():
+            raise ValueError(f"native face wire incidence is ambiguous: face={tag}")
+        wire = Counter(
+            {edge: count for edge, count in directed.items() if abs(edge) in edges}
+        )
+        if Counter(abs(edge) for edge in wire.elements()) != edges:
+            raise ValueError(f"native face wire incidence is incomplete: face={tag}")
+        wires[signature] = wire
+        used.update(edges)
+    if used != Counter(abs(edge) for edge in directed.elements()):
+        raise ValueError(f"native face wire incidence is incomplete: face={tag}")
+    return wires
+
+
+def surface_outer_wire_edges(
+    surfaces: Sequence[SurfacePlanRecord],
+    loops: Sequence[SurfaceLoopRecord],
+    curve_tags: Mapping[str, int],
+    surface_tags: Mapping[str, int],
+) -> dict[int, tuple[int, ...]]:
+    """Bind the existing typed outer loop to current native edges."""
+    loops_by_id = {loop.loop_id: loop for loop in loops}
+    return {
+        surface_tags[surface.surface_id]: tuple(
+            curve_tags[ref.curve_id]
+            for ref in loops_by_id[cast(str, surface.outer_loop_ref)].curve_refs
+        )
+        for surface in surfaces
+        if surface.surface_id in surface_tags
+    }
+
+
+def rebind_surface_loops(
+    surfaces: Sequence[SurfacePlanRecord],
+    loops: Sequence[SurfaceLoopRecord],
+    curve_tags: Mapping[str, int],
+    surface_tags: Mapping[str, int],
+    repaired: SurfaceFirstResult,
+) -> tuple[SurfaceLoopRecord, ...]:
+    """Consume wire reversal only when every use of a canonical loop agrees."""
+    uses = {}
+    for surface in surfaces:
+        if surface.construction_only:
+            continue
+        for loop_id in (surface.outer_loop_ref, *surface.hole_loop_refs):
+            uses.setdefault(loop_id, []).append(surface.surface_id)
+    result = []
+    for loop in loops:
+        signature = _wire_signature(
+            tuple(curve_tags[ref.curve_id] for ref in loop.curve_refs)
+        )
+        requirements = {}
+        for sid in uses.get(loop.loop_id, ()):
+            tag = surface_tags[sid]
+            if tag in repaired.wire_parities:
+                parities = repaired.wire_parities[tag]
+                if signature not in parities:
+                    raise ValueError(
+                        f"native repair lost source loop correspondence: {loop.loop_id}, surface={sid}"
+                    )
+                requirements[sid] = parities[signature]
+            else:
+                # This construction did not replace or reverse that incident face.
+                requirements[sid] = 1
+        if len(set(requirements.values())) > 1:
+            raise ValueError(
+                f"native repair has conflicting shared loop directions: "
+                f"loop={loop.loop_id}, surfaces={requirements}"
+            )
+        if requirements and next(iter(requirements.values())) < 0:
+            loop = replace(
+                loop,
+                curve_refs=tuple(
+                    replace(ref, orientation=-ref.orientation)
+                    for ref in reversed(loop.curve_refs)
+                ),
+            )
+        result.append(loop)
+    return tuple(result)
+
+
+def rebind_volume_surface_refs(
+    volumes: Sequence[VolumePlanRecord], parities: Mapping[str, int]
+) -> tuple[VolumePlanRecord, ...]:
+    """Express retained shell directions in the final typed outer-wire basis."""
+
+    def rebind(ref: SurfaceRefRecord) -> SurfaceRefRecord:
+        return (
+            ref
+            if parities[ref.surface_id] > 0
+            else replace(
+                ref,
+                orientation="reversed" if ref.orientation == "forward" else "forward",
+            )
+        )
+
+    return tuple(
+        replace(
+            volume,
+            surface_refs=tuple(rebind(ref) for ref in volume.surface_refs),
+            exterior_surface_refs=tuple(
+                rebind(ref) for ref in volume.exterior_surface_refs
+            ),
+            inner_pec_void_shells=tuple(
+                replace(
+                    void, surface_refs=tuple(rebind(ref) for ref in void.surface_refs)
+                )
+                for void in volume.inner_pec_void_shells
+            ),
+        )
+        # A/B shell records travel through the base construction-plan volume type.
+        for volume in cast(Sequence[RouteABVolumePlanRecord], volumes)
+    )
