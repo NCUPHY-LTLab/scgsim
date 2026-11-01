@@ -1,4 +1,4 @@
-"""Shared compiler surface-record projection and derived sheet-region facts. Canonical definitions prevent stage import cycles."""
+"""Own canonical surface-record facts shared across compiler planning stages."""
 
 from __future__ import annotations
 
@@ -6,12 +6,19 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from scgsim.geometry._primitives.constants import _INTERFACE_KIND_ORDER
-from scgsim.geometry._primitives.entities import _unique_ids
-from scgsim.geometry._primitives.spatial import _coordinate_key
+# Surface provenance remains an extensible JSON-shaped metadata payload.
+from scgsim.geometry._primitives.constants import (
+    _INTERFACE_KIND_ORDER,
+)
+from scgsim.geometry._primitives.entities import (
+    _unique_ids,
+)
+from scgsim.geometry._primitives.spatial import (
+    _coordinate_key,
+)
 from scgsim.geometry.models.common import RouteLiteral
-from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.input import SemanticEntitySpec
+from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
 from scgsim.semantics import EvidenceResult
 
@@ -46,6 +53,7 @@ def _surface_contribution_provenance(
     patch_id: str,
     contributions: Sequence[EvidenceResult],
 ) -> dict[str, Any]:
+    """Serialize contribution facts and native aggregation policy."""
     ledger = tuple(
         {
             "contribution_id": result.contribution_id,
@@ -73,6 +81,8 @@ def _surface_contribution_provenance(
         for classification in classifications
         if classification in {"MA", "MS", "SA"}
     )
+    # These established labels mean metal-air (MA), metal-substrate (MS), and
+    # substrate-air (SA) surface participation in the Surface EPR model.
     unique_surface_epr = tuple(dict.fromkeys(surface_epr_classifications))
     aggregate_once = (
         len(surface_epr_classifications) > 1 and len(unique_surface_epr) == 1
@@ -113,6 +123,7 @@ def _surface_contribution_provenance(
 
 
 def _interface_kinds(interface: InterfacePlanRecord) -> tuple[str, ...]:
+    """Normalize interface kinds and return them in canonical package order."""
     raw = interface.metadata.get("interface_kinds", (interface.kind,))
     if isinstance(raw, str):
         raw_values = (raw,)
@@ -132,6 +143,7 @@ def _is_route_a_sheet_interface(
     *,
     representation_context: RepresentationContext | None = None,
 ) -> bool:
+    """Recognize route and representation-context surface-sheet interfaces."""
     recognition_rule = interface.metadata.get("recognition_rule")
     if route == "A" and recognition_rule == "route_a_surface_sheet_polygon":
         return True
@@ -150,6 +162,7 @@ def _is_route_a_sheet_interface(
 def _canonical_face_signature_3d(
     ring: tuple[tuple[float, float, float], ...],
 ) -> tuple[tuple[float, float, float], ...] | None:
+    """Return a rotation- and winding-independent 3D face signature."""
     if len(ring) < 3:
         return None
     normalized = tuple(_coordinate_key(point) for point in ring)
@@ -168,6 +181,7 @@ def _conductor_boundary_surface_id(
     representation: str,
     shell_part: str,
 ) -> str:
+    """Build the established route-scoped conductor boundary surface ID."""
     surface_kind = "SHELL" if representation == "cutout_boundary_shell" else "MAT"
     route_id = route or "REPRESENTATION"
     return (
@@ -180,6 +194,7 @@ def _surface_boundary_volume_ids(
     *,
     known_entity_ids: set[str],
 ) -> tuple[str, ...]:
+    """Resolve ordered known volume owners, excluding construction-only sheets."""
     if surface.surface_role == "lumped_port" and not surface.metadata.get(
         "route_a_boundary_port"
     ):

@@ -1,4 +1,4 @@
-"""Project source geometry references for planning; preserve existing route-specific source meaning without native inference."""
+"""Project source entity geometry into planning and sidewall references."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def entity_geometry_ref(
     *,
     representation: str,
 ) -> dict[str, Any]:
-    """Project the entity geometry and metadata without native inference."""
+    """Project entity geometry and source metadata without native inference."""
     result: dict[str, Any] = {
         "from_semantic_id": entity.semantic_id,
         "geometry_kind": entity.geometry_kind,
@@ -51,7 +51,8 @@ def route_entity_geometry_ref(
     representation: str,
     interfaces: tuple[InterfacePlanRecord, ...] = (),
 ) -> dict[str, Any]:
-    """Apply recognized Route A contact planes to the cutout body range."""
+    """Extend Route A cutout bounds only from recognized conductor contacts."""
+    # Keep the established caller signature; this projection reads entity-owned data.
     del build_input
     geometry_ref = entity_geometry_ref(entity, representation=representation)
     if route != "A" or representation != "cutout_boundary_shell":
@@ -94,7 +95,7 @@ def route_entity_geometry_ref(
 def sidewall_geometry_refs(
     geometry_ref: Mapping[str, Any],
 ) -> tuple[dict[str, Any], ...]:
-    """Describe sidewall quads for every retained exterior and hole edge."""
+    """Build one ordered sidewall quad for each exterior and hole edge."""
     z_min_um = float(geometry_ref.get("z_min_um", geometry_ref.get("z_um", 0.0)))
     thickness_um = float(geometry_ref.get("thickness_um", 0.0))
     if thickness_um <= 0:
