@@ -140,66 +140,10 @@ def _auto_vacuum_bounds(
 ) -> dict[str, float]:
     bounds: list[dict[str, float]] = []
     for semantic_id, region in regions.items():
-        semantic_id = str(semantic_id)
-        material_id = _material_id_for_region(region)
-        kind = _material_kind(material_id, materials)
-        metadata = region.get("metadata")
-        if (
-            kind == "vacuum"
-            and isinstance(metadata, Mapping)
-            and bool(metadata.get("is_auto_vacuum_region"))
-        ):
+        region_bounds = _region_envelope_bounds(str(semantic_id), region, materials)
+        if region_bounds is None:
             continue
-        geometry = region.get("geometry")
-        if not isinstance(geometry, Mapping):
-            raise TypeError(
-                f"solution region {semantic_id!r} must define geometry for auto vacuum envelope."
-            )
-        domain = geometry.get("domain_bounds_um")
-        if not isinstance(domain, Mapping):
-            raise TypeError(
-                f"solution region {semantic_id!r} must define domain_bounds_um for auto vacuum envelope."
-            )
-        names = ("x_min_um", "x_max_um", "y_min_um", "y_max_um")
-        if any(not _finite(domain.get(name)) for name in names):
-            missing = [name for name in names if not _finite(domain.get(name))]
-            raise ValueError(
-                f"solution region {semantic_id!r} has invalid {missing!r} for domain_bounds_um."
-            )
-        z_min = geometry.get("z_min_um", geometry.get("z_um"))
-        if z_min is None or not _finite(z_min):
-            raise ValueError(
-                f"solution region {semantic_id!r} has missing or non-finite z_min_um."
-            )
-        z_min = float(z_min)
-        z_max = geometry.get("z_max_um")
-        if z_max is None:
-            thickness = geometry.get("thickness_um")
-            if thickness is None or not _finite(thickness):
-                raise ValueError(
-                    f"solution region {semantic_id!r} requires finite z_max_um or thickness_um."
-                )
-            z_max = z_min + float(thickness)
-        elif not _finite(z_max):
-            raise ValueError(
-                f"solution region {semantic_id!r} has non-finite z_max_um."
-            )
-        else:
-            z_max = float(z_max)
-        if not z_min < z_max:
-            raise ValueError(
-                f"solution region {semantic_id!r} has non-positive thickness for envelope aggregation."
-            )
-        bounds.append(
-            {
-                "x_min_um": float(domain["x_min_um"]),
-                "x_max_um": float(domain["x_max_um"]),
-                "y_min_um": float(domain["y_min_um"]),
-                "y_max_um": float(domain["y_max_um"]),
-                "z_min_um": z_min,
-                "z_max_um": z_max,
-            }
-        )
+        bounds.append(region_bounds)
     if not bounds:
         raise ValueError(
             "Cannot auto-compute vacuum envelope without non-vacuum solution regions."
@@ -231,6 +175,72 @@ def _auto_vacuum_bounds(
             *(item["z_max_um"] for item in bounds),
             *(item[1] for item in layer_ranges),
         ),
+    }
+
+
+def _region_envelope_bounds(
+    semantic_id: str,
+    region: Mapping[str, Any],
+    materials: Mapping[str, Any],
+) -> dict[str, float] | None:
+    material_id = _material_id_for_region(region)
+    kind = _material_kind(material_id, materials)
+    metadata = region.get("metadata")
+    if (
+        kind == "vacuum"
+        and isinstance(metadata, Mapping)
+        and bool(metadata.get("is_auto_vacuum_region"))
+    ):
+        return None
+
+    geometry = region.get("geometry")
+    if not isinstance(geometry, Mapping):
+        raise TypeError(
+            f"solution region {semantic_id!r} must define geometry for auto vacuum envelope."
+        )
+    domain = geometry.get("domain_bounds_um")
+    if not isinstance(domain, Mapping):
+        raise TypeError(
+            f"solution region {semantic_id!r} must define domain_bounds_um for auto vacuum envelope."
+        )
+    coordinate_names = ("x_min_um", "x_max_um", "y_min_um", "y_max_um")
+    invalid_coordinates = [
+        name for name in coordinate_names if not _finite(domain.get(name))
+    ]
+    if invalid_coordinates:
+        raise ValueError(
+            f"solution region {semantic_id!r} has invalid {invalid_coordinates!r} for domain_bounds_um."
+        )
+
+    z_min = geometry.get("z_min_um", geometry.get("z_um"))
+    if z_min is None or not _finite(z_min):
+        raise ValueError(
+            f"solution region {semantic_id!r} has missing or non-finite z_min_um."
+        )
+    z_min = float(z_min)
+    z_max = geometry.get("z_max_um")
+    if z_max is None:
+        thickness = geometry.get("thickness_um")
+        if thickness is None or not _finite(thickness):
+            raise ValueError(
+                f"solution region {semantic_id!r} requires finite z_max_um or thickness_um."
+            )
+        z_max = z_min + float(thickness)
+    elif not _finite(z_max):
+        raise ValueError(f"solution region {semantic_id!r} has non-finite z_max_um.")
+    else:
+        z_max = float(z_max)
+    if not z_min < z_max:
+        raise ValueError(
+            f"solution region {semantic_id!r} has non-positive thickness for envelope aggregation."
+        )
+    return {
+        "x_min_um": float(domain["x_min_um"]),
+        "x_max_um": float(domain["x_max_um"]),
+        "y_min_um": float(domain["y_min_um"]),
+        "y_max_um": float(domain["y_max_um"]),
+        "z_min_um": z_min,
+        "z_max_um": z_max,
     }
 
 
