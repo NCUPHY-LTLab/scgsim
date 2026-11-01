@@ -16,13 +16,14 @@ original parsed binary64 coordinates.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import sys
 from dataclasses import dataclass
 from enum import IntEnum
 from fractions import Fraction
 from types import MappingProxyType
-from typing import Mapping
+from typing import Mapping, NamedTuple
 
 import numpy as np
 
@@ -44,6 +45,8 @@ _INV_W.flags.writeable = False
 
 
 class _StatusCode(IntEnum):
+    """Byte codes stored in the status and method arrays, decoded by ``_STATUS_LABELS``."""
+
     UNAVAILABLE = 0
     FLOATING_FILTER = 1
     EXACT_DYADIC = 2
@@ -109,6 +112,13 @@ def _decode_label(value: int | np.integer) -> str:
 
 @dataclass(frozen=True, slots=True)
 class Measurements:
+    """Per-tetrahedron results; unset entries are NaN with an explanatory status code.
+
+    ``*_method`` and ``*_status`` arrays hold ``_StatusCode`` values and are
+    decoded to labels by ``_decode_label``. Volumes ending ``_m3`` are in cubic
+    metres and exist only when a length scale was given.
+    """
+
     orientation: np.ndarray
     orientation_method: np.ndarray
     determinant_estimate: np.ndarray
@@ -343,233 +353,332 @@ def _condition_chunk(
         condition_status[index] = _StatusCode.AVAILABLE
 
 
-def measure(mesh: MeshData, length_scale_m: float | None) -> Measurements:
-    """Measure all locatable type-4 elements without changing their orientation."""
+@dataclass
+class _Workspace:
+    """Writable arrays for every ``Measurements`` field, filled chunk by chunk."""
 
+    orientation: np.ndarray
+    orientation_method: np.ndarray
+    determinant_estimate: np.ndarray
+    determinant_error_bound: np.ndarray
+    determinant_scale_exponent: np.ndarray
+    signed_volume: np.ndarray
+    volume: np.ndarray
+    volume_status: np.ndarray
+    volume_method: np.ndarray
+    volume_error_bound: np.ndarray
+    signed_volume_m3: np.ndarray
+    volume_m3: np.ndarray
+    volume_m3_status: np.ndarray
+    volume_m3_method: np.ndarray
+    volume_m3_error_bound: np.ndarray
+    kappa_j: np.ndarray
+    condition_status: np.ndarray
+    centers: np.ndarray
+    center_status: np.ndarray
+    fallback_used: np.ndarray
+
+
+def _allocate_workspace(count: int, length_scale_m: float | None) -> _Workspace:
+    """Create every array unset: NaN values, UNAVAILABLE statuses."""
+    m3_status = (
+        _StatusCode.NOT_REQUESTED if length_scale_m is None else _StatusCode.UNAVAILABLE
+    )
+    return _Workspace(
+        orientation=np.zeros(count, dtype=np.int8),
+        orientation_method=np.full(count, _StatusCode.UNAVAILABLE, dtype=np.uint8),
+        determinant_estimate=np.full(count, np.nan, dtype=np.float64),
+        determinant_error_bound=np.full(count, np.nan, dtype=np.float64),
+        determinant_scale_exponent=np.zeros(count, dtype=np.int32),
+        signed_volume=np.full(count, np.nan, dtype=np.float64),
+        volume=np.full(count, np.nan, dtype=np.float64),
+        volume_status=np.full(count, _StatusCode.UNAVAILABLE, dtype=np.uint8),
+        volume_method=np.full(count, _StatusCode.UNAVAILABLE, dtype=np.uint8),
+        volume_error_bound=np.full(count, np.nan, dtype=np.float64),
+        signed_volume_m3=np.full(count, np.nan, dtype=np.float64),
+        volume_m3=np.full(count, np.nan, dtype=np.float64),
+        volume_m3_status=np.full(count, m3_status, dtype=np.uint8),
+        volume_m3_method=np.full(count, m3_status, dtype=np.uint8),
+        volume_m3_error_bound=np.full(count, np.nan, dtype=np.float64),
+        kappa_j=np.full(count, np.nan, dtype=np.float64),
+        condition_status=np.full(count, _StatusCode.UNAVAILABLE, dtype=np.uint8),
+        centers=np.full((count, 3), np.nan, dtype=np.float64),
+        center_status=np.full(count, _StatusCode.UNAVAILABLE, dtype=np.uint8),
+        fallback_used=np.zeros(count, dtype=np.bool_),
+    )
+
+
+def measure(mesh: MeshData, length_scale_m: float | None) -> Measurements:
+    """Measure all locatable type-4 elements without changing their orientation.
+
+    Elements are processed in chunks of 4096 to bound memory. Each chunk first uses
+    fast floating-point filters whose error bounds certify the result, and falls
+    back to exact rational arithmetic for any element the filters cannot decide.
+    """
     count = len(mesh.element_ids)
-    orientation = np.zeros(count, dtype=np.int8)
-    orientation_method = np.full(count, _StatusCode.UNAVAILABLE, dtype=np.uint8)
-    determinant_estimate = np.full(count, np.nan, dtype=np.float64)
-    determinant_error_bound = np.full(count, np.nan, dtype=np.float64)
-    determinant_scale_exponent = np.zeros(count, dtype=np.int32)
-    signed_volume = np.full(count, np.nan, dtype=np.float64)
-    volume = np.full(count, np.nan, dtype=np.float64)
-    volume_status = np.full(count, _StatusCode.UNAVAILABLE, dtype=np.uint8)
-    volume_method = np.full(count, _StatusCode.UNAVAILABLE, dtype=np.uint8)
-    volume_error_bound = np.full(count, np.nan, dtype=np.float64)
-    signed_volume_m3 = np.full(count, np.nan, dtype=np.float64)
-    volume_m3 = np.full(count, np.nan, dtype=np.float64)
-    volume_m3_status = np.full(
-        count,
-        _StatusCode.NOT_REQUESTED
-        if length_scale_m is None
-        else _StatusCode.UNAVAILABLE,
-        dtype=np.uint8,
-    )
-    volume_m3_method = np.full(
-        count,
-        _StatusCode.NOT_REQUESTED
-        if length_scale_m is None
-        else _StatusCode.UNAVAILABLE,
-        dtype=np.uint8,
-    )
-    volume_m3_error_bound = np.full(count, np.nan, dtype=np.float64)
-    kappa_j = np.full(count, np.nan, dtype=np.float64)
-    condition_status = np.full(count, _StatusCode.UNAVAILABLE, dtype=np.uint8)
-    centers = np.full((count, 3), np.nan, dtype=np.float64)
-    center_status = np.full(count, _StatusCode.UNAVAILABLE, dtype=np.uint8)
-    fallback_used = np.zeros(count, dtype=np.bool_)
+    work = _allocate_workspace(count, length_scale_m)
     chunk_size = 4096
     for start in range(0, count, chunk_size):
         rows = np.arange(start, min(start + chunk_size, count), dtype=np.int64)
-        indices = mesh.node_indices[rows]
-        missing = np.any(indices < 0, axis=1)
-        missing_rows = rows[missing]
-        orientation_method[missing_rows] = _StatusCode.MISSING_NODES
-        volume_status[missing_rows] = _StatusCode.MISSING_NODES
-        volume_method[missing_rows] = _StatusCode.MISSING_NODES
-        condition_status[missing_rows] = _StatusCode.MISSING_NODES
-        center_status[missing_rows] = _StatusCode.MISSING_NODES
-        if length_scale_m is not None:
-            volume_m3_status[missing_rows] = _StatusCode.MISSING_NODES
-            volume_m3_method[missing_rows] = _StatusCode.MISSING_NODES
-
-        present_rows = rows[~missing]
-        if not len(present_rows):
-            continue
-        present_points = mesh.coordinates[mesh.node_indices[present_rows]]
-        finite = np.all(np.isfinite(present_points), axis=(1, 2))
-        nonfinite_rows = present_rows[~finite]
-        orientation_method[nonfinite_rows] = _StatusCode.NONFINITE_COORDINATES
-        volume_status[nonfinite_rows] = _StatusCode.NONFINITE_COORDINATES
-        volume_method[nonfinite_rows] = _StatusCode.NONFINITE_COORDINATES
-        condition_status[nonfinite_rows] = _StatusCode.NONFINITE_COORDINATES
-        center_status[nonfinite_rows] = _StatusCode.NONFINITE_COORDINATES
-        if length_scale_m is not None:
-            volume_m3_status[nonfinite_rows] = _StatusCode.NONFINITE_COORDINATES
-            volume_m3_method[nonfinite_rows] = _StatusCode.NONFINITE_COORDINATES
-
-        valid_rows = present_rows[finite]
-        points = present_points[finite]
-        if not len(valid_rows):
-            continue
-        maximum = np.max(np.abs(points), axis=(1, 2))
-        exponents = np.frexp(maximum)[1].astype(np.int32)
-        exponents[maximum == 0.0] = 0
-        determinant_scale_exponent[valid_rows] = exponents
-        with np.errstate(over="ignore", under="ignore", invalid="ignore"):
-            scaled = np.ldexp(points, -exponents[:, None, None])
-            restored = np.ldexp(scaled, exponents[:, None, None])
-            edges = np.stack(
-                (
-                    scaled[:, 1] - scaled[:, 0],
-                    scaled[:, 2] - scaled[:, 0],
-                    scaled[:, 3] - scaled[:, 0],
-                ),
-                axis=2,
-            )
-        scaled_normal = _normal_rows(scaled)
-        reversible = scaled_normal & np.all(restored == points, axis=(1, 2))
-        reversible &= np.all((points == 0.0) | (scaled != 0.0), axis=(1, 2))
-        edge_normal = _normal_rows(edges)
-        safe = reversible & edge_normal
-
-        condition_status[valid_rows[~scaled_normal]] = _StatusCode.SCALING_SUBNORMAL
-        condition_status[valid_rows[scaled_normal & ~reversible]] = (
-            _StatusCode.SCALING_NOT_REVERSIBLE
-        )
-        condition_status[valid_rows[reversible & ~edge_normal]] = (
-            _StatusCode.UNSAFE_SUBTRACTION
-        )
-        for local, row in enumerate(valid_rows):
-            if safe[local]:
-                centers[row], center_status[row] = _scaled_center(
-                    scaled[local], points[local], int(exponents[local])
-                )
-            else:
-                centers[row], center_status[row] = _exact_center(points[local])
-
-        safe_rows = valid_rows[safe]
-        safe_edges = edges[safe]
-        accepted_rows = np.empty(0, dtype=np.int64)
-        if len(safe_rows):
-            estimates, bounds, accepted = _filtered_determinants(safe_edges)
-            determinant_estimate[safe_rows] = estimates
-            determinant_error_bound[safe_rows] = bounds
-            accepted_rows = safe_rows[accepted]
-            orientation[accepted_rows] = np.where(estimates[accepted] > 0.0, 1, -1)
-            orientation_method[accepted_rows] = _StatusCode.FLOATING_FILTER
-
-        exact_cache: dict[int, Fraction] = {}
-
-        def exact_for(row: int) -> Fraction:
-            if row not in exact_cache:
-                exact_cache[row] = _exact_determinant(
-                    mesh.coordinates[mesh.node_indices[row]]
-                )
-            return exact_cache[row]
-
-        def apply_exact_mesh(row: int) -> None:
-            exact_determinant = exact_for(row)
-            fallback_used[row] = True
-            sign = 1 if exact_determinant > 0 else -1 if exact_determinant < 0 else 0
-            orientation[row] = sign
-            orientation_method[row] = _StatusCode.EXACT_DYADIC
-            exact_signed = exact_determinant / 6
-            magnitude, status = _fraction_float(abs(exact_signed))
-            signed, signed_status = _fraction_float(exact_signed)
-            volume_status[row] = status
-            volume_method[row] = _StatusCode.EXACT_ROUNDED
-            if status in {_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO}:
-                volume[row] = magnitude
-            if signed_status in {_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO}:
-                signed_volume[row] = signed
-            if sign == 0:
-                condition_status[row] = _StatusCode.EXACT_SINGULAR
-                kappa_j[row] = math.inf
-
-        rejected_rows = np.concatenate(
-            (
-                valid_rows[~safe],
-                safe_rows[orientation_method[safe_rows] != _StatusCode.FLOATING_FILTER],
-            )
-        )
-        for row_value in rejected_rows:
-            apply_exact_mesh(int(row_value))
-        for row_value in accepted_rows:
-            row = int(row_value)
-            restored_volume, restored_bound, restored_status = _restore_interval(
-                float(determinant_estimate[row]),
-                float(determinant_error_bound[row]),
-                int(determinant_scale_exponent[row]),
-                scale_m=None,
-            )
-            if restored_status == _StatusCode.AVAILABLE:
-                volume[row] = restored_volume
-                signed_volume[row] = math.copysign(restored_volume, orientation[row])
-                volume_status[row] = _StatusCode.AVAILABLE
-                volume_method[row] = _StatusCode.FLOATING_ESTIMATE
-                volume_error_bound[row] = restored_bound
-            else:
-                apply_exact_mesh(row)
-
-        if length_scale_m is not None:
-            exact_scale = Fraction.from_float(length_scale_m) ** 3
-            for row_value in valid_rows:
-                row = int(row_value)
-                if row not in exact_cache:
-                    restored_si, restored_si_bound, status_si = _restore_interval(
-                        float(determinant_estimate[row]),
-                        float(determinant_error_bound[row]),
-                        int(determinant_scale_exponent[row]),
-                        scale_m=length_scale_m,
-                    )
-                    if status_si == _StatusCode.AVAILABLE:
-                        volume_m3[row] = restored_si
-                        signed_volume_m3[row] = math.copysign(
-                            restored_si, orientation[row]
-                        )
-                        volume_m3_status[row] = _StatusCode.AVAILABLE
-                        volume_m3_method[row] = _StatusCode.FLOATING_ESTIMATE
-                        volume_m3_error_bound[row] = restored_si_bound
-                        continue
-                    exact_for(row)
-                    fallback_used[row] = True
-                exact_signed_si = exact_cache[row] * exact_scale / 6
-                value_si, status_si = _fraction_float(abs(exact_signed_si))
-                signed_si, signed_si_status = _fraction_float(exact_signed_si)
-                volume_m3_status[row] = status_si
-                volume_m3_method[row] = _StatusCode.EXACT_ROUNDED
-                if status_si in {_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO}:
-                    volume_m3[row] = value_si
-                if signed_si_status in {
-                    _StatusCode.AVAILABLE,
-                    _StatusCode.EXACT_ZERO,
-                }:
-                    signed_volume_m3[row] = signed_si
-
-        if len(safe_rows):
-            _condition_chunk(safe_edges, safe_rows, condition_status, kappa_j)
-
+        _measure_chunk(mesh, work, rows, length_scale_m)
     return Measurements(
-        orientation=_readonly(orientation),
-        orientation_method=_readonly(orientation_method),
-        determinant_estimate=_readonly(determinant_estimate),
-        determinant_error_bound=_readonly(determinant_error_bound),
-        determinant_scale_exponent=_readonly(determinant_scale_exponent),
-        signed_volume=_readonly(signed_volume),
-        volume=_readonly(volume),
-        volume_status=_readonly(volume_status),
-        volume_method=_readonly(volume_method),
-        volume_error_bound=_readonly(volume_error_bound),
-        signed_volume_m3=_readonly(signed_volume_m3),
-        volume_m3=_readonly(volume_m3),
-        volume_m3_status=_readonly(volume_m3_status),
-        volume_m3_method=_readonly(volume_m3_method),
-        volume_m3_error_bound=_readonly(volume_m3_error_bound),
-        kappa_j=_readonly(kappa_j),
-        condition_status=_readonly(condition_status),
-        centers=_readonly(centers),
-        center_status=_readonly(center_status),
-        fallback_used=_readonly(fallback_used),
+        **{
+            item.name: _readonly(getattr(work, item.name))
+            for item in dataclasses.fields(work)
+        }
     )
+
+
+def _mark_unmeasurable(
+    work: _Workspace,
+    rows: np.ndarray,
+    status: _StatusCode,
+    length_scale_m: float | None,
+) -> None:
+    """Record why these elements have no measurements (missing or non-finite input)."""
+    work.orientation_method[rows] = status
+    work.volume_status[rows] = status
+    work.volume_method[rows] = status
+    work.condition_status[rows] = status
+    work.center_status[rows] = status
+    if length_scale_m is not None:
+        work.volume_m3_status[rows] = status
+        work.volume_m3_method[rows] = status
+
+
+def _measure_chunk(
+    mesh: MeshData,
+    work: _Workspace,
+    rows: np.ndarray,
+    length_scale_m: float | None,
+) -> None:
+    """Measure one chunk of elements into ``work``."""
+    indices = mesh.node_indices[rows]
+    missing = np.any(indices < 0, axis=1)
+    _mark_unmeasurable(work, rows[missing], _StatusCode.MISSING_NODES, length_scale_m)
+
+    present_rows = rows[~missing]
+    if not len(present_rows):
+        return
+    present_points = mesh.coordinates[mesh.node_indices[present_rows]]
+    finite = np.all(np.isfinite(present_points), axis=(1, 2))
+    _mark_unmeasurable(
+        work, present_rows[~finite], _StatusCode.NONFINITE_COORDINATES, length_scale_m
+    )
+
+    valid_rows = present_rows[finite]
+    points = present_points[finite]
+    if not len(valid_rows):
+        return
+    scaling = _scale_to_unit_range(work, valid_rows, points)
+    safe = _classify_scaling(work, valid_rows, points, scaling)
+    _assign_centers(work, valid_rows, safe, points, scaling)
+
+    safe_rows = valid_rows[safe]
+    safe_edges = scaling.edges[safe]
+    accepted_rows = _filter_orientation(work, safe_rows, safe_edges)
+
+    exact = _ExactFallback(mesh, work)
+    rejected_rows = np.concatenate(
+        (
+            valid_rows[~safe],
+            safe_rows[
+                work.orientation_method[safe_rows] != _StatusCode.FLOATING_FILTER
+            ],
+        )
+    )
+    for row_value in rejected_rows:
+        exact.apply_to_volume(int(row_value))
+    for row_value in accepted_rows:
+        _restore_filtered_volume(work, exact, int(row_value))
+
+    if length_scale_m is not None:
+        _fill_si_volumes(work, exact, valid_rows, length_scale_m)
+
+    if len(safe_rows):
+        _condition_chunk(safe_edges, safe_rows, work.condition_status, work.kappa_j)
+
+
+class _Scaling(NamedTuple):
+    """One chunk after power-of-two scaling."""
+
+    exponents: np.ndarray
+    scaled: np.ndarray
+    restored: np.ndarray
+    edges: np.ndarray
+
+
+def _scale_to_unit_range(
+    work: _Workspace, valid_rows: np.ndarray, points: np.ndarray
+) -> _Scaling:
+    """Scale each element by a power of two and form its edge vectors.
+
+    Power-of-two scaling is exact, so it can be undone bit for bit; ``restored``
+    is the round trip that ``_classify_scaling`` compares with the input.
+    """
+    maximum = np.max(np.abs(points), axis=(1, 2))
+    exponents = np.frexp(maximum)[1].astype(np.int32)
+    exponents[maximum == 0.0] = 0
+    work.determinant_scale_exponent[valid_rows] = exponents
+    with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+        scaled = np.ldexp(points, -exponents[:, None, None])
+        restored = np.ldexp(scaled, exponents[:, None, None])
+        edges = np.stack(
+            (
+                scaled[:, 1] - scaled[:, 0],
+                scaled[:, 2] - scaled[:, 0],
+                scaled[:, 3] - scaled[:, 0],
+            ),
+            axis=2,
+        )
+    return _Scaling(exponents, scaled, restored, edges)
+
+
+def _classify_scaling(
+    work: _Workspace,
+    valid_rows: np.ndarray,
+    points: np.ndarray,
+    scaling: _Scaling,
+) -> np.ndarray:
+    """Return which elements may use the floating filter; record why others may not."""
+    scaled_normal = _normal_rows(scaling.scaled)
+    reversible = scaled_normal & np.all(scaling.restored == points, axis=(1, 2))
+    reversible &= np.all((points == 0.0) | (scaling.scaled != 0.0), axis=(1, 2))
+    edge_normal = _normal_rows(scaling.edges)
+    safe = reversible & edge_normal
+
+    work.condition_status[valid_rows[~scaled_normal]] = _StatusCode.SCALING_SUBNORMAL
+    work.condition_status[valid_rows[scaled_normal & ~reversible]] = (
+        _StatusCode.SCALING_NOT_REVERSIBLE
+    )
+    work.condition_status[valid_rows[reversible & ~edge_normal]] = (
+        _StatusCode.UNSAFE_SUBTRACTION
+    )
+    return safe
+
+
+def _assign_centers(
+    work: _Workspace,
+    valid_rows: np.ndarray,
+    safe: np.ndarray,
+    points: np.ndarray,
+    scaling: _Scaling,
+) -> None:
+    """Compute element centers from the scaled points, or exactly when unsafe."""
+    for local, row in enumerate(valid_rows):
+        if safe[local]:
+            work.centers[row], work.center_status[row] = _scaled_center(
+                scaling.scaled[local], points[local], int(scaling.exponents[local])
+            )
+        else:
+            work.centers[row], work.center_status[row] = _exact_center(points[local])
+
+
+def _filter_orientation(
+    work: _Workspace, safe_rows: np.ndarray, safe_edges: np.ndarray
+) -> np.ndarray:
+    """Decide orientation by the floating filter; return the rows it certified."""
+    accepted_rows = np.empty(0, dtype=np.int64)
+    if len(safe_rows):
+        estimates, bounds, accepted = _filtered_determinants(safe_edges)
+        work.determinant_estimate[safe_rows] = estimates
+        work.determinant_error_bound[safe_rows] = bounds
+        accepted_rows = safe_rows[accepted]
+        work.orientation[accepted_rows] = np.where(estimates[accepted] > 0.0, 1, -1)
+        work.orientation_method[accepted_rows] = _StatusCode.FLOATING_FILTER
+    return accepted_rows
+
+
+class _ExactFallback:
+    """Exact-arithmetic determinants of one chunk, computed once per element."""
+
+    def __init__(self, mesh: MeshData, work: _Workspace) -> None:
+        self._mesh = mesh
+        self._work = work
+        self.cache: dict[int, Fraction] = {}
+
+    def determinant(self, row: int) -> Fraction:
+        """Return the exact determinant of ``row``, computing it on first use."""
+        if row not in self.cache:
+            self.cache[row] = _exact_determinant(
+                self._mesh.coordinates[self._mesh.node_indices[row]]
+            )
+        return self.cache[row]
+
+    def apply_to_volume(self, row: int) -> None:
+        """Set orientation and volume of ``row`` from the exact determinant."""
+        work = self._work
+        exact_determinant = self.determinant(row)
+        work.fallback_used[row] = True
+        sign = 1 if exact_determinant > 0 else -1 if exact_determinant < 0 else 0
+        work.orientation[row] = sign
+        work.orientation_method[row] = _StatusCode.EXACT_DYADIC
+        exact_signed = exact_determinant / 6
+        magnitude, status = _fraction_float(abs(exact_signed))
+        signed, signed_status = _fraction_float(exact_signed)
+        work.volume_status[row] = status
+        work.volume_method[row] = _StatusCode.EXACT_ROUNDED
+        if status in {_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO}:
+            work.volume[row] = magnitude
+        if signed_status in {_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO}:
+            work.signed_volume[row] = signed
+        if sign == 0:
+            work.condition_status[row] = _StatusCode.EXACT_SINGULAR
+            work.kappa_j[row] = math.inf
+
+
+def _restore_filtered_volume(work: _Workspace, exact: _ExactFallback, row: int) -> None:
+    """Undo the scaling on a filter-certified volume; go exact if that is ambiguous."""
+    restored_volume, restored_bound, restored_status = _restore_interval(
+        float(work.determinant_estimate[row]),
+        float(work.determinant_error_bound[row]),
+        int(work.determinant_scale_exponent[row]),
+        scale_m=None,
+    )
+    if restored_status == _StatusCode.AVAILABLE:
+        work.volume[row] = restored_volume
+        work.signed_volume[row] = math.copysign(restored_volume, work.orientation[row])
+        work.volume_status[row] = _StatusCode.AVAILABLE
+        work.volume_method[row] = _StatusCode.FLOATING_ESTIMATE
+        work.volume_error_bound[row] = restored_bound
+    else:
+        exact.apply_to_volume(row)
+
+
+def _fill_si_volumes(
+    work: _Workspace,
+    exact: _ExactFallback,
+    valid_rows: np.ndarray,
+    length_scale_m: float,
+) -> None:
+    """Convert volumes to cubic metres with the caller's length scale in metres."""
+    exact_scale = Fraction.from_float(length_scale_m) ** 3
+    for row_value in valid_rows:
+        row = int(row_value)
+        if row not in exact.cache:
+            restored_si, restored_si_bound, status_si = _restore_interval(
+                float(work.determinant_estimate[row]),
+                float(work.determinant_error_bound[row]),
+                int(work.determinant_scale_exponent[row]),
+                scale_m=length_scale_m,
+            )
+            if status_si == _StatusCode.AVAILABLE:
+                work.volume_m3[row] = restored_si
+                work.signed_volume_m3[row] = math.copysign(
+                    restored_si, work.orientation[row]
+                )
+                work.volume_m3_status[row] = _StatusCode.AVAILABLE
+                work.volume_m3_method[row] = _StatusCode.FLOATING_ESTIMATE
+                work.volume_m3_error_bound[row] = restored_si_bound
+                continue
+            exact.determinant(row)
+            work.fallback_used[row] = True
+        exact_signed_si = exact.cache[row] * exact_scale / 6
+        value_si, status_si = _fraction_float(abs(exact_signed_si))
+        signed_si, signed_si_status = _fraction_float(exact_signed_si)
+        work.volume_m3_status[row] = status_si
+        work.volume_m3_method[row] = _StatusCode.EXACT_ROUNDED
+        if status_si in {_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO}:
+            work.volume_m3[row] = value_si
+        if signed_si_status in {_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO}:
+            work.signed_volume_m3[row] = signed_si

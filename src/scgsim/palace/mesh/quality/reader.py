@@ -1,11 +1,17 @@
-"""Streaming custody-preserving reader for ASCII Gmsh MSH 2.2 meshes."""
+"""Streaming custody-preserving reader for ASCII Gmsh MSH 2.2 meshes.
+
+Owns parsing one ``.msh`` file into compact read-only arrays of its tetrahedra,
+together with the file hash and identity that prove which bytes were read. Custody
+means the result can be tied to exactly one version of the file. It does not judge
+element quality (``numerics.py``) or format reports (``report.py``).
+"""
 
 from __future__ import annotations
 
 import hashlib
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import BinaryIO, Literal, Mapping, overload
@@ -57,6 +63,8 @@ _ELEMENT_TYPES: Mapping[int, tuple[int, int]] = MappingProxyType(
 
 @dataclass(frozen=True, slots=True)
 class FileIdentity:
+    """File stat fields compared before and after a read to detect a changing file."""
+
     device: int
     inode: int
     size: int
@@ -152,31 +160,44 @@ def _expect(lines: _Lines, expected: str) -> None:
         raise ValueError(f"expected {expected!r}, found {actual!r}")
 
 
-def read_msh22(mesh_path: str | Path) -> MeshData:
-    """Read one ASCII MSH 2.2 file sequentially and retain only compact arrays."""
+@dataclass
+class _ParsedSections:
+    """Rows collected while scanning the file; turned into arrays at the end."""
 
+    node_ids: list[int] = field(default_factory=list)
+    coordinates: list[tuple[float, float, float]] = field(default_factory=list)
+    element_ids_seen: set[int] = field(default_factory=set)
+    tet_ids: list[int] = field(default_factory=list)
+    tet_connectivity: list[tuple[int, int, int, int]] = field(default_factory=list)
+    flat_tags: list[int] = field(default_factory=list)
+    tag_offsets: list[tuple[int, int]] = field(default_factory=list)
+    physical_tags: list[int] = field(default_factory=list)
+    elementary_tags: list[int] = field(default_factory=list)
+    physical_names: dict[tuple[int, int], str] = field(default_factory=dict)
+    optional_sections: dict[str, int] = field(default_factory=dict)
+    counts: dict[str, int] = field(
+        default_factory=lambda: {
+            "all": 0,
+            "tetrahedra": 0,
+            "other_known_3d": 0,
+            "ordinary_2d": 0,
+            "known_other": 0,
+            "unknown": 0,
+        }
+    )
+    seen: set[str] = field(default_factory=set)
+
+
+def read_msh22(mesh_path: str | Path) -> MeshData:
+    """Read one ASCII MSH 2.2 file sequentially and retain only compact arrays.
+
+    The file is hashed while it is read, and its identity (device, inode, size,
+    mtime) is compared before and after, so a mesh that changes mid-read is
+    rejected instead of silently mixing two versions.
+    """
     path = Path(mesh_path).expanduser().resolve()
     before = _identity(path.stat())
-    node_ids: list[int] = []
-    coordinates: list[tuple[float, float, float]] = []
-    element_ids_seen: set[int] = set()
-    tet_ids: list[int] = []
-    tet_connectivity: list[tuple[int, int, int, int]] = []
-    flat_tags: list[int] = []
-    tag_offsets: list[tuple[int, int]] = []
-    physical_tags: list[int] = []
-    elementary_tags: list[int] = []
-    physical_names: dict[tuple[int, int], str] = {}
-    optional_sections: dict[str, int] = {}
-    counts = {
-        "all": 0,
-        "tetrahedra": 0,
-        "other_known_3d": 0,
-        "ordinary_2d": 0,
-        "known_other": 0,
-        "unknown": 0,
-    }
-    seen: set[str] = set()
+    parsed = _ParsedSections()
 
     with path.open("rb") as handle:
         lines = _Lines(handle)
@@ -190,126 +211,7 @@ def read_msh22(mesh_path: str | Path) -> MeshData:
                 raise ValueError(
                     f"expected an MSH section delimiter at line {lines.line_number}"
                 )
-            name = section[1:]
-            if not seen and name != "MeshFormat":
-                raise ValueError("$MeshFormat must be the first MSH section")
-            if name == "MeshFormat":
-                if name in seen:
-                    raise ValueError("duplicate $MeshFormat section")
-                seen.add(name)
-                raw_descriptor = lines.text(required=True)
-                descriptor = raw_descriptor.split()
-                if descriptor != ["2.2", "0", "8"]:
-                    if len(descriptor) >= 2 and descriptor[1] == "1":
-                        raise ValueError(
-                            "binary MSH files are unsupported; expected ASCII MSH 2.2"
-                        )
-                    raise ValueError(
-                        "unsupported mesh format; expected ASCII MSH 2.2 with size 8"
-                    )
-                _expect(lines, "$EndMeshFormat")
-                continue
-            if name == "PhysicalNames":
-                if name in seen:
-                    raise ValueError("duplicate $PhysicalNames section")
-                seen.add(name)
-                for _ in range(_count(lines, "PhysicalNames")):
-                    raw = lines.text(required=True)
-                    match = _PHYSICAL_NAME.fullmatch(raw)
-                    if match is None:
-                        raise ValueError(f"malformed PhysicalNames row: {raw!r}")
-                    key = (int(match.group(1)), int(match.group(2)))
-                    if key in physical_names:
-                        raise ValueError(
-                            f"duplicate physical name for dimension/tag {key}"
-                        )
-                    physical_names[key] = match.group(3)
-                _expect(lines, "$EndPhysicalNames")
-                continue
-            if name == "Nodes":
-                if name in seen:
-                    raise ValueError("duplicate $Nodes section")
-                seen.add(name)
-                identifiers: set[int] = set()
-                for _ in range(_count(lines, "Nodes")):
-                    raw_fields = lines.text(required=True)
-                    fields = raw_fields.split()
-                    if len(fields) != 4:
-                        raise ValueError("each MSH 2.2 node row must have four fields")
-                    try:
-                        node_id = int(fields[0])
-                        point = tuple(float(value) for value in fields[1:])
-                    except ValueError as error:
-                        raise ValueError("malformed MSH 2.2 node row") from error
-                    if node_id in identifiers:
-                        raise ValueError(f"duplicate node ID {node_id}")
-                    identifiers.add(node_id)
-                    node_ids.append(node_id)
-                    coordinates.append(point)  # type: ignore[arg-type]
-                _expect(lines, "$EndNodes")
-                continue
-            if name == "Elements":
-                if name in seen:
-                    raise ValueError("duplicate $Elements section")
-                if "Nodes" not in seen:
-                    raise ValueError("$Nodes must precede $Elements")
-                seen.add(name)
-                for _ in range(_count(lines, "Elements")):
-                    raw_fields = lines.text(required=True)
-                    fields = raw_fields.split()
-                    if len(fields) < 3:
-                        raise ValueError("malformed MSH 2.2 element row")
-                    try:
-                        element_id, element_type, tag_count = map(int, fields[:3])
-                        values = [int(value) for value in fields[3:]]
-                    except ValueError as error:
-                        raise ValueError("malformed MSH 2.2 element row") from error
-                    if element_id in element_ids_seen:
-                        raise ValueError(f"duplicate element ID {element_id}")
-                    element_ids_seen.add(element_id)
-                    if tag_count < 0 or len(values) < tag_count:
-                        raise ValueError(f"invalid tag count for element {element_id}")
-                    tags = values[:tag_count]
-                    connectivity = values[tag_count:]
-                    counts["all"] += 1
-                    known = _ELEMENT_TYPES.get(element_type)
-                    if known is not None and len(connectivity) != known[1]:
-                        raise ValueError(
-                            f"Gmsh element type {element_type} element {element_id} "
-                            f"must reference {known[1]} nodes"
-                        )
-                    if element_type == 4:
-                        start = len(flat_tags)
-                        flat_tags.extend(tags)
-                        tag_offsets.append((start, len(tags)))
-                        tet_ids.append(element_id)
-                        tet_connectivity.append(tuple(connectivity))  # type: ignore[arg-type]
-                        physical_tags.append(tags[0] if tags and tags[0] != 0 else 0)
-                        elementary_tags.append(tags[1] if len(tags) > 1 else 0)
-                        counts["tetrahedra"] += 1
-                    elif known is not None and known[0] == 3:
-                        counts["other_known_3d"] += 1
-                    elif known is not None and known[0] == 2:
-                        counts["ordinary_2d"] += 1
-                    elif known is not None:
-                        counts["known_other"] += 1
-                    else:
-                        counts["unknown"] += 1
-                _expect(lines, "$EndElements")
-                continue
-
-            end = f"$End{name}"
-            rows = 0
-            while True:
-                raw = lines.text(required=True)
-                if raw == end:
-                    break
-                if raw.startswith("$End") or raw.startswith("$"):
-                    raise ValueError(
-                        f"invalid delimiter inside optional ${name} section"
-                    )
-                rows += 1
-            optional_sections[name] = optional_sections.get(name, 0) + rows
+            _read_section(lines, section[1:], parsed)
 
         digest = lines.hasher.hexdigest()
         bytes_read = lines.bytes_read
@@ -319,15 +221,170 @@ def read_msh22(mesh_path: str | Path) -> MeshData:
         raise RuntimeError("mesh file identity changed while it was being read")
     if bytes_read != before.size:
         raise RuntimeError("mesh file byte count changed while it was being read")
-    missing = {"MeshFormat", "Nodes", "Elements"} - seen
+    missing = {"MeshFormat", "Nodes", "Elements"} - parsed.seen
     if missing:
         raise ValueError(f"missing required MSH sections: {', '.join(sorted(missing))}")
+    return _mesh_data(path, before, digest, bytes_read, parsed)
 
-    ids_array = np.asarray(node_ids, dtype=np.int64)
-    coords_array = np.asarray(coordinates, dtype=np.float64).reshape((-1, 3))
-    element_array = np.asarray(tet_ids, dtype=np.int64)
-    connectivity_array = np.asarray(tet_connectivity, dtype=np.int64).reshape((-1, 4))
-    index_by_id = {int(node_id): index for index, node_id in enumerate(node_ids)}
+
+def _read_section(lines: _Lines, name: str, parsed: _ParsedSections) -> None:
+    """Dispatch one ``$Name`` section; unknown sections are only counted, not parsed."""
+    seen = parsed.seen
+    if not seen and name != "MeshFormat":
+        raise ValueError("$MeshFormat must be the first MSH section")
+    if name == "MeshFormat":
+        if name in seen:
+            raise ValueError("duplicate $MeshFormat section")
+        seen.add(name)
+        _read_mesh_format(lines)
+    elif name == "PhysicalNames":
+        if name in seen:
+            raise ValueError("duplicate $PhysicalNames section")
+        seen.add(name)
+        _read_physical_names(lines, parsed)
+    elif name == "Nodes":
+        if name in seen:
+            raise ValueError("duplicate $Nodes section")
+        seen.add(name)
+        _read_nodes(lines, parsed)
+    elif name == "Elements":
+        if name in seen:
+            raise ValueError("duplicate $Elements section")
+        if "Nodes" not in seen:
+            raise ValueError("$Nodes must precede $Elements")
+        seen.add(name)
+        _read_elements(lines, parsed)
+    else:
+        _skip_optional_section(lines, name, parsed)
+
+
+def _read_mesh_format(lines: _Lines) -> None:
+    """Accept only ``2.2 0 8``: version 2.2, ASCII, 8-byte floats."""
+    raw_descriptor = lines.text(required=True)
+    descriptor = raw_descriptor.split()
+    if descriptor != ["2.2", "0", "8"]:
+        if len(descriptor) >= 2 and descriptor[1] == "1":
+            raise ValueError("binary MSH files are unsupported; expected ASCII MSH 2.2")
+        raise ValueError("unsupported mesh format; expected ASCII MSH 2.2 with size 8")
+    _expect(lines, "$EndMeshFormat")
+
+
+def _read_physical_names(lines: _Lines, parsed: _ParsedSections) -> None:
+    """Read ``dimension tag "name"`` rows."""
+    physical_names = parsed.physical_names
+    for _ in range(_count(lines, "PhysicalNames")):
+        raw = lines.text(required=True)
+        match = _PHYSICAL_NAME.fullmatch(raw)
+        if match is None:
+            raise ValueError(f"malformed PhysicalNames row: {raw!r}")
+        key = (int(match.group(1)), int(match.group(2)))
+        if key in physical_names:
+            raise ValueError(f"duplicate physical name for dimension/tag {key}")
+        physical_names[key] = match.group(3)
+    _expect(lines, "$EndPhysicalNames")
+
+
+def _read_nodes(lines: _Lines, parsed: _ParsedSections) -> None:
+    """Read ``id x y z`` rows, rejecting duplicate ids."""
+    identifiers: set[int] = set()
+    for _ in range(_count(lines, "Nodes")):
+        raw_fields = lines.text(required=True)
+        fields = raw_fields.split()
+        if len(fields) != 4:
+            raise ValueError("each MSH 2.2 node row must have four fields")
+        try:
+            node_id = int(fields[0])
+            point = tuple(float(value) for value in fields[1:])
+        except ValueError as error:
+            raise ValueError("malformed MSH 2.2 node row") from error
+        if node_id in identifiers:
+            raise ValueError(f"duplicate node ID {node_id}")
+        identifiers.add(node_id)
+        parsed.node_ids.append(node_id)
+        parsed.coordinates.append(point)  # type: ignore[arg-type]
+    _expect(lines, "$EndNodes")
+
+
+def _read_elements(lines: _Lines, parsed: _ParsedSections) -> None:
+    """Read ``id type tag_count tags... nodes...`` rows.
+
+    Only linear tetrahedra (Gmsh element type 4) are kept; every other element is
+    just counted by kind.
+    """
+    counts = parsed.counts
+    for _ in range(_count(lines, "Elements")):
+        raw_fields = lines.text(required=True)
+        fields = raw_fields.split()
+        if len(fields) < 3:
+            raise ValueError("malformed MSH 2.2 element row")
+        try:
+            element_id, element_type, tag_count = map(int, fields[:3])
+            values = [int(value) for value in fields[3:]]
+        except ValueError as error:
+            raise ValueError("malformed MSH 2.2 element row") from error
+        if element_id in parsed.element_ids_seen:
+            raise ValueError(f"duplicate element ID {element_id}")
+        parsed.element_ids_seen.add(element_id)
+        if tag_count < 0 or len(values) < tag_count:
+            raise ValueError(f"invalid tag count for element {element_id}")
+        tags = values[:tag_count]
+        connectivity = values[tag_count:]
+        counts["all"] += 1
+        known = _ELEMENT_TYPES.get(element_type)
+        if known is not None and len(connectivity) != known[1]:
+            raise ValueError(
+                f"Gmsh element type {element_type} element {element_id} "
+                f"must reference {known[1]} nodes"
+            )
+        if element_type == 4:
+            start = len(parsed.flat_tags)
+            parsed.flat_tags.extend(tags)
+            parsed.tag_offsets.append((start, len(tags)))
+            parsed.tet_ids.append(element_id)
+            parsed.tet_connectivity.append(tuple(connectivity))  # type: ignore[arg-type]
+            parsed.physical_tags.append(tags[0] if tags and tags[0] != 0 else 0)
+            parsed.elementary_tags.append(tags[1] if len(tags) > 1 else 0)
+            counts["tetrahedra"] += 1
+        elif known is not None and known[0] == 3:
+            counts["other_known_3d"] += 1
+        elif known is not None and known[0] == 2:
+            counts["ordinary_2d"] += 1
+        elif known is not None:
+            counts["known_other"] += 1
+        else:
+            counts["unknown"] += 1
+    _expect(lines, "$EndElements")
+
+
+def _skip_optional_section(lines: _Lines, name: str, parsed: _ParsedSections) -> None:
+    """Hash through an optional section, recording only its row count."""
+    end = f"$End{name}"
+    rows = 0
+    while True:
+        raw = lines.text(required=True)
+        if raw == end:
+            break
+        if raw.startswith("$End") or raw.startswith("$"):
+            raise ValueError(f"invalid delimiter inside optional ${name} section")
+        rows += 1
+    parsed.optional_sections[name] = parsed.optional_sections.get(name, 0) + rows
+
+
+def _mesh_data(
+    path: Path,
+    before: FileIdentity,
+    digest: str,
+    bytes_read: int,
+    parsed: _ParsedSections,
+) -> MeshData:
+    """Freeze the collected rows into read-only arrays."""
+    ids_array = np.asarray(parsed.node_ids, dtype=np.int64)
+    coords_array = np.asarray(parsed.coordinates, dtype=np.float64).reshape((-1, 3))
+    element_array = np.asarray(parsed.tet_ids, dtype=np.int64)
+    connectivity_array = np.asarray(parsed.tet_connectivity, dtype=np.int64).reshape(
+        (-1, 4)
+    )
+    index_by_id = {int(node_id): index for index, node_id in enumerate(parsed.node_ids)}
     node_index_array = np.full(connectivity_array.shape, -1, dtype=np.int64)
     for row in range(connectivity_array.shape[0]):
         for column in range(4):
@@ -345,11 +402,13 @@ def read_msh22(mesh_path: str | Path) -> MeshData:
         element_ids=_readonly(element_array),
         connectivity=_readonly(connectivity_array),
         node_indices=_readonly(node_index_array),
-        raw_tags=_readonly(np.asarray(flat_tags, dtype=np.int64)),
-        tag_offsets=_readonly(np.asarray(tag_offsets, dtype=np.int64).reshape((-1, 2))),
-        physical_tags=_readonly(np.asarray(physical_tags, dtype=np.int64)),
-        elementary_tags=_readonly(np.asarray(elementary_tags, dtype=np.int64)),
-        physical_names=MappingProxyType(dict(physical_names)),
-        element_counts=MappingProxyType(dict(counts)),
-        optional_sections=MappingProxyType(dict(optional_sections)),
+        raw_tags=_readonly(np.asarray(parsed.flat_tags, dtype=np.int64)),
+        tag_offsets=_readonly(
+            np.asarray(parsed.tag_offsets, dtype=np.int64).reshape((-1, 2))
+        ),
+        physical_tags=_readonly(np.asarray(parsed.physical_tags, dtype=np.int64)),
+        elementary_tags=_readonly(np.asarray(parsed.elementary_tags, dtype=np.int64)),
+        physical_names=MappingProxyType(dict(parsed.physical_names)),
+        element_counts=MappingProxyType(dict(parsed.counts)),
+        optional_sections=MappingProxyType(dict(parsed.optional_sections)),
     )

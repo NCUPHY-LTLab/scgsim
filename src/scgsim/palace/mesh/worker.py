@@ -1,4 +1,9 @@
-"""Gmsh worker for the Palace JSON request/result process boundary."""
+"""Entry point of the fresh Gmsh child process (``python -m scgsim.palace.mesh.worker``).
+
+Owns the JSON request/result handshake with ``worker_process.py``: decode and
+type-check one request, hand it to ``lowering.py``, write the result. It adds no
+meshing logic of its own.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +13,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from scgsim.palace.mesh.build import _mesh_xao_in_current_process
+from scgsim.palace.mesh.lowering import XaoMeshRequest, mesh_xao_in_process
 
 
 def main(arguments: list[str] | None = None) -> int:
@@ -28,21 +33,26 @@ def _run_request(request: Any, result_path: Path) -> int:
     from .controls import mesh_controls
 
     controls = mesh_controls(**_required(request, "mesh_controls", dict))
-    result = _mesh_xao_in_current_process(
-        xao_path=Path(_required(request, "xao_path", str)),
-        route=_required(request, "route", str),
-        records=_required(request, "records", list),
-        stack=_required(request, "stack", dict),
-        mesh_path=Path(_required(request, "mesh_path", str)),
-        refined_mesh_size=float(_required(request, "refined_mesh_size", int | float)),
-        max_mesh_size=float(_required(request, "max_mesh_size", int | float)),
-        mesh_controls=controls,
+    result = mesh_xao_in_process(
+        XaoMeshRequest(
+            xao_path=Path(_required(request, "xao_path", str)),
+            route=_required(request, "route", str),
+            records=_required(request, "records", list),
+            stack=_required(request, "stack", dict),
+            mesh_path=Path(_required(request, "mesh_path", str)),
+            refined_mesh_size=float(
+                _required(request, "refined_mesh_size", int | float)
+            ),
+            max_mesh_size=float(_required(request, "max_mesh_size", int | float)),
+            mesh_controls=controls,
+        )
     )
     result_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return 0
 
 
 def _required(payload: Mapping[str, Any], key: str, expected: type[Any]) -> Any:
+    """Return ``payload[key]`` if it has the expected type; bools never count as numbers."""
     value = payload.get(key)
     if isinstance(value, bool) or not isinstance(value, expected):
         raise TypeError(f"Gmsh worker request field {key!r} has an invalid type.")

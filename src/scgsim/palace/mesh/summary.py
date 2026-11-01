@@ -1,4 +1,11 @@
-"""Native mesh observations and detached summaries; no solver-DOF inference."""
+"""Native mesh observations and detached summaries; no solver-DOF inference.
+
+Owns what is read back from the final Gmsh mesh (node and element statistics,
+physical-region chord lengths, tetrahedral topology) and the detached
+``mesh_summary`` built from the recorded manifest. DOF means degrees of freedom;
+this module only estimates edge-element counts from topology and never reports a
+solver's actual count. It does not generate or validate meshes (``lowering.py``).
+"""
 
 from __future__ import annotations
 
@@ -7,6 +14,7 @@ import hashlib
 import itertools
 import json
 import math
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -35,8 +43,30 @@ def observe_native_mesh(groups: Mapping[str, Any]) -> dict[str, Any]:
         int(tag): tuple(float(x) for x in coordinates[3 * i : 3 * i + 3])
         for i, tag in enumerate(node_tags)
     }
-    types = []
     element_types, element_tags, _ = gmsh.model.mesh.getElements()
+    types = _element_type_rows(element_types, element_tags)
+    regions = _physical_region_rows(points)
+    topology = _tetrahedral_topology(groups)
+    return dict(
+        node_count=len(node_tags),
+        element_count=sum(len(t) for t in element_tags),
+        element_types=types,
+        physical_regions=regions,
+        tetrahedral_topology=dict(
+            vertices=len(topology.vertices),
+            edges=len(topology.edges),
+            faces=len(topology.faces),
+            tetrahedra=len(topology.tetrahedra),
+        ),
+        corner_chord_edge_lengths=_corner_chord_statistics(topology.edges, points),
+    )
+
+
+def _element_type_rows(element_types: Any, element_tags: Any) -> list[dict[str, Any]]:
+    """Describe each Gmsh element type present in the mesh and how many there are."""
+    import gmsh
+
+    types = []
     for code, tags in zip(element_types, element_tags, strict=True):
         name, dimension, order, nodes, reference, primary = (
             gmsh.model.mesh.getElementProperties(code)
@@ -53,6 +83,15 @@ def observe_native_mesh(groups: Mapping[str, Any]) -> dict[str, Any]:
                 reference_coordinates=[float(x) for x in reference],
             )
         )
+    return types
+
+
+def _physical_region_rows(
+    points: Mapping[int, tuple[float, ...]],
+) -> list[dict[str, Any]]:
+    """Describe every physical group: its elements and its corner-chord lengths."""
+    import gmsh
+
     regions = []
     for dim, attribute in gmsh.model.getPhysicalGroups():
         codes: dict[int, set[int]] = {}
@@ -61,20 +100,7 @@ def observe_native_mesh(groups: Mapping[str, Any]) -> dict[str, Any]:
             ts, ids, connectivity = gmsh.model.mesh.getElements(dim, int(entity))
             for code, tags, nodes in zip(ts, ids, connectivity, strict=True):
                 codes.setdefault(int(code), set()).update(int(t) for t in tags)
-                if dim == 1:
-                    _, _, _, count, _, _ = gmsh.model.mesh.getElementProperties(code)
-                    endpoints = [
-                        int(n)
-                        for i in range(len(tags))
-                        for n in nodes[i * count : i * count + 2]
-                    ]
-                elif dim > 1:
-                    # Native edge topology avoids treating quad/hex diagonals as edges.
-                    endpoints = gmsh.model.mesh.getElementEdgeNodes(
-                        int(code), int(entity), primary=True
-                    )
-                else:
-                    endpoints = ()
+                endpoints = _element_edge_endpoints(dim, code, int(entity), tags, nodes)
                 region_edges.update(
                     tuple(sorted((int(endpoints[i]), int(endpoints[i + 1]))))
                     for i in range(0, len(endpoints), 2)
@@ -91,10 +117,48 @@ def observe_native_mesh(groups: Mapping[str, Any]) -> dict[str, Any]:
                 ),
             )
         )
-    edges: set[tuple[int, int]] = set()
-    faces: set[tuple[int, int, int]] = set()
-    tetrahedra: set[int] = set()
-    vertices: set[int] = set()
+    return regions
+
+
+def _element_edge_endpoints(
+    dim: int, code: Any, entity: int, tags: Any, nodes: Any
+) -> Any:
+    """Return the flat endpoint node list of one element type's primary edges."""
+    import gmsh
+
+    if dim == 1:
+        _, _, _, count, _, _ = gmsh.model.mesh.getElementProperties(code)
+        return [
+            int(n) for i in range(len(tags)) for n in nodes[i * count : i * count + 2]
+        ]
+    if dim > 1:
+        # Native edge topology avoids treating quad/hex diagonals as edges.
+        return gmsh.model.mesh.getElementEdgeNodes(int(code), entity, primary=True)
+    return ()
+
+
+@dataclass
+class _TetrahedralTopology:
+    """Unique corner vertices, edges, faces and tetrahedra of the solution volumes."""
+
+    edges: set[tuple[int, int]] = field(default_factory=set)
+    faces: set[tuple[int, int, int]] = field(default_factory=set)
+    tetrahedra: set[int] = field(default_factory=set)
+    vertices: set[int] = field(default_factory=set)
+
+
+def _tetrahedral_topology(groups: Mapping[str, Any]) -> _TetrahedralTopology:
+    """Count unique primary-corner topology of all solution-volume tetrahedra.
+
+    Also requires that two tetrahedra sharing a face agree on its high-order nodes.
+    """
+    import gmsh
+
+    topology = _TetrahedralTopology()
+    tetrahedra = topology.tetrahedra
+    vertices = topology.vertices
+    edges = topology.edges
+    faces = topology.faces
     shared: dict[tuple[int, ...], tuple[int, ...]] = {}
     volumes = {int(t) for v in groups["volumes"].values() for t in v["tags"]}
     for volume in volumes:
@@ -134,19 +198,7 @@ def observe_native_mesh(groups: Mapping[str, Any]) -> dict[str, Any]:
                         "shared tetrahedral face has different high-order nodes"
                     )
                 shared[key] = value
-    return dict(
-        node_count=len(node_tags),
-        element_count=sum(len(t) for t in element_tags),
-        element_types=types,
-        physical_regions=regions,
-        tetrahedral_topology=dict(
-            vertices=len(vertices),
-            edges=len(edges),
-            faces=len(faces),
-            tetrahedra=len(tetrahedra),
-        ),
-        corner_chord_edge_lengths=_corner_chord_statistics(edges, points),
-    )
+    return topology
 
 
 def mesh_summary(

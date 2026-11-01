@@ -10,7 +10,7 @@ from importlib import metadata
 from numbers import Integral
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, NamedTuple, Sequence
 
 import numpy as np
 
@@ -48,6 +48,10 @@ def _finite(value: float) -> float | None:
 
 
 def _stats(values: np.ndarray, included: np.ndarray, total: int) -> dict[str, Any]:
+    """Summarize finite values among ``included`` (min, median, p95, p99, max).
+
+    Percentiles use linear interpolation computed in exact rational arithmetic.
+    """
     selected = values[included]
     finite = selected[np.isfinite(selected)]
     if not len(finite):
@@ -102,47 +106,22 @@ def _stats(values: np.ndarray, included: np.ndarray, total: int) -> dict[str, An
     }
 
 
-def _make_summary(mesh: MeshData, metrics: Measurements) -> Mapping[str, Any]:
+class _UnmeasuredCounts(NamedTuple):
+    """Element counts that explain why some tetrahedra have no measurement."""
+
+    exact_zero: int
+    missing: int
+    nonfinite: int
+    unavailable_conditions: int
+
+
+def _summary_warnings(
+    mesh: MeshData, metrics: Measurements, counts: _UnmeasuredCounts
+) -> list[str]:
+    """Write one plain-language warning for each way the metrics may mislead."""
     total = len(mesh.element_ids)
-    measured = np.isin(
-        metrics.orientation_method,
-        (_StatusCode.FLOATING_FILTER, _StatusCode.EXACT_DYADIC),
-    )
-    volume_available = np.isin(
-        metrics.volume_status, (_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO)
-    )
-    volume_m3_available = np.isin(
-        metrics.volume_m3_status, (_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO)
-    )
-    kappa_available = metrics.condition_status == _StatusCode.AVAILABLE
+    exact_zero, missing, nonfinite, unavailable_conditions = counts
     warnings: list[str] = []
-    exact_zero = int(
-        np.count_nonzero(
-            (metrics.orientation == 0)
-            & (metrics.orientation_method == _StatusCode.EXACT_DYADIC)
-        )
-    )
-    missing = int(
-        np.count_nonzero(metrics.orientation_method == _StatusCode.MISSING_NODES)
-    )
-    nonfinite = int(
-        np.count_nonzero(
-            metrics.orientation_method == _StatusCode.NONFINITE_COORDINATES
-        )
-    )
-    condition_codes, condition_values = np.unique(
-        metrics.condition_status, return_counts=True
-    )
-    condition_counts = {
-        _decode_label(code): int(value)
-        for code, value in zip(condition_codes, condition_values, strict=True)
-    }
-    condition_unavailable = ~np.isin(
-        metrics.condition_status,
-        (_StatusCode.AVAILABLE, _StatusCode.EXACT_SINGULAR),
-    )
-    unavailable_conditions = int(np.count_nonzero(condition_unavailable))
-    unresolved = condition_counts.get("numerically_unresolved", 0)
     if total == 0:
         warnings.append(
             "No four-node type-4 tetrahedra were present; no 3D quality metric was computed."
@@ -186,6 +165,55 @@ def _make_summary(mesh: MeshData, metrics: Measurements) -> Mapping[str, Any]:
         warnings.append(
             f"{representation_failures} mesh-unit or SI volume results are unavailable because binary64 cannot represent them."
         )
+    return warnings
+
+
+def _make_summary(mesh: MeshData, metrics: Measurements) -> Mapping[str, Any]:
+    """Count, summarize and warn about the measurements; the result is immutable."""
+    total = len(mesh.element_ids)
+    measured = np.isin(
+        metrics.orientation_method,
+        (_StatusCode.FLOATING_FILTER, _StatusCode.EXACT_DYADIC),
+    )
+    volume_available = np.isin(
+        metrics.volume_status, (_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO)
+    )
+    volume_m3_available = np.isin(
+        metrics.volume_m3_status, (_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO)
+    )
+    kappa_available = metrics.condition_status == _StatusCode.AVAILABLE
+    exact_zero = int(
+        np.count_nonzero(
+            (metrics.orientation == 0)
+            & (metrics.orientation_method == _StatusCode.EXACT_DYADIC)
+        )
+    )
+    missing = int(
+        np.count_nonzero(metrics.orientation_method == _StatusCode.MISSING_NODES)
+    )
+    nonfinite = int(
+        np.count_nonzero(
+            metrics.orientation_method == _StatusCode.NONFINITE_COORDINATES
+        )
+    )
+    condition_codes, condition_values = np.unique(
+        metrics.condition_status, return_counts=True
+    )
+    condition_counts = {
+        _decode_label(code): int(value)
+        for code, value in zip(condition_codes, condition_values, strict=True)
+    }
+    condition_unavailable = ~np.isin(
+        metrics.condition_status,
+        (_StatusCode.AVAILABLE, _StatusCode.EXACT_SINGULAR),
+    )
+    unavailable_conditions = int(np.count_nonzero(condition_unavailable))
+    unresolved = condition_counts.get("numerically_unresolved", 0)
+    warnings = _summary_warnings(
+        mesh,
+        metrics,
+        _UnmeasuredCounts(exact_zero, missing, nonfinite, unavailable_conditions),
+    )
     summary = {
         "counts": {
             "type4_tetrahedra": total,
@@ -244,6 +272,7 @@ class MeshQualityReport:
     def create(
         cls, mesh: MeshData, metrics: Measurements, length_scale_m: float | None
     ) -> "MeshQualityReport":
+        """Build the report and its summary from a parsed mesh and its measurements."""
         return cls(mesh, metrics, length_scale_m, _make_summary(mesh, metrics))
 
     @property
@@ -509,6 +538,7 @@ class MeshQualityReport:
         )
 
     def show_summary(self) -> str:
+        """Format the counts and statistics as text for a notebook or terminal."""
         counts = self._summary["counts"]
         lines = [
             f"Mesh quality: {counts['checked_tetrahedra']} tetrahedra; "
@@ -533,6 +563,7 @@ class MeshQualityReport:
         return text
 
     def show_worst_elements(self, metric: str = "kappa_j", limit: int = 10) -> str:
+        """Format the ``limit`` worst tetrahedra by ``metric``, then those it could not rank."""
         selection = self._selection(metric, limit)
         lines = [
             f"Worst elements by {metric}",
