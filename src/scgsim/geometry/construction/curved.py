@@ -573,8 +573,12 @@ def build_curved_construction_plan(build_input, *, route, representation_context
     import gmsh
 
     from scgsim.geometry.compiler.validation import validate_selected_route
-    from scgsim.geometry.planning.domain import _prepare_auto_vacuum_solution_regions
-    from scgsim.geometry.planning.surfaces import _with_surface_contract_metadata
+    from scgsim.geometry.planning.auto_vacuum import (
+        _prepare_auto_vacuum_solution_regions,
+    )
+    from scgsim.geometry.planning.surface_contract import (
+        _with_surface_contract_metadata,
+    )
     from scgsim.geometry.planning.tags import plan_route_tags
 
     prepared = _prepare_auto_vacuum_solution_regions(
@@ -796,7 +800,7 @@ def build_curved_construction_plan(build_input, *, route, representation_context
         from scgsim.geometry._primitives.entity_validation import (
             _resolve_contact_pad_attachment,
         )
-        from scgsim.geometry.planning.interfaces import (
+        from scgsim.geometry.planning.mm_contacts import (
             _validate_volumetric_overlap_ownership,
         )
 

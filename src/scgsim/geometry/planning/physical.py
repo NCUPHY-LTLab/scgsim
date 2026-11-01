@@ -42,18 +42,17 @@ def interpret_physical_layers(
     supporting_entities: Mapping[str, Any] | None = None,
     source_sha256: str | None = None,
 ) -> PhysicalRepresentationPlan:
-    """Interpret declared levels without requiring a qualified contact graph."""
-    index = {}
-    for item in declarations:
-        if not isinstance(item, PhysicalLayerDeclaration):
-            raise TypeError("physical declarations must be typed source records")
-        previous = index.setdefault(item.physical_layer_id, item)
-        if previous != item:
-            raise ValueError(f"conflicting declaration for {item.physical_layer_id!r}")
-    removed = []
-    anchors = {}
-    supporting_geometry = {}
-    support_planes = {}
+    """Interpret declared levels without requiring a qualified contact graph.
+
+    The profile decides which stack films collapse and where the remaining sheets
+    anchor. The checks run in a fixed order, and the first
+    one that fails is the error the user sees.
+    """
+    index = _index_declarations(declarations)
+    removed: list[tuple[str, float, float]] = []
+    anchors: dict[str, float] = {}
+    supporting_geometry: dict[str, Any] = {}
+    support_planes: dict[str, tuple[float, str]] = {}
     parameters = profile.parameters
     if profile.name in {"solid", "thin_film", "route_b"}:
         if parameters:
@@ -72,100 +71,14 @@ def interpret_physical_layers(
                 if item.feature_kind in {"stack_film", "local_film"}
             }
     else:
-        if set(parameters) != {"film_bindings"} or not isinstance(
-            parameters["film_bindings"], Mapping
-        ):
-            raise ValueError("face profiles require explicit film_bindings")
-        bindings = parameters["film_bindings"]
-        if not bindings:
-            raise ValueError("face profile requires declared film bindings")
-        if profile.name == "metal_gap_equivalent" and len(bindings) != 2:
-            raise ValueError(
-                "metal_gap_equivalent requires its two declared opposing films"
-            )
-        if profile.name == "substrate_face" and len(bindings) not in {1, 2}:
-            raise NotImplementedError(
-                "substrate_face V1 supports its declared one- or two-face profile"
-            )
-        if (
-            profile.name == "metal_gap_equivalent"
-            and len({binding["supporting_entity_id"] for binding in bindings.values()})
-            != 2
-        ):
-            raise ValueError(
-                "opposing films require distinct explicit supporting Entities"
-            )
-        for physical_id, binding in bindings.items():
-            item = index[physical_id]
-            if item.feature_kind != "stack_film":
-                raise ValueError("face profile binding must identify a stack film")
-            if set(binding) != {"supporting_entity_id", "supporting_side"}:
-                raise ValueError("film supporting Entity/side must be explicit")
-            if (
-                supporting_entities is None
-                or binding["supporting_entity_id"] not in supporting_entities
-            ):
-                raise ValueError("film profile supporting Entity is unavailable")
-            host = supporting_entities[binding["supporting_entity_id"]]
-            required = {
-                "geometry",
-                "material_id",
-                "material_kind",
-                "material_properties",
-            }
-            if not isinstance(host, Mapping) or not required <= set(host):
-                raise ValueError(
-                    "supporting Entity needs original geometry and material identity/properties"
-                )
-            if host["material_kind"] != "dielectric":
-                raise ValueError("film supporting Entity must be a declared dielectric")
-            if not host["material_id"] or not isinstance(
-                host["material_properties"], Mapping
-            ):
-                raise ValueError("supporting Entity material evidence is unavailable")
-            geometry = host["geometry"]
-            supporting_geometry[binding["supporting_entity_id"]] = _source_plain(host)
-            bounds = geometry_z_range(geometry, binding["supporting_entity_id"])
-            side = binding["supporting_side"]
-            if side not in {"lower", "upper"}:
-                raise ValueError("supporting side must be lower or upper")
-            plane = bounds[0 if side == "lower" else 1]
-            if not same_z(plane, item.attachment_z_um):
-                raise ValueError("film attachment and explicit supporting face differ")
-            support_planes[physical_id] = (plane, side)
-            anchors[physical_id] = item.attachment_z_um
-            if profile.name == "metal_gap_equivalent":
-                removed.append((physical_id, *item.source_interval_um))
-    removed.sort(key=lambda item: item[1])
-    for lower, upper in zip(removed, removed[1:], strict=False):
-        if lower[2] > upper[1]:
-            raise ValueError("distinct physical collapse intervals overlap")
+        removed, anchors, supporting_geometry, support_planes = _bind_face_films(
+            profile, index, supporting_entities
+        )
+    _check_collapse_intervals(removed)
     if profile.name == "metal_gap_equivalent":
-        if (
-            index[removed[0][0]].source_contact_facts["layer_attachment_face"]
-            != "lower"
-            or index[removed[1][0]].source_contact_facts["layer_attachment_face"]
-            != "upper"
-        ):
-            raise ValueError(
-                "metal_gap_equivalent requires lower/upper opposing attachments"
-            )
+        _check_opposing_attachment_faces(index, removed)
     if len(anchors) == 2 and profile.name in {"substrate_face", "metal_gap_equivalent"}:
-        lower, upper = sorted(anchors, key=anchors.get)
-        lower_host = parameters["film_bindings"][lower]["supporting_entity_id"]
-        upper_host = parameters["film_bindings"][upper]["supporting_entity_id"]
-        if (
-            lower_host == upper_host
-            or support_planes[lower][1] != "upper"
-            or support_planes[upper][1] != "lower"
-        ):
-            raise ValueError(
-                "two films require distinct opposing dielectric substrate faces"
-            )
-        if index[upper].source_interval_um[0] <= index[lower].source_interval_um[1]:
-            raise ValueError(
-                "opposing films require a positive original inter-film cavity"
-            )
+        _check_opposing_films(profile, index, anchors, support_planes)
     plan = PhysicalRepresentationPlan(
         source_sha256=source_sha256
         or canonical_sha256([item.to_payload() for item in index.values()]),
@@ -180,32 +93,163 @@ def interpret_physical_layers(
     )
 
 
+def _index_declarations(
+    declarations: Sequence[PhysicalLayerDeclaration],
+) -> dict[str, PhysicalLayerDeclaration]:
+    """Index declarations by physical layer id; a repeated id must be identical."""
+    index = {}
+    for item in declarations:
+        if not isinstance(item, PhysicalLayerDeclaration):
+            raise TypeError("physical declarations must be typed source records")
+        previous = index.setdefault(item.physical_layer_id, item)
+        if previous != item:
+            raise ValueError(f"conflicting declaration for {item.physical_layer_id!r}")
+    return index
+
+
+def _bind_face_films(
+    profile: ApproximationProfile,
+    index: Mapping[str, PhysicalLayerDeclaration],
+    supporting_entities: Mapping[str, Any] | None,
+) -> tuple[
+    list[tuple[str, float, float]],
+    dict[str, float],
+    dict[str, Any],
+    dict[str, tuple[float, str]],
+]:
+    """Bind each film of a face profile to the dielectric face that supports it.
+
+    Face profiles are ``substrate_face`` and ``metal_gap_equivalent``; each film is
+    bound to an explicit supporting dielectric Entity and side. Returns the collapse
+    intervals, sheet anchors, supporting geometry and supporting planes.
+    """
+    parameters = profile.parameters
+    removed: list[tuple[str, float, float]] = []
+    anchors: dict[str, float] = {}
+    supporting_geometry: dict[str, Any] = {}
+    support_planes: dict[str, tuple[float, str]] = {}
+    if set(parameters) != {"film_bindings"} or not isinstance(
+        parameters["film_bindings"], Mapping
+    ):
+        raise ValueError("face profiles require explicit film_bindings")
+    bindings = parameters["film_bindings"]
+    if not bindings:
+        raise ValueError("face profile requires declared film bindings")
+    if profile.name == "metal_gap_equivalent" and len(bindings) != 2:
+        raise ValueError(
+            "metal_gap_equivalent requires its two declared opposing films"
+        )
+    if profile.name == "substrate_face" and len(bindings) not in {1, 2}:
+        raise NotImplementedError(
+            "substrate_face V1 supports its declared one- or two-face profile"
+        )
+    if (
+        profile.name == "metal_gap_equivalent"
+        and len({binding["supporting_entity_id"] for binding in bindings.values()}) != 2
+    ):
+        raise ValueError("opposing films require distinct explicit supporting Entities")
+    for physical_id, binding in bindings.items():
+        item = index[physical_id]
+        if item.feature_kind != "stack_film":
+            raise ValueError("face profile binding must identify a stack film")
+        if set(binding) != {"supporting_entity_id", "supporting_side"}:
+            raise ValueError("film supporting Entity/side must be explicit")
+        host = _supporting_entity(supporting_entities, binding["supporting_entity_id"])
+        geometry = host["geometry"]
+        supporting_geometry[binding["supporting_entity_id"]] = _source_plain(host)
+        bounds = geometry_z_range(geometry, binding["supporting_entity_id"])
+        side = binding["supporting_side"]
+        if side not in {"lower", "upper"}:
+            raise ValueError("supporting side must be lower or upper")
+        plane = bounds[0 if side == "lower" else 1]
+        if not same_z(plane, item.attachment_z_um):
+            raise ValueError("film attachment and explicit supporting face differ")
+        support_planes[physical_id] = (plane, side)
+        anchors[physical_id] = item.attachment_z_um
+        if profile.name == "metal_gap_equivalent":
+            removed.append((physical_id, *item.source_interval_um))
+    return removed, anchors, supporting_geometry, support_planes
+
+
+def _supporting_entity(
+    supporting_entities: Mapping[str, Any] | None, entity_id: str
+) -> Mapping[str, Any]:
+    """Return the supporting dielectric record, requiring geometry and material evidence."""
+    if supporting_entities is None or entity_id not in supporting_entities:
+        raise ValueError("film profile supporting Entity is unavailable")
+    host = supporting_entities[entity_id]
+    required = {
+        "geometry",
+        "material_id",
+        "material_kind",
+        "material_properties",
+    }
+    if not isinstance(host, Mapping) or not required <= set(host):
+        raise ValueError(
+            "supporting Entity needs original geometry and material identity/properties"
+        )
+    if host["material_kind"] != "dielectric":
+        raise ValueError("film supporting Entity must be a declared dielectric")
+    if not host["material_id"] or not isinstance(host["material_properties"], Mapping):
+        raise ValueError("supporting Entity material evidence is unavailable")
+    return host
+
+
+def _check_collapse_intervals(removed: list[tuple[str, float, float]]) -> None:
+    """Sort the collapse intervals by start (in place) and reject overlapping ones."""
+    removed.sort(key=lambda item: item[1])
+    for lower, upper in zip(removed, removed[1:], strict=False):
+        if lower[2] > upper[1]:
+            raise ValueError("distinct physical collapse intervals overlap")
+
+
+def _check_opposing_attachment_faces(
+    index: Mapping[str, PhysicalLayerDeclaration],
+    removed: Sequence[tuple[str, float, float]],
+) -> None:
+    """``metal_gap_equivalent`` needs the lower film on a lower face, the upper on an upper."""
+    if (
+        index[removed[0][0]].source_contact_facts["layer_attachment_face"] != "lower"
+        or index[removed[1][0]].source_contact_facts["layer_attachment_face"] != "upper"
+    ):
+        raise ValueError(
+            "metal_gap_equivalent requires lower/upper opposing attachments"
+        )
+
+
+def _check_opposing_films(
+    profile: ApproximationProfile,
+    index: Mapping[str, PhysicalLayerDeclaration],
+    anchors: Mapping[str, float],
+    support_planes: Mapping[str, tuple[float, str]],
+) -> None:
+    """Two films must sit on opposing faces of distinct substrates, with a gap between."""
+    parameters = profile.parameters
+    lower, upper = sorted(anchors, key=anchors.get)
+    lower_host = parameters["film_bindings"][lower]["supporting_entity_id"]
+    upper_host = parameters["film_bindings"][upper]["supporting_entity_id"]
+    if (
+        lower_host == upper_host
+        or support_planes[lower][1] != "upper"
+        or support_planes[upper][1] != "lower"
+    ):
+        raise ValueError(
+            "two films require distinct opposing dielectric substrate faces"
+        )
+    if index[upper].source_interval_um[0] <= index[lower].source_interval_um[1]:
+        raise ValueError("opposing films require a positive original inter-film cavity")
+
+
 def interpret_physical_geometry(
     build_input: Any, stack: Mapping[str, Any], profile: ApproximationProfile
 ):
-    """Return effective input/stack and the sole source-bound representation plan."""
-    records = {item["semantic_id"]: item for item in stack["layers"]}
-    records.update(stack["solution_regions"])
-    declarations = []
-    bindings = {}
-    for entity in build_input.entities:
-        record = records.get(
-            entity.metadata.get("source_semantic_id", entity.semantic_id), {}
-        )
-        raw = entity.metadata.get(
-            PHYSICAL_LAYER_FIELD, record.get("metadata", {}).get(PHYSICAL_LAYER_FIELD)
-        )
-        if raw is not None:
-            declaration = PhysicalLayerDeclaration.from_payload(raw)
-            declarations.append(declaration)
-            bindings[entity.semantic_id] = declaration.physical_layer_id
-        elif _requires_route_representation(entity) and profile.name not in {
-            "solid",
-            "route_b",
-        }:
-            raise ValueError(
-                f"source body {entity.semantic_id!r} lacks neutral physical declaration"
-            )
+    """Return effective input/stack and the sole source-bound representation plan.
+
+    Steps: read each entity's physical declaration, interpret them under the profile,
+    remap every entity (and its stack record) to the effective z range, then project
+    the auto vacuum enclosure onto the effective geometry.
+    """
+    declarations, bindings = _declared_physical_layers(build_input, stack, profile)
     plan = interpret_physical_layers(
         declarations,
         profile,
@@ -259,11 +303,67 @@ def interpret_physical_geometry(
             }
     plan = replace(plan, entities=facts)
     effective_input = replace(build_input, entities=tuple(entities))
+    plan = replace(plan, enclosures=_project_enclosures(effective_input, plan, facts))
+    payload = plan.to_payload()
+    effective_stack["metadata"] = {
+        **effective_stack.get("metadata", {}),
+        "physical_representation": payload,
+    }
+    return (
+        replace(
+            effective_input,
+            solution_regions=effective_stack["solution_regions"],
+            metadata={**build_input.metadata, "physical_representation": payload},
+        ),
+        effective_stack,
+        plan,
+    )
+
+
+def _declared_physical_layers(
+    build_input: Any, stack: Mapping[str, Any], profile: ApproximationProfile
+) -> tuple[list[PhysicalLayerDeclaration], dict[str, str]]:
+    """Read each entity's physical layer declaration from its metadata or stack record.
+
+    Returns the declarations and a map from entity id to physical layer id. Only the
+    ``solid`` and ``route_b`` profiles may leave a route-bound body undeclared.
+    """
+    records = {item["semantic_id"]: item for item in stack["layers"]}
+    records.update(stack["solution_regions"])
+    declarations = []
+    bindings = {}
+    for entity in build_input.entities:
+        record = records.get(
+            entity.metadata.get("source_semantic_id", entity.semantic_id), {}
+        )
+        raw = entity.metadata.get(
+            PHYSICAL_LAYER_FIELD, record.get("metadata", {}).get(PHYSICAL_LAYER_FIELD)
+        )
+        if raw is not None:
+            declaration = PhysicalLayerDeclaration.from_payload(raw)
+            declarations.append(declaration)
+            bindings[entity.semantic_id] = declaration.physical_layer_id
+        elif _requires_route_representation(entity) and profile.name not in {
+            "solid",
+            "route_b",
+        }:
+            raise ValueError(
+                f"source body {entity.semantic_id!r} lacks neutral physical declaration"
+            )
+    return declarations, bindings
+
+
+def _project_enclosures(
+    effective_input: Any,
+    plan: PhysicalRepresentationPlan,
+    facts: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Project each auto vacuum region's padded envelope onto the effective geometry."""
     enclosures = {}
-    for entity in entities:
+    for entity in effective_input.entities:
         if not entity.metadata.get("is_auto_vacuum_region"):
             continue
-        from scgsim.geometry.planning.domain import _auto_vacuum_envelope_bounds
+        from scgsim.geometry.planning.auto_vacuum import _auto_vacuum_envelope_bounds
 
         effective_body = _auto_vacuum_envelope_bounds(
             effective_input, route=None, representation_context=plan.context
@@ -280,18 +380,4 @@ def interpret_physical_geometry(
             source_padding_um=entity.metadata["vacuum_region_padding_um"],
             source_envelope_bounds_um=source_bounds,
         )
-    plan = replace(plan, enclosures=enclosures)
-    payload = plan.to_payload()
-    effective_stack["metadata"] = {
-        **effective_stack.get("metadata", {}),
-        "physical_representation": payload,
-    }
-    return (
-        replace(
-            effective_input,
-            solution_regions=effective_stack["solution_regions"],
-            metadata={**build_input.metadata, "physical_representation": payload},
-        ),
-        effective_stack,
-        plan,
-    )
+    return enclosures

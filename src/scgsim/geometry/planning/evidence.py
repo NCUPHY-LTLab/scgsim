@@ -1,4 +1,11 @@
-"""Project geometry records into internal immutable semantic facts. Semantics never imports geometry or native backends."""
+"""Project the build input into semantic facts, and classify interfaces through the core.
+
+``scgsim.semantics`` never imports geometry or native backends, so this module is the
+adapter: it turns entities, polygons and ports into plain mappings once per planning call
+(``build_semantic_evidence_facade``) and wraps each proven adjacency as a patch for the
+core to classify (``conductor_solution_evidence``, ``solution_solution_evidence``,
+``metal_metal_evidence``). The evidence names the interface kind, for example MS, MA or SA.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +13,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from typing import Any, Literal
 
-from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.planning.representation import planned_conductor_representation
 from scgsim.semantics import (
@@ -55,66 +62,17 @@ def _project_semantic_facts(
     route: str | None,
     representation_context: RepresentationContext | None = None,
 ) -> dict[str, Any]:
+    """Project the build input into the plain mappings that the semantic core reads."""
     polygon_by_id = {polygon.polygon_id: polygon for polygon in build_input.polygons}
-    entities: dict[str, dict[str, Any]] = {}
-    for entity in build_input.entities:
-        metadata = entity.metadata
-        aggregate_id = next(
-            (
-                value
-                for key in (
-                    "physical_group_name",
-                    "physical_group_id",
-                    "semantic_group_id",
-                )
-                if isinstance((value := metadata.get(key)), str) and value
-            ),
-            entity.semantic_id,
+    entities = {
+        entity.semantic_id: _entity_facts(
+            entity,
+            polygon_by_id=polygon_by_id,
+            route=route,
+            representation_context=representation_context,
         )
-        effective_domains = (
-            (entity.semantic_id,)
-            if entity.role == "solution_region"
-            else (entity.host_void_semantic_id,)
-            if entity.host_void_semantic_id
-            else None
-        )
-        polygon_ids = tuple(entity.polygon_ids)
-        hole_ids = tuple(
-            polygon_id
-            for polygon_id in polygon_ids
-            if polygon_id in polygon_by_id and polygon_by_id[polygon_id].holes
-        )
-        representation = planned_conductor_representation(
-            entity, route=route, context=representation_context
-        )
-        sheet_owner = entity.semantic_id if representation == "surface_sheet" else None
-        side = (
-            metadata.get("surface_side")
-            if isinstance(metadata.get("surface_side"), str)
-            else None
-        )
-        seam_ids = _string_tuple(metadata.get("seam_source_ids"))
-        entities[entity.semantic_id] = {
-            "semantic_id": entity.semantic_id,
-            "role": entity.role,
-            "part_role": entity.part_role,
-            "material_id": entity.material_id,
-            "material_kind": entity.material_kind,
-            "net_id": entity.net_id,
-            "source_owner_ids": [entity.semantic_id],
-            "aggregate_owner_ids": [aggregate_id],
-            "effective_domain_ids": list(effective_domains)
-            if effective_domains
-            else None,
-            "side": side,
-            "sheet_owner_id": sheet_owner,
-            "outer_source_ids": list(polygon_ids) if polygon_ids else None,
-            "hole_source_ids": list(hole_ids) if polygon_ids else None,
-            "seam_source_ids": list(seam_ids) if seam_ids is not None else None,
-            "route_representation": representation,
-            "geometry": entity.geometry,
-            "polygon_ids": polygon_ids,
-        }
+        for entity in build_input.entities
+    }
     polygons = {
         polygon.polygon_id: {
             "layer": polygon.layer,
@@ -151,6 +109,73 @@ def _project_semantic_facts(
         "polygons": polygons,
         "solution_regions": build_input.solution_regions,
         "port_sheet_regions": ports,
+    }
+
+
+def _entity_facts(
+    entity: SemanticEntitySpec,
+    *,
+    polygon_by_id: Mapping[str, Any],
+    route: str | None,
+    representation_context: RepresentationContext | None,
+) -> dict[str, Any]:
+    """Describe one entity: owners, effective domain, side and source polygons."""
+    metadata = entity.metadata
+    # The aggregate owner groups split entities under one stable physical group id.
+    aggregate_id = next(
+        (
+            value
+            for key in (
+                "physical_group_name",
+                "physical_group_id",
+                "semantic_group_id",
+            )
+            if isinstance((value := metadata.get(key)), str) and value
+        ),
+        entity.semantic_id,
+    )
+    # A solution is its own effective domain; a conductor's domain is its host void.
+    effective_domains = (
+        (entity.semantic_id,)
+        if entity.role == "solution_region"
+        else (entity.host_void_semantic_id,)
+        if entity.host_void_semantic_id
+        else None
+    )
+    polygon_ids = tuple(entity.polygon_ids)
+    hole_ids = tuple(
+        polygon_id
+        for polygon_id in polygon_ids
+        if polygon_id in polygon_by_id and polygon_by_id[polygon_id].holes
+    )
+    representation = planned_conductor_representation(
+        entity, route=route, context=representation_context
+    )
+    sheet_owner = entity.semantic_id if representation == "surface_sheet" else None
+    side = (
+        metadata.get("surface_side")
+        if isinstance(metadata.get("surface_side"), str)
+        else None
+    )
+    seam_ids = _string_tuple(metadata.get("seam_source_ids"))
+    return {
+        "semantic_id": entity.semantic_id,
+        "role": entity.role,
+        "part_role": entity.part_role,
+        "material_id": entity.material_id,
+        "material_kind": entity.material_kind,
+        "net_id": entity.net_id,
+        "source_owner_ids": [entity.semantic_id],
+        "aggregate_owner_ids": [aggregate_id],
+        "effective_domain_ids": list(effective_domains) if effective_domains else None,
+        "side": side,
+        "sheet_owner_id": sheet_owner,
+        "outer_source_ids": list(polygon_ids) if polygon_ids else None,
+        "hole_source_ids": list(hole_ids) if polygon_ids else None,
+        "seam_source_ids": list(seam_ids) if seam_ids is not None else None,
+        "route_representation": representation,
+        "geometry": entity.geometry,
+        "polygon_ids": polygon_ids,
     }
 
 

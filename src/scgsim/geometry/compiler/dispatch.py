@@ -26,24 +26,24 @@ from scgsim.geometry.models.construction import (
     RouteABConstructionPlanRecord,
 )
 from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.planning.domain import (
-    _merge_solution_sidewall_interfaces,
-    _prepare_auto_vacuum_solution_regions,
-    _reconcile_solution_domain_boundaries,
-)
+from scgsim.geometry.planning.auto_vacuum import _prepare_auto_vacuum_solution_regions
+from scgsim.geometry.planning.contact_patches import plan_conductor_contact_patches
 from scgsim.geometry.planning.evidence import build_semantic_evidence_facade
 from scgsim.geometry.planning.interfaces import (
     complete_interface_plan_from_surfaces,
-    plan_conductor_contact_patches,
-    plan_mm_contact_records,
     recognize_route_interfaces,
 )
-from scgsim.geometry.planning.ports import (
+from scgsim.geometry.planning.mm_contacts import plan_mm_contact_records
+from scgsim.geometry.planning.port_sheets_route_b import (
     _bind_route_b_port_volume_plans,
-    _lower_port_sheet_regions,
     _validate_route_b_port_sheet_sidewall_topology,
 )
+from scgsim.geometry.planning.ports import _lower_port_sheet_regions
 from scgsim.geometry.planning.representation import project_native_route_representations
+from scgsim.geometry.planning.solution_boundaries import (
+    _merge_solution_sidewall_interfaces,
+    _reconcile_solution_domain_boundaries,
+)
 from scgsim.geometry.planning.surfaces import (
     plan_route_surfaces,
     plan_surface_partitions,

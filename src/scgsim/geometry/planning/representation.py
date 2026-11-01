@@ -1,4 +1,10 @@
-"""Private accessors for explicit prepared geometry representation facts."""
+"""Read how each conductor is represented, from the prepared representation context.
+
+A conductor is a ``sheet`` (zero thickness) or a ``solid`` (finite thickness) in the
+context. This module maps that fact, plus the route, to the geometry kind the planner
+uses: ``surface_sheet``, ``cutout_boundary_shell`` or ``material_volume``. It never reads
+backend metadata.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +24,7 @@ def entity_representation(
     route: RouteLiteral | None,
     context: RepresentationContext | None,
 ) -> EntityRepresentation | None:
+    """Return the context record for an entity; a missing context is an error."""
     if context is None:
         raise ValueError(
             "current geometry planning requires an explicit physical representation context"
@@ -31,6 +38,7 @@ def is_sheet_entity(
     route: RouteLiteral | None,
     context: RepresentationContext | None,
 ) -> bool:
+    """True when the context represents the entity as a zero-thickness sheet."""
     record = entity_representation(entity, route=route, context=context)
     return record is not None and record.representation == "sheet"
 
@@ -41,6 +49,7 @@ def is_solid_entity(
     route: RouteLiteral | None,
     context: RepresentationContext | None,
 ) -> bool:
+    """True when the context represents the entity as a finite-thickness solid."""
     record = entity_representation(entity, route=route, context=context)
     return record is not None and record.representation == "solid"
 
@@ -51,7 +60,11 @@ def planned_conductor_representation(
     route: RouteLiteral | None,
     context: RepresentationContext | None,
 ) -> str | None:
-    """Return the shared planner's geometry kind without backend metadata reads."""
+    """Return the shared planner's geometry kind without backend metadata reads.
+
+    A sheet is a ``surface_sheet``. A solid is a ``material_volume`` in Route C and a
+    ``cutout_boundary_shell`` (a PEC shell cut out of its host) in Routes A and B.
+    """
     if entity.role == "solution_region":
         return "solution_domain"
     record = entity_representation(entity, route=route, context=context)
@@ -67,6 +80,7 @@ def planned_conductor_representation(
 
 
 def is_sheet_context(context: RepresentationContext | None) -> bool:
+    """True when at least one entity in the context is represented as a sheet."""
     return context is not None and any(
         record.representation == "sheet" for record in context.entities.values()
     )

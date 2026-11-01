@@ -52,12 +52,12 @@ from scgsim.geometry.models.topology import (
     SurfaceRefRecord,
     VolumePlanRecord,
 )
+from scgsim.geometry.planning.contact_patches import plan_conductor_contact_patches
 from scgsim.geometry.planning.interfaces import (
     complete_interface_plan_from_surfaces,
-    plan_conductor_contact_patches,
-    plan_mm_contact_records,
     recognize_route_interfaces,
 )
+from scgsim.geometry.planning.mm_contacts import plan_mm_contact_records
 from scgsim.geometry.planning.surfaces import (
     plan_route_surfaces,
     plan_surface_contribution_patches,

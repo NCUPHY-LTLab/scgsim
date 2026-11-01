@@ -1,10 +1,17 @@
-"""Plan source-bound bodies, shells, volume memberships and cut hosts from shared surfaces; no native fallback volume discovery."""
+"""Plan construction bodies, volumes and cut-host operations from the shared surfaces.
+
+Owns three planning steps that run after all surfaces have stable ids: the cutter bodies
+of shell conductors, the volume each solution (or Route C conductor) encloses, and the
+grouping of bodies by the host they are cut from. A volume is closed by planned surfaces
+only; this module never discovers volumes from native geometry.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from math import hypot
+from typing import NamedTuple
 
 from scgsim.geometry._primitives.constants import _TOPOLOGY_EPS_UM
 from scgsim.geometry._primitives.entities import _entity_by_id, _entity_z_range_um
@@ -38,16 +45,20 @@ from scgsim.geometry.models.topology import (
     SurfaceRefRecord,
     VolumePlanRecord,
 )
-from scgsim.geometry.planning.domain import (
+from scgsim.geometry.planning.conductor_sidewalls import (
+    _conductor_sidewall_geometry_refs,
+)
+from scgsim.geometry.planning.mm_contacts import _is_fully_normalized_face_metal
+from scgsim.geometry.planning.solution_adjacency import (
     _component_is_boundary_attached,
     _conductor_sidewall_adjacent_solution_id,
-    _entity_occupied_region,
     _required_host_solution_id,
+)
+from scgsim.geometry.planning.solution_geometry import (
+    _entity_occupied_region,
     _solution_bounds,
 )
-from scgsim.geometry.planning.interfaces import _is_fully_normalized_face_metal
-from scgsim.geometry.planning.surfaces import (
-    _conductor_sidewall_geometry_refs,
+from scgsim.geometry.planning.surface_contacts import (
     _contact_patches_by_entity_face,
     _subtract_contact_patches_from_face,
 )
@@ -133,7 +144,44 @@ def plan_route_volumes(
     `addSurfaceLoop()` and `addVolume()`. This function must not create a
     volume from `domain_bounds_um`, `outer_loop`, or `thickness_um`; those values
     are only audit/planning metadata once surface ids exist.
+
+    Routes A and B plan solution volumes only: their conductors are PEC shells or
+    sheets, not volumes. Route C also plans one volume per retained conductor.
     """
+    surfaces_by_owner = _surfaces_by_owner_volume(build_input, surfaces)
+
+    records: list[VolumePlanRecord] = []
+    for entity in build_input.entities:
+        owner_surfaces = surfaces_by_owner.get(entity.semantic_id, ())
+        if _is_solution_entity(entity):
+            records.append(
+                _solution_volume_record(
+                    build_input,
+                    route=route,
+                    entity=entity,
+                    owner_surfaces=owner_surfaces,
+                    mm_contacts=mm_contacts,
+                )
+            )
+            continue
+        representation = entity.route_representations.get(route)
+        if route == "C" and representation == "material_volume":
+            records.append(
+                _route_c_conductor_volume_record(
+                    route=route,
+                    entity=entity,
+                    representation=representation,
+                    owner_surfaces=owner_surfaces,
+                )
+            )
+    return tuple(records)
+
+
+def _surfaces_by_owner_volume(
+    build_input: GeometryBuildInput,
+    surfaces: Sequence[SurfacePlanRecord],
+) -> dict[str, list[SurfacePlanRecord]]:
+    """Group surfaces by each volume they bound, in surface order."""
     entity_ids = {entity.semantic_id for entity in build_input.entities}
     surfaces_by_owner: dict[str, list[SurfacePlanRecord]] = {}
     for surface in surfaces:
@@ -150,161 +198,195 @@ def plan_route_volumes(
         )
         for owner_id in owner_ids:
             surfaces_by_owner.setdefault(str(owner_id), []).append(surface)
+    return surfaces_by_owner
 
-    records: list[VolumePlanRecord] = []
-    for entity in build_input.entities:
-        if _is_solution_entity(entity):
-            physical_owner_semantic_id = (
-                "VACUUM_REGION"
-                if bool(entity.metadata.get("is_auto_vacuum_region"))
-                and entity.material_kind == "vacuum"
-                else None
+
+def _solution_volume_record(
+    build_input: GeometryBuildInput,
+    *,
+    route: RouteLiteral,
+    entity: SemanticEntitySpec,
+    owner_surfaces: Sequence[SurfacePlanRecord],
+    mm_contacts: Sequence[MMContactRecord],
+) -> VolumePlanRecord:
+    """Plan the volume of one solution entity (dielectric or vacuum) from its surfaces."""
+    physical_owner_semantic_id = (
+        "VACUUM_REGION"
+        if bool(entity.metadata.get("is_auto_vacuum_region"))
+        and entity.material_kind == "vacuum"
+        else None
+    )
+    all_refs = tuple(
+        SurfaceRefRecord(
+            surface_id=surface.surface_id,
+            orientation=_surface_orientation_for_volume(surface, entity),
+            role="planned_boundary",
+        )
+        for surface in owner_surfaces
+    )
+    voids = _inner_void_shells(
+        build_input,
+        route=route,
+        entity=entity,
+        surfaces_with_refs=tuple(zip(owner_surfaces, all_refs, strict=True)),
+        mm_contacts=mm_contacts,
+    )
+    if route in {"A", "B"}:
+        return RouteABVolumePlanRecord(
+            volume_id=f"VOL__{entity.semantic_id}",
+            owner_semantic_id=entity.semantic_id,
+            material_id=entity.material_id,
+            surface_refs=all_refs,
+            exterior_surface_refs=tuple(voids.exterior_refs),
+            inner_pec_void_shells=voids.shells,
+            valid_routes=(route,),
+            metadata={
+                "representation": "solution_volume",
+                "material_kind": entity.material_kind,
+                "geometry_ref": dict(entity.geometry),
+                "physical_owner_semantic_id": physical_owner_semantic_id,
+                "inner_pec_void_shell_contact_ids": voids.contact_ids,
+            },
+        )
+    return VolumePlanRecord(
+        volume_id=f"VOL__{entity.semantic_id}",
+        owner_semantic_id=entity.semantic_id,
+        material_id=entity.material_id,
+        surface_refs=all_refs,
+        valid_routes=(route,),
+        metadata={
+            "representation": "solution_volume",
+            "material_kind": entity.material_kind,
+            "geometry_ref": dict(entity.geometry),
+            "physical_owner_semantic_id": physical_owner_semantic_id,
+        },
+    )
+
+
+class _InnerVoidShells(NamedTuple):
+    """A solution's bounding surfaces, split into outer boundary and inner PEC voids."""
+
+    exterior_refs: list[SurfaceRefRecord]
+    shells: tuple[InnerPecVoidShellRecord, ...]
+    # Contact ids per void component, for provenance.
+    contact_ids: dict[str, tuple[str, ...]]
+
+
+def _inner_void_shells(
+    build_input: GeometryBuildInput,
+    *,
+    route: RouteLiteral,
+    entity: SemanticEntitySpec,
+    surfaces_with_refs: Sequence[tuple[SurfacePlanRecord, SurfaceRefRecord]],
+    mm_contacts: Sequence[MMContactRecord],
+) -> _InnerVoidShells:
+    """Group the conductor shells a solution surrounds into inner PEC void shells.
+
+    A conductor shell (or a Route A sheet contact cap in vacuum) inside a solution is
+    a hole in that solution's volume, so its surfaces form an inner shell, oriented
+    inward. Shells of a conductor component that touches the domain boundary stay
+    on the outer boundary instead.
+    """
+    void_surfaces: dict[str, list[SurfaceRefRecord]] = {}
+    component_members: dict[str, set[str]] = {}
+    contact_ids_by_component: dict[str, list[str]] = {}
+    for contact in mm_contacts:
+        component_members.setdefault(contact.conductor_component_id, set()).update(
+            (contact.lower_entity_id, contact.upper_entity_id)
+        )
+        contact_ids_by_component.setdefault(contact.conductor_component_id, []).append(
+            contact.contact_id
+        )
+    boundary_components = {
+        str(surface.metadata["conductor_component_id"])
+        for surface, _ in surfaces_with_refs
+        if surface.metadata.get("conductor_component_id") is not None
+        and _component_is_boundary_attached(
+            build_input, solution=entity, surface=surface
+        )
+    }
+    exterior_refs: list[SurfaceRefRecord] = []
+    for surface, ref in surfaces_with_refs:
+        is_sheet_cap = (
+            route == "A"
+            and bool(surface.metadata.get("sheet_contact_cap"))
+            and _is_vacuum_solution_entity(entity)
+        )
+        component_id = str(
+            surface.metadata.get(
+                "conductor_component_id",
+                f"COMP__{surface.owner_semantic_id}",
             )
-            all_refs = tuple(
-                SurfaceRefRecord(
-                    surface_id=surface.surface_id,
-                    orientation=_surface_orientation_for_volume(surface, entity),
-                    role="planned_boundary",
-                )
-                for surface in surfaces_by_owner.get(entity.semantic_id, ())
+        )
+        is_component_boundary = component_id in boundary_components
+        if (
+            surface.surface_role == "cutout_boundary_shell" or is_sheet_cap
+        ) and not is_component_boundary:
+            component_members.setdefault(component_id, set()).add(
+                surface.owner_semantic_id
             )
-            void_surfaces: dict[str, list[SurfaceRefRecord]] = {}
-            component_members: dict[str, set[str]] = {}
-            contact_ids_by_component: dict[str, list[str]] = {}
-            for contact in mm_contacts:
-                component_members.setdefault(
-                    contact.conductor_component_id, set()
-                ).update((contact.lower_entity_id, contact.upper_entity_id))
-                contact_ids_by_component.setdefault(
-                    contact.conductor_component_id, []
-                ).append(contact.contact_id)
-            boundary_components = {
-                str(surface.metadata["conductor_component_id"])
-                for surface in surfaces_by_owner.get(entity.semantic_id, ())
-                if surface.metadata.get("conductor_component_id") is not None
-                and _component_is_boundary_attached(
-                    build_input, solution=entity, surface=surface
-                )
-            }
-            exterior_refs: list[SurfaceRefRecord] = []
-            for surface, ref in zip(
-                surfaces_by_owner.get(entity.semantic_id, ()), all_refs, strict=True
-            ):
-                is_sheet_cap = (
-                    route == "A"
-                    and bool(surface.metadata.get("sheet_contact_cap"))
-                    and _is_vacuum_solution_entity(entity)
-                )
-                component_id = str(
-                    surface.metadata.get(
-                        "conductor_component_id",
-                        f"COMP__{surface.owner_semantic_id}",
-                    )
-                )
-                is_component_boundary = component_id in boundary_components
-                if (
-                    surface.surface_role == "cutout_boundary_shell" or is_sheet_cap
-                ) and not is_component_boundary:
-                    component_members.setdefault(component_id, set()).add(
-                        surface.owner_semantic_id
-                    )
-                    void_surfaces.setdefault(component_id, []).append(
-                        replace(
-                            ref,
-                            orientation=_inner_void_orientation(
-                                build_input,
-                                surface=surface,
-                                component_members=component_members[component_id],
-                            ),
-                        )
-                    )
-                else:
-                    exterior_refs.append(ref)
-            void_shells = tuple(
-                InnerPecVoidShellRecord(
-                    shell_id=f"VOID__{entity.semantic_id}__{component_id}",
-                    surface_refs=tuple(refs),
-                    conductor_component_id=component_id,
-                    owner_semantic_ids=tuple(sorted(component_members[component_id])),
-                )
-                for component_id, refs in void_surfaces.items()
-            )
-            if route in {"A", "B"}:
-                records.append(
-                    RouteABVolumePlanRecord(
-                        volume_id=f"VOL__{entity.semantic_id}",
-                        owner_semantic_id=entity.semantic_id,
-                        material_id=entity.material_id,
-                        surface_refs=all_refs,
-                        exterior_surface_refs=tuple(exterior_refs),
-                        inner_pec_void_shells=void_shells,
-                        valid_routes=(route,),
-                        metadata={
-                            "representation": "solution_volume",
-                            "material_kind": entity.material_kind,
-                            "geometry_ref": dict(entity.geometry),
-                            "physical_owner_semantic_id": physical_owner_semantic_id,
-                            "inner_pec_void_shell_contact_ids": {
-                                component_id: tuple(
-                                    contact_ids_by_component.get(component_id, ())
-                                )
-                                for component_id in void_surfaces
-                            },
-                        },
-                    )
-                )
-            else:
-                records.append(
-                    VolumePlanRecord(
-                        volume_id=f"VOL__{entity.semantic_id}",
-                        owner_semantic_id=entity.semantic_id,
-                        material_id=entity.material_id,
-                        surface_refs=all_refs,
-                        valid_routes=(route,),
-                        metadata={
-                            "representation": "solution_volume",
-                            "material_kind": entity.material_kind,
-                            "geometry_ref": dict(entity.geometry),
-                            "physical_owner_semantic_id": physical_owner_semantic_id,
-                        },
-                    )
-                )
-            continue
-        representation = entity.route_representations.get(route)
-        if route == "C" and representation == "material_volume":
-            physical_owner_semantic_id = _entity_physical_group_id(entity)
-            records.append(
-                VolumePlanRecord(
-                    volume_id=f"VOL__{entity.semantic_id}",
-                    owner_semantic_id=entity.semantic_id,
-                    material_id=entity.material_id,
-                    surface_refs=tuple(
-                        SurfaceRefRecord(
-                            surface_id=surface.surface_id,
-                            orientation=_surface_orientation_for_volume(
-                                surface,
-                                entity,
-                            ),
-                            role="planned_boundary",
-                        )
-                        for surface in surfaces_by_owner.get(
-                            entity.semantic_id,
-                            (),
-                        )
+            void_surfaces.setdefault(component_id, []).append(
+                replace(
+                    ref,
+                    orientation=_inner_void_orientation(
+                        build_input,
+                        surface=surface,
+                        component_members=component_members[component_id],
                     ),
-                    valid_routes=(route,),
-                    metadata={
-                        "representation": representation,
-                        "material_kind": entity.material_kind,
-                        "geometry_ref": _entity_geometry_ref(
-                            entity,
-                            representation=representation,
-                        ),
-                        "physical_owner_semantic_id": physical_owner_semantic_id,
-                    },
                 )
             )
-    return tuple(records)
+        else:
+            exterior_refs.append(ref)
+    shells = tuple(
+        InnerPecVoidShellRecord(
+            shell_id=f"VOID__{entity.semantic_id}__{component_id}",
+            surface_refs=tuple(refs),
+            conductor_component_id=component_id,
+            owner_semantic_ids=tuple(sorted(component_members[component_id])),
+        )
+        for component_id, refs in void_surfaces.items()
+    )
+    contact_ids = {
+        component_id: tuple(contact_ids_by_component.get(component_id, ()))
+        for component_id in void_surfaces
+    }
+    return _InnerVoidShells(exterior_refs, shells, contact_ids)
+
+
+def _route_c_conductor_volume_record(
+    *,
+    route: RouteLiteral,
+    entity: SemanticEntitySpec,
+    representation: str,
+    owner_surfaces: Sequence[SurfacePlanRecord],
+) -> VolumePlanRecord:
+    """Plan the volume of a retained Route C conductor from its surfaces."""
+    return VolumePlanRecord(
+        volume_id=f"VOL__{entity.semantic_id}",
+        owner_semantic_id=entity.semantic_id,
+        material_id=entity.material_id,
+        surface_refs=tuple(
+            SurfaceRefRecord(
+                surface_id=surface.surface_id,
+                orientation=_surface_orientation_for_volume(
+                    surface,
+                    entity,
+                ),
+                role="planned_boundary",
+            )
+            for surface in owner_surfaces
+        ),
+        valid_routes=(route,),
+        metadata={
+            "representation": representation,
+            "material_kind": entity.material_kind,
+            "geometry_ref": _entity_geometry_ref(
+                entity,
+                representation=representation,
+            ),
+            "physical_owner_semantic_id": _entity_physical_group_id(entity),
+        },
+    )
 
 
 def _inner_void_orientation(

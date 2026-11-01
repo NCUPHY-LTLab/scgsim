@@ -1,4 +1,10 @@
-"""Project semantic physical names and tag records from planned surfaces/volumes, preserving grouped ownership."""
+"""Plan the physical group names (tags) that solvers see for planned surfaces and volumes.
+
+Owns the naming rules: an explicit ``physical_name`` wins; otherwise interface surfaces
+are named from their interface id and kinds (for example MS, MA), and surfaces whose
+owners share a physical group are named from that group instead of the split entity
+ids. Does not create any backend tag; those come from these records later.
+"""
 
 from __future__ import annotations
 
@@ -81,18 +87,7 @@ def _surface_physical_name(surface: SurfacePlanRecord) -> str:
     override = surface.metadata.get("physical_name")
     if isinstance(override, str) and override:
         return override
-    raw = surface.metadata.get("interface_kinds", ())
-    if isinstance(raw, str):
-        kinds = (raw,)
-    elif isinstance(raw, tuple | list | set):
-        kinds = tuple(str(kind) for kind in raw)
-    else:
-        kinds = ()
-    if len(kinds) > 2:
-        raise ValueError(
-            f"{surface.surface_id} has too many interface kinds: {kinds!r}"
-        )
-    kind_prefix = "_".join(kinds)
+    kind_prefix = "_".join(_surface_interface_kinds(surface))
     exposed_role = surface.metadata.get("exposed_surface_role")
     boundary_role = surface.metadata.get("boundary_role")
     owner_ids = _surface_owner_ids(surface)
@@ -125,6 +120,22 @@ def _surface_physical_name(surface: SurfacePlanRecord) -> str:
     if boundary_role == "sidewall":
         return surface.surface_id.removeprefix("SURF__").rsplit("__", 1)[0]
     return surface.surface_id.removeprefix("SURF__")
+
+
+def _surface_interface_kinds(surface: SurfacePlanRecord) -> tuple[str, ...]:
+    """Return the interface kinds in the surface metadata; at most two are allowed."""
+    raw = surface.metadata.get("interface_kinds", ())
+    if isinstance(raw, str):
+        kinds = (raw,)
+    elif isinstance(raw, tuple | list | set):
+        kinds = tuple(str(kind) for kind in raw)
+    else:
+        kinds = ()
+    if len(kinds) > 2:
+        raise ValueError(
+            f"{surface.surface_id} has too many interface kinds: {kinds!r}"
+        )
+    return kinds
 
 
 def _grouped_surface_physical_name(
