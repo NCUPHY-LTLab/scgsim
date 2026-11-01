@@ -71,17 +71,19 @@ test = [
     "ipython",
 ]
 quality = [
-    "ruff",
-    "pyright",
+    "ruff==0.17.3",
+    "pyright==1.1.411",
+    "import-linter==2.15",
 ]
 
 [tool.pyright]
-include = [
+include = ["src"]
+strict = [
     "src/scgsim/aedt/epr/evidence.py",
     "src/scgsim/aedt/runtime/batch_protocol.py",
     "src/scgsim/aedt/runtime/batch_runner.py",
 ]
-typeCheckingMode = "strict"
+typeCheckingMode = "standard"
 extraPaths = ["src", "src/scgsim/aedt/runtime"]
 
 [tool.pytest.ini_options]
