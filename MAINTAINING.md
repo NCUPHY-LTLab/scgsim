@@ -13,6 +13,17 @@ explanations; `_quarto.yml` owns site navigation and execution settings.
 Generated HTML, search indexes and packaged knowledge are derived output.
 Public component and executable notebook sources belong to OrPen SC PDK.
 
+## Source ownership
+
+The Architecture, Palace and AEDT Leads own the source responsibilities listed
+in [AGENTS.md](AGENTS.md). Architecture decides integration order; SCQ Integration
+performs public privacy review and protected merges. Resolve current Lead
+identities and shared delivery rules through `$scq-collaboration-roles`.
+
+Existing writers retain their assigned paths and running services during
+handoff. New backend Leads begin with read-only intake until the current
+writer releases an affected path or exact hunk.
+
 ## Native presentation
 
 The site uses the complete upstream Askr extension without local CSS or JS.
