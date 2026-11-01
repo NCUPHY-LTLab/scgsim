@@ -1,4 +1,8 @@
-"""Pure film assumptions shared by solver-specific EPR readers."""
+"""Validate shared film assumptions and calculate their inverse-Q contribution.
+
+Solver adapters supply heterogeneous input mappings. Their nested values remain
+``Any`` at this boundary, where each recognized field is checked and normalized.
+"""
 
 from __future__ import annotations
 
@@ -6,8 +10,7 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
-
-FILM_FIELDS = frozenset(
+FILM_FIELDS: frozenset[str] = frozenset(
     {
         "film_thickness_m",
         "film_relative_permittivity",
@@ -21,7 +24,11 @@ FILM_FIELDS = frozenset(
 def film_assumptions(
     value: Mapping[str, Any], *, partial: bool = False, allow_unknown: bool = False
 ) -> dict[str, Any]:
-    """Validate an SI film snapshot or a partial offline update."""
+    """Validate a complete SI film snapshot or an allowed partial update.
+
+    ``allow_unknown`` lets thickness and permittivity fields retain ``None`` in
+    offline records; partial updates may omit fields altogether.
+    """
 
     if not isinstance(value, Mapping) or set(value) - FILM_FIELDS:
         raise ValueError("film assumptions contain unsupported fields")
@@ -65,7 +72,7 @@ def film_assumptions(
 def inverse_quality_factor(
     participation: float | None, loss_tangent: float | None
 ) -> float | None:
-    """Return p tan(delta), preserving an unknown input as unknown."""
+    """Return participation times loss tangent, or ``None`` for unknown inputs."""
 
     if participation is None or loss_tangent is None:
         return None
