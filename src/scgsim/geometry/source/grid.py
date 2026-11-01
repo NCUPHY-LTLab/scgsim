@@ -1,12 +1,17 @@
 """Apply the source-bound assembled XY policy without rewriting source GDS."""
 
-from dataclasses import asdict, replace
-from decimal import Decimal
 import hashlib
 import json
+from dataclasses import asdict, replace
+from decimal import Decimal
 
-from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry._primitives.grid import GridOperand, build_grid_arrangement
+from scgsim.geometry.models.grid import GeometryGridContext
+from scgsim.geometry.source.ports import (
+    is_port_sheet_host_entity,
+    port_sheet_overlaps,
+    port_sheet_target_layer_matches,
+)
 
 
 def source_grid_context(source_dbu_um, requested):
@@ -128,9 +133,11 @@ def _apply_geometry_grid(build_input, context):
             )
         )
     # Preserve existing source conductor contact, across exact physically incident layers.
-    from shapely import Polygon, union_all
-    from scgsim.semantics.route_a import geometry_z_range
     from itertools import combinations
+
+    from shapely import Polygon, union_all
+
+    from scgsim.semantics.route_a import geometry_z_range
 
     conductors = [e for e in build_input.entities if e.material_kind == "conductor"]
     raw = {
@@ -176,11 +183,6 @@ def _apply_geometry_grid(build_input, context):
         )
     by_id = {p.polygon_id: p for p in polygons}
     ports = []
-    from scgsim.geometry.source.adapter import (
-        _port_sheet_overlaps,
-        _is_port_sheet_host_entity,
-        _port_sheet_target_layer_matches,
-    )
     from scgsim.geometry.models.input import LayoutPolygonSpec
 
     for port in build_input.port_sheet_regions:
@@ -199,8 +201,8 @@ def _apply_geometry_grid(build_input, context):
         eligible = {
             pid: entity
             for pid, entity in owners.items()
-            if _is_port_sheet_host_entity(entity)
-            and _port_sheet_target_layer_matches(entity, port.metadata["target_layer"])
+            if is_port_sheet_host_entity(entity)
+            and port_sheet_target_layer_matches(entity, port.metadata["target_layer"])
         }
         raw_port, final_port = Polygon(port.exterior, port.holes), Polygon(outer, holes)
         port_contacts = []
@@ -227,7 +229,7 @@ def _apply_geometry_grid(build_input, context):
             for pid, entity in eligible.items()
             if (entity.semantic_id, pid) in host_bindings
         }
-        overlaps = _port_sheet_overlaps(
+        overlaps = port_sheet_overlaps(
             port_sheet_id=port.port_sheet_id,
             port_polygon=LayoutPolygonSpec(
                 port.source_polygon_id, port.source_layer, outer, holes
@@ -314,6 +316,7 @@ def _apply_geometry_grid(build_input, context):
 def with_source_grid(function):
     """Bind actual source DBU before occurrence-local recipe operations."""
     from functools import wraps
+
     from scgsim.geometry._primitives.grid import geometry_grid_scope
 
     @wraps(function)

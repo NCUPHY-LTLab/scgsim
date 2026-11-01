@@ -1,12 +1,11 @@
 """Bind exact source terminals and derive rectangular junctions before planning."""
 
-from scgsim.geometry._primitives.grid import with_input_grid
-
 from dataclasses import replace
 
+from scgsim.geometry._primitives.grid import with_input_grid
 from scgsim.geometry.models.input import LayoutPolygonSpec
 from scgsim.geometry.models.junctions import RectangularJunctionSpec
-from scgsim.geometry.source.adapter import _port_sheet_overlaps
+from scgsim.geometry.source.ports import port_sheet_overlaps
 
 
 @with_input_grid
@@ -53,7 +52,7 @@ def with_rectangular_junctions(build_input, specs):
                     "rectangular junction terminal Net/occurrence ownership differs"
                 )
             selected.update({pid: entity for pid in entity.polygon_ids})
-        overlaps = _port_sheet_overlaps(
+        overlaps = port_sheet_overlaps(
             port_sheet_id=region.port_sheet_id,
             port_polygon=LayoutPolygonSpec(
                 region.source_polygon_id,
@@ -84,5 +83,3 @@ def with_rectangular_junctions(build_input, specs):
             "rectangular_junctions": tuple(item.to_payload() for item in requests),
         },
     )
-
-
