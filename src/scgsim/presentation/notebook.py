@@ -17,15 +17,16 @@ ReportTheme = Literal["light", "dark"]
 class _StyledFigure(Protocol):
     """Describe the Plotly operations used without importing the optional renderer."""
 
-    def update_layout(self, **kwargs: object) -> object:
+    # Plotly reserves overwrite as a boolean alongside open-ended styling keys.
+    def update_layout(self, *, overwrite: bool = False, **kwargs: object) -> object:
         """Update only this figure's layout."""
         ...
 
-    def update_xaxes(self, **kwargs: object) -> object:
+    def update_xaxes(self, *, overwrite: bool = False, **kwargs: object) -> object:
         """Update this figure's horizontal axes."""
         ...
 
-    def update_yaxes(self, **kwargs: object) -> object:
+    def update_yaxes(self, *, overwrite: bool = False, **kwargs: object) -> object:
         """Update this figure's vertical axes."""
         ...
 
