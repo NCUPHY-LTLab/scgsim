@@ -174,8 +174,8 @@ module to preserve dependency direction.
 - **Baseline `scgsim.sgb.models.topology` → current defining module `scgsim.geometry.models.topology`.** Declared names: `RouteABVolumePlanRecord`. Preferred API: `scgsim.geometry.models`.
 - **Baseline `scgsim.sgb.pipeline` → current defining module `scgsim.geometry.compiler.builder`.** Declared names: `SemanticGeometryBuilder`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.compiler.dispatch`.** Declared names: `build_route_construction_plan`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.interfaces`.** Declared names: `plan_conductor_contact_patches`, `plan_mm_contact_records`, `recognize_route_interfaces`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.surfaces`.** Declared names: `plan_route_surfaces`, `plan_surface_partitions`. Preferred API: `scgsim.geometry.compiler`.
+- **Baseline `scgsim.sgb.planning` → current defining modules `scgsim.geometry.planning.contact_planning.patches`, `.membership`, and `.intents`.** Declared names: `plan_conductor_contact_patches`, `plan_mm_contact_records`, `recognize_route_interfaces`. Preferred API: `scgsim.geometry.compiler`.
+- **Baseline `scgsim.sgb.planning` → current defining modules `scgsim.geometry.planning.surface_planning.planner` and `.partitions`.** Declared names: `plan_route_surfaces`, `plan_surface_partitions`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.tags`.** Declared names: `plan_route_tags`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.volumes`.** Declared names: `plan_cut_host_operations`, `plan_route_construction_bodies`, `plan_route_volumes`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.source_curves` → current defining module `scgsim.geometry.source.curves`.** Declared names: `bind_source_curves`. Preferred API: `scgsim.geometry`.
@@ -195,6 +195,39 @@ not import planning/compiler. Source identity, snapshot detachment, caller-owned
 final Net membership, native correspondence, stock CAD shell repair, curved
 arrangement and XAO/physical-group behavior remain owned by their current
 responsibilities.
+
+The shared implementation modules now use responsibility names. Geometry
+primitives move from `scgsim.geometry._primitives` to
+`scgsim.geometry.primitives`, including `grid_cache` and `tagged_grid`;
+`source._normalization`, `source._occurrence`, and `source._polygon_ops` move to
+`source.normalization`, `source.occurrence`, and `source.polygon_ops`. These
+internal names do not expand the supported API; use the `geometry` and
+`geometry.compiler` facades above. Curved construction remains behind
+`geometry.construction.curved`, with source boundaries, arrangement, native
+kernel, shared surfaces, and canonical records implemented in
+`geometry.construction.curved_geometry`.
+
+Planning and tagged-grid modules now follow the same responsibility boundaries.
+Their supported routes remain the package facades:
+
+| Implementation area | Use this supported import |
+|---|---|
+| Source assembly and occurrence preparation | `GeometryPlan` from `scgsim.geometry` |
+| Physical representation preparation | `interpret_physical_geometry` from `scgsim.geometry` |
+| Contact recognition and contact records | `recognize_route_interfaces`, `plan_conductor_contact_patches`, and `plan_mm_contact_records` from `scgsim.geometry.compiler` |
+| Surface and contribution planning | `plan_route_surfaces`, `plan_surface_contribution_patches`, and `plan_surface_partitions` from `scgsim.geometry.compiler` |
+| Canonical topology planning | `plan_canonical_topology` from `scgsim.geometry.compiler` |
+| Route construction plan only | `build_route_construction_plan` from `scgsim.geometry.compiler` |
+| Complete route construction, including port and tagged-grid stages | `SemanticGeometryBuilder.build` from `scgsim.geometry.compiler` |
+
+The responsibility modules are `scgsim.geometry.source.plan_assembly`,
+`scgsim.geometry.planning.contact_planning`,
+`scgsim.geometry.planning.port_planning`,
+`scgsim.geometry.planning.surface_planning`,
+`scgsim.geometry.planning.topology_planning`,
+`scgsim.geometry.primitives.tagged_grid_faces`, and
+`scgsim.geometry.primitives.tagged_grid_operations`. They organize the
+implementation without adding new supported imports.
 
 ## AEDT API, transaction and state ownership
 
@@ -326,7 +359,7 @@ not compatibility surfaces.
   geometry. A raw `.aedt` path requires explicit `aedt_version` and design; a
   sealed run directory uses its bound spec version without an override.
 - **Scene records and shared rendering → `scgsim.visualization.scene`, `scgsim.visualization.rendering`.** Responsibility: Keep scene construction and rendering reusable without taking solver physics or simulation status ownership.
-- **Shared loader file-identity helpers → `scgsim.visualization.loaders._common`.** Responsibility: One loader-level implementation for JSON, hash and confined-path observations.
+- **Shared loader file-identity helpers → `scgsim.visualization.loaders.common`.** Responsibility: One loader-level implementation for JSON, hash and confined-path observations.
 
 
 The `scgsim.visualization` package facade continues to export exactly

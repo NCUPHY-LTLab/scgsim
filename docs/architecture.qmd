@@ -24,16 +24,12 @@ standalone solver process, and collection on the requested AEDT version. Follow
 the [convergence status](convergence-status.qmd) for current implementation and
 delivery state.
 
-## Accepted SCGSim 2.0 structure
+## Current package structure
 
-Human accepted the current v2 structural/API implementation on 2026-10-09:
-candidate `a932a173edb5c56ae14740ff5177190996255bdd`, tree
-`2745321736e53e2a4fe8d150f2e9d8bd176669db`. Its semantic state is `ACCEPTED`,
-not `STABILIZED`. The implementation was integrated into `develop` through
-PR34 at `cc1424c84ffe9d295a57dbabb3c2ab6431110f6c` (tree
-`f9ecfe49df4c79be84a7991e44cc50c2602e3adb`).
-
-The accepted responsibility tree is:
+The package separates source geometry, geometry compilation, solver backends,
+result handling, and presentation. The tree below shows shared package
+ownership; Palace and AEDT retain their own preparation, execution, and result
+lifecycles.
 
 ```text
 scgsim/
@@ -43,7 +39,7 @@ scgsim/
 │   ├── compiler/     # advanced build API, derived records and validators
 │   ├── planning/     # domain, interface, surface, volume and tag planning
 │   ├── construction/ # native OCC construction, correspondence and export
-│   └── _primitives/  # shared lower source/compiler operations
+│   └── primitives/   # shared Entity, loop, grid and spatial operations
 ├── semantics/        # immutable solver-independent facts
 ├── palace/
 │   ├── preparation/  # distinct Electrostatic and Eigenmode input state owners
@@ -64,12 +60,17 @@ scgsim/
 │   ├── presentation/
 │   └── run.py       # supported CLI, delegates to transaction owner
 ├── visualization/
-│   ├── loaders/
+│   ├── loaders/      # backend artifact readers and common file checks
 │   ├── scene.py
 │   ├── preview.py
 │   └── rendering.py
 └── presentation/     # shared physics-neutral notebook formatting
 ```
+
+Curved construction has a facade at `geometry.construction.curved`; its
+focused operations live in `curved_geometry` modules for source boundaries,
+planar arrangement, native kernel operations, shared surfaces, and canonical
+records.
 
 The responsibility correction keeps one definition for every detached AEDT
 request record. `aedt.specs.geometry` owns `PreparedPlanarGeometry`;
@@ -96,11 +97,13 @@ The transaction retains sole Desktop and receipt ownership. General body,
 support, material and enclosure native operations belong to `runtime.native`;
 generic RLC assignment and saved readback belong to the native lumped owner.
 
-Only create a leaf when it owns real implementation. Geometry planning and
-construction primitives have one shared lower-level owner; backend families
-consume that geometry without importing one another. `semantics` remains a
-stdlib-only immutable fact boundary. Palace and AEDT keep separate mutable
-simulation state, transaction lifetime, and physical result meaning. Shared
+Geometry source preparation and compiler planning have separate owners:
+preparation uses shared primitives, planning coordinates specialized owners,
+and construction lowers the resulting plan to native geometry and exports.
+Backend families consume the shared geometry without importing one another.
+`semantics` remains a stdlib-only immutable fact boundary. Palace and AEDT keep
+separate mutable simulation state, transaction lifetime, and physical result
+meaning. Shared
 presentation formats detached values; it does not own solver physics or
 calculation. Visualization reads solver-authoritative metadata and artifacts;
 it does not start a solve or determine run status.
@@ -115,18 +118,34 @@ current implementation, without old `scgsim.sgb` compatibility wrappers or
 revived Q3D input-v1/v2 paths. The formal `python -m scgsim.aedt.run` entrypoint
 remains supported; it is the AEDT transaction CLI, not a legacy wrapper.
 
-The geometry facade is source-facing: it owns component/occurrence and stack
-adaptation, `GeometryPlan` and detached snapshots, normalized input records,
-vacuum/curve declarations and input summaries. `scgsim.geometry.compiler` is
-the advanced builder, derived-record and stage-validation surface. Input-only
-`validate_geometry_input` is defined below the compiler in
-`scgsim.geometry.source.validation` and re-exported by the compiler facade. Shared
-loop, spatial and Entity primitives sit below both source and compiler, so
-source preparation does not depend on planning. The compiler/construction
-boundary retains native correspondence, stock CAD shell repair, curved
-arrangement and XAO/physical-group behavior. The full source-facing and
-advanced symbol paths, including direct model aliases and pipeline validators,
-are listed in the [API migration reference](api-migration.qmd).
+The `geometry` facade is the source-authoring entrypoint. It exposes
+`GeometryPlan`, detached snapshots, normalized input records, component and
+stack adapters, physical representation interpretation, and input summaries.
+The `geometry.compiler` facade is for advanced builds: it exposes
+`SemanticGeometryBuilder`, route-plan construction, derived records, stage
+operations, and validators. Input validation is defined in
+`geometry.source.validation` and re-exported by `geometry.compiler`.
+`interpret_physical_geometry` from `scgsim.geometry` returns the effective
+input, stack, and representation plan. Pass `plan.context` to
+`build_route_construction_plan` from `scgsim.geometry.compiler` when you need
+the plan alone, or to `SemanticGeometryBuilder.build` when the route should
+continue through native construction and physical-group export.
+
+Internal modules divide work by responsibility. They are implementation
+boundaries; ordinary callers should use the two facades above.
+
+| Internal owner | Responsibility |
+|---|---|
+| `scgsim.geometry.source.plan_assembly` | Compose component occurrences, transforms, stack facts, and caller-assigned Nets into source input. |
+| `scgsim.geometry.planning.contact_planning` | Recognize declared interfaces, contact patches, and metal-to-metal contact ownership. |
+| `scgsim.geometry.planning.port_planning` | Lower source-bound port sheets and validate route-specific port geometry. |
+| `scgsim.geometry.planning.surface_planning` | Build solver-facing surfaces, contact coverage, contribution patches, and partitions. |
+| `scgsim.geometry.planning.topology_planning` | Assign canonical points, curves, loops, and shared surface ownership. |
+| `scgsim.geometry.primitives.tagged_grid_faces` and `tagged_grid_operations` | Separate face and edge provenance from the Shapely grid-operation adapter. |
+
+The [API migration reference](api-migration.qmd) lists the supported import
+routes for these operations. Native correspondence, shell repair, curved
+arrangement, and physical-group export remain in construction.
 
 Palace keeps two distinct mutable preparation owners: Electrostatic and
 Eigenmode setup state, invalidation, and failure ordering remain specific to
