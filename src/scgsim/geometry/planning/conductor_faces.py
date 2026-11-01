@@ -7,7 +7,7 @@ represents as a shell or material volume.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 from scgsim.geometry._primitives.entities import _entity_z_range_um
@@ -36,16 +36,26 @@ from scgsim.geometry.planning.solution_geometry import (
 )
 
 
+@dataclass(frozen=True)
+class _ConductorFace:
+    """One conductor face (`top` or `bottom`) and the geometry refs covering it."""
+
+    entity: SemanticEntitySpec
+    shell_part: str
+    geometry_refs: Sequence[Mapping[str, Any]]
+
+
 def _conductor_face_solution_pieces(
     build_input: GeometryBuildInput,
+    face: _ConductorFace,
     *,
     route: RouteLiteral | None,
-    entity: SemanticEntitySpec,
-    shell_part: str,
-    geometry_refs: Sequence[Mapping[str, Any]],
     representation_context: RepresentationContext | None = None,
 ) -> tuple[tuple[str, dict[str, Any]], ...]:
     """Partition Route-A/B planar faces by exact local solution adjacency."""
+    entity = face.entity
+    shell_part = face.shell_part
+    geometry_refs = face.geometry_refs
     if route not in {"A", "B"} and not (
         route is None and representation_context is not None
     ):
@@ -214,19 +224,34 @@ def _route_conductor_contact_footprints(
     return tuple(footprints)
 
 
+@dataclass(frozen=True)
+class _SolutionPlanePatch:
+    """A patch of the plane where two solution entities meet.
+
+    Give exactly one of `base_loop` or `base_region` to describe the patch.
+    """
+
+    lower: SemanticEntitySpec
+    upper: SemanticEntitySpec
+    z_um: float
+    base_loop: tuple[tuple[float, float], ...] | None = None
+    base_region: tuple[Any, ...] | None = None
+
+
 def _conductor_entities_on_solution_plane(
     build_input: GeometryBuildInput,
+    patch: _SolutionPlanePatch,
     *,
     route: RouteLiteral | None,
-    lower: SemanticEntitySpec,
-    upper: SemanticEntitySpec,
-    z_um: float,
-    base_loop: tuple[tuple[float, float], ...] | None = None,
-    base_region: tuple[Any, ...] | None = None,
     representation_context: RepresentationContext | None = None,
 ) -> tuple[SemanticEntitySpec, ...]:
     import gdstk
 
+    lower = patch.lower
+    upper = patch.upper
+    z_um = patch.z_um
+    base_loop = patch.base_loop
+    base_region = patch.base_region
     pair_ids = {lower.semantic_id, upper.semantic_id}
     records: list[SemanticEntitySpec] = []
     if base_loop is not None and base_region is not None:

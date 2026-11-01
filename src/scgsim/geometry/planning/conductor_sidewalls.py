@@ -9,6 +9,7 @@ segment faces; see ``solution_adjacency``.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from scgsim.geometry._primitives.constants import _TOPOLOGY_EPS_UM
@@ -47,15 +48,23 @@ from scgsim.geometry.planning.surface_contacts import (
 )
 
 
+@dataclass(frozen=True)
+class _SidewallRequest:
+    """The conductor whose sidewalls are wanted, and how it is represented."""
+
+    entity: SemanticEntitySpec
+    representation: str
+    # Solution on the outer side when the caller already knows it (Route C), else None.
+    adjacent_solution_id: str | None
+    interfaces: tuple[InterfacePlanRecord, ...] = ()
+    excluded_footprints: Sequence[tuple[tuple[float, float], ...]] = ()
+
+
 def _conductor_sidewall_geometry_refs(
     build_input: GeometryBuildInput,
+    request: _SidewallRequest,
     *,
     route: RouteLiteral | None,
-    entity: SemanticEntitySpec,
-    representation: str,
-    adjacent_solution_id: str | None,
-    interfaces: tuple[InterfacePlanRecord, ...] = (),
-    excluded_footprints: Sequence[tuple[tuple[float, float], ...]] = (),
     representation_context: RepresentationContext | None = None,
 ) -> tuple[dict[str, Any], ...]:
     """Return the exposed sidewall segments of one conductor, each with its adjacent solution.
@@ -67,14 +76,18 @@ def _conductor_sidewall_geometry_refs(
     because ``adjacent_solution_id`` is resolved lazily on the first segment that needs
     it and then reused by the following segments.
     """
+    entity = request.entity
+    adjacent_solution_id = request.adjacent_solution_id
     base_ref = _route_entity_geometry_ref(
         build_input,
         route,
         entity,
-        representation=representation,
-        interfaces=interfaces,
+        representation=request.representation,
+        interfaces=request.interfaces,
     )
-    face_refs = _subtract_contact_patches_from_face(base_ref, excluded_footprints)
+    face_refs = _subtract_contact_patches_from_face(
+        base_ref, request.excluded_footprints
+    )
     refs = tuple(
         side_ref
         for face_ref in face_refs

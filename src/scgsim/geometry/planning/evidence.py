@@ -262,7 +262,7 @@ def require_semantic_evidence_facade(
     return facade
 
 
-def conductor_solution_evidence(
+def conductor_solution_evidence(  # noqa: PLR0913 - published evidence signature; each argument is one distinct id or stage
     facade: SemanticEvidenceFacade,
     *,
     contribution_id: str,
@@ -299,7 +299,7 @@ def conductor_solution_evidence(
     )
 
 
-def solution_solution_evidence(
+def solution_solution_evidence(  # noqa: PLR0913 - published evidence signature; each argument is one distinct id or stage
     facade: SemanticEvidenceFacade,
     *,
     contribution_id: str,
@@ -336,7 +336,7 @@ def solution_solution_evidence(
     )
 
 
-def metal_metal_evidence(
+def metal_metal_evidence(  # noqa: PLR0913 - published evidence signature; each argument is one distinct id or stage
     facade: SemanticEvidenceFacade,
     *,
     contribution_id: str,

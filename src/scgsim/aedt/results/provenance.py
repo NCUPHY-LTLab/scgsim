@@ -25,14 +25,14 @@ RECEIPT_V3 = "scgsim.aedt.receipt.v3"
 # gate in `readback_common.py` still compares against it.
 SOURCE_SCHEMA_V19 = "scgsim.aedt.runtime-source.v19"
 
-SOURCE_SCHEMA_V21 = "scgsim.aedt.runtime-source.v21"
+SOURCE_SCHEMA_V22 = "scgsim.aedt.runtime-source.v22"
 
-SOURCE_SCHEMA = SOURCE_SCHEMA_V21
+SOURCE_SCHEMA = SOURCE_SCHEMA_V22
 
 # Every module whose bytes are hashed into a receipt, in the order they are
 # recorded. Adding, moving or removing a module under aedt/ or geometry/ changes
 # the recorded source, so this list must follow the file layout.
-_RUNTIME_SOURCE_V21_PATHS = (
+_RUNTIME_SOURCE_PATHS = (
     "src/scgsim/aedt/__init__.py",
     "src/scgsim/aedt/_benchmark.py",
     "src/scgsim/aedt/_data.py",
@@ -192,7 +192,7 @@ def _module_manifest() -> list[dict[str, str]]:
             "path": path,
             "sha256": file_sha256(source_root / path.removeprefix("src/")),
         }
-        for path in _RUNTIME_SOURCE_V21_PATHS
+        for path in _RUNTIME_SOURCE_PATHS
     ]
 
 
@@ -285,7 +285,7 @@ def validate_runtime_source(
             f"{stage} runtime source schema {schema!r} is unsupported; "
             f"only {SOURCE_SCHEMA!r} is supported"
         )
-    expected_paths = _RUNTIME_SOURCE_V21_PATHS
+    expected_paths = _RUNTIME_SOURCE_PATHS
     if (
         value.get("stage") != stage
         or not isinstance(modules, list)
@@ -339,7 +339,7 @@ def _validate_revision_observation(value: Any, *, stage: str) -> None:
         raise RuntimeError(f"{stage} runtime source revision observation is invalid")
 
 
-def initial_receipt_payload(
+def initial_receipt_payload(  # noqa: PLR0913 - one keyword per receipt field
     *,
     schema_version: str,
     mode: Any,

@@ -29,10 +29,12 @@ from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.topology import MMContactRecord, SurfacePlanRecord
 from scgsim.geometry.planning.conductor_faces import (
     _conductor_face_solution_pieces,
+    _ConductorFace,
     _route_conductor_contact_footprints,
 )
 from scgsim.geometry.planning.conductor_sidewalls import (
     _conductor_sidewall_geometry_refs,
+    _SidewallRequest,
 )
 from scgsim.geometry.planning.evidence import (
     conductor_solution_evidence,
@@ -170,22 +172,24 @@ def _conductor_face_records(
             for geometry_entity in shell.geometry_entities
             for piece in _conductor_face_solution_pieces(
                 scope.build_input,
-                route=scope.route,
-                entity=entity,
-                shell_part=shell_part,
-                geometry_refs=_subtract_contact_patches_from_face(
-                    {
-                        **_route_entity_geometry_ref(
-                            scope.build_input,
-                            scope.route,
-                            geometry_entity,
-                            representation=shell.representation,
-                            interfaces=scope.interfaces,
-                        ),
-                        "shell_part": shell_part,
-                    },
-                    contact_loops,
+                _ConductorFace(
+                    entity,
+                    shell_part,
+                    _subtract_contact_patches_from_face(
+                        {
+                            **_route_entity_geometry_ref(
+                                scope.build_input,
+                                scope.route,
+                                geometry_entity,
+                                representation=shell.representation,
+                                interfaces=scope.interfaces,
+                            ),
+                            "shell_part": shell_part,
+                        },
+                        contact_loops,
+                    ),
                 ),
+                route=scope.route,
                 representation_context=scope.representation_context,
             )
         )
@@ -312,16 +316,18 @@ def _conductor_sidewall_records(
             if scope.route == "C" and sidewall_adjacent_id is None
             else _conductor_sidewall_geometry_refs(
                 scope.build_input,
-                route=scope.route,
-                entity=geometry_entity,
-                representation=shell.representation,
-                adjacent_solution_id=sidewall_adjacent_id,
-                interfaces=scope.interfaces,
-                excluded_footprints=(
-                    inputs.normalized_sheet_loops.get(entity.semantic_id, ())
-                    if scope.route == "B" and entity.part_role == "face_metal"
-                    else ()
+                _SidewallRequest(
+                    geometry_entity,
+                    shell.representation,
+                    sidewall_adjacent_id,
+                    interfaces=scope.interfaces,
+                    excluded_footprints=(
+                        inputs.normalized_sheet_loops.get(entity.semantic_id, ())
+                        if scope.route == "B" and entity.part_role == "face_metal"
+                        else ()
+                    ),
                 ),
+                route=scope.route,
                 representation_context=scope.representation_context,
             )
         )

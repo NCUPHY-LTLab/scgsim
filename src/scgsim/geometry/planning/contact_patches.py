@@ -8,6 +8,7 @@ live in ``mm_contacts``.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, NamedTuple
 
 from scgsim.geometry._primitives.entities import _entity_z_range_um, _unique_ids
@@ -116,15 +117,15 @@ def plan_conductor_contact_patches(
                         continue
                     seen.add(signature)
                     metadata = _contact_patch_metadata(
-                        build_input,
-                        route=route,
-                        representation_context=representation_context,
-                        solution_entities=solution_entities,
-                        lower=lower,
-                        upper=upper,
-                        contact_z_um=float(z_key),
-                        contact_loop=contact_loop,
-                        contact_index=index,
+                        _ContactPatchScope(
+                            build_input,
+                            route,
+                            solution_entities,
+                            representation_context,
+                        ),
+                        _ContactCandidate(
+                            lower, upper, float(z_key), contact_loop, index
+                        ),
                     )
                     generated.append(
                         InterfacePlanRecord(
@@ -246,7 +247,6 @@ def _plan_route_c_conductor_contact_patches(
 
     generated: list[InterfacePlanRecord] = []
     seen = {_contact_signature(interface) for interface in interfaces}
-    solution_entities = _solution_entities(build_input)
     top_faces, bottom_faces = _conductor_faces_by_z(
         gdstk, _active_route_conductor_entities(build_input, route)
     )
@@ -279,8 +279,6 @@ def _plan_route_c_conductor_contact_patches(
                     continue
                 seen.add(signature)
                 metadata = _route_c_contact_patch_metadata(
-                    build_input,
-                    solution_entities=solution_entities,
                     lower=lower,
                     upper=upper,
                     contact_z_um=float(z_key),
@@ -304,16 +302,13 @@ def _plan_route_c_conductor_contact_patches(
 
 
 def _route_c_contact_patch_metadata(
-    build_input: GeometryBuildInput,
     *,
-    solution_entities: Sequence[SemanticEntitySpec],
     lower: SemanticEntitySpec,
     upper: SemanticEntitySpec,
     contact_z_um: float,
     contact_loop: tuple[tuple[float, float], ...],
 ) -> Mapping[str, Any]:
     """Exact pre-A/B Route-C contact metadata shape."""
-    del build_input, solution_entities
     return {
         "recognition_rule": "coplanar_conductor_contact_patch",
         "contact_policy": "retained_material_contact",
@@ -481,18 +476,39 @@ def _sort_contact_loops(
     )
 
 
+@dataclass(frozen=True)
+class _ContactPatchScope:
+    """The build input and route a contact patch is planned under."""
+
+    build_input: GeometryBuildInput
+    route: RouteLiteral | None
+    solution_entities: Sequence[SemanticEntitySpec]
+    representation_context: RepresentationContext | None = None
+
+
+@dataclass(frozen=True)
+class _ContactCandidate:
+    """One accepted contact: the touching conductors, their shared Z and loop."""
+
+    lower: SemanticEntitySpec
+    upper: SemanticEntitySpec
+    contact_z_um: float
+    contact_loop: tuple[tuple[float, float], ...]
+    contact_index: int
+
+
 def _contact_patch_metadata(
-    build_input: GeometryBuildInput,
-    *,
-    route: RouteLiteral | None,
-    solution_entities: Sequence[SemanticEntitySpec],
-    lower: SemanticEntitySpec,
-    upper: SemanticEntitySpec,
-    contact_z_um: float,
-    contact_loop: tuple[tuple[float, float], ...],
-    contact_index: int,
-    representation_context: RepresentationContext | None = None,
+    scope: _ContactPatchScope, candidate: _ContactCandidate
 ) -> Mapping[str, Any]:
+    build_input = scope.build_input
+    route = scope.route
+    solution_entities = scope.solution_entities
+    representation_context = scope.representation_context
+    lower = candidate.lower
+    upper = candidate.upper
+    contact_z_um = candidate.contact_z_um
+    contact_loop = candidate.contact_loop
+    contact_index = candidate.contact_index
     plane_z_um = contact_z_um
     boundary_volume_ids: tuple[str, ...]
     interface_kinds: tuple[str, ...] = ("MM",)

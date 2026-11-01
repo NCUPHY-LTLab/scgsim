@@ -269,7 +269,7 @@ def plan_surface_partitions(
     return tuple(records)
 
 
-def plan_route_surfaces(
+def plan_route_surfaces(  # noqa: PLR0913 - published planner signature; arguments are the independent plan inputs
     build_input: GeometryBuildInput,
     *,
     route: RouteLiteral | None,

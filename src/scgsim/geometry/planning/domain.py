@@ -41,6 +41,7 @@ from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
 from scgsim.geometry.planning.conductor_faces import (
     _conductor_entities_on_solution_plane,
+    _SolutionPlanePatch,
 )
 from scgsim.geometry.planning.evidence import solution_solution_evidence
 from scgsim.geometry.planning.solution_adjacency import (
@@ -264,12 +265,9 @@ def _plan_substrate_air_surfaces(
             )
             plane_conductors = _conductor_entities_on_solution_plane(
                 build_input,
+                _SolutionPlanePatch(lower, upper, z_um, base_region=(patch,)),
                 route=route,
                 representation_context=representation_context,
-                lower=lower,
-                upper=upper,
-                z_um=z_um,
-                base_region=(patch,),
             )
             solution_geometry_refs = _solution_interface_geometry_refs(
                 base_geometry_ref,

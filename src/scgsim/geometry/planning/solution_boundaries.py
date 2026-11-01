@@ -7,7 +7,7 @@ separate neighbouring solution entities. Does not plan conductor-owned surfaces.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from itertools import pairwise
 from math import hypot
 from typing import Any
@@ -106,13 +106,12 @@ def _plan_solution_domain_boundary_surfaces(
                 )
         for edge_index, geometry_ref in enumerate(
             _solution_domain_sidewall_geometry_refs(
-                build_input,
-                route=route,
-                solution=entity,
+                _SolutionBoundaryScope(
+                    build_input, route, entity, representation_context
+                ),
                 outer_loop=loop,
                 z_min_um=z_min_um,
                 z_max_um=z_max_um,
-                representation_context=representation_context,
             )
         ):
             records.append(
@@ -135,16 +134,24 @@ def _plan_solution_domain_boundary_surfaces(
     return tuple(records)
 
 
+@dataclass(frozen=True)
+class _SolutionBoundaryScope:
+    """The route, build input and solution entity one sidewall query runs against."""
+
+    build_input: GeometryBuildInput
+    route: RouteLiteral | None
+    solution: SemanticEntitySpec
+    representation_context: RepresentationContext | None = None
+
+
 def _solution_domain_sidewall_geometry_refs(
-    build_input: GeometryBuildInput,
+    scope: _SolutionBoundaryScope,
     *,
-    route: RouteLiteral | None,
-    solution: SemanticEntitySpec,
     outer_loop: tuple[tuple[float, float], ...],
     z_min_um: float,
     z_max_um: float,
-    representation_context: RepresentationContext | None = None,
 ) -> tuple[dict[str, Any], ...]:
+    solution = scope.solution
     refs: list[dict[str, Any]] = []
     for ring_role, ring_loop in (
         ("outer", _clean_loop(outer_loop)),
@@ -154,14 +161,7 @@ def _solution_domain_sidewall_geometry_refs(
         ),
     ):
         for edge_index, (start, end) in enumerate(_ring_edges(ring_loop)):
-            parameters = _solution_boundary_edge_parameters(
-                build_input,
-                route=route,
-                solution=solution,
-                start=start,
-                end=end,
-                representation_context=representation_context,
-            )
+            parameters = _solution_boundary_edge_parameters(scope, start, end)
             for first, second in pairwise(parameters):
                 segment_start = _interpolate_2d(start, end, first)
                 segment_end = _interpolate_2d(start, end, second)
@@ -174,22 +174,10 @@ def _solution_domain_sidewall_geometry_refs(
                 ):
                     continue
                 edge_z_min_um = _solution_boundary_edge_z_min_um(
-                    build_input,
-                    route=route,
-                    solution=solution,
-                    start=segment_start,
-                    end=segment_end,
-                    default_z_min_um=z_min_um,
-                    representation_context=representation_context,
+                    scope, segment_start, segment_end, default_z_min_um=z_min_um
                 )
                 edge_z_max_um = _solution_boundary_edge_z_max_um(
-                    build_input,
-                    route=route,
-                    solution=solution,
-                    start=segment_start,
-                    end=segment_end,
-                    default_z_max_um=z_max_um,
-                    representation_context=representation_context,
+                    scope, segment_start, segment_end, default_z_max_um=z_max_um
                 )
                 if edge_z_max_um - edge_z_min_um <= _TOPOLOGY_EPS_UM:
                     continue
@@ -209,15 +197,15 @@ def _solution_domain_sidewall_geometry_refs(
 
 
 def _solution_boundary_edge_parameters(
-    build_input: GeometryBuildInput,
-    *,
-    route: RouteLiteral | None,
-    solution: SemanticEntitySpec,
+    scope: _SolutionBoundaryScope,
     start: tuple[float, float],
     end: tuple[float, float],
-    representation_context: RepresentationContext | None = None,
 ) -> tuple[float, ...]:
     """Split a vacuum exterior edge at exact finite-conductor endpoints."""
+    build_input = scope.build_input
+    route = scope.route
+    solution = scope.solution
+    representation_context = scope.representation_context
     if not (
         route == "B" or (route is None and representation_context is not None)
     ) or not _is_vacuum_solution_entity(solution):
@@ -251,15 +239,16 @@ def _solution_boundary_edge_parameters(
 
 
 def _solution_boundary_edge_z_min_um(
-    build_input: GeometryBuildInput,
-    *,
-    route: RouteLiteral | None,
-    solution: SemanticEntitySpec,
+    scope: _SolutionBoundaryScope,
     start: tuple[float, float],
     end: tuple[float, float],
+    *,
     default_z_min_um: float,
-    representation_context: RepresentationContext | None = None,
 ) -> float:
+    build_input = scope.build_input
+    route = scope.route
+    solution = scope.solution
+    representation_context = scope.representation_context
     if not _is_vacuum_solution_entity(solution):
         return default_z_min_um
     z_min_um = default_z_min_um
@@ -287,15 +276,16 @@ def _solution_boundary_edge_z_min_um(
 
 
 def _solution_boundary_edge_z_max_um(
-    build_input: GeometryBuildInput,
-    *,
-    route: RouteLiteral | None,
-    solution: SemanticEntitySpec,
+    scope: _SolutionBoundaryScope,
     start: tuple[float, float],
     end: tuple[float, float],
+    *,
     default_z_max_um: float,
-    representation_context: RepresentationContext | None = None,
 ) -> float:
+    build_input = scope.build_input
+    route = scope.route
+    solution = scope.solution
+    representation_context = scope.representation_context
     if not _is_vacuum_solution_entity(solution):
         return default_z_max_um
     z_max_um = default_z_max_um

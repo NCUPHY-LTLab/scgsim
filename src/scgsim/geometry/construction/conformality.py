@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, NamedTuple
 
 from scgsim.geometry._primitives.port_contract import (
     _route_b_port_sheet_binding_matches,
@@ -138,25 +139,58 @@ def engine_gate_volume_adjacency_conformality(
 
     return _report(
         plan,
-        "volume_adjacency_conformality",
-        "after_build_route_construction_plan",
+        _GateStage(
+            "volume_adjacency_conformality", "after_build_route_construction_plan"
+        ),
         failures,
         records,
         counts={"surfaces": len(records)},
     )
 
 
+@dataclass(frozen=True)
+class _NativeTags:
+    """The live gmsh session and the plan-id to native-tag maps of one gate run."""
+
+    gmsh: Any
+    loops_by_id: Mapping[str, Any]
+    curve_tags: Mapping[str, int]
+    surface_tag_by_id: Mapping[str, int]
+
+
+@dataclass(frozen=True)
+class _GateFindings:
+    """Lists a gate appends its failures and checked records to."""
+
+    failures: list[dict[str, Any]]
+    records: list[dict[str, Any]]
+
+
+class _GateStage(NamedTuple):
+    engine_gate: str
+    stage: str
+
+
+@dataclass(frozen=True)
+class _PortProbe:
+    """One lumped-port surface and its mesh nodes, probed against each owner."""
+
+    plan: ConstructionPlanRecord
+    native: _NativeTags
+    findings: _GateFindings
+    port_surface: Any
+    port_tag: int
+    port_nodes: set[int]
+    port_curve_ids: set[str]
+
+
 def _append_lumped_port_mesh_conformality(
     plan: ConstructionPlanRecord,
-    *,
-    gmsh: Any,
-    loops_by_id: Mapping[str, Any],
-    curve_tags: Mapping[str, int],
-    surface_tag_by_id: Mapping[str, int],
-    failures: list[dict[str, Any]],
-    records: list[dict[str, Any]],
+    native: _NativeTags,
+    findings: _GateFindings,
 ) -> None:
     """Fail closed unless each Route-B terminal uses its exact owner-sidewall edge."""
+    gmsh = native.gmsh
     if plan.route not in {"A", "B"}:
         return
     port_surfaces = tuple(
@@ -167,7 +201,7 @@ def _append_lumped_port_mesh_conformality(
     try:
         gmsh.model.mesh.generate(2)
         for port_surface in port_surfaces:
-            port_tag = surface_tag_by_id.get(port_surface.surface_id)
+            port_tag = native.surface_tag_by_id.get(port_surface.surface_id)
             if port_tag is None:
                 continue
             port_nodes = _surface_mesh_node_tags(gmsh, port_tag)
@@ -180,138 +214,22 @@ def _append_lumped_port_mesh_conformality(
                     port_surface.outer_loop_ref,
                     *port_surface.hole_loop_refs,
                 )
-                for curve_ref in loops_by_id[loop_id].curve_refs
+                for curve_ref in native.loops_by_id[loop_id].curve_refs
             }
+            probe = _PortProbe(
+                plan,
+                native,
+                findings,
+                port_surface,
+                port_tag,
+                port_nodes,
+                port_curve_ids,
+            )
             for owner_id in owners:
-                overlap = _route_b_port_overlap(port_surface, owner_id)
-                overlap_id = (
-                    str(overlap.get("overlap_id"))
-                    if isinstance(overlap, Mapping)
-                    else None
-                )
-                owner_pec_surfaces = tuple(
-                    surface
-                    for surface in plan.surfaces
-                    if surface.owner_semantic_id == owner_id
-                    and (
-                        (
-                            plan.route == "A"
-                            and surface.metadata.get("representation")
-                            == "surface_sheet"
-                        )
-                        or (
-                            plan.route == "B"
-                            and surface.surface_role == "cutout_boundary_shell"
-                            and str(
-                                surface.geometry_ref.get("shell_part", "")
-                            ).startswith("sidewall")
-                            and surface.metadata.get(
-                                "route_b_port_sheet_sidewall_partition"
-                            )
-                            and _route_b_port_sheet_binding_matches(
-                                surface,
-                                port_surface_id=port_surface.surface_id,
-                                overlap_id=overlap_id,
-                                host_semantic_id=owner_id,
-                            )
-                        )
-                    )
-                )
-                sidewall_tags = tuple(
-                    surface_tag_by_id[surface.surface_id]
-                    for surface in owner_pec_surfaces
-                    if surface.surface_id in surface_tag_by_id
-                )
-                owner_surface_ids = {
-                    surface.surface_id for surface in owner_pec_surfaces
-                }
-                credited_terminal_curve_ids = tuple(
-                    curve.curve_id
-                    for curve in plan.curves
-                    if curve.curve_id in port_curve_ids
-                    and owner_surface_ids.intersection(curve.used_by_surface_ids)
-                )
-                owner_sidewall_nodes: set[int] = set()
-                for sidewall_tag in sidewall_tags:
-                    owner_sidewall_nodes.update(
-                        _surface_mesh_node_tags(gmsh, sidewall_tag)
-                    )
-                shared_nodes = port_nodes & owner_sidewall_nodes
-                expected_terminal_curve_ids = (
-                    _route_b_expected_terminal_curve_ids(
-                        plan,
-                        port_curve_ids=port_curve_ids,
-                        overlap=overlap,
-                    )
-                    if plan.route == "B"
-                    else credited_terminal_curve_ids
-                )
-                terminal_curve_node_counts = {
-                    curve_id: len(
-                        _curve_mesh_node_tags(gmsh, curve_tags[curve_id])
-                        & port_nodes
-                        & owner_sidewall_nodes
-                    )
-                    for curve_id in expected_terminal_curve_ids
-                    if curve_id in curve_tags
-                }
-                exact_terminal_coverage = set(credited_terminal_curve_ids) == set(
-                    expected_terminal_curve_ids
-                )
-                status = (
-                    "pass"
-                    if (
-                        shared_nodes
-                        and exact_terminal_coverage
-                        and len(terminal_curve_node_counts)
-                        == len(expected_terminal_curve_ids)
-                        and all(terminal_curve_node_counts.values())
-                    )
-                    else "fail"
-                )
-                if status == "fail":
-                    failures.append(
-                        _failure(
-                            "lumped_port_missing_shared_mesh_nodes",
-                            [port_surface.surface_id, owner_id],
-                            f"Route {plan.route} lumped-port sheet must share exact "
-                            "terminal curves and mesh nodes with each owner PEC "
-                            "surface.",
-                        )
-                    )
-                records.append(
-                    {
-                        "source_record_kind": (
-                            f"route_{plan.route.lower()}_lumped_port_mesh"
-                        ),
-                        "source_record_id": port_surface.surface_id,
-                        "owner_semantic_id": owner_id,
-                        "overlap_id": overlap_id,
-                        "backend_port_tag": port_tag,
-                        "backend_owner_pec_surface_tags": sorted(sidewall_tags),
-                        "bound_owner_pec_surface_ids": sorted(owner_surface_ids),
-                        "expected_terminal_curve_ids": sorted(
-                            expected_terminal_curve_ids
-                        ),
-                        "credited_terminal_curve_ids": sorted(
-                            credited_terminal_curve_ids
-                        ),
-                        "per_terminal_curve_shared_node_counts": (
-                            terminal_curve_node_counts
-                        ),
-                        "planned_shared_curve_ids": sorted(credited_terminal_curve_ids),
-                        "backend_shared_curve_tags": sorted(
-                            curve_tags[curve_id]
-                            for curve_id in credited_terminal_curve_ids
-                            if curve_id in curve_tags
-                        ),
-                        "shared_mesh_node_count": len(shared_nodes),
-                        "status": status,
-                    }
-                )
+                _probe_port_owner(probe, owner_id)
     except Exception as exc:  # noqa: BLE001 - report a failed disposable mesh probe
         for port_surface in port_surfaces:
-            failures.append(
+            findings.failures.append(
                 _failure(
                     "lumped_port_mesh_generation_failed",
                     [port_surface.surface_id],
@@ -320,6 +238,138 @@ def _append_lumped_port_mesh_conformality(
             )
     finally:
         gmsh.model.mesh.clear()
+
+
+def _probe_port_owner(probe: _PortProbe, owner_id: str) -> None:
+    """Check that the port shares mesh nodes and terminal curves with one owner."""
+    plan = probe.plan
+    gmsh = probe.native.gmsh
+    curve_tags = probe.native.curve_tags
+    surface_tag_by_id = probe.native.surface_tag_by_id
+    port_surface = probe.port_surface
+    port_nodes = probe.port_nodes
+    overlap = _route_b_port_overlap(port_surface, owner_id)
+    overlap_id = (
+        str(overlap.get("overlap_id")) if isinstance(overlap, Mapping) else None
+    )
+    owner_pec_surfaces = _owner_pec_surfaces(plan, port_surface, owner_id, overlap_id)
+    sidewall_tags = tuple(
+        surface_tag_by_id[surface.surface_id]
+        for surface in owner_pec_surfaces
+        if surface.surface_id in surface_tag_by_id
+    )
+    owner_surface_ids = {surface.surface_id for surface in owner_pec_surfaces}
+    credited_terminal_curve_ids = tuple(
+        curve.curve_id
+        for curve in plan.curves
+        if curve.curve_id in probe.port_curve_ids
+        and owner_surface_ids.intersection(curve.used_by_surface_ids)
+    )
+    owner_sidewall_nodes: set[int] = set()
+    for sidewall_tag in sidewall_tags:
+        owner_sidewall_nodes.update(_surface_mesh_node_tags(gmsh, sidewall_tag))
+    shared_nodes = port_nodes & owner_sidewall_nodes
+    expected_terminal_curve_ids = (
+        _route_b_expected_terminal_curve_ids(
+            plan,
+            port_curve_ids=probe.port_curve_ids,
+            overlap=overlap,
+        )
+        if plan.route == "B"
+        else credited_terminal_curve_ids
+    )
+    terminal_curve_node_counts = {
+        curve_id: len(
+            _curve_mesh_node_tags(gmsh, curve_tags[curve_id])
+            & port_nodes
+            & owner_sidewall_nodes
+        )
+        for curve_id in expected_terminal_curve_ids
+        if curve_id in curve_tags
+    }
+    exact_terminal_coverage = set(credited_terminal_curve_ids) == set(
+        expected_terminal_curve_ids
+    )
+    status = (
+        "pass"
+        if (
+            shared_nodes
+            and exact_terminal_coverage
+            and len(terminal_curve_node_counts) == len(expected_terminal_curve_ids)
+            and all(terminal_curve_node_counts.values())
+        )
+        else "fail"
+    )
+    if status == "fail":
+        probe.findings.failures.append(
+            _failure(
+                "lumped_port_missing_shared_mesh_nodes",
+                [port_surface.surface_id, owner_id],
+                f"Route {plan.route} lumped-port sheet must share exact "
+                "terminal curves and mesh nodes with each owner PEC "
+                "surface.",
+            )
+        )
+    probe.findings.records.append(
+        {
+            "source_record_kind": f"route_{plan.route.lower()}_lumped_port_mesh",
+            "source_record_id": port_surface.surface_id,
+            "owner_semantic_id": owner_id,
+            "overlap_id": overlap_id,
+            "backend_port_tag": probe.port_tag,
+            "backend_owner_pec_surface_tags": sorted(sidewall_tags),
+            "bound_owner_pec_surface_ids": sorted(owner_surface_ids),
+            "expected_terminal_curve_ids": sorted(expected_terminal_curve_ids),
+            "credited_terminal_curve_ids": sorted(credited_terminal_curve_ids),
+            "per_terminal_curve_shared_node_counts": terminal_curve_node_counts,
+            "planned_shared_curve_ids": sorted(credited_terminal_curve_ids),
+            "backend_shared_curve_tags": sorted(
+                curve_tags[curve_id]
+                for curve_id in credited_terminal_curve_ids
+                if curve_id in curve_tags
+            ),
+            "shared_mesh_node_count": len(shared_nodes),
+            "status": status,
+        }
+    )
+
+
+def _owner_pec_surfaces(
+    plan: ConstructionPlanRecord,
+    port_surface: Any,
+    owner_id: str,
+    overlap_id: str | None,
+) -> tuple[Any, ...]:
+    """The owner's PEC surfaces a port terminal may touch.
+
+    Route A: the owner's surface sheet. Route B: the owner sidewalls that this
+    port sheet partitioned.
+    """
+    return tuple(
+        surface
+        for surface in plan.surfaces
+        if surface.owner_semantic_id == owner_id
+        and (
+            (
+                plan.route == "A"
+                and surface.metadata.get("representation") == "surface_sheet"
+            )
+            or (
+                plan.route == "B"
+                and surface.surface_role == "cutout_boundary_shell"
+                and str(surface.geometry_ref.get("shell_part", "")).startswith(
+                    "sidewall"
+                )
+                and surface.metadata.get("route_b_port_sheet_sidewall_partition")
+                and _route_b_port_sheet_binding_matches(
+                    surface,
+                    port_surface_id=port_surface.surface_id,
+                    overlap_id=overlap_id,
+                    host_semantic_id=owner_id,
+                )
+            )
+        )
+    )
 
 
 def _surface_mesh_node_tags(gmsh: Any, surface_tag: int) -> set[int]:
@@ -546,18 +596,13 @@ def engine_gate_gmsh_brep_conformality(
 
     _append_lumped_port_mesh_conformality(
         plan,
-        gmsh=gmsh,
-        loops_by_id=loops_by_id,
-        curve_tags=curve_tags,
-        surface_tag_by_id=surface_tag_by_id,
-        failures=failures,
-        records=records,
+        _NativeTags(gmsh, loops_by_id, curve_tags, surface_tag_by_id),
+        _GateFindings(failures, records),
     )
 
     return _report(
         plan,
-        "gmsh_brep_conformality",
-        "after_occ_synchronize",
+        _GateStage("gmsh_brep_conformality", "after_occ_synchronize"),
         failures,
         records,
         counts={
@@ -621,8 +666,7 @@ def _planned_surface_curve_tags(
 
 def _report(
     plan: ConstructionPlanRecord,
-    engine_gate: str,
-    stage: str,
+    gate: _GateStage,
     failures: list[dict[str, Any]],
     records: list[dict[str, Any]],
     *,
@@ -630,10 +674,10 @@ def _report(
 ) -> dict[str, Any]:
     return {
         "schema": "sgb.engine_gate.v1",
-        "engine_gate": engine_gate,
+        "engine_gate": gate.engine_gate,
         "route": plan.route,
         "status": "fail" if failures else "pass",
-        "stage": stage,
+        "stage": gate.stage,
         "checked_record_ids": {
             "interfaces": [record.interface_id for record in plan.interfaces],
             "surface_partitions": [

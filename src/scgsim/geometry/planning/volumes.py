@@ -9,7 +9,7 @@ only; this module never discovers volumes from native geometry.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from math import hypot
 from typing import NamedTuple
 
@@ -47,6 +47,7 @@ from scgsim.geometry.models.topology import (
 )
 from scgsim.geometry.planning.conductor_sidewalls import (
     _conductor_sidewall_geometry_refs,
+    _SidewallRequest,
 )
 from scgsim.geometry.planning.mm_contacts import _is_fully_normalized_face_metal
 from scgsim.geometry.planning.solution_adjacency import (
@@ -119,8 +120,7 @@ def plan_route_construction_bodies(
                         build_input,
                         route,
                         entity,
-                        interfaces=interfaces,
-                        contact_faces=contact_faces,
+                        _ShellContacts(interfaces, contact_faces),
                         representation_context=representation_context,
                     )
                 ),
@@ -506,20 +506,31 @@ def _reconcile_construction_body_surface_ids(
     )
 
 
+@dataclass(frozen=True)
+class _ShellContacts:
+    """Interfaces and contact-patch faces that trim a conductor's shell surfaces."""
+
+    interfaces: tuple[InterfacePlanRecord, ...] = ()
+    # (entity id, "top" or "bottom") -> contact loops to cut out of that face.
+    contact_faces: (
+        Mapping[
+            tuple[str, str],
+            tuple[tuple[tuple[float, float], ...], ...],
+        ]
+        | None
+    ) = None
+
+
 def _cutout_shell_surface_ids(
     build_input: GeometryBuildInput,
     route: RouteLiteral,
     entity: SemanticEntitySpec,
+    shell_contacts: _ShellContacts,
     *,
-    interfaces: tuple[InterfacePlanRecord, ...] = (),
-    contact_faces: Mapping[
-        tuple[str, str],
-        tuple[tuple[tuple[float, float], ...], ...],
-    ]
-    | None = None,
     representation_context: RepresentationContext | None = None,
 ) -> tuple[str, ...]:
-    contact_faces = contact_faces or {}
+    interfaces = shell_contacts.interfaces
+    contact_faces = shell_contacts.contact_faces or {}
     top_bottom_ids: list[str] = []
     for shell_part in ("top", "bottom"):
         base_surface_id = _conductor_boundary_surface_id(
@@ -559,11 +570,13 @@ def _cutout_shell_surface_ids(
         if route == "C" and sidewall_adjacent_id is None
         else _conductor_sidewall_geometry_refs(
             build_input,
+            _SidewallRequest(
+                entity,
+                "cutout_boundary_shell",
+                sidewall_adjacent_id,
+                interfaces=shell_contacts.interfaces,
+            ),
             route=route,
-            entity=entity,
-            representation="cutout_boundary_shell",
-            adjacent_solution_id=sidewall_adjacent_id,
-            interfaces=interfaces,
             representation_context=representation_context,
         )
     )
