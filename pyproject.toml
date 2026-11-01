@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=77"]
-build-backend = "_build_backend"
+build-backend = "build_backend"
 backend-path = ["."]
 
 [project]
@@ -69,6 +69,7 @@ scgsim = [
 test = [
     "pytest",
     "ipython",
+    "setuptools>=77",
 ]
 quality = [
     "ruff==0.17.3",
