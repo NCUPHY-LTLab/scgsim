@@ -17,6 +17,8 @@ _R = TypeVar("_R")
 
 @dataclass
 class _PreparationState:
+    """One context-local worker budget and its lazily created shared pool."""
+
     max_workers: int
     executor: ThreadPoolExecutor | None = None
     # One ordered map or native stage owns this budget at a time.
@@ -74,6 +76,7 @@ def preparation_resources(*, max_workers: int) -> Iterator[None]:
 
 
 def _in_worker(function: Callable[[_T], _R], item: _T) -> _R:
+    """Mark a task as a worker so any nested map runs serially."""
     token = _worker_depth.set(_worker_depth.get() + 1)
     try:
         return function(item)
@@ -93,7 +96,7 @@ def _ordered_map(function: Callable[[_T], _R], items: Iterable[_T]) -> list[_R]:
             )
         pending: deque[Future[_R]] = deque()
         iterator = iter(items)
-        results = []
+        results: list[_R] = []
         try:
             for _ in range(state.max_workers):
                 try:
@@ -121,7 +124,7 @@ def _ordered_map(function: Callable[[_T], _R], items: Iterable[_T]) -> list[_R]:
             for future in pending:
                 try:
                     future.result()
-                except BaseException:
+                except BaseException:  # noqa: BLE001 -- settle every owned future before returning the original failure
                     pass
             raise
         return results

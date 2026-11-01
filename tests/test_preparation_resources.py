@@ -1,13 +1,18 @@
 """Preparation resource ownership contracts, without geometry or native work."""
 
-from contextvars import ContextVar
+import hashlib
 import json
+from contextvars import ContextVar
 from threading import Barrier, Event, get_ident
+from types import SimpleNamespace
 
 import pytest
 
-from scgsim.diagnostics import _stage, preparation_diagnostics
-from scgsim.preparation import (
+from scgsim.diagnostics import (  # private-import: test the diagnostic stage boundary
+    _stage,
+    preparation_diagnostics,
+)
+from scgsim.preparation import (  # private-import: verify the shared ordered worker contract
     _ordered_map,
     current_preparation_workers,
     preparation_resources,
@@ -15,6 +20,7 @@ from scgsim.preparation import (
 
 
 def test_outside_scope_is_serial_and_preserves_order():
+    """Use the caller thread and preserve input order without a resource scope."""
     caller = get_ident()
     assert current_preparation_workers() is None
     assert _ordered_map(lambda n: (n, get_ident()), range(4)) == [
@@ -24,6 +30,7 @@ def test_outside_scope_is_serial_and_preserves_order():
 
 @pytest.mark.parametrize("value", (True, False, 1.5, "3", None))
 def test_non_integer_budget_rejected(value):
+    """Reject boolean, fractional, textual, and missing worker budgets."""
     with pytest.raises(TypeError, match="positive integer"):
         with preparation_resources(max_workers=value):
             pytest.fail("invalid budget entered")
@@ -31,12 +38,14 @@ def test_non_integer_budget_rejected(value):
 
 @pytest.mark.parametrize("value", (0, -1))
 def test_nonpositive_budget_rejected(value):
+    """Reject zero and negative worker budgets before entering the scope."""
     with pytest.raises(ValueError, match="positive integer"):
         with preparation_resources(max_workers=value):
             pytest.fail("invalid budget entered")
 
 
 def test_parallel_output_context_and_nested_budget():
+    """Propagate context, reuse the outer pool, and run worker-nested maps serially."""
     marker = ContextVar("resource_test_marker", default="outside")
     token = marker.set("caller")
     barrier = Barrier(3)
@@ -66,6 +75,7 @@ def test_parallel_output_context_and_nested_budget():
 
 
 def test_failure_drains_owned_work_and_bounds_submission():
+    """Bound submitted work, settle owned tasks, and preserve the first failure."""
     barrier = Barrier(2)
     release = Event()
     finished = Event()
@@ -99,7 +109,10 @@ def test_failure_drains_owned_work_and_bounds_submission():
     "threads,surface_threads", ((3, 1), (1, 3), (0, 1), (-1, 1), (1, 0), (1, -1))
 )
 def test_mesh_budget_rejects_before_child(threads, surface_threads, tmp_path):
-    from scgsim.palace.mesh.build import _mesh_from_route_xao
+    """Reject native thread requests outside the explicit preparation budget."""
+    from scgsim.palace.mesh.build import (  # noqa: PLC0415 -- adapter is needed only for this preflight test; private-import: exercise its budget guard
+        _mesh_from_route_xao,  # private-import: exercise native budget validation
+    )
 
     with preparation_resources(max_workers=2):
         with pytest.raises(ValueError, match="must be positive and fit"):
@@ -121,7 +134,10 @@ def test_mesh_budget_rejects_before_child(threads, surface_threads, tmp_path):
 
 
 def test_one_worker_and_unscoped_native_guard_preserve_serial_behavior():
-    from scgsim.preparation import _native_preparation
+    """Keep one-worker maps serial and bypass native guards outside a scope."""
+    from scgsim.preparation import (  # noqa: PLC0415 -- isolate the private guard test; private-import: verify scoped native ownership
+        _native_preparation,  # private-import: exercise scoped native budget checks
+    )
 
     with _native_preparation({"threads": 0, "surface_threads": -1}):
         assert current_preparation_workers() is None
@@ -133,16 +149,20 @@ def test_one_worker_and_unscoped_native_guard_preserve_serial_behavior():
 
 
 def test_budget_is_required():
+    """Require callers to choose an explicit preparation worker budget."""
     with pytest.raises(TypeError, match="max_workers"):
-        with preparation_resources():
+        with preparation_resources():  # pyright: ignore[reportCallIssue] -- test the required runtime argument
             pytest.fail("implicit resource budget entered")
 
 
 def test_mesh_preparation_keeps_parallel_mapping_before_native(monkeypatch, tmp_path):
-    import hashlib
-    from types import SimpleNamespace
-    from scgsim.geometry.compiler.builder import SemanticGeometryBuilder
-    from scgsim.palace.mesh.build import build_route_mesh
+    """Run parallel mapping at the real mesh construction boundary before native work."""
+    from scgsim.geometry.compiler.builder import (  # noqa: PLC0415 -- adapter is needed only in this mesh orchestration test
+        SemanticGeometryBuilder,
+    )
+    from scgsim.palace.mesh.build import (  # noqa: PLC0415 -- adapter is needed only in this mesh orchestration test
+        build_route_mesh,
+    )
 
     class StopBeforeNative(Exception):
         pass
@@ -185,6 +205,8 @@ def test_mesh_preparation_keeps_parallel_mapping_before_native(monkeypatch, tmp_
 
 
 def test_threaded_diagnostics_write_complete_records(tmp_path):
+    """Write complete start/end records for stages run on preparation workers."""
+
     def task(n):
         with _stage("preparation.test.task"):
             return n
@@ -195,6 +217,11 @@ def test_threaded_diagnostics_write_complete_records(tmp_path):
     paths = list(tmp_path.glob("*.jsonl"))
     assert len(paths) == 1
     rows = [json.loads(line) for line in paths[0].read_text().splitlines()]
+    for row in rows:
+        assert row["rss_status"] in {"available", "unavailable", "unsupported_platform"}
+        assert row["process_peak_rss_bytes"] is None or isinstance(
+            row["process_peak_rss_bytes"], int
+        )
     task_rows = [row for row in rows if row["stage"] == "preparation.test.task"]
     assert len(task_rows) == 24
     assert sum(row["event"] == "start" for row in task_rows) == 12
