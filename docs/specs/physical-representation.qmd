@@ -41,10 +41,6 @@ limitation and does not guess from proximity, names or Net membership. Source
 contact normals do not establish HFSS calculator Surface/Adjacent field-side
 semantics or native electrical continuity.
 
-Historical requests, source hashes, runtime inventories and sealed cohorts
-retain their recorded interpretation. They are not a second authority for
-fresh physical-source preparation.
-
 ## Typed source carrier and plan
 
 The source owner's `LayerLevel.info["physical_layer"]` contains the serialized
@@ -115,16 +111,13 @@ authority; this physical-source contract does not admit native jobs.
 
 Fresh physical-source preparation consumes neutral `PhysicalLayerDeclaration`
 records and an explicit `ApproximationProfile`. Fresh `aedt_modeling` metadata
-and role-derived route classification are not adapters. Existing
-`PhysicalLayerSpec` records retain their original serialization and coordinate
-meaning for version-bound historical readers only; using them for a new
-physical-source execution requires replacing them with neutral declarations.
+and role-derived route classification are not adapters. AEDT requests reject
+`PhysicalLayerSpec`; replace it with neutral declarations.
 Explicit Solid bodies without layer declarations retain their finite source
 geometry through the shared identity plan, without minted physical IDs.
 
-The selected plan's tagged payload is the current prepared physical trace.
-Historical untagged traces remain readable under their original contract and
-retain their original hashes; they do not authorize fresh execution.
+The selected plan's tagged payload is the physical trace. AEDT requests
+without it are rejected.
 
 ## Palace caller profile
 

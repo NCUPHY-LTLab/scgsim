@@ -148,16 +148,12 @@ Within Palace, `results.report_data` owns detached report records and snapshot
 readers; `presentation.reports` owns trust/physics views and figures. The
 package facade retains the existing public result and report names.
 
-The v2 producer emitted `scgsim.aedt.runtime-source.v13` with 61
-canonical declared module paths, including 41 AEDT modules. Its records carry
+The AEDT producer writes `scgsim.aedt.runtime-source.v22`. Its records carry
 `schema_version`, `stage`, `modules`, `content_sha256`, and
 `revision_observation`; module bytes and their digest are mandatory, while the
-truthful Git observation may be unavailable. V13 has no helper-hash map and
-does not claim exhaustive transitive-source coverage. Historical runtime-source
-inventories continue to interpret their original module paths and identities;
-relocation does not rewrite or reinterpret their receipts. The responsibility
-correction advances the prior v17 producer to runtime-source v18 while retaining
-receipt V3; its declared inventory binds the relocated implementation.
+truthful Git observation may be unavailable. The manifest does not claim
+exhaustive transitive-source coverage. The receipt schema is V3, and SCGSim
+reads no other runtime-source schema.
 
 The flow below shows the accepted source structure. Geometry source preparation
 and compiler planning have separate owners, and neither backend defines source
@@ -333,36 +329,27 @@ only this bound request after entry. Its carrier retains the mutable native app
 handle together with detached preparation readback; solve and export consume the
 carrier and cannot reinterpret a caller spec or workspace.
 
-New preparation keeps the handoff and handoff-manifest schemas at V1 while both
+New preparation writes the handoff and handoff-manifest records, which both
 declare that the mutable run receipt uses `scgsim.aedt.receipt.v3`. The initial
-V3 receipt records a declared `runtime-source.v13` preparation-time SCGSim module
+V3 receipt records a declared `runtime-source.v22` preparation-time SCGSim module
 manifest and content digest. Before mutation, execution verifies the canonical
-manifest and binds the initial-receipt and prepared-manifest hashes. A canonical historical
-V1 `not_run` handoff with neither marker remains executable, but its resulting
-V3 receipt records preparation provenance as `legacy_v1_not_recorded`; it does
-not fabricate history.
+manifest and binds the initial-receipt and prepared-manifest hashes. Receipts
+other than V3 are rejected with an error that names the version found.
 
-Every new completed V3 receipt records a separate declared `runtime-source.v13`
+Every new completed V3 receipt records a separate declared `runtime-source.v22`
 execution-time module manifest and digest. Its measured module bytes and
-content digest are mandatory; it has no helper-hash map. Preparation and
-execution identities are not required to match: their separation records what
-prepared and what actually executed the handoff. Historical completed V1
-receipts remain subject to their old resolution rules, except that a V1 receipt
-combined with either later-version expectation marker is rejected as an
-inconsistent cohort. Historical completed V2 receipts retain their existing
-resolution rules; new V3-only native PEC checks do not reinterpret them. This
-consistency contract is not source authenticity for an actor able
-to rewrite the entire unsigned artifact set.
+content digest are mandatory. Preparation and execution identities are not
+required to match: their separation records what prepared and what actually
+executed the handoff. This consistency contract is not source authenticity for
+an actor able to rewrite the entire unsigned artifact set.
 
 The [AEDT receipt/provenance contract](provenance.qmd#aedt-receipt-cohorts)
-is the unique authority for the exact current V13 inventory and frozen
-historical reader evolution. V1–V12 retain their exact prior path assignments
-and reader interpretations; V13 binds its declared file set, not every
-transitive dependency. One pure, versioned initial-receipt codec owns historical
-V1/V2 and current V3 JSON member order, indentation and final newline; handoff
-writing and initial-receipt reconstruction use that codec. Historical receipt
-hashes are never compared with installed source, and preparation and execution
-identities remain independent evidence.
+is the authority for the current runtime-source inventory. V22 binds its
+declared file set, not every transitive dependency. One pure initial-receipt
+codec owns the V3 JSON member order, indentation and final newline; handoff
+writing and initial-receipt reconstruction use that codec. Receipt hashes are
+never compared with installed source, and preparation and execution identities
+remain independent evidence.
 
 Runtime-source provenance is computed inside the receipt-owned failure
 transaction before PyAEDT import and Desktop construction. New HFSS V3 receipts

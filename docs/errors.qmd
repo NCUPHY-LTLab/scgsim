@@ -38,8 +38,8 @@ criteria.
 
 ### What was and was not established
 
-At that SCGSim revision, `_validate_tetrahedral_solution_groups` in
-`src/scgsim/palace/_mesh.py` verifies solution-volume ownership, tetrahedral
+The check `validate_tetrahedral_solution_groups` in
+`src/scgsim/palace/mesh/checks_gmsh.py` verifies solution-volume ownership, tetrahedral
 element type, and the presence of 3D elements. It does not check signed
 tetrahedron volume or element Jacobians. Native orientation handling accounts
 for negative orientation; it does not make a zero determinant valid. Palace

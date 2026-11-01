@@ -261,9 +261,10 @@ attributes separately and their exact union must equal
 `Boundaries.Ground.Attributes`. Existing
 `exterior_boundary_policy="none"` plus
 `unassigned_conductor_policy="ground"` remains the implicit-ground path.
-New Electrostatic authoring writes index-map schema v2. The resolver retains
-schema-v1 read support for sealed historical runs, but only schema v2 carries
-and can claim the physical-versus-exterior Ground split.
+Electrostatic runs write index-map schema 2, which carries the physical-versus-exterior
+Ground split; the resolver accepts only schema 2 for Electrostatic. Eigenmode
+writes and accepts schema 1. A run with another schema fails with an error that
+names the schema found and the one supported.
 
 External gsim and historical SGB revisions are derivation evidence only. The
 runtime geometry authority is the in-tree `scgsim.geometry.compiler` and the

@@ -33,14 +33,12 @@ the v2 package and the corresponding old-to-new map.
   Q3D contract.
 - Preserve the formal `python -m scgsim.aedt.run` command as the AEDT
   transaction entrypoint. It is a supported CLI, not a legacy wrapper.
-- The 2.0 baseline AEDT producer emits
-  `scgsim.aedt.runtime-source.v13`. That frozen manifest has 61 declared paths,
-  including 41 AEDT modules, and records `schema_version`, `stage`, `modules`,
-  `content_sha256`, and `revision_observation`; module bytes and digest are
-  required while the Git observation may truthfully be unavailable. V13 adds
-  no helper-hash map. Its declared files are not a transitive dependency
-  attestation. V1–V13 retain their exact historical path and identity rules;
-  migration does not rewrite or reinterpret their receipts.
+- The AEDT producer emits `scgsim.aedt.runtime-source.v22`. The manifest
+  records `schema_version`, `stage`, `modules`, `content_sha256`, and
+  `revision_observation`; module bytes and digest are required while the Git
+  observation may truthfully be unavailable. Its declared files are not a
+  transitive dependency attestation. SCGSim reads only receipt V3 and source
+  v22; any other version fails with an error naming the version found.
 
 ## Solid/Thin-Film request migration
 
@@ -53,12 +51,10 @@ and sheet-contact side where applicable. Existing Object, Net, port, connected
 outline and hole identities remain the request's source of truth.
 
 This selection uses the existing Q3D body-v3 and HFSS family schema
-identifiers. A supported historical Q3D/HFSS result payload without `modeling`
-can only be read through its original versioned result reader; its raw payload
-and hash are preserved, and it cannot start a new execution. The new execution
-path never infers or supplies a missing mode. Layer declarations use
-`PhysicalLayerSpec(physical_layer_id, kind, z_min_um, z_max_um, contact_side,
-source_thickness_um=None)`
+identifiers. A request payload without `modeling` is rejected, and the
+execution path never infers or supplies a missing mode. Layer declarations use
+`PhysicalLayerDeclaration`; a request that passes `PhysicalLayerSpec` is
+rejected. Declarations are placed
 in the single authored `LayerStack` coordinate system. In solid mode the
 `physical_layers` collection may be empty; source body and `LayerImport`
 records may identify a layer with `physical_layer_id`. Preparation exposes
@@ -76,16 +72,8 @@ The mode selection chooses geometry representation; it does not choose a solver
 family or a public A/B/C execution route. The complete transform and material,
 terminal, build-only, and failure behavior is defined in the
 [AEDT Solid and thin-film contract](specs/aedt-runtime.qmd#aedt-solid-thin-film).
-Q2D and Palace are outside this migration. Q3D input-v1/v2 request schemas
-remain removed; shared V1/V2 handoff compatibility for other supported family
-paths does not restore those Q3D request schemas or bypass the explicit-mode
-requirement.
-
-This extension uses the next declared AEDT runtime-source identity,
-`scgsim.aedt.runtime-source.v15`, and
-V1–V14 keep their existing contracts. V15 will bind the implemented module
-bytes and digest without claiming exhaustive transitive dependency coverage;
-its precise path list is owned by the frozen implementation inventory.
+Q2D and Palace are outside this migration. Q3D has one request schema, `v3`,
+and every new Q3D or HFSS 3D request needs the explicit mode.
 
 The current continuation's candidate scope covers terminal-free Q3D C/G, HFSS
 Eigenmode with EPR/saved-field analysis, and HFSS Driven Terminal. Q3D AC/RL
@@ -232,13 +220,12 @@ export/readback dependency becomes an explicit internal service. Visualization
 imports current PyAEDT constants from the canonical spec owner without making
 them public exports.
 
-The current producer uses runtime-source v13; its declared inventory and
+The current producer uses runtime-source v22; its declared inventory and
 content digest identify the measured modules for that source snapshot, without
 making the digest a permanent code value or claiming exhaustive transitive
-coverage. Historical v1–v12 readers retain their original path, hash, revision
-and schema meanings. Do not map old module strings onto new paths while
-resolving old receipts. Handoff and receipt histories remain separate from Q3D
-request versioning; Q3D remains v3 only. This map does not claim native Q3D
+coverage. Old receipts and source schemas are not read, so no old module string
+is mapped onto a new path. Handoff and receipt versions are separate from Q3D
+request versioning; Q3D is v3 only. This map does not claim native Q3D
 completion.
 
 ## Palace package symbols

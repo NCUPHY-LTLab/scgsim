@@ -82,10 +82,11 @@ A loss tangent set to zero means lossless. A loss tangent you did not set is
 unknown, and its contribution is left out of the sum. Likewise, energy that was
 not computed is not zero energy.
 
-::: {.callout-note title="Reading older Palace results" collapse="true"}
-For Palace surface-film records preceding v2, a recorded zero loss tangent has
-ambiguous origin. The reader preserves the raw value but treats its effective
-loss as unknown; the inverse-$Q$ contribution remains unavailable.
+::: {.callout-note title="Surface-film records"}
+Palace surface-film records use schema `scgsim.palace.surface-film.v2`; another
+schema fails with an error naming it. When a film gives no loss tangent, the
+configuration carries `LossTan` 0.0. The reader treats that effective loss as
+unknown, and the inverse-$Q$ contribution stays unavailable.
 :::
 
 A **mask margin** excludes a band of given width next to the metal edges,

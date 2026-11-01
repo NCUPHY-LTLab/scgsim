@@ -266,14 +266,11 @@ normal thickness. A TSV wall's radial thickness is not its axial span.
 Explicit Solid geometry without layer declarations can use the common
 identity plan without inventing physical IDs.
 
-Historical `PhysicalLayerSpec` payloads and untagged coordinate traces retain
-their original interpretation and hash meaning through reader-only,
-version-bound decoding. They are not silently converted into fresh neutral
-declarations. Fresh execution of an old physical-source request fails before
-Desktop creation with a replacement preparation instruction. Existing pinned
-source and sealed artifacts are unchanged. Historical zero-width conductor
-imports remain their recorded Sheet representation and are not relabeled as
-Solid volumes.
+Physical layers are declared with neutral `PhysicalLayerDeclaration` records.
+A request that passes `PhysicalLayerSpec` is rejected with a replacement
+instruction, and a request without a tagged `physical_representation` is
+rejected before Desktop creation. Zero-width conductor imports keep their Sheet
+representation and are not relabeled as Solid volumes.
 
 In `solid` mode, the model retains source physical Z intervals. In
 `thin_film` mode, a stack-bearing film is represented as a sheet and its
@@ -457,8 +454,8 @@ receipt names and hashes that output. Its `status` distinguishes complete
 native profile data from an unavailable profile or a profile API/format error;
 the latter two do not turn a successful physics solve into solver failure.
 Failure to write or hash the claimed JSON is an artifact-integrity failure.
-Historical completed receipts without this output remain readable and report
-`not_recorded`, without synthesizing old profile measurements. A claimed but
+A completed receipt without this output is readable and reports
+`not_recorded`, with no invented profile measurements. A claimed but
 missing or hash-mismatched benchmark is rejected by `resolve_results()`.
 
 The benchmark preserves exact native setup, variation, solution-process group,
@@ -485,10 +482,7 @@ its native value with unknown scope; no host-capacity or usage meaning is inferr
 Stage memory peaks include only qualified task rows and remain unavailable when
 none exist. They are maxima of observed task peaks, not a whole-host peak or sum.
 One pure detached projection serves capture, verified offline reading, and direct
-Report display. Historical receipt-bound files stay unchanged; their returned
-interpretation corrects prior unconditional scope and descendant aggregates.
-Runtime source V21 adds this shared attribution leaf while preserving V1–V20
-inventories and readers. Receipt V3 and benchmark v1 remain unchanged.
+Report display. Receipts use schema V3, runtime source V22 and benchmark v1.
 
 `ResolvedRun.simulation_benchmark()` retains its four existing summary keys and
 adds the verified benchmark record.
@@ -702,7 +696,7 @@ records, while source-backed v3 has eight allowed paths and seven records.
 ## Eigenmode saved fields and Surface-EPR direction
 
 The accepted Eigenmode Surface-EPR path is an additive lifecycle, not a
-reinterpretation of a completed V1/V2/V3 receipt. It starts from shared source
+reinterpretation of a completed receipt. It starts from shared source
 polygons, holes, material/domain facts, route profile, and declared junction
 intent, then records a separate AEDT binding from those facts to native bodies,
 sheets, faces, material sides, and calculator selections. Native adjacency is
@@ -818,8 +812,8 @@ expression-cache item for a caller-selected mode and explicit criterion. The
 mode must also be selected by the configured `EprAnalysisRequest`. With this
 setting omitted, SCGSim authors no auxiliary expression and submits the same
 non-converging primitive cache items as before. The handoff records a configured
-setting in `scgsim.aedt.hfss-eigenmode-epr.v3`; V1/V2 handoffs remain readable
-and retain their prior schema on round trip. The low-level
+setting in `scgsim.aedt.hfss-eigenmode-epr.v3`; a request without it stays
+at `scgsim.aedt.hfss-eigenmode-epr.v2` on round trip. The low-level
 `prepare_hfss_eigenmode_from_geometry()` also requires `modeling` and accepts
 the same `expression_convergence` argument.
 

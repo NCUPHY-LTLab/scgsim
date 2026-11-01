@@ -22,6 +22,16 @@ A later formal producer update must retain its own exact version/commit.
 Use native Quarto structures for tables, callouts and navigation; keep source
 identity separate from generated presentation identity.
 
+## Code style
+
+[CODE_STYLE.md](CODE_STYLE.md) defines how to structure and comment modules
+under `src/`. Before committing, run:
+
+```bash
+uvx ruff@0.17.3 check src
+uvx ruff@0.17.3 format --check src
+```
+
 ## Writing documentation
 
 [DOCS_STYLE.md](DOCS_STYLE.md) defines the reader, page types and writing
@@ -79,11 +89,10 @@ submodule/symbol inventory are recorded in
 responsibility, without old `scgsim.sgb` compatibility wrappers, revived Q3D
 input-v1/v2, or a common solver `Simulation`/physical-result abstraction. Keep
 `python -m scgsim.aedt.run` as the supported AEDT transaction CLI. The current
-v2 AEDT producer records runtime-source v13 with 61 canonical declared module
-paths, including 41 AEDT modules. Its measured module bytes and content digest
-are required; truthful Git revision observation may be unavailable. V13 does
-not include a helper-hash map or claim transitive-source coverage. Readers
-retain the exact v1–v12 historical path and identity rules. Q3D body-v3 has an
+AEDT producer records runtime-source v22 (receipt v3); SCGSim reads no other
+version. Its measured module bytes and content digest are required; truthful
+Git revision observation may be unavailable. The manifest does not claim
+transitive-source coverage. Q3D body-v3 has an
 observed build-only native readback/save/release path, but no completed C/G
 solve; see the [Q3D contract](docs/specs/aedt-runtime.qmd#q3d-body-input-v3).
 The Xmon Route A, CircularPad Route B and HFSS Eigenmode/saved-field EPR/offline
