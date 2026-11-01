@@ -65,7 +65,8 @@ def test_conversion_cache_is_local_and_does_not_hold_stale_evidence(tmp_path):
 
 
 def test_timing_reports_actual_sidecar_bytes():
-    import time
-
-    payload = builder._timing_payload("A", [], None, None, time.perf_counter(), {"02_plan": 321})
+    """Retain measured sidecar bytes in the transaction timing snapshot."""
+    transaction = builder._BuildTransaction("A", Path("metadata"), Path("geometry"))  # noqa: SLF001 -- Exercise the internal timing snapshot directly.
+    transaction.sidecar_sizes["02_plan"] = 321
+    payload = transaction.timing_payload()
     assert payload["sidecar_bytes"] == {"02_plan": 321}
