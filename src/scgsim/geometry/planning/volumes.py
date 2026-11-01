@@ -31,6 +31,7 @@ from scgsim.geometry.planning.domain import (
 )
 from scgsim.geometry.planning.interfaces import is_fully_normalized_face_metal
 from scgsim.geometry.planning.surfaces import (
+    ConductorSidewallRequest,
     conductor_sidewall_geometry_refs,
     contact_patches_by_entity_face,
     subtract_contact_patches_from_face,
@@ -476,13 +477,15 @@ def _cutout_shell_surface_ids(
         ()
         if route == "C" and sidewall_adjacent_id is None
         else conductor_sidewall_geometry_refs(
-            build_input,
-            route=route,
-            entity=entity,
-            representation="cutout_boundary_shell",
-            adjacent_solution_id=sidewall_adjacent_id,
-            representation_context=representation_context,
-            interfaces=interfaces,
+            ConductorSidewallRequest(
+                build_input,
+                route=route,
+                entity=entity,
+                representation="cutout_boundary_shell",
+                adjacent_solution_id=sidewall_adjacent_id,
+                representation_context=representation_context,
+                interfaces=interfaces,
+            )
         )
     )
     sidewall_ids = tuple(
