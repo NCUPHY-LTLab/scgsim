@@ -7,15 +7,17 @@ one. A plan's context is a projection of this authority, not another source.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, fields, is_dataclass, replace
+from types import MappingProxyType
 from typing import Any, Literal
 
 from scgsim.geometry.models.representation import (
-    EntityRepresentation,
     EffectiveEnclosure,
+    EntityRepresentation,
     RepresentationContext,
 )
+from scgsim.semantics.route_a import geometry_z_range, same_z
 from scgsim.semantics.snapshot import _plain, canonical_sha256, freeze_plain
 
 FeatureKind = Literal["stack_film", "local_film", "finite_volume"]
@@ -28,6 +30,8 @@ PLAN_SCHEMA = "scgsim.geometry.physical-representation.v1"
 
 @dataclass(frozen=True)
 class PhysicalLayerDeclaration:
+    """Carry source-owned film or finite-volume identity and physical facts."""
+
     physical_layer_id: str
     source_level_id: str
     source_level_and_gds_pair: Mapping[str, Any]
@@ -72,6 +76,7 @@ class PhysicalLayerDeclaration:
 
     @property
     def attachment_z_um(self) -> float:
+        """Return the authored lower or upper film attachment coordinate."""
         side = self.source_contact_facts.get("layer_attachment_face")
         if side not in {"lower", "upper"}:
             raise ValueError(
@@ -80,15 +85,19 @@ class PhysicalLayerDeclaration:
         return self.source_interval_um[0 if side == "lower" else 1]
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize this record using plain canonical containers."""
         return {name: _plain(getattr(self, name)) for name in self.__dataclass_fields__}
 
     @classmethod
     def from_payload(cls, value: Mapping[str, Any]) -> PhysicalLayerDeclaration:
+        """Reconstruct a declaration using its source-field validation."""
         return cls(**value)
 
 
 @dataclass(frozen=True)
 class ApproximationProfile:
+    """Select one explicit versioned physical approximation and its parameters."""
+
     name: ProfileName
     revision: str
     parameters: Mapping[str, Any]
@@ -107,6 +116,7 @@ class ApproximationProfile:
         object.__setattr__(self, "parameters", freeze_plain(self.parameters))
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize this record using plain canonical containers."""
         return {
             "name": self.name,
             "revision": self.revision,
@@ -115,11 +125,14 @@ class ApproximationProfile:
 
     @classmethod
     def from_payload(cls, value: Mapping[str, Any]) -> ApproximationProfile:
+        """Reconstruct an explicit profile from its serialized fields."""
         return cls(**value)
 
 
 @dataclass(frozen=True)
 class PhysicalRepresentationPlan:
+    """Own selected-profile coordinates and source-bound projection records."""
+
     source_sha256: str
     profile: ApproximationProfile
     declarations: tuple[PhysicalLayerDeclaration, ...]
@@ -146,14 +159,14 @@ class PhysicalRepresentationPlan:
 
     @property
     def declaration_index(self) -> Mapping[str, PhysicalLayerDeclaration]:
-        from types import MappingProxyType
-
+        """Index source declarations by physical identity without mutable access."""
         return MappingProxyType(
             {item.physical_layer_id: item for item in self.declarations}
         )
 
     @property
     def context(self) -> RepresentationContext:
+        """Project body and enclosure records for shared geometry planning."""
         return RepresentationContext(
             entities={
                 key: EntityRepresentation(
@@ -191,23 +204,30 @@ class PhysicalRepresentationPlan:
             raise ValueError(
                 "source body material differs from its declared physical layer"
             )
-        if physical_layer_id in self.sheet_anchors_um:
+        if (
+            declaration is not None
+            and declaration.physical_layer_id in self.sheet_anchors_um
+        ):
             if tuple(source_interval_um) != declaration.source_interval_um:
                 raise ValueError(
                     f"film body interval differs from {physical_layer_id!r}"
                 )
-            effective_low = effective_high = self.sheet_anchors_um[physical_layer_id]
+            effective_low = effective_high = self.sheet_anchors_um[
+                declaration.physical_layer_id
+            ]
             representation = "sheet"
         else:
             effective_low, effective_high = self.map_z(low), self.map_z(high)
             representation = "solid"
-        film = declaration is not None and declaration.feature_kind in {
-            "stack_film",
-            "local_film",
-        }
+        film_declaration = (
+            declaration
+            if declaration is not None
+            and declaration.feature_kind in {"stack_film", "local_film"}
+            else None
+        )
         physical_thickness = (
-            declaration.physical_dimensions["normal_thickness_um"]
-            if film
+            film_declaration.physical_dimensions["normal_thickness_um"]
+            if film_declaration is not None
             else source_geometry.get("thickness_um", high - low)
         )
         geometry = _plain(source_geometry)
@@ -225,7 +245,7 @@ class PhysicalRepresentationPlan:
             "effective_geometry": geometry,
             "physical_thickness_um": physical_thickness,
             "physical_thickness_basis": "source_film_normal"
-            if film
+            if film_declaration is not None
             else "source_body_axial",
             "physical_dimensions": _plain(declaration.physical_dimensions)
             if declaration
@@ -245,11 +265,11 @@ class PhysicalRepresentationPlan:
         source_envelope_bounds_um: Mapping[str, float] | None = None,
     ) -> dict[str, Any]:
         """Map the original full envelope once, then derive native offsets."""
-        if (source_body_bounds_um is None) == (source_envelope_bounds_um is None):
-            raise ValueError(
-                "provide exactly one original body or full-envelope bounds record"
-            )
         if source_body_bounds_um is not None:
+            if source_envelope_bounds_um is not None:
+                raise ValueError(
+                    "provide exactly one original body or full-envelope bounds record"
+                )
             bounds = {
                 f"{axis}_{edge}_um": source_body_bounds_um[f"{axis}_{edge}_um"]
                 + (
@@ -260,8 +280,12 @@ class PhysicalRepresentationPlan:
                 for axis in ("x", "y", "z")
                 for edge in ("min", "max")
             }
-        else:
+        elif source_envelope_bounds_um is not None:
             bounds = dict(source_envelope_bounds_um)
+        else:
+            raise ValueError(
+                "provide exactly one original body or full-envelope bounds record"
+            )
         effective = {
             **bounds,
             "z_min_um": self.map_z(bounds["z_min_um"]),
@@ -287,6 +311,7 @@ class PhysicalRepresentationPlan:
 
     @classmethod
     def from_payload(cls, value: Mapping[str, Any]) -> PhysicalRepresentationPlan:
+        """Rebuild the source interpretation and verify every recorded projection."""
         # Frozen prepared provenance and JSON share one exact plain-container basis.
         value = _plain(value)
         if value.get("schema_version") != PLAN_SCHEMA:
@@ -304,8 +329,6 @@ class PhysicalRepresentationPlan:
         }
         if set(value) != expected:
             raise ValueError("physical representation plan members are not canonical")
-        from scgsim.geometry.planning.physical import interpret_physical_layers
-
         profile = ApproximationProfile.from_payload(value["profile"])
         declarations = tuple(
             PhysicalLayerDeclaration.from_payload(item)
@@ -345,13 +368,12 @@ class PhysicalRepresentationPlan:
                 raise ValueError(
                     "serialized enclosure differs from its original mapped bounds"
                 )
-        from dataclasses import replace
-
         return replace(
             result, entities=value["entities"], enclosures=value["enclosures"]
         )
 
     def map_z(self, source_z_um: float) -> float:
+        """Remove each declared collapse interval from one source coordinate."""
         value = float(source_z_um)
         return value - sum(
             min(max(value - low, 0.0), high - low)
@@ -361,6 +383,7 @@ class PhysicalRepresentationPlan:
     def map_point(
         self, point: tuple[float, float, float]
     ) -> tuple[float, float, float]:
+        """Preserve the lateral coordinates and map the source height."""
         x, y, z = point
         return x, y, self.map_z(z)
 
@@ -380,6 +403,7 @@ class PhysicalRepresentationPlan:
         return self.map_point(point)
 
     def layer(self, physical_layer_id: str) -> dict[str, Any]:
+        """Describe the selected representation of one declared physical layer."""
         declaration = next(
             item
             for item in self.declarations
@@ -402,6 +426,7 @@ class PhysicalRepresentationPlan:
         }
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize this record using plain canonical containers."""
         return {
             "schema_version": PLAN_SCHEMA,
             "source_sha256": self.source_sha256,
@@ -416,4 +441,190 @@ class PhysicalRepresentationPlan:
 
     @property
     def plan_id(self) -> str:
+        """Hash the complete canonical serialized interpretation."""
         return canonical_sha256(self.to_payload())
+
+
+def source_plain(value: Any) -> Any:
+    """Convert authored dataclasses and containers to canonical plain source data."""
+    if is_dataclass(value):
+        return {
+            item.name: source_plain(getattr(value, item.name)) for item in fields(value)
+        }
+    if isinstance(value, Mapping):
+        return {key: source_plain(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [source_plain(item) for item in value]
+    return _plain(value)
+
+
+def interpret_physical_layers(
+    declarations: Sequence[PhysicalLayerDeclaration],
+    profile: ApproximationProfile,
+    *,
+    supporting_entities: Mapping[str, Any] | None = None,
+    source_sha256: str | None = None,
+) -> PhysicalRepresentationPlan:
+    """Interpret declared levels without requiring a qualified contact graph."""
+    index = _index_declarations(declarations)
+    removed = []
+    anchors = {}
+    supporting_geometry = {}
+    support_planes = {}
+    parameters = profile.parameters
+    if profile.name in {"solid", "thin_film", "route_b"}:
+        if parameters:
+            raise ValueError(
+                f"profile {profile.name!r} V1 has no additional parameters"
+            )
+        if profile.name == "thin_film":
+            removed = [
+                (item.physical_layer_id, *item.source_interval_um)
+                for item in index.values()
+                if item.feature_kind == "stack_film"
+            ]
+            anchors = {
+                item.physical_layer_id: item.attachment_z_um
+                for item in index.values()
+                if item.feature_kind in {"stack_film", "local_film"}
+            }
+    else:
+        bindings = _face_profile_bindings(profile)
+        for physical_id, binding in bindings.items():
+            item = index[physical_id]
+            if item.feature_kind != "stack_film":
+                raise ValueError("face profile binding must identify a stack film")
+            if set(binding) != {"supporting_entity_id", "supporting_side"}:
+                raise ValueError("film supporting Entity/side must be explicit")
+            host = _supporting_entity(binding, supporting_entities)
+            geometry = host["geometry"]
+            supporting_geometry[binding["supporting_entity_id"]] = source_plain(host)
+            bounds = geometry_z_range(geometry, binding["supporting_entity_id"])
+            side = binding["supporting_side"]
+            if side not in {"lower", "upper"}:
+                raise ValueError("supporting side must be lower or upper")
+            plane = bounds[0 if side == "lower" else 1]
+            if not same_z(plane, item.attachment_z_um):
+                raise ValueError("film attachment and explicit supporting face differ")
+            support_planes[physical_id] = (plane, side)
+            anchors[physical_id] = item.attachment_z_um
+            if profile.name == "metal_gap_equivalent":
+                removed.append((physical_id, *item.source_interval_um))
+    removed.sort(key=lambda item: item[1])
+    for lower, upper in zip(removed, removed[1:], strict=False):
+        if lower[2] > upper[1]:
+            raise ValueError("distinct physical collapse intervals overlap")
+    _validate_opposing_films(index, profile, removed, anchors, support_planes)
+    plan = PhysicalRepresentationPlan(
+        source_sha256=source_sha256
+        or canonical_sha256([item.to_payload() for item in index.values()]),
+        profile=profile,
+        declarations=tuple(index.values()),
+        collapse_intervals=tuple(removed),
+        sheet_anchors_um={},
+        supporting_entities=supporting_geometry,
+    )
+    return replace(
+        plan, sheet_anchors_um={key: plan.map_z(z) for key, z in anchors.items()}
+    )
+
+
+def _face_profile_bindings(profile: ApproximationProfile) -> Mapping[str, Any]:
+    parameters = profile.parameters
+    if set(parameters) != {"film_bindings"} or not isinstance(
+        parameters["film_bindings"], Mapping
+    ):
+        raise ValueError("face profiles require explicit film_bindings")
+    bindings = parameters["film_bindings"]
+    if not bindings:
+        raise ValueError("face profile requires declared film bindings")
+    if profile.name == "metal_gap_equivalent" and len(bindings) != 2:
+        raise ValueError(
+            "metal_gap_equivalent requires its two declared opposing films"
+        )
+    if profile.name == "substrate_face" and len(bindings) not in {1, 2}:
+        raise NotImplementedError(
+            "substrate_face V1 supports its declared one- or two-face profile"
+        )
+    if (
+        profile.name == "metal_gap_equivalent"
+        and len({binding["supporting_entity_id"] for binding in bindings.values()}) != 2
+    ):
+        raise ValueError("opposing films require distinct explicit supporting Entities")
+    return bindings
+
+
+def _validate_opposing_films(
+    index: Mapping[str, PhysicalLayerDeclaration],
+    profile: ApproximationProfile,
+    removed: Sequence[tuple[str, float, float]],
+    anchors: Mapping[str, float],
+    support_planes: Mapping[str, tuple[float, str]],
+) -> None:
+    parameters = profile.parameters
+    if profile.name == "metal_gap_equivalent":
+        if (
+            index[removed[0][0]].source_contact_facts["layer_attachment_face"]
+            != "lower"
+            or index[removed[1][0]].source_contact_facts["layer_attachment_face"]
+            != "upper"
+        ):
+            raise ValueError(
+                "metal_gap_equivalent requires lower/upper opposing attachments"
+            )
+    if len(anchors) == 2 and profile.name in {"substrate_face", "metal_gap_equivalent"}:
+        lower, upper = sorted(anchors, key=lambda physical_id: anchors[physical_id])
+        lower_host = parameters["film_bindings"][lower]["supporting_entity_id"]
+        upper_host = parameters["film_bindings"][upper]["supporting_entity_id"]
+        if (
+            lower_host == upper_host
+            or support_planes[lower][1] != "upper"
+            or support_planes[upper][1] != "lower"
+        ):
+            raise ValueError(
+                "two films require distinct opposing dielectric substrate faces"
+            )
+        if index[upper].source_interval_um[0] <= index[lower].source_interval_um[1]:
+            raise ValueError(
+                "opposing films require a positive original inter-film cavity"
+            )
+
+
+def _supporting_entity(
+    binding: Mapping[str, Any],
+    supporting_entities: Mapping[str, Any] | None,
+) -> Mapping[str, Any]:
+    if (
+        supporting_entities is None
+        or binding["supporting_entity_id"] not in supporting_entities
+    ):
+        raise ValueError("film profile supporting Entity is unavailable")
+    host = supporting_entities[binding["supporting_entity_id"]]
+    required = {
+        "geometry",
+        "material_id",
+        "material_kind",
+        "material_properties",
+    }
+    if not isinstance(host, Mapping) or not required <= set(host):
+        raise ValueError(
+            "supporting Entity needs original geometry and material identity/properties"
+        )
+    if host["material_kind"] != "dielectric":
+        raise ValueError("film supporting Entity must be a declared dielectric")
+    if not host["material_id"] or not isinstance(host["material_properties"], Mapping):
+        raise ValueError("supporting Entity material evidence is unavailable")
+    return host
+
+
+def _index_declarations(
+    declarations: Sequence[PhysicalLayerDeclaration],
+) -> dict[str, PhysicalLayerDeclaration]:
+    index = {}
+    for item in declarations:
+        if not isinstance(item, PhysicalLayerDeclaration):
+            raise TypeError("physical declarations must be typed source records")
+        previous = index.setdefault(item.physical_layer_id, item)
+        if previous != item:
+            raise ValueError(f"conflicting declaration for {item.physical_layer_id!r}")
+    return index
