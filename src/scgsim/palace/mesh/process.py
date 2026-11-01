@@ -10,8 +10,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
-from scgsim.diagnostics import _stage, _worker_config
-from scgsim.preparation import _native_preparation
+from scgsim.diagnostics import diagnostic_stage, worker_config
+from scgsim.preparation import native_preparation
 
 from .controls import MeshSizing
 
@@ -47,10 +47,10 @@ def mesh_from_route_xao(  # noqa: PLR0913 -- process request preserves explicit 
             key: value for key, value in mesh_controls.items() if key != "size_policy"
         },
     }
-    diagnostic_config = _worker_config()
+    diagnostic_config = worker_config()
     if diagnostic_config is not None:
         request["preparation_diagnostics"] = diagnostic_config
-    with _native_preparation(mesh_controls):
+    with native_preparation(mesh_controls):
         result = _run_gmsh_worker(request=request, run_dir=mesh_path.parent)
     groups = result.get("groups")
     if not isinstance(groups, dict):
@@ -63,7 +63,7 @@ def mesh_from_route_xao(  # noqa: PLR0913 -- process request preserves explicit 
     return mesh_path, groups, meshing
 
 
-@_stage("palace.mesh.worker_wait")
+@diagnostic_stage("palace.mesh.worker_wait")
 def _run_gmsh_worker(*, request: Mapping[str, Any], run_dir: Path) -> Mapping[str, Any]:
     """Run unchanged gsim-derived XAO lowering in a fresh process."""
     with TemporaryDirectory(prefix="scgsim-gmsh-worker-", dir=run_dir) as temporary:

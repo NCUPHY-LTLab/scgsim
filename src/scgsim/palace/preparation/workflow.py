@@ -19,10 +19,10 @@ from scgsim.geometry.models.physical import (
     PhysicalRepresentationPlan,
 )
 from scgsim.geometry.planning.physical import interpret_physical_geometry
-from scgsim.geometry.source.adapter import _solution_region_entity_from_record
-from scgsim.geometry.source.ground_bumps import _prepare_indium_ground_bump_fill
+from scgsim.geometry.source.adapter_records import solution_region_entity
+from scgsim.geometry.source.ground_bumps import prepare_indium_ground_bump_fill
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
-from scgsim.semantics.snapshot import _plain, canonical_sha256
+from scgsim.semantics.snapshot import canonical_sha256, to_plain
 
 from ..mesh.source import with_port_sheet_metadata
 from .transforms import (
@@ -64,7 +64,7 @@ def prepare_mesh_input(  # noqa: PLR0913 - explicit preparation controls preserv
     indium_fill = None
     prepared_component = component
     if indium_ground_bumps is not None:
-        indium_fill = _prepare_indium_ground_bump_fill(
+        indium_fill = prepare_indium_ground_bump_fill(
             component=component,
             stack=prepared_stack,
             **indium_ground_bumps,
@@ -103,7 +103,7 @@ def prepare_mesh_input(  # noqa: PLR0913 - explicit preparation controls preserv
     )
     prepared_stack = effective_stack
     if route == "A":
-        source_hash = canonical_sha256(_plain(stack))
+        source_hash = canonical_sha256(to_plain(stack))
         prepared_stack["metadata"]["route_a_thin_film"] = {
             "schema_version": 1,
             "variant": approximation_profile.name,
@@ -139,7 +139,7 @@ def _synchronize_solution_regions(
     """Replace changed solution regions without disturbing retained entity order."""
     if prepared_stack["solution_regions"] != build_input.solution_regions:
         regions = tuple(
-            _solution_region_entity_from_record(
+            solution_region_entity(
                 key,
                 record,
                 materials=prepared_stack["materials"],

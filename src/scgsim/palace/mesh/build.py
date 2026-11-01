@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from scgsim.diagnostics import _stage
+from scgsim.diagnostics import diagnostic_stage
 from scgsim.geometry.compiler.builder import SemanticGeometryBuilder
 
 from .controls import mesh_controls, normalize_mesh_sizing
@@ -48,7 +48,7 @@ class MeshBuildResult:
     sidecar_path: Path
 
 
-@_stage("palace.mesh.prepare")
+@diagnostic_stage("palace.mesh.prepare")
 def build_route_mesh(  # noqa: PLR0913 -- preserve the supported mesh preparation API.
     *,
     component: Any,

@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from scgsim.diagnostics import _worker_diagnostics
+from scgsim.diagnostics import worker_diagnostics
 from scgsim.palace.mesh.native import mesh_xao_in_current_process
 
 from .controls import MeshSizing, mesh_controls
@@ -26,7 +26,7 @@ def main(arguments: list[str] | None = None) -> int:
     diagnostic_config = request.get("preparation_diagnostics")
     if diagnostic_config is not None and not isinstance(diagnostic_config, Mapping):
         raise TypeError("Worker diagnostic configuration must be a mapping.")
-    with _worker_diagnostics(diagnostic_config):
+    with worker_diagnostics(diagnostic_config):
         return _run_request(request, result_path)
 
 
