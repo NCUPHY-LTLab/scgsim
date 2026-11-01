@@ -95,11 +95,11 @@ def analyze_epr(  # noqa: PLR0913 -- public keyword-only signature.
         geometry_workers=geometry_workers,
     )
     from scgsim.aedt.results.epr import resolve_epr_result
-    from scgsim.aedt.runtime.transaction import execute
+    from scgsim.aedt.runtime.transaction import Options, execute
 
     previous = Path.cwd()
     try:
-        exit_code = execute(plan.metadata_path, analyze_epr=True)
+        exit_code = execute(plan.metadata_path, Options(analyze_epr=True))
     finally:
         import os
 

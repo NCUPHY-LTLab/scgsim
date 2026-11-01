@@ -87,7 +87,7 @@ _SPECS_WITH_FAILURE_NOTES = (Q3dSpec, HfssDrivenGeometrySpec, HfssEprSpec)
 
 
 @dataclass(frozen=True)
-class _Options:
+class Options:
     """The command-line choices that change how a handoff runs."""
 
     prepare_only: bool = False
@@ -148,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     return execute(
         metadata_path,
-        _Options(
+        Options(
             prepare_only=args.prepare_only,
             analyze_epr=args.analyze_epr,
             geometry_workers=args.geometry_workers,
@@ -158,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
 
-def execute(metadata_path: Path, options: _Options) -> int:
+def execute(metadata_path: Path, options: Options) -> int:
     """Run a verified handoff on an owned Desktop, write its receipt; 0 on success."""
     os.chdir(metadata_path.parent.parent)
     handoff = load_verified_handoff(
@@ -218,7 +218,7 @@ def _warn_if_thin_film_epr_unvalidated(spec: AedtSpec) -> None:
 
 
 def _run_on_owned_desktop(
-    handoff: VerifiedHandoff, attempt: _Attempt, options: _Options
+    handoff: VerifiedHandoff, attempt: _Attempt, options: Options
 ) -> None:
     spec = handoff.spec
     receipt = handoff.receipt
@@ -251,7 +251,7 @@ def _run_on_owned_desktop(
     _run_solver_family(handoff, attempt, options.prepare_only, inset_plan)
 
 
-def _precompute_epr_insets(handoff: VerifiedHandoff, options: _Options) -> Any | None:
+def _precompute_epr_insets(handoff: VerifiedHandoff, options: Options) -> Any | None:
     """Compute inset surfaces before AEDT starts; this geometry work needs no Desktop."""
     spec = handoff.spec
     setting = handoff.metadata.get("execution", {}).get("geometry_workers")
@@ -401,7 +401,7 @@ def _describe_failure(exc: Exception, spec: AedtSpec) -> str:
 
 
 def _close_transaction(
-    handoff: VerifiedHandoff, attempt: _Attempt, options: _Options, started: float
+    handoff: VerifiedHandoff, attempt: _Attempt, options: Options, started: float
 ) -> None:
     spec = handoff.spec
     receipt = handoff.receipt

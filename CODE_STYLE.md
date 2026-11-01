@@ -58,6 +58,6 @@ A fix goes in its own commit.
 
 ## Example
 
-`src/scgsim/aedt/runtime/transaction.py` is the reference. Its `_execute` shows the
+`src/scgsim/aedt/runtime/transaction.py` is the reference. Its `execute` shows the
 whole transaction in a few lines; the verification and receipt details live in
 `handoff_checks.py` and `receipts.py`.
