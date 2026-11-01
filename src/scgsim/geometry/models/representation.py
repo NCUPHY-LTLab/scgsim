@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Literal
 from types import MappingProxyType
+from typing import Literal
+
 from scgsim.semantics.snapshot import freeze_plain
 
 
@@ -24,8 +25,12 @@ class EntityRepresentation:
     effective_z_interval_um: tuple[float, float]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "source_z_interval_um", tuple(self.source_z_interval_um))
-        object.__setattr__(self, "effective_z_interval_um", tuple(self.effective_z_interval_um))
+        object.__setattr__(
+            self, "source_z_interval_um", tuple(self.source_z_interval_um)
+        )
+        object.__setattr__(
+            self, "effective_z_interval_um", tuple(self.effective_z_interval_um)
+        )
 
 
 @dataclass(frozen=True, slots=True)
