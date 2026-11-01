@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .common import read_json_record, file_sha256
 from ..preview import GeometryPreview
 from ..scene import FIXED_COLORS, SceneMode, ScenePart, color_for_identity
+from .common import file_sha256, read_json_record
 
 
 def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
@@ -25,9 +26,8 @@ def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
         raise FileNotFoundError(f"Palace preview inputs are missing: {missing!r}")
 
     try:
-        import meshio
-        import numpy as np
-        import pyvista as pv
+        import meshio  # noqa: PLC0415 - optional visualization dependency.
+        import pyvista as pv  # noqa: PLC0415 - optional visualization dependency.
     except ImportError as exc:
         raise RuntimeError(
             "Palace geometry preview requires scgsim[visualization]"
@@ -38,6 +38,98 @@ def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
     config = read_json_record(paths["config.json"])
     mesh = meshio.read(paths["palace.msh"])
     grid = _high_order_grid(mesh, mesh_manifest, pv)
+    selection = _bind_mesh_selection(mesh, grid, mesh_manifest)
+    materials = _palace_materials(config, selection.records, selection.cells)
+    boundaries = _palace_boundaries(
+        config, index_map, selection.records, selection.cells
+    )
+    surface_epr = _palace_surface_epr(
+        config, index_map, selection.records, selection.cells
+    )
+    mesh_parts = selection.mesh_parts()
+    source_hashes = {name: file_sha256(path) for name, path in paths.items()}
+    return GeometryPreview(
+        root=root,
+        backend="palace",
+        source_hashes=source_hashes,
+        modes={
+            "materials": SceneMode(tuple(materials)),
+            "boundaries": SceneMode(tuple(boundaries)),
+            "surface_epr": (
+                SceneMode(tuple(surface_epr))
+                if surface_epr
+                else SceneMode(
+                    unavailable_reason="No structured Surface-EPR assignment is present."
+                )
+            ),
+            "mesh": SceneMode(tuple(mesh_parts)),
+        },
+    )
+
+
+@dataclass(frozen=True)
+class _MeshSelection:
+    """One mesh and its detached physical-tag arrays shared by preview modes."""
+
+    grid: Any
+    dimensions: Any
+    physical: Any
+    cell_types: Any
+    records: dict[tuple[int, int], Mapping[str, Any]]
+    field_names: dict[tuple[int, int], list[str]]
+    actual: set[tuple[int, int]]
+
+    def cells(self, dimension: int, attribute: int) -> Any:
+        """Extract cells for one exact physical identity."""
+        import numpy as np  # noqa: PLC0415 - visualization is an optional heavy dependency.
+
+        ids = np.flatnonzero(
+            (self.dimensions == dimension) & (self.physical == attribute)
+        )
+        if not len(ids):
+            raise ValueError(
+                f"Palace physical group {(dimension, attribute)} has no cells"
+            )
+        return self.grid.extract_cells(ids)
+
+    def mesh_parts(self) -> list[ScenePart]:
+        """Build the mesh mode using complete element-type labels and tag counts."""
+        mesh_parts: list[ScenePart] = []
+        for dimension, attribute in sorted(self.actual):
+            types = sorted(
+                set(
+                    self.cell_types[
+                        (self.dimensions == dimension) & (self.physical == attribute)
+                    ]
+                )
+            )
+            name = " / ".join(sorted(self.field_names[(dimension, attribute)]))
+            mesh_parts.append(
+                ScenePart(
+                    dataset=self.cells(dimension, attribute),
+                    semantic_id=f"mesh:{dimension}:{attribute}",
+                    label=f"{name} · dim {dimension} · {'/'.join(types)}",
+                    role="solution physical group",
+                    color=color_for_identity(name),
+                    opacity=0.35 if dimension == 3 else 0.85,
+                    count=int(
+                        (
+                            (self.dimensions == dimension)
+                            & (self.physical == attribute)
+                        ).sum()
+                    ),
+                    show_edges=True,
+                )
+            )
+        return mesh_parts
+
+
+def _bind_mesh_selection(
+    mesh: Any, grid: Any, mesh_manifest: Mapping[str, Any]
+) -> _MeshSelection:
+    """Validate physical tags and bind their exact structured manifest records."""
+    import numpy as np  # noqa: PLC0415 - visualization is an optional heavy dependency.
+
     physical_blocks = mesh.cell_data.get("gmsh:physical")
     if physical_blocks is None or len(physical_blocks) != len(mesh.cells):
         raise ValueError("Palace mesh has no complete gmsh:physical cell tags")
@@ -79,62 +171,14 @@ def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
         for key, items in grouped_records.items()
     }
 
-    def cells(dimension: int, attribute: int) -> Any:
-        ids = np.flatnonzero(
-            (dimensions_array == dimension) & (physical_array == attribute)
-        )
-        if not len(ids):
-            raise ValueError(
-                f"Palace physical group {(dimension, attribute)} has no cells"
-            )
-        return grid.extract_cells(ids)
-
-    materials = _palace_materials(config, records, cells)
-    boundaries = _palace_boundaries(config, index_map, records, cells)
-    surface_epr = _palace_surface_epr(config, index_map, records, cells)
-    mesh_parts: list[ScenePart] = []
-    for dimension, attribute in sorted(actual):
-        types = sorted(
-            set(
-                cell_types_array[
-                    (dimensions_array == dimension) & (physical_array == attribute)
-                ]
-            )
-        )
-        name = " / ".join(sorted(field_names[(dimension, attribute)]))
-        mesh_parts.append(
-            ScenePart(
-                dataset=cells(dimension, attribute),
-                semantic_id=f"mesh:{dimension}:{attribute}",
-                label=f"{name} · dim {dimension} · {'/'.join(types)}",
-                role="solution physical group",
-                color=color_for_identity(name),
-                opacity=0.35 if dimension == 3 else 0.85,
-                count=int(
-                    (
-                        (dimensions_array == dimension) & (physical_array == attribute)
-                    ).sum()
-                ),
-                show_edges=True,
-            )
-        )
-    source_hashes = {name: file_sha256(path) for name, path in paths.items()}
-    return GeometryPreview(
-        root=root,
-        backend="palace",
-        source_hashes=source_hashes,
-        modes={
-            "materials": SceneMode(tuple(materials)),
-            "boundaries": SceneMode(tuple(boundaries)),
-            "surface_epr": (
-                SceneMode(tuple(surface_epr))
-                if surface_epr
-                else SceneMode(
-                    unavailable_reason="No structured Surface-EPR assignment is present."
-                )
-            ),
-            "mesh": SceneMode(tuple(mesh_parts)),
-        },
+    return _MeshSelection(
+        grid,
+        dimensions_array,
+        physical_array,
+        cell_types_array,
+        records,
+        field_names,
+        actual,
     )
 
 
@@ -190,14 +234,7 @@ def _palace_boundaries(
 ) -> list[ScenePart]:
     boundary_root = config.get("Boundaries", {})
     assignments: dict[int, tuple[str, str, str]] = {}
-    indexed: dict[tuple[str, int], Mapping[str, Any]] = {}
-    for item in index_map.get("entries", ()):
-        if item.get("index") is None:
-            continue
-        key = (str(item.get("section")), int(item["index"]))
-        if key in indexed:
-            raise ValueError(f"Palace index map has duplicate identity {key!r}")
-        indexed[key] = item
+    indexed = _boundary_index(index_map)
 
     def add(attribute: int, semantic_id: str, label: str, role: str) -> None:
         attribute = int(attribute)
@@ -368,12 +405,12 @@ def _high_order_grid(mesh: Any, manifest: Mapping[str, Any], pv: Any) -> Any:
     simplices retain Gmsh order, so native reference lattices supply the exact
     permutation instead of dropping their non-corner nodes.
     """
-    import numpy as np
-    from meshio._vtk_common import meshio_to_vtk_type
-    from vtkmodules.vtkCommonDataModel import (
+    import numpy as np  # noqa: PLC0415 - optional visualization dependency.
+    from meshio._vtk_common import meshio_to_vtk_type  # noqa: PLC0415  # private-import: meshio exposes its VTK cell-code mapping only through this module.
+    from vtkmodules.vtkCommonDataModel import (  # noqa: PLC0415 - optional VTK runtime.
         vtkLagrangeCurve,
-        vtkLagrangeTriangle,
         vtkLagrangeTetra,
+        vtkLagrangeTriangle,
     )
 
     records = manifest.get("meshing", {}).get("statistics", {}).get("element_types", ())
@@ -444,3 +481,19 @@ def _high_order_grid(mesh: Any, manifest: Mapping[str, Any], pv: Any) -> Any:
         {key: np.concatenate(values) for key, values in mesh.cell_data.items()}
     )
     return grid
+
+
+def _boundary_index(
+    index_map: Mapping[str, Any],
+) -> dict[tuple[str, int], Mapping[str, Any]]:
+    """Require unique section/index identities before boundary assignments."""
+    indexed: dict[tuple[str, int], Mapping[str, Any]] = {}
+    for item in index_map.get("entries", ()):
+        if item.get("index") is None:
+            continue
+        key = (str(item.get("section")), int(item["index"]))
+        if key in indexed:
+            raise ValueError(f"Palace index map has duplicate identity {key!r}")
+        indexed[key] = item
+
+    return indexed

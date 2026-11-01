@@ -208,7 +208,8 @@ def adapted_mesh_output_paths(root: Path, config: dict[str, Any]) -> list[str]:
     return outputs
 
 
-def _record_for_path(run_dir: Path, relative_path: str) -> dict[str, Any]:
+def record_for_path(run_dir: Path, relative_path: str) -> dict[str, Any]:
+    """Describe a run artifact with its presence, byte count, and digest."""
     path = confined_path(run_dir, relative_path)
     if not path.is_file():
         return {"path": relative_path, "bytes": None, "sha256": None, "present": False}
@@ -310,7 +311,7 @@ def _runtime_compatibility_verified(
     config_path = config.get("path")
     if config_path != "config.json" or config.get("declared_schema") != config_schema:
         return False
-    expected_config = _record_for_path(root, config_path)
+    expected_config = record_for_path(root, config_path)
     if expected_config["present"] is not True:
         return False
     if (
@@ -453,8 +454,8 @@ def _receipt_payload(context: _ReceiptContext) -> dict[str, Any]:
     ):
         output_paths.extend(adapted_mesh_output_paths(context.root, config))
         output_paths = list(dict.fromkeys(output_paths))
-    output_records = [_record_for_path(context.root, path) for path in output_paths]
-    log_record = _record_for_path(context.root, context.args.log_path)
+    output_records = [record_for_path(context.root, path) for path in output_paths]
+    log_record = record_for_path(context.root, context.args.log_path)
     completed_outputs = all(record["present"] is True for record in output_records)
     completed_inputs = _input_hashes_match(context.root, context.input_hashes)
     runtime_compatible = _runtime_compatibility_verified(
@@ -671,14 +672,14 @@ def _verify_config_main(argv: list[str]) -> int:
     )
 
     root = Path.cwd().resolve()
-    config_before = _record_for_path(root, args.config_path)
+    config_before = record_for_path(root, args.config_path)
     dry_run_command = [args.executable]
     if args.command_style == "wrapper":
         dry_run_command.append("-serial")
     dry_run_command.extend(["--dry-run", args.config_path])
     dry_run_exit_code, _ = _run_probe(dry_run_command)
 
-    config_record = _record_for_path(root, args.config_path)
+    config_record = record_for_path(root, args.config_path)
     supported_release = version_exit_code == 0 and _supported_palace_release(
         native_git_tag
     )
@@ -736,6 +737,7 @@ __all__ = [
     "adapted_mesh_output_paths",
     "confined_path",
     "iteration_output_paths",
+    "record_for_path",
     "sha256",
 ]
 

@@ -1,4 +1,4 @@
-"""Offline Palace EPR projection and Plotly rendering."""
+"""Render one detached EPR mode with surface, bulk and signed-port axes."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from typing import Any
 
 
 def _plain_view(value: Any) -> Any:
+    """Convert immutable EPR containers into values suitable for Plotly hover metadata."""
     if isinstance(value, Mapping):
         return {str(key): _plain_view(item) for key, item in value.items()}
     if isinstance(value, (tuple, list)):
@@ -16,6 +17,7 @@ def _plain_view(value: Any) -> Any:
 
 
 def _show_view(result: Any, *, mode: int | None) -> dict[str, Any]:
+    """Select exactly one mode and summarize known baseline loss and contribution coverage."""
     selected = [row for row in result.rows if mode is None or row["mode"] == mode]
     if len(selected) != 1:
         raise ValueError("show_epr requires one exact mode")
@@ -48,6 +50,7 @@ def _show_view(result: Any, *, mode: int | None) -> dict[str, Any]:
 
 
 def _surface_label(item: Mapping[str, Any]) -> str:
+    """Label source owners and interface, retaining explicit margin or historical band units."""
     owners = ",".join(item["owner_semantic_ids"])
     label = f"{owners} / {item['interface_kind']} / {item['evaluation_kind']}"
     if item["evaluation_kind"] == "geometric_band":
@@ -62,8 +65,11 @@ def show_epr(result: Any, *, mode: int | None = None) -> Any:
 
     view = _show_view(result, mode=mode)
     row = view["row"]
-    from plotly import graph_objects as go
-    from plotly.subplots import make_subplots
+    # Plotly loads only when the caller requests a figure.
+    from plotly import graph_objects as go  # noqa: PLC0415
+
+    # Plotly loads only when the caller requests a figure.
+    from plotly.subplots import make_subplots  # noqa: PLC0415
 
     figure = make_subplots(
         rows=3, cols=1, subplot_titles=("Surface", "Bulk", "Palace port")
@@ -144,5 +150,3 @@ def show_epr(result: Any, *, mode: int | None = None) -> Any:
     )
     figure.update_layout(title=f"Palace EPR mode {row['mode']}", height=900)
     return figure
-
-
