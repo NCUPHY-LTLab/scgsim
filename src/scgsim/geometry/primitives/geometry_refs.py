@@ -46,7 +46,7 @@ def entity_geometry_ref(
 
 def route_entity_geometry_ref(
     build_input: GeometryBuildInput,
-    route: RouteLiteral,
+    route: RouteLiteral | None,
     entity: SemanticEntitySpec,
     *,
     representation: str,
