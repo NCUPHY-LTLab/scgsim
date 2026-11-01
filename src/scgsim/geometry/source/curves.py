@@ -135,6 +135,39 @@ def boundary_binding(
     return record
 
 
+@overload
+def transform_boundary(
+    value: _BoundaryInput,
+    *,
+    path: str,
+    transform: tuple[float, ...],
+    point: _BoundaryPoint,
+    reconstruction: Literal[False] = False,
+) -> BoundaryCurveChainSpec: ...
+
+
+@overload
+def transform_boundary(
+    value: _BoundaryInput,
+    *,
+    path: str,
+    transform: tuple[float, ...],
+    point: _BoundaryPoint,
+    reconstruction: Literal[True],
+) -> GdsBoundaryReconstructionSpec: ...
+
+
+@overload
+def transform_boundary(
+    value: _BoundaryInput,
+    *,
+    path: str,
+    transform: tuple[float, ...],
+    point: _BoundaryPoint,
+    reconstruction: bool,
+) -> _BoundaryRecord: ...
+
+
 def transform_boundary(
     value: _BoundaryInput,
     *,

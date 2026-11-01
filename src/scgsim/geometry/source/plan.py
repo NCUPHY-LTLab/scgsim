@@ -871,20 +871,26 @@ class GeometryPlan:
         reconstruction = list(self._boundary_reconstruction)
         for path, (cell, _, transform) in self._instances.items():
             semantics = _local_semantics(cell, path)
-            for key, target, reconstruct in (
-                ("boundary_curves", boundary_curves, False),
-                ("boundary_reconstruction", reconstruction, True),
-            ):
-                target.extend(
-                    transform_boundary(
-                        value,
-                        path=path,
-                        transform=transform,
-                        point=_point,
-                        reconstruction=reconstruct,
-                    )
-                    for value in semantics.get(key, ())
+            boundary_curves.extend(
+                transform_boundary(
+                    value,
+                    path=path,
+                    transform=transform,
+                    point=_point,
+                    reconstruction=False,
                 )
+                for value in semantics.get("boundary_curves", ())
+            )
+            reconstruction.extend(
+                transform_boundary(
+                    value,
+                    path=path,
+                    transform=transform,
+                    point=_point,
+                    reconstruction=True,
+                )
+                for value in semantics.get("boundary_reconstruction", ())
+            )
         build_input = replace(
             build_input,
             polygons=polygons,
