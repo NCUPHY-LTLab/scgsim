@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from scgsim.geometry._primitives.grid import polygon_boolean
-
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from itertools import pairwise
@@ -27,21 +25,26 @@ from scgsim.geometry._primitives.geometry_refs import (
     _route_entity_geometry_ref,
     _sidewall_geometry_refs,
 )
+from scgsim.geometry._primitives.grid import (
+    boolean_polygon_region,
+    polygon_boolean,
+    split_gdstk_cutline_loop,
+)
 from scgsim.geometry._primitives.loops import (
-    _boolean_gdstk_region,
-    _clean_loop,
     _edge_is_covered_by_loop_edge,
-    _filter_gdstk_polygons,
     _gdstk_surface_region,
     _geometry_ref_from_gdstk_polygon,
     _geometry_refs_from_gdstk_region,
     _loop_centroid,
     _loop_signature,
     _loops_share_edge_overlap,
-    _polygon_area,
-    _ring_edges,
     _simple_interior_hole_loops,
-    _split_gdstk_cutline_loop,
+)
+from scgsim.geometry._primitives.planar_loops import (
+    clean_loop,
+    filter_gdstk_polygons,
+    polygon_area,
+    ring_edges,
 )
 from scgsim.geometry._primitives.spatial import (
     _bounds_contains_point,
@@ -126,12 +129,12 @@ def verified_route_a_substrate_support(
                     raise ValueError(
                         f"{source_id} references missing normalized polygon {polygon_id!r}."
                     )
-                exterior = (gdstk.Polygon(_clean_loop(polygon.exterior)),)
+                exterior = (gdstk.Polygon(clean_loop(polygon.exterior)),)
                 holes = tuple(
-                    gdstk.Polygon(_clean_loop(hole)) for hole in polygon.holes
+                    gdstk.Polygon(clean_loop(hole)) for hole in polygon.holes
                 )
                 face_regions.extend(
-                    _boolean_gdstk_region(gdstk, exterior, holes, "not")
+                    boolean_polygon_region(gdstk, exterior, holes, "not")
                 )
         if not face_regions:
             raise ValueError(
@@ -147,7 +150,7 @@ def verified_route_a_substrate_support(
             if not sides:
                 continue
             substrate_region = _solution_entity_xy_region(gdstk, substrate)
-            if _boolean_gdstk_region(gdstk, face_regions, substrate_region, "and"):
+            if boolean_polygon_region(gdstk, face_regions, substrate_region, "and"):
                 matches.extend((side, substrate.semantic_id) for side in sides)
         if len(matches) != 1:
             raise ValueError(
@@ -302,7 +305,7 @@ def _prepare_auto_vacuum_solution_regions(
                 continue
             active_subtractors.append(entity)
             if active_subtractor_region:
-                active_subtractor_region = _boolean_gdstk_region(
+                active_subtractor_region = boolean_polygon_region(
                     gdstk,
                     active_subtractor_region,
                     subtractor_regions,
@@ -313,7 +316,7 @@ def _prepare_auto_vacuum_solution_regions(
 
         vacuum_region_refs = _geometry_refs_from_gdstk_region(
             {"outer_loop": envelope_loop},
-            _boolean_gdstk_region(
+            boolean_polygon_region(
                 gdstk,
                 base_region,
                 active_subtractor_region,
@@ -353,7 +356,7 @@ def _prepare_auto_vacuum_solution_regions(
                 entity_region = _auto_vacuum_subtractor_xy_region(
                     gdstk, build_input, entity
                 )
-                if _boolean_gdstk_region(
+                if boolean_polygon_region(
                     gdstk,
                     component_region,
                     entity_region,
@@ -492,8 +495,8 @@ def _auto_vacuum_entity_xy_bounds(
         }
 
     if "outer_loop" in geometry:
-        outer_loop = _clean_loop(geometry["outer_loop"])
-        hole_loops = tuple(_clean_loop(loop) for loop in geometry.get("hole_loops", ()))
+        outer_loop = clean_loop(geometry["outer_loop"])
+        hole_loops = tuple(clean_loop(loop) for loop in geometry.get("hole_loops", ()))
         if not all(
             isfinite(coordinate)
             for loop in (outer_loop, *hole_loops)
@@ -519,14 +522,14 @@ def _auto_vacuum_entity_xy_bounds(
             raise ValueError(
                 f"{entity.semantic_id} references an unknown layout polygon for auto vacuum envelope."
             ) from exc
-        loop = _clean_loop(polygon.exterior)
+        loop = clean_loop(polygon.exterior)
         if len(loop) < 3:
             raise ValueError(
                 f"{entity.semantic_id} references degenerate polygon {polygon_id!r} for auto vacuum envelope."
             )
         points.extend(loop)
         for hole in polygon.holes:
-            hole_loop = _clean_loop(hole)
+            hole_loop = clean_loop(hole)
             if not all(
                 isfinite(coordinate) for point in hole_loop for coordinate in point
             ):
@@ -745,7 +748,7 @@ def _auto_vacuum_subtractor_xy_region(
         region = (
             polygon_region
             if not region
-            else _boolean_gdstk_region(gdstk, region, polygon_region, "or")
+            else boolean_polygon_region(gdstk, region, polygon_region, "or")
         )
     if not entity.polygon_ids:
         return _solution_entity_xy_region(gdstk, entity)
@@ -757,16 +760,16 @@ def _xy_region_from_loops(
     outer_loop: Any,
     hole_loops: Sequence[Any],
 ) -> tuple[Any, ...]:
-    outer = _clean_loop(outer_loop)
-    split_outer, *split_holes = _split_gdstk_cutline_loop(outer)
+    outer = clean_loop(outer_loop)
+    split_outer, *split_holes = split_gdstk_cutline_loop(outer)
     holes = tuple(
-        _clean_loop(loop)
+        clean_loop(loop)
         for loop in tuple(hole_loops) + tuple(split_holes)
         if len(loop) >= 3
     )
     if not holes:
         return (gdstk.Polygon(split_outer),)
-    return _filter_gdstk_polygons(
+    return filter_gdstk_polygons(
         polygon_boolean(
             (gdstk.Polygon(split_outer),),
             tuple(gdstk.Polygon(hole_loop) for hole_loop in holes),
@@ -781,7 +784,7 @@ def _loop_domain_bounds(
     hole_loops: tuple[tuple[tuple[float, float], ...], ...] = (),
 ) -> dict[str, float]:
     points = tuple(
-        point for loop in (outer_loop, *hole_loops) for point in _clean_loop(loop)
+        point for loop in (outer_loop, *hole_loops) for point in clean_loop(loop)
     )
     return {
         "x_min_um": min(point[0] for point in points),
@@ -819,7 +822,7 @@ def _planar_side_solution_regions(
         )
         if not on_boundary and not contains_plane:
             continue
-        overlap = _boolean_gdstk_region(
+        overlap = boolean_polygon_region(
             gdstk,
             occupied_region,
             _solution_entity_xy_region(gdstk, solution),
@@ -830,7 +833,7 @@ def _planar_side_solution_regions(
 
     for index, (left_id, left_region) in enumerate(records):
         for right_id, right_region in records[index + 1 :]:
-            if _boolean_gdstk_region(gdstk, left_region, right_region, "and"):
+            if boolean_polygon_region(gdstk, left_region, right_region, "and"):
                 raise ValueError(
                     f"{owner_id} {side} local adjacency is ambiguous "
                     f"between {left_id!r} and {right_id!r}."
@@ -840,9 +843,9 @@ def _planar_side_solution_regions(
         covered = (
             region
             if not covered
-            else _boolean_gdstk_region(gdstk, covered, region, "or")
+            else boolean_polygon_region(gdstk, covered, region, "or")
         )
-    uncovered = _boolean_gdstk_region(gdstk, occupied_region, covered, "not")
+    uncovered = boolean_polygon_region(gdstk, occupied_region, covered, "not")
     if uncovered:
         raise ValueError(f"{owner_id} {side} has no local solution coverage.")
     return tuple(records)
@@ -976,7 +979,7 @@ def _entity_loop_bounds(entity: SemanticEntitySpec) -> Mapping[str, float]:
             entity.geometry["outer_loop"],
             *entity.geometry.get("hole_loops", ()),
         )
-        for point in _clean_loop(loop)
+        for point in clean_loop(loop)
     )
     return {
         "x_min_um": min(point[0] for point in points),
@@ -1079,7 +1082,7 @@ def _plan_substrate_air_surfaces(
     )
     surface_index = 0
     for lower, upper, z_um, bounds in _solution_interface_planes(build_input):
-        interface_region = _boolean_gdstk_region(
+        interface_region = boolean_polygon_region(
             gdstk,
             _solution_entity_xy_region(gdstk, lower),
             _solution_entity_xy_region(gdstk, upper),
@@ -1110,9 +1113,9 @@ def _plan_substrate_air_surfaces(
             sorted(
                 interface_region,
                 key=lambda polygon: (
-                    round(_loop_centroid(_clean_loop(polygon.points))[0], 9),
-                    round(_loop_centroid(_clean_loop(polygon.points))[1], 9),
-                    round(abs(_polygon_area(polygon.points)), 9),
+                    round(_loop_centroid(clean_loop(polygon.points))[0], 9),
+                    round(_loop_centroid(clean_loop(polygon.points))[1], 9),
+                    round(abs(polygon_area(polygon.points)), 9),
                 ),
             )
         )
@@ -1139,7 +1142,7 @@ def _plan_substrate_air_surfaces(
                     _geometry_ref_surface_z_um(sheet_patch.geometry_ref),
                     z_um,
                 )
-                and _boolean_gdstk_region(
+                and boolean_polygon_region(
                     gdstk,
                     _gdstk_surface_region(sheet_patch.geometry_ref),
                     (patch,),
@@ -1218,7 +1221,7 @@ def _solution_interface_geometry_refs(
         for geometry_ref in conductor_geometry_refs
         for polygon in _gdstk_surface_region(geometry_ref)
     )
-    live_region = _boolean_gdstk_region(
+    live_region = boolean_polygon_region(
         gdstk,
         base_region,
         conductor_region,
@@ -1252,16 +1255,16 @@ def _auto_vacuum_component_contacts_subtractor(
         subtractor_region,
     )
     component_loops = (
-        _clean_loop(component_geometry_ref["outer_loop"]),
-        *(_clean_loop(loop) for loop in component_geometry_ref.get("hole_loops", ())),
+        clean_loop(component_geometry_ref["outer_loop"]),
+        *(clean_loop(loop) for loop in component_geometry_ref.get("hole_loops", ())),
     )
     return any(
         _loops_share_edge_overlap(component_loop, subtractor_loop)
         for component_loop in component_loops
         for subtractor_ref in subtractor_refs
         for subtractor_loop in (
-            _clean_loop(subtractor_ref["outer_loop"]),
-            *(_clean_loop(loop) for loop in subtractor_ref.get("hole_loops", ())),
+            clean_loop(subtractor_ref["outer_loop"]),
+            *(clean_loop(loop) for loop in subtractor_ref.get("hole_loops", ())),
         )
     )
 
@@ -1277,14 +1280,14 @@ def _entity_occupied_region(
         if build_input is None or not entity.polygon_ids:
             return ()
         return _auto_vacuum_subtractor_xy_region(gdstk, build_input, entity)
-    outer = gdstk.Polygon(_clean_loop(entity.geometry["outer_loop"]))
+    outer = gdstk.Polygon(clean_loop(entity.geometry["outer_loop"]))
     holes = tuple(
-        gdstk.Polygon(_clean_loop(hole_loop))
+        gdstk.Polygon(clean_loop(hole_loop))
         for hole_loop in entity.geometry.get("hole_loops", ())
     )
     if not holes:
-        return _filter_gdstk_polygons((outer,))
-    return _boolean_gdstk_region(gdstk, (outer,), holes, "not")
+        return filter_gdstk_polygons((outer,))
+    return boolean_polygon_region(gdstk, (outer,), holes, "not")
 
 
 def _solution_domain_sidewall_geometry_refs(
@@ -1299,13 +1302,13 @@ def _solution_domain_sidewall_geometry_refs(
 ) -> tuple[dict[str, Any], ...]:
     refs: list[dict[str, Any]] = []
     for ring_role, ring_loop in (
-        ("outer", _clean_loop(outer_loop)),
+        ("outer", clean_loop(outer_loop)),
         *(
-            (f"hole_{index:04d}", _clean_loop(hole_loop))
+            (f"hole_{index:04d}", clean_loop(hole_loop))
             for index, hole_loop in enumerate(solution.geometry.get("hole_loops", ()))
         ),
     ):
-        for edge_index, (start, end) in enumerate(_ring_edges(ring_loop)):
+        for edge_index, (start, end) in enumerate(ring_edges(ring_loop)):
             parameters = _solution_boundary_edge_parameters(
                 build_input,
                 route=route,
@@ -1393,8 +1396,8 @@ def _solution_boundary_edge_parameters(
             or _same_z(entity_z_max, solution_z_max)
         ):
             continue
-        for edge_start, edge_end in _ring_edges(
-            _clean_loop(entity.geometry["outer_loop"])
+        for edge_start, edge_end in ring_edges(
+            clean_loop(entity.geometry["outer_loop"])
         ):
             interval = _segment_overlap_interval(start, end, edge_start, edge_end)
             if interval is not None:
@@ -1679,14 +1682,14 @@ def _reconcile_solution_domain_boundaries(
             replacement_region = (
                 candidate_region
                 if not replacement_region
-                else _boolean_gdstk_region(
+                else boolean_polygon_region(
                     gdstk,
                     replacement_region,
                     candidate_region,
                     "or",
                 )
             )
-        residual_region = _boolean_gdstk_region(
+        residual_region = boolean_polygon_region(
             gdstk,
             _gdstk_surface_region(surface.geometry_ref),
             replacement_region,
@@ -1727,7 +1730,7 @@ def _plan_solution_domain_boundary_surfaces(
         if not _is_solution_entity(entity):
             continue
         if "outer_loop" in entity.geometry:
-            loop = _clean_loop(entity.geometry["outer_loop"])
+            loop = clean_loop(entity.geometry["outer_loop"])
             z_min_um = float(entity.geometry["z_min_um"])
             z_max_um = float(entity.geometry["z_max_um"])
         else:
@@ -2197,7 +2200,7 @@ def _sidewall_segment_is_component_boundary(
     intervals = tuple(
         interval
         for loop in loops
-        for edge_start, edge_end in _ring_edges(_clean_loop(loop))
+        for edge_start, edge_end in ring_edges(clean_loop(loop))
         if (interval := _segment_overlap_interval(start, end, edge_start, edge_end))
         is not None
     )
@@ -2301,7 +2304,7 @@ def _solution_id_for_entity_coverage(
             raise ValueError(f"unsupported solution adjacency mode {mode!r}")
         if not matches:
             continue
-        uncovered_region = _boolean_gdstk_region(
+        uncovered_region = boolean_polygon_region(
             gdstk,
             occupied_region,
             _solution_entity_xy_region(gdstk, solution),
@@ -2389,7 +2392,7 @@ def _conductor_entities_on_solution_plane(
     patch_region = (
         base_region
         if base_region is not None
-        else (gdstk.Polygon(_clean_loop(base_loop)),)
+        else (gdstk.Polygon(clean_loop(base_loop)),)
     )
     candidate_entities = (
         _route_conductor_contact_footprints(
@@ -2408,7 +2411,7 @@ def _conductor_entities_on_solution_plane(
             )
             is None
             or "outer_loop" not in entity.geometry
-            or not _boolean_gdstk_region(
+            or not boolean_polygon_region(
                 gdstk,
                 _entity_occupied_region(gdstk, entity),
                 patch_region,
@@ -2440,7 +2443,7 @@ def _conductor_entities_on_solution_plane(
                 records.append(entity)
             continue
         entity_region = _entity_occupied_region(gdstk, entity)
-        local_overlap = _boolean_gdstk_region(gdstk, entity_region, patch_region, "and")
+        local_overlap = boolean_polygon_region(gdstk, entity_region, patch_region, "and")
         if not local_overlap:
             continue
         for face, face_z in zip(
@@ -2489,7 +2492,7 @@ def _solution_exterior_face_geometry_refs(
         if not candidate:
             continue
         if subtractor_region:
-            subtractor_region = _boolean_gdstk_region(
+            subtractor_region = boolean_polygon_region(
                 gdstk,
                 subtractor_region,
                 candidate,
@@ -2497,7 +2500,7 @@ def _solution_exterior_face_geometry_refs(
             )
         else:
             subtractor_region = candidate
-    residual_region = _boolean_gdstk_region(
+    residual_region = boolean_polygon_region(
         gdstk,
         base_region,
         subtractor_region,

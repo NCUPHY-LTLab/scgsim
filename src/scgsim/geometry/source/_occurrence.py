@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
+from copy import deepcopy
+from dataclasses import dataclass, field, replace
+from functools import wraps
+from math import isfinite
+from threading import get_ident
+from types import MappingProxyType
+from typing import Any
+
 from scgsim.geometry._primitives.grid import (
     in_occurrence_frame,
     preserve_declared_source,
+    split_gdstk_cutline_loop,
 )
-
-from collections.abc import Mapping, Sequence
-from copy import deepcopy
-from contextlib import contextmanager
-from contextvars import ContextVar
-from dataclasses import dataclass, field, replace
-from functools import wraps
-from threading import get_ident
-from types import MappingProxyType
-from math import isfinite
-from typing import Any
-
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.source._normalization import _gds_layer
 from scgsim.geometry.source._polygon_ops import (
@@ -568,7 +568,6 @@ def _lumped_ring_identity(ring):
 
 def _occurrence_lumped_polygon(support, *, cell, excluded_reference_indexes=()):
     """Bind the complete authored local ring to actual original GDS geometry."""
-    from scgsim.geometry._primitives.loops import _split_gdstk_cutline_loop
 
     declared = (
         _lumped_ring_identity(support.exterior),
@@ -578,7 +577,7 @@ def _occurrence_lumped_polygon(support, *, cell, excluded_reference_indexes=()):
     for polygon in _polygons_by_layer(
         cell, excluded_reference_indexes=excluded_reference_indexes
     ).get(support.source_layer, ()):
-        exterior, holes = _split_gdstk_cutline_loop(_ring_from_gdstk_polygon(polygon))
+        exterior, holes = split_gdstk_cutline_loop(_ring_from_gdstk_polygon(polygon))
         local = LayoutPolygonSpec(support.source_polygon_id, "", exterior, holes)
         actual = (
             _lumped_ring_identity(exterior),

@@ -29,17 +29,16 @@ from scgsim.geometry._primitives.geometry_refs import (
     _route_entity_geometry_ref,
     _sidewall_geometry_refs,
 )
+from scgsim.geometry._primitives.grid import boolean_polygon_region
 from scgsim.geometry._primitives.loops import (
-    _boolean_gdstk_region,
     _canonical_loop_sort_key,
-    _clean_loop,
     _contact_holes_are_simple,
     _gdstk_surface_region,
     _geometry_refs_from_gdstk_region,
     _loop_signature,
-    _ring_edges,
     _same_loop_geometry,
 )
+from scgsim.geometry._primitives.planar_loops import clean_loop, ring_edges
 from scgsim.geometry._primitives.spatial import (
     _interpolate_3d,
     _interval_complement,
@@ -70,9 +69,9 @@ from scgsim.geometry.models.topology import (
 )
 from scgsim.geometry.planning.domain import (
     _adjacent_auto_vacuum_sidewall_component_id,
-    _conductor_sidewall_ref_solution_id,
     _conductor_face_solution_pieces,
     _conductor_sidewall_adjacent_solution_id,
+    _conductor_sidewall_ref_solution_id,
     _interface_surface_kinds,
     _merge_solution_sidewall_interfaces,
     _plan_substrate_air_surfaces,
@@ -91,15 +90,15 @@ from scgsim.geometry.planning.evidence import (
     metal_metal_evidence,
     require_semantic_evidence_facade,
 )
+from scgsim.geometry.planning.interfaces import (
+    _plan_mm_contact_records_with_components,
+    plan_conductor_contact_patches,
+    plan_mm_contact_records,
+    recognize_route_interfaces,
+)
 from scgsim.geometry.planning.representation import (
     is_sheet_context,
     planned_conductor_representation,
-)
-from scgsim.geometry.planning.interfaces import (
-    plan_conductor_contact_patches,
-    _plan_mm_contact_records_with_components,
-    plan_mm_contact_records,
-    recognize_route_interfaces,
 )
 from scgsim.geometry.planning.tags import (
     _entity_physical_group_id,
@@ -126,7 +125,9 @@ def plan_surface_contribution_patches(
     if representation_context is None:
         raise ValueError("interpret_physical_geometry() and pass plan.context for current contribution planning")
     from scgsim.geometry.compiler.validation import validate_selected_route
-    from scgsim.geometry.planning.representation import project_native_route_representations
+    from scgsim.geometry.planning.representation import (
+        project_native_route_representations,
+    )
     build_input = project_native_route_representations(build_input, route, representation_context)
     validate_selected_route(build_input, route, representation_context=representation_context)
     return _plan_surface_contribution_geometry(
@@ -423,7 +424,7 @@ def _plan_route_a_sheet_patches(
         has_distinct_side_domains = False
         for bottom_id, bottom_region in bottom_regions:
             for top_id, top_region in top_regions:
-                overlap = _boolean_gdstk_region(
+                overlap = boolean_polygon_region(
                     gdstk,
                     bottom_region,
                     top_region,
@@ -440,9 +441,9 @@ def _plan_route_a_sheet_patches(
                 pair_region = (
                     overlap
                     if not pair_region
-                    else _boolean_gdstk_region(gdstk, pair_region, overlap, "or")
+                    else boolean_polygon_region(gdstk, pair_region, overlap, "or")
                 )
-        uncovered = _boolean_gdstk_region(
+        uncovered = boolean_polygon_region(
             gdstk,
             sheet_region,
             pair_region,
@@ -600,10 +601,10 @@ def _effective_contact_sheet_surfaces(
     for side in ("bottom", "top"):
         contacts = contact_sides.get(side, ())
         contact_region = tuple(
-            gdstk.Polygon(_clean_loop(contact.outer_loop)) for contact in contacts
+            gdstk.Polygon(clean_loop(contact.outer_loop)) for contact in contacts
         )
         exposed = (
-            _boolean_gdstk_region(gdstk, sheet_region, contact_region, "not")
+            boolean_polygon_region(gdstk, sheet_region, contact_region, "not")
             if contact_region
             else sheet_region
         )
@@ -669,7 +670,7 @@ def _effective_contact_sheet_surfaces(
     paired = []
     for bottom_id, bottom_region in side_regions["bottom"]:
         for top_id, top_region in side_regions["top"]:
-            overlap = _boolean_gdstk_region(gdstk, bottom_region, top_region, "and")
+            overlap = boolean_polygon_region(gdstk, bottom_region, top_region, "and")
             for geometry_ref in _geometry_refs_from_gdstk_region(parent_ref, overlap):
                 patch_id = f"effective-mask:{interface.interface_id}:{len(paired):04d}"
                 paired.append(
@@ -1298,10 +1299,10 @@ def _route_a_sheet_patch_surfaces(
     }
     records: list[SurfacePlanRecord] = []
     for contact_index, contact in enumerate(sheet_contacts):
-        contact_region = (gdstk.Polygon(_clean_loop(contact.outer_loop)),)
+        contact_region = (gdstk.Polygon(clean_loop(contact.outer_loop)),)
         matches: list[_RouteASheetPatch] = []
         for patch in patches:
-            overlap = _boolean_gdstk_region(
+            overlap = boolean_polygon_region(
                 gdstk,
                 contact_region,
                 _gdstk_surface_region(patch.geometry_ref),
@@ -1315,7 +1316,7 @@ def _route_a_sheet_patch_surfaces(
                 "sheet patches; one contact requires one ordered domain pair."
             )
         patch = matches[0]
-        uncovered = _boolean_gdstk_region(
+        uncovered = boolean_polygon_region(
             gdstk,
             contact_region,
             _gdstk_surface_region(patch.geometry_ref),
@@ -1325,7 +1326,7 @@ def _route_a_sheet_patch_surfaces(
             raise ValueError(
                 f"{contact.contact_id} is not contained by its local Route A patch."
             )
-        contact_loops_by_patch[patch.patch_id].append(_clean_loop(contact.outer_loop))
+        contact_loops_by_patch[patch.patch_id].append(clean_loop(contact.outer_loop))
         cap_face = _route_a_sheet_contact_cap_face(
             build_input,
             sheet_entity=sheet,
@@ -1346,7 +1347,7 @@ def _route_a_sheet_patch_surfaces(
         )
         cap_geometry_ref = {
             **dict(patch.geometry_ref),
-            "outer_loop": _clean_loop(contact.outer_loop),
+            "outer_loop": clean_loop(contact.outer_loop),
             "hole_loops": (),
             "source_polygon_ids": _unique_ids(
                 (
@@ -1739,7 +1740,7 @@ def _contact_patches_by_entity_face(
     for interface in interfaces:
         if interface.recognition_rule != "coplanar_conductor_contact_patch":
             continue
-        loop = _clean_loop(interface.metadata["outer_loop"])
+        loop = clean_loop(interface.metadata["outer_loop"])
         lower_id = str(interface.metadata["lower_entity_id"])
         upper_id = str(interface.metadata["upper_entity_id"])
         lower_face = str(interface.metadata.get("lower_face", "top"))
@@ -1821,7 +1822,7 @@ def _route_a_sheet_contacts_by_face_metal(
             sorted(
                 contacts,
                 key=lambda contact: (
-                    _canonical_loop_sort_key(_clean_loop(contact.outer_loop)),
+                    _canonical_loop_sort_key(clean_loop(contact.outer_loop)),
                     contact.contact_id,
                 ),
             )
@@ -1894,26 +1895,26 @@ def _subtract_contact_patches_from_face(
 ) -> tuple[dict[str, Any], ...]:
     if not contact_loops:
         return (dict(geometry_ref),)
-    outer_loop = _clean_loop(geometry_ref["outer_loop"])
+    outer_loop = clean_loop(geometry_ref["outer_loop"])
     existing_holes = tuple(
-        _clean_loop(hole_loop) for hole_loop in geometry_ref.get("hole_loops", ())
+        clean_loop(hole_loop) for hole_loop in geometry_ref.get("hole_loops", ())
     )
     remaining_holes: list[tuple[tuple[float, float], ...]] = list(existing_holes)
     for contact_loop in contact_loops:
         if _same_loop_geometry(contact_loop, outer_loop):
             return ()
-        remaining_holes.append(_clean_loop(contact_loop))
+        remaining_holes.append(clean_loop(contact_loop))
     simple_ref = {
         **dict(geometry_ref),
         "hole_loops": tuple(remaining_holes),
-        "contact_hole_loops": tuple(_clean_loop(loop) for loop in contact_loops),
+        "contact_hole_loops": tuple(clean_loop(loop) for loop in contact_loops),
     }
     if _contact_holes_are_simple(outer_loop, remaining_holes):
         return (simple_ref,)
 
     import gdstk
 
-    live_region = _boolean_gdstk_region(
+    live_region = boolean_polygon_region(
         gdstk,
         _gdstk_surface_region(geometry_ref),
         tuple(gdstk.Polygon(loop) for loop in contact_loops),
@@ -2395,7 +2396,7 @@ def _entity_boundary_edges(
             entity.geometry["outer_loop"],
             *entity.geometry.get("hole_loops", ()),
         )
-        for edge in _ring_edges(_clean_loop(loop))
+        for edge in ring_edges(clean_loop(loop))
     )
 
 

@@ -10,11 +10,8 @@ from typing import Any
 
 from scgsim.geometry._primitives.constants import _TOPOLOGY_EPS_UM
 from scgsim.geometry._primitives.entities import _unique_ids
-from scgsim.geometry._primitives.loops import (
-    _clean_loop,
-    _ordered_loop_signature,
-    _polygon_area,
-)
+from scgsim.geometry._primitives.loops import _ordered_loop_signature
+from scgsim.geometry._primitives.planar_loops import clean_loop, polygon_area
 from scgsim.geometry._primitives.spatial import (
     _coordinate_key,
     _geometry_ref_surface_z_um,
@@ -358,7 +355,7 @@ def _surface_ring3d_specs(
         raise ValueError(f"{surface.surface_id} requires outer_loop or quad_points")
     z_um = _geometry_ref_surface_z_um(geometry_ref)
     outer_loop = _canonical_planar_loop_orientation(
-        _clean_loop(geometry_ref["outer_loop"])
+        clean_loop(geometry_ref["outer_loop"])
     )
     specs = [
         (
@@ -373,7 +370,7 @@ def _surface_ring3d_specs(
             index,
             tuple(
                 (x, y, z_um)
-                for x, y in _canonical_planar_loop_orientation(_clean_loop(hole_loop))
+                for x, y in _canonical_planar_loop_orientation(clean_loop(hole_loop))
             ),
         )
         for index, hole_loop in enumerate(geometry_ref.get("hole_loops", ()))
@@ -385,7 +382,7 @@ def _canonical_planar_loop_orientation(
     loop: tuple[tuple[float, float], ...],
 ) -> tuple[tuple[float, float], ...]:
     """Use one XY loop direction for OCC plane surfaces and their holes."""
-    if _polygon_area(loop) < 0:
+    if polygon_area(loop) < 0:
         return tuple(reversed(loop))
     return loop
 

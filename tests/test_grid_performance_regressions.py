@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 from shapely import Polygon, coverage_union_all, union_all
 
-from scgsim.geometry._primitives import grid
+from scgsim.geometry._primitives import grid, grid_overlay, grid_regions
 from scgsim.geometry.models.grid import GeometryGridContext
 
 
@@ -32,7 +32,7 @@ def test_existing_incremental_index_matches_exhaustive_candidates(monkeypatch, r
         for i, ring in enumerate(rings)
     )
     shapes = {v.operand_id: Polygon(v.exterior) for v in values}
-    indexed = grid._subdivide_grid(values, shapes, 0.1)
+    indexed = grid_overlay.subdivide_grid(values, shapes, 0.1)
 
     class ExhaustiveCandidates:
         """Reference broad phase: every real cell remains an exact candidate."""
@@ -44,7 +44,7 @@ def test_existing_incremental_index_matches_exhaustive_candidates(monkeypatch, r
             return tuple(range(self.count))
 
     monkeypatch.setattr(shapely, "STRtree", ExhaustiveCandidates)
-    exhaustive = grid._subdivide_grid(values, shapes, 0.1)
+    exhaustive = grid_overlay.subdivide_grid(values, shapes, 0.1)
     assert [(g.wkb, labels) for g, labels in indexed.cells] == [
         (g.wkb, labels) for g, labels in exhaustive.cells
     ]
@@ -61,14 +61,14 @@ def test_separated_incremental_inputs_do_no_pair_boolean_work(monkeypatch):
         for i in range(12)
     )
     calls = []
-    original = grid._overlay_call
+    original = grid_overlay.overlay_call
 
     def observed(operation, left, right, precision, operand_index, cell_index):
         calls.append((operation, cell_index))
         return original(operation, left, right, precision, operand_index, cell_index)
 
-    monkeypatch.setattr(grid, "_overlay_call", observed)
-    result = grid._subdivide_grid(
+    monkeypatch.setattr(grid_overlay, "overlay_call", observed)
+    result = grid_overlay.subdivide_grid(
         values, {v.operand_id: Polygon(v.exterior) for v in values}, 0.1
     )
     assert len(result.cells) == len(values)
@@ -85,19 +85,19 @@ def test_shared_vertex_conversion_once_and_exact_diagonal_incidence(monkeypatch)
         *[(10.0 + i, 20.0 + i) for i in range(30)],
     )
     calls = []
-    original = grid._region_key
+    original = grid_regions.region_key
 
     def observed(point, precision):
         calls.append(tuple(point))
         return original(point, precision)
 
-    monkeypatch.setattr(grid, "_region_key", observed)
-    index = grid._region_vertex_index(vertices, 0.1)
+    monkeypatch.setattr(grid_regions, "region_key", observed)
+    index = grid_regions.region_vertex_index(vertices, 0.1)
     assert len(calls) == len(vertices)
     shape = Polygon(((0.0, 0.0), (3.0, 3.0), (0.0, 3.0)))
     expected = (((0.0, 0.0), (1.0, 1.0), (2.0, 2.0), (3.0, 3.0), (0.0, 3.0)), ())
-    assert grid._regions_indexed(shape, index) == (expected,)
-    assert grid._regions_indexed(shape, index) == (expected,)
+    assert grid_regions.regions_indexed(shape, index) == (expected,)
+    assert grid_regions.regions_indexed(shape, index) == (expected,)
     assert len(calls) == len(vertices)
 
 
@@ -119,15 +119,17 @@ def test_arrangement_region_reuse_preserves_holed_memberships(monkeypatch, apply
         if f.face_id in selected_ids
     ]
     merged = coverage_union_all(selected) if apply_grid else union_all(selected)
-    expected = grid._regions(merged, arrangement.vertices, 0.1 if apply_grid else None)
+    expected = grid_regions.regions(
+        merged, arrangement.vertices, 0.1 if apply_grid else None
+    )
     calls = []
-    original = grid._regions_indexed
+    original = grid.regions_indexed
 
     def observed(geometry, index):
         calls.append(1)
         return original(geometry, index)
 
-    monkeypatch.setattr(grid, "_regions_indexed", observed)
+    monkeypatch.setattr(grid, "regions_indexed", observed)
     first = arrangement.operand_regions("outer")
     assert first == expected
     assert arrangement.face_regions(selected_ids) is first

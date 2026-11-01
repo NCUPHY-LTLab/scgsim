@@ -7,11 +7,14 @@ transforms remain at the occurrence boundary and are applied exactly once.
 
 from __future__ import annotations
 
-from scgsim.geometry._primitives.grid import polygon_boolean, preserve_declared_source
-
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from scgsim.geometry._primitives.grid import (
+    polygon_boolean,
+    preserve_declared_source,
+    split_gdstk_cutline_loop,
+)
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.source._polygon_ops import (
     _fused_gdstk_components,
@@ -32,10 +35,7 @@ def _derived_ground_polygons(
     """Derive one positive Ground from its plane, mask and explicit includes."""
     import gdstk
 
-    from scgsim.geometry._primitives.loops import (
-        _canonical_loop_sort_key,
-        _split_gdstk_cutline_loop,
-    )
+    from scgsim.geometry._primitives.loops import _canonical_loop_sort_key
 
     mask_layer = entity.geometry.get("mask_layer")
     if mask_layer is None:
@@ -127,7 +127,7 @@ def _derived_ground_polygons(
     regions = polygon_boolean(without_mask or (), tuple(included), "or", precision=1e-9)
     normalized_regions = sorted(
         (
-            _split_gdstk_cutline_loop(_ring_from_gdstk_polygon(region))
+            split_gdstk_cutline_loop(_ring_from_gdstk_polygon(region))
             for region in regions or ()
         ),
         key=lambda region: (

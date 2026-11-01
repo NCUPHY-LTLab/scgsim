@@ -17,14 +17,16 @@ from scgsim.geometry._primitives.entity_validation import (
     _is_solution_entity,
     _is_vacuum_solution_entity,
 )
+from scgsim.geometry._primitives.grid import boolean_polygon_region
 from scgsim.geometry._primitives.loops import (
-    _boolean_gdstk_region,
-    _clean_loop,
     _gdstk_surface_region,
     _geometry_refs_from_gdstk_region,
     _loops_share_edge_overlap,
-    _polygon_area,
-    _ring_edges,
+)
+from scgsim.geometry._primitives.planar_loops import (
+    clean_loop,
+    polygon_area,
+    ring_edges,
 )
 from scgsim.geometry._primitives.port_contract import (
     _route_b_port_sheet_binding_matches,
@@ -47,8 +49,8 @@ from scgsim.geometry.models.topology import (
     VolumePlanRecord,
 )
 from scgsim.geometry.planning.domain import _solution_entity_xy_region
-from scgsim.geometry.planning.topology import _surface_owner_ids
 from scgsim.geometry.planning.representation import planned_conductor_representation
+from scgsim.geometry.planning.topology import _surface_owner_ids
 
 
 def _lower_port_sheet_regions(
@@ -315,7 +317,7 @@ def _bind_route_b_port_volume_plans(
             z_min, z_max = _entity_z_range_um(entity)
             if not z_min < z < z_max:
                 continue
-            if _boolean_gdstk_region(
+            if boolean_polygon_region(
                 gdstk, remainder, _solution_entity_xy_region(gdstk, entity), "and"
             ):
                 hosts.append(volume.volume_id)
@@ -345,12 +347,12 @@ def _partition_route_b_port_sheet_sidewalls(
         host_id: tuple(
             (start, end)
             for boundary in (remainder["outer_loop"], *remainder["hole_loops"])
-            for start, end in _ring_edges(_clean_loop(boundary))
+            for start, end in ring_edges(clean_loop(boundary))
             if any(
                 _segment_overlap_interval(start, end, overlap_start, overlap_end)
                 is not None
-                for overlap_start, overlap_end in _ring_edges(
-                    _clean_loop(overlap.overlap_loop)
+                for overlap_start, overlap_end in ring_edges(
+                    clean_loop(overlap.overlap_loop)
                 )
             )
         )
@@ -615,7 +617,7 @@ def _route_b_port_terminal_curve_matches_overlap(
     return any(
         _segment_overlap_interval(start[:2], end[:2], overlap_start, overlap_end)
         is not None
-        for overlap_start, overlap_end in _ring_edges(_clean_loop(overlap_loop))
+        for overlap_start, overlap_end in ring_edges(clean_loop(overlap_loop))
     )
 
 
@@ -637,7 +639,7 @@ def _route_a_port_sheet_sheet_contract(
             raise ValueError(
                 f"{host_id} requires exactly one Route A port overlap record"
             )
-        overlap_region = (gdstk.Polygon(_clean_loop(host_overlaps[0].overlap_loop)),)
+        overlap_region = (gdstk.Polygon(clean_loop(host_overlaps[0].overlap_loop)),)
         candidates = tuple(
             surface
             for surface in planned_surfaces
@@ -651,7 +653,7 @@ def _route_a_port_sheet_sheet_contract(
         host_sheets = tuple(
             surface
             for surface in candidates
-            if _boolean_gdstk_region(
+            if boolean_polygon_region(
                 gdstk,
                 overlap_region,
                 _gdstk_surface_region(surface.geometry_ref),
@@ -663,7 +665,7 @@ def _route_a_port_sheet_sheet_contract(
                 f"{host_id} port overlap intersects {len(host_sheets)} local "
                 "Route A surface_sheet patches"
             )
-        if _boolean_gdstk_region(
+        if boolean_polygon_region(
             gdstk,
             overlap_region,
             _gdstk_surface_region(host_sheets[0].geometry_ref),
@@ -747,7 +749,7 @@ def _carve_route_a_port_sheet_from_host_plane(
         ):
             result.append(surface)
             continue
-        overlap = _boolean_gdstk_region(
+        overlap = boolean_polygon_region(
             gdstk,
             _gdstk_surface_region(surface.geometry_ref),
             port_region,
@@ -756,7 +758,7 @@ def _carve_route_a_port_sheet_from_host_plane(
         if not overlap:
             result.append(surface)
             continue
-        remainder = _boolean_gdstk_region(
+        remainder = boolean_polygon_region(
             gdstk,
             _gdstk_surface_region(surface.geometry_ref),
             port_region,
@@ -796,9 +798,9 @@ def _port_sheet_remainder_geometry(region: PortSheetRegionRecord) -> dict[str, A
         {"outer_loop": region.exterior, "hole_loops": region.holes}
     )
     overlaps = tuple(
-        gdstk.Polygon(_clean_loop(overlap.overlap_loop)) for overlap in region.overlaps
+        gdstk.Polygon(clean_loop(overlap.overlap_loop)) for overlap in region.overlaps
     )
-    remainder = _boolean_gdstk_region(gdstk, authored, overlaps, "not")
+    remainder = boolean_polygon_region(gdstk, authored, overlaps, "not")
     refs = _geometry_refs_from_gdstk_region(
         {"outer_loop": region.exterior, "hole_loops": region.holes}, remainder
     )
@@ -807,8 +809,8 @@ def _port_sheet_remainder_geometry(region: PortSheetRegionRecord) -> dict[str, A
             f"{region.port_sheet_id} requires exactly one finite active remainder"
         )
     result = refs[0]
-    area = abs(_polygon_area(_clean_loop(result["outer_loop"]))) - sum(
-        abs(_polygon_area(_clean_loop(hole))) for hole in result["hole_loops"]
+    area = abs(polygon_area(clean_loop(result["outer_loop"]))) - sum(
+        abs(polygon_area(clean_loop(hole))) for hole in result["hole_loops"]
     )
     if not isfinite(area) or area <= _TOPOLOGY_EPS_UM:
         raise ValueError(f"{region.port_sheet_id} active remainder must be finite")

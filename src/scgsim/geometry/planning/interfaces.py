@@ -18,14 +18,16 @@ from scgsim.geometry._primitives.entities import (
 from scgsim.geometry._primitives.entity_validation import (
     _resolve_contact_pad_attachment,
 )
+from scgsim.geometry._primitives.grid import boolean_polygon_region
 from scgsim.geometry._primitives.loops import (
-    _boolean_gdstk_region,
     _canonical_loop_sort_key,
-    _clean_loop,
     _loop_signature,
     _loops_touch_without_area,
-    _polygon_area,
-    _ring_edges,
+)
+from scgsim.geometry._primitives.planar_loops import (
+    clean_loop,
+    polygon_area,
+    ring_edges,
 )
 from scgsim.geometry._primitives.spatial import _bounds_overlap, _same_z, _z_key
 from scgsim.geometry.models.common import RouteLiteral
@@ -41,17 +43,17 @@ from scgsim.geometry.planning.domain import (
     _entity_loop_bounds,
     _entity_occupied_region,
     _required_host_solution_id,
-    _route_conductor_contact_footprints,
     _route_a_sheet_boundary_volume_ids_from_solutions,
     _route_a_sheet_plane_z_um_from_solutions,
+    _route_conductor_contact_footprints,
     _solution_entities,
+)
+from scgsim.geometry.planning.representation import (
+    planned_conductor_representation,
 )
 from scgsim.geometry.planning.topology import (
     _surface_interface_record_owners,
     _surface_owner_ids,
-)
-from scgsim.geometry.planning.representation import (
-    planned_conductor_representation,
 )
 
 
@@ -255,12 +257,12 @@ def _sheet_loops_share_positive_edge(
     upper_loops = (upper.geometry["outer_loop"], *upper.geometry.get("hole_loops", ()))
     for left in lower_loops:
         for right in upper_loops:
-            for start, end in _ring_edges(left):
+            for start, end in ring_edges(left):
                 dx, dy = end[0] - start[0], end[1] - start[1]
                 length_sq = dx * dx + dy * dy
                 if length_sq == 0:
                     continue
-                for first, second in _ring_edges(right):
+                for first, second in ring_edges(right):
                     if any(
                         (point[0] - start[0]) * dy - (point[1] - start[1]) * dx != 0
                         for point in (first, second)
@@ -335,7 +337,7 @@ def plan_conductor_contact_patches(
                         representation_context=representation_context,
                     )
                 ):
-                    overlap_region = _boolean_gdstk_region(
+                    overlap_region = boolean_polygon_region(
                         gdstk, lower_region, upper_region, "and"
                     )
                     # One collapsed source film may have a lateral seam between
@@ -355,7 +357,7 @@ def plan_conductor_contact_patches(
                         )
                     continue
                 if overlap_region is None:
-                    overlap_region = _boolean_gdstk_region(
+                    overlap_region = boolean_polygon_region(
                         gdstk,
                         lower_region,
                         upper_region,
@@ -379,11 +381,11 @@ def plan_conductor_contact_patches(
                 # its authored ring verbatim.  The lower top hole and upper
                 # authored sidewall then share canonical curves without
                 # replacing either body's sidewall geometry.
-                upper_remainder = _boolean_gdstk_region(
+                upper_remainder = boolean_polygon_region(
                     gdstk, upper_region, overlap_region, "not"
                 )
                 if not upper_remainder and not upper.geometry.get("hole_loops"):
-                    contact_loops = (_clean_loop(upper.geometry["outer_loop"]),)
+                    contact_loops = (clean_loop(upper.geometry["outer_loop"]),)
                 for contact_loop in contact_loops:
                     signature = (
                         lower.semantic_id,
@@ -463,7 +465,7 @@ def _plan_route_c_conductor_contact_patches(
                     lower_bounds, upper_bounds
                 ):
                     continue
-                overlap_region = _boolean_gdstk_region(
+                overlap_region = boolean_polygon_region(
                     gdstk, lower_region, upper_region, "and"
                 )
                 if not overlap_region:
@@ -655,7 +657,7 @@ def _plan_mm_contact_records_with_components(
             continue
         lower_id, upper_id = interface.owner_semantic_ids
         lower, upper = entities[lower_id], entities[upper_id]
-        loop = _clean_loop(interface.metadata["outer_loop"])
+        loop = clean_loop(interface.metadata["outer_loop"])
         component_id = component_ids[lower_id]
         component_net, component_equipotential = component_values[component_id]
         contact_id = str(interface.metadata.get("contact_id") or interface.interface_id)
@@ -671,7 +673,7 @@ def _plan_mm_contact_records_with_components(
                 lower_source_fragment_ids=lower.polygon_ids,
                 upper_source_fragment_ids=upper.polygon_ids,
                 outer_loop=loop,
-                area_um2=abs(_polygon_area(loop)),
+                area_um2=abs(polygon_area(loop)),
                 normal=(0.0, 0.0, 1.0),
                 conductor_component_id=component_id,
                 net_id=component_net,
@@ -720,7 +722,7 @@ def _plan_mm_contact_records_with_components(
                     lower_source_fragment_ids=lower.polygon_ids,
                     upper_source_fragment_ids=upper.polygon_ids,
                     outer_loop=loop,
-                    area_um2=abs(_polygon_area(loop)),
+                    area_um2=abs(polygon_area(loop)),
                     normal=(0.0, 0.0, 1.0),
                     conductor_component_id=component_ids[lower.semantic_id],
                     net_id=component_values[component_ids[lower.semantic_id]][0],
@@ -826,7 +828,7 @@ def _validate_volumetric_conductor_contacts(
                 <= _TOPOLOGY_EPS_UM
             ):
                 continue
-            overlap = _boolean_gdstk_region(
+            overlap = boolean_polygon_region(
                 gdstk, lower_region, tuple(footprint_regions[upper.semantic_id]), "and"
             )
             if not overlap:
@@ -907,7 +909,7 @@ def _is_fully_normalized_face_metal(
         if pad.part_role == "contact_pad"
         and _resolve_contact_pad_attachment(pad, build_input.entities) is entity
     )
-    covered = _boolean_gdstk_region(
+    covered = boolean_polygon_region(
         gdstk, face, tuple(polygon for region in pads for polygon in region), "not"
     )
     return not covered
@@ -931,7 +933,7 @@ def _contact_patch_loops(
 ) -> tuple[tuple[tuple[float, float], ...], ...]:
     import gdstk
 
-    polygons = _boolean_gdstk_region(gdstk, overlap_region, (), "or")
+    polygons = boolean_polygon_region(gdstk, overlap_region, (), "or")
     if not polygons:
         raise ValueError(
             f"{lower_id} and {upper_id} contact must produce at least one "
@@ -939,7 +941,7 @@ def _contact_patch_loops(
         )
     loops: list[tuple[tuple[float, float], ...]] = []
     for polygon in polygons:
-        loop = _clean_loop(polygon.points)
+        loop = clean_loop(polygon.points)
         loops.append(loop)
     return _sort_contact_loops(tuple(loops))
 
@@ -952,13 +954,13 @@ def _single_rectangular_contact_loop(
     """Route-C legacy contact recognizer: exactly one rectangular patch."""
     import gdstk
 
-    polygons = _boolean_gdstk_region(gdstk, overlap_region, (), "or")
+    polygons = boolean_polygon_region(gdstk, overlap_region, (), "or")
     if len(polygons) != 1:
         raise ValueError(
             f"{lower_id} and {upper_id} contact must produce one polygon, got "
             f"{len(polygons)}"
         )
-    loop = _clean_loop(polygons[0].points)
+    loop = clean_loop(polygons[0].points)
     if not _is_axis_aligned_rectangle(loop):
         raise ValueError(
             f"{lower_id} and {upper_id} contact is not a rectangular patch"
@@ -969,7 +971,7 @@ def _single_rectangular_contact_loop(
 def _is_axis_aligned_rectangle(loop: tuple[tuple[float, float], ...]) -> bool:
     return len(loop) == 4 and all(
         _same_z(start[0], end[0]) or _same_z(start[1], end[1])
-        for start, end in _ring_edges(loop)
+        for start, end in ring_edges(loop)
     )
 
 
@@ -977,7 +979,7 @@ def _sort_contact_loops(
     loops: tuple[tuple[tuple[float, float], ...], ...],
 ) -> tuple[tuple[tuple[float, float], ...], ...]:
     def _stable_loop_key(loop: tuple[tuple[float, float], ...]) -> tuple:
-        clean = _clean_loop(loop)
+        clean = clean_loop(loop)
         xs = tuple(point[0] for point in clean)
         ys = tuple(point[1] for point in clean)
         canonical = _canonical_loop_sort_key(clean)
@@ -986,7 +988,7 @@ def _sort_contact_loops(
             max(xs),
             min(ys),
             max(ys),
-            round(abs(_polygon_area(clean)), 12),
+            round(abs(polygon_area(clean)), 12),
             canonical,
         )
 

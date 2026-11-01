@@ -2,47 +2,38 @@
 
 from __future__ import annotations
 
-
+import hashlib
+import json
 import math
-
 from bisect import bisect_left, bisect_right
-
 from collections import defaultdict
-
 from collections.abc import Mapping, Sequence
-
-from dataclasses import fields, replace
-
+from dataclasses import dataclass, fields, replace
 from decimal import ROUND_FLOOR, Decimal
-
 from fractions import Fraction
-
 from itertools import pairwise
-
 from typing import Any
 
 import gdstk
 
-from scgsim.geometry.models.input import GeometryBuildInput, LayoutPolygonSpec
-from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry._primitives.grid import (
-    PolygonRegion, polygon_boolean, polygon_world_frame, with_input_grid,
+    PolygonRegion,
+    polygon_boolean,
+    polygon_world_frame,
+    with_input_grid,
 )
+from scgsim.geometry._primitives.planar_loops import (
+    cancel_reversed_planar_edges,
+    simple_planar_loops_from_edges,
+)
+from scgsim.geometry.models.grid import geometry_grid_context
+from scgsim.geometry.models.input import GeometryBuildInput, LayoutPolygonSpec
+from scgsim.geometry.models.junctions import JunctionGeometry, RectangularJunctionSpec
 from scgsim.geometry.models.physical import (
     PhysicalLayerDeclaration,
     PhysicalRepresentationPlan,
 )
 from scgsim.semantics.route_a import geometry_z_range
-
-from scgsim.geometry._primitives.loops import (
-    _cancel_reversed_planar_edges,
-    _simple_planar_loops_from_edges,
-)
-
-from scgsim.geometry.models.junctions import JunctionGeometry, RectangularJunctionSpec
-import hashlib
-import json
-from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -517,7 +508,7 @@ def _rings(region):
                 ),
             )
             edges.extend(pairwise(on_edge))
-        loops = _simple_planar_loops_from_edges(_cancel_reversed_planar_edges(edges))
+        loops = simple_planar_loops_from_edges(cancel_reversed_planar_edges(edges))
 
         def area(ring):
             return abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in _edges((ring,))))
@@ -879,10 +870,10 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
 
     def lower(traced, *, simplify=False):
         raw = [(a, b) for a, b, _ in traced]
-        raw = _cancel_reversed_planar_edges(raw)
+        raw = cancel_reversed_planar_edges(raw)
         if not raw:
             return []
-        loops = _simple_planar_loops_from_edges(raw)
+        loops = simple_planar_loops_from_edges(raw)
         outer = [
             ring
             for ring in loops
@@ -1067,8 +1058,8 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
         emitted_support.extend(
             (emit(a), emit(b)) for a, b, _ in physical_ends[entity.semantic_id]
         )
-        boundary = _cancel_reversed_planar_edges(emitted_support)
-        loops = _simple_planar_loops_from_edges(boundary)
+        boundary = cancel_reversed_planar_edges(emitted_support)
+        loops = simple_planar_loops_from_edges(boundary)
         outer = [
             ring
             for ring in loops
@@ -1229,7 +1220,7 @@ def _emitted_partition_coverage(free, parts):
                     ),
                 )
                 result.extend(pairwise(ordered))
-        return _cancel_reversed_planar_edges(result)
+        return cancel_reversed_planar_edges(result)
 
     return sorted(edges(free)) == sorted(edges(parts))
 

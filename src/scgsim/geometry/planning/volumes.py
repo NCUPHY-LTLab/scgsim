@@ -16,7 +16,7 @@ from scgsim.geometry._primitives.geometry_refs import (
     _entity_geometry_ref,
     _route_entity_geometry_ref,
 )
-from scgsim.geometry._primitives.loops import _clean_loop
+from scgsim.geometry._primitives.planar_loops import clean_loop
 from scgsim.geometry._primitives.spatial import _vector_cross, _vector_subtract
 from scgsim.geometry._primitives.surface_records import (
     _conductor_boundary_surface_id,
@@ -560,7 +560,7 @@ def _entity_volume_center_um(
         )
     if "outer_loop" not in entity.geometry:
         raise ValueError(f"{entity.semantic_id} requires outer_loop for volume center")
-    loop = _clean_loop(entity.geometry["outer_loop"])
+    loop = clean_loop(entity.geometry["outer_loop"])
     z_min_um, z_max_um = _entity_z_range_um(entity)
     return (
         (min(point[0] for point in loop) + max(point[0] for point in loop)) / 2.0,

@@ -9,7 +9,7 @@ from scgsim.geometry._primitives.entities import (
     _entity_z_range_um,
     _geometry_ref_from_metadata,
 )
-from scgsim.geometry._primitives.loops import _clean_loop, _ring_edges
+from scgsim.geometry._primitives.planar_loops import clean_loop, ring_edges
 from scgsim.geometry._primitives.spatial import _same_z
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
@@ -98,7 +98,7 @@ def _sidewall_geometry_refs(
             for index, hole_loop in enumerate(geometry_ref.get("hole_loops", ()))
         ),
     ):
-        for edge_index, (start, end) in enumerate(_ring_edges(_clean_loop(ring))):
+        for edge_index, (start, end) in enumerate(ring_edges(clean_loop(ring))):
             refs.append(
                 {
                     "quad_points": (

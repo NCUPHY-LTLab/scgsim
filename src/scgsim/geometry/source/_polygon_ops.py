@@ -7,14 +7,15 @@ recipe and occurrence selectors.
 
 from __future__ import annotations
 
-from scgsim.geometry._primitives.grid import polygon_boolean
-
-from scgsim.geometry._primitives.grid import current_grid_size_um, current_grid_context
-
 from collections.abc import Sequence
 from typing import Any
 
-from scgsim.geometry._primitives.loops import _split_gdstk_cutline_loop
+from scgsim.geometry._primitives.grid import (
+    current_grid_context,
+    current_grid_size_um,
+    polygon_boolean,
+    split_gdstk_cutline_loop,
+)
 from scgsim.geometry.models.input import LayoutPolygonSpec
 
 
@@ -27,8 +28,10 @@ def _fused_boolean_candidates(candidates):
     if current_grid_context() is None:
         return None
     from math import isfinite
+
     from shapely import STRtree, box
-    from scgsim.geometry._primitives.grid import _frame_point, _SOURCE_INTENT
+
+    from scgsim.geometry._primitives.grid import _SOURCE_INTENT, _frame_point
 
     # Native near-vertex insertion is within grid/100 and node rounding within
     # half a grid step. A full step on EACH bound is a conservative candidate
@@ -104,7 +107,7 @@ def _fused_gdstk_components(
             )
         if not regions or len(regions) != 1:
             raise ValueError("fused selector component must lower to one polygon")
-        outer, holes = _split_gdstk_cutline_loop(_ring_from_gdstk_polygon(regions[0]))
+        outer, holes = split_gdstk_cutline_loop(_ring_from_gdstk_polygon(regions[0]))
         source_indexes = tuple(indexes)
         result.append(
             (
