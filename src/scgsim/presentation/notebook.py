@@ -9,11 +9,31 @@ from __future__ import annotations
 import html
 import json
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal
+from typing import Literal, Protocol, TypeVar, cast
 
 ReportTheme = Literal["light", "dark"]
 
+
+class _StyledFigure(Protocol):
+    """Describe the Plotly operations used without importing the optional renderer."""
+
+    def update_layout(self, **kwargs: object) -> object:
+        """Update only this figure's layout."""
+        ...
+
+    def update_xaxes(self, **kwargs: object) -> object:
+        """Update this figure's horizontal axes."""
+        ...
+
+    def update_yaxes(self, **kwargs: object) -> object:
+        """Update this figure's vertical axes."""
+        ...
+
+
+_FigureT = TypeVar("_FigureT", bound=_StyledFigure)
+
 _PLOT_COLORS = ("#56B4E9", "#E69F00", "#009E73", "#CC79A7", "#0072B2", "#D55E00")
+# MA, MS and SA denote metal-air, metal-substrate and substrate-air interfaces.
 INTERFACE_COLORS = {"MA": "#56B4E9", "MS": "#E69F00", "SA": "#009E73"}
 
 _THEMES = {
@@ -41,10 +61,10 @@ def checked_theme(theme: str) -> ReportTheme:
 
     if not isinstance(theme, str) or theme not in _THEMES:
         raise ValueError("theme must be 'light' or 'dark'")
-    return theme  # type: ignore[return-value]
+    return cast(ReportTheme, theme)
 
 
-def display_text(value: Any, *, unknown: str = "unknown") -> str:
+def display_text(value: object, *, unknown: str = "unknown") -> str:
     """Keep an absent value visibly different from numeric zero."""
 
     if value is None:
@@ -54,7 +74,7 @@ def display_text(value: Any, *, unknown: str = "unknown") -> str:
     return str(value)
 
 
-def selection_text(value: Any, *, absent: bool = False) -> str:
+def selection_text(value: object, *, absent: bool = False) -> str:
     """None/all and empty/none apply only to configured selections."""
 
     if absent:
@@ -98,7 +118,8 @@ def section(
     )
 
 
-def cards(items: Sequence[tuple[str, Any]]) -> str:
+def cards(items: Sequence[tuple[str, object]]) -> str:
+    """Render escaped labels and detached values as wrapping summary cards."""
     return (
         '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px">'
         + "".join(
@@ -114,7 +135,7 @@ def cards(items: Sequence[tuple[str, Any]]) -> str:
     )
 
 
-def table(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> str:
+def table(headers: Sequence[str], rows: Sequence[Sequence[object]]) -> str:
     """Render a compact escaped data table; cells are never trusted markup."""
 
     header = "".join(
@@ -140,13 +161,17 @@ def table(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> str:
 
 
 def details(title: str, body: str, *, opened: bool = False) -> str:
+    """Put trusted markup under an escaped, optionally expanded summary."""
     return (
         f"<details{' open' if opened else ''}>"
         f"<summary>{html.escape(title)}</summary>{body}</details>"
     )
 
 
-def json_details(title: str, data: Mapping[str, Any], *, opened: bool = False) -> str:
+def json_details(
+    title: str, data: Mapping[str, object], *, opened: bool = False
+) -> str:
+    """Format a mapping as escaped JSON inside a collapsible section."""
     return details(
         title,
         "<pre style='white-space:pre-wrap;overflow-wrap:anywhere'>"
@@ -156,7 +181,7 @@ def json_details(title: str, data: Mapping[str, Any], *, opened: bool = False) -
     )
 
 
-def style_figure(figure: Any, *, theme: str, height: int = 460) -> Any:
+def style_figure(figure: _FigureT, *, theme: str, height: int = 460) -> _FigureT:
     """Apply per-Figure Plotly colors and typography without setting a template."""
 
     tokens = _THEMES[checked_theme(theme)]
