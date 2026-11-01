@@ -282,6 +282,7 @@ class ZeroAreaResidue:
 
     @cached_property
     def exact_key(self) -> tuple[tuple[str, ...], bytes]:
+        """Identify normalized support together with its operand membership."""
         # Equal support with different labels remains a distinct semantic record.
         return self.operand_ids, self.geometry.normalize().wkb
 

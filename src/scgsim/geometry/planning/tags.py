@@ -78,18 +78,7 @@ def _surface_physical_name(surface: SurfacePlanRecord) -> str:
     override = surface.metadata.get("physical_name")
     if isinstance(override, str) and override:
         return override
-    raw = surface.metadata.get("interface_kinds", ())
-    if isinstance(raw, str):
-        kinds = (raw,)
-    elif isinstance(raw, tuple | list | set):
-        kinds = tuple(str(kind) for kind in raw)
-    else:
-        kinds = ()
-    if len(kinds) > 2:
-        raise ValueError(
-            f"{surface.surface_id} has too many interface kinds: {kinds!r}"
-        )
-    kind_prefix = "_".join(kinds)
+    kind_prefix = _interface_kind_prefix(surface)
     exposed_role = surface.metadata.get("exposed_surface_role")
     boundary_role = surface.metadata.get("boundary_role")
     owner_ids = surface_owner_ids(surface)
@@ -122,6 +111,21 @@ def _surface_physical_name(surface: SurfacePlanRecord) -> str:
     if boundary_role == "sidewall":
         return surface.surface_id.removeprefix("SURF__").rsplit("__", 1)[0]
     return surface.surface_id.removeprefix("SURF__")
+
+
+def _interface_kind_prefix(surface: SurfacePlanRecord) -> str:
+    raw = surface.metadata.get("interface_kinds", ())
+    if isinstance(raw, str):
+        kinds = (raw,)
+    elif isinstance(raw, tuple | list | set):
+        kinds = tuple(str(kind) for kind in raw)
+    else:
+        kinds = ()
+    if len(kinds) > 2:
+        raise ValueError(
+            f"{surface.surface_id} has too many interface kinds: {kinds!r}"
+        )
+    return "_".join(kinds)
 
 
 def _grouped_surface_physical_name(
