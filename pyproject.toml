@@ -73,7 +73,8 @@ test = [
 ]
 quality = [
     "ruff==0.17.3",
-    "pyright==1.1.411",
+    "pyright[nodejs]==1.1.411",
+    "nodejs-wheel-binaries>=22,<23",
     "import-linter==2.15",
 ]
 
