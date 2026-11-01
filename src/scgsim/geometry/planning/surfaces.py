@@ -3,8 +3,8 @@
 ``plan_route_surfaces`` is the entry point. It builds, in order: Route A sheet surfaces,
 the substrate-air and domain boundary surfaces, one surface per recognized interface,
 and the top, bottom and sidewall surfaces of shell or volume conductors, then attaches
-the surface contract metadata. The steps live in ``sheet_patches``, ``sheet_surfaces``,
-``surface_sheets``, ``domain``, ``surface_conductors`` and ``surface_contract``.
+the surface contract metadata. The steps live in ``sheets``, ``domain``,
+``interface_surfaces``, ``conductors.shell_surfaces`` and ``surface_contract``.
 
 This module also owns the non-gmsh seam for physical contribution planning
 (``plan_surface_contribution_patches``). Mixed sheet and solid contacts exclude their
@@ -16,6 +16,7 @@ remain caller-owned.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from scgsim.geometry.models.common import RouteLiteral
@@ -54,15 +55,14 @@ from scgsim.geometry.planning.context.representation import (
     project_native_route_representations,
 )
 from scgsim.geometry.planning.context.scope import SurfaceScope
-from scgsim.geometry.planning.context.tags import resolve_physical_group_owner_ids
 from scgsim.geometry.planning.domain.boundaries import (
     merge_solution_sidewall_interfaces,
     reconcile_solution_domain_boundaries,
 )
 from scgsim.geometry.planning.domain.substrate_air import (
-    interface_surface_kinds,
     plan_substrate_air_surfaces,
 )
+from scgsim.geometry.planning.interface_surfaces import plan_interface_surfaces
 from scgsim.geometry.planning.interfaces import recognize_route_interfaces
 from scgsim.geometry.planning.sheets.effective_contacts import (
     effective_sheet_contact_sides,
@@ -71,26 +71,15 @@ from scgsim.geometry.planning.sheets.effective_contacts import (
     refresh_generated_route_a_sheet_interfaces,
 )
 from scgsim.geometry.planning.sheets.patches import plan_route_a_sheet_patches
-from scgsim.geometry.planning.sheets.surfaces import route_a_sheet_patch_surfaces
-from scgsim.geometry.planning.solutions.adjacency import (
-    route_a_sheet_boundary_volume_ids,
-)
 from scgsim.geometry.planning.solutions.auto_vacuum import (
     prepare_auto_vacuum_solution_regions,
 )
 from scgsim.geometry.planning.surface_contract import with_surface_contract_metadata
 from scgsim.geometry.planning.validation import validate_selected_route
-from scgsim.geometry.primitives.entities import (
-    entity_by_id,
-    geometry_ref_from_metadata,
-    unique_ids,
-)
 from scgsim.geometry.primitives.surface_records import (
     RouteASheetPatch,
-    is_route_a_sheet_interface,
 )
-from scgsim.semantics import EvidenceResult, SemanticEvidenceFacade
-from scgsim.semantics.ownership import interface_surface_owner_ids
+from scgsim.semantics import SemanticEvidenceFacade
 
 
 def plan_surface_contribution_patches(
@@ -320,38 +309,7 @@ def plan_route_surfaces(  # noqa: PLR0913 - published planner signature; argumen
 
     # Step 1: Route A sheets. Sheet conductors own no standalone surface; their
     # patches replace parts of the substrate-air interface they sit on.
-    context_planning = scope.context_planning
-    effective_contacts = (
-        effective_sheet_contact_sides(
-            build_input, mm_contacts, representation_context=representation_context
-        )
-        if context_planning
-        else {}
-    )
-    effective_sheet_surfaces, effective_mask_patches = plan_effective_contact_sheets(
-        scope, effective_contacts
-    )
-    route_a_sheet_patches = (
-        plan_route_a_sheet_patches(
-            build_input,
-            interfaces=tuple(
-                interface
-                for interface in interfaces
-                if interface.interface_id not in effective_sheet_surfaces
-            ),
-            semantic_facts=semantic_facts,
-            route=route,
-            representation_context=representation_context,
-        )
-        if route == "A"
-        or (context_planning and is_sheet_context(representation_context))
-        else ()
-    )
-    sheet_patches_by_interface: dict[str, list[RouteASheetPatch]] = {}
-    for patch in route_a_sheet_patches:
-        sheet_patches_by_interface.setdefault(patch.parent_interface_id, []).append(
-            patch
-        )
+    sheets = _plan_sheets(scope, mm_contacts)
 
     # Step 2: the substrate-air and domain boundary surfaces, with sheet footprints cut out.
     records: list[SurfacePlanRecord] = []
@@ -360,7 +318,7 @@ def plan_route_surfaces(  # noqa: PLR0913 - published planner signature; argumen
             build_input,
             route=route,
             semantic_facts=semantic_facts,
-            route_a_sheet_patches=(*route_a_sheet_patches, *effective_mask_patches),
+            route_a_sheet_patches=(*sheets.route_a_patches, *sheets.mask_patches),
             representation_context=representation_context,
         )
     )
@@ -369,7 +327,7 @@ def plan_route_surfaces(  # noqa: PLR0913 - published planner signature; argumen
     contact_faces = contact_patches_by_entity_face(interfaces)
     sheet_contacts_by_face = (
         route_a_sheet_contacts_by_face_metal(build_input, mm_contacts)
-        if route == "A" or context_planning
+        if route == "A" or scope.context_planning
         else {}
     )
     normalized_sheet_loops = sheet_contact_loops_by_face_metal(
@@ -378,11 +336,11 @@ def plan_route_surfaces(  # noqa: PLR0913 - published planner signature; argumen
         include_direct_bump_contacts=False,
     )
     records.extend(
-        _plan_interface_surfaces(
+        plan_interface_surfaces(
             scope,
             partitions_by_interface=partitions_by_interface,
-            effective_sheet_surfaces=effective_sheet_surfaces,
-            sheet_patches_by_interface=sheet_patches_by_interface,
+            effective_sheet_surfaces=sheets.effective_surfaces,
+            sheet_patches_by_interface=sheets.patches_by_interface(),
             sheet_contacts_by_face=sheet_contacts_by_face,
         )
     )
@@ -422,267 +380,54 @@ def _partitions_by_parent_interface(
     return partitions_by_interface
 
 
-def _plan_interface_surfaces(
-    scope: SurfaceScope,
-    *,
-    partitions_by_interface: Mapping[str, Sequence[SurfacePartitionRecord]],
-    effective_sheet_surfaces: Mapping[str, Sequence[SurfacePlanRecord]],
-    sheet_patches_by_interface: Mapping[str, Sequence[RouteASheetPatch]],
-    sheet_contacts_by_face: Mapping[str, Sequence[MMContactRecord]],
-) -> list[SurfacePlanRecord]:
-    """Plan the surfaces owned by recognized interfaces, in interface order."""
-    route = scope.route
-    representation_context = scope.representation_context
-    records: list[SurfacePlanRecord] = []
-    for interface in scope.interfaces:
-        # Same-net conductor contacts are component provenance only.  Neither
-        # Route A nor Route B may lower an internal MM face as solver geometry.
-        if _is_hidden_contact_interface(
-            route, interface, representation_context=representation_context
-        ):
-            continue
-        if interface.interface_id in effective_sheet_surfaces:
-            records.extend(effective_sheet_surfaces[interface.interface_id])
-            continue
-        if is_route_a_sheet_interface(
-            route, interface, representation_context=representation_context
-        ):
-            patches = tuple(sheet_patches_by_interface.get(interface.interface_id, ()))
-            if not patches:
-                raise ValueError(
-                    f"{interface.interface_id} has no local Route A sheet patches"
-                )
-            records.extend(
-                route_a_sheet_patch_surfaces(
-                    scope,
-                    interface=interface,
-                    patches=patches,
-                    sheet_contacts=sheet_contacts_by_face.get(
-                        patches[0].sheet_entity_id, ()
-                    ),
-                )
-            )
-            continue
-        records.extend(
-            _planned_interface_records(
-                scope,
-                interface,
-                partitions_by_interface.get(interface.interface_id, ()),
-            )
+@dataclass(frozen=True)
+class _SheetPlan:
+    """What the Route A sheet step hands to the later surface steps."""
+
+    effective_surfaces: Mapping[str, Sequence[SurfacePlanRecord]]
+    mask_patches: tuple[RouteASheetPatch, ...]
+    route_a_patches: tuple[RouteASheetPatch, ...]
+
+    def patches_by_interface(self) -> dict[str, list[RouteASheetPatch]]:
+        """Group the Route A patches by the interface they subdivide."""
+        grouped: dict[str, list[RouteASheetPatch]] = {}
+        for patch in self.route_a_patches:
+            grouped.setdefault(patch.parent_interface_id, []).append(patch)
+        return grouped
+
+
+def _plan_sheets(
+    scope: SurfaceScope, mm_contacts: tuple[MMContactRecord, ...]
+) -> _SheetPlan:
+    """Plan sheets whose contacts hide one side, then patch the remaining sheets."""
+    effective_contacts = (
+        effective_sheet_contact_sides(
+            scope.build_input,
+            mm_contacts,
+            representation_context=scope.representation_context,
         )
-    return records
-
-
-def _planned_interface_records(
-    scope: SurfaceScope,
-    interface: InterfacePlanRecord,
-    partitions: Sequence[SurfacePartitionRecord],
-) -> list[SurfacePlanRecord]:
-    """Plan one plain interface as a single surface, or as one child per partition."""
-    build_input = scope.build_input
-    route = scope.route
-    representation_context = scope.representation_context
-    geometry_ref = {
-        "from_interface_id": interface.interface_id,
-        "source_polygon_ids": interface.source_polygon_ids,
-        **geometry_ref_from_metadata(interface.metadata),
-    }
-    # TODO(human): this evidence is always empty, so `primary_kind` is always None
-    # and the Route A evidence arguments below never carry data. Behavior kept as is.
-    route_a_sheet_evidence: tuple[EvidenceResult, ...] = ()
-    primary_kind = next(
-        (
-            result.classification
-            for result in route_a_sheet_evidence
-            if interface.owner_semantic_ids[1] in (result.effective_domain_ids or ())
-        ),
-        None,
+        if scope.context_planning
+        else {}
     )
-    surface_interface_id = _surface_interface_id(
-        build_input,
-        route=route,
-        interface=interface,
-        primary_kind=primary_kind,
-        representation_context=representation_context,
+    effective_surfaces, mask_patches = plan_effective_contact_sheets(
+        scope, effective_contacts
     )
-    interface_kinds = interface_surface_kinds(
-        build_input,
-        route=route,
-        interface=interface,
-        route_a_evidence=route_a_sheet_evidence,
-        representation_context=representation_context,
+    plans_patches = scope.route == "A" or (
+        scope.context_planning and is_sheet_context(scope.representation_context)
     )
-    owner_semantic_ids = _interface_surface_owner_ids(
-        build_input,
-        route=route,
-        interface=interface,
-        route_a_evidence=route_a_sheet_evidence,
-        representation_context=representation_context,
-    )
-    boundary_volume_ids = _interface_boundary_volume_ids(
-        build_input,
-        route=route,
-        interface=interface,
-        route_a_evidence=route_a_sheet_evidence,
-        representation_context=representation_context,
-    )
-    physical_owner_semantic_ids = resolve_physical_group_owner_ids(
-        build_input,
-        owner_semantic_ids,
-    )
-    embedded_sheet = is_route_a_sheet_interface(
-        route, interface, representation_context=representation_context
-    )
-
-    def metadata() -> dict[str, Any]:
-        # A fresh dict per record, so no two surfaces share mutable metadata.
-        return {
-            "interface_kinds": interface_kinds,
-            "owner_semantic_ids": owner_semantic_ids,
-            "physical_owner_semantic_ids": physical_owner_semantic_ids,
-            "boundary_volume_ids": boundary_volume_ids,
-            "embedded_surface_sheet": embedded_sheet,
-        }
-
-    if partitions:
-        parent_surface_id = f"SURF__{surface_interface_id}"
-        return [
-            SurfacePlanRecord(
-                surface_id=partition.child_surface_id,
-                owner_semantic_id=interface.owner_semantic_ids[0],
-                surface_role=(
-                    "representation_context_planned_interface_partition"
-                    if scope.context_planning
-                    else f"{route}_planned_interface_partition"
-                ),
-                geometry_ref={
-                    **geometry_ref,
-                    "partition_id": partition.partition_id,
-                    "parent_interface_id": partition.parent_interface_id,
-                    **geometry_ref_from_metadata(partition.metadata),
-                },
-                interface_id=surface_interface_id,
-                parent_surface_id=parent_surface_id,
-                partition_label=partition.label,
-                solver_use=interface.solver_use or "solver_active",
-                valid_routes=() if route is None else (route,),
-                metadata=metadata(),
-            )
-            for partition in partitions
-        ]
-    return [
-        SurfacePlanRecord(
-            surface_id=f"SURF__{surface_interface_id}",
-            owner_semantic_id=interface.owner_semantic_ids[0],
-            surface_role=(
-                "representation_context_planned_interface"
-                if scope.context_planning
-                else f"{route}_planned_interface"
+    route_a_patches = (
+        plan_route_a_sheet_patches(
+            scope.build_input,
+            interfaces=tuple(
+                interface
+                for interface in scope.interfaces
+                if interface.interface_id not in effective_surfaces
             ),
-            geometry_ref=geometry_ref,
-            interface_id=surface_interface_id,
-            solver_use=interface.solver_use or "solver_active",
-            valid_routes=() if route is None else (route,),
-            metadata=metadata(),
+            semantic_facts=scope.semantic_facts,
+            route=scope.route,
+            representation_context=scope.representation_context,
         )
-    ]
-
-
-def _interface_surface_owner_ids(
-    build_input: GeometryBuildInput,
-    *,
-    route: RouteLiteral | None,
-    interface: InterfacePlanRecord,
-    route_a_evidence: tuple[EvidenceResult, ...] = (),
-    representation_context: RepresentationContext | None = None,
-) -> tuple[str, ...]:
-    raw_owner_ids = interface.metadata.get("surface_owner_semantic_ids")
-    route_a_owner_ids = None
-    if is_route_a_sheet_interface(
-        route, interface, representation_context=representation_context
-    ):
-        route_a_owner_ids = unique_ids(
-            owner_id
-            for result in route_a_evidence
-            for owner_id in (
-                *result.source_owner_ids,
-                *(result.effective_domain_ids or ()),
-            )
-        )
-        if not route_a_owner_ids:
-            entity = entity_by_id(build_input, interface.owner_semantic_ids[0])
-            route_a_owner_ids = (
-                entity.semantic_id,
-                *route_a_sheet_boundary_volume_ids(build_input, entity),
-            )
-    return interface_surface_owner_ids(
-        raw_owner_ids,
-        route_a_sheet_owner_ids=route_a_owner_ids,
-        fallback_owner_ids=interface.owner_semantic_ids,
+        if plans_patches
+        else ()
     )
-
-
-def _interface_boundary_volume_ids(
-    build_input: GeometryBuildInput,
-    *,
-    route: RouteLiteral | None,
-    interface: InterfacePlanRecord,
-    route_a_evidence: tuple[EvidenceResult, ...] = (),
-    representation_context: RepresentationContext | None = None,
-) -> tuple[str, ...]:
-    raw_boundary_ids = interface.metadata.get("boundary_volume_ids")
-    if raw_boundary_ids is not None:
-        if isinstance(raw_boundary_ids, str):
-            return (raw_boundary_ids,)
-        return unique_ids(raw_boundary_ids)
-    if is_route_a_sheet_interface(
-        route, interface, representation_context=representation_context
-    ):
-        if route_a_evidence:
-            return unique_ids(
-                domain_id
-                for result in route_a_evidence
-                for domain_id in (result.effective_domain_ids or ())
-            )
-        return route_a_sheet_boundary_volume_ids(
-            build_input,
-            entity_by_id(build_input, interface.owner_semantic_ids[0]),
-        )
-    return unique_ids(interface.owner_semantic_ids)
-
-
-def _surface_interface_id(
-    build_input: GeometryBuildInput,
-    *,
-    route: RouteLiteral | None,
-    interface: InterfacePlanRecord,
-    primary_kind: str | None = None,
-    representation_context: RepresentationContext | None = None,
-) -> str:
-    if not is_route_a_sheet_interface(
-        route, interface, representation_context=representation_context
-    ):
-        return interface.interface_id
-    entity = entity_by_id(build_input, interface.owner_semantic_ids[0])
-    boundary_ids = route_a_sheet_boundary_volume_ids(build_input, entity)
-    suffix = interface.interface_id.rsplit("__", 1)[-1]
-    return (
-        f"{primary_kind or interface.kind}__{entity.semantic_id}__"
-        f"{'__'.join(boundary_ids)}__{suffix}"
-    )
-
-
-def _is_hidden_contact_interface(
-    route: RouteLiteral | None,
-    interface: InterfacePlanRecord,
-    *,
-    representation_context: RepresentationContext | None = None,
-) -> bool:
-    return (
-        interface.recognition_rule == "coplanar_conductor_contact_patch"
-        and (
-            route in {"A", "B"}
-            or (route is None and representation_context is not None)
-        )
-        and bool(interface.metadata.get("hidden_solver_contact"))
-    )
+    return _SheetPlan(effective_surfaces, mask_patches, route_a_patches)

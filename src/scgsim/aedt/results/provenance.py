@@ -145,6 +145,7 @@ _RUNTIME_SOURCE_PATHS = (
     "src/scgsim/geometry/planning/context/topology.py",
     "src/scgsim/geometry/planning/domain/boundaries.py",
     "src/scgsim/geometry/planning/domain/substrate_air.py",
+    "src/scgsim/geometry/planning/interface_surfaces.py",
     "src/scgsim/geometry/planning/interfaces.py",
     "src/scgsim/geometry/planning/physical.py",
     "src/scgsim/geometry/planning/point_index.py",

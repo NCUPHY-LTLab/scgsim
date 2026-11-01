@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -100,24 +101,16 @@ def build_route_construction_plan(
             build_input, route=route, representation_context=representation_context
         )
 
-    state = _PlanState(
+    return _RoutePlanner(
         build_input=build_input,
         route=route,
         representation_context=representation_context,
-    )
-    # The stage order is the order of the original single function. Each stage
-    # reads what earlier stages stored on ``state``; the timings list records it.
-    _plan_interfaces(state)
-    _plan_surfaces(state)
-    _plan_topology(state)
-    _plan_volumes(state)
-    _plan_cuts_and_tags(state)
-    return _assemble_plan(state)
+    ).build()
 
 
 @dataclass
-class _PlanState:
-    """Intermediate planning results, filled in by the stage functions in order.
+class _RoutePlanner:
+    """Plan one route, stage by stage; each stage reads what earlier stages stored.
 
     Fields after ``timings`` hold ``None`` until the stage that produces them runs.
     """
@@ -144,353 +137,267 @@ class _PlanState:
         """Routes A and B share cut-based construction and carry MM contacts."""
         return self.route in {"A", "B"}
 
+    def build(self) -> ConstructionPlanRecord:
+        """Run the planning stages in their required order and bundle the results."""
+        self.plan_interfaces()
+        self.plan_surfaces()
+        self.plan_topology()
+        self.plan_volumes()
+        self.plan_cuts_and_tags()
+        return self.assemble()
 
-def _plan_interfaces(state: _PlanState) -> None:
-    """Validate the route, recognize interfaces, plan contact patches and MM contacts."""
-    route = state.route
-    context = state.representation_context
-    state.build_input = prepare_auto_vacuum_solution_regions(
-        state.build_input, route=route, representation_context=context
-    )
-    build_input = state.build_input
-    timings = state.timings
-    _timed(
-        timings,
-        "validate_selected_route",
-        lambda: validate_selected_route(
-            build_input, route, representation_context=context
-        ),
-    )
-    state.semantic_facts = build_semantic_evidence_facade(
-        build_input, route=route, representation_context=context
-    )
-    state.interfaces = _timed(
-        timings,
-        "recognize_route_interfaces",
-        lambda: recognize_route_interfaces(
-            build_input, route=route, representation_context=context
-        ),
-    )
-    state.interfaces = _timed(
-        timings,
-        "plan_conductor_contact_patches",
-        lambda: plan_conductor_contact_patches(
-            build_input,
-            route=route,
-            representation_context=context,
-            interfaces=state.interfaces,
-        ),
-    )
-    if state.is_route_ab:
-        state.interfaces, state.mm_contacts = _timed(
-            timings,
-            "plan_mm_contact_records",
-            lambda: plan_mm_contact_records(
-                build_input,
-                route=route,
-                representation_context=context,
-                interfaces=state.interfaces,
-            ),
+    def plan_interfaces(self) -> None:
+        """Validate the route, recognize interfaces, plan contact patches and MM contacts."""
+        self.build_input = prepare_auto_vacuum_solution_regions(
+            self.build_input,
+            route=self.route,
+            representation_context=self.representation_context,
         )
-    else:
-        state.mm_contacts = ()
-
-
-def _plan_surfaces(state: _PlanState) -> None:
-    """Plan partitions, construction bodies and surfaces, then fold in port sheets."""
-    route = state.route
-    build_input = state.build_input
-    timings = state.timings
-    state.surface_partitions = _timed(
-        timings,
-        "plan_surface_partitions",
-        lambda: plan_surface_partitions(
-            build_input,
-            route=route,
-            interfaces=state.interfaces,
-        ),
-    )
-    state.construction_bodies = _timed(
-        timings,
-        "plan_route_construction_bodies",
-        lambda: plan_route_construction_bodies(
-            build_input,
-            route=route,
-            interfaces=state.interfaces,
-            representation_context=state.representation_context,
-        ),
-    )
-    state.surfaces = _timed(
-        timings,
-        "plan_route_surfaces",
-        lambda: plan_route_surfaces(
-            build_input,
-            route=route,
-            representation_context=state.representation_context,
-            interfaces=state.interfaces,
-            surface_partitions=state.surface_partitions,
-            construction_bodies=state.construction_bodies,
-            mm_contacts=state.mm_contacts,
-            semantic_facts=state.semantic_facts,
-        ),
-    )
-    state.surfaces = _timed(
-        timings,
-        "reconcile_solution_domain_boundaries",
-        lambda: reconcile_solution_domain_boundaries(
-            build_input,
-            surfaces=state.surfaces,
-        ),
-    )
-    if state.is_route_ab and build_input.port_sheet_regions:
-        state.surfaces = _timed(
-            timings,
-            "lower_port_sheet_regions",
-            lambda: lower_port_sheet_regions(
-                build_input,
-                route=route,
-                mm_contacts=state.mm_contacts,
-                planned_surfaces=state.surfaces,
-            ),
+        self.timed(
+            validate_selected_route,
+            self.build_input,
+            self.route,
+            representation_context=self.representation_context,
         )
-    _timed(
-        timings,
-        "validate_surface_sheet_interface_coverage",
-        lambda: validate_surface_sheet_interface_coverage(
-            build_input,
-            route=route,
-            surfaces=state.surfaces,
-        ),
-    )
-    state.surfaces = _timed(
-        timings,
-        "merge_solution_sidewall_interfaces",
-        lambda: merge_solution_sidewall_interfaces(
-            build_input,
-            surfaces=state.surfaces,
-            semantic_facts=state.semantic_facts,
-        ),
-    )
-    state.interfaces = _timed(
-        timings,
-        "complete_interface_plan_from_surfaces",
-        lambda: complete_interface_plan_from_surfaces(
-            interfaces=state.interfaces,
-            surfaces=state.surfaces,
-        ),
-    )
-
-
-def _plan_topology(state: _PlanState) -> None:
-    """Derive points, curves and surface loops, then check they cover the surfaces."""
-    route = state.route
-    timings = state.timings
-    state.points, state.curves, state.surface_loops, state.surfaces = _timed(
-        timings,
-        "plan_canonical_topology",
-        lambda: plan_canonical_topology(surfaces=state.surfaces),
-    )
-    _timed(
-        timings,
-        "validate_route_b_port_sheet_sidewall_topology",
-        lambda: validate_route_b_port_sheet_sidewall_topology(
-            route=route,
-            points=state.points,
-            curves=state.curves,
-            surface_loops=state.surface_loops,
-            surfaces=state.surfaces,
-        ),
-    )
-    _timed(
-        timings,
-        "validate_curve_plan_coverage",
-        lambda: validate_curve_plan_coverage(
-            points=state.points,
-            curves=state.curves,
-            surface_loops=state.surface_loops,
-            surfaces=state.surfaces,
-        ),
-    )
-    _timed(
-        timings,
-        "validate_surface_deduplication",
-        lambda: validate_surface_deduplication(surfaces=state.surfaces),
-    )
-    _timed(
-        timings,
-        "validate_no_surface_overlap",
-        lambda: validate_no_surface_overlap(surfaces=state.surfaces),
-    )
-
-
-def _plan_volumes(state: _PlanState) -> None:
-    """Plan volumes from the surfaces and check they close over them."""
-    route = state.route
-    timings = state.timings
-    state.volumes = _timed(
-        timings,
-        "plan_route_volumes",
-        lambda: plan_route_volumes(
-            state.build_input,
-            route=route,
-            surfaces=state.surfaces,
-            mm_contacts=state.mm_contacts,
-        ),
-    )
-    if route == "B":
-        state.surfaces = bind_route_b_port_volume_plans(
-            state.build_input, state.surfaces, state.volumes
+        self.semantic_facts = build_semantic_evidence_facade(
+            self.build_input,
+            route=self.route,
+            representation_context=self.representation_context,
         )
-    _timed(
-        timings,
-        "validate_route_volume_surface_refs",
-        lambda: validate_route_volume_surface_refs(route=route, volumes=state.volumes),
-    )
-    _timed(
-        timings,
-        "validate_volume_surface_closure",
-        lambda: validate_volume_surface_closure(
-            volumes=state.volumes,
-            surfaces=state.surfaces,
-            surface_loops=state.surface_loops,
-        ),
-    )
-    _timed(
-        timings,
-        "validate_surface_use_counts",
-        lambda: validate_surface_use_counts(
-            volumes=state.volumes, surfaces=state.surfaces
-        ),
-    )
+        self.interfaces = self.timed(
+            recognize_route_interfaces,
+            self.build_input,
+            route=self.route,
+            representation_context=self.representation_context,
+        )
+        self.interfaces = self.timed(
+            plan_conductor_contact_patches,
+            self.build_input,
+            route=self.route,
+            representation_context=self.representation_context,
+            interfaces=self.interfaces,
+        )
+        if self.is_route_ab:
+            self.interfaces, self.mm_contacts = self.timed(
+                plan_mm_contact_records,
+                self.build_input,
+                route=self.route,
+                representation_context=self.representation_context,
+                interfaces=self.interfaces,
+            )
+        else:
+            self.mm_contacts = ()
 
+    def plan_surfaces(self) -> None:
+        """Plan partitions, construction bodies and surfaces, then fold in port sheets."""
+        self.surface_partitions = self.timed(
+            plan_surface_partitions,
+            self.build_input,
+            route=self.route,
+            interfaces=self.interfaces,
+        )
+        self.construction_bodies = self.timed(
+            plan_route_construction_bodies,
+            self.build_input,
+            route=self.route,
+            interfaces=self.interfaces,
+            representation_context=self.representation_context,
+        )
+        self.surfaces = self.timed(
+            plan_route_surfaces,
+            self.build_input,
+            route=self.route,
+            representation_context=self.representation_context,
+            interfaces=self.interfaces,
+            surface_partitions=self.surface_partitions,
+            construction_bodies=self.construction_bodies,
+            mm_contacts=self.mm_contacts,
+            semantic_facts=self.semantic_facts,
+        )
+        self.surfaces = self.timed(
+            reconcile_solution_domain_boundaries,
+            self.build_input,
+            surfaces=self.surfaces,
+        )
+        if self.is_route_ab and self.build_input.port_sheet_regions:
+            self.surfaces = self.timed(
+                lower_port_sheet_regions,
+                self.build_input,
+                route=self.route,
+                mm_contacts=self.mm_contacts,
+                planned_surfaces=self.surfaces,
+            )
+        self.timed(
+            validate_surface_sheet_interface_coverage,
+            self.build_input,
+            route=self.route,
+            surfaces=self.surfaces,
+        )
+        self.surfaces = self.timed(
+            merge_solution_sidewall_interfaces,
+            self.build_input,
+            surfaces=self.surfaces,
+            semantic_facts=self.semantic_facts,
+        )
+        self.interfaces = self.timed(
+            complete_interface_plan_from_surfaces,
+            interfaces=self.interfaces,
+            surfaces=self.surfaces,
+        )
 
-def _plan_cuts_and_tags(state: _PlanState) -> None:
-    """Plan cut operations and physical tags, then run the final coverage checks."""
-    route = state.route
-    timings = state.timings
-    state.construction_bodies = reconcile_construction_body_surface_ids(
-        state.construction_bodies,
-        surfaces=state.surfaces,
-    )
-    state.cut_operations = _timed(
-        timings,
-        "plan_cut_host_operations",
-        lambda: plan_cut_host_operations(
-            route=route,
-            construction_bodies=state.construction_bodies,
-        ),
-    )
-    state.tags = _timed(
-        timings,
-        "plan_route_tags",
-        lambda: plan_route_tags(
-            route=route, surfaces=state.surfaces, volumes=state.volumes
-        ),
-    )
-    _timed(
-        timings,
-        "validate_route_operation_coverage",
-        lambda: validate_route_operation_coverage(
-            construction_bodies=state.construction_bodies,
-            cut_operations=state.cut_operations,
-            surfaces=state.surfaces,
-        ),
-    )
-    _timed(
-        timings,
-        "validate_surface_partition_coverage",
-        lambda: validate_surface_partition_coverage(
-            interfaces=state.interfaces,
-            surface_partitions=state.surface_partitions,
-            surfaces=state.surfaces,
-        ),
-    )
-    _timed(
-        timings,
-        "validate_interface_surface_source_of_truth",
-        lambda: validate_interface_surface_source_of_truth(
-            interfaces=state.interfaces,
-            surfaces=state.surfaces,
-        ),
-    )
-    _timed(
-        timings,
-        "validate_tag_plan_coverage",
-        lambda: validate_tag_plan_coverage(
-            surfaces=state.surfaces,
-            volumes=state.volumes,
-            tags=state.tags,
-        ),
-    )
+    def plan_topology(self) -> None:
+        """Derive points, curves and surface loops, then check they cover the surfaces."""
+        self.points, self.curves, self.surface_loops, self.surfaces = self.timed(
+            plan_canonical_topology, surfaces=self.surfaces
+        )
+        self.timed(
+            validate_route_b_port_sheet_sidewall_topology,
+            route=self.route,
+            points=self.points,
+            curves=self.curves,
+            surface_loops=self.surface_loops,
+            surfaces=self.surfaces,
+        )
+        self.timed(
+            validate_curve_plan_coverage,
+            points=self.points,
+            curves=self.curves,
+            surface_loops=self.surface_loops,
+            surfaces=self.surfaces,
+        )
+        self.timed(validate_surface_deduplication, surfaces=self.surfaces)
+        self.timed(validate_no_surface_overlap, surfaces=self.surfaces)
 
+    def plan_volumes(self) -> None:
+        """Plan volumes from the surfaces and check they close over them."""
+        self.volumes = self.timed(
+            plan_route_volumes,
+            self.build_input,
+            route=self.route,
+            surfaces=self.surfaces,
+            mm_contacts=self.mm_contacts,
+        )
+        if self.route == "B":
+            self.surfaces = bind_route_b_port_volume_plans(
+                self.build_input, self.surfaces, self.volumes
+            )
+        self.timed(
+            validate_route_volume_surface_refs, route=self.route, volumes=self.volumes
+        )
+        self.timed(
+            validate_volume_surface_closure,
+            volumes=self.volumes,
+            surfaces=self.surfaces,
+            surface_loops=self.surface_loops,
+        )
+        self.timed(
+            validate_surface_use_counts, volumes=self.volumes, surfaces=self.surfaces
+        )
 
-def _assemble_plan(state: _PlanState) -> ConstructionPlanRecord:
-    """Bundle the staged results; only Route A/B plans carry MM contacts."""
-    route = state.route
-    build_input = state.build_input
-    plan_type = (
-        RouteABConstructionPlanRecord if state.is_route_ab else ConstructionPlanRecord
-    )
-    plan_kwargs = {
-        "route": route,
-        "interfaces": state.interfaces,
-        "surface_partitions": state.surface_partitions,
-        "points": state.points,
-        "curves": state.curves,
-        "surface_loops": state.surface_loops,
-        "surfaces": state.surfaces,
-        "volumes": state.volumes,
-        "construction_bodies": state.construction_bodies,
-        "cut_operations": state.cut_operations,
-        "port_sheet_regions": build_input.port_sheet_regions,
-        "tags": state.tags,
-        "metadata": {
-            "backend_strategy": "surface_plan_first_bottom_up_occ",
-            "port_sheet_region_layer": {
-                "source": "GeometryBuildInput.port_sheet_regions",
-                "backend_live_surface_records": (
-                    bool(build_input.port_sheet_regions) and state.is_route_ab
-                ),
-                "allowed_overlap": "palace_lumped_port_sheet_only",
-                "lowering_status": (
-                    "lowered" if build_input.port_sheet_regions else "none"
+    def plan_cuts_and_tags(self) -> None:
+        """Plan cut operations and physical tags, then run the final coverage checks."""
+        self.construction_bodies = reconcile_construction_body_surface_ids(
+            self.construction_bodies,
+            surfaces=self.surfaces,
+        )
+        self.cut_operations = self.timed(
+            plan_cut_host_operations,
+            route=self.route,
+            construction_bodies=self.construction_bodies,
+        )
+        self.tags = self.timed(
+            plan_route_tags,
+            route=self.route,
+            surfaces=self.surfaces,
+            volumes=self.volumes,
+        )
+        self.timed(
+            validate_route_operation_coverage,
+            construction_bodies=self.construction_bodies,
+            cut_operations=self.cut_operations,
+            surfaces=self.surfaces,
+        )
+        self.timed(
+            validate_surface_partition_coverage,
+            interfaces=self.interfaces,
+            surface_partitions=self.surface_partitions,
+            surfaces=self.surfaces,
+        )
+        self.timed(
+            validate_interface_surface_source_of_truth,
+            interfaces=self.interfaces,
+            surfaces=self.surfaces,
+        )
+        self.timed(
+            validate_tag_plan_coverage,
+            surfaces=self.surfaces,
+            volumes=self.volumes,
+            tags=self.tags,
+        )
+
+    def assemble(self) -> ConstructionPlanRecord:
+        """Bundle the staged results; only Route A/B plans carry MM contacts."""
+        plan_type = (
+            RouteABConstructionPlanRecord
+            if self.is_route_ab
+            else ConstructionPlanRecord
+        )
+        plan_kwargs = {
+            "route": self.route,
+            "interfaces": self.interfaces,
+            "surface_partitions": self.surface_partitions,
+            "points": self.points,
+            "curves": self.curves,
+            "surface_loops": self.surface_loops,
+            "surfaces": self.surfaces,
+            "volumes": self.volumes,
+            "construction_bodies": self.construction_bodies,
+            "cut_operations": self.cut_operations,
+            "port_sheet_regions": self.build_input.port_sheet_regions,
+            "tags": self.tags,
+            "metadata": {
+                "backend_strategy": "surface_plan_first_bottom_up_occ",
+                "port_sheet_region_layer": {
+                    "source": "GeometryBuildInput.port_sheet_regions",
+                    "backend_live_surface_records": (
+                        bool(self.build_input.port_sheet_regions) and self.is_route_ab
+                    ),
+                    "allowed_overlap": "palace_lumped_port_sheet_only",
+                    "lowering_status": (
+                        "lowered" if self.build_input.port_sheet_regions else "none"
+                    ),
+                },
+                "timings": self.timings,
+                **(
+                    {"conductor_components": component_metadata(self.mm_contacts)}
+                    if self.is_route_ab
+                    else {}
                 ),
             },
-            "timings": state.timings,
-            **(
-                {"conductor_components": component_metadata(state.mm_contacts)}
-                if state.is_route_ab
-                else {}
-            ),
-        },
-    }
-    if state.is_route_ab:
-        plan_kwargs["mm_contacts"] = state.mm_contacts
-    return plan_type(**plan_kwargs)
+        }
+        if self.is_route_ab:
+            plan_kwargs["mm_contacts"] = self.mm_contacts
+        return plan_type(**plan_kwargs)
 
-
-def _timed(
-    timings: list[dict[str, Any]],
-    stage: str,
-    fn: Any,
-) -> Any:
-    started = time.perf_counter()
-    try:
-        result = fn()
-    except Exception:
-        timings.append(
+    def timed(self, step: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        """Run one planning step and record its duration under the step's name."""
+        started = time.perf_counter()
+        try:
+            result = step(*args, **kwargs)
+        except Exception:
+            self.timings.append(
+                {
+                    "stage": step.__name__,
+                    "seconds": round(time.perf_counter() - started, 6),
+                    "status": "failed",
+                }
+            )
+            raise
+        self.timings.append(
             {
-                "stage": stage,
+                "stage": step.__name__,
                 "seconds": round(time.perf_counter() - started, 6),
-                "status": "failed",
+                "status": "done",
             }
         )
-        raise
-    timings.append(
-        {
-            "stage": stage,
-            "seconds": round(time.perf_counter() - started, 6),
-            "status": "done",
-        }
-    )
-    return result
+        return result
