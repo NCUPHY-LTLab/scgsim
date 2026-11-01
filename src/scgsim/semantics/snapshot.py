@@ -13,6 +13,7 @@ RevisionKind = Literal["declared_revision", "content_hash_fallback"]
 
 
 def plain_semantic_facts(value: Any) -> Any:
+    """Convert nested facts to plain dicts, lists and scalars; else TypeError."""
     if isinstance(value, Mapping):
         plain: dict[str, Any] = {}
         for key, item in value.items():

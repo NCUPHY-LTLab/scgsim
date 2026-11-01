@@ -25,6 +25,7 @@ from scgsim.semantics.route_a import geometry_z_range
 def polygon_sheet(
     app: Any, polygon: Mapping[str, Any], *, name: str, z_um: float
 ) -> Any:
+    """Create a covered planar sheet from a polygon at z_um, then subtract its holes."""
     points = [[float(x), float(y), z_um] for x, y in polygon["exterior"]]
     value = app.modeler.create_polyline(
         points,
@@ -129,6 +130,7 @@ def _bounds_box(app: Any, entity: Mapping[str, Any], source: Mapping[str, Any]) 
 def solution_body(
     app: Any, entity: Mapping[str, Any], source: Mapping[str, Any]
 ) -> Any:
+    """Create the native body of a solution domain, a box or a Z-swept polygon solid."""
     geometry = entity["geometry"]
     if "outer_loop" not in geometry:
         return _bounds_box(app, entity, source)
@@ -188,6 +190,7 @@ def native_conductor_geometry(
 
 
 def read_back_materials(app: Any, materials: Mapping[str, Any]) -> dict[str, Any]:
+    """Read back vacuum and dielectric materials from the app, keyed by material id."""
     observed: dict[str, Any] = {}
     for material_id, record in materials.items():
         if not isinstance(record, Mapping) or record.get("kind") not in {
@@ -212,6 +215,7 @@ def native_solution_materials(source: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def install_material_catalog(app: Any, materials: Mapping[str, Any]) -> dict[str, Any]:
+    """Create vacuum and dielectric materials in the app; return observed records."""
     observed: dict[str, Any] = {}
     for material_id, record in materials.items():
         if not isinstance(material_id, str) or not isinstance(record, Mapping):

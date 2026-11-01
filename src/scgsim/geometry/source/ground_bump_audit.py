@@ -345,6 +345,7 @@ def intersecting_blocker_ids(
 
 
 def point2(value: Any, name: str) -> tuple[float, float]:
+    """Parse a two-item numeric sequence into an (x, y) float pair."""
     if (
         isinstance(value, str | bytes)
         or not isinstance(value, Sequence)
@@ -355,6 +356,7 @@ def point2(value: Any, name: str) -> tuple[float, float]:
 
 
 def gdstk_cell(library: Any, name: str) -> Any:
+    """Return the cell with this name, else the library's single top-level cell."""
     matches = [cell for cell in library.cells if cell.name == name] if name else []
     if len(matches) == 1:
         return matches[0]
@@ -365,6 +367,7 @@ def gdstk_cell(library: Any, name: str) -> Any:
 
 
 def gds_layer_polygons(cell: Any, layer: tuple[int, int]) -> list[Any]:
+    """List the polygons of a (layer, datatype) in a cell, repetitions applied."""
     return list(
         cell.get_polygons(layer=layer[0], datatype=layer[1], apply_repetitions=True)
     )

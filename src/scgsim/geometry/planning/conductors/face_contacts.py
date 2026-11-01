@@ -27,6 +27,7 @@ from scgsim.geometry.primitives.loops import (
 def contact_patches_by_entity_face(
     interfaces: tuple[InterfacePlanRecord, ...],
 ) -> dict[tuple[str, str], tuple[tuple[tuple[float, float], ...], ...]]:
+    """Group coplanar contact-patch loops by (entity id, face) for both sides."""
     records: dict[tuple[str, str], list[tuple[tuple[float, float], ...]]] = {}
     for interface in interfaces:
         if interface.recognition_rule != "coplanar_conductor_contact_patch":
@@ -62,6 +63,7 @@ def is_face_pad_mm_contact(
     record: MMContactRecord,
     entities: Mapping[str, SemanticEntitySpec],
 ) -> bool:
+    """True when one MM contact side is a contact_pad and the other a face_metal."""
     return {
         entities[record.lower_entity_id].part_role,
         entities[record.upper_entity_id].part_role,
@@ -126,6 +128,7 @@ def subtract_contact_patches_from_face(
     geometry_ref: Mapping[str, Any],
     contact_loops: Sequence[tuple[tuple[float, float], ...]],
 ) -> tuple[dict[str, Any], ...]:
+    """Cut contact loops out of a face as holes, or return () if one fills it."""
     if not contact_loops:
         return (dict(geometry_ref),)
     outer_loop = normalized_loop(geometry_ref["outer_loop"])

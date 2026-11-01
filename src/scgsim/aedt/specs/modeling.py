@@ -30,6 +30,7 @@ ContactSide = Literal["lower", "upper"]
 
 
 def checked_modeling(value: Any) -> Modeling:
+    """Return value if it is "solid" or "thin_film", else raise ValueError."""
     if value not in {"solid", "thin_film"}:
         raise ValueError("modeling must be explicitly 'solid' or 'thin_film'")
     return value
@@ -132,6 +133,7 @@ def physical_fields_from_payload(payload: Any) -> dict[str, Any]:
 
 
 def source_plan_layers(source: Any):
+    """Return the layer declarations of the source's physical representation plan."""
     return PhysicalRepresentationPlan.from_payload(source["modeling"]).declarations
 
 
@@ -166,6 +168,7 @@ def request_modeling(spec: Any):
 
 
 def modeling_payload(spec: Any) -> dict[str, Any]:
+    """Payload of modeling mode, physical layers and physical representation."""
     return {
         "modeling": spec.modeling,
         "physical_layers": [layer.to_payload() for layer in spec.physical_layers],
@@ -217,6 +220,7 @@ def source_record_payload(value: dict[str, Any]) -> dict[str, Any]:
 
 
 def verify_effective_records(actual, expected) -> None:
+    """Raise ValueError unless the actual and expected records are equal lists."""
     if list(actual) != list(expected):
         raise ValueError(
             "canonical native lowering records differ from authored modeling map"

@@ -22,12 +22,14 @@ from scgsim.geometry.primitives.loops import (
 def list_solution_entities(
     build_input: GeometryBuildInput,
 ) -> tuple[SemanticEntitySpec, ...]:
+    """Return the solution entities of the build input as a tuple."""
     return tuple(
         entity for entity in build_input.entities if is_solution_entity(entity)
     )
 
 
 def solution_bounds(entity: SemanticEntitySpec) -> Mapping[str, float]:
+    """Return the entity's domain_bounds_um mapping, raising TypeError if absent."""
     bounds = entity.geometry.get("domain_bounds_um")
     if not isinstance(bounds, Mapping):
         raise TypeError(f"{entity.semantic_id} requires domain_bounds_um")
@@ -41,6 +43,7 @@ def solution_entity_xy_region(
     z_min_um: float | None = None,
     z_max_um: float | None = None,
 ) -> tuple[Any, ...]:
+    """XY region of a solution entity as gdstk polygons, from its loops or bounds."""
     del z_min_um, z_max_um
     geometry = entity.geometry
     if "outer_loop" in geometry:
@@ -127,6 +130,7 @@ def entity_occupied_region(
 
 
 def domain_bounds_loop(bounds: Mapping[str, Any]) -> tuple[tuple[float, float], ...]:
+    """Corner loop of an XY bounds mapping, counter-clockwise from the min corner."""
     return (
         (float(bounds["x_min_um"]), float(bounds["y_min_um"])),
         (float(bounds["x_max_um"]), float(bounds["y_min_um"])),
@@ -139,6 +143,7 @@ def loop_domain_bounds(
     outer_loop: tuple[tuple[float, float], ...],
     hole_loops: tuple[tuple[tuple[float, float], ...], ...] = (),
 ) -> dict[str, float]:
+    """XY min/max bounds in micrometres over an outer loop and its hole loops."""
     points = tuple(
         point for loop in (outer_loop, *hole_loops) for point in normalized_loop(loop)
     )
@@ -151,6 +156,7 @@ def loop_domain_bounds(
 
 
 def entity_loop_bounds(entity: SemanticEntitySpec) -> Mapping[str, float]:
+    """XY min/max bounds in micrometres over an entity's outer and hole loops."""
     points = tuple(
         point
         for loop in (

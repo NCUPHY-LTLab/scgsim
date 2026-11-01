@@ -57,6 +57,7 @@ def conductor_face_adjacent_solution_id(
     entity: SemanticEntitySpec,
     face: str,
 ) -> str:
+    """Id of the solution entity adjacent to a conductor's bottom or top face."""
     z_min_um, z_max_um = entity_z_range_um(entity)
     face_z_um = z_min_um if face == "bottom" else z_max_um
     auto_parent, auto_component = _auto_vacuum_host_component_id(
@@ -134,6 +135,7 @@ def conductor_sidewall_adjacent_solution_id(
     build_input: GeometryBuildInput,
     entity: SemanticEntitySpec,
 ) -> str | None:
+    """Id of the solution beside a conductor sidewall, or None when exterior-only."""
     z_min_um, z_max_um = entity_z_range_um(entity)
     mid_z_um = (z_min_um + z_max_um) / 2.0
     auto_parent, auto_component = _auto_vacuum_host_component_id(
@@ -584,6 +586,7 @@ def classify_conductor_solution_interface(
     *,
     semantic_facts: SemanticEvidenceFacade | None = None,
 ) -> str:
+    """Interface kind of a solution entity, from its material kind."""
     material_kind = (
         semantic_facts.material_kind(solution.semantic_id)
         if semantic_facts is not None
@@ -598,6 +601,7 @@ def route_a_sheet_boundary_volume_ids(
     build_input: GeometryBuildInput,
     entity: SemanticEntitySpec,
 ) -> tuple[str, ...]:
+    """Unique ids of the solutions adjacent to a Route-A sheet's bottom and top."""
     return unique_ids(
         (
             conductor_face_adjacent_solution_id(build_input, entity, "bottom"),
@@ -612,6 +616,7 @@ def route_a_sheet_plane_z_um(
     *,
     representation_context: RepresentationContext | None = None,
 ) -> float:
+    """Z of a Route-A sheet plane in micrometres, taken from a non-vacuum side."""
     if any(
         solution.metadata.get("auto_vacuum_group_id") == entity.host_void_semantic_id
         for solution in list_solution_entities(build_input)
@@ -639,6 +644,7 @@ def route_a_sheet_plane_z_um_from_solutions(
     entity: SemanticEntitySpec,
     solution_entities: Sequence[SemanticEntitySpec],
 ) -> float:
+    """Z in micrometres of a Route-A sheet plane, from the given solution entities."""
     z_min_um, z_max_um = entity_z_range_um(entity)
     point = loop_centroid(entity.geometry["outer_loop"])
     for face_z_um, solution_edge_key in (
@@ -659,6 +665,7 @@ def route_a_sheet_boundary_volume_ids_from_solutions(
     entity: SemanticEntitySpec,
     solution_entities: Sequence[SemanticEntitySpec],
 ) -> tuple[str, ...]:
+    """Unique ids of solutions touching a sheet's bottom and top at its centroid."""
     z_min_um, z_max_um = entity_z_range_um(entity)
     point = loop_centroid(entity.geometry["outer_loop"])
     ids: list[str] = []
@@ -679,6 +686,7 @@ def sidewall_on_solution_outer_boundary(
     geometry_ref: Mapping[str, Any],
     solution: SemanticEntitySpec,
 ) -> bool:
+    """True when a sidewall quad's first edge lies along the solution's XY boundary."""
     points = geometry_ref.get("quad_points", ())
     if len(points) != 4:
         return False

@@ -40,6 +40,7 @@ def domain_energy_rows(
     domain_volumes: list[tuple[str, Mapping[str, Any]]],
     materials: Mapping[str, Mapping[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Build Palace domain-energy rows and their index rows for the domain volumes."""
     rows = [
         {
             "Index": index,
@@ -177,6 +178,7 @@ def _material_identity(
 
 
 def physical_group_values(value: Any) -> tuple[int, ...]:
+    """Integer attributes of a physical group value; raise if there are none."""
     raw = value if isinstance(value, (list, tuple, set)) else (value,)
     values = [
         int(item)

@@ -23,6 +23,7 @@ NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM = 1e-5
 
 
 def native_coordinates_close(left, right) -> bool:
+    """True when two coordinate tuples are finite and within the junction tolerance."""
     return len(left) == len(right) and all(
         math.isfinite(float(a))
         and math.isfinite(float(b))
@@ -217,6 +218,7 @@ def native_edge_section(bodies, start, end, *, boundary_only=False):
 
 
 def native_edge_covered(bodies, start, end) -> bool:
+    """True when the segment is fully covered by the bodies' boundary sections."""
     intervals, _ = native_edge_section(bodies, start, end, boundary_only=True)
     reached = Fraction(0)
     for lo, hi in sorted(intervals):
@@ -249,6 +251,7 @@ def native_boundary_contact(left, right) -> bool:
 
 
 def native_closed_contact(left, right) -> bool:
+    """True when closed contact holds or a ring point lies on the other's boundary."""
     return closed_contact(left, right) or any(
         _native_on_segment(point, a, b)
         for regions, others in ((left, right), (right, left))
@@ -262,6 +265,7 @@ def native_closed_contact(left, right) -> bool:
 
 
 def native_strict_inside(point, rings) -> bool:
+    """True when the point is inside the outer ring, in no hole, and off every edge."""
     return (
         inside_ring(point, rings[0]) == 1
         and all(inside_ring(point, hole) == -1 for hole in rings[1:])
@@ -274,6 +278,7 @@ def native_strict_inside(point, rings) -> bool:
 
 
 def native_cross_sign(a, b, point):
+    """Side of segment a-b a point lies on: 1 left, -1 right, 0 when on it."""
     _, projected = _native_edge_projection(point, a, b)
     value = cross(a, b, point)
     return 0 if native_coordinates_close(point, projected) else (1 if value > 0 else -1)

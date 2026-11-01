@@ -13,6 +13,7 @@ def route_b_port_sheet_binding_matches(
     overlap_id: str | None,
     host_semantic_id: str,
 ) -> bool:
+    """True when a surface has a route_b port-sheet binding with these ids."""
     return any(
         isinstance(binding, Mapping)
         and binding.get("port_surface_id") == port_surface_id

@@ -32,6 +32,7 @@ def _region_bounds(region: Any) -> tuple[float, ...]:
 
 
 def verified_region_bounds(region: Any, plan: Mapping[str, Any]) -> tuple[float, ...]:
+    """Return the Region bounds, raising unless they match the planned envelope."""
     bounds = _region_bounds(region)
     loop = tuple(
         tuple(float(value) for value in point)
@@ -60,6 +61,7 @@ def verified_region_bounds(region: Any, plan: Mapping[str, Any]) -> tuple[float,
 
 
 def create_epr_region(app: Any, source: Mapping[str, Any]) -> dict[str, Any]:
+    """Create the vacuum Region with absolute padding and return its evidence record."""
     plan = source["native_region"]
     if app.modeler.get_object_from_name("Region") is not None:
         raise RuntimeError("new EPR model already has Region")
@@ -167,6 +169,7 @@ def _verify_no_explicit_region_boundary(app: Any) -> None:
 
 
 def implicit_closed_enclosure(app: Any, source: Mapping[str, Any]) -> dict[str, Any]:
+    """Verify the Region's six outer faces; return the boundary policy and evidence."""
     if source["native_region"].get("outer_boundary_policy") != "hfss_default.v1":
         raise ValueError("EPR Region boundary policy requires re-preparation")
     faces = _enclosure_faces(app, source)

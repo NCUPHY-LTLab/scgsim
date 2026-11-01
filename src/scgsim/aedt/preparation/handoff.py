@@ -569,6 +569,7 @@ def _member(path: Path, root: Path) -> dict[str, str | int]:
 
 
 def utc_now() -> str:
+    """Current UTC time as an ISO 8601 string with a trailing Z, to the second."""
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 

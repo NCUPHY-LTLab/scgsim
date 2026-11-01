@@ -21,6 +21,7 @@ def entity_geometry_ref(
     *,
     representation: str,
 ) -> dict[str, Any]:
+    """Geometry ref dict for an entity, merged from its geometry and metadata keys."""
     result: dict[str, Any] = {
         "from_semantic_id": entity.semantic_id,
         "geometry_kind": entity.geometry_kind,
@@ -43,6 +44,7 @@ def route_entity_geometry_ref(
     representation: str,
     interfaces: tuple[InterfacePlanRecord, ...] = (),
 ) -> dict[str, Any]:
+    """Entity geometry ref, widening Route A cutout z range to contact planes."""
     del build_input
     geometry_ref = entity_geometry_ref(entity, representation=representation)
     if route != "A" or representation != "cutout_boundary_shell":
@@ -85,6 +87,7 @@ def route_entity_geometry_ref(
 def sidewall_geometry_refs(
     geometry_ref: Mapping[str, Any],
 ) -> tuple[dict[str, Any], ...]:
+    """Vertical quad refs for each loop edge, or () when thickness is not positive."""
     z_min_um = float(geometry_ref.get("z_min_um", geometry_ref.get("z_um", 0.0)))
     thickness_um = float(geometry_ref.get("thickness_um", 0.0))
     if thickness_um <= 0:

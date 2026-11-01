@@ -29,6 +29,7 @@ class RouteASheetPatch:
 
     @property
     def boundary_volume_ids(self) -> tuple[str, str]:
+        """The single effective domain id of the bottom and of the top side."""
         bottom_ids = self.bottom.effective_domain_ids or ()
         top_ids = self.top.effective_domain_ids or ()
         if len(bottom_ids) != 1 or len(top_ids) != 1:
@@ -37,6 +38,7 @@ class RouteASheetPatch:
 
     @property
     def contributions(self) -> tuple[EvidenceResult, EvidenceResult]:
+        """The (bottom, top) evidence results as a pair."""
         return (self.bottom, self.top)
 
 
@@ -46,6 +48,7 @@ def surface_contribution_provenance(
     patch_id: str,
     contributions: Sequence[EvidenceResult],
 ) -> dict[str, Any]:
+    """Dict describing contribution evidence, native aggregation and mask support."""
     ledger = tuple(
         {
             "contribution_id": result.contribution_id,
@@ -113,6 +116,7 @@ def surface_contribution_provenance(
 
 
 def interface_kinds(interface: InterfacePlanRecord) -> tuple[str, ...]:
+    """Declared plus own interface kinds, in INTERFACE_KIND_ORDER."""
     raw = interface.metadata.get("interface_kinds", (interface.kind,))
     if isinstance(raw, str):
         raw_values = (raw,)
@@ -132,6 +136,7 @@ def is_route_a_sheet_interface(
     *,
     representation_context: RepresentationContext | None = None,
 ) -> bool:
+    """True when the interface is a Route A or representation-context sheet polygon."""
     recognition_rule = interface.metadata.get("recognition_rule")
     if route == "A" and recognition_rule == "route_a_surface_sheet_polygon":
         return True
@@ -150,6 +155,7 @@ def is_route_a_sheet_interface(
 def canonical_face_signature_3d(
     ring: tuple[tuple[float, float, float], ...],
 ) -> tuple[tuple[float, float, float], ...] | None:
+    """Canonical ring key: smallest rotation either way; None under 3 points."""
     if len(ring) < 3:
         return None
     normalized = tuple(coordinate_key(point) for point in ring)
@@ -168,6 +174,7 @@ def conductor_boundary_surface_id(
     representation: str,
     shell_part: str,
 ) -> str:
+    """Surface id built from route, SHELL or MAT kind, entity id and shell part."""
     surface_kind = "SHELL" if representation == "cutout_boundary_shell" else "MAT"
     route_id = route or "REPRESENTATION"
     return (
@@ -180,6 +187,7 @@ def surface_boundary_volume_ids(
     *,
     known_entity_ids: set[str],
 ) -> tuple[str, ...]:
+    """Known entity ids bounding a surface, at most two, or () for embedded sheets."""
     if surface.surface_role == "lumped_port" and not surface.metadata.get(
         "route_a_boundary_port"
     ):

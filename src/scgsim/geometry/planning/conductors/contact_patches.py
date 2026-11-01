@@ -409,6 +409,7 @@ def contact_patch_loops(
     lower_id: str,
     upper_id: str,
 ) -> tuple[tuple[tuple[float, float], ...], ...]:
+    """Union an overlap region into normalized loops, sorted; raise if it is empty."""
     import gdstk
 
     polygons = boolean_gdstk_region(gdstk, overlap_region, (), "or")

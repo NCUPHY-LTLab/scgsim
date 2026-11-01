@@ -152,6 +152,7 @@ class AedtResources:
 
 
 def project_filename(value: Any, field: str) -> Path:
+    """Return a single-filename project Path, rejecting directories and empty stems."""
     project = Path(stripped_text(value, field))
     if project.parent != Path(".") or project.name in {".", ".."}:
         raise ValueError("project_name must be a single project filename")
@@ -166,6 +167,7 @@ def project_name_from_payload(value: Any) -> str:
 
 
 def coerced_finite_number(value: Any, field: str) -> float:
+    """Convert to float, rejecting bools and non-finite values."""
     if isinstance(value, bool):
         raise TypeError(f"{field} must be a finite number")
     try:

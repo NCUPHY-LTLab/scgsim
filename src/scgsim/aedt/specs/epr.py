@@ -584,6 +584,7 @@ class SavedSolution:
 
 
 def contained_relative_path(value: Any, name: str) -> Path:
+    """Return value as a Path, rejecting empty, absolute, "." and ".." paths."""
     if not isinstance(value, str) or not value:
         raise ValueError(f"{name} must be a non-empty relative path")
     path = Path(value)

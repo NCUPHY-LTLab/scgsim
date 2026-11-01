@@ -241,6 +241,7 @@ def boolean(left, right, operation):
     # SGB (the geometry builder) has a Boolean wrapper that filters small areas.
     # Partitioning must retain every residual, so reuse its precision and loop
     # lowering without that filter.
+    """Run a gdstk Boolean at PRECISION_UM and return the result as a list."""
     return list(gdstk.boolean(left, right, operation, precision=PRECISION_UM) or ())
 
 

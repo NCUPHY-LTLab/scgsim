@@ -38,6 +38,13 @@ uvx ruff@0.17.3 format --check src
    instead, such as `_elapsed_seconds(started)`.
 9. **One copy of each helper.** Merge copies only when they really behave the same.
    When they differ, the names must say how.
+10. **A leading underscore means "used in this file only".** A name imported by another
+    module has no underscore, and it gets a docstring. A package's own subfolders say
+    where a name belongs, so a reader can learn the structure by following its imports.
+11. **Use a class when the same data travels together.** If several steps keep passing
+    the same arguments to each other, those arguments belong on a class and the steps
+    become its methods. Data that only flows through a sequence of steps stays a
+    pipeline of functions. `geometry/planning/interface_surfaces.py` is the example.
 
 ## What a refactor must not change
 

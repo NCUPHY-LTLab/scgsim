@@ -32,6 +32,7 @@ def loops_touch_without_area(left: Any, right: Any) -> bool:
 
 
 def canonical_loop_sort_key(loop: tuple[tuple[float, float], ...]) -> tuple:
+    """Sort key: the smallest rotation of the loop in either direction."""
     clean = normalized_loop(loop)
     candidates: list[tuple[tuple[float, float], ...]] = []
     reversed_loop = tuple(reversed(clean))
@@ -43,6 +44,7 @@ def canonical_loop_sort_key(loop: tuple[tuple[float, float], ...]) -> tuple:
 
 
 def loop_signature(loop: Any) -> tuple[tuple[float, float], ...]:
+    """Sorted rounded points of a loop, or () when it cannot be normalized."""
     try:
         points = normalized_loop(loop)
     except Exception:  # noqa: BLE001 - malformed optional loop has no signature
@@ -51,6 +53,7 @@ def loop_signature(loop: Any) -> tuple[tuple[float, float], ...]:
 
 
 def same_loop_geometry(left: Any, right: Any) -> bool:
+    """True when two loops have the same signature of rounded points."""
     return loop_signature(left) == loop_signature(right)
 
 
@@ -58,6 +61,7 @@ def contact_holes_are_simple(
     outer_loop: tuple[tuple[float, float], ...],
     hole_loops: Sequence[tuple[tuple[float, float], ...]],
 ) -> bool:
+    """True when each hole lies inside the outer loop and no two holes share an edge."""
     for hole_loop in hole_loops:
         if not _loop_strictly_inside_loop(hole_loop, outer_loop):
             return False
@@ -138,6 +142,7 @@ def simple_interior_hole_loops(
     # This shortcut constructs a new hole list from conductor footprints.  An
     # already-holed solution interface must take the Boolean path so authored
     # substrate holes remain absent from the live SA surface.
+    """Conductor footprints as disjoint hole loops, or None when a Boolean is needed."""
     if parent_geometry_ref.get("hole_loops"):
         return None
     if any(entity.geometry.get("hole_loops") for entity in plane_conductors):
@@ -184,6 +189,7 @@ def loops_share_edge_overlap(
     left: tuple[tuple[float, float], ...],
     right: tuple[tuple[float, float], ...],
 ) -> bool:
+    """True when any edge of one loop overlaps any edge of the other."""
     return any(
         segment_overlap_interval(left_start, left_end, right_start, right_end)
         is not None
@@ -197,6 +203,7 @@ def edge_is_covered_by_loop_edge(
     end: tuple[float, float],
     loop: Any,
 ) -> bool:
+    """True when one loop edge covers the whole segment start-end."""
     return any(
         interval is not None
         and interval[0] <= TOPOLOGY_EPS_UM
@@ -225,6 +232,7 @@ def _loop_inside_loop(loop: Any, container: Any) -> bool:
 
 
 def loop_centroid(loop: Any) -> tuple[float, float]:
+    """Mean of the loop's points, as (x, y)."""
     points = tuple((float(point[0]), float(point[1])) for point in loop)
     return (
         sum(point[0] for point in points) / len(points),
@@ -246,6 +254,7 @@ def ordered_loop_signature(
 
 
 def normalized_loop(loop: Any) -> tuple[tuple[float, float], ...]:
+    """Clean a loop: round, drop repeated and collinear points; need 3 and area."""
     points = tuple(
         coordinate_2d_key((float(point[0]), float(point[1]))) for point in loop
     )
@@ -330,12 +339,14 @@ def _point_on_segment_2d(
 def ring_edges(
     ring: tuple[tuple[float, float], ...],
 ) -> tuple[tuple[tuple[float, float], tuple[float, float]], ...]:
+    """Consecutive (start, end) point pairs of a ring, closing back to the first."""
     return tuple(
         (ring[index], ring[(index + 1) % len(ring)]) for index in range(len(ring))
     )
 
 
 def gdstk_surface_region(geometry_ref: Mapping[str, Any]) -> tuple[Any, ...]:
+    """gdstk region for a geometry ref's outer loop minus its hole loops."""
     import gdstk
 
     outer = gdstk.Polygon(normalized_loop(geometry_ref["outer_loop"]))
@@ -354,6 +365,7 @@ def boolean_gdstk_region(
     right: Sequence[Any],
     operation: str,
 ) -> tuple[Any, ...]:
+    """Boolean of two gdstk regions at precision 1e-9, dropping tiny pieces."""
     if not left:
         return ()
     if operation == "not" and not right:
@@ -368,6 +380,7 @@ def boolean_gdstk_region(
 
 
 def filter_gdstk_polygons(polygons: Sequence[Any]) -> tuple[Any, ...]:
+    """Keep gdstk polygons whose area exceeds TOPOLOGY_EPS_UM."""
     return tuple(
         polygon
         for polygon in polygons
@@ -379,6 +392,7 @@ def geometry_ref_from_gdstk_polygon(
     parent_geometry_ref: Mapping[str, Any],
     polygon: Any,
 ) -> dict[str, Any]:
+    """Copy a parent geometry ref with outer and hole loops from a gdstk polygon."""
     geometry_ref = dict(parent_geometry_ref)
     outer_loop, hole_loops = split_gdstk_cutline_loop(normalized_loop(polygon.points))
     geometry_ref["outer_loop"] = outer_loop
@@ -459,6 +473,7 @@ def _planar_segment_parameter(
 def cancel_reversed_planar_edges(
     edges: Sequence[tuple[tuple[float, float], tuple[float, float]]],
 ) -> tuple[tuple[tuple[float, float], tuple[float, float]], ...]:
+    """Remove edges that are cancelled by their reverse, and zero-length edges."""
     counts: dict[tuple[tuple[float, float], tuple[float, float]], int] = {}
     for edge in edges:
         counts[edge] = counts.get(edge, 0) + 1
@@ -479,6 +494,7 @@ def cancel_reversed_planar_edges(
 def simple_planar_loops_from_edges(
     edges: Sequence[tuple[tuple[float, float], tuple[float, float]]],
 ) -> tuple[tuple[tuple[float, float], ...], ...]:
+    """Chain edges into closed loops; raise if a boundary branches or repeats."""
     neighbors: dict[tuple[float, float], set[tuple[float, float]]] = {}
     unused: set[tuple[tuple[float, float], tuple[float, float]]] = set()
     for start, end in edges:
@@ -512,6 +528,7 @@ def geometry_refs_from_gdstk_region(
     parent_geometry_ref: Mapping[str, Any],
     region: tuple[Any, ...],
 ) -> tuple[dict[str, Any], ...]:
+    """Geometry refs for each non-trivial gdstk polygon of a region."""
     return tuple(
         geometry_ref_from_gdstk_polygon(parent_geometry_ref, polygon)
         for polygon in filter_gdstk_polygons(region)
@@ -519,6 +536,7 @@ def geometry_refs_from_gdstk_region(
 
 
 def polygon_area(points: Sequence[Sequence[float]]) -> float:
+    """Signed polygon area by the shoelace formula; 0.0 for fewer than 3 points."""
     clean_points = tuple((float(point[0]), float(point[1])) for point in points)
     if len(clean_points) < 3:
         return 0.0

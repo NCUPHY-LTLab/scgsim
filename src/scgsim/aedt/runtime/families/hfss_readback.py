@@ -19,6 +19,7 @@ from scgsim.aedt.specs.parse import HfssSpec
 
 
 def native_mesh_operation_names(hfss: Any) -> list[str]:
+    """Return the names of native HFSS mesh operations, raising if unavailable."""
     names = hfss.get_oo_name(hfss.odesign, "Mesh")
     if not isinstance(names, list):
         raise TypeError("AEDT native mesh operation collection is unavailable")
@@ -155,6 +156,7 @@ def native_modal_oo_readback(hfss: Any, boundary_name: str) -> dict[str, Any]:
 def bind_port_evidence(
     hfss: Any, spec: HfssSpec, ports: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
+    """Attach native excitation evidence to port records by solution mode."""
     if isinstance(spec, HfssEigenmodeSpec):
         if ports:
             raise RuntimeError("HFSS Eigenmode must not bind port evidence")
@@ -332,6 +334,7 @@ def require_native_properties(
 def face_for_side(
     faces: list[tuple[int, tuple[float, float, float]]], side: str
 ) -> int:
+    """Return the id of the single face lying on the extreme of the given side."""
     axis, sign = {
         "-X": (0, -1),
         "+X": (0, 1),

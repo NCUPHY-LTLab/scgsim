@@ -161,6 +161,7 @@ def active_route_conductor_entities(
     *,
     representation_context: RepresentationContext | None = None,
 ) -> tuple[SemanticEntitySpec, ...]:
+    """Conductor entities with an outer loop that have a planned representation."""
     if route is None and representation_context is not None:
         return route_conductor_contact_footprints(
             build_input,
@@ -247,6 +248,7 @@ def conductor_entities_on_solution_plane(
     route: RouteLiteral | None,
     representation_context: RepresentationContext | None = None,
 ) -> tuple[SemanticEntitySpec, ...]:
+    """Conductor entities whose region overlaps a solution-plane patch's base region."""
     import gdstk
 
     lower = patch.lower

@@ -9,6 +9,7 @@ from scgsim.geometry.primitives.constants import TOPOLOGY_EPS_UM
 
 
 def geometry_ref_surface_z_um(geometry_ref: Mapping[str, Any]) -> float:
+    """Z in micrometres of a geometry ref's surface, from shell part or plane."""
     z_min_um = float(geometry_ref.get("z_min_um", geometry_ref.get("z_um", 0.0)))
     shell_part = geometry_ref.get("shell_part")
     if shell_part == "top":
@@ -27,6 +28,7 @@ def geometry_ref_surface_z_um(geometry_ref: Mapping[str, Any]) -> float:
 def coordinate_key(
     coordinate: tuple[float, float, float],
 ) -> tuple[float, float, float]:
+    """Round each coordinate to 9 decimals, for use as a dict key."""
     return tuple(round(float(value), 9) for value in coordinate)
 
 
@@ -34,6 +36,7 @@ def bounds_overlap(
     first: Mapping[str, float],
     second: Mapping[str, float],
 ) -> bool:
+    """True when two XY bounds overlap by more than TOPOLOGY_EPS_UM."""
     return not (
         float(first["x_max_um"]) <= float(second["x_min_um"]) + TOPOLOGY_EPS_UM
         or float(second["x_max_um"]) <= float(first["x_min_um"]) + TOPOLOGY_EPS_UM
@@ -43,6 +46,7 @@ def bounds_overlap(
 
 
 def rounded_z_key(value_um: float) -> float:
+    """Round a Z value in micrometres to 9 decimals."""
     return round(float(value_um), 9)
 
 
@@ -51,6 +55,7 @@ def interpolate_2d(
     end: tuple[float, float],
     parameter: float,
 ) -> tuple[float, float]:
+    """Point at the given fraction along the 2D segment from start to end."""
     return (
         start[0] + (end[0] - start[0]) * parameter,
         start[1] + (end[1] - start[1]) * parameter,
@@ -61,6 +66,7 @@ def vector_subtract(
     left: tuple[float, float, float],
     right: tuple[float, float, float],
 ) -> tuple[float, float, float]:
+    """Component-wise difference left - right of two 3D vectors."""
     return (
         left[0] - right[0],
         left[1] - right[1],
@@ -72,6 +78,7 @@ def vector_cross(
     left: tuple[float, float, float],
     right: tuple[float, float, float],
 ) -> tuple[float, float, float]:
+    """Cross product left x right of two 3D vectors."""
     return (
         left[1] * right[2] - left[2] * right[1],
         left[2] * right[0] - left[0] * right[2],
@@ -91,6 +98,7 @@ def intersect_bounds(
     first: Mapping[str, Any],
     second: Mapping[str, Any],
 ) -> dict[str, float] | None:
+    """Intersection of two XY bounds, or None when it is empty."""
     bounds = {
         "x_min_um": max(float(first["x_min_um"]), float(second["x_min_um"])),
         "y_min_um": max(float(first["y_min_um"]), float(second["y_min_um"])),
@@ -109,6 +117,7 @@ def bounds_contains_point(
     bounds: Mapping[str, Any],
     point: tuple[float, float],
 ) -> bool:
+    """True when an (x, y) point lies inside the XY bounds, edges included."""
     x, y = point
     return float(bounds["x_min_um"]) <= x <= float(bounds["x_max_um"]) and float(
         bounds["y_min_um"]
@@ -116,6 +125,7 @@ def bounds_contains_point(
 
 
 def is_same_z(left: float, right: float) -> bool:
+    """True when two values differ by at most TOPOLOGY_EPS_UM."""
     return abs(left - right) <= TOPOLOGY_EPS_UM
 
 
@@ -125,6 +135,7 @@ def segment_overlap_interval(
     other_start: tuple[float, float],
     other_end: tuple[float, float],
 ) -> tuple[float, float] | None:
+    """Overlap of a second segment on the first as (start, end) fractions, or None."""
     dx = end[0] - start[0]
     dy = end[1] - start[1]
     length_sq = dx * dx + dy * dy
@@ -152,6 +163,7 @@ def line_key_2d(
     start: tuple[float, float],
     end: tuple[float, float],
 ) -> tuple[tuple[float, float], float] | None:
+    """Direction and offset key of the 2D line through two points, or None if equal."""
     start_key = tuple(round(float(value), 9) for value in start)
     end_key = tuple(round(float(value), 9) for value in end)
     direction = (
@@ -175,6 +187,7 @@ def line_key_2d(
 def interval_complement(
     intervals: Sequence[tuple[float, float]],
 ) -> tuple[tuple[float, float], ...]:
+    """Parts of the 0..1 range left uncovered by the given intervals."""
     merged: list[tuple[float, float]] = []
     for start, end in sorted(intervals):
         start = max(0.0, min(1.0, start))
@@ -201,6 +214,7 @@ def interpolate_3d(
     end: tuple[float, float, float],
     parameter: float,
 ) -> tuple[float, float, float]:
+    """Point at the given fraction along the 3D segment from start to end."""
     return (
         start[0] + (end[0] - start[0]) * parameter,
         start[1] + (end[1] - start[1]) * parameter,
@@ -214,10 +228,12 @@ def range_within_bounds(
     lower: float,
     upper: float,
 ) -> bool:
+    """True when both ends of start-end lie within lower and upper, with tolerance."""
     return lower - TOPOLOGY_EPS_UM <= min(start, end) and max(start, end) <= (
         upper + TOPOLOGY_EPS_UM
     )
 
 
 def coordinate_2d_key(point: tuple[float, float]) -> tuple[float, float]:
+    """Round each 2D coordinate to 9 decimals, for use as a dict key."""
     return tuple(round(float(value), 9) for value in point)

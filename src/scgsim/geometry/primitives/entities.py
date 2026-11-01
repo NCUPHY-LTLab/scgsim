@@ -64,10 +64,12 @@ def _one_component_value(
 
 
 def geometry_ref_from_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
+    """Pick the GEOMETRY_REF_METADATA_KEYS present in metadata into a new dict."""
     return {key: metadata[key] for key in GEOMETRY_REF_METADATA_KEYS if key in metadata}
 
 
 def intent_supports_route(intent: Mapping[str, Any], route: RouteLiteral) -> bool:
+    """True when the intent has no valid_routes or lists the given route."""
     valid_routes = intent.get("valid_routes")
     if valid_routes is None:
         return True
@@ -80,6 +82,7 @@ def entity_by_id(
     build_input: GeometryBuildInput,
     semantic_id: str,
 ) -> SemanticEntitySpec:
+    """Return the entity with this semantic id, or raise ValueError if unknown."""
     for entity in build_input.entities:
         if entity.semantic_id == semantic_id:
             return entity
@@ -87,6 +90,7 @@ def entity_by_id(
 
 
 def unique_ids(values: Any) -> tuple[str, ...]:
+    """Stringify values and drop repeats, keeping first-seen order."""
     result: list[str] = []
     seen: set[str] = set()
     for value in values:
@@ -99,6 +103,7 @@ def unique_ids(values: Any) -> tuple[str, ...]:
 
 
 def entity_z_range_um(entity: SemanticEntitySpec) -> tuple[float, float]:
+    """Return (z_min, z_max) in micrometres, using thickness when no z_max is given."""
     z_min_um = float(entity.geometry.get("z_min_um", entity.geometry.get("z_um", 0.0)))
     z_max_um = entity.geometry.get("z_max_um")
     if z_max_um is not None:

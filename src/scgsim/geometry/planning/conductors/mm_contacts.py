@@ -470,6 +470,7 @@ def _has_explicit_volumetric_normalization(
 def is_fully_normalized_face_metal(
     build_input: GeometryBuildInput, entity: SemanticEntitySpec
 ) -> bool:
+    """True for a face_metal entity whose region its contact pads fully cover."""
     if entity.part_role != "face_metal":
         return False
     import gdstk

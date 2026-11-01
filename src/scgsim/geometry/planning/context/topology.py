@@ -60,6 +60,7 @@ def structured_surface_boundary_volume_ids(
     surface: SurfacePlanRecord,
     owners: tuple[str, ...],
 ) -> tuple[str, ...]:
+    """Boundary volume ids of a structured surface; must be 1 or 2, among its owners."""
     raw = surface.metadata.get("boundary_volume_ids", ())
     boundary_ids = () if isinstance(raw, str) else tuple(str(value) for value in raw)
     expected_count = 1 if surface.metadata.get("sheet_contact_cap") else 2
@@ -440,6 +441,7 @@ def _cancel_backtracking_curve_refs(
 def surface_ring3d_specs(
     surface: SurfacePlanRecord,
 ) -> tuple[tuple[str, int, tuple[tuple[float, float, float], ...]], ...]:
+    """Return (kind, index, 3D points) specs for a surface's outer and hole rings."""
     geometry_ref = surface.geometry_ref
     if "quad_points" in geometry_ref:
         return (("outer", 0, _clean_ring3d(geometry_ref["quad_points"])),)
@@ -628,6 +630,7 @@ def _segment_candidate_points(
 
 
 def surface_owner_ids(surface: SurfacePlanRecord) -> tuple[str, ...]:
+    """Owner semantic ids of a surface, defaulting to its single owner."""
     return surface_declared_owner_ids(
         surface.metadata.get("owner_semantic_ids", (surface.owner_semantic_id,)),
         surface.owner_semantic_id,

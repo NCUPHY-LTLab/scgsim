@@ -363,6 +363,7 @@ def route_a_sheet_patch_interface_kinds(
     interface: InterfacePlanRecord,
     contributions: Sequence[EvidenceResult],
 ) -> tuple[str, ...]:
+    """Interface kinds from sheet-patch evidence; reject contradicting declarations."""
     derived = {result.classification for result in contributions}
     raw = interface.metadata.get("interface_kinds")
     if (

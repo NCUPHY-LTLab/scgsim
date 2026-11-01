@@ -456,6 +456,7 @@ def auto_vacuum_envelope_bounds(
     route: RouteLiteral | None,
     representation_context: RepresentationContext | None = None,
 ) -> dict[str, float]:
+    """XYZ bounding box in micrometres over subtractor entities and Route-A sheets."""
     bounds: list[dict[str, float]] = []
     for entity in build_input.entities:
         is_subtractor = _is_auto_vacuum_subtractor(
@@ -646,6 +647,7 @@ def auto_vacuum_sheet_z(
     *,
     representation_context: RepresentationContext | None = None,
 ) -> float:
+    """Z in micrometres of an auto-vacuum Route-A sheet, from context or provenance."""
     context_record = (
         representation_context.entities.get(entity.semantic_id)
         if representation_context is not None

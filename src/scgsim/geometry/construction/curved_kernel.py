@@ -91,6 +91,7 @@ class Kernel:
         self.source_edges = {}
 
     def point(self, xyz):
+        """Return the cached OCC point for xyz, adding it on first use."""
         xyz = tuple(float(x) for x in xyz)
         if xyz not in self.points:
             self.points[xyz] = self.occ.addPoint(*xyz)
@@ -99,6 +100,7 @@ class Kernel:
     def line(self, a, b):
         # A straight line is a cubic B-spline with collinear control points so
         # it is the same native edge type as every curved neighbour.
+        """Add a straight edge from a to b as a cubic B-spline with collinear points."""
         points = [
             self.point(a),
             self.point(tuple(a[j] + (b[j] - a[j]) / 3 for j in range(3))),

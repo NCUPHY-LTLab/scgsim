@@ -139,6 +139,7 @@ def _identity(stat: os.stat_result) -> FileIdentity:
 
 
 def readonly(value: np.ndarray) -> np.ndarray:
+    """Mark a NumPy array read-only and return it."""
     value.flags.writeable = False
     return value
 

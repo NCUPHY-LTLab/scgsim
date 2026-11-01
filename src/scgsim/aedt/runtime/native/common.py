@@ -344,6 +344,7 @@ def native_object_evidence(hfss: Any, object_name: str) -> dict[str, Any]:
 
 
 def native_boundary_type(hfss: Any, name: str) -> str:
+    """Return the native type of the one HFSS boundary with this name."""
     raw = [str(value) for value in hfss.oboundary.GetBoundaries()]
     if len(raw) % 2:
         raise RuntimeError("native HFSS boundary list is invalid")
@@ -774,6 +775,7 @@ def native_object_property(obj: Any, property_name: str) -> str:
 
 def native_object_boolean_property(obj: Any, property_name: str) -> bool:
     # Keep boolean readback direct too; AEDT transports it as either bool or text.
+    """Read a native boolean object property, accepting bool or "true"/"false" text."""
     value = obj._oeditor.GetPropertyValue(  # noqa: SLF001 - PyAEDT exposes no public query
         "Geometry3DAttributeTab", obj.name, property_name
     )

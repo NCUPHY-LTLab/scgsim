@@ -159,6 +159,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def execute(metadata_path: Path, options: _Options) -> int:
+    """Run a verified handoff on an owned Desktop, write its receipt; 0 on success."""
     os.chdir(metadata_path.parent.parent)
     handoff = load_verified_handoff(
         metadata_path,

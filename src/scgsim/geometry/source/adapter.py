@@ -441,6 +441,7 @@ def solution_region_entity_from_record(
     materials: Mapping[str, Any],
     cell_bounds_um: Mapping[str, float],
 ) -> SemanticEntitySpec:
+    """Build a solution-region entity from a stack record; default bounds are padded."""
     if not isinstance(semantic_id, str):
         raise TypeError("solution region ids must be strings")
     if not isinstance(record, Mapping):

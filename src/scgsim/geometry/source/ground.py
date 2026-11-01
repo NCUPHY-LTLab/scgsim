@@ -217,6 +217,7 @@ def _ground_plane_bounds(
 
 
 def layout_polygon_region(gdstk: Any, polygon: LayoutPolygonSpec) -> tuple[Any, ...]:
+    """gdstk region of a layout polygon: the exterior minus its holes."""
     outer = gdstk.Polygon(polygon.exterior)
     holes = tuple(gdstk.Polygon(hole) for hole in polygon.holes)
     if not holes:

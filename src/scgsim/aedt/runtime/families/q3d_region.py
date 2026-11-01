@@ -369,6 +369,7 @@ def _assign_region_thin_conductors(
 def read_q3d_region_ground(
     app: Any, spec: Q3dSpec, region_record: dict[str, Any]
 ) -> dict[str, Any]:
+    """Verify the saved Q3D grounded Region against its evidence; return readback."""
     evidence = region_record.get("grounded_region")
     region = app.modeler.get_object_from_name("Region")
     if not isinstance(evidence, dict) or region is None:

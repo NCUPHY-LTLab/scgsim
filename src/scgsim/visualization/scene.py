@@ -77,6 +77,8 @@ _OTHER_COLORS = (
 
 @dataclass(frozen=True)
 class Part:
+    """One mesh dataset to draw, with its semantic id, label, role, color, opacity."""
+
     dataset: Any
     semantic_id: str
     label: str
@@ -89,11 +91,14 @@ class Part:
 
 @dataclass(frozen=True)
 class Mode:
+    """The drawable parts of one preview mode, or the reason it is unavailable."""
+
     parts: tuple[Part, ...] = ()
     unavailable_reason: str | None = None
 
 
 def with_scene_palette(mode: Mode) -> Mode:
+    """Return the mode with fixed role colors and cycled colors for other identities."""
     if mode.unavailable_reason is not None:
         return mode
     identities = sorted(
@@ -120,6 +125,7 @@ def with_scene_palette(mode: Mode) -> Mode:
 
 
 def identity_color(identity: str) -> str:
+    """Color for an identity: its fixed color, else a palette entry chosen by index."""
     if identity in FIXED_COLORS:
         return FIXED_COLORS[identity]
     return _OTHER_COLORS[_palette_index(identity)]

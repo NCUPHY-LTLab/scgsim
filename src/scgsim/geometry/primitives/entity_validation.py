@@ -125,6 +125,7 @@ def _polygon_area(points: Sequence[Sequence[float]]) -> float:
 
 
 def is_solution_entity(entity: SemanticEntitySpec) -> bool:
+    """True for a solution_region entity whose material is vacuum or dielectric."""
     return entity.role == "solution_region" and entity.material_kind in {
         "vacuum",
         "dielectric",
@@ -132,10 +133,12 @@ def is_solution_entity(entity: SemanticEntitySpec) -> bool:
 
 
 def is_vacuum_solution_entity(entity: SemanticEntitySpec) -> bool:
+    """True for a solution entity whose material kind is vacuum."""
     return is_solution_entity(entity) and entity.material_kind == "vacuum"
 
 
 def requires_route_representation(entity: SemanticEntitySpec) -> bool:
+    """True for a non-solution entity whose material kind is conductor."""
     if is_solution_entity(entity):
         return False
     return entity.material_kind == "conductor"

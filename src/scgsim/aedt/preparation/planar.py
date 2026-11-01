@@ -360,6 +360,7 @@ def _klayout_point(point: Sequence[float], dbu_um: float, k: Any) -> Any:
 
 
 def klayout_region(regions: Sequence[Mapping[str, Any]], dbu_um: float, k: Any) -> Any:
+    """Merged KLayout Region built from exterior and hole rings in micrometres."""
     result = k.Region()
     for region in regions:
         exterior = [_klayout_point(point, dbu_um, k) for point in region["exterior"]]
@@ -373,6 +374,7 @@ def klayout_region(regions: Sequence[Mapping[str, Any]], dbu_um: float, k: Any) 
 def regions_from_klayout(region: Any, dbu_um: float) -> list[dict[str, Any]]:
     # Split point contacts without changing the integer polygon set. Iterate
     # stored pieces so implicit merging cannot recreate a self-touching contour.
+    """Convert a KLayout Region to exterior/hole dicts in micrometres, hash-sorted."""
     simple = region.merged(True, 1)
 
     def points(iterator: Any) -> list[list[float]]:
@@ -418,6 +420,7 @@ def _junction_partition_plane(
 def junction_polygon(
     source: Mapping[str, Any], junction: PlanarJunction, polygons: Mapping[str, Any]
 ):
+    """Return the junction polygon and its partition record (None if unpartitioned)."""
     record = source.get("junction_partitions", {}).get(junction.junction_id)
     if record is None:
         # Historical prepared geometry retains its recorded authored sheet.
@@ -432,6 +435,7 @@ def junction_polygon(
 def junction_terminal_line(
     polygon: Mapping[str, Any], junction: PlanarJunction, z_um: float
 ) -> tuple[list[list[float]], float]:
+    """Check a junction polygon is a rectangle along its direction; return its line."""
     exterior = tuple(
         (float(point[0]), float(point[1])) for point in polygon["exterior"]
     )
@@ -591,6 +595,7 @@ def _route_a_sheet_z(source: Mapping[str, Any], entity: Mapping[str, Any]) -> fl
 
 
 def entity_z_range(entity: Mapping[str, Any]) -> tuple[float, float]:
+    """Return the (min, max) Z range in micrometres of an entity's geometry."""
     return geometry_z_range(entity.get("geometry"), str(entity.get("semantic_id")))
 
 

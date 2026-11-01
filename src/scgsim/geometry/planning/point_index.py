@@ -21,12 +21,14 @@ from scgsim.geometry.models.topology import PointPlanRecord
 def coordinate_signature(
     coordinate: tuple[float, float, float],
 ) -> tuple[float, float, float]:
+    """Round a 3D coordinate to 9 decimals so equal points compare equal."""
     return tuple(round(float(value), 9) for value in coordinate)
 
 
 def build_point_axis_index(
     points_by_id: Mapping[str, PointPlanRecord],
 ) -> tuple[tuple[tuple[float, ...], tuple[str, ...]], ...]:
+    """Per-axis lists of sorted coordinate values and matching point ids."""
     indexes: list[tuple[tuple[float, ...], tuple[str, ...]]] = []
     for axis in range(3):
         items = sorted(
@@ -48,6 +50,7 @@ def build_point_axis_index(
 def axis_aligned_point_index(
     points_by_id: Mapping[str, PointPlanRecord],
 ) -> dict[tuple[int, tuple[float, float]], tuple[tuple[float, ...], tuple[str, ...]]]:
+    """Index points by (axis, other two coordinates) to sorted values and point ids."""
     records: dict[
         tuple[int, tuple[float, float]],
         list[tuple[float, str]],
@@ -78,6 +81,7 @@ def segment_candidate_point_ids(
         tuple[tuple[float, ...], tuple[str, ...]],
     ],
 ) -> tuple[str, ...]:
+    """Ids of points that may lie on a segment, using the line or axis index."""
     start_key = coordinate_signature(start)
     end_key = coordinate_signature(end)
     varying_axes = tuple(
@@ -117,6 +121,7 @@ def point_on_segment_interior(
     start: tuple[float, float, float],
     end: tuple[float, float, float],
 ) -> bool:
+    """True when a point lies on a segment strictly between its endpoints."""
     vector = tuple(float(end[index]) - float(start[index]) for index in range(3))
     offset = tuple(float(point[index]) - float(start[index]) for index in range(3))
     length_sq = sum(value * value for value in vector)

@@ -14,6 +14,7 @@ from typing import Any
 
 
 def non_negative_number(value: Any, name: str) -> float:
+    """Return value as a float; reject bools, non-numbers, negatives and non-finite."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be a finite non-negative number.")
     result = float(value)
@@ -23,6 +24,7 @@ def non_negative_number(value: Any, name: str) -> float:
 
 
 def load_stack(stack: Mapping[str, Any] | str | Path) -> Mapping[str, Any]:
+    """Load a stack from a mapping, JSON text or JSON file path into a mapping."""
     if isinstance(stack, Mapping):
         return dict(stack)
     if isinstance(stack, Path):
@@ -56,6 +58,8 @@ def load_stack(stack: Mapping[str, Any] | str | Path) -> Mapping[str, Any]:
 def validate_stack_material_kinds(
     stack: Mapping[str, Any], materials: Mapping[str, Mapping[str, Any]]
 ) -> None:
+    """Check that stack regions and layers reference materials of the allowed kinds."""
+
     def material_kind(material_id: Any, owner: str) -> str:
         if not isinstance(material_id, str) or material_id not in materials:
             raise ValueError(f"{owner} must reference an explicit stack material_id.")

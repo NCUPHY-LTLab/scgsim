@@ -301,6 +301,7 @@ def _backend_tags_by_source(
 def group_tag_plans(
     tags: tuple[TagPlanRecord, ...],
 ) -> tuple[tuple[TagPlanRecord, ...], ...]:
+    """Group tag plans by name, dimension, role and solver use; reject mixed sources."""
     grouped: dict[tuple[str, int, str, str], list[TagPlanRecord]] = {}
     contracts: dict[tuple[str, int], tuple[str, str]] = {}
     for tag in tags:

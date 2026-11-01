@@ -189,6 +189,7 @@ def interface_surface_kinds(
     route_a_evidence: tuple[EvidenceResult, ...] = (),
     representation_context: RepresentationContext | None = None,
 ) -> tuple[str, ...]:
+    """Interface kinds of an interface in INTERFACE_KIND_ORDER, declared or derived."""
     raw_kinds = interface.metadata.get("interface_kinds")
     if raw_kinds is not None:
         if isinstance(raw_kinds, str):

@@ -62,6 +62,7 @@ def plan_solution_domain_boundary_surfaces(
     route: RouteLiteral | None,
     representation_context: RepresentationContext | None = None,
 ) -> tuple[SurfacePlanRecord, ...]:
+    """Plan bottom, top and sidewall boundary surfaces for each solution entity."""
     records: list[SurfacePlanRecord] = []
     for entity in build_input.entities:
         if not is_solution_entity(entity):

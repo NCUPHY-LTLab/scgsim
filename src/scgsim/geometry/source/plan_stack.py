@@ -42,6 +42,7 @@ _FORBIDDEN_AUTHOR_KEYS = {
 
 
 def checked_entity_path(value: str) -> str:
+    """Return the path if every slash-separated segment matches the allowed pattern."""
     if (
         not isinstance(value, str)
         or not value
@@ -54,6 +55,7 @@ def checked_entity_path(value: str) -> str:
 
 
 def affine(reference: Any) -> tuple[float, float, float, float, float, float]:
+    """Affine tuple (a, b, c, d, tx, ty) of a reference; only rigid transforms pass."""
     from klayout import db as kdb
 
     transform = reference.dcplx_trans
@@ -79,6 +81,7 @@ def affine(reference: Any) -> tuple[float, float, float, float, float, float]:
 def compose(
     parent: tuple[float, ...], child: tuple[float, ...]
 ) -> tuple[float, float, float, float, float, float]:
+    """Compose two affine tuples so the child is applied first, then the parent."""
     a, b, c, d, x, y = parent
     e, f, g, h, u, v = child
     return (
@@ -94,6 +97,7 @@ def compose(
 def transformed_point(
     transform: tuple[float, ...], value: Sequence[float]
 ) -> list[float]:
+    """Apply an affine tuple to a two-item point; raise if the result is not finite."""
     if isinstance(value, (str, bytes)) or len(value) != 2:
         raise ValueError("selector and port point must be a two-item coordinate")
     x, y = float(value[0]), float(value[1])
@@ -116,6 +120,7 @@ def _direction(transform: tuple[float, ...], angle_degrees: float) -> list[float
 
 
 def local_semantics(component: Any, path: str) -> Mapping[str, Any]:
+    """Read and validate a component's component_semantics v2 declaration."""
     try:
         raw = component.info["component_semantics"]
     except (AttributeError, KeyError) as exc:

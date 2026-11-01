@@ -19,6 +19,7 @@ from scgsim.aedt.specs.parse import HfssSpec
 def export(
     hfss: Any, run_dir: Path, spec: HfssSpec, ports: list[dict[str, Any]]
 ) -> tuple[dict[str, str], dict[str, Any]]:
+    """Export Touchstone and mode results for a run; return file hashes and readback."""
     output_dir = run_dir / "results" / spec.mode
     output_dir.mkdir(parents=True, exist_ok=True)
     if isinstance(spec, HfssEigenmodeSpec):
@@ -66,6 +67,7 @@ def export_eigenmode(
     output_dir: Path,
     spec: HfssEigenmodeSpec,
 ) -> tuple[dict[str, str], dict[str, Any]]:
+    """Export HFSS eigenmodes to raw and CSV files; return file hashes and readback."""
     setup = f"{spec.run_control.setup_name} : LastAdaptive"
     raw = output_dir / "eigenmodes.eig"
     hfss.osolution.ExportEigenmodes(setup, "", str(raw))

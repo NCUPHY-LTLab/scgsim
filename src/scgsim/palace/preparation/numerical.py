@@ -177,6 +177,7 @@ def _check_optional_flags(**flags: bool | None) -> None:
 
 
 def positive_finite(value: Any) -> bool:
+    """True for a real non-bool number that is finite and greater than zero."""
     return (
         isinstance(value, Real)
         and not isinstance(value, bool)

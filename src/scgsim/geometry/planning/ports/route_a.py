@@ -202,6 +202,7 @@ def carve_route_a_port_sheet_from_host_plane(
 
 
 def port_sheet_remainder_geometry(region: PortSheetRegionRecord) -> dict[str, Any]:
+    """Remainder of a port sheet after its overlaps are removed, as one geometry ref."""
     import gdstk
 
     authored = gdstk_surface_region(

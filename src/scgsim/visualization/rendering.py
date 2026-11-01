@@ -154,6 +154,7 @@ def add_parts(
     clip: tuple[str, float] | None = None,
     center: tuple[float, float, float] | None = None,
 ) -> None:
+    """Add each part's mesh to the plotter, optionally clipped at the scene center."""
     for part in parts:
         dataset = part.dataset
         if clip is not None:
@@ -173,6 +174,7 @@ def add_parts(
 
 
 def interactive_legend(mode_name: str, parts: tuple[Part, ...]) -> str:
+    """HTML table legend of the parts for a mode, one row per aggregated entry."""
     rows = "".join(
         "<tr>"
         f"<td><span style='display:inline-block;width:1.1rem;height:1.1rem;"
@@ -198,6 +200,7 @@ def interactive_legend(mode_name: str, parts: tuple[Part, ...]) -> str:
 
 
 def aggregate_legend(parts: tuple[Part, ...] | list[Part]) -> list[dict[str, Any]]:
+    """Sum part counts by (semantic id, label, role, color) into legend row dicts."""
     aggregated: dict[tuple[str, str, str, str], int] = {}
     for part in parts:
         key = (part.semantic_id, part.label, part.role, part.color)
@@ -232,6 +235,7 @@ def _combined_bounds(parts: tuple[Part, ...]) -> tuple[float, ...]:
 
 
 def configure_headless_rendering() -> None:
+    """Select an EGL device for VTK when no DISPLAY is set; raise if none exists."""
     if os.environ.get("DISPLAY"):
         return
     window_name = os.environ.setdefault(

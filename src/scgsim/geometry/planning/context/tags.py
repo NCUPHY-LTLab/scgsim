@@ -181,6 +181,7 @@ def _surface_role_suffix(value: Any) -> str | None:
 
 
 def read_surface_physical_owner_ids(surface: SurfacePlanRecord) -> tuple[str, ...]:
+    """Physical owner ids of a surface, falling back to its owner ids."""
     owner_ids = surface.metadata.get("physical_owner_semantic_ids")
     return surface_physical_owner_ids(owner_ids, surface_owner_ids(surface))
 
@@ -189,6 +190,7 @@ def resolve_physical_group_owner_ids(
     build_input: GeometryBuildInput,
     owner_ids: Sequence[str],
 ) -> tuple[str, ...]:
+    """Resolve owner ids to physical-group ids through entity_physical_group_id."""
     entities_by_id = {entity.semantic_id: entity for entity in build_input.entities}
     resolved = {
         owner_id: entity_physical_group_id(entities_by_id[owner_id])
@@ -202,6 +204,7 @@ def resolve_physical_group_owner_ids(
 
 
 def entity_physical_group_id(entity: SemanticEntitySpec) -> str:
+    """Physical-group id of an entity; local conductors with a net share a hashed id."""
     auto_group_id = entity.metadata.get("auto_vacuum_group_id")
     if isinstance(auto_group_id, str) and auto_group_id:
         return auto_group_id
