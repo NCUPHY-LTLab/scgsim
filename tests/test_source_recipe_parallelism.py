@@ -1,8 +1,8 @@
 """Offline source recipe equivalence and ownership, without solver/mesh work."""
 
+import json
 from contextlib import contextmanager
 from copy import deepcopy
-import json
 from pathlib import Path
 from threading import Barrier, get_ident
 from types import SimpleNamespace
@@ -16,12 +16,12 @@ from scgsim.geometry import (
     build_gds_stack_geometry_input,
 )
 from scgsim.geometry.models.grid import GeometryGridContext
-from scgsim.geometry._primitives.grid import (
+from scgsim.geometry.primitives.grid import (
     geometry_grid_scope,
     source_grid_audits,
-    _source_recipe_map,
+    source_recipe_map,
 )
-from scgsim.geometry.source import _occurrence as occurrence
+from scgsim.geometry.source import occurrence as occurrence
 from scgsim.preparation import preparation_resources
 
 
@@ -34,7 +34,7 @@ def native_source():
 
 
 def entity(name, point):
-    return occurrence._entity_from_layer_record(
+    return occurrence.entity_from_layer_record(
         {
             "semantic_id": name,
             "role": "metal",
@@ -58,8 +58,8 @@ def test_recipe_results_context_audits_and_serial_extraction_match(
     # Source selectors are world-frame facts; both execution paths use this transform.
     def prepared_jobs():
         for index, point in enumerate(((11, 21), (15, 21))):
-            yield occurrence._source_recipe_job(
-                occurrence._occurrence_polygons_for_entity,
+            yield occurrence.source_recipe_job(
+                occurrence.occurrence_polygons_for_entity,
                 entity(f"metal_{index}", point),
                 source_cell=native_source,
                 transform=(1, 0, 0, 1, 10, 20),
@@ -75,13 +75,11 @@ def test_recipe_results_context_audits_and_serial_extraction_match(
 
     monkeypatch.setattr(occurrence, "_extract_polygons_by_layer", extract)
     with geometry_grid_scope(GeometryGridContext(0.001)):
-        serial = _source_recipe_map(occurrence._run_source_recipe, prepared_jobs())
+        serial = source_recipe_map(occurrence.run_source_recipe, prepared_jobs())
         serial_audits = deepcopy(source_grid_audits())
     with geometry_grid_scope(GeometryGridContext(0.001)):
         with preparation_resources(max_workers=2):
-            parallel = _source_recipe_map(
-                occurrence._run_source_recipe, prepared_jobs()
-            )
+            parallel = source_recipe_map(occurrence.run_source_recipe, prepared_jobs())
         parallel_audits = source_grid_audits()
     assert parallel == serial
     assert parallel_audits == serial_audits
@@ -104,12 +102,12 @@ def test_job_native_objects_and_record_inputs_are_isolated(native_source):
 
     def make_jobs():
         for _ in range(2):
-            yield occurrence._source_recipe_job(
+            yield occurrence.source_recipe_job(
                 mutate, record, source_cell=native_source
             )
 
     with preparation_resources(max_workers=2):
-        results = _source_recipe_map(occurrence._run_source_recipe, make_jobs())
+        results = source_recipe_map(occurrence.run_source_recipe, make_jobs())
     expected_points = [[x + 100, y] for x, y in original_points[0]]
     assert results == [({"nested": [1, 2]}, expected_points)] * 2
     assert record == {"nested": [1]}
@@ -121,8 +119,8 @@ def test_first_comparison_failure_keeps_audit_prefix_and_allows_clean_next_map(
 ):
     def invalid_jobs():
         for index, point in enumerate(((1, 1), (99, 99))):
-            yield occurrence._source_recipe_job(
-                occurrence._occurrence_polygons_for_entity,
+            yield occurrence.source_recipe_job(
+                occurrence.occurrence_polygons_for_entity,
                 entity(f"metal_{index}", point),
                 source_cell=native_source,
                 transform=(1, 0, 0, 1, 0, 0),
@@ -134,7 +132,7 @@ def test_first_comparison_failure_keeps_audit_prefix_and_allows_clean_next_map(
 
     def observed_run(job):
         try:
-            return occurrence._run_source_recipe(job)
+            return occurrence.run_source_recipe(job)
         except ValueError as error:
             errors.append(str(error))
             raise
@@ -142,16 +140,16 @@ def test_first_comparison_failure_keeps_audit_prefix_and_allows_clean_next_map(
     with geometry_grid_scope(GeometryGridContext(0.001)):
         with preparation_resources(max_workers=2):
             with pytest.raises(ValueError, match="source mismatch 0"):
-                _source_recipe_map(observed_run, invalid_jobs())
+                source_recipe_map(observed_run, invalid_jobs())
             assert "source mismatch 0" in errors
             assert len(errors) == 2
             assert any("source mismatch" not in error for error in errors)
             assert [r["source_entity_id"] for r in source_grid_audits()] == ["metal_0"]
-            result = _source_recipe_map(
-                occurrence._run_source_recipe,
+            result = source_recipe_map(
+                occurrence.run_source_recipe,
                 [
-                    occurrence._source_recipe_job(
-                        occurrence._occurrence_polygons_for_entity,
+                    occurrence.source_recipe_job(
+                        occurrence.occurrence_polygons_for_entity,
                         entity("next", (1, 1)),
                         source_cell=native_source,
                         transform=(1, 0, 0, 1, 0, 0),
@@ -171,7 +169,7 @@ def test_ground_include_and_port_recipe_outputs_match():
     cell.add(gdstk.rectangle((0, 0), (4, 4), layer=2))
     cell.add(gdstk.rectangle((5, 0), (6, 1), layer=3))
     cell.add(gdstk.rectangle((0, 0), (1, 1), layer=4))
-    ground = occurrence._entity_from_layer_record(
+    ground = occurrence.entity_from_layer_record(
         {
             "semantic_id": "ground",
             "role": "metal",
@@ -188,15 +186,15 @@ def test_ground_include_and_port_recipe_outputs_match():
     )
 
     def prepared_jobs():
-        yield occurrence._source_recipe_job(
-            occurrence._occurrence_ground_polygons_for_entity,
+        yield occurrence.source_recipe_job(
+            occurrence.occurrence_ground_polygons_for_entity,
             ground,
             source_cell=cell,
             transform=(1, 0, 0, 1, 0, 0),
             plane_layer=(2, 0),
         )
-        yield occurrence._source_recipe_job(
-            occurrence._occurrence_include_polygon,
+        yield occurrence.source_recipe_job(
+            occurrence.occurrence_include_polygon,
             {
                 "source_local_id": "include",
                 "layer": [3, 0],
@@ -205,8 +203,8 @@ def test_ground_include_and_port_recipe_outputs_match():
             source_cell=cell,
             transform=(1, 0, 0, 1, 0, 0),
         )
-        yield occurrence._source_recipe_job(
-            occurrence._occurrence_port_polygon,
+        yield occurrence.source_recipe_job(
+            occurrence.occurrence_port_polygon,
             {
                 "name": "port",
                 "layer": 4,
@@ -218,13 +216,11 @@ def test_ground_include_and_port_recipe_outputs_match():
         )
 
     with geometry_grid_scope(GeometryGridContext(0.001)):
-        serial = _source_recipe_map(occurrence._run_source_recipe, prepared_jobs())
+        serial = source_recipe_map(occurrence.run_source_recipe, prepared_jobs())
         serial_audits = deepcopy(source_grid_audits())
     with geometry_grid_scope(GeometryGridContext(0.001)):
         with preparation_resources(max_workers=2):
-            parallel = _source_recipe_map(
-                occurrence._run_source_recipe, prepared_jobs()
-            )
+            parallel = source_recipe_map(occurrence.run_source_recipe, prepared_jobs())
         assert source_grid_audits() == serial_audits
     assert parallel == serial
     assert len(parallel[0][0]["holes"]) == 1
@@ -281,6 +277,7 @@ def test_public_plan_exact_detached_snapshot_for_identical_emitted_fixture(
     tmp_path, monkeypatch
 ):
     import gdsfactory as gf
+
     from scgsim.geometry.source import plan as plan_module
 
     # Restore process-local PDK state after this public generic fixture.
@@ -352,11 +349,13 @@ def test_public_plan_exact_detached_snapshot_for_identical_emitted_fixture(
     monkeypatch.setattr(type(component), "write_gds", fixed_fixture_write)
     monkeypatch.setattr(plan_module, "TemporaryDirectory", fixed_fixture_directory)
     serial = plan.prepare()
-    from scgsim.geometry.source import occurrence_validation as occurrence_validation_module
+    from scgsim.geometry.source import (
+        occurrence_validation as occurrence_validation_module,
+    )
 
     barrier = Barrier(2)
     worker_threads = []
-    original_selector = plan_module._occurrence_polygons_for_entity
+    original_selector = plan_module.occurrence_polygons_for_entity
 
     def observed_selector(*args, **kwargs):
         # Observe genuine selectors, without substituting their outputs.
@@ -367,10 +366,12 @@ def test_public_plan_exact_detached_snapshot_for_identical_emitted_fixture(
 
     with monkeypatch.context() as watched:
         watched.setattr(
-            plan_module, "_occurrence_polygons_for_entity", observed_selector
+            plan_module, "occurrence_polygons_for_entity", observed_selector
         )
         watched.setattr(
-            occurrence_validation_module, "_occurrence_polygons_for_entity", observed_selector
+            occurrence_validation_module,
+            "occurrence_polygons_for_entity",
+            observed_selector,
         )
         with preparation_resources(max_workers=2):
             parallel = plan.prepare()

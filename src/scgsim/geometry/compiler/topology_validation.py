@@ -14,10 +14,6 @@ from dataclasses import dataclass, field
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from scgsim.geometry._primitives.entity_validation import (
-    _BOOLEAN_AREA_EPS_UM2,
-    _BOOLEAN_RELATIVE_AREA_EPS,
-)
 from scgsim.geometry.models.topology import (
     CurvePlanRecord,
     PointPlanRecord,
@@ -25,6 +21,10 @@ from scgsim.geometry.models.topology import (
     SurfacePlanRecord,
     SurfaceRefRecord,
     VolumePlanRecord,
+)
+from scgsim.geometry.primitives.entity_validation import (
+    BOOLEAN_AREA_EPS_UM2,
+    BOOLEAN_RELATIVE_AREA_EPS,
 )
 
 if TYPE_CHECKING:
@@ -519,7 +519,7 @@ def _horizontal_surface_region(
     return _geometry_ref_z_um(geometry_ref), tuple(
         polygon
         for polygon in region
-        if abs(float(polygon.area())) > _BOOLEAN_AREA_EPS_UM2
+        if abs(float(polygon.area())) > BOOLEAN_AREA_EPS_UM2
     )
 
 
@@ -530,8 +530,8 @@ def _regions_overlap(left: _Region, right: _Region) -> bool:
     overlap = gdstk.boolean(left, right, "and", precision=1e-9) or ()
     overlap_area = _region_area(overlap)
     area_limit = max(
-        _BOOLEAN_AREA_EPS_UM2,
-        _BOOLEAN_RELATIVE_AREA_EPS * min(_region_area(left), _region_area(right)),
+        BOOLEAN_AREA_EPS_UM2,
+        BOOLEAN_RELATIVE_AREA_EPS * min(_region_area(left), _region_area(right)),
     )
     return overlap_area > area_limit
 

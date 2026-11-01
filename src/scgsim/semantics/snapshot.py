@@ -1,7 +1,7 @@
 """Normalize raw semantic facts into immutable, revision-bound snapshots.
 
 Input fact mappings deliberately keep arbitrary nested values at the boundary;
-``_plain`` validates that shape before snapshots are hashed or stored.
+``to_plain`` validates that shape before snapshots are hashed or stored.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import Any, Literal
 RevisionKind = Literal["declared_revision", "content_hash_fallback"]
 
 
-def _plain(value: Any) -> Any:
+def to_plain(value: Any) -> Any:
     """Return detached plain values in the canonical container form."""
     if isinstance(value, Mapping):
         plain: dict[str, Any] = {}
@@ -26,12 +26,12 @@ def _plain(value: Any) -> Any:
                     "semantic fact mapping keys must be strings, "
                     f"got {type(key).__name__}"
                 )
-            plain[key] = _plain(item)
+            plain[key] = to_plain(item)
         return plain
     if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
-        return [_plain(item) for item in value]
+        return [to_plain(item) for item in value]
     if isinstance(value, (set, frozenset)):
-        return sorted((_plain(item) for item in value), key=repr)
+        return sorted((to_plain(item) for item in value), key=repr)
     if value is None or isinstance(value, str | int | float | bool):
         return value
     raise TypeError(f"semantic facts require plain values, got {type(value).__name__}")
@@ -48,7 +48,7 @@ def _freeze(value: Any) -> Any:
 
 def freeze_plain(value: Any) -> Any:
     """Detach a plain-data value and freeze each nested mapping and sequence."""
-    return _freeze(_plain(value))
+    return _freeze(to_plain(value))
 
 
 def _detached(value: Any) -> Any:
@@ -62,11 +62,11 @@ def _detached(value: Any) -> Any:
 
 def canonical_sha256(value: Any) -> str:
     """Hash deterministic compact JSON for a supported plain-data value."""
-    return _canonical_sha256_plain(_plain(value))
+    return _canonical_sha256_plain(to_plain(value))
 
 
 def _canonical_sha256_plain(value: Any) -> str:
-    """Hash a value already normalized by ``_plain``."""
+    """Hash a value already normalized by ``to_plain``."""
     rendered = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(rendered.encode("utf-8")).hexdigest()
 
@@ -149,7 +149,7 @@ class SemanticFactsSnapshot:
     facts: Mapping[str, Any]
 
     def __post_init__(self) -> None:
-        plain = _plain(self.facts)
+        plain = to_plain(self.facts)
         digest = _canonical_sha256_plain(plain)
         _validate_sha256_digest("canonical_sha256", self.canonical_sha256)
         if self.canonical_sha256 != digest:
@@ -202,7 +202,7 @@ def create_snapshot(  # noqa: PLR0913 -- preserves independent revision values a
     The source and geometry revision values and kinds remain separate because
     either source can be declared independently or fall back to the content hash.
     """
-    plain = _plain(facts)
+    plain = to_plain(facts)
     digest = _canonical_sha256_plain(plain)
     fallback = f"sha256:{digest}"
     resolved_source_revision, resolved_source_kind = _resolve_revision(

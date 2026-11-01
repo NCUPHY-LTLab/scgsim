@@ -5,16 +5,16 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Sequence
 from typing import Protocol, cast
 
-from scgsim.geometry._primitives.grid import (
+from scgsim.geometry.models.input import SemanticEntitySpec
+from scgsim.geometry.primitives.grid import (
     polygon_boolean,
 )
-from scgsim.geometry._primitives.planar_loops import (
+from scgsim.geometry.primitives.planar_loops import (
     LoopCoordinates,
 )
-from scgsim.geometry.models.input import SemanticEntitySpec
 
-_BOOLEAN_AREA_EPS_UM2 = 1e-8
-_BOOLEAN_RELATIVE_AREA_EPS = 1e-12
+BOOLEAN_AREA_EPS_UM2 = 1e-8
+BOOLEAN_RELATIVE_AREA_EPS = 1e-12
 
 
 class _PolygonWithArea(Protocol):
@@ -30,7 +30,7 @@ class _PolygonWithArea(Protocol):
         ...
 
 
-def _resolve_contact_pad_attachment(
+def resolve_contact_pad_attachment(
     pad: SemanticEntitySpec,
     entities: Sequence[SemanticEntitySpec],
     *,
@@ -63,7 +63,7 @@ def _resolve_contact_pad_attachment(
         if _same_entity_z_range(pad, candidate)
         and (
             defer_overlap
-            or (finite_overlap or _entities_have_finite_overlap)(pad, candidate)
+            or (finite_overlap or entities_have_finite_overlap)(pad, candidate)
         )
     )
     if not matches:
@@ -104,7 +104,7 @@ def _entity_z_range(entity: SemanticEntitySpec) -> tuple[float, float]:
     return z_min, z_min + float(entity.geometry.get("thickness_um", 0.0))
 
 
-def _entities_have_finite_overlap(
+def entities_have_finite_overlap(
     first: SemanticEntitySpec, second: SemanticEntitySpec
 ) -> bool:
     """Check Boolean overlap area against absolute and relative noise floors."""
@@ -123,8 +123,8 @@ def _entities_have_finite_overlap(
 def _polygon_has_finite_area(polygon: _PolygonWithArea) -> bool:
     """Apply the existing absolute and relative overlap-area thresholds."""
     return abs(_polygon_area(polygon.points)) > max(
-        _BOOLEAN_AREA_EPS_UM2,
-        abs(polygon.area()) * _BOOLEAN_RELATIVE_AREA_EPS,
+        BOOLEAN_AREA_EPS_UM2,
+        abs(polygon.area()) * BOOLEAN_RELATIVE_AREA_EPS,
     )
 
 
@@ -159,7 +159,7 @@ def _polygon_area(points: Iterable[Sequence[float]]) -> float:
     )
 
 
-def _is_solution_entity(entity: SemanticEntitySpec) -> bool:
+def is_solution_entity(entity: SemanticEntitySpec) -> bool:
     """Return whether an entity owns a vacuum or dielectric solution region."""
     return entity.role == "solution_region" and entity.material_kind in {
         "vacuum",
@@ -167,13 +167,13 @@ def _is_solution_entity(entity: SemanticEntitySpec) -> bool:
     }
 
 
-def _is_vacuum_solution_entity(entity: SemanticEntitySpec) -> bool:
+def is_vacuum_solution_entity(entity: SemanticEntitySpec) -> bool:
     """Return whether an entity is a vacuum solution region."""
-    return _is_solution_entity(entity) and entity.material_kind == "vacuum"
+    return is_solution_entity(entity) and entity.material_kind == "vacuum"
 
 
-def _requires_route_representation(entity: SemanticEntitySpec) -> bool:
+def requires_route_representation(entity: SemanticEntitySpec) -> bool:
     """Return whether the entity's conductor requires route representation."""
-    if _is_solution_entity(entity):
+    if is_solution_entity(entity):
         return False
     return entity.material_kind == "conductor"

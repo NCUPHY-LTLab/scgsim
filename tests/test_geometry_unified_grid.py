@@ -14,9 +14,9 @@ from scgsim.geometry import (
     SemanticEntitySpec,
     with_rectangular_junctions,
 )
-from scgsim.geometry._primitives.grid import GridOperand, build_grid_arrangement
 from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
 from scgsim.geometry.planning.junction_partition import derive_rectangular_junctions
+from scgsim.geometry.primitives.grid import GridOperand, build_grid_arrangement
 from scgsim.geometry.source.grid import apply_geometry_grid, source_grid_context
 
 

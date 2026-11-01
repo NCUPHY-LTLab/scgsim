@@ -6,30 +6,6 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from typing import Any
 
-from scgsim.geometry._primitives.constants import (
-    _INTERFACE_KIND_ORDER,
-    _TOPOLOGY_EPS_UM,
-)
-from scgsim.geometry._primitives.entities import (
-    _entity_z_range_um,
-    _intent_supports_route,
-    _unique_ids,
-)
-from scgsim.geometry._primitives.entity_validation import (
-    _resolve_contact_pad_attachment,
-)
-from scgsim.geometry._primitives.grid import boolean_polygon_region
-from scgsim.geometry._primitives.loops import (
-    _canonical_loop_sort_key,
-    _loop_signature,
-    _loops_touch_without_area,
-)
-from scgsim.geometry._primitives.planar_loops import (
-    clean_loop,
-    polygon_area,
-    ring_edges,
-)
-from scgsim.geometry._primitives.spatial import _bounds_overlap, _same_z, _z_key
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
@@ -39,21 +15,49 @@ from scgsim.geometry.models.topology import (
     SurfacePlanRecord,
 )
 from scgsim.geometry.planning.domain import (
-    _active_route_conductor_entities,
-    _entity_loop_bounds,
-    _entity_occupied_region,
-    _required_host_solution_id,
-    _route_a_sheet_boundary_volume_ids_from_solutions,
-    _route_a_sheet_plane_z_um_from_solutions,
-    _route_conductor_contact_footprints,
-    _solution_entities,
+    active_route_conductor_entities,
+    entity_loop_bounds,
+    entity_occupied_region,
+    required_host_solution_id,
+    route_a_sheet_boundary_volume_ids_from_solutions,
+    route_a_sheet_plane_z_um_from_solutions,
+    route_conductor_contact_footprints,
+    solution_region_entities,
 )
 from scgsim.geometry.planning.representation import (
     planned_conductor_representation,
 )
 from scgsim.geometry.planning.topology import (
-    _surface_interface_record_owners,
-    _surface_owner_ids,
+    surface_interface_record_owners,
+    surface_owner_ids,
+)
+from scgsim.geometry.primitives.constants import (
+    INTERFACE_KIND_ORDER,
+    TOPOLOGY_EPS_UM,
+)
+from scgsim.geometry.primitives.entities import (
+    entity_z_range_um,
+    intent_supports_route,
+    unique_ids,
+)
+from scgsim.geometry.primitives.entity_validation import (
+    resolve_contact_pad_attachment,
+)
+from scgsim.geometry.primitives.grid import boolean_polygon_region
+from scgsim.geometry.primitives.loops import (
+    canonical_loop_sort_key,
+    loop_signature,
+    loops_touch_without_area,
+)
+from scgsim.geometry.primitives.planar_loops import (
+    clean_loop,
+    polygon_area,
+    ring_edges,
+)
+from scgsim.geometry.primitives.spatial import (
+    bounds_overlap,
+    coordinate_z_key,
+    same_coordinate_z,
 )
 
 
@@ -69,10 +73,10 @@ def complete_interface_plan_from_surfaces(
         if surface.interface_id is None or surface.interface_id in known:
             continue
         kind = surface.interface_id.split("__", 1)[0]
-        if kind not in _INTERFACE_KIND_ORDER:
+        if kind not in INTERFACE_KIND_ORDER:
             raise ValueError(f"invalid surface interface id: {surface.interface_id}")
-        owners = _surface_owner_ids(surface)
-        record_owners = _surface_interface_record_owners(surface, owners)
+        owners = surface_owner_ids(surface)
+        record_owners = surface_interface_record_owners(surface, owners)
         if len(record_owners) != 2:
             raise ValueError(
                 f"{surface.surface_id} interface needs two owners, got {owners!r}"
@@ -123,7 +127,7 @@ def recognize_route_interfaces(
         ):
             continue
         kind = str(intent.get("kind", ""))
-        if kind not in _INTERFACE_KIND_ORDER:
+        if kind not in INTERFACE_KIND_ORDER:
             raise ValueError(f"invalid interface kind: {kind!r}")
         owners = tuple(str(owner) for owner in intent.get("owner_semantic_ids", ()))
         if len(owners) != 2:
@@ -200,7 +204,7 @@ def _intent_supports_context_or_route(
     representation_context: RepresentationContext | None,
 ) -> bool:
     if route is not None:
-        return _intent_supports_route(intent, route)
+        return intent_supports_route(intent, route)
     if representation_context is None:
         return False
     if intent.get("intent_origin") == "generated_representation_context_surface_sheet":
@@ -293,14 +297,16 @@ def plan_conductor_contact_patches(
     """
     if route == "C":
         return _plan_route_c_conductor_contact_patches(
-            build_input, route=route, interfaces=interfaces,
+            build_input,
+            route=route,
+            interfaces=interfaces,
             representation_context=representation_context,
         )
     import gdstk
 
     generated: list[InterfacePlanRecord] = []
     seen = {_contact_signature(interface) for interface in interfaces}
-    solution_entities = _solution_entities(build_input)
+    solution_entities = solution_region_entities(build_input)
     top_faces: dict[
         float,
         list[tuple[SemanticEntitySpec, Any, Mapping[str, float]]],
@@ -310,16 +316,20 @@ def plan_conductor_contact_patches(
         list[tuple[SemanticEntitySpec, Any, Mapping[str, float]]],
     ] = {}
 
-    for entity in _route_conductor_contact_footprints(
+    for entity in route_conductor_contact_footprints(
         build_input, route, representation_context=representation_context
     ):
-        region = _entity_occupied_region(gdstk, entity)
+        region = entity_occupied_region(gdstk, entity)
         if not region:
             continue
-        bounds = _entity_loop_bounds(entity)
-        z_min_um, z_max_um = _entity_z_range_um(entity)
-        bottom_faces.setdefault(_z_key(z_min_um), []).append((entity, region, bounds))
-        top_faces.setdefault(_z_key(z_max_um), []).append((entity, region, bounds))
+        bounds = entity_loop_bounds(entity)
+        z_min_um, z_max_um = entity_z_range_um(entity)
+        bottom_faces.setdefault(coordinate_z_key(z_min_um), []).append(
+            (entity, region, bounds)
+        )
+        top_faces.setdefault(coordinate_z_key(z_max_um), []).append(
+            (entity, region, bounds)
+        )
 
     index = 0
     for z_key, lower_faces in top_faces.items():
@@ -347,8 +357,8 @@ def plan_conductor_contact_patches(
                         lower, upper
                     ):
                         continue
-                if not _bounds_overlap(lower_bounds, upper_bounds):
-                    if _loops_touch_without_area(
+                if not bounds_overlap(lower_bounds, upper_bounds):
+                    if loops_touch_without_area(
                         lower.geometry["outer_loop"], upper.geometry["outer_loop"]
                     ):
                         raise ValueError(
@@ -364,7 +374,7 @@ def plan_conductor_contact_patches(
                         "and",
                     )
                 if not overlap_region:
-                    if _loops_touch_without_area(
+                    if loops_touch_without_area(
                         lower.geometry["outer_loop"], upper.geometry["outer_loop"]
                     ):
                         raise ValueError(
@@ -390,8 +400,8 @@ def plan_conductor_contact_patches(
                     signature = (
                         lower.semantic_id,
                         upper.semantic_id,
-                        _z_key(float(z_key)),
-                        _loop_signature(contact_loop),
+                        coordinate_z_key(float(z_key)),
+                        loop_signature(contact_loop),
                     )
                     if signature in seen:
                         continue
@@ -439,29 +449,33 @@ def _plan_route_c_conductor_contact_patches(
 
     generated: list[InterfacePlanRecord] = []
     seen = {_contact_signature(interface) for interface in interfaces}
-    solution_entities = _solution_entities(build_input)
+    solution_entities = solution_region_entities(build_input)
     top_faces: dict[
         float, list[tuple[SemanticEntitySpec, Any, Mapping[str, float]]]
     ] = {}
     bottom_faces: dict[
         float, list[tuple[SemanticEntitySpec, Any, Mapping[str, float]]]
     ] = {}
-    for entity in _active_route_conductor_entities(
+    for entity in active_route_conductor_entities(
         build_input, route, representation_context=representation_context
     ):
-        region = _entity_occupied_region(gdstk, entity)
+        region = entity_occupied_region(gdstk, entity)
         if not region:
             continue
-        bounds = _entity_loop_bounds(entity)
-        z_min_um, z_max_um = _entity_z_range_um(entity)
-        bottom_faces.setdefault(_z_key(z_min_um), []).append((entity, region, bounds))
-        top_faces.setdefault(_z_key(z_max_um), []).append((entity, region, bounds))
+        bounds = entity_loop_bounds(entity)
+        z_min_um, z_max_um = entity_z_range_um(entity)
+        bottom_faces.setdefault(coordinate_z_key(z_min_um), []).append(
+            (entity, region, bounds)
+        )
+        top_faces.setdefault(coordinate_z_key(z_max_um), []).append(
+            (entity, region, bounds)
+        )
 
     index = 0
     for z_key, lower_faces in top_faces.items():
         for lower, lower_region, lower_bounds in lower_faces:
             for upper, upper_region, upper_bounds in bottom_faces.get(z_key, ()):
-                if lower.semantic_id == upper.semantic_id or not _bounds_overlap(
+                if lower.semantic_id == upper.semantic_id or not bounds_overlap(
                     lower_bounds, upper_bounds
                 ):
                     continue
@@ -476,8 +490,8 @@ def _plan_route_c_conductor_contact_patches(
                 signature = (
                     lower.semantic_id,
                     upper.semantic_id,
-                    _z_key(float(z_key)),
-                    _loop_signature(contact_loop),
+                    coordinate_z_key(float(z_key)),
+                    loop_signature(contact_loop),
                 )
                 if signature in seen:
                     continue
@@ -551,7 +565,7 @@ def plan_mm_contact_records(
     record remains present for both Route A and Route B while its internal face
     is deliberately absent from solver physical groups.
     """
-    enriched, records, _ = _plan_mm_contact_records_with_components(
+    enriched, records, _ = plan_mm_contact_records_with_components(
         build_input,
         route=route,
         interfaces=interfaces,
@@ -560,7 +574,7 @@ def plan_mm_contact_records(
     return enriched, records
 
 
-def _plan_mm_contact_records_with_components(
+def plan_mm_contact_records_with_components(
     build_input: GeometryBuildInput,
     *,
     route: RouteLiteral | None,
@@ -574,7 +588,7 @@ def _plan_mm_contact_records_with_components(
     """Return MM contacts and their single source-owned component ledger."""
     live_ids = {
         entity.semantic_id
-        for entity in _route_conductor_contact_footprints(
+        for entity in route_conductor_contact_footprints(
             build_input, route, representation_context=representation_context
         )
     }
@@ -796,11 +810,11 @@ def _validate_volumetric_conductor_contacts(
     import gdstk
 
     footprint_regions: dict[str, list[Any]] = {}
-    for footprint in _route_conductor_contact_footprints(
+    for footprint in route_conductor_contact_footprints(
         build_input, route, representation_context=representation_context
     ):
         footprint_regions.setdefault(footprint.semantic_id, []).extend(
-            _entity_occupied_region(gdstk, footprint)
+            entity_occupied_region(gdstk, footprint)
         )
     ordered = tuple(sorted(entities.values(), key=lambda entity: entity.semantic_id))
     normalized: list[
@@ -817,23 +831,20 @@ def _validate_volumetric_conductor_contacts(
     for pad in ordered:
         if pad.part_role != "contact_pad":
             continue
-        _resolve_contact_pad_attachment(pad, ordered)
+        resolve_contact_pad_attachment(pad, ordered)
     for index, lower in enumerate(ordered):
         lower_region = tuple(footprint_regions[lower.semantic_id])
-        lower_min, lower_max = _entity_z_range_um(lower)
+        lower_min, lower_max = entity_z_range_um(lower)
         for upper in ordered[index + 1 :]:
-            upper_min, upper_max = _entity_z_range_um(upper)
-            if (
-                min(lower_max, upper_max) - max(lower_min, upper_min)
-                <= _TOPOLOGY_EPS_UM
-            ):
+            upper_min, upper_max = entity_z_range_um(upper)
+            if min(lower_max, upper_max) - max(lower_min, upper_min) <= TOPOLOGY_EPS_UM:
                 continue
             overlap = boolean_polygon_region(
                 gdstk, lower_region, tuple(footprint_regions[upper.semantic_id]), "and"
             )
             if not overlap:
                 continue
-            _validate_volumetric_overlap_ownership(lower, upper, ordered)
+            validate_volumetric_overlap_ownership(lower, upper, ordered)
             normalized.append(
                 (
                     lower,
@@ -844,7 +855,7 @@ def _validate_volumetric_conductor_contacts(
     return tuple(normalized)
 
 
-def _validate_volumetric_overlap_ownership(
+def validate_volumetric_overlap_ownership(
     lower: SemanticEntitySpec,
     upper: SemanticEntitySpec,
     entities: Sequence[SemanticEntitySpec],
@@ -880,34 +891,36 @@ def _has_explicit_volumetric_normalization(
     finite_overlap: Callable[[SemanticEntitySpec, SemanticEntitySpec], bool]
     | None = None,
 ) -> bool:
-    lower_z_min, lower_z_max = _entity_z_range_um(lower)
-    upper_z_min, upper_z_max = _entity_z_range_um(upper)
-    if not (_same_z(lower_z_min, upper_z_min) and _same_z(lower_z_max, upper_z_max)):
+    lower_z_min, lower_z_max = entity_z_range_um(lower)
+    upper_z_min, upper_z_max = entity_z_range_um(upper)
+    if not (
+        same_coordinate_z(lower_z_min, upper_z_min)
+        and same_coordinate_z(lower_z_max, upper_z_max)
+    ):
         return False
     return any(
         pad.part_role == "contact_pad"
         and face.part_role == "face_metal"
-        and _resolve_contact_pad_attachment(
-            pad, entities, finite_overlap=finite_overlap
-        )
+        and resolve_contact_pad_attachment(pad, entities, finite_overlap=finite_overlap)
         is face
         for pad, face in ((lower, upper), (upper, lower))
     )
 
 
-def _is_fully_normalized_face_metal(
+def is_fully_normalized_face_metal(
     build_input: GeometryBuildInput, entity: SemanticEntitySpec
 ) -> bool:
+    """Test whether attached contact pads cover the complete face-metal region."""
     if entity.part_role != "face_metal":
         return False
     import gdstk
 
-    face = _entity_occupied_region(gdstk, entity)
+    face = entity_occupied_region(gdstk, entity)
     pads = tuple(
-        _entity_occupied_region(gdstk, pad)
+        entity_occupied_region(gdstk, pad)
         for pad in build_input.entities
         if pad.part_role == "contact_pad"
-        and _resolve_contact_pad_attachment(pad, build_input.entities) is entity
+        and resolve_contact_pad_attachment(pad, build_input.entities) is entity
     )
     covered = boolean_polygon_region(
         gdstk, face, tuple(polygon for region in pads for polygon in region), "not"
@@ -921,8 +934,8 @@ def _contact_signature(interface: InterfacePlanRecord) -> tuple[Any, ...]:
     return (
         str(interface.metadata.get("lower_entity_id", "")),
         str(interface.metadata.get("upper_entity_id", "")),
-        _z_key(float(interface.metadata.get("contact_z_um", 0.0))),
-        _loop_signature(interface.metadata.get("outer_loop", ())),
+        coordinate_z_key(float(interface.metadata.get("contact_z_um", 0.0))),
+        loop_signature(interface.metadata.get("outer_loop", ())),
     )
 
 
@@ -970,7 +983,7 @@ def _single_rectangular_contact_loop(
 
 def _is_axis_aligned_rectangle(loop: tuple[tuple[float, float], ...]) -> bool:
     return len(loop) == 4 and all(
-        _same_z(start[0], end[0]) or _same_z(start[1], end[1])
+        same_coordinate_z(start[0], end[0]) or same_coordinate_z(start[1], end[1])
         for start, end in ring_edges(loop)
     )
 
@@ -982,7 +995,7 @@ def _sort_contact_loops(
         clean = clean_loop(loop)
         xs = tuple(point[0] for point in clean)
         ys = tuple(point[1] for point in clean)
-        canonical = _canonical_loop_sort_key(clean)
+        canonical = canonical_loop_sort_key(clean)
         return (
             min(xs),
             max(xs),
@@ -994,7 +1007,7 @@ def _sort_contact_loops(
 
     return tuple(
         sorted(
-            {_loop_signature(loop): loop for loop in loops}.values(),
+            {loop_signature(loop): loop for loop in loops}.values(),
             key=_stable_loop_key,
         )
     )
@@ -1030,11 +1043,11 @@ def _contact_patch_metadata(
             None,
         )
         if sheet is not None:
-            plane_z_um = _route_a_sheet_plane_z_um_from_solutions(
+            plane_z_um = route_a_sheet_plane_z_um_from_solutions(
                 sheet,
                 solution_entities,
             )
-            boundary_volume_ids = _route_a_sheet_boundary_volume_ids_from_solutions(
+            boundary_volume_ids = route_a_sheet_boundary_volume_ids_from_solutions(
                 sheet,
                 solution_entities,
             )
@@ -1045,10 +1058,10 @@ def _contact_patch_metadata(
     elif route == "C":
         boundary_volume_ids = (lower.semantic_id, upper.semantic_id)
     else:
-        boundary_volume_ids = _unique_ids(
+        boundary_volume_ids = unique_ids(
             (
-                _required_host_solution_id(build_input, lower),
-                _required_host_solution_id(build_input, upper),
+                required_host_solution_id(build_input, lower),
+                required_host_solution_id(build_input, upper),
             )
         )
 

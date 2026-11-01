@@ -6,12 +6,12 @@ import pytest
 import shapely
 from shapely import Polygon, coverage_union_all, union_all
 
-from scgsim.geometry._primitives import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+from scgsim.geometry.models.grid import GeometryGridContext
+from scgsim.geometry.primitives import (  # private-import: primitive package-path migration awaits coordinated backend source lists
     grid,
     grid_overlay,
     grid_regions,
 )
-from scgsim.geometry.models.grid import GeometryGridContext
 
 
 def box(x0, y0, x1, y1):

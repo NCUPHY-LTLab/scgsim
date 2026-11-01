@@ -6,25 +6,26 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-# Surface provenance remains an extensible JSON-shaped metadata payload.
-from scgsim.geometry._primitives.constants import (
-    _INTERFACE_KIND_ORDER,
-)
-from scgsim.geometry._primitives.entities import (
-    _unique_ids,
-)
-from scgsim.geometry._primitives.spatial import (
-    _coordinate_key,
-)
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
+
+# Surface provenance remains an extensible JSON-shaped metadata payload.
+from scgsim.geometry.primitives.constants import (
+    INTERFACE_KIND_ORDER,
+)
+from scgsim.geometry.primitives.entities import (
+    unique_ids,
+)
+from scgsim.geometry.primitives.spatial import (
+    coordinate_key,
+)
 from scgsim.semantics import EvidenceResult
 
 
 @dataclass(frozen=True, slots=True)
-class _RouteASheetPatch:
+class RouteASheetPatch:
     """One exact sheet region with one ordered solution domain on each side."""
 
     parent_interface_id: str
@@ -36,6 +37,7 @@ class _RouteASheetPatch:
 
     @property
     def boundary_volume_ids(self) -> tuple[str, str]:
+        """Return the single effective solution domain on each side, in order."""
         bottom_ids = self.bottom.effective_domain_ids or ()
         top_ids = self.top.effective_domain_ids or ()
         if len(bottom_ids) != 1 or len(top_ids) != 1:
@@ -44,10 +46,11 @@ class _RouteASheetPatch:
 
     @property
     def contributions(self) -> tuple[EvidenceResult, EvidenceResult]:
+        """Return bottom and top contribution evidence in side order."""
         return (self.bottom, self.top)
 
 
-def _surface_contribution_provenance(
+def surface_contribution_provenance(
     *,
     parent_interface_id: str,
     patch_id: str,
@@ -122,7 +125,7 @@ def _surface_contribution_provenance(
     }
 
 
-def _interface_kinds(interface: InterfacePlanRecord) -> tuple[str, ...]:
+def interface_kinds(interface: InterfacePlanRecord) -> tuple[str, ...]:
     """Normalize interface kinds and return them in canonical package order."""
     raw = interface.metadata.get("interface_kinds", (interface.kind,))
     if isinstance(raw, str):
@@ -134,10 +137,10 @@ def _interface_kinds(interface: InterfacePlanRecord) -> tuple[str, ...]:
 
     seen = {str(value) for value in raw_values}
     seen.add(interface.kind)
-    return tuple(kind for kind in _INTERFACE_KIND_ORDER if kind in seen)
+    return tuple(kind for kind in INTERFACE_KIND_ORDER if kind in seen)
 
 
-def _is_route_a_sheet_interface(
+def is_route_a_sheet_interface(
     route: RouteLiteral | None,
     interface: InterfacePlanRecord,
     *,
@@ -159,13 +162,13 @@ def _is_route_a_sheet_interface(
     return False
 
 
-def _canonical_face_signature_3d(
+def canonical_face_signature_3d(
     ring: tuple[tuple[float, float, float], ...],
 ) -> tuple[tuple[float, float, float], ...] | None:
     """Return a rotation- and winding-independent 3D face signature."""
     if len(ring) < 3:
         return None
-    normalized = tuple(_coordinate_key(point) for point in ring)
+    normalized = tuple(coordinate_key(point) for point in ring)
     candidates: list[tuple[tuple[float, float, float], ...]] = []
     for candidate in (normalized, tuple(reversed(normalized))):
         rotations = tuple(
@@ -175,7 +178,7 @@ def _canonical_face_signature_3d(
     return min(candidates)
 
 
-def _conductor_boundary_surface_id(
+def conductor_boundary_surface_id(
     route: RouteLiteral | None,
     entity: SemanticEntitySpec,
     representation: str,
@@ -189,7 +192,7 @@ def _conductor_boundary_surface_id(
     )
 
 
-def _surface_boundary_volume_ids(
+def surface_boundary_volume_ids(
     surface: SurfacePlanRecord,
     *,
     known_entity_ids: set[str],
@@ -211,7 +214,7 @@ def _surface_boundary_volume_ids(
         values = (raw,)
     else:
         values = tuple(str(value) for value in raw)
-    result = _unique_ids(value for value in values if value in known_entity_ids)
+    result = unique_ids(value for value in values if value in known_entity_ids)
     if len(result) > 2:
         raise ValueError(
             f"{surface.surface_id} belongs to more than two volumes: {result!r}"

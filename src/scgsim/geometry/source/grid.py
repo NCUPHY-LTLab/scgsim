@@ -20,7 +20,15 @@ from typing import (
     cast,
 )
 
-from scgsim.geometry._primitives.grid import (  # private-import: the source grid policy consumes this shared noding engine.
+from scgsim.geometry.models.common import PolygonRing
+from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
+from scgsim.geometry.models.input import (
+    GeometryBuildInput,
+    LayoutPolygonSpec,
+    SemanticEntitySpec,
+)
+from scgsim.geometry.models.regions import PortSheetRegionRecord
+from scgsim.geometry.primitives.grid import (
     GridArrangement,
     GridOperand,
     SourceGridAudit,
@@ -30,14 +38,6 @@ from scgsim.geometry._primitives.grid import (  # private-import: the source gri
     regions,
     source_grid_audits,
 )
-from scgsim.geometry.models.common import PolygonRing
-from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
-from scgsim.geometry.models.input import (
-    GeometryBuildInput,
-    LayoutPolygonSpec,
-    SemanticEntitySpec,
-)
-from scgsim.geometry.models.regions import PortSheetRegionRecord
 from scgsim.geometry.source.ports import (
     is_port_sheet_host_entity,
     port_sheet_overlaps,

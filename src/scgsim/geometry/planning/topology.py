@@ -8,14 +8,6 @@ from dataclasses import replace
 from itertools import pairwise
 from typing import Any
 
-from scgsim.geometry._primitives.constants import _TOPOLOGY_EPS_UM
-from scgsim.geometry._primitives.entities import _unique_ids
-from scgsim.geometry._primitives.loops import _ordered_loop_signature
-from scgsim.geometry._primitives.planar_loops import clean_loop, polygon_area
-from scgsim.geometry._primitives.spatial import (
-    _coordinate_key,
-    _geometry_ref_surface_z_um,
-)
 from scgsim.geometry.models.topology import (
     CurvePlanRecord,
     CurveRefRecord,
@@ -23,13 +15,21 @@ from scgsim.geometry.models.topology import (
     SurfaceLoopRecord,
     SurfacePlanRecord,
 )
+from scgsim.geometry.primitives.constants import TOPOLOGY_EPS_UM
+from scgsim.geometry.primitives.entities import unique_ids
+from scgsim.geometry.primitives.loops import ordered_loop_signature
+from scgsim.geometry.primitives.planar_loops import clean_loop, polygon_area
+from scgsim.geometry.primitives.spatial import (
+    coordinate_key,
+    geometry_ref_surface_z_um,
+)
 from scgsim.semantics.ownership import (
     project_legacy_interface_record_owners,
     surface_declared_owner_ids,
 )
 
 
-def _surface_interface_record_owners(
+def surface_interface_record_owners(
     surface: SurfacePlanRecord,
     owners: tuple[str, ...],
 ) -> tuple[str, ...]:
@@ -41,10 +41,11 @@ def _surface_interface_record_owners(
     )
 
 
-def _structured_surface_boundary_volume_ids(
+def structured_surface_boundary_volume_ids(
     surface: SurfacePlanRecord,
     owners: tuple[str, ...],
 ) -> tuple[str, ...]:
+    """Read and validate ordered boundary-volume owners for a structured surface."""
     raw = surface.metadata.get("boundary_volume_ids", ())
     boundary_ids = () if isinstance(raw, str) else tuple(str(value) for value in raw)
     expected_count = 1 if surface.metadata.get("sheet_contact_cap") else 2
@@ -53,7 +54,7 @@ def _structured_surface_boundary_volume_ids(
             f"{surface.surface_id} structured interface requires {expected_count} ordered "
             "boundary_volume_ids from its owners"
         )
-    return _unique_ids(boundary_ids)
+    return unique_ids(boundary_ids)
 
 
 def plan_canonical_topology(
@@ -104,7 +105,7 @@ def plan_canonical_topology(
     ] = []
 
     def point_id(coordinate: tuple[float, float, float]) -> str:
-        key = _coordinate_key(coordinate)
+        key = coordinate_key(coordinate)
         existing = point_ids.get(key)
         if existing is not None:
             return existing
@@ -118,7 +119,7 @@ def plan_canonical_topology(
         if surface.construction_only:
             canonical_surfaces.append(surface)
             continue
-        specs = _surface_ring3d_specs(surface)
+        specs = surface_ring3d_specs(surface)
         surface_specs.append((surface, specs))
         for _, _, ring in specs:
             for coordinate in ring:
@@ -161,7 +162,7 @@ def plan_canonical_topology(
         point_curve_ids[start_id].add(curve_id)
         point_curve_ids[end_id].add(curve_id)
         curve_owner_ids.setdefault(curve_id, set()).update(
-            str(owner_id) for owner_id in _surface_owner_ids(surface)
+            str(owner_id) for owner_id in surface_owner_ids(surface)
         )
         if surface.interface_id is not None:
             curve_interface_ids.setdefault(curve_id, set()).add(surface.interface_id)
@@ -188,7 +189,7 @@ def plan_canonical_topology(
             curve_refs = _cancel_backtracking_curve_refs(raw_curve_refs)
             if not curve_refs:
                 raise ValueError(f"{surface.surface_id} has empty canonical loop")
-            loop_key = (role, _ordered_loop_signature(curve_refs))
+            loop_key = (role, ordered_loop_signature(curve_refs))
             loop_id = loop_ids.get(loop_key)
             if loop_id is None:
                 suffix = "OUTER" if role == "outer" else f"HOLE_{index:04d}"
@@ -232,7 +233,7 @@ def plan_canonical_topology(
         curve_id: {
             owner_id
             for surface_id in surface_ids
-            for owner_id in _surface_owner_ids(retained_surfaces[surface_id])
+            for owner_id in surface_owner_ids(retained_surfaces[surface_id])
         }
         for curve_id, surface_ids in retained_curve_surface_ids.items()
     }
@@ -261,7 +262,7 @@ def plan_canonical_topology(
     for curve_id, surface_ids in retained_curve_surface_ids.items():
         retained = tuple(retained_surfaces[surface_id] for surface_id in surface_ids)
         expected_owners = {
-            owner_id for surface in retained for owner_id in _surface_owner_ids(surface)
+            owner_id for surface in retained for owner_id in surface_owner_ids(surface)
         }
         expected_interfaces = {
             surface.interface_id
@@ -340,20 +341,21 @@ def _cancel_backtracking_curve_refs(
     return tuple(result)
 
 
-def _surface_ring3d_specs(
+def surface_ring3d_specs(
     surface: SurfacePlanRecord,
 ) -> tuple[tuple[str, int, tuple[tuple[float, float, float], ...]], ...]:
+    """Read the outer and hole rings of a surface in three dimensions."""
     geometry_ref = surface.geometry_ref
     if "planar_loops_3d" in geometry_ref:
         return tuple(
-            ("outer" if index == 0 else "hole", max(0, index-1), _clean_ring3d(ring))
+            ("outer" if index == 0 else "hole", max(0, index - 1), _clean_ring3d(ring))
             for index, ring in enumerate(geometry_ref["planar_loops_3d"])
         )
     if "quad_points" in geometry_ref:
         return (("outer", 0, _clean_ring3d(geometry_ref["quad_points"])),)
     if "outer_loop" not in geometry_ref:
         raise ValueError(f"{surface.surface_id} requires outer_loop or quad_points")
-    z_um = _geometry_ref_surface_z_um(geometry_ref)
+    z_um = geometry_ref_surface_z_um(geometry_ref)
     outer_loop = _canonical_planar_loop_orientation(
         clean_loop(geometry_ref["outer_loop"])
     )
@@ -455,7 +457,7 @@ def _axis_aligned_point_index(
         list[tuple[float, tuple[float, float, float]]],
     ] = {}
     for coordinate in coordinates:
-        key = _coordinate_key(coordinate)
+        key = coordinate_key(coordinate)
         for varying_axis in range(3):
             fixed_key = tuple(key[axis] for axis in range(3) if axis != varying_axis)
             records.setdefault((varying_axis, fixed_key), []).append(
@@ -482,12 +484,12 @@ def _segment_candidate_points(
         tuple[tuple[float, ...], tuple[tuple[float, float, float], ...]],
     ],
 ) -> tuple[tuple[float, float, float], ...]:
-    start_key = _coordinate_key(start)
-    end_key = _coordinate_key(end)
+    start_key = coordinate_key(start)
+    end_key = coordinate_key(end)
     varying_axes = tuple(
         axis
         for axis in range(3)
-        if abs(start_key[axis] - end_key[axis]) > _TOPOLOGY_EPS_UM
+        if abs(start_key[axis] - end_key[axis]) > TOPOLOGY_EPS_UM
     )
     if len(varying_axes) == 1:
         varying_axis = varying_axes[0]
@@ -496,8 +498,8 @@ def _segment_candidate_points(
             (varying_axis, fixed_key),
             ((), ()),
         )
-        lower = min(start_key[varying_axis], end_key[varying_axis]) - _TOPOLOGY_EPS_UM
-        upper = max(start_key[varying_axis], end_key[varying_axis]) + _TOPOLOGY_EPS_UM
+        lower = min(start_key[varying_axis], end_key[varying_axis]) - TOPOLOGY_EPS_UM
+        upper = max(start_key[varying_axis], end_key[varying_axis]) + TOPOLOGY_EPS_UM
         left = bisect_left(values, lower)
         right = bisect_right(values, upper)
         candidates = set(coordinates[left:right])
@@ -505,8 +507,8 @@ def _segment_candidate_points(
         return tuple(sorted(candidates))
     bounds = tuple(
         (
-            min(start_key[axis], end_key[axis]) - _TOPOLOGY_EPS_UM,
-            max(start_key[axis], end_key[axis]) + _TOPOLOGY_EPS_UM,
+            min(start_key[axis], end_key[axis]) - TOPOLOGY_EPS_UM,
+            max(start_key[axis], end_key[axis]) + TOPOLOGY_EPS_UM,
         )
         for axis in range(3)
     )
@@ -533,7 +535,8 @@ def _segment_candidate_points(
     return tuple(sorted(candidates))
 
 
-def _surface_owner_ids(surface: SurfacePlanRecord) -> tuple[str, ...]:
+def surface_owner_ids(surface: SurfacePlanRecord) -> tuple[str, ...]:
+    """Resolve the declared semantic owners of a surface."""
     return surface_declared_owner_ids(
         surface.metadata.get("owner_semantic_ids", (surface.owner_semantic_id,)),
         surface.owner_semantic_id,

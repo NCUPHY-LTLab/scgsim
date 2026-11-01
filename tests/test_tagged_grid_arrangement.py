@@ -7,14 +7,14 @@ from fractions import Fraction
 import pytest
 from shapely import Point, Polygon, coverage_is_valid, union_all
 
-from scgsim.geometry._primitives._tagged_grid import (
-    _pixel_interval,
-    _PointIndex,
-    _source_paths,
-    build_tagged_subdivision,
-)
-from scgsim.geometry._primitives.grid import GridOperand, build_grid_arrangement
 from scgsim.geometry.models.grid import GeometryGridContext
+from scgsim.geometry.primitives.grid import GridOperand, build_grid_arrangement
+from scgsim.geometry.primitives.tagged_grid import (
+    PointIndex,
+    build_tagged_subdivision,
+    pixel_interval,
+    source_paths,
+)
 from scgsim.preparation import preparation_resources
 
 
@@ -163,16 +163,16 @@ def test_direction_and_missing_endpoint_context_are_explicit_refusals():
     assert context == dict(operand_index=0, ring_index=0)
     row = ("owner", 0, 0, 0, (0, 0), (2, 0), ((0, 0), (2, 0)), 1)
     with pytest.raises(ValueError, match="source endpoint pixel incidence"):
-        _source_paths((row,), _PointIndex.build(((0, 0),)), 1)
+        source_paths((row,), PointIndex.build(((0, 0),)), 1)
     # Exact half-open geometry: point-touching top/right is excluded, while
     # the lower-left corner belongs to the pixel. No numerical tolerance.
     assert (
-        _pixel_interval(
+        pixel_interval(
             (Fraction(1, 2), Fraction(1, 2)), (Fraction(1), Fraction(1)), (0, 0)
         )
         is None
     )
-    assert _pixel_interval(
+    assert pixel_interval(
         (Fraction(-1, 2), Fraction(-1, 2)), (Fraction(-1), Fraction(-1)), (0, 0)
     ) == (0, 0)
 
@@ -187,7 +187,7 @@ def test_parallel_source_paths_preserve_exact_graph_and_real_worker_execution():
     old = threading.getprofile()
 
     def observe(frame, event, arg):
-        if event == "call" and frame.f_code is _source_paths.__code__:
+        if event == "call" and frame.f_code is source_paths.__code__:
             with lock:
                 seen.add(threading.get_ident())
 
@@ -212,7 +212,7 @@ def test_parallel_source_paths_preserve_exact_graph_and_real_worker_execution():
 
 def test_cached_pure_partition_does_not_cache_or_skip_physical_failure_audits():
     """Verify that cached pure partition does not cache or skip physical failure audits."""
-    from scgsim.geometry._primitives._grid_cache import _ACTIVE, grid_work_cache_scope  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.primitives.grid_cache import ACTIVE, grid_work_cache_scope  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     thin = GridOperand("thin", rectangle(0, 0, 0.25, 2), contact=False)
     with grid_work_cache_scope():
@@ -223,12 +223,12 @@ def test_cached_pure_partition_does_not_cache_or_skip_physical_failure_audits():
             ) as caught:
                 build_grid_arrangement((thin,), GeometryGridContext(1))
             errors.append(caught.value)
-            cached = tuple(_ACTIVE.get().values.values())
+            cached = tuple(ACTIVE.get().values.values())
             assert len(cached) == 1
             assert len(cached[0].subdivision.source_paths) == 4
         assert errors[0] is not errors[1]
         assert errors[0].__notes__ == errors[1].__notes__
-    assert _ACTIVE.get() is None
+    assert ACTIVE.get() is None
 
 
 @pytest.mark.parametrize(
@@ -277,17 +277,17 @@ def test_presnap_raw_context_recovers_public_native_network(polygons):
 
 def test_directed_offline_nodes_use_geometric_secondary_order():
     """Verify that directed offline nodes use geometric secondary order."""
-    from scgsim.geometry._primitives._tagged_grid import _raw_chain  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.primitives.tagged_grid import raw_chain  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     # Equal dominant coordinates must use direction-aware geometry, not tag ID.
     nodes = {(0, 0), (10, 1), (5, 0.51), (5, 0.49)}
-    assert _raw_chain((0, 0), (10, 1), nodes) == ((0, 0), (5, 0.49), (5, 0.51), (10, 1))
-    assert _raw_chain((10, 1), (0, 0), nodes) == ((10, 1), (5, 0.51), (5, 0.49), (0, 0))
+    assert raw_chain((0, 0), (10, 1), nodes) == ((0, 0), (5, 0.49), (5, 0.51), (10, 1))
+    assert raw_chain((10, 1), (0, 0), nodes) == ((10, 1), (5, 0.51), (5, 0.49), (0, 0))
 
 
 def test_cache_reuses_raw_polygons_but_repeats_contact_audit():
     """Verify that cache reuses raw polygons but repeats contact audit."""
-    from scgsim.geometry._primitives._grid_cache import _ACTIVE, grid_work_cache_scope  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.primitives.grid_cache import ACTIVE, grid_work_cache_scope  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     values = (
         GridOperand("A", rectangle(0, 0, 1.1, 1)),
@@ -300,7 +300,7 @@ def test_cache_reuses_raw_polygons_but_repeats_contact_audit():
             with pytest.raises(ValueError, match="contact changed") as caught:
                 build_grid_arrangement(values, GeometryGridContext(1))
             errors.append(caught.value)
-            current = next(iter(_ACTIVE.get().values.values()))
+            current = next(iter(ACTIVE.get().values.values()))
             if work is not None:
                 assert current is work
                 assert all(

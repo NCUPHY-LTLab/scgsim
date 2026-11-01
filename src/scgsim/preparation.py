@@ -84,7 +84,7 @@ def _in_worker(function: Callable[[_T], _R], item: _T) -> _R:
         _worker_depth.reset(token)
 
 
-def _ordered_map(function: Callable[[_T], _R], items: Iterable[_T]) -> list[_R]:
+def ordered_map(function: Callable[[_T], _R], items: Iterable[_T]) -> list[_R]:
     """Apply independent tasks with bounded submission and deterministic merge."""
     state = _state.get()
     if state is None or state.max_workers == 1 or _worker_depth.get():
@@ -131,7 +131,7 @@ def _ordered_map(function: Callable[[_T], _R], items: Iterable[_T]) -> list[_R]:
 
 
 @contextmanager
-def _native_preparation(mesh_controls: Mapping[str, object]) -> Iterator[None]:
+def native_preparation(mesh_controls: Mapping[str, object]) -> Iterator[None]:
     """Reserve the pool budget only while the native mesh child is running."""
     state = _state.get()
     if state is None:

@@ -1,13 +1,13 @@
 """Call-local reuse of genuine gdstk extraction; no solver or mesh work."""
 
-from contextvars import copy_context
 import json
+from contextvars import copy_context
 from threading import Thread
 
 import gdstk
 import pytest
 
-from scgsim.geometry.source import _occurrence as occurrence
+from scgsim.geometry.source import occurrence as occurrence
 
 
 @pytest.fixture
@@ -38,17 +38,17 @@ def extractions(monkeypatch):
 def test_same_cell_reused_and_exact_exclusion_tuple_distinguished(cells, extractions):
     parent, _, _ = cells
     with occurrence._occurrence_extraction_scope():
-        first = occurrence._polygons_by_layer(parent)
-        assert occurrence._polygons_by_layer(parent) is first
+        first = occurrence.read_polygons_by_layer(parent)
+        assert occurrence.read_polygons_by_layer(parent) is first
         assert set(first) == {(1, 0), (2, 0), (3, 0)}
         assert set(
-            occurrence._polygons_by_layer(parent, excluded_reference_indexes=(0,))
+            occurrence.read_polygons_by_layer(parent, excluded_reference_indexes=(0,))
         ) == {(2, 0), (3, 0)}
         assert set(
-            occurrence._polygons_by_layer(parent, excluded_reference_indexes=(1,))
+            occurrence.read_polygons_by_layer(parent, excluded_reference_indexes=(1,))
         ) == {(1, 0), (3, 0)}
-        occurrence._polygons_by_layer(parent, excluded_reference_indexes=(0, 1))
-        occurrence._polygons_by_layer(parent, excluded_reference_indexes=(1, 0))
+        occurrence.read_polygons_by_layer(parent, excluded_reference_indexes=(0, 1))
+        occurrence.read_polygons_by_layer(parent, excluded_reference_indexes=(1, 0))
         with pytest.raises(TypeError):
             first[(4, 0)] = ()
     assert [row[1] for row in extractions] == [(), (0,), (1,), (0, 1), (1, 0)]
@@ -58,24 +58,24 @@ def test_cell_identity_and_nested_scope_are_separate(cells, extractions):
     parent, _, _ = cells
     other = gdstk.Cell("PARENT")
     with occurrence._occurrence_extraction_scope():
-        first = occurrence._polygons_by_layer(parent)
-        assert not occurrence._polygons_by_layer(other)
+        first = occurrence.read_polygons_by_layer(parent)
+        assert not occurrence.read_polygons_by_layer(other)
         with occurrence._occurrence_extraction_scope():
-            nested = occurrence._polygons_by_layer(parent)
+            nested = occurrence.read_polygons_by_layer(parent)
             assert nested is not first
-        assert occurrence._polygons_by_layer(parent) is first
+        assert occurrence.read_polygons_by_layer(parent) is first
     assert len(extractions) == 3
 
 
 def test_changes_outside_scope_are_read_fresh(cells, extractions):
     parent, _, _ = cells
     with occurrence._occurrence_extraction_scope():
-        assert (4, 0) not in occurrence._polygons_by_layer(parent)
+        assert (4, 0) not in occurrence.read_polygons_by_layer(parent)
     parent.add(gdstk.rectangle((6, 0), (7, 1), layer=4))
     with occurrence._occurrence_extraction_scope():
-        assert (4, 0) in occurrence._polygons_by_layer(parent)
-    occurrence._polygons_by_layer(parent)
-    occurrence._polygons_by_layer(parent)
+        assert (4, 0) in occurrence.read_polygons_by_layer(parent)
+    occurrence.read_polygons_by_layer(parent)
+    occurrence.read_polygons_by_layer(parent)
     assert len(extractions) == 4
 
 
@@ -83,29 +83,29 @@ def test_exception_restores_cache_context(cells, extractions):
     parent, _, _ = cells
     with pytest.raises(ValueError, match="scope failure"):
         with occurrence._occurrence_extraction_scope():
-            occurrence._polygons_by_layer(parent)
+            occurrence.read_polygons_by_layer(parent)
             raise ValueError("scope failure")
     assert occurrence._EXTRACTION_CACHE.get() is None
-    occurrence._polygons_by_layer(parent)
+    occurrence.read_polygons_by_layer(parent)
     assert len(extractions) == 2
 
 
 def test_copied_context_does_not_share_cache_with_worker(cells, extractions):
     parent, _, _ = cells
     with occurrence._occurrence_extraction_scope():
-        first = occurrence._polygons_by_layer(parent)
+        first = occurrence.read_polygons_by_layer(parent)
         context = copy_context()
         results = []
 
         def extract():
-            results.append(occurrence._polygons_by_layer(parent))
-            results.append(occurrence._polygons_by_layer(parent))
+            results.append(occurrence.read_polygons_by_layer(parent))
+            results.append(occurrence.read_polygons_by_layer(parent))
 
         worker = Thread(target=context.run, args=(extract,))
         worker.start()
         worker.join(timeout=5)
         assert not worker.is_alive()
-        assert occurrence._polygons_by_layer(parent) is first
+        assert occurrence.read_polygons_by_layer(parent) is first
     assert len(results) == 2 and results[0] is not results[1]
     assert len(extractions) == 3
 
@@ -114,7 +114,7 @@ def test_selector_outputs_are_detached_and_cached_polygons_unchanged(
     cells, extractions
 ):
     parent, _, _ = cells
-    entity = occurrence._entity_from_layer_record(
+    entity = occurrence.entity_from_layer_record(
         {
             "semantic_id": "metal",
             "role": "conductor",
@@ -127,14 +127,14 @@ def test_selector_outputs_are_detached_and_cached_polygons_unchanged(
         materials={"PEC": {"kind": "conductor"}},
     )
     with occurrence._occurrence_extraction_scope():
-        polygons = occurrence._polygons_by_layer(parent)
+        polygons = occurrence.read_polygons_by_layer(parent)
         before = {
             key: [p.points.tolist() for p in values] for key, values in polygons.items()
         }
-        first = occurrence._occurrence_polygons_for_entity(
+        first = occurrence.occurrence_polygons_for_entity(
             entity, cell=parent, transform=(1, 0, 0, 1, 0, 0)
         )
-        second = occurrence._occurrence_polygons_for_entity(
+        second = occurrence.occurrence_polygons_for_entity(
             entity, cell=parent, transform=(1, 0, 0, 1, 0, 0)
         )
         assert first == second

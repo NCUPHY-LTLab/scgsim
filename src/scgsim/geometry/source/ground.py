@@ -10,21 +10,21 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from scgsim.geometry._primitives.grid import (
+from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
+from scgsim.geometry.primitives.grid import (
     polygon_boolean,
     preserve_declared_source,
     split_gdstk_cutline_loop,
 )
-from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.source._polygon_ops import (
-    _fused_gdstk_components,
-    _point_in_layout_polygon,
-    _ring_from_gdstk_polygon,
+from scgsim.geometry.source.polygon_ops import (
+    fused_gdstk_components,
+    point_in_layout_polygon,
+    ring_from_gdstk_polygon,
 )
 
 
 @preserve_declared_source
-def _derived_ground_polygons(
+def derived_ground_polygons(
     entity: SemanticEntitySpec,
     *,
     polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
@@ -35,7 +35,7 @@ def _derived_ground_polygons(
     """Derive one positive Ground from its plane, mask and explicit includes."""
     import gdstk
 
-    from scgsim.geometry._primitives.loops import _canonical_loop_sort_key
+    from scgsim.geometry.primitives.loops import canonical_loop_sort_key
 
     mask_layer = entity.geometry.get("mask_layer")
     if mask_layer is None:
@@ -79,7 +79,7 @@ def _derived_ground_polygons(
                 f"{entity.semantic_id} has an incomplete source contribution"
             )
         included.extend(
-            _layout_polygon_region(
+            layout_polygon_region(
                 gdstk,
                 LayoutPolygonSpec(
                     polygon_id=f"{entity.semantic_id}__INCLUDE__{len(included):04d}",
@@ -103,7 +103,7 @@ def _derived_ground_polygons(
         )
         # Fuse exact contacts before applying an explicit selector; ownership
         # still comes from the authored layer and selector, not proximity.
-        components = _fused_gdstk_components(candidates)
+        components = fused_gdstk_components(candidates)
         for point in include_points:
             if (
                 not isinstance(point, Sequence)
@@ -117,22 +117,22 @@ def _derived_ground_polygons(
             matches = [
                 polygon
                 for polygon, _, _ in components
-                if _point_in_layout_polygon(selector, polygon)
+                if point_in_layout_polygon(selector, polygon)
             ]
             if len(matches) != 1:
                 raise ValueError(
                     f"{entity.semantic_id} include selector {tuple(point)!r} matched {len(matches)} source polygons"
                 )
-            included.extend(_layout_polygon_region(gdstk, matches[0]))
+            included.extend(layout_polygon_region(gdstk, matches[0]))
     regions = polygon_boolean(without_mask or (), tuple(included), "or", precision=1e-9)
     normalized_regions = sorted(
         (
-            split_gdstk_cutline_loop(_ring_from_gdstk_polygon(region))
+            split_gdstk_cutline_loop(ring_from_gdstk_polygon(region))
             for region in regions or ()
         ),
         key=lambda region: (
-            _canonical_loop_sort_key(region[0]),
-            tuple(_canonical_loop_sort_key(hole) for hole in region[1]),
+            canonical_loop_sort_key(region[0]),
+            tuple(canonical_loop_sort_key(hole) for hole in region[1]),
         ),
     )
     if not normalized_regions:
@@ -190,7 +190,8 @@ def _ground_plane_bounds(
         ) from exc
 
 
-def _layout_polygon_region(gdstk: Any, polygon: LayoutPolygonSpec) -> tuple[Any, ...]:
+def layout_polygon_region(gdstk: Any, polygon: LayoutPolygonSpec) -> tuple[Any, ...]:
+    """Convert a layout polygon and its holes into GDS polygon pieces."""
     outer = gdstk.Polygon(polygon.exterior)
     holes = tuple(gdstk.Polygon(hole) for hole in polygon.holes)
     if not holes:

@@ -26,7 +26,7 @@ from scgsim.geometry.source.curves import (
     transform_boundary,
 )
 from scgsim.geometry.source.intents import (  # private-import: exercise the current plan-shared sheet projection.
-    _route_a_sheet_interfaces,
+    route_a_sheet_interfaces,
 )
 from scgsim.geometry.source.stack import build_component_stack
 
@@ -236,7 +236,7 @@ def test_generated_sheet_intent_keeps_source_identity_and_plane():
         geometry={"z_um": 1.5},
     )
 
-    result = _route_a_sheet_interfaces((entity,), (polygon,))
+    result = route_a_sheet_interfaces((entity,), (polygon,))
 
     assert result == {
         "interfaces": (

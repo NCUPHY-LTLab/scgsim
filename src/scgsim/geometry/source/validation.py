@@ -5,13 +5,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from math import isfinite
 
-from scgsim.geometry._primitives.entity_validation import (
-    _is_solution_entity,
-    _is_vacuum_solution_entity,
-    _requires_route_representation,
-    _resolve_contact_pad_attachment,
-)
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.primitives.entity_validation import (
+    is_solution_entity,
+    is_vacuum_solution_entity,
+    requires_route_representation,
+    resolve_contact_pad_attachment,
+)
 
 
 def validate_geometry_input(build_input: GeometryBuildInput) -> GeometryBuildInput:
@@ -65,14 +65,14 @@ def validate_geometry_input(build_input: GeometryBuildInput) -> GeometryBuildInp
     for entity in build_input.entities:
         if entity.material_kind == "conductor" and entity.host_void_semantic_id:
             host = entities_by_id.get(entity.host_void_semantic_id)
-            if host is None or not _is_solution_entity(host):
+            if host is None or not is_solution_entity(host):
                 errors.append(
                     f"{entity.semantic_id} host_void_semantic_id must resolve a solution_region"
                 )
         if entity.part_role != "contact_pad":
             continue
         try:
-            _resolve_contact_pad_attachment(
+            resolve_contact_pad_attachment(
                 entity,
                 build_input.entities,
                 defer_overlap=bool(
@@ -161,9 +161,9 @@ def validate_geometry_input(build_input: GeometryBuildInput) -> GeometryBuildInp
                 )
             else:
                 host_entity = entities_by_id[overlap.host_semantic_id]
-                host_is_solver_geometry = not _is_solution_entity(
+                host_is_solver_geometry = not is_solution_entity(
                     host_entity
-                ) and _requires_route_representation(host_entity)
+                ) and requires_route_representation(host_entity)
                 if not host_is_solver_geometry:
                     errors.append(
                         f"{overlap.overlap_id} host {overlap.host_semantic_id} "
@@ -183,7 +183,7 @@ def validate_geometry_input(build_input: GeometryBuildInput) -> GeometryBuildInp
             if len(overlap.overlap_loop) < 3:
                 errors.append(f"{overlap.overlap_id} overlap_loop requires 3 points")
 
-    if not any(_is_vacuum_solution_entity(entity) for entity in build_input.entities):
+    if not any(is_vacuum_solution_entity(entity) for entity in build_input.entities):
         errors.append("GeometryBuildInput requires a vacuum solution_region")
 
     if errors:

@@ -10,8 +10,8 @@ from geometry_grid_fixtures import GRID, rectangle, ring_area
 from test_rectangular_junction_geometry import fixture as junction_fixture
 
 from scgsim.geometry import with_rectangular_junctions
-from scgsim.geometry._primitives.grid import GridOperand, build_grid_arrangement
 from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
+from scgsim.geometry.primitives.grid import GridOperand, build_grid_arrangement
 from scgsim.geometry.source.grid import apply_geometry_grid
 
 
@@ -79,8 +79,8 @@ def test_declared_ground_hole_is_audited_before_quantized_source_output(
     """Verify that declared ground hole is audited before quantized source output."""
     import gdstk  # noqa: PLC0415 -- optional GDS dependency is needed only by this adapter test
 
-    from scgsim.geometry._primitives.grid import geometry_grid_scope  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
-    from scgsim.geometry.source.ground import _derived_ground_polygons  # noqa: PLC0415 -- keep this test-specific dependency scoped to its contract test
+    from scgsim.geometry.primitives.grid import geometry_grid_scope  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.source.ground import derived_ground_polygons  # noqa: PLC0415 -- keep this test-specific dependency scoped to its contract test
 
     build, _ = junction_fixture()
     ground = replace(
@@ -100,9 +100,9 @@ def test_declared_ground_hole_is_audited_before_quantized_source_output(
             with pytest.raises(
                 ValueError, match="declared physical source component/hole topology"
             ):
-                _derived_ground_polygons(ground, **arguments)
+                derived_ground_polygons(ground, **arguments)
         else:
-            result = _derived_ground_polygons(ground, **arguments)
+            result = derived_ground_polygons(ground, **arguments)
             assert len(result) == 1 and len(result[0].holes) == 1
 
 
@@ -211,11 +211,11 @@ def test_mixed_intermediate_chain_preserves_area_and_auxiliary_residue():
         for p in ring
     }
 
-    from scgsim.geometry._primitives.grid import _account_zero_area, _subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.primitives.grid import account_zero_area, subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     shapes = {v.operand_id: Polygon(v.exterior, v.holes) for v in operands}
-    subdivision = _subdivide_grid(operands, shapes, 1)
-    accounting = _account_zero_area(subdivision.residues, subdivision.cells, 1)
+    subdivision = subdivide_grid(operands, shapes, 1)
+    accounting = account_zero_area(subdivision.residues, subdivision.cells, 1)
     assert sum(r.geometry.length for r in accounting.auxiliary) == 2
     assert all(r.operand_ids == ("cutoff",) for r in accounting.auxiliary)
     assert {tuple(p) for r in accounting.auxiliary for p in r.geometry.coords} == {
@@ -228,7 +228,7 @@ def test_zero_area_contact_sideband_nodes_faces_without_orphan_edges():
     """Verify that zero area contact sideband nodes faces without orphan edges."""
     from shapely import Polygon  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry._primitives.grid import _account_zero_area, _subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.primitives.grid import account_zero_area, subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     operands = (
         GridOperand("A", rectangle(0, 0, 4, 4)),
@@ -243,8 +243,8 @@ def test_zero_area_contact_sideband_nodes_faces_without_orphan_edges():
     }
     assert {(4, 1), (4, 3), (6, 3)} <= set(result.vertices)
     shapes = {v.operand_id: Polygon(v.exterior, v.holes) for v in operands}
-    subdivision = _subdivide_grid(operands, shapes, 1)
-    accounting = _account_zero_area(subdivision.residues, subdivision.cells, 1)
+    subdivision = subdivide_grid(operands, shapes, 1)
+    accounting = account_zero_area(subdivision.residues, subdivision.cells, 1)
     assert not accounting.auxiliary
     assert any(
         r.geometry.geom_type == "LineString" and r.geometry.length == 2
@@ -275,11 +275,11 @@ def test_overlay_native_error_retains_coordinate_free_boundary_context():
     from shapely import Polygon  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
     from shapely.errors import GEOSException  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry._primitives.grid import _overlay_call  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.primitives.grid import overlay_call  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     invalid = Polygon(((0, 0), (2, 2), (0, 2), (2, 0)))
     with pytest.raises(GEOSException) as caught:
-        _overlay_call("intersection", invalid, invalid, 1, 0, None)
+        overlay_call("intersection", invalid, invalid, 1, 0, None)
     import json  # noqa: PLC0415 -- keep this test-specific dependency scoped to its contract test
 
     note = next(
@@ -333,7 +333,7 @@ def test_realized_envelope_candidates_keep_snapped_touching_support():
     """Verify that realized envelope candidates keep snapped touching support."""
     from shapely import Polygon  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry._primitives.grid import _account_zero_area, _subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.primitives.grid import account_zero_area, subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     operands = (
         GridOperand("A", rectangle(0, 0, 1.4, 2), contact=False),
@@ -346,8 +346,8 @@ def test_realized_envelope_candidates_keep_snapped_touching_support():
     }
     assert {(1, 0), (1, 2)} <= set(result.vertices)
     shapes = {value.operand_id: Polygon(value.exterior) for value in operands}
-    subdivision = _subdivide_grid(operands, shapes, 1)
-    accounting = _account_zero_area(subdivision.residues, subdivision.cells, 1)
+    subdivision = subdivide_grid(operands, shapes, 1)
+    accounting = account_zero_area(subdivision.residues, subdivision.cells, 1)
     assert any(
         residue.geometry.length == 2 and residue.operand_ids == ("A", "B")
         for residue in accounting.boundary
@@ -358,19 +358,19 @@ def test_area_minus_line_keeps_hole_and_all_contact_nodes():
     """Verify that area minus line keeps hole and all contact nodes."""
     from shapely import LineString, Point, Polygon  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry._primitives.grid import (  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
-        _OverlayParts,
-        _parts_overlay,
-        _regions,
+    from scgsim.geometry.primitives.grid import (  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+        OverlayParts,
+        parts_overlay,
+        regions,
     )
 
     area = Polygon(rectangle(0, 0, 8, 8), (rectangle(2, 2, 6, 6),))
     line = LineString(((-1, 4), (9, 4)))
-    left, right = _OverlayParts((area,)), _OverlayParts((line,))
-    remaining = _parts_overlay("difference", left, right, 1, 0, 0)
+    left, right = OverlayParts((area,)), OverlayParts((line,))
+    remaining = parts_overlay("difference", left, right, 1, 0, 0)
     assert remaining.geometries == (area,)
     assert remaining.geometries[0] is area
-    contact = _parts_overlay("intersection", left, right, 1, 0, 0)
+    contact = parts_overlay("intersection", left, right, 1, 0, 0)
     nodes = tuple(
         tuple(point)
         for geometry in contact.geometries
@@ -379,19 +379,19 @@ def test_area_minus_line_keeps_hole_and_all_contact_nodes():
         )
         for point in part.coords
     )
-    outer, holes = _regions(area, nodes, 1)[0]
+    outer, holes = regions(area, nodes, 1)[0]
     assert {(0, 4), (8, 4)} <= set(outer)
     assert {(2, 4), (6, 4)} <= set(holes[0])
     assert Polygon(outer, holes).area == 48
     # A genuine line/line difference must still split at the exact crossing.
-    split = _parts_overlay(
-        "difference", right, _OverlayParts((LineString(((4, 0), (4, 8))),)), 1, 0, 0
+    split = parts_overlay(
+        "difference", right, OverlayParts((LineString(((4, 0), (4, 8))),)), 1, 0, 0
     )
     assert len(split.geometries) == 1
     assert split.geometries[0].geom_type == "MultiLineString"
     assert len(split.geometries[0].geoms) == 2
     assert (
-        _parts_overlay("intersection", right, _OverlayParts((Point(4, 4),)), 1, 0, 0)
+        parts_overlay("intersection", right, OverlayParts((Point(4, 4),)), 1, 0, 0)
         .geometries[0]
         .equals(Point(4, 4))
     )
@@ -401,14 +401,14 @@ def test_zero_area_dedup_keeps_labels_and_retained_collinear_vertices():
     """Verify that zero area dedup keeps labels and retained collinear vertices."""
     from shapely import LineString  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry._primitives.grid import _deduplicate_residues, _ZeroAreaResidue  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.primitives.grid import ZeroAreaResidue, deduplicate_residues  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     line = LineString(((0, 0), (1, 0), (2, 0)))
-    first = _ZeroAreaResidue(line, ("A",))
-    duplicate = _ZeroAreaResidue(LineString(tuple(reversed(line.coords))), ("A",))
-    other_label = _ZeroAreaResidue(line, ("B",))
-    other_nodes = _ZeroAreaResidue(LineString(((0, 0), (2, 0))), ("A",))
-    result = _deduplicate_residues((first, duplicate, other_label, other_nodes))
+    first = ZeroAreaResidue(line, ("A",))
+    duplicate = ZeroAreaResidue(LineString(tuple(reversed(line.coords))), ("A",))
+    other_label = ZeroAreaResidue(line, ("B",))
+    other_nodes = ZeroAreaResidue(LineString(((0, 0), (2, 0))), ("A",))
+    result = deduplicate_residues((first, duplicate, other_label, other_nodes))
     assert result == (first, other_label, other_nodes)
     assert result[0] is first
     assert tuple(result[0].geometry.coords) == ((0, 0), (1, 0), (2, 0))
@@ -485,7 +485,7 @@ def test_crossing_cut_partition_conserves_parent_at_each_union_stage():
     """Verify that crossing cut partition conserves parent at each union stage."""
     from shapely import Polygon, intersection, union_all  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry._primitives.grid import _subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.primitives.grid import subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     # Public coarse lattice makes snapping visible; no study geometry/values.
     context = GeometryGridContext(1)
@@ -498,7 +498,7 @@ def test_crossing_cut_partition_conserves_parent_at_each_union_stage():
     shapes = {
         value.operand_id: Polygon(value.exterior, value.holes) for value in operands
     }
-    subdivision = _subdivide_grid(operands, shapes, 1)
+    subdivision = subdivide_grid(operands, shapes, 1)
     selected = [cell for cell, labels in subdivision.cells if "parent" in labels]
     raw = shapes["parent"]
     self_realized = intersection(raw, raw, grid_size=1)
@@ -528,55 +528,55 @@ def test_crossing_cut_partition_conserves_parent_at_each_union_stage():
 @pytest.mark.parametrize("workers", (1, 2))
 def test_source_recipe_map_isolates_context_and_merges_audits_in_source_order(workers):
     """Verify that source recipe map isolates context and merges audits in source order."""
-    from scgsim.geometry._primitives.grid import (  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
-        _SOURCE_AUDITS,
-        _SOURCE_INTENT,
-        _frame_point,
-        _source_recipe_map,
+    from scgsim.geometry.primitives.grid import (  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+        SOURCE_AUDITS,
+        SOURCE_INTENT,
         current_grid_context,
+        frame_point,
         geometry_grid_scope,
         polygon_world_frame,
         source_grid_audits,
+        source_recipe_map,
     )
     from scgsim.preparation import preparation_resources  # noqa: PLC0415 -- keep resource-scope imports scoped to the test that exercises them
 
     with geometry_grid_scope(GRID), polygon_world_frame((1, 0, 0, 1, 3, 4)):
-        parent = _SOURCE_AUDITS.get()
+        parent = SOURCE_AUDITS.get()
         parent.append({"seed": 0})
-        intent = _SOURCE_INTENT.set(True)
+        intent = SOURCE_INTENT.set(True)
         try:
 
             def recipe(index):
-                local = _SOURCE_AUDITS.get()
+                local = SOURCE_AUDITS.get()
                 assert local is not parent
                 assert local == []
                 assert current_grid_context() == GRID
-                assert _SOURCE_INTENT.get() is True
-                assert _frame_point((0, 0)) == (3, 4)
+                assert SOURCE_INTENT.get() is True
+                assert frame_point((0, 0)) == (3, 4)
                 local.extend(({"seed": 0}, {"recipe": index}))
                 assert parent == [{"seed": 0}]
                 return index * 2
 
             with preparation_resources(max_workers=workers):
-                assert _source_recipe_map(recipe, (2, 0, 1)) == [4, 0, 2]
+                assert source_recipe_map(recipe, (2, 0, 1)) == [4, 0, 2]
             assert source_grid_audits() == (
                 {"seed": 0},
                 {"recipe": 2},
                 {"recipe": 0},
                 {"recipe": 1},
             )
-            assert _SOURCE_AUDITS.get() is parent
+            assert SOURCE_AUDITS.get() is parent
         finally:
-            _SOURCE_INTENT.reset(intent)
-    assert _SOURCE_AUDITS.get() is None
+            SOURCE_INTENT.reset(intent)
+    assert SOURCE_AUDITS.get() is None
 
     def disabled(index):
-        assert _SOURCE_AUDITS.get() is None
+        assert SOURCE_AUDITS.get() is None
         return index
 
     with preparation_resources(max_workers=workers):
-        assert _source_recipe_map(disabled, (1, 2)) == [1, 2]
-    assert _SOURCE_AUDITS.get() is None
+        assert source_recipe_map(disabled, (1, 2)) == [1, 2]
+    assert SOURCE_AUDITS.get() is None
 
 
 @pytest.mark.parametrize("workers", (1, 2))
@@ -584,20 +584,20 @@ def test_source_recipe_map_preserves_first_error_and_audit_prefix_then_cleans_up
     workers,
 ):
     """Verify that source recipe map preserves first error and audit prefix then cleans up."""
-    from scgsim.geometry._primitives.grid import (  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
-        _SOURCE_AUDITS,
-        _source_recipe_map,
+    from scgsim.geometry.primitives.grid import (  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+        SOURCE_AUDITS,
         geometry_grid_scope,
         source_grid_audits,
+        source_recipe_map,
     )
     from scgsim.preparation import preparation_resources  # noqa: PLC0415 -- keep resource-scope imports scoped to the test that exercises them
 
     first, later = ValueError("first recipe"), ValueError("later recipe")
     with geometry_grid_scope(GRID):
-        parent = _SOURCE_AUDITS.get()
+        parent = SOURCE_AUDITS.get()
 
         def recipe(index):
-            _SOURCE_AUDITS.get().append({"recipe": index})
+            SOURCE_AUDITS.get().append({"recipe": index})
             assert parent == []
             if index == 1:
                 raise first
@@ -607,45 +607,45 @@ def test_source_recipe_map_preserves_first_error_and_audit_prefix_then_cleans_up
 
         with preparation_resources(max_workers=workers):
             with pytest.raises(ValueError) as caught:
-                _source_recipe_map(recipe, (0, 1, 2))
+                source_recipe_map(recipe, (0, 1, 2))
             assert caught.value is first
             assert source_grid_audits() == ({"recipe": 0}, {"recipe": 1})
-            assert _SOURCE_AUDITS.get() is parent
+            assert SOURCE_AUDITS.get() is parent
 
             def clean(index):
-                assert _SOURCE_AUDITS.get() == []
+                assert SOURCE_AUDITS.get() == []
                 return index
 
-            assert _source_recipe_map(clean, (3, 4)) == [3, 4]
+            assert source_recipe_map(clean, (3, 4)) == [3, 4]
             assert source_grid_audits() == ({"recipe": 0}, {"recipe": 1})
-    assert _SOURCE_AUDITS.get() is None
+    assert SOURCE_AUDITS.get() is None
 
 
 def test_realized_grid_nodes_use_one_coordinate_per_integer_key():
     """Verify that realized grid nodes use one coordinate per integer key."""
     from shapely import Polygon  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry._primitives.grid import _region_key, _regions  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.primitives.grid import region_key, regions  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     grid = 0.1
     endpoint = (3 * grid, 3 * grid)
     same_key = (3 / 10, 3 / 10)
     assert endpoint != same_key
-    assert _region_key(endpoint, grid) == _region_key(same_key, grid)
+    assert region_key(endpoint, grid) == region_key(same_key, grid)
     triangle = Polygon(((0, 0), endpoint, (0, 1)))
-    realized = _regions(triangle, (same_key, endpoint), grid)[0][0]
-    keys = tuple(_region_key(point, grid) for point in realized)
+    realized = regions(triangle, (same_key, endpoint), grid)[0][0]
+    keys = tuple(region_key(point, grid) for point in realized)
     assert len(keys) == len(set(keys)) == 3
     assert realized == ((0, 0), same_key, (0, 1))
     assert Polygon(realized).equals(Polygon(((0, 0), same_key, (0, 1))))
     assert tuple(triangle.exterior.coords)[1] == endpoint
-    assert _regions(Polygon(realized), (same_key, endpoint), grid)[0][0] == realized
+    assert regions(Polygon(realized), (same_key, endpoint), grid)[0][0] == realized
     # The same distinction remains real in an ungridded parent plane; its
     # original coordinates are not rounded by this layout-node identity rule.
-    untouched = _regions(triangle, (), None)[0][0]
+    untouched = regions(triangle, (), None)[0][0]
     assert untouched == ((0, 0), endpoint, (0, 1))
     separate_triangle = Polygon(((0, 0), same_key, (0, 1)))
-    assert _regions(separate_triangle, (), None)[0][0][1] == same_key
+    assert regions(separate_triangle, (), None)[0][0][1] == same_key
 
 
 def test_candidate_pairs_parallelize_real_work_with_identical_subdivision_and_graph():
@@ -653,14 +653,14 @@ def test_candidate_pairs_parallelize_real_work_with_identical_subdivision_and_gr
 
     from shapely import Polygon  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry._primitives.grid import _cell_overlay_chunk, _subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.geometry.primitives.grid import cell_overlay_chunk, subdivide_grid  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
     from scgsim.preparation import preparation_resources  # noqa: PLC0415 -- keep resource-scope imports scoped to the test that exercises them
 
     values = mixed_bridge_operands()
     shapes = {
         value.operand_id: Polygon(value.exterior, value.holes) for value in values
     }
-    serial = _subdivide_grid(values, shapes, 1)
+    serial = subdivide_grid(values, shapes, 1)
     serial_graph = build_grid_arrangement(values, GeometryGridContext(1))
     main_thread = threading.get_ident()
     seen = set()
@@ -668,14 +668,14 @@ def test_candidate_pairs_parallelize_real_work_with_identical_subdivision_and_gr
     old_profile = threading.getprofile()
 
     def observe(frame, event, arg):
-        if event == "call" and frame.f_code is _cell_overlay_chunk.__code__:
+        if event == "call" and frame.f_code is cell_overlay_chunk.__code__:
             with lock:
                 seen.add(threading.get_ident())
 
     threading.setprofile(observe)
     try:
         with preparation_resources(max_workers=2):
-            parallel = _subdivide_grid(values, shapes, 1)
+            parallel = subdivide_grid(values, shapes, 1)
             parallel_graph = build_grid_arrangement(values, GeometryGridContext(1))
     finally:
         threading.setprofile(old_profile)
@@ -695,19 +695,19 @@ def test_candidate_pair_chunks_retain_real_geos_failures_at_original_ordinals():
     from shapely import Polygon  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
     from shapely.errors import GEOSException  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them
 
-    from scgsim.geometry._primitives.grid import _cell_overlay_chunk, _OverlayParts  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
-    from scgsim.preparation import _ordered_map, preparation_resources  # noqa: PLC0415 -- keep resource-scope imports scoped to the test that exercises them
+    from scgsim.geometry.primitives.grid import OverlayParts, cell_overlay_chunk  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
+    from scgsim.preparation import ordered_map, preparation_resources  # noqa: PLC0415 -- keep resource-scope imports scoped to the test that exercises them
 
     invalid = Polygon(((0, 0), (2, 2), (0, 2), (2, 0)))
     valid = Polygon(rectangle(0, 0, 4, 4))
-    operand = _OverlayParts((valid,))
+    operand = OverlayParts((valid,))
     work = (
         (((3, invalid), (4, valid)), operand, 1, 7),
         (((5, invalid),), operand, 1, 7),
     )
-    serial = [_cell_overlay_chunk(chunk) for chunk in work]
+    serial = [cell_overlay_chunk(chunk) for chunk in work]
     with preparation_resources(max_workers=2):
-        parallel = _ordered_map(_cell_overlay_chunk, work)
+        parallel = ordered_map(cell_overlay_chunk, work)
     for expected_chunk, actual_chunk in zip(serial, parallel, strict=True):
         assert [index for index, _ in actual_chunk] == [
             index for index, _ in expected_chunk

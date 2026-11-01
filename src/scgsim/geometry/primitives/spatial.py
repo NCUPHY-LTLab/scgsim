@@ -6,12 +6,12 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 # Geometry-reference values remain open source metadata at this boundary.
-from scgsim.geometry._primitives.constants import (
-    _TOPOLOGY_EPS_UM,
+from scgsim.geometry.primitives.constants import (
+    TOPOLOGY_EPS_UM,
 )
 
 
-def _geometry_ref_surface_z_um(geometry_ref: Mapping[str, Any]) -> float:
+def geometry_ref_surface_z_um(geometry_ref: Mapping[str, Any]) -> float:
     """Resolve the surface plane from shell, explicit plane, or base Z data."""
     z_min_um = float(geometry_ref.get("z_min_um", geometry_ref.get("z_um", 0.0)))
     shell_part = geometry_ref.get("shell_part")
@@ -28,7 +28,7 @@ def _geometry_ref_surface_z_um(geometry_ref: Mapping[str, Any]) -> float:
     return z_min_um
 
 
-def _coordinate_key(
+def coordinate_key(
     coordinate: tuple[float, float, float],
 ) -> tuple[float, float, float]:
     """Round a 3D point to the established nine-decimal identity key."""
@@ -39,25 +39,25 @@ def _coordinate_key(
     )
 
 
-def _bounds_overlap(
+def bounds_overlap(
     first: Mapping[str, float],
     second: Mapping[str, float],
 ) -> bool:
     """Return whether two XY bounds overlap beyond the topology tolerance."""
     return not (
-        float(first["x_max_um"]) <= float(second["x_min_um"]) + _TOPOLOGY_EPS_UM
-        or float(second["x_max_um"]) <= float(first["x_min_um"]) + _TOPOLOGY_EPS_UM
-        or float(first["y_max_um"]) <= float(second["y_min_um"]) + _TOPOLOGY_EPS_UM
-        or float(second["y_max_um"]) <= float(first["y_min_um"]) + _TOPOLOGY_EPS_UM
+        float(first["x_max_um"]) <= float(second["x_min_um"]) + TOPOLOGY_EPS_UM
+        or float(second["x_max_um"]) <= float(first["x_min_um"]) + TOPOLOGY_EPS_UM
+        or float(first["y_max_um"]) <= float(second["y_min_um"]) + TOPOLOGY_EPS_UM
+        or float(second["y_max_um"]) <= float(first["y_min_um"]) + TOPOLOGY_EPS_UM
     )
 
 
-def _z_key(value_um: float) -> float:
+def coordinate_z_key(value_um: float) -> float:
     """Round a Z coordinate to the established nine-decimal identity key."""
     return round(float(value_um), 9)
 
 
-def _interpolate_2d(
+def interpolate_2d(
     start: tuple[float, float],
     end: tuple[float, float],
     parameter: float,
@@ -69,7 +69,7 @@ def _interpolate_2d(
     )
 
 
-def _vector_subtract(
+def vector_subtract(
     left: tuple[float, float, float],
     right: tuple[float, float, float],
 ) -> tuple[float, float, float]:
@@ -81,7 +81,7 @@ def _vector_subtract(
     )
 
 
-def _vector_cross(
+def vector_cross(
     left: tuple[float, float, float],
     right: tuple[float, float, float],
 ) -> tuple[float, float, float]:
@@ -93,17 +93,17 @@ def _vector_cross(
     )
 
 
-def _undirected_xy_edge(
+def undirected_xy_edge(
     start: Sequence[float], end: Sequence[float]
 ) -> tuple[tuple[float, float], tuple[float, float]]:
     """Return rounded edge endpoints in direction-independent order."""
-    first = _coordinate_2d_key((float(start[0]), float(start[1])))
-    second = _coordinate_2d_key((float(end[0]), float(end[1])))
+    first = coordinate_2d_key((float(start[0]), float(start[1])))
+    second = coordinate_2d_key((float(end[0]), float(end[1])))
     ordered = sorted((first, second))
     return ordered[0], ordered[1]
 
 
-def _intersect_bounds(
+def intersect_bounds(
     first: Mapping[str, Any],
     second: Mapping[str, Any],
 ) -> dict[str, float] | None:
@@ -122,7 +122,7 @@ def _intersect_bounds(
     return bounds
 
 
-def _bounds_contains_point(
+def bounds_contains_point(
     bounds: Mapping[str, Any],
     point: tuple[float, float],
 ) -> bool:
@@ -133,12 +133,12 @@ def _bounds_contains_point(
     ) <= y <= float(bounds["y_max_um"])
 
 
-def _same_z(left: float, right: float) -> bool:
+def same_coordinate_z(left: float, right: float) -> bool:
     """Compare Z coordinates using the shared topology tolerance."""
-    return abs(left - right) <= _TOPOLOGY_EPS_UM
+    return abs(left - right) <= TOPOLOGY_EPS_UM
 
 
-def _segment_overlap_interval(
+def segment_overlap_interval(
     start: tuple[float, float],
     end: tuple[float, float],
     other_start: tuple[float, float],
@@ -163,12 +163,12 @@ def _segment_overlap_interval(
         return None
     overlap_start = max(0.0, min(first, second))
     overlap_end = min(1.0, max(first, second))
-    if overlap_end - overlap_start <= _TOPOLOGY_EPS_UM:
+    if overlap_end - overlap_start <= TOPOLOGY_EPS_UM:
         return None
     return overlap_start, overlap_end
 
 
-def _line_key_2d(
+def line_key_2d(
     start: tuple[float, float],
     end: tuple[float, float],
 ) -> tuple[tuple[float, float], float] | None:
@@ -196,7 +196,7 @@ def _line_key_2d(
     return unit, offset
 
 
-def _interval_complement(
+def interval_complement(
     intervals: Sequence[tuple[float, float]],
 ) -> tuple[tuple[float, float], ...]:
     """Return uncovered unit-interval spans after clipping and merging inputs."""
@@ -204,24 +204,24 @@ def _interval_complement(
     for start, end in sorted(intervals):
         start = max(0.0, min(1.0, start))
         end = max(0.0, min(1.0, end))
-        if end - start <= _TOPOLOGY_EPS_UM:
+        if end - start <= TOPOLOGY_EPS_UM:
             continue
-        if not merged or start > merged[-1][1] + _TOPOLOGY_EPS_UM:
+        if not merged or start > merged[-1][1] + TOPOLOGY_EPS_UM:
             merged.append((start, end))
         else:
             merged[-1] = (merged[-1][0], max(merged[-1][1], end))
     exposed: list[tuple[float, float]] = []
     cursor = 0.0
     for start, end in merged:
-        if start - cursor > _TOPOLOGY_EPS_UM:
+        if start - cursor > TOPOLOGY_EPS_UM:
             exposed.append((cursor, start))
         cursor = max(cursor, end)
-    if 1.0 - cursor > _TOPOLOGY_EPS_UM:
+    if 1.0 - cursor > TOPOLOGY_EPS_UM:
         exposed.append((cursor, 1.0))
     return tuple(exposed)
 
 
-def _interpolate_3d(
+def interpolate_3d(
     start: tuple[float, float, float],
     end: tuple[float, float, float],
     parameter: float,
@@ -234,18 +234,18 @@ def _interpolate_3d(
     )
 
 
-def _range_within_bounds(
+def range_within_bounds(
     start: float,
     end: float,
     lower: float,
     upper: float,
 ) -> bool:
     """Return whether a scalar segment lies within bounds plus tolerance."""
-    return lower - _TOPOLOGY_EPS_UM <= min(start, end) and max(start, end) <= (
-        upper + _TOPOLOGY_EPS_UM
+    return lower - TOPOLOGY_EPS_UM <= min(start, end) and max(start, end) <= (
+        upper + TOPOLOGY_EPS_UM
     )
 
 
-def _coordinate_2d_key(point: tuple[float, float]) -> tuple[float, float]:
+def coordinate_2d_key(point: tuple[float, float]) -> tuple[float, float]:
     """Round an XY point to the established nine-decimal identity key."""
     return (round(float(point[0]), 9), round(float(point[1]), 9))

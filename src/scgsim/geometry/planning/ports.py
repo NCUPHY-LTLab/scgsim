@@ -7,35 +7,6 @@ from dataclasses import replace
 from math import isfinite, sqrt
 from typing import Any
 
-from scgsim.geometry._primitives.constants import _TOPOLOGY_EPS_UM
-from scgsim.geometry._primitives.entities import (
-    _component_metadata,
-    _entity_z_range_um,
-    _unique_ids,
-)
-from scgsim.geometry._primitives.entity_validation import (
-    _is_solution_entity,
-    _is_vacuum_solution_entity,
-)
-from scgsim.geometry._primitives.grid import boolean_polygon_region
-from scgsim.geometry._primitives.loops import (
-    _gdstk_surface_region,
-    _geometry_refs_from_gdstk_region,
-    _loops_share_edge_overlap,
-)
-from scgsim.geometry._primitives.planar_loops import (
-    clean_loop,
-    polygon_area,
-    ring_edges,
-)
-from scgsim.geometry._primitives.port_contract import (
-    _route_b_port_sheet_binding_matches,
-)
-from scgsim.geometry._primitives.spatial import (
-    _geometry_ref_surface_z_um,
-    _same_z,
-    _segment_overlap_interval,
-)
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.regions import PortSheetRegionRecord
@@ -48,12 +19,41 @@ from scgsim.geometry.models.topology import (
     SurfacePlanRecord,
     VolumePlanRecord,
 )
-from scgsim.geometry.planning.domain import _solution_entity_xy_region
+from scgsim.geometry.planning.domain import solution_entity_xy_region
 from scgsim.geometry.planning.representation import planned_conductor_representation
-from scgsim.geometry.planning.topology import _surface_owner_ids
+from scgsim.geometry.planning.topology import surface_owner_ids
+from scgsim.geometry.primitives.constants import TOPOLOGY_EPS_UM
+from scgsim.geometry.primitives.entities import (
+    component_metadata,
+    entity_z_range_um,
+    unique_ids,
+)
+from scgsim.geometry.primitives.entity_validation import (
+    is_solution_entity,
+    is_vacuum_solution_entity,
+)
+from scgsim.geometry.primitives.grid import boolean_polygon_region
+from scgsim.geometry.primitives.loops import (
+    gdstk_surface_region,
+    geometry_refs_from_gdstk_region,
+    loops_share_edge_overlap,
+)
+from scgsim.geometry.primitives.planar_loops import (
+    clean_loop,
+    polygon_area,
+    ring_edges,
+)
+from scgsim.geometry.primitives.port_contract import (
+    route_b_port_sheet_binding_matches,
+)
+from scgsim.geometry.primitives.spatial import (
+    geometry_ref_surface_z_um,
+    same_coordinate_z,
+    segment_overlap_interval,
+)
 
 
-def _lower_port_sheet_regions(
+def lower_port_sheet_regions(
     build_input: GeometryBuildInput,
     *,
     route: RouteLiteral,
@@ -66,7 +66,7 @@ def _lower_port_sheet_regions(
     polygons = {polygon.polygon_id: polygon for polygon in build_input.polygons}
     component_by_entity = {
         entity_id: str(component["conductor_component_id"])
-        for component in _component_metadata(mm_contacts)
+        for component in component_metadata(mm_contacts)
         for entity_id in component["members"]
     }
     records: list[SurfacePlanRecord] = list(planned_surfaces)
@@ -90,7 +90,7 @@ def _lower_port_sheet_regions(
             raise ValueError(
                 f"{region.port_sheet_id} requires exactly two host overlap records"
             )
-        host_ids = _unique_ids(overlap.host_semantic_id for overlap in region.overlaps)
+        host_ids = unique_ids(overlap.host_semantic_id for overlap in region.overlaps)
         if len(host_ids) != 2:
             raise ValueError(
                 f"{region.port_sheet_id} requires one overlap per distinct "
@@ -105,7 +105,8 @@ def _lower_port_sheet_regions(
             or not _port_sheet_target_layer_matches(host, target_layer)
             or planned_conductor_representation(
                 host, route=route, context=representation_context
-            ) != {"A": "surface_sheet", "B": "cutout_boundary_shell"}[route]
+            )
+            != {"A": "surface_sheet", "B": "cutout_boundary_shell"}[route]
             for host in host_entities
         ):
             raise ValueError(
@@ -115,7 +116,7 @@ def _lower_port_sheet_regions(
         z_values = tuple(
             float(host.geometry.get("z_um", float("nan"))) for host in host_entities
         )
-        if not all(isfinite(value) for value in z_values) or not _same_z(
+        if not all(isfinite(value) for value in z_values) or not same_coordinate_z(
             z_values[0], z_values[1]
         ):
             raise ValueError(
@@ -130,7 +131,7 @@ def _lower_port_sheet_regions(
             if (
                 not all(isfinite(value) for value in thickness_values)
                 or any(value <= 0.0 for value in thickness_values)
-                or not _same_z(thickness_values[0], thickness_values[1])
+                or not same_coordinate_z(thickness_values[0], thickness_values[1])
             ):
                 raise ValueError(
                     f"{region.port_sheet_id} Route B hosts require the same "
@@ -141,7 +142,7 @@ def _lower_port_sheet_regions(
             any(not host_void_id for host_void_id in host_void_ids)
             or len(set(host_void_ids)) != 1
             or host_void_ids[0] not in entities
-            or not _is_solution_entity(entities[str(host_void_ids[0])])
+            or not is_solution_entity(entities[str(host_void_ids[0])])
         ):
             raise ValueError(
                 f"{region.port_sheet_id} hosts require one common host_void solution"
@@ -156,23 +157,40 @@ def _lower_port_sheet_regions(
             contact_loops = tuple(overlap.overlap_loop for overlap in region.overlaps)
         else:
             partition = build_input.metadata["junction_partitions"][rectangle_id]
-            central = next(polygon for polygon in build_input.polygons
-                           if polygon.polygon_id == partition["central_polygon_id"])
+            central = next(
+                polygon
+                for polygon in build_input.polygons
+                if polygon.polygon_id == partition["central_polygon_id"]
+            )
             if region.exterior != central.exterior or region.holes != central.holes:
-                raise ValueError("rectangular port differs from its derived central rectangle")
+                raise ValueError(
+                    "rectangular port differs from its derived central rectangle"
+                )
             remainder = {"outer_loop": central.exterior, "hole_loops": central.holes}
             contact_loops = tuple(
-                loop for host in hosts
-                for loop in (host.geometry["outer_loop"], *host.geometry.get("hole_loops", ()))
+                loop
+                for host in hosts
+                for loop in (
+                    host.geometry["outer_loop"],
+                    *host.geometry.get("hole_loops", ()),
+                )
             )
         if rectangle_id is None:
-            contacting = all(_port_sheet_boundary_shares_segment(remainder, loop)
-                             for loop in contact_loops)
-        else:
-            contacting = all(any(
+            contacting = all(
                 _port_sheet_boundary_shares_segment(remainder, loop)
-                for loop in (host.geometry["outer_loop"], *host.geometry.get("hole_loops", ()))
-            ) for host in hosts)
+                for loop in contact_loops
+            )
+        else:
+            contacting = all(
+                any(
+                    _port_sheet_boundary_shares_segment(remainder, loop)
+                    for loop in (
+                        host.geometry["outer_loop"],
+                        *host.geometry.get("hole_loops", ()),
+                    )
+                )
+                for host in hosts
+            )
         if not contacting:
             raise ValueError(
                 f"{region.port_sheet_id} active sheet must share a finite segment with each host"
@@ -229,7 +247,9 @@ def _lower_port_sheet_regions(
         if rectangle_id is not None:
             source_provenance = {
                 **source_provenance,
-                "rectangular_junction_binding": region.metadata["rectangular_junction_binding"],
+                "rectangular_junction_binding": region.metadata[
+                    "rectangular_junction_binding"
+                ],
                 "junction_partition": partition,
             }
         port_surface = SurfacePlanRecord(
@@ -289,7 +309,7 @@ def _lower_port_sheet_regions(
     return tuple(records)
 
 
-def _bind_route_b_port_volume_plans(
+def bind_route_b_port_volume_plans(
     build_input: GeometryBuildInput,
     surfaces: tuple[SurfacePlanRecord, ...],
     volumes: tuple[VolumePlanRecord, ...],
@@ -307,18 +327,18 @@ def _bind_route_b_port_volume_plans(
         if surface.surface_role != "lumped_port":
             result.append(surface)
             continue
-        z = _geometry_ref_surface_z_um(surface.geometry_ref)
-        remainder = _gdstk_surface_region(surface.geometry_ref)
+        z = geometry_ref_surface_z_um(surface.geometry_ref)
+        remainder = gdstk_surface_region(surface.geometry_ref)
         hosts = []
         for volume in volumes:
             entity = entities[volume.owner_semantic_id]
             if entity.material_kind != "vacuum":
                 continue
-            z_min, z_max = _entity_z_range_um(entity)
+            z_min, z_max = entity_z_range_um(entity)
             if not z_min < z < z_max:
                 continue
             if boolean_polygon_region(
-                gdstk, remainder, _solution_entity_xy_region(gdstk, entity), "and"
+                gdstk, remainder, solution_entity_xy_region(gdstk, entity), "and"
             ):
                 hosts.append(volume.volume_id)
         if not hosts:
@@ -342,14 +362,14 @@ def _partition_route_b_port_sheet_sidewalls(
     overlaps_by_host: Mapping[str, Any],
 ) -> list[SurfacePlanRecord]:
     """Split only the two overlap-bound Route-B PEC sidewalls at the port plane."""
-    port_z_um = _geometry_ref_surface_z_um(port_surface.geometry_ref)
+    port_z_um = geometry_ref_surface_z_um(port_surface.geometry_ref)
     terminal_segments_by_host = {
         host_id: tuple(
             (start, end)
             for boundary in (remainder["outer_loop"], *remainder["hole_loops"])
             for start, end in ring_edges(clean_loop(boundary))
             if any(
-                _segment_overlap_interval(start, end, overlap_start, overlap_end)
+                segment_overlap_interval(start, end, overlap_start, overlap_end)
                 is not None
                 for overlap_start, overlap_end in ring_edges(
                     clean_loop(overlap.overlap_loop)
@@ -387,7 +407,7 @@ def _partition_route_b_port_sheet_sidewalls(
             (float(point[0]), float(point[1]), float(point[2])) for point in points
         )
         if not any(
-            _segment_overlap_interval(quad[0][:2], quad[1][:2], start, end) is not None
+            segment_overlap_interval(quad[0][:2], quad[1][:2], start, end) is not None
             for start, end in terminal_segments_by_host[surface.owner_semantic_id]
         ):
             result.append(surface)
@@ -404,7 +424,9 @@ def _partition_route_b_port_sheet_sidewalls(
             "overlap_id": str(overlap.overlap_id),
             "host_semantic_id": surface.owner_semantic_id,
         }
-        if _same_z(port_z_um, z_min_um) or _same_z(port_z_um, z_max_um):
+        if same_coordinate_z(port_z_um, z_min_um) or same_coordinate_z(
+            port_z_um, z_max_um
+        ):
             if not surface.metadata.get("route_b_port_sheet_bindings"):
                 raise ValueError(
                     f"{port_surface.surface_id} requires an imprinted "
@@ -510,7 +532,7 @@ def _route_b_port_sheet_partition_metadata(
     }
 
 
-def _validate_route_b_port_sheet_sidewall_topology(
+def validate_route_b_port_sheet_sidewall_topology(
     *,
     route: RouteLiteral,
     points: Sequence[PointPlanRecord],
@@ -577,7 +599,7 @@ def _validate_route_b_port_sheet_sidewall_topology(
                         "sidewall_"
                     )
                     and candidate.metadata.get("route_b_port_sheet_sidewall_partition")
-                    and _route_b_port_sheet_binding_matches(
+                    and route_b_port_sheet_binding_matches(
                         candidate,
                         port_surface_id=port_surface.surface_id,
                         overlap_id=str(overlap["overlap_id"]),
@@ -615,7 +637,7 @@ def _route_b_port_terminal_curve_matches_overlap(
     if start is None or end is None:
         return False
     return any(
-        _segment_overlap_interval(start[:2], end[:2], overlap_start, overlap_end)
+        segment_overlap_interval(start[:2], end[:2], overlap_start, overlap_end)
         is not None
         for overlap_start, overlap_end in ring_edges(clean_loop(overlap_loop))
     )
@@ -648,7 +670,7 @@ def _route_a_port_sheet_sheet_contract(
             # single solution volume.  A layout junction sheet replaces the
             # actual two-volume face interface, never one of those caps.
             and surface.surface_role == "A_planned_interface"
-            and host_id in _surface_owner_ids(surface)
+            and host_id in surface_owner_ids(surface)
         )
         host_sheets = tuple(
             surface
@@ -656,7 +678,7 @@ def _route_a_port_sheet_sheet_contract(
             if boolean_polygon_region(
                 gdstk,
                 overlap_region,
-                _gdstk_surface_region(surface.geometry_ref),
+                gdstk_surface_region(surface.geometry_ref),
                 "and",
             )
         )
@@ -668,13 +690,13 @@ def _route_a_port_sheet_sheet_contract(
         if boolean_polygon_region(
             gdstk,
             overlap_region,
-            _gdstk_surface_region(host_sheets[0].geometry_ref),
+            gdstk_surface_region(host_sheets[0].geometry_ref),
             "not",
         ):
             raise ValueError(
                 f"{host_id} port overlap crosses incompatible Route A domains"
             )
-        plane_z_um = _geometry_ref_surface_z_um(host_sheets[0].geometry_ref)
+        plane_z_um = geometry_ref_surface_z_um(host_sheets[0].geometry_ref)
         if not isfinite(plane_z_um):
             raise ValueError(f"{host_id} Route A surface_sheet plane must be finite")
         host_planes.append(plane_z_um)
@@ -694,7 +716,7 @@ def _route_a_port_sheet_sheet_contract(
                 "Route A lumped-port hosts require common boundary volumes: "
                 f"{boundary_volume_ids!r} != {candidate_boundary_ids!r}"
             )
-    if not _same_z(host_planes[0], host_planes[1]):
+    if not same_coordinate_z(host_planes[0], host_planes[1]):
         raise ValueError("Route A lumped-port hosts require one common sheet plane")
     if boundary_volume_ids is None:
         raise ValueError("Route A lumped-port hosts require boundary volumes")
@@ -709,7 +731,7 @@ def _route_a_port_sheet_vacuum_volume_id(
     boundary_entities: list[SemanticEntitySpec] = []
     for volume_id in boundary_volume_ids:
         entity = entities.get(volume_id)
-        if entity is None or not _is_solution_entity(entity):
+        if entity is None or not is_solution_entity(entity):
             raise ValueError(
                 "Route A lumped-port boundary volumes must be typed solution regions"
             )
@@ -719,7 +741,7 @@ def _route_a_port_sheet_vacuum_volume_id(
         for volume_id, entity in zip(
             boundary_volume_ids, boundary_entities, strict=True
         )
-        if _is_vacuum_solution_entity(entity)
+        if is_vacuum_solution_entity(entity)
     )
     if len(vacuum_ids) != 1:
         raise ValueError(
@@ -737,21 +759,23 @@ def _carve_route_a_port_sheet_from_host_plane(
     """Replace the co-planar solution face under a Route-A port with its hole."""
     import gdstk
 
-    port_region = _gdstk_surface_region(port_surface.geometry_ref)
-    port_z_um = _geometry_ref_surface_z_um(port_surface.geometry_ref)
+    port_region = gdstk_surface_region(port_surface.geometry_ref)
+    port_z_um = geometry_ref_surface_z_um(port_surface.geometry_ref)
     result: list[SurfacePlanRecord] = []
     for surface in surfaces:
         if (
             surface.construction_only
             or surface.metadata.get("representation") == "surface_sheet"
             or "outer_loop" not in surface.geometry_ref
-            or not _same_z(_geometry_ref_surface_z_um(surface.geometry_ref), port_z_um)
+            or not same_coordinate_z(
+                geometry_ref_surface_z_um(surface.geometry_ref), port_z_um
+            )
         ):
             result.append(surface)
             continue
         overlap = boolean_polygon_region(
             gdstk,
-            _gdstk_surface_region(surface.geometry_ref),
+            gdstk_surface_region(surface.geometry_ref),
             port_region,
             "and",
         )
@@ -760,11 +784,11 @@ def _carve_route_a_port_sheet_from_host_plane(
             continue
         remainder = boolean_polygon_region(
             gdstk,
-            _gdstk_surface_region(surface.geometry_ref),
+            gdstk_surface_region(surface.geometry_ref),
             port_region,
             "not",
         )
-        refs = _geometry_refs_from_gdstk_region(surface.geometry_ref, remainder)
+        refs = geometry_refs_from_gdstk_region(surface.geometry_ref, remainder)
         parent_surface_id = surface.parent_surface_id or surface.surface_id
         for index, geometry_ref in enumerate(refs):
             result.append(
@@ -794,14 +818,14 @@ def _carve_route_a_port_sheet_from_host_plane(
 def _port_sheet_remainder_geometry(region: PortSheetRegionRecord) -> dict[str, Any]:
     import gdstk
 
-    authored = _gdstk_surface_region(
+    authored = gdstk_surface_region(
         {"outer_loop": region.exterior, "hole_loops": region.holes}
     )
     overlaps = tuple(
         gdstk.Polygon(clean_loop(overlap.overlap_loop)) for overlap in region.overlaps
     )
     remainder = boolean_polygon_region(gdstk, authored, overlaps, "not")
-    refs = _geometry_refs_from_gdstk_region(
+    refs = geometry_refs_from_gdstk_region(
         {"outer_loop": region.exterior, "hole_loops": region.holes}, remainder
     )
     if len(refs) != 1:
@@ -812,7 +836,7 @@ def _port_sheet_remainder_geometry(region: PortSheetRegionRecord) -> dict[str, A
     area = abs(polygon_area(clean_loop(result["outer_loop"]))) - sum(
         abs(polygon_area(clean_loop(hole))) for hole in result["hole_loops"]
     )
-    if not isfinite(area) or area <= _TOPOLOGY_EPS_UM:
+    if not isfinite(area) or area <= TOPOLOGY_EPS_UM:
         raise ValueError(f"{region.port_sheet_id} active remainder must be finite")
     return result
 
@@ -821,7 +845,7 @@ def _port_sheet_boundary_shares_segment(
     remainder: Mapping[str, Any], overlap_loop: Any
 ) -> bool:
     return any(
-        _loops_share_edge_overlap(boundary, overlap_loop)
+        loops_share_edge_overlap(boundary, overlap_loop)
         for boundary in (remainder["outer_loop"], *remainder["hole_loops"])
     )
 

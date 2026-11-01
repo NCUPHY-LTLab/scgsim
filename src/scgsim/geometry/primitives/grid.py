@@ -20,34 +20,42 @@ from typing import (
     cast,
 )
 
-from scgsim.diagnostics import (  # private-import: diagnostics owner retains its shared stage and progress entry points
-    _progress,
-    _stage,
+from scgsim.diagnostics import (
+    diagnostic_stage,
+    progress,
 )
-from scgsim.geometry._primitives._grid_cache import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
+from scgsim.geometry.primitives.constants import (
+    TOPOLOGY_EPS_UM,
+)
+from scgsim.geometry.primitives.grid_cache import (
     cached_subdivision,
 )
-from scgsim.geometry._primitives._tagged_grid import (  # private-import: primitive package-path migration awaits coordinated backend source lists
-    build_tagged_subdivision,
-)
-from scgsim.geometry._primitives.constants import (  # private-import: source-owned topology constants are retained during coordinated package migration
-    _TOPOLOGY_EPS_UM,
-)
-from scgsim.geometry._primitives.grid_overlay import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+from scgsim.geometry.primitives.grid_overlay import (
     GridAuditor,
-    OverlayParts,
     Subdivision,
     ZeroAreaAccounting,
     ZeroAreaResidue,
     account_zero_area,
-    cell_overlay_chunk,
-    deduplicate_residues,
-    overlay_call,
-    parts_overlay,
     residue_coordinates,
     subdivide_grid,
 )
-from scgsim.geometry._primitives.grid_regions import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+from scgsim.geometry.primitives.grid_overlay import (
+    OverlayParts as OverlayParts,
+)
+from scgsim.geometry.primitives.grid_overlay import (
+    cell_overlay_chunk as cell_overlay_chunk,
+)
+from scgsim.geometry.primitives.grid_overlay import (
+    deduplicate_residues as deduplicate_residues,
+)
+from scgsim.geometry.primitives.grid_overlay import (
+    overlay_call as overlay_call,
+)
+from scgsim.geometry.primitives.grid_overlay import (
+    parts_overlay as parts_overlay,
+)
+from scgsim.geometry.primitives.grid_regions import (
     GridArrangement,
     GridFace,
     GridOperand,
@@ -56,15 +64,17 @@ from scgsim.geometry._primitives.grid_regions import (  # private-import: primit
     GridRing,
     PolygonRegion,
     polygon_components,
-    region_key,
     region_vertex_index,
     regions,
     regions_indexed,
 )
-from scgsim.geometry._primitives.grid_regions import (  # private-import: retain the existing grid record export during coordinated package migration
+from scgsim.geometry.primitives.grid_regions import (
     GridOperandAudit as GridOperandAudit,
 )
-from scgsim.geometry._primitives.planar_loops import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+from scgsim.geometry.primitives.grid_regions import (
+    region_key as region_key,
+)
+from scgsim.geometry.primitives.planar_loops import (
     LoopCoordinates,
     PlanarLoop,
     PolygonCoordinates,
@@ -73,9 +83,11 @@ from scgsim.geometry._primitives.planar_loops import (  # private-import: primit
     filter_gdstk_polygons,
     polygon_area,
 )
-from scgsim.geometry.models.grid import GeometryGridContext, geometry_grid_context
-from scgsim.preparation import (  # private-import: preparation owner retains the existing ordered-worker entry point
-    _ordered_map,
+from scgsim.geometry.primitives.tagged_grid import (
+    build_tagged_subdivision,
+)
+from scgsim.preparation import (
+    ordered_map,
 )
 
 if TYPE_CHECKING:
@@ -123,10 +135,10 @@ _T = TypeVar("_T")
 _ACTIVE_GRID: ContextVar[GeometryGridContext | None] = ContextVar(
     "scgsim_geometry_grid", default=None
 )
-_SOURCE_INTENT: ContextVar[bool] = ContextVar(
+SOURCE_INTENT: ContextVar[bool] = ContextVar(
     "scgsim_source_intent_overlay", default=False
 )
-_SOURCE_AUDITS: ContextVar[list[SourceGridAudit] | None] = ContextVar(
+SOURCE_AUDITS: ContextVar[list[SourceGridAudit] | None] = ContextVar(
     "scgsim_source_grid_audits", default=None
 )
 
@@ -164,13 +176,13 @@ def geometry_grid_scope(context: GeometryGridContext | None):
     same = context is not None and context == _ACTIVE_GRID.get()
     token = _ACTIVE_GRID.set(context)
     audit_token = (
-        None if same else _SOURCE_AUDITS.set([] if context is not None else None)
+        None if same else SOURCE_AUDITS.set([] if context is not None else None)
     )
     try:
         yield
     finally:
         if audit_token is not None:
-            _SOURCE_AUDITS.reset(audit_token)
+            SOURCE_AUDITS.reset(audit_token)
         _ACTIVE_GRID.reset(token)
 
 
@@ -210,7 +222,7 @@ def build_grid_arrangement(
     geometries = dict(work.raw_polygons)
     subdivision = work.subdivision
     cells = subdivision.cells
-    with _stage(
+    with diagnostic_stage(
         "geometry.grid.zero_area", counts={"residues": len(subdivision.residues)}
     ):
         zero_area = subdivision.accounting
@@ -221,7 +233,7 @@ def build_grid_arrangement(
         for residue in (*zero_area.boundary, *zero_area.auxiliary)
         for point in residue_coordinates(residue.geometry)
     }
-    with _stage("geometry.grid.vertices", counts={"cells": len(cells)}):
+    with diagnostic_stage("geometry.grid.vertices", counts={"cells": len(cells)}):
         vertices = tuple(
             sorted(
                 {
@@ -240,7 +252,7 @@ def build_grid_arrangement(
     auditor = GridAuditor(values, geometries, effective, cells, faces, grid)
     audits = auditor.physical_audits()
     auditor.audit_contacts()
-    with _stage("geometry.grid.edges", counts={"faces": len(faces)}):
+    with diagnostic_stage("geometry.grid.edges", counts={"faces": len(faces)}):
         edges = tuple(
             sorted(
                 {
@@ -291,7 +303,8 @@ def in_occurrence_frame(function: Callable[..., _T]) -> Callable[..., _T]:
     return framed
 
 
-def _frame_point(point: Sequence[float], inverse: bool = False) -> GridPoint:
+def frame_point(point: Sequence[float], inverse: bool = False) -> GridPoint:
+    """Transform a point through the active polygon frame or its inverse."""
     frame = _POLYGON_FRAME.get()
     if frame is None:
         return tuple(point)
@@ -333,14 +346,14 @@ def polygon_boolean(
             values.append(
                 GridOperand(
                     f"{label}{index}",
-                    tuple(_frame_point(p) for p in outer),
-                    tuple(tuple(_frame_point(p) for p in ring) for ring in holes),
+                    tuple(frame_point(p) for p in outer),
+                    tuple(tuple(frame_point(p) for p in ring) for ring in holes),
                     physical=False,
                     contact=False,
                 )
             )
     arrangement = build_grid_arrangement(
-        values, context, apply_grid=not _SOURCE_INTENT.get()
+        values, context, apply_grid=not SOURCE_INTENT.get()
     )
     selected = []
     for face in arrangement.faces:
@@ -356,8 +369,8 @@ def polygon_boolean(
             selected.append(face.face_id)
     return [
         PolygonRegion(
-            tuple(_frame_point(p, True) for p in outer),
-            tuple(tuple(_frame_point(p, True) for p in ring) for ring in holes),
+            tuple(frame_point(p, True) for p in outer),
+            tuple(tuple(frame_point(p, True) for p in ring) for ring in holes),
         )
         for outer, holes in arrangement.face_regions(selected)
     ]
@@ -365,7 +378,7 @@ def polygon_boolean(
 
 def source_grid_audits() -> tuple[SourceGridAudit, ...]:
     """Read the current scope ledger without changing its ordering or records."""
-    return tuple(_SOURCE_AUDITS.get() or ())
+    return tuple(SOURCE_AUDITS.get() or ())
 
 
 @dataclass(frozen=True)
@@ -384,17 +397,17 @@ class _SourceRecipeFailure:
     traceback: TracebackType | None
 
 
-def _source_recipe_map[_Item, _Result](
+def source_recipe_map[_Item, _Result](
     function: Callable[[_Item], _Result], items: Iterable[_Item]
 ) -> list[_Result]:
     """Run independent recipes with isolated audits and source-order merging."""
-    parent_audits = _SOURCE_AUDITS.get()
+    parent_audits = SOURCE_AUDITS.get()
 
     def execute(item: _Item) -> _SourceRecipeSuccess[_Result] | _SourceRecipeFailure:
         local_audits: list[SourceGridAudit] | None = (
             [] if parent_audits is not None else None
         )
-        token = _SOURCE_AUDITS.set(local_audits)
+        token = SOURCE_AUDITS.set(local_audits)
         try:
             try:
                 result = function(item)
@@ -404,9 +417,9 @@ def _source_recipe_map[_Item, _Result](
                 )
             return _SourceRecipeSuccess(result, tuple(local_audits or ()))
         finally:
-            _SOURCE_AUDITS.reset(token)
+            SOURCE_AUDITS.reset(token)
 
-    outcomes = _ordered_map(execute, items)
+    outcomes = ordered_map(execute, items)
     results = []
     for outcome in outcomes:
         if parent_audits is not None:
@@ -436,15 +449,15 @@ def preserve_declared_source(
         entity: SemanticEntitySpec, *args: _P.args, **kwargs: _P.kwargs
     ) -> tuple[LayoutPolygonSpec, ...]:
         context = current_grid_context()
-        if context is None or _SOURCE_INTENT.get():
+        if context is None or SOURCE_INTENT.get():
             return function(entity, *args, **kwargs)
-        token = _SOURCE_INTENT.set(True)
+        token = SOURCE_INTENT.set(True)
         try:
-            with _stage("geometry.grid.source_reference"):
+            with diagnostic_stage("geometry.grid.source_reference"):
                 requested = function(entity, *args, **kwargs)
         finally:
-            _SOURCE_INTENT.reset(token)
-        with _stage("geometry.grid.source_realization"):
+            SOURCE_INTENT.reset(token)
+        with diagnostic_stage("geometry.grid.source_realization"):
             realized = function(entity, *args, **kwargs)
         return _audit_declared_source(
             entity, function.__name__, context, requested, realized
@@ -489,7 +502,7 @@ def loop_inside_loop(loop: LoopCoordinates, container: LoopCoordinates) -> bool:
     intersection_area = sum(
         abs(polygon_area(polygon.points)) for polygon in intersection
     )
-    return loop_area - intersection_area <= max(_TOPOLOGY_EPS_UM, loop_area * 1e-9)
+    return loop_area - intersection_area <= max(TOPOLOGY_EPS_UM, loop_area * 1e-9)
 
 
 def split_gdstk_cutline_loop(
@@ -504,23 +517,11 @@ def split_gdstk_cutline_loop(
     return outer, holes
 
 
-# Transitional aliases preserve callers during the coordinated internal migration.
-_region_key = region_key
-_regions = regions
 _regions_indexed = regions_indexed
-_OverlayParts = OverlayParts
-_ZeroAreaResidue = ZeroAreaResidue
-_overlay_call = overlay_call
-_subdivide_grid = subdivide_grid
-_account_zero_area = account_zero_area
-
-_parts_overlay = parts_overlay
-_cell_overlay_chunk = cell_overlay_chunk
-_deduplicate_residues = deduplicate_residues
 
 
 def _atomic_grid_faces(cells, vertices, grid):
-    with _stage(
+    with diagnostic_stage(
         "geometry.grid.cell_regions",
         counts={"cells": len(cells), "vertices": len(vertices)},
     ):
@@ -536,7 +537,7 @@ def _atomic_grid_faces(cells, vertices, grid):
                     "GRID_FACE__" + identity[:24], outer, holes, tuple(sorted(members))
                 )
             )
-            _progress(cell_index + 1, len(cells))
+            progress(cell_index + 1, len(cells))
         faces = tuple(sorted(faces, key=lambda f: f.face_id))
         vertices = tuple(
             sorted(
@@ -558,7 +559,7 @@ def _effective_grid_operands(values, ids, faces, apply_grid):
         union_all,
     )
 
-    with _stage("geometry.grid.effective", counts={"operands": len(values)}):
+    with diagnostic_stage("geometry.grid.effective", counts={"operands": len(values)}):
         # One immutable polygon per atomic face, including multiply-labelled
         # cells. Preserve face order within each operand's exact union.
         face_polygons = tuple(Polygon(face.exterior, face.holes) for face in faces)
@@ -573,7 +574,7 @@ def _effective_grid_operands(values, ids, faces, apply_grid):
             ]
             return coverage_union_all(selected) if apply_grid else union_all(selected)
 
-        effective = dict(zip(ids, _ordered_map(realize, values), strict=True))
+        effective = dict(zip(ids, ordered_map(realize, values), strict=True))
     return effective
 
 
@@ -583,7 +584,7 @@ def _construct_grid_work(
     apply_grid: bool,
     polygon_type: type[Polygon],
 ) -> _GridWork:
-    with _stage("geometry.grid.inputs", counts={"operands": len(values)}):
+    with diagnostic_stage("geometry.grid.inputs", counts={"operands": len(values)}):
         raw_polygons = tuple(
             (v.operand_id, polygon_type(v.exterior, v.holes)) for v in values
         )
@@ -621,14 +622,14 @@ def _audit_declared_source(
         return union_all(
             [
                 Polygon(
-                    tuple(_frame_point(p) for p in v.exterior),
-                    tuple(tuple(_frame_point(p) for p in r) for r in v.holes),
+                    tuple(frame_point(p) for p in v.exterior),
+                    tuple(tuple(frame_point(p) for p in r) for r in v.holes),
                 )
                 for v in polygons
             ]
         )
 
-    with _stage("geometry.grid.source_audit"):
+    with diagnostic_stage("geometry.grid.source_audit"):
         raw, final = geometry(requested), geometry(realized)
         before = (
             len(polygon_components(raw)),
@@ -651,8 +652,8 @@ def _audit_declared_source(
         requested_polygons: list[SourcePolygonAudit] = [
             {
                 "source_polygon_id": p.polygon_id,
-                "exterior": tuple(_frame_point(v) for v in p.exterior),
-                "holes": tuple(tuple(_frame_point(v) for v in r) for r in p.holes),
+                "exterior": tuple(frame_point(v) for v in p.exterior),
+                "holes": tuple(tuple(frame_point(v) for v in r) for r in p.holes),
             }
             for p in requested
         ]
@@ -673,7 +674,7 @@ def _audit_declared_source(
             "realized_holes": after[1],
             "geometry_changed": not raw.equals(final),
         }
-        audits = _SOURCE_AUDITS.get()
+        audits = SOURCE_AUDITS.get()
         if audits is not None and ledger not in audits:
             audits.append(ledger)
         return tuple(

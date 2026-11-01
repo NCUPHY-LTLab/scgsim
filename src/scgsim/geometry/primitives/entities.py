@@ -6,13 +6,13 @@ from collections.abc import Mapping, Sequence
 from math import isfinite
 from typing import Any
 
-from scgsim.geometry._primitives.constants import _GEOMETRY_REF_METADATA_KEYS
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.topology import MMContactRecord
+from scgsim.geometry.primitives.constants import GEOMETRY_REF_METADATA_KEYS
 
 
-def _component_metadata(
+def component_metadata(
     records: tuple[MMContactRecord, ...],
 ) -> tuple[dict[str, Any], ...]:
     """Derive one complete transitive component ledger from MM contacts."""
@@ -63,13 +63,13 @@ def _one_component_value(
     return next(iter(distinct), None)
 
 
-def _geometry_ref_from_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
-    return {
-        key: metadata[key] for key in _GEOMETRY_REF_METADATA_KEYS if key in metadata
-    }
+def geometry_ref_from_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
+    """Extract the recognized geometry-reference fields from metadata."""
+    return {key: metadata[key] for key in GEOMETRY_REF_METADATA_KEYS if key in metadata}
 
 
-def _intent_supports_route(intent: Mapping[str, Any], route: RouteLiteral) -> bool:
+def intent_supports_route(intent: Mapping[str, Any], route: RouteLiteral) -> bool:
+    """Test whether an intent permits the requested route."""
     valid_routes = intent.get("valid_routes")
     if valid_routes is None:
         return True
@@ -78,17 +78,19 @@ def _intent_supports_route(intent: Mapping[str, Any], route: RouteLiteral) -> bo
     return route in {str(value) for value in valid_routes}
 
 
-def _entity_by_id(
+def entity_by_id(
     build_input: GeometryBuildInput,
     semantic_id: str,
 ) -> SemanticEntitySpec:
+    """Resolve one semantic entity by its exact identifier."""
     for entity in build_input.entities:
         if entity.semantic_id == semantic_id:
             return entity
     raise ValueError(f"unknown semantic entity: {semantic_id}")
 
 
-def _unique_ids(values: Any) -> tuple[str, ...]:
+def unique_ids(values: Any) -> tuple[str, ...]:
+    """Convert identifiers to strings and deduplicate them in source order."""
     result: list[str] = []
     seen: set[str] = set()
     for value in values:
@@ -100,7 +102,8 @@ def _unique_ids(values: Any) -> tuple[str, ...]:
     return tuple(result)
 
 
-def _entity_z_range_um(entity: SemanticEntitySpec) -> tuple[float, float]:
+def entity_z_range_um(entity: SemanticEntitySpec) -> tuple[float, float]:
+    """Resolve an entity's lower and upper Z coordinates in micrometres."""
     z_min_um = float(entity.geometry.get("z_min_um", entity.geometry.get("z_um", 0.0)))
     z_max_um = entity.geometry.get("z_max_um")
     if z_max_um is not None:

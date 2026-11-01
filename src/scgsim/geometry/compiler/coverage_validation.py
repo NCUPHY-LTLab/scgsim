@@ -6,10 +6,6 @@ geometric overlap belong to topology_validation; native construction is downstre
 
 from __future__ import annotations
 
-from scgsim.geometry._primitives.entity_validation import (
-    _is_solution_entity,
-    _requires_route_representation,
-)
 from scgsim.geometry.models.common import ROUTE_ALLOWED_REPRESENTATIONS, RouteLiteral
 from scgsim.geometry.models.construction import (
     ConstructionBodyPlanRecord,
@@ -25,6 +21,10 @@ from scgsim.geometry.models.topology import (
     VolumePlanRecord,
 )
 from scgsim.geometry.planning.representation import planned_conductor_representation
+from scgsim.geometry.primitives.entity_validation import (
+    is_solution_entity,
+    requires_route_representation,
+)
 
 _INTERFACE_KINDS = {"MM", "SS", "AA", "MS", "MA", "SA"}
 
@@ -49,7 +49,7 @@ def validate_selected_route(
     if route == "C" and build_input.port_sheet_regions:
         errors.append("Route C does not support Palace lumped-port sheets")
     for entity in build_input.entities:
-        if not _requires_route_representation(entity):
+        if not requires_route_representation(entity):
             continue
         representation = planned_conductor_representation(
             entity, route=route, context=context
@@ -136,7 +136,7 @@ def validate_surface_sheet_interface_coverage(
     sheet_ids = {
         entity.semantic_id
         for entity in build_input.entities
-        if not _is_solution_entity(entity)
+        if not is_solution_entity(entity)
         and entity.route_representations.get(route) == "surface_sheet"
     }
     if not sheet_ids:

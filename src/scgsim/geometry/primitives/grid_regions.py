@@ -11,8 +11,8 @@ from functools import cached_property
 from types import MappingProxyType
 from typing import TYPE_CHECKING, cast, overload
 
-from scgsim.diagnostics import (  # private-import: diagnostics owner retains its shared stage and progress entry points
-    _stage,
+from scgsim.diagnostics import (
+    diagnostic_stage,
 )
 from scgsim.geometry.models.grid import GeometryGridContext
 
@@ -151,7 +151,7 @@ def regions(
     grid_size: float | None = None,
 ) -> tuple[GridRegion, ...]:
     """Reconstruct atomic polygon rings using a shared realized-vertex index."""
-    with _stage("geometry.grid.regions"):
+    with diagnostic_stage("geometry.grid.regions"):
         return regions_indexed(geometry, region_vertex_index(vertices, grid_size))
 
 
@@ -325,7 +325,7 @@ class GridArrangement:
                 polygon = Polygon(face.exterior, face.holes)
                 polygons[index] = polygon
             selected.append(polygon)
-        with _stage("geometry.grid.regions"):
+        with diagnostic_stage("geometry.grid.regions"):
             merged = (
                 coverage_union_all(selected)
                 if self.grid_applied

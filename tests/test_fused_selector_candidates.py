@@ -5,13 +5,13 @@ from contextlib import nullcontext
 import gdstk
 import pytest
 
-from scgsim.geometry._primitives.grid import (
-    _SOURCE_INTENT,
+from scgsim.geometry.models.grid import GeometryGridContext
+from scgsim.geometry.primitives.grid import (
+    SOURCE_INTENT,
     geometry_grid_scope,
     polygon_world_frame,
 )
-from scgsim.geometry.models.grid import GeometryGridContext
-from scgsim.geometry.source import _polygon_ops as ops
+from scgsim.geometry.source import polygon_ops as ops
 
 
 def polygons(kind):
@@ -42,7 +42,7 @@ def polygons(kind):
 
 def outcome(values):
     try:
-        return ("result", ops._fused_gdstk_components(values))
+        return ("result", ops.fused_gdstk_components(values))
     except ValueError as error:
         return (
             "error",
@@ -63,13 +63,13 @@ def test_candidates_equal_original_ordered_all_pairs(monkeypatch, kind, frame, i
         geometry_grid_scope(GeometryGridContext(0.1)),
         polygon_world_frame(frame) if frame else nullcontext(),
     ):
-        token = _SOURCE_INTENT.set(intent)
+        token = SOURCE_INTENT.set(intent)
         try:
             actual = outcome(polygons(kind))
             monkeypatch.setattr(ops, "_fused_boolean_candidates", lambda values: None)
             assert actual == outcome(polygons(kind))
         finally:
-            _SOURCE_INTENT.reset(token)
+            SOURCE_INTENT.reset(token)
 
 
 def test_distant_world_inputs_avoid_pair_booleans_but_keep_raw_edge_calls(monkeypatch):
@@ -89,7 +89,7 @@ def test_distant_world_inputs_avoid_pair_booleans_but_keep_raw_edge_calls(monkey
     monkeypatch.setattr(ops, "_rings_share_edge", observed_edge)
     values = [gdstk.rectangle((10 * i, 0), (10 * i + 1, 1)) for i in range(8)]
     with geometry_grid_scope(GeometryGridContext(0.1)):
-        assert len(ops._fused_gdstk_components(values)) == 8
+        assert len(ops.fused_gdstk_components(values)) == 8
     assert calls == ["or"] * 8
     assert len(edges) == 8 * 7 // 2
 
@@ -104,5 +104,5 @@ def test_legacy_unbound_selector_keeps_all_pair_calls(monkeypatch):
 
     monkeypatch.setattr(ops, "polygon_boolean", observed)
     with geometry_grid_scope(None):
-        assert len(ops._fused_gdstk_components(polygons("distant"))) == 2
+        assert len(ops.fused_gdstk_components(polygons("distant"))) == 2
     assert calls == ["and", "or", "or"]

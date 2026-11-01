@@ -5,22 +5,23 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-# Geometry references carry extensible source metadata; Any preserves its
-# existing payload contract rather than imposing a new metadata schema.
-from scgsim.geometry._primitives.entities import (  # private-import: entity projection helpers remain with their source owner outside this lease
-    _entity_z_range_um,
-    _geometry_ref_from_metadata,
-)
-from scgsim.geometry._primitives.planar_loops import (  # private-import: primitive package-path migration awaits coordinated backend source lists
-    clean_loop,
-    ring_edges,
-)
-from scgsim.geometry._primitives.spatial import (  # private-import: spatial helper names remain with their source owner outside this lease
-    _same_z,
-)
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.topology import InterfacePlanRecord
+
+# Geometry references carry extensible source metadata; Any preserves its
+# existing payload contract rather than imposing a new metadata schema.
+from scgsim.geometry.primitives.entities import (
+    entity_z_range_um,
+    geometry_ref_from_metadata,
+)
+from scgsim.geometry.primitives.planar_loops import (
+    clean_loop,
+    ring_edges,
+)
+from scgsim.geometry.primitives.spatial import (
+    same_coordinate_z,
+)
 
 
 def entity_geometry_ref(
@@ -36,8 +37,8 @@ def entity_geometry_ref(
         "representation": representation,
         "source_polygon_ids": entity.polygon_ids,
     }
-    result.update(_geometry_ref_from_metadata(entity.geometry))
-    result.update(_geometry_ref_from_metadata(entity.metadata))
+    result.update(geometry_ref_from_metadata(entity.geometry))
+    result.update(geometry_ref_from_metadata(entity.metadata))
     if "z_um" in entity.geometry and "plane" not in result:
         result["plane"] = {"axis": "z", "value_um": entity.geometry["z_um"]}
     return result
@@ -58,7 +59,7 @@ def route_entity_geometry_ref(
     if route != "A" or representation != "cutout_boundary_shell":
         return geometry_ref
 
-    z_min_um, z_max_um = _entity_z_range_um(entity)
+    z_min_um, z_max_um = entity_z_range_um(entity)
     for interface in interfaces:
         if interface.recognition_rule != "coplanar_conductor_contact_patch":
             continue
@@ -80,9 +81,11 @@ def route_entity_geometry_ref(
 
     if z_max_um <= z_min_um:
         raise ValueError(f"{entity.semantic_id} Route A cutout body has empty z range")
-    if not _same_z(z_min_um, _entity_z_range_um(entity)[0]) or not _same_z(
+    if not same_coordinate_z(
+        z_min_um, entity_z_range_um(entity)[0]
+    ) or not same_coordinate_z(
         z_max_um,
-        _entity_z_range_um(entity)[1],
+        entity_z_range_um(entity)[1],
     ):
         geometry_ref["z_um"] = z_min_um
         geometry_ref["z_min_um"] = z_min_um
@@ -123,9 +126,3 @@ def sidewall_geometry_refs(
                 }
             )
     return tuple(refs)
-
-
-# Transitional aliases preserve source-owned callers during their import migration.
-_entity_geometry_ref = entity_geometry_ref
-_route_entity_geometry_ref = route_entity_geometry_ref
-_sidewall_geometry_refs = sidewall_geometry_refs

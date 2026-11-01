@@ -34,7 +34,7 @@ class _SheetSupport:
     holes: tuple[PolygonRing, ...]
 
 
-def _route_a_sheet_interfaces(
+def route_a_sheet_interfaces(
     entities: Sequence[SemanticEntitySpec],
     polygons: Sequence[LayoutPolygonSpec],
     *,

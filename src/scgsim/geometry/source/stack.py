@@ -6,13 +6,13 @@ import copy
 from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
-from scgsim.geometry.source._normalization import (
-    _coupon_domain_bounds,
-    _finite_number,
-    _mapping,
-    _materials,
-    _semantic_layer_records,
-    _solution_regions,
+from scgsim.geometry.source.normalization import (
+    coupon_domain_bounds,
+    finite_number,
+    mapping,
+    normalize_material_records,
+    semantic_layer_records,
+    solution_regions,
 )
 
 
@@ -29,20 +29,20 @@ def build_component_stack(
     integration semantics. The component owns conductor identities, nets, and
     topology selectors. Geometry bounds size the coupon only.
     """
-    padding = _finite_number(coupon_padding_um, "coupon_padding_um")
+    padding = finite_number(coupon_padding_um, "coupon_padding_um")
     if padding < 0.0:
         raise ValueError("coupon_padding_um must be a finite non-negative number.")
-    bounds = _coupon_domain_bounds(component, padding)
+    bounds = coupon_domain_bounds(component, padding)
     spec = _component_semantics(component)
     levels, conductor_regions, metadata = _validated_stack_inputs(layer_stack, spec)
 
-    materials = _materials(material_records)
-    regions = _solution_regions(levels, materials=materials, bounds=bounds)
+    materials = normalize_material_records(material_records)
+    regions = solution_regions(levels, materials=materials, bounds=bounds)
     if not regions:
         raise ValueError(
             "PDK layer_stack must declare at least one included solution region."
         )
-    layers = _semantic_layer_records(
+    layers = semantic_layer_records(
         cast(
             Sequence[Mapping[str, Any]],
             conductor_regions,
@@ -71,7 +71,7 @@ def build_component_stack(
 def _component_semantics(component: Any) -> dict[str, Any]:
     """Read and validate the caller-authored component annotation."""
     try:
-        spec = _mapping(
+        spec = mapping(
             component.info["component_semantics"], "component component_semantics"
         )
     except (AttributeError, KeyError) as exc:

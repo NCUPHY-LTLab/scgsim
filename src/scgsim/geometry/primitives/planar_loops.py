@@ -8,11 +8,11 @@ from itertools import pairwise
 from math import sqrt
 from typing import Protocol, TypeVar
 
-from scgsim.geometry._primitives.constants import (  # private-import: source-owned topology constants are retained during coordinated package migration
-    _TOPOLOGY_EPS_UM,
+from scgsim.geometry.primitives.constants import (
+    TOPOLOGY_EPS_UM,
 )
-from scgsim.geometry._primitives.spatial import (  # private-import: spatial helper names remain with their source owner outside this lease
-    _coordinate_2d_key,
+from scgsim.geometry.primitives.spatial import (
+    coordinate_2d_key,
 )
 
 Point2D = tuple[float, float]
@@ -75,7 +75,7 @@ def cutline_boundary_loops(
 def clean_loop(loop: LoopCoordinates) -> PlanarLoop:
     """Round coordinate keys and remove redundant points while preserving cutlines."""
     points = tuple(
-        _coordinate_2d_key((float(point[0]), float(point[1]))) for point in loop
+        coordinate_2d_key((float(point[0]), float(point[1]))) for point in loop
     )
     if len(points) > 1 and points[0] == points[-1]:
         points = points[:-1]
@@ -83,7 +83,7 @@ def clean_loop(loop: LoopCoordinates) -> PlanarLoop:
     points = _drop_redundant_collinear_loop_points(points)
     if len(points) < 3:
         raise ValueError("loop requires at least 3 unique points")
-    if abs(polygon_area(points)) <= _TOPOLOGY_EPS_UM:
+    if abs(polygon_area(points)) <= TOPOLOGY_EPS_UM:
         raise ValueError("loop area is below topology tolerance")
     return points
 
@@ -146,13 +146,13 @@ def _point_on_segment_2d(
     dx = end[0] - start[0]
     dy = end[1] - start[1]
     length_sq = dx * dx + dy * dy
-    if length_sq <= _TOPOLOGY_EPS_UM * _TOPOLOGY_EPS_UM:
+    if length_sq <= TOPOLOGY_EPS_UM * TOPOLOGY_EPS_UM:
         return False
     cross = (point[0] - start[0]) * dy - (point[1] - start[1]) * dx
-    if abs(cross) > _TOPOLOGY_EPS_UM * sqrt(length_sq):
+    if abs(cross) > TOPOLOGY_EPS_UM * sqrt(length_sq):
         return False
     dot = (point[0] - start[0]) * dx + (point[1] - start[1]) * dy
-    return _TOPOLOGY_EPS_UM < dot < length_sq - _TOPOLOGY_EPS_UM
+    return TOPOLOGY_EPS_UM < dot < length_sq - TOPOLOGY_EPS_UM
 
 
 def ring_edges(
@@ -169,7 +169,7 @@ def filter_gdstk_polygons(polygons: Sequence[_Polygon]) -> tuple[_Polygon, ...]:
     return tuple(
         polygon
         for polygon in polygons
-        if abs(polygon_area(polygon.points)) > _TOPOLOGY_EPS_UM
+        if abs(polygon_area(polygon.points)) > TOPOLOGY_EPS_UM
     )
 
 
@@ -180,15 +180,15 @@ def point_on_planar_segment(
 ) -> bool:
     """Test inclusive planar segment membership at the existing topology tolerance."""
     dx, dy = end[0] - start[0], end[1] - start[1]
-    if abs((point[0] - start[0]) * dy - (point[1] - start[1]) * dx) > _TOPOLOGY_EPS_UM:
+    if abs((point[0] - start[0]) * dy - (point[1] - start[1]) * dx) > TOPOLOGY_EPS_UM:
         return False
     return (
-        min(start[0], end[0]) - _TOPOLOGY_EPS_UM
+        min(start[0], end[0]) - TOPOLOGY_EPS_UM
         <= point[0]
-        <= max(start[0], end[0]) + _TOPOLOGY_EPS_UM
-        and min(start[1], end[1]) - _TOPOLOGY_EPS_UM
+        <= max(start[0], end[0]) + TOPOLOGY_EPS_UM
+        and min(start[1], end[1]) - TOPOLOGY_EPS_UM
         <= point[1]
-        <= max(start[1], end[1]) + _TOPOLOGY_EPS_UM
+        <= max(start[1], end[1]) + TOPOLOGY_EPS_UM
     )
 
 

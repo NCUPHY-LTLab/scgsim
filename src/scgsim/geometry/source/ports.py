@@ -6,12 +6,12 @@ from collections.abc import Mapping, Sequence
 from math import isfinite, sqrt
 from typing import Any, Protocol, TypeGuard, cast
 
-from scgsim.geometry._primitives.grid import (  # private-import: fixed-grid Boolean API is owned by the primitive grid layer.
+from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
+from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
+from scgsim.geometry.primitives.grid import (
     current_grid_size_um,
     polygon_boolean,
 )  # pyright: ignore[reportPrivateUsage]
-from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
 
 SOURCE_OCCURRENCE_POLYGON_METADATA_KEY = "source_occurrence_polygon_um"
 

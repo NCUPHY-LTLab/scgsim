@@ -9,25 +9,25 @@ from functools import partial
 from math import cos, isfinite, sin
 from typing import TYPE_CHECKING, Any
 
-from scgsim.geometry._primitives.grid import (
-    _source_recipe_map,
+from scgsim.geometry.models.input import LayoutPolygonSpec
+from scgsim.geometry.primitives.grid import (
     current_grid_size_um,
     polygon_boolean,
-)
-from scgsim.geometry.models.input import LayoutPolygonSpec
-from scgsim.geometry.source._occurrence import (
-    _entity_from_layer_record,
-    _failed_source_recipe,
-    _occurrence_ground_polygons_for_entity,
-    _occurrence_include_polygon,
-    _occurrence_polygons_for_entity,
-    _occurrence_port_polygon,
-    _run_source_recipe,
-    _source_recipe_job,
-    _SourceRecipeJob,
+    source_recipe_map,
 )
 from scgsim.geometry.source.adapter_records import AdapterSource, record_sequence
-from scgsim.geometry.source.ground import _layout_polygon_region
+from scgsim.geometry.source.ground import layout_polygon_region
+from scgsim.geometry.source.occurrence import (
+    SourceRecipeJob,
+    entity_from_layer_record,
+    failed_source_recipe,
+    occurrence_ground_polygons_for_entity,
+    occurrence_include_polygon,
+    occurrence_polygons_for_entity,
+    occurrence_port_polygon,
+    run_source_recipe,
+    source_recipe_job,
+)
 
 if TYPE_CHECKING:
     from gdstk import Cell, Reference
@@ -91,7 +91,7 @@ class _OccurrenceValidation:
     contribution_ids: set[tuple[object, str]] = field(default_factory=set)
     physical_planes: set[Any] = field(default_factory=set)
     planes: dict[Any, Mapping[str, Any]] = field(default_factory=dict)
-    pending_checks: list[Callable[[], _SourceRecipeJob]] = field(default_factory=list)
+    pending_checks: list[Callable[[], SourceRecipeJob]] = field(default_factory=list)
 
     def validate(self) -> Mapping[str, Any] | None:
         self.index_planes()
@@ -121,12 +121,12 @@ class _OccurrenceValidation:
                 try:
                     job = factory()
                 except Exception as error:  # noqa: BLE001 - marshal the original worker error in source order.
-                    yield _failed_source_recipe(error)
+                    yield failed_source_recipe(error)
                     return
                 yield job
 
         try:
-            _source_recipe_map(_run_source_recipe, jobs())
+            source_recipe_map(run_source_recipe, jobs())
         finally:
             self.pending_checks.clear()
 
@@ -170,7 +170,7 @@ class _OccurrenceValidation:
             raise ValueError("GeometryPlan ground contribution local ID is duplicated")
         self.contribution_ids.add(key)
         self.flush_expected()
-        expected = _occurrence_include_polygon(
+        expected = occurrence_include_polygon(
             contribution,
             cell=self.source_cells[source_occurrence["cell_name"]],
             transform=source_occurrence["transform"],
@@ -213,17 +213,15 @@ class _OccurrenceValidation:
             and path != self.root_path
         )
         selector = (
-            _occurrence_ground_polygons_for_entity
+            occurrence_ground_polygons_for_entity
             if local_ground
-            else _occurrence_polygons_for_entity
+            else occurrence_polygons_for_entity
         )
         self.pending_checks.append(
             partial(
-                _source_recipe_job,
+                source_recipe_job,
                 selector,
-                _entity_from_layer_record(
-                    record, materials=self.source.stack.materials
-                ),
+                entity_from_layer_record(record, materials=self.source.stack.materials),
                 source_cell=self.source_cells[occurrence["cell_name"]],
                 transform=occurrence["transform"],
                 excluded_reference_indexes=self.child_reference_indexes[path],
@@ -270,8 +268,8 @@ class _OccurrenceValidation:
                     )
                 self.pending_checks.append(
                     partial(
-                        _source_recipe_job,
-                        _occurrence_port_polygon,
+                        source_recipe_job,
+                        occurrence_port_polygon,
                         record,
                         source_cell=self.source_cells[occurrence["cell_name"]],
                         transform=occurrence["transform"],
@@ -376,7 +374,7 @@ def validate_ground_contribution_ownership(
             "source_occurrence_includes", ()
         ):
             region = contribution["polygon"]
-            included = _layout_polygon_region(
+            included = layout_polygon_region(
                 gdstk,
                 LayoutPolygonSpec(
                     polygon_id="source_ground_contribution",
@@ -396,7 +394,7 @@ def validate_ground_contribution_ownership(
                 ):
                     continue
                 for polygon in other["geometry"]["source_occurrence_polygons_um"]:
-                    claimed = _layout_polygon_region(
+                    claimed = layout_polygon_region(
                         gdstk,
                         LayoutPolygonSpec(
                             polygon_id="named_local_conductor",

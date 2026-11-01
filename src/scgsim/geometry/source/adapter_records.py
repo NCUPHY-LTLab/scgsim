@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, TypeGuard
 
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.source._occurrence import (
-    _entity_from_layer_record,
-    _gds_polygons_for_entity,
-    _is_record_sequence,
-    _resolve_material_kind,
+from scgsim.geometry.source.ground import derived_ground_polygons
+from scgsim.geometry.source.occurrence import (
+    entity_from_layer_record,
+    gds_polygons_for_entity,
+    is_record_sequence,
+    resolve_material_kind,
 )
-from scgsim.geometry.source.ground import _derived_ground_polygons
 
 if TYPE_CHECKING:
     from gdstk import Cell, Polygon
@@ -76,7 +76,7 @@ class LoweredEntity(NamedTuple):
 
 def record_sequence(value: object) -> TypeGuard[Sequence[Any]]:
     """Narrow the existing record-sequence predicate without adding validation."""
-    return _is_record_sequence(value)
+    return is_record_sequence(value)
 
 
 def solution_region_entity(
@@ -112,7 +112,7 @@ def solution_region_entity(
         semantic_id=semantic_id,
         role=record.get("role", "solution_region"),
         material_id=record.get("material_id", semantic_id),
-        material_kind=_resolve_material_kind(
+        material_kind=resolve_material_kind(
             record,
             material_id=record.get("material_id", semantic_id),
             materials=materials,
@@ -134,7 +134,7 @@ def lower_layer_record(
     domain_bounds_by_semantic_id: Mapping[str, Mapping[str, Any]],
 ) -> tuple[LoweredEntity, ...]:
     """Lower a worker-private layer record through the existing source recipes."""
-    entity = _entity_from_layer_record(record, materials=materials)
+    entity = entity_from_layer_record(record, materials=materials)
     geometry_source = str(entity.geometry.get("geometry_source", "gds_polygon"))
     if geometry_source == "die_face_minus_ground_mask":
         occurrence_polygons = entity.geometry.get("source_occurrence_polygons_um")
@@ -152,7 +152,7 @@ def lower_layer_record(
                 for index, region in enumerate(occurrence_polygons)
             )
         else:
-            entity_polygons = _derived_ground_polygons(
+            entity_polygons = derived_ground_polygons(
                 entity,
                 polygons_by_layer=polygons_by_layer,
                 cell_bounds_um=cell_bounds_um,
@@ -169,7 +169,7 @@ def lower_layer_record(
             ),
         )
     elif geometry_source == "gds_polygon":
-        entity_polygons = _gds_polygons_for_entity(
+        entity_polygons = gds_polygons_for_entity(
             entity,
             polygons_by_layer=polygons_by_layer,
         )

@@ -6,9 +6,6 @@ from dataclasses import dataclass, field, replace
 
 import pytest
 
-from scgsim.geometry._primitives._grid_cache import (  # private-import: exercise the existing build cache boundary through final timing and failure cleanup.
-    cached_subdivision,
-)
 from scgsim.geometry.compiler import builder, dispatch
 from scgsim.geometry.compiler.stages import StageTimings
 from scgsim.geometry.models.construction import (
@@ -23,6 +20,9 @@ from scgsim.geometry.models.input import (
 )
 from scgsim.geometry.models.regions import PortSheetRegionRecord
 from scgsim.geometry.models.representation import RepresentationContext
+from scgsim.geometry.primitives.grid_cache import (  # private-import: exercise the existing build cache boundary through final timing and failure cleanup.
+    cached_subdivision,
+)
 
 BUILD_STAGES = (
     "validate_geometry_input",
@@ -399,21 +399,21 @@ def _install_polygon_stages(monkeypatch, failed_stage=None):
     }
     identity = {
         "project_native_route_representations",
-        "_prepare_auto_vacuum_solution_regions",
+        "prepare_auto_vacuum_solution_regions",
     }
     names = (
         "project_native_route_representations",
-        "_prepare_auto_vacuum_solution_regions",
+        "prepare_auto_vacuum_solution_regions",
         "build_semantic_evidence_facade",
         *POLYGON_STAGES,
-        "_bind_route_b_port_volume_plans",
-        "_reconcile_construction_body_surface_ids",
+        "bind_route_b_port_volume_plans",
+        "reconcile_construction_body_surface_ids",
     )
     renamed = {
-        "reconcile_solution_domain_boundaries": "_reconcile_solution_domain_boundaries",
-        "lower_port_sheet_regions": "_lower_port_sheet_regions",
-        "merge_solution_sidewall_interfaces": "_merge_solution_sidewall_interfaces",
-        "validate_route_b_port_sheet_sidewall_topology": "_validate_route_b_port_sheet_sidewall_topology",
+        "reconcile_solution_domain_boundaries": "reconcile_solution_domain_boundaries",
+        "lower_port_sheet_regions": "lower_port_sheet_regions",
+        "merge_solution_sidewall_interfaces": "merge_solution_sidewall_interfaces",
+        "validate_route_b_port_sheet_sidewall_topology": "validate_route_b_port_sheet_sidewall_topology",
     }
 
     def operation(name):

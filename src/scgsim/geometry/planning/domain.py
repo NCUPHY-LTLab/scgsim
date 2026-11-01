@@ -8,69 +8,69 @@ from itertools import pairwise
 from math import hypot, isfinite
 from typing import Any
 
-from scgsim.geometry._primitives.constants import (
-    _INTERFACE_KIND_ORDER,
-    _TOPOLOGY_EPS_UM,
-)
-from scgsim.geometry._primitives.entities import (
-    _entity_by_id,
-    _entity_z_range_um,
-    _unique_ids,
-)
-from scgsim.geometry._primitives.entity_validation import (
-    _is_solution_entity,
-    _is_vacuum_solution_entity,
-)
-from scgsim.geometry._primitives.geometry_refs import (
-    _route_entity_geometry_ref,
-    _sidewall_geometry_refs,
-)
-from scgsim.geometry._primitives.grid import (
-    boolean_polygon_region,
-    polygon_boolean,
-    split_gdstk_cutline_loop,
-)
-from scgsim.geometry._primitives.loops import (
-    _edge_is_covered_by_loop_edge,
-    _gdstk_surface_region,
-    _geometry_ref_from_gdstk_polygon,
-    _geometry_refs_from_gdstk_region,
-    _loop_centroid,
-    _loop_signature,
-    _loops_share_edge_overlap,
-    _simple_interior_hole_loops,
-)
-from scgsim.geometry._primitives.planar_loops import (
-    clean_loop,
-    filter_gdstk_polygons,
-    polygon_area,
-    ring_edges,
-)
-from scgsim.geometry._primitives.spatial import (
-    _bounds_contains_point,
-    _geometry_ref_surface_z_um,
-    _interpolate_2d,
-    _intersect_bounds,
-    _interval_complement,
-    _range_within_bounds,
-    _same_z,
-    _segment_overlap_interval,
-)
-from scgsim.geometry._primitives.surface_records import (
-    _canonical_face_signature_3d,
-    _interface_kinds,
-    _is_route_a_sheet_interface,
-    _RouteASheetPatch,
-    _surface_boundary_volume_ids,
-    _surface_contribution_provenance,
-)
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
 from scgsim.geometry.planning.evidence import solution_solution_evidence
 from scgsim.geometry.planning.representation import planned_conductor_representation
-from scgsim.geometry.planning.topology import _surface_ring3d_specs
+from scgsim.geometry.planning.topology import surface_ring3d_specs
+from scgsim.geometry.primitives.constants import (
+    INTERFACE_KIND_ORDER,
+    TOPOLOGY_EPS_UM,
+)
+from scgsim.geometry.primitives.entities import (
+    entity_by_id,
+    entity_z_range_um,
+    unique_ids,
+)
+from scgsim.geometry.primitives.entity_validation import (
+    is_solution_entity,
+    is_vacuum_solution_entity,
+)
+from scgsim.geometry.primitives.geometry_refs import (
+    route_entity_geometry_ref,
+    sidewall_geometry_refs,
+)
+from scgsim.geometry.primitives.grid import (
+    boolean_polygon_region,
+    polygon_boolean,
+    split_gdstk_cutline_loop,
+)
+from scgsim.geometry.primitives.loops import (
+    edge_is_covered_by_loop_edge,
+    gdstk_surface_region,
+    geometry_ref_from_gdstk_polygon,
+    geometry_refs_from_gdstk_region,
+    loop_centroid,
+    loop_signature,
+    loops_share_edge_overlap,
+    simple_interior_hole_loops,
+)
+from scgsim.geometry.primitives.planar_loops import (
+    clean_loop,
+    filter_gdstk_polygons,
+    polygon_area,
+    ring_edges,
+)
+from scgsim.geometry.primitives.spatial import (
+    bounds_contains_point,
+    geometry_ref_surface_z_um,
+    interpolate_2d,
+    intersect_bounds,
+    interval_complement,
+    range_within_bounds,
+    same_coordinate_z,
+    segment_overlap_interval,
+)
+from scgsim.geometry.primitives.surface_records import (
+    RouteASheetPatch,
+    canonical_face_signature_3d,
+    interface_kinds,
+    is_route_a_sheet_interface,
+    surface_boundary_volume_ids,
+    surface_contribution_provenance,
+)
 from scgsim.semantics import (
     EvidenceResult,
     SemanticEvidenceFacade,
@@ -98,7 +98,7 @@ def verified_route_a_substrate_support(
     substrates = tuple(
         entity
         for entity in build_input.entities
-        if _is_solution_entity(entity) and entity.material_kind == "dielectric"
+        if is_solution_entity(entity) and entity.material_kind == "dielectric"
     )
     result: dict[str, dict[str, str]] = {}
     for record in layers:
@@ -130,9 +130,7 @@ def verified_route_a_substrate_support(
                         f"{source_id} references missing normalized polygon {polygon_id!r}."
                     )
                 exterior = (gdstk.Polygon(clean_loop(polygon.exterior)),)
-                holes = tuple(
-                    gdstk.Polygon(clean_loop(hole)) for hole in polygon.holes
-                )
+                holes = tuple(gdstk.Polygon(clean_loop(hole)) for hole in polygon.holes)
                 face_regions.extend(
                     boolean_polygon_region(gdstk, exterior, holes, "not")
                 )
@@ -142,14 +140,14 @@ def verified_route_a_substrate_support(
             )
         matches: list[tuple[str, str]] = []
         for substrate in substrates:
-            sub_z_min, sub_z_max = _entity_z_range_um(substrate)
+            sub_z_min, sub_z_max = entity_z_range_um(substrate)
             sides = (
                 *(("lower",) if same_z(sub_z_max, face_z_min) else ()),
                 *(("upper",) if same_z(sub_z_min, face_z_max) else ()),
             )
             if not sides:
                 continue
-            substrate_region = _solution_entity_xy_region(gdstk, substrate)
+            substrate_region = solution_entity_xy_region(gdstk, substrate)
             if boolean_polygon_region(gdstk, face_regions, substrate_region, "and"):
                 matches.extend((side, substrate.semantic_id) for side in sides)
         if len(matches) != 1:
@@ -163,7 +161,7 @@ def verified_route_a_substrate_support(
     return result
 
 
-def _prepare_auto_vacuum_solution_regions(
+def prepare_auto_vacuum_solution_regions(
     build_input: GeometryBuildInput,
     route: RouteLiteral | None,
     *,
@@ -191,7 +189,7 @@ def _prepare_auto_vacuum_solution_regions(
         # padding remains provenance and is not mapped a second time here.
         auto_bounds = dict(enclosure.effective_bounds_um)
     else:
-        auto_bounds = _auto_vacuum_envelope_bounds(
+        auto_bounds = auto_vacuum_envelope_bounds(
             build_input,
             route=route,
             representation_context=representation_context,
@@ -255,7 +253,7 @@ def _prepare_auto_vacuum_solution_regions(
 
     z_events = {auto_z_min_um, auto_z_max_um}
     for entity in obstacle_entities:
-        entity_z_min_um, entity_z_max_um = _entity_z_range_um(entity)
+        entity_z_min_um, entity_z_max_um = entity_z_range_um(entity)
         if not (
             isfinite(entity_z_min_um)
             and isfinite(entity_z_max_um)
@@ -272,15 +270,15 @@ def _prepare_auto_vacuum_solution_regions(
     components: list[SemanticEntitySpec] = []
     component_index = 0
     for z_start, z_end in pairwise(z_slices):
-        if z_end - z_start <= _TOPOLOGY_EPS_UM:
+        if z_end - z_start <= TOPOLOGY_EPS_UM:
             continue
         if (
-            z_start < auto_z_min_um - _TOPOLOGY_EPS_UM
-            or z_end > auto_z_max_um + _TOPOLOGY_EPS_UM
+            z_start < auto_z_min_um - TOPOLOGY_EPS_UM
+            or z_end > auto_z_max_um + TOPOLOGY_EPS_UM
         ):
             continue
 
-        base_region = _solution_entity_xy_region(
+        base_region = solution_entity_xy_region(
             gdstk,
             auto_region,
             z_min_um=z_start,
@@ -292,10 +290,10 @@ def _prepare_auto_vacuum_solution_regions(
         active_subtractor_region: tuple[Any, ...] = ()
         active_subtractors: list[SemanticEntitySpec] = []
         for entity in obstacle_entities:
-            obstacle_z_min_um, obstacle_z_max_um = _entity_z_range_um(entity)
+            obstacle_z_min_um, obstacle_z_max_um = entity_z_range_um(entity)
             if (
-                obstacle_z_min_um >= z_end - _TOPOLOGY_EPS_UM
-                or obstacle_z_max_um <= z_start + _TOPOLOGY_EPS_UM
+                obstacle_z_min_um >= z_end - TOPOLOGY_EPS_UM
+                or obstacle_z_max_um <= z_start + TOPOLOGY_EPS_UM
             ):
                 continue
             subtractor_regions = _auto_vacuum_subtractor_xy_region(
@@ -314,7 +312,7 @@ def _prepare_auto_vacuum_solution_regions(
             else:
                 active_subtractor_region = subtractor_regions
 
-        vacuum_region_refs = _geometry_refs_from_gdstk_region(
+        vacuum_region_refs = geometry_refs_from_gdstk_region(
             {"outer_loop": envelope_loop},
             boolean_polygon_region(
                 gdstk,
@@ -328,9 +326,9 @@ def _prepare_auto_vacuum_solution_regions(
 
         for geometry_ref in sorted(
             vacuum_region_refs,
-            key=lambda region: _loop_signature(region["outer_loop"]),
+            key=lambda region: loop_signature(region["outer_loop"]),
         ):
-            component_region = _gdstk_surface_region(geometry_ref)
+            component_region = gdstk_surface_region(geometry_ref)
             component_subtractor_ids = tuple(
                 sorted(
                     entity.semantic_id
@@ -345,11 +343,11 @@ def _prepare_auto_vacuum_solution_regions(
             )
             boundary_entity_ids = {"bottom": [], "top": []}
             for entity in obstacle_entities:
-                entity_z_min_um, entity_z_max_um = _entity_z_range_um(entity)
+                entity_z_min_um, entity_z_max_um = entity_z_range_um(entity)
                 boundary_key: str | None = None
-                if _same_z(entity_z_max_um, z_start):
+                if same_coordinate_z(entity_z_max_um, z_start):
                     boundary_key = "bottom"
-                elif _same_z(entity_z_min_um, z_end):
+                elif same_coordinate_z(entity_z_min_um, z_end):
                     boundary_key = "top"
                 if boundary_key is None:
                     continue
@@ -438,7 +436,7 @@ def _is_auto_vacuum_subtractor(
 ) -> bool:
     if bool(entity.metadata.get("is_auto_vacuum_region")):
         return False
-    if _is_solution_entity(entity):
+    if is_solution_entity(entity):
         return True
 
     representation = planned_conductor_representation(
@@ -590,12 +588,13 @@ def _auto_vacuum_padding(
     return values
 
 
-def _auto_vacuum_envelope_bounds(
+def auto_vacuum_envelope_bounds(
     build_input: GeometryBuildInput,
     *,
     route: RouteLiteral | None,
     representation_context: RepresentationContext | None = None,
 ) -> dict[str, float]:
+    """Collect the route's participating geometry into vacuum envelope bounds."""
     bounds: list[dict[str, float]] = []
     for entity in build_input.entities:
         is_subtractor = _is_auto_vacuum_subtractor(
@@ -615,7 +614,7 @@ def _auto_vacuum_envelope_bounds(
             "z_max_um": float("nan"),
         }
         if is_subtractor:
-            z_min_um, z_max_um = _entity_z_range_um(entity)
+            z_min_um, z_max_um = entity_z_range_um(entity)
             if not (isfinite(z_min_um) and isfinite(z_max_um) and z_max_um > z_min_um):
                 raise ValueError(
                     f"{entity.semantic_id} has non-positive or non-finite z extent."
@@ -698,7 +697,7 @@ def _auto_vacuum_solution_region(
     candidates = tuple(
         entity
         for entity in build_input.entities
-        if _is_solution_entity(entity)
+        if is_solution_entity(entity)
         and bool(entity.metadata.get("is_auto_vacuum_region"))
     )
     if not candidates:
@@ -708,13 +707,14 @@ def _auto_vacuum_solution_region(
     return candidates[0]
 
 
-def _solution_entity_xy_region(
+def solution_entity_xy_region(
     gdstk: Any,
     entity: SemanticEntitySpec,
     *,
     z_min_um: float | None = None,
     z_max_um: float | None = None,
 ) -> tuple[Any, ...]:
+    """Build the XY polygon region represented by a solution entity."""
     del z_min_um, z_max_um
     geometry = entity.geometry
     if "outer_loop" in geometry:
@@ -723,7 +723,7 @@ def _solution_entity_xy_region(
             geometry["outer_loop"],
             tuple(geometry.get("hole_loops", ())),
         )
-    bounds = _solution_bounds(entity)
+    bounds = solution_bounds(entity)
     return (gdstk.Polygon(_domain_bounds_loop(bounds)),)
 
 
@@ -733,8 +733,8 @@ def _auto_vacuum_subtractor_xy_region(
     entity: SemanticEntitySpec,
 ) -> tuple[Any, ...]:
     """Use the normalized polygons for a source entity lacking a planned loop."""
-    if _is_solution_entity(entity) or "outer_loop" in entity.geometry:
-        return _solution_entity_xy_region(gdstk, entity)
+    if is_solution_entity(entity) or "outer_loop" in entity.geometry:
+        return solution_entity_xy_region(gdstk, entity)
 
     polygons_by_id = {polygon.polygon_id: polygon for polygon in build_input.polygons}
     region: tuple[Any, ...] = ()
@@ -751,7 +751,7 @@ def _auto_vacuum_subtractor_xy_region(
             else boolean_polygon_region(gdstk, region, polygon_region, "or")
         )
     if not entity.polygon_ids:
-        return _solution_entity_xy_region(gdstk, entity)
+        return solution_entity_xy_region(gdstk, entity)
     return region
 
 
@@ -794,7 +794,7 @@ def _loop_domain_bounds(
     }
 
 
-def _planar_side_solution_regions(
+def planar_side_solution_regions(
     build_input: GeometryBuildInput,
     *,
     owner_id: str,
@@ -806,26 +806,26 @@ def _planar_side_solution_regions(
     import gdstk
 
     records: list[tuple[str, tuple[Any, ...]]] = []
-    for solution in _solution_entities(build_input):
+    for solution in solution_region_entities(build_input):
         z_min_um = float(solution.geometry["z_min_um"])
         z_max_um = float(solution.geometry["z_max_um"])
         on_boundary = (
-            _same_z(z_max_um, plane_z_um)
+            same_coordinate_z(z_max_um, plane_z_um)
             if side == "bottom"
-            else _same_z(z_min_um, plane_z_um)
+            else same_coordinate_z(z_min_um, plane_z_um)
         )
         # Endpoint equivalence and strict interior must be mutually exclusive.
         contains_plane = (
             z_min_um < plane_z_um < z_max_um
-            and not _same_z(z_min_um, plane_z_um)
-            and not _same_z(z_max_um, plane_z_um)
+            and not same_coordinate_z(z_min_um, plane_z_um)
+            and not same_coordinate_z(z_max_um, plane_z_um)
         )
         if not on_boundary and not contains_plane:
             continue
         overlap = boolean_polygon_region(
             gdstk,
             occupied_region,
-            _solution_entity_xy_region(gdstk, solution),
+            solution_entity_xy_region(gdstk, solution),
             "and",
         )
         if overlap:
@@ -851,7 +851,7 @@ def _planar_side_solution_regions(
     return tuple(records)
 
 
-def _conductor_face_solution_pieces(
+def conductor_face_solution_pieces(
     build_input: GeometryBuildInput,
     *,
     route: RouteLiteral | None,
@@ -873,12 +873,12 @@ def _conductor_face_solution_pieces(
             (adjacent_id, dict(geometry_ref)) for geometry_ref in geometry_refs
         )
 
-    z_min_um, z_max_um = _entity_z_range_um(entity)
+    z_min_um, z_max_um = entity_z_range_um(entity)
     plane_z_um = z_min_um if shell_part == "bottom" else z_max_um
     records: list[tuple[str, dict[str, Any]]] = []
     for geometry_ref in geometry_refs:
-        occupied_region = _gdstk_surface_region(geometry_ref)
-        adjacent_regions = _planar_side_solution_regions(
+        occupied_region = gdstk_surface_region(geometry_ref)
+        adjacent_regions = planar_side_solution_regions(
             build_input,
             owner_id=entity.semantic_id,
             occupied_region=occupied_region,
@@ -888,27 +888,28 @@ def _conductor_face_solution_pieces(
         for adjacent_id, region in adjacent_regions:
             records.extend(
                 (adjacent_id, child)
-                for child in _geometry_refs_from_gdstk_region(geometry_ref, region)
+                for child in geometry_refs_from_gdstk_region(geometry_ref, region)
             )
     return tuple(
         sorted(
             records,
             key=lambda item: (
                 item[0],
-                _loop_signature(item[1]["outer_loop"]),
+                loop_signature(item[1]["outer_loop"]),
             ),
         )
     )
 
 
-def _active_route_conductor_entities(
+def active_route_conductor_entities(
     build_input: GeometryBuildInput,
     route: RouteLiteral | None,
     *,
     representation_context: RepresentationContext | None = None,
 ) -> tuple[SemanticEntitySpec, ...]:
+    """Select conductor entities active in the chosen route representation."""
     if route is None and representation_context is not None:
-        return _route_conductor_contact_footprints(
+        return route_conductor_contact_footprints(
             build_input,
             route,
             representation_context=representation_context,
@@ -916,7 +917,7 @@ def _active_route_conductor_entities(
     return tuple(
         entity
         for entity in build_input.entities
-        if not _is_solution_entity(entity)
+        if not is_solution_entity(entity)
         and planned_conductor_representation(
             entity, route=route, context=representation_context
         )
@@ -925,7 +926,7 @@ def _active_route_conductor_entities(
     )
 
 
-def _route_conductor_contact_footprints(
+def route_conductor_contact_footprints(
     build_input: GeometryBuildInput,
     route: RouteLiteral | None,
     *,
@@ -937,7 +938,7 @@ def _route_conductor_contact_footprints(
     they neither replace source bodies nor invent a bounding exterior.
     """
     if route is not None:
-        return _active_route_conductor_entities(
+        return active_route_conductor_entities(
             build_input, route, representation_context=representation_context
         )
     if representation_context is None:
@@ -946,7 +947,7 @@ def _route_conductor_contact_footprints(
     footprints: list[SemanticEntitySpec] = []
     for entity in build_input.entities:
         if (
-            _is_solution_entity(entity)
+            is_solution_entity(entity)
             or planned_conductor_representation(
                 entity, route=route, context=representation_context
             )
@@ -972,7 +973,8 @@ def _route_conductor_contact_footprints(
     return tuple(footprints)
 
 
-def _entity_loop_bounds(entity: SemanticEntitySpec) -> Mapping[str, float]:
+def entity_loop_bounds(entity: SemanticEntitySpec) -> Mapping[str, float]:
+    """Compute XY bounds across an entity's outer and hole loops."""
     points = tuple(
         point
         for loop in (
@@ -989,47 +991,53 @@ def _entity_loop_bounds(entity: SemanticEntitySpec) -> Mapping[str, float]:
     }
 
 
-def _route_a_sheet_plane_z_um_from_solutions(
+def route_a_sheet_plane_z_um_from_solutions(
     entity: SemanticEntitySpec,
     solution_entities: Sequence[SemanticEntitySpec],
 ) -> float:
-    z_min_um, z_max_um = _entity_z_range_um(entity)
-    point = _loop_centroid(entity.geometry["outer_loop"])
+    """Find the sheet plane coincident with an incident solution boundary."""
+    z_min_um, z_max_um = entity_z_range_um(entity)
+    point = loop_centroid(entity.geometry["outer_loop"])
     for face_z_um, solution_edge_key in (
         (z_min_um, "z_max_um"),
         (z_max_um, "z_min_um"),
     ):
         for solution in solution_entities:
-            if not _bounds_contains_point(_solution_bounds(solution), point):
+            if not bounds_contains_point(solution_bounds(solution), point):
                 continue
-            if not _same_z(float(solution.geometry[solution_edge_key]), face_z_um):
+            if not same_coordinate_z(
+                float(solution.geometry[solution_edge_key]), face_z_um
+            ):
                 continue
-            if not _is_vacuum_solution_entity(solution):
+            if not is_vacuum_solution_entity(solution):
                 return face_z_um
     return z_min_um
 
 
-def _route_a_sheet_boundary_volume_ids_from_solutions(
+def route_a_sheet_boundary_volume_ids_from_solutions(
     entity: SemanticEntitySpec,
     solution_entities: Sequence[SemanticEntitySpec],
 ) -> tuple[str, ...]:
-    z_min_um, z_max_um = _entity_z_range_um(entity)
-    point = _loop_centroid(entity.geometry["outer_loop"])
+    """Collect solution volumes incident to the conductor's sheet faces."""
+    z_min_um, z_max_um = entity_z_range_um(entity)
+    point = loop_centroid(entity.geometry["outer_loop"])
     ids: list[str] = []
     for face_z_um, solution_edge_key in (
         (z_min_um, "z_max_um"),
         (z_max_um, "z_min_um"),
     ):
         for solution in solution_entities:
-            if not _bounds_contains_point(_solution_bounds(solution), point):
+            if not bounds_contains_point(solution_bounds(solution), point):
                 continue
-            if _same_z(float(solution.geometry[solution_edge_key]), face_z_um):
+            if same_coordinate_z(
+                float(solution.geometry[solution_edge_key]), face_z_um
+            ):
                 ids.append(solution.semantic_id)
                 break
-    return _unique_ids(ids)
+    return unique_ids(ids)
 
 
-def _interface_surface_kinds(
+def interface_surface_kinds(
     build_input: GeometryBuildInput,
     *,
     route: RouteLiteral | None,
@@ -1037,12 +1045,13 @@ def _interface_surface_kinds(
     route_a_evidence: tuple[EvidenceResult, ...] = (),
     representation_context: RepresentationContext | None = None,
 ) -> tuple[str, ...]:
+    """Resolve ordered surface kinds for one recognized interface."""
     raw_kinds = interface.metadata.get("interface_kinds")
     if raw_kinds is not None:
         if isinstance(raw_kinds, str):
             raw_kinds = (raw_kinds,)
-        return tuple(kind for kind in _INTERFACE_KIND_ORDER if kind in set(raw_kinds))
-    if _is_route_a_sheet_interface(
+        return tuple(kind for kind in INTERFACE_KIND_ORDER if kind in set(raw_kinds))
+    if is_route_a_sheet_interface(
         route, interface, representation_context=representation_context
     ):
         derived = (
@@ -1050,27 +1059,28 @@ def _interface_surface_kinds(
             if route_a_evidence
             else tuple(
                 _conductor_solution_interface_kind(
-                    _entity_by_id(build_input, boundary_id)
+                    entity_by_id(build_input, boundary_id)
                 )
-                for boundary_id in _route_a_sheet_boundary_volume_ids(
+                for boundary_id in route_a_sheet_boundary_volume_ids(
                     build_input,
-                    _entity_by_id(build_input, interface.owner_semantic_ids[0]),
+                    entity_by_id(build_input, interface.owner_semantic_ids[0]),
                 )
             )
         )
-        return tuple(kind for kind in _INTERFACE_KIND_ORDER if kind in set(derived))
-    kinds = set(_interface_kinds(interface))
-    return tuple(kind for kind in _INTERFACE_KIND_ORDER if kind in kinds)
+        return tuple(kind for kind in INTERFACE_KIND_ORDER if kind in set(derived))
+    kinds = set(interface_kinds(interface))
+    return tuple(kind for kind in INTERFACE_KIND_ORDER if kind in kinds)
 
 
-def _plan_substrate_air_surfaces(
+def plan_substrate_air_surfaces(
     build_input: GeometryBuildInput,
     *,
     route: RouteLiteral | None,
     semantic_facts: SemanticEvidenceFacade | None = None,
-    route_a_sheet_patches: Sequence[_RouteASheetPatch] = (),
+    route_a_sheet_patches: Sequence[RouteASheetPatch] = (),
     representation_context: RepresentationContext | None = None,
 ) -> tuple[SurfacePlanRecord, ...]:
+    """Plan solution boundaries and substrate-air surfaces for the route."""
     import gdstk
 
     records: list[SurfacePlanRecord] = list(
@@ -1084,8 +1094,8 @@ def _plan_substrate_air_surfaces(
     for lower, upper, z_um, bounds in _solution_interface_planes(build_input):
         interface_region = boolean_polygon_region(
             gdstk,
-            _solution_entity_xy_region(gdstk, lower),
-            _solution_entity_xy_region(gdstk, upper),
+            solution_entity_xy_region(gdstk, lower),
+            solution_entity_xy_region(gdstk, upper),
             "and",
         )
         if not interface_region:
@@ -1113,14 +1123,14 @@ def _plan_substrate_air_surfaces(
             sorted(
                 interface_region,
                 key=lambda polygon: (
-                    round(_loop_centroid(clean_loop(polygon.points))[0], 9),
-                    round(_loop_centroid(clean_loop(polygon.points))[1], 9),
+                    round(loop_centroid(clean_loop(polygon.points))[0], 9),
+                    round(loop_centroid(clean_loop(polygon.points))[1], 9),
                     round(abs(polygon_area(polygon.points)), 9),
                 ),
             )
         )
         for patch in interface_region:
-            base_geometry_ref = _geometry_ref_from_gdstk_polygon(
+            base_geometry_ref = geometry_ref_from_gdstk_polygon(
                 {"plane": {"axis": "z", "value_um": z_um}},
                 patch,
             )
@@ -1138,13 +1148,13 @@ def _plan_substrate_air_surfaces(
                 for sheet_patch in route_a_sheet_patches
                 if sheet_patch.boundary_volume_ids
                 == (lower.semantic_id, upper.semantic_id)
-                and _same_z(
-                    _geometry_ref_surface_z_um(sheet_patch.geometry_ref),
+                and same_coordinate_z(
+                    geometry_ref_surface_z_um(sheet_patch.geometry_ref),
                     z_um,
                 )
                 and boolean_polygon_region(
                     gdstk,
-                    _gdstk_surface_region(sheet_patch.geometry_ref),
+                    gdstk_surface_region(sheet_patch.geometry_ref),
                     (patch,),
                     "and",
                 )
@@ -1175,7 +1185,7 @@ def _plan_substrate_air_surfaces(
                                 upper.semantic_id,
                             ),
                             "source_provenance": (
-                                _surface_contribution_provenance(
+                                surface_contribution_provenance(
                                     parent_interface_id=(
                                         f"solution-interface:{lower.semantic_id}:"
                                         f"{upper.semantic_id}"
@@ -1203,7 +1213,7 @@ def _solution_interface_geometry_refs(
 
     import gdstk
 
-    hole_loops = _simple_interior_hole_loops(
+    hole_loops = simple_interior_hole_loops(
         parent_geometry_ref,
         plane_conductors,
         conductor_geometry_refs=conductor_geometry_refs,
@@ -1211,15 +1221,15 @@ def _solution_interface_geometry_refs(
     if hole_loops is not None:
         return ({**dict(parent_geometry_ref), "hole_loops": hole_loops},)
 
-    base_region = _gdstk_surface_region(parent_geometry_ref)
+    base_region = gdstk_surface_region(parent_geometry_ref)
     conductor_region = tuple(
         polygon
         for entity in plane_conductors
-        for polygon in _entity_occupied_region(gdstk, entity)
+        for polygon in entity_occupied_region(gdstk, entity)
     ) + tuple(
         polygon
         for geometry_ref in conductor_geometry_refs
-        for polygon in _gdstk_surface_region(geometry_ref)
+        for polygon in gdstk_surface_region(geometry_ref)
     )
     live_region = boolean_polygon_region(
         gdstk,
@@ -1227,7 +1237,7 @@ def _solution_interface_geometry_refs(
         conductor_region,
         "not",
     )
-    return _geometry_refs_from_gdstk_region(parent_geometry_ref, live_region)
+    return geometry_refs_from_gdstk_region(parent_geometry_ref, live_region)
 
 
 def _auto_vacuum_component_contacts_subtractor(
@@ -1250,7 +1260,7 @@ def _auto_vacuum_component_contacts_subtractor(
     )
     if not subtractor_region:
         return False
-    subtractor_refs = _geometry_refs_from_gdstk_region(
+    subtractor_refs = geometry_refs_from_gdstk_region(
         {},
         subtractor_region,
     )
@@ -1259,7 +1269,7 @@ def _auto_vacuum_component_contacts_subtractor(
         *(clean_loop(loop) for loop in component_geometry_ref.get("hole_loops", ())),
     )
     return any(
-        _loops_share_edge_overlap(component_loop, subtractor_loop)
+        loops_share_edge_overlap(component_loop, subtractor_loop)
         for component_loop in component_loops
         for subtractor_ref in subtractor_refs
         for subtractor_loop in (
@@ -1269,7 +1279,7 @@ def _auto_vacuum_component_contacts_subtractor(
     )
 
 
-def _entity_occupied_region(
+def entity_occupied_region(
     gdstk: Any,
     entity: SemanticEntitySpec,
     *,
@@ -1318,14 +1328,14 @@ def _solution_domain_sidewall_geometry_refs(
                 representation_context=representation_context,
             )
             for first, second in pairwise(parameters):
-                segment_start = _interpolate_2d(start, end, first)
-                segment_end = _interpolate_2d(start, end, second)
+                segment_start = interpolate_2d(start, end, first)
+                segment_end = interpolate_2d(start, end, second)
                 if (
                     hypot(
                         segment_end[0] - segment_start[0],
                         segment_end[1] - segment_start[1],
                     )
-                    <= _TOPOLOGY_EPS_UM
+                    <= TOPOLOGY_EPS_UM
                 ):
                     continue
                 edge_z_min_um = _solution_boundary_edge_z_min_um(
@@ -1346,7 +1356,7 @@ def _solution_domain_sidewall_geometry_refs(
                     default_z_max_um=z_max_um,
                     representation_context=representation_context,
                 )
-                if edge_z_max_um - edge_z_min_um <= _TOPOLOGY_EPS_UM:
+                if edge_z_max_um - edge_z_min_um <= TOPOLOGY_EPS_UM:
                     continue
                 refs.append(
                     {
@@ -1375,12 +1385,12 @@ def _solution_boundary_edge_parameters(
     """Split a vacuum exterior edge at exact finite-conductor endpoints."""
     if not (
         route == "B" or (route is None and representation_context is not None)
-    ) or not _is_vacuum_solution_entity(solution):
+    ) or not is_vacuum_solution_entity(solution):
         return (0.0, 1.0)
     parameters = {0.0, 1.0}
     solution_z_min = float(solution.geometry["z_min_um"])
     solution_z_max = float(solution.geometry["z_max_um"])
-    for entity in _active_route_conductor_entities(
+    for entity in active_route_conductor_entities(
         build_input, route, representation_context=representation_context
     ):
         if planned_conductor_representation(
@@ -1390,16 +1400,16 @@ def _solution_boundary_edge_parameters(
             "material_volume",
         }:
             continue
-        entity_z_min, entity_z_max = _entity_z_range_um(entity)
+        entity_z_min, entity_z_max = entity_z_range_um(entity)
         if not (
-            _same_z(entity_z_min, solution_z_min)
-            or _same_z(entity_z_max, solution_z_max)
+            same_coordinate_z(entity_z_min, solution_z_min)
+            or same_coordinate_z(entity_z_max, solution_z_max)
         ):
             continue
         for edge_start, edge_end in ring_edges(
             clean_loop(entity.geometry["outer_loop"])
         ):
-            interval = _segment_overlap_interval(start, end, edge_start, edge_end)
+            interval = segment_overlap_interval(start, end, edge_start, edge_end)
             if interval is not None:
                 parameters.update(interval)
     return tuple(sorted(parameters))
@@ -1415,14 +1425,14 @@ def _solution_boundary_edge_z_min_um(
     default_z_min_um: float,
     representation_context: RepresentationContext | None = None,
 ) -> float:
-    if not _is_vacuum_solution_entity(solution):
+    if not is_vacuum_solution_entity(solution):
         return default_z_min_um
     z_min_um = default_z_min_um
-    for entity in _active_route_conductor_entities(
+    for entity in active_route_conductor_entities(
         build_input, route, representation_context=representation_context
     ):
         if (
-            _is_solution_entity(entity)
+            is_solution_entity(entity)
             or planned_conductor_representation(
                 entity, route=route, context=representation_context
             )
@@ -1433,10 +1443,10 @@ def _solution_boundary_edge_z_min_um(
             or "outer_loop" not in entity.geometry
         ):
             continue
-        entity_z_min_um, entity_z_max_um = _entity_z_range_um(entity)
-        if not _same_z(entity_z_min_um, default_z_min_um):
+        entity_z_min_um, entity_z_max_um = entity_z_range_um(entity)
+        if not same_coordinate_z(entity_z_min_um, default_z_min_um):
             continue
-        if _edge_is_covered_by_loop_edge(start, end, entity.geometry["outer_loop"]):
+        if edge_is_covered_by_loop_edge(start, end, entity.geometry["outer_loop"]):
             z_min_um = max(z_min_um, entity_z_max_um)
     return z_min_um
 
@@ -1451,14 +1461,14 @@ def _solution_boundary_edge_z_max_um(
     default_z_max_um: float,
     representation_context: RepresentationContext | None = None,
 ) -> float:
-    if not _is_vacuum_solution_entity(solution):
+    if not is_vacuum_solution_entity(solution):
         return default_z_max_um
     z_max_um = default_z_max_um
-    for entity in _active_route_conductor_entities(
+    for entity in active_route_conductor_entities(
         build_input, route, representation_context=representation_context
     ):
         if (
-            _is_solution_entity(entity)
+            is_solution_entity(entity)
             or planned_conductor_representation(
                 entity, route=route, context=representation_context
             )
@@ -1469,15 +1479,15 @@ def _solution_boundary_edge_z_max_um(
             or "outer_loop" not in entity.geometry
         ):
             continue
-        entity_z_min_um, entity_z_max_um = _entity_z_range_um(entity)
-        if not _same_z(entity_z_max_um, default_z_max_um):
+        entity_z_min_um, entity_z_max_um = entity_z_range_um(entity)
+        if not same_coordinate_z(entity_z_max_um, default_z_max_um):
             continue
-        if _edge_is_covered_by_loop_edge(start, end, entity.geometry["outer_loop"]):
+        if edge_is_covered_by_loop_edge(start, end, entity.geometry["outer_loop"]):
             z_max_um = min(z_max_um, entity_z_min_um)
     return z_max_um
 
 
-def _merge_solution_sidewall_interfaces(
+def merge_solution_sidewall_interfaces(
     build_input: GeometryBuildInput,
     *,
     surfaces: tuple[SurfacePlanRecord, ...],
@@ -1486,9 +1496,7 @@ def _merge_solution_sidewall_interfaces(
     """Merge coincident solution sidewalls into one shared interface surface."""
     entities = {entity.semantic_id: entity for entity in build_input.entities}
     solution_ids = {
-        entity.semantic_id
-        for entity in entities.values()
-        if _is_solution_entity(entity)
+        entity.semantic_id for entity in entities.values() if is_solution_entity(entity)
     }
     non_merge: list[SurfacePlanRecord] = []
     sidewall_groups: dict[
@@ -1509,7 +1517,7 @@ def _merge_solution_sidewall_interfaces(
         if "quad_points" not in surface.geometry_ref:
             non_merge.append(surface)
             continue
-        boundary_ids = _surface_boundary_volume_ids(
+        boundary_ids = surface_boundary_volume_ids(
             surface,
             known_entity_ids=solution_ids,
         )
@@ -1518,14 +1526,14 @@ def _merge_solution_sidewall_interfaces(
             continue
         owner_id = boundary_ids[0]
         owner = entities.get(owner_id)
-        if owner is None or not _is_solution_entity(owner):
+        if owner is None or not is_solution_entity(owner):
             non_merge.append(surface)
             continue
-        specs = _surface_ring3d_specs(surface)
+        specs = surface_ring3d_specs(surface)
         if len(specs) != 1:
             non_merge.append(surface)
             continue
-        signature = _canonical_face_signature_3d(specs[0][2])
+        signature = canonical_face_signature_3d(specs[0][2])
         if signature is None:
             non_merge.append(surface)
             continue
@@ -1536,10 +1544,10 @@ def _merge_solution_sidewall_interfaces(
         if len(group) == 1:
             grouped_surfaces.append(group[0])
             continue
-        all_ids = _unique_ids(
+        all_ids = unique_ids(
             value
             for surface in group
-            for value in _surface_boundary_volume_ids(
+            for value in surface_boundary_volume_ids(
                 surface,
                 known_entity_ids=solution_ids,
             )
@@ -1577,7 +1585,7 @@ def _merge_solution_sidewall_interfaces(
                 "boundary_volume_ids": owner_ids,
                 "interface_kinds": (kind,),
                 "interface_type": kind,
-                "source_provenance": _surface_contribution_provenance(
+                "source_provenance": surface_contribution_provenance(
                     parent_interface_id=(
                         f"solution-sidewall:{lower.semantic_id}:{upper.semantic_id}"
                     ),
@@ -1591,7 +1599,7 @@ def _merge_solution_sidewall_interfaces(
     return tuple(grouped_surfaces)
 
 
-def _reconcile_solution_domain_boundaries(
+def reconcile_solution_domain_boundaries(
     build_input: GeometryBuildInput,
     *,
     surfaces: tuple[SurfacePlanRecord, ...],
@@ -1609,7 +1617,7 @@ def _reconcile_solution_domain_boundaries(
     solution_ids = {
         entity.semantic_id
         for entity in build_input.entities
-        if _is_solution_entity(entity)
+        if is_solution_entity(entity)
     }
     retained: list[SurfacePlanRecord] = []
     non_domain_surfaces = tuple(
@@ -1623,7 +1631,7 @@ def _reconcile_solution_domain_boundaries(
         if surface.construction_only or surface.surface_role != "domain_boundary":
             retained.append(surface)
             continue
-        boundary_ids = _surface_boundary_volume_ids(
+        boundary_ids = surface_boundary_volume_ids(
             surface,
             known_entity_ids=solution_ids,
         )
@@ -1635,7 +1643,7 @@ def _reconcile_solution_domain_boundaries(
             candidate
             for candidate in non_domain_surfaces
             if owner_id
-            in _surface_boundary_volume_ids(
+            in surface_boundary_volume_ids(
                 candidate,
                 known_entity_ids=solution_ids,
             )
@@ -1644,15 +1652,15 @@ def _reconcile_solution_domain_boundaries(
             retained.append(surface)
             continue
         if "quad_points" in surface.geometry_ref:
-            domain_specs = _surface_ring3d_specs(surface)
+            domain_specs = surface_ring3d_specs(surface)
             domain_signature = (
-                _canonical_face_signature_3d(domain_specs[0][2])
+                canonical_face_signature_3d(domain_specs[0][2])
                 if len(domain_specs) == 1
                 else None
             )
             if domain_signature is not None and any(
-                len(candidate_specs := _surface_ring3d_specs(candidate)) == 1
-                and _canonical_face_signature_3d(candidate_specs[0][2])
+                len(candidate_specs := surface_ring3d_specs(candidate)) == 1
+                and canonical_face_signature_3d(candidate_specs[0][2])
                 == domain_signature
                 for candidate in candidates
             ):
@@ -1662,14 +1670,14 @@ def _reconcile_solution_domain_boundaries(
         if "outer_loop" not in surface.geometry_ref:
             retained.append(surface)
             continue
-        plane_z_um = _geometry_ref_surface_z_um(surface.geometry_ref)
+        plane_z_um = geometry_ref_surface_z_um(surface.geometry_ref)
         planar_candidates = tuple(
             candidate
             for candidate in candidates
             if "quad_points" not in candidate.geometry_ref
             and "outer_loop" in candidate.geometry_ref
-            and _same_z(
-                _geometry_ref_surface_z_um(candidate.geometry_ref),
+            and same_coordinate_z(
+                geometry_ref_surface_z_um(candidate.geometry_ref),
                 plane_z_um,
             )
         )
@@ -1678,7 +1686,7 @@ def _reconcile_solution_domain_boundaries(
             continue
         replacement_region: tuple[Any, ...] = ()
         for candidate in sorted(planar_candidates, key=lambda item: item.surface_id):
-            candidate_region = _gdstk_surface_region(candidate.geometry_ref)
+            candidate_region = gdstk_surface_region(candidate.geometry_ref)
             replacement_region = (
                 candidate_region
                 if not replacement_region
@@ -1691,14 +1699,14 @@ def _reconcile_solution_domain_boundaries(
             )
         residual_region = boolean_polygon_region(
             gdstk,
-            _gdstk_surface_region(surface.geometry_ref),
+            gdstk_surface_region(surface.geometry_ref),
             replacement_region,
             "not",
         )
         residual_refs = tuple(
             sorted(
-                _geometry_refs_from_gdstk_region(surface.geometry_ref, residual_region),
-                key=lambda geometry_ref: _loop_signature(geometry_ref["outer_loop"]),
+                geometry_refs_from_gdstk_region(surface.geometry_ref, residual_region),
+                key=lambda geometry_ref: loop_signature(geometry_ref["outer_loop"]),
             )
         )
         if not residual_refs:
@@ -1727,7 +1735,7 @@ def _plan_solution_domain_boundary_surfaces(
 ) -> tuple[SurfacePlanRecord, ...]:
     records: list[SurfacePlanRecord] = []
     for entity in build_input.entities:
-        if not _is_solution_entity(entity):
+        if not is_solution_entity(entity):
             continue
         if "outer_loop" in entity.geometry:
             loop = clean_loop(entity.geometry["outer_loop"])
@@ -1809,11 +1817,12 @@ def _domain_bounds_loop(bounds: Mapping[str, Any]) -> tuple[tuple[float, float],
     )
 
 
-def _route_a_sheet_boundary_volume_ids(
+def route_a_sheet_boundary_volume_ids(
     build_input: GeometryBuildInput,
     entity: SemanticEntitySpec,
 ) -> tuple[str, ...]:
-    return _unique_ids(
+    """Collect the distinct solution owners adjacent to both conductor faces."""
+    return unique_ids(
         (
             _conductor_face_adjacent_solution_id(build_input, entity, "bottom"),
             _conductor_face_adjacent_solution_id(build_input, entity, "top"),
@@ -1821,20 +1830,21 @@ def _route_a_sheet_boundary_volume_ids(
     )
 
 
-def _route_a_sheet_plane_z_um(
+def route_a_sheet_plane_z_um(
     build_input: GeometryBuildInput,
     entity: SemanticEntitySpec,
     *,
     representation_context: RepresentationContext | None = None,
 ) -> float:
+    """Resolve a Route A sheet plane from its host and solution geometry."""
     if any(
         solution.metadata.get("auto_vacuum_group_id") == entity.host_void_semantic_id
-        for solution in _solution_entities(build_input)
+        for solution in solution_region_entities(build_input)
     ):
         return _auto_vacuum_sheet_z(
             build_input, entity, representation_context=representation_context
         )
-    z_min_um, z_max_um = _entity_z_range_um(entity)
+    z_min_um, z_max_um = entity_z_range_um(entity)
     for boundary_id, z_um in (
         (
             _conductor_face_adjacent_solution_id(build_input, entity, "bottom"),
@@ -1845,12 +1855,12 @@ def _route_a_sheet_plane_z_um(
             z_max_um,
         ),
     ):
-        if not _is_vacuum_solution_entity(_entity_by_id(build_input, boundary_id)):
+        if not is_vacuum_solution_entity(entity_by_id(build_input, boundary_id)):
             return z_um
     return z_min_um
 
 
-def _component_is_boundary_attached(
+def component_is_boundary_attached(
     build_input: GeometryBuildInput,
     *,
     solution: SemanticEntitySpec,
@@ -1872,11 +1882,11 @@ def _component_is_boundary_attached(
             float(point[2]) for point in surface.geometry_ref["quad_points"]
         )
         return any(
-            _same_z(z_um, float(solution.geometry["z_min_um"]))
-            or _same_z(z_um, float(solution.geometry["z_max_um"]))
+            same_coordinate_z(z_um, float(solution.geometry["z_min_um"]))
+            or same_coordinate_z(z_um, float(solution.geometry["z_max_um"]))
             for z_um in z_values
         )
-    if solution.semantic_id not in _surface_boundary_volume_ids(
+    if solution.semantic_id not in surface_boundary_volume_ids(
         surface,
         known_entity_ids={entity.semantic_id for entity in build_input.entities},
     ):
@@ -1884,10 +1894,10 @@ def _component_is_boundary_attached(
     z_min = float(solution.geometry["z_min_um"])
     z_max = float(solution.geometry["z_max_um"])
     try:
-        z_um = _geometry_ref_surface_z_um(surface.geometry_ref)
+        z_um = geometry_ref_surface_z_um(surface.geometry_ref)
     except (KeyError, TypeError, ValueError):
         return False
-    return _same_z(z_um, z_min) or _same_z(z_um, z_max)
+    return same_coordinate_z(z_um, z_min) or same_coordinate_z(z_um, z_max)
 
 
 def _conductor_face_adjacent_solution_id(
@@ -1895,7 +1905,7 @@ def _conductor_face_adjacent_solution_id(
     entity: SemanticEntitySpec,
     face: str,
 ) -> str:
-    z_min_um, z_max_um = _entity_z_range_um(entity)
+    z_min_um, z_max_um = entity_z_range_um(entity)
     face_z_um = z_min_um if face == "bottom" else z_max_um
     auto_parent, auto_component = _auto_vacuum_host_component_id(
         build_input,
@@ -1923,7 +1933,7 @@ def _conductor_face_adjacent_solution_id(
         )
         if (
             adjacent_solution is not None
-            and _entity_by_id(build_input, adjacent_solution).metadata.get(
+            and entity_by_id(build_input, adjacent_solution).metadata.get(
                 "auto_vacuum_group_id"
             )
             == entity.host_void_semantic_id
@@ -1940,7 +1950,7 @@ def _conductor_face_adjacent_solution_id(
         )
         if (
             containing_solution is not None
-            and _entity_by_id(build_input, containing_solution).metadata.get(
+            and entity_by_id(build_input, containing_solution).metadata.get(
                 "auto_vacuum_group_id"
             )
             == entity.host_void_semantic_id
@@ -1968,11 +1978,12 @@ def _conductor_face_adjacent_solution_id(
     raise ValueError(f"{entity.semantic_id} {face} face has no adjacent solution")
 
 
-def _conductor_sidewall_adjacent_solution_id(
+def conductor_sidewall_adjacent_solution_id(
     build_input: GeometryBuildInput,
     entity: SemanticEntitySpec,
 ) -> str | None:
-    z_min_um, z_max_um = _entity_z_range_um(entity)
+    """Resolve the solution volume adjacent to a conductor sidewall."""
+    z_min_um, z_max_um = entity_z_range_um(entity)
     mid_z_um = (z_min_um + z_max_um) / 2.0
     auto_parent, auto_component = _auto_vacuum_host_component_id(
         build_input,
@@ -2018,7 +2029,7 @@ def _auto_vacuum_host_component_id(
         raise ValueError(f"{entity.semantic_id} requires host_void_semantic_id")
     components = []
     has_parent = False
-    for solution in _solution_entities(build_input):
+    for solution in solution_region_entities(build_input):
         metadata = solution.metadata
         if metadata.get("auto_vacuum_group_id") != host_id:
             continue
@@ -2054,9 +2065,9 @@ def _auto_vacuum_host_component_id(
         if relation == "sidewall":
             matches = z_min < z_um < z_max
         elif relation == "bottom":
-            matches = _same_z(z_max, z_um)
+            matches = same_coordinate_z(z_max, z_um)
         else:
-            matches = _same_z(z_min, z_um)
+            matches = same_coordinate_z(z_min, z_um)
         if matches:
             components.append(solution.semantic_id)
     if not has_parent:
@@ -2069,7 +2080,7 @@ def _auto_vacuum_host_component_id(
     return True, components[0] if components else None
 
 
-def _conductor_sidewall_ref_solution_id(
+def conductor_sidewall_ref_solution_id(
     build_input: GeometryBuildInput,
     *,
     entity: SemanticEntitySpec,
@@ -2092,7 +2103,7 @@ def _conductor_sidewall_ref_solution_id(
         raise ValueError(f"{entity.semantic_id} sidewall requires four quad points")
     start = (float(points[0][0]), float(points[0][1]))
     end = (float(points[1][0]), float(points[1][1]))
-    if _segment_overlap_interval(start, end, start, end) is None:
+    if segment_overlap_interval(start, end, start, end) is None:
         raise ValueError(f"{entity.semantic_id} sidewall has degenerate XY segment")
     z_values = tuple(float(point[2]) for point in points)
     z_min_um, z_max_um = min(z_values), max(z_values)
@@ -2100,13 +2111,15 @@ def _conductor_sidewall_ref_solution_id(
         raise ValueError(f"{entity.semantic_id} sidewall has non-positive z extent")
     matches: list[str] = []
     has_parent = False
-    for solution in _solution_entities(build_input):
+    for solution in solution_region_entities(build_input):
         metadata = solution.metadata
         is_host_child = metadata.get("auto_vacuum_group_id") == host_id
         if is_host_child:
             has_parent = True
             entity_ids = metadata.get("auto_vacuum_subtracting_entity_ids")
-            if isinstance(entity_ids, str | bytes) or not isinstance(entity_ids, Sequence):
+            if isinstance(entity_ids, str | bytes) or not isinstance(
+                entity_ids, Sequence
+            ):
                 raise TypeError(
                     f"auto-vacuum component {solution.semantic_id!r} lacks an entity subtractor ledger"
                 )
@@ -2118,11 +2131,11 @@ def _conductor_sidewall_ref_solution_id(
         solution_z_max_um = float(solution.geometry["z_max_um"])
         if is_host_child:
             if not (
-                _same_z(solution_z_min_um, z_min_um)
-                and _same_z(solution_z_max_um, z_max_um)
+                same_coordinate_z(solution_z_min_um, z_min_um)
+                and same_coordinate_z(solution_z_max_um, z_max_um)
             ):
                 continue
-        elif not _range_within_bounds(
+        elif not range_within_bounds(
             z_min_um, z_max_um, solution_z_min_um, solution_z_max_um
         ):
             continue
@@ -2141,7 +2154,7 @@ def _conductor_sidewall_ref_solution_id(
     return True, matches[0]
 
 
-def _adjacent_auto_vacuum_sidewall_component_id(
+def adjacent_auto_vacuum_sidewall_component_id(
     build_input: GeometryBuildInput,
     *,
     entity: SemanticEntitySpec,
@@ -2156,7 +2169,7 @@ def _adjacent_auto_vacuum_sidewall_component_id(
     z_values = tuple(float(point[2]) for point in points)
     z_min_um, z_max_um = min(z_values), max(z_values)
     matches: list[str] = []
-    for solution in _solution_entities(build_input):
+    for solution in solution_region_entities(build_input):
         if not bool(solution.metadata.get("is_auto_vacuum_region")):
             continue
         entity_ids = solution.metadata.get("auto_vacuum_subtracting_entity_ids")
@@ -2167,8 +2180,8 @@ def _adjacent_auto_vacuum_sidewall_component_id(
         if entity.semantic_id not in entity_ids:
             continue
         if not (
-            _same_z(float(solution.geometry["z_min_um"]), z_min_um)
-            and _same_z(float(solution.geometry["z_max_um"]), z_max_um)
+            same_coordinate_z(float(solution.geometry["z_min_um"]), z_min_um)
+            and same_coordinate_z(float(solution.geometry["z_max_um"]), z_max_um)
             and _sidewall_segment_is_component_boundary(start, end, solution)
         ):
             continue
@@ -2201,10 +2214,10 @@ def _sidewall_segment_is_component_boundary(
         interval
         for loop in loops
         for edge_start, edge_end in ring_edges(clean_loop(loop))
-        if (interval := _segment_overlap_interval(start, end, edge_start, edge_end))
+        if (interval := segment_overlap_interval(start, end, edge_start, edge_end))
         is not None
     )
-    return not _interval_complement(intervals)
+    return not interval_complement(intervals)
 
 
 def _auto_vacuum_sidewall_is_exterior_only(
@@ -2212,20 +2225,20 @@ def _auto_vacuum_sidewall_is_exterior_only(
     entity: SemanticEntitySpec,
 ) -> bool:
     """Whether every unmatched finite sidewall is an exact parent-envelope edge."""
-    z_min, z_max = _entity_z_range_um(entity)
+    z_min, z_max = entity_z_range_um(entity)
     if z_max <= z_min:
         raise ValueError(f"{entity.semantic_id} has non-positive sidewall extent.")
-    base_ref = _route_entity_geometry_ref(
+    base_ref = route_entity_geometry_ref(
         build_input,
         "B",
         entity,
         representation="cutout_boundary_shell",
     )
-    sidewalls = _sidewall_geometry_refs(base_ref)
+    sidewalls = sidewall_geometry_refs(base_ref)
     if not sidewalls:
         raise ValueError(f"{entity.semantic_id} has no sidewall edge references.")
     for sidewall in sidewalls:
-        if not _sidewall_is_auto_vacuum_envelope_edge(
+        if not sidewall_is_auto_vacuum_envelope_edge(
             build_input,
             entity=entity,
             geometry_ref=sidewall,
@@ -2234,7 +2247,7 @@ def _auto_vacuum_sidewall_is_exterior_only(
     return True
 
 
-def _sidewall_is_auto_vacuum_envelope_edge(
+def sidewall_is_auto_vacuum_envelope_edge(
     build_input: GeometryBuildInput,
     *,
     entity: SemanticEntitySpec,
@@ -2244,7 +2257,7 @@ def _sidewall_is_auto_vacuum_envelope_edge(
     host_id = entity.host_void_semantic_id
     envelopes = {
         tuple(tuple(float(value) for value in point) for point in loop)
-        for solution in _solution_entities(build_input)
+        for solution in solution_region_entities(build_input)
         if solution.metadata.get("auto_vacuum_group_id") == host_id
         for loop in (solution.metadata.get("auto_vacuum_envelope_outer_loop"),)
         if isinstance(loop, Sequence) and not isinstance(loop, str | bytes)
@@ -2261,7 +2274,7 @@ def _sidewall_is_auto_vacuum_envelope_edge(
     start = (float(quad[0][0]), float(quad[0][1]))
     end = (float(quad[1][0]), float(quad[1][1]))
     envelope = next(iter(envelopes))
-    return _edge_is_covered_by_loop_edge(start, end, envelope)
+    return edge_is_covered_by_loop_edge(start, end, envelope)
 
 
 def _solution_id_for_entity_coverage(
@@ -2281,19 +2294,19 @@ def _solution_id_for_entity_coverage(
     """
     import gdstk
 
-    occupied_region = _entity_occupied_region(gdstk, entity, build_input=build_input)
+    occupied_region = entity_occupied_region(gdstk, entity, build_input=build_input)
     if not occupied_region:
         raise ValueError(f"{entity.semantic_id} has no occupied geometry region.")
     candidates: list[str] = []
-    for solution in _solution_entities(build_input):
+    for solution in solution_region_entities(build_input):
         if not include_auto_vacuum and bool(
             solution.metadata.get("is_auto_vacuum_region")
         ):
             continue
         if mode == "bottom":
-            matches = _same_z(float(solution.geometry["z_max_um"]), z_um)
+            matches = same_coordinate_z(float(solution.geometry["z_max_um"]), z_um)
         elif mode == "top":
-            matches = _same_z(float(solution.geometry["z_min_um"]), z_um)
+            matches = same_coordinate_z(float(solution.geometry["z_min_um"]), z_um)
         elif mode == "containing":
             matches = (
                 float(solution.geometry["z_min_um"])
@@ -2307,7 +2320,7 @@ def _solution_id_for_entity_coverage(
         uncovered_region = boolean_polygon_region(
             gdstk,
             occupied_region,
-            _solution_entity_xy_region(gdstk, solution),
+            solution_entity_xy_region(gdstk, solution),
             "not",
         )
         if not uncovered_region:
@@ -2345,22 +2358,22 @@ def _solution_interface_planes(
     records: list[
         tuple[SemanticEntitySpec, SemanticEntitySpec, float, Mapping[str, float]]
     ] = []
-    solutions = _solution_entities(build_input)
+    solutions = solution_region_entities(build_input)
     for index, first in enumerate(solutions):
         for second in solutions[index + 1 :]:
-            first_bounds = _solution_bounds(first)
-            second_bounds = _solution_bounds(second)
-            overlap = _intersect_bounds(first_bounds, second_bounds)
+            first_bounds = solution_bounds(first)
+            second_bounds = solution_bounds(second)
+            overlap = intersect_bounds(first_bounds, second_bounds)
             if overlap is None:
                 continue
-            if _same_z(
+            if same_coordinate_z(
                 float(first.geometry["z_max_um"]),
                 float(second.geometry["z_min_um"]),
             ):
                 records.append(
                     (first, second, float(first.geometry["z_max_um"]), overlap)
                 )
-            elif _same_z(
+            elif same_coordinate_z(
                 float(second.geometry["z_max_um"]),
                 float(first.geometry["z_min_um"]),
             ):
@@ -2395,7 +2408,7 @@ def _conductor_entities_on_solution_plane(
         else (gdstk.Polygon(clean_loop(base_loop)),)
     )
     candidate_entities = (
-        _route_conductor_contact_footprints(
+        route_conductor_contact_footprints(
             build_input,
             route,
             representation_context=representation_context,
@@ -2405,7 +2418,7 @@ def _conductor_entities_on_solution_plane(
     )
     for entity in candidate_entities:
         if (
-            _is_solution_entity(entity)
+            is_solution_entity(entity)
             or planned_conductor_representation(
                 entity, route=route, context=representation_context
             )
@@ -2413,7 +2426,7 @@ def _conductor_entities_on_solution_plane(
             or "outer_loop" not in entity.geometry
             or not boolean_polygon_region(
                 gdstk,
-                _entity_occupied_region(gdstk, entity),
+                entity_occupied_region(gdstk, entity),
                 patch_region,
                 "and",
             )
@@ -2429,10 +2442,10 @@ def _conductor_entities_on_solution_plane(
             if (
                 route != "A"
                 and not (route is None and representation_context is not None)
-                and set(_route_a_sheet_boundary_volume_ids(build_input, entity))
+                and set(route_a_sheet_boundary_volume_ids(build_input, entity))
                 == pair_ids
-                and _same_z(
-                    _route_a_sheet_plane_z_um(
+                and same_coordinate_z(
+                    route_a_sheet_plane_z_um(
                         build_input,
                         entity,
                         representation_context=representation_context,
@@ -2442,18 +2455,20 @@ def _conductor_entities_on_solution_plane(
             ):
                 records.append(entity)
             continue
-        entity_region = _entity_occupied_region(gdstk, entity)
-        local_overlap = boolean_polygon_region(gdstk, entity_region, patch_region, "and")
+        entity_region = entity_occupied_region(gdstk, entity)
+        local_overlap = boolean_polygon_region(
+            gdstk, entity_region, patch_region, "and"
+        )
         if not local_overlap:
             continue
         for face, face_z in zip(
             ("bottom", "top"),
-            _entity_z_range_um(entity),
+            entity_z_range_um(entity),
             strict=True,
         ):
-            if not _same_z(face_z, z_um):
+            if not same_coordinate_z(face_z, z_um):
                 continue
-            local_domains = _planar_side_solution_regions(
+            local_domains = planar_side_solution_regions(
                 build_input,
                 owner_id=entity.semantic_id,
                 occupied_region=local_overlap,
@@ -2475,18 +2490,21 @@ def _solution_exterior_face_geometry_refs(
 
     z_key = "z_max_um" if face == "top" else "z_min_um"
     z_um = float(entity.geometry[z_key])
-    base_region = _solution_entity_xy_region(gdstk, entity)
+    base_region = solution_entity_xy_region(gdstk, entity)
     if not base_region:
         return ()
     subtractor_region: tuple[Any, ...] = ()
-    for other in _solution_entities(build_input):
+    for other in solution_region_entities(build_input):
         if other.semantic_id == entity.semantic_id:
             continue
         touches_face = (
-            face == "top" and _same_z(float(other.geometry["z_min_um"]), z_um)
-        ) or (face == "bottom" and _same_z(float(other.geometry["z_max_um"]), z_um))
+            face == "top" and same_coordinate_z(float(other.geometry["z_min_um"]), z_um)
+        ) or (
+            face == "bottom"
+            and same_coordinate_z(float(other.geometry["z_max_um"]), z_um)
+        )
         if touches_face:
-            candidate = _solution_entity_xy_region(gdstk, other)
+            candidate = solution_entity_xy_region(gdstk, other)
         else:
             continue
         if not candidate:
@@ -2508,7 +2526,7 @@ def _solution_exterior_face_geometry_refs(
     )
     if not residual_region:
         return ()
-    geometry_refs = _geometry_refs_from_gdstk_region(
+    geometry_refs = geometry_refs_from_gdstk_region(
         {"plane": {"axis": "z", "value_um": z_um}},
         residual_region,
     )
@@ -2519,60 +2537,63 @@ def _solution_exterior_face_geometry_refs(
                 for geometry_ref in geometry_refs
                 if geometry_ref["outer_loop"]
             ),
-            key=lambda geometry_ref: _loop_signature(geometry_ref["outer_loop"]),
+            key=lambda geometry_ref: loop_signature(geometry_ref["outer_loop"]),
         )
     )
 
 
-def _solution_entities(
+def solution_region_entities(
     build_input: GeometryBuildInput,
 ) -> tuple[SemanticEntitySpec, ...]:
+    """Select the input entities that represent solution regions."""
     return tuple(
-        entity for entity in build_input.entities if _is_solution_entity(entity)
+        entity for entity in build_input.entities if is_solution_entity(entity)
     )
 
 
-def _solution_bounds(entity: SemanticEntitySpec) -> Mapping[str, float]:
+def solution_bounds(entity: SemanticEntitySpec) -> Mapping[str, float]:
+    """Read a solution entity's declared domain bounds."""
     bounds = entity.geometry.get("domain_bounds_um")
     if not isinstance(bounds, Mapping):
         raise TypeError(f"{entity.semantic_id} requires domain_bounds_um")
     return bounds
 
 
-def _sidewall_on_solution_outer_boundary(
+def sidewall_on_solution_outer_boundary(
     geometry_ref: Mapping[str, Any],
     solution: SemanticEntitySpec,
 ) -> bool:
+    """Test whether a sidewall lies on the solution's outer XY boundary."""
     points = geometry_ref.get("quad_points", ())
     if len(points) != 4:
         return False
     start = (float(points[0][0]), float(points[0][1]))
     end = (float(points[1][0]), float(points[1][1]))
-    bounds = _solution_bounds(solution)
+    bounds = solution_bounds(solution)
     x_min = float(bounds["x_min_um"])
     x_max = float(bounds["x_max_um"])
     y_min = float(bounds["y_min_um"])
     y_max = float(bounds["y_max_um"])
-    if _same_z(start[0], x_min) and _same_z(end[0], x_min):
-        return _range_within_bounds(start[1], end[1], y_min, y_max)
-    if _same_z(start[0], x_max) and _same_z(end[0], x_max):
-        return _range_within_bounds(start[1], end[1], y_min, y_max)
-    if _same_z(start[1], y_min) and _same_z(end[1], y_min):
-        return _range_within_bounds(start[0], end[0], x_min, x_max)
-    if _same_z(start[1], y_max) and _same_z(end[1], y_max):
-        return _range_within_bounds(start[0], end[0], x_min, x_max)
+    if same_coordinate_z(start[0], x_min) and same_coordinate_z(end[0], x_min):
+        return range_within_bounds(start[1], end[1], y_min, y_max)
+    if same_coordinate_z(start[0], x_max) and same_coordinate_z(end[0], x_max):
+        return range_within_bounds(start[1], end[1], y_min, y_max)
+    if same_coordinate_z(start[1], y_min) and same_coordinate_z(end[1], y_min):
+        return range_within_bounds(start[0], end[0], x_min, x_max)
+    if same_coordinate_z(start[1], y_max) and same_coordinate_z(end[1], y_max):
+        return range_within_bounds(start[0], end[0], x_min, x_max)
     return False
 
 
-def _required_host_solution_id(
+def required_host_solution_id(
     build_input: GeometryBuildInput, entity: SemanticEntitySpec
 ) -> str:
     """Return one authored conductor host, never an inferred global vacuum."""
     host_id = entity.host_void_semantic_id
     if not isinstance(host_id, str) or not host_id:
         raise ValueError(f"{entity.semantic_id} requires host_void_semantic_id")
-    host = _entity_by_id(build_input, host_id)
-    if not _is_solution_entity(host):
+    host = entity_by_id(build_input, host_id)
+    if not is_solution_entity(host):
         raise ValueError(
             f"{entity.semantic_id} host_void_semantic_id {host_id!r} is not a solution_region"
         )

@@ -14,17 +14,17 @@ from itertools import pairwise
 from types import TracebackType
 from typing import TYPE_CHECKING, Literal, cast, overload
 
-from scgsim.diagnostics import (  # private-import: diagnostics owner retains its shared stage and progress entry points
-    _progress,
-    _stage,
+from scgsim.diagnostics import (
+    diagnostic_stage,
+    progress,
 )
-from scgsim.geometry._primitives.grid_regions import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+from scgsim.geometry.primitives.grid_regions import (
     GridOperandAudit,
     polygon_components,
 )
-from scgsim.preparation import (  # private-import: preparation owner retains the existing ordered-worker entry point
-    _ordered_map,
+from scgsim.preparation import (
     current_preparation_workers,
+    ordered_map,
 )
 
 if TYPE_CHECKING:
@@ -37,13 +37,13 @@ if TYPE_CHECKING:
     )
     from shapely.geometry.base import BaseGeometry
 
-    from scgsim.geometry._primitives._tagged_grid import (  # private-import: primitive package-path migration awaits coordinated backend source lists
-        SourcePath,
-    )
-    from scgsim.geometry._primitives.grid_regions import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+    from scgsim.geometry.primitives.grid_regions import (
         GridFace,
         GridOperand,
         GridPoint,
+    )
+    from scgsim.geometry.primitives.tagged_grid import (
+        SourcePath,
     )
 
 
@@ -427,7 +427,7 @@ class _SubdivisionStep:
         # Complete immutable pair work before serial pending updates; the caller
         # and worker pool never process these native overlays concurrently.
         return dict(
-            row for chunk in _ordered_map(cell_overlay_chunk, work) for row in chunk
+            row for chunk in ordered_map(cell_overlay_chunk, work) for row in chunk
         )
 
 
@@ -442,7 +442,7 @@ def subdivide_grid(
     cells: Sequence[LabelledCell] = []
     residues: Sequence[ZeroAreaResidue] = []
     candidate_count = skipped_count = residues_before_dedup = 0
-    with _stage("geometry.grid.overlay", counts={"operands": len(values)}):
+    with diagnostic_stage("geometry.grid.overlay", counts={"operands": len(values)}):
         for operand_index, value in enumerate(values):
             scope = OverlayScope(grid, operand_index)
             original = geometries[value.operand_id]
@@ -460,8 +460,8 @@ def subdivide_grid(
             step.divide(previous, candidates)
             residues_before_dedup += len(step.sideband)
             cells, residues = step.divided, deduplicate_residues(step.sideband)
-            _progress(operand_index + 1, len(values))
-    with _stage(
+            progress(operand_index + 1, len(values))
+    with diagnostic_stage(
         "geometry.grid.overlay_work",
         counts={
             "candidate_cells": candidate_count,
@@ -519,7 +519,7 @@ def account_zero_area(
         )
 
     classified = dict(
-        zip(geometries, _ordered_map(classify, tuple(geometries.values())), strict=True)
+        zip(geometries, ordered_map(classify, tuple(geometries.values())), strict=True)
     )
     incident, auxiliary = [], []
     for key, labels in labeled:
@@ -544,7 +544,7 @@ class GridAuditor:
 
     def physical_audits(self) -> list[GridOperandAudit]:
         """Check existing physical topology rules in source operand order."""
-        with _stage(
+        with diagnostic_stage(
             "geometry.grid.physical_audit", counts={"operands": len(self.values)}
         ):
             audits = []
@@ -571,13 +571,15 @@ class GridAuditor:
                         ),
                     )
                 )
-                _progress(operand_index + 1, len(self.values))
+                progress(operand_index + 1, len(self.values))
         return audits
 
     def audit_contacts(self) -> None:
         """Retain the original pairwise contact relation of physical operands."""
         contacts = [v for v in self.values if v.contact]
-        with _stage("geometry.grid.contact_audit", counts={"operands": len(contacts)}):
+        with diagnostic_stage(
+            "geometry.grid.contact_audit", counts={"operands": len(contacts)}
+        ):
             for i, first in enumerate(contacts):
                 for second in contacts[i + 1 :]:
                     before = self.geometries[first.operand_id].relate(
@@ -590,7 +592,7 @@ class GridAuditor:
                         raise ValueError(
                             f"physical contact changed at grid: {first.operand_id}, {second.operand_id}"
                         )
-                _progress(i + 1, len(contacts))
+                progress(i + 1, len(contacts))
 
     def _topology_error(
         self,

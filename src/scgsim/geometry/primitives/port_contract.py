@@ -6,13 +6,14 @@ from collections.abc import Mapping
 from typing import Any
 
 
-def _route_b_port_sheet_binding_matches(
+def route_b_port_sheet_binding_matches(
     surface: Any,
     *,
     port_surface_id: str,
     overlap_id: str | None,
     host_semantic_id: str,
 ) -> bool:
+    """Test whether a surface carries the requested Route B port binding."""
     return any(
         isinstance(binding, Mapping)
         and binding.get("port_surface_id") == port_surface_id

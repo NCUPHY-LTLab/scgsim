@@ -10,13 +10,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from scgsim.geometry._primitives.grid import (
+from scgsim.geometry.models.input import LayoutPolygonSpec
+from scgsim.geometry.primitives.grid import (
     current_grid_context,
     current_grid_size_um,
     polygon_boolean,
     split_gdstk_cutline_loop,
 )
-from scgsim.geometry.models.input import LayoutPolygonSpec
 
 
 def _fused_boolean_candidates(candidates):
@@ -31,15 +31,15 @@ def _fused_boolean_candidates(candidates):
 
     from shapely import STRtree, box
 
-    from scgsim.geometry._primitives.grid import _SOURCE_INTENT, _frame_point
+    from scgsim.geometry.primitives.grid import SOURCE_INTENT, frame_point
 
     # Native near-vertex insertion is within grid/100 and node rounding within
     # half a grid step. A full step on EACH bound is a conservative candidate
     # envelope, never an overlap/contact acceptance rule.
-    padding = 0.0 if _SOURCE_INTENT.get() else current_grid_size_um()
+    padding = 0.0 if SOURCE_INTENT.get() else current_grid_size_um()
     envelopes = []
     for polygon in candidates:
-        points = tuple(_frame_point(tuple(map(float, p))) for p in polygon.points)
+        points = tuple(frame_point(tuple(map(float, p))) for p in polygon.points)
         if not points:
             return None
         low = tuple(min(p[axis] for p in points) - padding for axis in (0, 1))
@@ -55,7 +55,7 @@ def _fused_boolean_candidates(candidates):
     )
 
 
-def _fused_gdstk_components(
+def fused_gdstk_components(
     candidates: Sequence[Any],
 ) -> tuple[tuple[LayoutPolygonSpec, tuple[int, ...], float], ...]:
     """Return stable occupied components for explicit source selectors."""
@@ -83,7 +83,7 @@ def _fused_gdstk_components(
                     (polygon,), (other,), "and", precision=current_grid_size_um()
                 )
             if overlap or _rings_share_edge(
-                _ring_from_gdstk_polygon(polygon), _ring_from_gdstk_polygon(other)
+                ring_from_gdstk_polygon(polygon), ring_from_gdstk_polygon(other)
             ):
                 union(index, other_index)
 
@@ -107,7 +107,7 @@ def _fused_gdstk_components(
             )
         if not regions or len(regions) != 1:
             raise ValueError("fused selector component must lower to one polygon")
-        outer, holes = split_gdstk_cutline_loop(_ring_from_gdstk_polygon(regions[0]))
+        outer, holes = split_gdstk_cutline_loop(ring_from_gdstk_polygon(regions[0]))
         source_indexes = tuple(indexes)
         result.append(
             (
@@ -133,7 +133,8 @@ def _fused_gdstk_components(
     )
 
 
-def _ring_from_gdstk_polygon(polygon: Any) -> tuple[tuple[float, float], ...]:
+def ring_from_gdstk_polygon(polygon: Any) -> tuple[tuple[float, float], ...]:
+    """Read an open coordinate ring from a GDS polygon."""
     points = tuple((float(x), float(y)) for x, y in polygon.points)
     if len(points) > 1 and points[0] == points[-1]:
         points = points[:-1]
@@ -195,18 +196,20 @@ def _shared_segment_length(
     return overlap * first_length / abs((first_dx, first_dy)[axis])
 
 
-def _point_in_layout_polygon(
+def point_in_layout_polygon(
     point: tuple[float, float], polygon: LayoutPolygonSpec
 ) -> bool:
-    return _point_in_ring(point, polygon.exterior) and not any(
-        _point_in_ring(point, hole) for hole in polygon.holes
+    """Test whether a point lies in the exterior and outside all holes."""
+    return point_in_ring(point, polygon.exterior) and not any(
+        point_in_ring(point, hole) for hole in polygon.holes
     )
 
 
-def _point_in_ring(
+def point_in_ring(
     point: tuple[float, float],
     ring: Sequence[tuple[float, float]],
 ) -> bool:
+    """Test ring membership using horizontal ray crossings."""
     x, y = point
     inside = False
     j = len(ring) - 1

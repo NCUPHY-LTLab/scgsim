@@ -5,32 +5,36 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from scgsim.geometry._primitives.constants import (  # private-import: source-owned topology constants are retained during coordinated package migration
-    _TOPOLOGY_EPS_UM,
+from scgsim.geometry.models.input import SemanticEntitySpec
+from scgsim.geometry.models.topology import CurveRefRecord
+from scgsim.geometry.primitives.constants import (
+    TOPOLOGY_EPS_UM,
 )
-from scgsim.geometry._primitives.grid import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+from scgsim.geometry.primitives.grid import (
     boolean_polygon_region,
     loop_inside_loop,
     split_gdstk_cutline_loop,
 )
-from scgsim.geometry._primitives.planar_loops import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+from scgsim.geometry.primitives.planar_loops import (
     LoopCoordinates,
     PlanarLoop,
     PolygonCoordinates,
-    cancel_reversed_planar_edges,
     clean_loop,
     filter_gdstk_polygons,
     point_on_planar_segment,
     polygon_area,
     ring_edges,
-    simple_planar_loops_from_edges,
 )
-from scgsim.geometry._primitives.spatial import (  # private-import: spatial helper names remain with their source owner outside this lease
-    _coordinate_2d_key,
-    _segment_overlap_interval,
+from scgsim.geometry.primitives.planar_loops import (
+    cancel_reversed_planar_edges as cancel_reversed_planar_edges,
 )
-from scgsim.geometry.models.input import SemanticEntitySpec
-from scgsim.geometry.models.topology import CurveRefRecord
+from scgsim.geometry.primitives.planar_loops import (
+    simple_planar_loops_from_edges as simple_planar_loops_from_edges,
+)
+from scgsim.geometry.primitives.spatial import (
+    coordinate_2d_key,
+    segment_overlap_interval,
+)
 
 
 def loops_touch_without_area(left: LoopCoordinates, right: LoopCoordinates) -> bool:
@@ -65,7 +69,7 @@ def loop_signature(loop: LoopCoordinates) -> tuple[tuple[float, float], ...]:
         points = clean_loop(loop)
     except Exception:  # noqa: BLE001 - malformed optional loop has no signature
         return ()
-    return tuple(sorted(_coordinate_2d_key(point) for point in points))
+    return tuple(sorted(coordinate_2d_key(point) for point in points))
 
 
 def same_loop_geometry(left: LoopCoordinates, right: LoopCoordinates) -> bool:
@@ -127,10 +131,10 @@ def _bounds_tuple_may_overlap(
 ) -> bool:
     """Cheap candidate filter; contact/hole validity is checked on loops."""
     return not (
-        left[2] <= right[0] + _TOPOLOGY_EPS_UM
-        or right[2] <= left[0] + _TOPOLOGY_EPS_UM
-        or left[3] <= right[1] + _TOPOLOGY_EPS_UM
-        or right[3] <= left[1] + _TOPOLOGY_EPS_UM
+        left[2] <= right[0] + TOPOLOGY_EPS_UM
+        or right[2] <= left[0] + TOPOLOGY_EPS_UM
+        or left[3] <= right[1] + TOPOLOGY_EPS_UM
+        or right[3] <= left[1] + TOPOLOGY_EPS_UM
     )
 
 
@@ -192,7 +196,7 @@ def loops_share_edge_overlap(
 ) -> bool:
     """Find retained positive-length overlap between the two loop boundaries."""
     return any(
-        _segment_overlap_interval(left_start, left_end, right_start, right_end)
+        segment_overlap_interval(left_start, left_end, right_start, right_end)
         is not None
         for left_start, left_end in ring_edges(left)
         for right_start, right_end in ring_edges(right)
@@ -207,10 +211,10 @@ def edge_is_covered_by_loop_edge(
     """Test full segment coverage under the existing overlap interval tolerance."""
     return any(
         interval is not None
-        and interval[0] <= _TOPOLOGY_EPS_UM
-        and interval[1] >= 1.0 - _TOPOLOGY_EPS_UM
+        and interval[0] <= TOPOLOGY_EPS_UM
+        and interval[1] >= 1.0 - TOPOLOGY_EPS_UM
         for edge_start, edge_end in ring_edges(clean_loop(loop))
-        for interval in (_segment_overlap_interval(start, end, edge_start, edge_end),)
+        for interval in (segment_overlap_interval(start, end, edge_start, edge_end),)
     )
 
 
@@ -275,29 +279,10 @@ def geometry_refs_from_gdstk_region(
     )
 
 
-# Transitional aliases preserve callers during the coordinated internal migration.
 _clean_loop = clean_loop
 _ring_edges = ring_edges
 _filter_gdstk_polygons = filter_gdstk_polygons
-_cancel_reversed_planar_edges = cancel_reversed_planar_edges
-_simple_planar_loops_from_edges = simple_planar_loops_from_edges
 _polygon_area = polygon_area
 _loop_inside_loop = loop_inside_loop
 _boolean_gdstk_region = boolean_polygon_region
 _split_gdstk_cutline_loop = split_gdstk_cutline_loop
-
-
-# Transitional aliases preserve existing callers until their owner migrates imports.
-_loops_touch_without_area = loops_touch_without_area
-_canonical_loop_sort_key = canonical_loop_sort_key
-_loop_signature = loop_signature
-_same_loop_geometry = same_loop_geometry
-_contact_holes_are_simple = contact_holes_are_simple
-_simple_interior_hole_loops = simple_interior_hole_loops
-_loops_share_edge_overlap = loops_share_edge_overlap
-_edge_is_covered_by_loop_edge = edge_is_covered_by_loop_edge
-_loop_centroid = loop_centroid
-_ordered_loop_signature = ordered_loop_signature
-_gdstk_surface_region = gdstk_surface_region
-_geometry_ref_from_gdstk_polygon = geometry_ref_from_gdstk_polygon
-_geometry_refs_from_gdstk_region = geometry_refs_from_gdstk_region

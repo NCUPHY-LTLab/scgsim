@@ -40,7 +40,7 @@ class _Cache:
     lock: Lock = field(default_factory=Lock)
 
 
-_ACTIVE: ContextVar[_Cache | None] = ContextVar("scgsim_grid_work_cache", default=None)
+ACTIVE: ContextVar[_Cache | None] = ContextVar("scgsim_grid_work_cache", default=None)
 _T = TypeVar("_T")
 
 
@@ -72,20 +72,22 @@ def _key(operands, context, apply_grid):
 @contextmanager
 def grid_work_cache_scope():
     """Own one fresh outer scope; copied executor contexts share only its cache."""
-    if _ACTIVE.get() is not None:
+    if ACTIVE.get() is not None:
         yield
         return
     cache = _Cache()
-    token = _ACTIVE.set(cache)
+    token = ACTIVE.set(cache)
     try:
         yield
     finally:
         with cache.lock:
             cache.values.clear()
-        _ACTIVE.reset(token)
+        ACTIVE.reset(token)
 
 
 def with_grid_work_cache(function):
+    """Scope reusable grid work to one decorated operation."""
+
     @wraps(function)
     def scoped(*args, **kwargs):
         with grid_work_cache_scope():
@@ -106,7 +108,7 @@ def cached_subdivision(
     Concurrent misses may compute twice. No worker waits for another worker's
     future, and the lock never spans geometry computation or nested maps.
     """
-    cache = _ACTIVE.get()
+    cache = ACTIVE.get()
     if cache is None:
         return build()
     key = _key(operands, context, apply_grid)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-_GEOMETRY_REF_METADATA_KEYS = (
+GEOMETRY_REF_METADATA_KEYS = (
     "plane",
     "contact_plane",
     "footprint",
@@ -16,7 +16,7 @@ _GEOMETRY_REF_METADATA_KEYS = (
 )
 
 
-_INTERFACE_KIND_ORDER = ("MM", "SS", "AA", "MS", "MA", "SA")
+INTERFACE_KIND_ORDER = ("MM", "SS", "AA", "MS", "MA", "SA")
 
 
-_TOPOLOGY_EPS_UM = 1e-9
+TOPOLOGY_EPS_UM = 1e-9

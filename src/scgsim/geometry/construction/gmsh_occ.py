@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import Any
 
 from scgsim.geometry.construction.conformality import engine_gate_gmsh_brep_conformality
-from scgsim.geometry.construction.export import _group_tag_plans
+from scgsim.geometry.construction.export import group_tag_plans
 from scgsim.geometry.construction.native import (
-    _rebind_surface_loops,
-    _rebind_volume_surface_refs,
-    _surface_outer_wire_edges,
     add_surface_first_volume,
+    rebind_surface_loops,
+    rebind_volume_surface_refs,
+    surface_outer_wire_edges,
 )
 from scgsim.geometry.models.common import GmshDimTag
 from scgsim.geometry.models.construction import ConstructionPlanRecord
@@ -233,13 +233,13 @@ def write_occ_geometry_from_plan(
                     repaired = add_surface_first_volume(
                         gmsh,
                         shell_surfaces,
-                        outer_wire_edges=_surface_outer_wire_edges(
+                        outer_wire_edges=surface_outer_wire_edges(
                             plan.surfaces, plan.surface_loops, curve_tags, surface_tags
                         ),
                     )
                     plan = replace(
                         plan,
-                        surface_loops=_rebind_surface_loops(
+                        surface_loops=rebind_surface_loops(
                             plan.surfaces,
                             plan.surface_loops,
                             curve_tags,
@@ -279,7 +279,7 @@ def write_occ_geometry_from_plan(
         if plan.route in {"A", "B"}:
             plan = replace(
                 plan,
-                volumes=_rebind_volume_surface_refs(plan.volumes, surface_basis_parity),
+                volumes=rebind_volume_surface_refs(plan.volumes, surface_basis_parity),
             )
         with _debug_stage(debug_logging, "synchronize OCC model", timings):
             gmsh.model.occ.synchronize()
@@ -291,7 +291,7 @@ def write_occ_geometry_from_plan(
                 curve_tags=curve_tags,
             )
         backend_tags = _backend_entity_tags(source_tags)
-        grouped_tag_plans = _group_tag_plans(plan.tags)
+        grouped_tag_plans = group_tag_plans(plan.tags)
         with _debug_stage(
             debug_logging,
             f"add {len(grouped_tag_plans)} physical groups",

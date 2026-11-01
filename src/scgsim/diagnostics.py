@@ -140,7 +140,10 @@ _span: ContextVar[_Span | None] = ContextVar("scgsim_diagnostic_span", default=N
 
 
 @contextmanager
-def _stage(name: str, *, counts: dict[str, int] | None = None) -> Iterator[None]:
+def diagnostic_stage(
+    name: str, *, counts: dict[str, int] | None = None
+) -> Iterator[None]:
+    """Record the start, progress context and outcome of one diagnostic stage."""
     recorder = _recorder.get()
     if recorder is None:
         yield
@@ -162,7 +165,8 @@ def _stage(name: str, *, counts: dict[str, int] | None = None) -> Iterator[None]
         _span.reset(token)
 
 
-def _progress(completed: int, total: int | None = None) -> None:
+def progress(completed: int, total: int | None = None) -> None:
+    """Emit throttled progress for the current diagnostic stage."""
     recorder, span = _recorder.get(), _span.get()
     if recorder is None or span is None:
         return
@@ -172,7 +176,8 @@ def _progress(completed: int, total: int | None = None) -> None:
         recorder.emit("progress", span, completed=completed, total=total)
 
 
-def _worker_config() -> _DiagnosticPayload | None:
+def worker_config() -> _DiagnosticPayload | None:
+    """Capture diagnostic settings and the parent span for a worker."""
     recorder = _recorder.get()
     if recorder is None:
         return None
@@ -199,7 +204,7 @@ def _diagnostic_session(config: _DiagnosticConfig) -> Iterator[None]:
     try:
         if profiler is not None:
             profiler.enable()
-        with _stage("preparation.session"):
+        with diagnostic_stage("preparation.session"):
             yield
     except BaseException as error:
         primary = error
@@ -255,7 +260,8 @@ def preparation_diagnostics(
 
 
 @contextmanager
-def _worker_diagnostics(payload: Mapping[str, object] | None) -> Iterator[None]:
+def worker_diagnostics(payload: Mapping[str, object] | None) -> Iterator[None]:
+    """Run a worker within the supplied diagnostic session."""
     if payload is None:
         yield
         return

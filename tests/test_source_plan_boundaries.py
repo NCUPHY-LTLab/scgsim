@@ -62,7 +62,7 @@ def _make_plan(monkeypatch, semantics_by_path):
     )
     monkeypatch.setattr(
         source_plan,
-        "_source_recipe_map",
+        "source_recipe_map",
         lambda _runner, jobs: list(jobs),
     )
     monkeypatch.setattr(
@@ -78,7 +78,7 @@ def _make_plan(monkeypatch, semantics_by_path):
             },
         ),
     )
-    monkeypatch.setattr(source_plan, "_stage", lambda _name: nullcontext())
+    monkeypatch.setattr(source_plan, "diagnostic_stage", lambda _name: nullcontext())
     fake_gdstk = ModuleType("gdstk")
     vars(fake_gdstk)["read_gds"] = lambda _path: SimpleNamespace(cells=[])
     monkeypatch.setitem(sys.modules, "gdstk", fake_gdstk)

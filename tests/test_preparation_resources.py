@@ -9,12 +9,12 @@ from types import SimpleNamespace
 import pytest
 
 from scgsim.diagnostics import (  # private-import: test the diagnostic stage boundary
-    _stage,
+    diagnostic_stage,
     preparation_diagnostics,
 )
 from scgsim.preparation import (  # private-import: verify the shared ordered worker contract
-    _ordered_map,
     current_preparation_workers,
+    ordered_map,
     preparation_resources,
 )
 
@@ -23,7 +23,7 @@ def test_outside_scope_is_serial_and_preserves_order():
     """Use the caller thread and preserve input order without a resource scope."""
     caller = get_ident()
     assert current_preparation_workers() is None
-    assert _ordered_map(lambda n: (n, get_ident()), range(4)) == [
+    assert ordered_map(lambda n: (n, get_ident()), range(4)) == [
         (n, caller) for n in range(4)
     ]
 
@@ -57,7 +57,7 @@ def test_parallel_output_context_and_nested_budget():
         worker = get_ident()
         with preparation_resources(max_workers=30):
             assert current_preparation_workers() == 3
-            nested = _ordered_map(lambda value: (value, get_ident()), range(2))
+            nested = ordered_map(lambda value: (value, get_ident()), range(2))
         assert nested == [(0, worker), (1, worker)]
         return n, worker
 
@@ -65,7 +65,7 @@ def test_parallel_output_context_and_nested_budget():
         with preparation_resources(max_workers=3):
             with preparation_resources(max_workers=1):
                 assert current_preparation_workers() == 3
-                result = _ordered_map(task, range(3))
+                result = ordered_map(task, range(3))
             assert [row[0] for row in result] == [0, 1, 2]
             assert len({row[1] for row in result}) == 3
             assert marker.get() == "caller"
@@ -98,11 +98,11 @@ def test_failure_drains_owned_work_and_bounds_submission():
 
     with preparation_resources(max_workers=2):
         with pytest.raises(ValueError) as observed:
-            _ordered_map(task, items())
+            ordered_map(task, items())
         assert observed.value is original
         assert finished.is_set()
         assert consumed == [0, 1]
-        assert _ordered_map(lambda n: n + 1, [1, 2]) == [2, 3]
+        assert ordered_map(lambda n: n + 1, [1, 2]) == [2, 3]
 
 
 @pytest.mark.parametrize(
@@ -136,15 +136,15 @@ def test_mesh_budget_rejects_before_child(threads, surface_threads, tmp_path):
 def test_one_worker_and_unscoped_native_guard_preserve_serial_behavior():
     """Keep one-worker maps serial and bypass native guards outside a scope."""
     from scgsim.preparation import (  # noqa: PLC0415 -- isolate the private guard test; private-import: verify scoped native ownership
-        _native_preparation,  # private-import: exercise scoped native budget checks
+        native_preparation,  # private-import: exercise scoped native budget checks
     )
 
-    with _native_preparation({"threads": 0, "surface_threads": -1}):
+    with native_preparation({"threads": 0, "surface_threads": -1}):
         assert current_preparation_workers() is None
     caller = get_ident()
     with preparation_resources(max_workers=1):
-        assert _ordered_map(lambda n: get_ident(), range(3)) == [caller] * 3
-        with _native_preparation({"threads": 1, "surface_threads": 1}):
+        assert ordered_map(lambda n: get_ident(), range(3)) == [caller] * 3
+        with native_preparation({"threads": 1, "surface_threads": 1}):
             assert current_preparation_workers() == 1
 
 
@@ -175,7 +175,7 @@ def test_mesh_preparation_keeps_parallel_mapping_before_native(monkeypatch, tmp_
         return n, get_ident()
 
     def construction(self, *args, **kwargs):
-        observed.extend(_ordered_map(task, range(2)))
+        observed.extend(ordered_map(task, range(2)))
         raise StopBeforeNative
 
     # Stop at the real construction call boundary: no fake XAO or native result.
@@ -208,12 +208,12 @@ def test_threaded_diagnostics_write_complete_records(tmp_path):
     """Write complete start/end records for stages run on preparation workers."""
 
     def task(n):
-        with _stage("preparation.test.task"):
+        with diagnostic_stage("preparation.test.task"):
             return n
 
     with preparation_diagnostics(tmp_path, profile=False):
         with preparation_resources(max_workers=3):
-            assert _ordered_map(task, range(12)) == list(range(12))
+            assert ordered_map(task, range(12)) == list(range(12))
     paths = list(tmp_path.glob("*.jsonl"))
     assert len(paths) == 1
     rows = [json.loads(line) for line in paths[0].read_text().splitlines()]

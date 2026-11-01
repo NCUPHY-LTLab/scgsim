@@ -4,19 +4,21 @@ Pixel incidence is an exact half-open slab construction, not a replay of GEOS
 private segment history. Missing context is refused, never assigned by samples.
 """
 
+import json
 from bisect import bisect_left, bisect_right
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from decimal import Decimal
 from fractions import Fraction
-import json
 
-from scgsim.diagnostics import _progress, _stage
-from scgsim.preparation import _ordered_map, current_preparation_workers
+from scgsim.diagnostics import diagnostic_stage, progress
+from scgsim.preparation import current_preparation_workers, ordered_map
 
 
 @dataclass(frozen=True)
 class SourcePath:
+    """Carry one directed source segment and its arrangement nodes."""
+
     operand_id: str
     operand_index: int
     ring_index: int
@@ -27,6 +29,8 @@ class SourcePath:
 
 @dataclass(frozen=True)
 class TaggedSubdivision:
+    """Bundle subdivision cells, boundaries and their source-segment provenance."""
+
     cells: tuple
     boundary: tuple
     auxiliary: tuple
@@ -35,7 +39,9 @@ class TaggedSubdivision:
 
 
 @dataclass(frozen=True)
-class _PointIndex:
+class PointIndex:
+    """Keep source points indexed along both coordinate axes."""
+
     by_x: tuple
     by_y: tuple
     xs: tuple
@@ -43,6 +49,7 @@ class _PointIndex:
 
     @classmethod
     def build(cls, points):
+        """Deduplicate source points and index them in both axis orders."""
         by_x, by_y = (
             tuple(sorted(set(points))),
             tuple(sorted(set(points), key=lambda p: (p[1], p[0]))),
@@ -50,6 +57,7 @@ class _PointIndex:
         return cls(by_x, by_y, tuple(p[0] for p in by_x), tuple(p[1] for p in by_y))
 
     def candidates(self, xmin, ymin, xmax, ymax):
+        """Select indexed source points inside the requested closed bounds."""
         xl, xr = bisect_left(self.xs, xmin), bisect_right(self.xs, xmax)
         yl, yr = bisect_left(self.ys, ymin), bisect_right(self.ys, ymax)
         rows = self.by_x[xl:xr] if xr - xl <= yr - yl else self.by_y[yl:yr]
@@ -72,7 +80,7 @@ def _signed(ring):
     return sum(a[0] * b[1] - a[1] * b[0] for a, b in zip(ring, (*ring[1:], ring[0])))
 
 
-def _pixel_interval(a, b, pixel):
+def pixel_interval(a, b, pixel):
     """Intersect [0,1] with two exact left/bottom-closed, right/top-open slabs."""
     low, high, low_open, high_open = Fraction(0), Fraction(1), False, False
     for start, end, center in zip(a, b, pixel, strict=True):
@@ -120,9 +128,10 @@ def _refuse(reason, **context):
     raise error
 
 
-def _raw_chain(a, b, nodes):
+def raw_chain(a, b, nodes):
     # Segment direction defines a geometric lexicographic order, including
     # off-line near vertices with equal dominant coordinate. No identity tie.
+    """Order raw source nodes along their directed segment."""
     dx, dy = b[0] - a[0], b[1] - a[1]
     axis = 0 if abs(dx) >= abs(dy) else 1
     signs = (1 if dx >= 0 else -1, 1 if dy >= 0 else -1)
@@ -220,12 +229,14 @@ def _raw_context(segments, grid):
     def chunk_events(chunk):
         return tuple(row for i in chunk for row in events(i))
 
-    with _stage("geometry.grid.tagged_raw_context", counts={"segments": len(segments)}):
-        for rows in _ordered_map(chunk_events, chunks):
+    with diagnostic_stage(
+        "geometry.grid.tagged_raw_context", counts={"segments": len(segments)}
+    ):
+        for rows in ordered_map(chunk_events, chunks):
             for owner, point in rows:
                 nodes[owner].add(point)
     return tuple(
-        _raw_chain(a, b, points) for (a, b), points in zip(segments, nodes, strict=True)
+        raw_chain(a, b, points) for (a, b), points in zip(segments, nodes, strict=True)
     )
 
 
@@ -243,7 +254,7 @@ def _pixel_path(a, b, endpoints, index, scale, context):
     )
     hits = []
     for pixel in candidates:
-        interval = _pixel_interval(start, end, pixel)
+        interval = pixel_interval(start, end, pixel)
         if interval is not None:
             hits.append((*interval, pixel))
     hits.sort()
@@ -255,7 +266,8 @@ def _pixel_path(a, b, endpoints, index, scale, context):
     return path
 
 
-def _source_paths(rows, index, scale):
+def source_paths(rows, index, scale):
+    """Build source-segment paths through indexed arrangement nodes."""
     output = []
     for row in rows:
         (
@@ -296,13 +308,14 @@ def _source_paths(rows, index, scale):
 
 
 def build_tagged_subdivision(values, geometries, grid):
+    """Build a grid-aligned subdivision while retaining source edge provenance."""
     from shapely import (
         LineString,
         Point,
         Polygon,
         get_coordinates,
         get_precision,
-        points as make_points,
+        points,
         polygonize,
         set_precision,
         union_all,
@@ -312,10 +325,12 @@ def build_tagged_subdivision(values, geometries, grid):
     for operand_index, value in enumerate(values):
         shape = geometries[value.operand_id]
         for ring_index, ring in enumerate((shape.exterior, *shape.interiors)):
-            points = tuple(tuple(p) for p in ring.coords)[:-1]
-            if not points:
+            ring_points = tuple(tuple(p) for p in ring.coords)[:-1]
+            if not ring_points:
                 continue
-            area = _signed(tuple(tuple(Fraction(v) for v in point) for point in points))
+            area = _signed(
+                tuple(tuple(Fraction(v) for v in point) for point in ring_points)
+            )
             if not area:
                 _refuse(
                     "nondegenerate source ring direction",
@@ -324,7 +339,7 @@ def build_tagged_subdivision(values, geometries, grid):
                 )
             orientation = (1 if ring_index == 0 else -1) * (1 if area > 0 else -1)
             for segment_index, (a, b) in enumerate(
-                zip(points, (*points[1:], points[0]))
+                zip(ring_points, (*ring_points[1:], ring_points[0]))
             ):
                 raw_rows.append(
                     (
@@ -341,7 +356,9 @@ def build_tagged_subdivision(values, geometries, grid):
     if not raw_rows:
         return TaggedSubdivision((), (), (), (), ())
     unique = tuple(dict.fromkeys(tuple(sorted((row[4], row[5]))) for row in raw_rows))
-    with _stage("geometry.grid.tagged_network", counts={"segments": len(raw_rows)}):
+    with diagnostic_stage(
+        "geometry.grid.tagged_network", counts={"segments": len(raw_rows)}
+    ):
         try:
             native = union_all([LineString(edge) for edge in unique], grid_size=grid)
         except Exception as error:
@@ -363,7 +380,7 @@ def build_tagged_subdivision(values, geometries, grid):
             raise
         # Native point rounding is observed AFTER the global network is built.
         # It supplies endpoint metadata/ties, never independently rounded inputs.
-        rounded = set_precision(make_points(vertices), grid, mode="pointwise")
+        rounded = set_precision(points(vertices), grid, mode="pointwise")
         native_grid = get_precision(rounded[0])
         scale = 1 / native_grid
         key = lambda point: tuple(round(v * scale) for v in point)
@@ -379,16 +396,16 @@ def build_tagged_subdivision(values, geometries, grid):
     context_points = tuple(
         dict.fromkeys(point for chain in chains.values() for point in chain)
     )
-    context_rounded = set_precision(make_points(context_points), grid, mode="pointwise")
+    context_rounded = set_precision(points(context_points), grid, mode="pointwise")
     context_keys = dict(
         zip(context_points, (key(p.coords[0]) for p in context_rounded), strict=True)
     )
     pixels.update(context_keys.values())
-    point_index = _PointIndex.build(pixels)
+    point_index = PointIndex.build(pixels)
 
     def source_chain(row):
         edge = tuple(sorted((row[4], row[5])))
-        chain = _raw_chain(row[4], row[5], chains[edge])
+        chain = raw_chain(row[4], row[5], chains[edge])
         return tuple((point, context_keys[point]) for point in chain)
 
     rows = tuple(
@@ -403,14 +420,14 @@ def build_tagged_subdivision(values, geometries, grid):
     workers = current_preparation_workers() or 1
     size = (len(rows) + workers - 1) // workers
     chunks = tuple(rows[start : start + size] for start in range(0, len(rows), size))
-    with _stage(
+    with diagnostic_stage(
         "geometry.grid.tagged_paths",
         counts={"segments": len(rows), "pixels": len(pixels)},
     ):
         paths = tuple(
             path
-            for chunk in _ordered_map(
-                lambda chunk: _source_paths(chunk, point_index, scale), chunks
+            for chunk in ordered_map(
+                lambda chunk: source_paths(chunk, point_index, scale), chunks
             )
             for path in chunk
         )
@@ -446,7 +463,9 @@ def build_tagged_subdivision(values, geometries, grid):
             extra_edges=len(set(origins) - native_atoms),
             grid_size_um=grid,
         )
-    with _stage("geometry.grid.tagged_faces", counts={"edges": len(native_atoms)}):
+    with diagnostic_stage(
+        "geometry.grid.tagged_faces", counts={"edges": len(native_atoms)}
+    ):
         # Polygonize the same atomic integer graph. This adds no new noding or
         # precision overlay; every face reuses these exact lattice identities.
         integer_faces = tuple(
@@ -550,7 +569,7 @@ def build_tagged_subdivision(values, geometries, grid):
             tuple(values[owner].operand_id for owner in sorted(owners)),
         )
         (boundary if point in boundary_nodes else auxiliary).append(row)
-    _progress(len(paths), len(paths))
+    progress(len(paths), len(paths))
     return TaggedSubdivision(
         cells,
         tuple(boundary),

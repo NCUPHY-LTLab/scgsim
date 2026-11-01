@@ -4,7 +4,6 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from typing import cast
 
-from scgsim.geometry._primitives.grid import with_input_grid
 from scgsim.geometry.models.input import (
     GeometryBuildInput,
     LayoutPolygonSpec,
@@ -12,6 +11,7 @@ from scgsim.geometry.models.input import (
 )
 from scgsim.geometry.models.junctions import RectangularJunctionSpec
 from scgsim.geometry.models.regions import PortSheetRegionRecord
+from scgsim.geometry.primitives.grid import with_input_grid
 from scgsim.geometry.source.ports import port_sheet_overlaps
 
 

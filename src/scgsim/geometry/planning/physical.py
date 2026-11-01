@@ -11,8 +11,6 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any
 
-from scgsim.geometry._primitives.entity_validation import _requires_route_representation
-from scgsim.geometry._primitives.grid import with_input_grid
 from scgsim.geometry.models.physical import (
     PHYSICAL_LAYER_FIELD,
     ApproximationProfile,
@@ -22,6 +20,8 @@ from scgsim.geometry.models.physical import (
 from scgsim.geometry.models.physical import (
     interpret_physical_layers as interpret_physical_layers,
 )
+from scgsim.geometry.primitives.entity_validation import requires_route_representation
+from scgsim.geometry.primitives.grid import with_input_grid
 from scgsim.semantics.route_a import geometry_z_range
 from scgsim.semantics.snapshot import canonical_sha256
 
@@ -46,7 +46,7 @@ def interpret_physical_geometry(
             declaration = PhysicalLayerDeclaration.from_payload(raw)
             declarations.append(declaration)
             bindings[entity.semantic_id] = declaration.physical_layer_id
-        elif _requires_route_representation(entity) and profile.name not in {
+        elif requires_route_representation(entity) and profile.name not in {
             "solid",
             "route_b",
         }:
@@ -110,9 +110,9 @@ def interpret_physical_geometry(
     for entity in entities:
         if not entity.metadata.get("is_auto_vacuum_region"):
             continue
-        from scgsim.geometry.planning.domain import _auto_vacuum_envelope_bounds
+        from scgsim.geometry.planning.domain import auto_vacuum_envelope_bounds
 
-        effective_body = _auto_vacuum_envelope_bounds(
+        effective_body = auto_vacuum_envelope_bounds(
             effective_input, route=None, representation_context=plan.context
         )
         source_geometry = facts[entity.semantic_id]["source_geometry"]
@@ -143,7 +143,7 @@ def interpret_physical_geometry(
 
     effective_input = derive_rectangular_junctions(effective_input)
     if effective_input.metadata.get("rectangular_junctions"):
-        from scgsim.geometry.source.intents import _route_a_sheet_interfaces
+        from scgsim.geometry.source.intents import route_a_sheet_interfaces
 
         intents = dict(effective_input.metadata.get("interface_intents_2d", {}))
         explicit = tuple(
@@ -155,7 +155,7 @@ def interpret_physical_geometry(
                 "generated_representation_context_surface_sheet",
             }
         )
-        generated = _route_a_sheet_interfaces(
+        generated = route_a_sheet_interfaces(
             effective_input.entities,
             effective_input.polygons,
             representation_context=plan.context,

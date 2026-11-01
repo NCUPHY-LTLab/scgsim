@@ -7,19 +7,19 @@ from threading import Barrier, Lock
 
 import pytest
 
-from scgsim.geometry._primitives._grid_cache import (
+from scgsim.geometry.models.grid import GeometryGridContext
+from scgsim.geometry.primitives.grid import (
+    SOURCE_AUDITS,
+    GridOperand,
+    geometry_grid_scope,
+    source_grid_audits,
+    source_recipe_map,
+)
+from scgsim.geometry.primitives.grid_cache import (
     cached_subdivision,
     grid_work_cache_scope,
     with_grid_work_cache,
 )
-from scgsim.geometry._primitives.grid import (
-    _SOURCE_AUDITS,
-    GridOperand,
-    _source_recipe_map,
-    geometry_grid_scope,
-    source_grid_audits,
-)
-from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.preparation import preparation_resources
 
 BASE = GridOperand("A", ((0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)))
@@ -140,7 +140,7 @@ def test_concurrent_misses_and_per_call_audits_remain_independent():
     def recipe(index):
         value = cached_subdivision((BASE,), CONTEXT, apply_grid=True, build=build)
         # Audit ownership is outside the cached pure builder, once per invocation.
-        _SOURCE_AUDITS.get().append({"recipe": index})
+        SOURCE_AUDITS.get().append({"recipe": index})
         return value
 
     with (
@@ -148,13 +148,13 @@ def test_concurrent_misses_and_per_call_audits_remain_independent():
         geometry_grid_scope(CONTEXT),
         grid_work_cache_scope(),
     ):
-        assert _source_recipe_map(recipe, (0, 1)) == [
+        assert source_recipe_map(recipe, (0, 1)) == [
             (("immutable",),),
             (("immutable",),),
         ]
         assert len(calls) == 2
         assert source_grid_audits() == ({"recipe": 0}, {"recipe": 1})
-        assert _source_recipe_map(recipe, (2, 3)) == [
+        assert source_recipe_map(recipe, (2, 3)) == [
             (("immutable",),),
             (("immutable",),),
         ]
@@ -180,7 +180,7 @@ def test_compiler_build_owns_cache_scope_without_executing_geometry():
     )
     assert any(
         isinstance(n, ast.ImportFrom)
-        and n.module == "scgsim.geometry._primitives._grid_cache"
+        and n.module == "scgsim.geometry.primitives.grid_cache"
         and any(a.name == "with_grid_work_cache" for a in n.names)
         for n in module.body
     )

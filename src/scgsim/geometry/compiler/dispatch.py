@@ -5,9 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, TypedDict
 
-from scgsim.diagnostics import _stage
-from scgsim.geometry._primitives.entities import _component_metadata
-from scgsim.geometry._primitives.grid import with_input_grid
+from scgsim.diagnostics import diagnostic_stage
 from scgsim.geometry.compiler.stages import StageTimings
 from scgsim.geometry.compiler.validation import (
     validate_curve_plan_coverage,
@@ -46,9 +44,9 @@ from scgsim.geometry.models.topology import (
     VolumePlanRecord,
 )
 from scgsim.geometry.planning.domain import (
-    _merge_solution_sidewall_interfaces,
-    _prepare_auto_vacuum_solution_regions,
-    _reconcile_solution_domain_boundaries,
+    merge_solution_sidewall_interfaces,
+    prepare_auto_vacuum_solution_regions,
+    reconcile_solution_domain_boundaries,
 )
 from scgsim.geometry.planning.evidence import build_semantic_evidence_facade
 from scgsim.geometry.planning.interfaces import (
@@ -58,9 +56,9 @@ from scgsim.geometry.planning.interfaces import (
     recognize_route_interfaces,
 )
 from scgsim.geometry.planning.ports import (
-    _bind_route_b_port_volume_plans,
-    _lower_port_sheet_regions,
-    _validate_route_b_port_sheet_sidewall_topology,
+    bind_route_b_port_volume_plans,
+    lower_port_sheet_regions,
+    validate_route_b_port_sheet_sidewall_topology,
 )
 from scgsim.geometry.planning.representation import project_native_route_representations
 from scgsim.geometry.planning.surfaces import (
@@ -70,16 +68,18 @@ from scgsim.geometry.planning.surfaces import (
 from scgsim.geometry.planning.tags import plan_route_tags
 from scgsim.geometry.planning.topology import plan_canonical_topology
 from scgsim.geometry.planning.volumes import (
-    _reconcile_construction_body_surface_ids,
     plan_cut_host_operations,
     plan_route_construction_bodies,
     plan_route_volumes,
+    reconcile_construction_body_surface_ids,
 )
+from scgsim.geometry.primitives.entities import component_metadata
+from scgsim.geometry.primitives.grid import with_input_grid
 from scgsim.semantics import SemanticEvidenceFacade
 
 
 @with_input_grid
-@_stage("geometry.compiler.plan")
+@diagnostic_stage("geometry.compiler.plan")
 def build_route_construction_plan(
     build_input: GeometryBuildInput,
     *,
@@ -117,7 +117,7 @@ def build_route_construction_plan(
             build_input, route=route, representation_context=representation_context
         )
     timings = StageTimings(diagnostic_prefix="geometry.compiler.")
-    build_input = _prepare_auto_vacuum_solution_regions(
+    build_input = prepare_auto_vacuum_solution_regions(
         build_input, route=route, representation_context=representation_context
     )
     with timings.measure("validate_selected_route"):
@@ -229,12 +229,12 @@ class _PolygonPlanner:
                 semantic_facts=self.semantic_facts,
             )
         with self.timings.measure("reconcile_solution_domain_boundaries"):
-            self.surfaces = _reconcile_solution_domain_boundaries(
+            self.surfaces = reconcile_solution_domain_boundaries(
                 self.build_input, surfaces=self.surfaces
             )
         if self.route in {"A", "B"} and self.build_input.port_sheet_regions:
             with self.timings.measure("lower_port_sheet_regions"):
-                self.surfaces = _lower_port_sheet_regions(
+                self.surfaces = lower_port_sheet_regions(
                     self.build_input,
                     route=self.route,
                     mm_contacts=self.mm_contacts,
@@ -246,7 +246,7 @@ class _PolygonPlanner:
                 self.build_input, route=self.route, surfaces=self.surfaces
             )
         with self.timings.measure("merge_solution_sidewall_interfaces"):
-            self.surfaces = _merge_solution_sidewall_interfaces(
+            self.surfaces = merge_solution_sidewall_interfaces(
                 self.build_input,
                 surfaces=self.surfaces,
                 semantic_facts=self.semantic_facts,
@@ -262,7 +262,7 @@ class _PolygonPlanner:
             topology = plan_canonical_topology(surfaces=self.surfaces)
         self.points, self.curves, self.surface_loops, self.surfaces = topology
         with self.timings.measure("validate_route_b_port_sheet_sidewall_topology"):
-            _validate_route_b_port_sheet_sidewall_topology(
+            validate_route_b_port_sheet_sidewall_topology(
                 route=self.route,
                 points=self.points,
                 curves=self.curves,
@@ -291,7 +291,7 @@ class _PolygonPlanner:
                 mm_contacts=self.mm_contacts,
             )
         if self.route == "B":
-            self.surfaces = _bind_route_b_port_volume_plans(
+            self.surfaces = bind_route_b_port_volume_plans(
                 self.build_input, self.surfaces, self.volumes
             )
         with self.timings.measure("validate_route_volume_surface_refs"):
@@ -304,7 +304,7 @@ class _PolygonPlanner:
             )
         with self.timings.measure("validate_surface_use_counts"):
             validate_surface_use_counts(volumes=self.volumes, surfaces=self.surfaces)
-        self.construction_bodies = _reconcile_construction_body_surface_ids(
+        self.construction_bodies = reconcile_construction_body_surface_ids(
             self.construction_bodies, surfaces=self.surfaces
         )
 
@@ -403,7 +403,7 @@ class _PolygonPlanner:
             },
             "timings": self.timings.records,
             **(
-                {"conductor_components": _component_metadata(self.mm_contacts)}
+                {"conductor_components": component_metadata(self.mm_contacts)}
                 if self.route in {"A", "B"}
                 else {}
             ),

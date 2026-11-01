@@ -9,10 +9,10 @@ import pytest
 
 import scgsim.diagnostics as diagnostics
 from scgsim.diagnostics import (  # private-import: inspect worker handoff and stage context contracts
-    _stage,
-    _worker_config,
-    _worker_diagnostics,
+    diagnostic_stage,
     preparation_diagnostics,
+    worker_config,
+    worker_diagnostics,
 )
 
 
@@ -33,7 +33,7 @@ def _read_events(output_dir: Path) -> list[tuple[Path, list[dict[str, object]]]]
 def test_nested_worker_session_keeps_session_and_parent_span(tmp_path: Path) -> None:
     """Carry diagnostic session identity into a child and restore parent span."""
     with preparation_diagnostics(tmp_path):
-        worker_payload = _worker_config()
+        worker_payload = worker_config()
         assert worker_payload is not None
         assert set(worker_payload) == {
             "output_dir",
@@ -42,10 +42,10 @@ def test_nested_worker_session_keeps_session_and_parent_span(tmp_path: Path) -> 
             "session_id",
             "parent_span_id",
         }
-        with _worker_diagnostics(worker_payload):
-            with _stage("preparation.worker.task"):
+        with worker_diagnostics(worker_payload):
+            with diagnostic_stage("preparation.worker.task"):
                 pass
-        with _stage("preparation.parent.after_worker"):
+        with diagnostic_stage("preparation.parent.after_worker"):
             pass
 
     event_files = _read_events(tmp_path)
@@ -76,10 +76,10 @@ def test_stage_records_error_and_restores_context(tmp_path: Path) -> None:
     failure = ValueError("stage failed")
     with preparation_diagnostics(tmp_path):
         with pytest.raises(ValueError) as observed:
-            with _stage("preparation.failing"):
+            with diagnostic_stage("preparation.failing"):
                 raise failure
         assert observed.value is failure
-        with _stage("preparation.after_failure"):
+        with diagnostic_stage("preparation.after_failure"):
             pass
 
     rows = [row for _, records in _read_events(tmp_path) for row in records]
@@ -123,7 +123,7 @@ def test_cleanup_failure_preserves_primary_error_and_resets_context(
         "Preparation diagnostics failed: OSError" in note for note in failure.__notes__
     )
     with preparation_diagnostics(tmp_path):
-        with _stage("preparation.after_cleanup_failure"):
+        with diagnostic_stage("preparation.after_cleanup_failure"):
             pass
     assert len(_read_events(tmp_path)) == 2
 

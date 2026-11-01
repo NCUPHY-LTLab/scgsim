@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from scgsim.geometry._primitives._grid_cache import with_grid_work_cache
-
-from scgsim.diagnostics import _stage, _progress
-
 import copy
 import hashlib
 import json
@@ -17,36 +13,38 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from scgsim.diagnostics import diagnostic_stage, progress
 from scgsim.geometry.models.input import (
     GeometryBuildInput,
     SemanticEntitySpec,
     VacuumRegionSpec,
 )
 from scgsim.geometry.models.lumped import LumpedSupport
-from scgsim.geometry.source._normalization import (
-    _coupon_domain_bounds,
-    _finite_number,
-    _gds_layer,
-    _materials,
-    _semantic_layer_records,
-    _solution_regions,
-)
-from scgsim.geometry.source._occurrence import (
-    _entity_from_layer_record,
-    _source_recipe_job,
-    _failed_source_recipe,
-    _run_source_recipe,
-    _with_occurrence_extraction_cache,
-    _occurrence_ground_polygons_for_entity,
-    _occurrence_include_polygon,
-    _occurrence_polygons_for_entity,
-    _occurrence_port_polygon,
-    _occurrence_lumped_polygon,
-)
-from scgsim.geometry._primitives.grid import _source_recipe_map
+from scgsim.geometry.primitives.grid import source_recipe_map
+from scgsim.geometry.primitives.grid_cache import with_grid_work_cache
 from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
-from scgsim.geometry.source.grid import with_source_grid
 from scgsim.geometry.source.curves import boundary_binding, transform_boundary
+from scgsim.geometry.source.grid import with_source_grid
+from scgsim.geometry.source.normalization import (
+    coupon_domain_bounds,
+    finite_number,
+    gds_layer,
+    normalize_material_records,
+    semantic_layer_records,
+    solution_regions,
+)
+from scgsim.geometry.source.occurrence import (
+    entity_from_layer_record,
+    failed_source_recipe,
+    occurrence_ground_polygons_for_entity,
+    occurrence_include_polygon,
+    occurrence_lumped_polygon,
+    occurrence_polygons_for_entity,
+    occurrence_port_polygon,
+    run_source_recipe,
+    source_recipe_job,
+    with_occurrence_extraction_cache,
+)
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 
 _PATH_SEGMENT = re.compile(r"[A-Za-z][A-Za-z0-9_.-]*\Z")
@@ -236,7 +234,7 @@ class GeometryPlan:
         self._component = component
         self._layer_stack = layer_stack
         self._material_records = material_records
-        self._coupon_padding_um = _finite_number(coupon_padding_um, "coupon_padding_um")
+        self._coupon_padding_um = finite_number(coupon_padding_um, "coupon_padding_um")
         if self._coupon_padding_um < 0:
             raise ValueError("coupon_padding_um must be nonnegative")
         self._instances: dict[str, tuple[Any, Any, tuple[float, ...]]] = {
@@ -261,7 +259,6 @@ class GeometryPlan:
             if len(set(identities)) != len(identities):
                 raise ValueError(f"duplicate rectangular junction {field}")
         self._rectangular_junctions = requests
-
 
     def set_lumped_supports(self, supports: Sequence[LumpedSupport]) -> None:
         """Bind caller-declared local nonmetal supports; no excitation is inferred."""
@@ -329,7 +326,7 @@ class GeometryPlan:
     def entities(self) -> tuple[SemanticEntitySpec, ...]:
         stack = self._stack()
         return tuple(
-            _entity_from_layer_record(record, materials=stack["materials"])
+            entity_from_layer_record(record, materials=stack["materials"])
             for record in stack["layers"]
         )
 
@@ -405,9 +402,9 @@ class GeometryPlan:
         levels = getattr(self._layer_stack, "layers", None)
         if not isinstance(levels, Mapping):
             raise TypeError("layer_stack must expose layers")
-        bounds = _coupon_domain_bounds(self._component, self._coupon_padding_um)
-        materials = _materials(self._material_records)
-        regions = _solution_regions(levels, materials=materials, bounds=bounds)
+        bounds = coupon_domain_bounds(self._component, self._coupon_padding_um)
+        materials = normalize_material_records(self._material_records)
+        regions = solution_regions(levels, materials=materials, bounds=bounds)
         if not regions:
             raise ValueError("plan needs at least one PDK solution region")
         owners = {
@@ -483,7 +480,7 @@ class GeometryPlan:
                 if key in contribution_ids:
                     raise ValueError(f"duplicate ground contribution {path}/{local_id}")
                 contribution_ids.add(key)
-                layer = _gds_layer(
+                layer = gds_layer(
                     raw["layer"], f"{path}/{local_id} ground contribution"
                 )
                 contributions.append(
@@ -511,7 +508,7 @@ class GeometryPlan:
                 if "/" in name:
                     raise ValueError("component-local port name must be one segment")
                 port = cell.ports[name]
-                layer = _gds_layer(raw["layer"], f"{path}/{name} port")
+                layer = gds_layer(raw["layer"], f"{path}/{name} port")
                 raw_port_layer = port.layer
                 if hasattr(raw_port_layer, "layer") and hasattr(
                     raw_port_layer, "datatype"
@@ -535,7 +532,7 @@ class GeometryPlan:
                         "source_occurrence_path": path,
                     }
                 )
-        layers = _semantic_layer_records(
+        layers = semantic_layer_records(
             declarations,
             levels=levels,
             materials=materials,
@@ -558,10 +555,14 @@ class GeometryPlan:
 
                 bounds_ref = record["geometry"].get("plane_bounds_ref")
                 if bounds_ref not in regions or bounds_ref not in levels:
-                    raise ValueError("occurrence Ground requires its declared plane_bounds_ref")
+                    raise ValueError(
+                        "occurrence Ground requires its declared plane_bounds_ref"
+                    )
                 source_layer = levels[bounds_ref].layer
                 if not isinstance(source_layer, LogicalLayer):
-                    raise ValueError("occurrence Ground bounds require a source logical layer")
+                    raise ValueError(
+                        "occurrence Ground bounds require a source logical layer"
+                    )
                 regions[bounds_ref]["metadata"]["source_layer_datatype"] = list(
                     get_layer_tuple(source_layer.layer)
                 )
@@ -617,8 +618,8 @@ class GeometryPlan:
 
     @with_grid_work_cache
     @with_source_grid
-    @_stage("geometry.plan.prepare")
-    @_with_occurrence_extraction_cache
+    @diagnostic_stage("geometry.plan.prepare")
+    @with_occurrence_extraction_cache
     def prepare(self) -> GeometryPlanSnapshot:
         self._validate_registered_sources()
         stack = self._stack()
@@ -653,7 +654,7 @@ class GeometryPlan:
         with TemporaryDirectory(prefix="scgsim-geometry-plan-") as temporary:
             root = Path(temporary)
             gds_file, stack_file = root / "source.gds", root / "source.stack.json"
-            with _stage("geometry.source.write_gds"):
+            with diagnostic_stage("geometry.source.write_gds"):
                 self._component.write_gds(gds_file)
             gds_bytes = gds_file.read_bytes()
             gds_sha256 = hashlib.sha256(gds_bytes).hexdigest()
@@ -661,7 +662,7 @@ class GeometryPlan:
             stack["metadata"]["source_occurrences"] = occurrences
             import gdstk
 
-            with _stage("geometry.source.read_gds"):
+            with diagnostic_stage("geometry.source.read_gds"):
                 source_cells = {
                     cell.name: cell for cell in gdstk.read_gds(str(gds_file)).cells
                 }
@@ -673,12 +674,12 @@ class GeometryPlan:
                 )
                 for path in self._instances
             }
-            with _stage("geometry.source.extract_occurrences"):
+            with diagnostic_stage("geometry.source.extract_occurrences"):
                 occurrence_targets = []
 
                 def occurrence_jobs():
                     for diagnostic_index, record in enumerate(stack["layers"]):
-                        _progress(diagnostic_index, len(stack["layers"]))
+                        progress(diagnostic_index, len(stack["layers"]))
                         try:
                             geometry_source = record["geometry"].get(
                                 "geometry_source", "gds_polygon"
@@ -696,13 +697,13 @@ class GeometryPlan:
                                     f"source occurrence {path!r} is absent from written GDS"
                                 )
                             selector = (
-                                _occurrence_ground_polygons_for_entity
+                                occurrence_ground_polygons_for_entity
                                 if local_ground
-                                else _occurrence_polygons_for_entity
+                                else occurrence_polygons_for_entity
                             )
-                            job = _source_recipe_job(
+                            job = source_recipe_job(
                                 selector,
-                                _entity_from_layer_record(
+                                entity_from_layer_record(
                                     record, materials=stack["materials"]
                                 ),
                                 source_cell=source_cells[cell.name],
@@ -721,16 +722,16 @@ class GeometryPlan:
                                 ),
                             )
                         except Exception as error:
-                            yield _failed_source_recipe(error)
+                            yield failed_source_recipe(error)
                             return
                         occurrence_targets.append(record)
                         yield job
 
-                values = _source_recipe_map(_run_source_recipe, occurrence_jobs())
+                values = source_recipe_map(run_source_recipe, occurrence_jobs())
                 for record, value in zip(occurrence_targets, values, strict=True):
                     record["geometry"]["source_occurrence_polygons_um"] = value
 
-            with _stage("geometry.source.extract_includes"):
+            with diagnostic_stage("geometry.source.extract_includes"):
                 include_targets = []
 
                 def include_jobs():
@@ -745,8 +746,8 @@ class GeometryPlan:
                                     raise ValueError(
                                         f"ground contribution source {path!r} is absent from GDS"
                                     )
-                                job = _source_recipe_job(
-                                    _occurrence_include_polygon,
+                                job = source_recipe_job(
+                                    occurrence_include_polygon,
                                     contribution,
                                     source_cell=source_cells[cell.name],
                                     transform=transform,
@@ -755,16 +756,16 @@ class GeometryPlan:
                                     ],
                                 )
                             except Exception as error:
-                                yield _failed_source_recipe(error)
+                                yield failed_source_recipe(error)
                                 return
                             include_targets.append(contribution)
                             yield job
 
-                values = _source_recipe_map(_run_source_recipe, include_jobs())
+                values = source_recipe_map(run_source_recipe, include_jobs())
                 for contribution, value in zip(include_targets, values, strict=True):
                     contribution["polygon"] = value
 
-            with _stage("geometry.source.extract_ports"):
+            with diagnostic_stage("geometry.source.extract_ports"):
                 port_targets = []
 
                 def port_jobs():
@@ -776,8 +777,8 @@ class GeometryPlan:
                                 raise ValueError(
                                     f"source port occurrence {path!r} is absent from written GDS"
                                 )
-                            job = _source_recipe_job(
-                                _occurrence_port_polygon,
+                            job = source_recipe_job(
+                                occurrence_port_polygon,
                                 record,
                                 source_cell=source_cells[cell.name],
                                 transform=transform,
@@ -786,16 +787,16 @@ class GeometryPlan:
                                 ],
                             )
                         except Exception as error:
-                            yield _failed_source_recipe(error)
+                            yield failed_source_recipe(error)
                             return
                         port_targets.append(record)
                         yield job
 
-                values = _source_recipe_map(_run_source_recipe, port_jobs())
+                values = source_recipe_map(run_source_recipe, port_jobs())
                 for record, value in zip(port_targets, values, strict=True):
                     record["source_occurrence_polygon_um"] = value
             stack_file.write_text(json.dumps(stack, sort_keys=True), encoding="utf-8")
-            with _stage("geometry.source.lower_stack"):
+            with diagnostic_stage("geometry.source.lower_stack"):
                 build_input = build_gds_stack_geometry_input(
                     gds_file=gds_file,
                     stack_file=stack_file,
@@ -812,29 +813,57 @@ class GeometryPlan:
                     )
                 cell, _, transform = self._instances[path]
                 if support.source_level not in self._layer_stack.layers:
-                    raise ValueError(f"lumped support level {support.source_level!r} is not declared")
+                    raise ValueError(
+                        f"lumped support level {support.source_level!r} is not declared"
+                    )
                 level = self._layer_stack.layers[support.source_level]
                 from gdsfactory.pdk import get_layer_tuple
+
                 if get_layer_tuple(level.layer.layer) != support.source_layer:
-                    raise ValueError("lumped support source level/layer binding differs")
+                    raise ValueError(
+                        "lumped support source level/layer binding differs"
+                    )
                 source_z_um = float(level.zmin)
-                if support.source_z_um is not None and support.source_z_um != source_z_um:
-                    raise ValueError("lumped support source plane differs from locator Level")
+                if (
+                    support.source_z_um is not None
+                    and support.source_z_um != source_z_um
+                ):
+                    raise ValueError(
+                        "lumped support source plane differs from locator Level"
+                    )
                 if any(point[2] != source_z_um for point in support.contact_points_um):
-                    raise ValueError("lumped support contacts differ from locator plane")
-                for entity_id in (*support.terminal_a_entity_ids, *support.terminal_b_entity_ids):
-                    if entity_id not in entities or entities[entity_id].material_kind != "conductor":
-                        raise ValueError(f"lumped support terminal Entity {entity_id!r} is not a conductor")
+                    raise ValueError(
+                        "lumped support contacts differ from locator plane"
+                    )
+                for entity_id in (
+                    *support.terminal_a_entity_ids,
+                    *support.terminal_b_entity_ids,
+                ):
+                    if (
+                        entity_id not in entities
+                        or entities[entity_id].material_kind != "conductor"
+                    ):
+                        raise ValueError(
+                            f"lumped support terminal Entity {entity_id!r} is not a conductor"
+                        )
                     if entities[entity_id].net_id is None:
-                        raise ValueError(f"lumped support terminal Entity {entity_id!r} lacks final Net ownership")
-                polygon = _occurrence_lumped_polygon(
-                    support, cell=source_cells[cell.name],
+                        raise ValueError(
+                            f"lumped support terminal Entity {entity_id!r} lacks final Net ownership"
+                        )
+                polygon = occurrence_lumped_polygon(
+                    support,
+                    cell=source_cells[cell.name],
                     excluded_reference_indexes=child_reference_indexes[path],
                 )
-                lumped_supports.append(replace(
-                    support, exterior=polygon.exterior, holes=polygon.holes,
-                    source_transform=transform, source_z_um=source_z_um,
-                ))
+                lumped_supports.append(
+                    replace(
+                        support,
+                        exterior=polygon.exterior,
+                        holes=polygon.holes,
+                        source_transform=transform,
+                        source_z_um=source_z_um,
+                    )
+                )
         # The source is self-contained after temporary input files disappear.
         metadata = dict(build_input.metadata)
         metadata.pop("gds_file", None)
@@ -902,11 +931,20 @@ class GeometryPlan:
         if self._rectangular_junctions:
             from scgsim.geometry.source.junctions import with_rectangular_junctions
 
-            build_input = with_rectangular_junctions(build_input, self._rectangular_junctions)
-        stack = {**stack, "metadata": {**stack["metadata"],
-            "geometry_grid": build_input.metadata["geometry_grid"],
-            "source_dbu_um": build_input.metadata["source_dbu_um"],
-            "unquantized_source_sha256": build_input.metadata["unquantized_source_sha256"]}}
+            build_input = with_rectangular_junctions(
+                build_input, self._rectangular_junctions
+            )
+        stack = {
+            **stack,
+            "metadata": {
+                **stack["metadata"],
+                "geometry_grid": build_input.metadata["geometry_grid"],
+                "source_dbu_um": build_input.metadata["source_dbu_um"],
+                "unquantized_source_sha256": build_input.metadata[
+                    "unquantized_source_sha256"
+                ],
+            },
+        }
         return GeometryPlanSnapshot(
             build_input,
             json.dumps(stack, sort_keys=True),

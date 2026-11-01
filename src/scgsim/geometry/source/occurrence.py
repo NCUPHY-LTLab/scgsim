@@ -13,23 +13,25 @@ from threading import get_ident
 from types import MappingProxyType
 from typing import Any
 
-from scgsim.geometry._primitives.grid import (
+from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
+from scgsim.geometry.primitives.grid import (
     in_occurrence_frame,
     preserve_declared_source,
     split_gdstk_cutline_loop,
 )
-from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.source._normalization import _gds_layer
-from scgsim.geometry.source._polygon_ops import (
-    _fused_gdstk_components,
-    _point_in_layout_polygon,
-    _point_in_ring,
-    _ring_from_gdstk_polygon,
+from scgsim.geometry.source.normalization import gds_layer
+from scgsim.geometry.source.polygon_ops import (
+    fused_gdstk_components,
+    point_in_layout_polygon,
+    point_in_ring,
+    ring_from_gdstk_polygon,
 )
 
 
 @dataclass(frozen=True)
-class _SourceRecipeJob:
+class SourceRecipeJob:
+    """Carry one source recipe or its deferred preparation failure."""
+
     function: Any = None
     args: tuple = ()
     kwargs: Mapping[str, Any] = field(default_factory=dict)
@@ -39,7 +41,7 @@ class _SourceRecipeJob:
     traceback: Any = None
 
 
-def _source_recipe_job(
+def source_recipe_job(
     function,
     *args,
     source_cell=None,
@@ -51,7 +53,7 @@ def _source_recipe_job(
 ):
     """Prepare worker-owned inputs on the source thread, before pool dispatch."""
     if source_cell is not None:
-        source_polygons = _polygons_by_layer(
+        source_polygons = read_polygons_by_layer(
             source_cell, excluded_reference_indexes=excluded_reference_indexes
         )
         kwargs["cell"] = None
@@ -61,17 +63,19 @@ def _source_recipe_job(
             layer: tuple(polygon.copy() for polygon in polygons)
             for layer, polygons in source_polygons.items()
         }
-    return _SourceRecipeJob(
+    return SourceRecipeJob(
         function, deepcopy(args), copied, deepcopy(expected), comparison_error
     )
 
 
-def _failed_source_recipe(error):
+def failed_source_recipe(error):
     # Preparation errors join the same source-order failure stream as recipes.
-    return _SourceRecipeJob(error=error, traceback=error.__traceback__)
+    """Capture a preparation failure for ordered source-recipe execution."""
+    return SourceRecipeJob(error=error, traceback=error.__traceback__)
 
 
-def _run_source_recipe(job):
+def run_source_recipe(job):
+    """Execute one source recipe and preserve its ordered failure behavior."""
     if job.error is not None:
         raise job.error.with_traceback(job.traceback)
     result = job.function(*job.args, **job.kwargs)
@@ -80,7 +84,7 @@ def _run_source_recipe(job):
     return result
 
 
-def _resolve_material_kind(
+def resolve_material_kind(
     record: Mapping[str, Any],
     *,
     material_id: Any,
@@ -114,7 +118,8 @@ def _resolve_material_kind(
     return str(stack_kind)
 
 
-def _is_record_sequence(value: Any) -> bool:
+def is_record_sequence(value: Any) -> bool:
+    """Identify record sequences while excluding strings and bytes."""
     return isinstance(value, Sequence) and not isinstance(value, str | bytes)
 
 
@@ -139,7 +144,9 @@ def _occurrence_extraction_scope():
         _EXTRACTION_CACHE.reset(token)
 
 
-def _with_occurrence_extraction_cache(function):
+def with_occurrence_extraction_cache(function):
+    """Give each decorated adapter call its own extraction-cache scope."""
+
     @wraps(function)
     def scoped(*args, **kwargs):
         # Nested adapter reads own another library and therefore get a fresh cache.
@@ -149,9 +156,10 @@ def _with_occurrence_extraction_cache(function):
     return scoped
 
 
-def _polygons_by_layer(
+def read_polygons_by_layer(
     cell: Any, *, excluded_reference_indexes: Sequence[int] = ()
 ) -> Mapping[tuple[int, int], tuple[Any, ...]]:
+    """Read layer polygons, reusing extraction within the current thread scope."""
     cache = _EXTRACTION_CACHE.get()
     if cache is None or cache.owner_thread != get_ident():
         return _extract_polygons_by_layer(
@@ -196,9 +204,10 @@ def _extract_polygons_by_layer(
     return {key: tuple(value) for key, value in result.items()}
 
 
-def _entity_from_layer_record(
+def entity_from_layer_record(
     record: Any, *, materials: Mapping[str, Any]
 ) -> SemanticEntitySpec:
+    """Build a semantic entity from one stack layer and its material record."""
     if not isinstance(record, Mapping):
         raise TypeError("stack_file 'layers' items must be mappings")
 
@@ -242,7 +251,7 @@ def _entity_from_layer_record(
         semantic_id=record["semantic_id"],
         role=record["role"],
         material_id=record["material_id"],
-        material_kind=_resolve_material_kind(
+        material_kind=resolve_material_kind(
             record,
             material_id=record["material_id"],
             materials=materials,
@@ -264,14 +273,15 @@ def _entity_from_layer_record(
 
 
 @preserve_declared_source
-def _gds_polygons_for_entity(
+def gds_polygons_for_entity(
     entity: SemanticEntitySpec,
     *,
     polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
 ) -> tuple[LayoutPolygonSpec, ...]:
+    """Read an entity's layout polygons from occurrence data or GDS layers."""
     occurrence_polygons = entity.geometry.get("source_occurrence_polygons_um")
     if occurrence_polygons is not None:
-        if not _is_record_sequence(occurrence_polygons):
+        if not is_record_sequence(occurrence_polygons):
             raise TypeError(
                 f"{entity.semantic_id} occurrence polygons must be a sequence"
             )
@@ -305,8 +315,8 @@ def _gds_polygons_for_entity(
             sorted(
                 polygons,
                 key=lambda polygon: (
-                    min(point[0] for point in _ring_from_gdstk_polygon(polygon)),
-                    min(point[1] for point in _ring_from_gdstk_polygon(polygon)),
+                    min(point[0] for point in ring_from_gdstk_polygon(polygon)),
+                    min(point[1] for point in ring_from_gdstk_polygon(polygon)),
                     polygon.area(),
                 ),
             )
@@ -324,9 +334,9 @@ def _gds_polygons_for_entity(
             selected = [
                 polygon
                 for polygon in candidates
-                if _point_in_ring(
+                if point_in_ring(
                     (float(selector[0]), float(selector[1])),
-                    _ring_from_gdstk_polygon(polygon),
+                    ring_from_gdstk_polygon(polygon),
                 )
             ]
             if len(selected) != 1:
@@ -340,7 +350,7 @@ def _gds_polygons_for_entity(
             LayoutPolygonSpec(
                 polygon_id=f"POLY__{entity.semantic_id}__{index:04d}",
                 layer=f"{layer}/{datatype}",
-                exterior=_ring_from_gdstk_polygon(polygon),
+                exterior=ring_from_gdstk_polygon(polygon),
                 object_name=entity.semantic_id,
                 net_name=entity.net_id,
             )
@@ -354,7 +364,7 @@ def _gds_polygons_for_entity(
         raise TypeError(
             f"{entity.semantic_id} exclude_selector_points_um must be a point sequence"
         )
-    components = _fused_gdstk_components(ordered(candidates))
+    components = fused_gdstk_components(ordered(candidates))
     points = (
         *(
             (selector_point("selector_point_um", selector),)
@@ -368,7 +378,7 @@ def _gds_polygons_for_entity(
         indexes = [
             index
             for index, (polygon, _, _) in enumerate(components)
-            if _point_in_layout_polygon(point, polygon)
+            if point_in_layout_polygon(point, polygon)
         ]
         if len(indexes) != 1:
             raise ValueError(
@@ -445,7 +455,7 @@ def _occurrence_polygon_record(
 
 
 @in_occurrence_frame
-def _occurrence_polygons_for_entity(
+def occurrence_polygons_for_entity(
     entity: SemanticEntitySpec,
     *,
     cell: Any,
@@ -453,8 +463,9 @@ def _occurrence_polygons_for_entity(
     excluded_reference_indexes: Sequence[int] = (),
     polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]] | None = None,
 ) -> list[dict[str, Any]]:
+    """Transform the selected entity polygons into occurrence coordinates."""
     if polygons_by_layer is None:
-        polygons_by_layer = _polygons_by_layer(
+        polygons_by_layer = read_polygons_by_layer(
             cell, excluded_reference_indexes=excluded_reference_indexes
         )
     geometry = dict(entity.geometry)
@@ -468,7 +479,7 @@ def _occurrence_polygons_for_entity(
                 _occurrence_inverse_point(transform, point) for point in geometry[key]
             ]
     local_entity = replace(entity, geometry=geometry)
-    selected = _gds_polygons_for_entity(
+    selected = gds_polygons_for_entity(
         local_entity,
         polygons_by_layer=polygons_by_layer,
     )
@@ -476,7 +487,7 @@ def _occurrence_polygons_for_entity(
 
 
 @in_occurrence_frame
-def _occurrence_ground_polygons_for_entity(
+def occurrence_ground_polygons_for_entity(
     entity: SemanticEntitySpec,
     *,
     cell: Any,
@@ -491,10 +502,10 @@ def _occurrence_ground_polygons_for_entity(
     descendants supply neither that outline nor the local mask/include recipe.
     """
     if polygons_by_layer is None:
-        polygons_by_layer = _polygons_by_layer(
+        polygons_by_layer = read_polygons_by_layer(
             cell, excluded_reference_indexes=excluded_reference_indexes
         )
-    from scgsim.geometry.source.ground import _derived_ground_polygons
+    from scgsim.geometry.source.ground import derived_ground_polygons
 
     geometry = dict(entity.geometry)
     geometry.pop("source_occurrence_polygons_um", None)
@@ -507,12 +518,12 @@ def _occurrence_ground_polygons_for_entity(
                 _occurrence_inverse_point(transform, point) for point in geometry[key]
             ]
     polygons = polygons_by_layer
-    plane = polygons.get(_gds_layer(plane_layer, entity.semantic_id), ())
+    plane = polygons.get(gds_layer(plane_layer, entity.semantic_id), ())
     if not plane:
         raise ValueError(
             f"{entity.semantic_id} occurrence has no declared plane-bound geometry"
         )
-    derived = _derived_ground_polygons(
+    derived = derived_ground_polygons(
         replace(entity, geometry=geometry),
         polygons_by_layer=polygons,
         cell_bounds_um={},
@@ -522,7 +533,7 @@ def _occurrence_ground_polygons_for_entity(
     return [_occurrence_polygon_record(polygon, transform) for polygon in derived]
 
 
-def _occurrence_port_polygon(
+def occurrence_port_polygon(
     record: Mapping[str, Any],
     *,
     cell: Any,
@@ -530,8 +541,9 @@ def _occurrence_port_polygon(
     excluded_reference_indexes: Sequence[int] = (),
     polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]] | None = None,
 ) -> dict[str, Any]:
+    """Read and transform the polygon selected by one occurrence port record."""
     if polygons_by_layer is None:
-        polygons_by_layer = _polygons_by_layer(
+        polygons_by_layer = read_polygons_by_layer(
             cell, excluded_reference_indexes=excluded_reference_indexes
         )
     layer = (record["layer"], record["datatype"])
@@ -539,7 +551,7 @@ def _occurrence_port_polygon(
     selected = [
         polygon
         for polygon in polygons_by_layer.get(layer, ())
-        if _point_in_ring(point, _ring_from_gdstk_polygon(polygon))
+        if point_in_ring(point, ring_from_gdstk_polygon(polygon))
     ]
     if len(selected) != 1:
         raise ValueError(
@@ -548,7 +560,7 @@ def _occurrence_port_polygon(
     local = LayoutPolygonSpec(
         polygon_id="source_port_sheet",
         layer=f"{layer[0]}/{layer[1]}",
-        exterior=_ring_from_gdstk_polygon(selected[0]),
+        exterior=ring_from_gdstk_polygon(selected[0]),
     )
     return _occurrence_polygon_record(local, transform)
 
@@ -566,7 +578,7 @@ def _lumped_ring_identity(ring):
     )
 
 
-def _occurrence_lumped_polygon(support, *, cell, excluded_reference_indexes=()):
+def occurrence_lumped_polygon(support, *, cell, excluded_reference_indexes=()):
     """Bind the complete authored local ring to actual original GDS geometry."""
 
     declared = (
@@ -574,10 +586,10 @@ def _occurrence_lumped_polygon(support, *, cell, excluded_reference_indexes=()):
         sorted(_lumped_ring_identity(ring) for ring in support.holes),
     )
     selected = []
-    for polygon in _polygons_by_layer(
+    for polygon in read_polygons_by_layer(
         cell, excluded_reference_indexes=excluded_reference_indexes
     ).get(support.source_layer, ()):
-        exterior, holes = split_gdstk_cutline_loop(_ring_from_gdstk_polygon(polygon))
+        exterior, holes = split_gdstk_cutline_loop(ring_from_gdstk_polygon(polygon))
         local = LayoutPolygonSpec(support.source_polygon_id, "", exterior, holes)
         actual = (
             _lumped_ring_identity(exterior),
@@ -592,7 +604,7 @@ def _occurrence_lumped_polygon(support, *, cell, excluded_reference_indexes=()):
     return selected[0]
 
 
-def _occurrence_include_polygon(
+def occurrence_include_polygon(
     record: Mapping[str, Any],
     *,
     cell: Any,
@@ -602,18 +614,18 @@ def _occurrence_include_polygon(
 ) -> dict[str, Any]:
     """Select one connected local metal region, including its authored pieces."""
     if polygons_by_layer is None:
-        polygons_by_layer = _polygons_by_layer(
+        polygons_by_layer = read_polygons_by_layer(
             cell, excluded_reference_indexes=excluded_reference_indexes
         )
-    layer = _gds_layer(
+    layer = gds_layer(
         record.get("layer"), str(record.get("source_local_id", "ground contribution"))
     )
     point = _occurrence_inverse_point(transform, record["selector_point_um"])
-    components = _fused_gdstk_components(polygons_by_layer.get(layer, ()))
+    components = fused_gdstk_components(polygons_by_layer.get(layer, ()))
     selected = [
         polygon
         for polygon, _, _ in components
-        if _point_in_layout_polygon((point[0], point[1]), polygon)
+        if point_in_layout_polygon((point[0], point[1]), polygon)
     ]
     if len(selected) != 1:
         raise ValueError(

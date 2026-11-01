@@ -10,8 +10,7 @@ from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
 from typing import Any
 
-from scgsim.diagnostics import _stage
-from scgsim.geometry._primitives._grid_cache import with_grid_work_cache
+from scgsim.diagnostics import diagnostic_stage
 from scgsim.geometry.compiler.dispatch import build_route_construction_plan
 from scgsim.geometry.compiler.stages import BuildTimingPayload, StageTimings
 from scgsim.geometry.compiler.validation import (
@@ -33,6 +32,7 @@ from scgsim.geometry.models.construction import ConstructionPlanRecord
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.tags import FinalPhysicalGroupRecord
+from scgsim.geometry.primitives.grid_cache import with_grid_work_cache
 from scgsim.geometry.source.validation import validate_geometry_input
 
 
@@ -56,7 +56,7 @@ class SemanticGeometryBuilder:
     One call writes one route XAO file. Mesh generation is downstream.
     """
 
-    @_stage("geometry.compiler.build")
+    @diagnostic_stage("geometry.compiler.build")
     @with_grid_work_cache
     def build(
         self,
@@ -223,11 +223,11 @@ def _write_stage_sidecar(path: Path, stage_name: str, payload: Any) -> int:
     # Sidecars retain the full evidence, including repeated ledger references.
     # Convert and redact shared records once without dataclasses.asdict's deep
     # copy; JSON still emits every occurrence using the existing file format.
-    with _stage("geometry.compiler.sidecar.redaction"):
+    with diagnostic_stage("geometry.compiler.sidecar.redaction"):
         public_payload = _redact_local_paths(payload, run_root=path.parents[1])
-    with _stage("geometry.compiler.sidecar.json"):
+    with diagnostic_stage("geometry.compiler.sidecar.json"):
         text = json.dumps(public_payload, indent=2, sort_keys=True)
-    with _stage(
+    with diagnostic_stage(
         "geometry.compiler.sidecar.write", counts={"bytes": len(text.encode("utf-8"))}
     ):
         destination = path / f"{stage_name}.json"

@@ -6,9 +6,10 @@ from types import SimpleNamespace
 import gdstk
 import pytest
 
-import scgsim.geometry.source._occurrence as occurrence_source  # private-import: exercise actual decorated source entry points while retaining their owned imports
 import scgsim.geometry.source.ground as ground_source
-from scgsim.geometry._primitives.grid import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+import scgsim.geometry.source.occurrence as occurrence_source  # private-import: exercise actual decorated source entry points while retaining their owned imports
+from scgsim.geometry.models.grid import GeometryGridContext
+from scgsim.geometry.primitives.grid import (  # private-import: primitive package-path migration awaits coordinated backend source lists
     PolygonRegion,
     geometry_grid_scope,
     in_occurrence_frame,
@@ -16,15 +17,14 @@ from scgsim.geometry._primitives.grid import (  # private-import: primitive pack
     preserve_declared_source,
     split_gdstk_cutline_loop,
 )
-from scgsim.geometry._primitives.loops import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+from scgsim.geometry.primitives.loops import (  # private-import: primitive package-path migration awaits coordinated backend source lists
     geometry_ref_from_gdstk_polygon,
 )
-from scgsim.geometry._primitives.planar_loops import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+from scgsim.geometry.primitives.planar_loops import (  # private-import: primitive package-path migration awaits coordinated backend source lists
     clean_loop,
     cutline_boundary_loops,
     polygon_area,
 )
-from scgsim.geometry.models.grid import GeometryGridContext
 
 OUTER = ((0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0))
 HOLE = ((2.0, 2.0), (2.0, 4.0), (4.0, 4.0), (4.0, 2.0))
@@ -143,10 +143,10 @@ def test_grid_decorators_preserve_function_metadata(decorate):
 @pytest.mark.parametrize(
     ("module", "name"),
     (
-        (occurrence_source, "_gds_polygons_for_entity"),
-        (occurrence_source, "_occurrence_polygons_for_entity"),
-        (occurrence_source, "_occurrence_ground_polygons_for_entity"),
-        (ground_source, "_derived_ground_polygons"),
+        (occurrence_source, "gds_polygons_for_entity"),
+        (occurrence_source, "occurrence_polygons_for_entity"),
+        (occurrence_source, "occurrence_ground_polygons_for_entity"),
+        (ground_source, "derived_ground_polygons"),
     ),
 )
 def test_source_entry_points_preserve_decorated_metadata(module, name):

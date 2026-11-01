@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from scgsim.geometry._primitives.grid import polygon_boolean
-
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
@@ -13,8 +11,10 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from scgsim.geometry.primitives.grid import polygon_boolean
 
-def _prepare_indium_ground_bump_fill(
+
+def prepare_indium_ground_bump_fill(
     *,
     component: Any,
     stack: Mapping[str, Any],

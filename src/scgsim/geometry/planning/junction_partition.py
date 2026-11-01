@@ -12,20 +12,10 @@ from dataclasses import dataclass, fields, replace
 from decimal import ROUND_FLOOR, Decimal
 from fractions import Fraction
 from itertools import pairwise
-from typing import Any
+from typing import Any, Protocol
 
 import gdstk
 
-from scgsim.geometry._primitives.grid import (
-    PolygonRegion,
-    polygon_boolean,
-    polygon_world_frame,
-    with_input_grid,
-)
-from scgsim.geometry._primitives.planar_loops import (
-    cancel_reversed_planar_edges,
-    simple_planar_loops_from_edges,
-)
 from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput, LayoutPolygonSpec
 from scgsim.geometry.models.junctions import JunctionGeometry, RectangularJunctionSpec
@@ -33,11 +23,23 @@ from scgsim.geometry.models.physical import (
     PhysicalLayerDeclaration,
     PhysicalRepresentationPlan,
 )
+from scgsim.geometry.primitives.grid import (
+    PolygonRegion,
+    polygon_boolean,
+    polygon_world_frame,
+    with_input_grid,
+)
+from scgsim.geometry.primitives.planar_loops import (
+    cancel_reversed_planar_edges,
+    simple_planar_loops_from_edges,
+)
 from scgsim.semantics.route_a import geometry_z_range
 
 
 @dataclass(frozen=True)
 class JunctionPartitionFormat:
+    """Carry the metadata keys and identity markers for junction partitions."""
+
     metadata_key: str = "junction_partitions"
     source_hash_key: str = "junction_authored_input_sha256"
     method: str = "scgsim.geometry.junction-partition.v1"
@@ -51,6 +53,7 @@ DEFAULT_FORMAT = JunctionPartitionFormat()
 
 def canonical_sha256(value):
     # Preserve the existing AEDT algorithm's canonical identities at its adapter.
+    """Hash canonical JSON while preserving the existing junction identities."""
     encoded = json.dumps(
         value, ensure_ascii=True, separators=(",", ":"), sort_keys=True
     )
@@ -60,20 +63,23 @@ def canonical_sha256(value):
 PRECISION_UM = 1e-9
 
 
-def _plain(value: Any) -> Any:
+def plain_record(value: Any) -> Any:
+    """Detach dataclasses, mappings and sequences into plain record values."""
     if hasattr(value, "__dataclass_fields__"):
-        return {item.name: _plain(getattr(value, item.name)) for item in fields(value)}
+        return {
+            item.name: plain_record(getattr(value, item.name)) for item in fields(value)
+        }
     if isinstance(value, Mapping):
-        return {str(key): _plain(item) for key, item in value.items()}
+        return {str(key): plain_record(item) for key, item in value.items()}
     if isinstance(value, (tuple, list)):
-        return [_plain(item) for item in value]
+        return [plain_record(item) for item in value]
     return value
 
 
 _SUPPORT_PLANE_SCHEMA = DEFAULT_FORMAT.support_schema
 
 
-def _junction_contact_inventory(
+def junction_contact_inventory(
     build_input: GeometryBuildInput,
     source_polygon_id: str,
     terminal_a_net: str,
@@ -213,7 +219,7 @@ def _junction_contact_inventory(
             if entity.net_id not in {terminal_a_net, terminal_b_net}:
                 continue
             for pid in entity.polygon_ids:
-                if pid != source_polygon_id and _closed_contact(
+                if pid != source_polygon_id and closed_contact(
                     [sheet_rings], [_source_contact_rings(polygons[pid])]
                 ):
                     contacting.append((eid, pid))
@@ -259,7 +265,7 @@ def _junction_contact_inventory(
         "basis": basis,
         "source_hosts": hosts,
     }
-    if stored_binding is not None and _plain(stored_binding) != binding:
+    if stored_binding is not None and plain_record(stored_binding) != binding:
         raise ValueError(
             "junction stored support-plane binding differs from current source"
         )
@@ -311,9 +317,10 @@ def _source_contact_rings(polygon):
     )
 
 
-def _junction_source_binding(inventory):
+def junction_source_binding(inventory):
+    """Extract the source-support binding fields from a contact inventory."""
     return {
-        name: _plain(inventory[name])
+        name: plain_record(inventory[name])
         for name in (
             "schema_version",
             "source_polygon_id",
@@ -329,17 +336,19 @@ def _edges(rings):
         yield from zip(ring, (*ring[1:], ring[0]))
 
 
-def _cross(a, b, c):
+def cross(a, b, c):
+    """Return the signed planar cross product about the first point."""
     return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
 
 
 def _on(point, a, b):
-    return _cross(a, b, point) == 0 and all(
+    return cross(a, b, point) == 0 and all(
         min(a[i], b[i]) <= point[i] <= max(a[i], b[i]) for i in (0, 1)
     )
 
 
-def _inside_ring(point, ring):
+def inside_ring(point, ring):
+    """Classify a point as inside, on the boundary or outside a ring."""
     inside = False
     for a, b in _edges((ring,)):
         if _on(point, a, b):
@@ -352,12 +361,12 @@ def _inside_ring(point, ring):
 
 
 def _inside(point, rings):
-    return _inside_ring(point, rings[0]) >= 0 and not any(
-        _inside_ring(point, hole) == 1 for hole in rings[1:]
+    return inside_ring(point, rings[0]) >= 0 and not any(
+        inside_ring(point, hole) == 1 for hole in rings[1:]
     )
 
 
-def _section(rings, axis, coordinate, low, high):
+def section(rings, axis, coordinate, low, high):
     """Exact closed contact on a specified edge in Boolean integer coordinates."""
     other = 1 - axis
     marks = {Fraction(low), Fraction(high)}
@@ -390,7 +399,7 @@ def _covered(polygons, axis, coordinate, low, high):
     intervals = sorted(
         interval
         for rings in polygons
-        for interval in _section(rings, axis, coordinate, low, high)[0]
+        for interval in section(rings, axis, coordinate, low, high)[0]
     )
     end = Fraction(low)
     for a, b in intervals:
@@ -427,7 +436,8 @@ def _positive_boundary_contact(left, right):
     )
 
 
-def _closed_contact(left, right):
+def closed_contact(left, right):
+    """Test whether two polygon-region collections touch or overlap."""
     for a in left:
         for b in right:
             ax = [p[0] for p in a[0]]
@@ -448,10 +458,10 @@ def _closed_contact(left, right):
             for p, q in _edges(a):
                 for r, s in _edges(b):
                     c = (
-                        _cross(p, q, r),
-                        _cross(p, q, s),
-                        _cross(r, s, p),
-                        _cross(r, s, q),
+                        cross(p, q, r),
+                        cross(p, q, s),
+                        cross(r, s, p),
+                        cross(r, s, q),
                     )
                     if any((_on(r, p, q), _on(s, p, q), _on(p, r, s), _on(q, r, s))):
                         return True
@@ -484,9 +494,15 @@ def _rings(region):
     result = []
     for polygon in region:
         if isinstance(polygon, PolygonRegion):
-            result.append(tuple(tuple((round(x / PRECISION_UM), round(y / PRECISION_UM))
-                               for x,y in ring)
-                               for ring in (polygon.exterior, *polygon.holes)))
+            result.append(
+                tuple(
+                    tuple(
+                        (round(x / PRECISION_UM), round(y / PRECISION_UM))
+                        for x, y in ring
+                    )
+                    for ring in (polygon.exterior, *polygon.holes)
+                )
+            )
             continue
         points = tuple(
             (round(x / PRECISION_UM), round(y / PRECISION_UM))
@@ -515,7 +531,7 @@ def _rings(region):
 
         outer = max(loops, key=area)
         holes = tuple(ring for ring in loops if ring is not outer)
-        if any(_inside_ring(hole[0], outer) != 1 for hole in holes):
+        if any(inside_ring(hole[0], outer) != 1 for hole in holes):
             raise ValueError(
                 "junction residual has point-connected or non-interior components"
             )
@@ -538,7 +554,7 @@ def _contacts(polygons, span, width):
             (1, 0, 0, span),
             (1, width, 0, span),
         ):
-            intervals, points = _section(rings, axis, c, low, high)
+            intervals, points = section(rings, axis, c, low, high)
             if axis == 0 and (intervals or points):
                 positions.append(c)
             elif axis == 1:
@@ -592,7 +608,7 @@ def _end_candidate(free, own, foreign, cut, span, width, *, left):
             "valid": False,
             "reason": "end lacks positive-length own-arm contact",
         }
-    if _closed_contact(end, foreign):
+    if closed_contact(end, foreign):
         return None, {
             "valid": False,
             "reason": "end contacts wrong terminal or third net",
@@ -649,7 +665,7 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
                 raise ValueError(
                     "numerical junction source polygon/hole collapses in model coordinates"
                 )
-            if index and any(_inside_ring(point, region[0]) != 1 for point in ring):
+            if index and any(inside_ring(point, region[0]) != 1 for point in ring):
                 raise ValueError(
                     "numerical junction source hole loses model interior topology"
                 )
@@ -688,7 +704,7 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
                     )
                     event(arm, point, t)
                     event(sheet, point, u)
-            elif _cross(a, b, c) == 0:
+            elif cross(a, b, c) == 0:
                 for point in {a, b, c, d}:
                     if _on(point, a, b) and _on(point, c, d):
                         for key, start, delta in ((arm, a, ab), (sheet, c, cd)):
@@ -712,7 +728,7 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
         owned_edges = [(key, a, b) for key, (a, b) in edges.items() if key[0] in owned]
         for n, (left, a, b) in enumerate(owned_edges):
             for right, c, d in owned_edges[n + 1 :]:
-                if left[0] == right[0] or _cross(a, b, c) or _cross(a, b, d):
+                if left[0] == right[0] or cross(a, b, c) or cross(a, b, d):
                     continue
                 for point in {a, b, c, d}:
                     if _on(point, a, b) and _on(point, c, d):
@@ -842,7 +858,7 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
                     "numerical junction selected cut has no full source section"
                 )
             # Collinear existing arm vertices can split a direct-contact edge.
-            if any(_cross(ordered[0], ordered[-1], point) for point in ordered):
+            if any(cross(ordered[0], ordered[-1], point) for point in ordered):
                 raise ValueError(
                     "numerical junction selected cut has inconsistent section nodes"
                 )
@@ -878,9 +894,7 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
             ring
             for ring in loops
             if not any(
-                _inside_ring(ring[0], other) == 1
-                for other in loops
-                if other is not ring
+                inside_ring(ring[0], other) == 1 for other in loops if other is not ring
             )
         ]
         regions = []
@@ -888,11 +902,11 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
             holes = [
                 hole
                 for hole in loops
-                if hole is not ring and _inside_ring(hole[0], ring) == 1
+                if hole is not ring and inside_ring(hole[0], ring) == 1
             ]
             if any(
                 any(
-                    _inside_ring(hole[0], other) == 1
+                    inside_ring(hole[0], other) == 1
                     for other in holes
                     if other is not hole
                 )
@@ -905,7 +919,7 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
                     loop = tuple(
                         point
                         for n, point in enumerate(loop)
-                        if _cross(loop[n - 1], point, loop[(n + 1) % len(loop)]) != 0
+                        if cross(loop[n - 1], point, loop[(n + 1) % len(loop)]) != 0
                     )
                 area = sum(a[0] * b[1] - b[0] * a[1] for a, b in _edges((loop,)))
                 if (area > 0) != (index == 0):
@@ -1001,7 +1015,7 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
                 physical_ends[end["source_entity_id"]].extend(
                     refine(sliced[jid][0 if n == 0 else 2])
                 )
-            end["model_regions"] = _plain(part)
+            end["model_regions"] = plain_record(part)
         final_free = lower(refine(free_edges[jid]))
         if not _emitted_partition_coverage(
             final_free, [*parts[0], (corners,), *parts[2]]
@@ -1009,7 +1023,7 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
             raise ValueError(
                 "numerical junction emitted partition does not cover source free boundary"
             )
-        record["free_model_regions"] = _plain(final_free)
+        record["free_model_regions"] = plain_record(final_free)
         record["central_model_regions"] = [[list(corners)]]
         record["proof_conditions"]["emitted_partition_coverage"] = True
         record["model_coordinate_method"] = "source_edge_incidence_and_two_cuts.v1"
@@ -1025,8 +1039,8 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
             intersection_deviation
         )
         record["authored_source_geometry"] = {
-            "exterior": _plain(sheet.exterior),
-            "holes": _plain(sheet.holes),
+            "exterior": plain_record(sheet.exterior),
+            "holes": plain_record(sheet.holes),
         }
         record["model_cut_projection_ranges_um"] = [
             [
@@ -1064,7 +1078,7 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
             ring
             for ring in loops
             if not any(
-                _inside_ring(
+                inside_ring(
                     tuple(Fraction(str(v)) for v in ring[0]),
                     tuple(tuple(Fraction(str(v)) for v in p) for p in other),
                 )
@@ -1109,8 +1123,8 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
         midpoint = tuple(sum(point[i] for point in c) / 4 for i in (0, 1))
 
         def strictly_inside(point, region):
-            return _inside_ring(point, region[0]) == 1 and all(
-                _inside_ring(point, hole) == -1 for hole in region[1:]
+            return inside_ring(point, region[0]) == 1 and all(
+                inside_ring(point, hole) == -1 for hole in region[1:]
             )
 
         for _, _, region in conductors:
@@ -1118,8 +1132,8 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
                 any(strictly_inside(point, (c,)) for point in region[0])
                 or any(strictly_inside(point, region) for point in (*c, midpoint))
                 or any(
-                    _cross(a, b, u) * _cross(a, b, v) < 0
-                    and _cross(u, v, a) * _cross(u, v, b) < 0
+                    cross(a, b, u) * cross(a, b, v) < 0
+                    and cross(u, v, a) * cross(u, v, b) < 0
                     for a, b in _edges(region)
                     for u, v in _edges((c,))
                 )
@@ -1146,7 +1160,7 @@ def _model_geometry(build_input, originals, records, output_format=DEFAULT_FORMA
                     raise ValueError(
                         "final model end lacks positive-length source-arm contact"
                     )
-                if _closed_contact([piece], other):
+                if closed_contact([piece], other):
                     raise ValueError("final cross-junction end contacts another net")
             n = 0 if end["side"] == "A" else 1
             start, finish = (c[3], c[0]) if n == 0 else (c[1], c[2])
@@ -1241,7 +1255,7 @@ def _model_edge_coordinates(region, start, finish):
 
 
 def _model_edge_section(region, start, finish):
-    return _section(_model_edge_coordinates(region, start, finish), 1, 0, 0, 1)
+    return section(_model_edge_coordinates(region, start, finish), 1, 0, 0, 1)
 
 
 def _model_edge_covered(regions, start, finish):
@@ -1286,7 +1300,7 @@ def partition_junctions(
     entities = {e.semantic_id: e for e in build_input.entities}
     records = {}
     for junction in junctions:
-        support_plane = _junction_contact_inventory(
+        support_plane = junction_contact_inventory(
             build_input,
             junction.source_polygon_id,
             junction.terminal_a_net,
@@ -1331,15 +1345,20 @@ def partition_junctions(
                     raise ValueError(
                         "numerical junction geometry failure: source polygon/hole collapses at Boolean precision"
                     )
-                if index and any(_inside_ring(point, rings[0]) != 1 for point in ring):
+                if index and any(inside_ring(point, rings[0]) != 1 for point in ring):
                     raise ValueError(
                         "numerical junction geometry failure: source hole loses interior topology"
                     )
             return tuple(rings)
 
-        transform = (dx, px, dy, py,
-                     origin[0]*dx + origin[1]*px,
-                     origin[0]*dy + origin[1]*py)
+        transform = (
+            dx,
+            px,
+            dy,
+            py,
+            origin[0] * dx + origin[1] * px,
+            origin[0] * dy + origin[1] * py,
+        )
         with polygon_world_frame(transform):
             by_entity = {
                 e.semantic_id: [
@@ -1351,7 +1370,10 @@ def partition_junctions(
             by_net = defaultdict(list)
             for eid, polygons in by_entity.items():
                 by_net[entities[eid].net_id].extend(polygons)
-            own_a, own_b = by_net[junction.terminal_a_net], by_net[junction.terminal_b_net]
+            own_a, own_b = (
+                by_net[junction.terminal_a_net],
+                by_net[junction.terminal_b_net],
+            )
             if not own_a or not own_b:
                 raise ValueError(
                     "junction requires both explicit terminal conductor geometries"
@@ -1363,15 +1385,19 @@ def partition_junctions(
                 for p in polygons
             ]
             if _contacts(other, span, width) is not None:
-                raise ValueError("third-net closed contact with authored junction sheet")
+                raise ValueError(
+                    "third-net closed contact with authored junction sheet"
+                )
             ca, cb = _contacts(own_a, span, width), _contacts(own_b, span, width)
             if ca is None or cb is None or ca[1] >= cb[0]:
-                raise ValueError("unsupported junction contact ordering or clear corridor")
+                raise ValueError(
+                    "unsupported junction contact ordering or clear corridor"
+                )
             lower, upper = ca[1], cb[0]
             for polygons in (own_a, own_b, other):
                 for rings in polygons:
                     for y in (0, width):
-                        intervals, points = _section(rings, 1, y, lower, upper)
+                        intervals, points = section(rings, 1, y, lower, upper)
                         if any(a < b for a, b in intervals) or any(
                             lower < v < upper for v in points
                         ):
@@ -1397,7 +1423,9 @@ def partition_junctions(
                     interior = (
                         (Decimal(index) * Decimal(str(step)) > _bound_decimal(bound))
                         if left
-                        else (Decimal(index) * Decimal(str(step)) < _bound_decimal(bound))
+                        else (
+                            Decimal(index) * Decimal(str(step)) < _bound_decimal(bound)
+                        )
                     )
                     if interior and cut == bound:
                         raise ValueError(
@@ -1436,13 +1464,15 @@ def partition_junctions(
             central = _rectangle(a, 0, b, width)
             for y in (0, width):
                 for rings in [*own_a, *own_b, *other, *end_a, *end_b]:
-                    intervals, points = _section(rings, 1, y, a, b)
-                    if any(x < z for x, z in intervals) or any(a < v < b for v in points):
+                    intervals, points = section(rings, 1, y, a, b)
+                    if any(x < z for x, z in intervals) or any(
+                        a < v < b for v in points
+                    ):
                         raise ValueError(
                             "RLC open side has forbidden line or point contact"
                         )
             for cut, wrong in ((a, own_b + other + end_b), (b, own_a + other + end_a)):
-                if any(any(_section(rings, 0, cut, 0, width)) for rings in wrong):
+                if any(any(section(rings, 0, cut, 0, width)) for rings in wrong):
                     raise ValueError("wrong-net RLC end/corner contact")
             parts = [_region(end_a), _region(central), _region(end_b)]
             union = _boolean([p for part in parts for p in part], [], "or")
@@ -1484,11 +1514,11 @@ def partition_junctions(
                         "source_entity_id": owner.semantic_id,
                         "net_id": net,
                         "material_id": owner.material_id,
-                        "geometry": _plain(owner.geometry),
+                        "geometry": plain_record(owner.geometry),
                         "representation": dict(owner.route_representations),
                         "polygon_id": polygon_id,
                         "empty_residual": not end,
-                        "local_regions": _plain(end),
+                        "local_regions": plain_record(end),
                     }
                 )
             cid = f"{output_format.id_prefix}_{canonical_sha256([junction.junction_id, 'central'])[:24]}"
@@ -1517,14 +1547,16 @@ def partition_junctions(
                 },
                 "maximum_input_coordinate_deviation_um": max(deviations, default=0.0),
                 "ends": end_records,
-                "free_local_regions": _plain(_rings(free)),
-                "central_local_regions": _plain(central),
+                "free_local_regions": plain_record(_rings(free)),
+                "central_local_regions": plain_record(central),
             }
     model, derived_entities = _model_geometry(
         build_input, originals, records, output_format
     )
     metadata = dict(build_input.metadata)
-    metadata[output_format.source_hash_key] = canonical_sha256(_plain(build_input))
+    metadata[output_format.source_hash_key] = canonical_sha256(
+        plain_record(build_input)
+    )
     metadata[output_format.metadata_key] = records
     original_ids = {p.polygon_id for p in build_input.polygons}
     derived_polygons = tuple(model[p.polygon_id] for p in build_input.polygons) + tuple(
@@ -1552,42 +1584,86 @@ def partition_junctions(
     context = geometry_grid_context(build_input)
     if context is not None:
         from scgsim.geometry.source.grid import apply_geometry_grid
+
         result = apply_geometry_grid(result, context)
         actual = {p.polygon_id: p for p in result.polygons}
         for junction in junctions:
             record = records[junction.junction_id]
             polygon = actual[record["central_polygon_id"]]
             try:
-                junction_terminal_line({"exterior": polygon.exterior, "holes": polygon.holes},
-                                       junction, record["z_um"])
-                ends = [actual[end["polygon_id"]] for end in record["ends"] if end["polygon_id"]]
+                junction_terminal_line(
+                    {"exterior": polygon.exterior, "holes": polygon.holes},
+                    junction,
+                    record["z_um"],
+                )
+                ends = [
+                    actual[end["polygon_id"]]
+                    for end in record["ends"]
+                    if end["polygon_id"]
+                ]
                 emitted = [(p.exterior, *p.holes) for p in ends]
                 emitted.append((polygon.exterior, *polygon.holes))
-                if not _emitted_partition_coverage(record["free_model_regions"], emitted):
-                    raise ValueError("junction grid realization changes partition coverage")
+                if not _emitted_partition_coverage(
+                    record["free_model_regions"], emitted
+                ):
+                    raise ValueError(
+                        "junction grid realization changes partition coverage"
+                    )
             except ValueError as error:
-                error.add_note(json.dumps({"junction_id": junction.junction_id,
-                    "geometry_grid": context.to_payload(),
-                    "requested_direction_xy": list(junction.direction_xy),
-                    "requested_width_um": junction.width_um,
-                    "realization_status": "incompatible_with_existing_shape_contract"}, sort_keys=True))
+                error.add_note(
+                    json.dumps(
+                        {
+                            "junction_id": junction.junction_id,
+                            "geometry_grid": context.to_payload(),
+                            "requested_direction_xy": list(junction.direction_xy),
+                            "requested_width_um": junction.width_um,
+                            "realization_status": "incompatible_with_existing_shape_contract",
+                        },
+                        sort_keys=True,
+                    )
+                )
                 raise
             record["geometry_grid"] = context.to_payload()
             record["requested_central_model_regions"] = record["central_model_regions"]
-            record["central_model_regions"] = [[list(polygon.exterior), *map(list, polygon.holes)]]
+            record["central_model_regions"] = [
+                [list(polygon.exterior), *map(list, polygon.holes)]
+            ]
             record["realized_central_geometry_sha256"] = canonical_sha256(
-                {"exterior": polygon.exterior, "holes": polygon.holes})
+                {"exterior": polygon.exterior, "holes": polygon.holes}
+            )
             for end in record["ends"]:
                 if end["polygon_id"]:
                     piece = actual[end["polygon_id"]]
                     end["requested_model_regions"] = end["model_regions"]
-                    end["model_regions"] = [[list(piece.exterior), *map(list, piece.holes)]]
+                    end["model_regions"] = [
+                        [list(piece.exterior), *map(list, piece.holes)]
+                    ]
     return result
 
 
+class JunctionTerminalGeometry(Protocol):
+    """Describe the junction identity, direction and width used by terminal lines."""
+
+    @property
+    def junction_id(self) -> str:
+        """Identify the source junction in geometry errors."""
+        ...
+
+    @property
+    def direction_xy(self) -> tuple[float, float]:
+        """Give the junction's axial direction in the XY plane."""
+        ...
+
+    @property
+    def width_um(self) -> float:
+        """Give the junction's transverse width in micrometres."""
+        ...
+
+
 def junction_terminal_line(
-    polygon: Mapping[str, Any], junction: JunctionGeometry, z_um: float
+    polygon: Mapping[str, Any], junction: JunctionTerminalGeometry, z_um: float
 ) -> tuple[list[list[float]], float]:
+    """Validate a rectangular junction sheet and return its axial terminal line."""
     exterior = tuple(
         (float(point[0]), float(point[1])) for point in polygon["exterior"]
     )
@@ -1595,11 +1671,19 @@ def junction_terminal_line(
     # exact, non-mutating corner witness for shape validation; the physical
     # polygon and all its shared subdivisions remain unchanged.
     rational = lambda p: tuple(Fraction(str(v)) for v in p)
-    witness = tuple(point for index, point in enumerate(exterior)
-                    if point != exterior[index-1])
-    exterior = tuple(point for index, point in enumerate(witness)
-                     if _cross(rational(witness[index-1]), rational(point),
-                               rational(witness[(index+1) % len(witness)])) != 0)
+    witness = tuple(
+        point for index, point in enumerate(exterior) if point != exterior[index - 1]
+    )
+    exterior = tuple(
+        point
+        for index, point in enumerate(witness)
+        if cross(
+            rational(witness[index - 1]),
+            rational(point),
+            rational(witness[(index + 1) % len(witness)]),
+        )
+        != 0
+    )
     if len(exterior) != 4 or polygon.get("holes"):
         raise ValueError(
             f"junction {junction.junction_id!r} requires one rectangular polygon without holes"
@@ -1677,10 +1761,17 @@ def derive_rectangular_junctions(build_input):
         except ValueError as error:
             context = geometry_grid_context(build_input)
             if context is not None:
-                error.add_note(json.dumps({"junction_id": request.junction_id,
-                    "geometry_grid": context.to_payload(),
-                    "requested_direction_xy": list(geometry.direction_xy),
-                    "realization_status": "incompatible_with_existing_shape_contract"}, sort_keys=True))
+                error.add_note(
+                    json.dumps(
+                        {
+                            "junction_id": request.junction_id,
+                            "geometry_grid": context.to_payload(),
+                            "requested_direction_xy": list(geometry.direction_xy),
+                            "realization_status": "incompatible_with_existing_shape_contract",
+                        },
+                        sort_keys=True,
+                    )
+                )
             raise
         geometries.append(geometry)
     result = partition_junctions(
@@ -1738,4 +1829,3 @@ def derive_rectangular_junctions(build_input):
         for entity in result.entities
     )
     return replace(result, entities=entities, port_sheet_regions=tuple(regions))
-

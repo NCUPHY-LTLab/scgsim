@@ -2,43 +2,43 @@
 
 from dataclasses import replace
 
-from scgsim.geometry._primitives.entity_validation import (
-    _entities_have_finite_overlap,
-    _is_solution_entity,
-    _is_vacuum_solution_entity,
-    _requires_route_representation,
-    _resolve_contact_pad_attachment,
+from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
+from scgsim.geometry.primitives.entity_validation import (
+    entities_have_finite_overlap,
+    is_solution_entity,
+    is_vacuum_solution_entity,
+    requires_route_representation,
+    resolve_contact_pad_attachment,
 )
-from scgsim.geometry._primitives.geometry_refs import (
+from scgsim.geometry.primitives.geometry_refs import (
     entity_geometry_ref,
     route_entity_geometry_ref,
     sidewall_geometry_refs,
 )
-from scgsim.geometry._primitives.spatial import (  # private-import: lock down shared tolerance and canonicalization contracts
-    _bounds_contains_point,
-    _bounds_overlap,
-    _coordinate_2d_key,
-    _coordinate_key,
-    _geometry_ref_surface_z_um,
-    _interpolate_2d,
-    _interpolate_3d,
-    _intersect_bounds,
-    _interval_complement,
-    _line_key_2d,
-    _range_within_bounds,
-    _segment_overlap_interval,
-    _undirected_xy_edge,
-    _vector_cross,
-    _vector_subtract,
-    _z_key,
+from scgsim.geometry.primitives.spatial import (  # private-import: lock down shared tolerance and canonicalization contracts
+    bounds_contains_point,
+    bounds_overlap,
+    coordinate_2d_key,
+    coordinate_key,
+    coordinate_z_key,
+    geometry_ref_surface_z_um,
+    interpolate_2d,
+    interpolate_3d,
+    intersect_bounds,
+    interval_complement,
+    line_key_2d,
+    range_within_bounds,
+    segment_overlap_interval,
+    undirected_xy_edge,
+    vector_cross,
+    vector_subtract,
 )
-from scgsim.geometry._primitives.surface_records import (
-    _canonical_face_signature_3d,
-    _interface_kinds,
-    _surface_boundary_volume_ids,
+from scgsim.geometry.primitives.surface_records import (
+    canonical_face_signature_3d,
+    interface_kinds,
+    surface_boundary_volume_ids,
 )
-from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
-from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
 
 
 def _entity(
@@ -60,15 +60,15 @@ def _entity(
 
 def test_spatial_keys_and_vector_operations_keep_coordinate_order():
     """Keep coordinate rounding, directed math, and undirected edge identity stable."""
-    assert _coordinate_key((1.0000000004, -2.0, 3.25)) == (1.0, -2.0, 3.25)
-    assert _coordinate_2d_key((1.0000000004, -2.0)) == (1.0, -2.0)
-    assert _z_key(2.0000000004) == 2.0
-    assert _undirected_xy_edge((2, 1), (0, 3)) == ((0.0, 3.0), (2.0, 1.0))
-    assert _undirected_xy_edge((0, 3), (2, 1)) == ((0.0, 3.0), (2.0, 1.0))
-    assert _vector_subtract((4, 3, 2), (1, 1, 1)) == (3, 2, 1)
-    assert _vector_cross((1, 0, 0), (0, 1, 0)) == (0, 0, 1)
-    assert _interpolate_2d((0, 2), (4, 6), 0.25) == (1.0, 3.0)
-    assert _interpolate_3d((0, 2, 4), (4, 6, 8), 0.25) == (1.0, 3.0, 5.0)
+    assert coordinate_key((1.0000000004, -2.0, 3.25)) == (1.0, -2.0, 3.25)
+    assert coordinate_2d_key((1.0000000004, -2.0)) == (1.0, -2.0)
+    assert coordinate_z_key(2.0000000004) == 2.0
+    assert undirected_xy_edge((2, 1), (0, 3)) == ((0.0, 3.0), (2.0, 1.0))
+    assert undirected_xy_edge((0, 3), (2, 1)) == ((0.0, 3.0), (2.0, 1.0))
+    assert vector_subtract((4, 3, 2), (1, 1, 1)) == (3, 2, 1)
+    assert vector_cross((1, 0, 0), (0, 1, 0)) == (0, 0, 1)
+    assert interpolate_2d((0, 2), (4, 6), 0.25) == (1.0, 3.0)
+    assert interpolate_3d((0, 2, 4), (4, 6, 8), 0.25) == (1.0, 3.0, 5.0)
 
 
 def test_bounds_distinguish_tolerance_overlap_from_positive_intersection():
@@ -82,45 +82,43 @@ def test_bounds_distinguish_tolerance_overlap_from_positive_intersection():
     }
     close = {**touching, "x_min_um": 1.0 - 5e-10}
 
-    assert not _bounds_overlap(first, touching)
-    assert _intersect_bounds(first, touching) is None
-    assert not _bounds_overlap(first, close)
-    assert _intersect_bounds(first, close) == {
+    assert not bounds_overlap(first, touching)
+    assert intersect_bounds(first, touching) is None
+    assert not bounds_overlap(first, close)
+    assert intersect_bounds(first, close) == {
         "x_min_um": 1.0 - 5e-10,
         "x_max_um": 1.0,
         "y_min_um": 0.0,
         "y_max_um": 1.0,
     }
-    assert _bounds_contains_point(first, (1.0, 1.0))
-    assert not _bounds_contains_point(first, (1.0 + 1e-12, 1.0))
-    assert _range_within_bounds(-5e-10, 1.0 + 5e-10, 0.0, 1.0)
-    assert not _range_within_bounds(-2e-9, 1.0, 0.0, 1.0)
+    assert bounds_contains_point(first, (1.0, 1.0))
+    assert not bounds_contains_point(first, (1.0 + 1e-12, 1.0))
+    assert range_within_bounds(-5e-10, 1.0 + 5e-10, 0.0, 1.0)
+    assert not range_within_bounds(-2e-9, 1.0, 0.0, 1.0)
 
 
 def test_segment_intervals_and_line_keys_ignore_endpoint_direction():
     """Keep collinear overlap parameters and line identity stable under reversal."""
-    overlap = _segment_overlap_interval((0, 0), (10, 0), (8, 0), (2, 0))
-    reverse_overlap = _segment_overlap_interval((10, 0), (0, 0), (8, 0), (2, 0))
+    overlap = segment_overlap_interval((0, 0), (10, 0), (8, 0), (2, 0))
+    reverse_overlap = segment_overlap_interval((10, 0), (0, 0), (8, 0), (2, 0))
 
     assert overlap == (0.2, 0.8)
     assert reverse_overlap == overlap
-    assert _segment_overlap_interval((0, 0), (10, 0), (10, 0), (12, 0)) is None
-    assert _segment_overlap_interval((1, 1), (1, 1), (0, 0), (2, 2)) is None
-    assert _segment_overlap_interval((0, 0), (10, 0), (2, 1e-8), (8, 1e-8)) is None
+    assert segment_overlap_interval((0, 0), (10, 0), (10, 0), (12, 0)) is None
+    assert segment_overlap_interval((1, 1), (1, 1), (0, 0), (2, 2)) is None
+    assert segment_overlap_interval((0, 0), (10, 0), (2, 1e-8), (8, 1e-8)) is None
 
-    forward_key = _line_key_2d((1, 2), (5, 4))
-    reverse_key = _line_key_2d((5, 4), (1, 2))
+    forward_key = line_key_2d((1, 2), (5, 4))
+    reverse_key = line_key_2d((5, 4), (1, 2))
     assert forward_key == reverse_key
-    assert _line_key_2d((1, 2), (1, 2)) is None
+    assert line_key_2d((1, 2), (1, 2)) is None
 
 
 def test_interval_complement_clips_and_merges_with_shared_tolerance():
     """Preserve clipping, touching-interval merge, and exposed-span ordering."""
-    assert _interval_complement(()) == ((0.0, 1.0),)
-    assert _interval_complement(((-0.2, 0.25), (0.25, 0.5), (0.8, 1.2))) == (
-        (0.5, 0.8),
-    )
-    assert _interval_complement(((0.2, 0.4), (0.4000000005, 0.7))) == (
+    assert interval_complement(()) == ((0.0, 1.0),)
+    assert interval_complement(((-0.2, 0.25), (0.25, 0.5), (0.8, 1.2))) == ((0.5, 0.8),)
+    assert interval_complement(((0.2, 0.4), (0.4000000005, 0.7))) == (
         (0.0, 0.2),
         (0.7, 1.0),
     )
@@ -129,30 +127,30 @@ def test_interval_complement_clips_and_merges_with_shared_tolerance():
 def test_geometry_ref_surface_plane_precedence_is_unchanged():
     """Keep shell, explicit contact plane, and entity-base plane precedence."""
     assert (
-        _geometry_ref_surface_z_um(
+        geometry_ref_surface_z_um(
             {"z_min_um": 1.0, "z_max_um": 4.0, "shell_part": "top"}
         )
         == 4.0
     )
     assert (
-        _geometry_ref_surface_z_um(
+        geometry_ref_surface_z_um(
             {"z_min_um": 1.0, "thickness_um": 2.0, "shell_part": "top"}
         )
         == 3.0
     )
     assert (
-        _geometry_ref_surface_z_um(
+        geometry_ref_surface_z_um(
             {"z_min_um": 1.0, "shell_part": "bottom", "z_max_um": 4.0}
         )
         == 1.0
     )
     assert (
-        _geometry_ref_surface_z_um(
+        geometry_ref_surface_z_um(
             {"z_min_um": 1.0, "plane": {"axis": "z", "value_um": 2.5}}
         )
         == 2.5
     )
-    assert _geometry_ref_surface_z_um({"z_min_um": 1.0}) == 1.0
+    assert geometry_ref_surface_z_um({"z_min_um": 1.0}) == 1.0
 
 
 def test_route_a_cutout_ref_uses_recognized_contact_planes_only():
@@ -260,15 +258,15 @@ def test_contact_attachment_uses_declared_identity_net_and_finite_overlap():
         },
     )
 
-    assert _entities_have_finite_overlap(pad, metal)
-    assert not _entities_have_finite_overlap(pad, touching)
-    assert _resolve_contact_pad_attachment(pad, (metal,)) is metal
-    assert _resolve_contact_pad_attachment(pad, (metal,), defer_overlap=True) is None
+    assert entities_have_finite_overlap(pad, metal)
+    assert not entities_have_finite_overlap(pad, touching)
+    assert resolve_contact_pad_attachment(pad, (metal,)) is metal
+    assert resolve_contact_pad_attachment(pad, (metal,), defer_overlap=True) is None
     vacuum = replace(_entity("vacuum"), role="solution_region", material_kind="vacuum")
-    assert _is_solution_entity(vacuum)
-    assert _is_vacuum_solution_entity(vacuum)
-    assert not _requires_route_representation(vacuum)
-    assert _requires_route_representation(metal)
+    assert is_solution_entity(vacuum)
+    assert is_vacuum_solution_entity(vacuum)
+    assert not requires_route_representation(vacuum)
+    assert requires_route_representation(metal)
 
 
 def test_surface_record_helpers_keep_canonical_kind_and_face_order():
@@ -283,8 +281,8 @@ def test_surface_record_helpers_keep_canonical_kind_and_face_order():
     ring = ((0, 0, 1), (2, 0, 1), (2, 3, 1), (0, 3, 1))
     rotated = ring[2:] + ring[:2]
 
-    assert _interface_kinds(interface) == ("MM", "MA", "SA")
-    assert _canonical_face_signature_3d(ring) == _canonical_face_signature_3d(
+    assert interface_kinds(interface) == ("MM", "MA", "SA")
+    assert canonical_face_signature_3d(ring) == canonical_face_signature_3d(
         tuple(reversed(rotated))
     )
     surface = SurfacePlanRecord(
@@ -296,7 +294,7 @@ def test_surface_record_helpers_keep_canonical_kind_and_face_order():
             "boundary_volume_ids": ("substrate", "metal", "substrate", "unknown")
         },
     )
-    assert _surface_boundary_volume_ids(
+    assert surface_boundary_volume_ids(
         surface, known_entity_ids={"metal", "substrate"}
     ) == ("substrate", "metal")
 
@@ -307,6 +305,4 @@ def test_surface_record_helpers_keep_canonical_kind_and_face_order():
         geometry_ref={},
         metadata={"embedded_surface_sheet": True},
     )
-    assert (
-        _surface_boundary_volume_ids(embedded_sheet, known_entity_ids={"sheet"}) == ()
-    )
+    assert surface_boundary_volume_ids(embedded_sheet, known_entity_ids={"sheet"}) == ()

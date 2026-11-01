@@ -10,9 +10,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, cast
 
-from scgsim.diagnostics import _progress, _stage
-from scgsim.geometry._primitives._grid_cache import with_grid_work_cache
-from scgsim.geometry._primitives.grid import _source_recipe_map, geometry_grid_scope
+from scgsim.diagnostics import diagnostic_stage, progress
 from scgsim.geometry.models.common import PathInput
 from scgsim.geometry.models.input import (
     BoundaryCurveChainSpec,
@@ -22,13 +20,8 @@ from scgsim.geometry.models.input import (
     SemanticEntitySpec,
 )
 from scgsim.geometry.models.regions import PortSheetRegionRecord
-from scgsim.geometry.source._occurrence import (
-    _failed_source_recipe,
-    _polygons_by_layer,
-    _run_source_recipe,
-    _source_recipe_job,
-    _with_occurrence_extraction_cache,
-)
+from scgsim.geometry.primitives.grid import geometry_grid_scope, source_recipe_map
+from scgsim.geometry.primitives.grid_cache import with_grid_work_cache
 from scgsim.geometry.source.adapter_records import (
     AdapterSource,
     LoadedLibrary,
@@ -39,7 +32,14 @@ from scgsim.geometry.source.adapter_records import (
 )
 from scgsim.geometry.source.curves import boundary_binding
 from scgsim.geometry.source.grid import apply_geometry_grid, source_grid_context
-from scgsim.geometry.source.intents import _route_a_sheet_interfaces
+from scgsim.geometry.source.intents import route_a_sheet_interfaces
+from scgsim.geometry.source.occurrence import (
+    failed_source_recipe,
+    read_polygons_by_layer,
+    run_source_recipe,
+    source_recipe_job,
+    with_occurrence_extraction_cache,
+)
 from scgsim.geometry.source.occurrence_validation import validate_occurrence_sources
 from scgsim.geometry.source.ports import port_sheet_regions_from_stack_metadata
 from scgsim.geometry.source.stack import build_component_stack
@@ -53,8 +53,8 @@ if TYPE_CHECKING:
 
 
 @with_grid_work_cache
-@_stage("geometry.source.adapter")
-@_with_occurrence_extraction_cache
+@diagnostic_stage("geometry.source.adapter")
+@with_occurrence_extraction_cache
 def build_gds_stack_geometry_input(
     *,
     gds_file: PathInput,
@@ -211,7 +211,7 @@ def _read_selected_source(
         library, str(effective_top_cell_name) if effective_top_cell_name else None
     )
     cell_bounds = _cell_bounds_um(cell)
-    polygons_by_layer = _polygons_by_layer(cell)
+    polygons_by_layer = read_polygons_by_layer(cell)
     return AdapterSource(
         stack, library, cell, cell_bounds, polygons_by_layer, source_dbu_um, context
     )
@@ -256,20 +256,20 @@ class _SourceLowering:
         }
 
     def lower_layers(self) -> None:
-        with _stage(
+        with diagnostic_stage(
             "geometry.source.lower_layers",
             counts={"layers": len(self.source.stack.layers)},
         ):
-            for rows in _source_recipe_map(_run_source_recipe, self.layer_jobs()):
+            for rows in source_recipe_map(run_source_recipe, self.layer_jobs()):
                 for lowered in rows:
                     self.polygons.extend(lowered.polygons)
                     self.entities.append(lowered.entity)
 
     def layer_jobs(self):
         for diagnostic_index, record in enumerate(self.source.stack.layers):
-            _progress(diagnostic_index, len(self.source.stack.layers))
+            progress(diagnostic_index, len(self.source.stack.layers))
             try:
-                job = _source_recipe_job(
+                job = source_recipe_job(
                     lower_layer_record,
                     record,
                     materials=self.source.stack.materials,
@@ -278,7 +278,7 @@ class _SourceLowering:
                     domain_bounds_by_semantic_id=self.domain_bounds,
                 )
             except Exception as error:  # noqa: BLE001 - marshal the original worker error in source order.
-                yield _failed_source_recipe(error)
+                yield failed_source_recipe(error)
                 return
             yield job
 
@@ -293,7 +293,7 @@ class _SourceLowering:
             "cell_bounds_um": self.source.cell_bounds_um,
             "source_dbu_um": self.source.source_dbu_um,
         }
-        metadata["interface_intents_2d"] = _route_a_sheet_interfaces(
+        metadata["interface_intents_2d"] = route_a_sheet_interfaces(
             self.entities, self.polygons
         )
         return metadata
@@ -455,4 +455,3 @@ def _cell_bounds_um(cell: Cell) -> dict[str, float]:
 
 
 # Palace preparation still imports this source-owned helper at its original path.
-_solution_region_entity_from_record = solution_region_entity

@@ -7,15 +7,19 @@ from collections.abc import Mapping, Sequence
 from math import isfinite
 from typing import Any
 
-from scgsim.geometry.models.physical import PHYSICAL_LAYER_FIELD, PhysicalLayerDeclaration
+from scgsim.geometry.models.physical import (
+    PHYSICAL_LAYER_FIELD,
+    PhysicalLayerDeclaration,
+)
 
 
-def _solution_regions(
+def solution_regions(
     levels: Mapping[str, Any],
     *,
     materials: Mapping[str, Mapping[str, Any]],
     bounds: Mapping[str, float],
 ) -> dict[str, dict[str, Any]]:
+    """Normalize declared solution-region layers and their domain bounds."""
     result: dict[str, dict[str, Any]] = {}
     for level_name, level in levels.items():
         info = _level_info(level, level_name)
@@ -55,13 +59,15 @@ def _solution_regions(
             "metadata": {
                 "pdk_level_id": semantic_id,
                 "pdk_semantic_authority": "layer_stack",
-                PHYSICAL_LAYER_FIELD: _physical_declaration(info, level_name, material_id),
+                PHYSICAL_LAYER_FIELD: _physical_declaration(
+                    info, level_name, material_id
+                ),
             },
         }
     return result
 
 
-def _semantic_layer_records(
+def semantic_layer_records(
     declarations: Sequence[Mapping[str, Any]],
     *,
     levels: Mapping[str, Any],
@@ -69,6 +75,7 @@ def _semantic_layer_records(
     solution_region_ids: Mapping[str, Any],
     require_net: bool = True,
 ) -> list[dict[str, Any]]:
+    """Normalize component conductor declarations against stack records."""
     result = []
     semantic_ids: set[str] = set()
     for declaration in declarations:
@@ -121,11 +128,11 @@ def _semantic_layer_records(
             raise ValueError(
                 f"semantic layer {semantic_id!r} host {host!r} is not a solution region."
             )
-        layer, datatype = _gds_layer(declaration["gds_layer"], semantic_id)
-        pdk_geometry = _mapping(
+        layer, datatype = gds_layer(declaration["gds_layer"], semantic_id)
+        pdk_geometry = mapping(
             level_info.get("geometry", {}), f"PDK level {level_name!r} geometry"
         )
-        component_geometry = _mapping(
+        component_geometry = mapping(
             declaration.get("geometry", {}), f"{semantic_id!r} geometry"
         )
         unknown_geometry = set(component_geometry) - {
@@ -144,7 +151,7 @@ def _semantic_layer_records(
             "geometry_source"
         ] != pdk_geometry.get("geometry_source"):
             pdk_geometry = {}
-        component_metadata = _mapping(
+        component_metadata = mapping(
             declaration.get("metadata", {}), f"{semantic_id!r} metadata"
         )
         part_role = _identifier(
@@ -174,7 +181,9 @@ def _semantic_layer_records(
                 "pdk_semantic_authority": "layer_stack",
                 "component_semantic_authority": "component.info",
                 **component_metadata,
-                PHYSICAL_LAYER_FIELD: _physical_declaration(level_info, level_name, material_id),
+                PHYSICAL_LAYER_FIELD: _physical_declaration(
+                    level_info, level_name, material_id
+                ),
                 **(
                     {"host_reference_origin": "generated_background"}
                     if auto_host
@@ -188,7 +197,7 @@ def _semantic_layer_records(
             ),
         }
         if "ground_bump_fill_spec" in level_info:
-            record["metadata"]["ground_bump_fill_spec"] = _mapping(
+            record["metadata"]["ground_bump_fill_spec"] = mapping(
                 level_info["ground_bump_fill_spec"],
                 f"PDK level {level_name!r} ground_bump_fill_spec",
             )
@@ -196,7 +205,8 @@ def _semantic_layer_records(
     return result
 
 
-def _coupon_domain_bounds(component: Any, padding_um: float) -> dict[str, float]:
+def coupon_domain_bounds(component: Any, padding_um: float) -> dict[str, float]:
+    """Read component bounds and expand them by the requested padding."""
     try:
         bbox = component.dbbox()
     except AttributeError as exc:
@@ -235,14 +245,14 @@ def _level(levels: Mapping[str, Any], name: Any) -> Any:
 
 
 def _level_info(level: Any, name: Any) -> dict[str, Any]:
-    return _mapping(getattr(level, "info", None), f"PDK level {name!r} info")
+    return mapping(getattr(level, "info", None), f"PDK level {name!r} info")
 
 
 def _level_facts(level: Any, name: Any) -> tuple[str, float, float, int]:
     material_id = _identifier(
         getattr(level, "material", None), f"level {name!r} material"
     )
-    z_um = _finite_number(getattr(level, "zmin", None), f"level {name!r} zmin")
+    z_um = finite_number(getattr(level, "zmin", None), f"level {name!r} zmin")
     thickness_um = _positive_number(
         getattr(level, "thickness", None), f"level {name!r} thickness"
     )
@@ -262,7 +272,8 @@ def _require_material(
         )
 
 
-def _gds_layer(value: Any, semantic_id: str) -> tuple[int, int]:
+def gds_layer(value: Any, semantic_id: str) -> tuple[int, int]:
+    """Read a nonnegative integer GDS layer and datatype pair."""
     if (
         isinstance(value, str | bytes)
         or not isinstance(value, Sequence)
@@ -282,20 +293,30 @@ def _gds_layer(value: Any, semantic_id: str) -> tuple[int, int]:
     return layer, datatype
 
 
-def _physical_declaration(info: Mapping[str, Any], level_name: str, material_id: str) -> dict[str, Any]:
+def _physical_declaration(
+    info: Mapping[str, Any], level_name: str, material_id: str
+) -> dict[str, Any]:
     """One neutral source carrier; old backend metadata is historical only."""
     if "aedt_modeling" in info:
         raise ValueError("fresh source must replace aedt_modeling with physical_layer")
     raw = info.get(PHYSICAL_LAYER_FIELD)
     if not isinstance(raw, Mapping):
-        raise ValueError(f"source level {level_name!r} lacks its neutral physical declaration")
+        raise ValueError(
+            f"source level {level_name!r} lacks its neutral physical declaration"
+        )
     declaration = PhysicalLayerDeclaration.from_payload(raw)
-    if declaration.source_level_id != level_name or declaration.material_id != material_id:
-        raise ValueError(f"physical declaration identity differs from source level {level_name!r}")
+    if (
+        declaration.source_level_id != level_name
+        or declaration.material_id != material_id
+    ):
+        raise ValueError(
+            f"physical declaration identity differs from source level {level_name!r}"
+        )
     return declaration.to_payload()
 
 
-def _mapping(value: Any, name: str) -> dict[str, Any]:
+def mapping(value: Any, name: str) -> dict[str, Any]:
+    """Copy a mapping into an ordinary dictionary."""
     if not isinstance(value, Mapping):
         raise TypeError(f"{name} must be a mapping.")
     return dict(value)
@@ -307,7 +328,8 @@ def _identifier(value: Any, name: str) -> str:
     return value
 
 
-def _finite_number(value: Any, name: str) -> float:
+def finite_number(value: Any, name: str) -> float:
+    """Read a finite numeric value while rejecting booleans."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be a finite number.")
     result = float(value)
@@ -317,13 +339,15 @@ def _finite_number(value: Any, name: str) -> float:
 
 
 def _positive_number(value: Any, name: str) -> float:
-    result = _finite_number(value, name)
+    result = finite_number(value, name)
     if result <= 0.0:
         raise ValueError(f"{name} must be a finite positive number.")
     return result
 
 
-def _materials(records: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+def normalize_material_records(
+    records: Mapping[str, Mapping[str, Any]],
+) -> dict[str, dict[str, Any]]:
     """Normalize material records with the established stack-material mapping."""
     if not isinstance(records, Mapping):
         raise TypeError("material_records must be a mapping.")

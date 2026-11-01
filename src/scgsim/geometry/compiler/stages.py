@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Literal, TypedDict
 
-from scgsim.diagnostics import _stage
+from scgsim.diagnostics import diagnostic_stage
 from scgsim.geometry.models.common import RouteLiteral
 
 
@@ -47,7 +47,7 @@ class StageTimings:
             if self.diagnostic_prefix is None:
                 yield
             else:
-                with _stage(self.diagnostic_prefix + stage):
+                with diagnostic_stage(self.diagnostic_prefix + stage):
                     yield
         except Exception:
             self.records.append(_timing_record(stage, started, "failed"))
