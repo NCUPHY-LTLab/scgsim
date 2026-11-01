@@ -5,21 +5,27 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from scgsim.geometry._primitives.constants import _TOPOLOGY_EPS_UM
-from scgsim.geometry._primitives.grid import (
+from scgsim.geometry._primitives.constants import (  # private-import: source-owned topology constants are retained during coordinated package migration
+    _TOPOLOGY_EPS_UM,
+)
+from scgsim.geometry._primitives.grid import (  # private-import: primitive package-path migration awaits coordinated backend source lists
     boolean_polygon_region,
     loop_inside_loop,
     split_gdstk_cutline_loop,
 )
-from scgsim.geometry._primitives.planar_loops import (
+from scgsim.geometry._primitives.planar_loops import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+    LoopCoordinates,
+    PlanarLoop,
+    PolygonCoordinates,
     cancel_reversed_planar_edges,
     clean_loop,
     filter_gdstk_polygons,
+    point_on_planar_segment,
     polygon_area,
     ring_edges,
     simple_planar_loops_from_edges,
 )
-from scgsim.geometry._primitives.spatial import (
+from scgsim.geometry._primitives.spatial import (  # private-import: spatial helper names remain with their source owner outside this lease
     _coordinate_2d_key,
     _segment_overlap_interval,
 )
@@ -27,21 +33,22 @@ from scgsim.geometry.models.input import SemanticEntitySpec
 from scgsim.geometry.models.topology import CurveRefRecord
 
 
-def _loops_touch_without_area(left: Any, right: Any) -> bool:
+def loops_touch_without_area(left: LoopCoordinates, right: LoopCoordinates) -> bool:
     """Reject a coplanar contact that has no finite-area footprint."""
     left_loop, right_loop = clean_loop(left), clean_loop(right)
     return any(
-        _point_on_segment(point, start, end)
+        point_on_planar_segment(point, start, end)
         for point in left_loop
         for start, end in ring_edges(right_loop)
     ) or any(
-        _point_on_segment(point, start, end)
+        point_on_planar_segment(point, start, end)
         for point in right_loop
         for start, end in ring_edges(left_loop)
     )
 
 
-def _canonical_loop_sort_key(loop: tuple[tuple[float, float], ...]) -> tuple:
+def canonical_loop_sort_key(loop: PlanarLoop) -> PlanarLoop:
+    """Return the least rotation across both orientations of a clean loop."""
     clean = clean_loop(loop)
     candidates: list[tuple[tuple[float, float], ...]] = []
     reversed_loop = tuple(reversed(clean))
@@ -52,7 +59,8 @@ def _canonical_loop_sort_key(loop: tuple[tuple[float, float], ...]) -> tuple:
     return min(candidates)
 
 
-def _loop_signature(loop: Any) -> tuple[tuple[float, float], ...]:
+def loop_signature(loop: LoopCoordinates) -> tuple[tuple[float, float], ...]:
+    """Return unordered coordinate keys, or no signature for malformed optional input."""
     try:
         points = clean_loop(loop)
     except Exception:  # noqa: BLE001 - malformed optional loop has no signature
@@ -60,14 +68,16 @@ def _loop_signature(loop: Any) -> tuple[tuple[float, float], ...]:
     return tuple(sorted(_coordinate_2d_key(point) for point in points))
 
 
-def _same_loop_geometry(left: Any, right: Any) -> bool:
-    return _loop_signature(left) == _loop_signature(right)
+def same_loop_geometry(left: LoopCoordinates, right: LoopCoordinates) -> bool:
+    """Compare unordered clean-loop coordinate signatures."""
+    return loop_signature(left) == loop_signature(right)
 
 
-def _contact_holes_are_simple(
+def contact_holes_are_simple(
     outer_loop: tuple[tuple[float, float], ...],
     hole_loops: Sequence[tuple[tuple[float, float], ...]],
 ) -> bool:
+    """Check interior holes and reject shared retained boundary support."""
     for hole_loop in hole_loops:
         if not _loop_strictly_inside_loop(hole_loop, outer_loop):
             return False
@@ -78,41 +88,26 @@ def _contact_holes_are_simple(
         for right_bounds, right in hole_records[index + 1 :]:
             if not _bounds_tuple_may_overlap(left_bounds, right_bounds):
                 continue
-            if _loops_share_edge_overlap(left, right):
+            if loops_share_edge_overlap(left, right):
                 return False
     return True
 
 
-def _loop_strictly_inside_loop(loop: Any, container: Any) -> bool:
+def _loop_strictly_inside_loop(
+    loop: LoopCoordinates, container: LoopCoordinates
+) -> bool:
     """Require a real interior hole, excluding any boundary touch."""
     if not loop_inside_loop(loop, container):
         return False
     loop_points = clean_loop(loop)
     container_points = clean_loop(container)
     if any(
-        _point_on_segment(point, start, end)
+        point_on_planar_segment(point, start, end)
         for point in loop_points
         for start, end in ring_edges(container_points)
     ):
         return False
-    return not _loops_share_edge_overlap(loop_points, container_points)
-
-
-def _point_on_segment(
-    point: tuple[float, float], start: tuple[float, float], end: tuple[float, float]
-) -> bool:
-    dx, dy = end[0] - start[0], end[1] - start[1]
-    cross = (point[0] - start[0]) * dy - (point[1] - start[1]) * dx
-    if abs(cross) > _TOPOLOGY_EPS_UM:
-        return False
-    return (
-        min(start[0], end[0]) - _TOPOLOGY_EPS_UM
-        <= point[0]
-        <= max(start[0], end[0]) + _TOPOLOGY_EPS_UM
-        and min(start[1], end[1]) - _TOPOLOGY_EPS_UM
-        <= point[1]
-        <= max(start[1], end[1]) + _TOPOLOGY_EPS_UM
-    )
+    return not loops_share_edge_overlap(loop_points, container_points)
 
 
 def _loop_bounds_tuple(
@@ -139,7 +134,7 @@ def _bounds_tuple_may_overlap(
     )
 
 
-def _simple_interior_hole_loops(
+def simple_interior_hole_loops(
     parent_geometry_ref: Mapping[str, Any],
     plane_conductors: Sequence[SemanticEntitySpec],
     *,
@@ -148,6 +143,7 @@ def _simple_interior_hole_loops(
     # This shortcut constructs a new hole list from conductor footprints.  An
     # already-holed solution interface must take the Boolean path so authored
     # substrate holes remain absent from the live SA surface.
+    """Use separate conductor holes only when their interior and overlap checks pass."""
     if parent_geometry_ref.get("hole_loops"):
         return None
     if any(entity.geometry.get("hole_loops") for entity in plane_conductors):
@@ -171,7 +167,7 @@ def _simple_interior_hole_loops(
     # Overlapping conductor footprints must be unioned before they become
     # solution-interface holes; separate overlapping holes create a third
     # coincident rim when a normalized contact-pad cap is added.
-    import gdstk  # optional native geometry dependency
+    import gdstk  # noqa: PLC0415 - defer native geometry loading until this operation requires it
 
     for index, left in enumerate(hole_loops):
         for right in hole_loops[index + 1 :]:
@@ -185,15 +181,16 @@ def _simple_interior_hole_loops(
     all_loops = (base_loop, *hole_loops)
     for index, left in enumerate(all_loops):
         for right in all_loops[index + 1 :]:
-            if _loops_share_edge_overlap(left, right):
+            if loops_share_edge_overlap(left, right):
                 return None
     return hole_loops
 
 
-def _loops_share_edge_overlap(
+def loops_share_edge_overlap(
     left: tuple[tuple[float, float], ...],
     right: tuple[tuple[float, float], ...],
 ) -> bool:
+    """Find retained positive-length overlap between the two loop boundaries."""
     return any(
         _segment_overlap_interval(left_start, left_end, right_start, right_end)
         is not None
@@ -202,11 +199,12 @@ def _loops_share_edge_overlap(
     )
 
 
-def _edge_is_covered_by_loop_edge(
+def edge_is_covered_by_loop_edge(
     start: tuple[float, float],
     end: tuple[float, float],
-    loop: Any,
+    loop: LoopCoordinates,
 ) -> bool:
+    """Test full segment coverage under the existing overlap interval tolerance."""
     return any(
         interval is not None
         and interval[0] <= _TOPOLOGY_EPS_UM
@@ -216,7 +214,8 @@ def _edge_is_covered_by_loop_edge(
     )
 
 
-def _loop_centroid(loop: Any) -> tuple[float, float]:
+def loop_centroid(loop: LoopCoordinates) -> tuple[float, float]:
+    """Return the arithmetic mean of supplied vertex coordinates."""
     points = tuple((float(point[0]), float(point[1])) for point in loop)
     return (
         sum(point[0] for point in points) / len(points),
@@ -224,7 +223,7 @@ def _loop_centroid(loop: Any) -> tuple[float, float]:
     )
 
 
-def _ordered_loop_signature(
+def ordered_loop_signature(
     curve_refs: tuple[CurveRefRecord, ...],
 ) -> tuple[tuple[str, int], ...]:
     """Return a rotation-stable loop signature without discarding orientation."""
@@ -237,8 +236,11 @@ def _ordered_loop_signature(
     return min(rotations)
 
 
-def _gdstk_surface_region(geometry_ref: Mapping[str, Any]) -> tuple[Any, ...]:
-    import gdstk  # optional native geometry dependency
+def gdstk_surface_region(
+    geometry_ref: Mapping[str, Any],
+) -> tuple[PolygonCoordinates, ...]:
+    """Lower exterior and holes through the existing scoped native Boolean path."""
+    import gdstk  # noqa: PLC0415 - defer native geometry loading until this operation requires it
 
     outer = gdstk.Polygon(clean_loop(geometry_ref["outer_loop"]))
     holes = tuple(
@@ -250,10 +252,11 @@ def _gdstk_surface_region(geometry_ref: Mapping[str, Any]) -> tuple[Any, ...]:
     return boolean_polygon_region(gdstk, (outer,), holes, "not")
 
 
-def _geometry_ref_from_gdstk_polygon(
+def geometry_ref_from_gdstk_polygon(
     parent_geometry_ref: Mapping[str, Any],
-    polygon: Any,
+    polygon: PolygonCoordinates,
 ) -> dict[str, Any]:
+    """Copy metadata and replace boundaries using the cleaned native polygon walk."""
     geometry_ref = dict(parent_geometry_ref)
     outer_loop, hole_loops = split_gdstk_cutline_loop(clean_loop(polygon.points))
     geometry_ref["outer_loop"] = outer_loop
@@ -261,12 +264,13 @@ def _geometry_ref_from_gdstk_polygon(
     return geometry_ref
 
 
-def _geometry_refs_from_gdstk_region(
+def geometry_refs_from_gdstk_region(
     parent_geometry_ref: Mapping[str, Any],
-    region: tuple[Any, ...],
+    region: tuple[PolygonCoordinates, ...],
 ) -> tuple[dict[str, Any], ...]:
+    """Lower each retained polygon while preserving the parent metadata."""
     return tuple(
-        _geometry_ref_from_gdstk_polygon(parent_geometry_ref, polygon)
+        geometry_ref_from_gdstk_polygon(parent_geometry_ref, polygon)
         for polygon in filter_gdstk_polygons(region)
     )
 
@@ -281,3 +285,19 @@ _polygon_area = polygon_area
 _loop_inside_loop = loop_inside_loop
 _boolean_gdstk_region = boolean_polygon_region
 _split_gdstk_cutline_loop = split_gdstk_cutline_loop
+
+
+# Transitional aliases preserve existing callers until their owner migrates imports.
+_loops_touch_without_area = loops_touch_without_area
+_canonical_loop_sort_key = canonical_loop_sort_key
+_loop_signature = loop_signature
+_same_loop_geometry = same_loop_geometry
+_contact_holes_are_simple = contact_holes_are_simple
+_simple_interior_hole_loops = simple_interior_hole_loops
+_loops_share_edge_overlap = loops_share_edge_overlap
+_edge_is_covered_by_loop_edge = edge_is_covered_by_loop_edge
+_loop_centroid = loop_centroid
+_ordered_loop_signature = ordered_loop_signature
+_gdstk_surface_region = gdstk_surface_region
+_geometry_ref_from_gdstk_polygon = geometry_ref_from_gdstk_polygon
+_geometry_refs_from_gdstk_region = geometry_refs_from_gdstk_region

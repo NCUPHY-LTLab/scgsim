@@ -5,22 +5,30 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from scgsim.geometry._primitives.entities import (
+# Geometry references carry extensible source metadata; Any preserves its
+# existing payload contract rather than imposing a new metadata schema.
+from scgsim.geometry._primitives.entities import (  # private-import: entity projection helpers remain with their source owner outside this lease
     _entity_z_range_um,
     _geometry_ref_from_metadata,
 )
-from scgsim.geometry._primitives.planar_loops import clean_loop, ring_edges
-from scgsim.geometry._primitives.spatial import _same_z
+from scgsim.geometry._primitives.planar_loops import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+    clean_loop,
+    ring_edges,
+)
+from scgsim.geometry._primitives.spatial import (  # private-import: spatial helper names remain with their source owner outside this lease
+    _same_z,
+)
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.topology import InterfacePlanRecord
 
 
-def _entity_geometry_ref(
+def entity_geometry_ref(
     entity: SemanticEntitySpec,
     *,
     representation: str,
 ) -> dict[str, Any]:
+    """Project the entity geometry and metadata without native inference."""
     result: dict[str, Any] = {
         "from_semantic_id": entity.semantic_id,
         "geometry_kind": entity.geometry_kind,
@@ -35,7 +43,7 @@ def _entity_geometry_ref(
     return result
 
 
-def _route_entity_geometry_ref(
+def route_entity_geometry_ref(
     build_input: GeometryBuildInput,
     route: RouteLiteral,
     entity: SemanticEntitySpec,
@@ -43,8 +51,9 @@ def _route_entity_geometry_ref(
     representation: str,
     interfaces: tuple[InterfacePlanRecord, ...] = (),
 ) -> dict[str, Any]:
+    """Apply recognized Route A contact planes to the cutout body range."""
     del build_input
-    geometry_ref = _entity_geometry_ref(entity, representation=representation)
+    geometry_ref = entity_geometry_ref(entity, representation=representation)
     if route != "A" or representation != "cutout_boundary_shell":
         return geometry_ref
 
@@ -82,9 +91,10 @@ def _route_entity_geometry_ref(
     return geometry_ref
 
 
-def _sidewall_geometry_refs(
+def sidewall_geometry_refs(
     geometry_ref: Mapping[str, Any],
 ) -> tuple[dict[str, Any], ...]:
+    """Describe sidewall quads for every retained exterior and hole edge."""
     z_min_um = float(geometry_ref.get("z_min_um", geometry_ref.get("z_um", 0.0)))
     thickness_um = float(geometry_ref.get("thickness_um", 0.0))
     if thickness_um <= 0:
@@ -112,3 +122,9 @@ def _sidewall_geometry_refs(
                 }
             )
     return tuple(refs)
+
+
+# Transitional aliases preserve source-owned callers during their import migration.
+_entity_geometry_ref = entity_geometry_ref
+_route_entity_geometry_ref = route_entity_geometry_ref
+_sidewall_geometry_refs = sidewall_geometry_refs

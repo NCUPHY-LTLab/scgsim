@@ -3,20 +3,41 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from itertools import pairwise
 from math import sqrt
-from typing import Any
+from typing import Protocol, TypeVar
 
-from scgsim.geometry._primitives.constants import _TOPOLOGY_EPS_UM
-from scgsim.geometry._primitives.spatial import _coordinate_2d_key
+from scgsim.geometry._primitives.constants import (  # private-import: source-owned topology constants are retained during coordinated package migration
+    _TOPOLOGY_EPS_UM,
+)
+from scgsim.geometry._primitives.spatial import (  # private-import: spatial helper names remain with their source owner outside this lease
+    _coordinate_2d_key,
+)
+
+Point2D = tuple[float, float]
+PlanarLoop = tuple[Point2D, ...]
+PlanarEdge = tuple[Point2D, Point2D]
+LoopCoordinates = Iterable[Sequence[float]]
+
+
+class PolygonCoordinates(Protocol):
+    """Read-only polygon coordinates accepted by the planar boundary operations."""
+
+    @property
+    def points(self) -> LoopCoordinates:
+        """Return the native polygon walk without cleaning or rounding it."""
+        ...
+
+
+_Polygon = TypeVar("_Polygon", bound=PolygonCoordinates)
 
 
 def cutline_boundary_loops(
-    loop: tuple[tuple[float, float], ...],
+    loop: PlanarLoop,
 ) -> tuple[
-    tuple[tuple[float, float], ...],
-    tuple[tuple[tuple[float, float], ...], ...],
+    PlanarLoop,
+    tuple[PlanarLoop, ...],
 ]:
     """Normalize gdstk's cutline-encoded boundary into simple outer/hole loops.
 
@@ -25,10 +46,10 @@ def cutline_boundary_loops(
     independent boundary cycles; that representation is suitable for both the
     adapter's fused selector components and Boolean residual lowering.
     """
-    atomic_edges: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    atomic_edges: list[PlanarEdge] = []
     for start, end in ring_edges(loop):
         points = sorted(
-            {point for point in loop if _point_on_planar_segment(point, start, end)},
+            {point for point in loop if point_on_planar_segment(point, start, end)},
             key=lambda point: _planar_segment_parameter(point, start, end),
         )
         atomic_edges.extend((left, right) for left, right in pairwise(points))
@@ -51,7 +72,7 @@ def cutline_boundary_loops(
     return outer, holes
 
 
-def clean_loop(loop: Any) -> tuple[tuple[float, float], ...]:
+def clean_loop(loop: LoopCoordinates) -> PlanarLoop:
     """Round coordinate keys and remove redundant points while preserving cutlines."""
     points = tuple(
         _coordinate_2d_key((float(point[0]), float(point[1]))) for point in loop
@@ -68,8 +89,8 @@ def clean_loop(loop: Any) -> tuple[tuple[float, float], ...]:
 
 
 def _drop_near_duplicate_loop_points(
-    points: tuple[tuple[float, float], ...],
-) -> tuple[tuple[float, float], ...]:
+    points: PlanarLoop,
+) -> PlanarLoop:
     cleaned: list[tuple[float, float]] = []
     for point in points:
         if cleaned and cleaned[-1] == point:
@@ -81,8 +102,8 @@ def _drop_near_duplicate_loop_points(
 
 
 def _drop_redundant_collinear_loop_points(
-    points: tuple[tuple[float, float], ...],
-) -> tuple[tuple[float, float], ...]:
+    points: PlanarLoop,
+) -> PlanarLoop:
     points = _drop_near_duplicate_loop_points(points)
     if len(points) <= 3:
         return points
@@ -105,7 +126,7 @@ def _drop_redundant_collinear_loop_points(
 
 
 def _duplicate_edge_point_indices(
-    points: tuple[tuple[float, float], ...],
+    points: PlanarLoop,
 ) -> set[int]:
     edge_counts = Counter(
         tuple(sorted((start, end))) for start, end in ring_edges(points)
@@ -135,15 +156,15 @@ def _point_on_segment_2d(
 
 
 def ring_edges(
-    ring: tuple[tuple[float, float], ...],
-) -> tuple[tuple[tuple[float, float], tuple[float, float]], ...]:
+    ring: PlanarLoop,
+) -> tuple[PlanarEdge, ...]:
     """Return directed edges including the closing edge of a ring."""
     return tuple(
         (ring[index], ring[(index + 1) % len(ring)]) for index in range(len(ring))
     )
 
 
-def filter_gdstk_polygons(polygons: Sequence[Any]) -> tuple[Any, ...]:
+def filter_gdstk_polygons(polygons: Sequence[_Polygon]) -> tuple[_Polygon, ...]:
     """Retain polygons whose area exceeds the existing topology tolerance."""
     return tuple(
         polygon
@@ -152,11 +173,12 @@ def filter_gdstk_polygons(polygons: Sequence[Any]) -> tuple[Any, ...]:
     )
 
 
-def _point_on_planar_segment(
+def point_on_planar_segment(
     point: tuple[float, float],
     start: tuple[float, float],
     end: tuple[float, float],
 ) -> bool:
+    """Test inclusive planar segment membership at the existing topology tolerance."""
     dx, dy = end[0] - start[0], end[1] - start[1]
     if abs((point[0] - start[0]) * dy - (point[1] - start[1]) * dx) > _TOPOLOGY_EPS_UM:
         return False
@@ -182,10 +204,10 @@ def _planar_segment_parameter(
 
 
 def cancel_reversed_planar_edges(
-    edges: Sequence[tuple[tuple[float, float], tuple[float, float]]],
-) -> tuple[tuple[tuple[float, float], tuple[float, float]], ...]:
+    edges: Sequence[PlanarEdge],
+) -> tuple[PlanarEdge, ...]:
     """Cancel opposite directed edge occurrences without discarding retained repeats."""
-    counts: dict[tuple[tuple[float, float], tuple[float, float]], int] = {}
+    counts: dict[PlanarEdge, int] = {}
     for edge in edges:
         counts[edge] = counts.get(edge, 0) + 1
     for edge in tuple(counts):
@@ -203,13 +225,14 @@ def cancel_reversed_planar_edges(
 
 
 def simple_planar_loops_from_edges(
-    edges: Sequence[tuple[tuple[float, float], tuple[float, float]]],
-) -> tuple[tuple[tuple[float, float], ...], ...]:
+    edges: Sequence[PlanarEdge],
+) -> tuple[PlanarLoop, ...]:
     """Reconstruct nonbranching cycles and reject repeated retained boundary edges."""
     neighbors: dict[tuple[float, float], set[tuple[float, float]]] = {}
-    unused: set[tuple[tuple[float, float], tuple[float, float]]] = set()
+    unused: set[PlanarEdge] = set()
     for start, end in edges:
-        edge_key = tuple(sorted((start, end)))
+        ordered = sorted((start, end))
+        edge_key = (ordered[0], ordered[1])
         if edge_key in unused:
             raise ValueError("gdstk cutline repeats a retained boundary edge")
         unused.add(edge_key)
@@ -217,7 +240,7 @@ def simple_planar_loops_from_edges(
         neighbors.setdefault(end, set()).add(start)
     if any(len(points) != 2 for points in neighbors.values()):
         raise ValueError("gdstk cutline boundary is not a simple loop")
-    loops: list[tuple[tuple[float, float], ...]] = []
+    loops: list[PlanarLoop] = []
     while unused:
         start, current = next(iter(unused))
         loop = [start]
@@ -235,7 +258,7 @@ def simple_planar_loops_from_edges(
     return tuple(loops)
 
 
-def polygon_area(points: Sequence[Sequence[float]]) -> float:
+def polygon_area(points: LoopCoordinates) -> float:
     """Return the signed shoelace area of planar coordinates."""
     clean_points = tuple((float(point[0]), float(point[1])) for point in points)
     if len(clean_points) < 3:

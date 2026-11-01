@@ -3,13 +3,19 @@
 from dataclasses import replace
 
 import pytest
+import shapely
 from shapely import Polygon, coverage_union_all, union_all
 
-from scgsim.geometry._primitives import grid, grid_overlay, grid_regions
+from scgsim.geometry._primitives import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+    grid,
+    grid_overlay,
+    grid_regions,
+)
 from scgsim.geometry.models.grid import GeometryGridContext
 
 
 def box(x0, y0, x1, y1):
+    """Return a rectangular ring in its original vertex order."""
     return ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
 
 
@@ -25,8 +31,7 @@ CASES = [
 
 @pytest.mark.parametrize("rings", CASES)
 def test_existing_incremental_index_matches_exhaustive_candidates(monkeypatch, rings):
-    import shapely
-
+    """Keep the indexed subdivision exactly equal to exhaustive native overlays."""
     values = tuple(
         grid.GridOperand(str(i), ring, physical=False, contact=False)
         for i, ring in enumerate(rings)
@@ -54,6 +59,7 @@ def test_existing_incremental_index_matches_exhaustive_candidates(monkeypatch, r
 
 
 def test_separated_incremental_inputs_do_no_pair_boolean_work(monkeypatch):
+    """Avoid pair overlays for separated inputs without dropping area cells."""
     values = tuple(
         grid.GridOperand(
             str(i), box(10 * i, 0, 10 * i + 1, 1), physical=False, contact=False
@@ -61,13 +67,13 @@ def test_separated_incremental_inputs_do_no_pair_boolean_work(monkeypatch):
         for i in range(12)
     )
     calls = []
-    original = grid_overlay.overlay_call
+    original = grid_overlay.OverlayScope.call
 
-    def observed(operation, left, right, precision, operand_index, cell_index):
-        calls.append((operation, cell_index))
-        return original(operation, left, right, precision, operand_index, cell_index)
+    def observed(scope, operation, left, right):
+        calls.append((operation, scope.cell_index))
+        return original(scope, operation, left, right)
 
-    monkeypatch.setattr(grid_overlay, "overlay_call", observed)
+    monkeypatch.setattr(grid_overlay.OverlayScope, "call", observed)
     result = grid_overlay.subdivide_grid(
         values, {v.operand_id: Polygon(v.exterior) for v in values}, 0.1
     )
@@ -76,6 +82,7 @@ def test_separated_incremental_inputs_do_no_pair_boolean_work(monkeypatch):
 
 
 def test_shared_vertex_conversion_once_and_exact_diagonal_incidence(monkeypatch):
+    """Reuse exact vertex keys while retaining every collinear native node."""
     vertices = (
         (0.0, 0.0),
         (1.0, 1.0),
@@ -103,6 +110,7 @@ def test_shared_vertex_conversion_once_and_exact_diagonal_incidence(monkeypatch)
 
 @pytest.mark.parametrize("apply_grid", (False, True))
 def test_arrangement_region_reuse_preserves_holed_memberships(monkeypatch, apply_grid):
+    """Reuse each immutable region result without changing holed memberships."""
     outer = grid.GridOperand(
         "outer", box(0, 0, 6, 6), holes=(box(2, 2, 4, 4),), contact=False
     )
@@ -123,13 +131,13 @@ def test_arrangement_region_reuse_preserves_holed_memberships(monkeypatch, apply
         merged, arrangement.vertices, 0.1 if apply_grid else None
     )
     calls = []
-    original = grid.regions_indexed
+    original = grid_regions.regions_indexed
 
     def observed(geometry, index):
         calls.append(1)
         return original(geometry, index)
 
-    monkeypatch.setattr(grid, "regions_indexed", observed)
+    monkeypatch.setattr(grid_regions, "regions_indexed", observed)
     first = arrangement.operand_regions("outer")
     assert first == expected
     assert arrangement.face_regions(selected_ids) is first
@@ -141,6 +149,7 @@ def test_arrangement_region_reuse_preserves_holed_memberships(monkeypatch, apply
 
 
 def test_strict_contact_and_identity_failures_remain():
+    """Retain original failures for changed physical contact or repeated identities."""
     values = (
         grid.GridOperand("A", box(0, 0, 0.96, 1)),
         grid.GridOperand("B", box(1.04, 0, 2, 1)),

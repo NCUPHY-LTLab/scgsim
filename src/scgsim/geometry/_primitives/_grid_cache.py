@@ -10,16 +10,28 @@ from typing import Protocol, TypeVar, cast
 
 
 class _Operand(Protocol):
-    operand_id: str
-    exterior: tuple
-    holes: tuple
-    physical: bool
-    contact: bool
+    @property
+    def operand_id(self) -> str: ...
+
+    @property
+    def exterior(self) -> tuple: ...
+
+    @property
+    def holes(self) -> tuple: ...
+
+    @property
+    def physical(self) -> bool: ...
+
+    @property
+    def contact(self) -> bool: ...
 
 
 class _Context(Protocol):
-    grid_size_um: float
-    coordinate_frame: str
+    @property
+    def grid_size_um(self) -> float: ...
+
+    @property
+    def coordinate_frame(self) -> str: ...
 
 
 @dataclass

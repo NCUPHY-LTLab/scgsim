@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import gdstk
 import pytest
 
-import scgsim.geometry.source._occurrence as occurrence_source
+import scgsim.geometry.source._occurrence as occurrence_source  # private-import: exercise actual decorated source entry points while retaining their owned imports
 import scgsim.geometry.source.ground as ground_source
-from scgsim.geometry._primitives.grid import (
+from scgsim.geometry._primitives.grid import (  # private-import: primitive package-path migration awaits coordinated backend source lists
     PolygonRegion,
     geometry_grid_scope,
     in_occurrence_frame,
@@ -16,8 +16,10 @@ from scgsim.geometry._primitives.grid import (
     preserve_declared_source,
     split_gdstk_cutline_loop,
 )
-from scgsim.geometry._primitives.loops import _geometry_ref_from_gdstk_polygon
-from scgsim.geometry._primitives.planar_loops import (
+from scgsim.geometry._primitives.loops import (  # private-import: primitive package-path migration awaits coordinated backend source lists
+    geometry_ref_from_gdstk_polygon,
+)
+from scgsim.geometry._primitives.planar_loops import (  # private-import: primitive package-path migration awaits coordinated backend source lists
     clean_loop,
     cutline_boundary_loops,
     polygon_area,
@@ -46,7 +48,7 @@ def test_real_gdstk_hole_cutline_walk(context):
     with geometry_grid_scope(context):
         outer, holes = split_gdstk_cutline_loop(walk)
         assert polygon_rings(polygon) == (outer, holes)
-        ref = _geometry_ref_from_gdstk_polygon({"kind": "surface"}, polygon)
+        ref = geometry_ref_from_gdstk_polygon({"kind": "surface"}, polygon)
     assert abs(polygon_area(outer)) == 100.0
     assert len(holes) == 1
     assert _boundary_edges(holes[0]) == _boundary_edges(HOLE)
@@ -107,7 +109,7 @@ def test_polygon_rings_retains_raw_coordinates_and_collinear_vertices(context):
     polygon = SimpleNamespace(points=walk)
     with geometry_grid_scope(context):
         outer, holes = polygon_rings(polygon)
-        ref = _geometry_ref_from_gdstk_polygon({}, polygon)
+        ref = geometry_ref_from_gdstk_polygon({}, polygon)
     assert set(outer) == set(walk)
     assert holes == ()
     assert set(ref["outer_loop"]) == set(clean_loop(walk))
