@@ -8,12 +8,15 @@ recipe and occurrence selectors.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from math import isfinite
+from typing import Any, cast
 
 from scgsim.geometry.models.input import LayoutPolygonSpec
 from scgsim.geometry.primitives.grid import (
+    SOURCE_INTENT,
     current_grid_context,
     current_grid_size_um,
+    frame_point,
     polygon_boolean,
     split_gdstk_cutline_loop,
 )
@@ -27,11 +30,7 @@ def _fused_boolean_candidates(candidates):
     """
     if current_grid_context() is None:
         return None
-    from math import isfinite
-
-    from shapely import STRtree, box
-
-    from scgsim.geometry.primitives.grid import SOURCE_INTENT, frame_point
+    from shapely import STRtree, box  # noqa: PLC0415 -- only the bound-grid broad phase needs this optional native dependency
 
     # Native near-vertex insertion is within grid/100 and node rounding within
     # half a grid step. A full step on EACH bound is a conservative candidate
@@ -42,8 +41,15 @@ def _fused_boolean_candidates(candidates):
         points = tuple(frame_point(tuple(map(float, p))) for p in polygon.points)
         if not points:
             return None
-        low = tuple(min(p[axis] for p in points) - padding for axis in (0, 1))
-        high = tuple(max(p[axis] for p in points) + padding for axis in (0, 1))
+        # Each comprehension enumerates exactly the X and Y axes.
+        low = cast(
+            tuple[float, float],
+            tuple(min(p[axis] for p in points) - padding for axis in (0, 1)),
+        )
+        high = cast(
+            tuple[float, float],
+            tuple(max(p[axis] for p in points) + padding for axis in (0, 1)),
+        )
         if not all(isfinite(v) for v in (*low, *high)):
             # No new input rejection; uncertain envelopes use the original path.
             return None
@@ -59,7 +65,7 @@ def fused_gdstk_components(
     candidates: Sequence[Any],
 ) -> tuple[tuple[LayoutPolygonSpec, tuple[int, ...], float], ...]:
     """Return stable occupied components for explicit source selectors."""
-    import gdstk
+    import gdstk  # noqa: PLC0415 -- load the optional GDS kernel only for native source polygon fusion
 
     overlap_candidates = _fused_boolean_candidates(candidates)
     parents = list(range(len(candidates)))
@@ -103,7 +109,10 @@ def fused_gdstk_components(
         # source fact without using layout names or proximity inference.
         if current_grid_context() is None:
             regions = gdstk.offset(
-                regions or (), 0.0, join="miter", precision=current_grid_size_um()
+                cast("Sequence[gdstk.Polygon]", regions or ()),
+                0.0,
+                join="miter",
+                precision=current_grid_size_um(),
             )
         if not regions or len(regions) != 1:
             raise ValueError("fused selector component must lower to one polygon")
@@ -206,7 +215,7 @@ def point_in_layout_polygon(
 
 
 def point_in_ring(
-    point: tuple[float, float],
+    point: Sequence[float],
     ring: Sequence[tuple[float, float]],
 ) -> bool:
     """Test ring membership using horizontal ray crossings."""

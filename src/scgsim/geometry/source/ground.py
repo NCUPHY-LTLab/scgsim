@@ -7,7 +7,8 @@ transforms remain at the occurrence boundary and are applied exactly once.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from types import ModuleType
 from typing import Any
 
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
@@ -16,6 +17,7 @@ from scgsim.geometry.primitives.grid import (
     preserve_declared_source,
     split_gdstk_cutline_loop,
 )
+from scgsim.geometry.primitives.loops import canonical_loop_sort_key
 from scgsim.geometry.source.polygon_ops import (
     fused_gdstk_components,
     point_in_layout_polygon,
@@ -33,9 +35,7 @@ def derived_ground_polygons(
     plane_polygons: Sequence[Any] | None = None,
 ) -> tuple[LayoutPolygonSpec, ...]:
     """Derive one positive Ground from its plane, mask and explicit includes."""
-    import gdstk
-
-    from scgsim.geometry.primitives.loops import canonical_loop_sort_key
+    import gdstk  # noqa: PLC0415 -- Ground construction is the boundary that requires the optional native GDS kernel
 
     mask_layer = entity.geometry.get("mask_layer")
     if mask_layer is None:
@@ -70,25 +70,7 @@ def derived_ground_polygons(
         raise ValueError(
             f"{entity.semantic_id} mixes source contributions with global includes"
         )
-    for contribution in source_includes:
-        polygon = (
-            contribution.get("polygon") if isinstance(contribution, Mapping) else None
-        )
-        if not isinstance(polygon, Mapping):
-            raise ValueError(
-                f"{entity.semantic_id} has an incomplete source contribution"
-            )
-        included.extend(
-            layout_polygon_region(
-                gdstk,
-                LayoutPolygonSpec(
-                    polygon_id=f"{entity.semantic_id}__INCLUDE__{len(included):04d}",
-                    layer=f"{mask_key[0]}/{mask_key[1]}",
-                    exterior=polygon["exterior"],
-                    holes=polygon["holes"],
-                ),
-            )
-        )
+    _append_source_includes(included, gdstk, entity, mask_key, source_includes)
     if include_layer is not None:
         if (
             not isinstance(include_layer, Sequence)
@@ -156,6 +138,35 @@ def derived_ground_polygons(
         )
         for index, (outer, holes) in enumerate(normalized_regions)
     )
+
+
+def _append_source_includes(
+    included: list[Any],
+    native: ModuleType,
+    entity: SemanticEntitySpec,
+    mask_key: tuple[int, int],
+    contributions: Iterable[object],
+) -> None:
+    """Append declared occurrence polygons in their original source order."""
+    for contribution in contributions:
+        polygon = (
+            contribution.get("polygon") if isinstance(contribution, Mapping) else None
+        )
+        if not isinstance(polygon, Mapping):
+            raise ValueError(
+                f"{entity.semantic_id} has an incomplete source contribution"
+            )
+        included.extend(
+            layout_polygon_region(
+                native,
+                LayoutPolygonSpec(
+                    polygon_id=f"{entity.semantic_id}__INCLUDE__{len(included):04d}",
+                    layer=f"{mask_key[0]}/{mask_key[1]}",
+                    exterior=polygon["exterior"],
+                    holes=polygon["holes"],
+                ),
+            )
+        )
 
 
 def _merged_gdstk_polygons(polygons: Sequence[Any]) -> tuple[Any, ...]:

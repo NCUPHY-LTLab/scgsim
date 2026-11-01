@@ -19,6 +19,7 @@ from scgsim.geometry.primitives.grid import (
     preserve_declared_source,
     split_gdstk_cutline_loop,
 )
+from scgsim.geometry.source.ground import derived_ground_polygons
 from scgsim.geometry.source.normalization import gds_layer
 from scgsim.geometry.source.polygon_ops import (
     fused_gdstk_components,
@@ -41,7 +42,7 @@ class SourceRecipeJob:
     traceback: Any = None
 
 
-def source_recipe_job(
+def source_recipe_job(  # noqa: PLR0913 -- acquisition and comparison controls stay distinct from the forwarded recipe arguments
     function,
     *args,
     source_cell=None,
@@ -281,46 +282,7 @@ def gds_polygons_for_entity(
     """Read an entity's layout polygons from occurrence data or GDS layers."""
     occurrence_polygons = entity.geometry.get("source_occurrence_polygons_um")
     if occurrence_polygons is not None:
-        if not is_record_sequence(occurrence_polygons):
-            raise TypeError(
-                f"{entity.semantic_id} occurrence polygons must be a sequence"
-            )
-        return tuple(
-            LayoutPolygonSpec(
-                polygon_id=f"{entity.semantic_id}__P{index:04d}",
-                layer=f"{entity.geometry['gds_layer']}/{entity.geometry['gds_datatype']}",
-                exterior=record["exterior"],
-                holes=record["holes"],
-                object_name=entity.semantic_id,
-                net_name=entity.net_id,
-                metadata={
-                    "source": "gds_source_occurrence",
-                    "source_polygon_index": index,
-                },
-            )
-            for index, record in enumerate(occurrence_polygons)
-        )
-
-    def selector_point(name: str, value: Any) -> tuple[float, float]:
-        if (
-            not isinstance(value, Sequence)
-            or isinstance(value, str | bytes)
-            or len(value) != 2
-        ):
-            raise ValueError(f"{entity.semantic_id} {name} must be a 2D point")
-        return (float(value[0]), float(value[1]))
-
-    def ordered(polygons: Sequence[Any]) -> tuple[Any, ...]:
-        return tuple(
-            sorted(
-                polygons,
-                key=lambda polygon: (
-                    min(point[0] for point in ring_from_gdstk_polygon(polygon)),
-                    min(point[1] for point in ring_from_gdstk_polygon(polygon)),
-                    polygon.area(),
-                ),
-            )
-        )
+        return _source_occurrence_polygons(entity, occurrence_polygons)
 
     layer = int(entity.geometry["gds_layer"])
     datatype = int(entity.geometry["gds_datatype"])
@@ -330,32 +292,7 @@ def gds_polygons_for_entity(
 
     selector = entity.geometry.get("selector_point_um")
     if not entity.geometry.get("route_ab_fused_selector_mode", False):
-        if selector is not None:
-            selected = [
-                polygon
-                for polygon in candidates
-                if point_in_ring(
-                    (float(selector[0]), float(selector[1])),
-                    ring_from_gdstk_polygon(polygon),
-                )
-            ]
-            if len(selected) != 1:
-                raise ValueError(
-                    f"{entity.semantic_id} selector_point_um matched "
-                    f"{len(selected)} polygons"
-                )
-        else:
-            selected = list(candidates)
-        return tuple(
-            LayoutPolygonSpec(
-                polygon_id=f"POLY__{entity.semantic_id}__{index:04d}",
-                layer=f"{layer}/{datatype}",
-                exterior=ring_from_gdstk_polygon(polygon),
-                object_name=entity.semantic_id,
-                net_name=entity.net_id,
-            )
-            for index, polygon in enumerate(selected)
-        )
+        return _source_layer_polygons(entity, candidates, selector, layer, datatype)
 
     excluded = entity.geometry.get("exclude_selector_points_um", ())
     if excluded is None:
@@ -364,14 +301,17 @@ def gds_polygons_for_entity(
         raise TypeError(
             f"{entity.semantic_id} exclude_selector_points_um must be a point sequence"
         )
-    components = fused_gdstk_components(ordered(candidates))
+    components = fused_gdstk_components(_ordered_source_polygons(candidates))
     points = (
         *(
-            (selector_point("selector_point_um", selector),)
+            (_selector_point(entity, "selector_point_um", selector),)
             if selector is not None
             else ()
         ),
-        *(selector_point("exclude_selector_points_um", point) for point in excluded),
+        *(
+            _selector_point(entity, "exclude_selector_points_um", point)
+            for point in excluded
+        ),
     )
     matched: list[int] = []
     for point in points:
@@ -420,6 +360,87 @@ def gds_polygons_for_entity(
             },
         )
         for index, (polygon, source_indexes, source_area) in enumerate(selected)
+    )
+
+
+def _source_occurrence_polygons(
+    entity: SemanticEntitySpec, records: Any
+) -> tuple[LayoutPolygonSpec, ...]:
+    if not is_record_sequence(records):
+        raise TypeError(f"{entity.semantic_id} occurrence polygons must be a sequence")
+    return tuple(
+        LayoutPolygonSpec(
+            polygon_id=f"{entity.semantic_id}__P{index:04d}",
+            layer=f"{entity.geometry['gds_layer']}/{entity.geometry['gds_datatype']}",
+            exterior=record["exterior"],
+            holes=record["holes"],
+            object_name=entity.semantic_id,
+            net_name=entity.net_id,
+            metadata={
+                "source": "gds_source_occurrence",
+                "source_polygon_index": index,
+            },
+        )
+        for index, record in enumerate(records)
+    )
+
+
+def _source_layer_polygons(
+    entity: SemanticEntitySpec,
+    candidates: Sequence[Any],
+    selector: Any,
+    layer: int,
+    datatype: int,
+) -> tuple[LayoutPolygonSpec, ...]:
+    if selector is not None:
+        selected = [
+            polygon
+            for polygon in candidates
+            if point_in_ring(
+                (float(selector[0]), float(selector[1])),
+                ring_from_gdstk_polygon(polygon),
+            )
+        ]
+        if len(selected) != 1:
+            raise ValueError(
+                f"{entity.semantic_id} selector_point_um matched {len(selected)} polygons"
+            )
+    else:
+        selected = list(candidates)
+    return tuple(
+        LayoutPolygonSpec(
+            polygon_id=f"POLY__{entity.semantic_id}__{index:04d}",
+            layer=f"{layer}/{datatype}",
+            exterior=ring_from_gdstk_polygon(polygon),
+            object_name=entity.semantic_id,
+            net_name=entity.net_id,
+        )
+        for index, polygon in enumerate(selected)
+    )
+
+
+def _selector_point(
+    entity: SemanticEntitySpec, name: str, value: Any
+) -> tuple[float, float]:
+    if (
+        not isinstance(value, Sequence)
+        or isinstance(value, str | bytes)
+        or len(value) != 2
+    ):
+        raise ValueError(f"{entity.semantic_id} {name} must be a 2D point")
+    return (float(value[0]), float(value[1]))
+
+
+def _ordered_source_polygons(polygons: Sequence[Any]) -> tuple[Any, ...]:
+    return tuple(
+        sorted(
+            polygons,
+            key=lambda polygon: (
+                min(point[0] for point in ring_from_gdstk_polygon(polygon)),
+                min(point[1] for point in ring_from_gdstk_polygon(polygon)),
+                polygon.area(),
+            ),
+        )
     )
 
 
@@ -487,7 +508,7 @@ def occurrence_polygons_for_entity(
 
 
 @in_occurrence_frame
-def occurrence_ground_polygons_for_entity(
+def occurrence_ground_polygons_for_entity(  # noqa: PLR0913 -- the uniform occurrence recipe protocol also carries its source-owned plane binding
     entity: SemanticEntitySpec,
     *,
     cell: Any,
@@ -505,8 +526,6 @@ def occurrence_ground_polygons_for_entity(
         polygons_by_layer = read_polygons_by_layer(
             cell, excluded_reference_indexes=excluded_reference_indexes
         )
-    from scgsim.geometry.source.ground import derived_ground_polygons
-
     geometry = dict(entity.geometry)
     geometry.pop("source_occurrence_polygons_um", None)
     for key in ("selector_point_um",):
