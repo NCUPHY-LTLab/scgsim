@@ -3,18 +3,7 @@
 from dataclasses import replace
 
 from scgsim.geometry.models.junctions import JunctionGeometry
-from scgsim.geometry.planning.junction_partition import (
-    JunctionPartitionFormat,
-    _closed_contact as _closed_contact,
-    _cross as _cross,
-    _inside_ring as _inside_ring,
-    _section as _section,
-    _plain,
-    junction_terminal_line,
-    _junction_contact_inventory as _shared_contact_inventory,
-    _junction_source_binding as _junction_source_binding,
-    partition_junctions as _partition_junctions,
-)
+from scgsim.geometry.planning.junction_partition import JunctionPartitionFormat, closed_contact as _closed_contact, cross as _cross, inside_ring as _inside_ring, section as _section, plain_record, junction_terminal_line, junction_contact_inventory as _shared_contact_inventory, junction_source_binding as _junction_source_binding, partition_junctions as _partition_junctions
 
 METHOD = "scgsim.aedt.junction-partition.v1"
 _FORMAT = JunctionPartitionFormat(
@@ -75,7 +64,7 @@ def partition_junctions(build_input, junctions, step):
                 item,
                 record["z_um"],
             )
-            adapted = _plain(record)
+            adapted = plain_record(record)
             adapted["shared_geometry_method"] = record["method"]
             adapted["method"] = METHOD
             adapted["support_plane"]["schema_version"] = _FORMAT.support_schema

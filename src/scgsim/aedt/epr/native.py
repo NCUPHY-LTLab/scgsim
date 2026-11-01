@@ -11,7 +11,7 @@ import time
 from collections.abc import Mapping, Sequence
 from importlib.metadata import version
 from typing import Any, Literal
-from scgsim.geometry._primitives.spatial import _geometry_ref_surface_z_um
+from scgsim.geometry.primitives.spatial import geometry_ref_surface_z_um
 from scgsim.aedt.epr.geometry import (
     _INSET_CIRCLE_POINTS,
     _INSET_METHOD,
@@ -52,7 +52,7 @@ def _analysis_surface_sheet(
             not isinstance(plane, Mapping) or plane.get("axis") != "z"
         ) and geometry_ref.get("shell_part") not in {"top", "bottom"}:
             raise ValueError("analysis surface loop requires an explicit Z plane")
-        z_um = _geometry_ref_surface_z_um(geometry_ref)
+        z_um = geometry_ref_surface_z_um(geometry_ref)
         points = [[float(x), float(y), z_um] for x, y in outer]
         holes = [
             [[float(x), float(y), z_um] for x, y in ring]
@@ -304,7 +304,7 @@ def bind_native_surface_references(
         kind = contribution["classification"]
         if cid not in selected or kind not in {"MA", "MS", "SA"}:
             continue
-        z_um = _geometry_ref_surface_z_um(binding["geometry_ref"])
+        z_um = geometry_ref_surface_z_um(binding["geometry_ref"])
         if kind == "SA":
             owner = binding["substrate_domain_id"]
             entities = [

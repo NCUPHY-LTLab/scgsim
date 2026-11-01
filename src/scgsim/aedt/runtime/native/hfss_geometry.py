@@ -670,10 +670,7 @@ def _native_planar_loops(obj: Any, z_um: float, observations=None) -> list[tuple
     Midpoint and actual native length jointly check straight edges; ambiguity
     below this comparison resolution is not an exact CAD contact guarantee.
     """
-    from scgsim.geometry._primitives.loops import (
-        _cancel_reversed_planar_edges,
-        _simple_planar_loops_from_edges,
-    )
+    from scgsim.geometry.primitives.planar_loops import cancel_reversed_planar_edges, simple_planar_loops_from_edges
 
     loops = []
     for face in obj.faces:
@@ -711,8 +708,8 @@ def _native_planar_loops(obj: Any, z_um: float, observations=None) -> list[tuple
                 }
             )
         # Edge direction is not a native face-loop ordering contract.
-        face_loops = _simple_planar_loops_from_edges(
-            _cancel_reversed_planar_edges(edges)
+        face_loops = simple_planar_loops_from_edges(
+            cancel_reversed_planar_edges(edges)
         )
 
         def area(ring):
@@ -742,10 +739,7 @@ def _native_extrusion_sides(obj, bottom, top, z_range, thickness, observations):
     vertical quadrilaterals after comparison-only straight-chain reduction;
     general face tessellation is unsupported.
     """
-    from scgsim.geometry._primitives.loops import (
-        _cancel_reversed_planar_edges,
-        _simple_planar_loops_from_edges,
-    )
+    from scgsim.geometry.primitives.planar_loops import cancel_reversed_planar_edges, simple_planar_loops_from_edges
 
     cap_observations = observations[-2:]
     cap_edges = ({}, {})
@@ -822,7 +816,7 @@ def _native_extrusion_sides(obj, bottom, top, z_range, thickness, observations):
         ):
             continue  # Cap shape and straight edges were already read in full.
         edges, edge_observations = _native_face_edges(face, obj.name)
-        rings = _simple_planar_loops_from_edges(_cancel_reversed_planar_edges(edges))
+        rings = simple_planar_loops_from_edges(cancel_reversed_planar_edges(edges))
         if len(rings) != 1:
             raise RuntimeError("native junction extrusion side has unsupported loops")
         corners, chains = _native_straight_ring(rings[0])

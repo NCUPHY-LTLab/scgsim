@@ -25,7 +25,7 @@ from scgsim.geometry.planning.junction_partition import (
 )
 from scgsim.geometry.source.validation import validate_geometry_input
 
-from scgsim.geometry._primitives.spatial import _geometry_ref_surface_z_um
+from scgsim.geometry.primitives.spatial import geometry_ref_surface_z_um
 from scgsim.geometry.planning.surfaces import plan_representation_contribution_geometry
 from scgsim.aedt.specs.modeling import Modeling
 from scgsim.aedt.preparation.modeling import _effective_geometry_input
@@ -379,7 +379,7 @@ def _surface_mask_plane(geometry_ref: Mapping[str, Any]) -> dict[str, Any]:
             or not isinstance(plane.get("value_um"), (int, float))
         ):
             raise ValueError("planar EPR surface requires finite plane Z")
-        z_um = _geometry_ref_surface_z_um(geometry_ref)
+        z_um = geometry_ref_surface_z_um(geometry_ref)
         if not math.isfinite(z_um):
             raise ValueError("planar EPR surface requires finite plane Z")
         return {
