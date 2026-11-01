@@ -163,7 +163,7 @@ def _check_exact_inventory(
         )
 
 
-def seal_saved_solution(
+def seal_saved_solution(  # noqa: PLR0913 - public API; keyword fields mirror the sealed manifest
     run_dir: str | Path,
     *,
     project_name: str,

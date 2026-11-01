@@ -418,7 +418,9 @@ class Q3dSpec:
     def _check_grounded_region_net(self, nets: tuple[Q3dNetSpec, ...]) -> None:
         """The grounded-Region enclosure Net must be new and excludes AC R/L.
 
-        TODO(human): why the grounded Region cannot be combined with AC R/L.
+        Per docs/specs/aedt-runtime.qmd, the grounded Region is a
+        capacitance/conductance-only construction and makes no DC or AC R/L
+        return-path claim, so the combination fails closed.
         """
         grounded_region_net = self.grounded_region_net
         if grounded_region_net is None:

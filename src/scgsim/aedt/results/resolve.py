@@ -78,6 +78,26 @@ class ResolvedRun:
     _epr_result: EprResult | None = None
     _lumped_boundaries: tuple[dict[str, Any], ...] = ()
 
+    @property
+    def setup_name(self) -> str | None:
+        """AEDT setup name the run was configured with (read-only)."""
+        return self._setup_name
+
+    @property
+    def lumped_boundaries(self) -> tuple[dict[str, Any], ...]:
+        """Lumped RLC boundaries recorded in the receipt geometry (read-only)."""
+        return self._lumped_boundaries
+
+    @property
+    def output_hashes(self) -> tuple[tuple[str, str], ...]:
+        """Sorted ``(relative path, sha256)`` pairs of the receipt outputs."""
+        return self._output_hashes
+
+    @property
+    def spec_sha256(self) -> str | None:
+        """SHA-256 of ``aedt_spec.json`` as recorded in the receipt source."""
+        return self._spec_sha256
+
     def _verified_output(self, path: Path) -> Path:
         """Re-check ``path`` against the receipt hash at the moment it is read."""
         root = self.receipt_path.parent.parent

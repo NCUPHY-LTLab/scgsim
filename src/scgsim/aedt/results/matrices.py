@@ -16,7 +16,7 @@ from typing import Any
 from scgsim.aedt.specs.q2d import Q2dSpec
 
 
-def parse_matrix_export(
+def parse_matrix_export(  # noqa: PLR0913 - public API; each argument is one export property or expected check
     path: Path,
     solver: str,
     problem: str,

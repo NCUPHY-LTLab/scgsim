@@ -487,7 +487,7 @@ def _display_run_summary(
                 ("Backend", "AEDT"),
                 ("Project", resolved.project_path.name),
                 ("Analysis", resolved.mode),
-                ("Setup", resolved._setup_name),
+                ("Setup", resolved.setup_name),
                 (
                     "Requested modes",
                     ", ".join(map(str, modes))
@@ -510,7 +510,7 @@ def _lumped_treatment(request: Any) -> str:
 
 
 def _display_lumped_elements(resolved: Any, show_details: bool, theme: str) -> None:
-    lumped = resolved._lumped_boundaries
+    lumped = resolved.lumped_boundaries
     if not lumped:
         return
     summaries = []
@@ -646,7 +646,7 @@ def _display_identity(
     resolved: Any, result: EprResult | None, show_details: bool, theme: str
 ) -> None:
     """Show the hashes that tie this display to the verified spec, project and receipt."""
-    project_sha = dict(resolved._output_hashes)[resolved.project_path.name]
+    project_sha = dict(resolved.output_hashes)[resolved.project_path.name]
     source_sha = (
         result.provenance["analysis_source_sha256"] if result is not None else None
     )
@@ -655,7 +655,7 @@ def _display_identity(
     ).as_posix()
     identity = {
         "receipt": receipt,
-        "spec_sha256": resolved._spec_sha256,
+        "spec_sha256": resolved.spec_sha256,
         "project_sha256": project_sha,
         "analysis_source_sha256": source_sha,
     }

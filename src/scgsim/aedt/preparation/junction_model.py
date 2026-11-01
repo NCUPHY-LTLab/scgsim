@@ -357,8 +357,8 @@ class _JunctionModel:
             for start, end in pairwise(ordered):
                 midpoint = (project(start) + project(end)) / 2
                 which = 0 if midpoint < cuts[0] else 2 if midpoint > cuts[1] else 1
-                # Source boundaries at an empty residual end belong to R alone.
-                # TODO(human): what R stands for (presumably the central RLC part).
+                # Source boundaries at an empty residual end belong to part 1 alone,
+                # the central part (added below as the "central_rlc" polygon).
                 if midpoint == cuts[1]:
                     which = 1
                 edge = (start, end, sources)

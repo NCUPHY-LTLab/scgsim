@@ -147,7 +147,8 @@ class SurfaceEprSpec:
     and SA, plus optional `loss_tangent`, `source` and `preset`. An MM contact
     needs none of these. Each value of `margins_um` is a separate requested
     evaluation, in micrometres, alongside an automatic unmasked baseline.
-    TODO(human): state what a margin masks.
+    A margin excludes a band of that width next to the metal edges, where the
+    field is singular (docs/eigenmode-epr.qmd, "mask margin").
     """
 
     contribution_id: str

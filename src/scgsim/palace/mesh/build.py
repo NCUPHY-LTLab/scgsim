@@ -2,8 +2,11 @@
 
 Route A and Route B are the two geometry routes of SGB (the semantic geometry
 builder). A Route A stack must carry ``route_a_thin_film`` provenance and a Route B
-stack must not. TODO(human): state in one line what physical difference Route A and
-Route B represent.
+stack must not. Route A models metal as zero-thickness PEC (perfect electric
+conductor) sheets placed at a face, which is why it needs the thin-film provenance.
+Route B keeps the metal as a finite-thickness volume whose closed outer shell is PEC
+and whose interior is not meshed (docs/geometry-sgb.qmd, "Current Surface-EPR
+direction"; docs/concepts/model-and-numerics.qmd, "Metal representation in Palace").
 
 This module owns one mesh build from start to finish: prepare the run directory,
 write the GDS and stack inputs, run SGB to produce the XAO geometry and group

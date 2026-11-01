@@ -179,7 +179,7 @@ class SemanticFactsSnapshot:
         }
 
 
-def create_snapshot(
+def create_snapshot(  # noqa: PLR0913 - public API; arguments map one-to-one to snapshot fields
     facts: Mapping[str, Any],
     *,
     source_revision: str | None,

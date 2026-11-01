@@ -75,7 +75,7 @@ class GeometryPreviewArtifact:
 class GeometryPreview:
     """A bound geometry source with four explicit preview modes."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - public constructor; one keyword per bound preview field
         self,
         *,
         root: Path,

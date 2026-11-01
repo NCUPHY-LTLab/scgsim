@@ -14,7 +14,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 
-def compute_handoff_id(
+def compute_handoff_id(  # noqa: PLR0913 - one argument per identity field hashed into the id
     *,
     profile: str,
     route: str,

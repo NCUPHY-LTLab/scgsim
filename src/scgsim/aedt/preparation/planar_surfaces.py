@@ -8,7 +8,8 @@ evaluation (`scgsim.aedt.epr`).
 
 Interface kinds, by the two media on either side of a surface: MA is metal-air,
 MS metal-substrate and SA substrate-air (docs/eigenmode-epr.qmd). MM is a
-metal-metal contact; TODO(human): confirm MM is meant as metal-metal.
+metal-metal contact (scgsim/geometry/planning/interfaces.py,
+scgsim/palace/mesh/record_checks.py).
 """
 
 from __future__ import annotations
