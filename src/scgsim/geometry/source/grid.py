@@ -102,6 +102,9 @@ class _SourceGridPlan(Protocol):
     def _grid_size_um(self) -> float | None: ...
 
 
+_PlanT = TypeVar("_PlanT", bound=_SourceGridPlan)
+
+
 def source_grid_context(
     source_dbu_um: float, requested: float | None
 ) -> GeometryGridContext:
@@ -579,13 +582,13 @@ def _apply_geometry_grid(
 
 
 def with_source_grid(
-    function: Callable[Concatenate[_SourceGridPlan, _Arguments], _Result],
-) -> Callable[Concatenate[_SourceGridPlan, _Arguments], _Result]:
+    function: Callable[Concatenate[_PlanT, _Arguments], _Result],
+) -> Callable[Concatenate[_PlanT, _Arguments], _Result]:
     """Wrap one GeometryPlan operation in its actual source DBU scope."""
 
     @wraps(function)
     def prepare(
-        plan: _SourceGridPlan, *args: _Arguments.args, **kwargs: _Arguments.kwargs
+        plan: _PlanT, *args: _Arguments.args, **kwargs: _Arguments.kwargs
     ) -> _Result:
         source_dbu_um = float(
             plan._component.kcl.dbu  # noqa: SLF001 — GeometryPlan owns the native source DBU.

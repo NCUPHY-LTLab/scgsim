@@ -57,7 +57,7 @@ def _make_plan(monkeypatch, semantics_by_path):
     )
     monkeypatch.setattr(
         source_plan,
-        "_local_semantics",
+        "component_semantics",
         lambda _cell, path: semantics_by_path[path],
     )
     monkeypatch.setattr(
