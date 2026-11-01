@@ -39,6 +39,7 @@ class InputSummary:
 
     @property
     def data(self) -> dict[str, Any]:
+        """Decoded copy of the summary payload."""
         return json.loads(self._payload_json)
 
     def _repr_html_(self) -> str:

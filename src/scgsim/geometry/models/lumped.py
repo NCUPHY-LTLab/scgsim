@@ -75,11 +75,13 @@ class LumpedSupport:
                 )
 
     def world_point(self, point: tuple[float, ...]) -> tuple[float, ...]:
+        """Apply the affine `source_transform` to the XY of a point; keep z when present."""
         a, b, c, d, x, y = self.source_transform
         result = (a * point[0] + b * point[1] + x, c * point[0] + d * point[1] + y)
         return result if len(point) == 2 else (*result, point[2])
 
     def to_payload(self) -> dict[str, Any]:
+        """Plain JSON-ready mapping of the support."""
         return {
             "support_id": self.support_id,
             "source_polygon_id": self.source_polygon_id,
@@ -99,4 +101,5 @@ class LumpedSupport:
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, Any]) -> LumpedSupport:
+        """Rebuild a support from `to_payload` output."""
         return cls(**dict(payload))

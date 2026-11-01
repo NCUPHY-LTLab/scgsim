@@ -1,18 +1,30 @@
-"""Own existing compiler-record invariants and failure contracts. Input-only validation lives below this stage; no new numerical policy."""
+"""Invariants of the compiler's plan records, checked before and after OCC lowering.
+
+Owns: route, surface, curve, loop, volume and tag-plan checks. Each `validate_*`
+function collects its errors in a fixed order and raises one `ValueError`.
+
+Does not own: input-only validation (`source/validation.py`), the horizontal
+surface-overlap check (`surface_overlap.py`) or the point lookup used for the
+curve check (`point_index.py`). No numerical policy lives here.
+"""
 
 from __future__ import annotations
 
 import json
-from bisect import bisect_left, bisect_right
 from collections import Counter
 from collections.abc import Mapping
 from typing import Any
 
 from scgsim.geometry._primitives.entity_validation import (
-    _BOOLEAN_AREA_EPS_UM2,
-    _BOOLEAN_RELATIVE_AREA_EPS,
     _is_solution_entity,
     _requires_route_representation,
+)
+from scgsim.geometry.compiler.point_index import (
+    _axis_aligned_point_index,
+    _coordinate_signature,
+    _point_axis_index,
+    _point_on_segment_interior,
+    _segment_candidate_point_ids,
 )
 from scgsim.geometry.models.common import ROUTE_ALLOWED_REPRESENTATIONS, RouteLiteral
 from scgsim.geometry.models.construction import (
@@ -212,6 +224,8 @@ def validate_curve_plan_coverage(
     loops but may not repeat inside one loop. This is the pre-OCC contract that
     keeps self-touching boolean output from reaching backend curve-loop
     lowering.
+
+    Errors from every step are collected, in step order, into one message.
     """
     errors: list[str] = []
     if any(not surface.construction_only for surface in surfaces) and (
@@ -221,6 +235,22 @@ def validate_curve_plan_coverage(
             "backend-live surfaces require canonical points, curves, and loops"
         )
 
+    points_by_id = _check_points(points, errors)
+    _check_curves(curves, set(points_by_id), errors)
+    _check_no_points_inside_line_segments(curves, points_by_id, errors)
+    curves_by_id = {curve.curve_id: curve for curve in curves}
+    for loop in surface_loops:
+        _check_surface_loop(loop, curves_by_id, errors)
+    _check_surface_loop_refs(surfaces, {loop.loop_id for loop in surface_loops}, errors)
+
+    if errors:
+        raise ValueError("Invalid curve plan coverage: " + "; ".join(errors))
+
+
+def _check_points(
+    points: tuple[PointPlanRecord, ...], errors: list[str]
+) -> dict[str, PointPlanRecord]:
+    """Point ids and coordinates must be unique. Returns the points by id."""
     point_ids: set[str] = set()
     point_signatures: dict[tuple[float, float, float], str] = {}
     points_by_id: dict[str, PointPlanRecord] = {}
@@ -236,7 +266,13 @@ def validate_curve_plan_coverage(
                 f"duplicate point coordinate: {existing} and {point.point_id}"
             )
         point_signatures[signature] = point.point_id
+    return points_by_id
 
+
+def _check_curves(
+    curves: tuple[CurvePlanRecord, ...], point_ids: set[str], errors: list[str]
+) -> None:
+    """Curve ids and geometry must be unique and their end points must exist."""
     curve_ids: set[str] = set()
     curve_signatures: dict[tuple[str, str], str] = {}
     for curve in curves:
@@ -257,6 +293,8 @@ def validate_curve_plan_coverage(
         ):
             errors.append(f"{curve.curve_id} has identical start/end points")
             continue
+        # A line is the same line in either direction; other curves are compared
+        # by kind, geometry and parameter interval.
         signature = (
             tuple(sorted((curve.start_point_id, curve.end_point_id)))
             if curve.curve_kind == "line_segment"
@@ -271,6 +309,13 @@ def validate_curve_plan_coverage(
             errors.append(f"duplicate curve geometry: {existing} and {curve.curve_id}")
         curve_signatures[signature] = curve.curve_id
 
+
+def _check_no_points_inside_line_segments(
+    curves: tuple[CurvePlanRecord, ...],
+    points_by_id: Mapping[str, PointPlanRecord],
+    errors: list[str],
+) -> None:
+    """A planned point on a line's interior would leave the mesh non-conformal."""
     point_axis_index = _point_axis_index(points_by_id)
     point_line_index = _axis_aligned_point_index(points_by_id)
     for curve in curves:
@@ -301,66 +346,86 @@ def validate_curve_plan_coverage(
                 f"{interior_points!r}"
             )
 
-    loop_ids = {loop.loop_id for loop in surface_loops}
-    curves_by_id = {curve.curve_id: curve for curve in curves}
-    for loop in surface_loops:
-        if len(loop.curve_refs) < 3 and not any(
-            curves_by_id.get(ref.curve_id) is not None
-            and curves_by_id[ref.curve_id].curve_kind != "line_segment"
-            for ref in loop.curve_refs
-        ):
-            errors.append(f"{loop.loop_id} requires at least three straight curves")
-            continue
-        repeated_curve_refs = sorted(
-            curve_id
-            for curve_id, count in Counter(
-                curve_ref.curve_id for curve_ref in loop.curve_refs
-            ).items()
-            if count > 1
-        )
-        if repeated_curve_refs:
-            errors.append(
-                f"{loop.loop_id} repeats curve refs inside one surface loop: "
-                f"{repeated_curve_refs!r}"
-            )
-        directed_edges: list[tuple[str, str]] = []
-        for curve_ref in loop.curve_refs:
-            curve = curves_by_id.get(curve_ref.curve_id)
-            if curve is None:
-                errors.append(
-                    f"{loop.loop_id} references unknown curve {curve_ref.curve_id}"
-                )
-                continue
-            if curve_ref.orientation not in {-1, 1}:
-                errors.append(
-                    f"{loop.loop_id} curve {curve_ref.curve_id} has invalid "
-                    f"orientation {curve_ref.orientation!r}"
-                )
-                continue
-            if curve_ref.orientation == 1:
-                directed_edges.append((curve.start_point_id, curve.end_point_id))
-            else:
-                directed_edges.append((curve.end_point_id, curve.start_point_id))
-        for index, (_, end_point_id) in enumerate(directed_edges):
-            next_start_id, _ = directed_edges[(index + 1) % len(directed_edges)]
-            if end_point_id != next_start_id:
-                errors.append(f"{loop.loop_id} curve refs do not form a closed loop")
-                break
-        if len(directed_edges) == len(loop.curve_refs):
-            point_use_counts: Counter[str] = Counter()
-            for start_point_id, end_point_id in directed_edges:
-                point_use_counts.update((start_point_id, end_point_id))
-            bad_point_use_counts = {
-                point_id: count
-                for point_id, count in point_use_counts.items()
-                if count != 2
-            }
-            if bad_point_use_counts:
-                errors.append(
-                    f"{loop.loop_id} is not a simple surface loop; point use "
-                    f"counts {bad_point_use_counts!r}"
-                )
 
+def _check_surface_loop(
+    loop: SurfaceLoopRecord,
+    curves_by_id: Mapping[str, CurvePlanRecord],
+    errors: list[str],
+) -> None:
+    """One loop must be a closed simple cycle of known, signed curves."""
+    if len(loop.curve_refs) < 3 and not any(
+        curves_by_id.get(ref.curve_id) is not None
+        and curves_by_id[ref.curve_id].curve_kind != "line_segment"
+        for ref in loop.curve_refs
+    ):
+        errors.append(f"{loop.loop_id} requires at least three straight curves")
+        return
+    repeated_curve_refs = sorted(
+        curve_id
+        for curve_id, count in Counter(
+            curve_ref.curve_id for curve_ref in loop.curve_refs
+        ).items()
+        if count > 1
+    )
+    if repeated_curve_refs:
+        errors.append(
+            f"{loop.loop_id} repeats curve refs inside one surface loop: "
+            f"{repeated_curve_refs!r}"
+        )
+    directed_edges = _directed_loop_edges(loop, curves_by_id, errors)
+    for index, (_, end_point_id) in enumerate(directed_edges):
+        next_start_id, _ = directed_edges[(index + 1) % len(directed_edges)]
+        if end_point_id != next_start_id:
+            errors.append(f"{loop.loop_id} curve refs do not form a closed loop")
+            break
+    if len(directed_edges) == len(loop.curve_refs):
+        # In a simple cycle every point is entered once and left once.
+        point_use_counts: Counter[str] = Counter()
+        for start_point_id, end_point_id in directed_edges:
+            point_use_counts.update((start_point_id, end_point_id))
+        bad_point_use_counts = {
+            point_id: count
+            for point_id, count in point_use_counts.items()
+            if count != 2
+        }
+        if bad_point_use_counts:
+            errors.append(
+                f"{loop.loop_id} is not a simple surface loop; point use "
+                f"counts {bad_point_use_counts!r}"
+            )
+
+
+def _directed_loop_edges(
+    loop: SurfaceLoopRecord,
+    curves_by_id: Mapping[str, CurvePlanRecord],
+    errors: list[str],
+) -> list[tuple[str, str]]:
+    """(start, end) point ids of the loop's curves, following each curve's orientation."""
+    directed_edges: list[tuple[str, str]] = []
+    for curve_ref in loop.curve_refs:
+        curve = curves_by_id.get(curve_ref.curve_id)
+        if curve is None:
+            errors.append(
+                f"{loop.loop_id} references unknown curve {curve_ref.curve_id}"
+            )
+            continue
+        if curve_ref.orientation not in {-1, 1}:
+            errors.append(
+                f"{loop.loop_id} curve {curve_ref.curve_id} has invalid "
+                f"orientation {curve_ref.orientation!r}"
+            )
+            continue
+        if curve_ref.orientation == 1:
+            directed_edges.append((curve.start_point_id, curve.end_point_id))
+        else:
+            directed_edges.append((curve.end_point_id, curve.start_point_id))
+    return directed_edges
+
+
+def _check_surface_loop_refs(
+    surfaces: tuple[SurfacePlanRecord, ...], loop_ids: set[str], errors: list[str]
+) -> None:
+    """Every backend-live surface needs an outer loop and only known loop refs."""
     for surface in surfaces:
         if surface.construction_only:
             continue
@@ -375,9 +440,6 @@ def validate_curve_plan_coverage(
                 errors.append(
                     f"{surface.surface_id} references unknown loop {loop_ref}"
                 )
-
-    if errors:
-        raise ValueError("Invalid curve plan coverage: " + "; ".join(errors))
 
 
 def validate_interface_surface_source_of_truth(
@@ -434,70 +496,6 @@ def validate_surface_deduplication(
         raise ValueError("Invalid surface deduplication: " + "; ".join(errors))
 
 
-def validate_no_surface_overlap(
-    *,
-    surfaces: tuple[SurfacePlanRecord, ...],
-) -> None:
-    """Reject horizontal same-plane partial overlap for all solver-live surfaces.
-
-    This guard is intentionally not allowed to skip high-count conductors by
-    semantic owner. Physical groups may collapse many instances into one solver
-    label, but topology validation must still see every live surface. General
-    sidewall/arbitrary-plane overlap validation is a separate contract and must
-    fail fast before those cases are advertised as mesh-safe.
-    """
-    horizontal_surfaces = tuple(
-        (surface, z_um, region, _region_bounds(region))
-        for surface in surfaces
-        if not surface.construction_only
-        for z_um, region in (_horizontal_surface_region(surface),)
-        if region
-    )
-    outer_loop_signatures = {
-        surface.surface_id: _loop2d_signature(surface.geometry_ref.get("outer_loop"))
-        for surface, _, _, _ in horizontal_surfaces
-    }
-    known_hole_signatures = {
-        surface.surface_id: _known_hole_signatures(surface)
-        for surface, _, _, _ in horizontal_surfaces
-    }
-    surfaces_by_z = {}
-    for surface, z_um, region, bounds in horizontal_surfaces:
-        surfaces_by_z.setdefault(round(z_um, 9), []).append((surface, region, bounds))
-
-    errors: list[str] = []
-    for z_um, z_surfaces in surfaces_by_z.items():
-        ordered = sorted(z_surfaces, key=lambda item: item[2][0])
-        for index, (left, left_region, left_bounds) in enumerate(ordered):
-            for right, right_region, right_bounds in ordered[index + 1 :]:
-                if right_bounds[0] > left_bounds[2] + 1e-9:
-                    break
-                if not _bounds_overlap(left_bounds, right_bounds):
-                    continue
-                left_outer = outer_loop_signatures[left.surface_id]
-                right_outer = outer_loop_signatures[right.surface_id]
-                if (
-                    left_outer is not None
-                    and left_outer in known_hole_signatures[right.surface_id]
-                ) or (
-                    right_outer is not None
-                    and right_outer in known_hole_signatures[left.surface_id]
-                ):
-                    continue
-                if not _regions_overlap(left_region, right_region):
-                    continue
-                errors.append(
-                    f"{left.surface_id} overlaps {right.surface_id} on z={z_um}"
-                )
-                break
-            if errors:
-                break
-        if errors:
-            break
-    if errors:
-        raise ValueError("Invalid surface overlap: " + "; ".join(errors))
-
-
 def validate_volume_surface_closure(
     *,
     volumes: tuple[VolumePlanRecord, ...],
@@ -539,7 +537,7 @@ def validate_volume_surface_closure(
         raise ValueError("Invalid volume surface closure: " + "; ".join(errors))
 
 
-def _validate_one_volume_shell(
+def _validate_one_volume_shell(  # noqa: PLR0913 - keyword-only; each argument is one shell fact
     *,
     volume_id: str,
     shell_id: str,
@@ -733,112 +731,6 @@ def validate_backend_tag_ledger(
         raise ValueError("Invalid backend tag ledger: " + "; ".join(errors))
 
 
-def _horizontal_surface_region(
-    surface: SurfacePlanRecord,
-) -> tuple[float, tuple[Any, ...]]:
-    geometry_ref = surface.geometry_ref
-    if "outer_loop" not in geometry_ref or "quad_points" in geometry_ref:
-        return 0.0, ()
-    import gdstk
-
-    outer = gdstk.Polygon(_clean_loop2d(geometry_ref["outer_loop"]))
-    holes = tuple(
-        gdstk.Polygon(_clean_loop2d(hole_loop))
-        for hole_loop in geometry_ref.get("hole_loops", ())
-    )
-    if holes:
-        region = tuple(gdstk.boolean((outer,), holes, "not", precision=1e-9) or ())
-    else:
-        region = (outer,)
-    return _geometry_ref_z_um(geometry_ref), tuple(
-        polygon
-        for polygon in region
-        if abs(float(polygon.area())) > _BOOLEAN_AREA_EPS_UM2
-    )
-
-
-def _regions_overlap(left: tuple[Any, ...], right: tuple[Any, ...]) -> bool:
-    import gdstk
-
-    overlap = gdstk.boolean(left, right, "and", precision=1e-9) or ()
-    overlap_area = _region_area(overlap)
-    area_limit = max(
-        _BOOLEAN_AREA_EPS_UM2,
-        _BOOLEAN_RELATIVE_AREA_EPS * min(_region_area(left), _region_area(right)),
-    )
-    return overlap_area > area_limit
-
-
-def _region_area(region: tuple[Any, ...]) -> float:
-    return sum(abs(float(polygon.area())) for polygon in region)
-
-
-def _known_hole_signatures(
-    surface: SurfacePlanRecord,
-) -> set[tuple[tuple[float, float], ...]]:
-    geometry_ref = surface.geometry_ref
-    return {
-        signature
-        for key in ("hole_loops", "contact_hole_loops")
-        for loop in geometry_ref.get(key, ())
-        for signature in (_loop2d_signature(loop),)
-        if signature is not None
-    }
-
-
-def _loop2d_signature(loop: Any) -> tuple[tuple[float, float], ...] | None:
-    if loop is None:
-        return None
-    return tuple(sorted(_coordinate_2d_key(point) for point in _clean_loop2d(loop)))
-
-
-def _coordinate_2d_key(point: tuple[float, float]) -> tuple[float, float]:
-    return (round(float(point[0]), 9), round(float(point[1]), 9))
-
-
-def _region_bounds(region: tuple[Any, ...]) -> tuple[float, float, float, float]:
-    boxes = [polygon.bounding_box() for polygon in region]
-    return (
-        min(float(box[0][0]) for box in boxes),
-        min(float(box[0][1]) for box in boxes),
-        max(float(box[1][0]) for box in boxes),
-        max(float(box[1][1]) for box in boxes),
-    )
-
-
-def _bounds_overlap(
-    left: tuple[float, float, float, float],
-    right: tuple[float, float, float, float],
-) -> bool:
-    return not (
-        left[2] <= right[0] + 1e-9
-        or right[2] <= left[0] + 1e-9
-        or left[3] <= right[1] + 1e-9
-        or right[3] <= left[1] + 1e-9
-    )
-
-
-def _clean_loop2d(loop: Any) -> tuple[tuple[float, float], ...]:
-    points = tuple((float(point[0]), float(point[1])) for point in loop)
-    if len(points) > 1 and points[0] == points[-1]:
-        points = points[:-1]
-    if len(points) < 3:
-        raise ValueError("surface loop requires at least 3 points")
-    return points
-
-
-def _geometry_ref_z_um(geometry_ref: Mapping[str, Any]) -> float:
-    z_min_um = float(geometry_ref.get("z_min_um", geometry_ref.get("z_um", 0.0)))
-    if geometry_ref.get("shell_part") == "top":
-        return z_min_um + float(geometry_ref.get("thickness_um", 0.0))
-    if geometry_ref.get("shell_part") == "bottom":
-        return z_min_um
-    plane = geometry_ref.get("plane") or geometry_ref.get("contact_plane")
-    if isinstance(plane, Mapping) and plane.get("axis") == "z":
-        return float(plane["value_um"])
-    return z_min_um
-
-
 def _surface_signature(surface: SurfacePlanRecord) -> str:
     if surface.outer_loop_ref is not None:
         return json.dumps(
@@ -856,117 +748,3 @@ def _surface_interface_kinds(surface: SurfacePlanRecord) -> tuple[str, ...]:
     if isinstance(kinds, str):
         kinds = (kinds,)
     return tuple(sorted({str(kind) for kind in kinds if str(kind) in _INTERFACE_KINDS}))
-
-
-def _coordinate_signature(
-    coordinate: tuple[float, float, float],
-) -> tuple[float, float, float]:
-    return tuple(round(float(value), 9) for value in coordinate)
-
-
-def _point_axis_index(
-    points_by_id: Mapping[str, PointPlanRecord],
-) -> tuple[tuple[tuple[float, ...], tuple[str, ...]], ...]:
-    indexes: list[tuple[tuple[float, ...], tuple[str, ...]]] = []
-    for axis in range(3):
-        items = sorted(
-            (
-                _coordinate_signature(point.coordinate)[axis],
-                point_id,
-            )
-            for point_id, point in points_by_id.items()
-        )
-        indexes.append(
-            (
-                tuple(value for value, _ in items),
-                tuple(point_id for _, point_id in items),
-            )
-        )
-    return tuple(indexes)
-
-
-def _axis_aligned_point_index(
-    points_by_id: Mapping[str, PointPlanRecord],
-) -> dict[tuple[int, tuple[float, float]], tuple[tuple[float, ...], tuple[str, ...]]]:
-    records: dict[
-        tuple[int, tuple[float, float]],
-        list[tuple[float, str]],
-    ] = {}
-    for point_id, point in points_by_id.items():
-        key = _coordinate_signature(point.coordinate)
-        for varying_axis in range(3):
-            fixed_key = tuple(key[axis] for axis in range(3) if axis != varying_axis)
-            records.setdefault((varying_axis, fixed_key), []).append(
-                (key[varying_axis], point_id)
-            )
-    return {
-        line_key: (
-            tuple(value for value, _ in sorted_items),
-            tuple(point_id for _, point_id in sorted_items),
-        )
-        for line_key, items in records.items()
-        for sorted_items in (tuple(sorted(items)),)
-    }
-
-
-def _segment_candidate_point_ids(
-    start: tuple[float, float, float],
-    end: tuple[float, float, float],
-    point_axis_index: tuple[tuple[tuple[float, ...], tuple[str, ...]], ...],
-    point_line_index: Mapping[
-        tuple[int, tuple[float, float]],
-        tuple[tuple[float, ...], tuple[str, ...]],
-    ],
-) -> tuple[str, ...]:
-    start_key = _coordinate_signature(start)
-    end_key = _coordinate_signature(end)
-    varying_axes = tuple(
-        axis for axis in range(3) if abs(start_key[axis] - end_key[axis]) > 1e-9
-    )
-    if len(varying_axes) == 1:
-        varying_axis = varying_axes[0]
-        fixed_key = tuple(start_key[axis] for axis in range(3) if axis != varying_axis)
-        values, point_ids = point_line_index.get(
-            (varying_axis, fixed_key),
-            ((), ()),
-        )
-        lower = min(start_key[varying_axis], end_key[varying_axis]) - 1e-9
-        upper = max(start_key[varying_axis], end_key[varying_axis]) + 1e-9
-        left = bisect_left(values, lower)
-        right = bisect_right(values, upper)
-        return point_ids[left:right]
-    bounds = tuple(
-        (
-            min(start_key[axis], end_key[axis]) - 1e-9,
-            max(start_key[axis], end_key[axis]) + 1e-9,
-        )
-        for axis in range(3)
-    )
-    ranges: list[tuple[int, int, int]] = []
-    for axis, (values, _) in enumerate(point_axis_index):
-        lower, upper = bounds[axis]
-        left = bisect_left(values, lower)
-        right = bisect_right(values, upper)
-        ranges.append((right - left, left, axis))
-    count, left, axis = min(ranges)
-    return point_axis_index[axis][1][left : left + count]
-
-
-def _point_on_segment_interior(
-    point: tuple[float, float, float],
-    start: tuple[float, float, float],
-    end: tuple[float, float, float],
-) -> bool:
-    vector = tuple(float(end[index]) - float(start[index]) for index in range(3))
-    offset = tuple(float(point[index]) - float(start[index]) for index in range(3))
-    length_sq = sum(value * value for value in vector)
-    if length_sq <= 1e-18:
-        return False
-    parameter = sum(offset[index] * vector[index] for index in range(3)) / length_sq
-    if parameter <= 1e-9 or parameter >= 1.0 - 1e-9:
-        return False
-    closest = tuple(
-        float(start[index]) + parameter * vector[index] for index in range(3)
-    )
-    distance_sq = sum((float(point[index]) - closest[index]) ** 2 for index in range(3))
-    return distance_sq <= 1e-18

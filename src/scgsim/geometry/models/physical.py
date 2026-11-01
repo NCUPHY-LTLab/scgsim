@@ -32,6 +32,8 @@ PLAN_SCHEMA = "scgsim.geometry.physical-representation.v1"
 
 @dataclass(frozen=True)
 class PhysicalLayerDeclaration:
+    """One physical layer from the source level stack, with its material and dimensions."""
+
     physical_layer_id: str
     source_level_id: str
     source_level_and_gds_pair: Mapping[str, Any]
@@ -76,6 +78,7 @@ class PhysicalLayerDeclaration:
 
     @property
     def attachment_z_um(self) -> float:
+        """Source-stack z of the face the layer is attached to (lower or upper edge of its interval)."""
         side = self.source_contact_facts.get("layer_attachment_face")
         if side not in {"lower", "upper"}:
             raise ValueError(
@@ -84,6 +87,7 @@ class PhysicalLayerDeclaration:
         return self.source_interval_um[0 if side == "lower" else 1]
 
     def to_payload(self) -> dict[str, Any]:
+        """Plain JSON-ready mapping of every dataclass field."""
         return {
             name: _plain_semantic_facts(getattr(self, name))
             for name in self.__dataclass_fields__
@@ -91,11 +95,14 @@ class PhysicalLayerDeclaration:
 
     @classmethod
     def from_payload(cls, value: Mapping[str, Any]) -> PhysicalLayerDeclaration:
+        """Rebuild a declaration from `to_payload` output."""
         return cls(**value)
 
 
 @dataclass(frozen=True)
 class ApproximationProfile:
+    """Named approximation (solid, thin film, ...) used to build the physical representation."""
+
     name: ProfileName
     revision: str
     parameters: Mapping[str, Any]
@@ -114,6 +121,7 @@ class ApproximationProfile:
         object.__setattr__(self, "parameters", freeze_plain(self.parameters))
 
     def to_payload(self) -> dict[str, Any]:
+        """Plain JSON-ready mapping of the profile."""
         return {
             "name": self.name,
             "revision": self.revision,
@@ -122,11 +130,14 @@ class ApproximationProfile:
 
     @classmethod
     def from_payload(cls, value: Mapping[str, Any]) -> ApproximationProfile:
+        """Rebuild a profile from `to_payload` output."""
         return cls(**value)
 
 
 @dataclass(frozen=True)
 class PhysicalRepresentationPlan:
+    """How each source layer is represented (solid or sheet) and how source z maps to effective z."""
+
     source_sha256: str
     profile: ApproximationProfile
     declarations: tuple[PhysicalLayerDeclaration, ...]
@@ -153,6 +164,7 @@ class PhysicalRepresentationPlan:
 
     @property
     def declaration_index(self) -> Mapping[str, PhysicalLayerDeclaration]:
+        """Read-only lookup of declarations by physical layer id."""
         from types import MappingProxyType
 
         return MappingProxyType(
@@ -161,6 +173,7 @@ class PhysicalRepresentationPlan:
 
     @property
     def context(self) -> RepresentationContext:
+        """Per-entity and per-enclosure representation lookup used by the compiler."""
         return RepresentationContext(
             entities={
                 key: EntityRepresentation(
@@ -299,6 +312,7 @@ class PhysicalRepresentationPlan:
     @classmethod
     def from_payload(cls, value: Mapping[str, Any]) -> PhysicalRepresentationPlan:
         # Frozen prepared provenance and JSON share one exact plain-container basis.
+        """Rebuild a plan from `to_payload` output."""
         value = _plain_semantic_facts(value)
         if value.get("schema_version") != PLAN_SCHEMA:
             raise ValueError("unsupported physical representation plan schema")
@@ -366,6 +380,7 @@ class PhysicalRepresentationPlan:
         )
 
     def map_z(self, source_z_um: float) -> float:
+        """Map a source z to effective z by removing the collapsed intervals below it."""
         value = float(source_z_um)
         return value - sum(
             min(max(value - low, 0.0), high - low)
@@ -375,6 +390,7 @@ class PhysicalRepresentationPlan:
     def map_point(
         self, point: tuple[float, float, float]
     ) -> tuple[float, float, float]:
+        """Map only the z of an (x, y, z) point with `map_z`."""
         x, y, z = point
         return x, y, self.map_z(z)
 
@@ -394,6 +410,7 @@ class PhysicalRepresentationPlan:
         return self.map_point(point)
 
     def layer(self, physical_layer_id: str) -> dict[str, Any]:
+        """Representation record (sheet or solid, source and effective intervals) of one physical layer."""
         declaration = next(
             item
             for item in self.declarations
@@ -420,6 +437,7 @@ class PhysicalRepresentationPlan:
         }
 
     def to_payload(self) -> dict[str, Any]:
+        """Plain JSON-ready mapping of the whole plan."""
         return {
             "schema_version": PLAN_SCHEMA,
             "source_sha256": self.source_sha256,
@@ -434,4 +452,5 @@ class PhysicalRepresentationPlan:
 
     @property
     def plan_id(self) -> str:
+        """Canonical SHA-256 of the plan payload."""
         return canonical_sha256(self.to_payload())

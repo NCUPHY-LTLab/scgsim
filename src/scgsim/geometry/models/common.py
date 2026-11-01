@@ -1,4 +1,7 @@
-"""Canonical geometry records. Keep source facts distinct from compiler records; reexports share these exact definitions."""
+"""Shared type aliases and constants of the geometry records (routes, interface kinds, tags).
+
+Owns: the vocabulary other geometry modules import. Does not own any record or behavior.
+"""
 
 from __future__ import annotations
 

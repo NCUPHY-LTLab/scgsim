@@ -1,4 +1,8 @@
-"""Canonical geometry records. Keep source facts distinct from compiler records; reexports share these exact definitions."""
+"""Compiler records for Route A/B construction bodies, cut operations and surface partitions.
+
+Owns: frozen record types only. Does not build them (`compiler/dispatch.py`) or
+lower them to gmsh (`construction/`).
+"""
 
 from __future__ import annotations
 

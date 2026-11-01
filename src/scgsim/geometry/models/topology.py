@@ -1,4 +1,8 @@
-"""Canonical geometry records. Keep source facts distinct from compiler records; reexports share these exact definitions."""
+"""Compiler topology records: points, curves, loops, surfaces, volumes and interfaces.
+
+Owns: frozen record types of the planned boundary representation. Does not plan
+or validate them (`planning/`, `compiler/validation.py`).
+"""
 
 from __future__ import annotations
 

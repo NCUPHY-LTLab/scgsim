@@ -14,6 +14,7 @@ from scgsim.geometry.models.input import (
 
 
 def source_curve(value) -> SourceCurveSpec:
+    """Validate a source curve record or mapping and return it as a `SourceCurveSpec`."""
     if isinstance(value, SourceCurveSpec):
         value = {name: getattr(value, name) for name in value.__dataclass_fields__}
     if not isinstance(value, Mapping):
@@ -48,6 +49,11 @@ def source_curve(value) -> SourceCurveSpec:
 
 
 def boundary_binding(value, *, reconstruction=False):
+    """Validate a boundary record or mapping.
+
+    Returns a `GdsBoundaryReconstructionSpec` when `reconstruction` is true,
+    otherwise a `BoundaryCurveChainSpec`.
+    """
     cls = GdsBoundaryReconstructionSpec if reconstruction else BoundaryCurveChainSpec
     if isinstance(value, cls):
         value = {name: getattr(value, name) for name in value.__dataclass_fields__}
@@ -126,6 +132,39 @@ def bind_source_curves(prepared_input, source_input):
             *source_input.boundary_reconstruction,
         )
     }
+    split_hosts = _reunite_split_entities(
+        prepared_input, source_entities, prepared_entities, active
+    )
+    polygons, entities = _restore_authored_polygons(
+        prepared_input,
+        source_input,
+        prepared_entities,
+        split_hosts,
+        active,
+    )
+    source_ports = {
+        region.port_sheet_id: region for region in source_input.port_sheet_regions
+    }
+    ports = [
+        _restore_port_overlaps(region, source_ports, split_hosts)
+        for region in prepared_input.port_sheet_regions
+    ]
+    return replace(
+        prepared_input,
+        polygons=tuple(polygons.values()),
+        entities=tuple(entities),
+        port_sheet_regions=tuple(ports),
+        boundary_curves=copy.deepcopy(source_input.boundary_curves),
+        boundary_reconstruction=copy.deepcopy(source_input.boundary_reconstruction),
+    )
+
+
+def _reunite_split_entities(prepared_input, source_entities, prepared_entities, active):
+    """Rebuild curve-bound entities that the adapter split into polygon children.
+
+    Adds each rebuilt entity to `prepared_entities` and returns a map from child
+    id to the source entity id.
+    """
     # Prepared adapters may split one source Entity into polygon children.
     # Reunite only explicit adapter lineage, never suffixes or geometric guesses.
     split_hosts = {}
@@ -168,6 +207,14 @@ def bind_source_curves(prepared_input, source_input):
             first, semantic_id=entity_id, metadata=metadata
         )
         split_hosts.update((child.semantic_id, entity_id) for child in children)
+    return split_hosts
+
+
+def _restore_authored_polygons(
+    prepared_input, source_input, prepared_entities, split_hosts, active
+):
+    """Entities in prepared order, with curve-bound ones given their authored polygons."""
+    source_entities = {entity.semantic_id: entity for entity in source_input.entities}
     polygons = {polygon.polygon_id: polygon for polygon in prepared_input.polygons}
     source_polygons = {polygon.polygon_id: polygon for polygon in source_input.polygons}
     entities = []
@@ -190,42 +237,30 @@ def bind_source_curves(prepared_input, source_input):
                     geometry[key] = copy.deepcopy(source.geometry[key])
             entity = replace(entity, polygon_ids=source.polygon_ids, geometry=geometry)
         entities.append(entity)
-    source_ports = {
-        region.port_sheet_id: region for region in source_input.port_sheet_regions
-    }
-    ports = []
-    for region in prepared_input.port_sheet_regions:
-        overlaps = []
-        emitted_hosts = set()
-        for overlap in region.overlaps:
-            host_id = split_hosts.get(overlap.host_semantic_id)
-            if host_id is None:
-                overlaps.append(overlap)
-                continue
-            if host_id in emitted_hosts:
-                continue
-            original = source_ports.get(region.port_sheet_id)
-            matches = (
-                ()
-                if original is None
-                else tuple(
-                    item
-                    for item in original.overlaps
-                    if item.host_semantic_id == host_id
-                )
+    return polygons, entities
+
+
+def _restore_port_overlaps(region, source_ports, split_hosts):
+    """Replace overlaps on split children with the source host's original overlaps."""
+    overlaps = []
+    emitted_hosts = set()
+    for overlap in region.overlaps:
+        host_id = split_hosts.get(overlap.host_semantic_id)
+        if host_id is None:
+            overlaps.append(overlap)
+            continue
+        if host_id in emitted_hosts:
+            continue
+        original = source_ports.get(region.port_sheet_id)
+        matches = (
+            ()
+            if original is None
+            else tuple(
+                item for item in original.overlaps if item.host_semantic_id == host_id
             )
-            if not matches:
-                raise ValueError(
-                    "prepared curve-bound port lost its source host overlap"
-                )
-            overlaps.extend(copy.deepcopy(matches))
-            emitted_hosts.add(host_id)
-        ports.append(replace(region, overlaps=tuple(overlaps)))
-    return replace(
-        prepared_input,
-        polygons=tuple(polygons.values()),
-        entities=tuple(entities),
-        port_sheet_regions=tuple(ports),
-        boundary_curves=copy.deepcopy(source_input.boundary_curves),
-        boundary_reconstruction=copy.deepcopy(source_input.boundary_reconstruction),
-    )
+        )
+        if not matches:
+            raise ValueError("prepared curve-bound port lost its source host overlap")
+        overlaps.extend(copy.deepcopy(matches))
+        emitted_hosts.add(host_id)
+    return replace(region, overlaps=tuple(overlaps))

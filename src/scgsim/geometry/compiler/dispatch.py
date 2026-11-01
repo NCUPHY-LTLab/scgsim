@@ -6,10 +6,10 @@ import time
 from typing import Any
 
 from scgsim.geometry._primitives.entities import _component_metadata
+from scgsim.geometry.compiler.surface_overlap import validate_no_surface_overlap
 from scgsim.geometry.compiler.validation import (
     validate_curve_plan_coverage,
     validate_interface_surface_source_of_truth,
-    validate_no_surface_overlap,
     validate_route_operation_coverage,
     validate_route_volume_surface_refs,
     validate_selected_route,

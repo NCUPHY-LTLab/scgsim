@@ -1,4 +1,8 @@
-"""Canonical geometry records. Keep source facts distinct from compiler records; reexports share these exact definitions."""
+"""Port-sheet records: where a Palace lumped-port sheet lies and which conductors it overlaps.
+
+Owns: the two frozen records. A port sheet here is input geometry only; it is
+not a backend-live surface.
+"""
 
 from __future__ import annotations
 

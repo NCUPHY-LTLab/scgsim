@@ -1,4 +1,9 @@
-"""Canonical geometry records. Keep source facts distinct from compiler records; reexports share these exact definitions."""
+"""Input-side geometry records: polygons, entities, curves and the vacuum region.
+
+Owns: `GeometryBuildInput` and the records it holds, which describe what the
+caller authored. Does not hold compiler plans (`topology.py`, `construction.py`)
+or decide solver ownership.
+"""
 
 from __future__ import annotations
 

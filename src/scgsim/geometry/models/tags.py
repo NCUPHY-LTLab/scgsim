@@ -1,4 +1,8 @@
-"""Canonical geometry records. Keep source facts distinct from compiler records; reexports share these exact definitions."""
+"""Tag plan, backend tag and final physical-group records.
+
+Owns: record types that link a planned surface or volume to its gmsh tag and to
+the physical group the solver sees. Does not assign tags (`planning/tags.py`).
+"""
 
 from __future__ import annotations
 

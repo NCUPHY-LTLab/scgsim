@@ -2,11 +2,11 @@
 
 from scgsim.geometry.compiler.builder import SemanticGeometryBuilder
 from scgsim.geometry.compiler.dispatch import build_route_construction_plan
+from scgsim.geometry.compiler.surface_overlap import validate_no_surface_overlap
 from scgsim.geometry.compiler.validation import (
     validate_backend_tag_ledger,
     validate_curve_plan_coverage,
     validate_interface_surface_source_of_truth,
-    validate_no_surface_overlap,
     validate_route_operation_coverage,
     validate_route_volume_surface_refs,
     validate_selected_route,

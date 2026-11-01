@@ -61,66 +61,18 @@ def _derived_ground_polygons(
         raise ValueError(
             f"{entity.semantic_id} include_selector_points_um requires include_layer"
         )
-    included: list[Any] = []
     source_includes = entity.geometry.get("source_occurrence_includes", ())
     if source_includes and (include_layer is not None or include_points):
         raise ValueError(
             f"{entity.semantic_id} mixes source contributions with global includes"
         )
-    for contribution in source_includes:
-        polygon = (
-            contribution.get("polygon") if isinstance(contribution, Mapping) else None
-        )
-        if not isinstance(polygon, Mapping):
-            raise ValueError(
-                f"{entity.semantic_id} has an incomplete source contribution"
-            )
-        included.extend(
-            _layout_polygon_region(
-                gdstk,
-                LayoutPolygonSpec(
-                    polygon_id=f"{entity.semantic_id}__INCLUDE__{len(included):04d}",
-                    layer=f"{mask_key[0]}/{mask_key[1]}",
-                    exterior=polygon["exterior"],
-                    holes=polygon["holes"],
-                ),
-            )
-        )
+    included = _source_contribution_regions(entity, source_includes, mask_key)
     if include_layer is not None:
-        if (
-            not isinstance(include_layer, Sequence)
-            or isinstance(include_layer, str | bytes)
-            or len(include_layer) != 2
-        ):
-            raise TypeError(
-                f"{entity.semantic_id} include_layer must be a GDS layer pair"
+        included.extend(
+            _global_include_regions(
+                entity, include_layer, include_points, polygons_by_layer
             )
-        candidates = polygons_by_layer.get(
-            (int(include_layer[0]), int(include_layer[1])), ()
         )
-        # Fuse exact contacts before applying an explicit selector; ownership
-        # still comes from the authored layer and selector, not proximity.
-        components = _fused_gdstk_components(candidates)
-        for point in include_points:
-            if (
-                not isinstance(point, Sequence)
-                or isinstance(point, str | bytes)
-                or len(point) != 2
-            ):
-                raise TypeError(
-                    f"{entity.semantic_id} include_selector_points_um requires 2D points"
-                )
-            selector = (float(point[0]), float(point[1]))
-            matches = [
-                polygon
-                for polygon, _, _ in components
-                if _point_in_layout_polygon(selector, polygon)
-            ]
-            if len(matches) != 1:
-                raise ValueError(
-                    f"{entity.semantic_id} include selector {tuple(point)!r} matched {len(matches)} source polygons"
-                )
-            included.extend(_layout_polygon_region(gdstk, matches[0]))
     regions = gdstk.boolean(without_mask or (), tuple(included), "or", precision=1e-9)
     normalized_regions = sorted(
         (
@@ -153,6 +105,82 @@ def _derived_ground_polygons(
         )
         for index, (outer, holes) in enumerate(normalized_regions)
     )
+
+
+def _source_contribution_regions(
+    entity: SemanticEntitySpec,
+    source_includes: Sequence[Any],
+    mask_key: tuple[int, int],
+) -> list[Any]:
+    """Regions of the ground contributions recorded from component occurrences."""
+    import gdstk
+
+    included: list[Any] = []
+    for contribution in source_includes:
+        polygon = (
+            contribution.get("polygon") if isinstance(contribution, Mapping) else None
+        )
+        if not isinstance(polygon, Mapping):
+            raise ValueError(
+                f"{entity.semantic_id} has an incomplete source contribution"
+            )
+        included.extend(
+            _layout_polygon_region(
+                gdstk,
+                LayoutPolygonSpec(
+                    polygon_id=f"{entity.semantic_id}__INCLUDE__{len(included):04d}",
+                    layer=f"{mask_key[0]}/{mask_key[1]}",
+                    exterior=polygon["exterior"],
+                    holes=polygon["holes"],
+                ),
+            )
+        )
+    return included
+
+
+def _global_include_regions(
+    entity: SemanticEntitySpec,
+    include_layer: Any,
+    include_points: Sequence[Any],
+    polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
+) -> list[Any]:
+    """Regions of the polygons on `include_layer` that contain each selector point."""
+    import gdstk
+
+    included: list[Any] = []
+    if (
+        not isinstance(include_layer, Sequence)
+        or isinstance(include_layer, str | bytes)
+        or len(include_layer) != 2
+    ):
+        raise TypeError(f"{entity.semantic_id} include_layer must be a GDS layer pair")
+    candidates = polygons_by_layer.get(
+        (int(include_layer[0]), int(include_layer[1])), ()
+    )
+    # Fuse exact contacts before applying an explicit selector; ownership
+    # still comes from the authored layer and selector, not proximity.
+    components = _fused_gdstk_components(candidates)
+    for point in include_points:
+        if (
+            not isinstance(point, Sequence)
+            or isinstance(point, str | bytes)
+            or len(point) != 2
+        ):
+            raise TypeError(
+                f"{entity.semantic_id} include_selector_points_um requires 2D points"
+            )
+        selector = (float(point[0]), float(point[1]))
+        matches = [
+            polygon
+            for polygon, _, _ in components
+            if _point_in_layout_polygon(selector, polygon)
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                f"{entity.semantic_id} include selector {tuple(point)!r} matched {len(matches)} source polygons"
+            )
+        included.extend(_layout_polygon_region(gdstk, matches[0]))
+    return included
 
 
 def _merged_gdstk_polygons(polygons: Sequence[Any]) -> tuple[Any, ...]:
