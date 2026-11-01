@@ -54,6 +54,8 @@ It checks tracked Python files with Ruff formatting and lint rules, the readable
 
 A length or private-import exception must use the marker the checker recognizes, with a non-empty reason, at the exact location below:
 
+A pending migration, an ownership boundary, or an established name is unfinished work, not an exception. A private-import marker must explain why the final design needs that import; keep remaining naming changes in the task's issue list until their callers have migrated.
+
 - Put `# long-function: <reason>` on the `def` line of a function over 150 lines.
 - Put `# long-file: <reason>` in a standalone top-level comment within the file's first 10 lines when the file exceeds 800 lines.
 - Put `# private-import: <reason>` on the import's starting line when a cross-file private import is necessary.
