@@ -110,13 +110,13 @@ def test_failure_drains_owned_work_and_bounds_submission():
 )
 def test_mesh_budget_rejects_before_child(threads, surface_threads, tmp_path):
     """Reject native thread requests outside the explicit preparation budget."""
-    from scgsim.palace.mesh.build import (  # noqa: PLC0415 -- adapter is needed only for this preflight test; private-import: exercise its budget guard
-        _mesh_from_route_xao,  # private-import: exercise native budget validation
+    from scgsim.palace.mesh.process import (  # noqa: PLC0415 - exercise only the process budget guard.
+        mesh_from_route_xao,
     )
 
     with preparation_resources(max_workers=2):
         with pytest.raises(ValueError, match="must be positive and fit"):
-            _mesh_from_route_xao(
+            mesh_from_route_xao(
                 xao_path=tmp_path / "unused.xao",
                 route="B",
                 records=[],

@@ -4,28 +4,28 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shlex
 import shutil
 import tarfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
+from ..mesh.build import MeshBuildResult
+from ..mesh.provenance import (
+    GSIM_SHA,
+    SGB_DERIVATION_BASE_SHA,
+    SGB_DERIVATION_IMPORTED_SHA,
+    SGB_RUNTIME_AUTHORITY,
+)
+from ..preparation.transforms import SCHEMA_VERSION
 from .archive import (
     run_archive_arcname,
     sibling_run_archive_path,
     sibling_run_archive_relative,
 )
-from ..mesh.build import (
-    GSIM_SHA,
-    SGB_DERIVATION_BASE_SHA,
-    SGB_DERIVATION_IMPORTED_SHA,
-    SGB_RUNTIME_AUTHORITY,
-    MeshBuildResult,
-)
-from ..preparation.transforms import SCHEMA_VERSION
+from .script import positive_int, render_script, single_line
 
 HandoffProfile = Literal["direct-local", "slurm-single-node", "slurm-multi-node"]
 _PROFILES = {"direct-local", "slurm-single-node", "slurm-multi-node"}
@@ -51,7 +51,18 @@ class HandoffPlan:
     returned_receipt_recorder_path: Path
 
 
-def prepare_handoff(
+@dataclass(frozen=True)
+class _PreparedArtifacts:
+    route: str
+    thin_film: dict[str, Any] | None
+    hashes: list[dict[str, str | int]]
+    source_revisions: dict[str, Any]
+    palace_identity: dict[str, Any]
+    execution_identity: dict[str, Any]
+    handoff_id: str
+
+
+def prepare_handoff(  # noqa: PLR0913 -- established public handoff API
     *,
     profile: str,
     mesh_result: MeshBuildResult,
@@ -68,9 +79,9 @@ def prepare_handoff(
     if not config_path.is_file() or not mesh_result.mesh_path.is_file():
         raise FileNotFoundError("handoff requires existing config.json and palace.msh.")
 
-    executable = _single_line(executable, "executable")
-    setup = tuple(_single_line(command, "setup command") for command in setup_commands)
-    petsc = tuple(_single_line(option, "PETSc option") for option in petsc_options)
+    executable = single_line(executable, "executable")
+    setup = tuple(single_line(command, "setup command") for command in setup_commands)
+    petsc = tuple(single_line(option, "PETSc option") for option in petsc_options)
     resource_map = _validate_resources(profile, resources)
     run_dir = mesh_result.output_dir
     for directory in (
@@ -102,6 +113,87 @@ def prepare_handoff(
         run_dir=run_dir,
         returned_receipt_path=returned_receipt_path,
     )
+    artifacts = _prepare_artifacts(
+        profile=profile,
+        mesh_result=mesh_result,
+        config_path=config_path,
+        executable=executable,
+        resources=resource_map,
+        setup=setup,
+        petsc=petsc,
+        problem=problem,
+        run_dir=run_dir,
+        index_map_path=index_map_path,
+        script_path=script_path,
+        recorder_path=returned_receipt_recorder_path,
+    )
+    _write_handoff_metadata(
+        artifacts=artifacts,
+        profile=profile,
+        problem=problem,
+        executable=executable,
+        resources=resource_map,
+        setup=setup,
+        petsc=petsc,
+        run_dir=run_dir,
+        metadata_path=metadata_path,
+        run_metadata_path=run_metadata_path,
+        script_path=script_path,
+        config_path=config_path,
+        mesh_path=mesh_result.mesh_path,
+        returned_receipt_path=returned_receipt_path,
+        recorder_path=returned_receipt_recorder_path,
+    )
+
+    resource_record_path.unlink(missing_ok=True)
+    archive_path.unlink(missing_ok=True)
+    (run_dir / "palace_handoff.tar.gz").unlink(missing_ok=True)
+
+    _create_archive(
+        run_dir=run_dir,
+        archive_path=archive_path,
+        archive_relative=archive_relative,
+        manifest_path=manifest_path,
+        resource_record_path=resource_record_path,
+        artifacts=artifacts,
+        profile=profile,
+        problem=problem,
+        resources=resource_map,
+    )
+
+    return HandoffPlan(
+        cast(HandoffProfile, profile),
+        "prepared",
+        "manual_handoff",
+        artifacts.handoff_id,
+        run_dir,
+        script_path,
+        metadata_path,
+        run_metadata_path,
+        resource_record_path,
+        manifest_path,
+        archive_path,
+        returned_receipt_path,
+        returned_receipt_recorder_path,
+    )
+
+
+def _prepare_artifacts(  # noqa: PLR0913 -- preparation inputs remain explicit
+    *,
+    profile: str,
+    mesh_result: MeshBuildResult,
+    config_path: Path,
+    executable: str,
+    resources: Mapping[str, Any],
+    setup: Sequence[str],
+    petsc: Sequence[str],
+    problem: str,
+    run_dir: Path,
+    index_map_path: Path,
+    script_path: Path,
+    recorder_path: Path,
+) -> _PreparedArtifacts:
+    """Bind inputs and prepare the standalone script and recorder before metadata."""
     if not index_map_path.is_file():
         raise FileNotFoundError("handoff requires metadata/palace_index_map.json.")
 
@@ -116,7 +208,7 @@ def prepare_handoff(
             index_map_path,
         ),
     )
-    identity = _identity()
+    source_revisions = _identity()
     palace_identity = {
         "config_schema": SCHEMA_VERSION,
         "config_compatibility_probe": "native_dry_run",
@@ -124,22 +216,18 @@ def prepare_handoff(
         "runtime_identity_semantics": "observed_provenance_only",
     }
 
-    if returned_receipt_recorder_path.is_file():
-        returned_receipt_recorder_path.unlink()
-    shutil.copy2(
-        Path(__file__).with_name("returned_receipt.py"),
-        returned_receipt_recorder_path,
-    )
-    returned_receipt_recorder_path.chmod(0o755)
-
+    if recorder_path.is_file():
+        recorder_path.unlink()
+    shutil.copy2(Path(__file__).with_name("returned_receipt.py"), recorder_path)
+    recorder_path.chmod(0o755)
     script_path.write_text(
-        _render_script(
+        render_script(
             profile,
             executable,
-            resource_map,
+            resources,
             setup,
             petsc,
-            returned_receipt_recorder_name=returned_receipt_recorder_path.name,
+            returned_receipt_recorder_name=recorder_path.name,
             palace_identity=palace_identity,
         )
         + "\n",
@@ -149,24 +237,56 @@ def prepare_handoff(
 
     execution_identity = _execution_identity(
         profile=profile,
-        resources=resource_map,
+        resources=resources,
         executable=executable,
         setup=setup,
         petsc=petsc,
         script_path=script_path,
-        recorder_path=returned_receipt_recorder_path,
+        recorder_path=recorder_path,
     )
     handoff_id = _compute_handoff_id(
         profile=profile,
         route=route,
         problem=problem,
-        source_revisions=identity,
+        source_revisions=source_revisions,
         palace_identity=palace_identity,
         hashes=hashes,
         execution_identity=execution_identity,
         route_a_thin_film=thin_film,
     )
+    return _PreparedArtifacts(
+        route,
+        thin_film,
+        hashes,
+        source_revisions,
+        palace_identity,
+        execution_identity,
+        handoff_id,
+    )
 
+
+def _write_handoff_metadata(  # noqa: PLR0913 -- fields map to separate JSON records
+    *,
+    artifacts: _PreparedArtifacts,
+    profile: str,
+    problem: str,
+    executable: str,
+    resources: Mapping[str, Any],
+    setup: Sequence[str],
+    petsc: Sequence[str],
+    run_dir: Path,
+    metadata_path: Path,
+    run_metadata_path: Path,
+    script_path: Path,
+    config_path: Path,
+    mesh_path: Path,
+    returned_receipt_path: Path,
+    recorder_path: Path,
+) -> None:
+    """Write the prepared and not-run records after script identities are known."""
+    thin_film = artifacts.thin_film
+    handoff_id = artifacts.handoff_id
+    returned_receipt_relative = returned_receipt_path.relative_to(run_dir).as_posix()
     _write_json(
         metadata_path,
         {
@@ -175,55 +295,58 @@ def prepare_handoff(
             "kind": "manual_handoff",
             "manual_intent": True,
             "profile": profile,
-            "route": route,
+            "route": artifacts.route,
             **({"route_a_thin_film": thin_film} if thin_film is not None else {}),
             "problem": problem,
             "handoff_id": handoff_id,
-            "returned_receipt_path": returned_receipt_path.relative_to(
-                run_dir
-            ).as_posix(),
-            "returned_receipt_recorder": returned_receipt_recorder_path.relative_to(
-                run_dir
-            ).as_posix(),
-            "palace_identity": palace_identity,
-            "source_revisions": identity,
-            "execution_identity": execution_identity,
-            "command": _redacted_command(profile, executable, resource_map),
+            "returned_receipt_path": returned_receipt_relative,
+            "returned_receipt_recorder": recorder_path.relative_to(run_dir).as_posix(),
+            "palace_identity": artifacts.palace_identity,
+            "source_revisions": artifacts.source_revisions,
+            "execution_identity": artifacts.execution_identity,
+            "command": _redacted_command(profile, executable, resources),
             "setup_commands": list(setup),
             "petsc_options": list(petsc),
-            "requested_resources": resource_map,
-            "resolved_resources": resource_map,
+            "requested_resources": resources,
+            "resolved_resources": resources,
             "script": script_path.name,
             "config": config_path.name,
-            "mesh": mesh_result.mesh_path.name,
-            "hashes": hashes,
+            "mesh": mesh_path.name,
+            "hashes": artifacts.hashes,
         },
     )
-
     _write_json(
         run_metadata_path,
         {
             "schema_version": 1,
             "status": "not_run",
             "kind": "manual_handoff",
-            "route": route,
+            "route": artifacts.route,
             **({"route_a_thin_film": thin_film} if thin_film is not None else {}),
             "problem": problem,
             "handoff_id": handoff_id,
-            "returned_receipt_path": returned_receipt_path.relative_to(
-                run_dir
-            ).as_posix(),
-            "palace_identity": palace_identity,
-            "source_revisions": identity,
-            "execution_identity": execution_identity,
-            "hashes": hashes,
+            "returned_receipt_path": returned_receipt_relative,
+            "palace_identity": artifacts.palace_identity,
+            "source_revisions": artifacts.source_revisions,
+            "execution_identity": artifacts.execution_identity,
+            "hashes": artifacts.hashes,
         },
     )
 
-    resource_record_path.unlink(missing_ok=True)
-    archive_path.unlink(missing_ok=True)
-    (run_dir / "palace_handoff.tar.gz").unlink(missing_ok=True)
 
+def _create_archive(  # noqa: PLR0913 -- archive paths and identities stay explicit
+    *,
+    run_dir: Path,
+    archive_path: Path,
+    archive_relative: str,
+    manifest_path: Path,
+    resource_record_path: Path,
+    artifacts: _PreparedArtifacts,
+    profile: str,
+    problem: str,
+    resources: Mapping[str, Any],
+) -> None:
+    """Create the archive and record its digest after all archived inputs settle."""
     excluded = {resource_record_path, run_dir / "palace_handoff.tar.gz"}
     members = _members(run_dir, exclude=excluded | {manifest_path})
     _write_json(
@@ -231,7 +354,7 @@ def prepare_handoff(
         {
             "schema_version": 1,
             "archive": archive_relative,
-            "input_hashes": hashes,
+            "input_hashes": artifacts.hashes,
             "members": members,
             "archive_members_excluded_from_self_listing": [
                 manifest_path.relative_to(run_dir).as_posix()
@@ -257,36 +380,24 @@ def prepare_handoff(
             "status": "not_submitted",
             "kind": "manual_handoff",
             "profile": profile,
-            "route": route,
-            **({"route_a_thin_film": thin_film} if thin_film is not None else {}),
+            "route": artifacts.route,
+            **(
+                {"route_a_thin_film": artifacts.thin_film}
+                if artifacts.thin_film is not None
+                else {}
+            ),
             "problem": problem,
-            "handoff_id": handoff_id,
-            "source_revisions": identity,
-            "palace_identity": palace_identity,
-            "execution_identity": execution_identity,
-            "requested_resources": resource_map,
-            "resolved_resources": resource_map,
+            "handoff_id": artifacts.handoff_id,
+            "source_revisions": artifacts.source_revisions,
+            "palace_identity": artifacts.palace_identity,
+            "execution_identity": artifacts.execution_identity,
+            "requested_resources": resources,
+            "resolved_resources": resources,
             "archive": {
                 "path": archive_relative,
                 "sha256": _sha256(archive_path),
             },
         },
-    )
-
-    return HandoffPlan(
-        profile,
-        "prepared",
-        "manual_handoff",
-        handoff_id,
-        run_dir,
-        script_path,
-        metadata_path,
-        run_metadata_path,
-        resource_record_path,
-        manifest_path,
-        archive_path,
-        returned_receipt_path,
-        returned_receipt_recorder_path,
     )
 
 
@@ -297,12 +408,12 @@ def _validate_resources(
         raise ValueError("handoff requires caller-supplied resources.")
     result = dict(resources)
     if profile == "direct-local":
-        _positive_int(result.get("threads", 1), "resources.threads")
-        _positive_int(result.get("processes", 1), "resources.processes")
+        positive_int(result.get("threads", 1), "resources.threads")
+        positive_int(result.get("processes", 1), "resources.processes")
     else:
-        _positive_int(result.get("ntasks"), "resources.ntasks")
-        _positive_int(result.get("cpus_per_task"), "resources.cpus_per_task")
-        nodes = _positive_int(result.get("nodes"), "resources.nodes")
+        positive_int(result.get("ntasks"), "resources.ntasks")
+        positive_int(result.get("cpus_per_task"), "resources.cpus_per_task")
+        nodes = positive_int(result.get("nodes"), "resources.nodes")
         if profile == "slurm-single-node" and nodes != 1:
             raise ValueError(
                 "slurm-single-node is a single-node profile and requires resources.nodes=1."
@@ -327,222 +438,6 @@ def _validate_resources(
     return result
 
 
-def _render_script(
-    profile: str,
-    executable: str,
-    resources: Mapping[str, Any],
-    setup: Sequence[str],
-    petsc: Sequence[str],
-    *,
-    returned_receipt_recorder_name: str,
-    palace_identity: Mapping[str, Any],
-) -> str:
-    style = str(resources.get("command_style", "binary"))
-    threads = _positive_int(
-        resources.get("threads", resources.get("cpus_per_task", 1)), "threads"
-    )
-    processes = _positive_int(
-        resources.get("processes", resources.get("ntasks", 1)), "processes"
-    )
-    directives: list[str] = []
-    if profile != "direct-local":
-        for key, value in resources.items():
-            if key in {
-                "launcher",
-                "command_style",
-                "threads",
-                "processes",
-                "output",
-                "error",
-                "open_mode",
-            }:
-                continue
-            _single_line(str(value), f"resource {key}")
-            directives.append(f"#SBATCH --{key.replace('_', '-')}={value}")
-        # Slurm defaults to slurm-%j.out in the submit directory. Palace stdout
-        # already belongs in logs/palace-%j.log, so bind both streams there and
-        # do not tee (tee would duplicate every line into the same file).
-        directives.extend(
-            [
-                "#SBATCH --output=logs/palace-%j.log",
-                "#SBATCH --error=logs/palace-%j.log",
-                "#SBATCH --open-mode=append",
-            ]
-        )
-    launcher = (
-        []
-        if profile == "direct-local"
-        else _launcher_tokens(resources.get("launcher", ("srun",)))
-    )
-    if profile != "direct-local" and not launcher:
-        raise ValueError("Slurm profile launcher must be non-empty.")
-
-    arguments = ['"$PALACE_EXECUTABLE"']
-    if style == "wrapper":
-        arguments.extend(["-np", '"$PALACE_PROCESSES"', "-nt", '"$PALACE_THREADS"'])
-    arguments.append('"$PALACE_CONFIG"')
-    command = " ".join([*(shlex.quote(item) for item in launcher), *arguments])
-    config_schema = _single_line(
-        str(palace_identity["config_schema"]), "palace_identity.config_schema"
-    )
-    receipt_command = (
-        f'python3 metadata/{returned_receipt_recorder_name} "$(pwd)" '
-        '"$PIPELINE_EXIT_CODE" --log-path "$PALACE_LOG" '
-        '--tee-exit-code "$TEE_EXIT_CODE" '
-        '--job-id "${SLURM_JOB_ID:-manual}" '
-        '--job-name "${SLURM_JOB_NAME:-manual}" '
-    )
-    preflight_receipt_command = (
-        receipt_command + "--execution-stage config_compatibility "
-        '--preflight-exit-code "$COMPATIBILITY_VERIFY_EXIT" '
-        " || RECEIPT_EXIT=$?"
-    )
-    solver_receipt_command = (
-        receipt_command + "--execution-stage solver --preflight-exit-code 0 "
-        '--solver-exit-code "$PALACE_EXIT_CODE" '
-        " || RECEIPT_EXIT=$?"
-    )
-
-    run_directory_lines = (
-        [
-            'SCRIPT_SOURCE="${BASH_SOURCE[0]}"',
-            'RUN_DIR="$(CDPATH= cd -- "$(dirname -- "$SCRIPT_SOURCE")" && pwd -P)" || exit 2',
-        ]
-        if profile == "direct-local"
-        else [
-            '[[ -n "${SLURM_SUBMIT_DIR:-}" ]] || { echo "missing SLURM_SUBMIT_DIR" >&2; exit 2; }',
-            'RUN_DIR="$(CDPATH= cd -- "$SLURM_SUBMIT_DIR" && pwd -P)" || exit 2',
-        ]
-    )
-
-    lines = [
-        "#!/usr/bin/env bash",
-        *directives,
-        "",
-        "set -u",
-        *run_directory_lines,
-        '[[ -f "$RUN_DIR/config.json" ]] || { echo "missing $RUN_DIR/config.json" >&2; exit 2; }',
-        '[[ -f "$RUN_DIR/palace.msh" ]] || { echo "missing $RUN_DIR/palace.msh" >&2; exit 2; }',
-        '[[ -f "$RUN_DIR/metadata/palace_handoff_metadata.json" ]] || { echo "missing canonical handoff metadata" >&2; exit 2; }',
-        '[[ -f "$RUN_DIR/metadata/palace_run_metadata.json" ]] || { echo "missing canonical run metadata" >&2; exit 2; }',
-        '[[ -f "$RUN_DIR/metadata/mesh_manifest.json" ]] || { echo "missing canonical mesh manifest" >&2; exit 2; }',
-        '[[ -f "$RUN_DIR/metadata/palace_index_map.json" ]] || { echo "missing canonical index map" >&2; exit 2; }',
-        'cd "$RUN_DIR" || exit 2',
-        "mkdir -p logs results/palace metadata",
-        "rm -f metadata/palace_returned_run_receipt.json",
-        "rm -f metadata/palace_runtime_compatibility.json",
-        *(["rm -f logs/palace-*.log"] if profile == "direct-local" else []),
-        "rm -rf results/palace",
-        "mkdir -p results/palace",
-        'PALACE_CONFIG="config.json"',
-        'PALACE_MESH="palace.msh"',
-        f"PALACE_EXECUTABLE={shlex.quote(executable)}",
-        f"PALACE_PROCESSES={processes}",
-        f"PALACE_THREADS={threads}",
-        f"PALACE_COMMAND_STYLE={shlex.quote(style)}",
-        'export OMP_NUM_THREADS="$PALACE_THREADS"',
-        'PALACE_LOG="logs/palace-${SLURM_JOB_ID:-manual}.log"',
-        'PALACE_RUNTIME_COMPATIBILITY="metadata/palace_runtime_compatibility.json"',
-        '[[ -f "$PALACE_CONFIG" ]] || { echo "missing $PALACE_CONFIG" >&2; exit 2; }',
-        '[[ -f "$PALACE_MESH" ]] || { echo "missing $PALACE_MESH" >&2; exit 2; }',
-    ]
-    if petsc:
-        lines.extend(
-            [
-                f"PALACE_PETSC_OPTIONS={shlex.quote(' '.join(petsc))}",
-                'export PETSC_OPTIONS="${PETSC_OPTIONS:-} ${PALACE_PETSC_OPTIONS}"',
-            ]
-        )
-
-    if any(command.lstrip().startswith("module ") for command in setup):
-        lines.extend(
-            [
-                "if ! type module >/dev/null 2>&1; then",
-                '  [[ -r /etc/profile.d/modules.sh ]] || { echo "missing Environment Modules initialization" >&2; exit 2; }',
-                "  set +u",
-                "  source /etc/profile.d/modules.sh || { echo 'Environment Modules initialization failed' >&2; exit 2; }",
-                "  set -u",
-                "fi",
-            ]
-        )
-    for setup_command in setup:
-        lines.extend(
-            [
-                "set +u",
-                f"{{ {setup_command}; }} || {{ echo 'setup command failed' >&2; exit 2; }}",
-                "set -u",
-            ]
-        )
-
-    compatibility_probe = (
-        f"python3 metadata/{returned_receipt_recorder_name} verify-config "
-        '"$PALACE_EXECUTABLE" "$PALACE_COMMAND_STYLE" '
-        '"$PALACE_RUNTIME_COMPATIBILITY" "$PALACE_CONFIG" '
-        f"--config-schema {shlex.quote(config_schema)}"
-    )
-    if profile == "direct-local":
-        lines.extend(
-            [
-                "set -o pipefail",
-                f'{compatibility_probe} 2>&1 | tee -a "$PALACE_LOG"',
-                'COMPATIBILITY_PIPE_STATUS=("${PIPESTATUS[@]}")',
-                "COMPATIBILITY_VERIFY_EXIT=${COMPATIBILITY_PIPE_STATUS[0]:-1}",
-                "COMPATIBILITY_TEE_EXIT=${COMPATIBILITY_PIPE_STATUS[1]:-1}",
-            ]
-        )
-    else:
-        lines.extend(
-            [
-                compatibility_probe,
-                "COMPATIBILITY_VERIFY_EXIT=$?",
-                "COMPATIBILITY_TEE_EXIT=0",
-            ]
-        )
-    lines.extend(
-        [
-            'if [ "$COMPATIBILITY_VERIFY_EXIT" -ne 0 ] || [ "$COMPATIBILITY_TEE_EXIT" -ne 0 ]; then',
-            "  TEE_EXIT_CODE=$COMPATIBILITY_TEE_EXIT",
-            "  PIPELINE_EXIT_CODE=$COMPATIBILITY_VERIFY_EXIT",
-            '  if [ "$PIPELINE_EXIT_CODE" -eq 0 ]; then PIPELINE_EXIT_CODE=$TEE_EXIT_CODE; fi',
-            f"  {preflight_receipt_command}",
-            "  RECEIPT_EXIT=${RECEIPT_EXIT:-0}",
-            '  if [ "$PIPELINE_EXIT_CODE" -ne 0 ]; then exit "$PIPELINE_EXIT_CODE"; fi',
-            '  exit "$RECEIPT_EXIT"',
-            "fi",
-        ]
-    )
-
-    execution_lines = (
-        [
-            "set -o pipefail",
-            f'{command} 2>&1 | tee -a "$PALACE_LOG"',
-            'PALACE_PIPE_STATUS=("${PIPESTATUS[@]}")',
-            "PALACE_EXIT_CODE=${PALACE_PIPE_STATUS[0]:-1}",
-            "TEE_EXIT_CODE=${PALACE_PIPE_STATUS[1]:-1}",
-            "PIPELINE_EXIT_CODE=$PALACE_EXIT_CODE",
-            'if [ "$PIPELINE_EXIT_CODE" -eq 0 ] && [ "$TEE_EXIT_CODE" -ne 0 ]; then PIPELINE_EXIT_CODE=$TEE_EXIT_CODE; fi',
-        ]
-        if profile == "direct-local"
-        else [
-            command,
-            "PALACE_EXIT_CODE=$?",
-            "TEE_EXIT_CODE=0",
-            "PIPELINE_EXIT_CODE=$PALACE_EXIT_CODE",
-        ]
-    )
-    lines.extend(
-        [
-            *execution_lines,
-            solver_receipt_command,
-            "RECEIPT_EXIT=${RECEIPT_EXIT:-0}",
-            'if [ "$PIPELINE_EXIT_CODE" -ne 0 ]; then exit "$PIPELINE_EXIT_CODE"; fi',
-            'if [ "$RECEIPT_EXIT" -ne 0 ]; then exit "$RECEIPT_EXIT"; fi',
-            'exit "$PIPELINE_EXIT_CODE"',
-        ]
-    )
-    return "\n".join(lines)
-
-
 def _redacted_command(
     profile: str, executable: str, resources: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -557,7 +452,7 @@ def _redacted_command(
     }
 
 
-def _identity() -> dict[str, str]:
+def _identity() -> dict[str, Any]:
     try:
         scgsim = version("scgsim")
     except PackageNotFoundError as exc:
@@ -577,7 +472,7 @@ def _identity() -> dict[str, str]:
     }
 
 
-def _compute_handoff_id(
+def _compute_handoff_id(  # noqa: PLR0913 -- hash binds each protocol identity input
     *,
     profile: str,
     route: str,
@@ -606,7 +501,7 @@ def _compute_handoff_id(
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def _execution_identity(
+def _execution_identity(  # noqa: PLR0913 -- each value is a distinct identity field
     *,
     profile: str,
     resources: Mapping[str, Any],
@@ -645,20 +540,6 @@ def _clear_previous_returned_outputs(
     results_path.mkdir(parents=True, exist_ok=True)
     for log_path in (run_dir / "logs").glob("palace-*.log"):
         log_path.unlink()
-
-
-def _launcher_tokens(value: Any) -> list[str]:
-    """Treat a launcher string as one executable token, never as characters."""
-    if isinstance(value, str):
-        return [_single_line(value, "launcher")]
-    if not isinstance(value, Sequence):
-        raise TypeError(
-            "resources.launcher must be a single string or a sequence of strings."
-        )
-    tokens = [_single_line(item, "launcher token") for item in value]
-    if not tokens:
-        raise ValueError("resources.launcher must be non-empty.")
-    return tokens
 
 
 def _members(root: Path, *, exclude: set[Path]) -> list[dict[str, str | int]]:
@@ -721,23 +602,6 @@ def _route_a_thin_film(
             "Route A mesh provenance and manifest require identical thin-film identity."
         )
     return dict(provenance_value)
-
-
-def _positive_int(value: Any, field: str) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
-        raise ValueError(f"{field} must be a positive integer.")
-    return value
-
-
-def _single_line(value: str, field: str) -> str:
-    if (
-        not isinstance(value, str)
-        or not value.strip()
-        or "\n" in value
-        or "\r" in value
-    ):
-        raise ValueError(f"{field} must be non-empty single-line text.")
-    return value
 
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:

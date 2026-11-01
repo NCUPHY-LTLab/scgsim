@@ -6,7 +6,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from numbers import Real
-from typing import Any
+from typing import Any, cast
 
 MESH_CONTROL_KEYS = (
     "size_policy",
@@ -42,10 +42,11 @@ class MeshSizing:
             ):
                 raise ValueError(f"{name} must be finite and > 0.")
             object.__setattr__(self, name, float(value))
-        if self.max_mesh_size < self.refined_mesh_size:
+        if cast(float, self.max_mesh_size) < cast(float, self.refined_mesh_size):
             raise ValueError("max_mesh_size must be >= refined_mesh_size.")
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize the exact normalized mesh sizing controls."""
         return {
             "size_policy": self.size_policy,
             "refined_mesh_size": self.refined_mesh_size,
@@ -54,8 +55,11 @@ class MeshSizing:
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, Any]) -> MeshSizing:
+        """Restore normalized mesh sizing from the process payload."""
         return cls(
-            payload["size_policy"], payload["refined_mesh_size"], payload["max_mesh_size"]
+            payload["size_policy"],
+            payload["refined_mesh_size"],
+            payload["max_mesh_size"],
         )
 
 
@@ -70,6 +74,7 @@ def normalize_mesh_sizing(
     refined_mesh_size: float | None = None,
     max_mesh_size: float | None = None,
 ) -> MeshSizing:
+    """Apply the selected sizing policy and its existing defaults."""
     _validate_size_policy(size_policy)
     if size_policy == "scgsim_default":
         refined_mesh_size = 5.0 if refined_mesh_size is None else refined_mesh_size
@@ -84,6 +89,7 @@ def update_mesh_sizing(
     refined_mesh_size: float | None = None,
     max_mesh_size: float | None = None,
 ) -> MeshSizing:
+    """Apply supplied sizing changes while retaining omitted controls."""
     policy = current.size_policy if size_policy is None else size_policy
     _validate_size_policy(policy)
     if policy == "scgsim_default" and current.size_policy == policy:
@@ -98,7 +104,7 @@ def update_mesh_sizing(
     )
 
 
-def mesh_controls(
+def mesh_controls(  # noqa: PLR0913 -- supported independent native controls retain their keyword API
     *,
     size_policy: str = "scgsim_default",
     algorithm_3d: str = "Delaunay",

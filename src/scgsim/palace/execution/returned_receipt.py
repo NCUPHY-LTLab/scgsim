@@ -11,7 +11,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -19,10 +20,7 @@ SCHEMA = "palace-returned-run-receipt.v1"
 RUNTIME_COMPATIBILITY_SCHEMA = "palace-runtime-compatibility.v1"
 RUNTIME_COMPATIBILITY_PATH = "metadata/palace_runtime_compatibility.json"
 
-try:
-    from datetime import UTC
-except ImportError:  # pragma: no cover
-    UTC = __import__("datetime").timezone.utc
+UTC = timezone.utc
 
 _REQUIRED_OUTPUT_FAMILIES = {
     "Electrostatic": (
@@ -71,7 +69,8 @@ def _output_families(problem: str, config: dict[str, Any]) -> tuple[str, ...]:
     )
 
 
-def _sha256(path: Path) -> str:
+def sha256(path: Path) -> str:
+    """Return a file's SHA-256 digest using only the standard library."""
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1 << 20), b""):
@@ -125,24 +124,30 @@ def _required_output_paths(
 
 def _iteration_directories(root: Path) -> list[Path]:
     results = root / "results/palace"
-    if not _confined_path(root, "results/palace").is_dir():
+    if not confined_path(root, "results/palace").is_dir():
         return []
     directories = []
     for path in results.iterdir():
-        if not path.name.startswith("iteration") or not path.name.removeprefix("iteration").isdigit():
+        if (
+            not path.name.startswith("iteration")
+            or not path.name.removeprefix("iteration").isdigit()
+        ):
             continue
-        if _confined_path(root, path.relative_to(root).as_posix()).is_dir():
+        if confined_path(root, path.relative_to(root).as_posix()).is_dir():
             directories.append(path)
-    return sorted(directories, key=lambda path: int(path.name.removeprefix("iteration")))
+    return sorted(
+        directories, key=lambda path: int(path.name.removeprefix("iteration"))
+    )
 
 
-def _iteration_output_paths(
+def iteration_output_paths(
     root: Path,
     problem: str,
     *,
     config: dict[str, Any] | None = None,
     masks_configured: bool = False,
 ) -> list[str]:
+    """Return the present output tables beneath recognized iteration folders."""
     families = (
         _output_families(problem, config)
         if config is not None
@@ -160,7 +165,7 @@ def _iteration_output_paths(
     return paths
 
 
-def _adapted_mesh_output_paths(root: Path, config: dict[str, Any]) -> list[str]:
+def adapted_mesh_output_paths(root: Path, config: dict[str, Any]) -> list[str]:
     """Bind native-declared adapted meshes without replacing sealed input meshes.
 
     Palace 0.18.1 writes Model.Mesh.stem plus .meshgz (zlib) or .mesh next
@@ -171,13 +176,13 @@ def _adapted_mesh_output_paths(root: Path, config: dict[str, Any]) -> list[str]:
         return []
     mesh_name = Path(config["Model"]["Mesh"]).stem
     results = root / "results/palace"
-    if not _confined_path(root, "results/palace").is_dir():
+    if not confined_path(root, "results/palace").is_dir():
         return []
     directories = [results, *_iteration_directories(root)]
     outputs: list[str] = []
     for directory in directories:
         metadata_relative = (directory / "palace.json").relative_to(root).as_posix()
-        metadata_path = _confined_path(root, metadata_relative)
+        metadata_path = confined_path(root, metadata_relative)
         if not metadata_path.is_file():
             continue  # The existing required metadata inventory handles missing metadata.
         metadata = _read_json(metadata_path)
@@ -185,9 +190,15 @@ def _adapted_mesh_output_paths(root: Path, config: dict[str, Any]) -> list[str]:
             continue
         if not isinstance(metadata["SavedAdaptedMesh"], dict):
             raise TypeError("native SavedAdaptedMesh must be a JSON object")
-        alternatives = [(directory / f"{mesh_name}{suffix}").relative_to(root).as_posix()
-                        for suffix in (".meshgz", ".mesh")]
-        present = [relative for relative in alternatives if _confined_path(root, relative).is_file()]
+        alternatives = [
+            (directory / f"{mesh_name}{suffix}").relative_to(root).as_posix()
+            for suffix in (".meshgz", ".mesh")
+        ]
+        present = [
+            relative
+            for relative in alternatives
+            if confined_path(root, relative).is_file()
+        ]
         if len(present) > 1:
             raise ValueError("native adapted mesh has ambiguous compression variants")
         # Missing alternatives remain explicit failed output records, not an
@@ -198,13 +209,13 @@ def _adapted_mesh_output_paths(root: Path, config: dict[str, Any]) -> list[str]:
 
 
 def _record_for_path(run_dir: Path, relative_path: str) -> dict[str, Any]:
-    path = _confined_path(run_dir, relative_path)
+    path = confined_path(run_dir, relative_path)
     if not path.is_file():
         return {"path": relative_path, "bytes": None, "sha256": None, "present": False}
     return {
         "path": relative_path,
         "bytes": path.stat().st_size,
-        "sha256": _sha256(path),
+        "sha256": sha256(path),
         "present": True,
     }
 
@@ -270,7 +281,7 @@ def _runtime_compatibility(
     config_schema = _compatibility_required(handoff_metadata)
     if config_schema is None:
         return {}
-    path = _confined_path(root, RUNTIME_COMPATIBILITY_PATH)
+    path = confined_path(root, RUNTIME_COMPATIBILITY_PATH)
     if not path.is_file():
         return {}
     payload = _read_json(path)
@@ -314,6 +325,18 @@ def _runtime_compatibility_verified(
     )
 
 
+@dataclass(frozen=True)
+class _ReceiptContext:
+    args: argparse.Namespace
+    root: Path
+    handoff_metadata: dict[str, Any]
+    route: str
+    problem: str
+    input_hashes: list[dict[str, Any]]
+    handoff_id: str
+    solver_invoked: bool
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Write a returned Palace run receipt for manual handoff.",
@@ -336,7 +359,11 @@ def main() -> int:
         "--receipt-path", default="metadata/palace_returned_run_receipt.json"
     )
     args = parser.parse_args()
+    return _write_returned_receipt(args)
 
+
+def _write_returned_receipt(args: argparse.Namespace) -> int:
+    """Validate the attempt, build its receipt, then persist records in order."""
     solver_invoked = args.execution_stage == "solver"
     if solver_invoked:
         if args.preflight_exit_code != 0:
@@ -363,78 +390,18 @@ def main() -> int:
             route=route, problem=problem, input_hashes=input_hashes
         )
 
-    solver_identity = _solver_identity(root)
-    runtime_compatibility = _runtime_compatibility(root, handoff_metadata)
-    compatibility_required = _compatibility_required(handoff_metadata)
-    masks_configured = _mask_outputs_configured(root)
-    config = _read_json(root / "config.json")
-    output_paths = [
-        *_required_output_paths(
-            problem, args.log_path, config=config, masks_configured=masks_configured
-        ),
-        *_iteration_output_paths(
-            root, problem, config=config, masks_configured=masks_configured
-        ),
-        *([RUNTIME_COMPATIBILITY_PATH] if compatibility_required is not None else []),
-    ]
-    if handoff_metadata.get("palace_identity", {}).get("config_schema") == "1-7-0":
-        output_paths.extend(_adapted_mesh_output_paths(root, config))
-        output_paths = list(dict.fromkeys(output_paths))
-    output_records = [_record_for_path(root, path) for path in output_paths]
-    log_record = _record_for_path(root, args.log_path)
-    completed_outputs = all(record["present"] is True for record in output_records)
-    completed_inputs = _input_hashes_match(root, input_hashes)
-    runtime_compatible = _runtime_compatibility_verified(
+    context = _ReceiptContext(
+        args=args,
         root=root,
         handoff_metadata=handoff_metadata,
-        runtime_compatibility=runtime_compatibility,
+        route=route,
+        problem=problem,
+        input_hashes=input_hashes,
+        handoff_id=handoff_id,
+        solver_invoked=solver_invoked,
     )
-
-    if args.diagnostic_after_the_fact:
-        status = "diagnostic_unverified"
-    elif (
-        args.exit_code == 0
-        and solver_invoked
-        and args.preflight_exit_code == 0
-        and args.solver_exit_code == 0
-        and args.tee_exit_code == 0
-        and completed_inputs
-        and completed_outputs
-        and runtime_compatible
-    ):
-        status = "completed"
-    else:
-        status = "failed"
-
-    payload: dict[str, Any] = {
-        "schema": SCHEMA,
-        "schema_version": 1,
-        "handoff_id": handoff_id,
-        "route": route,
-        "problem": problem,
-        "status": status,
-        "exit_code": args.exit_code,
-        "execution_stage": args.execution_stage,
-        "solver_invoked": solver_invoked,
-        "preflight_exit_code": args.preflight_exit_code,
-        "solver_exit_code": args.solver_exit_code,
-        "tee_exit_code": args.tee_exit_code,
-        "identity_verified": status == "completed",
-        "timestamp_utc": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
-        "job_identity": {
-            "job_id": args.job_id,
-            "job_name": args.job_name,
-        },
-        "input_hashes": input_hashes,
-        "output_files": output_records,
-        "log": log_record,
-        "solver_identity": solver_identity,
-    }
-    if compatibility_required is not None:
-        payload["runtime_compatibility"] = runtime_compatibility
-    if handoff_metadata.get("route_a_thin_film") is not None:
-        payload["route_a_thin_film"] = handoff_metadata["route_a_thin_film"]
-
+    payload = _receipt_payload(context)
+    status = payload["status"]
     _update_resource_record(
         root=root,
         handoff_metadata=handoff_metadata,
@@ -449,11 +416,99 @@ def main() -> int:
         exit_code=args.exit_code,
         job_identity=payload["job_identity"],
     )
-    receipt_path = _confined_path(root, args.receipt_path)
+    receipt_path = confined_path(root, args.receipt_path)
     _write_json_atomic(receipt_path, payload)
     if status == "completed" or args.diagnostic_after_the_fact:
         return 0
     return args.exit_code if args.exit_code != 0 else 3
+
+
+def _receipt_payload(context: _ReceiptContext) -> dict[str, Any]:
+    """Collect inputs and outputs, then assemble the returned-run receipt."""
+    solver_identity = _solver_identity(context.root)
+    runtime_compatibility = _runtime_compatibility(
+        context.root, context.handoff_metadata
+    )
+    compatibility_required = _compatibility_required(context.handoff_metadata)
+    masks_configured = _mask_outputs_configured(context.root)
+    config = _read_json(context.root / "config.json")
+    output_paths = [
+        *_required_output_paths(
+            context.problem,
+            context.args.log_path,
+            config=config,
+            masks_configured=masks_configured,
+        ),
+        *iteration_output_paths(
+            context.root,
+            context.problem,
+            config=config,
+            masks_configured=masks_configured,
+        ),
+        *([RUNTIME_COMPATIBILITY_PATH] if compatibility_required is not None else []),
+    ]
+    if (
+        context.handoff_metadata.get("palace_identity", {}).get("config_schema")
+        == "1-7-0"
+    ):
+        output_paths.extend(adapted_mesh_output_paths(context.root, config))
+        output_paths = list(dict.fromkeys(output_paths))
+    output_records = [_record_for_path(context.root, path) for path in output_paths]
+    log_record = _record_for_path(context.root, context.args.log_path)
+    completed_outputs = all(record["present"] is True for record in output_records)
+    completed_inputs = _input_hashes_match(context.root, context.input_hashes)
+    runtime_compatible = _runtime_compatibility_verified(
+        root=context.root,
+        handoff_metadata=context.handoff_metadata,
+        runtime_compatibility=runtime_compatibility,
+    )
+
+    if context.args.diagnostic_after_the_fact:
+        status = "diagnostic_unverified"
+    elif (
+        context.args.exit_code == 0
+        and context.solver_invoked
+        and context.args.preflight_exit_code == 0
+        and context.args.solver_exit_code == 0
+        and context.args.tee_exit_code == 0
+        and completed_inputs
+        and completed_outputs
+        and runtime_compatible
+    ):
+        status = "completed"
+    else:
+        status = "failed"
+
+    payload: dict[str, Any] = {
+        "schema": SCHEMA,
+        "schema_version": 1,
+        "handoff_id": context.handoff_id,
+        "route": context.route,
+        "problem": context.problem,
+        "status": status,
+        "exit_code": context.args.exit_code,
+        "execution_stage": context.args.execution_stage,
+        "solver_invoked": context.solver_invoked,
+        "preflight_exit_code": context.args.preflight_exit_code,
+        "solver_exit_code": context.args.solver_exit_code,
+        "tee_exit_code": context.args.tee_exit_code,
+        "identity_verified": status == "completed",
+        "timestamp_utc": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
+        "job_identity": {
+            "job_id": context.args.job_id,
+            "job_name": context.args.job_name,
+        },
+        "input_hashes": context.input_hashes,
+        "output_files": output_records,
+        "log": log_record,
+        "solver_identity": solver_identity,
+    }
+    if compatibility_required is not None:
+        payload["runtime_compatibility"] = runtime_compatibility
+    if context.handoff_metadata.get("route_a_thin_film") is not None:
+        payload["route_a_thin_film"] = context.handoff_metadata["route_a_thin_film"]
+
+    return payload
 
 
 def _input_hashes_match(root: Path, input_hashes: list[dict[str, Any]]) -> bool:
@@ -465,11 +520,11 @@ def _input_hashes_match(root: Path, input_hashes: list[dict[str, Any]]) -> bool:
             return False
         if not isinstance(expected_sha, str) or len(expected_sha) != 64:
             return False
-        path = _confined_path(root, path_name)
+        path = confined_path(root, path_name)
         if (
             not path.is_file()
             or path.stat().st_size != expected_bytes
-            or _sha256(path) != expected_sha
+            or sha256(path) != expected_sha
         ):
             return False
     return bool(input_hashes)
@@ -531,7 +586,8 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
-def _confined_path(root: Path, relative: str) -> Path:
+def confined_path(root: Path, relative: str) -> Path:
+    """Resolve a receipt path while keeping it inside its run directory."""
     if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
         raise ValueError("receipt artifact paths must be non-empty relative paths.")
     candidate = (root / relative).resolve()
@@ -610,7 +666,9 @@ def _verify_config_main(argv: list[str]) -> int:
         else None
     )
     binary_identity = runtime_binary.name if runtime_binary is not None else None
-    binary_sha256 = _sha256(runtime_binary) if runtime_binary is not None else None
+    runtime_binary_sha256 = (
+        sha256(runtime_binary) if runtime_binary is not None else None
+    )
 
     root = Path.cwd().resolve()
     config_before = _record_for_path(root, args.config_path)
@@ -621,7 +679,9 @@ def _verify_config_main(argv: list[str]) -> int:
     dry_run_exit_code, _ = _run_probe(dry_run_command)
 
     config_record = _record_for_path(root, args.config_path)
-    supported_release = version_exit_code == 0 and _supported_palace_release(native_git_tag)
+    supported_release = version_exit_code == 0 and _supported_palace_release(
+        native_git_tag
+    )
     compatible = (
         dry_run_exit_code == 0
         and config_record["present"] is True
@@ -648,20 +708,20 @@ def _verify_config_main(argv: list[str]) -> int:
             "native_schema_version": native_schema_version,
             "version_probe_exit_code": version_exit_code,
             "runtime_binary_identity": binary_identity,
-            "runtime_binary_sha256": binary_sha256,
+            "runtime_binary_sha256": runtime_binary_sha256,
         },
         "command": {
             "command_style": args.command_style,
             "executable_identity": Path(args.executable).name,
         },
     }
-    _write_json_atomic(_confined_path(root, args.output_path), payload)
+    _write_json_atomic(confined_path(root, args.output_path), payload)
     observed_label = native_git_tag if native_git_tag is not None else "unavailable"
     print(
         "SCGSim Palace config compatibility: "
         f"schema={args.config_schema} dry_run_exit={dry_run_exit_code} "
         f"compatible={str(compatible).lower()} native_git_tag={observed_label} "
-        f"binary_sha_recorded={str(binary_sha256 is not None).lower()}"
+        f"binary_sha_recorded={str(runtime_binary_sha256 is not None).lower()}"
     )
     return 0 if compatible else 78
 
@@ -670,6 +730,14 @@ def _script_main() -> None:
     if sys.argv[1:2] == ["verify-config"]:
         raise SystemExit(_verify_config_main(sys.argv[2:]))
     raise SystemExit(main())
+
+
+__all__ = [
+    "adapted_mesh_output_paths",
+    "confined_path",
+    "iteration_output_paths",
+    "sha256",
+]
 
 
 if __name__ == "__main__":

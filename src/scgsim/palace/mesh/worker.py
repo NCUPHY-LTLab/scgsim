@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from scgsim.diagnostics import _worker_diagnostics
-
 import json
 import sys
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from scgsim.palace.mesh.build import _mesh_xao_in_current_process
+from scgsim.diagnostics import _worker_diagnostics
+from scgsim.palace.mesh.native import mesh_xao_in_current_process
+
+from .controls import MeshSizing, mesh_controls
 
 
 def main(arguments: list[str] | None = None) -> int:
@@ -33,13 +34,12 @@ def _run_request(request: Any, result_path: Path) -> int:
     """Validate and execute one decoded worker request."""
     if not isinstance(request, Mapping):
         raise TypeError("Gmsh worker request must be a mapping.")
-    from .controls import MeshSizing, mesh_controls
 
     sizing = MeshSizing.from_payload(request)
     controls = mesh_controls(
         size_policy=sizing.size_policy, **_required(request, "mesh_controls", dict)
     )
-    result = _mesh_xao_in_current_process(
+    result = mesh_xao_in_current_process(
         xao_path=Path(_required(request, "xao_path", str)),
         route=_required(request, "route", str),
         records=_required(request, "records", list),
