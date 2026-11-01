@@ -18,15 +18,6 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from scgsim.geometry._primitives.entities import (
-    _entity_by_id,
-    _geometry_ref_from_metadata,
-    _unique_ids,
-)
-from scgsim.geometry._primitives.surface_records import (
-    _is_route_a_sheet_interface,
-    _RouteASheetPatch,
-)
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.construction import (
     ConstructionBodyPlanRecord,
@@ -39,48 +30,65 @@ from scgsim.geometry.models.topology import (
     MMContactRecord,
     SurfacePlanRecord,
 )
-from scgsim.geometry.planning.auto_vacuum import _prepare_auto_vacuum_solution_regions
-from scgsim.geometry.planning.contact_patches import plan_conductor_contact_patches
-from scgsim.geometry.planning.domain import (
-    _interface_surface_kinds,
-    _plan_substrate_air_surfaces,
+from scgsim.geometry.planning.conductors.contact_patches import (
+    plan_conductor_contact_patches,
 )
-from scgsim.geometry.planning.evidence import (
+from scgsim.geometry.planning.conductors.face_contacts import (
+    contact_patches_by_entity_face,
+    route_a_sheet_contacts_by_face_metal,
+    sheet_contact_loops_by_face_metal,
+)
+from scgsim.geometry.planning.conductors.mm_contacts import (
+    plan_mm_contact_records,
+    plan_mm_contact_records_with_components,
+)
+from scgsim.geometry.planning.conductors.shell_surfaces import (
+    plan_conductor_shell_surfaces,
+)
+from scgsim.geometry.planning.context.evidence import (
     build_semantic_evidence_facade,
     require_semantic_evidence_facade,
 )
-from scgsim.geometry.planning.interfaces import recognize_route_interfaces
-from scgsim.geometry.planning.mm_contacts import (
-    _plan_mm_contact_records_with_components,
-    plan_mm_contact_records,
-)
-from scgsim.geometry.planning.representation import (
+from scgsim.geometry.planning.context.representation import (
     is_sheet_context,
+    project_native_route_representations,
 )
-from scgsim.geometry.planning.sheet_patches import _plan_route_a_sheet_patches
-from scgsim.geometry.planning.sheet_surfaces import _route_a_sheet_patch_surfaces
-from scgsim.geometry.planning.solution_adjacency import (
-    _route_a_sheet_boundary_volume_ids,
+from scgsim.geometry.planning.context.scope import SurfaceScope
+from scgsim.geometry.planning.context.tags import resolve_physical_group_owner_ids
+from scgsim.geometry.planning.domain.boundaries import (
+    merge_solution_sidewall_interfaces,
+    reconcile_solution_domain_boundaries,
 )
-from scgsim.geometry.planning.solution_boundaries import (
-    _merge_solution_sidewall_interfaces,
-    _reconcile_solution_domain_boundaries,
+from scgsim.geometry.planning.domain.substrate_air import (
+    interface_surface_kinds,
+    plan_substrate_air_surfaces,
 )
-from scgsim.geometry.planning.surface_conductors import plan_conductor_shell_surfaces
-from scgsim.geometry.planning.surface_contacts import (
-    _contact_patches_by_entity_face,
-    _route_a_sheet_contacts_by_face_metal,
-    _sheet_contact_loops_by_face_metal,
-)
-from scgsim.geometry.planning.surface_contract import _with_surface_contract_metadata
-from scgsim.geometry.planning.surface_scope import SurfaceScope
-from scgsim.geometry.planning.surface_sheets import (
-    _effective_sheet_contact_sides,
-    _refresh_generated_context_sheet_interfaces,
-    _refresh_generated_route_a_sheet_interfaces,
+from scgsim.geometry.planning.interfaces import recognize_route_interfaces
+from scgsim.geometry.planning.sheets.effective_contacts import (
+    effective_sheet_contact_sides,
     plan_effective_contact_sheets,
+    refresh_generated_context_sheet_interfaces,
+    refresh_generated_route_a_sheet_interfaces,
 )
-from scgsim.geometry.planning.tags import _physical_group_owner_ids
+from scgsim.geometry.planning.sheets.patches import plan_route_a_sheet_patches
+from scgsim.geometry.planning.sheets.surfaces import route_a_sheet_patch_surfaces
+from scgsim.geometry.planning.solutions.adjacency import (
+    route_a_sheet_boundary_volume_ids,
+)
+from scgsim.geometry.planning.solutions.auto_vacuum import (
+    prepare_auto_vacuum_solution_regions,
+)
+from scgsim.geometry.planning.surface_contract import with_surface_contract_metadata
+from scgsim.geometry.planning.validation import validate_selected_route
+from scgsim.geometry.primitives.entities import (
+    entity_by_id,
+    geometry_ref_from_metadata,
+    unique_ids,
+)
+from scgsim.geometry.primitives.surface_records import (
+    RouteASheetPatch,
+    is_route_a_sheet_interface,
+)
 from scgsim.semantics import EvidenceResult, SemanticEvidenceFacade
 from scgsim.semantics.ownership import interface_surface_owner_ids
 
@@ -102,10 +110,6 @@ def plan_surface_contribution_patches(
         raise ValueError(
             "interpret_physical_geometry() and pass plan.context for current contribution planning"
         )
-    from scgsim.geometry.compiler.validation import validate_selected_route
-    from scgsim.geometry.planning.representation import (
-        project_native_route_representations,
-    )
 
     build_input = project_native_route_representations(
         build_input, route, representation_context
@@ -130,14 +134,14 @@ def _plan_surface_contribution_geometry(
             raise ValueError(
                 "route-neutral contribution planning requires representation context"
             )
-        build_input = _prepare_auto_vacuum_solution_regions(
+        build_input = prepare_auto_vacuum_solution_regions(
             build_input, route=route, representation_context=representation_context
         )
-        build_input = _refresh_generated_context_sheet_interfaces(
+        build_input = refresh_generated_context_sheet_interfaces(
             build_input, representation_context=representation_context
         )
     elif route == "A":
-        build_input = _refresh_generated_route_a_sheet_interfaces(build_input)
+        build_input = refresh_generated_route_a_sheet_interfaces(build_input)
     semantic_facts = build_semantic_evidence_facade(
         build_input,
         route=route,
@@ -155,7 +159,7 @@ def _plan_surface_contribution_geometry(
     component_ledger = None
     if route is None and representation_context is not None:
         interfaces, mm_contacts, component_ledger = (
-            _plan_mm_contact_records_with_components(
+            plan_mm_contact_records_with_components(
                 build_input,
                 route=route,
                 interfaces=interfaces,
@@ -184,8 +188,8 @@ def _plan_surface_contribution_geometry(
         representation_context=representation_context,
         _conductor_component_ledger=component_ledger,
     )
-    surfaces = _reconcile_solution_domain_boundaries(build_input, surfaces=surfaces)
-    return build_input, _merge_solution_sidewall_interfaces(
+    surfaces = reconcile_solution_domain_boundaries(build_input, surfaces=surfaces)
+    return build_input, merge_solution_sidewall_interfaces(
         build_input,
         surfaces=surfaces,
         semantic_facts=semantic_facts,
@@ -318,7 +322,7 @@ def plan_route_surfaces(  # noqa: PLR0913 - published planner signature; argumen
     # patches replace parts of the substrate-air interface they sit on.
     context_planning = scope.context_planning
     effective_contacts = (
-        _effective_sheet_contact_sides(
+        effective_sheet_contact_sides(
             build_input, mm_contacts, representation_context=representation_context
         )
         if context_planning
@@ -328,7 +332,7 @@ def plan_route_surfaces(  # noqa: PLR0913 - published planner signature; argumen
         scope, effective_contacts
     )
     route_a_sheet_patches = (
-        _plan_route_a_sheet_patches(
+        plan_route_a_sheet_patches(
             build_input,
             interfaces=tuple(
                 interface
@@ -343,7 +347,7 @@ def plan_route_surfaces(  # noqa: PLR0913 - published planner signature; argumen
         or (context_planning and is_sheet_context(representation_context))
         else ()
     )
-    sheet_patches_by_interface: dict[str, list[_RouteASheetPatch]] = {}
+    sheet_patches_by_interface: dict[str, list[RouteASheetPatch]] = {}
     for patch in route_a_sheet_patches:
         sheet_patches_by_interface.setdefault(patch.parent_interface_id, []).append(
             patch
@@ -352,7 +356,7 @@ def plan_route_surfaces(  # noqa: PLR0913 - published planner signature; argumen
     # Step 2: the substrate-air and domain boundary surfaces, with sheet footprints cut out.
     records: list[SurfacePlanRecord] = []
     records.extend(
-        _plan_substrate_air_surfaces(
+        plan_substrate_air_surfaces(
             build_input,
             route=route,
             semantic_facts=semantic_facts,
@@ -362,13 +366,13 @@ def plan_route_surfaces(  # noqa: PLR0913 - published planner signature; argumen
     )
 
     # Step 3: one surface (or its partition children) per recognized interface.
-    contact_faces = _contact_patches_by_entity_face(interfaces)
+    contact_faces = contact_patches_by_entity_face(interfaces)
     sheet_contacts_by_face = (
-        _route_a_sheet_contacts_by_face_metal(build_input, mm_contacts)
+        route_a_sheet_contacts_by_face_metal(build_input, mm_contacts)
         if route == "A" or context_planning
         else {}
     )
-    normalized_sheet_loops = _sheet_contact_loops_by_face_metal(
+    normalized_sheet_loops = sheet_contact_loops_by_face_metal(
         build_input,
         mm_contacts,
         include_direct_bump_contacts=False,
@@ -395,7 +399,7 @@ def plan_route_surfaces(  # noqa: PLR0913 - published planner signature; argumen
     )
     if route == "C":
         return tuple(records)
-    return _with_surface_contract_metadata(
+    return with_surface_contract_metadata(
         build_input,
         route=route,
         interfaces=interfaces,
@@ -423,7 +427,7 @@ def _plan_interface_surfaces(
     *,
     partitions_by_interface: Mapping[str, Sequence[SurfacePartitionRecord]],
     effective_sheet_surfaces: Mapping[str, Sequence[SurfacePlanRecord]],
-    sheet_patches_by_interface: Mapping[str, Sequence[_RouteASheetPatch]],
+    sheet_patches_by_interface: Mapping[str, Sequence[RouteASheetPatch]],
     sheet_contacts_by_face: Mapping[str, Sequence[MMContactRecord]],
 ) -> list[SurfacePlanRecord]:
     """Plan the surfaces owned by recognized interfaces, in interface order."""
@@ -440,7 +444,7 @@ def _plan_interface_surfaces(
         if interface.interface_id in effective_sheet_surfaces:
             records.extend(effective_sheet_surfaces[interface.interface_id])
             continue
-        if _is_route_a_sheet_interface(
+        if is_route_a_sheet_interface(
             route, interface, representation_context=representation_context
         ):
             patches = tuple(sheet_patches_by_interface.get(interface.interface_id, ()))
@@ -449,7 +453,7 @@ def _plan_interface_surfaces(
                     f"{interface.interface_id} has no local Route A sheet patches"
                 )
             records.extend(
-                _route_a_sheet_patch_surfaces(
+                route_a_sheet_patch_surfaces(
                     scope,
                     interface=interface,
                     patches=patches,
@@ -481,7 +485,7 @@ def _planned_interface_records(
     geometry_ref = {
         "from_interface_id": interface.interface_id,
         "source_polygon_ids": interface.source_polygon_ids,
-        **_geometry_ref_from_metadata(interface.metadata),
+        **geometry_ref_from_metadata(interface.metadata),
     }
     # TODO(human): this evidence is always empty, so `primary_kind` is always None
     # and the Route A evidence arguments below never carry data. Behavior kept as is.
@@ -501,7 +505,7 @@ def _planned_interface_records(
         primary_kind=primary_kind,
         representation_context=representation_context,
     )
-    interface_kinds = _interface_surface_kinds(
+    interface_kinds = interface_surface_kinds(
         build_input,
         route=route,
         interface=interface,
@@ -522,11 +526,11 @@ def _planned_interface_records(
         route_a_evidence=route_a_sheet_evidence,
         representation_context=representation_context,
     )
-    physical_owner_semantic_ids = _physical_group_owner_ids(
+    physical_owner_semantic_ids = resolve_physical_group_owner_ids(
         build_input,
         owner_semantic_ids,
     )
-    embedded_sheet = _is_route_a_sheet_interface(
+    embedded_sheet = is_route_a_sheet_interface(
         route, interface, representation_context=representation_context
     )
 
@@ -555,7 +559,7 @@ def _planned_interface_records(
                     **geometry_ref,
                     "partition_id": partition.partition_id,
                     "parent_interface_id": partition.parent_interface_id,
-                    **_geometry_ref_from_metadata(partition.metadata),
+                    **geometry_ref_from_metadata(partition.metadata),
                 },
                 interface_id=surface_interface_id,
                 parent_surface_id=parent_surface_id,
@@ -594,10 +598,10 @@ def _interface_surface_owner_ids(
 ) -> tuple[str, ...]:
     raw_owner_ids = interface.metadata.get("surface_owner_semantic_ids")
     route_a_owner_ids = None
-    if _is_route_a_sheet_interface(
+    if is_route_a_sheet_interface(
         route, interface, representation_context=representation_context
     ):
-        route_a_owner_ids = _unique_ids(
+        route_a_owner_ids = unique_ids(
             owner_id
             for result in route_a_evidence
             for owner_id in (
@@ -606,10 +610,10 @@ def _interface_surface_owner_ids(
             )
         )
         if not route_a_owner_ids:
-            entity = _entity_by_id(build_input, interface.owner_semantic_ids[0])
+            entity = entity_by_id(build_input, interface.owner_semantic_ids[0])
             route_a_owner_ids = (
                 entity.semantic_id,
-                *_route_a_sheet_boundary_volume_ids(build_input, entity),
+                *route_a_sheet_boundary_volume_ids(build_input, entity),
             )
     return interface_surface_owner_ids(
         raw_owner_ids,
@@ -630,21 +634,21 @@ def _interface_boundary_volume_ids(
     if raw_boundary_ids is not None:
         if isinstance(raw_boundary_ids, str):
             return (raw_boundary_ids,)
-        return _unique_ids(raw_boundary_ids)
-    if _is_route_a_sheet_interface(
+        return unique_ids(raw_boundary_ids)
+    if is_route_a_sheet_interface(
         route, interface, representation_context=representation_context
     ):
         if route_a_evidence:
-            return _unique_ids(
+            return unique_ids(
                 domain_id
                 for result in route_a_evidence
                 for domain_id in (result.effective_domain_ids or ())
             )
-        return _route_a_sheet_boundary_volume_ids(
+        return route_a_sheet_boundary_volume_ids(
             build_input,
-            _entity_by_id(build_input, interface.owner_semantic_ids[0]),
+            entity_by_id(build_input, interface.owner_semantic_ids[0]),
         )
-    return _unique_ids(interface.owner_semantic_ids)
+    return unique_ids(interface.owner_semantic_ids)
 
 
 def _surface_interface_id(
@@ -655,12 +659,12 @@ def _surface_interface_id(
     primary_kind: str | None = None,
     representation_context: RepresentationContext | None = None,
 ) -> str:
-    if not _is_route_a_sheet_interface(
+    if not is_route_a_sheet_interface(
         route, interface, representation_context=representation_context
     ):
         return interface.interface_id
-    entity = _entity_by_id(build_input, interface.owner_semantic_ids[0])
-    boundary_ids = _route_a_sheet_boundary_volume_ids(build_input, entity)
+    entity = entity_by_id(build_input, interface.owner_semantic_ids[0])
+    boundary_ids = route_a_sheet_boundary_volume_ids(build_input, entity)
     suffix = interface.interface_id.rsplit("__", 1)[-1]
     return (
         f"{primary_kind or interface.kind}__{entity.semantic_id}__"

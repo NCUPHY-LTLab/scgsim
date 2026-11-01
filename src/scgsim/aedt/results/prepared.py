@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from scgsim.aedt._data import _freeze_str_keys_only, detached
+from scgsim.aedt._data import detached, freeze_str_keys_only
 from scgsim.aedt._io import file_sha256, read_json
 from scgsim.aedt.preparation.cohort import validate_geometry_source
 from scgsim.aedt.results.body_first_readback import (
@@ -60,7 +60,7 @@ class PreparedModel:
     _readback: Any
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "_readback", _freeze_str_keys_only(self._readback))
+        object.__setattr__(self, "_readback", freeze_str_keys_only(self._readback))
 
     @property
     def readback(self) -> dict[str, Any]:

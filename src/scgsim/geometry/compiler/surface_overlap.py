@@ -7,7 +7,7 @@ Does not own: sidewall or arbitrary-plane overlap, which is a separate contract
 and must fail fast before those cases are advertised as mesh-safe.
 
 Overlap is judged with gdstk booleans at a precision of 1e-9 um; an overlap
-smaller than `_BOOLEAN_AREA_EPS_UM2` (or the relative limit) is boolean
+smaller than `BOOLEAN_AREA_EPS_UM2` (or the relative limit) is boolean
 round-off, not a real overlap.
 """
 
@@ -16,11 +16,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from scgsim.geometry._primitives.entity_validation import (
-    _BOOLEAN_AREA_EPS_UM2,
-    _BOOLEAN_RELATIVE_AREA_EPS,
-)
 from scgsim.geometry.models.topology import SurfacePlanRecord
+from scgsim.geometry.primitives.entity_validation import (
+    BOOLEAN_AREA_EPS_UM2,
+    BOOLEAN_RELATIVE_AREA_EPS,
+)
 
 
 def validate_no_surface_overlap(
@@ -107,7 +107,7 @@ def _horizontal_surface_region(
     return _geometry_ref_z_um(geometry_ref), tuple(
         polygon
         for polygon in region
-        if abs(float(polygon.area())) > _BOOLEAN_AREA_EPS_UM2
+        if abs(float(polygon.area())) > BOOLEAN_AREA_EPS_UM2
     )
 
 
@@ -117,8 +117,8 @@ def _regions_overlap(left: tuple[Any, ...], right: tuple[Any, ...]) -> bool:
     overlap = gdstk.boolean(left, right, "and", precision=1e-9) or ()
     overlap_area = _region_area(overlap)
     area_limit = max(
-        _BOOLEAN_AREA_EPS_UM2,
-        _BOOLEAN_RELATIVE_AREA_EPS * min(_region_area(left), _region_area(right)),
+        BOOLEAN_AREA_EPS_UM2,
+        BOOLEAN_RELATIVE_AREA_EPS * min(_region_area(left), _region_area(right)),
     )
     return overlap_area > area_limit
 

@@ -12,7 +12,12 @@ from collections import defaultdict
 from itertools import combinations
 
 from scgsim.geometry.construction.curved_context import SlabOwnership
-from scgsim.geometry.construction.curved_kernel import _identity
+from scgsim.geometry.construction.curved_kernel import identity
+from scgsim.geometry.planning.conductors.mm_contacts import (
+    validate_volumetric_overlap_ownership,
+)
+from scgsim.geometry.primitives.constants import TOPOLOGY_EPS_UM
+from scgsim.geometry.primitives.entity_validation import resolve_contact_pad_attachment
 
 
 def build_slab_ownership(session, arrangement):
@@ -69,13 +74,6 @@ def _validate_conductor_overlaps(session, arrangement, ranges):
     """Check contact-pad attachment and overlapping-conductor ownership policy."""
     # Native shared cells establish actual XY overlap; ownership uses the
     # same explicit attachment policy as the polygon conductor path.
-    from scgsim.geometry._primitives.constants import _TOPOLOGY_EPS_UM
-    from scgsim.geometry._primitives.entity_validation import (
-        _resolve_contact_pad_attachment,
-    )
-    from scgsim.geometry.planning.mm_contacts import (
-        _validate_volumetric_overlap_ownership,
-    )
 
     membership = arrangement.membership
     cells = arrangement.cells
@@ -95,16 +93,16 @@ def _validate_conductor_overlaps(session, arrangement, ranges):
 
     for conductor in conductors:
         if conductor.part_role == "contact_pad":
-            _resolve_contact_pad_attachment(
+            resolve_contact_pad_attachment(
                 conductor, conductors, finite_overlap=finite_overlap
             )
     for lower, upper in combinations(conductors, 2):
         lower_min, lower_max = ranges[lower.semantic_id]
         upper_min, upper_max = ranges[upper.semantic_id]
-        if min(lower_max, upper_max) - max(lower_min, upper_min) <= _TOPOLOGY_EPS_UM:
+        if min(lower_max, upper_max) - max(lower_min, upper_min) <= TOPOLOGY_EPS_UM:
             continue
         if finite_overlap(lower, upper):
-            _validate_volumetric_overlap_ownership(
+            validate_volumetric_overlap_ownership(
                 lower, upper, conductors, finite_overlap=finite_overlap
             )
 
@@ -199,7 +197,7 @@ def _volume_groups(arrangement, owners, sheet_ids, ranges, z_values):
     for key in owners:
         components[find(key)].append(key)
     volume_ids = {
-        key: _identity(
+        key: identity(
             "VOL__",
             {
                 "owner": owners[key],

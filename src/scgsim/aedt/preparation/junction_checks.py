@@ -19,15 +19,15 @@ from fractions import Fraction
 from itertools import pairwise
 
 from scgsim.aedt.preparation.junction_exact import (
-    _closed_contact,
-    _covered,
-    _cross,
-    _edges,
-    _inside_ring,
-    _on,
-    _section,
+    closed_contact,
+    covered,
+    cross,
+    inside_ring,
+    on,
+    ring_edges,
+    section,
 )
-from scgsim.geometry._primitives.loops import _cancel_reversed_planar_edges
+from scgsim.geometry.primitives.loops import cancel_reversed_planar_edges
 
 
 @dataclass
@@ -80,7 +80,7 @@ class FinalModel:
                 raise ValueError(
                     "final model end lacks positive-length source-arm contact"
                 )
-            if _closed_contact([piece], other):
+            if closed_contact([piece], other):
                 raise ValueError("final cross-junction end contacts another net")
         n = 0 if end["side"] == "A" else 1
         start, finish = (c[3], c[0]) if n == 0 else (c[1], c[2])
@@ -91,8 +91,8 @@ class FinalModel:
 
 
 def _strictly_inside(point, region):
-    return _inside_ring(point, region[0]) == 1 and all(
-        _inside_ring(point, hole) == -1 for hole in region[1:]
+    return inside_ring(point, region[0]) == 1 and all(
+        inside_ring(point, hole) == -1 for hole in region[1:]
     )
 
 
@@ -104,10 +104,10 @@ def _check_central_interior_clear(c, conductors):
             any(_strictly_inside(point, (c,)) for point in region[0])
             or any(_strictly_inside(point, region) for point in (*c, midpoint))
             or any(
-                _cross(a, b, u) * _cross(a, b, v) < 0
-                and _cross(u, v, a) * _cross(u, v, b) < 0
-                for a, b in _edges(region)
-                for u, v in _edges((c,))
+                cross(a, b, u) * cross(a, b, v) < 0
+                and cross(u, v, a) * cross(u, v, b) < 0
+                for a, b in ring_edges(region)
+                for u, v in ring_edges((c,))
             )
         ):
             raise ValueError("final cross-junction PEC intersects RLC interior")
@@ -128,7 +128,7 @@ def _fraction_boundary_contact(left, right):
     def lines(regions):
         result = defaultdict(list)
         for region in regions:
-            for a, b in _edges(region):
+            for a, b in ring_edges(region):
                 if a[0] != b[0]:
                     slope = (b[1] - a[1]) / (b[0] - a[0])
                     key, axis = ("x", slope, a[1] - slope * a[0]), 0
@@ -167,19 +167,19 @@ def emitted_partition_coverage(free, parts):
     def edges(regions):
         result = []
         for region in regions:
-            for a, b in _edges(region):
+            for a, b in ring_edges(region):
                 candidates = points[
                     bisect_left(xs, min(a[0], b[0])) : bisect_right(xs, max(a[0], b[0]))
                 ]
                 ordered = sorted(
-                    (point for point in candidates if _on(point, a, b)),
+                    (point for point in candidates if on(point, a, b)),
                     key=lambda point: (
                         (point[0] - a[0]) * (b[0] - a[0])
                         + (point[1] - a[1]) * (b[1] - a[1])
                     ),
                 )
                 result.extend(pairwise(ordered))
-        return _cancel_reversed_planar_edges(result)
+        return cancel_reversed_planar_edges(result)
 
     return sorted(edges(free)) == sorted(edges(parts))
 
@@ -204,11 +204,11 @@ def _model_edge_coordinates(region, start, finish):
 
 
 def _model_edge_section(region, start, finish):
-    return _section(_model_edge_coordinates(region, start, finish), 1, 0, 0, 1)
+    return section(_model_edge_coordinates(region, start, finish), 1, 0, 0, 1)
 
 
 def _model_edge_covered(regions, start, finish):
-    return _covered(
+    return covered(
         [_model_edge_coordinates(region, start, finish) for region in regions],
         1,
         0,

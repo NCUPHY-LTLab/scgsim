@@ -16,13 +16,13 @@ from scgsim.aedt.specs.hfss import HfssDrivenSpec, HfssEigenmodeSpec
 from scgsim.aedt.specs.parse import HfssSpec
 
 
-def _export(
+def export(
     hfss: Any, run_dir: Path, spec: HfssSpec, ports: list[dict[str, Any]]
 ) -> tuple[dict[str, str], dict[str, Any]]:
     output_dir = run_dir / "results" / spec.mode
     output_dir.mkdir(parents=True, exist_ok=True)
     if isinstance(spec, HfssEigenmodeSpec):
-        return _export_eigenmode(hfss, run_dir, output_dir, spec)
+        return export_eigenmode(hfss, run_dir, output_dir, spec)
     setup_sweep = f"{spec.run_control.setup_name} : {spec.run_control.sweep_name}"
     terminal = spec.mode == "terminal"
     names = [
@@ -60,7 +60,7 @@ def _export(
     return hashes, readback
 
 
-def _export_eigenmode(
+def export_eigenmode(
     hfss: Any,
     run_dir: Path,
     output_dir: Path,

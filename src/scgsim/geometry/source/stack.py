@@ -7,12 +7,12 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from scgsim.geometry.source._normalization import (
-    _coupon_domain_bounds,
-    _finite_number,
-    _mapping_as_dict,
-    _materials,
-    _semantic_layer_records,
-    _solution_regions,
+    coupon_domain_bounds,
+    finite_number,
+    mapping_as_dict,
+    normalized_materials,
+    semantic_layer_records,
+    solution_regions,
 )
 
 
@@ -29,12 +29,12 @@ def build_component_stack(
     integration semantics. The component owns conductor identities, nets, and
     topology selectors. Geometry bounds size the coupon only.
     """
-    padding = _finite_number(coupon_padding_um, "coupon_padding_um")
+    padding = finite_number(coupon_padding_um, "coupon_padding_um")
     if padding < 0.0:
         raise ValueError("coupon_padding_um must be a finite non-negative number.")
-    bounds = _coupon_domain_bounds(component, padding)
+    bounds = coupon_domain_bounds(component, padding)
     try:
-        spec = _mapping_as_dict(
+        spec = mapping_as_dict(
             component.info["component_semantics"], "component component_semantics"
         )
     except (AttributeError, KeyError) as exc:
@@ -66,13 +66,13 @@ def build_component_stack(
     if metadata is not None and not isinstance(metadata, Mapping):
         raise TypeError("metadata must be a mapping when provided.")
 
-    materials = _materials(material_records)
-    regions = _solution_regions(levels, materials=materials, bounds=bounds)
+    materials = normalized_materials(material_records)
+    regions = solution_regions(levels, materials=materials, bounds=bounds)
     if not regions:
         raise ValueError(
             "PDK layer_stack must declare at least one included solution region."
         )
-    layers = _semantic_layer_records(
+    layers = semantic_layer_records(
         conductor_regions,
         levels=levels,
         materials=materials,

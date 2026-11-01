@@ -33,7 +33,7 @@ the v2 package and the corresponding old-to-new map.
   Q3D contract.
 - Preserve the formal `python -m scgsim.aedt.run` command as the AEDT
   transaction entrypoint. It is a supported CLI, not a legacy wrapper.
-- The AEDT producer emits `scgsim.aedt.runtime-source.v22`. The manifest
+- The AEDT producer emits `scgsim.aedt.runtime-source.v23`. The manifest
   records `schema_version`, `stage`, `modules`, `content_sha256`, and
   `revision_observation`; module bytes and digest are required while the Git
   observation may truthfully be unavailable. Its declared files are not a
@@ -130,13 +130,13 @@ module to preserve dependency direction.
 - **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.compiler.dispatch`.** Declared names: `build_route_construction_plan`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.interfaces`.** Declared names: `plan_conductor_contact_patches`, `plan_mm_contact_records`, `recognize_route_interfaces`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.surfaces`.** Declared names: `plan_route_surfaces`, `plan_surface_partitions`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.tags`.** Declared names: `plan_route_tags`. Preferred API: `scgsim.geometry.compiler`.
+- **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.context.tags`.** Declared names: `plan_route_tags`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.volumes`.** Declared names: `plan_cut_host_operations`, `plan_route_construction_bodies`, `plan_route_volumes`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.source_curves` → current defining module `scgsim.geometry.source.curves`.** Declared names: `bind_source_curves`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.stack` → current defining module `scgsim.geometry.source.stack`.** Declared names: `build_component_stack`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.summary` → current defining module `scgsim.geometry.source.summary`.** Declared names: `InputSummary`, `summarize_geometry_input`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.vacuum` → current defining module `scgsim.geometry.source.vacuum`.** Declared names: `apply_vacuum_region_to_stack`. Preferred API: `scgsim.geometry`.
-- **Baseline `scgsim.sgb.validation` → current defining module `scgsim.geometry.compiler.validation`.** Declared names: `validate_backend_tag_ledger`, `validate_curve_plan_coverage`, `validate_interface_surface_source_of_truth`, `validate_no_surface_overlap`, `validate_route_operation_coverage`, `validate_route_volume_surface_refs`, `validate_selected_route`, `validate_surface_deduplication`, `validate_surface_partition_coverage`, `validate_surface_sheet_interface_coverage`, `validate_surface_use_counts`, `validate_tag_plan_coverage`, `validate_volume_surface_closure`. Preferred API: `scgsim.geometry.compiler`.
+- **Baseline `scgsim.sgb.validation` → current defining module `scgsim.geometry.planning.validation`.** Declared names: `validate_backend_tag_ledger`, `validate_curve_plan_coverage`, `validate_interface_surface_source_of_truth`, `validate_no_surface_overlap`, `validate_route_operation_coverage`, `validate_route_volume_surface_refs`, `validate_selected_route`, `validate_surface_deduplication`, `validate_surface_partition_coverage`, `validate_surface_sheet_interface_coverage`, `validate_surface_use_counts`, `validate_tag_plan_coverage`, `validate_volume_surface_closure`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.validation` → current defining module `scgsim.geometry.source.validation`.** Declared names: `validate_geometry_input`. Preferred API: `scgsim.geometry.compiler`.
 
 
@@ -220,7 +220,7 @@ export/readback dependency becomes an explicit internal service. Visualization
 imports current PyAEDT constants from the canonical spec owner without making
 them public exports.
 
-The current producer uses runtime-source v22; its declared inventory and
+The current producer uses runtime-source v23; its declared inventory and
 content digest identify the measured modules for that source snapshot, without
 making the digest a permanent code value or claiming exhaustive transitive
 coverage. Old receipts and source schemas are not read, so no old module string

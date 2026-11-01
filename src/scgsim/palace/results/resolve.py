@@ -32,22 +32,22 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, cast
 
-from ._archive_manifest import _validate_archive_manifest
-from ._artifact_files import _read_json
+from ._archive_manifest import validate_archive_manifest
+from ._artifact_files import read_json
 from ._config_checks import (
-    _validate_config_index_correspondence,
-    _validate_config_problem,
-    _validate_route_consistency,
+    validate_config_index_correspondence,
+    validate_config_problem,
+    validate_route_consistency,
 )
-from ._expect import _expect_scalar
-from ._index_map import IndexCounts, _index_counts, _surface_mask_entries
+from ._expect import expect_scalar
+from ._index_map import IndexCounts, count_index_entries, surface_mask_entries
 from ._result_tables import (
-    _PROBLEM_FAMILIES,
-    _eigenmode_count,
-    _output_families,
-    _read_csv_table,
-    _validate_surface_mask_table,
-    _validate_table,
+    PROBLEM_FAMILIES,
+    eigenmode_count,
+    output_families,
+    read_csv_table,
+    validate_surface_mask_table,
+    validate_table,
 )
 from ._result_types import (
     PalaceCost,
@@ -58,10 +58,10 @@ from ._result_types import (
     ResolvedPalaceResult,
 )
 from ._returned_receipt import (
-    _RETURNED_RECEIPT_FILE,
-    _build_returned_receipt,
-    _validate_receipt_payload,
-    _validate_returned_state_agreement,
+    RETURNED_RECEIPT_FILE,
+    build_returned_receipt,
+    validate_receipt_payload,
+    validate_returned_state_agreement,
 )
 from ._run_documents import (
     ArchiveManifest,
@@ -72,15 +72,15 @@ from ._run_documents import (
     RunMetadata,
 )
 from ._run_identity import (
-    _validate_archive_record,
-    _validate_contract_schema,
-    _validate_execution_identity,
-    _validate_handoff_id,
-    _validate_hashes,
-    _validate_resource_identity,
-    _validate_scalar_identity,
+    validate_archive_record,
+    validate_contract_schema,
+    validate_execution_identity,
+    validate_handoff_id,
+    validate_hashes,
+    validate_resource_identity,
+    validate_scalar_identity,
 )
-from ._solver_metrics import _build_cost, _build_performance
+from ._solver_metrics import build_cost, build_performance
 
 # Files that must exist before any of them is read.
 _REQUIRED_FILES = (
@@ -118,16 +118,16 @@ def resolve_palace_result(
 
     tables = _discover_results(root, problem, index_counts, provenance.config)
 
-    returned_receipt = _build_returned_receipt(provenance.returned_receipt)
-    cost = _build_cost(provenance.palace_json)
-    performance = _build_performance(provenance.palace_json)
+    returned_receipt = build_returned_receipt(provenance.returned_receipt)
+    cost = build_cost(provenance.palace_json)
+    performance = build_performance(provenance.palace_json)
 
     return ResolvedPalaceResult(
         run_dir=root,
         problem=problem,
         route=route,
         has_returned_outputs=True,
-        status=_expect_scalar(provenance.run_metadata, "status", str),
+        status=expect_scalar(provenance.run_metadata, "status", str),
         performance=performance,
         cost=cost,
         tables=tables,
@@ -155,38 +155,38 @@ def _read_provenance(root: Path) -> PalaceProvenance:
     return PalaceProvenance(
         handoff_metadata=cast(
             HandoffMetadata,
-            _read_json(root / "metadata" / "palace_handoff_metadata.json"),
+            read_json(root / "metadata" / "palace_handoff_metadata.json"),
         ),
         run_metadata=cast(
-            RunMetadata, _read_json(root / "metadata" / "palace_run_metadata.json")
+            RunMetadata, read_json(root / "metadata" / "palace_run_metadata.json")
         ),
         resource_record=cast(
             ResourceRecord,
-            _read_json(root / "metadata" / "palace_resource_record.json"),
+            read_json(root / "metadata" / "palace_resource_record.json"),
         ),
         handoff_archive_manifest=cast(
             ArchiveManifest,
-            _read_json(root / "metadata" / "palace_handoff_archive_manifest.json"),
+            read_json(root / "metadata" / "palace_handoff_archive_manifest.json"),
         ),
-        index_map=cast(IndexMap, _read_json(root / "metadata/palace_index_map.json")),
-        mesh_manifest=_read_json(root / "metadata/mesh_manifest.json"),
-        config=_read_json(root / "config.json"),
-        palace_json=_read_json(root / "results/palace/palace.json"),
+        index_map=cast(IndexMap, read_json(root / "metadata/palace_index_map.json")),
+        mesh_manifest=read_json(root / "metadata/mesh_manifest.json"),
+        config=read_json(root / "config.json"),
+        palace_json=read_json(root / "results/palace/palace.json"),
         returned_receipt=cast(
-            ReturnedReceiptPayload, _read_json(root / _RETURNED_RECEIPT_FILE)
+            ReturnedReceiptPayload, read_json(root / RETURNED_RECEIPT_FILE)
         ),
     )
 
 
 def _read_route_and_problem(handoff_metadata: HandoffMetadata) -> tuple[str, str]:
-    route = _expect_scalar(handoff_metadata, "route", str)
-    problem = _expect_scalar(handoff_metadata, "problem", str)
+    route = expect_scalar(handoff_metadata, "route", str)
+    problem = expect_scalar(handoff_metadata, "problem", str)
 
     if route not in {"A", "B"}:
         raise ValueError(f"invalid route {route!r}; expected 'A' or 'B'.")
-    if problem not in _PROBLEM_FAMILIES:
+    if problem not in PROBLEM_FAMILIES:
         raise ValueError(
-            f"unsupported problem {problem!r}; expected one of {tuple(_PROBLEM_FAMILIES)}."
+            f"unsupported problem {problem!r}; expected one of {tuple(PROBLEM_FAMILIES)}."
         )
     return route, problem
 
@@ -200,13 +200,13 @@ def _check_metadata_headers(provenance: PalaceProvenance) -> None:
         raise ValueError("run metadata does not identify manual_handoff kind.")
     if handoff_metadata.get("kind") != "manual_handoff":
         raise ValueError("handoff metadata does not identify manual_handoff kind.")
-    _validate_contract_schema(handoff_metadata, "handoff metadata")
-    _validate_contract_schema(run_metadata, "run metadata")
-    _validate_contract_schema(resource_record, "resource record")
+    validate_contract_schema(handoff_metadata, "handoff metadata")
+    validate_contract_schema(run_metadata, "run metadata")
+    validate_contract_schema(resource_record, "resource record")
 
-    if _expect_scalar(run_metadata, "status", str, fallback="") == "":
+    if expect_scalar(run_metadata, "status", str, fallback="") == "":
         raise ValueError("run metadata status must be a non-empty string.")
-    if _expect_scalar(resource_record, "status", str, fallback="") == "":
+    if expect_scalar(resource_record, "status", str, fallback="") == "":
         raise ValueError("resource record status must be a non-empty string.")
 
 
@@ -214,10 +214,10 @@ def _check_handoff_identity(
     root: Path, provenance: PalaceProvenance, expected_handoff_id: str
 ) -> None:
     """Handoff, run and resource records are one run, and it is the expected one."""
-    _validate_scalar_identity(provenance.handoff_metadata, provenance.run_metadata)
-    _validate_execution_identity(root, provenance.handoff_metadata)
-    _validate_handoff_id(provenance.handoff_metadata, expected_handoff_id)
-    _validate_resource_identity(provenance.resource_record, provenance.handoff_metadata)
+    validate_scalar_identity(provenance.handoff_metadata, provenance.run_metadata)
+    validate_execution_identity(root, provenance.handoff_metadata)
+    validate_handoff_id(provenance.handoff_metadata, expected_handoff_id)
+    validate_resource_identity(provenance.resource_record, provenance.handoff_metadata)
 
 
 def _check_returned_receipt(
@@ -227,7 +227,7 @@ def _check_returned_receipt(
     route: str,
     problem: str,
 ) -> None:
-    _validate_receipt_payload(
+    validate_receipt_payload(
         receipt_payload=provenance.returned_receipt,
         expected_handoff_id=expected_handoff_id,
         handoff_metadata=provenance.handoff_metadata,
@@ -236,7 +236,7 @@ def _check_returned_receipt(
         route=route,
         root=root,
     )
-    _validate_returned_state_agreement(
+    validate_returned_state_agreement(
         receipt_payload=provenance.returned_receipt,
         run_metadata=provenance.run_metadata,
         resource_record=provenance.resource_record,
@@ -245,10 +245,10 @@ def _check_returned_receipt(
 
 def _check_sealed_files(root: Path, provenance: PalaceProvenance) -> None:
     """Files hashed by the metadata, and the handoff archive, are what was sealed."""
-    _validate_hashes(root, provenance.handoff_metadata, "handoff")
-    _validate_hashes(root, provenance.run_metadata, "run")
-    _validate_archive_record(root, provenance.resource_record)
-    _validate_archive_manifest(
+    validate_hashes(root, provenance.handoff_metadata, "handoff")
+    validate_hashes(root, provenance.run_metadata, "run")
+    validate_archive_record(root, provenance.resource_record)
+    validate_archive_manifest(
         root,
         provenance.handoff_archive_manifest,
         provenance.resource_record,
@@ -260,8 +260,8 @@ def _check_config_against_index_map(
     provenance: PalaceProvenance, route: str, problem: str
 ) -> IndexCounts:
     """Return the index counts, which later steps use to size the result tables."""
-    index_counts = _index_counts(provenance.index_map)
-    _validate_route_consistency(
+    index_counts = count_index_entries(provenance.index_map)
+    validate_route_consistency(
         route,
         provenance.run_metadata,
         provenance.handoff_metadata,
@@ -270,8 +270,8 @@ def _check_config_against_index_map(
         index_counts,
         problem,
     )
-    _validate_config_problem(provenance.config, problem)
-    _validate_config_index_correspondence(
+    validate_config_problem(provenance.config, problem)
+    validate_config_index_correspondence(
         provenance.config, provenance.index_map, index_counts, problem
     )
     return index_counts
@@ -280,7 +280,7 @@ def _check_config_against_index_map(
 def _load_result_family(path: Path) -> ParsedTable:
     if not path.is_file():
         raise FileNotFoundError(f"required result family is missing: {path}")
-    return _read_csv_table(path)
+    return read_csv_table(path)
 
 
 def _discover_results(
@@ -291,23 +291,23 @@ def _discover_results(
 ) -> dict[str, ParsedTable]:
     results_root = root / "results" / "palace"
     discovered: dict[str, ParsedTable] = {}
-    for family in _output_families(problem, index_counts):
+    for family in output_families(problem, index_counts):
         table = _load_result_family(results_root / f"{family}.csv")
-        _validate_table(problem, table, index_counts, config)
+        validate_table(problem, table, index_counts, config)
         discovered[family] = table
     # Masked Surface EPR adds two more tables, only when the index map has masks.
-    mask_entries = _surface_mask_entries(
-        _read_json(root / "metadata" / "palace_index_map.json")
+    mask_entries = surface_mask_entries(
+        read_json(root / "metadata" / "palace_index_map.json")
     )
     if mask_entries:
         expected_rows = (
-            _eigenmode_count(config)
+            eigenmode_count(config)
             if problem == "Eigenmode"
             else index_counts["terminal"]
         )
         for name in ("surface-mask-Q", "surface-mask-energy"):
             table = _load_result_family(results_root / f"{name}.csv")
-            _validate_surface_mask_table(
+            validate_surface_mask_table(
                 table,
                 problem=problem,
                 expected_rows=expected_rows,

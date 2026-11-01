@@ -22,14 +22,14 @@ from typing import Any
 
 from scgsim.geometry.models.input import LayoutPolygonSpec
 from scgsim.geometry.source._occurrence import (
-    _entity_from_layer_record,
-    _is_record_sequence,
-    _occurrence_ground_polygons_for_entity,
-    _occurrence_include_polygon,
-    _occurrence_polygons_for_entity,
-    _occurrence_port_polygon,
+    entity_from_layer_record,
+    is_record_sequence,
+    occurrence_ground_polygons_for_entity,
+    occurrence_include_polygon,
+    occurrence_polygons_for_entity,
+    occurrence_port_polygon,
 )
-from scgsim.geometry.source.ground import _layout_polygon_region
+from scgsim.geometry.source.ground import layout_polygon_region
 
 _DERIVED_GROUND = "die_face_minus_ground_mask"
 _GROUND_CONTRIBUTION_FIELDS = {
@@ -111,7 +111,7 @@ def _index_occurrences(
 ) -> _OccurrenceIndex:
     source_cells = {source_cell.name: source_cell for source_cell in library.cells}
     occurrences = stack_metadata.get("source_occurrences")
-    if not _is_record_sequence(occurrences):
+    if not is_record_sequence(occurrences):
         raise ValueError("GeometryPlan stack needs source occurrences")
     by_path = {row.get("path"): row for row in occurrences if isinstance(row, Mapping)}
     if len(by_path) != len(occurrences):
@@ -251,7 +251,7 @@ def _check_ground_contribution(
     if key in contribution_ids:
         raise ValueError("GeometryPlan ground contribution local ID is duplicated")
     contribution_ids.add(key)
-    expected = _occurrence_include_polygon(
+    expected = occurrence_include_polygon(
         contribution,
         cell=source_cell,
         transform=index.by_path[source_path]["transform"],
@@ -273,12 +273,12 @@ def _check_layer_polygons(  # noqa: PLR0913 - keyword-only; mirrors _check_layer
     """Compare the record's stored polygons with those re-read from the GDS."""
     geometry = record.get("geometry", {})
     selector = (
-        _occurrence_ground_polygons_for_entity
+        occurrence_ground_polygons_for_entity
         if local_ground
-        else _occurrence_polygons_for_entity
+        else occurrence_polygons_for_entity
     )
     # The entity is built first so its errors still come before a bad plane ref.
-    entity = _entity_from_layer_record(record, materials=materials)
+    entity = entity_from_layer_record(record, materials=materials)
     extra: dict[str, Any] = {}
     if local_ground:
         # A non-root ground plane is cut by the layer its plane bounds name.
@@ -310,7 +310,7 @@ def _check_port_sheet_sources(
         source_cell = index.source_cell_of(path)
         if source_cell is None:
             raise ValueError("GeometryPlan port has no recorded source occurrence")
-        expected = _occurrence_port_polygon(
+        expected = occurrence_port_polygon(
             record,
             cell=source_cell,
             transform=index.by_path[path]["transform"],
@@ -392,7 +392,7 @@ def _occurrence_transform(path: str, row: Mapping[str, Any]) -> tuple[float, ...
     """The occurrence's 2D affine transform (a, b, c, d, x, y) as finite floats."""
     raw_transform = row.get("transform")
     if (
-        not _is_record_sequence(raw_transform)
+        not is_record_sequence(raw_transform)
         or len(raw_transform) != 6
         or any(
             isinstance(value, bool)
@@ -460,7 +460,7 @@ def _validate_plan_ground_contribution_ownership(
             "source_occurrence_includes", ()
         ):
             region = contribution["polygon"]
-            included = _layout_polygon_region(
+            included = layout_polygon_region(
                 gdstk,
                 LayoutPolygonSpec(
                     polygon_id="source_ground_contribution",
@@ -480,7 +480,7 @@ def _validate_plan_ground_contribution_ownership(
                 ):
                     continue
                 for polygon in other["geometry"]["source_occurrence_polygons_um"]:
-                    claimed = _layout_polygon_region(
+                    claimed = layout_polygon_region(
                         gdstk,
                         LayoutPolygonSpec(
                             polygon_id="named_local_conductor",

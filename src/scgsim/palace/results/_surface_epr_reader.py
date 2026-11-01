@@ -17,9 +17,9 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from ._index_map import _validate_index_entries
+from ._index_map import validate_index_entries
 from ._report_types import (
-    _SURFACE_TYPES,
+    SURFACE_TYPES,
     AmrPassSnapshot,
     SurfaceEprRecord,
     SurfaceEprSeriesSnapshot,
@@ -27,9 +27,9 @@ from ._report_types import (
     SurfaceMaskEprSeriesSnapshot,
 )
 from ._result_tables import (
-    _read_csv_table,
-    _validate_surface_mask_table,
-    _validate_surface_table,
+    read_csv_table,
+    validate_surface_mask_table,
+    validate_surface_table,
 )
 
 
@@ -50,13 +50,13 @@ def _optional_identity_string(value: Any) -> str | None:
     return value
 
 
-def _read_surface_bindings(
+def read_surface_bindings(
     index_map: dict[str, Any] | None,
 ) -> tuple[dict[str, Any], ...] | None:
     if index_map is None:
         return None
     try:
-        _validate_index_entries(index_map)
+        validate_index_entries(index_map)
         entries = [
             entry
             for entry in index_map["entries"]
@@ -73,7 +73,7 @@ def _read_surface_bindings(
             face_kind = metadata.get("face_kind")
             owners = metadata.get("owner_semantic_ids")
             provenance = metadata.get("source_provenance")
-            if interface_type not in _SURFACE_TYPES:
+            if interface_type not in SURFACE_TYPES:
                 raise ValueError("surface interface_type must be MA, MS, or SA.")
             if not isinstance(surface_id, str) or not surface_id:
                 raise ValueError("surface_id must be a non-empty string.")
@@ -128,13 +128,13 @@ def _read_surface_bindings(
         return None
 
 
-def _read_surface_mask_bindings(
+def read_surface_mask_bindings(
     index_map: dict[str, Any] | None,
 ) -> tuple[dict[str, Any], ...] | None:
     if index_map is None:
         return None
     try:
-        _validate_index_entries(index_map)
+        validate_index_entries(index_map)
         bindings: list[dict[str, Any]] = []
         for entry in sorted(index_map["entries"], key=lambda item: item["index"]):
             if (
@@ -147,7 +147,7 @@ def _read_surface_mask_bindings(
             owners = metadata.get("owner_semantic_ids")
             provenance = metadata.get("source_provenance")
             if (
-                metadata.get("interface_type") not in _SURFACE_TYPES
+                metadata.get("interface_type") not in SURFACE_TYPES
                 or not isinstance(metadata.get("surface_id"), str)
                 or not metadata["surface_id"]
                 or not isinstance(metadata.get("face_kind"), str)
@@ -204,7 +204,7 @@ def _read_surface_mask_bindings(
         return None
 
 
-def _read_surface_epr(  # noqa: PLR0913 - keyword-only; each argument is a separate fact about the pass
+def read_surface_epr(  # noqa: PLR0913 - keyword-only; each argument is a separate fact about the pass
     path: Path,
     *,
     problem: str,
@@ -218,8 +218,8 @@ def _read_surface_epr(  # noqa: PLR0913 - keyword-only; each argument is a separ
     if not path.is_file() or not bindings or expected_rows <= 0:
         return None
     try:
-        table = _read_csv_table(path)
-        _validate_surface_table(
+        table = read_csv_table(path)
+        validate_surface_table(
             table,
             len(bindings) if surface_count is None else surface_count,
             expected_rows,
@@ -275,7 +275,7 @@ def _read_surface_epr(  # noqa: PLR0913 - keyword-only; each argument is a separ
         return None
 
 
-def _read_surface_mask_epr(  # noqa: PLR0913 - keyword-only; each argument is a separate fact about the pass
+def read_surface_mask_epr(  # noqa: PLR0913 - keyword-only; each argument is a separate fact about the pass
     q_path: Path,
     energy_path: Path,
     *,
@@ -294,15 +294,15 @@ def _read_surface_mask_epr(  # noqa: PLR0913 - keyword-only; each argument is a 
     ):
         return None
     try:
-        q_table = _read_csv_table(q_path)
-        energy_table = _read_csv_table(energy_path)
-        _validate_surface_mask_table(
+        q_table = read_csv_table(q_path)
+        energy_table = read_csv_table(energy_path)
+        validate_surface_mask_table(
             q_table,
             problem=problem,
             expected_rows=expected_rows,
             entries=bindings,
         )
-        _validate_surface_mask_table(
+        validate_surface_mask_table(
             energy_table,
             problem=problem,
             expected_rows=expected_rows,
@@ -343,13 +343,13 @@ def _read_surface_mask_epr(  # noqa: PLR0913 - keyword-only; each argument is a 
         return None
 
 
-def _surface_snapshots(
+def surface_snapshots(
     passes: Sequence[AmrPassSnapshot],
 ) -> tuple[SurfaceEprSeriesSnapshot, ...]:
     return tuple(snapshot for pass_ in passes for snapshot in (pass_.surface_epr or ()))
 
 
-def _surface_mask_snapshots(
+def surface_mask_snapshots(
     passes: Sequence[AmrPassSnapshot],
 ) -> tuple[SurfaceMaskEprSeriesSnapshot, ...]:
     return tuple(

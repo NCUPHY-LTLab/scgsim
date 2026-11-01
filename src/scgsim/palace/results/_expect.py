@@ -3,7 +3,7 @@
 Every field of a returned run directory is untrusted until proven otherwise, so the
 resolver reads it through these helpers. They fix which exception a bad field raises:
 ``TypeError`` for a value of the wrong type, ``ValueError`` for an empty list that must
-not be empty (``_expect_list``). Callers and tests rely on that split; it is not
+not be empty (``expect_list``). Callers and tests rely on that split; it is not
 an accident of implementation.
 """
 
@@ -13,13 +13,13 @@ from collections.abc import Mapping
 from typing import Any
 
 
-def _expect_mapping(value: Any, name: str) -> dict[str, Any]:
+def expect_mapping(value: Any, name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise TypeError(f"{name} must be a JSON object.")
     return value
 
 
-def _expect_scalar(
+def expect_scalar(
     payload: Mapping[str, Any],
     field: str,
     _type: type,
@@ -34,7 +34,7 @@ def _expect_scalar(
     return value
 
 
-def _expect_list(payload: Any, label: str, *, allow_empty: bool = False) -> list[Any]:
+def expect_list(payload: Any, label: str, *, allow_empty: bool = False) -> list[Any]:
     if not isinstance(payload, list):
         raise TypeError(f"{label} must be a list.")
     if not allow_empty and not payload:
@@ -42,7 +42,7 @@ def _expect_list(payload: Any, label: str, *, allow_empty: bool = False) -> list
     return payload
 
 
-def _expect_int(value: Any, *, optional: bool = False) -> int | None:
+def expect_int(value: Any, *, optional: bool = False) -> int | None:
     if value is None:
         if optional:
             return None
@@ -56,21 +56,21 @@ def _expect_int(value: Any, *, optional: bool = False) -> int | None:
     raise TypeError("value must be integer-compatible.")
 
 
-def _optional_dict(value: Any) -> dict[str, Any] | None:
+def optional_dict(value: Any) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def _to_float(value: Any) -> float:
+def to_float(value: Any) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError("value must be float-compatible.")
     return float(value)
 
 
-def _as_float_map(payload: Any, keys: tuple[str, ...]) -> dict[str, float | None]:
+def as_float_map(payload: Any, keys: tuple[str, ...]) -> dict[str, float | None]:
     if not isinstance(payload, dict):
         return {key: None for key in keys}
     return {
-        key: _to_float(payload.get(key))
+        key: to_float(payload.get(key))
         if isinstance(payload.get(key), (int, float))
         else None
         for key in keys

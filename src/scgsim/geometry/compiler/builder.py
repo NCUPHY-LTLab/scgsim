@@ -11,9 +11,6 @@ from pathlib import Path
 from typing import Any
 
 from scgsim.geometry.compiler.dispatch import build_route_construction_plan
-from scgsim.geometry.compiler.validation import (
-    validate_backend_tag_ledger,
-)
 from scgsim.geometry.construction.conformality import (
     assert_engine_gate_pass,
     engine_gate_volume_adjacency_conformality,
@@ -28,6 +25,9 @@ from scgsim.geometry.models.common import (
 )
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.tags import FinalPhysicalGroupRecord
+from scgsim.geometry.planning.validation import (
+    validate_backend_tag_ledger,
+)
 from scgsim.geometry.source.validation import validate_geometry_input
 
 

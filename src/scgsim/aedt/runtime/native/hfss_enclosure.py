@@ -10,13 +10,13 @@ from collections.abc import Mapping
 from typing import Any
 
 from scgsim.aedt.preparation.planar import (
-    _plain_geometry_source,
+    plain_geometry_source,
 )
 from scgsim.aedt.runtime.native.common import (
-    _native_object_boolean_property,
-    _native_object_evidence,
-    _resolve_native_assignment,
+    native_object_boolean_property,
+    native_object_evidence,
     native_object_property,
+    resolve_native_assignment,
 )
 
 
@@ -31,7 +31,7 @@ def _region_bounds(region: Any) -> tuple[float, ...]:
     return bounds
 
 
-def _verified_region_bounds(region: Any, plan: Mapping[str, Any]) -> tuple[float, ...]:
+def verified_region_bounds(region: Any, plan: Mapping[str, Any]) -> tuple[float, ...]:
     bounds = _region_bounds(region)
     loop = tuple(
         tuple(float(value) for value in point)
@@ -59,7 +59,7 @@ def _verified_region_bounds(region: Any, plan: Mapping[str, Any]) -> tuple[float
     return bounds
 
 
-def _create_epr_region(app: Any, source: Mapping[str, Any]) -> dict[str, Any]:
+def create_epr_region(app: Any, source: Mapping[str, Any]) -> dict[str, Any]:
     plan = source["native_region"]
     if app.modeler.get_object_from_name("Region") is not None:
         raise RuntimeError("new EPR model already has Region")
@@ -76,9 +76,9 @@ def _create_epr_region(app: Any, source: Mapping[str, Any]) -> dict[str, Any]:
     observed_material = native_object_property(region, "Material").strip('"')
     if observed_material.casefold() != str(plan["material_id"]).casefold():
         raise RuntimeError("native EPR Region vacuum material differs")
-    if not _native_object_boolean_property(region, "Solve Inside"):
+    if not native_object_boolean_property(region, "Solve Inside"):
         raise RuntimeError("native EPR Region must solve inside vacuum")
-    evidence = _native_object_evidence(app, "Region")
+    evidence = native_object_evidence(app, "Region")
     if evidence["native_object_type"] != "Solid":
         raise RuntimeError("native EPR Region is not solid")
     return {
@@ -89,7 +89,7 @@ def _create_epr_region(app: Any, source: Mapping[str, Any]) -> dict[str, Any]:
         "object_name": "Region",
         "padding_um": list(plan["padding_um"]),
         "native_solve_inside": True,
-        "native_bounding_box_um": list(_verified_region_bounds(region, plan)),
+        "native_bounding_box_um": list(verified_region_bounds(region, plan)),
         **evidence,
     }
 
@@ -100,7 +100,7 @@ def _enclosure_faces(app: Any, source: Mapping[str, Any]) -> dict[str, Any]:
     region = app.modeler.get_object_from_name("Region")
     if region is None:
         raise RuntimeError("native EPR Region is unavailable")
-    bounds = _verified_region_bounds(region, source["native_region"])
+    bounds = verified_region_bounds(region, source["native_region"])
     z_min, z_max = source["native_region"]["z_range_um"]
     face_records: list[dict[str, Any]] = []
     plane_labels = ("x_minus", "y_minus", "bottom", "x_plus", "y_plus", "top")
@@ -128,7 +128,7 @@ def _enclosure_faces(app: Any, source: Mapping[str, Any]) -> dict[str, Any]:
         raise RuntimeError("native closed-enclosure face selection repeats a face")
     return {
         "face_records": face_records,
-        "envelope_outer_loop_um": _plain_geometry_source(
+        "envelope_outer_loop_um": plain_geometry_source(
             source["native_region"]["envelope_outer_loop_um"]
         ),
         "z_range_um": [z_min, z_max],
@@ -161,12 +161,12 @@ def _verify_no_explicit_region_boundary(app: Any) -> None:
             raise RuntimeError(
                 f"native boundary assignment IDs are invalid for {name!r}"
             )
-        _, _, objects = _resolve_native_assignment(app, raw_ids)
+        _, _, objects = resolve_native_assignment(app, raw_ids)
         if "Region" in objects:
             raise RuntimeError(f"Region has an explicit native boundary {name!r}")
 
 
-def _implicit_closed_enclosure(app: Any, source: Mapping[str, Any]) -> dict[str, Any]:
+def implicit_closed_enclosure(app: Any, source: Mapping[str, Any]) -> dict[str, Any]:
     if source["native_region"].get("outer_boundary_policy") != "hfss_default.v1":
         raise ValueError("EPR Region boundary policy requires re-preparation")
     faces = _enclosure_faces(app, source)

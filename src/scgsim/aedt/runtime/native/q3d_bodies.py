@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from scgsim.aedt.runtime.native.common import (
-    _native_object_evidence,
+    native_object_evidence,
     native_object_property,
 )
 from scgsim.aedt.specs.q3d import Q3dBodySpec, Q3dSpec
@@ -333,7 +333,7 @@ def _read_native_body_identities(app: Any, build: _BodyBuild) -> None:
         obj = app.modeler.get_object_from_name(body.body_id)
         if obj is None:
             raise RuntimeError(f"Q3D native body is unavailable: {body.body_id!r}")
-        native = _native_object_evidence(app, body.body_id)
+        native = native_object_evidence(app, body.body_id)
         native_id = native["native_object_id"]
         if native_id <= 0 or native_id in native_ids:
             raise RuntimeError(

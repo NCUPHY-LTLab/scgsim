@@ -13,7 +13,7 @@ from scgsim.geometry.models.physical import (
 )
 
 
-def _solution_regions(
+def solution_regions(
     levels: Mapping[str, Any],
     *,
     materials: Mapping[str, Mapping[str, Any]],
@@ -66,7 +66,7 @@ def _solution_regions(
     return result
 
 
-def _semantic_layer_records(
+def semantic_layer_records(
     declarations: Sequence[Mapping[str, Any]],
     *,
     levels: Mapping[str, Any],
@@ -126,11 +126,11 @@ def _semantic_layer_records(
             raise ValueError(
                 f"semantic layer {semantic_id!r} host {host!r} is not a solution region."
             )
-        layer, datatype = _gds_layer(declaration["gds_layer"], semantic_id)
-        pdk_geometry = _mapping_as_dict(
+        layer, datatype = gds_layer(declaration["gds_layer"], semantic_id)
+        pdk_geometry = mapping_as_dict(
             level_info.get("geometry", {}), f"PDK level {level_name!r} geometry"
         )
-        component_geometry = _mapping_as_dict(
+        component_geometry = mapping_as_dict(
             declaration.get("geometry", {}), f"{semantic_id!r} geometry"
         )
         unknown_geometry = set(component_geometry) - {
@@ -149,7 +149,7 @@ def _semantic_layer_records(
             "geometry_source"
         ] != pdk_geometry.get("geometry_source"):
             pdk_geometry = {}
-        component_metadata = _mapping_as_dict(
+        component_metadata = mapping_as_dict(
             declaration.get("metadata", {}), f"{semantic_id!r} metadata"
         )
         part_role = _identifier(
@@ -195,7 +195,7 @@ def _semantic_layer_records(
             ),
         }
         if "ground_bump_fill_spec" in level_info:
-            record["metadata"]["ground_bump_fill_spec"] = _mapping_as_dict(
+            record["metadata"]["ground_bump_fill_spec"] = mapping_as_dict(
                 level_info["ground_bump_fill_spec"],
                 f"PDK level {level_name!r} ground_bump_fill_spec",
             )
@@ -203,7 +203,7 @@ def _semantic_layer_records(
     return result
 
 
-def _coupon_domain_bounds(component: Any, padding_um: float) -> dict[str, float]:
+def coupon_domain_bounds(component: Any, padding_um: float) -> dict[str, float]:
     try:
         bbox = component.dbbox()
     except AttributeError as exc:
@@ -242,14 +242,14 @@ def _level(levels: Mapping[str, Any], name: Any) -> Any:
 
 
 def _level_info(level: Any, name: Any) -> dict[str, Any]:
-    return _mapping_as_dict(getattr(level, "info", None), f"PDK level {name!r} info")
+    return mapping_as_dict(getattr(level, "info", None), f"PDK level {name!r} info")
 
 
 def _level_facts(level: Any, name: Any) -> tuple[str, float, float, int]:
     material_id = _identifier(
         getattr(level, "material", None), f"level {name!r} material"
     )
-    z_um = _finite_number(getattr(level, "zmin", None), f"level {name!r} zmin")
+    z_um = finite_number(getattr(level, "zmin", None), f"level {name!r} zmin")
     thickness_um = _positive_number(
         getattr(level, "thickness", None), f"level {name!r} thickness"
     )
@@ -269,7 +269,7 @@ def _require_material(
         )
 
 
-def _gds_layer(value: Any, semantic_id: str) -> tuple[int, int]:
+def gds_layer(value: Any, semantic_id: str) -> tuple[int, int]:
     if (
         isinstance(value, str | bytes)
         or not isinstance(value, Sequence)
@@ -311,7 +311,7 @@ def _physical_declaration(
     return declaration.to_payload()
 
 
-def _mapping_as_dict(value: Any, name: str) -> dict[str, Any]:
+def mapping_as_dict(value: Any, name: str) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         raise TypeError(f"{name} must be a mapping.")
     return dict(value)
@@ -323,7 +323,7 @@ def _identifier(value: Any, name: str) -> str:
     return value
 
 
-def _finite_number(value: Any, name: str) -> float:
+def finite_number(value: Any, name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be a finite number.")
     result = float(value)
@@ -333,13 +333,15 @@ def _finite_number(value: Any, name: str) -> float:
 
 
 def _positive_number(value: Any, name: str) -> float:
-    result = _finite_number(value, name)
+    result = finite_number(value, name)
     if result <= 0.0:
         raise ValueError(f"{name} must be a finite positive number.")
     return result
 
 
-def _materials(records: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+def normalized_materials(
+    records: Mapping[str, Mapping[str, Any]],
+) -> dict[str, dict[str, Any]]:
     """Normalize material records with the established stack-material mapping."""
     if not isinstance(records, Mapping):
         raise TypeError("material_records must be a mapping.")

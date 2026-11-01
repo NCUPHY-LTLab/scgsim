@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from .._files import sha256_file
-from ._expect import _expect_int, _expect_scalar
+from ._expect import expect_int, expect_scalar
 
 # (size in bytes, SHA-256 hex digest), or (None, None) for a file that is absent.
 HashEntry = tuple[int | None, str | None]
@@ -27,7 +27,7 @@ class HashRecord(TypedDict):
     sha256: str
 
 
-def _read_json(path: Path) -> dict[str, Any]:
+def read_json(path: Path) -> dict[str, Any]:
     payload = path.read_text(encoding="utf-8")
     parsed = json.loads(payload)
     if not isinstance(parsed, dict):
@@ -37,7 +37,7 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 # Paths named inside metadata are untrusted text. Resolving before the containment
 # test also rejects symlinks that point out of the run directory.
-def _confined_path(root: Path, relative: str) -> Path:
+def confined_path(root: Path, relative: str) -> Path:
     if not isinstance(relative, str) or not relative or Path(relative).is_absolute():
         raise ValueError("artifact paths must be non-empty relative paths.")
     candidate = (root / relative).resolve()
@@ -47,7 +47,7 @@ def _confined_path(root: Path, relative: str) -> Path:
     return candidate
 
 
-def _extract_hash_map(
+def extract_hash_map(
     entries: list[HashRecord],
     label: str = "hash entries",
     *,
@@ -57,15 +57,15 @@ def _extract_hash_map(
     for entry in entries:
         if not isinstance(entry, dict):
             raise TypeError(f"{label} must be mappings.")
-        path = _expect_scalar(entry, "path", str)
+        path = expect_scalar(entry, "path", str)
         if path in result:
             raise ValueError(f"{label} contains duplicate path {path!r}.")
         if require_optional_values:
-            bytes_value = _expect_int(entry.get("bytes"), optional=True)
-            sha_value = _expect_scalar(entry, "sha256", str, fallback=None)
+            bytes_value = expect_int(entry.get("bytes"), optional=True)
+            sha_value = expect_scalar(entry, "sha256", str, fallback=None)
         else:
-            bytes_value = _expect_int(entry.get("bytes"))
-            sha_value = _expect_scalar(entry, "sha256", str)
+            bytes_value = expect_int(entry.get("bytes"))
+            sha_value = expect_scalar(entry, "sha256", str)
         result[path] = (
             bytes_value,
             sha_value,
@@ -73,12 +73,12 @@ def _extract_hash_map(
     return result
 
 
-def _compute_hash_entry(path: Path) -> HashEntry:
+def compute_hash_entry(path: Path) -> HashEntry:
     if not path.is_file():
         return None, None
     return path.stat().st_size, sha256_file(path)
 
 
-def _compute_input_hash_entry(root: Path, rel: str) -> HashEntry:
-    path = _confined_path(root, rel)
-    return _compute_hash_entry(path)
+def compute_input_hash_entry(root: Path, rel: str) -> HashEntry:
+    path = confined_path(root, rel)
+    return compute_hash_entry(path)

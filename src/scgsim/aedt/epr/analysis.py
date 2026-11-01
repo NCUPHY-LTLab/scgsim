@@ -29,11 +29,11 @@ from typing import Any, NamedTuple
 from scgsim.aedt._data import (
     detached,
 )
-from scgsim.aedt.epr.selection import _exact_mapping, _finite, _quantity
+from scgsim.aedt.epr.selection import exact_mapping, finite, quantity
 from scgsim.aedt.epr.surface_epr import (
-    _native_surface_reference_rows,
-    _surface_contributions,
-    _SurfaceIntegrals,
+    SurfaceIntegrals,
+    native_surface_reference_rows,
+    surface_contributions,
 )
 from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
@@ -63,35 +63,35 @@ def combine_epr_mode(
     """
 
     _check_prepared_and_request(prepared, request)
-    raw = _exact_mapping(raw, "raw EPR mode")
-    frequency_hz = _quantity(raw.get("frequency_hz"), "frequency_hz", "Hz")
+    raw = exact_mapping(raw, "raw EPR mode")
+    frequency_hz = quantity(raw.get("frequency_hz"), "frequency_hz", "Hz")
     if frequency_hz <= 0.0:
         raise ValueError("frequency_hz must be > 0")
     domain_integrals = _DomainIntegrals(
-        electric=_exact_mapping(
+        electric=exact_mapping(
             raw.get("electric_domain_integrals_v2_m"),
             "electric_domain_integrals_v2_m",
         ),
-        effective_volumes=_exact_mapping(
+        effective_volumes=exact_mapping(
             raw.get("effective_domain_volumes_m3"), "effective_domain_volumes_m3"
         ),
-        magnetic=_exact_mapping(
+        magnetic=exact_mapping(
             raw.get("magnetic_domain_integrals_a2_m"),
             "magnetic_domain_integrals_a2_m",
         ),
-        relative_permeability=_exact_mapping(
+        relative_permeability=exact_mapping(
             raw.get("relative_permeability"), "relative_permeability"
         ),
     )
-    surface = _SurfaceIntegrals(
-        _exact_mapping(raw.get("surface_integrals_v2"), "surface_integrals_v2"),
-        _exact_mapping(raw.get("masked_areas_m2"), "masked_areas_m2"),
+    surface = SurfaceIntegrals(
+        exact_mapping(raw.get("surface_integrals_v2"), "surface_integrals_v2"),
+        exact_mapping(raw.get("masked_areas_m2"), "masked_areas_m2"),
     )
-    junction = _exact_mapping(
+    junction = exact_mapping(
         raw.get("junction_integrals_v_m"), "junction_integrals_v_m"
     )
 
-    _, materials, domains = _epr_domain_context(prepared)
+    _, materials, domains = epr_domain_context(prepared)
     domain_integrals.require_cover(domains)
     electric_energy_j, magnetic_energy_j, electric_rows = _domain_energies(
         materials, domains, domain_integrals
@@ -124,10 +124,10 @@ def combine_epr_mode(
         if row["junction_id"] in selected_junctions
     ]
 
-    granularity, surface_rows = _surface_contributions(
+    granularity, surface_rows = surface_contributions(
         prepared, raw, surface, request, normalization_j
     )
-    native_surface_references = _native_surface_reference_rows(prepared, raw, request)
+    native_surface_references = native_surface_reference_rows(prepared, raw, request)
 
     selected_domains = (
         set(domains)
@@ -171,20 +171,20 @@ def combine_surface_epr_mode(
     """
 
     _check_prepared_and_request(prepared, request)
-    raw = _exact_mapping(raw, "raw EPR mode")
-    electric = _exact_mapping(
+    raw = exact_mapping(raw, "raw EPR mode")
+    electric = exact_mapping(
         raw.get("electric_domain_integrals_v2_m"),
         "electric_domain_integrals_v2_m",
     )
-    surface = _SurfaceIntegrals(
-        _exact_mapping(raw.get("surface_integrals_v2"), "surface_integrals_v2"),
-        _exact_mapping(raw.get("masked_areas_m2"), "masked_areas_m2"),
+    surface = SurfaceIntegrals(
+        exact_mapping(raw.get("surface_integrals_v2"), "surface_integrals_v2"),
+        exact_mapping(raw.get("masked_areas_m2"), "masked_areas_m2"),
     )
-    junction = _exact_mapping(
+    junction = exact_mapping(
         raw.get("junction_integrals_v_m"), "junction_integrals_v_m"
     )
 
-    _, materials, domains = _epr_domain_context(prepared)
+    _, materials, domains = epr_domain_context(prepared)
     if set(electric) != set(domains):
         raise ValueError(
             "electric domain integrals must cover every prepared solution domain"
@@ -204,14 +204,14 @@ def combine_surface_epr_mode(
         and not set(request.bulk_domain_ids) <= set(domains)
     ):
         raise ValueError("EPR request selects an unknown bulk domain")
-    _, surface_rows = _surface_contributions(
+    _, surface_rows = surface_contributions(
         prepared, raw, surface, request, normalization_j
     )
     result = {
         "normalization_energy_j": normalization_j,
         "surface_contributions": surface_rows,
     }
-    native_surface_references = _native_surface_reference_rows(prepared, raw, request)
+    native_surface_references = native_surface_reference_rows(prepared, raw, request)
     if native_surface_references is not None:
         result["native_surface_references"] = native_surface_references
     return result
@@ -254,7 +254,7 @@ class _DomainIntegrals(NamedTuple):
             )
 
 
-def _epr_domain_context(
+def epr_domain_context(
     prepared: PreparedPlanarGeometry,
 ) -> tuple[dict[str, Any], Mapping[str, Any], dict[str, Any]]:
     """Return (source, materials, domains) for the energy sums.
@@ -265,16 +265,16 @@ def _epr_domain_context(
     """
 
     source = detached(prepared.source)
-    materials = _exact_mapping(source["materials"], "prepared materials")
+    materials = exact_mapping(source["materials"], "prepared materials")
     domains = {item["semantic_id"]: item for item in source["solution_regions"]}
     native_region = source.get("native_region")
     if native_region is not None:
-        native_region = _exact_mapping(native_region, "native Region mapping")
+        native_region = exact_mapping(native_region, "native Region mapping")
         auto_vacuum_ids = {
             domain_id
             for domain_id, domain in domains.items()
             if domain["material_kind"] == "vacuum"
-            and _exact_mapping(
+            and exact_mapping(
                 domain.get("metadata", {}),
                 f"solution domain {domain_id!r} metadata",
             ).get("is_auto_vacuum_region")
@@ -320,17 +320,17 @@ def _domain_energies(
         epsilon_r, integral, energy = _electric_domain_energy(
             materials, domain_id, domain, integrals.electric
         )
-        magnetic_integral = _quantity(
+        magnetic_integral = quantity(
             integrals.magnetic[domain_id], f"magnetic integral {domain_id!r}", "A^2*m"
         )
-        permeability_r = _quantity(
+        permeability_r = quantity(
             integrals.relative_permeability[domain_id],
             f"relative permeability {domain_id!r}",
             "1",
         )
         if permeability_r <= 0.0:
             raise ValueError("relative permeability must be > 0")
-        effective_volume = _quantity(
+        effective_volume = quantity(
             integrals.effective_volumes[domain_id],
             f"effective volume {domain_id!r}",
             "m^3",
@@ -362,24 +362,24 @@ def _electric_domain_energy(
 ) -> tuple[float, float, float]:
     """Return (eps_r, integral |E|^2 dV, U_E) for one domain."""
 
-    material = _exact_mapping(
+    material = exact_mapping(
         materials.get(domain["material_id"]), f"material {domain['material_id']!r}"
     )
     if "permittivity" not in material:
         raise ValueError(
             f"material {domain['material_id']!r} lacks relative permittivity"
         )
-    epsilon_r = _finite(material["permittivity"], "relative permittivity")
+    epsilon_r = finite(material["permittivity"], "relative permittivity")
     if epsilon_r <= 0.0:
         raise ValueError("relative permittivity must be > 0")
-    integral = _quantity(
+    integral = quantity(
         electric[domain_id], f"electric integral {domain_id!r}", "V^2*m"
     )
     energy = _EPSILON_0_F_PER_M * epsilon_r * integral / 2.0
     return epsilon_r, integral, energy
 
 
-def _electric_domain_energy_coefficient(relative_permittivity: float) -> float:
+def electric_domain_energy_coefficient(relative_permittivity: float) -> float:
     """eps0 * eps_r / 2: multiplies integral |E|^2 dV to give a domain's U_E."""
 
     return _EPSILON_0_F_PER_M * relative_permittivity / 2.0
@@ -388,7 +388,7 @@ def _electric_domain_energy_coefficient(relative_permittivity: float) -> float:
 # --- Junctions and normalization ---------------------------------------------
 
 
-def _junction_capacitive_energy_coefficient(
+def junction_capacitive_energy_coefficient(
     capacitance_f: float, width_um: float
 ) -> float:
     """C / (2 w^2): multiplies |integral E.l dA|^2 to give a junction's U_C.
@@ -418,11 +418,11 @@ def _junction_capacitive_energies(
     rows: list[dict[str, Any]] = []
     capacitive_energy_j = 0.0
     for junction_id, spec in junction_by_id.items():
-        value = _exact_mapping(junction[junction_id], f"junction {junction_id!r}")
-        real = _quantity(
+        value = exact_mapping(junction[junction_id], f"junction {junction_id!r}")
+        real = quantity(
             value.get("real"), "junction real integral", "V*m", nonnegative=False
         )
-        imag = _quantity(
+        imag = quantity(
             value.get("imag"), "junction imaginary integral", "V*m", nonnegative=False
         )
         voltage = complex(real, imag) / (spec.width_um * 1e-6)

@@ -14,20 +14,20 @@ from dataclasses import dataclass
 from typing import Any
 
 from scgsim.aedt.epr.analysis import combine_epr_mode
-from scgsim.aedt.epr.cache import _cache_intrinsics
+from scgsim.aedt.epr.cache import cache_intrinsics
 from scgsim.aedt.epr.integrals import (
-    _SURFACE_ANALYSIS_SCOPE,
-    _attach_saved_native_surface_membership,
-    _canonical_integral,
-    _empty_raw_integrals,
-    _integral_target,
-    _purpose_unit,
-    _store_integral,
+    SURFACE_ANALYSIS_SCOPE,
+    attach_saved_native_surface_membership,
+    canonical_integral,
+    empty_raw_integrals,
+    integral_target,
+    purpose_unit,
+    store_integral,
 )
 from scgsim.aedt.epr.models import EprResult
 from scgsim.aedt.runtime.families.hfss_body_eigenmode import (
-    _solution_trace,
     read_body_eigenmode_history,
+    solution_trace,
 )
 from scgsim.aedt.specs.hfss_prepared import HfssEprSpec
 
@@ -146,7 +146,7 @@ def _trace_for_cache_context(
     }
 
 
-def _adaptive_epr_result(
+def adaptive_epr_result(
     spec: HfssEprSpec,
     history: dict[str, Any],
     convergence: dict[str, Any],
@@ -185,7 +185,7 @@ def _adaptive_epr_result(
         provenance={
             "model_source_sha256": spec.geometry.model_sha256,
             "analysis_source_sha256": spec.geometry.source_sha256,
-            "surface_analysis_scope": _SURFACE_ANALYSIS_SCOPE,
+            "surface_analysis_scope": SURFACE_ANALYSIS_SCOPE,
             "solver_last_completed_pass": convergence["final_pass"],
             "requested_modes": list(selected_modes),
             "cache_status": cache["status"],
@@ -290,12 +290,12 @@ def _pass_row(
         "unverified_cache_context_titles": invalid_context,
         "frequency_native_unit": series.frequency_trace["unit"],
     }
-    raw = _empty_raw_integrals()
+    raw = empty_raw_integrals()
     integral_evidence, unit_mismatches = _store_pass_integrals(raw, series, pass_id)
     row["raw_integrals"] = raw
     row["raw_integral_evidence"] = integral_evidence
     if native_surface_references:
-        _attach_saved_native_surface_membership(raw, row, native_surface_references)
+        attach_saved_native_surface_membership(raw, row, native_surface_references)
     if unit_mismatches:
         row["unit_mismatches"] = unit_mismatches
     frequency_hz = _pass_frequency_hz(row, series, pass_id)
@@ -310,7 +310,7 @@ def _pass_row(
         # combine_epr_mode adds its own `native_surface_references` rows to `row`;
         # the saved face membership belongs on those too.
         if native_surface_references:
-            _attach_saved_native_surface_membership(raw, row, native_surface_references)
+            attach_saved_native_surface_membership(raw, row, native_surface_references)
         row["status"] = "complete"
     except (TypeError, ValueError, RuntimeError) as exc:
         row["combination_error"] = f"{type(exc).__name__}: {exc}"
@@ -331,9 +331,9 @@ def _store_pass_integrals(
             continue
         native_unit = series.native_units[title]
         context = series.item_contexts[title]
-        target = _integral_target(item["purpose"], item["selection"])
+        target = integral_target(item["purpose"], item["selection"])
         try:
-            value, unit_evidence = _canonical_integral(
+            value, unit_evidence = canonical_integral(
                 {"value": values[pass_id], "unit": native_unit},
                 target=target,
                 purpose=item["purpose"],
@@ -343,7 +343,7 @@ def _store_pass_integrals(
                 {
                     "title": title,
                     "native_unit": native_unit,
-                    "expected_unit": _purpose_unit(target.kind),
+                    "expected_unit": purpose_unit(target.kind),
                     "error": str(exc),
                 }
             )
@@ -356,7 +356,7 @@ def _store_pass_integrals(
                 **unit_evidence,
             }
         )
-        _store_integral(
+        store_integral(
             raw,
             target=target,
             value=value,
@@ -430,7 +430,7 @@ class _NativeCacheScope:
     quantities: list[str]
 
 
-def _adaptive_mode_history(
+def adaptive_mode_history(
     app: Any,
     spec: HfssEprSpec,
     cache_items: list[dict[str, Any]],
@@ -541,9 +541,7 @@ def _query_cache_item(
         query["error"] = "persisted cache item expression/context differs"
         return None
     query["persisted_binding"] = "exact"
-    if item["intrinsics"] != _cache_intrinsics(
-        spec.run_control.num_modes, item["mode"]
-    ):
+    if item["intrinsics"] != cache_intrinsics(spec.run_control.num_modes, item["mode"]):
         query["error"] = "cache item is not the complete one-hot context"
         return None
     expected_quantity = f"ExprCache({persisted['title']})"
@@ -579,7 +577,7 @@ def _query_cache_item(
         if returned != [quantity]:
             raise RuntimeError("native scoped cache quantity differs")
         cached.primary_sweep = "Pass"
-        trace = _solution_trace(cached, quantity)
+        trace = solution_trace(cached, quantity)
         query["status"] = "reported"
     except Exception as exc:  # noqa: BLE001 -- retain per-item partial history.
         query["error"] = f"{type(exc).__name__}: {exc}"

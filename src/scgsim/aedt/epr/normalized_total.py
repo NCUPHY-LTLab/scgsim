@@ -16,12 +16,12 @@ from __future__ import annotations
 from typing import Any
 
 from scgsim.aedt.epr.analysis import (
-    _electric_domain_energy_coefficient,
-    _epr_domain_context,
-    _junction_capacitive_energy_coefficient,
+    electric_domain_energy_coefficient,
+    epr_domain_context,
+    junction_capacitive_energy_coefficient,
 )
 from scgsim.aedt.epr.selection import surface_integral_groups
-from scgsim.aedt.epr.surface_epr import _surface_energy_coefficients
+from scgsim.aedt.epr.surface_epr import surface_energy_coefficients
 from scgsim.aedt.specs.epr import NormalizedSurfaceEprTotal
 from scgsim.aedt.specs.hfss_prepared import HfssEprSpec
 
@@ -50,7 +50,7 @@ def _expression_name(
     return str(matches[0]["name"])
 
 
-def _normalized_surface_total_operations(
+def normalized_surface_total_operations(
     spec: HfssEprSpec,
     expressions: list[dict[str, Any]],
     target: NormalizedSurfaceEprTotal,
@@ -89,7 +89,7 @@ def _surface_numerator_operations(
 
     numerator_terms: list[tuple[str, float]] = []
     for group in groups:
-        normal_coefficient, tangential_coefficient = _surface_energy_coefficients(
+        normal_coefficient, tangential_coefficient = surface_energy_coefficients(
             group["interface_kind"],
             float(group["film_thickness_m"]),
             float(group["film_relative_permittivity"]),
@@ -130,11 +130,11 @@ def _energy_denominator_operations(
 ) -> list[str]:
     """Electric energy of every domain plus the junctions' capacitive energy."""
 
-    _, materials, domains = _epr_domain_context(spec.geometry)
+    _, materials, domains = epr_domain_context(spec.geometry)
     denominator_terms: list[list[str]] = []
     for domain_id, domain in domains.items():
         material = materials[domain["material_id"]]
-        coefficient = _electric_domain_energy_coefficient(
+        coefficient = electric_domain_energy_coefficient(
             float(material["permittivity"])
         )
         name = _expression_name(
@@ -152,7 +152,7 @@ def _energy_denominator_operations(
             ]
         )
     for junction in spec.geometry.junctions:
-        coefficient = _junction_capacitive_energy_coefficient(
+        coefficient = junction_capacitive_energy_coefficient(
             junction.capacitance_f, junction.width_um
         )
         if coefficient == 0.0:

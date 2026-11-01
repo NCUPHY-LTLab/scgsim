@@ -6,9 +6,44 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from scgsim.geometry._primitives.entities import _component_metadata
 from scgsim.geometry.compiler.surface_overlap import validate_no_surface_overlap
-from scgsim.geometry.compiler.validation import (
+from scgsim.geometry.models.common import RouteLiteral
+from scgsim.geometry.models.construction import (
+    ConstructionPlanRecord,
+    RouteABConstructionPlanRecord,
+)
+from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.planning.conductors.contact_patches import (
+    plan_conductor_contact_patches,
+)
+from scgsim.geometry.planning.conductors.mm_contacts import plan_mm_contact_records
+from scgsim.geometry.planning.context.evidence import build_semantic_evidence_facade
+from scgsim.geometry.planning.context.representation import (
+    project_native_route_representations,
+)
+from scgsim.geometry.planning.context.tags import plan_route_tags
+from scgsim.geometry.planning.context.topology import plan_canonical_topology
+from scgsim.geometry.planning.domain.boundaries import (
+    merge_solution_sidewall_interfaces,
+    reconcile_solution_domain_boundaries,
+)
+from scgsim.geometry.planning.interfaces import (
+    complete_interface_plan_from_surfaces,
+    recognize_route_interfaces,
+)
+from scgsim.geometry.planning.ports.lowering import lower_port_sheet_regions
+from scgsim.geometry.planning.ports.route_b import (
+    bind_route_b_port_volume_plans,
+    validate_route_b_port_sheet_sidewall_topology,
+)
+from scgsim.geometry.planning.solutions.auto_vacuum import (
+    prepare_auto_vacuum_solution_regions,
+)
+from scgsim.geometry.planning.surfaces import (
+    plan_route_surfaces,
+    plan_surface_partitions,
+)
+from scgsim.geometry.planning.validation import (
     validate_curve_plan_coverage,
     validate_interface_surface_source_of_truth,
     validate_route_operation_coverage,
@@ -21,42 +56,13 @@ from scgsim.geometry.compiler.validation import (
     validate_tag_plan_coverage,
     validate_volume_surface_closure,
 )
-from scgsim.geometry.models.common import RouteLiteral
-from scgsim.geometry.models.construction import (
-    ConstructionPlanRecord,
-    RouteABConstructionPlanRecord,
-)
-from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.planning.auto_vacuum import _prepare_auto_vacuum_solution_regions
-from scgsim.geometry.planning.contact_patches import plan_conductor_contact_patches
-from scgsim.geometry.planning.evidence import build_semantic_evidence_facade
-from scgsim.geometry.planning.interfaces import (
-    complete_interface_plan_from_surfaces,
-    recognize_route_interfaces,
-)
-from scgsim.geometry.planning.mm_contacts import plan_mm_contact_records
-from scgsim.geometry.planning.port_sheets_route_b import (
-    _bind_route_b_port_volume_plans,
-    _validate_route_b_port_sheet_sidewall_topology,
-)
-from scgsim.geometry.planning.ports import _lower_port_sheet_regions
-from scgsim.geometry.planning.representation import project_native_route_representations
-from scgsim.geometry.planning.solution_boundaries import (
-    _merge_solution_sidewall_interfaces,
-    _reconcile_solution_domain_boundaries,
-)
-from scgsim.geometry.planning.surfaces import (
-    plan_route_surfaces,
-    plan_surface_partitions,
-)
-from scgsim.geometry.planning.tags import plan_route_tags
-from scgsim.geometry.planning.topology import plan_canonical_topology
 from scgsim.geometry.planning.volumes import (
-    _reconcile_construction_body_surface_ids,
     plan_cut_host_operations,
     plan_route_construction_bodies,
     plan_route_volumes,
+    reconcile_construction_body_surface_ids,
 )
+from scgsim.geometry.primitives.entities import component_metadata
 
 
 def build_route_construction_plan(
@@ -143,7 +149,7 @@ def _plan_interfaces(state: _PlanState) -> None:
     """Validate the route, recognize interfaces, plan contact patches and MM contacts."""
     route = state.route
     context = state.representation_context
-    state.build_input = _prepare_auto_vacuum_solution_regions(
+    state.build_input = prepare_auto_vacuum_solution_regions(
         state.build_input, route=route, representation_context=context
     )
     build_input = state.build_input
@@ -231,7 +237,7 @@ def _plan_surfaces(state: _PlanState) -> None:
     state.surfaces = _timed(
         timings,
         "reconcile_solution_domain_boundaries",
-        lambda: _reconcile_solution_domain_boundaries(
+        lambda: reconcile_solution_domain_boundaries(
             build_input,
             surfaces=state.surfaces,
         ),
@@ -240,7 +246,7 @@ def _plan_surfaces(state: _PlanState) -> None:
         state.surfaces = _timed(
             timings,
             "lower_port_sheet_regions",
-            lambda: _lower_port_sheet_regions(
+            lambda: lower_port_sheet_regions(
                 build_input,
                 route=route,
                 mm_contacts=state.mm_contacts,
@@ -259,7 +265,7 @@ def _plan_surfaces(state: _PlanState) -> None:
     state.surfaces = _timed(
         timings,
         "merge_solution_sidewall_interfaces",
-        lambda: _merge_solution_sidewall_interfaces(
+        lambda: merge_solution_sidewall_interfaces(
             build_input,
             surfaces=state.surfaces,
             semantic_facts=state.semantic_facts,
@@ -287,7 +293,7 @@ def _plan_topology(state: _PlanState) -> None:
     _timed(
         timings,
         "validate_route_b_port_sheet_sidewall_topology",
-        lambda: _validate_route_b_port_sheet_sidewall_topology(
+        lambda: validate_route_b_port_sheet_sidewall_topology(
             route=route,
             points=state.points,
             curves=state.curves,
@@ -332,7 +338,7 @@ def _plan_volumes(state: _PlanState) -> None:
         ),
     )
     if route == "B":
-        state.surfaces = _bind_route_b_port_volume_plans(
+        state.surfaces = bind_route_b_port_volume_plans(
             state.build_input, state.surfaces, state.volumes
         )
     _timed(
@@ -362,7 +368,7 @@ def _plan_cuts_and_tags(state: _PlanState) -> None:
     """Plan cut operations and physical tags, then run the final coverage checks."""
     route = state.route
     timings = state.timings
-    state.construction_bodies = _reconcile_construction_body_surface_ids(
+    state.construction_bodies = reconcile_construction_body_surface_ids(
         state.construction_bodies,
         surfaces=state.surfaces,
     )
@@ -452,7 +458,7 @@ def _assemble_plan(state: _PlanState) -> ConstructionPlanRecord:
             },
             "timings": state.timings,
             **(
-                {"conductor_components": _component_metadata(state.mm_contacts)}
+                {"conductor_components": component_metadata(state.mm_contacts)}
                 if state.is_route_ab
                 else {}
             ),

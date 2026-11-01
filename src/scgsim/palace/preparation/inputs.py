@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 
-def _non_negative_number(value: Any, name: str) -> float:
+def non_negative_number(value: Any, name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be a finite non-negative number.")
     result = float(value)
@@ -22,7 +22,7 @@ def _non_negative_number(value: Any, name: str) -> float:
     return result
 
 
-def _load_stack(stack: Mapping[str, Any] | str | Path) -> Mapping[str, Any]:
+def load_stack(stack: Mapping[str, Any] | str | Path) -> Mapping[str, Any]:
     if isinstance(stack, Mapping):
         return dict(stack)
     if isinstance(stack, Path):
@@ -53,7 +53,7 @@ def _load_stack(stack: Mapping[str, Any] | str | Path) -> Mapping[str, Any]:
     return dict(payload)
 
 
-def _validate_stack_material_kinds(
+def validate_stack_material_kinds(
     stack: Mapping[str, Any], materials: Mapping[str, Mapping[str, Any]]
 ) -> None:
     def material_kind(material_id: Any, owner: str) -> str:
@@ -89,4 +89,4 @@ def _validate_stack_material_kinds(
             raise ValueError("metal layer material must have conductor kind.")
 
 
-__all__ = ["_load_stack", "_non_negative_number", "_validate_stack_material_kinds"]
+__all__ = ["load_stack", "non_negative_number", "validate_stack_material_kinds"]

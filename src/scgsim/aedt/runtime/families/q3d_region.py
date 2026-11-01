@@ -205,7 +205,7 @@ def _same_q3d_bounds(observed: Any, expected: list[float]) -> bool:
     )
 
 
-def _seal_q3d_region(app: Any, spec: Q3dSpec) -> dict[str, Any]:
+def seal_q3d_region(app: Any, spec: Q3dSpec) -> dict[str, Any]:
     """Replace the Region with six PEC sheets on its faces, grounded as one net.
 
     The six sheets are created while the Region is deleted, then a zero-padding
@@ -366,7 +366,7 @@ def _assign_region_thin_conductors(
     return records
 
 
-def _read_q3d_region_ground(
+def read_q3d_region_ground(
     app: Any, spec: Q3dSpec, region_record: dict[str, Any]
 ) -> dict[str, Any]:
     evidence = region_record.get("grounded_region")

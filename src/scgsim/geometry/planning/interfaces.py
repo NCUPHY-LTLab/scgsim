@@ -11,16 +11,16 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, NamedTuple
 
-from scgsim.geometry._primitives.constants import _INTERFACE_KIND_ORDER
-from scgsim.geometry._primitives.entities import _intent_supports_route
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.models.topology import InterfacePlanRecord, SurfacePlanRecord
-from scgsim.geometry.planning.topology import (
-    _surface_interface_record_owners,
-    _surface_owner_ids,
+from scgsim.geometry.planning.context.topology import (
+    surface_interface_record_owners,
+    surface_owner_ids,
 )
+from scgsim.geometry.primitives.constants import INTERFACE_KIND_ORDER
+from scgsim.geometry.primitives.entities import intent_supports_route
 
 
 def complete_interface_plan_from_surfaces(
@@ -35,10 +35,10 @@ def complete_interface_plan_from_surfaces(
         if surface.interface_id is None or surface.interface_id in known:
             continue
         kind = surface.interface_id.split("__", 1)[0]
-        if kind not in _INTERFACE_KIND_ORDER:
+        if kind not in INTERFACE_KIND_ORDER:
             raise ValueError(f"invalid surface interface id: {surface.interface_id}")
-        owners = _surface_owner_ids(surface)
-        record_owners = _surface_interface_record_owners(surface, owners)
+        owners = surface_owner_ids(surface)
+        record_owners = surface_interface_record_owners(surface, owners)
         if len(record_owners) != 2:
             raise ValueError(
                 f"{surface.surface_id} interface needs two owners, got {owners!r}"
@@ -93,7 +93,7 @@ def recognize_route_interfaces(
         ):
             continue
         kind = str(intent.get("kind", ""))
-        if kind not in _INTERFACE_KIND_ORDER:
+        if kind not in INTERFACE_KIND_ORDER:
             raise ValueError(f"invalid interface kind: {kind!r}")
         owners = tuple(str(owner) for owner in intent.get("owner_semantic_ids", ()))
         if len(owners) != 2:
@@ -195,7 +195,7 @@ def _intent_supports_context_or_route(
     representation_context: RepresentationContext | None,
 ) -> bool:
     if route is not None:
-        return _intent_supports_route(intent, route)
+        return intent_supports_route(intent, route)
     if representation_context is None:
         return False
     if intent.get("intent_origin") == "generated_representation_context_surface_sheet":

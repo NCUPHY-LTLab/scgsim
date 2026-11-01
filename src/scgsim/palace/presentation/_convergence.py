@@ -15,21 +15,21 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from ..results.report_data import (
-    _ERROR_INDICATOR_TRACES,
-    _FREQ_HEADER,
-    _SKIP_EIG_COLUMNS,
+    ERROR_INDICATOR_TRACES,
+    FREQ_HEADER,
+    SKIP_EIG_COLUMNS,
     AmrPassSnapshot,
 )
 from ._figures import (
     ReportTheme,
-    _capacitance_traces,
-    _delta_traces,
-    _line_figure,
-    _mode_traces,
-    _traces_are_finite,
-    _yaxis_type,
+    capacitance_traces,
+    delta_traces,
+    line_figure,
+    mode_traces,
+    traces_are_finite,
+    yaxis_scale_type,
 )
-from ._html import _native_positive_infinity_q_notice
+from ._html import native_positive_infinity_q_notice
 
 
 def convergence_trend_items(
@@ -52,8 +52,8 @@ def convergence_trend_items(
 
 def single_pass_q_notice(passes: Sequence[AmrPassSnapshot]) -> str | None:
     """Explain a Q of positive infinity when only one pass exists to plot."""
-    q_traces = _mode_traces(passes, _column_reader("eig_columns", "Q"))
-    return _native_positive_infinity_q_notice(q_traces)
+    q_traces = mode_traces(passes, _column_reader("eig_columns", "Q"))
+    return native_positive_infinity_q_notice(q_traces)
 
 
 def _eigenvalue_items(
@@ -61,29 +61,29 @@ def _eigenvalue_items(
 ) -> list[Any]:
     items: list[Any] = []
     for header in _union_mapping_keys(passes, "eig_columns"):
-        if header in _SKIP_EIG_COLUMNS:
+        if header in SKIP_EIG_COLUMNS:
             continue
-        traces = _mode_traces(passes, _column_reader("eig_columns", header))
-        if header == "Q" and not _traces_are_finite(traces):
+        traces = mode_traces(passes, _column_reader("eig_columns", header))
+        if header == "Q" and not traces_are_finite(traces):
             items.append(
-                _native_positive_infinity_q_notice(traces)
+                native_positive_infinity_q_notice(traces)
                 or "<p style='opacity:0.75'>A finite Q convergence plot is "
                 "unavailable because the Q trace contains non-finite or "
                 "unavailable data.</p>"
             )
             continue
-        figure = _line_figure(
+        figure = line_figure(
             title=f"{header} vs AMR pass",
             xlabel="AMR pass",
             ylabel=header,
             xs=xs,
             traces=traces,
-            yaxis_type=_yaxis_type(header),
+            yaxis_type=yaxis_scale_type(header),
             theme=theme,
         )
         if figure is not None:
             items.append(figure)
-        if header == _FREQ_HEADER:
+        if header == FREQ_HEADER:
             items.extend(
                 _delta_items(f"|Δ {header}|", f"|Δ {header}|", traces, xs, theme)
             )
@@ -95,8 +95,8 @@ def _port_epr_items(
 ) -> list[Any]:
     items: list[Any] = []
     for header in _union_mapping_keys(passes, "port_epr"):
-        traces = _mode_traces(passes, _column_reader("port_epr", header))
-        figure = _line_figure(
+        traces = mode_traces(passes, _column_reader("port_epr", header))
+        figure = line_figure(
             title=f"Port EPR {header} vs AMR pass",
             xlabel="AMR pass",
             ylabel=header,
@@ -113,8 +113,8 @@ def _capacitance_items(
     passes: Sequence[AmrPassSnapshot], xs: tuple[int, ...], theme: ReportTheme
 ) -> list[Any]:
     items: list[Any] = []
-    for label, traces in _capacitance_traces(passes):
-        figure = _line_figure(
+    for label, traces in capacitance_traces(passes):
+        figure = line_figure(
             title=f"{label} vs AMR pass",
             xlabel="AMR pass",
             ylabel="fF",
@@ -138,12 +138,12 @@ def _delta_items(
     theme: ReportTheme,
 ) -> list[Any]:
     """Pass-to-pass change on a log axis, so convergence shows as a falling line."""
-    figure = _line_figure(
+    figure = line_figure(
         title=f"{title_quantity} vs AMR pass",
         xlabel="AMR pass",
         ylabel=ylabel,
         xs=xs[1:],
-        traces=_delta_traces(traces),
+        traces=delta_traces(traces),
         yaxis_type="log",
         theme=theme,
     )
@@ -167,12 +167,12 @@ def _error_indicator_figure(
                 for pass_ in passes
             ],
         )
-        for name in _ERROR_INDICATOR_TRACES
+        for name in ERROR_INDICATOR_TRACES
     ]
     hline = None
     if amr_tolerance is not None:
         hline = (amr_tolerance, "configured AMR Tol")
-    return _line_figure(
+    return line_figure(
         title="AMR error indicator vs AMR pass",
         xlabel="AMR pass",
         ylabel="error indicator",

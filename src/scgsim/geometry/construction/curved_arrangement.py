@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from scgsim.geometry.construction.curved_context import PlanarArrangement
-from scgsim.geometry.construction.curved_kernel import _face_loops, _identity
+from scgsim.geometry.construction.curved_kernel import face_loops, identity
 from scgsim.geometry.models.input import SourceCurveSpec
 
 
@@ -35,7 +35,7 @@ def build_planar_arrangement(session, rings, chains):
     cells, membership, native_edges = _fragment_footprints(
         session, footprints, source_edges, references
     )
-    cell_loops = {tag: _face_loops(gmsh, occ, tag) for tag in cells}
+    cell_loops = {tag: face_loops(gmsh, occ, tag) for tag in cells}
     edge_cells = defaultdict(set)
     for cell, loops in cell_loops.items():
         for loop in loops:
@@ -65,11 +65,11 @@ def build_planar_arrangement(session, rings, chains):
     # A cell id hashes its boundary curves and covering owners, so it is stable
     # across native tag renumbering.
     cell_ids = {
-        cell: _identity(
+        cell: identity(
             "CELL__",
             {
                 "curves": sorted(
-                    _identity("", curve_descriptors[abs(e)])
+                    identity("", curve_descriptors[abs(e)])
                     for loop in loops
                     for e in loop
                 ),

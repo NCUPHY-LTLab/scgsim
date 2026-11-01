@@ -315,7 +315,7 @@ def detached_data(value: Any) -> Any:
     return value
 
 
-def _native_object_evidence(hfss: Any, object_name: str) -> dict[str, Any]:
+def native_object_evidence(hfss: Any, object_name: str) -> dict[str, Any]:
     """Read object identity, shape kind, and faces directly from the editor."""
     editor = hfss.modeler.oeditor
     object_id = int(editor.GetObjectIDByName(object_name))
@@ -343,7 +343,7 @@ def _native_object_evidence(hfss: Any, object_name: str) -> dict[str, Any]:
     }
 
 
-def _native_boundary_type(hfss: Any, name: str) -> str:
+def native_boundary_type(hfss: Any, name: str) -> str:
     raw = [str(value) for value in hfss.oboundary.GetBoundaries()]
     if len(raw) % 2:
         raise RuntimeError("native HFSS boundary list is invalid")
@@ -353,14 +353,14 @@ def _native_boundary_type(hfss: Any, name: str) -> str:
     return matches[0]
 
 
-def _resolve_native_assignment(
+def resolve_native_assignment(
     hfss: Any, raw_ids: list[int]
 ) -> tuple[list[dict[str, Any]], set[int], set[str]]:
     """Resolve AEDT's face-or-object boundary IDs without guessing their kind."""
     by_object_id: dict[int, tuple[str, list[int]]] = {}
     by_face_id: dict[int, str] = {}
     for object_name in [str(name) for name in hfss.modeler.object_names]:
-        native = _native_object_evidence(hfss, object_name)
+        native = native_object_evidence(hfss, object_name)
         object_id = native["native_object_id"]
         face_ids = native["native_face_ids"]
         if object_id in by_object_id:
@@ -507,7 +507,7 @@ def _bind_imported_object(
             f"unsupported HFSS conductor representation: {representation!r}"
         )
     material = materials[binding.material_id]
-    native = _native_object_evidence(hfss, binding.object_name)
+    native = native_object_evidence(hfss, binding.object_name)
     if native["native_object_type"] != expected_native_type:
         raise RuntimeError(
             f"HFSS imported representation mismatch for {binding.object_name!r}: "
@@ -562,7 +562,7 @@ def _bind_superconductor(
     if representation == "solid":
         obj.material_name = "pec"
         obj.solve_inside = False
-        fresh = _native_object_evidence(hfss, object_name)
+        fresh = native_object_evidence(hfss, object_name)
         if (
             fresh["native_object_id"] != native["native_object_id"]
             or fresh["native_object_type"] != native["native_object_type"]
@@ -572,7 +572,7 @@ def _bind_superconductor(
                 f"HFSS PEC native object identity changed for {object_name!r}"
             )
         observed_material = native_object_property(obj, "Material").strip('"')
-        observed_solve_inside = _native_object_boolean_property(obj, "Solve Inside")
+        observed_solve_inside = native_object_boolean_property(obj, "Solve Inside")
         if observed_material.casefold() != "pec" or observed_solve_inside:
             raise RuntimeError(f"HFSS solid PEC readback mismatch for {object_name!r}")
         record["hfss_pec_binding"] = {
@@ -620,14 +620,14 @@ def _assign_pec_sheets(
     boundary = hfss.assign_perfect_e(pec_sheets, name="SCGSimPEC")
     if boundary is None or "SCGSimPEC" not in native_boundary_names(hfss):
         raise RuntimeError("PEC assignment readback failed")
-    boundary_type = _native_boundary_type(hfss, "SCGSimPEC")
+    boundary_type = native_boundary_type(hfss, "SCGSimPEC")
     if boundary_type != "Perfect E":
         raise RuntimeError("PEC native boundary type mismatch")
     raw_assignment_ids = [
         int(native_id)
         for native_id in hfss.oboundary.GetBoundaryAssignment("SCGSimPEC")
     ]
-    resolved, covered_faces, covered_objects = _resolve_native_assignment(
+    resolved, covered_faces, covered_objects = resolve_native_assignment(
         hfss, raw_assignment_ids
     )
     target_faces = {
@@ -772,7 +772,7 @@ def native_object_property(obj: Any, property_name: str) -> str:
     return value
 
 
-def _native_object_boolean_property(obj: Any, property_name: str) -> bool:
+def native_object_boolean_property(obj: Any, property_name: str) -> bool:
     # Keep boolean readback direct too; AEDT transports it as either bool or text.
     value = obj._oeditor.GetPropertyValue(  # noqa: SLF001 - PyAEDT exposes no public query
         "Geometry3DAttributeTab", obj.name, property_name

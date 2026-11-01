@@ -18,7 +18,7 @@ from __future__ import annotations
 import math
 from typing import Any, TypedDict
 
-from ._expect import _expect_list, _expect_mapping, _expect_scalar
+from ._expect import expect_list, expect_mapping, expect_scalar
 from ._run_documents import IndexMap
 
 # Film spec as ``preparation/surface_epr.py`` writes it. Version 2 added the SI
@@ -61,8 +61,8 @@ class SurfaceMaskEntry(TypedDict):
     mask: MaskEvidence
 
 
-def _index_counts(index_map: IndexMap) -> IndexCounts:
-    entries = _expect_list(index_map.get("entries"), "palace_index_map.entries")
+def count_index_entries(index_map: IndexMap) -> IndexCounts:
+    entries = expect_list(index_map.get("entries"), "palace_index_map.entries")
     counts = {
         "terminal": 0,
         "lumped_port": 0,
@@ -70,8 +70,8 @@ def _index_counts(index_map: IndexMap) -> IndexCounts:
         "surface": 0,
     }
     for entry in entries:
-        data = _expect_mapping(entry, "palace_index_map.entry")
-        section = _expect_scalar(data, "section", str, fallback="")
+        data = expect_mapping(entry, "palace_index_map.entry")
+        section = expect_scalar(data, "section", str, fallback="")
         if section.startswith("Boundaries.Terminal"):
             counts["terminal"] += 1
         elif section.startswith("Boundaries.LumpedPort"):
@@ -91,7 +91,7 @@ _EXPECTED_ROLES = {
 }
 
 
-def _validate_index_entries(index_map: IndexMap) -> None:
+def validate_index_entries(index_map: IndexMap) -> None:
     entries = index_map.get("entries")
     if not isinstance(entries, list) or not entries:
         raise ValueError("palace_index_map.json must include non-empty entries list.")
@@ -107,22 +107,22 @@ def _validate_index_entries(index_map: IndexMap) -> None:
     for section, values in indices.items():
         if values and sorted(values) != list(range(1, len(values) + 1)):
             raise ValueError(f"index map {section} entries must be ordered 1..N.")
-    _surface_mask_entries(index_map)
+    surface_mask_entries(index_map)
 
 
 def _validate_entry_identity(
     entry: dict[str, Any], names: set[tuple[str, str]]
 ) -> tuple[str, int]:
     """Check section, role, index and name; ``names`` collects names to find repeats."""
-    section = _expect_scalar(entry, "section", str)
+    section = expect_scalar(entry, "section", str)
     if section not in _EXPECTED_ROLES:
         raise ValueError(f"index map has unsupported section {section!r}.")
-    if _expect_scalar(entry, "role", str) != _EXPECTED_ROLES[section]:
+    if expect_scalar(entry, "role", str) != _EXPECTED_ROLES[section]:
         raise ValueError("index map section and role are inconsistent.")
-    index = _expect_scalar(entry, "index", int)
+    index = expect_scalar(entry, "index", int)
     if index < 1:
         raise ValueError("index map indices must be positive.")
-    entry_name = _expect_scalar(entry, "entry_name", str)
+    entry_name = expect_scalar(entry, "entry_name", str)
     if not entry_name or (section, entry_name) in names:
         raise ValueError("index entry names must be non-empty and unique per section.")
     names.add((section, entry_name))
@@ -131,10 +131,10 @@ def _validate_entry_identity(
 
 def _validate_entry_targets(entry: dict[str, Any]) -> None:
     """Physical names and mesh attributes the entry points at."""
-    physical_names = _expect_list(entry.get("physical_names"), "index physical_names")
+    physical_names = expect_list(entry.get("physical_names"), "index physical_names")
     if not all(isinstance(name, str) and name for name in physical_names):
         raise ValueError("index physical_names must be non-empty strings.")
-    entry_attributes = _expect_list(entry.get("attributes"), "index attributes")
+    entry_attributes = expect_list(entry.get("attributes"), "index attributes")
     for attribute in entry_attributes:
         if (
             not isinstance(attribute, int)
@@ -146,16 +146,16 @@ def _validate_entry_targets(entry: dict[str, Any]) -> None:
 
 def _validate_section_fields(section: str, entry: dict[str, Any]) -> None:
     """Fields that only one kind of entry carries."""
-    metadata = _expect_mapping(entry.get("metadata"), "index metadata")
+    metadata = expect_mapping(entry.get("metadata"), "index metadata")
     if section == "Boundaries.Terminal":
-        _expect_scalar(entry, "terminal_name", str)
-        _expect_scalar(entry, "net_id", str)
-        _expect_list(
+        expect_scalar(entry, "terminal_name", str)
+        expect_scalar(entry, "net_id", str)
+        expect_list(
             entry.get("conductor_component_ids"), "terminal conductor components"
         )
     elif section == "Boundaries.LumpedPort":
-        _expect_scalar(entry, "port_name", str)
-        owners = _expect_list(
+        expect_scalar(entry, "port_name", str)
+        owners = expect_list(
             metadata.get("owner_semantic_ids"), "port owner semantic ids"
         )
         if len(owners) != 2 or not all(
@@ -163,31 +163,29 @@ def _validate_section_fields(section: str, entry: dict[str, Any]) -> None:
         ):
             raise ValueError("lumped port index entry must have exactly two owners.")
     elif section == "Domains.Postprocessing.Energy":
-        _expect_mapping(metadata.get("material"), "domain index material")
+        expect_mapping(metadata.get("material"), "domain index material")
     elif section == "Boundaries.Postprocessing.Dielectric":
-        _expect_mapping(metadata.get("physical_attribute"), "surface index attributes")
+        expect_mapping(metadata.get("physical_attribute"), "surface index attributes")
 
 
-def _surface_mask_entries(index_map: IndexMap) -> tuple[SurfaceMaskEntry, ...]:
+def surface_mask_entries(index_map: IndexMap) -> tuple[SurfaceMaskEntry, ...]:
     """Return validated native Inset rows without inferring identity from names."""
-    entries = _expect_list(index_map.get("entries"), "palace_index_map.entries")
+    entries = expect_list(index_map.get("entries"), "palace_index_map.entries")
     dielectric = tuple(
-        _expect_mapping(entry, "palace dielectric index entry")
+        expect_mapping(entry, "palace dielectric index entry")
         for entry in entries
-        if _expect_scalar(_expect_mapping(entry, "palace index entry"), "section", str)
+        if expect_scalar(expect_mapping(entry, "palace index entry"), "section", str)
         == "Boundaries.Postprocessing.Dielectric"
     )
     masks = tuple(entry for entry in dielectric if "mask" in entry)
     if not masks:
         return ()
-    by_index = {_expect_scalar(entry, "index", int): entry for entry in dielectric}
+    by_index = {expect_scalar(entry, "index", int): entry for entry in dielectric}
     if len(by_index) != len(dielectric):
         raise ValueError("surface EPR index entries must have unique indices.")
     baselines = tuple(entry for entry in dielectric if "mask" not in entry)
-    baseline_indexes = sorted(
-        _expect_scalar(entry, "index", int) for entry in baselines
-    )
-    mask_indexes = sorted(_expect_scalar(entry, "index", int) for entry in masks)
+    baseline_indexes = sorted(expect_scalar(entry, "index", int) for entry in baselines)
+    mask_indexes = sorted(expect_scalar(entry, "index", int) for entry in masks)
     if baseline_indexes != list(range(1, len(baselines) + 1)):
         raise ValueError(
             "surface EPR baselines must retain the initial contiguous indices."
@@ -200,26 +198,26 @@ def _surface_mask_entries(index_map: IndexMap) -> tuple[SurfaceMaskEntry, ...]:
     _check_baseline_links(dielectric, by_index)
     _check_mask_rows(masks, by_index)
     _check_margin_sequences(baseline_indexes, by_index, masks)
-    return tuple(sorted(masks, key=lambda entry: _expect_scalar(entry, "index", int)))
+    return tuple(sorted(masks, key=lambda entry: expect_scalar(entry, "index", int)))
 
 
 def _check_baseline_rows(baselines: tuple[dict[str, Any], ...]) -> None:
     """Each unmasked row names a known interface type and a valid film."""
     for baseline in baselines:
-        metadata = _expect_mapping(baseline.get("metadata"), "surface EPR metadata")
+        metadata = expect_mapping(baseline.get("metadata"), "surface EPR metadata")
         # MA, MS, SA: metal-air, metal-substrate, substrate-air interface (docs/eigenmode-epr.qmd).
         if metadata.get("interface_type") not in {"MA", "MS", "SA"}:
             raise ValueError("surface EPR interface_type must be MA, MS, or SA.")
         for field in ("surface_id", "face_kind"):
             if not isinstance(metadata.get(field), str) or not metadata[field]:
                 raise ValueError(f"surface EPR {field} must be non-empty text.")
-        owners = _expect_list(
+        owners = expect_list(
             metadata.get("owner_semantic_ids"), "surface EPR owner semantic ids"
         )
         if not owners or not all(isinstance(owner, str) and owner for owner in owners):
             raise ValueError("surface EPR owners must be non-empty text.")
-        _expect_mapping(metadata.get("source_provenance"), "surface EPR provenance")
-        _check_film_spec(_expect_mapping(baseline.get("epr_spec"), "surface EPR spec"))
+        expect_mapping(metadata.get("source_provenance"), "surface EPR provenance")
+        _check_film_spec(expect_mapping(baseline.get("epr_spec"), "surface EPR spec"))
 
 
 def _check_film_spec(epr_spec: dict[str, Any]) -> None:
@@ -268,8 +266,8 @@ def _check_baseline_links(
 ) -> None:
     """Every row points at a dielectric row; unmasked rows point at themselves."""
     for entry in dielectric:
-        index = _expect_scalar(entry, "index", int)
-        baseline_index = _expect_scalar(entry, "baseline_index", int)
+        index = expect_scalar(entry, "index", int)
+        baseline_index = expect_scalar(entry, "baseline_index", int)
         if baseline_index < 1 or baseline_index not in by_index:
             raise ValueError(
                 "surface EPR baseline_index must identify a dielectric row."
@@ -288,14 +286,14 @@ def _check_mask_rows(
     # so native_margin = margin_um * 1e-6 / model_l0_m. The test below is exact
     # float equality on purpose: it must match the writer's expression order.
     for entry in masks:
-        index = _expect_scalar(entry, "index", int)
-        baseline_index = _expect_scalar(entry, "baseline_index", int)
+        index = expect_scalar(entry, "index", int)
+        baseline_index = expect_scalar(entry, "baseline_index", int)
         if index == baseline_index or "mask" in by_index[baseline_index]:
             raise ValueError("masked surface EPR row must bind one unmasked baseline.")
-        mask = _expect_mapping(entry.get("mask"), "surface EPR mask")
+        mask = expect_mapping(entry.get("mask"), "surface EPR mask")
         if mask.get("type") != "Inset":
             raise ValueError("surface EPR mask type must be Inset.")
-        margin_index = _expect_scalar(mask, "margin_index", int)
+        margin_index = expect_scalar(mask, "margin_index", int)
         if margin_index < 0:
             raise ValueError("surface EPR mask margin_index must be non-negative.")
         for field in ("margin_um", "native_margin", "model_l0_m"):
@@ -332,9 +330,9 @@ def _check_margin_sequences(
     """Masked rows must reproduce the baseline's `inset_margins_um` in order."""
     for baseline_index in baseline_indexes:
         baseline = by_index[baseline_index]
-        epr_spec = _expect_mapping(baseline.get("epr_spec"), "surface EPR spec")
+        epr_spec = expect_mapping(baseline.get("epr_spec"), "surface EPR spec")
         if "inset_margins_um" in epr_spec:
-            expected_margins = _expect_list(
+            expected_margins = expect_list(
                 epr_spec.get("inset_margins_um"), "surface EPR inset margins"
             )
             if not expected_margins:
@@ -357,15 +355,15 @@ def _check_margin_sequences(
             (
                 entry
                 for entry in masks
-                if _expect_scalar(entry, "baseline_index", int) == baseline_index
+                if expect_scalar(entry, "baseline_index", int) == baseline_index
             ),
-            key=lambda entry: _expect_scalar(
-                _expect_mapping(entry["mask"], "surface EPR mask"), "margin_index", int
+            key=lambda entry: expect_scalar(
+                expect_mapping(entry["mask"], "surface EPR mask"), "margin_index", int
             ),
         )
         ordinals = [
-            _expect_scalar(
-                _expect_mapping(entry["mask"], "surface EPR mask"), "margin_index", int
+            expect_scalar(
+                expect_mapping(entry["mask"], "surface EPR mask"), "margin_index", int
             )
             for entry in masked_for_baseline
         ]
@@ -374,7 +372,7 @@ def _check_margin_sequences(
                 "surface EPR mask ordinals must match the configured margin sequence."
             )
         margins = [
-            _expect_mapping(entry["mask"], "surface EPR mask").get("margin_um")
+            expect_mapping(entry["mask"], "surface EPR mask").get("margin_um")
             for entry in masked_for_baseline
         ]
         if margins != expected_margins:

@@ -14,7 +14,7 @@ from scgsim.geometry.models.physical import ApproximationProfile
 from scgsim.geometry.planning.physical import interpret_physical_geometry
 
 
-def _interpret_geometry(build_input: Any, stack: Any, modeling: Modeling):
+def interpret_geometry(build_input: Any, stack: Any, modeling: Modeling):
     """Run the physical planner and record which source stack it interpreted."""
     effective_input, effective_stack, plan = interpret_physical_geometry(
         build_input, stack, ApproximationProfile(modeling, "v1", {})
@@ -25,9 +25,9 @@ def _interpret_geometry(build_input: Any, stack: Any, modeling: Modeling):
     return effective_input, effective_stack, plan
 
 
-def _effective_geometry_input(build_input: Any, stack: Any, modeling: Modeling):
+def effective_geometry_input(build_input: Any, stack: Any, modeling: Modeling):
     """Return common effective geometry, stack and its planner projection."""
-    effective_input, effective_stack, plan = _interpret_geometry(
+    effective_input, effective_stack, plan = interpret_geometry(
         build_input, stack, modeling
     )
     return effective_input, effective_stack, plan.context

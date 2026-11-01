@@ -12,10 +12,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from scgsim.aedt.runtime.families.hfss_readback import (
-    _face_for_side,
-    _native_oo_properties,
-    _native_terminal_reference_ids,
-    _require_native_properties,
+    face_for_side,
+    native_oo_properties,
+    native_terminal_reference_ids,
+    require_native_properties,
 )
 from scgsim.aedt.runtime.native.common import (
     detached_data,
@@ -28,7 +28,7 @@ from scgsim.aedt.specs.hfss_prepared import (
 )
 
 
-def _assign_body_terminal_ports(
+def assign_body_terminal_ports(
     hfss: Any, spec: HfssDrivenGeometrySpec, geometry: dict[str, Any]
 ) -> list[dict[str, Any]]:
     """Use authored Entities and supports; AutoIdentify does not author ownership."""
@@ -64,7 +64,7 @@ def _assign_body_terminal_ports(
                     (int(face.id), tuple(float(value) for value in face.center))
                     for face in region.faces
                 ]
-                face_id = _face_for_side(faces, port.side)
+                face_id = face_for_side(faces, port.side)
                 before = set(hfss.oboundary.GetExcitationsOfType("Terminal"))
                 boundary = hfss.wave_port(
                     face_id,
@@ -141,7 +141,7 @@ class _SavedTerminalSetup:
     reference_names: list[str]
 
 
-def _bind_body_terminal_evidence(
+def bind_body_terminal_evidence(
     hfss: Any,
     spec: HfssDrivenGeometrySpec,
     geometry: dict[str, Any],
@@ -181,7 +181,7 @@ def _bind_body_terminal_evidence(
 def _read_saved_terminal_setup(hfss: Any) -> _SavedTerminalSetup:
     """Read the saved boundary records and the conductors AEDT uses as references."""
     boundaries = hfss.design_properties["BoundarySetup"]["Boundaries"]
-    reference_ids = _native_terminal_reference_ids(hfss)
+    reference_ids = native_terminal_reference_ids(hfss)
     reference_names = [hfss.oeditor.GetObjectNameByID(value) for value in reference_ids]
     return _SavedTerminalSetup(boundaries, reference_ids, reference_names)
 
@@ -209,10 +209,10 @@ def _bind_port_terminal(
     native["signal_objects"] = owners
     native["reference_conductor_ids"] = saved.reference_ids
     native["reference_conductors"] = saved.reference_names
-    native["boundary_properties"] = _native_oo_properties(
+    native["boundary_properties"] = native_oo_properties(
         hfss, f"Excitations\\{record['boundary']}"
     )
-    native["terminal_properties"] = _native_oo_properties(
+    native["terminal_properties"] = native_oo_properties(
         hfss, f"Excitations\\{record['boundary']}\\{terminal_name}"
     )
     if not owners or not set(owners).issubset(
@@ -320,7 +320,7 @@ def _verify_terminal_family(
     if [int(value) for value in native_boundary["Faces"]] != [record["face_id"]]:
         raise RuntimeError(f"saved Terminal support assignment differs: {port.name!r}")
     renorm = port.renormalize if isinstance(port, LumpedTerminalPort) else False
-    _require_native_properties(
+    require_native_properties(
         native["boundary_properties"],
         {
             "Type": expected_type,
@@ -330,7 +330,7 @@ def _verify_terminal_family(
         port.name,
     )
     if isinstance(port, LumpedTerminalPort):
-        _require_native_properties(
+        require_native_properties(
             native["terminal_properties"],
             {"Terminal Renormalizing Impedance": f"{port.impedance_ohm:g}ohm"},
             terminal_name,
@@ -348,7 +348,7 @@ def _verify_terminal_family(
         native["inactive_renormalizing_impedance"] = native["terminal_properties"].get(
             "Terminal Renormalizing Impedance"
         )
-        _require_native_properties(
+        require_native_properties(
             native["boundary_properties"],
             {"Deembed Dist": f"{port.deembed_um:g}um"},
             port.name,

@@ -14,7 +14,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from scgsim.aedt._data import canonical_sha256
-from scgsim.aedt.specs.modeling import _native_physical_record
+from scgsim.aedt.specs.modeling import native_physical_record
 from scgsim.geometry import GeometryBuildInput
 from scgsim.semantics.route_a import geometry_z_range
 
@@ -38,18 +38,18 @@ _PADDING_FACE_KEYS = (
 )
 
 
-def _plain_geometry_source(value: Any) -> Any:
+def plain_geometry_source(value: Any) -> Any:
     """Convert nested mappings and sequences to plain JSON-compatible values."""
     if isinstance(value, Mapping):
-        return {str(key): _plain_geometry_source(item) for key, item in value.items()}
+        return {str(key): plain_geometry_source(item) for key, item in value.items()}
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
-        return [_plain_geometry_source(item) for item in value]
+        return [plain_geometry_source(item) for item in value]
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     raise TypeError(f"geometry source contains unsupported {type(value).__name__}")
 
 
-def _source_payload(
+def source_payload(
     build_input: GeometryBuildInput,
     prepared_stack: Mapping[str, Any],
     *,
@@ -57,17 +57,17 @@ def _source_payload(
 ) -> dict[str, Any]:
     """Build the detached `source` record, in the key order the hashes cover."""
     materials, solution_regions, layers, metadata = _stack_sections(prepared_stack)
-    material_catalog = _plain_geometry_source(materials)
+    material_catalog = plain_geometry_source(materials)
     _check_entity_materials(build_input, materials)
     conductors = _conductor_records(build_input, layers)
     normalized_regions = _solution_region_records(build_input, solution_regions)
     native_region = _native_region(normalized_regions, metadata)
     return {
         "schema_version": "scgsim.aedt.epr-planar-source.v1",
-        "modeling": _plain_geometry_source(metadata.get("physical_representation")),
+        "modeling": plain_geometry_source(metadata.get("physical_representation")),
         "source_dbu_um": source_dbu_um,
         "prepared_stack_sha256": canonical_sha256(
-            _plain_geometry_source(prepared_stack)
+            plain_geometry_source(prepared_stack)
         ),
         "source_stack_sha256": metadata["physical_source_stack_sha256"],
         "materials": material_catalog,
@@ -81,7 +81,7 @@ def _source_payload(
         "surface_evaluation_policy": "unmasked_plus_requested.v1",
         **(
             {
-                "junction_partitions": _plain_geometry_source(
+                "junction_partitions": plain_geometry_source(
                     build_input.metadata["aedt_junction_partitions"]
                 ),
                 "authored_input_sha256": build_input.metadata[
@@ -162,14 +162,14 @@ def _conductor_records(build_input, layers: Sequence[Any]) -> list[dict[str, Any
                 "representation": item.metadata["physical_representation"][
                     "representation"
                 ],
-                "physical_layer": _native_physical_record(
+                "physical_layer": native_physical_record(
                     item.metadata["physical_representation"]
                 ),
                 "net_id": item.net_id,
                 "polygon_ids": list(item.polygon_ids),
-                "geometry": _plain_geometry_source(item.geometry),
+                "geometry": plain_geometry_source(item.geometry),
                 "metadata": {
-                    key: _plain_geometry_source(item.metadata[key])
+                    key: plain_geometry_source(item.metadata[key])
                     for key in _CONDUCTOR_METADATA_KEYS
                     if key in item.metadata
                 },
@@ -228,8 +228,8 @@ def _solution_region_records(
                 "material_id": entity.material_id,
                 "material_kind": entity.material_kind,
                 "representation": "solution_domain",
-                "geometry": _plain_geometry_source(geometry),
-                "metadata": _plain_geometry_source(entity.metadata),
+                "geometry": plain_geometry_source(geometry),
+                "metadata": plain_geometry_source(entity.metadata),
             }
         )
     missing_regions = set(solution_regions) - {
@@ -301,11 +301,11 @@ def _native_region(
         ),
         "padding_um": padding_um,
         **(
-            {"source_effective_envelope": _plain_geometry_source(envelope_trace)}
+            {"source_effective_envelope": plain_geometry_source(envelope_trace)}
             if isinstance(envelope_trace, Mapping)
             else {}
         ),
-        "envelope_outer_loop_um": _plain_geometry_source(envelope_loop),
+        "envelope_outer_loop_um": plain_geometry_source(envelope_loop),
         "z_range_um": [
             envelope_bounds["z_min_um"],
             envelope_bounds["z_max_um"],
@@ -346,7 +346,7 @@ def _junction_region_records(build_input) -> list[dict[str, Any]]:
             "host_semantic_ids": list(
                 dict.fromkeys(overlap.host_semantic_id for overlap in item.overlaps)
             ),
-            "metadata": _plain_geometry_source(item.metadata),
+            "metadata": plain_geometry_source(item.metadata),
         }
         for item in build_input.port_sheet_regions
     ]

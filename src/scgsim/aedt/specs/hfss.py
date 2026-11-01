@@ -15,7 +15,7 @@ from numbers import Number
 from pathlib import Path
 from typing import Any, Literal
 
-from scgsim.aedt._data import _stripped_text
+from scgsim.aedt._data import stripped_text
 from scgsim.aedt.specs.common import (
     EIGENMODE_SCHEMA_VERSION,
     LOCKED_PYAEDT,
@@ -29,22 +29,22 @@ from scgsim.aedt.specs.common import (
     ObjectBinding,
     PdkMaterial,
     TerminalPort,
-    _adaptive_controls,
-    _coerced_finite_number,
-    _normalize_gds_spec,
-    _padding,
-    _project_name_from_payload,
+    adaptive_controls,
+    checked_region_padding,
+    coerced_finite_number,
+    normalize_gds_spec,
+    project_name_from_payload,
 )
 from scgsim.aedt.specs.modeling import (
     Modeling,
     PhysicalLayerDeclaration,
     PhysicalRepresentationPlan,
-    _effective_record,
-    _modeling_payload,
-    _physical_fields_from_payload,
-    _request_modeling,
-    _source_record_payload,
-    _verify_effective_records,
+    effective_record,
+    modeling_payload,
+    physical_fields_from_payload,
+    request_modeling,
+    source_record_payload,
+    verify_effective_records,
 )
 
 
@@ -122,8 +122,8 @@ def _run_control_from_payload(
 ) -> HfssRunControl:
     """Decode a Driven run control; an absent adaptive control takes its default."""
     return HfssRunControl(
-        _stripped_text(run.get("setup_name"), "setup_name"),
-        _stripped_text(run.get("sweep_name"), "sweep_name"),
+        stripped_text(run.get("setup_name"), "setup_name"),
+        stripped_text(run.get("sweep_name"), "sweep_name"),
         sweep,
         maximum_passes=run.get("maximum_passes", 99),
         minimum_passes=run.get("minimum_passes", 1),
@@ -141,7 +141,7 @@ def _effective_layer_imports(spec: Any) -> tuple[dict[str, Any], ...]:
     whose object is named `<layer_name>_...` is the retained domain, which the
     Thin Film approximation must not collapse to a sheet.
     """
-    mapping = _request_modeling(spec)
+    mapping = request_modeling(spec)
     pairs = {
         pair: index + 1
         for index, pair in enumerate(
@@ -160,7 +160,7 @@ def _effective_layer_imports(spec: Any) -> tuple[dict[str, Any], ...]:
     }
     return tuple(
         {
-            **_effective_record(
+            **effective_record(
                 item,
                 mapping,
                 retained_domain=(item.layer, item.datatype) in domain_pairs,
@@ -183,8 +183,8 @@ class FrequencySweepSpec:
     points: int = POINT_COUNT
 
     def __post_init__(self) -> None:
-        start = _coerced_finite_number(self.start_ghz, "start_ghz")
-        stop = _coerced_finite_number(self.stop_ghz, "stop_ghz")
+        start = coerced_finite_number(self.start_ghz, "start_ghz")
+        stop = coerced_finite_number(self.stop_ghz, "stop_ghz")
         if start <= 0 or stop <= start:
             raise ValueError("frequency sweep requires 0 < start_ghz < stop_ghz")
         if isinstance(self.points, bool) or not isinstance(self.points, Number):
@@ -233,18 +233,18 @@ class HfssRunControl:
 
     def __post_init__(self) -> None:
         object.__setattr__(
-            self, "setup_name", _stripped_text(self.setup_name, "setup_name")
+            self, "setup_name", stripped_text(self.setup_name, "setup_name")
         )
         object.__setattr__(
-            self, "sweep_name", _stripped_text(self.sweep_name, "sweep_name")
+            self, "sweep_name", stripped_text(self.sweep_name, "sweep_name")
         )
-        refinement = _adaptive_controls(
+        refinement = adaptive_controls(
             self.maximum_passes,
             self.minimum_passes,
             self.minimum_converged_passes,
             self.percent_refinement,
         )
-        delta = _coerced_finite_number(self.maximum_delta_s, "maximum_delta_s")
+        delta = coerced_finite_number(self.maximum_delta_s, "maximum_delta_s")
         if delta <= 0:
             raise ValueError("maximum_delta_s must be > 0")
         object.__setattr__(self, "percent_refinement", refinement)
@@ -295,10 +295,10 @@ class HfssDrivenSpec:
     pyaedt_version: str = LOCKED_PYAEDT
 
     def __post_init__(self) -> None:
-        _request_modeling(self)
+        request_modeling(self)
         if self.mode not in {"terminal", "modal"}:
             raise ValueError("mode must be terminal or modal")
-        grounds, signals = _normalize_gds_spec(self)
+        grounds, signals = normalize_gds_spec(self)
         if len(self.ports) != 2 or tuple(port.index for port in self.ports) != (1, 2):
             raise ValueError("V1 requires exactly ordered ports 1 and 2")
         if len({port.name for port in self.ports}) != 2 or {
@@ -329,7 +329,7 @@ class HfssDrivenSpec:
             raise ValueError(
                 "terminal ports must share one ordered global reference conductor tuple"
             )
-        padding = _padding(self.region_padding_um)
+        padding = checked_region_padding(self.region_padding_um)
         # PyAEDT create_region consumes this native order unchanged.
         side_index = {"+X": 0, "-X": 1, "+Y": 2, "-Y": 3, "+Z": 4, "-Z": 5}
         if any(padding[side_index[port.side]] != 0 for port in self.ports):
@@ -348,7 +348,7 @@ class HfssDrivenSpec:
     @property
     def effective_ports(self) -> tuple[TerminalPort, ...] | tuple[ModalPort, ...]:
         """Native port coordinates derived from immutable authored endpoints."""
-        mapping = _request_modeling(self)
+        mapping = request_modeling(self)
         return tuple(
             replace(
                 port,
@@ -376,7 +376,7 @@ class HfssDrivenSpec:
     def to_payload(self) -> dict[str, Any]:
         """Serialize with the effective layer imports and ports of the bound plan."""
         return {
-            **_modeling_payload(self),
+            **modeling_payload(self),
             "schema_version": SCHEMA_VERSION,
             "mode": self.mode,
             "aedt": {"requested_version": self.aedt_version},
@@ -412,12 +412,12 @@ class HfssDrivenSpec:
         """
         if payload.get("schema_version") != SCHEMA_VERSION:
             raise ValueError("unsupported HFSS driven schema")
-        mode = _stripped_text(payload.get("mode"), "mode")
-        gds = Path(_stripped_text(payload.get("gds", {}).get("path"), "gds.path"))
+        mode = stripped_text(payload.get("mode"), "mode")
+        gds = Path(stripped_text(payload.get("gds", {}).get("path"), "gds.path"))
         if base_dir is not None and not gds.is_absolute():
             gds = base_dir / gds
         imports = tuple(
-            LayerImport(**_source_record_payload(item))
+            LayerImport(**source_record_payload(item))
             for item in payload.get("layer_imports", ())
         )
         bindings = tuple(
@@ -431,17 +431,17 @@ class HfssDrivenSpec:
         length = payload.get("length_mesh")
         result = cls(
             modeling=payload.get("modeling"),
-            **_physical_fields_from_payload(payload),
+            **physical_fields_from_payload(payload),
             mode=mode,  # type: ignore[arg-type]
             gds_path=gds,
-            project_name=_project_name_from_payload(
+            project_name=project_name_from_payload(
                 payload.get("project", {}).get("name")
             ),
-            design_name=_stripped_text(
+            design_name=stripped_text(
                 payload.get("project", {}).get("design"), "project.design"
             ),
             materials=materials,
-            vacuum_material_id=_stripped_text(
+            vacuum_material_id=stripped_text(
                 payload.get("vacuum_material_id"), "vacuum_material_id"
             ),
             layer_imports=imports,
@@ -450,18 +450,18 @@ class HfssDrivenSpec:
             run_control=_run_control_from_payload(run, sweep),
             region_padding_um=tuple(payload.get("region_padding_um", ())),  # type: ignore[arg-type]
             length_mesh=LengthMeshSpec(**length) if length is not None else None,
-            aedt_version=_stripped_text(
+            aedt_version=stripped_text(
                 payload.get("aedt", {}).get("requested_version"),
                 "aedt.requested_version",
             ),
-            pyaedt_version=_stripped_text(
+            pyaedt_version=stripped_text(
                 payload.get("pyaedt", {}).get("locked_version"), "pyaedt.locked_version"
             ),
         )
-        _verify_effective_records(
+        verify_effective_records(
             payload["layer_imports"], result.effective_layer_imports
         )
-        _verify_effective_records(
+        verify_effective_records(
             payload["effective_ports"],
             [item.to_payload() for item in result.effective_ports],
         )
@@ -491,12 +491,12 @@ class EigenmodeRunControl:
 
     def __post_init__(self) -> None:
         object.__setattr__(
-            self, "setup_name", _stripped_text(self.setup_name, "setup_name")
+            self, "setup_name", stripped_text(self.setup_name, "setup_name")
         )
-        minimum = _coerced_finite_number(
+        minimum = coerced_finite_number(
             self.minimum_frequency_ghz, "minimum_frequency_ghz"
         )
-        delta = _coerced_finite_number(
+        delta = coerced_finite_number(
             self.maximum_delta_frequency_percent,
             "maximum_delta_frequency_percent",
         )
@@ -504,7 +504,7 @@ class EigenmodeRunControl:
             raise ValueError("Eigenmode frequency and convergence percent must be > 0")
         if not isinstance(self.num_modes, int) or self.num_modes <= 0:
             raise ValueError("num_modes must be a positive integer")
-        refinement = _adaptive_controls(
+        refinement = adaptive_controls(
             self.maximum_passes,
             self.minimum_passes,
             self.minimum_converged_passes,
@@ -559,9 +559,11 @@ class HfssEigenmodeSpec:
         return "eigenmode"
 
     def __post_init__(self) -> None:
-        _request_modeling(self)
-        grounds, signals = _normalize_gds_spec(self)
-        object.__setattr__(self, "region_padding_um", _padding(self.region_padding_um))
+        request_modeling(self)
+        grounds, signals = normalize_gds_spec(self)
+        object.__setattr__(
+            self, "region_padding_um", checked_region_padding(self.region_padding_um)
+        )
         if self.length_mesh is not None and (
             not set(self.length_mesh.ground_objects).issubset(grounds)
             or not set(self.length_mesh.signal_objects).issubset(signals)
@@ -585,7 +587,7 @@ class HfssEigenmodeSpec:
     def to_payload(self) -> dict[str, Any]:
         """Serialize with the effective layer imports of the bound plan."""
         return {
-            **_modeling_payload(self),
+            **modeling_payload(self),
             "schema_version": EIGENMODE_SCHEMA_VERSION,
             "mode": self.mode,
             "aedt": {"requested_version": self.aedt_version},
@@ -619,7 +621,7 @@ class HfssEigenmodeSpec:
         """
         if payload.get("schema_version") != EIGENMODE_SCHEMA_VERSION:
             raise ValueError("unsupported HFSS Eigenmode schema")
-        gds = Path(_stripped_text(payload.get("gds", {}).get("path"), "gds.path"))
+        gds = Path(stripped_text(payload.get("gds", {}).get("path"), "gds.path"))
         if base_dir is not None and not gds.is_absolute():
             gds = base_dir / gds
         raw_materials = payload.get("materials")
@@ -635,20 +637,20 @@ class HfssEigenmodeSpec:
         length = payload.get("length_mesh")
         result = cls(
             modeling=payload.get("modeling"),
-            **_physical_fields_from_payload(payload),
+            **physical_fields_from_payload(payload),
             gds_path=gds,
-            project_name=_project_name_from_payload(
+            project_name=project_name_from_payload(
                 payload.get("project", {}).get("name")
             ),
-            design_name=_stripped_text(
+            design_name=stripped_text(
                 payload.get("project", {}).get("design"), "project.design"
             ),
             materials=materials,
-            vacuum_material_id=_stripped_text(
+            vacuum_material_id=stripped_text(
                 payload.get("vacuum_material_id"), "vacuum_material_id"
             ),
             layer_imports=tuple(
-                LayerImport(**_source_record_payload(item))
+                LayerImport(**source_record_payload(item))
                 for item in payload.get("layer_imports", ())
             ),
             object_bindings=tuple(
@@ -657,15 +659,15 @@ class HfssEigenmodeSpec:
             run_control=EigenmodeRunControl(**run),
             region_padding_um=tuple(payload.get("region_padding_um", ())),  # type: ignore[arg-type]
             length_mesh=LengthMeshSpec(**length) if length is not None else None,
-            aedt_version=_stripped_text(
+            aedt_version=stripped_text(
                 payload.get("aedt", {}).get("requested_version"),
                 "aedt.requested_version",
             ),
-            pyaedt_version=_stripped_text(
+            pyaedt_version=stripped_text(
                 payload.get("pyaedt", {}).get("locked_version"), "pyaedt.locked_version"
             ),
         )
-        _verify_effective_records(
+        verify_effective_records(
             payload["layer_imports"], result.effective_layer_imports
         )
         return result
@@ -688,16 +690,16 @@ class LengthMeshSpec:
 
     def __post_init__(self) -> None:
         signals = tuple(
-            _stripped_text(value, "signal_object") for value in self.signal_objects
+            stripped_text(value, "signal_object") for value in self.signal_objects
         )
         grounds = tuple(
-            _stripped_text(value, "ground_object") for value in self.ground_objects
+            stripped_text(value, "ground_object") for value in self.ground_objects
         )
         if not signals or not grounds:
             raise ValueError(
                 "length mesh requires explicit signal_objects and ground_objects"
             )
-        maximum = _coerced_finite_number(self.maximum_length_um, "maximum_length_um")
+        maximum = coerced_finite_number(self.maximum_length_um, "maximum_length_um")
         if maximum <= 0:
             raise ValueError("maximum_length_um must be > 0")
         if self.uniform_cpw_mtl is not True:

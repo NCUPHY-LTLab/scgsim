@@ -23,17 +23,17 @@ from scgsim.aedt._data import (
 )
 from scgsim.aedt._io import file_sha256, write_json
 from scgsim.aedt.epr.analysis import combine_epr_mode
-from scgsim.aedt.epr.cache import _prepare_expressions_and_cache, _read_cache
-from scgsim.aedt.epr.expressions import _author_epr_expressions
+from scgsim.aedt.epr.cache import prepare_expressions_and_cache, read_cache
+from scgsim.aedt.epr.expressions import author_epr_expressions
 from scgsim.aedt.epr.fields import install_variables, parse_native_scalar
-from scgsim.aedt.epr.history import _adaptive_epr_result, _adaptive_mode_history
+from scgsim.aedt.epr.history import adaptive_epr_result, adaptive_mode_history
 from scgsim.aedt.epr.integrals import (
-    _SURFACE_ANALYSIS_SCOPE,
-    _attach_saved_native_surface_membership,
-    _canonical_integral,
-    _empty_raw_integrals,
-    _integral_target,
-    _store_integral,
+    SURFACE_ANALYSIS_SCOPE,
+    attach_saved_native_surface_membership,
+    canonical_integral,
+    empty_raw_integrals,
+    integral_target,
+    store_integral,
 )
 from scgsim.aedt.epr.models import (
     EprResult,
@@ -43,7 +43,7 @@ from scgsim.aedt.epr.native import (
     bind_saved_analysis_surfaces,
     verify_saved_native_surface_references,
 )
-from scgsim.aedt.preparation.handoff import _prepare_epr_analysis_handoff
+from scgsim.aedt.preparation.handoff import prepare_epr_analysis_handoff
 from scgsim.aedt.runtime.families.hfss_body_eigenmode import (
     PreparedBodyEigenmode,
     prepare_body_eigenmode,
@@ -51,14 +51,14 @@ from scgsim.aedt.runtime.families.hfss_body_eigenmode import (
     read_body_eigenmode_setup,
     solve_and_export_body_eigenmode,
 )
-from scgsim.aedt.runtime.families.hfss_export import _export_eigenmode
+from scgsim.aedt.runtime.families.hfss_export import export_eigenmode
 from scgsim.aedt.runtime.native.common import (
     detached_data,
     pyaedt_version,
 )
 from scgsim.aedt.runtime.native.hfss_geometry import bind_saved_planar_geometry
-from scgsim.aedt.runtime.native.hfss_junction_readback import _read_saved_junction_lines
-from scgsim.aedt.runtime.native.hfss_lumped import _bind_saved_generic_rlcs
+from scgsim.aedt.runtime.native.hfss_junction_readback import read_saved_junction_lines
+from scgsim.aedt.runtime.native.hfss_lumped import bind_saved_generic_rlcs
 from scgsim.aedt.specs.common import REQUIRED_AEDT_VERSION, AedtResources
 from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
@@ -84,7 +84,7 @@ def analyze_epr(  # noqa: PLR0913 -- public keyword-only signature.
 ) -> Any:
     """Analyze one sealed saved-field cohort in an owned disposable workcopy."""
 
-    plan = _prepare_epr_analysis_handoff(
+    plan = prepare_epr_analysis_handoff(
         saved_solution=saved_solution,
         geometry=geometry,
         project_name=project_name,
@@ -95,11 +95,11 @@ def analyze_epr(  # noqa: PLR0913 -- public keyword-only signature.
         geometry_workers=geometry_workers,
     )
     from scgsim.aedt.results.epr import resolve_epr_result
-    from scgsim.aedt.runtime.transaction import _execute
+    from scgsim.aedt.runtime.transaction import execute
 
     previous = Path.cwd()
     try:
-        exit_code = _execute(plan.metadata_path, analyze_epr=True)
+        exit_code = execute(plan.metadata_path, analyze_epr=True)
     finally:
         import os
 
@@ -160,7 +160,7 @@ def _evaluate_mode_integrals(
     if observed != pp_values:
         raise RuntimeError("EPR mode postprocessing assignment readback differs")
     solution = f"{spec.run_control.setup_name} : LastAdaptive"
-    raw = _empty_raw_integrals()
+    raw = empty_raw_integrals()
     raw["frequency_hz"] = {"value": frequency_hz, "unit": "Hz"}
     evidence: list[dict[str, Any]] = []
     for expression in expressions:
@@ -169,7 +169,7 @@ def _evaluate_mode_integrals(
         identity = expression["identity"]
         selection = identity["selection"]
         purpose = str(identity["purpose"])
-        target = _integral_target(purpose, selection)
+        target = integral_target(purpose, selection)
         scalar = parse_native_scalar(
             app.post.fields_calculator.evaluate(
                 expression["name"],
@@ -177,10 +177,10 @@ def _evaluate_mode_integrals(
                 intrinsics={"Phase": "0deg", **pp_values},
             )
         )
-        value, item_evidence = _canonical_integral(
+        value, item_evidence = canonical_integral(
             scalar, target=target, purpose=purpose
         )
-        _store_integral(
+        store_integral(
             raw,
             target=target,
             value=value,
@@ -225,13 +225,13 @@ def analyze_saved_epr(
     started = time.perf_counter()
     geometry = bind_saved_planar_geometry(app, spec.geometry)
     bind_saved_analysis_surfaces(app, spec.geometry, geometry)
-    _bind_saved_generic_rlcs(app, spec.geometry, geometry)
-    _read_saved_junction_lines(
+    bind_saved_generic_rlcs(app, spec.geometry, geometry)
+    read_saved_junction_lines(
         app, project_path, spec.design_name, spec.geometry, geometry
     )
     timings["geometry_rebind_seconds"] = round(time.perf_counter() - started, 6)
     started = time.perf_counter()
-    expressions, authoring, phase_timings = _author_epr_expressions(
+    expressions, authoring, phase_timings = author_epr_expressions(
         app,
         work_root,
         spec,
@@ -249,7 +249,7 @@ def analyze_saved_epr(
     output_dir = Path(run_dir) / "results/epr"
     output_dir.mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()
-    outputs, final_modes = _export_eigenmode(app, Path(run_dir), output_dir, spec)
+    outputs, final_modes = export_eigenmode(app, Path(run_dir), output_dir, spec)
     timings["final_export_seconds"] = round(time.perf_counter() - started, 6)
     selected_modes = (
         tuple(range(1, spec.run_control.num_modes + 1))
@@ -266,7 +266,7 @@ def analyze_saved_epr(
     result_provenance = {
         "model_source_sha256": spec.geometry.model_sha256,
         "analysis_source_sha256": spec.geometry.source_sha256,
-        "surface_analysis_scope": _SURFACE_ANALYSIS_SCOPE,
+        "surface_analysis_scope": SURFACE_ANALYSIS_SCOPE,
         "saved_solution_content_sha256": spec.saved_solution.content_sha256,
         "saved_solution_identity": detached(spec.saved_solution.identity),
         "requested_modes": list(selected_modes),
@@ -298,7 +298,7 @@ def analyze_saved_epr(
         )
         cache["native_surface_references"] = native_references
         for row in rows:
-            _attach_saved_native_surface_membership(
+            attach_saved_native_surface_membership(
                 row["raw_integrals"], row, native_references
             )
         result = EprResult(
@@ -462,7 +462,7 @@ def _evaluate_saved_modes(
 def _analysis_readback(app, spec, cache, project_path):
     """Read the persisted cache and native face membership after the project save."""
 
-    cache["serialized_readback"] = _read_cache(app, spec, cache["items"])
+    cache["serialized_readback"] = read_cache(app, spec, cache["items"])
     references = cache["native_surface_references"]
     if references:
         cache["native_surface_references"] = verify_saved_native_surface_references(
@@ -493,7 +493,7 @@ def prepare_epr_hfss(
         spec,
         geometry_extension=add_analysis_surfaces,
         analysis_author=lambda app, workspace, bound, geometry: (
-            _prepare_expressions_and_cache(app, workspace, bound, geometry, inset_plan)
+            prepare_expressions_and_cache(app, workspace, bound, geometry, inset_plan)
         ),
         analysis_readback=_analysis_readback,
     )
@@ -505,7 +505,7 @@ def prepared_epr_result(prepared: PreparedBodyEigenmode) -> dict[str, Any]:
     result = prepared_body_eigenmode_result(
         prepared, analysis_readback=_prepared_analysis_readback
     )
-    result["surface_analysis_scope"] = _SURFACE_ANALYSIS_SCOPE
+    result["surface_analysis_scope"] = SURFACE_ANALYSIS_SCOPE
     return result
 
 
@@ -516,7 +516,7 @@ def _export_epr_analysis(  # noqa: PLR0913 -- signature fixed by `analysis_expor
 
     saved_field_evidence = _saved_field_evidence(prepared.app, spec, convergence)
     started = time.perf_counter()
-    history = _adaptive_mode_history(
+    history = adaptive_mode_history(
         prepared.app,
         spec,
         prepared.cache["items"],
@@ -526,7 +526,7 @@ def _export_epr_analysis(  # noqa: PLR0913 -- signature fixed by `analysis_expor
     history_path = output_dir / "adaptive-mode-history.json"
     write_json(history_path, history)
     outputs[history_path.relative_to(run_dir).as_posix()] = file_sha256(history_path)
-    adaptive_result = _adaptive_epr_result(
+    adaptive_result = adaptive_epr_result(
         spec,
         history,
         convergence,
@@ -540,7 +540,7 @@ def _export_epr_analysis(  # noqa: PLR0913 -- signature fixed by `analysis_expor
         history,
         adaptive_result.to_payload(),
         {
-            "surface_analysis_scope": _SURFACE_ANALYSIS_SCOPE,
+            "surface_analysis_scope": SURFACE_ANALYSIS_SCOPE,
             "saved_field_evidence": saved_field_evidence,
         },
     )

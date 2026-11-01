@@ -16,36 +16,36 @@ from typing import Any
 
 from scgsim.aedt._data import detached
 from scgsim.aedt.preparation.planar import (
-    _junction_polygon,
-    _junction_terminal_line,
-    _native_entity_name,
-    _native_name,
+    junction_polygon,
+    junction_terminal_line,
+    native_entity_name,
+    native_name,
 )
 from scgsim.aedt.runtime.native.common import (
-    _native_boundary_type,
-    _native_object_boolean_property,
-    _native_object_evidence,
-    _resolve_native_assignment,
+    native_boundary_type,
+    native_object_boolean_property,
+    native_object_evidence,
     native_object_property,
+    resolve_native_assignment,
 )
 from scgsim.aedt.runtime.native.hfss_bodies import (
-    _install_material_catalog,
-    _material_readback,
-    _native_conductor_geometry,
-    _native_solution_materials,
-    _polygon_sheet,
-    _prepared_modeling_identity,
-    _solution_body,
-    _swept_z_solid,
-    _validate_native_modeling_source,
+    install_material_catalog,
+    native_conductor_geometry,
+    native_solution_materials,
+    polygon_sheet,
+    prepared_modeling_identity,
+    read_back_materials,
+    solution_body,
+    swept_z_solid,
+    validate_native_modeling_source,
 )
 from scgsim.aedt.runtime.native.hfss_enclosure import (
-    _create_epr_region,
-    _implicit_closed_enclosure,
-    _verified_region_bounds,
+    create_epr_region,
+    implicit_closed_enclosure,
+    verified_region_bounds,
 )
 from scgsim.aedt.runtime.native.hfss_junction_readback import (
-    _native_junction_live_readback,
+    native_junction_live_readback,
 )
 from scgsim.aedt.specs.epr import PlanarJunction
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
@@ -59,12 +59,12 @@ def _native_lumped_supports(
     for support in prepared.source.get("lumped_supports", ()):
         value = detached(support)
         effective = value["effective"]
-        name = _native_name("lumped_support", value["support_id"])
+        name = native_name("lumped_support", value["support_id"])
         if saved:
             obj = app.modeler[name]
         else:
-            obj = _polygon_sheet(app, effective, name=name, z_um=effective["z_um"])
-        evidence = _native_object_evidence(app, name)
+            obj = polygon_sheet(app, effective, name=name, z_um=effective["z_um"])
+        evidence = native_object_evidence(app, name)
         if evidence["native_object_type"] != "Sheet" or len(obj.faces) != 1:
             raise RuntimeError(
                 f"neutral support is not one native Sheet face: {value['support_id']!r}"
@@ -114,9 +114,7 @@ def prepare_native_planar_geometry(
     phase_seconds: dict[str, float] = {}
 
     started = time.perf_counter()
-    material_readback = _install_material_catalog(
-        app, _native_solution_materials(source)
-    )
+    material_readback = install_material_catalog(app, native_solution_materials(source))
     phase_seconds["materials_seconds"] = time.perf_counter() - started
 
     bindings: list[dict[str, Any]] = []
@@ -135,8 +133,8 @@ def prepare_native_planar_geometry(
     phase_seconds["junctions_seconds"] = time.perf_counter() - started
 
     started = time.perf_counter()
-    bindings.insert(0, _create_epr_region(app, source))
-    enclosure = _implicit_closed_enclosure(app, source)
+    bindings.insert(0, create_epr_region(app, source))
+    enclosure = implicit_closed_enclosure(app, source)
     phase_seconds["region_boundary_seconds"] = time.perf_counter() - started
 
     surface_selections: list[dict[str, Any]] = []
@@ -148,7 +146,7 @@ def prepare_native_planar_geometry(
         raise RuntimeError("native planar object names are not unique")
     return {
         "schema_version": "scgsim.aedt.epr-native-binding.v1",
-        **_prepared_modeling_identity(prepared),
+        **prepared_modeling_identity(prepared),
         "source_sha256": prepared.source_sha256,
         "objects": bindings,
         **(
@@ -180,7 +178,7 @@ def _validated_native_source(prepared: PreparedPlanarGeometry) -> dict[str, Any]
         raise ValueError("EPR geometry predates single Region; reprepare the handoff")
     if source["native_region"].get("outer_boundary_policy") != "hfss_default.v1":
         raise ValueError("EPR Region boundary policy requires re-preparation")
-    _validate_native_modeling_source(prepared, source)
+    validate_native_modeling_source(prepared, source)
     return source
 
 
@@ -221,8 +219,8 @@ def _create_solution_domains(
     for entity in source["solution_regions"]:
         if entity["metadata"].get("is_auto_vacuum_region"):
             continue
-        obj = _solution_body(app, entity, source)
-        evidence = _native_object_evidence(app, obj.name)
+        obj = solution_body(app, entity, source)
+        evidence = native_object_evidence(app, obj.name)
         if evidence["native_object_type"] != "Solid":
             raise RuntimeError(
                 f"solution domain {entity['semantic_id']!r} is not solid"
@@ -254,33 +252,33 @@ def _create_conductors(
     bindings = []
     junction_polygons = {item.source_polygon_id for item in prepared.junctions}
     for entity in source["conductors"]:
-        representation, z_min_um, z_max_um = _native_conductor_geometry(source, entity)
+        representation, z_min_um, z_max_um = native_conductor_geometry(source, entity)
         is_sheet = representation == "sheet"
         z_um = z_min_um
         thickness_um = z_max_um - z_min_um
         for polygon_id in entity["polygon_ids"]:
             if polygon_id in junction_polygons:
                 continue
-            name = _native_entity_name(
+            name = native_entity_name(
                 source, "conductor", entity["semantic_id"], polygon_id
             )
             boundary_name: str | None = None
             if is_sheet:
-                obj = _polygon_sheet(app, polygons[polygon_id], name=name, z_um=z_um)
-                boundary_name = _native_name(
+                obj = polygon_sheet(app, polygons[polygon_id], name=name, z_um=z_um)
+                boundary_name = native_name(
                     "pec_boundary", entity["semantic_id"], polygon_id
                 )
                 boundary = app.assign_perfect_e(obj.name, name=boundary_name)
                 if boundary is False or boundary is None:
                     raise RuntimeError(f"failed to assign Perfect E to {obj.name!r}")
-                if _native_boundary_type(app, boundary_name) != "Perfect E":
+                if native_boundary_type(app, boundary_name) != "Perfect E":
                     raise RuntimeError(f"Perfect E readback failed for {obj.name!r}")
             else:
                 if thickness_um <= 0.0:
                     raise ValueError(
                         f"finite conductor {entity['semantic_id']!r} requires positive thickness"
                     )
-                obj = _swept_z_solid(
+                obj = swept_z_solid(
                     app,
                     polygons[polygon_id],
                     name=name,
@@ -289,7 +287,7 @@ def _create_conductors(
                 )
                 obj.material_name = "pec"
                 obj.solve_inside = False
-            evidence = _native_object_evidence(app, obj.name)
+            evidence = native_object_evidence(app, obj.name)
             expected_type = "Sheet" if is_sheet else "Solid"
             if evidence["native_object_type"] != expected_type:
                 raise RuntimeError(f"native conductor type mismatch for {obj.name!r}")
@@ -299,7 +297,7 @@ def _create_conductors(
                     "native_material_name": native_object_property(
                         obj, "Material"
                     ).strip('"'),
-                    "native_solve_inside": _native_object_boolean_property(
+                    "native_solve_inside": native_object_boolean_property(
                         obj, "Solve Inside"
                     ),
                 }
@@ -315,7 +313,7 @@ def _create_conductors(
                     "kind": "conductor",
                     "semantic_id": entity["semantic_id"],
                     "source_polygon_id": polygon_id,
-                    **_prepared_modeling_identity(prepared),
+                    **prepared_modeling_identity(prepared),
                     "physical_layer": detached(entity["physical_layer"]),
                     "object_name": obj.name,
                     "boundary_name": boundary_name,
@@ -352,7 +350,7 @@ def _junction_owner_z_um(
         raise RuntimeError(
             f"junction {junction.junction_id!r} source owners do not match its nets"
         )
-    z_values = [_native_conductor_geometry(source, owner)[1] for owner in owners]
+    z_values = [native_conductor_geometry(source, owner)[1] for owner in owners]
     if max(z_values) - min(z_values) > 1e-9:
         raise RuntimeError(f"junction {junction.junction_id!r} owners are not coplanar")
     return partition["z_um"] if partition is not None else z_values[0]
@@ -372,13 +370,13 @@ def _create_junctions(
     """
     junction_bindings: list[dict[str, Any]] = []
     for junction in prepared.junctions:
-        polygon, partition = _junction_polygon(source, junction, polygons)
+        polygon, partition = junction_polygon(source, junction, polygons)
         region = junction_regions.get(junction.source_polygon_id)
         z_um = _junction_owner_z_um(source, junction, partition, region)
-        name = _native_name("junction", junction.junction_id)
-        sheet = _polygon_sheet(app, polygon, name=name, z_um=z_um)
-        line, span_um = _junction_terminal_line(polygon, junction, z_um)
-        boundary_name = _native_name("junction_rlc", junction.junction_id)
+        name = native_name("junction", junction.junction_id)
+        sheet = polygon_sheet(app, polygon, name=name, z_um=z_um)
+        line, span_um = junction_terminal_line(polygon, junction, z_um)
+        boundary_name = native_name("junction_rlc", junction.junction_id)
         boundary = app.assign_lumped_rlc_to_sheet(
             sheet.name,
             line,
@@ -389,9 +387,9 @@ def _create_junctions(
         )
         if boundary is False or boundary is None:
             raise RuntimeError(f"failed to assign junction {junction.junction_id!r}")
-        evidence = _native_object_evidence(app, sheet.name)
+        evidence = native_object_evidence(app, sheet.name)
         partition_readback = (
-            _native_junction_live_readback(app, source, junction)
+            native_junction_live_readback(app, source, junction)
             if partition is not None
             else None
         )
@@ -438,7 +436,7 @@ def bind_saved_planar_geometry(
     if not isinstance(prepared, PreparedPlanarGeometry):
         raise TypeError("prepared must be PreparedPlanarGeometry")
     source = detached(prepared.source)
-    _validate_native_modeling_source(prepared, source)
+    validate_native_modeling_source(prepared, source)
     if (
         source.get("native_region", {}).get("method")
         != "single_region_absolute_offset.v1"
@@ -454,14 +452,14 @@ def bind_saved_planar_geometry(
     boundary_policy = region_plan.get("outer_boundary_policy")
     if boundary_policy == "hfss_default.v1":
         enclosure = {
-            **_implicit_closed_enclosure(app, source),
+            **implicit_closed_enclosure(app, source),
             "binding_stage": "saved_project_readback_without_cad_creation",
         }
     else:
         raise ValueError("saved EPR Region boundary policy is unknown")
     return {
         "schema_version": "scgsim.aedt.epr-native-binding.v1",
-        **_prepared_modeling_identity(prepared),
+        **prepared_modeling_identity(prepared),
         "source_sha256": prepared.source_sha256,
         "objects": objects,
         **(
@@ -471,8 +469,8 @@ def bind_saved_planar_geometry(
         ),
         "junctions": junctions,
         "surface_selections": selections,
-        "material_readback": _material_readback(
-            app, _native_solution_materials(source)
+        "material_readback": read_back_materials(
+            app, native_solution_materials(source)
         ),
         "closed_enclosure": enclosure,
         "binding_stage": "saved_project_readback_without_cad_creation",
@@ -487,8 +485,8 @@ def _bind_saved_solution_domains(
     for domain in source["solution_regions"]:
         if domain["metadata"].get("is_auto_vacuum_region"):
             continue
-        name = _native_entity_name(source, "domain", domain["semantic_id"])
-        evidence = _native_object_evidence(app, name)
+        name = native_entity_name(source, "domain", domain["semantic_id"])
+        evidence = native_object_evidence(app, name)
         if evidence["native_object_type"] != "Solid":
             raise RuntimeError(f"saved solution domain {name!r} is not solid")
         objects.append(
@@ -508,13 +506,13 @@ def _bind_saved_region(app: Any, region_plan: Mapping[str, Any]) -> dict[str, An
     saved_region = app.modeler.get_object_from_name("Region")
     if saved_region is None:
         raise RuntimeError("saved EPR Region is unavailable")
-    region_evidence = _native_object_evidence(app, "Region")
+    region_evidence = native_object_evidence(app, "Region")
     if region_evidence["native_object_type"] != "Solid":
         raise RuntimeError("saved EPR Region is not solid")
     saved_material = native_object_property(saved_region, "Material").strip('"')
     if saved_material.casefold() != str(region_plan["material_id"]).casefold():
         raise RuntimeError("saved EPR Region vacuum material differs")
-    if not _native_object_boolean_property(saved_region, "Solve Inside"):
+    if not native_object_boolean_property(saved_region, "Solve Inside"):
         raise RuntimeError("saved EPR Region does not solve inside vacuum")
     return {
         "kind": "solution_domain",
@@ -525,7 +523,7 @@ def _bind_saved_region(app: Any, region_plan: Mapping[str, Any]) -> dict[str, An
         "padding_um": list(region_plan["padding_um"]),
         "native_solve_inside": True,
         "native_bounding_box_um": list(
-            _verified_region_bounds(saved_region, region_plan)
+            verified_region_bounds(saved_region, region_plan)
         ),
         **region_evidence,
     }
@@ -538,22 +536,22 @@ def _bind_saved_conductors(
     objects: list[dict[str, Any]] = []
     junction_polygon_ids = {item.source_polygon_id for item in prepared.junctions}
     for entity in source["conductors"]:
-        representation, _, _ = _native_conductor_geometry(source, entity)
+        representation, _, _ = native_conductor_geometry(source, entity)
         is_sheet = representation == "sheet"
         for polygon_id in entity["polygon_ids"]:
             if polygon_id in junction_polygon_ids:
                 continue
-            name = _native_entity_name(
+            name = native_entity_name(
                 source, "conductor", entity["semantic_id"], polygon_id
             )
-            evidence = _native_object_evidence(app, name)
+            evidence = native_object_evidence(app, name)
             expected_type = "Sheet" if is_sheet else "Solid"
             if evidence["native_object_type"] != expected_type:
                 raise RuntimeError(f"saved conductor {name!r} has wrong object type")
             boundary_name: str | None = None
             observed: dict[str, Any] = {}
             if is_sheet:
-                boundary_name = _native_name(
+                boundary_name = native_name(
                     "pec_boundary", entity["semantic_id"], polygon_id
                 )
                 _verify_saved_sheet_pec(app, name, boundary_name)
@@ -564,7 +562,7 @@ def _bind_saved_conductors(
                     "kind": "conductor",
                     "semantic_id": entity["semantic_id"],
                     "source_polygon_id": polygon_id,
-                    **_prepared_modeling_identity(prepared),
+                    **prepared_modeling_identity(prepared),
                     **(
                         {"physical_layer": detached(entity["physical_layer"])}
                         if isinstance(entity.get("physical_layer"), Mapping)
@@ -581,7 +579,7 @@ def _bind_saved_conductors(
 
 def _verify_saved_sheet_pec(app: Any, name: str, boundary_name: str) -> None:
     """Require a sheet conductor to be the sole target of its Perfect E boundary."""
-    if _native_boundary_type(app, boundary_name) != "Perfect E":
+    if native_boundary_type(app, boundary_name) != "Perfect E":
         raise RuntimeError(f"saved conductor {name!r} lacks Perfect E")
     assigned = app.oboundary.GetBoundaryAssignment(boundary_name)
     if assigned is None:
@@ -592,7 +590,7 @@ def _verify_saved_sheet_pec(app: Any, name: str, boundary_name: str) -> None:
         raise RuntimeError(f"saved conductor {name!r} has invalid PEC IDs") from exc
     if not raw_ids or len(raw_ids) != len(set(raw_ids)):
         raise RuntimeError(f"saved conductor {name!r} has invalid PEC IDs")
-    _, _, assigned_objects = _resolve_native_assignment(app, raw_ids)
+    _, _, assigned_objects = resolve_native_assignment(app, raw_ids)
     if assigned_objects != {name}:
         raise RuntimeError(f"saved conductor {name!r} PEC target differs")
 
@@ -604,7 +602,7 @@ def _verify_saved_solid_pec(app: Any, name: str) -> dict[str, Any]:
         raise RuntimeError(f"saved conductor {name!r} is unavailable")
     observed = {
         "native_material_name": native_object_property(obj, "Material").strip('"'),
-        "native_solve_inside": _native_object_boolean_property(obj, "Solve Inside"),
+        "native_solve_inside": native_object_boolean_property(obj, "Solve Inside"),
     }
     if (
         observed["native_material_name"].casefold() != "pec"
@@ -620,12 +618,12 @@ def _bind_saved_junctions(
     """Check each saved junction sheet; partitioned junctions get a live CAD readback."""
     junctions: list[dict[str, Any]] = []
     for junction in prepared.junctions:
-        name = _native_name("junction", junction.junction_id)
-        evidence = _native_object_evidence(app, name)
+        name = native_name("junction", junction.junction_id)
+        evidence = native_object_evidence(app, name)
         if evidence["native_object_type"] != "Sheet":
             raise RuntimeError(f"saved junction {name!r} is not a sheet")
         partition_readback = (
-            _native_junction_live_readback(app, source, junction)
+            native_junction_live_readback(app, source, junction)
             if junction.junction_id in source.get("junction_partitions", {})
             else None
         )
@@ -634,7 +632,7 @@ def _bind_saved_junctions(
                 "junction_id": junction.junction_id,
                 "source_polygon_id": junction.source_polygon_id,
                 "object_name": name,
-                "boundary_name": _native_name("junction_rlc", junction.junction_id),
+                "boundary_name": native_name("junction_rlc", junction.junction_id),
                 **(
                     {"_partition_live_readback": partition_readback}
                     if partition_readback is not None

@@ -11,15 +11,15 @@ from collections.abc import Mapping, Sequence
 from dataclasses import fields, is_dataclass, replace
 from typing import Any
 
-from scgsim.geometry._primitives.entity_validation import _requires_route_representation
 from scgsim.geometry.models.physical import (
     PHYSICAL_LAYER_FIELD,
     ApproximationProfile,
     PhysicalLayerDeclaration,
     PhysicalRepresentationPlan,
 )
+from scgsim.geometry.primitives.entity_validation import requires_route_representation
 from scgsim.semantics.route_a import geometry_z_range, same_z
-from scgsim.semantics.snapshot import _plain_semantic_facts, canonical_sha256
+from scgsim.semantics.snapshot import canonical_sha256, plain_semantic_facts
 
 
 def _source_plain(value: Any) -> Any:
@@ -32,7 +32,7 @@ def _source_plain(value: Any) -> Any:
         return {key: _source_plain(item) for key, item in value.items()}
     if isinstance(value, (tuple, list)):
         return [_source_plain(item) for item in value]
-    return _plain_semantic_facts(value)
+    return plain_semantic_facts(value)
 
 
 def interpret_physical_layers(
@@ -343,7 +343,7 @@ def _declared_physical_layers(
             declaration = PhysicalLayerDeclaration.from_payload(raw)
             declarations.append(declaration)
             bindings[entity.semantic_id] = declaration.physical_layer_id
-        elif _requires_route_representation(entity) and profile.name not in {
+        elif requires_route_representation(entity) and profile.name not in {
             "solid",
             "route_b",
         }:
@@ -363,9 +363,11 @@ def _project_enclosures(
     for entity in effective_input.entities:
         if not entity.metadata.get("is_auto_vacuum_region"):
             continue
-        from scgsim.geometry.planning.auto_vacuum import _auto_vacuum_envelope_bounds
+        from scgsim.geometry.planning.solutions.auto_vacuum import (
+            auto_vacuum_envelope_bounds,
+        )
 
-        effective_body = _auto_vacuum_envelope_bounds(
+        effective_body = auto_vacuum_envelope_bounds(
             effective_input, route=None, representation_context=plan.context
         )
         source_geometry = facts[entity.semantic_id]["source_geometry"]

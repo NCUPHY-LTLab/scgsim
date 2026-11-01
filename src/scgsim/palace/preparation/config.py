@@ -24,21 +24,21 @@ from .electrostatic_boundaries import (
     GroundBoundaryResolution,
     TerminalBinding,
     TerminalIndexEntry,
-    _electrostatic_boundaries,
+    electrostatic_boundaries,
 )
-from .numerical import _positive_finite
+from .numerical import positive_finite
 from .solution_volumes import (
-    _domain_energy_rows,
-    _domains_from_solution_volumes,
-    _material_resolution,
-    _materials_from_solution_volumes,
-    _physical_group_values,
+    domain_energy_rows,
+    domains_from_solution_volumes,
+    materials_from_solution_volumes,
+    physical_group_values,
+    resolve_volume_materials,
 )
 from .surface_epr import build_surface_epr_postprocessing
 
 # Model.L0 in metres: the length unit of mesh coordinates and of lengths in the config
 # (1e-6 is one micrometre).
-_MODEL_L0_M = 1e-6
+MODEL_L0_M = 1e-6
 
 
 @dataclass(frozen=True)
@@ -102,7 +102,7 @@ def build_electrostatic_config(  # noqa: PLR0913 - public keyword-only API, one 
         )
 
     boundary_map, terminal_index_map, ground_boundary_resolution = (
-        _electrostatic_boundaries(
+        electrostatic_boundaries(
             groups=groups,
             terminals=terminals,
             ground_net_ids=ground_net_ids,
@@ -110,15 +110,15 @@ def build_electrostatic_config(  # noqa: PLR0913 - public keyword-only API, one 
             exterior_boundary_policy=exterior_boundary_policy,
         )
     )
-    domain_volumes = _domains_from_solution_volumes(groups.get("volumes", {}))
-    materials_payload = _materials_from_solution_volumes(
+    domain_volumes = domains_from_solution_volumes(groups.get("volumes", {}))
+    materials_payload = materials_from_solution_volumes(
         domain_volumes=domain_volumes,
         materials=materials,
     )
     epr_rows, epr_index_map = build_surface_epr_postprocessing(
-        groups, surface_epr_specs, model_l0_m=_MODEL_L0_M
+        groups, surface_epr_specs, model_l0_m=MODEL_L0_M
     )
-    energy_rows, energy_index_map = _domain_energy_rows(domain_volumes, materials)
+    energy_rows, energy_index_map = domain_energy_rows(domain_volumes, materials)
 
     config: dict[str, Any] = {
         "Problem": _problem_block("Electrostatic", numerical),
@@ -145,7 +145,7 @@ def build_electrostatic_config(  # noqa: PLR0913 - public keyword-only API, one 
         terminal_index_map=terminal_index_map,
         surface_epr_index_map=epr_index_map,
         domain_energy_index_map=energy_index_map,
-        material_resolution=_material_resolution(domain_volumes, materials),
+        material_resolution=resolve_volume_materials(domain_volumes, materials),
         ground_boundary_resolution=ground_boundary_resolution,
     )
 
@@ -166,13 +166,13 @@ def build_eigenmode_config(  # noqa: PLR0913 - public keyword-only API, one argu
     """Build one non-Floquet Eigenmode config from SGB-authored groups."""
     _check_eigenmode_controls(num_modes, target_hz, eigenmode_tolerance, save_fields)
 
-    domain_volumes = _domains_from_solution_volumes(groups.get("volumes", {}))
-    material_rows = _materials_from_solution_volumes(
+    domain_volumes = domains_from_solution_volumes(groups.get("volumes", {}))
+    material_rows = materials_from_solution_volumes(
         domain_volumes=domain_volumes, materials=materials
     )
-    energy_rows, energy_index = _domain_energy_rows(domain_volumes, materials)
+    energy_rows, energy_index = domain_energy_rows(domain_volumes, materials)
     epr_rows, epr_index = build_surface_epr_postprocessing(
-        groups, surface_epr_specs, model_l0_m=_MODEL_L0_M
+        groups, surface_epr_specs, model_l0_m=MODEL_L0_M
     )
     lumped_ports, port_info, port_index = _eigenmode_lumped_ports(groups, ports)
     _check_ports_are_not_loss_groups(lumped_ports, epr_rows)
@@ -212,7 +212,7 @@ def build_eigenmode_config(  # noqa: PLR0913 - public keyword-only API, one argu
         config=config,
         port_information=port_info,
         index_entries=[*port_index, *energy_index, *epr_index],
-        material_resolution=_material_resolution(domain_volumes, materials),
+        material_resolution=resolve_volume_materials(domain_volumes, materials),
     )
 
 
@@ -224,9 +224,9 @@ def _check_eigenmode_controls(
 ) -> None:
     if not isinstance(num_modes, int) or isinstance(num_modes, bool) or num_modes < 1:
         raise ValueError("num_modes must be a positive integer.")
-    if not _positive_finite(eigenmode_tolerance):
+    if not positive_finite(eigenmode_tolerance):
         raise ValueError("Eigenmode tolerance must be finite and positive.")
-    if target_hz is not None and not _positive_finite(target_hz):
+    if target_hz is not None and not positive_finite(target_hz):
         raise ValueError("Eigenmode target must be finite positive Hz.")
     if (
         not isinstance(save_fields, int)
@@ -260,7 +260,7 @@ def _pec_attributes(
         {
             int(value)
             for info in groups.get("pec_surfaces", {}).values()
-            for value in _physical_group_values(info.get("phys_group"))
+            for value in physical_group_values(info.get("phys_group"))
         }
     )
     if not pec_attributes:
@@ -281,7 +281,7 @@ def _problem_block(problem_type: str, numerical: Mapping[str, Any]) -> dict[str,
 def _model_block(mesh_path: Path, numerical: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "Mesh": str(mesh_path.name),
-        "L0": _MODEL_L0_M,
+        "L0": MODEL_L0_M,
         "Refinement": _build_refinement(numerical),
     }
 
@@ -390,7 +390,7 @@ def _eigenmode_lumped_ports(
         group = _port_group(groups, port, key)
         direction = _direction_tuple(group.get("direction"), port.name)
         _check_port_identity(port, group, direction)
-        attributes = sorted(_physical_group_values(group.get("phys_group")))
+        attributes = sorted(physical_group_values(group.get("phys_group")))
         rows.append(
             {
                 "Index": port.index,

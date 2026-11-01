@@ -33,7 +33,7 @@ from scgsim.aedt.epr.native import (
     bind_inset_surface_selections,
     bind_native_surface_references,
 )
-from scgsim.aedt.epr.normalized_total import _normalized_surface_total_operations
+from scgsim.aedt.epr.normalized_total import normalized_surface_total_operations
 from scgsim.aedt.epr.selection import surface_integral_groups
 from scgsim.aedt.runtime.native.common import detached_data
 from scgsim.aedt.specs.epr import (
@@ -47,7 +47,7 @@ from scgsim.aedt.specs.hfss_prepared import HfssEprSpec
 # --- Entry point ------------------------------------------------------------
 
 
-def _author_epr_expressions(  # noqa: PLR0913 -- one argument per authoring input.
+def author_epr_expressions(  # noqa: PLR0913 -- one argument per authoring input.
     app: Any,
     run_dir: Path,
     spec: HfssEprSpec,
@@ -646,7 +646,7 @@ def _author_convergence_expression(author: _ExpressionAuthor) -> None:
             "evaluation_kind": target.evaluation_kind,
             "margin_um": target.margin_um,
         }
-        operations = _normalized_surface_total_operations(
+        operations = normalized_surface_total_operations(
             spec, author.expressions, target
         )
     elif isinstance(target, NativeExpressionDefinition):

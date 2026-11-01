@@ -54,7 +54,7 @@ def _face_boundary(gmsh: Any, tag: int) -> dict[tuple[int, ...], Counter]:
     return wires
 
 
-def _surface_outer_wire_edges(surfaces, loops, curve_tags, surface_tags):
+def surface_outer_wire_edges(surfaces, loops, curve_tags, surface_tags):
     """Bind the existing typed outer loop to current native edges."""
     loops_by_id = {loop.loop_id: loop for loop in loops}
     return {
@@ -67,7 +67,7 @@ def _surface_outer_wire_edges(surfaces, loops, curve_tags, surface_tags):
     }
 
 
-def _rebind_surface_loops(surfaces, loops, curve_tags, surface_tags, repaired):
+def rebind_surface_loops(surfaces, loops, curve_tags, surface_tags, repaired):
     """Consume wire reversal only when every use of a canonical loop agrees."""
     uses = {}
     for surface in surfaces:
@@ -110,7 +110,7 @@ def _rebind_surface_loops(surfaces, loops, curve_tags, surface_tags, repaired):
     return tuple(result)
 
 
-def _rebind_volume_surface_refs(volumes, parities):
+def rebind_volume_surface_refs(volumes, parities):
     """Express retained shell directions in the final typed outer-wire basis."""
 
     def rebind(ref):

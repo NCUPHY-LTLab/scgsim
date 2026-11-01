@@ -35,7 +35,7 @@ package.
 ## AEDT receipt and runtime source {#aedt-receipt-cohorts}
 
 The run receipt schema is `scgsim.aedt.receipt.v3`. The current runtime source
-schema is `scgsim.aedt.runtime-source.v22`. SCGSim reads and writes only these
+schema is `scgsim.aedt.runtime-source.v23`. SCGSim reads and writes only these
 two versions. A run directory that carries any other receipt or source schema
 fails with an error that names the version found and the version supported.
 
@@ -43,7 +43,7 @@ New handoffs write `scgsim.aedt.handoff.v1` and
 `scgsim.aedt.handoff-manifest.v1`; body-first requests write the matching `v2`
 records. Both record `expected_receipt_schema: scgsim.aedt.receipt.v3`, and the
 initial receipt is V3. It contains `prepared_runtime_source`: a deterministic,
-sorted `runtime-source.v22` manifest. The record fields are `schema_version`,
+sorted `runtime-source.v23` manifest. The record fields are `schema_version`,
 `stage`, `modules`, `content_sha256`, and `revision_observation`. Each declared
 module has measured bytes, and the content digest binds that inventory. The Git
 observation is either the actual 40-hex commit or explicitly unavailable. A
@@ -59,7 +59,7 @@ Every new Q3D or HFSS 3D execution requires an explicit `modeling`; a
 payload without `modeling` is rejected. Q3D has one input schema, `v3`.
 
 Every completed V3 receipt has a separate `runtime_source` manifest, also
-`runtime-source.v22`, for the code that actually executed the run. Declared
+`runtime-source.v23`, for the code that actually executed the run. Declared
 module bytes and the digest are mandatory. `revision_observation` carries the
 actual 40-hex commit when available and records `unavailable` for a wheel
 without VCS metadata. Missing or corrupt declared module bytes, digest or

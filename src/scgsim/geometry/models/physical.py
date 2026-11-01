@@ -17,9 +17,9 @@ from scgsim.geometry.models.representation import (
     RepresentationContext,
 )
 from scgsim.semantics.snapshot import (
-    _plain_semantic_facts,
     canonical_sha256,
     freeze_plain,
+    plain_semantic_facts,
 )
 
 FeatureKind = Literal["stack_film", "local_film", "finite_volume"]
@@ -89,7 +89,7 @@ class PhysicalLayerDeclaration:
     def to_payload(self) -> dict[str, Any]:
         """Plain JSON-ready mapping of every dataclass field."""
         return {
-            name: _plain_semantic_facts(getattr(self, name))
+            name: plain_semantic_facts(getattr(self, name))
             for name in self.__dataclass_fields__
         }
 
@@ -125,7 +125,7 @@ class ApproximationProfile:
         return {
             "name": self.name,
             "revision": self.revision,
-            "parameters": _plain_semantic_facts(self.parameters),
+            "parameters": plain_semantic_facts(self.parameters),
         }
 
     @classmethod
@@ -185,7 +185,7 @@ class PhysicalRepresentationPlan:
                 for key, value in self.entities.items()
             },
             enclosures={
-                key: EffectiveEnclosure(**_plain_semantic_facts(value))
+                key: EffectiveEnclosure(**plain_semantic_facts(value))
                 for key, value in self.enclosures.items()
             },
         )
@@ -230,7 +230,7 @@ class PhysicalRepresentationPlan:
             if film
             else source_geometry.get("thickness_um", high - low)
         )
-        geometry = _plain_semantic_facts(source_geometry)
+        geometry = plain_semantic_facts(source_geometry)
         geometry.update(z_min_um=effective_low, z_max_um=effective_high)
         if "z_um" in geometry:
             geometry["z_um"] = effective_low
@@ -241,18 +241,16 @@ class PhysicalRepresentationPlan:
             "representation": representation,
             "source_interval_um": [low, high],
             "effective_interval_um": [effective_low, effective_high],
-            "source_geometry": _plain_semantic_facts(source_geometry),
+            "source_geometry": plain_semantic_facts(source_geometry),
             "effective_geometry": geometry,
             "physical_thickness_um": physical_thickness,
             "physical_thickness_basis": "source_film_normal"
             if film
             else "source_body_axial",
-            "physical_dimensions": _plain_semantic_facts(
-                declaration.physical_dimensions
-            )
+            "physical_dimensions": plain_semantic_facts(declaration.physical_dimensions)
             if declaration
             else {},
-            "source_contact_facts": _plain_semantic_facts(
+            "source_contact_facts": plain_semantic_facts(
                 declaration.source_contact_facts
             )
             if declaration
@@ -304,8 +302,8 @@ class PhysicalRepresentationPlan:
         return {
             "source_bounds_um": bounds,
             "effective_bounds_um": effective,
-            "effective_body_bounds_um": _plain_semantic_facts(effective_body_bounds_um),
-            "source_padding_um": _plain_semantic_facts(source_padding_um),
+            "effective_body_bounds_um": plain_semantic_facts(effective_body_bounds_um),
+            "source_padding_um": plain_semantic_facts(source_padding_um),
             "effective_padding_um": padding,
         }
 
@@ -313,7 +311,7 @@ class PhysicalRepresentationPlan:
     def from_payload(cls, value: Mapping[str, Any]) -> PhysicalRepresentationPlan:
         # Frozen prepared provenance and JSON share one exact plain-container basis.
         """Rebuild a plan from `to_payload` output."""
-        value = _plain_semantic_facts(value)
+        value = plain_semantic_facts(value)
         if value.get("schema_version") != PLAN_SCHEMA:
             raise ValueError("unsupported physical representation plan schema")
         expected = {
@@ -343,11 +341,11 @@ class PhysicalRepresentationPlan:
             source_sha256=value["source_sha256"],
         )
         if (
-            _plain_semantic_facts(result.collapse_intervals)
+            plain_semantic_facts(result.collapse_intervals)
             != value["collapse_intervals"]
-            or _plain_semantic_facts(result.sheet_anchors_um)
+            or plain_semantic_facts(result.sheet_anchors_um)
             != value["sheet_anchors_um"]
-            or _plain_semantic_facts(result.supporting_entities)
+            or plain_semantic_facts(result.supporting_entities)
             != value["supporting_entities"]
         ):
             raise ValueError(
@@ -427,10 +425,10 @@ class PhysicalRepresentationPlan:
             "representation": representation,
             "source_interval_um": list(declaration.source_interval_um),
             "effective_interval_um": [low, high],
-            "physical_dimensions": _plain_semantic_facts(
+            "physical_dimensions": plain_semantic_facts(
                 declaration.physical_dimensions
             ),
-            "source_contact_facts": _plain_semantic_facts(
+            "source_contact_facts": plain_semantic_facts(
                 declaration.source_contact_facts
             ),
             "material_id": declaration.material_id,
@@ -443,11 +441,11 @@ class PhysicalRepresentationPlan:
             "source_sha256": self.source_sha256,
             "profile": self.profile.to_payload(),
             "declarations": [item.to_payload() for item in self.declarations],
-            "collapse_intervals": _plain_semantic_facts(self.collapse_intervals),
-            "sheet_anchors_um": _plain_semantic_facts(self.sheet_anchors_um),
-            "entities": _plain_semantic_facts(self.entities),
-            "enclosures": _plain_semantic_facts(self.enclosures),
-            "supporting_entities": _plain_semantic_facts(self.supporting_entities),
+            "collapse_intervals": plain_semantic_facts(self.collapse_intervals),
+            "sheet_anchors_um": plain_semantic_facts(self.sheet_anchors_um),
+            "entities": plain_semantic_facts(self.entities),
+            "enclosures": plain_semantic_facts(self.enclosures),
+            "supporting_entities": plain_semantic_facts(self.supporting_entities),
         }
 
     @property

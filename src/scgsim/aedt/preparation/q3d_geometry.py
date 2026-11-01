@@ -17,7 +17,7 @@ from typing import Literal
 
 from scgsim.aedt._data import canonical_sha256, detached
 from scgsim.aedt._io import file_sha256, write_json
-from scgsim.aedt.preparation.modeling import _interpret_geometry
+from scgsim.aedt.preparation.modeling import interpret_geometry
 from scgsim.aedt.specs.common import MatrixRunControl, PdkMaterial
 from scgsim.aedt.specs.modeling import Modeling
 from scgsim.aedt.specs.q3d import Q3dBodySpec, Q3dNetSpec, Q3dSpec
@@ -47,7 +47,7 @@ def lower_q3d_geometry(  # noqa: PLR0913 - public keyword-only preparation API
             "AEDT finite Q3D lowering does not support active source curve intent"
         )
     stack = snapshot.stack
-    _, _, physical_plan = _interpret_geometry(source, stack, modeling)
+    _, _, physical_plan = interpret_geometry(source, stack, modeling)
     layer_bindings = {
         key: value["physical_layer_id"] for key, value in physical_plan.entities.items()
     }

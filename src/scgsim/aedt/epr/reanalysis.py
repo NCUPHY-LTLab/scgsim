@@ -21,8 +21,8 @@ from typing import Any
 from scgsim.aedt.epr.models import (
     EprResult,
 )
-from scgsim.aedt.epr.selection import _finite
-from scgsim.aedt.epr.surface_epr import _surface_energy_j
+from scgsim.aedt.epr.selection import finite
+from scgsim.aedt.epr.surface_epr import surface_energy_j
 from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
 
 
@@ -59,7 +59,7 @@ def reanalyze_epr(
         if row["status"] != "complete":
             rows.append(row)
             continue
-        normalization = _finite(row["normalization_energy_j"], "normalization energy")
+        normalization = finite(row["normalization_energy_j"], "normalization energy")
         if normalization <= 0:
             raise ValueError("normalization energy must be positive")
         surfaces = [
@@ -173,11 +173,11 @@ def _reanalyzed_surface(
         candidate,
         allow_unknown=True,
     )
-    original_participation = _finite(
+    original_participation = finite(
         surface.get("original_participation", surface["participation"]),
         "original participation",
     )
-    original_energy = _finite(
+    original_energy = finite(
         surface.get("original_energy_j", surface["energy_j"]),
         "original film energy",
     )
@@ -253,16 +253,16 @@ def _recombined_film_energy(
     if surface["interface_kind"] == "MS":
         recombination_terms.add("substrate_relative_permittivity")
     if recombination_terms <= set(surface):
-        energy = _surface_energy_j(
+        energy = surface_energy_j(
             surface["interface_kind"],
             updated["film_thickness_m"],
             updated["film_relative_permittivity"],
-            _finite(
+            finite(
                 surface.get("substrate_relative_permittivity", 1.0),
                 "substrate epsilon",
             ),
-            _finite(surface["normal_integral_v2"], "normal integral"),
-            _finite(surface["tangential_integral_v2"], "tangential integral"),
+            finite(surface["normal_integral_v2"], "normal integral"),
+            finite(surface["tangential_integral_v2"], "tangential integral"),
         )
         return energy / normalization, energy
     if "group_id" in surface:

@@ -17,7 +17,7 @@ from typing import Any
 from scgsim.aedt._data import detached
 from scgsim.aedt._io import file_sha256, read_json, write_json
 from scgsim.aedt.epr.models import EprResult
-from scgsim.aedt.epr.selection import _exact_mapping
+from scgsim.aedt.epr.selection import exact_mapping
 from scgsim.aedt.specs.epr import SavedSolution
 
 
@@ -26,7 +26,7 @@ def resolve_saved_solution(manifest_path: str | Path) -> SavedSolution:
 
     manifest_source = _located_manifest(manifest_path)
     base = manifest_source.parent
-    manifest = _exact_mapping(read_json(manifest_source), "saved-solution manifest")
+    manifest = exact_mapping(read_json(manifest_source), "saved-solution manifest")
     saved = _saved_solution_from_manifest(base, manifest)
     _check_saved_paths(saved)
     _check_saved_receipt(base, manifest, saved)
@@ -110,7 +110,7 @@ def _check_saved_receipt(
         or file_sha256(receipt) != manifest["receipt_sha256"]
     ):
         raise RuntimeError("saved-solution receipt hash mismatch")
-    receipt_payload = _exact_mapping(read_json(receipt), "saved-solution receipt")
+    receipt_payload = exact_mapping(read_json(receipt), "saved-solution receipt")
     if (
         receipt_payload.get("status") != "completed"
         or receipt_payload.get("saved_fields") is not True
@@ -127,7 +127,7 @@ def _check_saved_members(
     observed_members: list[dict[str, Any]] = []
     declared_paths: set[str] = set()
     for member in saved.members:
-        item = _exact_mapping(member, "saved-solution member")
+        item = exact_mapping(member, "saved-solution member")
         if set(item) != {"path", "bytes", "sha256"}:
             raise ValueError("saved-solution member is not canonical")
         relative = _safe_relative(item["path"], "saved-solution member.path")
@@ -181,7 +181,7 @@ def seal_saved_solution(  # noqa: PLR0913 - public API; keyword fields mirror th
         raise RuntimeError("released saved-solution project is unavailable")
     if results.is_symlink() or results.resolve() != results or not results.is_dir():
         raise RuntimeError("released saved-solution result directory is unavailable")
-    evidence = _exact_mapping(evidence, "saved-field evidence")
+    evidence = exact_mapping(evidence, "saved-field evidence")
     _check_saved_field_evidence(evidence)
     inventory = _released_inventory(project, results)
     members = [

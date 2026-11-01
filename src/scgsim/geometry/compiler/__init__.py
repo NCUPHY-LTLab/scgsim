@@ -3,20 +3,6 @@
 from scgsim.geometry.compiler.builder import SemanticGeometryBuilder
 from scgsim.geometry.compiler.dispatch import build_route_construction_plan
 from scgsim.geometry.compiler.surface_overlap import validate_no_surface_overlap
-from scgsim.geometry.compiler.validation import (
-    validate_backend_tag_ledger,
-    validate_curve_plan_coverage,
-    validate_interface_surface_source_of_truth,
-    validate_route_operation_coverage,
-    validate_route_volume_surface_refs,
-    validate_selected_route,
-    validate_surface_deduplication,
-    validate_surface_partition_coverage,
-    validate_surface_sheet_interface_coverage,
-    validate_surface_use_counts,
-    validate_tag_plan_coverage,
-    validate_volume_surface_closure,
-)
 from scgsim.geometry.construction.export import export_physical_group_records
 from scgsim.geometry.models.common import (
     RUN_METADATA_DIR,
@@ -52,19 +38,35 @@ from scgsim.geometry.models.topology import (
     SurfaceRefRecord,
     VolumePlanRecord,
 )
-from scgsim.geometry.planning.contact_patches import plan_conductor_contact_patches
+from scgsim.geometry.planning.conductors.contact_patches import (
+    plan_conductor_contact_patches,
+)
+from scgsim.geometry.planning.conductors.mm_contacts import plan_mm_contact_records
+from scgsim.geometry.planning.context.tags import plan_route_tags
+from scgsim.geometry.planning.context.topology import plan_canonical_topology
 from scgsim.geometry.planning.interfaces import (
     complete_interface_plan_from_surfaces,
     recognize_route_interfaces,
 )
-from scgsim.geometry.planning.mm_contacts import plan_mm_contact_records
 from scgsim.geometry.planning.surfaces import (
     plan_route_surfaces,
     plan_surface_contribution_patches,
     plan_surface_partitions,
 )
-from scgsim.geometry.planning.tags import plan_route_tags
-from scgsim.geometry.planning.topology import plan_canonical_topology
+from scgsim.geometry.planning.validation import (
+    validate_backend_tag_ledger,
+    validate_curve_plan_coverage,
+    validate_interface_surface_source_of_truth,
+    validate_route_operation_coverage,
+    validate_route_volume_surface_refs,
+    validate_selected_route,
+    validate_surface_deduplication,
+    validate_surface_partition_coverage,
+    validate_surface_sheet_interface_coverage,
+    validate_surface_use_counts,
+    validate_tag_plan_coverage,
+    validate_volume_surface_closure,
+)
 from scgsim.geometry.planning.volumes import (
     plan_cut_host_operations,
     plan_route_construction_bodies,

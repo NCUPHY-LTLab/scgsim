@@ -10,11 +10,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from scgsim.geometry._primitives.loops import _split_gdstk_cutline_loop
 from scgsim.geometry.models.input import LayoutPolygonSpec
+from scgsim.geometry.primitives.loops import split_gdstk_cutline_loop
 
 
-def _fused_gdstk_components(
+def fused_gdstk_components(
     candidates: Sequence[Any],
 ) -> tuple[tuple[LayoutPolygonSpec, tuple[int, ...], float], ...]:
     """Return stable occupied components for explicit source selectors."""
@@ -37,7 +37,7 @@ def _fused_gdstk_components(
         for other_index, other in enumerate(candidates[index + 1 :], index + 1):
             overlap = gdstk.boolean((polygon,), (other,), "and", precision=1e-9)
             if overlap or _rings_share_edge(
-                _ring_from_gdstk_polygon(polygon), _ring_from_gdstk_polygon(other)
+                ring_from_gdstk_polygon(polygon), ring_from_gdstk_polygon(other)
             ):
                 union(index, other_index)
 
@@ -58,7 +58,7 @@ def _fused_gdstk_components(
         regions = gdstk.offset(regions or (), 0.0, join="miter", precision=1e-9)
         if not regions or len(regions) != 1:
             raise ValueError("fused selector component must lower to one polygon")
-        outer, holes = _split_gdstk_cutline_loop(_ring_from_gdstk_polygon(regions[0]))
+        outer, holes = split_gdstk_cutline_loop(ring_from_gdstk_polygon(regions[0]))
         source_indexes = tuple(indexes)
         result.append(
             (
@@ -84,7 +84,7 @@ def _fused_gdstk_components(
     )
 
 
-def _ring_from_gdstk_polygon(polygon: Any) -> tuple[tuple[float, float], ...]:
+def ring_from_gdstk_polygon(polygon: Any) -> tuple[tuple[float, float], ...]:
     points = tuple((float(x), float(y)) for x, y in polygon.points)
     if len(points) > 1 and points[0] == points[-1]:
         points = points[:-1]
@@ -146,15 +146,15 @@ def _shared_segment_length(
     return overlap * first_length / abs((first_dx, first_dy)[axis])
 
 
-def _point_in_layout_polygon(
+def point_in_layout_polygon(
     point: tuple[float, float], polygon: LayoutPolygonSpec
 ) -> bool:
-    return _point_in_ring(point, polygon.exterior) and not any(
-        _point_in_ring(point, hole) for hole in polygon.holes
+    return point_in_ring(point, polygon.exterior) and not any(
+        point_in_ring(point, hole) for hole in polygon.holes
     )
 
 
-def _point_in_ring(
+def point_in_ring(
     point: tuple[float, float],
     ring: Sequence[tuple[float, float]],
 ) -> bool:

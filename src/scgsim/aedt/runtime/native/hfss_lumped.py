@@ -131,12 +131,12 @@ def read_rlc_parameters(app: Any, record: dict[str, Any]) -> dict[str, Any]:
     names = list(live.GetPropNames())
     values = {name: live.GetPropValue(name) for name in names}
     record["native_properties"] = values
-    from scgsim.aedt.runtime.native.common import _resolve_native_assignment
+    from scgsim.aedt.runtime.native.common import resolve_native_assignment
 
     raw_ids = [
         int(value) for value in app.oboundary.GetBoundaryAssignment(record["boundary"])
     ]
-    typed, covered_faces, covered_objects = _resolve_native_assignment(app, raw_ids)
+    typed, covered_faces, covered_objects = resolve_native_assignment(app, raw_ids)
     record["assignment"] = {
         "raw_ids": raw_ids,
         "typed": typed,
@@ -173,9 +173,9 @@ def read_rlc_parameters(app: Any, record: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
-def _assign_generic_rlcs(app: Any, spec: Any, geometry: dict[str, Any]) -> None:
+def assign_generic_rlcs(app: Any, spec: Any, geometry: dict[str, Any]) -> None:
     """Electrical loads use neutral source supports, independently of JJ EPR."""
-    from scgsim.aedt.preparation.planar import _native_name
+    from scgsim.aedt.preparation.planar import native_name
 
     supports = {
         item["support_id"]: item for item in geometry.get("lumped_supports", ())
@@ -188,7 +188,7 @@ def _assign_generic_rlcs(app: Any, spec: Any, geometry: dict[str, Any]) -> None:
             record = assign_rlc(
                 app,
                 app.modeler[support["object_name"]],
-                name=_native_name("rlc", treatment.support_id),
+                name=native_name("rlc", treatment.support_id),
                 contact_points_um=support["effective"]["contact_points_um"],
                 treatment=treatment,
             )
@@ -211,11 +211,11 @@ def _assign_generic_rlcs(app: Any, spec: Any, geometry: dict[str, Any]) -> None:
         )
 
 
-def _bind_saved_generic_rlcs(
+def bind_saved_generic_rlcs(
     app: Any, prepared: PreparedPlanarGeometry, geometry: dict[str, Any]
 ) -> None:
     """Rebuild the generic RLC records from the saved project, then read them back."""
-    from scgsim.aedt.preparation.planar import _native_name
+    from scgsim.aedt.preparation.planar import native_name
 
     supports = {
         item["support_id"]: item for item in geometry.get("lumped_supports", ())
@@ -226,7 +226,7 @@ def _bind_saved_generic_rlcs(
         support = supports[treatment.support_id]
         record = rlc_record(
             app.modeler[support["object_name"]],
-            name=_native_name("rlc", treatment.support_id),
+            name=native_name("rlc", treatment.support_id),
             contact_points_um=support["effective"]["contact_points_um"],
             treatment=treatment,
         )
@@ -237,19 +237,19 @@ def _bind_saved_generic_rlcs(
                 **record,
             }
         )
-    _read_generic_rlcs(app, geometry)
+    read_generic_rlcs(app, geometry)
 
 
-def _read_generic_rlcs(app: Any, geometry: dict[str, Any]) -> None:
+def read_generic_rlcs(app: Any, geometry: dict[str, Any]) -> None:
     """Check each generic RLC against the saved project and live native properties."""
     records = geometry.get("lumped_rlcs", ())
     if not records:
         return
     from scgsim.aedt.runtime.native.hfss_junction_readback import (
-        _read_saved_hfss_design,
+        read_saved_hfss_design,
     )
 
-    digest, design = _read_saved_hfss_design(
+    digest, design = read_saved_hfss_design(
         Path(app.project_file), app.design_name, purpose="generic RLC"
     )
     boundaries = design["BoundarySetup"]["Boundaries"]

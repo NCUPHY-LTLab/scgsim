@@ -21,12 +21,12 @@ from scgsim.aedt._io import file_sha256, write_json
 from scgsim.aedt.preparation.handoff import (
     HandoffPlan,
     ReceiptSeed,
-    _utc_now,
-    _write_script,
     new_run_directory,
     prepare_handoff,
     seal_handoff,
     single_vacuum_material_id,
+    utc_now,
+    write_script,
 )
 from scgsim.aedt.preparation.planar import validate_geometry_workers
 from scgsim.aedt.results.provenance import (
@@ -172,14 +172,14 @@ def _prepare_body_hfss_handoff(  # noqa: PLR0913 - one keyword per handoff input
         raise TypeError("resources must be AedtResources or None")
     plan = HandoffPlan.under(new_run_directory(output_dir))
     plan.metadata_path.parent.mkdir(parents=True)
-    prepared_at = _utc_now()
+    prepared_at = utc_now()
     started = time.perf_counter()
     prepared_source = prepared_runtime_source()
     payload = spec.to_payload()
     materials = detached(geometry.source)["materials"]
     vacuum_id = single_vacuum_material_id(materials)
 
-    _write_script(plan.script_path)
+    write_script(plan.script_path)
     write_json(plan.spec_path, payload)
     files = {
         "spec": plan.spec_path.name,

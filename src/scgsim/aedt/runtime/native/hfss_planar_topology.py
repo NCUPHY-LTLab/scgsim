@@ -13,20 +13,20 @@ from itertools import pairwise
 from typing import Any
 
 from scgsim.aedt.preparation.junction_exact import (
-    _closed_contact,
-    _cross,
-    _inside_ring,
-    _section,
+    closed_contact,
+    cross,
+    inside_ring,
+    section,
 )
 
-_NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM = 1e-5
+NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM = 1e-5
 
 
-def _native_coordinates_close(left, right) -> bool:
+def native_coordinates_close(left, right) -> bool:
     return len(left) == len(right) and all(
         math.isfinite(float(a))
         and math.isfinite(float(b))
-        and abs(float(a) - float(b)) <= _NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM
+        and abs(float(a) - float(b)) <= NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM
         for a, b in zip(left, right, strict=False)
     )
 
@@ -60,7 +60,7 @@ def _native_straight_ring(ring):
                 changed = True
                 break
     if any(
-        _native_coordinates_close(a, b)
+        native_coordinates_close(a, b)
         for a, b in zip(points, (*points[1:], points[0]), strict=False)
     ):
         raise RuntimeError(
@@ -69,7 +69,7 @@ def _native_straight_ring(ring):
     return points, chains
 
 
-def _native_polygon_correspondence(
+def native_polygon_correspondence(
     loops, polygon, name, deviations, *, subdivisions=True
 ):
     """Match boundary corner cycles, retaining raw native loops for contacts.
@@ -104,7 +104,7 @@ def _native_polygon_correspondence(
     actual, actual_chains = comparison(actual_rings)
     matches = {}
     for point in actual:
-        candidates = [p for p in expected if _native_coordinates_close(point, p)]
+        candidates = [p for p in expected if native_coordinates_close(point, p)]
         if len(candidates) != 1 or candidates[0] in matches:
             raise RuntimeError(
                 f"native junction vertex correspondence is missing or ambiguous: {name!r}"
@@ -160,22 +160,22 @@ def _native_edge_projection(point, start, end):
 def _native_on_segment(point, start, end) -> bool:
     parameter, projected = _native_edge_projection(point, start, end)
     nearest = start if parameter < 0 else end if parameter > 1 else projected
-    return _native_coordinates_close(point, nearest)
+    return native_coordinates_close(point, nearest)
 
 
-def _native_edge_section(bodies, start, end, *, boundary_only=False):
+def native_edge_section(bodies, start, end, *, boundary_only=False):
     """Sections of actual footprints, with only bounded boundary comparisons."""
     dx, dy = end[0] - start[0], end[1] - start[1]
     norm = dx * dx + dy * dy
-    if not norm or _native_coordinates_close(start, end):
+    if not norm or native_coordinates_close(start, end):
         raise RuntimeError("native junction edge is unresolved at readback resolution")
     intervals, contacts = [], set()
 
     def clamp(value):
         point = (start[0] + value * dx, start[1] + value * dy)
-        if _native_coordinates_close(point, start):
+        if native_coordinates_close(point, start):
             return Fraction(0)
-        if _native_coordinates_close(point, end):
+        if native_coordinates_close(point, end):
             return Fraction(1)
         return value
 
@@ -191,15 +191,15 @@ def _native_edge_section(bodies, start, end, *, boundary_only=False):
                 )
                 for ring in rings
             )
-            spans, points = _section(transformed, 1, 0, 0, 1)
+            spans, points = section(transformed, 1, 0, 0, 1)
             intervals.extend((clamp(a), clamp(b)) for a, b in spans)
             contacts.update(clamp(v) for v in points)
         for ring in rings:
             for a, b in zip(ring, (*ring[1:], ring[0]), strict=False):
                 ta, pa = _native_edge_projection(a, start, end)
                 tb, pb = _native_edge_projection(b, start, end)
-                near_a = _native_coordinates_close(a, pa)
-                near_b = _native_coordinates_close(b, pb)
+                near_a = native_coordinates_close(a, pa)
+                near_b = native_coordinates_close(b, pb)
                 if near_a and 0 <= clamp(ta) <= 1:
                     contacts.add(clamp(ta))
                 if near_b and 0 <= clamp(tb) <= 1:
@@ -216,26 +216,26 @@ def _native_edge_section(bodies, start, end, *, boundary_only=False):
     return spans, contacts
 
 
-def _native_edge_covered(bodies, start, end) -> bool:
-    intervals, _ = _native_edge_section(bodies, start, end, boundary_only=True)
+def native_edge_covered(bodies, start, end) -> bool:
+    intervals, _ = native_edge_section(bodies, start, end, boundary_only=True)
     reached = Fraction(0)
     for lo, hi in sorted(intervals):
         left = tuple(a + lo * (b - a) for a, b in zip(start, end, strict=False))
         right = tuple(a + reached * (b - a) for a, b in zip(start, end, strict=False))
-        if lo > reached and not _native_coordinates_close(left, right):
+        if lo > reached and not native_coordinates_close(left, right):
             return False
         reached = max(reached, hi)
     return reached == 1
 
 
-def _native_boundary_contact(left, right) -> bool:
+def native_boundary_contact(left, right) -> bool:
     """Require a resolved positive span; tiny raw subdivisions cannot prove one."""
     for rings in left:
         for ring in rings:
             for start, end in zip(ring, (*ring[1:], ring[0]), strict=False):
-                if start != end and _native_coordinates_close(start, end):
+                if start != end and native_coordinates_close(start, end):
                     continue
-                spans, _ = _native_edge_section(right, start, end, boundary_only=True)
+                spans, _ = native_edge_section(right, start, end, boundary_only=True)
                 for lo, hi in spans:
                     a = tuple(
                         p + lo * (q - p) for p, q in zip(start, end, strict=False)
@@ -243,13 +243,13 @@ def _native_boundary_contact(left, right) -> bool:
                     b = tuple(
                         p + hi * (q - p) for p, q in zip(start, end, strict=False)
                     )
-                    if not _native_coordinates_close(a, b):
+                    if not native_coordinates_close(a, b):
                         return True
     return False
 
 
-def _native_closed_contact(left, right) -> bool:
-    return _closed_contact(left, right) or any(
+def native_closed_contact(left, right) -> bool:
+    return closed_contact(left, right) or any(
         _native_on_segment(point, a, b)
         for regions, others in ((left, right), (right, left))
         for rings in regions
@@ -261,10 +261,10 @@ def _native_closed_contact(left, right) -> bool:
     )
 
 
-def _native_strict_inside(point, rings) -> bool:
+def native_strict_inside(point, rings) -> bool:
     return (
-        _inside_ring(point, rings[0]) == 1
-        and all(_inside_ring(point, hole) == -1 for hole in rings[1:])
+        inside_ring(point, rings[0]) == 1
+        and all(inside_ring(point, hole) == -1 for hole in rings[1:])
         and not any(
             _native_on_segment(point, a, b)
             for ring in rings
@@ -273,30 +273,28 @@ def _native_strict_inside(point, rings) -> bool:
     )
 
 
-def _native_cross_sign(a, b, point):
+def native_cross_sign(a, b, point):
     _, projected = _native_edge_projection(point, a, b)
-    value = _cross(a, b, point)
-    return (
-        0 if _native_coordinates_close(point, projected) else (1 if value > 0 else -1)
-    )
+    value = cross(a, b, point)
+    return 0 if native_coordinates_close(point, projected) else (1 if value > 0 else -1)
 
 
-def _native_z_may_contact(left, right) -> bool:
+def native_z_may_contact(left, right) -> bool:
     """Exclude forbidden contact only when actual Z ranges are separated."""
     low, high = max(left[0], right[0]), min(left[1], right[1])
-    return low <= high or _native_coordinates_close((low,), (high,))
+    return low <= high or native_coordinates_close((low,), (high,))
 
 
-def _native_z_contact(left, left_solid, right, right_solid) -> bool:
+def native_z_contact(left, left_solid, right, right_solid) -> bool:
     """Required contact compatibility; sheets need full consistent planes."""
     if not left_solid and not right_solid:
-        return all(_native_coordinates_close((a,), (b,)) for a in left for b in right)
+        return all(native_coordinates_close((a,), (b,)) for a in left for b in right)
     if left_solid and right_solid:
-        return _native_z_may_contact(left, right)
+        return native_z_may_contact(left, right)
     solid, sheet = (left, right) if left_solid else (right, left)
     return all(
-        (z >= solid[0] or _native_coordinates_close((z,), (solid[0],)))
-        and (z <= solid[1] or _native_coordinates_close((z,), (solid[1],)))
+        (z >= solid[0] or native_coordinates_close((z,), (solid[0],)))
+        and (z <= solid[1] or native_coordinates_close((z,), (solid[1],)))
         for z in sheet
     )
 
@@ -322,7 +320,7 @@ def _native_face_edges(face, name):
         midpoint_valid = len(midpoint_values) == 3 and all(
             math.isfinite(v) for v in midpoint_values
         )
-        midpoint_matches = midpoint_valid and _native_coordinates_close(
+        midpoint_matches = midpoint_valid and native_coordinates_close(
             midpoint_values, expected_midpoint
         )
         try:
@@ -333,7 +331,7 @@ def _native_face_edges(face, name):
             )
         except OverflowError:
             length_valid = False
-        length_matches = length_valid and _native_coordinates_close((length,), (chord,))
+        length_matches = length_valid and native_coordinates_close((length,), (chord,))
         if not midpoint_matches or not length_matches:
 
             def observed(value):
@@ -360,7 +358,7 @@ def _native_face_edges(face, name):
                     "_id", getattr(face, "__dict__", {}).get("id")
                 ),
                 "model_units": "um",
-                "absolute_tolerance_um": _NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
+                "absolute_tolerance_um": NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
                 "relative_tolerance": 0.0,
                 "endpoints_um": vertices,
                 "observed_midpoint_um": midpoint,
@@ -408,16 +406,16 @@ def _native_face_edges(face, name):
     return edges, edge_observations
 
 
-def _native_planar_loops(obj: Any, z_um: float, observations=None) -> list[tuple]:
+def native_planar_loops(obj: Any, z_um: float, observations=None) -> list[tuple]:
     """Read actual planar boundaries at absolute 1e-5 um coordinate resolution.
 
     Independent vertex/midpoint/length getters need not serialize identically.
     Midpoint and actual native length jointly check straight edges; ambiguity
     below this comparison resolution is not an exact CAD contact guarantee.
     """
-    from scgsim.geometry._primitives.loops import (
-        _cancel_reversed_planar_edges,
-        _simple_planar_loops_from_edges,
+    from scgsim.geometry.primitives.loops import (
+        cancel_reversed_planar_edges,
+        simple_planar_loops_from_edges,
     )
 
     loops = []
@@ -427,9 +425,9 @@ def _native_planar_loops(obj: Any, z_um: float, observations=None) -> list[tuple
             raise RuntimeError(
                 f"native junction face vertices unavailable: {obj.name!r}"
             )
-        if any(not _native_coordinates_close((p[2],), (z_um,)) for p in positions):
+        if any(not native_coordinates_close((p[2],), (z_um,)) for p in positions):
             continue
-        if not _native_coordinates_close(
+        if not native_coordinates_close(
             (min(float(p[2]) for p in positions),),
             (max(float(p[2]) for p in positions),),
         ):
@@ -456,9 +454,7 @@ def _native_planar_loops(obj: Any, z_um: float, observations=None) -> list[tuple
                 }
             )
         # Edge direction is not a native face-loop ordering contract.
-        face_loops = _simple_planar_loops_from_edges(
-            _cancel_reversed_planar_edges(edges)
-        )
+        face_loops = simple_planar_loops_from_edges(cancel_reversed_planar_edges(edges))
 
         def area(ring):
             return abs(
@@ -477,7 +473,7 @@ def _native_planar_loops(obj: Any, z_um: float, observations=None) -> list[tuple
     return loops
 
 
-def _native_extrusion_sides(obj, z_range, thickness, observations):
+def native_extrusion_sides(obj, z_range, thickness, observations):
     """Verify straight prism sides against actual caps, independent of subdivision.
 
     Each actual cap edge must belong to exactly one side face by native ID;
@@ -490,9 +486,9 @@ def _native_extrusion_sides(obj, z_range, thickness, observations):
     ``observations`` must end with the bottom and top cap observations; each side
     face read here is appended to it.
     """
-    from scgsim.geometry._primitives.loops import (
-        _cancel_reversed_planar_edges,
-        _simple_planar_loops_from_edges,
+    from scgsim.geometry.primitives.loops import (
+        cancel_reversed_planar_edges,
+        simple_planar_loops_from_edges,
     )
 
     prism = _ExtrusionCaps(obj, z_range, thickness, observations[-2:])
@@ -501,12 +497,12 @@ def _native_extrusion_sides(obj, z_range, thickness, observations):
     for face in obj.faces:
         positions = [vertex.position for vertex in face.vertices]
         if positions and any(
-            all(_native_coordinates_close((p[2],), (z,)) for p in positions)
+            all(native_coordinates_close((p[2],), (z,)) for p in positions)
             for z in z_range
         ):
             continue  # Cap shape and straight edges were already read in full.
         edges, edge_observations = _native_face_edges(face, obj.name)
-        rings = _simple_planar_loops_from_edges(_cancel_reversed_planar_edges(edges))
+        rings = simple_planar_loops_from_edges(cancel_reversed_planar_edges(edges))
         if len(rings) != 1:
             raise RuntimeError("native junction extrusion side has unsupported loops")
         corners, chains = _native_straight_ring(rings[0])
@@ -554,7 +550,7 @@ class _ExtrusionCaps:
         """Require the caps to be one extrusion thickness apart."""
         cap_z = self.cap_z
         if any(
-            not _native_coordinates_close((height,), (self.thickness,))
+            not native_coordinates_close((height,), (self.thickness,))
             for height in (
                 max(cap_z[1]) - min(cap_z[0]),
                 min(cap_z[1]) - max(cap_z[0]),
@@ -580,10 +576,10 @@ class _ExtrusionCaps:
         found = [
             n
             for n, z in enumerate(self.z_range)
-            if _native_coordinates_close((point[2],), (z,))
+            if native_coordinates_close((point[2],), (z,))
         ]
         if len(found) != 1 or any(
-            not _native_coordinates_close((point[2],), (z,))
+            not native_coordinates_close((point[2],), (z,))
             for z in self.cap_z[found[0]]
         ):
             raise RuntimeError("native junction actual extrusion vertex Z differs")
@@ -608,7 +604,7 @@ class _ExtrusionCaps:
             "side_face_id": side_face_id,
             "prior_side_face_id": prior_side_face_id,
             "model_units": "um",
-            "absolute_tolerance_um": _NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
+            "absolute_tolerance_um": NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
             "relative_tolerance": 0.0,
         }
         return RuntimeError(
@@ -626,13 +622,13 @@ class _ExtrusionCaps:
                 "native junction extrusion side is not a vertical quadrilateral"
             )
         if any(
-            layer(a) != layer(b) and not _native_coordinates_close(a[:2], b[:2])
+            layer(a) != layer(b) and not native_coordinates_close(a[:2], b[:2])
             for a, b in zip(corners, (*corners[1:], corners[0]), strict=False)
         ):
             raise RuntimeError("native junction extrusion side has nonvertical edges")
         for point in sides[0]:
-            mates = [p for p in sides[1] if _native_coordinates_close(point[:2], p[:2])]
-            if len(mates) != 1 or not _native_coordinates_close(
+            mates = [p for p in sides[1] if native_coordinates_close(point[:2], p[:2])]
+            if len(mates) != 1 or not native_coordinates_close(
                 (float(mates[0][2] - point[2]),), (self.thickness,)
             ):
                 raise RuntimeError(
@@ -674,7 +670,7 @@ class _ExtrusionCaps:
                 actual = side_edge["vertices_um"]
                 if not any(
                     all(
-                        _native_coordinates_close(p, q)
+                        native_coordinates_close(p, q)
                         for p, q in zip(actual, ordering, strict=False)
                     )
                     for ordering in (wanted, wanted[::-1])
@@ -704,7 +700,7 @@ class _ExtrusionCaps:
             if (
                 position is None
                 or len(position) != 3
-                or not _native_z_may_contact((position[2], position[2]), z_span)
+                or not native_z_may_contact((position[2], position[2]), z_span)
                 or not any(
                     _native_on_segment(position, a, b) for a, b in self.boundary_edges
                 )

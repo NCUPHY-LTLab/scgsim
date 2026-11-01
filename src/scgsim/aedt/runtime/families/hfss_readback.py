@@ -18,18 +18,18 @@ from scgsim.aedt.specs.hfss import HfssDrivenSpec, HfssEigenmodeSpec
 from scgsim.aedt.specs.parse import HfssSpec
 
 
-def _native_mesh_operation_names(hfss: Any) -> list[str]:
+def native_mesh_operation_names(hfss: Any) -> list[str]:
     names = hfss.get_oo_name(hfss.odesign, "Mesh")
     if not isinstance(names, list):
         raise TypeError("AEDT native mesh operation collection is unavailable")
     return names
 
 
-def _native_mesh_readback(
+def native_mesh_readback(
     hfss: Any, expected_name: str, expected_objects: list[str]
 ) -> dict[str, Any]:
     """Read AEDT OOP mesh properties and MeshSetup assignments directly."""
-    operation_names = _native_mesh_operation_names(hfss)
+    operation_names = native_mesh_operation_names(hfss)
     if expected_name not in operation_names:
         raise RuntimeError(f"mesh operation is missing natively: {expected_name}")
     property_names = hfss.get_oo_properties(hfss.odesign, f"Mesh/{expected_name}")
@@ -60,7 +60,7 @@ def _native_mesh_readback(
     }
 
 
-def _require_native_mesh_properties(
+def require_native_mesh_properties(
     native: dict[str, Any], expected: dict[str, Any], context: str
 ) -> None:
     """Compare required settings while retaining AEDT's raw native properties."""
@@ -83,7 +83,7 @@ def _native_value_matches(observed: Any, expected: Any) -> bool:
     return observed == expected
 
 
-def _native_terminal_readback(
+def native_terminal_readback(
     hfss: Any, boundary_name: str, terminal_name: str, port: TerminalPort
 ) -> dict[str, Any]:
     """Read port and terminal state from AEDT's Excitations object tree."""
@@ -95,11 +95,11 @@ def _native_terminal_readback(
         raise RuntimeError(
             f"AEDT terminal child mismatch for {boundary_name!r}: {terminal_names!r}"
         )
-    boundary_properties = _native_oo_properties(hfss, f"Excitations\\{boundary_name}")
-    terminal_properties = _native_oo_properties(
+    boundary_properties = native_oo_properties(hfss, f"Excitations\\{boundary_name}")
+    terminal_properties = native_oo_properties(
         hfss, f"Excitations\\{boundary_name}\\{terminal_name}"
     )
-    _require_native_properties(
+    require_native_properties(
         boundary_properties,
         {
             "Name": boundary_name,
@@ -111,7 +111,7 @@ def _native_terminal_readback(
         },
         f"terminal boundary {boundary_name!r}",
     )
-    _require_native_properties(
+    require_native_properties(
         terminal_properties,
         {"Name": terminal_name, "Port Name": boundary_name, "Type": "Terminal"},
         f"terminal child {terminal_name!r}",
@@ -129,13 +129,13 @@ def _native_terminal_readback(
     }
 
 
-def _native_modal_oo_readback(hfss: Any, boundary_name: str) -> dict[str, Any]:
+def native_modal_oo_readback(hfss: Any, boundary_name: str) -> dict[str, Any]:
     """Read the direct AEDT object-tree state of one modal wave port."""
     excitation_names = hfss.get_oo_name(hfss.odesign, "Excitations")
     if boundary_name not in excitation_names:
         raise RuntimeError(f"AEDT modal boundary is missing: {boundary_name!r}")
-    properties = _native_oo_properties(hfss, f"Excitations\\{boundary_name}")
-    _require_native_properties(
+    properties = native_oo_properties(hfss, f"Excitations\\{boundary_name}")
+    require_native_properties(
         properties,
         {
             "Name": boundary_name,
@@ -152,7 +152,7 @@ def _native_modal_oo_readback(hfss: Any, boundary_name: str) -> dict[str, Any]:
     }
 
 
-def _bind_port_evidence(
+def bind_port_evidence(
     hfss: Any, spec: HfssSpec, ports: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     if isinstance(spec, HfssEigenmodeSpec):
@@ -266,7 +266,7 @@ def _bind_terminal_reference_evidence(
     """Bind global AEDT terminal reference IDs after saving the owned project."""
     if len(ports) != len(spec.ports):
         raise RuntimeError("terminal port evidence count is invalid")
-    reference_ids = _native_terminal_reference_ids(hfss)
+    reference_ids = native_terminal_reference_ids(hfss)
     reference_objects = [
         hfss.oeditor.GetObjectNameByID(object_id) for object_id in reference_ids
     ]
@@ -287,7 +287,7 @@ def _bind_terminal_reference_evidence(
     return ports
 
 
-def _native_terminal_reference_ids(hfss: Any) -> list[int]:
+def native_terminal_reference_ids(hfss: Any) -> list[int]:
     """Read terminal reference conductors from HFSS native design properties."""
     try:
         values = hfss.design_properties["BoundarySetup"]["ProductSpecificData"][
@@ -305,7 +305,7 @@ def _native_terminal_reference_ids(hfss: Any) -> list[int]:
         raise RuntimeError("AEDT native terminal reference IDs are invalid") from exc
 
 
-def _native_oo_properties(hfss: Any, path: str) -> dict[str, Any]:
+def native_oo_properties(hfss: Any, path: str) -> dict[str, Any]:
     """Return properties directly from an AEDT object-oriented child object."""
     child = hfss.get_oo_object(hfss.odesign, path)
     if not child:
@@ -316,7 +316,7 @@ def _native_oo_properties(hfss: Any, path: str) -> dict[str, Any]:
     return {name: child.GetPropValue(name) for name in names}
 
 
-def _require_native_properties(
+def require_native_properties(
     observed: dict[str, Any], expected: dict[str, Any], context: str
 ) -> None:
     """Require semantic settings from their direct AEDT native representation."""
@@ -329,7 +329,7 @@ def _require_native_properties(
         raise RuntimeError(f"{context} native property mismatch: {mismatches!r}")
 
 
-def _face_for_side(
+def face_for_side(
     faces: list[tuple[int, tuple[float, float, float]]], side: str
 ) -> int:
     axis, sign = {

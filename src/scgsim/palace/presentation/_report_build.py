@@ -1,6 +1,6 @@
 """Collect what a Palace trust report shows from a run directory.
 
-``_trust_report_fields`` reads a returned run, complete or not, and returns the
+``trust_report_fields`` reads a returned run, complete or not, and returns the
 values ``PalaceTrustReport`` is made of. It trusts nothing it cannot cross-check: the
 mesh manifest and handoff must agree on the Route-A thin-film identity, and a run that
 declares surface masks must pass the same mask checks the resolver applies.
@@ -17,30 +17,30 @@ from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 from ..mesh.summary import mesh_summary
-from ..results._artifact_files import _read_json
-from ..results._config_checks import _validate_surface_mask_config
-from ..results._index_map import _validate_index_entries
+from ..results._artifact_files import read_json
+from ..results._config_checks import validate_surface_mask_config
+from ..results._index_map import validate_index_entries
 from ..results._inspection import (
-    _failure_diagnosis,
-    _result_selection,
-    _validate_inspection_receipt,
+    failure_diagnosis,
+    result_selection,
+    validate_inspection_receipt,
 )
 from ..results._surface_epr_reader import (
-    _read_surface_bindings,
-    _read_surface_mask_bindings,
+    read_surface_bindings,
+    read_surface_mask_bindings,
 )
 from ..results.report_data import (
     AmrPassSnapshot,
     PalaceFailureDiagnosis,
     PalaceResultSelection,
-    _as_int,
-    _collect_amr_passes,
-    _declares_surface_masks,
-    _mapping_max,
-    _read_optional_json,
+    as_int,
+    collect_amr_passes,
+    declares_surface_masks,
+    mapping_max,
+    read_optional_json,
 )
 from ..results.resolve import ResolvedPalaceResult
-from ._figures import ReportTheme, _checked_theme
+from ._figures import ReportTheme, checked_theme
 
 
 class TrustIdentity(TypedDict):
@@ -85,7 +85,7 @@ _PROVENANCE_KEYS = (
 )
 
 
-def _trust_report_fields(
+def trust_report_fields(
     root: Path,
     *,
     resolved: ResolvedPalaceResult | None = None,
@@ -98,26 +98,24 @@ def _trust_report_fields(
     if problem not in {"Eigenmode", "Electrostatic"}:
         raise ValueError(f"unsupported problem {problem!r} for trustworthiness report.")
 
-    config = _read_optional_json(root / "config.json")
-    receipt = _read_optional_json(
-        root / "metadata" / "palace_returned_run_receipt.json"
-    )
-    receipt_paths = _validate_inspection_receipt(root, handoff, receipt)
+    config = read_optional_json(root / "config.json")
+    receipt = read_optional_json(root / "metadata" / "palace_returned_run_receipt.json")
+    receipt_paths = validate_inspection_receipt(root, handoff, receipt)
     refinement = _refinement(config)
     index_map = (
         resolved.provenance.index_map
         if resolved is not None
-        else _read_optional_json(root / "metadata" / "palace_index_map.json")
+        else read_optional_json(root / "metadata" / "palace_index_map.json")
     )
     _check_declared_surface_masks(config, index_map)
-    collected = _collect_amr_passes(
+    collected = collect_amr_passes(
         root,
         problem,
-        _read_surface_bindings(index_map),
-        _read_surface_mask_bindings(index_map),
+        read_surface_bindings(index_map),
+        read_surface_mask_bindings(index_map),
         failed_attempt=receipt is not None and receipt.get("status") == "failed",
     )
-    selection = _result_selection(
+    selection = result_selection(
         root=root,
         problem=problem,
         collected=collected,
@@ -129,9 +127,9 @@ def _trust_report_fields(
         and collected.final_snapshot_status == "readable"
         and selection.selected_source == "final"
     )
-    failure = _failure_diagnosis(root, receipt, receipt_paths)
+    failure = failure_diagnosis(root, receipt, receipt_paths)
     palace_payload = _latest_palace_json(collected.passes, resolved)
-    cost = _cost_cards(palace_payload, resolved)
+    cost = cost_cards(palace_payload, resolved)
     return {
         "run_dir": root,
         "problem": problem,
@@ -144,13 +142,13 @@ def _trust_report_fields(
         "identity": _trust_identity(handoff, receipt, resolved, cost),
         "passes": tuple(collected.passes),
         "amr_tolerance": refinement.get("Tol"),
-        "amr_max_passes": _as_int(refinement.get("MaxIts")),
-        "durations": _durations(palace_payload),
+        "amr_max_passes": as_int(refinement.get("MaxIts")),
+        "durations": elapsed_durations(palace_payload),
         "cost": cost,
         "provenance": _report_provenance(
             handoff, receipt, config, mesh_manifest, problem
         ),
-        "theme": _checked_theme(theme),
+        "theme": checked_theme(theme),
     }
 
 
@@ -160,8 +158,8 @@ def _read_handoff_and_mesh_manifest(
     handoff_path = root / "metadata" / "palace_handoff_metadata.json"
     if not handoff_path.is_file():
         raise FileNotFoundError(f"required artifact missing: {handoff_path}")
-    handoff = _read_json(handoff_path)
-    mesh_manifest = _read_optional_json(root / "metadata" / "mesh_manifest.json")
+    handoff = read_json(handoff_path)
+    mesh_manifest = read_optional_json(root / "metadata" / "mesh_manifest.json")
     mesh_thin_film = (
         mesh_manifest.get("route_a_thin_film")
         if isinstance(mesh_manifest, dict)
@@ -177,12 +175,12 @@ def _read_handoff_and_mesh_manifest(
 def _check_declared_surface_masks(
     config: dict[str, Any] | None, index_map: dict[str, Any] | None
 ) -> None:
-    if not _declares_surface_masks(config, index_map):
+    if not declares_surface_masks(config, index_map):
         return
     if not isinstance(config, dict) or not isinstance(index_map, dict):
         raise ValueError("declared surface masks require config and index evidence.")
-    _validate_index_entries(index_map)
-    _validate_surface_mask_config(config, index_map)
+    validate_index_entries(index_map)
+    validate_surface_mask_config(config, index_map)
 
 
 def _receipt_status(receipt: dict[str, Any] | None) -> Any:
@@ -246,7 +244,7 @@ def _report_provenance(
     return provenance
 
 
-def _resolved_benchmark_data(result: ResolvedPalaceResult) -> dict[str, Any]:
+def resolved_benchmark_data(result: ResolvedPalaceResult) -> dict[str, Any]:
     return {
         "cost": {
             "problem_degrees_of_freedom": result.cost.problem_degrees_of_freedom,
@@ -302,13 +300,13 @@ def _latest_palace_json(
     if resolved is not None:
         return resolved.provenance.palace_json
     for pass_ in reversed(passes):
-        payload = _read_optional_json(pass_.path / "palace.json")
+        payload = read_optional_json(pass_.path / "palace.json")
         if payload is not None:
             return payload
     return None
 
 
-def _durations(palace_payload: dict[str, Any] | None) -> dict[str, float]:
+def elapsed_durations(palace_payload: dict[str, Any] | None) -> dict[str, float]:
     if not palace_payload:
         return {}
     elapsed = palace_payload.get("ElapsedTime")
@@ -324,7 +322,7 @@ def _durations(palace_payload: dict[str, Any] | None) -> dict[str, float]:
     }
 
 
-def _cost_cards(
+def cost_cards(
     palace_payload: dict[str, Any] | None, resolved: ResolvedPalaceResult | None
 ) -> dict[str, Any]:
     if resolved is not None:
@@ -333,8 +331,8 @@ def _cost_cards(
             "mesh_elements": resolved.cost.mesh_elements,
             "mpi_size": resolved.cost.mpi_size,
             "openmp_threads": resolved.cost.openmp_threads,
-            "peak_memory_megabytes": _mapping_max(resolved.cost.peak_memory_megabytes),
-            "peak_node_memory_megabytes": _mapping_max(
+            "peak_memory_megabytes": mapping_max(resolved.cost.peak_memory_megabytes),
+            "peak_node_memory_megabytes": mapping_max(
                 resolved.cost.peak_node_memory_megabytes
             ),
             "git_tag": resolved.cost.git_tag,
@@ -344,14 +342,12 @@ def _cost_cards(
     problem_block = palace_payload.get("Problem")
     problem_block = problem_block if isinstance(problem_block, dict) else {}
     return {
-        "problem_degrees_of_freedom": _as_int(problem_block.get("DegreesOfFreedom")),
-        "mesh_elements": _as_int(problem_block.get("MeshElements")),
-        "mpi_size": _as_int(problem_block.get("MPISize")),
-        "openmp_threads": _as_int(problem_block.get("OpenMPThreads")),
-        "peak_memory_megabytes": _mapping_max(
-            palace_payload.get("PeakMemoryMegabytes")
-        ),
-        "peak_node_memory_megabytes": _mapping_max(
+        "problem_degrees_of_freedom": as_int(problem_block.get("DegreesOfFreedom")),
+        "mesh_elements": as_int(problem_block.get("MeshElements")),
+        "mpi_size": as_int(problem_block.get("MPISize")),
+        "openmp_threads": as_int(problem_block.get("OpenMPThreads")),
+        "peak_memory_megabytes": mapping_max(palace_payload.get("PeakMemoryMegabytes")),
+        "peak_node_memory_megabytes": mapping_max(
             palace_payload.get("PeakNodeMemoryMegabytes")
         ),
         "git_tag": palace_payload.get("GitTag")

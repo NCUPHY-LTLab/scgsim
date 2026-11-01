@@ -19,16 +19,16 @@ from scgsim.geometry.models.physical import (
     PhysicalRepresentationPlan,
 )
 from scgsim.geometry.planning.physical import interpret_physical_geometry
-from scgsim.geometry.source.adapter import _solution_region_entity_from_record
-from scgsim.geometry.source.ground_bumps import _prepare_indium_ground_bump_fill
+from scgsim.geometry.source.adapter import solution_region_entity_from_record
+from scgsim.geometry.source.ground_bumps import prepare_indium_ground_bump_fill
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
-from scgsim.semantics.snapshot import _plain_semantic_facts, canonical_sha256
+from scgsim.semantics.snapshot import canonical_sha256, plain_semantic_facts
 
-from ..mesh.build import _with_port_sheet_metadata
+from ..mesh.build import with_port_sheet_metadata
 from .transforms import (
     RouteAThinFilm,
-    _normalized_component_input,
     apply_airbox_to_stack,
+    normalized_component_input,
 )
 
 
@@ -67,7 +67,7 @@ def prepare_mesh_input(  # noqa: PLR0913 - public keyword-only API, one argument
         port_sheet_source_layers=port_sheet_source_layers,
     )
     if build_input is None:
-        build_input = _normalized_component_input(prepared_component, prepared_stack)
+        build_input = normalized_component_input(prepared_component, prepared_stack)
     else:
         # Synchronize caller source selections before the one physical interpretation.
         build_input = _sync_solution_regions(build_input, prepared_stack)
@@ -121,7 +121,7 @@ def _transform_stack(  # noqa: PLR0913 - one argument per transform, passed by k
     indium_fill = None
     prepared_component = component
     if indium_ground_bumps is not None:
-        indium_fill = _prepare_indium_ground_bump_fill(
+        indium_fill = prepare_indium_ground_bump_fill(
             component=component,
             stack=prepared_stack,
             **indium_ground_bumps,
@@ -137,7 +137,7 @@ def _transform_stack(  # noqa: PLR0913 - one argument per transform, passed by k
                 "port_sheet_source_layers": [],
             },
         }
-        prepared_stack = _with_port_sheet_metadata(
+        prepared_stack = with_port_sheet_metadata(
             prepared_stack, port_sheet_source_layers
         )
     return prepared_stack, prepared_component, indium_fill
@@ -150,7 +150,7 @@ def _sync_solution_regions(
     if prepared_stack["solution_regions"] == build_input.solution_regions:
         return build_input
     regions = tuple(
-        _solution_region_entity_from_record(
+        solution_region_entity_from_record(
             key,
             record,
             materials=prepared_stack["materials"],
@@ -237,7 +237,7 @@ def _route_a_metadata(
     stack: Mapping[str, Any], approximation_profile: ApproximationProfile
 ) -> dict[str, Any]:
     """The thin-film identity recorded for Route A, bound to the source stack's hash."""
-    source_hash = canonical_sha256(_plain_semantic_facts(stack))
+    source_hash = canonical_sha256(plain_semantic_facts(stack))
     return {
         "schema_version": 1,
         "variant": approximation_profile.name,

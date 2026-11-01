@@ -18,11 +18,11 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from ._expect import _expect_int, _expect_mapping, _expect_scalar
+from ._expect import expect_int, expect_mapping, expect_scalar
 from ._index_map import IndexCounts, SurfaceMaskEntry
 from ._result_types import ParsedTable
 
-_PROBLEM_FAMILIES = {
+PROBLEM_FAMILIES = {
     "Electrostatic": (
         "terminal-C",
         "terminal-Cm",
@@ -44,9 +44,9 @@ _PROBLEM_FAMILIES = {
 }
 
 
-def _output_families(problem: str, index_counts: IndexCounts) -> tuple[str, ...]:
+def output_families(problem: str, index_counts: IndexCounts) -> tuple[str, ...]:
     if problem != "Eigenmode":
-        return _PROBLEM_FAMILIES[problem]
+        return PROBLEM_FAMILIES[problem]
     return (
         "eig",
         *(("port-EPR", "port-I", "port-V") if index_counts["lumped_port"] else ()),
@@ -56,10 +56,10 @@ def _output_families(problem: str, index_counts: IndexCounts) -> tuple[str, ...]
     )
 
 
-def _eigenmode_count(config: dict[str, Any]) -> int:
-    solver = _expect_mapping(config.get("Solver"), "config.Solver")
-    eigenmode = _expect_mapping(solver.get("Eigenmode"), "config.Solver.Eigenmode")
-    count = _expect_int(eigenmode.get("N"))
+def eigenmode_count(config: dict[str, Any]) -> int:
+    solver = expect_mapping(config.get("Solver"), "config.Solver")
+    eigenmode = expect_mapping(solver.get("Eigenmode"), "config.Solver.Eigenmode")
+    count = expect_int(eigenmode.get("N"))
     if count is None or count < 1:
         raise ValueError("config Solver.Eigenmode.N must be positive.")
     return count
@@ -68,7 +68,7 @@ def _eigenmode_count(config: dict[str, Any]) -> int:
 # ---------------------------------------------------------------- reading
 
 
-def _read_csv_table(path: Path) -> ParsedTable:
+def read_csv_table(path: Path) -> ParsedTable:
     with path.open("r", encoding="utf-8") as handle:
         reader = csv.reader(handle, skipinitialspace=True)
         rows = list(reader)
@@ -116,8 +116,8 @@ def _parse_cell(value: str) -> Any:
 
 
 # TODO(human): why a table name that matches no branch below is accepted unchecked.
-# Today only the families in ``_output_families`` reach here.
-def _validate_table(
+# Today only the families in ``output_families`` reach here.
+def validate_table(
     problem: str,
     table: ParsedTable,
     index_counts: IndexCounts,
@@ -153,7 +153,7 @@ def _validate_eigenmode_table(
     table: ParsedTable, index_counts: IndexCounts, config: dict[str, Any]
 ) -> None:
     # One row per requested mode in every Eigenmode table.
-    expected_rows = _eigenmode_count(config)
+    expected_rows = eigenmode_count(config)
     port_kinds = {"port-EPR": "EPR", "port-I": "I", "port-V": "V"}
     if table.name == "eig":
         _validate_eig_table(table, expected_rows)
@@ -175,7 +175,7 @@ def _validate_shared_table(
     if table.name == "domain-E":
         _validate_domain_table(table, index_counts["domain"], expected_rows)
     elif table.name == "surface-Q":
-        _validate_surface_table(table, index_counts["surface"], expected_rows)
+        validate_surface_table(table, index_counts["surface"], expected_rows)
     elif table.name == "error-indicators":
         _validate_error_indicators(table)
 
@@ -355,7 +355,7 @@ def _validate_domain_table(
     _require_ordered_index(table, index_name, expected_rows)
 
 
-def _validate_surface_table(
+def validate_surface_table(
     table: ParsedTable, surface_count: int, expected_rows: int
 ) -> None:
     if surface_count <= 0:
@@ -397,7 +397,7 @@ def _validate_error_indicators(table: ParsedTable) -> None:
 # ------------------------------------- surface-mask tables (masked Surface EPR)
 
 
-def _validate_surface_mask_table(
+def validate_surface_mask_table(
     table: ParsedTable,
     *,
     problem: str,
@@ -405,7 +405,7 @@ def _validate_surface_mask_table(
     entries: tuple[SurfaceMaskEntry, ...],
 ) -> None:
     index_name = "m" if problem == "Eigenmode" else "i"
-    indexes = [_expect_scalar(entry, "index", int) for entry in entries]
+    indexes = [expect_scalar(entry, "index", int) for entry in entries]
     if table.name == "surface-mask-Q":
         expected_headers = (
             index_name,

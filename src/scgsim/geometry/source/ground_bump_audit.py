@@ -24,7 +24,7 @@ Blocker = tuple[str, tuple[Any, ...]]
 _BOOLEAN_PRECISION = 1e-9
 
 
-def _audit_authored_indium_sites(  # noqa: PLR0913 - keyword-only; each argument is one audited input
+def audit_authored_indium_sites(  # noqa: PLR0913 - keyword-only; each argument is one audited input
     *,
     build_input: Any,
     cell: Any,
@@ -164,8 +164,8 @@ def _pdk_keepout_blockers(spec: Mapping[str, Any], cell: Any) -> list[Blocker]:
         name = record.get("name")
         if not isinstance(name, str) or not name:
             raise ValueError("public indium keepout requires an exact source name.")
-        layer = _point2(record.get("layer"), "keepout layer")
-        polygons = tuple(_gds_layer_polygons(cell, (int(layer[0]), int(layer[1]))))
+        layer = point2(record.get("layer"), "keepout layer")
+        polygons = tuple(gds_layer_polygons(cell, (int(layer[0]), int(layer[1]))))
         if polygons:
             blockers.append((f"pdk_keepout:{name}", polygons))
     return blockers
@@ -219,8 +219,8 @@ def _pair_bumps_with_ubm(
     under_bump_layer: tuple[int, int],
 ) -> list[tuple[Any, Any, str, str]]:
     """Pair each authored bump with its one exact UBM as (bump, ubm, entity, polygon)."""
-    bump_polygons = _gds_layer_polygons(cell, bump_layer)
-    under_polygons = _gds_layer_polygons(cell, under_bump_layer)
+    bump_polygons = gds_layer_polygons(cell, bump_layer)
+    under_polygons = gds_layer_polygons(cell, under_bump_layer)
     if not bump_polygons and not under_polygons:
         return []
     if len(bump_polygons) != len(under_polygons):
@@ -277,7 +277,7 @@ def _authored_site_records(  # noqa: PLR0913 - keyword-only; each argument is on
         footprint = (under,)
         if _gdstk_boolean(footprint, ground, "not"):
             raise ValueError(f"authored site {site_id!r} is outside D0/D1 Ground.")
-        sources = _intersecting_blocker_ids(footprint, blockers)
+        sources = intersecting_blocker_ids(footprint, blockers)
         if sources:
             raise ValueError(
                 f"authored site {site_id!r} intersects blocking sources {list(sources)!r}."
@@ -333,7 +333,7 @@ def _polygon_points(polygon: Any) -> list[list[float]]:
     return [[float(x), float(y)] for x, y in polygon.points]
 
 
-def _intersecting_blocker_ids(
+def intersecting_blocker_ids(
     footprint: Sequence[Any], blockers: Sequence[tuple[str, Sequence[Any]]]
 ) -> tuple[str, ...]:
     """Names of the blockers whose polygons intersect `footprint`."""
@@ -344,7 +344,7 @@ def _intersecting_blocker_ids(
     )
 
 
-def _point2(value: Any, name: str) -> tuple[float, float]:
+def point2(value: Any, name: str) -> tuple[float, float]:
     if (
         isinstance(value, str | bytes)
         or not isinstance(value, Sequence)
@@ -354,7 +354,7 @@ def _point2(value: Any, name: str) -> tuple[float, float]:
     return float(value[0]), float(value[1])
 
 
-def _gdstk_cell(library: Any, name: str) -> Any:
+def gdstk_cell(library: Any, name: str) -> Any:
     matches = [cell for cell in library.cells if cell.name == name] if name else []
     if len(matches) == 1:
         return matches[0]
@@ -364,7 +364,7 @@ def _gdstk_cell(library: Any, name: str) -> Any:
     return tops[0]
 
 
-def _gds_layer_polygons(cell: Any, layer: tuple[int, int]) -> list[Any]:
+def gds_layer_polygons(cell: Any, layer: tuple[int, int]) -> list[Any]:
     return list(
         cell.get_polygons(layer=layer[0], datatype=layer[1], apply_repetitions=True)
     )

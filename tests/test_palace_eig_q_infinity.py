@@ -13,7 +13,7 @@ from IPython.display import display
 from IPython.utils.capture import capture_output
 
 from scgsim.palace import inspect_run_trustworthiness
-from scgsim.palace.results.resolve import _read_csv_table, _validate_table
+from scgsim.palace.results.resolve import read_csv_table, validate_table
 
 
 _EIG_HEADER = (
@@ -26,8 +26,8 @@ _FINITE_INDEX_COUNTS: dict[str, int] = {}
 def _validate_eig(tmp_path: Path, row: str) -> dict[str, object]:
     path = tmp_path / "eig.csv"
     path.write_text(_EIG_HEADER + row + "\n", encoding="utf-8")
-    table = _read_csv_table(path)
-    _validate_table("Eigenmode", table, _FINITE_INDEX_COUNTS, _EIG_CONFIG)
+    table = read_csv_table(path)
+    validate_table("Eigenmode", table, _FINITE_INDEX_COUNTS, _EIG_CONFIG)
     return table.rows[0]
 
 

@@ -16,8 +16,8 @@ from scgsim.aedt.results.convergence.q3d import read_q3d_convergence
 from scgsim.aedt.results.matrices import parse_matrix_export
 from scgsim.aedt.runtime.benchmark import attach_simulation_benchmark
 from scgsim.aedt.runtime.families.q3d_region import (
-    _read_q3d_region_ground,
-    _seal_q3d_region,
+    read_q3d_region_ground,
+    seal_q3d_region,
 )
 from scgsim.aedt.runtime.native.common import (
     BoundAedtRequest,
@@ -164,7 +164,7 @@ def prepare_q3d(Q3d: Any, run_dir: Path, spec: Q3dSpec) -> PreparedQ3d:
         ]
     nets = _assign_q3d_nets(app, spec)
     if spec.grounded_region_net is not None:
-        grounded_region = _seal_q3d_region(app, spec)
+        grounded_region = seal_q3d_region(app, spec)
         region["native_region_object_id"] = grounded_region["native_region_object_id"]
         region["native_bounding_box_um"] = grounded_region["native_bounding_box_um"]
         region["grounded_region"] = grounded_region
@@ -175,7 +175,7 @@ def prepare_q3d(Q3d: Any, run_dir: Path, spec: Q3dSpec) -> PreparedQ3d:
     _verify_saved_q3d_sheet_terminals(app, nets)
     setup = _read_q3d_setup(app, spec) if spec.run_control is not None else None
     if spec.grounded_region_net is not None:
-        region["grounded_region"] = _read_q3d_region_ground(app, spec, region)
+        region["grounded_region"] = read_q3d_region_ground(app, spec, region)
         region["native_region_object_id"] = region["grounded_region"][
             "native_region_object_id"
         ]
@@ -255,7 +255,7 @@ def export_q3d(prepared: PreparedQ3d) -> dict[str, Any]:
         raise RuntimeError("Q3D project was not saved")
     region = detached_data(prepared.region)
     if spec.grounded_region_net is not None:
-        region["grounded_region"] = _read_q3d_region_ground(prepared.app, spec, region)
+        region["grounded_region"] = read_q3d_region_ground(prepared.app, spec, region)
         region["native_region_object_id"] = region["grounded_region"][
             "native_region_object_id"
         ]

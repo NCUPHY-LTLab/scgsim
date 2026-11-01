@@ -14,13 +14,13 @@ from typing import Any
 
 from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
 
-_INTERFACE_KINDS = {"MA", "MS", "SA"}  # metal-air, metal-substrate, substrate-air
+INTERFACE_KINDS = {"MA", "MS", "SA"}  # metal-air, metal-substrate, substrate-air
 
 
 _EVALUATION_KINDS = {"unmasked_baseline", "requested_margin"}
 
 
-def _number(value: Any, name: str, *, positive: bool = False) -> float:
+def checked_number(value: Any, name: str, *, positive: bool = False) -> float:
     if (
         isinstance(value, bool)
         or not isinstance(value, (int, float))
@@ -34,7 +34,7 @@ def _number(value: Any, name: str, *, positive: bool = False) -> float:
     return float(value)
 
 
-def _check_row(
+def check_row(
     row: Mapping[str, Any],
     seen_modes: set[int],
     group_sources: dict[str, tuple[Any, ...]],
@@ -43,8 +43,10 @@ def _check_row(
     if type(mode) is not int or mode <= 0 or mode in seen_modes:
         raise ValueError("Palace EPR modes must be unique positive integers")
     seen_modes.add(mode)
-    _number(row.get("frequency_hz"), "frequency_hz", positive=True)
-    _number(row.get("normalization_energy_j"), "normalization_energy_j", positive=True)
+    checked_number(row.get("frequency_hz"), "frequency_hz", positive=True)
+    checked_number(
+        row.get("normalization_energy_j"), "normalization_energy_j", positive=True
+    )
     for name in ("surface", "bulk", "junction"):
         if not isinstance(row.get(name), (list, tuple)) or any(
             not isinstance(item, Mapping) for item in row[name]
@@ -55,7 +57,7 @@ def _check_row(
     for bulk in row["bulk"]:
         if not isinstance(bulk.get("domain_id"), str) or not bulk["domain_id"]:
             raise ValueError("Palace EPR bulk domain_id is invalid")
-        _number(bulk.get("participation"), "bulk participation")
+        checked_number(bulk.get("participation"), "bulk participation")
     for port in row["junction"]:
         _check_junction(port)
 
@@ -73,7 +75,7 @@ def _check_surface(
         if not isinstance(surface.get(name), str) or not surface[name]:
             raise ValueError(f"Palace EPR surface {name} is missing")
     if (
-        surface["interface_kind"] not in _INTERFACE_KINDS
+        surface["interface_kind"] not in INTERFACE_KINDS
         or surface["evaluation_kind"] not in _EVALUATION_KINDS
     ):
         raise ValueError("Palace EPR surface identity is invalid")
@@ -86,9 +88,9 @@ def _check_surface(
         or any(not isinstance(owner, str) or not owner for owner in owners)
     ):
         raise ValueError("Palace EPR surface owners are invalid")
-    _number(surface.get("margin_um"), "surface margin")
-    _number(surface.get("original_participation"), "original participation")
-    _number(surface.get("participation"), "participation")
+    checked_number(surface.get("margin_um"), "surface margin")
+    checked_number(surface.get("original_participation"), "original participation")
+    checked_number(surface.get("participation"), "participation")
     assumption = film_assumptions(surface.get("assumptions"), allow_unknown=True)
     original = film_assumptions(surface.get("original_assumptions"), allow_unknown=True)
     _check_inverse_q(surface, assumption["loss_tangent"])
@@ -112,7 +114,10 @@ def _check_inverse_q(surface: Mapping[str, Any], loss_tangent: float | None) -> 
     if (expected_q is None) != (actual_q is None) or (
         expected_q is not None
         and not math.isclose(
-            _number(actual_q, "inverse_q"), expected_q, rel_tol=1e-12, abs_tol=0.0
+            checked_number(actual_q, "inverse_q"),
+            expected_q,
+            rel_tol=1e-12,
+            abs_tol=0.0,
         )
     ):
         raise ValueError("Palace EPR inverse_q disagrees with participation and loss")
@@ -130,7 +135,7 @@ def _check_junction(port: Mapping[str, Any]) -> None:
         raise ValueError("Palace EPR signed port participation is invalid")
 
 
-def _check_provenance(provenance: Mapping[str, Any]) -> None:
+def check_provenance(provenance: Mapping[str, Any]) -> None:
     if not isinstance(provenance, Mapping) or not isinstance(
         provenance.get("handoff_id"), str
     ):

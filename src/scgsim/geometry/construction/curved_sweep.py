@@ -8,7 +8,7 @@ swept walls. Does not create caps, surfaces or volumes.
 from __future__ import annotations
 
 from scgsim.geometry.construction.curved_context import SweptComplex
-from scgsim.geometry.construction.curved_kernel import _edge_vertices
+from scgsim.geometry.construction.curved_kernel import edge_vertices
 
 
 def sweep_curve_complex(session, arrangement, z_values):
@@ -25,8 +25,8 @@ def sweep_curve_complex(session, arrangement, z_values):
     lifted_vertices = {}
     for edge in retained_edges:
         for source, copied in zip(
-            _edge_vertices(gmsh, edge),
-            _edge_vertices(gmsh, lifted[0, edge]),
+            edge_vertices(gmsh, edge),
+            edge_vertices(gmsh, lifted[0, edge]),
             strict=False,
         ):
             lifted_vertices[0, source] = copied
@@ -91,7 +91,7 @@ def _sweep_slab(session, retained_edges, slab, height, tables):
         for tag in boundary:
             if tag == bottom_tags[0]:
                 continue
-            vertices = _edge_vertices(gmsh, tag)
+            vertices = edge_vertices(gmsh, tag)
             lower_vertices = [v for v in vertices if v in source_by_vertex]
             if not lower_vertices:
                 lifted[slab + 1, edge] = tag

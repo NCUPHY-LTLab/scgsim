@@ -26,7 +26,7 @@ from scgsim.aedt.specs.geometry import (
 )
 
 
-def _finite(value: Any, name: str, *, nonnegative: bool = True) -> float:
+def finite(value: Any, name: str, *, nonnegative: bool = True) -> float:
     """`value` as a finite float (non-negative by default); reject bool and text."""
 
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -38,16 +38,16 @@ def _finite(value: Any, name: str, *, nonnegative: bool = True) -> float:
     return result
 
 
-def _quantity(value: Any, name: str, unit: str, *, nonnegative: bool = True) -> float:
+def quantity(value: Any, name: str, unit: str, *, nonnegative: bool = True) -> float:
     """The number in a `{"value", "unit"}` record, which must use exactly `unit`."""
 
-    item = _exact_mapping(value, name)
+    item = exact_mapping(value, name)
     if set(item) != {"value", "unit"} or item.get("unit") != unit:
         raise ValueError(f"{name} must use canonical unit {unit!r}")
-    return _finite(item.get("value"), name, nonnegative=nonnegative)
+    return finite(item.get("value"), name, nonnegative=nonnegative)
 
 
-def _exact_mapping(value: Any, name: str) -> Mapping[str, Any]:
+def exact_mapping(value: Any, name: str) -> Mapping[str, Any]:
     """`value` itself if it is a mapping with only string keys."""
 
     if not isinstance(value, Mapping) or any(not isinstance(key, str) for key in value):
@@ -99,7 +99,7 @@ def _members_by_signature(
     conductor_ids = {item["semantic_id"] for item in prepared.source["conductors"]}
     groups: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
     for binding in prepared.surface_bindings:
-        record = _exact_mapping(binding["contribution"], "surface provenance")
+        record = exact_mapping(binding["contribution"], "surface provenance")
         contribution_id = record["contribution_id"]
         if contribution_id not in selected:
             continue
@@ -121,7 +121,7 @@ def _members_by_signature(
             if spec.interface_kind in {"MS", "SA"}
             else binding["effective_material"]
         )
-        epsilon_s = _finite(material["permittivity"], "group substrate permittivity")
+        epsilon_s = finite(material["permittivity"], "group substrate permittivity")
         if epsilon_s <= 0.0:
             raise ValueError("group substrate permittivity must be positive")
         signature = (

@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from scgsim.aedt.epr.expressions import _author_epr_expressions
+from scgsim.aedt.epr.expressions import author_epr_expressions
 from scgsim.aedt.runtime.native.common import detached_data, saved_setup_properties
 from scgsim.aedt.runtime.native.hfss_eigenmode import submit_eigenmode_cache
 from scgsim.aedt.specs.epr import (
@@ -28,7 +28,7 @@ from scgsim.aedt.specs.hfss_prepared import HfssEprSpec
 # --- Entry point ------------------------------------------------------------
 
 
-def _prepare_expressions_and_cache(
+def prepare_expressions_and_cache(
     app: Any,
     run_dir: Path,
     spec: HfssEprSpec,
@@ -39,7 +39,7 @@ def _prepare_expressions_and_cache(
 
     if inset_plan is None:
         raise RuntimeError("EPR inset geometry must be precomputed before Desktop")
-    expressions, authoring, phase_timings = _author_epr_expressions(
+    expressions, authoring, phase_timings = author_epr_expressions(
         app,
         run_dir,
         spec,
@@ -63,7 +63,7 @@ def _identity_sha256(value: Any) -> str:
     ).hexdigest()
 
 
-def _cache_intrinsics(mode_count: int, selected_mode: int) -> str:
+def cache_intrinsics(mode_count: int, selected_mode: int) -> str:
     """Intrinsics string that selects one mode: its variable 1, the others 0."""
 
     assignments = ["Phase='0deg'"]
@@ -84,7 +84,7 @@ def _cache_items(
 
     items: list[dict[str, Any]] = []
     for mode in selected_modes:
-        intrinsics = _cache_intrinsics(mode_count, mode)
+        intrinsics = cache_intrinsics(mode_count, mode)
         for expression in expressions:
             identity = {
                 "name": expression["name"],
@@ -200,7 +200,7 @@ def _submit_epr_cache(
     }
 
 
-def _read_cache(
+def read_cache(
     app: Any, spec: HfssEprSpec, submitted: list[dict[str, Any]]
 ) -> dict[str, Any]:
     """Read the cache back from the saved setup and require it to match `submitted`."""

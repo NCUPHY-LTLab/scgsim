@@ -1,7 +1,7 @@
 """Run one prepared AEDT handoff from start to finish.
 
 This is the only code that opens and closes an AEDT Desktop for a handoff. A run
-has four steps, and ``_execute`` reads in that order:
+has four steps, and ``execute`` reads in that order:
 
 1. Verify the handoff (``handoff_checks.py``). A failure here raises and leaves the
    receipt at ``not_run``.
@@ -146,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
         raise RuntimeError(
             "prepared handoff is not executed; use run_aedt.sh or pass --execute explicitly"
         )
-    return _execute(
+    return execute(
         metadata_path,
         _Options(
             prepare_only=args.prepare_only,
@@ -158,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
 
-def _execute(metadata_path: Path, options: _Options) -> int:
+def execute(metadata_path: Path, options: _Options) -> int:
     os.chdir(metadata_path.parent.parent)
     handoff = load_verified_handoff(
         metadata_path,

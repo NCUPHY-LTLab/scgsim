@@ -19,11 +19,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
-from ..results._inspection import _failure_payload, _selection_payload
+from ..results._inspection import failure_payload, selection_payload
 from ..results._surface_epr_reader import (
-    _read_surface_mask_bindings,
-    _surface_mask_snapshots,
-    _surface_snapshots,
+    read_surface_mask_bindings,
+    surface_mask_snapshots,
+    surface_snapshots,
 )
 from ..results.report_data import (
     AmrPassSnapshot,
@@ -32,7 +32,7 @@ from ..results.report_data import (
     PassCostRecord,
     SurfaceEprSeriesSnapshot,
     SurfaceMaskEprSeriesSnapshot,
-    _read_optional_json,
+    read_optional_json,
 )
 from ..results.resolve import ResolvedPalaceResult
 from ._benchmark import (
@@ -44,29 +44,29 @@ from ._benchmark import (
 )
 from ._convergence import convergence_trend_items, single_pass_q_notice
 from ._figures import (
-    _PLOTLY_CONFIG,
-    _SURFACE_TYPES,
+    PLOTLY_CONFIG,
+    SURFACE_TYPES,
     ReportTheme,
-    _checked_theme,
-    _series_label,
-    _surface_mask_participation_figure,
-    _surface_percentage_figure,
-    _surface_ranking_figure,
-    _surface_total_figure,
+    checked_theme,
+    series_label,
+    surface_mask_participation_figure,
+    surface_percentage_figure,
+    surface_ranking_figure,
+    surface_total_figure,
 )
 from ._html import (
-    _fmt,
-    _mesh_summary_html,
-    _surface_loss_html,
-    _surface_mask_html,
     card_html,
+    fmt,
+    mesh_summary_html,
+    surface_loss_html,
+    surface_mask_html,
 )
 from ._report_build import (
     TrustIdentity,
-    _cost_cards,
-    _durations,
-    _resolved_benchmark_data,
-    _trust_report_fields,
+    cost_cards,
+    elapsed_durations,
+    resolved_benchmark_data,
+    trust_report_fields,
 )
 
 
@@ -100,7 +100,7 @@ class PalaceTrustReport:
 
     def with_theme(self, theme: ReportTheme) -> PalaceTrustReport:
         """Return this report with the plot theme changed (``light`` or ``dark``)."""
-        checked = _checked_theme(theme)
+        checked = checked_theme(theme)
         return self if self.theme == checked else replace(self, theme=checked)
 
     def show_run_trustworthiness(
@@ -121,14 +121,14 @@ class PalaceTrustReport:
     ) -> SimulationBenchmarkReport:
         """Return the readable benchmark while retaining every machine field."""
 
-        attempted = _read_optional_json(self.run_dir / "results/palace/palace.json")
+        attempted = read_optional_json(self.run_dir / "results/palace/palace.json")
         data = {
             "cost": dict(self.cost),
             "mesh_summary": self.mesh_summary(),
             "performance": {"counts": {}, "durations": dict(self.durations)},
             "attempted_run": {
-                "cost": _cost_cards(attempted, None),
-                "durations": _durations(attempted),
+                "cost": cost_cards(attempted, None),
+                "durations": elapsed_durations(attempted),
             },
             "selected_snapshot": {
                 "source": self.selection.selected_source,
@@ -145,8 +145,8 @@ class PalaceTrustReport:
                 "status": self.identity.get("receipt"),
                 "completeness": self.completeness,
                 "latest_source": self.latest_source,
-                "selection": _selection_payload(self.selection),
-                "failure": _failure_payload(self.failure),
+                "selection": selection_payload(self.selection),
+                "failure": failure_payload(self.failure),
             },
         }
         return SimulationBenchmarkReport(
@@ -222,8 +222,8 @@ class PalaceTrustReport:
             ("Final snapshot", self.selection.final_snapshot_status),
             ("Selection integrity", self.selection.integrity),
             ("AMR passes recorded", str(len(self.passes))),
-            ("AMR MaxIts", _fmt(self.amr_max_passes)),
-            ("AMR Tol", _fmt(self.amr_tolerance)),
+            ("AMR MaxIts", fmt(self.amr_max_passes)),
+            ("AMR Tol", fmt(self.amr_tolerance)),
             ("MPI × OpenMP", self.identity.get("resources")),
             ("Receipt", self.identity.get("receipt")),
             ("Palace git", self.identity.get("git_tag")),
@@ -248,12 +248,12 @@ class PalaceTrustReport:
                 "padding:0.65rem 0.8rem;margin:0.7rem 0'>"
                 f"<strong>Run failed — {html.escape(self.failure.category.replace('_', ' '))}</strong><br>"
                 f"{html.escape(self.failure.summary)}<br>"
-                f"Stage: {_fmt(self.failure.execution_stage)}; preflight: "
-                f"{_fmt(self.failure.preflight_exit_code)}; solver invoked: "
-                f"{_fmt(self.failure.solver_invoked)}; exit: "
-                f"{_fmt(self.failure.exit_code)}; solver: "
-                f"{_fmt(self.failure.solver_exit_code)}; output capture: "
-                f"{_fmt(self.failure.tee_exit_code)}."
+                f"Stage: {fmt(self.failure.execution_stage)}; preflight: "
+                f"{fmt(self.failure.preflight_exit_code)}; solver invoked: "
+                f"{fmt(self.failure.solver_invoked)}; exit: "
+                f"{fmt(self.failure.exit_code)}; solver: "
+                f"{fmt(self.failure.solver_exit_code)}; output capture: "
+                f"{fmt(self.failure.tee_exit_code)}."
                 "<details><summary>Failure evidence</summary><code>"
                 f"{html.escape(json.dumps(self.failure.evidence, sort_keys=True))}"
                 "</code></details></div>"
@@ -317,15 +317,15 @@ class PalaceTrustReport:
         else:
             quantity_line = "Latest physics quantity: unavailable"
         error_line = (
-            f"Estimated error indicator (Norm): {_fmt(latest.error_norm)}"
+            f"Estimated error indicator (Norm): {fmt(latest.error_norm)}"
             if latest is not None
             else "Estimated error indicator: unavailable"
         )
         body = (
             f"<p>{html.escape(quantity_line)}</p>"
             f"<p>{html.escape(error_line)}</p>"
-            f"<p>Configured AMR Tol: {html.escape(_fmt(self.amr_tolerance))}</p>"
-            f"<p>Configured MaxIts: {html.escape(_fmt(self.amr_max_passes))}</p>"
+            f"<p>Configured AMR Tol: {html.escape(fmt(self.amr_tolerance))}</p>"
+            f"<p>Configured MaxIts: {html.escape(fmt(self.amr_max_passes))}</p>"
             f"<p>Latest snapshot: {html.escape(self.latest_source)}</p>"
         )
         title = (
@@ -342,7 +342,7 @@ class PalaceTrustReport:
         )
 
     def _surface_convergence_items(self) -> list[Any]:
-        snapshots = _surface_snapshots(self.passes)
+        snapshots = surface_snapshots(self.passes)
         if not snapshots:
             return [
                 (
@@ -364,11 +364,11 @@ class PalaceTrustReport:
             series = tuple(
                 item for item in snapshots if item.series_index == series_index
             )
-            items.append(f"<h4>{html.escape(_series_label(series[-1]))}</h4>")
-            total = _surface_total_figure(series, self.theme)
+            items.append(f"<h4>{html.escape(series_label(series[-1]))}</h4>")
+            total = surface_total_figure(series, self.theme)
             if total is not None:
                 items.append(total)
-            items.append(_surface_percentage_figure(series, self.theme))
+            items.append(surface_percentage_figure(series, self.theme))
         return items
 
     def pass_cost_records(self) -> tuple[PassCostRecord, ...]:
@@ -397,9 +397,7 @@ class SimulationBenchmarkReport:
         from IPython.display import HTML, display
 
         display(HTML(benchmark_cards_html(self.trust)))
-        display(
-            HTML(_mesh_summary_html(self.data["mesh_summary"], card_html=card_html))
-        )
+        display(HTML(mesh_summary_html(self.data["mesh_summary"], card_html=card_html)))
         timing = benchmark_time_figure(self.trust)
         if isinstance(timing, str):
             display(HTML(timing))
@@ -430,20 +428,20 @@ class PhysicsQuantitiesReport:
     @property
     def snapshots(self) -> tuple[SurfaceEprSeriesSnapshot, ...]:
         """Baseline surface-EPR snapshots, one per AMR pass and mode or excitation."""
-        return _surface_snapshots(self.trust.passes)
+        return surface_snapshots(self.trust.passes)
 
     @property
     def masked_snapshots(self) -> tuple[SurfaceMaskEprSeriesSnapshot, ...]:
         """All readable native mask passes; ``snapshots`` remains baseline-only."""
-        return _surface_mask_snapshots(self.trust.passes)
+        return surface_mask_snapshots(self.trust.passes)
 
     @property
     def masks_configured(self) -> bool:
         """Whether the run's index map declares any masked surface-EPR rows."""
-        index_map = _read_optional_json(
+        index_map = read_optional_json(
             self.trust.run_dir / "metadata" / "palace_index_map.json"
         )
-        return bool(_read_surface_mask_bindings(index_map))
+        return bool(read_surface_mask_bindings(index_map))
 
     def _ipython_display_(self) -> None:
         from IPython.display import HTML, display
@@ -464,14 +462,14 @@ class PhysicsQuantitiesReport:
                 item for item in snapshots if item.series_index == series_index
             )
             latest = series[-1]
-            label = _series_label(latest)
+            label = series_label(latest)
             display(HTML(f"<h4>{html.escape(label)}</h4>"))
-            ranking = _surface_ranking_figure(
+            ranking = surface_ranking_figure(
                 latest, self.ranking_limit, self.trust.theme
             )
             if ranking is not None:
                 _show_figure(ranking)
-            display(HTML(_surface_loss_html(latest, self.trust.problem)))
+            display(HTML(surface_loss_html(latest, self.trust.problem)))
             mask_latest = _latest_mask_snapshot(
                 self.masked_snapshots,
                 pass_index=latest.pass_index,
@@ -479,8 +477,8 @@ class PhysicsQuantitiesReport:
                 series_index=latest.series_index,
             )
             if mask_latest is not None:
-                for interface_type in _SURFACE_TYPES:
-                    figure = _surface_mask_participation_figure(
+                for interface_type in SURFACE_TYPES:
+                    figure = surface_mask_participation_figure(
                         mask_latest,
                         latest,
                         interface_type,
@@ -488,7 +486,7 @@ class PhysicsQuantitiesReport:
                     )
                     if figure is not None:
                         _show_figure(figure)
-                display(HTML(_surface_mask_html(mask_latest)))
+                display(HTML(surface_mask_html(mask_latest)))
             elif self.masks_configured:
                 display(
                     HTML(
@@ -544,11 +542,11 @@ def _build_trust_report(
     theme: ReportTheme = "light",
 ) -> PalaceTrustReport:
     return PalaceTrustReport(
-        **_trust_report_fields(root, resolved=resolved, theme=theme)
+        **trust_report_fields(root, resolved=resolved, theme=theme)
     )
 
 
-def _show_run_trustworthiness(
+def render_run_trustworthiness(
     result: ResolvedPalaceResult,
     *,
     theme: ReportTheme = "light",
@@ -560,20 +558,20 @@ def _show_run_trustworthiness(
     return report.show_run_trustworthiness(theme=theme, show_details=show_details)
 
 
-def _show_physics_quantities(
+def render_physics_quantities(
     result: ResolvedPalaceResult,
     *,
     theme: ReportTheme = "light",
     ranking_limit: int | None = 20,
 ) -> PhysicsQuantitiesReport:
-    report = _show_run_trustworthiness(result, theme=theme)
+    report = render_run_trustworthiness(result, theme=theme)
     return report.show_physics_quantities(
         theme=theme,
         ranking_limit=ranking_limit,
     )
 
 
-def _show_all_results(
+def render_all_results(
     result: ResolvedPalaceResult,
     *,
     theme: ReportTheme = "light",
@@ -587,7 +585,7 @@ def _show_all_results(
 
     from IPython.display import display
 
-    trust = _show_run_trustworthiness(
+    trust = render_run_trustworthiness(
         result,
         theme=theme,
         show_details=show_details,
@@ -596,7 +594,7 @@ def _show_all_results(
     display(
         SimulationBenchmarkReport(
             trust=trust,
-            data=_resolved_benchmark_data(result),
+            data=resolved_benchmark_data(result),
             show_details=_checked_show_details(show_details),
         )
     )
@@ -608,7 +606,7 @@ def _show_all_results(
     )
 
 
-def _show_simulation_benchmark(
+def render_simulation_benchmark(
     result: ResolvedPalaceResult,
     *,
     show_details: bool = False,
@@ -619,8 +617,8 @@ def _show_simulation_benchmark(
         raise TypeError("resolved result report requires ResolvedPalaceResult.")
 
     return SimulationBenchmarkReport(
-        trust=_show_run_trustworthiness(result),
-        data=_resolved_benchmark_data(result),
+        trust=render_run_trustworthiness(result),
+        data=resolved_benchmark_data(result),
         show_details=_checked_show_details(show_details),
     )
 
@@ -665,7 +663,7 @@ def _max_abs_diagonal(matrix: Sequence[Sequence[float]]) -> float:
 
 
 def _show_figure(fig: Any) -> None:
-    fig.show(config=_PLOTLY_CONFIG)
+    fig.show(config=PLOTLY_CONFIG)
 
 
 def _checked_ranking_limit(value: int | None) -> int | None:

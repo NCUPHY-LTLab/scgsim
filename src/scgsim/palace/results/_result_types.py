@@ -133,9 +133,9 @@ class ResolvedPalaceResult:
     def show_run_trustworthiness(
         self, *, theme: str = "light", show_details: bool = False
     ):
-        from ..presentation.reports import _show_run_trustworthiness
+        from ..presentation.reports import render_run_trustworthiness
 
-        return _show_run_trustworthiness(
+        return render_run_trustworthiness(
             self,
             theme=theme,
             show_details=show_details,
@@ -148,9 +148,9 @@ class ResolvedPalaceResult:
         ranking_limit: int | None = 20,
         show_details: bool = False,
     ) -> None:
-        from ..presentation.reports import _show_all_results
+        from ..presentation.reports import render_all_results
 
-        _show_all_results(
+        render_all_results(
             self,
             theme=theme,
             ranking_limit=ranking_limit,
@@ -160,11 +160,11 @@ class ResolvedPalaceResult:
     def show_physics_quantities(
         self, *, theme: str = "light", ranking_limit: int | None = 20
     ):
-        from ..presentation.reports import _show_physics_quantities
+        from ..presentation.reports import render_physics_quantities
 
-        return _show_physics_quantities(self, theme=theme, ranking_limit=ranking_limit)
+        return render_physics_quantities(self, theme=theme, ranking_limit=ranking_limit)
 
     def show_simulation_benchmark(self, *, show_details: bool = False):
-        from ..presentation.reports import _show_simulation_benchmark
+        from ..presentation.reports import render_simulation_benchmark
 
-        return _show_simulation_benchmark(self, show_details=show_details)
+        return render_simulation_benchmark(self, show_details=show_details)

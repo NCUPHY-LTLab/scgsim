@@ -110,7 +110,7 @@ def _check_solver_controls(  # noqa: PLR0913 - one argument per control being ch
 ) -> None:
     if not isinstance(order, int) or isinstance(order, bool) or not 1 <= order <= 4:
         raise ValueError("order must be an integer from 1 through 4.")
-    if not _positive_finite(tolerance):
+    if not positive_finite(tolerance):
         raise ValueError("tolerance must be finite and positive.")
     if (
         not isinstance(max_iterations, int)
@@ -131,9 +131,9 @@ def _check_solver_controls(  # noqa: PLR0913 - one argument per control being ch
 def _check_mesh_sizes(
     refined_mesh_size: float, max_mesh_size: float
 ) -> tuple[float, float]:
-    if not _positive_finite(refined_mesh_size):
+    if not positive_finite(refined_mesh_size):
         raise ValueError("refined_mesh_size must be finite and > 0.")
-    if not _positive_finite(max_mesh_size):
+    if not positive_finite(max_mesh_size):
         raise ValueError("max_mesh_size must be finite and > 0.")
     refined = float(refined_mesh_size)
     maximum = float(max_mesh_size)
@@ -155,7 +155,7 @@ def _check_amr_controls(
         raise ValueError("amr_max_passes must be >= 0.")
     if not isinstance(amr_nonconformal, bool):
         raise TypeError("amr_nonconformal must be a bool.")
-    if not _positive_finite(amr_tolerance):
+    if not positive_finite(amr_tolerance):
         raise ValueError("amr_tolerance must be finite and positive.")
     if amr_update_fraction is not None:
         if not isinstance(amr_update_fraction, Real) or isinstance(
@@ -176,7 +176,7 @@ def _check_optional_flags(**flags: bool | None) -> None:
             raise TypeError(f"{name} must be bool or None.")
 
 
-def _positive_finite(value: Any) -> bool:
+def positive_finite(value: Any) -> bool:
     return (
         isinstance(value, Real)
         and not isinstance(value, bool)

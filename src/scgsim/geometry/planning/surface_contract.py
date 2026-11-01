@@ -10,8 +10,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, NamedTuple
 
-from scgsim.geometry._primitives.entities import _component_metadata, _unique_ids
-from scgsim.geometry._primitives.entity_validation import _is_solution_entity
 from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.topology import (
@@ -19,12 +17,14 @@ from scgsim.geometry.models.topology import (
     MMContactRecord,
     SurfacePlanRecord,
 )
-from scgsim.geometry.planning.surface_contacts import _is_face_pad_mm_contact
-from scgsim.geometry.planning.tags import _surface_physical_owner_ids
-from scgsim.geometry.planning.topology import _surface_owner_ids
+from scgsim.geometry.planning.conductors.face_contacts import is_face_pad_mm_contact
+from scgsim.geometry.planning.context.tags import read_surface_physical_owner_ids
+from scgsim.geometry.planning.context.topology import surface_owner_ids
+from scgsim.geometry.primitives.entities import component_metadata, unique_ids
+from scgsim.geometry.primitives.entity_validation import is_solution_entity
 
 
-def _with_surface_contract_metadata(
+def with_surface_contract_metadata(
     build_input: GeometryBuildInput,
     *,
     route: RouteLiteral | None,
@@ -40,7 +40,7 @@ def _with_surface_contract_metadata(
     component_ledger = (
         _conductor_component_ledger
         if _conductor_component_ledger is not None
-        else _component_metadata(mm_contacts)
+        else component_metadata(mm_contacts)
     )
     lookups = _ContractLookups(
         build_input=build_input,
@@ -91,13 +91,13 @@ def _surface_with_contract(
     surface: SurfacePlanRecord, lookups: _ContractLookups
 ) -> SurfacePlanRecord:
     """Return the surface with route, face kind, net, component and provenance filled in."""
-    owner_ids = _surface_owner_ids(surface)
-    structured_owner_ids = _surface_physical_owner_ids(surface)
+    owner_ids = surface_owner_ids(surface)
+    structured_owner_ids = read_surface_physical_owner_ids(surface)
     conductors = tuple(
         lookups.entities[owner_id]
         for owner_id in owner_ids
         if owner_id in lookups.entities
-        and not _is_solution_entity(lookups.entities[owner_id])
+        and not is_solution_entity(lookups.entities[owner_id])
     )
     identity = _conductor_identity(surface, conductors, lookups)
     component_ids = identity.component_ids
@@ -230,7 +230,7 @@ def _normalized_source_polygon_ids(
     component_id = geometry_ref.get("conductor_component_id")
     entities = {entity.semantic_id: entity for entity in build_input.entities}
     for record in mm_contacts:
-        if not _is_face_pad_mm_contact(record, entities):
+        if not is_face_pad_mm_contact(record, entities):
             continue
         if component_id is not None and record.conductor_component_id != component_id:
             continue
@@ -238,4 +238,4 @@ def _normalized_source_polygon_ids(
             continue
         ids.extend(record.lower_source_fragment_ids)
         ids.extend(record.upper_source_fragment_ids)
-    return _unique_ids(ids)
+    return unique_ids(ids)

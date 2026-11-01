@@ -18,12 +18,12 @@ from typing import Any
 
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
-from scgsim.geometry.source._occurrence import _is_record_sequence
+from scgsim.geometry.source._occurrence import is_record_sequence
 from scgsim.geometry.source._polygon_ops import (
-    _point_in_ring,
-    _ring_from_gdstk_polygon,
+    point_in_ring,
+    ring_from_gdstk_polygon,
 )
-from scgsim.geometry.source.ground import _layout_polygon_region
+from scgsim.geometry.source.ground import layout_polygon_region
 
 _PORT_SHEET_SOURCE = "palace_lumped_port_sheet"
 
@@ -47,7 +47,7 @@ class _PortSheetSource:
     datatype: int
 
 
-def _port_sheet_regions_from_stack_metadata(
+def port_sheet_regions_from_stack_metadata(
     stack_metadata: Mapping[str, Any],
     *,
     polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
@@ -58,7 +58,7 @@ def _port_sheet_regions_from_stack_metadata(
     records = stack_metadata.get("port_sheet_source_layers", ())
     if records is None:
         return ()
-    if not _is_record_sequence(records):
+    if not is_record_sequence(records):
         raise TypeError("metadata.port_sheet_source_layers must be a sequence")
 
     host_entity_by_polygon_id = {
@@ -237,7 +237,7 @@ def _gds_sheet_polygons(
         selected_polygons = tuple(
             (index, polygon)
             for index, polygon in enumerate(all_source_polygons)
-            if _point_in_ring(point, _ring_from_gdstk_polygon(polygon))
+            if point_in_ring(point, ring_from_gdstk_polygon(polygon))
         )
         if len(selected_polygons) != 1:
             raise ValueError(
@@ -250,7 +250,7 @@ def _gds_sheet_polygons(
             LayoutPolygonSpec(
                 polygon_id=f"PORT_SHEET_{layer}_{datatype}__P{index:04d}",
                 layer=f"{layer}/{datatype}",
-                exterior=_ring_from_gdstk_polygon(polygon),
+                exterior=ring_from_gdstk_polygon(polygon),
                 metadata=_port_sheet_polygon_metadata(source),
             ),
         )
@@ -322,7 +322,7 @@ def _port_sheet_overlaps(
     """Boolean-AND the sheet with each eligible host polygon, in host order."""
     import gdstk
 
-    port_region = _layout_polygon_region(gdstk, port_polygon)
+    port_region = layout_polygon_region(gdstk, port_polygon)
     overlaps: list[PortSheetOverlapRecord] = []
     for host_polygon_id, host_polygon in host_polygons_by_id.items():
         host_entity = host_entity_by_polygon_id.get(host_polygon_id)
@@ -334,7 +334,7 @@ def _port_sheet_overlaps(
             continue
         overlap_region = gdstk.boolean(
             port_region,
-            _layout_polygon_region(gdstk, host_polygon),
+            layout_polygon_region(gdstk, host_polygon),
             "and",
             precision=1e-9,
         )
@@ -352,7 +352,7 @@ def _port_sheet_overlaps(
                     port_polygon_id=port_polygon.polygon_id,
                     host_semantic_id=host_entity.semantic_id,
                     host_polygon_id=host_polygon_id,
-                    overlap_loop=_ring_from_gdstk_polygon(overlap_polygon),
+                    overlap_loop=ring_from_gdstk_polygon(overlap_polygon),
                     metadata={"overlap_polygon_index": index},
                 )
             )

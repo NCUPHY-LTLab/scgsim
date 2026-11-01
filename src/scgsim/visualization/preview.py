@@ -14,27 +14,27 @@ from pathlib import Path
 from typing import Any, Literal
 
 from .loaders._common import (
-    _artifact_matches,
-    _confined,
-    _json,
-    _receipt_authority_sha256,
-    _sha256,
-    _write_sorted_json_atomic,
+    artifact_matches,
+    confined,
+    read_json_object,
+    receipt_authority_sha256,
+    sha256,
+    write_sorted_json_atomic,
 )
 from .rendering import (
-    _add_parts,
-    _configure_headless_rendering,
-    _interactive_legend,
-    _legend,
-    _render_mode,
+    add_parts,
+    aggregate_legend,
+    configure_headless_rendering,
+    interactive_legend,
+    render_mode,
 )
 from .scene import (
-    _FIXED_COLORS,
-    _MODE_TITLES,
-    _MODES,
-    _VIEWS,
-    _Mode,
-    _with_scene_palette,
+    FIXED_COLORS,
+    MODE_TITLES,
+    MODES,
+    VIEWS,
+    Mode,
+    with_scene_palette,
 )
 
 
@@ -66,7 +66,7 @@ class GeometryPreviewArtifact:
             display(
                 HTML(
                     "<div style='padding:0.8rem;border:1px solid #bbb'>"
-                    f"<strong>{_MODE_TITLES[self.mode]}: Unavailable</strong><br>"
+                    f"<strong>{MODE_TITLES[self.mode]}: Unavailable</strong><br>"
                     f"{self.reason}</div>"
                 )
             )
@@ -83,15 +83,15 @@ class GeometryPreview:
         source_hashes: Mapping[str, str],
         source_identity: Mapping[str, Any] | None = None,
         bind_aedt_receipt: bool = False,
-        modes: Mapping[str, _Mode],
+        modes: Mapping[str, Mode],
     ) -> None:
         self.root = root.resolve()
         self.backend = backend
         self._source_hashes = dict(source_hashes)
         self._source_identity = dict(source_identity or {})
         self._bind_receipt = bind_aedt_receipt
-        self._modes = {name: _with_scene_palette(mode) for name, mode in modes.items()}
-        if set(self._modes) != set(_MODES):
+        self._modes = {name: with_scene_palette(mode) for name, mode in modes.items()}
+        if set(self._modes) != set(MODES):
             raise ValueError("geometry preview requires exactly four named modes")
         self._manifest_path = self.root / "metadata/geometry_preview_manifest.json"
 
@@ -116,7 +116,7 @@ class GeometryPreview:
         mode: Literal["materials", "boundaries", "surface_epr", "mesh"],
     ) -> Any:
         """Display one inline interactive semantic scene in a notebook."""
-        if mode not in _MODES:
+        if mode not in MODES:
             raise ValueError(f"unsupported geometry preview mode: {mode!r}")
         selected = self._modes[mode]
         if selected.unavailable_reason is not None:
@@ -134,11 +134,11 @@ class GeometryPreview:
                 "interactive geometry preview requires scgsim[visualization] "
                 "inside a Jupyter notebook"
             ) from exc
-        display(HTML(_interactive_legend(mode, selected.parts)))
-        _configure_headless_rendering()
+        display(HTML(interactive_legend(mode, selected.parts)))
+        configure_headless_rendering()
         plotter = pv.Plotter(notebook=True, off_screen=True)
         plotter.set_background("white")
-        _add_parts(plotter, selected.parts)
+        add_parts(plotter, selected.parts)
         plotter.add_axes(line_width=3, labels_off=False)
         plotter.view_isometric()
         plotter.reset_camera()
@@ -172,7 +172,7 @@ class GeometryPreview:
             )
         self._verify_sources()
         try:
-            contact_sheet, artifacts = _render_mode(
+            contact_sheet, artifacts = render_mode(
                 root=self.root, mode_name=mode_name, parts=mode.parts
             )
         except Exception as exc:
@@ -185,15 +185,15 @@ class GeometryPreview:
 
     def _verify_sources(self) -> None:
         for relative, expected in self._source_hashes.items():
-            path = _confined(self.root, relative)
-            if not path.is_file() or _sha256(path) != expected:
+            path = confined(self.root, relative)
+            if not path.is_file() or sha256(path) != expected:
                 raise ValueError(f"geometry preview source changed: {relative}")
         expected_receipt = self._source_identity.get("receipt_authority_sha256")
         if expected_receipt is not None:
             receipt_path = self.root / "metadata/aedt_run_receipt.json"
             if (
                 not receipt_path.is_file()
-                or _receipt_authority_sha256(receipt_path) != expected_receipt
+                or receipt_authority_sha256(receipt_path) != expected_receipt
             ):
                 raise ValueError("AEDT preview receipt authority changed")
 
@@ -207,7 +207,7 @@ class GeometryPreview:
     ) -> None:
         previous: dict[str, Any] = {}
         if self._manifest_path.is_file():
-            previous = _json(self._manifest_path)
+            previous = read_json_object(self._manifest_path)
         renderer = {
             "name": "PyVista off-screen",
             "scgsim": _version("scgsim"),
@@ -216,7 +216,7 @@ class GeometryPreview:
             "meshio": _version("meshio") if self.backend == "palace" else None,
             "pillow": _version("pillow"),
         }
-        views = [item[0] for item in _VIEWS]
+        views = [item[0] for item in VIEWS]
         tile_size = [1600, 1200]
         contact_sheet_size = [4800, 4200]
         same_source = (
@@ -226,17 +226,17 @@ class GeometryPreview:
             and previous.get("source_identity") == self._source_identity
             and previous.get("renderer") == renderer
             and previous.get("views") == views
-            and previous.get("palette") == _FIXED_COLORS
+            and previous.get("palette") == FIXED_COLORS
             and previous.get("tile_size_px") == tile_size
             and previous.get("contact_sheet_size_px") == contact_sheet_size
         )
         mode_records = dict(previous.get("modes", {})) if same_source else {}
-        for name in _MODES:
+        for name in MODES:
             item = self._modes[name]
             if name == rendered_mode:
                 mode_records[name] = {
                     "status": "available",
-                    "legend": _legend(item.parts),
+                    "legend": aggregate_legend(item.parts),
                     "artifacts": artifacts,
                 }
             elif name == failed_mode:
@@ -250,13 +250,13 @@ class GeometryPreview:
                 existing = mode_records.get(name, {})
                 existing_artifacts = existing.get("artifacts", [])
                 if any(
-                    not _artifact_matches(self.root, artifact)
+                    not artifact_matches(self.root, artifact)
                     for artifact in existing_artifacts
                 ):
                     existing_artifacts = []
                 mode_records[name] = {
                     "status": "available",
-                    "legend": _legend(item.parts),
+                    "legend": aggregate_legend(item.parts),
                     "artifacts": existing_artifacts,
                 }
         payload = {
@@ -266,7 +266,7 @@ class GeometryPreview:
             "source_identity": self._source_identity,
             "renderer": renderer,
             "views": views,
-            "palette": _FIXED_COLORS,
+            "palette": FIXED_COLORS,
             "tile_size_px": tile_size,
             "contact_sheet_size_px": contact_sheet_size,
             "modes": mode_records,
@@ -274,7 +274,7 @@ class GeometryPreview:
             "identity_role": "preview receipt; excluded from solver and handoff identity",
         }
         self._manifest_path.parent.mkdir(parents=True, exist_ok=True)
-        _write_sorted_json_atomic(self._manifest_path, payload)
+        write_sorted_json_atomic(self._manifest_path, payload)
         if self._bind_receipt:
             self._bind_aedt_receipt(payload)
 
@@ -282,7 +282,7 @@ class GeometryPreview:
         receipt_path = self.root / "metadata/aedt_run_receipt.json"
         if not receipt_path.is_file():
             return
-        receipt = _json(receipt_path)
+        receipt = read_json_object(receipt_path)
         artifacts = {
             item["path"]: item["sha256"]
             for mode in manifest["modes"].values()
@@ -292,9 +292,9 @@ class GeometryPreview:
             "status": "available" if artifacts else "not_rendered",
             "manifest": {
                 "path": self._manifest_path.relative_to(self.root).as_posix(),
-                "sha256": _sha256(self._manifest_path),
+                "sha256": sha256(self._manifest_path),
             },
             "artifacts": artifacts,
             "simulation_status_affected": False,
         }
-        _write_sorted_json_atomic(receipt_path, receipt)
+        write_sorted_json_atomic(receipt_path, receipt)

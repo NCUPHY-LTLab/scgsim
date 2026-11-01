@@ -23,9 +23,9 @@ from scgsim.palace.results.report_data import (
     AmrPassSnapshot,
     SurfaceEprRecord,
     SurfaceEprSeriesSnapshot,
-    _read_surface_epr,
+    read_surface_epr,
 )
-from scgsim.palace.presentation.reports import _surface_ranking_figure
+from scgsim.palace.presentation.reports import surface_ranking_figure
 from scgsim.palace.execution.returned_receipt import _iteration_output_paths
 
 
@@ -283,7 +283,7 @@ class PalaceReportUxTests(unittest.TestCase):
             loss_status="unavailable_nonfinite",
         )
 
-        figure = _surface_ranking_figure(snapshot, 20, "light")
+        figure = surface_ranking_figure(snapshot, 20, "light")
 
         self.assertIsNotNone(figure)
         self.assertEqual(figure.layout.height, 1110)
@@ -301,13 +301,13 @@ class PalaceReportUxTests(unittest.TestCase):
                 "_convergence_items",
                 return_value=["numerical"],
             ),
-            patch("scgsim.palace.presentation.reports._surface_total_figure", return_value=total),
+            patch("scgsim.palace.presentation.reports.surface_total_figure", return_value=total),
             patch(
-                "scgsim.palace.presentation.reports._surface_percentage_figure",
+                "scgsim.palace.presentation.reports.surface_percentage_figure",
                 return_value=percentage,
             ),
             patch(
-                "scgsim.palace.presentation.reports._surface_ranking_figure",
+                "scgsim.palace.presentation.reports.surface_ranking_figure",
                 side_effect=AssertionError("trust must not render physics ranking"),
             ),
             patch("scgsim.palace.presentation.reports._show_figure", trust_figures.append),
@@ -320,15 +320,15 @@ class PalaceReportUxTests(unittest.TestCase):
         physics = trust.show_physics_quantities(ranking_limit=1)
         with (
             patch(
-                "scgsim.palace.presentation.reports._surface_total_figure",
+                "scgsim.palace.presentation.reports.surface_total_figure",
                 side_effect=AssertionError("physics must not redraw convergence"),
             ),
             patch(
-                "scgsim.palace.presentation.reports._surface_percentage_figure",
+                "scgsim.palace.presentation.reports.surface_percentage_figure",
                 side_effect=AssertionError("physics must not redraw convergence"),
             ),
             patch(
-                "scgsim.palace.presentation.reports._surface_ranking_figure",
+                "scgsim.palace.presentation.reports.surface_ranking_figure",
                 return_value=ranking,
             ),
             patch("scgsim.palace.presentation.reports._show_figure", physics_figures.append),
@@ -490,7 +490,7 @@ class PalaceReportUxTests(unittest.TestCase):
                 "m,p_surf[1],Q_surf[1]\n1,0.25,+inf\n",
                 encoding="utf-8",
             )
-            snapshots = _read_surface_epr(
+            snapshots = read_surface_epr(
                 path,
                 problem="Eigenmode",
                 pass_index=0,

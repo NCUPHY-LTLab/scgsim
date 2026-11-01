@@ -14,11 +14,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
-from scgsim.aedt._data import _freeze_str_keys_only, canonical_sha256, detached
-from scgsim.aedt.specs._support import _prepared_lumped_supports
+from scgsim.aedt._data import canonical_sha256, detached, freeze_str_keys_only
+from scgsim.aedt.specs._support import prepared_lumped_supports
 from scgsim.aedt.specs.common import LumpedRlc
 from scgsim.aedt.specs.epr import PlanarJunction, SurfaceEprSpec
-from scgsim.aedt.specs.modeling import _native_physical_record
+from scgsim.aedt.specs.modeling import native_physical_record
 from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.models.physical import PLAN_SCHEMA, PhysicalRepresentationPlan
 
@@ -46,7 +46,7 @@ class PreparedPlanarGeometry:
     def __post_init__(self) -> None:
         self._check_modeling_basis()
         rlcs, junctions, contributions = self._freeze_records()
-        source = _freeze_str_keys_only(self.source)
+        source = freeze_str_keys_only(self.source)
         _check_source_matches_plan(source, self.modeling)
         _check_lumped_supports(source)
         support_ids = {item["support_id"] for item in source.get("lumped_supports", ())}
@@ -58,7 +58,7 @@ class PreparedPlanarGeometry:
         object.__setattr__(
             self,
             "surface_bindings",
-            tuple(_freeze_str_keys_only(item) for item in self.surface_bindings),
+            tuple(freeze_str_keys_only(item) for item in self.surface_bindings),
         )
         self._check_digests(source)
 
@@ -95,7 +95,7 @@ class PreparedPlanarGeometry:
         object.__setattr__(
             self,
             "contribution_catalog",
-            tuple(_freeze_str_keys_only(item) for item in catalog),
+            tuple(freeze_str_keys_only(item) for item in catalog),
         )
         object.__setattr__(self, "contributions", contributions)
         return rlcs, junctions, contributions
@@ -240,7 +240,7 @@ def _check_source_matches_plan(source: Mapping[str, Any], modeling: str) -> None
     if plan.profile.name != modeling:
         raise ValueError("prepared geometry modeling differs from its neutral profile")
     for entity in source["conductors"]:
-        expected = _native_physical_record(plan.entities[entity["semantic_id"]])
+        expected = native_physical_record(plan.entities[entity["semantic_id"]])
         if detached(entity["physical_layer"]) != expected:
             raise ValueError(
                 "prepared conductor physical evidence differs from the neutral plan"
@@ -258,7 +258,7 @@ def _check_lumped_supports(source: Mapping[str, Any]) -> None:
     supports = tuple(
         LumpedSupport.from_payload(item["source"]) for item in source["lumped_supports"]
     )
-    if detached(source["lumped_supports"]) != _prepared_lumped_supports(
+    if detached(source["lumped_supports"]) != prepared_lumped_supports(
         supports, source
     ):
         raise ValueError(

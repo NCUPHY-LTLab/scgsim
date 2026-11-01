@@ -18,7 +18,7 @@ from scgsim.aedt.runtime._timing import elapsed_seconds
 from scgsim.aedt.runtime.benchmark import (
     export_simulation_benchmark,
 )
-from scgsim.aedt.runtime.families.hfss_export import _export_eigenmode
+from scgsim.aedt.runtime.families.hfss_export import export_eigenmode
 from scgsim.aedt.runtime.native.common import (
     BoundAedtRequest,
     analyze_with_resources,
@@ -31,10 +31,10 @@ from scgsim.aedt.runtime.native.hfss_eigenmode import (
     read_eigenmode_setup,
 )
 from scgsim.aedt.runtime.native.hfss_geometry import prepare_native_planar_geometry
-from scgsim.aedt.runtime.native.hfss_junction_readback import _read_saved_junction_lines
+from scgsim.aedt.runtime.native.hfss_junction_readback import read_saved_junction_lines
 from scgsim.aedt.runtime.native.hfss_lumped import (
-    _assign_generic_rlcs,
-    _read_generic_rlcs,
+    assign_generic_rlcs,
+    read_generic_rlcs,
 )
 from scgsim.aedt.specs.common import (
     REQUIRED_AEDT_VERSION,
@@ -83,7 +83,7 @@ def _frequency_solution_trace(
 ) -> dict[str, Any]:
     """Retain raw frequency and optional explicit native SI evidence."""
 
-    trace = _solution_trace(data, expression)
+    trace = solution_trace(data, expression)
     if trace["unit"] != "":
         return trace
     evidence: dict[str, Any] = {
@@ -155,7 +155,7 @@ def _frequency_solution_trace(
     return trace
 
 
-def _solution_trace(data: Any, expression: str) -> dict[str, Any]:
+def solution_trace(data: Any, expression: str) -> dict[str, Any]:
     """Detach one native trace while retaining its coordinate columns."""
 
     real, imaginary = data.full_matrix_real_imag
@@ -319,7 +319,7 @@ def prepare_body_eigenmode(  # noqa: PLR0913 - three optional keyword-only hooks
     geometry = prepare_native_planar_geometry(app, bound.geometry)
     if geometry_extension is not None:
         geometry_extension(app, bound.geometry, geometry)
-    _assign_generic_rlcs(app, bound, geometry)
+    assign_generic_rlcs(app, bound, geometry)
     timings["geometry_seconds"] = elapsed_seconds(started)
     timings["geometry_phases"] = geometry.pop("geometry_phases")
     started = time.perf_counter()
@@ -349,10 +349,10 @@ def prepare_body_eigenmode(  # noqa: PLR0913 - three optional keyword-only hooks
         raise RuntimeError("HFSS EPR project was not saved after preparation")
     timings["save_seconds"] = elapsed_seconds(started)
     started = time.perf_counter()
-    _read_saved_junction_lines(
+    read_saved_junction_lines(
         app, project_path, bound.design_name, bound.geometry, geometry
     )
-    _read_generic_rlcs(app, geometry)
+    read_generic_rlcs(app, geometry)
     setup = (
         read_body_eigenmode_setup(app, bound) if bound.run_control is not None else None
     )
@@ -474,7 +474,7 @@ def solve_and_export_body_eigenmode(
     output_dir = run_dir / "results/epr"
     output_dir.mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()
-    outputs, final_modes = _export_eigenmode(prepared.app, run_dir, output_dir, spec)
+    outputs, final_modes = export_eigenmode(prepared.app, run_dir, output_dir, spec)
     timings["final_export_seconds"] = elapsed_seconds(started)
     convergence_path = output_dir / "adaptive-convergence.prop"
     started = time.perf_counter()

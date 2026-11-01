@@ -11,12 +11,12 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, replace
 
-from scgsim.geometry.construction.curved_kernel import _identity
+from scgsim.geometry.construction.curved_kernel import identity
 from scgsim.geometry.construction.native import (
-    _rebind_surface_loops,
-    _rebind_volume_surface_refs,
-    _surface_outer_wire_edges,
     add_surface_first_volume,
+    rebind_surface_loops,
+    rebind_volume_surface_refs,
+    surface_outer_wire_edges,
 )
 from scgsim.geometry.models.topology import (
     InnerPecVoidShellRecord,
@@ -78,7 +78,7 @@ def build_volumes(context, book, curves, table):
             )
         )
     # Rebase all retained observations only after the final global face map is known.
-    return _rebind_volume_surface_refs(volumes, probe.surface_basis_parity)
+    return rebind_volume_surface_refs(volumes, probe.surface_basis_parity)
 
 
 def _surface_curve_ids(loops):
@@ -126,14 +126,14 @@ def _orient_shells(probe, shells):
         repaired = add_surface_first_volume(
             gmsh,
             [[native_surfaces[ref.surface_id] for ref in shell]],
-            outer_wire_edges=_surface_outer_wire_edges(
+            outer_wire_edges=surface_outer_wire_edges(
                 table.surfaces,
                 table.loops,
                 {cid: edge for edge, cid in curve_ids.items()},
                 native_surfaces,
             ),
         )
-        table.loops = _rebind_surface_loops(
+        table.loops = rebind_surface_loops(
             table.surfaces,
             table.loops,
             {cid: edge for edge, cid in curve_ids.items()},
@@ -203,9 +203,9 @@ def _inner_void_shells(entities, book, vid, shells, exterior_index):
         shells[index] = shell
         inner.append(
             InnerPecVoidShellRecord(
-                _identity("VOID__", [vid, sorted(ref.surface_id for ref in shell)]),
+                identity("VOID__", [vid, sorted(ref.surface_id for ref in shell)]),
                 shell,
-                _identity("COMP__", metal_owners),
+                identity("COMP__", metal_owners),
                 metal_owners,
             )
         )

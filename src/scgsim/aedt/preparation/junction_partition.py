@@ -28,17 +28,17 @@ from fractions import Fraction
 from scgsim.aedt._data import canonical_sha256
 from scgsim.aedt.preparation.junction_exact import (
     PRECISION_UM,
-    _boolean,
-    _closed_contact,
-    _covered,
-    _inside_ring,
-    _plain_with_dataclasses,
-    _positive_boundary_contact,
-    _rectangle,
-    _region,
-    _rings,
-    _section,
-    _twice_signed_area,
+    boolean,
+    closed_contact,
+    covered,
+    inside_ring,
+    plain_with_dataclasses,
+    positive_boundary_contact,
+    rectangle,
+    region_from_polygons,
+    rings_from_region,
+    section,
+    twice_signed_area,
 )
 from scgsim.aedt.preparation.junction_model import model_geometry
 from scgsim.aedt.specs.epr import PlanarJunction
@@ -89,7 +89,7 @@ def _partitioned_input(build_input, records, model, derived_entities, authored_i
     """
     metadata = dict(build_input.metadata)
     metadata["aedt_authored_input_sha256"] = canonical_sha256(
-        _plain_with_dataclasses(build_input)
+        plain_with_dataclasses(build_input)
     )
     metadata["aedt_junction_partitions"] = records
     original_ids = {p.polygon_id for p in build_input.polygons}
@@ -164,12 +164,12 @@ class _LocalFrame:
                 converted.append(point)
             rings.append(tuple(converted))
         for index, ring in enumerate(rings):
-            area = _twice_signed_area(ring)
+            area = twice_signed_area(ring)
             if len(set(ring)) < 3 or area == 0:
                 raise ValueError(
                     "numerical junction geometry failure: source polygon/hole collapses at Boolean precision"
                 )
-            if index and any(_inside_ring(point, rings[0]) != 1 for point in ring):
+            if index and any(inside_ring(point, rings[0]) != 1 for point in ring):
                 raise ValueError(
                     "numerical junction geometry failure: source hole loses interior topology"
                 )
@@ -245,8 +245,8 @@ def _prove_junction(junction, originals, authored_ids, entities, step):
         },
         "maximum_input_coordinate_deviation_um": max(frame.deviations, default=0.0),
         "ends": end_records,
-        "free_local_regions": _plain_with_dataclasses(_rings(corridor.free)),
-        "central_local_regions": _plain_with_dataclasses(central),
+        "free_local_regions": plain_with_dataclasses(rings_from_region(corridor.free)),
+        "central_local_regions": plain_with_dataclasses(central),
     }
 
 
@@ -286,15 +286,15 @@ def _corridor(terminals, frame):
     for polygons in (own_a, own_b, other):
         for rings in polygons:
             for y in (0, width):
-                intervals, points = _section(rings, 1, y, lower, upper)
+                intervals, points = section(rings, 1, y, lower, upper)
                 if any(a < b for a, b in intervals) or any(
                     lower < v < upper for v in points
                 ):
                     raise ValueError("unsupported corridor side-boundary metal contact")
-    sheet_region = _region(_rectangle(0, 0, span, width))
-    free = _boolean(sheet_region, _region([*own_a, *own_b]), "not")
-    corridor = _region(_rectangle(lower, 0, upper, width))
-    if _boolean(corridor, free, "not"):
+    sheet_region = region_from_polygons(rectangle(0, 0, span, width))
+    free = boolean(sheet_region, region_from_polygons([*own_a, *own_b]), "not")
+    corridor = region_from_polygons(rectangle(lower, 0, upper, width))
+    if boolean(corridor, free, "not"):
         raise ValueError(
             "unsupported corridor containment; no general search performed"
         )
@@ -307,7 +307,11 @@ def _contacts(polygons, span, width):
     Returns the smallest and largest `s` at which the polygons touch the sheet
     rectangle (area, edge or point contact), or None if they never touch it.
     """
-    region = _boolean(_region(polygons), _region(_rectangle(0, 0, span, width)), "and")
+    region = boolean(
+        region_from_polygons(polygons),
+        region_from_polygons(rectangle(0, 0, span, width)),
+        "and",
+    )
     positions = [round(x / PRECISION_UM) for p in region for x, _ in p.points]
     for rings in polygons:
         for axis, c, low, high in (
@@ -316,7 +320,7 @@ def _contacts(polygons, span, width):
             (1, 0, 0, span),
             (1, width, 0, span),
         ):
-            intervals, points = _section(rings, axis, c, low, high)
+            intervals, points = section(rings, axis, c, low, high)
             if axis == 0 and (intervals or points):
                 positions.append(c)
             elif axis == 1:
@@ -416,14 +420,14 @@ def _end_candidate(corridor, own, foreign, cut, *, left):
     sits on the metal bound. Each rejection says which condition failed.
     """
     span, width = corridor.span, corridor.width
-    clip = _rectangle(0, 0, cut, width) if left else _rectangle(cut, 0, span, width)
+    clip = rectangle(0, 0, cut, width) if left else rectangle(cut, 0, span, width)
     region = (
-        _boolean(corridor.free, _region(clip), "and")
+        boolean(corridor.free, region_from_polygons(clip), "and")
         if (cut > 0 if left else cut < span)
         else []
     )
     try:
-        end = _rings(region)
+        end = rings_from_region(region)
     except ValueError as exc:
         return None, {"valid": False, "reason": str(exc)}
     if len(end) > 1:
@@ -432,17 +436,17 @@ def _end_candidate(corridor, own, foreign, cut, *, left):
             "reason": "nonempty end has disconnected components",
             "components": len(end),
         }
-    if end and not _positive_boundary_contact(end, own):
+    if end and not positive_boundary_contact(end, own):
         return None, {
             "valid": False,
             "reason": "end lacks positive-length own-arm contact",
         }
-    if _closed_contact(end, foreign):
+    if closed_contact(end, foreign):
         return None, {
             "valid": False,
             "reason": "end contacts wrong terminal or third net",
         }
-    if not _covered([*own, *end], 0, cut, 0, width):
+    if not covered([*own, *end], 0, cut, 0, width):
         return None, {
             "valid": False,
             "reason": "designated end edge is not wholly covered",
@@ -457,19 +461,23 @@ def _prove_partition(corridor, terminals, choices):
     own_a, own_b, other = terminals.own_a, terminals.own_b, terminals.other
     if a >= b:
         raise ValueError("junction DBU grid has no positive central span")
-    central = _rectangle(a, 0, b, width)
+    central = rectangle(a, 0, b, width)
     for y in (0, width):
         for rings in [*own_a, *own_b, *other, *end_a, *end_b]:
-            intervals, points = _section(rings, 1, y, a, b)
+            intervals, points = section(rings, 1, y, a, b)
             if any(x < z for x, z in intervals) or any(a < v < b for v in points):
                 raise ValueError("RLC open side has forbidden line or point contact")
     for cut, wrong in ((a, own_b + other + end_b), (b, own_a + other + end_a)):
-        if any(any(_section(rings, 0, cut, 0, width)) for rings in wrong):
+        if any(any(section(rings, 0, cut, 0, width)) for rings in wrong):
             raise ValueError("wrong-net RLC end/corner contact")
-    parts = [_region(end_a), _region(central), _region(end_b)]
-    union = _boolean([p for part in parts for p in part], [], "or")
-    if _boolean(union, corridor.free, "xor") or any(
-        _boolean(parts[i], parts[j], "and") for i, j in ((0, 1), (0, 2), (1, 2))
+    parts = [
+        region_from_polygons(end_a),
+        region_from_polygons(central),
+        region_from_polygons(end_b),
+    ]
+    union = boolean([p for part in parts for p in part], [], "or")
+    if boolean(union, corridor.free, "xor") or any(
+        boolean(parts[i], parts[j], "and") for i, j in ((0, 1), (0, 2), (1, 2))
     ):
         raise ValueError(
             "numerical junction geometry failure: partition coverage/interiors differ"
@@ -490,9 +498,9 @@ def _end_records(junction, ends, by_entity, entities, width):
             for eid, polygons in by_entity.items()
             if entities[eid].net_id == net
             and (
-                _positive_boundary_contact(end, polygons)
+                positive_boundary_contact(end, polygons)
                 if end
-                else _covered(polygons, 0, cut, 0, width)
+                else covered(polygons, 0, cut, 0, width)
             )
         ]
         if len(owners) != 1:
@@ -511,11 +519,11 @@ def _end_records(junction, ends, by_entity, entities, width):
                 "source_entity_id": owner.semantic_id,
                 "net_id": net,
                 "material_id": owner.material_id,
-                "geometry": _plain_with_dataclasses(owner.geometry),
+                "geometry": plain_with_dataclasses(owner.geometry),
                 "representation": dict(owner.route_representations),
                 "polygon_id": polygon_id,
                 "empty_residual": not end,
-                "local_regions": _plain_with_dataclasses(end),
+                "local_regions": plain_with_dataclasses(end),
             }
         )
     return end_records

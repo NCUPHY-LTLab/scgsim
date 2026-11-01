@@ -17,10 +17,10 @@ from pathlib import Path
 from typing import Any, Literal
 
 from scgsim.aedt._data import (
-    _freeze_str_keys_only,
-    _number_at_least,
-    _stripped_text,
     detached,
+    freeze_str_keys_only,
+    number_at_least,
+    stripped_text,
 )
 from scgsim.semantics.epr import film_assumptions
 
@@ -72,35 +72,29 @@ class PlanarJunction:
             "terminal_a_net",
             "terminal_b_net",
         ):
-            object.__setattr__(self, name, _stripped_text(getattr(self, name), name))
+            object.__setattr__(self, name, stripped_text(getattr(self, name), name))
         if self.terminal_a_net == self.terminal_b_net:
             raise ValueError("junction terminal nets must be distinct")
         if len(self.direction_xy) != 2:
             raise ValueError("junction direction_xy must contain two values")
-        dx = _number_at_least(
-            self.direction_xy[0], "direction_xy[0]", minimum=-math.inf
-        )
-        dy = _number_at_least(
-            self.direction_xy[1], "direction_xy[1]", minimum=-math.inf
-        )
+        dx = number_at_least(self.direction_xy[0], "direction_xy[0]", minimum=-math.inf)
+        dy = number_at_least(self.direction_xy[1], "direction_xy[1]", minimum=-math.inf)
         norm = math.hypot(dx, dy)
         if norm == 0.0:
             raise ValueError("junction direction_xy must be nonzero")
         object.__setattr__(self, "direction_xy", (dx / norm, dy / norm))
-        object.__setattr__(
-            self, "width_um", _number_at_least(self.width_um, "width_um")
-        )
+        object.__setattr__(self, "width_um", number_at_least(self.width_um, "width_um"))
         if self.width_um <= 0.0:
             raise ValueError("junction width_um must be > 0")
         object.__setattr__(
-            self, "inductance_h", _number_at_least(self.inductance_h, "inductance_h")
+            self, "inductance_h", number_at_least(self.inductance_h, "inductance_h")
         )
         object.__setattr__(
-            self, "capacitance_f", _number_at_least(self.capacitance_f, "capacitance_f")
+            self, "capacitance_f", number_at_least(self.capacitance_f, "capacitance_f")
         )
         if self.inductance_h <= 0.0 or self.capacitance_f < 0.0:
             raise ValueError("junction L must be > 0 and C must be >= 0")
-        object.__setattr__(self, "metadata", _freeze_str_keys_only(self.metadata))
+        object.__setattr__(self, "metadata", freeze_str_keys_only(self.metadata))
 
     def to_payload(self) -> dict[str, Any]:
         """Serialize the junction with its unit direction vector and detached metadata."""
@@ -165,13 +159,13 @@ class SurfaceEprSpec:
 
     def __post_init__(self) -> None:
         for name in ("contribution_id", "source_polygon_id"):
-            object.__setattr__(self, name, _stripped_text(getattr(self, name), name))
+            object.__setattr__(self, name, stripped_text(getattr(self, name), name))
         if self.interface_kind not in {"MA", "MS", "SA", "MM"}:
             raise ValueError(f"unsupported EPR interface kind {self.interface_kind!r}")
         if self.field_side not in {"top", "bottom", "sidewall"}:
             raise ValueError(f"unsupported EPR field side {self.field_side!r}")
         margins = tuple(
-            _number_at_least(value, "margin_um") for value in self.margins_um
+            number_at_least(value, "margin_um") for value in self.margins_um
         )
         if not margins or len(margins) != len(set(margins)):
             raise ValueError("margins_um must be non-empty and unique")
@@ -183,7 +177,7 @@ class SurfaceEprSpec:
         for name in optional:
             value = getattr(self, name)
             if value is not None:
-                number = _number_at_least(value, name)
+                number = number_at_least(value, name)
                 if number <= 0.0:
                     raise ValueError(f"{name} must be > 0 when provided")
                 object.__setattr__(self, name, number)
@@ -209,7 +203,7 @@ class SurfaceEprSpec:
             },
             partial=self.interface_kind == "MM",
         )
-        object.__setattr__(self, "metadata", _freeze_str_keys_only(self.metadata))
+        object.__setattr__(self, "metadata", freeze_str_keys_only(self.metadata))
 
     def to_payload(self) -> dict[str, Any]:
         """Serialize the contribution with its film-assumption keys."""
@@ -284,7 +278,7 @@ class EprAnalysisRequest:
                 if any(type(item) is not int or item <= 0 for item in values):
                     raise ValueError("mode_indices must contain positive integers")
             else:
-                values = tuple(_stripped_text(item, name) for item in values)
+                values = tuple(stripped_text(item, name) for item in values)
             object.__setattr__(self, name, values)
 
     def to_payload(self) -> dict[str, Any]:
@@ -334,7 +328,7 @@ class NativeExpressionDefinition:
     operations: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "name", _stripped_text(self.name, "expression name"))
+        object.__setattr__(self, "name", stripped_text(self.name, "expression name"))
         if isinstance(self.operations, (str, bytes)) or not isinstance(
             self.operations, Sequence
         ):
@@ -386,7 +380,7 @@ class NormalizedSurfaceEprTotal:
             raise ValueError("surface EPR total interface must be MA, MS, or SA")
         if self.evaluation_kind not in {"unmasked_baseline", "requested_margin"}:
             raise ValueError("surface EPR total evaluation kind is invalid")
-        margin = _number_at_least(self.margin_um, "surface EPR total margin")
+        margin = number_at_least(self.margin_um, "surface EPR total margin")
         if self.evaluation_kind == "unmasked_baseline" and margin != 0.0:
             raise ValueError("unmasked baseline margin must be exactly 0 um")
         object.__setattr__(self, "margin_um", margin)
@@ -439,7 +433,7 @@ class ExpressionCacheConvergence:
             raise TypeError(
                 "convergence target must be a native expression or normalized surface total"
             )
-        criterion = _number_at_least(
+        criterion = number_at_least(
             self.criterion, "convergence criterion", minimum=-math.inf
         )
         if type(self.use_relative_convergence) is not bool:
@@ -515,11 +509,11 @@ class SavedSolution:
         if any(not isinstance(item, Mapping) for item in members):
             raise TypeError("saved solution members must contain mappings")
         object.__setattr__(
-            self, "members", tuple(_freeze_str_keys_only(item) for item in members)
+            self, "members", tuple(freeze_str_keys_only(item) for item in members)
         )
         if not isinstance(self.content_sha256, str) or len(self.content_sha256) != 64:
             raise ValueError("saved solution content_sha256 is invalid")
-        identity = _freeze_str_keys_only(self.identity)
+        identity = freeze_str_keys_only(self.identity)
         expected_identity = {
             "model_source_sha256",
             "project_name",
@@ -537,7 +531,7 @@ class SavedSolution:
             "saved_fields_pass",
             "saved_fields",
         }:
-            _stripped_text(identity[name], f"saved solution identity.{name}")
+            stripped_text(identity[name], f"saved solution identity.{name}")
         for name in ("solver_last_completed_pass", "saved_fields_pass"):
             if type(identity[name]) is not int or identity[name] <= 0:
                 raise ValueError(f"saved solution {name} must be positive")
@@ -577,8 +571,8 @@ class SavedSolution:
         ):
             raise ValueError("saved solution payload is not canonical")
         base = Path(root)
-        project = _contained_relative_path(value["project"], "saved solution project")
-        results = _contained_relative_path(value["results"], "saved solution results")
+        project = contained_relative_path(value["project"], "saved solution project")
+        results = contained_relative_path(value["results"], "saved solution results")
         return cls(
             root=base,
             project_path=base / project,
@@ -589,7 +583,7 @@ class SavedSolution:
         )
 
 
-def _contained_relative_path(value: Any, name: str) -> Path:
+def contained_relative_path(value: Any, name: str) -> Path:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{name} must be a non-empty relative path")
     path = Path(value)

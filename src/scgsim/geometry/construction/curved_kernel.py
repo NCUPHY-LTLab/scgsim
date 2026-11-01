@@ -1,6 +1,6 @@
 """Native OpenCASCADE (OCC) kernel helpers for curved construction.
 
-Owns stable identity hashing, edge and face topology queries, and `_Kernel`,
+Owns stable identity hashing, edge and face topology queries, and `Kernel`,
 which turns one source curve spec into native B-spline edges and one footprint
 into a planar face. Every curve kind is built as a degree-3 B-spline so that
 lines, arcs and splines share one native edge type. Does not decide which
@@ -14,10 +14,10 @@ import json
 import math
 from dataclasses import asdict
 
-from scgsim.geometry.construction.curved_source import _circle_points
+from scgsim.geometry.construction.curved_source import circle_points
 
 
-def _identity(prefix, value):
+def identity(prefix, value):
     """Content-addressed id: `prefix` plus 24 hex digits of the value's SHA-256.
 
     Ids depend on content, not native tags, so they stay stable when OCC
@@ -31,7 +31,7 @@ def _identity(prefix, value):
     )
 
 
-def _edge_vertices(gmsh, edge):
+def edge_vertices(gmsh, edge):
     """Vertex tags of a native edge, ordered by curve parameter (start first)."""
     vertices = [
         abs(tag)
@@ -46,7 +46,7 @@ def _edge_vertices(gmsh, edge):
     )
 
 
-def _face_loops(gmsh, occ, face):
+def face_loops(gmsh, occ, face):
     """Signed edge tags of each loop of a face, each walked as one closed chain."""
     oriented = {
         abs(tag): tag
@@ -59,7 +59,7 @@ def _face_loops(gmsh, occ, face):
         ordered = [pending.pop(0)]
 
         def endpoints(tag):
-            vertices = _edge_vertices(gmsh, abs(tag))
+            vertices = edge_vertices(gmsh, abs(tag))
             return vertices if tag > 0 else vertices[::-1]
 
         while pending:
@@ -76,7 +76,7 @@ def _face_loops(gmsh, occ, face):
     return result
 
 
-class _Kernel:
+class Kernel:
     """Builds source curves and footprints as native OCC entities, in call order.
 
     `points` de-duplicates OCC points by exact coordinates so that curves meeting
@@ -202,7 +202,7 @@ class _Kernel:
         self.occ.synchronize()
         open_tags = []
         for tag in tags:
-            if len(_edge_vertices(self.gmsh, tag)) == 2:
+            if len(edge_vertices(self.gmsh, tag)) == 2:
                 open_tags.append(tag)
                 continue
             lower, upper = self.gmsh.model.getParametrizationBounds(1, tag)
@@ -256,7 +256,7 @@ def _rational_arc_controls(arc_points_um, points):
     Returns `(controls, pieces)`: one rational quadratic span per quarter turn,
     each degree-elevated to cubic so spans can join in a single B-spline.
     """
-    center, radius = _circle_points(arc_points_um)
+    center, radius = circle_points(arc_points_um)
     cx, cy = center
     angles = [math.atan2(y - cy, x - cx) for x, y in arc_points_um]
     ccw = (angles[2] - angles[0]) % (2 * math.pi)

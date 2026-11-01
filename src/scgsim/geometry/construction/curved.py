@@ -29,7 +29,7 @@ from typing import Any
 
 from scgsim.geometry.construction.curved_arrangement import build_planar_arrangement
 from scgsim.geometry.construction.curved_context import BuildSession, CurvedContext
-from scgsim.geometry.construction.curved_kernel import _Kernel
+from scgsim.geometry.construction.curved_kernel import Kernel
 from scgsim.geometry.construction.curved_ownership import build_slab_ownership
 from scgsim.geometry.construction.curved_records import (
     apply_surface_contract,
@@ -40,13 +40,23 @@ from scgsim.geometry.construction.curved_records import (
     build_surface_table,
     finalize_curves_and_points,
 )
-from scgsim.geometry.construction.curved_source import _boundaries, _source_rings
+from scgsim.geometry.construction.curved_source import boundaries, source_rings
 from scgsim.geometry.construction.curved_surfaces import register_surfaces
 from scgsim.geometry.construction.curved_sweep import sweep_curve_complex
 from scgsim.geometry.construction.curved_volumes import build_volumes
 from scgsim.geometry.models.construction import (
     ConstructionPlanRecord,
     RouteABConstructionPlanRecord,
+)
+from scgsim.geometry.planning.context.tags import plan_route_tags
+from scgsim.geometry.planning.solutions.auto_vacuum import (
+    prepare_auto_vacuum_solution_regions,
+)
+from scgsim.geometry.planning.validation import (
+    validate_curve_plan_coverage,
+    validate_selected_route,
+    validate_tag_plan_coverage,
+    validate_volume_surface_closure,
 )
 
 
@@ -65,12 +75,7 @@ def build_curved_construction_plan(build_input, *, route, representation_context
     """Compile source curves globally before naming shared material surfaces."""
     import gmsh
 
-    from scgsim.geometry.compiler.validation import validate_selected_route
-    from scgsim.geometry.planning.auto_vacuum import (
-        _prepare_auto_vacuum_solution_regions,
-    )
-
-    prepared = _prepare_auto_vacuum_solution_regions(
+    prepared = prepare_auto_vacuum_solution_regions(
         build_input,
         route=route,
         native_complement=True,
@@ -79,8 +84,8 @@ def build_curved_construction_plan(build_input, *, route, representation_context
     validate_selected_route(
         prepared, route, representation_context=representation_context
     )
-    rings = _source_rings(prepared)
-    chains, operations = _boundaries(prepared, rings)
+    rings = source_rings(prepared)
+    chains, operations = boundaries(prepared, rings)
     entities = {e.semantic_id: e for e in prepared.entities}
     initialized = bool(gmsh.isInitialized())
     if not initialized:
@@ -90,7 +95,7 @@ def build_curved_construction_plan(build_input, *, route, representation_context
     terminal = gmsh.option.getNumber("General.Terminal")
     gmsh.option.setNumber("General.Terminal", 0)
     try:
-        kernel = _Kernel(gmsh)
+        kernel = Kernel(gmsh)
         session = BuildSession(gmsh, kernel.occ, kernel, route, prepared, entities)
         return _build_plan(session, rings, chains, operations)
     finally:
@@ -166,7 +171,6 @@ def _write_boundary_xao(gmsh, book, curves):
 
 
 def _assemble_plan(context, curves, operations, payload, records):
-    from scgsim.geometry.planning.tags import plan_route_tags
 
     session = context.session
     route = session.route
@@ -226,11 +230,6 @@ def _assemble_plan(context, curves, operations, payload, records):
 
 
 def _validate_plan(plan):
-    from scgsim.geometry.compiler.validation import (
-        validate_curve_plan_coverage,
-        validate_tag_plan_coverage,
-        validate_volume_surface_closure,
-    )
 
     validate_curve_plan_coverage(
         points=plan.points,

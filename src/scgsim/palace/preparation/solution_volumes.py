@@ -19,7 +19,7 @@ from typing import Any
 from .._values import optional_stripped_string
 
 
-def _material_resolution(
+def resolve_volume_materials(
     domain_volumes: list[tuple[str, Mapping[str, Any]]],
     materials: Mapping[str, Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -27,7 +27,7 @@ def _material_resolution(
     return [
         {
             "solution_volume": name,
-            "attributes": sorted(_physical_group_values(volume.get("phys_group"))),
+            "attributes": sorted(physical_group_values(volume.get("phys_group"))),
             "physical_attribute": volume.get("physical_attribute", {}),
             "material": _material_identity(volume, materials),
             "source_provenance": volume.get("source_provenance", {}),
@@ -36,14 +36,14 @@ def _material_resolution(
     ]
 
 
-def _domain_energy_rows(
+def domain_energy_rows(
     domain_volumes: list[tuple[str, Mapping[str, Any]]],
     materials: Mapping[str, Mapping[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     rows = [
         {
             "Index": index,
-            "Attributes": sorted(_physical_group_values(info.get("phys_group"))),
+            "Attributes": sorted(physical_group_values(info.get("phys_group"))),
         }
         for index, (_, info) in enumerate(domain_volumes, start=1)
     ]
@@ -71,7 +71,7 @@ def _domain_energy_rows(
     return rows, index_rows
 
 
-def _domains_from_solution_volumes(
+def domains_from_solution_volumes(
     groups: Mapping[str, Mapping[str, Any]],
 ) -> list[tuple[str, Mapping[str, Any]]]:
     """Sort solver volumes as deterministic domains."""
@@ -80,7 +80,7 @@ def _domains_from_solution_volumes(
     )
 
 
-def _materials_from_solution_volumes(
+def materials_from_solution_volumes(
     *,
     domain_volumes: list[tuple[str, Mapping[str, Any]]],
     materials: Mapping[str, Mapping[str, Any]],
@@ -93,7 +93,7 @@ def _materials_from_solution_volumes(
 
     material_rows: list[dict[str, Any]] = []
     for name, volume in domain_volumes:
-        attrs = _physical_group_values(volume.get("phys_group"))
+        attrs = physical_group_values(volume.get("phys_group"))
         physical_attribute = volume.get("physical_attribute")
         if not isinstance(physical_attribute, Mapping):
             raise TypeError(f"SGB solution volume {name!r} missing physical_attribute.")
@@ -176,7 +176,7 @@ def _material_identity(
     return {"material_id": material_id, "kind": str(material["kind"])}
 
 
-def _physical_group_values(value: Any) -> tuple[int, ...]:
+def physical_group_values(value: Any) -> tuple[int, ...]:
     raw = value if isinstance(value, (list, tuple, set)) else (value,)
     values = [
         int(item)

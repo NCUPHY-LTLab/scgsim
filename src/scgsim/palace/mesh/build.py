@@ -106,7 +106,7 @@ def build_route_mesh(  # noqa: PLR0913 - one keyword per user-facing mesh knob
     )
     thin_film = _route_a_thin_film_provenance(stack, route)
     _check_mesh_sizes(refined_mesh_size, max_mesh_size)
-    stack = _with_port_sheet_metadata(stack, port_sheet_source_layers)
+    stack = with_port_sheet_metadata(stack, port_sheet_source_layers)
     paths = _prepare_run_directory(output_dir, route)
 
     top_cell = _write_geometry_inputs(component, stack, source_gds_bytes, paths)
@@ -248,8 +248,8 @@ def _write_geometry_inputs(
     if source_gds_bytes is None:
         if component is None:
             raise ValueError("component or immutable plan GDS source is required")
-        _write_component_gds(component=component, path=paths.gds)
-        top_cell = _component_gds_top_cell_name(component=component, gds_path=paths.gds)
+        write_component_gds(component=component, path=paths.gds)
+        top_cell = component_gds_top_cell_name(component=component, gds_path=paths.gds)
     else:
         if component is not None or not isinstance(source_gds_bytes, bytes):
             raise TypeError("plan GDS bytes cannot be mixed with a live component")
@@ -473,7 +473,7 @@ def _route_a_thin_film_provenance(
     return result
 
 
-def _write_component_gds(component: Any, path: Path) -> None:
+def write_component_gds(component: Any, path: Path) -> None:
     """Write the component's GDS, supporting both string and pathlib styles."""
     path.parent.mkdir(parents=True, exist_ok=True)
     write_gds = getattr(component, "write_gds", None)
@@ -486,7 +486,7 @@ def _write_component_gds(component: Any, path: Path) -> None:
         write_gds(str(path))
 
 
-def _with_port_sheet_metadata(
+def with_port_sheet_metadata(
     stack: Mapping[str, Any], records: Sequence[Mapping[str, Any]]
 ) -> Mapping[str, Any]:
     """Attach authored ports after marking their exact face-metal owners splittable."""
@@ -553,7 +553,7 @@ def _with_port_sheet_metadata(
     return payload
 
 
-def _component_gds_top_cell_name(*, component: Any, gds_path: Path) -> str:
+def component_gds_top_cell_name(*, component: Any, gds_path: Path) -> str:
     """Select a deterministic top cell name for SGB input."""
     try:
         import gdstk

@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from scgsim.aedt._data import _stripped_text
+from scgsim.aedt._data import stripped_text
 from scgsim.aedt.specs.common import (
     LOCKED_PYAEDT,
     OFFICIAL_PYAEDT_SOURCE_URL,
@@ -24,21 +24,21 @@ from scgsim.aedt.specs.common import (
     MatrixRunControl,
     PdkMaterial,
     Side,
-    _coerced_finite_number,
-    _normalize_common_spec,
-    _padding,
-    _project_name_from_payload,
+    checked_region_padding,
+    coerced_finite_number,
+    normalize_common_spec,
+    project_name_from_payload,
 )
 from scgsim.aedt.specs.modeling import (
     Modeling,
     PhysicalLayerDeclaration,
     PhysicalRepresentationPlan,
-    _effective_record,
-    _modeling_payload,
-    _physical_fields_from_payload,
-    _request_modeling,
-    _source_record_payload,
-    _verify_effective_records,
+    effective_record,
+    modeling_payload,
+    physical_fields_from_payload,
+    request_modeling,
+    source_record_payload,
+    verify_effective_records,
 )
 
 
@@ -60,11 +60,11 @@ class Q3dNetSpec:
     sink_side: Side | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "name", _stripped_text(self.name, "net.name"))
+        object.__setattr__(self, "name", stripped_text(self.name, "net.name"))
         if self.net_type not in {"Signal", "Ground"}:
             raise ValueError("Q3D net_type must be Signal or Ground")
         objects = tuple(
-            _stripped_text(value, "net.object_name") for value in self.object_names
+            stripped_text(value, "net.object_name") for value in self.object_names
         )
         if not objects or len(set(objects)) != len(objects):
             raise ValueError("Q3D net object_names must be nonempty and unique")
@@ -85,8 +85,8 @@ class Q3dNetSpec:
             raise ValueError(
                 "Q3D Signal terminals must be all absent or a complete source/sink pair"
             )
-        source = _stripped_text(self.source_object, "net.source_object")
-        sink = _stripped_text(self.sink_object, "net.sink_object")
+        source = stripped_text(self.source_object, "net.source_object")
+        sink = stripped_text(self.sink_object, "net.sink_object")
         if source not in objects or sink not in objects:
             raise ValueError("Q3D source and sink objects must belong to their net")
         if self.source_side not in {
@@ -149,7 +149,7 @@ class Q3dBodySpec:
 
     def __post_init__(self) -> None:
         for field in ("body_id", "material_id"):
-            object.__setattr__(self, field, _stripped_text(getattr(self, field), field))
+            object.__setattr__(self, field, stripped_text(getattr(self, field), field))
         if self.physical_role not in {"signal", "ground", "substrate"}:
             raise ValueError("Q3D body physical_role is invalid")
         for field in (
@@ -162,7 +162,7 @@ class Q3dBodySpec:
         ):
             value = getattr(self, field)
             if value is not None:
-                object.__setattr__(self, field, _stripped_text(value, field))
+                object.__setattr__(self, field, stripped_text(value, field))
 
         def ring(value: Any) -> tuple[tuple[float, float], ...]:
             points = tuple(tuple(point) for point in value)
@@ -175,8 +175,8 @@ class Q3dBodySpec:
             self, "holes_um", tuple(ring(hole) for hole in self.holes_um)
         )
         low, high = (
-            _coerced_finite_number(self.z_min_um, "z_min_um"),
-            _coerced_finite_number(self.z_max_um, "z_max_um"),
+            coerced_finite_number(self.z_min_um, "z_min_um"),
+            coerced_finite_number(self.z_max_um, "z_max_um"),
         )
         if high <= low:
             raise ValueError("Q3D bodies require positive thickness")
@@ -254,7 +254,7 @@ def _q3d_geometry_source(
     ):
         raise ValueError("Q3D geometry_source physical_ground_nets are invalid")
 
-    dbu = _coerced_finite_number(
+    dbu = coerced_finite_number(
         source["source_dbu_um"], "geometry_source.source_dbu_um"
     )
     if dbu <= 0:
@@ -340,17 +340,19 @@ class Q3dSpec:
         return "q3d"
 
     def __post_init__(self) -> None:
-        _request_modeling(self)
+        request_modeling(self)
         if self.schema_version != Q3D_SCHEMA_VERSION:
             raise ValueError("unsupported Q3D schema")
-        materials = _normalize_common_spec(self)
+        materials = normalize_common_spec(self)
         if self.run_control is not None and not isinstance(
             self.run_control, MatrixRunControl
         ):
             raise TypeError("run_control must be MatrixRunControl or None")
         bodies = self._checked_bodies(materials)
         object.__setattr__(self, "bodies", bodies)
-        object.__setattr__(self, "region_padding_um", _padding(self.region_padding_um))
+        object.__setattr__(
+            self, "region_padding_um", checked_region_padding(self.region_padding_um)
+        )
         nets = self._checked_nets(bodies)
         if self.geometry_source is not None:
             if not isinstance(self.geometry_source, Mapping):
@@ -425,7 +427,7 @@ class Q3dSpec:
         grounded_region_net = self.grounded_region_net
         if grounded_region_net is None:
             return
-        _stripped_text(grounded_region_net, "grounded_region_net")
+        stripped_text(grounded_region_net, "grounded_region_net")
         if self.solve_ac_rl:
             raise ValueError("grounded_region_net requires solve_ac_rl=False")
         if grounded_region_net in {net.name for net in nets}:
@@ -438,13 +440,13 @@ class Q3dSpec:
         """Bodies with the physical-layer plan applied, carrying both source and effective
         Z.
         """
-        mapping = _request_modeling(self)
-        return tuple(_effective_record(item, mapping) for item in self.bodies)
+        mapping = request_modeling(self)
+        return tuple(effective_record(item, mapping) for item in self.bodies)
 
     @property
     def effective_region(self) -> dict[str, Any]:
         """Project the complete originally requested envelope with the common plan."""
-        mapping = _request_modeling(self)
+        mapping = request_modeling(self)
 
         def bounds(records):
             points = [point for body in records for point in body["exterior_um"]]
@@ -499,7 +501,7 @@ class Q3dSpec:
     def to_payload(self) -> dict[str, Any]:
         """Serialize with the effective bodies of the bound plan."""
         payload = {
-            **_modeling_payload(self),
+            **modeling_payload(self),
             "schema_version": self.schema_version,
             "mode": self.mode,
             "aedt": {"requested_version": self.aedt_version},
@@ -541,11 +543,11 @@ class Q3dSpec:
             raise ValueError("Q3D v3 does not accept GDS-piece inputs")
         result = cls(
             modeling=payload.get("modeling"),
-            **_physical_fields_from_payload(payload),
-            project_name=_project_name_from_payload(
+            **physical_fields_from_payload(payload),
+            project_name=project_name_from_payload(
                 payload.get("project", {}).get("name")
             ),
-            design_name=_stripped_text(
+            design_name=stripped_text(
                 payload.get("project", {}).get("design"), "project.design"
             ),
             materials={
@@ -553,8 +555,7 @@ class Q3dSpec:
             },
             vacuum_material_id=payload["vacuum_material_id"],
             bodies=tuple(
-                Q3dBodySpec(**_source_record_payload(body))
-                for body in payload["bodies"]
+                Q3dBodySpec(**source_record_payload(body)) for body in payload["bodies"]
             ),
             nets=tuple(Q3dNetSpec(**net) for net in payload["nets"]),
             run_control=(
@@ -569,5 +570,5 @@ class Q3dSpec:
             pyaedt_version=payload["pyaedt"]["locked_version"],
             geometry_source=payload.get("geometry_source"),
         )
-        _verify_effective_records(payload["bodies"], result.effective_bodies)
+        verify_effective_records(payload["bodies"], result.effective_bodies)
         return result

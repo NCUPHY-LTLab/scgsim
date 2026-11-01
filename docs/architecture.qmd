@@ -148,7 +148,7 @@ Within Palace, `results.report_data` owns detached report records and snapshot
 readers; `presentation.reports` owns trust/physics views and figures. The
 package facade retains the existing public result and report names.
 
-The AEDT producer writes `scgsim.aedt.runtime-source.v22`. Its records carry
+The AEDT producer writes `scgsim.aedt.runtime-source.v23`. Its records carry
 `schema_version`, `stage`, `modules`, `content_sha256`, and
 `revision_observation`; module bytes and their digest are mandatory, while the
 truthful Git observation may be unavailable. The manifest does not claim
@@ -331,12 +331,12 @@ carrier and cannot reinterpret a caller spec or workspace.
 
 New preparation writes the handoff and handoff-manifest records, which both
 declare that the mutable run receipt uses `scgsim.aedt.receipt.v3`. The initial
-V3 receipt records a declared `runtime-source.v22` preparation-time SCGSim module
+V3 receipt records a declared `runtime-source.v23` preparation-time SCGSim module
 manifest and content digest. Before mutation, execution verifies the canonical
 manifest and binds the initial-receipt and prepared-manifest hashes. Receipts
 other than V3 are rejected with an error that names the version found.
 
-Every new completed V3 receipt records a separate declared `runtime-source.v22`
+Every new completed V3 receipt records a separate declared `runtime-source.v23`
 execution-time module manifest and digest. Its measured module bytes and
 content digest are mandatory. Preparation and execution identities are not
 required to match: their separation records what prepared and what actually

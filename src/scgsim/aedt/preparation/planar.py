@@ -22,38 +22,38 @@ from importlib.metadata import version
 from typing import Any
 
 from scgsim.aedt._data import canonical_sha256
-from scgsim.aedt.preparation.junction_exact import _closed_contact
+from scgsim.aedt.preparation.junction_exact import closed_contact
 from scgsim.aedt.preparation.junction_partition import partition_junctions
-from scgsim.aedt.preparation.modeling import _effective_geometry_input
+from scgsim.aedt.preparation.modeling import effective_geometry_input
 from scgsim.aedt.preparation.planar_source import (
-    _plain_geometry_source,
-    _source_payload,
+    plain_geometry_source,
+    source_payload,
 )
 from scgsim.aedt.preparation.planar_surfaces import (
-    _contribution_catalog,
-    _plane_group_key,
-    _project_plane_region,
-    _resolve_contributions,
-    _support_bindings,
-    _surface_ledger,
+    bind_mask_support,
+    merged_contribution_catalog,
+    plane_group_key,
+    project_plane_region,
+    resolve_contributions,
+    surface_ledger,
 )
-from scgsim.aedt.specs._support import _prepared_lumped_supports
+from scgsim.aedt.specs._support import prepared_lumped_supports
 from scgsim.aedt.specs.epr import (
     PlanarJunction,
     SurfaceEprSpec,
 )
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-from scgsim.aedt.specs.modeling import Modeling, _native_physical_record
+from scgsim.aedt.specs.modeling import Modeling, native_physical_record
 from scgsim.geometry import GeometryBuildInput
 from scgsim.geometry.planning.surfaces import plan_representation_contribution_geometry
 from scgsim.geometry.source.validation import validate_geometry_input
 from scgsim.semantics.route_a import geometry_z_range
 
-_INSET_CIRCLE_POINTS = 128
-_INSET_METHOD = "klayout_complement_minkowski.v1"
+INSET_CIRCLE_POINTS = 128
+INSET_METHOD = "klayout_complement_minkowski.v1"
 
-_KLAYOUT_COORD_MIN = -(2**31)
-_KLAYOUT_COORD_MAX = 2**31 - 1
+KLAYOUT_COORD_MIN = -(2**31)
+KLAYOUT_COORD_MAX = 2**31 - 1
 
 
 def prepare_planar_geometry_input(  # noqa: PLR0913 - public keyword-only API
@@ -70,7 +70,7 @@ def prepare_planar_geometry_input(  # noqa: PLR0913 - public keyword-only API
     _check_planar_inputs(build_input, prepared_stack)
     source_dbu_um = _resolved_source_dbu_um(build_input, source_dbu_um)
     validate_geometry_input(build_input)
-    build_input, prepared_stack, representation_context = _effective_geometry_input(
+    build_input, prepared_stack, representation_context = effective_geometry_input(
         build_input, prepared_stack, modeling
     )
     rlc_tuple, junction_tuple, contribution_tuple = _declared_treatments(
@@ -84,18 +84,18 @@ def prepare_planar_geometry_input(  # noqa: PLR0913 - public keyword-only API
     build_input, planned_surfaces = plan_representation_contribution_geometry(
         build_input, representation_context
     )
-    surfaces = _surface_ledger(planned_surfaces)
-    contribution_catalog = _contribution_catalog(surfaces)
+    surfaces = surface_ledger(planned_surfaces)
+    contribution_catalog = merged_contribution_catalog(surfaces)
 
-    source = _source_payload(build_input, prepared_stack, source_dbu_um=source_dbu_um)
+    source = source_payload(build_input, prepared_stack, source_dbu_um=source_dbu_um)
     _attach_lumped_supports(source, build_input, rlc_tuple)
 
     regions_by_id = {item["semantic_id"]: item for item in source["solution_regions"]}
     materials = source["materials"]
-    support_bindings = _support_bindings(
+    support_bindings = bind_mask_support(
         surfaces, contribution_tuple, regions_by_id, materials
     )
-    resolved_surfaces = _resolve_contributions(
+    resolved_surfaces = resolve_contributions(
         contribution_tuple, surfaces, regions_by_id, materials
     )
     resolved_surfaces = _bind_physical_support_masks(
@@ -136,7 +136,7 @@ def prepare_planar_geometry_input(  # noqa: PLR0913 - public keyword-only API
 def _attach_lumped_supports(source, build_input, rlc_tuple) -> None:
     """Add the neutral lumped supports to `source`; every RLC must use one of them."""
     if build_input.lumped_supports:
-        source["lumped_supports"] = _prepared_lumped_supports(
+        source["lumped_supports"] = prepared_lumped_supports(
             build_input.lumped_supports, source
         )
     support_ids = {item["support_id"] for item in source.get("lumped_supports", ())}
@@ -223,7 +223,7 @@ def _check_declared_treatments(build_input, junction_tuple, contribution_tuple) 
                 for r in build_input.port_sheet_regions
                 if r.source_polygon_id == item.source_polygon_id
             )
-        _junction_terminal_line(
+        junction_terminal_line(
             {"exterior": authored.exterior, "holes": authored.holes}, item, 0.0
         )
 
@@ -238,7 +238,7 @@ def _with_junction_planes(build_input, junction_tuple):
     for junction in junction_tuple:
         record = build_input.metadata["aedt_junction_partitions"][junction.junction_id]
         polygon = final_polygons[record["central_polygon_id"]]
-        _junction_terminal_line(
+        junction_terminal_line(
             {"exterior": polygon.exterior, "holes": polygon.holes}, junction, 0.0
         )
     partition_source = {
@@ -254,7 +254,7 @@ def _with_junction_planes(build_input, junction_tuple):
                 "representation": e.metadata["physical_representation"][
                     "representation"
                 ],
-                "physical_layer": _native_physical_record(
+                "physical_layer": native_physical_record(
                     e.metadata["physical_representation"]
                 ),
                 "geometry": e.geometry,
@@ -263,7 +263,7 @@ def _with_junction_planes(build_input, junction_tuple):
             if e.material_kind == "conductor"
         ],
     }
-    records = _plain_geometry_source(build_input.metadata["aedt_junction_partitions"])
+    records = plain_geometry_source(build_input.metadata["aedt_junction_partitions"])
     for record in records.values():
         record["z_um"] = _junction_partition_plane(partition_source, record)
     return replace(
@@ -294,25 +294,25 @@ def _bind_physical_support_masks(
 
     groups: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
     for binding in support_bindings:
-        groups.setdefault(_plane_group_key(binding), []).append(binding)
+        groups.setdefault(plane_group_key(binding), []).append(binding)
     support_by_group: dict[
         tuple[Any, ...],
         tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]],
     ] = {}
     for key, group in groups.items():
         plane = group[0]["mask_plane"]
-        projected = [_project_plane_region(item["mask_plane"], plane) for item in group]
-        union = _klayout_region(projected, source_dbu_um, k)
+        projected = [project_plane_region(item["mask_plane"], plane) for item in group]
+        union = klayout_region(projected, source_dbu_um, k)
         if union.is_empty():
             raise RuntimeError("physical EPR support union is empty")
         support_by_group[key] = (
             plane,
-            _regions_from_klayout(union, source_dbu_um),
+            regions_from_klayout(union, source_dbu_um),
             group,
         )
     result: list[dict[str, Any]] = []
     for binding in bindings:
-        support = support_by_group.get(_plane_group_key(binding))
+        support = support_by_group.get(plane_group_key(binding))
         if support is None:
             raise RuntimeError("selected EPR surface lacks complete physical support")
         plane, support_regions, group = support
@@ -331,14 +331,14 @@ def _bind_physical_support_masks(
                         }
                     ),
                     "attribution_regions": [
-                        _project_plane_region(binding["mask_plane"], plane)
+                        project_plane_region(binding["mask_plane"], plane)
                     ],
                     # Offset the complete union before intersecting owner
                     # attribution; internal owner seams are not boundaries.
                     "support_regions": support_regions,
                     "source_dbu_um": source_dbu_um,
-                    "inset_method": _INSET_METHOD,
-                    "circle_points": _INSET_CIRCLE_POINTS,
+                    "inset_method": INSET_METHOD,
+                    "circle_points": INSET_CIRCLE_POINTS,
                     "klayout_version": version("klayout"),
                 },
             }
@@ -352,14 +352,14 @@ def _klayout_point(point: Sequence[float], dbu_um: float, k: Any) -> Any:
     values = [float(value) for value in point]
     if any(
         not math.isfinite(value)
-        or not _KLAYOUT_COORD_MIN < value / dbu_um < _KLAYOUT_COORD_MAX
+        or not KLAYOUT_COORD_MIN < value / dbu_um < KLAYOUT_COORD_MAX
         for value in values
     ):
         raise OverflowError("EPR mask coordinate exceeds KLayout integer range")
     return k.DPoint(*values).to_itype(dbu_um)
 
 
-def _klayout_region(regions: Sequence[Mapping[str, Any]], dbu_um: float, k: Any) -> Any:
+def klayout_region(regions: Sequence[Mapping[str, Any]], dbu_um: float, k: Any) -> Any:
     result = k.Region()
     for region in regions:
         exterior = [_klayout_point(point, dbu_um, k) for point in region["exterior"]]
@@ -370,7 +370,7 @@ def _klayout_region(regions: Sequence[Mapping[str, Any]], dbu_um: float, k: Any)
     return result.merged()
 
 
-def _regions_from_klayout(region: Any, dbu_um: float) -> list[dict[str, Any]]:
+def regions_from_klayout(region: Any, dbu_um: float) -> list[dict[str, Any]]:
     # Split point contacts without changing the integer polygon set. Iterate
     # stored pieces so implicit merging cannot recreate a self-touching contour.
     simple = region.merged(True, 1)
@@ -399,7 +399,7 @@ def _junction_partition_plane(
     positions = [
         _route_a_sheet_z(source, owner)
         if owner["representation"] in {"surface_sheet", "sheet"}
-        else _entity_z_range(owner)[0]
+        else entity_z_range(owner)[0]
         for owner in owners
     ]
     if len(set(positions)) != 1:
@@ -409,13 +409,13 @@ def _junction_partition_plane(
     for owner in owners:
         if (
             owner["representation"] not in {"surface_sheet", "sheet"}
-            and _entity_z_range(owner)[1] <= positions[0]
+            and entity_z_range(owner)[1] <= positions[0]
         ):
             raise ValueError("junction Solid source Entity has no positive thickness")
     return positions[0]
 
 
-def _junction_polygon(
+def junction_polygon(
     source: Mapping[str, Any], junction: PlanarJunction, polygons: Mapping[str, Any]
 ):
     record = source.get("junction_partitions", {}).get(junction.junction_id)
@@ -429,7 +429,7 @@ def _junction_polygon(
     return polygons[record["central_polygon_id"]], record
 
 
-def _junction_terminal_line(
+def junction_terminal_line(
     polygon: Mapping[str, Any], junction: PlanarJunction, z_um: float
 ) -> tuple[list[list[float]], float]:
     exterior = tuple(
@@ -527,9 +527,7 @@ def planar_junction_from_port(  # noqa: PLR0913 - public keyword-only API
             if pid == region.source_polygon_id:
                 continue
             polygon = polygons[pid]
-            if _closed_contact(
-                [sheet], [source_rings(polygon.exterior, polygon.holes)]
-            ):
+            if closed_contact([sheet], [source_rings(polygon.exterior, polygon.holes)]):
                 overlap_nets.add(entity.net_id)
     if overlap_nets != {terminal_a_net, terminal_b_net}:
         raise ValueError(
@@ -553,7 +551,7 @@ def planar_junction_from_port(  # noqa: PLR0913 - public keyword-only API
         capacitance_f=capacitance_f,
         metadata={"source_port_name": port_name},
     )
-    _junction_terminal_line(
+    junction_terminal_line(
         {"exterior": region.exterior, "holes": region.holes}, junction, 0.0
     )
     return junction
@@ -592,11 +590,11 @@ def _route_a_sheet_z(source: Mapping[str, Any], entity: Mapping[str, Any]) -> fl
     return float(value)
 
 
-def _entity_z_range(entity: Mapping[str, Any]) -> tuple[float, float]:
+def entity_z_range(entity: Mapping[str, Any]) -> tuple[float, float]:
     return geometry_z_range(entity.get("geometry"), str(entity.get("semantic_id")))
 
 
-def _native_name(kind: str, *identity: Any) -> str:
+def native_name(kind: str, *identity: Any) -> str:
     """Return a stable AEDT-safe name while retaining raw ids only as metadata."""
 
     if not isinstance(kind, str) or not kind.isidentifier():
@@ -605,12 +603,12 @@ def _native_name(kind: str, *identity: Any) -> str:
     return f"scgsim_{kind}_{digest}"
 
 
-def _native_entity_name(source: Mapping[str, Any], kind: str, *identity: Any) -> str:
+def native_entity_name(source: Mapping[str, Any], kind: str, *identity: Any) -> str:
     """Keep historical hash names while giving new Plan entities readable names."""
 
     policy = source.get("native_entity_name_policy", "hash.v1")
     if policy == "hash.v1":
-        return _native_name(kind, *identity)
+        return native_name(kind, *identity)
     if policy != "readable.v1":
         raise ValueError("unknown native entity name policy")
     raw = "__".join(str(value) for value in identity)

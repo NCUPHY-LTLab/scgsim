@@ -29,7 +29,7 @@ LayerModelKind = Literal["stack_film", "local_film", "retained_solid"]
 ContactSide = Literal["lower", "upper"]
 
 
-def _modeling(value: Any) -> Modeling:
+def checked_modeling(value: Any) -> Modeling:
     if value not in {"solid", "thin_film"}:
         raise ValueError("modeling must be explicitly 'solid' or 'thin_film'")
     return value
@@ -97,7 +97,7 @@ class PhysicalLayerSpec:
         return payload
 
 
-def _native_physical_record(value: Any) -> dict[str, Any]:
+def native_physical_record(value: Any) -> dict[str, Any]:
     """Project common body facts into native assignment evidence without remapping."""
     from scgsim.aedt._data import detached
 
@@ -110,7 +110,7 @@ def _native_physical_record(value: Any) -> dict[str, Any]:
     }
 
 
-def _physical_layers_from_payload(payload: Any):
+def physical_layers_from_payload(payload: Any):
     """Decode the neutral physical-layer declarations of a request payload."""
     if "physical_representation" not in payload:
         raise ValueError(
@@ -121,21 +121,21 @@ def _physical_layers_from_payload(payload: Any):
     )
 
 
-def _physical_fields_from_payload(payload: Any) -> dict[str, Any]:
+def physical_fields_from_payload(payload: Any) -> dict[str, Any]:
     """Constructor fields that decode a payload's physical layers and neutral plan."""
     return {
-        "physical_layers": _physical_layers_from_payload(payload),
+        "physical_layers": physical_layers_from_payload(payload),
         "physical_representation": PhysicalRepresentationPlan.from_payload(
             payload["physical_representation"]
         ),
     }
 
 
-def _source_plan_layers(source: Any):
+def source_plan_layers(source: Any):
     return PhysicalRepresentationPlan.from_payload(source["modeling"]).declarations
 
 
-def _request_modeling(spec: Any):
+def request_modeling(spec: Any):
     """Bind one neutral physical plan to the request."""
     layers = tuple(spec.physical_layers)
     if any(not isinstance(item, PhysicalLayerDeclaration) for item in layers):
@@ -165,15 +165,15 @@ def _request_modeling(spec: Any):
     return plan
 
 
-def _modeling_payload(spec: Any) -> dict[str, Any]:
+def modeling_payload(spec: Any) -> dict[str, Any]:
     return {
         "modeling": spec.modeling,
         "physical_layers": [layer.to_payload() for layer in spec.physical_layers],
-        "physical_representation": _request_modeling(spec).to_payload(),
+        "physical_representation": request_modeling(spec).to_payload(),
     }
 
 
-def _effective_record(
+def effective_record(
     record: Any, mapping: PhysicalRepresentationPlan, *, retained_domain: bool = False
 ) -> dict[str, Any]:
     """Source coordinates and physical thickness accompany native geometry."""
@@ -199,7 +199,7 @@ def _effective_record(
     }
 
 
-def _source_record_payload(value: dict[str, Any]) -> dict[str, Any]:
+def source_record_payload(value: dict[str, Any]) -> dict[str, Any]:
     """Decode source fields; native lowering always comes from the authored map."""
     return {
         key: item
@@ -216,7 +216,7 @@ def _source_record_payload(value: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _verify_effective_records(actual, expected) -> None:
+def verify_effective_records(actual, expected) -> None:
     if list(actual) != list(expected):
         raise ValueError(
             "canonical native lowering records differ from authored modeling map"

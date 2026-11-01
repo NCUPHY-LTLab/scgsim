@@ -71,7 +71,7 @@ def normalize_route_a_thin_film(route: str, value: str | None) -> RouteAThinFilm
     )
 
 
-def _normalized_component_input(
+def normalized_component_input(
     component: Any, stack: Mapping[str, Any]
 ) -> GeometryBuildInput:
     """Acquire the existing public component/stack source before interpretation."""
@@ -81,17 +81,17 @@ def _normalized_component_input(
         )
     from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
 
-    from ..mesh.build import _component_gds_top_cell_name, _write_component_gds
+    from ..mesh.build import component_gds_top_cell_name, write_component_gds
 
     with TemporaryDirectory(prefix="scgsim-physical-source-") as directory:
         gds_path = Path(directory) / "design.gds"
         stack_path = Path(directory) / "design.stack.json"
-        _write_component_gds(component, gds_path)
+        write_component_gds(component, gds_path)
         stack_path.write_text(json.dumps(dict(stack)) + "\n", encoding="utf-8")
         return build_gds_stack_geometry_input(
             gds_file=gds_path,
             stack_file=stack_path,
-            top_cell_name=_component_gds_top_cell_name(
+            top_cell_name=component_gds_top_cell_name(
                 component=component, gds_path=gds_path
             ),
         )

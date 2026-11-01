@@ -51,7 +51,7 @@ from .presentation.epr import show_epr
 from .results.resolve import ResolvedRun, resolve_results
 from .specs.common import AedtResources
 from .specs.hfss import EigenmodeRunControl
-from .specs.modeling import Modeling, _modeling
+from .specs.modeling import Modeling, checked_modeling
 
 
 @dataclass
@@ -81,7 +81,7 @@ class EigenmodeSim:
     )
 
     def __post_init__(self) -> None:
-        _modeling(self.modeling)
+        checked_modeling(self.modeling)
 
     def _invalidate_model(self) -> None:
         self.prepared_geometry = None
@@ -175,7 +175,7 @@ class EigenmodeSim:
             raise ValueError("design_name must be non-empty text")
         if run_control is not None and not isinstance(run_control, EigenmodeRunControl):
             raise TypeError("run_control must be EigenmodeRunControl or None")
-        _modeling(self.modeling)
+        checked_modeling(self.modeling)
         if resources is not None and not isinstance(resources, AedtResources):
             raise TypeError("resources must be AedtResources or None")
         validate_geometry_workers(geometry_workers)

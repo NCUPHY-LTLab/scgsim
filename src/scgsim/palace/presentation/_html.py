@@ -18,7 +18,7 @@ from ..results.report_data import (
 )
 
 
-def _surface_mask_html(snapshot: SurfaceMaskEprSeriesSnapshot) -> str:
+def surface_mask_html(snapshot: SurfaceMaskEprSeriesSnapshot) -> str:
     zeroes = sum(
         record.contribution_status == "zero_contribution" for record in snapshot.records
     )
@@ -31,9 +31,9 @@ def _surface_mask_html(snapshot: SurfaceMaskEprSeriesSnapshot) -> str:
     )
 
 
-def _surface_loss_html(snapshot: SurfaceEprSeriesSnapshot, problem: str) -> str:
+def surface_loss_html(snapshot: SurfaceEprSeriesSnapshot, problem: str) -> str:
     if snapshot.loss_status == "available":
-        q_value = _fmt(snapshot.quality_factor_total)
+        q_value = fmt(snapshot.quality_factor_total)
         detail = "Q_total uses 1 / Σ(p_i tanδ_i); individual Q values are never summed."
     elif snapshot.loss_status == "unavailable_missing":
         q_value = "unavailable"
@@ -52,7 +52,7 @@ def _surface_loss_html(snapshot: SurfaceEprSeriesSnapshot, problem: str) -> str:
         cards.append(
             (
                 "Surface-loss T1",
-                _fmt_seconds(snapshot.t1_seconds)
+                fmt_seconds(snapshot.t1_seconds)
                 if snapshot.t1_seconds is not None
                 else "unavailable / non-finite",
             )
@@ -70,7 +70,7 @@ def _surface_loss_html(snapshot: SurfaceEprSeriesSnapshot, problem: str) -> str:
     )
 
 
-def _native_positive_infinity_q_notice(
+def native_positive_infinity_q_notice(
     traces: Sequence[tuple[str, Sequence[float | None]]],
 ) -> str | None:
     values = [value for _name, ys in traces for value in ys]
@@ -97,14 +97,14 @@ def _native_positive_infinity_q_notice(
     )
 
 
-def _html_cell(tag: str, text: str) -> str:
+def html_cell(tag: str, text: str) -> str:
     return (
         f"<{tag} style='border:1px solid var(--border,#d0d7de);"
         f"padding:0.35rem 0.65rem;text-align:left'>{html.escape(text)}</{tag}>"
     )
 
 
-def _fmt(value: Any) -> str:
+def fmt(value: Any) -> str:
     if value is None:
         return "unavailable"
     if isinstance(value, float):
@@ -112,7 +112,7 @@ def _fmt(value: Any) -> str:
     return str(value)
 
 
-def _fmt_seconds(value: Any) -> str:
+def fmt_seconds(value: Any) -> str:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return "unavailable"
     seconds = float(value)
@@ -121,7 +121,7 @@ def _fmt_seconds(value: Any) -> str:
     return f"{seconds:.3g} s"
 
 
-def _fmt_mb(value: Any) -> str:
+def fmt_mb(value: Any) -> str:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return "unavailable"
     mb = float(value)
@@ -143,7 +143,7 @@ _MESH_REGION_COLUMNS = (
 )
 
 
-def _mesh_summary_html(
+def mesh_summary_html(
     summary: Mapping[str, Any], *, card_html: Callable[[str, Any], str]
 ) -> str:
     """Keep geometric discretization distinct from native solver measurements."""
@@ -153,7 +153,7 @@ def _mesh_summary_html(
     stats = meshing["statistics"]
     items = "".join(card_html(label, value) for label, value in _mesh_cards(summary))
     rows = [_mesh_region_row(region) for region in stats["physical_regions"]]
-    header = "".join(_html_cell("th", label) for label in _MESH_REGION_COLUMNS)
+    header = "".join(html_cell("th", label) for label in _MESH_REGION_COLUMNS)
     types = ", ".join(
         f"{record['name']}: {record['count']}" for record in stats["element_types"]
     )
@@ -184,7 +184,7 @@ def _mesh_cards(summary: Mapping[str, Any]) -> list[tuple[str, Any]]:
     return [
         (
             "Geometry / FEM order",
-            f"{effective['geometry_order']} / {_fmt(summary['finite_element_order'])}",
+            f"{effective['geometry_order']} / {fmt(summary['finite_element_order'])}",
         ),
         (
             "Native nodes / elements",
@@ -193,10 +193,10 @@ def _mesh_cards(summary: Mapping[str, Any]) -> list[tuple[str, Any]]:
         ("3D algorithm", effective["algorithm_3d"]),
         (
             "Volume / surface thread options",
-            f"{_fmt(effective['volume_threads'])} / {_fmt(effective['surface_threads_2d'])}",
+            f"{fmt(effective['volume_threads'])} / {fmt(effective['surface_threads_2d'])}",
         ),
         ("HighOrder optimization", meshing["high_order_optimization"]["status"]),
-        ("ND topological DOF estimate", _fmt(estimate.get("value"))),
+        ("ND topological DOF estimate", fmt(estimate.get("value"))),
     ]
 
 
@@ -213,13 +213,13 @@ def _mesh_region_row(region: Mapping[str, Any]) -> str:
     values.extend(
         [
             chords["count"],
-            *(_fmt(chords[key]) for key in ("minimum", "mean", "maximum")),
+            *(fmt(chords[key]) for key in ("minimum", "mean", "maximum")),
             chords["unit"],
         ]
         if chords is not None
         else ["not recorded"] * 5
     )
-    return "<tr>" + "".join(_html_cell("td", str(value)) for value in values) + "</tr>"
+    return "<tr>" + "".join(html_cell("td", str(value)) for value in values) + "</tr>"
 
 
 def card_html(label: Any, value: Any) -> str:

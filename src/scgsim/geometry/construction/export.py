@@ -29,7 +29,7 @@ def export_physical_group_records(
     surfaces = {surface.surface_id: surface for surface in plan.surfaces}
     volumes = {volume.volume_id: volume for volume in plan.volumes}
     records: list[FinalPhysicalGroupRecord] = []
-    for tags in _group_tag_plans(plan.tags):
+    for tags in group_tag_plans(plan.tags):
         first = tags[0]
         entity_tags = _physical_entity_tags(tags, backend_tags)
         if not entity_tags:
@@ -298,7 +298,7 @@ def _backend_tags_by_source(
     return {source: tuple(dim_tags) for source, dim_tags in result.items()}
 
 
-def _group_tag_plans(
+def group_tag_plans(
     tags: tuple[TagPlanRecord, ...],
 ) -> tuple[tuple[TagPlanRecord, ...], ...]:
     grouped: dict[tuple[str, int, str, str], list[TagPlanRecord]] = {}

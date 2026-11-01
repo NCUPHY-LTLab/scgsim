@@ -14,7 +14,7 @@ from typing import Any, Literal
 
 # Interface types of a Surface EPR film: MA metal-air, MS metal-substrate,
 # SA substrate-air.
-_SURFACE_TYPES = ("MA", "MS", "SA")
+SURFACE_TYPES = ("MA", "MS", "SA")
 
 
 @dataclass(frozen=True)
@@ -161,6 +161,6 @@ class PalaceFailureDiagnosis:
 
 
 @dataclass(frozen=True)
-class _CollectedSnapshots:
+class CollectedSnapshots:
     passes: tuple[AmrPassSnapshot, ...]
     final_snapshot_status: Literal["readable", "missing", "unreadable"]

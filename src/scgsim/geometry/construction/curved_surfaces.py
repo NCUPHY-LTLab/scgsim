@@ -15,7 +15,7 @@ from itertools import combinations
 from typing import Any
 
 from scgsim.geometry.construction.curved_context import SurfaceBook
-from scgsim.geometry.construction.curved_kernel import _identity
+from scgsim.geometry.construction.curved_kernel import identity
 from scgsim.geometry.models.topology import SurfaceRefRecord
 
 
@@ -127,7 +127,7 @@ def _register_wall_contacts(context, book):
                             pair,
                             (
                                 "edge",
-                                _identity("", arrangement.curve_descriptors[edge]),
+                                identity("", arrangement.curve_descriptors[edge]),
                                 slab,
                             ),
                             None,
@@ -306,7 +306,7 @@ def _register_surface(context, book, request):
     route = context.session.route
     owners = context.ownership.owners
     port = request.port
-    sid = _identity("SURF__", request.key)
+    sid = identity("SURF__", request.key)
     book.native_surfaces[sid] = request.tag
     boundary_keys = [k for k in request.adjacent if k in owners]
     boundary_owners = tuple(owners[k] for k in boundary_keys)

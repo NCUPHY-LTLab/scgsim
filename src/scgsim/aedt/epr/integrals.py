@@ -15,13 +15,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from scgsim.aedt._data import _freeze_str_keys_only, detached
+from scgsim.aedt._data import detached, freeze_str_keys_only
 from scgsim.aedt.runtime.native.common import detached_data
 
 # Which thin-film field sides the surface EPR (energy participation ratio) integrates.
 # Surfaces are the MA (metal-air), MS (metal-substrate) and SA (substrate-air)
 # interfaces of docs/eigenmode-epr.qmd; the sidewall is left out of the integral.
-_SURFACE_ANALYSIS_SCOPE = {
+SURFACE_ANALYSIS_SCOPE = {
     "included_field_sides": ["top", "bottom"],
     "excluded_field_sides": ["sidewall"],
     "excluded_sidewall_energy": "not_evaluated_not_zero",
@@ -68,7 +68,7 @@ class IntegralTarget:
     selection: Mapping[str, Any]
 
 
-def _integral_target(purpose: str, selection: Mapping[str, Any]) -> IntegralTarget:
+def integral_target(purpose: str, selection: Mapping[str, Any]) -> IntegralTarget:
     """Decode a persisted `<kind>_<id>` purpose and validate its selection.
 
     The kind is parsed from the purpose string only; it is never written back into
@@ -115,10 +115,10 @@ def _integral_target(purpose: str, selection: Mapping[str, Any]) -> IntegralTarg
             raise RuntimeError(
                 "magnetic energy requires positive relative permeability"
             )
-    return IntegralTarget(kind, scope_id, _freeze_str_keys_only(selection))
+    return IntegralTarget(kind, scope_id, freeze_str_keys_only(selection))
 
 
-def _canonical_integral(
+def canonical_integral(
     scalar: dict[str, Any], *, target: IntegralTarget, purpose: str
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Check one native scalar against the SI unit its recipe produces.
@@ -127,7 +127,7 @@ def _canonical_integral(
     recipes already integrate in SI, so only the unit label is verified.
     """
 
-    expected_unit = _purpose_unit(target.kind)
+    expected_unit = purpose_unit(target.kind)
     native_unit = scalar["unit"]
     suffix = "" if native_unit is None else str(native_unit).strip()
     number = float(scalar["value"])
@@ -159,7 +159,7 @@ def _canonical_integral(
     return canonical, evidence
 
 
-def _store_integral(
+def store_integral(
     raw: dict[str, Any],
     *,
     target: IntegralTarget,
@@ -243,7 +243,7 @@ def _store_native_surface_integral(
     record["expression_identities"][component] = detached(expression_identity)
 
 
-def _attach_saved_native_surface_membership(
+def attach_saved_native_surface_membership(
     raw: dict[str, Any],
     result_row: dict[str, Any],
     references: list[dict[str, Any]],
@@ -287,7 +287,7 @@ def _attach_saved_native_surface_membership(
         reference["saved_membership"] = detached_data(membership)
 
 
-def _purpose_unit(kind: IntegralKind) -> str:
+def purpose_unit(kind: IntegralKind) -> str:
     """SI unit of the integral that one recipe kind evaluates."""
 
     if kind == "effective_volume":
@@ -312,7 +312,7 @@ def _purpose_unit(kind: IntegralKind) -> str:
     raise AssertionError(f"unsupported integral kind {kind!r}")
 
 
-def _empty_raw_integrals() -> dict[str, Any]:
+def empty_raw_integrals() -> dict[str, Any]:
     """Return the canonical recombination payload before native values are added."""
 
     return {

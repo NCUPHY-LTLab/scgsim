@@ -16,11 +16,11 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from scgsim.geometry.source._normalization import (
-    _coupon_domain_bounds,
-    _gds_layer,
-    _materials,
-    _semantic_layer_records,
-    _solution_regions,
+    coupon_domain_bounds,
+    gds_layer,
+    normalized_materials,
+    semantic_layer_records,
+    solution_regions,
 )
 
 # One instance: (cell, GDS reference or None for the root, affine transform to root).
@@ -41,7 +41,7 @@ _FORBIDDEN_AUTHOR_KEYS = {
 }
 
 
-def _path(value: str) -> str:
+def checked_entity_path(value: str) -> str:
     if (
         not isinstance(value, str)
         or not value
@@ -53,7 +53,7 @@ def _path(value: str) -> str:
     return value
 
 
-def _affine(reference: Any) -> tuple[float, float, float, float, float, float]:
+def affine(reference: Any) -> tuple[float, float, float, float, float, float]:
     from klayout import db as kdb
 
     transform = reference.dcplx_trans
@@ -76,7 +76,7 @@ def _affine(reference: Any) -> tuple[float, float, float, float, float, float]:
     return values
 
 
-def _compose(
+def compose(
     parent: tuple[float, ...], child: tuple[float, ...]
 ) -> tuple[float, float, float, float, float, float]:
     a, b, c, d, x, y = parent
@@ -91,7 +91,9 @@ def _compose(
     )
 
 
-def _point(transform: tuple[float, ...], value: Sequence[float]) -> list[float]:
+def transformed_point(
+    transform: tuple[float, ...], value: Sequence[float]
+) -> list[float]:
     if isinstance(value, (str, bytes)) or len(value) != 2:
         raise ValueError("selector and port point must be a two-item coordinate")
     x, y = float(value[0]), float(value[1])
@@ -113,7 +115,7 @@ def _direction(transform: tuple[float, ...], angle_degrees: float) -> list[float
     return [result[0] / magnitude, result[1] / magnitude, 0.0]
 
 
-def _local_semantics(component: Any, path: str) -> Mapping[str, Any]:
+def local_semantics(component: Any, path: str) -> Mapping[str, Any]:
     try:
         raw = component.info["component_semantics"]
     except (AttributeError, KeyError) as exc:
@@ -162,9 +164,9 @@ def build_plan_stack(  # noqa: PLR0913 - keyword-only; each argument is a separa
     levels = getattr(layer_stack, "layers", None)
     if not isinstance(levels, Mapping):
         raise TypeError("layer_stack must expose layers")
-    bounds = _coupon_domain_bounds(component, coupon_padding_um)
-    materials = _materials(material_records)
-    regions = _solution_regions(levels, materials=materials, bounds=bounds)
+    bounds = coupon_domain_bounds(component, coupon_padding_um)
+    materials = normalized_materials(material_records)
+    regions = solution_regions(levels, materials=materials, bounds=bounds)
     if not regions:
         raise ValueError("plan needs at least one PDK solution region")
     owners = {entity_id: net for net, members in nets.items() for entity_id in members}
@@ -173,7 +175,7 @@ def build_plan_stack(  # noqa: PLR0913 - keyword-only; each argument is a separa
     contributions: list[tuple[str, dict[str, Any]]] = []
     contribution_ids: set[tuple[str, str]] = set()
     for path, (cell, _, transform) in instances.items():
-        semantics = _local_semantics(cell, path)
+        semantics = local_semantics(cell, path)
         declarations.extend(_conductor_declarations(path, semantics, transform, owners))
         contributions.extend(
             _ground_contributions(path, semantics, transform, contribution_ids)
@@ -181,7 +183,7 @@ def build_plan_stack(  # noqa: PLR0913 - keyword-only; each argument is a separa
         ports.extend(
             _port_sheet_sources(path, cell, semantics, transform, first=len(ports))
         )
-    layers = _semantic_layer_records(
+    layers = semantic_layer_records(
         declarations,
         levels=levels,
         materials=materials,
@@ -224,17 +226,19 @@ def _conductor_declarations(
         metadata = raw.get("metadata", {})
         if not isinstance(metadata, Mapping) or set(metadata) & _FORBIDDEN_AUTHOR_KEYS:
             raise ValueError(f"{path} v2 entity metadata cannot author Net or Group")
-        local_id = _path(raw.get("semantic_id"))
+        local_id = checked_entity_path(raw.get("semantic_id"))
         if "/" in local_id:
             raise ValueError("component-local entity ID must be one segment")
         entity_id = f"{path}/{local_id}"
         geometry = dict(raw.get("geometry", {}))
         for key in ("selector_point_um",):
             if key in geometry:
-                geometry[key] = _point(transform, geometry[key])
+                geometry[key] = transformed_point(transform, geometry[key])
         for key in ("include_selector_points_um", "exclude_selector_points_um"):
             if key in geometry:
-                geometry[key] = [_point(transform, point) for point in geometry[key]]
+                geometry[key] = [
+                    transformed_point(transform, point) for point in geometry[key]
+                ]
         declarations.append(
             {
                 **raw,
@@ -272,7 +276,7 @@ def _ground_contributions(
                 f"{path} ground contribution needs local_id, plane_id, level, layer, selector_point_um"
             )
         local_id, plane_id, level = (
-            _path(raw[key]) for key in ("local_id", "plane_id", "level")
+            checked_entity_path(raw[key]) for key in ("local_id", "plane_id", "level")
         )
         if any("/" in value for value in (local_id, plane_id, level)):
             raise ValueError("ground contribution IDs must be component-local names")
@@ -280,7 +284,7 @@ def _ground_contributions(
         if key in contribution_ids:
             raise ValueError(f"duplicate ground contribution {path}/{local_id}")
         contribution_ids.add(key)
-        layer = _gds_layer(raw["layer"], f"{path}/{local_id} ground contribution")
+        layer = gds_layer(raw["layer"], f"{path}/{local_id} ground contribution")
         contributions.append(
             (
                 plane_id,
@@ -289,7 +293,9 @@ def _ground_contributions(
                     "source_local_id": local_id,
                     "level": level,
                     "layer": list(layer),
-                    "selector_point_um": _point(transform, raw["selector_point_um"]),
+                    "selector_point_um": transformed_point(
+                        transform, raw["selector_point_um"]
+                    ),
                 },
             )
         )
@@ -313,11 +319,11 @@ def _port_sheet_sources(
             "target_layer",
         }:
             raise ValueError(f"{path} port requires name, layer, target_layer")
-        name = _path(raw["name"])
+        name = checked_entity_path(raw["name"])
         if "/" in name:
             raise ValueError("component-local port name must be one segment")
         port = cell.ports[name]
-        layer = _gds_layer(raw["layer"], f"{path}/{name} port")
+        layer = gds_layer(raw["layer"], f"{path}/{name} port")
         raw_port_layer = port.layer
         if hasattr(raw_port_layer, "layer") and hasattr(raw_port_layer, "datatype"):
             port_layer = raw_port_layer
@@ -335,7 +341,7 @@ def _port_sheet_sources(
                 "target_layer": raw["target_layer"],
                 "direction": _direction(transform, float(port.orientation)),
                 "direction_sign_convention": "gdsfactory_port_orientation_outward",
-                "selector_point_um": _point(transform, port.center),
+                "selector_point_um": transformed_point(transform, port.center),
                 "source_occurrence_path": path,
             }
         )

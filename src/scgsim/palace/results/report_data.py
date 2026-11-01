@@ -20,9 +20,10 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from ._artifact_files import _read_json
+from ._artifact_files import read_json
 from ._report_types import (
     AmrPassSnapshot,
+    CollectedSnapshots,
     PalaceFailureDiagnosis,
     PalaceResultSelection,
     PassCostRecord,
@@ -30,17 +31,16 @@ from ._report_types import (
     SurfaceEprSeriesSnapshot,
     SurfaceMaskEprRecord,
     SurfaceMaskEprSeriesSnapshot,
-    _CollectedSnapshots,
 )
-from ._result_tables import _read_csv_table
-from ._surface_epr_reader import _read_surface_epr, _read_surface_mask_epr
+from ._result_tables import read_csv_table
+from ._surface_epr_reader import read_surface_epr, read_surface_mask_epr
 
 _ITERATION_DIR = re.compile(r"^iteration(\d+)$")
-_FREQ_HEADER = "Re{f} (GHz)"
+FREQ_HEADER = "Re{f} (GHz)"
 _CAP_HEADER_PREFIX = "C[i]["
 _INDEX_COLUMNS = {"m", "i"}
-_SKIP_EIG_COLUMNS = {"Error (Bkwd.)", "Error (Abs.)"}
-_ERROR_INDICATOR_TRACES = ("Norm", "Maximum", "Mean")
+SKIP_EIG_COLUMNS = {"Error (Bkwd.)", "Error (Abs.)"}
+ERROR_INDICATOR_TRACES = ("Norm", "Maximum", "Mean")
 
 
 def _parent_has_physics(results: Path, problem: str) -> bool:
@@ -82,7 +82,7 @@ def _problem_size_conflicts(left: AmrPassSnapshot, right: AmrPassSnapshot) -> bo
     )
 
 
-def _mapping_max(payload: Any) -> float | None:
+def mapping_max(payload: Any) -> float | None:
     if isinstance(payload, dict):
         value = payload.get("Max")
         if isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -93,13 +93,13 @@ def _mapping_max(payload: Any) -> float | None:
     return None
 
 
-def _read_optional_json(path: Path) -> dict[str, Any] | None:
+def read_optional_json(path: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
-    return _read_json(path)
+    return read_json(path)
 
 
-def _as_int(value: Any) -> int | None:
+def as_int(value: Any) -> int | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     if not math.isfinite(float(value)):
@@ -107,7 +107,7 @@ def _as_int(value: Any) -> int | None:
     return int(value)
 
 
-def _declares_surface_masks(
+def declares_surface_masks(
     config: dict[str, Any] | None, index_map: dict[str, Any] | None
 ) -> bool:
     boundaries = config.get("Boundaries") if isinstance(config, dict) else None
@@ -127,17 +127,17 @@ def _declares_surface_masks(
     )
 
 
-def _collect_amr_passes(
+def collect_amr_passes(
     root: Path,
     problem: str,
     surface_bindings: tuple[dict[str, Any], ...] | None,
     surface_mask_bindings: tuple[dict[str, Any], ...] | None,
     *,
     failed_attempt: bool,
-) -> _CollectedSnapshots:
+) -> CollectedSnapshots:
     results = root / "results" / "palace"
     if not results.is_dir():
-        return _CollectedSnapshots((), "missing")
+        return CollectedSnapshots((), "missing")
     iteration_dirs = []
     for child in results.iterdir():
         match = _ITERATION_DIR.match(child.name)
@@ -157,7 +157,7 @@ def _collect_amr_passes(
         if snapshot is not None:
             snapshots.append(snapshot)
     if not _parent_has_physics(results, problem):
-        return _CollectedSnapshots(tuple(snapshots), "missing")
+        return CollectedSnapshots(tuple(snapshots), "missing")
     parent = _load_optional_snapshot(
         pass_index=max((index for index, _path in iteration_dirs), default=0),
         source="final",
@@ -167,17 +167,17 @@ def _collect_amr_passes(
         surface_mask_bindings=surface_mask_bindings,
     )
     if parent is None:
-        return _CollectedSnapshots(tuple(snapshots), "unreadable")
+        return CollectedSnapshots(tuple(snapshots), "unreadable")
     if snapshots and _same_primary_physics(snapshots[-1], parent):
         if failed_attempt and _problem_size_conflicts(snapshots[-1], parent):
-            return _CollectedSnapshots(tuple(snapshots), "unreadable")
+            return CollectedSnapshots(tuple(snapshots), "unreadable")
         parent = replace(parent, pass_index=snapshots[-1].pass_index)
         if _same_masked_physics(
             snapshots[-1].surface_mask_epr, parent.surface_mask_epr
         ):
             snapshots[-1] = replace(parent, pass_index=snapshots[-1].pass_index)
-            return _CollectedSnapshots(tuple(snapshots), "readable")
-    return _CollectedSnapshots((*snapshots, parent), "readable")
+            return CollectedSnapshots(tuple(snapshots), "readable")
+    return CollectedSnapshots((*snapshots, parent), "readable")
 
 
 def _load_optional_snapshot(  # noqa: PLR0913 - keyword-only; mirrors _load_snapshot
@@ -227,7 +227,7 @@ def _load_snapshot(  # noqa: PLR0913 - keyword-only; each argument is a separate
         else None
     )
     error_indicators = _read_error_indicators(path / "error-indicators.csv")
-    frequencies = None if eig_columns is None else eig_columns.get(_FREQ_HEADER)
+    frequencies = None if eig_columns is None else eig_columns.get(FREQ_HEADER)
     expected_rows = (
         len(frequencies)
         if frequencies is not None
@@ -235,7 +235,7 @@ def _load_snapshot(  # noqa: PLR0913 - keyword-only; each argument is a separate
         if capacitance is not None
         else 0
     )
-    surface_epr = _read_surface_epr(
+    surface_epr = read_surface_epr(
         path / "surface-Q.csv",
         problem=problem,
         pass_index=pass_index,
@@ -245,7 +245,7 @@ def _load_snapshot(  # noqa: PLR0913 - keyword-only; each argument is a separate
         bindings=surface_bindings,
         surface_count=len(surface_bindings or ()) + len(surface_mask_bindings or ()),
     )
-    surface_mask_epr = _read_surface_mask_epr(
+    surface_mask_epr = read_surface_mask_epr(
         path / "surface-mask-Q.csv",
         path / "surface-mask-energy.csv",
         problem=problem,
@@ -286,7 +286,7 @@ class _PalaceCost(NamedTuple):
 
 def _read_palace_cost(path: Path) -> _PalaceCost:
     """Every field is ``None`` when the file or the field is absent."""
-    payload = _read_optional_json(path)
+    payload = read_optional_json(path)
     problem_block = payload.get("Problem") if payload else None
     if not isinstance(problem_block, dict):
         problem_block = {}
@@ -300,10 +300,10 @@ def _read_palace_cost(path: Path) -> _PalaceCost:
             ):
                 elapsed = float(duration_map["Total"])
     return _PalaceCost(
-        degrees_of_freedom=_as_int(problem_block.get("DegreesOfFreedom")),
-        mesh_elements=_as_int(problem_block.get("MeshElements")),
+        degrees_of_freedom=as_int(problem_block.get("DegreesOfFreedom")),
+        mesh_elements=as_int(problem_block.get("MeshElements")),
         elapsed_total_s=elapsed,
-        peak_node_memory_mb=_mapping_max(
+        peak_node_memory_mb=mapping_max(
             payload.get("PeakNodeMemoryMegabytes") if payload else None
         ),
     )
@@ -312,7 +312,7 @@ def _read_palace_cost(path: Path) -> _PalaceCost:
 def _read_numeric_table_columns(path: Path) -> dict[str, tuple[float, ...]] | None:
     if not path.is_file():
         return None
-    table = _read_csv_table(path)
+    table = read_csv_table(path)
     columns: dict[str, tuple[float, ...]] = {}
     for header in table.headers:
         if header in _INDEX_COLUMNS:
@@ -333,7 +333,7 @@ def _read_numeric_table_columns(path: Path) -> dict[str, tuple[float, ...]] | No
 def _read_capacitance(path: Path) -> tuple[tuple[float, ...], ...] | None:
     if not path.is_file():
         return None
-    table = _read_csv_table(path)
+    table = read_csv_table(path)
     matrix: list[tuple[float, ...]] = []
     value_headers = [
         header for header in table.headers if header.startswith(_CAP_HEADER_PREFIX)
@@ -354,7 +354,7 @@ def _read_capacitance(path: Path) -> tuple[tuple[float, ...], ...] | None:
 def _read_error_indicators(path: Path) -> dict[str, float] | None:
     if not path.is_file():
         return None
-    table = _read_csv_table(path)
+    table = read_csv_table(path)
     if not table.rows:
         return None
     payload: dict[str, float] = {}

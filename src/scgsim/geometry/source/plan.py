@@ -26,25 +26,25 @@ from scgsim.geometry.models.input import (
     VacuumRegionSpec,
 )
 from scgsim.geometry.models.lumped import LumpedSupport
-from scgsim.geometry.source._normalization import _finite_number
+from scgsim.geometry.source._normalization import finite_number
 from scgsim.geometry.source._occurrence import (
-    _entity_from_layer_record,
-    _occurrence_ground_polygons_for_entity,
-    _occurrence_include_polygon,
-    _occurrence_lumped_polygon,
-    _occurrence_polygons_for_entity,
-    _occurrence_port_polygon,
+    entity_from_layer_record,
+    occurrence_ground_polygons_for_entity,
+    occurrence_include_polygon,
+    occurrence_lumped_polygon,
+    occurrence_polygons_for_entity,
+    occurrence_port_polygon,
 )
 from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
 from scgsim.geometry.source.curves import boundary_binding, transform_boundary
 from scgsim.geometry.source.plan_stack import (
     InstanceRecord,
-    _affine,
-    _compose,
-    _local_semantics,
-    _path,
-    _point,
+    affine,
     build_plan_stack,
+    checked_entity_path,
+    compose,
+    local_semantics,
+    transformed_point,
 )
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 
@@ -114,14 +114,14 @@ class GeometryPlan:
     ) -> None:
         if not callable(getattr(component, "write_gds", None)):
             raise TypeError("component must be an assembled GDSFactory Component")
-        self.root_id = _path(root_id)
+        self.root_id = checked_entity_path(root_id)
         if "/" in self.root_id:
             raise ValueError("root_id must be one path segment")
-        _local_semantics(component, self.root_id)
+        local_semantics(component, self.root_id)
         self._component = component
         self._layer_stack = layer_stack
         self._material_records = material_records
-        self._coupon_padding_um = _finite_number(coupon_padding_um, "coupon_padding_um")
+        self._coupon_padding_um = finite_number(coupon_padding_um, "coupon_padding_um")
         if self._coupon_padding_um < 0:
             raise ValueError("coupon_padding_um must be nonnegative")
         self._instances: dict[str, InstanceRecord] = {
@@ -163,7 +163,7 @@ class GeometryPlan:
 
     def register_instance(self, path: str, reference: Any) -> None:
         """Register a placed instance (child cell reference) under its parent's path."""
-        path = _path(path)
+        path = checked_entity_path(path)
         parent_path, _, _ = path.rpartition("/")
         if (
             not parent_path
@@ -192,8 +192,8 @@ class GeometryPlan:
         ):
             raise ValueError("the same source occurrence is already registered")
         child = reference.cell
-        _local_semantics(child, path)
-        transform = _compose(parent_transform, _affine(reference))
+        local_semantics(child, path)
+        transform = compose(parent_transform, affine(reference))
         self._instances[path] = (child, reference, transform)
 
     @property
@@ -201,7 +201,7 @@ class GeometryPlan:
         """Semantic entities of the stack, in stack layer order."""
         stack = self._stack()
         return tuple(
-            _entity_from_layer_record(record, materials=stack["materials"])
+            entity_from_layer_record(record, materials=stack["materials"])
             for record in stack["layers"]
         )
 
@@ -242,7 +242,7 @@ class GeometryPlan:
                 or reference.cell != cell
                 or sum(item.instance == reference.instance for item in parent.insts)
                 != 1
-                or _compose(parent_transform, _affine(reference)) != transform
+                or compose(parent_transform, affine(reference)) != transform
             ):
                 raise ValueError(
                     f"registered occurrence {path!r} changed before prepare"
@@ -417,12 +417,12 @@ class GeometryPlan:
                     f"source occurrence {path!r} is absent from written GDS"
                 )
             selector = (
-                _occurrence_ground_polygons_for_entity
+                occurrence_ground_polygons_for_entity
                 if local_ground
-                else _occurrence_polygons_for_entity
+                else occurrence_polygons_for_entity
             )
             record["geometry"]["source_occurrence_polygons_um"] = selector(
-                _entity_from_layer_record(record, materials=stack["materials"]),
+                entity_from_layer_record(record, materials=stack["materials"]),
                 cell=source_cells[cell.name],
                 transform=transform,
                 excluded_reference_indexes=child_reference_indexes[path],
@@ -453,7 +453,7 @@ class GeometryPlan:
                     raise ValueError(
                         f"ground contribution source {path!r} is absent from GDS"
                     )
-                contribution["polygon"] = _occurrence_include_polygon(
+                contribution["polygon"] = occurrence_include_polygon(
                     contribution,
                     cell=source_cells[cell.name],
                     transform=transform,
@@ -473,7 +473,7 @@ class GeometryPlan:
                 raise ValueError(
                     f"source port occurrence {path!r} is absent from written GDS"
                 )
-            record["source_occurrence_polygon_um"] = _occurrence_port_polygon(
+            record["source_occurrence_polygon_um"] = occurrence_port_polygon(
                 record,
                 cell=source_cells[cell.name],
                 transform=transform,
@@ -493,7 +493,7 @@ class GeometryPlan:
             path = support.source_occurrence_path
             source_z_um = self._check_lumped_support(support, entities)
             cell, _, transform = self._instances[path]
-            polygon = _occurrence_lumped_polygon(
+            polygon = occurrence_lumped_polygon(
                 support,
                 cell=source_cells[cell.name],
                 excluded_reference_indexes=child_reference_indexes[path],
@@ -552,7 +552,7 @@ class GeometryPlan:
         boundary_curves = list(self._boundary_curves)
         reconstruction = list(self._boundary_reconstruction)
         for path, (cell, _, transform) in self._instances.items():
-            semantics = _local_semantics(cell, path)
+            semantics = local_semantics(cell, path)
             for key, target, reconstruct in (
                 ("boundary_curves", boundary_curves, False),
                 ("boundary_reconstruction", reconstruction, True),
@@ -562,7 +562,7 @@ class GeometryPlan:
                         value,
                         path=path,
                         transform=transform,
-                        point=_point,
+                        point=transformed_point,
                         reconstruction=reconstruct,
                     )
                     for value in semantics.get(key, ())

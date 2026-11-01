@@ -110,7 +110,7 @@ class HfssSweepCountTests(unittest.TestCase):
             root = Path(temporary)
             spec = _spec(5.0)
             transport = _NativeTransport(5)
-            _, readback = runtime._export(transport, root, spec,
+            _, readback = runtime.export(transport, root, spec,
                                          [{"modal_excitation": "P1"},
                                           {"modal_excitation": "P2"}])
             ports = []
@@ -198,7 +198,7 @@ class HfssSweepCountTests(unittest.TestCase):
                 key = "modal_excitation" if mode == "modal" else "terminal_excitation"
                 ports = [{"index": i, key: f"P{i}", "unresolved_native": True}
                          for i in (1, 2)]
-                hashes, readback = runtime._export(transport, root, spec, ports)
+                hashes, readback = runtime.export(transport, root, spec, ports)
                 prefix = "S" if mode == "modal" else "St"
                 self.assertEqual(transport.query["expressions"],
                                  [f"{prefix}({a},{b})" for a in ("P1", "P2")
@@ -252,7 +252,7 @@ class HfssSweepCountTests(unittest.TestCase):
             transport = _NativeTransport(3)
             transport.export_ok = False
             with self.assertRaisesRegex(RuntimeError, "Touchstone export failed"):
-                runtime._export(transport, root, _spec(),
+                runtime.export(transport, root, _spec(),
                                 [{"modal_excitation": "P1"}, {"modal_excitation": "P2"}])
             with self.assertRaisesRegex(RuntimeError, "expression length mismatch"):
                 runtime._write_complex_csv(_SolutionData(3, True), ["S(P1,P1)"],

@@ -15,15 +15,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
-from ._artifact_files import _compute_hash_entry, _confined_path, _extract_hash_map
+from ._artifact_files import compute_hash_entry, confined_path, extract_hash_map
 from ._report_types import (
+    CollectedSnapshots,
     PalaceFailureDiagnosis,
     PalaceResultSelection,
-    _CollectedSnapshots,
 )
 
 
-def _validate_inspection_receipt(
+def validate_inspection_receipt(
     root: Path,
     handoff: dict[str, Any],
     receipt: dict[str, Any] | None,
@@ -62,12 +62,12 @@ def _check_input_hashes(
     handoff_entries = handoff.get("hashes")
     if not isinstance(input_entries, list) or not isinstance(handoff_entries, list):
         raise TypeError("returned receipt and handoff input hashes must be lists.")
-    receipt_inputs = _extract_hash_map(input_entries)
-    handoff_inputs = _extract_hash_map(handoff_entries)
+    receipt_inputs = extract_hash_map(input_entries)
+    handoff_inputs = extract_hash_map(handoff_entries)
     if receipt_inputs != handoff_inputs:
         raise ValueError("returned receipt input hashes do not match handoff metadata.")
     for relative, expected in receipt_inputs.items():
-        observed = _compute_hash_entry(_confined_path(root, relative))
+        observed = compute_hash_entry(confined_path(root, relative))
         if observed != expected:
             raise ValueError(f"returned receipt input hash mismatch for {relative}.")
 
@@ -105,7 +105,7 @@ def _verify_receipt_file_record(root: Path, entry: Any, label: str) -> str:
         raise ValueError(f"returned receipt {label} path must be non-empty.")
     if not isinstance(present, bool):
         raise TypeError(f"returned receipt {label} present must be bool.")
-    observed = _compute_hash_entry(_confined_path(root, relative))
+    observed = compute_hash_entry(confined_path(root, relative))
     if present:
         size = entry.get("bytes")
         sha256 = entry.get("sha256")
@@ -179,11 +179,11 @@ def _receipt_execution_state(
     )
 
 
-def _result_selection(
+def result_selection(
     *,
     root: Path,
     problem: str,
-    collected: _CollectedSnapshots,
+    collected: CollectedSnapshots,
     receipt_paths: frozenset[str],
 ) -> PalaceResultSelection:
     if not collected.passes:
@@ -237,7 +237,7 @@ def _snapshot_artifact_paths(path: Path, problem: str) -> tuple[Path, ...]:
     )
 
 
-def _failure_diagnosis(
+def failure_diagnosis(
     root: Path,
     receipt: dict[str, Any] | None,
     receipt_paths: frozenset[str],
@@ -329,7 +329,7 @@ def _slurm_oom_evidence(
     relative = log.get("path")
     if not isinstance(relative, str) or relative not in receipt_paths:
         return None
-    path = _confined_path(root, relative)
+    path = confined_path(root, relative)
     with path.open(encoding="utf-8", errors="replace") as handle:
         for line in handle:
             lowered = line.lower()
@@ -349,7 +349,7 @@ def _slurm_oom_evidence(
     return None
 
 
-def _selection_payload(selection: PalaceResultSelection) -> dict[str, Any]:
+def selection_payload(selection: PalaceResultSelection) -> dict[str, Any]:
     return {
         "final_snapshot_status": selection.final_snapshot_status,
         "selected_source": selection.selected_source,
@@ -362,7 +362,7 @@ def _selection_payload(selection: PalaceResultSelection) -> dict[str, Any]:
     }
 
 
-def _failure_payload(
+def failure_payload(
     failure: PalaceFailureDiagnosis | None,
 ) -> dict[str, Any] | None:
     if failure is None:

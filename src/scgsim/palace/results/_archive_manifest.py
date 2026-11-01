@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Any
 
 from ..execution.archive import logical_tar_member_name, resolve_run_archive_path
-from ._artifact_files import _extract_hash_map
-from ._expect import _expect_list, _expect_mapping, _expect_scalar
+from ._artifact_files import extract_hash_map
+from ._expect import expect_list, expect_mapping, expect_scalar
 from ._run_documents import ArchiveManifest, HandoffMetadata, ResourceRecord
 
 
@@ -29,7 +29,7 @@ class _ManifestMembers:
     files: dict[str, tuple[int, str]]  # path -> (bytes, sha256), files only
 
 
-def _validate_archive_manifest(
+def validate_archive_manifest(
     root: Path,
     manifest: ArchiveManifest,
     resource_record: ResourceRecord,
@@ -47,16 +47,16 @@ def _check_manifest_header(
     handoff_metadata: HandoffMetadata,
 ) -> dict[str, Any]:
     """Return the resource record's archive entry after the manifest agrees with it."""
-    if _expect_scalar(manifest, "schema_version", int, fallback=0) != 1:
+    if expect_scalar(manifest, "schema_version", int, fallback=0) != 1:
         raise ValueError("handoff archive manifest schema_version must be integer 1.")
-    archive = _expect_mapping(resource_record.get("archive"), "resource_record.archive")
-    if _extract_hash_map(
-        _expect_list(manifest.get("input_hashes"), "archive manifest input_hashes")
-    ) != _extract_hash_map(
-        _expect_list(handoff_metadata.get("hashes"), "handoff metadata hashes")
+    archive = expect_mapping(resource_record.get("archive"), "resource_record.archive")
+    if extract_hash_map(
+        expect_list(manifest.get("input_hashes"), "archive manifest input_hashes")
+    ) != extract_hash_map(
+        expect_list(handoff_metadata.get("hashes"), "handoff metadata hashes")
     ):
         raise ValueError("archive manifest input hashes do not match handoff metadata.")
-    if _expect_scalar(manifest, "archive", str) != _expect_scalar(archive, "path", str):
+    if expect_scalar(manifest, "archive", str) != expect_scalar(archive, "path", str):
         raise ValueError(
             "handoff archive manifest archive path does not match receipt."
         )
@@ -64,23 +64,23 @@ def _check_manifest_header(
 
 
 def _read_manifest_members(manifest: ArchiveManifest) -> _ManifestMembers:
-    members = _expect_list(manifest.get("members"), "handoff archive manifest members")
+    members = expect_list(manifest.get("members"), "handoff archive manifest members")
     member_paths: set[str] = set()
     member_types: dict[str, str] = {}
     file_members: dict[str, tuple[int, str]] = {}
     for entry in members:
-        data = _expect_mapping(entry, "handoff archive manifest member")
-        path = _expect_scalar(data, "path", str)
+        data = expect_mapping(entry, "handoff archive manifest member")
+        path = expect_scalar(data, "path", str)
         if not path or path in member_paths:
             raise ValueError("handoff archive manifest members must have unique paths.")
         member_paths.add(path)
-        member_type = _expect_scalar(data, "type", str)
+        member_type = expect_scalar(data, "type", str)
         if member_type not in {"file", "directory"}:
             raise ValueError("handoff archive manifest member type is invalid.")
         member_types[path] = member_type
         if member_type == "file":
-            bytes_value = _expect_scalar(data, "bytes", int)
-            sha_value = _expect_scalar(data, "sha256", str)
+            bytes_value = expect_scalar(data, "bytes", int)
+            sha_value = expect_scalar(data, "sha256", str)
             file_members[path] = (bytes_value, sha_value)
     return _ManifestMembers(paths=member_paths, types=member_types, files=file_members)
 
@@ -111,11 +111,11 @@ def _check_manifest_inputs(
             "handoff archive manifest requires regular-file members: "
             + ", ".join(sorted(non_files))
         )
-    manifest_input_hashes = _extract_hash_map(
-        _expect_list(manifest.get("input_hashes"), "archive manifest input_hashes")
+    manifest_input_hashes = extract_hash_map(
+        expect_list(manifest.get("input_hashes"), "archive manifest input_hashes")
     )
-    handoff_input_hashes = _extract_hash_map(
-        _expect_list(handoff_metadata.get("hashes"), "handoff metadata hashes")
+    handoff_input_hashes = extract_hash_map(
+        expect_list(handoff_metadata.get("hashes"), "handoff metadata hashes")
     )
     for path, expected in handoff_input_hashes.items():
         if manifest_input_hashes.get(path) != expected:
@@ -136,7 +136,7 @@ def _check_archive_matches_manifest(
     member_paths = members.paths
     member_types = members.types
     file_members = members.files
-    archive_path = resolve_run_archive_path(root, _expect_scalar(archive, "path", str))
+    archive_path = resolve_run_archive_path(root, expect_scalar(archive, "path", str))
     with tarfile.open(archive_path, "r:gz") as bundle:
         bundled: dict[str, tarfile.TarInfo] = {}
         for member in bundle.getmembers():
@@ -146,7 +146,7 @@ def _check_archive_matches_manifest(
             bundled[logical.rstrip("/")] = member
         allowed_extra = {
             path.rstrip("/")
-            for path in _expect_list(
+            for path in expect_list(
                 manifest.get("archive_members_excluded_from_self_listing"),
                 "archive manifest excluded self members",
             )

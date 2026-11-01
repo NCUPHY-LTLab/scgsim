@@ -21,10 +21,10 @@ from ..results.report_data import (
     SurfaceMaskEprSeriesSnapshot,
 )
 
-_SURFACE_TYPES = ("MA", "MS", "SA")
+SURFACE_TYPES = ("MA", "MS", "SA")
 
 
-_COLORWAY = (
+COLORWAY = (
     "#56B4E9",
     "#E69F00",
     "#009E73",
@@ -35,7 +35,7 @@ _COLORWAY = (
 )
 
 
-_PLOTLY_CONFIG = {
+PLOTLY_CONFIG = {
     "displaylogo": False,
     "responsive": True,
     "modeBarButtonsToRemove": ["lasso2d", "select2d"],
@@ -54,7 +54,7 @@ _PLOT_TITLE_FONT = 18
 _PLOT_AXIS_FONT = 16
 
 
-_PLOT_TICK_FONT = 14
+PLOT_TICK_FONT = 14
 
 
 _PLOT_LEGEND_FONT = 15
@@ -106,15 +106,15 @@ def _surface_totals(snapshot: SurfaceEprSeriesSnapshot) -> dict[str, float]:
             for record in snapshot.records
             if record.interface_type == interface_type
         )
-        for interface_type in _SURFACE_TYPES
+        for interface_type in SURFACE_TYPES
     }
 
 
-def _surface_total_figure(
+def surface_total_figure(
     snapshots: Sequence[SurfaceEprSeriesSnapshot], theme: ReportTheme
 ) -> Any | None:
-    return _line_figure(
-        title=f"{_series_label(snapshots[-1])}: MA/MS/SA participation vs AMR pass",
+    return line_figure(
+        title=f"{series_label(snapshots[-1])}: MA/MS/SA participation vs AMR pass",
         xlabel="AMR pass",
         ylabel="total participation",
         xs=[snapshot.pass_index for snapshot in snapshots],
@@ -123,13 +123,13 @@ def _surface_total_figure(
                 interface_type,
                 [_surface_totals(snapshot)[interface_type] for snapshot in snapshots],
             )
-            for interface_type in _SURFACE_TYPES
+            for interface_type in SURFACE_TYPES
         ],
         theme=theme,
     )
 
 
-def _surface_mask_participation_figure(
+def surface_mask_participation_figure(
     snapshot: SurfaceMaskEprSeriesSnapshot,
     baseline: SurfaceEprSeriesSnapshot,
     interface_type: str,
@@ -141,7 +141,7 @@ def _surface_mask_participation_figure(
     if not records:
         return None
     baseline_by_index = {record.index: record for record in baseline.records}
-    go = _plotly()
+    go = import_plotly()
     figure = go.Figure()
     grouped: dict[int, list[SurfaceMaskEprRecord]] = {}
     for record in records:
@@ -155,7 +155,7 @@ def _surface_mask_participation_figure(
             y=[record.participation for record in ordered],
             mode="lines+markers",
             name=label,
-            line={"color": _COLORWAY[color_index % len(_COLORWAY)]},
+            line={"color": COLORWAY[color_index % len(COLORWAY)]},
             customdata=_mask_hover_rows(ordered),
             hovertemplate=(
                 "margin=%{x:.6g} µm<br>participation=%{y:.6g}"
@@ -176,14 +176,14 @@ def _surface_mask_participation_figure(
                 marker={
                     "symbol": "diamond",
                     "size": 9,
-                    "color": _COLORWAY[color_index % len(_COLORWAY)],
+                    "color": COLORWAY[color_index % len(COLORWAY)],
                 },
                 hovertemplate="baseline participation=%{y:.6g}<extra>%{fullData.name}</extra>",
             )
-    _style_figure(
+    style_figure(
         figure,
         title=(
-            f"{_series_label(snapshot)}: {interface_type} native Inset-mask participation "
+            f"{series_label(snapshot)}: {interface_type} native Inset-mask participation "
             f"vs margin ({snapshot.source})"
         ),
         height=460,
@@ -219,13 +219,13 @@ def _mask_hover_rows(records: Sequence[SurfaceMaskEprRecord]) -> list[list[Any]]
     ]
 
 
-def _surface_percentage_figure(
+def surface_percentage_figure(
     snapshots: Sequence[SurfaceEprSeriesSnapshot], theme: ReportTheme
 ) -> Any | str:
     totals = [_surface_totals(snapshot) for snapshot in snapshots]
     denominators = [sum(values.values()) for values in totals]
-    figure = _line_figure(
-        title=f"{_series_label(snapshots[-1])}: normalized MA/MS/SA participation",
+    figure = line_figure(
+        title=f"{series_label(snapshots[-1])}: normalized MA/MS/SA participation",
         xlabel="AMR pass",
         ylabel="share of MA+MS+SA (%)",
         xs=[snapshot.pass_index for snapshot in snapshots],
@@ -239,7 +239,7 @@ def _surface_percentage_figure(
                     for values, denominator in zip(totals, denominators, strict=True)
                 ],
             )
-            for interface_type in _SURFACE_TYPES
+            for interface_type in SURFACE_TYPES
         ],
         theme=theme,
     )
@@ -252,7 +252,7 @@ def _surface_percentage_figure(
     return figure
 
 
-def _surface_ranking_figure(
+def surface_ranking_figure(
     snapshot: SurfaceEprSeriesSnapshot,
     ranking_limit: int | None,
     theme: ReportTheme,
@@ -263,8 +263,8 @@ def _surface_ranking_figure(
     visible = records if ranking_limit is None else records[:ranking_limit]
     if not visible:
         return None
-    tokens = _theme_tokens(theme)
-    go = _plotly()
+    tokens = theme_tokens(theme)
+    go = import_plotly()
     labels = [
         f"#{record.index} {record.interface_type} · {record.face_kind}"
         f"<br>{record.owner_semantic_ids[0]}"
@@ -292,7 +292,7 @@ def _surface_ranking_figure(
                 orientation="h",
                 marker={
                     "color": [
-                        _COLORWAY[_SURFACE_TYPES.index(record.interface_type)]
+                        COLORWAY[SURFACE_TYPES.index(record.interface_type)]
                         for record in visible
                     ]
                 },
@@ -308,10 +308,10 @@ def _surface_ranking_figure(
     )
     count = len(snapshot.records)
     shown = len(visible)
-    _style_figure(
+    style_figure(
         fig,
         title=(
-            f"{_series_label(snapshot)}: latest surface participation ranking "
+            f"{series_label(snapshot)}: latest surface participation ranking "
             f"({snapshot.source}; {shown} of {count})"
         ),
         height=max(420, 48 * shown + 150),
@@ -321,12 +321,12 @@ def _surface_ranking_figure(
         theme=theme,
     )
     fig.update_layout(bargap=0.38)
-    fig.update_xaxes(title=_axis_title("participation", tokens), rangemode="tozero")
+    fig.update_xaxes(title=axis_title("participation", tokens), rangemode="tozero")
     fig.update_yaxes(autorange="reversed", automargin=True)
     return fig
 
 
-def _series_label(
+def series_label(
     snapshot: SurfaceEprSeriesSnapshot | SurfaceMaskEprSeriesSnapshot,
 ) -> str:
     noun = "Mode" if snapshot.series_kind == "mode" else "Excitation"
@@ -410,7 +410,7 @@ def _serialized_report_contribution(record: Mapping[str, Any]) -> str:
     )
 
 
-def _mode_traces(
+def mode_traces(
     passes: Sequence[AmrPassSnapshot],
     getter: Callable[[AmrPassSnapshot], Sequence[float] | None],
 ) -> list[tuple[str, list[float | None]]]:
@@ -428,7 +428,7 @@ def _mode_traces(
     return traces
 
 
-def _traces_are_finite(traces: Sequence[tuple[str, Sequence[float | None]]]) -> bool:
+def traces_are_finite(traces: Sequence[tuple[str, Sequence[float | None]]]) -> bool:
     numbers = [
         value
         for _name, ys in traces
@@ -438,7 +438,7 @@ def _traces_are_finite(traces: Sequence[tuple[str, Sequence[float | None]]]) -> 
     return bool(numbers) and all(math.isfinite(value) for value in numbers)
 
 
-def _delta_traces(
+def delta_traces(
     traces: Sequence[tuple[str, Sequence[float | None]]],
 ) -> list[tuple[str, list[float | None]]]:
     deltas: list[tuple[str, list[float | None]]] = []
@@ -456,7 +456,7 @@ def _delta_traces(
     return deltas
 
 
-def _capacitance_traces(
+def capacitance_traces(
     passes: Sequence[AmrPassSnapshot],
 ) -> list[tuple[str, list[tuple[str, list[float | None]]]]]:
     rows = max(
@@ -498,7 +498,7 @@ def _capacitance_traces(
     return per_element
 
 
-def _line_figure(  # noqa: PLR0913 - keyword-only drawing options; each is independent
+def line_figure(  # noqa: PLR0913 - keyword-only drawing options; each is independent
     *,
     title: str,
     xlabel: str,
@@ -510,11 +510,11 @@ def _line_figure(  # noqa: PLR0913 - keyword-only drawing options; each is indep
     hline: tuple[float, str] | None = None,
     theme: ReportTheme = "light",
 ) -> Any | None:
-    tokens = _theme_tokens(theme)
-    go = _plotly()
+    tokens = theme_tokens(theme)
+    go = import_plotly()
     fig = go.Figure()
     # A responsive width does not reclaim the fixed gutter for an outside legend.
-    _style_figure(
+    style_figure(
         fig,
         title=title,
         margin={"l": 84, "r": 36, "t": 116, "b": 64},
@@ -556,7 +556,7 @@ def _line_figure(  # noqa: PLR0913 - keyword-only drawing options; each is indep
         if labels:
             trace["text"] = labels
             trace["textposition"] = "top center"
-            trace["textfont"] = {"size": _PLOT_TICK_FONT, "color": tokens.muted}
+            trace["textfont"] = {"size": PLOT_TICK_FONT, "color": tokens.muted}
         fig.add_trace(go.Scatter(**trace))
         plotted = True
     if not plotted:
@@ -568,16 +568,16 @@ def _line_figure(  # noqa: PLR0913 - keyword-only drawing options; each is indep
             line_color=tokens.muted,
             line_width=1.5,
             annotation_text=hline[1],
-            annotation_font={"size": _PLOT_TICK_FONT, "color": tokens.muted},
+            annotation_font={"size": PLOT_TICK_FONT, "color": tokens.muted},
             annotation_position="top right",
         )
-    fig.update_xaxes(title=_axis_title(xlabel, tokens))
-    fig.update_yaxes(title=_axis_title(ylabel, tokens), type=yaxis_type)
+    fig.update_xaxes(title=axis_title(xlabel, tokens))
+    fig.update_yaxes(title=axis_title(ylabel, tokens), type=yaxis_type)
     _maybe_integer_xticks(fig, xs)
     return fig
 
 
-def _style_figure(  # noqa: PLR0913 - keyword-only layout options; each is independent
+def style_figure(  # noqa: PLR0913 - keyword-only layout options; each is independent
     fig: Any,
     *,
     title: str,
@@ -587,7 +587,7 @@ def _style_figure(  # noqa: PLR0913 - keyword-only layout options; each is indep
     showlegend: bool = True,
     theme: ReportTheme = "light",
 ) -> None:
-    tokens = _theme_tokens(theme)
+    tokens = theme_tokens(theme)
     if margin is None:
         margin = (
             {"l": 84, "r": 168, "t": 72, "b": 64}
@@ -612,12 +612,12 @@ def _style_figure(  # noqa: PLR0913 - keyword-only layout options; each is indep
             "yanchor": "top",
             "pad": {"t": 12, "b": 12, "l": 16, "r": 0},
         },
-        colorway=list(_COLORWAY),
+        colorway=list(COLORWAY),
         hovermode=hovermode,
         hoverlabel={
             "bgcolor": tokens.hover_bg,
             "bordercolor": tokens.hover_border,
-            "font": {"color": tokens.hover_font, "size": _PLOT_TICK_FONT},
+            "font": {"color": tokens.hover_font, "size": PLOT_TICK_FONT},
         },
         legend={
             "orientation": "v",
@@ -645,13 +645,13 @@ def _style_figure(  # noqa: PLR0913 - keyword-only layout options; each is indep
         "showline": False,
         "ticks": "",
         "automargin": False,
-        "tickfont": {"size": _PLOT_TICK_FONT, "color": tokens.muted},
+        "tickfont": {"size": PLOT_TICK_FONT, "color": tokens.muted},
     }
     fig.update_xaxes(**axis)
     fig.update_yaxes(**axis)
 
 
-def _axis_title(text: str, tokens: _PlotTheme) -> dict[str, Any]:
+def axis_title(text: str, tokens: _PlotTheme) -> dict[str, Any]:
     return {
         "text": text,
         "font": {"size": _PLOT_AXIS_FONT, "color": tokens.font},
@@ -668,7 +668,7 @@ def _maybe_integer_xticks(fig: Any, xs: Sequence[int | float | None]) -> None:
         fig.update_xaxes(dtick=1)
 
 
-def _plotly() -> Any:
+def import_plotly() -> Any:
     try:
         import plotly.graph_objects as go
     except ImportError as exc:
@@ -678,21 +678,21 @@ def _plotly() -> Any:
     return go
 
 
-def _checked_theme(theme: str) -> ReportTheme:
+def checked_theme(theme: str) -> ReportTheme:
     if theme == "light" or theme == "dark":
         return theme
     raise ValueError("theme must be 'light' or 'dark'.")
 
 
-def _theme_tokens(theme: str) -> _PlotTheme:
-    return _THEMES[_checked_theme(theme)]
+def theme_tokens(theme: str) -> _PlotTheme:
+    return _THEMES[checked_theme(theme)]
 
 
 def _positive_or_none(values: Sequence[float | None]) -> list[float | None]:
     return [None if value is None or value <= 0 else value for value in values]
 
 
-def _yaxis_type(name: str) -> str:
+def yaxis_scale_type(name: str) -> str:
     lowered = name.lower()
     if any(
         marker in lowered

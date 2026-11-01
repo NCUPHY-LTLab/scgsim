@@ -6,10 +6,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
-from scgsim.geometry._primitives.port_contract import (
-    _route_b_port_sheet_binding_matches,
-)
 from scgsim.geometry.models.construction import ConstructionPlanRecord
+from scgsim.geometry.primitives.port_contract import (
+    route_b_port_sheet_binding_matches,
+)
 
 _COORD_TOL_UM = 1e-9
 
@@ -361,7 +361,7 @@ def _owner_pec_surfaces(
                     "sidewall"
                 )
                 and surface.metadata.get("route_b_port_sheet_sidewall_partition")
-                and _route_b_port_sheet_binding_matches(
+                and route_b_port_sheet_binding_matches(
                     surface,
                     port_surface_id=port_surface.surface_id,
                     overlap_id=overlap_id,

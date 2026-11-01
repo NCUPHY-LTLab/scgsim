@@ -26,66 +26,64 @@ from typing import Any
 
 import gdstk
 
-from scgsim.geometry._primitives.loops import (
-    _cancel_reversed_planar_edges,
-    _simple_planar_loops_from_edges,
+from scgsim.geometry.primitives.loops import (
+    cancel_reversed_planar_edges,
+    simple_planar_loops_from_edges,
 )
 
 # Boolean grid pitch in micrometres: coordinates are rounded to multiples of this.
 PRECISION_UM = 1e-9
 
 
-def _plain_with_dataclasses(value: Any) -> Any:
+def plain_with_dataclasses(value: Any) -> Any:
     """Convert dataclasses, mappings and sequences to plain dicts and lists."""
     if hasattr(value, "__dataclass_fields__"):
         return {
-            item.name: _plain_with_dataclasses(getattr(value, item.name))
+            item.name: plain_with_dataclasses(getattr(value, item.name))
             for item in fields(value)
         }
     if isinstance(value, Mapping):
-        return {str(key): _plain_with_dataclasses(item) for key, item in value.items()}
+        return {str(key): plain_with_dataclasses(item) for key, item in value.items()}
     if isinstance(value, (tuple, list)):
-        return [_plain_with_dataclasses(item) for item in value]
+        return [plain_with_dataclasses(item) for item in value]
     return value
 
 
-def _edges(rings):
+def ring_edges(rings):
     """Yield the closed edges `(start, end)` of every ring."""
     for ring in rings:
         yield from zip(ring, (*ring[1:], ring[0]), strict=False)
 
 
-def _twice_signed_area(ring):
+def twice_signed_area(ring):
     """Twice the signed area of a ring; positive when counter-clockwise."""
-    return sum(a[0] * b[1] - b[0] * a[1] for a, b in _edges((ring,)))
+    return sum(a[0] * b[1] - b[0] * a[1] for a, b in ring_edges((ring,)))
 
 
-def _oriented_ring(ring, index):
+def oriented_ring(ring, index):
     """Return the ring wound counter-clockwise if outer (index 0), else clockwise."""
     return (
-        ring
-        if (_twice_signed_area(ring) > 0) == (index == 0)
-        else tuple(reversed(ring))
+        ring if (twice_signed_area(ring) > 0) == (index == 0) else tuple(reversed(ring))
     )
 
 
-def _cross(a, b, c):
+def cross(a, b, c):
     """Twice the signed area of triangle `abc`; zero exactly when collinear."""
     return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
 
 
-def _on(point, a, b):
+def on(point, a, b):
     """Whether `point` lies on the closed segment `ab`."""
-    return _cross(a, b, point) == 0 and all(
+    return cross(a, b, point) == 0 and all(
         min(a[i], b[i]) <= point[i] <= max(a[i], b[i]) for i in (0, 1)
     )
 
 
-def _inside_ring(point, ring):
+def inside_ring(point, ring):
     """Locate `point` against one ring: 1 inside, 0 on the boundary, -1 outside."""
     inside = False
-    for a, b in _edges((ring,)):
-        if _on(point, a, b):
+    for a, b in ring_edges((ring,)):
+        if on(point, a, b):
             return 0  # Boundary, distinct from inside and outside.
         if (a[1] > point[1]) != (b[1] > point[1]):
             x = Fraction(b[0] - a[0], b[1] - a[1]) * (point[1] - a[1]) + a[0]
@@ -97,12 +95,12 @@ def _inside_ring(point, ring):
 def _inside(point, rings):
     """Whether `point` is in the closed polygon: on or inside the outer ring and
     not strictly inside a hole (hole boundaries belong to the polygon)."""
-    return _inside_ring(point, rings[0]) >= 0 and not any(
-        _inside_ring(point, hole) == 1 for hole in rings[1:]
+    return inside_ring(point, rings[0]) >= 0 and not any(
+        inside_ring(point, hole) == 1 for hole in rings[1:]
     )
 
 
-def _section(rings, axis, coordinate, low, high):
+def section(rings, axis, coordinate, low, high):
     """Exact closed contact on a specified edge in Boolean integer coordinates.
 
     Intersects the closed polygon with the line `axis == coordinate` over
@@ -112,7 +110,7 @@ def _section(rings, axis, coordinate, low, high):
     """
     other = 1 - axis
     marks = {Fraction(low), Fraction(high)}
-    for a, b in _edges(rings):
+    for a, b in ring_edges(rings):
         if a[axis] == b[axis] == coordinate:
             marks.update(Fraction(v[other]) for v in (a, b) if low <= v[other] <= high)
         elif a[axis] != b[axis] and min(a[axis], b[axis]) <= coordinate <= max(
@@ -137,12 +135,12 @@ def _section(rings, axis, coordinate, low, high):
     return intervals, points
 
 
-def _covered(polygons, axis, coordinate, low, high):
+def covered(polygons, axis, coordinate, low, high):
     """Whether the union of the polygons covers `[low, high]` on the given line."""
     intervals = sorted(
         interval
         for rings in polygons
-        for interval in _section(rings, axis, coordinate, low, high)[0]
+        for interval in section(rings, axis, coordinate, low, high)[0]
     )
     end = Fraction(low)
     for a, b in intervals:
@@ -161,7 +159,7 @@ def _line_intervals(polygons):
     """
     result = defaultdict(list)
     for rings in polygons:
-        for a, b in _edges(rings):
+        for a, b in ring_edges(rings):
             dx, dy = b[0] - a[0], b[1] - a[1]
             divisor = math.gcd(dx, dy)
             if not divisor:
@@ -175,7 +173,7 @@ def _line_intervals(polygons):
     return result
 
 
-def _positive_boundary_contact(left, right):
+def positive_boundary_contact(left, right):
     """Whether two groups of polygons share boundary of positive length."""
     a, b = _line_intervals(left), _line_intervals(right)
     return any(
@@ -186,7 +184,7 @@ def _positive_boundary_contact(left, right):
     )
 
 
-def _closed_contact(left, right):
+def closed_contact(left, right):
     """Whether any polygon of `left` and any of `right` share at least one point.
 
     Closed regions count: touching at a vertex or along an edge is contact, as is
@@ -209,22 +207,22 @@ def _closed_contact(left, right):
                 return True
             if any(_inside(p, b) for p in a[0]) or any(_inside(p, a) for p in b[0]):
                 return True
-            for p, q in _edges(a):
-                for r, s in _edges(b):
+            for p, q in ring_edges(a):
+                for r, s in ring_edges(b):
                     c = (
-                        _cross(p, q, r),
-                        _cross(p, q, s),
-                        _cross(r, s, p),
-                        _cross(r, s, q),
+                        cross(p, q, r),
+                        cross(p, q, s),
+                        cross(r, s, p),
+                        cross(r, s, q),
                     )
-                    if any((_on(r, p, q), _on(s, p, q), _on(p, r, s), _on(q, r, s))):
+                    if any((on(r, p, q), on(s, p, q), on(p, r, s), on(q, r, s))):
                         return True
                     if c[0] * c[1] < 0 and c[2] * c[3] < 0:
                         return True
     return False
 
 
-def _region(polygons):
+def region_from_polygons(polygons):
     """Convert integer polygons to gdstk polygons in micrometres, holes cut out."""
     result = []
     for rings in polygons:
@@ -235,18 +233,18 @@ def _region(polygons):
             gdstk.Polygon([(x * PRECISION_UM, y * PRECISION_UM) for x, y in ring])
             for ring in rings[1:]
         ]
-        result.extend(_boolean([exterior], holes, "not"))
+        result.extend(boolean([exterior], holes, "not"))
     return result
 
 
-def _boolean(left, right, operation):
+def boolean(left, right, operation):
     # SGB (the geometry builder) has a Boolean wrapper that filters small areas.
     # Partitioning must retain every residual, so reuse its precision and loop
     # lowering without that filter.
     return list(gdstk.boolean(left, right, operation, precision=PRECISION_UM) or ())
 
 
-def _rings(region):
+def rings_from_region(region):
     """Convert a gdstk region back to integer polygons, each as `(outer, *holes)`.
 
     Raises `ValueError` when a residual has point-connected or non-interior
@@ -263,25 +261,25 @@ def _rings(region):
         ordered = sorted(set(points))
         xs = [point[0] for point in ordered]
         edges = []
-        for a, b in _edges((points,)):
+        for a, b in ring_edges((points,)):
             candidates = ordered[
                 bisect_left(xs, min(a[0], b[0])) : bisect_right(xs, max(a[0], b[0]))
             ]
             on_edge = sorted(
-                (p for p in candidates if _on(p, a, b)),
+                (p for p in candidates if on(p, a, b)),
                 key=lambda p: (
                     (p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])
                 ),
             )
             edges.extend(pairwise(on_edge))
-        loops = _simple_planar_loops_from_edges(_cancel_reversed_planar_edges(edges))
+        loops = simple_planar_loops_from_edges(cancel_reversed_planar_edges(edges))
 
         def area(ring):
-            return abs(_twice_signed_area(ring))
+            return abs(twice_signed_area(ring))
 
         outer = max(loops, key=area)
         holes = tuple(ring for ring in loops if ring is not outer)
-        if any(_inside_ring(hole[0], outer) != 1 for hole in holes):
+        if any(inside_ring(hole[0], outer) != 1 for hole in holes):
             raise ValueError(
                 "junction residual has point-connected or non-interior components"
             )
@@ -289,6 +287,6 @@ def _rings(region):
     return result
 
 
-def _rectangle(x0, y0, x1, y1):
+def rectangle(x0, y0, x1, y1):
     """The rectangle as a one-polygon region of integer rings."""
     return ((((x0, y0), (x1, y0), (x1, y1), (x0, y1)),),)

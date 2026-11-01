@@ -17,7 +17,7 @@ from scgsim.geometry.models.input import SourceCurveSpec
 from scgsim.geometry.source.curves import boundary_binding
 
 
-def _source_rings(build_input):
+def source_rings(build_input):
     """Use adapter-normalized Entity-owned logical polygons, including holes."""
     polygons = {p.polygon_id: p for p in build_input.polygons}
     result = {}
@@ -81,7 +81,7 @@ def _select_boundary(record, rings):
     )
 
 
-def _circle_points(points):
+def circle_points(points):
     """Center and radius of the circle through three points (circumcircle)."""
     a, b, c = points
     ax, ay = a
@@ -153,7 +153,7 @@ def _reconstruct(record, ring):
             raise ValueError(
                 "closed circular reconstruction requires three explicit distinct anchors"
             )
-        center, radius = _circle_points(points)
+        center, radius = circle_points(points)
         start = points[0]
         angle = math.atan2(start[1] - center[1], start[0] - center[0])
         area = sum(
@@ -204,7 +204,7 @@ def _reconstruct(record, ring):
     )
 
 
-def _boundaries(build_input, rings):
+def boundaries(build_input, rings):
     """Return one ordered curve chain per ring, plus the provenance of each claim."""
     authored, reconstructed, provenance = _boundary_claims(build_input, rings)
     result = {}

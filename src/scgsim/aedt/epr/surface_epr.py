@@ -20,9 +20,9 @@ from scgsim.aedt._data import (
     detached,
 )
 from scgsim.aedt.epr.selection import (
-    _exact_mapping,
-    _finite,
-    _quantity,
+    exact_mapping,
+    finite,
+    quantity,
     surface_integral_groups,
 )
 from scgsim.aedt.specs.epr import (
@@ -39,14 +39,14 @@ _EPSILON_0_F_PER_M = 8.8541878128e-12
 _FILM_INTERFACES = {"MA", "MS", "SA"}
 
 
-class _SurfaceIntegrals(NamedTuple):
+class SurfaceIntegrals(NamedTuple):
     """Raw surface integrals of one mode and the masked area of each."""
 
     integrals: Mapping[str, Any]
     masked_areas: Mapping[str, Any]
 
 
-def _surface_energy_j(  # noqa: PLR0913 -- one argument per symbol of the formula.
+def surface_energy_j(  # noqa: PLR0913 -- one argument per symbol of the formula.
     interface_kind: str,
     thickness_m: float,
     film_epsilon: float,
@@ -87,7 +87,7 @@ def _surface_energy_j(  # noqa: PLR0913 -- one argument per symbol of the formul
     raise ValueError(f"unsupported surface interface {interface_kind!r}")
 
 
-def _surface_energy_coefficients(
+def surface_energy_coefficients(
     interface_kind: str,
     thickness_m: float,
     film_epsilon: float,
@@ -95,7 +95,7 @@ def _surface_energy_coefficients(
 ) -> tuple[float, float]:
     """Return the existing normal and tangential peak-phasor energy factors.
 
-    The same formulas as `_surface_energy_j`, with the integrals factored out so
+    The same formulas as `surface_energy_j`, with the integrals factored out so
     the factors can weight native expressions in AEDT.
     """
     if interface_kind == "MA":
@@ -116,10 +116,10 @@ def _surface_energy_coefficients(
     raise ValueError(f"unsupported surface interface {interface_kind!r}")
 
 
-def _surface_contributions(
+def surface_contributions(
     prepared: PreparedPlanarGeometry,
     raw: Mapping[str, Any],
-    surface: _SurfaceIntegrals,
+    surface: SurfaceIntegrals,
     request: EprAnalysisRequest | None,
     normalization_j: float,
 ) -> tuple[str, list[dict[str, Any]]]:
@@ -158,7 +158,7 @@ def _bindings_by_contribution(
 
     bindings: dict[str, list[Mapping[str, Any]]] = {}
     for item in prepared.surface_bindings:
-        contribution = _exact_mapping(
+        contribution = exact_mapping(
             item.get("contribution"), "surface binding contribution"
         )
         contribution_id = contribution.get("contribution_id")
@@ -171,7 +171,7 @@ def _bindings_by_contribution(
 def _grouped_surface_rows(  # noqa: PLR0913 -- one argument per input of the step.
     prepared: PreparedPlanarGeometry,
     raw: Mapping[str, Any],
-    surface: _SurfaceIntegrals,
+    surface: SurfaceIntegrals,
     request: EprAnalysisRequest | None,
     normalization_j: float,
     specs_by_id: Mapping[str, Any],
@@ -181,7 +181,7 @@ def _grouped_surface_rows(  # noqa: PLR0913 -- one argument per input of the ste
     surface_rows: list[dict[str, Any]] = []
     groups = surface_integral_groups(prepared, request)
     expected_groups = {item["group_id"]: item for item in groups}
-    provenance = _exact_mapping(
+    provenance = exact_mapping(
         raw.get("surface_group_provenance"), "surface group provenance"
     )
     if (
@@ -191,18 +191,18 @@ def _grouped_surface_rows(  # noqa: PLR0913 -- one argument per input of the ste
     ):
         raise ValueError("grouped surface integrals do not cover prepared groups")
     for group_id, group in expected_groups.items():
-        native_group = _exact_mapping(provenance[group_id], "native surface group")
+        native_group = exact_mapping(provenance[group_id], "native surface group")
         if any(native_group.get(key) != value for key, value in group.items()):
             raise ValueError(f"surface group provenance differs for {group_id!r}")
-        values = _exact_mapping(surface.integrals[group_id], "grouped surface integral")
-        normal = _quantity(values.get("normal"), "normal group integral", "V^2")
-        tangential = _quantity(
+        values = exact_mapping(surface.integrals[group_id], "grouped surface integral")
+        normal = quantity(values.get("normal"), "normal group integral", "V^2")
+        tangential = quantity(
             values.get("tangential"),
             "tangential group integral",
             "V^2",
             nonnegative=False,
         )
-        energy = _surface_energy_j(
+        energy = surface_energy_j(
             group["interface_kind"],
             group["film_thickness_m"],
             group["film_relative_permittivity"],
@@ -237,7 +237,7 @@ def _grouped_surface_rows(  # noqa: PLR0913 -- one argument per input of the ste
                 **group,
                 "normal_integral_v2": normal,
                 "tangential_integral_v2": tangential,
-                "masked_area_m2": _quantity(
+                "masked_area_m2": quantity(
                     surface.masked_areas[group_id], "masked group area", "m^2"
                 ),
                 "energy_j": energy,
@@ -254,7 +254,7 @@ def _grouped_surface_rows(  # noqa: PLR0913 -- one argument per input of the ste
 
 def _require_per_binding_keys(
     prepared: PreparedPlanarGeometry,
-    surface: _SurfaceIntegrals,
+    surface: SurfaceIntegrals,
     specs_by_id: Mapping[str, Any],
     selected_surfaces: set[str],
 ) -> None:
@@ -277,7 +277,7 @@ def _require_per_binding_keys(
 def _per_binding_surface_rows(
     prepared: PreparedPlanarGeometry,
     bindings: Mapping[str, list[Mapping[str, Any]]],
-    surface: _SurfaceIntegrals,
+    surface: SurfaceIntegrals,
     normalization_j: float,
     selected_surfaces: set[str],
 ) -> list[dict[str, Any]]:
@@ -300,20 +300,20 @@ def _per_binding_surface_rows(
                 if not isinstance(binding_id, str) or not binding_id:
                     raise ValueError("surface binding id is invalid")
                 key = f"{binding_id}@{margin:.17g}"
-                values = _exact_mapping(
+                values = exact_mapping(
                     surface.integrals[key], f"surface integral {key!r}"
                 )
-                normal += _quantity(
+                normal += quantity(
                     values.get("normal"), "normal surface integral", "V^2"
                 )
-                tangential += _quantity(
+                tangential += quantity(
                     values.get("tangential"),
                     "tangential surface integral",
                     "V^2",
                     nonnegative=False,
                 )
                 binding_ids.append(binding_id)
-            energy = _surface_energy_j(
+            energy = surface_energy_j(
                 spec.interface_kind,
                 spec.film_thickness_m,
                 spec.film_relative_permittivity,
@@ -330,12 +330,12 @@ def _per_binding_surface_rows(
                     "margin_um": margin,
                     "normal_integral_v2": normal,
                     "tangential_integral_v2": tangential,
-                    "masked_area_m2": _quantity(
+                    "masked_area_m2": quantity(
                         surface.masked_areas[f"{binding_ids[-1]}@{margin:.17g}"]
                         if len(local_bindings) == 1
                         else {
                             "value": sum(
-                                _quantity(
+                                quantity(
                                     surface.masked_areas[
                                         f"{item['binding_id']}@{margin:.17g}"
                                     ],
@@ -378,7 +378,7 @@ def _field_side_permittivity(
 
     epsilon_values: set[float] = set()
     for binding in local_bindings:
-        contribution = _exact_mapping(
+        contribution = exact_mapping(
             binding.get("contribution"), "surface binding contribution"
         )
         if (
@@ -393,11 +393,11 @@ def _field_side_permittivity(
             if spec.interface_kind == "SA"
             else "effective_material"
         )
-        material = _exact_mapping(binding.get(material_key), "surface binding material")
+        material = exact_mapping(binding.get(material_key), "surface binding material")
         if "permittivity" not in material:
             raise ValueError("field-side material lacks explicit relative permittivity")
         epsilon_values.add(
-            _finite(
+            finite(
                 material["permittivity"],
                 "field-side relative permittivity",
             )
@@ -409,7 +409,7 @@ def _field_side_permittivity(
     return epsilon_values.pop()
 
 
-def _native_surface_reference_rows(
+def native_surface_reference_rows(
     prepared: PreparedPlanarGeometry,
     raw: Mapping[str, Any],
     request: EprAnalysisRequest | None,
@@ -431,7 +431,7 @@ def _native_surface_reference_rows(
         # Keep previously serialized raw records readable without fabricating
         # reference values that were not part of their original evidence.
         return None
-    references = _exact_mapping(
+    references = exact_mapping(
         raw["native_surface_references"], "native_surface_references"
     )
     if references_requested and not references:
@@ -440,8 +440,8 @@ def _native_surface_reference_rows(
     rows: list[dict[str, Any]] = []
     associated_contributions: set[str] = set()
     for reference_id, value in sorted(references.items()):
-        record = _exact_mapping(value, "native surface reference")
-        selection = _exact_mapping(
+        record = exact_mapping(value, "native surface reference")
+        selection = exact_mapping(
             record.get("selection"), "native surface reference selection"
         )
         if (
@@ -457,15 +457,15 @@ def _native_surface_reference_rows(
         ):
             raise TypeError("native surface reference contribution IDs are invalid")
         associated_contributions.update(contribution_ids)
-        normal = _quantity(record.get("normal"), "native face normal integral", "V^2")
-        tangential = _quantity(
+        normal = quantity(record.get("normal"), "native face normal integral", "V^2")
+        tangential = quantity(
             record.get("tangential"),
             "native face tangential integral",
             "V^2",
             nonnegative=False,
         )
-        area = _quantity(record.get("area"), "native face area integral", "m^2")
-        expression_identities = _exact_mapping(
+        area = quantity(record.get("area"), "native face area integral", "m^2")
+        expression_identities = exact_mapping(
             record.get("expression_identities"),
             "native surface reference expression identities",
         )

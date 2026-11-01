@@ -14,7 +14,7 @@ from typing import Any, Mapping, NamedTuple, Sequence
 
 import numpy as np
 
-from .numerics import Measurements, _decode_label, _StatusCode
+from .numerics import Measurements, StatusCode, decode_label
 from .reader import MeshData
 
 _SCHEMA = "scgsim.mesh-quality.v1"
@@ -151,13 +151,13 @@ def _summary_warnings(
         np.count_nonzero(
             np.isin(
                 metrics.volume_status,
-                (_StatusCode.UNDERFLOW, _StatusCode.OVERFLOW),
+                (StatusCode.UNDERFLOW, StatusCode.OVERFLOW),
             )
         )
         + np.count_nonzero(
             np.isin(
                 metrics.volume_m3_status,
-                (_StatusCode.UNDERFLOW, _StatusCode.OVERFLOW),
+                (StatusCode.UNDERFLOW, StatusCode.OVERFLOW),
             )
         )
     )
@@ -173,39 +173,37 @@ def _make_summary(mesh: MeshData, metrics: Measurements) -> Mapping[str, Any]:
     total = len(mesh.element_ids)
     measured = np.isin(
         metrics.orientation_method,
-        (_StatusCode.FLOATING_FILTER, _StatusCode.EXACT_DYADIC),
+        (StatusCode.FLOATING_FILTER, StatusCode.EXACT_DYADIC),
     )
     volume_available = np.isin(
-        metrics.volume_status, (_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO)
+        metrics.volume_status, (StatusCode.AVAILABLE, StatusCode.EXACT_ZERO)
     )
     volume_m3_available = np.isin(
-        metrics.volume_m3_status, (_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO)
+        metrics.volume_m3_status, (StatusCode.AVAILABLE, StatusCode.EXACT_ZERO)
     )
-    kappa_available = metrics.condition_status == _StatusCode.AVAILABLE
+    kappa_available = metrics.condition_status == StatusCode.AVAILABLE
     exact_zero = int(
         np.count_nonzero(
             (metrics.orientation == 0)
-            & (metrics.orientation_method == _StatusCode.EXACT_DYADIC)
+            & (metrics.orientation_method == StatusCode.EXACT_DYADIC)
         )
     )
     missing = int(
-        np.count_nonzero(metrics.orientation_method == _StatusCode.MISSING_NODES)
+        np.count_nonzero(metrics.orientation_method == StatusCode.MISSING_NODES)
     )
     nonfinite = int(
-        np.count_nonzero(
-            metrics.orientation_method == _StatusCode.NONFINITE_COORDINATES
-        )
+        np.count_nonzero(metrics.orientation_method == StatusCode.NONFINITE_COORDINATES)
     )
     condition_codes, condition_values = np.unique(
         metrics.condition_status, return_counts=True
     )
     condition_counts = {
-        _decode_label(code): int(value)
+        decode_label(code): int(value)
         for code, value in zip(condition_codes, condition_values, strict=True)
     }
     condition_unavailable = ~np.isin(
         metrics.condition_status,
-        (_StatusCode.AVAILABLE, _StatusCode.EXACT_SINGULAR),
+        (StatusCode.AVAILABLE, StatusCode.EXACT_SINGULAR),
     )
     unavailable_conditions = int(np.count_nonzero(condition_unavailable))
     unresolved = condition_counts.get("numerically_unresolved", 0)
@@ -226,25 +224,25 @@ def _make_summary(mesh: MeshData, metrics: Measurements) -> Mapping[str, Any]:
             "missing_nodes": missing,
             "nonfinite_coordinates": nonfinite,
             "condition_exact_singular": int(
-                np.count_nonzero(metrics.condition_status == _StatusCode.EXACT_SINGULAR)
+                np.count_nonzero(metrics.condition_status == StatusCode.EXACT_SINGULAR)
             ),
             "condition_numerically_unresolved": unresolved,
             "condition_svd_failed": int(
-                np.count_nonzero(metrics.condition_status == _StatusCode.SVD_FAILED)
+                np.count_nonzero(metrics.condition_status == StatusCode.SVD_FAILED)
             ),
             "condition_unavailable": unavailable_conditions,
             "exact_fallback": int(np.count_nonzero(metrics.fallback_used)),
             "volume_underflow": int(
-                np.count_nonzero(metrics.volume_status == _StatusCode.UNDERFLOW)
+                np.count_nonzero(metrics.volume_status == StatusCode.UNDERFLOW)
             ),
             "volume_overflow": int(
-                np.count_nonzero(metrics.volume_status == _StatusCode.OVERFLOW)
+                np.count_nonzero(metrics.volume_status == StatusCode.OVERFLOW)
             ),
             "volume_m3_underflow": int(
-                np.count_nonzero(metrics.volume_m3_status == _StatusCode.UNDERFLOW)
+                np.count_nonzero(metrics.volume_m3_status == StatusCode.UNDERFLOW)
             ),
             "volume_m3_overflow": int(
-                np.count_nonzero(metrics.volume_m3_status == _StatusCode.OVERFLOW)
+                np.count_nonzero(metrics.volume_m3_status == StatusCode.OVERFLOW)
             ),
             **{key: int(value) for key, value in mesh.element_counts.items()},
         },
@@ -299,8 +297,8 @@ class MeshQualityReport:
         physical_tag = int(self._mesh.physical_tags[row]) or None
         elementary_tag = int(self._mesh.elementary_tags[row]) or None
         coordinates, coordinate_status = self._coordinates(row)
-        condition_status = _decode_label(self._metrics.condition_status[row])
-        orientation_method = _decode_label(self._metrics.orientation_method[row])
+        condition_status = decode_label(self._metrics.condition_status[row])
+        orientation_method = decode_label(self._metrics.orientation_method[row])
         orientation_value = (
             int(self._metrics.orientation[row])
             if orientation_method in {"floating_filter", "exact_dyadic"}
@@ -321,7 +319,7 @@ class MeshQualityReport:
         else:
             kappa = _finite(float(self._metrics.kappa_j[row]))
         center = [_finite(float(value)) for value in self._metrics.centers[row]]
-        center_status = _decode_label(self._metrics.center_status[row])
+        center_status = decode_label(self._metrics.center_status[row])
         if center_status != "available":
             center = [None, None, None]
         return {
@@ -353,13 +351,13 @@ class MeshQualityReport:
             ),
             "signed_volume": _finite(float(self._metrics.signed_volume[row])),
             "volume": _finite(float(self._metrics.volume[row])),
-            "volume_status": _decode_label(self._metrics.volume_status[row]),
-            "volume_method": _decode_label(self._metrics.volume_method[row]),
+            "volume_status": decode_label(self._metrics.volume_status[row]),
+            "volume_method": decode_label(self._metrics.volume_method[row]),
             "volume_error_bound": _finite(float(self._metrics.volume_error_bound[row])),
             "signed_volume_m3": _finite(float(self._metrics.signed_volume_m3[row])),
             "volume_m3": _finite(float(self._metrics.volume_m3[row])),
-            "volume_m3_status": _decode_label(self._metrics.volume_m3_status[row]),
-            "volume_m3_method": _decode_label(self._metrics.volume_m3_method[row]),
+            "volume_m3_status": decode_label(self._metrics.volume_m3_status[row]),
+            "volume_m3_method": decode_label(self._metrics.volume_m3_method[row]),
             "volume_m3_error_bound": _finite(
                 float(self._metrics.volume_m3_error_bound[row])
             ),
@@ -487,13 +485,13 @@ class MeshQualityReport:
             singular = [
                 row
                 for row in range(len(element_ids))
-                if self._metrics.condition_status[row] == _StatusCode.EXACT_SINGULAR
+                if self._metrics.condition_status[row] == StatusCode.EXACT_SINGULAR
             ]
             singular.sort(key=lambda row: int(element_ids[row]))
             finite = [
                 row
                 for row in range(len(element_ids))
-                if self._metrics.condition_status[row] == _StatusCode.AVAILABLE
+                if self._metrics.condition_status[row] == StatusCode.AVAILABLE
             ]
             finite.sort(
                 key=lambda row: (
@@ -505,7 +503,7 @@ class MeshQualityReport:
                 row
                 for row in range(len(element_ids))
                 if self._metrics.condition_status[row]
-                not in {_StatusCode.AVAILABLE, _StatusCode.EXACT_SINGULAR}
+                not in {StatusCode.AVAILABLE, StatusCode.EXACT_SINGULAR}
             ]
             unresolved.sort(key=lambda row: int(element_ids[row]))
             ranked = singular + finite
@@ -514,7 +512,7 @@ class MeshQualityReport:
                 row
                 for row in range(len(element_ids))
                 if self._metrics.volume_status[row]
-                in {_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO}
+                in {StatusCode.AVAILABLE, StatusCode.EXACT_ZERO}
             ]
             finite.sort(
                 key=lambda row: (

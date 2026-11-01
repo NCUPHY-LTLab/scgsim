@@ -27,7 +27,7 @@ from typing import Mapping, NamedTuple
 
 import numpy as np
 
-from .reader import MeshData, _readonly
+from .reader import MeshData, readonly
 
 _U = 2.0**-53
 _EPS = 2.0**-52
@@ -44,7 +44,7 @@ _INV_W = np.linalg.inv(_W)
 _INV_W.flags.writeable = False
 
 
-class _StatusCode(IntEnum):
+class StatusCode(IntEnum):
     """Byte codes stored in the status and method arrays, decoded by ``_STATUS_LABELS``."""
 
     UNAVAILABLE = 0
@@ -70,38 +70,38 @@ class _StatusCode(IntEnum):
     FLOATING_ESTIMATE = 20
 
 
-_STATUS_LABELS: Mapping[_StatusCode, str] = MappingProxyType(
+_STATUS_LABELS: Mapping[StatusCode, str] = MappingProxyType(
     {
-        _StatusCode.UNAVAILABLE: "unavailable",
-        _StatusCode.FLOATING_FILTER: "floating_filter",
-        _StatusCode.EXACT_DYADIC: "exact_dyadic",
-        _StatusCode.MISSING_NODES: "missing_nodes",
-        _StatusCode.NONFINITE_COORDINATES: "nonfinite_coordinates",
-        _StatusCode.NOT_REQUESTED: "not_requested",
-        _StatusCode.EXACT_ZERO: "exact_zero",
-        _StatusCode.OVERFLOW: "overflow",
-        _StatusCode.UNDERFLOW: "underflow",
-        _StatusCode.AVAILABLE: "available",
-        _StatusCode.AMBIGUOUS_REPRESENTATION: "ambiguous_representation",
-        _StatusCode.CENTER_OVERFLOW: "center_overflow",
-        _StatusCode.CENTER_UNDERFLOW: "center_underflow",
-        _StatusCode.SCALING_SUBNORMAL: "scaling_subnormal",
-        _StatusCode.SCALING_NOT_REVERSIBLE: "scaling_not_reversible",
-        _StatusCode.UNSAFE_SUBTRACTION: "unsafe_subtraction",
-        _StatusCode.EXACT_SINGULAR: "exact_singular",
-        _StatusCode.SVD_FAILED: "svd_failed",
-        _StatusCode.NUMERICALLY_UNRESOLVED: "numerically_unresolved",
-        _StatusCode.EXACT_ROUNDED: "exact_rounded",
-        _StatusCode.FLOATING_ESTIMATE: "floating_estimate",
+        StatusCode.UNAVAILABLE: "unavailable",
+        StatusCode.FLOATING_FILTER: "floating_filter",
+        StatusCode.EXACT_DYADIC: "exact_dyadic",
+        StatusCode.MISSING_NODES: "missing_nodes",
+        StatusCode.NONFINITE_COORDINATES: "nonfinite_coordinates",
+        StatusCode.NOT_REQUESTED: "not_requested",
+        StatusCode.EXACT_ZERO: "exact_zero",
+        StatusCode.OVERFLOW: "overflow",
+        StatusCode.UNDERFLOW: "underflow",
+        StatusCode.AVAILABLE: "available",
+        StatusCode.AMBIGUOUS_REPRESENTATION: "ambiguous_representation",
+        StatusCode.CENTER_OVERFLOW: "center_overflow",
+        StatusCode.CENTER_UNDERFLOW: "center_underflow",
+        StatusCode.SCALING_SUBNORMAL: "scaling_subnormal",
+        StatusCode.SCALING_NOT_REVERSIBLE: "scaling_not_reversible",
+        StatusCode.UNSAFE_SUBTRACTION: "unsafe_subtraction",
+        StatusCode.EXACT_SINGULAR: "exact_singular",
+        StatusCode.SVD_FAILED: "svd_failed",
+        StatusCode.NUMERICALLY_UNRESOLVED: "numerically_unresolved",
+        StatusCode.EXACT_ROUNDED: "exact_rounded",
+        StatusCode.FLOATING_ESTIMATE: "floating_estimate",
     }
 )
 
 
-def _decode_label(value: int | np.integer) -> str:
+def decode_label(value: int | np.integer) -> str:
     """Decode one internal byte code, rejecting corrupt or unknown values."""
 
     try:
-        code = _StatusCode(int(value))
+        code = StatusCode(int(value))
     except (TypeError, ValueError) as error:
         raise ValueError(f"unknown mesh-quality status code {value!r}") from error
     try:
@@ -114,8 +114,8 @@ def _decode_label(value: int | np.integer) -> str:
 class Measurements:
     """Per-tetrahedron results; unset entries are NaN with an explanatory status code.
 
-    ``*_method`` and ``*_status`` arrays hold ``_StatusCode`` values and are
-    decoded to labels by ``_decode_label``. Volumes ending ``_m3`` are in cubic
+    ``*_method`` and ``*_status`` arrays hold ``StatusCode`` values and are
+    decoded to labels by ``decode_label``. Volumes ending ``_m3`` are in cubic
     metres and exist only when a length scale was given.
     """
 
@@ -210,18 +210,18 @@ def _filtered_determinants(
     return determinant, bound, accepted
 
 
-def _fraction_float(value: Fraction) -> tuple[float, _StatusCode]:
+def _fraction_float(value: Fraction) -> tuple[float, StatusCode]:
     if value == 0:
-        return 0.0, _StatusCode.EXACT_ZERO
+        return 0.0, StatusCode.EXACT_ZERO
     try:
         converted = float(value)
     except OverflowError:
-        return math.nan, _StatusCode.OVERFLOW
+        return math.nan, StatusCode.OVERFLOW
     if not math.isfinite(converted):
-        return math.nan, _StatusCode.OVERFLOW
+        return math.nan, StatusCode.OVERFLOW
     if converted == 0.0:
-        return math.nan, _StatusCode.UNDERFLOW
-    return converted, _StatusCode.AVAILABLE
+        return math.nan, StatusCode.UNDERFLOW
+    return converted, StatusCode.AVAILABLE
 
 
 def _restore_interval(
@@ -230,7 +230,7 @@ def _restore_interval(
     exponent: int,
     *,
     scale_m: float | None,
-) -> tuple[float, float, _StatusCode]:
+) -> tuple[float, float, StatusCode]:
     factor = 1.0 / 6.0
     restore_exponent = 3 * exponent
     if scale_m is not None:
@@ -245,29 +245,29 @@ def _restore_interval(
         restored_low = math.ldexp(low, restore_exponent)
         restored_high = math.ldexp(high, restore_exponent)
     except OverflowError:
-        return math.nan, math.nan, _StatusCode.AMBIGUOUS_REPRESENTATION
+        return math.nan, math.nan, StatusCode.AMBIGUOUS_REPRESENTATION
     if (
         not math.isfinite(restored)
         or not math.isfinite(restored_high)
         or (low > 0.0 and restored_low == 0.0)
         or (middle > 0.0 and restored == 0.0)
     ):
-        return math.nan, math.nan, _StatusCode.AMBIGUOUS_REPRESENTATION
+        return math.nan, math.nan, StatusCode.AMBIGUOUS_REPRESENTATION
     try:
         restored_bound = math.ldexp(bound * factor, restore_exponent)
     except OverflowError:
-        return math.nan, math.nan, _StatusCode.AMBIGUOUS_REPRESENTATION
+        return math.nan, math.nan, StatusCode.AMBIGUOUS_REPRESENTATION
     if not math.isfinite(restored_bound):
-        return math.nan, math.nan, _StatusCode.AMBIGUOUS_REPRESENTATION
+        return math.nan, math.nan, StatusCode.AMBIGUOUS_REPRESENTATION
     restored_bound += 16.0 * _U * (abs(restored) + abs(restored_bound)) + math.ulp(
         restored
     )
     if restored <= restored_bound:
-        return math.nan, math.nan, _StatusCode.AMBIGUOUS_REPRESENTATION
-    return restored, restored_bound, _StatusCode.AVAILABLE
+        return math.nan, math.nan, StatusCode.AMBIGUOUS_REPRESENTATION
+    return restored, restored_bound, StatusCode.AVAILABLE
 
 
-def _exact_center(points: np.ndarray) -> tuple[np.ndarray, _StatusCode]:
+def _exact_center(points: np.ndarray) -> tuple[np.ndarray, StatusCode]:
     values = np.empty(3, dtype=np.float64)
     for axis in range(3):
         exact = (
@@ -278,20 +278,20 @@ def _exact_center(points: np.ndarray) -> tuple[np.ndarray, _StatusCode]:
             / 4
         )
         value, status = _fraction_float(exact)
-        if status not in {_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO}:
+        if status not in {StatusCode.AVAILABLE, StatusCode.EXACT_ZERO}:
             center_status = (
-                _StatusCode.CENTER_OVERFLOW
-                if status == _StatusCode.OVERFLOW
-                else _StatusCode.CENTER_UNDERFLOW
+                StatusCode.CENTER_OVERFLOW
+                if status == StatusCode.OVERFLOW
+                else StatusCode.CENTER_UNDERFLOW
             )
             return np.full(3, np.nan), center_status
         values[axis] = value
-    return values, _StatusCode.AVAILABLE
+    return values, StatusCode.AVAILABLE
 
 
 def _scaled_center(
     scaled_points: np.ndarray, original_points: np.ndarray, exponent: int
-) -> tuple[np.ndarray, _StatusCode]:
+) -> tuple[np.ndarray, StatusCode]:
     totals = np.asarray(
         [
             math.fsum(float(value) for value in scaled_points[:, axis])
@@ -312,7 +312,7 @@ def _scaled_center(
         return _exact_center(original_points)
     if np.any((restored != 0.0) & (np.abs(restored) < _MIN_NORMAL)):
         return _exact_center(original_points)
-    return restored, _StatusCode.AVAILABLE
+    return restored, StatusCode.AVAILABLE
 
 
 def _condition_chunk(
@@ -339,18 +339,18 @@ def _condition_chunk(
             except np.linalg.LinAlgError as error:
                 results.append((int(index), None, error))
     for index, values, error in results:
-        if condition_status[index] == _StatusCode.EXACT_SINGULAR:
+        if condition_status[index] == StatusCode.EXACT_SINGULAR:
             continue
         if error is not None or values is None or not np.all(np.isfinite(values)):
-            condition_status[index] = _StatusCode.SVD_FAILED
+            condition_status[index] = StatusCode.SVD_FAILED
             continue
         maximum = float(values[0])
         minimum = float(values[-1])
         if maximum == 0.0 or minimum == 0.0 or minimum <= 3.0 * _EPS * maximum:
-            condition_status[index] = _StatusCode.NUMERICALLY_UNRESOLVED
+            condition_status[index] = StatusCode.NUMERICALLY_UNRESOLVED
             continue
         kappa_j[index] = maximum / minimum
-        condition_status[index] = _StatusCode.AVAILABLE
+        condition_status[index] = StatusCode.AVAILABLE
 
 
 @dataclass
@@ -382,18 +382,18 @@ class _Workspace:
 def _allocate_workspace(count: int, length_scale_m: float | None) -> _Workspace:
     """Create every array unset: NaN values, UNAVAILABLE statuses."""
     m3_status = (
-        _StatusCode.NOT_REQUESTED if length_scale_m is None else _StatusCode.UNAVAILABLE
+        StatusCode.NOT_REQUESTED if length_scale_m is None else StatusCode.UNAVAILABLE
     )
     return _Workspace(
         orientation=np.zeros(count, dtype=np.int8),
-        orientation_method=np.full(count, _StatusCode.UNAVAILABLE, dtype=np.uint8),
+        orientation_method=np.full(count, StatusCode.UNAVAILABLE, dtype=np.uint8),
         determinant_estimate=np.full(count, np.nan, dtype=np.float64),
         determinant_error_bound=np.full(count, np.nan, dtype=np.float64),
         determinant_scale_exponent=np.zeros(count, dtype=np.int32),
         signed_volume=np.full(count, np.nan, dtype=np.float64),
         volume=np.full(count, np.nan, dtype=np.float64),
-        volume_status=np.full(count, _StatusCode.UNAVAILABLE, dtype=np.uint8),
-        volume_method=np.full(count, _StatusCode.UNAVAILABLE, dtype=np.uint8),
+        volume_status=np.full(count, StatusCode.UNAVAILABLE, dtype=np.uint8),
+        volume_method=np.full(count, StatusCode.UNAVAILABLE, dtype=np.uint8),
         volume_error_bound=np.full(count, np.nan, dtype=np.float64),
         signed_volume_m3=np.full(count, np.nan, dtype=np.float64),
         volume_m3=np.full(count, np.nan, dtype=np.float64),
@@ -401,9 +401,9 @@ def _allocate_workspace(count: int, length_scale_m: float | None) -> _Workspace:
         volume_m3_method=np.full(count, m3_status, dtype=np.uint8),
         volume_m3_error_bound=np.full(count, np.nan, dtype=np.float64),
         kappa_j=np.full(count, np.nan, dtype=np.float64),
-        condition_status=np.full(count, _StatusCode.UNAVAILABLE, dtype=np.uint8),
+        condition_status=np.full(count, StatusCode.UNAVAILABLE, dtype=np.uint8),
         centers=np.full((count, 3), np.nan, dtype=np.float64),
-        center_status=np.full(count, _StatusCode.UNAVAILABLE, dtype=np.uint8),
+        center_status=np.full(count, StatusCode.UNAVAILABLE, dtype=np.uint8),
         fallback_used=np.zeros(count, dtype=np.bool_),
     )
 
@@ -423,7 +423,7 @@ def measure(mesh: MeshData, length_scale_m: float | None) -> Measurements:
         _measure_chunk(mesh, work, rows, length_scale_m)
     return Measurements(
         **{
-            item.name: _readonly(getattr(work, item.name))
+            item.name: readonly(getattr(work, item.name))
             for item in dataclasses.fields(work)
         }
     )
@@ -432,7 +432,7 @@ def measure(mesh: MeshData, length_scale_m: float | None) -> Measurements:
 def _mark_unmeasurable(
     work: _Workspace,
     rows: np.ndarray,
-    status: _StatusCode,
+    status: StatusCode,
     length_scale_m: float | None,
 ) -> None:
     """Record why these elements have no measurements (missing or non-finite input)."""
@@ -455,7 +455,7 @@ def _measure_chunk(
     """Measure one chunk of elements into ``work``."""
     indices = mesh.node_indices[rows]
     missing = np.any(indices < 0, axis=1)
-    _mark_unmeasurable(work, rows[missing], _StatusCode.MISSING_NODES, length_scale_m)
+    _mark_unmeasurable(work, rows[missing], StatusCode.MISSING_NODES, length_scale_m)
 
     present_rows = rows[~missing]
     if not len(present_rows):
@@ -463,7 +463,7 @@ def _measure_chunk(
     present_points = mesh.coordinates[mesh.node_indices[present_rows]]
     finite = np.all(np.isfinite(present_points), axis=(1, 2))
     _mark_unmeasurable(
-        work, present_rows[~finite], _StatusCode.NONFINITE_COORDINATES, length_scale_m
+        work, present_rows[~finite], StatusCode.NONFINITE_COORDINATES, length_scale_m
     )
 
     valid_rows = present_rows[finite]
@@ -482,9 +482,7 @@ def _measure_chunk(
     rejected_rows = np.concatenate(
         (
             valid_rows[~safe],
-            safe_rows[
-                work.orientation_method[safe_rows] != _StatusCode.FLOATING_FILTER
-            ],
+            safe_rows[work.orientation_method[safe_rows] != StatusCode.FLOATING_FILTER],
         )
     )
     for row_value in rejected_rows:
@@ -547,12 +545,12 @@ def _classify_scaling(
     edge_normal = _normal_rows(scaling.edges)
     safe = reversible & edge_normal
 
-    work.condition_status[valid_rows[~scaled_normal]] = _StatusCode.SCALING_SUBNORMAL
+    work.condition_status[valid_rows[~scaled_normal]] = StatusCode.SCALING_SUBNORMAL
     work.condition_status[valid_rows[scaled_normal & ~reversible]] = (
-        _StatusCode.SCALING_NOT_REVERSIBLE
+        StatusCode.SCALING_NOT_REVERSIBLE
     )
     work.condition_status[valid_rows[reversible & ~edge_normal]] = (
-        _StatusCode.UNSAFE_SUBTRACTION
+        StatusCode.UNSAFE_SUBTRACTION
     )
     return safe
 
@@ -585,7 +583,7 @@ def _filter_orientation(
         work.determinant_error_bound[safe_rows] = bounds
         accepted_rows = safe_rows[accepted]
         work.orientation[accepted_rows] = np.where(estimates[accepted] > 0.0, 1, -1)
-        work.orientation_method[accepted_rows] = _StatusCode.FLOATING_FILTER
+        work.orientation_method[accepted_rows] = StatusCode.FLOATING_FILTER
     return accepted_rows
 
 
@@ -612,18 +610,18 @@ class _ExactFallback:
         work.fallback_used[row] = True
         sign = 1 if exact_determinant > 0 else -1 if exact_determinant < 0 else 0
         work.orientation[row] = sign
-        work.orientation_method[row] = _StatusCode.EXACT_DYADIC
+        work.orientation_method[row] = StatusCode.EXACT_DYADIC
         exact_signed = exact_determinant / 6
         magnitude, status = _fraction_float(abs(exact_signed))
         signed, signed_status = _fraction_float(exact_signed)
         work.volume_status[row] = status
-        work.volume_method[row] = _StatusCode.EXACT_ROUNDED
-        if status in {_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO}:
+        work.volume_method[row] = StatusCode.EXACT_ROUNDED
+        if status in {StatusCode.AVAILABLE, StatusCode.EXACT_ZERO}:
             work.volume[row] = magnitude
-        if signed_status in {_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO}:
+        if signed_status in {StatusCode.AVAILABLE, StatusCode.EXACT_ZERO}:
             work.signed_volume[row] = signed
         if sign == 0:
-            work.condition_status[row] = _StatusCode.EXACT_SINGULAR
+            work.condition_status[row] = StatusCode.EXACT_SINGULAR
             work.kappa_j[row] = math.inf
 
 
@@ -635,11 +633,11 @@ def _restore_filtered_volume(work: _Workspace, exact: _ExactFallback, row: int) 
         int(work.determinant_scale_exponent[row]),
         scale_m=None,
     )
-    if restored_status == _StatusCode.AVAILABLE:
+    if restored_status == StatusCode.AVAILABLE:
         work.volume[row] = restored_volume
         work.signed_volume[row] = math.copysign(restored_volume, work.orientation[row])
-        work.volume_status[row] = _StatusCode.AVAILABLE
-        work.volume_method[row] = _StatusCode.FLOATING_ESTIMATE
+        work.volume_status[row] = StatusCode.AVAILABLE
+        work.volume_method[row] = StatusCode.FLOATING_ESTIMATE
         work.volume_error_bound[row] = restored_bound
     else:
         exact.apply_to_volume(row)
@@ -662,13 +660,13 @@ def _fill_si_volumes(
                 int(work.determinant_scale_exponent[row]),
                 scale_m=length_scale_m,
             )
-            if status_si == _StatusCode.AVAILABLE:
+            if status_si == StatusCode.AVAILABLE:
                 work.volume_m3[row] = restored_si
                 work.signed_volume_m3[row] = math.copysign(
                     restored_si, work.orientation[row]
                 )
-                work.volume_m3_status[row] = _StatusCode.AVAILABLE
-                work.volume_m3_method[row] = _StatusCode.FLOATING_ESTIMATE
+                work.volume_m3_status[row] = StatusCode.AVAILABLE
+                work.volume_m3_method[row] = StatusCode.FLOATING_ESTIMATE
                 work.volume_m3_error_bound[row] = restored_si_bound
                 continue
             exact.determinant(row)
@@ -677,8 +675,8 @@ def _fill_si_volumes(
         value_si, status_si = _fraction_float(abs(exact_signed_si))
         signed_si, signed_si_status = _fraction_float(exact_signed_si)
         work.volume_m3_status[row] = status_si
-        work.volume_m3_method[row] = _StatusCode.EXACT_ROUNDED
-        if status_si in {_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO}:
+        work.volume_m3_method[row] = StatusCode.EXACT_ROUNDED
+        if status_si in {StatusCode.AVAILABLE, StatusCode.EXACT_ZERO}:
             work.volume_m3[row] = value_si
-        if signed_si_status in {_StatusCode.AVAILABLE, _StatusCode.EXACT_ZERO}:
+        if signed_si_status in {StatusCode.AVAILABLE, StatusCode.EXACT_ZERO}:
             work.signed_volume_m3[row] = signed_si

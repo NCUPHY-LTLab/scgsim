@@ -24,13 +24,13 @@ from typing import Any
 
 from scgsim.aedt._data import canonical_sha256
 from scgsim.aedt.preparation.planar import (
-    _INSET_CIRCLE_POINTS,
-    _INSET_METHOD,
-    _KLAYOUT_COORD_MAX,
-    _KLAYOUT_COORD_MIN,
-    _klayout_region,
-    _plain_geometry_source,
-    _regions_from_klayout,
+    INSET_CIRCLE_POINTS,
+    INSET_METHOD,
+    KLAYOUT_COORD_MAX,
+    KLAYOUT_COORD_MIN,
+    klayout_region,
+    plain_geometry_source,
+    regions_from_klayout,
     validate_geometry_workers,
 )
 
@@ -95,7 +95,7 @@ def _inset_tasks(
             and binding["contribution"]["contribution_id"] not in selected
         ):
             continue
-        support = _plain_geometry_source(binding["mask_support"])
+        support = plain_geometry_source(binding["mask_support"])
         key = support["group_identity_sha256"]
         if key not in grouped:
             grouped[key] = (support, [])
@@ -168,21 +168,21 @@ def _inset_group_task(
     if support["klayout_version"] != version("klayout"):
         raise RuntimeError("prepared EPR KLayout version differs from worker runtime")
     dbu_um = float(support["source_dbu_um"])
-    physical = _klayout_region(support["support_regions"], dbu_um, k)
+    physical = klayout_region(support["support_regions"], dbu_um, k)
     insets: dict[int, Any] = {0: physical}
     result: dict[tuple[str, float], dict[str, Any]] = {}
     for member in members:
-        attribution = _klayout_region(member["attribution_regions"], dbu_um, k)
+        attribution = klayout_region(member["attribution_regions"], dbu_um, k)
         for requested in member["margins_um"]:
             margin_um = float(requested)
             if not math.isfinite(margin_um) or margin_um < 0:
                 raise ValueError("surface EPR margin must be finite and nonnegative")
-            if margin_um / dbu_um >= _KLAYOUT_COORD_MAX:
+            if margin_um / dbu_um >= KLAYOUT_COORD_MAX:
                 raise OverflowError("EPR margin exceeds KLayout integer range")
             radius = k.DPoint(margin_um, 0).to_itype(dbu_um).x
             if radius not in insets:
                 insets[radius] = _klayout_inset(physical, radius, k)
-            regions = _regions_from_klayout(insets[radius] & attribution, dbu_um)
+            regions = regions_from_klayout(insets[radius] & attribution, dbu_um)
             result[(member["binding_id"], margin_um)] = {
                 "regions": regions,
                 "requested_margin_um": margin_um,
@@ -209,8 +209,8 @@ def _klayout_inset(support: Any, radius: int, k: Any) -> Any:
     bounds = support.bbox()
     padding = 2 * radius + 1
     if any(
-        coordinate < _KLAYOUT_COORD_MIN + radius
-        or coordinate > _KLAYOUT_COORD_MAX - radius
+        coordinate < KLAYOUT_COORD_MIN + radius
+        or coordinate > KLAYOUT_COORD_MAX - radius
         for coordinate in (
             bounds.left - padding,
             bounds.bottom - padding,
@@ -231,7 +231,7 @@ def _klayout_inset(support: Any, radius: int, k: Any) -> Any:
         - support
     )
     circle = k.Polygon.ellipse(
-        k.Box(-radius, -radius, radius, radius), _INSET_CIRCLE_POINTS
+        k.Box(-radius, -radius, radius, radius), INSET_CIRCLE_POINTS
     )
     return (support - complement.minkowski_sum(circle).merged()).merged()
 
@@ -270,7 +270,7 @@ def plan_inset_sheet_names(
                     {
                         "plane": binding["mask_plane"],
                         "region": region,
-                        "method": _INSET_METHOD,
+                        "method": INSET_METHOD,
                         "source_dbu_um": dbu_um,
                         "klayout_version": version("klayout"),
                     }
@@ -295,7 +295,7 @@ def plan_inset_sheet_names(
     }
 
 
-def _base_sheet_plan(
+def base_sheet_plan(
     bindings: Sequence[Mapping[str, Any]],
 ) -> dict[str, dict[str, Any]]:
     """Name the unmasked base sheet of each binding; shared geometry shares a sheet."""

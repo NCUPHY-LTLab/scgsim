@@ -24,15 +24,15 @@ from scgsim.geometry.models.input import (
     SemanticEntitySpec,
 )
 from scgsim.geometry.source._occurrence import (
-    _entity_from_layer_record,
-    _gds_polygons_for_entity,
-    _is_record_sequence,
-    _polygons_by_layer,
-    _resolve_material_kind,
+    collect_polygons_by_layer,
+    entity_from_layer_record,
+    gds_polygons_for_entity,
+    is_record_sequence,
+    resolve_material_kind,
 )
-from scgsim.geometry.source.ground import _derived_ground_polygons
+from scgsim.geometry.source.ground import derived_ground_polygons
 from scgsim.geometry.source.plan_source_checks import verify_paired_plan_sources
-from scgsim.geometry.source.port_sheets import _port_sheet_regions_from_stack_metadata
+from scgsim.geometry.source.port_sheets import port_sheet_regions_from_stack_metadata
 from scgsim.geometry.source.stack import build_component_stack
 
 if TYPE_CHECKING:
@@ -119,7 +119,7 @@ def build_gds_stack_geometry_input(
         str(effective_top_cell_name) if effective_top_cell_name else None,
     )
     cell_bounds = _cell_bounds_um(cell)
-    polygons_by_layer = _polygons_by_layer(cell)
+    polygons_by_layer = collect_polygons_by_layer(cell)
     if (
         stack_metadata.get("component_semantics_schema_version")
         == _COMPONENT_SEMANTICS_PLAN_SCHEMA
@@ -157,12 +157,12 @@ def build_gds_stack_geometry_input(
         "cell_bounds_um": cell_bounds,
         "source_dbu_um": float(library.precision) * 1e6,
     }
-    from scgsim.geometry.source.intents import _route_a_sheet_interfaces
+    from scgsim.geometry.source.intents import route_a_sheet_interfaces
 
-    combined_metadata["interface_intents_2d"] = _route_a_sheet_interfaces(
+    combined_metadata["interface_intents_2d"] = route_a_sheet_interfaces(
         entities, polygons
     )
-    port_sheet_regions = _port_sheet_regions_from_stack_metadata(
+    port_sheet_regions = port_sheet_regions_from_stack_metadata(
         stack_metadata,
         polygons_by_layer=polygons_by_layer,
         host_entities=entities,
@@ -193,7 +193,7 @@ def _stack_sections(
 ) -> tuple[Any, Mapping[str, Any], Mapping[str, Any], Mapping[str, Any]]:
     """Return the stack's layers, solution regions, materials and metadata."""
     raw_layers = stack_mapping.get("layers")
-    if not _is_record_sequence(raw_layers):
+    if not is_record_sequence(raw_layers):
         raise TypeError("stack_file must define sequence 'layers'")
 
     solution_regions = stack_mapping.get("solution_regions")
@@ -220,7 +220,7 @@ def _lower_stack_entities(
     """Solution-region entities first, then layer entities in stack order."""
     polygons: list[LayoutPolygonSpec] = []
     entities: list[SemanticEntitySpec] = [
-        _solution_region_entity_from_record(
+        solution_region_entity_from_record(
             semantic_id,
             record,
             materials=materials,
@@ -434,7 +434,7 @@ def _cell_bounds_um(cell: Any) -> dict[str, float]:
     }
 
 
-def _solution_region_entity_from_record(
+def solution_region_entity_from_record(
     semantic_id: Any,
     record: Any,
     *,
@@ -466,7 +466,7 @@ def _solution_region_entity_from_record(
         semantic_id=semantic_id,
         role=record.get("role", "solution_region"),
         material_id=record.get("material_id", semantic_id),
-        material_kind=_resolve_material_kind(
+        material_kind=resolve_material_kind(
             record,
             material_id=record.get("material_id", semantic_id),
             materials=materials,
@@ -487,7 +487,7 @@ def _entities_and_polygons_from_layer_record(
     cell_bounds_um: Mapping[str, float],
     domain_bounds_by_semantic_id: Mapping[str, Mapping[str, Any]],
 ) -> tuple[tuple[SemanticEntitySpec, tuple[LayoutPolygonSpec, ...]], ...]:
-    entity = _entity_from_layer_record(record, materials=materials)
+    entity = entity_from_layer_record(record, materials=materials)
     geometry_source = str(entity.geometry.get("geometry_source", "gds_polygon"))
     if geometry_source == "die_face_minus_ground_mask":
         occurrence_polygons = entity.geometry.get("source_occurrence_polygons_um")
@@ -505,7 +505,7 @@ def _entities_and_polygons_from_layer_record(
                 for index, region in enumerate(occurrence_polygons)
             )
         else:
-            entity_polygons = _derived_ground_polygons(
+            entity_polygons = derived_ground_polygons(
                 entity,
                 polygons_by_layer=polygons_by_layer,
                 cell_bounds_um=cell_bounds_um,
@@ -520,7 +520,7 @@ def _entities_and_polygons_from_layer_record(
             (_entity_with_polygon_geometry(entity, entity_polygons), entity_polygons),
         )
     elif geometry_source == "gds_polygon":
-        entity_polygons = _gds_polygons_for_entity(
+        entity_polygons = gds_polygons_for_entity(
             entity,
             polygons_by_layer=polygons_by_layer,
         )

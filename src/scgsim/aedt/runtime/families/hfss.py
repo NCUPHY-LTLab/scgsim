@@ -19,18 +19,18 @@ from scgsim.aedt.runtime.benchmark import (
     attach_simulation_benchmark,
 )
 from scgsim.aedt.runtime.families.hfss_body_ports import (
-    _assign_body_terminal_ports,
-    _bind_body_terminal_evidence,
+    assign_body_terminal_ports,
+    bind_body_terminal_evidence,
 )
-from scgsim.aedt.runtime.families.hfss_export import _export
+from scgsim.aedt.runtime.families.hfss_export import export
 from scgsim.aedt.runtime.families.hfss_readback import (
-    _bind_port_evidence,
-    _face_for_side,
-    _native_mesh_operation_names,
-    _native_mesh_readback,
-    _native_modal_oo_readback,
-    _native_terminal_readback,
-    _require_native_mesh_properties,
+    bind_port_evidence,
+    face_for_side,
+    native_mesh_operation_names,
+    native_mesh_readback,
+    native_modal_oo_readback,
+    native_terminal_readback,
+    require_native_mesh_properties,
 )
 from scgsim.aedt.runtime.native.common import (
     BoundAedtRequest,
@@ -144,7 +144,7 @@ def prepare_hfss(Hfss: Any, run_dir: Path, spec: HfssSpec) -> PreparedHfss:
             "status": "not_requested",
             "reason": "body-first request uses native adaptive mesh",
         }
-        ports = _assign_body_terminal_ports(app, spec, geometry)
+        ports = assign_body_terminal_ports(app, spec, geometry)
     else:
         materials = _import_and_bind(app, spec)
         region = _create_region(app, spec)
@@ -156,9 +156,9 @@ def prepare_hfss(Hfss: Any, run_dir: Path, spec: HfssSpec) -> PreparedHfss:
         raise RuntimeError("HFSS project was not saved before native port readback")
     setup = _read_hfss_setup(app, spec) if spec.run_control is not None else None
     ports = (
-        _bind_body_terminal_evidence(app, spec, geometry, ports)
+        bind_body_terminal_evidence(app, spec, geometry, ports)
         if isinstance(spec, HfssDrivenGeometrySpec)
-        else _bind_port_evidence(app, spec, ports)
+        else bind_port_evidence(app, spec, ports)
     )
     return PreparedHfss(
         app,
@@ -204,7 +204,7 @@ def export_hfss(prepared: PreparedHfss) -> dict[str, Any]:
     spec = prepared.request.parse()
     if not isinstance(spec, HfssSpec):
         raise TypeError("bound HFSS request did not retain an HFSS spec")
-    outputs, result_readback = _export(
+    outputs, result_readback = export(
         prepared.app, run_dir, spec, detached_data(prepared.ports)
     )
     outputs = detached_data(outputs)
@@ -265,10 +265,10 @@ def _assign_mesh(hfss: Any, spec: HfssSpec) -> dict[str, Any]:
         operation = hfss.mesh.assign_surface_mesh(
             objects, SURFACE_APPROXIMATION_LEVEL, name
         )
-        if operation is None or name not in _native_mesh_operation_names(hfss):
+        if operation is None or name not in native_mesh_operation_names(hfss):
             raise RuntimeError(f"{role} surface mesh readback failed")
-        native = _native_mesh_readback(hfss, name, objects)
-        _require_native_mesh_properties(
+        native = native_mesh_readback(hfss, name, objects)
+        require_native_mesh_properties(
             native,
             {
                 "Name": name,
@@ -308,10 +308,10 @@ def _assign_mesh(hfss: Any, spec: HfssSpec) -> dict[str, Any]:
                 "RefineInside": False,
                 "Enabled": True,
             }
-            if operation is None or name not in _native_mesh_operation_names(hfss):
+            if operation is None or name not in native_mesh_operation_names(hfss):
                 raise RuntimeError(f"uniform CPW {role} length mesh readback failed")
-            native = _native_mesh_readback(hfss, name, objects)
-            _require_native_mesh_properties(
+            native = native_mesh_readback(hfss, name, objects)
+            require_native_mesh_properties(
                 native,
                 {
                     "Name": name,
@@ -347,7 +347,7 @@ def _assign_ports(hfss: Any, spec: HfssSpec) -> list[dict[str, Any]]:
     centers = {face_id: center for face_id, center in faces}
     records: list[dict[str, Any]] = []
     for port, effective_port in zip(spec.ports, spec.effective_ports, strict=True):
-        face_id = _face_for_side(faces, port.side)
+        face_id = face_for_side(faces, port.side)
         if isinstance(port, TerminalPort):
             before = set(hfss.oboundary.GetExcitationsOfType("Terminal"))
             boundary = hfss.wave_port(
@@ -367,7 +367,7 @@ def _assign_ports(hfss: Any, spec: HfssSpec) -> list[dict[str, Any]]:
             boundary_name = unstripped_nonempty_text(
                 getattr(boundary, "name", port.name), "boundary.name"
             )
-            native = _native_terminal_readback(hfss, boundary_name, names[0], port)
+            native = native_terminal_readback(hfss, boundary_name, names[0], port)
             records.append(
                 {
                     "index": port.index,
@@ -406,7 +406,7 @@ def _assign_ports(hfss: Any, spec: HfssSpec) -> list[dict[str, Any]]:
                 raise RuntimeError(
                     f"modal excitation readback failed for {port.name!r}: {names!r}"
                 )
-            native = _native_modal_oo_readback(hfss, port.name)
+            native = native_modal_oo_readback(hfss, port.name)
             records.append(
                 {
                     "index": port.index,

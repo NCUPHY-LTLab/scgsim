@@ -9,14 +9,14 @@ from pathlib import Path
 from typing import Any
 
 
-def _json(path: Path) -> dict[str, Any]:
+def read_json_object(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise TypeError(f"{path.name} must contain a JSON object")
     return payload
 
 
-def _write_sorted_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
+def write_sorted_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -24,7 +24,7 @@ def _write_sorted_json_atomic(path: Path, payload: Mapping[str, Any]) -> None:
     temporary.replace(path)
 
 
-def _confined(root: Path, relative: str) -> Path:
+def confined(root: Path, relative: str) -> Path:
     path = Path(relative)
     if path.is_absolute():
         raise ValueError("preview artifact identity must be relative")
@@ -34,7 +34,7 @@ def _confined(root: Path, relative: str) -> Path:
     return resolved
 
 
-def _sha256(path: Path) -> str:
+def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
@@ -42,20 +42,20 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _receipt_authority_sha256(path: Path) -> str:
-    payload = _json(path)
+def receipt_authority_sha256(path: Path) -> str:
+    payload = read_json_object(path)
     payload.pop("geometry_preview", None)
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
 
 
-def _artifact_matches(root: Path, artifact: Any) -> bool:
+def artifact_matches(root: Path, artifact: Any) -> bool:
     if not isinstance(artifact, Mapping):
         return False
     relative = artifact.get("path")
     expected = artifact.get("sha256")
     if not isinstance(relative, str) or not isinstance(expected, str):
         return False
-    path = _confined(root, relative)
-    return path.is_file() and _sha256(path) == expected
+    path = confined(root, relative)
+    return path.is_file() and sha256(path) == expected

@@ -16,12 +16,12 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
-from .loaders._common import _sha256
-from .scene import _MODE_TITLES, _VIEWS, _Part
+from .loaders._common import sha256
+from .scene import MODE_TITLES, VIEWS, Part
 
 
-def _render_mode(
-    *, root: Path, mode_name: str, parts: tuple[_Part, ...]
+def render_mode(
+    *, root: Path, mode_name: str, parts: tuple[Part, ...]
 ) -> tuple[Path, list[dict[str, Any]]]:
     """Render every view of one mode plus a contact sheet into previews/geometry/<mode>."""
     if not parts:
@@ -53,14 +53,14 @@ def _render_mode(
             {
                 "path": path.relative_to(root).as_posix(),
                 "size": path.stat().st_size,
-                "sha256": _sha256(path),
+                "sha256": sha256(path),
             }
         )
     return final_dir / "contact-sheet.png", artifacts
 
 
-def _screenshot_views(pv: Any, parts: tuple[_Part, ...], directory: Path) -> None:
-    """Save one parallel-projection PNG per entry in _VIEWS."""
+def _screenshot_views(pv: Any, parts: tuple[Part, ...], directory: Path) -> None:
+    """Save one parallel-projection PNG per entry in VIEWS."""
     bounds = _combined_bounds(parts)
     center = (
         (bounds[0] + bounds[1]) / 2,
@@ -68,11 +68,11 @@ def _screenshot_views(pv: Any, parts: tuple[_Part, ...], directory: Path) -> Non
         (bounds[4] + bounds[5]) / 2,
     )
     span = max(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4])
-    _configure_headless_rendering()
-    for filename, label, direction, clip in _VIEWS:
+    configure_headless_rendering()
+    for filename, label, direction, clip in VIEWS:
         plotter = pv.Plotter(off_screen=True, window_size=(1600, 1200))
         plotter.set_background("white")
-        _add_parts(plotter, parts, clip=clip, center=center)
+        add_parts(plotter, parts, clip=clip, center=center)
         plotter.add_axes(line_width=3, labels_off=False)
         plotter.add_text(label, position="upper_left", font_size=12, color="black")
         vector = _unit(direction)
@@ -89,7 +89,7 @@ def _screenshot_views(pv: Any, parts: tuple[_Part, ...], directory: Path) -> Non
         plotter.close()
 
 
-def _contact_sheet(mode_name: str, parts: tuple[_Part, ...], directory: Path) -> Any:
+def _contact_sheet(mode_name: str, parts: tuple[Part, ...], directory: Path) -> Any:
     """Title, legend and a grid of the view screenshots on one 4800x4200 sheet."""
     from PIL import Image, ImageDraw, ImageFont
 
@@ -100,7 +100,7 @@ def _contact_sheet(mode_name: str, parts: tuple[_Part, ...], directory: Path) ->
     body_font = _font(ImageFont, 31)
     draw.text(
         (120, 70),
-        f"{_MODE_TITLES[mode_name]} — Geometry Preview",
+        f"{MODE_TITLES[mode_name]} — Geometry Preview",
         fill="black",
         font=title_font,
     )
@@ -110,14 +110,14 @@ def _contact_sheet(mode_name: str, parts: tuple[_Part, ...], directory: Path) ->
         fill="#444444",
         font=body_font,
     )
-    _draw_legend(draw, _legend(parts), body_font)
+    _draw_legend(draw, aggregate_legend(parts), body_font)
     draw.text(
         (120, 1360),
         "CURATED12 — cutaways are visualization clips, not solver boundaries",
         fill="#333333",
         font=header_font,
     )
-    for index, (filename, _, _, _) in enumerate(_VIEWS):
+    for index, (filename, _, _, _) in enumerate(VIEWS):
         tile = Image.open(directory / f"{filename}.png").convert("RGB")
         tile.thumbnail((1200, 900))
         x = (index % 4) * 1200
@@ -147,9 +147,9 @@ def _draw_legend(draw: Any, legend: list[dict[str, Any]], font: Any) -> None:
         draw.multiline_text((x + 72, y), text, fill="black", font=font, spacing=2)
 
 
-def _add_parts(
+def add_parts(
     plotter: Any,
-    parts: tuple[_Part, ...],
+    parts: tuple[Part, ...],
     *,
     clip: tuple[str, float] | None = None,
     center: tuple[float, float, float] | None = None,
@@ -172,7 +172,7 @@ def _add_parts(
             )
 
 
-def _interactive_legend(mode_name: str, parts: tuple[_Part, ...]) -> str:
+def interactive_legend(mode_name: str, parts: tuple[Part, ...]) -> str:
     rows = "".join(
         "<tr>"
         f"<td><span style='display:inline-block;width:1.1rem;height:1.1rem;"
@@ -182,11 +182,11 @@ def _interactive_legend(mode_name: str, parts: tuple[_Part, ...]) -> str:
         f"<td>{html.escape(item['role'])}</td>"
         f"<td style='text-align:right'>{item['count']}</td>"
         "</tr>"
-        for item in _legend(parts)
+        for item in aggregate_legend(parts)
     )
     return (
         "<div style='margin:0.4rem 0 0.8rem'>"
-        f"<strong>{html.escape(_MODE_TITLES[mode_name])} — Interactive Geometry</strong>"
+        f"<strong>{html.escape(MODE_TITLES[mode_name])} — Interactive Geometry</strong>"
         "<div style='color:#555;margin:0.2rem 0 0.5rem'>"
         "Color is presentation; semantic authority is solver metadata."
         "</div>"
@@ -197,7 +197,7 @@ def _interactive_legend(mode_name: str, parts: tuple[_Part, ...]) -> str:
     )
 
 
-def _legend(parts: tuple[_Part, ...] | list[_Part]) -> list[dict[str, Any]]:
+def aggregate_legend(parts: tuple[Part, ...] | list[Part]) -> list[dict[str, Any]]:
     aggregated: dict[tuple[str, str, str, str], int] = {}
     for part in parts:
         key = (part.semantic_id, part.label, part.role, part.color)
@@ -214,7 +214,7 @@ def _legend(parts: tuple[_Part, ...] | list[_Part]) -> list[dict[str, Any]]:
     ]
 
 
-def _combined_bounds(parts: tuple[_Part, ...]) -> tuple[float, ...]:
+def _combined_bounds(parts: tuple[Part, ...]) -> tuple[float, ...]:
     bounds = [part.dataset.bounds for part in parts if part.dataset.n_points]
     if not bounds:
         raise ValueError("preview geometry has no points")
@@ -231,7 +231,7 @@ def _combined_bounds(parts: tuple[_Part, ...]) -> tuple[float, ...]:
     return result
 
 
-def _configure_headless_rendering() -> None:
+def configure_headless_rendering() -> None:
     if os.environ.get("DISPLAY"):
         return
     window_name = os.environ.setdefault(

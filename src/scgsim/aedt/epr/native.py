@@ -22,25 +22,25 @@ from typing import Any
 
 from scgsim.aedt._data import canonical_sha256, detached
 from scgsim.aedt.epr.fields import create_verified_face_list
-from scgsim.aedt.epr.geometry import _base_sheet_plan
+from scgsim.aedt.epr.geometry import base_sheet_plan
 from scgsim.aedt.preparation.planar import (
-    _INSET_CIRCLE_POINTS,
-    _INSET_METHOD,
-    _entity_z_range,
-    _native_name,
+    INSET_CIRCLE_POINTS,
+    INSET_METHOD,
+    entity_z_range,
+    native_name,
 )
 from scgsim.aedt.runtime.native.common import (
-    _native_object_boolean_property,
-    _native_object_evidence,
+    native_object_boolean_property,
+    native_object_evidence,
 )
 from scgsim.aedt.runtime.native.hfss_bodies import (
-    _native_conductor_geometry as _native_conductor_geometry,
+    native_conductor_geometry as native_conductor_geometry,
 )
 from scgsim.aedt.runtime.native.hfss_junction_readback import (
-    _read_saved_hfss_design as _read_saved_hfss_design,
+    read_saved_hfss_design as read_saved_hfss_design,
 )
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-from scgsim.geometry._primitives.spatial import _geometry_ref_surface_z_um
+from scgsim.geometry.primitives.spatial import geometry_ref_surface_z_um
 
 
 def _analysis_surface_sheet(
@@ -63,7 +63,7 @@ def _analysis_surface_sheet(
             not isinstance(plane, Mapping) or plane.get("axis") != "z"
         ) and geometry_ref.get("shell_part") not in {"top", "bottom"}:
             raise ValueError("analysis surface loop requires an explicit Z plane")
-        z_um = _geometry_ref_surface_z_um(geometry_ref)
+        z_um = geometry_ref_surface_z_um(geometry_ref)
         points = [[float(x), float(y), z_um] for x, y in outer]
         holes = [
             [[float(x), float(y), z_um] for x, y in ring]
@@ -86,7 +86,7 @@ def _analysis_surface_sheet(
     if sheet is False or sheet is None:
         raise RuntimeError(f"failed to create analysis surface {name!r}")
     for index, ring in enumerate(holes):
-        hole_name = _native_name("hole", name, index)
+        hole_name = native_name("hole", name, index)
         hole = app.modeler.create_polyline(
             ring,
             cover_surface=True,
@@ -193,7 +193,7 @@ def bind_inset_surface_selections(
             {
                 "plane": plane,
                 "region": region,
-                "method": _INSET_METHOD,
+                "method": INSET_METHOD,
                 "source_dbu_um": dbu_um,
                 "klayout_version": version("klayout"),
             }
@@ -228,9 +228,9 @@ def bind_inset_surface_selections(
                 "adjacent_side": adjacent_side,
                 "native_normal": native_normal,
                 "polygon_approximation": {
-                    "method": _INSET_METHOD,
+                    "method": INSET_METHOD,
                     "source_dbu_um": dbu_um,
-                    "points_per_circle": _INSET_CIRCLE_POINTS,
+                    "points_per_circle": INSET_CIRCLE_POINTS,
                     "requested_margin_um": margin_um,
                     "integer_margin_dbu": planned["integer_margin_dbu"],
                     "effective_margin_um": planned["effective_margin_um"],
@@ -258,11 +258,11 @@ def _read_inset_sheet(
             {"plane_basis": plane, "local_region": region},
             name=name,
         )
-    native = _native_object_evidence(app, name)
+    native = native_object_evidence(app, name)
     faces = sheet.faces
     if native["native_object_type"] != "Sheet" or len(faces) != 1:
         raise RuntimeError(f"inset EPR selection {name!r} is not one sheet")
-    if _native_object_boolean_property(sheet, "Model"):
+    if native_object_boolean_property(sheet, "Model"):
         raise RuntimeError(f"inset EPR selection {name!r} became model geometry")
     normal = faces[0].normal
     if (
@@ -307,7 +307,7 @@ def bind_native_surface_references(
         kind = contribution["classification"]
         if contribution_id not in selected or kind not in {"MA", "MS", "SA"}:
             continue
-        z_um = _geometry_ref_surface_z_um(binding["geometry_ref"])
+        z_um = geometry_ref_surface_z_um(binding["geometry_ref"])
         owner, entities, candidates = _source_owned_solids(
             prepared, native_geometry, binding, specs
         )
@@ -388,9 +388,9 @@ def _source_cap(
 
     contribution_id = binding["contribution"]["contribution_id"]
     if binding["contribution"]["classification"] == "SA":
-        z_min, z_max = _entity_z_range(entity)
+        z_min, z_max = entity_z_range(entity)
     else:
-        representation, z_min, z_max = _native_conductor_geometry(source, entity)
+        representation, z_min, z_max = native_conductor_geometry(source, entity)
         if representation != "solid":
             raise RuntimeError(
                 f"native reference {contribution_id!r} owner is not a Solid"
@@ -500,7 +500,7 @@ def _native_reference_record(  # noqa: PLR0913 -- one argument per recorded fact
     face_ids = [int(face.id)]
     face_list = create_verified_face_list(
         app,
-        name=_native_name("reference", reference_id),
+        name=native_name("reference", reference_id),
         face_ids=face_ids,
         reuse_existing=True,
     )
@@ -576,7 +576,7 @@ def verify_saved_native_surface_references(
     verified = detached(references)
     if not verified:
         return verified
-    digest, design = _read_saved_hfss_design(
+    digest, design = read_saved_hfss_design(
         project_path, design_name, purpose="native surface reference"
     )
     setup = design.get("ModelSetup")
@@ -655,7 +655,7 @@ def add_analysis_surfaces(
     phase_seconds: dict[str, float] = {}
     surface_selections: list[dict[str, Any]] = []
     started = time.perf_counter()
-    base_names = _base_sheet_plan(prepared.surface_bindings)
+    base_names = base_sheet_plan(prepared.surface_bindings)
     base_points: dict[str, list[list[float]]] = {}
     for binding in prepared.surface_bindings:
         binding_id = str(binding["binding_id"])
@@ -671,7 +671,7 @@ def add_analysis_surfaces(
             if sheet is None:
                 raise RuntimeError(f"shared analysis surface {name!r} vanished")
             points = base_points[name]
-        native = _native_object_evidence(app, sheet.name)
+        native = native_object_evidence(app, sheet.name)
         if native["native_object_type"] != "Sheet" or len(sheet.faces) != 1:
             raise RuntimeError(f"analysis surface {name!r} is not one native sheet")
         normal = sheet.faces[0].normal
@@ -723,7 +723,7 @@ def bind_saved_analysis_surfaces(
 ) -> None:
     """Read EPR selection sheets from the saved common native model."""
     selections: list[dict[str, Any]] = []
-    base_names = _base_sheet_plan(prepared.surface_bindings)
+    base_names = base_sheet_plan(prepared.surface_bindings)
     for binding in prepared.surface_bindings:
         binding_id = str(binding["binding_id"])
         planned_name = base_names[binding_id]
@@ -731,7 +731,7 @@ def bind_saved_analysis_surfaces(
         obj = app.modeler.get_object_from_name(name)
         if obj is None or len(obj.faces) != 1:
             raise RuntimeError(f"saved analysis surface {name!r} is unavailable")
-        evidence = _native_object_evidence(app, name)
+        evidence = native_object_evidence(app, name)
         if evidence["native_object_type"] != "Sheet":
             raise RuntimeError(f"saved analysis surface {name!r} is not a sheet")
         normal = obj.faces[0].normal

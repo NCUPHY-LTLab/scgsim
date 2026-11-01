@@ -9,11 +9,11 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from ._expect import _as_float_map, _expect_int, _to_float
+from ._expect import as_float_map, expect_int, to_float
 from ._result_types import PalaceCost, PalacePerformance
 
 
-def _build_performance(palace_payload: dict[str, Any]) -> PalacePerformance:
+def build_performance(palace_payload: dict[str, Any]) -> PalacePerformance:
     elapsed = palace_payload.get("ElapsedTime")
     if not isinstance(elapsed, dict):
         raise TypeError("palace.json missing ElapsedTime block.")
@@ -53,7 +53,7 @@ def _build_performance(palace_payload: dict[str, Any]) -> PalacePerformance:
     return PalacePerformance(counts=counts, durations=durations)
 
 
-def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
+def build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
     problem_block = palace_payload.get("Problem")
     if not isinstance(problem_block, dict):
         raise TypeError("palace.json missing Problem block.")
@@ -63,20 +63,20 @@ def _build_cost(palace_payload: dict[str, Any]) -> PalaceCost:
         linear_solver = {}
 
     cost = PalaceCost(
-        problem_degrees_of_freedom=_expect_int(problem_block.get("DegreesOfFreedom")),
-        mesh_elements=_expect_int(problem_block.get("MeshElements")),
-        mpi_size=_expect_int(problem_block.get("MPISize")),
-        openmp_threads=_expect_int(problem_block.get("OpenMPThreads")),
-        peak_memory_megabytes=_as_float_map(
+        problem_degrees_of_freedom=expect_int(problem_block.get("DegreesOfFreedom")),
+        mesh_elements=expect_int(problem_block.get("MeshElements")),
+        mpi_size=expect_int(problem_block.get("MPISize")),
+        openmp_threads=expect_int(problem_block.get("OpenMPThreads")),
+        peak_memory_megabytes=as_float_map(
             palace_payload.get("PeakMemoryMegabytes"),
             ("Average", "Max", "Min", "Total"),
         ),
-        peak_node_memory_megabytes=_as_float_map(
+        peak_node_memory_megabytes=as_float_map(
             palace_payload.get("PeakNodeMemoryMegabytes"),
             ("Average", "Max", "Min", "Total"),
         ),
         linear_solver={
-            key: _to_float(value)
+            key: to_float(value)
             for key, value in linear_solver.items()
             if isinstance(linear_solver, dict)
             and isinstance(key, str)

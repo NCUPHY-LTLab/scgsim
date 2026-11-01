@@ -17,31 +17,31 @@ from typing import Any
 from scgsim.aedt._data import detached
 from scgsim.aedt._io import file_sha256
 from scgsim.aedt.preparation.planar import (
-    _junction_terminal_line,
-    _native_entity_name,
-    _native_name,
+    junction_terminal_line,
+    native_entity_name,
+    native_name,
 )
 from scgsim.aedt.runtime.native.common import (
-    _native_boundary_type,
-    _native_object_boolean_property,
-    _resolve_native_assignment,
+    native_boundary_type,
+    native_object_boolean_property,
     native_object_property,
+    resolve_native_assignment,
 )
-from scgsim.aedt.runtime.native.hfss_bodies import _native_conductor_geometry
+from scgsim.aedt.runtime.native.hfss_bodies import native_conductor_geometry
 from scgsim.aedt.runtime.native.hfss_planar_topology import (
-    _NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
-    _native_boundary_contact,
-    _native_closed_contact,
-    _native_coordinates_close,
-    _native_cross_sign,
-    _native_edge_covered,
-    _native_edge_section,
-    _native_extrusion_sides,
-    _native_planar_loops,
-    _native_polygon_correspondence,
-    _native_strict_inside,
-    _native_z_contact,
-    _native_z_may_contact,
+    NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
+    native_boundary_contact,
+    native_closed_contact,
+    native_coordinates_close,
+    native_cross_sign,
+    native_edge_covered,
+    native_edge_section,
+    native_extrusion_sides,
+    native_planar_loops,
+    native_polygon_correspondence,
+    native_strict_inside,
+    native_z_contact,
+    native_z_may_contact,
 )
 from scgsim.aedt.specs.epr import (
     PlanarJunction,
@@ -94,7 +94,7 @@ class _LiveContacts:
     )
 
 
-def _native_junction_live_readback(
+def native_junction_live_readback(
     app: Any, source: Mapping[str, Any], junction: PlanarJunction
 ) -> dict[str, Any]:
     """Verify live CAD/electrical state before authoring; line awaits native save.
@@ -136,7 +136,7 @@ def _native_junction_live_readback(
         contacts.possible_by_net,
     )
 
-    boundary_name = _native_name("junction_rlc", junction.junction_id)
+    boundary_name = native_name("junction_rlc", junction.junction_id)
     _assert_boundary_target(app, boundary_name, central.name, "Lumped RLC")
     _verify_junction_rlc_properties(app, boundary_name, junction)
     evidence.deviations.extend(
@@ -146,7 +146,7 @@ def _native_junction_live_readback(
     )
     return {
         "coordinate_comparison_policy": {
-            "absolute_tolerance_um": _NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
+            "absolute_tolerance_um": NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
             "relative_tolerance": 0.0,
             "scope": "SCGSim native junction readback; not an AEDT precision guarantee",
             "geometry_moved": False,
@@ -191,13 +191,13 @@ def _read_central_face(
     """Find the one four-edge central face and match it to its authored polygon."""
     polygons = _polygons_by_id(source)
     z_um = float(record["z_um"])
-    name = _native_name("junction", junction_id)
+    name = native_name("junction", junction_id)
     central = app.modeler.get_object_from_name(name)
     if central is None or len(central.faces) != 1 or len(central.faces[0].edges) != 4:
         raise RuntimeError("native central junction is not one four-edge face")
-    loops = _native_planar_loops(central, z_um, evidence.observations)
+    loops = native_planar_loops(central, z_um, evidence.observations)
     expected = polygons[record["central_polygon_id"]]
-    matches = _native_polygon_correspondence(
+    matches = native_polygon_correspondence(
         loops, expected, name, evidence.deviations, subdivisions=False
     )
     z_range = _z_extent(evidence.observations[0]["face_vertices_um"])
@@ -208,7 +208,7 @@ def _assert_boundary_target(
     app: Any, boundary_name: str, target: str, kind: str
 ) -> None:
     """Require boundary ``boundary_name`` to be a ``kind`` boundary on only ``target``."""
-    if _native_boundary_type(app, boundary_name) != kind:
+    if native_boundary_type(app, boundary_name) != kind:
         raise RuntimeError(f"native junction boundary type differs: {boundary_name!r}")
     raw = app.oboundary.GetBoundaryAssignment(boundary_name)
     if raw is None:
@@ -218,7 +218,7 @@ def _assert_boundary_target(
     ids = [int(v) for v in raw]
     if not ids or len(ids) != len(set(ids)):
         raise RuntimeError("native junction boundary assignment IDs are invalid")
-    _, _, names = _resolve_native_assignment(app, ids)
+    _, _, names = resolve_native_assignment(app, ids)
     if names != {target}:
         raise RuntimeError(
             f"native junction boundary has wrong targets: {boundary_name!r}"
@@ -239,11 +239,11 @@ def _read_source_conductors(
     }
     contacts = _LiveContacts()
     for entity in source["conductors"]:
-        representation, z_min_um, z_max_um = _native_conductor_geometry(source, entity)
+        representation, z_min_um, z_max_um = native_conductor_geometry(source, entity)
         for pid in entity["polygon_ids"]:
             if pid in authored_ids:
                 continue
-            name = _native_entity_name(source, "conductor", entity["semantic_id"], pid)
+            name = native_entity_name(source, "conductor", entity["semantic_id"], pid)
             obj = app.modeler.get_object_from_name(name)
             if obj is None:
                 raise RuntimeError(
@@ -263,9 +263,9 @@ def _read_source_conductors(
             key = entity["semantic_id"], pid
             contacts.loops_by_polygon[key] = loops
             contacts.z_by_polygon[key] = native_z, solid
-            if _native_z_contact(central_z, False, native_z, solid):
+            if native_z_contact(central_z, False, native_z, solid):
                 contacts.touching_by_net.setdefault(entity["net_id"], []).extend(loops)
-            if _native_z_may_contact(central_z, native_z):
+            if native_z_may_contact(central_z, native_z):
                 contacts.possible_by_net.setdefault(entity["net_id"], []).extend(loops)
     return contacts
 
@@ -279,15 +279,15 @@ def _read_source_polygon(
     A sheet is a zero-thickness face carrying a Perfect E boundary; anything else
     is a finite-thickness solid lowered as PEC.
     """
-    loops = _native_planar_loops(body.obj, body.z_min_um, evidence.observations)
-    bottom_matches = _native_polygon_correspondence(
+    loops = native_planar_loops(body.obj, body.z_min_um, evidence.observations)
+    bottom_matches = native_polygon_correspondence(
         loops, body.wanted, body.name, evidence.deviations
     )
     bottom_vertices = evidence.observations[-1]["face_vertices_um"]
     if body.representation == "sheet":
         _assert_boundary_target(
             app,
-            _native_name("pec_boundary", body.semantic_id, body.polygon_id),
+            native_name("pec_boundary", body.semantic_id, body.polygon_id),
             body.name,
             "Perfect E",
         )
@@ -318,24 +318,24 @@ def _verify_finite_pec_body(
     bottom_xyz = _xy_to_vertex(bottom_vertices)
     if (
         native_object_property(obj, "Material").strip('"').casefold() != "pec"
-        or _native_object_boolean_property(obj, "Solve Inside") is not False
+        or native_object_boolean_property(obj, "Solve Inside") is not False
     ):
         raise RuntimeError(
             f"native junction conductor lacks finite PEC lowering: {name!r}"
         )
     zs = [float(vertex.position[2]) for vertex in obj.vertices]
-    if not zs or not _native_coordinates_close(
+    if not zs or not native_coordinates_close(
         (min(zs), max(zs)), (body.z_min_um, body.z_max_um)
     ):
         raise RuntimeError(
             f"native junction source material/Z lineage differs: {name!r}"
         )
-    top = _native_planar_loops(obj, max(zs), evidence.observations)
-    top_matches = _native_polygon_correspondence(
+    top = native_planar_loops(obj, max(zs), evidence.observations)
+    top_matches = native_polygon_correspondence(
         top, body.wanted, name, evidence.deviations
     )
     try:
-        _native_polygon_correspondence(
+        native_polygon_correspondence(
             top, {"exterior": loops[0][0], "holes": loops[0][1:]}, name, []
         )
     except RuntimeError as exc:
@@ -345,15 +345,15 @@ def _verify_finite_pec_body(
     top_xyz = _xy_to_vertex(evidence.observations[-1]["face_vertices_um"])
     thickness = body.z_max_um - body.z_min_um
     if any(
-        not _native_coordinates_close(bottom_matches[point], top_matches[point])
-        or not _native_coordinates_close(
+        not native_coordinates_close(bottom_matches[point], top_matches[point])
+        or not native_coordinates_close(
             (top_xyz[top_matches[point]][2] - bottom_xyz[bottom_matches[point]][2],),
             (thickness,),
         )
         for point in bottom_matches
     ):
         raise RuntimeError("native junction actual top/bottom extrusion differs")
-    _native_extrusion_sides(
+    native_extrusion_sides(
         obj,
         (body.z_min_um, body.z_max_um),
         thickness,
@@ -369,18 +369,16 @@ def _verify_central_interior_clear(
     central_midpoint = tuple(sum(p[i] for p in points) / 4 for i in (0, 1))
     for bodies in possible_by_net.values():
         for rings in bodies:
-            if any(_native_strict_inside(p, (points,)) for p in rings[0]) or any(
-                _native_strict_inside(p, rings) for p in (*points, central_midpoint)
+            if any(native_strict_inside(p, (points,)) for p in rings[0]) or any(
+                native_strict_inside(p, rings) for p in (*points, central_midpoint)
             ):
                 raise RuntimeError("native PEC occupies central RLC interior")
             for ring in rings:
                 for a, b in zip(ring, (*ring[1:], ring[0]), strict=False):
                     for c, d in zip(points, (*points[1:], points[0]), strict=False):
                         if (
-                            _native_cross_sign(a, b, c) * _native_cross_sign(a, b, d)
-                            < 0
-                            and _native_cross_sign(c, d, a)
-                            * _native_cross_sign(c, d, b)
+                            native_cross_sign(a, b, c) * native_cross_sign(a, b, d) < 0
+                            and native_cross_sign(c, d, a) * native_cross_sign(c, d, b)
                             < 0
                         ):
                             raise RuntimeError(
@@ -413,10 +411,10 @@ def _verify_derived_ends(
             for (eid, pid), loops in loops_by_polygon.items()
             if eid == end["source_entity_id"]
             and pid not in derived_ids
-            and _native_z_contact(end_z, end_solid, *z_by_polygon[eid, pid])
+            and native_z_contact(end_z, end_solid, *z_by_polygon[eid, pid])
             for rings in loops
         ]
-        if not _native_boundary_contact(end_loops, arms):
+        if not native_boundary_contact(end_loops, arms):
             raise RuntimeError(
                 "native derived end lacks positive-length source-arm contact"
             )
@@ -424,10 +422,10 @@ def _verify_derived_ends(
             rings
             for (eid, pid), loops in loops_by_polygon.items()
             if entity_nets[eid] != end["net_id"]
-            and _native_z_may_contact(end_z, z_by_polygon[eid, pid][0])
+            and native_z_may_contact(end_z, z_by_polygon[eid, pid][0])
             for rings in loops
         ]
-        if _native_closed_contact(end_loops, foreign):
+        if native_closed_contact(end_loops, foreign):
             raise RuntimeError("native derived end contacts another net")
 
 
@@ -444,7 +442,7 @@ def _verify_junction_edge_contacts(
     """
     edge_evidence = []
     for start, end, correct_net in edge_specs:
-        if correct_net is not None and not _native_edge_covered(
+        if correct_net is not None and not native_edge_covered(
             native_by_net.get(correct_net, []), start, end
         ):
             raise RuntimeError(
@@ -452,7 +450,7 @@ def _verify_junction_edge_contacts(
             )
         for net, bodies in potential_by_net.items():
             for rings in bodies:
-                intervals, contacts = _native_edge_section([rings], start, end)
+                intervals, contacts = native_edge_section([rings], start, end)
                 if correct_net is not None:
                     forbidden = net != correct_net and bool(intervals or contacts)
                 else:
@@ -543,7 +541,7 @@ def _verify_junction_rlc_properties(
         raise RuntimeError("native junction capacitance differs")
 
 
-def _read_saved_hfss_design(project_path, design_name, *, purpose):
+def read_saved_hfss_design(project_path, design_name, *, purpose):
     """Read one saved HFSS design without a cached parser or project mutation."""
     from ansys.aedt.core.internal.load_aedt_file import load_entire_aedt_file
 
@@ -566,7 +564,7 @@ def _read_saved_hfss_design(project_path, design_name, *, purpose):
     return digest, matching[0]
 
 
-def _read_saved_junction_lines(app, project_path, design_name, prepared, geometry):
+def read_saved_junction_lines(app, project_path, design_name, prepared, geometry):
     """Complete junction evidence from one uncached, identity-bound native save.
 
     PyAEDT1.3 configurations._update_boundaries interprets GeometryPosition XYZ
@@ -625,7 +623,7 @@ def _read_saved_boundaries(
         or app.design_type != "HFSS"
     ):
         raise RuntimeError("saved junction project/design identity differs")
-    digest, design = _read_saved_hfss_design(path, design_name, purpose="junction")
+    digest, design = read_saved_hfss_design(path, design_name, purpose="junction")
     model_setup = design.get("ModelSetup")
     model = (
         model_setup.get("GeometryCore") if isinstance(model_setup, Mapping) else None
@@ -682,8 +680,8 @@ def _read_saved_junction_line(
             "saved junction boundary target differs from actual central object"
         )
     evidence = _Evidence()
-    loops = _native_planar_loops(central, z_um, evidence.observations)
-    matches = _native_polygon_correspondence(
+    loops = native_planar_loops(central, z_um, evidence.observations)
+    matches = native_polygon_correspondence(
         loops, expected, central.name, evidence.deviations, subdivisions=False
     )
     points = _central_corner_points(matches, expected)
@@ -692,15 +690,15 @@ def _read_saved_junction_line(
         _saved_line_position(position, edge)
         for position, edge in zip(positions, terminal_edges, strict=False)
     ]
-    line, _ = _junction_terminal_line(expected, junction, z_um)
+    line, _ = junction_terminal_line(expected, junction, z_um)
     actual_midpoints = [edge["midpoint_um"] for edge in terminal_edges]
     if any(
-        not _native_coordinates_close(a, b)
+        not native_coordinates_close(a, b)
         for a, b in zip(observed_line, line, strict=False)
     ):
         raise RuntimeError("saved junction integration line differs")
     if any(
-        not _native_coordinates_close(a, b)
+        not native_coordinates_close(a, b)
         for a, b in zip(observed_line, actual_midpoints, strict=False)
     ):
         raise RuntimeError(

@@ -13,15 +13,15 @@ from typing import TYPE_CHECKING, Any
 
 from ..results.report_data import AmrPassSnapshot, PassCostRecord
 from ._figures import (
-    _COLORWAY,
-    _PLOT_TICK_FONT,
-    _axis_title,
-    _line_figure,
-    _plotly,
-    _style_figure,
-    _theme_tokens,
+    COLORWAY,
+    PLOT_TICK_FONT,
+    axis_title,
+    import_plotly,
+    line_figure,
+    style_figure,
+    theme_tokens,
 )
-from ._html import _fmt, _fmt_mb, _fmt_seconds, _html_cell, card_html
+from ._html import card_html, fmt, fmt_mb, fmt_seconds, html_cell
 
 if TYPE_CHECKING:
     from .reports import PalaceTrustReport
@@ -48,11 +48,11 @@ _DURATION_BARS = (
 
 def benchmark_cards_html(report: PalaceTrustReport) -> str:
     cards = (
-        ("Total wall", _fmt_seconds(report.durations.get("Total"))),
-        ("Peak node memory", _fmt_mb(report.cost.get("peak_node_memory_megabytes"))),
-        ("Peak rank memory", _fmt_mb(report.cost.get("peak_memory_megabytes"))),
-        ("DOFs", _fmt(report.cost.get("problem_degrees_of_freedom"))),
-        ("Mesh elements", _fmt(report.cost.get("mesh_elements"))),
+        ("Total wall", fmt_seconds(report.durations.get("Total"))),
+        ("Peak node memory", fmt_mb(report.cost.get("peak_node_memory_megabytes"))),
+        ("Peak rank memory", fmt_mb(report.cost.get("peak_memory_megabytes"))),
+        ("DOFs", fmt(report.cost.get("problem_degrees_of_freedom"))),
+        ("Mesh elements", fmt(report.cost.get("mesh_elements"))),
         ("MPI × OpenMP", report.identity.get("resources")),
     )
     items = "".join(
@@ -82,23 +82,23 @@ def benchmark_time_figure(report: PalaceTrustReport) -> Any:
             "<p style='opacity:0.75'>Palace elapsed-time timers are unavailable "
             "in this package.</p>"
         )
-    tokens = _theme_tokens(report.theme)
-    go = _plotly()
+    tokens = theme_tokens(report.theme)
+    go = import_plotly()
     fig = go.Figure(
         data=[
             go.Bar(
                 x=values,
                 y=labels,
                 orientation="h",
-                marker={"color": _COLORWAY[0], "opacity": 0.88},
-                text=[_fmt_seconds(value) for value in values],
+                marker={"color": COLORWAY[0], "opacity": 0.88},
+                text=[fmt_seconds(value) for value in values],
                 textposition="outside",
-                textfont={"color": tokens.muted, "size": _PLOT_TICK_FONT},
+                textfont={"color": tokens.muted, "size": PLOT_TICK_FONT},
                 hovertemplate="%{x:.3g} s<extra>%{y}</extra>",
             )
         ]
     )
-    _style_figure(
+    style_figure(
         fig,
         title="Elapsed time by Palace timer",
         height=max(320, 42 * len(labels) + 110),
@@ -107,7 +107,7 @@ def benchmark_time_figure(report: PalaceTrustReport) -> Any:
         showlegend=False,
         theme=report.theme,
     )
-    fig.update_xaxes(title=_axis_title("seconds", tokens), rangemode="tozero")
+    fig.update_xaxes(title=axis_title("seconds", tokens), rangemode="tozero")
     fig.update_yaxes(categoryorder="total ascending")
     return fig
 
@@ -157,7 +157,7 @@ def benchmark_pass_table_html(report: PalaceTrustReport) -> str:
     header = (
         "<tr>"
         + "".join(
-            _html_cell("th", name)
+            html_cell("th", name)
             for name in (
                 "Pass",
                 "Snapshot",
@@ -175,14 +175,14 @@ def benchmark_pass_table_html(report: PalaceTrustReport) -> str:
     for record in records:
         rows.append(
             "<tr>"
-            + _html_cell("td", str(record.pass_index))
-            + _html_cell("td", record.source)
-            + _html_cell("td", _fmt(record.degrees_of_freedom))
-            + _html_cell("td", _fmt(record.mesh_elements))
-            + _html_cell("td", _fmt_seconds(record.elapsed_pass_s))
-            + _html_cell("td", _fmt_seconds(record.elapsed_cumulative_s))
-            + _html_cell("td", _fmt(record.seconds_per_million_dof))
-            + _html_cell("td", _fmt_mb(record.peak_node_memory_mb))
+            + html_cell("td", str(record.pass_index))
+            + html_cell("td", record.source)
+            + html_cell("td", fmt(record.degrees_of_freedom))
+            + html_cell("td", fmt(record.mesh_elements))
+            + html_cell("td", fmt_seconds(record.elapsed_pass_s))
+            + html_cell("td", fmt_seconds(record.elapsed_cumulative_s))
+            + html_cell("td", fmt(record.seconds_per_million_dof))
+            + html_cell("td", fmt_mb(record.peak_node_memory_mb))
             + "</tr>"
         )
     return (
@@ -201,7 +201,7 @@ def benchmark_pass_figures(report: PalaceTrustReport) -> list[Any]:
     if len(records) < 2:
         return []
     figures: list[Any] = []
-    dof_cost = _line_figure(
+    dof_cost = line_figure(
         title="This-pass wall time vs DOFs",
         xlabel="DOFs",
         ylabel="seconds this pass",

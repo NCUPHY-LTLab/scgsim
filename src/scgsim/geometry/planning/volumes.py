@@ -13,22 +13,6 @@ from dataclasses import dataclass, replace
 from math import hypot
 from typing import NamedTuple
 
-from scgsim.geometry._primitives.constants import _TOPOLOGY_EPS_UM
-from scgsim.geometry._primitives.entities import _entity_by_id, _entity_z_range_um
-from scgsim.geometry._primitives.entity_validation import (
-    _is_solution_entity,
-    _is_vacuum_solution_entity,
-)
-from scgsim.geometry._primitives.geometry_refs import (
-    _entity_geometry_ref,
-    _route_entity_geometry_ref,
-)
-from scgsim.geometry._primitives.loops import _clean_loop
-from scgsim.geometry._primitives.spatial import _vector_cross, _vector_subtract
-from scgsim.geometry._primitives.surface_records import (
-    _conductor_boundary_surface_id,
-    _surface_boundary_volume_ids,
-)
 from scgsim.geometry.models.common import RouteLiteral, SurfaceOrientationLiteral
 from scgsim.geometry.models.construction import (
     ConstructionBodyPlanRecord,
@@ -45,29 +29,47 @@ from scgsim.geometry.models.topology import (
     SurfaceRefRecord,
     VolumePlanRecord,
 )
-from scgsim.geometry.planning.conductor_sidewalls import (
-    _conductor_sidewall_geometry_refs,
-    _SidewallRequest,
+from scgsim.geometry.planning.conductors.face_contacts import (
+    contact_patches_by_entity_face,
+    subtract_contact_patches_from_face,
 )
-from scgsim.geometry.planning.mm_contacts import _is_fully_normalized_face_metal
-from scgsim.geometry.planning.solution_adjacency import (
-    _component_is_boundary_attached,
-    _conductor_sidewall_adjacent_solution_id,
-    _required_host_solution_id,
+from scgsim.geometry.planning.conductors.mm_contacts import (
+    is_fully_normalized_face_metal,
 )
-from scgsim.geometry.planning.solution_geometry import (
-    _entity_occupied_region,
-    _solution_bounds,
+from scgsim.geometry.planning.conductors.sidewalls import (
+    SidewallRequest,
+    conductor_sidewall_geometry_refs,
 )
-from scgsim.geometry.planning.surface_contacts import (
-    _contact_patches_by_entity_face,
-    _subtract_contact_patches_from_face,
+from scgsim.geometry.planning.context.tags import entity_physical_group_id
+from scgsim.geometry.planning.context.topology import (
+    structured_surface_boundary_volume_ids,
+    surface_owner_ids,
+    surface_ring3d_specs,
 )
-from scgsim.geometry.planning.tags import _entity_physical_group_id
-from scgsim.geometry.planning.topology import (
-    _structured_surface_boundary_volume_ids,
-    _surface_owner_ids,
-    _surface_ring3d_specs,
+from scgsim.geometry.planning.solutions.adjacency import (
+    component_is_boundary_attached,
+    conductor_sidewall_adjacent_solution_id,
+    required_host_solution_id,
+)
+from scgsim.geometry.planning.solutions.occupancy import (
+    entity_occupied_region,
+    solution_bounds,
+)
+from scgsim.geometry.primitives.constants import TOPOLOGY_EPS_UM
+from scgsim.geometry.primitives.entities import entity_by_id, entity_z_range_um
+from scgsim.geometry.primitives.entity_validation import (
+    is_solution_entity,
+    is_vacuum_solution_entity,
+)
+from scgsim.geometry.primitives.geometry_refs import (
+    entity_geometry_ref,
+    route_entity_geometry_ref,
+)
+from scgsim.geometry.primitives.loops import normalized_loop
+from scgsim.geometry.primitives.spatial import vector_cross, vector_subtract
+from scgsim.geometry.primitives.surface_records import (
+    conductor_boundary_surface_id,
+    surface_boundary_volume_ids,
 )
 
 
@@ -89,23 +91,23 @@ def plan_route_construction_bodies(
     if route == "C":
         return ()
 
-    contact_faces = _contact_patches_by_entity_face(interfaces)
+    contact_faces = contact_patches_by_entity_face(interfaces)
     records: list[ConstructionBodyPlanRecord] = []
     for entity in build_input.entities:
-        if _is_solution_entity(entity):
+        if is_solution_entity(entity):
             continue
         representation = entity.route_representations.get(route)
         if representation != "cutout_boundary_shell":
             continue
 
-        host_id = _required_host_solution_id(build_input, entity)
+        host_id = required_host_solution_id(build_input, entity)
         records.append(
             ConstructionBodyPlanRecord(
                 construction_body_id=f"CBODY__{route}__{entity.semantic_id}",
                 owner_semantic_id=entity.semantic_id,
                 host_semantic_id=host_id,
                 representation=representation,
-                geometry_ref=_route_entity_geometry_ref(
+                geometry_ref=route_entity_geometry_ref(
                     build_input,
                     route,
                     entity,
@@ -115,7 +117,7 @@ def plan_route_construction_bodies(
                 expected_surface_ids=(
                     ()
                     if route == "B"
-                    and _is_fully_normalized_face_metal(build_input, entity)
+                    and is_fully_normalized_face_metal(build_input, entity)
                     else _cutout_shell_surface_ids(
                         build_input,
                         route,
@@ -153,7 +155,7 @@ def plan_route_volumes(
     records: list[VolumePlanRecord] = []
     for entity in build_input.entities:
         owner_surfaces = surfaces_by_owner.get(entity.semantic_id, ())
-        if _is_solution_entity(entity):
+        if is_solution_entity(entity):
             records.append(
                 _solution_volume_record(
                     build_input,
@@ -186,12 +188,12 @@ def _surfaces_by_owner_volume(
     surfaces_by_owner: dict[str, list[SurfacePlanRecord]] = {}
     for surface in surfaces:
         owner_ids = (
-            _structured_surface_boundary_volume_ids(
+            structured_surface_boundary_volume_ids(
                 surface,
-                _surface_owner_ids(surface),
+                surface_owner_ids(surface),
             )
             if surface.metadata.get("embedded_surface_sheet")
-            else _surface_boundary_volume_ids(
+            else surface_boundary_volume_ids(
                 surface,
                 known_entity_ids=entity_ids,
             )
@@ -301,7 +303,7 @@ def _inner_void_shells(
         str(surface.metadata["conductor_component_id"])
         for surface, _ in surfaces_with_refs
         if surface.metadata.get("conductor_component_id") is not None
-        and _component_is_boundary_attached(
+        and component_is_boundary_attached(
             build_input, solution=entity, surface=surface
         )
     }
@@ -310,7 +312,7 @@ def _inner_void_shells(
         is_sheet_cap = (
             route == "A"
             and bool(surface.metadata.get("sheet_contact_cap"))
-            and _is_vacuum_solution_entity(entity)
+            and is_vacuum_solution_entity(entity)
         )
         component_id = str(
             surface.metadata.get(
@@ -380,11 +382,11 @@ def _route_c_conductor_volume_record(
         metadata={
             "representation": representation,
             "material_kind": entity.material_kind,
-            "geometry_ref": _entity_geometry_ref(
+            "geometry_ref": entity_geometry_ref(
                 entity,
                 representation=representation,
             ),
-            "physical_owner_semantic_id": _entity_physical_group_id(entity),
+            "physical_owner_semantic_id": entity_physical_group_id(entity),
         },
     )
 
@@ -397,7 +399,7 @@ def _inner_void_orientation(
 ) -> SurfaceOrientationLiteral:
     """Orient from conductor center, then reverse for a solution inner shell."""
     centers = tuple(
-        _entity_volume_center_um(_entity_by_id(build_input, member))
+        _entity_volume_center_um(entity_by_id(build_input, member))
         for member in component_members
     )
     component_center = tuple(
@@ -415,15 +417,15 @@ def _inner_void_orientation(
         # component's occupied planar region instead of inventing a global
         # orientation convention for that degenerate center-vector case.
         normal_xy_length = hypot(normal[0], normal[1])
-        if normal_xy_length > _TOPOLOGY_EPS_UM:
+        if normal_xy_length > TOPOLOGY_EPS_UM:
             import gdstk
 
             regions = tuple(
                 region
                 for member in component_members
-                for region in _entity_occupied_region(
+                for region in entity_occupied_region(
                     gdstk,
-                    _entity_by_id(build_input, member),
+                    entity_by_id(build_input, member),
                 )
             )
             if regions:
@@ -482,7 +484,7 @@ def plan_cut_host_operations(
     )
 
 
-def _reconcile_construction_body_surface_ids(
+def reconcile_construction_body_surface_ids(
     construction_bodies: tuple[ConstructionBodyPlanRecord, ...],
     *,
     surfaces: Sequence[SurfacePlanRecord],
@@ -533,14 +535,14 @@ def _cutout_shell_surface_ids(
     contact_faces = shell_contacts.contact_faces or {}
     top_bottom_ids: list[str] = []
     for shell_part in ("top", "bottom"):
-        base_surface_id = _conductor_boundary_surface_id(
+        base_surface_id = conductor_boundary_surface_id(
             route,
             entity,
             "cutout_boundary_shell",
             shell_part,
         )
         base_geometry_ref = {
-            **_route_entity_geometry_ref(
+            **route_entity_geometry_ref(
                 build_input,
                 route,
                 entity,
@@ -549,7 +551,7 @@ def _cutout_shell_surface_ids(
             ),
             "shell_part": shell_part,
         }
-        face_geometry_refs = _subtract_contact_patches_from_face(
+        face_geometry_refs = subtract_contact_patches_from_face(
             base_geometry_ref,
             contact_faces.get((entity.semantic_id, shell_part), ()),
         )
@@ -561,16 +563,16 @@ def _cutout_shell_surface_ids(
                 for index, _ in enumerate(face_geometry_refs)
             )
     sidewall_adjacent_id = (
-        _conductor_sidewall_adjacent_solution_id(build_input, entity)
+        conductor_sidewall_adjacent_solution_id(build_input, entity)
         if route == "C"
         else None
     )
     sidewall_refs = (
         ()
         if route == "C" and sidewall_adjacent_id is None
-        else _conductor_sidewall_geometry_refs(
+        else conductor_sidewall_geometry_refs(
             build_input,
-            _SidewallRequest(
+            SidewallRequest(
                 entity,
                 "cutout_boundary_shell",
                 sidewall_adjacent_id,
@@ -581,7 +583,7 @@ def _cutout_shell_surface_ids(
         )
     )
     sidewall_ids = tuple(
-        _conductor_boundary_surface_id(
+        conductor_boundary_surface_id(
             route,
             entity,
             "cutout_boundary_shell",
@@ -614,13 +616,13 @@ def _surface_orientation_for_volume(
 def _surface_normal_vector(surface: SurfacePlanRecord) -> tuple[float, float, float]:
     if surface.normal_hint is not None:
         return tuple(float(value) for value in surface.normal_hint)
-    ring = _surface_ring3d_specs(surface)[0][2]
+    ring = surface_ring3d_specs(surface)[0][2]
     origin = ring[0]
     for first_index in range(1, len(ring) - 1):
-        first = _vector_subtract(ring[first_index], origin)
+        first = vector_subtract(ring[first_index], origin)
         for second_index in range(first_index + 1, len(ring)):
-            second = _vector_subtract(ring[second_index], origin)
-            normal = _vector_cross(first, second)
+            second = vector_subtract(ring[second_index], origin)
+            normal = vector_cross(first, second)
             length_sq = sum(value * value for value in normal)
             if length_sq > 1e-18:
                 return normal
@@ -630,7 +632,7 @@ def _surface_normal_vector(surface: SurfacePlanRecord) -> tuple[float, float, fl
 def _surface_centroid(surface: SurfacePlanRecord) -> tuple[float, float, float]:
     points = tuple(
         coordinate
-        for _, _, ring in _surface_ring3d_specs(surface)
+        for _, _, ring in surface_ring3d_specs(surface)
         for coordinate in ring
     )
     if not points:
@@ -645,8 +647,8 @@ def _surface_centroid(surface: SurfacePlanRecord) -> tuple[float, float, float]:
 def _entity_volume_center_um(
     entity: SemanticEntitySpec,
 ) -> tuple[float, float, float]:
-    if _is_solution_entity(entity):
-        bounds = _solution_bounds(entity)
+    if is_solution_entity(entity):
+        bounds = solution_bounds(entity)
         return (
             (float(bounds["x_min_um"]) + float(bounds["x_max_um"])) / 2.0,
             (float(bounds["y_min_um"]) + float(bounds["y_max_um"])) / 2.0,
@@ -655,8 +657,8 @@ def _entity_volume_center_um(
         )
     if "outer_loop" not in entity.geometry:
         raise ValueError(f"{entity.semantic_id} requires outer_loop for volume center")
-    loop = _clean_loop(entity.geometry["outer_loop"])
-    z_min_um, z_max_um = _entity_z_range_um(entity)
+    loop = normalized_loop(entity.geometry["outer_loop"])
+    z_min_um, z_max_um = entity_z_range_um(entity)
     return (
         (min(point[0] for point in loop) + max(point[0] for point in loop)) / 2.0,
         (min(point[1] for point in loop) + max(point[1] for point in loop)) / 2.0,

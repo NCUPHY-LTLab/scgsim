@@ -26,10 +26,10 @@ from typing import Any, TypedDict
 from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
 
 from ._epr_checks import (
-    _INTERFACE_KINDS,
-    _check_provenance,
-    _check_row,
-    _number,
+    INTERFACE_KINDS,
+    check_provenance,
+    check_row,
+    checked_number,
 )
 from ._index_map import FILM_SPEC_SCHEMA
 from .resolve import ResolvedPalaceResult
@@ -150,8 +150,8 @@ class PalaceEprResult:
         seen_modes: set[int] = set()
         group_sources: dict[str, tuple[Any, ...]] = {}
         for row in rows:
-            _check_row(row, seen_modes, group_sources)
-        _check_provenance(self.provenance)
+            check_row(row, seen_modes, group_sources)
+        check_provenance(self.provenance)
         if self._verified_source is not None and not isinstance(
             self._verified_source, PalaceEprResult
         ):
@@ -226,7 +226,9 @@ def epr_result(result: ResolvedPalaceResult) -> PalaceEprResult:
     if not isinstance(result, ResolvedPalaceResult) or result.problem != "Eigenmode":
         raise TypeError("a resolved Palace Eigenmode run is required")
     index_map = result.provenance.index_map
-    l0 = _number(result.provenance.config["Model"]["L0"], "Model.L0", positive=True)
+    l0 = checked_number(
+        result.provenance.config["Model"]["L0"], "Model.L0", positive=True
+    )
     entries = index_map["entries"]
     surfaces = _entries_by_index(entries, "Boundaries.Postprocessing.Dielectric")
     domains = _entries_by_index(entries, "Domains.Postprocessing.Energy")
@@ -249,16 +251,20 @@ def epr_result(result: ResolvedPalaceResult) -> PalaceEprResult:
             masks_requested=masks_requested,
         )
         # Participation is relative to the mode's electric plus capacitive energy.
-        normalization = _number(domain_row["E_elec (J)"], "electric energy") + _number(
-            domain_row["E_cap (J)"], "capacitive energy"
+        normalization = checked_number(
+            domain_row["E_elec (J)"], "electric energy"
+        ) + checked_number(domain_row["E_cap (J)"], "capacitive energy")
+        normalization = checked_number(
+            normalization, "normalization energy", positive=True
         )
-        normalization = _number(normalization, "normalization energy", positive=True)
         surface = _surface_items(
             surfaces, selected["surface_interfaces"], l0, surface_row, mask_q_row
         )
         bulk = _bulk_items(domains, selected["bulk_domain_ids"], domain_row)
         junction = _junction_items(junctions, selected["port_names"], port_row)
-        frequency_ghz = _number(mode_row["Re{f} (GHz)"], "frequency", positive=True)
+        frequency_ghz = checked_number(
+            mode_row["Re{f} (GHz)"], "frequency", positive=True
+        )
         rows.append(
             {
                 "mode": mode,
@@ -396,7 +402,7 @@ def _surface_items(
         film = _read_film(spec, l0)
         mask = entry.get("mask")
         # A masked row reports its own participation; an unmasked one the baseline's.
-        participation = _number(
+        participation = checked_number(
             (
                 mask_q_row[f"p_surf_mask[{number}]"]
                 if mask is not None
@@ -454,13 +460,15 @@ def _read_film(spec: Mapping[str, Any], l0: float) -> _Film:
             "surface EPR film spec schema_version is "
             f"{spec.get('schema_version')!r}; supported: {FILM_SPEC_SCHEMA!r}."
         )
-    native_thickness = _number(
+    native_thickness = checked_number(
         spec["thickness"], "native film thickness", positive=True
     )
-    recorded_l0 = _number(spec["model_l0_m"], "film Model.L0", positive=True)
+    recorded_l0 = checked_number(spec["model_l0_m"], "film Model.L0", positive=True)
     if recorded_l0 != l0:
         raise ValueError("film Model.L0 disagrees with resolved config")
-    physical = _number(spec["film_thickness_m"], "SI film thickness", positive=True)
+    physical = checked_number(
+        spec["film_thickness_m"], "SI film thickness", positive=True
+    )
     if not math.isclose(physical, native_thickness * l0, rel_tol=1e-12):
         raise ValueError("film SI/native thickness mismatch")
     loss = spec["loss_tangent"]
@@ -486,7 +494,7 @@ def _bulk_items(
             "domain_id": item["entry_name"],
             "index": number,
             "material": item["metadata"]["material"],
-            "participation": _number(
+            "participation": checked_number(
                 domain_row[f"p_elec[{number}]"], "bulk participation"
             ),
         }
@@ -582,7 +590,7 @@ def reanalyze_epr(
             for key, value in group_overrides.items()
         }
     )
-    if set(defaults) - _INTERFACE_KINDS:
+    if set(defaults) - INTERFACE_KINDS:
         raise ValueError("surface_defaults supports only MA, MS, and SA")
     known = {item["group_id"] for row in result.rows for item in row["surface"]}
     if set(overrides) - known:

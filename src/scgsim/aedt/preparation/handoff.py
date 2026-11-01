@@ -120,11 +120,11 @@ def prepare_handoff(
         shutil.copy2(source_gds, original_gds)
         _write_import_gds(source_gds, copied_gds, spec.effective_layer_imports)
 
-    prepared_at = _utc_now()
+    prepared_at = utc_now()
     started = time.perf_counter()
     prepared_source = prepared_runtime_source()
 
-    _write_script(plan.script_path)
+    write_script(plan.script_path)
     payload = spec.to_payload()
     if not isinstance(spec, (Q2dSpec, Q3dSpec)):
         _bind_gds_payload(payload, spec, original_gds)
@@ -303,7 +303,7 @@ def _attach_q3d_geometry_source(spec, run_dir: Path):
     return geometry_source
 
 
-def _prepare_epr_analysis_handoff(  # noqa: PLR0913 - one keyword per EPR analysis input
+def prepare_epr_analysis_handoff(  # noqa: PLR0913 - one keyword per EPR analysis input
     *,
     saved_solution: SavedSolution,
     geometry: PreparedPlanarGeometry,
@@ -332,7 +332,7 @@ def _prepare_epr_analysis_handoff(  # noqa: PLR0913 - one keyword per EPR analys
         saved_solution=copied_solution,
     )
     plan = HandoffPlan.under(run_dir)
-    prepared_at = _utc_now()
+    prepared_at = utc_now()
     started = time.perf_counter()
     prepared_source = prepared_runtime_source()
     payload = spec.to_payload()
@@ -538,7 +538,7 @@ def _raw_gds_path_datatypes(path: Path) -> set[tuple[int, int]]:
     return result
 
 
-def _write_script(path: Path) -> None:
+def write_script(path: Path) -> None:
     """Write the launcher that executes the handoff."""
     _write_launcher(path, '--execute "$@"')
 
@@ -568,7 +568,7 @@ def _member(path: Path, root: Path) -> dict[str, str | int]:
     }
 
 
-def _utc_now() -> str:
+def utc_now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 

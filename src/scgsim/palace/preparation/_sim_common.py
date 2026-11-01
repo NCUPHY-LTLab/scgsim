@@ -26,11 +26,11 @@ from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
 from ..execution.handoff import HandoffPlan, prepare_handoff
 from ..mesh.build import MeshBuildResult, build_route_mesh
 from ..mesh.controls import MESH_CONTROL_KEYS
-from .config import _MODEL_L0_M
+from .config import MODEL_L0_M
 from .inputs import (
-    _load_stack,
-    _non_negative_number,
-    _validate_stack_material_kinds,
+    load_stack,
+    non_negative_number,
+    validate_stack_material_kinds,
 )
 from .numerical import configure_numerical_controls
 from .surface_epr import normalize_surface_epr_specs
@@ -91,7 +91,7 @@ class PreparationControls:
         """Load the layer stack; it must define explicit materials. Clears the mesh."""
         if self._plan_snapshot is not None:
             raise ValueError(_GEOMETRY_PLAN_OWNS_SOURCE)
-        payload = _load_stack(stack)
+        payload = load_stack(stack)
         materials = payload.get("materials")
         if not isinstance(materials, Mapping) or not materials:
             raise ValueError(
@@ -104,7 +104,7 @@ class PreparationControls:
         }
         if len(resolved) != len(materials):
             raise TypeError("every explicit stack material must be a mapping.")
-        _validate_stack_material_kinds(payload, resolved)
+        validate_stack_material_kinds(payload, resolved)
         self.stack = payload
         self._materials = resolved
         self._plan_snapshot = None
@@ -174,7 +174,7 @@ class PreparationControls:
         self.indium_ground_bumps = {
             "fill": fill,
             "fill_pitch_um": validate_positive_number(fill_pitch_um, "fill_pitch_um"),
-            "fill_clearance_um": _non_negative_number(
+            "fill_clearance_um": non_negative_number(
                 fill_clearance_um, "fill_clearance_um"
             ),
         }
@@ -386,7 +386,7 @@ class PreparationControls:
         if self._mesh_result is None:
             raise ValueError("mesh() must run before check_mesh_quality().")
         return check_mesh_quality(
-            self._mesh_result.mesh_path, length_scale_m=_MODEL_L0_M
+            self._mesh_result.mesh_path, length_scale_m=MODEL_L0_M
         )
 
     def prepare_handoff(

@@ -2,7 +2,7 @@
 
 Standard library only, so every spec module can use it without import cycles. It
 owns three jobs: small field validators, turning data into a frozen read-only copy
-(`_freeze_str_keys_only`) or a plain mutable one (`detached`), and the canonical
+(`freeze_str_keys_only`) or a plain mutable one (`detached`), and the canonical
 SHA-256 that identifies a payload (`canonical_sha256`).
 """
 
@@ -16,14 +16,14 @@ from types import MappingProxyType
 from typing import Any
 
 
-def _stripped_text(value: Any, name: str) -> str:
+def stripped_text(value: Any, name: str) -> str:
     """Return `value` stripped of surrounding whitespace; it must be non-empty text."""
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be non-empty text")
     return value.strip()
 
 
-def _number_at_least(value: Any, name: str, *, minimum: float = 0.0) -> float:
+def number_at_least(value: Any, name: str, *, minimum: float = 0.0) -> float:
     """Return `value` as a float that is finite and at least `minimum`; bools are refused."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be numeric")
@@ -33,7 +33,7 @@ def _number_at_least(value: Any, name: str, *, minimum: float = 0.0) -> float:
     return result
 
 
-def _freeze_str_keys_only(value: Any, *, verified: Any = None) -> Any:
+def freeze_str_keys_only(value: Any, *, verified: Any = None) -> Any:
     """Freeze JSON-like data: mappings become read-only views, sequences tuples.
 
     Mapping keys must be strings, and leaves must be None, str, int, float or bool.
@@ -48,7 +48,7 @@ def _freeze_str_keys_only(value: Any, *, verified: Any = None) -> Any:
         prior = verified if isinstance(verified, Mapping) else {}
         return MappingProxyType(
             {
-                key: _freeze_str_keys_only(item, verified=prior.get(key))
+                key: freeze_str_keys_only(item, verified=prior.get(key))
                 for key, item in value.items()
             }
         )
@@ -59,7 +59,7 @@ def _freeze_str_keys_only(value: Any, *, verified: Any = None) -> Any:
             else ()
         )
         return tuple(
-            _freeze_str_keys_only(
+            freeze_str_keys_only(
                 item, verified=prior[index] if index < len(prior) else None
             )
             for index, item in enumerate(value)

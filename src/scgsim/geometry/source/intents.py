@@ -9,7 +9,7 @@ from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.models.representation import RepresentationContext
 
 
-def _route_a_sheet_interfaces(
+def route_a_sheet_interfaces(
     entities: Sequence[SemanticEntitySpec],
     polygons: Sequence[LayoutPolygonSpec],
     *,

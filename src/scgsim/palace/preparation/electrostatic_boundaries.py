@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Any, TypedDict
 
 from .._values import optional_stripped_string
-from .solution_volumes import _physical_group_values
+from .solution_volumes import physical_group_values
 
 
 @dataclass(frozen=True)
@@ -79,7 +79,7 @@ class _TerminalBoundaries:
     assigned: set[str]  # component ids that belong to a Terminal
 
 
-def _electrostatic_boundaries(
+def electrostatic_boundaries(
     *,
     groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
     terminals: Sequence[TerminalBinding],
@@ -183,7 +183,7 @@ def _collect_conductors(
                 f"SGB conductor component {component_id!r} missing exact net_id."
             )
 
-        attrs = _physical_group_values(info.get("phys_group"))
+        attrs = physical_group_values(info.get("phys_group"))
         if not attrs:
             raise ValueError(
                 f"SGB conductor component {component_id!r} has no physical attributes."
@@ -325,7 +325,7 @@ def _exterior_ground(
             and info.get("source") == "domain_boundary"
             and info.get("solver_use") == "solver_active"
         ):
-            attributes.update(_physical_group_values(info.get("phys_group")))
+            attributes.update(physical_group_values(info.get("phys_group")))
             names.add(str(physical_name))
     if not attributes:
         raise ValueError(

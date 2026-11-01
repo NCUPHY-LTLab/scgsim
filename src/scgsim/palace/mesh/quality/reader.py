@@ -138,7 +138,7 @@ def _identity(stat: os.stat_result) -> FileIdentity:
     )
 
 
-def _readonly(value: np.ndarray) -> np.ndarray:
+def readonly(value: np.ndarray) -> np.ndarray:
     value.flags.writeable = False
     return value
 
@@ -397,17 +397,17 @@ def _mesh_data(
         sha256=digest,
         bytes_read=bytes_read,
         file_identity=before,
-        node_ids=_readonly(ids_array),
-        coordinates=_readonly(coords_array),
-        element_ids=_readonly(element_array),
-        connectivity=_readonly(connectivity_array),
-        node_indices=_readonly(node_index_array),
-        raw_tags=_readonly(np.asarray(parsed.flat_tags, dtype=np.int64)),
-        tag_offsets=_readonly(
+        node_ids=readonly(ids_array),
+        coordinates=readonly(coords_array),
+        element_ids=readonly(element_array),
+        connectivity=readonly(connectivity_array),
+        node_indices=readonly(node_index_array),
+        raw_tags=readonly(np.asarray(parsed.flat_tags, dtype=np.int64)),
+        tag_offsets=readonly(
             np.asarray(parsed.tag_offsets, dtype=np.int64).reshape((-1, 2))
         ),
-        physical_tags=_readonly(np.asarray(parsed.physical_tags, dtype=np.int64)),
-        elementary_tags=_readonly(np.asarray(parsed.elementary_tags, dtype=np.int64)),
+        physical_tags=readonly(np.asarray(parsed.physical_tags, dtype=np.int64)),
+        elementary_tags=readonly(np.asarray(parsed.elementary_tags, dtype=np.int64)),
         physical_names=MappingProxyType(dict(parsed.physical_names)),
         element_counts=MappingProxyType(dict(parsed.counts)),
         optional_sections=MappingProxyType(dict(parsed.optional_sections)),

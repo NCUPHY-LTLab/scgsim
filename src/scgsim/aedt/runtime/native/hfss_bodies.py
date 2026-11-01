@@ -11,8 +11,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from scgsim.aedt.preparation.planar import (
-    _native_entity_name,
-    _native_name,
+    native_entity_name,
+    native_name,
 )
 from scgsim.aedt.runtime.native.materials import (
     read_native_material,
@@ -22,7 +22,7 @@ from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 from scgsim.semantics.route_a import geometry_z_range
 
 
-def _polygon_sheet(
+def polygon_sheet(
     app: Any, polygon: Mapping[str, Any], *, name: str, z_um: float
 ) -> Any:
     points = [[float(x), float(y), z_um] for x, y in polygon["exterior"]]
@@ -36,7 +36,7 @@ def _polygon_sheet(
     if value is False or value is None:
         raise RuntimeError(f"failed to create planar source polygon {name!r}")
     for index, ring in enumerate(polygon["holes"]):
-        hole_name = _native_name("hole", name, index)
+        hole_name = native_name("hole", name, index)
         hole = app.modeler.create_polyline(
             [[float(x), float(y), z_um] for x, y in ring],
             cover_surface=True,
@@ -51,7 +51,7 @@ def _polygon_sheet(
     return app.modeler[name]
 
 
-def _swept_z_solid(
+def swept_z_solid(
     app: Any,
     polygon: Mapping[str, Any],
     *,
@@ -63,7 +63,7 @@ def _swept_z_solid(
 
     if z_max_um <= z_min_um:
         raise ValueError(f"solid {name!r} has empty Z extent")
-    sheet = _polygon_sheet(app, polygon, name=name, z_um=z_min_um)
+    sheet = polygon_sheet(app, polygon, name=name, z_um=z_min_um)
     body = app.modeler.sweep_along_vector(
         sheet.name, ["0um", "0um", f"{z_max_um - z_min_um:.17g}um"]
     )
@@ -116,7 +116,7 @@ def _bounds_box(app: Any, entity: Mapping[str, Any], source: Mapping[str, Any]) 
     value = app.modeler.create_box(
         origin,
         size,
-        name=_native_entity_name(source, "domain", entity["semantic_id"]),
+        name=native_entity_name(source, "domain", entity["semantic_id"]),
         material=native_material,
     )
     if value is False or value is None:
@@ -126,7 +126,7 @@ def _bounds_box(app: Any, entity: Mapping[str, Any], source: Mapping[str, Any]) 
     return value
 
 
-def _solution_body(
+def solution_body(
     app: Any, entity: Mapping[str, Any], source: Mapping[str, Any]
 ) -> Any:
     geometry = entity["geometry"]
@@ -141,18 +141,18 @@ def _solution_body(
         "exterior": geometry["outer_loop"],
         "holes": geometry.get("hole_loops", ()),
     }
-    name = _native_entity_name(source, "domain", entity["semantic_id"])
-    body = _swept_z_solid(app, polygon, name=name, z_min_um=z_min, z_max_um=z_max)
+    name = native_entity_name(source, "domain", entity["semantic_id"])
+    body = swept_z_solid(app, polygon, name=name, z_min_um=z_min, z_max_um=z_max)
     body.material_name = str(entity["material_id"])
     return body
 
 
-def _prepared_modeling_identity(prepared: PreparedPlanarGeometry) -> dict[str, Any]:
+def prepared_modeling_identity(prepared: PreparedPlanarGeometry) -> dict[str, Any]:
     """Name the modeling the prepared geometry was built with."""
     return {"modeling": prepared.modeling}
 
 
-def _validate_native_modeling_source(
+def validate_native_modeling_source(
     prepared: PreparedPlanarGeometry, source: Mapping[str, Any]
 ) -> None:
     """The prepared source must carry its effective-layer provenance."""
@@ -160,7 +160,7 @@ def _validate_native_modeling_source(
         raise ValueError("prepared EPR effective-layer provenance is unavailable")
 
 
-def _native_conductor_geometry(
+def native_conductor_geometry(
     source: Mapping[str, Any], entity: Mapping[str, Any]
 ) -> tuple[str, float, float]:
     """Read the producer's effective native shape and Z without remapping it."""
@@ -187,7 +187,7 @@ def _native_conductor_geometry(
     )
 
 
-def _material_readback(app: Any, materials: Mapping[str, Any]) -> dict[str, Any]:
+def read_back_materials(app: Any, materials: Mapping[str, Any]) -> dict[str, Any]:
     observed: dict[str, Any] = {}
     for material_id, record in materials.items():
         if not isinstance(record, Mapping) or record.get("kind") not in {
@@ -199,7 +199,7 @@ def _material_readback(app: Any, materials: Mapping[str, Any]) -> dict[str, Any]
     return observed
 
 
-def _native_solution_materials(source: Mapping[str, Any]) -> dict[str, Any]:
+def native_solution_materials(source: Mapping[str, Any]) -> dict[str, Any]:
     """Install only materials carried by native solution-domain bodies."""
 
     catalog = source["materials"]
@@ -211,7 +211,7 @@ def _native_solution_materials(source: Mapping[str, Any]) -> dict[str, Any]:
     return {material_id: catalog[material_id] for material_id in sorted(material_ids)}
 
 
-def _install_material_catalog(app: Any, materials: Mapping[str, Any]) -> dict[str, Any]:
+def install_material_catalog(app: Any, materials: Mapping[str, Any]) -> dict[str, Any]:
     observed: dict[str, Any] = {}
     for material_id, record in materials.items():
         if not isinstance(material_id, str) or not isinstance(record, Mapping):

@@ -14,7 +14,7 @@ from typing import Any
 from scgsim.geometry.models.physical import PhysicalRepresentationPlan
 
 
-def _prepared_lumped_supports(supports, source):
+def prepared_lumped_supports(supports, source):
     """Derive explicit support XY/Z from the same physical map as all bodies."""
     mapping = PhysicalRepresentationPlan.from_payload(source["modeling"])
     layers = mapping.declaration_index

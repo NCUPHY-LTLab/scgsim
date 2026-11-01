@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import Any
 
 from scgsim.geometry.construction.conformality import engine_gate_gmsh_brep_conformality
-from scgsim.geometry.construction.export import _group_tag_plans
+from scgsim.geometry.construction.export import group_tag_plans
 from scgsim.geometry.construction.native import (
-    _rebind_surface_loops,
-    _rebind_volume_surface_refs,
-    _surface_outer_wire_edges,
     add_surface_first_volume,
+    rebind_surface_loops,
+    rebind_volume_surface_refs,
+    surface_outer_wire_edges,
 )
 from scgsim.geometry.models.common import GmshDimTag
 from scgsim.geometry.models.construction import ConstructionPlanRecord
@@ -65,7 +65,7 @@ def write_occ_geometry_from_plan(
         if lowering.plan.route in {"A", "B"}:
             lowering.plan = replace(
                 lowering.plan,
-                volumes=_rebind_volume_surface_refs(
+                volumes=rebind_volume_surface_refs(
                     lowering.plan.volumes, surface_basis_parity
                 ),
             )
@@ -320,13 +320,13 @@ def _add_surface_first_volume(
     repaired = add_surface_first_volume(
         lowering.gmsh,
         shell_surfaces,
-        outer_wire_edges=_surface_outer_wire_edges(
+        outer_wire_edges=surface_outer_wire_edges(
             plan.surfaces, plan.surface_loops, curve_tags, surface_tags
         ),
     )
     lowering.plan = replace(
         plan,
-        surface_loops=_rebind_surface_loops(
+        surface_loops=rebind_surface_loops(
             plan.surfaces,
             plan.surface_loops,
             curve_tags,
@@ -369,7 +369,7 @@ def _finish_lowering(lowering: _Lowering, xao_path: Path) -> ConstructionPlanRec
             curve_tags=lowering.curve_tags,
         )
     backend_tags = _backend_entity_tags(source_tags)
-    grouped_tag_plans = _group_tag_plans(plan.tags)
+    grouped_tag_plans = group_tag_plans(plan.tags)
     with _debug_stage(
         debug_logging, f"add {len(grouped_tag_plans)} physical groups", timings
     ):

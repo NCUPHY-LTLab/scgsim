@@ -19,8 +19,8 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from scgsim.aedt._data import canonical_sha256
-from scgsim.aedt.preparation.planar_source import _plain_geometry_source
-from scgsim.geometry._primitives.spatial import _geometry_ref_surface_z_um
+from scgsim.aedt.preparation.planar_source import plain_geometry_source
+from scgsim.geometry.primitives.spatial import geometry_ref_surface_z_um
 
 # Interface kinds a catalog entry can describe, and the field sides it can face.
 _CATALOG_INTERFACE_KINDS = {"MA", "MS", "SA", "MM"}
@@ -29,7 +29,7 @@ _FIELD_SIDES = {"top", "bottom"}
 _HORIZONTAL_SHELL_PARTS = {"top", "bottom"}
 
 
-def _surface_ledger(planned_surfaces) -> list[dict[str, Any]]:
+def surface_ledger(planned_surfaces) -> list[dict[str, Any]]:
     """List one horizontal surface per contribution ledger entry of the planner.
 
     Sidewall entries are skipped: sidewall Surface-EPR is excluded.
@@ -51,11 +51,11 @@ def _surface_ledger(planned_surfaces) -> list[dict[str, Any]]:
                 {
                     "surface_id": surface.surface_id,
                     "owner_semantic_id": surface.owner_semantic_id,
-                    "geometry_ref": _plain_geometry_source(surface.geometry_ref),
-                    "normal_hint": _plain_geometry_source(surface.normal_hint),
+                    "geometry_ref": plain_geometry_source(surface.geometry_ref),
+                    "normal_hint": plain_geometry_source(surface.normal_hint),
                     "surface_role": surface.surface_role,
                     "mask_plane": _surface_mask_plane(surface.geometry_ref),
-                    "contribution": _plain_geometry_source(record),
+                    "contribution": plain_geometry_source(record),
                 }
             )
     return surfaces
@@ -75,20 +75,20 @@ def _surface_mask_plane(geometry_ref: Mapping[str, Any]) -> dict[str, Any]:
             or not isinstance(plane.get("value_um"), (int, float))
         ):
             raise ValueError("planar EPR surface requires finite plane Z")
-        z_um = _geometry_ref_surface_z_um(geometry_ref)
+        z_um = geometry_ref_surface_z_um(geometry_ref)
         if not math.isfinite(z_um):
             raise ValueError("planar EPR surface requires finite plane Z")
         return {
             "origin_um": [0.0, 0.0, z_um],
             "u": [1.0, 0.0, 0.0],
             "v": [0.0, 1.0, 0.0],
-            "exterior": _plain_geometry_source(outer),
-            "holes": _plain_geometry_source(geometry_ref.get("hole_loops", ())),
+            "exterior": plain_geometry_source(outer),
+            "holes": plain_geometry_source(geometry_ref.get("hole_loops", ())),
         }
     raise ValueError("horizontal EPR surface requires a planar loop")
 
 
-def _plane_group_key(binding: Mapping[str, Any]) -> tuple[Any, ...]:
+def plane_group_key(binding: Mapping[str, Any]) -> tuple[Any, ...]:
     """Key that groups bindings sharing a plane, side, classification and material.
 
     The normal is made sign-independent (first significant component positive) and
@@ -119,7 +119,7 @@ def _plane_group_key(binding: Mapping[str, Any]) -> tuple[Any, ...]:
     )
 
 
-def _project_plane_region(
+def project_plane_region(
     source: Mapping[str, Any], target: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Express a region given in `source` plane coordinates in `target` coordinates."""
@@ -174,7 +174,9 @@ def _binding_id(contribution_id: str, surface: Mapping[str, Any]) -> str:
     return f"{contribution_id}__{digest}"
 
 
-def _contribution_catalog(surfaces: list[dict[str, Any]]) -> tuple[dict[str, Any], ...]:
+def merged_contribution_catalog(
+    surfaces: list[dict[str, Any]],
+) -> tuple[dict[str, Any], ...]:
     """Merge ledger entries into one catalog record per contribution id, sorted by id."""
     catalog_by_id: dict[str, dict[str, Any]] = {}
     for item in surfaces:
@@ -216,7 +218,7 @@ def _contribution_catalog(surfaces: list[dict[str, Any]]) -> tuple[dict[str, Any
     return tuple(catalog_by_id[key] for key in sorted(catalog_by_id))
 
 
-def _support_bindings(
+def bind_mask_support(
     surfaces: list[dict[str, Any]],
     contributions: Sequence[Any],
     regions_by_id: Mapping[str, Any],
@@ -269,7 +271,7 @@ def _support_bindings(
     return support_bindings
 
 
-def _resolve_contributions(
+def resolve_contributions(
     contributions: Sequence[Any],
     surfaces: list[dict[str, Any]],
     regions_by_id: Mapping[str, Any],
@@ -339,9 +341,9 @@ def _resolve_match(requested, match, regions_by_id, materials) -> dict[str, Any]
             substrate_domain["semantic_id"] if substrate_domain is not None else None
         ),
         "effective_material_id": domain["material_id"],
-        "effective_material": _plain_geometry_source(material),
+        "effective_material": plain_geometry_source(material),
         "substrate_material": (
-            _plain_geometry_source(substrate_material)
+            plain_geometry_source(substrate_material)
             if substrate_material is not None
             else None
         ),

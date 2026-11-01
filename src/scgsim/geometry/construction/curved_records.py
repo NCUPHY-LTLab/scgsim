@@ -13,9 +13,9 @@ from dataclasses import asdict, dataclass, replace
 
 from scgsim.geometry.construction.curved_context import EdgeLookup
 from scgsim.geometry.construction.curved_kernel import (
-    _edge_vertices,
-    _face_loops,
-    _identity,
+    edge_vertices,
+    face_loops,
+    identity,
 )
 from scgsim.geometry.models.topology import (
     CurvePlanRecord,
@@ -26,6 +26,8 @@ from scgsim.geometry.models.topology import (
     SurfaceLoopRecord,
     SurfacePlanRecord,
 )
+from scgsim.geometry.planning.surface_contract import with_surface_contract_metadata
+from scgsim.geometry.primitives.entities import component_metadata
 
 
 @dataclass
@@ -60,7 +62,7 @@ def _detached_edge(gmsh, edge, lookup):
     """Describe one native edge by geometry alone, independent of native tags."""
     endpoints = [
         tuple(float(v) for v in gmsh.model.getValue(0, tag, []))
-        for tag in _edge_vertices(gmsh, edge)
+        for tag in edge_vertices(gmsh, edge)
     ]
     if len(endpoints) != 2:
         raise ValueError(
@@ -81,8 +83,8 @@ def _detached_edge(gmsh, edge, lookup):
         raise ValueError(
             "native sidewall construction replaced a planned shared boundary curve"
         )
-    cid = _identity("C__", geometry)
-    pids = [_identity("P__", xyz) for xyz in endpoints]
+    cid = identity("C__", geometry)
+    pids = [identity("P__", xyz) for xyz in endpoints]
     bounds = gmsh.model.getParametrizationBounds(1, edge)
     return CurvePlanRecord(
         cid,
@@ -191,9 +193,9 @@ def _add_surface_loops(context, table, curves, surface):
     sid, tag, data = surface
     gmsh = context.session.gmsh
     loop_ids = []
-    native_loops = _face_loops(gmsh, context.session.occ, tag)
+    native_loops = face_loops(gmsh, context.session.occ, tag)
     for index, tags in enumerate(native_loops):
-        lid = _identity("LOOP__", [sid, index])
+        lid = identity("LOOP__", [sid, index])
         loop_ids.append(lid)
         refs = tuple(
             CurveRefRecord(
@@ -227,14 +229,14 @@ def build_mm_contacts(context, book, curves):
         tag = row["tag"]
         a, b = row["pair"]
         members = tuple(sorted(contact_members[contact_root(a)]))
-        component_id = _identity("COMP__", members)
+        component_id = identity("COMP__", members)
         equipotentials = {
             entities[eid].metadata.get("equipotential_id") for eid in members
         }
         equipotentials.discard(None)
         if len(equipotentials) > 1:
             raise ValueError("native curved contact has conflicting equipotential IDs")
-        cid = _identity("MM__", [row["pair"], row["key"]])
+        cid = identity("MM__", [row["pair"], row["key"]])
         geometry, contact_loops, contact_curves, contact_points = _contact_geometry(
             context, curves.lookup, cid, row
         )
@@ -317,7 +319,7 @@ def _contact_geometry(context, lookup, cid, row):
     contact_curves = {}
     contact_points = {}
     contact_loops = []
-    for index, edges in enumerate(_face_loops(gmsh, context.session.occ, tag)):
+    for index, edges in enumerate(face_loops(gmsh, context.session.occ, tag)):
         refs = []
         for edge in edges:
             record, edge_points = _detached_edge(gmsh, abs(edge), lookup)
@@ -328,7 +330,7 @@ def _contact_geometry(context, lookup, cid, row):
             )
         contact_loops.append(
             SurfaceLoopRecord(
-                _identity("LOOP__", [cid, index]),
+                identity("LOOP__", [cid, index]),
                 tuple(refs),
                 "outer" if index == 0 else "hole",
             )
@@ -361,11 +363,10 @@ def bind_port_conductor_components(surfaces, mm_contacts):
     Ports are registered before contacts exist, so their component ids start as
     `COMP__<host>`; the contact graph decides the real shared component.
     """
-    from scgsim.geometry._primitives.entities import _component_metadata
 
     component_by_entity = {
         eid: component["conductor_component_id"]
-        for component in _component_metadata(mm_contacts)
+        for component in component_metadata(mm_contacts)
         for eid in component["members"]
     }
     for index, surface_record in enumerate(surfaces):
@@ -395,13 +396,10 @@ def bind_port_conductor_components(surfaces, mm_contacts):
 
 def apply_surface_contract(session, table, mm_contacts):
     """Add surface-contract metadata to every non-port surface."""
-    from scgsim.geometry.planning.surface_contract import (
-        _with_surface_contract_metadata,
-    )
 
     ordinary = {
         surface.surface_id: surface
-        for surface in _with_surface_contract_metadata(
+        for surface in with_surface_contract_metadata(
             session.prepared,
             route=session.route,
             interfaces=tuple(table.interfaces),

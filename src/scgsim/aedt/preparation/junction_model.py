@@ -33,21 +33,21 @@ from scgsim.aedt.preparation.junction_checks import (
 )
 from scgsim.aedt.preparation.junction_exact import (
     PRECISION_UM,
-    _boolean,
-    _cross,
-    _edges,
-    _inside_ring,
-    _on,
-    _oriented_ring,
-    _plain_with_dataclasses,
-    _region,
-    _rings,
-    _twice_signed_area,
+    boolean,
+    cross,
+    inside_ring,
+    on,
+    oriented_ring,
+    plain_with_dataclasses,
+    region_from_polygons,
+    ring_edges,
+    rings_from_region,
+    twice_signed_area,
 )
 from scgsim.geometry import LayoutPolygonSpec
-from scgsim.geometry._primitives.loops import (
-    _cancel_reversed_planar_edges,
-    _simple_planar_loops_from_edges,
+from scgsim.geometry.primitives.loops import (
+    cancel_reversed_planar_edges,
+    simple_planar_loops_from_edges,
 )
 
 
@@ -179,16 +179,16 @@ class _JunctionModel:
         edges = {}
         for pid, region in self.rings.items():
             for index, ring in enumerate(region):
-                area = _twice_signed_area(ring)
+                area = twice_signed_area(ring)
                 if len(set(ring)) < 3 or not area:
                     raise ValueError(
                         "numerical junction source polygon/hole collapses in model coordinates"
                     )
-                if index and any(_inside_ring(point, region[0]) != 1 for point in ring):
+                if index and any(inside_ring(point, region[0]) != 1 for point in ring):
                     raise ValueError(
                         "numerical junction source hole loses model interior topology"
                     )
-                for n, (a, b) in enumerate(_edges((ring,))):
+                for n, (a, b) in enumerate(ring_edges((ring,))):
                     key = (pid, index, n)
                     edges[key] = a, b
                     self.incidence.record(key, a, Fraction(0))
@@ -233,7 +233,7 @@ class _JunctionModel:
                 )
                 self.incidence.record(arm, point, t)
                 self.incidence.record(sheet, point, u)
-        elif _cross(a, b, c) == 0:
+        elif cross(a, b, c) == 0:
             self._register_shared_points(arm, (a, b), sheet, (c, d))
 
     def _register_shared_points(self, left, left_edge, right, right_edge):
@@ -241,7 +241,7 @@ class _JunctionModel:
         a, b = left_edge
         c, d = right_edge
         for point in {a, b, c, d}:
-            if _on(point, a, b) and _on(point, c, d):
+            if on(point, a, b) and on(point, c, d):
                 for key, start, finish in ((left, a, b), (right, c, d)):
                     delta = finish[0] - start[0], finish[1] - start[1]
                     parameter = Fraction(
@@ -264,7 +264,7 @@ class _JunctionModel:
             ]
             for n, (left, a, b) in enumerate(owned_edges):
                 for right, c, d in owned_edges[n + 1 :]:
-                    if left[0] == right[0] or _cross(a, b, c) or _cross(a, b, d):
+                    if left[0] == right[0] or cross(a, b, c) or cross(a, b, d):
                         continue
                     self._register_shared_points(left, (a, b), right, (c, d))
 
@@ -274,10 +274,10 @@ class _JunctionModel:
         """Trace the free sheet (sheet minus all metal) back to its source edges."""
         raw_free = {}
         for jid, record in self.records.items():
-            free = _rings(
-                _boolean(
-                    _region([self.rings[record["authored_polygon_id"]]]),
-                    _region([self.rings[pid] for pid in self.metal_ids]),
+            free = rings_from_region(
+                boolean(
+                    region_from_polygons([self.rings[record["authored_polygon_id"]]]),
+                    region_from_polygons([self.rings[pid] for pid in self.metal_ids]),
                     "not",
                 )
             )
@@ -290,13 +290,13 @@ class _JunctionModel:
         traced = []
         for region in free:
             for index, ring in enumerate(region):
-                for a, b in _edges((_oriented_ring(ring, index),)):
+                for a, b in ring_edges((oriented_ring(ring, index),)):
                     # Boolean may remove collinear source vertices. Reinsert
                     # registered nodes on this exact segment, then require each
                     # subedge to have its pre-recorded source-edge incidence.
                     delta = b[0] - a[0], b[1] - a[1]
                     nodes = sorted(
-                        (point for point in members if _on(point, a, b)),
+                        (point for point in members if on(point, a, b)),
                         key=lambda point: (
                             (point[0] - a[0]) * delta[0] + (point[1] - a[1]) * delta[1]
                         ),
@@ -459,10 +459,10 @@ class _JunctionModel:
             self.physical_ends[end["source_entity_id"]].extend(
                 self.incidence.refine(self.sliced[jid][0 if n == 0 else 2])
             )
-        end["model_regions"] = _plain_with_dataclasses(part)
+        end["model_regions"] = plain_with_dataclasses(part)
 
     def _record_model_results(self, record, sheet, final_free, corners):
-        record["free_model_regions"] = _plain_with_dataclasses(final_free)
+        record["free_model_regions"] = plain_with_dataclasses(final_free)
         record["central_model_regions"] = [[list(corners)]]
         record["proof_conditions"]["emitted_partition_coverage"] = True
         record["model_coordinate_method"] = "source_edge_incidence_and_two_cuts.v1"
@@ -478,8 +478,8 @@ class _JunctionModel:
             self.intersection_deviation
         )
         record["authored_source_geometry"] = {
-            "exterior": _plain_with_dataclasses(sheet.exterior),
-            "holes": _plain_with_dataclasses(sheet.holes),
+            "exterior": plain_with_dataclasses(sheet.exterior),
+            "holes": plain_with_dataclasses(sheet.holes),
         }
         dx, dy = record["direction_xy"]
         record["model_cut_projection_ranges_um"] = [
@@ -497,17 +497,15 @@ class _JunctionModel:
         that it ends up with exactly four corners.
         """
         raw = [(a, b) for a, b, _ in traced]
-        raw = _cancel_reversed_planar_edges(raw)
+        raw = cancel_reversed_planar_edges(raw)
         if not raw:
             return []
-        loops = _simple_planar_loops_from_edges(raw)
+        loops = simple_planar_loops_from_edges(raw)
         outer = [
             ring
             for ring in loops
             if not any(
-                _inside_ring(ring[0], other) == 1
-                for other in loops
-                if other is not ring
+                inside_ring(ring[0], other) == 1 for other in loops if other is not ring
             )
         ]
         regions = []
@@ -515,11 +513,11 @@ class _JunctionModel:
             holes = [
                 hole
                 for hole in loops
-                if hole is not ring and _inside_ring(hole[0], ring) == 1
+                if hole is not ring and inside_ring(hole[0], ring) == 1
             ]
             if any(
                 any(
-                    _inside_ring(hole[0], other) == 1
+                    inside_ring(hole[0], other) == 1
                     for other in holes
                     if other is not hole
                 )
@@ -532,9 +530,9 @@ class _JunctionModel:
                     loop = tuple(
                         point
                         for n, point in enumerate(loop)
-                        if _cross(loop[n - 1], point, loop[(n + 1) % len(loop)]) != 0
+                        if cross(loop[n - 1], point, loop[(n + 1) % len(loop)]) != 0
                     )
-                loop = _oriented_ring(loop, index)
+                loop = oriented_ring(loop, index)
                 region.append(tuple(self.vertices.emit(point) for point in loop))
             regions.append(tuple(region))
         if sum(len(region) for region in regions) != len(loops):
@@ -581,17 +579,17 @@ class _JunctionModel:
         emitted_support = []
         for pid in ids:
             for index, ring in enumerate((model[pid].exterior, *model[pid].holes)):
-                emitted_support.extend(_edges((_oriented_ring(ring, index),)))
+                emitted_support.extend(ring_edges((oriented_ring(ring, index),)))
         emitted_support.extend(
             (emit(a), emit(b)) for a, b, _ in self.physical_ends[entity.semantic_id]
         )
-        boundary = _cancel_reversed_planar_edges(emitted_support)
-        loops = _simple_planar_loops_from_edges(boundary)
+        boundary = cancel_reversed_planar_edges(emitted_support)
+        loops = simple_planar_loops_from_edges(boundary)
         outer = [
             ring
             for ring in loops
             if not any(
-                _inside_ring(
+                inside_ring(
                     tuple(Fraction(str(v)) for v in ring[0]),
                     tuple(tuple(Fraction(str(v)) for v in p) for p in other),
                 )
@@ -620,7 +618,7 @@ def _close_cut_caps(cap, parts, dx, dy):
                 "numerical junction selected cut has no full source section"
             )
         # Collinear existing arm vertices can split a direct-contact edge.
-        if any(_cross(ordered[0], ordered[-1], point) for point in ordered):
+        if any(cross(ordered[0], ordered[-1], point) for point in ordered):
             raise ValueError(
                 "numerical junction selected cut has inconsistent section nodes"
             )

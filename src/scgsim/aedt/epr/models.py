@@ -14,19 +14,19 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from scgsim.aedt._data import (
-    _freeze_str_keys_only as _freeze_str_keys_only,
-)
-from scgsim.aedt._data import (
-    _number_at_least as _number_at_least,
-)
-from scgsim.aedt._data import (
-    _stripped_text as _stripped_text,
-)
-from scgsim.aedt._data import (
     canonical_sha256 as canonical_sha256,
 )
 from scgsim.aedt._data import (
     detached as detached,
+)
+from scgsim.aedt._data import (
+    freeze_str_keys_only as freeze_str_keys_only,
+)
+from scgsim.aedt._data import (
+    number_at_least as number_at_least,
+)
+from scgsim.aedt._data import (
+    stripped_text as stripped_text,
 )
 from scgsim.aedt.specs.common import LumpedRlc as LumpedRlc
 from scgsim.aedt.specs.epr import (
@@ -57,7 +57,7 @@ from scgsim.aedt.specs.epr import (
     SurfaceEprSpec as SurfaceEprSpec,
 )
 from scgsim.aedt.specs.epr import (
-    _contained_relative_path as _contained_relative_path,
+    contained_relative_path as contained_relative_path,
 )
 from scgsim.aedt.specs.epr import (
     surface_evaluations as surface_evaluations,
@@ -85,7 +85,7 @@ class EprResult:
         if self.result_kind not in {"adaptive_history", "saved_field"}:
             raise ValueError("unsupported EPR result kind")
         object.__setattr__(
-            self, "setup_name", _stripped_text(self.setup_name, "setup_name")
+            self, "setup_name", stripped_text(self.setup_name, "setup_name")
         )
         if isinstance(self.rows, (str, bytes)):
             raise TypeError("EPR result rows must be a sequence of mappings")
@@ -100,13 +100,13 @@ class EprResult:
             self._verified_source.rows if self._verified_source is not None else ()
         )
         frozen_rows = tuple(
-            _freeze_str_keys_only(
+            freeze_str_keys_only(
                 row, verified=prior_rows[index] if index < len(prior_rows) else None
             )
             for index, row in enumerate(rows)
         )
         _validate_rows(frozen_rows, self.result_kind)
-        provenance = _freeze_str_keys_only(
+        provenance = freeze_str_keys_only(
             self.provenance,
             verified=(
                 self._verified_source.provenance
@@ -287,7 +287,7 @@ def _validate_complete_row(row: Mapping[str, Any]) -> None:
     ):
         raise ValueError("complete EPR result row lacks canonical energy members")
     for name in _COMPLETE_ROW_NUMBERS:
-        number = _number_at_least(row[name], f"EPR result row {name}")
+        number = number_at_least(row[name], f"EPR result row {name}")
         # A mode needs a positive frequency, and participation divides by U_norm.
         if name in {"frequency_hz", "normalization_energy_j"} and number <= 0:
             raise ValueError(f"complete EPR result row {name} must be > 0")
@@ -298,17 +298,17 @@ def _validate_complete_row(row: Mapping[str, Any]) -> None:
         if any(not isinstance(item, Mapping) for item in value):
             raise TypeError(f"complete EPR result row {name} must contain mappings")
     for surface in row["surface_contributions"]:
-        _number_at_least(
+        number_at_least(
             surface.get("participation"),
             "surface contribution participation",
         )
         film_assumptions(surface.get("assumptions"), allow_unknown=True)
     for junction in row["junctions"]:
-        _number_at_least(
+        number_at_least(
             junction.get("inductive_participation"),
             "junction inductive participation",
         )
-        _number_at_least(
+        number_at_least(
             junction.get("capacitive_participation"),
             "junction capacitive participation",
         )
@@ -325,7 +325,7 @@ def _validate_native_surface_references(references: Any) -> None:
     for reference in references:
         if not _REQUIRED_REFERENCE_MEMBERS <= set(reference):
             raise ValueError("native surface reference lacks canonical evidence")
-        reference_id = _stripped_text(reference["reference_id"], "native reference ID")
+        reference_id = stripped_text(reference["reference_id"], "native reference ID")
         if reference_id in reference_ids:
             raise ValueError("native surface reference IDs repeat")
         reference_ids.add(reference_id)
@@ -335,7 +335,7 @@ def _validate_native_surface_references(references: Any) -> None:
             "area_m2",
             "native_area_m2",
         ):
-            _number_at_least(
+            number_at_least(
                 reference[name],
                 f"native surface reference {name}",
                 minimum=-math.inf,

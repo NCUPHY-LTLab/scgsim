@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import Any
 
 from ..preview import GeometryPreview
-from ..scene import _FIXED_COLORS, _color, _Mode, _Part
-from ._common import _json, _sha256
+from ..scene import FIXED_COLORS, Mode, Part, identity_color
+from ._common import read_json_object, sha256
 
 _Records = Mapping[tuple[int, int], Mapping[str, Any]]
 
@@ -25,9 +25,9 @@ def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
     paths = _require_inputs(root)
     meshio, np, pv = _import_mesh_readers()
 
-    mesh_manifest = _json(paths["metadata/mesh_manifest.json"])
-    index_map = _json(paths["metadata/palace_index_map.json"])
-    config = _json(paths["config.json"])
+    mesh_manifest = read_json_object(paths["metadata/mesh_manifest.json"])
+    index_map = read_json_object(paths["metadata/palace_index_map.json"])
+    config = read_json_object(paths["config.json"])
     mesh = meshio.read(paths["palace.msh"])
     grid = _high_order_grid(mesh, mesh_manifest, pv)
     table = _CellTable.from_mesh(mesh, grid, np)
@@ -42,18 +42,18 @@ def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
     return GeometryPreview(
         root=root,
         backend="palace",
-        source_hashes={name: _sha256(path) for name, path in paths.items()},
+        source_hashes={name: sha256(path) for name, path in paths.items()},
         modes={
-            "materials": _Mode(tuple(materials)),
-            "boundaries": _Mode(tuple(boundaries)),
+            "materials": Mode(tuple(materials)),
+            "boundaries": Mode(tuple(boundaries)),
             "surface_epr": (
-                _Mode(tuple(surface_epr))
+                Mode(tuple(surface_epr))
                 if surface_epr
-                else _Mode(
+                else Mode(
                     unavailable_reason="No structured Surface-EPR assignment is present."
                 )
             ),
-            "mesh": _Mode(tuple(mesh_parts)),
+            "mesh": Mode(tuple(mesh_parts)),
         },
     )
 
@@ -170,19 +170,19 @@ def _mesh_parts(
     table: _CellTable,
     physical_groups: set[tuple[int, int]],
     field_names: Mapping[tuple[int, int], list[str]],
-) -> list[_Part]:
-    parts: list[_Part] = []
+) -> list[Part]:
+    parts: list[Part] = []
     for dimension, attribute in sorted(physical_groups):
         mask = table.mask(dimension, attribute)
         types = sorted(set(table.cell_types[mask]))
         name = " / ".join(sorted(field_names[(dimension, attribute)]))
         parts.append(
-            _Part(
+            Part(
                 dataset=table.cells(dimension, attribute),
                 semantic_id=f"mesh:{dimension}:{attribute}",
                 label=f"{name} · dim {dimension} · {'/'.join(types)}",
                 role="solution physical group",
-                color=_color(name),
+                color=identity_color(name),
                 opacity=0.35 if dimension == 3 else 0.85,
                 count=int(mask.sum()),
                 show_edges=True,
@@ -195,7 +195,7 @@ def _palace_materials(
     config: Mapping[str, Any],
     records: Mapping[tuple[int, int], Mapping[str, Any]],
     cells: Any,
-) -> list[_Part]:
+) -> list[Part]:
     assignments: set[int] = set()
     for material in config.get("Domains", {}).get("Materials", ()):
         for attribute in material.get("Attributes", ()):
@@ -203,7 +203,7 @@ def _palace_materials(
             if attribute in assignments:
                 raise ValueError(f"Palace volume {attribute} has multiple materials")
             assignments.add(attribute)
-    parts: list[_Part] = []
+    parts: list[Part] = []
     volume_attributes = {
         attribute for dimension, attribute in records if dimension == 3
     }
@@ -222,12 +222,12 @@ def _palace_materials(
         kind = str(kinds[0])
         dataset = cells(3, attribute)
         parts.append(
-            _Part(
+            Part(
                 dataset,
                 material_id,
                 material_id,
                 kind,
-                _color(material_id),
+                identity_color(material_id),
                 0.08 if kind == "vacuum" else 0.42,
                 dataset.n_cells,
             )
@@ -240,7 +240,7 @@ def _palace_boundaries(
     index_map: Mapping[str, Any],
     records: _Records,
     cells: Any,
-) -> list[_Part]:
+) -> list[Part]:
     boundary_root = config.get("Boundaries", {})
     indexed = _index_map_identities(index_map)
     assignments: dict[int, tuple[str, str, str]] = {}
@@ -249,7 +249,7 @@ def _palace_boundaries(
             _assign_boundary(assignments, int(attribute), section, section, section)
     for section in ("Terminal", "LumpedPort"):
         _assign_indexed_boundaries(assignments, boundary_root, indexed, section)
-    parts: list[_Part] = []
+    parts: list[Part] = []
     surface_attributes = {
         attribute for dimension, attribute in records if dimension == 2
     }
@@ -269,12 +269,12 @@ def _palace_boundaries(
         )
         dataset = cells(2, attribute)
         parts.append(
-            _Part(
+            Part(
                 dataset,
                 semantic_id,
                 label,
                 role,
-                _color(role if role in _FIXED_COLORS else semantic_id),
+                identity_color(role if role in FIXED_COLORS else semantic_id),
                 1.0 if role != "unassigned" else 0.5,
                 dataset.n_cells,
             )
@@ -355,7 +355,7 @@ def _palace_surface_epr(
     index_map: Mapping[str, Any],
     records: Mapping[tuple[int, int], Mapping[str, Any]],
     cells: Any,
-) -> list[_Part]:
+) -> list[Part]:
     entries: dict[int, Mapping[str, Any]] = {}
     for item in index_map.get("entries", ()):
         if item.get("section") != "Boundaries.Postprocessing.Dielectric":
@@ -382,7 +382,7 @@ def _palace_surface_epr(
             grouped.setdefault(int(attribute), []).append(record)
     if set(entries) != configured:
         raise ValueError("Palace Surface-EPR config/index-map identities differ")
-    parts: list[_Part] = []
+    parts: list[Part] = []
     for attribute, mappings in sorted(grouped.items()):
         if (2, attribute) not in records:
             raise ValueError(f"Surface-EPR attribute {attribute} is absent from mesh")
@@ -423,12 +423,12 @@ def _palace_surface_epr(
         )
         dataset = cells(2, attribute)
         parts.append(
-            _Part(
+            Part(
                 dataset,
                 f"surface-epr:{attribute}:{role}",
                 " / ".join(labels),
                 role,
-                _FIXED_COLORS[role],
+                FIXED_COLORS[role],
                 0.95,
                 dataset.n_cells,
             )

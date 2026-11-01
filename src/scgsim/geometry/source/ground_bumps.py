@@ -22,11 +22,11 @@ from typing import Any, NamedTuple
 
 from scgsim.geometry.source.ground_bump_audit import (
     Blocker,
-    _audit_authored_indium_sites,
-    _gds_layer_polygons,
-    _gdstk_cell,
-    _intersecting_blocker_ids,
-    _point2,
+    audit_authored_indium_sites,
+    gds_layer_polygons,
+    gdstk_cell,
+    intersecting_blocker_ids,
+    point2,
 )
 
 _RECEIPT_SOURCE = "scgsim.sgb.ground_bumps._prepare_indium_ground_bump_fill"
@@ -42,7 +42,7 @@ class _FillSite(NamedTuple):
     y: float
 
 
-def _prepare_indium_ground_bump_fill(
+def prepare_indium_ground_bump_fill(
     *,
     component: Any,
     stack: Mapping[str, Any],
@@ -76,7 +76,7 @@ def _prepare_indium_ground_bump_fill(
     from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 
     template, spec = _ground_bump_fill_spec(result_stack)
-    origin = _point2(spec["lattice_origin_um"], "lattice_origin_um")
+    origin = point2(spec["lattice_origin_um"], "lattice_origin_um")
     bump_layer = _layer_pair(spec["body_layer"], "body_layer")
     under_bump_layer = _layer_pair(spec["contact_layer"], "contact_layer")
     body_polygon = _relative_polygon(spec["body_polygon_um"], "body_polygon_um")
@@ -244,8 +244,8 @@ def _audit_written_component(  # noqa: PLR0913 - keyword-only; each argument is 
             top_cell_name=str(getattr(component, "name", "") or "") or None,
         )
         library = gdstk.read_gds(str(source_gds))
-        cell = _gdstk_cell(library, str(getattr(component, "name", "") or ""))
-        audit = _audit_authored_indium_sites(
+        cell = gdstk_cell(library, str(getattr(component, "name", "") or ""))
+        audit = audit_authored_indium_sites(
             build_input=build_input,
             cell=cell,
             bump_layer=bump_layer,
@@ -307,7 +307,7 @@ def _sweep_fill_lattice(  # noqa: PLR0913 - keyword-only; each argument is one l
                 reason = "outside_d0_d1_ground_intersection"
                 blocker_ids = ("D0_D1_GROUND_INTERSECTION",)
             else:
-                blocker_ids = _intersecting_blocker_ids(expanded, blockers)
+                blocker_ids = intersecting_blocker_ids(expanded, blockers)
                 reason = "intersects_blocking_footprint" if blocker_ids else None
             if reason:
                 rejected.append(
@@ -497,7 +497,7 @@ def _relative_polygon(value: Any, name: str) -> tuple[tuple[float, float], ...]:
         or len(value) < 3
     ):
         raise TypeError(f"{name} must contain at least three 2D points.")
-    points = tuple(_point2(point, name) for point in value)
+    points = tuple(point2(point, name) for point in value)
     area = sum(
         x1 * y2 - x2 * y1
         for (x1, y1), (x2, y2) in zip(points, (*points[1:], points[0]), strict=True)
@@ -584,10 +584,10 @@ def _assert_generated_center_selectors(
     with TemporaryDirectory(prefix="scgsim-indium-fill-verify-") as temporary:
         path = Path(temporary) / "derived.gds"
         component.write_gds(path)
-        cell = _gdstk_cell(
+        cell = gdstk_cell(
             gdstk.read_gds(str(path)), str(getattr(component, "name", "") or "")
         )
-        polygons = _gds_layer_polygons(cell, bump_layer)
+        polygons = gds_layer_polygons(cell, bump_layer)
         for i, j, x, y in accepted:
             matches = [
                 polygon

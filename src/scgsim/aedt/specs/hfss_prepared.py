@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from scgsim.aedt._data import _stripped_text
+from scgsim.aedt._data import stripped_text
 from scgsim.aedt.epr.selection import surface_integral_groups
 from scgsim.aedt.specs.common import (
     DRIVEN_GEOMETRY_SCHEMA_VERSION,
@@ -26,8 +26,8 @@ from scgsim.aedt.specs.common import (
     LumpedRlc,
     LumpedTerminalPort,
     TerminalPort,
-    _project_filename,
-    _project_name_from_payload,
+    project_filename,
+    project_name_from_payload,
 )
 from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
@@ -45,11 +45,11 @@ from scgsim.aedt.specs.modeling import (
     Modeling,
     PhysicalLayerDeclaration,
     PhysicalRepresentationPlan,
-    _modeling_payload,
-    _physical_fields_from_payload,
-    _physical_layers_from_payload,
-    _request_modeling,
-    _source_plan_layers,
+    modeling_payload,
+    physical_fields_from_payload,
+    physical_layers_from_payload,
+    request_modeling,
+    source_plan_layers,
 )
 
 
@@ -85,7 +85,7 @@ class HfssEprSpec:
         return "eigenmode"
 
     def __post_init__(self) -> None:
-        _request_modeling(self)
+        request_modeling(self)
         _normalize_epr_identity(self)
         self._bind_prepared_geometry()
         self._check_run_control_and_epr()
@@ -97,7 +97,7 @@ class HfssEprSpec:
             raise TypeError("geometry must be PreparedPlanarGeometry")
         if self.geometry.modeling != self.modeling:
             raise ValueError("request and prepared geometry modeling differ")
-        declared = _source_plan_layers(self.geometry.source)
+        declared = source_plan_layers(self.geometry.source)
         if self.physical_layers and {
             item.physical_layer_id: item for item in self.physical_layers
         } != {item.physical_layer_id: item for item in declared}:
@@ -133,7 +133,7 @@ class HfssEprSpec:
             else EPR_EIGENMODE_SCHEMA_VERSION_V2
         )
         return {
-            **_modeling_payload(self),
+            **modeling_payload(self),
             "schema_version": schema_version,
             "mode": self.mode,
             "aedt": {"requested_version": self.aedt_version},
@@ -202,9 +202,9 @@ class HfssEprSpec:
         geometry = PreparedPlanarGeometry.from_payload(payload.get("geometry"))
         return cls(
             modeling=payload.get("modeling"),
-            **_physical_fields_from_payload(payload),
-            project_name=_project_name_from_payload(project.get("name")),
-            design_name=_stripped_text(project.get("design"), "project.design"),
+            **physical_fields_from_payload(payload),
+            project_name=project_name_from_payload(project.get("name")),
+            design_name=stripped_text(project.get("design"), "project.design"),
             geometry=geometry,
             run_control=None if run is None else EigenmodeRunControl(**run),
             epr_request=(
@@ -219,11 +219,11 @@ class HfssEprSpec:
                     payload.get("expression_convergence")
                 )
             ),
-            aedt_version=_stripped_text(
+            aedt_version=stripped_text(
                 payload.get("aedt", {}).get("requested_version"),
                 "aedt.requested_version",
             ),
-            pyaedt_version=_stripped_text(
+            pyaedt_version=stripped_text(
                 payload.get("pyaedt", {}).get("locked_version"),
                 "pyaedt.locked_version",
             ),
@@ -326,19 +326,19 @@ class HfssEprAnalysisSpec:
         if not isinstance(project, dict) or not isinstance(run, dict):
             raise TypeError("project and run_control must be JSON objects")
         return cls(
-            project_name=_project_name_from_payload(project.get("name")),
-            design_name=_stripped_text(project.get("design"), "project.design"),
+            project_name=project_name_from_payload(project.get("name")),
+            design_name=stripped_text(project.get("design"), "project.design"),
             geometry=PreparedPlanarGeometry.from_payload(payload.get("geometry")),
             run_control=EigenmodeRunControl(**run),
             epr_request=EprAnalysisRequest.from_payload(payload.get("epr")),
             saved_solution=SavedSolution.from_payload(
                 base_dir / "saved", payload.get("saved_solution")
             ),
-            aedt_version=_stripped_text(
+            aedt_version=stripped_text(
                 payload.get("aedt", {}).get("requested_version"),
                 "aedt.requested_version",
             ),
-            pyaedt_version=_stripped_text(
+            pyaedt_version=stripped_text(
                 payload.get("pyaedt", {}).get("locked_version"),
                 "pyaedt.locked_version",
             ),
@@ -352,10 +352,10 @@ def _normalize_epr_identity(spec: HfssEprSpec | HfssEprAnalysisSpec) -> None:
         or str(spec.pyaedt_version) != LOCKED_PYAEDT
     ):
         raise ValueError("EPR V1 requires AEDT 2024.2 and PyAEDT 1.3.0")
-    project = _project_filename(spec.project_name, "project_name")
+    project = project_filename(spec.project_name, "project_name")
     object.__setattr__(spec, "project_name", project.stem)
     object.__setattr__(
-        spec, "design_name", _stripped_text(spec.design_name, "design_name")
+        spec, "design_name", stripped_text(spec.design_name, "design_name")
     )
 
 
@@ -458,7 +458,7 @@ class HfssDrivenGeometrySpec:
 
     def __post_init__(self) -> None:
         self._bind_prepared_geometry()
-        _request_modeling(self)
+        request_modeling(self)
         self._normalize_identity_and_run_control()
         self._validate_ports()
 
@@ -476,7 +476,7 @@ class HfssDrivenGeometrySpec:
             raise ValueError(
                 "Driven geometry cannot contain Eigenmode treatments or EPR requests"
             )
-        declared = _source_plan_layers(self.geometry.source)
+        declared = source_plan_layers(self.geometry.source)
         if self.physical_layers and self.physical_layers != declared:
             raise ValueError("request physical layers differ from prepared source map")
         object.__setattr__(self, "physical_layers", declared)
@@ -491,10 +491,10 @@ class HfssDrivenGeometrySpec:
         object.__setattr__(
             self,
             "project_name",
-            _project_filename(self.project_name, "project_name").stem,
+            project_filename(self.project_name, "project_name").stem,
         )
         object.__setattr__(
-            self, "design_name", _stripped_text(self.design_name, "design_name")
+            self, "design_name", stripped_text(self.design_name, "design_name")
         )
         if self.run_control is not None and not isinstance(
             self.run_control, HfssRunControl
@@ -545,7 +545,7 @@ class HfssDrivenGeometrySpec:
     def to_payload(self) -> dict[str, Any]:
         """Serialize the prepared geometry, ports and optional run control."""
         return {
-            **_modeling_payload(self),
+            **modeling_payload(self),
             "schema_version": DRIVEN_GEOMETRY_SCHEMA_VERSION,
             "mode": self.mode,
             "aedt": {"requested_version": self.aedt_version},
@@ -601,7 +601,7 @@ class HfssDrivenGeometrySpec:
                 for item in payload["ports"]
             ),
             run_control=None if run is None else HfssRunControl(**run),
-            physical_layers=_physical_layers_from_payload(payload),
+            physical_layers=physical_layers_from_payload(payload),
             physical_representation=PhysicalRepresentationPlan.from_payload(
                 payload["physical_representation"]
             ),
