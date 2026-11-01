@@ -1,6 +1,8 @@
 """Pure call-local subdivision memoization; no native or performance claims."""
 
+import ast
 from dataclasses import replace
+from pathlib import Path
 from threading import Barrier, Lock
 
 import pytest
@@ -11,8 +13,8 @@ from scgsim.geometry._primitives._grid_cache import (
     with_grid_work_cache,
 )
 from scgsim.geometry._primitives.grid import (
-    GridOperand,
     _SOURCE_AUDITS,
+    GridOperand,
     _source_recipe_map,
     geometry_grid_scope,
     source_grid_audits,
@@ -20,12 +22,12 @@ from scgsim.geometry._primitives.grid import (
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.preparation import preparation_resources
 
-
 BASE = GridOperand("A", ((0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)))
 CONTEXT = GeometryGridContext(0.1)
 
 
 def test_exact_reuse_nested_scope_fresh_calls_and_exception_cleanup():
+    """Verify that exact reuse nested scope fresh calls and exception cleanup."""
     calls = []
 
     def build():
@@ -77,6 +79,7 @@ def test_exact_reuse_nested_scope_fresh_calls_and_exception_cleanup():
     ],
 )
 def test_complete_key_distinguishes_inputs(operands, context, apply_grid):
+    """Verify that complete key distinguishes inputs."""
     calls = []
 
     def build():
@@ -97,6 +100,7 @@ def test_complete_key_distinguishes_inputs(operands, context, apply_grid):
 
 
 def test_order_and_failure_are_not_cached():
+    """Verify that order and failure are not cached."""
     other = replace(BASE, operand_id="B")
     calls = []
 
@@ -122,6 +126,7 @@ def test_order_and_failure_are_not_cached():
 
 
 def test_concurrent_misses_and_per_call_audits_remain_independent():
+    """Verify that concurrent misses and per call audits remain independent."""
     barrier = Barrier(2)
     lock = Lock()
     calls = []
@@ -158,9 +163,7 @@ def test_concurrent_misses_and_per_call_audits_remain_independent():
 
 
 def test_compiler_build_owns_cache_scope_without_executing_geometry():
-    import ast
-    from pathlib import Path
-
+    """Verify that compiler build owns cache scope without executing geometry."""
     path = Path(__file__).parents[1] / "src/scgsim/geometry/compiler/builder.py"
     module = ast.parse(path.read_text())
     owner = next(
