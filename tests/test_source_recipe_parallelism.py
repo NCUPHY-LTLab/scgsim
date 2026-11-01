@@ -352,7 +352,7 @@ def test_public_plan_exact_detached_snapshot_for_identical_emitted_fixture(
     monkeypatch.setattr(type(component), "write_gds", fixed_fixture_write)
     monkeypatch.setattr(plan_module, "TemporaryDirectory", fixed_fixture_directory)
     serial = plan.prepare()
-    from scgsim.geometry.source import adapter as adapter_module
+    from scgsim.geometry.source import occurrence_validation as occurrence_validation_module
 
     barrier = Barrier(2)
     worker_threads = []
@@ -370,7 +370,7 @@ def test_public_plan_exact_detached_snapshot_for_identical_emitted_fixture(
             plan_module, "_occurrence_polygons_for_entity", observed_selector
         )
         watched.setattr(
-            adapter_module, "_occurrence_polygons_for_entity", observed_selector
+            occurrence_validation_module, "_occurrence_polygons_for_entity", observed_selector
         )
         with preparation_resources(max_workers=2):
             parallel = plan.prepare()

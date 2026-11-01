@@ -250,6 +250,8 @@ def test_source_port_modules_have_no_import_cycle() -> None:
 def _source_import_dependencies() -> dict[str, set[str]]:
     module_paths = {
         "adapter": Path("src/scgsim/geometry/source/adapter.py"),
+        "adapter_records": Path("src/scgsim/geometry/source/adapter_records.py"),
+        "occurrence_validation": Path("src/scgsim/geometry/source/occurrence_validation.py"),
         "grid": Path("src/scgsim/geometry/source/grid.py"),
         "junctions": Path("src/scgsim/geometry/source/junctions.py"),
         "ports": Path("src/scgsim/geometry/source/ports.py"),
@@ -267,7 +269,8 @@ def _source_import_dependencies() -> dict[str, set[str]]:
             )
             for module in imported:
                 for dependency in module_paths:
-                    if f"geometry.source.{dependency}" in module:
+                    qualified_name = f"scgsim.geometry.source.{dependency}"
+                    if module == qualified_name or module.startswith(qualified_name + "."):
                         dependencies[name].add(dependency)
 
     return dependencies
