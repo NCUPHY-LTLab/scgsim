@@ -2,83 +2,84 @@
 
 from __future__ import annotations
 
-
 import argparse
 import json
-import sys
-from contextlib import ExitStack
-
 import os
-
-import re
-
+import sys
 import time
-
-import warnings
-
+from contextlib import ExitStack
+from dataclasses import dataclass
 from pathlib import Path
-
-from typing import Any
-
-from scgsim.aedt._io import file_sha256, read_json, write_json
+from typing import Any, cast
 
 from scgsim.aedt.epr.geometry import (
     precompute_inset_surfaces,
 )
-from scgsim.aedt.preparation.planar import (
-    validate_geometry_workers,
-)
-
-from scgsim.aedt.epr.workflow import (
+from scgsim.aedt.epr.native_workflow import (
+    analyze_saved_epr,
+    collect_batch_epr,
     prepare_epr_hfss,
     prepared_epr_result,
     solve_and_export_epr,
 )
-
-from scgsim.aedt.preparation.cohort import (
-    canonical_handoff_paths,
-    canonical_member_paths,
-    validate_geometry_source,
-    validate_hfss_import_source,
+from scgsim.aedt.io import file_sha256, read_json, write_json
+from scgsim.aedt.preparation.planar import (
+    validate_geometry_workers,
 )
-
 from scgsim.aedt.results.epr import seal_saved_solution
-
 from scgsim.aedt.results.provenance import (
     RECEIPT_V1,
     RECEIPT_V2,
     RECEIPT_V3,
     runtime_source_identity,
-    validate_runtime_source,
 )
-
+from scgsim.aedt.runtime.batch_protocol import (
+    CollectionContext,
+    collection_source,
+    object_payload,
+)
+from scgsim.aedt.runtime.control import (
+    request_q3d_abort_and_save,
+    request_q3d_stop_and_save,
+)
+from scgsim.aedt.runtime.desktop_lifecycle import release_owned_desktop
 from scgsim.aedt.runtime.families.hfss import (
     prepare_hfss,
     run_hfss,
+)
+from scgsim.aedt.runtime.families.hfss_body_eigenmode import (
     prepare_body_eigenmode,
     prepared_body_eigenmode_result,
     solve_and_export_body_eigenmode,
 )
-
-from scgsim.aedt.runtime.families.q2d import (run_q2d, prepare_q2d, prepared_q2d_result)
-from scgsim.aedt.runtime.control import (request_q3d_stop_and_save, request_q3d_abort_and_save)
-
+from scgsim.aedt.runtime.families.q2d import prepare_q2d, prepared_q2d_result, run_q2d
 from scgsim.aedt.runtime.families.q3d import (
     prepare_q3d,
     prepared_q3d_result,
     run_q3d,
 )
-
+from scgsim.aedt.runtime.handoff_validation import (
+    canonical_metadata_files,
+    contained,
+    execution_resources,
+    json_object,
+    require_pristine_run,
+    validate_execution_flags,
+    verify_prepared_cohort,
+    verify_prepared_hashes,
+    warn_thin_film_surfaces,
+)
 from scgsim.aedt.runtime.native.common import (
     owned_application_constructor,
     pyaedt_version,
 )
-
-from scgsim.aedt.specs.common import AedtResources
-from scgsim.aedt.versions import resolve_aedt_version
-from scgsim.aedt.runtime.batch_protocol import CollectionContext, collection_source, object_payload
 from scgsim.aedt.runtime.native.compatibility import native_compatibility
-
+from scgsim.aedt.runtime.receipt import (
+    read_physics_warnings,
+    record_epr_project_after_release,
+    record_ordinary_result_after_release,
+    record_result_before_release,
+)
 from scgsim.aedt.specs.hfss import (
     HfssDrivenGeometrySpec,
     HfssDrivenSpec,
@@ -86,13 +87,10 @@ from scgsim.aedt.specs.hfss import (
     HfssEprAnalysisSpec,
     HfssEprSpec,
 )
-
-from scgsim.aedt.specs.parse import AedtSpec, parse_aedt_spec
-
+from scgsim.aedt.specs.parse import parse_aedt_spec
 from scgsim.aedt.specs.q2d import Q2dSpec
-
 from scgsim.aedt.specs.q3d import Q3dSpec
-
+from scgsim.aedt.versions import resolve_aedt_version
 
 _solve = run_hfss
 
@@ -102,6 +100,7 @@ _solve_q2d = run_q2d
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the selected CLI action against a prepared handoff."""
     parser = argparse.ArgumentParser(description="Run one prepared SCGSim AEDT handoff")
     parser.add_argument("--handoff", required=True)
     parser.add_argument(
@@ -165,363 +164,340 @@ def main(argv: list[str] | None = None) -> int:
         raise RuntimeError(
             "prepared handoff is not executed; use run_aedt.sh or pass --execute explicitly"
         )
-    return _execute(
+    return execute_handoff(
         metadata_path,
-        prepare_only=args.prepare_only,
-        analyze_epr=args.analyze_epr,
-        geometry_workers=args.geometry_workers,
-        cores=args.cores,
-        ram_limit_percent=args.ram_limit_percent,
+        options=ExecutionOptions(
+            prepare_only=args.prepare_only,
+            analyze_epr=args.analyze_epr,
+            geometry_workers=args.geometry_workers,
+            cores=args.cores,
+            ram_limit_percent=args.ram_limit_percent,
+        ),
     )
 
 
-def _execute(
-    metadata_path: Path,
-    *,
-    prepare_only: bool = False,
-    analyze_epr: bool = False,
-    geometry_workers: int | None = None,
-    cores: int | None = None,
-    ram_limit_percent: int | None = None,
-    batch_collection: CollectionContext | None = None,
+@dataclass(frozen=True)
+class ExecutionOptions:
+    """Select a handoff action and its explicit execution overrides."""
+
+    prepare_only: bool = False
+    analyze_epr: bool = False
+    geometry_workers: int | None = None
+    cores: int | None = None
+    ram_limit_percent: int | None = None
+    batch_collection: CollectionContext | None = None
+
+
+def execute_handoff(
+    metadata_path: Path, *, options: ExecutionOptions | None = None
 ) -> int:
-    run_dir = metadata_path.parent.parent
-    os.chdir(run_dir)
-    metadata = _object(read_json(metadata_path), "handoff metadata")
-    files = _canonical_metadata_files(metadata, metadata_path, run_dir)
-    receipt_path = run_dir / files["receipt"]
-    receipt = _object(read_json(receipt_path), "receipt")
-    if receipt.get("schema_version") not in {RECEIPT_V1, RECEIPT_V2, RECEIPT_V3}:
-        raise RuntimeError("handoff receipt schema is invalid")
-    if receipt.get("status") != "not_run":
-        raise RuntimeError("one-shot handoff is not in not_run state")
-    spec_path = run_dir / files["spec"]
-    spec = parse_aedt_spec(_object(read_json(spec_path), "spec"), base_dir=run_dir)
-    profile = resolve_aedt_version(spec.aedt_version)
-    if not prepare_only and not analyze_epr and spec.run_control is None:
-        raise ValueError("solving requires an explicit complete run_control")
-    resources = _execution_resources(metadata, spec, cores, ram_limit_percent)
-    if (
-        not isinstance(
-            spec,
-            (
-                HfssEprAnalysisSpec,
-                HfssEprSpec,
-                HfssDrivenGeometrySpec,
-                Q2dSpec,
-                Q3dSpec,
-            ),
-        )
-        and spec.gds_path.resolve() != (run_dir / "geometry/design.gds").resolve()
-    ):
-        raise RuntimeError("prepared spec must use geometry/design.gds")
-    valid_flags = (
-        (
-            isinstance(
-                spec,
-                (
-                    HfssEprSpec,
-                    HfssDrivenGeometrySpec,
-                    HfssDrivenSpec,
-                    HfssEigenmodeSpec,
-                    Q3dSpec,
-                    Q2dSpec,
-                ),
-            )
-            and not analyze_epr
-        )
-        or (isinstance(spec, HfssEprAnalysisSpec) and analyze_epr and not prepare_only)
-        or (
-            not isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec))
-            and not prepare_only
-            and not analyze_epr
-        )
-    )
-    if not valid_flags:
-        raise RuntimeError(
-            "EPR execution flags do not match the prepared handoff workflow"
-        )
-    batch_parent = None
-    if batch_collection is None:
-        _require_pristine_run(run_dir, spec)
-    else:
-        if prepare_only or analyze_epr or not isinstance(spec, HfssEprSpec) or spec.epr_request is None:
-            raise ValueError("external batch collection requires the original full EPR workflow")
-        batch_parent = collection_source(run_dir, batch_collection)
-        package, attempt, prepared_receipt = batch_parent
-        if (package.spec_sha256 != file_sha256(spec_path)
-                or package.requested_aedt_version != spec.aedt_version
-                or prepared_receipt["connected"]["aedt_version"] != spec.aedt_version):
-            raise RuntimeError("batch collection source/version differs from the prepared request")
-    cohort = _verify_prepared_cohort(run_dir, metadata, receipt, spec)
-    if isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec)):
-        geometry = spec.geometry
-        request = spec.epr_request
-        selected_surfaces = (
-            None if request is None else request.surface_contribution_ids
-        )
-        if (
-            geometry.modeling == "thin_film"
-            and request is not None
-            and any(
-                contribution.interface_kind != "MM"
-                and (
-                    selected_surfaces is None
-                    or contribution.contribution_id in selected_surfaces
-                )
-                for contribution in geometry.contributions
-            )
-        ):
-            warnings.warn(
-                "ThinFilm Surface-EPR uses FacePrimitive.normal as a geometric "
-                "direction, not native calculator-side readback. The "
-                "Surface/Adjacent mapping is empirical for pinned PyAEDT 1.3.0 / "
-                "AEDT 2024.2; it is unverified for 2023.2 and may select the "
-                "wrong material side; ThinFilm "
-                "MA/MS participation and loss are not physically validated.",
-                UserWarning,
-                stacklevel=2,
-            )
-    started = _utc_now()
-    execution_started = time.perf_counter()
-    receipt.update(
-        {
-            "schema_version": RECEIPT_V3,
-            "expected_receipt_schema": RECEIPT_V3,
-            "preparation_cohort": cohort["preparation_cohort"],
-            "prepared_runtime_source": cohort["prepared_runtime_source"],
-            "prepared_receipt_sha256": cohort["prepared_receipt_sha256"],
-            "verified_prepared_manifest_sha256": cohort[
-                "verified_prepared_manifest_sha256"
-            ],
-            "status": "running",
-            "started_at_utc": started,
-            "save": {"ok": False},
-            "release": {"ok": False},
-        }
-    )
-    receipt["resources"] = {
-        "requested": resources.to_payload() if resources else None,
-        "request_source": (
-            "cli_override"
-            if cores is not None or ram_limit_percent is not None
-            else "handoff"
-            if resources is not None
-            else "omitted"
-        ),
-        "status": (
-            "not_used_prepare_only"
-            if prepare_only
-            else "not_applicable_saved_analysis"
-            if analyze_epr
-            else "not_started"
-        ),
-    }
-    if prepare_only:
-        receipt["solver_invoked"] = False
-        receipt["model_stage"] = (
-            "model_only" if spec.run_control is None else "model_with_setup"
-        )
-    if batch_parent is not None:
-        package, attempt, prepared_receipt = batch_parent
-        receipt["native_batch"] = {
-            "source": batch_collection.to_payload(),
-            "package_id": package.package_id, "attempt_id": attempt.attempt_id,
-            "native_preparation": "released_verified",
-            "external_solve": "process_terminal_native_results_pending_collection",
-            "collection": "running", "collector_analyze_invoked": False,
-            "external_execution_location": object_payload(attempt.execution_location),
-            "external_requested_aedt_version": attempt.requested_aedt_version,
-            "external_actual_aedt_version": attempt.actual_aedt_version,
-            "resources_requested": attempt.resources_requested.to_payload(),
-        }
-        receipt["resources"] = {
-            "requested": attempt.resources_requested.to_payload(),
-            "status": "external_native_recipe; not applied to collector",
-            "request_source": "native_batch_package",
-        }
-    receipt["requested_aedt_version"] = profile.requested_version
-    receipt["connected_aedt_version"] = None
-    if isinstance(spec, HfssEprAnalysisSpec):
-        receipt["saved_solution_aedt_version"] = spec.saved_solution.aedt_version
-    write_json(receipt_path, receipt)
+    """Validate, run, release, and record one prepared handoff."""
+    return _ExecutionTransaction(metadata_path, options or ExecutionOptions()).run()
 
-    desktop: Any | None = None
-    actual_aedt_version: str | None = None
-    transport_stack = ExitStack()
-    status = "failed"
-    failure: str | None = None
-    result: dict[str, Any] | None = None
-    epr_solver_attempted = False
-    try:
-        receipt["mode"] = spec.mode
-        _verify_prepared_hashes(metadata, spec_path, spec)
-        receipt["runtime_source"] = _runtime_source_identity()
-        if _pyaedt_version() != profile.pyaedt_version:
-            raise RuntimeError("PyAEDT lock mismatch")
-        if isinstance(spec, Q3dSpec) and not prepare_only:
-            write_json(receipt_path, receipt)
-        setting = metadata.get("execution", {}).get("geometry_workers")
-        workers = geometry_workers if geometry_workers is not None else setting
-        validate_geometry_workers(workers)
-        inset_plan = None
+
+@dataclass
+class _ExecutionTransaction:
+    """Keep one handoff's mutable receipt and owned Desktop together."""
+
+    metadata_path: Path
+    options: ExecutionOptions
+
+    def run(self) -> int:
+        """Execute stages while preserving failure and Desktop cleanup order."""
+        self._validate_handoff()
+        self._start_receipt()
+        try:
+            self._run_native()
+        except Exception as exc:  # noqa: BLE001 -- receipt must record any solver failure.
+            self.failure = f"{type(exc).__name__}: {exc}"
+            if isinstance(self.spec, (Q3dSpec, HfssDrivenGeometrySpec, HfssEprSpec)):
+                # Body notes retain source attribution/native context in the existing
+                # failed-receipt error, after the primary exception.
+                notes = getattr(exc, "__notes__", ())
+                if notes:
+                    self.failure += "\n" + "\n".join(notes)
+        finally:
+            self._release_native()
+            self._finish_receipt()
+        return (
+            0
+            if self.status
+            in {
+                "completed",
+                "epr_analysis_completed",
+                "native_preparation_only",
+                "normal_stop_saved",
+                "abort_saved",
+            }
+            else 1
+        )
+
+    def _validate_handoff(self) -> None:
+        self.run_dir = self.metadata_path.parent.parent
+        os.chdir(self.run_dir)
+        self.metadata = json_object(read_json(self.metadata_path), "handoff metadata")
+        self.files = canonical_metadata_files(
+            self.metadata, self.metadata_path, self.run_dir
+        )
+        self.receipt_path = self.run_dir / self.files["receipt"]
+        self.receipt = json_object(read_json(self.receipt_path), "receipt")
+        if self.receipt.get("schema_version") not in {
+            RECEIPT_V1,
+            RECEIPT_V2,
+            RECEIPT_V3,
+        }:
+            raise RuntimeError("handoff receipt schema is invalid")
+        if self.receipt.get("status") != "not_run":
+            raise RuntimeError("one-shot handoff is not in not_run state")
+        self.spec_path = self.run_dir / self.files["spec"]
+        self.spec = parse_aedt_spec(
+            json_object(read_json(self.spec_path), "spec"), base_dir=self.run_dir
+        )
+        self.profile = resolve_aedt_version(self.spec.aedt_version)
         if (
-            batch_parent is None
-            and isinstance(spec, (HfssEprSpec, HfssEprAnalysisSpec))
-            and spec.epr_request is not None
+            not self.options.prepare_only
+            and not self.options.analyze_epr
+            and self.spec.run_control is None
+        ):
+            raise ValueError("solving requires an explicit complete run_control")
+        self.resources = execution_resources(
+            self.metadata, self.spec, self.options.cores, self.options.ram_limit_percent
+        )
+        validate_execution_flags(
+            self.spec, self.run_dir, self.options.prepare_only, self.options.analyze_epr
+        )
+        self.batch_parent = None
+        if self.options.batch_collection is None:
+            require_pristine_run(self.run_dir, self.spec)
+        else:
+            if (
+                self.options.prepare_only
+                or self.options.analyze_epr
+                or not isinstance(self.spec, HfssEprSpec)
+                or self.spec.epr_request is None
+            ):
+                raise ValueError(
+                    "external batch collection requires the original full EPR workflow"
+                )
+            self.batch_parent = collection_source(
+                self.run_dir, self.options.batch_collection
+            )
+            package, attempt, prepared_receipt = self.batch_parent
+            if (
+                package.spec_sha256 != file_sha256(self.spec_path)
+                or package.requested_aedt_version != self.spec.aedt_version
+                or cast(dict[str, Any], prepared_receipt)["connected"]["aedt_version"]
+                != self.spec.aedt_version
+            ):
+                raise RuntimeError(
+                    "batch collection source/version differs from the prepared request"
+                )
+        self.cohort = verify_prepared_cohort(
+            self.run_dir, self.metadata, self.receipt, self.spec
+        )
+        warn_thin_film_surfaces(self.spec)
+
+    def _start_receipt(self) -> None:
+        self.started = _utc_now()
+        self.execution_started = time.perf_counter()
+        self.receipt.update(
+            {
+                "schema_version": RECEIPT_V3,
+                "expected_receipt_schema": RECEIPT_V3,
+                "preparation_cohort": self.cohort["preparation_cohort"],
+                "prepared_runtime_source": self.cohort["prepared_runtime_source"],
+                "prepared_receipt_sha256": self.cohort["prepared_receipt_sha256"],
+                "verified_prepared_manifest_sha256": self.cohort[
+                    "verified_prepared_manifest_sha256"
+                ],
+                "status": "running",
+                "started_at_utc": self.started,
+                "save": {"ok": False},
+                "release": {"ok": False},
+            }
+        )
+        self.receipt["resources"] = {
+            "requested": self.resources.to_payload() if self.resources else None,
+            "request_source": (
+                "cli_override"
+                if self.options.cores is not None
+                or self.options.ram_limit_percent is not None
+                else "handoff"
+                if self.resources is not None
+                else "omitted"
+            ),
+            "status": (
+                "not_used_prepare_only"
+                if self.options.prepare_only
+                else "not_applicable_saved_analysis"
+                if self.options.analyze_epr
+                else "not_started"
+            ),
+        }
+        if self.options.prepare_only:
+            self.receipt["solver_invoked"] = False
+            self.receipt["model_stage"] = (
+                "model_only" if self.spec.run_control is None else "model_with_setup"
+            )
+        if self.batch_parent is not None:
+            package, attempt, prepared_receipt = self.batch_parent
+            self.receipt["native_batch"] = {
+                "source": cast(
+                    CollectionContext, self.options.batch_collection
+                ).to_payload(),
+                "package_id": package.package_id,
+                "attempt_id": attempt.attempt_id,
+                "native_preparation": "released_verified",
+                "external_solve": "process_terminal_native_results_pending_collection",
+                "collection": "running",
+                "collector_analyze_invoked": False,
+                "external_execution_location": object_payload(
+                    attempt.execution_location
+                ),
+                "external_requested_aedt_version": attempt.requested_aedt_version,
+                "external_actual_aedt_version": attempt.actual_aedt_version,
+                "resources_requested": attempt.resources_requested.to_payload(),
+            }
+            self.receipt["resources"] = {
+                "requested": attempt.resources_requested.to_payload(),
+                "status": "external_native_recipe; not applied to collector",
+                "request_source": "native_batch_package",
+            }
+        self.receipt["requested_aedt_version"] = self.profile.requested_version
+        self.receipt["connected_aedt_version"] = None
+        if isinstance(self.spec, HfssEprAnalysisSpec):
+            self.receipt["saved_solution_aedt_version"] = (
+                self.spec.saved_solution.aedt_version
+            )
+        write_json(self.receipt_path, self.receipt)
+
+        self.desktop: Any | None = None
+        self.actual_aedt_version: str | None = None
+        self.transport_stack = ExitStack()
+        self.status = "failed"
+        self.failure: str | None = None
+        self.result: dict[str, Any] | None = None
+        self.epr_solver_attempted = False
+
+    def _run_native(self) -> None:
+        self.receipt["mode"] = self.spec.mode
+        verify_prepared_hashes(self.metadata, self.spec_path, self.spec)
+        self.receipt["runtime_source"] = runtime_source_identity()
+        if pyaedt_version() != self.profile.pyaedt_version:
+            raise RuntimeError("PyAEDT lock mismatch")
+        if isinstance(self.spec, Q3dSpec) and not self.options.prepare_only:
+            write_json(self.receipt_path, self.receipt)
+        setting = self.metadata.get("execution", {}).get("geometry_workers")
+        workers = (
+            self.options.geometry_workers
+            if self.options.geometry_workers is not None
+            else setting
+        )
+        validate_geometry_workers(workers)
+        self.inset_plan = None
+        if (
+            self.batch_parent is None
+            and isinstance(self.spec, (HfssEprSpec, HfssEprAnalysisSpec))
+            and self.spec.epr_request is not None
         ):
             geometry_started = time.perf_counter()
-            inset_plan = precompute_inset_surfaces(
-                spec.geometry, spec.epr_request, workers
+            self.inset_plan = precompute_inset_surfaces(
+                self.spec.geometry, self.spec.epr_request, workers
             )
-            receipt["geometry_precompute"] = {
+            self.receipt["geometry_precompute"] = {
                 "seconds": round(time.perf_counter() - geometry_started, 6),
-                "members": len(inset_plan),
+                "members": len(self.inset_plan),
                 "requested_workers": workers,
             }
-        receipt["native_compatibility"] = {}
-        transport_stack.enter_context(
-            native_compatibility(profile, evidence=receipt["native_compatibility"])
+        self.receipt["native_compatibility"] = {}
+        self.transport_stack.enter_context(
+            native_compatibility(
+                self.profile, evidence=self.receipt["native_compatibility"]
+            )
         )
         if (
-            isinstance(spec, Q3dSpec) and not prepare_only and sys.platform == "linux"
-            and os.getenv("PYAEDT_DOC_GENERATION", "false").lower() in {"true", "1", "t"}
+            isinstance(self.spec, Q3dSpec)
+            and not self.options.prepare_only
+            and sys.platform == "linux"
+            and os.getenv("PYAEDT_DOC_GENERATION", "false").lower()
+            in {"true", "1", "t"}
         ):
-            raise RuntimeError("PyAEDT documentation mode cannot preserve stop-managed Desktop ownership")
-        from ansys.aedt.core import Desktop, Hfss, Q2d, Q3d
+            raise RuntimeError(
+                "PyAEDT documentation mode cannot preserve stop-managed Desktop ownership"
+            )
+        # Load the optional solver dependency only after the receipt starts running.
+        from ansys.aedt.core import Desktop, Hfss, Q2d, Q3d  # noqa: PLC0415 -- optional heavy solver dependency.
 
         desktop_started = time.perf_counter()
-        desktop = Desktop(
-            version=profile.requested_version,
+        self.desktop = Desktop(
+            version=self.profile.requested_version,
             non_graphical=True,
             new_desktop=True,
             close_on_exit=False,
         )
-        actual_aedt_version = desktop.aedt_version_id
-        receipt["connected_aedt_version"] = actual_aedt_version
-        if actual_aedt_version != profile.requested_version:
-            raise RuntimeError(f"AEDT version mismatch: {actual_aedt_version!r}")
-        if isinstance(spec, (HfssEprSpec, HfssEprAnalysisSpec)):
-            receipt.setdefault("timings", {})["desktop_startup_seconds"] = round(
+        self.actual_aedt_version = self.desktop.aedt_version_id
+        self.receipt["connected_aedt_version"] = self.actual_aedt_version
+        if self.actual_aedt_version != self.profile.requested_version:
+            raise RuntimeError(f"AEDT version mismatch: {self.actual_aedt_version!r}")
+        if isinstance(self.spec, (HfssEprSpec, HfssEprAnalysisSpec)):
+            self.receipt.setdefault("timings", {})["desktop_startup_seconds"] = round(
                 time.perf_counter() - desktop_started, 6
             )
-        if batch_parent is not None:
-            from scgsim.aedt.epr.workflow import collect_batch_epr
-            epr_solver_attempted = True  # The bound external attempt ran the solver.
-            result = collect_batch_epr(
-                owned_application_constructor(Hfss, desktop, profile=profile),
-                run_dir, spec, batch_parent[2],
-            )
-            status = "completed"
-        elif isinstance(spec, HfssEprAnalysisSpec):
-            from scgsim.aedt.epr.workflow import analyze_saved_epr
+        self._dispatch_native(Hfss, Q2d, Q3d)
 
-            result = analyze_saved_epr(
-                owned_application_constructor(Hfss, desktop, profile=profile),
-                run_dir,
-                spec,
-                inset_plan,
-                connected_aedt_version=actual_aedt_version,
+    def _dispatch_native(self, Hfss: Any, Q2d: Any, Q3d: Any) -> None:
+        if self.batch_parent is not None:
+            self.epr_solver_attempted = (
+                True  # The bound external attempt ran the solver.
             )
-            status = "epr_analysis_completed"
-        elif isinstance(spec, HfssEprSpec):
-            if spec.epr_request is None:
-                prepared = prepare_body_eigenmode(
-                    owned_application_constructor(Hfss, desktop, profile=profile), run_dir, spec
-                )
-            else:
-                prepared = prepare_epr_hfss(
-                    owned_application_constructor(Hfss, desktop, profile=profile),
-                    run_dir,
-                    spec,
-                    inset_plan,
-                )
-            if prepare_only:
-                result = (
-                    prepared_body_eigenmode_result(prepared)
-                    if spec.epr_request is None
-                    else prepared_epr_result(prepared)
-                )
-                status = "native_preparation_only"
-            else:
-                epr_solver_attempted = True
-                result = (
-                    solve_and_export_body_eigenmode(
-                        prepared, resources, receipt["resources"]
-                    )
-                    if spec.epr_request is None
-                    else solve_and_export_epr(prepared, resources, receipt["resources"])
-                )
-                status = "completed"
-        elif isinstance(spec, Q3dSpec):
-            if prepare_only:
-                prepared = prepare_q3d(
-                    owned_application_constructor(Q3d, desktop, profile=profile), run_dir, spec
-                )
-                result = prepared_q3d_result(prepared)
-                status = "native_preparation_only"
-            else:
-                result = _solve_q3d(
-                    owned_application_constructor(Q3d, desktop, profile=profile),
-                    run_dir,
-                    spec,
-                    resources,
-                    receipt["resources"],
-                    control_metadata=metadata_path,
-                    runtime_source=receipt["runtime_source"],
-                )
-                if "termination" in result:
-                    workflow = result["termination"]
-                    intent = workflow["control"].get("intent")
-                    failure = workflow["primary_error"]
-                    if (
-                        failure is None
-                        and workflow["analysis"].get("native_return") is not True
-                    ):
-                        failure = (
-                            "Q3D Analyze did not return True after normal-stop intent"
-                        )
-                    if (
-                        failure is None
-                        and workflow["control"]
-                        .get("native_settlement", {})
-                        .get("status")
-                        != "inactive"
-                    ):
-                        failure = "Q3D native inactivity was not confirmed after Analyze settlement"
-                    if failure is None and intent["rpc_status"] != "returned":
-                        failure = intent.get("error", "Q3D stop RPC outcome is unknown")
-                    if failure is None and not result["save"]["ok"]:
-                        failure = result["save"]["error"]
-                    status = (
-                        (
-                            "abort_saved"
-                            if workflow["mode"] == "abort_and_save"
-                            else "normal_stop_saved"
-                        )
-                        if failure is None
-                        else "failed"
-                    )
-        elif isinstance(spec, Q2dSpec):
-            if prepare_only:
+            self.result = collect_batch_epr(
+                owned_application_constructor(Hfss, self.desktop, profile=self.profile),
+                self.run_dir,
+                self.spec,
+                self.batch_parent[2],
+            )
+            self.status = "completed"
+        elif isinstance(self.spec, HfssEprAnalysisSpec):
+            self.result = analyze_saved_epr(
+                owned_application_constructor(Hfss, self.desktop, profile=self.profile),
+                self.run_dir,
+                self.spec,
+                cast(dict[tuple[str, float], dict[str, Any]], self.inset_plan),
+                connected_aedt_version=cast(str, self.actual_aedt_version),
+            )
+            self.status = "epr_analysis_completed"
+        elif isinstance(self.spec, HfssEprSpec):
+            self._run_epr(Hfss, self.spec)
+        elif isinstance(self.spec, Q3dSpec):
+            self._run_q3d(Q3d, self.spec)
+        elif isinstance(self.spec, Q2dSpec):
+            if self.options.prepare_only:
                 prepared = prepare_q2d(
-                    owned_application_constructor(Q2d, desktop, profile=profile), run_dir, spec
+                    owned_application_constructor(
+                        Q2d, self.desktop, profile=self.profile
+                    ),
+                    self.run_dir,
+                    self.spec,
                 )
-                result = prepared_q2d_result(prepared)
-                status = "native_preparation_only"
+                self.result = prepared_q2d_result(prepared)
+                self.status = "native_preparation_only"
             else:
-                result = _solve_q2d(
-                    owned_application_constructor(Q2d, desktop, profile=profile),
-                    run_dir,
-                    spec,
-                    resources,
-                    receipt["resources"],
+                self.result = _solve_q2d(
+                    owned_application_constructor(
+                        Q2d, self.desktop, profile=self.profile
+                    ),
+                    self.run_dir,
+                    self.spec,
+                    self.resources,
+                    self.receipt["resources"],
                 )
-        elif prepare_only:
+        elif self.options.prepare_only:
             prepared = prepare_hfss(
-                owned_application_constructor(Hfss, desktop, profile=profile), run_dir, spec
+                owned_application_constructor(Hfss, self.desktop, profile=self.profile),
+                self.run_dir,
+                self.spec,
             )
-            result = {
+            self.result = {
                 "outputs": {},
                 "connected": {
                     "aedt_version": prepared.app.desktop_class.aedt_version_id,
@@ -539,104 +515,206 @@ def _execute(
                 "save": {"ok": True},
                 "solver_invoked": False,
             }
-            status = "native_preparation_only"
+            self.status = "native_preparation_only"
         else:
-            result = _solve(
-                owned_application_constructor(Hfss, desktop, profile=profile),
-                run_dir,
-                spec,
-                resources,
-                receipt["resources"],
+            self.result = _solve(
+                owned_application_constructor(Hfss, self.desktop, profile=self.profile),
+                self.run_dir,
+                self.spec,
+                self.resources,
+                self.receipt["resources"],
             )
         if (
-            not isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec))
-            and not prepare_only
-            and not (result is not None and "termination" in result)
+            not isinstance(self.spec, (HfssEprAnalysisSpec, HfssEprSpec))
+            and not self.options.prepare_only
+            and not (self.result is not None and "termination" in self.result)
         ):
-            status = "completed"
-    except Exception as exc:  # noqa: BLE001 -- receipt must record any solver failure.
-        failure = f"{type(exc).__name__}: {exc}"
-        if isinstance(spec, (Q3dSpec, HfssDrivenGeometrySpec, HfssEprSpec)):
-            # Body notes retain source attribution/native context in the existing
-            # failed-receipt error, after the primary exception.
-            notes = getattr(exc, "__notes__", ())
-            if notes:
-                failure += "\n" + "\n".join(notes)
-    finally:
+            self.status = "completed"
+
+    def _run_epr(self, Hfss: Any, spec: HfssEprSpec) -> None:
+        if spec.epr_request is None:
+            prepared = prepare_body_eigenmode(
+                owned_application_constructor(Hfss, self.desktop, profile=self.profile),
+                self.run_dir,
+                spec,
+            )
+        else:
+            prepared = prepare_epr_hfss(
+                owned_application_constructor(Hfss, self.desktop, profile=self.profile),
+                self.run_dir,
+                spec,
+                self.inset_plan,
+            )
+        if self.options.prepare_only:
+            self.result = (
+                prepared_body_eigenmode_result(prepared)
+                if spec.epr_request is None
+                else prepared_epr_result(prepared)
+            )
+            self.status = "native_preparation_only"
+        else:
+            self.epr_solver_attempted = True
+            self.result = (
+                solve_and_export_body_eigenmode(
+                    prepared, self.resources, self.receipt["resources"]
+                )
+                if spec.epr_request is None
+                else solve_and_export_epr(
+                    prepared, self.resources, self.receipt["resources"]
+                )
+            )
+            self.status = "completed"
+
+    def _run_q3d(self, Q3d: Any, spec: Q3dSpec) -> None:
+        if self.options.prepare_only:
+            prepared = prepare_q3d(
+                owned_application_constructor(Q3d, self.desktop, profile=self.profile),
+                self.run_dir,
+                spec,
+            )
+            self.result = prepared_q3d_result(prepared)
+            self.status = "native_preparation_only"
+        else:
+            self.result = _solve_q3d(
+                owned_application_constructor(Q3d, self.desktop, profile=self.profile),
+                self.run_dir,
+                spec,
+                self.resources,
+                self.receipt["resources"],
+                control_metadata=self.metadata_path,
+                runtime_source=self.receipt["runtime_source"],
+            )
+            if "termination" in self.result:
+                workflow = self.result["termination"]
+                intent = workflow["control"].get("intent")
+                self.failure = workflow["primary_error"]
+                if (
+                    self.failure is None
+                    and workflow["analysis"].get("native_return") is not True
+                ):
+                    self.failure = (
+                        "Q3D Analyze did not return True after normal-stop intent"
+                    )
+                if (
+                    self.failure is None
+                    and workflow["control"].get("native_settlement", {}).get("status")
+                    != "inactive"
+                ):
+                    self.failure = "Q3D native inactivity was not confirmed after Analyze settlement"
+                if self.failure is None and intent["rpc_status"] != "returned":
+                    self.failure = intent.get(
+                        "error", "Q3D stop RPC outcome is unknown"
+                    )
+                if self.failure is None and not self.result["save"]["ok"]:
+                    self.failure = self.result["save"]["error"]
+                self.status = (
+                    (
+                        "abort_saved"
+                        if workflow["mode"] == "abort_and_save"
+                        else "normal_stop_saved"
+                    )
+                    if self.failure is None
+                    else "failed"
+                )
+
+    def _release_native(self) -> None:
         try:
-            if result is not None:
+            if self.result is not None:
                 try:
-                    _record_result_before_release(receipt, result, spec)
-                except Exception as exc:
-                    receipt["result_record_error"] = f"{type(exc).__name__}: {exc}"
-                    if failure is None:
-                        failure = receipt["result_record_error"]
-            if desktop is not None:
+                    record_result_before_release(self.receipt, self.result, self.spec)
+                except Exception as exc:  # noqa: BLE001 -- record any native failure while retaining cleanup and the primary error.
+                    self.receipt["result_record_error"] = f"{type(exc).__name__}: {exc}"
+                    if self.failure is None:
+                        self.failure = self.receipt["result_record_error"]
+            if self.desktop is not None:
                 release_started = time.perf_counter()
                 try:
-                    _release_owned_desktop(desktop, receipt, result)
-                except Exception as exc:
-                    if failure is None:
-                        failure = f"{type(exc).__name__}: {exc}"
-                receipt.setdefault("timings", {})["release_seconds"] = round(
+                    release_owned_desktop(self.desktop, self.receipt, self.result)
+                except Exception as exc:  # noqa: BLE001 -- record any native failure while retaining cleanup and the primary error.
+                    if self.failure is None:
+                        self.failure = f"{type(exc).__name__}: {exc}"
+                self.receipt.setdefault("timings", {})["release_seconds"] = round(
                     time.perf_counter() - release_started, 6
                 )
         finally:
             try:
-                transport_stack.close()
-            except Exception as exc:
-                receipt["native_compatibility_restore_error"] = f"{type(exc).__name__}: {exc}"
-                if failure is None:
-                    failure = receipt["native_compatibility_restore_error"]
-        if failure is not None:
-            status = "failed"
-            receipt["error"] = failure
-        if isinstance(spec, HfssEprSpec):
-            receipt["solver_invoked"] = epr_solver_attempted
+                self.transport_stack.close()
+            except Exception as exc:  # noqa: BLE001 -- record any native failure while retaining cleanup and the primary error.
+                self.receipt["native_compatibility_restore_error"] = (
+                    f"{type(exc).__name__}: {exc}"
+                )
+                if self.failure is None:
+                    self.failure = self.receipt["native_compatibility_restore_error"]
+
+    def _finish_receipt(self) -> None:
+        if self.failure is not None:
+            self.status = "failed"
+            self.receipt["error"] = self.failure
+        if isinstance(self.spec, HfssEprSpec):
+            self.receipt["solver_invoked"] = self.epr_solver_attempted
+        self._seal_result()
+        self.receipt["diagnostics"] = read_physics_warnings(self.run_dir)
+        if self.batch_parent is not None:
+            self.receipt["native_batch"]["collection"] = (
+                "collected_sealed" if self.status == "completed" else "failed"
+            )
+            self.receipt["native_batch"]["external_solve"] = (
+                "native_results_collected"
+                if self.status == "completed"
+                else "process_terminal_collection_failed"
+            )
+        self.receipt["status"] = self.status
+        self.receipt["finished_at_utc"] = _utc_now()
+        self.receipt["execution_seconds"] = round(
+            time.perf_counter() - self.execution_started, 6
+        )
+        write_json(self.receipt_path, self.receipt)
+
+    def _seal_result(self) -> None:
         if (
-            result is not None
-            and "termination" in result
-            and result["termination"]["control"]
+            self.result is not None
+            and "termination" in self.result
+            and self.result["termination"]["control"]
             .get("native_settlement", {})
             .get("status")
             == "inactive"
-            and result["termination"]["control"]
+            and self.result["termination"]["control"]
             .get("request_readback", {})
             .get("status")
             != "unavailable"
-            and result["save"]["ok"] is True
-            and receipt.get("release", {}).get("ok") is True
+            and self.result["save"]["ok"] is True
+            and self.receipt.get("release", {}).get("ok") is True
         ):
             # Seal real released bytes independently, but do not overwrite the
             # stop-save failure with success from an older preparation project.
             try:
-                project = _contained(run_dir, result["project"])
+                project = contained(self.run_dir, self.result["project"])
                 if not project.is_file():
                     raise RuntimeError(
                         "Q3D project is missing after normal-stop release"
                     )
                 digest = file_sha256(project)
-                result["outputs"][result["project"]] = digest
-                receipt["outputs"] = result["outputs"]
-                receipt["save"] = {
-                    **result["save"],
+                self.result["outputs"][self.result["project"]] = digest
+                self.receipt["outputs"] = self.result["outputs"]
+                self.receipt["save"] = {
+                    **self.result["save"],
                     "project_sha256": digest,
                     "identity_stage": "after_owned_desktop_release",
                 }
-            except Exception as exc:
-                receipt["save"] = {
-                    **result["save"],
+            except Exception as exc:  # noqa: BLE001 -- record any native failure while retaining cleanup and the primary error.
+                self.receipt["save"] = {
+                    **self.result["save"],
                     "ok": False,
                     "sealing_error": f"{type(exc).__name__}: {exc}",
                 }
-                status = "failed"
-                if failure is None:
-                    failure = receipt["save"]["sealing_error"]
-                    receipt["error"] = failure
+                self.status = "failed"
+                if self.failure is None:
+                    self.failure = self.receipt["save"]["sealing_error"]
+                    self.receipt["error"] = self.failure
         elif (
-            result is not None
+            self.result is not None
             and isinstance(
-                spec,
+                self.spec,
                 (
                     Q3dSpec,
                     Q2dSpec,
@@ -646,577 +724,74 @@ def _execute(
                     HfssEprSpec,
                 ),
             )
-            and prepare_only
+            and self.options.prepare_only
         ):
-            if receipt.get("release") == {"ok": True}:
+            if self.receipt.get("release") == {"ok": True}:
                 try:
-                    if not _record_epr_project_after_release(run_dir, receipt, result):
+                    if not record_epr_project_after_release(
+                        self.run_dir, self.receipt, self.result
+                    ):
                         raise RuntimeError(
                             "prepared project is missing after owned Desktop release"
                         )
                 except Exception as exc:  # noqa: BLE001 -- retain the primary native failure.
-                    receipt["save"] = {
+                    self.receipt["save"] = {
                         "ok": False,
                         "error": f"{type(exc).__name__}: {exc}",
                     }
-                    status = "failed"
-                    if failure is None:
-                        failure = receipt["save"]["error"]
-                        receipt["error"] = failure
-        elif result is not None and isinstance(
-            spec, (HfssEprAnalysisSpec, HfssEprSpec)
+                    self.status = "failed"
+                    if self.failure is None:
+                        self.failure = self.receipt["save"]["error"]
+                        self.receipt["error"] = self.failure
+        elif self.result is not None and isinstance(
+            self.spec, (HfssEprAnalysisSpec, HfssEprSpec)
         ):
-            if not _record_epr_project_after_release(run_dir, receipt, result):
-                status = "failed"
-                if failure is None:
-                    failure = "EPR project is missing after owned Desktop release"
-                    receipt["error"] = failure
-            else:
-                if (
-                    isinstance(spec, HfssEprSpec)
-                    and spec.epr_request is not None
-                    and status == "completed"
-                    and failure is None
-                    and receipt.get("release") == {"ok": True}
-                ):
-                    try:
-                        sealed = seal_saved_solution(
-                            run_dir,
-                            project_name=spec.project_name,
-                            design_name=spec.design_name,
-                            setup_name=spec.run_control.setup_name,
-                            model_source_sha256=spec.geometry.model_sha256,
-                            evidence=result["saved_field_evidence"],
-                            aedt_version=actual_aedt_version,
-                        )
-                        result["outputs"].update(
-                            {
-                                sealed["manifest"]: sealed["manifest_sha256"],
-                                sealed["receipt"]: sealed["receipt_sha256"],
-                            }
-                        )
-                        receipt["outputs"] = result["outputs"]
-                        receipt["saved_solution"] = sealed
-                    except Exception as exc:  # noqa: BLE001 -- sealing is required.
-                        seal_error = f"{type(exc).__name__}: {exc}"
-                        receipt["saved_solution"] = {
-                            "status": "unavailable",
-                            "error": seal_error,
-                        }
-                        status = "failed"
-                        if failure is None:
-                            failure = seal_error
-                            receipt["error"] = failure
-        elif result is not None and "termination" not in result:
-            _record_ordinary_result_after_release(receipt, result)
-        receipt["diagnostics"] = _read_physics_warnings(run_dir)
-        if batch_parent is not None:
-            receipt["native_batch"]["collection"] = (
-                "collected_sealed" if status == "completed" else "failed"
-            )
-            receipt["native_batch"]["external_solve"] = (
-                "native_results_collected" if status == "completed"
-                else "process_terminal_collection_failed"
-            )
-        receipt["status"] = status
-        receipt["finished_at_utc"] = _utc_now()
-        receipt["execution_seconds"] = round(time.perf_counter() - execution_started, 6)
-        write_json(receipt_path, receipt)
-    return (
-        0
-        if status
-        in {
-            "completed",
-            "epr_analysis_completed",
-            "native_preparation_only",
-            "normal_stop_saved",
-            "abort_saved",
-        }
-        else 1
-    )
+            self._seal_epr_result(self.result)
+        elif self.result is not None and "termination" not in self.result:
+            record_ordinary_result_after_release(self.receipt, self.result)
 
-
-def _release_owned_desktop(
-    desktop: Any, receipt: dict[str, Any], result: dict[str, Any] | None
-) -> None:
-    """Close saved work; detach without closing when stop-save remains unresolved."""
-    preserve_desktop = False
-    try:
-        preserve_desktop = (
-            result is not None
-            and "termination" in result
-            and (
-                result["termination"]["control"]
-                .get("native_settlement", {})
-                .get("status")
-                != "inactive"
-                or result["termination"]["control"]
-                .get("request_readback", {})
-                .get("status")
-                == "unavailable"
-                or result["save"]["ok"] is not True
-            )
-        )
-        if preserve_desktop:
-            receipt["release"] = {
-                "ok": False,
-                "reason": "save_failed"
-                if result["save"].get("attempted") and not result["save"]["ok"]
-                else "native_not_confirmed_inactive",
-                "preserved_desktop": result["termination"]["control"][
-                    "desktop"
-                ],
-                "ownership": "unresolved",
-            }
-            detached = desktop.release_desktop(
-                close_projects=False, close_on_exit=False
-            )
-            receipt["release"]["detach"] = {
-                "ok": detached is True,
-                "native_return": detached,
-            }
+    def _seal_epr_result(self, result: dict[str, Any]) -> None:
+        if not record_epr_project_after_release(self.run_dir, self.receipt, result):
+            self.status = "failed"
+            if self.failure is None:
+                self.failure = "EPR project is missing after owned Desktop release"
+                self.receipt["error"] = self.failure
         else:
-            released = bool(
-                desktop.release_desktop(close_projects=True, close_on_exit=True)
-            )
-            receipt["release"] = {"ok": released}
-            if not released:
-                raise RuntimeError("owned AEDT Desktop release returned false")
-    except Exception as exc:  # noqa: BLE001 -- receipt records release failure.
-        receipt["release"] = {
-            **receipt.get("release", {}),
-            "ok": False,
-            "error": f"{type(exc).__name__}: {exc}",
-        }
-        if preserve_desktop:
-            receipt["release"]["detach"] = {
-                "ok": False,
-                "error": receipt["release"]["error"],
-            }
-        raise
-
-
-def _record_result_before_release(
-    receipt: dict[str, Any], result: dict[str, Any], spec: AedtSpec
-) -> None:
-    """Copy returned facts before releasing the one transaction-owned Desktop."""
-
-    if isinstance(spec, Q3dSpec) and "termination" in result:
-        for name in (
-            "outputs",
-            "connected",
-            "project",
-            "materials",
-            "region",
-            "nets",
-            "setup",
-            "save",
-            "solver_invoked",
-            "termination",
-        ):
-            receipt[name] = result[name]
-    elif (
-        isinstance(
-            spec, (Q3dSpec, Q2dSpec, HfssDrivenGeometrySpec, HfssDrivenSpec, HfssEigenmodeSpec)
-        )
-        and result.get("solver_invoked") is False
-    ):
-        for name in (
-            "outputs",
-            "connected",
-            "project",
-            "materials",
-            "region",
-            "setup",
-            "save",
-            "solver_invoked",
-        ):
-            receipt[name] = result[name]
-        for name in ("nets", "ports", "conductors", "mesh", "geometry"):
-            if name in result:
-                receipt[name] = result[name]
-    elif isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec)):
-        receipt["outputs"] = result["outputs"]
-        receipt["connected"] = result["connected"]
-        receipt["project"] = result["project"]
-        receipt["geometry"] = result["geometry"]
-        receipt["setup"] = result["setup"]
-        receipt["expressions"] = result.get("expressions", [])
-        receipt["cache"] = result.get("cache", {"status": "not_applicable"})
-        receipt["timings"] = {**receipt.get("timings", {}), **result.get("timings", {})}
-        receipt["solver_invoked"] = result["solver_invoked"]
-        receipt["workflow_status"] = result["workflow_status"]
-        if "convergence" in result:
-            receipt["convergence"] = result["convergence"]
-        if "result_readback" in result:
-            receipt["result_readback"] = result["result_readback"]
-        if "result" in result:
-            receipt["epr_result"] = result["result"]
-        if "saved_field_evidence" in result:
-            receipt["saved_field_evidence"] = result["saved_field_evidence"]
-        if "benchmark" in result:
-            receipt["benchmark"] = result["benchmark"]
-    else:
-        receipt["save"] = result["save"]
-        if "geometry" in result:
-            receipt["geometry"] = result["geometry"]
-        if "benchmark" in result:
-            receipt["benchmark"] = result["benchmark"]
-
-
-def _record_epr_project_after_release(
-    run_dir: Path, receipt: dict[str, Any], result: dict[str, Any]
-) -> bool:
-    """Hash a released saved project; return false only when it is missing."""
-
-    project_relative = result["project"]
-    project_path = _contained(run_dir, project_relative)
-    if not project_path.is_file():
-        return False
-    project_sha256 = file_sha256(project_path)
-    result["outputs"] = {
-        project_relative: project_sha256,
-        **{
-            key: value
-            for key, value in result["outputs"].items()
-            if key != project_relative
-        },
-    }
-    result["save"] = {
-        "ok": True,
-        "project_sha256": project_sha256,
-        "identity_stage": "after_owned_desktop_release",
-    }
-    receipt["outputs"] = result["outputs"]
-    receipt["save"] = result["save"]
-    return True
-
-
-def _record_ordinary_result_after_release(
-    receipt: dict[str, Any], result: dict[str, Any]
-) -> None:
-    """Copy ordinary HFSS/Q3D/Q2D export facts after Desktop release."""
-
-    receipt["outputs"] = result["outputs"]
-    receipt["connected"] = result["connected"]
-    receipt["project"] = result["project"]
-    receipt["ports"] = result.get("ports", [])
-    receipt["nets"] = result.get("nets", [])
-    receipt["conductors"] = result.get("conductors", [])
-    receipt["mesh"] = result.get("mesh", {})
-    receipt["materials"] = result["materials"]
-    receipt["region"] = result["region"]
-    receipt["result_readback"] = result["result_readback"]
-    receipt["setup"] = result.get("setup")
-    if "stop_control" in result:
-        receipt["stop_control"] = result["stop_control"]
-    if "convergence" in result:
-        receipt["convergence"] = result["convergence"]
-
-
-def _execution_resources(
-    metadata: dict[str, Any],
-    spec: AedtSpec,
-    cores: int | None,
-    ram_limit_percent: int | None,
-) -> AedtResources | None:
-    execution = _object(metadata.get("execution", {}), "handoff execution")
-    prepared = execution.get("resources")
-    if prepared is not None:
-        prepared = _object(prepared, "prepared resources")
-        if set(prepared) != {"cores", "ram_limit_percent"}:
-            raise ValueError("prepared resource fields are not canonical")
-    if cores is not None or ram_limit_percent is not None:
-        if isinstance(spec, HfssEprAnalysisSpec):
-            raise ValueError("saved-field analysis does not run a solve")
-        if prepared is None and (cores is None or ram_limit_percent is None):
-            raise ValueError(
-                "both resource overrides are required without prepared resources"
-            )
-        prepared = {
-            "cores": cores if cores is not None else prepared["cores"],
-            "ram_limit_percent": (
-                ram_limit_percent
-                if ram_limit_percent is not None
-                else prepared["ram_limit_percent"]
-            ),
-        }
-    if isinstance(spec, HfssEprAnalysisSpec) and prepared is not None:
-        raise ValueError("saved-field analysis cannot request solve resources")
-    return AedtResources(**prepared) if prepared is not None else None
-
-
-def _canonical_metadata_files(
-    metadata: dict[str, Any], metadata_path: Path, run_dir: Path
-) -> dict[str, str]:
-    expected_path = run_dir / "metadata/aedt_handoff_metadata.json"
-    if metadata_path != expected_path:
-        raise RuntimeError("handoff metadata path is not canonical")
-    schema = metadata.get("schema_version")
-    if (
-        schema not in {"scgsim.aedt.handoff.v1", "scgsim.aedt.handoff.v2"}
-        or metadata.get("status") != "prepared"
-    ):
-        raise RuntimeError("handoff metadata schema or status is invalid")
-    files = _object(metadata.get("files"), "files")
-    expected = {"spec": "aedt_spec.json", "receipt": "metadata/aedt_run_receipt.json"}
-    workflow = metadata.get("workflow")
-    if schema == "scgsim.aedt.handoff.v1" and metadata.get("mode") not in {
-        "q2d",
-        "q3d",
-    }:
-        expected["gds"] = "geometry/design.gds"
-    elif schema == "scgsim.aedt.handoff.v2" and workflow == "epr_analysis":
-        for key in ("saved_project", "saved_results"):
-            value = files.get(key)
             if (
-                not isinstance(value, str)
-                or not value.startswith("saved/")
-                or _contained(run_dir, value) != run_dir / value
+                isinstance(self.spec, HfssEprSpec)
+                and self.spec.epr_request is not None
+                and self.status == "completed"
+                and self.failure is None
+                and self.receipt.get("release") == {"ok": True}
             ):
-                raise RuntimeError("analysis handoff saved paths are not canonical")
-            expected[key] = value
-    if (schema == "scgsim.aedt.handoff.v2") != (
-        workflow
-        in {"body_first_driven_terminal", "body_first_eigenmode", "epr", "epr_analysis"}
-    ):
-        raise RuntimeError("handoff metadata workflow is inconsistent")
-    if files != expected:
-        raise RuntimeError("handoff metadata file map is not canonical")
-    return expected
-
-
-def _verify_prepared_hashes(
-    metadata: dict[str, Any], spec_path: Path, spec: AedtSpec
-) -> None:
-    receipt = _object(
-        read_json(spec_path.parent / "metadata/aedt_run_receipt.json"), "receipt"
-    )
-    source = _object(receipt.get("source"), "receipt.source")
-    if source.get("spec") != "aedt_spec.json":
-        raise RuntimeError("receipt source paths are not canonical")
-    if file_sha256(spec_path) != _text(source.get("spec_sha256"), "source.spec_sha256"):
-        raise RuntimeError("prepared spec hash mismatch")
-    if isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec, HfssDrivenGeometrySpec)):
-        expected_source_keys = {
-            "spec",
-            "spec_sha256",
-            "planar_source_sha256",
-            "planar_model_sha256",
-        }
-        if isinstance(spec, HfssEprAnalysisSpec):
-            expected_source_keys.add("saved_solution_sha256")
-        if set(source) != expected_source_keys:
-            raise RuntimeError("EPR handoff source members are not canonical")
-        if source.get("planar_source_sha256") != spec.geometry.source_sha256:
-            raise RuntimeError("prepared planar source hash mismatch")
-        if source.get("planar_model_sha256") != spec.geometry.model_sha256:
-            raise RuntimeError("prepared planar model hash mismatch")
-        if "gds_sha256" in metadata:
-            raise RuntimeError("EPR handoff must not contain a GDS source")
-        if (
-            isinstance(spec, HfssEprAnalysisSpec)
-            and source.get("saved_solution_sha256")
-            != spec.saved_solution.content_sha256
-        ):
-            raise RuntimeError("prepared saved solution hash mismatch")
-        return
-    if isinstance(spec, (Q2dSpec, Q3dSpec)):
-        if set(source) != {"spec", "spec_sha256"} or "gds_sha256" in metadata:
-            raise RuntimeError(
-                "Q2D handoff must not contain a GDS source"
-                if isinstance(spec, Q2dSpec)
-                else "Q3D body handoff must not contain an imported GDS source"
-            )
-        return
-    gds_path = spec.gds_path
-    if source.get("gds") != "geometry/design.gds":
-        raise RuntimeError("receipt GDS path is not canonical")
-    if file_sha256(gds_path) != _text(metadata.get("gds_sha256"), "gds_sha256"):
-        raise RuntimeError("copied GDS hash mismatch")
-    if file_sha256(gds_path) != _text(source.get("gds_sha256"), "source.gds_sha256"):
-        raise RuntimeError("receipt GDS hash mismatch")
-
-
-def _verify_prepared_cohort(
-    run_dir: Path, metadata: dict[str, Any], receipt: dict[str, Any], spec: AedtSpec
-) -> dict[str, Any]:
-    manifest_path = run_dir / "metadata/aedt_handoff_manifest.json"
-    if not manifest_path.is_file():
-        raise FileNotFoundError(f"handoff manifest is missing: {manifest_path}")
-    manifest = _object(read_json(manifest_path), "handoff manifest")
-    expected_manifest_schema = (
-        "scgsim.aedt.handoff-manifest.v2"
-        if isinstance(spec, (HfssEprAnalysisSpec, HfssEprSpec, HfssDrivenGeometrySpec))
-        else "scgsim.aedt.handoff-manifest.v1"
-    )
-    if manifest.get("schema_version") != expected_manifest_schema:
-        raise RuntimeError("handoff manifest schema is invalid")
-    metadata_has = "expected_receipt_schema" in metadata
-    manifest_has = "expected_receipt_schema" in manifest
-    markers = (
-        metadata.get("expected_receipt_schema"),
-        manifest.get("expected_receipt_schema"),
-    )
-    schema = receipt.get("schema_version")
-    if receipt.get("mode") != spec.mode:
-        raise RuntimeError("prepared receipt mode does not match the spec")
-    initial_keys = {
-        "schema_version",
-        "status",
-        "mode",
-        "requested",
-        "pdk_materials",
-        "vacuum_material_id",
-        "source",
-        "outputs",
-        "prepared_at_utc",
-    }
-    if schema in {RECEIPT_V2, RECEIPT_V3}:
-        initial_keys.add("prepared_runtime_source")
-        if markers != (schema, schema):
-            raise RuntimeError("prepared receipt cohort markers are inconsistent")
-        validate_runtime_source(
-            receipt.get("prepared_runtime_source"), stage="prepared"
-        )
-        preparation_cohort = "prepared_v3" if schema == RECEIPT_V3 else "prepared_v2"
-        prepared_source = receipt["prepared_runtime_source"]
-    elif schema == RECEIPT_V1:
-        if metadata_has or manifest_has:
-            if RECEIPT_V2 in markers:
-                raise RuntimeError(
-                    "legacy receipt conflicts with v2 expectation markers"
-                )
-            raise RuntimeError(
-                "legacy receipt conflicts with later expectation markers"
-            )
-        if "prepared_runtime_source" in receipt or "expected_receipt_schema" in receipt:
-            raise RuntimeError("legacy receipt contains mixed preparation provenance")
-        preparation_cohort = "verified_legacy_v1"
-        prepared_source = {"status": "legacy_v1_not_recorded"}
-    else:
-        raise RuntimeError("handoff receipt schema is invalid")
-    if set(receipt) != initial_keys or receipt.get("outputs") != {}:
-        raise RuntimeError("prepared receipt members are not canonical")
-
-    expected_paths = canonical_handoff_paths(spec)
-    if manifest.get("allowed_paths") != expected_paths:
-        raise RuntimeError("handoff manifest allowed paths are not canonical")
-    members = manifest.get("members")
-    if not isinstance(members, list) or len(members) != len(expected_paths) - 1:
-        raise RuntimeError("handoff manifest members are not canonical")
-    if [
-        item.get("path") if isinstance(item, dict) else None for item in members
-    ] != canonical_member_paths(spec):
-        raise RuntimeError("handoff manifest members are not canonical")
-    hashes: dict[str, str] = {}
-    for item in members:
-        if not isinstance(item, dict) or set(item) != {"path", "bytes", "sha256"}:
-            raise RuntimeError("handoff manifest member is invalid")
-        relative = item["path"]
-        path = _contained(run_dir, relative)
-        if (
-            not isinstance(item["bytes"], int)
-            or isinstance(item["bytes"], bool)
-            or item["bytes"] < 0
-            or not isinstance(item["sha256"], str)
-            or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"])
-            or not path.is_file()
-            or path.stat().st_size != item["bytes"]
-            or file_sha256(path) != item["sha256"]
-        ):
-            raise RuntimeError(f"handoff manifest member mismatch: {relative}")
-        hashes[relative] = item["sha256"]
-    if isinstance(spec, Q3dSpec):
-        validate_geometry_source(run_dir, receipt["source"], spec)
-    validate_hfss_import_source(run_dir, read_json(run_dir / "aedt_spec.json"), spec)
-    return {
-        "preparation_cohort": preparation_cohort,
-        "prepared_runtime_source": prepared_source,
-        "prepared_receipt_sha256": hashes["metadata/aedt_run_receipt.json"],
-        "verified_prepared_manifest_sha256": file_sha256(manifest_path),
-    }
-
-
-def _contained(root: Path, relative: str) -> Path:
-    requested = Path(relative)
-    if requested.is_absolute():
-        raise RuntimeError(f"handoff path escapes run directory: {relative!r}")
-    path = (root / requested).resolve()
-    if not path.is_relative_to(root.resolve()):
-        raise RuntimeError(f"handoff path escapes run directory: {relative!r}")
-    return path
-
-
-def _require_pristine_run(run_dir: Path, spec: AedtSpec) -> None:
-    if isinstance(spec, HfssEprAnalysisSpec):
-        if (run_dir / "analysis-work").exists():
-            raise RuntimeError("saved-field analysis workcopy already exists")
-        return
-    if (run_dir / f"{spec.project_name}.aedt").exists() or (
-        run_dir / "results"
-    ).exists():
-        raise RuntimeError("one-shot handoff already owns project or results artifacts")
-
-
-def _pyaedt_version() -> str:
-    return pyaedt_version()
-
-
-def _object(value: Any, field: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise TypeError(f"{field} must be a JSON object")
-    return value
-
-
-def _read_physics_warnings(run_dir: Path) -> dict[str, Any]:
-    """Preserve HFSS terminal-mode diagnostics without treating them as gates."""
-    path = run_dir / "batch.log"
-    if not path.is_file():
-        return {"batch_log": "batch.log", "present": False, "physics_warnings": []}
-    warnings: dict[tuple[str, str], dict[str, Any]] = {}
-    for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        conductor = re.search(
-            r"Port '([^']+)' has (\d+) signal conductors with (\d+) terminals", raw_line
-        )
-        slow_mode = re.search(
-            r"Port ([^ ]+) supports an additional propagating and/or slowly decaying mode",
-            raw_line,
-        )
-        if conductor:
-            port, signals, terminals = conductor.groups()
-            detail = {
-                "kind": "signal_conductors_per_terminal",
-                "port": port,
-                "signal_conductors": int(signals),
-                "terminals": int(terminals),
-            }
-        elif slow_mode:
-            detail = {
-                "kind": "additional_propagating_or_slow_mode",
-                "port": slow_mode.group(1),
-            }
-        else:
-            continue
-        key = (detail["kind"], detail["port"])
-        record = warnings.setdefault(key, {**detail, "occurrences": 0})
-        record["occurrences"] += 1
-    return {
-        "batch_log": "batch.log",
-        "sha256": file_sha256(path),
-        "present": True,
-        "physics_warnings": [warnings[key] for key in sorted(warnings)],
-    }
-
-
-def _runtime_source_identity() -> dict[str, Any]:
-    return runtime_source_identity()
-
-
-def _text(value: Any, field: str) -> str:
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"{field} must be non-empty text")
-    return value
+                try:
+                    sealed = seal_saved_solution(
+                        self.run_dir,
+                        project_name=self.spec.project_name,
+                        design_name=self.spec.design_name,
+                        setup_name=cast(Any, self.spec.run_control).setup_name,
+                        model_source_sha256=self.spec.geometry.model_sha256,
+                        evidence=result["saved_field_evidence"],
+                        aedt_version=cast(str, self.actual_aedt_version),
+                    )
+                    result["outputs"].update(
+                        {
+                            sealed["manifest"]: sealed["manifest_sha256"],
+                            sealed["receipt"]: sealed["receipt_sha256"],
+                        }
+                    )
+                    self.receipt["outputs"] = result["outputs"]
+                    self.receipt["saved_solution"] = sealed
+                except Exception as exc:  # noqa: BLE001 -- sealing is required.
+                    seal_error = f"{type(exc).__name__}: {exc}"
+                    self.receipt["saved_solution"] = {
+                        "status": "unavailable",
+                        "error": seal_error,
+                    }
+                    self.status = "failed"
+                    if self.failure is None:
+                        self.failure = seal_error
+                        self.receipt["error"] = self.failure
 
 
 def _utc_now() -> str:

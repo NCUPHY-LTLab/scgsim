@@ -1,4 +1,4 @@
-"""Source exterior-chain selection shared by Q3D authoring and offline readers.
+"""Select source exterior chains for Q3D authoring and offline readers.
 
 This module owns no native session and never chooses a nearest electrode.
 """

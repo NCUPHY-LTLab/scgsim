@@ -1,16 +1,17 @@
 """Offline source-material contracts; no native application or simulated readback."""
 
-from dataclasses import replace
 import hashlib
 import json
+from dataclasses import replace
 
 import pytest
 
 from scgsim.aedt.preparation.cohort import GEOMETRY_SOURCE_PATHS
-from scgsim.aedt.runtime.families.q3d import _source_material_bindings
+from scgsim.aedt.runtime.families.q3d import source_material_bindings
 from scgsim.aedt.runtime.native.common import source_material_properties
 from scgsim.aedt.specs.common import PdkMaterial
 from scgsim.aedt.specs.q3d import Q3dBodySpec, Q3dNetSpec, Q3dSpec
+from scgsim.geometry.source.normalization import normalize_material_records
 
 
 def _spec():
@@ -63,6 +64,7 @@ def _source_spec(root, catalog):
 
 
 def test_projects_only_declared_properties_without_material_defaults():
+    """Project only declared scalar material properties without adding library defaults."""
     record = {
         "permittivity": 11.45,
         "permeability": 1,
@@ -94,15 +96,18 @@ def test_projects_only_declared_properties_without_material_defaults():
     ],
 )
 def test_unsupported_declared_properties_fail_instead_of_using_library(record, error):
+    """Reject unsupported declared property shapes before library substitution."""
     with pytest.raises(error):
         source_material_properties(record)
 
 
 def test_source_free_request_keeps_library_only_path(tmp_path):
-    assert _source_material_bindings(tmp_path, _spec()) is None
+    """Keep requests without source records on the established library-only path."""
+    assert source_material_bindings(tmp_path, _spec()) is None
 
 
 def test_q3d_resolves_only_referenced_nonpec_source_materials(tmp_path):
+    """Resolve only referenced non-PEC Q3D source material records."""
     catalog = {
         "vacuum": {"permittivity": 1.0},
         "si_a": {"permittivity": 11.45},
@@ -110,13 +115,14 @@ def test_q3d_resolves_only_referenced_nonpec_source_materials(tmp_path):
         "metal": {"conductivity": "unsupported but PEC is separate"},
         "unused": {"permittivity": [1, 2, 3]},
     }
-    bindings = _source_material_bindings(tmp_path, _source_spec(tmp_path, catalog))
+    bindings = source_material_bindings(tmp_path, _source_spec(tmp_path, catalog))
     assert tuple(bindings) == ("si_a", "si_b", "vacuum")
     assert bindings["si_a"] == {"record": catalog["si_a"], "native_name": "Silicon"}
     assert bindings["si_b"]["record"] == {"loss_tangent": 0.0001}
 
 
 def test_same_native_name_conflicts_reject_before_any_native_write(tmp_path):
+    """Reject conflicting source values for one native material name before writing."""
     catalog = {
         "vacuum": {},
         "si_a": {"permittivity": 11.45},
@@ -124,23 +130,24 @@ def test_same_native_name_conflicts_reject_before_any_native_write(tmp_path):
     }
     spec = _source_spec(tmp_path, catalog)
     with pytest.raises(ValueError, match="conflicting 'permittivity'"):
-        _source_material_bindings(tmp_path, spec)
+        source_material_bindings(tmp_path, spec)
 
 
 def test_same_native_name_matching_values_remain_separate_source_bindings(tmp_path):
+    """Retain separate source bindings when native names and declared values agree."""
     catalog = {
         "vacuum": {},
         "si_a": {"permittivity": 11.45},
         "si_b": {"permittivity": 11.45},
     }
-    bindings = _source_material_bindings(tmp_path, _source_spec(tmp_path, catalog))
+    bindings = source_material_bindings(tmp_path, _source_spec(tmp_path, catalog))
     assert bindings["si_a"]["record"] == bindings["si_b"]["record"]
     assert bindings["si_a"]["native_name"] == "Silicon"
     assert bindings["si_b"]["native_name"] == "silicon"
 
 
 def test_source_normalization_preserves_declared_scalars_template_and_raw_conductivity():
-    from scgsim.geometry.source._normalization import _materials
+    """Preserve declared scalars, library templates and raw conductivity during normalization."""
 
     declared = {
         "dielectric": {
@@ -154,7 +161,7 @@ def test_source_normalization_preserves_declared_scalars_template_and_raw_conduc
             "conductivity": {"value": 5.8e7, "unit": "S/m"},
         },
     }
-    normalized = _materials(declared)
+    normalized = normalize_material_records(declared)
     assert normalized["dielectric"] == {
         "kind": "dielectric",
         "permittivity": 11.45,
@@ -169,22 +176,29 @@ def test_source_normalization_preserves_declared_scalars_template_and_raw_conduc
         "value": 5.8e7,
         "unit": "S/m",
     }
-    assert normalized["conductor"]["conductivity"] is not declared["conductor"]["conductivity"]
+    assert (
+        normalized["conductor"]["conductivity"]
+        is not declared["conductor"]["conductivity"]
+    )
     with pytest.raises(TypeError, match="no established scalar unit contract"):
         source_material_properties(normalized["conductor"])
 
 
 @pytest.mark.parametrize("permittivity", [True, [11.45, 12.0, 13.0]])
-def test_source_normalization_keeps_unsupported_permittivity_for_backend_failure(permittivity):
-    from scgsim.geometry.source._normalization import _materials
+def test_source_normalization_keeps_unsupported_permittivity_for_backend_failure(
+    permittivity,
+):
+    """Retain unsupported permittivity shapes for explicit backend rejection."""
 
-    normalized = _materials({
-        "dielectric": {
-            "kind": "dielectric",
-            "relative_permittivity": permittivity,
-            "aedt_library_name": "Silicon",
-        },
-    })["dielectric"]
+    normalized = normalize_material_records(
+        {
+            "dielectric": {
+                "kind": "dielectric",
+                "relative_permittivity": permittivity,
+                "aedt_library_name": "Silicon",
+            },
+        }
+    )["dielectric"]
     assert normalized["permittivity"] == permittivity
     assert type(normalized["permittivity"]) is type(permittivity)
     assert normalized["aedt_library_name"] == "Silicon"

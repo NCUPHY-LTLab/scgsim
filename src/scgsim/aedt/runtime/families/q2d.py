@@ -2,33 +2,30 @@
 
 from __future__ import annotations
 
-
 from dataclasses import dataclass
-
 from pathlib import Path
+from typing import Any, cast
 
-from typing import Any
-
-from scgsim.aedt._io import file_sha256
-
+from scgsim.aedt.io import file_sha256
 from scgsim.aedt.results.convergence.q2d import read_q2d_convergence
-
 from scgsim.aedt.results.matrices import read_q2d_rlgc_matrix
-
 from scgsim.aedt.runtime.benchmark import attach_simulation_benchmark
-
 from scgsim.aedt.runtime.native.common import (
     BoundAedtRequest,
-    analyze_with_resources,
     detached_data,
     native_boundary_names,
+)
+from scgsim.aedt.runtime.native.common import (
     native_object_property as _native_object_property,
+)
+from scgsim.aedt.runtime.native.common import (
     pyaedt_version as _pyaedt_version,
+)
+from scgsim.aedt.runtime.native.common import (
     saved_setup_properties as _saved_setup_properties,
 )
-
-from scgsim.aedt.specs.common import AedtResources
-
+from scgsim.aedt.runtime.native.resources import analyze_with_resources
+from scgsim.aedt.specs.common import AedtResources, MatrixRunControl
 from scgsim.aedt.specs.q2d import Q2dSpec
 
 
@@ -89,12 +86,12 @@ def prepare_q2d(Q2d: Any, run_dir: Path, spec: Q2dSpec) -> PreparedQ2d:
     region = _create_q2d_region(app, spec)
     conductors = _assign_q2d_conductors(app, spec, objects)
     if spec.run_control is not None:
-        _setup_q2d(app, spec)
+        _setup_q2d(app, spec.run_control)
     elif app.setup_names:
         raise RuntimeError("model-only Q2D design must not inherit a setup")
     if not app.save_project() or not project_path.is_file():
         raise RuntimeError("Q2D project was not saved before solve")
-    setup = None if spec.run_control is None else _read_q2d_setup(app, spec)
+    setup = None if spec.run_control is None else _read_q2d_setup(app, spec.run_control)
     _read_saved_q2d_conductors(app, conductors)
     return PreparedQ2d(
         app,
@@ -160,7 +157,9 @@ def export_q2d(prepared: PreparedQ2d) -> dict[str, Any]:
         raise TypeError("bound Q2D request did not retain a Q2D spec")
     if spec.run_control is None:
         raise ValueError("Q2D result export requires an explicit complete run_control")
-    outputs, result_readback = _export_q2d(prepared.app, run_dir, spec)
+    outputs, result_readback = export_q2d_matrices(
+        prepared.app, run_dir, spec, spec.run_control
+    )
     outputs = detached_data(outputs)
     result_readback = detached_data(result_readback)
     if not prepared.app.save_project() or not prepared.project_path.is_file():
@@ -194,7 +193,9 @@ def _create_q2d_geometry(
     records: list[dict[str, Any]] = []
     for rectangle in spec.rectangles:
         material = spec.materials[rectangle.material_id]
-        library_name = "pec" if material.is_superconducting else material.library_name
+        library_name = (
+            "pec" if material.is_superconducting else cast(str, material.library_name)
+        )
         if not material.is_superconducting and not app.materials.exists_material(
             library_name
         ):
@@ -337,31 +338,27 @@ def _read_saved_q2d_conductors(app: Any, records: list[dict[str, Any]]) -> None:
         }
 
 
-def _setup_q2d(app: Any, spec: Q2dSpec) -> None:
+def _setup_q2d(app: Any, control: MatrixRunControl) -> None:
     if app.setup_names:
         raise RuntimeError("new Q2D design must not inherit a setup")
-    setup = app.create_setup(spec.run_control.setup_name)
-    setup.props["AdaptiveFreq"] = f"{spec.run_control.frequency_ghz:g}GHz"
-    setup.props["CGDataBlock"]["MaxPass"] = spec.run_control.maximum_passes
-    setup.props["CGDataBlock"]["MinPass"] = spec.run_control.minimum_passes
-    setup.props["CGDataBlock"]["MinConvPass"] = (
-        spec.run_control.minimum_converged_passes
-    )
-    setup.props["CGDataBlock"]["PerError"] = spec.run_control.convergence_percent
-    setup.props["CGDataBlock"]["PerRefine"] = spec.run_control.percent_refinement
-    setup.props["RLDataBlock"]["MaxPass"] = spec.run_control.maximum_passes
-    setup.props["RLDataBlock"]["MinPass"] = spec.run_control.minimum_passes
-    setup.props["RLDataBlock"]["MinConvPass"] = (
-        spec.run_control.minimum_converged_passes
-    )
-    setup.props["RLDataBlock"]["PerError"] = spec.run_control.convergence_percent
-    setup.props["RLDataBlock"]["PerRefine"] = spec.run_control.percent_refinement
+    setup = app.create_setup(control.setup_name)
+    setup.props["AdaptiveFreq"] = f"{control.frequency_ghz:g}GHz"
+    setup.props["CGDataBlock"]["MaxPass"] = control.maximum_passes
+    setup.props["CGDataBlock"]["MinPass"] = control.minimum_passes
+    setup.props["CGDataBlock"]["MinConvPass"] = control.minimum_converged_passes
+    setup.props["CGDataBlock"]["PerError"] = control.convergence_percent
+    setup.props["CGDataBlock"]["PerRefine"] = control.percent_refinement
+    setup.props["RLDataBlock"]["MaxPass"] = control.maximum_passes
+    setup.props["RLDataBlock"]["MinPass"] = control.minimum_passes
+    setup.props["RLDataBlock"]["MinConvPass"] = control.minimum_converged_passes
+    setup.props["RLDataBlock"]["PerError"] = control.convergence_percent
+    setup.props["RLDataBlock"]["PerRefine"] = control.percent_refinement
     if not setup.update():
         raise RuntimeError("Q2D setup update failed")
 
 
-def _read_q2d_setup(app: Any, spec: Q2dSpec) -> dict[str, Any]:
-    raw = _saved_setup_properties(app, spec.run_control.setup_name)
+def _read_q2d_setup(app: Any, control: MatrixRunControl) -> dict[str, Any]:
+    raw = _saved_setup_properties(app, control.setup_name)
     cg = raw.get("CGDataBlock")
     rl = raw.get("RLDataBlock")
     if not isinstance(cg, dict) or not isinstance(rl, dict):
@@ -380,35 +377,36 @@ def _read_q2d_setup(app: Any, spec: Q2dSpec) -> dict[str, Any]:
         "rl_percent_refinement": rl.get("PerRefine"),
     }
     expected = {
-        "adaptive_frequency": f"{spec.run_control.frequency_ghz:g}GHz",
-        "cg_maximum_passes": spec.run_control.maximum_passes,
-        "cg_minimum_passes": spec.run_control.minimum_passes,
-        "cg_minimum_converged_passes": spec.run_control.minimum_converged_passes,
-        "cg_convergence_percent": spec.run_control.convergence_percent,
-        "cg_percent_refinement": spec.run_control.percent_refinement,
-        "rl_maximum_passes": spec.run_control.maximum_passes,
-        "rl_minimum_passes": spec.run_control.minimum_passes,
-        "rl_minimum_converged_passes": spec.run_control.minimum_converged_passes,
-        "rl_convergence_percent": spec.run_control.convergence_percent,
-        "rl_percent_refinement": spec.run_control.percent_refinement,
+        "adaptive_frequency": f"{control.frequency_ghz:g}GHz",
+        "cg_maximum_passes": control.maximum_passes,
+        "cg_minimum_passes": control.minimum_passes,
+        "cg_minimum_converged_passes": control.minimum_converged_passes,
+        "cg_convergence_percent": control.convergence_percent,
+        "cg_percent_refinement": control.percent_refinement,
+        "rl_maximum_passes": control.maximum_passes,
+        "rl_minimum_passes": control.minimum_passes,
+        "rl_minimum_converged_passes": control.minimum_converged_passes,
+        "rl_convergence_percent": control.convergence_percent,
+        "rl_percent_refinement": control.percent_refinement,
     }
     if native != expected:
         raise RuntimeError(f"Q2D saved setup readback mismatch: {native!r}")
-    return {"name": spec.run_control.setup_name, "native": native}
+    return {"name": control.setup_name, "native": native}
 
 
-def _export_q2d(
-    app: Any, run_dir: Path, spec: Q2dSpec
+def export_q2d_matrices(
+    app: Any, run_dir: Path, spec: Q2dSpec, control: MatrixRunControl
 ) -> tuple[dict[str, str], dict[str, Any]]:
+    """Export the authored distributed matrices at the explicit solve frequency."""
     output_dir = run_dir / "results" / "q2d"
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / "rlgc_matrix.csv"
-    frequency_hz = spec.run_control.frequency_ghz * 1e9
+    frequency_hz = control.frequency_ghz * 1e9
     exported = app.export_matrix_data(
         file_name=str(path),
         problem_type="CG, RL",
         variations="",
-        setup=spec.run_control.setup_name,
+        setup=control.setup_name,
         sweep="LastAdaptive",
         reduce_matrix="Original",
         r_unit="ohm",
@@ -431,7 +429,7 @@ def _export_q2d(
     return {relative: file_sha256(path)}, {
         "matrices": {
             "path": relative,
-            "frequency_ghz": spec.run_control.frequency_ghz,
+            "frequency_ghz": control.frequency_ghz,
             "length_setting": "Distributed",
             "length": "1meter",
             "matrix_type": "Maxwell, Spice, Couple",

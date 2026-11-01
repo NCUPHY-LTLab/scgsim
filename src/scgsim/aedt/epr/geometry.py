@@ -14,23 +14,28 @@ from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from importlib.metadata import version
 from multiprocessing import get_context
 from typing import Any
+
+from scgsim.aedt.data import canonical_sha256
+from scgsim.aedt.preparation.planar import (
+    prepare_planar_geometry_input as prepare_planar_geometry_input,
+)
+from scgsim.aedt.preparation.planar import (
+    validate_geometry_workers as validate_geometry_workers,
+)
+from scgsim.aedt.preparation.planar_junctions import (
+    planar_junction_from_port as planar_junction_from_port,
+)
+from scgsim.aedt.preparation.planar_masks import (
+    INSET_CIRCLE_POINTS,
+    INSET_METHOD,
+    klayout_region,
+    regions_from_klayout,
+)
+from scgsim.aedt.preparation.planar_source import plain
 from scgsim.aedt.specs.epr import (
     surface_evaluations,
 )
-from scgsim.aedt.preparation.planar import (
-    _klayout_region as _klayout_region,
-    _plain as _plain,
-    _regions_from_klayout as _regions_from_klayout,
-    planar_junction_from_port as planar_junction_from_port,
-    prepare_planar_geometry_input as prepare_planar_geometry_input,
-    validate_geometry_workers as validate_geometry_workers,
-)
-from scgsim.aedt._data import canonical_sha256
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-from scgsim.aedt.preparation.planar import (
-    _INSET_METHOD,
-    _INSET_CIRCLE_POINTS,
-)
 
 
 def _sheet_member(binding: Mapping[str, Any], margin_label: str) -> tuple[str, ...]:
@@ -51,7 +56,11 @@ def _sheet_naming_identity(
 ) -> str:
     """Bind the complete physical membership independently of its native label."""
     return canonical_sha256(
-        {"geometry_sha256": geometry_sha256, "members": sorted(members), "parts": sorted(parts)}
+        {
+            "geometry_sha256": geometry_sha256,
+            "members": sorted(members),
+            "parts": sorted(parts),
+        }
     )
 
 
@@ -91,14 +100,17 @@ def _sheet_name(
     if owner_budget < 1:
         # Preserve successful legacy labels; compact only overflow of SCG's
         # inherited identifier budget, not an asserted native naming limit.
-        token = base64.b32encode(bytes.fromhex(identity_sha256)).decode("ascii").rstrip("=")
+        token = (
+            base64.b32encode(bytes.fromhex(identity_sha256)).decode("ascii").rstrip("=")
+        )
         return f"EPR_{token}"
     return f"EPR_{owner[:owner_budget].rstrip('_')}{tail}"
 
 
-def _base_sheet_plan(
+def base_sheet_plan(
     bindings: Sequence[Mapping[str, Any]],
 ) -> dict[str, dict[str, Any]]:
+    """Name coincident source sheets from their complete physical memberships."""
     by_geometry: dict[str, set[tuple[str, ...]]] = {}
     keys: dict[str, str] = {}
     for binding in bindings:
@@ -153,7 +165,7 @@ def plan_inset_sheet_names(
                     {
                         "plane": binding["mask_plane"],
                         "region": region,
-                        "method": _INSET_METHOD,
+                        "method": INSET_METHOD,
                         "source_dbu_um": dbu_um,
                         "klayout_version": version("klayout"),
                     }
@@ -215,7 +227,7 @@ def _klayout_inset(support: Any, radius: int, k: Any) -> Any:
         - support
     )
     circle = k.Polygon.ellipse(
-        k.Box(-radius, -radius, radius, radius), _INSET_CIRCLE_POINTS
+        k.Box(-radius, -radius, radius, radius), INSET_CIRCLE_POINTS
     )
     return (support - complement.minkowski_sum(circle).merged()).merged()
 
@@ -227,7 +239,7 @@ def inset_surface_regions(
 ) -> list[dict[str, Any]]:
     """Inset complete physical support, then attribute its surviving pieces."""
 
-    import klayout.db as k
+    import klayout.db as k  # noqa: PLC0415 -- optional inset geometry engine is needed only during geometry calculation.
 
     if not math.isfinite(margin_um) or margin_um < 0.0:
         raise ValueError("surface EPR margin must be finite and nonnegative")
@@ -240,10 +252,10 @@ def inset_surface_regions(
     radius = k.DPoint(margin_um, 0).to_itype(dbu_um).x
     key = (str(support["group_identity_sha256"]), radius)
     if key not in support_insets:
-        physical = _klayout_region(support["support_regions"], dbu_um, k)
+        physical = klayout_region(support["support_regions"], dbu_um, k)
         support_insets[key] = _klayout_inset(physical, radius, k)
-    attribution = _klayout_region(support["attribution_regions"], dbu_um, k)
-    return _regions_from_klayout(support_insets[key] & attribution, dbu_um)
+    attribution = klayout_region(support["attribution_regions"], dbu_um, k)
+    return regions_from_klayout(support_insets[key] & attribution, dbu_um)
 
 
 def _inset_group_task(
@@ -251,17 +263,17 @@ def _inset_group_task(
 ) -> dict[tuple[str, float], dict[str, Any]]:
     """Pure integer geometry for one physical support and all its owners/margins."""
 
-    import klayout.db as k
+    import klayout.db as k  # noqa: PLC0415 -- optional inset geometry engine is needed only during geometry calculation.
 
     support, members = task
     if support["klayout_version"] != version("klayout"):
         raise RuntimeError("prepared EPR KLayout version differs from worker runtime")
     dbu_um = float(support["source_dbu_um"])
-    physical = _klayout_region(support["support_regions"], dbu_um, k)
+    physical = klayout_region(support["support_regions"], dbu_um, k)
     insets: dict[int, Any] = {0: physical}
     result: dict[tuple[str, float], dict[str, Any]] = {}
     for member in members:
-        attribution = _klayout_region(member["attribution_regions"], dbu_um, k)
+        attribution = klayout_region(member["attribution_regions"], dbu_um, k)
         for requested in member["margins_um"]:
             margin_um = float(requested)
             if not math.isfinite(margin_um) or margin_um < 0:
@@ -271,7 +283,7 @@ def _inset_group_task(
             radius = k.DPoint(margin_um, 0).to_itype(dbu_um).x
             if radius not in insets:
                 insets[radius] = _klayout_inset(physical, radius, k)
-            regions = _regions_from_klayout(insets[radius] & attribution, dbu_um)
+            regions = regions_from_klayout(insets[radius] & attribution, dbu_um)
             result[(member["binding_id"], margin_um)] = {
                 "regions": regions,
                 "requested_margin_um": margin_um,
@@ -304,7 +316,7 @@ def precompute_inset_surfaces(
             and binding["contribution"]["contribution_id"] not in selected
         ):
             continue
-        support = _plain(binding["mask_support"])
+        support = plain(binding["mask_support"])
         key = support["group_identity_sha256"]
         if key not in grouped:
             grouped[key] = (support, [])
@@ -342,7 +354,7 @@ def precompute_inset_surfaces(
         ) as pool:
             pending = {
                 pool.submit(_inset_group_task, task)
-                for _, task in zip(range(2 * workers), task_iter)
+                for _, task in zip(range(2 * workers), task_iter, strict=False)
             }
             while pending:
                 done, pending = wait(pending, return_when=FIRST_COMPLETED)

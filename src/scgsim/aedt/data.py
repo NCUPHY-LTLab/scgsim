@@ -1,5 +1,7 @@
-"""Private stdlib detachment and canonical identity; no native or preparation imports."""
+"""Detach immutable request data and compute canonical identities using stdlib."""
+
 from __future__ import annotations
+
 import hashlib
 import json
 import math
@@ -7,12 +9,16 @@ from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 from typing import Any
 
-def _text(value: Any, name: str) -> str:
+
+def text_value(value: Any, name: str) -> str:
+    """Read a nonempty text value using the request's existing rules."""
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be non-empty text")
     return value.strip()
 
-def _number(value: Any, name: str, *, minimum: float = 0.0) -> float:
+
+def number_value(value: Any, name: str, *, minimum: float = 0.0) -> float:
+    """Read a finite numeric request value at its declared lower bound."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be numeric")
     result = float(value)
@@ -20,7 +26,9 @@ def _number(value: Any, name: str, *, minimum: float = 0.0) -> float:
         raise ValueError(f"{name} must be finite and >= {minimum:g}")
     return result
 
-def _freeze(value: Any, *, verified: Any = None) -> Any:
+
+def freeze(value: Any, *, verified: Any = None) -> Any:
+    """Recursively freeze plain data, retaining already verified values."""
     if verified is not None and value is verified:
         return verified
     if isinstance(value, Mapping):
@@ -28,7 +36,7 @@ def _freeze(value: Any, *, verified: Any = None) -> Any:
             raise TypeError("EPR mapping keys must be strings")
         prior = verified if isinstance(verified, Mapping) else {}
         return MappingProxyType(
-            {key: _freeze(item, verified=prior.get(key)) for key, item in value.items()}
+            {key: freeze(item, verified=prior.get(key)) for key, item in value.items()}
         )
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         prior = (
@@ -37,12 +45,13 @@ def _freeze(value: Any, *, verified: Any = None) -> Any:
             else ()
         )
         return tuple(
-            _freeze(item, verified=prior[index] if index < len(prior) else None)
+            freeze(item, verified=prior[index] if index < len(prior) else None)
             for index, item in enumerate(value)
         )
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     raise TypeError(f"EPR data contains unsupported {type(value).__name__}")
+
 
 def detached(value: Any) -> Any:
     """Return recursively detached plain containers."""
@@ -54,7 +63,9 @@ def detached(value: Any) -> Any:
         return [detached(item) for item in value]
     return value
 
+
 def canonical_sha256(value: Any) -> str:
+    """Hash detached values with the canonical JSON codec."""
     encoded = json.dumps(
         detached(value), ensure_ascii=True, separators=(",", ":"), sort_keys=True
     ).encode("utf-8")
