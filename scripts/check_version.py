@@ -55,6 +55,7 @@ def repository_version(root: Path) -> str:
 
 
 def main() -> None:
+    """Validate the repository version and optional selected release line."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--line", choices=("any", "develop", "main"), default="any")
     args = parser.parse_args()
