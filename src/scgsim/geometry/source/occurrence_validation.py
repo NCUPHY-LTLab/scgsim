@@ -101,15 +101,12 @@ class _OccurrenceValidation:
         return self.effective_metadata
 
     def index_planes(self) -> None:
-        # Preserve the current metadata merge input; its schema-two overwrite is a
-        # separately tracked defect, outside this behavior-preserving refactor.
         for record in self.source.stack.layers:
             if not isinstance(record, Mapping):
                 raise ValueError("GeometryPlan layers must be mappings")
             geometry = record.get("geometry", {})
             if geometry.get("geometry_source") == "die_face_minus_ground_mask":
                 plane_metadata = record.get("metadata", {})
-                self.effective_metadata = plane_metadata
                 level = plane_metadata.get("logical_layer_id")
                 if level in self.physical_planes:
                     raise ValueError(
