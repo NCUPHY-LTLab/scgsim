@@ -13,12 +13,12 @@ from scgsim.aedt.specs.common import LOCKED_PYAEDT
 from scgsim.aedt.versions import resolve_aedt_version
 
 from ..preview import GeometryPreview
-from ..scene import _FIXED_COLORS, _Mode, _Part, _color
-from ._common import (
-    _confined,
-    _json,
-    _receipt_authority_sha256,
-    _sha256,
+from ..scene import FIXED_COLORS, SceneMode, ScenePart, color_for_identity
+from .common import (
+    confined_artifact_path,
+    file_sha256,
+    read_json_record,
+    receipt_authority_sha256,
 )
 
 
@@ -49,7 +49,7 @@ def inspect_aedt_geometry(
         spec_path = root / "aedt_spec.json"
         if not spec_path.is_file():
             raise FileNotFoundError("AEDT run folder has no aedt_spec.json")
-        spec = _json(spec_path)
+        spec = read_json_record(spec_path)
         aedt = _mapping(spec.get("aedt"), "spec.aedt")
         profile = resolve_aedt_version(aedt.get("requested_version"))
         if (
@@ -64,9 +64,9 @@ def inspect_aedt_geometry(
             raise ValueError("explicit design disagrees with the AEDT run spec")
         design = recorded_design
         project_name = _text(project.get("name"), "spec.project.name")
-        project_path = _confined(root, f"{project_name}.aedt")
+        project_path = confined_artifact_path(root, f"{project_name}.aedt")
         receipt_path = root / "metadata/aedt_run_receipt.json"
-        receipt = _json(receipt_path) if receipt_path.is_file() else None
+        receipt = read_json_record(receipt_path) if receipt_path.is_file() else None
         if receipt is not None:
             connected = receipt.get("connected")
             if isinstance(connected, Mapping) and "aedt_version" in connected:
@@ -85,7 +85,7 @@ def inspect_aedt_geometry(
                 source_conductors = tuple(source_geometry.get("conductors", ()))
                 if receipt.get("status") != "native_preparation_only":
                     recorded_source = _mapping(receipt.get("source"), "receipt.source")
-                    if recorded_source.get("spec_sha256") != _sha256(spec_path):
+                    if recorded_source.get("spec_sha256") != file_sha256(spec_path):
                         raise ValueError(
                             "AEDT source spec hash disagrees with the receipt"
                         )
@@ -96,7 +96,7 @@ def inspect_aedt_geometry(
             outputs = _mapping(receipt.get("outputs", {}), "receipt.outputs")
             relative = project_path.relative_to(root).as_posix()
             expected = outputs.get(relative)
-            if not isinstance(expected, str) or _sha256(project_path) != expected:
+            if not isinstance(expected, str) or file_sha256(project_path) != expected:
                 raise ValueError("AEDT project hash disagrees with the run receipt")
     else:
         raise FileNotFoundError(f"AEDT geometry source does not exist: {source_path}")
@@ -176,12 +176,12 @@ def inspect_aedt_geometry(
                 if released is False:
                     raise RuntimeError("AEDT Desktop did not confirm release after preview")
 
-    source_hashes = {project_path.relative_to(root).as_posix(): _sha256(project_path)}
+    source_hashes = {project_path.relative_to(root).as_posix(): file_sha256(project_path)}
     if root != project_path.parent or (root / "aedt_spec.json").is_file():
         for relative in ("aedt_spec.json",):
             path = root / relative
             if path.is_file():
-                source_hashes[relative] = _sha256(path)
+                source_hashes[relative] = file_sha256(path)
     source_identity: dict[str, Any] = {
         "design": design,
         "aedt_version": connected_aedt_version,
@@ -190,7 +190,7 @@ def inspect_aedt_geometry(
         "pyaedt_version": LOCKED_PYAEDT,
     }
     if receipt_path is not None and receipt is not None:
-        source_identity["receipt_authority_sha256"] = _receipt_authority_sha256(
+        source_identity["receipt_authority_sha256"] = receipt_authority_sha256(
             receipt_path
         )
     return GeometryPreview(
@@ -200,12 +200,12 @@ def inspect_aedt_geometry(
         source_identity=source_identity,
         bind_aedt_receipt=receipt is not None,
         modes={
-            "materials": _Mode(tuple(materials)),
-            "boundaries": _Mode(tuple(boundaries)),
-            "surface_epr": _Mode(
+            "materials": SceneMode(tuple(materials)),
+            "boundaries": SceneMode(tuple(boundaries)),
+            "surface_epr": SceneMode(
                 unavailable_reason="AEDT V1 has no structured Surface-EPR assignment authority."
             ),
-            "mesh": _Mode(
+            "mesh": SceneMode(
                 unavailable_reason="AEDT V1 has no readable native mesh artifact."
             ),
         },
@@ -339,7 +339,7 @@ def _materials(
     datasets: Mapping[str, Any],
     receipt: dict[str, Any] | None,
     source_conductors: tuple[Mapping[str, Any], ...],
-) -> list[_Part]:
+) -> list[ScenePart]:
     receipt_items: dict[str, Mapping[str, Any]] = {}
     pdk_materials: Mapping[str, Any] = {}
     region: Mapping[str, Any] = {}
@@ -352,7 +352,7 @@ def _materials(
             receipt.get("pdk_materials", {}), "receipt.pdk_materials"
         )
         region = _mapping(receipt.get("region", {}), "receipt.region")
-    parts: list[_Part] = []
+    parts: list[ScenePart] = []
     for object_name, dataset in sorted(datasets.items()):
         native_material = str(app.modeler[object_name].material_name).lower()
         item = receipt_items.get(object_name)
@@ -396,12 +396,12 @@ def _materials(
             material_id = native_material
             kind = "native AEDT material"
         parts.append(
-            _Part(
+            ScenePart(
                 dataset,
                 f"material:{material_id}",
                 material_id,
                 kind,
-                _color(material_id),
+                color_for_identity(material_id),
                 0.08 if kind == "vacuum" else 0.42,
                 1,
             )
@@ -415,9 +415,9 @@ def _boundaries(
     receipt: dict[str, Any] | None,
     pv: Any,
     native_boundaries: Mapping[str, Mapping[str, Any]],
-) -> list[_Part]:
+) -> list[ScenePart]:
     assigned: set[str] = set()
-    parts: list[_Part] = []
+    parts: list[ScenePart] = []
     if receipt is not None:
         mode = receipt.get("mode")
         if mode in {"terminal", "modal", "eigenmode"}:
@@ -455,12 +455,12 @@ def _boundaries(
                 label = _text(port.get("boundary"), "receipt port boundary")
                 boundary_type = str(native_boundaries[label]["BoundType"])
                 parts.append(
-                    _Part(
+                    ScenePart(
                         dataset,
                         f"port:{label}",
                         label,
                         boundary_type,
-                        _color(boundary_type),
+                        color_for_identity(boundary_type),
                         1.0,
                         1,
                     )
@@ -521,17 +521,17 @@ def _boundaries(
                 ]
                 dataset = pv.PolyData(points, faces=[len(points), *range(len(points))])
                 parts.append(
-                    _Part(dataset, f"boundary:{name}", name, role, _color(role), 1.0, 1)
+                    ScenePart(dataset, f"boundary:{name}", name, role, color_for_identity(role), 1.0, 1)
                 )
     for object_name, dataset in sorted(datasets.items()):
         if object_name not in assigned:
             parts.append(
-                _Part(
+                ScenePart(
                     dataset,
                     f"unassigned:{object_name}",
                     f"{object_name}: no explicit boundary assignment",
                     "unassigned",
-                    _FIXED_COLORS["unassigned"],
+                    FIXED_COLORS["unassigned"],
                     0.35,
                     1,
                 )
@@ -540,7 +540,7 @@ def _boundaries(
 
 
 def _append_object(
-    parts: list[_Part],
+    parts: list[ScenePart],
     datasets: Mapping[str, Any],
     assigned: set[str],
     object_name: str,
@@ -553,12 +553,12 @@ def _append_object(
         return
     assigned.add(object_name)
     parts.append(
-        _Part(
+        ScenePart(
             datasets[object_name],
             f"boundary:{label}:{object_name}",
             label,
             role,
-            _color(role if role in _FIXED_COLORS else label),
+            color_for_identity(role if role in FIXED_COLORS else label),
             0.95,
             1,
         )
