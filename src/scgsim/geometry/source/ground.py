@@ -7,21 +7,29 @@ transforms remain at the occurrence boundary and are applied exactly once.
 
 from __future__ import annotations
 
-from scgsim.geometry._primitives.grid import polygon_boolean, preserve_declared_source
-
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from types import ModuleType
 from typing import Any
 
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.source._polygon_ops import (
-    _fused_gdstk_components,
-    _point_in_layout_polygon,
-    _ring_from_gdstk_polygon,
+from scgsim.geometry.primitives.grid import (
+    polygon_boolean,
+    preserve_declared_source,
+    split_gdstk_cutline_loop,
+)
+from scgsim.geometry.primitives.loops import canonical_loop_sort_key
+from scgsim.geometry.source.polygon_ops import (
+    fused_gdstk_components,
+    point_in_layout_polygon,
+    ring_from_gdstk_polygon,
+)
+from scgsim.geometry.source.polygon_ops import (
+    layout_polygon_region as layout_polygon_region,
 )
 
 
 @preserve_declared_source
-def _derived_ground_polygons(
+def derived_ground_polygons(
     entity: SemanticEntitySpec,
     *,
     polygons_by_layer: Mapping[tuple[int, int], tuple[Any, ...]],
@@ -30,12 +38,7 @@ def _derived_ground_polygons(
     plane_polygons: Sequence[Any] | None = None,
 ) -> tuple[LayoutPolygonSpec, ...]:
     """Derive one positive Ground from its plane, mask and explicit includes."""
-    import gdstk
-
-    from scgsim.geometry._primitives.loops import (
-        _canonical_loop_sort_key,
-        _split_gdstk_cutline_loop,
-    )
+    import gdstk  # noqa: PLC0415 -- Ground construction is the boundary that requires the optional native GDS kernel
 
     mask_layer = entity.geometry.get("mask_layer")
     if mask_layer is None:
@@ -70,25 +73,7 @@ def _derived_ground_polygons(
         raise ValueError(
             f"{entity.semantic_id} mixes source contributions with global includes"
         )
-    for contribution in source_includes:
-        polygon = (
-            contribution.get("polygon") if isinstance(contribution, Mapping) else None
-        )
-        if not isinstance(polygon, Mapping):
-            raise ValueError(
-                f"{entity.semantic_id} has an incomplete source contribution"
-            )
-        included.extend(
-            _layout_polygon_region(
-                gdstk,
-                LayoutPolygonSpec(
-                    polygon_id=f"{entity.semantic_id}__INCLUDE__{len(included):04d}",
-                    layer=f"{mask_key[0]}/{mask_key[1]}",
-                    exterior=polygon["exterior"],
-                    holes=polygon["holes"],
-                ),
-            )
-        )
+    _append_source_includes(included, gdstk, entity, mask_key, source_includes)
     if include_layer is not None:
         if (
             not isinstance(include_layer, Sequence)
@@ -103,7 +88,7 @@ def _derived_ground_polygons(
         )
         # Fuse exact contacts before applying an explicit selector; ownership
         # still comes from the authored layer and selector, not proximity.
-        components = _fused_gdstk_components(candidates)
+        components = fused_gdstk_components(candidates)
         for point in include_points:
             if (
                 not isinstance(point, Sequence)
@@ -117,22 +102,22 @@ def _derived_ground_polygons(
             matches = [
                 polygon
                 for polygon, _, _ in components
-                if _point_in_layout_polygon(selector, polygon)
+                if point_in_layout_polygon(selector, polygon)
             ]
             if len(matches) != 1:
                 raise ValueError(
                     f"{entity.semantic_id} include selector {tuple(point)!r} matched {len(matches)} source polygons"
                 )
-            included.extend(_layout_polygon_region(gdstk, matches[0]))
+            included.extend(layout_polygon_region(gdstk, matches[0]))
     regions = polygon_boolean(without_mask or (), tuple(included), "or", precision=1e-9)
     normalized_regions = sorted(
         (
-            _split_gdstk_cutline_loop(_ring_from_gdstk_polygon(region))
+            split_gdstk_cutline_loop(ring_from_gdstk_polygon(region))
             for region in regions or ()
         ),
         key=lambda region: (
-            _canonical_loop_sort_key(region[0]),
-            tuple(_canonical_loop_sort_key(hole) for hole in region[1]),
+            canonical_loop_sort_key(region[0]),
+            tuple(canonical_loop_sort_key(hole) for hole in region[1]),
         ),
     )
     if not normalized_regions:
@@ -156,6 +141,35 @@ def _derived_ground_polygons(
         )
         for index, (outer, holes) in enumerate(normalized_regions)
     )
+
+
+def _append_source_includes(
+    included: list[Any],
+    native: ModuleType,
+    entity: SemanticEntitySpec,
+    mask_key: tuple[int, int],
+    contributions: Iterable[object],
+) -> None:
+    """Append declared occurrence polygons in their original source order."""
+    for contribution in contributions:
+        polygon = (
+            contribution.get("polygon") if isinstance(contribution, Mapping) else None
+        )
+        if not isinstance(polygon, Mapping):
+            raise ValueError(
+                f"{entity.semantic_id} has an incomplete source contribution"
+            )
+        included.extend(
+            layout_polygon_region(
+                native,
+                LayoutPolygonSpec(
+                    polygon_id=f"{entity.semantic_id}__INCLUDE__{len(included):04d}",
+                    layer=f"{mask_key[0]}/{mask_key[1]}",
+                    exterior=polygon["exterior"],
+                    holes=polygon["holes"],
+                ),
+            )
+        )
 
 
 def _merged_gdstk_polygons(polygons: Sequence[Any]) -> tuple[Any, ...]:
@@ -188,14 +202,6 @@ def _ground_plane_bounds(
             f"{entity.semantic_id} plane_bounds_ref {plane_bounds_ref!r} "
             "does not match a solution region"
         ) from exc
-
-
-def _layout_polygon_region(gdstk: Any, polygon: LayoutPolygonSpec) -> tuple[Any, ...]:
-    outer = gdstk.Polygon(polygon.exterior)
-    holes = tuple(gdstk.Polygon(hole) for hole in polygon.holes)
-    if not holes:
-        return (outer,)
-    return tuple(polygon_boolean((outer,), holes, "not", precision=1e-9) or ())
 
 
 def _rectangle_ring(bounds: Mapping[str, float]) -> tuple[tuple[float, float], ...]:

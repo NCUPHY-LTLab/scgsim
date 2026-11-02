@@ -1,0 +1,528 @@
+"""Compose authored junction cuts, model emission and optional grid realization."""
+
+from __future__ import annotations
+
+import json
+from collections import defaultdict
+from collections.abc import Sequence
+from dataclasses import dataclass, field, replace
+from decimal import Decimal
+from fractions import Fraction
+from typing import Any
+
+from scgsim.geometry.models.grid import geometry_grid_context
+from scgsim.geometry.models.input import (
+    GeometryBuildInput,
+    LayoutPolygonSpec,
+    SemanticEntitySpec,
+)
+from scgsim.geometry.models.junctions import JunctionGeometry
+from scgsim.geometry.planning.junction_planning.boolean_geometry import (
+    boolean,
+    build_polygon_region,
+    read_boolean_rings,
+    rectangle,
+)
+from scgsim.geometry.planning.junction_planning.contact import (
+    JunctionContactRequest,
+    junction_contact_inventory,
+)
+from scgsim.geometry.planning.junction_planning.core import (
+    DEFAULT_FORMAT,
+    PRECISION_UM,
+    JunctionPartitionFormat,
+    canonical_sha256,
+    plain_record,
+)
+from scgsim.geometry.planning.junction_planning.exact_geometry import (
+    covered,
+    positive_boundary_contact,
+    section,
+)
+from scgsim.geometry.planning.junction_planning.local_frame import JunctionLocalFrame
+from scgsim.geometry.planning.junction_planning.model import model_geometry
+from scgsim.geometry.planning.junction_planning.model_checks import (
+    emitted_partition_coverage,
+)
+from scgsim.geometry.planning.junction_planning.selection import (
+    EndSection,
+    bound_decimal,
+    candidate_indices,
+    contacts,
+    end_candidate,
+    grid_cut,
+)
+from scgsim.geometry.planning.junction_planning.terminal import junction_terminal_line
+from scgsim.geometry.primitives.grid import polygon_world_frame, with_input_grid
+from scgsim.geometry.primitives.planar_loops import PolygonCoordinates
+
+
+@with_input_grid
+def partition_junctions(
+    build_input: GeometryBuildInput,
+    junctions: Sequence[JunctionGeometry],
+    step: float,
+    *,
+    output_format: JunctionPartitionFormat = DEFAULT_FORMAT,
+):
+    """Derive terminal-owned ends and a complete central rectangle once."""
+    if not junctions:
+        return build_input
+    if output_format.metadata_key in build_input.metadata:
+        raise ValueError(
+            "junction input is already partitioned; use immutable authored input"
+        )
+    return _JunctionPartitionPlanner(
+        build_input, junctions, step, output_format
+    ).build()
+
+
+@dataclass
+class _JunctionPartitionPlanner:
+    """Carry authored source, local cut state and ordered partition records."""
+
+    build_input: GeometryBuildInput
+    junctions: Sequence[JunctionGeometry]
+    step: float
+    output_format: JunctionPartitionFormat
+    originals: dict[str, LayoutPolygonSpec] = field(init=False)
+    authored_ids: set[str] = field(init=False)
+    entities: dict[str, SemanticEntitySpec] = field(init=False)
+    records: dict[str, dict[str, Any]] = field(init=False)
+    junction: JunctionGeometry = field(init=False)
+    support_plane: dict[str, Any] = field(init=False)
+    sheet: LayoutPolygonSpec = field(init=False)
+    dx: float = field(init=False)
+    dy: float = field(init=False)
+    px: float = field(init=False)
+    py: float = field(init=False)
+    origin: tuple[float, float] = field(init=False)
+    span: int = field(init=False)
+    width: int = field(init=False)
+    deviations: list[float] = field(init=False)
+    frame: JunctionLocalFrame = field(init=False)
+    by_entity: dict[str, list[tuple]] = field(init=False)
+    own_a: list[tuple] = field(init=False)
+    own_b: list[tuple] = field(init=False)
+    other: list[tuple] = field(init=False)
+    lower: int | Fraction = field(init=False)
+    upper: int | Fraction = field(init=False)
+    free: Sequence[PolygonCoordinates] = field(init=False)
+    choices: list[tuple] = field(init=False)
+    checks: list[dict[str, Any]] = field(init=False)
+    a: int = field(init=False)
+    b: int = field(init=False)
+    end_a: list[tuple] = field(init=False)
+    end_b: list[tuple] = field(init=False)
+    ka: int = field(init=False)
+    kb: int = field(init=False)
+    central: tuple[tuple[tuple[tuple[int, int], ...], ...], ...] = field(init=False)
+    end_records: list[dict[str, Any]] = field(init=False)
+    model: dict[str, LayoutPolygonSpec] = field(init=False)
+    derived_entities: tuple[SemanticEntitySpec, ...] = field(init=False)
+    result: GeometryBuildInput = field(init=False)
+
+    def build(self) -> GeometryBuildInput:
+        """Select every junction before shared model emission and grid realization."""
+        self.initialize()
+        for junction in self.junctions:
+            self.junction = junction
+            self.plan_one()
+        self.emit_model()
+        self.assemble_output()
+        self.realize_grid()
+        return self.result
+
+    def plan_one(self) -> None:
+        """Keep all local selection inside its original polygon world frame."""
+        self.read_source_frame()
+        self.frame = JunctionLocalFrame(
+            self.dx, self.dy, self.px, self.py, self.origin, self.deviations
+        )
+        transform = (
+            self.dx,
+            self.px,
+            self.dy,
+            self.py,
+            self.origin[0] * self.dx + self.origin[1] * self.px,
+            self.origin[0] * self.dy + self.origin[1] * self.py,
+        )
+        with polygon_world_frame(transform):
+            self.read_conductors()
+            self.find_corridor()
+            self.choose_ends()
+            self.check_partition()
+            self.record_ends()
+            self.record_junction()
+
+    def initialize(self):
+        """Index immutable authored polygons, source Entities and junction identities."""
+        self.originals = {p.polygon_id: p for p in self.build_input.polygons}
+        self.originals.update(
+            {
+                r.source_polygon_id: LayoutPolygonSpec(
+                    r.source_polygon_id, r.source_layer, r.exterior, r.holes
+                )
+                for r in self.build_input.port_sheet_regions
+            }
+        )
+        self.authored_ids = {j.source_polygon_id for j in self.junctions}
+        self.entities = {e.semantic_id: e for e in self.build_input.entities}
+        self.records = {}
+
+    def read_source_frame(self):
+        """Resolve support, direction and the complete authored rectangle extent."""
+        self.support_plane = junction_contact_inventory(
+            self.build_input,
+            JunctionContactRequest(
+                self.junction.source_polygon_id,
+                self.junction.terminal_a_net,
+                self.junction.terminal_b_net,
+                self.junction.metadata.get("junction_support_plane"),
+                support_schema=self.output_format.support_schema,
+            ),
+        )
+        self.sheet = self.originals[self.junction.source_polygon_id]
+        self.dx, self.dy = self.junction.direction_xy
+        self.px, self.py = (-self.dy, self.dx)
+        along = [x * self.dx + y * self.dy for x, y in self.sheet.exterior]
+        across = [x * self.px + y * self.py for x, y in self.sheet.exterior]
+        self.origin = (min(along), min(across))
+        self.span = round((max(along) - self.origin[0]) / PRECISION_UM)
+        self.width = round((max(across) - self.origin[1]) / PRECISION_UM)
+        if self.span <= 0 or self.width <= 0:
+            raise ValueError(
+                "junction authored geometry collapses at Boolean precision"
+            )
+        self.deviations = []
+
+    def read_conductors(self):
+        """Convert eligible source conductors and resolve both explicit terminal nets."""
+        self.by_entity = {
+            e.semantic_id: [
+                self.frame.convert(self.originals[p])
+                for p in e.polygon_ids
+                if p not in self.authored_ids
+            ]
+            for e in self.entities.values()
+            if e.semantic_id in self.support_plane["eligible_entity_ids"]
+        }
+        by_net = defaultdict(list)
+        for eid, polygons in self.by_entity.items():
+            by_net[self.entities[eid].net_id].extend(polygons)
+        self.own_a, self.own_b = (
+            by_net[self.junction.terminal_a_net],
+            by_net[self.junction.terminal_b_net],
+        )
+        if not self.own_a or not self.own_b:
+            raise ValueError(
+                "junction requires both explicit terminal conductor geometries"
+            )
+        self.other = [
+            p
+            for net, polygons in by_net.items()
+            if net not in {self.junction.terminal_a_net, self.junction.terminal_b_net}
+            for p in polygons
+        ]
+
+    def find_corridor(self):
+        """Verify terminal ordering and complete clear-corridor containment."""
+        if contacts(self.other, self.span, self.width) is not None:
+            raise ValueError("third-net closed contact with authored junction sheet")
+        ca, cb = (
+            contacts(self.own_a, self.span, self.width),
+            contacts(self.own_b, self.span, self.width),
+        )
+        if ca is None or cb is None or ca[1] >= cb[0]:
+            raise ValueError("unsupported junction contact ordering or clear corridor")
+        self.lower, self.upper = (ca[1], cb[0])
+        for polygons in (self.own_a, self.own_b, self.other):
+            for rings in polygons:
+                for y in (0, self.width):
+                    intervals, points = section(rings, 1, y, self.lower, self.upper)
+                    if any((a < b for a, b in intervals)) or any(
+                        (self.lower < v < self.upper for v in points)
+                    ):
+                        raise ValueError(
+                            "unsupported corridor side-boundary metal contact"
+                        )
+        sheet_region = build_polygon_region(rectangle(0, 0, self.span, self.width))
+        self.free = boolean(
+            sheet_region, build_polygon_region([*self.own_a, *self.own_b]), "not"
+        )
+        corridor = build_polygon_region(
+            rectangle(self.lower, 0, self.upper, self.width)
+        )
+        if boolean(corridor, self.free, "not"):
+            raise ValueError(
+                "unsupported corridor containment; no general search performed"
+            )
+
+    def choose_ends(self):
+        """Select the existing verified grid candidates and central span."""
+        self.choices = []
+        self.checks = []
+        for left, bound, own, foreign in (
+            (True, self.lower, self.own_a, self.own_b + self.other),
+            (False, self.upper, self.own_b, self.own_a + self.other),
+        ):
+            chosen = None
+            for index in candidate_indices(bound, self.step, left=left):
+                requested, cut = grid_cut(index, self.step)
+                interior = (
+                    Decimal(index) * Decimal(str(self.step)) > bound_decimal(bound)
+                    if left
+                    else Decimal(index) * Decimal(str(self.step)) < bound_decimal(bound)
+                )
+                if interior and cut == bound:
+                    raise ValueError(
+                        "numerical junction geometry failure: interior grid cut collapses to boundary"
+                    )
+                if (
+                    cut < self.lower
+                    or cut > self.upper
+                    or (interior and (cut <= self.lower or cut >= self.upper))
+                ):
+                    continue
+                end, evidence = end_candidate(
+                    self.free,
+                    own,
+                    foreign,
+                    EndSection(cut, self.span, self.width, left=left),
+                )
+                self.checks.append(
+                    {
+                        "side": "A" if left else "B",
+                        "index": index,
+                        "requested_s_um": requested,
+                        "actual_s_um": cut * PRECISION_UM,
+                        "deviation_um": cut * PRECISION_UM - requested,
+                        **evidence,
+                    }
+                )
+                if end is not None:
+                    chosen = (cut, end, index)
+                    break
+            if chosen is None:
+                raise ValueError(
+                    "unsupported junction end topology on verified corridor/grid"
+                )
+            self.choices.append(chosen)
+        (self.a, self.end_a, self.ka), (self.b, self.end_b, self.kb) = self.choices
+        if self.a >= self.b:
+            raise ValueError("junction DBU grid has no positive central span")
+        self.central = rectangle(self.a, 0, self.b, self.width)
+
+    def check_partition(self):
+        """Check closed endpoint contacts, open sides and exact partition coverage."""
+        for y in (0, self.width):
+            for rings in [
+                *self.own_a,
+                *self.own_b,
+                *self.other,
+                *self.end_a,
+                *self.end_b,
+            ]:
+                intervals, points = section(rings, 1, y, self.a, self.b)
+                if any((x < z for x, z in intervals)) or any(
+                    (self.a < v < self.b for v in points)
+                ):
+                    raise ValueError(
+                        "RLC open side has forbidden line or point contact"
+                    )
+        for cut, wrong in (
+            (self.a, self.own_b + self.other + self.end_b),
+            (self.b, self.own_a + self.other + self.end_a),
+        ):
+            if any((any(section(rings, 0, cut, 0, self.width)) for rings in wrong)):
+                raise ValueError("wrong-net RLC end/corner contact")
+        parts = [
+            build_polygon_region(self.end_a),
+            build_polygon_region(self.central),
+            build_polygon_region(self.end_b),
+        ]
+        union = boolean([p for part in parts for p in part], [], "or")
+        if boolean(union, self.free, "xor") or any(
+            (boolean(parts[i], parts[j], "and") for i, j in ((0, 1), (0, 2), (1, 2)))
+        ):
+            raise ValueError(
+                "numerical junction geometry failure: partition coverage/interiors differ"
+            )
+
+    def record_ends(self):
+        """Bind terminal residuals to their unique source Entity/material lineage."""
+        self.end_records = []
+        for label, end, _own, cut, net in (
+            ("A", self.end_a, self.own_a, self.a, self.junction.terminal_a_net),
+            ("B", self.end_b, self.own_b, self.b, self.junction.terminal_b_net),
+        ):
+            owners = [
+                eid
+                for eid, polygons in self.by_entity.items()
+                if self.entities[eid].net_id == net
+                and (
+                    positive_boundary_contact(end, polygons)
+                    if end
+                    else covered(polygons, 0, cut, 0, self.width)
+                )
+            ]
+            if len(owners) != 1:
+                raise ValueError(
+                    "junction end lacks an unambiguous source Entity/material/Z lineage"
+                )
+            owner = self.entities[owners[0]]
+            polygon_id = (
+                f"{self.output_format.id_prefix}_{canonical_sha256([self.junction.junction_id, label, owner.semantic_id])[:24]}"
+                if end
+                else None
+            )
+            self.end_records.append(
+                {
+                    "side": label,
+                    "source_entity_id": owner.semantic_id,
+                    "net_id": net,
+                    "material_id": owner.material_id,
+                    "geometry": plain_record(owner.geometry),
+                    "representation": dict(owner.route_representations),
+                    "polygon_id": polygon_id,
+                    "empty_residual": not end,
+                    "local_regions": plain_record(end),
+                }
+            )
+
+    def record_junction(self):
+        """Store the selected source-bound geometry and existing proof records."""
+        cid = f"{self.output_format.id_prefix}_{canonical_sha256([self.junction.junction_id, 'central'])[:24]}"
+        self.records[self.junction.junction_id] = {
+            "method": self.output_format.method,
+            "support_plane": self.support_plane,
+            "z_um": self.support_plane["effective_z_um"],
+            "authored_polygon_id": self.junction.source_polygon_id,
+            "central_polygon_id": cid,
+            "direction_xy": [self.dx, self.dy],
+            "local_origin_projection_um": list(self.origin),
+            "source_dbu_um": self.step,
+            "boolean_precision_um": PRECISION_UM,
+            "span_um": self.span * PRECISION_UM,
+            "width_um": self.width * PRECISION_UM,
+            "corridor_um": [self.lower * PRECISION_UM, self.upper * PRECISION_UM],
+            "cut_indices": [self.ka, self.kb],
+            "actual_cuts_um": [self.a * PRECISION_UM, self.b * PRECISION_UM],
+            "candidate_checks": self.checks,
+            "candidate_count": len(self.checks),
+            "proof_conditions": {
+                "full_width_corridor_containment": True,
+                "closed_corridor_side_clearance": True,
+                "terminal_contact_ordering": "A_left_B_right",
+                "partition_coverage_and_disjoint_interiors": True,
+            },
+            "maximum_input_coordinate_deviation_um": max(self.deviations, default=0.0),
+            "ends": self.end_records,
+            "free_local_regions": plain_record(read_boolean_rings(self.free)),
+            "central_local_regions": plain_record(self.central),
+        }
+
+    def emit_model(self):
+        """Emit registered model coordinates only after all local selections."""
+        self.model, self.derived_entities = model_geometry(
+            self.build_input, self.originals, self.records, self.output_format
+        )
+
+    def assemble_output(self):
+        """Assemble derived source records and the authored-input hash."""
+        metadata = dict(self.build_input.metadata)
+        metadata[self.output_format.source_hash_key] = canonical_sha256(
+            plain_record(self.build_input)
+        )
+        metadata[self.output_format.metadata_key] = self.records
+        original_ids = {p.polygon_id for p in self.build_input.polygons}
+        derived_polygons = tuple(
+            (self.model[p.polygon_id] for p in self.build_input.polygons)
+        ) + tuple(
+            (
+                p
+                for pid, p in self.model.items()
+                if pid not in original_ids and pid not in self.authored_ids
+            )
+        )
+        regions = tuple(
+            (
+                replace(
+                    r,
+                    exterior=self.model[r.source_polygon_id].exterior,
+                    holes=self.model[r.source_polygon_id].holes,
+                )
+                if r.source_polygon_id in self.model
+                else r
+                for r in self.build_input.port_sheet_regions
+            )
+        )
+        self.result = replace(
+            self.build_input,
+            polygons=derived_polygons,
+            entities=self.derived_entities,
+            port_sheet_regions=regions,
+            metadata=metadata,
+        )
+
+    def realize_grid(self):
+        """Realize an existing input grid and retain exact shape failure context."""
+        context = geometry_grid_context(self.build_input)
+        if context is not None:
+            from scgsim.geometry.source.grid import apply_geometry_grid  # noqa: PLC0415 -- retain the conditional grid-realization dependency and its failure boundary.
+
+            self.result = apply_geometry_grid(self.result, context)
+            actual = {p.polygon_id: p for p in self.result.polygons}
+            for junction in self.junctions:
+                record = self.records[junction.junction_id]
+                polygon = actual[record["central_polygon_id"]]
+                try:
+                    junction_terminal_line(
+                        {"exterior": polygon.exterior, "holes": polygon.holes},
+                        junction,
+                        record["z_um"],
+                    )
+                    ends = [
+                        actual[end["polygon_id"]]
+                        for end in record["ends"]
+                        if end["polygon_id"]
+                    ]
+                    emitted = [(p.exterior, *p.holes) for p in ends]
+                    emitted.append((polygon.exterior, *polygon.holes))
+                    if not emitted_partition_coverage(
+                        record["free_model_regions"], emitted
+                    ):
+                        raise ValueError(
+                            "junction grid realization changes partition coverage"
+                        )
+                except ValueError as error:
+                    error.add_note(
+                        json.dumps(
+                            {
+                                "junction_id": junction.junction_id,
+                                "geometry_grid": context.to_payload(),
+                                "requested_direction_xy": list(junction.direction_xy),
+                                "requested_width_um": junction.width_um,
+                                "realization_status": "incompatible_with_existing_shape_contract",
+                            },
+                            sort_keys=True,
+                        )
+                    )
+                    raise
+                record["geometry_grid"] = context.to_payload()
+                record["requested_central_model_regions"] = record[
+                    "central_model_regions"
+                ]
+                record["central_model_regions"] = [
+                    [list(polygon.exterior), *map(list, polygon.holes)]
+                ]
+                record["realized_central_geometry_sha256"] = canonical_sha256(
+                    {"exterior": polygon.exterior, "holes": polygon.holes}
+                )
+                for end in record["ends"]:
+                    if end["polygon_id"]:
+                        piece = actual[end["polygon_id"]]
+                        end["requested_model_regions"] = end["model_regions"]
+                        end["model_regions"] = [
+                            [list(piece.exterior), *map(list, piece.holes)]
+                        ]

@@ -1,4 +1,4 @@
-"""Backend-neutral source support. Treatments never own or infer this geometry."""
+"""Backend-neutral records for lumped-port source support geometry."""
 
 from __future__ import annotations
 
@@ -29,11 +29,22 @@ class LumpedSupport:
     holes: tuple[tuple[tuple[float, float], ...], ...]
     source_z_um: float | None = None
     source_transform: tuple[float, float, float, float, float, float] = (
-        1.0, 0.0, 0.0, 1.0, 0.0, 0.0
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
     )
 
     def __post_init__(self) -> None:
-        for key in ("support_id", "source_polygon_id", "source_occurrence_path", "source_level", "contact_physical_layer_id"):
+        for key in (
+            "support_id",
+            "source_polygon_id",
+            "source_occurrence_path",
+            "source_level",
+            "contact_physical_layer_id",
+        ):
             value = getattr(self, key)
             if not isinstance(value, str) or not value:
                 raise ValueError(f"{key} requires explicit source identity")
@@ -48,25 +59,35 @@ class LumpedSupport:
         object.__setattr__(self, "contact_points_um", points)
         for key in ("terminal_a_entity_ids", "terminal_b_entity_ids"):
             values = tuple(getattr(self, key))
-            if not values or any(not isinstance(value, str) or not value for value in values):
+            if not values or any(
+                not isinstance(value, str) or not value for value in values
+            ):
                 raise ValueError(f"{key} requires qualified Entity identities")
             object.__setattr__(self, key, values)
         object.__setattr__(self, "exterior", tuple(tuple(p) for p in self.exterior))
-        object.__setattr__(self, "holes", tuple(tuple(tuple(p) for p in ring) for ring in self.holes))
+        object.__setattr__(
+            self, "holes", tuple(tuple(tuple(p) for p in ring) for ring in self.holes)
+        )
         for ring in (self.exterior, *self.holes):
             if len(ring) < 3 or any(len(point) != 2 for point in ring):
-                raise ValueError("lumped support requires complete local XY polygon rings")
+                raise ValueError(
+                    "lumped support requires complete local XY polygon rings"
+                )
 
     def world_point(self, point: tuple[float, ...]) -> tuple[float, ...]:
+        """Apply the recorded occurrence transform to a local XY or XYZ point."""
         a, b, c, d, x, y = self.source_transform
         result = (a * point[0] + b * point[1] + x, c * point[0] + d * point[1] + y)
         return result if len(point) == 2 else (*result, point[2])
 
     def to_payload(self) -> dict[str, Any]:
+        """Serialize source support while preserving its ordered contacts."""
         return {
-            "support_id": self.support_id, "source_polygon_id": self.source_polygon_id,
+            "support_id": self.support_id,
+            "source_polygon_id": self.source_polygon_id,
             "source_occurrence_path": self.source_occurrence_path,
-            "source_layer": list(self.source_layer), "source_level": self.source_level,
+            "source_layer": list(self.source_layer),
+            "source_level": self.source_level,
             "contact_physical_layer_id": self.contact_physical_layer_id,
             "normal": list(self.normal),
             "contact_points_um": [list(point) for point in self.contact_points_um],
@@ -80,4 +101,5 @@ class LumpedSupport:
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, Any]) -> LumpedSupport:
+        """Reconstruct the immutable source-support record from its payload."""
         return cls(**dict(payload))

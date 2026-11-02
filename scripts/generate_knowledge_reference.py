@@ -1,7 +1,7 @@
-"""Refresh the focused API reference and its deterministic public input index.
+"""Generate bilingual API pages and a source-bound public reference index.
 
-This maintenance operation reads Python syntax and authored prose only. Builds
-copy the committed pages; neither operation imports SCGSim or a solver.
+The generator reads Python syntax and authored Markdown only. It never imports
+SCGSim or initializes a solver.
 """
 
 from __future__ import annotations
@@ -10,163 +10,321 @@ import argparse
 import ast
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeAlias
 
 ROOT = Path(__file__).resolve().parents[1]
 NAMESPACES = (
-    "aedt", "aedt.specs", "geometry", "geometry.compiler", "geometry.models",
-    "palace", "palace.mesh.quality", "semantics", "visualization",
+    "aedt",
+    "aedt.specs",
+    "geometry",
+    "geometry.compiler",
+    "geometry.models",
+    "palace",
+    "palace.mesh.quality",
+    "semantics",
+    "visualization",
 )
-INDEX = "docs/api/input-index.qmd"
-DETAIL = "docs/api/analyze_epr.qmd"
-USAGE = "docs/api/analyze-epr-usage.md"
-ZH_USAGE = "zh-TW/docs/api/analyze-epr-usage.md"
-IMPLEMENTATION = "src/scgsim/aedt/epr/workflow.py"
+INDEX_PATH = "docs/api/input-index.qmd"
+DETAIL_PATH = "docs/api/analyze_epr.qmd"
+CHINESE_INDEX_PATH = "zh-TW/docs/api/input-index.qmd"
+CHINESE_DETAIL_PATH = "zh-TW/docs/api/analyze_epr.qmd"
+USAGE_PATHS = (
+    "docs/api/analyze-epr-usage.md",
+    "zh-TW/docs/api/analyze-epr-usage.md",
+)
+WORKFLOW_PATH = "src/scgsim/aedt/epr/workflow.py"
+ResourcePath: TypeAlias = str
 
 
-def digest(path: str) -> str:
-    return hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
+@dataclass(frozen=True)
+class _DetailPage:
+    root: Path
+    usage_path: str
+    signature: str
+    sources: list[str]
+    index: str
+    chinese: bool
 
 
-def exports(namespace: str) -> list[str]:
-    """Keep every statically declared export, including lazy facade names."""
-    module = ast.parse((ROOT / f"src/scgsim/{namespace.replace('.', '/')}/__init__.py").read_text())
+def render(root: Path = ROOT) -> dict[ResourcePath, str]:
+    """Read fixed API facades and authored inputs, then render four pages."""
+    sources = _generation_sources(root)
+    inventory = _public_documents(root)
+    export_rows = _facade_exports(root)
+    signature = _analyze_epr_signature(root)
+    english_usage, chinese_usage = (_read_text(root, path) for path in USAGE_PATHS)
+
+    english_index = _render_index(root, inventory, export_rows, sources, chinese=False)
+    chinese_index = _render_index(root, inventory, export_rows, sources, chinese=True)
+    english_detail = _render_detail(
+        english_usage,
+        _DetailPage(root, USAGE_PATHS[0], signature, sources, english_index, False),
+    )
+    chinese_detail = _render_detail(
+        chinese_usage,
+        _DetailPage(root, USAGE_PATHS[1], signature, sources, chinese_index, True),
+    )
+    return {
+        INDEX_PATH: english_index,
+        DETAIL_PATH: english_detail,
+        CHINESE_INDEX_PATH: chinese_index,
+        CHINESE_DETAIL_PATH: chinese_detail,
+    }
+
+
+def _generation_sources(root: Path) -> list[str]:
+    sources = [
+        "scripts/generate_knowledge_reference.py",
+        "docs/knowledge-sources.json",
+        WORKFLOW_PATH,
+        *USAGE_PATHS,
+        *(
+            f"src/scgsim/{namespace.replace('.', '/')}/__init__.py"
+            for namespace in NAMESPACES
+        ),
+    ]
+    for source in sources:
+        _read_bytes(root, source)
+    return sources
+
+
+def _public_documents(root: Path) -> list[str]:
+    inventory = json.loads(_read_text(root, "docs/knowledge-sources.json"))
+    documents = inventory["public_documents"]
+    if not isinstance(documents, list) or any(
+        not isinstance(path, str) for path in documents
+    ):
+        raise ValueError("public_documents must be a list of paths")
+    if documents != sorted(set(documents)):
+        raise ValueError("Public document inventory must be unique and sorted")
+    for path in documents:
+        _read_bytes(root, path)
+    return documents
+
+
+def _facade_exports(root: Path) -> dict[str, list[str]]:
+    exports = {
+        namespace: _declared_exports(root, namespace) for namespace in NAMESPACES
+    }
+    return exports
+
+
+def _declared_exports(root: Path, namespace: str) -> list[str]:
+    """Read literal __all__ assignments without importing a package facade."""
+    source = f"src/scgsim/{namespace.replace('.', '/')}/__init__.py"
+    tree = ast.parse(_read_text(root, source), filename=source)
     names: list[str] = []
-    for node in module.body:
+    for node in tree.body:
         if isinstance(node, ast.Assign) and any(
             isinstance(target, ast.Name) and target.id == "__all__"
             for target in node.targets
         ):
-            names = list(ast.literal_eval(node.value))
-        elif isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name):
-            if node.target.id == "__all__":
-                names.extend(ast.literal_eval(node.value))
-    if not names or any(not isinstance(name, str) for name in names):
-        raise ValueError(f"Explicit string exports required: {namespace}")
-    return sorted(set(names))
+            names = _literal_names(node.value, namespace)
+        elif (
+            isinstance(node, ast.AugAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "__all__"
+        ):
+            names.extend(_literal_names(node.value, namespace))
+    if not names:
+        raise ValueError(f"Explicit string __all__ required: scgsim.{namespace}")
+    if len(names) != len(set(names)):
+        raise ValueError(f"Duplicate __all__ entries: scgsim.{namespace}")
+    return sorted(names)
 
 
-def header(title: str, description: str, identifier: str, kind: str) -> str:
-    fields = {"title": title, "description": description, "scgsim-id": identifier,
-              "scgsim-kind": kind, "scgsim-status": "CONVERGING"}
-    return "---\n" + "".join(f"{key}: {json.dumps(value)}\n" for key, value in fields.items()) + "---\n\n"
+def _literal_names(node: ast.expr, namespace: str) -> list[str]:
+    value = ast.literal_eval(node)
+    if not isinstance(value, (list, tuple)) or any(
+        not isinstance(name, str) for name in value
+    ):
+        raise ValueError(f"String-list __all__ required: scgsim.{namespace}")
+    return list(value)
 
 
-def render() -> dict[str, str]:
-    sources = ["scripts/generate_knowledge_reference.py", "docs/knowledge-sources.json",
-               IMPLEMENTATION, USAGE, ZH_USAGE,
-               *(f"src/scgsim/{name.replace('.', '/')}/__init__.py" for name in NAMESPACES)]
-    declared = set()
-    for path in (ROOT / "src/scgsim").rglob("__init__.py"):
-        tree = ast.parse(path.read_text())
-        if any(isinstance(node, ast.Name) and node.id == "__all__"
-               and isinstance(node.ctx, ast.Store) for node in ast.walk(tree)):
-            declared.add(".".join(path.parent.relative_to(ROOT / "src/scgsim").parts))
-    if declared != set(NAMESPACES):
-        raise ValueError("Review the namespace inventory when declared public facades change")
-    inventory = json.loads((ROOT / "docs/knowledge-sources.json").read_text())
-    public_docs = inventory["public_documents"]
-    if public_docs != sorted(set(public_docs)):
-        raise ValueError("Public document inventory must be unique and sorted")
-    unbundled = [name for name in public_docs
-                 if name != "README.md" and not (name.startswith("docs/") and name.endswith(".qmd"))]
-    index = header("Public reference inputs and export inventory",
-                   "Complete declared public facade names and source documents outside the offline bundle.",
-                   "docs/api/input-index", "reference")
-    index += ("Generated by `scripts/generate_knowledge_reference.py`; edit its canonical inputs.\n\n"
-              "Use the [task guide](../knowledge-guide.qmd) for a reading route. "
-              "This index retains the complete declared name inventory; a declaration alone "
-              "does not describe every parameter combination.\n\n## Declared public exports\n\n")
-    for namespace in NAMESPACES:
-        index += f"### scgsim.{namespace}\n\n" + ", ".join(f"`{name}`" for name in exports(namespace)) + ".\n\n"
-    index += "## Generation inputs\n\n| Source | SHA-256 |\n|---|---|\n"
-    for source in sources:
-        index += f"| `{source}` | `{digest(source)}` |\n"
-    index += ("\nThe inputs above contain no catalogue output hashes, so detail pages can bind "
-              "this index without a digest cycle.\n\n## Public documents outside the bundle\n\n"
-              "The English canonical QMD pages and README are bundled. Translations, site "
-              "entry wrappers and maintainer sources below remain repository documents. "
-              "The API usage Markdown is included through its generated detail page.\n\n")
-    index += "".join(f"- `{name}`\n" for name in unbundled)
-    tree = ast.parse((ROOT / IMPLEMENTATION).read_text())
-    function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "analyze_epr")
-    args = function.args
-    if args.posonlyargs or args.args or args.vararg or args.kwarg:
-        raise ValueError("Review the reference formatter when the keyword-only API changes")
-    parameters = []
-    for argument, default in zip(args.kwonlyargs, args.kw_defaults, strict=True):
-        value = ast.unparse(argument)
-        if default is not None:
-            value += " = " + ast.unparse(default)
-        parameters.append("    " + value + ",")
-    signature = ("def analyze_epr(\n    *,\n" + "\n".join(parameters)
-                 + f"\n) -> {ast.unparse(function.returns)}: ...")
-    detail = header("analyze_epr: evaluate retained HFSS fields",
-                    "Saved-field EPR parameters, field-side selectors, native requirements and returned results.",
-                    "docs/api/scgsim-aedt/analyze_epr", "api")
-    detail += ("Generated from the function declaration and authored usage. Edit "
-               f"`{USAGE}` or the owning Python source, then refresh this page.\n\n")
-    detail += (ROOT / USAGE).read_text().rstrip() + "\n\n## Signature\n\n```python\n" + signature + "\n```\n\n"
-    detail += "## Direct sources\n\n| Source | SHA-256 |\n|---|---|\n"
-    for source in (IMPLEMENTATION, USAGE):
-        detail += f"| `{source}` | `{digest(source)}` |\n"
-    index_sha = hashlib.sha256(index.encode()).hexdigest()
-    detail += f"\n[Complete generation inputs](input-index.qmd), SHA-256 `{index_sha}`.\n"
-    zh_index = index.replace(
-        "Public reference inputs and export inventory", "公開參考輸入與匯出清單"
-    ).replace("## Declared public exports", "## 宣告的公開匯出").replace(
-        "## Generation inputs", "## 產生來源"
-    ).replace("## Public documents outside the bundle", "## 未納入套件的公開文件")
-    zh_index = zh_index.replace(
-        "Complete declared public facade names and source documents outside the offline bundle.",
-        "完整列出公開匯出名稱，以及未收錄於離線套件的來源文件。",
-    ).replace(
-        "Generated by `scripts/generate_knowledge_reference.py`; edit its canonical inputs.",
-        "本頁由 `scripts/generate_knowledge_reference.py` 產生；請修改其正式輸入來源。",
-    ).replace(
-        "Use the [task guide](../knowledge-guide.qmd) for a reading route. "
-        "This index retains the complete declared name inventory; a declaration alone "
-        "does not describe every parameter combination.",
-        "依照[任務指南](../knowledge-guide.qmd)選擇閱讀路徑。本索引保留全部宣告名稱；"
-        "各項宣告的參數適用範圍仍以所屬介面與契約為準。",
-    ).replace("| Source | SHA-256 |", "| 來源 | SHA-256 |").replace(
-        "The inputs above contain no catalogue output hashes, so detail pages can bind "
-        "this index without a digest cycle.",
-        "上述輸入不包含目錄輸出的雜湊，因此詳細頁面可以綁定本索引，不會形成循環雜湊。",
-    ).replace(
-        "The English canonical QMD pages and README are bundled. Translations, site "
-        "entry wrappers and maintainer sources below remain repository documents. "
-        "The API usage Markdown is included through its generated detail page.",
-        "套件收錄英文正式 QMD 頁面與 README。下列譯文、網站入口及維護來源保留於儲存庫。"
-        "API 使用說明的 Markdown 會透過產生的詳細頁面收錄。",
+def _analyze_epr_signature(root: Path) -> str:
+    tree = ast.parse(_read_text(root, WORKFLOW_PATH), filename=WORKFLOW_PATH)
+    function = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "analyze_epr"
+        ),
+        None,
     )
-    zh_detail = header("analyze_epr：讀取已保存的 HFSS 場",
-                       "已保存場的 EPR 參數、取場指令、原生需求與回傳結果。",
-                       "docs/api/scgsim-aedt/analyze_epr", "api")
-    zh_detail += ("本頁由函式宣告與使用說明產生。修改 "
-                  f"`{ZH_USAGE}` 或所屬 Python 來源後，再重新產生。\n\n")
-    zh_detail += (ROOT / ZH_USAGE).read_text().rstrip() + "\n\n## 函式簽章\n\n```python\n" + signature + "\n```\n\n"
-    zh_detail += "## 直接來源\n\n| 來源 | SHA-256 |\n|---|---|\n"
-    for source in (IMPLEMENTATION, ZH_USAGE):
-        zh_detail += f"| `{source}` | `{digest(source)}` |\n"
-    zh_index_sha = hashlib.sha256(zh_index.encode()).hexdigest()
-    zh_detail += f"\n[完整產生來源](input-index.qmd)，SHA-256 `{zh_index_sha}`。\n"
-    return {INDEX: index, DETAIL: detail,
-            "zh-TW/" + INDEX: zh_index, "zh-TW/" + DETAIL: zh_detail}
+    if function is None:
+        raise ValueError("Public analyze_epr function was not found")
+    arguments = function.args
+    if arguments.posonlyargs or arguments.args or arguments.vararg or arguments.kwarg:
+        raise ValueError("Review formatter when analyze_epr is no longer keyword-only")
+    if function.returns is None:
+        raise ValueError("analyze_epr needs a declared return annotation")
+
+    parameters = []
+    for argument, default in zip(
+        arguments.kwonlyargs, arguments.kw_defaults, strict=True
+    ):
+        parameter = ast.unparse(argument)
+        if default is not None:
+            parameter += f" = {ast.unparse(default)}"
+        parameters.append(f"    {parameter},")
+    return (
+        "def analyze_epr(\n    *,\n"
+        + "\n".join(parameters)
+        + (f"\n) -> {ast.unparse(function.returns)}: ...")
+    )
+
+
+def _render_index(
+    root: Path,
+    documents: list[str],
+    exports: dict[str, list[str]],
+    sources: list[str],
+    *,
+    chinese: bool,
+) -> str:
+    title = (
+        "公開參考輸入與匯出清單"
+        if chinese
+        else "Public reference inputs and export inventory"
+    )
+    description = (
+        "完整列出公開匯出名稱，以及未收錄於離線套件的來源文件。"
+        if chinese
+        else "Declared public facade names and source documents outside the offline bundle."
+    )
+    parts = [_header(title, description, "docs/api/input-index", "reference")]
+    if chinese:
+        parts.append(
+            "本頁由 `scripts/generate_knowledge_reference.py` 產生；請修改正式來源後重建。\n\n"
+            "本索引列出九個公開 facade 的宣告名稱；名稱清單不取代各 API 的參數與行為契約。\n\n"
+            "## 宣告的公開匯出\n\n"
+        )
+    else:
+        parts.append(
+            "Generated by `scripts/generate_knowledge_reference.py`; edit its canonical inputs.\n\n"
+            "This index lists names declared by nine public facades; it does not replace each API's parameter and behavior contract.\n\n"
+            "## Declared public exports\n\n"
+        )
+    for namespace, names in exports.items():
+        parts.append(
+            f"### scgsim.{namespace}\n\n"
+            + ", ".join(f"`{name}`" for name in names)
+            + ".\n\n"
+        )
+    parts.append(
+        (
+            "## 產生來源\n\n| 來源 | SHA-256 |\n|---|---|\n"
+            if chinese
+            else "## Generation sources\n\n| Source | SHA-256 |\n|---|---|\n"
+        )
+    )
+    for source in sources:
+        parts.append(f"| `{source}` | `{_digest(root, source)}` |\n")
+    parts.append("\n")
+    unbundled = [
+        path
+        for path in documents
+        if path != "README.md"
+        and not (path.startswith("docs/") and path.endswith(".qmd"))
+    ]
+    if chinese:
+        parts.append(
+            "## 未收錄於離線套件的公開文件\n\n"
+            "README 與英文 `docs/*.qmd` 會收錄於離線 bundle；以下文件僅保留在儲存庫。\n\n"
+        )
+    else:
+        parts.append(
+            "## Public documents outside the offline bundle\n\n"
+            "The README and English `docs/*.qmd` pages are bundled; the following public documents remain in the repository.\n\n"
+        )
+    parts.extend(f"- `{path}`\n" for path in unbundled)
+    return "".join(parts)
+
+
+def _render_detail(usage: str, page: _DetailPage) -> str:
+    title = (
+        "analyze_epr：讀取已保存的 HFSS 場"
+        if page.chinese
+        else "analyze_epr: evaluate retained HFSS fields"
+    )
+    description = (
+        "已保存場 EPR 的參數、最小呼叫與函式簽章。"
+        if page.chinese
+        else "Saved-field EPR parameters, a minimal call and the current function signature."
+    )
+    identifier = "docs/api/scgsim-aedt/analyze_epr"
+    parts = [_header(title, description, identifier, "api"), usage.rstrip(), "\n\n"]
+    parts.append(
+        "## 函式簽章\n\n```python\n" if page.chinese else "## Signature\n\n```python\n"
+    )
+    parts.extend((page.signature, "\n```\n\n"))
+    parts.append(
+        "## 直接來源\n\n| 來源 | SHA-256 |\n|---|---|\n"
+        if page.chinese
+        else "## Direct sources\n\n| Source | SHA-256 |\n|---|---|\n"
+    )
+    for source in (WORKFLOW_PATH, page.usage_path):
+        if source not in page.sources:
+            raise ValueError(
+                f"Reference source is missing from source inventory: {source}"
+            )
+        parts.append(f"| `{source}` | `{_digest(page.root, source)}` |\n")
+    label = "完整產生索引" if page.chinese else "Complete generation index"
+    index_path = CHINESE_INDEX_PATH if page.chinese else INDEX_PATH
+    index_hash = hashlib.sha256(page.index.encode("utf-8")).hexdigest()
+    parts.append(f"\n[{label}]({Path(index_path).name}), SHA-256 `{index_hash}`.\n")
+    return "".join(parts)
+
+
+def _header(title: str, description: str, identifier: str, kind: str) -> str:
+    fields = (
+        ("title", title),
+        ("description", description),
+        ("scgsim-id", identifier),
+        ("scgsim-kind", kind),
+        ("scgsim-status", "CONVERGING"),
+    )
+    values = "".join(
+        f"{key}: {json.dumps(value, ensure_ascii=False)}\n" for key, value in fields
+    )
+    return f"---\n{values}---\n\n"
+
+
+def _digest(root: Path, path: str) -> str:
+    return hashlib.sha256(_read_bytes(root, path)).hexdigest()
+
+
+def _read_text(root: Path, path: str) -> str:
+    return _read_bytes(root, path).decode("utf-8")
+
+
+def _read_bytes(root: Path, path: str) -> bytes:
+    source = root / path
+    if source.resolve() != source or not source.is_file():
+        raise ValueError(f"Reference source must be a regular non-symlink file: {path}")
+    return source.read_bytes()
 
 
 def main() -> None:
+    """Write generated pages, or report stale pages without changing them."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
-    args = parser.parse_args()
-    for name, content in render().items():
-        path = ROOT / name
-        if args.check:
-            if not path.is_file() or path.read_text() != content:
-                raise SystemExit(f"Generated reference is stale: {name}")
-        else:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content)
+    arguments = parser.parse_args()
+    for relative, content in render().items():
+        destination = ROOT / relative
+        if arguments.check:
+            if (
+                not destination.is_file()
+                or destination.read_text(encoding="utf-8") != content
+            ):
+                raise SystemExit(f"Generated reference is stale: {relative}")
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(content, encoding="utf-8")
 
 
 if __name__ == "__main__":

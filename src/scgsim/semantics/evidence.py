@@ -1,4 +1,10 @@
-"""Immutable sourced-patch evidence and deduplicated contribution results."""
+"""Validate sourced-patch evidence and deduplicate logical contributions.
+
+Observation payloads stay dynamically typed at this serialized-data boundary;
+``freeze_plain`` validates and detaches them before any result uses their hash.
+The semantic identity tuple is heterogeneous because it compares all identity
+fields together without changing their serialized or scalar types.
+"""
 
 from __future__ import annotations
 
@@ -19,7 +25,7 @@ from .snapshot import (
 )
 
 EvidenceStage = Literal["declared", "planned", "observed"]
-_STAGE_ORDER = ("declared", "planned", "observed")
+_STAGE_ORDER: tuple[EvidenceStage, ...] = ("declared", "planned", "observed")
 _INTERFACE_INTENTS = (
     "conductor_solution",
     "solution_solution",
@@ -30,6 +36,8 @@ _INTERFACE_INTENTS = (
 
 @dataclass(frozen=True, slots=True)
 class SourcedPatch:
+    """Immutable patch evidence with its semantic identity and source facts."""
+
     patch_id: str
     contribution_id: str
     interface_intent: str
@@ -48,10 +56,9 @@ class SourcedPatch:
     snapshot_reference: SemanticSnapshotReference | None = None
 
     def __post_init__(self) -> None:
+        """Freeze sequence and observation inputs at the record boundary."""
         if self.evidence_stage not in _STAGE_ORDER:
-            raise ValueError(
-                "evidence_stage must be declared, planned, or observed"
-            )
+            raise ValueError("evidence_stage must be declared, planned, or observed")
         for field_name in ("source_owner_ids", "aggregate_owner_ids"):
             object.__setattr__(self, field_name, tuple(getattr(self, field_name)))
         for field_name in (
@@ -73,6 +80,7 @@ class SourcedPatch:
             )
 
     def semantic_identity(self) -> tuple[Any, ...]:
+        """Return fields that must agree for patches to share one contribution."""
         return (
             self.contribution_id,
             self.interface_intent,
@@ -91,6 +99,8 @@ class SourcedPatch:
 
 @dataclass(frozen=True, slots=True)
 class EvidenceResult:
+    """One classified contribution with ordered provenance and snapshot identity."""
+
     contribution_id: str
     patch_ids: tuple[str, ...]
     classification: str
@@ -109,6 +119,7 @@ class EvidenceResult:
     snapshot_reference: SemanticSnapshotReference
 
     def __post_init__(self) -> None:
+        """Normalize ordered collections and validate the bound snapshot."""
         if not isinstance(self.snapshot_reference, SemanticSnapshotReference):
             raise TypeError("snapshot_reference must be a SemanticSnapshotReference")
         for field_name in (
@@ -142,10 +153,12 @@ class SemanticEvidenceFacade:
         snapshot: SemanticFactsSnapshot,
         patches: Sequence[SourcedPatch] = (),
     ):
+        """Bind a snapshot and any patch records for repeatable evaluation."""
         object.__setattr__(self, "snapshot", snapshot)
         object.__setattr__(self, "_patches", tuple(patches))
 
     def material_kind(self, semantic_id: str) -> str | None:
+        """Read a material kind when the entity is present in the snapshot."""
         entity = self.snapshot.facts.get("entities", {}).get(semantic_id)
         return entity.get("material_kind") if isinstance(entity, Mapping) else None
 
@@ -159,6 +172,7 @@ class SemanticEvidenceFacade:
     def results(
         self, patches: Sequence[SourcedPatch] = ()
     ) -> tuple[EvidenceResult, ...]:
+        """Validate references, merge duplicate patches, and classify in ID order."""
         records_to_evaluate = (*self._patches, *tuple(patches))
         for patch in records_to_evaluate:
             _validate_interface_intent(patch)
@@ -175,9 +189,11 @@ class SemanticEvidenceFacade:
                 record.semantic_identity() != first.semantic_identity()
                 for record in records[1:]
             ):
-                raise ValueError(f"conflicting semantic evidence for {contribution_id!r}")
+                raise ValueError(
+                    f"conflicting semantic evidence for {contribution_id!r}"
+                )
             classification, source_owner_ids = _classify_patch(self.snapshot, first)
-            stages = tuple(
+            stages: tuple[EvidenceStage, ...] = tuple(
                 stage
                 for stage in _STAGE_ORDER
                 if any(record.evidence_stage == stage for record in records)
@@ -205,7 +221,7 @@ class SemanticEvidenceFacade:
                     outer_source_ids=first.outer_source_ids,
                     hole_source_ids=first.hole_source_ids,
                     seam_source_ids=first.seam_source_ids,
-                    evidence_stages=stages,  # type: ignore[arg-type]
+                    evidence_stages=stages,
                     observation_hashes=observation_hashes,
                     snapshot_reference=expected_reference,
                 )
@@ -223,7 +239,9 @@ def _validate_snapshot_reference(
     expected_reference: SemanticSnapshotReference,
 ) -> None:
     if patch.snapshot_reference is None:
-        raise ValueError(f"semantic evidence {patch.patch_id!r} has no snapshot reference")
+        raise ValueError(
+            f"semantic evidence {patch.patch_id!r} has no snapshot reference"
+        )
     if patch.snapshot_reference != expected_reference:
         raise ValueError(
             f"semantic evidence {patch.patch_id!r} belongs to a different snapshot"
@@ -236,7 +254,9 @@ def _classify_patch(
     domains = patch.effective_domain_ids
     if patch.interface_intent == "conductor_solution":
         if domains is None or len(domains) != 1:
-            raise ValueError("conductor_solution evidence requires one effective domain")
+            raise ValueError(
+                "conductor_solution evidence requires one effective domain"
+            )
         material_kind = _material_kind(snapshot, domains[0])
         return conductor_solution_interface_kind(material_kind), patch.source_owner_ids
     if patch.interface_intent == "solution_solution":

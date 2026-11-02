@@ -18,19 +18,25 @@ from scgsim.geometry.models.input import (
     SourceCurveSpec,
     VacuumRegionSpec,
 )
-from scgsim.geometry.models.junctions import JunctionTerminalBinding, RectangularJunctionSpec
-from scgsim.geometry.source.junctions import with_rectangular_junctions
+from scgsim.geometry.models.junctions import (
+    JunctionTerminalBinding,
+    RectangularJunctionSpec,
+)
 from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.models.physical import (
-    ApproximationProfile, PhysicalLayerDeclaration, PhysicalRepresentationPlan,
+    ApproximationProfile,
+    PhysicalLayerDeclaration,
+    PhysicalRepresentationPlan,
+    interpret_physical_layers,
 )
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
-from scgsim.geometry.planning.physical import interpret_physical_geometry, interpret_physical_layers
+from scgsim.geometry.planning.physical import interpret_physical_geometry
 from scgsim.geometry.source.adapter import (
     build_gds_stack_geometry_input,
     build_gdsfactory_geometry_input,
 )
 from scgsim.geometry.source.curves import bind_source_curves
+from scgsim.geometry.source.junctions import with_rectangular_junctions
 from scgsim.geometry.source.plan import GeometryPlan, GeometryPlanSnapshot
 from scgsim.geometry.source.stack import build_component_stack
 from scgsim.geometry.source.summary import InputSummary, summarize_geometry_input

@@ -1,0 +1,121 @@
+"""Derive rectangular source junctions after physical interpretation."""
+
+from __future__ import annotations
+
+import json
+import math
+from dataclasses import replace
+
+from scgsim.geometry.models.grid import geometry_grid_context
+from scgsim.geometry.models.junctions import JunctionGeometry, RectangularJunctionSpec
+from scgsim.geometry.planning.junction_planning.partition import partition_junctions
+from scgsim.geometry.planning.junction_planning.terminal import junction_terminal_line
+from scgsim.geometry.primitives.grid import with_input_grid
+
+
+@with_input_grid
+def derive_rectangular_junctions(build_input):
+    """Derive once after the single physical interpretation, before any surfaces."""
+    requests = tuple(
+        (
+            RectangularJunctionSpec.from_payload(item)
+            for item in build_input.metadata.get("rectangular_junctions", ())
+        )
+    )
+    if not requests:
+        return build_input
+    regions = {item.port_sheet_id: item for item in build_input.port_sheet_regions}
+    geometries = []
+    for request in requests:
+        region = regions[request.port_sheet_id]
+        dx, dy = region.metadata["direction"][:2]
+        norm = math.hypot(dx, dy)
+        dx, dy = (dx / norm, dy / norm)
+        across = [-dy * x + dx * y for x, y in region.exterior]
+        geometry = JunctionGeometry(
+            request.junction_id,
+            request.source_polygon_id,
+            request.terminal_a.net_id,
+            request.terminal_b.net_id,
+            (dx, dy),
+            max(across) - min(across),
+        )
+        try:
+            junction_terminal_line(
+                {"exterior": region.exterior, "holes": region.holes}, geometry, 0.0
+            )
+        except ValueError as error:
+            context = geometry_grid_context(build_input)
+            if context is not None:
+                error.add_note(
+                    json.dumps(
+                        {
+                            "junction_id": request.junction_id,
+                            "geometry_grid": context.to_payload(),
+                            "requested_direction_xy": list(geometry.direction_xy),
+                            "realization_status": "incompatible_with_existing_shape_contract",
+                        },
+                        sort_keys=True,
+                    )
+                )
+            raise
+        geometries.append(geometry)
+    result = partition_junctions(
+        build_input, geometries, build_input.metadata["source_dbu_um"]
+    )
+    records = result.metadata["junction_partitions"]
+    polygons = {item.polygon_id: item for item in result.polygons}
+    regions = []
+    by_port = {item.port_sheet_id: item for item in requests}
+    for region in result.port_sheet_regions:
+        request = by_port.get(region.port_sheet_id)
+        if request is None:
+            regions.append(region)
+            continue
+        record = records[request.junction_id]
+        central = polygons[record["central_polygon_id"]]
+        regions.append(
+            replace(
+                region,
+                exterior=central.exterior,
+                holes=central.holes,
+                metadata={
+                    **region.metadata,
+                    "rectangular_junction_partition": request.junction_id,
+                    "rectangular_junction_binding": request.to_payload(),
+                    "rectangular_junction_source_geometry": record[
+                        "authored_source_geometry"
+                    ],
+                },
+            )
+        )
+    owner_ids = {
+        terminal.source_entity_id
+        for item in requests
+        for terminal in (item.terminal_a, item.terminal_b)
+    }
+    entities = tuple(
+        (
+            replace(
+                entity,
+                metadata={
+                    **entity.metadata,
+                    "junction_derived_support": tuple(
+                        (
+                            item.junction_id
+                            for item in requests
+                            if entity.semantic_id
+                            in {
+                                item.terminal_a.source_entity_id,
+                                item.terminal_b.source_entity_id,
+                            }
+                        )
+                    ),
+                },
+            )
+            if entity.semantic_id in owner_ids
+            else entity
+            for entity in result.entities
+        )
+    )
+    return replace(result, entities=entities, port_sheet_regions=tuple(regions))

@@ -1,7 +1,6 @@
-"""EPR analysis selections and native field-reference bindings.
+"""Bind EPR analysis sheets and their native field-side selections.
 
 Common model construction and saved geometry readback belong to runtime.native.
-This module adds analysis selections to that source-bound model.
 """
 
 from __future__ import annotations
@@ -9,29 +8,24 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from importlib.metadata import version
 from typing import Any, Literal
-from scgsim.geometry._primitives.spatial import _geometry_ref_surface_z_um
+
+from scgsim.aedt.data import canonical_sha256
 from scgsim.aedt.epr.geometry import (
-    _INSET_CIRCLE_POINTS,
-    _INSET_METHOD,
-    _base_sheet_plan,
+    base_sheet_plan,
 )
-from scgsim.aedt.preparation.planar import (
-    _entity_z_range,
-    _native_name,
+from scgsim.aedt.preparation.planar_masks import INSET_CIRCLE_POINTS, INSET_METHOD
+from scgsim.aedt.preparation.planar_source import (
+    native_name,
 )
-from scgsim.aedt.epr.fields import create_verified_face_list
 from scgsim.aedt.runtime.native.common import (
-    _native_object_boolean_property,
-    _native_object_evidence,
+    native_object_boolean_property,
+    native_object_evidence,
 )
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
-from scgsim.aedt._data import canonical_sha256, detached
-from scgsim.aedt.runtime.native.hfss_geometry import (
-    _native_conductor_geometry as _native_conductor_geometry,
-    _read_saved_hfss_design as _read_saved_hfss_design,
-)
+from scgsim.geometry.primitives.spatial import geometry_ref_surface_z_um
 
 
 def _analysis_surface_sheet(
@@ -52,7 +46,7 @@ def _analysis_surface_sheet(
             not isinstance(plane, Mapping) or plane.get("axis") != "z"
         ) and geometry_ref.get("shell_part") not in {"top", "bottom"}:
             raise ValueError("analysis surface loop requires an explicit Z plane")
-        z_um = _geometry_ref_surface_z_um(geometry_ref)
+        z_um = geometry_ref_surface_z_um(geometry_ref)
         points = [[float(x), float(y), z_um] for x, y in outer]
         holes = [
             [[float(x), float(y), z_um] for x, y in ring]
@@ -75,7 +69,7 @@ def _analysis_surface_sheet(
     if sheet is False or sheet is None:
         raise RuntimeError(f"failed to create analysis surface {name!r}")
     for index, ring in enumerate(holes):
-        hole_name = _native_name("hole", name, index)
+        hole_name = native_name("hole", name, index)
         hole = app.modeler.create_polyline(
             ring,
             cover_surface=True,
@@ -107,7 +101,8 @@ def _native_sheet_side_binding(
     else:
         raise RuntimeError(unknown_side_error)
     orientation = sum(
-        float(normal) * target for normal, target in zip(native_normal, desired)
+        float(normal) * target
+        for normal, target in zip(native_normal, desired, strict=False)
     )
     if abs(orientation) <= 1e-12:
         raise RuntimeError(ambiguous_side_error)
@@ -137,7 +132,8 @@ def _resolve_surface_field_selector(
         "requested_native_selector": requested_selector,
         "applied_native_selector": applied,
         "applied_native_token": {
-            "surface": "EnterSurface", "adjacent": "EnterAdjacentSurface"
+            "surface": "EnterSurface",
+            "adjacent": "EnterAdjacentSurface",
         }[applied],
         "physical_material_side": "unverified",
         "scope": "surface_field_quantities_only; masked area is side-independent",
@@ -159,414 +155,141 @@ def _lift_inset_ring(
     ]
 
 
-def bind_inset_surface_selections(
-    app: Any,
-    binding: Mapping[str, Any],
-    base_selection: Mapping[str, Any],
-    margin_um: float,
-    inset_plan: Mapping[tuple[str, float], Mapping[str, Any]],
-    sheet_facts: dict[str, dict[str, Any]],
-    sheet_names: Mapping[str, Mapping[str, Any]],
-    *,
-    modeling: str | None,
-    surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None = None,
-) -> list[dict[str, Any]]:
-    """Create or rebind non-model inset sheets without changing solver CAD."""
+@dataclass
+class InsetSurfaceBinding:
+    """Carry one source contribution and the session's shared inset-sheet facts."""
 
-    plane = binding["mask_plane"]
-    # Keep the existing positional caller contract; direction comes from this
-    # source contribution, never from the base Sheet's orientation.
-    field_side = str(binding["contribution"]["side"])
-    planned = inset_plan[(str(binding["binding_id"]), margin_um)]
-    regions = planned["regions"]
-    dbu_um = float(binding["mask_support"]["source_dbu_um"])
-    result: list[dict[str, Any]] = []
-    for index, region in enumerate(regions):
-        contour_sha256 = canonical_sha256(
+    app: Any
+    binding: Mapping[str, Any]
+    base_selection: Mapping[str, Any]
+    margin_um: float
+    inset_plan: Mapping[tuple[str, float], Mapping[str, Any]]
+    sheet_facts: dict[str, dict[str, Any]]
+    sheet_names: Mapping[str, Mapping[str, Any]]
+    modeling: str | None
+    surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None = None
+
+    def bind(self) -> list[dict[str, Any]]:
+        """Bind each inset component and its requested native field selector."""
+        self.plane = self.binding["mask_plane"]
+        # Field direction belongs to the source contribution independently of
+        # the base sheet's orientation.
+        self.field_side = str(self.binding["contribution"]["side"])
+        self.planned = self.inset_plan[
+            (str(self.binding["binding_id"]), self.margin_um)
+        ]
+        regions = self.planned["regions"]
+        self.dbu_um = float(self.binding["mask_support"]["source_dbu_um"])
+        self.result: list[dict[str, Any]] = []
+        for index, region in enumerate(regions):
+            self.index = index
+            self.region = region
+            self._bind_region()
+        return self.result
+
+    def _bind_region(self) -> None:
+        self.contour_sha256 = canonical_sha256(
             {
-                "plane": plane,
-                "region": region,
-                "method": _INSET_METHOD,
-                "source_dbu_um": dbu_um,
+                "plane": self.plane,
+                "region": self.region,
+                "method": INSET_METHOD,
+                "source_dbu_um": self.dbu_um,
                 "klayout_version": version("klayout"),
             }
         )
-        planned_name = sheet_names[contour_sha256]
-        name = str(planned_name["name"])
-        facts = sheet_facts.get(name)
+        self.planned_name = self.sheet_names[self.contour_sha256]
+        self.name = str(self.planned_name["name"])
+        facts = self.sheet_facts.get(self.name)
         if facts is None:
-            sheet = app.modeler.get_object_from_name(name)
-            if sheet is None:
-                sheet, _ = _analysis_surface_sheet(
-                    app,
-                    {"plane_basis": plane, "local_region": region},
-                    name=name,
-                )
-            native = _native_object_evidence(app, name)
-            faces = sheet.faces
-            if native["native_object_type"] != "Sheet" or len(faces) != 1:
-                raise RuntimeError(f"inset EPR selection {name!r} is not one sheet")
-            if _native_object_boolean_property(sheet, "Model"):
-                raise RuntimeError(
-                    f"inset EPR selection {name!r} became model geometry"
-                )
-            normal = faces[0].normal
-            if (
-                normal is None
-                or len(normal) != 3
-                or not all(math.isfinite(float(value)) for value in normal)
-            ):
-                raise RuntimeError(f"inset EPR selection {name!r} has no native normal")
-            facts = {
-                "contour_sha256": contour_sha256,
-                "shared_sheet_members": planned_name["members"],
-                "naming_identity_sha256": planned_name["naming_identity_sha256"],
-                "aggregated_parts": planned_name["aggregated_parts"],
-                "native": native,
-                "native_normal": [float(value) for value in normal],
-            }
-            sheet_facts[name] = facts
-        if facts["contour_sha256"] != contour_sha256:
-            raise RuntimeError(f"inset EPR selection name collision: {name!r}")
+            facts = self._read_sheet_facts()
+        if facts["contour_sha256"] != self.contour_sha256:
+            raise RuntimeError(f"inset EPR selection name collision: {self.name!r}")
         native = facts["native"]
         native_normal = facts["native_normal"]
         desired, adjacent_side = _native_sheet_side_binding(
             native_normal,
-            field_side,
-            modeling,
-            unknown_side_error=f"inset EPR selection {name!r} has unknown field side",
+            self.field_side,
+            self.modeling,
+            unknown_side_error=f"inset EPR selection {self.name!r} has unknown field side",
             ambiguous_side_error=(
-                f"inset EPR selection {name!r} has ambiguous field side"
+                f"inset EPR selection {self.name!r} has ambiguous field side"
             ),
         )
         selector_evidence = {}
-        if surface_field_selectors:
+        if self.surface_field_selectors:
             selector_evidence = _resolve_surface_field_selector(
                 adjacent_side,
-                surface_field_selectors.get(str(binding["contribution"]["contribution_id"])),
-                source_field_side=field_side,
+                self.surface_field_selectors.get(
+                    str(self.binding["contribution"]["contribution_id"])
+                ),
+                source_field_side=self.field_side,
             )
             adjacent_side = selector_evidence["applied_native_selector"] == "adjacent"
-        result.append(
+        self.result.append(
             {
-                "selection_name": name,
-                "component_index": index,
-                "shared_sheet_members": planned_name["members"],
-                "naming_identity_sha256": planned_name["naming_identity_sha256"],
-                "aggregated_parts": planned_name["aggregated_parts"],
-                "contour_sha256": contour_sha256,
-                "contour": region,
+                "selection_name": self.name,
+                "component_index": self.index,
+                "shared_sheet_members": self.planned_name["members"],
+                "naming_identity_sha256": self.planned_name["naming_identity_sha256"],
+                "aggregated_parts": self.planned_name["aggregated_parts"],
+                "contour_sha256": self.contour_sha256,
+                "contour": self.region,
                 "adjacent_side": adjacent_side,
-                **({"field_selector_binding": selector_evidence} if selector_evidence else {}),
+                **(
+                    {"field_selector_binding": selector_evidence}
+                    if selector_evidence
+                    else {}
+                ),
                 "native_normal": native_normal,
                 "polygon_approximation": {
-                    "method": _INSET_METHOD,
-                    "source_dbu_um": dbu_um,
-                    "points_per_circle": _INSET_CIRCLE_POINTS,
-                    "requested_margin_um": margin_um,
-                    "integer_margin_dbu": planned["integer_margin_dbu"],
-                    "effective_margin_um": planned["effective_margin_um"],
+                    "method": INSET_METHOD,
+                    "source_dbu_um": self.dbu_um,
+                    "points_per_circle": INSET_CIRCLE_POINTS,
+                    "requested_margin_um": self.margin_um,
+                    "integer_margin_dbu": self.planned["integer_margin_dbu"],
+                    "effective_margin_um": self.planned["effective_margin_um"],
                     "klayout_version": version("klayout"),
                 },
                 "reused_source_sheet": False,
                 **native,
             }
         )
-    return result
 
-
-def bind_native_surface_references(
-    app: Any,
-    prepared: PreparedPlanarGeometry,
-    native_geometry: Mapping[str, Any],
-    request: Any,
-) -> list[dict[str, Any]]:
-    """Bind whole Solid caps as references, separate from masked Sheet supports.
-
-    Source ownership and constant-section Z construction select the cap. Native
-    normals describe projection only; they do not establish an incident trace.
-    Saved reuse changes selection metadata, never CAD or solved field topology.
-    """
-    if prepared.modeling != "solid":
-        return []
-    selected = (
-        {item.contribution_id for item in prepared.contributions}
-        if request.surface_contribution_ids is None
-        else set(request.surface_contribution_ids)
-    )
-    source = prepared.source
-    specs = {item.contribution_id: item for item in prepared.contributions}
-    objects = native_geometry["objects"]
-    references: dict[str, dict[str, Any]] = {}
-    for binding in prepared.surface_bindings:
-        contribution = binding["contribution"]
-        cid = contribution["contribution_id"]
-        kind = contribution["classification"]
-        if cid not in selected or kind not in {"MA", "MS", "SA"}:
-            continue
-        z_um = _geometry_ref_surface_z_um(binding["geometry_ref"])
-        if kind == "SA":
-            owner = binding["substrate_domain_id"]
-            entities = [
-                item
-                for item in source["solution_regions"]
-                if item["semantic_id"] == owner
-            ]
-            candidates = [
-                item
-                for item in objects
-                if item["kind"] == "solution_domain" and item["semantic_id"] == owner
-            ]
-        else:
-            owner = binding["owner_semantic_id"]
-            entities = [
-                item for item in source["conductors"] if item["semantic_id"] == owner
-            ]
-            source_ids = {
-                specs[cid].source_polygon_id,
-                *(contribution.get("outer_source_ids") or ()),
-                *(contribution.get("hole_source_ids") or ()),
-            }
-            candidates = [
-                item
-                for item in objects
-                if item["kind"] == "conductor"
-                and item["semantic_id"] == owner
-                and item["source_polygon_id"] in source_ids
-            ]
-        if len(entities) != 1 or not candidates:
+    def _read_sheet_facts(self) -> dict[str, Any]:
+        sheet = self.app.modeler.get_object_from_name(self.name)
+        if sheet is None:
+            sheet, _ = _analysis_surface_sheet(
+                self.app,
+                {"plane_basis": self.plane, "local_region": self.region},
+                name=self.name,
+            )
+        native = native_object_evidence(self.app, self.name)
+        faces = sheet.faces
+        if native["native_object_type"] != "Sheet" or len(faces) != 1:
+            raise RuntimeError(f"inset EPR selection {self.name!r} is not one sheet")
+        if native_object_boolean_property(sheet, "Model"):
             raise RuntimeError(
-                f"native reference {cid!r} lacks source-owned Solid {owner!r}"
+                f"inset EPR selection {self.name!r} became model geometry"
             )
-        entity = entities[0]
-        if kind == "SA":
-            z_min, z_max = _entity_z_range(entity)
-        else:
-            representation, z_min, z_max = _native_conductor_geometry(source, entity)
-            if representation != "solid":
-                raise RuntimeError(f"native reference {cid!r} owner is not a Solid")
-        if z_um == z_max and z_um != z_min:
-            cap = "top"
-        elif z_um == z_min and z_um != z_max:
-            cap = "bottom"
-        else:
-            raise RuntimeError(
-                f"native reference {cid!r} is not a source cap of {owner!r}"
-            )
-        for native in candidates:
-            name = native["object_name"]
-            obj = app.modeler.get_object_from_name(name)
-            if obj is None or native["native_object_type"] != "Solid":
-                raise RuntimeError(f"native reference Solid {name!r} is unavailable")
-            centers = []
-            for face in obj.faces:
-                center = face.center_from_aedt
-                if center is False or center is None or len(center) != 3:
-                    raise RuntimeError(
-                        f"native reference {name!r} face {face.id} center unavailable"
-                    )
-                centers.append((float(center[2]), face, list(center)))
-            if not centers:
-                raise RuntimeError(f"native reference {name!r} has no faces")
-            extreme = (max if cap == "top" else min)(item[0] for item in centers)
-            matches = [item for item in centers if item[0] == extreme]
-            if len(matches) != 1:
-                raise RuntimeError(f"native reference {name!r} {cap} cap is ambiguous")
-            _, face, center = matches[0]
-            normal = face.normal
-            if normal is None or len(normal) != 3:
-                raise RuntimeError(
-                    f"native reference {name!r} cap projection unavailable"
-                )
-            normal = [float(value) for value in normal]
-            identity = {"object_name": name, "cap": cap, "projection_normal": normal}
-            reference_id = "native_cap_" + canonical_sha256(identity)[:24]
-            record = references.get(reference_id)
-            if record is None:
-                edges = []
-                for edge in face.edges:
-                    vertices = []
-                    samples = []
-                    for vertex in edge.vertices:
-                        position = vertex.position
-                        if int(vertex.id) <= 0:
-                            # PyAEDT can synthesize an edge-parameter sample when
-                            # the native edge has no vertex IDs (e.g. a closed edge).
-                            samples.append(
-                                {
-                                    "basis": "PyAEDT synthesized edge-parameter sample",
-                                    "position_um": list(position)
-                                    if position is not None
-                                    else None,
-                                    "native_vertex_id": None,
-                                }
-                            )
-                            continue
-                        if position is None or len(position) != 3:
-                            raise RuntimeError(
-                                f"native reference {name!r} vertex {vertex.id} unavailable"
-                            )
-                        vertices.append(
-                            {"vertex_id": int(vertex.id), "position_um": list(position)}
-                        )
-                    edges.append(
-                        {
-                            "edge_id": int(edge.id),
-                            "vertices": vertices,
-                            "native_vertex_identity_available": bool(vertices)
-                            and not samples,
-                            "parametric_samples": samples,
-                        }
-                    )
-                area = face.area
-                if area is None or area is False:
-                    raise RuntimeError(
-                        f"native reference {name!r} cap area unavailable"
-                    )
-                face_ids = [int(face.id)]
-                face_list = create_verified_face_list(
-                    app,
-                    name=_native_name("reference", reference_id),
-                    face_ids=face_ids,
-                    reuse_existing=True,
-                )
-                record = {
-                    "reference_id": reference_id,
-                    "contribution_ids": [],
-                    "binding_ids": [],
-                    "interface_kinds": [],
-                    "selection_name": face_list["name"],
-                    "face_ids": face_ids,
-                    "face_list": face_list,
-                    "owner_semantic_id": owner,
-                    "source_polygon_id": native.get("source_polygon_id"),
-                    "object_name": name,
-                    "native_object_id": native["native_object_id"],
-                    "source_cap": cap,
-                    "source_z_um": z_um,
-                    "source_supports": [],
-                    "incident_domains": [],
-                    "native_normal": normal,
-                    "projection_normal": normal,
-                    "native_normal_basis": "PyAEDT FacePrimitive.normal geometric projection",
-                    "native_area_m2": float(area) * 1e-12,
-                    "native_faces": [
-                        {
-                            "face_id": int(face.id),
-                            "center_um": center,
-                            "edges": edges,
-                            "area_um2": float(area),
-                        }
-                    ],
-                    "support_kind": "whole_native_cap",
-                    "sampling_basis": "native_solid_owner_face; incident_trace_unproven",
-                }
-                references[reference_id] = record
-            for key, value in (
-                ("contribution_ids", cid),
-                ("binding_ids", binding["binding_id"]),
-                ("interface_kinds", kind),
-            ):
-                if value not in record[key]:
-                    record[key].append(value)
-            record["source_supports"].append(
-                {
-                    "binding_id": binding["binding_id"],
-                    "geometry_ref": binding["geometry_ref"],
-                }
-            )
-            incident = {
-                "effective_domain_id": binding["effective_domain_id"],
-                "effective_material_id": binding["effective_material_id"],
-                "substrate_domain_id": binding["substrate_domain_id"],
-            }
-            if incident not in record["incident_domains"]:
-                record["incident_domains"].append(incident)
-    return detached([references[key] for key in sorted(references)])
-
-
-def verify_saved_native_surface_references(
-    project_path, design_name, references
-) -> list[dict[str, Any]]:
-    """Bind reference membership to the existing pre-Analyze native save.
-
-    Created PyAEDT List properties hold the authored assignment. Only the saved
-    GeometryEntityListOperation supplies native serialization membership here;
-    this function neither saves nor changes the model or the reference support.
-    """
-    verified = detached(references)
-    if not verified:
-        return verified
-    digest, design = _read_saved_hfss_design(
-        project_path, design_name, purpose="native surface reference"
-    )
-    setup = design.get("ModelSetup")
-    core = setup.get("GeometryCore") if isinstance(setup, Mapping) else None
-    operations = core.get("GeometryOperations") if isinstance(core, Mapping) else None
-    lists = (
-        operations.get("GeometryEntityLists")
-        if isinstance(operations, Mapping)
-        else None
-    )
-    records = (
-        lists.get("GeometryEntityListOperation") if isinstance(lists, Mapping) else None
-    )
-    if isinstance(records, Mapping):
-        records = [records]
-    if not isinstance(records, list):
-        raise RuntimeError(
-            "saved native surface reference list records are unavailable"
-        )
-    for reference in verified:
-        requested = reference["face_list"]
-        name = requested["name"]
-        matching = [
-            record
-            for record in records
-            if isinstance(record, Mapping)
-            and isinstance(record.get("Attributes"), Mapping)
-            and record["Attributes"].get("Name") == name
-        ]
-        expected = {
-            "name": name,
-            "native_id": requested["native_id"],
-            "entity_type": "Face",
-            "face_ids": requested["face_ids"],
-        }
-        if len(matching) != 1:
-            raise RuntimeError(
-                f"saved native surface reference list missing or ambiguous: "
-                f"requested={expected!r}; matching_records={matching!r}"
-            )
-        record = matching[0]
-        parameters = record.get("GeometryEntityListParameters")
-        actual = {
-            "name": record["Attributes"]["Name"],
-            "native_id": record.get("ID"),
-            "entity_type": parameters.get("EntityType")
-            if isinstance(parameters, Mapping)
-            else None,
-            "face_ids": parameters.get("EntityList")
-            if isinstance(parameters, Mapping)
-            else None,
-        }
+        normal = faces[0].normal
         if (
-            actual != expected
-            or type(actual["native_id"]) is not int
-            or not isinstance(actual["face_ids"], list)
-            or any(type(value) is not int for value in actual["face_ids"])
+            normal is None
+            or len(normal) != 3
+            or not all(math.isfinite(float(value)) for value in normal)
         ):
             raise RuntimeError(
-                f"saved native surface reference membership differs: "
-                f"requested={expected!r}; actual={actual!r}"
+                f"inset EPR selection {self.name!r} has no native normal"
             )
-        requested["saved_membership"] = {
-            "basis": "saved_native_project_geometry_entity_list",
-            "project_sha256": digest,
-            "design_name": design_name,
-            **actual,
+        facts = {
+            "contour_sha256": self.contour_sha256,
+            "shared_sheet_members": self.planned_name["members"],
+            "naming_identity_sha256": self.planned_name["naming_identity_sha256"],
+            "aggregated_parts": self.planned_name["aggregated_parts"],
+            "native": native,
+            "native_normal": [float(value) for value in normal],
         }
-    return verified
+        self.sheet_facts[self.name] = facts
+        return facts
 
 
 def add_analysis_surfaces(
@@ -576,7 +299,7 @@ def add_analysis_surfaces(
     phase_seconds: dict[str, float] = {}
     surface_selections: list[dict[str, Any]] = []
     started = time.perf_counter()
-    base_names = _base_sheet_plan(prepared.surface_bindings)
+    base_names = base_sheet_plan(prepared.surface_bindings)
     base_points: dict[str, list[list[float]]] = {}
     for binding in prepared.surface_bindings:
         binding_id = str(binding["binding_id"])
@@ -592,7 +315,7 @@ def add_analysis_surfaces(
             if sheet is None:
                 raise RuntimeError(f"shared analysis surface {name!r} vanished")
             points = base_points[name]
-        native = _native_object_evidence(app, sheet.name)
+        native = native_object_evidence(app, sheet.name)
         if native["native_object_type"] != "Sheet" or len(sheet.faces) != 1:
             raise RuntimeError(f"analysis surface {name!r} is not one native sheet")
         normal = sheet.faces[0].normal
@@ -642,12 +365,15 @@ def add_analysis_surfaces(
 
 
 def bind_saved_analysis_surfaces(
-    app: Any, prepared: PreparedPlanarGeometry, geometry: dict[str, Any],
-    *, surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None = None,
+    app: Any,
+    prepared: PreparedPlanarGeometry,
+    geometry: dict[str, Any],
+    *,
+    surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None = None,
 ) -> None:
     """Read EPR selection sheets from the saved common native model."""
     selections: list[dict[str, Any]] = []
-    base_names = _base_sheet_plan(prepared.surface_bindings)
+    base_names = base_sheet_plan(prepared.surface_bindings)
     for binding in prepared.surface_bindings:
         binding_id = str(binding["binding_id"])
         planned_name = base_names[binding_id]
@@ -655,7 +381,7 @@ def bind_saved_analysis_surfaces(
         obj = app.modeler.get_object_from_name(name)
         if obj is None or len(obj.faces) != 1:
             raise RuntimeError(f"saved analysis surface {name!r} is unavailable")
-        evidence = _native_object_evidence(app, name)
+        evidence = native_object_evidence(app, name)
         if evidence["native_object_type"] != "Sheet":
             raise RuntimeError(f"saved analysis surface {name!r} is not a sheet")
         normal = obj.faces[0].normal
@@ -678,7 +404,9 @@ def bind_saved_analysis_surfaces(
         if surface_field_selectors:
             selector_evidence = _resolve_surface_field_selector(
                 adjacent_side,
-                surface_field_selectors.get(str(binding["contribution"]["contribution_id"])),
+                surface_field_selectors.get(
+                    str(binding["contribution"]["contribution_id"])
+                ),
                 source_field_side=side,
             )
             adjacent_side = selector_evidence["applied_native_selector"] == "adjacent"
@@ -692,7 +420,11 @@ def bind_saved_analysis_surfaces(
                 "aggregated_parts": planned_name["aggregated_parts"],
                 "effective_domain_id": binding["effective_domain_id"],
                 "adjacent_side": adjacent_side,
-                **({"field_selector_binding": selector_evidence} if selector_evidence else {}),
+                **(
+                    {"field_selector_binding": selector_evidence}
+                    if selector_evidence
+                    else {}
+                ),
                 "field_side": side,
                 "native_normal": list(native_normal),
                 "desired_field_side_normal": list(desired),

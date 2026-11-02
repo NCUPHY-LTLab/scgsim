@@ -6,16 +6,16 @@ import hashlib
 from dataclasses import dataclass, replace
 from typing import Any
 
-_MODES = ("materials", "boundaries", "surface_epr", "mesh")
+MODES = ("materials", "boundaries", "surface_epr", "mesh")
 
-_MODE_TITLES = {
+MODE_TITLES = {
     "materials": "Materials",
     "boundaries": "Boundaries",
     "surface_epr": "Surface EPR",
     "mesh": "Mesh",
 }
 
-_VIEWS = (
+VIEWS = (
     ("plus-x", "+X", (1.0, 0.0, 0.0), None),
     ("minus-x", "-X", (-1.0, 0.0, 0.0), None),
     ("plus-y", "+Y", (0.0, 1.0, 0.0), None),
@@ -40,7 +40,7 @@ _VIEWS = (
     ),
 )
 
-_FIXED_COLORS = {
+FIXED_COLORS = {
     "Ground": "#3A3A3A",
     "PEC": "#3A3A3A",
     "LumpedPort": "#CC3377",
@@ -76,7 +76,9 @@ _OTHER_COLORS = (
 
 
 @dataclass(frozen=True)
-class _Part:
+class ScenePart:
+    """One detached geometry dataset and its solver-derived display facts."""
+
     dataset: Any
     semantic_id: str
     label: str
@@ -88,16 +90,19 @@ class _Part:
 
 
 @dataclass(frozen=True)
-class _Mode:
-    parts: tuple[_Part, ...] = ()
+class SceneMode:
+    """One semantic preview mode, including an explicit unavailable state."""
+
+    parts: tuple[ScenePart, ...] = ()
     unavailable_reason: str | None = None
 
 
-def _with_scene_palette(mode: _Mode) -> _Mode:
+def with_scene_palette(mode: SceneMode) -> SceneMode:
+    """Assign stable presentation colors without changing semantic facts."""
     if mode.unavailable_reason is not None:
         return mode
     identities = sorted(
-        {part.semantic_id for part in mode.parts if part.role not in _FIXED_COLORS}
+        {part.semantic_id for part in mode.parts if part.role not in FIXED_COLORS}
     )
     assigned = {
         identity: _OTHER_COLORS[index % len(_OTHER_COLORS)]
@@ -109,8 +114,8 @@ def _with_scene_palette(mode: _Mode) -> _Mode:
             replace(
                 part,
                 color=(
-                    _FIXED_COLORS[part.role]
-                    if part.role in _FIXED_COLORS
+                    FIXED_COLORS[part.role]
+                    if part.role in FIXED_COLORS
                     else assigned[part.semantic_id]
                 ),
             )
@@ -119,9 +124,10 @@ def _with_scene_palette(mode: _Mode) -> _Mode:
     )
 
 
-def _color(identity: str) -> str:
-    if identity in _FIXED_COLORS:
-        return _FIXED_COLORS[identity]
+def color_for_identity(identity: str) -> str:
+    """Choose the existing fixed or identity-derived scene presentation color."""
+    if identity in FIXED_COLORS:
+        return FIXED_COLORS[identity]
     return _OTHER_COLORS[_palette_index(identity)]
 
 

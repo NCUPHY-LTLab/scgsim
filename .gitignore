@@ -19,6 +19,7 @@ src/scgsim/_agent_knowledge/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.import_linter_cache/
 .artifacts/
 
 /.quarto/

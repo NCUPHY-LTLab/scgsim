@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-
 import html
 import re
-
+from dataclasses import dataclass, field
 from typing import Any
 
-from scgsim.aedt._benchmark import attribute_profile_memory
+from scgsim.aedt.benchmark_data import attribute_profile_memory
 from scgsim.presentation.notebook import (
     cards,
     checked_theme,
@@ -20,54 +19,71 @@ from scgsim.presentation.notebook import (
 )
 
 
-def _benchmark_view(data: dict[str, Any], *, show_details: bool) -> dict[str, Any]:
-    """Project the recorded native profile tree into display-only rows and series."""
+@dataclass(frozen=True)
+class _BenchmarkBranch:
+    """Traversal context inherited by one native profile-tree branch."""
 
-    benchmark = data["benchmark"]
-    if benchmark["status"] != "complete":
-        return {"table_rows": [], "adaptive_series": [], "sweep_series": []}
-    rows: list[dict[str, Any]] = []
-    pass_rows: list[dict[str, Any]] = []
+    scope: str
+    pass_id: int | None = None
+    inside_adaptive_meshing: bool = False
 
-    def visit(
-        node: dict[str, Any],
-        profile: str,
-        group: str,
-        branch: str,
-        pass_id: int | None = None,
-        inside_adaptive_meshing: bool = False,
-    ) -> None:
+
+@dataclass
+class _BenchmarkGroupProjection:
+    """Collect display rows for one recorded native process group."""
+
+    data: dict[str, Any]
+    profile: str
+    group: str
+    rows: list[dict[str, Any]] = field(default_factory=list)
+    pass_rows: list[dict[str, Any]] = field(default_factory=list)
+
+    def visit(self, node: dict[str, Any], branch: _BenchmarkBranch) -> None:
+        """Project one node, then pass its derived scope to child nodes."""
         name = str(node["name"])
-        pass_id = node.get("adaptive_pass", pass_id)
-        inside_adaptive_meshing = (
-            inside_adaptive_meshing or name == "Adaptive Meshing Group"
+        pass_id = node.get("adaptive_pass", branch.pass_id)
+        inside_adaptive = (
+            branch.inside_adaptive_meshing or name == "Adaptive Meshing Group"
         )
-        native_pass_group = False
-        if (
-            "adaptive_pass" not in node
-            and data["mode"] == "q3d"
-            and inside_adaptive_meshing
-        ):
-            match = re.fullmatch(r"Pass (\d+) Group", name)
-            if match is not None:
-                # This literal native group owns its descendant stages, not all problems.
-                pass_id = int(match[1])
-                native_pass_group = True
-        kind = (
-            "adaptive"
-            if pass_id is not None
-            else "sweep"
-            if "sweep" in name.lower()
-            else "subproblem"
-            if data["mode"] in {"q2d", "q3d"}
-            else branch
-        )
+        native_pass_group = self._native_pass_group(node, name, inside_adaptive)
+        if native_pass_group is not None:
+            pass_id = native_pass_group
+        scope = self._node_scope(name, pass_id, branch.scope)
+        self._record_metrics(node, name, scope, pass_id)
+        self._record_pass_peak(node, name, pass_id, native_pass_group is not None)
+        child_branch = _BenchmarkBranch(scope, pass_id, inside_adaptive)
+        for child in node.get("children", []):
+            self.visit(child, child_branch)
+
+    def _native_pass_group(
+        self, node: dict[str, Any], name: str, inside_adaptive: bool
+    ) -> int | None:
+        if "adaptive_pass" in node or self.data["mode"] != "q3d" or not inside_adaptive:
+            return None
+        match = re.fullmatch(r"Pass (\d+) Group", name)
+        if match is None:
+            return None
+        # This literal native group owns its descendants, not every Q3D problem.
+        return int(match[1])
+
+    def _node_scope(self, name: str, pass_id: int | None, parent_scope: str) -> str:
+        if pass_id is not None:
+            return "adaptive"
+        if "sweep" in name.lower():
+            return "sweep"
+        if self.data["mode"] in {"q2d", "q3d"}:
+            return "subproblem"
+        return parent_scope
+
+    def _record_metrics(
+        self, node: dict[str, Any], name: str, scope: str, pass_id: int | None
+    ) -> None:
         if node.get("metrics"):
-            rows.append(
+            self.rows.append(
                 {
-                    "profile": profile,
-                    "process_group": group,
-                    "scope": kind,
+                    "profile": self.profile,
+                    "process_group": self.group,
+                    "scope": scope,
                     "stage": name,
                     "pass": pass_id,
                     "frequency_native": node.get("native_properties", {}).get(
@@ -76,92 +92,151 @@ def _benchmark_view(data: dict[str, Any], *, show_details: bool) -> dict[str, An
                     **node["metrics"],
                 }
             )
-        if "adaptive_pass" in node or native_pass_group:
-            peak = node.get("stage_memory_peak", {})
-            pass_rows.append(
-                {
-                    "profile": profile,
-                    "process_group": group,
-                    "scope": "adaptive",
-                    "stage": name,
-                    "pass": pass_id,
-                    "memory_native": peak.get("memory_native"),
-                    "memory_scope": peak.get("scope"),
-                    **node["metrics"],
-                }
-            )
-        for child in node.get("children", []):
-            visit(child, profile, group, kind, pass_id, inside_adaptive_meshing)
 
-    for profile in benchmark["profiles"]:
-        for group in profile["process_groups"]:
-            visit(group, profile["native_setup_profile"], group["name"], "stage")
+    def _record_pass_peak(
+        self,
+        node: dict[str, Any],
+        name: str,
+        pass_id: int | None,
+        native_pass_group: bool,
+    ) -> None:
+        if "adaptive_pass" not in node and not native_pass_group:
+            return
+        peak = node.get("stage_memory_peak", {})
+        self.pass_rows.append(
+            {
+                "profile": self.profile,
+                "process_group": self.group,
+                "scope": "adaptive",
+                "stage": name,
+                "pass": pass_id,
+                "memory_native": peak.get("memory_native"),
+                "memory_scope": peak.get("scope"),
+                **node["metrics"],
+            }
+        )
+
+
+def _benchmark_view(data: dict[str, Any], *, show_details: bool) -> dict[str, Any]:
+    """Project the recorded native profile tree into display-only rows and series."""
+    benchmark = data["benchmark"]
+    if benchmark["status"] != "complete":
+        return {"table_rows": [], "adaptive_series": [], "sweep_series": []}
+    rows, pass_rows = _profile_rows(data, benchmark["profiles"])
     summary_rows = pass_rows + [
         row
         for row in rows
         if row["pass"] is None and row["scope"] in {"sweep", "subproblem"}
     ]
     table_rows = rows if show_details else (summary_rows or rows)
-    adaptive_series: list[dict[str, Any]] = []
-    sweep_series: list[dict[str, Any]] = []
-    if table_rows:
-        for profile in benchmark["profiles"]:
-            for group in profile["process_groups"]:
-                stages = {
-                    row["stage"]
-                    for row in rows
-                    if row["profile"] == profile["native_setup_profile"]
-                    and row["process_group"] == group["name"]
-                    and row["scope"] == "adaptive"
-                    and row["pass"] is not None
-                    and ("real_seconds" in row or "elapsed_seconds" in row)
-                }
-                for stage in sorted(stages):
-                    for metric in ("real_seconds", "elapsed_seconds"):
-                        selected = [
-                            row
-                            for row in rows
-                            if row["profile"] == profile["native_setup_profile"]
-                            and row["process_group"] == group["name"]
-                            and row["stage"] == stage
-                            and row["pass"] is not None
-                            and metric in row
-                            and (metric == "real_seconds" or "real_seconds" not in row)
-                        ]
-                        if selected:
-                            adaptive_series.append(
-                                {
-                                    "x": [row["pass"] for row in selected],
-                                    "y": [row[metric] for row in selected],
-                                    "name": f"{group['name']} / {stage} ({metric.removesuffix('_seconds')})",
-                                }
-                            )
-        for profile in benchmark["profiles"]:
-            for group in profile["process_groups"]:
-                for metric in ("real_seconds", "elapsed_seconds"):
-                    selected = [
-                        row
-                        for row in rows
-                        if row["profile"] == profile["native_setup_profile"]
-                        and row["process_group"] == group["name"]
-                        and row["scope"] == "sweep"
-                        and row["frequency_native"] is not None
-                        and metric in row
-                        and (metric == "real_seconds" or "real_seconds" not in row)
-                    ]
-                    if selected:
-                        sweep_series.append(
-                            {
-                                "x": [row["frequency_native"] for row in selected],
-                                "y": [row[metric] for row in selected],
-                                "name": f"{group['name']} ({metric.removesuffix('_seconds')})",
-                            }
-                        )
+    adaptive_series, sweep_series = (
+        _profile_series(rows, benchmark["profiles"]) if table_rows else ([], [])
+    )
     return {
         "table_rows": table_rows,
         "adaptive_series": adaptive_series,
         "sweep_series": sweep_series,
     }
+
+
+def _profile_rows(
+    data: dict[str, Any], profiles: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Collect all profile rows in recorded profile and group order."""
+    rows: list[dict[str, Any]] = []
+    pass_rows: list[dict[str, Any]] = []
+    for profile in profiles:
+        for group in profile["process_groups"]:
+            projection = _BenchmarkGroupProjection(
+                data, profile["native_setup_profile"], group["name"]
+            )
+            projection.visit(group, _BenchmarkBranch("stage"))
+            rows.extend(projection.rows)
+            pass_rows.extend(projection.pass_rows)
+    return rows, pass_rows
+
+
+def _profile_series(
+    rows: list[dict[str, Any]], profiles: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Build adaptive-pass and frequency-sweep plotting projections."""
+    adaptive = _adaptive_series(rows, profiles)
+    sweeps = _sweep_series(rows, profiles)
+    return adaptive, sweeps
+
+
+def _adaptive_series(
+    rows: list[dict[str, Any]], profiles: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Select the recorded timing series for each native adaptive stage."""
+    series: list[dict[str, Any]] = []
+    for profile in profiles:
+        for group in profile["process_groups"]:
+            group_rows = [
+                row
+                for row in rows
+                if row["profile"] == profile["native_setup_profile"]
+                and row["process_group"] == group["name"]
+            ]
+            stages = {
+                row["stage"]
+                for row in group_rows
+                if row["scope"] == "adaptive"
+                and row["pass"] is not None
+                and ("real_seconds" in row or "elapsed_seconds" in row)
+            }
+            for stage in sorted(stages):
+                for metric in ("real_seconds", "elapsed_seconds"):
+                    selected = [
+                        row
+                        for row in group_rows
+                        if row["stage"] == stage
+                        and row["pass"] is not None
+                        and metric in row
+                        and (metric == "real_seconds" or "real_seconds" not in row)
+                    ]
+                    if selected:
+                        series.append(
+                            {
+                                "x": [row["pass"] for row in selected],
+                                "y": [row[metric] for row in selected],
+                                "name": f"{group['name']} / {stage} ({metric.removesuffix('_seconds')})",
+                            }
+                        )
+    return series
+
+
+def _sweep_series(
+    rows: list[dict[str, Any]], profiles: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Select native sweep timing values paired with recorded frequencies."""
+    series: list[dict[str, Any]] = []
+    for profile in profiles:
+        for group in profile["process_groups"]:
+            group_rows = [
+                row
+                for row in rows
+                if row["profile"] == profile["native_setup_profile"]
+                and row["process_group"] == group["name"]
+            ]
+            for metric in ("real_seconds", "elapsed_seconds"):
+                selected = [
+                    row
+                    for row in group_rows
+                    if row["scope"] == "sweep"
+                    and row["frequency_native"] is not None
+                    and metric in row
+                    and (metric == "real_seconds" or "real_seconds" not in row)
+                ]
+                if selected:
+                    series.append(
+                        {
+                            "x": [row["frequency_native"] for row in selected],
+                            "y": [row[metric] for row in selected],
+                            "name": f"{group['name']} ({metric.removesuffix('_seconds')})",
+                        }
+                    )
+    return series
 
 
 def _legend_label(name: str) -> str:
@@ -197,7 +272,7 @@ def display_benchmark(
 
     checked_theme(theme)
     data = {**data, "benchmark": attribute_profile_memory(data["benchmark"])}
-    from IPython.display import HTML, display
+    from IPython.display import HTML, display  # noqa: PLC0415 - notebook output is optional
 
     benchmark = data["benchmark"]
     display(
@@ -265,7 +340,7 @@ def display_benchmark(
             )
         )
         try:
-            import plotly.graph_objects as go
+            import plotly.graph_objects as go  # noqa: PLC0415 - Plotly is an optional plot extra
         except ImportError:
             display(
                 HTML(

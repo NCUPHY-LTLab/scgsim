@@ -1,0 +1,7 @@
+/.quarto/
+**/*.quarto_ipynb
+
+# The root project owns shared assets; the bilingual builder stages these copies.
+/_extensions/
+/docs/assets/
+/docs/images/

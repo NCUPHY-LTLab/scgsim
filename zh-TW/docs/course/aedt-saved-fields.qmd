@@ -51,6 +51,8 @@ final_epr = analyze_epr(
 
 新的輸出目錄會保留原始已釋出解算結果與一般執行收據。SCGSim 會封存／複製不可變證據、重新開啟工作複本、檢查已綁定的背景資料與運算式定義，接著不求解、不呼叫匯出而評估指定場。若場或定義無法取得，流程會明確失敗，不會從自適應歷程虛構 EPR。
 
+如需精簡參數表與最小呼叫範例，請參閱 [`analyze_epr` API 指南](../api/analyze_epr.qmd)。
+
 獨立的分析收據與 `results/epr/epr-result.json` 描述最終儲存場評估。新要求的遮罩／內縮邊距使用此最終場結果；不得將其插入較早自適應通過時彷彿已量得的結果。套用損耗假設前，請確認實際選取的模態與涵蓋範圍。接著閱讀[離線 EPR](offline-epr.qmd)，其中 `reanalyze_epr` 會在不執行原生分析的情況下，更新這些已記錄分子的假設。[執行環境契約](../specs/aedt-runtime.qmd)規範確切的儲存場背景、材料側支援與分析失敗行為。
 
 ## 可選的專案指示區塊 {#optional-project-instruction-block}

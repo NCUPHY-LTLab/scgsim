@@ -1,16 +1,26 @@
 """Detached EPR and junction declarations, independent of native execution."""
+
 from __future__ import annotations
+
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal
 from pathlib import Path
-from scgsim.semantics.epr import film_assumptions
-from scgsim.aedt._data import _text, _number, _freeze, detached, canonical_sha256
+from typing import Any, Literal
+
+from scgsim.aedt.data import (
+    canonical_sha256,
+    detached,
+    freeze,
+    number_value,
+    text_value,
+)
 from scgsim.aedt.versions import normalize_aedt_version
+from scgsim.semantics.epr import film_assumptions
 
 InterfaceKind = Literal["MA", "MS", "SA", "MM"]
 FieldSide = Literal["top", "bottom", "sidewall"]
+
 
 def surface_evaluations(
     margins_um: Sequence[float], *, policy: str | None
@@ -23,6 +33,7 @@ def surface_evaluations(
     if policy != "unmasked_plus_requested.v1":
         raise ValueError("unsupported surface evaluation policy")
     return (("unmasked_baseline", 0.0), *requested)
+
 
 @dataclass(frozen=True)
 class PlanarJunction:
@@ -45,31 +56,32 @@ class PlanarJunction:
             "terminal_a_net",
             "terminal_b_net",
         ):
-            object.__setattr__(self, name, _text(getattr(self, name), name))
+            object.__setattr__(self, name, text_value(getattr(self, name), name))
         if self.terminal_a_net == self.terminal_b_net:
             raise ValueError("junction terminal nets must be distinct")
         if len(self.direction_xy) != 2:
             raise ValueError("junction direction_xy must contain two values")
-        dx = _number(self.direction_xy[0], "direction_xy[0]", minimum=-math.inf)
-        dy = _number(self.direction_xy[1], "direction_xy[1]", minimum=-math.inf)
+        dx = number_value(self.direction_xy[0], "direction_xy[0]", minimum=-math.inf)
+        dy = number_value(self.direction_xy[1], "direction_xy[1]", minimum=-math.inf)
         norm = math.hypot(dx, dy)
         if norm == 0.0:
             raise ValueError("junction direction_xy must be nonzero")
         object.__setattr__(self, "direction_xy", (dx / norm, dy / norm))
-        object.__setattr__(self, "width_um", _number(self.width_um, "width_um"))
+        object.__setattr__(self, "width_um", number_value(self.width_um, "width_um"))
         if self.width_um <= 0.0:
             raise ValueError("junction width_um must be > 0")
         object.__setattr__(
-            self, "inductance_h", _number(self.inductance_h, "inductance_h")
+            self, "inductance_h", number_value(self.inductance_h, "inductance_h")
         )
         object.__setattr__(
-            self, "capacitance_f", _number(self.capacitance_f, "capacitance_f")
+            self, "capacitance_f", number_value(self.capacitance_f, "capacitance_f")
         )
         if self.inductance_h <= 0.0 or self.capacitance_f < 0.0:
             raise ValueError("junction L must be > 0 and C must be >= 0")
-        object.__setattr__(self, "metadata", _freeze(self.metadata))
+        object.__setattr__(self, "metadata", freeze(self.metadata))
 
     def to_payload(self) -> dict[str, Any]:
+        """Return the canonical PlanarJunction payload."""
         return {
             "junction_id": self.junction_id,
             "source_polygon_id": self.source_polygon_id,
@@ -84,6 +96,7 @@ class PlanarJunction:
 
     @classmethod
     def from_payload(cls, value: Any) -> PlanarJunction:
+        """Decode a PlanarJunction from its canonical payload."""
         if not isinstance(value, Mapping):
             raise TypeError("junction payload must be a mapping")
         expected = {
@@ -100,6 +113,7 @@ class PlanarJunction:
         if set(value) != expected:
             raise ValueError("junction payload members are not canonical")
         return cls(**dict(value))
+
 
 @dataclass(frozen=True)
 class SurfaceEprSpec:
@@ -125,12 +139,12 @@ class SurfaceEprSpec:
 
     def __post_init__(self) -> None:
         for name in ("contribution_id", "source_polygon_id"):
-            object.__setattr__(self, name, _text(getattr(self, name), name))
+            object.__setattr__(self, name, text_value(getattr(self, name), name))
         if self.interface_kind not in {"MA", "MS", "SA", "MM"}:
             raise ValueError(f"unsupported EPR interface kind {self.interface_kind!r}")
         if self.field_side not in {"top", "bottom", "sidewall"}:
             raise ValueError(f"unsupported EPR field side {self.field_side!r}")
-        margins = tuple(_number(value, "margin_um") for value in self.margins_um)
+        margins = tuple(number_value(value, "margin_um") for value in self.margins_um)
         if not margins or len(margins) != len(set(margins)):
             raise ValueError("margins_um must be non-empty and unique")
         object.__setattr__(self, "margins_um", margins)
@@ -141,7 +155,7 @@ class SurfaceEprSpec:
         for name in optional:
             value = getattr(self, name)
             if value is not None:
-                number = _number(value, name)
+                number = number_value(value, name)
                 if number <= 0.0:
                     raise ValueError(f"{name} must be > 0 when provided")
                 object.__setattr__(self, name, number)
@@ -171,9 +185,10 @@ class SurfaceEprSpec:
             value is not None for value in (self.loss_tangent, self.source, self.preset)
         ):
             raise ValueError("legacy surface payload cannot carry new film assumptions")
-        object.__setattr__(self, "metadata", _freeze(self.metadata))
+        object.__setattr__(self, "metadata", freeze(self.metadata))
 
     def to_payload(self) -> dict[str, Any]:
+        """Return the canonical SurfaceEprSpec payload."""
         payload = {
             "contribution_id": self.contribution_id,
             "source_polygon_id": self.source_polygon_id,
@@ -192,6 +207,7 @@ class SurfaceEprSpec:
 
     @classmethod
     def from_payload(cls, value: Any) -> SurfaceEprSpec:
+        """Decode a SurfaceEprSpec from its canonical payload."""
         if not isinstance(value, Mapping):
             raise TypeError("surface EPR payload must be a mapping")
         expected = {
@@ -208,6 +224,7 @@ class SurfaceEprSpec:
         if set(value) not in (expected, new):
             raise ValueError("surface EPR payload members are not canonical")
         return cls(**dict(value), _legacy_payload=set(value) == expected)
+
 
 @dataclass(frozen=True)
 class EprAnalysisRequest:
@@ -238,12 +255,13 @@ class EprAnalysisRequest:
                 if any(type(item) is not int or item <= 0 for item in values):
                     raise ValueError("mode_indices must contain positive integers")
             else:
-                values = tuple(_text(item, name) for item in values)
+                values = tuple(text_value(item, name) for item in values)
             object.__setattr__(self, name, values)
         if self._legacy_payload and self.bulk_domain_ids is not None:
             raise ValueError("legacy EPR request cannot select bulk domains")
 
     def to_payload(self) -> dict[str, Any]:
+        """Return the canonical EprAnalysisRequest payload."""
         payload = {
             "mode_indices": (
                 None if self.mode_indices is None else list(self.mode_indices)
@@ -265,6 +283,7 @@ class EprAnalysisRequest:
 
     @classmethod
     def from_payload(cls, value: Any) -> EprAnalysisRequest:
+        """Decode a EprAnalysisRequest from its canonical payload."""
         if not isinstance(value, Mapping):
             raise TypeError("EPR analysis request must be a mapping")
         expected = {
@@ -276,6 +295,7 @@ class EprAnalysisRequest:
             raise ValueError("EPR analysis request members are not canonical")
         return cls(**dict(value), _legacy_payload=set(value) == expected)
 
+
 @dataclass(frozen=True)
 class NativeExpressionDefinition:
     """One caller-authored Field Calculator operation sequence."""
@@ -284,7 +304,7 @@ class NativeExpressionDefinition:
     operations: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "name", _text(self.name, "expression name"))
+        object.__setattr__(self, "name", text_value(self.name, "expression name"))
         if isinstance(self.operations, (str, bytes)) or not isinstance(
             self.operations, Sequence
         ):
@@ -298,6 +318,7 @@ class NativeExpressionDefinition:
         object.__setattr__(self, "operations", operations)
 
     def to_payload(self) -> dict[str, Any]:
+        """Return the canonical NativeExpressionDefinition payload."""
         return {
             "kind": "native_expression",
             "name": self.name,
@@ -306,6 +327,7 @@ class NativeExpressionDefinition:
 
     @classmethod
     def from_payload(cls, value: Any) -> NativeExpressionDefinition:
+        """Decode a NativeExpressionDefinition from its canonical payload."""
         if (
             not isinstance(value, Mapping)
             or set(value) != {"kind", "name", "operations"}
@@ -313,6 +335,7 @@ class NativeExpressionDefinition:
         ):
             raise ValueError("native expression definition members are not canonical")
         return cls(name=value["name"], operations=value["operations"])
+
 
 @dataclass(frozen=True)
 class NormalizedSurfaceEprTotal:
@@ -327,12 +350,13 @@ class NormalizedSurfaceEprTotal:
             raise ValueError("surface EPR total interface must be MA, MS, or SA")
         if self.evaluation_kind not in {"unmasked_baseline", "requested_margin"}:
             raise ValueError("surface EPR total evaluation kind is invalid")
-        margin = _number(self.margin_um, "surface EPR total margin")
+        margin = number_value(self.margin_um, "surface EPR total margin")
         if self.evaluation_kind == "unmasked_baseline" and margin != 0.0:
             raise ValueError("unmasked baseline margin must be exactly 0 um")
         object.__setattr__(self, "margin_um", margin)
 
     def to_payload(self) -> dict[str, Any]:
+        """Return the canonical NormalizedSurfaceEprTotal payload."""
         return {
             "kind": "normalized_surface_epr_total",
             "interface_kind": self.interface_kind,
@@ -342,6 +366,7 @@ class NormalizedSurfaceEprTotal:
 
     @classmethod
     def from_payload(cls, value: Any) -> NormalizedSurfaceEprTotal:
+        """Decode a NormalizedSurfaceEprTotal from its canonical payload."""
         if (
             not isinstance(value, Mapping)
             or set(value) != {"kind", "interface_kind", "evaluation_kind", "margin_um"}
@@ -353,6 +378,7 @@ class NormalizedSurfaceEprTotal:
             evaluation_kind=value["evaluation_kind"],
             margin_um=value["margin_um"],
         )
+
 
 @dataclass(frozen=True)
 class ExpressionCacheConvergence:
@@ -372,12 +398,15 @@ class ExpressionCacheConvergence:
             raise TypeError(
                 "convergence target must be a native expression or normalized surface total"
             )
-        criterion = _number(self.criterion, "convergence criterion", minimum=-math.inf)
+        criterion = number_value(
+            self.criterion, "convergence criterion", minimum=-math.inf
+        )
         if type(self.use_relative_convergence) is not bool:
             raise TypeError("use_relative_convergence must be a bool")
         object.__setattr__(self, "criterion", criterion)
 
     def to_payload(self) -> dict[str, Any]:
+        """Return the canonical ExpressionCacheConvergence payload."""
         return {
             "mode": self.mode,
             "target": self.target.to_payload(),
@@ -387,6 +416,7 @@ class ExpressionCacheConvergence:
 
     @classmethod
     def from_payload(cls, value: Any) -> ExpressionCacheConvergence:
+        """Decode a ExpressionCacheConvergence from its canonical payload."""
         if not isinstance(value, Mapping) or set(value) != {
             "mode",
             "target",
@@ -423,7 +453,9 @@ class ExpressionCacheConvergenceSet:
         if not controls or any(
             not isinstance(item, ExpressionCacheConvergence) for item in controls
         ):
-            raise TypeError("controls must be a nonempty collection of ExpressionCacheConvergence")
+            raise TypeError(
+                "controls must be a nonempty collection of ExpressionCacheConvergence"
+            )
         identities = [
             (item.mode, canonical_sha256(item.target.to_payload())) for item in controls
         ]
@@ -432,6 +464,7 @@ class ExpressionCacheConvergenceSet:
         object.__setattr__(self, "controls", controls)
 
     def to_payload(self) -> dict[str, Any]:
+        """Return the canonical ExpressionCacheConvergenceSet payload."""
         return {
             "kind": "expression_cache_convergence_set",
             "controls": [item.to_payload() for item in self.controls],
@@ -439,15 +472,21 @@ class ExpressionCacheConvergenceSet:
 
     @classmethod
     def from_payload(cls, value: Any) -> ExpressionCacheConvergenceSet:
+        """Decode a ExpressionCacheConvergenceSet from its canonical payload."""
         if (
             not isinstance(value, Mapping)
             or set(value) != {"kind", "controls"}
             or value["kind"] != "expression_cache_convergence_set"
         ):
-            raise ValueError("expression convergence collection members are not canonical")
-        return cls(controls=tuple(
-            ExpressionCacheConvergence.from_payload(item) for item in value["controls"]
-        ))
+            raise ValueError(
+                "expression convergence collection members are not canonical"
+            )
+        return cls(
+            controls=tuple(
+                ExpressionCacheConvergence.from_payload(item)
+                for item in value["controls"]
+            )
+        )
 
 
 def iter_expression_convergence(
@@ -460,7 +499,9 @@ def iter_expression_convergence(
         return (control,)
     if isinstance(control, ExpressionCacheConvergenceSet):
         return control.controls
-    raise TypeError("expression convergence must be a unit control, collection, or None")
+    raise TypeError(
+        "expression convergence must be a unit control, collection, or None"
+    )
 
 
 @dataclass(frozen=True)
@@ -489,10 +530,10 @@ class SavedSolution:
         members = tuple(self.members)
         if any(not isinstance(item, Mapping) for item in members):
             raise TypeError("saved solution members must contain mappings")
-        object.__setattr__(self, "members", tuple(_freeze(item) for item in members))
+        object.__setattr__(self, "members", tuple(freeze(item) for item in members))
         if not isinstance(self.content_sha256, str) or len(self.content_sha256) != 64:
             raise ValueError("saved solution content_sha256 is invalid")
-        identity = _freeze(self.identity)
+        identity = freeze(self.identity)
         expected_identity = {
             "model_source_sha256",
             "project_name",
@@ -510,7 +551,7 @@ class SavedSolution:
             "saved_fields_pass",
             "saved_fields",
         }:
-            _text(identity[name], f"saved solution identity.{name}")
+            text_value(identity[name], f"saved solution identity.{name}")
         for name in ("solver_last_completed_pass", "saved_fields_pass"):
             if type(identity[name]) is not int or identity[name] <= 0:
                 raise ValueError(f"saved solution {name} must be positive")
@@ -523,6 +564,7 @@ class SavedSolution:
             )
 
     def to_payload(self) -> dict[str, Any]:
+        """Return the canonical SavedSolution payload."""
         payload = {
             "schema_version": (
                 "scgsim.aedt.saved-solution.v2"
@@ -541,6 +583,7 @@ class SavedSolution:
 
     @classmethod
     def from_payload(cls, root: str | Path, value: Any) -> SavedSolution:
+        """Decode a SavedSolution from its canonical payload."""
         if not isinstance(value, Mapping):
             raise TypeError("saved solution payload must be a mapping")
         expected = {
@@ -563,8 +606,8 @@ class SavedSolution:
         else:
             raise ValueError("saved solution payload is not canonical")
         base = Path(root)
-        project = _contained_relative_path(value["project"], "saved solution project")
-        results = _contained_relative_path(value["results"], "saved solution results")
+        project = contained_relative_path(value["project"], "saved solution project")
+        results = contained_relative_path(value["results"], "saved solution results")
         return cls(
             root=base,
             project_path=base / project,
@@ -575,7 +618,9 @@ class SavedSolution:
             aedt_version=aedt_version,
         )
 
-def _contained_relative_path(value: Any, name: str) -> Path:
+
+def contained_relative_path(value: Any, name: str) -> Path:
+    """Decode one non-empty relative path stored by a SavedSolution."""
     if not isinstance(value, str) or not value:
         raise ValueError(f"{name} must be a non-empty relative path")
     path = Path(value)

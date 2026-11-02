@@ -2,61 +2,58 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Literal
-
-
 import shutil
-
 import tarfile
-
 import time
-
+from collections.abc import Mapping
 from dataclasses import dataclass
-
 from pathlib import Path
+from typing import Literal, cast
 
-from scgsim.aedt.versions import normalize_aedt_version
-
-from scgsim.aedt._io import file_sha256, write_json
-
-from scgsim.aedt.preparation.planar import validate_geometry_workers
-from scgsim.aedt.specs.epr import (
-    EprAnalysisRequest,
-)
-from scgsim.aedt.specs.geometry import (
-    PreparedPlanarGeometry,
-)
-from scgsim.aedt.specs.epr import SavedSolution
-from scgsim.aedt._data import (
+from scgsim.aedt.data import (
     detached,
 )
-
+from scgsim.aedt.io import file_sha256, write_json
 from scgsim.aedt.preparation.cohort import (
     GEOMETRY_SOURCE_PATHS,
     canonical_handoff_paths,
 )
-
+from scgsim.aedt.preparation.gds import GdsPreflight, gds_preflight, write_import_gds
+from scgsim.aedt.preparation.handoff_files import (
+    handoff_member,
+    utc_now,
+    write_analysis_script,
+    write_script,
+)
+from scgsim.aedt.preparation.planar import validate_geometry_workers
 from scgsim.aedt.results.provenance import (
     RECEIPT_V3,
     encode_initial_receipt,
     initial_receipt_payload,
     prepared_runtime_source,
 )
-
 from scgsim.aedt.specs.common import (
-    AedtResources,
     LOCKED_PYAEDT,
     OFFICIAL_PYAEDT_SOURCE_URL,
+    AedtResources,
 )
-
-from scgsim.aedt.specs.hfss import EigenmodeRunControl, HfssEprAnalysisSpec
-
+from scgsim.aedt.specs.epr import (
+    EprAnalysisRequest,
+    SavedSolution,
+)
+from scgsim.aedt.specs.geometry import (
+    PreparedPlanarGeometry,
+)
+from scgsim.aedt.specs.hfss import (
+    HfssDrivenSpec,
+    HfssEigenmodeSpec,
+    HfssEprAnalysisSpec,
+)
+from scgsim.aedt.specs.hfss_common import EigenmodeRunControl
 from scgsim.aedt.specs.parse import AedtSpec
-
 from scgsim.aedt.specs.q2d import Q2dSpec
-
 from scgsim.aedt.specs.q3d import Q3dSpec
+from scgsim.aedt.versions import normalize_aedt_version
 
 
 @dataclass(frozen=True)
@@ -75,161 +72,229 @@ class HandoffPlan:
 def prepare_handoff(
     *, spec: AedtSpec, output_dir: str | Path, resources: AedtResources | None = None
 ) -> HandoffPlan:
-    """Bind every required input into a new portable run directory."""
-    if resources is not None and not isinstance(resources, AedtResources):
-        raise TypeError("resources must be AedtResources or None")
-    if not isinstance(spec, Q2dSpec) and getattr(spec, "modeling", None) is None:
-        raise ValueError("new AEDT 3D execution requires explicit modeling")
-    source_gds: Path | None = None
-    preflight: dict[str, int | set[tuple[int, int]]] | None = None
-    if not isinstance(spec, (Q2dSpec, Q3dSpec)):
-        source_gds = spec.gds_path.resolve()
-        if not source_gds.is_file():
-            raise FileNotFoundError(f"gds_path must be an existing file: {source_gds}")
-        preflight = _gds_preflight(source_gds)
-        actual_pairs = preflight["polygon_layer_datatypes"]
-        declared_pairs = {(item.layer, item.datatype) for item in spec.layer_imports}
-        if actual_pairs != declared_pairs:
-            raise ValueError(
-                f"GDS layer/datatype pairs {sorted(actual_pairs)!r} do not match spec {sorted(declared_pairs)!r}"
+    """Prepare one portable source cohort without opening AEDT."""
+    return _PortableHandoff(spec, output_dir, resources).build()
+
+
+@dataclass
+class _PortableHandoff:
+    """Carry one request through canonical file writing and packaging."""
+
+    spec: AedtSpec
+    output_dir: str | Path
+    resources: AedtResources | None
+
+    def build(self) -> HandoffPlan:
+        """Write the portable cohort in its required order."""
+        self._validate_source()
+        self._copy_source()
+        self._write_spec()
+        self._write_metadata()
+        self._write_receipt()
+        return self._package()
+
+    def _validate_source(self) -> None:
+        if self.resources is not None and not isinstance(self.resources, AedtResources):
+            raise TypeError("resources must be AedtResources or None")
+        if (
+            not isinstance(self.spec, Q2dSpec)
+            and getattr(self.spec, "modeling", None) is None
+        ):
+            raise ValueError("new AEDT 3D execution requires explicit modeling")
+        self.source_gds: Path | None = None
+        self.preflight: GdsPreflight | None = None
+        if not isinstance(self.spec, (Q2dSpec, Q3dSpec)):
+            self.source_gds = cast(
+                Path, cast(HfssDrivenSpec | HfssEigenmodeSpec, self.spec).gds_path
+            ).resolve()
+            if not self.source_gds.is_file():
+                raise FileNotFoundError(
+                    f"gds_path must be an existing file: {self.source_gds}"
+                )
+            self.preflight = gds_preflight(self.source_gds)
+            actual_pairs = self.preflight["polygon_layer_datatypes"]
+            declared_pairs = {
+                (item.layer, item.datatype)
+                for item in cast(
+                    HfssDrivenSpec | HfssEigenmodeSpec, self.spec
+                ).layer_imports
+            }
+            if actual_pairs != declared_pairs:
+                raise ValueError(
+                    f"GDS layer/datatype pairs {sorted(actual_pairs)!r} do not match spec {sorted(declared_pairs)!r}"
+                )
+
+    def _copy_source(self) -> None:
+        self.run_dir = Path(self.output_dir).expanduser().resolve()
+        if self.run_dir.exists():
+            raise FileExistsError(
+                "output_dir must be new; prepared handoffs never reuse directories"
+            )
+        self.metadata_dir = self.run_dir / "metadata"
+        self.metadata_dir.mkdir(parents=True)
+        self.copied_gds: Path | None = None
+        if self.source_gds is not None:
+            geometry_dir = self.run_dir / "geometry"
+            geometry_dir.mkdir()
+            self.copied_gds = geometry_dir / "design.gds"
+            self.original_gds = geometry_dir / "source.gds"
+            shutil.copy2(self.source_gds, self.original_gds)
+            write_import_gds(
+                self.source_gds,
+                self.copied_gds,
+                cast(
+                    HfssDrivenSpec | HfssEigenmodeSpec, self.spec
+                ).effective_layer_imports,
             )
 
-    run_dir = Path(output_dir).expanduser().resolve()
-    if run_dir.exists():
-        raise FileExistsError(
-            "output_dir must be new; prepared handoffs never reuse directories"
-        )
-    metadata_dir = run_dir / "metadata"
-    metadata_dir.mkdir(parents=True)
-    copied_gds: Path | None = None
-    if source_gds is not None:
-        geometry_dir = run_dir / "geometry"
-        geometry_dir.mkdir()
-        copied_gds = geometry_dir / "design.gds"
-        original_gds = geometry_dir / "source.gds"
-        shutil.copy2(source_gds, original_gds)
-        _write_import_gds(source_gds, copied_gds, spec.effective_layer_imports)
+        self.script_path = self.run_dir / "run_aedt.sh"
+        self.spec_path = self.run_dir / "aedt_spec.json"
+        self.metadata_path = self.metadata_dir / "aedt_handoff_metadata.json"
+        self.receipt_path = self.metadata_dir / "aedt_run_receipt.json"
+        self.manifest_path = self.metadata_dir / "aedt_handoff_manifest.json"
+        self.archive_path = self.run_dir / "aedt_handoff.tar.gz"
+        self.prepared_at = utc_now()
+        self.started = time.perf_counter()
+        self.prepared_source = prepared_runtime_source()
 
-    script_path = run_dir / "run_aedt.sh"
-    spec_path = run_dir / "aedt_spec.json"
-    metadata_path = metadata_dir / "aedt_handoff_metadata.json"
-    receipt_path = metadata_dir / "aedt_run_receipt.json"
-    manifest_path = metadata_dir / "aedt_handoff_manifest.json"
-    archive_path = run_dir / "aedt_handoff.tar.gz"
-    prepared_at = _utc_now()
-    started = time.perf_counter()
-    prepared_source = prepared_runtime_source()
+    def _write_spec(self) -> None:
+        write_script(self.script_path)
+        self.payload = self.spec.to_payload()
+        if not isinstance(self.spec, (Q2dSpec, Q3dSpec)):
+            self.payload["gds"]["path"] = "geometry/design.gds"
+            self.payload["gds"]["source_path"] = "geometry/source.gds"
+            self.payload["gds"]["source_sha256"] = file_sha256(self.original_gds)
+            self.payload["gds"]["import_layer_map"] = [
+                {
+                    key: item[key]
+                    for key in (
+                        "layer",
+                        "datatype",
+                        "layer_name",
+                        "physical_layer_id",
+                        "native_import_layer",
+                    )
+                }
+                for item in cast(
+                    HfssDrivenSpec | HfssEigenmodeSpec, self.spec
+                ).effective_layer_imports
+            ]
+        if isinstance(self.spec, Q3dSpec) and self.spec.geometry_source is not None:
+            geometry_source = detached(self.spec.geometry_source)
+            for key, destination in GEOMETRY_SOURCE_PATHS.items():
+                reference = geometry_source["files"][key]
+                source_path = Path(reference["path"])
+                if file_sha256(source_path) != reference["sha256"]:
+                    raise ValueError(f"Q3D source attachment identity differs: {key}")
+                target = self.run_dir / destination
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_path, target)
+                reference["path"] = destination
+            self.payload["geometry_source"] = geometry_source
+        write_json(self.spec_path, self.payload)
 
-    _write_script(script_path)
-    payload = spec.to_payload()
-    if not isinstance(spec, (Q2dSpec, Q3dSpec)):
-        payload["gds"]["path"] = "geometry/design.gds"
-        payload["gds"]["source_path"] = "geometry/source.gds"
-        payload["gds"]["source_sha256"] = file_sha256(original_gds)
-        payload["gds"]["import_layer_map"] = [
-            {key: item[key] for key in ("layer", "datatype", "layer_name",
-                                       "physical_layer_id", "native_import_layer")}
-            for item in spec.effective_layer_imports
-        ]
-    if isinstance(spec, Q3dSpec) and spec.geometry_source is not None:
-        geometry_source = detached(spec.geometry_source)
-        for key, destination in GEOMETRY_SOURCE_PATHS.items():
-            reference = geometry_source["files"][key]
-            source_path = Path(reference["path"])
-            if file_sha256(source_path) != reference["sha256"]:
-                raise ValueError(f"Q3D source attachment identity differs: {key}")
-            target = run_dir / destination
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source_path, target)
-            reference["path"] = destination
-        payload["geometry_source"] = geometry_source
-    write_json(spec_path, payload)
-    files = {
-        "spec": spec_path.name,
-        "receipt": "metadata/aedt_run_receipt.json",
-    }
-    metadata = {
-        "schema_version": "scgsim.aedt.handoff.v1",
-        "expected_receipt_schema": RECEIPT_V3,
-        "status": "prepared",
-        "mode": spec.mode,
-        "project": payload["project"],
-        "materials": payload["materials"],
-        "vacuum_material_id": payload["vacuum_material_id"],
-        "run_control": payload["run_control"],
-        "execution": {"resources": resources.to_payload() if resources else None},
-        "pyaedt": payload["pyaedt"],
-        "aedt": payload["aedt"],
-        "files": files,
-        "prepared_at_utc": prepared_at,
-        "preparation_seconds": round(time.perf_counter() - started, 6),
-    }
-    source = {
-        "spec": spec_path.name,
-        "spec_sha256": file_sha256(spec_path),
-    }
-    if copied_gds is not None and preflight is not None:
-        files["gds"] = "geometry/design.gds"
-        metadata["gds_sha256"] = file_sha256(copied_gds)
-        metadata["gds_preflight"] = {
-            "polygon_layer_datatypes": [
-                list(pair) for pair in sorted(preflight["polygon_layer_datatypes"])
-            ],
-            "path_count": preflight["path_count"],
-            "label_count": preflight["label_count"],
-            "labels": "ignored as non-geometry",
+    def _write_metadata(self) -> None:
+        self.files = {
+            "spec": self.spec_path.name,
+            "receipt": "metadata/aedt_run_receipt.json",
         }
-        source["gds"] = "geometry/design.gds"
-        source["gds_sha256"] = file_sha256(copied_gds)
-    write_json(metadata_path, metadata)
-    receipt_path.write_bytes(
-        encode_initial_receipt(
-            initial_receipt_payload(
-                schema_version=RECEIPT_V3,
-                mode=spec.mode,
-                requested={
-                    "aedt_version": spec.aedt_version,
-                    "pyaedt_version": spec.pyaedt_version,
-                    "official_source": OFFICIAL_PYAEDT_SOURCE_URL,
-                },
-                pdk_materials=payload["materials"],
-                vacuum_material_id=payload["vacuum_material_id"],
-                source=source,
-                prepared_runtime_source_value=prepared_source,
-                outputs={},
-                prepared_at_utc=prepared_at,
+        self.metadata = {
+            "schema_version": "scgsim.aedt.handoff.v1",
+            "expected_receipt_schema": RECEIPT_V3,
+            "status": "prepared",
+            "mode": self.spec.mode,
+            "project": self.payload["project"],
+            "materials": self.payload["materials"],
+            "vacuum_material_id": self.payload["vacuum_material_id"],
+            "run_control": self.payload["run_control"],
+            "execution": {
+                "resources": self.resources.to_payload() if self.resources else None
+            },
+            "pyaedt": self.payload["pyaedt"],
+            "aedt": self.payload["aedt"],
+            "files": self.files,
+            "prepared_at_utc": self.prepared_at,
+            "preparation_seconds": round(time.perf_counter() - self.started, 6),
+        }
+        self.source = {
+            "spec": self.spec_path.name,
+            "spec_sha256": file_sha256(self.spec_path),
+        }
+        if self.copied_gds is not None and self.preflight is not None:
+            self.files["gds"] = "geometry/design.gds"
+            self.metadata["gds_sha256"] = file_sha256(self.copied_gds)
+            self.metadata["gds_preflight"] = {
+                "polygon_layer_datatypes": [
+                    list(pair)
+                    for pair in sorted(self.preflight["polygon_layer_datatypes"])
+                ],
+                "path_count": self.preflight["path_count"],
+                "label_count": self.preflight["label_count"],
+                "labels": "ignored as non-geometry",
+            }
+            self.source["gds"] = "geometry/design.gds"
+            self.source["gds_sha256"] = file_sha256(self.copied_gds)
+        write_json(self.metadata_path, self.metadata)
+
+    def _write_receipt(self) -> None:
+        self.receipt_path.write_bytes(
+            encode_initial_receipt(
+                initial_receipt_payload(
+                    schema_version=RECEIPT_V3,
+                    mode=self.spec.mode,
+                    requested={
+                        "aedt_version": self.spec.aedt_version,
+                        "pyaedt_version": self.spec.pyaedt_version,
+                        "official_source": OFFICIAL_PYAEDT_SOURCE_URL,
+                    },
+                    pdk_materials=self.payload["materials"],
+                    vacuum_material_id=self.payload["vacuum_material_id"],
+                    source=self.source,
+                    prepared_runtime_source_value=self.prepared_source,
+                    outputs={},
+                    prepared_at_utc=self.prepared_at,
+                )
             )
         )
-    )
-    allowed = tuple(run_dir / relative for relative in canonical_handoff_paths(spec))
-    write_json(
-        manifest_path,
-        {
-            "schema_version": "scgsim.aedt.handoff-manifest.v1",
-            "expected_receipt_schema": RECEIPT_V3,
-            "allowed_paths": [path.relative_to(run_dir).as_posix() for path in allowed],
-            "members": [
-                _member(path, run_dir) for path in allowed if path != manifest_path
-            ],
-        },
-    )
-    with tarfile.open(archive_path, "w:gz") as archive:
-        for path in allowed:
-            archive.add(
-                path, arcname=path.relative_to(run_dir).as_posix(), recursive=False
-            )
-    return HandoffPlan(
-        run_dir,
-        script_path,
-        spec_path,
-        metadata_path,
-        receipt_path,
-        manifest_path,
-        archive_path,
-    )
+
+    def _package(self) -> HandoffPlan:
+        self.allowed = tuple(
+            self.run_dir / relative for relative in canonical_handoff_paths(self.spec)
+        )
+        write_json(
+            self.manifest_path,
+            {
+                "schema_version": "scgsim.aedt.handoff-manifest.v1",
+                "expected_receipt_schema": RECEIPT_V3,
+                "allowed_paths": [
+                    path.relative_to(self.run_dir).as_posix() for path in self.allowed
+                ],
+                "members": [
+                    handoff_member(path, self.run_dir)
+                    for path in self.allowed
+                    if path != self.manifest_path
+                ],
+            },
+        )
+        with tarfile.open(self.archive_path, "w:gz") as archive:
+            for path in self.allowed:
+                archive.add(
+                    path,
+                    arcname=path.relative_to(self.run_dir).as_posix(),
+                    recursive=False,
+                )
+        return HandoffPlan(
+            self.run_dir,
+            self.script_path,
+            self.spec_path,
+            self.metadata_path,
+            self.receipt_path,
+            self.manifest_path,
+            self.archive_path,
+        )
 
 
-def _prepare_epr_analysis_handoff(
+def prepare_epr_analysis_handoff(  # noqa: PLR0913 -- preserve the saved-field preparation keyword API.
     *,
     aedt_version: str,
     saved_solution: SavedSolution,
@@ -242,287 +307,229 @@ def _prepare_epr_analysis_handoff(
     geometry_workers: int | None,
     surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None = None,
 ) -> HandoffPlan:
-    """Prepare one private workcopy-only saved-field analysis transaction."""
+    """Prepare one portable source cohort without opening AEDT."""
+    return _SavedAnalysisHandoff(
+        aedt_version,
+        saved_solution,
+        geometry,
+        project_name,
+        design_name,
+        run_control,
+        epr_request,
+        output_dir,
+        geometry_workers,
+        surface_field_selectors,
+    ).build()
 
-    if not isinstance(saved_solution, SavedSolution):
-        raise TypeError("saved_solution must be SavedSolution")
-    validate_geometry_workers(geometry_workers)
-    aedt_version = normalize_aedt_version(aedt_version)
-    run_dir = Path(output_dir).expanduser().resolve()
-    if run_dir.exists():
-        raise FileExistsError(
-            "output_dir must be new; prepared handoffs never reuse directories"
-        )
-    saved_root = run_dir / "saved"
-    metadata_dir = run_dir / "metadata"
-    metadata_dir.mkdir(parents=True)
-    copied_paths: list[Path] = []
-    for member in saved_solution.members:
-        relative = Path(member["path"])
-        source = (saved_solution.root / relative).resolve()
-        if not source.is_relative_to(saved_solution.root) or source.is_symlink():
-            raise RuntimeError("saved solution member escapes its sealed root")
-        if (
-            not source.is_file()
-            or source.stat().st_size != member["bytes"]
-            or file_sha256(source) != member["sha256"]
-        ):
-            raise RuntimeError(f"saved solution member changed: {relative.as_posix()}")
-        target = saved_root / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
-        copied_paths.append(target)
-    copied_solution = SavedSolution(
-        root=saved_root,
-        project_path=saved_root
-        / saved_solution.project_path.relative_to(saved_solution.root),
-        result_path=saved_root
-        / saved_solution.result_path.relative_to(saved_solution.root),
-        members=saved_solution.members,
-        content_sha256=saved_solution.content_sha256,
-        identity=saved_solution.identity,
-        aedt_version=saved_solution.aedt_version,
-    )
-    spec = HfssEprAnalysisSpec(
-        surface_field_selectors=surface_field_selectors,
-        aedt_version=aedt_version,
-        project_name=project_name,
-        design_name=design_name,
-        geometry=geometry,
-        run_control=run_control,
-        epr_request=epr_request,
-        saved_solution=copied_solution,
-    )
-    script_path = run_dir / "run_aedt.sh"
-    spec_path = run_dir / "aedt_spec.json"
-    metadata_path = metadata_dir / "aedt_handoff_metadata.json"
-    receipt_path = metadata_dir / "aedt_run_receipt.json"
-    manifest_path = metadata_dir / "aedt_handoff_manifest.json"
-    archive_path = run_dir / "aedt_handoff.tar.gz"
-    prepared_at = _utc_now()
-    started = time.perf_counter()
-    prepared_source = prepared_runtime_source()
-    payload = spec.to_payload()
-    materials = detached(geometry.source)["materials"]
-    vacuum_ids = sorted(
-        material_id
-        for material_id, record in materials.items()
-        if isinstance(record, dict) and record.get("kind") == "vacuum"
-    )
-    if len(vacuum_ids) != 1:
-        raise ValueError("prepared EPR geometry requires exactly one vacuum material")
-    _write_analysis_script(script_path)
-    write_json(spec_path, payload)
-    files = {
-        "spec": spec_path.name,
-        "receipt": "metadata/aedt_run_receipt.json",
-        "saved_project": (
-            "saved/" + copied_solution.project_path.relative_to(saved_root).as_posix()
-        ),
-        "saved_results": (
-            "saved/" + copied_solution.result_path.relative_to(saved_root).as_posix()
-        ),
-    }
-    metadata = {
-        "schema_version": "scgsim.aedt.handoff.v2",
-        "expected_receipt_schema": RECEIPT_V3,
-        "status": "prepared",
-        "mode": spec.mode,
-        "workflow": "epr_analysis",
-        "project": payload["project"],
-        "materials": materials,
-        "vacuum_material_id": vacuum_ids[0],
-        "run_control": payload["run_control"],
-        "execution": {"geometry_workers": geometry_workers},
-        "pyaedt": payload["pyaedt"],
-        "aedt": payload["aedt"],
-        "files": files,
-        "prepared_at_utc": prepared_at,
-        "preparation_seconds": round(time.perf_counter() - started, 6),
-    }
-    source = {
-        "spec": spec_path.name,
-        "spec_sha256": file_sha256(spec_path),
-        "planar_source_sha256": geometry.source_sha256,
-        "planar_model_sha256": geometry.model_sha256,
-        "saved_solution_sha256": copied_solution.content_sha256,
-    }
-    write_json(metadata_path, metadata)
-    receipt_path.write_bytes(
-        encode_initial_receipt(
-            initial_receipt_payload(
-                schema_version=RECEIPT_V3,
-                mode=spec.mode,
-                requested={
-                    "aedt_version": spec.aedt_version,
-                    "pyaedt_version": LOCKED_PYAEDT,
-                    "official_source": OFFICIAL_PYAEDT_SOURCE_URL,
-                    "workflow": "epr_analysis",
-                },
-                pdk_materials=materials,
-                vacuum_material_id=vacuum_ids[0],
-                source=source,
-                prepared_runtime_source_value=prepared_source,
-                outputs={},
-                prepared_at_utc=prepared_at,
+
+@dataclass
+class _SavedAnalysisHandoff:
+    """Carry one request through canonical file writing and packaging."""
+
+    aedt_version: str
+    saved_solution: SavedSolution
+    geometry: PreparedPlanarGeometry
+    project_name: str
+    design_name: str
+    run_control: EigenmodeRunControl
+    epr_request: EprAnalysisRequest
+    output_dir: str | Path
+    geometry_workers: int | None
+    surface_field_selectors: Mapping[str, Literal["surface", "adjacent"]] | None
+
+    def build(self) -> HandoffPlan:
+        """Write the portable cohort in its required order."""
+        self._copy_saved_solution()
+        self._bind_spec()
+        self._prepare_payload()
+        self._write_metadata()
+        self._write_receipt()
+        return self._package()
+
+    def _copy_saved_solution(self) -> None:
+        if not isinstance(self.saved_solution, SavedSolution):
+            raise TypeError("saved_solution must be SavedSolution")
+        validate_geometry_workers(self.geometry_workers)
+        self.aedt_version = normalize_aedt_version(self.aedt_version)
+        self.run_dir = Path(self.output_dir).expanduser().resolve()
+        if self.run_dir.exists():
+            raise FileExistsError(
+                "output_dir must be new; prepared handoffs never reuse directories"
             )
+        self.saved_root = self.run_dir / "saved"
+        self.metadata_dir = self.run_dir / "metadata"
+        self.metadata_dir.mkdir(parents=True)
+        self.copied_paths: list[Path] = []
+        for member in self.saved_solution.members:
+            relative = Path(member["path"])
+            source = (self.saved_solution.root / relative).resolve()
+            if (
+                not source.is_relative_to(self.saved_solution.root)
+                or source.is_symlink()
+            ):
+                raise RuntimeError("saved solution member escapes its sealed root")
+            if (
+                not source.is_file()
+                or source.stat().st_size != member["bytes"]
+                or file_sha256(source) != member["sha256"]
+            ):
+                raise RuntimeError(
+                    f"saved solution member changed: {relative.as_posix()}"
+                )
+            target = self.saved_root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+            self.copied_paths.append(target)
+
+    def _bind_spec(self) -> None:
+        self.copied_solution = SavedSolution(
+            root=self.saved_root,
+            project_path=self.saved_root
+            / self.saved_solution.project_path.relative_to(self.saved_solution.root),
+            result_path=self.saved_root
+            / self.saved_solution.result_path.relative_to(self.saved_solution.root),
+            members=self.saved_solution.members,
+            content_sha256=self.saved_solution.content_sha256,
+            identity=self.saved_solution.identity,
+            aedt_version=self.saved_solution.aedt_version,
         )
-    )
-    allowed = (
-        script_path,
-        spec_path,
-        *sorted(copied_paths),
-        metadata_path,
-        receipt_path,
-        manifest_path,
-    )
-    write_json(
-        manifest_path,
-        {
-            "schema_version": "scgsim.aedt.handoff-manifest.v2",
+        self.spec = HfssEprAnalysisSpec(
+            surface_field_selectors=self.surface_field_selectors,
+            aedt_version=self.aedt_version,
+            project_name=self.project_name,
+            design_name=self.design_name,
+            geometry=self.geometry,
+            run_control=self.run_control,
+            epr_request=self.epr_request,
+            saved_solution=self.copied_solution,
+        )
+
+    def _prepare_payload(self) -> None:
+        self.script_path = self.run_dir / "run_aedt.sh"
+        self.spec_path = self.run_dir / "aedt_spec.json"
+        self.metadata_path = self.metadata_dir / "aedt_handoff_metadata.json"
+        self.receipt_path = self.metadata_dir / "aedt_run_receipt.json"
+        self.manifest_path = self.metadata_dir / "aedt_handoff_manifest.json"
+        self.archive_path = self.run_dir / "aedt_handoff.tar.gz"
+        self.prepared_at = utc_now()
+        self.started = time.perf_counter()
+        self.prepared_source = prepared_runtime_source()
+        self.payload = self.spec.to_payload()
+        self.materials = detached(self.geometry.source)["materials"]
+        self.vacuum_ids = sorted(
+            material_id
+            for material_id, record in self.materials.items()
+            if isinstance(record, dict) and record.get("kind") == "vacuum"
+        )
+        if len(self.vacuum_ids) != 1:
+            raise ValueError(
+                "prepared EPR geometry requires exactly one vacuum material"
+            )
+
+    def _write_metadata(self) -> None:
+        write_analysis_script(self.script_path)
+        write_json(self.spec_path, self.payload)
+        self.files = {
+            "spec": self.spec_path.name,
+            "receipt": "metadata/aedt_run_receipt.json",
+            "saved_project": (
+                "saved/"
+                + self.copied_solution.project_path.relative_to(
+                    self.saved_root
+                ).as_posix()
+            ),
+            "saved_results": (
+                "saved/"
+                + self.copied_solution.result_path.relative_to(
+                    self.saved_root
+                ).as_posix()
+            ),
+        }
+        self.metadata = {
+            "schema_version": "scgsim.aedt.handoff.v2",
             "expected_receipt_schema": RECEIPT_V3,
-            "allowed_paths": [path.relative_to(run_dir).as_posix() for path in allowed],
-            "members": [
-                _member(path, run_dir) for path in allowed if path != manifest_path
-            ],
-        },
-    )
-    with tarfile.open(archive_path, "w:gz") as archive:
-        for path in allowed:
-            archive.add(
-                path, arcname=path.relative_to(run_dir).as_posix(), recursive=False
+            "status": "prepared",
+            "mode": self.spec.mode,
+            "workflow": "epr_analysis",
+            "project": self.payload["project"],
+            "materials": self.materials,
+            "vacuum_material_id": self.vacuum_ids[0],
+            "run_control": self.payload["run_control"],
+            "execution": {"geometry_workers": self.geometry_workers},
+            "pyaedt": self.payload["pyaedt"],
+            "aedt": self.payload["aedt"],
+            "files": self.files,
+            "prepared_at_utc": self.prepared_at,
+            "preparation_seconds": round(time.perf_counter() - self.started, 6),
+        }
+        self.source = {
+            "spec": self.spec_path.name,
+            "spec_sha256": file_sha256(self.spec_path),
+            "planar_source_sha256": self.geometry.source_sha256,
+            "planar_model_sha256": self.geometry.model_sha256,
+            "saved_solution_sha256": self.copied_solution.content_sha256,
+        }
+        write_json(self.metadata_path, self.metadata)
+
+    def _write_receipt(self) -> None:
+        self.receipt_path.write_bytes(
+            encode_initial_receipt(
+                initial_receipt_payload(
+                    schema_version=RECEIPT_V3,
+                    mode=self.spec.mode,
+                    requested={
+                        "aedt_version": self.spec.aedt_version,
+                        "pyaedt_version": LOCKED_PYAEDT,
+                        "official_source": OFFICIAL_PYAEDT_SOURCE_URL,
+                        "workflow": "epr_analysis",
+                    },
+                    pdk_materials=self.materials,
+                    vacuum_material_id=self.vacuum_ids[0],
+                    source=self.source,
+                    prepared_runtime_source_value=self.prepared_source,
+                    outputs={},
+                    prepared_at_utc=self.prepared_at,
+                )
             )
-    return HandoffPlan(
-        run_dir,
-        script_path,
-        spec_path,
-        metadata_path,
-        receipt_path,
-        manifest_path,
-        archive_path,
-    )
-
-
-def _gds_preflight(path: Path) -> dict[str, int | set[tuple[int, int]]]:
-    try:
-        import gdstk
-    except ImportError as exc:  # pragma: no cover - dependency contract
-        raise RuntimeError(
-            "GDS preflight requires the scgsim[aedt] gdstk dependency"
-        ) from exc
-    path_pairs = _raw_gds_path_datatypes(path)
-    if path_pairs:
-        raise ValueError(
-            "GDS preflight found PATH layer/datatypes "
-            f"{sorted(path_pairs)!r}; V1 requires polygonized CPW geometry"
         )
-    library = gdstk.read_gds(path)
-    path_pairs.update(
-        (int(layer), int(datatype))
-        for cell in library.cells
-        for path_item in cell.paths
-        for layer, datatype in zip(path_item.layers, path_item.datatypes, strict=True)
-    )
-    if path_pairs:
-        raise ValueError(
-            "GDS preflight found PATH layer/datatypes "
-            f"{sorted(path_pairs)!r}; V1 requires polygonized CPW geometry"
+
+    def _package(self) -> HandoffPlan:
+        self.allowed = (
+            self.script_path,
+            self.spec_path,
+            *sorted(self.copied_paths),
+            self.metadata_path,
+            self.receipt_path,
+            self.manifest_path,
         )
-    pairs = {
-        (polygon.layer, polygon.datatype)
-        for cell in library.cells
-        for polygon in cell.polygons
-    }
-    if not pairs:
-        raise ValueError("GDS preflight found no polygons")
-    return {
-        "polygon_layer_datatypes": {
-            (int(layer), int(datatype)) for layer, datatype in pairs
-        },
-        "path_count": 0,
-        "label_count": sum(len(cell.labels) for cell in library.cells),
-    }
-
-
-def _raw_gds_path_datatypes(path: Path) -> set[tuple[int, int]]:
-    """Read PATH records because gdstk expands them to polygons on GDS import."""
-    data = path.read_bytes()
-    offset = 0
-    in_path = False
-    layer: int | None = None
-    datatype: int | None = None
-    result: set[tuple[int, int]] = set()
-    while offset < len(data):
-        if offset + 4 > len(data):
-            raise ValueError("GDS preflight found a truncated record header")
-        size = int.from_bytes(data[offset : offset + 2], "big")
-        if size < 4 or offset + size > len(data):
-            raise ValueError("GDS preflight found an invalid record length")
-        record_type = data[offset + 2]
-        payload = data[offset + 4 : offset + size]
-        if record_type == 0x09:  # PATH
-            in_path, layer, datatype = True, None, None
-        elif in_path and record_type == 0x0D and len(payload) == 2:  # LAYER
-            layer = int.from_bytes(payload, "big", signed=True)
-        elif in_path and record_type == 0x0E and len(payload) == 2:  # DATATYPE
-            datatype = int.from_bytes(payload, "big", signed=True)
-        elif record_type == 0x11:  # ENDEL
-            if in_path:
-                if layer is None or datatype is None:
-                    raise ValueError("GDS PATH record is missing layer or datatype")
-                result.add((layer, datatype))
-            in_path = False
-        offset += size
-    if in_path:
-        raise ValueError("GDS preflight found an unterminated PATH record")
-    return result
-
-
-def _write_script(path: Path) -> None:
-    path.write_text(
-        "#!/usr/bin/env bash\nset -euo pipefail\n"
-        'run_dir="$(cd "$(dirname "$0")" && pwd)"\n'
-        'python -m scgsim.aedt.run --handoff "$run_dir/metadata/aedt_handoff_metadata.json" --execute "$@"\n',
-        encoding="utf-8",
-    )
-    path.chmod(0o755)
-
-
-def _write_analysis_script(path: Path) -> None:
-    path.write_text(
-        "#!/usr/bin/env bash\nset -euo pipefail\n"
-        'run_dir="$(cd "$(dirname "$0")" && pwd)"\n'
-        'python -m scgsim.aedt.run --handoff "$run_dir/metadata/aedt_handoff_metadata.json" --execute --analyze-epr "$@"\n',
-        encoding="utf-8",
-    )
-    path.chmod(0o755)
-
-
-def _member(path: Path, root: Path) -> dict[str, str | int]:
-    return {
-        "path": path.relative_to(root).as_posix(),
-        "bytes": path.stat().st_size,
-        "sha256": file_sha256(path),
-    }
-
-
-def _utc_now() -> str:
-    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-
-
-def _write_import_gds(source: Path, destination: Path, effective_imports) -> None:
-    """Lower explicit source pairs for numeric-layer-only native GDS import.
-
-    Cells, references, database unit and polygon vertices stay source-authored;
-    only the derived file's import selectors change. The source file is retained.
-    """
-    import gdstk
-
-    library = gdstk.read_gds(source)
-    selectors = {(item["layer"], item["datatype"]): item["native_import_layer"]
-                 for item in effective_imports}
-    for cell in library.cells:
-        for polygon in cell.polygons:
-            polygon.layer = selectors[(polygon.layer, polygon.datatype)]
-            polygon.datatype = 0
-    library.write_gds(destination, max_points=0)
+        write_json(
+            self.manifest_path,
+            {
+                "schema_version": "scgsim.aedt.handoff-manifest.v2",
+                "expected_receipt_schema": RECEIPT_V3,
+                "allowed_paths": [
+                    path.relative_to(self.run_dir).as_posix() for path in self.allowed
+                ],
+                "members": [
+                    handoff_member(path, self.run_dir)
+                    for path in self.allowed
+                    if path != self.manifest_path
+                ],
+            },
+        )
+        with tarfile.open(self.archive_path, "w:gz") as archive:
+            for path in self.allowed:
+                archive.add(
+                    path,
+                    arcname=path.relative_to(self.run_dir).as_posix(),
+                    recursive=False,
+                )
+        return HandoffPlan(
+            self.run_dir,
+            self.script_path,
+            self.spec_path,
+            self.metadata_path,
+            self.receipt_path,
+            self.manifest_path,
+            self.archive_path,
+        )

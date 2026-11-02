@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-
 import json
-
 from collections.abc import Mapping
 from typing import Any
 
 from scgsim.aedt.runtime.native.common import (
-    _native_object_evidence,
+    native_object_evidence,
     native_object_property,
 )
-
 from scgsim.aedt.specs.q3d import Q3dBodySpec, Q3dSpec
 
 
@@ -223,27 +220,7 @@ def construct_q3d_bodies(
     material_realizations: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Build every declared body, inventory native identities, then assign materials."""
-    effective_bodies = {record["body_id"]: record for record in spec.effective_bodies}
-    for body in spec.bodies:
-        if (
-            effective_bodies[body.body_id]["representation"] == "sheet"
-            and not spec.materials[body.material_id].is_superconducting
-        ):
-            raise ValueError("Q3D ThinConductor requires a declared PDK superconductor")
-    body_ids = [body.body_id for body in spec.bodies]
-    cutter_names = tuple(
-        _hole_name(body_index, hole_index)
-        for body_index, body in enumerate(spec.bodies, start=1)
-        for hole_index, _ in enumerate(body.holes_um, start=1)
-    )
-    reserved_names = body_ids + list(cutter_names)
-    if len(set(reserved_names)) != len(reserved_names):
-        raise RuntimeError("Q3D body and temporary hole-cutter names collide")
-
-    existing_names = {str(name) for name in app.modeler.object_names}
-    conflicts = sorted(existing_names & set(reserved_names))
-    if conflicts:
-        raise RuntimeError(f"Q3D body names already exist in the design: {conflicts!r}")
+    effective_bodies, body_ids = _validate_body_names(app, spec)
 
     records: dict[str, dict[str, Any]] = {}
     current_body_id: str | None = None
@@ -283,40 +260,13 @@ def construct_q3d_bodies(
         for body in spec.bodies:
             current_body_id = body.body_id
             phase = "body_native_readback"
-            obj = app.modeler.get_object_from_name(body.body_id)
-            if obj is None:
-                raise RuntimeError(f"Q3D native body is unavailable: {body.body_id!r}")
-            native = _native_object_evidence(app, body.body_id)
-            native_id = native["native_object_id"]
-            if native_id <= 0 or native_id in native_ids:
-                raise RuntimeError(
-                    f"Q3D native body ID is invalid or duplicated: {native_id}"
-                )
-            native_ids.add(native_id)
-            expected_type = (
-                "Sheet"
-                if effective_bodies[body.body_id]["representation"] == "sheet"
-                else "Solid"
+            records[body.body_id]["body_binding"] = _read_body_identity(
+                app,
+                body,
+                effective_bodies[body.body_id],
+                records[body.body_id]["construction"],
+                native_ids,
             )
-            if native["native_object_type"] != expected_type:
-                raise RuntimeError(
-                    f"Q3D body is not a native {expected_type}: {body.body_id!r}"
-                )
-            native_face_ids = list(native["native_face_ids"])
-            if any(face_id <= 0 for face_id in native_face_ids):
-                raise RuntimeError(
-                    f"Q3D native face IDs are invalid for {body.body_id!r}"
-                )
-            records[body.body_id]["body_binding"] = {
-                "body": body.to_payload(),
-                "effective_geometry": effective_bodies[body.body_id],
-                "native_object_id": native_id,
-                "object_name": body.body_id,
-                "native_object_type": native["native_object_type"],
-                "native_face_ids": native_face_ids,
-                "incidence": _native_incidence(obj, native_face_ids),
-                "construction": records[body.body_id]["construction"],
-            }
 
         observed: list[dict[str, Any]] = []
         phase = "material_assignment"
@@ -325,111 +275,11 @@ def construct_q3d_bodies(
             material = spec.materials[body.material_id]
             effective = effective_bodies[body.body_id]
             evidence.pop("thin_conductor_readback", None)
+            observed_material: dict[str, Any]
             if effective["representation"] == "sheet":
-                boundary_name = f"{body.body_id}ThinConductor"
-                thickness = f"{effective['physical_thickness_um']:.17g}um"
-                boundary = app.assign_thin_conductor(
-                    assignment=body.body_id,
-                    material="pec",
-                    thickness=thickness,
-                    name=boundary_name,
+                observed_material = _assign_thin_conductor(
+                    app, body, effective, records[body.body_id], evidence
                 )
-                if not boundary or boundary.name != boundary_name:
-                    raise RuntimeError(
-                        f"Q3D thin conductor assignment failed: {body.body_id!r}"
-                    )
-                # Sheet PEC belongs to ThinConductor, not the Solid Material property.
-                child = boundary.child_object
-                property_names = list(child.GetPropNames())
-                if (
-                    "Material" not in property_names
-                    or "Thickness" not in property_names
-                ):
-                    raise RuntimeError(
-                        f"Q3D ThinConductor native properties unavailable: {property_names!r}"
-                    )
-                native_id = records[body.body_id]["body_binding"]["native_object_id"]
-                readback = {
-                    "boundary_name": boundary_name,
-                    "native_object_id": native_id,
-                    "expected": {
-                        "material": "pec",
-                        "thickness": thickness,
-                        "thickness_um": effective["physical_thickness_um"],
-                        "assignment_ids": [native_id],
-                    },
-                    "observed": {},
-                }
-                # Retain each native return before the next query or comparison can fail.
-                evidence["thin_conductor_readback"] = readback
-                actual = readback["observed"]
-                actual["material"] = child.GetPropValue("Material")
-                actual["thickness"] = child.GetPropValue("Thickness")
-                actual["assignment_ids"] = list(
-                    app.oboundary.GetExcitationAssignment(boundary_name)
-                )
-                assigned = [int(value) for value in actual["assignment_ids"]]
-                raw_material = actual["material"]
-                if (
-                    isinstance(raw_material, (list, tuple))
-                    and len(raw_material) == 2
-                    and raw_material[0] == "Material:="
-                ):
-                    raw_material = raw_material[1]
-                if not isinstance(raw_material, str):
-                    raise RuntimeError(
-                        "Q3D ThinConductor Material has unknown native shape"
-                    )
-                boundary_material = raw_material.strip('"')
-                from ansys.aedt.core.generic.numbers_utils import Quantity
-
-                if not isinstance(actual["thickness"], str):
-                    raise RuntimeError(
-                        "Q3D ThinConductor Thickness is not a native length"
-                    )
-                quantity = Quantity(actual["thickness"])
-                if quantity.unit_system != "Length":
-                    raise RuntimeError(
-                        "Q3D ThinConductor Thickness is not a native length"
-                    )
-                measured_thickness_um = quantity.to("um").value
-                actual["thickness_um"] = measured_thickness_um
-                differs = {}
-                if boundary_material.casefold() != "pec":
-                    differs["material"] = {
-                        "expected": "pec",
-                        "observed": actual["material"],
-                    }
-                if measured_thickness_um != effective["physical_thickness_um"]:
-                    differs["thickness"] = {
-                        "expected_um": effective["physical_thickness_um"],
-                        "observed": actual["thickness"],
-                        "observed_um": measured_thickness_um,
-                    }
-                if assigned != [native_id]:
-                    differs["assignment_ids"] = {
-                        "expected": [native_id],
-                        "observed": actual["assignment_ids"],
-                    }
-                if differs:
-                    raise RuntimeError(
-                        f"Q3D thin conductor readback differs: {body.body_id!r}; "
-                        f"fields={differs!r}"
-                    )
-                records[body.body_id]["body_binding"]["thin_conductor"] = {
-                    "name": boundary_name,
-                    "bound_type": "ThinConductor",
-                    "material": boundary_material,
-                    "material_raw": actual["material"],
-                    "thickness": actual["thickness"],
-                    "thickness_um": measured_thickness_um,
-                    "native_assignment_ids_raw": actual["assignment_ids"],
-                    "native_object_ids": assigned,
-                }
-                observed_material = {
-                    "native_material_property": "not_applicable_sheet",
-                    "native_boundary_material_name": boundary_material,
-                }
             else:
                 observed_material = {
                     "native_material_name": _assign_material(app, body, material)
@@ -471,3 +321,168 @@ def construct_q3d_bodies(
         _note_native_failure(exc, app, spec, evidence)
         raise
 
+
+def _assign_thin_conductor(
+    app: Any,
+    body: Q3dBodySpec,
+    effective: Mapping[str, Any],
+    record: dict[str, Any],
+    evidence: dict[str, Any],
+) -> dict[str, Any]:
+    """Assign and independently read a sheet conductor while retaining failures."""
+    boundary_name = f"{body.body_id}ThinConductor"
+    thickness = f"{effective['physical_thickness_um']:.17g}um"
+    boundary = app.assign_thin_conductor(
+        assignment=body.body_id,
+        material="pec",
+        thickness=thickness,
+        name=boundary_name,
+    )
+    if not boundary or boundary.name != boundary_name:
+        raise RuntimeError(f"Q3D thin conductor assignment failed: {body.body_id!r}")
+    # Sheet PEC belongs to ThinConductor, not the Solid Material property.
+    child = boundary.child_object
+    property_names = list(child.GetPropNames())
+    if "Material" not in property_names or "Thickness" not in property_names:
+        raise RuntimeError(
+            f"Q3D ThinConductor native properties unavailable: {property_names!r}"
+        )
+    native_id = record["body_binding"]["native_object_id"]
+    readback = {
+        "boundary_name": boundary_name,
+        "native_object_id": native_id,
+        "expected": {
+            "material": "pec",
+            "thickness": thickness,
+            "thickness_um": effective["physical_thickness_um"],
+            "assignment_ids": [native_id],
+        },
+        "observed": {},
+    }
+    # Retain each native return before the next query or comparison can fail.
+    evidence["thin_conductor_readback"] = readback
+    actual = readback["observed"]
+    actual["material"] = child.GetPropValue("Material")
+    actual["thickness"] = child.GetPropValue("Thickness")
+    actual["assignment_ids"] = list(
+        app.oboundary.GetExcitationAssignment(boundary_name)
+    )
+    assigned = [int(value) for value in actual["assignment_ids"]]
+    raw_material = actual["material"]
+    if (
+        isinstance(raw_material, (list, tuple))
+        and len(raw_material) == 2
+        and raw_material[0] == "Material:="
+    ):
+        raw_material = raw_material[1]
+    if not isinstance(raw_material, str):
+        raise RuntimeError("Q3D ThinConductor Material has unknown native shape")
+    boundary_material = raw_material.strip('"')
+    from ansys.aedt.core.generic.numbers_utils import Quantity  # noqa: PLC0415 -- optional PyAEDT Quantity is needed only to decode live ThinConductor thickness.
+
+    if not isinstance(actual["thickness"], str):
+        raise RuntimeError("Q3D ThinConductor Thickness is not a native length")
+    quantity = Quantity(actual["thickness"])
+    if quantity.unit_system != "Length":
+        raise RuntimeError("Q3D ThinConductor Thickness is not a native length")
+    measured_thickness_um = quantity.to("um").value
+    actual["thickness_um"] = measured_thickness_um
+    differs = {}
+    if boundary_material.casefold() != "pec":
+        differs["material"] = {
+            "expected": "pec",
+            "observed": actual["material"],
+        }
+    if measured_thickness_um != effective["physical_thickness_um"]:
+        differs["thickness"] = {
+            "expected_um": effective["physical_thickness_um"],
+            "observed": actual["thickness"],
+            "observed_um": measured_thickness_um,
+        }
+    if assigned != [native_id]:
+        differs["assignment_ids"] = {
+            "expected": [native_id],
+            "observed": actual["assignment_ids"],
+        }
+    if differs:
+        raise RuntimeError(
+            f"Q3D thin conductor readback differs: {body.body_id!r}; fields={differs!r}"
+        )
+    record["body_binding"]["thin_conductor"] = {
+        "name": boundary_name,
+        "bound_type": "ThinConductor",
+        "material": boundary_material,
+        "material_raw": actual["material"],
+        "thickness": actual["thickness"],
+        "thickness_um": measured_thickness_um,
+        "native_assignment_ids_raw": actual["assignment_ids"],
+        "native_object_ids": assigned,
+    }
+    observed_material = {
+        "native_material_property": "not_applicable_sheet",
+        "native_boundary_material_name": boundary_material,
+    }
+    return observed_material
+
+
+def _read_body_identity(
+    app: Any,
+    body: Q3dBodySpec,
+    effective: Mapping[str, Any],
+    construction: dict[str, Any],
+    native_ids: set[int],
+) -> dict[str, Any]:
+    """Verify one constructed object and its face incidence against the source."""
+    obj = app.modeler.get_object_from_name(body.body_id)
+    if obj is None:
+        raise RuntimeError(f"Q3D native body is unavailable: {body.body_id!r}")
+    native = native_object_evidence(app, body.body_id)
+    native_id = native["native_object_id"]
+    if native_id <= 0 or native_id in native_ids:
+        raise RuntimeError(f"Q3D native body ID is invalid or duplicated: {native_id}")
+    native_ids.add(native_id)
+    expected_type = "Sheet" if effective["representation"] == "sheet" else "Solid"
+    if native["native_object_type"] != expected_type:
+        raise RuntimeError(
+            f"Q3D body is not a native {expected_type}: {body.body_id!r}"
+        )
+    native_face_ids = list(native["native_face_ids"])
+    if any(face_id <= 0 for face_id in native_face_ids):
+        raise RuntimeError(f"Q3D native face IDs are invalid for {body.body_id!r}")
+    return {
+        "body": body.to_payload(),
+        "effective_geometry": effective,
+        "native_object_id": native_id,
+        "object_name": body.body_id,
+        "native_object_type": native["native_object_type"],
+        "native_face_ids": native_face_ids,
+        "incidence": _native_incidence(obj, native_face_ids),
+        "construction": construction,
+    }
+
+
+def _validate_body_names(app: Any, spec: Q3dSpec) -> tuple[dict[str, Any], list[str]]:
+    """Reserve declared body and cutter names before the first native mutation."""
+    effective_bodies = {record["body_id"]: record for record in spec.effective_bodies}
+    for body in spec.bodies:
+        if (
+            effective_bodies[body.body_id]["representation"] == "sheet"
+            and not spec.materials[body.material_id].is_superconducting
+        ):
+            raise ValueError("Q3D ThinConductor requires a declared PDK superconductor")
+    body_ids = [body.body_id for body in spec.bodies]
+    cutter_names = tuple(
+        _hole_name(body_index, hole_index)
+        for body_index, body in enumerate(spec.bodies, start=1)
+        for hole_index, _ in enumerate(body.holes_um, start=1)
+    )
+    reserved_names = body_ids + list(cutter_names)
+    if len(set(reserved_names)) != len(reserved_names):
+        raise RuntimeError("Q3D body and temporary hole-cutter names collide")
+
+    existing_names = {str(name) for name in app.modeler.object_names}
+    conflicts = sorted(existing_names & set(reserved_names))
+    if conflicts:
+        raise RuntimeError(f"Q3D body names already exist in the design: {conflicts!r}")
+
+    return effective_bodies, body_ids

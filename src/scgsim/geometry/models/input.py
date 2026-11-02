@@ -1,4 +1,8 @@
-"""Canonical geometry records. Keep source facts distinct from compiler records; reexports share these exact definitions."""
+"""Adapter-normalized input records for route-aware geometry construction.
+
+These immutable records preserve source facts and provenance before compiler
+planning; compiled geometry records are defined in their own modules.
+"""
 
 from __future__ import annotations
 
@@ -13,8 +17,8 @@ from scgsim.geometry.models.common import (
     PolygonRing,
     RouteLiteral,
 )
-from scgsim.geometry.models.regions import PortSheetRegionRecord
 from scgsim.geometry.models.lumped import LumpedSupport
+from scgsim.geometry.models.regions import PortSheetRegionRecord
 
 
 @dataclass(frozen=True)

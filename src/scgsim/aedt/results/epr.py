@@ -2,31 +2,24 @@
 
 from __future__ import annotations
 
-
 import hashlib
-
 import json
-
 from collections.abc import Mapping
-
+from pathlib import Path
 from typing import Any
 
-from pathlib import Path
-
-from scgsim.aedt._io import file_sha256, read_json, write_json
-
+from scgsim.aedt.data import (
+    detached,
+)
 from scgsim.aedt.epr.models import (
     EprResult,
 )
+from scgsim.aedt.epr.selection import exact_mapping
+from scgsim.aedt.io import file_sha256, read_json, write_json
 from scgsim.aedt.specs.epr import (
     SavedSolution,
 )
 from scgsim.aedt.versions import normalize_aedt_version
-from scgsim.aedt._data import (
-    detached,
-)
-
-from scgsim.aedt.epr.selection import _exact_mapping
 
 
 def resolve_saved_solution(manifest_path: str | Path) -> SavedSolution:
@@ -43,28 +36,8 @@ def resolve_saved_solution(manifest_path: str | Path) -> SavedSolution:
             f"saved-solution manifest is missing: {manifest_source}"
         )
     base = manifest_source.parent
-    manifest = _exact_mapping(read_json(manifest_source), "saved-solution manifest")
-    expected = {
-        "schema_version",
-        "project",
-        "results",
-        "members",
-        "content_sha256",
-        "identity",
-        "receipt",
-        "receipt_sha256",
-    }
-    schema = manifest.get("schema_version")
-    if schema == "scgsim.aedt.saved-solution-manifest.v1":
-        if set(manifest) != expected:
-            raise ValueError("saved-solution manifest members are not canonical")
-        aedt_version = None
-    elif schema == "scgsim.aedt.saved-solution-manifest.v2":
-        if set(manifest) != expected | {"aedt_version"}:
-            raise ValueError("saved-solution manifest members are not canonical")
-        aedt_version = normalize_aedt_version(manifest["aedt_version"])
-    else:
-        raise ValueError("saved-solution manifest members are not canonical")
+    manifest = exact_mapping(read_json(manifest_source), "saved-solution manifest")
+    aedt_version = _manifest_aedt_version(manifest)
     payload = {
         "schema_version": (
             "scgsim.aedt.saved-solution.v1"
@@ -80,80 +53,13 @@ def resolve_saved_solution(manifest_path: str | Path) -> SavedSolution:
     if aedt_version is not None:
         payload["aedt_version"] = aedt_version
     saved = SavedSolution.from_payload(base, payload)
-    if saved.project_path.is_symlink() or saved.result_path.is_symlink():
-        raise RuntimeError("saved-solution project/results cannot be symlinks")
-    if (
-        saved.project_path.resolve() != saved.project_path
-        or saved.result_path.resolve() != saved.result_path
-    ):
-        raise RuntimeError("saved-solution project/results traverse a symlink")
-    if not saved.project_path.is_file() or not saved.result_path.is_dir():
-        raise FileNotFoundError("saved-solution project or result directory is missing")
-    receipt_relative = _safe_relative(manifest["receipt"], "receipt")
-    receipt = base / receipt_relative
-    if (
-        not receipt.is_file()
-        or receipt.is_symlink()
-        or file_sha256(receipt) != manifest["receipt_sha256"]
-    ):
-        raise RuntimeError("saved-solution receipt hash mismatch")
-    receipt_payload = _exact_mapping(read_json(receipt), "saved-solution receipt")
-    if (
-        receipt_payload.get("schema_version")
-        != (
-            "scgsim.aedt.saved-solution-receipt.v1"
-            if aedt_version is None
-            else "scgsim.aedt.saved-solution-receipt.v2"
-        )
-        or receipt_payload.get("status") != "completed"
-        or receipt_payload.get("saved_fields") is not True
-    ):
-        raise RuntimeError("saved-solution receipt does not attest completed fields")
-    if aedt_version is not None and receipt_payload.get("aedt_version") != aedt_version:
-        raise RuntimeError("saved-solution receipt AEDT version mismatch")
-    if receipt_payload.get("identity") != detached(saved.identity):
-        raise RuntimeError("saved-solution receipt identity mismatch")
-    observed_members: list[dict[str, Any]] = []
-    declared_paths: set[str] = set()
-    for member in saved.members:
-        item = _exact_mapping(member, "saved-solution member")
-        if set(item) != {"path", "bytes", "sha256"}:
-            raise ValueError("saved-solution member is not canonical")
-        relative = _safe_relative(item["path"], "saved-solution member.path")
-        path = base / relative
-        if relative.as_posix() in declared_paths:
-            raise ValueError("saved-solution member paths must be unique")
-        declared_paths.add(relative.as_posix())
-        if (
-            not path.is_file()
-            or path.is_symlink()
-            or path.resolve() != path
-            or path.stat().st_size != item["bytes"]
-            or file_sha256(path) != item["sha256"]
-        ):
-            raise RuntimeError(f"saved-solution member mismatch: {relative}")
-        observed_members.append(dict(item))
-    actual_paths = {saved.project_path.relative_to(base).as_posix()}
-    for path in saved.result_path.rglob("*"):
-        if path.is_symlink() or path.resolve() != path:
-            raise RuntimeError(f"saved solution contains a symlink: {path}")
-        if path.is_file():
-            actual_paths.add(path.relative_to(base).as_posix())
-    if declared_paths != actual_paths:
-        raise RuntimeError(
-            "saved-solution manifest does not cover the exact result inventory"
-        )
-    digest = hashlib.sha256(
-        json.dumps(observed_members, sort_keys=True, separators=(",", ":")).encode(
-            "utf-8"
-        )
-    ).hexdigest()
-    if digest != saved.content_sha256:
-        raise RuntimeError("saved-solution content digest mismatch")
+    _validate_saved_paths(saved)
+    _verify_saved_receipt(base, manifest, saved, aedt_version)
+    _verify_saved_members(base, saved)
     return saved
 
 
-def seal_saved_solution(
+def seal_saved_solution(  # noqa: PLR0913 -- preserve the saved-solution sealing identity/evidence keyword API.
     run_dir: str | Path,
     *,
     project_name: str,
@@ -173,7 +79,7 @@ def seal_saved_solution(
         raise RuntimeError("released saved-solution project is unavailable")
     if results.is_symlink() or results.resolve() != results or not results.is_dir():
         raise RuntimeError("released saved-solution result directory is unavailable")
-    evidence = _exact_mapping(evidence, "saved-field evidence")
+    evidence = exact_mapping(evidence, "saved-field evidence")
     expected_evidence = {
         "saved_fields",
         "solver_last_completed_pass",
@@ -276,3 +182,116 @@ def resolve_epr_result(path: str | Path) -> EprResult:
     if not source.is_file() or source.is_symlink():
         raise FileNotFoundError(f"EPR result is missing: {source}")
     return EprResult.from_payload(read_json(source))
+
+
+def _manifest_aedt_version(manifest: Mapping[str, Any]) -> str | None:
+    """Validate the exact historical or current manifest keys before construction."""
+    expected = {
+        "schema_version",
+        "project",
+        "results",
+        "members",
+        "content_sha256",
+        "identity",
+        "receipt",
+        "receipt_sha256",
+    }
+    schema = manifest.get("schema_version")
+    if schema == "scgsim.aedt.saved-solution-manifest.v1":
+        if set(manifest) != expected:
+            raise ValueError("saved-solution manifest members are not canonical")
+        aedt_version = None
+    elif schema == "scgsim.aedt.saved-solution-manifest.v2":
+        if set(manifest) != expected | {"aedt_version"}:
+            raise ValueError("saved-solution manifest members are not canonical")
+        aedt_version = normalize_aedt_version(manifest["aedt_version"])
+    else:
+        raise ValueError("saved-solution manifest members are not canonical")
+    return aedt_version
+
+
+def _validate_saved_paths(saved: SavedSolution) -> None:
+    """Require real released project and result paths without symlink traversal."""
+    if saved.project_path.is_symlink() or saved.result_path.is_symlink():
+        raise RuntimeError("saved-solution project/results cannot be symlinks")
+    if (
+        saved.project_path.resolve() != saved.project_path
+        or saved.result_path.resolve() != saved.result_path
+    ):
+        raise RuntimeError("saved-solution project/results traverse a symlink")
+    if not saved.project_path.is_file() or not saved.result_path.is_dir():
+        raise FileNotFoundError("saved-solution project or result directory is missing")
+
+
+def _verify_saved_receipt(
+    base: Path,
+    manifest: Mapping[str, Any],
+    saved: SavedSolution,
+    aedt_version: str | None,
+) -> None:
+    """Verify the receipt hash, completed fields, version and saved identity in order."""
+    receipt_relative = _safe_relative(manifest["receipt"], "receipt")
+    receipt = base / receipt_relative
+    if (
+        not receipt.is_file()
+        or receipt.is_symlink()
+        or file_sha256(receipt) != manifest["receipt_sha256"]
+    ):
+        raise RuntimeError("saved-solution receipt hash mismatch")
+    receipt_payload = exact_mapping(read_json(receipt), "saved-solution receipt")
+    if (
+        receipt_payload.get("schema_version")
+        != (
+            "scgsim.aedt.saved-solution-receipt.v1"
+            if aedt_version is None
+            else "scgsim.aedt.saved-solution-receipt.v2"
+        )
+        or receipt_payload.get("status") != "completed"
+        or receipt_payload.get("saved_fields") is not True
+    ):
+        raise RuntimeError("saved-solution receipt does not attest completed fields")
+    if aedt_version is not None and receipt_payload.get("aedt_version") != aedt_version:
+        raise RuntimeError("saved-solution receipt AEDT version mismatch")
+    if receipt_payload.get("identity") != detached(saved.identity):
+        raise RuntimeError("saved-solution receipt identity mismatch")
+
+
+def _verify_saved_members(base: Path, saved: SavedSolution) -> None:
+    """Verify every declared file before comparing the complete inventory and digest."""
+    observed_members: list[dict[str, Any]] = []
+    declared_paths: set[str] = set()
+    for member in saved.members:
+        item = exact_mapping(member, "saved-solution member")
+        if set(item) != {"path", "bytes", "sha256"}:
+            raise ValueError("saved-solution member is not canonical")
+        relative = _safe_relative(item["path"], "saved-solution member.path")
+        path = base / relative
+        if relative.as_posix() in declared_paths:
+            raise ValueError("saved-solution member paths must be unique")
+        declared_paths.add(relative.as_posix())
+        if (
+            not path.is_file()
+            or path.is_symlink()
+            or path.resolve() != path
+            or path.stat().st_size != item["bytes"]
+            or file_sha256(path) != item["sha256"]
+        ):
+            raise RuntimeError(f"saved-solution member mismatch: {relative}")
+        observed_members.append(dict(item))
+    actual_paths = {saved.project_path.relative_to(base).as_posix()}
+    for path in saved.result_path.rglob("*"):
+        if path.is_symlink() or path.resolve() != path:
+            raise RuntimeError(f"saved solution contains a symlink: {path}")
+        if path.is_file():
+            actual_paths.add(path.relative_to(base).as_posix())
+    if declared_paths != actual_paths:
+        raise RuntimeError(
+            "saved-solution manifest does not cover the exact result inventory"
+        )
+    digest = hashlib.sha256(
+        json.dumps(observed_members, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+    if digest != saved.content_sha256:
+        raise RuntimeError("saved-solution content digest mismatch")

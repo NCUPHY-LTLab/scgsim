@@ -14,19 +14,22 @@ import tempfile
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from scgsim.aedt._io import file_sha256, read_json
+from scgsim.aedt.io import file_sha256, read_json
 from scgsim.aedt.preparation.handoff import HandoffPlan
 from scgsim.aedt.results.provenance import (
     runtime_source_identity,
     validate_runtime_source,
 )
-from scgsim.aedt.versions import resolve_aedt_version
+from scgsim.aedt.runtime.native.common import pyaedt_version
 from scgsim.aedt.runtime.native.compatibility import native_compatibility
+from scgsim.aedt.specs.common import MatrixRunControl
 from scgsim.aedt.specs.parse import parse_aedt_spec
 from scgsim.aedt.specs.q3d import Q3dSpec
+from scgsim.aedt.versions import resolve_aedt_version
 
 _SCHEMA = "scgsim.aedt.q3d-stop-control.v1"
 _STATE = "q3d_stop_control.json"
@@ -60,7 +63,7 @@ def _verify_process(expected: dict[str, Any]) -> None:
 
 @contextmanager
 def _locked(path: Path, *, create: bool = False) -> Iterator[None]:
-    import fcntl
+    import fcntl  # noqa: PLC0415 -- this Linux-only primitive stays lazy at import time.
 
     flags = os.O_RDWR | os.O_NOFOLLOW | (os.O_CREAT if create else 0)
     fd = os.open(path, flags, 0o600)
@@ -175,13 +178,14 @@ class Q3dStopControl:
                     ).resolve()
                 ),
                 "design_name": spec.design_name,
-                "setup_name": spec.run_control.setup_name,
+                "setup_name": cast(MatrixRunControl, spec.run_control).setup_name,
             },
             "phase": "analysing",
             "intent": None,
         }
 
     def analyze(self, call: Callable[[], Any]) -> Any:
+        """Register this recorder, run Analyze, and persist its settlement state."""
         try:
             with _locked(self.lock, create=True):
                 if self.path.exists():
@@ -189,7 +193,7 @@ class Q3dStopControl:
                         "Q3D control state already exists for this cohort"
                     )
                 _store(self.path, self.initial)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 -- native Analyze may raise arbitrary COM errors.
             exc.add_note(
                 "Q3D stop-control registration failed before Analyze; solver_invoked=False"
             )
@@ -233,7 +237,7 @@ class Q3dStopControl:
                                 "method": "AreThereSimulationsRunning",
                                 "arguments": [True],
                             }
-                        except Exception as exc:
+                        except Exception as exc:  # noqa: BLE001 -- retain arbitrary AEDT settlement failures.
                             state["native_settlement"] = {
                                 "status": "unavailable",
                                 "error": f"{type(exc).__name__}: {exc}",
@@ -241,7 +245,7 @@ class Q3dStopControl:
                     self.state = copy.deepcopy(state)
                     _store(self.path, state)
                     self.state = copy.deepcopy(state)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 -- preserve cleanup errors without masking Analyze.
                 self.ledger_error = f"{type(exc).__name__}: {exc}"
                 if self.state is not None:
                     self.state["closure_error"] = f"{type(exc).__name__}: {exc}"
@@ -250,6 +254,7 @@ class Q3dStopControl:
                 primary.add_note(f"Q3D stop admission closure failed: {exc}")
 
     def snapshot(self) -> dict[str, Any]:
+        """Return the last persisted state with this Analyze call's readback."""
         state = copy.deepcopy(self.state or self.initial)
         state["analysis_call"] = copy.deepcopy(self.analysis_call)
         if self.ledger_error is not None:
@@ -289,114 +294,160 @@ def _request_q3d_termination_and_save(
     inputs, spec = _inputs(metadata_path)
     profile = resolve_aedt_version(spec.aedt_version)
     with _locked(lock):
-        state = read_json(path)
-        if state["schema_version"] != _SCHEMA or state["handoff"] != str(metadata_path):
-            raise RuntimeError("Q3D stop control state is not bound to this handoff")
-        if state["inputs"] != inputs:
-            raise RuntimeError("Q3D stop handoff input bytes changed")
-        validate_runtime_source(state["runtime_source"], stage="actual")
-        actual = runtime_source_identity()
-        if any(
-            actual[key] != state["runtime_source"][key]
-            for key in ("schema_version", "modules", "content_sha256")
-        ):
+        request = _StopRequest(metadata_path, path, inputs, spec, profile, action)
+        state, already_committed = _read_admitted_state(request)
+        if already_committed:
+            return state
+        return _attach_and_request_stop(request, state)
+
+
+@dataclass(frozen=True)
+class _StopRequest:
+    """Inputs bound before locking for one Q3D stop admission attempt."""
+
+    metadata_path: Path
+    state_path: Path
+    inputs: dict[str, str]
+    spec: Q3dSpec
+    profile: Any
+    action: str
+
+
+def _read_admitted_state(
+    request: _StopRequest,
+) -> tuple[dict[str, Any], bool]:
+    """Verify the recorder ledger and return idempotent requests without attach."""
+    state = read_json(request.state_path)
+    if state["schema_version"] != _SCHEMA or state["handoff"] != str(
+        request.metadata_path
+    ):
+        raise RuntimeError("Q3D stop control state is not bound to this handoff")
+    if state["inputs"] != request.inputs:
+        raise RuntimeError("Q3D stop handoff input bytes changed")
+    validate_runtime_source(state["runtime_source"], stage="actual")
+    actual = runtime_source_identity()
+    if any(
+        actual[key] != state["runtime_source"][key]
+        for key in ("schema_version", "modules", "content_sha256")
+    ):
+        raise RuntimeError("Q3D stop requester runtime bytes differ from the recorder")
+    receipt = read_json(request.metadata_path.parent / "aedt_run_receipt.json")
+    if receipt.get("runtime_source") != state["runtime_source"]:
+        raise RuntimeError("Q3D stop control/receipt execution identity differs")
+    if state["recorder"]["pid"] == os.getpid():
+        raise RuntimeError("Q3D stop requester must be a separate process")
+    # Idempotence never attaches or repeats an RPC, even after recorder closure.
+    if state["intent"] is not None:
+        if state["intent"]["action"] != request.action:
             raise RuntimeError(
-                "Q3D stop requester runtime bytes differ from the recorder"
+                "Q3D termination mode conflicts with the committed intent"
             )
-        receipt = read_json(metadata_path.parent / "aedt_run_receipt.json")
-        if receipt.get("runtime_source") != state["runtime_source"]:
-            raise RuntimeError("Q3D stop control/receipt execution identity differs")
-        if state["recorder"]["pid"] == os.getpid():
-            raise RuntimeError("Q3D stop requester must be a separate process")
-        # Idempotence never attaches or repeats an RPC, even after recorder closure.
-        if state["intent"] is not None:
-            if state["intent"]["action"] != action:
-                raise RuntimeError(
-                    "Q3D termination mode conflicts with the committed intent"
-                )
-            return copy.deepcopy(state)
-        if state["phase"] != "analysing" or receipt.get("status") != "running":
-            raise RuntimeError("Q3D stop admission is closed")
-        if state["desktop"]["version"] != profile.requested_version:
-            raise RuntimeError("Q3D control Desktop version differs from the bound spec")
+        return copy.deepcopy(state), True
+    if state["phase"] != "analysing" or receipt.get("status") != "running":
+        raise RuntimeError("Q3D stop admission is closed")
+    if state["desktop"]["version"] != request.profile.requested_version:
+        raise RuntimeError("Q3D control Desktop version differs from the bound spec")
+    _verify_process(state["recorder"])
+    _verify_process(state["desktop"]["process"])
+    if (
+        state["model"]["project_name"] != request.spec.project_name
+        or state["model"]["design_name"] != request.spec.design_name
+        or state["model"]["setup_name"]
+        != cast(MatrixRunControl, request.spec.run_control).setup_name
+    ):
+        raise RuntimeError("Q3D control model differs from the bound spec")
+    _verify_environment_binding(state, request.profile.requested_version)
+    return state, False
+
+
+def _verify_environment_binding(state: dict[str, Any], version: str) -> None:
+    """Reject process settings that could redirect the exact Desktop attach."""
+    overrides = {
+        "PYAEDT_PROCESS_ID": str(state["desktop"]["process"]["pid"]),
+        "PYAEDT_DESKTOP_PORT": str(state["desktop"]["port"]),
+        "PYAEDT_DESKTOP_VERSION": version,
+    }
+    for name, expected in overrides.items():
+        if os.environ.get(name) not in {None, "", expected}:
+            raise RuntimeError(f"{name} redirects the owned Desktop attachment")
+    if os.environ.get("PYAEDT_DOC_GENERATION", "false").lower() in {"true", "1", "t"}:
+        raise RuntimeError("PyAEDT documentation mode would create a new Desktop")
+
+
+def _attach_and_request_stop(
+    request: _StopRequest, state: dict[str, Any]
+) -> dict[str, Any]:
+    """Attach to the validated Desktop and commit exactly one stop request."""
+    pyaedt_version()
+    with native_compatibility(request.profile):
+        from ansys.aedt.core import Desktop  # noqa: PLC0415 -- keep PyAEDT out of ordinary control imports.
+        from ansys.aedt.core.generic.settings import settings  # noqa: PLC0415 -- keep PyAEDT out of ordinary control imports.
+        from ansys.aedt.core.internal.desktop_sessions import _desktop_sessions  # noqa: PLC0415 -- only the stop path needs session inventory.  # private-import: AEDT has no public session inventory; reject unrelated sessions before exact attach.
+
+        if settings.remote_rpc_session is not None:
+            raise RuntimeError(
+                "Q3D stop control cannot attach through a remote RPC session"
+            )
+        if any(pid != state["desktop"]["process"]["pid"] for pid in _desktop_sessions):
+            raise RuntimeError(
+                "stop requester already has an unrelated Desktop session"
+            )
+        desktop = Desktop(
+            version=request.profile.requested_version,
+            new_desktop=False,
+            non_graphical=True,
+            close_on_exit=False,
+            aedt_process_id=state["desktop"]["process"]["pid"],
+            port=state["desktop"]["port"],
+        )
+        _native_identity(desktop, state)
         _verify_process(state["recorder"])
-        _verify_process(state["desktop"]["process"])
-        if (
-            state["model"]["project_name"] != spec.project_name
-            or state["model"]["design_name"] != spec.design_name
-            or state["model"]["setup_name"] != spec.run_control.setup_name
-        ):
-            raise RuntimeError("Q3D control model differs from the bound spec")
-        # Pinned PyAEDT environment overrides must not redirect an exact attach.
-        overrides = {
-            "PYAEDT_PROCESS_ID": str(state["desktop"]["process"]["pid"]),
-            "PYAEDT_DESKTOP_PORT": str(state["desktop"]["port"]),
-            "PYAEDT_DESKTOP_VERSION": profile.requested_version,
-        }
-        for name, expected in overrides.items():
-            if os.environ.get(name) not in {None, "", expected}:
-                raise RuntimeError(f"{name} redirects the owned Desktop attachment")
-        if os.environ.get("PYAEDT_DOC_GENERATION", "false").lower() in {
-            "true",
-            "1",
-            "t",
-        }:
-            raise RuntimeError("PyAEDT documentation mode would create a new Desktop")
-        from scgsim.aedt.runtime.native.common import pyaedt_version
+        _native_identity(desktop, state)
+        _verify_current_inputs(request, state)
+        if not desktop.are_there_simulations_running:
+            raise RuntimeError("Q3D owned Desktop has no active simulation to stop")
+        _commit_stop_intent(request, state)
+        return _issue_stop_rpc(desktop, request, state)
 
-        pyaedt_version()
-        with native_compatibility(profile):
-            from ansys.aedt.core import Desktop
-            from ansys.aedt.core.generic.settings import settings
-            from ansys.aedt.core.internal.desktop_sessions import _desktop_sessions
 
-            if settings.remote_rpc_session is not None:
-                raise RuntimeError(
-                    "Q3D stop control cannot attach through a remote RPC session"
-                )
-            if any(pid != state["desktop"]["process"]["pid"] for pid in _desktop_sessions):
-                raise RuntimeError(
-                    "stop requester already has an unrelated Desktop session"
-                )
-            desktop = Desktop(
-                version=profile.requested_version,
-                new_desktop=False,
-                non_graphical=True,
-                close_on_exit=False,
-                aedt_process_id=state["desktop"]["process"]["pid"],
-                port=state["desktop"]["port"],
+def _verify_current_inputs(request: _StopRequest, state: dict[str, Any]) -> None:
+    """Recheck the files and receipt immediately before the native stop RPC."""
+    current_inputs, _ = _inputs(request.metadata_path)
+    current_receipt = read_json(request.metadata_path.parent / "aedt_run_receipt.json")
+    if (
+        current_inputs != state["inputs"]
+        or current_receipt.get("runtime_source") != state["runtime_source"]
+    ):
+        raise RuntimeError("Q3D stop input/execution binding changed before RPC")
+
+
+def _commit_stop_intent(request: _StopRequest, state: dict[str, Any]) -> None:
+    """Persist intent immediately before the one irreversible native call."""
+    state["intent"] = {
+        "action": request.action,
+        "requester": _process_identity(os.getpid()),
+        "rpc_status": "unknown",
+    }
+    _store(request.state_path, state)
+
+
+def _issue_stop_rpc(
+    desktop: Any, request: _StopRequest, state: dict[str, Any]
+) -> dict[str, Any]:
+    """Record the native RPC outcome while retaining the original error."""
+    try:
+        response = desktop.stop_simulations(
+            clean_stop=request.action == "stop_and_save"
+        )
+        state["intent"].update(rpc_status="returned", native_response=response)
+    except Exception as exc:  # noqa: BLE001 -- PyAEDT COM calls may raise arbitrary native exceptions.
+        state["intent"].update(rpc_status="error", error=f"{type(exc).__name__}: {exc}")
+        try:
+            _store(request.state_path, state)
+        except Exception as storage_error:  # noqa: BLE001 -- preserve the RPC error if recording also fails.
+            exc.add_note(
+                f"Q3D stop RPC error state could not be stored: {storage_error}"
             )
-            _native_identity(desktop, state)
-            _verify_process(state["recorder"])
-            _native_identity(desktop, state)
-            current_inputs, _ = _inputs(metadata_path)
-            current_receipt = read_json(metadata_path.parent / "aedt_run_receipt.json")
-            if (
-                current_inputs != state["inputs"]
-                or current_receipt.get("runtime_source") != state["runtime_source"]
-            ):
-                raise RuntimeError("Q3D stop input/execution binding changed before RPC")
-            if not desktop.are_there_simulations_running:
-                raise RuntimeError("Q3D owned Desktop has no active simulation to stop")
-            state["intent"] = {
-                "action": action,
-                "requester": _process_identity(os.getpid()),
-                "rpc_status": "unknown",
-            }
-            _store(path, state)  # Intent is committed immediately before the single RPC.
-            try:
-                response = desktop.stop_simulations(clean_stop=clean_stop)
-                state["intent"].update(rpc_status="returned", native_response=response)
-            except Exception as exc:
-                state["intent"].update(
-                    rpc_status="error", error=f"{type(exc).__name__}: {exc}"
-                )
-                try:
-                    _store(path, state)
-                except Exception as storage_error:
-                    exc.add_note(
-                        f"Q3D stop RPC error state could not be stored: {storage_error}"
-                    )
-                raise
-            _store(path, state)
-            return copy.deepcopy(state)
+        raise
+    _store(request.state_path, state)
+    return copy.deepcopy(state)

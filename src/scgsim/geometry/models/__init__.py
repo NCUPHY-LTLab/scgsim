@@ -41,7 +41,9 @@ from scgsim.geometry.models.input import (
 )
 from scgsim.geometry.models.lumped import LumpedSupport
 from scgsim.geometry.models.physical import (
-    ApproximationProfile, PhysicalLayerDeclaration, PhysicalRepresentationPlan,
+    ApproximationProfile,
+    PhysicalLayerDeclaration,
+    PhysicalRepresentationPlan,
 )
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
 from scgsim.geometry.models.tags import (

@@ -17,7 +17,10 @@ from scgsim.palace.execution.archive import (
 
 
 class SiblingRunArchiveTests(unittest.TestCase):
+    """Check the archive location and safe run-relative member convention."""
+
     def test_archive_sits_beside_run_folder_with_the_same_name(self) -> None:
+        """Place the named archive beside its matching run directory."""
         run_dir = Path("/tmp/runs/ExampleRun01")
         archive = sibling_run_archive_path(run_dir)
         self.assertEqual(archive.parent, run_dir.parent)
@@ -28,14 +31,18 @@ class SiblingRunArchiveTests(unittest.TestCase):
         )
 
     def test_tar_members_are_prefixed_with_the_folder_name(self) -> None:
+        """Round-trip folder-prefixed and legacy archive member names."""
         run_dir = Path("/tmp/runs/Run01")
         path = run_dir / "config.json"
         self.assertEqual(run_archive_arcname(run_dir, path), "Run01/config.json")
-        self.assertEqual(logical_tar_member_name("Run01/config.json", "Run01"), "config.json")
+        self.assertEqual(
+            logical_tar_member_name("Run01/config.json", "Run01"), "config.json"
+        )
         self.assertIsNone(logical_tar_member_name("Run01", "Run01"))
         self.assertEqual(logical_tar_member_name("config.json", "Run01"), "config.json")
 
     def test_resolve_accepts_sibling_path_and_rejects_escape(self) -> None:
+        """Accept the run's sibling archive and reject a different sibling."""
         with tempfile.TemporaryDirectory() as raw:
             parent = Path(raw)
             run_dir = parent / "Run01"
@@ -48,6 +55,7 @@ class SiblingRunArchiveTests(unittest.TestCase):
                 resolve_run_archive_path(run_dir, "../other.tar.gz")
 
     def test_round_trip_tar_extracts_to_the_folder_name(self) -> None:
+        """Keep the run folder prefix when a real archive is extracted."""
         with tempfile.TemporaryDirectory() as raw:
             parent = Path(raw)
             run_dir = parent / "Run01"

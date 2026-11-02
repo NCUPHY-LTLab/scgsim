@@ -2,491 +2,27 @@
 
 from __future__ import annotations
 
-
 import html
-
-import json
-
-import math
-
 import textwrap
-
-from collections.abc import Mapping
-
 from typing import Any
 
+from scgsim.aedt.epr.models import EprResult, detached
+from scgsim.aedt.presentation.epr_projection import (
+    history_view,
+    native_reference_table_data,
+    ranking_height,
+    saved_solution_versions_text,
+    show_view,
+    surface_hover,
+    surface_key,
+    surface_metadata,
+    surface_tick_label,
+)
 from scgsim.presentation.notebook import (
     INTERFACE_COLORS,
     checked_theme,
-    details,
-    display_text,
-    json_details,
     style_figure,
-    table,
 )
-
-from scgsim.aedt.epr.models import EprResult, detached
-
-
-def _saved_solution_version_text(provenance: Mapping[str, Any]) -> str:
-    """Describe the captured solution's recorded origin, including missingness."""
-
-    source = provenance.get("saved_solution_aedt_version")
-    if isinstance(source, str) and source:
-        return f"Source AEDT version: {html.escape(source)}"
-    return "Source AEDT version not recorded (來源版本未記錄)"
-
-
-def _saved_solution_versions_text(provenance: Mapping[str, Any]) -> str:
-    """Keep saved origin, requested release, and connected release distinct."""
-
-    parts = [_saved_solution_version_text(provenance)]
-    for key, label in (
-        ("requested_aedt_version", "Requested AEDT version"),
-        ("connected_aedt_version", "Connected AEDT version"),
-    ):
-        value = provenance.get(key)
-        if isinstance(value, str) and value:
-            parts.append(f"{label}: {html.escape(value)}")
-    return " · ".join(parts)
-
-
-def _usable_frequency(value: Any) -> float | None:
-    if not isinstance(value, (int, float)) or isinstance(value, bool):
-        return None
-    try:
-        frequency_hz = float(value)
-    except OverflowError:
-        return None
-    return frequency_hz if math.isfinite(frequency_hz) and frequency_hz > 0 else None
-
-
-def _surface_key(surface: Any) -> str:
-    """Use recorded scientific identity, never a shortened display label."""
-
-    members = surface.get("members", surface.get("binding_ids", ()))
-    return json.dumps(
-        {
-            "group_id": surface.get("group_id"),
-            "contribution_id": surface.get("contribution_id"),
-            "owner_id": surface.get("owner_id"),
-            "interface_kind": surface.get("interface_kind"),
-            "evaluation_kind": surface.get("evaluation_kind", "requested_margin"),
-            "margin_um": surface.get("margin_um"),
-            "field_side": surface.get("field_side"),
-            "members": detached(members),
-        },
-        sort_keys=True,
-    )
-
-
-def _surface_label_parts(surface: Any) -> tuple[str, str, str]:
-    owner = surface.get("owner_id", surface.get("contribution_id", "owner"))
-    readable_owner = str(owner).replace("_", " ")
-    evaluation = (
-        "Unmasked"
-        if surface.get("evaluation_kind") == "unmasked_baseline"
-        else f"Requested {surface['margin_um']:g} µm"
-    )
-    return readable_owner, str(surface["interface_kind"]), evaluation
-
-
-def _surface_label(surface: Any) -> str:
-    return " · ".join(
-        html.escape(part, quote=False) for part in _surface_label_parts(surface)
-    )
-
-
-def _surface_tick_label(surface: Any) -> str:
-    """Wrap category labels so long source names cannot consume the plot area."""
-
-    raw = " · ".join(_surface_label_parts(surface))
-    parts = textwrap.wrap(raw, width=28, break_long_words=True, break_on_hyphens=False)
-    return "<br>".join(html.escape(part, quote=False) for part in parts)
-
-
-def _surface_hover(surface: Any) -> str:
-    metadata = {
-        "group_id": surface.get("group_id"),
-        "owner_id": surface.get("owner_id"),
-        "interface_kind": surface.get("interface_kind"),
-        "evaluation_kind": surface.get("evaluation_kind"),
-        "margin_um": surface.get("margin_um"),
-        "field_side": surface.get("field_side"),
-        "members": detached(surface.get("members", surface.get("binding_ids"))),
-        "source": surface.get("source"),
-        "assumptions": detached(surface.get("assumptions")),
-        "original_assumptions": detached(surface.get("original_assumptions")),
-        "assumption_update": detached(surface.get("assumption_update")),
-        "inverse_q": surface.get("inverse_q"),
-    }
-    members = metadata["members"] or []
-    lines = [
-        ("Owner", metadata["owner_id"]),
-        ("Group", metadata["group_id"]),
-        ("Interface", metadata["interface_kind"]),
-        ("Evaluation", metadata["evaluation_kind"]),
-        ("Margin (µm)", metadata["margin_um"]),
-        ("Side", metadata["field_side"]),
-        ("Source", metadata["source"]),
-        ("Members", len(members)),
-    ]
-    for index, member in enumerate(members[:3], 1):
-        if isinstance(member, dict):
-            identity = ", ".join(
-                f"{key}={member[key]}"
-                for key in (
-                    "binding_id",
-                    "contribution_id",
-                    "source_polygon_id",
-                    "field_side",
-                )
-                if key in member
-            )
-        else:
-            identity = str(member)
-        lines.append((f"Member {index}", identity))
-    if len(members) > 3:
-        lines.append(
-            (
-                "Additional members",
-                f"{len(members) - 3}; full records in trace metadata",
-            )
-        )
-    assumptions = metadata["assumptions"]
-    if isinstance(assumptions, dict):
-        lines.extend(
-            (name.replace("_", " "), value) for name, value in assumptions.items()
-        )
-    rendered = []
-    for label, value in lines:
-        wrapped = textwrap.wrap(
-            str(display_text(value)),
-            width=58,
-            break_long_words=True,
-            break_on_hyphens=False,
-        ) or [""]
-        rendered.append(
-            f"<b>{html.escape(label, quote=False)}</b>: "
-            + "<br>".join(html.escape(part, quote=False) for part in wrapped)
-        )
-    return "<br>".join(rendered)
-
-
-def _surface_metadata(surface: Any) -> dict[str, Any]:
-    """Keep the full source record independently of a shortened hover display."""
-
-    return detached(surface)
-
-
-def _native_reference_value(reference: Any, *keys: str) -> str:
-    for key in keys:
-        if key in reference:
-            value = reference[key]
-            if value is None:
-                return "null"
-            if isinstance(value, (Mapping, list, tuple)):
-                return json.dumps(detached(value), ensure_ascii=False, sort_keys=True)
-            return display_text(value)
-    return "not recorded"
-
-
-def _native_reference_table_data(
-    references: Any,
-) -> tuple[tuple[str, ...], list[tuple[str, ...]]]:
-    """Present raw native-face references without deriving participation or loss."""
-
-    headers = (
-        "Reference / contribution",
-        "Native owner / object",
-        "Interface / source cap / Z",
-        "Source supports / incident domains",
-        "Face List / faces",
-        "Projection / basis / support",
-        "Normal integral (V²)",
-        "Tangential integral (V²)",
-        "Native face area (m²)",
-        "Calculator area (m²)",
-    )
-    rows = []
-    for reference in references:
-        rows.append(
-            (
-                "Reference: "
-                + _native_reference_value(reference, "reference_id")
-                + "\nContributions: "
-                + _native_reference_value(reference, "contribution_ids", "binding_ids"),
-                "Owner: "
-                + _native_reference_value(
-                    reference, "owner_semantic_id", "source_polygon_id"
-                )
-                + "\nObject: "
-                + _native_reference_value(reference, "object_name", "native_object_id"),
-                "Interfaces: "
-                + _native_reference_value(reference, "interface_kinds")
-                + "\nCap: "
-                + _native_reference_value(reference, "source_cap")
-                + "\nSource Z (µm): "
-                + _native_reference_value(reference, "source_z_um"),
-                "Source: "
-                + _native_reference_value(reference, "source_supports")
-                + "\nIncident domains: "
-                + _native_reference_value(reference, "incident_domains"),
-                "Selection: "
-                + _native_reference_value(reference, "selection_name")
-                + "\nFace List: "
-                + _native_reference_value(reference, "face_list")
-                + "\nFace IDs: "
-                + _native_reference_value(reference, "face_ids", "native_faces"),
-                "Native normal: "
-                + _native_reference_value(reference, "native_normal")
-                + "\nProjection: "
-                + _native_reference_value(reference, "projection_normal")
-                + "\nBasis: "
-                + _native_reference_value(reference, "sampling_basis")
-                + "\nSupport: "
-                + _native_reference_value(reference, "support_kind"),
-                _native_reference_value(reference, "normal_integral_v2"),
-                _native_reference_value(reference, "tangential_integral_v2"),
-                _native_reference_value(reference, "native_area_m2"),
-                _native_reference_value(reference, "area_m2"),
-            )
-        )
-    return headers, rows
-
-
-def _native_reference_html(row: Any, *, opened: bool = False) -> str:
-    """Render recorded native references as separate, raw evidence."""
-
-    if "native_surface_references" not in row:
-        return ""
-    references = row["native_surface_references"]
-    note = (
-        "<p>These raw native-owner face references are separate from the masked "
-        "Sheet contributions; their supports may differ. Native face area and "
-        "calculator area are separate records. An SA reference identifies its "
-        "dielectric native owner separately from the existing vacuum-formula "
-        "basis. No participation, loss, or equivalence is inferred.</p>"
-    )
-    if references is None:
-        return note + "<p>The recorded native reference value is null.</p>"
-    if not references:
-        return note + "<p>The recorded native reference sequence is empty.</p>"
-    headers, rows = _native_reference_table_data(references)
-    return note + details(
-        "Native-face raw references",
-        table(headers, rows)
-        + json_details(
-            "Complete native-face reference records",
-            {"native_surface_references": detached(references)},
-        ),
-        opened=opened,
-    )
-
-
-def _ranking_height(count: int) -> int:
-    return max(460, 180 + 52 * count)
-
-
-def _history_view(
-    result: EprResult,
-    *,
-    mode: int | None,
-    native_pass: int | None,
-    show_convergence: bool,
-) -> dict[str, Any]:
-    requested_modes_raw = result.provenance.get(
-        "requested_modes", sorted({int(row["mode"]) for row in result.rows})
-    )
-    known_modes = {
-        int(item) for item in requested_modes_raw if type(item) is int and item > 0
-    }
-    if mode is not None and mode not in known_modes:
-        raise ValueError(f"mode {mode} was not requested by this EPR result")
-    requested_modes = [
-        int(item)
-        for item in requested_modes_raw
-        if type(item) is int and item > 0 and (mode is None or item == mode)
-    ]
-    target_pass = native_pass
-    if result.result_kind == "adaptive_history" and target_pass is None:
-        observed_last = result.provenance.get("solver_last_completed_pass")
-        if type(observed_last) is not int or observed_last <= 0:
-            raise ValueError("adaptive EPR result lacks solver_last_completed_pass")
-        target_pass = observed_last
-    selected = [
-        row
-        for row in result.rows
-        if (mode is None or row["mode"] == mode)
-        and (
-            result.result_kind != "adaptive_history"
-            or row["native_pass"] == target_pass
-        )
-    ]
-    selected_by_mode = {int(row["mode"]): row for row in selected}
-    unavailable: list[str] = []
-    for requested_mode in requested_modes:
-        if requested_mode not in selected_by_mode:
-            unavailable.append(
-                f"mode {requested_mode}: requested pass {target_pass} is missing"
-                if target_pass is not None
-                else f"mode {requested_mode}: result row is missing"
-            )
-    bars: list[dict[str, Any]] = []
-    for row in selected:
-        row_mode = row["mode"]
-        pass_label = (
-            "" if "native_pass" not in row else f", pass {row['native_pass']:g}"
-        )
-        if row.get("status") == "partial" or "normalization_energy_j" not in row:
-            unavailable.append(
-                f"mode {row_mode}{pass_label}: "
-                f"{row.get('combination_error', 'incomplete native evidence')}"
-            )
-            continue
-        labels: list[str] = []
-        keys: list[str] = []
-        kinds: list[str] = []
-        values: list[float] = []
-        for surface in row.get("surface_contributions", ()):
-            labels.append(_surface_tick_label(surface))
-            keys.append(_surface_key(surface))
-            kinds.append(f"surface:{surface['interface_kind']}")
-            values.append(float(surface["participation"]))
-        for junction in row.get("junctions", ()):
-            labels.extend(
-                [
-                    f"junction-L:{html.escape(str(junction['junction_id']))}",
-                    f"junction-C:{html.escape(str(junction['junction_id']))}",
-                ]
-            )
-            keys.extend(
-                [
-                    f"junction-L:{junction['junction_id']}",
-                    f"junction-C:{junction['junction_id']}",
-                ]
-            )
-            kinds.extend(["junction-L", "junction-C"])
-            values.extend(
-                [
-                    float(junction["inductive_participation"]),
-                    float(junction["capacitive_participation"]),
-                ]
-            )
-        bars.append(
-            {
-                "name": f"mode {row_mode}{pass_label}",
-                "labels": labels,
-                "keys": keys,
-                "kinds": kinds,
-                "values": values,
-            }
-        )
-    convergence_view = show_convergence and result.result_kind == "adaptive_history"
-    lines: list[dict[str, Any]] = []
-    if convergence_view:
-        last_pass = result.provenance.get("solver_last_completed_pass")
-        if type(last_pass) is not int or last_pass <= 0:
-            raise ValueError("adaptive EPR result lacks solver_last_completed_pass")
-        pass_axis = list(range(1, last_pass + 1))
-        for row_mode in requested_modes:
-            complete = sorted(
-                (
-                    row
-                    for row in result.rows
-                    if row["mode"] == row_mode and row["status"] == "complete"
-                ),
-                key=lambda item: item["native_pass"],
-            )
-            series: dict[str, dict[str, Any]] = {}
-            frequency_by_pass: dict[int, float] = {}
-            for row in result.rows:
-                if row["mode"] != row_mode:
-                    continue
-                frequency_hz = _usable_frequency(row.get("frequency_hz"))
-                if frequency_hz is not None:
-                    frequency_by_pass[int(row["native_pass"])] = frequency_hz
-            for row in complete:
-                native = int(row["native_pass"])
-                energy = series.setdefault(
-                    "energy",
-                    {
-                        "name": f"mode {row_mode} magnetic+inductive / normalization",
-                        "kind": "energy",
-                        "identity": "energy",
-                        "values": {},
-                    },
-                )
-                energy["values"][native] = float(
-                    row["magnetic_energy_balance_j"]
-                ) / float(row["normalization_energy_j"])
-                for surface in row["surface_contributions"]:
-                    identity = _surface_key(surface)
-                    item = series.setdefault(
-                        identity,
-                        {
-                            "name": f"mode {row_mode} {_surface_label(surface)}",
-                            "kind": "surface",
-                            "interface_kind": surface["interface_kind"],
-                            "identity": identity,
-                            "hover": _surface_hover(surface),
-                            "source_metadata": _surface_metadata(surface),
-                            "mode": row_mode,
-                            "values": {},
-                        },
-                    )
-                    item["values"][native] = float(surface["participation"])
-                for junction in row["junctions"]:
-                    for kind, field in (
-                        ("junction-L", "inductive_participation"),
-                        ("junction-C", "capacitive_participation"),
-                    ):
-                        identity = f"{kind}:{junction['junction_id']}"
-                        item = series.setdefault(
-                            identity,
-                            {
-                                "name": f"mode {row_mode} {html.escape(identity)}",
-                                "kind": kind,
-                                "identity": identity,
-                                "mode": row_mode,
-                                "values": {},
-                            },
-                        )
-                        item["values"][native] = float(junction[field])
-            for item in sorted(
-                series.values(), key=lambda entry: entry["name"] + entry["identity"]
-            ):
-                lines.append(
-                    {
-                        **{
-                            key: value for key, value in item.items() if key != "values"
-                        },
-                        "x": pass_axis,
-                        "y": [item["values"].get(native) for native in pass_axis],
-                        "secondary_y": False,
-                    }
-                )
-            lines.append(
-                {
-                    "name": f"mode {row_mode} frequency",
-                    "x": pass_axis,
-                    "y": [frequency_by_pass.get(item) for item in pass_axis],
-                    "kind": "frequency",
-                    "identity": f"mode:{row_mode}:frequency",
-                    "mode": row_mode,
-                    "secondary_y": True,
-                }
-            )
-    return {
-        "result_kind": result.result_kind,
-        "mode": mode,
-        "native_pass": target_pass,
-        "show_convergence": show_convergence,
-        "convergence_view": convergence_view,
-        "bars": bars,
-        "lines": lines,
-        "unavailable": unavailable,
-    }
 
 
 def plot_epr_result(
@@ -510,10 +46,10 @@ def plot_epr_result(
         raise ValueError("native_pass selection requires adaptive-history results")
     if type(show_convergence) is not bool:
         raise TypeError("show_convergence must be bool")
-    from plotly import graph_objects as go
-    from plotly.subplots import make_subplots
+    from plotly import graph_objects as go  # noqa: PLC0415 - Plotly is an optional plot extra
+    from plotly.subplots import make_subplots  # noqa: PLC0415 - Plotly is an optional plot extra
 
-    view = _history_view(
+    view = history_view(
         result, mode=mode, native_pass=native_pass, show_convergence=show_convergence
     )
     convergence_view = view["convergence_view"]
@@ -638,73 +174,6 @@ def plot_epr_result(
     return figure
 
 
-def _show_view(
-    result: EprResult, *, mode: int | None, native_pass: int | None
-) -> dict[str, Any]:
-    if not isinstance(result, EprResult):
-        raise TypeError("result must be EprResult")
-    selected = [
-        row
-        for row in result.rows
-        if (mode is None or row["mode"] == mode)
-        and (native_pass is None or row.get("native_pass") == native_pass)
-    ]
-    if len(selected) != 1:
-        raise ValueError("show_epr requires one exact mode/pass selection")
-    row = selected[0]
-    has_native_references = "native_surface_references" in row
-    native_references = row.get("native_surface_references")
-    if row["status"] != "complete":
-        frequency = _usable_frequency(row.get("frequency_hz"))
-        return {
-            "row": row,
-            "complete": False,
-            "has_native_references": has_native_references,
-            "native_references": native_references,
-            "frequency_text": (
-                f"; verified frequency {frequency:.6g} Hz"
-                if frequency is not None
-                else ""
-            ),
-        }
-    surfaces = row["surface_contributions"]
-    domains = row["electric_domains"]
-    junctions = row["junctions"]
-    baselines = [
-        item for item in surfaces if item.get("evaluation_kind") == "unmasked_baseline"
-    ]
-    known_baselines = [
-        item["inverse_q"] for item in baselines if item.get("inverse_q") is not None
-    ]
-    return {
-        "row": row,
-        "complete": True,
-        "has_native_references": has_native_references,
-        "native_references": native_references,
-        "surfaces": surfaces,
-        "domains": domains,
-        "junctions": junctions,
-        "bulk_participations": [
-            item["energy_j"] / row["normalization_energy_j"] for item in domains
-        ],
-        "coverage": {
-            "surface_rows": len(surfaces),
-            "bindings": sum(
-                len(item.get("members", item.get("binding_ids", ())))
-                for item in surfaces
-            ),
-            "bulk_domains": len(domains),
-            "junctions": len(junctions),
-            "known_baseline_subtotal": (
-                f"{sum(known_baselines):.6g}" if known_baselines else "unavailable"
-            ),
-            "unknown_baseline_losses": sum(
-                item.get("inverse_q") is None for item in baselines
-            ),
-        },
-    }
-
-
 def show_epr(
     result: EprResult,
     *,
@@ -713,13 +182,23 @@ def show_epr(
     theme: str = "light",
 ) -> Any:
     """Show one exact pass/mode with raw native references kept separate."""
-
     checked_theme(theme)
-    view = _show_view(result, mode=mode, native_pass=native_pass)
-    row = view["row"]
-    from plotly import graph_objects as go
-    from plotly.subplots import make_subplots
+    view = show_view(result, mode=mode, native_pass=native_pass)
+    from plotly import graph_objects as go  # noqa: PLC0415 - Plotly is an optional plot extra
+    from plotly.subplots import make_subplots  # noqa: PLC0415 - Plotly is an optional plot extra
 
+    figure = _show_epr_figure(view, result, theme, go, make_subplots)
+    return figure
+
+
+def _show_epr_figure(
+    view: dict[str, Any],
+    result: EprResult,
+    theme: str,
+    go: Any,
+    make_subplots: Any,
+) -> Any:
+    """Assemble the selected-pass display from detached projection records."""
     has_native_references = view["has_native_references"]
     subplot_titles = ("Surface", "Bulk", "Junction")
     specs = None
@@ -739,95 +218,10 @@ def show_epr(
         subplot_titles=subplot_titles,
         specs=specs,
     )
-    top_margin = 65
     if view["complete"]:
-        surfaces = sorted(
-            view["surfaces"], key=lambda item: -float(item["participation"])
-        )
-        surface_keys = [_surface_key(item) for item in surfaces]
-        surface_labels = [_surface_tick_label(item) for item in surfaces]
-        figure.add_trace(
-            go.Bar(
-                x=[item["participation"] for item in surfaces],
-                y=surface_keys,
-                orientation="h",
-                name="surface p",
-                marker_color=[
-                    INTERFACE_COLORS.get(item["interface_kind"], "#CC79A7")
-                    for item in surfaces
-                ],
-                customdata=[_surface_hover(item) for item in surfaces],
-                meta=[_surface_metadata(item) for item in surfaces],
-                hovertemplate="p=%{x:.6g}<br>%{customdata}<extra></extra>",
-            ),
-            row=1,
-            col=1,
-        )
-        figure.update_yaxes(
-            tickmode="array",
-            tickvals=surface_keys,
-            ticktext=surface_labels,
-            autorange="reversed",
-            row=1,
-            col=1,
-        )
-        domains = view["domains"]
-        figure.add_trace(
-            go.Bar(
-                x=view["bulk_participations"],
-                y=[html.escape(str(item["domain_id"])) for item in domains],
-                orientation="h",
-                name="bulk p",
-            ),
-            row=2,
-            col=1,
-        )
-        junctions = view["junctions"]
-        figure.add_trace(
-            go.Bar(
-                x=[item["inductive_participation"] for item in junctions],
-                y=[html.escape(str(item["junction_id"])) for item in junctions],
-                orientation="h",
-                name="junction pL",
-            ),
-            row=3,
-            col=1,
-        )
-        figure.add_trace(
-            go.Bar(
-                x=[item["capacitive_participation"] for item in junctions],
-                y=[html.escape(str(item["junction_id"])) for item in junctions],
-                orientation="h",
-                name="junction pC",
-            ),
-            row=3,
-            col=1,
-        )
-        coverage = view["coverage"]
-        coverage_text = (
-            f"Coverage: {coverage['surface_rows']} surface rows / "
-            f"{coverage['bindings']} bindings; "
-            f"{coverage['bulk_domains']} bulk domains; {coverage['junctions']} junctions. "
-            f"Known baseline 1/Q subtotal: {coverage['known_baseline_subtotal']}; "
-            f"{coverage['unknown_baseline_losses']} baseline losses unknown. "
-            "Sidewalls uncomputed; requested margins are alternatives."
-        )
-        coverage_lines = textwrap.wrap(coverage_text, width=32, break_long_words=True)
-        top_margin = max(240, 135 + 14 * len(coverage_lines))
-        figure.add_annotation(
-            text="<br>".join(html.escape(line) for line in coverage_lines),
-            xref="paper",
-            yref="paper",
-            x=0,
-            y=1,
-            yshift=top_margin - 110,
-            xanchor="left",
-            yanchor="top",
-            align="left",
-            font={"size": 11},
-            showarrow=False,
-        )
+        top_margin = _add_complete_show_traces(figure, go, view)
     else:
+        top_margin = 65
         figure.add_annotation(
             text=f"Partial native result{view['frequency_text']}; EPR quantities unavailable",
             xref="paper",
@@ -837,42 +231,147 @@ def show_epr(
             showarrow=False,
         )
     if has_native_references:
-        native_references = view["native_references"]
-        headers, native_rows = _native_reference_table_data(native_references or ())
-        if native_rows:
-            columns = [list(column) for column in zip(*native_rows)]
-        else:
-            columns = [[] for _ in headers]
+        _add_native_reference_table(figure, go, view)
+    _style_show_epr_figure(figure, view, result, theme, top_margin)
+    return figure
+
+
+def _add_complete_show_traces(figure: Any, go: Any, view: dict[str, Any]) -> int:
+    """Add complete-row participation traces and coverage annotation."""
+    surfaces = sorted(view["surfaces"], key=lambda item: -float(item["participation"]))
+    surface_keys = [surface_key(item) for item in surfaces]
+    figure.add_trace(
+        go.Bar(
+            x=[item["participation"] for item in surfaces],
+            y=surface_keys,
+            orientation="h",
+            name="surface p",
+            marker_color=[
+                INTERFACE_COLORS.get(item["interface_kind"], "#CC79A7")
+                for item in surfaces
+            ],
+            customdata=[surface_hover(item) for item in surfaces],
+            meta=[surface_metadata(item) for item in surfaces],
+            hovertemplate="p=%{x:.6g}<br>%{customdata}<extra></extra>",
+        ),
+        row=1,
+        col=1,
+    )
+    figure.update_yaxes(
+        tickmode="array",
+        tickvals=surface_keys,
+        ticktext=[surface_tick_label(item) for item in surfaces],
+        autorange="reversed",
+        row=1,
+        col=1,
+    )
+    _add_bulk_and_junction_traces(figure, go, view)
+    coverage = view["coverage"]
+    coverage_text = (
+        f"Coverage: {coverage['surface_rows']} surface rows / "
+        f"{coverage['bindings']} bindings; "
+        f"{coverage['bulk_domains']} bulk domains; {coverage['junctions']} junctions. "
+        f"Known baseline 1/Q subtotal: {coverage['known_baseline_subtotal']}; "
+        f"{coverage['unknown_baseline_losses']} baseline losses unknown. "
+        "Sidewalls uncomputed; requested margins are alternatives."
+    )
+    coverage_lines = textwrap.wrap(coverage_text, width=32, break_long_words=True)
+    top_margin = max(240, 135 + 14 * len(coverage_lines))
+    figure.add_annotation(
+        text="<br>".join(html.escape(line) for line in coverage_lines),
+        xref="paper",
+        yref="paper",
+        x=0,
+        y=1,
+        yshift=top_margin - 110,
+        xanchor="left",
+        yanchor="top",
+        align="left",
+        font={"size": 11},
+        showarrow=False,
+    )
+    return top_margin
+
+
+def _add_bulk_and_junction_traces(figure: Any, go: Any, view: dict[str, Any]) -> None:
+    """Add the independent bulk, inductive, and capacitive participation bars."""
+    domains = view["domains"]
+    figure.add_trace(
+        go.Bar(
+            x=view["bulk_participations"],
+            y=[html.escape(str(item["domain_id"])) for item in domains],
+            orientation="h",
+            name="bulk p",
+        ),
+        row=2,
+        col=1,
+    )
+    junctions = view["junctions"]
+    for field_name, trace_name in (
+        ("inductive_participation", "junction pL"),
+        ("capacitive_participation", "junction pC"),
+    ):
         figure.add_trace(
-            go.Table(
-                header={"values": list(headers), "align": "left"},
-                cells={"values": columns, "align": "left"},
+            go.Bar(
+                x=[item[field_name] for item in junctions],
+                y=[html.escape(str(item["junction_id"])) for item in junctions],
+                orientation="h",
+                name=trace_name,
             ),
-            row=4,
+            row=3,
             col=1,
         )
-        if not native_rows:
-            empty_note = (
-                "The recorded native reference value is null."
-                if native_references is None
-                else "The recorded native reference sequence is empty."
-            )
-            figure.add_annotation(
-                text=html.escape(empty_note),
-                xref="paper",
-                yref="paper",
-                x=0.5,
-                y=0.08,
-                showarrow=False,
-            )
+
+
+def _add_native_reference_table(figure: Any, go: Any, view: dict[str, Any]) -> None:
+    """Add raw native-face references without deriving participation or loss."""
+    native_references = view["native_references"]
+    headers, native_rows = native_reference_table_data(native_references or ())
+    columns = (
+        [list(column) for column in zip(*native_rows, strict=True)]
+        if native_rows
+        else [[] for _ in headers]
+    )
+    figure.add_trace(
+        go.Table(
+            header={"values": list(headers), "align": "left"},
+            cells={"values": columns, "align": "left"},
+        ),
+        row=4,
+        col=1,
+    )
+    if not native_rows:
+        empty_note = (
+            "The recorded native reference value is null."
+            if native_references is None
+            else "The recorded native reference sequence is empty."
+        )
+        figure.add_annotation(
+            text=html.escape(empty_note),
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.08,
+            showarrow=False,
+        )
+
+
+def _style_show_epr_figure(
+    figure: Any,
+    view: dict[str, Any],
+    result: EprResult,
+    theme: str,
+    top_margin: int,
+) -> None:
+    """Set selected-row identity, axes, and existing responsive plot sizing."""
+    row = view["row"]
+    has_native_references = view["has_native_references"]
     title = f"EPR mode {row['mode']}" + (
         f" pass {row['native_pass']}" if "native_pass" in row else " saved field"
     )
     if result.result_kind == "saved_field":
         title += (
-            "<br><sup>"
-            + _saved_solution_versions_text(result.provenance)
-            + "</sup>"
+            "<br><sup>" + saved_solution_versions_text(result.provenance) + "</sup>"
         )
     figure.update_layout(
         title={
@@ -888,7 +387,7 @@ def show_epr(
         showlegend=True,
         meta={
             "surface_identities": [
-                _surface_key(item) for item in view.get("surfaces", ())
+                surface_key(item) for item in view.get("surfaces", ())
             ],
             "mode": row["mode"],
             "native_pass": row.get("native_pass"),
@@ -906,7 +405,7 @@ def show_epr(
         theme=theme,
         height=max(
             900 + top_margin - 65,
-            _ranking_height(len(view.get("surfaces", ()))) + 320 + top_margin - 65,
+            ranking_height(len(view.get("surfaces", ()))) + 320 + top_margin - 65,
         )
         + (230 if has_native_references else 0)
         if view["complete"]
@@ -914,4 +413,3 @@ def show_epr(
     )
     figure.update_layout(margin={"l": 180, "r": 20, "t": top_margin, "b": 125})
     figure.update_yaxes(automargin=False, tickfont={"size": 12}, row=1, col=1)
-    return figure

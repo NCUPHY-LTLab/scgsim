@@ -2,23 +2,18 @@
 
 from __future__ import annotations
 
-
 import math
-
 import re
-
 from pathlib import Path
-
 from typing import Any
 
-from scgsim.aedt._benchmark import (
+from scgsim.aedt.benchmark_data import (
     BENCHMARK_RELATIVE,
     BENCHMARK_SCHEMA,
     NATIVE_PROFILE_SOURCE,
     attribute_profile_memory,
 )
-from scgsim.aedt._io import file_sha256, write_json
-
+from scgsim.aedt.io import file_sha256, write_json
 
 _METRIC_LABELS = {
     "Real time": "real_seconds",
@@ -35,87 +30,40 @@ _COUNT_LABELS = {
 }
 
 
-def _seconds(value: Any, label: str) -> float:
-    if not isinstance(value, str):
-        raise ValueError(f"native profile {label} is not formatted time")
-    match = re.fullmatch(r"(\d+):(\d{2}):(\d{2})(?:\.(\d+))?", value)
-    if match is None or int(match[2]) > 59 or int(match[3]) > 59:
-        raise ValueError(f"native profile {label} has invalid time {value!r}")
-    fractional = float(f"0.{match[4]}") if match[4] else 0.0
-    return int(match[1]) * 3600 + int(match[2]) * 60 + int(match[3]) + fractional
-
-
-def _metrics(properties: Any) -> dict[str, Any]:
-    if not isinstance(properties, dict):
-        raise TypeError("native profile node has no properties")
-    result: dict[str, Any] = {}
-    for label, key in _METRIC_LABELS.items():
-        if label in properties:
-            value = _seconds(properties[label], label)
-            if key in result and result[key] != value:
-                raise ValueError(f"native profile has conflicting {key} values")
-            result[key] = value
-            result[f"{key}_native"] = properties[label]
-    if "Memory" in properties:
-        from ansys.aedt.core.modules.profile import MemoryGB
-
-        native = properties["Memory"]
-        if not isinstance(native, str):
-            raise ValueError("native profile Memory is not a formatted quantity")
-        sdk_input = native[:-2] + "G" if native.endswith(" GB") else native
-        value = MemoryGB(sdk_input).value
-        if not math.isfinite(value) or value < 0:
-            raise ValueError("native profile Memory is invalid")
-        result["memory_native"] = native
-        result["memory_gb_sdk"] = value
-        if sdk_input != native:
-            result["memory_sdk_input"] = sdk_input
-            result["memory_unit_alias"] = (
-                "native GB is canonicalized to SDK G (decimal gigabytes)"
-            )
-    for label, key in _COUNT_LABELS.items():
-        if label in properties:
-            native = properties[label]
-            value = (
-                int(native)
-                if isinstance(native, str) and native.isdecimal()
-                else native
-            )
-            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-                raise ValueError(f"native profile {label} is invalid")
-            result[key] = value
-            result[f"{key}_native_label"] = label
-            result[f"{key}_native"] = native
-    return result
-
-
-def _node(name: str, native: Any) -> dict[str, Any]:
-    properties = {
-        str(label): native.GetPropValue(label) for label in native.GetPropNames()
+def export_simulation_benchmark(
+    app: Any, run_dir: Path, setup_name: str
+) -> tuple[str, str, dict[str, str]]:
+    """Capture one native profile; profile failure is data, artifact failure is fatal."""
+    payload: dict[str, Any] = {
+        "schema_version": BENCHMARK_SCHEMA,
+        "setup_name": setup_name,
+        "native_source": NATIVE_PROFILE_SOURCE,
+        "memory_conversion": "PyAEDT 1.3.0 MemoryGB.value; native GB spelling normalized to SDK G, raw retained",
     }
-    result = {"name": str(name), "metrics": _metrics(properties)}
-    match = re.fullmatch(r"Adaptive Pass (\d+)(?: Group)?", str(name))
-    if match:
-        result["adaptive_pass"] = int(match[1])
-    identity = {
-        label: properties[label]
-        for label in ("Info", "Type", "Frequency", "Status", "Start Time", "Stop Time")
-        if label in properties
-        and isinstance(properties[label], (str, int, float, bool))
-    }
-    if identity:
-        result["native_identity"] = identity
-    result["native_properties"] = {
-        str(label): value
-        for label, value in properties.items()
-        if isinstance(value, (str, int, float, bool))
-    }
-    children = [
-        _node(str(child_name), native.GetChildObject(child_name))
-        for child_name in native.GetChildNames()
-    ]
-    if children:
-        result["children"] = children
+    try:
+        payload["design_name"] = app.design_name
+        payload.update(_native_profile(app, setup_name))
+        payload = attribute_profile_memory(payload)
+    except Exception as exc:  # noqa: BLE001 -- profile failure is recorded without changing the physics solve result.
+        payload.update(
+            status="error", reason=f"{type(exc).__name__}: {exc}", profiles=[]
+        )
+    path = run_dir / BENCHMARK_RELATIVE
+    write_json(path, payload)
+    return (
+        BENCHMARK_RELATIVE,
+        file_sha256(path),
+        {"status": payload["status"], "path": BENCHMARK_RELATIVE},
+    )
+
+
+def attach_simulation_benchmark(
+    result: dict[str, Any], app: Any, run_dir: Path, setup_name: str
+) -> dict[str, Any]:
+    """Attach the captured profile artifact identity to this completed result."""
+    relative, digest, summary = export_simulation_benchmark(app, run_dir, setup_name)
+    result["outputs"][relative] = digest
+    result["benchmark"] = summary
     return result
 
 
@@ -179,39 +127,85 @@ def _native_profile(app: Any, setup_name: str) -> dict[str, Any]:
     return {"status": "complete", "profiles": profiles}
 
 
-def export_simulation_benchmark(
-    app: Any, run_dir: Path, setup_name: str
-) -> tuple[str, str, dict[str, str]]:
-    """Capture one native profile; profile failure is data, artifact failure is fatal."""
-    payload: dict[str, Any] = {
-        "schema_version": BENCHMARK_SCHEMA,
-        "setup_name": setup_name,
-        "native_source": NATIVE_PROFILE_SOURCE,
-        "memory_conversion": "PyAEDT 1.3.0 MemoryGB.value; native GB spelling normalized to SDK G, raw retained",
+def _node(name: str, native: Any) -> dict[str, Any]:
+    properties = {
+        str(label): native.GetPropValue(label) for label in native.GetPropNames()
     }
-    try:
-        payload["design_name"] = app.design_name
-        payload.update(_native_profile(app, setup_name))
-        payload = attribute_profile_memory(payload)
-    except (
-        Exception
-    ) as exc:  # Profile failure must not change the physics solve result.
-        payload.update(
-            status="error", reason=f"{type(exc).__name__}: {exc}", profiles=[]
-        )
-    path = run_dir / BENCHMARK_RELATIVE
-    write_json(path, payload)
-    return (
-        BENCHMARK_RELATIVE,
-        file_sha256(path),
-        {"status": payload["status"], "path": BENCHMARK_RELATIVE},
-    )
-
-
-def attach_simulation_benchmark(
-    result: dict[str, Any], app: Any, run_dir: Path, setup_name: str
-) -> dict[str, Any]:
-    relative, digest, summary = export_simulation_benchmark(app, run_dir, setup_name)
-    result["outputs"][relative] = digest
-    result["benchmark"] = summary
+    result = {"name": str(name), "metrics": _metrics(properties)}
+    match = re.fullmatch(r"Adaptive Pass (\d+)(?: Group)?", str(name))
+    if match:
+        result["adaptive_pass"] = int(match[1])
+    identity = {
+        label: properties[label]
+        for label in ("Info", "Type", "Frequency", "Status", "Start Time", "Stop Time")
+        if label in properties
+        and isinstance(properties[label], (str, int, float, bool))
+    }
+    if identity:
+        result["native_identity"] = identity
+    result["native_properties"] = {
+        str(label): value
+        for label, value in properties.items()
+        if isinstance(value, (str, int, float, bool))
+    }
+    children = [
+        _node(str(child_name), native.GetChildObject(child_name))
+        for child_name in native.GetChildNames()
+    ]
+    if children:
+        result["children"] = children
     return result
+
+
+def _metrics(properties: Any) -> dict[str, Any]:
+    if not isinstance(properties, dict):
+        raise TypeError("native profile node has no properties")
+    result: dict[str, Any] = {}
+    for label, key in _METRIC_LABELS.items():
+        if label in properties:
+            value = _seconds(properties[label], label)
+            if key in result and result[key] != value:
+                raise ValueError(f"native profile has conflicting {key} values")
+            result[key] = value
+            result[f"{key}_native"] = properties[label]
+    if "Memory" in properties:
+        from ansys.aedt.core.modules.profile import MemoryGB  # noqa: PLC0415 -- optional SDK unit conversion loads only for native memory evidence.
+
+        native = properties["Memory"]
+        if not isinstance(native, str):
+            raise ValueError("native profile Memory is not a formatted quantity")
+        sdk_input = native[:-2] + "G" if native.endswith(" GB") else native
+        value = MemoryGB(sdk_input).value
+        if not math.isfinite(value) or value < 0:
+            raise ValueError("native profile Memory is invalid")
+        result["memory_native"] = native
+        result["memory_gb_sdk"] = value
+        if sdk_input != native:
+            result["memory_sdk_input"] = sdk_input
+            result["memory_unit_alias"] = (
+                "native GB is canonicalized to SDK G (decimal gigabytes)"
+            )
+    for label, key in _COUNT_LABELS.items():
+        if label in properties:
+            native = properties[label]
+            value = (
+                int(native)
+                if isinstance(native, str) and native.isdecimal()
+                else native
+            )
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"native profile {label} is invalid")
+            result[key] = value
+            result[f"{key}_native_label"] = label
+            result[f"{key}_native"] = native
+    return result
+
+
+def _seconds(value: Any, label: str) -> float:
+    if not isinstance(value, str):
+        raise ValueError(f"native profile {label} is not formatted time")
+    match = re.fullmatch(r"(\d+):(\d{2}):(\d{2})(?:\.(\d+))?", value)
+    if match is None or int(match[2]) > 59 or int(match[3]) > 59:
+        raise ValueError(f"native profile {label} has invalid time {value!r}")
+    fractional = float(f"0.{match[4]}") if match[4] else 0.0
+    return int(match[1]) * 3600 + int(match[2]) * 60 + int(match[3]) + fractional

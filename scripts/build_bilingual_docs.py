@@ -4,21 +4,42 @@ The root project owns English; zh-TW owns its translated prose. Shared theme
 and scientific assets are copied for rendering, following Askr's child-project
 pattern. Neither a solver nor a notebook is executed.
 """
-from pathlib import Path
+
 import json
 import os
 import shutil
 import subprocess
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CHINESE = ROOT / "zh-TW"
 
 
+def main():
+    """Stage translations, render Chinese pages and verify both editions."""
+    if os.environ.get("QUARTO_PROJECT_RENDER_ALL") != "1":
+        return
+    stage_assets()
+    _render_chinese_project()
+    _write_english_geometry_redirect()
+    _write_bilingual_manifest()
+
+
 def stage_assets():
+    """Copy shared render inputs and translate the Chinese diagrams."""
+    _copy_shared_assets()
+    _translate_workflow()
+    _translate_source_diagrams()
+
+
+def _copy_shared_assets():
     for relative in ("_extensions", "docs/assets", "docs/images"):
         source, destination = ROOT / relative, CHINESE / relative
         if source.is_dir():
             shutil.copytree(source, destination, dirs_exist_ok=True)
+
+
+def _translate_workflow():
     labels = {
         "Source layout": "來源版圖",
         "Materials and electrical Nets": "材料與電氣網路",
@@ -39,6 +60,8 @@ def stage_assets():
         text = text.replace(">" + original + "<", ">" + translated + "<")
     workflow.write_text(text)
 
+
+def _translate_source_diagrams():
     diagram_labels = {
         "cpw-source.svg": {
             "Declared finite-ground CPW source geometry": "公開有限接地 CPW 來源幾何",
@@ -77,22 +100,27 @@ def stage_assets():
         diagram.write_text(content)
 
 
-def main():
-    if os.environ.get("QUARTO_PROJECT_RENDER_ALL") != "1":
-        return
-    stage_assets()
+def _render_chinese_project():
     child_render = ["quarto", "render", str(CHINESE)]
     if (CHINESE / "_quarto-pages.yml").is_file():
         child_render.extend(["--profile", "pages"])
     child_render.append("--no-execute")
     subprocess.run(child_render, cwd=ROOT, check=True)
+
+
+def _write_english_geometry_redirect():
     # Retain the earlier Preview's English SGB URL as a compatibility redirect.
     alias = ROOT / "_site/docs/concepts/geometry-en.html"
-    alias.write_text('<!doctype html><html lang="en"><head><meta charset="utf-8">'
-                     '<meta http-equiv="refresh" content="0;url=geometry.html">'
-                     '<title>SGB documentation</title></head><body>'
-                     '<a href="geometry.html">Read the English SGB documentation</a>'
-                     '</body></html>\n')
+    alias.write_text(
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta http-equiv="refresh" content="0;url=geometry.html">'
+        "<title>SGB documentation</title></head><body>"
+        '<a href="geometry.html">Read the English SGB documentation</a>'
+        "</body></html>\n"
+    )
+
+
+def _write_bilingual_manifest():
     source = ROOT / "_site"
     documents = ["index.html"] + sorted(
         str(path.relative_to(ROOT).with_suffix(".html"))
@@ -107,7 +135,9 @@ def main():
         "english": {"root": "/", "pages": documents},
         "zh-TW": {"root": "/zh-TW/", "pages": documents},
     }
-    (source / "bilingual-pages.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+    (source / "bilingual-pages.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+    )
 
 
 if __name__ == "__main__":

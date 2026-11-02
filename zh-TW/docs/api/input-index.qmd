@@ -6,9 +6,9 @@ scgsim-kind: "reference"
 scgsim-status: "CONVERGING"
 ---
 
-本頁由 `scripts/generate_knowledge_reference.py` 產生；請修改其正式輸入來源。
+本頁由 `scripts/generate_knowledge_reference.py` 產生；請修改正式來源後重建。
 
-依照[任務指南](../knowledge-guide.qmd)選擇閱讀路徑。本索引保留全部宣告名稱；各項宣告的參數適用範圍仍以所屬介面與契約為準。
+本索引列出九個公開 facade 的宣告名稱；名稱清單不取代各 API 的參數與行為契約。
 
 ## 宣告的公開匯出
 
@@ -52,29 +52,28 @@ scgsim-status: "CONVERGING"
 
 | 來源 | SHA-256 |
 |---|---|
-| `scripts/generate_knowledge_reference.py` | `43a9757093edbf6aa915ac236958766fe2cda2a140833adeb45e9c2c3d4a23b8` |
-| `docs/knowledge-sources.json` | `fc076c24747e9a7092656968764da5d79ad9d6237b9077b88a3095154224a9cd` |
-| `src/scgsim/aedt/epr/workflow.py` | `edd95ee3006c5582ddd62611a605e6f0753626cb02433f7bc42288fd85a906af` |
-| `docs/api/analyze-epr-usage.md` | `6b2dcdc4211cd1a2014e5d47aaf37e424a09ef9f5bc812d2bdf260dbf0c31d0c` |
-| `zh-TW/docs/api/analyze-epr-usage.md` | `d481ec5f0191f7996ad3b49cac1b5cd75550341f93caee1db1bc80ac34dd3e77` |
-| `src/scgsim/aedt/__init__.py` | `2169e3722387b61b6596cde6863e5068e036b804e74e5ef052fb611dccca92cf` |
+| `scripts/generate_knowledge_reference.py` | `753ed86a4f527917bb62becaca2b55fc57020da2bac29f2088285b75d4eae5ee` |
+| `docs/knowledge-sources.json` | `882be3152e0a30464e000571aff4dd23d8f032b9ba2a79ddc57953e086100948` |
+| `src/scgsim/aedt/epr/workflow.py` | `e820d10b5c7ef94a160d1e985a2466da5952c49522d656651f35c9bc313f4162` |
+| `docs/api/analyze-epr-usage.md` | `39dd5b84a8154ae373bc495141fc82d015ea59aa2210793c072f5c0d6069ddba` |
+| `zh-TW/docs/api/analyze-epr-usage.md` | `5cdfd9f0aa8b57e1dbd3365b3907235c12b4a33d985358b6eb321a0d15c7675c` |
+| `src/scgsim/aedt/__init__.py` | `d9b6b6fdca3d03f0657a8fd73d11ca395d060a6388e0722a4c8705b5c814a039` |
 | `src/scgsim/aedt/specs/__init__.py` | `face6e5583a1326d130bb35845350c0363c31bd2bc277664b271b385e9ec5ec3` |
-| `src/scgsim/geometry/__init__.py` | `64a4290c94f0e76586438c91571fae4d7bce67e7f446b484858b511602523b88` |
+| `src/scgsim/geometry/__init__.py` | `592524fe7659e8a336af03a3544270e996ccbbd510ea9e7cd16b0ae0bd668a35` |
 | `src/scgsim/geometry/compiler/__init__.py` | `5483f9a15796f25576abba930e87c08690961d64a5ba748261e2c24bdb880a69` |
-| `src/scgsim/geometry/models/__init__.py` | `856123e82f3bc804ac2cefe5df6965998087dc497b97a927173c82e59fe26abc` |
+| `src/scgsim/geometry/models/__init__.py` | `2fec191dd1d7708d1f7effe40cd01882d86d71a8263b1f2008cef33dccf692ad` |
 | `src/scgsim/palace/__init__.py` | `0a3c30f18b567db601db986607d922b1e7f897b1080b0e218ce7499f681e73c3` |
 | `src/scgsim/palace/mesh/quality/__init__.py` | `f8ba7cc897bbba9dda491709e1189dab2709ff82357759cc98f882f3c65ca5d7` |
-| `src/scgsim/semantics/__init__.py` | `938214ec20a26653fef3aff3c12bb0b66c13af131ad635af57576862ec1afd27` |
+| `src/scgsim/semantics/__init__.py` | `a1902da7627ee76ba95283fc2861b6d785400c303a09e6e875375f55a056e39c` |
 | `src/scgsim/visualization/__init__.py` | `181a1bf3c38a632bc163c6ac9ee55dcbc6ca1bcc85bc6bca3e16afbe43e21ad1` |
 
-上述輸入不包含目錄輸出的雜湊，因此詳細頁面可以綁定本索引，不會形成循環雜湊。
+## 未收錄於離線套件的公開文件
 
-## 未納入套件的公開文件
-
-套件收錄英文正式 QMD 頁面與 README。下列譯文、網站入口及維護來源保留於儲存庫。API 使用說明的 Markdown 會透過產生的詳細頁面收錄。
+README 與英文 `docs/*.qmd` 會收錄於離線 bundle；以下文件僅保留在儲存庫。
 
 - `.github/PULL_REQUEST_TEMPLATE.md`
 - `AGENTS.md`
+- `CODE_STYLE.md`
 - `MAINTAINING.md`
 - `_extensions/arfiligol/askr/THIRD_PARTY.md`
 - `docs/api/analyze-epr-usage.md`
@@ -83,8 +82,6 @@ scgsim-status: "CONVERGING"
 - `zh-TW/README.md`
 - `zh-TW/docs/api-migration.qmd`
 - `zh-TW/docs/api/analyze-epr-usage.md`
-- `zh-TW/docs/api/analyze_epr.qmd`
-- `zh-TW/docs/api/input-index.qmd`
 - `zh-TW/docs/architecture.qmd`
 - `zh-TW/docs/backend-support.qmd`
 - `zh-TW/docs/concepts/geometry.qmd`

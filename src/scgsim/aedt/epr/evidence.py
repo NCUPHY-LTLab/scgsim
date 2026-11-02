@@ -12,12 +12,16 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import cast
 
-from scgsim.aedt.epr.fields import validated_expression_readback
-
+from scgsim.aedt.epr.expression_codec import validated_expression_readback
 
 type EvidenceValue = (
-    None | bool | int | float | str
-    | tuple[EvidenceValue, ...] | Mapping[str, EvidenceValue]
+    None
+    | bool
+    | int
+    | float
+    | str
+    | tuple[EvidenceValue, ...]
+    | Mapping[str, EvidenceValue]
 )
 
 
@@ -70,11 +74,18 @@ class SavedCacheEvidence:
     observation: Mapping[str, EvidenceValue]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "submitted_items", _records(self.submitted_items, "cache items"))
-        object.__setattr__(self, "observation", _mapping(self.observation, "saved cache"))
+        object.__setattr__(
+            self, "submitted_items", _records(self.submitted_items, "cache items")
+        )
+        object.__setattr__(
+            self, "observation", _mapping(self.observation, "saved cache")
+        )
 
     @classmethod
-    def from_payload(cls, submitted_items: object, observation: object) -> SavedCacheEvidence:
+    def from_payload(
+        cls, submitted_items: object, observation: object
+    ) -> SavedCacheEvidence:
+        """Bind submitted cache items to the saved configuration subset."""
         submitted = _records(submitted_items, "cache items")
         observed = _mapping(observation, "saved cache")
         if not submitted:
@@ -83,16 +94,24 @@ class SavedCacheEvidence:
         if not isinstance(source, Mapping) or not source:
             raise RuntimeError("native preparation lacks fresh saved cache readback")
         expected = tuple(
-            {"title": item["title"], "expression": item["expression"], "intrinsics": item["intrinsics"]}
+            {
+                "title": item["title"],
+                "expression": item["expression"],
+                "intrinsics": item["intrinsics"],
+            }
             for item in submitted
         )
         # This is the producer's persisted-subset check, shared by later readers.
         # Optional observed convergence/frequency fields remain untouched.
-        if observed.get("use_cache_for") != ("Pass",) or observed.get("items") != expected:
+        if (
+            observed.get("use_cache_for") != ("Pass",)
+            or observed.get("items") != expected
+        ):
             raise RuntimeError("saved EPR cache persisted-subset readback mismatch")
         return cls(submitted, observed)
 
     def to_payload(self) -> dict[str, object]:
+        """Return detached saved cache observations."""
         return _payload(self.observation)
 
 
@@ -109,36 +128,60 @@ class PreparedEprEvidence:
     def __post_init__(self) -> None:
         object.__setattr__(self, "setup", _mapping(self.setup, "setup"))
         object.__setattr__(self, "cache", _mapping(self.cache, "cache"))
-        object.__setattr__(self, "expressions", _records(self.expressions, "expressions"))
-        object.__setattr__(self, "required_definitions", _mapping(self.required_definitions, "CLC definitions"))
+        object.__setattr__(
+            self, "expressions", _records(self.expressions, "expressions")
+        )
+        object.__setattr__(
+            self,
+            "required_definitions",
+            _mapping(self.required_definitions, "CLC definitions"),
+        )
 
     @classmethod
-    def from_payload(cls, receipt: object, *, evidence_root: Path) -> PreparedEprEvidence:
+    def from_payload(
+        cls, receipt: object, *, evidence_root: Path
+    ) -> PreparedEprEvidence:
+        """Validate setup, cache and required calculator-expression evidence."""
         payload = _mapping(receipt, "receipt")
         setup = _mapping(payload.get("setup"), "setup")
         cache = _mapping(payload.get("cache"), "cache")
         expressions = _records(payload.get("expressions"), "expressions")
         if not setup or not cache or not expressions:
-            raise RuntimeError("native preparation lacks setup/cache/expression readback")
-        saved = SavedCacheEvidence.from_payload(cache.get("items"), cache.get("serialized_readback"))
-        # Keep the historical CLC codec's list/dict wire representation.
-        expression_payloads = [cast(dict[str, object], _thaw(item)) for item in expressions]
-        required = validated_expression_readback(
-            expression_payloads, _payload(cache), evidence_root=evidence_root,
+            raise RuntimeError(
+                "native preparation lacks setup/cache/expression readback"
+            )
+        saved = SavedCacheEvidence.from_payload(
+            cache.get("items"), cache.get("serialized_readback")
         )
-        return cls(setup, cache, expressions, saved, _mapping(required, "CLC definitions"))
+        # Keep the historical CLC codec's list/dict wire representation.
+        expression_payloads = [
+            cast(dict[str, object], _thaw(item)) for item in expressions
+        ]
+        required = validated_expression_readback(
+            expression_payloads,
+            _payload(cache),
+            evidence_root=evidence_root,
+        )
+        return cls(
+            setup, cache, expressions, saved, _mapping(required, "CLC definitions")
+        )
 
     def to_payload(self) -> dict[str, object]:
+        """Return the established setup, cache and expression payload."""
         return {
-            "setup": _payload(self.setup), "cache": self.cache_payload(),
+            "setup": _payload(self.setup),
+            "cache": self.cache_payload(),
             "expressions": self.expression_payloads(),
         }
 
     def cache_payload(self) -> dict[str, object]:
+        """Detach the recorded cache configuration."""
         return _payload(self.cache)
 
     def expression_payloads(self) -> list[dict[str, object]]:
+        """Detach the ordered native-expression records."""
         return [_payload(item) for item in self.expressions]
 
     def required_definitions_payload(self) -> dict[str, object]:
+        """Detach the required calculator-expression definitions."""
         return _payload(self.required_definitions)

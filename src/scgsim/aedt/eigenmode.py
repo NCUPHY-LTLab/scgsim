@@ -9,6 +9,22 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from scgsim.aedt.epr.models import (
+    EprResult,
+)
+from scgsim.aedt.specs.common import (
+    LumpedRlc,
+)
+from scgsim.aedt.specs.epr import (
+    EprAnalysisRequest,
+    ExpressionCacheConvergence,
+    ExpressionCacheConvergenceSet,
+    PlanarJunction,
+    SurfaceEprSpec,
+)
+from scgsim.aedt.specs.geometry import (
+    PreparedPlanarGeometry,
+)
 from scgsim.geometry import (
     GeometryBuildInput,
     GeometryPlanSnapshot,
@@ -19,30 +35,14 @@ from scgsim.geometry import (
 from scgsim.semantics.epr import film_assumptions
 
 from .epr.analysis import reanalyze_epr
-from .preparation.planar import prepare_planar_geometry_input, validate_geometry_workers
-from scgsim.aedt.specs.epr import (
-    EprAnalysisRequest,
-    ExpressionCacheConvergence,
-    ExpressionCacheConvergenceSet,
-    PlanarJunction,
-    SurfaceEprSpec,
-)
-from scgsim.aedt.epr.models import (
-    EprResult,
-)
-from scgsim.aedt.specs.common import (
-    LumpedRlc,
-)
-from scgsim.aedt.specs.geometry import (
-    PreparedPlanarGeometry,
-)
-from .preparation.handoff import HandoffPlan
 from .preparation.geometry import prepare_hfss_eigenmode_from_geometry
+from .preparation.handoff import HandoffPlan
+from .preparation.planar import prepare_planar_geometry_input, validate_geometry_workers
 from .presentation.epr import show_epr
 from .results.resolve import ResolvedRun, resolve_results
 from .specs.common import AedtResources
-from .specs.modeling import Modeling, _modeling
 from .specs.hfss import EigenmodeRunControl
+from .specs.modeling import Modeling, modeling_from_value
 from .versions import normalize_aedt_version
 
 
@@ -66,7 +66,9 @@ class EigenmodeSim:
     junctions: tuple[PlanarJunction, ...] = ()
     lumped_rlcs: tuple[LumpedRlc, ...] = ()
     epr_request: EprAnalysisRequest | None = None
-    expression_convergence: ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None = None
+    expression_convergence: (
+        ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None
+    ) = None
     prepared_geometry: PreparedPlanarGeometry | None = field(default=None, init=False)
     handoff_plan: HandoffPlan | None = field(default=None, init=False)
     _plan_snapshot: GeometryPlanSnapshot | None = field(
@@ -74,7 +76,8 @@ class EigenmodeSim:
     )
 
     def __post_init__(self) -> None:
-        _modeling(self.modeling)
+        """Normalize the public modeling selector at construction time."""
+        modeling_from_value(self.modeling)
 
     def __setattr__(self, name: str, value: Any) -> None:
         if name == "aedt_version":
@@ -88,6 +91,7 @@ class EigenmodeSim:
         self.handoff_plan = None
 
     def set_geometry(self, component: Any | GeometryBuildInput) -> None:
+        """Replace the source geometry and invalidate its prepared model."""
         if self._plan_snapshot is not None:
             raise ValueError(
                 "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
@@ -117,61 +121,19 @@ class EigenmodeSim:
         self._invalidate_model()
 
     def set_stack(self, stack: Mapping[str, Any] | str | Path) -> None:
+        """Load, validate, and detach a stack without changing its JSON shape."""
         if self._plan_snapshot is not None:
             raise ValueError(
                 "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
             )
-        if isinstance(stack, Mapping):
-            payload = dict(stack)
-        elif isinstance(stack, (str, Path)):
-            source = Path(stack)
-            if not source.is_file():
-                raise FileNotFoundError(source)
-            payload = json.loads(source.read_text(encoding="utf-8"))
-        else:
-            raise TypeError("stack must be a mapping or JSON path")
-        if not isinstance(payload, Mapping):
-            raise TypeError("stack JSON root must be a mapping")
-        for key in ("materials", "solution_regions", "layers", "metadata"):
-            if key not in payload:
-                raise ValueError(f"stack lacks {key!r}")
-        materials = payload["materials"]
-        regions = payload["solution_regions"]
-        layers = payload["layers"]
-        metadata = payload["metadata"]
-        if (
-            not isinstance(materials, Mapping)
-            or not isinstance(regions, Mapping)
-            or not isinstance(layers, Sequence)
-            or isinstance(layers, (str, bytes))
-            or not isinstance(metadata, Mapping)
-        ):
-            raise TypeError(
-                "stack materials, solution_regions, and metadata must be mappings; layers must be a sequence"
-            )
-        if any(not isinstance(item, Mapping) for item in materials.values()):
-            raise TypeError("stack materials must contain mappings")
-        if any(not isinstance(item, Mapping) for item in regions.values()):
-            raise TypeError("stack solution_regions must contain mappings")
-        if any(not isinstance(item, Mapping) for item in layers):
-            raise TypeError("stack layers must contain mappings")
-        if any(
-            record.get("material_id", semantic_id) not in materials
-            for semantic_id, record in regions.items()
-        ):
-            raise ValueError("stack solution region references an unknown material")
-        if any(
-            record.get("material_id") not in materials
-            for record in layers
-            if "material_id" in record
-        ):
-            raise ValueError("stack layer references an unknown material")
-        detached = json.loads(json.dumps(payload, allow_nan=False))
+        payload = _stack_payload(stack)
+        detached = _validate_stack_payload(payload)
         self.stack = detached
         self._plan_snapshot = None
         self._invalidate_model()
 
     def set_output_dir(self, path: str | Path) -> None:
+        """Set the resolved output directory and invalidate any prepared handoff."""
         if not isinstance(path, (str, Path)):
             raise TypeError("output_dir must be a path string or Path")
         resolved = Path(path).expanduser().resolve()
@@ -187,7 +149,7 @@ class EigenmodeSim:
         resources: AedtResources | None = None,
         geometry_workers: int | None = None,
     ) -> None:
-        """Declare the native model identity and optional complete solve setup."""
+        """Declare native model identity and an optional complete solve setup."""
         if (
             not isinstance(project_name, str)
             or not project_name.strip()
@@ -199,7 +161,7 @@ class EigenmodeSim:
             raise ValueError("design_name must be non-empty text")
         if run_control is not None and not isinstance(run_control, EigenmodeRunControl):
             raise TypeError("run_control must be EigenmodeRunControl or None")
-        _modeling(self.modeling)
+        modeling_from_value(self.modeling)
         if resources is not None and not isinstance(resources, AedtResources):
             raise TypeError("resources must be AedtResources or None")
         validate_geometry_workers(geometry_workers)
@@ -217,6 +179,7 @@ class EigenmodeSim:
         contributions: Sequence[SurfaceEprSpec] = (),
         defaults: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> None:
+        """Set surface contributions and fill only missing authored defaults."""
         if isinstance(contributions, (str, bytes)):
             raise TypeError("contributions must be SurfaceEprSpec records")
         selected = tuple(contributions)
@@ -259,6 +222,7 @@ class EigenmodeSim:
         self._invalidate_model()
 
     def add_junction(self, junction: PlanarJunction) -> None:
+        """Append one junction after rejecting duplicate source identities."""
         if not isinstance(junction, PlanarJunction):
             raise TypeError("junction must be PlanarJunction")
         if junction.junction_id in {item.junction_id for item in self.junctions}:
@@ -267,6 +231,7 @@ class EigenmodeSim:
         self._invalidate_model()
 
     def set_epr_request(self, request: EprAnalysisRequest | None) -> None:
+        """Set the optional EPR request and discard a stale handoff plan."""
         if request is not None and not isinstance(request, EprAnalysisRequest):
             raise TypeError("request must be EprAnalysisRequest or None")
         self.epr_request = request
@@ -275,8 +240,13 @@ class EigenmodeSim:
     def set_expression_cache_convergence(
         self, control: ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None
     ) -> None:
-        if control is not None and not isinstance(control, (ExpressionCacheConvergence, ExpressionCacheConvergenceSet)):
-            raise TypeError("control must be a unit expression control, collection, or None")
+        """Set the optional expression-cache convergence control."""
+        if control is not None and not isinstance(
+            control, (ExpressionCacheConvergence, ExpressionCacheConvergenceSet)
+        ):
+            raise TypeError(
+                "control must be a unit expression control, collection, or None"
+            )
         self.expression_convergence = control
         self.handoff_plan = None
 
@@ -354,6 +324,7 @@ class EigenmodeSim:
         return InputSummary(data)
 
     def prepare_handoff(self) -> HandoffPlan:
+        """Prepare reusable geometry, then capture the AEDT execution handoff."""
         source_stack = (
             self._plan_snapshot.stack if self._plan_snapshot is not None else self.stack
         )
@@ -394,6 +365,7 @@ class EigenmodeSim:
         return plan
 
     def resolve_results(self, run_dir: str | Path | None = None) -> ResolvedRun:
+        """Resolve completed result evidence from the plan or explicit run path."""
         if run_dir is None:
             if self.handoff_plan is None:
                 raise ValueError("prepare_handoff() or an explicit run_dir is required")
@@ -407,6 +379,7 @@ class EigenmodeSim:
         surface_defaults: Mapping[str, Mapping[str, Any]] | None = None,
         group_overrides: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> EprResult:
+        """Reanalyze a detached EPR result with presentation-only overrides."""
         return reanalyze_epr(
             result, surface_defaults=surface_defaults, group_overrides=group_overrides
         )
@@ -419,4 +392,60 @@ class EigenmodeSim:
         native_pass: int | None = None,
         theme: str = "light",
     ) -> Any:
+        """Display one detached EPR result without running the solver."""
         return show_epr(result, mode=mode, native_pass=native_pass, theme=theme)
+
+
+def _stack_payload(stack: Mapping[str, Any] | str | Path) -> Mapping[str, Any]:
+    """Read stack JSON or copy the caller mapping, preserving root validation order."""
+    if isinstance(stack, Mapping):
+        payload = dict(stack)
+    elif isinstance(stack, (str, Path)):
+        source = Path(stack)
+        if not source.is_file():
+            raise FileNotFoundError(source)
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    else:
+        raise TypeError("stack must be a mapping or JSON path")
+    if not isinstance(payload, Mapping):
+        raise TypeError("stack JSON root must be a mapping")
+    return payload
+
+
+def _validate_stack_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate stack mappings in authored order, then return a JSON-detached copy."""
+    for key in ("materials", "solution_regions", "layers", "metadata"):
+        if key not in payload:
+            raise ValueError(f"stack lacks {key!r}")
+    materials = payload["materials"]
+    regions = payload["solution_regions"]
+    layers = payload["layers"]
+    metadata = payload["metadata"]
+    if (
+        not isinstance(materials, Mapping)
+        or not isinstance(regions, Mapping)
+        or not isinstance(layers, Sequence)
+        or isinstance(layers, (str, bytes))
+        or not isinstance(metadata, Mapping)
+    ):
+        raise TypeError(
+            "stack materials, solution_regions, and metadata must be mappings; layers must be a sequence"
+        )
+    if any(not isinstance(item, Mapping) for item in materials.values()):
+        raise TypeError("stack materials must contain mappings")
+    if any(not isinstance(item, Mapping) for item in regions.values()):
+        raise TypeError("stack solution_regions must contain mappings")
+    if any(not isinstance(item, Mapping) for item in layers):
+        raise TypeError("stack layers must contain mappings")
+    if any(
+        record.get("material_id", semantic_id) not in materials
+        for semantic_id, record in regions.items()
+    ):
+        raise ValueError("stack solution region references an unknown material")
+    if any(
+        record.get("material_id") not in materials
+        for record in layers
+        if "material_id" in record
+    ):
+        raise ValueError("stack layer references an unknown material")
+    return json.loads(json.dumps(dict(payload), allow_nan=False))

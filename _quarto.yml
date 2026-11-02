@@ -133,6 +133,8 @@ website:
     contents:
     - docs/reference.qmd
     - docs/backend-support.qmd
+    - docs/knowledge-guide.qmd
+    - docs/api/input-index.qmd
     - section: Geometry and physical model
       contents:
       - docs/geometry-sgb.qmd

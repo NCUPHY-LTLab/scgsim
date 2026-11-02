@@ -1,11 +1,15 @@
 """Conductor-bearing public polygon planning with the one physical context."""
 
+from dataclasses import replace
+
 import pytest
 
 from scgsim.geometry import (
     ApproximationProfile,
     GeometryBuildInput,
     LayoutPolygonSpec,
+    PortSheetOverlapRecord,
+    PortSheetRegionRecord,
     SemanticEntitySpec,
     interpret_physical_geometry,
 )
@@ -13,6 +17,7 @@ from scgsim.geometry.compiler import build_route_construction_plan
 
 
 def conductor_input():
+    """Build one conductor with its vacuum host and source stack."""
     metal_loop = ((0, 0), (4, 0), (4, 4), (0, 4))
     vacuum_loop = ((-2, -2), (6, -2), (6, 6), (-2, 6))
     polygon = LayoutPolygonSpec("metal_polygon", "metal", metal_loop)
@@ -78,6 +83,7 @@ def conductor_input():
 
 @pytest.mark.parametrize("route,profile", (("B", "route_b"), ("C", "solid")))
 def test_public_conductor_catalogue_forwards_existing_physical_context(route, profile):
+    """Verify that public conductor catalogue forwards existing physical context."""
     source, stack = conductor_input()
     effective, _, physical = interpret_physical_geometry(
         source, stack, ApproximationProfile(profile, "v1", {})
@@ -87,7 +93,9 @@ def test_public_conductor_catalogue_forwards_existing_physical_context(route, pr
         effective, route=route, representation_context=original_context
     )
     assert construction.surfaces and construction.volumes and construction.tags
-    assert any(surface.owner_semantic_id == "metal" for surface in construction.surfaces)
+    assert any(
+        surface.owner_semantic_id == "metal" for surface in construction.surfaces
+    )
     assert (
         tuple(map(tuple, effective.entities[0].geometry["outer_loop"]))
         == source.entities[0].geometry["outer_loop"]
@@ -102,15 +110,14 @@ def test_public_conductor_catalogue_forwards_existing_physical_context(route, pr
 
 
 def test_public_conductor_catalogue_still_rejects_missing_context():
+    """Verify that public conductor catalogue still rejects missing context."""
     source, _ = conductor_input()
     with pytest.raises(ValueError, match="physical_geometry"):
         build_route_construction_plan(source, route="B")
 
 
 def conductor_port_input():
-    from dataclasses import replace
-    from scgsim.geometry import PortSheetOverlapRecord, PortSheetRegionRecord
-
+    """Add terminal metals and an explicit port sheet with host overlaps."""
     source, stack = conductor_input()
     left = replace(
         source.entities[0],
@@ -202,6 +209,7 @@ def conductor_port_input():
 
 
 def test_public_port_catalogue_accepts_selected_route_only():
+    """Verify that public port catalogue accepts selected route only."""
     source, stack = conductor_port_input()
     effective, _, physical = interpret_physical_geometry(
         source, stack, ApproximationProfile("route_b", "v1", {})
@@ -229,6 +237,7 @@ def test_public_port_catalogue_accepts_selected_route_only():
 
 
 def test_route_c_ports_remain_explicitly_unsupported():
+    """Verify that route c ports remain explicitly unsupported."""
     source, stack = conductor_port_input()
     effective, _, physical = interpret_physical_geometry(
         source, stack, ApproximationProfile("solid", "v1", {})
@@ -249,8 +258,7 @@ def test_route_c_ports_remain_explicitly_unsupported():
     ),
 )
 def test_selected_route_keeps_existing_host_contracts(mutation, expected):
-    from dataclasses import replace
-
+    """Verify that selected route keeps existing host contracts."""
     source, stack = conductor_port_input()
     right = source.entities[1]
     if mutation == "role":
@@ -273,9 +281,3 @@ def test_selected_route_keeps_existing_host_contracts(mutation, expected):
         build_route_construction_plan(
             effective, route="B", representation_context=physical.context
         )
-
-
-
-
-
-
