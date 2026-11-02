@@ -273,7 +273,7 @@ def _require_material(
 
 
 def gds_layer(value: Any, semantic_id: str) -> tuple[int, int]:
-    """Read a nonnegative integer GDS layer and datatype pair."""
+    """Read an integer GDS layer and datatype pair."""
     if (
         isinstance(value, str | bytes)
         or not isinstance(value, Sequence)
