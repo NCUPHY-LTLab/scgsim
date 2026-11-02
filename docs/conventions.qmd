@@ -115,8 +115,9 @@ on backend; thin-film estimates contribute numerators and are not added to the
 denominator.
 
 [SPR]{#term-spr} means Surface Participation Ratio: estimated energy in a
-specified interface film divided by the backend's EPR normalization energy.
-It is an interface estimate, not automatically a disjoint part of total energy.
+specified interface film divided by the workflow's stated normalization energy.
+The denominator is workflow-dependent. SPR is an interface estimate, not
+automatically a disjoint part of total energy.
 
 For EPR and SPR, read the numerator and denominator together. They are
 dimensionless ratios; do not confuse them with percentages or with loss
