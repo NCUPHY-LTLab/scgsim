@@ -12,7 +12,7 @@ from typing import Any, Mapping
 
 
 def _corner_chord_statistics(
-    edges: set[tuple[int, int]], points: Mapping[int, tuple[float, ...]]
+    edges: set[tuple[int, ...]], points: Mapping[int, tuple[float, ...]]
 ) -> dict[str, Any]:
     """Measure unique primary-edge chords in Palace's micrometre coordinates."""
     lengths = [math.dist(points[a], points[b]) for a, b in edges]
@@ -28,7 +28,7 @@ def _corner_chord_statistics(
 
 def observe_native_mesh(groups: Mapping[str, Any]) -> dict[str, Any]:
     """Read final Gmsh connectivity before its native session is finalized."""
-    import gmsh
+    import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only on native paths.
 
     node_tags, coordinates, _ = gmsh.model.mesh.getNodes()
     points = {
@@ -53,46 +53,9 @@ def observe_native_mesh(groups: Mapping[str, Any]) -> dict[str, Any]:
                 reference_coordinates=[float(x) for x in reference],
             )
         )
-    regions = []
-    for dim, attribute in gmsh.model.getPhysicalGroups():
-        codes: dict[int, set[int]] = {}
-        region_edges: set[tuple[int, int]] = set()
-        for entity in gmsh.model.getEntitiesForPhysicalGroup(dim, attribute):
-            ts, ids, connectivity = gmsh.model.mesh.getElements(dim, int(entity))
-            for code, tags, nodes in zip(ts, ids, connectivity, strict=True):
-                codes.setdefault(int(code), set()).update(int(t) for t in tags)
-                if dim == 1:
-                    _, _, _, count, _, _ = gmsh.model.mesh.getElementProperties(code)
-                    endpoints = [
-                        int(n)
-                        for i in range(len(tags))
-                        for n in nodes[i * count : i * count + 2]
-                    ]
-                elif dim > 1:
-                    # Native edge topology avoids treating quad/hex diagonals as edges.
-                    endpoints = gmsh.model.mesh.getElementEdgeNodes(
-                        int(code), int(entity), primary=True
-                    )
-                else:
-                    endpoints = ()
-                region_edges.update(
-                    tuple(sorted((int(endpoints[i]), int(endpoints[i + 1]))))
-                    for i in range(0, len(endpoints), 2)
-                )
-        regions.append(
-            dict(
-                dimension=int(dim),
-                attribute=int(attribute),
-                name=gmsh.model.getPhysicalName(dim, attribute),
-                element_count=sum(len(v) for v in codes.values()),
-                element_types={str(k): len(v) for k, v in codes.items()},
-                corner_chord_edge_lengths=_corner_chord_statistics(
-                    region_edges, points
-                ),
-            )
-        )
-    edges: set[tuple[int, int]] = set()
-    faces: set[tuple[int, int, int]] = set()
+    regions = _observe_physical_regions(points)
+    edges: set[tuple[int, ...]] = set()
+    faces: set[tuple[int, ...]] = set()
     tetrahedra: set[int] = set()
     vertices: set[int] = set()
     shared: dict[tuple[int, ...], tuple[int, ...]] = {}
@@ -205,3 +168,49 @@ def summary_from_files(
         mesh_sha256=hashlib.sha256(mesh_path.read_bytes()).hexdigest(),
         manifest_sha256=hashlib.sha256(payload).hexdigest(),
     )
+
+
+def _observe_physical_regions(
+    points: Mapping[int, tuple[float, ...]],
+) -> list[dict[str, Any]]:
+    import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only on native paths.
+
+    regions = []
+    for dim, attribute in gmsh.model.getPhysicalGroups():
+        codes: dict[int, set[int]] = {}
+        region_edges: set[tuple[int, ...]] = set()
+        for entity in gmsh.model.getEntitiesForPhysicalGroup(dim, attribute):
+            ts, ids, connectivity = gmsh.model.mesh.getElements(dim, int(entity))
+            for code, tags, nodes in zip(ts, ids, connectivity, strict=True):
+                codes.setdefault(int(code), set()).update(int(t) for t in tags)
+                if dim == 1:
+                    _, _, _, count, _, _ = gmsh.model.mesh.getElementProperties(code)
+                    endpoints = [
+                        int(n)
+                        for i in range(len(tags))
+                        for n in nodes[i * count : i * count + 2]
+                    ]
+                elif dim > 1:
+                    # Native edge topology avoids treating quad/hex diagonals as edges.
+                    endpoints = gmsh.model.mesh.getElementEdgeNodes(
+                        int(code), int(entity), primary=True
+                    )
+                else:
+                    endpoints = ()
+                region_edges.update(
+                    tuple(sorted((int(endpoints[i]), int(endpoints[i + 1]))))
+                    for i in range(0, len(endpoints), 2)
+                )
+        regions.append(
+            dict(
+                dimension=int(dim),
+                attribute=int(attribute),
+                name=gmsh.model.getPhysicalName(dim, attribute),
+                element_count=sum(len(v) for v in codes.values()),
+                element_types={str(k): len(v) for k, v in codes.items()},
+                corner_chord_edge_lengths=_corner_chord_statistics(
+                    region_edges, points
+                ),
+            )
+        )
+    return regions

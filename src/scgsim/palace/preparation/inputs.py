@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 
 
-def _non_negative_number(value: Any, name: str) -> float:
+def non_negative_number(value: Any, name: str) -> float:
+    """Validate the finite nonnegative scalar used by problem inputs."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be a finite non-negative number.")
     result = float(value)
@@ -18,7 +19,8 @@ def _non_negative_number(value: Any, name: str) -> float:
     return result
 
 
-def _load_stack(stack: Mapping[str, Any] | str | Path) -> Mapping[str, Any]:
+def load_stack(stack: Mapping[str, Any] | str | Path) -> Mapping[str, Any]:
+    """Read a stack mapping from an explicit mapping, JSON text, or file."""
     if isinstance(stack, Mapping):
         return dict(stack)
     if isinstance(stack, Path):
@@ -49,9 +51,11 @@ def _load_stack(stack: Mapping[str, Any] | str | Path) -> Mapping[str, Any]:
     return dict(payload)
 
 
-def _validate_stack_material_kinds(
+def validate_stack_material_kinds(
     stack: Mapping[str, Any], materials: Mapping[str, Mapping[str, Any]]
 ) -> None:
+    """Require explicit material kinds for solution regions and metal layers."""
+
     def material_kind(material_id: Any, owner: str) -> str:
         if not isinstance(material_id, str) or material_id not in materials:
             raise ValueError(f"{owner} must reference an explicit stack material_id.")
@@ -85,4 +89,4 @@ def _validate_stack_material_kinds(
             raise ValueError("metal layer material must have conductor kind.")
 
 
-__all__ = ["_load_stack", "_non_negative_number", "_validate_stack_material_kinds"]
+__all__ = ["load_stack", "non_negative_number", "validate_stack_material_kinds"]

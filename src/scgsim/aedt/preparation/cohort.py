@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-
 from collections.abc import Mapping
-
 from pathlib import Path
 
-from scgsim.aedt._io import file_sha256, read_json
-
-from scgsim.aedt.specs.hfss import HfssEprAnalysisSpec, HfssEprSpec, HfssDrivenGeometrySpec
-
+from scgsim.aedt.io import file_sha256, read_json
+from scgsim.aedt.specs.hfss import (
+    HfssDrivenGeometrySpec,
+    HfssEprAnalysisSpec,
+    HfssEprSpec,
+)
 from scgsim.aedt.specs.parse import AedtSpec
-
 from scgsim.aedt.specs.q2d import Q2dSpec
-
 from scgsim.aedt.specs.q3d import Q3dSpec
-
 
 MANIFEST_PATH = "metadata/aedt_handoff_manifest.json"
 
@@ -28,6 +25,7 @@ GEOMETRY_SOURCE_PATHS = {
 
 
 def canonical_handoff_paths(spec: AedtSpec) -> list[str]:
+    """Return the complete canonical file set for one prepared workflow."""
     paths = ["run_aedt.sh", "aedt_spec.json"]
     if isinstance(spec, HfssEprAnalysisSpec):
         paths.extend(f"saved/{item['path']}" for item in spec.saved_solution.members)
@@ -48,6 +46,7 @@ def canonical_handoff_paths(spec: AedtSpec) -> list[str]:
 
 
 def canonical_member_paths(spec: AedtSpec) -> list[str]:
+    """Return canonical manifest members excluding the manifest itself."""
     return [path for path in canonical_handoff_paths(spec) if path != MANIFEST_PATH]
 
 
@@ -87,18 +86,34 @@ def validate_geometry_source(
         raise RuntimeError("Q3D geometry trace mapping differs from the sealed spec")
 
 
-def validate_hfss_import_source(root: Path, raw_payload: Mapping, spec: AedtSpec) -> None:
+def validate_hfss_import_source(
+    root: Path, raw_payload: Mapping, spec: AedtSpec
+) -> None:
     """Bind explicit native import lineage to immutable original GDS bytes."""
-    if isinstance(spec, (HfssEprSpec, HfssEprAnalysisSpec, HfssDrivenGeometrySpec, Q2dSpec, Q3dSpec)):
+    if isinstance(
+        spec,
+        (HfssEprSpec, HfssEprAnalysisSpec, HfssDrivenGeometrySpec, Q2dSpec, Q3dSpec),
+    ):
         return
     if spec.modeling is None:
         return  # Historical inventories retain their original source contract.
     gds = raw_payload["gds"]
-    if gds.get("source_path") != "geometry/source.gds" or gds.get("path") != "geometry/design.gds":
+    if (
+        gds.get("source_path") != "geometry/source.gds"
+        or gds.get("path") != "geometry/design.gds"
+    ):
         raise RuntimeError("HFSS source/import GDS paths are not canonical")
     if file_sha256(root / "geometry/source.gds") != gds.get("source_sha256"):
         raise RuntimeError("HFSS original GDS source identity differs")
-    keys = ("layer", "datatype", "layer_name", "physical_layer_id", "native_import_layer")
-    expected = [{key: item[key] for key in keys} for item in spec.effective_layer_imports]
+    keys = (
+        "layer",
+        "datatype",
+        "layer_name",
+        "physical_layer_id",
+        "native_import_layer",
+    )
+    expected = [
+        {key: item[key] for key in keys} for item in spec.effective_layer_imports
+    ]
     if gds.get("import_layer_map") != expected:
         raise RuntimeError("HFSS import layer mapping differs from declared source")

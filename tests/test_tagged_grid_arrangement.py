@@ -1,28 +1,30 @@
 """Public constructive grid regressions; no native mesher or study geometry."""
 
-from fractions import Fraction
 import json
 import threading
+from fractions import Fraction
 
 import pytest
-from shapely import Polygon, Point, coverage_is_valid, union_all
+from shapely import Point, Polygon, coverage_is_valid, union_all
 
-from scgsim.geometry._primitives.grid import GridOperand, build_grid_arrangement
-from scgsim.geometry._primitives._tagged_grid import (
-    _PointIndex,
-    _pixel_interval,
-    _source_paths,
-    build_tagged_subdivision,
-)
 from scgsim.geometry.models.grid import GeometryGridContext
+from scgsim.geometry.primitives.grid import GridOperand, build_grid_arrangement
+from scgsim.geometry.primitives.tagged_grid import (
+    PointIndex,
+    build_tagged_subdivision,
+    pixel_interval,
+    source_paths,
+)
 from scgsim.preparation import preparation_resources
 
 
 def rectangle(x0, y0, x1, y1):
+    """Return a counter-clockwise rectangular ring for the given bounds."""
     return ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
 
 
 def operands_for(polygons):
+    """Convert source polygons to ordered grid operands."""
     return tuple(
         GridOperand(
             str(index),
@@ -36,18 +38,21 @@ def operands_for(polygons):
 
 
 def construct(polygons, grid):
+    """Build source operands and their tagged grid subdivision."""
     values = operands_for(polygons)
     shapes = dict(zip((v.operand_id for v in values), polygons, strict=True))
     return values, build_tagged_subdivision(values, shapes, grid)
 
 
 def disk_fixture():
+    """Build a rectangular parent and three overlapping disk operands."""
     return (Polygon(rectangle(-5, -5, 5, 5)),) + tuple(
         Point(x, y).buffer(3.2, quad_segs=8) for x, y in ((-1, 0), (1, 0), (0, 1))
     )
 
 
 def test_global_partition_preserves_parent_before_any_resnap_union():
+    """Verify that global partition preserves parent before any resnap union."""
     polygons = disk_fixture()
     values, result = construct(polygons, 0.1)
     parent_cells = [cell for cell, owners in result.cells if "0" in owners]
@@ -66,6 +71,7 @@ def test_global_partition_preserves_parent_before_any_resnap_union():
 
 
 def test_reversed_holes_and_opposed_coincident_origins_remain_distinct():
+    """Verify that reversed holes and opposed coincident origins remain distinct."""
     outer, hole = rectangle(-3, -3, 3, 3), rectangle(-1, -1, 1, 1)
     polygons = (
         Polygon(rectangle(-5, -5, 5, 5)),
@@ -88,7 +94,7 @@ def test_reversed_holes_and_opposed_coincident_origins_remain_distinct():
         (2, 1),
     }
     opposed = []
-    for edge, origins in result.edge_origins:
+    for _edge, origins in result.edge_origins:
         if len(origins) > 1:
             assert {
                 result.source_paths[index].operand_index for index, _ in origins
@@ -106,11 +112,12 @@ def test_reversed_holes_and_opposed_coincident_origins_remain_distinct():
     ),
 )
 def test_native_half_ties_bind_endpoint_incidence(grid, triangle):
+    """Verify that native half ties bind endpoint incidence."""
     polygons = (Polygon(rectangle(-5, -5, 5, 5)), Polygon(triangle))
     _, result = construct(polygons, grid)
     source = [path for path in result.source_paths if path.operand_index == 1]
     assert source
-    for first, second in zip(source, (*source[1:], source[0])):
+    for first, second in zip(source, (*source[1:], source[0]), strict=False):
         assert first.nodes[-1] == second.nodes[0]
     joined = union_all(
         [cell for cell, owners in result.cells if "0" in owners], grid_size=0
@@ -119,6 +126,7 @@ def test_native_half_ties_bind_endpoint_incidence(grid, triangle):
 
 
 def test_contacts_and_zero_area_source_origins_are_not_deleted():
+    """Verify that contacts and zero area source origins are not deleted."""
     polygons = (
         Polygon(rectangle(-5, -5, 5, 5)),
         Polygon(rectangle(0, 0, 0.25, 2)),
@@ -147,6 +155,7 @@ def test_contacts_and_zero_area_source_origins_are_not_deleted():
 
 
 def test_direction_and_missing_endpoint_context_are_explicit_refusals():
+    """Verify that direction and missing endpoint context are explicit refusals."""
     bowtie = GridOperand("invalid", ((0, 0), (2, 2), (0, 2), (2, 0)))
     with pytest.raises(ValueError, match="source ring direction") as caught:
         build_grid_arrangement((bowtie,), GeometryGridContext(1))
@@ -154,21 +163,22 @@ def test_direction_and_missing_endpoint_context_are_explicit_refusals():
     assert context == dict(operand_index=0, ring_index=0)
     row = ("owner", 0, 0, 0, (0, 0), (2, 0), ((0, 0), (2, 0)), 1)
     with pytest.raises(ValueError, match="source endpoint pixel incidence"):
-        _source_paths((row,), _PointIndex.build(((0, 0),)), 1)
+        source_paths((row,), PointIndex.build(((0, 0),)), 1)
     # Exact half-open geometry: point-touching top/right is excluded, while
     # the lower-left corner belongs to the pixel. No numerical tolerance.
     assert (
-        _pixel_interval(
+        pixel_interval(
             (Fraction(1, 2), Fraction(1, 2)), (Fraction(1), Fraction(1)), (0, 0)
         )
         is None
     )
-    assert _pixel_interval(
+    assert pixel_interval(
         (Fraction(-1, 2), Fraction(-1, 2)), (Fraction(-1), Fraction(-1)), (0, 0)
     ) == (0, 0)
 
 
 def test_parallel_source_paths_preserve_exact_graph_and_real_worker_execution():
+    """Verify that parallel source paths preserve exact graph and real worker execution."""
     polygons = disk_fixture()
     values, serial = construct(polygons, 0.1)
     main = threading.get_ident()
@@ -177,7 +187,7 @@ def test_parallel_source_paths_preserve_exact_graph_and_real_worker_execution():
     old = threading.getprofile()
 
     def observe(frame, event, arg):
-        if event == "call" and frame.f_code is _source_paths.__code__:
+        if event == "call" and frame.f_code is source_paths.__code__:
             with lock:
                 seen.add(threading.get_ident())
 
@@ -201,7 +211,8 @@ def test_parallel_source_paths_preserve_exact_graph_and_real_worker_execution():
 
 
 def test_cached_pure_partition_does_not_cache_or_skip_physical_failure_audits():
-    from scgsim.geometry._primitives._grid_cache import _ACTIVE, grid_work_cache_scope
+    """Verify that cached pure partition does not cache or skip physical failure audits."""
+    from scgsim.geometry.primitives.grid_cache import ACTIVE, grid_work_cache_scope  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     thin = GridOperand("thin", rectangle(0, 0, 0.25, 2), contact=False)
     with grid_work_cache_scope():
@@ -212,12 +223,12 @@ def test_cached_pure_partition_does_not_cache_or_skip_physical_failure_audits():
             ) as caught:
                 build_grid_arrangement((thin,), GeometryGridContext(1))
             errors.append(caught.value)
-            cached = tuple(_ACTIVE.get().values.values())
+            cached = tuple(ACTIVE.get().values.values())
             assert len(cached) == 1
             assert len(cached[0].subdivision.source_paths) == 4
         assert errors[0] is not errors[1]
         assert errors[0].__notes__ == errors[1].__notes__
-    assert _ACTIVE.get() is None
+    assert ACTIVE.get() is None
 
 
 @pytest.mark.parametrize(
@@ -237,13 +248,15 @@ def test_cached_pure_partition_does_not_cache_or_skip_physical_failure_audits():
 def test_presnap_raw_context_recovers_public_native_network(polygons):
     # These raw source edges need native pre-snap nodes before pixel traversal.
     # The second case has integer-grid input, including a remote affected pixel.
+    """Verify that presnap raw context recovers public native network."""
     values, result = construct(polygons, 1)
     assert all(origins for _, origins in result.edge_origins)
     assert len(result.source_paths) == sum(len(p.exterior.coords) - 1 for p in polygons)
     for owner in range(len(polygons)):
         paths = [p for p in result.source_paths if p.operand_index == owner]
         assert all(
-            a.nodes[-1] == b.nodes[0] for a, b in zip(paths, (*paths[1:], paths[0]))
+            a.nodes[-1] == b.nodes[0]
+            for a, b in zip(paths, (*paths[1:], paths[0]), strict=False)
         )
     parent = union_all([cell for cell, owners in result.cells if "0" in owners])
     assert parent.geom_type == "Polygon" and not parent.interiors
@@ -263,16 +276,18 @@ def test_presnap_raw_context_recovers_public_native_network(polygons):
 
 
 def test_directed_offline_nodes_use_geometric_secondary_order():
-    from scgsim.geometry._primitives._tagged_grid import _raw_chain
+    """Verify that directed offline nodes use geometric secondary order."""
+    from scgsim.geometry.primitives.tagged_grid import raw_chain  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     # Equal dominant coordinates must use direction-aware geometry, not tag ID.
     nodes = {(0, 0), (10, 1), (5, 0.51), (5, 0.49)}
-    assert _raw_chain((0, 0), (10, 1), nodes) == ((0, 0), (5, 0.49), (5, 0.51), (10, 1))
-    assert _raw_chain((10, 1), (0, 0), nodes) == ((10, 1), (5, 0.51), (5, 0.49), (0, 0))
+    assert raw_chain((0, 0), (10, 1), nodes) == ((0, 0), (5, 0.49), (5, 0.51), (10, 1))
+    assert raw_chain((10, 1), (0, 0), nodes) == ((10, 1), (5, 0.51), (5, 0.49), (0, 0))
 
 
 def test_cache_reuses_raw_polygons_but_repeats_contact_audit():
-    from scgsim.geometry._primitives._grid_cache import _ACTIVE, grid_work_cache_scope
+    """Verify that cache reuses raw polygons but repeats contact audit."""
+    from scgsim.geometry.primitives.grid_cache import ACTIVE, grid_work_cache_scope  # noqa: PLC0415 -- keep the internal algorithm dependency scoped to its contract test
 
     values = (
         GridOperand("A", rectangle(0, 0, 1.1, 1)),
@@ -285,12 +300,14 @@ def test_cache_reuses_raw_polygons_but_repeats_contact_audit():
             with pytest.raises(ValueError, match="contact changed") as caught:
                 build_grid_arrangement(values, GeometryGridContext(1))
             errors.append(caught.value)
-            current = next(iter(_ACTIVE.get().values.values()))
+            current = next(iter(ACTIVE.get().values.values()))
             if work is not None:
                 assert current is work
                 assert all(
                     a[1] is b[1]
-                    for a, b in zip(current.raw_polygons, work.raw_polygons)
+                    for a, b in zip(
+                        current.raw_polygons, work.raw_polygons, strict=False
+                    )
                 )
             work = current
         assert errors[0] is not errors[1]

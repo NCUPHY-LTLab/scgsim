@@ -1,4 +1,4 @@
-"""Canonical geometry records. Keep source facts distinct from compiler records; reexports share these exact definitions."""
+"""Canonical interfaces, topology, surfaces, and volumes for geometry plans."""
 
 from __future__ import annotations
 

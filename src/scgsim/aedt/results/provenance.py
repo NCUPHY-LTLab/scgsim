@@ -2,25 +2,104 @@
 
 from __future__ import annotations
 
-
 import hashlib
-
 import json
-
 import re
-
 import subprocess
-
 from collections.abc import Mapping
-
 from importlib.metadata import PackageNotFoundError, distribution
-
 from pathlib import Path
+from typing import Any, Literal, cast
 
-from typing import Any, Literal
-
-from scgsim.aedt._io import file_sha256
-
+from scgsim.aedt.io import file_sha256
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA as SOURCE_SCHEMA,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V1 as SOURCE_SCHEMA_V1,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V2 as SOURCE_SCHEMA_V2,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V3 as SOURCE_SCHEMA_V3,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V4 as SOURCE_SCHEMA_V4,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V5 as SOURCE_SCHEMA_V5,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V6 as SOURCE_SCHEMA_V6,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V7 as SOURCE_SCHEMA_V7,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V8 as SOURCE_SCHEMA_V8,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V9 as SOURCE_SCHEMA_V9,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V10 as SOURCE_SCHEMA_V10,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V11 as SOURCE_SCHEMA_V11,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V12 as SOURCE_SCHEMA_V12,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V13 as SOURCE_SCHEMA_V13,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V15 as SOURCE_SCHEMA_V15,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V16 as SOURCE_SCHEMA_V16,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V17 as SOURCE_SCHEMA_V17,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V18 as SOURCE_SCHEMA_V18,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V19 as SOURCE_SCHEMA_V19,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V20 as SOURCE_SCHEMA_V20,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V21 as SOURCE_SCHEMA_V21,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V22 as SOURCE_SCHEMA_V22,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V23 as SOURCE_SCHEMA_V23,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V24 as SOURCE_SCHEMA_V24,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V25 as SOURCE_SCHEMA_V25,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V26 as SOURCE_SCHEMA_V26,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V27 as SOURCE_SCHEMA_V27,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V28 as SOURCE_SCHEMA_V28,
+)
+from scgsim.aedt.results.runtime_inventory import (
+    current_runtime_source_paths,
+    runtime_source_paths,
+)
 
 RECEIPT_V1 = "scgsim.aedt.receipt.v1"
 
@@ -28,336 +107,31 @@ RECEIPT_V2 = "scgsim.aedt.receipt.v2"
 
 RECEIPT_V3 = "scgsim.aedt.receipt.v3"
 
-SOURCE_SCHEMA_V1 = "scgsim.aedt.runtime-source.v1"
-
-SOURCE_SCHEMA_V2 = "scgsim.aedt.runtime-source.v2"
-
-SOURCE_SCHEMA_V3 = "scgsim.aedt.runtime-source.v3"
-
-SOURCE_SCHEMA_V4 = "scgsim.aedt.runtime-source.v4"
-
-SOURCE_SCHEMA_V5 = "scgsim.aedt.runtime-source.v5"
-
-SOURCE_SCHEMA_V6 = "scgsim.aedt.runtime-source.v6"
-
-SOURCE_SCHEMA_V7 = "scgsim.aedt.runtime-source.v7"
-
-SOURCE_SCHEMA_V8 = "scgsim.aedt.runtime-source.v8"
-
-SOURCE_SCHEMA_V9 = "scgsim.aedt.runtime-source.v9"
-
-SOURCE_SCHEMA_V10 = "scgsim.aedt.runtime-source.v10"
-
-SOURCE_SCHEMA_V11 = "scgsim.aedt.runtime-source.v11"
-
-SOURCE_SCHEMA_V12 = "scgsim.aedt.runtime-source.v12"
-
-SOURCE_SCHEMA_V13 = "scgsim.aedt.runtime-source.v13"
-
-SOURCE_SCHEMA_V15 = "scgsim.aedt.runtime-source.v15"
-
-SOURCE_SCHEMA_V16 = "scgsim.aedt.runtime-source.v16"
-
-SOURCE_SCHEMA_V17 = "scgsim.aedt.runtime-source.v17"
-
-SOURCE_SCHEMA_V18 = "scgsim.aedt.runtime-source.v18"
-
-SOURCE_SCHEMA_V19 = "scgsim.aedt.runtime-source.v19"
-
-SOURCE_SCHEMA_V20 = "scgsim.aedt.runtime-source.v20"
-
-SOURCE_SCHEMA_V21 = "scgsim.aedt.runtime-source.v21"
-
-SOURCE_SCHEMA_V22 = "scgsim.aedt.runtime-source.v22"
-
-SOURCE_SCHEMA_V23 = "scgsim.aedt.runtime-source.v23"
-
-SOURCE_SCHEMA_V24 = "scgsim.aedt.runtime-source.v24"
-
-SOURCE_SCHEMA_V25 = "scgsim.aedt.runtime-source.v25"
-
-SOURCE_SCHEMA = SOURCE_SCHEMA_V25
-
-_RUNTIME_SOURCE_V1_MODULES = (
-    "_hfss_convergence.py",
-    "_hfss_runtime.py",
-    "_matrix_export.py",
-    "_native_common.py",
-    "_q2d_convergence.py",
-    "_q2d_runtime.py",
-    "_q3d_runtime.py",
-    "_runtime_provenance.py",
-    "handoff.py",
-    "resolve.py",
-    "run.py",
-    "spec.py",
-    "util.py",
-)
-
-_RUNTIME_SOURCE_V1_PATHS = tuple(
-    f"scgsim/aedt/{name}" for name in sorted(_RUNTIME_SOURCE_V1_MODULES)
-)
-
-_RUNTIME_SOURCE_V2_PATHS = tuple(
-    sorted(
-        (
-            *_RUNTIME_SOURCE_V1_PATHS,
-            "scgsim/aedt/_epr_eigenmode.py",
-            "scgsim/aedt/_epr_fields.py",
-            "scgsim/aedt/_epr_geometry.py",
-            "scgsim/aedt/_epr_models.py",
-            "scgsim/aedt/_epr_results.py",
-            "scgsim/semantics/route_a.py",
-            "scgsim/sgb/planning.py",
-        )
-    )
-)
-
-_RUNTIME_SOURCE_V3_PATHS = tuple(
-    sorted((*_RUNTIME_SOURCE_V2_PATHS, "scgsim/aedt/_benchmark.py"))
-)
-
-_RUNTIME_SOURCE_V4_PATHS = tuple(
-    sorted((*_RUNTIME_SOURCE_V3_PATHS, "scgsim/aedt/_presentation.py"))
-)
-
-_RUNTIME_SOURCE_V5_PATHS = tuple(
-    sorted(
-        (
-            *_RUNTIME_SOURCE_V4_PATHS,
-            "scgsim/sgb/geometry_plan.py",
-            "scgsim/sgb/__init__.py",
-        )
-    )
-)
-
-_RUNTIME_SOURCE_V6_PATHS = tuple(
-    sorted(
-        (
-            *_RUNTIME_SOURCE_V5_PATHS,
-            "scgsim/sgb/summary.py",
-        )
-    )
-)
-
-_RUNTIME_SOURCE_V7_PATHS = tuple(
-    sorted(
-        (
-            *_RUNTIME_SOURCE_V6_PATHS,
-            "scgsim/_notebook_presentation.py",
-        )
-    )
-)
-
-_RUNTIME_SOURCE_V8_PATHS = tuple(
-    sorted(
-        (
-            *_RUNTIME_SOURCE_V7_PATHS,
-            "scgsim/aedt/_junction_partition.py",
-        )
-    )
-)
-
-_RUNTIME_SOURCE_V9_PATHS = tuple(
-    sorted(
-        (
-            *_RUNTIME_SOURCE_V8_PATHS,
-            "scgsim/aedt/__init__.py",
-            "scgsim/aedt/_q3d_geometry.py",
-            "scgsim/sgb/adapter.py",
-            "scgsim/sgb/stack.py",
-        )
-    )
-)
-
-_RUNTIME_SOURCE_V10_PATHS = tuple(
-    sorted((*_RUNTIME_SOURCE_V9_PATHS, "scgsim/aedt/_handoff_cohort.py"))
-)
-
-_RUNTIME_SOURCE_V11_PATHS = tuple(
-    sorted((*_RUNTIME_SOURCE_V10_PATHS, "scgsim/aedt/_q3d_bodies.py"))
-)
-
-_RUNTIME_SOURCE_V12_PATHS = _RUNTIME_SOURCE_V11_PATHS
-
-_RUNTIME_SOURCE_V13_PATHS = (
-    "src/scgsim/aedt/__init__.py",
-    "src/scgsim/aedt/_io.py",
-    "src/scgsim/aedt/eigenmode.py",
-    "src/scgsim/aedt/epr/analysis.py",
-    "src/scgsim/aedt/epr/cache.py",
-    "src/scgsim/aedt/epr/fields.py",
-    "src/scgsim/aedt/epr/geometry.py",
-    "src/scgsim/aedt/epr/junction_partition.py",
-    "src/scgsim/aedt/epr/models.py",
-    "src/scgsim/aedt/epr/native.py",
-    "src/scgsim/aedt/epr/selection.py",
-    "src/scgsim/aedt/epr/workflow.py",
-    "src/scgsim/aedt/preparation/cohort.py",
-    "src/scgsim/aedt/preparation/geometry.py",
-    "src/scgsim/aedt/preparation/handoff.py",
-    "src/scgsim/aedt/preparation/q3d_geometry.py",
-    "src/scgsim/aedt/presentation/benchmark.py",
-    "src/scgsim/aedt/presentation/epr.py",
-    "src/scgsim/aedt/presentation/runs.py",
-    "src/scgsim/aedt/results/benchmark.py",
-    "src/scgsim/aedt/results/convergence/common.py",
-    "src/scgsim/aedt/results/convergence/hfss.py",
-    "src/scgsim/aedt/results/convergence/q2d.py",
-    "src/scgsim/aedt/results/convergence/q3d.py",
-    "src/scgsim/aedt/results/epr.py",
-    "src/scgsim/aedt/results/matrices.py",
-    "src/scgsim/aedt/results/provenance.py",
-    "src/scgsim/aedt/results/resolve.py",
-    "src/scgsim/aedt/run.py",
-    "src/scgsim/aedt/runtime/benchmark.py",
-    "src/scgsim/aedt/runtime/families/hfss.py",
-    "src/scgsim/aedt/runtime/families/q2d.py",
-    "src/scgsim/aedt/runtime/families/q3d.py",
-    "src/scgsim/aedt/runtime/native/common.py",
-    "src/scgsim/aedt/runtime/native/q3d_bodies.py",
-    "src/scgsim/aedt/runtime/transaction.py",
-    "src/scgsim/aedt/specs/common.py",
-    "src/scgsim/aedt/specs/hfss.py",
-    "src/scgsim/aedt/specs/parse.py",
-    "src/scgsim/aedt/specs/q2d.py",
-    "src/scgsim/aedt/specs/q3d.py",
-    "src/scgsim/geometry/__init__.py",
-    "src/scgsim/geometry/_primitives/entities.py",
-    "src/scgsim/geometry/_primitives/loops.py",
-    "src/scgsim/geometry/_primitives/spatial.py",
-    "src/scgsim/geometry/compiler/dispatch.py",
-    "src/scgsim/geometry/compiler/validation.py",
-    "src/scgsim/geometry/planning/domain.py",
-    "src/scgsim/geometry/planning/interfaces.py",
-    "src/scgsim/geometry/planning/ports.py",
-    "src/scgsim/geometry/planning/surfaces.py",
-    "src/scgsim/geometry/planning/tags.py",
-    "src/scgsim/geometry/planning/topology.py",
-    "src/scgsim/geometry/planning/volumes.py",
-    "src/scgsim/geometry/source/adapter.py",
-    "src/scgsim/geometry/source/plan.py",
-    "src/scgsim/geometry/source/stack.py",
-    "src/scgsim/geometry/source/summary.py",
-    "src/scgsim/geometry/source/validation.py",
-    "src/scgsim/presentation/notebook.py",
-    "src/scgsim/semantics/route_a.py",
-)
-
-
-_RUNTIME_SOURCE_V15_PATHS = tuple(
-    sorted(
-        (
-            *_RUNTIME_SOURCE_V13_PATHS,
-            "src/scgsim/aedt/specs/modeling.py",
-            "src/scgsim/geometry/_primitives/geometry_refs.py",
-            "src/scgsim/geometry/_primitives/surface_records.py",
-            "src/scgsim/geometry/planning/evidence.py",
-            "src/scgsim/geometry/source/intents.py",
-            "src/scgsim/geometry/source/_normalization.py",
-        )
-    )
-)
-
-_RUNTIME_SOURCE_V16_PATHS = tuple(
-    sorted(
-        (
-            *_RUNTIME_SOURCE_V15_PATHS,
-            "src/scgsim/aedt/runtime/native/hfss_eigenmode.py",
-        )
-    )
-)
-
-_RUNTIME_SOURCE_V17_PATHS = tuple(
-    sorted(
-        (
-            *_RUNTIME_SOURCE_V16_PATHS,
-            "src/scgsim/geometry/models/lumped.py",
-            "src/scgsim/aedt/specs/__init__.py",
-            "src/scgsim/aedt/runtime/native/hfss_lumped.py",
-        )
-    )
-)
 
 # V17 remains a frozen historical inventory. V18 follows the current AEDT
 # ownership split and declares the relocated helpers and neutral geometry
 # representation used by the current candidate.
-_RUNTIME_SOURCE_V18_PATHS = tuple(
-    sorted(
-        (
-            set(_RUNTIME_SOURCE_V17_PATHS)
-            - {"src/scgsim/aedt/epr/junction_partition.py"}
-            | {
-                "src/scgsim/aedt/_data.py",
-                "src/scgsim/aedt/_rlc.py",
-                "src/scgsim/aedt/_terminal_chain.py",
-                "src/scgsim/aedt/specs/geometry.py",
-                "src/scgsim/aedt/specs/epr.py",
-                "src/scgsim/aedt/specs/_support.py",
-                "src/scgsim/aedt/preparation/modeling.py",
-                "src/scgsim/aedt/preparation/planar.py",
-                "src/scgsim/aedt/preparation/junction_partition.py",
-                "src/scgsim/aedt/runtime/native/hfss_geometry.py",
-                "src/scgsim/geometry/models/representation.py",
-                "src/scgsim/geometry/planning/representation.py",
-                "src/scgsim/geometry/source/ground.py",
-                "src/scgsim/geometry/source/_polygon_ops.py",
-            }
-        )
-    )
-)
 
 
 # V1–V18 inventories remain historical; V19 adds the public model-stage reader.
-_RUNTIME_SOURCE_V19_PATHS = tuple(
-    sorted((*_RUNTIME_SOURCE_V18_PATHS, "src/scgsim/aedt/results/prepared.py"))
-)
 
 
 # V1–V19 remain exact historical inventories. V20 binds the sole neutral
 # physical interpreter and its source serialization dependency.
-_RUNTIME_SOURCE_V20_PATHS = tuple(sorted((*_RUNTIME_SOURCE_V19_PATHS,
-    "src/scgsim/geometry/models/physical.py",
-    "src/scgsim/geometry/planning/physical.py",
-    "src/scgsim/semantics/snapshot.py",
-)))
 
 
 # V1–V20 retain exact historical scopes; V21 adds shared memory attribution.
-_RUNTIME_SOURCE_V21_PATHS = tuple(
-    sorted((*_RUNTIME_SOURCE_V20_PATHS, "src/scgsim/aedt/_benchmark.py"))
-)
 
 
 # V1–V21 remain exact historical inventories; V22 binds explicit version
 # selection and the native compatibility routing used by that selection.
-_RUNTIME_SOURCE_V22_PATHS = tuple(
-    sorted(
-        (
-            *_RUNTIME_SOURCE_V21_PATHS,
-            "src/scgsim/aedt/versions.py",
-            "src/scgsim/aedt/runtime/native/compatibility.py",
-        )
-    )
-)
 
 
-_RUNTIME_SOURCE_V23_PATHS = tuple(
-    sorted((*_RUNTIME_SOURCE_V22_PATHS, "src/scgsim/aedt/batch.py"))
-)
+# V1–V25 retain their historical module paths and receipt interpretation.
+# V26 records current implementation owners after responsibility splits.
+# V27 retains its committed ordered closure. V28 records the current AST-resolved
+# internal import closure as a frozen roster.
 
-
-_RUNTIME_SOURCE_V24_PATHS = tuple(sorted((
-    *_RUNTIME_SOURCE_V23_PATHS,
-    "src/scgsim/aedt/epr/evidence.py",
-    "src/scgsim/aedt/runtime/batch_protocol.py",
-    "src/scgsim/aedt/runtime/batch_runner.py",
-)))
-
-_RUNTIME_SOURCE_V25_PATHS = tuple(sorted((
-    *_RUNTIME_SOURCE_V24_PATHS,
-    "src/scgsim/aedt/runtime/control.py",
-)))
 
 def _module_manifest() -> list[dict[str, str]]:
     source_root = Path(__file__).resolve().parents[3]
@@ -367,7 +141,7 @@ def _module_manifest() -> list[dict[str, str]]:
             "path": path,
             "sha256": file_sha256(source_root / path.removeprefix("src/")),
         }
-        for path in _RUNTIME_SOURCE_V25_PATHS
+        for path in current_runtime_source_paths()
     ]
 
 
@@ -457,32 +231,7 @@ def validate_runtime_source(
         raise RuntimeError(f"{stage} runtime source provenance is invalid")
     modules = value.get("modules")
     schema = value.get("schema_version")
-    expected_paths = {
-        SOURCE_SCHEMA_V1: _RUNTIME_SOURCE_V1_PATHS,
-        SOURCE_SCHEMA_V2: _RUNTIME_SOURCE_V2_PATHS,
-        SOURCE_SCHEMA_V3: _RUNTIME_SOURCE_V3_PATHS,
-        SOURCE_SCHEMA_V4: _RUNTIME_SOURCE_V4_PATHS,
-        SOURCE_SCHEMA_V5: _RUNTIME_SOURCE_V5_PATHS,
-        SOURCE_SCHEMA_V6: _RUNTIME_SOURCE_V6_PATHS,
-        SOURCE_SCHEMA_V7: _RUNTIME_SOURCE_V7_PATHS,
-        SOURCE_SCHEMA_V8: _RUNTIME_SOURCE_V8_PATHS,
-        SOURCE_SCHEMA_V9: _RUNTIME_SOURCE_V9_PATHS,
-        SOURCE_SCHEMA_V10: _RUNTIME_SOURCE_V10_PATHS,
-        SOURCE_SCHEMA_V11: _RUNTIME_SOURCE_V11_PATHS,
-        SOURCE_SCHEMA_V12: _RUNTIME_SOURCE_V12_PATHS,
-        SOURCE_SCHEMA_V13: _RUNTIME_SOURCE_V13_PATHS,
-        SOURCE_SCHEMA_V15: _RUNTIME_SOURCE_V15_PATHS,
-        SOURCE_SCHEMA_V16: _RUNTIME_SOURCE_V16_PATHS,
-        SOURCE_SCHEMA_V17: _RUNTIME_SOURCE_V17_PATHS,
-        SOURCE_SCHEMA_V18: _RUNTIME_SOURCE_V18_PATHS,
-        SOURCE_SCHEMA_V19: _RUNTIME_SOURCE_V19_PATHS,
-        SOURCE_SCHEMA_V20: _RUNTIME_SOURCE_V20_PATHS,
-        SOURCE_SCHEMA_V21: _RUNTIME_SOURCE_V21_PATHS,
-        SOURCE_SCHEMA_V22: _RUNTIME_SOURCE_V22_PATHS,
-        SOURCE_SCHEMA_V23: _RUNTIME_SOURCE_V23_PATHS,
-        SOURCE_SCHEMA_V24: _RUNTIME_SOURCE_V24_PATHS,
-        SOURCE_SCHEMA_V25: _RUNTIME_SOURCE_V25_PATHS,
-    }.get(schema)
+    expected_paths = runtime_source_paths(schema)
     if (
         expected_paths is None
         or value.get("stage") != stage
@@ -490,44 +239,7 @@ def validate_runtime_source(
         or len(modules) != len(expected_paths)
     ):
         raise RuntimeError(f"{stage} runtime source provenance is invalid")
-    paths: list[str] = []
-    for item in modules:
-        expected_module = (
-            item["path"].removeprefix("src/").removesuffix(".py").replace("/", ".")
-            if isinstance(item, dict) and isinstance(item.get("path"), str)
-            else None
-        )
-        if (
-            not isinstance(item, dict)
-            or set(item) != {"module", "path", "sha256"}
-            or item["module"] != expected_module
-            or not isinstance(item["path"], str)
-            or not item["path"].startswith(
-                "src/scgsim/"
-                if schema
-                in {
-                    SOURCE_SCHEMA_V13,
-                    SOURCE_SCHEMA_V15,
-                    SOURCE_SCHEMA_V16,
-                    SOURCE_SCHEMA_V17,
-                    SOURCE_SCHEMA_V18,
-                    SOURCE_SCHEMA_V19,
-                    SOURCE_SCHEMA_V20,
-                    SOURCE_SCHEMA_V21,
-                    SOURCE_SCHEMA_V22,
-                    SOURCE_SCHEMA_V23,
-                    SOURCE_SCHEMA_V24,
-                    SOURCE_SCHEMA_V25,
-                }
-                else "scgsim/"
-            )
-            or Path(item["path"]).is_absolute()
-            or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"])
-        ):
-            raise RuntimeError(f"{stage} runtime source module manifest is invalid")
-        paths.append(item["path"])
-    if tuple(paths) != expected_paths:
-        raise RuntimeError(f"{stage} runtime source module manifest is invalid")
+    _validate_module_records(modules, expected_paths, schema, stage)
     if value.get("content_sha256") != _content_digest(modules):
         raise RuntimeError(f"{stage} runtime source content digest is invalid")
     if stage == "prepared":
@@ -553,6 +265,9 @@ def validate_runtime_source(
         SOURCE_SCHEMA_V23,
         SOURCE_SCHEMA_V24,
         SOURCE_SCHEMA_V25,
+        SOURCE_SCHEMA_V26,
+        SOURCE_SCHEMA_V27,
+        SOURCE_SCHEMA_V28,
     }:
         if set(value) != {
             "schema_version",
@@ -606,6 +321,56 @@ def validate_runtime_source(
             raise RuntimeError("actual runtime source legacy identity is invalid")
 
 
+def _validate_module_records(
+    modules: list[Any],
+    expected_paths: tuple[str, ...],
+    schema: Any,
+    stage: str,
+) -> None:
+    """Check ordered module identities before validating the enclosing digest."""
+    paths: list[str] = []
+    for item in modules:
+        expected_module = (
+            item["path"].removeprefix("src/").removesuffix(".py").replace("/", ".")
+            if isinstance(item, dict) and isinstance(item.get("path"), str)
+            else None
+        )
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"module", "path", "sha256"}
+            or item["module"] != expected_module
+            or not isinstance(item["path"], str)
+            or not item["path"].startswith(
+                "src/scgsim/"
+                if schema
+                in {
+                    SOURCE_SCHEMA_V13,
+                    SOURCE_SCHEMA_V15,
+                    SOURCE_SCHEMA_V16,
+                    SOURCE_SCHEMA_V17,
+                    SOURCE_SCHEMA_V18,
+                    SOURCE_SCHEMA_V19,
+                    SOURCE_SCHEMA_V20,
+                    SOURCE_SCHEMA_V21,
+                    SOURCE_SCHEMA_V22,
+                    SOURCE_SCHEMA_V23,
+                    SOURCE_SCHEMA_V24,
+                    SOURCE_SCHEMA_V25,
+                    SOURCE_SCHEMA_V26,
+                    SOURCE_SCHEMA_V27,
+                    SOURCE_SCHEMA_V28,
+                }
+                else "scgsim/"
+            )
+            or Path(item["path"]).is_absolute()
+            or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"])
+        ):
+            raise RuntimeError(f"{stage} runtime source module manifest is invalid")
+        paths.append(item["path"])
+    if tuple(paths) != expected_paths:
+        raise RuntimeError(f"{stage} runtime source module manifest is invalid")
+
+
 def _validate_revision_observation(value: Any, *, stage: str) -> None:
     """Unavailable VCS provenance is distinct from missing measured code bytes."""
     if not isinstance(value, dict):
@@ -620,7 +385,7 @@ def _validate_revision_observation(value: Any, *, stage: str) -> None:
         raise RuntimeError(f"{stage} runtime source revision observation is invalid")
 
 
-def initial_receipt_payload(
+def initial_receipt_payload(  # noqa: PLR0913 -- retain the versioned codec's explicit keyword interface.
     *,
     schema_version: str,
     mode: Any,
@@ -663,7 +428,7 @@ def initial_receipt_payload(
 def encode_initial_receipt(value: Mapping[str, Any]) -> bytes:
     """Encode exact historical initial-receipt bytes with fixed indentation."""
     canonical = initial_receipt_payload(
-        schema_version=value.get("schema_version"),
+        schema_version=cast(str, value.get("schema_version")),
         mode=value.get("mode"),
         requested=value.get("requested"),
         pdk_materials=value.get("pdk_materials"),

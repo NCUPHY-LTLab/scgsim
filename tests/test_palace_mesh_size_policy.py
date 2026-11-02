@@ -1,13 +1,15 @@
 """Public mesh policy/state and transport contracts; no native mesh proof."""
 
-from copy import deepcopy
+import builtins
 import json
+from copy import deepcopy
 
 import pytest
 
 from scgsim.geometry import ApproximationProfile
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 from scgsim.palace.mesh.controls import MeshSizing
+from scgsim.palace.mesh.refinement import apply_mesh_sizing
 from scgsim.palace.preparation.config import configure_numerical_controls
 
 
@@ -15,6 +17,7 @@ from scgsim.palace.preparation.config import configure_numerical_controls
     params=(EigenmodeSim, ElectrostaticSim), ids=("eigenmode", "electrostatic")
 )
 def sim(request):
+    """Create each supported Palace facade with its explicit representation profile."""
     return request.param(
         route="B", approximation_profile=ApproximationProfile("route_b", "v1", {})
     )
@@ -28,6 +31,7 @@ def _sizing(sim):
 
 
 def test_default_and_omitted_policy_preserve_legacy_custom_sizes(sim):
+    """Retain chosen custom mesh sizes when later settings omit them."""
     assert _sizing(sim) == (
         ("gmsh_default", None, None)
         if isinstance(sim, EigenmodeSim)
@@ -43,6 +47,7 @@ def test_default_and_omitted_policy_preserve_legacy_custom_sizes(sim):
 
 
 def test_gmsh_policy_clears_stale_sizes_and_omission_retains_it(sim):
+    """Clear custom sizes on native-policy selection and retain that selection."""
     sim.set_mesh(
         size_policy="scgsim_default", refined_mesh_size=10.0, max_mesh_size=200.0
     )
@@ -61,6 +66,7 @@ def test_gmsh_policy_clears_stale_sizes_and_omission_retains_it(sim):
     ),
 )
 def test_gmsh_with_explicit_sizes_rejects_before_mutating_controls(sim, sizes):
+    """Reject conflicting native-policy sizes atomically."""
     sim.set_mesh(
         size_policy="scgsim_default", refined_mesh_size=10.0, max_mesh_size=200.0
     )
@@ -71,6 +77,7 @@ def test_gmsh_with_explicit_sizes_rejects_before_mutating_controls(sim, sizes):
 
 
 def test_switch_to_scg_restores_defaults_or_explicit_sizes(sim):
+    """Restore custom-policy defaults or explicitly supplied sizes."""
     sim.set_mesh(
         size_policy="scgsim_default", refined_mesh_size=10.0, max_mesh_size=200.0
     )
@@ -87,6 +94,7 @@ def test_switch_to_scg_restores_defaults_or_explicit_sizes(sim):
 def test_numerical_without_sizes_preserves_gmsh_and_explicit_sizes_reject_atomically(
     sim,
 ):
+    """Retain the native size policy while updating unrelated numerical controls."""
     sim.set_mesh(size_policy="gmsh_default")
     sim.set_numerical(order=2, max_iterations=2000)
     assert _sizing(sim) == ("gmsh_default", None, None)
@@ -104,6 +112,7 @@ def test_numerical_without_sizes_preserves_gmsh_and_explicit_sizes_reject_atomic
 def test_mesh_sizing_and_numerical_json_codecs_retain_explicit_policy(
     policy, lower, upper
 ):
+    """Round-trip sizing choices through the existing JSON transport."""
     sizing = MeshSizing(
         size_policy=policy, refined_mesh_size=lower, max_mesh_size=upper
     )
@@ -119,9 +128,7 @@ def test_mesh_sizing_and_numerical_json_codecs_retain_explicit_policy(
 
 
 def test_native_sizing_leaves_groups_untouched_without_importing_gmsh(monkeypatch):
-    import builtins
-    from scgsim.palace.mesh.build import _apply_mesh_sizing
-
+    """Leave native sizing and groups untouched without loading the native library."""
     original_import = builtins.__import__
 
     def guarded_import(name, *args, **kwargs):
@@ -132,5 +139,5 @@ def test_native_sizing_leaves_groups_untouched_without_importing_gmsh(monkeypatc
     groups = {"boundary_surfaces": {"surface": {"tags": (1,), "phys_group": [2]}}}
     before = deepcopy(groups)
     monkeypatch.setattr(builtins, "__import__", guarded_import)
-    _apply_mesh_sizing(groups, MeshSizing("gmsh_default", None, None))
+    apply_mesh_sizing(groups, MeshSizing("gmsh_default", None, None))
     assert groups == before

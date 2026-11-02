@@ -1,15 +1,18 @@
 """Public file-only request production; no native project or success evidence."""
+
 from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+from pathlib import Path
 
 from scgsim.aedt import (
-    AedtResources, EigenmodeRunControl, PreparedPlanarGeometry,
+    AedtResources,
+    EigenmodeRunControl,
+    PreparedPlanarGeometry,
     prepare_hfss_eigenmode_from_geometry,
 )
 from scgsim.aedt.specs.parse import parse_aedt_spec
@@ -17,34 +20,58 @@ from scgsim.geometry import ApproximationProfile, interpret_physical_layers
 
 
 def _digest(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 def file_only_geometry():
     # Structural codec input: no claim of native body/field adequacy.
+    """Build structural geometry input for file-only preparation without native evidence."""
     physical = interpret_physical_layers((), ApproximationProfile("solid", "v1", {}))
-    source = {"materials": {"vacuum": {"kind": "vacuum", "permittivity": 1.0}},
-              "modeling": physical.to_payload(), "conductors": []}
+    source = {
+        "materials": {"vacuum": {"kind": "vacuum", "permittivity": 1.0}},
+        "modeling": physical.to_payload(),
+        "conductors": [],
+    }
     model = {"modeling": "solid", "source": source, "junctions": []}
-    complete = {**model, "contribution_catalog": [], "contributions": [], "surface_bindings": []}
+    complete = {
+        **model,
+        "contribution_catalog": [],
+        "contributions": [],
+        "surface_bindings": [],
+    }
     return PreparedPlanarGeometry(
-        modeling="solid", source=source, junctions=(), contribution_catalog=(),
-        contributions=(), surface_bindings=(), model_sha256=_digest(model),
+        modeling="solid",
+        source=source,
+        junctions=(),
+        contribution_catalog=(),
+        contributions=(),
+        surface_bindings=(),
+        model_sha256=_digest(model),
         source_sha256=_digest(complete),
     )
 
 
 def produce_request(root: Path, version="2024.2"):
+    """Produce a real file-only eigenmode handoff with explicit version and controls."""
     return prepare_hfss_eigenmode_from_geometry(
-        aedt_version=version, modeling="solid", geometry=file_only_geometry(),
-        project_name="ProtocolSource", design_name="Design", output_dir=root,
+        aedt_version=version,
+        modeling="solid",
+        geometry=file_only_geometry(),
+        project_name="ProtocolSource",
+        design_name="Design",
+        output_dir=root,
         run_control=EigenmodeRunControl("Setup", 1.0, 1, 3, 1.0),
         resources=AedtResources(2, 8),
     )
 
 
 class PublicPreparationTests(unittest.TestCase):
+    """Verify file-only public preparation and its immutable handoff artifacts."""
+
     def test_both_versions_produce_real_not_run_handoff_and_archive(self):
+        """Produce matching not-run handoffs and exact archives for both supported versions."""
         with tempfile.TemporaryDirectory() as temporary:
             for version in ("2023.2", "2024.2"):
                 with self.subTest(version=version):
@@ -58,15 +85,24 @@ class PublicPreparationTests(unittest.TestCase):
                     self.assertEqual(receipt["status"], "not_run")
                     self.assertEqual(receipt["requested"]["aedt_version"], version)
                     self.assertFalse((plan.run_dir / "ProtocolSource.aedt").exists())
-                    manifest = json.loads((plan.run_dir / "metadata/aedt_handoff_manifest.json").read_text())
+                    manifest = json.loads(
+                        (
+                            plan.run_dir / "metadata/aedt_handoff_manifest.json"
+                        ).read_text()
+                    )
                     for item in manifest["members"]:
                         body = (plan.run_dir / item["path"]).read_bytes()
                         self.assertEqual(len(body), item["bytes"])
-                        self.assertEqual(hashlib.sha256(body).hexdigest(), item["sha256"])
+                        self.assertEqual(
+                            hashlib.sha256(body).hexdigest(), item["sha256"]
+                        )
                     with tarfile.open(plan.archive_path) as archive:
-                        self.assertEqual(set(archive.getnames()), set(manifest["allowed_paths"]))
+                        self.assertEqual(
+                            set(archive.getnames()), set(manifest["allowed_paths"])
+                        )
 
     def test_public_preparation_preserves_fresh_output_failure(self):
+        """Reject an existing output directory without changing the original request bytes."""
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "run"
             produce_request(root)

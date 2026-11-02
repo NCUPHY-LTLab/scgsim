@@ -1,0 +1,71 @@
+[importlinter]
+root_package = scgsim
+include_external_packages = True
+
+[importlinter:contract:backend-independence]
+name = Solver backends remain independent
+type = independence
+modules =
+    scgsim.aedt
+    scgsim.palace
+
+[importlinter:contract:geometry-source]
+name = Geometry source and models do not depend on planning or construction
+type = forbidden
+source_modules =
+    scgsim.geometry.source
+    scgsim.geometry.models
+forbidden_modules =
+    scgsim.geometry.planning
+    scgsim.geometry.construction
+    scgsim.geometry.compiler
+
+[importlinter:contract:geometry-preparation-does-not-depend-on-compiler]
+name = Geometry planning and construction do not depend on compiler
+type = forbidden
+source_modules =
+    scgsim.geometry.planning
+    scgsim.geometry.construction
+forbidden_modules =
+    scgsim.geometry.compiler
+
+[importlinter:contract:shared-geometry]
+name = Shared geometry does not depend on a solver backend
+type = forbidden
+source_modules =
+    scgsim.geometry
+forbidden_modules =
+    scgsim.aedt
+    scgsim.palace
+
+[importlinter:contract:semantics]
+name = Semantic facts remain independent of geometry solvers and presentation
+type = forbidden
+source_modules =
+    scgsim.semantics
+forbidden_modules =
+    scgsim.geometry
+    scgsim.aedt
+    scgsim.palace
+    scgsim.presentation
+    scgsim.visualization
+    scgsim.preparation
+    scgsim.diagnostics
+    numpy
+    plotly
+    gdsfactory
+    gdstk
+    gmsh
+    shapely
+    pyvista
+    meshio
+    ansys
+
+[importlinter:contract:shared-presentation]
+name = Shared presentation formats values without solver dependencies
+type = forbidden
+source_modules =
+    scgsim.presentation
+forbidden_modules =
+    scgsim.aedt
+    scgsim.palace

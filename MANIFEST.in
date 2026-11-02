@@ -1,4 +1,4 @@
-include _build_backend.py
+include build_backend.py
 include README.md
 recursive-include docs *.qmd
 recursive-include docs/assets *
