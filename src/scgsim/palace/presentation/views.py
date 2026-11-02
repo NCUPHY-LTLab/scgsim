@@ -43,8 +43,7 @@ class SimulationBenchmarkReport:
     show_details: bool = False
 
     def _ipython_display_(self) -> None:
-        # Notebook display is optional for detached result processing.
-        from IPython.display import HTML, display  # noqa: PLC0415
+        from IPython.display import HTML, display  # noqa: PLC0415 -- IPython is optional; detached result reading needs no notebook runtime.
 
         display(HTML(self.trust.benchmark_cards_html()))
         display(
@@ -100,8 +99,7 @@ class PhysicsQuantitiesReport:
         return bool(read_surface_mask_bindings(index_map))
 
     def _ipython_display_(self) -> None:
-        # Notebook display is optional for detached result processing.
-        from IPython.display import HTML, display  # noqa: PLC0415
+        from IPython.display import HTML, display  # noqa: PLC0415 -- IPython is optional; detached result reading needs no notebook runtime.
 
         display(HTML(self._heading_html()))
         snapshots = self.snapshots

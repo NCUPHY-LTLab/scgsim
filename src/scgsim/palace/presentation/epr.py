@@ -65,11 +65,8 @@ def show_epr(result: Any, *, mode: int | None = None) -> Any:
 
     view = _show_view(result, mode=mode)
     row = view["row"]
-    # Plotly loads only when the caller requests a figure.
-    from plotly import graph_objects as go  # noqa: PLC0415
-
-    # Plotly loads only when the caller requests a figure.
-    from plotly.subplots import make_subplots  # noqa: PLC0415
+    from plotly import graph_objects as go  # noqa: PLC0415 -- Defer heavy Plotly loading until a figure is requested.
+    from plotly.subplots import make_subplots  # noqa: PLC0415 -- Defer heavy Plotly loading until a figure is requested.
 
     figure = make_subplots(
         rows=3, cols=1, subplot_titles=("Surface", "Bulk", "Palace port")

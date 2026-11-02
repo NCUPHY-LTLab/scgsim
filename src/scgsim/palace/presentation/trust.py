@@ -176,9 +176,7 @@ class PalaceTrustReport:
     ) -> None:
         """Display trust, benchmark, and available physics in the shared order."""
 
-        # Notebook display is optional for detached result processing.
-
-        from IPython.display import display  # noqa: PLC0415
+        from IPython.display import display  # noqa: PLC0415 -- IPython is optional; detached result reading needs no notebook runtime.
 
         trust = self.show_run_trustworthiness(
             theme=theme,
@@ -207,8 +205,7 @@ class PalaceTrustReport:
         )
 
     def _ipython_display_(self) -> None:
-        # Notebook display is optional for detached result processing.
-        from IPython.display import HTML, display  # noqa: PLC0415
+        from IPython.display import HTML, display  # noqa: PLC0415 -- IPython is optional; detached result reading needs no notebook runtime.
 
         display(HTML(self.identity_html()))
         items = self._convergence_items()

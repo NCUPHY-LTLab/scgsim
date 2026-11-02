@@ -81,7 +81,7 @@ class _MeshSelection:
 
     def cells(self, dimension: int, attribute: int) -> Any:
         """Extract cells for one exact physical identity."""
-        import numpy as np  # noqa: PLC0415 - visualization is an optional heavy dependency.
+        import numpy as np  # noqa: PLC0415 -- Defer NumPy array loading until preview geometry is requested.
 
         ids = np.flatnonzero(
             (self.dimensions == dimension) & (self.physical == attribute)
@@ -128,7 +128,7 @@ def _bind_mesh_selection(
     mesh: Any, grid: Any, mesh_manifest: Mapping[str, Any]
 ) -> _MeshSelection:
     """Validate physical tags and bind their exact structured manifest records."""
-    import numpy as np  # noqa: PLC0415 - visualization is an optional heavy dependency.
+    import numpy as np  # noqa: PLC0415 -- Defer NumPy array loading until preview geometry is requested.
 
     physical_blocks = mesh.cell_data.get("gmsh:physical")
     if physical_blocks is None or len(physical_blocks) != len(mesh.cells):
@@ -405,8 +405,8 @@ def _high_order_grid(mesh: Any, manifest: Mapping[str, Any], pv: Any) -> Any:
     simplices retain Gmsh order, so native reference lattices supply the exact
     permutation instead of dropping their non-corner nodes.
     """
-    import numpy as np  # noqa: PLC0415 - optional visualization dependency.
-    from meshio._vtk_common import meshio_to_vtk_type  # noqa: PLC0415  # private-import: meshio exposes its VTK cell-code mapping only through this module.
+    import numpy as np  # noqa: PLC0415 -- Defer NumPy array loading until preview geometry is requested.
+    from meshio._vtk_common import meshio_to_vtk_type  # noqa: PLC0415 -- meshio is optional and needed only for VTK previews.  # private-import: meshio exposes its VTK cell-code mapping only through this module.
     from vtkmodules.vtkCommonDataModel import (  # noqa: PLC0415 - optional VTK runtime.
         vtkLagrangeCurve,
         vtkLagrangeTetra,

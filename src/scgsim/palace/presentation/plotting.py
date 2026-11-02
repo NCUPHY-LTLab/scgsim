@@ -284,8 +284,7 @@ def show_figure(fig: Any) -> None:
 def plotly() -> Any:
     """Load optional Plotly rendering only when a caller requests a figure."""
     try:
-        # Plotly loads only when the caller requests a figure.
-        import plotly.graph_objects as go  # noqa: PLC0415
+        import plotly.graph_objects as go  # noqa: PLC0415 -- Defer heavy Plotly loading until a figure is requested.
     except ImportError as exc:
         raise RuntimeError(
             "plotly is not available; install plotly to render Palace trustworthiness figures."

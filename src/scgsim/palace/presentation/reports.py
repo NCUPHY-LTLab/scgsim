@@ -101,9 +101,7 @@ def show_all_results(
     if not isinstance(result, ResolvedRunData):
         raise TypeError("resolved result report requires ResolvedPalaceResult.")
 
-    # Notebook display is optional for detached result processing.
-
-    from IPython.display import display  # noqa: PLC0415
+    from IPython.display import display  # noqa: PLC0415 -- IPython is optional; detached result reading needs no notebook runtime.
 
     trust = show_run_trustworthiness(
         result,
