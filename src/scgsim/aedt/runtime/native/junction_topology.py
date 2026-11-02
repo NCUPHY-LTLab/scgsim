@@ -33,6 +33,29 @@ def native_coordinates_close(left, right) -> bool:
     )
 
 
+def native_junction_corners(polygon, direction_xy, matches):
+    """Order matched native corners A-low, B-low, B-high, A-high.
+
+    The shared terminal-line validator establishes a rectangle in the declared
+    axial direction. Rank its source corners along that same axis and its
+    transverse (-dy, dx) axis; ring start and winding carry no terminal meaning.
+    Only the ordering changes: each returned coordinate is the original matched
+    native value, including its readback deviation from the source.
+    """
+    dx, dy = (Fraction(str(float(value))) for value in direction_xy)
+    source_points = [
+        tuple(Fraction(str(float(value))) for value in point)
+        for point in polygon["exterior"]
+    ]
+    along = sorted(source_points, key=lambda point: point[0] * dx + point[1] * dy)
+    terminal_a = sorted(along[:2], key=lambda point: -point[0] * dy + point[1] * dx)
+    terminal_b = sorted(along[2:], key=lambda point: -point[0] * dy + point[1] * dx)
+    return [
+        matches[point]
+        for point in (terminal_a[0], terminal_b[0], terminal_b[1], terminal_a[1])
+    ]
+
+
 def native_straight_ring(ring):
     """Comparison copy with whole monotone straight chains, never moved nodes."""
     points = [tuple(Fraction(str(float(v))) for v in point) for point in ring]

@@ -12,6 +12,7 @@ from scgsim.aedt.data import detached
 from scgsim.aedt.io import file_sha256
 from scgsim.aedt.runtime.native.junction_topology import (
     native_coordinates_close,
+    native_junction_corners,
     native_planar_loops,
     native_polygon_correspondence,
 )
@@ -98,10 +99,7 @@ def read_saved_junction_lines(app, project_path, design_name, prepared, geometry
         matches = native_polygon_correspondence(
             loops, expected, central.name, deviations, subdivisions=False
         )
-        points = [
-            matches[tuple(Fraction(str(float(v))) for v in p)]
-            for p in expected["exterior"]
-        ]
+        points = native_junction_corners(expected, junction.direction_xy, matches)
         terminal_edges = _read_terminal_edges(observations, points)
         observed_line = _read_line_positions(positions, terminal_edges)
         line, _ = junction_terminal_line(expected, junction_geometry(junction), z_um)

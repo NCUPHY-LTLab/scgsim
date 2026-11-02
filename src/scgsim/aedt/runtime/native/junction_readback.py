@@ -26,6 +26,7 @@ from scgsim.aedt.runtime.native.junction_topology import (
     native_cross_sign,
     native_edge_covered,
     native_edge_section,
+    native_junction_corners,
     native_planar_loops,
     native_polygon_correspondence,
     native_strict_inside,
@@ -253,13 +254,10 @@ class JunctionReadback:
                 if native_z_may_contact(self.central_z, native_z):
                     self.potential_by_net.setdefault(entity["net_id"], []).extend(loops)
 
-        # Correspondence orders actual vertices in the authored A->B frame.
-
     def _verify_central_interior(self) -> None:
-        self.points = [
-            self.central_matches[tuple(Fraction(str(float(v))) for v in p)]
-            for p in self.expected["exterior"]
-        ]
+        self.points = native_junction_corners(
+            self.expected, self.junction.direction_xy, self.central_matches
+        )
         central_midpoint = tuple(sum(p[i] for p in self.points) / 4 for i in (0, 1))
         for bodies in self.potential_by_net.values():
             for rings in bodies:
