@@ -10,11 +10,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import cast
 
-from scgsim.geometry.compiler.validation import (
-    validate_curve_plan_coverage,
-    validate_tag_plan_coverage,
-    validate_volume_surface_closure,
-)
 from scgsim.geometry.construction.curved_geometry.kernel import (
     CurveDetacher,
     face_loops,
@@ -42,8 +37,12 @@ from scgsim.geometry.models.topology import (
     SurfacePlanRecord,
 )
 from scgsim.geometry.planning.surfaces import with_surface_contract_metadata
-from scgsim.geometry.planning.tags import plan_route_tags
+from scgsim.geometry.planning.tags import plan_route_tags, validate_tag_plan_coverage
 from scgsim.geometry.primitives.entities import component_metadata
+from scgsim.geometry.primitives.topology_validation import (
+    validate_curve_plan_coverage,
+    validate_volume_surface_closure,
+)
 
 
 class CanonicalRecords:

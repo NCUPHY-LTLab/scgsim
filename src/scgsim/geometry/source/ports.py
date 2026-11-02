@@ -11,7 +11,11 @@ from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegi
 from scgsim.geometry.primitives.grid import (
     current_grid_size_um,
     polygon_boolean,
-)  # pyright: ignore[reportPrivateUsage]
+)
+from scgsim.geometry.source.polygon_ops import (
+    layout_polygon_region,
+    ring_from_gdstk_polygon,
+)
 
 SOURCE_OCCURRENCE_POLYGON_METADATA_KEY = "source_occurrence_polygon_um"
 
@@ -223,7 +227,7 @@ def _selected_port_polygons(
         selected = tuple(
             (index, polygon)
             for index, polygon in enumerate(source_polygons)
-            if _point_in_ring(point, _ring_from_polygon(polygon))
+            if _point_in_ring(point, ring_from_gdstk_polygon(polygon))
         )
         if len(selected) != 1:
             raise ValueError(
@@ -235,7 +239,7 @@ def _selected_port_polygons(
             LayoutPolygonSpec(
                 polygon_id=f"PORT_SHEET_{layer}_{datatype}__P{index:04d}",
                 layer=f"{layer}/{datatype}",
-                exterior=_ring_from_polygon(polygon),
+                exterior=ring_from_gdstk_polygon(polygon),
                 metadata={
                     "gds_layer": layer,
                     "gds_datatype": datatype,
@@ -287,7 +291,7 @@ def port_sheet_overlaps(
     """Intersect a port polygon with eligible source host polygons."""
     import gdstk  # noqa: PLC0415 — keep the optional geometry dependency lazy.
 
-    port_region = _layout_polygon_region(gdstk, port_polygon)
+    port_region = layout_polygon_region(gdstk, port_polygon)
     overlaps: list[PortSheetOverlapRecord] = []
     for host_polygon_id, host_polygon in host_polygons_by_id.items():
         host_entity = host_entity_by_polygon_id.get(host_polygon_id)
@@ -299,7 +303,7 @@ def port_sheet_overlaps(
             continue
         overlap_region = polygon_boolean(
             port_region,
-            _layout_polygon_region(gdstk, host_polygon),
+            layout_polygon_region(gdstk, host_polygon),
             "and",
             precision=current_grid_size_um(),
         )
@@ -317,7 +321,7 @@ def port_sheet_overlaps(
                     port_polygon_id=port_polygon.polygon_id,
                     host_semantic_id=host_entity.semantic_id,
                     host_polygon_id=host_polygon_id,
-                    overlap_loop=_ring_from_polygon(overlap_polygon),
+                    overlap_loop=ring_from_gdstk_polygon(overlap_polygon),
                     metadata={"overlap_polygon_index": index},
                 )
             )
@@ -347,15 +351,6 @@ def is_port_sheet_host_entity(entity: SemanticEntitySpec) -> bool:
     return geometry_source in {"gds_polygon", "die_face_minus_ground_mask"}
 
 
-def _ring_from_polygon(polygon: Any) -> tuple[tuple[float, float], ...]:
-    points = tuple((float(x), float(y)) for x, y in polygon.points)
-    if len(points) > 1 and points[0] == points[-1]:
-        points = points[:-1]
-    if len(points) < 3:
-        raise ValueError("GDS polygon requires at least 3 unique points")
-    return points
-
-
 def _point_in_ring(
     point: tuple[float, float], ring: Sequence[tuple[float, float]]
 ) -> bool:
@@ -373,14 +368,6 @@ def _point_in_ring(
                 inside = not inside
         previous_index = index
     return inside
-
-
-def _layout_polygon_region(gdstk: Any, polygon: LayoutPolygonSpec) -> tuple[Any, ...]:
-    outer = gdstk.Polygon(polygon.exterior)
-    holes = tuple(gdstk.Polygon(hole) for hole in polygon.holes)
-    if not holes:
-        return (outer,)
-    return tuple(polygon_boolean((outer,), holes, "not", precision=1e-9) or ())
 
 
 class _AreaPolygon(Protocol):

@@ -6,67 +6,28 @@ geometric overlap belong to topology_validation; native construction is downstre
 
 from __future__ import annotations
 
-from scgsim.geometry.models.common import ROUTE_ALLOWED_REPRESENTATIONS, RouteLiteral
+from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.construction import (
     ConstructionBodyPlanRecord,
     CutHostOperationRecord,
     SurfacePartitionRecord,
 )
 from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.models.tags import BackendEntityTagRecord, TagPlanRecord
+from scgsim.geometry.models.tags import BackendEntityTagRecord
 from scgsim.geometry.models.topology import (
     InterfacePlanRecord,
     SurfacePlanRecord,
     VolumePlanRecord,
 )
-from scgsim.geometry.planning.representation import planned_conductor_representation
-from scgsim.geometry.primitives.entity_validation import (
-    is_solution_entity,
-    requires_route_representation,
+from scgsim.geometry.planning.representation import (
+    validate_selected_route as validate_selected_route,
 )
+from scgsim.geometry.planning.tags import (
+    validate_tag_plan_coverage as validate_tag_plan_coverage,
+)
+from scgsim.geometry.primitives.entity_validation import is_solution_entity
 
 _INTERFACE_KINDS = {"MM", "SS", "AA", "MS", "MA", "SA"}
-
-
-def validate_selected_route(
-    build_input: GeometryBuildInput,
-    route: RouteLiteral,
-    *,
-    representation_context=None,
-) -> None:
-    """Validate that every conductor has an explicit representation for route."""
-    if representation_context is None:
-        raise ValueError(
-            "current compilation requires interpret_physical_geometry() and plan.context"
-        )
-    context: RepresentationContext = representation_context
-    allowed = ROUTE_ALLOWED_REPRESENTATIONS.get(route)
-    if allowed is None:
-        raise ValueError(f"Unsupported route: {route}")
-
-    errors: list[str] = []
-    if route == "C" and build_input.port_sheet_regions:
-        errors.append("Route C does not support Palace lumped-port sheets")
-    for entity in build_input.entities:
-        if not requires_route_representation(entity):
-            continue
-        representation = planned_conductor_representation(
-            entity, route=route, context=context
-        )
-        if representation is None:
-            errors.append(f"{entity.semantic_id} does not define Route {route}")
-        elif representation not in allowed:
-            errors.append(
-                f"{entity.semantic_id} Route {route} representation "
-                f"{representation!r} is not supported"
-            )
-        if route == "C" and entity.geometry.get("route_ab_fused_selector_mode"):
-            errors.append(
-                f"{entity.semantic_id} Route C cannot use route_ab_fused_selector_mode"
-            )
-    if errors:
-        raise ValueError("Invalid selected route: " + "; ".join(errors))
 
 
 def validate_route_operation_coverage(
@@ -262,46 +223,6 @@ def validate_surface_partition_coverage(
 
     if errors:
         raise ValueError("Invalid surface partition plan: " + "; ".join(errors))
-
-
-def validate_tag_plan_coverage(
-    *,
-    surfaces: tuple[SurfacePlanRecord, ...],
-    volumes: tuple[VolumePlanRecord, ...],
-    tags: tuple[TagPlanRecord, ...],
-) -> None:
-    """Validate that every exported geometry record has a tag plan.
-
-    Interface surfaces, domain exterior boundary surfaces, and non-construction
-    volumes must have `TagPlanRecord`s before OCC assigns dim-tags.
-    """
-    live_sources = {
-        ("surface", surface.surface_id)
-        for surface in surfaces
-        if not surface.construction_only
-        and not surface.metadata.get("hidden_solver_contact")
-        and (
-            surface.interface_id is not None
-            or surface.surface_role == "domain_boundary"
-            or surface.surface_role == "lumped_port"
-        )
-    }
-    live_sources.update(
-        ("volume", volume.volume_id)
-        for volume in volumes
-        if not volume.construction_only
-    )
-    tag_sources = {(tag.source_record_kind, tag.source_record_id) for tag in tags}
-
-    missing = sorted(live_sources - tag_sources)
-    extra = sorted(tag_sources - live_sources)
-    if missing or extra:
-        parts = []
-        if missing:
-            parts.append(f"missing tags for {missing!r}")
-        if extra:
-            parts.append(f"tags reference non-live records {extra!r}")
-        raise ValueError("Invalid tag plan coverage: " + "; ".join(parts))
 
 
 def validate_backend_tag_ledger(

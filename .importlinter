@@ -20,6 +20,15 @@ forbidden_modules =
     scgsim.geometry.construction
     scgsim.geometry.compiler
 
+[importlinter:contract:geometry-preparation-does-not-depend-on-compiler]
+name = Geometry planning and construction do not depend on compiler
+type = forbidden
+source_modules =
+    scgsim.geometry.planning
+    scgsim.geometry.construction
+forbidden_modules =
+    scgsim.geometry.compiler
+
 [importlinter:contract:shared-geometry]
 name = Shared geometry does not depend on a solver backend
 type = forbidden

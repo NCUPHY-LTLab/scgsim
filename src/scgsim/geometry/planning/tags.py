@@ -64,6 +64,46 @@ def plan_route_tags(
     return tuple(tags)
 
 
+def validate_tag_plan_coverage(
+    *,
+    surfaces: tuple[SurfacePlanRecord, ...],
+    volumes: tuple[VolumePlanRecord, ...],
+    tags: tuple[TagPlanRecord, ...],
+) -> None:
+    """Validate that every exported geometry record has a tag plan.
+
+    Interface surfaces, domain exterior boundary surfaces, and non-construction
+    volumes must have `TagPlanRecord`s before OCC assigns dim-tags.
+    """
+    live_sources = {
+        ("surface", surface.surface_id)
+        for surface in surfaces
+        if not surface.construction_only
+        and not surface.metadata.get("hidden_solver_contact")
+        and (
+            surface.interface_id is not None
+            or surface.surface_role == "domain_boundary"
+            or surface.surface_role == "lumped_port"
+        )
+    }
+    live_sources.update(
+        ("volume", volume.volume_id)
+        for volume in volumes
+        if not volume.construction_only
+    )
+    tag_sources = {(tag.source_record_kind, tag.source_record_id) for tag in tags}
+
+    missing = sorted(live_sources - tag_sources)
+    extra = sorted(tag_sources - live_sources)
+    if missing or extra:
+        parts = []
+        if missing:
+            parts.append(f"missing tags for {missing!r}")
+        if extra:
+            parts.append(f"tags reference non-live records {extra!r}")
+        raise ValueError("Invalid tag plan coverage: " + "; ".join(parts))
+
+
 def _volume_physical_name(volume: VolumePlanRecord) -> str:
     override = volume.metadata.get("physical_name")
     if isinstance(override, str) and override:

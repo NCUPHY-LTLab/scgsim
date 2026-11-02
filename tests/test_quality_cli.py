@@ -102,10 +102,28 @@ def test_commands_use_current_python_complete_inventory_and_src(tmp_path: Path) 
         "src",
     )
     assert checks[4].command == (
-        str(Path(QUALITY.sys.prefix) / "bin" / "lint-imports"),
+        str(QUALITY._script_executable("lint-imports")),  # noqa: SLF001 -- inspect the generated tool path directly
     )
 
 
+@pytest.mark.parametrize(
+    ("platform", "filename"),
+    [("linux", "lint-imports"), ("win32", "lint-imports.exe")],
+)
+def test_import_linter_uses_active_environment_scripts_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, platform: str, filename: str
+) -> None:
+    """Resolve the pinned import-linter executable in platform scripts layout."""
+    monkeypatch.setattr(QUALITY.sysconfig, "get_path", lambda key: str(tmp_path))
+    assert QUALITY._script_executable(  # noqa: SLF001 -- exercise platform path selection directly
+        "lint-imports", platform=platform
+    ) == (tmp_path / filename)
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the fake console launcher in this integration test uses a POSIX shell",
+)
 def test_real_virtual_environment_keeps_its_interpreter_and_accepts_option_like_paths(
     tmp_path: Path,
 ) -> None:

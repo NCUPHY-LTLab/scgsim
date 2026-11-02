@@ -11,6 +11,7 @@ import os
 import shlex
 import subprocess
 import sys
+import sysconfig
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -108,7 +109,7 @@ def _tracked_python_files(repository: Path) -> list[Path] | None:
 def _quality_checks(python_files: list[Path]) -> list[Check]:
     python = sys.executable
     files = tuple(str(path) for path in python_files)
-    lint_imports = Path(sys.prefix) / "bin" / "lint-imports"
+    lint_imports = _script_executable("lint-imports")
     return [
         Check("Ruff format", (python, "-m", "ruff", "format", "--check", "--", *files)),
         Check("Ruff check", (python, "-m", "ruff", "check", "--", *files)),
@@ -118,6 +119,13 @@ def _quality_checks(python_files: list[Path]) -> list[Check]:
         Check("Pyright", (python, "-m", "pyright", "--pythonpath", python, "src")),
         Check("Import layers", (str(lint_imports),), lint_imports),
     ]
+
+
+def _script_executable(name: str, *, platform: str | None = None) -> Path:
+    """Resolve a pinned tool only from this interpreter's scripts directory."""
+    active_platform = platform or sys.platform
+    executable_name = f"{name}.exe" if active_platform == "win32" else name
+    return Path(sysconfig.get_path("scripts")) / executable_name
 
 
 def _print_plan(repository: Path, checks: list[Check]) -> None:

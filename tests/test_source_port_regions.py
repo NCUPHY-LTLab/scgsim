@@ -7,8 +7,13 @@ from pathlib import Path
 import gdstk
 import pytest
 
+from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
-from scgsim.geometry.source.ports import port_sheet_regions_from_stack_metadata
+from scgsim.geometry.primitives.grid import geometry_grid_scope
+from scgsim.geometry.source.ports import (
+    port_sheet_overlaps,
+    port_sheet_regions_from_stack_metadata,
+)
 
 
 def test_port_regions_preserve_ids_metadata_and_overlap_ownership() -> None:
@@ -241,6 +246,46 @@ def test_occurrence_port_overlaps_only_owned_and_contributed_hosts() -> None:
     )
 
 
+@pytest.mark.parametrize("grid_um", (None, 0.001))
+def test_port_overlap_preserves_port_and_host_holes(grid_um) -> None:
+    """Subtract both authored holes through the shared polygon conversion path."""
+    outer = ((0, 0), (4, 0), (4, 4), (0, 4))
+    port = LayoutPolygonSpec(
+        "port",
+        "9/0",
+        outer,
+        holes=(((1, 1), (2, 1), (2, 2), (1, 2)),),
+    )
+    host = LayoutPolygonSpec(
+        "host",
+        "5/0",
+        outer,
+        holes=(((2, 2), (3, 2), (3, 3), (2, 3)),),
+    )
+    entity = SemanticEntitySpec(
+        "metal",
+        "conductor",
+        "Cu",
+        "conductor",
+        0,
+        "polygon",
+        polygon_ids=("host",),
+        geometry={"gds_layer": 5, "gds_datatype": 0},
+        metadata={"logical_layer_id": "M5"},
+    )
+    context = None if grid_um is None else GeometryGridContext(grid_um)
+    with geometry_grid_scope(context):
+        overlaps = port_sheet_overlaps(
+            port_sheet_id="P1",
+            port_polygon=port,
+            target_layer="M5",
+            host_entity_by_polygon_id={"host": entity},
+            host_polygons_by_id={"host": host},
+        )
+    assert sum(gdstk.Polygon(item.overlap_loop).area() for item in overlaps) == 14.0
+    assert {item.host_semantic_id for item in overlaps} == {"metal"}
+
+
 def test_source_port_modules_have_no_import_cycle() -> None:
     """Keep adapter, grid and junction source imports acyclic."""
     dependencies = _source_import_dependencies()
@@ -257,6 +302,8 @@ def _source_import_dependencies() -> dict[str, set[str]]:
         "grid": Path("src/scgsim/geometry/source/grid.py"),
         "junctions": Path("src/scgsim/geometry/source/junctions.py"),
         "ports": Path("src/scgsim/geometry/source/ports.py"),
+        "ground": Path("src/scgsim/geometry/source/ground.py"),
+        "polygon_ops": Path("src/scgsim/geometry/source/polygon_ops.py"),
     }
     dependencies = {name: set() for name in module_paths}
     for name, path in module_paths.items():

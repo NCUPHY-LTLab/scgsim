@@ -51,7 +51,7 @@ class GeometryPreviewArtifact:
 
     def _ipython_display_(self) -> None:
         try:
-            from IPython.display import HTML, Image, display  # noqa: PLC0415
+            from IPython.display import HTML, Image, display  # noqa: PLC0415 -- IPython is needed only to display an artifact.
         except ImportError:
             print(self)
             return
@@ -122,8 +122,8 @@ class GeometryPreview:
             )
         self._verify_sources()
         try:
-            import pyvista as pv  # noqa: PLC0415 - optional interactive renderer
-            from IPython.display import HTML, display  # noqa: PLC0415
+            import pyvista as pv  # noqa: PLC0415 -- PyVista is only needed for interactive rendering.
+            from IPython.display import HTML, display  # noqa: PLC0415 -- IPython is only needed for the interactive legend.
         except ImportError as exc:
             raise RuntimeError(
                 "interactive geometry preview requires scgsim[visualization] "
@@ -149,7 +149,7 @@ class GeometryPreview:
             self.show_mesh(),
         )
         try:
-            from IPython.display import display  # noqa: PLC0415
+            from IPython.display import display  # noqa: PLC0415 -- IPython is optional; text output is used without it.
         except ImportError:
             for result in results:
                 print(result)

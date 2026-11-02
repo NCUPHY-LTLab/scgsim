@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from scgsim.geometry.compiler.validation import validate_selected_route
 from scgsim.geometry.construction.curved_geometry.arrangement import PlanarArrangement
 from scgsim.geometry.construction.curved_geometry.boundaries import (
     source_boundaries,
@@ -16,6 +15,7 @@ from scgsim.geometry.models.construction import ConstructionPlanRecord
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.planning.domain import prepare_auto_vacuum_solution_regions
+from scgsim.geometry.planning.representation import validate_selected_route
 
 
 def build_curved_construction_plan(

@@ -10,6 +10,7 @@ import argparse
 import ast
 import io
 import json
+import re
 import sys
 import tokenize
 from collections.abc import Iterable
@@ -19,6 +20,7 @@ from pathlib import Path
 PRIVATE_IMPORT_MARK = "private-import:"
 LONG_FILE_MARK = "long-file:"
 LONG_FUNCTION_MARK = "long-function:"
+LAZY_IMPORT_RULE = "PLC0415"
 
 
 @dataclass(frozen=True)
@@ -90,10 +92,87 @@ def _inspect_file(path: Path, file_limit: int, function_limit: int) -> list[Find
     line_count = _physical_line_count(source)
     tree = ast.parse(source, filename=str(path))
     comments = _comment_lines(source)
-    findings = _private_import_findings(path, tree, comments)
+    findings = _lazy_import_reason_findings(path, tree, comments)
+    findings.extend(_private_import_findings(path, tree, comments))
     findings.extend(_long_file_findings(path, line_count, comments, file_limit))
     findings.extend(_long_function_findings(path, tree, comments, function_limit))
     return findings
+
+
+def _lazy_import_reason_findings(
+    path: Path, tree: ast.Module, comments: dict[int, tuple[str, int]]
+) -> list[Finding]:
+    """Require a reason when an import suppresses Ruff's PLC0415 rule."""
+    findings: list[Finding] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Import, ast.ImportFrom)):
+            continue
+        comment = comments.get(node.lineno)
+        if comment is None or not _suppresses_rule(comment[0], LAZY_IMPORT_RULE):
+            continue
+        if _lazy_import_has_reason(comment[0]):
+            continue
+        previous_comment = comments.get(node.lineno - 1)
+        if (
+            previous_comment
+            and previous_comment[1] == node.col_offset
+            and previous_comment[0].lstrip("#").strip()
+            and not _is_noqa_only_comment(previous_comment[0])
+        ):
+            continue
+        findings.append(
+            Finding(
+                str(path),
+                node.lineno,
+                "lazy-import-reason",
+                "PLC0415 suppression needs a same-line reason or preceding explanation comment",
+            )
+        )
+    return findings
+
+
+def _is_noqa_only_comment(comment: str) -> bool:
+    """Reject a preceding suppression directive as an explanation."""
+    content = comment.lstrip("#").strip()
+    return bool(
+        re.fullmatch(
+            r"noqa(?:\s*:\s*[A-Z]+\d{4}(?:\s*,\s*[A-Z]+\d{4})*)?",
+            content,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _suppresses_rule(comment: str, rule: str) -> bool:
+    directive = _noqa_directive(comment)
+    if directive is None:
+        return False
+    if not directive.startswith(":"):
+        return True
+    codes = directive[1:].split("#", maxsplit=1)[0]
+    codes = re.split(r"\s+-{1,2}\s+", codes, maxsplit=1)[0]
+    return any(code.strip().upper() == rule for code in codes.split(","))
+
+
+def _lazy_import_has_reason(comment: str) -> bool:
+    directive = _noqa_directive(comment)
+    if directive is None or not directive.startswith(":"):
+        return False
+    content = directive[1:].strip()
+    reason_separator = re.search(r"\s+(?:--?|—|–)\s+|\s+#\s*", content)
+    if reason_separator is None:
+        return False
+    codes = content[: reason_separator.start()]
+    reason = content[reason_separator.end() :].strip()
+    has_lazy_import_code = any(
+        code.strip().upper() == LAZY_IMPORT_RULE for code in codes.split(",")
+    )
+    return has_lazy_import_code and bool(reason)
+
+
+def _noqa_directive(comment: str) -> str | None:
+    match = re.search(r"\bnoqa\b", comment, flags=re.IGNORECASE)
+    return None if match is None else comment[match.end() :]
 
 
 def _physical_line_count(source: str) -> int:

@@ -249,7 +249,7 @@ def _bounds_disjoint(left: BaseGeometry, right: BaseGeometry) -> bool:
     return ax1 < bx0 or bx1 < ax0 or ay1 < by0 or by1 < ay0
 
 
-def overlay_call(  # noqa: PLR0913 - retain the positional boundary used by unmigrated callers
+def overlay_call(  # noqa: PLR0913 - keep overlay operands and witness coordinates explicit at the native boundary
     operation: str,
     left: OverlayInput,
     right: BaseGeometry | None,
@@ -261,7 +261,7 @@ def overlay_call(  # noqa: PLR0913 - retain the positional boundary used by unmi
     return OverlayScope(grid, operand_index, cell_index).call(operation, left, right)
 
 
-def parts_overlay(  # noqa: PLR0913 - retain the positional boundary used by unmigrated callers
+def parts_overlay(  # noqa: PLR0913 - keep overlay operands and witness coordinates explicit at the native boundary
     operation: str,
     left: OverlayParts,
     right: OverlayParts,

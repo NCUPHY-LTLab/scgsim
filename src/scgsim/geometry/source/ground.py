@@ -23,6 +23,9 @@ from scgsim.geometry.source.polygon_ops import (
     point_in_layout_polygon,
     ring_from_gdstk_polygon,
 )
+from scgsim.geometry.source.polygon_ops import (
+    layout_polygon_region as layout_polygon_region,
+)
 
 
 @preserve_declared_source
@@ -199,15 +202,6 @@ def _ground_plane_bounds(
             f"{entity.semantic_id} plane_bounds_ref {plane_bounds_ref!r} "
             "does not match a solution region"
         ) from exc
-
-
-def layout_polygon_region(gdstk: Any, polygon: LayoutPolygonSpec) -> tuple[Any, ...]:
-    """Convert a layout polygon and its holes into GDS polygon pieces."""
-    outer = gdstk.Polygon(polygon.exterior)
-    holes = tuple(gdstk.Polygon(hole) for hole in polygon.holes)
-    if not holes:
-        return (outer,)
-    return tuple(polygon_boolean((outer,), holes, "not", precision=1e-9) or ())
 
 
 def _rectangle_ring(bounds: Mapping[str, float]) -> tuple[tuple[float, float], ...]:

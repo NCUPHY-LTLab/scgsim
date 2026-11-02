@@ -112,6 +112,90 @@ def test_exception_requires_nonempty_comment_reason(tmp_path: Path) -> None:
     assert _run(str(blank)).returncode == 1
 
 
+def test_lazy_import_suppression_requires_same_line_reason(tmp_path: Path) -> None:
+    """Require a readable reason for explicitly suppressing PLC0415."""
+    allowed = _write(
+        tmp_path,
+        "allowed.py",
+        "import optional_package  # noqa: F401, PLC0415 - optional feature dependency\n",
+    )
+    blank = _write(tmp_path, "blank.py", "import optional_package  # noqa: PLC0415\n")
+    empty_adjacent = _write(
+        tmp_path,
+        "empty_adjacent.py",
+        "# \nimport optional_package  # noqa: PLC0415\n",
+    )
+    noqa_adjacent = _write(
+        tmp_path,
+        "noqa_adjacent.py",
+        "# noqa: PLC0415\nimport optional_package  # noqa: PLC0415\n",
+    )
+    assert _run(str(allowed)).returncode == 0
+    result = _run(str(blank), "--format", "json")
+    assert result.returncode == 1
+    assert json.loads(result.stdout)[0]["rule"] == "lazy-import-reason"
+    assert _run(str(empty_adjacent)).returncode == 1
+    assert _run(str(noqa_adjacent)).returncode == 1
+
+
+def test_lazy_import_suppression_accepts_adjacent_reason_and_multiline_import(
+    tmp_path: Path,
+) -> None:
+    """Attach a preceding reason to the import start line, including multiline."""
+    source = (
+        "# Optional feature dependency is loaded only by this operation.\n"
+        "from optional_package import (  # noqa: PLC0415\n"
+        "    one,\n"
+        "    two,\n"
+        ")\n"
+    )
+    path = _write(tmp_path, "multiline.py", source)
+    assert _run(str(path)).returncode == 0
+
+
+def test_uppercase_noqa_is_reported_when_ruff_accepts_it(tmp_path: Path) -> None:
+    """Detect a missing reason even when Ruff accepts uppercase NOQA."""
+    path = _write(
+        tmp_path,
+        "uppercase_noqa.py",
+        "def render():\n    import optional_package  # NOQA: PLC0415\n",
+    )
+    ruff = subprocess.run(
+        [sys.executable, "-m", "ruff", "check", "--select", "PLC0415", str(path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert ruff.returncode == 0, ruff.stdout + ruff.stderr
+    checker = _run(str(path), "--format", "json")
+    assert checker.returncode == 1
+    assert json.loads(checker.stdout)[0]["rule"] == "lazy-import-reason"
+
+
+def test_indented_adjacent_explanation_and_exclusions(tmp_path: Path) -> None:
+    """Accept an explanation at import indentation, not empty or noqa comments."""
+    allowed = _write(
+        tmp_path,
+        "indented_allowed.py",
+        "def render():\n    # Optional import used only for interactive display.\n"
+        "    import optional_package  # noqa: PLC0415\n",
+    )
+    empty = _write(
+        tmp_path,
+        "indented_empty.py",
+        "def render():\n    # \n    import optional_package  # noqa: PLC0415\n",
+    )
+    noqa_only = _write(
+        tmp_path,
+        "indented_noqa.py",
+        "def render():\n    # noqa: PLC0415\n"
+        "    import optional_package  # noqa: PLC0415\n",
+    )
+    assert _run(str(allowed)).returncode == 0
+    assert _run(str(empty)).returncode == 1
+    assert _run(str(noqa_only)).returncode == 1
+
+
 def test_string_cannot_masquerade_as_exception_comment(tmp_path: Path) -> None:
     """Ignore directive text inside a string literal."""
     source = '"# private-import: reason"\nfrom x import _y\n'

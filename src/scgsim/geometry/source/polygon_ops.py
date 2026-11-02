@@ -152,6 +152,15 @@ def ring_from_gdstk_polygon(polygon: Any) -> tuple[tuple[float, float], ...]:
     return points
 
 
+def layout_polygon_region(gdstk: Any, polygon: LayoutPolygonSpec) -> tuple[Any, ...]:
+    """Convert a layout polygon and its holes into GDS polygon pieces."""
+    outer = gdstk.Polygon(polygon.exterior)
+    holes = tuple(gdstk.Polygon(hole) for hole in polygon.holes)
+    if not holes:
+        return (outer,)
+    return tuple(polygon_boolean((outer,), holes, "not", precision=1e-9) or ())
+
+
 def _ring_edges(
     loop: Sequence[tuple[float, float]],
 ) -> tuple[tuple[tuple[float, float], tuple[float, float]], ...]:
