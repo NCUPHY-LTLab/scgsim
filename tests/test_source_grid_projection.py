@@ -25,8 +25,9 @@ def test_projection_preserves_complete_public_payload_hash():
     build = replace(build, metadata={**build.metadata, "source_dbu_um": 0.001})
     projected = apply_geometry_grid(build, GeometryGridContext(0.001))
 
+    # The typed Route B fixture uses cutout_boundary_shell.
     assert _payload_sha256(projected) == (
-        "6c9ebb54989fbac562682a5f6de3851c653c147ba6f2d8e9ba56a591e5f02db8"
+        "720b5140ecdcac2a2ec9ae5b907aa9969415cbe29ae073f743246b22f5805c8f"
     )
 
 
