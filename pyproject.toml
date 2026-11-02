@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=77"]
-build-backend = "_build_backend"
+build-backend = "build_backend"
 backend-path = ["."]
 
 [project]
@@ -69,19 +69,23 @@ scgsim = [
 test = [
     "pytest",
     "ipython",
+    "setuptools>=77",
 ]
 quality = [
-    "ruff",
-    "pyright",
+    "ruff==0.17.3",
+    "pyright[nodejs]==1.1.411",
+    "nodejs-wheel-binaries>=22,<23",
+    "import-linter==2.15",
 ]
 
 [tool.pyright]
-include = [
+include = ["src"]
+strict = [
     "src/scgsim/aedt/epr/evidence.py",
     "src/scgsim/aedt/runtime/batch_protocol.py",
     "src/scgsim/aedt/runtime/batch_runner.py",
 ]
-typeCheckingMode = "strict"
+typeCheckingMode = "standard"
 extraPaths = ["src", "src/scgsim/aedt/runtime"]
 
 [tool.pytest.ini_options]

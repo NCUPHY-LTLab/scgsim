@@ -1,25 +1,32 @@
-"""Explicit source ownership for solver-neutral rectangular junction geometry."""
+"""Source-owned rectangular-junction requests and neutral geometry inputs."""
+
+from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 
-def _text(value, name):
+def _text(value: object, name: str) -> None:
+    """Reject missing identity text at a record boundary."""
     if not isinstance(value, str) or not value:
         raise ValueError(f"{name} must be nonempty text")
 
 
 @dataclass(frozen=True)
 class JunctionTerminalBinding:
+    """Bind one junction terminal to its source Entity, occurrence, and net."""
+
     source_entity_id: str
     source_occurrence_path: str
     net_id: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         for name in ("source_entity_id", "source_occurrence_path", "net_id"):
             _text(getattr(self, name), name)
 
-    def to_payload(self):
+    def to_payload(self) -> dict[str, str]:
+        """Serialize the qualified source terminal identity."""
         return {
             "source_entity_id": self.source_entity_id,
             "source_occurrence_path": self.source_occurrence_path,
@@ -27,12 +34,15 @@ class JunctionTerminalBinding:
         }
 
     @classmethod
-    def from_payload(cls, value):
+    def from_payload(cls, value: Mapping[str, Any]) -> JunctionTerminalBinding:
+        """Reconstruct a terminal binding and apply its identity checks."""
         return cls(**dict(value))
 
 
 @dataclass(frozen=True)
 class RectangularJunctionSpec:
+    """Request a rectangular junction from an explicit port sheet and terminals."""
+
     junction_id: str
     port_sheet_id: str
     source_polygon_id: str
@@ -40,7 +50,7 @@ class RectangularJunctionSpec:
     terminal_a: JunctionTerminalBinding
     terminal_b: JunctionTerminalBinding
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         for name in (
             "junction_id",
             "port_sheet_id",
@@ -59,7 +69,8 @@ class RectangularJunctionSpec:
         if self.terminal_a.net_id == self.terminal_b.net_id:
             raise ValueError("junction terminal Nets must be distinct")
 
-    def to_payload(self):
+    def to_payload(self) -> dict[str, Any]:
+        """Serialize the request, including both source-bound terminals."""
         return {
             "junction_id": self.junction_id,
             "port_sheet_id": self.port_sheet_id,
@@ -70,7 +81,8 @@ class RectangularJunctionSpec:
         }
 
     @classmethod
-    def from_payload(cls, value):
+    def from_payload(cls, value: Mapping[str, Any]) -> RectangularJunctionSpec:
+        """Rebuild terminal records before validating the junction request."""
         fields = dict(value)
         fields["terminal_a"] = JunctionTerminalBinding.from_payload(
             fields["terminal_a"]
@@ -83,7 +95,7 @@ class RectangularJunctionSpec:
 
 @dataclass(frozen=True)
 class JunctionGeometry:
-    """Algorithm input without solver inductance/capacitance settings."""
+    """Geometry algorithm input without solver inductance or capacitance settings."""
 
     junction_id: str
     source_polygon_id: str
@@ -91,4 +103,4 @@ class JunctionGeometry:
     terminal_b_net: str
     direction_xy: tuple[float, float]
     width_um: float
-    metadata: Mapping = field(default_factory=dict)
+    metadata: Mapping[str, Any] = field(default_factory=dict)

@@ -33,6 +33,10 @@ Authorized implementation includes directly related documentation, tests and
 local checks under `$v1-lifecycle`; research and native execution follow the
 assigned task scope.
 
+Follow `CODE_STYLE.md` for Python changes. Run `python scripts/check_quality.py`
+in the locked quality environment for the complete maintained Python scope;
+readability and responsibility boundaries also require review.
+
 External gsim and historical SGB are derivation provenance only: new work uses
 in-tree `scgsim.geometry` and advanced `scgsim.geometry.compiler` APIs, never
 an external consumer or fallback. OrcaPen SC PDK owns public component-simulation

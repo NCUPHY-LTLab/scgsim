@@ -57,7 +57,9 @@ def _require_setup(setup: Any, control: EigenmodeRunControl) -> None:
         or setup.setuptype != 2
         or setup.name != control.setup_name
     ):
-        raise RuntimeError("native setup did not retain the requested HFSSEigen identity")
+        raise RuntimeError(
+            "native setup did not retain the requested HFSSEigen identity"
+        )
 
 
 def create_eigenmode_setup(app: Any, control: EigenmodeRunControl) -> None:
@@ -68,9 +70,7 @@ def create_eigenmode_setup(app: Any, control: EigenmodeRunControl) -> None:
     # create_setup batches keyword edits with auto_update=False internally.
     payload = eigenmode_setup_payload(control)
     payload.pop("Name")
-    setup = app.create_setup(
-        name=control.setup_name, setup_type="HFSSEigen", **payload
-    )
+    setup = app.create_setup(name=control.setup_name, setup_type="HFSSEigen", **payload)
     _require_setup(setup, control)
 
 
@@ -109,6 +109,6 @@ def submit_eigenmode_cache(
     if not expression_cache or expression_cache[0] != "NAME:ExpressionCache":
         raise ValueError("EPR cache extension must be a native ExpressionCache block")
     properties["UseCacheFor"] = list(use_cache_for)
-    args = setup._setup_dict_to_arg(name=control.setup_name, props=properties)
+    args = setup._setup_dict_to_arg(name=control.setup_name, props=properties)  # noqa: SLF001 -- pinned setup serializer preserves the native expression-cache payload.
     args.append(expression_cache)
     setup.omodule.EditSetup(control.setup_name, args)

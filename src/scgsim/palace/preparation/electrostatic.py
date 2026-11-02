@@ -6,29 +6,32 @@ This class prepares geometry and manual handoff files; it never runs Palace.
 from __future__ import annotations
 
 import json
-
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
-from scgsim.geometry.source.plan import GeometryPlanSnapshot
 from scgsim.geometry.models.input import VacuumRegionSpec
+from scgsim.geometry.models.physical import ApproximationProfile
+from scgsim.geometry.source.plan import GeometryPlanSnapshot
+from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
+
+from ..execution.handoff import HandoffPlan, prepare_handoff
+from ..mesh.build import MeshBuildResult, build_route_mesh
+from ..mesh.controls import MESH_CONTROL_KEYS, MeshSizing, update_mesh_sizing
+from ..mesh.summary import summary_from_files
 from .config import (
-    _MODEL_L0_M,
+    MODEL_L0_M,
     TerminalBinding,
     build_electrostatic_config,
     configure_numerical_controls,
 )
-from .surface_epr import normalize_surface_epr_specs
 from .inputs import (
-    _load_stack,
-    _non_negative_number,
-    _validate_stack_material_kinds,
+    load_stack,
+    non_negative_number,
+    validate_stack_material_kinds,
 )
-from ..mesh.build import MeshBuildResult, build_route_mesh
-from ..mesh.controls import MESH_CONTROL_KEYS, MeshSizing, update_mesh_sizing
+from .surface_epr import normalize_surface_epr_specs
 from .transforms import (
     RouteAThinFilm,
     normalize_route_a_thin_film,
@@ -37,8 +40,6 @@ from .transforms import (
     validate_positive_number,
 )
 from .workflow import persist_problem_files, prepare_mesh_input
-from scgsim.geometry.models.physical import ApproximationProfile
-from ..execution.handoff import HandoffPlan, prepare_handoff
 
 
 @dataclass
@@ -79,6 +80,7 @@ class ElectrostaticSim:
         self.handoff_plan = None
 
     def set_geometry(self, component: Any) -> None:
+        """Bind standalone authored geometry and invalidate derived mesh state."""
         if self._plan_snapshot is not None:
             raise ValueError(
                 "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
@@ -106,11 +108,12 @@ class ElectrostaticSim:
         self._invalidate_mesh()
 
     def set_stack(self, stack: Mapping[str, Any] | str | Path) -> None:
+        """Validate standalone stack materials before replacing the source state."""
         if self._plan_snapshot is not None:
             raise ValueError(
                 "GeometryPlan owns the paired source; use set_plan(new_snapshot) or a new Sim"
             )
-        payload = _load_stack(stack)
+        payload = load_stack(stack)
         materials = payload.get("materials")
         if not isinstance(materials, Mapping) or not materials:
             raise ValueError(
@@ -123,13 +126,14 @@ class ElectrostaticSim:
         }
         if len(resolved) != len(materials):
             raise TypeError("every explicit stack material must be a mapping.")
-        _validate_stack_material_kinds(payload, resolved)
+        validate_stack_material_kinds(payload, resolved)
         self.stack = payload
         self._materials = resolved
         self._plan_snapshot = None
         self._invalidate_mesh()
 
     def set_output_dir(self, path: str | Path) -> None:
+        """Select the output directory and invalidate derived artifacts."""
         if not isinstance(path, (str, Path)):
             raise TypeError("output path must be a path string or Path.")
         self.output_dir = Path(path).expanduser().resolve()
@@ -143,6 +147,7 @@ class ElectrostaticSim:
         z_above: float | None = None,
         z_below: float | None = None,
     ) -> None:
+        """Validate all envelope controls before updating mesh-dependent state."""
         if (
             self._plan_snapshot is not None
             and "VACUUM_REGION" in self._plan_snapshot.stack["solution_regions"]
@@ -189,13 +194,14 @@ class ElectrostaticSim:
         self.indium_ground_bumps = {
             "fill": fill,
             "fill_pitch_um": validate_positive_number(fill_pitch_um, "fill_pitch_um"),
-            "fill_clearance_um": _non_negative_number(
+            "fill_clearance_um": non_negative_number(
                 fill_clearance_um, "fill_clearance_um"
             ),
         }
         self._invalidate_mesh()
 
     def add_terminal(self, name: str, *, net_id: str) -> None:
+        """Bind one exact conductor net to a named Electrostatic terminal."""
         binding = TerminalBinding(
             name=validate_nonempty_string(name, "terminal name"),
             net_id=validate_nonempty_string(net_id, "net_id"),
@@ -227,9 +233,14 @@ class ElectrostaticSim:
             raise ValueError("Surface EPR representation must be 'A' or 'B'.")
         if self._materials is None:
             raise ValueError("set_stack() must run before set_surface_epr().")
-        normalized_thin_film = (normalize_route_a_thin_film(route, route_a_thin_film)
-                                if route_a_thin_film is not None else None)
-        if approximation_profile is not None and not isinstance(approximation_profile, ApproximationProfile):
+        normalized_thin_film = (
+            normalize_route_a_thin_film(route, route_a_thin_film)
+            if route_a_thin_film is not None
+            else None
+        )
+        if approximation_profile is not None and not isinstance(
+            approximation_profile, ApproximationProfile
+        ):
             raise TypeError("approximation_profile must be ApproximationProfile")
         normalized_specs = normalize_surface_epr_specs(specs, materials=self._materials)
         self.route = route  # type: ignore[assignment]
@@ -246,6 +257,7 @@ class ElectrostaticSim:
         unassigned_conductor_policy: Literal["ground", "error"] = "ground",
         exterior_boundary_policy: Literal["none", "ground"] = "none",
     ) -> None:
+        """Set Electrostatic boundary policies and saved-field controls."""
         if unassigned_conductor_policy not in {"ground", "error"}:
             raise ValueError("unassigned_conductor_policy must be 'ground' or 'error'.")
         if exterior_boundary_policy not in {"none", "ground"}:
@@ -262,7 +274,7 @@ class ElectrostaticSim:
         self.exterior_boundary_policy = exterior_boundary_policy
         self._invalidate_config()
 
-    def set_mesh(
+    def set_mesh(  # noqa: PLR0913 - preserve the public keyword controls.
         self,
         *,
         size_policy: str | None = None,
@@ -307,7 +319,7 @@ class ElectrostaticSim:
             self.numerical = numerical
             self._invalidate_mesh()
 
-    def set_numerical(
+    def set_numerical(  # noqa: PLR0913 - preserve the public keyword controls.
         self,
         *,
         order: int = 1,
@@ -380,6 +392,7 @@ class ElectrostaticSim:
             self._invalidate_config()
 
     def mesh(self) -> Path:
+        """Invalidate prior derived state, prepare the source, and build a new mesh."""
         self._invalidate_mesh()
         if (
             (self.component is None and self._plan_snapshot is None)
@@ -434,8 +447,8 @@ class ElectrostaticSim:
             stack=self.stack,
             route=self.route,
             route_a_thin_film=self.route_a_thin_film,
-                approximation_profile=self.approximation_profile,
-                airbox=self.airbox,
+            approximation_profile=self.approximation_profile,
+            airbox=self.airbox,
             vacuum_region=self.vacuum_region,
             indium_ground_bumps=self.indium_ground_bumps,
         )
@@ -457,8 +470,6 @@ class ElectrostaticSim:
 
     def mesh_summary(self) -> dict[str, Any]:
         """Detach actual mesh observations and the current FEM topology estimate."""
-        from ..mesh.summary import summary_from_files
-
         if self._mesh_result is None:
             raise RuntimeError("mesh_summary requires a generated mesh.")
         return summary_from_files(
@@ -474,10 +485,11 @@ class ElectrostaticSim:
         if self._mesh_result is None:
             raise ValueError("mesh() must run before check_mesh_quality().")
         return check_mesh_quality(
-            self._mesh_result.mesh_path, length_scale_m=_MODEL_L0_M
+            self._mesh_result.mesh_path, length_scale_m=MODEL_L0_M
         )
 
     def write_config(self) -> Path:
+        """Validate current mesh bindings and persist metadata before config."""
         self._invalidate_config()
         if (
             self._mesh_result is None
@@ -539,6 +551,7 @@ class ElectrostaticSim:
         setup_commands: tuple[str, ...] = (),
         petsc_options: tuple[str, ...] = (),
     ) -> HandoffPlan:
+        """Package the current mesh and config for explicit manual execution."""
         if self._mesh_result is None or self.config_path is None:
             raise ValueError(
                 "mesh() and write_config() must run before prepare_handoff()."

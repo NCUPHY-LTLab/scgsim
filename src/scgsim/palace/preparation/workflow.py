@@ -13,17 +13,23 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from scgsim.geometry.models.input import VacuumRegionSpec
-from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
-from scgsim.geometry.models.input import GeometryBuildInput
-from scgsim.geometry.source.ground_bumps import _prepare_indium_ground_bump_fill
-
-from .transforms import RouteAThinFilm, _normalized_component_input, apply_airbox_to_stack
-from ..mesh.build import _with_port_sheet_metadata
-from scgsim.geometry.source.adapter import _solution_region_entity_from_record
-from scgsim.geometry.models.physical import ApproximationProfile, PhysicalRepresentationPlan
+from scgsim.geometry.models.input import GeometryBuildInput, VacuumRegionSpec
+from scgsim.geometry.models.physical import (
+    ApproximationProfile,
+    PhysicalRepresentationPlan,
+)
 from scgsim.geometry.planning.physical import interpret_physical_geometry
-from scgsim.semantics.snapshot import canonical_sha256, _plain
+from scgsim.geometry.source.adapter_records import solution_region_entity
+from scgsim.geometry.source.ground_bumps import prepare_indium_ground_bump_fill
+from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
+from scgsim.semantics.snapshot import canonical_sha256, to_plain
+
+from ..mesh.source import with_port_sheet_metadata
+from .transforms import (
+    RouteAThinFilm,
+    apply_airbox_to_stack,
+    normalized_component_input,
+)
 
 
 @dataclass(frozen=True)
@@ -38,7 +44,7 @@ class PreparedMeshInput:
     physical_plan: PhysicalRepresentationPlan
 
 
-def prepare_mesh_input(
+def prepare_mesh_input(  # noqa: PLR0913 - explicit preparation controls preserve the existing caller contract.
     *,
     component: Any,
     stack: Mapping[str, Any],
@@ -58,7 +64,7 @@ def prepare_mesh_input(
     indium_fill = None
     prepared_component = component
     if indium_ground_bumps is not None:
-        indium_fill = _prepare_indium_ground_bump_fill(
+        indium_fill = prepare_indium_ground_bump_fill(
             component=component,
             stack=prepared_stack,
             **indium_ground_bumps,
@@ -67,64 +73,50 @@ def prepare_mesh_input(
         prepared_stack = indium_fill["stack"]
     prepared_stack = apply_airbox_to_stack(prepared_stack, airbox or {})
     if port_sheet_source_layers is not None:
-        prepared_stack = {**prepared_stack, "metadata": {
-            **prepared_stack.get("metadata", {}), "port_sheet_source_layers": []}}
-        prepared_stack = _with_port_sheet_metadata(prepared_stack, port_sheet_source_layers)
+        prepared_stack = {
+            **prepared_stack,
+            "metadata": {
+                **prepared_stack.get("metadata", {}),
+                "port_sheet_source_layers": [],
+            },
+        }
+        prepared_stack = with_port_sheet_metadata(
+            prepared_stack, port_sheet_source_layers
+        )
     if build_input is None:
-        build_input = _normalized_component_input(prepared_component, prepared_stack)
+        build_input = normalized_component_input(prepared_component, prepared_stack)
     else:
-        # Synchronize caller source selections before the one physical interpretation.
-        if prepared_stack["solution_regions"] != build_input.solution_regions:
-            regions = tuple(_solution_region_entity_from_record(
-                key, record, materials=prepared_stack["materials"],
-                cell_bounds_um=build_input.metadata["cell_bounds_um"],
-            ) for key, record in prepared_stack["solution_regions"].items())
-            by_id = {entity.semantic_id: entity for entity in regions}
-            old_ids = set(build_input.solution_regions)
-            retained = tuple(by_id.pop(entity.semantic_id) if entity.semantic_id in by_id
-                             else entity for entity in build_input.entities
-                             if entity.semantic_id not in old_ids or entity.semantic_id in by_id)
-            build_input = replace(build_input, entities=(*retained, *by_id.values()),
-                                  solution_regions=prepared_stack["solution_regions"])
-        if port_sheet_source_layers is not None:
-            selected = []
-            for source_index, record in enumerate(port_sheet_source_layers):
-                matches = tuple(region for region in build_input.port_sheet_regions
-                                if region.metadata.get("source_name") == record["name"])
-                if not matches:
-                    raise ValueError(f"normalized source has no authored port {record['name']!r}")
-                selected.extend(replace(region, metadata={**region.metadata,
-                    "source_index": source_index, "port_index": record["port_index"],
-                }) for region in matches)
-            build_input = replace(build_input, port_sheet_regions=tuple(selected),
-                                  metadata={**build_input.metadata,
-                                            "port_sheet_source_layers": list(port_sheet_source_layers)})
+        # Synchronize source selections before the single physical interpretation.
+        build_input = _synchronize_solution_regions(build_input, prepared_stack)
+        build_input = _select_authored_ports(build_input, port_sheet_source_layers)
     if indium_fill is not None:
-        build_input = replace(build_input,
+        build_input = replace(
+            build_input,
             polygons=(*build_input.polygons, *indium_fill.get("injected_polygons", ())),
-            entities=(*build_input.entities, *indium_fill.get("injected_entities", ())))
-    if approximation_profile is None:
-        if route == "A":
-            raise ValueError("fresh Palace Route A requires approximation_profile=ApproximationProfile(name, 'v1', {'film_bindings': explicit_bindings}); route_a_thin_film does not author supporting Entities")
-        approximation_profile = ApproximationProfile("route_b", "v1", {})
-    if not isinstance(approximation_profile, ApproximationProfile):
-        raise TypeError("approximation_profile must be ApproximationProfile")
-    if route_a_thin_film is not None and approximation_profile.name != route_a_thin_film:
-        raise ValueError("route_a_thin_film selector differs from the explicit approximation profile")
+            entities=(*build_input.entities, *indium_fill.get("injected_entities", ())),
+        )
+    approximation_profile = _resolve_approximation_profile(
+        route, route_a_thin_film, approximation_profile
+    )
     effective_input, effective_stack, plan = interpret_physical_geometry(
         build_input, prepared_stack, approximation_profile
     )
     prepared_stack = effective_stack
     if route == "A":
-        source_hash = canonical_sha256(_plain(stack))
+        source_hash = canonical_sha256(to_plain(stack))
         prepared_stack["metadata"]["route_a_thin_film"] = {
             "schema_version": 1,
             "variant": approximation_profile.name,
-            "display_label": "A_PRIME" if approximation_profile.name == "substrate_face" else "A",
-            "source_stack": {"revision": f"sha256:{source_hash}", "sha256": source_hash},
+            "display_label": "A_PRIME"
+            if approximation_profile.name == "substrate_face"
+            else "A",
+            "source_stack": {
+                "revision": f"sha256:{source_hash}",
+                "sha256": source_hash,
+            },
         }
     prepared_materials = prepared_stack.get("materials")
-    materials = None
+    materials: dict[str, Mapping[str, Any]] | None = None
     if isinstance(prepared_materials, Mapping):
         materials = {
             str(material_id): dict(material)
@@ -139,6 +131,98 @@ def prepare_mesh_input(
         geometry_input=effective_input,
         physical_plan=plan,
     )
+
+
+def _synchronize_solution_regions(
+    build_input: GeometryBuildInput, prepared_stack: Mapping[str, Any]
+) -> GeometryBuildInput:
+    """Replace changed solution regions without disturbing retained entity order."""
+    if prepared_stack["solution_regions"] != build_input.solution_regions:
+        regions = tuple(
+            solution_region_entity(
+                key,
+                record,
+                materials=prepared_stack["materials"],
+                cell_bounds_um=build_input.metadata["cell_bounds_um"],
+            )
+            for key, record in prepared_stack["solution_regions"].items()
+        )
+        by_id = {entity.semantic_id: entity for entity in regions}
+        old_ids = set(build_input.solution_regions)
+        retained = tuple(
+            by_id.pop(entity.semantic_id) if entity.semantic_id in by_id else entity
+            for entity in build_input.entities
+            if entity.semantic_id not in old_ids or entity.semantic_id in by_id
+        )
+        build_input = replace(
+            build_input,
+            entities=(*retained, *by_id.values()),
+            solution_regions=prepared_stack["solution_regions"],
+        )
+    return build_input
+
+
+def _select_authored_ports(
+    build_input: GeometryBuildInput,
+    port_sheet_source_layers: Sequence[Mapping[str, Any]] | None,
+) -> GeometryBuildInput:
+    """Keep exact source identities while assigning request-order port indices."""
+    if port_sheet_source_layers is not None:
+        selected = []
+        for source_index, record in enumerate(port_sheet_source_layers):
+            matches = tuple(
+                region
+                for region in build_input.port_sheet_regions
+                if region.metadata.get("source_name") == record["name"]
+            )
+            if not matches:
+                raise ValueError(
+                    f"normalized source has no authored port {record['name']!r}"
+                )
+            selected.extend(
+                replace(
+                    region,
+                    metadata={
+                        **region.metadata,
+                        "source_index": source_index,
+                        "port_index": record["port_index"],
+                    },
+                )
+                for region in matches
+            )
+        build_input = replace(
+            build_input,
+            port_sheet_regions=tuple(selected),
+            metadata={
+                **build_input.metadata,
+                "port_sheet_source_layers": list(port_sheet_source_layers),
+            },
+        )
+    return build_input
+
+
+def _resolve_approximation_profile(
+    route: str,
+    route_a_thin_film: RouteAThinFilm | None,
+    approximation_profile: ApproximationProfile | None,
+) -> ApproximationProfile:
+    """Validate the explicit approximation selector before physical interpretation."""
+    if approximation_profile is None:
+        if route == "A":
+            raise ValueError(
+                "fresh Palace Route A requires approximation_profile=ApproximationProfile(name, 'v1', {'film_bindings': explicit_bindings}); route_a_thin_film does not author supporting Entities"
+            )
+        approximation_profile = ApproximationProfile("route_b", "v1", {})
+    if not isinstance(approximation_profile, ApproximationProfile):
+        raise TypeError("approximation_profile must be ApproximationProfile")
+    if (
+        route_a_thin_film is not None
+        and approximation_profile.name != route_a_thin_film
+    ):
+        raise ValueError(
+            "route_a_thin_film selector differs from the explicit approximation profile"
+        )
+    return approximation_profile
 
 
 def persist_problem_files(

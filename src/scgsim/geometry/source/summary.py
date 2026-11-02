@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -39,10 +39,11 @@ class InputSummary:
 
     @property
     def data(self) -> dict[str, Any]:
+        """Return a fresh mutable copy of the stored JSON data."""
         return json.loads(self._payload_json)
 
     def _repr_html_(self) -> str:
-        from scgsim.presentation.notebook import (
+        from scgsim.presentation.notebook import (  # noqa: PLC0415 - only used for HTML display
             cards,
             details,
             display_text,
@@ -53,193 +54,231 @@ class InputSummary:
         )
 
         data = self.data
-        source = data.get("source", {})
-        backend = data.get("backend", {})
-        entities = data.get("entities", [])
-        ports = data.get("ports", [])
-        junctions = backend.get("junctions", [])
-        source_cards = cards(
-            (
-                ("Source cell", source.get("top_cell_name")),
-                ("Backend", backend.get("name")),
-                ("Route", backend.get("route")),
-                ("Entities", source.get("entity_count")),
-                ("Polygons", source.get("polygon_count")),
-                ("Ports", source.get("port_sheet_count")),
-            )
-        )
-        entity_rows = [
-            (
-                item.get("semantic_id"),
-                item.get("source_occurrence_path"),
-                item.get("net_id"),
-                item.get("material_id"),
-                item.get("material_kind"),
-                f"{display_text(item.get('z_min_um'))}–{display_text(item.get('z_max_um'))}",
-                item.get("role"),
-            )
-            for item in entities
-        ]
-        net_rows = [
-            (item.get("net_id"), ", ".join(item.get("entity_ids", [])))
-            for item in data.get("nets", [])
-        ]
-        material_rows = [
-            (item.get("material_id"), item.get("record"))
-            for item in data.get("materials", [])
-        ]
-        port_rows = [
-            (
-                item.get("source_name"),
-                item.get("source_occurrence_path"),
-                ", ".join(item.get("overlap_hosts", [])),
-                ", ".join(item.get("overlap_nets", [])),
-                item.get("direction"),
-                item.get("target_layer"),
-            )
-            for item in ports
-        ]
-        junction_rows = [
-            (
-                item.get("junction_id"),
-                item.get("terminal_a_net"),
-                item.get("terminal_b_net"),
-                item.get("inductance_h"),
-                item.get("capacitance_f"),
-                item.get("source_polygon_id"),
-            )
-            for item in junctions
-        ]
-        palace_port_rows = [
-            (item.get("name"), item.get("layer"), item.get("inductance_h"))
-            for item in backend.get("ports", [])
-        ]
-        surfaces = backend.get("surface_contributions", [])
-        surface_rows = [
-            (
-                item.get("contribution_id"),
-                item.get("interface_kind"),
-                item.get("source_polygon_id"),
-                selection_text(item.get("margins_um")),
-                f"{display_text(item.get('film_thickness_m'))} m"
-                if item.get("film_thickness_m") is not None
-                else None,
-                item.get("film_relative_permittivity"),
-                item.get("loss_tangent"),
-                item.get("source"),
-                item.get("preset"),
-            )
-            for item in surfaces
-        ]
-        palace_surfaces = backend.get("surface_epr_specs")
-        if isinstance(palace_surfaces, Mapping):
-            surface_rows.extend(
-                (
-                    interface,
-                    interface,
-                    None,
-                    selection_text(item.get("inset_margins_um")),
-                    (
-                        f"{display_text(item['film_thickness_m'])} m"
-                        if "film_thickness_m" in item
-                        else f"{display_text(item['thickness'])} × Model.L0 (Palace native)"
-                        if "thickness" in item
-                        else None
-                    ),
-                    item.get("permittivity"),
-                    item.get("loss_tangent"),
-                    item.get("source"),
-                    item.get("preset"),
-                )
-                for interface, item in palace_surfaces.items()
-            )
-        request = backend.get("epr_request")
-        request_rows = (
-            [(key, selection_text(value)) for key, value in request.items()]
-            if isinstance(request, Mapping)
-            else [("EPR request", "not requested")]
-        )
-        settings = [
-            (key, display_text(backend.get(key)))
-            for key in (
-                "project_name",
-                "design_name",
-                "route_a_profile",
-                "geometry_workers",
-            )
-            if key in backend
-        ]
         content = (
             "<p>Configured source and settings; native geometry and solve unobserved.</p>"
-            + source_cards
-            + "<h4>Entities, Nets, materials, and source Z (µm)</h4>"
-            + table(
-                ("Entity", "Occurrence", "Net", "Material", "Kind", "Z range", "Role"),
-                entity_rows,
-            )
-            + details("Net membership", table(("Net", "Entities"), net_rows))
-            + details(
-                "Material records",
-                table(("Material", "Recorded properties"), material_rows),
-            )
-            + "<h4>Port sheets and source hosts</h4>"
-            + table(
-                ("Port", "Occurrence", "Hosts", "Nets", "Direction", "Layer"), port_rows
-            )
-            + "<h4>Junction declarations</h4>"
-            + table(
-                (
-                    "Junction",
-                    "Terminal A",
-                    "Terminal B",
-                    "L (H)",
-                    "C (F)",
-                    "Source sheet",
-                ),
-                junction_rows,
-            )
-            + (
-                details(
-                    "Palace lumped ports",
-                    table(("Port", "Layer", "L (H)"), palace_port_rows),
-                )
-                if palace_port_rows
-                else ""
-            )
-            + "<h4>Surface films and requested margins</h4>"
-            + table(
-                (
-                    "Contribution",
-                    "Interface",
-                    "Source",
-                    "Margins (µm)",
-                    "Film thickness",
-                    "εr",
-                    "Loss tangent",
-                    "Assumption source",
-                    "Preset",
-                ),
-                surface_rows,
-            )
-            + "<h4>Analysis choices</h4>"
-            + table(("Selection", "Configured"), request_rows)
-            + details(
-                "Solver controls and resources",
-                table(
-                    ("Setting", "Value"),
-                    [
-                        *settings,
-                        ("run_control", backend.get("run_control")),
-                        ("resources", backend.get("resources")),
-                        ("surface_defaults", backend.get("surface_defaults")),
-                    ],
-                ),
-            )
+            + _source_cards(data, cards)
+            + _entity_tables(data, display_text, table, details)
+            + _port_tables(data, table, details)
+            + _surface_table(data, display_text, selection_text, table)
+            + _analysis_tables(data, display_text, selection_text, table, details)
             + json_details("Original detached input JSON", data)
         )
         return section(
             "Pre-solve input summary", content, class_name="scgsim-input-summary"
         )
+
+
+def _source_cards(data: Mapping[str, Any], cards: Callable[..., str]) -> str:
+    source = data.get("source", {})
+    backend = data.get("backend", {})
+    return cards(
+        (
+            ("Source cell", source.get("top_cell_name")),
+            ("Backend", backend.get("name")),
+            ("Route", backend.get("route")),
+            ("Entities", source.get("entity_count")),
+            ("Polygons", source.get("polygon_count")),
+            ("Ports", source.get("port_sheet_count")),
+        )
+    )
+
+
+def _entity_tables(
+    data: Mapping[str, Any],
+    display_text: Callable[[Any], str],
+    table: Callable[..., str],
+    details: Callable[..., str],
+) -> str:
+    entities = data.get("entities", [])
+    entity_rows = [
+        (
+            item.get("semantic_id"),
+            item.get("source_occurrence_path"),
+            item.get("net_id"),
+            item.get("material_id"),
+            item.get("material_kind"),
+            f"{display_text(item.get('z_min_um'))}–{display_text(item.get('z_max_um'))}",
+            item.get("role"),
+        )
+        for item in entities
+    ]
+    net_rows = [
+        (item.get("net_id"), ", ".join(item.get("entity_ids", [])))
+        for item in data.get("nets", [])
+    ]
+    material_rows = [
+        (item.get("material_id"), item.get("record"))
+        for item in data.get("materials", [])
+    ]
+    return (
+        "<h4>Entities, Nets, materials, and source Z (µm)</h4>"
+        + table(
+            ("Entity", "Occurrence", "Net", "Material", "Kind", "Z range", "Role"),
+            entity_rows,
+        )
+        + details("Net membership", table(("Net", "Entities"), net_rows))
+        + details(
+            "Material records",
+            table(("Material", "Recorded properties"), material_rows),
+        )
+    )
+
+
+def _port_tables(
+    data: Mapping[str, Any],
+    table: Callable[..., str],
+    details: Callable[..., str],
+) -> str:
+    backend = data.get("backend", {})
+    ports = data.get("ports", [])
+    port_rows = [
+        (
+            item.get("source_name"),
+            item.get("source_occurrence_path"),
+            ", ".join(item.get("overlap_hosts", [])),
+            ", ".join(item.get("overlap_nets", [])),
+            item.get("direction"),
+            item.get("target_layer"),
+        )
+        for item in ports
+    ]
+    junction_rows = [
+        (
+            item.get("junction_id"),
+            item.get("terminal_a_net"),
+            item.get("terminal_b_net"),
+            item.get("inductance_h"),
+            item.get("capacitance_f"),
+            item.get("source_polygon_id"),
+        )
+        for item in backend.get("junctions", [])
+    ]
+    palace_port_rows = [
+        (item.get("name"), item.get("layer"), item.get("inductance_h"))
+        for item in backend.get("ports", [])
+    ]
+    return (
+        "<h4>Port sheets and source hosts</h4>"
+        + table(
+            ("Port", "Occurrence", "Hosts", "Nets", "Direction", "Layer"), port_rows
+        )
+        + "<h4>Junction declarations</h4>"
+        + table(
+            ("Junction", "Terminal A", "Terminal B", "L (H)", "C (F)", "Source sheet"),
+            junction_rows,
+        )
+        + (
+            details(
+                "Palace lumped ports",
+                table(("Port", "Layer", "L (H)"), palace_port_rows),
+            )
+            if palace_port_rows
+            else ""
+        )
+    )
+
+
+def _surface_table(
+    data: Mapping[str, Any],
+    display_text: Callable[[Any], str],
+    selection_text: Callable[[Any], str],
+    table: Callable[..., str],
+) -> str:
+    backend = data.get("backend", {})
+    surface_rows = [
+        (
+            item.get("contribution_id"),
+            item.get("interface_kind"),
+            item.get("source_polygon_id"),
+            selection_text(item.get("margins_um")),
+            f"{display_text(item.get('film_thickness_m'))} m"
+            if item.get("film_thickness_m") is not None
+            else None,
+            item.get("film_relative_permittivity"),
+            item.get("loss_tangent"),
+            item.get("source"),
+            item.get("preset"),
+        )
+        for item in backend.get("surface_contributions", [])
+    ]
+    palace_surfaces = backend.get("surface_epr_specs")
+    if isinstance(palace_surfaces, Mapping):
+        surface_rows.extend(
+            (
+                interface,
+                interface,
+                None,
+                selection_text(item.get("inset_margins_um")),
+                (
+                    f"{display_text(item['film_thickness_m'])} m"
+                    if "film_thickness_m" in item
+                    else f"{display_text(item['thickness'])} × Model.L0 (Palace native)"
+                    if "thickness" in item
+                    else None
+                ),
+                item.get("permittivity"),
+                item.get("loss_tangent"),
+                item.get("source"),
+                item.get("preset"),
+            )
+            for interface, item in palace_surfaces.items()
+        )
+    return "<h4>Surface films and requested margins</h4>" + table(
+        (
+            "Contribution",
+            "Interface",
+            "Source",
+            "Margins (µm)",
+            "Film thickness",
+            "εr",
+            "Loss tangent",
+            "Assumption source",
+            "Preset",
+        ),
+        surface_rows,
+    )
+
+
+def _analysis_tables(
+    data: Mapping[str, Any],
+    display_text: Callable[[Any], str],
+    selection_text: Callable[[Any], str],
+    table: Callable[..., str],
+    details: Callable[..., str],
+) -> str:
+    backend = data.get("backend", {})
+    request = backend.get("epr_request")
+    request_rows = (
+        [(key, selection_text(value)) for key, value in request.items()]
+        if isinstance(request, Mapping)
+        else [("EPR request", "not requested")]
+    )
+    settings = [
+        (key, display_text(backend.get(key)))
+        for key in (
+            "project_name",
+            "design_name",
+            "route_a_profile",
+            "geometry_workers",
+        )
+        if key in backend
+    ]
+    return (
+        "<h4>Analysis choices</h4>"
+        + table(("Selection", "Configured"), request_rows)
+        + details(
+            "Solver controls and resources",
+            table(
+                ("Setting", "Value"),
+                [
+                    *settings,
+                    ("run_control", backend.get("run_control")),
+                    ("resources", backend.get("resources")),
+                    ("surface_defaults", backend.get("surface_defaults")),
+                ],
+            ),
+        )
+    )
 
 
 def summarize_geometry_input(
@@ -292,6 +331,11 @@ def summarize_geometry_input(
         )
     ports = []
     for port in build_input.port_sheet_regions:
+        overlap_nets = {
+            net_id
+            for item in port.overlaps
+            if (net_id := by_id[item.host_semantic_id].net_id) is not None
+        }
         ports.append(
             {
                 "source_name": port.metadata["source_name"],
@@ -300,13 +344,7 @@ def summarize_geometry_input(
                 "direction": port.metadata["direction"],
                 "source_occurrence_path": port.metadata.get("source_occurrence_path"),
                 "overlap_hosts": [item.host_semantic_id for item in port.overlaps],
-                "overlap_nets": sorted(
-                    {
-                        by_id[item.host_semantic_id].net_id
-                        for item in port.overlaps
-                        if by_id[item.host_semantic_id].net_id is not None
-                    }
-                ),
+                "overlap_nets": sorted(overlap_nets),
             }
         )
     source_metadata = build_input.metadata

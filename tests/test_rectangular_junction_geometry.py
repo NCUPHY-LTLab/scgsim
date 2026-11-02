@@ -1,22 +1,25 @@
 """Shared real polygon partitioning; no native model or private study data."""
 
-from dataclasses import replace
 import json
+from dataclasses import replace
 
 import gdstk
 import pytest
 
 from scgsim.geometry import (
+    ApproximationProfile,
     GeometryBuildInput,
-    LayoutPolygonSpec,
-    SemanticEntitySpec,
     JunctionTerminalBinding,
-    RectangularJunctionSpec,
+    LayoutPolygonSpec,
+    PhysicalLayerDeclaration,
     PortSheetRegionRecord,
+    RectangularJunctionSpec,
+    SemanticEntitySpec,
+    interpret_physical_geometry,
     with_rectangular_junctions,
 )
+from scgsim.geometry.compiler import build_route_construction_plan
 from scgsim.geometry.planning.junction_partition import derive_rectangular_junctions
-
 
 SHEET = ((0, 0), (10, 0), (10, 2), (0, 2))
 LEFT = ((-2, 0), (3, 0), (3, 1), (2, 1), (2, 2), (-2, 2))
@@ -24,6 +27,7 @@ RIGHT = ((7, 0), (12, 0), (12, 2), (8, 2), (8, 1), (7, 1))
 
 
 def fixture(*, other=False, b_z=0):
+    """Construct authored terminal polygons and their source junction request."""
     polygons = [
         LayoutPolygonSpec("left", "metal", LEFT),
         LayoutPolygonSpec("right", "metal", RIGHT),
@@ -41,7 +45,10 @@ def fixture(*, other=False, b_z=0):
                 part_role="face_metal",
                 net_id=net,
                 polygon_ids=(name,),
-                route_representations={"A": "surface_sheet", "B": "solid"},
+                route_representations={
+                    "A": "surface_sheet",
+                    "B": "cutout_boundary_shell",
+                },
                 geometry={
                     "geometry_source": "gds_polygon",
                     "z_um": z,
@@ -97,19 +104,21 @@ def fixture(*, other=False, b_z=0):
         JunctionTerminalBinding("chip/left", "chip", "A"),
         JunctionTerminalBinding("chip/right", "chip", "B"),
     )
-    return build, spec
+    return (build, spec)
 
 
 def _region(rings):
+    """Build the native region after subtracting its authored interior holes."""
     return gdstk.boolean(
         [gdstk.Polygon(rings[0])],
         [gdstk.Polygon(hole) for hole in rings[1:]],
         "not",
-        precision=1e-9,
+        precision=1e-09,
     )
 
 
 def test_explicit_child_sheet_parent_terminals_and_request_codec():
+    """Check explicit child sheet parent terminals and request codec."""
     build, spec = fixture()
     assert build.port_sheet_regions[0].overlaps == ()
     restored = RectangularJunctionSpec.from_payload(
@@ -125,6 +134,7 @@ def test_explicit_child_sheet_parent_terminals_and_request_codec():
 
 
 def test_rectangle_and_terminal_owned_ends_cover_free_region_once():
+    """Check rectangle and terminal owned ends cover free region once."""
     build, spec = fixture()
     result = derive_rectangular_junctions(with_rectangular_junctions(build, (spec,)))
     record = result.metadata["junction_partitions"]["junction"]
@@ -137,10 +147,10 @@ def test_rectangle_and_terminal_owned_ends_cover_free_region_once():
         == 2
     )
     parts = [[gdstk.Polygon(central.exterior)]]
-    for end, expected in zip(record["ends"], ("chip/left", "chip/right")):
+    for end, expected in zip(record["ends"], ("chip/left", "chip/right"), strict=False):
         assert end["source_entity_id"] == expected
         owner = next(
-            entity for entity in result.entities if entity.semantic_id == expected
+            (entity for entity in result.entities if entity.semantic_id == expected)
         )
         assert end["net_id"] == owner.net_id
         assert end["material_id"] == owner.material_id == "metal"
@@ -154,18 +164,18 @@ def test_rectangle_and_terminal_owned_ends_cover_free_region_once():
             )
         )
     union = gdstk.boolean(
-        [poly for part in parts for poly in part], [], "or", precision=1e-9
+        [poly for part in parts for poly in part], [], "or", precision=1e-09
     )
     free = gdstk.boolean(
         [gdstk.Polygon(SHEET)],
         [gdstk.Polygon(LEFT), gdstk.Polygon(RIGHT)],
         "not",
-        precision=1e-9,
+        precision=1e-09,
     )
-    assert sum(poly.area() for poly in union) == 10
-    assert not gdstk.boolean(union, free, "xor", precision=1e-9)
+    assert sum((poly.area() for poly in union)) == 10
+    assert not gdstk.boolean(union, free, "xor", precision=1e-09)
     for i, j in ((0, 1), (0, 2), (1, 2)):
-        assert not gdstk.boolean(parts[i], parts[j], "and", precision=1e-9)
+        assert not gdstk.boolean(parts[i], parts[j], "and", precision=1e-09)
     assert result.port_sheet_regions[0].exterior == central.exterior
     assert record["support_plane"]["source_z_um"] == record["z_um"] == 0
     assert build.polygons[0].exterior == LEFT
@@ -174,6 +184,7 @@ def test_rectangle_and_terminal_owned_ends_cover_free_region_once():
 
 @pytest.mark.parametrize("change", ("missing", "occurrence", "net", "sheet"))
 def test_explicit_binding_rejects_wrong_source_ownership(change):
+    """Check explicit binding rejects wrong source ownership."""
     build, spec = fixture()
     if change == "sheet":
         spec = replace(spec, source_polygon_id="missing")
@@ -192,24 +203,29 @@ def test_explicit_binding_rejects_wrong_source_ownership(change):
 
 
 def test_real_third_net_contact_is_not_filtered_by_explicit_two_terminals():
+    """Check real third net contact is not filtered by explicit two terminals."""
     build, spec = fixture(other=True)
     with pytest.raises(ValueError):
         derive_rectangular_junctions(with_rectangular_junctions(build, (spec,)))
 
 
 def test_incompatible_actual_source_planes_fail():
+    """Check incompatible actual source planes fail."""
     build, spec = fixture(b_z=1)
     with pytest.raises(ValueError, match="support plane|authored support"):
         derive_rectangular_junctions(with_rectangular_junctions(build, (spec,)))
 
 
 def test_aedt_adapter_keeps_legacy_partition_identity_and_geometry():
-    from scgsim.aedt.specs.epr import PlanarJunction
-    from scgsim.aedt.preparation.junction_partition import partition_junctions
+    """Check aedt adapter keeps legacy partition identity and geometry."""
+    from scgsim.aedt.preparation.junction_partition import partition_junctions  # noqa: PLC0415 -- load the optional AEDT adapter only for its dedicated regression.
+    from scgsim.aedt.specs.epr import PlanarJunction  # noqa: PLC0415 -- load the optional AEDT adapter only for its dedicated regression.
 
     build, spec = fixture()
     bound = with_rectangular_junctions(build, (spec,))
-    junction = PlanarJunction("junction", "sheet_polygon", "A", "B", (1, 0), 2, 1e-9, 0)
+    junction = PlanarJunction(
+        "junction", "sheet_polygon", "A", "B", (1, 0), 2, 1e-09, 0
+    )
     legacy = partition_junctions(bound, (junction,), 0.5)
     record = legacy.metadata["aedt_junction_partitions"]["junction"]
     common = derive_rectangular_junctions(bound).metadata["junction_partitions"][
@@ -228,8 +244,7 @@ def test_aedt_adapter_keeps_legacy_partition_identity_and_geometry():
 
 
 def physical_fixture():
-    from scgsim.geometry import PhysicalLayerDeclaration, ApproximationProfile
-
+    """Compose source film attachment, dielectric support and two vacuum domains."""
     build, spec = fixture()
     declaration = PhysicalLayerDeclaration(
         "film",
@@ -242,13 +257,15 @@ def physical_fixture():
         {"layer_attachment_face": "lower"},
     )
     metals = tuple(
-        replace(
-            item,
-            host_void_semantic_id="upper_air",
-            geometry={**item.geometry, "thickness_um": 0.25},
-            metadata={**item.metadata, "physical_layer": declaration.to_payload()},
+        (
+            replace(
+                item,
+                host_void_semantic_id="upper_air",
+                geometry={**item.geometry, "thickness_um": 0.25},
+                metadata={**item.metadata, "physical_layer": declaration.to_payload()},
+            )
+            for item in build.entities
         )
-        for item in build.entities
     )
 
     def solution(name, kind, material, bounds, holes=()):
@@ -323,18 +340,14 @@ def physical_fixture():
                     "supporting_entity_id": "substrate",
                     "supporting_side": "upper",
                 }
-            },
+            }
         },
     )
-    return with_rectangular_junctions(source, (spec,)), stack, profile
+    return (with_rectangular_junctions(source, (spec,)), stack, profile)
 
 
 def test_physical_attachment_then_full_construction_uses_same_derived_rectangle():
-    from scgsim.geometry import (
-        interpret_physical_geometry,
-    )
-    from scgsim.geometry.compiler import build_route_construction_plan
-
+    """Check physical attachment then full construction uses same derived rectangle."""
     source, stack, profile = physical_fixture()
     effective, _, physical = interpret_physical_geometry(source, stack, profile)
     record = effective.metadata["junction_partitions"]["junction"]
@@ -344,12 +357,14 @@ def test_physical_attachment_then_full_construction_uses_same_derived_rectangle(
         effective, route="A", representation_context=physical.context
     )
     port = next(
-        item for item in construction.surfaces if item.surface_role == "lumped_port"
+        (item for item in construction.surfaces if item.surface_role == "lumped_port")
     )
     central = next(
-        item
-        for item in effective.polygons
-        if item.polygon_id == record["central_polygon_id"]
+        (
+            item
+            for item in effective.polygons
+            if item.polygon_id == record["central_polygon_id"]
+        )
     )
     assert port.geometry_ref["outer_loop"] == central.exterior
     assert port.geometry_ref["plane"]["value_um"] == 0
@@ -357,15 +372,16 @@ def test_physical_attachment_then_full_construction_uses_same_derived_rectangle(
     assert construction.surfaces
 
 
-
-
 def test_aedt_consumes_common_geometry_without_partitioning_twice():
-    from scgsim.aedt.specs.epr import PlanarJunction
-    from scgsim.aedt.preparation.junction_partition import partition_junctions
+    """Check aedt consumes common geometry without partitioning twice."""
+    from scgsim.aedt.preparation.junction_partition import partition_junctions  # noqa: PLC0415 -- load the optional AEDT adapter only for its dedicated regression.
+    from scgsim.aedt.specs.epr import PlanarJunction  # noqa: PLC0415 -- load the optional AEDT adapter only for its dedicated regression.
 
     build, spec = fixture()
     shared = derive_rectangular_junctions(with_rectangular_junctions(build, (spec,)))
-    junction = PlanarJunction("junction", "sheet_polygon", "A", "B", (1, 0), 2, 1e-9, 0)
+    junction = PlanarJunction(
+        "junction", "sheet_polygon", "A", "B", (1, 0), 2, 1e-09, 0
+    )
     adapted = partition_junctions(shared, (junction,), 0.5)
     assert adapted.polygons is shared.polygons
     assert adapted.entities is shared.entities

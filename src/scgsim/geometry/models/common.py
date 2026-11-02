@@ -1,4 +1,8 @@
-"""Canonical geometry records. Keep source facts distinct from compiler records; reexports share these exact definitions."""
+"""Shared geometry vocabulary and constants used by source and compiler records.
+
+This module owns common type aliases and policy constants, not the records that
+carry source facts or compiled geometry.
+"""
 
 from __future__ import annotations
 

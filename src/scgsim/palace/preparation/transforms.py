@@ -6,11 +6,15 @@ import copy
 import json
 import math
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
+
+from ..mesh.source import component_gds_top_cell_name, write_component_gds
 
 SCHEMA_VERSION = "1-7-0"
 
@@ -59,55 +63,72 @@ def normalize_route_a_thin_film(route: str, value: str | None) -> RouteAThinFilm
         raise ValueError("route must be either 'A' or 'B'.")
     normalized = value if value in {"substrate_face", "metal_gap_equivalent"} else None
     if normalized is not None:
-        return normalized
+        return cast(RouteAThinFilm, normalized)
     raise ValueError(
         "Route A requires route_a_thin_film='substrate_face' or 'metal_gap_equivalent'."
     )
 
 
-
-
-def _normalized_component_input(component: Any, stack: Mapping[str, Any]) -> GeometryBuildInput:
+def normalized_component_input(
+    component: Any, stack: Mapping[str, Any]
+) -> GeometryBuildInput:
     """Acquire the existing public component/stack source before interpretation."""
     if component is None:
-        raise ValueError("Palace preparation requires component or normalized geometry input")
-    from scgsim.geometry.source.adapter import build_gds_stack_geometry_input
-    from ..mesh.build import _component_gds_top_cell_name, _write_component_gds
+        raise ValueError(
+            "Palace preparation requires component or normalized geometry input"
+        )
 
     with TemporaryDirectory(prefix="scgsim-physical-source-") as directory:
         gds_path = Path(directory) / "design.gds"
         stack_path = Path(directory) / "design.stack.json"
-        _write_component_gds(component, gds_path)
+        write_component_gds(component, gds_path)
         stack_path.write_text(json.dumps(dict(stack)) + "\n", encoding="utf-8")
         return build_gds_stack_geometry_input(
-            gds_file=gds_path, stack_file=stack_path,
-            top_cell_name=_component_gds_top_cell_name(component=component, gds_path=gds_path),
+            gds_file=gds_path,
+            stack_file=stack_path,
+            top_cell_name=component_gds_top_cell_name(
+                component=component, gds_path=gds_path
+            ),
         )
-
-
-
-
-
-
-
-
-
-
 
 
 def apply_airbox_to_stack(
     stack: Mapping[str, Any], airbox: Mapping[str, Any]
 ) -> Mapping[str, Any]:
-    """Return a copy of stack with requested airbox envelope updates applied."""
+    """Expand the declared airbox regions while preserving their source identities."""
     if not airbox:
         return dict(stack)
     if not isinstance(stack, Mapping):
         raise TypeError("stack must be a mapping.")
-
     solution_regions = stack.get("solution_regions")
     if not isinstance(solution_regions, Mapping):
         raise TypeError("stack must provide 'solution_regions' mapping.")
+    matched = _airbox_markers(solution_regions)
+    work = copy.deepcopy(dict(stack))
+    work_regions = dict(work["solution_regions"])
+    targets = _airbox_targets(matched)
+    margin = _lateral_margin(airbox)
+    shared_bounds = _expand_shared_footprint(
+        solution_regions, targets, margin, work_regions
+    )
+    z_below = (
+        validate_positive_number(airbox["z_below"], "z_below")
+        if "z_below" in airbox
+        else None
+    )
+    z_above = (
+        validate_positive_number(airbox["z_above"], "z_above")
+        if "z_above" in airbox
+        else None
+    )
+    expansion = _AirboxExpansion(margin, shared_bounds, z_below, z_above)
+    for key, region, side in targets:
+        work_regions[key] = expansion.expand_region(key, region, side)
+    work["solution_regions"] = work_regions
+    return work
 
+
+def _airbox_markers(solution_regions: Mapping[str, Any]) -> list[tuple[str, Any]]:
     matched = []
     for key, region in solution_regions.items():
         if not isinstance(region, Mapping):
@@ -122,8 +143,10 @@ def apply_airbox_to_stack(
                 )
             matched.append((str(key), region))
 
-    work = copy.deepcopy(dict(stack))
-    work_regions = dict(work["solution_regions"])
+    return matched
+
+
+def _airbox_targets(matched: list[tuple[str, Any]]) -> tuple[tuple[str, Any, Any], ...]:
     if len(matched) == 1:
         targets = ((matched[0][0], matched[0][1], None),)
     elif len(matched) == 2:
@@ -141,6 +164,10 @@ def apply_airbox_to_stack(
             "Airbox requires either one legacy marker or explicit below/above markers."
         )
 
+    return targets
+
+
+def _lateral_margin(airbox: Mapping[str, Any]) -> float | None:
     has_x = "margin_x" in airbox
     has_y = "margin_y" in airbox
     if has_x or has_y:
@@ -152,8 +179,18 @@ def apply_airbox_to_stack(
             raise ValueError(
                 "margin_x and margin_y must be equal for scalar padding updates."
             )
+        return margin_x
+    return None
+
+
+def _expand_shared_footprint(
+    solution_regions: Mapping[str, Any],
+    targets: tuple[tuple[str, Any, Any], ...],
+    margin: float | None,
+    work_regions: dict[str, Any],
+) -> dict[str, float] | None:
     shared_domain_bounds: dict[str, float] | None = None
-    if len(targets) == 2 and has_x:
+    if len(targets) == 2 and margin is not None:
         marker_bounds = tuple(
             _explicit_domain_bounds(region, key) for key, region, _ in targets
         )
@@ -174,10 +211,10 @@ def apply_airbox_to_stack(
                     "explicit domain_bounds_um footprint."
                 )
         shared_domain_bounds = {
-            "x_min_um": common_bounds["x_min_um"] - margin_x,
-            "y_min_um": common_bounds["y_min_um"] - margin_y,
-            "x_max_um": common_bounds["x_max_um"] + margin_x,
-            "y_max_um": common_bounds["y_max_um"] + margin_y,
+            "x_min_um": common_bounds["x_min_um"] - margin,
+            "y_min_um": common_bounds["y_min_um"] - margin,
+            "x_max_um": common_bounds["x_max_um"] + margin,
+            "y_max_um": common_bounds["y_max_um"] + margin,
         }
         for key, region in shared_regions:
             work_region = dict(region)
@@ -185,70 +222,76 @@ def apply_airbox_to_stack(
             work_geometry["domain_bounds_um"] = dict(shared_domain_bounds)
             work_region["geometry"] = work_geometry
             work_regions[key] = work_region
-    z_below = (
-        validate_positive_number(airbox["z_below"], "z_below")
-        if "z_below" in airbox
-        else None
-    )
-    z_above = (
-        validate_positive_number(airbox["z_above"], "z_above")
-        if "z_above" in airbox
-        else None
-    )
-    for key, region, side in targets:
+    return shared_domain_bounds
+
+
+@dataclass(frozen=True)
+class _AirboxExpansion:
+    """Validated envelope changes applied consistently to every marked region."""
+
+    margin: float | None
+    shared_bounds: dict[str, float] | None
+    z_below: float | None
+    z_above: float | None
+
+    def expand_region(
+        self, key: str, region: Mapping[str, Any], side: str | None
+    ) -> dict[str, Any]:
+        """Expand one marker using the validated lateral and vertical controls."""
         geometry = region.get("geometry")
         if not isinstance(geometry, Mapping):
             raise TypeError(f"airbox solution region {key!r} must define geometry.")
         work_region = dict(region)
         work_geometry = dict(geometry)
-        if has_x:
-            if shared_domain_bounds is not None:
-                work_geometry["domain_bounds_um"] = dict(shared_domain_bounds)
+        if self.margin is not None:
+            if self.shared_bounds is not None:
+                work_geometry["domain_bounds_um"] = dict(self.shared_bounds)
             else:
-                bounds = work_geometry.get("domain_bounds_um")
-                if isinstance(bounds, Mapping):
-                    required_bounds = ("x_min_um", "y_min_um", "x_max_um", "y_max_um")
-                    if any(
-                        not isinstance(bounds.get(name), (int, float))
-                        or isinstance(bounds.get(name), bool)
-                        for name in required_bounds
-                    ):
-                        raise TypeError(
-                            f"airbox solution region {key!r} has invalid domain_bounds_um."
-                        )
-                    work_geometry["domain_bounds_um"] = {
-                        "x_min_um": float(bounds["x_min_um"]) - margin_x,
-                        "y_min_um": float(bounds["y_min_um"]) - margin_y,
-                        "x_max_um": float(bounds["x_max_um"]) + margin_x,
-                        "y_max_um": float(bounds["y_max_um"]) + margin_y,
-                    }
-                else:
-                    padding = work_geometry.get("padding_um")
-                    if not isinstance(padding, (int, float)) or isinstance(
-                        padding, bool
-                    ):
-                        raise TypeError(
-                            f"airbox solution region {key!r} must define padding_um or domain_bounds_um."
-                        )
-                    if float(padding) < 0.0:
-                        raise ValueError(
-                            f"airbox solution region {key!r} has invalid padding_um."
-                        )
-                    work_geometry["padding_um"] = float(padding) + margin_x
-        if z_below is not None and side in {None, "below"}:
+                self.expand_lateral_geometry(key, work_geometry)
+        if self.z_below is not None and side in {None, "below"}:
             z_min = work_geometry.get("z_min_um")
             if not isinstance(z_min, (int, float)) or isinstance(z_min, bool):
                 raise TypeError(f"airbox solution region {key!r} must define z_min_um.")
-            work_geometry["z_min_um"] = float(z_min) - z_below
-        if z_above is not None and side in {None, "above"}:
+            work_geometry["z_min_um"] = float(z_min) - self.z_below
+        if self.z_above is not None and side in {None, "above"}:
             z_max = work_geometry.get("z_max_um")
             if not isinstance(z_max, (int, float)) or isinstance(z_max, bool):
                 raise TypeError(f"airbox solution region {key!r} must define z_max_um.")
-            work_geometry["z_max_um"] = float(z_max) + z_above
+            work_geometry["z_max_um"] = float(z_max) + self.z_above
         work_region["geometry"] = work_geometry
-        work_regions[key] = work_region
-    work["solution_regions"] = work_regions
-    return work
+        return work_region
+
+    def expand_lateral_geometry(self, key: str, work_geometry: dict[str, Any]) -> None:
+        """Expand an explicit footprint or its legacy scalar padding in place."""
+        margin = cast(float, self.margin)
+        bounds = work_geometry.get("domain_bounds_um")
+        if isinstance(bounds, Mapping):
+            required_bounds = ("x_min_um", "y_min_um", "x_max_um", "y_max_um")
+            if any(
+                not isinstance(bounds.get(name), (int, float))
+                or isinstance(bounds.get(name), bool)
+                for name in required_bounds
+            ):
+                raise TypeError(
+                    f"airbox solution region {key!r} has invalid domain_bounds_um."
+                )
+            work_geometry["domain_bounds_um"] = {
+                "x_min_um": float(bounds["x_min_um"]) - margin,
+                "y_min_um": float(bounds["y_min_um"]) - margin,
+                "x_max_um": float(bounds["x_max_um"]) + margin,
+                "y_max_um": float(bounds["y_max_um"]) + margin,
+            }
+        else:
+            padding = work_geometry.get("padding_um")
+            if not isinstance(padding, (int, float)) or isinstance(padding, bool):
+                raise TypeError(
+                    f"airbox solution region {key!r} must define padding_um or domain_bounds_um."
+                )
+            if float(padding) < 0.0:
+                raise ValueError(
+                    f"airbox solution region {key!r} has invalid padding_um."
+                )
+            work_geometry["padding_um"] = float(padding) + margin
 
 
 def _explicit_domain_bounds(region: Mapping[str, Any], key: str) -> dict[str, float]:

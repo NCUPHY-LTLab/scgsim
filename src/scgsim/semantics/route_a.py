@@ -3,7 +3,10 @@
 Neutral physical declarations and selected-profile arithmetic belong to
 geometry.models.physical and geometry.planning.physical. This module does not
 classify source bodies from route roles or author approximation semantics.
+Raw geometry fields remain dynamically typed and unchanged; only Z coordinates
+and extents are converted to finite floats here.
 """
+
 from __future__ import annotations
 
 import math
@@ -14,6 +17,7 @@ _Z_TOLERANCE_UM = 1e-9
 
 
 def record_geometry(record: Mapping[str, Any], context: str) -> dict[str, Any]:
+    """Copy a record's geometry and fill only its explicitly paired Z bounds."""
     raw = record.get("geometry")
     if raw is None:
         geometry = dict(record)
@@ -29,7 +33,9 @@ def record_geometry(record: Mapping[str, Any], context: str) -> dict[str, Any]:
             geometry.setdefault(second, record[second])
     return geometry
 
+
 def geometry_z_range(geometry: Any, context: str) -> tuple[float, float]:
+    """Read finite Z bounds from either supported geometry representation."""
     if not isinstance(geometry, Mapping):
         raise TypeError(f"{context} geometry must be a mapping.")
     if "z_min_um" in geometry or "z_max_um" in geometry:
@@ -43,10 +49,14 @@ def geometry_z_range(geometry: Any, context: str) -> tuple[float, float]:
         raise ValueError(f"{context} has a negative Z extent.")
     return z_min, z_max
 
+
 def same_z(left: float, right: float) -> bool:
+    """Compare two micrometre Z coordinates with the shared absolute tolerance."""
     return math.isclose(left, right, rel_tol=0.0, abs_tol=_Z_TOLERANCE_UM)
 
-def _finite_z(value: Any, field: str) -> float:
+
+def _finite_z(value: object, field: str) -> float:
+    """Validate and normalize one raw coordinate or extent value."""
     if (
         not isinstance(value, (int, float))
         or isinstance(value, bool)

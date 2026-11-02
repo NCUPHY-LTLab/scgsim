@@ -1,4 +1,4 @@
-"""Canonical geometry records. Keep source facts distinct from compiler records; reexports share these exact definitions."""
+"""Solver-neutral tag plans and their backend entity-tag resolution records."""
 
 from __future__ import annotations
 
