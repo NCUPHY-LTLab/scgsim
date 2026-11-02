@@ -820,6 +820,7 @@ footer.footer .nav-link .bi { line-height: 1; font-size: 1rem; }
   #quarto-header .quarto-btn-toggle .bi { font-size: calc(var(--qdk-version-size) * var(--qdk-ui) * var(--_qdk-ui-scale)); line-height: 1; }
 }
 .sidebar-navigation .sidebar-item a.sidebar-link, #TOC a { color: var(--qdk-text); font-size: calc(15px * var(--qdk-ui) * var(--_qdk-ui-scale) - 2px); font-weight: 400; line-height: 1.35; }
+.sidebar-navigation .sidebar-item a.sidebar-link { border-radius: var(--qdk-radius); padding: .2rem .45rem; }
 // Areas has one panel presentation, independent of the Pages breakpoint.
 #quarto-header .navbar-brand { display: block; min-width: 0; max-width: 100%; }
 #quarto-header .navbar-title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -879,7 +880,12 @@ footer.footer .nav-link .bi { line-height: 1; font-size: 1rem; }
 @media (prefers-reduced-motion: reduce) {
   #quarto-header.askr-areas-collapsed .navbar-collapse, #qdk-area-glass { transition: none !important; }
 }
-.sidebar-navigation .sidebar-link.active, .navbar .nav-link.active, #TOC .active > a { color: var(--qdk-link); font-weight: 600; }
+.sidebar-navigation .sidebar-item a.sidebar-link.active {
+  background-color: color-mix(in srgb, var(--qdk-link) 10%, transparent);
+  color: var(--qdk-link);
+  font-weight: 600;
+}
+.navbar .nav-link.active, #TOC .active > a { color: var(--qdk-link); font-weight: 600; }
 #TOC { color: var(--qdk-muted); }
 
 h1, h2, h3, h4, h5, h6, .quarto-title .title { color: var(--qdk-heading); font-family: var(--qdk-heading-font); font-weight: var(--qdk-heading-weight); letter-spacing: -.018em; scroll-margin-top: 5rem; }
@@ -947,15 +953,39 @@ pre code { background: transparent; border-radius: 0; color: var(--qdk-code-colo
 div.sourceCode > pre.sourceCode { padding: var(--qdk-code-padding); }
 div.sourceCode > pre.sourceCode, div.sourceCode > pre.sourceCode > code.sourceCode { background: transparent; border: 0; border-radius: 0; box-shadow: none; }
 .sourceCode .highlight, .sourceCode .code-annotation-line-highlight { background: var(--qdk-highlight); border-inline-start: 3px solid var(--qdk-link); }
-.code-with-filename .code-with-filename-file { border: 1px solid var(--qdk-code-border); border-bottom: 0; border-radius: var(--qdk-code-radius) var(--qdk-code-radius) 0 0; font-family: var(--qdk-mono-font); font-size: .9rem; margin-bottom: 0; padding: 0 .75rem; }
-.code-with-filename .code-with-filename-file pre { border: 0; border-radius: 0; margin: 0; padding: 0; }
-.code-with-filename div.sourceCode { border-top-left-radius: 0; border-top-right-radius: 0; margin-top: 0; }
+// A filename and its source share one frame, including inside native callouts.
+.code-with-filename { background: var(--qdk-code-background); border: 1px solid var(--qdk-code-border); border-radius: var(--qdk-code-radius); margin-block: 0 1rem; min-inline-size: 0; padding: 0; position: relative; }
+.code-with-filename .code-with-filename-file,
+.quarto-dark .code-with-filename .code-with-filename-file {
+  background: var(--qdk-highlight);
+  border: 0;
+  border-bottom: 1px solid var(--qdk-code-border);
+  border-radius: var(--qdk-code-radius) var(--qdk-code-radius) 0 0;
+  color: var(--qdk-text);
+  font-family: var(--qdk-mono-font);
+  margin: 0;
+  padding: .4rem 1rem;
+}
+.code-with-filename .code-with-filename-file pre { background: transparent; border: 0; border-radius: 0; color: inherit; font-size: var(--qdk-code-size); line-height: 1.4; margin: 0; overflow-wrap: anywhere; padding: 0; white-space: pre-wrap; }
+.code-with-filename > .code-copy-outer-scaffold > div.sourceCode,
+.code-with-filename > div.sourceCode,
+.code-with-filename > pre { background: transparent; border: 0; border-radius: 0; margin: 0; }
 .askr-copy-button { align-items: center; background: var(--qdk-code-copy-background); border: 1px solid var(--qdk-code-border); border-radius: var(--qdk-inline-radius); color: var(--qdk-code-copy-color); cursor: pointer; display: inline-flex; font: inherit; font-size: .7rem; justify-content: center; line-height: 1.2; padding: .1rem .3rem; transition: background-color .2s ease, border-color .2s ease, color .2s ease; }
 .askr-copy-button:hover, .askr-copy-button:focus-visible { background: var(--qdk-code-copy-hover-background); color: var(--qdk-code-copy-hover-color); }
 .askr-copy-button.is-copied { border-color: var(--qdk-tertiary); color: var(--qdk-tertiary); }
 .askr-copy-code { opacity: 0; position: absolute; right: 5px; top: 5px; z-index: 3; }
 // Keep the normal vertical padding; reserve a side lane outside the code scrollport.
 .code-copy-outer-scaffold.askr-has-copy-control .sourceCode > pre.sourceCode { margin-inline-end: 4rem; padding-inline-end: .5rem; }
+// Named blocks place Copy in the label row, leaving the source its full width.
+.code-with-filename:has(> .askr-has-copy-control) .code-with-filename-file { padding-inline-end: 5rem; }
+.code-with-filename > .code-copy-outer-scaffold { position: static; }
+.code-with-filename > .askr-has-copy-control .sourceCode > pre.sourceCode { margin-inline-end: 0; padding-inline-end: var(--qdk-code-padding); }
+.code-with-filename .askr-copy-code { top: .35rem; right: .5rem; }
+.code-with-filename .sourceCode { overflow: visible; }
+.code-with-filename pre.sourceCode { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; scrollbar-color: var(--qdk-muted-decoration) transparent; }
+// Quarto pads a callout's final child; keep that spacing outside the code frame.
+#quarto-document-content .callout.callout-titled .callout-body > .code-with-filename:last-child,
+#quarto-document-content .callout.callout-titled .callout-body > div > .code-with-filename:last-child { margin-block-end: calc(var(--qdk-callout-padding) * var(--_qdk-callout-scale)); padding-block-end: 0; }
 .code-copy-outer-scaffold:hover .askr-copy-code, .askr-copy-code:focus-visible { opacity: 1; }
 .code-copy-outer-scaffold + .askr-copy-status:not(:empty), .askr-copyable-math > .askr-copy-status:not(:empty) { display: block; margin-block: .25rem .5rem; }
 .askr-copy-status { color: var(--qdk-text); font-size: .7rem; }

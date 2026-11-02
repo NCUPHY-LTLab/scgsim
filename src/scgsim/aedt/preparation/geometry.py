@@ -2,72 +2,60 @@
 
 from __future__ import annotations
 
-
 import tarfile
-
 import time
-
 from collections.abc import Mapping, Sequence
-
+from dataclasses import dataclass
 from pathlib import Path
-
 from tempfile import TemporaryDirectory
-
 from typing import Literal
 
-from scgsim.geometry import GeometryPlanSnapshot
-
-from scgsim.aedt._io import file_sha256, write_json
-
-from scgsim.aedt.preparation.planar import validate_geometry_workers
-
-from scgsim.aedt.specs.epr import (
-    EprAnalysisRequest,
-    ExpressionCacheConvergence,
-    ExpressionCacheConvergenceSet,
-)
-from scgsim.aedt.specs.common import (
-    LumpedRlc,
-)
-from scgsim.aedt.specs.geometry import (
-    PreparedPlanarGeometry,
-)
-from scgsim.aedt._data import (
+from scgsim.aedt.data import (
     detached,
 )
-
+from scgsim.aedt.io import file_sha256, write_json
 from scgsim.aedt.preparation.handoff import (
     HandoffPlan,
-    _member,
-    _utc_now,
-    _write_script,
     prepare_handoff,
 )
-
+from scgsim.aedt.preparation.handoff_files import handoff_member, utc_now, write_script
+from scgsim.aedt.preparation.planar import validate_geometry_workers
+from scgsim.aedt.preparation.q3d_geometry import lower_q3d_geometry
 from scgsim.aedt.results.provenance import (
     RECEIPT_V3,
     encode_initial_receipt,
     initial_receipt_payload,
     prepared_runtime_source,
 )
-
 from scgsim.aedt.specs.common import (
-    AedtResources,
     LOCKED_PYAEDT,
-    MatrixRunControl,
     OFFICIAL_PYAEDT_SOURCE_URL,
+    AedtResources,
+    LumpedRlc,
+    LumpedTerminalPort,
+    MatrixRunControl,
     PdkMaterial,
+    TerminalPort,
 )
-
+from scgsim.aedt.specs.epr import (
+    EprAnalysisRequest,
+    ExpressionCacheConvergence,
+    ExpressionCacheConvergenceSet,
+)
+from scgsim.aedt.specs.geometry import (
+    PreparedPlanarGeometry,
+)
+from scgsim.aedt.specs.hfss import (
+    HfssDrivenGeometrySpec,
+    HfssEprSpec,
+)
+from scgsim.aedt.specs.hfss_common import EigenmodeRunControl, HfssRunControl
 from scgsim.aedt.specs.modeling import Modeling
 from scgsim.aedt.specs.q3d import Q3dTerminalPair
-
-from scgsim.aedt.specs.hfss import (EigenmodeRunControl, HfssEprSpec,
-                                     HfssDrivenGeometrySpec, HfssRunControl)
-from scgsim.aedt.specs.common import LumpedTerminalPort, TerminalPort
+from scgsim.geometry import GeometryPlanSnapshot
 
 
-def prepare_q3d_from_geometry(
+def prepare_q3d_from_geometry(  # noqa: PLR0913 -- preserve the supported explicit preparation keyword API.
     snapshot: GeometryPlanSnapshot,
     *,
     aedt_version: str,
@@ -92,7 +80,6 @@ def prepare_q3d_from_geometry(
     Optional terminal_pairs map final Net IDs to exact source Entity identities
     and caller-selected global sides; each selected Entity must emit one body.
     """
-    from scgsim.aedt.preparation.q3d_geometry import lower_q3d_geometry
 
     with TemporaryDirectory(prefix="scgsim-q3d-geometry-") as temporary:
         spec = lower_q3d_geometry(
@@ -112,7 +99,7 @@ def prepare_q3d_from_geometry(
         return prepare_handoff(spec=spec, output_dir=output_dir, resources=resources)
 
 
-def prepare_hfss_eigenmode_from_geometry(
+def prepare_hfss_eigenmode_from_geometry(  # noqa: PLR0913 -- preserve the supported explicit preparation keyword API.
     *,
     aedt_version: str,
     modeling: Modeling,
@@ -123,7 +110,9 @@ def prepare_hfss_eigenmode_from_geometry(
     output_dir: str | Path,
     epr_request: EprAnalysisRequest | None = None,
     lumped_rlcs: Sequence[LumpedRlc] | None = None,
-    expression_convergence: ExpressionCacheConvergence | ExpressionCacheConvergenceSet | None = None,
+    expression_convergence: ExpressionCacheConvergence
+    | ExpressionCacheConvergenceSet
+    | None = None,
     geometry_workers: int | None = None,
     resources: AedtResources | None = None,
 ) -> HandoffPlan:
@@ -141,144 +130,192 @@ def prepare_hfss_eigenmode_from_geometry(
         epr_request=epr_request,
         expression_convergence=expression_convergence,
     )
-    return _prepare_body_hfss_handoff(
-        spec=spec, geometry=geometry, output_dir=output_dir,
+    return _BodyHfssHandoff(
+        spec=spec,
+        geometry=geometry,
+        output_dir=output_dir,
         workflow="epr" if epr_request is not None else "body_first_eigenmode",
-        geometry_workers=geometry_workers, resources=resources,
-    )
+        geometry_workers=geometry_workers,
+        resources=resources,
+    ).build()
 
 
-def prepare_hfss_driven_from_geometry(
-    *, aedt_version: str, modeling: Modeling, geometry: PreparedPlanarGeometry,
-    project_name: str, design_name: str, run_control: HfssRunControl | None = None,
-    ports: Sequence[TerminalPort | LumpedTerminalPort], output_dir: str | Path,
-    geometry_workers: int | None = None, resources: AedtResources | None = None,
+def prepare_hfss_driven_from_geometry(  # noqa: PLR0913 -- preserve the supported explicit preparation keyword API.
+    *,
+    aedt_version: str,
+    modeling: Modeling,
+    geometry: PreparedPlanarGeometry,
+    project_name: str,
+    design_name: str,
+    run_control: HfssRunControl | None = None,
+    ports: Sequence[TerminalPort | LumpedTerminalPort],
+    output_dir: str | Path,
+    geometry_workers: int | None = None,
+    resources: AedtResources | None = None,
 ) -> HandoffPlan:
     """Prepare a Terminal model and ports, with optional complete solve setup."""
     spec = HfssDrivenGeometrySpec(
         aedt_version=aedt_version,
-        modeling=modeling, geometry=geometry, project_name=project_name,
-        design_name=design_name, run_control=run_control, ports=tuple(ports),
+        modeling=modeling,
+        geometry=geometry,
+        project_name=project_name,
+        design_name=design_name,
+        run_control=run_control,
+        ports=tuple(ports),
     )
-    return _prepare_body_hfss_handoff(
-        spec=spec, geometry=geometry, output_dir=output_dir,
-        workflow="body_first_driven_terminal", geometry_workers=geometry_workers, resources=resources,
-    )
+    return _BodyHfssHandoff(
+        spec=spec,
+        geometry=geometry,
+        output_dir=output_dir,
+        workflow="body_first_driven_terminal",
+        geometry_workers=geometry_workers,
+        resources=resources,
+    ).build()
 
 
-def _prepare_body_hfss_handoff(*, spec, geometry, output_dir, workflow, geometry_workers, resources):
-    """One canonical portable cohort writer for body-first HFSS requests."""
-    validate_geometry_workers(geometry_workers)
-    if resources is not None and not isinstance(resources, AedtResources):
-        raise TypeError("resources must be AedtResources or None")
-    run_dir = Path(output_dir).expanduser().resolve()
-    if run_dir.exists():
-        raise FileExistsError(
-            "output_dir must be new; prepared handoffs never reuse directories"
-        )
-    metadata_dir = run_dir / "metadata"
-    metadata_dir.mkdir(parents=True)
-    script_path = run_dir / "run_aedt.sh"
-    spec_path = run_dir / "aedt_spec.json"
-    metadata_path = metadata_dir / "aedt_handoff_metadata.json"
-    receipt_path = metadata_dir / "aedt_run_receipt.json"
-    manifest_path = metadata_dir / "aedt_handoff_manifest.json"
-    archive_path = run_dir / "aedt_handoff.tar.gz"
-    prepared_at = _utc_now()
-    started = time.perf_counter()
-    prepared_source = prepared_runtime_source()
-    payload = spec.to_payload()
-    materials = detached(geometry.source)["materials"]
-    vacuum_ids = sorted(
-        material_id
-        for material_id, record in materials.items()
-        if isinstance(record, dict) and record.get("kind") == "vacuum"
-    )
-    if len(vacuum_ids) != 1:
-        raise ValueError("prepared EPR geometry requires exactly one vacuum material")
+@dataclass
+class _BodyHfssHandoff:
+    """Carry one request through canonical file writing and packaging."""
 
-    _write_script(script_path)
-    write_json(spec_path, payload)
-    files = {
-        "spec": spec_path.name,
-        "receipt": "metadata/aedt_run_receipt.json",
-    }
-    metadata = {
-        "schema_version": "scgsim.aedt.handoff.v2",
-        "expected_receipt_schema": RECEIPT_V3,
-        "status": "prepared",
-        "mode": spec.mode,
-        "workflow": workflow,
-        "project": payload["project"],
-        "materials": materials,
-        "vacuum_material_id": vacuum_ids[0],
-        "run_control": payload["run_control"],
-        "execution": {
-            "geometry_workers": geometry_workers,
-            "resources": resources.to_payload() if resources else None,
-        },
-        "pyaedt": payload["pyaedt"],
-        "aedt": payload["aedt"],
-        "files": files,
-        "prepared_at_utc": prepared_at,
-        "preparation_seconds": round(time.perf_counter() - started, 6),
-    }
-    source = {
-        "spec": spec_path.name,
-        "spec_sha256": file_sha256(spec_path),
-        "planar_source_sha256": geometry.source_sha256,
-        "planar_model_sha256": geometry.model_sha256,
-    }
-    write_json(metadata_path, metadata)
-    receipt_path.write_bytes(
-        encode_initial_receipt(
-            initial_receipt_payload(
-                schema_version=RECEIPT_V3,
-                mode=spec.mode,
-                requested={
-                    "aedt_version": spec.aedt_version,
-                    "pyaedt_version": LOCKED_PYAEDT,
-                    "official_source": OFFICIAL_PYAEDT_SOURCE_URL,
-                    "workflow": workflow,
-                },
-                pdk_materials=materials,
-                vacuum_material_id=vacuum_ids[0],
-                source=source,
-                prepared_runtime_source_value=prepared_source,
-                outputs={},
-                prepared_at_utc=prepared_at,
+    spec: HfssDrivenGeometrySpec | HfssEprSpec
+    geometry: PreparedPlanarGeometry
+    output_dir: str | Path
+    workflow: str
+    geometry_workers: int | None
+    resources: AedtResources | None
+
+    def build(self) -> HandoffPlan:
+        """Write the portable cohort in its required order."""
+        self._prepare_payload()
+        self._write_metadata()
+        self._write_receipt()
+        return self._package()
+
+    def _prepare_payload(self) -> None:
+        validate_geometry_workers(self.geometry_workers)
+        if self.resources is not None and not isinstance(self.resources, AedtResources):
+            raise TypeError("resources must be AedtResources or None")
+        self.run_dir = Path(self.output_dir).expanduser().resolve()
+        if self.run_dir.exists():
+            raise FileExistsError(
+                "output_dir must be new; prepared handoffs never reuse directories"
             )
+        self.metadata_dir = self.run_dir / "metadata"
+        self.metadata_dir.mkdir(parents=True)
+        self.script_path = self.run_dir / "run_aedt.sh"
+        self.spec_path = self.run_dir / "aedt_spec.json"
+        self.metadata_path = self.metadata_dir / "aedt_handoff_metadata.json"
+        self.receipt_path = self.metadata_dir / "aedt_run_receipt.json"
+        self.manifest_path = self.metadata_dir / "aedt_handoff_manifest.json"
+        self.archive_path = self.run_dir / "aedt_handoff.tar.gz"
+        self.prepared_at = utc_now()
+        self.started = time.perf_counter()
+        self.prepared_source = prepared_runtime_source()
+        self.payload = self.spec.to_payload()
+        self.materials = detached(self.geometry.source)["materials"]
+        self.vacuum_ids = sorted(
+            material_id
+            for material_id, record in self.materials.items()
+            if isinstance(record, dict) and record.get("kind") == "vacuum"
         )
-    )
-    allowed = (
-        script_path,
-        spec_path,
-        metadata_path,
-        receipt_path,
-        manifest_path,
-    )
-    write_json(
-        manifest_path,
-        {
-            "schema_version": "scgsim.aedt.handoff-manifest.v2",
+        if len(self.vacuum_ids) != 1:
+            raise ValueError(
+                "prepared EPR geometry requires exactly one vacuum material"
+            )
+
+    def _write_metadata(self) -> None:
+        write_script(self.script_path)
+        write_json(self.spec_path, self.payload)
+        self.files = {
+            "spec": self.spec_path.name,
+            "receipt": "metadata/aedt_run_receipt.json",
+        }
+        self.metadata = {
+            "schema_version": "scgsim.aedt.handoff.v2",
             "expected_receipt_schema": RECEIPT_V3,
-            "allowed_paths": [path.relative_to(run_dir).as_posix() for path in allowed],
-            "members": [
-                _member(path, run_dir) for path in allowed if path != manifest_path
-            ],
-        },
-    )
-    with tarfile.open(archive_path, "w:gz") as archive:
-        for path in allowed:
-            archive.add(
-                path, arcname=path.relative_to(run_dir).as_posix(), recursive=False
+            "status": "prepared",
+            "mode": self.spec.mode,
+            "workflow": self.workflow,
+            "project": self.payload["project"],
+            "materials": self.materials,
+            "vacuum_material_id": self.vacuum_ids[0],
+            "run_control": self.payload["run_control"],
+            "execution": {
+                "geometry_workers": self.geometry_workers,
+                "resources": self.resources.to_payload() if self.resources else None,
+            },
+            "pyaedt": self.payload["pyaedt"],
+            "aedt": self.payload["aedt"],
+            "files": self.files,
+            "prepared_at_utc": self.prepared_at,
+            "preparation_seconds": round(time.perf_counter() - self.started, 6),
+        }
+        self.source = {
+            "spec": self.spec_path.name,
+            "spec_sha256": file_sha256(self.spec_path),
+            "planar_source_sha256": self.geometry.source_sha256,
+            "planar_model_sha256": self.geometry.model_sha256,
+        }
+        write_json(self.metadata_path, self.metadata)
+
+    def _write_receipt(self) -> None:
+        self.receipt_path.write_bytes(
+            encode_initial_receipt(
+                initial_receipt_payload(
+                    schema_version=RECEIPT_V3,
+                    mode=self.spec.mode,
+                    requested={
+                        "aedt_version": self.spec.aedt_version,
+                        "pyaedt_version": LOCKED_PYAEDT,
+                        "official_source": OFFICIAL_PYAEDT_SOURCE_URL,
+                        "workflow": self.workflow,
+                    },
+                    pdk_materials=self.materials,
+                    vacuum_material_id=self.vacuum_ids[0],
+                    source=self.source,
+                    prepared_runtime_source_value=self.prepared_source,
+                    outputs={},
+                    prepared_at_utc=self.prepared_at,
+                )
             )
-    return HandoffPlan(
-        run_dir,
-        script_path,
-        spec_path,
-        metadata_path,
-        receipt_path,
-        manifest_path,
-        archive_path,
-    )
+        )
+
+    def _package(self) -> HandoffPlan:
+        self.allowed = (
+            self.script_path,
+            self.spec_path,
+            self.metadata_path,
+            self.receipt_path,
+            self.manifest_path,
+        )
+        write_json(
+            self.manifest_path,
+            {
+                "schema_version": "scgsim.aedt.handoff-manifest.v2",
+                "expected_receipt_schema": RECEIPT_V3,
+                "allowed_paths": [
+                    path.relative_to(self.run_dir).as_posix() for path in self.allowed
+                ],
+                "members": [
+                    handoff_member(path, self.run_dir)
+                    for path in self.allowed
+                    if path != self.manifest_path
+                ],
+            },
+        )
+        with tarfile.open(self.archive_path, "w:gz") as archive:
+            for path in self.allowed:
+                archive.add(
+                    path,
+                    arcname=path.relative_to(self.run_dir).as_posix(),
+                    recursive=False,
+                )
+        return HandoffPlan(
+            self.run_dir,
+            self.script_path,
+            self.spec_path,
+            self.metadata_path,
+            self.receipt_path,
+            self.manifest_path,
+            self.archive_path,
+        )

@@ -14,10 +14,10 @@ from scgsim.aedt import (
     Q2dSpec,
     prepare_handoff,
 )
+from scgsim.aedt.results.provenance import SOURCE_SCHEMA, validate_runtime_source
 from scgsim.aedt.runtime.families.q2d import run_q2d
 from scgsim.aedt.specs.common import Q2D_SCHEMA_VERSION, Q2D_SCHEMA_VERSION_V2
 from scgsim.aedt.specs.parse import parse_aedt_spec
-from scgsim.aedt.results.provenance import SOURCE_SCHEMA_V25, validate_runtime_source
 
 
 def _spec(version: str, run_control: MatrixRunControl | None) -> Q2dSpec:
@@ -49,6 +49,7 @@ def _spec(version: str, run_control: MatrixRunControl | None) -> Q2dSpec:
 def test_q2d_model_only_handoff_roundtrips_explicit_null_without_native_output(
     tmp_path, version
 ):
+    """Round-trip explicit null controls without creating native model or solver outputs."""
     plan = prepare_handoff(
         spec=_spec(version, None), output_dir=tmp_path / f"q2d-{version}"
     )
@@ -62,13 +63,14 @@ def test_q2d_model_only_handoff_roundtrips_explicit_null_without_native_output(
     assert parsed.to_payload() == payload
     assert parsed.aedt_version == version
     assert receipt["status"] == "not_run"
-    assert receipt["prepared_runtime_source"]["schema_version"] == SOURCE_SCHEMA_V25
+    assert receipt["prepared_runtime_source"]["schema_version"] == SOURCE_SCHEMA
     validate_runtime_source(receipt["prepared_runtime_source"], stage="prepared")
     assert not (plan.run_dir / "PreparedQ2d.aedt").exists()
     assert not (plan.run_dir / "results").exists()
 
 
 def test_q2d_model_only_payload_requires_explicit_null_run_control():
+    """Require the explicit null run-control field in a model-only payload."""
     payload = _spec("2024.2", None).to_payload()
     assert payload["schema_version"] == Q2D_SCHEMA_VERSION_V2
 
@@ -86,11 +88,13 @@ def test_q2d_model_only_payload_requires_explicit_null_run_control():
 
 
 def test_model_only_q2d_cannot_enter_the_solver(tmp_path):
+    """Reject a model-only Q2D request before starting a solve."""
     with pytest.raises(ValueError, match="requires an explicit complete run_control"):
         run_q2d(None, tmp_path, _spec("2024.2", None))
 
 
 def test_controlled_q2d_payload_remains_v1():
+    """Keep the controlled Q2D request on its established version-one schema."""
     spec = _spec("2024.2", MatrixRunControl("Setup1", 6.0, 4, 0.1))
     payload = spec.to_payload()
     assert payload["schema_version"] == Q2D_SCHEMA_VERSION

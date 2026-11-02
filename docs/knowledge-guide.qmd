@@ -1,0 +1,37 @@
+---
+title: "Knowledge guide"
+description: "Match SCGSim source and public references to the solver workflow you intend to use."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/knowledge-guide"
+---
+
+Use this page to find maintained references for a study and keep its SCGSim package and PDK revisions paired. The current SCGSim baseline is `2.0.0rc15` at [`fb8cbe1`](https://github.com/NCUPHY-LTLab/scgsim/tree/fb8cbe199386bbe6d81cc9c58817fbe7d339573f).
+
+The public Xmon and CPW examples use OrPen SC PDK revision [`35b4dc1`](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/tree/35b4dc1cdd3f921badcac2fe57a98366315ae8d9), distributed as `orpen-sc-pdk` and imported as `orpen_sc_pdk`. Use the pinned revision named by the example you follow.
+
+## Find the right reference
+
+| Need | Start here |
+|---|---|
+| Choose a calculation and its end-to-end notebook | [Simulation chooser](examples.qmd) |
+| Check supported backend workflows | [Supported calculations](backend-support.qmd) |
+| Prepare, seal and evaluate saved AEDT fields | [Saved-field workflow](course/aedt-saved-fields.qmd) |
+| Change assumptions on an existing EPR result offline | [Offline EPR](course/offline-epr.qmd) |
+| Look up `analyze_epr` parameters and signature | [Saved-field EPR API reference](api/analyze_epr.qmd) |
+| Browse declared public inputs and facade names | [Public API index](api/input-index.qmd) |
+| Review source ownership and API boundaries | [Architecture](architecture.qmd) |
+
+## Keep source revisions paired
+
+For Xmon and CPW, pair SCGSim `2.0.0rc15` with the pinned PDK revision above. The distribution name is `orpen-sc-pdk`; Python imports use `orpen_sc_pdk`. Keep each study's source revision in its environment and record.
+
+The [historical Circular Pad setup](history/curved-source-installation.qmd) records a separate set of pinned SCGSim, PDK and native Palace revisions for that study. Use those pins when reproducing that specific run; the `orpen_sc_pdk` import name also appears in the Xmon and CPW source revision above.
+
+## Native and offline EPR steps
+
+`analyze_epr` evaluates retained saved fields through native AEDT and requires an explicitly selected AEDT release and license. `reanalyze_epr` updates assumptions on a resolved EPR result offline. Follow the complete [saved-field lesson](course/aedt-saved-fields.qmd), then use the [generated API reference](api/analyze_epr.qmd) for its callable signature.
+
+## Junction capacitance reference
+
+For one junction in a given mode and pass, $V$ is its complex peak-phasor voltage and $U_{norm}$ is the electric-energy normalization, not total electric-plus-magnetic energy. For nonzero $V$, the effective modal capacitance is $C_{mode}=2U_{norm}/|V|^2$, the branch capacitance is $C_j=2U_{C,j}/|V|^2$, and the participation ratio is $p_{C,j}=C_j/C_{mode}$. At $V=0$, the ratio is undefined. The [AEDT runtime contract](specs/aedt-runtime.qmd#surface-estimates-and-junction-normalization) records the full voltage, energy and normalization definitions.

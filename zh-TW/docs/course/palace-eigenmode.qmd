@@ -51,9 +51,15 @@ print(mesh_path, config_path)
 
 若公開 Xmon 使用電感來源埠與已歸屬的薄膜，請在產生網格與準備交接套件**之前**，先使用 [Palace EPR 延伸教學](../tutorial-xmon-palace.qmd)。其中的 surface／bulk／port 選擇會篩選回報數量，不會刪除物理區域或改變正規化方式。[EPR 概念](../eigenmode-epr.qmd)說明後續要解讀的數值，包括為何原生埠參與量帶正負號，而 AEDT 接面參與量為非負值。
 
-## Surface EPR 的原生 Mask／Inset
+## Surface EPR 的原生 Mask／Inset {#native-maskinset-for-surface-epr}
 
-Palace Surface EPR 可透過 `inset_margins_um` 要求原生 Mask／Inset 邊距資料列。省略此欄位即可只要求未遮罩基準列。非空請求需要支援原生 Mask／Inset 設定的 Palace 可執行檔；Python 準備流程不會提供該執行檔。這些資料列是原生邊距評估，不會分割 SGB 幾何，也不會建立距離帶。公開的 [Xmon EPR 延伸範例](../tutorial-xmon-palace.qmd)示範來源設定。
+Palace Surface EPR 可透過 `inset_margins_um` 要求原生 Mask／Inset 邊距資料列。省略此欄位即可只要求未遮罩基準列。官方
+[Palace v0.18.1
+設定結構](https://raw.githubusercontent.com/awslabs/palace/v0.18.1/scripts/schema/config-schema.json)定義
+`Model.Refinement.Nonconformal`，但未定義 `Mask` 或 `Inset`。此功能需使用實作該原生設定的 Palace
+分支版本；已記錄的[歷史分支版本](https://github.com/arfiligol/palace/tree/4e9e1b7232b4c8ca8b964be7e70f1848f578de37)即為一例。安裝後請依該執行檔自身的來源與設定契約確認支援情形；Python
+準備流程不會提供原生執行檔。要求的資料列是原生邊距評估，不是 SGB 切分或距離帶。公開的 [Xmon EPR
+延伸範例](../tutorial-xmon-palace.qmd)示範來源設定。
 
 ## Circular Pad LC 研究 {#circular-pad-lc-study}
 

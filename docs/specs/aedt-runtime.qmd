@@ -274,11 +274,15 @@ New handoffs retain `scgsim.aedt.handoff.v1` and
 `scgsim.aedt.handoff-manifest.v1`. Both records add
 `expected_receipt_schema: scgsim.aedt.receipt.v3`, and the initial receipt is
 V3. It contains `prepared_runtime_source`: a deterministic, sorted
-`runtime-source.v24` manifest for the current source. The record fields are
-`schema_version`, `stage`, `modules`, `content_sha256`, and
-`revision_observation`; there is no helper-hash map. Each declared module has
-measured bytes and the content digest binds that inventory. The Git observation
-is either available with the actual 40-hex commit or explicitly unavailable.
+`runtime-source.v28` manifest for the current source, with 284 sorted, unique
+paths. V28 starts from all current AEDT modules, both AEDT visualization loaders,
+and the non-AEDT paths retained from V27, then follows AST-resolved imports and
+package initializers. It adds `scgsim/geometry/primitives/topology_validation.py`
+to the frozen 283-path V27 roster. The fields are `schema_version`, `stage`,
+`modules`, `content_sha256`, and `revision_observation`; there is no helper-hash
+map. Each declared module has measured bytes and the content digest binds that
+inventory. The Git observation is either available with the actual 40-hex
+commit or explicitly unavailable.
 A source checkout or fabricated revision is not required for byte-bound
 identity.
 
@@ -306,8 +310,8 @@ partial markers, noncanonical members, and hash mismatches reject before
 receipt mutation.
 
 Every new completed V3 receipt has a separate `runtime_source` manifest using
-`runtime-source.v24` and a content digest for the code that actually executed
-it. Declared module bytes and the digest are mandatory; V24 has no redundant
+`runtime-source.v28` and a content digest for the code that actually executed
+it. Declared module bytes and the digest are mandatory; V28 has no redundant
 helper-hash fields. `revision_observation` carries the actual 40-hex commit
 when available and records `unavailable` truthfully for an immutable wheel
 without VCS metadata. Missing or corrupt declared module bytes, digest, schema,
@@ -326,7 +330,7 @@ These unsigned consistency checks do not authenticate an artifact set against
 an actor able to rewrite every member.
 
 `runtime-source.v1` is a frozen thirteen-module reader contract, not a live
-enumeration rule. The V2–V23 inventories are frozen as well. V4 added
+enumeration rule. The V2–V27 inventories retain their original module paths as well. V4 added
 `scgsim/aedt/_presentation.py`; V5 added `scgsim/sgb/geometry_plan.py` and
 `scgsim/sgb/__init__.py`. V7 added
 `scgsim/_notebook_presentation.py` to V6. V8 added
@@ -347,14 +351,19 @@ helpers, geometry/EPR/support specs, modeling/planar preparation, HFSS geometry
 runtime, neutral geometry representation modules, and the shared source-ground
 construction helper with its polygon-operation leaf. V19 added the model-only
 prepared-model reader; V20–V22 retain their separate declared historical
-inventories. V23 is the frozen inventory immediately preceding the current
-V24. V24 adds `scgsim/aedt/runtime/batch_protocol.py`,
+inventories. V24 adds `scgsim/aedt/runtime/batch_protocol.py`,
 `scgsim/aedt/runtime/batch_runner.py`, and `scgsim/aedt/epr/evidence.py` to the
-V23 inventory. V23 and V24 use the same five record fields described above,
-with no helper-hash map. Each version's exact path list is its
-declared implementation inventory. These manifests bind their
-declared file inventories, not an exhaustive transitive dependency
-attestation. The frozen V12 inventory, for example, does not separately hash
+V23 inventory. V25 adds the matrix run-control implementation.
+V26 freezes 167 paths for the request, preparation, transaction, native-family,
+EPR-expression, result-reader, and shared geometry modules after responsibility
+splits. V27 freezes 283 sorted, unique paths, seeded by 118 AEDT modules, both
+AEDT visualization loaders, and the retained non-AEDT paths, then closed over
+AST-resolved imports and package initializers. V28 is current with 284 paths; it
+adds `scgsim/geometry/primitives/topology_validation.py` to V27. V23–V28 use the
+same five record fields described above, with no helper-hash map. Each
+version's exact path list is its declared implementation inventory. These
+manifests bind their declared file inventories, not an exhaustive transitive
+dependency attestation. The frozen V12 inventory, for example, does not separately hash
 `scgsim/sgb/engine_gates.py`. They do not change the V3 receipt schema. A pure
 initial-receipt codec owns exact V1/V2/V3 member
 order, two-space JSON indentation, and the trailing newline. V1 omits prepared
@@ -364,7 +373,7 @@ historical hashes with the installed package.
 
 Execution computes mandatory runtime-source provenance inside the receipt-bound
 failure transaction, before importing PyAEDT or constructing Desktop. Current
-V24 may record `revision_observation` as unavailable; that alone does not fail
+V28 may record `revision_observation` as unavailable; that alone does not fail
 byte-bound identity or prevent execution. Missing or corrupt declared module
 bytes, digest, schema, or cohort still yield a failed V3 receipt without a
 Desktop launch rather than escaping receipt finalization. V1–V17 retain their
@@ -2233,6 +2242,13 @@ analysis uses the same inset definition and does not reuse historical
 point-to-edge expression names as the new geometry definition.
 
 ### Surface estimates and junction normalization {#surface-estimates-and-junction-normalization}
+
+Use the [saved-field API guide](../api/analyze_epr.qmd) for the `analyze_epr` call
+and parameter meanings. For a nonzero junction voltage $V$, the voltage-based effective
+modal capacitance is $C_{mode}=2U_{norm}/|V|^2$ and the branch capacitance is
+$C_j=2U_{C,j}/|V|^2$, so $p_{C,j}=C_j/C_{mode}$. When $V=0$, this capacitance ratio is
+undefined; no voltage cutoff is applied.
+
 
 With peak phasors, film thickness $t$, film relative permittivity
 $\epsilon_f$, and substrate relative permittivity $\epsilon_s$, the fixed

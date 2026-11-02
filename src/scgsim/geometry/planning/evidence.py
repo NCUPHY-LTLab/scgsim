@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from typing import Any, Literal
 
+from scgsim.geometry.models.common import RouteLiteral
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.planning.representation import planned_conductor_representation
@@ -52,7 +53,7 @@ def _upstream_plain(value: Any) -> Any:
 def _project_semantic_facts(
     build_input: GeometryBuildInput,
     *,
-    route: str | None,
+    route: RouteLiteral | None,
     representation_context: RepresentationContext | None = None,
 ) -> dict[str, Any]:
     polygon_by_id = {polygon.polygon_id: polygon for polygon in build_input.polygons}
@@ -171,7 +172,7 @@ def _source_revision(
 def build_semantic_evidence_facade(
     build_input: GeometryBuildInput,
     *,
-    route: str | None,
+    route: RouteLiteral | None,
     representation_context: RepresentationContext | None = None,
 ) -> SemanticEvidenceFacade:
     """Snapshot one effective build input for reuse during one planning call."""
@@ -194,7 +195,7 @@ def build_semantic_evidence_facade(
 def require_semantic_evidence_facade(
     build_input: GeometryBuildInput,
     *,
-    route: str | None,
+    route: RouteLiteral | None,
     facade: SemanticEvidenceFacade | None,
     representation_context: RepresentationContext | None = None,
 ) -> SemanticEvidenceFacade:
@@ -237,7 +238,7 @@ def require_semantic_evidence_facade(
     return facade
 
 
-def conductor_solution_evidence(
+def conductor_solution_evidence(  # noqa: PLR0913 -- explicit patch provenance and ordered owners are inputs to the semantic projection
     facade: SemanticEvidenceFacade,
     *,
     contribution_id: str,
@@ -274,7 +275,7 @@ def conductor_solution_evidence(
     )
 
 
-def solution_solution_evidence(
+def solution_solution_evidence(  # noqa: PLR0913 -- explicit patch provenance and ordered owners are inputs to the semantic projection
     facade: SemanticEvidenceFacade,
     *,
     contribution_id: str,
@@ -311,7 +312,7 @@ def solution_solution_evidence(
     )
 
 
-def metal_metal_evidence(
+def metal_metal_evidence(  # noqa: PLR0913 -- explicit patch provenance and ordered owners are inputs to the semantic projection
     facade: SemanticEvidenceFacade,
     *,
     contribution_id: str,

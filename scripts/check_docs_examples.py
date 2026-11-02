@@ -6,6 +6,7 @@ from __future__ import annotations
 import ast
 import contextlib
 import io
+import json
 import os
 import re
 import sys
@@ -16,6 +17,8 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class CodeBlock:
+    """Carry one fenced source block and its original document line."""
+
     language: str
     source: str
     line: int
@@ -23,6 +26,8 @@ class CodeBlock:
 
 @dataclass(frozen=True)
 class Selection:
+    """Identify the authored block and preparation cutoff to execute."""
+
     path: str
     heading: str | None
     ordinal: int
@@ -54,7 +59,9 @@ def _frontmatter_end(lines: list[str], path: Path) -> int:
     raise ValueError(f"{path}: unterminated YAML front matter")
 
 
-def _fenced_blocks(lines: list[str], path: Path, start: int, end: int) -> list[CodeBlock]:
+def _fenced_blocks(
+    lines: list[str], path: Path, start: int, end: int
+) -> list[CodeBlock]:
     blocks: list[CodeBlock] = []
     index = start
     while index < end:
@@ -86,7 +93,11 @@ def _select_blocks(selection: Selection, root: Path) -> list[CodeBlock]:
     else:
         target = f"## {selection.heading}"
         heading_index = next(
-            (index for index in range(body_start, len(lines)) if lines[index] == target),
+            (
+                index
+                for index in range(body_start, len(lines))
+                if lines[index] == target
+            ),
             None,
         )
         if heading_index is None:
@@ -127,7 +138,9 @@ def _validate_syntax(block: CodeBlock, path: Path) -> None:
     try:
         compile(block.source, f"{path}:{block.line}", "exec")
     except SyntaxError as error:
-        raise ValueError(f"{path}:{block.line}: selected Python block has invalid syntax") from error
+        raise ValueError(
+            f"{path}:{block.line}: selected Python block has invalid syntax"
+        ) from error
 
 
 def _validate_prepare_cutoff(block: CodeBlock, path: Path) -> None:
@@ -136,12 +149,17 @@ def _validate_prepare_cutoff(block: CodeBlock, path: Path) -> None:
         index
         for index, statement in enumerate(tree.body)
         if isinstance(statement, ast.Assign)
-        and any(isinstance(target, ast.Name) and target.id == "handoff" for target in statement.targets)
+        and any(
+            isinstance(target, ast.Name) and target.id == "handoff"
+            for target in statement.targets
+        )
         and isinstance(statement.value, ast.Call)
         and _call_name(statement.value.func) == "prepare_handoff"
     ]
     if len(prepare_assignments) != 1:
-        raise ValueError(f"{path}:{block.line}: expected one direct prepare_handoff assignment")
+        raise ValueError(
+            f"{path}:{block.line}: expected one direct prepare_handoff assignment"
+        )
     prepare_index = prepare_assignments[0]
     if prepare_index != len(tree.body) - 2:
         raise ValueError(
@@ -156,7 +174,9 @@ def _validate_prepare_cutoff(block: CodeBlock, path: Path) -> None:
         else None
     )
     if print_call is None:
-        raise ValueError(f"{path}:{block.line}: expected the documented handoff-path print after preparation")
+        raise ValueError(
+            f"{path}:{block.line}: expected the documented handoff-path print after preparation"
+        )
 
 
 def _run(root: Path) -> dict[str, object]:
@@ -188,15 +208,24 @@ def _run(root: Path) -> dict[str, object]:
                 value = getattr(handoff, attribute)
                 path = Path(value).resolve()
                 if not path.is_relative_to(work_dir):
-                    raise RuntimeError(f"prepared {attribute} escaped the temporary working directory")
+                    raise RuntimeError(
+                        f"prepared {attribute} escaped the temporary working directory"
+                    )
                 if not path.is_file():
                     raise RuntimeError(f"prepared {attribute} is not a file: {path}")
-                output_files[attribute] = {"name": path.name, "bytes": path.stat().st_size}
+                output_files[attribute] = {
+                    "name": path.name,
+                    "bytes": path.stat().st_size,
+                }
 
             return {
                 "status": "PREPARE_HANDOFF_COMPLETE",
                 "selected_blocks": [
-                    {"path": selection.path, "heading": selection.heading, "ordinal": selection.ordinal}
+                    {
+                        "path": selection.path,
+                        "heading": selection.heading,
+                        "ordinal": selection.ordinal,
+                    }
                     for selection, _block in selected
                 ],
                 "temporary_work_directory": work_dir.name,
@@ -210,13 +239,14 @@ def _run(root: Path) -> dict[str, object]:
 
 
 def main() -> int:
+    """Run the selected preparation examples and print their output inventory."""
     root = Path(__file__).resolve().parents[1]
     try:
         result = _run(root)
     except ModuleNotFoundError as error:
-        raise SystemExit(f"required documentation-example dependency is missing: {error.name}") from error
-    import json
-
+        raise SystemExit(
+            f"required documentation-example dependency is missing: {error.name}"
+        ) from error
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
 

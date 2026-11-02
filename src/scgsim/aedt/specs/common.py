@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
-
 import math
-
 from collections.abc import Mapping
-
 from dataclasses import dataclass
-
 from pathlib import Path
+from typing import Any, Literal, cast
 
-from typing import Any, Literal
-
-from scgsim.aedt._data import _text as _rlc_text
+from scgsim.aedt.data import text_value
 from scgsim.aedt.versions import normalize_aedt_version
 
 
@@ -28,7 +23,9 @@ class LumpedRlc:
     capacitance_f: float | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "support_id", _rlc_text(self.support_id, "support_id"))
+        object.__setattr__(
+            self, "support_id", text_value(self.support_id, "support_id")
+        )
         if self.topology not in {"series", "parallel"}:
             raise ValueError("lumped topology must be series or parallel")
         for key in ("resistance_ohm", "inductance_h", "capacitance_f"):
@@ -40,16 +37,25 @@ class LumpedRlc:
                 if not math.isfinite(value):
                     raise ValueError(f"{key} must be finite")
                 object.__setattr__(self, key, value)
-        if all(getattr(self, key) is None for key in ("resistance_ohm", "inductance_h", "capacitance_f")):
+        if all(
+            getattr(self, key) is None
+            for key in ("resistance_ohm", "inductance_h", "capacitance_f")
+        ):
             raise ValueError("lumped RLC requires an enabled component")
 
     def to_payload(self) -> dict[str, Any]:
-        return {"support_id": self.support_id, "topology": self.topology,
-                "resistance_ohm": self.resistance_ohm, "inductance_h": self.inductance_h,
-                "capacitance_f": self.capacitance_f}
+        """Return this request record in its canonical payload shape."""
+        return {
+            "support_id": self.support_id,
+            "topology": self.topology,
+            "resistance_ohm": self.resistance_ohm,
+            "inductance_h": self.inductance_h,
+            "capacitance_f": self.capacitance_f,
+        }
 
     @classmethod
     def from_payload(cls, value: Mapping[str, Any]) -> LumpedRlc:
+        """Construct this request record from its serialized payload."""
         return cls(**dict(value))
 
 
@@ -119,17 +125,13 @@ class AedtResources:
             raise ValueError("ram_limit_percent must be an integer from 1 to 100")
 
     def to_payload(self) -> dict[str, int]:
+        """Return this request record in its canonical payload shape."""
         return {"cores": self.cores, "ram_limit_percent": self.ram_limit_percent}
 
 
-def _text(value: Any, field: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{field} must be non-empty text")
-    return value.strip()
-
-
-def _project_filename(value: Any, field: str) -> Path:
-    project = Path(_text(value, field))
+def project_filename(value: Any, field: str) -> Path:
+    """Validate and normalize one AEDT project filename."""
+    project = Path(text_value(value, field))
     if project.parent != Path(".") or project.name in {".", ".."}:
         raise ValueError("project_name must be a single project filename")
     if not project.stem:
@@ -137,12 +139,13 @@ def _project_filename(value: Any, field: str) -> Path:
     return project
 
 
-def _project_name_from_payload(value: Any) -> str:
+def project_name_from_payload(value: Any) -> str:
     """Adapt one canonical payload name through constructor normalization."""
-    return f"{_project_filename(value, 'project.name').name}.aedt"
+    return f"{project_filename(value, 'project.name').name}.aedt"
 
 
-def _number(value: Any, field: str) -> float:
+def finite_number(value: Any, field: str) -> float:
+    """Validate and convert one finite numeric value."""
     if isinstance(value, bool):
         raise TypeError(f"{field} must be a finite number")
     try:
@@ -160,12 +163,13 @@ def _nonnegative_int(value: Any, field: str) -> int:
     return value
 
 
-def _adaptive_controls(
+def adaptive_controls(
     maximum_passes: Any,
     minimum_passes: Any,
     minimum_converged_passes: Any,
     percent_refinement: Any,
 ) -> float:
+    """Validate shared adaptive-pass controls and return the refinement value."""
     for field, value in (
         ("maximum_passes", maximum_passes),
         ("minimum_passes", minimum_passes),
@@ -175,7 +179,7 @@ def _adaptive_controls(
             raise ValueError(f"{field} must be a positive integer")
         if field != "maximum_passes" and value > maximum_passes:
             raise ValueError(f"{field} must not exceed maximum_passes")
-    refinement = _number(percent_refinement, "percent_refinement")
+    refinement = finite_number(percent_refinement, "percent_refinement")
     if not 0 < refinement <= 100:
         raise ValueError("percent_refinement must be in (0, 100]")
     return refinement
@@ -197,9 +201,11 @@ class LayerImport:
         object.__setattr__(
             self, "datatype", _nonnegative_int(self.datatype, "datatype")
         )
-        object.__setattr__(self, "layer_name", _text(self.layer_name, "layer_name"))
-        low = _number(self.z_min_um, "z_min_um")
-        high = _number(self.z_max_um, "z_max_um")
+        object.__setattr__(
+            self, "layer_name", text_value(self.layer_name, "layer_name")
+        )
+        low = finite_number(self.z_min_um, "z_min_um")
+        high = finite_number(self.z_max_um, "z_max_um")
         if high < low:
             raise ValueError(
                 "z_max_um must be >= z_min_um; equal values are conductor sheets"
@@ -208,9 +214,13 @@ class LayerImport:
         object.__setattr__(self, "z_max_um", high)
 
     def to_payload(self) -> dict[str, Any]:
+        """Return this request record in its canonical payload shape."""
         return {
-            **({"physical_layer_id": self.physical_layer_id}
-               if self.physical_layer_id is not None else {}),
+            **(
+                {"physical_layer_id": self.physical_layer_id}
+                if self.physical_layer_id is not None
+                else {}
+            ),
             "layer": self.layer,
             "datatype": self.datatype,
             "layer_name": self.layer_name,
@@ -229,7 +239,9 @@ class PdkMaterial:
     library_name: str | None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "material_id", _text(self.material_id, "material_id"))
+        object.__setattr__(
+            self, "material_id", text_value(self.material_id, "material_id")
+        )
         if self.kind not in {"vacuum", "dielectric", "superconductor"}:
             raise ValueError(
                 "material kind must be vacuum, dielectric, or superconductor"
@@ -243,7 +255,7 @@ class PdkMaterial:
         library_name = (
             None
             if self.library_name is None
-            else _text(self.library_name, "library_name")
+            else text_value(self.library_name, "library_name")
         )
         if self.is_superconducting and library_name is not None:
             raise ValueError("superconducting PDK material must not name AEDT material")
@@ -254,6 +266,7 @@ class PdkMaterial:
         object.__setattr__(self, "library_name", library_name)
 
     def to_payload(self) -> dict[str, Any]:
+        """Return this request record in its canonical payload shape."""
         return {
             "material_id": self.material_id,
             "kind": self.kind,
@@ -272,13 +285,18 @@ class ObjectBinding:
     material_id: str
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "object_name", _text(self.object_name, "object_name"))
+        object.__setattr__(
+            self, "object_name", text_value(self.object_name, "object_name")
+        )
         object.__setattr__(self, "layer", _nonnegative_int(self.layer, "binding.layer"))
         if self.role not in {"ground", "signal", "substrate"}:
             raise ValueError("role must be ground, signal, or substrate")
-        object.__setattr__(self, "material_id", _text(self.material_id, "material_id"))
+        object.__setattr__(
+            self, "material_id", text_value(self.material_id, "material_id")
+        )
 
     def to_payload(self) -> dict[str, Any]:
+        """Return this request record in its canonical payload shape."""
         return {
             "object_name": self.object_name,
             "layer": self.layer,
@@ -304,13 +322,15 @@ class LumpedTerminalPort:
         if self.index not in {1, 2}:
             raise ValueError("two-port V1 uses port indices 1 and 2")
         for key in ("name", "support_id"):
-            object.__setattr__(self, key, _text(getattr(self, key), key))
+            object.__setattr__(self, key, text_value(getattr(self, key), key))
         for key in ("signal_entity_ids", "reference_entity_ids"):
-            values = tuple(_text(value, key) for value in getattr(self, key))
+            values = tuple(text_value(value, key) for value in getattr(self, key))
             if not values:
                 raise ValueError(f"{key} requires explicit conductor Entities")
             object.__setattr__(self, key, values)
-        if isinstance(self.impedance_ohm, bool) or not isinstance(self.impedance_ohm, (int, float)):
+        if isinstance(self.impedance_ohm, bool) or not isinstance(
+            self.impedance_ohm, (int, float)
+        ):
             raise TypeError("impedance_ohm must be explicitly numeric")
         if self.deembed_um != 0:
             raise NotImplementedError("Lumped Terminal supports deembed_um=0 only")
@@ -318,14 +338,22 @@ class LumpedTerminalPort:
             raise TypeError("renormalize must be bool")
 
     def to_payload(self) -> dict[str, Any]:
-        return {"kind": "lumped", "index": self.index, "name": self.name,
-                "support_id": self.support_id, "signal_entity_ids": list(self.signal_entity_ids),
-                "reference_entity_ids": list(self.reference_entity_ids),
-                "impedance_ohm": self.impedance_ohm, "renormalize": self.renormalize,
-                "deembed_um": self.deembed_um}
+        """Return this request record in its canonical payload shape."""
+        return {
+            "kind": "lumped",
+            "index": self.index,
+            "name": self.name,
+            "support_id": self.support_id,
+            "signal_entity_ids": list(self.signal_entity_ids),
+            "reference_entity_ids": list(self.reference_entity_ids),
+            "impedance_ohm": self.impedance_ohm,
+            "renormalize": self.renormalize,
+            "deembed_um": self.deembed_um,
+        }
 
     @classmethod
     def from_payload(cls, value: Mapping[str, Any]) -> LumpedTerminalPort:
+        """Construct this request record from its serialized payload."""
         record = dict(value)
         if record.pop("kind") != "lumped":
             raise ValueError("lumped terminal kind differs")
@@ -346,30 +374,41 @@ class TerminalPort:
     def __post_init__(self) -> None:
         if self.index not in {1, 2}:
             raise ValueError("two-port V1 uses port indices 1 and 2")
-        object.__setattr__(self, "name", _text(self.name, "port.name"))
+        object.__setattr__(self, "name", text_value(self.name, "port.name"))
         if self.side not in {"+X", "-X", "+Y", "-Y", "+Z", "-Z"}:
             raise ValueError("port.side is invalid")
         references = tuple(
-            _text(value, "reference_object") for value in self.reference_objects
+            text_value(value, "reference_object") for value in self.reference_objects
         )
         if not references:
             raise ValueError("terminal port requires explicit reference_objects")
         object.__setattr__(self, "reference_objects", references)
-        object.__setattr__(self, "signal_entity_ids", tuple(
-            _text(value, "signal_entity_id") for value in self.signal_entity_ids))
-        deembed = _number(self.deembed_um, "deembed_um")
+        object.__setattr__(
+            self,
+            "signal_entity_ids",
+            tuple(
+                text_value(value, "signal_entity_id")
+                for value in self.signal_entity_ids
+            ),
+        )
+        deembed = finite_number(self.deembed_um, "deembed_um")
         if deembed < 0:
             raise ValueError("deembed_um must be >= 0")
         object.__setattr__(self, "deembed_um", deembed)
 
     def to_payload(self) -> dict[str, Any]:
+        """Return this request record in its canonical payload shape."""
         return {
             "index": self.index,
             "name": self.name,
             "side": self.side,
             "reference_objects": list(self.reference_objects),
             "deembed_um": self.deembed_um,
-            **({"signal_entity_ids": list(self.signal_entity_ids)} if self.signal_entity_ids else {}),
+            **(
+                {"signal_entity_ids": list(self.signal_entity_ids)}
+                if self.signal_entity_ids
+                else {}
+            ),
         }
 
 
@@ -385,7 +424,7 @@ class ModalPort:
     def __post_init__(self) -> None:
         if self.index not in {1, 2}:
             raise ValueError("two-port V1 uses port indices 1 and 2")
-        object.__setattr__(self, "name", _text(self.name, "port.name"))
+        object.__setattr__(self, "name", text_value(self.name, "port.name"))
         if self.side not in {"+X", "-X", "+Y", "-Y", "+Z", "-Z"}:
             raise ValueError("port.side is invalid")
         if len(self.integration_line_um) != 2 or any(
@@ -396,12 +435,13 @@ class ModalPort:
             self,
             "integration_line_um",
             tuple(
-                tuple(_number(value, "integration_line_um") for value in point)
+                tuple(finite_number(value, "integration_line_um") for value in point)
                 for point in self.integration_line_um
             ),
         )
 
     def to_payload(self) -> dict[str, Any]:
+        """Return this request record in its canonical payload shape."""
         return {
             "index": self.index,
             "name": self.name,
@@ -410,37 +450,40 @@ class ModalPort:
         }
 
 
-def _padding(
+def validate_region_padding(
     values: tuple[float, float, float, float, float, float],
 ) -> tuple[float, float, float, float, float, float]:
+    """Validate the six face-specific AEDT region padding values."""
     if len(values) != 6:
         raise ValueError(
             "region_padding_um requires six PyAEDT face values: +X,-X,+Y,-Y,+Z,-Z"
         )
-    result = tuple(_number(value, "region_padding_um") for value in values)
+    result = tuple(finite_number(value, "region_padding_um") for value in values)
     if any(value < 0 for value in result):
         raise ValueError("region_padding_um values must be >= 0")
-    return result
+    return cast(tuple[float, float, float, float, float, float], result)
 
 
-def _padding_2d(
+def validate_planar_padding(
     values: tuple[float, float, float, float],
 ) -> tuple[float, float, float, float]:
+    """Validate the four in-plane Q2D region padding values."""
     if len(values) != 4:
         raise ValueError("Q2D region_padding_um requires +X,-X,+Y,-Y values")
-    result = tuple(_number(value, "region_padding_um") for value in values)
+    result = tuple(finite_number(value, "region_padding_um") for value in values)
     if any(value < 0 for value in result):
         raise ValueError("region_padding_um values must be >= 0")
-    return result
+    return cast(tuple[float, float, float, float], result)
 
 
-def _normalize_common_spec(spec: Any) -> dict[str, PdkMaterial]:
+def normalize_common_spec(spec: Any) -> dict[str, PdkMaterial]:
+    """Normalize fields and validate the shared PDK material contract."""
     object.__setattr__(spec, "aedt_version", normalize_aedt_version(spec.aedt_version))
     if spec.pyaedt_version != LOCKED_PYAEDT:
         raise ValueError("V1 requires PyAEDT 1.3.0")
-    project = _project_filename(spec.project_name, "project_name")
+    project = project_filename(spec.project_name, "project_name")
     object.__setattr__(spec, "project_name", project.stem)
-    object.__setattr__(spec, "design_name", _text(spec.design_name, "design_name"))
+    object.__setattr__(spec, "design_name", text_value(spec.design_name, "design_name"))
     if not isinstance(spec.materials, Mapping):
         raise TypeError("materials must be a PDK material_id mapping")
     materials = dict(spec.materials)
@@ -450,7 +493,7 @@ def _normalize_common_spec(spec: Any) -> dict[str, PdkMaterial]:
         or set(materials) != {item.material_id for item in materials.values()}
     ):
         raise ValueError("materials must map each PDK material_id to its record")
-    vacuum_id = _text(spec.vacuum_material_id, "vacuum_material_id")
+    vacuum_id = text_value(spec.vacuum_material_id, "vacuum_material_id")
     vacuum = materials.get(vacuum_id)
     if (
         vacuum is None
@@ -467,9 +510,9 @@ def _normalize_common_spec(spec: Any) -> dict[str, PdkMaterial]:
     return materials
 
 
-def _normalize_gds_spec(spec: Any) -> tuple[set[str], set[str]]:
+def normalize_gds_spec(spec: Any) -> tuple[set[str], set[str]]:
     """Normalize the shared PDK/GDS model contract for 3D AEDT families."""
-    materials = _normalize_common_spec(spec)
+    materials = normalize_common_spec(spec)
     gds = Path(spec.gds_path)
     if not str(gds) or gds.name in {"", "."}:
         raise ValueError("gds_path must name a GDS file")
@@ -538,17 +581,19 @@ class MatrixRunControl:
     percent_refinement: float = 30.0
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "setup_name", _text(self.setup_name, "setup_name"))
-        frequency = _number(self.frequency_ghz, "frequency_ghz")
+        object.__setattr__(
+            self, "setup_name", text_value(self.setup_name, "setup_name")
+        )
+        frequency = finite_number(self.frequency_ghz, "frequency_ghz")
         if frequency <= 0:
             raise ValueError("matrix frequency_ghz must be > 0")
-        refinement = _adaptive_controls(
+        refinement = adaptive_controls(
             self.maximum_passes,
             self.minimum_passes,
             self.minimum_converged_passes,
             self.percent_refinement,
         )
-        convergence = _number(self.convergence_percent, "convergence_percent")
+        convergence = finite_number(self.convergence_percent, "convergence_percent")
         if convergence <= 0:
             raise ValueError("matrix convergence_percent must be > 0")
         object.__setattr__(self, "frequency_ghz", frequency)
@@ -556,6 +601,7 @@ class MatrixRunControl:
         object.__setattr__(self, "percent_refinement", refinement)
 
     def to_payload(self) -> dict[str, Any]:
+        """Return this request record in its canonical payload shape."""
         return {
             "setup_name": self.setup_name,
             "frequency_ghz": self.frequency_ghz,

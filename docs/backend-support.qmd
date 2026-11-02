@@ -61,6 +61,14 @@ AEDT can evaluate EPR from retained native saved fields without a new eigensolve
 that operation still needs AEDT. Offline reanalysis changes attributed loss
 assumptions on a recorded EPR result without native evaluation.
 
+## Palace executable capabilities
+
+Official Palace v0.18.1 defines `Nonconformal` in its configuration schema; it does not
+define the native `Mask`/`Inset` configuration used for surface-EPR margin rows. Those
+rows require a compatible Palace fork build. The [Palace Eigenmode
+guide](course/palace-eigenmode.qmd#native-maskinset-for-surface-epr) links the official
+schema and one documented fork source.
+
 ## Source and result differences
 
 GeometryPlan is shared by Palace, source-first HFSS Eigenmode and the Q3D C/G

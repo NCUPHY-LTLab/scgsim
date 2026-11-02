@@ -7,7 +7,6 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
-from scgsim.geometry._primitives.constants import _INTERFACE_KIND_ORDER
 from scgsim.geometry.models.common import (
     HIGH_COUNT_LOCAL_CONDUCTOR_PART_ROLES,
     RouteLiteral,
@@ -15,11 +14,9 @@ from scgsim.geometry.models.common import (
 from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
 from scgsim.geometry.models.tags import TagPlanRecord
 from scgsim.geometry.models.topology import SurfacePlanRecord, VolumePlanRecord
-from scgsim.geometry.planning.topology import _surface_owner_ids
-from scgsim.semantics.ownership import (
-    physical_group_owner_ids,
-    surface_physical_owner_ids,
-)
+from scgsim.geometry.planning.topology import surface_owner_ids
+from scgsim.geometry.primitives.constants import INTERFACE_KIND_ORDER
+from scgsim.semantics import ownership
 
 
 def plan_route_tags(
@@ -67,6 +64,46 @@ def plan_route_tags(
     return tuple(tags)
 
 
+def validate_tag_plan_coverage(
+    *,
+    surfaces: tuple[SurfacePlanRecord, ...],
+    volumes: tuple[VolumePlanRecord, ...],
+    tags: tuple[TagPlanRecord, ...],
+) -> None:
+    """Validate that every exported geometry record has a tag plan.
+
+    Interface surfaces, domain exterior boundary surfaces, and non-construction
+    volumes must have `TagPlanRecord`s before OCC assigns dim-tags.
+    """
+    live_sources = {
+        ("surface", surface.surface_id)
+        for surface in surfaces
+        if not surface.construction_only
+        and not surface.metadata.get("hidden_solver_contact")
+        and (
+            surface.interface_id is not None
+            or surface.surface_role == "domain_boundary"
+            or surface.surface_role == "lumped_port"
+        )
+    }
+    live_sources.update(
+        ("volume", volume.volume_id)
+        for volume in volumes
+        if not volume.construction_only
+    )
+    tag_sources = {(tag.source_record_kind, tag.source_record_id) for tag in tags}
+
+    missing = sorted(live_sources - tag_sources)
+    extra = sorted(tag_sources - live_sources)
+    if missing or extra:
+        parts = []
+        if missing:
+            parts.append(f"missing tags for {missing!r}")
+        if extra:
+            parts.append(f"tags reference non-live records {extra!r}")
+        raise ValueError("Invalid tag plan coverage: " + "; ".join(parts))
+
+
 def _volume_physical_name(volume: VolumePlanRecord) -> str:
     override = volume.metadata.get("physical_name")
     if isinstance(override, str) and override:
@@ -81,22 +118,11 @@ def _surface_physical_name(surface: SurfacePlanRecord) -> str:
     override = surface.metadata.get("physical_name")
     if isinstance(override, str) and override:
         return override
-    raw = surface.metadata.get("interface_kinds", ())
-    if isinstance(raw, str):
-        kinds = (raw,)
-    elif isinstance(raw, tuple | list | set):
-        kinds = tuple(str(kind) for kind in raw)
-    else:
-        kinds = ()
-    if len(kinds) > 2:
-        raise ValueError(
-            f"{surface.surface_id} has too many interface kinds: {kinds!r}"
-        )
-    kind_prefix = "_".join(kinds)
+    kind_prefix = _interface_kind_prefix(surface)
     exposed_role = surface.metadata.get("exposed_surface_role")
     boundary_role = surface.metadata.get("boundary_role")
-    owner_ids = _surface_owner_ids(surface)
-    physical_owner_ids = _surface_physical_owner_ids(surface)
+    owner_ids = surface_owner_ids(surface)
+    physical_owner_ids = surface_physical_owner_ids(surface)
     if physical_owner_ids != owner_ids:
         return _grouped_surface_physical_name(
             surface,
@@ -107,7 +133,7 @@ def _surface_physical_name(surface: SurfacePlanRecord) -> str:
         parts = surface.interface_id.split("__")
         if isinstance(exposed_role, str) and exposed_role.startswith("sidewall_"):
             parts[-1] = "SIDEWALL"
-        if parts and parts[0] in _INTERFACE_KIND_ORDER:
+        if parts and parts[0] in INTERFACE_KIND_ORDER:
             return "__".join((kind_prefix or parts[0], *parts[1:]))
         return surface.interface_id
     if kind_prefix:
@@ -125,6 +151,21 @@ def _surface_physical_name(surface: SurfacePlanRecord) -> str:
     if boundary_role == "sidewall":
         return surface.surface_id.removeprefix("SURF__").rsplit("__", 1)[0]
     return surface.surface_id.removeprefix("SURF__")
+
+
+def _interface_kind_prefix(surface: SurfacePlanRecord) -> str:
+    raw = surface.metadata.get("interface_kinds", ())
+    if isinstance(raw, str):
+        kinds = (raw,)
+    elif isinstance(raw, tuple | list | set):
+        kinds = tuple(str(kind) for kind in raw)
+    else:
+        kinds = ()
+    if len(kinds) > 2:
+        raise ValueError(
+            f"{surface.surface_id} has too many interface kinds: {kinds!r}"
+        )
+    return "_".join(kinds)
 
 
 def _grouped_surface_physical_name(
@@ -169,28 +210,31 @@ def _surface_role_suffix(value: Any) -> str | None:
     return None
 
 
-def _surface_physical_owner_ids(surface: SurfacePlanRecord) -> tuple[str, ...]:
+def surface_physical_owner_ids(surface: SurfacePlanRecord) -> tuple[str, ...]:
+    """Resolve a surface's physical owners from its semantic ownership."""
     owner_ids = surface.metadata.get("physical_owner_semantic_ids")
-    return surface_physical_owner_ids(owner_ids, _surface_owner_ids(surface))
+    return ownership.surface_physical_owner_ids(owner_ids, surface_owner_ids(surface))
 
 
-def _physical_group_owner_ids(
+def physical_group_owner_ids(
     build_input: GeometryBuildInput,
     owner_ids: Sequence[str],
 ) -> tuple[str, ...]:
+    """Resolve semantic owners into physical group identities."""
     entities_by_id = {entity.semantic_id: entity for entity in build_input.entities}
     resolved = {
-        owner_id: _entity_physical_group_id(entities_by_id[owner_id])
+        owner_id: entity_physical_group_id(entities_by_id[owner_id])
         for owner_id in owner_ids
         if owner_id in entities_by_id
     }
-    return physical_group_owner_ids(
+    return ownership.physical_group_owner_ids(
         owner_ids,
         resolved,
     )
 
 
-def _entity_physical_group_id(entity: SemanticEntitySpec) -> str:
+def entity_physical_group_id(entity: SemanticEntitySpec) -> str:
+    """Resolve an entity's explicit or shared computational physical group."""
     auto_group_id = entity.metadata.get("auto_vacuum_group_id")
     if isinstance(auto_group_id, str) and auto_group_id:
         return auto_group_id

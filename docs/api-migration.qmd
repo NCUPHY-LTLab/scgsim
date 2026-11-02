@@ -174,10 +174,10 @@ module to preserve dependency direction.
 - **Baseline `scgsim.sgb.models.topology` → current defining module `scgsim.geometry.models.topology`.** Declared names: `RouteABVolumePlanRecord`. Preferred API: `scgsim.geometry.models`.
 - **Baseline `scgsim.sgb.pipeline` → current defining module `scgsim.geometry.compiler.builder`.** Declared names: `SemanticGeometryBuilder`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.compiler.dispatch`.** Declared names: `build_route_construction_plan`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.interfaces`.** Declared names: `plan_conductor_contact_patches`, `plan_mm_contact_records`, `recognize_route_interfaces`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.surfaces`.** Declared names: `plan_route_surfaces`, `plan_surface_partitions`. Preferred API: `scgsim.geometry.compiler`.
+- **Baseline `scgsim.sgb.planning` → current defining modules `scgsim.geometry.planning.contact_planning.patches`, `.membership`, and `.intents`.** Declared names: `plan_conductor_contact_patches`, `plan_mm_contact_records`, `recognize_route_interfaces`. Preferred API: `scgsim.geometry.compiler`.
+- **Baseline `scgsim.sgb.planning` → current defining modules `scgsim.geometry.planning.surface_planning.planner` and `.partitions`.** Declared names: `plan_route_surfaces`, `plan_surface_partitions`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.tags`.** Declared names: `plan_route_tags`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.volumes`.** Declared names: `plan_cut_host_operations`, `plan_route_construction_bodies`, `plan_route_volumes`. Preferred API: `scgsim.geometry.compiler`.
+- **Baseline `scgsim.sgb.planning` → current defining modules `scgsim.geometry.planning.volume_planning.bodies` and `.planner`.** Declared names: `plan_cut_host_operations`, `plan_route_construction_bodies`, `plan_route_volumes`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.source_curves` → current defining module `scgsim.geometry.source.curves`.** Declared names: `bind_source_curves`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.stack` → current defining module `scgsim.geometry.source.stack`.** Declared names: `build_component_stack`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.summary` → current defining module `scgsim.geometry.source.summary`.** Declared names: `InputSummary`, `summarize_geometry_input`. Preferred API: `scgsim.geometry`.
@@ -195,6 +195,58 @@ not import planning/compiler. Source identity, snapshot detachment, caller-owned
 final Net membership, native correspondence, stock CAD shell repair, curved
 arrangement and XAO/physical-group behavior remain owned by their current
 responsibilities.
+
+The shared implementation modules now use responsibility names. Geometry
+primitives move from `scgsim.geometry._primitives` to
+`scgsim.geometry.primitives`, including `grid_cache` and `tagged_grid`;
+`source._normalization`, `source._occurrence`, and `source._polygon_ops` move to
+`source.normalization`, `source.occurrence`, and `source.polygon_ops`. These
+internal names do not expand the supported API; use the `geometry` and
+`geometry.compiler` facades above. Curved construction remains behind
+`geometry.construction.curved`, with source boundaries, arrangement, native
+kernel, shared surfaces, and canonical records implemented in
+`geometry.construction.curved_geometry`.
+
+Planning and tagged-grid modules now follow the same responsibility boundaries.
+Their supported routes remain the package facades:
+
+| Implementation area | Use this supported import |
+|---|---|
+| Source assembly and occurrence preparation | `GeometryPlan` from `scgsim.geometry` |
+| Physical representation preparation | `interpret_physical_geometry` from `scgsim.geometry` |
+| Rectangular junction declaration and derivation | Use `RectangularJunctionSpec` and `with_rectangular_junctions` from `scgsim.geometry`, then call `interpret_physical_geometry` |
+| Contact recognition and contact records | `recognize_route_interfaces`, `plan_conductor_contact_patches`, and `plan_mm_contact_records` from `scgsim.geometry.compiler` |
+| Surface and contribution planning | `plan_route_surfaces`, `plan_surface_contribution_patches`, and `plan_surface_partitions` from `scgsim.geometry.compiler` |
+| Volume and construction-body planning | `plan_route_volumes`, `plan_route_construction_bodies`, and `plan_cut_host_operations` from `scgsim.geometry.compiler` |
+| Canonical topology planning | `plan_canonical_topology` from `scgsim.geometry.compiler` |
+| Route construction plan only | `build_route_construction_plan` from `scgsim.geometry.compiler` |
+| Complete route construction and native lowering | `SemanticGeometryBuilder.build` from `scgsim.geometry.compiler` |
+| PDK ground-bump fill preparation | Internal source helper consumed by Palace preparation; no direct geometry-facade export. |
+
+The responsibility modules are `scgsim.geometry.source.plan_assembly`,
+`scgsim.geometry.planning.contact_planning`,
+`scgsim.geometry.planning.junction_planning`,
+`scgsim.geometry.planning.port_planning`,
+`scgsim.geometry.planning.surface_planning`,
+`scgsim.geometry.planning.topology_planning`,
+`scgsim.geometry.primitives.tagged_grid_faces`, and
+`scgsim.geometry.primitives.tagged_grid_operations`. They organize the
+implementation without adding new supported imports.
+
+Volume planning lives in `scgsim.geometry.planning.volume_planning`. Native
+Gmsh/OCC lowering and its topology/conformity records live in
+`scgsim.geometry.construction.native_geometry`; callers reach them through the
+builder facade. `scgsim.geometry.source.ground_bump_geometry` implements audit,
+lattice selection, and source-record creation behind the source helper used by
+Palace preparation.
+
+The junction implementation derives exact partitions for explicitly declared
+rectangular junctions. Source and AEDT preparation share the internal
+`junction_contact_inventory(build_input, request)` service and
+`JunctionContactRequest` record to resolve the source support and incident
+conductors. These bridge names are not exports of `scgsim.geometry` or
+`scgsim.geometry.compiler`; callers declare requests through the geometry
+facade and use the standard physical-interpretation and compiler steps.
 
 ## AEDT API, transaction and state ownership
 
@@ -266,14 +318,17 @@ export/readback dependency becomes an explicit internal service. Visualization
 imports current PyAEDT constants from the canonical spec owner without making
 them public exports.
 
-The current producer uses runtime-source v13; its declared inventory and
-content digest identify the measured modules for that source snapshot, without
-making the digest a permanent code value or claiming exhaustive transitive
-coverage. Historical v1–v12 readers retain their original path, hash, revision
-and schema meanings. Do not map old module strings onto new paths while
-resolving old receipts. Handoff and receipt histories remain separate from Q3D
-request versioning; Q3D remains v3 only. This map does not claim native Q3D
-completion.
+The current producer uses runtime-source v28 with 284 sorted, unique declared
+paths. Its inventory starts with all current AEDT modules, both AEDT
+visualization loaders, and the non-AEDT paths retained from V27, then follows
+AST-resolved imports and package initializers. It adds
+`scgsim/geometry/primitives/topology_validation.py` to the frozen V27 roster.
+Per-module hashes bind the declared files, and the canonical manifest digest
+identifies that source snapshot; neither is a permanent code value. Historical
+V1–V27 readers retain their original paths, hashes, revision rules, and schema
+meanings. Do not map old module strings onto new paths while resolving old
+receipts. Handoff and receipt histories remain separate from Q3D request
+versioning; Q3D remains v3 only. This map does not claim native Q3D completion.
 
 ## Palace package symbols
 
@@ -326,7 +381,7 @@ not compatibility surfaces.
   geometry. A raw `.aedt` path requires explicit `aedt_version` and design; a
   sealed run directory uses its bound spec version without an override.
 - **Scene records and shared rendering → `scgsim.visualization.scene`, `scgsim.visualization.rendering`.** Responsibility: Keep scene construction and rendering reusable without taking solver physics or simulation status ownership.
-- **Shared loader file-identity helpers → `scgsim.visualization.loaders._common`.** Responsibility: One loader-level implementation for JSON, hash and confined-path observations.
+- **Shared loader file-identity helpers → `scgsim.visualization.loaders.common`.** Responsibility: One loader-level implementation for JSON, hash and confined-path observations.
 
 
 The `scgsim.visualization` package facade continues to export exactly

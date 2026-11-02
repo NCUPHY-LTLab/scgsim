@@ -1,4 +1,4 @@
-"""Canonical geometry records. Keep source facts distinct from compiler records; reexports share these exact definitions."""
+"""Pre-planning records for adapter-owned regions and their explicit overlaps."""
 
 from __future__ import annotations
 

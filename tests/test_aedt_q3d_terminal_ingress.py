@@ -38,25 +38,38 @@ def _snapshot(tmp_path, *, multibody=False):
             entity_polygon_ids += (second.polygon_id,)
         entities.append(
             SemanticEntitySpec(
-                identity, "conductor", "metal", "conductor", 1, "polygon",
-                net_id=net, polygon_ids=entity_polygon_ids,
-                geometry={"outer_loop": outer, "z_min_um": 0,
-                          "z_max_um": 1, "thickness_um": 1},
+                identity,
+                "conductor",
+                "metal",
+                "conductor",
+                1,
+                "polygon",
+                net_id=net,
+                polygon_ids=entity_polygon_ids,
+                geometry={
+                    "outer_loop": outer,
+                    "z_min_um": 0,
+                    "z_max_um": 1,
+                    "thickness_um": 1,
+                },
             )
         )
     gds_path = tmp_path / "authored.gds"
     library.write_gds(gds_path)
     payload = gds_path.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
-    metadata = {"gds_sha256": digest, "source_dbu_um": 0.001,
-                "source_occurrences": []}
+    metadata = {"gds_sha256": digest, "source_dbu_um": 0.001, "source_occurrences": []}
     source = GeometryBuildInput(tuple(polygons), tuple(entities), metadata=metadata)
     stack = {
-        "layers": [{"semantic_id": e.semantic_id, "geometry": dict(e.geometry),
-                    "metadata": {}} for e in entities],
+        "layers": [
+            {"semantic_id": e.semantic_id, "geometry": dict(e.geometry), "metadata": {}}
+            for e in entities
+        ],
         "solution_regions": {},
-        "materials": {"metal": {"kind": "conductor"},
-                      "vacuum": {"kind": "vacuum", "permittivity": 1.0}},
+        "materials": {
+            "metal": {"kind": "conductor"},
+            "vacuum": {"kind": "vacuum", "permittivity": 1.0},
+        },
         "metadata": metadata,
     }
     return GeometryPlanSnapshot(source, json.dumps(stack), payload, digest, ())
@@ -64,27 +77,41 @@ def _snapshot(tmp_path, *, multibody=False):
 
 @pytest.fixture
 def snapshot(tmp_path):
+    """Build source geometry with explicitly bound final nets and a movable test entity."""
     return _snapshot(tmp_path)
 
 
 def _lower(snapshot, directory, **kwargs):
     return lower_q3d_geometry(
-        snapshot, aedt_version="2024.2", modeling="solid", directory=directory,
-        project_name="Terminals", design_name="Design",
-        materials={"metal": PdkMaterial("metal", "superconductor", True, None),
-                   "vacuum": PdkMaterial("vacuum", "vacuum", False, "Vacuum")},
+        snapshot,
+        aedt_version="2024.2",
+        modeling="solid",
+        directory=directory,
+        project_name="Terminals",
+        design_name="Design",
+        materials={
+            "metal": PdkMaterial("metal", "superconductor", True, None),
+            "vacuum": PdkMaterial("vacuum", "vacuum", False, "Vacuum"),
+        },
         net_types={"NetA": "Signal", "NetB": "Ground"},
-        physical_ground_nets=("NetB",), region_padding_um=(1, 1, 1, 1, 1, 1),
+        physical_ground_nets=("NetB",),
+        region_padding_um=(1, 1, 1, 1, 1, 1),
         **kwargs,
     )
 
 
-def test_exact_source_entities_bind_global_z_sides_and_keep_body_provenance(snapshot, tmp_path):
+def test_exact_source_entities_bind_global_z_sides_and_keep_body_provenance(
+    snapshot, tmp_path
+):
+    """Bind exact source entities to global Z sides while retaining body provenance."""
     pair = Q3dTerminalPair("source_a", "-Z", "sink_a", "+Z")
     spec = _lower(snapshot, tmp_path / "paired", terminal_pairs={"NetA": pair})
     by_source = {body.source_entity_id: body for body in spec.bodies}
     signal = next(net for net in spec.nets if net.name == "NetA")
-    assert (signal.source_object, signal.source_side) == (by_source["source_a"].body_id, "-Z")
+    assert (signal.source_object, signal.source_side) == (
+        by_source["source_a"].body_id,
+        "-Z",
+    )
     assert (signal.sink_object, signal.sink_side) == (by_source["sink_a"].body_id, "+Z")
     assert by_source["source_a"].source_polygon_id == "source_a_polygon"
     assert by_source["sink_a"].source_polygon_id == "sink_a_polygon"
@@ -96,6 +123,7 @@ def test_exact_source_entities_bind_global_z_sides_and_keep_body_provenance(snap
 
 
 def test_omitted_none_and_empty_pairs_preserve_cg_payload(snapshot, tmp_path):
+    """Preserve capacitance-only payloads for omitted, null or empty terminal pairs."""
     directory = tmp_path / "cg"
     baseline = _lower(snapshot, directory).to_payload()
     assert _lower(snapshot, directory, terminal_pairs=None).to_payload() == baseline
@@ -106,38 +134,66 @@ def test_omitted_none_and_empty_pairs_preserve_cg_payload(snapshot, tmp_path):
 
 
 @pytest.mark.parametrize("entity", ["absent", "source_a_polygon"])
-def test_terminal_requires_exact_entity_identity_not_polygon_or_guessed_body(snapshot, tmp_path, entity):
+def test_terminal_requires_exact_entity_identity_not_polygon_or_guessed_body(
+    snapshot, tmp_path, entity
+):
+    """Reject polygon names and guessed bodies in place of exact terminal entities."""
     pair = Q3dTerminalPair(entity, "-Z", "sink_a", "+Z")
     with pytest.raises(ValueError, match="has no emitted body"):
         _lower(snapshot, tmp_path / "missing", terminal_pairs={"NetA": pair})
 
 
 def test_multibody_source_entity_is_explicitly_unsupported(snapshot, tmp_path):
+    """Reject a terminal source entity that maps to multiple native bodies."""
     actual = _snapshot(tmp_path, multibody=True)
     with pytest.raises(ValueError, match="maps to multiple bodies"):
-        _lower(actual, tmp_path / "multiple", terminal_pairs={
-            "NetA": Q3dTerminalPair("source_a", "-Z", "sink_a", "+Z")})
+        _lower(
+            actual,
+            tmp_path / "multiple",
+            terminal_pairs={"NetA": Q3dTerminalPair("source_a", "-Z", "sink_a", "+Z")},
+        )
 
 
 def test_cross_net_entity_cannot_be_used_as_signal_terminal(snapshot, tmp_path):
+    """Reject a signal terminal bound to an entity from another net."""
     with pytest.raises(ValueError, match="must belong to their net"):
-        _lower(snapshot, tmp_path / "crossnet", terminal_pairs={
-            "NetA": Q3dTerminalPair("source_a", "-Z", "ground_b", "+Z")})
+        _lower(
+            snapshot,
+            tmp_path / "crossnet",
+            terminal_pairs={
+                "NetA": Q3dTerminalPair("source_a", "-Z", "ground_b", "+Z")
+            },
+        )
 
 
 def test_ground_net_cannot_accept_terminal_pair(snapshot, tmp_path):
+    """Reject source/sink terminal pairs on ground nets."""
     with pytest.raises(ValueError, match="Ground nets must not define"):
-        _lower(snapshot, tmp_path / "ground", terminal_pairs={
-            "NetB": Q3dTerminalPair("ground_b", "-Z", "ground_b", "+Z")})
+        _lower(
+            snapshot,
+            tmp_path / "ground",
+            terminal_pairs={
+                "NetB": Q3dTerminalPair("ground_b", "-Z", "ground_b", "+Z")
+            },
+        )
 
 
 def test_pair_key_must_select_existing_final_net(snapshot, tmp_path):
+    """Require each terminal-pair key to identify an existing final net."""
     with pytest.raises(ValueError, match="select final conductor Nets"):
-        _lower(snapshot, tmp_path / "unknown_net", terminal_pairs={
-            "Unknown": Q3dTerminalPair("source_a", "-Z", "sink_a", "+Z")})
+        _lower(
+            snapshot,
+            tmp_path / "unknown_net",
+            terminal_pairs={
+                "Unknown": Q3dTerminalPair("source_a", "-Z", "sink_a", "+Z")
+            },
+        )
 
 
-@pytest.mark.parametrize("source_side,sink_side", [("Z", "+Z"), ("-Z", "up"), (None, "+Z")])
+@pytest.mark.parametrize(
+    "source_side,sink_side", [("Z", "+Z"), ("-Z", "up"), (None, "+Z")]
+)
 def test_invalid_global_sides_fail_at_typed_request(source_side, sink_side):
+    """Reject unsupported global terminal sides when constructing the typed request."""
     with pytest.raises(ValueError, match="sides are invalid"):
         Q3dTerminalPair("source_a", source_side, "sink_a", sink_side)

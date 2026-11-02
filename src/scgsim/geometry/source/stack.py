@@ -1,18 +1,18 @@
-"""Build stack inputs from component/PDK declarations. Shared normalization is defined once below this entrypoint."""
+"""Build a semantic simulation stack from component and PDK declarations."""
 
 from __future__ import annotations
 
 import copy
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 
-from scgsim.geometry.source._normalization import (
-    _coupon_domain_bounds,
-    _finite_number,
-    _mapping,
-    _materials,
-    _semantic_layer_records,
-    _solution_regions,
+from scgsim.geometry.source.normalization import (
+    coupon_domain_bounds,
+    finite_number,
+    mapping,
+    normalize_material_records,
+    semantic_layer_records,
+    solution_regions,
 )
 
 
@@ -29,51 +29,24 @@ def build_component_stack(
     integration semantics. The component owns conductor identities, nets, and
     topology selectors. Geometry bounds size the coupon only.
     """
-    padding = _finite_number(coupon_padding_um, "coupon_padding_um")
+    padding = finite_number(coupon_padding_um, "coupon_padding_um")
     if padding < 0.0:
         raise ValueError("coupon_padding_um must be a finite non-negative number.")
-    bounds = _coupon_domain_bounds(component, padding)
-    try:
-        spec = _mapping(
-            component.info["component_semantics"], "component component_semantics"
-        )
-    except (AttributeError, KeyError) as exc:
-        raise ValueError(
-            "component must provide an authored info['component_semantics'] annotation."
-        ) from exc
-    if spec.get("schema_version") != 1:
-        raise ValueError("component_semantics schema_version must be 1.")
-    unknown = set(spec) - {
-        "schema_version",
-        "conductor_regions",
-        "boundary_curves",
-        "boundary_reconstruction",
-        "metadata",
-    }
-    if unknown:
-        raise ValueError(
-            f"component_semantics has unsupported fields {sorted(unknown)!r}."
-        )
-    conductor_regions = spec.get("conductor_regions")
-    metadata = spec.get("metadata")
-    levels = getattr(layer_stack, "layers", None)
-    if not isinstance(levels, Mapping):
-        raise TypeError("layer_stack must expose a mapping 'layers'.")
-    if isinstance(conductor_regions, str | bytes) or not isinstance(
-        conductor_regions, Sequence
-    ):
-        raise TypeError("component conductor_regions must be a sequence of mappings.")
-    if metadata is not None and not isinstance(metadata, Mapping):
-        raise TypeError("metadata must be a mapping when provided.")
+    bounds = coupon_domain_bounds(component, padding)
+    spec = _component_semantics(component)
+    levels, conductor_regions, metadata = _validated_stack_inputs(layer_stack, spec)
 
-    materials = _materials(material_records)
-    regions = _solution_regions(levels, materials=materials, bounds=bounds)
+    materials = normalize_material_records(material_records)
+    regions = solution_regions(levels, materials=materials, bounds=bounds)
     if not regions:
         raise ValueError(
             "PDK layer_stack must declare at least one included solution region."
         )
-    layers = _semantic_layer_records(
-        conductor_regions,
+    layers = semantic_layer_records(
+        cast(
+            Sequence[Mapping[str, Any]],
+            conductor_regions,
+        ),  # _semantic_layer_records validates each external row in order.
         levels=levels,
         materials=materials,
         solution_region_ids=regions,
@@ -93,3 +66,52 @@ def build_component_stack(
             "coupon_padding_um": padding,
         },
     }
+
+
+def _component_semantics(component: Any) -> dict[str, Any]:
+    """Read and validate the caller-authored component annotation."""
+    try:
+        spec = mapping(
+            component.info["component_semantics"], "component component_semantics"
+        )
+    except (AttributeError, KeyError) as exc:
+        raise ValueError(
+            "component must provide an authored info['component_semantics'] annotation."
+        ) from exc
+    if spec.get("schema_version") != 1:
+        raise ValueError("component_semantics schema_version must be 1.")
+    unknown = set(spec) - {
+        "schema_version",
+        "conductor_regions",
+        "boundary_curves",
+        "boundary_reconstruction",
+        "metadata",
+    }
+    if unknown:
+        raise ValueError(
+            f"component_semantics has unsupported fields {sorted(unknown)!r}."
+        )
+
+    return spec
+
+
+def _validated_stack_inputs(
+    layer_stack: Any, spec: Mapping[str, Any]
+) -> tuple[Mapping[str, Any], Sequence[object], Mapping[str, Any] | None]:
+    """Validate external stack containers in their established error order."""
+    conductor_regions = spec.get("conductor_regions")
+    metadata = spec.get("metadata")
+    levels = getattr(layer_stack, "layers", None)
+    if not isinstance(levels, Mapping):
+        raise TypeError("layer_stack must expose a mapping 'layers'.")
+    if isinstance(conductor_regions, str | bytes) or not isinstance(
+        conductor_regions, Sequence
+    ):
+        raise TypeError("component conductor_regions must be a sequence of mappings.")
+    if metadata is not None and not isinstance(metadata, Mapping):
+        raise TypeError("metadata must be a mapping when provided.")
+    return (
+        levels,
+        conductor_regions,
+        metadata,
+    )

@@ -1,4 +1,4 @@
-"""Canonical geometry records. Keep source facts distinct from compiler records; reexports share these exact definitions."""
+"""Route-aware construction plans and temporary cut-operation records."""
 
 from __future__ import annotations
 

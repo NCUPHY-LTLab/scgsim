@@ -103,9 +103,20 @@ The [EPR concept](../eigenmode-epr.qmd) explains the quantities you will later
 interpret, including why signed native port participation differs from AEDT's
 nonnegative junction participation.
 
-## Native Mask/Inset for surface EPR
+## Native Mask/Inset for surface EPR {#native-maskinset-for-surface-epr}
 
-Palace Surface EPR can request native Mask/Inset margin rows with `inset_margins_um`. Omit the field to request only the unmasked baseline. A non-empty request requires a Palace executable that implements the native Mask/Inset configuration; Python preparation does not supply that executable. These rows are native margin evaluations and do not partition SGB geometry or create distance bands. The public [Xmon EPR extension](../tutorial-xmon-palace.qmd) shows the source configuration.
+Palace Surface EPR can request native Mask/Inset margin rows with `inset_margins_um`.
+Omit the field to request only the unmasked baseline. The official [Palace v0.18.1
+configuration
+schema](https://raw.githubusercontent.com/awslabs/palace/v0.18.1/scripts/schema/config-schema.json)
+defines `Model.Refinement.Nonconformal` but does not define `Mask` or `Inset`. This
+capability is available with a Palace executable built from a fork that implements the
+native configuration, including the documented [historical fork
+revision](https://github.com/arfiligol/palace/tree/4e9e1b7232b4c8ca8b964be7e70f1848f578de37).
+Check the executable you install against its own source and configuration contract;
+Python preparation does not provide it. Requested rows are native margin evaluations,
+not SGB partitions or distance bands. The public [Xmon EPR
+extension](../tutorial-xmon-palace.qmd) shows the source configuration.
 
 ## Circular Pad LC study
 

@@ -291,7 +291,7 @@ jobs:
   offline:
     needs: change-scope
     if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && needs.change-scope.outputs.lane == 'product'
-    name: Offline tests and Ruff F (Python 3.12)
+    name: Offline tests and package quality (Python 3.12)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -305,37 +305,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y libglu1-mesa
       - name: Install locked offline test and quality dependencies
-        run: uv sync --locked --group test --group quality --extra aedt-epr --extra palace
+        run: uv sync --locked --group test --group quality --extra aedt-epr --extra palace --extra visualization
       - name: Run the complete public non-native suite
         run: uv run --locked --no-sync python -m pytest tests -m 'not private_golden'
-      - name: Check typed stage contracts with Pyright strict
-        run: uv run --locked --no-sync python -m pyright --pythonversion 3.12
-      - name: Check every tracked Python file with Ruff F
-        run: |
-          uv run --locked --no-sync python - <<'PYTHON'
-          import subprocess
-          import sys
-          from pathlib import Path
-
-          root = Path.cwd().resolve()
-          git_root = Path(subprocess.run(
-              ["git", "rev-parse", "--show-toplevel"],
-              check=True, capture_output=True, text=True,
-          ).stdout.strip()).resolve()
-          if git_root != root:
-              raise SystemExit("Quality scope must be the checkout root, not an ancestor repository")
-          tracked = subprocess.run(
-              ["git", "ls-files", "-z", "--", "*.py"],
-              check=True, capture_output=True,
-          ).stdout.decode("utf-8").split("\0")
-          paths = [path for path in tracked if path]
-          if not paths:
-              raise SystemExit("No tracked Python files were selected")
-          subprocess.run(
-              [sys.executable, "-m", "ruff", "check", "--select", "F", "--", *paths],
-              check=True,
-          )
-          PYTHON
+      - name: Check format, lint, readable style, types, and import layers
+        run: uv run --locked --no-sync python scripts/check_quality.py
 
   docs-smoke:
     needs: change-scope

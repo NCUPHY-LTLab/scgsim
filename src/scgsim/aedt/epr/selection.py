@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-
-import math
-
 import hashlib
-
 import json
-
+import math
 from collections.abc import Mapping
-
+from dataclasses import dataclass
 from typing import Any
 
+from scgsim.aedt.data import (
+    detached,
+)
 from scgsim.aedt.specs.epr import (
     EprAnalysisRequest,
     surface_evaluations,
@@ -20,12 +19,10 @@ from scgsim.aedt.specs.epr import (
 from scgsim.aedt.specs.geometry import (
     PreparedPlanarGeometry,
 )
-from scgsim.aedt._data import (
-    detached,
-)
 
 
-def _finite(value: Any, name: str, *, nonnegative: bool = True) -> float:
+def finite_value(value: Any, name: str, *, nonnegative: bool = True) -> float:
+    """Read a finite numeric value and optionally require it to be nonnegative."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{name} must be numeric")
     result = float(value)
@@ -35,10 +32,23 @@ def _finite(value: Any, name: str, *, nonnegative: bool = True) -> float:
     return result
 
 
-def _exact_mapping(value: Any, name: str) -> Mapping[str, Any]:
+def exact_mapping(value: Any, name: str) -> Mapping[str, Any]:
+    """Require a mapping with string keys while retaining the original mapping."""
     if not isinstance(value, Mapping) or any(not isinstance(key, str) for key in value):
         raise TypeError(f"{name} must be a string-keyed mapping")
     return value
+
+
+@dataclass(frozen=True)
+class SurfaceGroupContext:
+    """Source records used while forming and finalizing grouped surface rows."""
+
+    prepared: PreparedPlanarGeometry
+    selected: set[str]
+    specs: dict[str, Any]
+    domains: dict[str, Any]
+    conductor_ids: set[str]
+    evaluation_policy: Any
 
 
 def surface_integral_groups(
@@ -46,25 +56,37 @@ def surface_integral_groups(
     request: EprAnalysisRequest | None,
 ) -> tuple[dict[str, Any], ...]:
     """Partition physical bindings only where one exact film coefficient applies."""
-
     selected = (
         {item.contribution_id for item in prepared.contributions}
         if request is None or request.surface_contribution_ids is None
         else set(request.surface_contribution_ids)
     )
     specs = {item.contribution_id: item for item in prepared.contributions}
-    domains = {
-        item["semantic_id"]: item for item in prepared.source["solution_regions"]
-    }
-    conductor_ids = {item["semantic_id"] for item in prepared.source["conductors"]}
+    context = SurfaceGroupContext(
+        prepared,
+        selected,
+        specs,
+        {item["semantic_id"]: item for item in prepared.source["solution_regions"]},
+        {item["semantic_id"] for item in prepared.source["conductors"]},
+        prepared.source.get("surface_evaluation_policy"),
+    )
     groups: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
-    evaluation_policy = prepared.source.get("surface_evaluation_policy")
+    _collect_surface_group_members(context, groups)
+    return _finish_surface_groups(context, groups)
+
+
+def _collect_surface_group_members(
+    context: SurfaceGroupContext,
+    groups: dict[tuple[Any, ...], list[dict[str, Any]]],
+) -> None:
+    """Validate each selected binding and place it in its physical group."""
+    prepared = context.prepared
     for binding in prepared.surface_bindings:
-        record = _exact_mapping(binding["contribution"], "surface provenance")
+        record = exact_mapping(binding["contribution"], "surface provenance")
         contribution_id = record["contribution_id"]
-        if contribution_id not in selected:
+        if contribution_id not in context.selected:
             continue
-        spec = specs[contribution_id]
+        spec = context.specs[contribution_id]
         if spec.interface_kind == "MM":
             continue
         source_owners = tuple(record["source_owner_ids"])
@@ -72,23 +94,25 @@ def surface_integral_groups(
             owner_id = binding["substrate_domain_id"]
             if (
                 owner_id not in source_owners
-                or owner_id not in domains
-                or prepared.source["materials"][domains[owner_id]["material_id"]][
-                    "kind"
-                ]
+                or owner_id not in context.domains
+                or prepared.source["materials"][
+                    context.domains[owner_id]["material_id"]
+                ]["kind"]
                 != "dielectric"
             ):
                 raise ValueError("SA group lacks its physical dielectric owner")
         else:
             owner_id = binding["owner_semantic_id"]
-            if owner_id not in source_owners or owner_id not in conductor_ids:
+            if owner_id not in source_owners or owner_id not in context.conductor_ids:
                 raise ValueError("metal group lacks its physical conductor owner")
         material = (
             binding["substrate_material"]
             if spec.interface_kind in {"MS", "SA"}
             else binding["effective_material"]
         )
-        epsilon_s = _finite(material["permittivity"], "group substrate permittivity")
+        epsilon_s = finite_value(
+            material["permittivity"], "group substrate permittivity"
+        )
         if epsilon_s <= 0.0:
             raise ValueError("group substrate permittivity must be positive")
         signature = (
@@ -110,14 +134,23 @@ def surface_integral_groups(
             "geometry_ref": detached(binding["geometry_ref"]),
         }
         for evaluation_kind, margin in surface_evaluations(
-            spec.margins_um, policy=evaluation_policy
+            spec.margins_um, policy=context.evaluation_policy
         ):
             evaluation_key = (
                 (evaluation_kind, float(margin))
-                if evaluation_policy is not None
+                if context.evaluation_policy is not None
                 else (float(margin),)
             )
             groups.setdefault((*signature, *evaluation_key), []).append(member)
+
+
+def _finish_surface_groups(
+    context: SurfaceGroupContext,
+    groups: dict[tuple[Any, ...], list[dict[str, Any]]],
+) -> tuple[dict[str, Any], ...]:
+    """Assign stable IDs after validating assumptions and member uniqueness."""
+    specs = context.specs
+    evaluation_policy = context.evaluation_policy
     result: list[dict[str, Any]] = []
     for signature, members in sorted(groups.items(), key=lambda item: repr(item[0])):
         member_assumptions = {

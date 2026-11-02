@@ -1,12 +1,13 @@
 ---
 title: "選擇模擬流程"
 description: "依照要計算的物理量，選擇一份完整的 SCGSim 筆記本。"
-scgsim-kind: "course"
+scgsim-kind: "start"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/examples"
 ---
 
-SCGSim 會準備幾何與求解器請求，再解析附有單位與模型識別資訊的回傳結果。請依所需物理量選擇筆記本；其中的後端分頁涵蓋從來源輸入到結果讀取的完整流程。
+SCGSim 會準備幾何與求解器請求，再解析附有單位與模型識別資訊的回傳結果。請依所需物理量選擇筆記本；其中的後端分頁涵蓋從來源輸入到結果讀取的完整流程。API
+參數與來源版本配對方式請見[參考指南](knowledge-guide.qmd)。
 
 ## 選擇模擬目標 {#getting-started}
 
@@ -35,6 +36,8 @@ SCGSim 會準備幾何與求解器請求，再解析附有單位與模型識別�
 來源尺寸與預設值是範例模型輸入。SCGSim 請求的現行用法請依相關教學與 API 參考操作。
 
 ## 繼續閱讀主題參考
+
+- 請從[參考指南](knowledge-guide.qmd)查找來源版本配對方式與公開 API 參考資料。
 
 - 準備後端前，先[檢查來源與幾何](course/source-observations.qmd)。
 - 請在請求與預期模型不同時[檢查準備後的輸入](course/solver-observations.qmd)。

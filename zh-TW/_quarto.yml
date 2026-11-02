@@ -8,6 +8,7 @@ project:
   - index.qmd
   - docs/*.qmd
   - docs/specs/*.qmd
+  - docs/api/*.qmd
   - docs/course/*.qmd
   - docs/tutorials/*.qmd
   - docs/history/*.qmd
@@ -128,6 +129,8 @@ website:
     contents:
     - docs/reference.qmd
     - docs/backend-support.qmd
+    - docs/knowledge-guide.qmd
+    - docs/api/input-index.qmd
     - section: 幾何與物理模型
       contents:
       - docs/geometry-sgb.qmd

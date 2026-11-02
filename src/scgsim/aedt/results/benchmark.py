@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-
 import math
-
 from pathlib import Path
-
 from typing import Any
 
-from scgsim.aedt._io import read_json
-
-from scgsim.aedt._benchmark import BENCHMARK_SCHEMA, attribute_profile_memory
+from scgsim.aedt.benchmark_data import BENCHMARK_SCHEMA, attribute_profile_memory
+from scgsim.aedt.io import read_json
 
 
 def read_simulation_benchmark(path: Path, setup_name: str) -> dict[str, Any]:
@@ -35,32 +31,9 @@ def read_simulation_benchmark(path: Path, setup_name: str) -> dict[str, Any]:
         ):
             raise RuntimeError("claimed AEDT benchmark profile is incomplete")
 
-        def check_node(node: Any) -> None:
-            if (
-                not isinstance(node, dict)
-                or not isinstance(node.get("name"), str)
-                or not isinstance(node.get("metrics"), dict)
-                or not isinstance(node.get("native_properties"), dict)
-            ):
-                raise RuntimeError("claimed AEDT benchmark node is invalid")
-            for key, value in node["metrics"].items():
-                if key.endswith("_seconds") or key == "memory_gb_sdk":
-                    if (
-                        isinstance(value, bool)
-                        or not isinstance(value, (int, float))
-                        or not math.isfinite(value)
-                        or value < 0
-                    ):
-                        raise RuntimeError("claimed AEDT benchmark metric is invalid")
-            if "children" in node:
-                if not isinstance(node["children"], list):
-                    raise RuntimeError("claimed AEDT benchmark children are invalid")
-                for child in node["children"]:
-                    check_node(child)
-
         for profile in payload["profiles"]:
             for group in profile["process_groups"]:
-                check_node(group)
+                _validate_profile_node(group)
     elif (
         not isinstance(payload.get("reason"), str)
         or not payload["reason"]
@@ -68,3 +41,28 @@ def read_simulation_benchmark(path: Path, setup_name: str) -> dict[str, Any]:
     ):
         raise RuntimeError("claimed AEDT benchmark unavailability is invalid")
     return attribute_profile_memory(payload)
+
+
+def _validate_profile_node(node: Any) -> None:
+    """Validate detached native metrics and children before memory attribution."""
+    if (
+        not isinstance(node, dict)
+        or not isinstance(node.get("name"), str)
+        or not isinstance(node.get("metrics"), dict)
+        or not isinstance(node.get("native_properties"), dict)
+    ):
+        raise RuntimeError("claimed AEDT benchmark node is invalid")
+    for key, value in node["metrics"].items():
+        if key.endswith("_seconds") or key == "memory_gb_sdk":
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value < 0
+            ):
+                raise RuntimeError("claimed AEDT benchmark metric is invalid")
+    if "children" in node:
+        if not isinstance(node["children"], list):
+            raise RuntimeError("claimed AEDT benchmark children are invalid")
+        for child in node["children"]:
+            _validate_profile_node(child)

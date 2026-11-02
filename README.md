@@ -21,8 +21,8 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git, t
 ```bash
 uv init --python 3.12 scgsim-study
 cd scgsim-study
-uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@e018c587d5fab1ed1fa6e32f2b00cc31663b941c' \
-  'orpen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@51985d9507025e8241205712e866c0b804de29b9'
+uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@fb8cbe199386bbe6d81cc9c58817fbe7d339573f' \
+  'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@c75a1d4d2ee07e86a3b5d9b491609e5a1a5b850c'
 ```
 
 `uv` creates `.venv` and records resolved versions in `uv.lock`. Keep `pyproject.toml` and `uv.lock` with the study; run `uv sync` on another computer to recreate the environment.
@@ -31,7 +31,7 @@ uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@e018c587d5
 
 ## Usage example: one script for SimplePad capacitance
 
-This example places a 200 µm square metal pad, a 20 µm gap and surrounding Ground on a 1000 µm square die. The component library supplies the layout, materials and layer stack. The script declares the final `pad` and `ground` electrical membership, then asks Q3D for capacitance and conductance matrices.
+This example uses the public PDK’s nominal 100 nm aluminum stack and places a 200 µm square metal pad, a 20 µm gap and surrounding Ground on a 1000 µm square die. The component library supplies the layout, materials and layer stack. The script declares the final `pad` and `ground` electrical membership, then asks Q3D for capacitance and conductance matrices.
 
 ![SimplePad layout: square pad, surrounding Ground and authored locator.](docs/assets/simple-pad-layout.png)
 
@@ -45,9 +45,9 @@ import subprocess
 import sys
 
 import gdsfactory as gf
-import orpen_sc_pdk
-from orpen_sc_pdk import get_material_records
-from orpen_sc_pdk.tech import get_single_die_layer_stack
+import orcapen_sc_pdk
+from orcapen_sc_pdk import get_material_records
+from orcapen_sc_pdk.tech import get_single_die_layer_stack
 from scgsim.geometry import GeometryPlan
 from scgsim.aedt import (
     AedtResources,
@@ -64,7 +64,7 @@ def main():
     args = parser.parse_args()
 
     # 1. Build the layout and declare electrical ownership.
-    orpen_sc_pdk.activate()
+    orcapen_sc_pdk.activate()
     component = gf.get_component(
         "square_pad_capacitor",
         pad_side_um=200.0,
