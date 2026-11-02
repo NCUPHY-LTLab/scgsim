@@ -1,5 +1,5 @@
 ---
-title: "SCGSim reference"
+title: "Overview"
 description: "Find the model, mesh, handoff, and result topic you need."
 sidebar: contract
 scgsim-id: "docs/reference"
@@ -7,10 +7,9 @@ scgsim-kind: "reference"
 scgsim-status: "CONVERGING"
 ---
 
-Use this topic index to move between concepts, supported behavior, and detailed
-contracts. The linked pages remain the source for their respective definitions.
+Start with a goal tutorial, then use the topic links below to find the model, geometry, mesh, execution or result guidance for that task. Check the [Convention dictionary](conventions.qmd) when a technical term or unit needs clarification.
 
-## Complete goal tutorials {#goal-tutorials}
+## Goal tutorials {#goal-tutorials}
 
 Choose a complete reader workflow by calculation goal:
 

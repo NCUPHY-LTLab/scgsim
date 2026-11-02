@@ -11,15 +11,15 @@ SCGSim 提供以下工作流程。求解器可能支援 SCGSim 尚未實作的�
 
 ::: {.table-responsive}
 
-| 計算方式 | SCGSim 後端 | 輸入 | 回傳量 |
+| Analysis | SCGSim 後端 | 輸入 | 回傳量 |
 |---|---|---|---|
-| 靜電 | Palace | GeometryPlan、端點與接地 Net | 有序電容矩陣 |
-| 本徵模 | Palace | GeometryPlan、可選的電感端口 | 模態頻率／原生 Q 值、能量；指定的 EPR |
-| 本徵模 | HFSS | `modeling="solid"` 或 `"thin_film"`；GDS 對應或以來源為起點的 GeometryPlan | 模態頻率／原生 Q 值；指定的 EPR |
-| 驅動模態 | HFSS | `modeling="solid"` 或 `"thin_film"`；GDS 對應與積分線端口 | 複數 S 參數、CSV 與 Touchstone |
-| 驅動端點 | HFSS | `modeling="solid"` 或 `"thin_film"`；GDS 對應與明確指定的參考導體 | 複數 S 參數、CSV 與 Touchstone |
-| 有限 3D 萃取 | Q3D | `modeling="solid"` 或 `"thin_film"`；`Q3dSpec` v3 實體，或由 GeometryPlan 支援的 C/G 準備資料 | C/G，以及可選的 AC/RL 萃取矩陣 |
-| 截面萃取 | Q2D | 明確指定的矩形與導體群組 | 每單位長度 C/G/L/R 區塊 |
+| [Electrostatic](conventions.qmd#term-electrostatic) | Palace | GeometryPlan、端點與接地 Net | 有序電容矩陣 |
+| [Eigenmode](conventions.qmd#term-eigenmode) | Palace | GeometryPlan、可選的電感端口 | 模態頻率／原生 Q 值、能量；指定的 EPR |
+| [Eigenmode](conventions.qmd#term-eigenmode) | HFSS | `modeling="solid"` 或 `"thin_film"`；GDS 對應或以來源為起點的 GeometryPlan | 模態頻率／原生 Q 值；指定的 EPR |
+| [Driven Modal](conventions.qmd#term-driven-modal) | HFSS | `modeling="solid"` 或 `"thin_film"`；GDS 對應與積分線端口 | 複數 S 參數、CSV 與 Touchstone |
+| [Driven Terminal](conventions.qmd#term-driven-terminal) | HFSS | `modeling="solid"` 或 `"thin_film"`；GDS 對應與明確指定的參考導體 | 複數 S 參數、CSV 與 Touchstone |
+| Finite 3D extraction | Q3D | `modeling="solid"` 或 `"thin_film"`；`Q3dSpec` v3 實體，或由 GeometryPlan 支援的 C/G 準備資料 | C/G，以及可選的 AC/RL 萃取矩陣 |
+| Cross-section extraction | Q2D | 明確指定的矩形與導體群組 | 每單位長度 C/G/L/R 區塊 |
 
 :::
 

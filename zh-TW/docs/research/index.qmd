@@ -1,0 +1,23 @@
+---
+lang: zh-TW
+title: "研究"
+description: "依模型與版本閱讀數值研究、方法比較及重現設定。"
+sidebar: research
+scgsim-kind: "research"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/research/index"
+---
+
+研究頁把問題、模型、設定、結果與解讀放在一起。先看結論，再用圖表比較方法；需要重現或追查細節時，再展開完整設定與數據。
+
+## 研究項目
+
+| 研究 | 聚焦問題 | 適用範圍 |
+|---|---|---|
+| [Circular Pad 與 Uniform port](../history/curved-source-installation.qmd) | 曲線來源幾何，以及 Palace Eigenmode 研究使用的環境 | 歷史研究；保留當時配對的來源與 Solver 版本 |
+
+## 研究與工具文件
+
+特定模型的數值比較與觀察放在這個 Area。SCGSim 支援的行為、輸入、輸出與實作檢查，整理在[契約總覽](../reference.qmd)。例如，[四面體網格品質](../mesh-quality.qmd)說明儲存 Mesh 的讀取器會測量什麼，仍保留在「契約」。
+
+兩個 Area 使用的專有名詞，見 [Convention](../conventions.qmd)。

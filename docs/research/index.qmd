@@ -1,0 +1,28 @@
+---
+title: "Research"
+description: "Model-specific numerical studies, comparisons, and reproducibility notes."
+sidebar: research
+scgsim-kind: "research"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/research/index"
+---
+
+Research pages bring together a calculation's question, model, settings, results,
+and interpretation. Start with the conclusion, then use the plots and detailed
+data to examine the comparison.
+
+## Studies
+
+| Study | Focus | Scope |
+|---|---|---|
+| [Circular Pad with a Uniform port](../history/curved-source-installation.qmd) | Curved-source geometry and the environment used for a Palace Eigenmode study | Historical study; its recorded source and Solver versions stay together |
+
+## Research and tool documentation
+
+Use this Area for numerical comparisons and observations tied to a particular
+model. The [Contract Overview](../reference.qmd) covers SCGSim's supported
+behavior, inputs, outputs, and implementation checks. For example,
+[Tetrahedral Mesh Quality](../mesh-quality.qmd) describes what the stored-Mesh
+reader measures; it remains in Contract.
+
+[Convention](../conventions.qmd) explains the technical terms used in both Areas.

@@ -12,6 +12,7 @@ project:
   - docs/api/*.qmd
   - docs/course/*.qmd
   - docs/tutorials/*.qmd
+  - docs/research/*.qmd
   - docs/history/*.qmd
   - docs/concepts/*.qmd
   - '!docs/concepts/geometry-en.qmd'
@@ -32,8 +33,7 @@ askr:
       href: /zh-TW/
 website:
   title: SCGSim
-  description: Source geometry, explicit solver handoffs and verified electromagnetic
-    results
+  description: Source geometry, explicit solver handoffs and verified electromagnetic results
   page-navigation: true
   search:
     location: navbar
@@ -58,6 +58,8 @@ website:
       href: docs/examples.qmd
     - text: Concept
       href: docs/concepts/problems.qmd
+    - text: Research
+      href: docs/research/index.qmd
     - text: Contract
       href: docs/reference.qmd
     - text: Contribution
@@ -126,12 +128,20 @@ website:
     - docs/concepts/geometry.qmd
     - docs/eigenmode-epr.qmd
     - docs/concepts/model-and-numerics.qmd
+  - id: research
+    title: Pages
+    style: floating
+    collapse-level: 1
+    contents:
+    - docs/research/index.qmd
+    - docs/history/curved-source-installation.qmd
   - id: contract
     title: Pages
     style: floating
     collapse-level: 1
     contents:
     - docs/reference.qmd
+    - docs/conventions.qmd
     - docs/backend-support.qmd
     - docs/knowledge-guide.qmd
     - docs/api/input-index.qmd
