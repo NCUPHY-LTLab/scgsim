@@ -94,6 +94,9 @@ from scgsim.aedt.results.runtime_inventory import (
     SOURCE_SCHEMA_V27 as SOURCE_SCHEMA_V27,
 )
 from scgsim.aedt.results.runtime_inventory import (
+    SOURCE_SCHEMA_V28 as SOURCE_SCHEMA_V28,
+)
+from scgsim.aedt.results.runtime_inventory import (
     current_runtime_source_paths,
     runtime_source_paths,
 )
@@ -126,7 +129,8 @@ RECEIPT_V3 = "scgsim.aedt.receipt.v3"
 
 # V1–V25 retain their historical module paths and receipt interpretation.
 # V26 records current implementation owners after responsibility splits.
-# V27 records the complete AST-resolved internal import closure for current roots.
+# V27 retains its committed ordered closure. V28 records the current AST-resolved
+# internal import closure as a frozen roster.
 
 
 def _module_manifest() -> list[dict[str, str]]:
@@ -263,6 +267,7 @@ def validate_runtime_source(
         SOURCE_SCHEMA_V25,
         SOURCE_SCHEMA_V26,
         SOURCE_SCHEMA_V27,
+        SOURCE_SCHEMA_V28,
     }:
         if set(value) != {
             "schema_version",
@@ -353,6 +358,7 @@ def _validate_module_records(
                     SOURCE_SCHEMA_V25,
                     SOURCE_SCHEMA_V26,
                     SOURCE_SCHEMA_V27,
+                    SOURCE_SCHEMA_V28,
                 }
                 else "scgsim/"
             )

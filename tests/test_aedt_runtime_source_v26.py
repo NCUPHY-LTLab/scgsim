@@ -14,6 +14,8 @@ from scgsim.aedt.results.provenance import (
 from scgsim.aedt.results.runtime_inventory import (
     SOURCE_SCHEMA,
     SOURCE_SCHEMA_V26,
+    SOURCE_SCHEMA_V27,
+    current_runtime_source_closure,
     current_runtime_source_paths,
     runtime_import_closure,
     runtime_source_paths,
@@ -50,6 +52,7 @@ HISTORICAL_INVENTORY_DIGESTS = {
 }
 
 V27_PATH_DIGEST = "304e9c166cc231a33de53bd345743eb6f29a5ca92f54b8b972024182b3ddc37d"
+V28_PATH_DIGEST = "1ea4a853b9d06382d6dcff5659c8863457404a8373e970c6da532d16dc700bf0"
 
 
 @pytest.mark.parametrize(("schema", "expected"), HISTORICAL_INVENTORY_DIGESTS.items())
@@ -64,7 +67,8 @@ def test_current_inventory_covers_aedt_roots_and_import_closure():
     """Bind every AEDT module, preview reader, and retained shared seed."""
     repository = Path(__file__).resolve().parents[1]
     paths = current_runtime_source_paths()
-    assert SOURCE_SCHEMA == "scgsim.aedt.runtime-source.v27"
+    assert SOURCE_SCHEMA == "scgsim.aedt.runtime-source.v28"
+    assert len(paths) == 284
     assert paths == tuple(sorted(set(paths)))
     assert runtime_source_paths(SOURCE_SCHEMA) == paths
     assert all((repository / path).is_file() for path in paths)
@@ -73,6 +77,9 @@ def test_current_inventory_covers_aedt_roots_and_import_closure():
         for path in (repository / "src/scgsim/aedt").rglob("*.py")
     }
     assert all_aedt_modules <= set(paths)
+    assert set(paths) - set(runtime_source_paths(SOURCE_SCHEMA_V27) or ()) == {
+        "src/scgsim/geometry/primitives/topology_validation.py"
+    }
     assert {
         "src/scgsim/visualization/loaders/aedt.py",
         "src/scgsim/visualization/loaders/aedt_receipt.py",
@@ -84,12 +91,25 @@ def test_current_inventory_covers_aedt_roots_and_import_closure():
     assert v26_paths is not None
     assert tuple(sorted(set(v26_paths))) == v26_paths
     assert set(v26_paths) - all_aedt_modules <= set(paths)
+
+    v27_paths = runtime_source_paths(SOURCE_SCHEMA_V27)
+    assert v27_paths is not None
+    assert len(v27_paths) == 283
+    assert set(v27_paths) <= set(paths)
+    assert (
+        hashlib.sha256(
+            json.dumps(v27_paths, separators=(",", ":")).encode()
+        ).hexdigest()
+        == V27_PATH_DIGEST
+    )
     encoded = json.dumps(paths, separators=(",", ":")).encode()
-    assert hashlib.sha256(encoded).hexdigest() == V27_PATH_DIGEST
+    assert hashlib.sha256(encoded).hexdigest() == V28_PATH_DIGEST
+
+    assert current_runtime_source_closure() == paths
 
 
-def test_current_runtime_identity_uses_v27_without_changing_receipt_schema():
-    """Measure the V27 closure while retaining the V3 receipt contract."""
+def test_current_runtime_identity_uses_v28_without_changing_receipt_schema():
+    """Measure V28 while retaining the V3 receipt contract."""
     identity = runtime_source_identity()
     validate_runtime_source(identity, stage="actual")
     assert identity["schema_version"] == SOURCE_SCHEMA
