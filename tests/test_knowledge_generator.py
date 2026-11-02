@@ -128,6 +128,25 @@ def test_check_mode_fails_stale_without_creating_or_rewriting_outputs(source_tre
     } == before
 
 
+def test_repository_api_pages_match_the_current_sources():
+    """Fail the repository suite if generated API pages are stale."""
+    repository = Path(__file__).resolve().parents[1]
+    command = [
+        sys.executable,
+        "-I",
+        "-B",
+        str(repository / "scripts/generate_knowledge_reference.py"),
+        "--check",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0, (
+        f"API reference freshness check failed.\n"
+        f"stdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
+    )
+
+
 def _render_outputs(root: Path) -> dict[str, str]:
     module = _load_generator(
         root / "scripts/generate_knowledge_reference.py",
