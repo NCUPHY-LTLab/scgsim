@@ -1,4 +1,11 @@
-"""Orchestrate geometry preparation, the fresh mesh worker, and paired artifacts."""
+"""Orchestrate geometry preparation, the fresh mesh worker, and paired artifacts.
+
+Portions adapted from gsim 0.2.0+scq.1, revision
+8f5dc6c05255d003a9c6d8959537bcf8068379d3.
+Copyright 2025 GDSFactory. Licensed under the Apache License, Version 2.0.
+Modified for SCGSim in-tree geometry and mesh handoff integration.
+See NOTICE and LICENSES/gsim-LICENSE.txt for retained upstream notices.
+"""
 
 from __future__ import annotations
 

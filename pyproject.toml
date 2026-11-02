@@ -14,7 +14,7 @@ dependencies = [
     "plotly>=6.0.0",
 ]
 license = "Apache-2.0"
-license-files = ["LICENSE", "NOTICE"]
+license-files = ["LICENSE", "NOTICE", "LICENSES/gsim-LICENSE.txt"]
 
 [project.optional-dependencies]
 aedt = [

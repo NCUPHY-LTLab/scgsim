@@ -26,9 +26,10 @@ with the assigned writer before changing a shared path or taking over a scope.
 ## Native presentation
 
 The site uses the complete upstream Askr extension without local CSS or JS.
-The current authoring pin is Askr v0.4.2 at
-`611f537ca3ec7089f7b5daf983f1554f8c98a8dd`, requiring Quarto 1.10.18.
-A later formal producer update must retain its own exact version/commit.
+The authoring extension and versioned site builder use Askr v0.13.3 at
+`243d3dbdd234004bbe0538b9518fb76027903915`, supporting Quarto >=1.9.38 and <1.11.
+The local documentation checks use Quarto 1.10.19; the Pages workflow selects
+1.10.18 within that supported range.
 Use native Quarto structures for tables, callouts and navigation; keep source
 identity separate from generated presentation identity.
 
@@ -52,6 +53,20 @@ prevents publication and leaves the last deployed site in place. Source changes
 follow develop-to-main promotion; stable package metadata belongs to main.
 Version/catalogue changes should be checked with the existing maintained
 version tooling and the delivery packet's assigned observations.
+
+## Generated API references
+
+Edit the authored usage Markdown under `docs/api/` and `zh-TW/docs/api/`, or the
+owning public Python declarations. Refresh and check the derived references:
+
+```bash
+python scripts/generate_knowledge_reference.py
+python scripts/generate_knowledge_reference.py --check
+```
+
+The committed QMD pages are derived output. Ordinary tests check freshness;
+package builds copy them into the offline knowledge bundle without importing
+SCGSim or starting a solver.
 
 ## Implementation and project references
 
@@ -91,8 +106,9 @@ the product checks.
 Non-Draft product changes and manual dispatch retain the Python 3.12/3.13
 package-version, distribution-build, editable-import and isolated-wheel-import
 checks. The Python 3.12 offline job runs the full public offline test suite,
-strict Pyright on the three configured modules and Ruff F on tracked Python
-files. The separate Python 3.12 `docs-smoke` job runs current source examples
+the unified `scripts/check_quality.py` command: Ruff formatting and lint,
+readable style, standard Pyright with the three retained strict scopes, and
+six import-layer contracts. The separate Python 3.12 `docs-smoke` job runs current source examples
 through file-only preparation with the pinned public PDK. CI uses public
 inputs and excludes private golden data; it does not invoke AEDT or Palace
 solvers.

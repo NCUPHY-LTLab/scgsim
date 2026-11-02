@@ -4,6 +4,14 @@ Copyright 2026 OrPenStrike and contributors.
 SCGSim is an independent downstream toolkit and is not an official or
 endorsed release of gsim.
 
+Retained upstream attribution:
+  Portions derived from gsim.
+  Copyright 2025 GDSFactory
+  Licensed under the Apache License, Version 2.0.
+  The complete original gsim license is retained in LICENSES/gsim-LICENSE.txt.
+  SCGSim modifications are maintained independently; the original copyright
+  and source-license notices continue to apply to the derived portions.
+
 Phase 1 includes a Route-A/Route-B candidate implementation with scoped gsim-derived
 code and explicit attributions under Apache-2.0:
 

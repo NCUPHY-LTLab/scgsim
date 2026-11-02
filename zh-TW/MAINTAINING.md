@@ -6,9 +6,17 @@
 
 `src/scgsim/` 負責可重用產品程式碼。`docs/` 與 README 負責撰寫說明；`_quarto.yml` 負責網站導覽與執行設定。`scripts/` 負責建置及版本工具；`tests/` 負責維護中的套件測試。產生的 HTML、搜尋索引與封裝知識都是衍生輸出。公開元件與可執行 Notebook 來源由 OrPen SC PDK 維護。
 
+## 來源分工 {#source-ownership}
+
+Architecture 負責共用程式、套件文件、文件網站與 Preview；Palace 與 AEDT Lead 各自負責後端、測試與技術文件。各 Lead 提交及推送自己的工作分支，Architecture 決定整合順序，Integration 負責公開隱私審查與受保護合併。精確範圍以 [AGENTS.md](../AGENTS.md) 為準。
+
+現有寫入者保留指派路徑與執行中的服務。變更共用路徑或接手範圍前，先與該寫入者協調。
+
 ## 原生呈現 {#native-presentation}
 
-網站使用完整的上游 Askr 擴充功能，不含本地 CSS 或 JS。目前編輯固定版本為 Askr v0.12.0，修訂版本 `d4a0b7ac664f783304a761e307414b9fff16e977`，支援 Quarto >=1.9.38 且 <1.11。文件本機預覽使用 Quarto 1.10.19。後續正式的產生器更新必須保留自己的精確版本及修訂版本。表格、提示框與導覽請使用 Quarto 原生結構；來源識別資訊與產生的呈現識別資訊應分開處理。
+網站使用完整的上游 Askr 擴充功能，搭配原生 Quarto 結構。編輯用擴充功能與多版本網站建置器固定使用 Askr v0.13.3，修訂版本為 `243d3dbdd234004bbe0538b9518fb76027903915`，支援 Quarto >=1.9.38 且 <1.11。本機文件檢查使用 Quarto 1.10.19；Pages 工作流程使用相容範圍內的 1.10.18。
+
+表格、提示框與導覽採用原生元件；程式碼以 `code-overflow: scroll` 保留原始行結構。來源修訂版本與呈現修訂版本分別記錄。
 
 ## 文件建置 {#documentation-builds}
 
@@ -20,7 +28,18 @@ Documentation Pages 工作流程會在推送至 `develop`／`main` 或手動派�
 
 CI 會先判定事件差異的類型。草稿拉取請求只執行分類，並刻意略過產品工作；將拉取請求標記為 Ready 後，才會啟動適用的檢查。確認為純 Markdown 文字的 `README.md` 或 `docs/**/*.md` 變更，會在本機驗證 Markdown 連結路徑；含有行內程式碼歧義的文件則走產品檢查流程。可執行或不支援的內容、QMD／Notebook 檔案、共用設定、相依套件與來源變更，也會執行產品檢查。若無法取得比較資訊，同樣執行產品檢查。
 
-非草稿產品變更與手動派送會保留 Python 3.12／3.13 套件版本、發行套件建置、可編輯匯入與隔離 wheel 匯入檢查。獨立的 Python 3.12 `docs-smoke` 工作會使用固定版本的公開 PDK，以純檔案準備流程執行目前來源範例。這項檢查與產品測試分開，因為涵蓋範圍不同；它不是拉取請求檢查。
+非草稿產品變更與手動派送會保留 Python 3.12／3.13 套件版本、發行套件建置、可編輯匯入與隔離 wheel 匯入檢查。獨立的 Python 3.12 `docs-smoke` 工作會使用固定版本的公開 PDK，以純檔案準備流程執行目前來源範例。Ready 的產品拉取請求與 develop／main 推送會執行這項檢查，並納入 `required` 結果。離線測試工作也會執行完整品質入口 `scripts/check_quality.py`，涵蓋 Ruff 格式與程式檢查、可讀性、標準及原有嚴格 Pyright 設定，以及六條匯入層契約。
+
+## 產生 API 參考頁 {#generated-api-references}
+
+修改 `docs/api/` 與 `zh-TW/docs/api/` 的正式 Markdown 使用說明，或所屬 Python 公開宣告，再產生並檢查衍生頁面：
+
+```bash
+python scripts/generate_knowledge_reference.py
+python scripts/generate_knowledge_reference.py --check
+```
+
+提交的 QMD 是衍生輸出。一般測試會檢查內容是否更新；套件建置將它們收錄至離線知識套件，過程不匯入 SCGSim 或啟動求解器。
 
 ## 雙語文件編寫 {#bilingual-authoring}
 
@@ -62,7 +81,7 @@ python -m pytest tests/test_private_golden.py \
   --private-golden-manifest /path/to/authorized-manifest.json
 ```
 
-manifest 是讀取器的輸入，不代表有權存取或發布其資料。缺少必要 manifest 輸入屬於使用方式錯誤；略過的測試狀態是 `NOT RUN`，不是基準結果。公開 CI 會排除 `private_golden` 標記。基準資料必須保留在公開儲存庫之外。Tier B 仍受支援，不會因本次收斂工作而重新分類。目前範圍與待處理項目請參閱[拉取請求範本](.github/PULL_REQUEST_TEMPLATE.md)及[收斂狀態頁](docs/convergence-status.qmd)。
+manifest 是讀取器的輸入，不代表有權存取或發布其資料。缺少必要 manifest 輸入屬於使用方式錯誤；略過的測試狀態是 `NOT RUN`，不是基準結果。公開 CI 會排除 `private_golden` 標記。基準資料必須保留在公開儲存庫之外。Tier B 仍受支援，不會因本次收斂工作而重新分類。目前範圍與待處理項目請參閱[拉取請求範本](../.github/PULL_REQUEST_TEMPLATE.md)及[收斂狀態頁](docs/convergence-status.qmd)。
 
 ## 跨專案的大型提案 {#larger-proposals-across-projects}
 
