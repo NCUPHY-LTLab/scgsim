@@ -20,9 +20,8 @@ in [AGENTS.md](AGENTS.md). Architecture decides integration order; SCQ Integrati
 performs public privacy review and protected merges. Resolve current Lead
 identities and shared delivery rules through `$scq-collaboration-roles`.
 
-Existing writers retain their assigned paths and running services during
-handoff. New backend Leads begin with read-only intake until the current
-writer releases an affected path or exact hunk.
+Existing writers retain their assigned paths and running services. Coordinate
+with the assigned writer before changing a shared path or taking over a scope.
 
 ## Native presentation
 
