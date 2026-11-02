@@ -46,6 +46,7 @@ dev = [
 ]
 
 [project.urls]
+Issues = "https://github.com/NCUPHY-LTLab/scgsim/issues"
 Homepage = "https://github.com/OrPenStrike/scgsim"
 
 [tool.setuptools]

@@ -748,6 +748,10 @@ KLayout 0.30.10 合成驗證中，全部 1,224 個設定／邊距案例，最小
 
 ### 表面估計與接面正規化 {#surface-estimates-and-junction-normalization}
 
+`analyze_epr` 的呼叫方式與參數說明見[儲存場 API 指南](../api/analyze_epr.qmd)。當接面電壓 $V$
+非零時，依電壓計算的有效模態電容為 $C_{mode}=2U_{norm}/|V|^2$，支路電容為 $C_j=2U_{C,j}/|V|^2$，因此
+$p_{C,j}=C_j/C_{mode}$。若 $V=0$，此電容比值未定義；計算不套用電壓截止值。
+
 使用峰值相量、薄膜厚度 $t$、薄膜相對介電常數 $\epsilon_f$ 與基板相對介電常數 $\epsilon_s$ 時，固定表面估計為
 
 $$

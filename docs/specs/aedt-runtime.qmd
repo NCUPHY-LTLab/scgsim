@@ -2243,6 +2243,13 @@ point-to-edge expression names as the new geometry definition.
 
 ### Surface estimates and junction normalization {#surface-estimates-and-junction-normalization}
 
+Use the [saved-field API guide](../api/analyze_epr.qmd) for the `analyze_epr` call
+and parameter meanings. For a nonzero junction voltage $V$, the voltage-based effective
+modal capacitance is $C_{mode}=2U_{norm}/|V|^2$ and the branch capacitance is
+$C_j=2U_{C,j}/|V|^2$, so $p_{C,j}=C_j/C_{mode}$. When $V=0$, this capacitance ratio is
+undefined; no voltage cutoff is applied.
+
+
 With peak phasors, film thickness $t$, film relative permittivity
 $\epsilon_f$, and substrate relative permittivity $\epsilon_s$, the fixed
 surface estimates are

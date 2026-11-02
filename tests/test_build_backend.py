@@ -15,22 +15,33 @@ import build_backend
 
 @pytest.fixture
 def source_tree(tmp_path):
-    """Copy public inputs and the real backend into an isolated producer tree."""
+    """Create a small authored source tree around the real PEP 517 backend."""
     repository = Path(build_backend.__file__).parent
     root = tmp_path / "producer"
     root.mkdir()
-    for name in ("README.md", "pyproject.toml", "build_backend.py"):
-        shutil.copy2(repository / name, root / name)
-    (root / "docs").mkdir()
-    shutil.copy2(repository / "docs/architecture.qmd", root / "docs/architecture.qmd")
-    asset = next(
-        path
-        for path in sorted((repository / "docs/assets").rglob("*"))
-        if path.is_file()
+    shutil.copy2(repository / "build_backend.py", root / "build_backend.py")
+    (root / "README.md").write_text("# Fixture project\n", encoding="utf-8")
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "fixture"\nversion = "0.1"\n'
+        'description = "A backend fixture."\n',
+        encoding="utf-8",
     )
-    destination = root / asset.relative_to(repository)
-    destination.parent.mkdir(parents=True)
-    shutil.copy2(asset, destination)
+    (root / "docs").mkdir()
+    (root / "docs/architecture.qmd").write_text(
+        '---\ntitle: "Architecture"\ndescription: "Fixture page."\n'
+        'scgsim-kind: "reference"\nscgsim-status: "CONVERGING"\n'
+        'scgsim-id: "docs/architecture"\n---\n\nArchitecture text.\n',
+        encoding="utf-8",
+    )
+    (root / "docs/examples.qmd").write_text(
+        '---\ntitle: "Examples"\ndescription: "Start here."\n'
+        'scgsim-kind: "start"\nscgsim-status: "CONVERGING"\n'
+        'scgsim-id: "docs/examples"\n---\n',
+        encoding="utf-8",
+    )
+    asset = root / "docs/assets/figure.svg"
+    asset.parent.mkdir(parents=True)
+    asset.write_text('<svg xmlns="http://www.w3.org/2000/svg"/>\n', encoding="utf-8")
     bundle = root / "src/scgsim/_agent_knowledge"
     bundle.mkdir(parents=True)
     (bundle / "README.md").write_bytes(b"existing installed readme\n")
@@ -85,7 +96,7 @@ def test_generate_preserves_source_bytes_and_skips_unchanged_outputs(
     manifest = json.loads((bundle / "manifest.json").read_bytes())
     identifiers = [resource["id"] for resource in manifest["resources"]]
     assert identifiers == sorted(identifiers)
-    assert set(identifiers) == {"readme", "docs/architecture"}
+    assert set(identifiers) == {"readme", "docs/architecture", "docs/examples"}
     for resource in manifest["resources"]:
         digest = hashlib.sha256((bundle / resource["path"]).read_bytes()).hexdigest()
         assert resource["content_sha256"] == digest
@@ -155,6 +166,25 @@ def test_duplicate_ids_precede_project_name_access(source_tree, backend):
     )
     before = _bundle_state(source_tree)
     with pytest.raises(ValueError, match="resource IDs must be unique"):
+        backend.generate_knowledge()
+    assert _bundle_state(source_tree) == before
+
+
+@pytest.mark.parametrize(
+    ("identifier", "kind"),
+    [("docs/other", "start"), ("docs/examples", "course")],
+)
+def test_examples_is_the_only_start_resource(source_tree, backend, identifier, kind):
+    """Require the stable examples entry point as the sole start resource."""
+    page = source_tree / "docs/examples.qmd"
+    page.write_text(
+        page.read_text(encoding="utf-8")
+        .replace('scgsim-kind: "start"', f'scgsim-kind: "{kind}"')
+        .replace('scgsim-id: "docs/examples"', f'scgsim-id: "{identifier}"'),
+        encoding="utf-8",
+    )
+    before = _bundle_state(source_tree)
+    with pytest.raises(ValueError, match="docs/examples as its sole start resource"):
         backend.generate_knowledge()
     assert _bundle_state(source_tree) == before
 

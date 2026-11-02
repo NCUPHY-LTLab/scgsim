@@ -166,6 +166,11 @@ def _manifest_bytes(
     identifiers = [resource["id"] for resource in resources]
     if len(identifiers) != len(set(identifiers)):
         raise ValueError("Knowledge resource IDs must be unique")
+    start_resources = [
+        resource["id"] for resource in resources if resource["kind"] == "start"
+    ]
+    if start_resources != ["docs/examples"]:
+        raise ValueError("Knowledge needs docs/examples as its sole start resource")
     resources.sort(key=lambda resource: resource["id"])
     manifest: dict[str, object] = {
         "schema_version": "1.0",

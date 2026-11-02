@@ -1,5 +1,9 @@
 include build_backend.py
 include README.md
+include docs/knowledge-sources.json
+include docs/api/analyze-epr-usage.md
+include zh-TW/docs/api/analyze-epr-usage.md
+include scripts/generate_knowledge_reference.py
 recursive-include docs *.qmd
 recursive-include docs/assets *
 recursive-include src/scgsim/_agent_knowledge *.json *.md *.qmd

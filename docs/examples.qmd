@@ -1,12 +1,15 @@
 ---
 title: "Choose a simulation"
 description: "Select a complete SCGSim notebook by the physical quantity you want to calculate."
-scgsim-kind: "course"
+scgsim-kind: "start"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/examples"
 ---
 
-SCGSim prepares a geometry and solver request, then resolves the returned results with their units and model identity. Choose a notebook by the quantity you need; its backend tabs carry the procedure from source inputs through result reading.
+SCGSim prepares a geometry and solver request, then resolves the returned results with
+their units and model identity. Choose a notebook by the quantity you need; its backend
+tabs carry the procedure from source inputs through result reading. For API parameter
+lookup and source-version pairing, use the [knowledge guide](knowledge-guide.qmd).
 
 ## Choose a simulation {#getting-started}
 
@@ -35,6 +38,9 @@ The deeper Xmon and CPW source notebooks are pinned to public OrPen SC PDK revis
 The source dimensions and presets are example model inputs. For current SCGSim requests, follow the relevant tutorial and API references.
 
 ## Continue with a focused reference
+
+- Browse the [knowledge guide](knowledge-guide.qmd) for source-version pairing and public
+API references.
 
 - [Inspect source and geometry](course/source-observations.qmd) before backend preparation.
 - [Inspect prepared inputs](course/solver-observations.qmd) when a request differs from the intended model.
