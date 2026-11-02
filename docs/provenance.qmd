@@ -24,9 +24,12 @@ layout, settings or native result of a particular study. The current
 runtime-source manifest and content digest identify the module bytes used for
 execution; a Git revision is recorded only when truthfully available.
 
-Current AEDT manifests use `runtime-source.v26`. They record the declared
-module bytes and content digest separately for preparation and execution.
-Historical V1–V25 manifests keep their original paths and interpretation.
+Current AEDT manifests use `runtime-source.v27` with 283 sorted, unique paths.
+V27 starts from all 118 current AEDT modules, both AEDT visualization loaders,
+and the non-AEDT V26 entries, then closes over AST-resolved imports and package
+initializers. Preparation and execution record their declared module bytes and
+content digest separately. Historical V1–V26 manifests keep their original
+paths and interpretation.
 Earlier implementation and native-run records are linked from the
 [API migration reference](api-migration.qmd#accepted-scope-and-evidence-status).
 

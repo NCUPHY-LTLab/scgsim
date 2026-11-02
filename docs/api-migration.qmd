@@ -318,14 +318,16 @@ export/readback dependency becomes an explicit internal service. Visualization
 imports current PyAEDT constants from the canonical spec owner without making
 them public exports.
 
-The current producer uses runtime-source v13; its declared inventory and
-content digest identify the measured modules for that source snapshot, without
-making the digest a permanent code value or claiming exhaustive transitive
-coverage. Historical v1–v12 readers retain their original path, hash, revision
-and schema meanings. Do not map old module strings onto new paths while
-resolving old receipts. Handoff and receipt histories remain separate from Q3D
-request versioning; Q3D remains v3 only. This map does not claim native Q3D
-completion.
+The current producer uses runtime-source v27 with 283 sorted, unique declared
+paths. Its inventory starts with all current AEDT modules, the two AEDT
+visualization loaders, and the non-AEDT paths retained from V26, then follows
+AST-resolved imports and package initializers. Per-module hashes bind the
+declared files, and the canonical manifest digest identifies that source
+snapshot; neither is a permanent code value. Historical V1–V26 readers retain
+their original paths, hashes, revision rules, and schema meanings. Do not map
+old module strings onto new paths while resolving old receipts. Handoff and
+receipt histories remain separate from Q3D request versioning; Q3D remains v3
+only. This map does not claim native Q3D completion.
 
 ## Palace package symbols
 

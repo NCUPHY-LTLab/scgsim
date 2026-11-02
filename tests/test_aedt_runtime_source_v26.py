@@ -1,4 +1,4 @@
-"""Keep historical inventories stable while measuring current split source owners."""
+"""Protect historical inventory digests and current AST import closure."""
 
 import hashlib
 import json
@@ -6,9 +6,16 @@ from pathlib import Path
 
 import pytest
 
+from scgsim.aedt.results.provenance import (
+    RECEIPT_V3,
+    runtime_source_identity,
+    validate_runtime_source,
+)
 from scgsim.aedt.results.runtime_inventory import (
     SOURCE_SCHEMA,
+    SOURCE_SCHEMA_V26,
     current_runtime_source_paths,
+    runtime_import_closure,
     runtime_source_paths,
 )
 
@@ -38,7 +45,11 @@ HISTORICAL_INVENTORY_DIGESTS = {
     "scgsim.aedt.runtime-source.v23": "23fc8ab5eba22fa26389c8739b5e7d7315147f3f784e04441f45bfe71f44a1ce",
     "scgsim.aedt.runtime-source.v24": "760276beb4b6be76cb981ca94669e18405ab2de2ee0834e3fd3e5940a7e461f0",
     "scgsim.aedt.runtime-source.v25": "106ba25b2094e8de5e7b285e345c1ddd09c6d07c4de33d63559ef021aa4a8a9d",
+    # Captured from the committed ac448bf V26 roster, independently of V27.
+    "scgsim.aedt.runtime-source.v26": "74c0c1af7b6048b73a5ee681d5d2a247461919449a52c2ec092adf3b56049cb5",
 }
+
+V27_PATH_DIGEST = "304e9c166cc231a33de53bd345743eb6f29a5ca92f54b8b972024182b3ddc37d"
 
 
 @pytest.mark.parametrize(("schema", "expected"), HISTORICAL_INVENTORY_DIGESTS.items())
@@ -49,20 +60,72 @@ def test_historical_inventory_keeps_exact_ordered_paths(schema, expected):
     assert hashlib.sha256(encoded).hexdigest() == expected
 
 
-def test_current_inventory_binds_existing_split_owners():
-    """Bind current source owners using canonical, existing module paths."""
+def test_current_inventory_covers_aedt_roots_and_import_closure():
+    """Bind every AEDT module, preview reader, and retained shared seed."""
     repository = Path(__file__).resolve().parents[1]
     paths = current_runtime_source_paths()
-    assert SOURCE_SCHEMA == "scgsim.aedt.runtime-source.v26"
+    assert SOURCE_SCHEMA == "scgsim.aedt.runtime-source.v27"
     assert paths == tuple(sorted(set(paths)))
     assert runtime_source_paths(SOURCE_SCHEMA) == paths
     assert all((repository / path).is_file() for path in paths)
+    all_aedt_modules = {
+        f"src/{path.relative_to(repository / 'src').as_posix()}"
+        for path in (repository / "src/scgsim/aedt").rglob("*.py")
+    }
+    assert all_aedt_modules <= set(paths)
     assert {
-        "src/scgsim/aedt/data.py",
-        "src/scgsim/aedt/io.py",
-        "src/scgsim/aedt/results/runtime_inventory.py",
-        "src/scgsim/aedt/runtime/desktop_lifecycle.py",
-        "src/scgsim/aedt/specs/hfss_epr.py",
+        "src/scgsim/visualization/loaders/aedt.py",
+        "src/scgsim/visualization/loaders/aedt_receipt.py",
+        "src/scgsim/geometry/__init__.py",
+        "src/scgsim/semantics/route_a.py",
+        "src/scgsim/semantics/snapshot.py",
     } <= set(paths)
-    assert "src/scgsim/aedt/_data.py" not in paths
-    assert "src/scgsim/aedt/_io.py" not in paths
+    v26_paths = runtime_source_paths(SOURCE_SCHEMA_V26)
+    assert v26_paths is not None
+    assert tuple(sorted(set(v26_paths))) == v26_paths
+    assert set(v26_paths) - all_aedt_modules <= set(paths)
+    encoded = json.dumps(paths, separators=(",", ":")).encode()
+    assert hashlib.sha256(encoded).hexdigest() == V27_PATH_DIGEST
+
+
+def test_current_runtime_identity_uses_v27_without_changing_receipt_schema():
+    """Measure the V27 closure while retaining the V3 receipt contract."""
+    identity = runtime_source_identity()
+    validate_runtime_source(identity, stage="actual")
+    assert identity["schema_version"] == SOURCE_SCHEMA
+    assert RECEIPT_V3 == "scgsim.aedt.receipt.v3"
+    assert (
+        tuple(item["path"] for item in identity["modules"])
+        == current_runtime_source_paths()
+    )
+
+
+def test_import_closure_follows_package_relative_absolute_child_and_lazy_imports(
+    tmp_path,
+):
+    """Resolve direct, relative, package-child, initializer, and function imports."""
+    source_root = tmp_path / "src"
+    sources = {
+        "scgsim/__init__.py": "",
+        "scgsim/aedt/__init__.py": "from . import initialized_child\n",
+        "scgsim/aedt/initialized_child.py": "",
+        "scgsim/aedt/entry.py": (
+            "from . import relative_child\n"
+            "from scgsim.shared import imported_child\n"
+            "import scgsim.shared.absolute_child\n"
+            "def lazy_step():\n"
+            "    from ..shared.lazy_child import LazyValue\n"
+        ),
+        "scgsim/aedt/relative_child.py": "",
+        "scgsim/shared/__init__.py": "",
+        "scgsim/shared/imported_child.py": "",
+        "scgsim/shared/absolute_child.py": "",
+        "scgsim/shared/lazy_child.py": "",
+    }
+    for relative, source in sources.items():
+        path = source_root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source, encoding="utf-8")
+
+    paths = runtime_import_closure(source_root, ("src/scgsim/aedt/entry.py",))
+    assert paths == tuple(f"src/{path}" for path in sorted(sources))

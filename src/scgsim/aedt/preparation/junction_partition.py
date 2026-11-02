@@ -5,6 +5,7 @@ from dataclasses import replace
 from scgsim.aedt.specs.epr import PlanarJunction
 from scgsim.geometry.models.junctions import JunctionGeometry
 from scgsim.geometry.planning.junction_partition import (
+    JunctionContactRequest,
     JunctionPartitionFormat,
     junction_terminal_line,
     plain_record,
@@ -48,11 +49,13 @@ def junction_contact_inventory(
     """Read source contacts using the AEDT support-plane schema."""
     return _shared_contact_inventory(
         build_input,
-        source_polygon_id,
-        terminal_a_net,
-        terminal_b_net,
-        stored_binding,
-        support_schema=_FORMAT.support_schema,
+        JunctionContactRequest(
+            source_polygon_id,
+            terminal_a_net,
+            terminal_b_net,
+            stored_binding,
+            support_schema=_FORMAT.support_schema,
+        ),
     )
 
 

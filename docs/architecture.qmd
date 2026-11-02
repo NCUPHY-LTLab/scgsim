@@ -443,14 +443,17 @@ carrier and cannot reinterpret a caller spec or workspace.
 
 New preparation keeps the handoff and handoff-manifest schemas at V1 while both
 declare that the mutable run receipt uses `scgsim.aedt.receipt.v3`. The initial
-V3 receipt records a declared `runtime-source.v24` preparation-time SCGSim module
-manifest and content digest. Before mutation, execution verifies the canonical
-manifest and binds the initial-receipt and prepared-manifest hashes. A canonical historical
+V3 receipt records a declared `runtime-source.v27` preparation-time SCGSim module
+manifest and content digest for 283 sorted, unique paths. V27 starts from all
+118 AEDT modules, both AEDT visualization loaders, and the non-AEDT paths retained
+from V26, then follows AST-resolved imports and package initializers. Before
+mutation, execution verifies the canonical manifest and binds the
+initial-receipt and prepared-manifest hashes. A canonical historical
 V1 `not_run` handoff with neither marker remains executable, but its resulting
 V3 receipt records preparation provenance as `legacy_v1_not_recorded`; it does
 not fabricate history.
 
-Every new completed V3 receipt records a separate declared `runtime-source.v24`
+Every new completed V3 receipt records a separate declared `runtime-source.v27`
 execution-time module manifest and digest. Its measured module bytes and
 content digest are mandatory; it has no helper-hash map. Preparation and
 execution identities are not required to match: their separation records what
@@ -463,7 +466,7 @@ consistency contract is not source authenticity for an actor able
 to rewrite the entire unsigned artifact set.
 
 The [AEDT receipt/provenance contract](specs/aedt-runtime.qmd#receipt-cohorts-and-source-provenance)
-is the unique authority for the exact current V24 inventory and frozen
+is the unique authority for the exact current V27 283-path inventory and frozen
 historical reader evolution. V1–V12 retain their exact prior path assignments
 and reader interpretations; V13 binds its declared file set, not every
 transitive dependency. One pure, versioned initial-receipt codec owns historical
