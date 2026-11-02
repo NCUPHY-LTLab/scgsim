@@ -169,7 +169,9 @@ def bind_body_terminal_evidence(
                     f"saved Terminal child assignment must have exactly one "
                     f"nonempty Edges or Faces list: {port.name!r}"
                 )
-            owners = _read_body_terminal_owners(hfss, geometry, native, edges, faces)
+            owners = _read_body_terminal_owners(
+                hfss, geometry, native, edges, faces, port.name
+            )
             native["signal_objects"] = owners
             native["reference_conductor_ids"] = reference_ids
             native["reference_conductors"] = reference_names
@@ -515,12 +517,13 @@ def _terminal_assignment_ids(
     return [int(value) for value in values]
 
 
-def _read_body_terminal_owners(
+def _read_body_terminal_owners(  # noqa: PLR0913 -- native owner queries retain explicit assignment inputs and the failing port identity.
     hfss: Any,
     geometry: dict[str, Any],
     native: dict[str, Any],
     edges: list[int] | None,
     faces: list[int] | None,
+    port_name: str,
 ) -> list[str]:
     """Read the exact source conductor owner for every assigned edge or face."""
     owners = []
@@ -550,7 +553,9 @@ def _read_body_terminal_owners(
                 owners.append(matches[0])
     else:
         if faces is None:
-            raise RuntimeError("saved Terminal child assignment is unavailable")
+            raise RuntimeError(
+                f"saved Terminal child assignment is unavailable: {port_name!r}"
+            )
         face_records = []
         native["terminal_assignment_kind"] = "Faces"
         native["terminal_faces"] = face_records

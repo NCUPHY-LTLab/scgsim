@@ -212,7 +212,8 @@ def _package_manifest(
     """Build and validate the source-bound portable package manifest."""
     spec = context.spec
     run_control = spec.run_control
-    assert run_control is not None
+    if run_control is None:
+        raise TypeError("native batch requires a complete body-first EPR preparation")
     manifest = {
         "schema_version": _PACKAGE,
         "status": "prepared_native",
@@ -318,7 +319,8 @@ def _stage_collection_sources(
         parent / "attempt/work",
         protocol.inventory(attempt_root / "work"),
     )
-    assert attempt.raw_evidence is not None and attempt.work_members is not None
+    if attempt.raw_evidence is None or attempt.work_members is None:
+        raise RuntimeError("batch terminal attempt lacks returned inventories")
     attempt_path = attempt_root / "batch-attempt.json"
     attempt_records = [
         *attempt.raw_evidence,

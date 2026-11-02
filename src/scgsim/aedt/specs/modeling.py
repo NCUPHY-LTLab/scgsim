@@ -257,7 +257,10 @@ def modeling_payload(spec: Any) -> dict[str, Any]:
     }
     if not getattr(spec, "_historical_physical", False):
         plan = request_modeling(spec)
-        assert plan is not None
+        if plan is None:
+            raise RuntimeError(
+                "fresh physical modeling request did not produce a representation plan"
+            )
         payload["physical_representation"] = plan.to_payload()
     return payload
 

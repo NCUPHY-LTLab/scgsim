@@ -612,7 +612,8 @@ class _ResolvedRunDisplay:
     def _display_mode(self, mode: int) -> None:
         """Render one requested mode at the observed final pass only."""
         result = self.result
-        assert result is not None
+        if result is None:
+            raise RuntimeError("adaptive EPR result is unavailable for mode display")
         selected = [
             row
             for row in result.rows

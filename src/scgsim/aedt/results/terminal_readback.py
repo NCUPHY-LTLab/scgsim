@@ -350,8 +350,16 @@ def validate_terminal_native_evidence(
             )
         ):
             raise RuntimeError("completed receipt terminal native identity mismatch")
-        boundary = cast(dict[str, Any], native.get("boundary_properties"))
-        terminal = cast(dict[str, Any], native.get("terminal_properties"))
+        boundary = native.get("boundary_properties")
+        if not isinstance(boundary, dict):
+            raise TypeError(
+                "completed receipt has invalid terminal boundary properties"
+            )
+        terminal = native.get("terminal_properties")
+        if not isinstance(terminal, dict):
+            raise TypeError(
+                "completed receipt has invalid terminal excitation properties"
+            )
         expected_boundary = {
             "Deembed": boundary.get("Deembed") if current else True,
             "Deembed Dist": f"{port.deembed_um:g}um",
