@@ -18,12 +18,10 @@ from scgsim.aedt.runtime.native.junction_topology import (
 from scgsim.aedt.runtime.native.planar_bodies import junction_geometry
 from scgsim.geometry.planning.junction_partition import junction_terminal_line
 
-_NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM = 1e-5
-
 
 def read_saved_hfss_design(project_path, design_name, *, purpose):
     """Read one saved HFSS design without a cached parser or project mutation."""
-    from ansys.aedt.core.internal.load_aedt_file import load_entire_aedt_file  # noqa: PLC0415 -- optional PyAEDT loads only at the authorized native execution boundary.
+    from ansys.aedt.core.internal.load_aedt_file import load_entire_aedt_file  # noqa: PLC0415 -- optional PyAEDT parser is needed only when reading a saved native project, not during preparation.
 
     path = Path(project_path).resolve(strict=True)
     digest = file_sha256(path)

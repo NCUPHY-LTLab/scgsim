@@ -239,7 +239,7 @@ def inset_surface_regions(
 ) -> list[dict[str, Any]]:
     """Inset complete physical support, then attribute its surviving pieces."""
 
-    import klayout.db as k  # noqa: PLC0415 -- optional inset geometry engine is needed only during geometry calculation.
+    import klayout.db as k  # noqa: PLC0415 -- optional KLayout is required only when calculating a requested source-support inset.
 
     if not math.isfinite(margin_um) or margin_um < 0.0:
         raise ValueError("surface EPR margin must be finite and nonnegative")
@@ -263,7 +263,7 @@ def _inset_group_task(
 ) -> dict[tuple[str, float], dict[str, Any]]:
     """Pure integer geometry for one physical support and all its owners/margins."""
 
-    import klayout.db as k  # noqa: PLC0415 -- optional inset geometry engine is needed only during geometry calculation.
+    import klayout.db as k  # noqa: PLC0415 -- optional KLayout is loaded on the inset-task execution path, including spawned workers.
 
     support, members = task
     if support["klayout_version"] != version("klayout"):

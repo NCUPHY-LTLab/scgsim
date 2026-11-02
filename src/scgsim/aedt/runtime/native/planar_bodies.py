@@ -21,8 +21,6 @@ from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 from scgsim.geometry.models.junctions import JunctionGeometry
 from scgsim.semantics.route_a import geometry_z_range
 
-_NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM = 1e-5
-
 
 def polygon_sheet(
     app: Any, polygon: Mapping[str, Any], *, name: str, z_um: float

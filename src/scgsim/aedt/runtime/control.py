@@ -24,6 +24,7 @@ from scgsim.aedt.results.provenance import (
     runtime_source_identity,
     validate_runtime_source,
 )
+from scgsim.aedt.runtime.native.common import pyaedt_version
 from scgsim.aedt.runtime.native.compatibility import native_compatibility
 from scgsim.aedt.specs.common import MatrixRunControl
 from scgsim.aedt.specs.parse import parse_aedt_spec
@@ -377,8 +378,6 @@ def _attach_and_request_stop(
     request: _StopRequest, state: dict[str, Any]
 ) -> dict[str, Any]:
     """Attach to the validated Desktop and commit exactly one stop request."""
-    from scgsim.aedt.runtime.native.common import pyaedt_version  # noqa: PLC0415 -- imports native support only for an admitted stop.
-
     pyaedt_version()
     with native_compatibility(request.profile):
         from ansys.aedt.core import Desktop  # noqa: PLC0415 -- keep PyAEDT out of ordinary control imports.

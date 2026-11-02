@@ -45,6 +45,8 @@ def _check_standalone_protocol() -> None:
         raise RuntimeError("standalone protocol member identity differs")
 
 
+# Installed execution uses the package protocol; transported execution must
+# verify the copied helper bytes before Python imports that executable member.
 if __package__:
     from . import batch_protocol as protocol
 else:

@@ -37,8 +37,6 @@ from scgsim.aedt.runtime.native.planar_region import (
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 from scgsim.geometry.planning.junction_partition import junction_terminal_line
 
-_NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM = 1e-5
-
 
 def _native_lumped_supports(
     app: Any, prepared: PreparedPlanarGeometry, *, saved: bool = False

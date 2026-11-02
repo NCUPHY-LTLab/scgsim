@@ -16,7 +16,8 @@ from scgsim.aedt.specs.epr import EprAnalysisRequest
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
 
-_EPSILON_0_F_PER_M = 8.8541878128e-12
+# Vacuum permittivity is shared by surface and bulk electric-energy primitives.
+VACUUM_PERMITTIVITY_F_PER_M = 8.8541878128e-12
 
 
 def quantity(value: Any, name: str, unit: str, *, nonnegative: bool = True) -> float:
@@ -37,10 +38,10 @@ def surface_energy_j(
     """Compute one surface energy from its normal and tangential integrals."""
     normal, tangential = integrals
     if interface_kind == "MA":
-        return _EPSILON_0_F_PER_M * thickness_m * normal / (2.0 * film_epsilon)
+        return VACUUM_PERMITTIVITY_F_PER_M * thickness_m * normal / (2.0 * film_epsilon)
     if interface_kind == "MS":
         return (
-            _EPSILON_0_F_PER_M
+            VACUUM_PERMITTIVITY_F_PER_M
             * thickness_m
             * substrate_epsilon**2
             * normal
@@ -48,7 +49,7 @@ def surface_energy_j(
         )
     if interface_kind == "SA":
         return (
-            _EPSILON_0_F_PER_M
+            VACUUM_PERMITTIVITY_F_PER_M
             * thickness_m
             * (film_epsilon * tangential + normal / film_epsilon)
             / 2.0
@@ -64,10 +65,10 @@ def surface_energy_coefficients(
 ) -> tuple[float, float]:
     """Return the existing normal and tangential peak-phasor energy factors."""
     if interface_kind == "MA":
-        return _EPSILON_0_F_PER_M * thickness_m / (2.0 * film_epsilon), 0.0
+        return VACUUM_PERMITTIVITY_F_PER_M * thickness_m / (2.0 * film_epsilon), 0.0
     if interface_kind == "MS":
         return (
-            _EPSILON_0_F_PER_M
+            VACUUM_PERMITTIVITY_F_PER_M
             * thickness_m
             * substrate_epsilon**2
             / (2.0 * film_epsilon),
@@ -75,8 +76,8 @@ def surface_energy_coefficients(
         )
     if interface_kind == "SA":
         return (
-            _EPSILON_0_F_PER_M * thickness_m / (2.0 * film_epsilon),
-            _EPSILON_0_F_PER_M * thickness_m * film_epsilon / 2.0,
+            VACUUM_PERMITTIVITY_F_PER_M * thickness_m / (2.0 * film_epsilon),
+            VACUUM_PERMITTIVITY_F_PER_M * thickness_m * film_epsilon / 2.0,
         )
     raise ValueError(f"unsupported surface interface {interface_kind!r}")
 

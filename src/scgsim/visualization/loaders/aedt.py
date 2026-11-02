@@ -9,6 +9,7 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any, cast
 
+from scgsim.aedt.results.prepared import resolve_prepared_model
 from scgsim.aedt.runtime.native.compatibility import native_compatibility
 from scgsim.aedt.specs.common import LOCKED_PYAEDT
 from scgsim.aedt.versions import AedtVersionProfile, resolve_aedt_version
@@ -162,10 +163,6 @@ def _read_receipt_source(
             connected["aedt_version"]
         ).requested_version
     if receipt.get("status") == "native_preparation_only":
-        from scgsim.aedt.results.prepared import (  # noqa: PLC0415 - only preparation receipts need the result resolver
-            resolve_prepared_model,
-        )
-
         resolve_prepared_model(root)
     geometry = spec.get("geometry")
     if isinstance(geometry, Mapping):
@@ -188,8 +185,8 @@ def _read_receipt_source(
 def _inspect_native_project(source: _AedtSourceRequest) -> _NativeSceneData:
     """Read native geometry and assignments while guaranteeing Desktop release."""
     try:
-        import pyvista as pv  # noqa: PLC0415 - preview extra is optional
-        from ansys.aedt.core import Desktop  # noqa: PLC0415 - PyAEDT is optional
+        import pyvista as pv  # noqa: PLC0415 -- optional preview mesh types load only during native geometry inspection.
+        from ansys.aedt.core import Desktop  # noqa: PLC0415 -- optional PyAEDT loads only when opening the owned inspection Desktop.
     except ImportError as exc:
         raise RuntimeError(
             "AEDT geometry preview requires scgsim[aedt,visualization]"

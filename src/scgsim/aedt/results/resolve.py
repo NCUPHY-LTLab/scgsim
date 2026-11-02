@@ -12,8 +12,11 @@ from scgsim.aedt.io import file_sha256, read_json
 from scgsim.aedt.preparation.cohort import (
     validate_geometry_source,
 )
+from scgsim.aedt.presentation.benchmark import display_benchmark
+from scgsim.aedt.presentation.runs import display_resolved_run
 from scgsim.aedt.results.benchmark import read_simulation_benchmark
 from scgsim.aedt.results.convergence.hfss import read_hfss_convergence
+from scgsim.aedt.results.epr import resolve_epr_result, resolve_saved_solution
 from scgsim.aedt.results.hfss_readback import (
     eigenmode_convergence_source,
     validate_eigenmode_readback,
@@ -33,6 +36,7 @@ from scgsim.aedt.results.receipt_validation import (
     verified,
 )
 from scgsim.aedt.results.terminal_readback import validate_lumped_readback
+from scgsim.aedt.runtime.batch_protocol import CollectionContext, collection_source
 from scgsim.aedt.runtime.benchmark import BENCHMARK_RELATIVE
 from scgsim.aedt.specs.common import MatrixRunControl
 from scgsim.aedt.specs.hfss import (
@@ -45,6 +49,7 @@ from scgsim.aedt.specs.hfss import (
 from scgsim.aedt.specs.parse import parse_aedt_spec
 from scgsim.aedt.specs.q2d import Q2dSpec
 from scgsim.aedt.specs.q3d import Q3dSpec
+from scgsim.presentation.notebook import checked_theme
 
 
 @dataclass(frozen=True)
@@ -140,11 +145,7 @@ class ResolvedRun:
 
         if type(show_details) is not bool:
             raise TypeError("show_details must be a bool")
-        from scgsim.presentation.notebook import checked_theme  # noqa: PLC0415
-
         checked_theme(theme)
-        from scgsim.aedt.presentation.runs import display_resolved_run  # noqa: PLC0415
-
         display_resolved_run(self, show_details=show_details, theme=theme)
 
     def physics_results(self) -> tuple[dict[str, str], ...]:
@@ -217,8 +218,6 @@ class ResolvedRun:
         self, *, show_details: bool = False, theme: str = "light"
     ) -> AedtBenchmarkReport:
         """Return a notebook-displayable, offline view of native profile evidence."""
-        from scgsim.presentation.notebook import checked_theme  # noqa: PLC0415
-
         checked_theme(theme)
         return AedtBenchmarkReport(self.simulation_benchmark(), show_details, theme)
 
@@ -260,8 +259,6 @@ class AedtBenchmarkReport:
     theme: str = "light"
 
     def _ipython_display_(self) -> None:
-        from scgsim.aedt.presentation.benchmark import display_benchmark  # noqa: PLC0415
-
         display_benchmark(self.data, show_details=self.show_details, theme=self.theme)
 
 
@@ -296,8 +293,6 @@ def _captured_fields(
 def _resolved_adaptive_epr(
     path: Path, spec: HfssEprSpec, convergence: dict[str, Any]
 ) -> EprResult:
-    from scgsim.aedt.results.epr import resolve_epr_result  # noqa: PLC0415
-
     result = resolve_epr_result(path)
     run_control = cast(EigenmodeRunControl, spec.run_control)
     requested_modes = (
@@ -379,12 +374,6 @@ def _read_completed_receipt(root: Path) -> tuple[Path, dict[str, Any]]:
     if receipt.get("status") != "completed":
         raise RuntimeError("handoff has not completed successfully")
     if "native_batch" in receipt:
-        # Load the optional batch protocol only for receipts that declare one.
-        from scgsim.aedt.runtime.batch_protocol import (  # noqa: PLC0415
-            CollectionContext,
-            collection_source,
-        )
-
         batch = receipt["native_batch"]
         if (
             batch.get("collection") != "collected_sealed"
@@ -599,8 +588,6 @@ def _resolve_epr_outputs(context: OutputContext) -> ResolvedRun:
             isinstance(saved_summary, dict)
             and saved_summary.get("status") == "complete"
         ):
-            from scgsim.aedt.results.epr import resolve_saved_solution  # noqa: PLC0415
-
             saved = resolve_saved_solution(context.root / saved_manifest)
             expected_saved_summary = {
                 "status": "complete",

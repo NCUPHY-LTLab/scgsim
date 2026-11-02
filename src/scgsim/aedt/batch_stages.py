@@ -11,12 +11,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from scgsim.aedt.epr.evidence import PreparedEprEvidence
+from scgsim.aedt.preparation.cohort import canonical_handoff_paths
+from scgsim.aedt.results.prepared import resolve_prepared_model
+from scgsim.aedt.results.provenance import (
+    encode_initial_receipt,
+    initial_receipt_payload,
+)
+from scgsim.aedt.results.resolve import resolve_results
+from scgsim.aedt.runtime.transaction import ExecutionOptions, execute_handoff
+from scgsim.aedt.specs.common import AedtResources
+from scgsim.aedt.specs.hfss import HfssEprSpec
+from scgsim.aedt.specs.parse import parse_aedt_spec
+
 from .runtime import batch_protocol as protocol
 
 if TYPE_CHECKING:
     from scgsim.aedt.results.resolve import ResolvedRun
-    from scgsim.aedt.specs.common import AedtResources
-    from scgsim.aedt.specs.hfss import HfssEprSpec
 
 _PACKAGE = protocol.PACKAGE_SCHEMA
 _MANIFEST = protocol.MANIFEST
@@ -51,13 +62,6 @@ def _prepare_context(
     dependencies: Sequence[str],
 ) -> PreparationContext:
     """Validate the released source, request, recipe, and authored evidence."""
-    from scgsim.aedt.results.prepared import (  # noqa: PLC0415 -- preparation resolution is needed only for the package stage.
-        resolve_prepared_model,
-    )
-    from scgsim.aedt.specs.common import AedtResources  # noqa: PLC0415 -- keep request type validation out of batch module import time.
-    from scgsim.aedt.specs.hfss import HfssEprSpec  # noqa: PLC0415 -- load the solver-family DTO only for packaging.
-    from scgsim.aedt.specs.parse import parse_aedt_spec  # noqa: PLC0415 -- parse specs only for packaging.
-
     root = Path(prepared_run).expanduser().resolve()
     prepared = resolve_prepared_model(root)
     receipt = cast(
@@ -90,10 +94,6 @@ def _prepare_context(
     if isinstance(dependencies, (str, bytes)):
         raise TypeError("dependencies must be a sequence of run-relative paths")
 
-    from scgsim.aedt.epr.evidence import (  # noqa: PLC0415 -- authored EPR evidence is checked only by package preparation.
-        PreparedEprEvidence,
-    )
-
     PreparedEprEvidence.from_payload(
         receipt,
         evidence_root=root / "metadata/epr_expressions",
@@ -111,11 +111,6 @@ def _prepare_context(
 
 def _write_handoff_inputs(context: PreparationContext, output: Path) -> None:
     """Copy the handoff cohort with its canonical not-run receipt bytes."""
-    from scgsim.aedt.results.provenance import (  # noqa: PLC0415 -- receipt codec is used only for the package input copy.
-        encode_initial_receipt,
-        initial_receipt_payload,
-    )
-
     inputs = output / "inputs"
     inputs.mkdir()
     receipt = context.receipt
@@ -130,10 +125,6 @@ def _write_handoff_inputs(context: PreparationContext, output: Path) -> None:
         outputs={},
         prepared_at_utc=receipt["prepared_at_utc"],
     )
-    from scgsim.aedt.preparation.cohort import (  # noqa: PLC0415 -- materialize handoff paths only after the package output has been created.
-        canonical_handoff_paths,
-    )
-
     for relative in canonical_handoff_paths(context.spec):
         target = protocol.inside(inputs, relative)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -344,12 +335,6 @@ def _run_owned_collection(
     output: Path, context: protocol.CollectionContext
 ) -> ResolvedRun:
     """Execute the existing handoff transaction on its owned copied inputs."""
-    from scgsim.aedt.runtime.transaction import (  # noqa: I001, PLC0415 -- preserve baseline transaction-import failure precedence and defer solver runtime loading until explicit collection.
-        ExecutionOptions,
-        execute_handoff,
-    )
-    from scgsim.aedt.results.resolve import resolve_results  # noqa: PLC0415 -- result resolution follows transaction sealing.
-
     rc = execute_handoff(
         output / "metadata/aedt_handoff_metadata.json",
         options=ExecutionOptions(batch_collection=context),

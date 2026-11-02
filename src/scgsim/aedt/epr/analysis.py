@@ -13,6 +13,7 @@ from scgsim.aedt.data import (
 from scgsim.aedt.epr.reanalysis import reanalyze_epr
 from scgsim.aedt.epr.selection import exact_mapping, finite_value
 from scgsim.aedt.epr.surface import (
+    VACUUM_PERMITTIVITY_F_PER_M,
     SurfaceContributionInputs,
     native_surface_reference_rows,
     quantity,
@@ -22,8 +23,6 @@ from scgsim.aedt.specs.epr import EprAnalysisRequest
 from scgsim.aedt.specs.geometry import PreparedPlanarGeometry
 
 __all__ = ["combine_epr_mode", "combine_surface_epr_mode", "reanalyze_epr"]
-
-_EPSILON_0_F_PER_M = 8.8541878128e-12
 
 _MU_0_H_PER_M = 1.25663706212e-6
 
@@ -108,12 +107,12 @@ def _electric_domain_energy(
     integral = quantity(
         electric[domain_id], f"electric integral {domain_id!r}", "V^2*m"
     )
-    energy = _EPSILON_0_F_PER_M * epsilon_r * integral / 2.0
+    energy = VACUUM_PERMITTIVITY_F_PER_M * epsilon_r * integral / 2.0
     return epsilon_r, integral, energy
 
 
 def electric_domain_energy_coefficient(relative_permittivity: float) -> float:
-    return _EPSILON_0_F_PER_M * relative_permittivity / 2.0
+    return VACUUM_PERMITTIVITY_F_PER_M * relative_permittivity / 2.0
 
 
 def junction_capacitive_energy_coefficient(

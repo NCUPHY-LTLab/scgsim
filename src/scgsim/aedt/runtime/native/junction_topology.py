@@ -19,7 +19,8 @@ from scgsim.geometry.primitives.planar_loops import (
     simple_planar_loops_from_edges,
 )
 
-_NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM = 1e-5
+# Native CAD readback uses an absolute micrometre tolerance, never relative scaling.
+NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM = 1e-5
 
 
 def native_coordinates_close(left, right) -> bool:
@@ -27,7 +28,7 @@ def native_coordinates_close(left, right) -> bool:
     return len(left) == len(right) and all(
         math.isfinite(float(a))
         and math.isfinite(float(b))
-        and abs(float(a) - float(b)) <= _NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM
+        and abs(float(a) - float(b)) <= NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM
         for a, b in zip(left, right, strict=False)
     )
 
@@ -364,7 +365,7 @@ def native_face_edges(face, name):
                     "_id", getattr(face, "__dict__", {}).get("id")
                 ),
                 "model_units": "um",
-                "absolute_tolerance_um": _NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
+                "absolute_tolerance_um": NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
                 "relative_tolerance": 0.0,
                 "endpoints_um": vertices,
                 "observed_midpoint_um": midpoint,

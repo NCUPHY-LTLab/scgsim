@@ -115,7 +115,7 @@ def rlc_record(
 
 def read_rlc_parameters(app: Any, record: dict[str, Any]) -> dict[str, Any]:
     """Retain live native enable/value evidence; disabled branches stay disabled."""
-    from ansys.aedt.core.modules.boundary.common import BoundaryObject  # noqa: PLC0415 -- optional PyAEDT loads only at the authorized native execution boundary.
+    from ansys.aedt.core.modules.boundary.common import BoundaryObject  # noqa: PLC0415 -- optional PyAEDT BoundaryObject is needed only for uncached live RLC readback.
 
     live = BoundaryObject(app, record["boundary"], auto_update=False)._child_object  # noqa: SLF001 -- pinned boundary property object supplies uncached native electrical readback.
     if live is None:

@@ -22,7 +22,7 @@ def native_compatibility(
 ) -> Iterator[dict[str, Any]]:
     """Keep the transaction sole release owner until its cleanup has completed."""
     # This context is entered only at the explicit native execution boundary.
-    from ansys.aedt.core.generic.settings import settings  # noqa: PLC0415 -- optional PyAEDT loads only at the authorized native execution boundary.
+    from ansys.aedt.core.generic.settings import settings  # noqa: PLC0415 -- optional PyAEDT settings are loaded only when entering native execution, keeping offline preparation SDK-free.
 
     if evidence is None:
         evidence = {}
@@ -78,7 +78,7 @@ def _native_transport_compatibility(
         return
 
     # Import only at explicit native execution, never during offline preparation.
-    from ansys.aedt.core.generic.settings import settings  # noqa: PLC0415 -- optional PyAEDT loads only at the authorized native execution boundary.
+    from ansys.aedt.core.generic.settings import settings  # noqa: PLC0415 -- optional PyAEDT settings are loaded only when entering native execution, keeping offline preparation SDK-free.
 
     overrides = {
         "use_grpc_api": True,

@@ -35,7 +35,7 @@ def _frequency_solution_trace(
     trace["si_evidence"] = evidence
     # SI evidence is optional; failure must retain the original partial trace.
     try:
-        import numpy as np  # noqa: PLC0415 -- optional native unit/SI evidence loads its SDK or NumPy dependency only when queried.
+        import numpy as np  # noqa: PLC0415 -- NumPy loads only for optional SI evidence; failure retains the already-read raw trace.
 
         if len(data._original_data) != len(data.variations):  # noqa: SLF001 -- pinned native solution handles provide independent SI frequency reads.
             raise RuntimeError("native SI frequency variation count differs")

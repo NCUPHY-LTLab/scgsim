@@ -19,6 +19,7 @@ from scgsim.aedt.runtime.native.common import (
 )
 from scgsim.aedt.runtime.native.junction_extrusion import native_extrusion_sides
 from scgsim.aedt.runtime.native.junction_topology import (
+    NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
     native_boundary_contact,
     native_closed_contact,
     native_coordinates_close,
@@ -35,8 +36,6 @@ from scgsim.aedt.runtime.native.planar_bodies import native_conductor_geometry
 from scgsim.aedt.specs.epr import (
     PlanarJunction,
 )
-
-_NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM = 1e-5
 
 
 def native_junction_live_readback(
@@ -96,13 +95,13 @@ class JunctionReadback:
         return self._finish()
 
     def _read_central_sheet(self) -> None:
-        from ansys.aedt.core.generic.constants import AEDT_UNITS  # noqa: PLC0415 -- optional PyAEDT loads only at the authorized native execution boundary.
+        from ansys.aedt.core.generic.constants import AEDT_UNITS  # noqa: PLC0415 -- optional PyAEDT is needed only for live junction readback; offline preparation does not require the SDK.
 
         self.AEDT_UNITS = AEDT_UNITS
-        from ansys.aedt.core.generic.numbers_utils import decompose_variable_value  # noqa: PLC0415 -- optional PyAEDT loads only at the authorized native execution boundary.
+        from ansys.aedt.core.generic.numbers_utils import decompose_variable_value  # noqa: PLC0415 -- optional PyAEDT is needed only for live junction readback; offline preparation does not require the SDK.
 
         self.decompose_variable_value = decompose_variable_value
-        from ansys.aedt.core.modules.boundary.common import BoundaryObject  # noqa: PLC0415 -- optional PyAEDT loads only at the authorized native execution boundary.
+        from ansys.aedt.core.modules.boundary.common import BoundaryObject  # noqa: PLC0415 -- optional PyAEDT is needed only for live junction readback; offline preparation does not require the SDK.
 
         self.BoundaryObject = BoundaryObject
         self.record = self.source["junction_partitions"][self.junction.junction_id]
@@ -441,7 +440,7 @@ class JunctionReadback:
         )
         return {
             "coordinate_comparison_policy": {
-                "absolute_tolerance_um": _NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
+                "absolute_tolerance_um": NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
                 "relative_tolerance": 0.0,
                 "scope": "SCGSim native junction readback; not an AEDT precision guarantee",
                 "geometry_moved": False,

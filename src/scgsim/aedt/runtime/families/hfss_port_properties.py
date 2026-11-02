@@ -99,7 +99,7 @@ def native_position_um(value: Any) -> float:
             value.strip(),
         )
         if match:
-            from ansys.aedt.core.generic.constants import AEDT_UNITS, unit_converter  # noqa: PLC0415 -- optional native unit/SI evidence loads its SDK or NumPy dependency only when queried.
+            from ansys.aedt.core.generic.constants import AEDT_UNITS, unit_converter  # noqa: PLC0415 -- optional PyAEDT unit tables load only for a unit-bearing native coordinate; numeric reads stay SDK-free.
 
             units = match.group(2)
             if units not in AEDT_UNITS["Length"]:

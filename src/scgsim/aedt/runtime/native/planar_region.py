@@ -14,8 +14,6 @@ from scgsim.aedt.runtime.native.common import (
     resolve_native_assignment,
 )
 
-_NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM = 1e-5
-
 
 def _region_bounds(region: Any) -> tuple[float, ...]:
     bounds = tuple(float(value) for value in region.bounding_box)

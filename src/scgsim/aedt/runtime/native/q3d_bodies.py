@@ -378,7 +378,7 @@ def _assign_thin_conductor(
     if not isinstance(raw_material, str):
         raise RuntimeError("Q3D ThinConductor Material has unknown native shape")
     boundary_material = raw_material.strip('"')
-    from ansys.aedt.core.generic.numbers_utils import Quantity  # noqa: PLC0415 -- optional PyAEDT loads only at the authorized native execution boundary.
+    from ansys.aedt.core.generic.numbers_utils import Quantity  # noqa: PLC0415 -- optional PyAEDT Quantity is needed only to decode live ThinConductor thickness.
 
     if not isinstance(actual["thickness"], str):
         raise RuntimeError("Q3D ThinConductor Thickness is not a native length")

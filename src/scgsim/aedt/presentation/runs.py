@@ -38,7 +38,7 @@ from scgsim.presentation.notebook import (
 def _history_figures(result: EprResult, *, theme: str) -> tuple[Any, ...]:
     """Separate the existing pass projections without changing eligibility."""
 
-    from plotly import graph_objects as go  # noqa: PLC0415 - Plotly is an optional plot extra
+    from plotly import graph_objects as go  # noqa: PLC0415 -- Plotly is an optional plotting extra used only to build figures.
 
     view = history_view(result, mode=None, native_pass=None, show_convergence=True)
     surface_groups = sorted(
@@ -149,7 +149,7 @@ def _history_figures(result: EprResult, *, theme: str) -> tuple[Any, ...]:
 def _margin_figure(row: Any, *, theme: str) -> Any | None:
     """Keep requested margins within exact source/film lineages; baseline is a marker."""
 
-    from plotly import graph_objects as go  # noqa: PLC0415 - Plotly is an optional plot extra
+    from plotly import graph_objects as go  # noqa: PLC0415 -- Plotly is an optional plotting extra used only to build figures.
 
     surfaces = row["surface_contributions"]
     if not surfaces:
@@ -221,7 +221,7 @@ def _margin_figure(row: Any, *, theme: str) -> Any | None:
 def _final_quantity_figures(row: Any, *, theme: str) -> tuple[Any, ...]:
     """Present each final-pass quantity independently without recombination."""
 
-    from plotly import graph_objects as go  # noqa: PLC0415 - Plotly is an optional plot extra
+    from plotly import graph_objects as go  # noqa: PLC0415 -- Plotly is an optional plotting extra used only to build figures.
 
     surfaces = sorted(
         row["surface_contributions"], key=lambda item: -float(item["participation"])
@@ -395,7 +395,7 @@ def display_resolved_run(
 ) -> None:
     """Show detached numerical, physics, and receipt projections in order."""
     checked_theme(theme)
-    from IPython.display import HTML, display  # noqa: PLC0415 - notebook output is optional
+    from IPython.display import HTML, display  # noqa: PLC0415 -- notebook display is an optional presentation integration.
 
     rows = resolved.physics_results()
     benchmark = resolved.simulation_benchmark()

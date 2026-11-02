@@ -16,6 +16,7 @@ from .batch_stages import (
 )
 from .runtime import batch_protocol as protocol
 from .runtime.batch_runner import run_native_batch as _run_native_batch
+from .specs.common import AedtResources
 
 _PACKAGE = protocol.PACKAGE_SCHEMA
 _ATTEMPT = protocol.ATTEMPT_SCHEMA
@@ -108,8 +109,6 @@ def main(argv: list[str] | None = None) -> int:
         print(result)
         return 0 if _read(result)["returncode"] == 0 else 1
     if args.stage == "package":
-        from scgsim.aedt.specs.common import AedtResources  # noqa: PLC0415 -- construct resources only for the package CLI stage.
-
         result = prepare_native_batch(
             args.prepared_run,
             output_dir=args.output,

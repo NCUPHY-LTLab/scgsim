@@ -8,6 +8,7 @@ from itertools import pairwise
 from typing import Any
 
 from scgsim.aedt.runtime.native.junction_topology import (
+    NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
     native_coordinates_close,
     native_face_edges,
     native_on_segment,
@@ -18,8 +19,6 @@ from scgsim.geometry.primitives.planar_loops import (
     cancel_reversed_planar_edges,
     simple_planar_loops_from_edges,
 )
-
-_NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM = 1e-5
 
 
 def native_extrusion_sides(obj, z_range, thickness, observations):
@@ -263,7 +262,7 @@ class ExtrusionReadback:
             "side_face_id": side_face_id,
             "prior_side_face_id": prior_side_face_id,
             "model_units": "um",
-            "absolute_tolerance_um": _NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
+            "absolute_tolerance_um": NATIVE_JUNCTION_COORDINATE_ABS_TOL_UM,
             "relative_tolerance": 0.0,
         }
         return RuntimeError(

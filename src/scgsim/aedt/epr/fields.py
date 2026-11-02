@@ -48,7 +48,7 @@ def _square(value: Sequence[str]) -> list[str]:
 
 
 def _same_postprocessing_value(requested: str, actual: str) -> bool:
-    from ansys.aedt.core.generic.numbers_utils import decompose_variable_value  # noqa: PLC0415 -- optional native readback unit parser.
+    from ansys.aedt.core.generic.numbers_utils import decompose_variable_value  # noqa: PLC0415 -- optional PyAEDT parser is needed only for live postprocessing-variable readback.
 
     requested_number, requested_unit = decompose_variable_value(requested)
     if requested == actual:

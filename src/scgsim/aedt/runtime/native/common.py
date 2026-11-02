@@ -59,7 +59,7 @@ def source_material_properties(record: Mapping[str, Any]) -> dict[str, float]:
 
 def read_native_material(app: Any, native_name: str) -> dict[str, Any]:
     """Read the independent project material definition, never cached values."""
-    from ansys.aedt.core.generic.data_handlers import (  # noqa: PLC0415 -- optional SDK import at native boundary.  # private-import: pinned SDK decoder owns native GetData.
+    from ansys.aedt.core.generic.data_handlers import (  # noqa: PLC0415 -- optional PyAEDT decoder is needed only for native MaterialManager readback.  # private-import: pinned SDK decoder owns native GetData.
         _arg2dict,  # private-import: pinned SDK decoder owns the native GetData representation.
     )
 
