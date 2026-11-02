@@ -41,7 +41,11 @@ PROBLEM_FAMILIES = {
 def output_families(problem: str, index_counts: dict[str, int]) -> tuple[str, ...]:
     """Select native result families from the problem and configured surface/port counts."""
     if problem != "Eigenmode":
-        return PROBLEM_FAMILIES[problem]
+        return tuple(
+            family
+            for family in PROBLEM_FAMILIES[problem]
+            if family != "surface-Q" or index_counts["surface"]
+        )
     return (
         "eig",
         *(("port-EPR", "port-I", "port-V") if index_counts["lumped_port"] else ()),

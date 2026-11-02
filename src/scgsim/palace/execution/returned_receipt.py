@@ -49,7 +49,16 @@ def _output_families(problem: str, config: dict[str, Any]) -> tuple[str, ...]:
     if families is None:
         raise ValueError("unsupported problem")
     if problem != "Eigenmode":
-        return families
+        boundaries = config.get("Boundaries")
+        if not isinstance(boundaries, dict):
+            raise TypeError("Electrostatic config Boundaries must be a JSON object")
+        postprocessing = boundaries.get("Postprocessing", {})
+        if not isinstance(postprocessing, dict):
+            raise TypeError("Electrostatic postprocessing must be a JSON object")
+        surfaces = postprocessing.get("Dielectric", [])
+        if not isinstance(surfaces, list):
+            raise TypeError("Electrostatic dielectric postprocessing must be a list")
+        return tuple(family for family in families if family != "surface-Q" or surfaces)
     boundaries = config.get("Boundaries")
     if not isinstance(boundaries, dict):
         raise TypeError("Eigenmode config Boundaries must be a JSON object")
