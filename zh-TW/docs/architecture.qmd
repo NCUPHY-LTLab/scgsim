@@ -75,10 +75,14 @@ HFSS 家族負責一般來源支援的 Eigenmode 準備、求解及匯出。EPR 
 |---|---|
 | `scgsim.geometry.source.plan_assembly` | 組合元件實例、座標變換、堆疊事實與呼叫者指定的 Net，形成來源輸入。 |
 | `scgsim.geometry.planning.contact_planning` | 辨認宣告的介面、接觸區域及金屬間接觸歸屬。 |
+| `scgsim.geometry.planning.junction_planning` | 解析指定支撐面與相鄰導體歸屬，再推導精確矩形接面分區。 |
 | `scgsim.geometry.planning.port_planning` | 將來源埠片轉成後端幾何，並驗證路徑專屬埠結構。 |
 | `scgsim.geometry.planning.surface_planning` | 建立求解器使用的表面、接觸涵蓋、貢獻區域及分區。 |
+| `scgsim.geometry.planning.volume_planning` | 規劃保留體積、建構切割主體、宿主排除區及殼體方向。 |
 | `scgsim.geometry.planning.topology_planning` | 指派標準點、曲線、環線及共用表面歸屬。 |
 | `scgsim.geometry.primitives.tagged_grid_faces` 與 `tagged_grid_operations` | 分開處理面與邊界來源資訊，以及 Shapely 網格操作轉接。 |
+| `scgsim.geometry.construction.native_geometry` | 透過 Gmsh/OCC 降階建構規劃、保留拓撲對應，並產生 XAO 與符合性紀錄。 |
+| `scgsim.geometry.source.ground_bump_geometry` | 稽核已繪製的凸塊位置、選取填充晶格位置，並建立來源幾何紀錄。 |
 
 這些模組是內部實作邊界；支援的匯入路徑見[API 遷移參考](api-migration.qmd)。原生對應、殼修復、曲線排列及實體群組匯出仍由幾何建構模組負責。
 

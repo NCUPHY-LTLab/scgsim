@@ -138,10 +138,14 @@ boundaries; ordinary callers should use the two facades above.
 |---|---|
 | `scgsim.geometry.source.plan_assembly` | Compose component occurrences, transforms, stack facts, and caller-assigned Nets into source input. |
 | `scgsim.geometry.planning.contact_planning` | Recognize declared interfaces, contact patches, and metal-to-metal contact ownership. |
+| `scgsim.geometry.planning.junction_planning` | Resolve authored support and incident-conductor binding, then derive exact rectangular-junction partitions. |
 | `scgsim.geometry.planning.port_planning` | Lower source-bound port sheets and validate route-specific port geometry. |
 | `scgsim.geometry.planning.surface_planning` | Build solver-facing surfaces, contact coverage, contribution patches, and partitions. |
+| `scgsim.geometry.planning.volume_planning` | Plan retained volumes, construction cutters, host exclusions, and shell orientation. |
 | `scgsim.geometry.planning.topology_planning` | Assign canonical points, curves, loops, and shared surface ownership. |
 | `scgsim.geometry.primitives.tagged_grid_faces` and `tagged_grid_operations` | Separate face and edge provenance from the Shapely grid-operation adapter. |
+| `scgsim.geometry.construction.native_geometry` | Lower construction plans through Gmsh/OCC, retain topology bindings, and produce XAO and conformity records. |
+| `scgsim.geometry.source.ground_bump_geometry` | Audit authored bump sites, select fill-lattice sites, and create source geometry records. |
 
 The [API migration reference](api-migration.qmd) lists the supported import
 routes for these operations. Native correspondence, shell repair, curved

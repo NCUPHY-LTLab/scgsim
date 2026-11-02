@@ -177,7 +177,7 @@ module to preserve dependency direction.
 - **Baseline `scgsim.sgb.planning` → current defining modules `scgsim.geometry.planning.contact_planning.patches`, `.membership`, and `.intents`.** Declared names: `plan_conductor_contact_patches`, `plan_mm_contact_records`, `recognize_route_interfaces`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.planning` → current defining modules `scgsim.geometry.planning.surface_planning.planner` and `.partitions`.** Declared names: `plan_route_surfaces`, `plan_surface_partitions`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.tags`.** Declared names: `plan_route_tags`. Preferred API: `scgsim.geometry.compiler`.
-- **Baseline `scgsim.sgb.planning` → current defining module `scgsim.geometry.planning.volumes`.** Declared names: `plan_cut_host_operations`, `plan_route_construction_bodies`, `plan_route_volumes`. Preferred API: `scgsim.geometry.compiler`.
+- **Baseline `scgsim.sgb.planning` → current defining modules `scgsim.geometry.planning.volume_planning.bodies` and `.planner`.** Declared names: `plan_cut_host_operations`, `plan_route_construction_bodies`, `plan_route_volumes`. Preferred API: `scgsim.geometry.compiler`.
 - **Baseline `scgsim.sgb.source_curves` → current defining module `scgsim.geometry.source.curves`.** Declared names: `bind_source_curves`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.stack` → current defining module `scgsim.geometry.source.stack`.** Declared names: `build_component_stack`. Preferred API: `scgsim.geometry`.
 - **Baseline `scgsim.sgb.summary` → current defining module `scgsim.geometry.source.summary`.** Declared names: `InputSummary`, `summarize_geometry_input`. Preferred API: `scgsim.geometry`.
@@ -214,20 +214,39 @@ Their supported routes remain the package facades:
 |---|---|
 | Source assembly and occurrence preparation | `GeometryPlan` from `scgsim.geometry` |
 | Physical representation preparation | `interpret_physical_geometry` from `scgsim.geometry` |
+| Rectangular junction declaration and derivation | Use `RectangularJunctionSpec` and `with_rectangular_junctions` from `scgsim.geometry`, then call `interpret_physical_geometry` |
 | Contact recognition and contact records | `recognize_route_interfaces`, `plan_conductor_contact_patches`, and `plan_mm_contact_records` from `scgsim.geometry.compiler` |
 | Surface and contribution planning | `plan_route_surfaces`, `plan_surface_contribution_patches`, and `plan_surface_partitions` from `scgsim.geometry.compiler` |
+| Volume and construction-body planning | `plan_route_volumes`, `plan_route_construction_bodies`, and `plan_cut_host_operations` from `scgsim.geometry.compiler` |
 | Canonical topology planning | `plan_canonical_topology` from `scgsim.geometry.compiler` |
 | Route construction plan only | `build_route_construction_plan` from `scgsim.geometry.compiler` |
-| Complete route construction, including port and tagged-grid stages | `SemanticGeometryBuilder.build` from `scgsim.geometry.compiler` |
+| Complete route construction and native lowering | `SemanticGeometryBuilder.build` from `scgsim.geometry.compiler` |
+| PDK ground-bump fill preparation | Internal source helper consumed by Palace preparation; no direct geometry-facade export. |
 
 The responsibility modules are `scgsim.geometry.source.plan_assembly`,
 `scgsim.geometry.planning.contact_planning`,
+`scgsim.geometry.planning.junction_planning`,
 `scgsim.geometry.planning.port_planning`,
 `scgsim.geometry.planning.surface_planning`,
 `scgsim.geometry.planning.topology_planning`,
 `scgsim.geometry.primitives.tagged_grid_faces`, and
 `scgsim.geometry.primitives.tagged_grid_operations`. They organize the
 implementation without adding new supported imports.
+
+Volume planning lives in `scgsim.geometry.planning.volume_planning`. Native
+Gmsh/OCC lowering and its topology/conformity records live in
+`scgsim.geometry.construction.native_geometry`; callers reach them through the
+builder facade. `scgsim.geometry.source.ground_bump_geometry` implements audit,
+lattice selection, and source-record creation behind the source helper used by
+Palace preparation.
+
+The junction implementation derives exact partitions for explicitly declared
+rectangular junctions. Source and AEDT preparation share the internal
+`junction_contact_inventory(build_input, request)` service and
+`JunctionContactRequest` record to resolve the source support and incident
+conductors. These bridge names are not exports of `scgsim.geometry` or
+`scgsim.geometry.compiler`; callers declare requests through the geometry
+facade and use the standard physical-interpretation and compiler steps.
 
 ## AEDT API, transaction and state ownership
 
