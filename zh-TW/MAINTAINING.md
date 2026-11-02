@@ -81,7 +81,7 @@ python -m pytest tests/test_private_golden.py \
   --private-golden-manifest /path/to/authorized-manifest.json
 ```
 
-manifest 是讀取器的輸入，不代表有權存取或發布其資料。缺少必要 manifest 輸入屬於使用方式錯誤；略過的測試狀態是 `NOT RUN`，不是基準結果。公開 CI 會排除 `private_golden` 標記。基準資料必須保留在公開儲存庫之外。Tier B 仍受支援，不會因本次收斂工作而重新分類。目前範圍與待處理項目請參閱[拉取請求範本](.github/PULL_REQUEST_TEMPLATE.md)及[收斂狀態頁](docs/convergence-status.qmd)。
+manifest 是讀取器的輸入，不代表有權存取或發布其資料。缺少必要 manifest 輸入屬於使用方式錯誤；略過的測試狀態是 `NOT RUN`，不是基準結果。公開 CI 會排除 `private_golden` 標記。基準資料必須保留在公開儲存庫之外。Tier B 仍受支援，不會因本次收斂工作而重新分類。目前範圍與待處理項目請參閱[拉取請求範本](../.github/PULL_REQUEST_TEMPLATE.md)及[收斂狀態頁](docs/convergence-status.qmd)。
 
 ## 跨專案的大型提案 {#larger-proposals-across-projects}
 

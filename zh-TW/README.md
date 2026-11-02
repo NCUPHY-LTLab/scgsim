@@ -3,12 +3,12 @@
 **使用 Python 模擬超導電路版圖。**
 
 [![License: Apache-2.0](../docs/assets/badges/license.svg)](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/LICENSE)
-[![Python: 3.12–3.13](../docs/assets/badges/python.svg)](../docs/course/installation.qmd)
-[![Tutorial: Layout EM](../docs/assets/badges/tutorial.svg)](../docs/examples.qmd)
-[![AEDT: HFSS / Q3D / Q2D](../docs/assets/badges/aedt.svg)](../docs/backend-support.qmd)
-[![Palace: Electrostatic / Eigenmode](../docs/assets/badges/palace.svg)](../docs/course/palace-eigenmode.qmd)
-[![Gmsh: Meshing](../docs/assets/badges/gmsh.svg)](../docs/concepts/geometry.qmd)
-[![gsim: Unofficial Downstream](../docs/assets/badges/gsim.svg)](../docs/goals-and-upstream.qmd)
+[![Python: 3.12–3.13](../docs/assets/badges/python.svg)](docs/course/installation.qmd)
+[![Tutorial: Layout EM](../docs/assets/badges/tutorial.svg)](docs/examples.qmd)
+[![AEDT: HFSS / Q3D / Q2D](../docs/assets/badges/aedt.svg)](docs/backend-support.qmd)
+[![Palace: Electrostatic / Eigenmode](../docs/assets/badges/palace.svg)](docs/course/palace-eigenmode.qmd)
+[![Gmsh: Meshing](../docs/assets/badges/gmsh.svg)](docs/concepts/geometry.qmd)
+[![gsim: Unofficial Downstream](../docs/assets/badges/gsim.svg)](docs/goals-and-upstream.qmd)
 
 ![SCGSim 虎鯨與企鵝，介紹晶片版圖、有限元素網格與電磁場示意。](../docs/assets/scgsim-overview-orca-penguin.png)
 
@@ -27,7 +27,7 @@ uv add 'scgsim[aedt] @ git+https://github.com/NCUPHY-LTLab/scgsim.git@fb8cbe1993
 
 `uv` 會建立 `.venv`，並將解析後的版本寫入 `uv.lock`。把 `pyproject.toml` 和 `uv.lock` 留在研究專案中，其他電腦即可用 `uv sync` 重建環境。
 
-> **執行條件：** 下列範例需要本機已安裝 AEDT Q3D 2024.2 並具有可用授權。Python 套件不包含原生求解器；其他後端的設定見[安裝指南](../docs/course/installation.qmd)。
+> **執行條件：** 下列範例需要本機已安裝 AEDT Q3D 2024.2 並具有可用授權。Python 套件不包含原生求解器；其他後端的設定見[安裝指南](docs/course/installation.qmd)。
 
 ## 使用範例：用一支腳本完成 SimplePad 電容抽取
 
@@ -142,13 +142,13 @@ uv run simplepad_q3d.py
 
 若要先檢視輸入，執行 `uv run simplepad_q3d.py --handoff-only`。此選項只準備輸入與可攜套件，不會開啟 AEDT；完整模式則在同一主機執行並讀回結果。
 
-本例把兩個 Net 都設為 Q3D 的 `Signal`，讓兩者保留在矩陣中；`physical_ground_nets` 另外記錄接地的物理角色。模型尺寸、邊界選擇與結果解讀詳見[電容教學](../docs/tutorials/capacitance.qmd)；各完整教學保留其頁面列出的環境與來源版本。
+本例把兩個 Net 都設為 Q3D 的 `Signal`，讓兩者保留在矩陣中；`physical_ground_nets` 另外記錄接地的物理角色。模型尺寸、邊界選擇與結果解讀詳見[電容教學](docs/tutorials/capacitance.qmd)；各完整教學保留其頁面列出的環境與來源版本。
 
 ## 選擇下一個模擬目標
 
 | 目標 | 從這裡開始 |
 |---|---|
-| 電容 | [Palace Electrostatic 或 AEDT Q3D](../docs/tutorials/capacitance.qmd) |
-| 共振與 EPR | [Palace 或 HFSS 模態](../docs/tutorials/resonance.qmd) · [能量參與率](../docs/tutorials/resonance-epr.qmd) |
-| Driven S 參數 | [HFSS Modal 或 Terminal](../docs/tutorials/scattering.qmd) |
-| 傳輸線參數 | [AEDT Q2D](../docs/tutorials/transmission-line.qmd) |
+| 電容 | [Palace Electrostatic 或 AEDT Q3D](docs/tutorials/capacitance.qmd) |
+| 共振與 EPR | [Palace 或 HFSS 模態](docs/tutorials/resonance.qmd) · [能量參與率](docs/tutorials/resonance-epr.qmd) |
+| Driven S 參數 | [HFSS Modal 或 Terminal](docs/tutorials/scattering.qmd) |
+| 傳輸線參數 | [AEDT Q2D](docs/tutorials/transmission-line.qmd) |
