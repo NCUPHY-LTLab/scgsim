@@ -134,6 +134,7 @@ website:
     collapse-level: 1
     contents:
     - docs/research/index.qmd
+    - docs/research/simplepad-amr.qmd
     - docs/history/curved-source-installation.qmd
   - id: contract
     title: Pages
@@ -157,6 +158,7 @@ website:
       - docs/specs/aedt-runtime.qmd
       - docs/execution-profiles.qmd
       - docs/mesh-quality.qmd
+      - docs/amr-analysis.qmd
       - docs/report-model.qmd
       - docs/api-migration.qmd
       - docs/notebook-ux.qmd

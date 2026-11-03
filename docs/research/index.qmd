@@ -16,6 +16,7 @@ data to examine the comparison.
 | Study | Focus | Scope |
 |---|---|---|
 | [Circular Pad with a Uniform port](../history/curved-source-installation.qmd) | Curved-source geometry and the environment used for a Palace Eigenmode study | Historical study; its recorded source and Solver versions stay together |
+| [SimplePad AMR Efficiency Study](simplepad-amr.qmd) | Conformal versus Nonconformal AMR across two geometry methods | First trial: one shared initial Mesh per route; one 1 × 1 capacitance-matrix case |
 
 ## Research and tool documentation
 

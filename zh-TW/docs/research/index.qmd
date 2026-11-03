@@ -15,6 +15,7 @@ scgsim-id: "docs/research/index"
 | 研究 | 聚焦問題 | 適用範圍 |
 |---|---|---|
 | [Circular Pad 與 Uniform port](../history/curved-source-installation.qmd) | 曲線來源幾何，以及 Palace Eigenmode 研究使用的環境 | 歷史研究；保留當時配對的來源與 Solver 版本 |
+| [SimplePad AMR 效率研究](simplepad-amr.qmd) | 兩種幾何表示法下的 Conformal 與 Nonconformal AMR 比較 | 首輪：每種路徑共用一份初始 Mesh；單一 1 × 1 電容矩陣案例 |
 
 ## 研究與工具文件
 

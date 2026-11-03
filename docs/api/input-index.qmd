@@ -53,7 +53,7 @@ This index lists names declared by nine public facades; it does not replace each
 | Source | SHA-256 |
 |---|---|
 | `scripts/generate_knowledge_reference.py` | `753ed86a4f527917bb62becaca2b55fc57020da2bac29f2088285b75d4eae5ee` |
-| `docs/knowledge-sources.json` | `1229ba7f8b43d098f11c103ce5d3c61103c8aef160b1b0b1fe2af5c45b6de9a4` |
+| `docs/knowledge-sources.json` | `200c647779c7c0c00ac8bb019f17d9864fd243eeba00b5a0c092a226d54f4251` |
 | `src/scgsim/aedt/epr/workflow.py` | `e820d10b5c7ef94a160d1e985a2466da5952c49522d656651f35c9bc313f4162` |
 | `docs/api/analyze-epr-usage.md` | `39dd5b84a8154ae373bc495141fc82d015ea59aa2210793c072f5c0d6069ddba` |
 | `zh-TW/docs/api/analyze-epr-usage.md` | `5cdfd9f0aa8b57e1dbd3365b3907235c12b4a33d985358b6eb321a0d15c7675c` |
@@ -128,6 +128,7 @@ The README and English `docs/*.qmd` pages are bundled; the following public docu
 - `zh-TW/docs/reference.qmd`
 - `zh-TW/docs/report-model.qmd`
 - `zh-TW/docs/research/index.qmd`
+- `zh-TW/docs/research/simplepad-amr.qmd`
 - `zh-TW/docs/roadmap.qmd`
 - `zh-TW/docs/specs/aedt-runtime.qmd`
 - `zh-TW/docs/specs/palace-eigenmode.qmd`

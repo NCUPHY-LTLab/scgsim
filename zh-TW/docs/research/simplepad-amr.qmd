@@ -1,0 +1,65 @@
+---
+lang: zh-TW
+title: "SimplePad AMR 效率研究"
+description: "比較兩種 SimplePad 幾何方法下 Conformal 與 Nonconformal AMR 的首輪研究方法。"
+scgsim-kind: research
+scgsim-status: CONVERGING
+scgsim-id: docs/research/simplepad-amr
+sidebar: research
+---
+
+本次首輪研究以單一 SimplePad 靜電電容模型，比較 Conformal（共形，C）與 Nonconformal（非共形，NC）自適應網格細化（AMR）。同一路徑內，兩種 AMR 共用相同的初始 Mesh（網格）。
+
+本頁記錄首輪的研究方法與設定，尚未呈現實測結果。
+
+## 研究問題 {#study-question}
+
+配對案例從同一路徑、同一份初始 Mesh 開始，比較 C 與 NC 的 refined parent 數量、網格演變、求解成本與電容矩陣。Route A 與 Route B 分別使用不同的表面表示法及各自建立的初始 Mesh；跨路徑比較同時包含這兩項差異。
+
+首輪只評估一個 1 × 1 電容矩陣案例。SCGSim 支援一般多端子矩陣，並不代表本研究增加了其他案例。
+
+## 模型與幾何 {#model-and-geometry}
+
+兩種路徑使用相同的 SimplePad 尺寸與材料設定：pad 為 200 µm、間隙為 20 µm、die 為 1,000 µm；矽基板厚度為 500 µm，相對介電常數為 11.9。背景為真空，真空包覆設定為 `(250, 250, 1,000) µm`。將 pad 的 Net（網路）指定為 Terminal（端子），並將 Ground Net 指定為實體接地。外部邊界採 natural 邊界條件。不執行 Surface EPR 擷取。
+
+- **Route A：**明確 `thin_film` V1 Thin Film（薄膜）表示法，使用零厚度 PEC Sheet（片狀導體）。
+- **Route B：**`route_b` V1，以厚度 100 nm 的導體 Shell Solid（殼層實體）表示；只在外表面指定 PEC，導體內部不納入求解。
+
+## 四組案例設計 {#case-design}
+
+| 案例 | 表面表示法 | 細化方式 | 初始網格 |
+|---|---|---|---|
+| A-C | Route A，零厚度 PEC Sheet | Conformal | Route A Mesh，與 A-NC 共用 |
+| A-NC | Route A，零厚度 PEC Sheet | Nonconformal | Route A Mesh，與 A-C 共用 |
+| B-C | Route B，100 nm 導體 Shell Solid，外表面 PEC | Conformal | Route B Mesh，與 B-NC 共用 |
+| B-NC | Route B，100 nm 導體 Shell Solid，外表面 PEC | Nonconformal | Route B Mesh，與 B-C 共用 |
+
+每種路徑只建立一份初始 Mesh：Gmsh 4.15.2、`gmsh_default` 尺寸設定、Delaunay、幾何階數 1、單執行緒；同一路徑的 C 與 NC 案例共用該 Mesh。首輪每種路徑只有一份初始 Mesh。
+
+## 求解器與資源 {#solver-and-resources}
+
+四組案例使用相同的 Palace 與輸出設定，差異僅在幾何路徑及 C／NC 選擇。
+
+| 設定 | 數值 |
+|---|---|
+| FEM 階數 | 2 |
+| 線性求解器 | CG，搭配 BoomerAMG 預條件器 |
+| 線性容許誤差／最大迭代數 | `1e-6`／200 |
+| AMR 最大迭代數／容許誤差 | 20／`0.01` |
+| ZZ 更新比例 θ | `0.7` |
+| NC 階層限制 | 1 |
+| 平行資源 | 30 個 MPI ranks × 每個 rank 2 個 OpenMP 執行緒 |
+| 主機容量 | 32 個實體核心／64 個邏輯處理器 |
+| 執行順序 | 四組依序執行 |
+
+## AMR 指標的解讀 {#interpretation}
+
+ZZ 誤差指標用來標記待細化單元，並非電容矩陣誤差的直接估計。本研究將 `refined parent`（細化父元素）定義為 AMR pass 前仍活動、且本次實際被分裂的不同 Mesh 元素。Closure factor（閉合因子，`R_closure`）為 refined parent 數除以 ZZ 標記單元數；分子包含為符合共形閉合或 NC 階層限制而額外分裂的父元素。Closure factor 計算細化父元素，不是新增子元素數；新增單元放大率另行呈現。完整指標定義與資料收集方式請見 [AMR 分析參考](../amr-analysis.qmd)。
+
+首輪沒有獨立參考矩陣，因此不進行參考誤差判定；後續分析須明確提供獨立參考值。本研究不設定精度門檻。
+
+## 重現來源 {#reproduction}
+
+- 元件輸入由公開的[指定 100 nm PDK 版本 SimplePad 靜電案例](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/c75a1d4d2ee07e86a3b5d9b491609e5a1a5b850c/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_electrostatic.qmd)負責。
+- [Palace 原生細化基準來源](https://github.com/NCUPHY-LTLab/palace/tree/1f7718e7ad34e9ec751b08aa60dafee39a3b26f8)可用來查閱原生細化實作。
+- [SCGSim Palace 靜電工作流程](../course/palace-electrostatic.qmd)與 [Palace 靜電契約](../specs/palace-electrostatic-sgb.qmd)說明準備流程及求解器設定。

@@ -1,0 +1,64 @@
+---
+title: "SimplePad AMR Efficiency Study"
+description: "First-trial protocol comparing Conformal and Nonconformal AMR across two SimplePad geometry methods."
+scgsim-kind: research
+scgsim-status: CONVERGING
+scgsim-id: docs/research/simplepad-amr
+sidebar: research
+---
+
+This first trial compares Conformal (C) and Nonconformal (NC) adaptive mesh refinement (AMR) for one SimplePad electrostatic capacitance model. Within each route, C and NC reuse the same initial Mesh.
+
+This page records the first-trial method and settings; it does not report measured outcomes.
+
+## Study questions {#study-question}
+
+The paired runs compare C and NC from the same starting Mesh within Route A or Route B: the refined-parent count, mesh evolution, solver cost, and capacitance matrix. Route A versus Route B changes both the surface representation and the separately built starting Mesh, so that comparison combines both effects.
+
+The first trial evaluates one 1 × 1 capacitance-matrix case. SCGSim's support for general multi-terminal matrices does not add cases to this study.
+
+## Model and geometry {#model-and-geometry}
+
+Both routes use the same SimplePad dimensions and material settings: a 200 µm pad, a 20 µm gap, a 1,000 µm die, and a 500 µm silicon substrate with relative permittivity 11.9. The background is vacuum, with the vacuum-envelope settings `(250, 250, 1,000) µm`. The pad Net is selected as the Terminal, and the Ground Net is assigned as physical Ground. The exterior uses the natural boundary condition. No Surface EPR extraction is requested.
+
+- **Route A:** explicit `thin_film` V1 Thin Film model with a zero-thickness PEC Sheet.
+- **Route B:** `route_b` V1 with a finite 100 nm conductor represented as a Shell Solid. PEC is assigned to its outer surface, and the conductor interior is excluded from the solve.
+
+## Four-case design {#case-design}
+
+| Case | Surface representation | Refinement | Starting mesh |
+|---|---|---|---|
+| A-C | Route A, zero-thickness PEC Sheet | Conformal | Route A Mesh, shared with A-NC |
+| A-NC | Route A, zero-thickness PEC Sheet | Nonconformal | Route A Mesh, shared with A-C |
+| B-C | Route B, 100 nm conductor Shell Solid; outer PEC | Conformal | Route B Mesh, shared with B-NC |
+| B-NC | Route B, 100 nm conductor Shell Solid; outer PEC | Nonconformal | Route B Mesh, shared with B-C |
+
+Each route builds one initial Mesh with Gmsh 4.15.2, `gmsh_default` sizing, Delaunay, geometry order 1, and one thread. Its C and NC cases reuse that Mesh. Each route has only one initial Mesh in this first trial.
+
+## Solver and resources {#solver-and-resources}
+
+All four cases use the same Palace and output settings apart from the geometry route and C/NC choice.
+
+| Setting | Value |
+|---|---|
+| FEM order | 2 |
+| Linear solver | CG with BoomerAMG preconditioning |
+| Linear tolerance / maximum iterations | `1e-6` / 200 |
+| AMR maximum iterations / tolerance | 20 / `0.01` |
+| ZZ update fraction, θ | `0.7` |
+| NC level limit | 1 |
+| Parallel resources | 30 MPI ranks × 2 OpenMP threads |
+| Host capacity | 32 physical cores / 64 logical CPUs |
+| Execution order | Four runs executed sequentially |
+
+## Reading the AMR measures {#interpretation}
+
+The ZZ error indicator marks cells for refinement; it is not a direct estimate of capacitance-matrix error. A **refined parent** is a distinct active Mesh element immediately before an AMR pass that is actually split. The **Closure factor** (`R_closure`) is the number of refined parents divided by the number of ZZ-marked cells. Its numerator includes additional splits needed for Conformal closure or the NC level limit. It counts refined parents, not new child cells; new-cell amplification is reported separately. See the [AMR analysis reference](../amr-analysis.qmd) for metric definitions and collection behavior.
+
+The first batch has no independent reference matrix, so it supports no reference-error claim. A later reference-error analysis requires an explicitly supplied independent matrix; this study sets no accuracy threshold.
+
+## Reproduction sources {#reproduction}
+
+- The public [SimplePad Electrostatic source case at the selected 100 nm PDK revision](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/c75a1d4d2ee07e86a3b5d9b491609e5a1a5b850c/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_electrostatic.qmd) owns the component input.
+- The [Palace native refinement baseline source](https://github.com/NCUPHY-LTLab/palace/tree/1f7718e7ad34e9ec751b08aa60dafee39a3b26f8) identifies the native refinement implementation.
+- The [SCGSim Palace Electrostatic workflow](../course/palace-electrostatic.qmd) and [Palace Electrostatic contract](../specs/palace-electrostatic-sgb.qmd) describe preparation and solver settings.

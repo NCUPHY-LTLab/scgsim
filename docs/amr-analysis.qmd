@@ -52,6 +52,9 @@ indicator. The marked fraction counts cells. The squared-indicator coverage
 is computed from the retained native indicator squares over marked and all
 cells. It is actual indicator coverage, distinct from the requested theta
 fraction; it is not a percentage of cells or a measured solution error.
+`UpdateFraction=0.7` requests a marking set covering 70% of the summed
+squared indicators. The achieved coverage can exceed that target because
+elements are selected as whole cells.
 
 The transition also reports the number of actual refined parents $|P|$,
 refinement closure $|P|/|M|$, extra parents $|P\setminus M|$, and element
@@ -61,6 +64,12 @@ does not by itself show that refinement was wasteful or unnecessary. Actual
 parent counts are required for these quantities. When the source does not
 preserve them, the corresponding measures are unavailable rather than
 estimated from cell counts.
+
+For example, suppose 10 cells are marked and 30 distinct original parents
+are split, including all 10 marked cells. The Closure factor is $30/10=3$,
+with 20 extra refined parents. Count each parent once, regardless of its
+number of children. This describes refinement spread; read it alongside
+true DOFs, elapsed time and changes in the solution to judge its benefit.
 
 True degree-of-freedom growth is reported as
 $D_{\mathrm{after}}/D_{\mathrm{before}}$, alongside the degree-of-freedom
