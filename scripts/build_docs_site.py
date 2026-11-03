@@ -28,7 +28,7 @@ REPO_URL = f"https://github.com/{REPOSITORY}"
 SITE_URL = "https://ncuphy-ltlab.github.io/scgsim/"
 PREFIX = "/scgsim/"
 QUARTO_VERSION = "1.10.18"
-ASKR_COMMIT = "243d3dbdd234004bbe0538b9518fb76027903915"
+ASKR_COMMIT = "ab12c10b61d590c00ce1316f700ed56227027d71"
 
 
 @dataclass(frozen=True)

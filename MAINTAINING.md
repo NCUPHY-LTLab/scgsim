@@ -35,8 +35,8 @@ and its Askr adoption reference own site implementation and theme consumption.
 ## Native presentation
 
 The site uses the complete upstream Askr extension without local CSS or JS.
-The authoring extension and versioned site builder use Askr v0.13.3 at
-`243d3dbdd234004bbe0538b9518fb76027903915`, supporting Quarto >=1.9.38 and <1.11.
+The authoring extension and versioned site builder use Askr v0.14.0 at
+`ab12c10b61d590c00ce1316f700ed56227027d71`, supporting Quarto >=1.9.38 and <1.11.
 The local documentation checks use Quarto 1.10.19; the Pages workflow selects
 1.10.18 within that supported range.
 Use native Quarto structures for tables, callouts and navigation; keep source
