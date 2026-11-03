@@ -86,46 +86,58 @@ def test_a_model_of_sheets_only_has_one_level_and_no_slab():
 
 # --------------------------------------------------------------------------- membership
 
+UM2 = 1_000_000  # grid^2 per um^2 on the 1 nm grid
+
 
 def tab_model(route: str) -> PrismCatalogue:
-    """A 20x20 um pad with an overlapping same-Net 10x6 um tab (it sticks out 5 um on the right)."""
+    """A 20x20 um pad with an overlapping same-Net 10x6 um tab (it sticks out 5 um on the right).
+
+    The tab entity declares the higher priority, so it owns the 5 x 6 um overlap (decision D5).
+    """
     z1 = 0 if route == "A" else "0.2"
     prisms = chip_prisms(GRID, 40.0)
     prisms.append(conductor("pad", rect_um(-10, -10, 10, 10), 0, z1, "P"))
-    prisms.append(conductor("pad_tab", rect_um(5, -3, 15, 3), 0, z1, "P"))
+    prisms.append(conductor("pad_tab", rect_um(5, -3, 15, 3), 0, z1, "P", priority=1))
     return PrismCatalogue(GRID, tuple(prisms))
 
 
-def test_the_merged_level_face_keeps_the_overlapping_tab_in_its_membership():
-    """The merged level face keeps the overlapping tab in its membership."""
+def test_each_entity_keeps_its_own_face_and_membership_records_the_overlap():
+    """Per-Entity attribution: two faces; the face that lost the overlap still lists the tab's share."""
     result = derive_from_catalogue(tab_model("A"))
     layer = result.level_layers[1]
-    union = 400 + 60 - 30  # pad + tab - overlap, um^2
-    faces = [
-        fi
+    owned = {
+        layer.labels[fi].sheet.name: fi
         for fi in range(1, len(layer.arr.faces))
-        if layer.labels[fi].sheet is not None and layer.labels[fi].sheet.name == "P"
-    ]
-    assert len(faces) == 1  # the overlap dissolved: one face
-    share = layer.membership[faces[0]]
-    assert share["pad"] == pytest.approx(400 / union, abs=1e-9)
-    assert share["pad_tab"] == pytest.approx(60 / union, abs=1e-9)
-    assert share["vacuum"] == pytest.approx(1.0)
-    assert sum(share.values()) > 1.0  # non-exclusive
+        if layer.labels[fi].sheet is not None
+    }
+    assert set(owned) == {"pad", "pad_tab"}
+    pad_face, tab_face = (
+        layer.membership[owned["pad"]],
+        layer.membership[owned["pad_tab"]],
+    )
+    assert layer.arr.face_twice_area(owned["pad"]) == 2 * (400 - 30) * UM2
+    assert layer.arr.face_twice_area(owned["pad_tab"]) == 2 * 60 * UM2
+    assert pad_face["pad"] == pytest.approx(1.0) and "pad_tab" not in pad_face
+    assert tab_face["pad_tab"] == pytest.approx(1.0)
+    assert tab_face["pad"] == pytest.approx(
+        30 / 60, abs=1e-9
+    )  # half of the tab lies over the pad
+    assert tab_face["vacuum"] == pytest.approx(1.0)
+    assert sum(tab_face.values()) > 1.0  # non-exclusive
 
 
 def test_slab_cells_carry_the_union_of_their_raw_cells():
-    """Slab cells carry the union of their raw cells."""
+    """Dissolution unions the raw coverage: the pad cell is the pad minus the overlap, still all pad."""
     result = derive_from_catalogue(tab_model("B"))
     slab = result.slabs[1]
-    metal = [
-        fi
+    metal = {
+        slab.labels[fi].owner: fi
         for fi in range(1, len(slab.arr.faces))
         if slab.labels[fi] is not None and slab.labels[fi].kind == "conductor"
-    ]
-    assert len(metal) == 1
-    assert slab.membership[metal[0]]["pad_tab"] == pytest.approx(60 / 430, abs=1e-9)
-    assert slab.membership[metal[0]]["pad"] == pytest.approx(400 / 430, abs=1e-9)
+    }
+    assert slab.membership[metal["pad_tab"]]["pad"] == pytest.approx(0.5, abs=1e-9)
+    assert slab.membership[metal["pad_tab"]]["pad_tab"] == pytest.approx(1.0)
+    assert slab.membership[metal["pad"]]["pad"] == pytest.approx(1.0)
 
 
 # --------------------------------------------------------------------------- contacts

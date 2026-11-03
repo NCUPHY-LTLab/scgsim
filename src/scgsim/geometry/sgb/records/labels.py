@@ -14,10 +14,13 @@ from dataclasses import dataclass
 class Domain:
     """Occupying domain of a slab cell (what a volume is made of).
 
-    Conductors are identified by Net (conductor entities of one Net merge into one
-    domain); a dielectric or vacuum domain is identified by the solution
-    region that owns it, so two solution regions of equal material stay
-    separate volumes with a face between them.
+    Every domain has one owning entity (design brief, decision D5: surfaces are
+    attributed per Entity).  A conductor domain is its owning conductor entity --
+    where two entities of one Net overlap, the overlap belongs to the one of higher
+    declared priority -- and a dielectric or vacuum domain is its owning solution
+    region.  Two entities of equal material therefore stay separate volumes with a
+    required face between them; ``net`` records the electrical identity of a
+    conductor for the backends that need it.
     """
 
     kind: str  # "conductor" | "dielectric" | "vacuum"
@@ -27,16 +30,17 @@ class Domain:
 
     @property
     def name(self) -> str:
-        """Net of a conductor domain, solution-region id of any other domain."""
-        return self.net if self.kind == "conductor" else self.owner or self.material
+        """The owning entity id (the material name when a hand-made domain has no owner)."""
+        return self.owner or self.material
 
 
 @dataclass(frozen=True, order=True)
 class SheetOwner:
-    """Owner of a zero-thickness sheet face: a conductor Net or a port."""
+    """Owner of a zero-thickness sheet face: a conductor entity (with its Net) or a port."""
 
     kind: str  # "conductor" | "port"
-    name: str
+    name: str  # the entity id of a conductor sheet, the port sheet id of a port
+    net: str = ""
 
 
 @dataclass(frozen=True)

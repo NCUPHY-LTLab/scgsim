@@ -74,6 +74,7 @@ def conductor(  # noqa: PLR0913 - a test builder
     z1: str | int,
     net: str,
     grid: Grid = GRID,
+    priority: int = 0,
 ) -> PrismRecord:
     """A conductor prism with a rectangular-or-polygonal footprint."""
     return PrismRecord(
@@ -84,6 +85,7 @@ def conductor(  # noqa: PLR0913 - a test builder
         "Al",
         "conductor",
         net_id=net,
+        priority=priority,
     )
 
 
@@ -128,7 +130,14 @@ def disc_model(
         bar = Footprint.from_rings([(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
         prisms.append(
             PrismRecord(
-                "bar", bar, exact_z(0), exact_z(0), "Al", "conductor", net_id="N"
+                "bar",
+                bar,
+                exact_z(0),
+                exact_z(0),
+                "Al",
+                "conductor",
+                net_id="N",
+                priority=1,
             )
         )
     return PrismCatalogue(GRID, tuple(prisms), name="disc")
@@ -174,10 +183,30 @@ def _pad_ring(rounded_corner: bool) -> list[LineEdge | ArcCarrier]:
     return ring
 
 
+def _polygon_hole(sides: int) -> list[LineEdge | ArcCarrier]:
+    """The pad's hole as a regular polygon (clockwise, as a hole) instead of a true circle."""
+    centre = (-25.0, 5.0)
+    points = [
+        (
+            units(centre[0] + 8 * math.cos(-2 * math.pi * k / sides)),
+            units(centre[1] + 8 * math.sin(-2 * math.pi * k / sides)),
+        )
+        for k in range(sides)
+    ]
+    return [LineEdge(points[k], points[(k + 1) % sides], k) for k in range(sides)]
+
+
 def pad_in_ground(
-    route: str = "A", *, with_port: bool = True, rounded_corner: bool = True
+    route: str = "A",
+    *,
+    with_port: bool = True,
+    rounded_corner: bool = True,
+    hole_sides: int | None = None,
 ) -> PrismCatalogue:
-    """Ground with a cutout, a pad (chamfer, notch, rounded corner, true circular hole) and a lumped port."""
+    """Ground with a cutout, a pad (chamfer, notch, rounded corner, circular hole) and a lumped port.
+
+    ``hole_sides`` replaces the true circle by a regular polygon.
+    """
     half = 150.0
     z0, z1 = exact_z(0), exact_z(0 if route == "A" else "0.2")
     prisms = chip_prisms(GRID, half)
@@ -185,48 +214,39 @@ def pad_in_ground(
     prisms.append(
         PrismRecord("ground", ground, z0, z1, "Al", "conductor", net_id="Ground")
     )
-    hole = circle_arcs(
-        "pad/hole",
-        (units(-25), units(5)),
-        units(8),
-        False,
-        Lineage("polygon_edge", "pad", 0, 1, 0),
+    hole: list[LineEdge | ArcCarrier] = (
+        _polygon_hole(hole_sides)
+        if hole_sides
+        else list(
+            circle_arcs(
+                "pad/hole",
+                (units(-25), units(5)),
+                units(8),
+                False,
+                Lineage("polygon_edge", "pad", 0, 1, 0),
+            )
+        )
     )
     pad_footprint, arcs = Footprint.from_primitives(_pad_ring(rounded_corner), [hole])
-    corner = (
-        []
-        if not rounded_corner
-        else [a for a in _pad_ring(True) if isinstance(a, ArcCarrier)]
-    )
     prisms.append(
         PrismRecord(
-            "pad",
-            pad_footprint,
-            z0,
-            z1,
-            "Al",
-            "conductor",
-            net_id="pad",
-            arcs=(*arcs, *[a for a in corner if a not in arcs]),
+            "pad", pad_footprint, z0, z1, "Al", "conductor", net_id="pad", arcs=arcs
         )
     )
     if with_port:
-        plane = exact_z(0) if route == "A" else exact_z("0.1")
-        port = PortIdentity(
-            "p1", "P1", 1, (1.0, 0.0, 0.0), ("pad", "ground"), "metal", "port"
-        )
-        prisms.append(
-            PrismRecord(
-                "p1",
-                footprint(rect_um(50, -5, 80, 5)),
-                plane,
-                plane,
-                "lumped_port",
-                "port",
-                port=port,
-            )
-        )
+        prisms.append(lumped_port("p1", rect_um(50, -5, 80, 5), route))
     return PrismCatalogue(GRID, tuple(prisms), name=f"pad_in_ground_{route}")
+
+
+def lumped_port(name: str, outline: list[Um], route: str) -> PrismRecord:
+    """A lumped-port sheet: on the sheet plane in Route A, at the 0.2 um metal's mid-plane in Route B."""
+    plane = exact_z(0) if route == "A" else exact_z("0.1")
+    identity = PortIdentity(
+        name, name.upper(), 1, (1.0, 0.0, 0.0), ("pad", "ground"), "metal", "port"
+    )
+    return PrismRecord(
+        name, footprint(outline), plane, plane, "lumped_port", "port", port=identity
+    )
 
 
 def airbridge() -> PrismCatalogue:
@@ -305,7 +325,7 @@ def random_layout(
                 cy + size * rng.uniform(-0.2, 0.2),
                 size * 0.7,
             )
-            features.append(conductor(f"f{k}b", extra, 0, z1, net))
+            features.append(conductor(f"f{k}b", extra, 0, z1, net, priority=1))
             outline = outline + extra
         xs, ys = [p[0] for p in outline], [p[1] for p in outline]
         margin = pitch * 0.08

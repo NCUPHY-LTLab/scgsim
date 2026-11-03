@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, replace
+from decimal import Decimal
 from fractions import Fraction
 from typing import Literal
 
 from scgsim.geometry.sgb.plane import Point
+from scgsim.geometry.sgb.records import circle_math
 
 MEMBER_ONLY = "~m:"
 """Prefix of carrier ids that exist only to cut cells for area-weighted membership; never required."""
@@ -103,32 +105,39 @@ class ArcCarrier:
         """The same arc travelled the other way (start and end swap)."""
         return replace(self, ccw=not self.ccw, start=self.end, end=self.start)
 
-    def sweep(self) -> tuple[float, float]:
-        """(start angle, signed sweep) in radians; the sweep is positive when ``ccw``."""
-        cx, cy = float(self.centre[0]), float(self.centre[1])
-        t0 = math.atan2(float(self.start[1]) - cy, float(self.start[0]) - cx)
-        t1 = math.atan2(float(self.end[1]) - cy, float(self.end[0]) - cx)
-        if self.ccw:
-            return t0, (t1 - t0) % (2 * math.pi)
-        return t0, -((t0 - t1) % (2 * math.pi))
+    def sweep(self) -> tuple[Decimal, Decimal]:
+        """(start angle, signed sweep) in radians as decimals; the sweep is positive when ``ccw``."""
+        t0 = circle_math.vector_angle(self.centre, self.start)
+        t1 = circle_math.vector_angle(self.centre, self.end)
+        magnitude = circle_math.sweep_magnitude(t0, t1, ccw=self.ccw)
+        return t0, magnitude if self.ccw else -magnitude
 
     def witness_points(self) -> list[Point]:
-        """Grid points ``start .. end`` of the polyline witness (chord sagitta at most g/4)."""
-        radius = float(self.radius)
-        t0, sweep = self.sweep()
+        """Grid points ``start .. end`` of the polyline witness (chord sagitta at most g/4).
+
+        Computed in fixed-precision decimals (``records.circle_math``), so the lattice
+        points -- and with them every id downstream -- are identical on every platform.
+        """
+        radius = circle_math.to_decimal(self.radius)
+        _, signed_sweep = self.sweep()
+        magnitude = abs(signed_sweep)
         max_step = (
-            2 * math.acos(1 - WITNESS_SAGITTA / radius)
-            if radius > WITNESS_SAGITTA
-            else math.pi
+            2 * circle_math.acos(1 - Decimal(WITNESS_SAGITTA) / radius)
+            if radius > Decimal(WITNESS_SAGITTA)
+            else circle_math.PI
         )
-        steps = max(1, math.ceil(abs(sweep) / max_step))
-        cx, cy = float(self.centre[0]), float(self.centre[1])
+        steps = max(1, circle_math.ceil_div(magnitude, max_step))
+        centre_x = circle_math.to_decimal(self.centre[0])
+        centre_y = circle_math.to_decimal(self.centre[1])
+        x = circle_math.to_decimal(self.start[0] - self.centre[0])
+        y = circle_math.to_decimal(self.start[1] - self.centre[1])
+        rotation = circle_math.Rotation(magnitude / steps, ccw=self.ccw)
         points: list[Point] = [round_to_lattice(self.start)]
-        for k in range(1, steps):
-            angle = t0 + sweep * k / steps
+        for _ in range(1, steps):
+            x, y = rotation.apply(x, y)
             point = (
-                math.floor(cx + radius * math.cos(angle) + 0.5),
-                math.floor(cy + radius * math.sin(angle) + 0.5),
+                circle_math.round_half_up(centre_x + x),
+                circle_math.round_half_up(centre_y + y),
             )
             if point != points[-1]:
                 points.append(point)

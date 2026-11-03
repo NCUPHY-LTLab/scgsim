@@ -10,6 +10,7 @@ from pathlib import Path
 from sgb_scenes import pad_in_ground, random_layout
 
 from scgsim.geometry.sgb.derivation.labelled import derive_from_catalogue
+from scgsim.geometry.sgb.model import build_model_from_catalogue
 
 TESTS = Path(__file__).resolve().parent
 SCRIPT = (
@@ -57,3 +58,52 @@ def test_ids_are_content_addressed_not_positional():
     shared = set(full.level_layers[1].edge_ids) & set(plain.level_layers[1].edge_ids)
     assert shared  # the ground plane's outer boundary and cutout are untouched
     assert set(full.level_layers[1].vertex_ids) & set(plain.level_layers[1].vertex_ids)
+
+
+MODEL_SCRIPT = (
+    f"import sys; sys.path.insert(0, {str(TESTS)!r})\n"
+    "from scgsim.geometry.sgb.model import build_model_from_catalogue\n"
+    "from sgb_scenes import pad_in_ground, random_layout\n"
+    "print(build_model_from_catalogue(pad_in_ground('B'), 'B').identity_digest(),"
+    " build_model_from_catalogue(random_layout(30, 5, 'C'), 'C').identity_digest())\n"
+)
+
+
+def test_model_ids_do_not_depend_on_python_hash_randomisation():
+    """Vertices, edges, faces, volumes and groups: three hash seeds, one digest."""
+    outputs = set()
+    for hash_seed in ("0", "3", "999"):
+        result = subprocess.run(
+            [sys.executable, "-c", MODEL_SCRIPT],
+            env={**os.environ, "PYTHONHASHSEED": hash_seed},
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        outputs.add(result.stdout.strip())
+    assert len(outputs) == 1
+
+
+def test_wall_ids_do_not_depend_on_the_vertical_edges_next_to_them():
+    """A wall id hashes its horizontal chains and column end points only, so a port that cuts *other* walls keeps the rest."""
+    from sgb_scenes import lumped_port, rect_um  # noqa: PLC0415 -- helpers used by this test only
+
+    from scgsim.geometry.sgb.records.prisms import PrismCatalogue  # noqa: PLC0415 -- used by this test only
+
+    base = pad_in_ground("B", with_port=False)
+
+    def walls(x0, x1):
+        """Walls."""
+        catalogue = PrismCatalogue(
+            base.grid, (*base.prisms, lumped_port("p1", rect_um(x0, -5, x1, 5), "B"))
+        )
+        topology = build_model_from_catalogue(catalogue, "B").topology
+        return {f.id for f in topology.faces.values() if f.kind == "wall"}, topology
+
+    floating, _ = walls(55, 75)
+    touching, topology = walls(50, 80)
+    assert (
+        len(floating & touching) == len(floating) - 2
+    )  # only the two cut walls change their ids
+    columns = [e for e in topology.edges.values() if e.kind == "vertical"]
+    assert columns  # the vertical edges differ between the two models while the other walls keep their ids

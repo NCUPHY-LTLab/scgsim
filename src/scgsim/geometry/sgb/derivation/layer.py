@@ -65,6 +65,12 @@ class Layer:
     raw_labels: list[Any] | None = None
 
     @property
+    def level_z(self) -> Fraction:
+        """The Z of a level layer (a slab layer has a Z interval, see ``z``)."""
+        assert not isinstance(self.z, tuple), "a slab layer has no single Z"
+        return self.z
+
+    @property
     def arr(self) -> Arrangement:
         """The dissolved arrangement."""
         return self.dissolved.arrangement

@@ -32,7 +32,7 @@ def sheet_faces(result):
     faces = [
         fi
         for fi in range(1, len(layer.arr.faces))
-        if layer.labels[fi].sheet is not None and layer.labels[fi].sheet.name == "N"
+        if layer.labels[fi].sheet is not None and layer.labels[fi].sheet.net == "N"
     ]
     return layer, faces
 
@@ -55,7 +55,9 @@ def test_a_full_circle_is_four_quarter_arcs_so_no_edge_is_a_loop():
     """A full circle is four quarter arcs so no edge is a loop."""
     arcs = circle_arcs("c", (0, 0), 1000, False, LINEAGE)
     assert [a.start for a in arcs] == [a.end for a in arcs[-1:] + arcs[:-1]]
-    assert all(not a.ccw and abs(a.sweep()[1] + math.pi / 2) < 1e-12 for a in arcs)
+    assert all(
+        not a.ccw and abs(float(a.sweep()[1]) + math.pi / 2) < 1e-12 for a in arcs
+    )
 
 
 def test_witness_pieces_merge_back_into_exactly_one_edge_per_quarter_arc():
@@ -101,14 +103,15 @@ def test_circle_face_area_is_pi_r_squared_for_exact_end_points(radius):
 
 
 def test_circle_overlapped_by_a_bar_matches_the_shapely_union_within_the_snap_bound():
-    """Circle overlapped by a bar matches the shapely union within the snap bound."""
+    """Two entities of one Net keep their seam (D5); together the two faces cover the union."""
     result = derive_from_catalogue(
         disc_model(3000, extra_rect=(-1000, -5000, 1000, 5000))
     )
     layer, faces = sheet_faces(result)
-    assert len(faces) == 1
+    # the bar (higher priority) owns the overlap and splits the disc into its two lobes
+    assert len(faces) == 3
     union = ShapelyPoint(0, 0).buffer(3000, 4096).union(box(-1000, -5000, 1000, 5000))
-    measured = face_exact_area(layer.arr, layer.edge_curve, faces[0])
+    measured = sum(face_exact_area(layer.arr, layer.edge_curve, f) for f in faces)
     assert (
         abs(measured - union.area) <= union.length * 1.0
     )  # each boundary point moves by < 1 grid unit

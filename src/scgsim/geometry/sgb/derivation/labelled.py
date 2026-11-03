@@ -50,6 +50,9 @@ class LabelledArrangements:
         default_factory=dict
     )  # serial/parallel wall, worker work, Amdahl limit
     counts: dict[str, int] = field(default_factory=dict)
+    structural_checks: list[str] = field(
+        default_factory=list
+    )  # checks that ran while labelling and passed
 
     def identity_sets(self) -> dict[str, frozenset[str]]:
         """Every entity id by kind: equal for two builds iff their identity is equal."""
@@ -95,15 +98,16 @@ def derive_from_catalogue(
     was_enabled = gc.isenabled()
     gc.disable()
     try:
-        with Runtime(tiles, workers, _model_bbox(catalogue)) as rt:
+        with Runtime(tiles, workers, model_bbox(catalogue)) as rt:
             rt.keep_raw = keep_raw
-            return _derive(catalogue, rt)
+            return derive_with_runtime(catalogue, rt)
     finally:
         if was_enabled:
             gc.enable()
 
 
-def _derive(catalogue: PrismCatalogue, rt: Runtime) -> LabelledArrangements:
+def derive_with_runtime(catalogue: PrismCatalogue, rt: Runtime) -> LabelledArrangements:
+    """The labelled arrangements of a catalogue on a caller-owned runtime (later stages reuse its tiles and workers)."""
     with rt.serial("levels"):
         levels = build_levels(catalogue.prisms, catalogue.families)
     arcs = catalogue.arc_registry()
@@ -128,6 +132,7 @@ def _derive(catalogue: PrismCatalogue, rt: Runtime) -> LabelledArrangements:
         kinds,
         rt.watch.totals(),
         _counts(catalogue, slabs, level_layers),
+        ["no_different_net_contact", "no_non_manifold_pinch"],
     )
 
 
@@ -146,7 +151,8 @@ def _counts(
     }
 
 
-def _model_bbox(catalogue: PrismCatalogue) -> tuple[int, int, int, int]:
+def model_bbox(catalogue: PrismCatalogue) -> tuple[int, int, int, int]:
+    """(xmin, ymin, xmax, ymax) of every prism footprint, in grid units."""
     points = [
         p
         for prism in catalogue.prisms

@@ -7,7 +7,10 @@ regardless of worker count, tile layout or iteration order.
 * vertex = H(plane, grid coordinate)
 * edge   = H(plane, sorted endpoint vertex ids, sorted source carrier ids)
 * cell   = H(slab, domain, sorted boundary edge ids)
-* face   = H(plane, label, sorted boundary edge ids)
+* face   = H(plane, label, sorted boundary edge ids); a wall's id uses its horizontal
+  boundary chains and the columns' end points only, never the vertical edges, which
+  change whenever a neighbouring wall starts or ends on the column
+* volume = H(domain, sorted cell ids)
 
 Semantic names (``MA::<net>`` ...) belong to later stages.  Native Gmsh tags are
 never part of identity.
@@ -65,6 +68,16 @@ def cell_id(slab: str, domain: object, boundary_edge_ids: list[str]) -> str:
 def face_id(kind: str, plane: str, label: object, boundary_edge_ids: list[str]) -> str:
     """Id of a horizontal face of a level."""
     return digest("f", [kind, plane, label, sorted(boundary_edge_ids)])
+
+
+def vertical_edge_id(p: Point, z_lo: Fraction, z_hi: Fraction) -> str:
+    """Id of a vertical edge on the column through ``p`` between two levels."""
+    return digest("ve", [p[0], p[1], str(z_lo), str(z_hi)])
+
+
+def volume_id(domain: object, cell_ids: list[str]) -> str:
+    """Id of a volume: its domain and the cells it is made of."""
+    return digest("vol", [domain, sorted(cell_ids)])
 
 
 def plane_key_level(z: Fraction) -> str:

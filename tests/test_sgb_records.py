@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
+from decimal import Decimal
 from fractions import Fraction
 
 import pytest
 
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.prisms.arcs import arc_through_points, full_circle
-from scgsim.geometry.sgb.records.carriers import Lineage, base_carrier_id
+from scgsim.geometry.sgb.records import circle_math
+from scgsim.geometry.sgb.records.carriers import Lineage, base_carrier_id, circle_arcs
 from scgsim.geometry.sgb.records.grid import Grid, exact_z
 from scgsim.geometry.sgb.records.prisms import (
     Footprint,
@@ -122,7 +126,7 @@ def test_a_three_point_arc_is_cut_into_pieces_of_at_most_a_quarter_turn():
     assert pieces[0].start == (1000, 0) and pieces[1].end == (-1000, 0)
     assert pieces[0].end == pieces[1].start == (Fraction(0), Fraction(1000))
     assert all(piece.ccw and piece.root_id == "a" for piece in pieces)
-    assert all(abs(piece.sweep()[1] - math.pi / 2) < 1e-9 for piece in pieces)
+    assert all(abs(float(piece.sweep()[1]) - math.pi / 2) < 1e-9 for piece in pieces)
 
 
 def test_a_full_circle_through_three_anchors_is_four_pieces_from_the_first_anchor():
@@ -152,3 +156,47 @@ def test_three_collinear_points_define_no_circle():
         arc_through_points(
             "a", (0, 0), (Fraction(1), Fraction(0)), (2, 0), LINEAGE, "test arc"
         )
+
+
+def test_witness_points_are_pinned_so_ids_cannot_drift_with_the_platform_math_library():
+    """Golden lattice points of a few arcs; the witness is computed in fixed-precision decimals."""
+    small = circle_arcs("c", (3, -7), 50, True, LINEAGE)[0]
+    assert small.witness_points() == [
+        (53, -7), (52, 3), (49, 12), (45, 21), (38, 28), (31, 35), (22, 39), (13, 42), (3, 43),
+    ]  # fmt: skip
+    clockwise = circle_arcs("c", (3, -7), 800, False, LINEAGE)[1].witness_points()
+    assert (len(clockwise), clockwise[:3], clockwise[-2:]) == (
+        33,
+        [(3, -807), (-36, -806), (-75, -803)],
+        [(-796, -46), (-797, -7)],
+    )
+    assert _digest(clockwise) == "5e0bf40185e05648"
+    large = circle_arcs("c", (3, -7), 8000, False, LINEAGE)[1].witness_points()
+    assert (len(large), _digest(large)) == (101, "b5cc7ea9177cd68c")
+    pieces = arc_through_points(
+        "a", (1000, 0), (Fraction(1), Fraction(1000)), (-1000, 1), LINEAGE, "x"
+    )
+    assert [_digest(p.witness_points()) for p in pieces] == [
+        "2b1da6546698bedd",
+        "43614f7d84e0513e",
+    ]
+    circle = full_circle("f", ((7001, 3), (0, 7003), (-7001, 5)), True, LINEAGE, "x")
+    assert [_digest(p.witness_points()) for p in circle] == [
+        "eda2d83bf95164e9", "2d775ce19f759553", "1c3162d833ad6590", "ab34267c07cf84ac",
+    ]  # fmt: skip
+    assert [p.end for p in circle[:3]] == [(-1, 7003), (-7001, 1), (1, -6999)]
+
+
+def _digest(points):
+    return hashlib.sha256(json.dumps(points).encode()).hexdigest()[:16]
+
+
+def test_decimal_trigonometry_matches_the_known_values_to_many_digits():
+    """The series are accurate far beyond the lattice (checked here with the default 28-digit context)."""
+    sine, cosine = circle_math.sin_cos(circle_math.PI / 6)
+    assert abs(sine - Decimal("0.5")) < Decimal("1e-25")
+    assert abs(cosine - circle_math.sqrt(Decimal(3)) / 2) < Decimal("1e-25")
+    assert abs(
+        circle_math.atan2(Decimal(1), Decimal(-1)) - 3 * circle_math.PI / 4
+    ) < Decimal("1e-25")
+    assert abs(circle_math.acos(Decimal("0.5")) - circle_math.PI / 3) < Decimal("1e-25")

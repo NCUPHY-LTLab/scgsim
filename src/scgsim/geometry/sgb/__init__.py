@@ -20,8 +20,16 @@ Sub-packages follow the stages of the design brief, lowest layer first:
                    result, the contact and non-manifold checks, and the entry point
                    :func:`~scgsim.geometry.sgb.derivation.labelled.derive_labelled_arrangements`
 
+* ``assembly``     S6: vertices, edges, horizontal faces, walls (coalescing, curved walls
+                   split into exact cylinders), vertical edges, volumes and shells
+* ``routes``       S7/S8: Route A, B and C as labelling policies, decision-D5 names,
+                   the primary physical groups and their unions
+* ``validation``   S9: structural invariants, fail closed, never disabled
+* ``slivers``      S9: the sliver report (local feature size on exact carriers; report only)
+* ``model``        the entry point :func:`~scgsim.geometry.sgb.model.build_conformal_model`
+
 with ``parallel`` (per-tile runtime), ``identity`` (content-addressed ids),
 ``plane`` (exact integer geometry) and ``errors`` beside them.  Later sub-stages add
-assembly, routes, cut-family generators and emission as further sub-packages that
-consume the records defined here.
+cut-family generators (inset bands, ports, refinement curves) and emission as further
+sub-packages that consume the records defined here.
 """

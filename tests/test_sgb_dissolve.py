@@ -20,8 +20,10 @@ def rect(x0, y0, x1, y1):
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
 
 
-def prism(name, points, net="A", kind="conductor", material="Al", priority=0):  # noqa: PLR0913 - a test builder
-    """Prism."""
+def prism(  # noqa: PLR0913 - a test builder
+    name, points, net="A", kind="conductor", material="Al", priority=0, polygon=0
+):
+    """A prism of an entity; two polygons of one entity share its name and differ in ``polygon``."""
     return PrismRecord(
         name,
         Footprint.from_rings(points),
@@ -31,6 +33,7 @@ def prism(name, points, net="A", kind="conductor", material="Al", priority=0):  
         kind,
         net_id=net if kind == "conductor" else None,
         priority=priority,
+        polygon=polygon,
     )
 
 
@@ -62,7 +65,10 @@ def label(prisms):
 
 def test_same_net_overlap_dissolves_into_one_cell_with_union_outline():
     """Same net overlap dissolves into one cell with union outline."""
-    prisms = [prism("p", rect(0, 0, 100, 100)), prism("q", rect(50, 50, 150, 150))]
+    prisms = [
+        prism("p", rect(0, 0, 100, 100)),
+        prism("p", rect(50, 50, 150, 150), polygon=1),
+    ]
     arr, labels = label(prisms)
     assert len(arr.faces) - 1 == 3  # two private L-shaped parts and the overlap
     dissolved = dissolve(arr, labels)
@@ -73,6 +79,33 @@ def test_same_net_overlap_dissolves_into_one_cell_with_union_outline():
     assert (
         len(dissolved.arrangement.edges) == 8
     )  # union outline of two overlapping squares
+
+
+def test_entities_of_one_net_keep_their_seam_and_the_higher_priority_owns_the_overlap():
+    """Decision D5: surfaces are attributed per Entity, so the seam between two entities stays."""
+    prisms = [
+        prism("p", rect(0, 0, 100, 100), priority=1),
+        prism("q", rect(50, 50, 150, 150), priority=2),
+    ]
+    arr, labels = label(prisms)
+    dissolved = dissolve(arr, labels)
+    area_of = {
+        dissolved.labels[face].owner: dissolved.arrangement.face_twice_area(face)
+        for face in range(1, len(dissolved.arrangement.faces))
+    }
+    assert area_of == {
+        "p": 2 * (100 * 100 - 50 * 50),
+        "q": 2 * 100 * 100,
+    }  # q owns the 50 x 50 overlap
+
+
+def test_equal_priority_overlap_of_two_entities_of_one_net_fails_naming_both():
+    """No silent winner: equal priority means the source did not say who owns the overlap."""
+    prisms = [prism("p", rect(0, 0, 100, 100)), prism("q", rect(50, 50, 150, 150))]
+    with pytest.raises(
+        OverlapError, match=r"same-Net entities p, q .*equal priority 0"
+    ):
+        label(prisms)
 
 
 def test_different_net_overlap_raises_and_names_both_entities_and_the_location():
@@ -109,7 +142,10 @@ def test_dielectric_priority_resolves_overlap_and_equal_priority_raises():
 
 def test_required_family_edge_survives_dissolution_but_plain_edges_do_not():
     """Required family edge survives dissolution but plain edges do not."""
-    prisms = [prism("p", rect(0, 0, 100, 100)), prism("q", rect(0, 0, 100, 100))]
+    prisms = [
+        prism("p", rect(0, 0, 100, 100)),
+        prism("p", rect(0, 0, 100, 100), polygon=1),
+    ]
     arr = arrange(prisms, [Segment((50, 0), (50, 100), frozenset(["fam"]))])
     labels = label_cells(arr, prisms)
     assert len(arr.faces) - 1 == 2
@@ -136,7 +172,10 @@ def test_refinement_only_edges_are_kept_aside_without_splitting_the_cell():
 
 def test_degree_two_vertex_with_different_carriers_is_kept():
     """Degree two vertex with different carriers is kept."""
-    prisms = [prism("p", rect(0, 0, 100, 100)), prism("q", rect(100, 0, 200, 100))]
+    prisms = [
+        prism("p", rect(0, 0, 100, 100)),
+        prism("p", rect(100, 0, 200, 100), polygon=1),
+    ]
     arr, labels = label(prisms)
     dissolved = dissolve(arr, labels)
     # the shared wall dissolves; the outline of the union keeps the vertices where carriers change

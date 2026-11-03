@@ -9,6 +9,8 @@ Two routes to an effective ``GeometryBuildInput``:
   port and interprets it with the ``thin_film`` profile, which turns both metals into
   Route-A sheets.
 
+* ``rectangular_junction_pair`` is the thin-film pair joined by a rectangular junction: the
+  lumped-port sheet is the junction's central rectangle between two L-shaped terminals;
 * ``geometry_plan_electrodes`` prepares a real ``GeometryPlan`` of two electrodes on a
   substrate and interprets its snapshot (needs gdsfactory).
 
@@ -29,13 +31,16 @@ import gdstk
 from scgsim.geometry import (
     ApproximationProfile,
     GeometryBuildInput,
+    JunctionTerminalBinding,
     LayoutPolygonSpec,
     PhysicalLayerDeclaration,
     PortSheetOverlapRecord,
     PortSheetRegionRecord,
+    RectangularJunctionSpec,
     SemanticEntitySpec,
     build_gds_stack_geometry_input,
     interpret_physical_geometry,
+    with_rectangular_junctions,
 )
 from scgsim.geometry.models.grid import GeometryGridContext
 from scgsim.geometry.models.input import VacuumRegionSpec
@@ -406,3 +411,128 @@ def geometry_plan_electrodes(monkeypatch, *, gap_um: float = 10.0) -> EffectiveI
         ApproximationProfile("solid", "v1", {}),
     )
     return EffectiveInput(effective, physical.context)
+
+
+# --------------------------------------------------------------------------- rectangular junction
+
+
+JUNCTION_SHEET = ((0, 0), (10, 0), (10, 2), (0, 2))
+JUNCTION_LEFT = ((-2, 0), (3, 0), (3, 1), (2, 1), (2, 2), (-2, 2))
+JUNCTION_RIGHT = ((7, 0), (12, 0), (12, 2), (8, 2), (8, 1), (7, 1))
+JUNCTION_GRID_UM = 0.5
+
+
+def rectangular_junction_pair() -> EffectiveInput:
+    """Two L-shaped 0.25 um face metals joined by a rectangular junction (the source request of a Josephson element).
+
+    The junction partition replaces the authored sheet by its central rectangle, which touches the
+    two terminal-owned end polygons; the thin-film profile makes both terminals Route-A sheets.
+    """
+    declaration = PhysicalLayerDeclaration(
+        "film",
+        "metal",
+        {"level": "metal", "gds_pair": [1, 0]},
+        (0, 0.25),
+        "metal",
+        "stack_film",
+        {"normal_thickness_um": 0.25},
+        {"layer_attachment_face": "lower"},
+    )
+    terminals = (("left", "A", JUNCTION_LEFT), ("right", "B", JUNCTION_RIGHT))
+    metals = tuple(
+        SemanticEntitySpec(
+            f"chip/{name}",
+            "conductor",
+            "metal",
+            "conductor",
+            1,
+            "polygon",
+            part_role="face_metal",
+            net_id=net,
+            polygon_ids=(name,),
+            host_void_semantic_id="upper_air",
+            geometry={
+                "geometry_source": "gds_polygon",
+                "z_um": 0,
+                "thickness_um": 0.25,
+                "outer_loop": loop,
+            },
+            metadata={
+                "logical_layer_id": "metal",
+                "physical_layer": declaration.to_payload(),
+                "source_occurrence_path": "chip",
+            },
+        )
+        for name, net, loop in terminals
+    )
+    region = PortSheetRegionRecord(
+        "sheet",
+        "junction",
+        "sheet_polygon",
+        JUNCTION_SHEET,
+        (),
+        (),
+        {
+            "source": "palace_lumped_port_sheet",
+            "source_name": "chip/jj/port",
+            "source_occurrence_path": "chip/jj",
+            "target_layer": "metal",
+            "port_index": 1,
+            "direction": (1, 0, 0),
+            "direction_raw": (1, 0, 0),
+            "direction_sign_convention": "gdsfactory_port_orientation_outward",
+        },
+    )
+    substrate = _solution_region(
+        "substrate", "dielectric", "Si", (-4, 14, -2, 4, -2, 0)
+    )
+    upper = _solution_region("upper_air", "vacuum", "air", (-4, 14, -2, 4, 0, 4.25))
+    regions = {
+        item.semantic_id: {
+            "semantic_id": item.semantic_id,
+            "geometry": dict(item.geometry),
+            "metadata": {},
+        }
+        for item in (substrate, upper)
+    }
+    stack = {
+        "layers": [
+            {
+                "semantic_id": m.semantic_id,
+                "geometry": dict(m.geometry),
+                "metadata": dict(m.metadata),
+            }
+            for m in metals
+        ],
+        "solution_regions": regions,
+        "materials": {
+            "Si": {"kind": "dielectric", "permittivity": 4, "loss_tangent": 0},
+            "air": {"kind": "vacuum", "permittivity": 1, "loss_tangent": 0},
+            "metal": {"kind": "conductor"},
+        },
+        "metadata": {},
+    }
+    source = GeometryBuildInput(
+        tuple(LayoutPolygonSpec(name, "metal", loop) for name, _, loop in terminals),
+        (*metals, substrate, upper),
+        solution_regions=regions,
+        metadata={
+            "geometry_grid": GeometryGridContext(JUNCTION_GRID_UM).to_payload(),
+            "source_dbu_um": JUNCTION_GRID_UM,
+        },
+        port_sheet_regions=(region,),
+    )
+    request = RectangularJunctionSpec(
+        "junction",
+        "sheet",
+        "sheet_polygon",
+        "chip/jj",
+        JunctionTerminalBinding("chip/left", "chip", "A"),
+        JunctionTerminalBinding("chip/right", "chip", "B"),
+    )
+    effective, _, plan = interpret_physical_geometry(
+        with_rectangular_junctions(source, (request,)),
+        stack,
+        ApproximationProfile("thin_film", "v1", {}),
+    )
+    return EffectiveInput(effective, plan.context)

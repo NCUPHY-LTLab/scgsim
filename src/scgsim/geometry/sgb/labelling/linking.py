@@ -52,20 +52,23 @@ def trace_chains(level_arr: Arrangement, slab: SlabEdges) -> dict[int, list[int]
             raise SgbError(
                 f"slab edge {slab.edge_ids[si]} has no chain in the level arrangement"
             )
-        chains[si] = _walk_chain(
+        chains[si] = walk_chain(
             level_arr, edge_indices, slab_edge.a, slab_edge.b, slab.edge_ids[si]
         )
     return chains
 
 
-def _walk_chain(
+def walk_chain(
     level_arr: Arrangement,
     edge_indices: list[int],
     start: Point,
     end: Point,
     slab_edge_id: str,
 ) -> list[int]:
-    """The half-edges of the simple path of the given level edges from ``start`` to ``end``."""
+    """The half-edges of the simple path of the given level edges from ``start`` to ``end``.
+
+    ``slab_edge_id`` names the slab edge in the error when the path is broken or ambiguous.
+    """
     at: dict[Point, list[int]] = defaultdict(list)
     for ei in edge_indices:
         e = level_arr.edges[ei]

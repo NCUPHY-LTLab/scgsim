@@ -6,6 +6,7 @@ import pytest
 from sgb_scenes import airbridge, pad_in_ground, random_layout, random_segments
 
 from scgsim.geometry.sgb.derivation.labelled import derive_from_catalogue
+from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.noding.snap_rounding import snap_round
 from scgsim.geometry.sgb.noding.tiling import (
     TiledEngine,
@@ -100,3 +101,28 @@ def test_a_large_layout_has_one_identity_for_serial_tiled_and_worker_builds():
             for tiles, workers in ((1, 1), (4, 1), (4, 4))
         }
         assert len(digests) == 1
+
+
+@pytest.mark.parametrize("route", ["A", "B", "C"])
+@pytest.mark.parametrize("tiles", [2, 3])
+def test_the_whole_model_has_one_identity_for_every_tile_count(route, tiles):
+    """Assembly, groups and validation are tile-independent too: vertices, edges, faces, volumes and groups."""
+    catalogue = (
+        pad_in_ground("A" if route == "A" else "B") if route != "C" else airbridge()
+    )
+    reference = build_model_from_catalogue(catalogue, route)
+    tiled = build_model_from_catalogue(catalogue, route, tiles=tiles)
+    assert tiled.identity_sets() == reference.identity_sets()
+
+
+@pytest.mark.slow
+def test_the_whole_model_has_one_identity_for_worker_processes():
+    """A random Route B layout: serial, tiled in one process, tiled on four workers."""
+    catalogue = random_layout(120, seed=4, route="B")
+    digests = {
+        build_model_from_catalogue(
+            catalogue, "B", tiles=tiles, workers=workers
+        ).identity_digest()
+        for tiles, workers in ((1, 1), (3, 1), (3, 4))
+    }
+    assert len(digests) == 1

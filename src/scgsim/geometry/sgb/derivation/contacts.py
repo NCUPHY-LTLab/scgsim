@@ -102,7 +102,7 @@ def _conductor_nets(label: object) -> frozenset[str]:
         if d is not None and d.kind == "conductor"
     }
     if isinstance(label.sheet, SheetOwner) and label.sheet.kind == "conductor":
-        nets.add(label.sheet.name)
+        nets.add(label.sheet.net)
     return frozenset(nets)
 
 
@@ -141,13 +141,15 @@ def _raise_pinch(
         )
         what = f"Net {domain.net} (entities {', '.join(names) or '?'})"
     else:
-        around = sorted(
-            p.entity_id
+        around = [
+            p
             for p in catalogue.prisms
             if p.material_kind == "conductor"
             and _reaches(p, p.net_id or "", point, z_lo, z_hi)
-        )
-        what = f"{domain.name} (pinched between conductors {', '.join(around) or '?'})"
+        ]
+        names = ", ".join(sorted({p.entity_id for p in around})) or "?"
+        nets = ", ".join(sorted({p.net_id or "" for p in around}))
+        what = f"{domain.name} (pinched between conductors {names} of Net {nets})"
     raise NonManifoldError(
         f"non-manifold pinch: {what} touches itself along the vertical edge at "
         f"({grid.to_um(point[0]):.4f}, {grid.to_um(point[1]):.4f}) um, "

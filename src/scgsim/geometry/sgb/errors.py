@@ -19,6 +19,10 @@ class UnsupportedCurveError(InputError):
     """A source boundary uses a curve class this version does not carry (splines)."""
 
 
+class RouteError(SgbError):
+    """The prisms are not valid for the chosen route (names the entities)."""
+
+
 class OverlapError(SgbError):
     """Two different-Net conductors, or ambiguous dielectrics, occupy the same place."""
 

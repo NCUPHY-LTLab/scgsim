@@ -53,10 +53,12 @@ Z_DECIMALS = 12
 def exact_z(value_um: float | int | str | Fraction) -> Fraction:
     """Exact Z of a declared micrometre value (decimal text, never the binary expansion).
 
-    A float that carries binary noise from upstream arithmetic (``0.30000000000000004``)
-    is first rounded to ``Z_DECIMALS`` decimals, six orders of magnitude below a
-    nanometre, so noise never creates a spurious thin slab.  This is representation
-    hygiene, not a Z threshold: every declared value stays its own level.
+    This is numeric canonicalisation, not a Z threshold.  A float that carries binary
+    noise from upstream arithmetic (``0.30000000000000004`` after a film-collapse
+    subtraction) is rounded to ``Z_DECIMALS`` decimals -- six orders of magnitude
+    below a nanometre -- before its exact decimal value is taken, so noise never
+    creates a spurious thin slab.  Two values that differ by more than that stay two
+    levels, however thin the slab between them: no declared Z is merged or dropped.
     """
     if isinstance(value_um, Fraction):
         return value_um

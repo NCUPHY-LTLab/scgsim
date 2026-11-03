@@ -85,14 +85,33 @@ def resolve_domain(
 def _resolve_conductor(
     conductors: list[PrismRecord], where: RepPoint, grid: Grid
 ) -> Domain:
-    nets = {p.net_id for p in conductors}
-    if len(nets) > 1:
-        names = ", ".join(sorted(p.entity_id for p in conductors))
+    """One owning conductor entity: different Nets overlapping is an error, same Net goes by priority."""
+    winner = _owning_conductor(conductors, where, grid)
+    return Domain("conductor", winner.material, winner.net_id or "", winner.entity_id)
+
+
+def _owning_conductor(
+    conductors: list[PrismRecord], where: RepPoint, grid: Grid
+) -> PrismRecord:
+    """The prism whose entity owns a point covered by several conductor prisms.
+
+    Different Nets overlapping is an error.  Entities of one Net overlapping: the one
+    with the higher declared priority owns the overlap (decision D5, reversible); equal
+    priority fails closed naming both entities.
+    """
+    if len({p.net_id for p in conductors}) > 1:
+        names = ", ".join(sorted({p.entity_id for p in conductors}))
         raise OverlapError(
             f"different-Net conductors overlap near {format_location(where, grid)}: {names}"
         )
-    best = max(conductors, key=lambda p: (p.priority, p.material, p.entity_id))
-    return Domain("conductor", best.material, best.net_id or "")
+    top = max(p.priority for p in conductors)
+    leaders = sorted({p.entity_id for p in conductors if p.priority == top})
+    if len(leaders) > 1:
+        raise OverlapError(
+            f"same-Net entities {', '.join(leaders)} overlap near {format_location(where, grid)} "
+            f"with equal priority {top}: declare a higher priority on the entity that owns the overlap"
+        )
+    return next(p for p in conductors if p.priority == top)
 
 
 def _resolve_solution(hit: list[PrismRecord], where: RepPoint, grid: Grid) -> Domain:
@@ -115,22 +134,23 @@ def _resolve_solution(hit: list[PrismRecord], where: RepPoint, grid: Grid) -> Do
 def resolve_owner(
     hit: list[PrismRecord], where: RepPoint, grid: Grid
 ) -> SheetOwner | None:
-    """Owner of the sheet(s) at a point on a level."""
+    """Owner of the sheet(s) at a point on a level.
+
+    A port sheet never overlaps another sheet; conductor sheets follow the same
+    Net and priority rule as conductor bodies.
+    """
     if not hit:
         return None
-    owners = {_sheet_owner(p) for p in hit}
-    if len(owners) > 1:
-        names = ", ".join(sorted(p.entity_id for p in hit))
-        raise OverlapError(
-            f"sheets of different owners overlap near {format_location(where, grid)}: {names}"
-        )
-    return owners.pop()
-
-
-def _sheet_owner(prism: PrismRecord) -> SheetOwner:
-    if prism.material_kind == "port":
-        return SheetOwner("port", prism.entity_id)
-    return SheetOwner("conductor", prism.net_id or "")
+    ports = [p for p in hit if p.material_kind == "port"]
+    if ports:
+        if len(hit) > 1:
+            names = ", ".join(sorted(p.entity_id for p in hit))
+            raise OverlapError(
+                f"a port sheet overlaps another sheet near {format_location(where, grid)}: {names}"
+            )
+        return SheetOwner("port", ports[0].entity_id)
+    winner = _owning_conductor(hit, where, grid)
+    return SheetOwner("conductor", winner.entity_id, winner.net_id or "")
 
 
 def format_location(where: RepPoint, grid: Grid) -> str:

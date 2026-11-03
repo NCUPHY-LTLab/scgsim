@@ -326,7 +326,7 @@ def test_the_vacuum_envelope_yields_to_the_substrate_and_ports_label_their_level
     assert owners == {"PORT_SHEET__P1__0000"}
 
 
-def test_thin_film_sheets_label_their_level_by_net_and_port(thin_film):
+def test_thin_film_sheets_label_their_level_by_entity_and_port(thin_film):
     """Thin film sheets label their level by net and port."""
     result = derive_labelled_arrangements(
         thin_film.build_input, thin_film.representation
@@ -336,8 +336,8 @@ def test_thin_film_sheets_label_their_level_by_net_and_port(thin_film):
         (f.sheet.kind, f.sheet.name) for f in level.labels[1:] if f.sheet is not None
     }
     assert owners == {
-        ("conductor", "left"),
-        ("conductor", "right"),
+        ("conductor", "chip/left"),
+        ("conductor", "chip/right"),
         ("port", "port_sheet"),
     }
     # sheets of different owners share edges at the landings, which is legal for a port
