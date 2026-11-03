@@ -142,28 +142,38 @@ def interpret_physical_geometry(
     from scgsim.geometry.planning.junction_partition import derive_rectangular_junctions  # noqa: PLC0415 -- load optional gdstk only when interpreting executable geometry
 
     effective_input = derive_rectangular_junctions(effective_input)
-    if effective_input.metadata.get("rectangular_junctions"):
-        intents = dict(effective_input.metadata.get("interface_intents_2d", {}))
-        explicit = tuple(
-            item
-            for item in intents.get("interfaces", ())
-            if item.get("intent_origin")
-            not in {
-                "generated_route_a_surface_sheet",
-                "generated_representation_context_surface_sheet",
-            }
-        )
-        generated = route_a_sheet_interfaces(
-            effective_input.entities,
-            effective_input.polygons,
-            representation_context=plan.context,
-        )["interfaces"]
-        intents["interfaces"] = (*explicit, *generated)
-        effective_input = replace(
-            effective_input,
-            metadata={
-                **effective_input.metadata,
-                "interface_intents_2d": intents,
-            },
-        )
-    return effective_input, effective_stack, plan
+    return (
+        _with_context_sheet_interfaces(effective_input, plan.context),
+        effective_stack,
+        plan,
+    )
+
+
+def _with_context_sheet_interfaces(build_input: Any, context: Any) -> Any:
+    """Bind each sheet interface to the profile's conductor representation.
+
+    The source adapter runs before any approximation profile is selected, so
+    its generated sheet intents cannot know which conductors this profile maps
+    to sheets. The effective input regenerates them from the final polygons
+    (including any junction-derived ends), whether or not a junction exists.
+    """
+    intents = dict(build_input.metadata.get("interface_intents_2d", {}))
+    explicit = tuple(
+        item
+        for item in intents.get("interfaces", ())
+        if item.get("intent_origin")
+        not in {
+            "generated_route_a_surface_sheet",
+            "generated_representation_context_surface_sheet",
+        }
+    )
+    generated = route_a_sheet_interfaces(
+        build_input.entities,
+        build_input.polygons,
+        representation_context=context,
+    )["interfaces"]
+    intents["interfaces"] = (*explicit, *generated)
+    return replace(
+        build_input,
+        metadata={**build_input.metadata, "interface_intents_2d": intents},
+    )
