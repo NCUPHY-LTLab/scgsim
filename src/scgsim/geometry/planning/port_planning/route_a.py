@@ -45,46 +45,24 @@ def route_a_port_sheet_sheet_contract(
                 f"{host_id} requires exactly one Route A port overlap record"
             )
         overlap_region = (gdstk.Polygon(clean_loop(host_overlaps[0].overlap_loop)),)
-        candidates = tuple(
-            surface
-            for surface in planned_surfaces
-            if surface.metadata.get("representation") == "surface_sheet"
-            # Route-A contact caps are per bump/face contact and bound a
-            # single solution volume.  A layout junction sheet replaces the
-            # actual two-volume face interface, never one of those caps.
-            and surface.surface_role == "A_planned_interface"
-            and host_id in surface_owner_ids(surface)
+        host_sheet = _host_sheet_under_overlap(
+            gdstk, host_id, planned_surfaces, overlap_region
         )
-        host_sheets = tuple(
-            surface
-            for surface in candidates
-            if boolean_polygon_region(
-                gdstk,
-                overlap_region,
-                gdstk_surface_region(surface.geometry_ref),
-                "and",
-            )
-        )
-        if len(host_sheets) != 1:
-            raise ValueError(
-                f"{host_id} port overlap intersects {len(host_sheets)} local "
-                "Route A surface_sheet patches"
-            )
         if boolean_polygon_region(
             gdstk,
             overlap_region,
-            gdstk_surface_region(host_sheets[0].geometry_ref),
+            gdstk_surface_region(host_sheet.geometry_ref),
             "not",
         ):
             raise ValueError(
                 f"{host_id} port overlap crosses incompatible Route A domains"
             )
-        plane_z_um = geometry_ref_surface_z_um(host_sheets[0].geometry_ref)
+        plane_z_um = geometry_ref_surface_z_um(host_sheet.geometry_ref)
         if not isfinite(plane_z_um):
             raise ValueError(f"{host_id} Route A surface_sheet plane must be finite")
         host_planes.append(plane_z_um)
         raw_boundary_ids = cast(
-            Sequence[str] | str, host_sheets[0].metadata.get("boundary_volume_ids")
+            Sequence[str] | str, host_sheet.metadata.get("boundary_volume_ids")
         )
         if isinstance(raw_boundary_ids, str):
             candidate_boundary_ids = ()
@@ -106,6 +84,48 @@ def route_a_port_sheet_sheet_contract(
     if boundary_volume_ids is None:
         raise ValueError("Route A lumped-port hosts require boundary volumes")
     return host_planes[0], boundary_volume_ids
+
+
+def _host_sheet_under_overlap(
+    gdstk: Any,
+    host_id: str,
+    planned_surfaces: Sequence[SurfacePlanRecord],
+    overlap_region: tuple[Any, ...],
+) -> SurfacePlanRecord:
+    """Return the one Route-A sheet patch of `host_id` under its port overlap."""
+    candidates = tuple(
+        surface
+        for surface in planned_surfaces
+        if surface.metadata.get("representation") == "surface_sheet"
+        # Route-A contact caps are per bump/face contact and bound a
+        # single solution volume.  A layout junction sheet replaces the
+        # actual two-volume face interface, never one of those caps.
+        and surface.surface_role == "A_planned_interface"
+        and host_id in surface_owner_ids(surface)
+    )
+    if not candidates:
+        # Distinguish a host that was never represented as a sheet from a
+        # port that misses an existing sheet; the two need different fixes.
+        raise ValueError(
+            f"{host_id} has no Route A surface_sheet patches; the selected "
+            "approximation profile does not represent this port host as a sheet"
+        )
+    host_sheets = tuple(
+        surface
+        for surface in candidates
+        if boolean_polygon_region(
+            gdstk,
+            overlap_region,
+            gdstk_surface_region(surface.geometry_ref),
+            "and",
+        )
+    )
+    if len(host_sheets) != 1:
+        raise ValueError(
+            f"{host_id} port overlap intersects {len(host_sheets)} local "
+            "Route A surface_sheet patches"
+        )
+    return host_sheets[0]
 
 
 def route_a_port_sheet_vacuum_volume_id(
