@@ -1,0 +1,348 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scgsim.invalid/schemas/scgsim.sgb.sidecar.v1.json",
+  "title": "scgsim.sgb.sidecar.v1",
+  "description": "Sidecar of the SGB XAO/BREP: planned ids bound to native tags by construction order, primary physical groups with their semantic facts, unions, embeddings, lineage and the load-side expectations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "route", "route_policy", "grid_um", "tolerance_um", "model", "files", "binding", "counts",
+    "physical_groups", "unions", "surface_epr_rows", "volumes", "faces", "embedded_faces", "refinement_edges",
+    "ports", "lineage", "insets", "refinements", "slivers", "arrangement", "curved_wall_faces",
+    "surface_kinds", "expected"
+  ],
+  "properties": {
+    "schema": {"const": "scgsim.sgb.sidecar.v1"},
+    "route": {"enum": ["A", "B", "C"]},
+    "route_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conductor_volumes", "conductor_sheets"],
+      "properties": {
+        "conductor_volumes": {"enum": ["excluded", "retained"]},
+        "conductor_sheets": {"type": "boolean"}
+      }
+    },
+    "grid_um": {"type": "number", "exclusiveMinimum": 0},
+    "tolerance_um": {"type": "number", "exclusiveMinimum": 0},
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "identity_digest"],
+      "properties": {
+        "name": {"type": "string"},
+        "identity_digest": {"type": "string", "pattern": "^model:[0-9a-f]{16}$"}
+      }
+    },
+    "files": {
+      "description": "File names relative to the sidecar.",
+      "type": "object",
+      "additionalProperties": {"type": "string"},
+      "propertyNames": {"enum": ["xao", "brep", "sidecar", "sliver_report", "validation_report"]}
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "ids_by_tag"],
+      "properties": {
+        "rule": {"type": "string"},
+        "ids_by_tag": {
+          "description": "Planned ids per dimension in native-tag order: tag = 1 + position.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["0", "1", "2", "3"],
+          "properties": {
+            "0": {"$ref": "#/$defs/idList"},
+            "1": {"$ref": "#/$defs/idList"},
+            "2": {"$ref": "#/$defs/idList"},
+            "3": {"$ref": "#/$defs/idList"}
+          }
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0},
+      "required": ["vertices", "edges", "faces", "solids", "wires", "shells", "surfaces", "cylinders", "arcs", "pcurves", "free_faces", "free_edges", "volumes_total"]
+    },
+    "physical_groups": {
+      "description": "Primary physical groups by name; they partition each dimension.",
+      "type": "object",
+      "additionalProperties": {"oneOf": [{"$ref": "#/$defs/surfaceGroup"}, {"$ref": "#/$defs/volumeGroup"}]}
+    },
+    "unions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interface_types", "nets"],
+      "properties": {
+        "interface_types": {"$ref": "#/$defs/groupLists"},
+        "nets": {"$ref": "#/$defs/groupLists"}
+      }
+    },
+    "surface_epr_rows": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["group", "interface_type", "entities", "band"],
+        "properties": {
+          "group": {"type": "string"},
+          "interface_type": {"enum": ["MA", "MS", "SA"]},
+          "entities": {"type": "array", "items": {"type": "string"}},
+          "band": {"type": ["integer", "null"], "minimum": 0}
+        }
+      }
+    },
+    "volumes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["entity", "kind", "material", "net", "emitted", "group", "shells", "volume_um3", "aedt_name"],
+        "properties": {
+          "entity": {"type": "string"},
+          "kind": {"enum": ["vacuum", "dielectric", "conductor"]},
+          "material": {"type": "string"},
+          "net": {"type": ["string", "null"]},
+          "emitted": {"type": "boolean"},
+          "group": {"type": ["string", "null"]},
+          "shells": {"type": "integer", "minimum": 1},
+          "volume_um3": {"type": "number"},
+          "aedt_name": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_]+$"}
+        }
+      }
+    },
+    "faces": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["group", "kind", "face_kind", "z_um", "negative_volume", "positive_volume"],
+        "properties": {
+          "group": {"type": ["string", "null"]},
+          "kind": {"enum": ["horizontal", "wall"]},
+          "face_kind": {"enum": ["top", "bottom", "sidewall", "sheet", "port", "interface"]},
+          "z_um": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+          "negative_volume": {"type": ["string", "null"]},
+          "positive_volume": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "embedded_faces": {
+      "description": "Sheets inside an emitted volume; the mesher embeds each face in its host volume.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["face", "host_volume", "group"],
+        "properties": {
+          "face": {"type": "string"},
+          "host_volume": {"type": "string"},
+          "group": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "refinement_edges": {
+      "description": "Refinement-only curves; the mesher embeds each edge in its host face.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["edge", "host_face", "family", "written_as_free_edge"],
+        "properties": {
+          "edge": {"type": "string"},
+          "host_face": {"type": "string"},
+          "family": {"type": ["string", "null"]},
+          "written_as_free_edge": {"type": "boolean"}
+        }
+      }
+    },
+    "ports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["port_sheet_id", "group", "source_name", "port_index", "direction", "host_entity_ids", "source_layer", "target_layer", "z_um", "faces", "host_volumes", "adjacent_volumes"],
+        "properties": {
+          "port_sheet_id": {"type": "string"},
+          "group": {"type": "string"},
+          "source_name": {"type": "string"},
+          "port_index": {"type": "integer"},
+          "direction": {"type": "array", "items": {"type": "number"}},
+          "host_entity_ids": {"type": "array", "items": {"type": "string"}},
+          "source_layer": {"type": "string"},
+          "target_layer": {"type": "string"},
+          "z_um": {"type": "number"},
+          "faces": {"$ref": "#/$defs/idList"},
+          "host_volumes": {"$ref": "#/$defs/idList"},
+          "adjacent_volumes": {"$ref": "#/$defs/idList"}
+        }
+      }
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edges", "carriers", "vertical_edges", "faces", "membership"],
+      "properties": {
+        "edges": {"type": "object", "additionalProperties": {"$ref": "#/$defs/idList"}},
+        "carriers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["kind"],
+            "properties": {
+              "kind": {"enum": ["polygon_edge", "family_member", "unknown"]},
+              "entity": {"type": "string"},
+              "polygon": {"type": "integer"},
+              "ring": {"type": "integer"},
+              "edge": {"type": "integer"},
+              "family": {"type": "string"},
+              "member": {"type": "string"}
+            },
+            "additionalProperties": false
+          }
+        },
+        "vertical_edges": {"type": "object", "additionalProperties": {"$ref": "#/$defs/idList"}},
+        "faces": {"type": "object", "additionalProperties": {"$ref": "#/$defs/idList"}},
+        "membership": {
+          "description": "Face -> {Entity: covered fraction of the face area}; non-exclusive, may sum to more than 1.",
+          "type": "object",
+          "additionalProperties": {"type": "object", "additionalProperties": {"type": "number", "minimum": 0}}
+        }
+      }
+    },
+    "insets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["request_id", "support", "interface", "margins_um", "margins_grid", "band_count", "support_area_um2", "bands"],
+        "properties": {
+          "request_id": {"type": "string"},
+          "support": {"type": "object"},
+          "interface": {"type": ["string", "null"]},
+          "margins_um": {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}},
+          "margins_grid": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+          "band_count": {"type": "integer", "minimum": 1},
+          "support_area_um2": {"type": ["number", "null"]},
+          "bands": {"description": "Band index -> primary groups.", "type": "object", "additionalProperties": {"$ref": "#/$defs/idList"}}
+        }
+      }
+    },
+    "refinements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["request_id", "z_um", "points_um", "edges"],
+        "properties": {
+          "request_id": {"type": "string"},
+          "z_um": {"type": "number"},
+          "points_um": {"type": "array", "items": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}},
+          "edges": {"$ref": "#/$defs/idList"}
+        }
+      }
+    },
+    "slivers": {
+      "description": "Summary of the sliver report (measurements only; decision D2).",
+      "type": "object",
+      "properties": {
+        "shortest_edge_um": {"type": ["number", "null"]},
+        "narrowest_face_um": {"type": ["number", "null"]},
+        "smallest_angle_deg": {"type": ["number", "null"]},
+        "thin_slab_count": {"type": "integer"},
+        "max_snap_drift_grid": {"type": ["number", "null"]},
+        "max_arc_deviation_grid": {"type": ["number", "null"]}
+      }
+    },
+    "arrangement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_snap_drift_grid", "max_arc_deviation_grid", "arc_edges"],
+      "properties": {
+        "max_snap_drift_grid": {"type": ["number", "null"]},
+        "max_arc_deviation_grid": {"type": ["number", "null"]},
+        "arc_edges": {"type": "integer", "minimum": 0}
+      }
+    },
+    "curved_wall_faces": {"$ref": "#/$defs/idList"},
+    "surface_kinds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plane", "cylinder"],
+      "properties": {"plane": {"type": "integer", "minimum": 0}, "cylinder": {"type": "integer", "minimum": 0}}
+    },
+    "expected": {
+      "description": "What verify_loaded compares, by native tag (tag = 1 + position).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vertices_um", "edge_vertices", "face_edges", "solid_faces", "face_area_um2", "solid_volume_um3"],
+      "properties": {
+        "vertices_um": {"type": "array", "items": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3}},
+        "edge_vertices": {"type": "array", "items": {"type": "array", "items": {"type": "integer", "minimum": 1}, "minItems": 2, "maxItems": 2}},
+        "face_edges": {"type": "array", "items": {"$ref": "#/$defs/tagList"}},
+        "solid_faces": {"type": "array", "items": {"$ref": "#/$defs/tagList"}},
+        "face_area_um2": {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}},
+        "solid_volume_um3": {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}}
+      }
+    }
+  },
+  "$defs": {
+    "idList": {"type": "array", "items": {"type": "string"}},
+    "tagList": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+    "groupLists": {"type": "object", "additionalProperties": {"$ref": "#/$defs/idList"}},
+    "surfaceGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dim", "tag", "interface_type", "ids", "native_tags", "entities", "net", "face_kinds", "adjacent_domains", "adjacent_volumes", "band", "area_um2"],
+      "properties": {
+        "dim": {"const": 2},
+        "tag": {"type": "integer", "minimum": 1},
+        "interface_type": {"enum": ["MA", "MS", "MM", "SA", "AA", "SS", "SHEET", "PORT", "EXT"]},
+        "ids": {"$ref": "#/$defs/idList"},
+        "native_tags": {"$ref": "#/$defs/tagList"},
+        "entities": {"$ref": "#/$defs/idList"},
+        "net": {"type": ["string", "null"]},
+        "face_kinds": {"type": "array", "items": {"enum": ["top", "bottom", "sidewall", "sheet", "port", "interface"]}},
+        "adjacent_domains": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "kind", "material"],
+            "properties": {"name": {"type": "string"}, "kind": {"enum": ["vacuum", "dielectric"]}, "material": {"type": "string"}}
+          }
+        },
+        "adjacent_volumes": {"$ref": "#/$defs/idList"},
+        "band": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["family", "index"],
+              "properties": {"family": {"type": "string"}, "index": {"type": "integer", "minimum": 0}}
+            }
+          ]
+        },
+        "area_um2": {"type": "number", "minimum": 0}
+      }
+    },
+    "volumeGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dim", "tag", "interface_type", "ids", "native_tags", "entities", "kind", "material", "net"],
+      "properties": {
+        "dim": {"const": 3},
+        "tag": {"type": "integer", "minimum": 1},
+        "interface_type": {"type": "null"},
+        "ids": {"$ref": "#/$defs/idList"},
+        "native_tags": {"$ref": "#/$defs/tagList"},
+        "entities": {"$ref": "#/$defs/idList"},
+        "kind": {"enum": ["vacuum", "dielectric", "conductor"]},
+        "material": {"type": "string"},
+        "net": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

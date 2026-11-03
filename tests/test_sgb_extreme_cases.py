@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import math
 
+import jsonschema
 import pytest
+from sgb_catalogue_report import measure
 from sgb_extreme_cases import (
     FIXTURES,
     build_model,
@@ -21,9 +23,13 @@ from sgb_extreme_cases import (
 )
 from sgb_scenes import rect_um
 
+from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.records.grid import exact_z
+from scgsim.geometry.sgb.sidecar.files import read_sidecar, sidecar_schema
+from scgsim.geometry.sgb.slivers.report import sliver_report
+from scgsim.geometry.sgb.verification.loaded import verify_xao
 
 
 def build(name: str, route: str):
@@ -187,3 +193,95 @@ def test_stacked_slabs_touching_at_a_vertex_keep_their_levels_conformal():
     for name in ("stacked_corner_touch", "stacked_vertex_on_wall_edge"):
         for route in ("B", "C"):
             assert not build(name, route).report.failures
+
+
+# --------------------------------------------------------------------------- emission, load check, OCCT, quality and drift
+
+
+def accepted_cases():
+    """The (fixture, route) pairs that build (the refused ones never reach emission)."""
+    return [(f, r) for f, r in cases() if r not in f.expect_error]
+
+
+@pytest.mark.parametrize(
+    ("fixture", "route"),
+    accepted_cases(),
+    ids=[f"{f.name}-{r}" for f, r in accepted_cases()],
+)
+def test_every_fixture_emits_files_gmsh_loads_and_a_sidecar_that_validates(
+    fixture, route, tmp_path
+):
+    """The whole path for each fixture: write, validate the sidecar against its schema, load in Gmsh and check."""
+    model = build_model(fixture, route)
+    artifacts = emit_model(model, tmp_path)
+    sidecar = read_sidecar(artifacts.sidecar)
+    assert not list(
+        jsonschema.Draft202012Validator(sidecar_schema()).iter_errors(sidecar)
+    )
+    report = verify_xao(artifacts.xao, sidecar)
+    assert report.ok, report.problems
+    assert sidecar["counts"]["faces"] == model.counts["faces"] - _unemitted_faces(model)
+
+
+def _unemitted_faces(model) -> int:
+    """Faces that bound no emitted volume (Route A and B conductor interiors): planned, never written."""
+    return sum(
+        1
+        for f in model.topology.faces.values()
+        if not model.routed.is_emitted_face(f.neg_volume, f.pos_volume)
+    )
+
+
+@pytest.mark.occt
+@pytest.mark.parametrize(
+    ("fixture", "route"),
+    accepted_cases(),
+    ids=[f"{f.name}-{r}" for f, r in accepted_cases()],
+)
+def test_every_fixture_passes_the_official_occt_checks(fixture, route, tmp_path):
+    """BRepCheck, the Boolean argument analyzer (with self-interference) and ShapeAnalysis, against the plan."""
+    pytest.importorskip("OCP")
+    from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: PLC0415 -- used by this test only
+    from scgsim.geometry.sgb.verification.occt import check_file  # noqa: PLC0415 -- needs OCP
+
+    model = build_model(fixture, route)
+    artifacts = emit_model(model, tmp_path)
+    plan = plan_brep(model.topology, model.routed)
+    for path in (artifacts.brep, artifacts.xao):
+        report = check_file(path, model.topology, plan, self_interference=True)
+        assert report.ok, f"{fixture.name} {route} {path.suffix}: {report.problems}"
+
+
+@pytest.mark.parametrize(
+    ("fixture", "route"),
+    accepted_cases(),
+    ids=[f"{f.name}-{r}" for f, r in accepted_cases()],
+)
+def test_snap_drift_stays_within_one_grid_unit_on_every_fixture(fixture, route):
+    """Reopen trigger of decision D7: drift above 1 g on the fixture catalogue would revisit bounded-drift snap rounding."""
+    summary = sliver_report(build_model(fixture, route))["summary"]
+    assert summary["max_snap_drift_grid"] <= 1.0, (
+        f"{fixture.name} {route}: {summary['max_snap_drift_grid']} g"
+    )
+    assert summary["max_arc_deviation_grid"] <= 1.0
+
+
+def test_the_catalogue_records_mesh_quality_and_drift_per_fixture(tmp_path):
+    """The record that D2 and D7 are judged on: a coarse mesh per fixture, with ``minSICN`` and ``gamma`` percentiles."""
+    row = measure(
+        build_model(FIXTURES["near_tangent_arc_line"], "B"), tmp_path, with_occt=False
+    )
+    assert row["load_check"] == "ok" and row["mesh"] == "ok"
+    for key in ("minSICN_min", "minSICN_p1", "gamma_min", "gamma_p1", "max_snap_drift_grid", "max_arc_deviation_grid",
+                "narrowest_face_um", "tets"):  # fmt: skip
+        assert row[key] is not None, key
+    assert (
+        0 < row["minSICN_min"] <= row["minSICN_p1"] <= 1
+        and 0 < row["gamma_min"] <= row["gamma_p1"] <= 1
+    )
+    baseline = measure(
+        build_model(FIXTURES["baseline"], "A"), tmp_path / "baseline", with_occt=False
+    )
+    assert (
+        baseline["minSICN_min"] > 0.05
+    )  # a clean box of two prisms and a sheet meshes well

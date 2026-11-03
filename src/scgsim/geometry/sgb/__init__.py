@@ -28,9 +28,21 @@ Sub-packages follow the stages of the design brief, lowest layer first:
                    the primary physical groups and their unions
 * ``validation``   S9: structural invariants, fail closed, never disabled
 * ``slivers``      S9: the sliver report (local feature size on exact carriers; report only)
-* ``model``        the entry point :func:`~scgsim.geometry.sgb.model.build_conformal_model`
+* ``model``        the validated model :func:`~scgsim.geometry.sgb.model.build_conformal_model`
+* ``emission``     S10: numbering of the shapes in ``TopExp::MapShapes`` order and the direct, byte-deterministic
+                   BREP/XAO writer (no CAD kernel, no Boolean)
+* ``sidecar``      the versioned JSON sidecar ``scgsim.sgb.sidecar.v1`` and its JSON Schema
+* ``verification`` the load-side check the mesher runs on the opened XAO (Gmsh) and the official OCCT checks (OCP)
+* ``exchange``     the AEDT STEP export of the emitted solids (OCP)
+* ``build``        the public entry :func:`build_sgb_geometry`, exported here
 
 with ``parallel`` (per-tile runtime), ``identity`` (content-addressed ids),
-``plane`` (exact integer geometry) and ``errors`` beside them.  The next sub-stage adds emission (direct BREP/XAO writer, sidecar) as a sub-package
-that consumes the records defined here.
+``plane`` (exact integer geometry) and ``errors`` beside them.
+
+Importing this package needs neither Gmsh nor OCP: ``verification.loaded`` imports Gmsh and
+``verification.occt`` / ``exchange.step`` import OCP only when they are themselves imported or called.
 """
+
+from scgsim.geometry.sgb.build import SgbArtifacts, build_sgb_geometry
+
+__all__ = ["SgbArtifacts", "build_sgb_geometry"]

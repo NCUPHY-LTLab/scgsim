@@ -398,11 +398,11 @@ def _plan_level(name: str, material: str, interval: tuple[float, float], role: s
     )
 
 
-def geometry_plan_electrodes(monkeypatch, *, gap_um: float = 10.0) -> EffectiveInput:
-    """A real ``GeometryPlan``: a 20 um pad and a 30 um electrode ``gap_um`` apart, on Nets A and B.
+def electrode_plan(monkeypatch, *, gap_um: float = 10.0, same_net: bool = False):
+    """A real, unprepared ``GeometryPlan``: a 20 um pad and a 30 um electrode ``gap_um`` apart.
 
-    The component, layer stack and material records are small public stand-ins for a PDK;
-    the plan, its snapshot and the physical interpretation are the production code.
+    The Nets are A and B, or both A with ``same_net``.  A negative ``gap_um`` makes them overlap.  The
+    component, layer stack and material records are small public stand-ins for a PDK.
     """
     import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
 
@@ -449,8 +449,19 @@ def geometry_plan_electrodes(monkeypatch, *, gap_um: float = 10.0) -> EffectiveI
         coupon_padding_um=10,
         grid_size_um=GRID_UM,
     )
-    plan.set_nets({"A": ("chip/pad",), "B": ("chip/electrode",)})
-    snapshot = plan.prepare()
+    if same_net:
+        plan.set_nets({"A": ("chip/pad", "chip/electrode")})
+    else:
+        plan.set_nets({"A": ("chip/pad",), "B": ("chip/electrode",)})
+    return plan
+
+
+def geometry_plan_electrodes(monkeypatch, *, gap_um: float = 10.0) -> EffectiveInput:
+    """A real ``GeometryPlan``: a 20 um pad and a 30 um electrode ``gap_um`` apart, on Nets A and B.
+
+    The plan, its snapshot and the physical interpretation are the production code.
+    """
+    snapshot = electrode_plan(monkeypatch, gap_um=gap_um).prepare()
     effective, _, physical = interpret_physical_geometry(
         snapshot.geometry_input,
         snapshot.stack,

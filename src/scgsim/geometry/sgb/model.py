@@ -52,6 +52,10 @@ class ConformalModel:
         default_factory=dict
     )  # serial/parallel wall, worker work, Amdahl limit
     counts: dict[str, int] = field(default_factory=dict)
+    insets: tuple[
+        InsetRequest, ...
+    ] = ()  # the cut-family requests the model was built with
+    refinements: tuple[RefinementRequest, ...] = ()
 
     @property
     def policy(self) -> RoutePolicy:
@@ -128,7 +132,9 @@ def build_model_from_catalogue(  # noqa: PLR0913 - the catalogue, the route and 
     try:
         with Runtime(tiles, workers, model_bbox(catalogue)) as rt:
             rt.keep_raw = keep_raw
-            return _build(catalogue, policy, rt)
+            model = _build(catalogue, policy, rt)
+            model.insets, model.refinements = insets, refinements
+            return model
     finally:
         if was_enabled:
             gc.enable()
