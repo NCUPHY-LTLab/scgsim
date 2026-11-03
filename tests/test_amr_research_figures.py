@@ -129,3 +129,39 @@ def test_unprepared_route_has_status_without_invented_exports_or_plot_facets(tmp
         {},
     )
     assert observed_route_ids((*cases, observed)) == ("route-b",)
+
+
+def test_recovery_warning_and_native_cost_identity_remain_separate():
+    """A converged potential solve can coexist with an unconverged recovery solve."""
+    case = CaseSeries(
+        {"case_id": "b-c", "route_id": "route-b"},
+        {
+            "passes": [
+                {
+                    "native_iteration": 4,
+                    "linear_solve_state": "converged",
+                    "recovery_solve_state": "unconverged",
+                    "terminal_solve_observation": {
+                        "terminal_statistics": [
+                            {
+                                "main": {"iterations": 77, "final_residual": 2e-5},
+                                "recovery": {
+                                    "iterations": 10000,
+                                    "final_residual": 8e-5,
+                                },
+                            }
+                        ]
+                    },
+                }
+            ]
+        },
+        {"pass_cost_records": [{"native_iteration": 3, "elapsed_pass_s": 7.0}]},
+    )
+    row = observation_rows(case)[0]
+    assert row["linear_solve_state"] == "converged"
+    assert row["recovery_solve_state"] == "unconverged"
+    assert row["main_iterations"] == 77
+    assert row["recovery_iterations"] == 10000
+    assert row["main_final_residual"] == 2e-5
+    assert row["recovery_final_residual"] == 8e-5
+    assert row["elapsed_pass_s"] is None

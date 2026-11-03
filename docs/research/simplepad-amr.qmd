@@ -1,64 +1,88 @@
 ---
-title: "SimplePad AMR Efficiency Study"
-description: "First-trial protocol comparing Conformal and Nonconformal AMR across two SimplePad geometry methods."
+title: "SimplePad: Conformal and Nonconformal AMR"
+description: "Preparation status and study design for a four-case SimplePad adaptive-mesh comparison."
 scgsim-kind: research
 scgsim-status: CONVERGING
 scgsim-id: docs/research/simplepad-amr
 sidebar: research
 ---
 
-This first trial compares Conformal (C) and Nonconformal (NC) adaptive mesh refinement (AMR) for one SimplePad electrostatic capacitance model. Within each route, C and NC reuse the same initial Mesh.
+**Recorded snapshot — 4 November 2026:** Route A preparation stops before Gmsh. Route B shares one initial Mesh between C and NC. Conformal completed four solves, then aborted inside MFEM during the next refinement. The NC run was interrupted when the study binary was changed to Spack Official Palace 0.18.1; a later main CG solve had reached the 200-iteration limit without converging. The official-binary batch has not started. These fork observations are retained separately and are not a completed comparison.
 
-This page records the first-trial method and settings; it does not report measured outcomes.
+| Case | Geometry | AMR | Preparation status | Solver status |
+|---|---|---|---|---|
+| A-C | Route A: Thin Film, zero-thickness PEC Sheet | Conformal | Blocked before Gmsh: `chip/PAD port overlap intersects 0 local Route A surface_sheet patches` | Not started |
+| A-NC | Route A: Thin Film, zero-thickness PEC Sheet | Nonconformal | Blocked before Gmsh: `chip/PAD port overlap intersects 0 local Route A surface_sheet patches` | Not started |
+| B-C | Route B: 100 nm Shell Solid; outer PEC | Conformal | Prepared; shares the Route B Mesh with B-NC | Aborted during refinement after four completed solves |
+| B-NC | Route B: 100 nm Shell Solid; outer PEC | Nonconformal | Prepared; shares the Route B Mesh with B-C | Interrupted for the binary change; main and Recovery convergence remain separate |
 
-## Study questions {#study-question}
+The completed Conformal potential solves converged within 200 iterations; Recovery solves in passes 2–4 did not converge within 10,000 iterations. These observations used the diagnostic fork identified below. The cause of the refinement abort has not been established; neither a Geometry cause nor diagnostics-off equivalence has been demonstrated. A short failed run is not evidence of better efficiency.
 
-The paired runs compare C and NC from the same starting Mesh within Route A or Route B: the refined-parent count, mesh evolution, solver cost, and capacitance matrix. Route A versus Route B changes both the surface representation and the separately built starting Mesh, so that comparison combines both effects.
+The pad Net is selected as the Terminal, and the Ground Net is assigned as physical Ground. The exterior uses the natural boundary; no Surface EPR is requested.
 
-The first trial evaluates one 1 × 1 capacitance-matrix case. SCGSim's support for general multi-terminal matrices does not add cases to this study.
+![SimplePad source-geometry outline with layout locator. This figure shows declared source geometry only; it is not a generated Mesh or solver output.](../assets/research/simplepad-amr/simplepad-layout.svg){#fig-simplepad-layout}
 
-## Model and geometry {#model-and-geometry}
+## Study question {#study-question}
 
-Both routes use the same SimplePad dimensions and material settings: a 200 µm pad, a 20 µm gap, a 1,000 µm die, and a 500 µm silicon substrate with relative permittivity 11.9. The background is vacuum, with the vacuum-envelope settings `(250, 250, 1,000) µm`. The pad Net is selected as the Terminal, and the Ground Net is assigned as physical Ground. The exterior uses the natural boundary condition. No Surface EPR extraction is requested.
+Within each geometry route, compare Conformal (C) and Nonconformal (NC) AMR from the same initial Mesh. The measures describe refined parents, mesh growth, solver cost, and the 1 × 1 capacitance matrix. Route A and Route B use different surface representations and separately built starting Meshes, so their cross-route comparison combines both changes.
 
-- **Route A:** explicit `thin_film` V1 Thin Film model with a zero-thickness PEC Sheet.
-- **Route B:** `route_b` V1 with a finite 100 nm conductor represented as a Shell Solid. PEC is assigned to its outer surface, and the conductor interior is excluded from the solve.
+This first trial covers one 1 × 1 capacitance-matrix case. The first batch has no independent reference matrix; neither route serves as truth for the other. A later reference-error analysis requires an explicitly supplied independent matrix. No accuracy threshold is set here.
 
-## Four-case design {#case-design}
+## Core comparison {#core-settings}
 
-| Case | Surface representation | Refinement | Starting mesh |
-|---|---|---|---|
-| A-C | Route A, zero-thickness PEC Sheet | Conformal | Route A Mesh, shared with A-NC |
-| A-NC | Route A, zero-thickness PEC Sheet | Nonconformal | Route A Mesh, shared with A-C |
-| B-C | Route B, 100 nm conductor Shell Solid; outer PEC | Conformal | Route B Mesh, shared with B-NC |
-| B-NC | Route B, 100 nm conductor Shell Solid; outer PEC | Nonconformal | Route B Mesh, shared with B-C |
+| Dimension | Study design |
+|---|---|
+| Model | One 1 × 1 capacitance-matrix case; SimplePad geometry and material settings are shared. |
+| Geometry | Route A: zero-thickness PEC Sheet. Route B: 100 nm conductor Shell Solid, outer PEC only, interior excluded. |
+| AMR pair | Compare Conformal and Nonconformal within each route, starting from the same route Mesh. B is prepared with one shared Mesh; A stopped before Gmsh. |
+| Solver | FEM order 2; CG with BoomerAMG; AMR maximum 20 passes, tolerance `0.01`, ZZ update fraction `0.7`, NC level limit 1. |
+| Mesh generation | Gmsh 4.15.2; `gmsh_default`; Delaunay; geometry order 1; one thread. |
+| Execution | 30 MPI ranks × 2 OpenMP threads; four cases sequentially; output settings shared. |
 
-Each route builds one initial Mesh with Gmsh 4.15.2, `gmsh_default` sizing, Delaunay, geometry order 1, and one thread. Its C and NC cases reuse that Mesh. Each route has only one initial Mesh in this first trial.
-
-## Solver and resources {#solver-and-resources}
-
-All four cases use the same Palace and output settings apart from the geometry route and C/NC choice.
+<details>
+<summary>Model, mesh, and solver settings</summary>
 
 | Setting | Value |
 |---|---|
+| Pad | 200 µm |
+| Gap | 20 µm |
+| Die | 1,000 µm |
+| Silicon substrate | 500 µm; relative permittivity 11.9 |
+| Background and vacuum envelope | Vacuum; `(250, 250, 1,000) µm` |
+| Terminal and Ground | Pad Net selected as Terminal; Ground Net assigned as physical Ground |
+| Exterior boundary / Surface EPR | Natural exterior boundary; no Surface EPR extraction |
+| Route A | Explicit `thin_film` V1 Thin Film model; zero-thickness PEC Sheet |
+| Route B | `route_b` V1; finite 100 nm conductor represented as Shell Solid; outer PEC; conductor interior excluded |
+| Initial Mesh per route | One Mesh generated per route and reused for its C/NC pair. B-C/B-NC share the same prepared Mesh; Route A did not reach Gmsh. |
+| Mesh generation | Gmsh 4.15.2; `gmsh_default`; Delaunay; geometry order 1; one thread |
 | FEM order | 2 |
 | Linear solver | CG with BoomerAMG preconditioning |
 | Linear tolerance / maximum iterations | `1e-6` / 200 |
 | AMR maximum iterations / tolerance | 20 / `0.01` |
 | ZZ update fraction, θ | `0.7` |
 | NC level limit | 1 |
-| Parallel resources | 30 MPI ranks × 2 OpenMP threads |
-| Host capacity | 32 physical cores / 64 logical CPUs |
-| Execution order | Four runs executed sequentially |
+| Parallel resources / order | 30 MPI ranks × 2 OpenMP threads; four runs executed sequentially |
+| Output settings | Same across all four cases |
+
+Geometry dimensions are in micrometres; relative permittivity is dimensionless.
+
+</details>
 
 ## Reading the AMR measures {#interpretation}
 
-The ZZ error indicator marks cells for refinement; it is not a direct estimate of capacitance-matrix error. A **refined parent** is a distinct active Mesh element immediately before an AMR pass that is actually split. The **Closure factor** (`R_closure`) is the number of refined parents divided by the number of ZZ-marked cells. Its numerator includes additional splits needed for Conformal closure or the NC level limit. It counts refined parents, not new child cells; new-cell amplification is reported separately. See the [AMR analysis reference](../amr-analysis.qmd) for metric definitions and collection behavior.
+A **refined parent** is a distinct active Mesh element immediately before an AMR pass that is actually split. The **Closure factor** (`R_closure`) is the number of refined parents divided by the number of ZZ-marked cells. Its numerator includes additional splits required for conformity or the NC level limit. It counts parents, not new child cells; new-cell amplification is a separate measure. The [AMR analysis reference](../amr-analysis.qmd) owns full metric definitions and collection behavior.
 
-The first batch has no independent reference matrix, so it supports no reference-error claim. A later reference-error analysis requires an explicitly supplied independent matrix; this study sets no accuracy threshold.
+ZZ marks cells for refinement; it does not measure capacitance-matrix accuracy.
 
-## Reproduction sources {#reproduction}
+## Preparation and solver identity {#reproduction}
 
-- The public [SimplePad Electrostatic source case at the selected 100 nm PDK revision](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/c75a1d4d2ee07e86a3b5d9b491609e5a1a5b850c/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_electrostatic.qmd) owns the component input.
-- The [Palace native refinement baseline source](https://github.com/NCUPHY-LTLab/palace/tree/1f7718e7ad34e9ec751b08aa60dafee39a3b26f8) identifies the native refinement implementation.
-- The [SCGSim Palace Electrostatic workflow](../course/palace-electrostatic.qmd) and [Palace Electrostatic contract](../specs/palace-electrostatic-sgb.qmd) describe preparation and solver settings.
+The public [SimplePad Electrostatic source at the selected 100 nm PDK revision](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/c75a1d4d2ee07e86a3b5d9b491609e5a1a5b850c/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_electrostatic.qmd) owns the component input. The [SCGSim Palace Electrostatic workflow](../course/palace-electrostatic.qmd) and [Palace Electrostatic contract](../specs/palace-electrostatic-sgb.qmd) describe preparation and solver controls.
+
+<details>
+<summary>Prepared-input and executable identities</summary>
+
+The Route B C/NC pair uses the same initial Mesh (SHA-256 `e1f600bbde30c981b967c8c62dddc4693874bffd88a8d837932f9b4cfb31ca55`). The two configuration files are identical except for `Nonconformal`. The SCGSim preparation source tree was clean at [revision `baa0766`](https://github.com/NCUPHY-LTLab/scgsim/tree/baa0766f3b3dc27520d3a7bbffe6aa19363647d7).
+
+The diagnostic Palace executable was built from [Palace source revision `8dd5aca`](https://github.com/NCUPHY-LTLab/palace/tree/8dd5aca68cc27981be33e121b23525d9a19868ce); its ELF SHA-256 is `34474fd173e92cb1f712a26116da6277c18baeee69c7881c625513d581a8e60e`. The [later merged Palace source revision `bbe970ed`](https://github.com/NCUPHY-LTLab/palace/tree/bbe970edb6fda1c59336b8351816dc6018635168) identifies integrated source, not the executable that was built. The prepared configuration does not serialize `AbsTol`, `autoLc`, or `partitionseed`; this page does not present them as explicitly recorded settings.
+
+</details>

@@ -1,65 +1,89 @@
 ---
 lang: zh-TW
-title: "SimplePad AMR 效率研究"
-description: "比較兩種 SimplePad 幾何方法下 Conformal 與 Nonconformal AMR 的首輪研究方法。"
+title: "SimplePad：Conformal 與 Nonconformal AMR"
+description: "SimplePad 四組自適應網格研究的準備狀態與比較設計。"
 scgsim-kind: research
 scgsim-status: CONVERGING
 scgsim-id: docs/research/simplepad-amr
 sidebar: research
 ---
 
-本次首輪研究以單一 SimplePad 靜電電容模型，比較 Conformal（共形，C）與 Nonconformal（非共形，NC）自適應網格細化（AMR）。同一路徑內，兩種 AMR 共用相同的初始 Mesh（網格）。
+**2026 年 11 月 4 日的執行紀錄：**Route A 在 Gmsh 啟動前的準備階段停止。Route B 的 C 與 NC 共用同一份初始 Mesh。Conformal 完成四次求解後，在下一次細化時觸發 MFEM abort。NC 因改用 Spack Official Palace 0.18.1 而中止；中止前已有後續主 CG 求解達到 200 次上限而未收斂。官方版的新一批尚未開始，這批 fork 觀測會獨立保留，目前尚未完成比較。本文中的 C 與 NC 分別指 Conformal（共形）與 Nonconformal（非共形）AMR。
 
-本頁記錄首輪的研究方法與設定，尚未呈現實測結果。
+| 案例 | 幾何 | AMR | 準備狀態 | 求解器狀態 |
+|---|---|---|---|---|
+| A-C | Route A：Thin Film（薄膜），零厚度 PEC Sheet（片狀導體） | Conformal | Gmsh 前受阻：`chip/PAD port overlap intersects 0 local Route A surface_sheet patches` | 尚未啟動 |
+| A-NC | Route A：Thin Film（薄膜），零厚度 PEC Sheet（片狀導體） | Nonconformal | Gmsh 前受阻：`chip/PAD port overlap intersects 0 local Route A surface_sheet patches` | 尚未啟動 |
+| B-C | Route B：100 nm Shell Solid（殼層實體），外表面 PEC | Conformal | 已準備；與 B-NC 共用 Route B Mesh | 四次求解完成後，在細化階段中斷 |
+| B-NC | Route B：100 nm Shell Solid（殼層實體），外表面 PEC | Nonconformal | 已準備；與 B-C 共用 Route B Mesh | 因更換 binary 中止；主求解與 Recovery 收斂仍分開記錄 |
+
+Conformal 已完成的四次主電位求解都在 200 次內收斂；第 2–4 輪的 Recovery solve 則達到 10,000 次仍未收斂。這批觀測使用下方列出的診斷 fork；細化中斷的根因尚未確認，尚無證據證明來自 Geometry，也未驗證關閉診斷時是否相同。不能把失敗後較短的執行時間解讀為效率較好。
+
+模型將 pad 的 Net（網路）指定為 Terminal（端子），並將 Ground Net 指定為實體 Ground。外部邊界採 natural；不要求 Surface EPR。
+
+![SimplePad 宣告幾何輪廓與版圖定位圖。本圖僅呈現來源幾何，不是產生的 Mesh 或求解器輸出。](../assets/research/simplepad-amr/simplepad-layout.svg){#fig-simplepad-layout}
 
 ## 研究問題 {#study-question}
 
-配對案例從同一路徑、同一份初始 Mesh 開始，比較 C 與 NC 的 refined parent 數量、網格演變、求解成本與電容矩陣。Route A 與 Route B 分別使用不同的表面表示法及各自建立的初始 Mesh；跨路徑比較同時包含這兩項差異。
+在各自的幾何路徑內，從同一份初始 Mesh 開始比較 Conformal（共形，C）與 Nonconformal（非共形，NC）AMR。指標描述 refined parent、網格成長、求解成本，以及一乘一電容矩陣。Route A 與 Route B 使用不同表面表示法，也各自建立初始 Mesh，因此跨路徑比較同時包含這兩項變化。
 
-首輪只評估一個 1 × 1 電容矩陣案例。SCGSim 支援一般多端子矩陣，並不代表本研究增加了其他案例。
+首輪涵蓋單一 1 × 1 電容矩陣案例，且沒有獨立參考矩陣；兩種路徑都不作為另一方的真值。後續參考誤差分析必須明確提供獨立參考矩陣。本研究不設定精度門檻。
 
-## 模型與幾何 {#model-and-geometry}
+## 核心比較設計 {#core-settings}
 
-兩種路徑使用相同的 SimplePad 尺寸與材料設定：pad 為 200 µm、間隙為 20 µm、die 為 1,000 µm；矽基板厚度為 500 µm，相對介電常數為 11.9。背景為真空，真空包覆設定為 `(250, 250, 1,000) µm`。將 pad 的 Net（網路）指定為 Terminal（端子），並將 Ground Net 指定為實體接地。外部邊界採 natural 邊界條件。不執行 Surface EPR 擷取。
+| 比較面向 | 研究設計 |
+|---|---|
+| 模型 | 單一 1 × 1 電容矩陣案例；兩種路徑使用相同 SimplePad 尺寸與材料。 |
+| 幾何 | Route A：零厚度 PEC Sheet。Route B：100 nm 導體 Shell Solid，僅外表面指定 PEC，排除導體內部。 |
+| AMR 配對 | 各路徑內比較 Conformal 與 Nonconformal，並共用同一份初始 Mesh。Route B 已用同一 Mesh 準備；Route A 在 Gmsh 前停止。 |
+| 求解器 | FEM 階數 2；CG 搭配 BoomerAMG；AMR 最多 20 次、容許誤差 `0.01`、ZZ 更新比例 `0.7`、NC 階層限制 1。 |
+| 網格生成 | Gmsh 4.15.2；`gmsh_default`；Delaunay；幾何階數 1；單執行緒。 |
+| 執行 | 30 個 MPI ranks × 每個 rank 2 個 OpenMP 執行緒；四組依序執行；輸出設定相同。 |
 
-- **Route A：**明確 `thin_film` V1 Thin Film（薄膜）表示法，使用零厚度 PEC Sheet（片狀導體）。
-- **Route B：**`route_b` V1，以厚度 100 nm 的導體 Shell Solid（殼層實體）表示；只在外表面指定 PEC，導體內部不納入求解。
-
-## 四組案例設計 {#case-design}
-
-| 案例 | 表面表示法 | 細化方式 | 初始網格 |
-|---|---|---|---|
-| A-C | Route A，零厚度 PEC Sheet | Conformal | Route A Mesh，與 A-NC 共用 |
-| A-NC | Route A，零厚度 PEC Sheet | Nonconformal | Route A Mesh，與 A-C 共用 |
-| B-C | Route B，100 nm 導體 Shell Solid，外表面 PEC | Conformal | Route B Mesh，與 B-NC 共用 |
-| B-NC | Route B，100 nm 導體 Shell Solid，外表面 PEC | Nonconformal | Route B Mesh，與 B-C 共用 |
-
-每種路徑只建立一份初始 Mesh：Gmsh 4.15.2、`gmsh_default` 尺寸設定、Delaunay、幾何階數 1、單執行緒；同一路徑的 C 與 NC 案例共用該 Mesh。首輪每種路徑只有一份初始 Mesh。
-
-## 求解器與資源 {#solver-and-resources}
-
-四組案例使用相同的 Palace 與輸出設定，差異僅在幾何路徑及 C／NC 選擇。
+<details>
+<summary>完整模型、網格與求解設定</summary>
 
 | 設定 | 數值 |
 |---|---|
+| Pad | 200 µm |
+| 間隙 | 20 µm |
+| Die | 1,000 µm |
+| 矽基板 | 500 µm；相對介電常數 11.9 |
+| 背景與真空包覆 | 真空；`(250, 250, 1,000) µm` |
+| Terminal 與 Ground | pad 的 Net（網路）指定為 Terminal（端子）；Ground Net 指定為實體接地 |
+| 外部邊界／Surface EPR | natural 外部邊界；不擷取 Surface EPR |
+| Route A | 明確 `thin_film` V1 Thin Film（薄膜）模型；零厚度 PEC Sheet（片狀導體） |
+| Route B | `route_b` V1；100 nm 有限厚度導體表示為 Shell Solid（殼層實體）；僅外表面 PEC；排除導體內部 |
+| 每條路徑的初始 Mesh | 每條路徑建立一份 Mesh，供 C/NC 配對共用。B-C/B-NC 使用同一份已準備 Mesh；Route A 未進入 Gmsh。 |
+| 網格生成 | Gmsh 4.15.2；`gmsh_default`；Delaunay；幾何階數 1；單執行緒 |
 | FEM 階數 | 2 |
-| 線性求解器 | CG，搭配 BoomerAMG 預條件器 |
+| 線性求解器 | CG 搭配 BoomerAMG 預條件器 |
 | 線性容許誤差／最大迭代數 | `1e-6`／200 |
 | AMR 最大迭代數／容許誤差 | 20／`0.01` |
 | ZZ 更新比例 θ | `0.7` |
 | NC 階層限制 | 1 |
-| 平行資源 | 30 個 MPI ranks × 每個 rank 2 個 OpenMP 執行緒 |
-| 主機容量 | 32 個實體核心／64 個邏輯處理器 |
-| 執行順序 | 四組依序執行 |
+| 平行資源／執行順序 | 30 個 MPI ranks × 每個 rank 2 個 OpenMP 執行緒；四組依序執行 |
+| 輸出設定 | 四組相同 |
+
+幾何尺寸以微米表示；相對介電常數為無因次量。
+
+</details>
 
 ## AMR 指標的解讀 {#interpretation}
 
-ZZ 誤差指標用來標記待細化單元，並非電容矩陣誤差的直接估計。本研究將 `refined parent`（細化父元素）定義為 AMR pass 前仍活動、且本次實際被分裂的不同 Mesh 元素。Closure factor（閉合因子，`R_closure`）為 refined parent 數除以 ZZ 標記單元數；分子包含為符合共形閉合或 NC 階層限制而額外分裂的父元素。Closure factor 計算細化父元素，不是新增子元素數；新增單元放大率另行呈現。完整指標定義與資料收集方式請見 [AMR 分析參考](../amr-analysis.qmd)。
+本研究將 **refined parent**（細化父元素）定義為 AMR pass 前仍活動、且本次實際被分裂的不同 Mesh 元素。**Closure factor**（閉合因子，`R_closure`）為 refined parent 數除以 ZZ 標記單元數；分子包含為符合共形閉合或 NC 階層限制而額外分裂的父元素。Closure factor 計算父元素，不是新增子元素數；新增單元放大率是另一項指標。完整定義與資料收集方式由 [AMR 分析參考](../amr-analysis.qmd)說明。
 
-首輪沒有獨立參考矩陣，因此不進行參考誤差判定；後續分析須明確提供獨立參考值。本研究不設定精度門檻。
+ZZ 用來標記待細化單元，不代表電容矩陣精度。
 
-## 重現來源 {#reproduction}
+## 準備與求解器識別資料 {#reproduction}
 
-- 元件輸入由公開的[指定 100 nm PDK 版本 SimplePad 靜電案例](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/c75a1d4d2ee07e86a3b5d9b491609e5a1a5b850c/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_electrostatic.qmd)負責。
-- [Palace 原生細化基準來源](https://github.com/NCUPHY-LTLab/palace/tree/1f7718e7ad34e9ec751b08aa60dafee39a3b26f8)可用來查閱原生細化實作。
-- [SCGSim Palace 靜電工作流程](../course/palace-electrostatic.qmd)與 [Palace 靜電契約](../specs/palace-electrostatic-sgb.qmd)說明準備流程及求解器設定。
+元件輸入由公開的[指定 100 nm PDK 版本 SimplePad 靜電來源](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/c75a1d4d2ee07e86a3b5d9b491609e5a1a5b850c/notebooks/src/SCGSimExamples/ComponentSimulation/SimplePad/palace_electrostatic.qmd)負責。[SCGSim Palace 靜電工作流程](../course/palace-electrostatic.qmd)與 [Palace 靜電契約](../specs/palace-electrostatic-sgb.qmd)說明準備程序及求解設定。
+
+<details>
+<summary>已準備輸入與執行檔識別資料</summary>
+
+Route B 的 C/NC 配對使用同一份初始 Mesh（SHA-256 `e1f600bbde30c981b967c8c62dddc4693874bffd88a8d837932f9b4cfb31ca55`）；兩份設定檔只有 `Nonconformal` 不同。準備 B 案例時使用的 SCGSim 來源目錄在[修訂版 `baa0766`](https://github.com/NCUPHY-LTLab/scgsim/tree/baa0766f3b3dc27520d3a7bbffe6aa19363647d7)為乾淨狀態。
+
+診斷用 Palace 執行檔由[來源修訂版 `8dd5aca`](https://github.com/NCUPHY-LTLab/palace/tree/8dd5aca68cc27981be33e121b23525d9a19868ce)編譯；其 ELF SHA-256 為 `34474fd173e92cb1f712a26116da6277c18baeee69c7881c625513d581a8e60e`。[後續整併的 Palace 來源修訂版 `bbe970ed`](https://github.com/NCUPHY-LTLab/palace/tree/bbe970edb6fda1c59336b8351816dc6018635168)標示整合後的來源，不代表已編譯執行檔的識別資料。已準備的設定檔未序列化 `AbsTol`、`autoLc` 或 `partitionseed`；本頁不把這些項目描述為設定檔中明確記錄的值。
+
+</details>

@@ -45,10 +45,21 @@ _CSV_FIELDS: tuple[str, ...] = (
     "true_dofs",
     "mesh_elements",
     "elapsed_cumulative_s",
+    "elapsed_pass_s",
+    "elapsed_pass_reason",
     "peak_node_memory_mb",
     "capacitance_f",
     "native_zz_norm",
     "linear_solve_state",
+    "recovery_solve_state",
+    "main_iterations",
+    "main_final_residual",
+    "main_reference_residual",
+    "main_residual_norm",
+    "recovery_iterations",
+    "recovery_final_residual",
+    "recovery_reference_residual",
+    "recovery_residual_norm",
     "closure_factor",
     "extra_refined_parents",
     "new_cell_amplification",
@@ -144,10 +155,19 @@ def observation_rows(case: CaseSeries) -> list[dict[str, Any]]:
         for item in case.analysis.get("transitions", ())
         if item.get("after_iteration") is not None
     }
+    costs = {
+        item["native_iteration"]: item
+        for item in case.benchmark.get("pass_cost_records", ())
+        if item.get("native_iteration") is not None
+    }
     rows = []
     for solve in case.analysis.get("passes", ()):
         transition = transitions.get(solve.get("native_iteration"), {})
         adjacent = transition.get("adjacent_capacitance") or {}
+        cost = costs.get(solve.get("native_iteration"), {})
+        statistics = _single_terminal_statistics(solve)
+        main = statistics.get("main") or {}
+        recovery = statistics.get("recovery") or {}
         rows.append(
             {
                 "case": case.case["case_id"],
@@ -156,10 +176,21 @@ def observation_rows(case: CaseSeries) -> list[dict[str, Any]]:
                 "true_dofs": solve.get("degrees_of_freedom"),
                 "mesh_elements": solve.get("mesh_elements"),
                 "elapsed_cumulative_s": solve.get("elapsed_cumulative_s"),
+                "elapsed_pass_s": cost.get("elapsed_pass_s"),
+                "elapsed_pass_reason": cost.get("elapsed_pass_reason"),
                 "peak_node_memory_mb": solve.get("peak_node_memory_mb"),
                 "capacitance_f": _single_terminal_capacitance(solve),
                 "native_zz_norm": metric_value(solve, "native_zz_norm"),
                 "linear_solve_state": solve.get("linear_solve_state"),
+                "recovery_solve_state": solve.get("recovery_solve_state"),
+                "main_iterations": main.get("iterations"),
+                "main_final_residual": main.get("final_residual"),
+                "main_reference_residual": main.get("reference_residual"),
+                "main_residual_norm": main.get("residual_norm"),
+                "recovery_iterations": recovery.get("iterations"),
+                "recovery_final_residual": recovery.get("final_residual"),
+                "recovery_reference_residual": recovery.get("reference_residual"),
+                "recovery_residual_norm": recovery.get("residual_norm"),
                 "closure_factor": metric_value(transition, "closure_amplification"),
                 "extra_refined_parents": metric_value(
                     transition, "closure_extra_parents"
@@ -180,6 +211,16 @@ def observation_rows(case: CaseSeries) -> list[dict[str, Any]]:
     return rows
 
 
+def _single_terminal_statistics(solve: Mapping[str, Any]) -> Mapping[str, Any]:
+    observation = solve.get("terminal_solve_observation") or {}
+    statistics = observation.get("terminal_statistics") or ()
+    if not statistics:
+        return {}
+    if len(statistics) != 1:
+        raise ValueError("the SimplePad study expects one Terminal's solve statistics")
+    return statistics[0]
+
+
 def write_transitions(cases: Sequence[CaseSeries], destination: Path) -> None:
     """Keep refinement costs even when the next solve has no readable matrix."""
     fields: tuple[str, ...] = (
@@ -192,6 +233,9 @@ def write_transitions(cases: Sequence[CaseSeries], destination: Path) -> None:
         "extra_refined_parent_count",
         "cells_before",
         "cells_after",
+        "true_dofs_before",
+        "true_dofs_after",
+        "dof_growth_ratio",
         "closure_factor",
         "new_cell_amplification",
         "marked_fraction",
@@ -224,6 +268,9 @@ def transition_rows(case: CaseSeries) -> list[dict[str, Any]]:
                 ),
                 "cells_before": observations.get("cells_before"),
                 "cells_after": observations.get("cells_after"),
+                "true_dofs_before": observations.get("true_dofs_before"),
+                "true_dofs_after": observations.get("true_dofs_after"),
+                "dof_growth_ratio": metric_value(transition, "dof_growth_ratio"),
                 "closure_factor": metric_value(transition, "closure_amplification"),
                 "new_cell_amplification": metric_value(
                     transition, "new_cell_amplification"
@@ -307,6 +354,7 @@ def render_figures(cases: Sequence[CaseSeries], output: Path) -> list[str]:
             "Adjacent capacitance change",
             1.0,
         ),
+        ("dof-growth-work", "dof_growth_ratio", "True DOFs after / before", 1.0),
     )
     with plt.rc_context(
         {
@@ -392,6 +440,19 @@ def _plot_series(
                 color="#ff6e6e",
                 label=f"{label}: linear solve unconverged",
                 s=55,
+            )
+    if ykey == "native_zz_norm":
+        unconverged = [
+            row for row in points if row["recovery_solve_state"] == "unconverged"
+        ]
+        if unconverged:
+            axis.scatter(
+                [row[xkey] for row in unconverged],
+                [row[ykey] for row in unconverged],
+                marker="x",
+                color="#ff6e6e",
+                s=55,
+                label=f"{label}: recovery unconverged",
             )
 
 
