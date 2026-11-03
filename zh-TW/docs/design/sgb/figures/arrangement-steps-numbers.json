@@ -1,0 +1,179 @@
+{
+ "bound_sqrt2_over_2": 0.7071,
+ "bounded_faces": 4,
+ "carriers": {
+  "c1": {
+   "from": [
+    1,
+    1
+   ],
+   "to": [
+    10,
+    4
+   ]
+  },
+  "c2": {
+   "from": [
+    10,
+    4
+   ],
+   "to": [
+    12,
+    9
+   ]
+  },
+  "c3": {
+   "from": [
+    12,
+    9
+   ],
+   "to": [
+    1,
+    1
+   ]
+  },
+  "c4": {
+   "from": [
+    2,
+    0
+   ],
+   "to": [
+    12,
+    8
+   ]
+  },
+  "c5": {
+   "from": [
+    6,
+    2
+   ],
+   "to": [
+    10,
+    5
+   ]
+  }
+ },
+ "exact_crossings": [
+  {
+   "carriers": [
+    "c1",
+    "c4"
+   ],
+   "x": 4.8571,
+   "y": 2.2857
+  },
+  {
+   "carriers": [
+    "c1",
+    "c5"
+   ],
+   "x": 7.6,
+   "y": 3.2
+  },
+  {
+   "carriers": [
+    "c2",
+    "c4"
+   ],
+   "x": 11.4118,
+   "y": 7.5294
+  }
+ ],
+ "face_areas_g2": [
+  9.0,
+  8.5,
+  1.0,
+  0.5
+ ],
+ "hot_pixels": {
+  "end_points": 7,
+  "round_1_crossings": [
+   [
+    5,
+    2
+   ],
+   [
+    8,
+    3
+   ],
+   [
+    11,
+    8
+   ]
+  ],
+  "total": 10
+ },
+ "max_deviation_edge": [
+  [
+   5,
+   2
+  ],
+  [
+   6,
+   2
+  ]
+ ],
+ "max_edge_deviation_g": 0.6325,
+ "noded_edges": 13,
+ "round_2_added_edges": [
+  [
+   [
+    5,
+    2
+   ],
+   [
+    6,
+    2
+   ]
+  ]
+ ],
+ "round_2_removed_edges": [
+  [
+   [
+    5,
+    2
+   ],
+   [
+    8,
+    3
+   ]
+  ]
+ ],
+ "rounds_total": 3,
+ "rounds_with_change": 2,
+ "shared_edges": [
+  {
+   "carriers": [
+    "c1",
+    "c5"
+   ],
+   "edge": [
+    [
+     6,
+     2
+    ],
+    [
+     8,
+     3
+    ]
+   ]
+  },
+  {
+   "carriers": [
+    "c2",
+    "c4"
+   ],
+   "edge": [
+    [
+     11,
+     8
+    ],
+    [
+     12,
+     8
+    ]
+   ]
+  }
+ ],
+ "vertices": 10
+}

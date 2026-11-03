@@ -1,0 +1,255 @@
+{
+ "checks_of_a_valid_build": [
+  {
+   "detail": "0 off-grid edges",
+   "name": "vertices_on_grid",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "shortest horizontal edge = 50000000 grid^2",
+   "name": "no_edge_shorter_than_g",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "shortest slab = 0.1 um",
+   "name": "no_vertical_edge_shorter_than_g",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "no crossing edge, no vertex inside an edge",
+   "name": "arrangements_planar",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "25 arc edges sampled",
+   "name": "arc_edges_do_not_cross",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "max deviation of a realised arc from its exact carrier = 0.0000 grid units",
+   "name": "arc_deviation_within_snap_bound",
+   "passed": true,
+   "warning": true
+  },
+  {
+   "detail": "0 inset families: bands partition the support region and area(R_m) is non-increasing in m",
+   "name": "band_area_monotone",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "raw = dissolved = enclosed area for every S_i and A_i",
+   "name": "area_conservation_per_arrangement",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "worst deviation = 0.000 of the snap bound",
+   "name": "prism_area_conserved_over_cells",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "4 shells: every edge used twice with opposite orientation",
+   "name": "shells_closed_and_oriented",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "chi = 2 - 2*genus for every shell",
+   "name": "shell_euler_characteristic",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 volumes without positive-volume shell",
+   "name": "every_volume_has_outer_shell",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "face-volume count histogram {1: 15, 2: 26}",
+   "name": "each_face_used_by_at_most_two_volumes",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 interior faces missing a side",
+   "name": "interior_faces_have_two_sides",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "10 groups; empty: []",
+   "name": "physical_groups_non_empty",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 entities in more than one group",
+   "name": "groups_partition_each_dimension",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 emitted faces without group",
+   "name": "every_emitted_face_in_one_group",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 emitted volumes without group",
+   "name": "every_emitted_volume_in_one_group",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "unknown members: []",
+   "name": "unions_reference_primary_groups",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 non-planar walls (emitted as filled surfaces)",
+   "name": "walls_planar",
+   "passed": true,
+   "warning": true
+  },
+  {
+   "detail": "0 dangling edges; 2 free edges of embedded faces",
+   "name": "every_edge_shared_by_two_faces",
+   "passed": true,
+   "warning": false
+  }
+ ],
+ "defects": [
+  {
+   "defect": "remove the top face from the vacuum shell",
+   "details": {
+    "shell_euler_characteristic": "vol:066a0154103816f2/0: chi=1",
+    "shells_closed_and_oriented": "vol:066a0154103816f2/0: edge e:eaabc374ec653f31 used 1 times; vol:066a0154103816f2/0: edge e:b535f26645c304a9 used 1 times; vol:066a0154103816f2/0: edge e:e69265850bbceb34 used 1 times; vol:066a015410"
+   },
+   "failing_checks": [
+    "shells_closed_and_oriented",
+    "shell_euler_characteristic"
+   ],
+   "meaning": "the shell is open"
+  },
+  {
+   "defect": "flip the orientation of one shell face",
+   "details": {
+    "shells_closed_and_oriented": "vol:066a0154103816f2/0: edge ve:0e8a3937d99d4b17 not used with opposite orientation; vol:066a0154103816f2/0: edge e:be8ef3f430e404da not used with opposite orientation; vol:066a0154103816f2/0: edge ve"
+   },
+   "failing_checks": [
+    "shells_closed_and_oriented"
+   ],
+   "meaning": "faces disagree about the inside"
+  },
+  {
+   "defect": "put one face into two physical groups",
+   "details": {
+    "groups_partition_each_dimension": "1 entities in more than one group"
+   },
+   "failing_checks": [
+    "groups_partition_each_dimension"
+   ],
+   "meaning": "a face is double-booked"
+  },
+  {
+   "defect": "empty a physical group",
+   "details": {
+    "every_emitted_face_in_one_group": "1 emitted faces without group",
+    "physical_groups_non_empty": "10 groups; empty: ['PORT::p1']"
+   },
+   "failing_checks": [
+    "physical_groups_non_empty",
+    "every_emitted_face_in_one_group"
+   ],
+   "meaning": "a group names nothing"
+  },
+  {
+   "defect": "drop a face from its physical group",
+   "details": {
+    "every_emitted_face_in_one_group": "1 emitted faces without group"
+   },
+   "failing_checks": [
+    "every_emitted_face_in_one_group"
+   ],
+   "meaning": "an emitted face has no group"
+  },
+  {
+   "defect": "name a group that does not exist in a union",
+   "details": {
+    "unions_reference_primary_groups": "unknown members: ['MA::pad_typo']"
+   },
+   "failing_checks": [
+    "unions_reference_primary_groups"
+   ],
+   "meaning": "a union has a typo"
+  },
+  {
+   "defect": "remove the volume on one side of an interface face",
+   "details": {
+    "interior_faces_have_two_sides": "1 interior faces missing a side"
+   },
+   "failing_checks": [
+    "interior_faces_have_two_sides"
+   ],
+   "meaning": "an interface face with one side"
+  },
+  {
+   "defect": "change the recorded area of a slab arrangement",
+   "details": {
+    "area_conservation_per_arrangement": "slab[0,1/10]: raw 180000000002/180000000000 dissolved 180000000000/180000000000"
+   },
+   "failing_checks": [
+    "area_conservation_per_arrangement"
+   ],
+   "meaning": "area lost or gained by an arrangement"
+  },
+  {
+   "defect": "remove one cell of the deepest inset band (banded model)",
+   "details": {
+    "band_area_monotone": "band_gap: bands cover 2056493018.8 but the region has 13577365045.9 grid^2"
+   },
+   "failing_checks": [
+    "band_area_monotone"
+   ],
+   "meaning": "bands no longer partition the support region"
+  }
+ ],
+ "early_errors": {
+  "ContactError (contact check, after the arrangements)": "different-Net contact between other (entities touching_net) and pad (entities pad) at (-50.0000, -20.0000) um on slab[0,1/10] (grid g = 0.001 um; a gap smaller than the grid closes when the sources snap)",
+  "OverlapError (labelling, S5)": "different-Net conductors overlap near (-42524.750, -29999.500) grid units: other_net, pad",
+  "RouteError (route check, before S2)": "Route A needs sheet conductors; finite conductors: ['ground', 'pad']",
+  "SgbError (refinement curve in a cell with no face, assembly)": "refinement curve r/0 at (-70.0000, -8.0000) um on level[1/10] lies in a cell that has no face (inside a volume): it cannot be embedded and is not dropped silently",
+  "ValidationError (same-Net pinch at a corner, finite metal)": "1 invariant(s) failed: shells_closed_and_oriented: vol:eacdf3a24cf31a84/0: edge ve:4f281b0de2fc05b8 used 4 times; vol:eacdf3a24cf31a84/0: edge ve:262e7ce44ad1b0c2 used 4 times"
+ },
+ "tampered_shell": {
+  "checks_failed": [
+   "shells_closed_and_oriented",
+   "shell_euler_characteristic"
+  ],
+  "checks_passed": 19,
+  "checks_total": 21,
+  "edges_used_once": 4,
+  "failing_details": {
+   "shell_euler_characteristic": "vol:066a0154103816f2/0: chi=1",
+   "shells_closed_and_oriented": "vol:066a0154103816f2/0: edge e:eaabc374ec653f31 used 1 times; vol:066a0154103816f2/0: edge e:b535f26645c304a9 used 1 times; vol:066a0154103816f2/0: edge e:e69265850bbceb34 used 1 times; vol:066a0154103816f2/0: edge e:5e14be9d701e70ba used 1 times"
+  },
+  "raised_message": "2 invariant(s) failed: shells_closed_and_oriented: vol:066a0154103816f2/0: edge e:eaabc374ec653f31 used 1 times; vol:066a0154103816f2/0: edge e:b535f26645c304a9 used 1 times; vol:066a0154103816f2/0: edge e:e69265850bbceb34 used 1 times; vol:066a0154103816f2/0: edge e:5e14be9d701e70ba used 1 times; shell_euler_characteristic: vol:066a0154103816f2/0: chi=1",
+  "removed_face": "f:82119b47f621a494",
+  "removed_face_group": "EXT::vacuum",
+  "shell_faces_after": 28,
+  "shell_faces_before": 29,
+  "warnings": [
+   "arc_deviation_within_snap_bound",
+   "walls_planar"
+  ]
+ }
+}

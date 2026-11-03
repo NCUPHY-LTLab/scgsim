@@ -1,0 +1,164 @@
+{
+ "airbridge_ground_shell": {
+  "by_role": {
+   "horizontal face (cell of a level arrangement)": 6,
+   "wall coalesced over more than one slab": 2,
+   "wall of one slab": 10,
+   "wall on the outer chip boundary": 6
+  },
+  "coalesced_wall_z_ranges": [
+   [
+    "1/5",
+    "33/10"
+   ],
+   [
+    "1/5",
+    "33/10"
+   ]
+  ],
+  "faces": 24,
+  "levels": [
+   "-100",
+   "0",
+   "1/5",
+   "3",
+   "33/10",
+   "100"
+  ],
+  "model_counts": {
+   "edges": 76,
+   "emitted_volumes": 2,
+   "faces": 37,
+   "groups": 7,
+   "hot_pixels": 88,
+   "level_cells": 16,
+   "level_edges": 58,
+   "levels": 6,
+   "prisms": 7,
+   "slab_cells": 10,
+   "slab_edges": 38,
+   "slabs": 5,
+   "vertices": 44,
+   "volumes": 3
+  },
+  "signed_volume_um3": 17140.0
+ },
+ "coalescing_counts": {
+  "airbridge_B": {
+   "faces_as_built": 37,
+   "faces_every_level_cuts": 47
+  },
+  "pad_in_ground_B": {
+   "faces_as_built": 41,
+   "faces_every_level_cuts": 61
+  },
+  "pad_in_ground_B_polygon_hole32": {
+   "faces_as_built": 68,
+   "faces_every_level_cuts": 115
+  }
+ },
+ "inner_void": {
+  "counts": {
+   "edges": 106,
+   "emitted_volumes": 2,
+   "faces": 47,
+   "groups": 11,
+   "hot_pixels": 2528,
+   "level_cells": 19,
+   "level_edges": 96,
+   "levels": 7,
+   "prisms": 6,
+   "slab_cells": 13,
+   "slab_edges": 64,
+   "slabs": 6,
+   "vertices": 78,
+   "volumes": 5
+  },
+  "scene": "pad_in_ground('B') + island (Net float, x 100..120, y 100..120, z 50..51 um)",
+  "shell_checks": [
+   "6 shells: every edge used twice with opposite orientation",
+   "chi = 2 - 2*genus for every shell"
+  ],
+  "validation_passed": true,
+  "volumes": {
+   "Ground": {
+    "emitted": false,
+    "shells": [
+     {
+      "faces": 11,
+      "role": "outer",
+      "signed_volume_um3": 14160.0
+     }
+    ]
+   },
+   "float": {
+    "emitted": false,
+    "shells": [
+     {
+      "faces": 6,
+      "role": "outer",
+      "signed_volume_um3": 400.0
+     }
+    ]
+   },
+   "pad": {
+    "emitted": false,
+    "shells": [
+     {
+      "faces": 17,
+      "role": "outer",
+      "signed_volume_um3": 1084.314604851038
+     }
+    ]
+   },
+   "substrate": {
+    "emitted": true,
+    "shells": [
+     {
+      "faces": 9,
+      "role": "outer",
+      "signed_volume_um3": 9000000.0
+     }
+    ]
+   },
+   "vacuum": {
+    "emitted": true,
+    "shells": [
+     {
+      "faces": 29,
+      "role": "outer",
+      "signed_volume_um3": 8984755.685395148
+     },
+     {
+      "faces": 6,
+      "role": "inner",
+      "signed_volume_um3": -400.0
+     }
+    ]
+   }
+  }
+ },
+ "wall_anatomy": {
+  "every_level_cuts_validates": true,
+  "model_edges": {
+   "as_built": 94,
+   "every_level_cuts": 132
+  },
+  "model_faces": {
+   "as_built": 41,
+   "every_level_cuts": 61
+  },
+  "model_vertices": {
+   "as_built": 70,
+   "every_level_cuts": 93
+  },
+  "walls_drawn_as_built": {
+   "faces": 4,
+   "vertical_edge_segments_in_loops": 10
+  },
+  "walls_drawn_without_coalescing": {
+   "faces": 6,
+   "vertical_edge_segments_in_loops": 12
+  }
+ }
+}

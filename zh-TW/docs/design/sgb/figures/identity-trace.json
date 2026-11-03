@@ -1,0 +1,1205 @@
+{
+ "case": "pad_in_ground_B_bands",
+ "route": "B",
+ "margins_um": [
+  0.1,
+  0.5,
+  2.0
+ ],
+ "sidecar_format": "sgbproto-sidecar-2",
+ "step1_palace_attribute": {
+  "attribute": 7,
+  "resolved_name": "MA::pad::band=2",
+  "source": "model.sidecar.json: physical_groups[*].physical_tag"
+ },
+ "step2_physical_group": {
+  "name": "MA::pad::band=2",
+  "dim": 2,
+  "faces": [
+   "f:2b89bc30d72746fc",
+   "f:5cba27a49e17b07e"
+  ],
+  "native_surface_tags": [
+   9,
+   14
+  ],
+  "union_membership": [
+   "PEC::pad"
+  ],
+  "surface_epr_row": "MA::pad::band=2"
+ },
+ "step3_atomic_faces": [
+  {
+   "face": "f:2b89bc30d72746fc",
+   "native_tag": 9,
+   "kind": "horizontal",
+   "plane": "level[1/5]",
+   "z_um": "1/5",
+   "label_bands": [
+    [
+     "band_pad_top",
+     2
+    ]
+   ],
+   "neg_volume": "vol:2348a742095b8345",
+   "pos_volume": "vol:066a0154103816f2",
+   "sources_lineage": [
+    "band_pad_top"
+   ],
+   "membership": {
+    "pad": 1.0,
+    "vacuum": 1.0
+   },
+   "loops": [
+    [
+     {
+      "edge": "e:1e8f787dcd3e5c64",
+      "carriers": [
+       "band_pad_top/ring1/edge1@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge1",
+        "support_curve": "pad/hole/q1",
+        "source": "pad/polygon0/ring1/edge0",
+        "centre_um": [
+         -25.0,
+         5.0
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:254824ec50e8cb9c",
+      "carriers": [
+       "band_pad_top/ring1/edge0@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge0",
+        "support_curve": "pad/hole/q0",
+        "source": "pad/polygon0/ring1/edge0",
+        "centre_um": [
+         -25.0,
+         5.0
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:3c5ca380446ae957",
+      "carriers": [
+       "band_pad_top/ring1/edge3@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge3",
+        "support_curve": "pad/hole/q3",
+        "source": "pad/polygon0/ring1/edge0",
+        "centre_um": [
+         -25.0,
+         5.0
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:96bcae8cc689d1cf",
+      "carriers": [
+       "band_pad_top/ring1/edge2@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge2",
+        "support_curve": "pad/hole/q2",
+        "source": "pad/polygon0/ring1/edge0",
+        "centre_um": [
+         -25.0,
+         5.0
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": -1
+     }
+    ],
+    [
+     {
+      "edge": "e:92d7413faf280b4e",
+      "carriers": [
+       "band_pad_top/ring1/edge1@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge1",
+        "support_curve": "pad/hole/q1",
+        "source": "pad/polygon0/ring1/edge0",
+        "centre_um": [
+         -25.0,
+         5.0
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:eec5281a8b893150",
+      "carriers": [
+       "band_pad_top/ring1/edge2@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge2",
+        "support_curve": "pad/hole/q2",
+        "source": "pad/polygon0/ring1/edge0",
+        "centre_um": [
+         -25.0,
+         5.0
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:fb48c31da5fd247b",
+      "carriers": [
+       "band_pad_top/ring1/edge3@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge3",
+        "support_curve": "pad/hole/q3",
+        "source": "pad/polygon0/ring1/edge0",
+        "centre_um": [
+         -25.0,
+         5.0
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:7e46f5c6e76a3708",
+      "carriers": [
+       "band_pad_top/ring1/edge0@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge0",
+        "support_curve": "pad/hole/q0",
+        "source": "pad/polygon0/ring1/edge0",
+        "centre_um": [
+         -25.0,
+         5.0
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": -1
+     }
+    ]
+   ]
+  },
+  {
+   "face": "f:5cba27a49e17b07e",
+   "native_tag": 14,
+   "kind": "horizontal",
+   "plane": "level[1/5]",
+   "z_um": "1/5",
+   "label_bands": [
+    [
+     "band_pad_top",
+     2
+    ]
+   ],
+   "neg_volume": "vol:2348a742095b8345",
+   "pos_volume": "vol:066a0154103816f2",
+   "sources_lineage": [
+    "band_pad_top"
+   ],
+   "membership": {
+    "pad": 1.0,
+    "vacuum": 1.0
+   },
+   "loops": [
+    [
+     {
+      "edge": "e:04cf0185fe2c42c7",
+      "carriers": [
+       "band_pad_top/ring0/edge8@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge8",
+        "support_curve": "straight edge",
+        "support_primitive": 8
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:3814641e4355b553",
+      "carriers": [
+       "band_pad_top/ring0/edge9@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge9",
+        "support_curve": "pad/corner",
+        "source": "pad/polygon0/ring0/edge8",
+        "centre_um": [
+         -45.0,
+         -25.0
+        ],
+        "radius_um": 5.0
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:825e75f9eb3f0ce7",
+      "carriers": [
+       "band_pad_top/ring0/edge0@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge0",
+        "support_curve": "straight edge",
+        "support_primitive": 0
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:87b2445ae2552a54",
+      "carriers": [
+       "band_pad_top/ring0/edge1@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge1",
+        "support_curve": "straight edge",
+        "support_primitive": 1
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:d3bee7b57c6bbae7",
+      "carriers": [
+       "band_pad_top/ring0/corner1@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/corner1",
+        "support_curve": "reflex-corner arc 1 of ring 0"
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:bd68fca3258b2d31",
+      "carriers": [
+       "band_pad_top/ring0/edge2@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge2",
+        "support_curve": "straight edge",
+        "support_primitive": 2
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:62381d4778c455a5",
+      "carriers": [
+       "band_pad_top/ring0/corner2@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/corner2",
+        "support_curve": "reflex-corner arc 2 of ring 0"
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:8b82fe7f18c0ef4c",
+      "carriers": [
+       "band_pad_top/ring0/edge3@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge3",
+        "support_curve": "straight edge",
+        "support_primitive": 3
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:301f1c1ea53681a2",
+      "carriers": [
+       "band_pad_top/ring0/edge4@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge4",
+        "support_curve": "straight edge",
+        "support_primitive": 4
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:2d714188633d9171",
+      "carriers": [
+       "band_pad_top/ring0/edge5@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge5",
+        "support_curve": "straight edge",
+        "support_primitive": 5
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:a568e83f91875225",
+      "carriers": [
+       "band_pad_top/ring0/edge6@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge6",
+        "support_curve": "straight edge",
+        "support_primitive": 6
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:09a05c7eaab4ce8d",
+      "carriers": [
+       "band_pad_top/ring0/edge7@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge7",
+        "support_curve": "straight edge",
+        "support_primitive": 7
+       }
+      ],
+      "orientation": -1
+     }
+    ],
+    [
+     {
+      "edge": "e:b8c6e249a5be5218",
+      "carriers": [
+       "band_pad_top/ring0/edge8@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge8",
+        "support_curve": "straight edge",
+        "support_primitive": 8
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:3323ce2537aa7e3f",
+      "carriers": [
+       "band_pad_top/ring0/edge7@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge7",
+        "support_curve": "straight edge",
+        "support_primitive": 7
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:4369142a59cbf243",
+      "carriers": [
+       "band_pad_top/ring0/edge6@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge6",
+        "support_curve": "straight edge",
+        "support_primitive": 6
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:ed38c92bee8fef43",
+      "carriers": [
+       "band_pad_top/ring0/edge5@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge5",
+        "support_curve": "straight edge",
+        "support_primitive": 5
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:f0a971a78a3d18e5",
+      "carriers": [
+       "band_pad_top/ring0/edge4@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge4",
+        "support_curve": "straight edge",
+        "support_primitive": 4
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:4f167d86fa535c2c",
+      "carriers": [
+       "band_pad_top/ring0/edge3@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge3",
+        "support_curve": "straight edge",
+        "support_primitive": 3
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:5990010d35de6fe0",
+      "carriers": [
+       "band_pad_top/ring0/corner2@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/corner2",
+        "support_curve": "reflex-corner arc 2 of ring 0"
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:edab52b9ceb39aef",
+      "carriers": [
+       "band_pad_top/ring0/edge2@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge2",
+        "support_curve": "straight edge",
+        "support_primitive": 2
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:255f5190cbe89bc7",
+      "carriers": [
+       "band_pad_top/ring0/corner1@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/corner1",
+        "support_curve": "reflex-corner arc 1 of ring 0"
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:0208b45eba9d2539",
+      "carriers": [
+       "band_pad_top/ring0/edge1@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge1",
+        "support_curve": "straight edge",
+        "support_primitive": 1
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:3aeb568dd3968ee2",
+      "carriers": [
+       "band_pad_top/ring0/edge0@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge0",
+        "support_curve": "straight edge",
+        "support_primitive": 0
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:5bd2ffbaa82ca94f",
+      "carriers": [
+       "band_pad_top/ring0/edge9@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge9",
+        "support_curve": "pad/corner",
+        "source": "pad/polygon0/ring0/edge8",
+        "centre_um": [
+         -45.0,
+         -25.0
+        ],
+        "radius_um": 5.0
+       }
+      ],
+      "orientation": -1
+     }
+    ]
+   ]
+  }
+ ],
+ "alt_group": {
+  "name": "MA::pad::band=0",
+  "face": "f:94ae88ec540593d6",
+  "sources_lineage": [
+   "band_pad_top",
+   "pad"
+  ],
+  "membership": {
+   "pad": 1.0,
+   "vacuum": 1.0
+  },
+  "loops": [
+   [
+    {
+     "edge": "e:24fafc5be41d0c5f",
+     "carriers": [
+      "pad/polygon0/ring0/edge8"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge8",
+       "carrier": "pad/polygon0/ring0/edge8"
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:a9ebc7d63feeb7fc",
+     "carriers": [
+      "pad/corner"
+     ],
+     "resolved": [
+      {
+       "kind": "source arc carrier",
+       "carrier": "pad/corner",
+       "source": "pad/polygon0/ring0/edge8",
+       "centre_um": [
+        -45.0,
+        -25.0
+       ],
+       "radius_um": 5.0
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:9fe9f97783925715",
+     "carriers": [
+      "pad/polygon0/ring0/edge0"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge0",
+       "carrier": "pad/polygon0/ring0/edge0"
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:1175c3fa46771909",
+     "carriers": [
+      "pad/polygon0/ring0/edge1"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge1",
+       "carrier": "pad/polygon0/ring0/edge1"
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:d2295761821b32fb",
+     "carriers": [
+      "pad/polygon0/ring0/edge2"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge2",
+       "carrier": "pad/polygon0/ring0/edge2"
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:4b445a0330cfdc20",
+     "carriers": [
+      "pad/polygon0/ring0/edge3"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge3",
+       "carrier": "pad/polygon0/ring0/edge3"
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:8193d2aaad74cf9d",
+     "carriers": [
+      "pad/polygon0/ring0/edge4"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge4",
+       "carrier": "pad/polygon0/ring0/edge4"
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:30382c6c92f02904",
+     "carriers": [
+      "pad/polygon0/ring0/edge5"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge5",
+       "carrier": "pad/polygon0/ring0/edge5"
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:d4e5e72ff6c9f438",
+     "carriers": [
+      "pad/polygon0/ring0/edge6"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge6",
+       "carrier": "pad/polygon0/ring0/edge6"
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:a1f993ff8bf53747",
+     "carriers": [
+      "pad/polygon0/ring0/edge7"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge7",
+       "carrier": "pad/polygon0/ring0/edge7"
+      }
+     ],
+     "orientation": -1
+    }
+   ],
+   [
+    {
+     "edge": "e:3c0142ddf76690db",
+     "carriers": [
+      "band_pad_top/ring0/edge8@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge8",
+       "support_curve": "straight edge",
+       "support_primitive": 8
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:df5f41dcc7889f10",
+     "carriers": [
+      "band_pad_top/ring0/edge7@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge7",
+       "support_curve": "straight edge",
+       "support_primitive": 7
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:1f2e0bad99c95844",
+     "carriers": [
+      "band_pad_top/ring0/edge6@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge6",
+       "support_curve": "straight edge",
+       "support_primitive": 6
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:fa9138b9dd483377",
+     "carriers": [
+      "band_pad_top/ring0/edge5@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge5",
+       "support_curve": "straight edge",
+       "support_primitive": 5
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:30c6e8acbf72b6ef",
+     "carriers": [
+      "band_pad_top/ring0/edge4@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge4",
+       "support_curve": "straight edge",
+       "support_primitive": 4
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:d7031cb4546ff7ba",
+     "carriers": [
+      "band_pad_top/ring0/edge3@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge3",
+       "support_curve": "straight edge",
+       "support_primitive": 3
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:2d8f465fcbed02d0",
+     "carriers": [
+      "band_pad_top/ring0/corner2@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/corner2",
+       "support_curve": "reflex-corner arc 2 of ring 0"
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:acfb0dae376b70de",
+     "carriers": [
+      "band_pad_top/ring0/edge2@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge2",
+       "support_curve": "straight edge",
+       "support_primitive": 2
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:0812b848b3afabd1",
+     "carriers": [
+      "band_pad_top/ring0/corner1@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/corner1",
+       "support_curve": "reflex-corner arc 1 of ring 0"
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:f877326975c95d1b",
+     "carriers": [
+      "band_pad_top/ring0/edge1@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge1",
+       "support_curve": "straight edge",
+       "support_primitive": 1
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:d5ea47ad6e902550",
+     "carriers": [
+      "band_pad_top/ring0/edge0@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge0",
+       "support_curve": "straight edge",
+       "support_primitive": 0
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:7e356d7ae3e6d5bd",
+     "carriers": [
+      "band_pad_top/ring0/edge9@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge9",
+       "support_curve": "pad/corner",
+       "source": "pad/polygon0/ring0/edge8",
+       "centre_um": [
+        -45.0,
+        -25.0
+       ],
+       "radius_um": 5.0
+      }
+     ],
+     "orientation": -1
+    }
+   ]
+  ]
+ },
+ "wall": {
+  "name": "MA::pad",
+  "face": "f:06c541b62e947309",
+  "z_range": [
+   "0",
+   "1/5"
+  ],
+  "sources_lineage": [
+   "pad"
+  ],
+  "membership": {
+   "pad": 1.0
+  },
+  "loops": [
+   [
+    {
+     "edge": "ve:2ceb878a40cbefd5",
+     "carriers": [
+      "pad"
+     ],
+     "resolved": [
+      {
+       "kind": "source entity (vertical edge)",
+       "entity": "pad"
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:d2295761821b32fb",
+     "carriers": [
+      "pad/polygon0/ring0/edge2"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge2",
+       "carrier": "pad/polygon0/ring0/edge2"
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "ve:86f934585e954169",
+     "carriers": [
+      "pad"
+     ],
+     "resolved": [
+      {
+       "kind": "source entity (vertical edge)",
+       "entity": "pad"
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:dd2efdd2aed00e65",
+     "carriers": [
+      "pad/polygon0/ring0/edge2"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge2",
+       "carrier": "pad/polygon0/ring0/edge2"
+      }
+     ],
+     "orientation": -1
+    }
+   ]
+  ]
+ },
+ "traced_edge": {
+  "edge": "e:3814641e4355b553",
+  "carrier": "band_pad_top/ring0/edge9@m500.0",
+  "distance_to_support_um_at_midpoint": 0.5,
+  "support_curve": "pad/corner",
+  "support_lineage": "pad/polygon0/ring0/edge8"
+ }
+}

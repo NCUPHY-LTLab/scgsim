@@ -1,0 +1,152 @@
+---
+title: "BREP 與 XAO 檔案格式"
+description: "逐段說明 SGB 的 direct writer 輸出的 BREP 與 XAO：section、reference 編號、record、orientation、pcurve 與 tolerance，供審查 writer 時對照。"
+lang: zh-TW
+scgsim-kind: "design"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/design/sgb/brep-format"
+---
+
+本頁讓你能打開 direct writer 輸出的 `model.brep` 或 `model.xao`，親手核對任何一筆 record。它是 [emission](emission.qmd) 的格式附錄：emission 說明為什麼寫檔、怎麼交給 Gmsh；本頁說明檔案裡寫了什麼。
+
+範例是 `pad_in_ground_B`（pad-in-ground，[Route B](routes.qmd)）。本頁所有摘錄都是 `experiments/sgb-redesign/prototype/outputs/e3_brep/pad_in_ground_B/` 內檔案的真實行，行號標在區塊標題上；`docs/design/sgb/_figures/emission_snippets_check.py` 會把每個區塊與檔案逐行比對。名詞在首次出現處定義，並彙整於[詞彙表](index.qmd#glossary)。
+
+## BREP 基本結構 {#brep-essentials}
+
+**BREP**（boundary representation）以邊界描述 solid。BREP 檔是純文字，分成固定的 section。writer（`sgbproto/brep_writer.py`）依下表順序輸出；數量是 `pad_in_ground_B` 的數字。
+
+| Section | 內容 | 數量 |
+|---|---|---:|
+| `Locations` | 套用在 shape 上的位移；一律為空，所有幾何都是全域座標 | 0 |
+| `Curve2ds` | pcurve：在 surface 自身 (u, v) 座標中的曲線，每組 edge／surface 一筆 | 180 |
+| `Curves` | 每條 edge 一筆 3-D curve（Line 或 Circle） | 90 |
+| `Polygon3D`、`PolygonOnTriangulations`、`Triangulations` | 儲存的 mesh；一律為空 | 0 |
+| `Surfaces` | Plane 與 Cylinder record，由多個 face 共用 | 33 |
+| `TShapes` | topology，由葉到根：`Ve`、`Ed`、`Wi`、`Fa`、`Sh`、`So`，最後是 `Co` | 234 |
+
+```{.text filename="model.brep, lines 1-5"}
+DBRep_DrawableShape
+
+CASCADE Topology V1, (c) Matra-Datavision
+Locations 0
+Curve2ds 180
+```
+
+### Reference 編號與 orientation {#reference-numbers-and-orientation}
+
+在 `TShapes` 中，reference 是 record 位置**從 section 結尾往回算**的數字，所以 compound 是 `+1`。符號依慣例：`+` 為 FORWARD，`-` 為 REVERSED。每個 reference 後面的 `0` 是 location index，這裡一律為 0。範例中的兩個 shell record、兩個 solid 與 compound 位於檔案結尾：
+
+```{.text filename="model.brep, lines 1899-1920"}
+Sh
+
+0101100
++42 0 +41 0 +40 0 +39 0 -38 0 -37 0 -36 0 +35 0 +34 0 -33 0 +32 0 -31 0 -30 0 -29 0 +28 0 +27 0 -26 0 -25 0 -24 0 +23 0 -22 0 +21 0 -20 0 +19 0 -18 0 +17 0 -16 0 +15 0 +14 0 *
+Sh
+
+0101100
++13 0 -12 0 -11 0 +36 0 +10 0 +9 0 +29 0 +8 0 -7 0 *
+So
+
+0100000
++5 0 *
+So
+
+0100000
++4 0 *
+Co
+
+1100000
++3 0 +2 0 +6 0 *
+
++1 0
+```
+
+compound 列出兩個 solid（`+3`、`+2`）與 free 的 port face（`+6`）。vacuum shell 含 `-36` 與 `-29`；substrate shell 含 `+36` 與 `+29`：這是兩個 interface face。七位數的 `0101100` 是 shape flag，複製自 Gmsh 4.15.2 輸出的檔案，因此已知可以載入；writer 不解讀它們。
+
+writer 套用的 orientation 規則：
+
+- **Shell 中的 face：** face 的 normal 指向 solid 外側時用 `+`，否則用 `-`。若 solid 有內部 void，void 的 shell 是同一個 solid 的第二筆 shell record，其 face 指向材料外側、也就是指向 void。用「真空中的浮動導體」做的測試確認此時 volume 為整個 box 減去 void。
+- **Plane：** horizontal face 位於所屬 level 的 Plane 上（normal 為 +z，每個 level 一個 Plane，由該 level 的所有 face 共用）。wall 有自己的 Plane，normal 由繞其 loop 的右手定則決定。face 的外側 wire 從 normal 的頂端看是逆時針，洞的 wire 是順時針。
+- **Cylinder：** Cylinder 的自然 normal 指離軸線。當規劃的 loop normal 指向軸線時，writer 會把 wire 反向，所有 shell 對該 face 改用相反的符號。範例中五面 cylinder wall 有三面這樣翻轉（[tag 表](emission.qmd#xao-groups-and-the-planned-id-to-tag-map)中標為「wire 已反向」）。
+- **Mass 檢查：** orientation 錯誤在載入後會表現為負的 volume。單元測試把所有 shell 反向，確認每個 volume 都變成負值。
+
+### 追蹤一條 edge {#following-one-edge-through-the-file}
+
+取代 pad 左下 chamfer 的那段 arc（edge 19，z = 0 處、半徑 5 µm 的四分之一圓）寫在兩個 surface 上，即 cylinder wall 與 z = 0 的 plane，所以它帶有一條 3-D curve 與兩條 pcurve。`Ed` record 以 index 指名它們：
+
+```{.text filename="model.brep, lines 899-907"}
+Ed
+ 1e-07 1 1 0
+1  19 0 0 1.5707963267949
+2  19 5 0 0 1.5707963267949
+2  82 7 0 0 1.5707963267949
+0
+
+0101000
+-216 0 +215 0 *
+```
+
+第一行是 tolerance 與三個 flag。`1  19 0 0 1.57…` 的意思是：3-D curve 19、location 0、參數範圍 0 到 π/2。`2  19 5 …` 的意思是：pcurve 19，位於 surface 5。`2  82 7 …` 的意思是：pcurve 82，位於 surface 7。最後一行列出 end vertex（reversed）與 start vertex（forward）；writer 和 Gmsh 一樣先列 end。被引用的 record：
+
+```{.text filename="model.brep, line 205"}
+2 -45 -25 0 0 0 1 -1 0 0 0 -1 0 5
+```
+
+```{.text filename="model.brep, line 284"}
+2 -45 -25 0 0 0 1 -1 1.22464679914735e-16 0 -1.22464679914735e-16 -1 0 5
+```
+
+```{.text filename="model.brep, line 286"}
+1 0 0 0 0 0 1 1 0 0 0 1 0
+```
+
+```{.text filename="model.brep, line 24"}
+1 1.22464679914735e-16 0 1 0
+```
+
+```{.text filename="model.brep, line 87"}
+2 -45 -25 -1 0 0 -1 5
+```
+
+依序是：Circle（center、normal +z、x 方向、y 方向、radius）、surface 5 的 Cylinder（origin、axis +z、x、y、radius 5）、surface 7 的 Plane（origin、normal +z、x、y）、一條沿 cylinder 角度 u 的直線 pcurve，以及一條在 plane 自身座標中的圓形 pcurve。
+
+| Record | type code 之後的欄位（`1` 為 line／plane，`2` 為 circle／cylinder） |
+|---|---|
+| Line（3-D） | 起點、單位方向；參數 = 長度 |
+| Circle（3-D） | center、normal（依行進方向為 +z 或 −z）、x 方向、y 方向、radius；參數 = 角度 |
+| Plane | origin、normal、x 方向、y 方向 |
+| Cylinder | origin、axis (+z)、x 方向、y 方向、radius |
+| Line（pcurve） | 起點 (u, v)、方向 (du, dv) |
+| Circle（pcurve） | center (u, v)、x 方向、y 方向、radius |
+
+### Pcurve {#pcurves}
+
+**Pcurve** 是以 surface 自身 (u, v) 座標表示的 edge。writer 對每一組 (edge, surface) 產生一筆：範例中有 86 條 edge 位於兩個 surface 上，兩條位於三個 surface 上（接觸 wall 的 port edge：兩個 wall face 加上 port face），兩條位於一個 surface 上（free 的 port edge），共 180 筆 pcurve。
+
+在 OpenCASCADE 7.8.1 與 Gmsh 4.15.2 上的量測結果：只有 plane 的模型沒有 pcurve 也能載入並產生 mesh，但含 cylinder wall 的範例在 merge 時會失敗。單元測試 `test_pcurves_are_not_needed_for_planes_but_are_for_cylinders` 記錄了這兩種結果，所以 writer 一律寫出 pcurve。另一個測試會解析寫出的檔案，檢查在每條 pcurve 上求值的 surface，在兩端與中點都等於 3-D curve（誤差 < 10^-9 µm）。
+
+### Tolerance {#tolerance}
+
+每個 vertex、edge 與 face 都帶有 tolerance 1e-7 µm，即 OpenCASCADE 自己的 `Precision::Confusion`。model grid 是 1 nm = 1e-3 µm，因此 tolerance 比模型能分辨的任何距離小 10^4 倍。writer 會在下列情況以錯誤停止：edge 短於十倍 tolerance、edge 的端點離開帶有它 pcurve 的 surface 超過 tolerance 的十分之一，或 arc 端點不在它的圓上（誤差界線與前者相同）。
+
+## XAO 的結構 {#xao-layout}
+
+**XAO** 是 XML container，內含 BREP 文字、sub-shape reference 與具名 group。Gmsh 以 `gmsh.open` 開啟，並把 group 重建為 physical group。檔案有四個部分：
+
+- `<shape format="BREP">`：上述 BREP 文字，放在 CDATA 區塊中；
+- `<topology>`：每個 vertex、edge、face 與 solid 的 `index`（從 0 起算，依 tag 順序）及 `reference`，即該 shape 在 `TopExp::MapShapes` pre-order 中的位置（compound = 1）；
+- `<groups>`：每個 group 的名稱、維度（`face` 或 `solid`）、physical `tag` 與成員的 `index`；
+- `<fields count="0"/>`：未使用。
+
+```{.text filename="model.xao, lines 2079-2086"}
+      <faces count="37">
+        <face index="0" name="" reference="4"/>
+        <face index="1" name="" reference="14"/>
+        <face index="2" name="" reference="24"/>
+        <face index="3" name="" reference="34"/>
+        <face index="4" name="" reference="48"/>
+        <face index="5" name="" reference="58"/>
+        <face index="6" name="" reference="68"/>
+```
+
+注意兩套編號不同：BREP `TShapes` 內的 reference 從 section 結尾往回算；XAO 的 `reference` 是 `TopExp::MapShapes` pre-order 的位置，從 compound = 1 起算。例如第一個 face 在 BREP 裡是 `42`，在 XAO 裡是 `reference="4"`、`index="0"`，在 Gmsh 裡是 tag (2, 1)。planned id 如何對應到這些編號，見 [emission](emission.qmd#xao-groups-and-the-planned-id-to-tag-map)。

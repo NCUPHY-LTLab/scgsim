@@ -1,0 +1,162 @@
+---
+title: "Label、required edge 與 dissolution"
+description: "每個 arrangement cell 如何取得 domain label、哪些 edge 會保留，以及 dissolution 如何留下最小的模型。"
+lang: zh-TW
+scgsim-kind: "design"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/design/sgb/labels-and-dissolution"
+---
+
+本頁說明 SGB 如何決定「arrangement 的每個 cell 是什麼」，以及「哪些 edge 可以留下」。讀完後，你會知道 slab cell 與 level cell 的 label 怎麼來、一條 edge 保留或移除的規則，以及為什麼 seam 除非有語意上的需要，否則絕不會留下。
+
+名詞在第一次出現時定義，並彙整於[詞彙表](index.qmd#glossary)。arrangement 本身的建立方式見[建立 arrangement](arrangement.qmd)；Z 方向的結構（level、slab、active set）見[2.5D 分層模型](layered-model.qmd)。Labelling 是 pipeline 的 S5 階段，在模型的 arrangement 完成 noding、cell 也已取出之後執行。
+
+本頁所有範例都是**計算結果**：由 `docs/design/sgb/_figures/labels_and_dissolution.py` 使用 `experiments/sgb-redesign/prototype` 的 prototype 產生。文中的數字除非另有說明，皆記錄在 `figures/labels-numbers.json`。
+
+## 執行範例的觀點
+
+執行範例是 *pad-in-ground* 晶片（見[總覽](index.qmd)）。在 Route B（有限厚度的金屬，見 [Routes](routes.qmd)）中，金屬厚 0.2 µm，port sheet 位於其中間平面，所以 Z level 為 $-100, 0, 0.1, 0.2, 100$ µm，模型有四個 slab。取第一個金屬 slab $(0, 0.1)$ µm 來看：有三個 prism 在其中 active，分別是 vacuum 方塊、ground plane（含 cutout）與 pad（含 hole）。slab arrangement $S_i$ 只沿這三個 footprint 的邊界曲線切割平面，沒有其他曲線。它有四個 **cell**，也就是 edge 之間的連通區域。
+
+![Route B 中 slab (0, 0.1) µm 的四個 cell，以及覆蓋各 cell 的 prism。同時被導體與 vacuum 方塊覆蓋的 cell，其 label 取導體。](figures/labels-slab-cells.svg){#fig-slab-cells fig-alt="晶片 cutout 區域的平面圖，標示四個 cell（ground、vacuum gap、pad、pad hole 內的 vacuum），旁邊的表列出各 cell 被哪些 prism 覆蓋，以及最後得到的 slab label。"}
+
+請看表格：cell 1 與 cell 3 各被兩個 prism 覆蓋（vacuum 方塊*和*一個導體），卻只得到一個 label。把這種重疊解析成單一答案，就是 **slab label** 的工作。
+
+## Slab label
+
+**Domain** 是佔據某個區域的東西：某個 Net 的導體、dielectric 或 vacuum（prototype 中為 `Domain(kind, material, net)`）。cell 的 **slab label** 就是在整個 slab 範圍內佔據該 cell 的 domain。它由 cell 內一個精確的內部點，與該 slab 中 active 的 prism 做精確的 point-in-footprint 測試來決定，過程不使用浮點數。
+
+解析規則有四種情況：
+
+::: {.askr-table-compact}
+| 覆蓋該 cell 的 prism | 結果 |
+|---|---|
+| 無 | cell 位於模型之外（label 為 `None`） |
+| 一個或多個導體，且屬於同一個 Net | 該導體的 domain（導體優先於 dielectric 與 vacuum） |
+| **不同** Net 的導體 | **錯誤**：build 中止（`OverlapError`） |
+| 沒有導體 | 取 `priority` 最高的 dielectric 或 vacuum；優先序相同但材料不同則為**錯誤** |
+:::
+
+下列兩種來源上的事實是*錯誤*而不是選擇，因為默默解決它們會掩蓋建模上的錯誤。對 pad 加上一個 Net 為 `other` 且與 pad 重疊的導體，build 會以下列訊息中止：
+
+```text
+different-Net conductors overlap near (-42524.750, -29999.500) grid units: other_net, pad
+```
+
+若再加入一個與 substrate 優先序相同的 dielectric，則得到：
+
+```text
+ambiguous equal-priority materials near (-50000.000, -30000.000) grid units: alumina, substrate
+```
+
+（兩則訊息皆由 script 產生；座標單位為 grid unit，此處即 nm。）把新的 dielectric 設為 `priority=1` 便能解決重疊，模型也通過驗證（volume 為 `Ground`、`alumina`、`pad`、`substrate`、`vacuum`）。兩個同 Net 的導體重疊則不是錯誤：它們的 label 相同，共用的邊界是 seam，會由 dissolution 移除（見後文）。
+
+重疊不是唯一的衝突。**在每一種 route 中，不同 Net 的接觸都是錯誤。** 兩個不同 Net 的導體只是*接觸*（在同一平面上共用 edge 或 vertex：兩個 Route A sheet、有限厚度的金屬、站在另一個 Net 金屬上的 post），會在 arrangement 建立後、由 arrangement 的 vertex 與 face 偵測到，並使 build 中止。只存在於 grid 上的接觸也是錯誤：粗的 grid 或 snap 把來源中的間隙封閉了。若第二個 Net 的矩形與 pad 共用左邊緣，會得到：
+
+```text
+different-Net contact between other (entities touching_net) and pad (entities pad) at
+(-50.0000, -20.0000) um on slab[0,1/10] (grid g = 0.001 um; a gap smaller than the grid
+closes when the sources snap)
+```
+
+訊息指出兩個 Net、各自到達該點的 Entity、位置與 plane。同 Net 的接觸則屬正常。
+
+::: {.callout-important title="保證：slab label 與 kernel 無關"}
+slab label 只是來源 prism 與明確 priority 規則的函式。CAD kernel 從不決定 material、Net 或 owner，不同 Net 的重疊或接觸也不可能傳到 kernel。
+:::
+
+## Level label 由 linking 取得
+
+**Level arrangement** $A_i$ 是 Z level $z_i$ 上的平面剖分。它的 cell 需要一個 **level label** `(below, above, sheet owner, bands)`：level 正下方的 domain、正上方的 domain、位於該 level 上零厚度 sheet 的 owner（導體 Net 或 port），以及以該 level 為目標的 family 的 inset band 索引。
+
+`below` 與 `above` *不是*用第二次 point test 求得。slab arrangement $S_{i-1}$ 與 $S_i$ 的每條 edge 也都是 $A_i$ 的 edge chain（slab edge 以帶標記的曲線進入 $A_i$），所以每個 level cell 都被**連結（link）**到下方恰好一個 slab cell、上方恰好一個 slab cell：level cell 會跨越所有不屬於這種 chain 的 edge 而被合併，合併出的每一組都與某條 chain 相鄰，該 chain 的左右兩側就指出 slab cell。slab label 便透過這個 link 讀取。因此 level label 不可能與它所夾的 slab label 不一致；若同一組的兩個 level cell 指向不同的 slab cell，build 就會中止。只有 sheet owner 需要做 footprint 測試，因為 sheet 不屬於任何 slab。
+
+![Route B 金屬層的三個 level arrangement（z = 0、0.1 與 0.2 µm）。斜線的 cell 兩側 domain 相同且沒有 sheet，所以那裡不會產生 horizontal face。](figures/labels-level-links.svg){#fig-level-links fig-alt="三張平面圖，各對應一個 level。z = 0 時四個 cell 都是 substrate 與金屬或 vacuum 之間的 face。z = 0.1 時只有紅色的 port sheet 是 face。z = 0.2 時 ground 與 pad 的 cell 是金屬與 vacuum 之間的 face。"}
+
+{{< askr-chart-view src="figures/labels-level-links.html" label="逐個 cell 檢視 level label" >}}
+
+@fig-level-links 的看點：
+
+- 在 $z = 0$，每個 cell 下方都是 substrate，所以四個 cell 都分隔兩種不同的 domain，四個都需要 **horizontal face**（substrate 的頂面，依上方的東西再切分）。
+- 在 $z = 0.1$，除了 port 以外，跨越該 level 沒有任何改變：金屬兩側都是金屬，gap 兩側都是 vacuum。只有帶 sheet owner（`port:p1`）的那個 cell 需要 face：五個 cell 中的一個。
+- 在 $z = 0.2$，ground 與 pad 的 cell 分隔金屬與 vacuum；gap 與 pad hole 兩側都是 vacuum。
+
+規則只有一行：level cell 需要 face，若且唯若 `below != above` 或有 sheet 位於其上（`LevelLabel.needs_face`）。依 prototype 計數，$z = 0$、$0.1$、$0.2$ 三個 level 需要 face 的 cell 分別為 4 之 4、5 之 1、4 之 2。
+
+## Required edge 與非 required edge
+
+noding 之後，每條 edge 左右各有一個 cell。若兩側 label 不同，或它屬於 edge policy 為 `required` 的 curve family（port footprint、inset band 邊界；見 [Cut family](cut-families.qmd)），則該 edge 為 **required**。其餘皆為 **seam**：它分隔兩個就模型而言是同一個東西的 cell。
+
+第二種 policy `refinement_only` 不在這個二分之內：這類 edge 不是 required，所以從不切分 cell，也不改變 label，但會被另外保存為包含它的 cell 的 *embedded curve*（見 [Cut family](cut-families.qmd#edge-policies)）。
+
+## Dissolution
+
+**Dissolution** 會丟棄每一條非 required 的 edge，把它分隔的兩個 cell 合併，接著移除那些**度數為 2 的 vertex**，只要它的兩條 edge 位於完全相同的 carrier 集合上（**carrier** 是 edge 被切出來的那條精確曲線：直線、圓或來源 spline；見[建立 arrangement](arrangement.qmd)）。它不會移動任何 vertex。
+
+要看到 seam，範例在執行範例中多加一個 prism：與 pad 頂部重疊的同 Net tab（`pad_tab`，40 × 25 µm）。noding 把 slab 切成六個 cell、504 條 edge。其中四條 edge 是 seam，也就是位於金屬內部的重疊 cell 的邊界；其餘 500 條分隔 label 不同的 cell。
+
+![執行範例的一個 slab 加上一個同 Net tab：依覆蓋的 prism 上色的 noded cell（A）、它們的 slab label 與以紅色標示的四條 seam edge（B），以及 dissolution 後的結果（C）。](figures/labels-dissolution.svg){#fig-dissolution fig-alt="帶有 tab 的 pad 之三張平面圖。A 圖以三種顏色表示 pad、tab 與它們的重疊，重疊區周圍有紅色 seam edge。B 圖三者都是同一種金屬顏色，seam 仍為紅色。C 圖只剩一個金屬 cell，輪廓為聯集，沒有 seam。"}
+
+{{< askr-image-view target="fig-dissolution" mode="inline" >}}
+
+{{< askr-chart-view src="figures/labels-dissolution.html" label="檢視 dissolution 的各個面板" >}}
+
+由左至右閱讀 @fig-dissolution：A 與 B 是同一個 arrangement 的兩種著色。A 中以*哪些 prism 覆蓋*區分 cell，所以重疊區自成一個 cell。B 中以 *label* 區分，重疊區、pad 與 tab 都讀作「pad」。四條紅色 edge 兩側 label 相同，所以不是 required。C 是剩下的部分：一個金屬 cell，輪廓為聯集。
+
+::: {.askr-table-compact .askr-table-numeric}
+| 步驟（slab $(0, 0.1)$ µm，pad 加 tab） | Cell | Edge |
+|---|---|---|
+| noded arrangement | 6 | 504 |
+| 其中 seam（label 相同，被 dissolve） | | 4 |
+| 其中 label 不同（暫時保留） | | 500 |
+| 依 carrier 集合相同移除度數為 2 的 vertex 之後 | 4 | 26 |
+:::
+
+最後一步消失的 474 條 edge 不是 seam，而是圓弧被 *noding* 成的 chord 片段（pad 的 hole 與圓角是圓弧；v1 以 polyline witness 對圓弧做 noding，見 open decision D3）。同一條圓弧 carrier 的連續片段之間若沒有其他東西落在該 carrier 上，就是位於相同 carrier 集合上的度數為 2 的 vertex，所以會合併回一條 arc edge。同一個步驟把未修改的執行範例在此 slab 的 496 條 noded edge 變成 22 條，並把 $z = 0.1$ 的 level arrangement 從 502 條變成 28 條。若度數為 2 的 vertex 的兩條 edge 有*不同*的 carrier 集合，則會保留：它是輪廓上真正的轉角（pad 的 chamfer 角、notch 角）。
+
+::: {.callout-important title="保證：沒有理由就不會留下 seam"}
+dissolution 之後，每條 edge 要麼是兩個不同 label 之間的邊界，要麼是 `required` curve family 所要求的邊界，要麼是單一 carrier 在兩個度數不為 2 的 vertex 之間的完整範圍。因此 cell 數與 edge 數是語意所允許的最小值，沒有任何 cell 會因為來源 prism 的繪製方式而被切開。
+:::
+
+dissolution 改變的是數量，不是面積。驗證器（[驗證](validation.qmd)）會檢查 arrangement 在 dissolution 前後所圍面積相同，也檢查每個 prism 的 footprint 面積在其各 cell 上於 snap 界限內守恆。
+
+### 邊界情形
+
+- **你想要的 seam。** seam 只在 `required` family 把它放在那裡時才會留下。inset band 邊界或 port footprint 就是這樣把 label 相同的 cell 切成數個 face。
+- **Tile seam。** 平行排程器會把 level 切成 tile（[平行化推導](parallelism.qmd)），但沒有任何 seam 幾何進入 arrangement；tile 邊界從不是 edge，也不是 cut family，所以沒有東西需要 dissolve。
+- **合併後的 cell 保有 lineage。** 合併後的 pad cell 仍可透過其 edge 的 carrier 追溯到兩個來源 prism（[Identity 與 lineage](identity.qmd)）。
+
+## Attribution policy
+
+**Attribution policy** 決定輸出中一個表面被區分得多細，也就是 solver 看得到哪些 label 差異。brief 把預設定為 `(interface kind, Net, material pair, family band)`：表面由其兩側是什麼、金屬的 Net，以及它所在的 inset band 來命名。每個 Entity 的細節是 *lineage*，不是 seam。
+
+在 prototype 中，這個 policy 是由 route 擁有的單一函式（`routes.surface_group`）。對 Route B 的執行範例，它產生下列 primary physical group（數量取自 `outputs/pad_in_ground_B/identity.json`）：
+
+::: {.askr-table-compact .askr-table-numeric}
+| Primary group | 意義 | Face 數 |
+|---|---|---|
+| `MA::pad` | pad 金屬對 vacuum | 16 |
+| `MA::Ground` | ground 金屬對 vacuum | 6 |
+| `MS::pad`、`MS::Ground` | 金屬對 substrate | 各 1 |
+| `SA::substrate\|vacuum` | substrate 對 vacuum（gap、pad hole） | 2 |
+| `PORT::p1` | lumped-port face | 1 |
+| `EXT::substrate`、`EXT::vacuum` | 模型外部邊界 | 各 5 |
+:::
+
+因此，合併到同一個 cell 的同 Net 的兩個 Entity 只會得到**一個 face 與一個 group**；兩個 Entity 的身分則以 lineage 保存，並以 **area-weighted membership** 記錄：對每個貢獻的來源 Entity，記錄該 Entity 的 footprint 所覆蓋的、輸出 face 面積的比例。比例是非互斥的（重疊處對每個覆蓋它的 Entity 都計入），總和可以大於 1。prototype 對每個 face 記錄它（`identity.json` 與 sidecar 中的 `membership`）。執行範例中 pad 的頂面（`MA::pad`）為 `{"pad": 1.0, "vacuum": 1.0}`：vacuum prism 也覆蓋它，所以比例總和為 2。wall 沒有 footprint，Entity 的比例是 wall 底部邊界長度中由該 Entity 的 edge 所承擔的比例（pad 在 port plane 的兩面 wall 為 `pad: 1.0`，上面那一面另有 `p1: 0.208`）。
+
+對上述 pad 加 tab 的例子，由 slab 的 noded cell 重新計算（figure script）得到：pad 的 footprint 覆蓋合併後 cell 的 90.0 %，tab 覆蓋 16.6 %（400 µm² 的重疊對兩者都計入）。而 prototype 對該 tab 模型 pad 頂面的 face 記錄只列出 `pad` 與 `vacuum`：level arrangement 是由已經 dissolve 過的 slab arrangement 建立的，所以完全被 dissolution 併掉的 footprint，在計算 membership 時看不到。這是這份記錄目前已知的限制。
+
+::: {.callout-note title="設計決策：Entity 是 lineage，不是量測"}
+合併後的 face 絕不會為了讓每個來源 Entity 各有自己的表面而被切開。若某個 solver 量必須依 Entity 歸屬，那是對 `required` family 的需求，並有它在 face 數量上的代價，而不是 labelling 的性質。
+:::
+
+## 小結
+
+- slab cell 的 label 是覆蓋它的 prism 所解析出的 domain；來源衝突（重疊或接觸）使 build 中止。
+- level cell 的 label 是透過 link 從上下的 slab cell 讀取；當上下不同或有 sheet 時它需要 face。
+- label 不同或 `required` family 要求時，edge 為 required；其餘全部 dissolve，接著移除位於同一 carrier 集合上的度數為 2 的 vertex。
+- 下一步：已 label 的最小 cell 如何成為 face、wall 與 volume，見[從 arrangement 到實體](assembly.qmd)。
+
+## 參考
+
+- Brief 第 2、4 與 14 節（label、required edge、dissolution、contact、membership）是本頁的設計依據；prototype 模組為 `experiments/sgb-redesign/prototype/sgbproto` 中的 `labels`、`dissolve`、`linking`、`layers`、`contacts` 與 `routes`。

@@ -1,0 +1,198 @@
+{
+ "identity": {
+  "1000": {
+   "all_validation_passed": true,
+   "configurations": 9,
+   "distinct_ids_digests": 1,
+   "ids_digest": "build:394277f44754d5a5",
+   "tiles_per_side": [
+    1,
+    4,
+    8
+   ],
+   "workers": [
+    1,
+    8,
+    16,
+    32
+   ]
+  },
+  "20000": {
+   "all_validation_passed": true,
+   "configurations": 9,
+   "distinct_ids_digests": 1,
+   "ids_digest": "build:a1305dc586c23466",
+   "tiles_per_side": [
+    1,
+    4,
+    8
+   ],
+   "workers": [
+    1,
+    8,
+    16,
+    32
+   ]
+  },
+  "5000": {
+   "all_validation_passed": true,
+   "configurations": 9,
+   "distinct_ids_digests": 1,
+   "ids_digest": "build:4550335d7ad39cd3",
+   "tiles_per_side": [
+    1,
+    4,
+    8
+   ],
+   "workers": [
+    1,
+    8,
+    16,
+    32
+   ]
+  }
+ },
+ "local_log_slope": {
+  "api_emit_s": [
+   1.15,
+   1.17
+  ],
+  "brep_write_s": [
+   1.15,
+   1.04
+  ],
+  "derive_s": [
+   1.17,
+   1.14
+  ],
+  "faces": [
+   1.0,
+   1.0
+  ],
+  "gmsh_load_s": [
+   1.21,
+   1.06
+  ],
+  "rss_mb": [
+   0.89,
+   0.98
+  ],
+  "rss_tiled_mb": [
+   0.8,
+   0.95
+  ]
+ },
+ "series": {
+  "api_emit_s": [
+   2.296,
+   14.57,
+   74.22
+  ],
+  "brep_write_s": [
+   0.439,
+   2.8,
+   11.758
+  ],
+  "brep_write_w16_s": [
+   0.289,
+   1.941,
+   8.661
+  ],
+  "derive_s": [
+   1.42,
+   9.341,
+   45.174
+  ],
+  "faces": [
+   12761,
+   63664,
+   255052
+  ],
+  "gmsh_load_s": [
+   1.0653691939660348,
+   7.466365414031316,
+   32.59144364000531
+  ],
+  "n": [
+   1000,
+   5000,
+   20000
+  ],
+  "native_entities": [
+   61494,
+   306867,
+   1229980
+  ],
+  "rss_mb": [
+   323.7,
+   1358.3,
+   5272.2
+  ],
+  "rss_tiled_mb": [
+   143.7,
+   520.5,
+   1929.2
+  ]
+ },
+ "sidecar": {
+  "1000": {
+   "with_lineage_MB": 4.6,
+   "with_lineage_s": 0.11,
+   "without_lineage_s": 0.02
+  },
+  "20000": {
+   "with_lineage_MB": 93.9,
+   "with_lineage_s": 4.14,
+   "without_lineage_s": 0.65
+  },
+  "5000": {
+   "with_lineage_MB": 23.2,
+   "with_lineage_s": 0.92,
+   "without_lineage_s": 0.13
+  }
+ },
+ "source": [
+  "outputs/scaling.json",
+  "outputs/e3_brep/timing.json"
+ ],
+ "speedups": {
+  "1000": {
+   "best_speedup": 1.08,
+   "tiles_per_side": 4,
+   "workers": 8
+  },
+  "20000": {
+   "best_speedup": 1.18,
+   "tiles_per_side": 4,
+   "workers": 8
+  },
+  "5000": {
+   "best_speedup": 1.22,
+   "tiles_per_side": 4,
+   "workers": 32
+  }
+ },
+ "stack_n20000": {
+  "Gmsh-API oracle": {
+   "derive_s": 44.4,
+   "load_s": 41.7,
+   "sidecar_s": 0.0,
+   "total_s": 161.7,
+   "write_s": 75.6
+  },
+  "direct BREP/XAO, 16 workers": {
+   "derive_s": 44.4,
+   "load_s": 37.4,
+   "sidecar_s": 4.1,
+   "total_s": 94.4,
+   "write_s": 8.4
+  },
+  "direct BREP/XAO, one process": {
+   "derive_s": 44.4,
+   "load_s": 37.4,
+   "sidecar_s": 4.1,
+   "total_s": 97.8,
+   "write_s": 11.8
+  }
+ }
+}

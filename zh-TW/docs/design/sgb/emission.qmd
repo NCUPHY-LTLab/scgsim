@@ -1,0 +1,367 @@
+---
+title: "輸出 CAD，並交給 Gmsh 與 AEDT"
+description: "SGB 如何把規劃好的 topology 寫成 BREP／XAO 檔案、Gmsh tag 如何對回 planned id、載入後做哪些檢查，以及 AEDT 還有哪些未決事項。"
+lang: zh-TW
+scgsim-kind: "design"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/design/sgb/emission"
+---
+
+本頁說明完成的 topology 如何離開 SGB：Gmsh 載入的檔案、把每個 Gmsh 元素對回 planned id 的編號、載入後執行的檢查，以及之後的 AEDT 階段。讀完後，你能說明為什麼 SGB 自己輸出檔案，而不是呼叫 Gmsh API；檔案內部的逐行格式另見 [BREP 與 XAO 檔案格式](brep-format.qmd)。
+
+執行範例是 pad-in-ground 模型，metal 具有有限厚度（[Route B](routes.qmd)）：下方是 substrate，上方是 vacuum，ground plane 有一個 cutout，pad 有 chamfer、notch 與圓孔，pad 與 ground 之間有一片 lumped-port sheet。名詞在首次出現處定義，並彙整於[詞彙表](index.qmd#glossary)。
+
+除非圖說標明「概念」，本頁所有內容都是**計算得出**的。輸入是 prototype 的 E3 輸出，位於 `experiments/sgb-redesign/prototype/outputs/e3_brep/`（`timing.json`、`sidecar_timing.json`；每個 case 的 `validation.json`、`model.sidecar.json`、`model.brep`、`model.xao`、`model.step`），由 `examples/brep_emit.py` 產生。`docs/design/sgb/_figures/emission.py` 把它們轉成下列表格與圖。
+
+## 發出 CAD 時的執行範例 {#the-running-example-at-the-point-of-emission}
+
+Emission 是最後一個 stage（[pipeline 參考](pipeline-reference.qmd)中的 S10）。它接收已完全決定的 topology，本身不做任何決定：不做 Boolean operation、不做 healing、不搜尋幾何。Route B 把 pad 與 ground 的內部排除在 mesh 之外，所以四個規劃的 volume 中只有兩個會被輸出：`substrate` 與 `vacuum`。
+
+| | vertex | edge | face | volume |
+|---|---:|---:|---:|---:|
+| 規劃的 topology | 70 | 94 | 41 | 4 |
+| 實際輸出 | 60 | 90 | 37 | 2 |
+
+未輸出的四個 face 是被排除的 ground metal 的外側 wall，它們不接觸任何已輸出的 volume。port sheet 輸出為一個不界定任何 volume 的 free face。@tbl-counts 列出檔案內容。
+
+::: {#tbl-counts .askr-table-compact .askr-table-numeric}
+{{< include figures/emission-counts-table.md >}}
+
+`pad_in_ground_B` 寫出的元素（`validation.json`，`plan_counts`）。
+:::
+
+## 建構順序，以及為什麼它讓模型 conformal {#construction-order-and-why-it-makes-the-model-conformal}
+
+**BREP**（boundary representation）以邊界描述 solid。它的元素構成一個階層：**vertex**（一個點）、**edge**（兩個 vertex 之間的曲線）、**wire**（edge 組成的封閉 loop）、**face**（由一個外側 wire 與任意數量的洞 wire 界定的曲面片）、**shell**（封閉的 face 集合）與 **solid**（一個或多個 shell）。**compound** 收集 solid 與任何 free face。
+
+```{mermaid}
+%%| label: fig-order
+%%| fig-cap: "概念圖。箭頭表示「被…使用」。檔案由上往下列出 record，因此每個 reference 都指向已經存在的 record。"
+%%{init: {"flowchart": {"rankSpacing": 22, "nodeSpacing": 20, "padding": 6}}}%%
+flowchart TB
+  V["vertex (0D)：一個點"] --> E["edge (1D)：兩個 vertex 之間的曲線"]
+  E --> W["wire：edge 組成的封閉 loop"]
+  W --> F["face (2D)：由 wire 界定的曲面片"]
+  F --> S["shell：封閉的 face 集合"]
+  S --> So["solid (3D)：一個或多個 shell"]
+  So --> C["compound：所有 solid 與 free face"]
+```
+
+SGB 對這個階層使用兩種順序，兩者對審查都很重要。
+
+1. **相依順序（由葉到根）**是檔案的順序：先是所有 vertex，接著是所有 edge，然後是 wire、face、shell、solid 與 compound。一筆 record 只能指名在它之前寫出的 record。
+2. **編號順序（由根到葉）**是深度優先走訪的順序：compound、solid、shell、face、wire、edge、vertex。走訪第一次遇到某個 vertex、edge 或 face 時，該元素取得同類的下一個編號。這些編號就是 Gmsh tag（見 [XAO 與 tag 對應](#xao-groups-and-the-planned-id-to-tag-map)）。
+
+每個共用的元素只寫一次，並以 index 引用。兩個 solid 相接處，它們的 shell 指名同一筆 face record，一次用 `+`、一次用 `-`。符號是該次使用的 orientation（FORWARD 或 REVERSED）：`+` 表示 face 自身的 normal 指向 solid 外側。@fig-shared 顯示範例中 substrate／vacuum 的 interface。
+
+![概念性剖面圖，標示 `pad_in_ground_B` 的真實 reference。face `SA::substrate|vacuum` 只存在一次。vacuum 的 shell 以反向使用它（`-36`），因為 face 的 normal（+z）指向 vacuum；substrate 的 shell 則以 `+36` 使用它。](figures/emission-shared-face.svg){#fig-shared fig-alt="上下堆疊的兩個方塊，vacuum 在上、substrate 在下，中間有一個橘色的 face，由兩個 solid 各使用一次。vacuum 的 shell record 以負號列出它，substrate 的 shell record 以正號列出它。"}
+
+::: {.callout-important}
+## 保證：以共用達成 conformal
+
+每個規劃的 vertex、edge 或 face 只有一筆 record。相接的兩個 solid 使用同一筆 face record，所以 Gmsh 看到的是一個帶有兩個相鄰 volume 的 face，並且只對它做一次 mesh。沒有任何 tolerance 決定兩個 face 是否重合。在範例中，`pad_in_ground_B` 有兩個 face 被兩個 shell 使用、34 個被一個 shell 使用，而粗略的 3-D mesh 有 0 個重複 node（見[載入後的檢查](#validation-after-loading)）。topology 本身在建構時就是 conformal（[assembly](assembly.qmd)）；emission 的責任是絕不把共用的元素寫兩次，以維持這個性質。
+:::
+
+## 為什麼 SGB 自己寫檔，而不是呼叫 Gmsh {#why-sgb-writes-the-file-instead-of-calling-gmsh}
+
+其中一種輸出方式，是把 plan 透過 Gmsh API 重播：每個 vertex 一次 `addPoint`，每條 edge 一次 `addLine` 或 `addCircleArc`，接著是 curve loop、surface、surface loop 與 volume，最後 `synchronize` 與 `write`。這條路徑得到相同的階層與相同的共用。SGB 保留它作為 test oracle：writer 的輸出會逐 group 與它比較。
+
+::: {.callout-note}
+## 設計決策 D8：直接序列化 BREP／XAO
+
+Lead 決定由 SGB 把規劃好的階層直接寫成 OpenCASCADE 的 `CASCADE Topology V1` 文字檔，需要 physical group 時再包成 XAO；這項決策正在接受 architecture review。Gmsh 只用來對寫出的模型做 mesh，以及作為 test oracle，絕不用來建構幾何。理由有三：量測到的成本、Gmsh API 無法控制的 solid sense，以及一個附帶的好處：planned id 到 native tag 的對應，在 Gmsh 執行之前就已知道。替代方案與未決事項見 [decisions](decisions.qmd)。
+:::
+
+Gmsh API 還有第二個弱點，是任何計時都看不出來的：它無法指定一個封閉 shell 的哪一側是內部。即使使用 `addSurfaceLoop(sewing=True)`，solid 的 sense 仍然無法控制（在隨機 N = 1,000 的 layout 上，vacuum 出現了內外相反的結果），而對約 60,000 個 face 的 shell 做 sewing 花了 180 s 與 28 GB（prototype phase 3，`DESIGN_BRIEF.md` 第 14 節；`emit.py`）。direct writer 則明確寫出每一個 orientation。
+
+E3 實驗在隨機的 Route B layout 上對兩條路徑計時（`random_layout(n, seed=1, route="B")`）。每個儲存格只跑一次；請讀比值，不要讀最後一位數字。
+
+::: {#tbl-api .askr-table-compact .askr-table-numeric}
+{{< include figures/emission-timing-api-table.md >}}
+
+Gmsh-API emitter（`timing.json`，`gmsh_api`），計時時不做 sewing，因為在這個規模下 sewing 的記憶體與時間都是二次方成長。「推導」是到 topology 為止的 pipeline，列出供比較規模。N = 20,000 時各 stage 加起來不等於合計：有 5.8 s 落在有計時的 stage 之外。
+:::
+
+::: {#tbl-direct .askr-table-compact .askr-table-numeric}
+{{< include figures/emission-timing-direct-table.md >}}
+
+Direct XAO writer（`timing.json`，`xao_w16` 與 `xao_w1`）。planning 是序列的，只有算繪使用 worker。加速倍數是 API 合計除以 direct 合計。
+:::
+
+載入 Gmsh 是另一項成本，對相同元素數量而言，不論哪條路徑，數量級都相同。
+
+::: {#tbl-load .askr-table-compact .askr-table-numeric}
+{{< include figures/emission-timing-load-table.md >}}
+
+檔案大小與載入時間（`timing.json`，`load`）。載入是在全新的 process 中執行 `open`／`merge` 加 `synchronize`，不含 Gmsh 啟動時間。「寫出加載入」使用 XAO 檔案與 16 個 worker 的寫出。
+:::
+
+![gmsh-API emitter 與 direct writer 的寫出加載入時間（堆疊各 stage，每個 N 一個 panel）。深色區段是載入 Gmsh 的時間。](figures/emission-timing.svg){#fig-timing fig-alt="三個 panel，分別是 1000、5000 與 20000 個 feature。每個 panel 有一根高的堆疊長條代表 gmsh API，一根較短的代表 direct writer。兩根長條的載入區段相近；direct writer 的寫出各 stage 短得多。"}
+
+{{< askr-chart-view src="figures/emission-timing.html" label="檢視計時圖表" >}}
+
+N = 20,000（584,962 條 edge、255,052 個 face）時，數字顯示：
+
+- **寫出**從 75.6 s 降到 16 個 worker 的 8.4 s（9.0 倍），以及 1 個 worker 的 11.8 s（6.4 倍）。API 路徑花 24.6 s 建立 OCC 物件、22.2 s 在 `synchronize`、8.5 s 在 groups 與 embedding，以及 14.6 s 寫出 XAO。
+- **寫出加載入**從 117.3 s 降到 45.8 s。
+- **載入是下限。**Gmsh 讀取並 synchronize 同樣的 389,972 個 vertex、584,958 條 edge 與 255,048 個 face，需要 32.6 s（不含 group 的 BREP）、37.4 s（direct XAO）或 41.7 s（API XAO）。BREP 與 XAO 之間的 4.8 s 差距來自 XAO 額外的內容，即 83 MB 的 reference 與 40,007 個 group；這項量測沒有把兩者分開。沒有任何 writer 能消除其餘的部分。
+- **Planning 主導 direct 寫出。**算繪可以平行化（1 個 worker 為 3.4 s，16 個為 1.1 s），但序列的 plan 佔了 8.4 s 中的 7.4 s。@tbl-workers 中 plan 各列的數值落在 7.4 s 到 8.5 s 之間，儘管程式與輸入相同；這很可能是各次執行之間的變異。
+- **Pcurve 沒有可量測的成本。**不含 pcurve 時 BREP 是 124 MB 而不是 181 MB，但寫出是 8.8 s 對 8.7 s，載入是 34.8 s 對 32.6 s。因為 cylinder 需要它們，所以仍然寫出。
+- **不需要 healing。**把 `Geometry.OCCAutoFix` 開啟或關閉來載入，分別是 37.3 s 與 37.4 s，元素數量相同，所以這些檔案並不依賴 Gmsh 修復。
+
+::: {#tbl-workers .askr-table-compact .askr-table-numeric}
+{{< include figures/emission-timing-workers-table.md >}}
+
+依 worker 數列出的 direct XAO writer（`timing.json`，`xao_w1`、`xao_w8`、`xao_w16`）。
+:::
+
+輸出不受 worker 數影響。文字以 chunk 為單位算繪，再依檔案順序串接。在 N = 5,000 時，XAO 對 1、8 與 16 個 worker 是 byte-identical 的（geometry 名稱需固定，因為 XAO 內嵌檔名 stem），而 `experiments/sgb-redesign/prototype/tests/test_brep_writer.py` 以刻意很小的 chunk 比較 1、2 與 4 個 worker。這讓序列的 emission stage 能保持 deterministic，而 pipeline 其餘部分可以[平行執行](parallelism.qmd)。
+
+## BREP 與 XAO 格式摘要 {#brep-essentials}
+
+BREP 檔是純文字，依固定的 section 排列：`Locations`、`Curve2ds`、`Curves`、`Surfaces`，以及 `TShapes`（先是 vertex、edge、wire、face、shell、solid，最後是 compound）。`TShapes` 內的 reference 是 record 位置從 section 結尾往回算的數字，所以 compound 是 `+1`；符號 `+`／`-` 表示 FORWARD／REVERSED。幾何只用四種 record：Line、Circle、Plane 與 Cylinder，並為每一組 (edge, surface) 寫入 pcurve（cylinder 必須有）。所有 shape 的 tolerance 是 1e-7 µm。XAO 則是把同一份 BREP 包起來，再加上 sub-shape reference 與 group 的 XML。逐行解讀、orientation 規則與一條 edge 的完整追蹤見 [BREP 與 XAO 檔案格式](brep-format.qmd)。
+
+## XAO 與 planned id 到 tag 的對應 {#xao-groups-and-the-planned-id-to-tag-map}
+
+writer 依編號順序走訪 compound，數出每個新的 vertex、edge 與 face，並記錄該計數。Gmsh 對同一維度的元素使用相同的發現順序編號，所以 **Gmsh tag 等於 index 加一**。因此 planned id 到 tag 的對應在寫檔時就已知道，建立它不需要比較任何幾何。同一個 face 有三個編號：在 `pad_in_ground_B` 中，substrate／vacuum 的 interface face 在 shell 中是 `+36`，在 XAO 中是 `reference` 68、index 6，在 Gmsh 中是 tag (2, 7)。
+
+::: {#tbl-tags .askr-table-compact .askr-table-numeric}
+{{< include figures/emission-tags-table.md >}}
+
+`pad_in_ground_B` 中部分 planned id 與它們的 native 編號（`model.sidecar.json`、`model.xao`；physical group 的 tag 依維度各自編號，不是元素的 tag）。
+:::
+
+這個對應是完整的：sidecar 的 `ids_by_tag` 依 tag 順序列出 189 個 planned id（60 個 vertex、90 條 edge、37 個 face、2 個 solid），而建構 script 會檢查重新 build 的結果與它完全相同。從這裡出發，Gmsh 或 Palace 的元素如何一路對回 source curve，見 [mapping chain](identity.qmd)。
+
+## Physical group 與 sidecar {#physical-groups-and-the-sidecar}
+
+Gmsh 的輸出會為 face 所屬的每個 physical group 重複其 element，solver 可能因此誤讀。所以 SGB 讓每個維度的 group 構成一個**分割**：每個輸出的 face 恰好屬於一個 primary group，每個 volume 屬於一個 volume group。範例的 37 個 face 分成八個 group，沒有重疊也沒有遺漏（script 會斷言這一點）：
+
+::: {#tbl-groups .askr-table-compact .askr-table-numeric}
+{{< include figures/emission-groups-table.md >}}
+
+`pad_in_ground_B` 的 primary group（`model.xao`，`<groups>`）。`MA`：metal–vacuum 側，`MS`：metal–substrate 側，`SA`：substrate–vacuum 表面，`EXT`：外側 box，`PORT`：lumped port，`VOL`：volume。
+:::
+
+![重新開啟的 `pad_in_ground_B.xao`，以 `MeshSizeMax` 40 µm 對表面做 mesh（1,593 個 triangle），並依 physical group 上色。左：整個模型，縱軸已拉伸。右：cutout 的俯視圖；橘色的 substrate 表面從 pad 的圓孔中露出，紅色的 port sheet 橫跨 pad 與 ground 之間的間隙。互動版本在滑鼠停留時顯示每個 face 的 Gmsh face tag 與 planned id。](figures/emission-groups-3d.svg){#fig-groups fig-alt="左圖是 300 乘 300 微米的 box，灰色 ground plane 上有一個 cutout。右圖是 cutout 的俯視圖：橘色的 substrate 表面、帶有圓孔與 notch 的藍色 pad，以及 pad 與 ground 之間一個小的紅色長方形。"}
+
+{{< askr-chart-view src="figures/emission-groups-3d.html" label="依 physical group 檢視模型" >}}
+
+XAO 無法攜帶 mesher 與 solver 設定所需的全部資訊，所以 writer 也會在它旁邊寫一個 JSON **sidecar**，即 `<stem>.sidecar.json`（格式 `sgbproto-sidecar-2`）。它只含 planned id 與 group 名稱：沒有座標，也沒有 native handle。
+
+| Sidecar key | 內容 |
+|---|---|
+| `ids_by_tag` | 每個維度的 planned id，依 native tag 順序排列：`tag = 1 + 位置` |
+| `physical_groups` | 每個 primary group：維度、physical tag、planned id、native tag |
+| `unions`、`surface_epr_rows` | primary group 名稱的清單；每個 Surface EPR row 讀取的 group |
+| `embedded_faces`、`embedded` | mesher 必須重新 embed 的 (face, host volume) 配對 |
+| `refinement_edges` | (edge, host face) 配對，附 `written_as_free_edge` |
+| `lineage` | edge 對應到 source carrier id，face 對應到 source entity id，以及依面積加權的 `membership` |
+| `counts`、`curved_wall_faces`、`route`、`grid_um`、`tolerance_um` | 實際寫出的內容 |
+
+一筆 group 條目把三套編號串在一起。範例中 substrate／vacuum 的 face：
+
+```{.json filename="model.sidecar.json, lines 940-951"}
+  "SA::substrate|vacuum": {
+   "dim": 2,
+   "ids": [
+    "f:3ad2b7992021cd19",
+    "f:ad0d5c5cf6575532"
+   ],
+   "native_tags": [
+    7,
+    14
+   ],
+   "physical_tag": 8
+  },
+```
+
+**Physical tag 不是 identity。**它們依排序後的 group 名稱編號，新增 group 時會位移，所以使用者應儲存 group 名稱，並從載入的模型讀取 tag。
+
+**Unions** 是 primary group 名稱的清單。「Net `pad` 的所有 PEC（perfect electric conductor）face」是 `MA::pad` 加 `MS::pad`，絕不是互相重疊的 Gmsh group：
+
+```{.json filename="model.sidecar.json, lines 978-987"}
+ "unions": {
+  "PEC::Ground": [
+   "MA::Ground",
+   "MS::Ground"
+  ],
+  "PEC::pad": [
+   "MA::pad",
+   "MS::pad"
+  ]
+ },
+```
+
+**Embedded face 與 curve** 是 free 的元素：不界定任何 volume 的 face（位於 vacuum 中間的 port sheet）與 refinement curve。BREP 可以把它們放在 compound 之下，範例就是這樣處理 port face（上述 `+6`）。但 BREP 無法表達該 face 位於 vacuum volume 之內，所以 sidecar 記錄這個配對，由 mesher 在載入後重新套用：
+
+```{.json filename="model.sidecar.json, lines 29-34"}
+ "embedded_faces": [
+  {
+   "face": "f:05995125ff81fce2",
+   "host_volume": "vol:066a0154103816f2"
+  }
+ ],
+```
+
+沒有 lineage 時 sidecar 很小，加上 lineage 後大小約為兩倍。它以固定順序寫出，所以對任何 worker 數都是 byte-identical（單元測試），而 `lineage=False` 會省略這些 pointer。
+
+::: {#tbl-sidecar .askr-table-compact .askr-table-numeric}
+{{< include figures/emission-sidecar-table.md >}}
+
+隨機 layout 上 sidecar 的建立與輸出 JSON 時間及大小（`sidecar_timing.json`）。@tbl-direct 與 @tbl-load 的寫出時間只包含幾何檔案。
+:::
+
+## 交給 Gmsh mesher {#handoff-to-the-gmsh-mesher}
+
+Gmsh 只用來對寫出的模型做 mesh，以及作為 test oracle，絕不建構幾何。mesher 是這兩個檔案的使用者：
+
+```{mermaid}
+%%| label: fig-handoff
+%%| fig-cap: "mesher 的概念性流程。步驟 1 到 5 由 prototype 的載入後檢查實際執行；步驟 6 是 solver 設定的設計。"
+%%{init: {"flowchart": {"rankSpacing": 22, "nodeSpacing": 20, "padding": 6}}}%%
+flowchart TB
+  A["1. 開啟 XAO：幾何與 primary physical group 連同名稱一起載入"] --> B["2. 檢查載入結果：數量、邊界、面積、volume、group"]
+  B --> C["3. 讀取 sidecar：由 ids_by_tag 得到 planned id 到 tag 的對應"]
+  C --> D["4. 重新套用 embed：(face, host volume) 與 (edge, host face)；由 band 與 refinement curve 建立 size field"]
+  D --> E["5. 產生 mesh"]
+  E --> F["6. Solver 設定（Palace）：依名稱從 sidecar 取得 group；union 展開成 primary 名稱"]
+```
+
+prototype 在 `verify_loaded` 設定 `mesh_size` 時執行步驟 1 到 5：對載入的模型套用 embed 與 size field，接著產生粗略的 3-D mesh，並檢查它是否 conformal。
+
+```python
+# 概念性程式碼：mesher 在 gmsh.open("model.xao") 之後的步驟 3 與 4。
+# 實際測試的版本是 sgbproto/brep_writer.py 中的 _mesh_loaded()。
+tags = {pid: (dim, i + 1) for dim, ids in sidecar["ids_by_tag"].items() for i, pid in enumerate(ids)}
+for pair in sidecar["embedded_faces"]:
+    gmsh.model.mesh.embed(2, [tags[pair["face"]][1]], 3, tags[pair["host_volume"]][1])
+for pair in sidecar["refinement_edges"]:
+    gmsh.model.mesh.embed(1, [tags[pair["edge"]][1]], 2, tags[pair["host_face"]][1])
+```
+
+## 載入後的檢查 {#validation-after-loading}
+
+SGB 分三層驗證，讓有問題的檔案在成本最低的地方被抓到。
+
+| 層 | 何時執行 | 檢查內容 |
+|---|---|---|
+| 1. 開發測試 | 在大量 fixture 與隨機 layout 上 | OpenCASCADE 自己的 `BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`，加上下列 Gmsh 載入檢查 |
+| 2. 每一次 production build | 寫出之前，以及 mesher 載入之後 | SGB 的[結構不變量](validation.qmd)（fail closed，無法停用）；然後是載入模型的數量、邊界、面積、volume 與 group |
+| 3. Strict mode（選用） | 安裝 OCP 時，對 production 輸出執行 | 對剛寫出的檔案執行第 1 層的 OCCT 檢查 |
+
+第 1 層與第 3 層使用 OCP，也就是 OpenCASCADE 的 Python binding（`cadquery-ocp` 7.8.1.1.post1，建立在 OCCT 7.8.1 之上，與這裡使用的 Gmsh 是同一個 OCCT 版本）。OCP 是開發用的 extra：使用者安裝（例如透過 OrcaPen SC PDK）不會安裝它。`write_brep(..., strict=True)` 與 `write_xao(..., strict=True)` 會把寫出的檔案讀回來，有任何發現就丟出錯誤；沒有 OCP 時，會在寫出任何東西之前先告知。`BOPAlgo_ArgumentAnalyzer` 開啟 self-interference、small-edge、face-rebuild、tangency、merge-vertex、merge-edge、continuity 與 curve-on-surface 等模式（`sgbproto/occt_check.py`）；merge 模式能找出重合但未共用的 vertex 與 edge，這是 conformity 的缺陷。該模組也會把 kernel 算出的 volume 與 face 面積與 plan 比較。
+
+OCCT 檢查在各 fixture 上的結果仍在產生中，本頁不引用任何結果。
+
+三個執行範例在載入的模型上做的第 2 層檢查：
+
+::: {#tbl-validation .askr-table-compact}
+{{< include figures/emission-validation-table.md >}}
+
+把寫出的 XAO 載入 Gmsh 後的檢查（`validation.json`，`verify_xao`；BREP 的結果相同，只是它不含 group）。
+:::
+
+每項檢查能抓到什麼：
+
+| 檢查 | 能抓到 |
+|---|---|
+| 每個維度的元素數量 | 元素被寫兩次或被遺漏 |
+| 以 `getBoundary` 檢查邊界 | face 被錯誤的 edge 界定，或 solid 被錯誤的 face 界定 |
+| 預測 tag 處的 vertex 位置 | 任何編號錯誤（其他所有檢查都依賴它） |
+| group 與 plan 相同 | `<groups>` 中錯誤的 `index` |
+| volume（帶正負號的 mass）對 plan 與封閉形式 | orientation 錯誤的 shell（mass 為負）或錯誤的 cylinder |
+| 每個 face 與每個 group 的面積 | 錯誤的 surface 或 wire |
+| 粗略 3-D mesh 的 conformity | solid 之間不吻合的 face；重複的 node |
+| sidecar 對 oracle 的 sidecar | 兩個 emitter 之間的差異 |
+
+pad 的 volume 與封閉形式一致到最後一位印出的數字（300 × 300 × 100 µm 的 substrate，以及 vacuum box 減去 metal，包含 5 µm 的圓角與 8 µm 的洞）。emission 之前執行的結構不變量，與上述檢查彼此獨立：前者顯示 plan 是封閉且有 orientation 的，後者顯示檔案所說的與 plan 相同。
+
+solid 的 **sense**（shell 的哪一側是內部）正是 mass 檢查要保護的性質。Gmsh API 無法指定它（見上文）；writer 則明確寫出每一個 orientation，單元測試也確認：把 solid 的 shell 反向，以及只把內部 shell 反向，都會讓 volume 如預期地改變。
+
+## Mesh size hint {#mesh-size-hints}
+
+SGB 提供幾何與 hint；mesh 演算法由 Gmsh 負責。hint 是關於 curve 的陳述，由 mesher 轉成 size field。來源有三種：
+
+- **已經存在的 edge。**inset band 的 edge 與 port footprint 的 edge 都是模型的 edge（見 [inset imprint](inset-imprint.qmd) 與 [cut families](cut-families.qmd)）。sidecar 的 `lineage.edges` 指名每條 edge 的 source carrier，例如 `pad_in_ground_B_bands` 中的 `band_pad_top/ring0/edge1@m2000.0`，所以 mesher 可以用該前綴選出某個 family 的 curve，不需要額外的幾何。
+- **Refinement-only curve。**採用 `refinement_only` policy 的 cut family 會把它的 curve 保留為 free edge，且不改變任何 label；落在沒有輸出 face 的 curve 是錯誤。writer 把它們放在 compound 之下，sidecar 在 `refinement_edges` 列出 `(edge, host face)`，mesher 以 `mesh.embed(1, curves, 2, face)` embed 它們，讓 mesh node 落在該 curve 上。
+- **大小數值。**這些數字（全域最大與最小、curve 附近的大小、恢復到全域大小的距離）屬於 solver 設定，不屬於幾何。
+
+prototype 的 size field 是一個由選定 curve 出發的 `Distance` field，餵給 `Threshold` field：靠近 curve 時給出 `refine_size`，並在 `DistMin` 與 `DistMax` 之間成長到全域最大值。band 測試使用 `refine_size` 1.0 µm，範圍 1–20 µm。band 測試中 `MeshSizeMin` 維持 0，因為 2 µm 的下限無法解析 0.1 µm 的 band；gmsh-API 路徑也以同樣方式失敗。其他範例的 mesh 使用 `MeshSizeMin` = 2 µm，因為 0.2 µm 的 metal 厚度否則會迫使到處都出現很小的 element。
+
+兩個 band case 與一條 refinement curve 在測試中都經過 direct writer。載入後，每個 band group 的 mesh 使得它的 triangle 都是兩側數量相同的 tetrahedron 的 face，且 centroid 落在 band 內：
+
+::: {#tbl-bands .askr-table-compact .askr-table-numeric}
+{{< include figures/emission-bands-table.md >}}
+
+經過 direct writer 的 inset band case（`validation.json`，`verify_xao`）。Route A 把 band group 命名為 `SHEET::<net>::band=k`；Route B 對 pad 的上表面（`MA`）與下表面（`MS`）各自產生 band。
+:::
+
+對 refinement curve，測試檢查：該 edge 在載入的檔案中是 free 的（沒有任何 face 擁有它）、它被切成多於一個 element，以及 sidecar 的該列 `written_as_free_edge` 為 true。
+
+## 交給 AEDT {#handing-the-solids-to-aedt}
+
+AEDT 是 Gmsh 之後的另一個交接對象。實驗 E4 在 AEDT 2024.2（non-graphical）、PyAEDT 1.3.0、OCP 7.8.1 與 gmsh 4.15.2 上測試了這條路徑，只做 geometry／modeler，沒有 solve；證據在 `experiments/sgb-redesign/e4_aedt_step/README.md` 與 `results.json`。Lead 依此決定了 D4（正在接受 architecture review）。下面只列事實與量測數字；「推論」會明確標示。
+
+```{mermaid}
+%%| label: fig-handoff-aedt
+%%| fig-cap: "AEDT 交接流程。E4 以 PyAEDT 驗證了步驟 2 到 6 的動作；把 aedt_name 寫進 sidecar（步驟 1）是決策的內容。每一步的事實見下文。"
+%%{init: {"flowchart": {"rankSpacing": 22, "nodeSpacing": 20, "padding": 6}}}%%
+flowchart TB
+  A["1. 讀取 sidecar：aedt_name、group 名稱、unions"] --> B["2. 寫出 XDE-assembly STEP：每個 solid 一個具名 component，band 已預先切好"]
+  B --> C["3. PyAEDT 匯入 STEP；斷言 object 集合等於預期的 aedt_name"]
+  C --> D["4. 以每個 solid 的 face 順序對應 tag 到 (object, face id)；以 face 數與面積／center 檢查把關"]
+  D --> E["5. 依 sidecar 名稱指派 material 與 Perfect E boundary"]
+  E --> F["6. 依 sidecar 的幾何以原生方式建立 port sheet 與 lumped port"]
+```
+
+### 決定的路徑
+
+1. **XDE assembly 的 STEP，每個 solid 一個具名 component。**名稱放在 PRODUCT 上才會保留。AEDT 匯入 `pad_in_ground_B` 得到 `VOL__substrate`（Solid，9 個 face，volume 8999999.9976 µm³，規劃值 9e6，相對誤差 −2.6e-10）與 `VOL__vacuum`（Solid，29 個 face，8984755.6840 對 8984755.6854，相對誤差 −1.6e-10）。若改寫成一般（flat）的獨立 shape，名稱會遺失，object 變成 `q1_flat_UM_Unnamed_1/2`，而且順序不等於檔案順序。
+2. **名稱先經過淨化。**AEDT 會移除 `[A-Za-z0-9_]` 以外的所有字元，並完全丟棄非 ASCII 的名稱：`VOL::vacuum` 變成 `VOLvacuum`，`MA::pad::band=2` 變成 `MApadband2`，`SA::substrate|vacuum` 變成 `vacuum`（`|` 之前的部分被丟掉），重複的名稱會被改成 `dup_1`、`dup`，且後綴的指派不依檔案順序。所以 SGB 把淨化且檢查過不衝突的 `aedt_name` 寫進 sidecar（`::` 編成 `__`，`=` 與 `|` 編成 `_`，例如 `VOL__vacuum`），並在匯入後斷言 object 集合等於預期，絕不依賴 AEDT 自動加後綴。
+3. **單位配方，以及它的陷阱。**配方是 `xstep.cascade.unit=MM` 搭配 `write.step.unit=UM`：數字不變，標示為 µm；設定前必須先呼叫 `STEPControl_Controller.Init_s()` 與 `STEPCAFControl_Controller.Init_s()`，否則 `Interface_Static.SetCVal_s` 對第一個檔案會無聲失敗。
+
+   ::: {.callout-warning}
+   ## 陷阱：OCCT 的 STEP 單位
+   `STEPCAFControl_Writer` 會依 `xstep.cascade.unit` 把數字換算成 mm，而 `write.step.unit` 只改**標示**。`cascade=UM` 加 `write=UM` 會把數字除以 1000 卻標成 µm：AEDT 看到的模型小了 1000 倍，0.1 µm 的 metal slab 塌陷，vacuum solid 變成 20 個 face 的 Sheet，面積為負或零。E3 自己的 `model.step`（以 mm 標示 µm 的數字）同樣無法匯入。另一個也驗證過的配方是 `cascade=UM`、`write=MM`（數字除以 1000，標示 mm）；兩個配方的 volume 都在 2e-10 以內一致。
+   :::
+
+4. **Band 與所有分割在 solid 中預先切好，所以不需要 AEDT Imprint。**這就是 SGB 的 imprint：`pad_in_ground_B_bands` 的 BREP 本身就有 vacuum 41 個 face、substrate 21 個 face。把 face 當成獨立的 STEP sheet 不是可行的載體：named sheet 只有在約 200 µm 以上才能保留（1000、300、200 µm 的正方形匯入為具名 `Sheet`，面積正確；100、50、30、20、10、5、1 µm 則以 `GrpcApiError ... Import` 失敗）；`pad_in_ground_B_bands` 的 21 個 band face 匯入後只有 1 個保留名稱，其餘 20 個是面積 0 的 Solid。
+5. **Face identity 來自每個 solid 內的 OCC face 順序。**在 4 個 case × 2 個 solid 上，OCC 的 face 順序等於 AEDT 的 face-id 順序。這是**觀察到的性質，不是文件保證**，所以每一次匯入都要把關，且 fail closed：檢查每個 object 的 face 數，以及每個 face 的面積與 center。E4 使用的容許值是面積相對誤差 2e-3、center 5e-3 µm：planar face 與 OCC 的差在 1e-6 以內；含 arc 的 face 最多差 2.5e-5（含 band 時 4.7e-5，另有一個 5 µm² 的 sliver 差 1.0e-3），含 arc 邊界的 face 的 center 差 ≤ 2.6e-3 µm。在 1e-3 的面積容許值下，`MA::pad::band=0`（tag 33，5 µm² 的 sliver）會失敗（1.007e-3）。AEDT 不經由 scripting 暴露 face 名稱：名稱存在專案的 Parasolid body 裡、也會出現在 AEDT 的匯出檔中，但 `GetFaceIDFromNameForFirstOperation` 回傳 −1，`FaceNameAndIDMap()` 為空。
+6. **Shared face 在 AEDT 中每個 solid 各有一份。**STEP 有 38 個 `ADVANCED_FACE` 對應 29 + 9 次 face 使用；AEDT 中兩個 solid 的 face-id 集合互不相交。以（面積，center）找到的重合配對：`pad_in_ground_B` 有 2 對（SA face），`_bands` 有 8 對。在 AEDT 內，conformity 是幾何上的，不是 topology 上的（這是 AEDT 的一般做法）。[推論：HFSS 會因為表面重合而得到 conformal mesh；E4 沒有做 mesh。]
+7. **Port 依 sidecar 以原生方式重建。**free face（lumped-port sheet）無法經由 STEP 傳遞：30 × 10 µm 的 `PORT::p1` 在與 solid 同一個 STEP 中被無聲丟棄。PyAEDT 依 sidecar 記錄的幾何以 `create_rectangle` 建立（面積 300，規劃值 300），再建立 `lumped_port`，得到 `Lumped Port`。
+8. **Material 與 boundary 依 sidecar 名稱指派。**2 個 solid 的名稱查找 0 次失敗；62 個 face（41 + 21）在逐一對照規劃面積與 center 之後，face 解析 0 次失敗。`VOL__vacuum` 指派為 `vacuum`、`VOL__substrate` 指派為 `silicon`，讀回與請求相同。由 sidecar 的 unions 建立 `Perfect E`：`PEC::Ground`（7 個 face id）與 `PEC::pad`（29 個 face id，每個 tag 解析到擁有它的 object），`boundary.props["Faces"]` 與請求相同。
+
+### Imprint 只作為後備
+
+AEDT 原生的 Imprint 可以運作，但不提供 identity。在 `pad_in_ground_B` 上以 21 個 band sheet 做 Imprint：vacuum 的 face 從 29 個變 41 個、substrate 從 9 個變 21 個，與 `_bands` 的 BREP 數量完全相同，volume 不變。但它只回傳 `True`，沒有任何 id 對照：新的 face 取得全新的 id，順序與 band／tag 順序無關；face 名稱在 Imprint 後全部消失（vacuum 29 → 0，substrate 7 → 0），沒有被觸及的 face 也一樣。只能以（centroid，面積）把 sheet 對回 face：21 個 sheet 全部對到預期的 face（28 個不同的 face），最接近被拒絕的配對仍在容許值外 2.7 倍；只用 centroid 會有歧義（同心的環共用 centroid）。而且作為 tool 的 sheet 在 µm 尺度下無法從 STEP 匯入，必須在 AEDT 內由已匯入 solid 的 face 建立。這是幾何比對，不是 identity，因此只在需要時作為後備。
+
+### 其他格式，以及這條路徑做不到的事
+
+- SAT／Parasolid：OCP 7.8.1 與 gmsh 4.15.2 都沒有提供。IGES 在以 mm 縮放時可匯入，但沒有名稱（object 名稱為 `DE1`、`DE575`）。
+- E4 沒有做任何 solve，也沒有對複製的 face 做 HFSS mesh。
+- face 順序等於 face-id 順序是這個 AEDT 版本與匯入路徑的觀察結果；每次匯入都由上述把關檢查，並由回歸測試（4 個 case 通過）固定。
+
+下表是 E3 的 BREP 轉 STEP 再讀回（使用 Gmsh 載入的路徑），顯示 shared face 在 STEP 中被複製：
+
+::: {#tbl-step .askr-table-compact .askr-table-numeric}
+{{< include figures/emission-step-table.md >}}
+
+BREP 轉 STEP 再讀回（`validation.json`，`step`）。「多出的 face 數」是重新載入後的 face 數減去寫出的 face 數。
+:::
+
+在每個 case 中，多出的 face 數都等於 shared interior face 的數量（5、2、1、23 與 8）。STEP 把每個 solid 的 shell 分開儲存，所以被兩個 solid 共用的 face 會寫兩次；重新載入後 vertex 與 edge 也變多，因為被複製的 face 的邊界也一起被複製。
+
+## 限制與風險 {#limits-and-risks}
+
+- **OpenCASCADE 與 Gmsh 版本。**shape flag 來自 Gmsh 4.15.2 的檔案，pcurve 的發現是在 OpenCASCADE 7.8.1 搭配 Gmsh 4.15.2 上量測的。其他版本可能以不同方式讀取相同的檔案。每一組支援的版本都需要 `tests/test_brep_writer.py` 的來回測試，以及第 1 層的 OCCT 檢查。
+- **OCCT 檢查的結果尚未提出。**`BRepCheck`／`BOPAlgo` 這一層已實作為開發與選用的 strict mode 檢查；各 fixture 上的結果仍待產生。在它們出現之前，有效性的證據是結構不變量與上述載入檢查。
+- **不支援的曲面會丟出 `SgbError`。**writer 處理 plane 與單一圓的 cylinder。它拒絕不是這種 cylinder 的非平面 face、帶洞的 curved wall、arc 位於不同圓上或繞滿整個 cylinder 的 curved wall、行進方向不同的上緣 arc、不是繞 +z 逆時針的 horizontal face，以及在同一個 wire 中出現兩次的 edge（seam 或 bridge edge）。新增一種 face 要在 `SURFACE_RECORDS` 加一個條目，新增 curve 要在 `CURVE_RECORDS` 加一個，新增 (curve, surface) 組合要在 `PCURVE_RECORDS` 加一個。編號、共用與 section 排列都不變。
+- **只在小型 case 上有測試涵蓋。**帶內部 void 的 solid（真空中一個 40 × 30 × 1 µm 的浮動導體：vacuum solid 有外側與內側兩個 shell，volume 是 box 減去 void，把內側 shell 反向則會改成加上 void）、refinement 的 free edge，以及兩個 inset band case。B-spline 的 surface 與 curve 尚未實作。
+- **量測。**每個計時儲存格是在隨機 layout 上跑一次，而 Gmsh 的載入時間是佔主導且無法控制的部分。gmsh-API 的計時不含 sewing（`orientation_attempts=0`）。
+
+## 參考資料 {#references}
+
+- Gmsh：[reference manual 與 API](https://gmsh.info/doc/texinfo/gmsh.html)，包含 `mesh.embed`、physical group 與 OpenCASCADE 選項。
+- OpenCASCADE：[BRep format 說明](https://dev.opencascade.org/doc/overview/html/specification__brep_format.html)，以及 `TopExp::MapShapes` 的文件。
+- XAO：[SALOME GEOM 文件中的格式說明](https://docs.salome-platform.org/latest/gui/GEOM/xao_format_page.html)。

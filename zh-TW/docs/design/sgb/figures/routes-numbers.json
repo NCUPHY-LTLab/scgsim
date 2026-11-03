@@ -1,0 +1,208 @@
+{
+ "cells": {
+  "panels": [
+   {
+    "cells": 5,
+    "edges": 28,
+    "groups": {
+     "PEC::Ground": 1,
+     "PEC::pad": 1,
+     "PORT::p1": 1,
+     "SA::substrate|vacuum": 2
+    },
+    "panel": "Route A, level z = 0 (sheet plane)",
+    "plane": "level[0]"
+   },
+   {
+    "cells": 5,
+    "edges": 28,
+    "groups": {
+     "None": 4,
+     "PORT::p1": 1
+    },
+    "panel": "Route B, level z = 0.1 (port plane): the same five cells",
+    "plane": "level[1/10]"
+   },
+   {
+    "cells": 4,
+    "edges": 22,
+    "groups": {
+     "MS::Ground": 1,
+     "MS::pad": 1,
+     "SA::substrate|vacuum": 2
+    },
+    "panel": "Route B, level z = 0 (metal bottom)",
+    "plane": "level[0]"
+   },
+   {
+    "cells": 4,
+    "edges": 22,
+    "groups": {
+     "MA::Ground": 1,
+     "MA::pad": 1,
+     "None": 2
+    },
+    "panel": "Route B, level z = 0.2 (metal top)",
+    "plane": "level[1/5]"
+   }
+  ],
+  "route_A_level0_and_route_B_level_0.1_have_identical_edges": true,
+  "shared_edge_count": 28
+ },
+ "route_A": {
+  "counts": {
+   "edges": 44,
+   "emitted_volumes": 2,
+   "faces": 15,
+   "groups": 8,
+   "hot_pixels": 516,
+   "level_cells": 7,
+   "level_edges": 36,
+   "levels": 3,
+   "prisms": 5,
+   "slab_cells": 2,
+   "slab_edges": 8,
+   "slabs": 2,
+   "vertices": 39,
+   "volumes": 2
+  },
+  "edges_by_kind": {
+   "horizontal": 36,
+   "vertical": 8
+  },
+  "emission_native_entities_by_dim": {
+   "0": 34,
+   "1": 44,
+   "2": 15,
+   "3": 2
+  },
+  "faces_by_kind": {
+   "horizontal": 7,
+   "wall": 8
+  },
+  "level_cells_total": 7,
+  "mesh_conformal": true,
+  "mesh_nodes": 655,
+  "primary_groups_faces": {
+   "EXT::substrate": 5,
+   "EXT::vacuum": 5,
+   "PEC::Ground": 1,
+   "PEC::pad": 1,
+   "PORT::p1": 1,
+   "SA::substrate|vacuum": 2
+  },
+  "primary_groups_volumes": {
+   "VOL::substrate": 1,
+   "VOL::vacuum": 1
+  },
+  "unions": {
+   "PEC::Ground": [
+    "PEC::Ground"
+   ],
+   "PEC::pad": [
+    "PEC::pad"
+   ]
+  },
+  "validation_checks_passed": {
+   "checks": 21,
+   "passed": true
+  },
+  "volumes": {
+   "substrate": {
+    "embedded_faces": 0,
+    "emitted": true,
+    "shells": 1
+   },
+   "vacuum": {
+    "embedded_faces": 0,
+    "emitted": true,
+    "shells": 1
+   }
+  }
+ },
+ "route_B": {
+  "counts": {
+   "edges": 94,
+   "emitted_volumes": 2,
+   "faces": 41,
+   "groups": 10,
+   "hot_pixels": 2500,
+   "level_cells": 15,
+   "level_edges": 80,
+   "levels": 5,
+   "prisms": 5,
+   "slab_cells": 10,
+   "slab_edges": 52,
+   "slabs": 4,
+   "vertices": 70,
+   "volumes": 4
+  },
+  "edges_by_kind": {
+   "horizontal": 60,
+   "vertical": 34
+  },
+  "emission_native_entities_by_dim": {
+   "0": 60,
+   "1": 90,
+   "2": 37,
+   "3": 2
+  },
+  "faces_by_kind": {
+   "horizontal": 9,
+   "wall": 32
+  },
+  "level_cells_total": 15,
+  "mesh_conformal": true,
+  "mesh_nodes": 639,
+  "primary_groups_faces": {
+   "EXT::substrate": 5,
+   "EXT::vacuum": 5,
+   "MA::Ground": 6,
+   "MA::pad": 16,
+   "MS::Ground": 1,
+   "MS::pad": 1,
+   "PORT::p1": 1,
+   "SA::substrate|vacuum": 2
+  },
+  "primary_groups_volumes": {
+   "VOL::substrate": 1,
+   "VOL::vacuum": 1
+  },
+  "unions": {
+   "PEC::Ground": [
+    "MA::Ground",
+    "MS::Ground"
+   ],
+   "PEC::pad": [
+    "MA::pad",
+    "MS::pad"
+   ]
+  },
+  "validation_checks_passed": {
+   "checks": 21,
+   "passed": true
+  },
+  "volumes": {
+   "Ground": {
+    "embedded_faces": 0,
+    "emitted": false,
+    "shells": 1
+   },
+   "pad": {
+    "embedded_faces": 0,
+    "emitted": false,
+    "shells": 1
+   },
+   "substrate": {
+    "embedded_faces": 0,
+    "emitted": true,
+    "shells": 1
+   },
+   "vacuum": {
+    "embedded_faces": 1,
+    "emitted": true,
+    "shells": 1
+   }
+  }
+ }
+}

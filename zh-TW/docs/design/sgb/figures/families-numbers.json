@@ -1,0 +1,192 @@
+{
+ "ablation": {
+  "all_families": {
+   "face_groups": 13,
+   "faces_in_SA_groups": 10,
+   "faces_in_pad_sheet_band_groups": 7,
+   "level_cells": 25,
+   "level_edges": 168,
+   "level_hot_pixels": 2941,
+   "level_noded_edges": 2971,
+   "refinement_pieces": 16,
+   "topology": {
+    "edges": 200,
+    "faces": 35,
+    "vertices": 224
+   },
+   "validation_passed": true
+  },
+  "plus_bands": {
+   "face_groups": 13,
+   "faces_in_SA_groups": 8,
+   "faces_in_pad_sheet_band_groups": 7,
+   "level_cells": 23,
+   "level_edges": 160,
+   "level_hot_pixels": 2918,
+   "level_noded_edges": 2932,
+   "refinement_pieces": 0,
+   "topology": {
+    "edges": 176,
+    "faces": 33,
+    "vertices": 201
+   },
+   "validation_passed": true
+  },
+  "plus_bands_and_refine": {
+   "face_groups": 13,
+   "faces_in_SA_groups": 8,
+   "faces_in_pad_sheet_band_groups": 7,
+   "level_cells": 23,
+   "level_edges": 160,
+   "level_hot_pixels": 2934,
+   "level_noded_edges": 2961,
+   "refinement_pieces": 15,
+   "topology": {
+    "edges": 191,
+    "faces": 33,
+    "vertices": 217
+   },
+   "validation_passed": true
+  },
+  "plus_bands_and_window": {
+   "face_groups": 13,
+   "faces_in_SA_groups": 10,
+   "faces_in_pad_sheet_band_groups": 7,
+   "level_cells": 25,
+   "level_edges": 168,
+   "level_hot_pixels": 2924,
+   "level_noded_edges": 2940,
+   "refinement_pieces": 0,
+   "topology": {
+    "edges": 184,
+    "faces": 35,
+    "vertices": 207
+   },
+   "validation_passed": true
+  },
+  "port_and_physical_boundaries_only": {
+   "face_groups": 6,
+   "faces_in_SA_groups": 2,
+   "faces_in_pad_sheet_band_groups": 0,
+   "level_cells": 5,
+   "level_edges": 28,
+   "level_hot_pixels": 500,
+   "level_noded_edges": 502,
+   "refinement_pieces": 0,
+   "topology": {
+    "edges": 44,
+    "faces": 15,
+    "vertices": 39
+   },
+   "validation_passed": true
+  }
+ },
+ "band_areas_um2": {
+  "band_gap:band=0": {
+   "bands_only": 90.07655599007106,
+   "with_window_and_refine": 90.07655599007106
+  },
+  "band_gap:band=1": {
+   "bands_only": 360.0247937865997,
+   "with_window_and_refine": 360.0247937865997
+  },
+  "band_gap:band=2": {
+   "bands_only": 1346.3916690271815,
+   "with_window_and_refine": 1346.3916690271815
+  },
+  "band_gap:band=3": {
+   "bands_only": 11780.87202711121,
+   "with_window_and_refine": 11780.87202711121
+  },
+  "band_pad_top:band=0": {
+   "bands_only": 39.10689831731099,
+   "with_window_and_refine": 39.10689831731099
+  },
+  "band_pad_top:band=1": {
+   "bands_only": 156.2232134326414,
+   "with_window_and_refine": 156.2232134326414
+  },
+  "band_pad_top:band=2": {
+   "bands_only": 583.2395717008187,
+   "with_window_and_refine": 583.2395717008187
+  },
+  "band_pad_top:band=3": {
+   "bands_only": 4643.003340804418,
+   "with_window_and_refine": 4643.003340804418
+  }
+ },
+ "dissolve_policy": {
+  "error": "ValueError",
+  "message": "t: unknown edge policy 'dissolve'"
+ },
+ "families_of_scene": [
+  {
+   "arcs": 21,
+   "carriers": 27,
+   "edge_policy": "required",
+   "family_id": "band_pad_top",
+   "has_support_region": true,
+   "role": "inset_band",
+   "target_levels": [
+    "0"
+   ]
+  },
+  {
+   "arcs": 21,
+   "carriers": 39,
+   "edge_policy": "required",
+   "family_id": "band_gap",
+   "has_support_region": true,
+   "role": "inset_band",
+   "target_levels": [
+    "0"
+   ]
+  },
+  {
+   "arcs": 0,
+   "carriers": 4,
+   "edge_policy": "required",
+   "family_id": "window",
+   "has_support_region": false,
+   "role": "partition",
+   "target_levels": [
+    "0"
+   ]
+  },
+  {
+   "arcs": 0,
+   "carriers": 1,
+   "edge_policy": "refinement_only",
+   "family_id": "refine",
+   "has_support_region": false,
+   "role": "refinement",
+   "target_levels": [
+    "0"
+   ]
+  }
+ ],
+ "family_record_fields": [
+  "family_id",
+  "role",
+  "carriers",
+  "target_levels",
+  "edge_policy",
+  "arcs",
+  "support"
+ ],
+ "identity_digest_equal_when_family_order_reversed": true,
+ "level_edges_by_family": {
+  "band_gap": 74,
+  "band_pad_top": 48,
+  "physical boundary": 24,
+  "port": 16,
+  "window": 6
+ },
+ "level_refinement_pieces": 16,
+ "max_band_area_difference_um2": 0.0,
+ "refinement_in_faceless_cell": {
+  "error": "SgbError",
+  "message": "refinement curve r/0 at (-70.0000, -8.0000) um on level[1/10] lies in a cell that has no face (inside a volume): it cannot be embedded and is not dropped silently"
+ },
+ "scene": "pad_in_ground('A', bands (0.1, 0.5, 2.0) um) + window + refine"
+}

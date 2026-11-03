@@ -1,0 +1,121 @@
+---
+title: "Route A 與 Route B：作為 labelling policy"
+description: "片狀金屬（Route A）與排除的有限厚度金屬（Route B）如何只改變 cell 的意義與輸出內容，而不改變 topology 的推導方式。"
+lang: zh-TW
+scgsim-kind: "design"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/design/sgb/routes"
+---
+
+本頁說明 **Route A**（導體為零厚度的 sheet）與 **Route B**（導體為有限厚度的 prism，其 volume 不進入求解）是同一套推導之上的兩種 *labelling policy*。讀完後，你會知道 route 改變什麼、不能改變什麼、為什麼在兩種 route 中每個 face 都恰好得到一個 physical group，以及 Route B 的 lumped port 如何傳到 mesher。
+
+基本構件在前面幾頁：[cell 與其 label](labels-and-dissolution.qmd) 以及 [face、wall 與 volume](assembly.qmd)。名詞在第一次出現時定義，並彙整於[詞彙表](index.qmd#glossary)。
+
+所有範例皆為**計算結果**：由 `docs/design/sgb/_figures/routes.py` 以 prototype 的 `build(pad_in_ground("A"))` 與 `build(pad_in_ground("B"))` 產生；除非另有說明，數字取自 `figures/routes-numbers.json` 與 prototype 的 `outputs/pad_in_ground_{A,B}/`。
+
+## 執行範例的觀點
+
+兩種 route 描述的是同一顆晶片。在 Route A 中，ground 與 pad 是 $z = 0$ 的 sheet，lumped port 也是 $z = 0$ 的 sheet。在 Route B 中，金屬厚 0.2 µm（$z = 0$ 到 $0.2$），port sheet 位於其中間平面 $z = 0.1$，Ground 與 pad 的導體 volume 不屬於輸出模型，只有它們的邊界屬於。
+
+看各 route 的 sheet 平面：Route A 的 $z = 0$ 與 Route B 的 $z = 0.1$（port 所在處）。它們的 level arrangement 有**完全相同的 edge 幾何**（28 條 edge、5 個 cell；prototype 逐一比對）。不同的是 cell 的*意義*。
+
+![金屬層各 level 的 cell，依其 face 的 primary physical group 上色。上排：Route A（sheet 平面）與 Route B（port 平面）中的同樣五個 cell。下排：Route B 在金屬底部與頂部。](figures/routes-cells.svg){#fig-cells fig-alt="晶片 cutout 的四張平面圖。左上（Route A，z = 0）：ground、pad、兩個 gap cell 與一個 port 矩形，各自是有自己顏色的 face。右上（Route B，z = 0.1）：相同的輪廓，除了紅色 port 矩形之外全部畫上斜線，表示沒有 face。左下（Route B，z = 0）：ground 與 pad 為 metal-substrate face，gap cell 為 substrate-vacuum face。右下（Route B，z = 0.2）：ground 與 pad 為 metal-vacuum face，gap 畫上斜線。"}
+
+{{< askr-chart-view src="figures/routes-cells.html" label="檢視 cell 與其 group" >}}
+
+@fig-cells 的看點：
+
+- **左上對右上。** 同樣的五個 cell。在 Route A 中，每個金屬 cell 都是一個 face（`PEC::Ground`、`PEC::pad`），下方 substrate、上方 vacuum；gap 與 pad 的 hole 是 `SA::substrate|vacuum`；port 是一個 face。在 Route B 中，同樣的 cell 在 port 平面兩側都是金屬，所以那裡除了 port 本身之外不會輸出 face。
+- **下排。** 在 Route B 中，金屬的表面位於兩個外側 level：$z = 0$ 的 `MS::*`（金屬對 substrate）與 $z = 0.2$ 的 `MA::*`（金屬對 vacuum）。Route A 則是一個 sheet 兼任兩者。
+- **Gap cell** 在兩種 route 中於 $z = 0$ 都是 `SA::substrate|vacuum`。
+
+![兩個模型的 exploded volume，依 primary group 上色。](figures/routes-3d.svg){#fig-3d fig-alt="並排的兩張三維 exploded 視圖。Route A 中，兩個扁平的 shell（下方 substrate、上方 vacuum）共用一個灰色 sheet face。Route B 中，shell 被金屬層的 wall 隔開：vacuum 側有藍色 wall 與頂面，substrate 側有紫色 face。"}
+
+{{< askr-chart-view src="figures/routes-3d.html" label="檢視 exploded volume" >}}
+
+## Route 決定什麼
+
+Route 是*早期輸入*。它只作用於兩個地方，其他地方都不涉及。
+
+::: {.askr-table-compact}
+| | Route A | Route B |
+|---|---|---|
+| 導體 prism（S1） | 只接受零厚度 sheet；有限厚度導體會被拒絕（`RouteError`） | 有限厚度 prism（sheet 也接受） |
+| 導體 volume（S7） | 不存在 | 存在，但從輸出模型中**排除** |
+| level 上的導體 cell | 一個 face（`PEC::<net>`），位於上下兩個 volume 之間 | 相鄰 dielectric volume 的 face：`MA::<net>`（vacuum 側）、`MS::<net>`（substrate 側） |
+| Lumped port | 位於其平面上的 sheet，是兩個 volume 之間的 face | 位於 volume 內部的 sheet：*embedded* face |
+| 推導 S4–S6、驗證 S9 | 同一份程式 | 同一份程式 |
+:::
+
+在 prototype 中，這個 policy 是兩個旗標與一個命名函式（`RoutePolicy(exclude_conductor_volumes, allow_finite_conductors)` 與 `surface_group`）。arrangement、labelling、dissolution、assembly 與驗證都不看 route。
+
+::: {.callout-important title="設計決策：route 是輸入，不是後處理"}
+route 改變存在哪些 prism（S1）以及輸出哪些 volume（S7）。它從不事後改寫 arrangement 或 topology。要建什麼幾何，在建構之前就已決定。
+:::
+
+### 並排比較
+
+::: {.askr-table-compact .askr-table-numeric}
+| 量（來源：`routes-numbers.json`） | Route A（`pad_in_ground_A`） | Route B（`pad_in_ground_B`） |
+|---|---|---|
+| Prism | 5 | 5 |
+| Slab / level | 2 / 3 | 4 / 5 |
+| Level cell（dissolution 後） | 7 | 15 |
+| Vertex | 39 | 70 |
+| Edge（horizontal + vertical） | 44（36 + 8） | 94（60 + 34） |
+| Face（horizontal + wall） | 15（7 + 8） | 41（9 + 32） |
+| Volume（輸出的） | 2（2） | 4（2） |
+| Primary physical group：face / volume | 6 / 2 | 8 / 2 |
+| Gmsh emitter 輸出的 face | 15 | 37 |
+| 通過的驗證 check | 21 之 21 | 21 之 21 |
+| Mesh conformity（粗 mesh，`outputs/*/stage_summary.json`） | conformal，0 個重複節點 | conformal，0 個重複節點 |
+:::
+
+Route B 多出來的 face 是 wall 與第二組金屬表面：32 面 wall 對 8 面（只有晶片的八個側面）。沒有輸出的那四個 face 屬於被排除的 Ground volume 的外側（貫穿金屬層的晶片邊界），沒有任何輸出的 volume 以它們為邊界。
+
+## Physical group 劃分每個維度
+
+每個輸出的表面與 volume 都屬於**恰好一個 primary physical group**。Route A 的 group 是 `PEC::Ground`、`PEC::pad`、`PORT::p1`、`SA::substrate|vacuum`、`EXT::substrate`、`EXT::vacuum`、`VOL::substrate`、`VOL::vacuum`。Route B 以 `MA::pad`、`MS::pad`、`MA::Ground`、`MS::Ground` 取代 Route A 的兩個 `PEC` group。
+
+solver 常想要的是 *union*，例如「Net `pad` 的所有 PEC face」。它在 sidecar 中是 primary group 的清單，絕不是第二個重疊的 Gmsh group，因為 MSH 輸出會為每個包含某元素的 group 各複製一次該元素，solver 可能把這些複本讀成兩個表面。執行範例的 sidecar 為 Route B 記錄：
+
+```json
+"unions": { "PEC::Ground": ["MA::Ground", "MS::Ground"],
+            "PEC::pad":    ["MA::pad",    "MS::pad"] }
+```
+
+（取自 `outputs/pad_in_ground_B/model.sidecar.json`），Route A 則是只有一個成員的清單，例如 `"PEC::pad": ["PEC::pad"]`。同一份 solver 設定兩者都能讀：union 永遠是 primary group 名稱的清單，驗證器會檢查每個成員都存在（`unions_reference_primary_groups`），也檢查沒有任何 entity 位於兩個 group（`groups_partition_each_dimension`）。physical tag 不是 identity：tag 依 group 名稱排序，新增 group 時會位移，所以使用者應儲存 group 名稱。
+
+::: {.callout-important title="保證：一個 face，一個 group"}
+沒有任何輸出的 face 或 volume 位於兩個 physical group，也沒有任何一個不在任何 group 中。union 只是 sidecar 與 solver 設定中的簿記。
+:::
+
+## Route B 的 port 是 embedded face {#the-route-b-port-is-an-embedded-face}
+
+lumped-port footprint 是位於金屬層中間 $z = 0.1$ 的 sheet。pad 的 wall 與 ground cutout 的 wall 之間是 vacuum，所以 port 矩形位於 vacuum volume *內部*：它上下方的 volume 是同一個。兩側為同一個 volume 的 face 不圍出任何 volume；它是 **embedded** 於 host：
+
+- 這個 face 列在 volume 上作為 embedded face，不屬於該 volume 的 shell（執行範例中有一個這樣的 face，`PORT::p1`）；
+- 它在 pad 與 ground wall 上的兩條 edge 與 wall 片段共用（這就是這兩面 wall 在 $z = 0.1$ 被切開的原因，見[從 arrangement 到實體](assembly.qmd#coalescing)）；其他兩條 edge 是自由 edge，驗證器把它們計為自由 edge（範例中為 2 條）；
+- XAO 檔案無法攜帶「face embedded 於 volume」這種資訊，所以 sidecar 記錄這組配對，由 mesher 重新套用。sidecar 中是 `"embedded_faces": { "<volume id>": ["<face id>"] }` 加上說明，emitter 對每一組呼叫 Gmsh 的 embedding（`gmsh.model.mesh.embed(2, [face], 3, volume)`）。
+
+在 Route A 中，同一個 port 是 substrate 與 vacuum 之間一般的 face，不需要 embedding。`mesh.embed` 正適用於這種情形與 dangling refinement curve；其他可以使用它的地方見 [Cut family](cut-families.qmd#embed-or-edge)。
+
+## 邊界情形
+
+- **Route A 拒絕有限厚度導體。** 以 Route A 建構 `pad_in_ground("B")` 會以 `RouteError` 中止；route 在任何推導之前先檢查 prism。
+- **帶有 Surface-EPR band 的 Route A。** sheet face 同時是 metal-vacuum 與 metal-substrate 表面。有 inset band 時，它以 face 命名：`SHEET::<net>::band=k`（例如 `SHEET::pad::band=2`）；sidecar 的 `surface_epr_rows` 把 Surface EPR 表中的 MA 與 MS 兩列都對應到同一個 group，sheet 的 substrate 側在 mesh 中無法分開（[Inset imprint](inset-imprint.qmd)）。
+- **Route B 的 band。** 同一個 band family 對金屬的頂面（`MA::pad::band=k`）與底面（`MS::pad::band=k`）各產生一次；band 版本的執行範例（`pad_in_ground_B_bands`）有 59 個 face、250 條 edge、21 個 group（289 個 vertex）。
+- **不同 Net 的導體接觸**在兩種 route 中都是錯誤，包括共用 edge 或 vertex 的兩個 Route A sheet，以及因 snap 而產生的接觸；`ContactError` 指出兩個 Entity 與位置（見 [label 頁](labels-and-dissolution.qmd)）。
+- **Route C**（模型中保留導體 volume）是 open decision D1：v1 只支援 Route A 與 B；若某個使用者需要，它可以作為第三個 `RoutePolicy` 回來，而不是第三條 pipeline（[Decisions](decisions.qmd)）。
+
+## 小結
+
+- route 決定存在哪些 prism 以及輸出哪些 volume；同樣的 arrangement、labelling、assembly 與驗證同時服務兩者。
+- 同樣的 sheet 平面 cell，在 A 中意為「PEC face」，在 B 中意為「金屬內部」。
+- 每個輸出的 face 與 volume 有一個 primary group；union 是 sidecar 中的清單。
+- Route B 的 port 是 embedded face；sidecar 把 embedding 帶給 mesher。
+- 下一步：route 之外的分割，例如 port、band 與 refinement curve，見 [Cut family](cut-families.qmd)。
+
+## 參考
+
+- Brief 第 7 節（group、embedded face）、第 8 節（S7）與第 14 節（naming、contact）。prototype 模組：`routes`、`assembly`、`emit`。

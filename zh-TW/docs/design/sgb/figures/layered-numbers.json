@@ -1,0 +1,208 @@
+{
+ "airbridge_counts": {
+  "edges": 76,
+  "emitted_volumes": 2,
+  "faces": 37,
+  "groups": 7,
+  "hot_pixels": 88,
+  "level_cells": 16,
+  "level_edges": 58,
+  "levels": 6,
+  "prisms": 7,
+  "slab_cells": 10,
+  "slab_edges": 38,
+  "slabs": 5,
+  "vertices": 44,
+  "volumes": 3
+ },
+ "counts_pad_in_ground_B": {
+  "edges": 94,
+  "emitted_volumes": 2,
+  "faces": 41,
+  "groups": 10,
+  "hot_pixels": 2500,
+  "level_cells": 15,
+  "level_edges": 80,
+  "levels": 5,
+  "prisms": 5,
+  "slab_cells": 10,
+  "slab_edges": 52,
+  "slabs": 4,
+  "vertices": 70,
+  "volumes": 4
+ },
+ "exploded": {
+  "levels": [
+   -100.0,
+   0.0,
+   0.2,
+   3.0,
+   3.3,
+   100.0
+  ],
+  "metal_prisms": 5,
+  "slab_pieces": 5
+ },
+ "layers": {
+  "A_1": {
+   "cells": 4,
+   "edges": 22,
+   "labels": [
+    "substrate | Ground",
+    "substrate | pad",
+    "substrate | vacuum"
+   ]
+  },
+  "A_2": {
+   "cells": 5,
+   "edges": 28,
+   "labels": [
+    "Ground | Ground",
+    "pad | pad",
+    "sheet: p1",
+    "vacuum | vacuum"
+   ]
+  },
+  "S_1": {
+   "cells": 4,
+   "edges": 22,
+   "labels": [
+    "Ground",
+    "pad",
+    "vacuum"
+   ]
+  }
+ },
+ "stacks": {
+  "airbridge_B": {
+   "active_per_slab": [
+    [
+     "substrate"
+    ],
+    [
+     "vacuum",
+     "ground_left",
+     "ground_right"
+    ],
+    [
+     "vacuum",
+     "post_left",
+     "post_right"
+    ],
+    [
+     "vacuum",
+     "deck"
+    ],
+    [
+     "vacuum"
+    ]
+   ],
+   "levels_um": [
+    -100.0,
+    0.0,
+    0.2,
+    3.0,
+    3.3,
+    100.0
+   ],
+   "sheets_per_level": [
+    [],
+    [],
+    [],
+    [],
+    [],
+    []
+   ]
+  },
+  "pad_in_ground_B": {
+   "active_per_slab": [
+    [
+     "substrate"
+    ],
+    [
+     "vacuum",
+     "ground",
+     "pad"
+    ],
+    [
+     "vacuum",
+     "ground",
+     "pad"
+    ],
+    [
+     "vacuum"
+    ]
+   ],
+   "levels_um": [
+    -100.0,
+    0.0,
+    0.1,
+    0.2,
+    100.0
+   ],
+   "sheets_per_level": [
+    [],
+    [],
+    [
+     "p1"
+    ],
+    [],
+    []
+   ]
+  }
+ },
+ "walls": {
+  "coalesced": 32,
+  "horizontal_faces": 9,
+  "metal_coalesced": 20,
+  "metal_uncoalesced": 36,
+  "split_walls": [
+   {
+    "group": "MA::pad",
+    "mid_um": [
+     50.0,
+     -3.0
+    ],
+    "z": [
+     0.0,
+     0.1
+    ]
+   },
+   {
+    "group": "MA::pad",
+    "mid_um": [
+     50.0,
+     -3.0
+    ],
+    "z": [
+     0.1,
+     0.2
+    ]
+   },
+   {
+    "group": "MA::Ground",
+    "mid_um": [
+     80.0,
+     0.0
+    ],
+    "z": [
+     0.0,
+     0.1
+    ]
+   },
+   {
+    "group": "MA::Ground",
+    "mid_um": [
+     80.0,
+     0.0
+    ],
+    "z": [
+     0.1,
+     0.2
+    ]
+   }
+  ],
+  "total_faces": 41,
+  "uncoalesced": 52
+ }
+}

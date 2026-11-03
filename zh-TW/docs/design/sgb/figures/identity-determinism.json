@@ -1,0 +1,86 @@
+[
+ {
+  "tiles": "1x1",
+  "workers": 1,
+  "pythonhashseed": "0",
+  "pad_in_ground_B_bands": "build:22a139898b1f72d2",
+  "random_layout_60_seed5_B": "build:4208c3b044b51b94"
+ },
+ {
+  "tiles": "1x1",
+  "workers": 1,
+  "pythonhashseed": "1",
+  "pad_in_ground_B_bands": "build:22a139898b1f72d2",
+  "random_layout_60_seed5_B": "build:4208c3b044b51b94"
+ },
+ {
+  "tiles": "1x1",
+  "workers": 1,
+  "pythonhashseed": "12345",
+  "pad_in_ground_B_bands": "build:22a139898b1f72d2",
+  "random_layout_60_seed5_B": "build:4208c3b044b51b94"
+ },
+ {
+  "tiles": "2x2",
+  "workers": 1,
+  "pythonhashseed": "0",
+  "pad_in_ground_B_bands": "build:22a139898b1f72d2",
+  "random_layout_60_seed5_B": "build:4208c3b044b51b94"
+ },
+ {
+  "tiles": "2x2",
+  "workers": 1,
+  "pythonhashseed": "1",
+  "pad_in_ground_B_bands": "build:22a139898b1f72d2",
+  "random_layout_60_seed5_B": "build:4208c3b044b51b94"
+ },
+ {
+  "tiles": "2x2",
+  "workers": 1,
+  "pythonhashseed": "12345",
+  "pad_in_ground_B_bands": "build:22a139898b1f72d2",
+  "random_layout_60_seed5_B": "build:4208c3b044b51b94"
+ },
+ {
+  "tiles": "3x3",
+  "workers": 2,
+  "pythonhashseed": "0",
+  "pad_in_ground_B_bands": "build:22a139898b1f72d2",
+  "random_layout_60_seed5_B": "build:4208c3b044b51b94"
+ },
+ {
+  "tiles": "3x3",
+  "workers": 2,
+  "pythonhashseed": "1",
+  "pad_in_ground_B_bands": "build:22a139898b1f72d2",
+  "random_layout_60_seed5_B": "build:4208c3b044b51b94"
+ },
+ {
+  "tiles": "3x3",
+  "workers": 2,
+  "pythonhashseed": "12345",
+  "pad_in_ground_B_bands": "build:22a139898b1f72d2",
+  "random_layout_60_seed5_B": "build:4208c3b044b51b94"
+ },
+ {
+  "tiles": "4x4",
+  "workers": 4,
+  "pythonhashseed": "0",
+  "pad_in_ground_B_bands": "build:22a139898b1f72d2",
+  "random_layout_60_seed5_B": "build:4208c3b044b51b94"
+ },
+ {
+  "tiles": "4x4",
+  "workers": 4,
+  "pythonhashseed": "1",
+  "pad_in_ground_B_bands": "build:22a139898b1f72d2",
+  "random_layout_60_seed5_B": "build:4208c3b044b51b94"
+ },
+ {
+  "tiles": "4x4",
+  "workers": 4,
+  "pythonhashseed": "12345",
+  "pad_in_ground_B_bands": "build:22a139898b1f72d2",
+  "random_layout_60_seed5_B": "build:4208c3b044b51b94"
+ }
+]

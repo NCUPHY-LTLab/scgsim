@@ -1,0 +1,188 @@
+{
+ "dissolution": {
+  "cells_after": 4,
+  "edges_after": 26,
+  "edges_merged_by_degree_two_removal": 474,
+  "membership_fraction": {
+   "pad": 0.9003601533455782,
+   "pad_tab": 0.16606956288198302
+  },
+  "membership_um2": {
+   "pad": 5421.5844115,
+   "pad_tab": 1000.0
+  },
+  "merged_pad_cell_area_um2": 6021.57302425519,
+  "plane": "slab[0,1/10]",
+  "raw_cells": 6,
+  "raw_edges": 504,
+  "raw_edges_labels_differ": 500,
+  "raw_edges_seam": 4
+ },
+ "errors": {
+  "different_net_contact": "different-Net contact between other (entities touching_net) and pad (entities pad) at (-50.0000, -20.0000) um on slab[0,1/10] (grid g = 0.001 um; a gap smaller than the grid closes when the sources snap)",
+  "different_net_overlap": "different-Net conductors overlap near (-42524.750, -29999.500) grid units: other_net, pad",
+  "equal_priority_dielectrics": "ambiguous equal-priority materials near (-50000.000, -30000.000) grid units: alumina, substrate",
+  "priority_resolves": {
+   "validation_passed": true,
+   "volumes": [
+    "Ground",
+    "alumina",
+    "pad",
+    "substrate",
+    "vacuum"
+   ]
+  }
+ },
+ "level_labels": [
+  {
+   "cells": 4,
+   "cells_needing_face": 4,
+   "labels": [
+    "below substrate | above Ground",
+    "below substrate | above pad",
+    "below substrate | above vacuum"
+   ],
+   "plane": "level[0]"
+  },
+  {
+   "cells": 5,
+   "cells_needing_face": 1,
+   "labels": [
+    "below Ground | above Ground",
+    "below pad | above pad",
+    "below vacuum | above vacuum",
+    "below vacuum | above vacuum | sheet port:p1"
+   ],
+   "plane": "level[1/10]"
+  },
+  {
+   "cells": 4,
+   "cells_needing_face": 2,
+   "labels": [
+    "below Ground | above vacuum",
+    "below pad | above vacuum",
+    "below vacuum | above vacuum"
+   ],
+   "plane": "level[1/5]"
+  }
+ ],
+ "membership_record": {
+  "a_wall_of_the_tab": {
+   "group": "MA::pad",
+   "membership": {
+    "pad_tab": 1.0
+   }
+  },
+  "top_face_group": "MA::pad",
+  "top_face_membership": {
+   "pad": 1.0,
+   "vacuum": 1.0
+  }
+ },
+ "plain_dissolution_stats": {
+  "level[-100]": {
+   "cells_after": 1,
+   "edges_after": 4,
+   "raw_cells": 1,
+   "raw_edges": 4
+  },
+  "level[0]": {
+   "cells_after": 4,
+   "edges_after": 22,
+   "raw_cells": 4,
+   "raw_edges": 496
+  },
+  "level[1/10]": {
+   "cells_after": 5,
+   "edges_after": 28,
+   "raw_cells": 5,
+   "raw_edges": 502
+  },
+  "level[1/5]": {
+   "cells_after": 4,
+   "edges_after": 22,
+   "raw_cells": 4,
+   "raw_edges": 496
+  },
+  "level[100]": {
+   "cells_after": 1,
+   "edges_after": 4,
+   "raw_cells": 1,
+   "raw_edges": 4
+  },
+  "slab[-100,0]": {
+   "cells_after": 1,
+   "edges_after": 4,
+   "raw_cells": 1,
+   "raw_edges": 4
+  },
+  "slab[0,1/10]": {
+   "cells_after": 4,
+   "edges_after": 22,
+   "raw_cells": 4,
+   "raw_edges": 496
+  },
+  "slab[1/10,1/5]": {
+   "cells_after": 4,
+   "edges_after": 22,
+   "raw_cells": 4,
+   "raw_edges": 496
+  },
+  "slab[1/5,100]": {
+   "cells_after": 1,
+   "edges_after": 4,
+   "raw_cells": 1,
+   "raw_edges": 4
+  }
+ },
+ "scene": "pad_in_ground('B')",
+ "slab_cells": {
+  "active_prisms": [
+   "vacuum",
+   "ground",
+   "pad"
+  ],
+  "cells": [
+   {
+    "area_um2": 70800.0,
+    "cell": 1,
+    "kind": "conductor",
+    "label": "Ground",
+    "prisms_covering": [
+     "ground",
+     "vacuum"
+    ]
+   },
+   {
+    "area_um2": 13577.365045915063,
+    "cell": 2,
+    "kind": "vacuum",
+    "label": "vacuum",
+    "prisms_covering": [
+     "vacuum"
+    ]
+   },
+   {
+    "area_um2": 5421.57302425519,
+    "cell": 3,
+    "kind": "conductor",
+    "label": "pad",
+    "prisms_covering": [
+     "pad",
+     "vacuum"
+    ]
+   },
+   {
+    "area_um2": 201.0619298297467,
+    "cell": 4,
+    "kind": "vacuum",
+    "label": "vacuum",
+    "prisms_covering": [
+     "vacuum"
+    ]
+   }
+  ],
+  "plane": "slab[0,1/10]"
+ },
+ "tab_scene": "pad_in_ground('B') + pad_tab (same Net, z 0..0.2, x -20..20, y 20..45 um)"
+}

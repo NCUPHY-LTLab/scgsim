@@ -1,0 +1,152 @@
+{
+ "airbridge_B": {
+  "gmsh_boundary_mismatches": {
+   "edges": 0,
+   "faces": 0,
+   "solids": 0
+  },
+  "gmsh_loaded_counts_equal_planned": true,
+  "groups": 7,
+  "levels": [
+   "-100",
+   "0",
+   "1/5",
+   "3",
+   "33/10",
+   "100"
+  ],
+  "prisms": 7,
+  "slabs": 5,
+  "topology": {
+   "edges": 76,
+   "emitted_volumes": 2,
+   "faces": 37,
+   "vertices": 44,
+   "volumes": 3
+  },
+  "validation_checks": {
+   "checks": 21,
+   "passed": true
+  },
+  "written_by_direct_writer": {
+   "0": 44,
+   "1": 72,
+   "2": 31,
+   "3": 2
+  }
+ },
+ "exploded_view": {
+  "mesh_size_min_um": 4.0,
+  "mesh_size_um": 60.0,
+  "surface_triangles_drawn": 1140,
+  "volume_domains": [
+   "Ground emitted=False",
+   "pad emitted=False",
+   "substrate emitted=True",
+   "vacuum emitted=True"
+  ]
+ },
+ "pad_in_ground_A": {
+  "gmsh_boundary_mismatches": {
+   "edges": 0,
+   "faces": 0,
+   "solids": 0
+  },
+  "gmsh_loaded_counts_equal_planned": true,
+  "groups": 8,
+  "levels": [
+   "-100",
+   "0",
+   "100"
+  ],
+  "prisms": 5,
+  "slabs": 2,
+  "topology": {
+   "edges": 44,
+   "emitted_volumes": 2,
+   "faces": 15,
+   "vertices": 39,
+   "volumes": 2
+  },
+  "validation_checks": {
+   "checks": 21,
+   "passed": true
+  },
+  "written_by_direct_writer": {
+   "0": 34,
+   "1": 44,
+   "2": 15,
+   "3": 2
+  }
+ },
+ "pad_in_ground_B": {
+  "gmsh_boundary_mismatches": {
+   "edges": 0,
+   "faces": 0,
+   "solids": 0
+  },
+  "gmsh_loaded_counts_equal_planned": true,
+  "groups": 10,
+  "levels": [
+   "-100",
+   "0",
+   "1/10",
+   "1/5",
+   "100"
+  ],
+  "prisms": 5,
+  "slabs": 4,
+  "topology": {
+   "edges": 94,
+   "emitted_volumes": 2,
+   "faces": 41,
+   "vertices": 70,
+   "volumes": 4
+  },
+  "validation_checks": {
+   "checks": 21,
+   "passed": true
+  },
+  "written_by_direct_writer": {
+   "0": 60,
+   "1": 90,
+   "2": 37,
+   "3": 2
+  }
+ },
+ "pad_in_ground_B_bands": {
+  "gmsh_boundary_mismatches": {
+   "edges": 0,
+   "faces": 0,
+   "solids": 0
+  },
+  "gmsh_loaded_counts_equal_planned": true,
+  "groups": 21,
+  "levels": [
+   "-100",
+   "0",
+   "1/10",
+   "1/5",
+   "100"
+  ],
+  "prisms": 5,
+  "slabs": 4,
+  "topology": {
+   "edges": 250,
+   "emitted_volumes": 2,
+   "faces": 59,
+   "vertices": 289,
+   "volumes": 4
+  },
+  "validation_checks": {
+   "checks": 21,
+   "passed": true
+  },
+  "written_by_direct_writer": {
+   "0": 216,
+   "1": 246,
+   "2": 55,
+   "3": 2
+  }
+ }
+}

@@ -1,0 +1,150 @@
+---
+title: "從 arrangement 到實體"
+description: "已 label 並 dissolve 的 arrangement 如何成為 horizontal face、wall、vertical edge、shell 與 volume，以及結果為何是 conformal by construction。"
+lang: zh-TW
+scgsim-kind: "design"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/design/sgb/assembly"
+---
+
+本頁說明 SGB 如何不經過任何 CAD kernel，就把 [Label、required edge 與 dissolution](labels-and-dissolution.qmd) 中已 label 的平面 cell 變成封閉、共用的實體模型：horizontal face、垂直 wall、vertical edge、shell 與 volume。讀完後，你會知道每一種的建構規則、讓 wall 保持最小的 coalescing 規則，以及（一份 proof sketch，連同重新檢查它的 invariant）相鄰 volume 為什麼會落在同一個 face 上。
+
+Assembly 是 S6 階段。輸入是每個已 dissolve 的 slab arrangement $S_i$ 與 level arrangement $A_i$（含 label 與 link）；輸出是一組 vertex、edge、face 與 volume，其中每個 entity 都有 [identity](identity.qmd)，且 [emission](emission.qmd) 可以由下而上寫出。名詞在第一次出現時定義，並彙整於[詞彙表](index.qmd#glossary)。
+
+所有圖與數字皆為**計算結果**：prototype 規劃 topology，`docs/design/sgb/_figures/assembly.py` 繪圖並寫出 `figures/assembly-numbers.json`；除非另有說明，下列數字皆以此為來源。
+
+## 組裝什麼，依什麼順序
+
+::: {.askr-mermaid-view view-label="檢視圖表"}
+```{mermaid}
+flowchart LR
+  A["level arrangements A_i<br/>(vertices, edges, cells, labels)"] --> V["vertices and horizontal edges"]
+  A --> H["horizontal faces<br/>(cells that need a face)"]
+  S["slab arrangements S_i<br/>(slab labels, slab edges)"] --> W["wall runs<br/>(coalesced)"]
+  A --> W
+  W --> C["vertical edges<br/>(wall columns, cut where needed)"]
+  S --> Vol["volumes<br/>(connected slab cells)"]
+  A --> Vol
+  H --> Sh["shells<br/>(closed surfaces per volume)"]
+  W --> Sh
+  Vol --> Sh
+  Sh --> G["primary physical groups"]
+```
+:::
+
+一切都由*原子*組成：level arrangement 的 vertex 與 edge，加上 vertical edge。face 從不擁有自己私有的 edge 副本；它列出的是原子 id，所以相接的兩個 face 共用的是 edge 本身。
+
+## 執行範例的觀點
+
+Route B 的執行範例在金屬層有 $0$、$0.1$ 與 $0.2$ µm 三個 level。它的 pad 有九條直邊、一個圓角與一個圓形 hole。41 個 face 中，9 個是 horizontal face（需要 face 的 level arrangement cell，見 label 頁），32 個是 wall（數量取自 `outputs/pad_in_ground_B/identity.json`）。有趣的是 wall。
+
+沿 pad 輪廓看連續三邊：從 $(10, -30)$ 到 $(50, -30)$ µm 的底邊、$x = 50$ µm 的右側壁（到 $(50, 18)$），以及到 $(38, 30)$ 的 chamfer。port sheet 在 $x = 50$、$z = 0.1$ 處接觸 pad。@fig-wall-anatomy 把這三面 wall 攤開。
+
+![Route B 中沿 pad 連續三邊的 wall。上：實際建出的結果。下：若每個 level 都切每一面 wall 的同一個模型。紅色線段是 vertical edge；黑色線段是 level arrangement 的 edge；圓點是 vertex。](figures/assembly-wall-anatomy.svg){#fig-wall-anatomy fig-alt="同樣三面 wall 的上下兩張立面圖。上圖中底邊 wall 與 chamfer wall 各是一個從 z = 0 到 z = 0.2 的矩形，x = 50 的 wall 在 z = 0.1 被切成兩片，且兩片在共用的 z = 0.1 線上有三條 edge。下圖中每面 wall 都在 z = 0.1 被切成兩片。"}
+
+{{< askr-image-view target="fig-wall-anatomy" mode="inline" >}}
+
+@fig-wall-anatomy 的看點：
+
+- **只有 $x = 50$ 的 wall 在 $z = 0.1$ 被切開。** port 的 edge 終止在它上面，所以 $z = 0.1$ 的 level arrangement 在那面 wall 的線上有度數為三的 vertex（位於 $y = \pm 5$ µm）：上片的底邊界有三條 edge，下片的頂邊界也有三條 edge。
+- **鄰近的 wall 沒有被切，但它們共用的 column 被切了。** 底邊 wall 與 chamfer wall 各自從 $z = 0$ 到 $0.2$ 仍是一個 face。它們在 $(50, -30)$ 與 $(50, 18)$ 的轉角 column 必須在 $z = 0.1$ 被切開，因為鄰近的 wall 在那裡結束；所以這兩面 wall 在一側各自列出兩段疊起來的 vertical edge（$z = 0.1$ 處的紅色刻痕）。沿同一條 column 相接的兩個 face 因此永遠共用完整的 edge。
+- **不做 coalescing，模型會更大。** 每個 level 都切每面 wall，會得到 61 個 face、132 條 edge 與 93 個 vertex，而實際建出的模型是 41、94 與 70（被切開的模型也能通過驗證，所以沒有錯，只是冗餘）。pad 的多邊形變體（32 邊形 hole、無圓角）從 115 個 face 降到 68 個；airbridge 模型從 47 降到 37。
+
+## Horizontal face
+
+**Horizontal face** 是 level arrangement $A_i$ 的一個 cell，其 level label 需要 face（`below != above` 或有 sheet 位於其上），並且已經過 dissolution。它是下方 volume（若有）與上方 volume（若有）的邊界。它的外邊界與 hole 是 $A_i$ 的 edge 所成的 loop，取自 half-edge 結構並帶有方向。
+
+兩種特殊情形：
+
+- 兩側是*同一個* volume 的 face，是不圍出任何 volume 的 sheet。它是 **embedded**：列在它的 host volume 上，但不屬於該 volume 的 shell。Route B 的 lumped port 就是執行範例中的例子；見 [Routes](routes.qmd)。
+- 只有一側有 volume 的 face 位於模型的外邊界上，其 physical group 為 `EXT::<domain>`。
+
+## Wall
+
+**Slab edge** 是 $S_i$ 中兩側 slab label 不同的 edge。對每條原子 slab edge，SGB 產生一面垂直的 **wall**：
+
+- 它的**底邊界**是覆蓋該 slab edge 的 $A_i$ edge 所成的 chain（透過每條 slab edge 帶入 $A_i$ 的標記找到；chain 斷裂或有歧義時 build 中止）；
+- 它的**頂邊界**是覆蓋它的 $A_{i+1}$ edge chain；
+- 它的兩側是位於 slab edge 端點的 **vertical edge**，與相鄰 slab edge 上的 wall 共用。
+
+直線 carrier 上的 wall 是平面。圓弧 carrier 上的 wall 是通過該圓弧的圓柱的一塊 patch；spline carrier 上的 wall 是 ruled face（prototype 尚無 spline）。
+
+### Coalescing {#coalescing}
+
+Level 在 Z 上是全域的，但它的作用在 XY 上是局部的。若沒有規則，疊起來的 slab 會在每個 level 切開每面 wall，例如 pad 的側壁在 port level 被切開，即使 port 只碰到其中一面。**Coalescing** 規則決定連續的 wall 何時合併。同一條 slab edge（以端點辨識）上的 wall 跨越一個 level 時，在以下條件下合併：
+
+1. 上下兩側的 domain 相同，且
+2. 該 level **沒有切**這面 wall。
+
+完整的規則是：level 在以下情況切開一面 wall：
+
+- (a) 該 level 的某條 edge 或某個 vertex 落在 wall 的水平線上（例如 port-sheet 的 edge 碰到金屬側壁，或 level 正下方與正上方的 chain 並不是同一組 edge）；
+- (b) 該 level 的一個 sheet face 沿著 wall 的 chain 延伸（即使沒有任何額外的 vertex 碰到那條線；在 prototype 中，這包含任何需要 face 的相鄰 cell）。
+
+::: {.callout-important title="設計決策：wall column 由其鄰居切開"}
+wall column（某個 grid 點上方的垂直線）在下列情況於該 level 被切開：某個 wall run 在那裡開始或結束，**或是某個 horizontal face 在該 level 於這條 column 上有 vertex**（例如只碰到 wall 轉角的 sheet）。沒有這第二條規則，沿 column 相接的兩個 face 的 edge 長度會不同，shell 就無法由共用的原子組成封閉曲面。
+:::
+
+(a)、(b) 與 column 規則共同構成完整的規則集，並已以 mesh conformity 測試過。
+
+### 曲面 wall
+
+圓弧 carrier 上的 wall 是圓柱 patch。若恰好有四條邊界 edge（兩條圓弧與兩條 column，四分之一圓弧的一般情形），通過這四條共用 edge 的 B-spline filling 可將圓柱重現到 1.2e-11 個 grid unit；執行範例有五面這樣的 wall（圓形 hole 的四段四分之一圓弧與圓角），量測值見 `outputs/pad_in_ground_B/stage_summary.json`。邊界 edge 多於四條的 wall（圓弧上有 hot pixel、port edge 落在圓柱上）無法透過 Gmsh API 做到精確；Gmsh API 也無法控制 solid 的 sense。因此 emission 採直接寫 BREP（decision D8，由 Lead 決定、審查中；見 [Emission](emission.qmd)）。直線 wall 的平面性以精確整數運算測試。
+
+## Volume
+
+**Volume** 是具有相同 domain identity 的 slab cell 的連通分量。同一個 slab 中的兩個 cell 透過不屬於 wall 的共用 edge（兩側 domain 相同）連通。相鄰 slab 的 cell 則透過 below 與 above domain 相等且沒有 sheet 的 level cell 連通；那裡不會產生 face。prototype 以對 cell link 做 union-find 計算這些分量，這是 assembly 中唯一的全域 reduction（見[平行化推導](parallelism.qmd)）。
+
+在執行範例中，Route A 有兩個 volume（substrate、vacuum）。Route B 有四個：substrate、vacuum、`Ground` 與 `pad`；後兩者是 Route B 從輸出模型中排除的導體 volume。在 airbridge 模型中，`Ground` volume 透過 post 跨越五個 slab 仍是一個連通的 volume。
+
+## Shell 與內部 void
+
+Volume 的 **shell** 是它的 face 的集合。SGB 把它們分組為連通的封閉曲面：共用 edge 的 face 屬於同一個候選 shell。每個候選以整數運算的散度定理得到精確的 signed volume（Z level 乘以共同分母）；正值標示 **outer** shell，負值標示 **inner** shell，也就是 volume 內部的 void。
+
+執行範例只有 outer shell。只要有導體完全位於 dielectric 內部，就會出現 inner shell。在 vacuum 中於 $z = 50$–$51$ µm 加入一個浮空的 $20 \times 20 \times 1$ µm 島（Net `float`），vacuum volume 就有兩個 shell：29 個 face 的 outer shell（signed volume $8.98 \times 10^{6}$ µm³），以及由島的 6 個 face 組成、signed volume 為 $-400$ µm³ 的 inner shell，剛好是島體積的負值。驗證器接受它（6 個 shell，每條 edge 以相反方向使用兩次，每個 shell 的 Euler characteristic 形式為 $2 - 2g$）。
+
+![當 vacuum 內有浮空島時，vacuum volume 的 inner shell：六個 face，signed volume −400 µm³。](figures/assembly-inner-void.svg){#fig-inner-void fig-alt="一個扁平方塊的三維視圖，畫出島的六個 face，位於 z = 50 到 51 µm 之間。"}
+
+### 多 slab volume 的 shell
+
+@fig-shells 顯示較大的 shell：airbridge 模型的 `Ground` volume，它跨越五個 slab 仍是一個 volume（兩塊 ground、兩根 post 與 deck）。它的 24 個 face 中，6 個是 horizontal face，18 個是 wall。其中兩面 wall **跨 slab 被 coalesce**：$x = \pm 35$ µm 的 post 外側 wall 延續成 deck 的端面 wall，所以每面是從 $z = 0.2$ 到 $3.3$ µm 的單一 face。每個 face 都略為朝自己的中心拉開；縫隙就是這些 face 共用的 edge。
+
+![airbridge `Ground` volume（Route B）的 24 個 shell face，被拉開。橘色：跨三個 slab 被 coalesce 的兩面 wall。](figures/assembly-shells.svg){#fig-shells fig-alt="兩塊扁平的 ground 板由兩根 post 與一個 deck 連接的三維視圖，畫成帶有小縫隙的分離 face：淺藍色 horizontal face、深藍色 wall、post 外側的橘色高 wall，以及晶片邊界上的灰色 wall。"}
+
+{{< askr-chart-view src="figures/assembly-shells.html" label="檢視 shell 的各個 face" >}}
+
+## 為什麼結果是 conformal by construction
+
+主張：**組裝出的模型中，每個 face 至多被兩個 volume 使用，每個 shell 都封閉且可定向；相鄰的 volume 落在同一個 face entity 上，而不是兩個重合的 face。** 以下是逐步的 sketch。每一步都指出重新檢查它的 check，所以 assembly 的缺陷不會被忽略（[驗證](validation.qmd)）。
+
+1. **每個 arrangement 都是平面的。** snap rounding 之後，$S_i$ 或 $A_i$ 的任兩條 edge 不相交，也沒有 vertex 落在 edge 內部，所以它的 cell 只沿完整的 edge 相接。*重新檢查：* `arrangements_planar`。
+2. **每條 slab edge 在上下兩個 level 都是 chain。** $A_i$ 與 $A_{i+1}$ 由 $S_i$ 的曲線建立，所以每條 slab edge 在兩者中都成為一條原子 edge 的路徑。wall 的邊界因此是由原子組成的封閉 loop：底 chain、column、頂 chain、column。若 chain 無法追溯，build 中止。
+3. **Column 在任何鄰居有 vertex 之處被切開。** 每個碰到 column 的 face 使用的都是它完整的 vertical edge 段（上述 column 規則）。
+4. **在任一條 edge 周圍，face 恰好是四個象限中 volume 之間的介面。** 取 level arrangement 的一條 edge，看它周圍四個區域：左、右、下、上。每個區域屬於一個 volume（或不屬於任何 volume）。兩個相鄰區域之間存在 face，若且唯若它們的 volume 不同，或兩者之間有 sheet；label 依 [labelling 規則](labels-and-dissolution.qmd)是單值的，所以 face 沒有其他來源。
+5. **於是每個 volume 看到這條 edge 的次數是偶數且互相匹配。** 同一個 volume 在一條 edge 周圍的區域構成連續象限的區段；每個區段由兩個 face 圍住，從該 volume 看去方向相反。所以在一個 shell 內，每條 edge 被以相反方向使用兩次。若某個 volume 只佔據兩個不相鄰的象限（它沿一條 edge 接觸自己），這條 edge 在同一個 shell 中會被使用四次；這種情形會被拒絕，而不是被修補。prototype 的實驗證實了這點：同 Net 的有限厚度金屬只在轉角碰到 pad，build 以 `shells_closed_and_oriented` 失敗中止，訊息為 `edge ve:… used 4 times`；sheet 在轉角相接則是合法的。*重新檢查：* `shells_closed_and_oriented`、`shell_euler_characteristic`、`each_face_used_by_at_most_two_volumes`、`every_edge_shared_by_two_faces`。
+6. **一個 face 就是一個 entity。** 介面兩側的兩個 volume 列出的是同一個 face id，方向相反；沒有之後還要配對的第二份副本，emitter 也只建立它一次。*重新檢查：* emitter 的「每個 native entity 恰有一個 planned id」測試。
+
+沒有任何一步使用容差：1–3 步是 snap 後 grid 上的整數 topology，4–5 步是組合性的。assembly 中唯一的浮點數值（曲面 shell 的 volume 中的圓弧弓形面積、圓弧偏差）從不決定哪個 entity 存在。
+
+::: {.callout-important title="保證：沒有 Boolean 運算，也不做比對"}
+兩個 volume 是 conformal，是因為它們由相同的原子建出，而不是因為 kernel 發現它們重合。prototype 輸出的模型（Route A、Route B、airbridge）在 mesh 中都有零個重複節點（`outputs/*/stage_summary.json`）。
+:::
+
+## 邊界情形
+
+- **Volume 內部的 sheet。** Route B 的 port 是兩側為同一個 volume 的 face，它是 embedded，有自由邊界，且其自己的 edge 不受「每條 edge 兩個 face」測試約束；驗證器明確計入這些自由 edge（執行範例為 2 條，且沒有任何 dangling edge）。
+- **Volume 沿一條 edge 接觸自己（non-manifold pinch）。** 見第 5 步：被拒絕。只在 vertical edge 或 vertex 相接、沒有共用 face 的有限厚度金屬被拒絕，並回報明確的錯誤；sheet 可以在轉角相接。
+- **不同 Net 接觸。** 在 assembly 之前，不同 Net 的導體在任何 route 中只要共用 edge 或 vertex，就會被 contact check 以 `ContactError` 拒絕（見 [label 頁](labels-and-dissolution.qmd)）；它們必須以 gap 隔開，或屬於同一個 Net。
+- **Volume 的精確度。** 多邊形模型的 volume 是精確整數。含圓弧 wall 時，chord 多面體是精確的，但每面圓柱 wall 會加上一項以浮點數計算的弓形項，所以曲面 shell 的 volume 與解析值相符到約 $10^{-9}$ 相對誤差，而不是完全相等（prototype README，known limitations）。
+
+## 小結
+
+- face 列出原子；它們從不擁有副本。
+- horizontal face 是分隔兩個 domain 或帶有 sheet 的 level arrangement cell；每條原子 slab edge 在不同 slab label 之間有一面 wall。
+- wall 跨 slab 合併，除非有 level 碰到它們；column 由鄰近的 face 切開，使 edge 被完整共用。
+- shell 是連通的封閉曲面；負的 signed volume 標示內部 void。
+- 下一步：這些 face 在 Route A 與 Route B 下如何成為 physical group，見 [Route A 與 Route B](routes.qmd)。
+
+## 參考
+
+- Brief 第 2 節（建構、coalescing）、第 7 節（embedded face）、第 11 節與第 14 節（invariant、完整 coalescing 規則集、non-manifold pinch）。prototype 模組：`assembly`、`linking`、`contacts`、`validate`。
