@@ -57,13 +57,17 @@ def test_route_c_conductor_interfaces_are_shared_faces_with_per_entity_names(bri
     topology, routed = bridge_c.topology, bridge_c.routed
     groups = routed.groups
     assert {
-        "MA::deck",
-        "MA::post_left",
-        "MS::ground_left",
-        "MM::deck|post_left",
-        "MM::ground_left|post_left",
+        "MA::deck::top",
+        "MA::post_left::sidewall",
+        "MS::ground_left::bottom",
+        "MM::deck|post_left::interface",
+        "MM::ground_left|post_left::interface",
     } <= set(groups)
-    for name in ("MA::deck", "MS::ground_left", "MM::deck|post_left"):
+    for name in (
+        "MA::deck::top",
+        "MS::ground_left::bottom",
+        "MM::deck|post_left::interface",
+    ):
         for face_id in groups[name].ids:
             face = topology.faces[face_id]
             assert (
@@ -72,13 +76,17 @@ def test_route_c_conductor_interfaces_are_shared_faces_with_per_entity_names(bri
             )
     # the Net union lists the exposed conductor surfaces, never the internal MM faces
     union = routed.unions["NET::Ground"]
-    assert "MA::deck" in union and not any(name.startswith("MM::") for name in union)
+    assert "MA::deck::top" in union and not any(
+        name.startswith("MM::") for name in union
+    )
     assert routed.unions["MM"] == sorted(n for n in groups if n.startswith("MM::"))
 
 
 def test_route_c_conductor_reaching_the_model_boundary_has_an_ext_group(bridge_c):
-    """The ground halves run to the chip edge: those faces are EXT::<entity>."""
-    assert {"EXT::ground_left", "EXT::ground_right"} <= set(bridge_c.routed.groups)
+    """The ground halves run to the chip edge: those faces are EXT::<entity>::<face kind>."""
+    assert {"EXT::ground_left::sidewall", "EXT::ground_right::sidewall"} <= set(
+        bridge_c.routed.groups
+    )
 
 
 def test_route_c_rejects_conductor_sheets_but_supports_lumped_port_sheets():
@@ -126,12 +134,20 @@ def test_route_c_from_a_real_input_names_the_gds_entities(tmp_path):
     assert {
         "VOL::ground_0000",
         "VOL::pad",
-        "MA::pad",
-        "MS::pad",
-        "MA::ground_0000",
+        "MA::pad::top",
+        "MS::pad::bottom",
+        "MA::ground_0000::top",
     } <= groups
-    assert model.routed.unions["NET::P"] == ["MA::pad", "MS::pad"]
-    assert model.routed.unions["NET::G"] == ["MA::ground_0000", "MS::ground_0000"]
+    assert model.routed.unions["NET::P"] == [
+        "MA::pad::sidewall",
+        "MA::pad::top",
+        "MS::pad::bottom",
+    ]
+    assert model.routed.unions["NET::G"] == [
+        "MA::ground_0000::sidewall",
+        "MA::ground_0000::top",
+        "MS::ground_0000::bottom",
+    ]
 
 
 def test_route_a_accepts_the_undeclared_finite_conductors_of_a_real_solid_input(
@@ -144,7 +160,9 @@ def test_route_a_accepts_the_undeclared_finite_conductors_of_a_real_solid_input(
         model.topology.volumes[v].domain.name for v in model.routed.emitted_volumes
     }
     assert emitted == {"substrate", "VACUUM_REGION"}
-    assert {"MA::pad", "MS::pad", "MA::ground_0000"} <= set(model.routed.groups)
+    assert {"MA::pad::top", "MS::pad::bottom", "MA::ground_0000::top"} <= set(
+        model.routed.groups
+    )
 
 
 def test_route_a_rejects_declared_films_that_the_solid_profile_left_finite():
@@ -163,9 +181,9 @@ def test_a_finite_bump_stands_on_a_thin_film_sheet_in_route_a():
     assert not model.report.failures
     groups = model.routed.groups
     assert {
-        "SHEET::chip/left",
-        "SHEET::chip/right",
-        "MA::chip/bump",
+        "SHEET::chip/left::sheet",
+        "SHEET::chip/right::sheet",
+        "MA::chip/bump::top",
         "PORT::port_sheet",
     } <= set(groups)
     bump = next(
@@ -174,7 +192,11 @@ def test_a_finite_bump_stands_on_a_thin_film_sheet_in_route_a():
     assert (
         bump.id not in model.routed.emitted_volumes
     )  # an excluded finite volume with PEC boundary faces
-    assert model.routed.unions["NET::left"] == ["MA::chip/bump", "SHEET::chip/left"]
+    assert model.routed.unions["NET::left"] == [
+        "MA::chip/bump::sidewall",
+        "MA::chip/bump::top",
+        "SHEET::chip/left::sheet",
+    ]
     kinds = {
         p.entity_id: p.feature_kind
         for p in model.labelled.catalogue.prisms
@@ -194,7 +216,7 @@ def test_the_bump_without_the_film_collapse_is_a_finite_input_for_routes_b_and_c
         model = build_conformal_model(
             effective.build_input, effective.representation, route
         )
-        assert {"MA::chip/bump", "PORT::port_sheet"} <= set(model.routed.groups)
+        assert {"MA::chip/bump::top", "PORT::port_sheet"} <= set(model.routed.groups)
         assert not model.report.failures
 
 
@@ -221,10 +243,12 @@ def test_thin_film_sheets_build_under_route_a_only():
     model_a = build_conformal_model(
         effective.build_input, effective.representation, "A"
     )
-    assert {"SHEET::chip/left", "SHEET::chip/right", "PORT::port_sheet"} <= set(
-        model_a.routed.groups
-    )
-    assert model_a.routed.unions["NET::left"] == ["SHEET::chip/left"]
+    assert {
+        "SHEET::chip/left::sheet",
+        "SHEET::chip/right::sheet",
+        "PORT::port_sheet",
+    } <= set(model_a.routed.groups)
+    assert model_a.routed.unions["NET::left"] == ["SHEET::chip/left::sheet"]
     for route in ("B", "C"):
         with pytest.raises(
             RouteError, match=rf"Route {route} keeps conductors finite.*chip/left"
@@ -241,7 +265,7 @@ def test_a_rectangular_junction_builds_with_a_conformal_port_between_its_termina
     assert not model.report.failures
     groups = model.routed.groups
     assert len(groups["PORT::sheet"].ids) == 1
-    assert {"SHEET::chip/left", "SHEET::chip/right"} <= set(groups)
+    assert {"SHEET::chip/left::sheet", "SHEET::chip/right::sheet"} <= set(groups)
     port = model.topology.faces[groups["PORT::sheet"].ids[0]]
     assert (
         port.twice_xy_area == 2 * 32
@@ -274,13 +298,21 @@ def test_seams_between_entities_of_one_net_stay_required_edges(route):
     groups = model.routed.groups
     if route == "A":
         assert (
-            len(groups["SHEET::padL"].ids) == 1 and len(groups["SHEET::padR"].ids) == 1
+            len(groups["SHEET::padL::sheet"].ids) == 1
+            and len(groups["SHEET::padR::sheet"].ids) == 1
         )
     else:
-        assert {"MA::padL", "MA::padR", "MS::padL", "MS::padR"} <= set(groups)
+        assert {
+            "MA::padL::top",
+            "MA::padR::top",
+            "MS::padL::bottom",
+            "MS::padR::bottom",
+        } <= set(groups)
     # the Net union is the only place the two Entities meet
     net_union = model.routed.unions["NET::N"]
-    assert len(net_union) == (2 if route == "A" else 4)
+    assert len(net_union) == (
+        2 if route == "A" else 6
+    )  # per Entity: top, bottom, sidewall
 
 
 def test_the_overlap_of_two_entities_of_one_net_belongs_to_the_higher_priority():
@@ -307,13 +339,13 @@ def test_face_lineage_records_the_overlap_share_of_the_entity_that_lost_it():
         adjoining_pads("A", priorities=(1, 2), overlap=2.0), "A"
     )
     topology = model.topology
-    face = topology.faces[model.routed.groups["SHEET::padR"].ids[0]]
+    face = topology.faces[model.routed.groups["SHEET::padR::sheet"].ids[0]]
     assert face.membership["padR"] == pytest.approx(1.0)
     assert face.membership["padL"] == pytest.approx(
         0.2
     )  # the 2 x 10 um overlap is a fifth of padR's 100 um^2
     assert face.sources == ("padL", "padR")
-    assert topology.faces[model.routed.groups["SHEET::padL"].ids[0]].membership[
+    assert topology.faces[model.routed.groups["SHEET::padL::sheet"].ids[0]].membership[
         "padL"
     ] == pytest.approx(1.0)
 
@@ -357,58 +389,82 @@ M2 = Domain("conductor", "Al", "N", "chip/q0/arm")
 @pytest.mark.parametrize(
     ("neg", "pos", "owner", "bands", "name"),
     [
-        (V, S, None, (), "SA::substrate|air"),
-        (S, V, None, (), "SA::substrate|air"),
-        (M, V, None, (), "MA::chip/q0/pad"),
-        (S, M, None, (), "MS::chip/q0/pad"),
-        (M, V, None, (("fam", 2),), "MA::chip/q0/pad::band=2"),
-        (M2, M, None, (), "MM::chip/q0/arm|chip/q0/pad"),
-        (V, Domain("vacuum", "vacuum", owner="air2"), None, (), "AA::air|air2"),
+        (V, S, None, (), "SA::substrate|air::interface"),
+        (S, V, None, (), "SA::substrate|air::interface"),
+        (M, V, None, (), "MA::chip/q0/pad::top"),
+        (V, M, None, (), "MA::chip/q0/pad::bottom"),
+        (S, M, None, (), "MS::chip/q0/pad::bottom"),
+        (M, S, None, (), "MS::chip/q0/pad::top"),
+        (M, V, None, (("fam", 2),), "MA::chip/q0/pad::top::band=2"),
+        (M2, M, None, (), "MM::chip/q0/arm|chip/q0/pad::interface"),
+        (
+            V,
+            Domain("vacuum", "vacuum", owner="air2"),
+            None,
+            (),
+            "AA::air|air2::interface",
+        ),
         (
             S,
             Domain("dielectric", "SiO2", owner="oxide"),
             None,
             (),
-            "SS::oxide|substrate",
+            "SS::oxide|substrate::interface",
         ),
-        (V, V, SheetOwner("conductor", "chip/q0/pad", "N"), (), "SHEET::chip/q0/pad"),
+        (
+            V,
+            V,
+            SheetOwner("conductor", "chip/q0/pad", "N"),
+            (),
+            "SHEET::chip/q0/pad::sheet",
+        ),
         (
             V,
             S,
             SheetOwner("conductor", "chip/q0/pad", "N"),
             (("fam", 1),),
-            "SHEET::chip/q0/pad::band=1",
+            "SHEET::chip/q0/pad::sheet::band=1",
         ),
         (V, V, SheetOwner("port", "chip/q0/jj"), (("fam", 1),), "PORT::chip/q0/jj"),
-        (None, V, None, (), "EXT::air"),
-        (S, None, None, (), "EXT::substrate"),
+        (None, V, None, (), "EXT::air::bottom"),
+        (S, None, None, (), "EXT::substrate::top"),
         (None, None, None, (), None),
     ],
 )
 def test_primary_group_names_follow_kind_double_colon_qualified_entity(
     neg, pos, owner, bands, name
 ):
-    """``<kind>::<qualified entity id>[::band=k]``: a face's name from the two sides alone."""
+    """``<kind>::<qualified entity id>::<face kind>[::band=k]``: a face's name from the two sides alone."""
     assert surface_group(neg, pos, owner, bands) == name
+
+
+def test_a_vertical_face_is_a_sidewall_whatever_its_sides():
+    """Walls carry the face kind ``sidewall``; a conductor wall against vacuum is MA, a sheet has no wall."""
+    assert surface_group(M, V, None, vertical=True) == "MA::chip/q0/pad::sidewall"
+    assert surface_group(S, V, None, vertical=True) == "SA::substrate|air::sidewall"
+    assert surface_group(None, V, None, vertical=True) == "EXT::air::sidewall"
+    assert surface_group(M2, M, None, (("fam", 1),), vertical=True) == (
+        "MM::chip/q0/arm|chip/q0/pad::sidewall::band=1"
+    )
 
 
 def test_volume_groups_and_interface_types_and_surface_epr_rows():
     """VOL names, interface-type prefixes, and the rows a banded Route A sheet carries."""
     assert volume_group(M) == "VOL::chip/q0/pad"
-    assert interface_type("MA::chip/q0/pad::band=2") == "MA"
+    assert interface_type("MA::chip/q0/pad::top::band=2") == "MA"
     rows = surface_epr_rows(
         [
-            "SHEET::pad::band=0",
-            "SHEET::pad::band=1",
-            "SA::a|b::band=0",
-            "MA::x",
-            "EXT::air",
+            "SHEET::pad::sheet::band=0",
+            "SHEET::pad::sheet::band=1",
+            "SA::a|b::interface::band=0",
+            "MA::x::top",
+            "EXT::air::top",
         ]
     )
     assert rows == {
-        "MA::pad::band=0": "SHEET::pad::band=0",
-        "MS::pad::band=0": "SHEET::pad::band=0",
-        "MA::pad::band=1": "SHEET::pad::band=1",
-        "MS::pad::band=1": "SHEET::pad::band=1",
-        "SA::a|b::band=0": "SA::a|b::band=0",
+        "MA::pad::sheet::band=0": "SHEET::pad::sheet::band=0",
+        "MS::pad::sheet::band=0": "SHEET::pad::sheet::band=0",
+        "MA::pad::sheet::band=1": "SHEET::pad::sheet::band=1",
+        "MS::pad::sheet::band=1": "SHEET::pad::sheet::band=1",
+        "SA::a|b::interface::band=0": "SA::a|b::interface::band=0",
     }

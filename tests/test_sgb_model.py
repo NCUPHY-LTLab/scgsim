@@ -79,14 +79,14 @@ def test_all_invariants_pass(pad_a, pad_b, bridge):
 
 
 def test_route_a_has_two_volumes_and_per_entity_sheet_faces(pad_a):
-    """Route A: sheets are SHEET::<entity> faces, the port is PORT::<id>, no conductor volume exists."""
+    """Route A: sheets are SHEET::<entity>::sheet faces, the port is PORT::<id>, no conductor volume exists."""
     groups = pad_a.routed.groups
     assert set(volume_by_name(pad_a)) == {"substrate", "vacuum"}
-    assert len(groups["SHEET::ground"].ids) == 1
-    assert len(groups["SHEET::pad"].ids) == 1
+    assert len(groups["SHEET::ground::sheet"].ids) == 1
+    assert len(groups["SHEET::pad::sheet"].ids) == 1
     assert len(groups["PORT::p1"].ids) == 1
     # the gap region and the hole in the pad are the two plain substrate/vacuum interface cells
-    assert len(groups["SA::substrate|vacuum"].ids) == 2
+    assert len(groups["SA::substrate|vacuum::interface"].ids) == 2
 
 
 def test_route_b_excludes_conductor_volumes_but_keeps_their_boundary(pad_b):
@@ -101,9 +101,22 @@ def test_route_b_excludes_conductor_volumes_but_keeps_their_boundary(pad_b):
     assert not any(
         name.startswith(("SHEET::", "NET::")) for name in groups
     )  # unions are not Gmsh groups
-    assert {"MA::pad", "MS::pad", "MA::ground", "MS::ground"} <= set(groups)
-    assert pad_b.routed.unions["NET::pad"] == ["MA::pad", "MS::pad"]
-    assert pad_b.routed.unions["NET::Ground"] == ["MA::ground", "MS::ground"]
+    assert {
+        "MA::pad::top",
+        "MS::pad::bottom",
+        "MA::ground::top",
+        "MS::ground::bottom",
+    } <= set(groups)
+    assert pad_b.routed.unions["NET::pad"] == [
+        "MA::pad::sidewall",
+        "MA::pad::top",
+        "MS::pad::bottom",
+    ]
+    assert pad_b.routed.unions["NET::Ground"] == [
+        "MA::ground::sidewall",
+        "MA::ground::top",
+        "MS::ground::bottom",
+    ]
     # the lumped port is a sheet inside the vacuum volume: an embedded face
     assert len(volumes["vacuum"].embedded_faces) == 1
 
@@ -157,7 +170,7 @@ def test_route_a_accepts_finite_conductors_that_are_not_films():
             model.topology.volumes[v].domain.name for v in model.routed.emitted_volumes
         }
         assert emitted == {"substrate", "vacuum"}
-        assert {"MA::pad", "MS::pad"} <= set(model.routed.groups)
+        assert {"MA::pad::top", "MS::pad::bottom"} <= set(model.routed.groups)
 
 
 def test_unknown_route_is_rejected():
@@ -245,8 +258,9 @@ def test_lineage_maps_every_edge_to_source_entities(pad_b):
 def test_semantic_names_do_not_depend_on_native_state(pad_a):
     """The group names are a function of the labels alone."""
     assert sorted(pad_a.routed.groups) == [
-        "EXT::substrate", "EXT::vacuum", "PORT::p1", "SA::substrate|vacuum",
-        "SHEET::ground", "SHEET::pad", "VOL::substrate", "VOL::vacuum",
+        "EXT::substrate::bottom", "EXT::substrate::sidewall", "EXT::vacuum::sidewall", "EXT::vacuum::top",
+        "PORT::p1", "SA::substrate|vacuum::interface", "SHEET::ground::sheet", "SHEET::pad::sheet",
+        "VOL::substrate", "VOL::vacuum",
     ]  # fmt: skip
 
 
@@ -285,7 +299,7 @@ def test_curve_families_required_and_refinement_only():
 
     def gap_faces(model):
         """Gap faces."""
-        return len(model.routed.groups["SA::substrate|vacuum"].ids)
+        return len(model.routed.groups["SA::substrate|vacuum::interface"].ids)
 
     assert (
         gap_faces(families) == gap_faces(plain) + 1
@@ -320,7 +334,7 @@ def test_a_refinement_curve_in_a_cell_without_a_face_is_an_error_not_a_silent_dr
     hosts = [f for f in model.topology.faces.values() if f.refinement_edges]
     assert (
         len(hosts) == 1
-        and model.routed.face_group[hosts[0].id] == "SA::substrate|vacuum"
+        and model.routed.face_group[hosts[0].id] == "SA::substrate|vacuum::interface"
     )
 
 
@@ -342,9 +356,14 @@ def test_no_entity_is_in_two_physical_groups_and_every_emitted_entity_is_in_one(
 
 def test_route_a_net_union_lists_the_entity_sheet_groups(pad_a):
     """Net unions list the primary groups of the Net's exposed surfaces."""
-    assert pad_a.routed.unions["NET::Ground"] == ["SHEET::ground"]
-    assert pad_a.routed.unions["NET::pad"] == ["SHEET::pad"]
-    assert pad_a.routed.unions["SHEET"] == ["SHEET::ground", "SHEET::pad"]
+    assert pad_a.routed.unions["NET::Ground"] == ["SHEET::ground::sheet"]
+    assert pad_a.routed.unions["NET::pad"] == ["SHEET::pad::sheet"]
+    assert pad_a.routed.unions["SHEET"] == ["SHEET::ground::sheet", "SHEET::pad::sheet"]
+    assert (
+        pad_a.routed.unions["MA"]
+        == pad_a.routed.unions["MS"]
+        == pad_a.routed.unions["SHEET"]
+    )  # a sheet carries both rows
 
 
 # --------------------------------------------------------------------------- wall coalescing

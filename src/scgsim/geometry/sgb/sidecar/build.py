@@ -30,6 +30,7 @@ from scgsim.geometry.sgb.sidecar.groups import (
     unions,
     volume_group_records,
 )
+from scgsim.geometry.sgb.sidecar.hints import mesh_hints
 from scgsim.geometry.sgb.sidecar.lineage import edge_family, lineage_record
 
 SCHEMA = "scgsim.sgb.sidecar.v1"
@@ -84,11 +85,12 @@ def build_sidecar(
         "counts": {**plan.counts, "volumes_total": len(topology.volumes)},
         "physical_groups": {**surfaces, **volume_groups},
         "unions": unions(model),
-        "surface_epr_rows": surface_epr_rows(surfaces),
+        "surface_epr_rows": surface_epr_rows(model, surfaces),
         "volumes": _volumes(model, plan, volume_groups),
         "faces": _faces(model, plan),
         "embedded_faces": embedded,
         "refinement_edges": refinement_edges,
+        "mesh_hints": mesh_hints(model, plan, lineage["carriers"]),
         "ports": _ports(model, plan, embedded),
         "lineage": lineage,
         "insets": _insets(model),

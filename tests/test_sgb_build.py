@@ -134,7 +134,7 @@ def test_requests_for_bands_and_refinement_curves_reach_the_files(tmp_path, film
     sidecar = read_sidecar(artifacts.sidecar)
     assert [i["request_id"] for i in sidecar["insets"]] == ["band_left"]
     assert any(
-        name.startswith("SHEET::chip/left::band=")
+        name.startswith("SHEET::chip/left::sheet::band=")
         for name in sidecar["physical_groups"]
     )
     assert verify_xao(artifacts.xao, sidecar).ok

@@ -6,7 +6,8 @@ backends need.  Primary groups *partition* each dimension -- an entity belongs t
 one -- so the unions are lists of primary group names, never overlapping Gmsh groups:
 
 * interface-type unions: ``MA``, ``MS``, ``MM``, ``SA``, ``AA``, ``SS``, ``SHEET``, ``PORT``,
-  ``EXT`` list every primary group of that type (reports aggregate by interface type);
+  ``EXT`` list every primary group of that type (reports aggregate by interface type); a Route A
+  ``SHEET`` group is also listed under ``MA`` and ``MS``, because it carries both Surface-EPR rows;
 * Net unions: ``NET::<net>`` lists the primary groups of the Net's exposed conductor
   surfaces (Electrostatic terminals and grounds), whichever route produced them.
 
@@ -72,7 +73,13 @@ def apply_route(topology: Topology, policy: RoutePolicy) -> RoutedModel:
     groups: dict[str, PhysicalGroup] = {}
     net_groups: dict[str, set[str]] = defaultdict(set)
     for fid, face in sorted(topology.faces.items()):
-        group = surface_group(face.neg_domain, face.pos_domain, face.owner, face.bands)
+        group = surface_group(
+            face.neg_domain,
+            face.pos_domain,
+            face.owner,
+            face.bands,
+            vertical=face.kind == "wall",
+        )
         face_group[fid] = group
         bounds_emitted = any(
             v is not None and v in emitted for v in (face.neg_volume, face.pos_volume)
@@ -107,6 +114,12 @@ def _unions(
     for name, group in groups.items():
         if group.dim == 2:
             by_type[interface_type(name)].append(name)
+    # a Route A sheet group carries both the metal-air and the metal-substrate Surface-EPR row, so it
+    # belongs to the MA and MS unions as well as to SHEET
+    sheets = list(by_type.get("SHEET", ()))
+    if sheets:
+        by_type["MA"].extend(sheets)
+        by_type["MS"].extend(sheets)
     unions = {kind: sorted(names) for kind, names in by_type.items()}
     unions.update({name: sorted(members) for name, members in net_groups.items()})
     return dict(sorted(unions.items()))

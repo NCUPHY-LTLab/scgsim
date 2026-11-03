@@ -8,7 +8,7 @@
   "required": [
     "schema", "route", "route_policy", "grid_um", "tolerance_um", "model", "files", "binding", "counts",
     "physical_groups", "unions", "surface_epr_rows", "volumes", "faces", "embedded_faces", "refinement_edges",
-    "ports", "lineage", "insets", "refinements", "slivers", "arrangement", "curved_wall_faces",
+    "mesh_hints", "ports", "lineage", "insets", "refinements", "slivers", "arrangement", "curved_wall_faces",
     "surface_kinds", "expected"
   ],
   "properties": {
@@ -84,12 +84,20 @@
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["group", "interface_type", "entities", "band"],
+        "required": ["group", "interface_type", "entities", "band", "side", "shared_face_group"],
         "properties": {
           "group": {"type": "string"},
           "interface_type": {"enum": ["MA", "MS", "SA"]},
           "entities": {"type": "array", "items": {"type": "string"}},
-          "band": {"type": ["integer", "null"], "minimum": 0}
+          "band": {"type": ["integer", "null"], "minimum": 0},
+          "side": {
+            "description": "Which side of a two-sided sheet face the row integrates; null for a one-sided row.",
+            "enum": ["above", "below", "both", null]
+          },
+          "shared_face_group": {
+            "description": "The sheet group when the row integrates one side of an internal two-sided face, else null.",
+            "type": ["string", "null"]
+          }
         }
       }
     },
@@ -154,6 +162,21 @@
           "host_face": {"type": "string"},
           "family": {"type": ["string", "null"]},
           "written_as_free_edge": {"type": "boolean"}
+        }
+      }
+    },
+    "mesh_hints": {
+      "description": "Edges the mesher should resolve (no sizes): band boundaries, refinement curves, curved edges.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "source", "edges", "native_tags"],
+        "properties": {
+          "kind": {"enum": ["band_boundary", "refinement_curve", "curved_edge"]},
+          "source": {"description": "The inset or refinement request id; null for curved edges.", "type": ["string", "null"]},
+          "edges": {"$ref": "#/$defs/idList"},
+          "native_tags": {"$ref": "#/$defs/tagList"}
         }
       }
     },
@@ -294,7 +317,7 @@
     "surfaceGroup": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["dim", "tag", "interface_type", "ids", "native_tags", "entities", "net", "face_kinds", "adjacent_domains", "adjacent_volumes", "band", "area_um2"],
+      "required": ["dim", "tag", "interface_type", "ids", "native_tags", "entities", "net", "face_kind", "adjacent_domains", "adjacent_volumes", "band", "area_um2"],
       "properties": {
         "dim": {"const": 2},
         "tag": {"type": "integer", "minimum": 1},
@@ -303,7 +326,7 @@
         "native_tags": {"$ref": "#/$defs/tagList"},
         "entities": {"$ref": "#/$defs/idList"},
         "net": {"type": ["string", "null"]},
-        "face_kinds": {"type": "array", "items": {"enum": ["top", "bottom", "sidewall", "sheet", "port", "interface"]}},
+        "face_kind": {"description": "The one face kind every face of the group has; it is part of the group name (PORT groups: port).", "enum": ["top", "bottom", "sidewall", "sheet", "port", "interface"]},
         "adjacent_domains": {
           "type": "array",
           "items": {

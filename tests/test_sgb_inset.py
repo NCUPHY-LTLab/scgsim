@@ -150,24 +150,26 @@ def test_semantic_names_carry_the_band_index_and_unions_list_primary_groups(band
     groups = banded.routed.groups
     for k in range(4):
         assert (
-            f"SHEET::pad::band={k}" in groups
-            and f"SA::substrate|vacuum::band={k}" in groups
+            f"SHEET::pad::sheet::band={k}" in groups
+            and f"SA::substrate|vacuum::interface::band={k}" in groups
         )
     assert not any(
-        n.startswith(("MA::pad", "MS::pad", "SHEET::pad::band=4")) for n in groups
+        n.startswith(("MA::pad", "MS::pad", "SHEET::pad::sheet::band=4"))
+        for n in groups
     )
-    assert "SHEET::pad" not in groups  # the whole pad sheet is banded
+    assert "SHEET::pad::sheet" not in groups  # the whole pad sheet is banded
     assert banded.routed.unions["NET::pad"] == [
-        f"SHEET::pad::band={k}" for k in range(4)
+        f"SHEET::pad::sheet::band={k}" for k in range(4)
     ]
     rows = banded.routed.surface_epr_rows
     assert all(
-        rows[f"{kind}::pad::band={k}"] == f"SHEET::pad::band={k}"
+        rows[f"{kind}::pad::sheet::band={k}"] == f"SHEET::pad::sheet::band={k}"
         for k in range(4)
         for kind in ("MA", "MS")
     )
     assert all(
-        rows[f"SA::substrate|vacuum::band={k}"] == f"SA::substrate|vacuum::band={k}"
+        rows[f"SA::substrate|vacuum::interface::band={k}"]
+        == f"SA::substrate|vacuum::interface::band={k}"
         for k in range(4)
     )
     assert (
@@ -229,12 +231,20 @@ def test_route_b_and_c_band_the_pad_top_as_ma_and_the_pad_bottom_as_ms():
         )
         groups = model.routed.groups
         for k in range(4):
-            assert f"MA::pad::band={k}" in groups and f"MS::pad::band={k}" in groups
-        assert "MA::pad" in groups  # the sidewalls are not banded (out of version 1)
-        assert model.routed.surface_epr_rows["MS::pad::band=2"] == "MS::pad::band=2"
+            assert (
+                f"MA::pad::top::band={k}" in groups
+                and f"MS::pad::bottom::band={k}" in groups
+            )
+        assert (
+            "MA::pad::sidewall" in groups
+        )  # the sidewalls are not banded (out of version 1)
+        assert (
+            model.routed.surface_epr_rows["MS::pad::bottom::band=2"]
+            == "MS::pad::bottom::band=2"
+        )
         assert set(model.routed.unions["NET::pad"]) >= {
-            f"{kind}::pad::band={k}" for kind in ("MA", "MS") for k in range(4)
-        }
+            f"MA::pad::top::band={k}" for k in range(4)
+        } | {f"MS::pad::bottom::band={k}" for k in range(4)}
 
 
 def test_straight_inset_members_keep_their_generating_primitive_in_the_lineage(banded):
@@ -287,7 +297,7 @@ def test_face_membership_is_area_weighted_and_non_exclusive(banded):
     deepest = next(
         f
         for f in faces.values()
-        if banded.routed.face_group[f.id] == "SHEET::pad::band=3"
+        if banded.routed.face_group[f.id] == "SHEET::pad::sheet::band=3"
     )
     assert deepest.membership["pad"] == pytest.approx(1.0)
     assert deepest.membership["substrate"] == pytest.approx(1.0)
@@ -358,7 +368,7 @@ def test_the_expected_interface_type_is_checked_against_the_labels():
             InsetRequest("r", ConductorSurface("pad", "top"), (0.5,), interface="MA"),
         ),
     )
-    assert "MA::pad::band=1" in model.routed.groups
+    assert "MA::pad::top::band=1" in model.routed.groups
     message = request_error(
         InsetRequest("r", ConductorSurface("pad", "top"), (0.5,), interface="MS"), "B"
     )
@@ -472,11 +482,11 @@ def test_bands_on_a_real_thin_film_sheet_use_the_qualified_entity_id():
         effective.build_input, effective.representation, "A", insets=(request,)
     )
     groups = model.routed.groups
-    assert {f"SHEET::chip/left::band={k}" for k in range(3)} <= set(groups)
-    assert "SHEET::chip/right" in groups  # the other Entity is untouched
+    assert {f"SHEET::chip/left::sheet::band={k}" for k in range(3)} <= set(groups)
+    assert "SHEET::chip/right::sheet" in groups  # the other Entity is untouched
     assert (
-        model.routed.surface_epr_rows["MA::chip/left::band=2"]
-        == "SHEET::chip/left::band=2"
+        model.routed.surface_epr_rows["MA::chip/left::sheet::band=2"]
+        == "SHEET::chip/left::sheet::band=2"
     )
     fam = family(model, "bands/left")
     assert all(c.lineage.member.startswith("bands/left/ring") for c in fam.carriers)
@@ -496,7 +506,7 @@ def test_bands_on_the_top_of_a_real_finite_conductor(tmp_path):
     model = build_conformal_model(
         effective.build_input, effective.representation, "B", insets=(request,)
     )
-    assert {f"MA::pad::band={k}" for k in range(3)} <= set(model.routed.groups)
+    assert {f"MA::pad::top::band={k}" for k in range(3)} <= set(model.routed.groups)
     assert exact_band_areas(model, "pad_top").keys() == {0, 1, 2}
     assert sum(exact_band_areas(model, "pad_top").values()) * 1e-6 == pytest.approx(
         400.0, rel=1e-9

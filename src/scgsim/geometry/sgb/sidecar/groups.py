@@ -17,8 +17,10 @@ from typing import Any, TypedDict
 from scgsim.geometry.sgb.assembly.records import TopoFace, Topology
 from scgsim.geometry.sgb.emission.measures import planned_face_area_um2, rounded
 from scgsim.geometry.sgb.emission.plan import BrepPlan
+from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.records.labels import Domain
+from scgsim.geometry.sgb.routes.naming import face_kind as naming_face_kind
 from scgsim.geometry.sgb.routes.naming import interface_type, net_of_surface
 
 SURFACE_EPR_TYPES = (
@@ -46,7 +48,7 @@ class SurfaceGroupRecord(TypedDict):
     native_tags: list[int]
     entities: list[str]
     net: str | None
-    face_kinds: list[str]
+    face_kind: str
     adjacent_domains: list[DomainRecord]
     adjacent_volumes: list[str]
     band: dict[str, Any] | None
@@ -68,28 +70,10 @@ class VolumeGroupRecord(TypedDict):
 
 
 def face_kind(face: TopoFace) -> str:
-    """``sheet``, ``sidewall`` or, for a horizontal face, ``top`` / ``bottom`` of a conductor, else ``interface``.
-
-    A conductor below the face makes it that conductor's top; above, its bottom.
-    """
-    if face.owner is not None:
-        return "port" if face.owner.kind == "port" else "sheet"
-    if face.kind == "wall":
-        return "sidewall"
-    below, above = face.neg_domain, face.pos_domain
-    if (
-        below is not None
-        and below.kind == "conductor"
-        and (above is None or above.kind != "conductor")
-    ):
-        return "top"
-    if (
-        above is not None
-        and above.kind == "conductor"
-        and (below is None or below.kind != "conductor")
-    ):
-        return "bottom"
-    return "interface"
+    """The face kind of a planned face (``routes.naming.face_kind``): the one a group name carries, or ``port``."""
+    return naming_face_kind(
+        face.neg_domain, face.pos_domain, face.owner, vertical=face.kind == "wall"
+    )
 
 
 def surface_group_records(
@@ -111,7 +95,7 @@ def surface_group_records(
             native_tags=[face_tag[f.id] for f in faces],
             entities=_owners(group.name, faces),
             net=_net(faces),
-            face_kinds=sorted({face_kind(f) for f in faces}),
+            face_kind=_group_face_kind(group.name, faces),
             adjacent_domains=_adjacent_domains(faces),
             adjacent_volumes=_adjacent_volumes(model, faces),
             band=_band(faces),
@@ -158,13 +142,21 @@ def unions(model: ConformalModel) -> dict[str, dict[str, list[str]]]:
 
 
 def surface_epr_rows(
-    surface_groups: dict[str, SurfaceGroupRecord],
+    model: ConformalModel, surface_groups: dict[str, SurfaceGroupRecord]
 ) -> dict[str, dict[str, Any]]:
     """Every Surface-EPR row and the primary group that carries it.
 
     ``MA``, ``MS`` and ``SA`` groups carry their own row.  A Route A sheet group carries both the
-    metal-air and the metal-substrate row of its Entity (one face, two interface types), so its
-    two rows name the same group.  ``band`` is the band index or ``None`` for an unbanded group.
+    metal-air and the metal-substrate row of its Entity: one face, integrated once per side, so its two
+    rows name the same ``shared_face_group`` and say which side of the sheet they integrate:
+
+    * ``side`` -- ``above`` or ``below`` (the side of the sheet whose neighbour is vacuum for the MA row,
+      a dielectric for the MS row), ``both`` when both neighbours qualify, ``None`` for a one-sided row;
+    * ``shared_face_group`` -- the sheet group when the row integrates one side of a two-sided face,
+      else ``None``.  A consumer that treats an internal two-sided face (cracking it, or counting the
+      face once) decides from this field alone.
+
+    ``band`` is the band index, or ``None`` for an unbanded group.
     """
     rows: dict[str, dict[str, Any]] = {}
     for name, record in sorted(surface_groups.items()):
@@ -172,22 +164,54 @@ def surface_epr_rows(
         rest = name.split("::", 1)[1]
         band = record["band"]["index"] if record["band"] else None
         if kind == "SHEET":
-            for row_type in ("MA", "MS"):
-                rows[f"{row_type}::{rest}"] = _row(name, row_type, record, band)
+            faces = [model.topology.faces[f] for f in record["ids"]]
+            for row_type, neighbour in (("MA", "vacuum"), ("MS", "dielectric")):
+                side = _sheet_side(faces, neighbour)
+                rows[f"{row_type}::{rest}"] = _row(
+                    name, row_type, record, band, side, name
+                )
         elif kind in SURFACE_EPR_TYPES:
-            rows[name] = _row(name, kind, record, band)
+            rows[name] = _row(name, kind, record, band, None, None)
     return rows
 
 
-def _row(
-    group: str, row_type: str, record: SurfaceGroupRecord, band: int | None
+def _sheet_side(faces: list[TopoFace], neighbour_kind: str) -> str | None:
+    """Which side of a sheet group has a neighbour of this kind: ``above``, ``below`` or ``both`` (``None`` for neither)."""
+    above = any(
+        f.pos_domain is not None and f.pos_domain.kind == neighbour_kind for f in faces
+    )
+    below = any(
+        f.neg_domain is not None and f.neg_domain.kind == neighbour_kind for f in faces
+    )
+    return (
+        "both" if above and below else "above" if above else "below" if below else None
+    )
+
+
+def _row(  # noqa: PLR0913 - the fields of one row
+    group: str,
+    row_type: str,
+    record: SurfaceGroupRecord,
+    band: int | None,
+    side: str | None,
+    shared_face_group: str | None,
 ) -> dict[str, Any]:
     return {
         "group": group,
         "interface_type": row_type,
         "entities": record["entities"],
         "band": band,
+        "side": side,
+        "shared_face_group": shared_face_group,
     }
+
+
+def _group_face_kind(name: str, faces: list[TopoFace]) -> str:
+    """The one face kind of a group; a group that mixed two would be a naming defect, so it stops the build."""
+    kinds = {face_kind(f) for f in faces}
+    if len(kinds) != 1:
+        raise SgbError(f"physical group {name} mixes face kinds {sorted(kinds)}")
+    return kinds.pop()
 
 
 def _owners(group_name: str, faces: list[TopoFace]) -> list[str]:

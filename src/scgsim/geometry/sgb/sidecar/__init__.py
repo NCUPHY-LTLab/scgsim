@@ -24,20 +24,27 @@ Top-level fields and who uses them
 ``physical_groups``
     each primary group by name: ``dim``, ``tag`` (physical tag; not identity, consumers store names),
     ``ids``, ``native_tags``, and for surfaces ``interface_type``, ``entities`` (owner ids),
-    ``net``, ``face_kinds``, ``adjacent_domains`` (solution regions: kind, material),
+    ``net``, ``face_kind``, ``adjacent_domains`` (solution regions: kind, material),
     ``adjacent_volumes``, ``band`` and ``area_um2``; for volumes ``kind`` (vacuum, dielectric,
     conductor -- Route C conductor interiors are ``VOL::<entity>`` of kind conductor) and ``material``.
     Palace rebuilds ``groups = {volumes, boundary_surfaces, surface_groups, pec_surfaces,
     port_surfaces}`` from these: ``owner_semantic_ids`` = ``entities``, ``adjacent_solution_volume_ids``
-    = ``adjacent_domains``, ``face_kind`` = ``face_kinds``, ``conductor_component_id`` / ``net_id`` =
+    = ``adjacent_domains``, ``face_kind`` = ``face_kind`` (one per group, and part of its name:
+    ``<kind>::<entity>::<top|bottom|sidewall|sheet|interface>[::band=k]``), ``conductor_component_id`` / ``net_id`` =
     ``entities`` / ``net``, PEC surfaces = the ``MA``/``MS``/``SHEET`` groups of a conductor.
 ``unions``
-    ``interface_types`` (``MA`` -> groups ...; reports aggregate by interface type) and ``nets``
+    ``interface_types`` (``MA`` -> groups ...; reports aggregate by interface type; a Route A ``SHEET``
+    group is listed under ``SHEET``, ``MA`` and ``MS`` because it carries both rows) and ``nets``
     (Net -> exposed conductor groups; Electrostatic terminals and grounds).  Lists of primary groups,
     never overlapping Gmsh groups.
 ``surface_epr_rows``
-    every Surface-EPR row (``MA::pad::band=2`` ...) and the group that carries it (a Route A sheet
-    group carries both its MA and MS row), with entities and band: Palace's cumulative band selection.
+    every Surface-EPR row (``MA::pad::top::band=2`` ...) and the group that carries it, with entities and
+    band: Palace's cumulative band selection.  A Route A sheet group carries both its MA and MS row; each
+    of those rows has ``shared_face_group`` (the sheet group) and ``side`` (``above``, ``below`` or ``both``),
+    so the consumer decides internal-boundary cracking from the row alone.
+``mesh_hints``
+    ``band_boundary`` / ``refinement_curve`` / ``curved_edge`` entries: edge ids and native tags plus the
+    source request id; no sizes (the mesher decides).
 ``volumes`` / ``faces``
     per planned volume: group, kind, material, Net, ``emitted``, planned volume and ``aedt_name``;
     per planned face: group, ``face_kind``, ``z_um``, the volumes on its two sides.  AEDT's contribution
