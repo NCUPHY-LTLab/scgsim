@@ -30,8 +30,11 @@ local entity identity, ports, functional conductor regions, and topology
 selectors. The Notebook composes named occurrences and assigns the final net
 map; it does not author PDK or component facts manually.
 
-Overlap precedence follows the gdsfactory convention at the PDK interface:
-for `LayerLevel.mesh_order`, the lower value wins where materials overlap.
+Where solution regions overlap, material kind decides first: a dielectric
+region wins over a vacuum region regardless of `mesh_order` (conductors are
+resolved before solution regions and never compete on priority). Only
+between solution regions of the same kind does `LayerLevel.mesh_order` decide,
+following the gdsfactory convention that the lower value wins.
 `build_component_stack()` converts it once into the internal `priority`
 (`priority = -mesh_order`) on both solution-region and conductor records.
 `SemanticEntitySpec.priority`, and `priority` in a saved stack or annotation

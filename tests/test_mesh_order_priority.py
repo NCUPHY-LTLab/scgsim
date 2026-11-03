@@ -55,10 +55,10 @@ def _level(name, material, interval, role, mesh_order):
     )
 
 
-def _layers(order_a, order_b, metal_order=1):
+def _layers(order_a, order_b, metal_order=1, vacuum_order=5):
     return {
         "VACUUM_REGION": _level(
-            "VACUUM_REGION", "vacuum", (-2, 3), "solution_region", 5
+            "VACUUM_REGION", "vacuum", (-2, 3), "solution_region", vacuum_order
         ),
         "diel_a": _level("diel_a", "silicon", (-2, 0), "solution_region", order_a),
         "diel_b": _level("diel_b", "sapphire", (-2, 0), "solution_region", order_b),
@@ -106,10 +106,17 @@ def test_stack_priority_is_negated_mesh_order_for_all_level_kinds(orders):
 
 
 @pytest.mark.parametrize(
-    ("order_a", "order_b", "winner"), ((1, 2, "diel_a"), (2, 1, "diel_b"))
+    ("order_a", "order_b", "vacuum_order", "winner"),
+    ((1, 2, 5, "diel_a"), (2, 1, 5, "diel_b"), (1, 2, 0, "diel_a")),
 )
-def test_overlapping_dielectrics_resolve_to_lower_mesh_order(order_a, order_b, winner):
-    """The curved arrangement gives overlapping dielectric cells to lower `mesh_order`."""
+def test_overlapping_dielectrics_resolve_to_lower_mesh_order(
+    order_a, order_b, vacuum_order, winner
+):
+    """Within one material kind the lower `mesh_order` wins; material kind decides first.
+
+    The last case gives vacuum the lowest `mesh_order`; a dielectric still owns
+    the overlap because dielectric beats vacuum before priority is compared.
+    """
     pytest.importorskip("gmsh")
     pytest.importorskip("gdsfactory")
     environment = dict(os.environ)
@@ -118,7 +125,7 @@ def test_overlapping_dielectrics_resolve_to_lower_mesh_order(order_a, order_b, w
         (source, environment.get("PYTHONPATH", ""))
     )
     completed = subprocess.run(
-        [sys.executable, __file__, str(order_a), str(order_b)],
+        [sys.executable, __file__, str(order_a), str(order_b), str(vacuum_order)],
         env=environment,
         check=False,
         capture_output=True,
@@ -128,7 +135,7 @@ def test_overlapping_dielectrics_resolve_to_lower_mesh_order(order_a, order_b, w
     assert completed.stdout.split()[-1] == winner, completed.stdout
 
 
-def _curved_overlap_owner(order_a: int, order_b: int) -> str:
+def _curved_overlap_owner(order_a: int, order_b: int, vacuum_order: int) -> str:
     # Native Gmsh state is process-global, so this runs in a fresh subprocess.
     import gdsfactory as gf  # noqa: PLC0415 - optional dependency, subprocess-local
 
@@ -144,7 +151,9 @@ def _curved_overlap_owner(order_a: int, order_b: int) -> str:
     plan = GeometryPlan(
         component,
         root_id="coupon",
-        layer_stack=SimpleNamespace(layers=_layers(order_a, order_b)),
+        layer_stack=SimpleNamespace(
+            layers=_layers(order_a, order_b, vacuum_order=vacuum_order)
+        ),
         material_records=MATERIALS,
         coupon_padding_um=1,
         grid_size_um=0.001,
@@ -189,4 +198,4 @@ def _curved_overlap_owner(order_a: int, order_b: int) -> str:
 
 
 if __name__ == "__main__":
-    print(_curved_overlap_owner(int(sys.argv[1]), int(sys.argv[2])))
+    print(_curved_overlap_owner(*(int(value) for value in sys.argv[1:4])))

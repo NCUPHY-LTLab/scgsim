@@ -252,9 +252,11 @@ def _level_info(level: Any, name: Any) -> dict[str, Any]:
 def _level_facts(level: Any, name: Any) -> tuple[str, float, float, int]:
     """Read one PDK level; return `priority` where a HIGHER value wins overlaps.
 
-    gdsfactory `LayerLevel.mesh_order` is the opposite: the LOWER value wins
-    where materials overlap. This is the single place that converts the PDK
-    convention into `SemanticEntitySpec.priority` (higher wins), by negation.
+    gdsfactory `LayerLevel.mesh_order` is the opposite: the LOWER value wins.
+    This is the single place that converts the PDK convention into
+    `SemanticEntitySpec.priority` (higher wins), by negation. Material kind is
+    decided before priority (dielectric over vacuum), so mesh_order ranks
+    overlapping solution regions of the same kind only.
     """
     material_id = _identifier(
         getattr(level, "material", None), f"level {name!r} material"
