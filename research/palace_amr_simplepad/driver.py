@@ -47,10 +47,14 @@ from .contract import (
     VACUUM_PADDING_UM,
     CaseDefinition,
 )
+from .preparation_evidence import (
+    RoutePreparationContext,
+    RoutePreparationRequest,
+    prepare_routes,
+)
 from .provenance import capture_host_resources, capture_scgsim_provenance
 
 if TYPE_CHECKING:
-    from scgsim.geometry.source.plan import GeometryPlanSnapshot
     from scgsim.palace import ElectrostaticSim
     from scgsim.palace.execution.handoff import HandoffPlan
 
@@ -108,9 +112,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Parse a stage command and dispatch to its named workflow."""
     arguments = _parse_arguments(argv)
     if arguments.stage == "prepare":
-        study_dir = _prepare_study(arguments)
+        study_dir, exit_code = _prepare_study(arguments)
         print(study_dir)
-        return 0
+        return exit_code
     if arguments.stage == "run":
         return _run_study(arguments.study_dir)
     return analyze_study(arguments.study_dir)
@@ -134,7 +138,7 @@ def _parse_arguments(argv: Sequence[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _prepare_study(arguments: argparse.Namespace) -> Path:
+def _prepare_study(arguments: argparse.Namespace) -> tuple[Path, int]:
     """Verify inputs, create one GeometryPlan snapshot, mesh each route once, and seal cases."""
     from gdsfactory import clear_cache  # noqa: PLC0415 -- GDS preparation runs only in the prepare stage.
 
@@ -195,39 +199,38 @@ def _prepare_study(arguments: argparse.Namespace) -> Path:
         host_resources=capture_host_resources(),
     )
     manifest = _initial_manifest(preparation)
-    _write_manifest(study_dir, manifest)
-    prepared_cases: list[dict[str, Any]] = []
-    for route_id in ("route-a", "route-b"):
-        route_cases = tuple(case for case in CASES if case.route_id == route_id)
-        prepared_cases.extend(
-            _prepare_route(
-                study_dir=study_dir,
-                snapshot=snapshot,
-                route_cases=route_cases,
-                wrapper_path=wrapper_path,
-                preparation_timings=manifest["preparation_timings"],
-            )
+    write_manifest(study_dir, manifest)
+    route_groups = tuple(
+        (route_id, tuple(case for case in CASES if case.route_id == route_id))
+        for route_id in ("route-a", "route-b")
+    )
+    exit_code = prepare_routes(
+        RoutePreparationContext(
+            study_dir=study_dir,
+            manifest=manifest,
+            route_groups=route_groups,
+            snapshot=snapshot,
+            wrapper_path=wrapper_path,
+            prepare_route=_prepare_route,
+            on_case_sealed=record_sealed_case,
+            write_manifest=write_manifest,
+            require_prepared=require_prepared_manifest,
         )
-        manifest["cases"] = list(prepared_cases)
-        _write_manifest(study_dir, manifest)
-    manifest["status"] = "prepared"
-    require_prepared_manifest(manifest)
-    _write_manifest(study_dir, manifest)
-    return study_dir
+    )
+    return study_dir, exit_code
 
 
-def _prepare_route(
-    *,
-    study_dir: Path,
-    snapshot: GeometryPlanSnapshot,
-    route_cases: tuple[CaseDefinition, ...],
-    wrapper_path: Path,
-    preparation_timings: dict[str, Any],
-) -> list[dict[str, Any]]:
+def _prepare_route(request: RoutePreparationRequest) -> None:
     """Build one route mesh and export both independently sealed AMR arms."""
     from scgsim.geometry import ApproximationProfile  # noqa: PLC0415 -- physical profiles are needed only during preparation.
     from scgsim.palace import ElectrostaticSim  # noqa: PLC0415 -- the Palace facade is needed only during preparation.
 
+    study_dir = request.study_dir
+    snapshot = request.snapshot
+    route_cases = request.route_cases
+    wrapper_path = request.wrapper_path
+    preparation_timings = request.preparation_timings
+    on_case_sealed = request.on_case_sealed
     first = route_cases[0]
     simulation = ElectrostaticSim()
     simulation.set_plan(snapshot)
@@ -252,11 +255,12 @@ def _prepare_route(
         geometry_order=MESH_GEOMETRY_ORDER,
     )
     mesh_started = perf_counter()
-    mesh_path = simulation.mesh()
-    preparation_timings["route_geometry_and_mesh_seconds"][first.route_id] = (
-        perf_counter() - mesh_started
-    )
-    route_outputs: list[dict[str, Any]] = []
+    try:
+        mesh_path = simulation.mesh()
+    finally:
+        preparation_timings["route_geometry_and_mesh_seconds"][first.route_id] = (
+            perf_counter() - mesh_started
+        )
     for case in route_cases:
         config_started = perf_counter()
         _set_case_controls(simulation, case)
@@ -288,7 +292,7 @@ def _prepare_route(
         preparation_timings["case_export_seconds"][case.case_id] = (
             perf_counter() - export_started
         )
-        route_outputs.append(
+        on_case_sealed(
             _case_manifest_entry(
                 case=case,
                 handoff=handoff,
@@ -296,7 +300,6 @@ def _prepare_route(
                 study_dir=study_dir,
             )
         )
-    return route_outputs
 
 
 def _set_case_controls(simulation: ElectrostaticSim, case: CaseDefinition) -> None:
@@ -330,7 +333,7 @@ def _run_study(study_dir: Path) -> int:
     _verify_toolchain_identities(root, manifest)
     manifest["run_host_resources"] = capture_host_resources()
     manifest["status"] = "running"
-    _write_manifest(root, manifest)
+    write_manifest(root, manifest)
     failed_cases = 0
     for case in manifest["cases"]:
         run_dir = _study_path(root, case["run_dir"])
@@ -355,10 +358,10 @@ def _run_study(study_dir: Path) -> int:
             else:
                 case["run_status"] = "returned_nonzero"
                 failed_cases += 1
-        _write_manifest(root, manifest)
+        write_manifest(root, manifest)
     manifest["status"] = "run_attempts_complete"
     manifest["failed_run_count"] = failed_cases
-    _write_manifest(root, manifest)
+    write_manifest(root, manifest)
     return int(failed_cases > 0)
 
 
@@ -394,10 +397,10 @@ def analyze_study(study_dir: Path) -> int:
             case["analysis_status"] = "exported_from_observed_run"
             case["benchmark_sha256"] = _sha256(benchmark_path)
             case["amr_analysis_sha256"] = _sha256(amr_path)
-        _write_manifest(root, manifest)
+        write_manifest(root, manifest)
     manifest["status"] = "analysis_attempts_complete"
     manifest["analysis_error_count"] = failed_cases
-    _write_manifest(root, manifest)
+    write_manifest(root, manifest)
     return int(failed_cases > 0 or manifest.get("failed_run_count", 0) > 0)
 
 
@@ -505,6 +508,7 @@ def _case_manifest_entry(
     return {
         "case_id": case.case_id,
         "route_id": case.route_id,
+        "preparation_status": "sealed",
         "representation": case.representation,
         "approximation": case.approximation,
         "amr_nonconformal": case.nonconformal,
@@ -517,6 +521,18 @@ def _case_manifest_entry(
         "benchmark_path": f"analysis/{case.case_id}-benchmark.json",
         "amr_analysis_path": f"analysis/{case.case_id}-amr.json",
     }
+
+
+def record_sealed_case(
+    study_dir: Path, manifest: dict[str, Any], case_entry: dict[str, Any]
+) -> None:
+    """Persist one independently sealed case while its route is still preparing."""
+    for index, planned in enumerate(manifest["cases"]):
+        if planned["case_id"] == case_entry["case_id"]:
+            manifest["cases"][index] = case_entry
+            write_manifest(study_dir, manifest)
+            return
+    raise ValueError(f"sealed case was not planned: {case_entry['case_id']}")
 
 
 def _initial_manifest(preparation: PreparationContext) -> dict[str, Any]:
@@ -540,6 +556,7 @@ def _initial_manifest(preparation: PreparationContext) -> dict[str, Any]:
             ),
             "common_layout_and_geometry_plan_snapshot_seconds": preparation.source_preparation_seconds,
             "route_geometry_and_mesh_seconds": {},
+            "route_preparation_seconds": {},
             "case_config_seconds": {},
             "case_handoff_package_seconds": {},
             "case_export_seconds": {},
@@ -690,6 +707,8 @@ def require_prepared_manifest(manifest: dict[str, Any]) -> None:
     if manifest.get("status") != "prepared":
         raise ValueError("run requires a completely prepared study")
     cases = manifest.get("cases", [])
+    if any(case.get("preparation_status") != "sealed" for case in cases):
+        raise ValueError("run requires every planned case to be sealed")
     actual_ids = [case.get("case_id") for case in cases]
     if actual_ids != [case.case_id for case in CASES]:
         raise ValueError("prepared study does not contain the ordered four-case set")
@@ -726,7 +745,7 @@ def _read_manifest(study_dir: Path) -> dict[str, Any]:
     return value
 
 
-def _write_manifest(study_dir: Path, payload: dict[str, Any]) -> None:
+def write_manifest(study_dir: Path, payload: dict[str, Any]) -> None:
     """Atomically persist the study's measured preparation and run identities."""
     _write_json(study_dir / MANIFEST_NAME, payload)
 

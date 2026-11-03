@@ -1,9 +1,11 @@
 """Pure contract checks for the four-case Palace AMR research driver."""
 
+import hashlib
 import json
 import os
 import subprocess
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -36,12 +38,20 @@ from research.palace_amr_simplepad.driver import (
     analyze_study,
     launcher_script,
     new_study_dir,
+    record_sealed_case,
     require_prepared_manifest,
+    write_manifest,
+)
+from research.palace_amr_simplepad.preparation_evidence import (
+    RoutePreparationContext,
+    RoutePreparationRequest,
+    prepare_routes,
 )
 from research.palace_amr_simplepad.provenance import (
     capture_host_resources,
     capture_scgsim_provenance,
 )
+from scgsim.geometry.source.plan import GeometryPlanSnapshot
 
 
 def test_human_selected_source_mesh_and_solver_values_are_preserved():
@@ -96,7 +106,12 @@ def test_run_rejects_reused_handoff_identity():
             {
                 "status": "prepared",
                 "cases": [
-                    {"case_id": case.case_id, "handoff_id": "shared"} for case in CASES
+                    {
+                        "case_id": case.case_id,
+                        "handoff_id": "shared",
+                        "preparation_status": "sealed",
+                    }
+                    for case in CASES
                 ],
             }
         )
@@ -108,11 +123,83 @@ def test_prepared_manifest_accepts_exact_ordered_four_case_set():
         {
             "status": "prepared",
             "cases": [
-                {"case_id": case.case_id, "handoff_id": f"id-{case.case_id}"}
+                {
+                    "case_id": case.case_id,
+                    "handoff_id": f"id-{case.case_id}",
+                    "preparation_status": "sealed",
+                }
                 for case in CASES
             ],
         }
     )
+
+
+def test_route_failure_is_retained_other_route_attempted_and_run_refused(tmp_path):
+    """Keep route errors visible, attempt other routes, and refuse incomplete runs."""
+    study_dir = tmp_path / "study"
+    manifest = {
+        "schema": "scgsim.palace_amr_simplepad.study.v1",
+        "status": "preparing",
+        "preparation_timings": {"route_preparation_seconds": {}},
+    }
+    route_groups = tuple(
+        (route_id, tuple(case for case in CASES if case.route_id == route_id))
+        for route_id in ("route-a", "route-b")
+    )
+    attempted_routes = []
+
+    def fail_route(request: RoutePreparationRequest) -> None:
+        route_id = request.route_cases[0].route_id
+        attempted_routes.append(route_id)
+        if route_id == "route-a":
+            raise ValueError("Route A surface sheet overlap")
+        raise RuntimeError("Route B preparation diagnostic")
+
+    exit_code = prepare_routes(
+        RoutePreparationContext(
+            study_dir=study_dir,
+            manifest=manifest,
+            route_groups=route_groups,
+            snapshot=cast(GeometryPlanSnapshot, object()),
+            wrapper_path=study_dir / "launcher.sh",
+            prepare_route=fail_route,
+            on_case_sealed=record_sealed_case,
+            write_manifest=write_manifest,
+            require_prepared=require_prepared_manifest,
+        )
+    )
+
+    assert exit_code == 1
+    assert attempted_routes == ["route-a", "route-b"]
+    assert manifest["status"] == "preparation_failed"
+    assert [route["preparation_status"] for route in manifest["routes"]] == [
+        "failed",
+        "failed",
+    ]
+    assert [case["preparation_status"] for case in manifest["cases"]] == [
+        "failed",
+        "failed",
+        "failed",
+        "failed",
+    ]
+    assert [
+        case["preparation_failure_traceback_path"] for case in manifest["cases"]
+    ] == [
+        manifest["routes"][0]["failure"]["traceback_path"],
+        manifest["routes"][0]["failure"]["traceback_path"],
+        manifest["routes"][1]["failure"]["traceback_path"],
+        manifest["routes"][1]["failure"]["traceback_path"],
+    ]
+    for route in manifest["routes"]:
+        failure = route["failure"]
+        traceback_path = study_dir / failure["traceback_path"]
+        assert not Path(failure["traceback_path"]).is_absolute()
+        assert (
+            hashlib.sha256(traceback_path.read_bytes()).hexdigest()
+            == failure["traceback_sha256"]
+        )
+    with pytest.raises(ValueError, match="completely prepared study"):
+        require_prepared_manifest(manifest)
 
 
 def test_launcher_executes_serial_probe_and_fixed_mpi_binding_with_spaced_paths(
