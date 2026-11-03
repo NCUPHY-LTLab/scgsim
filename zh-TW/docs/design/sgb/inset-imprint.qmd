@@ -1,13 +1,13 @@
 ---
 title: "Surface EPR 的 inset imprint"
-description: "SGB 如何把 Surface EPR 的 inset mask 變成模型中精確的 band face，讓 solver 對一般的 surface group 做積分，而不是用 mask 切開 element。"
+description: "SGB 如何在 CAD／XAO 中把 Surface EPR 的 inset 做成精確的 band face，讓一般的 Palace 對普通的 surface group 積分，不需要 solver 端的 mask。"
 lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/inset-imprint"
 ---
 
-**Inset** 選出一個 surface 上距其物理邊界至少 $m$ 的部分；相鄰兩個 margin 之間的差形成 **band**。Surface EPR 在這些區域之上，還需要一個 field solution 與選定的 loss model：把 field 在各個區域上積分，才能估計 surface loss 有多少集中在邊緣附近。這一頁說明 SGB 如何把這些區域做成模型中精確的幾何：inset 曲線的規則、band 如何組成累積的「距邊緣至少 $m_k$」selection、solver 端有什麼改變，以及它與 Palace 和 AEDT 現行的 mask 有何不同。
+**Inset** 選出一個 surface 上距其物理邊界至少 $m$ 的部分；相鄰兩個 margin 之間的差形成 **band**。Surface EPR 在這些區域之上，還需要一個 field solution 與選定的 loss model：把 field 在各個區域上積分，才能估計 surface loss 有多少集中在邊緣附近。這一頁說明 SGB 如何把這些區域做成模型中精確的幾何：inset 曲線的規則、band 如何組成累積的「距邊緣至少 $m_k$」selection、solver 端有什麼改變，以及它與現行的 mask 做法有何不同。SGB 在 CAD／XAO 中直接解決 inset：一般的（upstream）Palace 只需要對普通的 surface group 積分，不需要、也不支援 fork 版 Palace 的原生 Mask／Inset。
 
 在 SGB 中，inset band 是 **cut family** 的第一個使用者：cut family 是把一組曲線連同語意 role 加進 arrangement 的 record（機制見 [Cut families](cut-families.qmd)，arrangement 見 [Building an arrangement](arrangement.qmd)，兩種 route 見 [Routes](routes.qmd)）。arrangement 中的平面區域稱為 **cell**，輸出後成為 BREP **face**。本頁每張圖與每個數字都是對 prototype 的**計算結果**，除非文字標明是 conceptual（概念示意）；產生方式見最後的補充。
 
@@ -107,7 +107,7 @@ Sidecar 的 `surface_epr_rows` 把 sheet 的 Surface EPR row `MA::pad::band=k` �
 
 prototype 驗證了這個結果。把 lumped port 從範例中移除，family record 完全相同，且每個 band 的面積差不超過 $6 \times 10^{-8}$ grid unit²。在有 port 的模型中，port face 被 band 切成 7 個 face，但它們仍是同一個 group `PORT::p1`，因為 port 不屬於 Surface EPR 的 surface。
 
-Palace 的原生 Mask／Inset 由 solver 端以 `inset_margins_um` 要求，不修改 SGB 的來源幾何；它如何決定距離由 Palace 的實作決定，本設計不假設它。SGB 的做法不同：band 曲線在 surface 被分成 group 之前，就由 support region 的物理邊界產生，所以 port、contact cap 或 tile seam 不可能成為 distance origin。
+band 曲線在 surface 被分成 group 之前，就由 support region 的物理邊界產生，所以 port、contact cap 或 tile seam 不可能成為 distance origin。這也是在 CAD 中解決 inset 的好處之一：距離的定義在幾何中寫死，不依賴 solver 如何解讀 patch 的周長。
 
 ## Topology 變化是一般的結果
 
@@ -155,22 +155,15 @@ prototype 的 Palace-facing 檢查對含 band 的 Route A 模型做 mesh（40 µ
 
 這個示意由 `inset.py` 以 gmsh 在一個帶半徑 0.5 圓形 contour 的 2-D 正方形上**計算**，**不是** Palace 的計算。它量測的是 surface 被 mask 保留部分的面積，不是 field 的積分。在 $h = 0.025$ 時，mesh 不知道有 mask 的情況有 276 個跨越的 triangle，contour 本身是 mesh boundary 時為零；面積的相對誤差在 sampled mask 為 $2.5 \times 10^{-4}$（八個 contour 位置的中位數，每個 element 取一個取樣點），aligned 為 $9.8 \times 10^{-5}$，而 sampled mask 最壞的位置是 $4.1 \times 10^{-4}$（所有數值見 `figures/inset-tables.md`）。使用一階 element 時，aligned 的誤差就是任何圓的 conformal mesh 的 polygon 誤差，並隨 $h^2$ 下降。
 
-## 與 solver 端 mask 的比較
+## 為什麼不用 solver 端的 mask
 
-::: {.askr-table-compact}
-| | Palace 原生 Mask／Inset | AEDT circle erosion | SGB imprint |
-|---|---|---|---|
-| mask 在哪裡 | solver 端以 `inset_margins_um` 要求；需要支援原生 Mask／Inset 的 Palace 執行檔；不修改 SGB 來源幾何 | AEDT project 中的 non-model integration sheet | 模型的 face：每個 band 一個 physical group |
-| 解讀 | 各 margin 的資料列不是互斥的幾何 band | 每個 margin 一組 sheet | band 互不相交；selection 是 band group $\ge k$ 的聯集 |
-| Mesh | 規格未描述 mesh 與 mask 的關係 | sheet 與模型 mesh 無關；CAD、boundary 與 mesh 不變 | band boundary 就是 mesh boundary；mesh 是 conformal |
-| Distance origin | 由 Palace 的實作決定 | 每個 source plane 先把完整的 physical support 聯集，再 offset | support region 的物理邊界，在任何 partition 之前；seam 絕不是 origin |
-| Offset 曲線 | 由 Palace 的實作決定 | 128 個頂點的 circle erosion（KLayout），再做 minimum-coherence normalisation | 精確的 line 與 arc；端點在 1 nm grid 上 |
-| Corner 規則 | 由 Palace 的實作決定 | 128 邊的 disc polygon；sagitta $m(1-\cos(\pi/128))$ 對 0.1、0.5、2 µm 為 0.03、0.15、0.60 nm | convex 維持尖角、reflex 為半徑 $m$ 的 arc、hole 為 $r+m$、convex arc 為 $\rho-m$ |
-| Topology 變化 | 規格未描述 | 切開的片段是各別的 sheet，加總；空的就是零 | 逐 band 的 face；空的 band 是零 group |
-| 成本 | mesh 中沒有 | mesh 中沒有 | band edge 是 mesh constraint；很薄的 band 需要很小或非等向的 element |
-:::
+先前的做法是讓 solver 在求解後用 mask 選出 inset 區域：fork 版 Palace 的原生 Mask／Inset，或 AEDT 的 non-model integration sheet。SGB 不採用 solver 端 mask，理由有三：
 
-Palace 與 AEDT 兩欄重述的是 [Palace electrostatic 規格](../../specs/palace-electrostatic-sgb.qmd#native-mask-inset)與 [AEDT runtime 規格](../../specs/aedt-runtime.qmd#epr-inset-contour-coherence)目前所說的；Palace 一欄只列規格支持的內容，規格沒有描述的地方不推測。Palace 的原生 mask 仍可作為獨立的估計來比對。對 AEDT，band 由 SGB 預先切好、寫在 STEP 的 solid 中（D4，見[設計決議](decisions.qmd#d4)），所以不需要 AEDT Imprint，預先切好的 band face 取代 non-model 的 integration sheet。
+- **Mask 會切過 element。** 跨在 mask 邊界上的 element 由 quadrature point 落在哪裡決定結果，AMR 細化時這部分誤差會一直變動（見上一節的示意）。SGB 讓 band 邊界本身就是 mesh 邊界。
+- **需要特製的 solver。** 原生 Mask／Inset 只存在於 fork 版 Palace，而且有效能問題。SGB 的 band 是普通的 physical group，任何一般的 Palace 都能直接積分。
+- **距離定義不在幾何裡。** Solver 端 mask 的距離原點取決於 solver 如何看待 patch 的周長；SGB 的距離原點是寫在幾何裡的物理邊界。
+
+AEDT 端同樣不再需要 non-model sheet：band 由 SGB 預先切好寫在 STEP 的 solid 中（D4，見[設計決議](decisions.qmd#d4)），預先切好的 band face 就是積分範圍，不需要 AEDT Imprint。現行 AEDT 的做法（128 邊形 circle erosion 加 non-model sheet）見 [AEDT runtime 規格](../../specs/aedt-runtime.qmd#epr-inset-contour-coherence)。
 
 ## 與 KLayout 交叉檢查
 
@@ -192,7 +185,7 @@ Palace 與 AEDT 兩欄重述的是 [Palace electrostatic 規格](../../specs/pal
 - **Arc noding 在 merge 之前很昂貴。** 使用 polyline witness（D3）時，含 band 的 z = 0 level 有 2 932 條 noded edge，dissolve 後剩 160 條。witness 約以 $\sqrt{r/g}$ 成長；arc 很多的 layout 必須預留這筆成本。直接 BREP writer（D8）對只有四條 boundary edge 的 cylinder wall 是精確的；當 arc 帶著外來的 vertex，wall 有五條 edge，目前的 writer 會拒絕，設計的修正是在該 vertex 處把 wall 切開（見 D8），在 production 的 stage 1 實作。
 - **薄的 band 要付出 element。** 0.1 µm 的 band 比 prototype 檢查所用的 1 µm size field 薄得多。prototype 不評估 mesh 品質；該檢查只證明 conformity。
 - **Side wall 的 band** 不在 v1 範圍。
-- **沒有 Palace 的執行。** 本頁的檢查是 mesh 檢查。由 band 聯集建構的 Surface EPR row 在真實求解中是否與 Palace 的原生 mask 一致，是設計仍然保持開放的比較。
+- **還沒有 Palace 的執行。** 本頁的檢查是 mesh 檢查。用一般的 Palace 對 band group 求解、量測 Surface EPR 與 AMR 收斂行為，要等 Palace 端改接新的 XAO 與 sidecar 之後才能做。
 
 ## 參考文獻
 
