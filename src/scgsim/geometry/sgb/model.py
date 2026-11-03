@@ -20,6 +20,8 @@ from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb import identity
 from scgsim.geometry.sgb.assembly.builder import assemble_topology
 from scgsim.geometry.sgb.assembly.records import Topology
+from scgsim.geometry.sgb.cutfamilies.generate import with_cut_families
+from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, RefinementRequest
 from scgsim.geometry.sgb.derivation.labelled import (
     LabelledArrangements,
     derive_with_runtime,
@@ -79,30 +81,46 @@ class ConformalModel:
         return identity.digest("model", {k: sorted(v) for k, v in sorted(sets.items())})
 
 
-def build_conformal_model(
+def build_conformal_model(  # noqa: PLR0913 - the effective input, the route and its options
     build_input: GeometryBuildInput,
     representation: RepresentationContext,
     route: str,
     *,
+    insets: tuple[InsetRequest, ...] = (),
+    refinements: tuple[RefinementRequest, ...] = (),
     tiles: int = 1,
     workers: int = 1,
 ) -> ConformalModel:
-    """The validated conformal model of an effective input under a route."""
+    """The validated conformal model of an effective input under a route, with the requested cut families."""
     catalogue = build_prism_catalogue(build_input, representation)
-    return build_model_from_catalogue(catalogue, route, tiles=tiles, workers=workers)
+    return build_model_from_catalogue(
+        catalogue,
+        route,
+        insets=insets,
+        refinements=refinements,
+        tiles=tiles,
+        workers=workers,
+    )
 
 
-def build_model_from_catalogue(
+def build_model_from_catalogue(  # noqa: PLR0913 - the catalogue, the route and its options
     catalogue: PrismCatalogue,
     route: str,
     *,
+    insets: tuple[InsetRequest, ...] = (),
+    refinements: tuple[RefinementRequest, ...] = (),
     tiles: int = 1,
     workers: int = 1,
     keep_raw: bool = False,
 ) -> ConformalModel:
-    """The validated conformal model of a prism catalogue under a route."""
+    """The validated conformal model of a prism catalogue under a route, with the requested cut families.
+
+    ``insets`` (Surface-EPR bands) and ``refinements`` (mesh-size curves) are the typed requests of
+    ``cutfamilies.requests``; they become cut families before the arrangements are built.
+    """
     policy = route_policy(route)
     check_route(policy, catalogue.prisms)
+    catalogue = with_cut_families(catalogue, insets, refinements)
     # The pipeline allocates millions of small acyclic objects; the cyclic collector would only
     # re-scan them, so it is paused for the build.
     was_enabled = gc.isenabled()

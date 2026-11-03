@@ -66,6 +66,23 @@ def base_carrier_id(carrier_id: str) -> str:
     return carrier_id.split(PIECE_SEPARATOR, 1)[0]
 
 
+@dataclass(frozen=True)
+class LineEdge:
+    """A straight source edge of a ring that may also contain arcs.
+
+    ``source_edge`` is the edge number lineage reports (the index of the edge in
+    the source ring); ``-1`` numbers the edge by its position in the ring.
+    """
+
+    p: Point
+    q: Point
+    source_edge: int = -1
+
+    def reversed(self) -> LineEdge:
+        """The same edge travelled the other way."""
+        return LineEdge(self.q, self.p, self.source_edge)
+
+
 def round_to_lattice(point: tuple[Fraction, Fraction]) -> Point:
     """Nearest lattice point of a grid-unit point (half rounds up)."""
     half = Fraction(1, 2)
@@ -170,3 +187,7 @@ def circle_arcs(
             ArcCarrier(f"{circle_id}/q{i}", (cx, cy), r, ccw, a, b, lineage, circle_id)
         )
     return arcs
+
+
+RingPrimitive = LineEdge | ArcCarrier
+"""A boundary primitive of a ring: a straight edge or a circular arc."""

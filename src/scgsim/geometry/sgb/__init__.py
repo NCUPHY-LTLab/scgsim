@@ -20,6 +20,8 @@ Sub-packages follow the stages of the design brief, lowest layer first:
                    result, the contact and non-manifold checks, and the entry point
                    :func:`~scgsim.geometry.sgb.derivation.labelled.derive_labelled_arrangements`
 
+* ``cutfamilies``  S3: typed requests (inset bands, refinement curves) and their generators;
+                   the inset support face is found in a physical pre-pass
 * ``assembly``     S6: vertices, edges, horizontal faces, walls (coalescing, curved walls
                    split into exact cylinders), vertical edges, volumes and shells
 * ``routes``       S7/S8: Route A, B and C as labelling policies, decision-D5 names,
@@ -29,7 +31,6 @@ Sub-packages follow the stages of the design brief, lowest layer first:
 * ``model``        the entry point :func:`~scgsim.geometry.sgb.model.build_conformal_model`
 
 with ``parallel`` (per-tile runtime), ``identity`` (content-addressed ids),
-``plane`` (exact integer geometry) and ``errors`` beside them.  Later sub-stages add
-cut-family generators (inset bands, ports, refinement curves) and emission as further
-sub-packages that consume the records defined here.
+``plane`` (exact integer geometry) and ``errors`` beside them.  The next sub-stage adds emission (direct BREP/XAO writer, sidecar) as a sub-package
+that consumes the records defined here.
 """

@@ -40,6 +40,7 @@ from scgsim.geometry.sgb.records.carriers import (
 )
 from scgsim.geometry.sgb.records.labels import LevelLabel, SheetOwner
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
+from scgsim.geometry.sgb.records.support import SupportRegion
 
 
 @dataclass
@@ -51,6 +52,7 @@ class _RawLevel:
     above_link: list[int] | None
     sheets: PrismSet | None
     policies: FamilyPolicies
+    supports: list[tuple[str, SupportRegion]]  # inset families targeting this level
     stats: dict[str, int]
 
 
@@ -86,7 +88,14 @@ def build_level_layers(
             "hot_pixels": snapped.hot_pixels,
             "snap_rounds": snapped.rounds,
         }
-        raw_levels.append(_RawLevel(arrangement, below, above, sheets, policies, stats))
+        supports = [
+            (catalogue.families[i].family_id, support)
+            for i in levels.level_families[level]
+            if (support := catalogue.families[i].support) is not None
+        ]
+        raw_levels.append(
+            _RawLevel(arrangement, below, above, sheets, policies, supports, stats)
+        )
 
     extras = _label_level_cells(catalogue, slabs, raw_levels, rt)
     layers = _dissolve_levels(levels, slabs, raw_levels, extras, rt)
@@ -165,7 +174,10 @@ def _label_level_cells(
     slabs: list[Layer],
     raw_levels: list[_RawLevel],
     rt: Runtime,
-) -> dict[tuple[int, int], tuple[SheetOwner | None, tuple[str, ...]]]:
+) -> dict[
+    tuple[int, int],
+    tuple[SheetOwner | None, tuple[tuple[str, int], ...], tuple[str, ...]],
+]:
     """Per raw face: sheet owner (footprint test) and the entities whose footprint covers it (a parallel stage)."""
     flat = [
         (k, fi)
@@ -181,6 +193,7 @@ def _label_level_cells(
     shared = (
         [raw.arrangement for raw in raw_levels],
         [raw.sheets for raw in raw_levels],
+        [raw.supports for raw in raw_levels],
         cover_sets,
         flat,
         catalogue.prisms,
@@ -191,17 +204,22 @@ def _label_level_cells(
 
 def _level_extras_job(shared: Any, items: list[int]) -> list[Any]:
     """Per face: its sheet owner and the entities whose footprint covers it."""
-    arrangements, sheet_sets, cover_sets, flat, prisms = shared
+    arrangements, sheet_sets, supports, cover_sets, flat, prisms = shared
     out = []
     for i in items:
         k, fi = flat[i]
         point = interior_point(arrangements[k], fi)
         sheets = sheet_sets[k]
         owner = sheets.owner_at(point) if sheets is not None else None
+        bands = tuple(
+            (family_id, band)
+            for family_id, support in supports[k]
+            if (band := support.band_of(point)) is not None
+        )
         entities = tuple(
             sorted({prisms[j].entity_id for s in cover_sets[k] for j in s.hit(point)})
         )
-        out.append((owner, entities))
+        out.append((owner, bands, entities))
     return out
 
 
@@ -209,7 +227,10 @@ def _dissolve_levels(
     levels: LevelStructure,
     slabs: list[Layer],
     raw_levels: list[_RawLevel],
-    extras: dict[tuple[int, int], tuple[SheetOwner | None, tuple[str, ...]]],
+    extras: dict[
+        tuple[int, int],
+        tuple[SheetOwner | None, tuple[tuple[str, int], ...], tuple[str, ...]],
+    ],
     rt: Runtime,
 ) -> list[Layer]:
     layers = []
@@ -225,6 +246,7 @@ def _dissolve_levels(
                         else None,
                         slabs[k].labels[raw.above_link[fi]] if raw.above_link else None,
                         extras[(k, fi)][0],
+                        extras[(k, fi)][1],
                     )
                 )
             dissolved = dissolve(arrangement, labels, raw.policies)
@@ -247,7 +269,7 @@ def _dissolve_levels(
                 **dissolved.stats,
             }
             _record_slab_cells(layer, dissolved, raw.below_link, raw.above_link)
-            entities = [extras[(k, fi)][1] for fi in range(1, len(arrangement.faces))]
+            entities = [extras[(k, fi)][2] for fi in range(1, len(arrangement.faces))]
             layer.membership = membership_shares(arrangement, dissolved, entities)
             if rt.keep_raw:
                 layer.raw_arrangement, layer.raw_labels = arrangement, labels

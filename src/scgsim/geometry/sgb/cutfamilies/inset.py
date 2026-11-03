@@ -1,0 +1,378 @@
+"""Surface-EPR inset bands (design brief sections 5 and 6): the first cut-family generator.
+
+Owns generating, from a *support region* ``R`` (rings of exact line and arc primitives), the boundary
+curves of ``R_m = R (-) D(m)`` (Minkowski erosion by a disk) for the margins ``m_1 < ... < m_K``.  The bands
+are ``B_0 = R \\ R_{m_1}``, ``B_k = R_{m_k} \\ R_{m_{k+1}}``, ``B_K = R_{m_K}``; "at least ``m_k`` from the
+edge" is the union of the bands ``>= k``.
+
+Construction (no polygonised disk):
+
+* every line is offset by ``m`` toward the region interior (a line);
+* every convex arc (centre on the interior side) becomes the concentric arc of radius ``rho - m`` (it
+  vanishes to a sharp corner when ``m >= rho``); every concave arc (a hole) the concentric arc of radius ``r + m``;
+* at every reflex vertex the offset curves leave a gap bridged by an arc of radius ``m`` centred at the vertex;
+  at convex vertices the offset lines overlap and simply cross -- convex corners stay sharp;
+* these *candidate* curves are noded together by snap rounding, and an edge is kept iff its midpoint is at
+  distance ``>= m`` from the region boundary (the ``dist >= m`` cells of the design brief); dangling stubs go.
+
+Distance origin: only the support region's own boundary primitives.  Ports, contact caps, other bands and
+tile seams are never origins -- they are not inputs of this module.  Topology changes (a neck that splits, a
+band that vanishes) are ordinary outcomes: the bands that survive are the ones the labels record.
+
+The offset of an oblique edge is not representable on the grid (its normal is irrational): curve end points
+are snapped to the lattice like every other vertex, so the carriers are exact up to the snap bound.  Every
+angle and normal is computed in fixed-precision decimals, so the end points -- and the ids built from them --
+are identical on every platform.
+
+Members keep their generating primitive in the lineage: ``<support>/ring<r>/edge<k>``, for straight members
+and arcs alike; reflex arcs ``<support>/ring<r>/corner<k>``.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Iterable
+from decimal import Decimal
+from fractions import Fraction
+
+from scgsim.geometry.sgb.noding.snap_rounding import NodedEdge, Segment, snap_round
+from scgsim.geometry.sgb.plane import Point
+from scgsim.geometry.sgb.records import circle_math
+from scgsim.geometry.sgb.records.carriers import (
+    ArcCarrier,
+    Lineage,
+    LineCarrier,
+    LineEdge,
+    RingPrimitive,
+)
+from scgsim.geometry.sgb.records.families import CurveFamilyRecord
+from scgsim.geometry.sgb.records.support import SupportRegion
+
+Vec = tuple[Decimal, Decimal]
+KEEP_TOLERANCE = 1.5  # grid units: a kept edge may lie this much nearer the boundary than m (snap drift)
+PARALLEL_EPSILON = Decimal(
+    "1e-9"
+)  # tangents closer to parallel than this are a straight or convex junction
+PIECE_SLACK = Decimal("1e-9")
+AddArc = Callable[[str, tuple[int, int], Fraction, bool, Point, Point], None]
+
+
+def inset_family(
+    family_id: str,
+    region: SupportRegion,
+    target_levels: tuple[Fraction, ...],
+) -> CurveFamilyRecord:
+    """The ``required`` cut family holding the boundaries of ``R_m`` for every margin of the region."""
+    lines: list[LineCarrier] = []
+    arcs: list[ArcCarrier] = []
+    for margin in region.margins:
+        margin_lines, margin_arcs = _boundary_of_eroded(family_id, region, margin)
+        lines.extend(margin_lines)
+        arcs.extend(margin_arcs)
+    return CurveFamilyRecord(
+        family_id,
+        "inset_band",
+        tuple(lines),
+        target_levels,
+        "required",
+        tuple(arcs),
+        region,
+    )
+
+
+# --------------------------------------------------------------------------- decimal geometry of primitives
+
+
+def _ends(prim: RingPrimitive) -> tuple[Vec, Vec]:
+    if isinstance(prim, LineEdge):
+        return (Decimal(prim.p[0]), Decimal(prim.p[1])), (
+            Decimal(prim.q[0]),
+            Decimal(prim.q[1]),
+        )
+    return (
+        (circle_math.to_decimal(prim.start[0]), circle_math.to_decimal(prim.start[1])),
+        (circle_math.to_decimal(prim.end[0]), circle_math.to_decimal(prim.end[1])),
+    )
+
+
+def _unit_tangent(prim: RingPrimitive, *, at_end: bool) -> Vec:
+    """Unit tangent of a primitive at its end or start, in the direction of travel."""
+    if isinstance(prim, LineEdge):
+        dx, dy = Decimal(prim.q[0] - prim.p[0]), Decimal(prim.q[1] - prim.p[1])
+        length = circle_math.sqrt(dx * dx + dy * dy)
+        return dx / length, dy / length
+    x, y = _ends(prim)[1 if at_end else 0]
+    vx = x - circle_math.to_decimal(prim.centre[0])
+    vy = y - circle_math.to_decimal(prim.centre[1])
+    length = circle_math.sqrt(vx * vx + vy * vy)
+    ux, uy = vx / length, vy / length
+    return (-uy, ux) if prim.ccw else (uy, -ux)
+
+
+def _left_normal(prim: RingPrimitive, *, at_end: bool) -> Vec:
+    tx, ty = _unit_tangent(prim, at_end=at_end)
+    return -ty, tx
+
+
+def _offset_point(prim: RingPrimitive, margin: int, *, at_end: bool) -> Point:
+    """End point of the offset of ``prim`` by ``margin`` toward the interior, rounded to the lattice."""
+    x, y = _ends(prim)[1 if at_end else 0]
+    nx, ny = _left_normal(prim, at_end=at_end)
+    return (
+        circle_math.round_half_up(x + margin * nx),
+        circle_math.round_half_up(y + margin * ny),
+    )
+
+
+# --------------------------------------------------------------------------- candidate curves
+
+
+class _Candidates:
+    """The candidate offset curves of one margin: lines and arcs, each with the id it will carry."""
+
+    def __init__(self, family_id: str, margin: int) -> None:
+        self.family_id = family_id
+        self.margin = margin
+        # A member's id is ``<support>/ring<r>/edge<k>@m<margin>``: the generating primitive plus the
+        # margin.  Its lineage keeps the primitive alone, for straight members and arcs alike.
+        self.tag = f"@m{margin}"
+        self.lines: list[tuple[str, Point, Point]] = []
+        self.arcs: dict[str, ArcCarrier] = {}
+
+    def add_line(self, name: str, p: Point, q: Point) -> None:
+        """A straight candidate (nothing when its end points coincide after snapping)."""
+        if p != q:
+            self.lines.append((f"{self.family_id}/{name}{self.tag}", p, q))
+
+    def add_arc(  # noqa: PLR0913 - an arc is its centre, radius, sense and two end points
+        self,
+        name: str,
+        centre: tuple[Fraction, Fraction],
+        radius: Fraction,
+        ccw: bool,
+        start: Point,
+        end: Point,
+    ) -> None:
+        """An arc candidate (nothing when its end points coincide after snapping)."""
+        if start == end:
+            return
+        arc = ArcCarrier(
+            f"{self.family_id}/{name}{self.tag}",
+            centre,
+            radius,
+            ccw,
+            (Fraction(start[0]), Fraction(start[1])),
+            (Fraction(end[0]), Fraction(end[1])),
+            Lineage(
+                "family_member",
+                family_id=self.family_id,
+                member=f"{self.family_id}/{name}",
+            ),
+        )
+        self.arcs[arc.id] = arc
+
+
+def _generate_candidates(
+    family_id: str, region: SupportRegion, margin: int
+) -> _Candidates:
+    candidates = _Candidates(family_id, margin)
+    for ri, ring in enumerate(region.rings):
+        count = len(ring)
+        for pi, prim in enumerate(ring):
+            name = f"ring{ri}/edge{pi}"
+            start = _offset_point(prim, margin, at_end=False)
+            end = _offset_point(prim, margin, at_end=True)
+            if isinstance(prim, LineEdge):
+                candidates.add_line(name, start, end)
+            else:
+                radius = prim.radius - margin if prim.ccw else prim.radius + margin
+                if radius >= 1:
+                    candidates.add_arc(name, prim.centre, radius, prim.ccw, start, end)
+            _corner_arcs(
+                f"ring{ri}/corner{pi}", prim, ring[(pi + 1) % count], margin, candidates
+            )
+    return candidates
+
+
+def _corner_arcs(
+    name: str,
+    prim: RingPrimitive,
+    following: RingPrimitive,
+    margin: int,
+    candidates: _Candidates,
+) -> None:
+    """Arc of radius ``margin`` about a reflex vertex joining the offsets of two consecutive primitives."""
+    t0 = _unit_tangent(prim, at_end=True)
+    t1 = _unit_tangent(following, at_end=False)
+    cross = t0[0] * t1[1] - t0[1] * t1[0]
+    dot = t0[0] * t1[0] + t0[1] * t1[1]
+    if cross >= -PARALLEL_EPSILON:
+        return  # straight or tangent junction, or a convex corner: the offsets meet or overlap
+    turn = circle_math.atan2(-cross, dot)  # right turn angle in (0, pi)
+    pieces = max(1, circle_math.ceil_div(turn - PIECE_SLACK, circle_math.HALF_PI))
+    vertex = _ends(prim)[1]
+    centre_point = (
+        circle_math.round_half_up(vertex[0]),
+        circle_math.round_half_up(vertex[1]),
+    )
+    nx, ny = _left_normal(prim, at_end=True)
+    rotation = circle_math.Rotation(turn / pieces, ccw=False)
+    vector: Vec = (margin * nx, margin * ny)
+    first_offset = _offset_point(prim, margin, at_end=True)
+    last_offset = _offset_point(following, margin, at_end=False)
+    previous = first_offset
+    for k in range(pieces):
+        vector = rotation.apply(*vector)
+        end = (
+            circle_math.round_half_up(vertex[0] + vector[0]),
+            circle_math.round_half_up(vertex[1] + vector[1]),
+        )
+        if k == pieces - 1:
+            end = last_offset
+        piece_name = name if pieces == 1 else f"{name}.{k}"
+        candidates.add_arc(
+            piece_name,
+            (Fraction(centre_point[0]), Fraction(centre_point[1])),
+            Fraction(margin),
+            False,
+            previous,
+            end,
+        )
+        previous = end
+
+
+# --------------------------------------------------------------------------- noding and selection
+
+
+def _boundary_of_eroded(
+    family_id: str, region: SupportRegion, margin: int
+) -> tuple[list[LineCarrier], list[ArcCarrier]]:
+    candidates = _generate_candidates(family_id, region, margin)
+    segments = [Segment(p, q, frozenset([cid])) for cid, p, q in candidates.lines]
+    arc_pieces: dict[str, tuple[ArcCarrier, list[Point]]] = {}
+    for arc in candidates.arcs.values():
+        points = arc.witness_points()
+        arc_pieces[arc.id] = (arc, points)
+        segments.extend(
+            Segment(p, q, frozenset([f"{arc.id}#{k}"]))
+            for k, (p, q) in enumerate(zip(points, points[1:], strict=False))
+        )
+    kept = _kept_edges(snap_round(segments).edges, region, margin)
+    return _lines_of(family_id, kept), _arcs_of(kept, arc_pieces)
+
+
+def _kept_edges(
+    edges: Iterable[NodedEdge], region: SupportRegion, margin: int
+) -> list[NodedEdge]:
+    """Edges whose midpoint is at least ``margin`` from the region boundary, with dangling stubs removed."""
+    kept = []
+    for e in edges:
+        middle = (e.a[0] + e.b[0], e.a[1] + e.b[1], 2)
+        if (
+            region.contains(middle)
+            and region.distance((middle[0] / 2, middle[1] / 2))
+            >= margin - KEEP_TOLERANCE
+        ):
+            kept.append(e)
+    while True:
+        degree: dict[Point, int] = {}
+        for e in kept:
+            degree[e.a] = degree.get(e.a, 0) + 1
+            degree[e.b] = degree.get(e.b, 0) + 1
+        pruned = [e for e in kept if degree[e.a] > 1 and degree[e.b] > 1]
+        if len(pruned) == len(kept):
+            return kept
+        kept = pruned
+
+
+def _lines_of(family_id: str, kept: list[NodedEdge]) -> list[LineCarrier]:
+    """Straight members: the kept edges that carry no arc witness chord."""
+    lines: list[LineCarrier] = []
+    pieces_of_line: dict[str, int] = {}
+    for e in kept:
+        if any("#" in c for c in e.carriers):
+            continue
+        source = sorted(e.carriers)[
+            0
+        ]  # the offset line (one primitive of the support) this piece lies on
+        n = pieces_of_line.get(source, 0)
+        pieces_of_line[source] = n + 1
+        member = source.split("@", 1)[0]
+        lines.append(
+            LineCarrier(
+                f"{source}.{n}",
+                e.a,
+                e.b,
+                Lineage("family_member", family_id=family_id, member=member),
+            )
+        )
+    return lines
+
+
+def _arcs_of(
+    kept: list[NodedEdge], arc_pieces: dict[str, tuple[ArcCarrier, list[Point]]]
+) -> list[ArcCarrier]:
+    kept_pieces: dict[str, set[int]] = {}
+    kept_points: dict[
+        tuple[str, int], set[Point]
+    ] = {}  # end points of the kept (possibly trimmed) part of each chord
+    for e in kept:
+        for c in e.carriers:
+            base, _, k = c.partition("#")
+            if k:
+                kept_pieces.setdefault(base, set()).add(int(k))
+                kept_points.setdefault((base, int(k)), set()).update((e.a, e.b))
+    return _arc_runs(kept_pieces, arc_pieces, kept_points)
+
+
+def _along(chord: tuple[Point, Point], point: Point) -> int:
+    """Position of ``point`` along the chord (dot product with its direction)."""
+    (px, py), (qx, qy) = chord
+    return (point[0] - px) * (qx - px) + (point[1] - py) * (qy - py)
+
+
+def _arc_runs(
+    kept_pieces: dict[str, set[int]],
+    arc_pieces: dict[str, tuple[ArcCarrier, list[Point]]],
+    kept_points: dict[tuple[str, int], set[Point]],
+) -> list[ArcCarrier]:
+    """Maximal runs of kept witness chords of each candidate arc, as sub-arcs through their end points.
+
+    A chord trimmed where another carrier crosses it (the crossing lies inside the chord) ends the run at the
+    crossing, not at the chord's far end; otherwise the arc would stick out past the crossing as a dangling stub.
+    """
+    out: list[ArcCarrier] = []
+    for arc_id in sorted(kept_pieces):
+        arc, points = arc_pieces[arc_id]
+        indices = sorted(kept_pieces[arc_id])
+        runs, start = [], indices[0]
+        for previous, current in zip(indices, indices[1:], strict=False):
+            if current != previous + 1:
+                runs.append((start, previous))
+                start = current
+        runs.append((start, indices[-1]))
+        for i, (k0, k1) in enumerate(runs):
+            a, b = points[k0], points[k1 + 1]
+            first, last = kept_points.get((arc_id, k0)), kept_points.get((arc_id, k1))
+            if first:
+                a = min(
+                    first, key=lambda pt, k=k0: _along((points[k], points[k + 1]), pt)
+                )
+            if last:
+                b = max(
+                    last, key=lambda pt, k=k1: _along((points[k], points[k + 1]), pt)
+                )
+            if a == b:
+                continue
+            out.append(
+                ArcCarrier(
+                    f"{arc_id}.{i}",
+                    arc.centre,
+                    arc.radius,
+                    arc.ccw,
+                    (Fraction(a[0]), Fraction(a[1])),
+                    (Fraction(b[0]), Fraction(b[1])),
+                    arc.lineage,
+                    arc.root_id,
+                )
+            )
+    return out

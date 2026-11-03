@@ -14,6 +14,7 @@ from fractions import Fraction
 from typing import Literal
 
 from scgsim.geometry.sgb.records.carriers import ArcCarrier, LineCarrier
+from scgsim.geometry.sgb.records.support import SupportRegion
 
 EdgePolicy = Literal["required", "refinement_only"]
 
@@ -28,6 +29,9 @@ class CurveFamilyRecord:
     target_levels: tuple[Fraction, ...]
     edge_policy: EdgePolicy = "required"
     arcs: tuple[ArcCarrier, ...] = ()
+    support: SupportRegion | None = (
+        None  # inset bands: the region whose bands the family partitions
+    )
 
     def __post_init__(self) -> None:
         if self.edge_policy not in ("required", "refinement_only"):

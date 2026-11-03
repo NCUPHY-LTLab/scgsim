@@ -166,5 +166,5 @@ def test_the_band_area_hook_checks_monotonicity_and_the_support_area():
     check_band_areas(consistent, [layer])
     assert not consistent.failures
     wrong = ValidationReport()
-    check_band_areas(wrong, [layer], {"fam": 1.0})
+    check_band_areas(wrong, [layer], {"fam": (1.0, 0.0)})
     assert [c.name for c in wrong.failures] == ["band_area_monotone"]

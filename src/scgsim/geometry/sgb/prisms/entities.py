@@ -24,10 +24,12 @@ the prisms exist.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from fractions import Fraction
 from typing import cast
 
-from scgsim.geometry.models.input import SemanticEntitySpec
+from scgsim.geometry.models.input import GeometryBuildInput, SemanticEntitySpec
+from scgsim.geometry.models.physical import PHYSICAL_LAYER_FIELD
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.plane import Ring
@@ -95,6 +97,22 @@ def entity_interval(
     return low, high
 
 
+def _source_occurrence(entity: SemanticEntitySpec) -> str | None:
+    path = entity.metadata.get("source_occurrence_path")
+    return str(path) if path is not None else None
+
+
+def _source_layer(entity: SemanticEntitySpec) -> str | None:
+    logical = entity.metadata.get("logical_layer_id")
+    if logical is not None:
+        return str(logical)
+    layer, datatype = (
+        entity.geometry.get("gds_layer"),
+        entity.geometry.get("gds_datatype"),
+    )
+    return f"{layer}/{datatype}" if layer is not None else None
+
+
 def _geometry_interval(entity: SemanticEntitySpec) -> ZInterval:
     geometry = entity.geometry
     try:
@@ -108,11 +126,37 @@ def _geometry_interval(entity: SemanticEntitySpec) -> ZInterval:
         ) from error
 
 
-def entity_prisms(
+def physical_feature_kind(
+    entity: SemanticEntitySpec,
+    build_input: GeometryBuildInput,
+    representation: RepresentationContext,
+) -> str | None:
+    """The feature kind of the entity's physical declaration, read from the prepared plan (never guessed).
+
+    The effective input carries the plan payload (``metadata["physical_representation"]``), whose
+    declarations are keyed by ``physical_layer_id``; the representation context says which layer an
+    entity belongs to.  An entity authored with its own ``physical_layer`` payload is read the same
+    way when the plan does not list it.  ``None`` means the entity has no declaration.
+    """
+    record = representation.entities.get(entity.semantic_id)
+    layer_id = record.physical_layer_id if record is not None else None
+    plan = build_input.metadata.get("physical_representation")
+    declarations = plan.get("declarations", ()) if isinstance(plan, Mapping) else ()
+    for declaration in declarations:
+        if layer_id is not None and declaration.get("physical_layer_id") == layer_id:
+            return str(declaration["feature_kind"])
+    authored = entity.metadata.get(PHYSICAL_LAYER_FIELD)
+    if isinstance(authored, Mapping) and "feature_kind" in authored:
+        return str(authored["feature_kind"])
+    return None
+
+
+def entity_prisms(  # noqa: PLR0913 - an entity, its footprints, interval, bound rings and declaration
     entity: SemanticEntitySpec,
     footprints: list[SourceFootprint],
     interval: ZInterval,
     ring_primitives: RingPrimitives,
+    feature_kind: str | None = None,
 ) -> list[PrismRecord]:
     """One prism per connected source footprint of an entity."""
     kind = cast(MaterialKind, entity.material_kind)
@@ -132,6 +176,9 @@ def entity_prisms(
                 priority=int(entity.priority),
                 polygon=source.polygon,
                 arcs=arcs,
+                feature_kind=feature_kind,
+                occurrence=_source_occurrence(entity),
+                layer=_source_layer(entity),
             )
         )
     return prisms

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 from fractions import Fraction
 
 import pytest
@@ -131,11 +132,32 @@ def test_airbridge_has_one_volume_per_entity_across_three_slabs(bridge):
     assert all(v.shells[0].role == "outer" for v in conductors)
 
 
-def test_route_a_rejects_conductors_that_are_still_finite():
-    """Route A with finite prisms fails closed and names them."""
-    with pytest.raises(RouteError, match=r"still finite.*ground, pad") as error:
-        build_model_from_catalogue(pad_in_ground("B"), "A")
+def test_route_a_rejects_a_film_that_is_still_finite():
+    """A film conductor (stack or local film) that the profile left finite fails closed and names it."""
+    films = tuple(
+        replace(p, feature_kind="stack_film") if p.material_kind == "conductor" else p
+        for p in pad_in_ground("B").prisms
+    )
+    with pytest.raises(
+        RouteError, match=r"films are still finite.*ground, pad"
+    ) as error:
+        build_model_from_catalogue(PrismCatalogue(GRID, films), "A")
     assert "thin_film" in str(error.value)
+
+
+def test_route_a_accepts_finite_conductors_that_are_not_films():
+    """Finite bodies (``finite_volume``, or undeclared as today's cutout shells) keep their volume, excluded."""
+    for kind in ("finite_volume", None):
+        bodies = tuple(
+            replace(p, feature_kind=kind) if p.material_kind == "conductor" else p
+            for p in pad_in_ground("B").prisms
+        )
+        model = build_model_from_catalogue(PrismCatalogue(GRID, bodies), "A")
+        emitted = {
+            model.topology.volumes[v].domain.name for v in model.routed.emitted_volumes
+        }
+        assert emitted == {"substrate", "vacuum"}
+        assert {"MA::pad", "MS::pad"} <= set(model.routed.groups)
 
 
 def test_unknown_route_is_rejected():

@@ -181,13 +181,14 @@ def check_prism_areas(
 def check_band_areas(
     report: ValidationReport,
     level_layers: Sequence[Layer],
-    support_areas: Mapping[str, float] | None = None,
+    supports: Mapping[str, tuple[float, float]] | None = None,
 ) -> None:
     """Inset bands partition their support region and ``area(R_m)`` does not grow with ``m``.
 
-    ``area(R_m)`` is the union of the bands from ``m`` on (selections are cumulative).  Sub-stage 1c
-    supplies ``support_areas`` (family id -> area of the support region, grid^2); without it the
-    check still verifies that the cumulative areas are non-increasing and no band area is negative.
+    ``area(R_m)`` is the union of the bands from ``m`` on (selections are cumulative, never added as
+    disjoint contributions).  ``supports`` maps a family id to ``(support area, tolerance)`` in grid^2:
+    the bands must cover the support within the tolerance (every boundary moves by less than one grid unit).
+    Without it only monotonicity and non-negative band areas are checked.
     """
     areas: dict[str, dict[int, float]] = {}
     for layer in level_layers:
@@ -198,8 +199,10 @@ def check_band_areas(
                     layer.arr, layer.edge_curve, fi
                 )
     problems = []
-    for family_id, by_band in sorted(areas.items()):
-        ordered = [by_band.get(k, 0.0) for k in range(max(by_band) + 1)]
+    family_ids: set[str] = {*areas, *(supports or {})}
+    for family_id in sorted(family_ids):
+        by_band = areas.get(family_id, {})
+        ordered = [by_band.get(k, 0.0) for k in range(max(by_band, default=-1) + 1)]
         cumulative = [sum(ordered[k:]) for k in range(len(ordered))]
         if any(a < -1e-6 for a in ordered) or any(
             b > a + 1e-6 for a, b in zip(cumulative, cumulative[1:], strict=False)
@@ -207,16 +210,16 @@ def check_band_areas(
             problems.append(
                 f"{family_id}: band areas {[round(a) for a in ordered]} are not non-increasing"
             )
-        expected = (support_areas or {}).get(family_id)
-        if expected is not None and abs(cumulative[0] - expected) > 1.0 * max(
-            1.0, expected**0.5
-        ) * len(ordered):
-            problems.append(
-                f"{family_id}: bands cover {cumulative[0]:.1f} but the region has {expected:.1f} grid^2"
-            )
+        if supports and family_id in supports:
+            expected, tolerance = supports[family_id]
+            covered = cumulative[0] if cumulative else 0.0
+            if abs(covered - expected) > tolerance:
+                problems.append(
+                    f"{family_id}: bands cover {covered:.1f} but the region has {expected:.1f} grid^2"
+                )
     report.add(
         "band_area_monotone",
         not problems,
         "; ".join(problems)
-        or f"{len(areas)} inset families: area(R_m) is non-increasing in m",
+        or f"{len(areas)} inset families: bands partition their support and area(R_m) is non-increasing in m",
     )

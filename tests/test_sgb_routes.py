@@ -81,15 +81,41 @@ def test_route_c_conductor_reaching_the_model_boundary_has_an_ext_group(bridge_c
     assert {"EXT::ground_left", "EXT::ground_right"} <= set(bridge_c.routed.groups)
 
 
-def test_route_c_rejects_sheets_and_lumped_port_sheets():
-    """Route C keeps conductor volumes: no sheets, no port sheets."""
+def test_route_c_rejects_conductor_sheets_but_supports_lumped_port_sheets():
+    """Route C keeps conductor volumes: sheets have no meaning, a port between two retained conductors is normal."""
     with pytest.raises(
-        RouteError,
-        match=r"Route C keeps conductor volumes.*lumped-port sheets \['p1'\]",
+        RouteError, match=r"Route C keeps conductors finite.*ground, pad"
     ):
-        build_model_from_catalogue(pad_in_ground("B"), "C")
-    with pytest.raises(RouteError, match=r"sheet conductors \['ground', 'pad'\]"):
         build_model_from_catalogue(pad_in_ground("A", with_port=False), "C")
+    model = build_model_from_catalogue(pad_in_ground("B"), "C")
+    assert not model.report.failures
+    (port_id,) = model.routed.groups["PORT::p1"].ids
+    port = model.topology.faces[port_id]
+    # an embedded face in the vacuum gap at the port plane, not a boundary of any shell
+    assert port.neg_volume == port.pos_volume is not None
+    assert port.neg_volume in model.topology.volumes
+    assert [
+        fid for v in model.topology.volumes.values() for fid in v.embedded_faces
+    ] == [port_id]
+    # its edges are shared with the conductor walls cut at the port plane
+    walls = [
+        f
+        for f in model.topology.faces.values()
+        if f.kind == "wall" and f.z_range[1] == Fraction(1, 10)
+    ]
+    port_edges = {eid for loop in port.loops for eid, _ in loop}
+    assert any(port_edges & {eid for loop in w.loops for eid, _ in loop} for w in walls)
+
+
+def test_route_b_rejects_conductor_sheets_but_accepts_lumped_port_sheets():
+    """Today's contract: Route B knows only cutout shells; its ports are mid-plane embedded faces."""
+    with pytest.raises(
+        RouteError, match=r"Route B keeps conductors finite.*ground, pad"
+    ):
+        build_model_from_catalogue(pad_in_ground("A", with_port=False), "B")
+    assert (
+        "PORT::p1" in build_model_from_catalogue(pad_in_ground("B"), "B").routed.groups
+    )
 
 
 def test_route_c_from_a_real_input_names_the_gds_entities(tmp_path):
@@ -108,11 +134,68 @@ def test_route_c_from_a_real_input_names_the_gds_entities(tmp_path):
     assert model.routed.unions["NET::G"] == ["MA::ground_0000", "MS::ground_0000"]
 
 
-def test_route_a_rejects_the_finite_conductors_of_a_real_solid_input(tmp_path):
-    """The solid profile leaves conductors finite after S1, so Route A names them."""
+def test_route_a_accepts_the_undeclared_finite_conductors_of_a_real_solid_input(
+    tmp_path,
+):
+    """No physical declaration: today's contract lets Route A keep finite conductors as cutout shells."""
     effective = gds_pad_in_ground(tmp_path)
-    with pytest.raises(RouteError, match=r"still finite.*ground_0000, pad"):
+    model = build_conformal_model(effective.build_input, effective.representation, "A")
+    emitted = {
+        model.topology.volumes[v].domain.name for v in model.routed.emitted_volumes
+    }
+    assert emitted == {"substrate", "VACUUM_REGION"}
+    assert {"MA::pad", "MS::pad", "MA::ground_0000"} <= set(model.routed.groups)
+
+
+def test_route_a_rejects_declared_films_that_the_solid_profile_left_finite():
+    """The declaration says the layer is a film; ``solid`` keeps it 0.25 um thick, so Route A refuses."""
+    effective = thin_film_pair(0.5, profile="solid")
+    with pytest.raises(
+        RouteError, match=r"films are still finite.*chip/left, chip/right"
+    ):
         build_conformal_model(effective.build_input, effective.representation, "A")
+
+
+def test_a_finite_bump_stands_on_a_thin_film_sheet_in_route_a():
+    """Face-metal films are sheets, the ``finite_volume`` bump keeps its volume (excluded like Route B)."""
+    effective = thin_film_pair(0.5, bump=True)
+    model = build_conformal_model(effective.build_input, effective.representation, "A")
+    assert not model.report.failures
+    groups = model.routed.groups
+    assert {
+        "SHEET::chip/left",
+        "SHEET::chip/right",
+        "MA::chip/bump",
+        "PORT::port_sheet",
+    } <= set(groups)
+    bump = next(
+        v for v in model.topology.volumes.values() if v.domain.name == "chip/bump"
+    )
+    assert (
+        bump.id not in model.routed.emitted_volumes
+    )  # an excluded finite volume with PEC boundary faces
+    assert model.routed.unions["NET::left"] == ["MA::chip/bump", "SHEET::chip/left"]
+    kinds = {
+        p.entity_id: p.feature_kind
+        for p in model.labelled.catalogue.prisms
+        if p.material_kind == "conductor"
+    }
+    assert kinds == {
+        "chip/left": "stack_film",
+        "chip/right": "stack_film",
+        "chip/bump": "finite_volume",
+    }
+
+
+def test_the_bump_without_the_film_collapse_is_a_finite_input_for_routes_b_and_c():
+    """Profile ``solid``: films and bump are all finite; Routes B and C accept them and keep the port."""
+    effective = thin_film_pair(0.5, profile="solid", bump=True)
+    for route in ("B", "C"):
+        model = build_conformal_model(
+            effective.build_input, effective.representation, route
+        )
+        assert {"MA::chip/bump", "PORT::port_sheet"} <= set(model.routed.groups)
+        assert not model.report.failures
 
 
 def test_route_b_from_a_real_input_excludes_conductors_and_embeds_the_port(tmp_path):
@@ -132,8 +215,8 @@ def test_route_b_from_a_real_input_excludes_conductors_and_embeds_the_port(tmp_p
 # --------------------------------------------------------------------------- real thin-film input
 
 
-def test_thin_film_input_builds_under_route_a_and_b_and_is_rejected_by_route_c():
-    """Sheets come from the profile: A and B accept them, C has no sheets."""
+def test_thin_film_sheets_build_under_route_a_only():
+    """Sheets come from the profile: Route A accepts them, B and C have no conductor sheets."""
     effective = thin_film_pair(0.5)
     model_a = build_conformal_model(
         effective.build_input, effective.representation, "A"
@@ -142,14 +225,13 @@ def test_thin_film_input_builds_under_route_a_and_b_and_is_rejected_by_route_c()
         model_a.routed.groups
     )
     assert model_a.routed.unions["NET::left"] == ["SHEET::chip/left"]
-    model_b = build_conformal_model(
-        effective.build_input, effective.representation, "B"
-    )
-    assert (
-        model_b.routed.groups.keys() == model_a.routed.groups.keys()
-    )  # sheets are PEC faces in both routes
-    with pytest.raises(RouteError, match="Route C keeps conductor volumes"):
-        build_conformal_model(effective.build_input, effective.representation, "C")
+    for route in ("B", "C"):
+        with pytest.raises(
+            RouteError, match=rf"Route {route} keeps conductors finite.*chip/left"
+        ):
+            build_conformal_model(
+                effective.build_input, effective.representation, route
+            )
 
 
 def test_a_rectangular_junction_builds_with_a_conformal_port_between_its_terminals():
@@ -239,7 +321,8 @@ def test_face_lineage_records_the_overlap_share_of_the_entity_that_lost_it():
 def test_equal_priority_overlap_of_two_entities_of_one_net_fails_closed_naming_both():
     """No silent winner."""
     with pytest.raises(
-        OverlapError, match=r"same-Net entities padL, padR .*equal priority"
+        OverlapError,
+        match=r"same-Net entities padL and padR overlap near \(.*\) um .*declare distinct entity priorities",
     ):
         build_model_from_catalogue(adjoining_pads("B", overlap=2.0), "B")
 

@@ -199,11 +199,15 @@ def _solution_region(name: str, kind: str, material: str, bounds, holes=()):
     )
 
 
-def thin_film_pair(landing_um: float = 0.5) -> EffectiveInput:
+def thin_film_pair(
+    landing_um: float = 0.5, *, profile: str = "thin_film", bump: bool = False
+) -> EffectiveInput:
     """Two 0.25 um face metals joined by a lumped port landing ``landing_um`` on each.
 
     The selected Thin Film profile collapses the film thickness, so both metals become
-    Route-A sheets at z = 0 and the vacuum above them shrinks from 4.25 um to 4 um.
+    Route-A sheets at z = 0 and the vacuum above them shrinks from 4.25 um to 4 um.  With
+    ``profile="solid"`` the declared films stay finite.  With ``bump`` a 2.75 um tall
+    ``finite_volume`` body stands on the left film (a bump or post): a finite body that is not a film.
     """
     declaration = PhysicalLayerDeclaration(
         "film",
@@ -244,6 +248,8 @@ def thin_film_pair(landing_um: float = 0.5) -> EffectiveInput:
         )
         for name, loop in loops.items()
     )
+    if bump:
+        metals = (*metals, _bump_entity())
     port_loop = _rectangle(LEFT_EDGE_UM - landing_um, RIGHT_EDGE_UM + landing_um)
     port = PortSheetRegionRecord(
         "port_sheet",
@@ -279,6 +285,7 @@ def thin_film_pair(landing_um: float = 0.5) -> EffectiveInput:
     )
     polygons = (
         *(LayoutPolygonSpec(name, "metal", loop) for name, loop in loops.items()),
+        *((LayoutPolygonSpec("bump", "bump", BUMP_LOOP),) if bump else ()),
         LayoutPolygonSpec("port_polygon", "port", port_loop),
     )
     substrate = _solution_region(
@@ -325,9 +332,48 @@ def thin_film_pair(landing_um: float = 0.5) -> EffectiveInput:
         metadata={"geometry_grid": GeometryGridContext(GRID_UM).to_payload()},
     )
     effective, _, plan = interpret_physical_geometry(
-        source, stack, ApproximationProfile("thin_film", "v1", {})
+        source, stack, ApproximationProfile(profile, "v1", {})
     )
     return EffectiveInput(effective, plan.context)
+
+
+BUMP_LOOP = ((1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0))
+
+
+def _bump_entity() -> SemanticEntitySpec:
+    """A ``finite_volume`` bump body on the left film: source Z 0.25 .. 3.0 um, one Net with the film."""
+    declaration = PhysicalLayerDeclaration(
+        "bump_layer",
+        "bump",
+        {"level": "bump", "gds_pair": [2, 0]},
+        (0.25, 3.0),
+        "metal",
+        "finite_volume",
+        {},
+        {},
+    )
+    return SemanticEntitySpec(
+        "chip/bump",
+        "conductor",
+        "metal",
+        "conductor",
+        2,
+        "polygon",
+        part_role="bump_body",
+        net_id="left",
+        polygon_ids=("bump",),
+        host_void_semantic_id="upper_air",
+        geometry={
+            "geometry_source": "gds_polygon",
+            "z_um": 0.25,
+            "thickness_um": 2.75,
+            "outer_loop": BUMP_LOOP,
+        },
+        metadata={
+            "logical_layer_id": "bump",
+            "physical_layer": declaration.to_payload(),
+        },
+    )
 
 
 # --------------------------------------------------------------------------- GeometryPlan route

@@ -103,7 +103,8 @@ def test_equal_priority_overlap_of_two_entities_of_one_net_fails_naming_both():
     """No silent winner: equal priority means the source did not say who owns the overlap."""
     prisms = [prism("p", rect(0, 0, 100, 100)), prism("q", rect(50, 50, 150, 150))]
     with pytest.raises(
-        OverlapError, match=r"same-Net entities p, q .*equal priority 0"
+        OverlapError,
+        match=r"same-Net entities p and q overlap near \(.*\) um with equal priority 0: declare distinct entity priorities",
     ):
         label(prisms)
 

@@ -22,31 +22,15 @@ from scgsim.geometry.sgb.records.carriers import (
     ArcCarrier,
     Lineage,
     LineCarrier,
+    LineEdge,
+    RingPrimitive,
 )
 from scgsim.geometry.sgb.records.families import CurveFamilyRecord
 from scgsim.geometry.sgb.records.grid import Grid
 
 MaterialKind = Literal["conductor", "dielectric", "vacuum", "port"]
-
-
-@dataclass(frozen=True)
-class LineEdge:
-    """A straight source edge of a ring that may also contain arcs.
-
-    ``source_edge`` is the edge number lineage reports (the index of the edge in
-    the source ring); ``-1`` numbers the edge by its position in the ring.
-    """
-
-    p: Point
-    q: Point
-    source_edge: int = -1
-
-    def reversed(self) -> LineEdge:
-        """The same edge travelled the other way."""
-        return LineEdge(self.q, self.p, self.source_edge)
-
-
-RingPrimitive = LineEdge | ArcCarrier
+FILM_FEATURE_KINDS = frozenset({"stack_film", "local_film"})
+"""Physical feature kinds of a conductor that is a *film* (a layer thin enough to be a sheet)."""
 
 
 @dataclass(frozen=True)
@@ -196,6 +180,14 @@ class PrismRecord:
     polygon: int = 0
     arcs: tuple[ArcCarrier, ...] = ()
     port: PortIdentity | None = None
+    # The source physical declaration's feature kind (``stack_film``, ``local_film`` or
+    # ``finite_volume``); ``None`` when the conductor has no declaration.
+    feature_kind: str | None = None
+    # Where the entity comes from, for errors that must say which source supplies a missing priority.
+    occurrence: str | None = None  # the source occurrence (component instance) path
+    layer: str | None = (
+        None  # the source layer (logical level id, else the GDS layer/datatype)
+    )
 
     def __post_init__(self) -> None:
         if self.z1 < self.z0:

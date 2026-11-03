@@ -11,6 +11,7 @@ from __future__ import annotations
 from scgsim.geometry.sgb.assembly.records import Topology
 from scgsim.geometry.sgb.derivation.labelled import LabelledArrangements
 from scgsim.geometry.sgb.parallel import Runtime
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.sgb.routes.groups import RoutedModel
 from scgsim.geometry.sgb.validation import arrangements
 from scgsim.geometry.sgb.validation import topology as topology_checks
@@ -44,7 +45,9 @@ def validate_model(
         with report.timed("arcs"):
             arrangements.check_arcs(report, layers)
         with report.timed("bands"):
-            arrangements.check_band_areas(report, labelled.level_layers)
+            arrangements.check_band_areas(
+                report, labelled.level_layers, _support_areas(catalogue)
+            )
         with report.timed("areas"):
             arrangements.check_areas(report, layers)
         with report.timed("prism_areas"):
@@ -66,3 +69,15 @@ def validate_model(
                 report, topology, catalogue.grid.size_um
             )
     return report
+
+
+def _support_areas(catalogue: PrismCatalogue) -> dict[str, tuple[float, float]]:
+    """Support area and tolerance of every inset family: each boundary point moves by less than one grid unit per margin."""
+    return {
+        family.family_id: (
+            family.support.area(),
+            family.support.perimeter() * family.support.band_count,
+        )
+        for family in catalogue.families
+        if family.support is not None
+    }

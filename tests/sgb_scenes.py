@@ -13,6 +13,8 @@ import random
 from collections.abc import Sequence
 from fractions import Fraction
 
+from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
+from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.noding.snap_rounding import NodedEdge, Segment
 from scgsim.geometry.sgb.noding.spatial_hash import HotGrid
 from scgsim.geometry.sgb.plane import (
@@ -397,3 +399,16 @@ def max_deviation(edges: list[NodedEdge], segments: list[Segment]) -> float:
         )
         worst = max(worst, math.sqrt(float(best)))
     return worst
+
+
+def exact_band_areas(model: ConformalModel, family_id: str) -> dict[int, float]:
+    """Area (grid^2) of every band of a family from the level arrangements, arcs realised exactly."""
+    areas: dict[int, float] = {}
+    for layer in model.labelled.level_layers:
+        for fi in range(1, len(layer.arr.faces)):
+            for family, band in layer.labels[fi].bands:
+                if family == family_id:
+                    areas[band] = areas.get(band, 0.0) + face_exact_area(
+                        layer.arr, layer.edge_curve, fi
+                    )
+    return areas

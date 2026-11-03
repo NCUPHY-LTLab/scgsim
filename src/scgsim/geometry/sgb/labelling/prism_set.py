@@ -107,9 +107,11 @@ def _owning_conductor(
     top = max(p.priority for p in conductors)
     leaders = sorted({p.entity_id for p in conductors if p.priority == top})
     if len(leaders) > 1:
+        tied = [p for p in conductors if p.priority == top]
         raise OverlapError(
-            f"same-Net entities {', '.join(leaders)} overlap near {format_location(where, grid)} "
-            f"with equal priority {top}: declare a higher priority on the entity that owns the overlap"
+            f"same-Net entities {' and '.join(leaders)} overlap near {format_location(where, grid)} with "
+            f"equal priority {top}: declare distinct entity priorities (SemanticEntitySpec.priority) so "
+            f"that exactly one of them owns the overlap; {priority_source(tied)}"
         )
     return next(p for p in conductors if p.priority == top)
 
@@ -125,10 +127,62 @@ def _resolve_solution(hit: list[PrismRecord], where: RepPoint, grid: Grid) -> Do
         names = ", ".join(sorted(p.entity_id for p in winners))
         raise OverlapError(
             "ambiguous equal-priority solution regions of different materials near "
-            f"{format_location(where, grid)}: {names}"
+            f"{format_location(where, grid)}: {names}; declare distinct entity priorities "
+            f"(SemanticEntitySpec.priority); {priority_source(winners)}"
         )
     owner = max(winners, key=lambda p: p.entity_id)
     return Domain(owner.material_kind, owner.material, owner=owner.entity_id)
+
+
+def priority_source(tied: list[PrismRecord]) -> str:
+    """Which source must supply the missing priority for entities that tie (lower ``mesh_order`` wins).
+
+    Entities of different layers are ordered by the LayerStack ``mesh_order``; entities of one layer in one
+    component by the component annotation ``priority`` (the PDK fills it); entities of one layer that come
+    from different occurrences by an assembly-level priority on the GeometryPlan.  Entities whose source is
+    unknown (hand-made records) get the generic advice.
+    """
+    by_entity = {p.entity_id: p for p in tied}
+    sources: list[str] = []
+    entities = sorted(by_entity.values(), key=lambda p: p.entity_id)
+    for i, first in enumerate(entities):
+        for second in entities[i + 1 :]:
+            source = _pair_source(first, second)
+            if source not in sources:
+                sources.append(source)
+    return (
+        "; ".join(sources)
+        if sources
+        else "the source that declares these entities must supply it"
+    )
+
+
+def _pair_source(first: PrismRecord, second: PrismRecord) -> str:
+    pair = f"{first.entity_id} and {second.entity_id}"
+    if (
+        first.layer is not None
+        and second.layer is not None
+        and first.layer != second.layer
+    ):
+        return (
+            f"{pair} are on different layers ({first.layer}, {second.layer}): the LayerStack "
+            "`mesh_order` must differ (lower mesh_order wins)"
+        )
+    if (
+        first.occurrence is not None
+        and second.occurrence is not None
+        and first.occurrence != second.occurrence
+    ):
+        return (
+            f"{pair} come from different occurrences ({first.occurrence}, {second.occurrence}): "
+            "the GeometryPlan assembly must give the overlap an assembly-level priority"
+        )
+    if first.layer is not None and second.layer is not None:
+        return (
+            f"{pair} share layer {first.layer} in one component: the component annotation `priority` "
+            "must differ (the PDK fills it)"
+        )
+    return f"{pair}: the source that declares them must supply distinct priorities"
 
 
 def resolve_owner(

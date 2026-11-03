@@ -23,6 +23,7 @@ from scgsim.geometry.sgb.prisms.entities import (
     check_entity_kind,
     entity_interval,
     entity_prisms,
+    physical_feature_kind,
 )
 from scgsim.geometry.sgb.prisms.footprints import SourceFootprint, source_footprints
 from scgsim.geometry.sgb.prisms.ports import port_prisms
@@ -51,7 +52,11 @@ def build_prism_catalogue(
             conductor_intervals[entity.semantic_id] = interval
         prisms.extend(
             entity_prisms(
-                entity, footprints[entity.semantic_id], interval, ring_primitives
+                entity,
+                footprints[entity.semantic_id],
+                interval,
+                ring_primitives,
+                physical_feature_kind(entity, build_input, representation),
             )
         )
     prisms.extend(port_prisms(build_input, grid, conductor_intervals))

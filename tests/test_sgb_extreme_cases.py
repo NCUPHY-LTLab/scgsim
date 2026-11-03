@@ -12,6 +12,7 @@ import math
 import pytest
 from sgb_extreme_cases import (
     FIXTURES,
+    build_model,
     cases,
     catalogue_of,
     chip,
@@ -26,8 +27,8 @@ from scgsim.geometry.sgb.records.grid import exact_z
 
 
 def build(name: str, route: str):
-    """Build one fixture under a route."""
-    return build_model_from_catalogue(FIXTURES[name].build(route), route)
+    """Build one fixture under a route, with its band and refinement requests."""
+    return build_model(FIXTURES[name], route)
 
 
 @pytest.mark.parametrize(
@@ -40,9 +41,9 @@ def test_every_fixture_passes_every_check_or_is_refused_early_with_the_expected_
     expected = fixture.expect_error.get(route)
     if expected is not None:
         with pytest.raises(expected):
-            build_model_from_catalogue(fixture.build(route), route)
+            build_model(fixture, route)
         return
-    model = build_model_from_catalogue(fixture.build(route), route)
+    model = build_model(fixture, route)
     assert not model.report.failures
     assert model.counts["faces"] < 100  # a handful of prisms, a few dozen faces
     unnamed = [

@@ -5,7 +5,8 @@ structural validators stay cheap.  The catalogue is data: :data:`FIXTURES` maps 
 :class:`Fixture` (risk, builder, routes, expected failure per route).  Fixtures that must be
 refused (a different-Net contact, a same-Net non-manifold pinch) carry the expected error class.
 
-Inset-band fixtures belong to the cut-family sub-stage and are not part of this catalogue yet.
+The inset-band fixtures carry their typed requests (``insets`` / ``refinements``); ``build_model``
+applies them together with the catalogue.
 """
 
 from __future__ import annotations
@@ -16,7 +17,13 @@ from fractions import Fraction
 
 from sgb_scenes import GRID, rect_um, to_grid
 
+from scgsim.geometry.sgb.cutfamilies.requests import (
+    ConductorSurface,
+    InsetRequest,
+    RefinementRequest,
+)
 from scgsim.geometry.sgb.errors import ContactError, NonManifoldError
+from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 from scgsim.geometry.sgb.records.carriers import Lineage, LineCarrier, circle_arcs
 from scgsim.geometry.sgb.records.families import CurveFamilyRecord
 from scgsim.geometry.sgb.records.grid import exact_z
@@ -353,6 +360,66 @@ def near_coincident_layers_2g(route: str) -> PrismCatalogue:
     return _layers_offset(route, "near_coincident_layers_2g", 0.002)
 
 
+# --------------------------------------------------------------------------- inset-band fixtures
+
+
+def surface_bands(
+    entity: str, route: str, margins: tuple[float, ...]
+) -> tuple[InsetRequest, ...]:
+    """Bands on the sheet of an entity (Route A), or on its top and bottom face (Routes B and C)."""
+    if route == "A":
+        return (
+            InsetRequest(
+                f"band_{entity}_top", ConductorSurface(entity, "sheet"), margins
+            ),
+        )
+    return (
+        InsetRequest(f"band_{entity}_top", ConductorSurface(entity, "top"), margins),
+        InsetRequest(
+            f"band_{entity}_bottom", ConductorSurface(entity, "bottom"), margins
+        ),
+    )
+
+
+DUMBBELL = [(-12, -4), (-4, -4), (-4, -0.25), (4, -0.25), (4, -4), (12, -4), (12, 4), (4, 4), (4, 0.25), (-4, 0.25), (-4, 4), (-12, 4)]  # fmt: skip
+STRIP = rect_um(-10, -0.15, 10, 0.15)
+SLIT = [(-10, -6), (10, -6), (10, 6), (-10, 6), (-10, 0.05), (0.0, 0.0), (-10, -0.05)]
+
+
+def neck_split_by_inset(route: str) -> PrismCatalogue:
+    """A dumbbell (two 8 um squares joined by a 0.5 um wide neck) whose 0.4 um inset splits at the neck."""
+    return catalogue_of(
+        "neck_split_by_inset", route, [*chip(), metal("dumbbell", "N", DUMBBELL, route)]
+    )
+
+
+def band_vanishes(route: str) -> PrismCatalogue:
+    """A 0.3 um wide strip: the 0.2 um inset is empty (the innermost band does not exist)."""
+    return catalogue_of(
+        "band_vanishes", route, [*chip(), metal("strip", "N", STRIP, route)]
+    )
+
+
+def reflex_small_angle(route: str) -> PrismCatalogue:
+    """A slit with a 0.6 degree opening cut into a conductor: the reflex corner at its apex has a tiny angle."""
+    return catalogue_of(
+        "reflex_small_angle", route, [*chip(), metal("slit", "N", SLIT, route)]
+    )
+
+
+def refinement_crossing_band_edge(route: str) -> PrismCatalogue:
+    """A refinement-only line crossing the bands' boundaries of a banded pad (it ends inside the outermost band)."""
+    return catalogue_of(
+        "refinement_crossing_band_edge",
+        route,
+        [*chip(), metal("pad", "N", rect_um(-10, -5, 10, 5), route)],
+    )
+
+
+def _top_z_um(route: str) -> float:
+    return 0.0 if route == "A" else float(METAL_THICKNESS)
+
+
 # --------------------------------------------------------------------------- catalogue
 
 
@@ -366,6 +433,8 @@ class Fixture:
     routes: tuple[str, ...] = ("A", "B", "C")
     expect_error: dict[str, type[Exception]] = field(default_factory=dict)
     note: str = ""
+    insets: Callable[[str], tuple[InsetRequest, ...]] = lambda route: ()  # noqa: ARG005 - default: no bands
+    refinements: Callable[[str], tuple[RefinementRequest, ...]] = lambda route: ()  # noqa: ARG005
 
 
 FIXTURES: dict[str, Fixture] = {
@@ -434,7 +503,7 @@ FIXTURES: dict[str, Fixture] = {
             "port_crossing_round_pad",
             "a port sheet crossing a round pad twice",
             port_crossing_round_pad,
-            routes=("B",),
+            routes=("B", "C"),
         ),  # fmt: skip
         Fixture(
             "floating_conductor",
@@ -462,7 +531,34 @@ FIXTURES: dict[str, Fixture] = {
             "port_edge_on_metal_sidewall",
             "port sheet whose edge lies partly on a metal sidewall",
             port_edge_on_metal_sidewall,
-            routes=("A", "B"),
+            routes=("A", "B", "C"),
+        ),  # fmt: skip
+        Fixture(
+            "neck_split_by_inset",
+            "a neck that the 0.4 um inset splits (topology change of the bands)",
+            neck_split_by_inset,
+            insets=lambda route: surface_bands("dumbbell", route, (0.1, 0.4)),
+        ),  # fmt: skip
+        Fixture(
+            "band_vanishes",
+            "a band that vanishes (strip narrower than twice the margin)",
+            band_vanishes,
+            insets=lambda route: surface_bands("strip", route, (0.1, 0.2)),
+        ),  # fmt: skip
+        Fixture(
+            "reflex_small_angle",
+            "reflex vertex of a 0.6 degree slit with inset bands",
+            reflex_small_angle,
+            insets=lambda route: surface_bands("slit", route, (0.05, 0.2)),
+        ),  # fmt: skip
+        Fixture(
+            "refinement_crossing_band_edge",
+            "refinement curve crossing band boundaries",
+            refinement_crossing_band_edge,
+            insets=lambda route: surface_bands("pad", route, (0.5, 2.0)),
+            refinements=lambda route: (
+                RefinementRequest("ref", _top_z_um(route), ((-9.9, 0.5), (9.9, 0.5))),
+            ),
         ),  # fmt: skip
         Fixture(
             "near_coincident_layers_sub_grid",
@@ -485,3 +581,13 @@ def cases() -> list[tuple[Fixture, str]]:
     return [
         (fixture, route) for fixture in FIXTURES.values() for route in fixture.routes
     ]
+
+
+def build_model(fixture: Fixture, route: str) -> ConformalModel:
+    """The validated model of a fixture under a route, with its band and refinement requests."""
+    return build_model_from_catalogue(
+        fixture.build(route),
+        route,
+        insets=fixture.insets(route),
+        refinements=fixture.refinements(route),
+    )
