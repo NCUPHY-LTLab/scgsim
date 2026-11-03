@@ -1,0 +1,204 @@
+---
+title: "Analyze Palace adaptive refinement"
+description: "Read marked elements, refinement response, energy-indicator coverage and capacitance-matrix stability from a retained Palace result."
+scgsim-kind: "api"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/amr-analysis"
+---
+
+`analyze_amr(result, reference=None)` turns retained Palace adaptive mesh
+refinement (AMR) evidence into a detached `PalaceAmrAnalysis`. It reports what
+the solver marked and how the mesh and capacitance matrix changed between
+available transitions. Display it with the public
+`show_amr_analysis(analysis)` function and reuse the same object in a benchmark.
+The input is either a strictly resolved Palace result or an existing partial
+trust report; the function does not accept a raw path that could bypass those
+result-reading contracts.
+
+This is an offline analysis of a returned result. It does not launch Palace,
+read a live simulation object, or infer missing observations. Missing passes,
+gaps, and zero denominators remain explicit; derived metrics are unavailable
+when their required observations are absent or invalid. Missing observations
+are never filled with zero or substituted with a proxy.
+
+The native `Model.Refinement.SaveAdaptDiagnostics` output is opt-in and
+defaults to `false`. Request it when preparing the Palace input with
+`set_numerical(save_adapt_diagnostics=True)`; the selected native Palace build
+must support this option. For nonconformal AMR, `amr_nc_levels=1` writes the
+native `MaxNCLevels` setting as `1`. Electrostatic studies may independently
+request field output with `set_electrostatic(save_fields=1)` when their study
+needs it; saved field or ParaView data is not a prerequisite for this AMR
+analysis. Diagnostics are written under `<Problem.Output>/amr-diagnostics`,
+and their manifest inventory includes the diagnostic meshes. They add storage
+and I/O even when `SaveAdaptMesh` is false. SCGSim follows the returned
+manifest's paths and binds its declared files through the receipt; it does not
+guess paths from directory contents. The analysis itself consumes only a
+returned result and does not execute the solver.
+
+## Read the refinement indicators
+
+For each available transition from pass $k$ to pass $k+1$, the analysis
+distinguishes the native marked-element count from the computed coverage of
+the squared error indicator:
+
+$$
+f_{\mathrm{marked}} = \frac{|M|}{N_{\mathrm{before}}},\qquad
+c_{\eta^2} = \frac{\sum_{e\in M}\eta_e^2}{\sum_{e}\eta_e^2}.
+$$
+
+Here, $M$ is the set of marked elements, $N_{\mathrm{before}}$ is the number
+of elements before refinement, and $\eta_e$ is the native element error
+indicator. The marked fraction counts cells. The squared-indicator coverage
+is computed from the retained native indicator squares over marked and all
+cells. It is actual indicator coverage, distinct from the requested theta
+fraction; it is not a percentage of cells or a measured solution error.
+
+The transition also reports the number of actual refined parents $|P|$,
+refinement closure $|P|/|M|$, extra parents $|P\setminus M|$, and element
+count amplification $(N_{\mathrm{after}}-N_{\mathrm{before}})/|M|$. Closure
+describes how much the mesh operation expanded the marked set; high closure
+does not by itself show that refinement was wasteful or unnecessary. Actual
+parent counts are required for these quantities. When the source does not
+preserve them, the corresponding measures are unavailable rather than
+estimated from cell counts.
+
+True degree-of-freedom growth is reported as
+$D_{\mathrm{after}}/D_{\mathrm{before}}$, alongside the degree-of-freedom
+increase. This is distinct from cell-count amplification: the two can differ
+as the finite-element space changes. If either degree-of-freedom count or the
+denominator is unavailable, growth is unavailable.
+
+The native energy-normalized ZZ indicator is retained as its own quantity.
+For terminal sample $n$, its integrated flux discrepancy is scaled by
+$\sqrt{0.5/E_{\mathrm{total}}}$ when total field energy is positive, and by
+$1$ otherwise, giving $\eta_{Kn}$. Palace combines the terminal samples at
+each element by root mean square and then takes the global norm:
+
+$$
+\eta_K=\sqrt{\frac{1}{n_{\mathrm{samples}}}\sum_n\eta_{Kn}^2},\qquad
+\mathrm{indicator\_norm}=\sqrt{\sum_K\eta_K^2}.
+$$
+
+This is an energy-normalized flux-recovery estimate, not a capacitance percent
+error or an accuracy reference. Read it alongside the main and recovery
+linear-solve statuses. Driver completion is a control-flow result and does
+not mean either solve converged; a capacitance matrix written by a
+nonconverged solve remains an observation with its solve status attached. See
+the Palace [native AMR diagnostics contract](https://github.com/NCUPHY-LTLab/palace/blob/642188ea0377c41523a6c5af710db1eb80fd6368/docs/src/features/amr_diagnostics.md)
+for the producer's retained evidence and normalization.
+
+## Compare capacitance matrices
+
+For adjacent available passes, the analysis reports the relative Frobenius
+change
+
+$$
+\frac{\|C_k-C_{k-1}\|_F}{\|C_k\|_F}
+$$
+
+and the elementwise absolute difference matrix $|C_k-C_{k-1}|$ in farads.
+Raw capacitance matrices and per-terminal linear-solve state remain visible,
+including when a solve did not converge. Only derived comparisons that lack
+valid inputs are unavailable. A zero denominator makes the relative
+Frobenius metric unavailable; the absolute entry-difference matrix can still
+be reported. Missing, failed, unconverged, or non-adjacent passes make the
+derived adjacent comparison unavailable. The analysis does not bridge a gap
+or treat failure as a zero matrix.
+
+An optional `CapacitanceReference` supplies a reference capacitance matrix,
+terminal identities, units, and source description. Its `values` are a square
+matrix in `terminal_ids` order; the immutable reference also retains `units`
+and `source`. Terminal IDs must be the exact
+`net_id` values from `palace_index_map.json` entries whose `section` is
+`Boundaries.Terminal` (the source-conductor net IDs), not
+terminal names or display labels. Matrix axes follow sorted native-index
+order. When explicitly provided,
+each comparable pass can report the relative Frobenius error
+$\|C_k-C_{\mathrm{ref}}\|_F/\|C_{\mathrm{ref}}\|_F$. Terminal identities
+must be aligned and units must agree before comparison; incompatible or
+incomplete reference data remains unavailable with its reason. A reference
+comparison is only as meaningful as the independently established source and
+model behind that reference. The tool does not create synthetic truth data or
+choose an acceptance threshold.
+
+Without a reference, the sequence can describe whether the matrix changed
+between recorded passes. It cannot establish absolute accuracy or claim an
+accuracy advantage over another solver or model.
+
+## Offline use
+
+Resolve a returned package first, then analyze and display the detached result.
+To inspect partial evidence, pass an existing trust report produced by the
+inspection path. The example uses the strict resolved-result path:
+
+```python
+from pathlib import Path
+from scgsim.palace import (
+    CapacitanceReference,
+    analyze_amr,
+    resolve_palace_result,
+    show_amr_analysis,
+)
+
+returned_run_dir = Path(".artifacts/returned-palace")
+expected_id = Path(".artifacts/palace-preparation-handoff-id.txt").read_text(
+    encoding="utf-8"
+).strip()
+resolved = resolve_palace_result(
+    returned_run_dir, expected_handoff_id=expected_id
+)
+analysis = analyze_amr(resolved, reference=None)
+show_amr_analysis(analysis, theme="dark")
+benchmark = resolved.show_simulation_benchmark(amr_analysis=analysis)
+```
+
+Pass that same `analysis` object to both presentation and benchmark so the
+figures and benchmark use one interpretation of the retained evidence. The
+benchmark does not rerun the analysis or invoke Palace. To compare with an
+explicit reference, construct a `CapacitanceReference` from an independently
+established matrix and its terminal identities, units, and source, then pass
+it through `reference=`. A resolved result also provides
+`resolved.show_amr_analysis(reference=reference, theme="dark")` as a combined
+analysis and display convenience.
+
+Each reported scalar is an `AmrMetric`: its `value` may be unavailable, and
+its `availability`, `reason`, and `units` explain that state. Pass records
+identify the native iteration and evidence source, preserve the extracted
+capacitance matrix and terminal order, and retain the native ZZ norm and any
+reference-capacitance comparison. `CapacitanceComparison` keeps the normalized
+Frobenius change separate from `absolute_delta_f`, whose matrix value contains
+elementwise differences in farads and whose terminal IDs identify its row and
+column order. Transition records identify their before/after iterations and
+retain the marked fraction, squared indicator coverage, closure measures,
+cell amplification, degree-of-freedom growth ratio and increase, adjacent
+capacitance comparison, and availability reason. The analysis also keeps
+problem, run status, integrity, pass and
+transition records, and the optional reference together.
+`analysis.to_payload()` returns the machine-readable boundary with top-level
+`run_dir`, `problem`, `run_status`, `integrity`, `passes`, `transitions`,
+`reference`, `diagnostics_reason`, and `diagnostic_missing_files` fields.
+The last two fields identify unavailable or incomplete native diagnostics.
+Raw pass matrices and per-terminal solve validity remain
+present in this payload, including when a derived comparison is unavailable.
+For standard JSON, nonfinite observations are encoded as the explicit strings
+`NaN`, `Infinity`, or `-Infinity`; the Python analysis retains the raw values.
+Each pass also retains optional source-snapshot degree of freedom count, mesh
+element count, cumulative elapsed seconds, and peak node memory in megabytes;
+these are observed values, not estimates. Benchmark pass-cost records identify
+`pass_index`, source, and native iteration. They report per-pass elapsed time
+only when the native iterations establish it; when iterations are missing or
+unknown, per-pass elapsed time and its reason remain unavailable. Cumulative
+elapsed time remains visible, and a multi-step cumulative difference is not
+presented as one pass duration. Transition observations retain compact raw
+counts, squared-indicator sums, native IDs, and source, without embedding the
+full element identity sets in the payload. Together these observations support
+work-precision plots from the same analysis payload.
+
+## Interpretation limits
+
+Use marked fraction, indicator coverage, closure, mesh growth, degrees of
+freedom, native indicator, and matrix changes as separate observations. None
+is a universal mesh-adequacy threshold. Adjacent matrix stability without an
+independent reference cannot establish accuracy; an independent reference
+comparison does not turn the reference into a universal truth for other
+models or settings.

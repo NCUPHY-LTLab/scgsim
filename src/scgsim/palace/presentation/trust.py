@@ -5,7 +5,9 @@ from __future__ import annotations
 import copy
 import html
 import json
-from dataclasses import dataclass, replace
+import math
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -48,6 +50,11 @@ from scgsim.palace.presentation.surface_figures import (
     surface_percentage_figure,
     surface_total_figure,
 )
+from scgsim.palace.results.amr_analysis import analyze_amr
+from scgsim.palace.results.amr_models import (
+    CapacitanceReference,
+    PalaceAmrAnalysis,
+)
 from scgsim.palace.results.inspection import (
     failure_payload,
     selection_payload,
@@ -63,6 +70,7 @@ from scgsim.palace.results.snapshots import (
     surface_snapshots,
 )
 
+from .amr import PalaceAmrReport, show_amr_analysis
 from .views import PhysicsQuantitiesReport, SimulationBenchmarkReport
 
 _DURATION_BARS = (
@@ -81,6 +89,59 @@ _DURATION_BARS = (
     "Paraview",
     "DiskIO",
 )
+
+
+def _validate_amr_analysis_binding(
+    report: PalaceTrustReport,
+    analysis: PalaceAmrAnalysis,
+) -> None:
+    """Prevent combining benchmark data with analysis from a different run identity."""
+    receipt = report.provenance.get("returned_receipt")
+    expected_status = receipt.get("status") if isinstance(receipt, Mapping) else None
+    if not isinstance(expected_status, str):
+        expected_status = (
+            "failed" if report.failure is not None else report.completeness
+        )
+    if (
+        analysis.run_dir.resolve() != report.run_dir.resolve()
+        or analysis.problem != report.problem
+        or analysis.run_status != expected_status
+        or analysis.integrity != report.selection.integrity
+    ):
+        raise ValueError(
+            "AMR analysis run identity, status, and integrity must match the trust report."
+        )
+
+
+def _elapsed_pass_cost(
+    iteration: int | None,
+    elapsed_total: float | None,
+    previous_iteration: int | None,
+    previous_elapsed: float | None,
+) -> tuple[float | None, str | None]:
+    """Return a pass delta only when native iteration and cumulative timer are continuous."""
+    if iteration is None:
+        return None, "native_iteration_unavailable"
+    if previous_iteration is None:
+        if iteration != 1:
+            return None, "missing_previous_native_iteration"
+    elif iteration <= previous_iteration:
+        return None, "native_iteration_not_increasing"
+    elif iteration != previous_iteration + 1:
+        return None, "native_iteration_gap"
+    if elapsed_total is None:
+        return None, "cumulative_elapsed_unavailable"
+    if not math.isfinite(elapsed_total):
+        return None, "nonfinite_cumulative_elapsed"
+    if previous_iteration is None:
+        return elapsed_total, None
+    if previous_elapsed is None:
+        return None, "previous_cumulative_elapsed_unavailable"
+    if not math.isfinite(previous_elapsed):
+        return None, "previous_cumulative_elapsed_nonfinite"
+    if elapsed_total < previous_elapsed:
+        return None, "cumulative_elapsed_reset"
+    return elapsed_total - previous_elapsed, None
 
 
 @dataclass(frozen=True)
@@ -110,6 +171,19 @@ class PalaceTrustReport:
 
         return copy.deepcopy(self.provenance["mesh_summary"])
 
+    def show_amr_analysis(
+        self,
+        *,
+        reference: CapacitanceReference | None = None,
+        theme: ReportTheme | None = None,
+    ) -> PalaceAmrReport:
+        """Return AMR figures and data for this complete or partial run."""
+        analysis = analyze_amr(self, reference)
+        return show_amr_analysis(
+            analysis,
+            theme=self.theme if theme is None else theme,
+        )
+
     def with_theme(self, theme: ReportTheme) -> PalaceTrustReport:
         """Return this report with validated display colors and unchanged source data."""
         checked = checked_theme(theme)
@@ -129,11 +203,16 @@ class PalaceTrustReport:
         )
 
     def show_simulation_benchmark(
-        self, *, show_details: bool = False
+        self,
+        *,
+        show_details: bool = False,
+        amr_analysis: PalaceAmrAnalysis | None = None,
     ) -> SimulationBenchmarkReport:
         """Return the readable benchmark while retaining every machine field."""
-
+        analysis = analyze_amr(self) if amr_analysis is None else amr_analysis
+        _validate_amr_analysis_binding(self, analysis)
         attempted = read_optional_json(self.run_dir / "results/palace/palace.json")
+        pass_cost_records = self.pass_cost_records()
         data = {
             "cost": dict(self.cost),
             "mesh_summary": self.mesh_summary(),
@@ -160,11 +239,14 @@ class PalaceTrustReport:
                 "selection": selection_payload(self.selection),
                 "failure": failure_payload(self.failure),
             },
+            "amr_analysis": analysis.to_payload(),
+            "pass_cost_records": [asdict(record) for record in pass_cost_records],
         }
         return SimulationBenchmarkReport(
             trust=self,
             data=data,
             show_details=checked_show_details(show_details),
+            amr_analysis=analysis,
         )
 
     def show_all_results(
@@ -173,6 +255,7 @@ class PalaceTrustReport:
         theme: ReportTheme = "light",
         ranking_limit: int | None = 20,
         show_details: bool = False,
+        amr_analysis: PalaceAmrAnalysis | None = None,
     ) -> None:
         """Display trust, benchmark, and available physics in the shared order."""
 
@@ -183,7 +266,12 @@ class PalaceTrustReport:
             show_details=show_details,
         )
         display(trust)
-        display(trust.show_simulation_benchmark(show_details=show_details))
+        display(
+            trust.show_simulation_benchmark(
+                show_details=show_details,
+                amr_analysis=amr_analysis,
+            )
+        )
         display(
             trust.show_physics_quantities(
                 theme=theme,
@@ -540,16 +628,23 @@ class PalaceTrustReport:
         return fig
 
     def pass_cost_records(self) -> tuple[PassCostRecord, ...]:
-        """Detach cumulative and incremental cost observations in native AMR pass order."""
+        """Detach pass costs while only differencing adjacent native iterations."""
         records: list[PassCostRecord] = []
+        previous_iteration: int | None = None
         previous_elapsed: float | None = None
         for pass_ in self.passes:
-            elapsed_pass = None
-            if pass_.elapsed_total_s is not None:
-                if previous_elapsed is None:
-                    elapsed_pass = pass_.elapsed_total_s
-                else:
-                    elapsed_pass = pass_.elapsed_total_s - previous_elapsed
+            iteration = pass_.native_iteration
+            elapsed_pass, elapsed_reason = _elapsed_pass_cost(
+                iteration,
+                pass_.elapsed_total_s,
+                previous_iteration,
+                previous_elapsed,
+            )
+            if iteration is None:
+                previous_iteration = None
+                previous_elapsed = None
+            else:
+                previous_iteration = iteration
                 previous_elapsed = pass_.elapsed_total_s
             seconds_per_million = None
             if (
@@ -562,12 +657,14 @@ class PalaceTrustReport:
                 PassCostRecord(
                     pass_index=pass_.pass_index,
                     source=pass_.source,
+                    native_iteration=iteration,
                     degrees_of_freedom=pass_.degrees_of_freedom,
                     mesh_elements=pass_.mesh_elements,
                     elapsed_cumulative_s=pass_.elapsed_total_s,
                     elapsed_pass_s=elapsed_pass,
                     seconds_per_million_dof=seconds_per_million,
                     peak_node_memory_mb=pass_.peak_node_memory_mb,
+                    elapsed_pass_reason=elapsed_reason,
                 )
             )
         return tuple(records)
@@ -586,9 +683,11 @@ class PalaceTrustReport:
                 for name in (
                     "Pass",
                     "Snapshot",
+                    "Native iteration",
                     "DOFs",
                     "Mesh elems",
                     "This pass",
+                    "Pass-time status",
                     "Cumulative",
                     "s / MDoF",
                     "Peak node mem",
@@ -602,9 +701,11 @@ class PalaceTrustReport:
                 "<tr>"
                 + html_cell("td", str(record.pass_index))
                 + html_cell("td", record.source)
+                + html_cell("td", fmt(record.native_iteration))
                 + html_cell("td", fmt(record.degrees_of_freedom))
                 + html_cell("td", fmt(record.mesh_elements))
                 + html_cell("td", fmt_seconds(record.elapsed_pass_s))
+                + html_cell("td", record.elapsed_pass_reason or "available")
                 + html_cell("td", fmt_seconds(record.elapsed_cumulative_s))
                 + html_cell("td", fmt(record.seconds_per_million_dof))
                 + html_cell("td", fmt_mb(record.peak_node_memory_mb))

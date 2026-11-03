@@ -7,6 +7,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from scgsim.palace.presentation.amr import show_amr_analysis
 from scgsim.palace.presentation.plotting import (
     mesh_summary_html,
     show_figure,
@@ -20,6 +21,7 @@ from scgsim.palace.presentation.surface_figures import (
     surface_mask_participation_figure,
     surface_ranking_figure,
 )
+from scgsim.palace.results.amr_models import PalaceAmrAnalysis
 from scgsim.palace.results.observations import read_optional_json
 from scgsim.palace.results.report_models import (
     SurfaceEprSeriesSnapshot,
@@ -41,6 +43,7 @@ class SimulationBenchmarkReport:
     trust: Any
     data: dict[str, Any]
     show_details: bool = False
+    amr_analysis: PalaceAmrAnalysis | None = None
 
     def _ipython_display_(self) -> None:
         from IPython.display import HTML, display  # noqa: PLC0415 -- IPython is optional; detached result reading needs no notebook runtime.
@@ -61,6 +64,14 @@ class SimulationBenchmarkReport:
         display(HTML(self.trust.benchmark_pass_table_html()))
         for figure in self.trust.benchmark_pass_figures():
             show_figure(figure)
+        if self.amr_analysis is not None:
+            amr_report = show_amr_analysis(
+                self.amr_analysis,
+                theme=self.trust.theme,
+            )
+            display(HTML(amr_report.tables_html()))
+            for figure in amr_report.figures.values():
+                show_figure(figure)
         if self.show_details:
             payload = html.escape(json.dumps(self.data, indent=2, sort_keys=True))
             display(
