@@ -11,6 +11,7 @@ project:
   - docs/api/*.qmd
   - docs/course/*.qmd
   - docs/tutorials/*.qmd
+  - docs/research/*.qmd
   - docs/history/*.qmd
   - docs/concepts/*.qmd
   - '!docs/concepts/geometry-en.qmd'
@@ -54,6 +55,8 @@ website:
       href: docs/examples.qmd
     - text: 概念
       href: docs/concepts/problems.qmd
+    - text: 研究
+      href: docs/research/index.qmd
     - text: 契約
       href: docs/reference.qmd
     - text: 貢獻
@@ -122,12 +125,20 @@ website:
     - docs/concepts/geometry.qmd
     - docs/eigenmode-epr.qmd
     - docs/concepts/model-and-numerics.qmd
+  - id: research
+    title: 頁面
+    style: floating
+    collapse-level: 1
+    contents:
+    - docs/research/index.qmd
+    - docs/history/curved-source-installation.qmd
   - id: contract
     title: 頁面
     style: floating
     collapse-level: 1
     contents:
     - docs/reference.qmd
+    - docs/conventions.qmd
     - docs/backend-support.qmd
     - docs/knowledge-guide.qmd
     - docs/api/input-index.qmd

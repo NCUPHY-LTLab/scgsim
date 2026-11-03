@@ -9,6 +9,13 @@ scgsim-id: "docs/course/execute"
 
 開始前，請先完成一篇後端教學並保留其 `handoff`。準備流程會建立輸入套件；執行則是另外呼叫原生求解器的操作。請保留準備階段的紀錄，並傳送完整套件，而非只傳網格、JSON 規格或專案檔名。
 
+## 準備 Solver 主機
+
+執行交接套件前，請確認目標主機已有所選後端需要的原生軟體與工具。Python extra 不會安裝原生 Palace 或 AEDT。
+
+- **Palace：**準備 Palace 執行檔，以及主機所需的 MPI 包裝程式或排程工具。請參閱 [Palace 安裝指南](https://awslabs.github.io/palace/stable/install/)與[執行設定參考](../execution-profiles.qmd)。
+- **AEDT Desktop 路徑：**準備交接套件指定的版本、適用授權及所需的 PyAEDT 環境。細節請見 [AEDT 執行階段契約](../specs/aedt-runtime.qmd)。
+
 ## Palace：選擇主機的啟動方式 {#palace-select-the-hosts-launch-shape}
 
 Palace 教學會設定 `sim`、建立網格並寫入設定檔。接下來由你提供主機上的實際執行檔、資源與設定命令。這些值取決於你的環境，因此範例從研究專用的環境變數讀取，而不指定特定站台路徑或核心數。

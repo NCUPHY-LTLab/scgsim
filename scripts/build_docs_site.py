@@ -236,13 +236,20 @@ def historical_website(website: str, source: Path) -> str:
     # The publisher configuration remains the sole maintained navigation authority.
     sidebars = list(re.finditer(r"(?m)^[ ]+- id: ([^\n]+)\n", website))
     landings = {}
+    empty_areas = []
     for index, match in enumerate(sidebars):
         end = sidebars[index + 1].start() if index + 1 < len(sidebars) else len(website)
         pages = re.findall(r"(?m)^\s+- (\S+\.qmd)\s*$", website[match.end() : end])
         destination = next((page for page in pages if (source / page).is_file()), None)
         landings[match[1]] = destination
+        if destination is None:
+            empty_areas.append((match.start(), end))
         for page in pages:
             landings[page] = destination
+
+    # New Areas have no content in older releases; keep them out of those menus.
+    for start, end in reversed(empty_areas):
+        website = website[:start] + website[end:]
 
     def landing(match: re.Match[str]) -> str:
         area, page = match["label"].strip("\"' "), match["page"]
@@ -250,6 +257,8 @@ def historical_website(website: str, source: Path) -> str:
             return match[0]
         replacement = landings.get(page, landings.get(area.lower()))
         if replacement is None:
+            if page in landings or area.lower() in landings:
+                return ""
             raise RuntimeError(f"historical source has no page for the {area} Area")
         return match[0].replace(page, replacement)
 

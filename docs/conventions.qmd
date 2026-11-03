@@ -1,0 +1,135 @@
+---
+title: "Convention"
+description: "Definitions of SCGSim's English technical terms, symbols and unit notation."
+sidebar: contract
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/conventions"
+---
+
+Use this dictionary when a term appears in a workflow or result page. Definitions
+follow the current SCGSim contracts; links point to the pages that describe each
+workflow in detail.
+
+## Analysis
+
+[Electrostatic]{#term-electrostatic} solves conductor charge for specified
+voltages and returns an ordered capacitance matrix. See the
+[problem overview](concepts/problems.qmd#capacitance-charge-response-to-conductor-voltage).
+
+[Eigenmode]{#term-eigenmode} finds resonant frequencies and fields for a model
+with its declared boundaries and circuit elements. An Eigenmode result and a
+driven response are different quantities. See the
+[problem overview](concepts/problems.qmd#resonance-modes-of-a-field-and-circuit-model).
+
+[Driven Modal]{#term-driven-modal} is the HFSS driven workflow using modal
+ports, including integration-line port declarations, to return complex
+S-parameters.
+
+[Driven Terminal]{#term-driven-terminal} is the HFSS driven workflow using
+explicit reference conductors to return complex S-parameters.
+
+## Geometry and workflow
+
+[Net]{#term-net} is the caller's electrical grouping of source Entities. It
+records connectivity assignments; the geometry API does not infer electrical
+connectivity from touching shapes.
+
+[Ground]{#term-ground} is a physical or electrical grounding choice in a
+selected model or workflow. It is not synonymous with a particular native
+`Net` type; consult the backend contract for how the choice is represented.
+
+[Body]{#term-body} is a geometry object represented in a source or backend
+model. Its meaning depends on the geometry contract: a source object may be
+interpreted or lowered as a Sheet or Solid, so Body does not by itself mean a
+native three-dimensional solid or imply inferred layer spans.
+
+[Occurrence]{#term-occurrence} is a named placement of a component instance in
+a hierarchy. Qualified occurrence identity distinguishes repeated instances
+while retaining their shared component definition.
+
+[GeometryPlan]{#term-geometry-plan} is the mutable Notebook builder for
+component entities and final Net assignments. Calling `prepare()` produces a
+detached immutable snapshot.
+
+[Snapshot]{#term-snapshot} is a detached, immutable record of prepared source
+geometry and its identities. It carries prepared input without retaining live
+component references.
+
+[Mesh]{#term-mesh} is the discretized geometric domain used by a field solver.
+A mesh summary describes mesh construction and counts; by itself it does not
+establish solver accuracy.
+
+[Adaptive Pass]{#term-adaptive-pass} is a solver's successive mesh/solution
+iteration in an adaptive workflow. Interpret values using the actual completed
+pass and the backend's recorded history.
+
+[AMR]{#term-amr} means Adaptive Mesh Refinement: the solver refines a mesh
+locally or globally during an adaptive workflow, according to its native
+procedure.
+
+[Nonconformal AMR]{#term-nonconformal-amr} is Adaptive Mesh Refinement that
+allows local refinement to leave neighboring elements at different refinement
+levels, creating hanging nodes at nonconforming mesh interfaces. Palace exposes
+this as `Model.Refinement.Nonconformal`; see the [MFEM explanation](https://mfem.org/howto/ncmesh/).
+
+[Solver]{#term-solver} is the native computational program that evaluates a
+prepared model. SCGSim prepares requests and resolves returned evidence around
+the selected solver.
+
+[Handoff]{#term-handoff} is the prepared, identifiable package passed from
+model preparation to a caller-controlled solver execution and result return.
+It does not itself mean that a solver ran or completed.
+
+## Results
+
+[Sheet]{#term-sheet} is a two-dimensional source or native geometric surface;
+it can represent a thin-film region or a port surface depending on its declared
+role.
+
+[Solid]{#term-solid} is the volume-based geometry representation selected by
+`modeling="solid"`.
+
+[Thin Film]{#term-thin-film} is the explicitly selected thin-film geometry
+representation, configured separately from Solid. Its film assumptions and
+backend support are documented in the [capability table](backend-support.qmd).
+
+[Port]{#term-port} is a declared excitation or measurement boundary for a
+driven calculation. Its type and reference determine how the returned network
+response is interpreted.
+
+[Terminal]{#term-terminal} is a conductor endpoint in a terminal formulation.
+A terminal's reference conductor is part of the model definition.
+
+[C]{#term-c} denotes capacitance. [G]{#term-g} denotes conductance. [RLGC]{#term-rlgc} means Resistance, Inductance, Conductance, and Capacitance
+parameters, often reported per unit length for a cross-section extraction.
+
+[Maxwell capacitance matrix]{#term-maxwell-capacitance-matrix} relates
+conductor charges to conductor voltages under the extraction's grounding and
+ordering conventions. Preserve its native conductor order and units.
+
+[EPR]{#term-epr} means Energy Participation Ratio: a selected energy numerator
+divided by the backend-defined normalization energy. The numerator and
+[denominator convention](eigenmode-epr.qmd#quantities-and-normalization) depend
+on backend; thin-film estimates contribute numerators and are not added to the
+denominator.
+
+[SPR]{#term-spr} means Surface Participation Ratio: estimated energy in a
+specified interface film divided by the workflow's stated normalization energy.
+The denominator is workflow-dependent. SPR is an interface estimate, not
+automatically a disjoint part of total energy.
+
+For EPR and SPR, read the numerator and denominator together. They are
+dimensionless ratios; do not confuse them with percentages or with loss
+contributions such as inverse-Q, which additionally depend on loss assumptions.
+
+[Convergence]{#term-convergence} describes whether a declared quantity
+approaches stability under the stated iterative criterion. Record the quantity,
+criterion, and stopping reason; interpret native solver flags separately from
+any caller-defined measure.
+
+## Symbols and units
+
+Capacitance may be expressed in farads (`F`) or femtofarads (`fF`); `1 fF = 10⁻¹⁵ F`. A ratio is dimensionless, while parts per million (`ppm`) is a scaled
+ratio (`1 ppm = 10⁻⁶`). Check the particular API or result contract for its
+units; SCGSim APIs do not all use the same unit convention.

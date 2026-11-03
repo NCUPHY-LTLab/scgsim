@@ -1,5 +1,5 @@
 ---
-title: "曲線來源的歷史 Palace 設定"
+title: "Circular Pad：研究重現設定"
 description: "Circular Pad Uniform-port 研究所記錄的固定來源與原生求解器設定。"
 scgsim-kind: "history"
 scgsim-status: "HISTORICAL"

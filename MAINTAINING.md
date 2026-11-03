@@ -23,6 +23,15 @@ identities and shared delivery rules through `$scq-collaboration-roles`.
 Existing writers retain their assigned paths and running services. Coordinate
 with the assigned writer before changing a shared path or taking over a scope.
 
+## Writing documentation
+
+Follow [DOCS_STYLE.md](DOCS_STYLE.md) for SCGSim's source, packaging and
+terminology requirements. The shared
+[docs-design Skill](https://github.com/arfiligol/agent-skills/blob/main/docs-design/SKILL.md)
+owns reader principles; the
+[quarto-docs Skill](https://github.com/arfiligol/agent-skills/blob/main/quarto-docs/SKILL.md)
+and its Askr adoption reference own site implementation and theme consumption.
+
 ## Native presentation
 
 The site uses the complete upstream Askr extension without local CSS or JS.

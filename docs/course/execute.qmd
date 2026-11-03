@@ -11,6 +11,13 @@ creates the input package. Execution is the separate operation that invokes the
 native solver. Keep your preparation-side notes and transfer the complete
 package, not just a mesh, JSON spec or project filename.
 
+## Prepare the solver host
+
+Before running a handoff, confirm that its target host has the native software and tools for the selected backend. Python extras do not install native Palace or AEDT.
+
+- **Palace:** provide a Palace executable and any MPI wrapper or scheduler tools required by your host. See the [Palace installation guide](https://awslabs.github.io/palace/stable/install/) and the [execution profiles reference](../execution-profiles.qmd).
+- **AEDT Desktop route:** provide the release selected for the handoff, its license, and the required PyAEDT environment. See the [AEDT runtime contract](../specs/aedt-runtime.qmd).
+
 ## Palace: select the host's launch shape
 
 The Palace lessons configure `sim`, build its mesh and write its config.

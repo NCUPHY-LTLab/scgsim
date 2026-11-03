@@ -35,6 +35,11 @@ Authorized implementation includes directly related documentation, tests and
 local checks under `$v1-lifecycle`; research and native execution follow the
 assigned task scope.
 
+Use `$docs-design` for human-facing documents and `$quarto-docs` for Quarto
+and Askr implementation. Read [DOCS_STYLE.md](DOCS_STYLE.md) for SCGSim's
+source ownership, packaging metadata and terminology references. Shared Skills
+own the reader principles and Askr consumer policy.
+
 Follow `CODE_STYLE.md` for Python changes. Run `python scripts/check_quality.py`
 in the locked quality environment for the complete maintained Python scope;
 readability and responsibility boundaries also require review.

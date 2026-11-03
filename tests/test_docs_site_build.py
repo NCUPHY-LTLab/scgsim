@@ -291,6 +291,40 @@ def test_versions_overlay_only_presentation_and_publish_after_all_renders(publis
         }
 
 
+@pytest.mark.parametrize("label", ["Research", "研究"])
+def test_new_area_is_absent_from_versions_without_its_pages(publisher, label):
+    """Adding an Area must not block publication of unchanged older content."""
+    presentation = publisher.sources[PRESENTATION]
+    config = presentation["_quarto.yml"]
+    config = config.replace(
+        "  sidebar:\n",
+        f"    - text: {label}\n      href: docs/research/index.qmd\n  sidebar:\n",
+    ).replace(
+        "format:\n",
+        "    - id: research\n      contents:\n      - docs/research/index.qmd\nformat:\n",
+    )
+    presentation["_quarto.yml"] = config
+    presentation["docs/research/index.qmd"] = "Current research overview.\n"
+
+    output = publisher.invoke()
+    historical = json.loads((output / "v1.0.0/render-observation.json").read_text())
+    assert f"text: {label}" not in historical["_quarto.yml"]
+    assert "id: research" not in historical["_quarto.yml"]
+    assert "href: docs/legacy.qmd" in historical["_quarto.yml"]
+    assert historical["docs/legacy.qmd"] == "Original historical legacy body.\n"
+
+
+def test_unknown_missing_menu_destination_still_fails(publisher):
+    """Omitting an empty known Area must not conceal an unrelated broken link."""
+    presentation = publisher.sources[PRESENTATION]
+    presentation["_quarto.yml"] = presentation["_quarto.yml"].replace(
+        "  sidebar:\n",
+        "    - text: Unmapped\n      href: docs/missing.qmd\n  sidebar:\n",
+    )
+    with pytest.raises(RuntimeError, match="no page for the Unmapped Area"):
+        publisher.invoke()
+
+
 def test_preview_binds_inventory_without_published_commit_attribution(publisher):
     """A clean export has its own content and presentation inventory identity."""
     source = publisher.source_export(_source_files("2.0.0rc15", "candidate"))

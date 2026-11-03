@@ -1,12 +1,12 @@
 ---
-title: "SCGSim 參考索引"
+title: "總覽"
 description: "找到所需的模型、網格、交接與結果主題。"
 sidebar: contract
 ---
 
-使用本索引在概念、支援行為與詳細契約之間移動。各連結頁仍是其主題定義的依據。
+請先依目標選擇一套教學，再從下方主題連結尋找模型、幾何、網格、執行或結果說明。遇到專有名詞或單位需要確認時，請查閱[Convention 術語字典](conventions.qmd)。
 
-## 完整目標教學 {#goal-tutorials}
+## 目標教學 {#goal-tutorials}
 
 依計算目標選擇一套完整閱讀流程：
 

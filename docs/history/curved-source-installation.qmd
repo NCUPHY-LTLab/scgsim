@@ -1,5 +1,5 @@
 ---
-title: "Historical curved-source Palace setup"
+title: "Circular Pad: study setup"
 description: "Pinned source and native-solver setup recorded for the Circular Pad Uniform-port study."
 scgsim-kind: "history"
 scgsim-status: "HISTORICAL"
