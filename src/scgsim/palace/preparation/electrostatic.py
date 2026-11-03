@@ -328,14 +328,17 @@ class ElectrostaticSim:
         solver_type: str = "Default",
         preconditioner: str = "Default",
         device: str = "CPU",
+        ksp_type: str | None = None,
         refined_mesh_size: float | None = None,
         max_mesh_size: float | None = None,
         amr_max_passes: int = 0,
         amr_nonconformal: bool = False,
+        amr_nc_levels: int | None = None,
         amr_tolerance: float = 1e-2,
         amr_update_fraction: float | None = None,
         save_adapt_iterations: bool | None = None,
         save_adapt_mesh: bool | None = None,
+        save_adapt_diagnostics: bool | None = None,
         estimator_mg: bool | None = None,
         output_paraview: bool | None = None,
         output_grid_function: bool | None = None,
@@ -345,6 +348,9 @@ class ElectrostaticSim:
         ``amr_max_passes`` is Palace ``MaxIts``. ``amr_nonconformal`` is Palace
         ``Model.Refinement.Nonconformal`` and defaults to ``False``. Set
         ``True`` only to opt into nonconformal AMR.
+        ``amr_nc_levels`` sets native ``MaxNCLevels``; zero means no limit.
+        Omitted Krylov and nonconformal-level controls retain current choices.
+        Explicit ``ksp_type="Default"`` uses Palace's problem-specific default.
         """
         if (refined_mesh_size is None) != (max_mesh_size is None):
             raise ValueError(
@@ -370,6 +376,12 @@ class ElectrostaticSim:
             solver_type=solver_type,
             preconditioner=preconditioner,
             device=device,
+            ksp_type=self.numerical.get("ksp_type") if ksp_type is None else ksp_type,
+            amr_nc_levels=(
+                self.numerical.get("amr_nc_levels")
+                if amr_nc_levels is None
+                else amr_nc_levels
+            ),
             **mesh_sizes,
             **{key: self.numerical[key] for key in MESH_CONTROL_KEYS},
             amr_max_passes=amr_max_passes,
@@ -378,6 +390,11 @@ class ElectrostaticSim:
             amr_update_fraction=amr_update_fraction,
             save_adapt_iterations=save_adapt_iterations,
             save_adapt_mesh=save_adapt_mesh,
+            save_adapt_diagnostics=(
+                self.numerical.get("save_adapt_diagnostics")
+                if save_adapt_diagnostics is None
+                else save_adapt_diagnostics
+            ),
             estimator_mg=estimator_mg,
             output_paraview=output_paraview,
             output_grid_function=output_grid_function,

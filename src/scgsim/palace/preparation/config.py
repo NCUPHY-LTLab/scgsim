@@ -110,7 +110,7 @@ def build_electrostatic_config(  # noqa: PLR0913 - config builder preserves its 
         )
     ]
 
-    linear = linear_solver(numerical)
+    linear = linear_solver(numerical, problem="Electrostatic")
     problem_block = build_output_formats(numerical)
     problem = {
         "Type": "Electrostatic",

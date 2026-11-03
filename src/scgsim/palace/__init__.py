@@ -10,12 +10,15 @@ from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
 
 from .preparation.eigenmode import EigenmodeSim
 from .preparation.electrostatic import ElectrostaticSim
+from .presentation.amr import PalaceAmrReport, show_amr_analysis
 from .presentation.reports import (
     PalaceTrustReport,
     PhysicsQuantitiesReport,
     SimulationBenchmarkReport,
     inspect_run_trustworthiness,
 )
+from .results.amr_analysis import analyze_amr
+from .results.amr_models import CapacitanceReference, PalaceAmrAnalysis
 from .results.epr import (
     PalaceEprResult,
     epr_result,
@@ -41,9 +44,12 @@ from .results.resolve import (
 )
 
 __all__ = [
+    "CapacitanceReference",
     "EigenmodeSim",
     "ElectrostaticSim",
     "MeshQualityReport",
+    "PalaceAmrAnalysis",
+    "PalaceAmrReport",
     "PalaceCost",
     "PalaceEprResult",
     "PalaceFailureDiagnosis",
@@ -59,11 +65,13 @@ __all__ = [
     "SimulationBenchmarkReport",
     "SurfaceMaskEprRecord",
     "SurfaceMaskEprSeriesSnapshot",
+    "analyze_amr",
     "check_mesh_quality",
     "epr_result",
     "inspect_run_trustworthiness",
     "reanalyze_epr",
     "resolve_epr_result",
     "resolve_palace_result",
+    "show_amr_analysis",
     "show_epr",
 ]

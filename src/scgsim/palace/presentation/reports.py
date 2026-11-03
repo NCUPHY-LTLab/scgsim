@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Literal
 
@@ -17,6 +18,8 @@ from scgsim.palace.presentation.plotting import (
     checked_show_details,
     checked_theme,
 )
+from scgsim.palace.results.amr_analysis import analyze_amr
+from scgsim.palace.results.amr_models import PalaceAmrAnalysis
 from scgsim.palace.results.artifacts import read_json
 from scgsim.palace.results.index_contract import validate_index_entries
 from scgsim.palace.results.inspection import (
@@ -95,6 +98,7 @@ def show_all_results(
     theme: ReportTheme = "light",
     ranking_limit: int | None = 20,
     show_details: bool = False,
+    amr_analysis: PalaceAmrAnalysis | None = None,
 ) -> None:
     """Display trust, benchmark, and physics in the Human-defined order."""
 
@@ -108,12 +112,16 @@ def show_all_results(
         theme=theme,
         show_details=show_details,
     )
+    analysis = analyze_amr(result) if amr_analysis is None else amr_analysis
+    _validate_amr_analysis_binding(result, analysis)
     display(trust)
+    pass_cost_records = trust.pass_cost_records()
     display(
         SimulationBenchmarkReport(
             trust=trust,
-            data=_resolved_benchmark_data(result),
+            data=_resolved_benchmark_data(result, analysis, pass_cost_records),
             show_details=checked_show_details(show_details),
+            amr_analysis=analysis,
         )
     )
     display(
@@ -128,21 +136,32 @@ def show_simulation_benchmark(
     result: ResolvedRunData,
     *,
     show_details: bool = False,
+    amr_analysis: PalaceAmrAnalysis | None = None,
 ) -> SimulationBenchmarkReport:
     """Return the readable benchmark and its complete machine data."""
 
     if not isinstance(result, ResolvedRunData):
         raise TypeError("resolved result report requires ResolvedPalaceResult.")
 
+    analysis = analyze_amr(result) if amr_analysis is None else amr_analysis
+    _validate_amr_analysis_binding(result, analysis)
+    trust = show_run_trustworthiness(result)
+    pass_cost_records = trust.pass_cost_records()
     return SimulationBenchmarkReport(
-        trust=show_run_trustworthiness(result),
-        data=_resolved_benchmark_data(result),
+        trust=trust,
+        data=_resolved_benchmark_data(result, analysis, pass_cost_records),
         show_details=checked_show_details(show_details),
+        amr_analysis=analysis,
     )
 
 
-def _resolved_benchmark_data(result: ResolvedRunData) -> dict[str, Any]:
+def _resolved_benchmark_data(
+    result: ResolvedRunData,
+    amr_analysis: PalaceAmrAnalysis,
+    pass_cost_records: tuple[PassCostRecord, ...],
+) -> dict[str, Any]:
     """Detach final and attempted-run costs, timings, resources and selection metadata."""
+    _validate_amr_analysis_binding(result, amr_analysis)
     return {
         "cost": {
             "problem_degrees_of_freedom": result.cost.problem_degrees_of_freedom,
@@ -179,7 +198,25 @@ def _resolved_benchmark_data(result: ResolvedRunData) -> dict[str, Any]:
             "rows": len(result.tables["error-indicators"].rows),
             "headers": result.tables["error-indicators"].headers,
         },
+        "amr_analysis": amr_analysis.to_payload(),
+        "pass_cost_records": [asdict(record) for record in pass_cost_records],
     }
+
+
+def _validate_amr_analysis_binding(
+    result: ResolvedRunData,
+    analysis: PalaceAmrAnalysis,
+) -> None:
+    """Reject analysis from a different run before combining benchmark observations."""
+    if (
+        analysis.run_dir.resolve() != result.run_dir.resolve()
+        or analysis.problem != result.problem
+        or analysis.run_status != result.status
+        or analysis.integrity != "receipt_bound"
+    ):
+        raise ValueError(
+            "AMR analysis run identity, status, and integrity must match the resolved result."
+        )
 
 
 def _build_trust_report(

@@ -95,6 +95,8 @@ class AmrPassSnapshot:
     elapsed_total_s: float | None
     peak_node_memory_mb: float | None
     surface_mask_epr: tuple[SurfaceMaskEprSeriesSnapshot, ...] | None = None
+    native_iteration: int | None = None
+    terminal_ids: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -109,6 +111,8 @@ class PassCostRecord:
     elapsed_pass_s: float | None
     seconds_per_million_dof: float | None
     peak_node_memory_mb: float | None
+    native_iteration: int | None = None
+    elapsed_pass_reason: str | None = None
 
 
 @dataclass(frozen=True)

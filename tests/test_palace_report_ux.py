@@ -98,6 +98,7 @@ def _trust_report(
             mesh_elements=50,
             elapsed_total_s=1.0 + index,
             peak_node_memory_mb=10.0,
+            native_iteration=index + 1,
         )
         for index, source in enumerate(sources)
     )

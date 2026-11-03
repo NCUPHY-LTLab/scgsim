@@ -148,6 +148,12 @@ def collect_amr_passes(
     if snapshots and _same_primary_physics(snapshots[-1], parent):
         if failed_attempt and _problem_size_conflicts(snapshots[-1], parent):
             return CollectedSnapshots(tuple(snapshots), "unreadable")
+        # Equal electrical values do not identify a mesh-refinement round.
+        if (
+            parent.native_iteration is None
+            or snapshots[-1].native_iteration != parent.native_iteration
+        ):
+            return CollectedSnapshots((*snapshots, parent), "readable")
         parent = replace(parent, pass_index=snapshots[-1].pass_index)
         if _same_masked_physics(
             snapshots[-1].surface_mask_epr, parent.surface_mask_epr
@@ -261,7 +267,14 @@ class SnapshotReader:
                 else None
             ),
             surface_mask_epr=surface_mask_epr,
+            native_iteration=_native_iteration(problem_block),
         )
+
+
+def _native_iteration(problem: Any) -> int | None:
+    """Retain a positive native identity without deriving it from folder numbering."""
+    value = problem.get("Iteration") if isinstance(problem, dict) else None
+    return value if type(value) is int and value > 0 else None
 
 
 def _read_numeric_table_columns(path: Path) -> dict[str, tuple[float, ...]] | None:
