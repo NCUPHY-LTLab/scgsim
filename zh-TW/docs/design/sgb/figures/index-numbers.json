@@ -1,5 +1,15 @@
 {
  "airbridge_B": {
+  "arc_centre_vertices": {
+   "arc_centre_vertices": 0,
+   "arc_edges": 0,
+   "edges_only_on_those_faces": 4,
+   "faces_bounding_no_emitted_volume": 6,
+   "planned_vertices": 44,
+   "their_groups": [
+    "EXT::Ground"
+   ]
+  },
   "gmsh_boundary_mismatches": {
    "edges": 0,
    "faces": 0,
@@ -47,6 +57,14 @@
   ]
  },
  "pad_in_ground_A": {
+  "arc_centre_vertices": {
+   "arc_centre_vertices": 5,
+   "arc_edges": 5,
+   "edges_only_on_those_faces": 0,
+   "faces_bounding_no_emitted_volume": 0,
+   "planned_vertices": 39,
+   "their_groups": []
+  },
   "gmsh_boundary_mismatches": {
    "edges": 0,
    "faces": 0,
@@ -80,6 +98,16 @@
   }
  },
  "pad_in_ground_B": {
+  "arc_centre_vertices": {
+   "arc_centre_vertices": 10,
+   "arc_edges": 10,
+   "edges_only_on_those_faces": 4,
+   "faces_bounding_no_emitted_volume": 4,
+   "planned_vertices": 70,
+   "their_groups": [
+    "EXT::Ground"
+   ]
+  },
   "gmsh_boundary_mismatches": {
    "edges": 0,
    "faces": 0,
@@ -115,6 +143,16 @@
   }
  },
  "pad_in_ground_B_bands": {
+  "arc_centre_vertices": {
+   "arc_centre_vertices": 73,
+   "arc_edges": 73,
+   "edges_only_on_those_faces": 4,
+   "faces_bounding_no_emitted_volume": 4,
+   "planned_vertices": 289,
+   "their_groups": [
+    "EXT::Ground"
+   ]
+  },
   "gmsh_boundary_mismatches": {
    "edges": 0,
    "faces": 0,

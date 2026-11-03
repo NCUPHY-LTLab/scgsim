@@ -7,9 +7,7 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/parallelism"
 ---
 
-本頁說明 SGB 哪些部分平行執行，以及平行結果如何與序列結果逐位元相同。讀完後你會知道 dependency graph、tile 規則、noding 為何每一輪都是一次 fork/join、Python prototype 實測的加速與 Amdahl 分解，以及 production 設計準備如何處理。
-
-名詞在首次出現處定義，並彙整於[術語表](index.qmd#glossary)。資料結構見 [Building an arrangement](arrangement.qmd) 與 [Identity](identity.qmd)，每個 stage 見 [stage 參考](pipeline-reference.qmd)。圖與數字皆為**計算結果**：tile 圖與表格由 `docs/design/sgb/_figures/parallel.py` 產生（它讀取 prototype 實測的 `outputs/scaling.json`，並用 prototype 自己的 runtime 重算 tile ownership），時間數字由 prototype 的 `examples/scaling.py` 量得。
+SGB 可以把 derivation 切成許多獨立的 job 平行執行，而且平行的結果與序列的結果逐位元相同。這一頁說明哪些部分平行、tile 規則為什麼能保證結果相同、noding 為什麼每一輪都要同步，以及 Python prototype 實測的加速為什麼只有 1.2 倍左右、production 設計打算怎麼處理。
 
 ## 哪些平行、哪些不平行
 
@@ -92,7 +90,7 @@ flowchart TB
   Q -->|no| Z["noded edges, identical for every T"]
 ```
 
-每一輪有兩次 fork/join。在 prototype 的五個範例 case 中，39 個 arrangement 有 33 個在一輪後收斂，6 個在兩輪後收斂（`outputs/*/stage_summary.json` 的 `snap_rounds`）。這個 barrier 是精確的，也保住 identity 性質，但它正是 noding 是一串小型 fork/join、而不是每個 tile 一個 job 的原因。
+每一輪有兩次 fork/join。在 prototype 的五個範例 case 中，39 個 arrangement 有 33 個在一輪後收斂，6 個在兩輪後收斂（各案例 `stage_summary.json` 的 `snap_rounds`）。這個 barrier 是精確的，也保住 identity 性質，但它正是 noding 是一串小型 fork/join、而不是每個 tile 一個 job 的原因。
 
 ## Granularity：job 單位是整段 per-tile derivation
 
@@ -117,36 +115,33 @@ flowchart TB
 | S10 emission（Gmsh API，不含 meshing） | sequential | 74.2 |
 :::
 
-Face 會跨越 tile（ground plane 是一個 face，所有 cutout 都是它的 hole），所以 face 抽取不做 tiling。只有 shell 與 volume 的連通性是全域 reduction，亦即對 cell 連結做 union-find。
+Arrangement 的 cell 會跨越 tile（ground plane 是一個 cell，所有 cutout 都是它的 hole），所以 cell 的抽取不做 tiling。只有 shell 與 volume 的連通性是全域 reduction，亦即對 cell 連結做 union-find。
 
 ## Prototype 量到什麼
 
-設定（`examples/scaling.py`、`outputs/scaling.json`）：隨機 Route B layout，N = 1 000、5 000、20 000 個 feature，$4 \times 4$ 與 $8 \times 8$ 個 tile，1、8、16、32 個 worker；每個 case 在 64 核心機器上各用一個 subprocess，每個 case 都通過驗證，同一個 N 在所有設定下 identity digest 相同。
+設定（資料來源見補充）：隨機 Route B layout，N = 1 000、5 000、20 000 個 feature，$4 \times 4$ 與 $8 \times 8$ 個 tile，1、8、16、32 個 worker；每個 case 在 64 核心機器上各用一個 subprocess，每個 case 都通過驗證，同一個 N 在所有設定下 identity digest 相同。
 
 ![左：derivation 相對單一 process 的實測加速。請看所有曲線都落在 0.9 到 1.2 之間，而依實測序列比例畫出的 Amdahl 曲線爬升到約 2。右：N = 20 000、單一 process 的序列執行中，時間依 stage 的分布；emission 是最長的一條。](figures/parallel-speedup.svg){#fig-speedup fig-alt="左圖：加速對 worker 數，所有實測曲線都低於 1.2，虛線 Amdahl 曲線升向 2.2；右圖：stage 時間的橫條圖，S10 emission 約 74 秒，noding kernels 約 7 秒，其餘更小。"}
 
 {{< askr-chart-view src="figures/parallel-speedup.html" label="檢視加速與 stage 時間" >}}
 
 ::: {.askr-table-compact .askr-table-numeric}
-| N | Tiles | Workers | Build (s) | 加速 | Serial stage (s) | Parallel stage，wall (s) | Worker compute (s) | Parallel fraction | Limit | Peak RSS (MB) |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 000 | 1×1 | 1 | 1.4 | 1.00 | 0.5 | 0.8 | 0.8 | 0.61 | 2.54 | 324 |
-| 1 000 | 4×4 | 8 | 1.3 | 1.08 | 0.6 | 0.6 | 1.3 | 0.66 | 2.95 | 152 |
-| 1 000 | 4×4 | 16 | 1.3 | 1.06 | 0.7 | 0.6 | 1.4 | 0.68 | 3.17 | 151 |
-| 1 000 | 8×8 | 32 | 1.6 | 0.91 | 0.6 | 0.8 | 2.0 | 0.76 | 4.14 | 150 |
-| 5 000 | 1×1 | 1 | 9.3 | 1.00 | 3.7 | 5.2 | 5.1 | 0.58 | 2.37 | 1 358 |
-| 5 000 | 4×4 | 1 | 10.2 | 0.92 | 3.9 | 5.9 | 5.4 | 0.55 | 2.22 | 520 |
-| 5 000 | 4×4 | 8 | 7.7 | 1.21 | 4.4 | 2.8 | 6.7 | 0.61 | 2.54 | 575 |
-| 5 000 | 4×4 | 32 | 7.7 | 1.22 | 4.3 | 2.7 | 7.5 | 0.63 | 2.72 | 575 |
-| 5 000 | 8×8 | 32 | 8.2 | 1.14 | 4.4 | 3.2 | 10.0 | 0.70 | 3.29 | 578 |
-| 20 000 | 1×1 | 1 | 45.2 | 1.00 | 18.9 | 24.3 | 24.2 | 0.56 | 2.27 | 5 272 |
-| 20 000 | 4×4 | 1 | 48.5 | 0.93 | 19.0 | 27.5 | 24.0 | 0.52 | 2.06 | 1 929 |
-| 20 000 | 4×4 | 8 | 38.2 | 1.18 | 21.8 | 13.8 | 30.1 | 0.58 | 2.38 | 2 128 |
-| 20 000 | 4×4 | 16 | 38.6 | 1.17 | 21.9 | 14.1 | 34.0 | 0.61 | 2.56 | 2 143 |
-| 20 000 | 8×8 | 32 | 42.5 | 1.06 | 23.0 | 16.6 | 41.4 | 0.64 | 2.80 | 2 129 |
+| N | Tiles | Workers | Build (s) | 加速 | Parallel fraction | Limit |
+|---|---|---|---|---|---|---|
+| 1 000 | 1×1 | 1 | 1.4 | 1.00 | 0.61 | 2.54 |
+| 1 000 | 4×4 | 16 | 1.3 | 1.06 | 0.68 | 3.17 |
+| 1 000 | 8×8 | 32 | 1.6 | 0.91 | 0.76 | 4.14 |
+| 5 000 | 1×1 | 1 | 9.3 | 1.00 | 0.58 | 2.37 |
+| 5 000 | 4×4 | 1 | 10.2 | 0.92 | 0.55 | 2.22 |
+| 5 000 | 4×4 | 32 | 7.7 | 1.22 | 0.63 | 2.72 |
+| 5 000 | 8×8 | 32 | 8.2 | 1.14 | 0.70 | 3.29 |
+| 20 000 | 1×1 | 1 | 45.2 | 1.00 | 0.56 | 2.27 |
+| 20 000 | 4×4 | 8 | 38.2 | 1.18 | 0.58 | 2.38 |
+| 20 000 | 4×4 | 32 | 38.4 | 1.18 | 0.60 | 2.51 |
+| 20 000 | 8×8 | 32 | 42.5 | 1.06 | 0.64 | 2.80 |
 :::
 
-（節錄；全部 27 個 case 在 `figures/parallel-tables.md`，由 `outputs/scaling.json` 產生。加速＝1×1、單一 worker 的 build 時間除以該 case 的 build 時間。*Parallel fraction* 是 worker compute 除以 serial 加 parallel compute；*limit* 是在實際付出的 marshalling 成本下，若 parallel stage 完美擴展可得的加速。）
+（節錄；加速＝1×1、單一 worker 的 build 時間除以該 case 的 build 時間。*Parallel fraction* 是 worker compute 除以 serial 加 parallel compute；*Limit* 是在實際付出的 marshalling 成本下，若 parallel stage 完美擴展可得的加速。完整 27 個 case 與其他欄位見最後的補充。）
 
 量測結果，不做任何四捨五入掩飾：
 
@@ -159,7 +154,7 @@ Face 會跨越 tile（ground plane 是一個 face，所有 cutout 都是它的 h
 
 ### 端到端
 
-Emission 是序列的。N = 20 000 時 derivation 與 emission 分別是 45.2 s 與 74.2 s，所以 emission 佔 119.4 s 的 62%。即使 derivation 達到它的加速上限 2.27×（19.9 s），總時間也是 94.1 s，端到端只快 1.27×；以實測最佳加速（1.18×）計則是 112.4 s、1.06×。因此在 prototype 中，影響總時間的最大槓桿是 emission，不是 tile 平行的 derivation（數字由 `parallel.py` 從 `outputs/scaling.json` 算出）。
+Emission 是序列的。N = 20 000 時 derivation 與 emission 分別是 45.2 s 與 74.2 s，所以 emission 佔 119.4 s 的 62%。即使 derivation 達到它的加速上限 2.27×（19.9 s），總時間也是 94.1 s，端到端只快 1.27×；以實測最佳加速（1.18×）計則是 112.4 s、1.06×。因此在 prototype 中，影響總時間的最大槓桿是 emission，不是 tile 平行的 derivation。
 
 ## Production 設計怎麼處理
 
@@ -185,3 +180,41 @@ prototype 的筆記把加速偏低歸因於 prototype 的語言（CPython proces
 - Guibas, L. and Marimont, D. (1998). Rounding arrangements dynamically. *International Journal of Computational Geometry and Applications* 8(2).
 - Halperin, D. and Packer, E. (2002). Iterated snap rounding. *Computational Geometry* 23(2).
 - KLayout, [`TilingProcessor`](https://www.klayout.de/doc/code/class_TilingProcessor.html).
+
+## 補充：重現資料
+
+本頁的 tile 圖與表格由 `docs/design/sgb/_figures/parallel.py` 產生，它讀取 prototype 實測的 `outputs/scaling.json`（由 prototype 的 `examples/scaling.py` 量得），並用 prototype 自己的 runtime 重算 tile ownership；表格另存於 `figures/parallel-tables.md`。tile 圖是**計算結果**，唯有右側的 pixel 示意是 conceptual。
+
+完整的實測表（27 個 case）：
+
+::: {.askr-table-compact .askr-table-numeric}
+| N | Tiles | Workers | Build (s) | 加速 | Serial stage (s) | Parallel stage，wall (s) | Worker compute (s) | Parallel fraction | Limit | Peak RSS (MB) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1000 | 1x1 | 1 | 1.4 | 1.00 | 0.5 | 0.8 | 0.8 | 0.61 | 2.54 | 324 |
+| 1000 | 4x4 | 1 | 1.6 | 0.89 | 0.5 | 1.0 | 0.9 | 0.60 | 2.49 | 144 |
+| 1000 | 4x4 | 8 | 1.3 | 1.08 | 0.6 | 0.6 | 1.3 | 0.66 | 2.95 | 152 |
+| 1000 | 4x4 | 16 | 1.3 | 1.06 | 0.7 | 0.6 | 1.4 | 0.68 | 3.17 | 151 |
+| 1000 | 4x4 | 32 | 1.4 | 1.04 | 0.6 | 0.6 | 1.5 | 0.71 | 3.42 | 152 |
+| 1000 | 8x8 | 1 | 1.6 | 0.86 | 0.5 | 1.1 | 1.0 | 0.61 | 2.57 | 145 |
+| 1000 | 8x8 | 8 | 1.4 | 1.01 | 0.7 | 0.6 | 1.4 | 0.67 | 3.00 | 150 |
+| 1000 | 8x8 | 16 | 1.4 | 1.04 | 0.7 | 0.6 | 1.7 | 0.72 | 3.58 | 151 |
+| 1000 | 8x8 | 32 | 1.6 | 0.91 | 0.6 | 0.8 | 2.0 | 0.76 | 4.14 | 150 |
+| 5000 | 1x1 | 1 | 9.3 | 1.00 | 3.7 | 5.2 | 5.1 | 0.58 | 2.37 | 1358 |
+| 5000 | 4x4 | 1 | 10.2 | 0.92 | 3.9 | 5.9 | 5.4 | 0.55 | 2.22 | 520 |
+| 5000 | 4x4 | 8 | 7.7 | 1.21 | 4.4 | 2.8 | 6.7 | 0.61 | 2.54 | 575 |
+| 5000 | 4x4 | 16 | 7.8 | 1.19 | 4.4 | 2.9 | 7.5 | 0.63 | 2.71 | 578 |
+| 5000 | 4x4 | 32 | 7.7 | 1.22 | 4.3 | 2.7 | 7.5 | 0.63 | 2.72 | 575 |
+| 5000 | 8x8 | 1 | 10.5 | 0.89 | 3.8 | 6.3 | 5.8 | 0.57 | 2.34 | 526 |
+| 5000 | 8x8 | 8 | 7.9 | 1.18 | 4.5 | 2.8 | 7.5 | 0.63 | 2.68 | 574 |
+| 5000 | 8x8 | 16 | 8.0 | 1.17 | 4.4 | 2.9 | 8.9 | 0.67 | 3.01 | 572 |
+| 5000 | 8x8 | 32 | 8.2 | 1.14 | 4.4 | 3.2 | 10.0 | 0.70 | 3.29 | 578 |
+| 20000 | 1x1 | 1 | 45.2 | 1.00 | 18.9 | 24.3 | 24.2 | 0.56 | 2.27 | 5272 |
+| 20000 | 4x4 | 1 | 48.5 | 0.93 | 19.0 | 27.5 | 24.0 | 0.52 | 2.06 | 1929 |
+| 20000 | 4x4 | 8 | 38.2 | 1.18 | 21.8 | 13.8 | 30.1 | 0.58 | 2.38 | 2128 |
+| 20000 | 4x4 | 16 | 38.6 | 1.17 | 21.9 | 14.1 | 34.0 | 0.61 | 2.56 | 2143 |
+| 20000 | 4x4 | 32 | 38.4 | 1.18 | 21.8 | 13.9 | 32.9 | 0.60 | 2.51 | 2138 |
+| 20000 | 8x8 | 1 | 51.2 | 0.88 | 19.6 | 29.6 | 25.9 | 0.53 | 2.11 | 1919 |
+| 20000 | 8x8 | 8 | 42.0 | 1.07 | 24.9 | 14.2 | 32.4 | 0.56 | 2.30 | 2134 |
+| 20000 | 8x8 | 16 | 43.2 | 1.05 | 25.4 | 14.8 | 39.5 | 0.61 | 2.56 | 2136 |
+| 20000 | 8x8 | 32 | 42.5 | 1.06 | 23.0 | 16.6 | 41.4 | 0.64 | 2.80 | 2129 |
+:::

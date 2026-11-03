@@ -1,81 +1,71 @@
 ---
 title: "SGB 設計總覽"
-description: "重新設計的 semantic geometry builder 會產生什麼、它服務哪些目標、整條 pipeline 的一張圖、詞彙表，以及如何閱讀其餘設計頁面。"
+description: "重新設計的 semantic geometry builder 要解決什麼問題、它從 prism 描述產生什麼、整條 pipeline、各目標對應的機制、詞彙表，以及其餘設計頁面的閱讀順序。"
 lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/index"
 ---
 
-本頁說明重新設計的 semantic geometry builder（SGB）會從一份晶片描述產生什麼、每個機制服務哪一個目標，以及各機制應該到哪一頁閱讀。讀完之後，你會在一張圖裡掌握整個設計，並熟悉其餘十六頁使用的詞彙。
+要模擬一顆超導晶片，solver 需要一個封閉、conformal 的實體模型：相鄰的 volume 共用它們之間的 face，而且每個 face 都知道自己是哪種材料之間的介面、屬於哪個 Net、對應哪一條來源曲線。常見的做法是先為每個零件建一個 solid，再請 CAD kernel 做一次全域的 fragment，最後再從結果中還原每個 face 的意義。這個做法在晶片尺度上既慢，也會遺失 identity（原因見[為什麼先規劃](why-plan-first.qmd)）。
 
-SGB 把以有限個 **prism** 描述的晶片，轉成一個封閉的、conformal 的實體模型，而且**在任何 CAD kernel 介入之前**就完成。接著 SGB 自己把已決定的 topology 寫成 BREP/XAO 檔案。Gmsh 不建立幾何：它載入檔案並對其產生 **mesh**，原型也把它當作測試用的 oracle。模型上不會執行任何三維 Boolean 運算。
+重新設計的 semantic geometry builder（SGB）把順序倒過來。它把晶片描述成有限個 **prism**，**在任何 CAD kernel 介入之前**就推導出完整的 topology 與每個 cell 的意義，再自己把結果寫成 BREP/XAO 檔案。Gmsh 不建立幾何：它載入檔案並對其產生 **mesh**，原型也把它當作測試用的 oracle。模型上不執行任何三維 Boolean 運算。
 
-## 執行範例
+## 執行範例：輸入與輸出
 
-每一頁都使用同一顆晶片，稱為 **pad-in-ground**：下方是 substrate，上方是 vacuum，一片帶矩形 cutout 的 ground plane，cutout 內有一個 pad，pad 與 ground 之間有一片 lumped-port sheet。pad 具有一個 chamfer、一個 reflex notch、一個圓角和一個圓形孔洞，因此涵蓋了演算法必須處理的各種轉角。需要多層金屬時，會改用第二個較小的範例（兩根 post 撐起的類 airbridge deck）。
+本設計的每一頁都使用同一顆晶片，稱為 **pad-in-ground**：下方是 substrate，上方是 vacuum，一片帶矩形 cutout 的 ground plane，cutout 內有一個 pad，pad 與 ground 之間有一片 lumped-port sheet。pad 有一個 chamfer、一個 reflex notch、一個圓角和一個圓形孔洞，涵蓋了演算法必須處理的各種轉角。需要多層金屬時，改用第二個較小的範例（由兩根 post 撐起的類 airbridge deck）。
 
-輸入共有五個 prism。以下使用的 Route B 形式中，金屬厚 0.2 µm，port sheet 位於金屬的中間平面，$z = 0.1$ µm。
+輸入是五個 prism。以下使用 Route B 的形式：金屬厚 0.2 µm，port sheet 位於金屬的中間平面，$z = 0.1$ µm。
 
 ![執行範例的輸入。左：從上方看的 footprint。右：沿虛線的剖面，以及由 prism 頂面與底面高度形成的 level（虛線）。](figures/index-example-input.svg){#fig-input fig-alt="左圖：300 × 300 微米晶片的俯視圖。灰色 ground plane 中有一個白色矩形 cutout，裡面是一個藍色 pad，pad 有倒角、下緣有缺口、左下角為圓角並有一個圓孔，另有一個紅色 port 矩形從 pad 連到 ground。右圖：y = 0 的 x-z 剖面，下方是 substrate slab，中間的 slab 有兩塊灰色 ground 與兩塊藍色 pad，中間的 level 上有一片紅色 port sheet，上方是 vacuum，共有五條虛線 level。"}
 
-SGB 從這些 prism 推導出一切。下圖是同一個模型的推導結果，並且拆開來顯示，讓每個 volume 與每個 face 都看得見：
+SGB 從這五個 prism 推導出下面的實體模型。為了讓每個 volume 與每個 face 都看得見，圖中把它們拆開：
 
 ![從五個 prism 推導出的實體模型（Route B），拆開顯示：substrate 向下移、vacuum 向上移，兩個金屬 volume 留在原位。每個 face 對它所圍住的每個 volume 各畫一次。金屬層畫得比實際厚 200 倍，face 的三角化由 Gmsh 完成，僅供顯示。](figures/index-example-3d.svg){#fig-3d fig-alt="三層晶片大小的疊層拆開後的立體圖。最下方偏紫色的一層是 substrate 側，帶有 metal-substrate face。中間一層是 pad 與 ground 的薄金屬 prism，帶有藍色 wall。最上方是 vacuum 側，有淺藍色的 gap 表面與 pad 的頂面 face。黑線標出每個 face 的邊界。"}
 
 {{< askr-chart-view src="figures/index-example-3d.html" label="檢視推導出的 3D 實體" >}}
 
-看 @fig-3d 時請注意：黑色輪廓是 **atomic face**。metal-vacuum 表面（藍）與 substrate-vacuum gap（淺藍）的 face 邊界只畫一次，並由兩側的 volume 共用。正是這種共用，讓模型不需要任何 fragment 運算就能 conformal。
+看 @fig-3d 時請注意：黑色輪廓是 BREP face 的邊界。metal-vacuum 表面（藍）與 substrate-vacuum gap（淺藍）的邊界只畫一次，並由兩側的 volume 共用。正是這種共用，讓模型不需要任何 fragment 運算就能 conformal。
 
-本節所有數字都是**計算所得**：由 `docs/design/sgb/_figures/index_example.py` 讀取原型的 `outputs/<case>/stage_summary.json` 與 `outputs/e3_brep/<case>/validation.json` 得到：
+在這個 Route B 範例中，規劃了 41 個 face，寫出 37 個：ground volume 在晶片邊緣的 4 道 wall 不圍住任何已 emit 的 volume，所以只被規劃而不被寫出（原因見 [Route A 與 Route B](routes.qmd)）。完整的數量表在本頁最後的補充。
 
-::: {.askr-table-compact .askr-table-numeric}
-| 量 | `pad_in_ground_B` | `pad_in_ground_A`（sheet 金屬） | `pad_in_ground_B_bands`（3 個 margin） | `airbridge_B`（延伸範例） |
-|---|---|---|---|---|
-| Prism 數 | 5 | 5 | 5 | 7 |
-| Level / slab 數 | 5 / 4 | 3 / 2 | 5 / 4 | 6 / 5 |
-| 規劃的 vertex / edge 數 | 70 / 94 | 39 / 44 | 289 / 250 | 44 / 76 |
-| 規劃的 face 數 | 41 | 15 | 59 | 37 |
-| Volume 數（已 emit） | 4（2） | 2（2） | 4（2） | 3（2） |
-| Physical group 數 | 10 | 8 | 21 | 7 |
-| direct writer 寫出的實體數（0D、1D、2D、3D） | 60, 90, 37, 2 | 34, 44, 15, 2 | 216, 246, 55, 2 | 44, 72, 31, 2 |
-| 通過的 structural validation 檢查 | 21 / 21 | 21 / 21 | 21 / 21 | 21 / 21 |
-| Gmsh 載入 BREP 時邊界不符的數量（edge、face、solid） | 0, 0, 0 | 0, 0, 0 | 0, 0, 0 | 0, 0, 0 |
+## SGB 給你什麼
+
+對收到的模型，SGB 產生四樣東西，全部在寫出檔案之前就已決定：
+
+1. **Topology**：由 vertex、edge、face、shell 與 volume 組成，每一個共用邊界只存在一份。相鄰的 volume 共用它們之間的 face 與 edge。
+2. **Semantic label**：每個 cell 的材料、擁有者（Net 或 port）、interface 種類，以及 Surface EPR 的 band。這裡的 **cell** 是 planar arrangement 中的一個區域；之後被寫出的 **BREP face** 是由 cell 與 wall 組成的曲面，兩者不是同一個東西（見 [Label、required edge 與 dissolution](labels-and-dissolution.qmd)）。
+3. **Identity**：每個實體有一個 semantic 名稱（原型的例子是 `MA::pad::band=2`）與一個依內容定址的 atomic id，並附有回到產生它的來源曲線的 lineage。
+4. **CAD 檔案與 sidecar**：直接由 topology 寫出的 BREP 與 XAO 檔案，不經任何 Boolean 運算；以及一個 JSON **sidecar**，記錄每個 native 實體對應的規劃 id、physical group、lineage 與依面積加權的 membership。
+
+無論哪一個 solver 使用，這些事實都相同。Palace 透過 Gmsh 讀取 XAO，並由 Gmsh 產生 mesh；AEDT 階段之後會讀取同樣的 solid（見 [Emission](emission.qmd)）。
+
+::: {.callout-note title="範例中的 group 名稱是原型的 per-Net 名稱"}
+本設計範例中的 physical group 名稱（例如 `MA::pad`、`PEC::Ground`、`MA::pad::band=2`）是目前原型的輸出，它把同一個 Net 的 Entity 合併成一個 group。決策 D5 已決定，設計規則是**依 Entity 歸屬**：primary group 命名為 `<kind>::<qualified entity id>[::band=k]`，例如 `MA::chip/q0/pad::band=2`；Route A 的 sheet 為 `SHEET::<entity>::band=k`；不同 Entity 之間的 seam 保留為 required edge，讓每個 Entity 對 Surface EPR 的貢獻可以分開。依 interface 種類（MA、MS、SA）的總和是 sidecar 中的聯集，Net 層級的聯集只用在 Electrostatic 這類需要電氣 identity 的後端。Route C 保留的導體內部 volume 則命名為 `VOL::<entity>`。這是設計規則；原型仍輸出 per-Net 名稱，最終的拼法在 D5 與 Route C 實作時固定。
 :::
-
-在 Route B 範例中，規劃的 41 個 face 裡有 4 個是 ground volume 在晶片邊緣的 wall。它們不圍住任何已 emit 的 volume，所以只被規劃而不被寫出（為什麼金屬 volume 會被排除，見 [Route A 與 Route B](routes.qmd)）。帶 band 的案例還在 pad 的頂面與底面多了 inset band 的 face（見 [Inset imprint](inset-imprint.qmd)）。最後兩列的數量是從寫出的檔案讀回來的；它們是載入檢查，不是 mesh 品質評估。
-
-## SGB 產生什麼
-
-對於收到的模型，SGB 產生四樣東西，全部在 emission 之前就已決定：
-
-1. **一個 topology**：由 vertex、edge、face、shell 與 volume 組成，每一個共用邊界都只存在一份。相鄰的 volume 共用它們之間的 face 與 edge。
-2. **每個 cell 的意義**：每個 face 與每個 volume 的材料、擁有者（Net 或 port）、interface 種類，以及 Surface EPR 的 band。
-3. **每個實體的 identity**：一個 semantic 名稱（例如 `MA::pad::band=2`）與一個依內容定址的 atomic id，並附有回到產生它的來源曲線的 lineage。
-4. **一個 CAD 檔案與一個 sidecar**：直接由 topology 寫出的 BREP 與 XAO 檔案，不經任何 Boolean 運算；以及一個 JSON **sidecar**，記錄每個 native 實體對應的規劃 id、physical group、lineage 與依面積加權的 membership。
-
-無論哪一個 solver 使用，這些事實都相同。Palace 透過 Gmsh 讀取 XAO，並由 Gmsh 產生 mesh。AEDT 階段之後會讀取同樣的 solid（見 [Emission](emission.qmd)）。
 
 ### 如何檢查結果
 
 設計中有三個層次：
 
-1. **開發測試**：在廣泛的 fixture 與隨機 layout 上執行 OpenCASCADE 自己的檢查（`BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`，透過 OCP 綁定，這是僅供開發的相依套件），以及 Gmsh 載入檢查。OCCT 檢查的結果尚未產出，因此本文不引用。
-2. **每一次 production build 都 fail closed**：在寫出任何東西之前，先檢查 SGB 自己的 structural invariant；在 mesher 中再做載入檢查（數量、邊界、面積、體積、group）。production 中無法關閉驗證。
+1. **開發測試**：在 fixture 與隨機 layout 上，以 OCP 綁定（僅供開發的相依套件）執行 OpenCASCADE 自己的檢查（`BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`），並做 Gmsh 載入檢查。
+2. **每一次 production build 都 fail closed**：寫出任何東西之前，先檢查 SGB 自己的 structural invariant；在 mesher 中再做載入檢查（數量、邊界、面積、體積、group）。production 中無法關閉驗證。
 3. **Strict mode**（選用）：在已安裝 OCP 時，對 production 輸出執行 OCCT 檢查。一般使用者安裝（例如透過 OrcaPen SC PDK）不會安裝 OCP。
 
-各項 invariant 列在 [Validation](validation.qmd)。
+OCCT 檢查目前的狀態：五個執行範例的 fixture（`airbridge_B`、`pad_in_ground_A`、`pad_in_ground_A_bands`、`pad_in_ground_B`、`pad_in_ground_B_bands`）已完成，每個案例的 BREP 與 XAO 檔案都通過：報告中 `ok` 為真、`BRepCheck_Analyzer` 判定有效，`BOPAlgo_ArgumentAnalyzer` 沒有回報任何錯誤或結果。另有五種刻意注入的缺陷（內環反向、共用 face 在一個 shell 中翻面、vertex 偏離曲線 $10^{-4}$ µm、缺一個 face、wire 有缺口）做為負向對照，每一種至少被一項檢查抓到。極端案例的 fixture 目錄，以及 runtime validator 在大模型上的 scaling，仍在進行中，本頁不引用。各項檢查的細節見 [Validation](validation.qmd)。
 
-## 一張圖看完整條 pipeline
+## Pipeline 全貌
 
-SGB 共有十一個階段。S1 到 S9 是作用在 immutable record 上的純函式，也是可平行化的部分；各階段的平行單位列在 [pipeline 參考](pipeline-reference.qmd)。S10 是循序的：它把完成的 topology 序列化，不呼叫任何 CAD kernel 來建立它。
+SGB 共有十一個階段（S0 到 S10）。S0 與 S1 沿用 develop 既有的固定格點來源準備：來源的正規化與 polygon Boolean 在已宣告的格點上完成，其 `GeometryGridContext` 帶著模型格點 $g$，這個 $g$ 就是 S4 使用的格點。**S4 起是新的 pipeline。** 原型不包含 S0 與 S1：它直接建立 prism，因此原型的成功並不代表已完成與 `GeometryPlan` 的整合。
+
+S1 到 S9 是作用在 immutable record 上的純函式，也是可平行化的部分（各階段的平行單位見 [pipeline 參考](pipeline-reference.qmd)）。S10 是循序的：它把完成的 topology 序列化，不呼叫任何 CAD kernel 來建立它。Route 是 S7 的一種 labelling policy，不是另一條 pipeline；v1 有三種：Route A（sheet 金屬）、Route B（排除金屬 volume）與 Route C（保留導體 volume 並在其內部做 mesh，用於有限導電率，以及未來的超導材料模型）。原型只實作 Route A 與 Route B。
 
 ::: {.askr-mermaid-view view-label="檢視圖表"}
 ```{mermaid}
 flowchart TB
   subgraph P["Prepare, S0 to S3"]
     direction LR
-    S0["S0 Source<br/>snapshot"] --> S1["S1 Physical<br/>interpretation"] --> S2["S2 Prism catalogue<br/>levels, slabs"] --> S3["S3 Cut<br/>families"]
+    S0["S0 Source snapshot<br/>(develop: fixed grid)"] --> S1["S1 Physical<br/>interpretation"] --> S2["S2 Prism catalogue<br/>levels, slabs"] --> S3["S3 Cut<br/>families"]
   end
   subgraph A["Arrange and label, S4 to S6"]
     direction LR
@@ -90,11 +80,11 @@ flowchart TB
 ```
 :::
 
-這張圖是**概念性**的：各階段就是 [pipeline 參考](pipeline-reference.qmd) 中的階段，平行單位則在 [Parallel derivation](parallelism.qmd) 討論。整個設計由三個想法支撐：
+這張圖是**概念性**的。整個設計由三個想法支撐：
 
 - **Local arrangement。** 每個 Z level 與每個 slab 各有一個 planar arrangement，只由在那裡相遇的曲線建立（見 [2.5D layered model](layered-model.qmd)）。
-- **每一種分割共用同一個機制。** 材料邊界、port、inset band 與 refinement curve 都是帶有 semantic role 的 cut family（見 [Cut family](cut-families.qmd)）。平行化用的 tile seam 不是 family：任何 seam 幾何都不會進入 arrangement。
-- **格點上的 exact carrier。** 每條曲線保有它的精確定義，而每個 vertex 都落在同一個格點上（見 [建立 arrangement](arrangement.qmd)）。
+- **每一種分割共用同一個機制。** 材料邊界、port、inset band 與 refinement curve 都是在 arrangement 中加入曲線，再由 label 決定意義（見 [Cut family](cut-families.qmd)）。平行化用的 tile seam 不是 family：任何 seam 幾何都不會進入 arrangement。
+- **格點上的 exact carrier。** 每條曲線保有它的精確定義，而每個 vertex 都落在同一個格點上（見[建立 arrangement](arrangement.qmd)）。
 
 ## 目標與各自的機制
 
@@ -109,14 +99,49 @@ flowchart TB
 | 4 | **可重現的 handoff identity 與程式化對應**：從每個 solver 實體回到 semantic 表面與來源曲線。 | 主要 physical group、sidecar，以及固定的對應鏈；使用端儲存 group 名稱（native tag 不是 identity）；不做座標或面積比對。 | [Identity](identity.qmd)、[Emission](emission.qmd) |
 | 5 | **與後端無關。** 一個封閉、conformal 的實體模型，供 Palace 以及之後的 AEDT 使用。 | topology 就是產物；BREP/XAO 與 AEDT 的 solid 都是它的序列化，而 Gmsh 只負責 mesh。 | [Assembly](assembly.qmd)、[Emission](emission.qmd) |
 | 6 | **依構造即 conformal；人為產生的 sliver 予以消除，來源本身的事實則予以回報。** | 共用的 atomic vertex 與 edge；snap rounding；local arrangement；dissolution；sliver 報告；fail-closed 驗證，且在任何 route 中不同 Net 的接觸都是錯誤。 | [Assembly](assembly.qmd)、[Sliver](slivers.qmd)、[Validation](validation.qmd) |
-| 7 | **可擴充的分割。** inset imprint 是第一個使用者，不是特例。 | cut family 由 generator、target 與 edge policy 組成；assembly 與 emission 不需要新的路徑。 | [Cut family](cut-families.qmd)、[Inset imprint](inset-imprint.qmd) |
+| 7 | **可擴充的分割。** inset imprint 是第一個使用者，不是特例。 | 新的分割種類只需要一個 generator、一個 target 與一個 edge policy；assembly 與 emission 不需要新的路徑。 | [Cut family](cut-families.qmd)、[Inset imprint](inset-imprint.qmd) |
 :::
 
 第一版的非目標：mesh 演算法（由 Gmsh 負責；SGB 只提供幾何與尺寸提示）、solver 設定、推論電氣連通性，以及非 prism 的本體，例如斜側壁。非 prism 本體是擴充點，絕不會被悄悄地近似。
 
+## 接下來讀哪裡
+
+初次閱讀請依此順序；每一列說明讀完該頁後你能解釋什麼。
+
+::: {.askr-table-compact}
+| # | 頁面 | 讀完後你能解釋 |
+|---|---|---|
+| 1 | 本頁 | SGB 解決什麼問題、給你什麼、各項目標。 |
+| 2 | [為什麼先規劃](why-plan-first.qmd) | 為什麼先建 solid 再 fragment 會損失速度與 identity、規劃帶來什麼（附實測 scaling），以及為什麼 SGB 自己寫 CAD 檔案。 |
+| 3 | [2.5D layered model](layered-model.qmd) | Prism、level、slab、slab arrangement 與 level arrangement，以及為什麼 arrangement 是局部的。 |
+| 4 | [建立 arrangement](arrangement.qmd) | 帶 exact carrier 的 snap rounding、它的保證、成本與曲線類別。 |
+| 5 | [Label、required edge 與 dissolution](labels-and-dissolution.qmd) | cell 如何取得 label，以及哪些 edge 會被保留。 |
+| 6 | [從 arrangement 到 solid](assembly.qmd) | Face、wall、shell 與 volume，以及為什麼結果依構造即 conformal。 |
+| 7 | [Route A 與 Route B](routes.qmd) | sheet 金屬與被排除的有限厚度金屬，如何只改變 label 與 emission。 |
+| 8 | [Cut family](cut-families.qmd) | 所有分割共用的機制，以及哪些分割需要明確的 record。 |
+| 9 | [Surface EPR inset imprint](inset-imprint.qmd) | Erosion、轉角規則、band，以及 Palace 與 AEDT 如何使用它們。 |
+| 10 | [Identity、lineage 與對應鏈](identity.qmd) | 兩層 identity，以及一次從頭到尾追蹤的查詢。 |
+| 11 | [Parallel derivation](parallelism.qmd) | 平行化的結構、tiling 規則，以及哪些部分維持循序。 |
+| 12 | [Sliver](slivers.qmd) | 四種 sliver 來源、哪些依構造即被消除，以及 feature size 如何量測。 |
+| 13 | [Validation](validation.qmd) | 各項檢查、三層驗證，以及 fail-closed 的行為。 |
+| 14 | [Emission](emission.qmd) | direct BREP/XAO writer、sidecar、Gmsh 如何處理它們，以及 AEDT 階段。 |
+| 15 | [階段與 record 參考](pipeline-reference.qmd) | 每個階段的輸入、輸出與 record，供查閱。 |
+| 16 | [未決的決策](decisions.qmd) | 仍待決定的事項，附選項與後果。 |
+:::
+
+想快速找到某個問題的答案：
+
+- *為什麼不直接建 solid 然後呼叫 fragment？* [為什麼先規劃](why-plan-first.qmd)。
+- *為什麼不會有來自無關層的 sliver face？* [2.5D layered model](layered-model.qmd)。
+- *所有東西都在格點上時，「exact」是什麼意思？* [建立 arrangement](arrangement.qmd)。
+- *一個 Palace attribute 如何追溯到來源曲線？* [Identity](identity.qmd)。
+- *還有什麼沒決定？* [未決的決策](decisions.qmd)。
+
+本設計的圖有兩種：**計算所得**的圖與數字來自 `experiments/sgb-redesign/prototype` 的原型；**概念性**的圖是手繪的規則示意，圖說會註明是哪一種。互動式圖可以在檢視器中開啟並縮放，每張都附有一張顯示關鍵視角的靜態圖。除非圖中註明「grid units $g$」，長度單位為微米，格點單位為奈米。
+
 ## 詞彙表 {#glossary}
 
-詞彙在此定義一次。各頁在第一次使用時會再定義一次，並連回本表。
+詞彙在此定義一次；各頁在第一次使用時會再簡述一次。
 
 ::: {.askr-table-compact}
 | 詞彙 | 意義 | 所在頁面 |
@@ -129,7 +154,7 @@ flowchart TB
 | **Arrangement** | 由一組曲線對 XY 平面做的 planar 分割，以 vertex、edge 與 cell 儲存。分為 slab arrangement $S_i$ 與 level arrangement $A_i$。 | [Layered model](layered-model.qmd)、[Arrangement](arrangement.qmd) |
 | **Carrier** | 一條曲線的精確定義（通過兩點的直線、由圓心與半徑決定的圓）。vertex 會被 snap；carrier 從不被 snap。 | [Arrangement](arrangement.qmd) |
 | **Hot pixel** | 含有端點或交點的格點 pixel；曲線會被改道穿過它的中心。 | [Arrangement](arrangement.qmd) |
-| **Cell** | arrangement 的一個 face（帶孔洞的連通區域）。 | [Layered model](layered-model.qmd) |
+| **Cell** | arrangement 的一個區域（帶孔洞的連通區域）。它與之後寫出的 BREP face 不同：BREP face 是 emission 的曲面，由 cell 與 wall 組成。 | [Layered model](layered-model.qmd) |
 | **Label** | cell 的意義：slab cell 是它佔據的 domain；level cell 則是（下方、上方、sheet 擁有者、band）。 | [Label](labels-and-dissolution.qmd) |
 | **Required edge** | 會被保留的 edge：它兩側的 label 不同，或它所屬的 curve family 標為 `required`。 | [Label](labels-and-dissolution.qmd) |
 | **Dissolution** | 移除非 required 的 edge，並合併兩側的 cell。 | [Label](labels-and-dissolution.qmd) |
@@ -148,45 +173,29 @@ flowchart TB
 | **Strict mode** | 選用的 production 設定：在已安裝 OCP 綁定時，對寫出的檔案執行 OpenCASCADE 的有效性檢查，這是每次 build 都會執行的 structural 檢查之外的額外一層。 | [Validation](validation.qmd) |
 :::
 
-## 如何閱讀這些頁面
+## 補充：重現資料
 
-每一頁先說明它帶給你什麼，接著展示執行範例，再陳述一般規則，最後處理邊界情況。圖有兩種，圖說會註明是哪一種：
+下表是執行範例與延伸範例的原型數字，每一列同時列出「規劃」與「實際輸出」：規劃是 S6 組裝好的 topology，實際輸出是 direct writer 寫出、並由 Gmsh 載入後讀回的實體數量。
 
-- **計算所得**的圖與數字來自 `experiments/sgb-redesign/prototype` 的原型，以及 `docs/design/sgb/_figures/` 中的腳本；頁面會指出腳本名稱。腳本及其執行方式列在 `docs/design/sgb/_figures/README.md`。
-- **概念性**的圖是手繪的規則示意。
-
-互動式圖可以在檢視器中開啟並縮放；每張都附有一張顯示關鍵視角的靜態圖。除非圖中註明「grid units $g$」，長度單位為微米，格點單位為奈米。
-
-## 閱讀地圖
-
-初次閱讀請依此順序。每一列說明讀完該頁後你能解釋什麼。
-
-::: {.askr-table-compact}
-| # | 頁面 | 讀完後你能解釋 |
-|---|---|---|
-| 1 | 本頁 | SGB 產生什麼、各項目標與詞彙。 |
-| 2 | [為什麼先規劃](why-plan-first.qmd) | 為什麼先建 solid 再 fragment 會損失速度與 identity、規劃帶來什麼（附實測 scaling），以及為什麼 SGB 自己寫 CAD 檔案。 |
-| 3 | [2.5D layered model](layered-model.qmd) | Prism、level、slab、slab arrangement 與 level arrangement，以及為什麼 arrangement 是局部的。 |
-| 4 | [建立 arrangement](arrangement.qmd) | 帶 exact carrier 的 snap rounding、它的保證、成本與曲線類別。 |
-| 5 | [Label、required edge 與 dissolution](labels-and-dissolution.qmd) | cell 如何取得 label，以及哪些 edge 會被保留。 |
-| 6 | [從 arrangement 到 solid](assembly.qmd) | Face、wall、shell 與 volume，以及為什麼結果依構造即 conformal。 |
-| 7 | [Route A 與 Route B](routes.qmd) | sheet 金屬與被排除的有限厚度金屬，如何只改變 label 與 emission。 |
-| 8 | [Cut family](cut-families.qmd) | 所有分割共用的單一機制，以及如何新增一個。 |
-| 9 | [Surface EPR inset imprint](inset-imprint.qmd) | Erosion、轉角規則、band，以及 Palace 與 AEDT 如何使用它們。 |
-| 10 | [Identity、lineage 與對應鏈](identity.qmd) | 兩層 identity，以及一次從頭到尾追蹤的查詢。 |
-| 11 | [Parallel derivation](parallelism.qmd) | 平行化的結構、tiling 規則，以及哪些部分維持循序。 |
-| 12 | [Sliver](slivers.qmd) | 四種 sliver 來源、哪些依構造即被消除，以及 feature size 如何量測。 |
-| 13 | [Validation](validation.qmd) | 各項 structural invariant、三層驗證，以及 fail-closed 的行為。 |
-| 14 | [Emission](emission.qmd) | direct BREP/XAO writer、sidecar、Gmsh 如何處理它們，以及 AEDT 階段。 |
-| 15 | [BREP 與 XAO 格式](brep-format.qmd) | 審查 writer 所需的 BREP 區段、編號、方向規則與 XAO 版面。 |
-| 16 | [階段與 record 參考](pipeline-reference.qmd) | 每個階段的輸入、輸出與 record，供查閱。 |
-| 17 | [未決的決策](decisions.qmd) | 仍待決定的事項，附選項與後果。 |
+::: {.askr-table-compact .askr-table-numeric}
+| 量（規劃／實際輸出） | `pad_in_ground_B` | `pad_in_ground_A`（sheet 金屬） | `pad_in_ground_B_bands`（3 個 margin） | `airbridge_B`（延伸範例） |
+|---|---|---|---|---|
+| Prism 數 | 5 | 5 | 5 | 7 |
+| Level / slab 數 | 5 / 4 | 3 / 2 | 5 / 4 | 6 / 5 |
+| Vertex | 70 / 60 | 39 / 34 | 289 / 216 | 44 / 44 |
+| Edge | 94 / 90 | 44 / 44 | 250 / 246 | 76 / 72 |
+| Face | 41 / 37 | 15 / 15 | 59 / 55 | 37 / 31 |
+| Volume | 4 / 2 | 2 / 2 | 4 / 2 | 3 / 2 |
+| Physical group 數 | 10 | 8 | 21 | 7 |
+| 通過的 structural validation 檢查 | 21 / 21 | 21 / 21 | 21 / 21 | 21 / 21 |
+| Gmsh 載入 BREP 時邊界不符的數量（edge、face、solid） | 0, 0, 0 | 0, 0, 0 | 0, 0, 0 | 0, 0, 0 |
 :::
 
-如果你想快速找到某個問題的答案：
+規劃與實際輸出的差，可以逐項對上。重建各案例的 topology 並檢查：
 
-- *為什麼不直接建 solid 然後呼叫 fragment？* [為什麼先規劃](why-plan-first.qmd)。
-- *為什麼不會有來自無關層的 sliver face？* [2.5D layered model](layered-model.qmd)。
-- *所有東西都在格點上時，「exact」是什麼意思？* [建立 arrangement](arrangement.qmd)。
-- *一個 Palace attribute 如何追溯到來源曲線？* [Identity](identity.qmd)。
-- *還有什麼沒決定？* [未決的決策](decisions.qmd)。
+- **Vertex：** 圓弧 edge 在規劃中各帶一個只用來記錄圓心的 vertex，不寫出。這類圓心 vertex 在 `pad_in_ground_A`、`pad_in_ground_B`、`pad_in_ground_B_bands`、`airbridge_B` 分別有 5、10、73、0 個，規劃的 vertex 數減去它們，恰好等於寫出的 0D 數 34、60、216、44。
+- **Face 與 edge：** 不圍住任何已 emit volume 的 face 不寫出，只屬於它們的 edge 也不寫出。這些 face 在 `pad_in_ground_B`、`pad_in_ground_B_bands`、`airbridge_B` 分別有 4、4、6 個，全是 `EXT::Ground`（ground volume 在晶片邊緣的 wall）；只屬於它們的 edge 分別有 4、4、4 條垂直 edge；`pad_in_ground_A` 沒有這類 face。
+
+最後兩列是載入檢查，不是 mesh 品質評估。
+
+數字由 `docs/design/sgb/_figures/index_example.py` 讀取原型的 `outputs/<case>/stage_summary.json` 與 `outputs/e3_brep/<case>/validation.json` 得到；OCCT 檢查讀自 `outputs/occt/reports/` 與 `outputs/occt/negative_controls.{json,md}`。腳本與其執行方式列在 `docs/design/sgb/_figures/README.md`。

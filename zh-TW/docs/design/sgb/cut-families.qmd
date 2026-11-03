@@ -7,11 +7,9 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/cut-families"
 ---
 
-本頁說明：在 SGB 中，分割一個表面的每一種方式都是同一個操作：**把一個 family 的曲線，帶著語意 role 與 edge policy 加入 arrangement**。讀完後，你會知道 family record 裝了什麼、兩種 edge policy 對 cell 與 label 造成什麼影響、為什麼 band 的距離只從 physical boundary 量起、如何在不碰 assembly 或 emission 的情況下新增一種分割，以及曲線何時可以 embed 在 mesh 中，而不必是 edge。
+SGB 中分割一個表面的方式，都共用同一個機制：**把曲線放進 arrangement，再由 labelling 決定這些曲線兩側的 cell 意味著什麼、哪些 edge 要保留**。材料邊界、port、inset band、refinement curve 都是如此。但它們不是每一種都需要同一種 record：有些分割直接來自 prism 的 footprint 與 label，不需要任何額外紀錄；只有無法從 prism 推出的特徵，才需要明確的 `CurveFamilyRecord`。本頁先分清這三類，再說明 family record、兩種 edge policy、band 距離的 distance-origin 規則、新增 family 的做法，以及曲線何時可以 embed 而不必成為 edge。
 
-label 與 dissolution 見 [Label、required edge 與 dissolution](labels-and-dissolution.qmd)；第一個完整的使用者是 [inset imprint](inset-imprint.qmd)。名詞在第一次出現時定義，並彙整於[詞彙表](index.qmd#glossary)。
-
-所有範例皆為**計算結果**：由 `docs/design/sgb/_figures/families.py` 在 `experiments/sgb-redesign/prototype` 的 prototype 上產生；數字取自 `figures/families-numbers.json`。
+[Label、required edge 與 dissolution](labels-and-dissolution.qmd) 是本頁的基礎；第一個完整的使用者是 [inset imprint](inset-imprint.qmd)。
 
 ## 執行範例的觀點
 
@@ -51,6 +49,20 @@ window 與 refinement curve 是在**完全不修改 pipeline** 的情況下加�
 
 window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它切開的 cell 保有原來的 label，所以 `SA::substrate|vacuum::band=2` 與 `SA::substrate|vacuum::band=3` 這兩個 group 各多一個 face（2 變 3、1 變 2）。refinement curve 沒有改變任何 cell、edge 或 face 的數量；它只增加 embedded curve 片段。band 讓 face group 從 6 增為 13，因為每個 band 都是自己的 group（Route A 中 pad 的 band 是 `SHEET::pad::band=k`，共 7 個 face）。
 
+## 三類分割
+
+不要把每一種分割都想成「建立一個 family record」。它們分成三類：
+
+::: {.askr-table-compact}
+| 類別 | 做法 | 例子 |
+|---|---|---|
+| **(a) 共用的機制** | 曲線進入 arrangement；labelling 與 dissolution 決定 edge 的去留 | 所有分割 |
+| **(b) 不需要 record，由 prism 的 footprint 與 label 自然產生** | 來源 prism 的邊界曲線本來就在 arrangement 中；兩側 label 不同時，edge 就是 required | 材料邊界、contact cap（prism 重疊處因 label 不同而被切開）；prototype 的 port 是一個 sheet prism，也屬於這一類 |
+| **(c) 需要明確的 `CurveFamilyRecord`** | 曲線不是任何 prism 的邊界，必須由 generator 產生並附上 edge policy | Surface EPR inset band、refinement curve，以及來源中沒有對應 prism 的明確 port footprint |
+:::
+
+換句話說，(a) 是每個分割都會經過的路，(b) 與 (c) 是曲線的兩種來源。下面的 family record 只描述 (c)。
+
 ## Family record
 
 **Cut family** 是一個不可變的 record，說的是：這些曲線，帶著這種意義，作用於這些 level，使用這個 edge policy。brief 的六個欄位與 prototype 的 record 對應如下。
@@ -70,7 +82,7 @@ window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它�
 
 目標 Z 若沒有任何 prism 定義，family 會加入該 level：它是一般的 level，active set 沒有任何變化。
 
-### 設計中的 family
+### 各種分割與它們的來源
 
 ::: {.askr-table-compact}
 | Family | Generator | Target | Edge policy | 在 prototype 中 |
@@ -178,6 +190,6 @@ flowchart TD
 - 只有 dangling 的 refinement curve 與 Route B 的 port 可以被 embed；其他都是 edge。
 - 下一步：不同 family 的近乎重合曲線如何被回報，見 [Sliver](slivers.qmd)。
 
-## 參考
+## 補充：重現資料
 
-- Brief 第 4–6 節與第 14 節（policy、family、inset、refinement、target level）。prototype 模組：`records`、`layers`、`dissolve`、`inset`、`emit`。
+本頁的圖與數字由 `zh-TW/docs/design/sgb/_figures/families.py` 在 `experiments/sgb-redesign/prototype` 的 prototype 上產生，數字取自 `figures/families-numbers.json`。Brief 對應第 4–6 節與第 14 節（policy、family、inset、refinement、target level）；prototype 模組為 `records`、`layers`、`dissolve`、`inset`、`emit`。

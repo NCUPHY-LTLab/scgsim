@@ -7,12 +7,9 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/why-plan-first"
 ---
 
-本頁說明 SGB 為什麼在呼叫 CAD kernel **之前**先推導晶片的 topology，而不是為每個 prism 建一個 solid、再請 kernel 一次對全部 solid 做 fragment。讀完之後，你會知道反對全域 fragment 的成本論證、它會遺失哪些 identity，以及規劃後的 pipeline 實際花費多少（來自量測）。
+SGB 在呼叫 CAD kernel **之前**先推導晶片的 topology，而不是為每個 prism 建一個 solid、再請 kernel 一次對全部 solid 做 fragment。理由有兩個：全域 fragment 在晶片尺度下預期很慢，而且它交回的只是幾何，每個 face 的意義與來源必須事後還原。本頁依序說明這兩點，再用實測的 scaling 說明規劃後的 pipeline 實際花費多少。
 
-本頁有兩種陳述，標題會把它們分開。
-
-- **論證。** 為什麼 solids-first 的流程預期會很慢並且遺失 identity。它依據 OpenCASCADE（OCCT）Boolean 與 General Fuse 演算法的文件所記載的行為，以及對模型結構的計數。**我們沒有對全域 fragment 做 benchmark**，所以這裡沒有它的任何計時，論證中的不等式也都不是量測值。
-- **量測。** 規劃後的 pipeline 實際花費多少，來自原型的 scaling 執行：時間、記憶體，以及 identity 性質，範圍到 $N = 20000$ 個特徵。
+陳述分成兩種，標題會把它們分開。**論證**依據 OpenCASCADE（OCCT）Boolean 與 General Fuse 演算法的文件，以及對模型結構的計數；**我們沒有對全域 fragment 做 benchmark**，所以本頁沒有它的計時，論證中的不等式也都不是量測值。**量測**則是原型的 scaling 執行：規劃後 pipeline 的時間、記憶體與 identity 性質，範圍到 $N = 20000$ 個特徵。
 
 ## 執行範例的觀點
 
@@ -24,7 +21,7 @@ pad-in-ground 晶片（[總覽](index.qmd#fig-input)）有五個 prism：substra
 
 {{< askr-chart-view src="figures/why-structure.html" label="檢視計數得到的結構" >}}
 
-看 @fig-structure 時請注意：橘色的 box 從不超出紅色的 box。**小本體的 box 沒有任何性質能把它與晶片大小的本體分開。** 在 $N = 20000$ 時，有 24 990 個小本體、74 970 組「小本體與晶片大小本體」的 box pair（每個小本體三組），而「兩個小本體」的 pair 只有 4 990 組。ground plane 的頂面與底面各帶有 20 000 個內部 wire。數字在 `figures/why-structure-numbers.json`，由 `_figures/why_structure.py` 計算。
+看 @fig-structure 時請注意：橘色的 box 從不超出紅色的 box。**小本體的 box 沒有任何性質能把它與晶片大小的本體分開。** 在 $N = 20000$ 時，有 24 990 個小本體、74 970 組「小本體與晶片大小本體」的 box pair（每個小本體三組），而「兩個小本體」的 pair 只有 4 990 組。ground plane 的頂面與底面各帶有 20 000 個內部 wire。
 
 ## 一般論證
 
@@ -42,7 +39,7 @@ OCCT 的文件把 General Fuse 演算法描述為：依維度遞增對子形狀�
 | # | 文件記載的行為 | 為什麼晶片會碰上它 | 規劃後的 pipeline |
 |---|---|---|---|
 | 1 | 候選的 sub-shape pair 來自 bounding box（章節「Initialization」），所以篩選的效果取決於 box 有多小。 | 三個本體（substrate、vacuum、ground）的 box 就是整顆晶片。每個小本體都與這三者重疊：每個本體有三組無法剔除的 pair（[@fig-structure]）。 | 一個 level 的 2D arrangement 只接收在該處相遇的曲線；以空間 hash 依位置剔除。 |
-| 2 | face 會被建立在其上的 section edge 切割（章節「Build Images for Faces」）。 | ground plane 是單一個 face，兩側各有 $N$ 個內部 wire；每次與它發生 interference，面對的都是邊界有 $N$ 個 loop 的 face。 | 帶孔洞的 cell 是 arrangement 的一個 face，由它的 half-edge 一次建成。 |
+| 2 | face 會被建立在其上的 section edge 切割（章節「Build Images for Faces」）。 | ground plane 是單一個 face，兩側各有 $N$ 個內部 wire；每次與它發生 interference，面對的都是邊界有 $N$ 個 loop 的 face。 | 帶孔洞的區域是 arrangement 的一個 cell，由它的 half-edge 一次建成。 |
 | 3 | 重合的 face 會被偵測出來，並共用一個 image（「same domain」；edge 對應章節「Common Blocks」）。 | 每個金屬本體的底面都與 substrate 頂面、vacuum 底面及 ground 底面 coplanar。每個小本體有四組 coplanar 且 box 重疊的 face pair。 | coplanar 的鄰居就是同一個 level arrangement 的 cell；label 相同的 cell 以 dissolution 合併。 |
 | 4 | face-face interference 是一般的曲面-曲面求交（章節「Computation Order」）。 | 每個曲面都是平面、垂直 wall 或圓柱 wall。問題是二維的（XY 平面上的曲線）加上 Z；用 3D 求交器來解，動用的機制超過所需。 | 以 exact 整數運算做 planar noding；Z 只透過 level 進入。 |
 | 5 | 結果是一組帶有 *history*（`Modified`、`Generated`、`IsDeleted`；章節「General description of the Building Part」）的 fragment。 | 多個輸入可能對應到同一個 image（same-domain），一個輸入也可能對應到多個 fragment。identity 必須沿著 history 或靠幾何來還原。 | 每個輸出實體被建立時，它的來源與 id 就已知；沒有任何東西需要還原。 |
@@ -101,7 +98,7 @@ flowchart TB
 
 ## 規劃能換來什麼：實測
 
-原型的 scaling 執行建立 Route B 的隨機 layout，特徵數為 $N = 1000, 5000, 20000$，每個都有四個 level，且 ground plane 上每個特徵各有一個孔。模型的 face 數從 12 761 成長到 255 052。以下所有數字都是**計算所得**：來自 `experiments/sgb-redesign/prototype/examples/scaling.py`（`outputs/scaling.json`）以及 `outputs/e3_brep/timing.json` 中 direct writer 的執行；`_figures/why_scaling.py` 負責繪圖。
+原型的 scaling 執行建立 Route B 的隨機 layout，特徵數為 $N = 1000, 5000, 20000$，每個都有四個 level，且 ground plane 上每個特徵各有一個孔。模型的 face 數從 12 761 成長到 255 052。數字的來源列在本頁最後的補充。
 
 ![規劃後 pipeline 的 wall time（左）與 peak memory（右）對特徵數 N 的關係，座標軸為對數。虛線的斜率為 1。](figures/why-scaling.svg){#fig-scaling fig-alt="N = 1000、5000、20000 的兩張對數-對數圖。左：四條上升的線，分別是推導、Gmsh API 的 test oracle、direct BREP writer，以及 Gmsh 載入 BREP，並有一條斜率為 1 的虛線參考線。每一條都比參考線稍陡。右：父行程的 peak memory，分別為單一 tile 與 4 × 4 tile，幾乎與斜率為 1 的參考線平行。"}
 
@@ -139,11 +136,11 @@ flowchart TB
 
 速度不是 oracle 不作為 emission 路徑的唯一原因。Gmsh API 中的 solid 是由 surface loop 建成的，而 API 無法指定 solid 的**方向**（face 的哪一側是內部）：
 
-- 即使使用 `addSurfaceLoop(sewing=True)`（它能讓 shell 內部互相一致），絕對的方向仍然無法控制。在 $N = 1000$ 個特徵的隨機 layout 中，vacuum 這個 solid 變成內外顛倒，質量為負，而 mesh 仍然可以進行。
+- 即使使用 `addSurfaceLoop(sewing=True)`（它能讓 shell 內部互相一致），絕對的方向仍然無法控制。在較大的隨機 layout 中，vacuum 這個 solid 會變成內外顛倒，質量為負，而 mesh 仍然可以進行。
 - 因此 oracle 對每個 solid 最多嘗試 12 種確定性的 face 順序，並把修不好的記錄下來（oracle sidecar 中的 `inside_out_solids`）。六個固定的測試模型從不需要這個後備方案；隨機 layout 則需要。
-- Sewing 不能擴展：一個約 60 000 個 face 的 shell，花了 180 s 與 28 GB。上面 oracle 的時間因此略過 sewing，而此時 solid 的方向也就沒有被檢查。
+- Sewing 不能擴展：對一個有數萬個 face 的 shell 做 sewing，時間與記憶體都大到不實用。上面 oracle 的時間因此略過 sewing，而此時 solid 的方向也就沒有被檢查。
 
-direct writer 逐 face 明確寫出每一個方向，所以事後沒有任何東西需要修復。資料來源：原型 README 的 phase 3，以及設計簡報中 D8 的證據。
+direct writer 逐 face 明確寫出每一個方向，所以事後沒有任何東西需要修復。這些觀察來自原型的 phase 3，來源狀態見本頁最後的補充。
 
 ### Identity 性質
 
@@ -177,3 +174,10 @@ solids-first 的 fragment 無法提供這樣的性質：結果中 face 的順序
   <https://dev.opencascade.org/doc/overview/html/specification__boolean_operations.html>
 - Gmsh reference manual，`gmsh.model.occ` API（`fragment`、`synchronize`、`addPhysicalGroup`）。<https://gmsh.info/doc/texinfo/gmsh.html>
 - 本頁使用的原型輸出：`outputs/scaling.json`、`outputs/e3_brep/timing.json`、`outputs/e3_brep/sidecar_timing.json`。
+
+## 補充：重現資料
+
+本頁的圖與數字是**計算所得**。`docs/design/sgb/_figures/why_structure.py` 對原型的隨機 layout 產生器（Route B，間距 260 µm，seed 1）計數 box pair、wire 與 coplanar face，數字在 `figures/why-structure-numbers.json`；它不執行任何 Boolean 運算。`docs/design/sgb/_figures/why_scaling.py` 繪製 scaling、tail 與 identity 的圖，數字在 `figures/why-scaling-numbers.json`，資料來自原型的 `outputs/scaling.json`（`examples/scaling.py` 的結果）、`outputs/e3_brep/timing.json` 與 `outputs/e3_brep/sidecar_timing.json`。Gmsh API 的 profile 來自原型 README 的 emission profile。
+
+Gmsh sewing 的觀察（約 60 000 個 face 的 shell 需要 180 s 與 28 GB；$N = 1000$ 的隨機 layout 中 vacuum 內外顛倒）是在原型 phase 3 中量測一次的結果，沒有保存任何輸出檔案，所以本頁主文只做定性陳述，這裡的數字只能當作單次的觀察，無法重現。
+

@@ -13,7 +13,7 @@ Outputs go to ``docs/design/sgb/figures/`` with the prefix ``emission-``:
 * ``emission-timing``         write and load cost of the gmsh-API emitter against the direct writer (html + svg)
 * ``emission-shared-face``    one shared face referenced + by a shell and - by the other (svg; schematic plus real references)
 * ``emission-groups-3d``      the reopened XAO meshed on its surfaces, coloured by physical group (html + svg)
-* ``emission-*-table.md``     markdown tables included by the page (counts, timing, sidecar, tags, groups, validation, bands, step)
+* ``emission-*-table.md``     markdown tables included by the page (counts, timing, sidecar, tags, groups, validation, OCCT, bands, step)
 """
 
 from __future__ import annotations
@@ -28,6 +28,8 @@ HERE = Path(__file__).resolve().parent
 FIGURES = HERE.parent / "figures"
 PROTOTYPE = HERE.parents[4] / "experiments" / "sgb-redesign" / "prototype"
 E3 = PROTOTYPE / "outputs" / "e3_brep"
+OCCT = PROTOTYPE / "outputs" / "occt"
+OCCT_CASES = ("airbridge_B", "pad_in_ground_A", "pad_in_ground_A_bands", "pad_in_ground_B", "pad_in_ground_B_bands")
 RUNNING_EXAMPLE = "pad_in_ground_B"
 CASES = ("pad_in_ground_A", "pad_in_ground_B", "airbridge_B")
 BAND_CASES = ("pad_in_ground_A_bands", "pad_in_ground_B_bands")
@@ -537,7 +539,39 @@ def _ensure_plotly_js() -> None:
         target.write_bytes((Path(plotly.__file__).parent / "package_data" / "plotly.min.js").read_bytes())
 
 
+def _occt_tables() -> None:
+    """Official OCCT checks over the five running-example fixtures, and the negative controls (outputs/occt/)."""
+    rows = []
+    for case in OCCT_CASES:
+        report = _load_json(OCCT / "reports" / f"{case}.json")
+        for fmt in ("brep", "xao"):
+            r = report[fmt]
+            shape, props = r["shape_analysis"], r["properties"]
+            rows.append([f"`{case}`", fmt.upper(), "是" if r["ok"] else "否", "是" if r["brepcheck"]["valid"] else "否",
+                         str(r["brepcheck"]["faulty_count"]), "有" if r["bop_argument_analyzer"]["faulty"] else "無",
+                         str(r["bop_argument_analyzer"]["result_count"]), str(r["bop_argument_analyzer"]["excluded_free_faces"]),
+                         f"{shape['shells_with_free_edges']} / {shape['shells_with_bad_edges']}", f"{shape['shortest_edge_um']:.3g}",
+                         f"{props['faces']['max_relative_error']:.2g}", f"{max(x['relative_error'] for x in props['solids']):.2g}"])
+    _write("emission-occt-table.md", _table(
+        ["case", "格式", "ok", "BRepCheck valid", "faulty 元素數", "BOP 偵測到 fault", "BOP result 數", "BOP 排除的 free face 數",
+         "有 free／bad edge 的 shell 數", "最短 edge (µm)", "face 面積最大相對誤差", "solid volume 最大相對誤差"], rows, "llllrlrrlrrr"))
+    controls = _load_json(OCCT / "negative_controls.json")
+    rows = []
+    for defect, c in controls.items():
+        def caught(flag, statuses):
+            return ("抓到（" + "，".join(statuses) + "）") if flag and statuses else ("抓到" if flag else "未抓到")
+        brep_statuses = list(c["BRepCheck_statuses"])
+        rows.append([f"`{defect}`", caught(c["BRepCheck_Analyzer"], brep_statuses), caught(c["BOPAlgo_ArgumentAnalyzer"], c["BOP_statuses"]),
+                     caught(c["ShapeAnalysis_Shell"], []), caught(c["plan_cross_check_area_volume"], []), f"{c['check_ms']:.1f}"])
+    _write("emission-occt-controls-table.md", _table(
+        ["注入的缺陷", "BRepCheck_Analyzer", "BOPAlgo_ArgumentAnalyzer", "ShapeAnalysis_Shell", "plan 面積／volume 比對", "全部檢查耗時 (ms)"],
+        rows, "lllllr"))
+
+
 def main() -> None:
+    if "--occt-only" in sys.argv:
+        _occt_tables()
+        return
     _ensure_plotly_js()
     topo, plan = _running_example()
     rows = _timing_rows()
@@ -546,6 +580,7 @@ def main() -> None:
     _counts_table(plan)
     _tags_and_groups_tables(topo, plan)
     _validation_table()
+    _occt_tables()
     _sidecar_table()
     _shared_face_figure(topo, plan)
     _groups_3d_figures(plan)

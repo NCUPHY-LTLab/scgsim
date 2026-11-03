@@ -7,9 +7,9 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/inset-imprint"
 ---
 
-本頁說明 Surface EPR 的 *inset mask* 如何變成幾何。讀完後你會知道 inset 曲線的精確規則、surface 如何被切成 **band**、band 如何組成累積的「距邊緣至少 $m_k$」selection、solver 端有什麼改變，以及它與 Palace 和 AEDT 現行的 mask 有何不同。
+**Inset** 選出一個 surface 上距其物理邊界至少 $m$ 的部分；相鄰兩個 margin 之間的差形成 **band**。Surface EPR 在這些區域之上，還需要一個 field solution 與選定的 loss model：把 field 在各個區域上積分，才能估計 surface loss 有多少集中在邊緣附近。這一頁說明 SGB 如何把這些區域做成模型中精確的幾何：inset 曲線的規則、band 如何組成累積的「距邊緣至少 $m_k$」selection、solver 端有什麼改變，以及它與 Palace 和 AEDT 現行的 mask 有何不同。
 
-**inset mask** 只保留金屬 surface 上距 surface 邊緣至少 $m$ 的部分，用來估計 surface loss 有多少集中在邊緣附近。**cut family** 是 SGB 中把一組曲線連同語意 role 加進 arrangement 的 record；inset band 是它的第一個使用者。名詞彙整於[術語表](index.qmd#glossary)；機制見 [Cut families](cut-families.qmd)，它餵入的 arrangement 見 [Building an arrangement](arrangement.qmd)，兩種 route 見 [Routes](routes.qmd)。本頁每張圖與每個數字都是 `docs/design/sgb/_figures/inset.py` 對 `experiments/sgb-redesign/prototype` 的**計算結果**，除非文字標明是 **conceptual**（概念示意）或另指來源（prototype 的輸出在 `experiments/sgb-redesign/prototype/outputs/`）。
+在 SGB 中，inset band 是 **cut family** 的第一個使用者：cut family 是把一組曲線連同語意 role 加進 arrangement 的 record（機制見 [Cut families](cut-families.qmd)，arrangement 見 [Building an arrangement](arrangement.qmd)，兩種 route 見 [Routes](routes.qmd)）。arrangement 中的平面區域稱為 **cell**，輸出後成為 BREP **face**。本頁每張圖與每個數字都是對 prototype 的**計算結果**，除非文字標明是 conceptual（概念示意）；產生方式見最後的補充。
 
 ## 以 running example 看
 
@@ -19,7 +19,7 @@ running example 的 pad 有 45° 的 chamfer、一個 reflex notch、一個 roun
 
 {{< askr-chart-view src="figures/inset-bands-pad.html" label="檢視 band（用按鈕放大 notch、hole 與 corner）" >}}
 
-每個 band 成為一個或多個 face 與一個 physical group，名稱來自 label（Route A 的 sheet 為 `SHEET::pad::band=2`，Route B 的 top 與 bottom face 為 `MA::pad::band=2` 與 `MS::pad::band=2`，gap 為 <code>SA::substrate&#124;vacuum::band=0</code>）。下表的面積由精確 arc 計算（也就是後面 KLayout 比較所用的數字）：
+每個 band 由一個或多個 cell 組成，輸出後成為 BREP face 與一個 physical group，名稱來自 label（Route A 的 sheet 為 `SHEET::pad::band=2`，Route B 的 top 與 bottom face 為 `MA::pad::band=2` 與 `MS::pad::band=2`，gap 為 <code>SA::substrate&#124;vacuum::band=0</code>）。下表的面積由精確 arc 計算（也就是後面 KLayout 比較所用的數字）：
 
 ::: {.askr-table-compact .askr-table-numeric}
 | Support surface | Band | Faces | 面積 (µm²) | Band ≥ k 的聯集，「$R_{m_k}$」(µm²) |
@@ -35,6 +35,11 @@ running example 的 pad 有 45° 的 chamfer、一個 reflex notch、一個 roun
 :::
 
 同一個 surface 的 band 互不重疊，且加起來等於該 surface（pad top 的 B0 到 B3 總和為 5421.5730 µm²）。一個 band 可以不只一個 face：pad top 的 band 是沿外框的一圈加上繞 hole 的一圈，而 port footprint 把 gap band 切成更多片。同一個 band 的所有 face 共用一個 group 名稱。
+
+::: {.callout-note}
+## 範例的 group 是 per Net 的
+範例中的 group（如 `SHEET::pad::band=2`、`PEC::pad`）是 prototype 目前 per Net 合併的結果。D5 已決定預設改為 per Entity，每個 Entity 各自有 band group，報告再依 MA/MS/SA 彙整；band 曲線本身不受影響；group 的設計命名是 `MA::<entity>::band=k`，Route A 的 sheet 為 `SHEET::<entity>::band=k`，最終拼法在實作 D5 時才固定。這部分尚未在 prototype 實作（見[決策頁](decisions.qmd#d5)）。
+:::
 
 ## 規則：以 disk 做 erosion
 
@@ -70,7 +75,7 @@ prototype（`sgbproto/inset.py`）並不畫出 disk。它寫出規則所給的 r
 
 {{< askr-chart-view src="figures/inset-erosion-construction.html" label="檢視 corner 規則" >}}
 
-**精確的 carrier，snapped 的端點。** 斜向 edge（chamfer）的 offset 位置是無理數，所以曲線的 carrier 是精確的，而它的端點與每個 vertex 一樣 snap 到 1 nm 的 grid。derived arc 與其精確圓的偏差，在含 band 的 Route A 模型的 47 條 arc edge 上，平均為 0.057、最大為 0.632 grid unit（`outputs/pad_in_ground_A_bands/sliver_report.json`），在 snap bound $\sqrt2/2 \approx 0.707$ 之內。circle 以四段 quarter arc 表示，reflex arc 在 90° 處切開，因為單一 edge 的圓是 loop，半圓與它的 chord 平行，而 arrangement 要求每條 arc edge 連接兩個不同的 vertex。
+**精確的 carrier，snapped 的端點。** 斜向 edge（chamfer）的 offset 位置是無理數，所以曲線的 carrier 是精確的，而它的端點與每個 vertex 一樣 snap 到 1 nm 的 grid。derived arc 與其精確圓的偏差，在含 band 的 Route A 模型的 47 條 arc edge 上，平均為 0.057、最大為 0.632 grid unit，在 snap bound $\sqrt2/2 \approx 0.707$ 之內。circle 以四段 quarter arc 表示，reflex arc 在 90° 處切開，因為單一 edge 的圓是 loop，半圓與它的 chord 平行，而 arrangement 要求每條 arc edge 連接兩個不同的 vertex。
 
 ### 累積的 selection
 
@@ -86,7 +91,7 @@ $$
 $Q(\ge m_1)$、$Q(\ge m_2)$、$Q(\ge m_3)$ 是累積且巢狀的：每一個都包含下一個。把它們相加會重複計算內部。要加的是 *band*（互不相交），或只讀*一個* selection，絕不是 selection 的總和。這與既有的多 margin Surface EPR 規則一致：margin 是彼此替代的觀察，絕不加總成物理 loss。
 :::
 
-以範例而言，Route A 的 pad top sheet 的 selection 就是一串 physical group 的 attribute（取自 direct writer 的 sidecar，`outputs/e3_brep/pad_in_ground_A_bands/model.sidecar.json`）：
+以範例而言，Route A 的 pad top sheet 的 selection 就是一串 physical group 的 attribute（取自 direct writer 的 sidecar）：
 
 ::: {.askr-table-compact}
 | Selection | Margin | Group（attribute） |
@@ -103,13 +108,13 @@ Sidecar 的 `surface_epr_rows` 把 sheet 的 Surface EPR row `MA::pad::band=k` �
 
 曲線是由 **support region 的物理邊界**產生的，在 arrangement 之前、也在任何其他 partition 之前就算好。Port、contact cap、tile seam 與其他 band 都絕不是 origin：它們甚至不是 generator 的輸入。
 
-prototype 驗證了這個結果。把 lumped port 從範例中移除，family record 完全相同，且每個 band 的面積差不超過 $6 \times 10^{-8}$ grid unit²（`outputs/inset/port_invariance.json`）。在有 port 的模型中，port face 被 band 切成 7 個 face，但它們仍是同一個 group `PORT::p1`，因為 port 不屬於 Surface EPR 的 surface。
+prototype 驗證了這個結果。把 lumped port 從範例中移除，family record 完全相同，且每個 band 的面積差不超過 $6 \times 10^{-8}$ grid unit²。在有 port 的模型中，port face 被 band 切成 7 個 face，但它們仍是同一個 group `PORT::p1`，因為 port 不屬於 Surface EPR 的 surface。
 
 若 mask 是從*被選取之 patch* 的 perimeter 量距離，只要 patch 被任何不是物理邊緣的東西切開，行為就會不同，因為那條切線會變成 perimeter 的一部分。[Palace 的原生 `Mask: Inset`](../../specs/palace-electrostatic-sgb.qmd#curved-positive-inset-distance) 作用在有 perimeter 的被選取 boundary patch 上。SGB 讓這個問題不再出現：band 曲線在 surface 被分成 group 之前就已存在。
 
 ## Topology 變化是一般的結果
 
-Erosion 可能把一段窄頸切成兩半，或讓整個 band 消失。兩者都逐 band 記錄，不需要修補。測試在 pad top 上使用 margin $m = 4, 9, 30$ µm（由 prototype 計算，`outputs/inset/topology_change.json`）。
+Erosion 可能把一段窄頸切成兩半，或讓整個 band 消失。兩者都逐 band 記錄，不需要修補。測試在 pad top 上使用 margin $m = 4, 9, 30$ µm。
 
 ![pad top 在 4、9 與 30 µm 下的 band。請看橘色的 band B2：它是三個分離的 face，因為 9 µm 的 erosion 把 pad top 切成三座島。B3（至少 30 µm）是空的。](figures/inset-topology-change.svg){#fig-topology fig-alt="pad top 在 4、9、30 µm margin 下依 band 著色，顯示三座分離的內部島。"}
 
@@ -131,29 +136,17 @@ Band **逐 support face** 產生：
 
 - **Route A。** sheet 是同時為 metal–vacuum 與 metal–substrate 的一個 face。它承載 band，並以 face 命名為 `SHEET::<net>::band=k`；Surface EPR 的 MA 與 MS 兩個 row 都參照這一個 group（`surface_epr_rows`）。
 - **Route B，top face。** 位於 $z = 0.2$ µm 的 family `band_pad_top` 產生 `MA::pad::band=k`。
-- **Route B，bottom face。** 位於 $z = 0$ 的 family `band_pad_bottom` 產生 `MS::pad::band=k`。儲存的 `pad_in_ground_B_bands` case 兩個 face 都切 band：59 個 face、250 條 edge、289 個 vertex 與 21 個 group，validation 通過，`PEC::pad` 列出八個 band group 與 `MA::pad`（side wall）（`figures/inset-tables.md`）。
+- **Route B，bottom face。** 位於 $z = 0$ 的 family `band_pad_bottom` 產生 `MS::pad::band=k`。儲存的 `pad_in_ground_B_bands` case 兩個 face 都切 band：59 個 face、250 條 edge、289 個 vertex 與 21 個 group，validation 通過，`PEC::pad` 列出八個 band group 與 `MA::pad`（side wall）。
 - **Side wall** 不在 v1 範圍：side wall 的 band 會是 wall face 上的第三個 family，目前不產生。
 
 ## Solver 收到什麼
 
 每個 band 都是自己的 primary physical group。Masked integral 變成對 band group 的聯集做一般積分，以 attribute 選取（見上表）。solver 內部沒有任何東西會切開 element。
 
-prototype 的 Palace-facing 檢查對含 band 的 Route A 模型做 mesh（40 µm 的 mesh size，band 曲線附近有 1 µm 的 size field，13 170 個 node、70 775 個 tetrahedron，無重複 node，conformal；`outputs/pad_in_ground_A_bands/stage_summary.json`）。對每個 band group，它計算 surface triangle 數，找出各 volume 中擁有這些 triangle 的 tetrahedron，並檢查每個 triangle 的 centroid 是否落在它的 band 內：
+prototype 的 Palace-facing 檢查對含 band 的 Route A 模型做 mesh（40 µm 的 mesh size，band 曲線附近有 1 µm 的 size field，13 170 個 node、70 775 個 tetrahedron，無重複 node，conformal）。對每個 band group，它計算 surface triangle 數，找出各 volume 中擁有這些 triangle 的 tetrahedron，並檢查每個 triangle 的 centroid 是否落在它的 band 內：
 
-::: {.askr-table-compact .askr-table-numeric}
-| Band group | Faces | Triangles | 兩側各自的 tet | 全部被 tet 共用 | Centroid 在 band 內 |
-|---|---|---|---|---|---|
-| `SHEET::pad::band=0` | 2 | 790 | 790 + 790 | 是 | 是 |
-| `SHEET::pad::band=1` | 2 | 807 | 807 + 807 | 是 | 是 |
-| `SHEET::pad::band=2` | 2 | 1591 | 1591 + 1591 | 是 | 是 |
-| `SHEET::pad::band=3` | 1 | 1607 | 1607 + 1607 | 是 | 是 |
-| <code>SA::substrate&#124;vacuum::band=0</code> | 2 | 1753 | 1753 + 1753 | 是 | 是 |
-| <code>SA::substrate&#124;vacuum::band=1</code> | 2 | 1804 | 1804 + 1804 | 是 | 是 |
-| <code>SA::substrate&#124;vacuum::band=2</code> | 2 | 3522 | 3522 + 3522 | 是 | 是 |
-| <code>SA::substrate&#124;vacuum::band=3</code> | 1 | 3574 | 3574 + 3574 | 是 | 是 |
-:::
-
-（`outputs/inset/palace_check.json`。）每個 triangle 恰好是 substrate 的一個 tetrahedron 與 vacuum 的一個 tetrahedron 的 face，且位於自己的 band 內：沒有任何 element 跨越 band 邊界。這是 mesh 檢查，不是 Palace 的執行。
+結果：八個 band group 的每一個，其 surface triangle 全部是 substrate 與 vacuum 各一個 tetrahedron 的 face，且每個 triangle 的 centroid 都在自己的 band 內（逐 group 的 triangle 數見補充）。
+每個 triangle 恰好是 substrate 的一個 tetrahedron 與 vacuum 的一個 tetrahedron 的 face，且位於自己的 band 內：沒有任何 element 跨越 band 邊界。這是 mesh 檢查，不是 Palace 的執行。
 
 ### 這對 adaptive refinement 為何重要
 
@@ -187,20 +180,8 @@ Palace 與 AEDT 兩欄重述的是 [Palace electrostatic 規格](../../specs/pal
 
 精確的 band 面積與 AEDT 風格的 erosion 比較：區域以 1 nm 的 database unit 表示，把補集用 512 邊形膨脹後減去。下表給出 $R_m$（band $\ge k$ 的聯集）的面積：由精確 arc、由 KLayout，以及 oracle 自己的 rounding 雜訊（每個邊界點 ±0.5 nm）：
 
-::: {.askr-table-compact .askr-table-numeric}
-| 區域 | Margin (µm) | 精確 (µm²) | KLayout (µm²) | 差 (µm²) | 相對 | Oracle rounding bound (µm²) |
-|---|---|---|---|---|---|---|
-| pad top | 0 | 5421.5730 | 5421.5732 | −0.00017 | −3.1e−08 | 0.196 |
-| pad top | 0.1 | 5382.4661 | 5382.4575 | +0.00867 | +1.6e−06 | 0.196 |
-| pad top | 0.5 | 5226.2429 | 5226.2351 | +0.00779 | +1.5e−06 | 0.195 |
-| pad top | 2 | 4643.0033 | 4643.0019 | +0.00142 | +3.1e−07 | 0.194 |
-| gap ring | 0 | 13577.3650 | 13577.3652 | −0.00014 | −9.9e−09 | 0.450 |
-| gap ring | 0.1 | 13487.2885 | 13487.2992 | −0.01075 | −8.0e−07 | 0.450 |
-| gap ring | 0.5 | 13127.2637 | 13127.2746 | −0.01094 | −8.3e−07 | 0.450 |
-| gap ring | 2 | 11780.8720 | 11780.8722 | −0.00016 | −1.3e−08 | 0.448 |
-:::
-
-（`outputs/inset/klayout_comparison.json`。）每個差值都遠小於 oracle 自己的 rounding 雜訊，相對誤差至多 $1.6 \times 10^{-6}$。margin 0 的列沒有 erosion，所以它只反映多邊形化 arc 的 chord 誤差（約 $10^{-4}$ µm²）。Route B 的 top 與 bottom face 給出與 pad top 相同的數字（`klayout_comparison_route_B.json`）。曲線本身在約一奈米內一致，那是多邊形整數 rounding 的量級：
+八個比較（pad top 與 gap ring 各四個 margin）的最大相對誤差是 $1.6 \times 10^{-6}$（完整表格見補充）。
+每個差值都遠小於 oracle 自己的 rounding 雜訊，相對誤差至多 $1.6 \times 10^{-6}$。margin 0 的列沒有 erosion，所以它只反映多邊形化 arc 的 chord 誤差（約 $10^{-4}$ µm²）。Route B 的 top 與 bottom face 給出與 pad top 相同的數字。曲線本身在約一奈米內一致，那是多邊形整數 rounding 的量級：
 
 ![三個 margin 的 offset arc 與 512 邊形 erosion 在 notch、rounded corner 與 hole 附近的比較，以及它們相對精確半徑的徑向偏差。請看下排：精確 carrier 落在圓上，512 邊形因頂點的整數 rounding 而散布約 ±1 nm。](figures/inset-arcs-vs-polygon.svg){#fig-arcs fig-alt="三個放大視圖，精確 arc 疊在 KLayout 多邊形邊界上，以及三張以奈米為單位的徑向偏差散點圖。"}
 
@@ -223,3 +204,37 @@ Palace 與 AEDT 兩欄重述的是 [Palace electrostatic 規格](../../specs/pal
 - KLayout，[`Region`](https://www.klayout.de/doc/code/class_Region.html)（`sized`、`merged`、`minkowski_sum`）。
 - Hobby, J. D. (1999). Practical segment intersection with finite precision output. *Computational Geometry* 13(4).
 - Halperin, D. and Packer, E. (2002). Iterated snap rounding. *Computational Geometry* 23(2).
+
+## 補充：重現資料
+
+本頁的圖與數字由 `docs/design/sgb/_figures/inset.py` 對 `experiments/sgb-redesign/prototype` 計算而得；產生的表格另存於 `figures/inset-tables.md`。prototype 的輸出在 `outputs/`：band 面積與 KLayout 比較在 `outputs/inset/klayout_comparison.json`（Route B 為 `klayout_comparison_route_B.json`），port 不變性在 `outputs/inset/port_invariance.json`，topology 變化在 `outputs/inset/topology_change.json`，Palace-facing 檢查在 `outputs/inset/palace_check.json` 與 `outputs/pad_in_ground_A_bands/stage_summary.json`，arc 偏差在 `outputs/pad_in_ground_A_bands/sliver_report.json`，Route A 的 attribute 取自 `outputs/e3_brep/pad_in_ground_A_bands/model.sidecar.json`。
+
+Palace-facing 檢查（含 band 的 Route A 模型，40 µm 的 mesh size 加上 band 曲線附近 1 µm 的 size field，13 170 個 node、70 775 個 tetrahedron）：
+
+::: {.askr-table-compact .askr-table-numeric}
+| Band group | Faces | Triangles | 兩側各自的 tet | 全部被 tet 共用 | Centroid 在 band 內 |
+|---|---|---|---|---|---|
+| `SHEET::pad::band=0` | 2 | 790 | 790 + 790 | 是 | 是 |
+| `SHEET::pad::band=1` | 2 | 807 | 807 + 807 | 是 | 是 |
+| `SHEET::pad::band=2` | 2 | 1591 | 1591 + 1591 | 是 | 是 |
+| `SHEET::pad::band=3` | 1 | 1607 | 1607 + 1607 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum::band=0</code> | 2 | 1753 | 1753 + 1753 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum::band=1</code> | 2 | 1804 | 1804 + 1804 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum::band=2</code> | 2 | 3522 | 3522 + 3522 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum::band=3</code> | 1 | 3574 | 3574 + 3574 | 是 | 是 |
+:::
+
+KLayout 交叉檢查（區域以 1 nm database unit 表示，補集以 512 邊形膨脹後減去）：
+
+::: {.askr-table-compact .askr-table-numeric}
+| 區域 | Margin (µm) | 精確 (µm²) | KLayout (µm²) | 差 (µm²) | 相對 | Oracle rounding bound (µm²) |
+|---|---|---|---|---|---|---|
+| pad top | 0 | 5421.5730 | 5421.5732 | −0.00017 | −3.1e−08 | 0.196 |
+| pad top | 0.1 | 5382.4661 | 5382.4575 | +0.00867 | +1.6e−06 | 0.196 |
+| pad top | 0.5 | 5226.2429 | 5226.2351 | +0.00779 | +1.5e−06 | 0.195 |
+| pad top | 2 | 4643.0033 | 4643.0019 | +0.00142 | +3.1e−07 | 0.194 |
+| gap ring | 0 | 13577.3650 | 13577.3652 | −0.00014 | −9.9e−09 | 0.450 |
+| gap ring | 0.1 | 13487.2885 | 13487.2992 | −0.01075 | −8.0e−07 | 0.450 |
+| gap ring | 0.5 | 13127.2637 | 13127.2746 | −0.01094 | −8.3e−07 | 0.450 |
+| gap ring | 2 | 11780.8720 | 11780.8722 | −0.00016 | −1.3e−08 | 0.448 |
+:::

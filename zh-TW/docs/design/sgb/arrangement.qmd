@@ -7,9 +7,9 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/arrangement"
 ---
 
-本頁說明 SGB 如何把一組精確的曲線變成一個 **arrangement**：一個 planar graph，它的 vertex 全都落在同一個格點上、edge 彼此不交叉，而每條 edge 仍記得它所來自的精確曲線。讀完之後，你會在一個小範例上看懂演算法的每一步，知道哪些性質是保證的、哪些是量測的，了解它的成本，以及圓弧如何納入。
+SGB 把一組精確的曲線變成一個 **arrangement**：一個 planar graph，它的 vertex 全都落在同一個格點上、edge 彼此不交叉，而每條 edge 仍記得它所來自的精確曲線。做法是帶 exact carrier 的 snap rounding。本頁先在一個小範例上走完每一步，再說明哪些性質是保證的、哪些是量測的、成本多少，以及圓弧如何納入。
 
-**Arrangement** 是由一組曲線對 XY 平面做的 planar 分割，以 vertex、edge 與 cell 儲存（見[詞彙表](index.qmd#glossary)）。輸入是一個 level 或一個 slab 的曲線（見 [2.5D layered model](layered-model.qmd)），輸出是帶有 face 的 noded graph。本頁所有數字都是**計算所得**：由 `docs/design/sgb/_figures/arrangement_steps.py` 或 `arrangement_guarantees.py` 產生，或讀自原型的 `outputs/`；數字在 `figures/arrangement-steps-numbers.json` 與 `figures/arrangement-guarantees-numbers.json`。
+**Arrangement** 是由一組曲線對 XY 平面做的 planar 分割，以 vertex、edge 與 cell 儲存（見[詞彙表](index.qmd#glossary)）。輸入是一個 level 或一個 slab 的曲線（見 [2.5D layered model](layered-model.qmd)），輸出是帶有 cell 的 noded graph。cell 是 arrangement 中的平面區域，之後寫出的 BREP face 則是另一個東西。
 
 ## 執行範例的觀點
 
@@ -51,9 +51,7 @@ Snapping 只有在曲線於非格點的位置**交叉**，或彼此距離小於�
 
 **步驟 5：round 3，沒有任何變化。** 沒有任何 edge 碰到 hot pixel 卻不穿過它的中心。結果有 10 個 vertex（全在格點上）與 13 條 edge。edge 端點到最近 carrier 的最大距離是 0.632 g，發生在 edge $(5, 2)$-$(6, 2)$，低於 $\sqrt{2}/2 = 0.707$ 的界限。
 
-**步驟 6：face。** half-edge 結構（doubly-connected edge list，DCEL）把 edge 變成 cell：四個有界 face，面積為 9、8.5、1 與 0.5 g²。c4 的 $(2, 0)$-$(5, 2)$ 是一條 dangling edge，不圍住任何 face。
-
-腳本中的 trace 逐個 round 執行原型自己的 kernel，並檢查最後的 edge 集合等於 `snap_round` 的結果。
+**步驟 6：cell。** half-edge 結構（doubly-connected edge list，DCEL）把 edge 變成 cell：四個有界 cell，面積為 9、8.5、1 與 0.5 g²。c4 的 $(2, 0)$-$(5, 2)$ 是一條 dangling edge，不圍住任何 cell。
 
 ## 一般規則
 
@@ -85,12 +83,12 @@ Snapping 只有在曲線於非格點的位置**交叉**，或彼此距離小於�
 3. **改道。** 每條 changed 的 edge，以及每條未改變的 edge（只對*新近*變成 hot 的 pixel 檢查），被換成它所碰到的所有 hot pixel 中心的串列，順序沿著該 edge。
 4. **合併。** 端點相同的 edge 合併成一條 edge，帶有它們 carrier id 的聯集。
 5. 只要有任何改道後的 edge 碰到它先前沒被穿過的 hot pixel，就**反覆**。結果就是 **noded** edge 集合。
-6. **Face。** 建立 half-edge 結構，並抽取帶孔洞的有界 face。
+6. **Cell。** 建立 half-edge 結構，並抽取帶孔洞的有界 cell。
 
 Hobby（1999）與 Guibas 和 Marimont（1998）把 snap rounding 定義為這個程序的第一個 round。Halperin 和 Packer（2002）則如上所述加以反覆。原型實作的是反覆的形式，且只使用整數運算。
 
-::: {.callout-important title="設計決策：整數 topology"}
-交點、pixel 的包含關係與每一個排序，都以精確的整數運算決定。浮點數絕不決定 topology。因此結果是 exact 的，且與 edge 或 tile 的處理順序無關，這讓 tile 可以被確定性地合併。
+::: {.callout-important title="設計決策：exact 運算決定 topology"}
+交點、pixel 判定與排序使用精確的整數運算；輸出頂點仍經 snapping，與原 carrier 的幾何偏離另外記錄。浮點數絕不決定 topology，所以 topology 與 edge 或 tile 的處理順序無關，tile 因而可以被確定性地合併。「exact」說的是這些判定，不是說輸出頂點恰好在 carrier 上。
 :::
 
 ### Carrier 與 lineage
@@ -103,16 +101,16 @@ edge 的 identity 是 H(plane key、排序後的端點 vertex id、排序後的 
 
 ## 哪些是保證、哪些是量測
 
-下表區分依構造成立的保證與量測值。量測的對象是 250 組隨機 segment 集合，每組 24 條、整數端點在 $48 \times 48$ 的方框內（`arrangement_guarantees.py`），比較僅做 round 1（經典 snap rounding）與反覆之後的結果。
+下表區分依構造成立的性質與量測值。量測的對象是 250 組隨機 segment 集合，每組 24 條、整數端點在 $48 \times 48$ grid unit 的方框內，比較僅做 round 1（經典 snap rounding）與反覆之後的結果。量測結果只說明這組樣本，不是證明。
 
 ::: {.askr-table-compact .askr-table-numeric}
 | 性質 | 狀態 | 僅 round 1 | 反覆之後 |
 |---|---|---|---|
 | 所有 vertex 都在格點上 | 依構造 | | |
 | 沒有兩個 vertex 的距離小於 $g$；沒有 edge 短於 $g$ | 依構造（pixel 中心互不相同） | 最短 edge 1.00 g | 最短 edge 1.00 g |
-| 沒有兩條 edge 交叉；沒有 vertex 落在 edge 內部 | 依反覆（停止規則） | 0 組有交叉 | 0 組有交叉或 vertex 在 edge 內 |
-| 不相接的 vertex 到 edge 的距離 | 反覆保證至少 $g/2$ | 最小 0.164 g | 最小 0.521 g |
-| edge 端點偏離其 carrier 的最大量 | 一個 round 後 $\le \sqrt{2}/2\,g$ | 最大 0.707 g | 最大 1.417 g |
+| 沒有兩條 edge 交叉；沒有 vertex 落在 edge 內部 | 反覆的設計目標；以本表的檢查量測 | 0 組有交叉 | 0 組有交叉或 vertex 在 edge 內 |
+| 不相接的 vertex 到 edge 的距離 | 由反覆的停止規則推得至少 $g/2$ | 最小 0.164 g | 最小 0.521 g |
+| edge 端點偏離其 carrier 的最大量 | 只有一個 round 時 $\le \sqrt{2}/2\,g$；反覆之後沒有此界限 | 最大 0.707 g | 最大 1.417 g |
 :::
 
 ![每組隨機試驗中，edge 端點偏離其 carrier 的最大量，分別為 round 1 之後與反覆之後。虛線是一個 round 的界限 √2/2 g。](figures/arrangement-guarantees.svg){#fig-drift fig-alt="250 組隨機試驗中，每組最大偏離量（單位為 grid unit）的重疊直方圖。灰色直方圖（round 1 之後）的尖峰剛好在虛線 0.707 的左邊，沒有超過它。藍色直方圖（反覆之後）則從 0.5 分散到約 1.4。"}
@@ -121,17 +119,21 @@ edge 的 identity 是 H(plane key、排序後的端點 vertex id、排序後的 
 
 看 @fig-drift 時請注意：反覆讓 vertex 與「沒有被穿過」的 edge 之間至少保持半個 pixel 的距離（round 1 之後是 0.164 g；反覆之後是 0.521 g），代價是讓 vertex 可以**超過**一個 round 的界限而 drift。一個 round 讓每個 vertex 都在其 carrier 的 $\sqrt{2}/2\,g$ 之內。反覆則可能帶得更遠，因為每次改道都把 chain 移離 carrier，下一個 round 改道的是新的 chain，而不是原本的 carrier。
 
+drift 的數字來自不同的輸入，不能互相取代，下表逐一標出輸入類型、樣本範圍與來源：
+
 ::: {.askr-table-compact .askr-table-numeric}
-| 輸入 | edge 偏離其 carrier 的最大 drift | 來源 |
-|---|---|---|
-| 執行範例（`pad_in_ground_A`、`_B`，有無 band，以及 `airbridge_B`） | 每條直線 edge 都是 0 g | `outputs/*/sliver_report.json` |
-| 執行範例中由 offset 衍生的圓弧（`pad_in_ground_A_bands` 中 47 條圓弧 edge） | 平均 0.057 g，偏離精確圓的最大值 0.632 g | `outputs/pad_in_ground_A_bands/sliver_report.json` |
-| 隨機 layout，$N = 200$ 個特徵、5 854 條 edge、旋轉矩形 | 0.605 g | `arrangement_guarantees.py` |
-| 對抗性隨機 segment（250 組，每組 24 條，在 $48 \times 48$ 方框內） | 1.417 g | `arrangement_guarantees.py` |
-| 較密的對抗性集合（1 500 組，每組 40 條 segment，在 $30 \times 30$ 方框內） | 1.925 g | `arrangement_guarantees.py` |
+| 輸入類型 | 樣本範圍 | 最大 drift（g） | 來源 |
+|---|---|---|---|
+| 隨機 segment，整數端點 | 250 組 × 24 條，$48 \times 48$ 方框 | 1.417 | `arrangement_guarantees.py` |
+| 隨機 segment，整數端點，較密 | 1 500 組 × 40 條，$30 \times 30$ 方框 | 1.925 | `arrangement_guarantees.py` |
+| 隨機 layout（Route B，旋轉矩形等） | $N = 200$ 個特徵、5 854 條 edge | 0.605 | `arrangement_guarantees.py` |
+| 執行範例的直線 edge | `pad_in_ground_A`、`_B`（有無 band）、`airbridge_B` | 0 | 各案例的 `sliver_report.json` |
+| 執行範例中由 offset 衍生的圓弧（不是直線 segment 的證據） | `pad_in_ground_A_bands` 47 條、`pad_in_ground_B_bands` 88 條圓弧 edge | 0.632（偏離精確圓） | 各案例的 `sliver_report.json` |
 :::
 
-Layout 的來源本來就在格點上，所以 drift 只出現在斜向 carrier 的交叉處。arrangement 記錄每條 edge 的實測偏離量，而不是把它藏起來。要不要對 drift 設**上限**（iterated snap rounding 的 bounded-drift 變體，Packer 2008），或只做記錄，是未決的決策 D7（見[未決的決策](decisions.qmd#d7)）。
+三點要小心。第一，一個 round 的 $\sqrt{2}/2\,g$ 界限不適用於反覆之後的結果：兩組對抗性樣本都超過它。第二，layout 類的輸入只有 $N = 200$ 的隨機 layout 這一個可重現的數字（0.605 g）；沒有其他可重現來源的範圍數字，本頁不引用。第三，圓弧的 0.632 g 量的是 offset 圓弧偏離精確圓的程度，不是直線 segment 的 drift，不能拿來當直線的證據。
+
+layout 的來源本來就在格點上，所以 drift 只出現在斜向 carrier 的交叉處。arrangement 記錄每條 edge 的實測偏離量，而不是把它藏起來。要不要對 drift 設**上限**（iterated snap rounding 的 bounded-drift 變體，Packer 2008），或只做記錄，是未決的決策 D7（見[未決的決策](decisions.qmd#d7)）。
 
 ## 成本
 
@@ -181,6 +183,20 @@ witness 的代價是大小。半徑為 $r$ 的 quarter arc 約需要 $\sqrt{r/g}
 - **來源曲線絕不移動。** 衍生曲線（inset、refinement curve）之後也許會被允許在某個容許值內 snap 到來源曲線上。那是經 Human 把關的 policy，不在本頁範圍內（見 [Sliver](slivers.qmd)）。
 - **Z。** arrangement 是 planar 的。Level 是精確的，從不被 snap。
 - **Tile seam。** tile 的切線落在 pixel 欄列之間，所以沒有任何 seam 幾何進入 arrangement，也就沒有 seam 需要在之後移除；合併後的結果與單一 tile 的結果相同（見 [Parallel derivation](parallelism.qmd)）。
+
+## 補充：重現資料
+
+本頁的圖與數字是**計算所得**。逐步範例由 `docs/design/sgb/_figures/arrangement_steps.py` 產生，數字在 `figures/arrangement-steps-numbers.json`；腳本逐個 round 執行原型自己的 kernel，並檢查最後的 edge 集合等於 `snap_round` 的結果。保證、drift、成本與圓弧 witness 由 `arrangement_guarantees.py` 產生，數字在 `figures/arrangement-guarantees-numbers.json`；執行範例的數字讀自原型的 `outputs/<case>/stage_summary.json` 與 `sliver_report.json`，pipeline 的大小讀自 `outputs/scaling.json`。
+
+::: {.askr-table-compact .askr-table-numeric}
+| N | Hot pixel 數 | Level arrangement 的 edge 數 | Slab arrangement 的 edge 數 | noding kernel（s） | noding driver（s） | DCEL（s） |
+|---|---|---|---|---|---|---|
+| 1 000 | 29 988 | 19 494 | 9 751 | 0.224 | 0.063 | 0.061 |
+| 5 000 | 149 708 | 97 282 | 48 645 | 1.427 | 0.478 | 0.532 |
+| 20 000 | 600 361 | 389 972 | 194 990 | 7.401 | 2.376 | 3.113 |
+:::
+
+隨機 segment 試驗中，需要的 round 數分布：250 組 × 24 條中，2 個 round 的有 47 組、3 個有 196 組、4 個有 7 組；1 500 組 × 40 條中，2 個 11 組、3 個 1 230 組、4 個 250 組、5 個 9 組。
 
 ## 參考資料
 

@@ -7,9 +7,11 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/layered-model"
 ---
 
-本頁定義 SGB 所處理的模型：晶片是有限個 **prism** 的集合，在 **level** 處被切成 **slab**，每個 level 與每個 slab 各有一個 planar arrangement。讀完之後，你會知道如何從模型讀出 level、slab 與 active set，slab arrangement 與 level arrangement 各包含什麼，以及為什麼 SGB 讓這些 arrangement 保持**局部**，而不是把每一層都投影到同一個平面上。
+SGB 處理的模型是有限個 **prism** 的集合：晶片在 **level** 處被切成 **slab**，每個 level 與每個 slab 各有一個 planar arrangement。這些 arrangement 是**局部**的：每一個只收納在三維空間中真正相遇的曲線，而不是把所有層投影到同一個平面。本頁先用執行範例說明 level、slab 與 active set，再說明為什麼局部的做法能避免 phantom sliver。詞彙彙整在[詞彙表](index.qmd#glossary)。
 
-詞彙在第一次使用時定義，並彙整在[詞彙表](index.qmd#glossary)。本頁所有的圖與數字都是**計算所得**：來自原型（`experiments/sgb-redesign/prototype`），由 `docs/design/sgb/_figures/layered_model.py` 或 `layered_phantom.py` 產生；數字在 `figures/layered-numbers.json` 與 `figures/layered-phantom-numbers.json`。
+## 模型格點
+
+所有 XY 座標都落在同一個**模型格點** $g$ 上，預設是來源的資料庫單位 1 nm，宣告一次並記錄在 handoff 中。這個格點來自 develop 既有的固定格點來源準備（S0 與 S1）：來源的正規化與 polygon Boolean 在已宣告的格點上完成，`GeometryGridContext` 帶著 $g$ 往後傳，S4 的 snap rounding 使用的就是同一個 $g$。S4 起是新的 pipeline；原型不含 S0 與 S1，直接以格點上的整數座標建立 prism。Z 不受這個格點約束（見下文）。
 
 ## 執行範例的觀點
 
@@ -41,8 +43,8 @@ port sheet $p_1$ 位於 level $0.1$ µm。它不填滿任何 slab；它附屬於
 看 @fig-arrangements 時請注意：
 
 - **Slab 的 cell** 各有一個名稱。$S_1$ 有四個 cell，輪廓與 $A_1$ 相同。
-- **$z = 0$ 的 A_1**：每個 cell 下方都是 substrate、上方是別的東西，所以每個 cell 都是最終模型的一個 face（ground 與 pad 底下的 metal-substrate 表面，以及 substrate-vacuum 的 gap 表面）。
-- **$z = 0.1$ µm 的 A_2**：有四個 cell 的下方與上方是同一個 domain（在金屬內部，或在 vacuum 中），所以這些 cell 不需要 face。只有 port sheet 需要。level cell 需要 face，若且唯若它下方與上方的 domain 不同，或其上有 sheet。
+- **$z = 0$ 的 A_1**：每個 cell 下方都是 substrate、上方是別的東西，所以每個 cell 都會產生最終模型中的一個 BREP face（ground 與 pad 底下的 metal-substrate 表面，以及 substrate-vacuum 的 gap 表面）。
+- **$z = 0.1$ µm 的 A_2**：有四個 cell 的下方與上方是同一個 domain（金屬區域上下都是金屬；gap 與孔洞區域上下都是 vacuum），所以這些 cell 不產生介面 face。port sheet 是另外保留的。level cell 需要 face，若且唯若它下方與上方的 domain 不同，或其上有 sheet。
 
 $A_1$ 與 $S_1$ 的 cell 與 edge 數是 4 個 cell、22 條 edge；$A_2$ 是 5 個 cell、28 條 edge（`figures/layered-numbers.json`）。
 
@@ -68,6 +70,10 @@ $S_i$ 由 slab $i$ 的 active set 的 footprint 曲線建成。它的 label 是 
 - dielectric 與 vacuum 之間，由明確的 priority 決定；優先順序相同但材料不同，是錯誤。
 
 同材料的重疊（例如同一個 Net 的兩個金屬 prism）不是錯誤：它們之間的 seam 不是 required edge，會被 dissolve（見 [Label、required edge 與 dissolution](labels-and-dissolution.qmd)）。
+
+::: {.callout-note title="範例中的 label 依 Net 命名"}
+圖中的 label（`Ground`、`pad`）以 Net 命名，是目前原型的行為：它把同一個 Net 的 Entity 合併。決策 D5 已決定，設計規則是依 Entity 歸屬：不同 Entity 之間的 seam 保留為 required edge，primary group 命名為 `<kind>::<qualified entity id>[::band=k]`，依 interface 種類的總和是 sidecar 中的聯集（見[總覽](index.qmd)「SGB 給你什麼」一節的說明）。同一個 Net 的重疊區域屬於優先順序較高的 Entity，優先順序相同或未設定則 fail closed。原型尚未實作；最終的名稱拼法在 D5 實作時固定。
+:::
 
 ### Level arrangement
 
@@ -120,7 +126,7 @@ level arrangement 只接收在 3D 中真正相遇的曲線：與它相鄰的 sla
 
 ## Wall 與 wall coalescing
 
-**Wall** 是沿著 slab arrangement 的 edge 的垂直 face，該 edge 兩側的 slab label 不同。SGB 對每條 atomic slab edge 產生一個 wall，下方的 $A_i$ edge 串是它的底邊界，$A_{i+1}$ 的 edge 串是它的頂邊界。
+**Wall** 是沿著 slab arrangement 的 edge 的垂直 BREP face，該 edge 兩側的 slab label 不同。SGB 對每條 atomic slab edge 產生一個 wall，下方的 $A_i$ edge 串是它的底邊界，$A_{i+1}$ 的 edge 串是它的頂邊界。
 
 若對每個 slab 都這樣做，就會在每個 level 切開每一道 wall，連金屬 wall 明明是繼續延伸的地方也不例外。**Wall coalescing** 去除這種情況，完整的規則是：level 在以下情形才切開一道 wall：(a) 該 level 的一條 edge 或一個 vertex 落在 wall 的水平線上，例如 port sheet 的 edge 終止在金屬側壁上；或 (b) 該 level 的一個 sheet face 沿著 wall 的 chain 延伸。另外，只要相鄰的 wall run 在該處開始或結束，或有水平 face 在該 wall column（垂直 edge）上有 vertex，就會把 wall column 切開。否則，連續 slab 疊起來的 wall 會合併成一個 face。Level 在 Z 上是全域的，但它們的作用在 XY 上是局部的。
 
@@ -159,6 +165,12 @@ airbridge 有七個 prism：substrate、vacuum、兩半 ground、兩根 post 與
 - **不同 Net 的金屬重疊或接觸。** 同一個 slab 中的重疊是錯誤，會使 build 中止。接觸也是錯誤，而且在每一種 route 中都是：包含兩片 Route A sheet 共用一條 edge 或一個 vertex，以及由 snapping 造成的接觸（在 g = 1 nm 時 4 nm 的間隙可以通過，在 g = 10 nm 時則不行）。同一 Net 的有限厚度金屬若只沿著一條垂直 edge 或在一個 vertex 相遇（non-manifold 的 pinch），會被拒絕；sheet 則可以在轉角相遇。
 - **非 prism 的本體。** 截面隨 $z$ 改變的本體（斜側壁）不是 prism。它是模型的擴充點，不會被悄悄近似。
 
-## 接下來
+## 補充：重現資料
 
-[建立 arrangement](arrangement.qmd) 說明一個 arrangement 的曲線如何被 node 到格點上；[Label、required edge 與 dissolution](labels-and-dissolution.qmd) 說明哪些 edge 會被保留；[從 arrangement 到 solid](assembly.qmd) 由共用的 edge 建立 face、wall 與 volume。
+本頁的圖與數字是**計算所得**，來自 `experiments/sgb-redesign/prototype`：
+
+- `docs/design/sgb/_figures/layered_model.py` 產生 level 與 slab 的剖面、arrangement 比較、wall 計數與 airbridge 的 3D 圖，數字在 `figures/layered-numbers.json`。
+- `docs/design/sgb/_figures/layered_phantom.py` 產生兩層金屬的 phantom sliver 範例，數字在 `figures/layered-phantom-numbers.json`。
+- 全域投影是以一個 snap rounding 後的 arrangement 包含所有 footprint 曲線；局部 arrangement 是原型 pipeline 的 `build` 結果。
+
+下一頁[建立 arrangement](arrangement.qmd) 說明一個 arrangement 的曲線如何被 node 到格點上；[Label、required edge 與 dissolution](labels-and-dissolution.qmd) 說明哪些 edge 會被保留；[從 arrangement 到 solid](assembly.qmd) 由共用的 edge 建立 face、wall 與 volume。

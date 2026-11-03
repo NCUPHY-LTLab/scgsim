@@ -24,7 +24,7 @@ from _intro_common import (
 from sgbproto.emit import surface_triangles
 from sgbproto.levels import build_levels
 from sgbproto.pipeline import build
-from sgbproto.scenes import pad_in_ground
+from sgbproto.scenes import airbridge, pad_in_ground
 
 GROUP_COLOURS = {"SA": "#9ecae1", "MA": "#2171b5", "MS": "#6a51a3", "EXT": "#bdbdbd", "PORT": "#d62728"}
 GROUP_NAMES = {
@@ -155,6 +155,24 @@ def exploded_figures(result) -> int:
     return sum(len(t[1]) for t in tri.values())
 
 
+def centre_vertices() -> dict:
+    """Planned vertices that only carry an arc's centre (rebuilt from the prototype; not written by the direct writer)."""
+    specs = {"pad_in_ground_A": pad_in_ground("A"), "pad_in_ground_B": pad_in_ground("B"),
+             "pad_in_ground_B_bands": pad_in_ground("B", bands_um=(0.1, 0.5, 2.0)), "airbridge_B": airbridge()}
+    out = {}
+    for case, spec in specs.items():
+        topo = build(spec).topology
+        centres = {e.centre_vertex for e in topo.edges.values() if e.centre_vertex}
+        volumes = {v.id: v for v in topo.volumes.values()}
+        unwritten = [f for f in topo.faces.values() if not any(volumes[v].emitted for v in (f.neg_volume, f.pos_volume) if v)]
+        used = {e for f in topo.faces.values() if f not in unwritten for loop in f.loops for e, _ in loop}
+        out[case] = {"planned_vertices": len(topo.vertices), "arc_centre_vertices": len(centres),
+                     "arc_edges": sum(1 for e in topo.edges.values() if e.curve is not None),
+                     "faces_bounding_no_emitted_volume": len(unwritten), "their_groups": sorted({f.group for f in unwritten}),
+                     "edges_only_on_those_faces": sum(1 for e in topo.edges.values() if e.id not in used and e.kind != "refinement")}
+    return out
+
+
 def counts() -> dict:
     """Planned counts (stage summaries) and what the direct writer wrote and Gmsh loaded back (e3_brep validation)."""
     out = {}
@@ -181,6 +199,9 @@ def main() -> None:
     input_figure(spec)
     triangles = exploded_figures(result)
     numbers = counts()
+    for case, extra in centre_vertices().items():
+        numbers[case]["arc_centre_vertices"] = extra
+        assert numbers[case]["written_by_direct_writer"]["0"] == extra["planned_vertices"] - extra["arc_centre_vertices"]
     numbers["exploded_view"] = {"surface_triangles_drawn": triangles, "mesh_size_um": 60.0, "mesh_size_min_um": 4.0,
                                 "volume_domains": sorted(f"{v.domain.name} emitted={v.emitted}" for v in result.topology.volumes.values())}
     write_numbers("index", numbers)

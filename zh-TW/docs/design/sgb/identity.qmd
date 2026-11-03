@@ -7,9 +7,9 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/identity"
 ---
 
-本頁說明 SGB 如何以查表（而不是看幾何）回答「這個 solver entity 是什麼？」。讀完後你會知道兩層 identity、每種 entity 的 hash 規則、lineage 記錄了什麼，以及在 running example 上逐步追蹤的一次真實查詢：從 Palace attribute 一路追到 source 曲線。
+Solver 回報某個 attribute 的結果時，SGB 讓你能以查表（而不是看幾何）知道它是什麼：從 Palace attribute 一路追到 physical group、face、edge、carrier，最後到 source 曲線。這一頁說明這條 mapping chain、兩層 identity、每種 entity 的 hash 規則、lineage 記錄了什麼，並在 running example 上完整追一次。
 
-名詞在首次出現處定義，並彙整於[術語表](index.qmd#glossary)。Identity 是 pipeline 的 S8 stage（見 [stage 參考](pipeline-reference.qmd)）；它命名的 face 來自 [Building an arrangement](arrangement.qmd) 與 [From arrangements to solids](assembly.qmd)，它交出去的 group 由 [Emission](emission.qmd) 寫出。本頁一切皆為 `docs/design/sgb/_figures/identity.py` 對 `experiments/sgb-redesign/prototype` 的**計算結果**（Route B 含 band 的範例，case `pad_in_ground_B_bands`）；公式是 prototype 的。原始資料：`figures/identity-trace.json`、`figures/identity-determinism.json`、`figures/identity-stability.json`。
+本頁以 Route B 含 band 的範例（case `pad_in_ground_B_bands`）為例，公式是 prototype 的。
 
 ## 以 running example 看：attribute 7
 
@@ -28,7 +28,7 @@ flowchart LR
   C -.->|"sidecar: ids_by_tag"| N["native tags<br/>9, 14（只記錄）"]
 ```
 
-每個箭頭都是一次查表。下列數字來自 direct writer 的 sidecar（`outputs/e3_brep/pad_in_ground_B_bands/model.sidecar.json`，格式 `sgbproto-sidecar-2`）、`identity.json`，以及同一次 build 的 topology。
+每個箭頭都是一次查表。下列數字來自 direct writer 的 sidecar（格式 `sgbproto-sidecar-2`）、`identity.json`，以及同一次 build 的 topology；檔案路徑見補充。
 
 ::: {.askr-table-compact}
 | 步驟 | 你手上有 | 查詢 | 你得到 |
@@ -58,7 +58,12 @@ Face `f:2b89bc30d72746fc` 是 hole 周圍的 ring；它的 8 條 edge 是 0.5 µ
 | **Atomic topology identity** | `f:5cba27a49e17b07e`、`e:3814641e4355b553` | 同樣的輸入得到同樣的 ID；只有 entity 自己的內容改變時才改變 | 每個輸出 entity 的計畫、lineage、sidecar |
 :::
 
-**Physical group** 是交給 solver 的一組 face 或 volume 的具名集合。語意名稱由 cell 的 label 組成：surface 種類（`MA` 為 metal–vacuum、`MS` 為 metal–substrate、`SA` 為 substrate–vacuum、`PORT`、`EXT` 為外邊界、`VOL` 為 volume）、Net 或 domain，以及有 inset band 時的 band。Route A 的 sheet 以 face 命名為 `SHEET::<net>::band=k`；Surface EPR 的 MA 與 MS 兩個 row 都由 sidecar 的 `surface_epr_rows` 指到它。
+**Physical group** 是交給 solver 的一組 face 或 volume 的具名集合。這裡的 face 指輸出的 BREP face；它在 arrangement 中對應的平面區域稱為 cell，一個 face 可由一個或多個 cell 合併而成。語意名稱由 cell 的 label 組成：surface 種類（`MA` 為 metal–vacuum、`MS` 為 metal–substrate、`SA` 為 substrate–vacuum、`PORT`、`EXT` 為外邊界、`VOL` 為 volume）、Net 或 domain，以及有 inset band 時的 band。Route A 的 sheet 以 face 命名為 `SHEET::<net>::band=k`；Surface EPR 的 MA 與 MS 兩個 row 都由 sidecar 的 `surface_epr_rows` 指到它。
+
+::: {.callout-note}
+## 範例顯示的是 per Net 的 group
+prototype 目前以 per Net 合併 face 並命名 group（例如 `MA::pad`）。D5 已決定預設改為 per Entity：不同 Entity 之間的 seam 保留為 required edge，報告再依界面種類 MA/MS/SA 彙整。這部分尚未在 prototype 實作，所以本頁的 group 名稱與 membership 範例都是 per Net 的。設計規則：primary group 命名為 `<kind>::<qualified entity id>[::band=k]`（例如 `MA::chip/q0/pad::band=2`；Route A 的 sheet 為 `SHEET::<entity>::band=k`），MA、MS、SA 的總和是 sidecar 中的 union，Net 層級的 union 只用於 Electrostatic。最終拼法在實作 D5 與 Route C 時才固定，prototype 目前仍輸出 per Net 的名稱。見[決策頁](decisions.qmd#d5)。
+:::
 
 ::: {.callout-note}
 ## Attribute 不是 identity
@@ -125,6 +130,27 @@ Face 的 `sources` 是其 boundary edge 的 base carrier ID 的集合，例如 `
 
 不論 worker 數、tile 配置或 Python hash seed，同樣的輸入得到同樣的 ID。腳本在全新的 interpreter 中，以四種（tile grid、worker）設定與三個 `PYTHONHASHSEED` 值重建兩個模型，並把 build 的每個 ID hash 成一個 digest：
 
+結果：十二次執行，每個模型都只有一個 digest（`pad_in_ground_B_bands` 為 `build:22a139898b1f72d2`，隨機 layout 為 `build:4208c3b044b51b94`；完整表格見補充）。
+成立的原因：topology 是整數（grid point 與精確分數），ID 是對內容 hash，tile 切線落在 pixel 欄之間所以每個 hot pixel 只有一個 owner，合併結果依 item index 放回（見[平行化的 derivation](parallelism.qmd)）。prototype 的測試（`tests/test_determinism.py`、`tests/test_tiling.py`）對 tile 數 1–4、至多 8 個 worker、隨機 layout 與三個 hash seed 重複了這件事；scaling 的執行（`outputs/scaling.json`）則對每個模型大小、每種 tile 與 worker 設定都記錄同一個 digest。直接 writer 的輸出對任何 worker 數逐位元相同。
+
+## 不相關的修改會改變什麼
+
+把範例中的 lumped port 移除。Band 完全沒變，band group 也證實這點：`MA::pad::band=0…3`、`MS::pad::band=0…3`、`MS::pad`、`MS::Ground`、`EXT` 與 `SA` 各 group 在有與沒有 port 時成員 ID 完全相同。改變的是 port 碰到的東西。
+
+Vertex、edge、face、volume 的數量與有多少 ID 在兩次 build 之間保持相同，見補充的表格：59 個 face 中有 54 個、250 條 edge 中有 234 條保持原 ID。
+Route B 的 port 碰到 pad 與 ground 的 side wall，所以那些 wall 在該處被切開（`MA::pad` 有 port 時 15 個 face、沒有時 14 個，`MA::Ground` 為 6 與 5）。Volume 是對它的 cell 集合 hash，而 cell 的邊界改變了，所以 vacuum 與兩個被排除的 conductor volume 得到新的 ID；substrate volume 保留原 ID。除了 `PORT::p1`，兩次 build 的 group 名稱相同。因此，不相關的修改只會改變內容被它碰到的 entity 的 ID，semantic 名稱不會移動。
+
+## 限制
+
+- ID 識別的是內容，不是意圖。移動過的 feature 是新 entity；把使用者的標籤跨過這種修改帶過去，是 SGB 之上那一層的命名政策。
+- 64 bit 的 digest 讓 ID 保持簡短。依生日界，一百萬個 entity 之間發生任何碰撞的機率約 $3 \times 10^{-8}$；最大的 scaling 執行有 255 052 個 face。
+
+## 補充：重現資料
+
+本頁一切皆由 `docs/design/sgb/_figures/identity.py` 對 `experiments/sgb-redesign/prototype` 計算而得。查詢使用的檔案是 `outputs/e3_brep/pad_in_ground_B_bands/model.sidecar.json` 與 `outputs/pad_in_ground_B_bands/identity.json`；原始資料另存於 `figures/identity-trace.json`、`figures/identity-determinism.json`、`figures/identity-stability.json`。
+
+決定性（四種 tile 與 worker 設定，各三個 `PYTHONHASHSEED`）：
+
 ::: {.askr-table-compact}
 | Tiles | Workers | Hash seed | Digest，pad-in-ground B 含 band | Digest，隨機 layout（60 個 feature，seed 5） |
 |---|---|---|---|---|
@@ -134,11 +160,7 @@ Face 的 `sources` 是其 boundary edge 的 base carrier ID 的集合，例如 `
 | 4×4 | 4 | 0, 1, 12345 | `build:22a139898b1f72d2` | `build:4208c3b044b51b94` |
 :::
 
-十二次執行，每個模型只有一個 digest。成立的原因：topology 是整數（grid point 與精確分數），ID 是對內容 hash，tile 切線落在 pixel 欄之間所以每個 hot pixel 只有一個 owner，合併結果依 item index 放回（見[平行化的 derivation](parallelism.qmd)）。prototype 的測試（`tests/test_determinism.py`、`tests/test_tiling.py`）對 tile 數 1–4、至多 8 個 worker、隨機 layout 與三個 hash seed 重複了這件事；scaling 的執行（`outputs/scaling.json`）則對每個模型大小、每種 tile 與 worker 設定都記錄同一個 digest。直接 writer 的輸出對任何 worker 數逐位元相同。
-
-## 不相關的修改會改變什麼
-
-把範例中的 lumped port 移除。Band 完全沒變，band group 也證實這點：`MA::pad::band=0…3`、`MS::pad::band=0…3`、`MS::pad`、`MS::Ground`、`EXT` 與 `SA` 各 group 在有與沒有 port 時成員 ID 完全相同。改變的是 port 碰到的東西。
+有與沒有 port 的 ID 比較：
 
 ::: {.askr-table-compact .askr-table-numeric}
 | 種類 | 有 port | 無 port | 共有 | 只在有 port | 只在無 port |
@@ -148,10 +170,3 @@ Face 的 `sources` 是其 boundary edge 的 base carrier ID 的集合，例如 `
 | faces | 59 | 56 | 54 | 5 | 2 |
 | volumes | 4 | 4 | 1 | 3 | 3 |
 :::
-
-Route B 的 port 碰到 pad 與 ground 的 side wall，所以那些 wall 在該處被切開（`MA::pad` 有 port 時 15 個 face、沒有時 14 個，`MA::Ground` 為 6 與 5）。Volume 是對它的 cell 集合 hash，而 cell 的邊界改變了，所以 vacuum 與兩個被排除的 conductor volume 得到新的 ID；substrate volume 保留原 ID。除了 `PORT::p1`，兩次 build 的 group 名稱相同。因此，不相關的修改只會改變內容被它碰到的 entity 的 ID，semantic 名稱不會移動。
-
-## 限制
-
-- ID 識別的是內容，不是意圖。移動過的 feature 是新 entity；把使用者的標籤跨過這種修改帶過去，是 SGB 之上那一層的命名政策。
-- 64 bit 的 digest 讓 ID 保持簡短。依生日界，一百萬個 entity 之間發生任何碰撞的機率約 $3 \times 10^{-8}$；最大的 scaling 執行有 255 052 個 face。

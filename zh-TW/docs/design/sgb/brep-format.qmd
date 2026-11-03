@@ -7,9 +7,9 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/brep-format"
 ---
 
-本頁讓你能打開 direct writer 輸出的 `model.brep` 或 `model.xao`，親手核對任何一筆 record。它是 [emission](emission.qmd) 的格式附錄：emission 說明為什麼寫檔、怎麼交給 Gmsh；本頁說明檔案裡寫了什麼。
+writer 輸出的 BREP 是純文字，XAO 是把同一份 BREP 加上 sub-shape reference 與 group 包起來的 XML。審查 writer 時，你可以直接打開 `model.brep` 或 `model.xao`，親手核對任何一筆 record。這一頁逐段說明檔案的結構、編號規則與 orientation 規則；為什麼要自己寫檔、怎麼交給 Gmsh，見 [emission](emission.qmd)。
 
-範例是 `pad_in_ground_B`（pad-in-ground，[Route B](routes.qmd)）。本頁所有摘錄都是 `experiments/sgb-redesign/prototype/outputs/e3_brep/pad_in_ground_B/` 內檔案的真實行，行號標在區塊標題上；`docs/design/sgb/_figures/emission_snippets_check.py` 會把每個區塊與檔案逐行比對。名詞在首次出現處定義，並彙整於[詞彙表](index.qmd#glossary)。
+範例是 `pad_in_ground_B`（pad-in-ground，[Route B](routes.qmd)）。本頁引用的區塊都是這個範例檔案中的真實行，行號標在區塊標題上。文中的 face 都是輸出的 BREP face，不是 arrangement 的 cell（兩者的差別見 [emission](emission.qmd#the-running-example-at-the-point-of-emission)）。
 
 ## BREP 基本結構 {#brep-essentials}
 
@@ -150,3 +150,7 @@ Ed
 ```
 
 注意兩套編號不同：BREP `TShapes` 內的 reference 從 section 結尾往回算；XAO 的 `reference` 是 `TopExp::MapShapes` pre-order 的位置，從 compound = 1 起算。例如第一個 face 在 BREP 裡是 `42`，在 XAO 裡是 `reference="4"`、`index="0"`，在 Gmsh 裡是 tag (2, 1)。planned id 如何對應到這些編號，見 [emission](emission.qmd#xao-groups-and-the-planned-id-to-tag-map)。
+
+## 補充：重現資料 {#reproduction-data}
+
+本頁的摘錄來自 `experiments/sgb-redesign/prototype/outputs/e3_brep/pad_in_ground_B/` 的 `model.brep`、`model.xao` 與 `model.sidecar.json`（由 `examples/brep_emit.py` 產生）。`docs/design/sgb/_figures/emission_snippets_check.py` 會把每個區塊與檔案的對應行逐行比對，不一致時以非零狀態結束。單元測試在 `experiments/sgb-redesign/prototype/tests/test_brep_writer.py`。

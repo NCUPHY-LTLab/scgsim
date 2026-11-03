@@ -7,17 +7,19 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/pipeline-reference"
 ---
 
-本頁用於查詢，不需依序閱讀。它列出 SGB pipeline 每個 stage 讀什麼、產生什麼、出問題時怎麼辦，以及其間每個 record 的欄位。stage 與 record 是[總覽](index.qmd)的設計；名詞見[術語表](index.qmd#glossary)。
+這一頁是查詢用的：每個 stage 讀什麼、產生什麼、出問題時怎麼辦，以及 stage 之間傳遞的 record 欄位。stage 與 record 的設計見[總覽](index.qmd)，名詞見[術語表](index.qmd#glossary)。
 
-**欄位名稱是 prototype 的**（`experiments/sgb-redesign/prototype/sgbproto/`，主要是 `records.py`、`assembly.py`、`layers.py`、`validate.py`、`emit.py`、`brep_writer.py`）。production 的名稱可以不同；設計固定的是各自的角色。S0 與 S1 是既有的 source contract，不在 prototype 中；prototype 從 S2 的 `ModelSpec` 開始。
+欄位名稱是 prototype 的（`sgbproto/` 的 `records.py`、`assembly.py`、`layers.py`、`validate.py`、`emit.py`、`brep_writer.py`）；production 的名稱可以不同，設計固定的是各自的角色。**S0 與 S1 不在 prototype 中**：prototype 直接從 S2 的 `ModelSpec` 開始，並且直接建立零厚度的 prism，所以 prototype 能跑通，並不代表已完成與 `GeometryPlan` 的整合。
+
+本頁分開使用兩個詞：**cell** 是 arrangement 中的平面區域；**face** 是 topology 中實際輸出的 BREP face，一個 face 由一個或多個 cell 合併而成（horizontal face），或是 wall。
 
 ## Stage 總覽
 
 ::: {.askr-table-compact}
 | Stage | 名稱 | 輸入 → 輸出 | 平行單位 | Prototype 的計時 stage |
 |---|---|---|---|---|
-| S0 | Source snapshot | `GeometryPlan` → normalized source | occurrence | 不在 prototype 中 |
-| S1 | Physical interpretation | source → effective prism | entity | 不在 prototype 中（`scenes.py` 直接建 prism） |
+| S0 | Source snapshot | `GeometryPlan` → normalized source（沿用 develop 的 fixed-grid source preparation） | occurrence | 不在 prototype 中 |
+| S1 | Physical interpretation | source → effective prism（含 Route A 的零厚度 sheet） | entity | 不在 prototype 中（`scenes.py` 直接建 prism） |
 | S2 | Prism catalogue | effective input → `PrismRecord`、level、slab | entity | `S2_levels`（serial） |
 | S3 | Cut families | prism + 請求 → `CurveFamilyRecord` | region × margin | 包含在 S2 的輸入內（`inset.py`） |
 | S4 | Arrangement | curve → snap-rounded $S_i$、$A_i$ | level 或 slab × tile | `noding_kernels`（parallel）、`noding_driver`、`dcel_faces`、`linking`、`arc_realisation` |
@@ -29,7 +31,7 @@ scgsim-id: "docs/design/sgb/pipeline-reference"
 | S10 | Emission | 計畫 → BREP/XAO 直接序列化 | 逐 chunk 平行寫出；其餘序列 | prototype 以 Gmsh API oracle 量測：`occ_build`、`synchronize`、`physical_groups`、`write_xao` |
 :::
 
-Route A 與 Route B 是 S7 的 labelling 政策（以及 S1 的 prism 詮釋），不是不同的 pipeline。
+Route A、Route B 與 Route C 是 S7 的 labelling 政策（以及 S1 的 prism 詮釋），不是不同的 pipeline。Route C 保留 conductor volume 並在內部做 mesh（D1，納入 v1），prototype 尚未實作。
 
 ## Stage 細節
 
@@ -37,11 +39,13 @@ Route A 與 Route B 是 S7 的 labelling 政策（以及 S1 的 prism 詮釋）�
 
 ### S0 Source snapshot
 
+S0 與 S1 沿用 develop 中已有的 fixed-grid source preparation：source 的正規化與 polygon Boolean 都在宣告的 grid 上進行，它的 `GeometryGridContext` 攜帶模型 grid $g$，S4 就使用這個 $g$。從 S4 起才是新的 pipeline。
+
 ::: {.askr-table-compact}
 | | |
 |---|---|
 | 輸入 | `GeometryPlan`（occurrence、Net、產生的 vacuum、contact 與 route 宣告） |
-| 輸出 | normalized source：帶有 source identity 的 polygon |
+| 輸出 | normalized source：帶有 source identity 的 polygon，以及 `GeometryGridContext`（`grid_size_um`、`coordinate_frame`） |
 | Record | 既有的 source contract |
 | 平行單位 | occurrence |
 | 失敗 | 既有 contract 的 source 驗證 |
@@ -49,14 +53,16 @@ Route A 與 Route B 是 S7 的 labelling 政策（以及 S1 的 prism 詮釋）�
 
 ### S1 Physical interpretation
 
+目前的 Thin Film contract 保留真實的金屬宣告：`PhysicalLayerDeclaration` 帶有厚度（例如 100 nm）與 source identity。S1 以 `interpret_physical_geometry` 與明確的 approximation profile（例如 `thin_film`）把它轉成零厚度的 effective sheet。Route A 拒絕的是**經過 S1 之後**仍然有厚度的 conductor，也就是沒有任何 profile 把它對應成 sheet；它不是要求 source 一開始就是零厚度。prototype 在入口直接檢查並對有厚度的 conductor 拋出 `RouteError`，那是 prototype 的簡化，不是 S1 的設計。
+
 ::: {.askr-table-compact}
 | | |
 |---|---|
-| 輸入 | normalized source、stack、route |
-| 輸出 | effective prism：材料、Net、Z 區間、role |
-| Record | 餵給 `PrismRecord` |
+| 輸入 | normalized source、stack、approximation profile |
+| 輸出 | effective prism：材料、Net、Z 區間、role；source 的物理宣告仍保留 |
+| Record | 餵給 `PrismRecord`；`PhysicalLayerDeclaration` 是 source 端的 record |
 | 平行單位 | entity |
-| 失敗 | 既有 contract 的錯誤（材料無法解析、幾何與 route 不相容） |
+| 失敗 | 既有 contract 的錯誤（缺少物理宣告、材料無法解析、幾何與 route 不相容） |
 :::
 
 ### S2 Prism catalogue
@@ -127,13 +133,15 @@ Tile seam 不是 family，所以沒有 `dissolve` edge 政策；`dissolve` 這�
 | | |
 |---|---|
 | 輸入 | topology、route 政策 |
-| 輸出 | 哪些 volume 要輸出（Route B 排除 conductor volume）、哪些 face 是 PEC |
-| Record | `RoutePolicy`（`exclude_conductor_volumes`、`allow_finite_conductors`） |
+| 輸出 | 哪些 volume 要輸出（Route B 排除 conductor volume；Route C 保留它們）、哪些 face 是 PEC |
+| Record | `RoutePolicy`（`exclude_conductor_volumes`、`allow_finite_conductors`）；Route C 是第三個設定，尚未在 prototype 中 |
 | 平行單位 | face 或 volume（label 規則） |
 | 失敗 | 不同 Net 的 conductor 隔著 face 接觸時 `OverlapError`（`ContactError` 是其子類別） |
 :::
 
 ### S8 Identity 與 group
+
+prototype 目前以 per Net 合併 face 並命名 group；D5 已決定預設改為 per Entity（不同 Entity 之間的 seam 保留為 required edge，報告依 MA/MS/SA 彙整），那部分尚未實作，見[決策頁](decisions.qmd#d5)。
 
 ::: {.askr-table-compact}
 | | |
@@ -213,6 +221,8 @@ Validation 分三層：（1）開發階段的測試以 OCP 執行 OCCT 的 `BRep
 :::
 
 ## Physical group 名稱
+
+下表是 prototype 目前（per Net）的名稱。設計規則：primary group 命名為 `<kind>::<qualified entity id>[::band=k]`（例如 `MA::chip/q0/pad::band=2`；Route A 的 sheet 為 `SHEET::<entity>::band=k`），MA、MS、SA 的總和是 sidecar 中的 union，Net 層級的 union 只用於 Electrostatic。最終拼法在實作 D5 與 Route C 時才固定，prototype 目前仍輸出 per Net 的名稱。Route C 的 conductor 內部 volume 命名為 `VOL::<entity>`。
 
 ::: {.askr-table-compact}
 | 名稱 | 意義 |
