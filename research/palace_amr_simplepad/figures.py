@@ -101,7 +101,10 @@ def load_case_series(study_dir: Path) -> tuple[CaseSeries, ...]:
 
 def _read_export(root: Path, case: Mapping[str, Any], name: str) -> dict[str, Any]:
     """Keep an explicitly reported export error separate from available data."""
-    if case.get("analysis_status") == "analysis_error":
+    if case.get("analysis_status") in {
+        "analysis_error",
+        "not_run_preparation_failed",
+    }:
         return {}
     relative = case[f"{name}_path"]
     path = (root / relative).resolve()
@@ -262,8 +265,9 @@ def case_summary(case: CaseSeries) -> dict[str, Any]:
     return {
         "case": case.case["case_id"],
         "route": case.case["route_id"],
+        "preparation_status": case.case.get("preparation_status"),
         "exit_code": case.case.get("run_exit_code"),
-        "run_status": case.analysis.get("run_status"),
+        "run_status": case.analysis.get("run_status", case.case.get("run_status")),
         "integrity": case.analysis.get("integrity"),
         "analysis_status": case.case.get("analysis_status"),
         "analysis_error_type": error.get("type"),
@@ -273,10 +277,26 @@ def case_summary(case: CaseSeries) -> dict[str, Any]:
     }
 
 
+def observed_route_ids(cases: Sequence[CaseSeries]) -> tuple[str, ...]:
+    """Facet only routes with recorded solve or refinement observations."""
+    return tuple(
+        route
+        for route in ("route-a", "route-b")
+        if any(
+            case.case["route_id"] == route
+            and (case.analysis.get("passes") or case.analysis.get("transitions"))
+            for case in cases
+        )
+    )
+
+
 def render_figures(cases: Sequence[CaseSeries], output: Path) -> list[str]:
     """Produce standalone SVGs from observed points, grouped by geometry route."""
     from matplotlib import pyplot as plt  # noqa: PLC0415 -- CSV export stays usable without the optional plotting runtime.
 
+    routes = observed_route_ids(cases)
+    if not routes:
+        return []
     figures = []
     specifications = (
         ("zz-work", "native_zz_norm", "Native ZZ norm", 1.0),
@@ -303,8 +323,14 @@ def render_figures(cases: Sequence[CaseSeries], output: Path) -> list[str]:
         }
     ):
         for stem, quantity, label, scale in specifications:
-            figure, axes = plt.subplots(2, 2, figsize=(11, 7), layout="constrained")
-            for row, route in enumerate(("route-a", "route-b")):
+            figure, axes = plt.subplots(
+                len(routes),
+                2,
+                figsize=(11, 3.5 * len(routes)),
+                layout="constrained",
+                squeeze=False,
+            )
+            for row, route in enumerate(routes):
                 for column, (xkey, xlabel) in enumerate(
                     (
                         ("true_dofs", "Global true DOFs"),
@@ -372,8 +398,15 @@ def _plot_series(
 def _render_refinement(cases: Sequence[CaseSeries], output: Path) -> list[str]:
     from matplotlib import pyplot as plt  # noqa: PLC0415 -- native refinement plots use the optional plotting runtime.
 
-    figure, axes = plt.subplots(2, 2, figsize=(11, 7), layout="constrained")
-    for row, route in enumerate(("route-a", "route-b")):
+    routes = observed_route_ids(cases)
+    figure, axes = plt.subplots(
+        len(routes),
+        2,
+        figsize=(11, 3.5 * len(routes)),
+        layout="constrained",
+        squeeze=False,
+    )
+    for row, route in enumerate(routes):
         for column, (quantity, label) in enumerate(
             (
                 ("closure_factor", "Refined parents / marked cells"),
@@ -412,8 +445,15 @@ def _plot_number(value: Any) -> bool:
 def _render_parent_counts(cases: Sequence[CaseSeries], output: Path) -> list[str]:
     from matplotlib import pyplot as plt  # noqa: PLC0415 -- standalone scientific figures use the optional plotting runtime.
 
-    figure, axes = plt.subplots(1, 2, figsize=(11, 4), layout="constrained")
-    for axis, route in zip(axes, ("route-a", "route-b"), strict=True):
+    routes = observed_route_ids(cases)
+    figure, axes = plt.subplots(
+        1,
+        len(routes),
+        figsize=(5.5 * len(routes), 4),
+        layout="constrained",
+        squeeze=False,
+    )
+    for axis, route in zip(axes.flat, routes, strict=True):
         for case in cases:
             if case.case["route_id"] != route:
                 continue
@@ -452,7 +492,7 @@ def _render_parent_counts(cases: Sequence[CaseSeries], output: Path) -> list[str
         if axis.has_data():
             axis.legend(fontsize=8)
     written = []
-    if any(axis.has_data() for axis in axes):
+    if any(axis.has_data() for axis in axes.flat):
         figure.savefig(output / "parent-counts.svg")
         written.append("parent-counts.svg")
     plt.close(figure)
@@ -462,8 +502,15 @@ def _render_parent_counts(cases: Sequence[CaseSeries], output: Path) -> list[str
 def _render_marking(cases: Sequence[CaseSeries], output: Path) -> list[str]:
     from matplotlib import pyplot as plt  # noqa: PLC0415 -- standalone scientific figures use the optional plotting runtime.
 
-    figure, axes = plt.subplots(2, 2, figsize=(11, 7), layout="constrained")
-    for row, route in enumerate(("route-a", "route-b")):
+    routes = observed_route_ids(cases)
+    figure, axes = plt.subplots(
+        len(routes),
+        2,
+        figsize=(11, 3.5 * len(routes)),
+        layout="constrained",
+        squeeze=False,
+    )
+    for row, route in enumerate(routes):
         for column, (quantity, label) in enumerate(
             (
                 ("marked_fraction", "Fraction of pre-step cells marked"),

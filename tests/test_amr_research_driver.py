@@ -37,9 +37,13 @@ from research.palace_amr_simplepad.contract import (
 from research.palace_amr_simplepad.driver import (
     analyze_study,
     launcher_script,
+    main,
     new_study_dir,
+    record_preparation_skips,
     record_sealed_case,
     require_prepared_manifest,
+    select_run_cases,
+    verify_case_input_hashes,
     write_manifest,
 )
 from research.palace_amr_simplepad.preparation_evidence import (
@@ -200,6 +204,155 @@ def test_route_failure_is_retained_other_route_attempted_and_run_refused(tmp_pat
         )
     with pytest.raises(ValueError, match="completely prepared study"):
         require_prepared_manifest(manifest)
+
+
+def test_run_cli_accepts_explicit_prepared_routes_only_flag(tmp_path, capsys):
+    """Expose the incomplete-preparation run mode only through its explicit flag."""
+    with pytest.raises(SystemExit) as exit_info:
+        main(["run", str(tmp_path), "--prepared-routes-only", "--help"])
+    assert exit_info.value.code == 0
+    assert "--prepared-routes-only" in capsys.readouterr().out
+
+
+def test_prepared_routes_only_selects_complete_pair_and_skips_failed_pair():
+    """Select a sealed conformal/nonconformal pair and retain failed cases separately."""
+    manifest = _partially_prepared_manifest()
+    selection = select_run_cases(manifest, prepared_routes_only=True)
+    assert [case["case_id"] for case in selection.selected_cases] == ["b-c", "b-nc"]
+    assert [case["case_id"] for case in selection.skipped_cases] == ["a-c", "a-nc"]
+    with pytest.raises(ValueError, match="completely prepared study"):
+        select_run_cases(manifest, prepared_routes_only=False)
+
+
+def test_preparation_skip_records_status_without_receipt_or_exit_code():
+    """Describe cases omitted from execution without asserting a solver outcome."""
+    manifest = _partially_prepared_manifest()
+    selection = select_run_cases(manifest, prepared_routes_only=True)
+    assert record_preparation_skips(selection.skipped_cases) == 2
+    for case in selection.skipped_cases:
+        assert case["run_status"] == "not_run_preparation_failed"
+        assert case["run_exit_code"] is None
+        assert "receipt_present" not in case
+        assert "receipt_sha256" not in case
+
+
+def test_prepared_routes_only_rejects_half_sealed_pair():
+    """Reject a route unless both its conformal and nonconformal cases are sealed."""
+    manifest = _partially_prepared_manifest()
+    manifest["cases"][2]["preparation_status"] = "failed"
+    with pytest.raises(ValueError, match="half-sealed route route-b"):
+        select_run_cases(manifest, prepared_routes_only=True)
+
+
+def test_prepared_routes_only_requires_at_least_one_complete_pair():
+    """Refuse a preparation failure that left no executable route pair."""
+    manifest = _partially_prepared_manifest()
+    for case in manifest["cases"]:
+        case["preparation_status"] = "failed"
+    manifest["routes"][1]["preparation_status"] = "failed"
+    with pytest.raises(ValueError, match="at least one complete route pair"):
+        select_run_cases(manifest, prepared_routes_only=True)
+
+
+def test_prepared_routes_only_requires_unique_handoff_ids():
+    """Reject reuse of a handoff identity within the selected route pair."""
+    manifest = _partially_prepared_manifest()
+    manifest["cases"][3]["handoff_id"] = manifest["cases"][2]["handoff_id"]
+    with pytest.raises(ValueError, match="unique handoff identities"):
+        select_run_cases(manifest, prepared_routes_only=True)
+
+
+def test_selected_route_inputs_are_hash_verified_and_share_mesh(tmp_path):
+    """Verify selected config and mesh bytes and route-level mesh identity."""
+    cases = []
+    for case_id in ("b-c", "b-nc"):
+        run_dir = tmp_path / "runs" / case_id
+        run_dir.mkdir(parents=True)
+        (run_dir / "config.json").write_text(f"config {case_id}", encoding="utf-8")
+        (run_dir / "palace.msh").write_text("shared mesh", encoding="utf-8")
+        cases.append(
+            {
+                "case_id": case_id,
+                "route_id": "route-b",
+                "run_dir": run_dir.relative_to(tmp_path).as_posix(),
+                "config_sha256": hashlib.sha256(
+                    (run_dir / "config.json").read_bytes()
+                ).hexdigest(),
+                "mesh_sha256": hashlib.sha256(
+                    (run_dir / "palace.msh").read_bytes()
+                ).hexdigest(),
+            }
+        )
+    verify_case_input_hashes(tmp_path, tuple(cases))
+
+    first_config = tmp_path / cases[0]["run_dir"] / "config.json"
+    first_config.write_text("changed config", encoding="utf-8")
+    with pytest.raises(ValueError, match="b-c config"):
+        verify_case_input_hashes(tmp_path, tuple(cases))
+    first_config.write_text("config b-c", encoding="utf-8")
+
+    second_mesh = tmp_path / cases[1]["run_dir"] / "palace.msh"
+    second_mesh.write_text("other mesh", encoding="utf-8")
+    cases[1]["mesh_sha256"] = hashlib.sha256(second_mesh.read_bytes()).hexdigest()
+    with pytest.raises(ValueError, match="do not share one mesh: route-b"):
+        verify_case_input_hashes(tmp_path, tuple(cases))
+
+
+def test_analysis_marks_skipped_cases_without_creating_result_payloads(tmp_path):
+    """Represent prepared-route skips explicitly without manufacturing analysis data."""
+    manifest = _partially_prepared_manifest()
+    manifest["status"] = "run_attempts_complete"
+    manifest["failed_run_count"] = 0
+    manifest["run_skipped_count"] = len(manifest["cases"])
+    for case in manifest["cases"]:
+        case["run_status"] = "not_run_preparation_failed"
+        case["run_exit_code"] = None
+    write_manifest(tmp_path, manifest)
+
+    assert analyze_study(tmp_path) == 1
+    result = json.loads((tmp_path / "study-manifest.json").read_text())
+    assert result["analysis_error_count"] == 0
+    assert result["analysis_skipped_count"] == 4
+    for case in result["cases"]:
+        if case["run_status"] == "not_run_preparation_failed":
+            assert case["analysis_status"] == "not_run_preparation_failed"
+            assert "benchmark_sha256" not in case
+            assert "amr_analysis_sha256" not in case
+    assert not (tmp_path / "analysis").exists()
+
+
+def _partially_prepared_manifest():
+    """Describe four planned cases with one failed route and one sealed pair."""
+    cases = []
+    for case in CASES:
+        sealed = case.route_id == "route-b"
+        record = {
+            "case_id": case.case_id,
+            "route_id": case.route_id,
+            "representation": case.representation,
+            "approximation": case.approximation,
+            "amr_nonconformal": case.nonconformal,
+            "preparation_status": "sealed" if sealed else "failed",
+        }
+        if sealed:
+            record.update(
+                handoff_id=f"handoff-{case.case_id}",
+                run_dir=f"runs/{case.case_id}/{case.route_id}",
+                config_sha256=f"config-hash-{case.case_id}",
+                mesh_sha256="shared-route-b-mesh",
+                benchmark_path=f"analysis/{case.case_id}-benchmark.json",
+                amr_analysis_path=f"analysis/{case.case_id}-amr.json",
+            )
+        cases.append(record)
+    return {
+        "schema": "scgsim.palace_amr_simplepad.study.v1",
+        "status": "preparation_failed",
+        "routes": [
+            {"route_id": "route-a", "preparation_status": "failed"},
+            {"route_id": "route-b", "preparation_status": "completed"},
+        ],
+        "cases": cases,
+    }
 
 
 def test_launcher_executes_serial_probe_and_fixed_mpi_binding_with_spaced_paths(

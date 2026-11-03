@@ -8,8 +8,10 @@ import pytest
 
 from research.palace_amr_simplepad.figures import (
     CaseSeries,
+    case_summary,
     load_case_series,
     observation_rows,
+    observed_route_ids,
     write_observations,
     write_transitions,
 )
@@ -102,3 +104,28 @@ def test_comparison_rejects_changed_export_bytes(tmp_path):
     analysis.write_text('{"passes": [], "transitions": [], "reference": "changed"}')
     with pytest.raises(ValueError, match="digest mismatch"):
         load_case_series(tmp_path)
+
+
+def test_unprepared_route_has_status_without_invented_exports_or_plot_facets(tmp_path):
+    """An explicitly skipped route needs no result files and adds no empty facet."""
+    skipped = {
+        "case_id": "a-c",
+        "route_id": "route-a",
+        "preparation_status": "failed",
+        "run_status": "not_run_preparation_failed",
+        "analysis_status": "not_run_preparation_failed",
+        "run_exit_code": None,
+    }
+    manifest = {"status": "analysis_attempts_complete", "cases": [skipped]}
+    (tmp_path / "study-manifest.json").write_text(json.dumps(manifest))
+    cases = load_case_series(tmp_path)
+    assert observation_rows(cases[0]) == []
+    assert case_summary(cases[0])["last_observation"] is None
+    assert case_summary(cases[0])["run_status"] == "not_run_preparation_failed"
+    assert observed_route_ids(cases) == ()
+    observed = CaseSeries(
+        {"case_id": "b-c", "route_id": "route-b"},
+        {"passes": [{"native_iteration": 1}], "transitions": []},
+        {},
+    )
+    assert observed_route_ids((*cases, observed)) == ("route-b",)

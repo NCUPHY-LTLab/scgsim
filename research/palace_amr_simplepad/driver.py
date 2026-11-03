@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import importlib.metadata
 import json
 import os
@@ -53,6 +52,14 @@ from .preparation_evidence import (
     prepare_routes,
 )
 from .provenance import capture_host_resources, capture_scgsim_provenance
+from .run_selection import (
+    record_preparation_skips,
+    require_prepared_manifest,
+    select_run_cases,
+    sha256_file,
+    study_path,
+    verify_case_input_hashes,
+)
 
 if TYPE_CHECKING:
     from scgsim.palace import ElectrostaticSim
@@ -116,7 +123,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(study_dir)
         return exit_code
     if arguments.stage == "run":
-        return _run_study(arguments.study_dir)
+        return _run_study(
+            arguments.study_dir,
+            prepared_routes_only=arguments.prepared_routes_only,
+        )
     return analyze_study(arguments.study_dir)
 
 
@@ -133,6 +143,11 @@ def _parse_arguments(argv: Sequence[str] | None) -> argparse.Namespace:
     prepare.add_argument("--mpi-launcher", type=Path, default=MPI_LAUNCHER)
     run = commands.add_parser("run", help="run all prepared cases sequentially")
     run.add_argument("study_dir", type=Path)
+    run.add_argument(
+        "--prepared-routes-only",
+        action="store_true",
+        help="run only complete route pairs from a partially prepared study",
+    )
     analyze = commands.add_parser("analyze", help="resolve and export measured results")
     analyze.add_argument("study_dir", type=Path)
     return parser.parse_args(argv)
@@ -325,18 +340,21 @@ def _set_case_controls(simulation: ElectrostaticSim, case: CaseDefinition) -> No
     )
 
 
-def _run_study(study_dir: Path) -> int:
-    """Attempt all four prepared handoffs sequentially and retain each outcome."""
+def _run_study(study_dir: Path, *, prepared_routes_only: bool = False) -> int:
+    """Attempt selected complete route pairs and retain every case outcome."""
     root = study_dir.expanduser().resolve()
     manifest = _read_manifest(root)
-    require_prepared_manifest(manifest)
+    selection = select_run_cases(manifest, prepared_routes_only=prepared_routes_only)
+    verify_case_input_hashes(root, selection.selected_cases)
     _verify_toolchain_identities(root, manifest)
     manifest["run_host_resources"] = capture_host_resources()
+    manifest["prepared_routes_only"] = prepared_routes_only
+    manifest["run_skipped_count"] = record_preparation_skips(selection.skipped_cases)
     manifest["status"] = "running"
     write_manifest(root, manifest)
     failed_cases = 0
-    for case in manifest["cases"]:
-        run_dir = _study_path(root, case["run_dir"])
+    for case in selection.selected_cases:
+        run_dir = study_path(root, case["run_dir"])
         try:
             completed = subprocess.run(
                 ["bash", str(run_dir / "run_palace.sh")], cwd=run_dir, check=False
@@ -362,7 +380,7 @@ def _run_study(study_dir: Path) -> int:
     manifest["status"] = "run_attempts_complete"
     manifest["failed_run_count"] = failed_cases
     write_manifest(root, manifest)
-    return int(failed_cases > 0)
+    return int(failed_cases > 0 or bool(selection.skipped_cases))
 
 
 def _record_receipt(run_dir: Path, case: dict[str, Any]) -> bool:
@@ -371,7 +389,7 @@ def _record_receipt(run_dir: Path, case: dict[str, Any]) -> bool:
     if not receipt.is_file():
         case["receipt_sha256"] = None
         return False
-    case["receipt_sha256"] = _sha256(receipt)
+    case["receipt_sha256"] = sha256_file(receipt)
     return True
 
 
@@ -382,7 +400,13 @@ def analyze_study(study_dir: Path) -> int:
     if manifest.get("status") != "run_attempts_complete":
         raise ValueError("analyze requires all four handoff attempts to finish")
     failed_cases = 0
+    skipped_cases = 0
     for case in manifest["cases"]:
+        if case.get("run_status") == "not_run_preparation_failed":
+            case["analysis_status"] = "not_run_preparation_failed"
+            skipped_cases += 1
+            write_manifest(root, manifest)
+            continue
         try:
             benchmark_data, analysis_data = analyze_case(root, case)
         except (OSError, ValueError, TypeError, KeyError, RuntimeError) as exc:
@@ -390,18 +414,24 @@ def analyze_study(study_dir: Path) -> int:
             case["analysis_error"] = {"type": type(exc).__name__, "message": str(exc)}
             failed_cases += 1
         else:
-            benchmark_path = _study_path(root, case["benchmark_path"])
-            amr_path = _study_path(root, case["amr_analysis_path"])
+            benchmark_path = study_path(root, case["benchmark_path"])
+            amr_path = study_path(root, case["amr_analysis_path"])
             _write_json(benchmark_path, benchmark_data)
             _write_json(amr_path, analysis_data)
             case["analysis_status"] = "exported_from_observed_run"
-            case["benchmark_sha256"] = _sha256(benchmark_path)
-            case["amr_analysis_sha256"] = _sha256(amr_path)
+            case["benchmark_sha256"] = sha256_file(benchmark_path)
+            case["amr_analysis_sha256"] = sha256_file(amr_path)
         write_manifest(root, manifest)
     manifest["status"] = "analysis_attempts_complete"
     manifest["analysis_error_count"] = failed_cases
+    manifest["analysis_skipped_count"] = skipped_cases
     write_manifest(root, manifest)
-    return int(failed_cases > 0 or manifest.get("failed_run_count", 0) > 0)
+    return int(
+        failed_cases > 0
+        or skipped_cases > 0
+        or manifest.get("failed_run_count", 0) > 0
+        or manifest.get("run_skipped_count", 0) > 0
+    )
 
 
 def analyze_case(
@@ -414,7 +444,7 @@ def analyze_case(
         resolve_palace_result,
     )
 
-    run_dir = _study_path(study_dir, case["run_dir"])
+    run_dir = study_path(study_dir, case["run_dir"])
     returned = case.get("run_exit_code") == 0 and case.get("receipt_present") is True
     if returned:
         observed = resolve_palace_result(
@@ -471,7 +501,7 @@ def _verify_handoff_contract(handoff: HandoffPlan) -> None:
         if isinstance(relative, str) and isinstance(digest, str):
             recorded[relative] = digest
     for name in ("config.json", "palace.msh"):
-        if recorded.get(name) != _sha256(handoff.run_dir / name):
+        if recorded.get(name) != sha256_file(handoff.run_dir / name):
             raise ValueError(f"prepared handoff {name} hash does not match its input")
 
 
@@ -481,7 +511,7 @@ def _verify_exported_inputs(
     """Confirm the exported case retains the route mesh and prepared config bytes."""
     for source in (source_config, source_mesh):
         exported = target_run / source.name
-        if _sha256(source) != _sha256(exported):
+        if sha256_file(source) != sha256_file(exported):
             raise ValueError(f"export changed prepared input bytes: {source.name}")
 
 
@@ -515,9 +545,9 @@ def _case_manifest_entry(
         "handoff_id": handoff.handoff_id,
         "run_dir": run_dir.relative_to(study_dir).as_posix(),
         "archive_path": archive_path.relative_to(study_dir).as_posix(),
-        "config_sha256": _sha256(run_dir / "config.json"),
-        "mesh_sha256": _sha256(run_dir / "palace.msh"),
-        "archive_sha256": _sha256(archive_path),
+        "config_sha256": sha256_file(run_dir / "config.json"),
+        "mesh_sha256": sha256_file(run_dir / "palace.msh"),
+        "archive_sha256": sha256_file(archive_path),
         "benchmark_path": f"analysis/{case.case_id}-benchmark.json",
         "amr_analysis_path": f"analysis/{case.case_id}-amr.json",
     }
@@ -605,11 +635,11 @@ def _initial_manifest(preparation: PreparationContext) -> dict[str, Any]:
         },
         "toolchain": {
             "palace_binary": str(palace_binary),
-            "palace_binary_sha256": _sha256(palace_binary),
+            "palace_binary_sha256": sha256_file(palace_binary),
             "mpi_launcher": str(mpi_launcher),
-            "mpi_launcher_sha256": _sha256(mpi_launcher),
+            "mpi_launcher_sha256": sha256_file(mpi_launcher),
             "wrapper": str(wrapper_path.relative_to(study_dir)),
-            "wrapper_sha256": _sha256(wrapper_path),
+            "wrapper_sha256": sha256_file(wrapper_path),
             "mpi_arguments": [
                 "--use-hwthread-cpus",
                 "--map-by",
@@ -695,42 +725,11 @@ def _verify_toolchain_identities(study_dir: Path, manifest: dict[str, Any]) -> N
         ("mpi_launcher", "mpi_launcher_sha256"),
     ):
         path = Path(toolchain[key])
-        if _sha256(path) != toolchain[digest_key]:
+        if sha256_file(path) != toolchain[digest_key]:
             raise ValueError(f"prepared toolchain identity changed: {path}")
-    wrapper = _study_path(study_dir, toolchain["wrapper"])
-    if _sha256(wrapper) != toolchain["wrapper_sha256"]:
+    wrapper = study_path(study_dir, toolchain["wrapper"])
+    if sha256_file(wrapper) != toolchain["wrapper_sha256"]:
         raise ValueError(f"prepared MPI wrapper identity changed: {wrapper}")
-
-
-def require_prepared_manifest(manifest: dict[str, Any]) -> None:
-    """Fail closed unless exactly the four independently sealed cases are present."""
-    if manifest.get("status") != "prepared":
-        raise ValueError("run requires a completely prepared study")
-    cases = manifest.get("cases", [])
-    if any(case.get("preparation_status") != "sealed" for case in cases):
-        raise ValueError("run requires every planned case to be sealed")
-    actual_ids = [case.get("case_id") for case in cases]
-    if actual_ids != [case.case_id for case in CASES]:
-        raise ValueError("prepared study does not contain the ordered four-case set")
-    handoff_ids = [case.get("handoff_id") for case in cases]
-    if any(not isinstance(identity, str) or not identity for identity in handoff_ids):
-        raise ValueError("prepared cases must retain their handoff identities")
-    if len(set(handoff_ids)) != len(CASES):
-        raise ValueError("each prepared case must have an independent handoff identity")
-
-
-def _study_path(study_dir: Path, relative_path: str) -> Path:
-    """Resolve one manifest path while keeping it inside the selected study."""
-    if not isinstance(relative_path, str) or not relative_path:
-        raise ValueError("study manifest paths must be non-empty relative paths")
-    candidate = Path(relative_path)
-    if candidate.is_absolute():
-        raise ValueError("study manifest paths must be relative")
-    root = study_dir.resolve()
-    resolved = (root / candidate).resolve()
-    if not resolved.is_relative_to(root):
-        raise ValueError("study manifest path escapes the selected study directory")
-    return resolved
 
 
 def _read_manifest(study_dir: Path) -> dict[str, Any]:
@@ -758,11 +757,6 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
         json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     temporary.replace(path)
-
-
-def _sha256(path: Path) -> str:
-    """Return the SHA-256 digest of one existing file."""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 if __name__ == "__main__":
