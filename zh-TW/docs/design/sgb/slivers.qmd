@@ -9,7 +9,7 @@ scgsim-id: "docs/design/sgb/slivers"
 
 **Sliver** 指的是遠小於模型特徵的 face 或 edge：短於 grid $g$ 的 edge，或只有幾奈米寬的 face。sliver 迫使 mesher 在毀掉元素品質與產生大量細小元素之間做選擇；以 Boolean 為基礎的 CAD 也會在它們周圍失去 topology。
 
-SGB 把 sliver 的來源分成四種：其中三種是推導方式造成的人為結果，各有一個具體的機制把它們移除；第四種來自來源幾何本身，SGB 保留它並在 **sliver report** 中回報，是否以及如何處理它留給 Human（open decision D2）。本頁依序說明這四種、report 的格式與每個數字的意義，以及 D2 的 policy。
+SGB 把 sliver 的來源分成四種：其中三種是推導方式造成的人為結果，各有一個具體的機制把它們移除；第四種來自來源幾何本身，被視為幾何本來的樣子：SGB 保留它，並在 **sliver report** 中回報（D2：v1 只回報，不設門檻）。本頁依序說明這四種、report 的格式與每個數字的意義，以及 D2 的 policy。
 
 ## 執行範例的觀點
 
@@ -136,7 +136,7 @@ report 是已完成 build 的函式。它讀取 topology 與 arrangement，且**
 
 - **寬度是 local feature size。** 對 horizontal face，是兩條不共用 vertex 的邊界 edge 之間的最小距離，在精確的 carrier 上量測；線段對圓弧、圓弧對圓弧的距離以解析方式計算。若 face 的 edge 彼此全部相鄰（三角形、透鏡形），則取 vertex 到不相鄰 edge 的最小距離。對 wall，則是 $\min(\text{height},\ \text{兩條 vertical edge 之間的距離})$。`bounded: true` 標示以 spatial hash 量測的大 face：此時數值是在 hash cell 大小處的上界，不是精確的最小值。
 - **Drift 是對直線 carrier 量測**；圓弧有自己的清單（`arc_edges`）。
-- report 只做排序與計數；不套用任何門檻。門檻屬於 Human（見下）。
+- report 只做排序與計數；v1 不套用任何門檻（見下，D2）。
 
 ## 針對來源近乎重合的 policy（D2）
 
@@ -163,17 +163,19 @@ report 是已完成 build 的函式。它讀取 topology 與 arrangement，且**
 
   同一條規則涵蓋 derived-to-source snapping：若 snap 封閉了兩個 Net 之間的來源 gap，必須失敗，並指出兩個 Entity 與位置。同 Net 的接觸則屬正常。因此 policy 永遠不會在無聲無息中讓兩個 Net 短路。
 
-門檻的判準已由 Human 定下：**門檻必須能防止畸形的 mesh 元素。** 具體數值尚未決定：Lead 會依極端案例 fixture 的 mesh 品質證據提出建議值，交 Human 核准。在那之前，本頁不給任何門檻或 $\tau$ 的數字，report 也不套用任何門檻。
+::: {.callout-note title="v1 的決定：只回報，不設門檻"}
+Human 已決定（D2）：v1 不設任何 sliver 門檻，上表兩個選用 policy 都不啟用。來源近乎重合被視為幾何本來就長這樣，SGB 照樣建出並回報。只有在真實 layout 或極端案例中出現由窄 face 造成的畸形 mesh 元素時，才重新評估是否需要門檻。
+:::
 
-::: {.callout-warning title="陷阱：policy 可能改變物理"}
-兩個選用 policy 都會把幾何改動至多它們的門檻。因此它們是 Human Gate（D2）：由 Human 指定 $\tau$ 與 grid，report 記錄每一次移動（位置、距離、carrier、Entity），且沒有任何東西是默默套用的。
+::: {.callout-warning title="陷阱：policy 會改變幾何"}
+兩個選用 policy 都會把幾何改動至多它們的門檻，所以日後若要啟用，數值必須由 Human 指定並寫進 handoff，report 也要記錄每一次移動（位置、距離、carrier、Entity）。
 :::
 
 ## 小結
 
 - snap rounding 移除因量化而短於 $g$ 的 edge；local arrangement 移除不相關 layer 的投影；dissolution 移除兩側 label 相同的 seam。這三項各自只涵蓋上面具體說明的情形。
 - 窄的 face 仍然可能存在：來源本身相距幾奈米的邊界是來源事實，會被保留，並連同位置、寬度、carrier 與 Entity 一起回報。
-- report 只在精確的 carrier 上量測。每個門檻與每個會移動曲線的 policy，都是 Human 的決定（D2）。
+- report 只在精確的 carrier 上量測。v1 不設門檻、不移動任何曲線（D2）。
 - 下一步：驗證器保證什麼、如何失敗，見[結構 invariant 與失敗行為](validation.qmd)。
 
 ## 補充：重現資料

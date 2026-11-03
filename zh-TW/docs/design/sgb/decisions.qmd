@@ -15,7 +15,7 @@ scgsim-id: "docs/design/sgb/decisions"
 | ID | 問題 | 目前狀態 | 決定者 |
 |---|---|---|---|
 | [D1](#d1) | 是否支援 Route C（保留 conductor volume）？ | Human 決定：納入 v1；prototype 尚未實作 | Human（範圍）、architecture review（細節） |
-| [D2](#d2) | sliver 的 threshold 與 derived-to-source snapping 的 $\tau$？ | 開放：準則已定，數值尚無 | **Human Gate** |
+| [D2](#d2) | sliver 的 threshold 與 derived-to-source snapping 的 $\tau$？ | Human 決定：v1 不設 threshold，只回報 | Human |
 | [D3](#d3) | arc 如何做 noding？ | Lead 暫定：polyline witness 加 merge-back | architecture review |
 | [D4](#d4) | AEDT 的 solid 交換格式與 face identity？ | Lead 決定：XDE assembly 的 STEP、預先切好的 band | architecture review |
 | [D5](#d5) | surface 的 attribution 粒度？ | Human 決定：預設 per Entity；prototype 尚未實作 | Human |
@@ -46,12 +46,11 @@ Route C 把有限厚度的金屬保留為 conductor volume，並在內部做 mes
 | | |
 |---|---|
 | 問題 | 多小的寬度、長度與角度算是缺陷？derived 曲線（inset band、refinement curve）可否在容差 $\tau_\mathrm{derived}$ 內 snap 到 source 曲線？ |
-| 準則（Human） | threshold 必須能防止產生畸形的 mesh element。 |
-| 現況 | **開放，尚無數值。** Lead 會依 extreme-case fixture 上的 mesh 品質證據提出具體數值，交 Human 核准。 |
-| 預設 | 保留並回報，不移動任何 source 曲線。 |
-| 可能的政策 | （b）每個 layer 或 family 使用較粗的 snap grid。（c）在 $\tau_\mathrm{derived}$ 內做 derived-to-source snapping：derived 曲線移到 source 曲線上，source 曲線永不移動。這兩項只有在 Human 核准數值後才能啟用。 |
-| 後果 | 每個 threshold（每個 layer 的 grid、$\tau_\mathrm{derived}$、回報等級）都是 handoff 中寫明的數字，不是內部預設值。經 snapping 才出現的不同 Net 接觸一律失敗（`ContactError`）。 |
-| 決定者 | **Human Gate。** |
+| Human 的決定 | **v1 不設任何 sliver threshold，只回報。** 四種 sliver 來源中，量化、無關 layer 的投影與同 label 的 seam 已由設計消除；剩下的「來源近乎重合」視為幾何本來就是這個樣子，SGB 照樣建出，並在 sliver report 中列出 feature size、位置與 lineage。v1 不做 derived-to-source snapping，也不因窄 face 讓 build 失敗。 |
+| 重新評估的條件 | 真實 layout 或 extreme-case fixture 中出現由窄 face 造成的畸形 mesh element。 |
+| 保留的選項 | （b）每個 layer 或 family 使用較粗的 snap grid；（c）在 $\tau_\mathrm{derived}$ 內做 derived-to-source snapping（source 曲線永不移動）。兩者在 v1 都不啟用；日後若啟用，每個數值都是 handoff 中寫明的數字。 |
+| 後果 | pipeline 不移動任何曲線；mesher 可能遇到來源本身的窄 face，但會由 sliver report 與 mesh 品質檢查顯示出來，不會靜默發生。經 snapping 才出現的不同 Net 接觸一律失敗（`ContactError`）。 |
+| 決定者 | **Human，已決定。** |
 :::
 
 證據：sliver 的寬度是 **feature size**，也就是同一個 cell 上兩條不相鄰邊界 edge 的最小距離，在精確 carrier 上量得，arc 也包含在內；chord polygon 的 $2A/P$ 另存為 `width_2a_over_p_um`。最窄的 cell：`pad_in_ground_A` 為 7.07 µm（$2A/P$ 為 28.48 µm）、`pad_in_ground_B` 為 0.1 µm（port plane 切出的垂直 wall；$2A/P$ 為 0.0998 µm）、含 band 的 case 為 0.0767 µm（$2A/P$ 約 0.397 µm）；最小角度皆為 90°，snap drift 為 0（`outputs/*/sliver_report.json`）。prototype 只量測，不套用任何 threshold。見 [Slivers](slivers.qmd)。
