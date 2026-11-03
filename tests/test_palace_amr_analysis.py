@@ -586,3 +586,80 @@ def test_payload_encodes_raw_nonfinite_observations_without_numerical_replacemen
         payload["passes"][0]["reference_capacitance"]["relative_frobenius"]["value"]
         is None
     )
+
+
+def test_declared_started_transition_after_last_solve_keeps_indicator_observations():
+    """A native refinement attempt survives without inventing its next solve or C table."""
+    snapshot = _snapshot(1)
+    transition = replace(
+        _refinement(),
+        state="started",
+        cells_after=None,
+        marked_parents=None,
+        refined_parents=None,
+        next_mesh_id="mesh-2",
+        refined_mesh_id="mesh-1-refined",
+        counts_validation="transition_started",
+    )
+    diagnostics = AmrDiagnosticObservations(refinements=(transition,))
+    analysis = analyze_snapshot_series((snapshot,), _context("failed"), diagnostics)
+    assert len(analysis.passes) == 1
+    assert len(analysis.transitions) == 1
+    result = analysis.transitions[0]
+    assert (result.before_iteration, result.after_iteration) == (1, 2)
+    assert result.reason == "native_transition_after_pass_unavailable"
+    assert result.marked_squared_indicator_coverage.value == 0.5
+    assert result.closure_amplification.reason == "native_transition_started"
+    assert result.new_cell_amplification.value is None
+    assert result.dof_increase.reason == "native_transition_after_pass_unavailable"
+    assert result.dof_increase.units == "DOF"
+    assert result.adjacent_capacitance.relative_frobenius.value is None
+    assert result.observations is not None
+    assert result.observations.source == transition.source
+    assert result.observations.state == "started"
+    assert result.observations.next_mesh_id == "mesh-2"
+    assert result.observations.true_dofs_before == snapshot.degrees_of_freedom
+    assert result.observations.true_dofs_after is None
+
+
+def test_declared_transition_with_missing_before_snapshot_retains_native_evidence():
+    """An absent previous solve invalidates C and DOF comparisons rather than erasing the transition."""
+    snapshot = replace(_snapshot(2), mesh_elements=16)
+    diagnostics = AmrDiagnosticObservations(refinements=(_refinement(),))
+    result = analyze_snapshot_series((snapshot,), _context(), diagnostics).transitions[
+        0
+    ]
+    assert result.reason == "native_transition_before_pass_unavailable"
+    assert result.adjacent_capacitance.relative_frobenius.reason == result.reason
+    assert result.marked_fraction.value == 0.2
+    assert result.observations is not None
+    assert result.observations.true_dofs_before is None
+    assert result.observations.true_dofs_after == snapshot.degrees_of_freedom
+
+
+def test_transition_union_keeps_existing_gap_and_declared_endpoints_without_duplicates():
+    """Recorded pass gaps and explicit native rounds coexist without repeating a completed pair."""
+    first = _snapshot(1)
+    second = replace(_snapshot(2), mesh_elements=16)
+    third = _snapshot(3)
+    diagnostics = AmrDiagnosticObservations(refinements=(_refinement(),))
+    complete = analyze_snapshot_series((first, second), _context(), diagnostics)
+    assert [
+        (item.before_iteration, item.after_iteration) for item in complete.transitions
+    ] == [(1, 2)]
+    gapped = analyze_snapshot_series((first, third), _context(), diagnostics)
+    assert [
+        (item.before_iteration, item.after_iteration) for item in gapped.transitions
+    ] == [(1, 3), (1, 2)]
+    assert gapped.transitions[0].reason == "native_iteration_gap"
+    assert gapped.transitions[1].reason == "native_transition_after_pass_unavailable"
+
+
+def test_declared_transition_without_either_snapshot_keeps_explicit_identity():
+    """Native transition identity remains reportable even with no readable solve snapshots."""
+    diagnostics = AmrDiagnosticObservations(refinements=(_refinement(),))
+    analysis = analyze_snapshot_series((), _context("failed"), diagnostics)
+    assert analysis.passes == ()
+    assert len(analysis.transitions) == 1
+    assert analysis.transitions[0].reason == "native_transition_both_passes_unavailable"
+    assert analysis.transitions[0].marked_squared_indicator_coverage.value == 0.5
