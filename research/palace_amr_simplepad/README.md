@@ -1,29 +1,72 @@
-# SimplePad Palace AMR study driver
+# SimplePad AMR comparison
 
-Use this driver to prepare, run, and analyze the four SimplePad Palace adaptive-mesh refinement cases. Run commands from the SCGSim checkout with the study dependencies installed.
+This driver prepares one public SimplePad Layout and compares Conformal and
+Nonconformal AMR in Thin Film (Route A) and Shell Solid (Route B). Each Route
+builds one initial Mesh, shared by its two AMR runs. The [Research page](../../docs/research/simplepad-amr.qmd)
+explains the model and measured results; the [AMR analysis reference](../../docs/amr-analysis.qmd)
+defines the metrics.
 
-## Run all four prepared cases
+Use the SCGSim checkout recorded with the study and a Palace build containing
+[`SaveAdaptDiagnostics`](https://github.com/NCUPHY-LTLab/palace/blob/bbe970edb6fda1c59336b8351816dc6018635168/docs/src/features/amr_diagnostics.md).
+The launcher must match that Palace build. The preset uses 30 MPI ranks with
+two OpenMP threads each and explicitly binds hardware threads. Native logs
+retain Open MPI's actual binding report.
 
-The default `run` command requires both Route A and Route B to have conformal and nonconformal handoffs prepared:
+## Prepare the Python environment
 
-```bash
-uv run python -m research.palace_amr_simplepad run /path/to/study
-```
-
-## Run complete prepared route pairs
-
-If preparation records a route failure, use `--prepared-routes-only` to run another route only when both of its handoffs are sealed:
-
-```bash
-uv run python -m research.palace_amr_simplepad run /path/to/study --prepared-routes-only
-```
-
-Cases from failed routes are recorded as not run and receive no result payload. The command returns a nonzero status when cases are skipped or a solver run fails. The default command continues to require all four cases.
-
-## Analyze completed runs
-
-After the selected route runs finish, analyze the study directory:
+Run these commands from the SCGSim checkout. The separate environment preserves
+the package's development environment and supplies the selected 100 nm PDK.
 
 ```bash
-uv run python -m research.palace_amr_simplepad analyze /path/to/study
+uv venv --python 3.12 .artifacts/amr-env
+uv pip install --python .artifacts/amr-env/bin/python -e '.[palace]' \
+  'orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@c75a1d4d2ee07e86a3b5d9b491609e5a1a5b850c' \
+  'gdsfactory==9.48.0' 'gmsh==4.15.2' 'plotly==6.9.0' matplotlib
 ```
+
+## Prepare, run and analyze
+
+Set `PALACE_BIN` and `PALACE_MPIRUN` to the selected native binary and its matching
+Open MPI launcher after loading that build's runtime environment. Select a new
+study directory on the storage used for simulation data.
+
+```bash
+STUDY_DIR="$PWD/.artifacts/simplepad-amr-study"
+.artifacts/amr-env/bin/python -m research.palace_amr_simplepad prepare \
+  --palace-binary "$PALACE_BIN" --mpi-launcher "$PALACE_MPIRUN" \
+  --study-dir "$STUDY_DIR"
+.artifacts/amr-env/bin/python -m research.palace_amr_simplepad run "$STUDY_DIR"
+.artifacts/amr-env/bin/python -m research.palace_amr_simplepad analyze "$STUDY_DIR"
+.artifacts/amr-env/bin/python -m research.palace_amr_simplepad.figures \
+  "$STUDY_DIR" "$STUDY_DIR/comparison"
+```
+
+Preparation seals all four input packages before native execution. The two
+initial Meshes, input digests, independent handoff identities, source versions,
+launcher identity, preparation times and resources remain in the study
+manifest. Native solve times come from Palace's existing Benchmark.
+
+`run` attempts the four cases sequentially and records their return codes and
+receipts. `analyze` also handles failed attempts through explicit inspection,
+retaining their status and available observations. A failed command returns
+nonzero while preserving the corresponding files and diagnostic records.
+
+If preparation fails for one Route but the other Route has both cases sealed,
+the prepared pair can run with the opt-in command:
+
+```bash
+.artifacts/amr-env/bin/python -m research.palace_amr_simplepad run \
+  "$STUDY_DIR" --prepared-routes-only
+```
+
+This option runs only complete conformal/nonconformal Route pairs. The other
+cases are recorded as `not_run_preparation_failed`; no receipt or result payload
+is created for them. `analyze` keeps those statuses and creates no per-case
+analysis payload for skipped cases. The command returns nonzero when cases are
+skipped or a solver run fails. Without this option, `run` still requires all
+four cases to be prepared.
+
+The comparison exporter consumes the same public AMR analysis used by the
+Benchmark. It writes CSV observations, refinement transitions, standalone SVG
+figures and a compact summary. Original matrices and unavailable reasons remain
+in the per-case exports. This first batch supplies no reference matrix.
