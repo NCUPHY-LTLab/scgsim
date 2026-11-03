@@ -445,3 +445,54 @@ def test_partial_missing_listed_mesh_is_explicitly_incomplete(tmp_path):
     assert len(observations.solves) == 2
     assert observations.missing_files == ("absent-mesh.bin",)
     assert _analysis(source).diagnostic_missing_files == ("absent-mesh.bin",)
+
+
+def test_serialized_started_transition_after_final_solve_has_no_synthetic_pass(
+    tmp_path,
+):
+    """The manifest can publish a started refinement before publishing its next solve."""
+    source = _fixture(tmp_path)
+    base = source.output_dir / "amr-diagnostics"
+    manifest = json.loads((base / "manifest.json").read_text())
+    manifest["solves"] = ["solve-1.json"]
+    manifest["files"] = [
+        name
+        for name in manifest["files"]
+        if name not in {"solve-2.json", "terminal-2.json", "rank.json"}
+    ]
+    (base / "manifest.json").write_text(json.dumps(manifest))
+    transition_record = json.loads((base / "transition.json").read_text())
+    transition_record["state"] = "started"
+    for name in (
+        "owned_global_cells_post_refinement",
+        "owned_global_cells_post_rebalance",
+        "marked_count",
+        "refined_parent_count",
+        "extra_refined_parent_count",
+        "refined_mesh_paths",
+        "rank_records",
+    ):
+        transition_record.pop(name)
+    (base / "transition.json").write_text(json.dumps(transition_record))
+    diagnostics = read_native_amr_diagnostics(_sealed(source))
+    snapshots = bind_native_attempts((_snapshot(1, 4.0),), diagnostics, tmp_path)
+    analysis = analyze_snapshot_series(
+        snapshots,
+        AmrAnalysisContext(tmp_path, "Electrostatic", "failed", "receipt_bound"),
+        diagnostics,
+    )
+    assert len(analysis.passes) == 1
+    assert len(analysis.transitions) == 1
+    transition = analysis.transitions[0]
+    assert (transition.before_iteration, transition.after_iteration) == (1, 2)
+    assert transition.reason == "native_transition_after_pass_unavailable"
+    assert transition.marked_squared_indicator_coverage.value == 0.8
+    assert transition.closure_extra_parents.reason == "native_transition_started"
+    assert transition.dof_growth_ratio.value is None
+    assert transition.adjacent_capacitance.relative_frobenius.value is None
+    assert transition.observations is not None
+    assert transition.observations.state == "started"
+    assert transition.observations.premesh_id == "mesh-1"
+    assert transition.observations.next_mesh_id == "mesh-2"
+    assert transition.observations.source.endswith("transition.json")
+    assert transition.observations.true_dofs_after is None

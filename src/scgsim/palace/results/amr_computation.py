@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
@@ -19,6 +19,7 @@ from scgsim.palace.results.amr_capacitance import (
     unavailable_comparison,
 )
 from scgsim.palace.results.amr_metrics import (
+    RefinementMetrics,
     observed_difference,
     observed_ratio,
     refinement_metrics,
@@ -63,8 +64,8 @@ def analyze_snapshot_series(
         _analyze_pass(snapshot, observed, reference) for snapshot in snapshots
     )
     transitions = tuple(
-        _analyze_transition(previous, current, observed)
-        for previous, current in zip(snapshots, snapshots[1:], strict=False)
+        _analyze_transition(endpoints, observed)
+        for endpoints in _transition_endpoints(snapshots, observed)
     )
     return PalaceAmrAnalysis(
         run_dir=context.run_dir,
@@ -131,25 +132,75 @@ def _analyze_pass(
     )
 
 
+@dataclass(frozen=True)
+class _TransitionEndpoints:
+    """Native endpoint identities remain known even when a solve snapshot is absent."""
+
+    before_iteration: int | None
+    after_iteration: int | None
+    previous: AmrPassSnapshot | None
+    current: AmrPassSnapshot | None
+
+
+def _transition_endpoints(
+    snapshots: Sequence[AmrPassSnapshot], diagnostics: AmrDiagnosticObservations
+) -> tuple[_TransitionEndpoints, ...]:
+    """Keep existing pass pairs and add explicitly declared native transitions once."""
+    endpoints = [
+        _TransitionEndpoints(
+            previous.native_iteration, current.native_iteration, previous, current
+        )
+        for previous, current in zip(snapshots, snapshots[1:], strict=False)
+    ]
+    pairs = {(item.before_iteration, item.after_iteration) for item in endpoints}
+    for observation in diagnostics.refinements:
+        pair = observation.before_iteration, observation.after_iteration
+        if pair not in pairs:
+            before = tuple(
+                item for item in snapshots if item.native_iteration == pair[0]
+            )
+            after = tuple(
+                item for item in snapshots if item.native_iteration == pair[1]
+            )
+            endpoints.append(
+                _TransitionEndpoints(
+                    *pair,
+                    before[0] if len(before) == 1 else None,
+                    after[0] if len(after) == 1 else None,
+                )
+            )
+            pairs.add(pair)
+    return tuple(endpoints)
+
+
 def _analyze_transition(
-    previous: AmrPassSnapshot,
-    current: AmrPassSnapshot,
+    endpoints: _TransitionEndpoints,
     diagnostics: AmrDiagnosticObservations,
 ) -> AmrTransitionAnalysis:
-    """Distinguish native iteration gaps from unavailable optional diagnostics."""
-    reason = _adjacency_reason(previous.native_iteration, current.native_iteration)
-    observation, observation_reason = _refinement_observation(
-        previous, current, diagnostics
+    """Preserve native transitions independently from availability of either solve."""
+    previous, current = endpoints.previous, endpoints.current
+    identity_reason = _adjacency_reason(
+        endpoints.before_iteration, endpoints.after_iteration
     )
-    refinement_reason = reason or observation_reason
+    reason = identity_reason or _missing_endpoint_reason(endpoints)
+    observation, observation_reason = _refinement_observation(endpoints, diagnostics)
+    refinement_reason = identity_reason or observation_reason
     refinement = (
         unavailable_refinement(refinement_reason)
         if refinement_reason is not None
         else refinement_metrics(observation)
     )
-    if reason is not None:
-        adjacent = unavailable_comparison(reason, normalization="current")
-        growth = increase = unavailable_metric(reason)
+    if (
+        observation is not None
+        and observation.state == "started"
+        and refinement_reason is None
+    ):
+        refinement = _started_refinement(refinement)
+    if reason is not None or previous is None or current is None:
+        missing = reason or "native_transition_endpoint_unavailable"
+        adjacent = unavailable_comparison(missing, normalization="current")
+        growth = unavailable_metric(missing)
+        increase = unavailable_metric(missing, units="DOF")
     else:
         adjacent = compare_adjacent_capacitance(previous, current, diagnostics.solves)
         growth = observed_ratio(
@@ -165,8 +216,8 @@ def _analyze_transition(
             units="DOF",
         )
     return AmrTransitionAnalysis(
-        before_iteration=previous.native_iteration,
-        after_iteration=current.native_iteration,
+        before_iteration=endpoints.before_iteration,
+        after_iteration=endpoints.after_iteration,
         availability="unavailable" if reason else "available",
         reason=reason,
         marked_fraction=refinement.marked_fraction,
@@ -178,6 +229,31 @@ def _analyze_transition(
         dof_increase=increase,
         adjacent_capacitance=adjacent,
         observations=_transition_evidence(observation, previous, current),
+    )
+
+
+def _missing_endpoint_reason(endpoints: _TransitionEndpoints) -> str | None:
+    """Distinguish absent solve observations from absent native transition identity."""
+    if endpoints.previous is None and endpoints.current is None:
+        return "native_transition_both_passes_unavailable"
+    if endpoints.previous is None:
+        return "native_transition_before_pass_unavailable"
+    if endpoints.current is None:
+        return "native_transition_after_pass_unavailable"
+    return None
+
+
+def _started_refinement(metrics: RefinementMetrics) -> RefinementMetrics:
+    """A started transition retains measured indicator coverage without inventing parent sets."""
+    reason = "native_transition_started"
+    return replace(
+        metrics,
+        marked_fraction=metrics.marked_fraction
+        if metrics.marked_fraction.value is not None
+        else unavailable_metric(reason),
+        closure_amplification=unavailable_metric(reason),
+        closure_extra_parents=unavailable_metric(reason, units="cells"),
+        new_cell_amplification=unavailable_metric(reason),
     )
 
 
@@ -193,16 +269,15 @@ def _adjacency_reason(before: int | None, after: int | None) -> str | None:
 
 
 def _refinement_observation(
-    previous: AmrPassSnapshot,
-    current: AmrPassSnapshot,
+    endpoints: _TransitionEndpoints,
     diagnostics: AmrDiagnosticObservations,
 ) -> tuple[AmrRefinementObservation | None, str | None]:
     """Match diagnostics to the same native transition and owned-cell observations."""
     matches = tuple(
         observation
         for observation in diagnostics.refinements
-        if observation.before_iteration == previous.native_iteration
-        and observation.after_iteration == current.native_iteration
+        if observation.before_iteration == endpoints.before_iteration
+        and observation.after_iteration == endpoints.after_iteration
     )
     if not matches:
         return None, diagnostics.reason or "native_refinement_diagnostics_unavailable"
@@ -212,8 +287,16 @@ def _refinement_observation(
     if any(
         reported is not None and native is not None and reported != native
         for reported, native in (
-            (previous.mesh_elements, observation.cells_before),
-            (current.mesh_elements, observation.cells_after),
+            (
+                None
+                if endpoints.previous is None
+                else endpoints.previous.mesh_elements,
+                observation.cells_before,
+            ),
+            (
+                None if endpoints.current is None else endpoints.current.mesh_elements,
+                observation.cells_after,
+            ),
         )
     ):
         return None, "native_transition_cell_count_mismatch"
@@ -247,8 +330,8 @@ def _recovery_state(
 
 def _transition_evidence(
     observation: AmrRefinementObservation | None,
-    previous: AmrPassSnapshot,
-    current: AmrPassSnapshot,
+    previous: AmrPassSnapshot | None,
+    current: AmrPassSnapshot | None,
 ) -> AmrTransitionEvidence | None:
     """Detach compact native counts and source IDs while leaving full cell sets on disk."""
     if observation is None:
@@ -268,8 +351,8 @@ def _transition_evidence(
         else len(refined - marked),
         marked_squared_indicator_sum=observation.marked_squared_indicator_sum,
         total_squared_indicator_sum=observation.total_squared_indicator_sum,
-        true_dofs_before=previous.degrees_of_freedom,
-        true_dofs_after=current.degrees_of_freedom,
+        true_dofs_before=None if previous is None else previous.degrees_of_freedom,
+        true_dofs_after=None if current is None else current.degrees_of_freedom,
         premesh_id=observation.premesh_id,
         source=observation.source,
         refined_mesh_id=observation.refined_mesh_id,
