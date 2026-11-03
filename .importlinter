@@ -69,3 +69,21 @@ source_modules =
 forbidden_modules =
     scgsim.aedt
     scgsim.palace
+
+[importlinter:contract:sgb-core-independence]
+name = SGB core does not depend on the replaced geometry paths
+type = forbidden
+source_modules =
+    scgsim.geometry.sgb
+forbidden_modules =
+    scgsim.geometry.compiler
+    scgsim.geometry.construction
+    scgsim.geometry.planning.domain
+    scgsim.geometry.planning.domain_planning
+    scgsim.geometry.planning.surface_planning
+    scgsim.geometry.planning.contact_planning
+    scgsim.geometry.planning.topology_planning
+    scgsim.geometry.planning.volume_planning
+    scgsim.geometry.planning.port_planning
+    scgsim.geometry.planning.evidence
+    scgsim.geometry.planning.tags
