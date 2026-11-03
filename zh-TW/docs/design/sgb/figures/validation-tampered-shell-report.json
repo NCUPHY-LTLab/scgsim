@@ -1,6 +1,18 @@
 {
  "model": "pad_in_ground B, vacuum shell without its top face (face f:82119b47f621a494)",
  "passed": false,
+ "timings_s": {
+  "grid_and_lengths": 5e-05,
+  "planarity": 0.00066,
+  "arcs": 0.06285,
+  "bands": 0.0,
+  "areas": 3e-05,
+  "prism_areas": 0.00019,
+  "shells": 0.00012,
+  "face_sides": 3e-05,
+  "groups": 3e-05,
+  "edges_in_faces": 3e-05
+ },
  "checks": [
   {
    "name": "vertices_on_grid",

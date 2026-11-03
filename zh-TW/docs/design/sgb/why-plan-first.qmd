@@ -50,21 +50,21 @@ OCCT 的文件把 General Fuse 演算法描述為：依維度遞增對子形狀�
 ::: {.askr-mermaid-view view-label="檢視圖表"}
 ```{mermaid}
 flowchart TB
-  subgraph F["Solids first (the alternative this page argues against)"]
+  subgraph F["Solids first（本頁反對的做法）"]
     direction TB
-    F1["One solid per prism<br/>N small + B chip-sized"] --> F2["Box prefilter:<br/>B x N pairs not pruned"]
-    F2 --> F3["3D face-face<br/>intersection of planes<br/>and cylinders"]
-    F3 --> F4["Split host faces<br/>with N inner wires"]
-    F4 --> F5["Same-domain merge<br/>of coplanar faces"]
-    F5 --> F6["Walk the history to<br/>recover which fragment<br/>came from which input"]
-    F6 --> F7["Name by history<br/>or by geometry"]
+    F1["每個 prism 一個 solid<br/>N 個小的 + B 個晶片大小的"] --> F2["Box 篩選：<br/>B x N 組無法剔除"]
+    F2 --> F3["3D face-face 求交<br/>（平面與圓柱）"]
+    F3 --> F4["切割有 N 個<br/>內部 wire 的 face"]
+    F4 --> F5["合併 coplanar 的<br/>same-domain face"]
+    F5 --> F6["沿 history 還原<br/>fragment 來自哪個輸入"]
+    F6 --> F7["以 history 或幾何命名"]
   end
-  subgraph P["Planned (SGB)"]
+  subgraph P["規劃（SGB）"]
     direction TB
-    P1["Prisms<br/>levels, slabs"] --> P2["Local 2D arrangement<br/>per level and slab"]
-    P2 --> P3["Label cells,<br/>dissolve seams"]
-    P3 --> P4["Assemble shared<br/>vertices, edges, faces"]
-    P4 --> P5["Emit directly,<br/>ids already known"]
+    P1["Prism<br/>level、slab"] --> P2["每個 level 與 slab 的<br/>局部 2D arrangement"]
+    P2 --> P3["標記 cell、<br/>dissolve seam"]
+    P3 --> P4["組裝共用的<br/>vertex、edge、face"]
+    P4 --> P5["直接寫出，<br/>id 已知"]
   end
 ```
 :::
@@ -83,13 +83,13 @@ fragment 傳回的是幾何。SGB 需要的不只是幾何：對每個表面，�
 ::: {.askr-mermaid-view view-label="檢視圖表"}
 ```{mermaid}
 flowchart TB
-  subgraph B["Back-tracking (solids first)"]
+  subgraph B["往回追（solids first）"]
     direction TB
-    b1["Source entity"] --> b2["Solid"] --> b3["Fragment"] --> b4["History or<br/>geometry match"] --> b5["Semantic name"]
+    b1["來源 Entity"] --> b2["Solid"] --> b3["Fragment"] --> b4["History 或<br/>幾何比對"] --> b5["Semantic 名稱"]
   end
-  subgraph W["Forward propagation (planned)"]
+  subgraph W["向前傳遞（規劃）"]
     direction TB
-    w1["Source entity<br/>and curve"] --> w2["Carrier<br/>(lineage recorded)"] --> w3["Atomic edge<br/>(content-hashed id)"] --> w4["Face, volume<br/>(id, label, name)"] --> w5["Written entity<br/>bound to its id by<br/>construction order"]
+    w1["來源 Entity<br/>與曲線"] --> w2["Carrier<br/>（記錄 lineage）"] --> w3["Atomic edge<br/>（內容雜湊的 id）"] --> w4["Face、volume<br/>（id、label、名稱）"] --> w5["寫出的實體<br/>依構造順序綁定 id"]
   end
 ```
 :::
@@ -98,29 +98,31 @@ flowchart TB
 
 ## 規劃能換來什麼：實測
 
-原型的 scaling 執行建立 Route B 的隨機 layout，特徵數為 $N = 1000, 5000, 20000$，每個都有四個 level，且 ground plane 上每個特徵各有一個孔。模型的 face 數從 12 761 成長到 255 052。數字的來源列在本頁最後的補充。
+原型的 scaling 執行建立 Route B 的隨機 layout，特徵數為 $N = 1000, 5000, 20000$，每個都有四個 level，且 ground plane 上每個特徵各有一個孔。模型的 face 數從 12 761 成長到 255 052。**這些 scaling 執行全是 polygon-only 的 layout：沒有圓弧、沒有 witness 的弦、沒有圓柱 wall，也沒有 band。** 因此圓弧與 band 在大規模下的成本與 exactness 並沒有量測，本頁不外推。數字的來源列在本頁最後的補充。
 
 ![規劃後 pipeline 的 wall time（左）與 peak memory（右）對特徵數 N 的關係，座標軸為對數。虛線的斜率為 1。](figures/why-scaling.svg){#fig-scaling fig-alt="N = 1000、5000、20000 的兩張對數-對數圖。左：四條上升的線，分別是推導、Gmsh API 的 test oracle、direct BREP writer，以及 Gmsh 載入 BREP，並有一條斜率為 1 的虛線參考線。每一條都比參考線稍陡。右：父行程的 peak memory，分別為單一 tile 與 4 × 4 tile，幾乎與斜率為 1 的參考線平行。"}
 
 {{< askr-chart-view src="figures/why-scaling.html" label="檢視 scaling 資料" >}}
 
-看 @fig-scaling 時請注意：每一條曲線都靠近斜率為 1 的虛線。$N = 1000$ 到 $5000$ 之間，推導的局部斜率是 1.17；$5000$ 到 $20000$ 之間是 1.14；模型的 face 數斜率為 1.00，peak memory 為 0.89 與 0.98。在這個範圍內，規劃後的 pipeline 對模型大小是**近乎線性**的，時間上只有一點點超線性的額外成長。
+看 @fig-scaling 時請注意：每一條曲線都靠近斜率為 1 的虛線。$N = 1000$ 到 $5000$ 之間，推導的局部斜率是 0.91；$5000$ 到 $20000$ 之間是 1.18；模型的 face 數斜率為 1.00，peak memory 為 0.89 與 0.98。這些斜率是單次執行的結果，同一台機器上重複量測的時間會有明顯的起伏（見下），所以請把推導的斜率讀成 0.9 到 1.2 的範圍。在這個範圍內，規劃後的 pipeline 對模型大小是**近乎線性**的。
 
 ::: {.askr-table-compact .askr-table-numeric}
 | N | Face 數 | 推導 S2-S9（s） | Gmsh-API oracle 的 emission（s） | direct BREP write，單一行程（s） | direct write，16 個 worker（s） | Gmsh 載入 BREP（s） | Peak RSS，單一 tile（MB） | Peak RSS，4 × 4 tile（MB） |
 |---|---|---|---|---|---|---|---|---|
-| 1 000 | 12 761 | 1.42 | 2.30 | 0.44 | 0.29 | 1.07 | 324 | 144 |
-| 5 000 | 63 664 | 9.34 | 14.57 | 2.80 | 1.94 | 7.47 | 1 358 | 521 |
-| 20 000 | 255 052 | 45.17 | 74.22 | 11.76 | 8.66 | 32.59 | 5 272 | 1 929 |
+| 1 000 | 12 761 | 2.34 | 3.28 | 0.44 | 0.29 | 1.07 | 331 | 147 |
+| 5 000 | 63 664 | 10.16 | 15.57 | 2.80 | 1.94 | 7.47 | 1 387 | 540 |
+| 20 000 | 255 052 | 52.06 | 80.24 | 11.76 | 8.66 | 32.59 | 5 386 | 2 002 |
 :::
 
-推導、oracle 與記憶體這幾欄來自 `outputs/scaling.json`；direct write 與載入這幾欄來自 `outputs/e3_brep/timing.json` 中另外的執行，所以同一個推導在一次執行中量到 45.2 s，在另一次是 44.4 s。oracle 的時間是**不做** sewing 的 emission，因為這個規模下做 sewing 負擔不起（見下一小節）。Peak memory 指的是父行程的；使用 tile 時，父行程不保留各 tile 的結果。
+推導、oracle 與記憶體這幾欄來自目前的 `outputs/scaling.json`；direct write 與載入這幾欄來自 `outputs/e3_brep/timing.json` 中另外的執行，所以兩者不是同一次執行。oracle 的時間是**不做** sewing 的 emission，因為這個規模下做 sewing 負擔不起（見下一小節）。Peak memory 指的是父行程的；使用 tile 時，父行程不保留各 tile 的結果。
+
+**單次執行的起伏。** 同一個 $N = 20000$ 的推導，在這台機器上的不同次執行量到 44.4 s（e3 的執行）、45.2 s（較早的 scaling 執行，該檔案後來被覆寫）、52.1 s（目前的 scaling.json）與 74.2 s（validator scaling 的執行，build wall）。推導的最佳加速在目前的執行中是 1.51 倍（$N = 1000$）、1.10 倍（$N = 5000$）與 1.20 倍（$N = 20000$），較早的一次執行則是 1.22 倍與 1.18 倍（$N = 5000$ 與 $20000$）。所以本頁的數字用來看量級與斜率，不是用來比較兩次執行之間的小差距。
 
 ### Emission 是尾巴
 
 推導完成之後，必須寫出 CAD 檔案，再由 Gmsh 載入。Emission 是循序的，在 $N = 20000$ 時與推導一樣長。逐一呼叫來建立幾何的 Gmsh API，只保留作為**測試用 oracle**；下面的比較就是決策 D8 的證據，D8 讓 direct writer 成為 emission 的路徑。
 
-![N = 20000 時，從規劃好的 topology 到 Gmsh 可以 mesh 的模型所需的時間；比較 Gmsh-API oracle 與 direct BREP/XAO writer（決策 D8）。](figures/why-tail.svg){#fig-tail fig-alt="三條水平堆疊長條。第一條 Gmsh-API oracle：推導 44.4 秒、寫出 75.6 秒、載入 41.7 秒，合計 162 秒。第二條 direct BREP/XAO（單一行程）：44.4、11.8、37.4 與 4.1 秒（含 sidecar 一段），合計 98 秒。第三條使用 16 個 worker：44.4、8.4、37.4 與 4.1 秒，合計 94 秒。"}
+![N = 20000 時，從規劃好的 topology 到 Gmsh 可以 mesh 的模型所需的時間；比較 Gmsh-API oracle 與 direct BREP/XAO writer（決策 D8）。數字取自 e3 的那一次執行。](figures/why-tail.svg){#fig-tail fig-alt="三條水平堆疊長條。第一條 Gmsh-API oracle：推導 44.4 秒、寫出 75.6 秒、載入 41.7 秒，合計 162 秒。第二條 direct BREP/XAO（單一行程）：44.4、11.8、37.4 與 4.1 秒（含 sidecar 一段），合計 98 秒。第三條使用 16 個 worker：44.4、8.4、37.4 與 4.1 秒，合計 94 秒。"}
 
 {{< askr-chart-view src="figures/why-tail.html" label="檢視端到端的堆疊" >}}
 
@@ -130,7 +132,9 @@ flowchart TB
 - **使用 direct BREP/XAO 序列化**，寫出時間降到單一行程 11.8 s、16 個 worker 8.4 s，因為規劃好的階層是以文字寫出，沒有任何東西透過 API 建立。附有 lineage 與 membership 的 sidecar 在 $N = 20000$ 時額外多 4.1 s 與 94 MB（不含 lineage 為 0.65 s；`outputs/e3_brep/sidecar_timing.json`）。
 - **載入不屬於 SGB。** Gmsh 解析 255 048 個 face 在 $N = 20000$ 時要 37.4 s，這是 Gmsh 讀取任何格式的下限，而且它和其他一切一樣，隨 face 數成長。
 
-讀這張圖的結論：規劃去除了全域 fragment，並讓推導近乎線性；但在大 $N$ 時，端到端的時間仍由數個循序步驟決定，其中一個還在 SGB 之外：寫出、sidecar 與 Gmsh 載入合計 53 s（單一行程）或 50 s（16 個 worker），相對於 44 s 的推導。平行化無法解決它們（見 [Parallel derivation](parallelism.qmd)）。在原型中，推導本身的加速也最多只有 $N = 5000$ 時的 $1.22\times$ 與 $N = 20000$ 時的 $1.18\times$，這是 CPython 的限制，不是演算法的限制（見[未決的決策](decisions.qmd#d9)）。
+讀這張圖的結論：規劃去除了全域 fragment，並讓推導近乎線性；但在大 $N$ 時，端到端的時間仍由數個循序步驟決定，其中一個還在 SGB 之外：寫出、sidecar 與 Gmsh 載入合計 53 s（單一行程）或 50 s（16 個 worker），相對於 44 s 的推導。平行化無法解決它們（見 [Parallel derivation](parallelism.qmd)）。在原型中，推導本身的加速在 $N = 20000$ 最多約 1.2 倍，這是 CPython 的限制，不是演算法的限制（見[設計決議](decisions.qmd#d9)）。
+
+這個尾巴還少算了一項。production 把第二層驗證（載入檢查）設為必要：在 validator scaling 的那次執行中，$N = 20000$ 時 Gmsh 載入花 50.6 s，載入檢查（`verify_loaded`）再花 30.2 s，寫出 XAO（8 個 worker）10.0 s；那次執行的 build wall 是 74.2 s（`outputs/validator_scaling.md`）。因此上圖的尾巴是下限，不是 production 的完整成本。sidecar 的 4.1 s 與 94 MB 來自較早的量測；之後 $N = 20000$ 的輸出檔（`outputs/_scaling_tmp/n20000.sidecar.json`）是 125.7 MB，表示加入 membership 之後 sidecar 變大了，時間沒有重測。
 
 ### 為什麼不透過 Gmsh API 建立 solid
 
@@ -154,8 +158,8 @@ Identity 是結果的性質，不是排程的性質。scaling 執行以九種排
 | 20 000 | 9 | **1** | `build:a1305dc586c23466` | 9 個全部 |
 :::
 
-::: {.callout-note title="保證：相同輸入得到相同 id"}
-在原型的各次執行中，每個實體的 id 在所試過的每一種 tile 配置與 worker 數下都相同。這是依構造而成立的：id 是內容的雜湊（level、格點座標、carrier、label）；edge 的 id 是 H(plane key、排序後的端點 vertex id、排序後的 carrier id 集合)；tile 的切線落在 pixel 欄列之間，所以沒有任何 tile 會產生幾何（見 [Parallel derivation](parallelism.qmd)、[Identity](identity.qmd)）。
+::: {.callout-note title="性質：相同輸入得到相同 id（依構造成立；以 27 次執行量測）"}
+依構造，id 與 tile 配置及 worker 數無關；量測上，在原型的 27 次執行（3 種 $N$ 乘上 9 種排程）中，每個實體的 id 在每一種排程下都相同。理由：id 是內容的雜湊（level、格點座標、carrier、label）；edge 的 id 是 H(plane key、排序後的端點 vertex id、排序後的 carrier id 集合)；tile 的切線落在 pixel 欄列之間，所以沒有任何 tile 會產生幾何（見 [Parallel derivation](parallelism.qmd)、[Identity](identity.qmd)）。
 :::
 
 solids-first 的 fragment 無法提供這樣的性質：結果中 face 的順序，以及模糊的 face 被歸給哪個輸入，都取決於 kernel 的走訪順序。
@@ -163,6 +167,7 @@ solids-first 的 fragment 無法提供這樣的性質：結果中 face 的順序
 ## 邊界情況與限制
 
 - **小型模型。** 對於只有幾個 prism 的模型，例如執行範例，兩種做法幾乎不花時間，差別在 identity，不在速度。成本論證要從數百個特徵起才有意義。
+- **只有 polygon-only 的 scaling。** 所有 scaling 與寫出時間都來自沒有圓弧、沒有 band 的 layout（direct writer 的計畫中圓弧數與圓柱 wall 數皆為 0）。圓弧的 witness 成本、圓柱 wall 的 exactness 與 band 的成本在大規模下沒有量測；本頁不外推。
 - **密集 layout。** scaling 執行使用的特徵間距為 260 µm，各自位於自己的 cutout。更密的 layout（相鄰特徵重疊更多）不在已量測的範圍內。設計預期同樣的近乎線性形狀，但沒有量測過。
 - **論證取決於 OCCT 文件記載的結構。** 如果改用結構不同的 kernel（例如穩健、帶索引的 3D Boolean 引擎），這個論證需要針對它重新進行。Identity 的論證則不取決於 kernel。
 - **非 prism 的本體**（斜側壁、Z 方向彎曲的橋）在第一版中不在規劃後 pipeline 的範圍內。它們是擴充點，不會被悄悄近似（見[總覽](index.qmd#glossary)）。
@@ -177,7 +182,7 @@ solids-first 的 fragment 無法提供這樣的性質：結果中 face 的順序
 
 ## 補充：重現資料
 
-本頁的圖與數字是**計算所得**。`docs/design/sgb/_figures/why_structure.py` 對原型的隨機 layout 產生器（Route B，間距 260 µm，seed 1）計數 box pair、wire 與 coplanar face，數字在 `figures/why-structure-numbers.json`；它不執行任何 Boolean 運算。`docs/design/sgb/_figures/why_scaling.py` 繪製 scaling、tail 與 identity 的圖，數字在 `figures/why-scaling-numbers.json`，資料來自原型的 `outputs/scaling.json`（`examples/scaling.py` 的結果）、`outputs/e3_brep/timing.json` 與 `outputs/e3_brep/sidecar_timing.json`。Gmsh API 的 profile 來自原型 README 的 emission profile。
+本頁的圖與數字是**計算所得**。`docs/design/sgb/_figures/why_structure.py` 對原型的隨機 layout 產生器（Route B，間距 260 µm，seed 1）計數 box pair、wire 與 coplanar face，數字在 `figures/why-structure-numbers.json`；它不執行任何 Boolean 運算。`docs/design/sgb/_figures/why_scaling.py` 繪製 scaling、tail 與 identity 的圖，數字在 `figures/why-scaling-numbers.json`，資料來自原型的 `outputs/scaling.json`（`examples/scaling.py` 的結果；此檔案在圖表產生之後被較新的執行覆寫，本頁已依目前的檔案重新產生）、`outputs/validator_scaling.md`、`outputs/e3_brep/timing.json` 與 `outputs/e3_brep/sidecar_timing.json`。Gmsh API 的 profile 來自原型 README 的 emission profile。
 
 Gmsh sewing 的觀察（約 60 000 個 face 的 shell 需要 180 s 與 28 GB；$N = 1000$ 的隨機 layout 中 vacuum 內外顛倒）是在原型 phase 3 中量測一次的結果，沒有保存任何輸出檔案，所以本頁主文只做定性陳述，這裡的數字只能當作單次的觀察，無法重現。
 

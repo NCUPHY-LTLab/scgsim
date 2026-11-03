@@ -21,7 +21,7 @@ Arrangement 只告訴我們平面被曲線切成哪些 **cell**（平面區域�
 
 ## Slab label
 
-**Domain** 是佔據某個區域的東西：某個 Net 的導體、dielectric 或 vacuum（prototype 中為 `Domain(kind, material, net)`）。cell 的 **slab label** 就是在整個 slab 範圍內佔據該 cell 的 domain。它由 cell 內一個精確的內部點，與該 slab 中 active 的 prism 做精確的 point-in-footprint 測試來決定，過程不使用浮點數。
+**Domain** 是佔據某個區域的東西：某個 Net 的導體、dielectric 或 vacuum（prototype 中為 `Domain(kind, material, net)`）。cell 的 **slab label** 就是在整個 slab 範圍內佔據該 cell 的 domain。它由 cell 內一個精確的內部點，與該 slab 中 active 的 prism 做 point-in-footprint 測試來決定。對由直線構成的 footprint，這個測試是精確的整數運算；對含圓弧的 footprint，prototype 以圓弧的 polyline witness（chord）判斷。整個 pipeline 中使用浮點數的只有三處：圓弧 footprint 的 witness 測試、inset band 的歸屬（以 cell 代表點到 support 邊界的距離判定）與圓弧交叉的抽樣檢查；它們都不決定 topology 中有哪些 edge。
 
 解析規則有四種情況：
 
@@ -58,7 +58,7 @@ closes when the sources snap)
 
 訊息指出兩個 Net、各自到達該點的 Entity、位置與 plane。同 Net 的接觸則屬正常。
 
-::: {.callout-important title="保證：slab label 與 kernel 無關"}
+::: {.callout-important title="保證：slab label 與 kernel 無關（依據：建構）"}
 slab label 只是來源 prism 與明確 priority 規則的函式。CAD kernel 從不決定 material、Net 或 owner，不同 Net 的重疊或接觸也不可能傳到 kernel。
 :::
 
@@ -111,7 +111,7 @@ noding 之後，每條 edge 左右各有一個 cell。若兩側 label 不同，�
 
 最後一步消失的 474 條 edge 不是 seam，而是圓弧被 *noding* 成的 chord 片段（pad 的 hole 與圓角是圓弧；v1 以 polyline witness 對圓弧做 noding，見 open decision D3）。同一條圓弧 carrier 的連續片段之間若沒有其他東西落在該 carrier 上，就是位於相同 carrier 集合上的度數為 2 的 vertex，所以會合併回一條 arc edge。同一個步驟把未修改的執行範例在此 slab 的 496 條 noded edge 變成 22 條，並把 $z = 0.1$ 的 level arrangement 從 502 條變成 28 條。若度數為 2 的 vertex 的兩條 edge 有*不同*的 carrier 集合，則會保留：它是輪廓上真正的轉角（pad 的 chamfer 角、notch 角）。
 
-::: {.callout-important title="規則：dissolution 移除什麼"}
+::: {.callout-important title="規則：dissolution 移除什麼（依據：建構與測試）"}
 dissolution 具體做兩件事：(1) 移除兩側 label 相同、且不屬於 `required` family 的 edge，並合併它兩側的 cell；(2) 移除度數為 2、且兩條 edge 的 carrier 集合完全相同的 vertex，把兩條 edge 併成一條。除此之外它不改變任何 vertex。這不表示結果是全域最小的 topology：D5 之後不同 Entity 之間的 seam 預設保留；不同 carrier 的轉角、`required` family 的 edge 與度數不為 2 的 vertex，也都會留下。
 :::
 
@@ -149,7 +149,7 @@ dissolution 改變的是數量，不是面積。驗證器（[驗證](validation.
 
 被合併的 Entity 仍以 lineage 保存，並以 **area-weighted membership** 記錄：對每個貢獻的來源 Entity，記錄該 Entity 的 footprint 所覆蓋的、輸出 face 面積的比例。比例是非互斥的（重疊處對每個覆蓋它的 Entity 都計入），總和可以大於 1。prototype 對每個 face 記錄它（`identity.json` 與 sidecar 中的 `membership`）。執行範例中 pad 的頂面（`MA::pad`）為 `{"pad": 1.0, "vacuum": 1.0}`：vacuum prism 也覆蓋它，所以比例總和為 2。wall 沒有 footprint，Entity 的比例是 wall 底部邊界長度中由該 Entity 的 edge 所承擔的比例（pad 在 port plane 的兩面 wall 為 `pad: 1.0`，上面那一面另有 `p1: 0.208`）。
 
-對上述 pad 加 tab 的例子，由 slab 的 noded cell 重新計算（figure script）得到：pad 的 footprint 覆蓋合併後 cell 的 90.0 %，tab 覆蓋 16.6 %（400 µm² 的重疊對兩者都計入）。而 prototype 對該 tab 模型 pad 頂面的 face 記錄只列出 `pad` 與 `vacuum`：level arrangement 是由已經 dissolve 過的 slab arrangement 建立的，所以完全被 dissolution 併掉的 footprint，在計算 membership 時看不到。這是這份記錄目前已知的限制。
+對上述 pad 加 tab 的例子，prototype 對合併後 pad 頂面（`MA::pad`）的 membership 記錄為 pad 0.900、`pad_tab` 0.166、vacuum 1.0（400 µm² 的重疊對兩個 Entity 都計入，所以比例總和大於 1）。membership 在 dissolution 之後仍然保留：slab 的 cell 帶有被併掉的 footprint 的聯集（`tests/test_membership.py`）。
 
 ## 小結
 

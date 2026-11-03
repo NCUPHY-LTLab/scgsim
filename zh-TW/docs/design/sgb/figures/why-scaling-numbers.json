@@ -54,16 +54,16 @@
  },
  "local_log_slope": {
   "api_emit_s": [
-   1.15,
-   1.17
+   0.97,
+   1.18
   ],
   "brep_write_s": [
    1.15,
    1.04
   ],
   "derive_s": [
-   1.17,
-   1.14
+   0.91,
+   1.18
   ],
   "faces": [
    1.0,
@@ -78,15 +78,15 @@
    0.98
   ],
   "rss_tiled_mb": [
-   0.8,
-   0.95
+   0.81,
+   0.94
   ]
  },
  "series": {
   "api_emit_s": [
-   2.296,
-   14.57,
-   74.22
+   3.277,
+   15.566,
+   80.235
   ],
   "brep_write_s": [
    0.439,
@@ -99,9 +99,9 @@
    8.661
   ],
   "derive_s": [
-   1.42,
-   9.341,
-   45.174
+   2.339,
+   10.158,
+   52.055
   ],
   "faces": [
    12761,
@@ -124,14 +124,14 @@
    1229980
   ],
   "rss_mb": [
-   323.7,
-   1358.3,
-   5272.2
+   331.3,
+   1387.3,
+   5386.2
   ],
   "rss_tiled_mb": [
-   143.7,
-   520.5,
-   1929.2
+   147.3,
+   540.4,
+   2002.2
   ]
  },
  "sidecar": {
@@ -157,19 +157,19 @@
  ],
  "speedups": {
   "1000": {
-   "best_speedup": 1.08,
+   "best_speedup": 1.51,
    "tiles_per_side": 4,
    "workers": 8
   },
   "20000": {
-   "best_speedup": 1.18,
+   "best_speedup": 1.2,
    "tiles_per_side": 4,
-   "workers": 8
+   "workers": 16
   },
   "5000": {
-   "best_speedup": 1.22,
-   "tiles_per_side": 4,
-   "workers": 32
+   "best_speedup": 1.1,
+   "tiles_per_side": 8,
+   "workers": 8
   }
  },
  "stack_n20000": {

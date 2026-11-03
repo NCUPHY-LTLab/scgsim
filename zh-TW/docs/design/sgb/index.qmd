@@ -7,7 +7,7 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/index"
 ---
 
-要模擬一顆超導晶片，solver 需要一個封閉、conformal 的實體模型：相鄰的 volume 共用它們之間的 face，而且每個 face 都知道自己是哪種材料之間的介面、屬於哪個 Net、對應哪一條來源曲線。常見的做法是先為每個零件建一個 solid，再請 CAD kernel 做一次全域的 fragment，最後再從結果中還原每個 face 的意義。這個做法在晶片尺度上既慢，也會遺失 identity（原因見[為什麼先規劃](why-plan-first.qmd)）。
+要模擬一顆超導晶片，solver 需要一個封閉的實體模型：相鄰的 volume 共用它們之間的 face（這稱為 conformal），而且每個 face 都知道自己是哪兩種材料之間的介面、屬於哪個 [Net](../../concepts/geometry.qmd#entity-occurrence-and-net)、對應哪一條來源曲線。常見的做法是先為每個零件建一個 solid，再請 CAD kernel 對所有 solid 一次做 fragment（一種全域的 Boolean 運算），最後從結果還原每個 face 的意義。這個做法預期在晶片尺度上很慢，也會遺失每個 face 的來源；論證見[為什麼先規劃](why-plan-first.qmd)，該頁也說明我們沒有對全域 fragment 做 benchmark。
 
 重新設計的 semantic geometry builder（SGB）把順序倒過來。它把晶片描述成有限個 **prism**，**在任何 CAD kernel 介入之前**就推導出完整的 topology 與每個 cell 的意義，再自己把結果寫成 BREP/XAO 檔案。Gmsh 不建立幾何：它載入檔案並對其產生 **mesh**，原型也把它當作測試用的 oracle。模型上不執行任何三維 Boolean 運算。
 
@@ -34,53 +34,67 @@ SGB 從這五個 prism 推導出下面的實體模型。為了讓每個 volume �
 對收到的模型，SGB 產生四樣東西，全部在寫出檔案之前就已決定：
 
 1. **Topology**：由 vertex、edge、face、shell 與 volume 組成，每一個共用邊界只存在一份。相鄰的 volume 共用它們之間的 face 與 edge。
-2. **Semantic label**：每個 cell 的材料、擁有者（Net 或 port）、interface 種類，以及 Surface EPR 的 band。這裡的 **cell** 是 planar arrangement 中的一個區域；之後被寫出的 **BREP face** 是由 cell 與 wall 組成的曲面，兩者不是同一個東西（見 [Label、required edge 與 dissolution](labels-and-dissolution.qmd)）。
+2. **Semantic label**：每個 cell 的材料、擁有者（Net 或 port）、interface 種類，以及 Surface EPR 的 band。cell 與 BREP face 的差別見詞彙表。
 3. **Identity**：每個實體有一個 semantic 名稱（原型的例子是 `MA::pad::band=2`）與一個依內容定址的 atomic id，並附有回到產生它的來源曲線的 lineage。
 4. **CAD 檔案與 sidecar**：直接由 topology 寫出的 BREP 與 XAO 檔案，不經任何 Boolean 運算；以及一個 JSON **sidecar**，記錄每個 native 實體對應的規劃 id、physical group、lineage 與依面積加權的 membership。
 
 無論哪一個 solver 使用，這些事實都相同。Palace 透過 Gmsh 讀取 XAO，並由 Gmsh 產生 mesh；AEDT 階段之後會讀取同樣的 solid（見 [Emission](emission.qmd)）。
 
-::: {.callout-note title="範例中的 group 名稱是原型的 per-Net 名稱"}
-本設計範例中的 physical group 名稱（例如 `MA::pad`、`PEC::Ground`、`MA::pad::band=2`）是目前原型的輸出，它把同一個 Net 的 Entity 合併成一個 group。決策 D5 已決定，設計規則是**依 Entity 歸屬**：primary group 命名為 `<kind>::<qualified entity id>[::band=k]`，例如 `MA::chip/q0/pad::band=2`；Route A 的 sheet 為 `SHEET::<entity>::band=k`；不同 Entity 之間的 seam 保留為 required edge，讓每個 Entity 對 Surface EPR 的貢獻可以分開。依 interface 種類（MA、MS、SA）的總和是 sidecar 中的聯集，Net 層級的聯集只用在 Electrostatic 這類需要電氣 identity 的後端。Route C 保留的導體內部 volume 則命名為 `VOL::<entity>`。這是設計規則；原型仍輸出 per-Net 名稱，最終的拼法在 D5 與 Route C 實作時固定。
-:::
+範例中的 group 名稱（例如 `MA::pad`）是原型目前的 per-Net 名稱；決策 D5 已決定改為 per-Entity，完整說明見 [Route](routes.qmd) 與[設計決議](decisions.qmd#d5)。在執行範例中每個 Net 只有一個 Entity，所以 face 與 group 的數量不變，只有名稱不同。
 
 ### 如何檢查結果
 
 設計中有三個層次：
 
 1. **開發測試**：在 fixture 與隨機 layout 上，以 OCP 綁定（僅供開發的相依套件）執行 OpenCASCADE 自己的檢查（`BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`），並做 Gmsh 載入檢查。
-2. **每一次 production build 都 fail closed**：寫出任何東西之前，先檢查 SGB 自己的 structural invariant；在 mesher 中再做載入檢查（數量、邊界、面積、體積、group）。production 中無法關閉驗證。
+2. **每一次 production build 都 fail closed**：寫出任何東西之前，先檢查 SGB 自己的 structural invariant；在 mesher 中再做載入檢查（數量、邊界、面積、體積、group）。設計上 production 中無法關閉驗證；原型保留一個僅供測試的開關。
 3. **Strict mode**（選用）：在已安裝 OCP 時，對 production 輸出執行 OCCT 檢查。一般使用者安裝（例如透過 OrcaPen SC PDK）不會安裝 OCP。
 
-OCCT 檢查目前的狀態：五個執行範例的 fixture（`airbridge_B`、`pad_in_ground_A`、`pad_in_ground_A_bands`、`pad_in_ground_B`、`pad_in_ground_B_bands`）已完成，每個案例的 BREP 與 XAO 檔案都通過：報告中 `ok` 為真、`BRepCheck_Analyzer` 判定有效，`BOPAlgo_ArgumentAnalyzer` 沒有回報任何錯誤或結果。另有五種刻意注入的缺陷（內環反向、共用 face 在一個 shell 中翻面、vertex 偏離曲線 $10^{-4}$ µm、缺一個 face、wire 有缺口）做為負向對照，每一種至少被一項檢查抓到。極端案例的 fixture 目錄，以及 runtime validator 在大模型上的 scaling，仍在進行中，本頁不引用。各項檢查的細節見 [Validation](validation.qmd)。
+第一層的結果已經產出，範圍如下：
+
+- **執行範例。** 五個 fixture（`airbridge_B`、`pad_in_ground_A`、`pad_in_ground_A_bands`、`pad_in_ground_B`、`pad_in_ground_B_bands`）的 BREP 與 XAO 檔案都通過：`BRepCheck_Analyzer` 判定有效，`BOPAlgo_ArgumentAnalyzer` 沒有回報任何錯誤或結果。
+- **極端案例目錄。** 22 個 fixture 乘上 Route A 與 Route B，共 39 列。其中 32 列通過全部檢查：build 與 21 項 structural 檢查、direct write、Gmsh 載入、conformal mesh、`BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer` 的所有模式，以及 `ShapeAnalysis` 與和規劃的交叉比對。另外 7 列是預期的拒絕：3 個 `NonManifoldError`、2 個 `ContactError`，以及 2 個 direct writer 對 5-edge 圓柱 wall 的拒絕。`NonManifoldError` 與 `ContactError` 都在 build 的早期就丟出（目錄記錄 1.5 到 23.7 ms）。通過的列中，`BRepCheck_Analyzer` 花 2.4 到 9.6 ms，`BOPAlgo_ArgumentAnalyzer` 花 8.8 到 48.5 ms（三次執行的中位數）。
+- **隨機 layout。** 開發測試也涵蓋 $N = 10$、100、1 000 的隨機 layout（兩種 route，$N = 1000$ 只有 Route B），皆通過。
+- **五種注入的缺陷。** 內環反向、共用 face 在一個 shell 中翻面、vertex 偏離曲線 $10^{-4}$ µm、缺一個 face、wire 有缺口，每一種至少被一項檢查抓到。
+- **Runtime validator 的成本。** 在 $N = 1000$、5 000、20 000 之間，每一項 validator 的時間對 face 數的局部斜率介於 0.79 與 1.16，也就是隨 face 數近乎線性成長。
+
+三個限制要一併說清楚。第一，direct writer 目前拒絕「外來 vertex 落在圓弧上、使圓柱 wall 有 5 條邊界 edge」的案例（Route B 與 Route C）；設計上的修正是在該 vertex 處用一條垂直 edge 把 wall 切開，每一片是自己 realised 圓上的精確圓柱，並在 production 階段 1 實作，原型尚未做。第二，目錄尚未記錄每個 fixture 的 mesh 品質與 drift；階段 1 會加入，這樣 D2 與 D7 重新評估的條件才有資料可判斷。第三，這些結果出自原型；Gmsh API 的 oracle 可以寫出上述 5-edge 案例，direct writer 不行。各項檢查的細節見 [Validation](validation.qmd)。
 
 ## Pipeline 全貌
 
-SGB 共有十一個階段（S0 到 S10）。S0 與 S1 沿用 develop 既有的固定格點來源準備：來源的正規化與 polygon Boolean 在已宣告的格點上完成，其 `GeometryGridContext` 帶著模型格點 $g$，這個 $g$ 就是 S4 使用的格點。**S4 起是新的 pipeline。** 原型不包含 S0 與 S1：它直接建立 prism，因此原型的成功並不代表已完成與 `GeometryPlan` 的整合。
+SGB 共有十一個階段（S0 到 S10）。S0 與 S1 沿用 develop 既有的固定格點來源準備：來源的正規化與 polygon Boolean 在已宣告的格點上完成，其 `GeometryGridContext` 帶著模型格點 $g$，這個 $g$ 就是 S4 使用的格點。**S4 起是新的 pipeline。** 原型不包含 S0 與 S1：它直接建立 prism，因此原型的成功並不代表已完成與 `GeometryPlan` 的整合。S2 從 S0 與 S1 收到什麼的合約（例如來源的圓弧如何變成四段 quarter `ArcCarrier`，以及 per-Entity 的 identity 如何通過 S0 的 polygon Boolean）要等 adapter 實作後才能驗證，目前尚未驗證。
 
-S1 到 S9 是作用在 immutable record 上的純函式，也是可平行化的部分（各階段的平行單位見 [pipeline 參考](pipeline-reference.qmd)）。S10 是循序的：它把完成的 topology 序列化，不呼叫任何 CAD kernel 來建立它。Route 是 S7 的一種 labelling policy，不是另一條 pipeline；v1 有三種：Route A（sheet 金屬）、Route B（排除金屬 volume）與 Route C（保留導體 volume 並在其內部做 mesh，用於有限導電率，以及未來的超導材料模型）。原型只實作 Route A 與 Route B。
+S1 到 S9 是作用在 immutable record 上的純函式，也是可平行化的部分（各階段的平行單位見 [pipeline 參考](pipeline-reference.qmd)）。S10 是循序的：它把完成的 topology 序列化，不呼叫任何 CAD kernel 來建立它。Route 是 S7 的一種 labelling policy，不是另一條 pipeline；v1 有三種：Route A（sheet 金屬）、Route B（排除金屬 volume）與 Route C（保留導體 volume 並在其內部做 mesh，用於有限導電率，以及未來的超導材料模型）。原型只實作 Route A 與 Route B；Route C 在原型中只是一個旗標，沒有測試也沒有 Gmsh 載入，設計上在 production 階段 1 實作。
 
 ::: {.askr-mermaid-view view-label="檢視圖表"}
 ```{mermaid}
 flowchart TB
-  subgraph P["Prepare, S0 to S3"]
+  subgraph P["準備（Prepare），S0 到 S3"]
     direction LR
-    S0["S0 Source snapshot<br/>(develop: fixed grid)"] --> S1["S1 Physical<br/>interpretation"] --> S2["S2 Prism catalogue<br/>levels, slabs"] --> S3["S3 Cut<br/>families"]
+    S0["S0 來源 snapshot<br/>（Source snapshot）"] --> S1["S1 物理詮釋<br/>（Physical interpretation）"] --> S2["S2 Prism 目錄<br/>（level、slab）"] --> S3["S3 Cut family"]
   end
-  subgraph A["Arrange and label, S4 to S6"]
+  subgraph A["排列與標記（Arrange and label），S4 到 S6"]
     direction LR
-    S4["S4 Arrangements<br/>A_i and S_i"] --> S5["S5 Labels,<br/>dissolution"] --> S6["S6 Topology<br/>assembly"]
+    S4["S4 Arrangement<br/>（A_i 與 S_i）"] --> S5["S5 Label、<br/>dissolution"] --> S6["S6 Topology 組裝<br/>（Assembly）"]
   end
-  subgraph N["Name and check, S7 to S9"]
+  subgraph N["命名與檢查（Name and check），S7 到 S9"]
     direction LR
-    S7["S7 Route<br/>representation"] --> S8["S8 Identity,<br/>groups"] --> S9["S9 Validation<br/>fails closed"]
+    S7["S7 Route 表示<br/>（Route representation）"] --> S8["S8 Identity、<br/>group"] --> S9["S9 驗證<br/>（Validation，fail closed）"]
   end
-  P --> A --> N --> S10["S10 Emission, sequential<br/>direct BREP/XAO writer and sidecar"]
-  S10 --> M["Gmsh meshes it, Palace solves<br/>AEDT later"]
+  P --> A --> N --> S10["S10 Emission（循序）<br/>direct BREP/XAO writer 與 sidecar"]
+  S10 --> M["Gmsh 產生 mesh，Palace 求解<br/>AEDT 之後"]
+  classDef reused fill:#d9d9d9,stroke:#555,color:#111
+  classDef newpar fill:#cfe0f1,stroke:#2a6f9e,color:#111
+  classDef seq fill:#f6d9a8,stroke:#e08a1e,color:#111
+  class S0,S1 reused
+  class S2,S3,S4,S5,S6,S7,S8,S9 newpar
+  class S10 seq
 ```
 :::
 
-這張圖是**概念性**的。整個設計由三個想法支撐：
+圖中灰色的 S0、S1 沿用 develop 的程式，原型不含；藍色的 S2 到 S9 是新的、可平行化的階段，原型已實作（S3 與 S7 只含原型用到的部分）；橘色的 S10 是新的、循序的階段。
+
+這張圖是**概念性**的示意。整個設計由三個想法支撐：
 
 - **Local arrangement。** 每個 Z level 與每個 slab 各有一個 planar arrangement，只由在那裡相遇的曲線建立（見 [2.5D layered model](layered-model.qmd)）。
 - **每一種分割共用同一個機制。** 材料邊界、port、inset band 與 refinement curve 都是在 arrangement 中加入曲線，再由 label 決定意義（見 [Cut family](cut-families.qmd)）。平行化用的 tile seam 不是 family：任何 seam 幾何都不會進入 arrangement。
@@ -106,7 +120,7 @@ flowchart TB
 
 ## 接下來讀哪裡
 
-初次閱讀請依此順序；每一列說明讀完該頁後你能解釋什麼。
+初次閱讀請依此順序；每一列說明讀完該頁後你能解釋什麼。第 16 與 17 頁是給需要核對檔案內容或查詢欄位的人，不需要依序讀完。
 
 ::: {.askr-table-compact}
 | # | 頁面 | 讀完後你能解釋 |
@@ -124,9 +138,11 @@ flowchart TB
 | 11 | [Parallel derivation](parallelism.qmd) | 平行化的結構、tiling 規則，以及哪些部分維持循序。 |
 | 12 | [Sliver](slivers.qmd) | 四種 sliver 來源、哪些依構造即被消除，以及 feature size 如何量測。 |
 | 13 | [Validation](validation.qmd) | 各項檢查、三層驗證，以及 fail-closed 的行為。 |
-| 14 | [Emission](emission.qmd) | direct BREP/XAO writer、sidecar、Gmsh 如何處理它們，以及 AEDT 階段。 |
-| 15 | [階段與 record 參考](pipeline-reference.qmd) | 每個階段的輸入、輸出與 record，供查閱。 |
-| 16 | [未決的決策](decisions.qmd) | 仍待決定的事項，附選項與後果。 |
+| 14 | [Emission](emission.qmd) | direct BREP/XAO writer、sidecar，以及 Gmsh 如何處理它們。 |
+| 15 | [交給 AEDT](aedt-handoff.qmd) | SGB 的 solid 如何以帶名稱的 solid 進入 AEDT，以及 face identity 如何把關。 |
+| 16 | [BREP 檔案格式](brep-format.qmd) | direct writer 寫出的 BREP 與 XAO 檔案的結構（給需要讀寫檔案的人）。 |
+| 17 | [階段與 record 參考](pipeline-reference.qmd) | 每個階段的輸入、輸出與 record，供查閱。 |
+| 18 | [設計決議](decisions.qmd) | 每一項決策的狀態、選項、建議與後果。 |
 :::
 
 想快速找到某個問題的答案：
@@ -135,7 +151,7 @@ flowchart TB
 - *為什麼不會有來自無關層的 sliver face？* [2.5D layered model](layered-model.qmd)。
 - *所有東西都在格點上時，「exact」是什麼意思？* [建立 arrangement](arrangement.qmd)。
 - *一個 Palace attribute 如何追溯到來源曲線？* [Identity](identity.qmd)。
-- *還有什麼沒決定？* [未決的決策](decisions.qmd)。
+- *哪些已決定、哪些還開放？* [設計決議](decisions.qmd)。
 
 本設計的圖有兩種：**計算所得**的圖與數字來自 `experiments/sgb-redesign/prototype` 的原型；**概念性**的圖是手繪的規則示意，圖說會註明是哪一種。互動式圖可以在檢視器中開啟並縮放，每張都附有一張顯示關鍵視角的靜態圖。除非圖中註明「grid units $g$」，長度單位為微米，格點單位為奈米。
 
@@ -170,6 +186,9 @@ flowchart TB
 | **Physical group** | 交給 mesher 與 solver 的、已命名的一組已 emit 的 face 或 volume。每個已 emit 的實體恰好屬於一個 primary group；像「Net X 的所有 PEC face」這種聯集，是 group 名稱的清單，絕不是互相重疊的 group。native tag 依排序後的名稱編號，不是 identity。 | [Identity](identity.qmd)、[Emission](emission.qmd) |
 | **Sidecar** | 與 BREP/XAO 檔案並列寫出的 JSON 檔：native tag 對應的規劃 id、physical group 與其聯集、embedded face、refinement curve、Surface EPR row、曲面 wall、計數與 lineage。 | [Emission](emission.qmd) |
 | **Feature size** | face 的寬度，定義為兩條互不相接的邊界 edge 之間的最小距離，在精確的 carrier 上量測（含圓弧）；sliver 報告用它衡量 face 有多薄。 | [Sliver](slivers.qmd) |
+| **MA / MS / SA** | interface 種類的縮寫：MA 是 metal–vacuum（金屬與真空之間），MS 是 metal–substrate（金屬與基板之間），SA 是 substrate–vacuum（基板與真空之間，也就是 gap 表面）。它們是 Surface EPR 的 row 所用的分類，也出現在 physical group 名稱中（例如 `MA::pad`）。見 [概念：geometry](../../concepts/geometry.qmd) 與 [Inset imprint](inset-imprint.qmd)。 | [Identity](identity.qmd) |
+| **Net / Entity** | Entity 是元件中一個有名字的來源形狀（例如 pad）；Net 是形成同一條電氣導體的一組 Entity。定義見 [概念：geometry](../../concepts/geometry.qmd#entity-occurrence-and-net)。 | [Route](routes.qmd) |
+| **Route A / B / C** | 三種 labelling policy：Route A 把金屬當成零厚度的 sheet；Route B 把有限厚度金屬的 volume 排除，只留下邊界；Route C 保留導體 volume 並在內部做 mesh。見 [Route](routes.qmd)。 | [Route](routes.qmd) |
 | **Strict mode** | 選用的 production 設定：在已安裝 OCP 綁定時，對寫出的檔案執行 OpenCASCADE 的有效性檢查，這是每次 build 都會執行的 structural 檢查之外的額外一層。 | [Validation](validation.qmd) |
 :::
 
@@ -198,4 +217,4 @@ flowchart TB
 
 最後兩列是載入檢查，不是 mesh 品質評估。
 
-數字由 `docs/design/sgb/_figures/index_example.py` 讀取原型的 `outputs/<case>/stage_summary.json` 與 `outputs/e3_brep/<case>/validation.json` 得到；OCCT 檢查讀自 `outputs/occt/reports/` 與 `outputs/occt/negative_controls.{json,md}`。腳本與其執行方式列在 `docs/design/sgb/_figures/README.md`。
+數字由 `docs/design/sgb/_figures/index_example.py` 讀取原型的 `outputs/<case>/stage_summary.json` 與 `outputs/e3_brep/<case>/validation.json` 得到；極端案例的列數、拒絕種類與檢查時間由同一個腳本解析 `outputs/extreme/catalogue.md`（時間為三次執行的中位數，單位 ms）；runtime validator 的斜率來自 `outputs/validator_scaling.md`；執行範例的 OCCT 檢查讀自 `outputs/occt/reports/` 與 `outputs/occt/negative_controls.{json,md}`；隨機 layout 的涵蓋範圍來自原型的 `tests/test_occt_check.py`。腳本與其執行方式列在 `docs/design/sgb/_figures/README.md`。

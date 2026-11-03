@@ -80,7 +80,7 @@ window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它�
 
 每個成員 carrier 都有 lineage record（family id 與成員名稱）；inset 的直線成員保留它的產生 primitive（`<support>/ring<r>/edge<k>`），和圓弧成員一樣。所以存活下來的 edge 永遠可以追溯到切出它的 family（[Identity](identity.qmd)）。
 
-目標 Z 若沒有任何 prism 定義，family 會加入該 level：它是一般的 level，active set 沒有任何變化。
+目標 Z 若沒有任何 prism 定義，family 會加入該 level：它是一般的 level，active set 沒有任何變化（prototype 已實作這一點，目前沒有專屬的測試）。
 
 ### 各種分割與它們的來源
 
@@ -107,7 +107,7 @@ policy 決定 arrangement 在 **labelling 之後**，如何處理帶有該 famil
 | `refinement_only` | 否 | 否 | 成為包含它的 face 的 **embedded curve**；face 的邊界不變 |
 :::
 
-對照計算出的表：window（`required`）增加 cell，refinement curve（`refinement_only`）不增加任何 cell。一條 edge 可以屬於多個 family（例如 refinement curve 與 band 曲線交叉時會在交點被切開，每一段只帶有自己的 carrier）；其 carrier 之中最強的 policy 勝出，所以只要有一個 carrier 是 `required`，edge 就會保留。
+對照計算出的表：window（`required`）增加 cell，refinement curve（`refinement_only`）不增加任何 cell。一條 edge 可以屬於多個 family（例如 refinement curve 與 band 曲線交叉時會在交點被切開，每一段只帶有自己的 carrier）；其 carrier 之中最強的 policy 勝出，所以只要有一個 carrier 是 `required`，edge 就會保留（極端案例 fixture `refinement_crossing_band_edge` 涵蓋 refinement curve 穿過 band 邊界的情形，兩種 route 都通過全部 check）。
 
 ## Target
 
@@ -123,7 +123,7 @@ inset 曲線由 support region 的 **physical boundary** 產生，在 arrangemen
 
 ## Family 可交換
 
-模型的 identity 不取決於 family 列出的順序：以相反的 family 清單建構範例，得到與原本相等的 build digest（計算結果）。arrangement 一次接收所有曲線，snap rounding 與順序無關，所以 family 是曲線的*集合*，而不是序列中的一步。
+模型的 identity 不取決於 family 列出的順序：以相反的 family 清單建構範例，得到與原本相等的 build digest（計算結果，由 figure script 驗證，沒有獨立的測試）。arrangement 一次接收所有曲線，snap rounding 與順序無關，所以 family 是曲線的*集合*，而不是序列中的一步。
 
 ## 如何新增 family
 
@@ -151,7 +151,7 @@ window = line_family("window", "partition",
 
 其餘一概不變：labelling、assembly、emission 與驗證都不動。驗證器像對待任何模型一樣重新檢查結果（上表每一種組合都通過）。
 
-::: {.callout-important title="保證：新增 family 不是新增程式路徑"}
+::: {.callout-important title="保證：新增 family 不是新增程式路徑（依據：建構；window 與 refinement curve 的範例已測試）"}
 assembly 與 emission 讀的是 cell、label 與 edge id。family 只以 edge 的形式、若為 `required` 則以額外 cell 的形式抵達它們。若某個提議的分割無法用曲線、edge policy 與 label 表達，它就是另一種性質的改動，需要設計審查。
 :::
 
@@ -167,12 +167,12 @@ assembly 與 emission 讀的是 cell、label 與 edge id。family 只以 edge �
 ::: {.askr-mermaid-view view-label="檢視圖表"}
 ```{mermaid}
 flowchart TD
-  Q1{"Does the feature change a label,<br/>bound a measured surface,<br/>or need its own physical group?"} -->|yes| E["arrangement edge<br/>(required family)"]
-  Q1 -->|no| Q2{"Is it a sheet that bounds no volume<br/>(inside a host volume)?"}
-  Q2 -->|yes| M1["embed the face in its host volume<br/>(sidecar records the pair)"]
-  Q2 -->|no| Q3{"Does it only guide the mesh?"}
-  Q3 -->|yes| M2["refinement_only family:<br/>embed the curve in its face"]
-  Q3 -->|no| E
+  Q1{"這個特徵會改變 label、<br/>圍出要量測的表面，<br/>或需要自己的 physical group 嗎？"} -->|是| E["arrangement edge<br/>(required family)"]
+  Q1 -->|否| Q2{"它是不圍出 volume 的 sheet<br/>(位於 host volume 內部) 嗎？"}
+  Q2 -->|是| M1["把 face embed 到 host volume<br/>(sidecar 記錄這組配對)"]
+  Q2 -->|否| Q3{"它只用來引導 mesh 嗎？"}
+  Q3 -->|是| M2["refinement_only family：<br/>把曲線 embed 到它的 face"]
+  Q3 -->|否| E
 ```
 :::
 

@@ -2,88 +2,89 @@
 
 | N | T x T | workers | build (s) | speed-up | serial stages (s) | parallel stages, wall (s) | worker compute (s) | Amdahl parallel fraction | speed-up limit | peak RSS (MB) |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1000 | 1x1 | 1 | 1.4 | 1.00 | 0.5 | 0.8 | 0.8 | 0.61 | 2.54 | 324 |
-| 1000 | 4x4 | 1 | 1.6 | 0.89 | 0.5 | 1.0 | 0.9 | 0.60 | 2.49 | 144 |
-| 1000 | 4x4 | 8 | 1.3 | 1.08 | 0.6 | 0.6 | 1.3 | 0.66 | 2.95 | 152 |
-| 1000 | 4x4 | 16 | 1.3 | 1.06 | 0.7 | 0.6 | 1.4 | 0.68 | 3.17 | 151 |
-| 1000 | 4x4 | 32 | 1.4 | 1.04 | 0.6 | 0.6 | 1.5 | 0.71 | 3.42 | 152 |
-| 1000 | 8x8 | 1 | 1.6 | 0.86 | 0.5 | 1.1 | 1.0 | 0.61 | 2.57 | 145 |
-| 1000 | 8x8 | 8 | 1.4 | 1.01 | 0.7 | 0.6 | 1.4 | 0.67 | 3.00 | 150 |
-| 1000 | 8x8 | 16 | 1.4 | 1.04 | 0.7 | 0.6 | 1.7 | 0.72 | 3.58 | 151 |
-| 1000 | 8x8 | 32 | 1.6 | 0.91 | 0.6 | 0.8 | 2.0 | 0.76 | 4.14 | 150 |
-| 5000 | 1x1 | 1 | 9.3 | 1.00 | 3.7 | 5.2 | 5.1 | 0.58 | 2.37 | 1358 |
-| 5000 | 4x4 | 1 | 10.2 | 0.92 | 3.9 | 5.9 | 5.4 | 0.55 | 2.22 | 520 |
-| 5000 | 4x4 | 8 | 7.7 | 1.21 | 4.4 | 2.8 | 6.7 | 0.61 | 2.54 | 575 |
-| 5000 | 4x4 | 16 | 7.8 | 1.19 | 4.4 | 2.9 | 7.5 | 0.63 | 2.71 | 578 |
-| 5000 | 4x4 | 32 | 7.7 | 1.22 | 4.3 | 2.7 | 7.5 | 0.63 | 2.72 | 575 |
-| 5000 | 8x8 | 1 | 10.5 | 0.89 | 3.8 | 6.3 | 5.8 | 0.57 | 2.34 | 526 |
-| 5000 | 8x8 | 8 | 7.9 | 1.18 | 4.5 | 2.8 | 7.5 | 0.63 | 2.68 | 574 |
-| 5000 | 8x8 | 16 | 8.0 | 1.17 | 4.4 | 2.9 | 8.9 | 0.67 | 3.01 | 572 |
-| 5000 | 8x8 | 32 | 8.2 | 1.14 | 4.4 | 3.2 | 10.0 | 0.70 | 3.29 | 578 |
-| 20000 | 1x1 | 1 | 45.2 | 1.00 | 18.9 | 24.3 | 24.2 | 0.56 | 2.27 | 5272 |
-| 20000 | 4x4 | 1 | 48.5 | 0.93 | 19.0 | 27.5 | 24.0 | 0.52 | 2.06 | 1929 |
-| 20000 | 4x4 | 8 | 38.2 | 1.18 | 21.8 | 13.8 | 30.1 | 0.58 | 2.38 | 2128 |
-| 20000 | 4x4 | 16 | 38.6 | 1.17 | 21.9 | 14.1 | 34.0 | 0.61 | 2.56 | 2143 |
-| 20000 | 4x4 | 32 | 38.4 | 1.18 | 21.8 | 13.9 | 32.9 | 0.60 | 2.51 | 2138 |
-| 20000 | 8x8 | 1 | 51.2 | 0.88 | 19.6 | 29.6 | 25.9 | 0.53 | 2.11 | 1919 |
-| 20000 | 8x8 | 8 | 42.0 | 1.07 | 24.9 | 14.2 | 32.4 | 0.56 | 2.30 | 2134 |
-| 20000 | 8x8 | 16 | 43.2 | 1.05 | 25.4 | 14.8 | 39.5 | 0.61 | 2.56 | 2136 |
-| 20000 | 8x8 | 32 | 42.5 | 1.06 | 23.0 | 16.6 | 41.4 | 0.64 | 2.80 | 2129 |
+| 1000 | 1x1 | 1 | 2.3 | 1.00 | 0.9 | 1.4 | 1.3 | 0.60 | 2.49 | 331 |
+| 1000 | 4x4 | 1 | 2.6 | 0.90 | 0.9 | 1.6 | 1.5 | 0.59 | 2.42 | 147 |
+| 1000 | 4x4 | 8 | 1.5 | 1.51 | 0.8 | 0.6 | 1.8 | 0.69 | 3.27 | 158 |
+| 1000 | 4x4 | 16 | 1.9 | 1.23 | 1.0 | 0.8 | 2.0 | 0.68 | 3.12 | 158 |
+| 1000 | 4x4 | 32 | 1.8 | 1.31 | 0.9 | 0.8 | 2.1 | 0.70 | 3.38 | 159 |
+| 1000 | 8x8 | 1 | 2.5 | 0.95 | 0.8 | 1.5 | 1.4 | 0.60 | 2.51 | 148 |
+| 1000 | 8x8 | 8 | 2.0 | 1.19 | 1.0 | 0.8 | 2.0 | 0.67 | 2.99 | 158 |
+| 1000 | 8x8 | 16 | 1.8 | 1.32 | 0.8 | 0.8 | 2.3 | 0.74 | 3.85 | 158 |
+| 1000 | 8x8 | 32 | 2.1 | 1.10 | 0.9 | 1.1 | 2.6 | 0.73 | 3.73 | 157 |
+| 5000 | 1x1 | 1 | 10.2 | 1.00 | 4.1 | 5.6 | 5.6 | 0.58 | 2.36 | 1387 |
+| 5000 | 4x4 | 1 | 11.0 | 0.92 | 4.1 | 6.5 | 6.0 | 0.56 | 2.30 | 540 |
+| 5000 | 4x4 | 8 | 9.3 | 1.09 | 5.2 | 3.4 | 9.7 | 0.65 | 2.87 | 602 |
+| 5000 | 4x4 | 16 | 10.8 | 0.94 | 6.2 | 3.8 | 11.0 | 0.64 | 2.79 | 596 |
+| 5000 | 4x4 | 32 | 10.8 | 0.94 | 6.2 | 3.8 | 11.1 | 0.64 | 2.79 | 596 |
+| 5000 | 8x8 | 1 | 11.7 | 0.87 | 4.2 | 7.1 | 6.5 | 0.58 | 2.39 | 544 |
+| 5000 | 8x8 | 8 | 9.2 | 1.10 | 5.1 | 3.5 | 10.8 | 0.68 | 3.14 | 600 |
+| 5000 | 8x8 | 16 | 10.9 | 0.93 | 6.2 | 3.9 | 13.4 | 0.68 | 3.16 | 595 |
+| 5000 | 8x8 | 32 | 10.8 | 0.94 | 5.8 | 4.2 | 13.7 | 0.70 | 3.38 | 592 |
+| 20000 | 1x1 | 1 | 52.1 | 1.00 | 21.9 | 28.0 | 27.9 | 0.56 | 2.27 | 5386 |
+| 20000 | 4x4 | 1 | 56.6 | 0.92 | 22.3 | 32.2 | 27.6 | 0.51 | 2.03 | 2002 |
+| 20000 | 4x4 | 8 | 53.9 | 0.97 | 32.0 | 18.6 | 44.7 | 0.58 | 2.40 | 2238 |
+| 20000 | 4x4 | 16 | 43.3 | 1.20 | 24.8 | 15.7 | 35.1 | 0.58 | 2.41 | 2228 |
+| 20000 | 4x4 | 32 | 44.6 | 1.17 | 25.2 | 16.6 | 36.7 | 0.59 | 2.45 | 2216 |
+| 20000 | 8x8 | 1 | 56.6 | 0.92 | 22.0 | 32.6 | 27.8 | 0.51 | 2.04 | 2010 |
+| 20000 | 8x8 | 8 | 54.2 | 0.96 | 30.5 | 20.3 | 48.2 | 0.61 | 2.58 | 2223 |
+| 20000 | 8x8 | 16 | 59.8 | 0.87 | 34.9 | 21.4 | 61.7 | 0.64 | 2.77 | 2215 |
+| 20000 | 8x8 | 32 | 66.4 | 0.78 | 35.4 | 27.2 | 81.4 | 0.70 | 3.30 | 2224 |
 
 ## Ranges quoted in the text
 
-- largest speed-up of any run: 1.22x
-- speed-up of runs with workers > 1: 0.91x to 1.22x
-- Amdahl parallel fraction, one process (1x1, 1 worker): 0.56 to 0.61
-- Amdahl parallel fraction, N >= 5000 with workers: 0.56 to 0.70
-- speed-up limit, N >= 5000 with workers: 2.30x to 3.29x
-- speed-up limit, one process: 2.27x to 2.54x
+- largest speed-up of any run: 1.51x
+- speed-up of runs with workers > 1: 0.78x to 1.51x
+- Amdahl parallel fraction, one process (1x1, 1 worker): 0.56 to 0.60
+- Amdahl parallel fraction, N >= 5000 with workers: 0.58 to 0.70
+- speed-up limit, N >= 5000 with workers: 2.40x to 3.38x
+- speed-up limit, one process: 2.27x to 2.49x
 - same identity digest for every (T, workers) of one N: True
 - every case passed validation: True
-- Amdahl curve with serial share from N = 20000, one process: fraction 0.560, S(8) = 1.96x, limit 2.27x
+- Amdahl curve with serial share from N = 20000, one process: fraction 0.559, S(8) = 1.96x, limit 2.27x
 
 ## Stage times of the serial run (N = 20000, 1x1 tile, 1 worker)
 
 | stage | kind | seconds |
 |---|---|---|
-| `noding_kernels` | parallel | 7.40 |
-| `dissolution` | serial | 5.24 |
-| `atomic_ids` | parallel | 4.87 |
-| `shells` | parallel | 4.30 |
-| `assembly_faces` | serial | 4.23 |
-| `dcel_faces` | serial | 3.11 |
-| `validation_shells` | parallel | 2.99 |
-| `noding_driver` | serial | 2.38 |
-| `labelling` | parallel | 2.38 |
-| `wall_runs` | parallel | 2.34 |
-| `validation_serial` | serial | 0.98 |
-| `linking` | serial | 0.77 |
-| `assembly_groups` | serial | 0.55 |
-| `assembly_registry` | serial | 0.42 |
-| `wall_prep` | serial | 0.34 |
-| `shell_prep` | serial | 0.33 |
-| `contact_check` | serial | 0.29 |
-| `arc_realisation` | serial | 0.14 |
-| `volume_connectivity` | serial | 0.10 |
+| `noding_kernels` | parallel | 9.41 |
+| `dissolution` | serial | 5.83 |
+| `atomic_ids` | parallel | 5.50 |
+| `assembly_faces` | serial | 4.50 |
+| `shells` | parallel | 4.26 |
+| `dcel_faces` | serial | 3.53 |
+| `noding_driver` | serial | 3.47 |
+| `labelling` | parallel | 3.12 |
+| `validation_shells` | parallel | 3.00 |
+| `wall_runs` | parallel | 2.69 |
+| `validation_serial` | serial | 1.02 |
+| `linking` | serial | 0.93 |
+| `assembly_groups` | serial | 0.54 |
+| `assembly_registry` | serial | 0.45 |
+| `wall_prep` | serial | 0.37 |
+| `contact_check` | serial | 0.34 |
+| `shell_prep` | serial | 0.31 |
+| `manifold_check` | serial | 0.30 |
+| `arc_realisation` | serial | 0.17 |
+| `volume_connectivity` | serial | 0.11 |
 | `S2_levels` | serial | 0.04 |
-| S10 emission (no meshing) | sequential | 74.22 |
+| S10 emission (no meshing) | sequential | 80.23 |
 
-serial stages total 18.9 s, parallel stages total 24.3 s, build wall 45.2 s
+serial stages total 21.9 s, parallel stages total 28.0 s, build wall 52.1 s
 
 ## End to end at N = 20000 (derivation + emission, one process)
 
-- derivation 45.2 s + emission 74.2 s = 119.4 s; emission is 62% of it
-- derivation at its speed-up limit (2.27x, 19.9 s): total 94.1 s, 1.27x end to end
-- derivation at the best measured speed-up (1.18x): total 112.4 s, 1.06x end to end
+- derivation 52.1 s + emission 80.2 s = 132.3 s; emission is 61% of it
+- derivation at its speed-up limit (2.27x, 23.0 s): total 103.2 s, 1.28x end to end
+- derivation at the best measured speed-up (1.20x): total 123.5 s, 1.07x end to end
 
 ## Worker compute against workers (N = 20000, 4x4 tiles)
 
 | workers | worker compute (s) | serial stages (s) | parallel stages wall (s) |
 |---|---|---|---|
-| 1 | 24.0 | 19.0 | 27.5 |
-| 8 | 30.1 | 21.8 | 13.8 |
-| 16 | 34.0 | 21.9 | 14.1 |
-| 32 | 32.9 | 21.8 | 13.9 |
+| 1 | 27.6 | 22.3 | 32.2 |
+| 8 | 44.7 | 32.0 | 18.6 |
+| 16 | 35.1 | 24.8 | 15.7 |
+| 32 | 36.7 | 25.2 | 16.6 |
 
 ## Tile statistics of the running example (z = 0 level, Route A with bands; computed here from the prototype runtime)
 

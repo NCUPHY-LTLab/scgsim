@@ -164,12 +164,53 @@ def route_numbers(result, name: str) -> dict:
     }
 
 
+def figure_abc_section() -> None:
+    """Conceptual cross-section (not computed): the same pad edge region in Route A, B and C."""
+    fig, axes = plt.subplots(1, 3, figsize=(12.5, 3.6), sharey=True)
+    titles = ("Route A: a sheet", "Route B: conductor volume excluded", "Route C: conductor volume kept")
+    for ax, title in zip(axes, titles):
+        ax.set_xlim(0, 10)
+        ax.set_ylim(-3, 4.2)
+        ax.add_patch(plt.Rectangle((0, -3), 10, 3, facecolor="#cfe0f1", edgecolor="none"))
+        ax.add_patch(plt.Rectangle((0, 0), 10, 4.2, facecolor="#fbf6df", edgecolor="none"))
+        ax.text(0.2, -2.6, "substrate", fontsize=8)
+        ax.text(0.2, 3.7, "vacuum", fontsize=8)
+        ax.set_title(title, fontsize=9)
+        ax.set_xticks([])
+        ax.set_yticks([])
+    # A: one sheet
+    axes[0].plot([3, 10], [0, 0], color="#7f7f7f", lw=4)
+    axes[0].text(6.5, 0.35, "PEC face\n(one face, two sides)", ha="center", fontsize=8)
+    # B: excluded metal: boundary faces drawn, interior hatched
+    axes[1].add_patch(plt.Rectangle((3, 0), 7, 1.2, facecolor="white", edgecolor="#555", hatch="////", lw=0))
+    axes[1].plot([3, 10], [1.2, 1.2], color="#2171b5", lw=3)
+    axes[1].plot([3, 10], [0, 0], color="#6a51a3", lw=3)
+    axes[1].plot([3, 3], [0, 1.2], color="#2171b5", lw=3)
+    axes[1].text(6.5, 1.5, "MA face (vacuum side)", ha="center", fontsize=8, color="#2171b5")
+    axes[1].text(6.5, -0.55, "MS face (substrate side)", ha="center", fontsize=8, color="#6a51a3")
+    axes[1].text(6.5, 0.45, "excluded: not meshed", ha="center", fontsize=8, bbox=dict(facecolor="white", edgecolor="none", pad=1))
+    # C: kept metal, meshed inside, shared faces
+    axes[2].add_patch(plt.Rectangle((3, 0), 7, 1.2, facecolor="#bfc3c7", edgecolor="none"))
+    for x in np.linspace(3, 10, 9):
+        axes[2].plot([x, x], [0, 1.2], color="#888", lw=0.5)
+    axes[2].plot([3, 10], [1.2, 1.2], color=PALETTE["ink"], lw=3)
+    axes[2].plot([3, 10], [0, 0], color=PALETTE["ink"], lw=3)
+    axes[2].plot([3, 3], [0, 1.2], color=PALETTE["ink"], lw=3)
+    axes[2].text(6.5, 1.5, "shared face with vacuum", ha="center", fontsize=8)
+    axes[2].text(6.5, -0.55, "shared face with substrate", ha="center", fontsize=8)
+    axes[2].text(6.5, 0.45, "conductor interior: solution domain", ha="center", fontsize=8, bbox=dict(facecolor="white", edgecolor="none", pad=1))
+    fig.suptitle("Conceptual cross-section (not computed): the same edge of a pad under the three routes", fontsize=9, y=1.02)
+    fig.tight_layout()
+    save_svg(fig, "routes-abc-section")
+
+
 def main() -> None:
     a = build(pad_in_ground("A"), keep_raw=True)
     b = build(pad_in_ground("B"), keep_raw=True)
     numbers = {"route_A": route_numbers(a, "pad_in_ground_A"), "route_B": route_numbers(b, "pad_in_ground_B")}
     figure_cells(a, b, numbers)
     figure_3d(a, b)
+    figure_abc_section()
     write_numbers("routes", numbers)
     print("routes: done")
 

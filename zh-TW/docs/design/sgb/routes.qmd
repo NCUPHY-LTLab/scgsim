@@ -40,6 +40,9 @@ scgsim-id: "docs/design/sgb/routes"
 
 ## Route 決定什麼
 
+![同一個 pad 邊緣在三種 route 下的橫截面（概念圖，非計算結果）。A：一個 sheet。B：導體 volume 被排除，只留下邊界 face。C：導體 volume 保留並在內部 mesh，與 dielectric、vacuum 共用 face。](figures/routes-abc-section.svg){#fig-abc fig-alt="三張並排的橫截面示意圖。A：substrate 與 vacuum 之間一條灰色粗線代表 sheet。B：一塊畫有斜線、標示為不 mesh 的矩形，上緣為 MA face，下緣為 MS face。C：同樣位置的灰色矩形，內部有 mesh 線，標示為導體內部是 solution domain，上下緣是與 vacuum 和 substrate 共用的 face。"}
+
+
 Route 是*早期輸入*，只作用於兩個地方：S1 決定存在哪些 prism，S7 決定輸出哪些 volume 與如何命名導體的 face。arrangement、labelling、dissolution、assembly 與驗證都不看 route；在 prototype 中，route 是兩個旗標與一個命名函式（`RoutePolicy(exclude_conductor_volumes, allow_finite_conductors)` 與 `surface_group`）。
 
 ::: {.askr-table-compact}
@@ -49,7 +52,7 @@ Route 是*早期輸入*，只作用於兩個地方：S1 決定存在哪些 prism
 | 導體 volume（S7） | 不存在 | 存在，但從輸出模型**排除** | 存在，**保留**並在內部 mesh，導體內部是 solution domain |
 | level 上的導體 cell | 一個 face（`PEC::<net>`），位於上下兩個 volume 之間 | 相鄰 dielectric volume 的 face：`MA::<net>`（vacuum 側）、`MS::<net>`（substrate 側） | 導體 volume 與相鄰 dielectric 或 vacuum volume 之間的共用 face |
 | Lumped port | 位於其平面上的 sheet，是兩個 volume 之間的 face | 位於 volume 內部的 sheet：*embedded* face | 尚未定義 |
-| 在 prototype 中 | 有 | 有 | 尚未實作 |
+| 在 prototype 中 | 有，已測試 | 有，已測試 | 只有旗標，沒有測試與 Gmsh 載入；於 production 第一階段實作 |
 :::
 
 ::: {.callout-important title="設計決策：route 是輸入，不是後處理"}
@@ -89,12 +92,12 @@ solver 常想要的是 *union*，例如「Net `pad` 的所有 PEC face」。它�
 
 Route A 則是只有一個成員的清單，例如 `"PEC::pad": ["PEC::pad"]`。同一份 solver 設定兩者都能讀：union 永遠是 primary group 名稱的清單，驗證器檢查每個成員都存在（`unions_reference_primary_groups`），也檢查沒有任何 entity 位於兩個 group（`groups_partition_each_dimension`）。physical tag 不是 identity：tag 依 group 名稱排序，新增 group 時會位移，所以使用者應儲存 group 名稱。
 
-::: {.callout-important title="保證：一個 face，一個 group"}
+::: {.callout-important title="保證：一個 face，一個 group（依據：測試）"}
 沒有任何輸出的 face 或 volume 位於兩個 physical group，也沒有任何一個不在任何 group 中。union 只是 sidecar 與 solver 設定中的簿記。
 :::
 
 ::: {.callout-warning title="範例中的 group 依 Net 合併，D5 的決定不同"}
-上面的 `PEC::pad`、`MA::pad` 是 prototype 目前的行為：同一個 Net 的 Entity 被合併成一個 group。D5 已決定，表面**預設依 Entity 歸屬**：不同 Entity 之間的 seam 保留為 required edge，讓每個 Entity 對 Surface EPR 的貢獻可以分開；primary group 的命名規則是 `<kind>::<qualified entity id>[::band=k]`（例如 `MA::chip/q0/pad::band=2`；Route A 的 sheet 是 `SHEET::<entity>::band=k`）；MA、MS、SA 各自的 interface type 總和是 sidecar 中的 union；Net 層級的 union 只用於 Electrostatic 等需要電性身分的後端。同一個 Net 的重疊區域屬於宣告 priority 較高的 Entity；priority 相同或缺少時 fail closed（Lead 的預設，可改）。這是設計規則，尚未實作：prototype 仍輸出依 Net 的名稱，確切的拼法要到 D5 實作時才定案。
+上面的 `PEC::pad`、`MA::pad` 是 prototype 目前的行為：同一個 Net 的 Entity 被合併成一個 group。D5 已決定，表面**預設依 Entity 歸屬**：不同 Entity 之間的 seam 保留為 required edge，讓每個 Entity 對 Surface EPR 的貢獻可以分開；primary group 的命名規則是 `<kind>::<qualified entity id>[::band=k]`（例如 `MA::chip/q0/pad::band=2`；Route A 的 sheet 是 `SHEET::<entity>::band=k`）；MA、MS、SA 各自的 interface type 總和是 sidecar 中的 union；Net 層級的 union 只用於 Electrostatic 等需要電性身分的後端。同一個 Net 的重疊區域屬於宣告 priority 較高的 Entity；priority 相同或缺少時 fail closed（Lead 的預設，可改）。這是設計規則，尚未實作：prototype 仍輸出依 Net 的名稱，確切的拼法要到 D5 實作時才定案。在執行範例中每個 Net 只有一個 Entity，所以依 Net 與依 Entity 得到的 face 完全相同，改變的只有 group 的名稱。
 :::
 
 ## Route B 的 port 是 embedded face {#the-route-b-port-is-an-embedded-face}
@@ -111,7 +114,7 @@ lumped-port footprint 是位於金屬層中間 $z = 0.1$ 的 sheet。pad 的 wal
 
 D1 已決定 **Route C 屬於 v1**。導體 volume 保留在模型中並在內部 mesh，導體內部是 solution domain；導體與 dielectric、導體與 vacuum 的介面是共用 face。目的是現在能處理有限導電率，未來能接上超導材料模型。它是 S7 的第三種 labelling policy，不是另一條 pipeline：arrangement、label 與 assembly 已經為導體建立了 volume 與它的 shell，Route C 只是不把它排除。
 
-Route C 尚未實作，prototype 只有 Route A 與 B。依設計規則，導體內部會成為輸出的 solid，其 volume group 為 `VOL::<entity>`；Route C 下 lumped port 如何表示、各介面的 physical group 最終如何拼寫，都要等 D5 與 Route C 實作時才定案，這頁不預先規定。
+Route C 在 prototype 中目前只是 `RoutePolicy` 的一個旗標：只有 S1–S9 的規劃與 BREP 規劃能通過，沒有專屬的測試，沒有 Gmsh 載入，也沒有 port、EXT 面與 band 的處理。它在 production 的第一階段才會實作，因此本頁只描述設計。依設計規則，導體內部會成為輸出的 solid，其 volume group 為 `VOL::<entity>`；Route C 下 lumped port 如何表示、各介面的 physical group 最終如何拼寫，都要等 D5 與 Route C 實作時才定案，這頁不預先規定。
 
 ## 邊界情形
 

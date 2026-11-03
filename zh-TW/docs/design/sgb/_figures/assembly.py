@@ -274,11 +274,51 @@ def figure_inner_void(numbers: dict) -> None:
     }
 
 
+def figure_curved_wall_split() -> None:
+    """Conceptual: a cylinder wall whose arc carries a foreign vertex, and the planned fix (split by a vertical edge)."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.5, 3.9), sharey=True)
+    # developed (unrolled) wall: u = arc length, z = height; the foreign vertex splits the arc at u = 0.4
+    for ax, split in ((ax1, False), (ax2, True)):
+        ax.set_xlim(-0.05, 1.05)
+        ax.set_ylim(-0.25, 1.3)
+        ax.set_xticks([])
+        ax.set_yticks([0, 1], ["z bottom", "z top"])
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+    ax1.add_patch(Polygon([(0, 0), (1, 0), (1, 1), (0, 1)], closed=True, facecolor="#cfe0f1", edgecolor="none"))
+    ax1.plot([0, 1], [0, 0], color=PALETTE["ink"], lw=2)
+    ax1.plot([0, 0.4], [1, 1], color=PALETTE["ink"], lw=2)
+    ax1.plot([0.4, 1], [1, 1], color=PALETTE["accent"], lw=2)
+    ax1.plot([0, 0], [0, 1], color=PALETTE["bad"], lw=2.4)
+    ax1.plot([1, 1], [0, 1], color=PALETTE["bad"], lw=2.4)
+    ax1.plot([0.4], [1], "o", color=PALETTE["bad"], ms=6)
+    ax1.annotate("a foreign vertex on the top arc\n(e.g. a port edge ending on a round pad)", (0.4, 1), (0.1, 1.17), fontsize=8,
+                 arrowprops=dict(arrowstyle="->", lw=0.8))
+    ax1.text(0.5, 0.5, "5 boundary edges:\n1 arc below, 2 arcs above,\n2 vertical edges", ha="center", va="center", fontsize=9)
+    ax1.set_title("Without a split: the two top arcs lie on\nslightly different circles, so the wall is\nnot one cylinder patch", fontsize=9)
+    ax2.add_patch(Polygon([(0, 0), (0.4, 0), (0.4, 1), (0, 1)], closed=True, facecolor="#cfe0f1", edgecolor="none"))
+    ax2.add_patch(Polygon([(0.4, 0), (1, 0), (1, 1), (0.4, 1)], closed=True, facecolor="#e8d9a8", edgecolor="none"))
+    ax2.plot([0, 1], [0, 0], color=PALETTE["ink"], lw=2)
+    ax2.plot([0, 0.4], [1, 1], color=PALETTE["ink"], lw=2)
+    ax2.plot([0.4, 1], [1, 1], color=PALETTE["accent"], lw=2)
+    for x in (0, 0.4, 1):
+        ax2.plot([x, x], [0, 1], color=PALETTE["bad"], lw=2.4)
+    ax2.plot([0.4], [0], "o", color=PALETTE["bad"], ms=6)
+    ax2.plot([0.4], [1], "o", color=PALETTE["bad"], ms=6)
+    ax2.text(0.2, 0.5, "piece 1\n4 edges", ha="center", va="center", fontsize=9)
+    ax2.text(0.7, 0.5, "piece 2\n4 edges", ha="center", va="center", fontsize=9)
+    ax2.set_title("With the planned split: a vertical edge at the\nforeign vertex (bottom arc split there too);\neach piece is an exact cylinder on its own circle", fontsize=9)
+    fig.suptitle("Conceptual drawing (not computed): a curved wall developed flat; red = vertical edges, black and orange = arcs", fontsize=9, y=1.02)
+    fig.tight_layout()
+    save_svg(fig, "assembly-curved-split")
+
+
 def main() -> None:
     numbers: dict = {}
     figure_wall_anatomy(numbers)
     figure_shells(numbers)
     figure_inner_void(numbers)
+    figure_curved_wall_split()
     write_numbers("assembly", numbers)
     print("assembly: done")
 

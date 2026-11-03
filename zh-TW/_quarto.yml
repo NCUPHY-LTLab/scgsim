@@ -198,6 +198,7 @@ website:
     - docs/design/sgb/slivers.qmd
     - docs/design/sgb/validation.qmd
     - docs/design/sgb/emission.qmd
+    - docs/design/sgb/aedt-handoff.qmd
     - docs/design/sgb/brep-format.qmd
     - docs/design/sgb/pipeline-reference.qmd
     - docs/design/sgb/decisions.qmd

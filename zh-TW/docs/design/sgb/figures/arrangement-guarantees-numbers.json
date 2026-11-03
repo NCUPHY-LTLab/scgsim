@@ -96,32 +96,32 @@
  "pipeline_rows": [
   {
    "N": 1000,
-   "build_s": 1.42,
-   "dcel_faces_s": 0.061,
-   "hot_pixels": 29988,
+   "build_s": 2.339,
+   "dcel_faces_s": 0.116,
+   "hot_pixels": 31474,
    "level_edges": 19494,
-   "noding_driver_s": 0.063,
-   "noding_kernels_s": 0.224,
+   "noding_driver_s": 0.11,
+   "noding_kernels_s": 0.413,
    "slab_edges": 9751
   },
   {
    "N": 5000,
-   "build_s": 9.341,
-   "dcel_faces_s": 0.532,
-   "hot_pixels": 149708,
+   "build_s": 10.158,
+   "dcel_faces_s": 0.581,
+   "hot_pixels": 157270,
    "level_edges": 97282,
-   "noding_driver_s": 0.478,
-   "noding_kernels_s": 1.427,
+   "noding_driver_s": 0.524,
+   "noding_kernels_s": 1.51,
    "slab_edges": 48645
   },
   {
    "N": 20000,
-   "build_s": 45.174,
-   "dcel_faces_s": 3.113,
-   "hot_pixels": 600361,
+   "build_s": 52.055,
+   "dcel_faces_s": 3.534,
+   "hot_pixels": 631159,
    "level_edges": 389972,
-   "noding_driver_s": 2.376,
-   "noding_kernels_s": 7.401,
+   "noding_driver_s": 3.471,
+   "noding_kernels_s": 9.41,
    "slab_edges": 194990
   }
  ],
@@ -170,66 +170,66 @@
  "timing": {
   "rows": [
    {
-    "dcel_s": 0.006,
+    "dcel_s": 0.008,
     "edges": 3067,
     "faces": 35,
     "hot_pixels": 4483,
     "rounds": 3,
     "segments": 2000,
-    "snap_s": 0.034
+    "snap_s": 0.036
    },
    {
-    "dcel_s": 0.014,
+    "dcel_s": 0.015,
     "edges": 6186,
     "faces": 72,
     "hot_pixels": 9004,
     "rounds": 3,
     "segments": 4000,
-    "snap_s": 0.071
+    "snap_s": 0.079
    },
    {
-    "dcel_s": 0.028,
+    "dcel_s": 0.034,
     "edges": 12492,
     "faces": 177,
     "hot_pixels": 18067,
     "rounds": 3,
     "segments": 8000,
-    "snap_s": 0.161
+    "snap_s": 0.186
    },
    {
-    "dcel_s": 0.12,
+    "dcel_s": 0.138,
     "edges": 24914,
     "faces": 311,
     "hot_pixels": 36093,
     "rounds": 3,
     "segments": 16000,
-    "snap_s": 0.416
+    "snap_s": 0.469
    },
    {
-    "dcel_s": 0.318,
+    "dcel_s": 0.249,
     "edges": 49976,
     "faces": 730,
     "hot_pixels": 72235,
     "rounds": 3,
     "segments": 32000,
-    "snap_s": 1.059
+    "snap_s": 1.075
    },
    {
-    "dcel_s": 0.762,
+    "dcel_s": 0.679,
     "edges": 99630,
     "faces": 1408,
     "hot_pixels": 144285,
     "rounds": 4,
     "segments": 64000,
-    "snap_s": 3.655
+    "snap_s": 3.206
    }
   ],
   "slope_snap_plus_dcel": [
-   1.09,
-   1.15,
-   1.5,
-   1.36,
-   1.68
+   1.1,
+   1.23,
+   1.46,
+   1.13,
+   1.55
   ]
  }
 }

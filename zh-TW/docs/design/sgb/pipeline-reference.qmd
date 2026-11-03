@@ -31,7 +31,7 @@ scgsim-id: "docs/design/sgb/pipeline-reference"
 | S10 | Emission | 計畫 → BREP/XAO 直接序列化 | 逐 chunk 平行寫出；其餘序列 | prototype 以 Gmsh API oracle 量測：`occ_build`、`synchronize`、`physical_groups`、`write_xao` |
 :::
 
-Route A、Route B 與 Route C 是 S7 的 labelling 政策（以及 S1 的 prism 詮釋），不是不同的 pipeline。Route C 保留 conductor volume 並在內部做 mesh（D1，納入 v1），prototype 尚未實作。
+Route A、Route B 與 Route C 是 S7 的 labelling 政策（以及 S1 的 prism 詮釋），不是不同的 pipeline。Route C 保留 conductor volume 並在內部做 mesh（D1，納入 v1）；目前只是設計，prototype 只有一個旗標，沒有測試也沒有 Gmsh 載入，實作在 production 的 stage 1。
 
 ## Stage 細節
 
@@ -76,6 +76,8 @@ S0 與 S1 沿用 develop 中已有的 fixed-grid source preparation：source 的
 | 平行單位 | entity |
 | 失敗 | `ValueError`：$z_1 < z_0$ 的 prism、沒有 Net 的 conductor、環向錯誤的 ring；`RouteError`：Route A 收到有厚度的 conductor |
 :::
+
+S2 從 S1 收到的內容（設計契約，尚未被轉接程式驗證）：每個 effective prism 帶有 footprint（外圈與 hole，宣告的 arc 以四段 quarter `ArcCarrier` 表示）、Z 區間、材料、Net、priority 與 entity ID，座標在宣告的 grid 上。每個 Entity 的 identity 必須在 S0 的 polygon Boolean 之後仍然保留；prototype 直接建立 prism，這個轉接尚未被驗證。
 
 ### S3 Cut families
 
@@ -124,7 +126,7 @@ Tile seam 不是 family，所以沒有 `dissolve` edge 政策；`dissolve` 這�
 | 輸出 | `Topology`：vertex、edge（horizontal、vertical、refinement）、horizontal face、**coalesced** wall、vertical edge column、volume、shell |
 | Record | `TopoVertex`、`TopoEdge`、`TopoFace`、`Shell`、`TopoVolume`、`Topology` |
 | 平行單位 | slab（wall）、volume（shell）；volume connectivity 是全域 reduction |
-| 失敗 | `ContactError`（`contact_check`）：不同 Net 的 conductor 在 slab 或 level arrangement 的 vertex、edge 或疊合的 face 上接觸（包含 Route A sheet 共用 edge 或 vertex，以及只在 grid 上因 snapping 才出現的接觸，例如 4 nm 間隙在 g = 1 nm 通過、在 g = 10 nm 失敗）；`SgbError`：wall 連接不同 volume 的 cell，或 slab edge chain 不明確或斷裂。同一 Net 的有限厚度金屬只在 vertical edge 或 vertex 相接（non-manifold pinch）會被拒絕；sheet 可以在角落相接 |
+| 失敗 | `ContactError`（`contact_check`）：不同 Net 的 conductor 在 slab 或 level arrangement 的 vertex、edge 或疊合的 face 上接觸（包含 Route A sheet 共用 edge 或 vertex，以及只在 grid 上因 snapping 才出現的接觸，例如 4 nm 間隙在 g = 1 nm 通過、在 g = 10 nm 失敗）；`SgbError`：wall 連接不同 volume 的 cell，或 slab edge chain 不明確或斷裂。`NonManifoldError`（`check_manifold`）：同一個 domain 的兩個 cell 只在 slab 的一個 vertex 相接，也就是 volume 會把一條 vertical edge 使用四次（non-manifold pinch；也包含 Route B 中 hole 碰到自己的外邊界）；它在 shell assembly 之前就丟出，訊息指名 Net、entity、位置與「vertical edge」。Route A 的 sheet 可以在角落相接，不受影響。`shells_closed_and_oriented` 保留為第二道防線 |
 :::
 
 ### S7 Route representation
@@ -134,14 +136,14 @@ Tile seam 不是 family，所以沒有 `dissolve` edge 政策；`dissolve` 這�
 |---|---|
 | 輸入 | topology、route 政策 |
 | 輸出 | 哪些 volume 要輸出（Route B 排除 conductor volume；Route C 保留它們）、哪些 face 是 PEC |
-| Record | `RoutePolicy`（`exclude_conductor_volumes`、`allow_finite_conductors`）；Route C 是第三個設定，尚未在 prototype 中 |
+| Record | `RoutePolicy`（`exclude_conductor_volumes`、`allow_finite_conductors`）；Route C 是第三個設定，設計上存在，實作在 production 的 stage 1 |
 | 平行單位 | face 或 volume（label 規則） |
 | 失敗 | 不同 Net 的 conductor 隔著 face 接觸時 `OverlapError`（`ContactError` 是其子類別） |
 :::
 
 ### S8 Identity 與 group
 
-prototype 目前以 per Net 合併 face 並命名 group；D5 已決定預設改為 per Entity（不同 Entity 之間的 seam 保留為 required edge，報告依 MA/MS/SA 彙整），那部分尚未實作，見[決策頁](decisions.qmd#d5)。
+prototype 目前以 per Net 合併 face 並命名 group；預設將改為 per Entity，見 [D5](decisions.qmd#d5)。
 
 ::: {.askr-table-compact}
 | | |
@@ -165,7 +167,9 @@ prototype 目前以 per Net 合併 face 並命名 group；D5 已決定預設改�
 | 失敗 | `ValidationError`，列出失敗的 invariant；warning（arc 偏差、非平面 wall）不會停止 build。production build 無法關閉 validation；關閉開關只存在於 prototype 的測試中 |
 :::
 
-Validation 分三層：（1）開發階段的測試以 OCP 執行 OCCT 的 `BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`，並做 Gmsh 載入檢查（OCP 是 dev 專用的 dependency）；（2）每個 production build 在寫出前以 SGB 自己的結構 invariant 失敗即停，並在 mesher 的載入檢查（數量、邊界、面積、體積、group）失敗即停；（3）安裝了 OCP 時，可選的 strict 模式對 production 輸出執行 OCCT 檢查。終端使用者的安裝（例如經由 OrcaPen SC PDK）不會裝 OCP。OCCT 檢查的結果仍在 prototype 第 4 階段產生中，本頁不引用。
+Validation 分三層：（1）開發階段的測試以 OCP 執行 OCCT 的 `BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`，並做 Gmsh 載入檢查（OCP 是 dev 專用的 dependency）；（2）每個 production build 在寫出前以 SGB 自己的結構 invariant 失敗即停，並在 mesher 的載入檢查（數量、邊界、面積、體積、group）失敗即停；（3）安裝了 OCP 時，可選的 strict 模式對 production 輸出執行 OCCT 檢查。終端使用者的安裝（例如經由 OrcaPen SC PDK）不會裝 OCP。
+
+prototype 已對這些檢查產生結果：extreme-case catalogue 共 22 個 fixture、39 個 fixture × route 的組合，其中 32 個通過每一項檢查（建構加 21 項結構檢查、直接寫出、Gmsh 載入、conformal mesh、`BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer` 的所有模式、`ShapeAnalysis`、與計畫的交叉核對）；7 個是預期的拒絕（3 個 `NonManifoldError`、2 個 `ContactError`、2 個直接 writer 對 5-edge wall 的拒絕）。每個通過的 fixture 上，`BRepCheck_Analyzer` 約 2–10 ms、BOP 約 9–49 ms，所有檢查加總約 100–275 ms；`NonManifoldError` 與 `ContactError` 在 build 開始後數毫秒內就丟出（1.5–24 ms）。五個刻意注入的缺陷（反向的 inner wire、被翻轉的共用 face、偏離曲線 $10^{-4}$ µm 的 vertex、缺少一個 face 的開放 shell、有縫隙的 wire）各被至少一項檢查抓到。執行期的 validator 耗時對 face 數大致線性（斜率 0.79–1.16，N = 1 000 到 20 000）。這個 catalogue 還沒有記錄每個 fixture 的 mesh 品質與 drift；stage 1 會補上，D2 與 D7 的重新評估條件才能被評估（見[決策頁](decisions.qmd)）。
 
 ### S10 Emission
 
@@ -279,7 +283,7 @@ prototype 對含 band 的 Route B 模型執行 21 項檢查（`validation_report
 | `every_edge_shared_by_two_faces` | 沒有懸空 edge（embedded face 的自由 edge 會被計數） |
 :::
 
-此外有三組不在上表中的 fail-closed 檢查：`contact_check`（`ContactError`）、`refinement_only` 片段的放置檢查（`SgbError`），以及輸出時的 planned ID 與 native entity 數量比對。
+此外有四組不在上表中的 fail-closed 檢查：`contact_check`（`ContactError`）、`manifold_check`（`NonManifoldError`）、`refinement_only` 片段的放置檢查（`SgbError`），以及輸出時的 planned ID 與 native entity 數量比對。
 
 ## 錯誤類別
 
@@ -288,6 +292,7 @@ prototype 對含 band 的 Route B 模型執行 21 項檢查（`validation_report
 |---|---|
 | `SgbError` | 基底類別：source 或規劃上的缺陷 |
 | `OverlapError` | 不同 Net 的 conductor 重疊；同 priority 的 dielectric 材料不同 |
+| `NonManifoldError` | `SgbError` 的子類別：同一個 domain 的兩個 cell 只在 vertex 相接（non-manifold pinch），在 assembly 之前由 `check_manifold` 丟出 |
 | `ContactError` | `OverlapError` 的子類別：不同 Net 的 conductor 接觸（共用 edge 或 vertex），包含只因 snapping 才出現的接觸；訊息指名兩個 Net、各自的 entity、位置（µm）、plane 與 grid |
 | `RouteError` | prism 對該 route 不合法 |
 | `ValidationError` | 結構 invariant 失敗 |

@@ -7,6 +7,8 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/brep-format"
 ---
 
+這一頁是參考頁，給審查或修改 writer 的 contributor 使用；只想了解 SGB 設計的讀者可以略過，改讀 [emission](emission.qmd)。
+
 writer 輸出的 BREP 是純文字，XAO 是把同一份 BREP 加上 sub-shape reference 與 group 包起來的 XML。審查 writer 時，你可以直接打開 `model.brep` 或 `model.xao`，親手核對任何一筆 record。這一頁逐段說明檔案的結構、編號規則與 orientation 規則；為什麼要自己寫檔、怎麼交給 Gmsh，見 [emission](emission.qmd)。
 
 範例是 `pad_in_ground_B`（pad-in-ground，[Route B](routes.qmd)）。本頁引用的區塊都是這個範例檔案中的真實行，行號標在區塊標題上。文中的 face 都是輸出的 BREP face，不是 arrangement 的 cell（兩者的差別見 [emission](emission.qmd#the-running-example-at-the-point-of-emission)）。
@@ -67,7 +69,7 @@ writer 套用的 orientation 規則：
 
 - **Shell 中的 face：** face 的 normal 指向 solid 外側時用 `+`，否則用 `-`。若 solid 有內部 void，void 的 shell 是同一個 solid 的第二筆 shell record，其 face 指向材料外側、也就是指向 void。用「真空中的浮動導體」做的測試確認此時 volume 為整個 box 減去 void。
 - **Plane：** horizontal face 位於所屬 level 的 Plane 上（normal 為 +z，每個 level 一個 Plane，由該 level 的所有 face 共用）。wall 有自己的 Plane，normal 由繞其 loop 的右手定則決定。face 的外側 wire 從 normal 的頂端看是逆時針，洞的 wire 是順時針。
-- **Cylinder：** Cylinder 的自然 normal 指離軸線。當規劃的 loop normal 指向軸線時，writer 會把 wire 反向，所有 shell 對該 face 改用相反的符號。範例中五面 cylinder wall 有三面這樣翻轉（[tag 表](emission.qmd#xao-groups-and-the-planned-id-to-tag-map)中標為「wire 已反向」）。
+- **Cylinder：** Cylinder 的自然 normal 指離軸線。當規劃的 loop normal 指向軸線時，writer 會把 wire 反向，所有 shell 對該 face 改用相反的符號。writer 只接受弧都落在同一個圓上的 curved wall；含 foreign vertex 的 5-edge wall 目前被拒絕（見 [emission 的限制](emission.qmd#limits-and-risks)）。範例中五面 cylinder wall 有三面這樣翻轉（[tag 表](emission.qmd#xao-groups-and-the-planned-id-to-tag-map)中標為「wire 已反向」）。
 - **Mass 檢查：** orientation 錯誤在載入後會表現為負的 volume。單元測試把所有 shell 反向，確認每個 volume 都變成負值。
 
 ### 追蹤一條 edge {#following-one-edge-through-the-file}

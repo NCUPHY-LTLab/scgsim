@@ -9,21 +9,22 @@ scgsim-id: "docs/design/sgb/decisions"
 
 這一頁把 SGB 設計中需要決定、或已由 Human 或 Lead 決定的項目放在一起，讓你一眼看出哪些已定案、哪些仍然開放、哪些數字需要 Human 核准。每一項先說明問題、選項、建議與後果，再列出 prototype 提供的證據。
 
-「**Human Gate**」是必須由 Human 擁有的選擇：一個數值，或一個會改變結果所代表意義的預設值。「**Architecture review**」是在對外行為相同的實作之間做技術選擇。證據來自 prototype 的輸出；各項會指明檔案，指令與資料表放在最後的「補充：重現資料」。
+「Human」表示由 Human 決定：一個數值，或一個會改變結果所代表意義的預設值。「Lead」表示由 Lead 提出決定或建議，再由 architecture review 審查實作選擇。證據來自 prototype 的輸出，來源檔案列在最後的「補充：重現資料」。
 
 ::: {.askr-table-compact}
-| ID | 問題 | 目前狀態 | 決定者 |
-|---|---|---|---|
-| [D1](#d1) | 是否支援 Route C（保留 conductor volume）？ | Human 決定：納入 v1；prototype 尚未實作 | Human（範圍）、architecture review（細節） |
-| [D2](#d2) | sliver 的 threshold 與 derived-to-source snapping 的 $\tau$？ | Human 決定：v1 不設 threshold，只回報 | Human |
-| [D3](#d3) | arc 如何做 noding？ | Lead 暫定：polyline witness 加 merge-back | architecture review |
-| [D4](#d4) | AEDT 的 solid 交換格式與 face identity？ | Lead 決定：XDE assembly 的 STEP、預先切好的 band | architecture review |
-| [D5](#d5) | surface 的 attribution 粒度？ | Human 決定：預設 per Entity；prototype 尚未實作 | Human |
-| [D6](#d6) | 既有 polygon 與 curved 路徑的取代方式？ | Human 決定：兩者移除，不留相容層 | Human、architecture review |
-| [D7](#d7) | iterated snap rounding 的 drift 是否設上限？ | Lead 建議：v1 只記錄 | architecture review |
-| [D8](#d8) | emission 用 Gmsh API 還是直接序列化？ | Lead 決定：直接 BREP/XAO 序列化 | architecture review |
-| [D9](#d9) | production kernel 的語言？ | Lead 建議：Python orchestration 加 compiled kernel | architecture review |
+| ID | 問題 | 決定 | 決定者 | prototype 是否已實作 | 已知缺口 |
+|---|---|---|---|---|---|
+| [D1](#d1) | 是否支援 Route C（保留 conductor volume）？ | 納入 v1 | Human（範圍）；細節由 architecture review | 否：只有一個旗標，沒有測試，也沒有 Gmsh 載入 | 在 stage 1 實作與驗證 |
+| [D2](#d2) | sliver 的 threshold 與 derived-to-source snapping？ | v1 不設 threshold，只回報 | Human | 部分：回報已有；窄 slab 會讓 prototype 中止 | catalogue 尚未記錄 mesh 品質；stage 1 移除中止並補上記錄 |
+| [D3](#d3) | arc 如何做 noding？ | polyline witness 加 merge-back（暫定） | Lead，architecture review 中 | 是 | witness 成本只在 running example 量過，未在 scaling 量過 |
+| [D4](#d4) | AEDT 的 solid 交換與 face identity？ | XDE assembly 的 STEP、預先切好的 band | Lead，architecture review 中 | 否：E4 是獨立實驗 | face 順序的回歸測試尚未存在 |
+| [D5](#d5) | surface 的 attribution 粒度？ | 預設 per Entity | Human | 否：prototype 仍 per Net 合併 | 命名與測試待實作 |
+| [D6](#d6) | 既有路徑的取代方式？ | 兩者移除，不留相容層 | Human，並經 architecture review | 不適用 | S0–S1 到 S2 的轉接契約尚未驗證 |
+| [D7](#d7) | iterated snap rounding 的 drift 是否設上限？ | v1 只記錄 | Lead 建議，architecture review | 是（只記錄） | catalogue 尚未記錄 per-fixture 的 drift |
+| [D8](#d8) | emission 用 Gmsh API 還是直接序列化？ | 直接 BREP/XAO 序列化 | Lead，architecture review 中 | 是，但帶 5-edge wall 的限制 | 5-edge cylinder wall 被拒絕（見 D8） |
+| [D9](#d9) | production kernel 的語言？ | Python orchestration 加 compiled kernel（建議） | Lead，architecture review | 否 | compiled kernel 尚未量測 |
 :::
+
 
 ## D1 Route C {#d1}
 
@@ -32,13 +33,13 @@ Route C 把有限厚度的金屬保留為 conductor volume，並在內部做 mes
 ::: {.askr-table-compact}
 | | |
 |---|---|
-| 決定 | Route C 納入 v1。它是 S7 的第三種 labelling 政策，不是另一條 pipeline。prototype 尚未實作。 |
+| 決定 | Route C 納入 v1。它是 S7 的第三種 labelling 政策，不是另一條 pipeline。目前只是設計：prototype 只有一個旗標，沒有測試、沒有 Gmsh 載入，也沒有 port、命名與 band 的處理；實作與驗證在 production 的 stage 1。 |
 | 選項 | （a）不支援。（b）當成第三種 labelling 政策支援（已選）。 |
 | 後果 | 會出現 conductor 內部的 volume group（`VOL::<entity>`，最終拼法在實作時固定）；「Net X 的 PEC」的意義在 Route C 不再是一組 PEC face，因為界面是 conductor 與 dielectric 之間的共用 face；Palace 端的 material domain 與 Surface EPR 的 lowering 都要有對應規則。Route A 與 Route B 的 contract 不變。 |
 | 決定者 | Human 已決定範圍；labelling 政策的細節由 architecture review。 |
 :::
 
-證據：Route 是 labelling 政策。prototype 的 `RoutePolicy` 只有 `exclude_conductor_volumes` 與 `allow_finite_conductors` 兩個旗標；兩種 route 都在 S6 derive 出 conductor volume，Route B 把它們標為 `emitted: false`（`outputs/pad_in_ground_B/identity.json`），Route C 只需讓這個旗標為 false。
+證據：Route 是 labelling 政策。prototype 的 `RoutePolicy` 只有 `exclude_conductor_volumes` 與 `allow_finite_conductors` 兩個旗標；兩種 route 都在 S6 derive 出 conductor volume，Route B 把它們標為 `emitted: false`。一次探測顯示，把旗標設為 false 時，S1–S9 與 writer 的計畫都通過；但它沒有經過 Gmsh 載入、port、EXT/VOL 命名、band 或 OCCT 檢查，所以這只說明規劃不需要新的程式，不代表 Route C 已驗證。
 
 ## D2 Sliver threshold 與 derived-to-source snapping {#d2}
 
@@ -46,14 +47,14 @@ Route C 把有限厚度的金屬保留為 conductor volume，並在內部做 mes
 | | |
 |---|---|
 | 問題 | 多小的寬度、長度與角度算是缺陷？derived 曲線（inset band、refinement curve）可否在容差 $\tau_\mathrm{derived}$ 內 snap 到 source 曲線？ |
-| Human 的決定 | **v1 不設任何 sliver threshold，只回報。** 四種 sliver 來源中，量化、無關 layer 的投影與同 label 的 seam 已由設計消除；剩下的「來源近乎重合」視為幾何本來就是這個樣子，SGB 照樣建出，並在 sliver report 中列出 feature size、位置與 lineage。v1 不做 derived-to-source snapping，也不因窄 face 讓 build 失敗。 |
-| 重新評估的條件 | 真實 layout 或 extreme-case fixture 中出現由窄 face 造成的畸形 mesh element。 |
+| Human 的決定 | **v1 不設任何 sliver threshold，只回報。** 四種 sliver 來源中，量化、無關 layer 的投影與同 label 的 seam 已由設計消除；剩下的「來源近乎重合」視為幾何本來就是這個樣子，SGB 照樣建出，並在 sliver report 中列出 feature size、位置與 lineage。v1 不做 derived-to-source snapping，也不因窄 face 讓 build 失敗。同樣的原則適用於 Z：level 是宣告的精確 Z 值，不設 Z 的 threshold；比 $g$ 薄的 slab 會被保留並回報。prototype 的 `validate.py` 目前會對這種 slab 中止 build，那是 prototype 的行為，production 的 stage 1 會移除。 |
+| 重新評估的條件 | 真實 layout 或 extreme-case fixture 中出現由窄 face 造成的畸形 mesh element。目前 extreme-case catalogue 還沒有記錄每個 fixture 的 mesh 品質（也沒有 drift）；stage 1 會加入這些欄位，這個條件才能被評估，這裡不預先填任何數值。 |
 | 保留的選項 | （b）每個 layer 或 family 使用較粗的 snap grid；（c）在 $\tau_\mathrm{derived}$ 內做 derived-to-source snapping（source 曲線永不移動）。兩者在 v1 都不啟用；日後若啟用，每個數值都是 handoff 中寫明的數字。 |
 | 後果 | pipeline 不移動任何曲線；mesher 可能遇到來源本身的窄 face，但會由 sliver report 與 mesh 品質檢查顯示出來，不會靜默發生。經 snapping 才出現的不同 Net 接觸一律失敗（`ContactError`）。 |
 | 決定者 | **Human，已決定。** |
 :::
 
-證據：sliver 的寬度是 **feature size**，也就是同一個 cell 上兩條不相鄰邊界 edge 的最小距離，在精確 carrier 上量得，arc 也包含在內；chord polygon 的 $2A/P$ 另存為 `width_2a_over_p_um`。最窄的 cell：`pad_in_ground_A` 為 7.07 µm（$2A/P$ 為 28.48 µm）、`pad_in_ground_B` 為 0.1 µm（port plane 切出的垂直 wall；$2A/P$ 為 0.0998 µm）、含 band 的 case 為 0.0767 µm（$2A/P$ 約 0.397 µm）；最小角度皆為 90°，snap drift 為 0（`outputs/*/sliver_report.json`）。prototype 只量測，不套用任何 threshold。見 [Slivers](slivers.qmd)。
+證據：sliver 的寬度是 **feature size**，也就是同一個 cell 上兩條不相鄰邊界 edge 的最小距離，在精確 carrier 上量得，arc 也包含在內；chord polygon 的 $2A/P$ 另存為 `width_2a_over_p_um`。最窄的 cell：`pad_in_ground_A` 為 7.07 µm（$2A/P$ 為 28.48 µm）、`pad_in_ground_B` 為 0.1 µm（port plane 切出的垂直 wall；$2A/P$ 為 0.0998 µm）、含 band 的 case 為 0.0767 µm（$2A/P$ 約 0.397 µm）；最小角度皆為 90°；snap drift 為 0，這是因為 layout 的輸入本來就在 grid 上（by construction），不是超出報告所顯示的量測性質。prototype 只量測，不套用任何 threshold。在 extreme-case catalogue 中，`near_coincident_layers_2g`（兩層邊緣相距 2 g，產生真實的 2 nm sliver face）仍通過全部檢查：BRepCheck、BOPAlgo、conformal mesh；相距 0.4 g 的 fixture 則被合併、沒有 sliver。見 [Slivers](slivers.qmd)。
 
 ## D3 Arc noding {#d3}
 
@@ -68,7 +69,7 @@ Route C 把有限厚度的金屬保留為 conductor volume，並在內部做 mes
 | 決定者 | Architecture review。 |
 :::
 
-證據：含 band 的 Route A 範例，z = 0 level 有 2 932 條 noded edge，dissolve 後剩 160 條（`outputs/pad_in_ground_A_bands/stage_summary.json` 的 `S4_level_arrangements`，plane `level[0]`）。一段 8 µm 的 quarter arc 約 100 條 chord；pad 的 hot pixel 從 69（32 邊形 hole）增加到 516（prototype README，phase 2）。47 條 arc edge 的 realised arc 與精確圓的偏差最大 0.632 grid unit（`sliver_report.json`）。
+證據：含 band 的 Route A 範例，z = 0 level 有 2 932 條 noded edge，dissolve 後剩 160 條。一段 8 µm 的 quarter arc 約 100 條 chord；pad 的 hot pixel 從 69（32 邊形 hole）增加到 516（prototype 的 phase 2 紀錄）。47 條 arc edge 的 realised arc 與精確圓的偏差最大 0.632 grid unit。這些成本只在 running example 上量過；scaling 的 layout 沒有 arc，所以大規模的 witness 成本沒有量測，不應外推。
 
 ## D4 AEDT solid 交換 {#d4}
 
@@ -78,12 +79,12 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | | |
 |---|---|
 | 選項 | （a）STEP 檔加 tag 表。（b）SAT。（c）由 planned topology 以 PyAEDT 原生建構。（d）把 band 以 AEDT 原生 Imprint 事後切出。 |
-| Lead 的決定 | （a）的 XDE assembly 形式，待 architecture review：OCCT 寫出 **XDE assembly 的 STEP**，每個 solid 一個具名 component；**band 與所有 partition 由 SGB 預先切好寫在 solid 中**，所以不需要 AEDT Imprint；face identity 由**每個 solid 的 face 順序**決定，並在每次 import 時以檢查把關；port 等 free face 由 PyAEDT 依 sidecar 的幾何以原生方式重建；AEDT 原生 Imprint 只作為 fallback。 |
-| 後果 | identity 由 SGB 的 sidecar 加上 face 順序承載，不是由 AEDT 看得到的名稱承載；sidecar 的 tag 順序必須等於 OCC 的 solid face 順序，每次 import 都有守衛，並需要回歸測試持續檢查這個性質。AEDT 中共用 face 每個 solid 各有一份，conformity 在 AEDT 內是幾何上的。預先切好的 band face 取代 AEDT 的 non-model integration sheet（[Inset imprint](inset-imprint.qmd)）。 |
-| 決定者 | Architecture review，與 AEDT stage 的負責人一起。 |
+| Lead 的決定 | （a）的 XDE assembly 形式，architecture review 中：OCCT 寫出 **XDE assembly 的 STEP**，每個 solid 一個具名 component；**band 與所有 partition 由 SGB 預先切好寫在 solid 中**，所以不需要 AEDT Imprint；face identity 由**每個 solid 的 face 順序**決定，並在每次 import 時以檢查把關；port 等 free face 由 PyAEDT 依 sidecar 的幾何以原生方式重建；AEDT 原生 Imprint 只作為 fallback。 |
+| 後果 | identity 由 SGB 的 sidecar 加上 face 順序承載，不是由 AEDT 看得到的名稱承載；sidecar 的 tag 順序必須等於 OCC 的 solid face 順序；這是設計要求，每次 import 都要守衛。目前 prototype 內還沒有檢查這個性質的回歸測試，E4 只在 AEDT 端的腳本中驗證過。AEDT 中共用 face 每個 solid 各有一份，conformity 在 AEDT 內是幾何上的。預先切好的 band face 取代 AEDT 的 non-model integration sheet（[Inset imprint](inset-imprint.qmd)）。 |
+| 決定者 | Lead 決定，architecture review 中（與 AEDT stage 的負責人一起）。 |
 :::
 
-證據（`experiments/sgb-redesign/e4_aedt_step/README.md`）：
+證據（E4 實驗報告）：
 
 - **名稱。** 只有 XDE assembly（名稱放在 PRODUCT 上）能讓 solid 名稱進到 AEDT；平的 free shape 會失去名稱。AEDT 會去掉 `[A-Za-z0-9_]` 以外的字元（非 ASCII 名稱整個被丟掉），所以 SGB 在 sidecar 寫入已消毒且檢查過碰撞的 `aedt_name`，import 後斷言 object 集合相同。
 - **單位。** OCCT 的 STEP 必須 `xstep.cascade.unit=MM` 搭配 `write.step.unit=UM`（數字不變，標示 µm）；寫成 UM 加 UM 會讓模型縮小 1 000 倍，金屬 slab 崩塌。兩個 solid 的體積相對誤差為 $-2.6 \times 10^{-10}$ 與 $-1.6 \times 10^{-10}$。
@@ -100,6 +101,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 |---|---|
 | 問題 | surface 的 group 與 Surface EPR 的貢獻，要以 **Net**（一個 `MA::pad`）還是以 **Entity**（每個 source 形狀）為單位？ |
 | 決定 | **預設 per Entity**：不同 Entity 之間的 seam 保留為 required edge，讓每個 Entity 的 Surface EPR 貢獻可以分開。報告依**界面種類**（MA、MS、SA）彙整，並可顯示總和；Net 只用在後端需要電氣 identity 的地方（Electrostatic 的 terminal 與 ground）。 |
+| 範例中 | running example 中每個 Net 只有一個 Entity，所以 per Net 與 per Entity 得到相同的 face，只有名稱不同。 |
 | 同一 Net 的重疊 | 重疊區屬於宣告 priority 較高的 Entity；priority 相同或沒有宣告時 fail closed。這是 Lead 的預設，可以回復。 |
 | prototype 現況 | **尚未實作**：prototype 仍以 per Net 合併 face，因此本設計文件中的範例（如 `MA::pad`、`PEC::pad`）顯示的是 per Net 的 group。area-weighted membership 已記錄，可作為遷移的依據。 |
 | 命名規則 | primary group 為 `<kind>::<qualified entity id>[::band=k]`，例如 `MA::chip/q0/pad::band=2`；Route A 的 sheet 為 `SHEET::<entity>::band=k`。MA、MS、SA 的總和是 sidecar 中的 union；Net 層級的 union 只用於 Electrostatic。這是設計規則，最終拼法在實作 D5 與 Route C 時才固定。 |
@@ -107,7 +109,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | 決定者 | Human 已決定預設；同一 Net 重疊的規則是 Lead 預設。 |
 :::
 
-證據：membership 現已記錄（`TopoFace.membership`；sidecar 的 `lineage.membership`）：horizontal face 為涵蓋面積比例，wall 為底邊長度比例；彼此不互斥，可總和超過 1，且包含背景 prism（`outputs/pad_in_ground_B_bands/identity.json`）。N = 20 000 時，帶 lineage 的 sidecar 在 Python 中建構 2.57 s、序列化 1.57 s、94 MB，不帶 lineage 為 0.35 s、0.30 s、46 MB（`outputs/e3_brep/sidecar_timing.json`）。physical group 的成本隨 group 數成長：Gmsh API emission 中 `physical_groups` 在 N = 5 000 為 0.44 s、N = 20 000 為 8.52 s（`outputs/scaling.json` 的 `emit_stage_s`）；若 group 數成為瓶頸，可以改成每種 kind 一個 group 加 sidecar 中的 attribute 表。
+證據：membership 現已記錄（`TopoFace.membership`；sidecar 的 `lineage.membership`）：horizontal face 為涵蓋面積比例，wall 為底邊長度比例；彼此不互斥，可總和超過 1，且包含背景 prism。N = 20 000 時，帶 lineage 的 sidecar 在 Python 中建構 2.57 s、序列化 1.57 s、94 MB，不帶 lineage 為 0.35 s、0.30 s、46 MB（這次量測早於 membership 的修正，目前寫出的 sidecar 更大，約 126 MB，尚未重新量測）。Gmsh API emission 中 `addPhysicalGroup` 的成本隨 group 數成長（目前保存的量測：N = 5 000 為 0.55 s、N = 20 000 為 10.0 s），validator 的 group 檢查已改為與 entity 數成線性（N = 20 000 為 2.1 s，斜率 1.09）；若 group 數成為瓶頸，可以改成每種 kind 一個 group 加 sidecar 中的 attribute 表。
 
 ## D6 取代計畫 {#d6}
 
@@ -127,7 +129,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 |---|---|
 | 問題 | iterated snap rounding 的 drift 要限制（bounded-drift ISR，Packer），還是只記錄？ |
 | 選項 | （a）記錄每條 edge 的偏差。（b）以 bounded-drift ISR 限制它。 |
-| Lead 的建議 | v1 只記錄（a）：sliver 報告中的逐 edge 偏差加結構性 validation；若真實 layout 的輸入（或 extreme-case fixture catalogue）出現超過 1 g 的 drift，再重新評估 bounded-drift ISR（b）；隨機 segment 的對抗性集合（1.417 g、1.925 g）是壓力測試的證據，不是這個觸發條件。這裡沒有訂任何新的 drift 上限數值。 |
+| Lead 的建議（已記載於 brief） | v1 只記錄（a）：sliver 報告中的逐 edge 偏差加結構性 validation；若真實 layout 的輸入（或 extreme-case fixture catalogue）出現超過 1 g 的 drift，再重新評估 bounded-drift ISR（b）；隨機 segment 的對抗性集合（1.417 g、1.925 g）是壓力測試的證據，不是這個觸發條件。這裡沒有訂任何新的 drift 上限數值；catalogue 目前沒有逐 fixture 的 drift 欄位，stage 1 會補上，這個觸發條件才能被評估。 |
 | 後果 | layout 的 source 已在 grid 上，drift 只出現在斜向 carrier 的交叉處。（b）要付出實作複雜度，並可能改變 noding 的結果；（a）依賴記錄下來的偏差與 validation。 |
 | 決定者 | Architecture review；若 drift 上限的數值要進入 handoff 成為容差，則由 Human 決定。 |
 :::
@@ -141,7 +143,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | iterated rounding（隨機 segment） | 同上 | 1.417 g | `random_trials.iterated` |
 | iterated rounding（dense 對抗性隨機 segment） | 1 500 組 × 40 條 segment，30 × 30 的 box | 1.925 g | `dense_random` |
 | iterated rounding（類 layout） | 隨機 layout N = 200，5 854 條 edge | 0.605 g，沒有 edge 超過 bound | `layout_like.random_layout_n200` |
-| 五個 running example 的 edge | 見 `sliver_report.json` | snap drift 0 | `snap_drift` |
+| 五個 running example 的 edge | 見 `sliver_report.json` | snap drift 0（layout 輸入在 grid 上，by construction） | `snap_drift` |
 | derived（offset）arc 與精確圓的偏差 | 含 band 的 Route A，47 條 arc edge | 0.632 g | `arc_edges`（這是 arc 的證據，不能代替直線 segment 的證據） |
 :::
 
@@ -153,14 +155,19 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | | |
 |---|---|
 | 問題 | 模型是由 Gmsh/OCC API 由下而上呼叫建構，還是直接從 planned topology 寫成 BREP/XAO？ |
-| 選項 | （a）Gmsh API 建構：序列的，受 `synchronize`、平面 face 建構與 XAO 寫出所限。（b）直接 BREP/XAO 序列化：精確的 cylinder wall、可分 chunk 平行寫出、mesher 只載入一次。 |
-| Lead 的決定 | （b），待 architecture review。emission 把 planned topology 直接寫成 OCCT `CASCADE Topology V1` 文字；Gmsh 只用來做 *mesh*（與作為測試 oracle），絕不用來建構幾何。 |
-| 理由 | （a）是線性但序列、且很大：N = 20 000 時 emission 74 s，derivation 只有 45 s。`addSurfaceFilling` 對 curved wall 不精確（r = 8 µm 時偏差 0.03–0.28 µm），`addBSplineFilling` 只在四條 edge 的 wall 上精確。Gmsh API 也無法控制 solid 的 sense：即使縫合（sewing）也一樣，隨機 layout 上曾出現 vacuum 內外顛倒，大型 shell 的縫合又慢又耗記憶體。直接 writer 明確寫出每個 orientation。 |
+| 選項 | （a）Gmsh API 建構：序列的，受 `synchronize`、平面 face 建構與 XAO 寫出所限。（b）直接 BREP/XAO 序列化：可分 chunk 平行寫出、mesher 只載入一次、明確寫出每個 orientation。 |
+| Lead 的決定 | （b），architecture review 中。emission 把 planned topology 直接寫成 OCCT `CASCADE Topology V1` 文字；Gmsh 只用來做 *mesh*（與作為測試 oracle），絕不用來建構幾何。 |
+| 理由 | （a）是線性但序列、且很大：N = 20 000 時 emission 74–80 s，derivation 約 45–52 s。Gmsh API 也無法控制 solid 的 sense：即使縫合（sewing）也一樣，隨機 layout 上曾出現 vacuum 內外顛倒，大型 shell 的縫合又慢又耗記憶體。直接 writer 明確寫出每個 orientation。 |
+| 已知限制 | **直接 writer 對 cylinder wall 並非「任意邊數都精確」。** 當一條宣告的 arc 帶著外來的 vertex（例如 port 的邊落在圓形 pad 上，或有一個 post 站在彎曲的邊上），wall 變成 5 條 boundary edge；arc 被切開的兩段各自經由 snapped 端點實現，落在略有不同的圓上，wall 的底邊與頂邊不在同一個圓柱面上，直接 writer 目前拒絕這種 wall（Route B/C；Route A 的 sheet 沒有這個問題）。Gmsh API oracle 可以寫出它。 |
+| 設計的修正（已決定） | 在外來 vertex 處以一條 vertical edge 把 wall 切開（頂部的 arc 在同一處切開）；每一段在自己的 realised 圓上是精確的圓柱，兩段共用那條 vertical edge。修正在 production 的 stage 1 實作，prototype 沒有。 |
+| 範圍 | 只有宣告的 arc 會產生 cylinder wall。以 polygon 表示的圓（GDS 的 16–128 個點）永遠不會產生 cylinder wall，它們的 wall 是平面（見 [Assembly](assembly.qmd)）。 |
 | 後果 | 去掉大部分寫出成本，但不去掉載入成本；writer 成為 topology contract 的第二個實作，必須與 API 路徑保持一致（E3 的檢查比對 group 內容與體積）。planned ID 對 native tag 的綁定由 writer 的建構順序決定，並記錄在 sidecar。 |
-| 決定者 | Architecture review。 |
+| 決定者 | Lead 決定，architecture review 中。 |
 :::
 
-證據（E3，`outputs/e3_brep/timing.json`）：寫出模型，N = 20 000 時 Gmsh API emission 75.6 s；直接 XAO 在單一 worker 為 11.8 s、16 個 worker 為 8.4 s；直接 BREP 在 16 個 worker 為 8.7 s。載入到新的 Gmsh process 仍需 41.7 s（API 的 XAO）、37.4 s（直接 XAO）與 32.6 s（直接 BREP）。直接 writer 重現解析體積的相對誤差為 0（airbridge 為 $2 \times 10^{-16}$），group 內容與 API 路徑相同（`validation.json`）；輸出對任何 worker 數逐位元相同。sewing 的觀察來源見補充。Human 提出的採用條件，也就是 AEDT 能帶著語意消費直接寫出的幾何，已由 E4 滿足（見 [D4](#d4)）。
+證據（E3）：寫出模型，N = 20 000 時 Gmsh API emission 75.6 s；直接 XAO 在單一 worker 為 11.8 s、16 個 worker 為 8.4 s；直接 BREP 在 16 個 worker 為 8.7 s。載入到新的 Gmsh process 仍需 41.7 s（API 的 XAO）、37.4 s（直接 XAO）與 32.6 s（直接 BREP）。直接 writer 重現解析體積的相對誤差為 0（airbridge 為 $2 \times 10^{-16}$），group 內容與 API 路徑相同；輸出對任何 worker 數逐位元相同。Human 提出的採用條件，也就是 AEDT 能帶著語意消費直接寫出的幾何，已由 E4 滿足（見 [D4](#d4)）。
+
+這些時間來自 **polygon-only 的 layout：沒有 arc、沒有 cylinder wall、沒有 band**，所以大規模的 cylinder 精確性與 arc 的成本沒有量測，不應外推。extreme-case catalogue（22 個 fixture，共 39 個 route 組合）顯示，除了上述 5-edge wall，其餘 fixture 都通過建構、寫出、載入與全部 OCCT 檢查（見 [Validation](validation.qmd)）。
 
 ## D9 Production kernel 語言 {#d9}
 
@@ -170,12 +177,12 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | 問題 | production pipeline 的 noding、half-edge 與 dissolution 核心用什麼語言撰寫？ |
 | 選項 | （a）純 Python，搭配更粗的 job 與 flat array。（b）Python orchestration，加上負責 noding、half-edge 結構與 dissolution 的 compiled kernel。 |
 | Lead 的建議 | （b）。 |
-| 理由 | 平行化量到的 Python 上限約 2.3×，序列比例約 45%，而 prototype 的加速最多 1.22×（見[平行化的 derivation](parallelism.qmd)）。序列的 stage 正是 half-edge 結構、dissolution、face assembly 與 noding driver。單是暫停 garbage collector 就有 30% 的改善，所以每條 edge 一個 Python 物件本身就是成本。 |
+| 理由 | 平行化量到的 Python 上限約 2.3×，序列比例約 45%，而 prototype 沒有量到穩定的加速（目前保存的量測最高 1.20×，見[平行化的 derivation](parallelism.qmd)）。序列的 stage 正是 half-edge 結構、dissolution、face assembly 與 noding driver。單是暫停 garbage collector 就有 30% 的改善，所以每條 edge 一個 Python 物件本身就是成本。 |
 | 後果 | packaging 與 release 多一個 compiled dependency；kernel 的語言（以及 KLayout 的整數 region engine 能否涵蓋 rectilinear 的情況）是 review 的一部分。收益應表述為第一個 compiled 實作的目標，不是 prototype 的結果。 |
 | 決定者 | Architecture review；packaging 的影響告知 Human。 |
 :::
 
-證據：`outputs/scaling.json`，N = 20 000 時 serial stage 為 45.2 s 中的 18.9 s；Amdahl parallel fraction 單一 process 為 0.56–0.61，N ≥ 5 000 且有 worker 時為 0.56–0.70。prototype 的筆記把不足歸因於 prototype 的語言，而不是演算法；compiled kernel 尚未量測。
+證據：目前保存的量測，N = 20 000 時 serial stage 為 52.1 s 中的 21.9 s（42%）；Amdahl parallel fraction 單一 process 為 0.56–0.60，N ≥ 5 000 且有 worker 時為 0.58–0.70。同一個 case 的 build 時間在不同次執行間落在 45–74 s，所以這些數字只有量級的意義，prototype 的時間不是最終數字，production 實作會在宣告的負載條件下重新量測；它們全部來自 polygon-only 的 layout。prototype 的筆記把不足歸因於 prototype 的語言，而不是演算法；compiled kernel 尚未量測。
 
 ## 原型期間已解決的事項
 
@@ -197,7 +204,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 
 ## 補充：重現資料
 
-D3、D7 與 D9 的數字可由下列檔案重現；本頁不重跑 prototype。
+D3、D7、D8 與 D9 的數字可由下列檔案重現；本頁不重跑 prototype。
 
 ::: {.askr-table-compact}
 | 資料 | 來源 |
@@ -208,4 +215,8 @@ D3、D7 與 D9 的數字可由下列檔案重現；本頁不重跑 prototype。
 | emission 的時間與載入時間 | `outputs/e3_brep/timing.json`、`outputs/e3_brep/sidecar_timing.json`、`outputs/scaling.json` |
 | AEDT 實驗 | `experiments/sgb-redesign/e4_aedt_step/README.md` 與 `out/*.json` |
 | Gmsh sewing 的觀察 | 隨機 N = 1 000 的 layout 中 vacuum 內外顛倒，以及縫合約 6 萬個 face 的 shell 花了 180 s 與 28 GB：這些數字在 prototype 第 3 階段量測一次，**沒有保存輸出檔**，目前只記錄在 prototype 的筆記與 brief 中，應視為一次性的觀察 |
+| 帶 5-edge wall 的 fixture 與 extreme-case catalogue | `outputs/extreme/catalogue.md`、`outputs/extreme/rows.json`；測試 `tests/test_extreme_cases.py` |
+| 驗證時間隨規模 | `outputs/validator_scaling.md` |
+| 目前保存的 scaling 量測 | `outputs/scaling.json`（單次執行） |
+| 直接 writer 的時間與驗證 | `outputs/e3_brep/timing.json`、`outputs/e3_brep/<case>/validation.json`、`outputs/e3_brep/sidecar_timing.json` |
 :::

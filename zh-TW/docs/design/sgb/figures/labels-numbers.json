@@ -75,7 +75,8 @@
   },
   "top_face_group": "MA::pad",
   "top_face_membership": {
-   "pad": 1.0,
+   "pad": 0.9003584507,
+   "pad_tab": 0.166069248833,
    "vacuum": 1.0
   }
  },

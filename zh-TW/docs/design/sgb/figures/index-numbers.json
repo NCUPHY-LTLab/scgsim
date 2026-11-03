@@ -56,6 +56,24 @@
    "vacuum emitted=True"
   ]
  },
+ "extreme_catalogue": {
+  "bop_argument_analyzer_ms_min_max": [
+   8.8,
+   48.5
+  ],
+  "brepcheck_ms_min_max": [
+   2.4,
+   9.6
+  ],
+  "expected_refusals": {
+   "ContactError": 2,
+   "NonManifoldError": 3,
+   "direct writer refused (5-edge wall)": 2
+  },
+  "fixtures": 22,
+  "passing_rows": 32,
+  "rows": 39
+ },
  "pad_in_ground_A": {
   "arc_centre_vertices": {
    "arc_centre_vertices": 5,

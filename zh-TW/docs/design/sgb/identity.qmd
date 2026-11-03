@@ -60,10 +60,7 @@ Face `f:2b89bc30d72746fc` 是 hole 周圍的 ring；它的 8 條 edge 是 0.5 µ
 
 **Physical group** 是交給 solver 的一組 face 或 volume 的具名集合。這裡的 face 指輸出的 BREP face；它在 arrangement 中對應的平面區域稱為 cell，一個 face 可由一個或多個 cell 合併而成。語意名稱由 cell 的 label 組成：surface 種類（`MA` 為 metal–vacuum、`MS` 為 metal–substrate、`SA` 為 substrate–vacuum、`PORT`、`EXT` 為外邊界、`VOL` 為 volume）、Net 或 domain，以及有 inset band 時的 band。Route A 的 sheet 以 face 命名為 `SHEET::<net>::band=k`；Surface EPR 的 MA 與 MS 兩個 row 都由 sidecar 的 `surface_epr_rows` 指到它。
 
-::: {.callout-note}
-## 範例顯示的是 per Net 的 group
-prototype 目前以 per Net 合併 face 並命名 group（例如 `MA::pad`）。D5 已決定預設改為 per Entity：不同 Entity 之間的 seam 保留為 required edge，報告再依界面種類 MA/MS/SA 彙整。這部分尚未在 prototype 實作，所以本頁的 group 名稱與 membership 範例都是 per Net 的。設計規則：primary group 命名為 `<kind>::<qualified entity id>[::band=k]`（例如 `MA::chip/q0/pad::band=2`；Route A 的 sheet 為 `SHEET::<entity>::band=k`），MA、MS、SA 的總和是 sidecar 中的 union，Net 層級的 union 只用於 Electrostatic。最終拼法在實作 D5 與 Route C 時才固定，prototype 目前仍輸出 per Net 的名稱。見[決策頁](decisions.qmd#d5)。
-:::
+範例中的 group 名稱與 membership 是 prototype 目前 per Net 的結果；預設將改為 per Entity（命名規則 `<kind>::<qualified entity id>[::band=k]`，MA、MS、SA 的總和是 sidecar 的 union），running example 中每個 Net 只有一個 Entity，所以只有名稱會改變。見 [D5](decisions.qmd#d5)。
 
 ::: {.callout-note}
 ## Attribute 不是 identity
@@ -143,7 +140,8 @@ Route B 的 port 碰到 pad 與 ground 的 side wall，所以那些 wall 在該�
 ## 限制
 
 - ID 識別的是內容，不是意圖。移動過的 feature 是新 entity；把使用者的標籤跨過這種修改帶過去，是 SGB 之上那一層的命名政策。
-- 64 bit 的 digest 讓 ID 保持簡短。依生日界，一百萬個 entity 之間發生任何碰撞的機率約 $3 \times 10^{-8}$；最大的 scaling 執行有 255 052 個 face。
+- 64 bit 的 digest 讓 ID 保持簡短。依生日界，一百萬個 entity 之間發生任何碰撞的機率約 $3 \times 10^{-8}$；最大的 scaling 執行有 255 052 個 face。prototype 的 registry 目前沒有重複 ID 的檢查，也沒有測試；production 應在遇到重複 ID 時 fail closed，並以強制碰撞的測試驗證。
+- 「wall 的 ID 不含 vertical edge、coalescing 只改變 vertical edge 的 ID」，以及「不相關的修改只改變被碰到的 entity 的 ID」，目前由腳本量測（補充中的比較表），prototype 還沒有對應的回歸測試。
 
 ## 補充：重現資料
 

@@ -22,7 +22,7 @@ from labels_common import FIGURES, GROUP_COLOURS, PALETTE, compact_triangles, go
 from matplotlib.patches import Patch
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from sgbproto.errors import ContactError, OverlapError, RouteError, SgbError, ValidationError
+from sgbproto.errors import ContactError, NonManifoldError, OverlapError, RouteError, SgbError, ValidationError
 from sgbproto.pipeline import build
 from sgbproto.records import Footprint, ModelSpec, PrismRecord, z_value
 from sgbproto.scenes import pad_in_ground, rect_um, to_grid
@@ -241,8 +241,8 @@ def early_errors(numbers: dict) -> None:
                         "Al", "conductor", net_id="pad")  # same Net, touches the pad only at the corner (50, 18)
     try:
         build(ModelSpec(base.grid, base.prisms + (pinch,), name="pinch", meta=base.meta))
-    except ValidationError as e:
-        out["ValidationError (same-Net pinch at a corner, finite metal)"] = str(e)
+    except NonManifoldError as e:
+        out["NonManifoldError (same-Net pinch at a corner, finite metal; before assembly)"] = str(e)
     from fractions import Fraction
 
     from sgbproto.records import CurveFamilyRecord, LineCarrier, Lineage

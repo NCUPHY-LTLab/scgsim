@@ -225,10 +225,10 @@
  ],
  "early_errors": {
   "ContactError (contact check, after the arrangements)": "different-Net contact between other (entities touching_net) and pad (entities pad) at (-50.0000, -20.0000) um on slab[0,1/10] (grid g = 0.001 um; a gap smaller than the grid closes when the sources snap)",
+  "NonManifoldError (same-Net pinch at a corner, finite metal; before assembly)": "non-manifold pinch: Net pad (entities pad, pinch) touches itself along the vertical edge at (50.0000, 18.0000) um, z 0.0..0.1 um (slab[0,1/10]): two cells of one domain meet only at a vertex; give them a shared edge or separate them",
   "OverlapError (labelling, S5)": "different-Net conductors overlap near (-42524.750, -29999.500) grid units: other_net, pad",
   "RouteError (route check, before S2)": "Route A needs sheet conductors; finite conductors: ['ground', 'pad']",
-  "SgbError (refinement curve in a cell with no face, assembly)": "refinement curve r/0 at (-70.0000, -8.0000) um on level[1/10] lies in a cell that has no face (inside a volume): it cannot be embedded and is not dropped silently",
-  "ValidationError (same-Net pinch at a corner, finite metal)": "1 invariant(s) failed: shells_closed_and_oriented: vol:eacdf3a24cf31a84/0: edge ve:4f281b0de2fc05b8 used 4 times; vol:eacdf3a24cf31a84/0: edge ve:262e7ce44ad1b0c2 used 4 times"
+  "SgbError (refinement curve in a cell with no face, assembly)": "refinement curve r/0 at (-70.0000, -8.0000) um on level[1/10] lies in a cell that has no face (inside a volume): it cannot be embedded and is not dropped silently"
  },
  "tampered_shell": {
   "checks_failed": [

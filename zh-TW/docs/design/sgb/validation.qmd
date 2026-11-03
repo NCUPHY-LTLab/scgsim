@@ -16,7 +16,7 @@ SGB 推導出的模型要交給 mesher 與 solver，所以在寫出之前必須�
 ::: {.askr-table-compact}
 | 層 | 何時執行 | 做什麼 | 失敗時 |
 |---|---|---|---|
-| **1. 開發測試** | 開發與 CI，涵蓋廣泛的 fixture 與隨機 layout | 對寫出的 BREP/XAO 執行 OCCT 自己的檢查：`BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer`（透過 OCP；僅為開發用 dependency），以及 Gmsh load check | 測試失敗；是 SGB 或 writer 的缺陷 |
+| **1. 開發測試** | 開發與 CI，涵蓋範例、極端案例 fixture 與隨機 layout（N = 10、100、1000，兩種 route） | 對寫出的 BREP/XAO 執行 OCCT 自己的檢查：`BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer`（透過 OCP；僅為開發用 dependency），以及 Gmsh load check | 測試失敗；是 SGB 或 writer 的缺陷 |
 | **2. 每一次 production build** | 每一次 build，寫出之前與 mesher 載入時 | 在寫出之前，對 SGB 自己的結構 invariant（本頁其餘部分）fail closed；在 mesher 中做 load check（數量、邊界、面積、volume、group） | build 中止，不回傳模型 |
 | **3. 選用的 strict mode** | 安裝了 OCP 時，在 production 輸出上 | 對 production 輸出執行第 1 層的 OCCT 檢查 | build 中止 |
 :::
@@ -24,7 +24,9 @@ SGB 推導出的模型要交給 mesher 與 solver，所以在寫出之前必須�
 幾點說明：
 
 - **第 1 層的 OCCT 檢查**（prototype 的 `occt_check` 模組）依序做四件事：(1) `BRepCheck_Analyzer`（開啟 geometry control）：問每個唯一的 vertex、edge、wire、face、shell 與 solid 是否 `IsValid`，並報告各自的狀態清單與在各 context 中的狀態（edge 在 face 中、face 在 shell 中等）；(2) `BOPAlgo_ArgumentAnalyzer`（Boolean 運算的前置檢查），開啟型別、self-interference、過小 edge、無法重建的 face、tangent face、未合併的 vertex 與 edge（conformity 缺陷）、C0 連續性與 pcurve 對 3-D 曲線等模式；(3) 輕量的 `ShapeAnalysis` 檢查：每個 shell 的自由 edge 與不良（non-manifold 或定向不一致）edge、短於 tolerance 十倍的 edge；(4) 與規劃交叉比對：每個 solid 的體積與每個 face 的面積對比規劃的 signed volume 與 `emit.planned_face_area_um2`。
-- **目前的結果。** 五個執行範例 fixture（`airbridge_B`、`pad_in_ground_A`、`pad_in_ground_A_bands`、`pad_in_ground_B`、`pad_in_ground_B_bands`）已完成檢查，每個都對寫出的 BREP 與 XAO 各做一次，十份報告全部 `ok = true`：`BRepCheck_Analyzer` 判定有效且沒有任何 faulty 的 sub-shape；`BOPAlgo_ArgumentAnalyzer` 沒有任何 fault 或結果；`ShapeAnalysis` 沒有帶自由 edge 或不良 edge 的 shell；與規劃交叉比對，face 面積的最大相對誤差為 $1.3 \times 10^{-12}$，solid 體積的最大相對誤差為 $2.1 \times 10^{-16}$。另有五個刻意製造的缺陷作為負對照（反轉的內 wire、shell 內翻轉的共用 face、vertex 移離曲線 $10^{-4}$ µm、缺一個 face 的開放 shell、有缺口的 wire），每個都至少被四種檢查中的一種抓到。極端案例 fixture 的目錄與 runtime validator 的 scaling 仍在進行中，這裡不引用。
+- **範例的結果。** 五個執行範例 fixture（`airbridge_B`、`pad_in_ground_A`、`pad_in_ground_A_bands`、`pad_in_ground_B`、`pad_in_ground_B_bands`）每個都對寫出的 BREP 與 XAO 各做一次，十份報告全部 `ok = true`：`BRepCheck_Analyzer` 判定有效且沒有任何 faulty 的 sub-shape；`BOPAlgo_ArgumentAnalyzer` 沒有任何 fault 或結果；`ShapeAnalysis` 沒有帶自由 edge 或不良 edge 的 shell；與規劃交叉比對，face 面積的最大相對誤差為 $1.3 \times 10^{-12}$，solid 體積的最大相對誤差為 $2.1 \times 10^{-16}$。另有五個刻意製造的缺陷作為負對照（反轉的內 wire、shell 內翻轉的共用 face、vertex 移離曲線 $10^{-4}$ µm、缺一個 face 的開放 shell、有缺口的 wire），每個都至少被四種檢查中的一種抓到。
+- **極端案例 catalogue 的結果。** catalogue 有 22 個 fixture，兩種 route 共 39 列，涵蓋近切圓弧與直線、1.6° 淺角相交的兩條圓弧、共線重疊、0.6° 的窄縫、band 消失與 neck 被 inset 切開、浮空導體、巢狀 hole、堆疊 slab 在角落或 wall 邊緣相碰、port edge 落在金屬側壁上、refinement curve 穿過 band 邊界、以及相距 0.4 g 與 2 g 的近乎重合邊緣等。**39 列中 32 列通過每一項 check**：build 與 21 個結構 check、寫出 BREP 與 XAO、Gmsh 載入與檢查、conformal mesh、`BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer`（全部模式）、`ShapeAnalysis` 與規劃比對。**其餘 7 列是預期中的拒絕**：3 列 `NonManifoldError`（Route B 的 `exactly_tangent_arc_line`、`kissing_corners_same_net`、`hole_touches_outer`，同一個 Net 的 volume 只在一點接觸自己，Route A 的 sheet 則合法）、2 列 `ContactError`（`kissing_corners_different_nets` 兩種 route），以及 2 列 direct writer 的 5-edge wall 拒絕（`arc_with_foreign_vertex` 與 `arc_with_foreign_vertex_from_post`，Route B；Gmsh API oracle 可以 conformal 地建出它們，見[從 arrangement 到實體](assembly.qmd#curved-walls)）。`NonManifoldError` 與 `ContactError` 在 build 的最前面就拋出（約 1.5 到 24 ms）。每個 fixture 的 OCCT 四項檢查合計約 7 到 34 ms，其中 `BOPAlgo_ArgumentAnalyzer` 全部模式為 4 到 25 ms；一個 fixture 的所有檢查合計約 103 到 275 ms（三次執行的中位數）。這些 fixture 都很小；strict mode 在大模型上的成本沒有量測。
+- **Runtime validator 的 scaling。** 對 N = 1000、5000、20000 個 feature 的 polygon layout（F = 12 761、63 664、255 052 個 face），每個 validator 與 load check 的成本對 face 數的 log-log 斜率在 0.79 到 1.16 之間，所以每一項都近似線性。N = 20000 時最貴的是 face 面積（8.4 s）、planarity（5.5 s）、edge 邊界（4.1 s）與 volume（4.0 s）；`physical_groups` 原本隨 group 數呈二次成長，已修正為近乎線性。mesher 端的 `verify_loaded` 在 N = 20000 時為 30.2 s，Gmsh 載入為 50.6 s，同一次執行的 build wall 為 74.2 s（同一台機器上，不同次執行的 build wall 可以差到數十 %）。**這些量測都是只有直線的 polygon layout，沒有圓弧也沒有 band，所以圓弧與 band 在大規模下的成本與精確度沒有量測，不外推。**
 - **OCP 是 development-only。** 它是 `cadquery-ocp` 對 OCCT 的 binding（版本與 Gmsh 使用的 OCCT 7.8.1 相同），只在 dev extra 中；終端使用者（例如經由 OrcaPen SC PDK）不會安裝 OCP。strict mode 只有在 OCP 已安裝時才可用。
 - **第 2 層的 mesher load check** 是設計上的 production 要求。prototype 目前在範例與測試中執行 mesh conformity 檢查（重複節點、共用的內部 face、問題清單），這是它的前身。
 - **驗證在 production build 中不能被停用。** prototype 保留的 `run_validation` 與 `check_planarity` 開關僅供測試使用。
@@ -70,6 +72,18 @@ shell_euler_characteristic: vol:066a0154103816f2/0: chi=1
 | **OCCT 檢查**（第 1 層與第 3 層） | `BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer`、與規劃的體積與面積比對 | 開發測試失敗；strict mode 下 build 中止 | 另一套獨立的 kernel 也認為寫出的 shape 有效，且與規劃一致 | mesh 品質、物理正確性、solver 結果；通過也不代表 SGB 自己的 invariant 可以省略 |
 :::
 
+### 保證的三種依據
+
+SGB 各頁使用的「保證」並不都是同一種強度。本頁與其他頁的 callout 以括號標明它的依據：
+
+::: {.askr-table-compact}
+| 依據 | 意思 | 例子 |
+|---|---|---|
+| **建構** | 由演算法的結構決定：只要實作符合設計，就不可能違反 | snap rounding 後任兩個 vertex 距離不小於 $g$；face 列出原子而不擁有副本 |
+| **測試** | 有自動化測試在特定的輸入上斷言，通過表示在這些輸入上成立 | `no_entity_is_in_two_physical_groups…`；wall coalescing 的 port 測試 |
+| **量測** | 對特定輸入量到的數值，不是通則 | 0.632 g 的 arc deviation；N = 20000 的 build 時間 |
+:::
+
 ## 規則：fail closed
 
 ::: {.callout-important title="設計決策：沒有 fallback geometry"}
@@ -82,6 +96,7 @@ shell_euler_characteristic: vol:066a0154103816f2/0: chi=1
 | 中止 | 由誰拋出 | 範例（計算結果） |
 |---|---|---|
 | 來源無法詮釋 | route check、labelling 規則 | `Route A needs sheet conductors; finite conductors: ['ground', 'pad']`；`different-Net conductors overlap near (-42524.750, -29999.500) grid units: other_net, pad` |
+| Non-manifold pinch | contact 階段的專用檢查，在 arrangement 之後、assembly 之前 | `NonManifoldError`：`non-manifold pinch: Net pad (entities pad, pinch) touches itself along the vertical edge at (50.0000, 18.0000) um, z 0.0..0.1 um (slab[0,1/10]) …`；同 Net 的有限厚度金屬只在 vertex 或 vertical edge 相接，或 hole 在 Route B 碰到自己的外邊界；Route A 的 sheet 可以在轉角相接 |
 | 不同 Net 接觸 | contact check，在 arrangement 之後、assembly 之前 | `ContactError`：指出兩個 Net、各自的 Entity、位置與 plane；包含只因 snap 或較粗 grid 而封閉的 gap |
 | Refinement 位置錯誤 | assembly | `SgbError`：`refinement curve r/0 at (-70.0000, -8.0000) um on level[1/10] lies in a cell that has no face …` |
 | 推導出的結構不一致 | assembly：slab-edge chain 無法追溯、level cell 對其 slab cell 看法不一、wall 連到不同 volume 的 cell | 指出 edge 或 wall id 的 `SgbError` |
@@ -101,7 +116,7 @@ shell_euler_characteristic: vol:066a0154103816f2/0: chi=1
 |---|---|---|
 | `vertices_on_grid` | 每個 arrangement 的每個 vertex 都是整數 grid 點 | 某個座標離開了整數 kernel；之後的每個 identity 與每個精確測試都失效 |
 | `no_edge_shorter_than_g` | 沒有 horizontal edge 短於 $g$ | snap rounding 沒有完成它的工作（sliver 來源 1，見 [Sliver](slivers.qmd)） |
-| `no_vertical_edge_shorter_than_g` | 沒有 slab 薄於 $g$ | 來源中兩個 Z level 比 grid 更近，例如 1 nm grid 上 0.5 nm 的薄膜 |
+| `no_vertical_edge_shorter_than_g` | 沒有 slab 薄於 $g$ | 這是 prototype 的行為，設計不是這樣：Z level 是宣告的精確值，不受 XY grid 影響，薄於 $g$ 的 slab（例如 1 nm grid 上 0.5 nm 的薄膜）會被保留並在 report 中回報，絕不使 build 失敗（與 D2 一致：沒有 Z 門檻）；production 第一階段移除這個 abort |
 | `arrangements_planar` | 任兩條 edge 不相交，沒有 vertex 位於 edge 內部 | noding 錯誤；cell 會重疊 |
 | `arc_edges_do_not_cross` | 實現出的 arc edge 不與其他 edge 相交（抽樣） | 把 witness chord 合併回圓弧時破壞了 planarity；這個 check 是浮點的安全網，從不決定 topology |
 | `area_conservation_per_arrangement` | 對每個 $S_i$ 與 $A_i$：raw 面積 = dissolve 後面積 = 所圍面積 | dissolution 或 face 擷取遺失或產生了面積 |
@@ -115,7 +130,7 @@ shell_euler_characteristic: vol:066a0154103816f2/0: chi=1
 ::: {.askr-table-compact}
 | Check | 陳述 | 失敗代表 |
 |---|---|---|
-| `shells_closed_and_oriented` | 在每個 shell 內，每條 edge 被以相反方向使用兩次 | shell 有洞、face 重複，或某個 face 的定向不一致；同 Net 金屬只在轉角相接（non-manifold pinch）也在此失敗，因為一條 edge 在同一 shell 中被使用四次 |
+| `shells_closed_and_oriented` | 在每個 shell 內，每條 edge 被以相反方向使用兩次 | shell 有洞、face 重複，或某個 face 的定向不一致；同 Net 金屬只在轉角相接（non-manifold pinch）時，一條 edge 在同一 shell 中會被使用四次；但這種情形已被更早的 `NonManifoldError` 攔下，這個 check 是第二道防線 |
 | `shell_euler_characteristic` | 每個 shell 的 $\chi = 2 - 2g$（偶數；outer shell 至多為 2） | shell 不是預期種類的封閉曲面 |
 | `every_volume_has_outer_shell` | 每個 volume 有一個 signed volume 為正的 outer shell | volume 只有 void，或它的 signed volume 錯誤 |
 | `each_face_used_by_at_most_two_volumes` | 沒有 face 的相鄰 volume 超過兩個 | face 被分配給第三個 volume |
@@ -163,13 +178,13 @@ shell_euler_characteristic: vol:066a0154103816f2/0: chi=1
 | 移除最深 inset band 的一個 cell（有 band 的模型） | `band_area_monotone` |
 :::
 
-每一種缺陷都被指名它的 check 抓到，沒有被不相關的 check 抓到；若兩條陳述都描述同一種缺陷（少了一個 face 既留下未封閉的 edge，也讓 Euler characteristic 錯誤），則被抓到兩次。驗證器是針對規劃缺陷的安全網，不是關於來源的證明。
+九種缺陷中，只有兩種（移除 shell 的一個 face、破壞 band 的劃分）是 prototype 測試套件裡的測試，其餘由 figure script 套用，並沒有獨立的測試。每一種缺陷都被指名它的 check 抓到，沒有被不相關的 check 抓到；若兩條陳述都描述同一種缺陷（少了一個 face 既留下未封閉的 edge，也讓 Euler characteristic 錯誤），則被抓到兩次。驗證器是針對規劃缺陷的安全網，不是關於來源的證明。
 
 ## 遇到失敗怎麼辦
 
 1. **讀 check 的名稱。** 它告訴你哪一條陳述是假的（上列各表）。
 2. **跟著 id 走。** 每則 detail 指出 volume、shell、edge 或 face。它們的 lineage 對應到來源 Entity，對 derived 曲線則對應到切出它們的 family（[Identity](identity.qmd)）。
-3. **修正原因**，而不是輸出。無法詮釋的來源（Net 重疊、薄於 grid 的 slab）屬於模型作者；對有效來源出現結構性失敗，則是 SGB 的缺陷，應附上失敗報告回報。
+3. **修正原因**，而不是輸出。無法詮釋的來源（Net 重疊或接觸、non-manifold pinch）屬於模型作者；對有效來源出現結構性失敗，則是 SGB 的缺陷，應附上失敗報告回報。
 4. **不要繞過 check。** pipeline 有給測試與 scaling 實驗用的開關；它不是操作模式。
 
 ## Check 在 pipeline 中的位置
@@ -177,15 +192,15 @@ shell_euler_characteristic: vol:066a0154103816f2/0: chi=1
 ::: {.askr-mermaid-view view-label="檢視圖表"}
 ```{mermaid}
 flowchart LR
-  S1["route check<br/>RouteError"] --> S2["levels and slabs"]
-  S2 --> S4["arrangements<br/>snap rounding"]
+  S1["route check<br/>RouteError"] --> S2["level 與 slab"]
+  S2 --> S4["arrangement<br/>snap rounding"]
   S4 --> S5["labelling<br/>OverlapError"]
-  S5 --> SC["contact check<br/>ContactError"]
-  SC --> S6["assembly<br/>SgbError: chain, refinement placement"]
-  S6 --> S9["S9 validate<br/>ValidationError"]
-  S9 --> S10["emission<br/>one planned id per native entity"]
-  S10 --> L2["mesher load checks<br/>(layer 2); optional OCCT strict mode (layer 3)"]
-  S9 -. "any failure: stop, return nothing" .-> X(("stop"))
+  S5 --> SC["contact 階段<br/>ContactError, NonManifoldError"]
+  SC --> S6["assembly<br/>SgbError：chain、refinement 位置"]
+  S6 --> S9["S9 驗證<br/>ValidationError"]
+  S9 --> S10["emission<br/>每個 native entity 一個 planned id"]
+  S10 --> L2["mesher load check (第 2 層)；<br/>選用的 OCCT strict mode (第 3 層)"]
+  S9 -. "任何失敗：中止，不回傳" .-> X(("中止"))
   S1 -.-> X
   S5 -.-> X
   SC -.-> X
@@ -197,7 +212,7 @@ flowchart LR
 
 ## 小結
 
-- 驗證有三層：開發測試中的 OCCT 檢查、每一次 production build 的 SGB 結構 invariant 加 mesher load check，以及選用的 OCCT strict mode。五個執行範例 fixture 的 OCCT 檢查全部通過；極端案例與 scaling 仍在進行。
+- 驗證有三層：開發測試中的 OCCT 檢查、每一次 production build 的 SGB 結構 invariant 加 mesher load check，以及選用的 OCCT strict mode。五個執行範例與 catalogue 中 32 個可建出的極端案例列都通過全部檢查，另外 7 列是預期中的拒絕。
 - 結構 invariant 共有 21 個 check，涵蓋 arrangement、shell 與 face、physical group；其中兩個是警告，一個是抽樣。
 - 每個 check 都從完成的 record 重新計算它的陳述，所以 assembly 的缺陷無法躲在自己的簿記後面。
 - 任何硬性失敗都會拋出例外；不修補，也不回傳模型。不同 Net 的接觸與 refinement 位置錯誤在更早的階段就會中止。
@@ -205,4 +220,4 @@ flowchart LR
 
 ## 補充：重現資料
 
-圖與數字由 `zh-TW/docs/design/sgb/_figures/validation.py` 在 `experiments/sgb-redesign/prototype` 的 prototype 上產生；數字在 `figures/validation-numbers.json`，invariant 清單是 `outputs/*/validation_report.json` 的 21 個 check。OCCT 的數字取自 `outputs/occt/reports/*.json` 與 `outputs/occt/negative_controls.{json,md}`。Brief 對應第 11 節與第 14 節；prototype 模組為 `validate`、`contacts`、`errors`、`occt_check`、`emit`；測試 `test_pipeline.py::test_tampered_shell_is_rejected_by_validation` 與 `test_pipeline.py::test_no_entity_is_in_two_physical_groups_and_every_emitted_entity_is_in_one`。名詞見[詞彙表](index.qmd#glossary)。
+圖與數字由 `zh-TW/docs/design/sgb/_figures/validation.py` 在 `experiments/sgb-redesign/prototype` 的 prototype 上產生；數字在 `figures/validation-numbers.json`，invariant 清單是 `outputs/*/validation_report.json` 的 21 個 check。OCCT 的數字取自 `outputs/occt/reports/*.json` 與 `outputs/occt/negative_controls.{json,md}`；極端案例取自 `outputs/extreme/catalogue.md` 與 `rows.json`；validator 與 load check 的 scaling 取自 `outputs/validator_scaling.md`。Brief 對應第 11 節與第 14 節；prototype 模組為 `validate`、`contacts`、`errors`、`occt_check`、`emit`；測試 `test_pipeline.py::test_tampered_shell_is_rejected_by_validation` 與 `test_pipeline.py::test_no_entity_is_in_two_physical_groups_and_every_emitted_entity_is_in_one`。名詞見[詞彙表](index.qmd#glossary)。

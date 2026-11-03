@@ -16,17 +16,17 @@ scgsim-id: "docs/design/sgb/assembly"
 ::: {.askr-mermaid-view view-label="檢視圖表"}
 ```{mermaid}
 flowchart LR
-  A["level arrangements A_i<br/>(vertices, edges, cells, labels)"] --> V["vertices and horizontal edges"]
-  A --> H["horizontal faces<br/>(cells that need a face)"]
-  S["slab arrangements S_i<br/>(slab labels, slab edges)"] --> W["wall runs<br/>(coalesced)"]
+  A["level arrangement A_i<br/>(vertex、edge、cell、label)"] --> V["vertex 與 horizontal edge"]
+  A --> H["horizontal face<br/>(需要 face 的 cell)"]
+  S["slab arrangement S_i<br/>(slab label、slab edge)"] --> W["wall run<br/>(已 coalesce)"]
   A --> W
-  W --> C["vertical edges<br/>(wall columns, cut where needed)"]
-  S --> Vol["volumes<br/>(connected slab cells)"]
+  W --> C["vertical edge<br/>(wall column，必要處切開)"]
+  S --> Vol["volume<br/>(連通的 slab cell)"]
   A --> Vol
-  H --> Sh["shells<br/>(closed surfaces per volume)"]
+  H --> Sh["shell<br/>(每個 volume 的封閉曲面)"]
   W --> Sh
   Vol --> Sh
-  Sh --> G["primary physical groups"]
+  Sh --> G["primary physical group"]
 ```
 :::
 
@@ -85,9 +85,15 @@ wall column（某個 grid 點上方的垂直線）在下列情況於該 level �
 
 (a)、(b) 與 column 規則共同構成完整的規則集，並已以 mesh conformity 測試過。
 
-### 曲面 wall
+### 曲面 wall {#curved-walls}
 
-圓弧 carrier 上的 wall 是圓柱 patch。若恰好有四條邊界 edge（兩條圓弧與兩條 column，四分之一圓弧的一般情形），通過這四條共用 edge 的 B-spline filling 可將圓柱重現到 1.2e-11 個 grid unit；執行範例有五面這樣的 wall（圓形 hole 的四段四分之一圓弧與圓角），量測值見 `outputs/pad_in_ground_B/stage_summary.json`。邊界 edge 多於四條的 wall（圓弧上有 hot pixel、port edge 落在圓柱上）無法透過 Gmsh API 做到精確；Gmsh API 也無法控制 solid 的 sense。因此 emission 採直接寫 BREP（decision D8，由 Lead 決定、審查中；見 [Emission](emission.qmd)）。直線 wall 的平面性以精確整數運算測試。
+圓弧 carrier 上的 wall 是圓柱 patch。若恰好有四條邊界 edge（兩條圓弧與兩條 column，四分之一圓弧的一般情形），直接寫出的 BREP 與 Gmsh API 的 B-spline filling 都可以把圓柱重現到 1.2e-11 個 grid unit；執行範例有五面這樣的 wall（圓形 hole 的四段四分之一圓弧與圓角），量測值見 `outputs/pad_in_ground_B/stage_summary.json`。直線 wall 的平面性以精確整數運算測試。
+
+**弧上有外來 vertex 的 wall（5 條邊界 edge）。** 當圓弧上落了一個來自別處的 vertex（例如 port 的 edge 終止在圓形 pad 上，或一根 post 站在曲邊上），這面 wall 的頂邊界被切成兩段圓弧，共有五條邊界 edge。這兩段圓弧各自經過 snap 後的端點重新實現，會落在彼此略有差異的圓上，所以這面 wall 的上下邊界不在同一個圓柱上。目前的狀態是：直接寫出 BREP 的 writer 拒絕這種 wall（`curved wall … lie on different circles`；只出現在 Route B 與 Route C，Route A 的 sheet 不會有這種 wall），Gmsh API 的 oracle 則可以 conformal 地建出它。已決定的修正是在外來 vertex 處把 wall 以一條 vertical edge 切開（底邊的圓弧也在同一處切開），每一片都是在自己實現出的圓上的精確圓柱，兩片共用那條 vertical edge。這個修正在 production 的第一階段實作，prototype 尚未實作；目前不能宣稱 writer 對任意數量的邊界 edge 都是精確的。
+
+![圓柱 wall 的弧上有外來 vertex 時的情形與已決定的切開方式（概念圖，非計算結果）。左：五條邊界 edge，兩段頂邊的圓不同。右：切開之後兩片各有四條邊界 edge。](figures/assembly-curved-split.svg){#fig-curved-split fig-alt="把曲面 wall 展開成平面的兩張示意圖。左圖是一個矩形，頂邊在一個點被分成兩段（外來 vertex），共五條邊界 edge。右圖在該點加了一條垂直線，把矩形分成兩個各有四條邊界 edge 的矩形。"}
+
+只由多邊形構成的圓（例如 GDS 中以 16 到 128 個點近似的圓）從不產生圓柱 wall：它的每一段都是直線，wall 是平面。因此上述限制只適用於來源中宣告為圓弧的邊界。
 
 ## Volume
 
@@ -119,20 +125,22 @@ Volume 的 **shell** 是它的 face 的集合。SGB 把它們分組為連通的�
 2. **每條 slab edge 在上下兩個 level 都是 chain。** $A_i$ 與 $A_{i+1}$ 由 $S_i$ 的曲線建立，所以每條 slab edge 在兩者中都成為一條原子 edge 的路徑。wall 的邊界因此是由原子組成的封閉 loop：底 chain、column、頂 chain、column。若 chain 無法追溯，build 中止。
 3. **Column 在任何鄰居有 vertex 之處被切開。** 每個碰到 column 的 face 使用的都是它完整的 vertical edge 段（上述 column 規則）。
 4. **在任一條 edge 周圍，face 恰好是四個象限中 volume 之間的介面。** 取 level arrangement 的一條 edge，看它周圍四個區域：左、右、下、上。每個區域屬於一個 volume（或不屬於任何 volume）。兩個相鄰區域之間存在 face，若且唯若它們的 volume 不同；label 依 [labelling 規則](labels-and-dissolution.qmd)是單值的，所以 face 沒有其他來源（embedded 的 sheet 另計，它們不分隔兩個不同的 volume）。
-5. **於是每個 volume 看到這條 edge 的次數是偶數且互相匹配。** 同一個 volume 在一條 edge 周圍的區域構成連續象限的區段；每個區段由兩個 face 圍住，從該 volume 看去方向相反。所以在一個 shell 內，每條 edge 被以相反方向使用兩次。若某個 volume 只佔據兩個不相鄰的象限（它沿一條 edge 接觸自己），這條 edge 在同一個 shell 中會被使用四次；這種情形會被拒絕，而不是被修補。prototype 的實驗證實了這點：同 Net 的有限厚度金屬只在轉角碰到 pad，build 以 `shells_closed_and_oriented` 失敗中止，訊息為 `edge ve:… used 4 times`；sheet 在轉角相接則是合法的。*重新檢查：* `shells_closed_and_oriented`、`shell_euler_characteristic`、`each_face_used_by_at_most_two_volumes`、`every_edge_shared_by_two_faces`。
+5. **於是每個 volume 看到這條 edge 的次數是偶數且互相匹配。** 同一個 volume 在一條 edge 周圍的區域構成連續象限的區段；每個區段由兩個 face 圍住，從該 volume 看去方向相反。所以在一個 shell 內，每條 edge 被以相反方向使用兩次。若某個 volume 只佔據兩個不相鄰的象限（它沿一條 edge 接觸自己），這條 edge 在同一個 shell 中會被使用四次；這種情形會被拒絕，而不是被修補。prototype 在 assembly 之前就以專用的 `contacts` 檢查攔下它，拋出 `NonManifoldError`：例如同 Net 的有限厚度金屬只在轉角碰到 pad，訊息為 `non-manifold pinch: Net pad (entities pad, pinch) touches itself along the vertical edge at (50.0000, 18.0000) um, z 0.0..0.1 um …`。這條規則也適用於 Route B 中 hole 碰到自己外邊界的情形；sheet（Route A）在轉角相接則是合法的。若 pinch 沒有被前一道檢查攔下，shell 的檢查仍會以 `shells_closed_and_oriented`（edge 被使用 4 次）作為第二道防線。
+*重新檢查：* `shells_closed_and_oriented`、`shell_euler_characteristic`、`each_face_used_by_at_most_two_volumes`、`every_edge_shared_by_two_faces`。
 6. **一個 face 就是一個 entity。** 介面兩側的兩個 volume 列出的是同一個 face id，方向相反；沒有之後還要配對的第二份副本，emitter 也只建立它一次。*重新檢查：* emitter 的「每個 native entity 恰有一個 planned id」測試。
 
-沒有任何一步使用容差：1–3 步是 snap 後 grid 上的整數 topology，4–5 步是組合性的。assembly 中唯一的浮點數值（曲面 shell 的 volume 中的圓弧弓形面積、圓弧偏差）從不決定哪個 entity 存在。
+沒有任何一步使用容差：1–3 步是 snap 後 grid 上的整數 topology，4–5 步是組合性的。assembly 本身用到的浮點數值（曲面 shell 的 volume 中的圓弧弓形面積、圓弧偏差）從不決定哪個 entity 存在；assembly 之前還有三處浮點（圓弧 footprint 的 witness 測試、inset band 歸屬、抽樣的圓弧交叉檢查），見 [label 頁](labels-and-dissolution.qmd)。
 
-::: {.callout-important title="保證的範圍：shell 內的 face，不含 embedded face"}
+::: {.callout-important title="保證的範圍：shell 內的 face，不含 embedded face（依據：建構，並由測試與計算的 fixture 驗證）"}
 兩個 volume 是 conformal，是因為它們由相同的原子建出，而不是因為 kernel 發現它們重合，這一點適用於 volume 的 shell。embedded 的 port face 不在任何 shell 內；它與 host volume 的關係由 sidecar 記錄，由 mesher 重新套用。prototype 輸出的模型（Route A、Route B、airbridge）在 mesh 中都有零個重複節點。
 :::
 
 ## 邊界情形
 
 - **Volume 內部的 sheet。** Route B 的 port 是兩側為同一個 volume 的 face，它是 embedded，有自由邊界，且不屬於任何 shell；驗證器明確計入它的自由 edge（執行範例為 2 條，且沒有任何 dangling edge）。
-- **Volume 沿一條 edge 接觸自己（non-manifold pinch）。** 見第 5 步：被拒絕。只在 vertical edge 或 vertex 相接、沒有共用 face 的有限厚度金屬被拒絕，並回報明確的錯誤；sheet 可以在轉角相接。
+- **Volume 沿一條 edge 接觸自己（non-manifold pinch）。** 見第 5 步：由 `NonManifoldError` 在 assembly 之前拒絕，錯誤訊息指出 Net、Entity 與位置。
 - **不同 Net 接觸。** 在 assembly 之前，不同 Net 的導體在任何 route 中只要共用 edge 或 vertex，就會被 contact check 以 `ContactError` 拒絕（見 [label 頁](labels-and-dissolution.qmd)）；它們必須以 gap 隔開，或屬於同一個 Net。
+- **已檢查的極端案例。** 極端案例 catalogue 中，`stacked_corner_touch`、`stacked_vertex_on_wall_edge`、`port_edge_on_metal_sidewall`、`floating_conductor` 與 `nested_holes` 這些會用到 column 規則、coalescing 與 inner shell 的 fixture，在可建出的 route 上都通過全部 check（結構驗證、寫出 BREP 與 XAO、Gmsh 載入、conformal mesh、OCCT 檢查）。
 - **Volume 的精確度。** 多邊形模型的 volume 是精確整數。含圓弧 wall 時，chord 多面體是精確的，但每面圓柱 wall 會加上一項以浮點數計算的弓形項，所以曲面 shell 的 volume 與解析值相符到約 $10^{-9}$ 相對誤差，而不是完全相等（prototype README，known limitations）。
 
 ## 小結

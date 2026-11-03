@@ -305,10 +305,13 @@ def _sidecar_table() -> None:
     rows = []
     for n, row in data.items():
         plain, full = row["no_lineage"], row["lineage"]
+        later = PROTOTYPE / "outputs" / "_scaling_tmp" / f"n{n}.sidecar.json"
+        later_mb = f"{later.stat().st_size / 1e6:.1f}" if later.exists() else "無"
         rows.append([f"{int(n):,}", _sec(plain["build_s"]), _sec(plain["json_s"]), f"{plain['MB']:.1f}",
-                     _sec(full["build_s"]), _sec(full["json_s"]), f"{full['MB']:.1f}"])
+                     _sec(full["build_s"]), _sec(full["json_s"]), f"{full['MB']:.1f}", later_mb])
     _write("emission-sidecar-table.md", _table(
-        ["N", "建立 (s)", "輸出 JSON (s)", "大小 (MB)", "含 lineage 建立 (s)", "含 lineage 輸出 JSON (s)", "含 lineage 大小 (MB)"], rows))
+        ["N", "建立 (s)", "輸出 JSON (s)", "大小 (MB)", "含 lineage 建立 (s)", "含 lineage 輸出 JSON (s)", "含 lineage 大小 (MB)",
+         "較晚的 scaling 執行留下的 sidecar 大小 (MB)"], rows))
 
 
 def _validation_table() -> None:
@@ -568,9 +571,87 @@ def _occt_tables() -> None:
         rows, "lllllr"))
 
 
+def _md_rows(path: Path, table_index: int) -> list[list[str]]:
+    """Cells of the table_index-th pipe table of a markdown file (header and rule rows dropped)."""
+    tables, current = [], []
+    for line in path.read_text().splitlines():
+        if line.startswith("|"):
+            current.append([c.strip() for c in line.strip().strip("|").split("|")])
+        elif current:
+            tables.append(current)
+            current = []
+    if current:
+        tables.append(current)
+    return tables[table_index][2:]
+
+
+def _extreme_tables() -> None:
+    """Extreme-case catalogue summary and validator scaling (outputs/extreme/, outputs/validator_scaling.md)."""
+    catalogue = _md_rows(PROTOTYPE / "outputs" / "extreme" / "catalogue.md", 0)
+    fixtures = {row[0] for row in catalogue}
+    passed = [r for r in catalogue if r[3] != "-" and not r[5].startswith("writer refused")]
+    build_refusals = [r for r in catalogue if "refused:" in r[4] and "at build" in r[4]]
+    writer_refusals = [r for r in catalogue if r[5].startswith("writer refused")]
+    count = lambda kind: sum(kind in r[4] for r in build_refusals)
+    ms = lambda column: [float(r[column].split()[-1]) for r in passed]
+    rows = [
+        ["通過全部檢查", str(len(passed)), "build 與結構檢查、寫出 BREP 與 XAO、Gmsh 載入與檢查、conformal mesh、`BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer`（全部模式）、`ShapeAnalysis`、與 plan 的比對"],
+        ["預期的拒絕：build 階段", str(len(build_refusals)), f"`NonManifoldError` {count('NonManifoldError')} 個、`ContactError` {count('ContactError')} 個；在 build 開始後數毫秒內丟出"],
+        ["預期的拒絕：direct writer", str(len(writer_refusals)), "5-edge cylinder wall；Gmsh-API oracle 可以寫出並得到 conformal 的 mesh"],
+    ]
+    _write("emission-extreme-table.md", _table(["結果", f"組合數（共 {len(catalogue)} 個，{len(fixtures)} 個 fixture）", "內容"], rows, "lrl"))
+    timing = [
+        ["`BRepCheck_Analyzer`", 8], ["`BOPAlgo_ArgumentAnalyzer`（全部模式）", 9], ["`ShapeAnalysis` 加 plan 比對", 10], ["catalogue 列出的全部檢查合計", 11],
+    ]
+    rows = [[name, f"{min(ms(c)):.1f}", f"{max(ms(c)):.1f}"] for name, c in timing]
+    build_ms = [float(r[4].split("(")[1].split()[0]) for r in build_refusals]
+    rows.append(["build 階段的拒絕（丟出錯誤所需時間）", f"{min(build_ms):.1f}", f"{max(build_ms):.1f}"])
+    _write("emission-extreme-timing-table.md", _table(["檢查", "最短 (ms)", "最長 (ms)"], rows))
+    names = ["檢查", "複雜度", "N = 1,000 (F = 12,761)", "N = 5,000 (F = 63,664)", "N = 20,000 (F = 255,052)", "每個 face 的 µs（首項到末項）", "對 F 的 slope"]
+    _write("emission-validator-table.md", _table(names, [[f"`{r[0]}`"] + r[1:] for r in _md_rows(PROTOTYPE / "outputs" / "validator_scaling.md", 0)], "llrrrrr"))
+    _write("emission-validator-run-table.md", _table(
+        ["N", "face 數", "edge 數", "build 牆鐘時間", "寫出 XAO（8 個 worker）", "Gmsh 載入", "verify_loaded", "peak RSS"],
+        _md_rows(PROTOTYPE / "outputs" / "validator_scaling.md", 1)))
+
+
+def _five_edge_wall_figure() -> None:
+    """Conceptual: the cylinder wall of a round pad unrolled (angle across, z up), before and after splitting at a foreign vertex."""
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.4))
+    for ax, split in zip(axes, (False, True)):
+        ax.set_xlim(-0.6, 5.6)
+        ax.set_ylim(-0.7, 2.7)
+        ax.axis("off")
+        face = "#fde9d6"
+        if not split:
+            ax.add_patch(Rectangle((0, 0), 5, 2, facecolor=face, edgecolor="none"))
+            ax.plot([0, 5, 5, 0, 0], [0, 0, 2, 2, 0], color="#1b1b1b", linewidth=1.6)
+            ax.plot([3], [0], "o", color="#D55E00", markersize=9)
+            ax.text(3, -0.35, "foreign vertex", ha="center", fontsize=8, color="#D55E00")
+            ax.text(1.5, -0.35, "bottom arc 1", ha="center", fontsize=8)
+            ax.text(4.1, -0.35, "arc 2", ha="center", fontsize=8)
+            ax.text(2.5, 1.0, "one wall, 5 boundary edges\n(2 bottom arcs, 1 top arc, 2 vertical)", ha="center", fontsize=9)
+            ax.set_title("before: the direct writer refuses it", fontsize=9)
+        else:
+            for x0, x1 in ((0, 3), (3, 5)):
+                ax.add_patch(Rectangle((x0, 0), x1 - x0, 2, facecolor=face, edgecolor="none"))
+            ax.plot([0, 5, 5, 0, 0], [0, 0, 2, 2, 0], color="#1b1b1b", linewidth=1.6)
+            ax.plot([3, 3], [0, 2], color="#0072B2", linewidth=2.4)
+            ax.plot([3], [0], "o", color="#D55E00", markersize=9)
+            ax.plot([3], [2], "o", color="#0072B2", markersize=7)
+            ax.text(3.1, 2.2, "new vertical edge, top arc split at the same place", ha="center", fontsize=8, color="#0072B2")
+            ax.text(1.5, 1.0, "piece 1\n4 edges", ha="center", fontsize=9)
+            ax.text(4.0, 1.0, "piece 2\n4 edges", ha="center", fontsize=9)
+            ax.set_title("after: two exact cylinders on their own circles", fontsize=9)
+    fig.suptitle("Conceptual: a curved wall with a foreign vertex on its arc, unrolled", fontsize=10)
+    fig.savefig(FIGURES / "emission-five-edge-wall.svg", facecolor="white", bbox_inches="tight")
+    plt.close(fig)
+    print("wrote emission-five-edge-wall.svg")
+
+
 def main() -> None:
     if "--occt-only" in sys.argv:
         _occt_tables()
+        _extreme_tables()
         return
     _ensure_plotly_js()
     topo, plan = _running_example()
@@ -581,6 +662,8 @@ def main() -> None:
     _tags_and_groups_tables(topo, plan)
     _validation_table()
     _occt_tables()
+    _extreme_tables()
+    _five_edge_wall_figure()
     _sidecar_table()
     _shared_face_figure(topo, plan)
     _groups_3d_figures(plan)

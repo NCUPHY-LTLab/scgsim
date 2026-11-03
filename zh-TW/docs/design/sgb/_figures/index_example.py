@@ -173,6 +173,30 @@ def centre_vertices() -> dict:
     return out
 
 
+def extreme_summary() -> dict:
+    """Counts and OCCT-check times read from the extreme-case catalogue (outputs/extreme/catalogue.md)."""
+    rows = []
+    for line in (OUTPUTS / "extreme" / "catalogue.md").read_text().splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) == 12 and cells[0] not in ("fixture", "---") and not cells[0].startswith("-"):
+            rows.append(cells)
+    refusals = {"NonManifoldError": 0, "ContactError": 0, "direct writer refused (5-edge wall)": 0}
+    passing, brep, bop = 0, [], []
+    for r in rows:
+        if "NonManifoldError" in r[4]:
+            refusals["NonManifoldError"] += 1
+        elif "ContactError" in r[4]:
+            refusals["ContactError"] += 1
+        elif "writer refused" in r[5]:
+            refusals["direct writer refused (5-edge wall)"] += 1
+        else:
+            passing += 1
+            brep.append(float(r[8].split()[1]))
+            bop.append(float(r[9].split()[1]))
+    return {"rows": len(rows), "fixtures": len({r[0] for r in rows}), "passing_rows": passing, "expected_refusals": refusals,
+            "brepcheck_ms_min_max": [min(brep), max(brep)], "bop_argument_analyzer_ms_min_max": [min(bop), max(bop)]}
+
+
 def counts() -> dict:
     """Planned counts (stage summaries) and what the direct writer wrote and Gmsh loaded back (e3_brep validation)."""
     out = {}
@@ -199,6 +223,7 @@ def main() -> None:
     input_figure(spec)
     triangles = exploded_figures(result)
     numbers = counts()
+    numbers["extreme_catalogue"] = extreme_summary()
     for case, extra in centre_vertices().items():
         numbers[case]["arc_centre_vertices"] = extra
         assert numbers[case]["written_by_direct_writer"]["0"] == extra["planned_vertices"] - extra["arc_centre_vertices"]
