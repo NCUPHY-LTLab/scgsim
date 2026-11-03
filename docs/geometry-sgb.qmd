@@ -30,6 +30,15 @@ local entity identity, ports, functional conductor regions, and topology
 selectors. The Notebook composes named occurrences and assigns the final net
 map; it does not author PDK or component facts manually.
 
+Overlap precedence follows the gdsfactory convention at the PDK interface:
+for `LayerLevel.mesh_order`, the lower value wins where materials overlap.
+`build_component_stack()` converts it once into the internal `priority`
+(`priority = -mesh_order`) on both solution-region and conductor records.
+`SemanticEntitySpec.priority`, and `priority` in a saved stack or annotation
+record, always means the higher value wins; `mesh_order` is never used as a
+priority directly. Source stacks recorded before this conversion carry
+the previous priority values, so they keep their recorded identity.
+
 In the public Xmon composition, the reusable child keeps its local pad,
 coupler, mask, and a ground-arm metal contribution. That arm overlaps the
 residual ground plane, so it is not a separate conductor Entity; modeling it

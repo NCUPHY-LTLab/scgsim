@@ -34,7 +34,7 @@ def solution_regions(
         if not include:
             continue
         semantic_id = _identifier(level_name, "PDK solution level id")
-        material_id, z_min_um, thickness_um, _ = _level_facts(level, level_name)
+        material_id, z_min_um, thickness_um, priority = _level_facts(level, level_name)
         _require_material(material_id, materials, f"solution region {semantic_id!r}")
         authored_geometry = info.get("geometry", {})
         if not isinstance(authored_geometry, Mapping):
@@ -49,6 +49,7 @@ def solution_regions(
         result[semantic_id] = {
             "role": "solution_region",
             "material_id": material_id,
+            "priority": priority,
             "geometry_kind": "domain",
             "geometry": {
                 "z_min_um": z_min_um,
@@ -249,6 +250,12 @@ def _level_info(level: Any, name: Any) -> dict[str, Any]:
 
 
 def _level_facts(level: Any, name: Any) -> tuple[str, float, float, int]:
+    """Read one PDK level; return `priority` where a HIGHER value wins overlaps.
+
+    gdsfactory `LayerLevel.mesh_order` is the opposite: the LOWER value wins
+    where materials overlap. This is the single place that converts the PDK
+    convention into `SemanticEntitySpec.priority` (higher wins), by negation.
+    """
     material_id = _identifier(
         getattr(level, "material", None), f"level {name!r} material"
     )
@@ -257,7 +264,7 @@ def _level_facts(level: Any, name: Any) -> tuple[str, float, float, int]:
         getattr(level, "thickness", None), f"level {name!r} thickness"
     )
     try:
-        priority = int(getattr(level, "mesh_order", 0) or 0)
+        priority = -int(getattr(level, "mesh_order", 0) or 0)
     except (TypeError, ValueError) as exc:
         raise TypeError(f"level {name!r} mesh_order must be an integer.") from exc
     return material_id, z_um, thickness_um, priority
