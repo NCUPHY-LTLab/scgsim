@@ -117,7 +117,8 @@ package-version, distribution-build, editable-import and isolated-wheel-import
 checks. The Python 3.12 offline job runs the full public offline test suite,
 the unified `scripts/check_quality.py` command: Ruff formatting and lint,
 readable style, standard Pyright with the three retained strict scopes, and
-six import-layer contracts. The separate Python 3.12 `docs-smoke` job runs current source examples
+six import-layer contracts. That job also installs the `occt` dependency group, so Pyright
+resolves OCP and the `occt`-marked OCCT checks run instead of skipping. The separate Python 3.12 `docs-smoke` job runs current source examples
 through file-only preparation with the pinned public PDK. CI uses public
 inputs and excludes private golden data; it does not invoke AEDT or Palace
 solvers.
