@@ -163,6 +163,10 @@ class PortIdentity:
     host_entity_ids: tuple[str, ...]
     target_layer: str
     source_layer: str
+    # Whether the sheet's cells over a host conductor are that host (the port's landing) instead of
+    # the port.  False for a region bound to a rectangular junction partition, which is already the
+    # junction's central rectangle and keeps its full footprint.
+    lands_on_hosts: bool = True
 
 
 @dataclass(frozen=True)

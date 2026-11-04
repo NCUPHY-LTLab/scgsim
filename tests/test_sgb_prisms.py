@@ -137,18 +137,18 @@ def test_the_automatic_vacuum_envelope_comes_from_the_prepared_enclosure(pad):
     )
 
 
-def test_a_port_sheet_is_a_sheet_prism_on_the_host_support_plane_with_its_landings_removed(
+def test_a_port_sheet_is_a_sheet_prism_on_the_host_support_plane_with_its_region_whole(
     pad,
 ):
-    """A port sheet is a sheet prism on the substrate top (the metal's attachment plane) with its landings removed."""
+    """A port sheet is a sheet prism on the substrate top (the metal's attachment plane); the landings are labelled, not cut out."""
     catalogue = build_prism_catalogue(pad.build_input, pad.representation)
     port = prism_of(catalogue, "PORT_SHEET__P1__0000")
     # the 0..0.2 um hosts are films attached at their lower face: z = 0, not their mid-plane 0.1
     assert port.is_sheet and port.z0 == 0
     assert port.material_kind == "port"
-    # 12 x 4 um region minus one 1 x 4 um landing on each host
-    assert port.footprint.twice_area() == 2 * 40 * UM * UM
-    assert len(port.footprint.holes) == 2
+    # the whole 12 x 4 um region: the landings are the hosts' cells, found by labelling
+    assert port.footprint.twice_area() == 2 * 48 * UM * UM
+    assert not port.footprint.holes
     identity = port.port
     assert identity is not None
     assert identity.source_name == "P1" and identity.port_index == 1
@@ -165,9 +165,7 @@ def test_thin_film_conductors_are_sheets_and_the_port_lies_on_their_plane(thin_f
         assert sheet.is_sheet and sheet.z0 == 0
     port = prism_of(catalogue, "port_sheet")
     assert port.z0 == port.z1 == 0
-    assert (
-        port.footprint.twice_area() == 2 * 4 * UM * UM
-    )  # 6 um^2 region minus two 1 um^2 landings
+    assert port.footprint.twice_area() == 2 * 6 * UM * UM  # the whole 6 um^2 region
     upper = prism_of(catalogue, "upper_air")
     assert (upper.z0, upper.z1) == (
         Fraction(0),
@@ -279,13 +277,11 @@ def test_a_port_without_any_host_overlap_fails_closed(thin_film):
 def test_a_port_covered_entirely_by_its_hosts_has_no_active_remainder(thin_film):
     """A port covered entirely by its hosts has no active remainder."""
     region = thin_film.build_input.port_sheet_regions[0]
-    covering = replace(
-        region.overlaps[0], overlap_loop=region.exterior, overlap_id="everything"
-    )
-    port = replace(region, overlaps=(covering, region.overlaps[1]))
+    inside_left = ((1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0))
+    port = replace(region, exterior=inside_left, holes=())
     bare = replace(thin_film.build_input, port_sheet_regions=(port,))
     with pytest.raises(InputError, match="no active remainder"):
-        build_prism_catalogue(bare, thin_film.representation)
+        derive_labelled_arrangements(bare, thin_film.representation)
 
 
 def test_the_catalogue_is_deterministic_and_prism_order_follows_the_input(pad):

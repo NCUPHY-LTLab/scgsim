@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import replace
 from fractions import Fraction
 
-from scgsim.geometry.sgb.cutfamilies.inset import inset_family
+from scgsim.geometry.sgb.cutfamilies.inset import PortClip, inset_family
 from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, RefinementRequest
 from scgsim.geometry.sgb.cutfamilies.supports import resolve_supports
 from scgsim.geometry.sgb.errors import InputError
@@ -59,12 +59,28 @@ def with_cut_families(
 
 def _port_footprints(
     catalogue: PrismCatalogue, level: Fraction
+) -> tuple[PortClip, ...]:
+    """The lumped-port sheets on a level, which the inset seams must not enter off their hosts."""
+    return tuple(
+        PortClip(
+            prism.footprint,
+            _landings(catalogue, prism.port.host_entity_ids, level)
+            if prism.port.lands_on_hosts
+            else (),
+        )
+        for prism in catalogue.prisms
+        if prism.port is not None and prism.z0 == level
+    )
+
+
+def _landings(
+    catalogue: PrismCatalogue, host_entity_ids: tuple[str, ...], level: Fraction
 ) -> tuple[Footprint, ...]:
-    """The footprints of the lumped-port sheets on a level, which the inset seams must not enter."""
+    """The footprints of the host conductors that meet a port's plane (a body above or below it, or a sheet on it)."""
     return tuple(
         prism.footprint
         for prism in catalogue.prisms
-        if prism.material_kind == "port" and prism.z0 == level
+        if prism.entity_id in host_entity_ids and prism.z0 <= level <= prism.z1
     )
 
 

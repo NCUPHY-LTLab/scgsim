@@ -26,11 +26,12 @@ from scgsim.geometry.sgb.arrangement.dcel import (
 from scgsim.geometry.sgb.derivation.arc_edges import realise_arc_edges
 from scgsim.geometry.sgb.derivation.ids import assign_ids
 from scgsim.geometry.sgb.derivation.layer import Layer, RawMeasurements
+from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.labelling.bands import face_band
 from scgsim.geometry.sgb.labelling.dissolve import Dissolved, FamilyPolicies, dissolve
 from scgsim.geometry.sgb.labelling.linking import TAG, SlabEdges, link_faces
 from scgsim.geometry.sgb.labelling.membership import membership_shares
-from scgsim.geometry.sgb.labelling.prism_set import PrismSet
+from scgsim.geometry.sgb.labelling.prism_set import PrismSet, without_landings
 from scgsim.geometry.sgb.noding.snap_rounding import Segment, snap_round
 from scgsim.geometry.sgb.parallel import Runtime
 from scgsim.geometry.sgb.prisms.levels import LevelStructure
@@ -105,7 +106,24 @@ def build_level_layers(
     with rt.serial("arc_realisation"):
         for layer in layers:
             realise_arc_edges(layer, arcs, register=False)
+    _check_ports_keep_a_face(catalogue, layers)
     return layers
+
+
+def _check_ports_keep_a_face(catalogue: PrismCatalogue, layers: list[Layer]) -> None:
+    """Every port keeps some area off its hosts: a port wholly on its hosts has nothing to excite."""
+    labelled = {
+        label.sheet.name
+        for layer in layers
+        for label in layer.labels[1:]
+        if label.sheet is not None
+    }
+    for prism in catalogue.prisms:
+        if prism.port is not None and prism.entity_id not in labelled:
+            raise InputError(
+                f"port sheet {prism.entity_id!r} has no active remainder: "
+                "its host overlaps cover it entirely"
+            )
 
 
 def _level_segments(
@@ -207,7 +225,8 @@ def _level_extras_job(shared: Any, items: list[int]) -> list[Any]:
     """Per face: its sheet owner, its bands and the entities whose footprint covers it.
 
     Owner and coverage are footprint tests at one interior point: every footprint boundary is an
-    arrangement edge, so no face straddles one.  A band is a distance test, whose boundary can be
+    arrangement edge, so no face straddles one.  A port's footprint is its authored region whole;
+    over a host conductor of the port the cell is the host's surface, not the port (``without_landings``).  A band is a distance test, whose boundary can be
     a line inside a face, so a band comes from the face's area (``face_band``), not from the point.  A port
     face is the one face that may lie across bands (the seams stop at its boundary).
     """
@@ -218,6 +237,8 @@ def _level_extras_job(shared: Any, items: list[int]) -> list[Any]:
         point = interior_point(arrangements[k], fi)
         sheets = sheet_sets[k]
         owner = sheets.owner_at(point) if sheets is not None else None
+        covering = sorted({j for s in cover_sets[k] for j in s.hit(point)})
+        owner, kept = without_landings(owner, [prisms[j] for j in covering])
         bands = tuple(
             (family_id, band)
             for family_id, support in supports[k]
@@ -231,9 +252,7 @@ def _level_extras_job(shared: Any, items: list[int]) -> list[Any]:
             )
             is not None
         )
-        entities = tuple(
-            sorted({prisms[j].entity_id for s in cover_sets[k] for j in s.hit(point)})
-        )
+        entities = tuple(sorted({p.entity_id for p in kept}))
         out.append((owner, bands, entities))
     return out
 

@@ -17,11 +17,15 @@ carries the port identity.  The semantics follow the compiler's port lowering
   therefore lies in the plane of the surface under it and occupies part of that surface
   instead of floating over it.  One rule for every route, because the prism catalogue
   does not know the route.
-* **Footprint.**  The *active remainder*: the authored region minus each host overlap
-  (the landing of the port on its host).  The overlaps enter as extra hole rings, which
-  the even-odd footprint test reads as removed area.  A region bound to a rectangular
-  junction partition is already the junction's central rectangle and keeps its full
-  footprint (``lowering._PortSheetLowerer.read_geometry``).
+* **Footprint.**  The authored region minus its authored holes, whole.  The part of it that
+  lands on a host conductor is not removed here: the adapter's ``overlap_loop`` follows the
+  host's raw GDS polyline, while SGB may have reconstructed the host as an exact arc, and the
+  two would meet as one edge with two carriers.  Labelling instead reads the landing from the
+  host footprint SGB built: a port-sheet cell over a host is the host
+  (``labelling.prism_set.without_landings``), so the port keeps only its *active remainder*
+  and shares the host's own edges.  A region bound to a rectangular junction partition is
+  already the junction's central rectangle and keeps its full footprint
+  (``lowering._PortSheetLowerer.read_geometry``), so it has no landing.
 * **Identity.**  Port sheet id, source name, 1-based port index, normalised XY
   direction, host entity ids and source/target layers.
 """
@@ -99,16 +103,9 @@ def _port_prism(
         lattice_ring(hole, grid, f"{what} hole {k}")
         for k, hole in enumerate(region.holes)
     ]
-    if JUNCTION_PARTITION_KEY not in region.metadata:
-        holes.extend(
-            lattice_ring(o.overlap_loop, grid, f"{what} overlap {o.overlap_id!r}")
-            for o in region.overlaps
-        )
     footprint = Footprint.from_rings(exterior, holes)
     if footprint.twice_area() <= 0:
-        raise InputError(
-            f"{what} has no active remainder: its host overlaps cover it entirely"
-        )
+        raise InputError(f"{what} has an empty footprint")
     return PrismRecord(
         entity_id=region.port_sheet_id,
         footprint=footprint,
@@ -124,6 +121,7 @@ def _port_prism(
             host_entity_ids=hosts,
             target_layer=str(region.metadata.get("target_layer", "")),
             source_layer=region.source_layer,
+            lands_on_hosts=JUNCTION_PARTITION_KEY not in region.metadata,
         ),
     )
 

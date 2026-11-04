@@ -25,9 +25,13 @@ and moves no band, but it keeps the band seams out of itself (below).  Topology 
 band that vanishes) are ordinary outcomes: the bands that survive are the ones the labels record.
 
 Ports.  A lumped-port sheet lies on the support's level and must stay one face, so no band seam may enter its
-interior.  The footprints of the ports on the level (the exterior rings minus host-overlap holes) join the noding
-as clip boundaries only: the candidates are cut where they cross a port boundary, the pieces whose midpoint lies
-in a port's interior are dropped, and a curve may end on the port boundary like on the free boundary.  Pieces
+interior.  The footprints of the ports on the level (the authored region whole) join the noding as clip
+boundaries only: the candidates are cut where they cross a port boundary, the pieces whose midpoint lies in a
+port's interior are dropped, and a curve may end on the port boundary like on the free boundary.  The part of a
+port that lands on a host conductor is the host's surface, not the port (labelling), so a piece inside the
+landing is kept: a port's *active* interior is its footprint minus the footprints of its hosts (:class:`PortClip`).
+A seam never crosses a host boundary: it lies in the support region, which is either wholly the host's surface
+or wholly outside it.  Pieces
 along the port boundary or outside it are unchanged, and the distance origins never saw the port, so every band
 keeps its geometry outside the port.  Only the seams of this family are clipped: a refinement curve is a user
 request and is never clipped here.
@@ -44,6 +48,7 @@ and arcs alike; reflex arcs ``<support>/ring<r>/corner<k>``, end caps ``<support
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from decimal import Decimal
 from fractions import Fraction
 
@@ -69,6 +74,26 @@ PARALLEL_EPSILON = Decimal(
 PIECE_SLACK = Decimal("1e-9")
 FREE_BOUNDARY = "~free"  # carrier id prefix of the boundary that is not an origin
 PORT_BOUNDARY = "~port"  # carrier id prefix of a port footprint boundary (a clip boundary, never an origin)
+
+
+@dataclass(frozen=True)
+class PortClip:
+    """A lumped port as the seams see it: its footprint and the footprints of the hosts it lands on."""
+
+    footprint: Footprint
+    landings: tuple[Footprint, ...] = ()
+
+    def holds(self, point: tuple[int, int, int]) -> bool:
+        """Whether a point off every boundary lies in the port's active interior (off its hosts)."""
+        return _inside(self.footprint, point) and not any(
+            _inside(host, point) for host in self.landings
+        )
+
+
+def _inside(footprint: Footprint, point: tuple[int, int, int]) -> bool:
+    return sum(point_in_ring(ring, point) for ring in footprint.rings()) % 2 == 1
+
+
 AddArc = Callable[[str, tuple[int, int], Fraction, bool, Point, Point], None]
 
 
@@ -76,12 +101,11 @@ def inset_family(
     family_id: str,
     region: SupportRegion,
     target_levels: tuple[Fraction, ...],
-    ports: tuple[Footprint, ...] = (),
+    ports: tuple[PortClip, ...] = (),
 ) -> CurveFamilyRecord:
     """The ``required`` cut family holding the boundaries of ``R_m`` for every margin of the region.
 
-    ``ports`` are the footprints of the lumped ports on the region's level: no curve has a piece in their
-    interior, so a port stays one face where only band seams would cut it.
+    ``ports`` are the lumped ports on the region's level: no curve has a piece in their active interior, so a port stays one face where only band seams would cut it.
     """
     lines: list[LineCarrier] = []
     arcs: list[ArcCarrier] = []
@@ -314,7 +338,7 @@ def _corner_arcs(
 
 
 def _boundary_of_eroded(
-    family_id: str, region: SupportRegion, margin: int, ports: tuple[Footprint, ...]
+    family_id: str, region: SupportRegion, margin: int, ports: tuple[PortClip, ...]
 ) -> tuple[list[LineCarrier], list[ArcCarrier]]:
     candidates = _generate_candidates(family_id, region, margin)
     segments = [Segment(p, q, frozenset([cid])) for cid, p, q in candidates.lines]
@@ -353,18 +377,18 @@ def _free_boundary_segments(region: SupportRegion) -> list[Segment]:
     return segments
 
 
-def _port_boundary_segments(ports: tuple[Footprint, ...]) -> list[Segment]:
+def _port_boundary_segments(ports: tuple[PortClip, ...]) -> list[Segment]:
     """The port footprint boundaries, as noding input only: they split the candidates where they cross them."""
     return [
         Segment(p, q, frozenset([f"{PORT_BOUNDARY}{k}.{r}.{j}"]))
-        for k, footprint in enumerate(ports)
-        for r, ring in enumerate(footprint.rings())
+        for k, clip in enumerate(ports)
+        for r, ring in enumerate(clip.footprint.rings())
         for j, (p, q) in enumerate(zip(ring, (*ring[1:], ring[0]), strict=True))
     ]
 
 
 def _clipped_to_ports(
-    edges: list[NodedEdge], ports: tuple[Footprint, ...]
+    edges: list[NodedEdge], ports: tuple[PortClip, ...]
 ) -> tuple[list[NodedEdge], set[Point]]:
     """The edges without the pieces inside a port, and the vertices on a port boundary.
 
@@ -389,13 +413,10 @@ def _clipped_to_ports(
     return clipped, port_ends
 
 
-def _in_a_port(edge: NodedEdge, ports: tuple[Footprint, ...]) -> bool:
-    """Whether the midpoint of an edge off every port boundary lies in the interior of a port."""
+def _in_a_port(edge: NodedEdge, ports: tuple[PortClip, ...]) -> bool:
+    """Whether the midpoint of an edge off every port boundary lies in the active interior of a port."""
     middle = (edge.a[0] + edge.b[0], edge.a[1] + edge.b[1], 2)
-    return any(
-        sum(point_in_ring(ring, middle) for ring in footprint.rings()) % 2 == 1
-        for footprint in ports
-    )
+    return any(clip.holds(middle) for clip in ports)
 
 
 def _kept_edges(

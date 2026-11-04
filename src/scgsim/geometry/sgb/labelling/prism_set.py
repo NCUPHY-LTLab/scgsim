@@ -190,21 +190,63 @@ def resolve_owner(
 ) -> SheetOwner | None:
     """Owner of the sheet(s) at a point on a level.
 
-    A port sheet never overlaps another sheet; conductor sheets follow the same
-    Net and priority rule as conductor bodies.
+    A port sheet never overlaps another sheet, except a conductor sheet that is one of its
+    hosts: there the port lands on its host and the host owns the point.  Conductor sheets
+    follow the same Net and priority rule as conductor bodies.
     """
     if not hit:
         return None
     ports = [p for p in hit if p.material_kind == "port"]
     if ports:
-        if len(hit) > 1:
+        landing = _landing_hosts(ports, hit)
+        if len(ports) > 1 or len(hit) - len(ports) > len(landing):
             names = ", ".join(sorted(p.entity_id for p in hit))
             raise OverlapError(
                 f"a port sheet overlaps another sheet near {format_location(where, grid)}: {names}"
             )
-        return SheetOwner("port", ports[0].entity_id)
+        if not landing:
+            return SheetOwner("port", ports[0].entity_id)
+        hit = landing
     winner = _owning_conductor(hit, where, grid)
     return SheetOwner("conductor", winner.entity_id, winner.net_id or "")
+
+
+def _landing_hosts(
+    ports: list[PrismRecord], covering: list[PrismRecord]
+) -> list[PrismRecord]:
+    """The conductors covering a point that are hosts of a port there, when that port lands on them."""
+    return [
+        host
+        for host in covering
+        if host.material_kind == "conductor"
+        and any(
+            port.port is not None
+            and port.port.lands_on_hosts
+            and host.entity_id in port.port.host_entity_ids
+            for port in ports
+        )
+    ]
+
+
+def without_landings(
+    owner: SheetOwner | None, covering: list[PrismRecord]
+) -> tuple[SheetOwner | None, list[PrismRecord]]:
+    """The sheet owner and the covering prisms of a level point once a port's landing is taken out.
+
+    The port footprint is the authored region whole.  Where it lies over a host conductor of the
+    port (a body above or below the port plane, or a sheet on it), the point is the host's surface:
+    it carries no port, so the port keeps only its active remainder and shares the host's own
+    edges.  ``covering`` lists every prism whose footprint contains the point (the slabs on both
+    sides and the sheets on the level).
+    """
+    ports = [p for p in covering if p.material_kind == "port"]
+    landed = [p for p in ports if _landing_hosts([p], covering)]
+    if not landed:
+        return owner, covering
+    kept = [p for p in covering if p not in landed]
+    if owner is not None and owner.kind == "port":
+        owner = None
+    return owner, kept
 
 
 def format_location(where: RepPoint, grid: Grid) -> str:
