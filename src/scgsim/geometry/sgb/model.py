@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import gc
 from dataclasses import dataclass, field
+from fractions import Fraction
 
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
@@ -35,6 +36,9 @@ from scgsim.geometry.sgb.routes.naming import check_entity_names
 from scgsim.geometry.sgb.routes.policy import RoutePolicy, check_route, route_policy
 from scgsim.geometry.sgb.validation.report import ValidationReport
 from scgsim.geometry.sgb.validation.validate import validate_model
+
+LENGTH_UNIT = "um"
+"""The unit of the model grid and of every length a hand-off carries."""
 
 
 @dataclass
@@ -81,9 +85,21 @@ class ConformalModel:
         return sets
 
     def identity_digest(self) -> str:
-        """One hash over every entity id."""
+        """One hash over every entity id and the physical grid they sit on.
+
+        Entity ids hash lattice coordinates, so the same lattice at two grid sizes has the same ids but
+        different areas and volumes; the exact grid size (the decimal text of the float, as
+        ``Grid.exact_units`` reads it) and the length unit therefore enter the hash.
+        """
         sets = self.identity_sets()
-        return identity.digest("model", {k: sorted(v) for k, v in sorted(sets.items())})
+        return identity.digest(
+            "model",
+            {
+                "grid": Fraction(repr(self.topology.grid_um)),
+                "length_unit": LENGTH_UNIT,
+                "entities": {k: sorted(v) for k, v in sorted(sets.items())},
+            },
+        )
 
 
 def build_conformal_model(  # noqa: PLR0913 - the effective input, the route and its options

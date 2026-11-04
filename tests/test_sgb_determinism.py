@@ -5,12 +5,14 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
-from sgb_scenes import pad_in_ground, random_layout
+from sgb_scenes import pad_in_ground, random_layout, slab_model
 
 from scgsim.geometry.sgb.derivation.labelled import derive_from_catalogue
 from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.records.grid import Grid
 
 TESTS = Path(__file__).resolve().parent
 SCRIPT = (
@@ -82,6 +84,22 @@ def test_model_ids_do_not_depend_on_python_hash_randomisation():
         )
         outputs.add(result.stdout.strip())
     assert len(outputs) == 1
+
+
+def test_the_model_digest_includes_the_physical_grid():
+    """One lattice at two grid sizes has the same entity ids but areas four times apart: the digests differ."""
+    catalogue = slab_model("B", [("pad", "P", (-4, -4, 4, 4))], half=10)
+    models = {
+        size_um: build_model_from_catalogue(replace(catalogue, grid=Grid(size_um)), "B")
+        for size_um in (0.001, 0.002)
+    }
+    fine, coarse = models[0.001], models[0.002]
+    assert (
+        fine.identity_sets() == coarse.identity_sets()
+    )  # the ids alone cannot tell them apart
+    assert fine.identity_digest() != coarse.identity_digest()
+    again = build_model_from_catalogue(replace(catalogue, grid=Grid(0.001)), "B")
+    assert again.identity_digest() == fine.identity_digest()
 
 
 def test_wall_ids_do_not_depend_on_the_vertical_edges_next_to_them():
