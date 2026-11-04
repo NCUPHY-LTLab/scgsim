@@ -34,10 +34,19 @@ if str(SGB_CORE / "tests") not in sys.path:
 import matplotlib  # noqa: E402
 
 matplotlib.use("Agg")
+from dataclasses import replace  # noqa: E402
+
+import gmsh  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+import plotly  # noqa: E402
 import plotly.graph_objects as go  # noqa: E402
 from matplotlib.path import Path as MplPath  # noqa: E402
+from scgsim.geometry.sgb.arrangement.arcs import sample_arc  # noqa: E402
+from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: E402
+from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file  # noqa: E402
+from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
+from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue  # noqa: E402
 
 G_UM = 0.001  # um per grid unit (default grid, 1 nm)
 
@@ -85,14 +94,13 @@ def ensure_plotly_js() -> None:
     FIGURES.mkdir(parents=True, exist_ok=True)
     target = FIGURES / "plotly.min.js"
     if not target.exists():
-        import plotly
-
         shutil.copyfile(
             Path(plotly.__file__).parent / "package_data" / "plotly.min.js", target
         )
 
 
 def save_svg(fig, name: str) -> Path:
+    """Save a Matplotlib figure as a static SVG under the figures folder."""
     FIGURES.mkdir(parents=True, exist_ok=True)
     path = FIGURES / f"{name}.svg"
     fig.savefig(path, format="svg", bbox_inches="tight", facecolor="white")
@@ -169,7 +177,6 @@ def real_input(*, film: bool = False, **options):
 
 def real_catalogue(*, film: bool = False, **options):
     """The prism catalogue (stage S2) of :func:`real_input`."""
-    from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue  # noqa: PLC0415
 
     effective = real_input(film=film, **options)
     return build_prism_catalogue(effective.build_input, effective.representation)
@@ -179,7 +186,6 @@ def build_model(
     catalogue, route: str, *, insets=(), refinements=(), keep_raw: bool = False
 ):
     """The validated conformal model of a catalogue under a route (stages S4 to S9)."""
-    from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: PLC0415
 
     return build_model_from_catalogue(
         catalogue, route, insets=insets, refinements=refinements, keep_raw=keep_raw
@@ -188,7 +194,6 @@ def build_model(
 
 def with_extra_families(catalogue, *families):
     """The catalogue with hand-made ``CurveFamilyRecord`` objects appended (the typed requests cannot express them)."""
-    from dataclasses import replace  # noqa: PLC0415
 
     return replace(catalogue, families=(*catalogue.families, *families))
 
@@ -197,6 +202,7 @@ def with_extra_families(catalogue, *families):
 
 
 def mpl_path(rings) -> MplPath:
+    """One compound Matplotlib path from several rings, so holes cut out of their outer ring."""
     verts, codes = [], []
     for ring in rings:
         verts += list(ring) + [ring[0]]
@@ -207,6 +213,7 @@ def mpl_path(rings) -> MplPath:
 
 
 def svg_path(rings) -> str:
+    """An SVG path string that closes every ring of a polygon with holes."""
     return " ".join(
         "M " + " L ".join(f"{x:.4f},{y:.4f}" for x, y in ring) + " Z" for ring in rings
     )
@@ -216,7 +223,6 @@ def cycle_polyline(
     arr, curves, cycle_index: int, step: float = 150.0
 ) -> list[tuple[float, float]]:
     """A boundary cycle as a closed float polyline, grid units, every realised arc edge sampled."""
-    from scgsim.geometry.sgb.arrangement.arcs import sample_arc  # noqa: PLC0415
 
     pts: list[tuple[float, float]] = []
     for h in arr.cycles[cycle_index].half_edges:
@@ -250,7 +256,6 @@ def edge_polyline_um(
     arr, curves, ei: int, step: float = 150.0
 ) -> list[tuple[float, float]]:
     """One arrangement edge as a polyline in micrometres (arc edges sampled)."""
-    from scgsim.geometry.sgb.arrangement.arcs import sample_arc  # noqa: PLC0415
 
     e = arr.edges[ei]
     curve = curves[ei]
@@ -263,6 +268,7 @@ def edge_polyline_um(
 
 
 def finish_plan(ax, xlim, ylim, title: str | None = None) -> None:
+    """Fix the limits and equal aspect of a plan view and label its axes in micrometres."""
     ax.set_xlim(*xlim)
     ax.set_ylim(*ylim)
     ax.set_aspect("equal")
@@ -272,7 +278,7 @@ def finish_plan(ax, xlim, ylim, title: str | None = None) -> None:
         ax.set_title(title)
 
 
-def plotly_cells(
+def plotly_cells(  # noqa: PLR0913 -- the figure, its cell, the colour and text rules and the axes ranges
     fig,
     layer,
     colour_of,
@@ -329,6 +335,7 @@ OWNER_COLOURS = {
 
 
 def domain_colour(domain) -> str:
+    """The fill colour of a labelled domain: conductor, substrate, vacuum or outside."""
     if domain is None:
         return PALETTE["none"]
     if domain.kind == "conductor":
@@ -337,10 +344,12 @@ def domain_colour(domain) -> str:
 
 
 def domain_name(domain) -> str:
+    """The owning entity id of a domain, or ``outside`` for no domain."""
     return "outside" if domain is None else domain.name
 
 
 def level_label_text(label) -> str:
+    """Hover text of a level label: the domains below and above it and its sheet, if any."""
     text = f"below {domain_name(label.below)} | above {domain_name(label.above)}"
     if label.sheet is not None:
         text += f" | sheet {label.sheet.kind}:{label.sheet.name}"
@@ -361,9 +370,6 @@ def stretch_z(z, metal: float = 200.0, top: float = 0.2):
 @contextmanager
 def loaded_model(model) -> Iterator[dict[str, tuple[int, int]]]:
     """Write the model's BREP/XAO with the production writer, open it in Gmsh and yield ``planned id -> (dim, tag)``."""
-    import gmsh  # noqa: PLC0415
-    from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: PLC0415
-    from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file  # noqa: PLC0415
 
     plan = plan_brep(model.topology, model.routed)
     with tempfile.TemporaryDirectory() as tmp:
@@ -389,7 +395,6 @@ def compact_triangles(
     The surface mesh is Gmsh's, made from the XAO that the production writer produced (display only).  A face that
     bounds no emitted volume is not in the file, so use Route C when every face of every volume is wanted.
     """
-    import gmsh  # noqa: PLC0415
 
     out = {}
     with loaded_model(model) as tags:
@@ -412,7 +417,8 @@ def compact_triangles(
     return out
 
 
-def mesh_trace(points, tri, colour, name, hover, opacity=0.6, **kw) -> go.Mesh3d:
+def mesh_trace(points, tri, colour, name, hover, opacity=0.6, **kw) -> go.Mesh3d:  # noqa: PLR0913 -- the mesh, its look and its hover text
+    """A flat-shaded Plotly triangle mesh that keeps its hover text out of the legend."""
     return go.Mesh3d(
         x=np.round(points[:, 0], 3),
         y=np.round(points[:, 1], 3),

@@ -18,7 +18,7 @@ from fractions import Fraction
 
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-from _intro_common import save_plotly, save_svg, write_numbers
+from intro_common import save_plotly, save_svg, write_numbers
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement, interior_point
 from scgsim.geometry.sgb.noding.snap_rounding import (
     NodedEdge,
@@ -49,8 +49,10 @@ FACE_COLOURS = ["#cfe0f1", "#fbe3b8", "#cfe8cf", "#e6d3ee", "#f6c6c6"]
 # --------------------------------------------------------------------------- the round-by-round trace
 
 
-def trace(carriers):
-    segments = [Segment(a, b, frozenset([n])) for (a, b), n in zip(carriers, NAMES)]
+def _trace(carriers):
+    segments = [
+        Segment(a, b, frozenset([n])) for (a, b), n in zip(carriers, NAMES, strict=True)
+    ]
     engine = SerialEngine()
     edges: dict = {}
     for seg in segments:
@@ -69,12 +71,12 @@ def trace(carriers):
         new_edges: dict = {}
         verified = set()
         routes = {}
-        for key, h in zip(keys, hits):
+        for key, h in zip(keys, hits, strict=True):
             chain = assemble_chain(key[0], key[1], h)
             routes[key] = chain
             if len(chain) == 2:
                 verified.add(key)
-            for u, v in zip(chain, chain[1:]):
+            for u, v in zip(chain, chain[1:], strict=False):
                 new_edges.setdefault(canonical(u, v), set()).update(edges[key])
         rounds.append(
             {
@@ -106,14 +108,14 @@ def exact_crossings(carriers):
 
 def deviation(final, carriers):
     """Max distance (grid units) from an edge's end points to the nearest of its carriers, over all edges."""
-    by_name = dict(zip(NAMES, carriers))
+    by_name = dict(zip(NAMES, carriers, strict=True))
     worst = (0.0, None)
     per_edge = {}
     for (a, b), names in final.items():
         best = None
         for n in names:
             p, q = by_name[n]
-            d = max(point_segment(a, p, q), point_segment(b, p, q))
+            d = max(_point_segment(a, p, q), _point_segment(b, p, q))
             best = d if best is None else min(best, d)
         per_edge[(a, b)] = best
         if best > worst[0]:
@@ -121,7 +123,7 @@ def deviation(final, carriers):
     return worst, per_edge
 
 
-def point_segment(pt, p, q) -> float:
+def _point_segment(pt, p, q) -> float:
     px, py = pt
     dx, dy = q[0] - p[0], q[1] - p[1]
     t = max(0.0, min(1.0, ((px - p[0]) * dx + (py - p[1]) * dy) / (dx * dx + dy * dy)))
@@ -131,7 +133,7 @@ def point_segment(pt, p, q) -> float:
 # --------------------------------------------------------------------------- scenes (shared by both renderers)
 
 
-def square(c):
+def _square(c):
     x, y = c
     return [
         (x - 0.5, y - 0.5),
@@ -142,7 +144,7 @@ def square(c):
     ]
 
 
-def carrier_lines(alpha_dash="solid", width=1.6):
+def _carrier_lines(alpha_dash="solid", width=1.6):
     return [
         dict(
             kind="line",
@@ -156,7 +158,7 @@ def carrier_lines(alpha_dash="solid", width=1.6):
     ]
 
 
-def edge_lines(edges, width=2.6, highlight=frozenset()):
+def _edge_lines(edges, width=2.6, highlight=frozenset()):
     out = []
     for (a, b), names in sorted(edges.items()):
         first = sorted(names)[0]
@@ -175,150 +177,21 @@ def edge_lines(edges, width=2.6, highlight=frozenset()):
     return out
 
 
-def vertex_points(edges, colour="#111"):
+def _vertex_points(edges, colour="#111"):
     return [
         dict(kind="pt", pt=p, colour=colour, size=6, text=f"({p[0]}, {p[1]})")
         for p in sorted({p for e in edges for p in e})
     ]
 
 
-def build_scenes(t):
-    r1, r2, r3 = t["rounds"][0], t["rounds"][1], t["rounds"][2]
+def _build_scenes(t):
+    r1, r2 = t["rounds"][0], t["rounds"][1]
     cross = exact_crossings(CARRIERS)
     scenes = []
-    scenes.append(
-        dict(
-            title="1  Input: five exact carriers",
-            elements=carrier_lines()
-            + [
-                dict(
-                    kind="pt",
-                    pt=p,
-                    colour=CARRIER_COLOUR[i],
-                    size=5,
-                    text=f"{NAMES[i]} end point {p}",
-                )
-                for i, (a, b) in enumerate(CARRIERS)
-                for p in (a, b)
-            ],
-        )
-    )
-    pixels = []
-    for c in sorted(t["endpoints"]):
-        pixels.append(
-            dict(
-                kind="poly",
-                pts=square(c),
-                fill="#f6d9a8",
-                edge="#e08a1e",
-                name=f"hot pixel {c} (end point)",
-            )
-        )
-    for c in sorted(r1["new_hot"]):
-        pixels.append(
-            dict(
-                kind="poly",
-                pts=square(c),
-                fill="#f2b4ae",
-                edge="#c0392b",
-                name=f"hot pixel {c} (crossing)",
-            )
-        )
-    scenes.append(
-        dict(
-            title="2  Round 1: hot pixels (orange: end points, red: crossings)",
-            elements=pixels
-            + carrier_lines(width=1.2)
-            + [
-                dict(
-                    kind="pt",
-                    pt=(float(x), float(y)),
-                    colour="#111",
-                    size=7,
-                    marker="x",
-                    text=f"exact crossing of {a} and {b}: ({float(x):.3f}, {float(y):.3f})",
-                )
-                for x, y, a, b in cross
-            ],
-        )
-    )
-    scenes.append(
-        dict(
-            title="3  Round 1: each carrier re-routed through the pixels it touches",
-            elements=[
-                dict(
-                    kind="poly",
-                    pts=square(c),
-                    fill="#f6d9a8" if c in t["endpoints"] else "#f2b4ae",
-                    edge="#999",
-                    name=f"hot pixel {c}",
-                )
-                for c in sorted(r1["hot"])
-            ]
-            + carrier_lines("dot", 1.0)
-            + edge_lines(r1["after"])
-            + vertex_points(r1["after"]),
-        )
-    )
-    added = set(r2["after"]) - set(r1["after"])
-    removed = set(r1["after"]) - set(r2["after"])
-    new_pixel = sorted({p for e in added for p in e} - {p for e in removed for p in e})
-    scenes.append(
-        dict(
-            title="4  Round 2: a re-routed chain now touches a pixel it missed",
-            elements=[
-                dict(
-                    kind="poly",
-                    pts=square(c),
-                    fill="#ffffff",
-                    edge="#999",
-                    name=f"hot pixel {c}",
-                )
-                for c in sorted(r2["hot"])
-            ]
-            + [
-                dict(
-                    kind="poly",
-                    pts=square(c),
-                    fill="#f6d9a8",
-                    edge="#e08a1e",
-                    name=f"pixel {c} newly touched",
-                )
-                for c in new_pixel
-            ]
-            + [
-                dict(
-                    kind="line",
-                    pts=list(e),
-                    colour="#bbbbbb",
-                    width=2.6,
-                    dash="dash",
-                    name=f"replaced edge {e}",
-                )
-                for e in sorted(removed)
-            ]
-            + edge_lines(r2["after"], highlight=frozenset(added))
-            + vertex_points(r2["after"]),
-        )
-    )
-    scenes.append(
-        dict(
-            title="5  Round 3: nothing changes; the noded arrangement",
-            elements=carrier_lines("dot", 1.0)
-            + edge_lines(t["final"])
-            + vertex_points(t["final"])
-            + [
-                dict(
-                    kind="text",
-                    pt=((a[0] + b[0]) / 2 + 0.15, (a[1] + b[1]) / 2 + 0.15),
-                    text="+".join(sorted(n)),
-                    size=6.5,
-                )
-                for (a, b), n in t["final"].items()
-                if len(n) > 1
-            ],
-        )
-    )
+    scenes += _input_scenes()
+    scenes += _hot_pixel_scenes(t, r1, cross)
+    scenes += _round2_scenes(r1, r2)
+    scenes += _round2_result_scenes(t)
     arr = build_arrangement(
         [NodedEdge(a, b, frozenset(n)) for (a, b), n in t["final"].items()]
     )
@@ -348,27 +221,184 @@ def build_scenes(t):
         dict(
             title=f"6  DCEL faces: {len(arr.faces) - 1} bounded faces (areas in g²)",
             elements=faces
-            + edge_lines(t["final"], width=1.6)
-            + vertex_points(t["final"]),
+            + _edge_lines(t["final"], width=1.6)
+            + _vertex_points(t["final"]),
         )
     )
     return scenes, arr
 
 
+def _input_scenes():
+    """Scene 1: the five exact carriers and their end points."""
+    scenes = []
+    scenes.append(
+        dict(
+            title="1  Input: five exact carriers",
+            elements=_carrier_lines()
+            + [
+                dict(
+                    kind="pt",
+                    pt=p,
+                    colour=CARRIER_COLOUR[i],
+                    size=5,
+                    text=f"{NAMES[i]} end point {p}",
+                )
+                for i, (a, b) in enumerate(CARRIERS)
+                for p in (a, b)
+            ],
+        )
+    )
+    return scenes
+
+
+def _hot_pixel_scenes(t, r1, cross):
+    """Scenes 2 and 3: the hot pixels of the end points, then of round 1."""
+    scenes = []
+    pixels = []
+    for c in sorted(t["endpoints"]):
+        pixels.append(
+            dict(
+                kind="poly",
+                pts=_square(c),
+                fill="#f6d9a8",
+                edge="#e08a1e",
+                name=f"hot pixel {c} (end point)",
+            )
+        )
+    for c in sorted(r1["new_hot"]):
+        pixels.append(
+            dict(
+                kind="poly",
+                pts=_square(c),
+                fill="#f2b4ae",
+                edge="#c0392b",
+                name=f"hot pixel {c} (crossing)",
+            )
+        )
+    scenes.append(
+        dict(
+            title="2  Round 1: hot pixels (orange: end points, red: crossings)",
+            elements=pixels
+            + _carrier_lines(width=1.2)
+            + [
+                dict(
+                    kind="pt",
+                    pt=(float(x), float(y)),
+                    colour="#111",
+                    size=7,
+                    marker="x",
+                    text=f"exact crossing of {a} and {b}: ({float(x):.3f}, {float(y):.3f})",
+                )
+                for x, y, a, b in cross
+            ],
+        )
+    )
+    scenes.append(
+        dict(
+            title="3  Round 1: each carrier re-routed through the pixels it touches",
+            elements=[
+                dict(
+                    kind="poly",
+                    pts=_square(c),
+                    fill="#f6d9a8" if c in t["endpoints"] else "#f2b4ae",
+                    edge="#999",
+                    name=f"hot pixel {c}",
+                )
+                for c in sorted(r1["hot"])
+            ]
+            + _carrier_lines("dot", 1.0)
+            + _edge_lines(r1["after"])
+            + _vertex_points(r1["after"]),
+        )
+    )
+    return scenes
+
+
+def _round2_scenes(r1, r2):
+    """Scene 4: the chain that round 2 re-routes onto a pixel it missed."""
+    scenes = []
+    added = set(r2["after"]) - set(r1["after"])
+    removed = set(r1["after"]) - set(r2["after"])
+    new_pixel = sorted({p for e in added for p in e} - {p for e in removed for p in e})
+    scenes.append(
+        dict(
+            title="4  Round 2: a re-routed chain now touches a pixel it missed",
+            elements=[
+                dict(
+                    kind="poly",
+                    pts=_square(c),
+                    fill="#ffffff",
+                    edge="#999",
+                    name=f"hot pixel {c}",
+                )
+                for c in sorted(r2["hot"])
+            ]
+            + [
+                dict(
+                    kind="poly",
+                    pts=_square(c),
+                    fill="#f6d9a8",
+                    edge="#e08a1e",
+                    name=f"pixel {c} newly touched",
+                )
+                for c in new_pixel
+            ]
+            + [
+                dict(
+                    kind="line",
+                    pts=list(e),
+                    colour="#bbbbbb",
+                    width=2.6,
+                    dash="dash",
+                    name=f"replaced edge {e}",
+                )
+                for e in sorted(removed)
+            ]
+            + _edge_lines(r2["after"], highlight=frozenset(added))
+            + _vertex_points(r2["after"]),
+        )
+    )
+    return scenes
+
+
+def _round2_result_scenes(t):
+    """Scene 5: the noded edges after round 2."""
+    scenes = []
+    scenes.append(
+        dict(
+            title="5  Round 3: nothing changes; the noded arrangement",
+            elements=_carrier_lines("dot", 1.0)
+            + _edge_lines(t["final"])
+            + _vertex_points(t["final"])
+            + [
+                dict(
+                    kind="text",
+                    pt=((a[0] + b[0]) / 2 + 0.15, (a[1] + b[1]) / 2 + 0.15),
+                    text="+".join(sorted(n)),
+                    size=6.5,
+                )
+                for (a, b), n in t["final"].items()
+                if len(n) > 1
+            ],
+        )
+    )
+    return scenes
+
+
 # --------------------------------------------------------------------------- renderers
 
 
-def draw_mpl(ax, scene):
+def _draw_mpl(ax, scene):
     ls = {"solid": "-", "dash": "--", "dot": ":"}
     for el in scene["elements"]:
         k = el["kind"]
         if k == "poly":
-            xs, ys = zip(*el["pts"])
+            xs, ys = zip(*el["pts"], strict=True)
             ax.fill(
                 xs, ys, facecolor=el["fill"], edgecolor=el["edge"], lw=0.8, alpha=0.85
             )
         elif k == "line":
-            xs, ys = zip(*el["pts"])
+            xs, ys = zip(*el["pts"], strict=True)
             ax.plot(
                 xs,
                 ys,
@@ -408,15 +438,15 @@ def draw_mpl(ax, scene):
     ax.set_title(scene["title"], fontsize=8.5, loc="left")
 
 
-def static_figure(scenes) -> None:
+def _static_figure(scenes) -> None:
     fig, axes = plt.subplots(2, 3, figsize=(14, 8.2))
-    for ax, scene in zip(axes.flat, scenes):
-        draw_mpl(ax, scene)
+    for ax, scene in zip(axes.flat, scenes, strict=True):
+        _draw_mpl(ax, scene)
     fig.tight_layout()
     save_svg(fig, "arrangement-steps")
 
 
-def interactive_figure(scenes) -> None:
+def _interactive_figure(scenes) -> None:
     dash = {"solid": "solid", "dash": "dash", "dot": "dot"}
     fig = go.Figure()
     owner = []
@@ -424,7 +454,7 @@ def interactive_figure(scenes) -> None:
         for el in scene["elements"]:
             k = el["kind"]
             if k == "poly":
-                xs, ys = zip(*el["pts"])
+                xs, ys = zip(*el["pts"], strict=True)
                 fig.add_trace(
                     go.Scatter(
                         x=xs,
@@ -440,7 +470,7 @@ def interactive_figure(scenes) -> None:
                     )
                 )
             elif k == "line":
-                xs, ys = zip(*el["pts"])
+                xs, ys = zip(*el["pts"], strict=True)
                 fig.add_trace(
                     go.Scatter(
                         x=xs,
@@ -514,21 +544,26 @@ def interactive_figure(scenes) -> None:
 
 
 def main() -> None:
-    t = trace(CARRIERS)
+    """Write the iterated snap-rounding figure and its numbers."""
+    t = _trace(CARRIERS)
     reference = snap_round(
-        [Segment(a, b, frozenset([n])) for (a, b), n in zip(CARRIERS, NAMES)]
+        [
+            Segment(a, b, frozenset([n]))
+            for (a, b), n in zip(CARRIERS, NAMES, strict=True)
+        ]
     )
     assert {(e.a, e.b): set(e.carriers) for e in reference.edges} == t["final"], (
         "trace differs from snap_round"
     )
-    scenes, arr = build_scenes(t)
-    static_figure(scenes)
-    interactive_figure(scenes)
+    scenes, arr = _build_scenes(t)
+    _static_figure(scenes)
+    _interactive_figure(scenes)
     (worst, edge), per_edge = deviation(t["final"], CARRIERS)
     r1, r2 = t["rounds"][0], t["rounds"][1]
     numbers = {
         "carriers": {
-            n: {"from": list(a), "to": list(b)} for n, (a, b) in zip(NAMES, CARRIERS)
+            n: {"from": list(a), "to": list(b)}
+            for n, (a, b) in zip(NAMES, CARRIERS, strict=True)
         },
         "hot_pixels": {
             "end_points": len(t["endpoints"]),

@@ -124,6 +124,7 @@ def _check_sidecar_blocks(scratch: Path, problems: list[str]) -> int:
 
 
 def main() -> int:
+    """Compare every quoted file excerpt of the emission pages with the written files; the exit status is 1 on a mismatch."""
     problems: list[str] = []
     cache: dict[str, list[str]] = {}
     with tempfile.TemporaryDirectory(prefix="sgb-snippets-") as folder:

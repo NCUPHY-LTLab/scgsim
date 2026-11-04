@@ -15,14 +15,14 @@ from collections import defaultdict
 
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-from _intro_common import COLOURS, draw_footprint, save_plotly, save_svg, write_numbers
+from intro_common import COLOURS, draw_footprint, save_plotly, save_svg, write_numbers
 from sgb_scenes import random_layout
 
 NS = (100, 500, 1000, 5000, 20000)
 CHIP_BODIES = ("substrate", "vacuum", "ground")
 
 
-def box(prism):
+def _box(prism):
     pts = [p for ring in prism.footprint.rings() for p in ring]
     xs, ys = [p[0] for p in pts], [p[1] for p in pts]
     return (min(xs), min(ys), max(xs), max(ys), float(prism.z0), float(prism.z1))
@@ -58,12 +58,12 @@ def feature_pairs(boxes) -> int:
     return len(seen)
 
 
-def structure(n: int) -> dict:
+def _structure(n: int) -> dict:
     spec = random_layout(n, seed=2, route="B")
     big = {p.entity_id: p for p in spec.prisms if p.entity_id in CHIP_BODIES}
     small = [p for p in spec.prisms if p.entity_id not in CHIP_BODIES]
-    big_boxes = {k: box(p) for k, p in big.items()}
-    small_boxes = [box(p) for p in small]
+    big_boxes = {k: _box(p) for k, p in big.items()}
+    small_boxes = [_box(p) for p in small]
     with_big = sum(overlap(b, bb) for b in small_boxes for bb in big_boxes.values())
     chip_area = (big_boxes["substrate"][2] - big_boxes["substrate"][0]) * (
         big_boxes["substrate"][3] - big_boxes["substrate"][1]
@@ -88,7 +88,7 @@ def structure(n: int) -> dict:
     }
 
 
-def schematic(ax, n: int = 36) -> None:
+def _schematic(ax, n: int = 36) -> None:
     spec = random_layout(n, seed=2, route="B")
     for p in spec.prisms:
         if p.entity_id in CHIP_BODIES:
@@ -101,7 +101,7 @@ def schematic(ax, n: int = 36) -> None:
             lw=0.4,
             alpha=0.9,
         )
-        b = box(p)
+        b = _box(p)
         ax.add_patch(
             plt.Rectangle(
                 (b[0] * 0.001, b[1] * 0.001),
@@ -143,7 +143,8 @@ def schematic(ax, n: int = 36) -> None:
 
 
 def main() -> None:
-    rows = [structure(n) for n in NS]
+    """Write the counted-structure figure and its numbers."""
+    rows = [_structure(n) for n in NS]
     ns = [r["n_features"] for r in rows]
     series = (
         ("small_x_chip_pairs", "small body × chip-sized body", COLOURS["bad"]),
@@ -162,7 +163,7 @@ def main() -> None:
     f, (a1, a2) = plt.subplots(
         1, 2, figsize=(12, 4.6), gridspec_kw={"width_ratios": [1, 1.1]}
     )
-    schematic(a1)
+    _schematic(a1)
     for key, name, colour in series:
         a2.loglog(ns, [r[key] for r in rows], marker="o", color=colour, label=name)
     a2.set_xticks(ns)

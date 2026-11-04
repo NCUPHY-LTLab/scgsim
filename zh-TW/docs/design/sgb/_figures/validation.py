@@ -21,8 +21,10 @@ Run:  SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python docs/des
 from __future__ import annotations
 
 import json
+import tempfile
 from collections import Counter
 from dataclasses import replace
+from pathlib import Path
 
 from labels_common import (
     FIGURES,
@@ -47,6 +49,8 @@ from scgsim.geometry.sgb.cutfamilies.requests import (
     RefinementRequest,
     SolutionInterface,
 )
+from scgsim.geometry.sgb.emission.plan import plan_brep
+from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file
 from scgsim.geometry.sgb.errors import (
     ContactError,
     NonManifoldError,
@@ -60,25 +64,26 @@ from scgsim.geometry.sgb.records.grid import exact_z
 from scgsim.geometry.sgb.records.labels import LevelLabel
 from scgsim.geometry.sgb.records.prisms import PrismRecord
 from scgsim.geometry.sgb.validation.validate import validate_model
-from sgb_scenes import footprint, rect_um
+from scgsim.geometry.sgb.verification.occt import check_file
+from sgb_scenes import airbridge, footprint, rect_um
 from sgb_scenes import pad_in_ground as stage_pad_in_ground
 
 G = 0.001
 MARGINS = (0.1, 0.5, 2.0)
 
 
-def revalidate(model):
+def _revalidate(model):
     return validate_model(model.labelled, model.topology, model.routed, Runtime())
 
 
-def fresh():
+def _fresh():
     return build_model(real_catalogue(), "B")
 
 
 # --------------------------------------------------------------------------- deliberate defects (each on a fresh build)
 
 
-def vacuum_volume(model):
+def _vacuum_volume(model):
     return next(
         v
         for v in model.topology.volumes.values()
@@ -86,49 +91,48 @@ def vacuum_volume(model):
     )
 
 
-def top_face_id(model) -> str:
-    topo = model.topology
+def _top_face_id(model) -> str:
     return next(
         fid
-        for fid, _ in vacuum_volume(model).shells[0].faces
+        for fid, _ in _vacuum_volume(model).shells[0].faces
         if model.routed.face_group[fid] == "EXT::VACUUM_REGION::top"
     )
 
 
-def drop_top_face(model):
-    shell = vacuum_volume(model).shells[0]
-    top = top_face_id(model)
+def _drop_top_face(model):
+    shell = _vacuum_volume(model).shells[0]
+    top = _top_face_id(model)
     shell.faces = tuple(e for e in shell.faces if e[0] != top)
 
 
-def flip_one_face(model):
-    shell = vacuum_volume(model).shells[0]
+def _flip_one_face(model):
+    shell = _vacuum_volume(model).shells[0]
     (fid, sign), *rest = shell.faces
     shell.faces = ((fid, -sign), *rest)
 
 
-def face_in_two_groups(model):
+def _face_in_two_groups(model):
     groups = model.routed.groups
     groups["MS::pad::bottom"].ids = groups["MS::pad::bottom"].ids + [
         groups["MA::pad::top"].ids[0]
     ]
 
 
-def empty_group(model):
+def _empty_group(model):
     model.routed.groups["PORT::PORT_SHEET__P1__0000"].ids = []
 
 
-def face_without_group(model):
+def _face_without_group(model):
     model.routed.groups["MA::pad::sidewall"].ids = model.routed.groups[
         "MA::pad::sidewall"
     ].ids[1:]
 
 
-def union_unknown_member(model):
+def _union_unknown_member(model):
     model.routed.unions["NET::P"] = model.routed.unions["NET::P"] + ["MA::pad_typo"]
 
 
-def interior_face_one_sided(model):
+def _interior_face_one_sided(model):
     face = next(
         f
         for f in model.topology.faces.values()
@@ -137,7 +141,7 @@ def interior_face_one_sided(model):
     face.pos_volume = None
 
 
-def banded():
+def _banded():
     insets = (
         InsetRequest("band_pad_top", ConductorSurface("pad", "top"), MARGINS),
         InsetRequest("band_pad_bottom", ConductorSurface("pad", "bottom"), MARGINS),
@@ -152,7 +156,11 @@ def banded():
 
 def band_loses_a_cell(model):
     """Remove one cell of the deepest band of the pad top: the bands no longer partition the support region."""
-    layer = next(l for l in model.labelled.level_layers if l.plane == "level[1/5]")
+    layer = next(
+        candidate
+        for candidate in model.labelled.level_layers
+        if candidate.plane == "level[1/5]"
+    )
     victim = next(
         fi
         for fi in range(1, len(layer.arr.faces))
@@ -164,17 +172,19 @@ def band_loses_a_cell(model):
     )
 
 
-def area_not_conserved(model):
+def _area_not_conserved(model):
     next(
-        l for l in model.labelled.level_layers if l.plane == "level[0]"
+        candidate
+        for candidate in model.labelled.level_layers
+        if candidate.plane == "level[0]"
     ).raw.total_twice_area += 2
 
 
-def staged():
+def _staged():
     return build_model(stage_pad_in_ground("B"), "B")
 
 
-def arc_on_another_circle(model):
+def _arc_on_another_circle(model):
     wall = next(f for f in model.topology.faces.values() if f.curved)
     top = model.topology.edges[wall.cylinder[1]]
     top.curve = replace(top.curve, radius=top.curve.radius + 1.0)
@@ -183,38 +193,38 @@ def arc_on_another_circle(model):
 DEFECTS = [
     (
         "remove the top face from the outer shell of the vacuum volume",
-        drop_top_face,
+        _drop_top_face,
         "the shell is open",
     ),
     (
         "flip the orientation of one shell face",
-        flip_one_face,
+        _flip_one_face,
         "faces disagree about the inside",
     ),
     (
         "put one face into two physical groups",
-        face_in_two_groups,
+        _face_in_two_groups,
         "a face is double-booked",
     ),
-    ("empty a physical group", empty_group, "a group names nothing"),
+    ("empty a physical group", _empty_group, "a group names nothing"),
     (
         "drop a face from its physical group",
-        face_without_group,
+        _face_without_group,
         "an emitted face has no group",
     ),
     (
         "name a group that does not exist in a union",
-        union_unknown_member,
+        _union_unknown_member,
         "a union has a typo",
     ),
     (
         "remove the volume on one side of an interface face",
-        interior_face_one_sided,
+        _interior_face_one_sided,
         "an interface face with one side",
     ),
     (
         "change the recorded area of a level arrangement",
-        area_not_conserved,
+        _area_not_conserved,
         "area lost or gained by an arrangement",
     ),
     (
@@ -224,19 +234,19 @@ DEFECTS = [
     ),
     (
         "move the top arc of a curved wall to another circle (stage-level scene with arcs)",
-        arc_on_another_circle,
+        _arc_on_another_circle,
         "a curved wall is not one cylinder",
     ),
 ]
-BUILDERS = {band_loses_a_cell: banded, arc_on_another_circle: staged}
+BUILDERS = {band_loses_a_cell: _banded, _arc_on_another_circle: _staged}
 
 
-def run_defects(numbers: dict) -> None:
+def _run_defects(numbers: dict) -> None:
     rows = []
     for title, apply, meaning in DEFECTS:
-        model = BUILDERS.get(apply, fresh)()
+        model = BUILDERS.get(apply, _fresh)()
         apply(model)
-        report = revalidate(model)
+        report = _revalidate(model)
         rows.append(
             {
                 "defect": title,
@@ -251,16 +261,15 @@ def run_defects(numbers: dict) -> None:
 # --------------------------------------------------------------------------- the example failure report and its figure
 
 
-def tampered_report(numbers: dict):
-    model = fresh()
+def _tampered_report(numbers: dict):
+    model = _fresh()
     assert not model.report.failures
     topo = model.topology
-    vol = vacuum_volume(model)
-    top = top_face_id(model)
-    removed = topo.faces[top]
+    vol = _vacuum_volume(model)
+    top = _top_face_id(model)
     faces_before = len(vol.shells[0].faces)
-    drop_top_face(model)
-    report = revalidate(model)
+    _drop_top_face(model)
+    report = _revalidate(model)
     try:
         report.raise_if_failed()
         message = None
@@ -305,9 +314,9 @@ def tampered_report(numbers: dict):
     return model, vol, free
 
 
-def figure_shell(model, vol, free) -> None:
+def _figure_shell(model, vol, free) -> None:
     topo = model.topology
-    clean = fresh()  # the written model needs an intact shell: draw the tampered shell's faces from an untouched build
+    clean = _fresh()  # the written model needs an intact shell: draw the tampered shell's faces from an untouched build
     tris = compact_triangles(clean, mesh_size=60.0, mesh_size_min=4.0)
     ids = {f.id for f in clean.topology.faces.values()}
     assert {
@@ -394,7 +403,7 @@ def figure_shell(model, vol, free) -> None:
 # --------------------------------------------------------------------------- errors before validation, check inventory
 
 
-def early_errors(numbers: dict) -> None:
+def _early_errors(numbers: dict) -> None:
     catalogue = real_catalogue()
     out = {}
 
@@ -469,8 +478,8 @@ def early_errors(numbers: dict) -> None:
     numbers["early_errors"] = out
 
 
-def inventory(numbers: dict) -> None:
-    model = fresh()
+def _inventory(numbers: dict) -> None:
+    model = _fresh()
     numbers["checks_of_a_valid_build"] = [
         {"name": c.name, "passed": c.passed, "warning": c.warning, "detail": c.detail}
         for c in model.report.checks
@@ -484,13 +493,6 @@ def occt_examples(numbers: dict) -> None:
     pad with true arcs (cylinder walls) are the other two.
     Needs OCP (the ``occt`` dependency group of the package); the wall times are one run on this machine.
     """
-    import tempfile  # noqa: PLC0415
-    from pathlib import Path  # noqa: PLC0415
-
-    from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: PLC0415
-    from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file  # noqa: PLC0415
-    from scgsim.geometry.sgb.verification.occt import check_file  # noqa: PLC0415
-    from sgb_scenes import airbridge  # noqa: PLC0415
 
     real, film = real_catalogue(), real_catalogue(film=True)
     bands_a = (
@@ -577,12 +579,13 @@ def occt_examples(numbers: dict) -> None:
 
 
 def main() -> None:
+    """Write the validation figure, the tampered-model report and the numbers of the defect table."""
     numbers: dict = {"scene": "gds_pad_in_ground (production real input), Route B"}
-    run_defects(numbers)
-    model, vol, free = tampered_report(numbers)
-    figure_shell(model, vol, free)
-    early_errors(numbers)
-    inventory(numbers)
+    _run_defects(numbers)
+    model, vol, free = _tampered_report(numbers)
+    _figure_shell(model, vol, free)
+    _early_errors(numbers)
+    _inventory(numbers)
     occt_examples(numbers)
     write_numbers("validation", numbers)
     print("validation: done")

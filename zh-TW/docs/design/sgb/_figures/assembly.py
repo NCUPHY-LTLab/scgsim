@@ -56,12 +56,12 @@ G = 0.001
 
 def build_uncoalesced(catalogue, route: str):
     """Build with the coalescing test replaced by 'every level cuts every wall' (restored afterwards)."""
-    original = walls_module._level_cuts_wall
-    walls_module._level_cuts_wall = lambda *args: True
+    original = walls_module._level_cuts_wall  # noqa: SLF001 -- the counterfactual replaces the package's coalescing test; no public switch exists
+    walls_module._level_cuts_wall = lambda *args: True  # noqa: SLF001 -- same counterfactual
     try:
         return build_model(catalogue, route)
     finally:
-        walls_module._level_cuts_wall = original
+        walls_module._level_cuts_wall = original  # noqa: SLF001 -- same counterfactual: restore the package's test
 
 
 # --------------------------------------------------------------------------- wall anatomy
@@ -100,7 +100,7 @@ def unrolled_walls(model):
                     for x, y, z, _, _ in verts
                 ]
                 edges = []
-                for k, (eid, sign) in enumerate(f.loops[0]):
+                for k, (eid, _) in enumerate(f.loops[0]):
                     a, b = poly[k], poly[(k + 1) % len(poly)]
                     edges.append((a, b, topo.edges[eid].kind, eid))
                 out.append((f, poly, edges))
@@ -108,7 +108,7 @@ def unrolled_walls(model):
     return out
 
 
-def draw_walls(ax, walls, title: str) -> dict:
+def _draw_walls(ax, walls, title: str) -> dict:
     cmap = ["#cfe0f1", "#e8d9a8", "#cfe8d4", "#f1cfcf", "#d9cfe8", "#e0e0e0"]
     vertical_segments = 0
     for k, (f, poly, edges) in enumerate(
@@ -128,7 +128,7 @@ def draw_walls(ax, walls, title: str) -> dict:
                 alpha=0.9,
             )
         )
-        for a, b, kind, eid in edges:
+        for a, b, kind, _ in edges:
             colour, width = (
                 (PALETTE["bad"], 2.4) if kind == "vertical" else (PALETTE["ink"], 1.4)
             )
@@ -174,17 +174,17 @@ def draw_walls(ax, walls, title: str) -> dict:
     return {"faces": len(walls), "vertical_edge_segments_in_loops": vertical_segments}
 
 
-def figure_wall_anatomy(numbers: dict) -> None:
+def _figure_wall_anatomy(numbers: dict) -> None:
     stage = stage_pad_in_ground("B")
     built = build_model(stage, "B")
     cut = build_uncoalesced(stage, "B")
     fig, axes = plt.subplots(2, 1, figsize=(11.5, 7.4), sharex=True)
-    a = draw_walls(
+    a = _draw_walls(
         axes[0],
         unrolled_walls(built),
         "As built: a level cuts a wall only where something at that level touches it",
     )
-    b = draw_walls(
+    b = _draw_walls(
         axes[1],
         unrolled_walls(cut),
         "If every level cut every wall (same model, coalescing test disabled)",
@@ -295,16 +295,16 @@ ZMAP = (
 )  # display-only piecewise-linear z: the 3.3 um bridge drawn 30x taller
 
 
-def display_z(z):
+def _display_z(z):
     return np.interp(z, [p[0] for p in ZMAP], [p[1] for p in ZMAP])
 
 
-def shrunk(points: np.ndarray, tri: np.ndarray, factor: float = 0.9):
+def _shrunk(points: np.ndarray, tri: np.ndarray, factor: float = 0.9):
     centre = points[np.unique(tri)].mean(axis=0)
     return centre + (points - centre) * factor
 
 
-def spans_of(topo, levels, fid: str) -> int:
+def _spans_of(topo, levels, fid: str) -> int:
     f = topo.faces[fid]
     if f.kind != "wall":
         return 0
@@ -315,14 +315,14 @@ def spans_of(topo, levels, fid: str) -> int:
     )
 
 
-def figure_shells(numbers: dict) -> None:
+def _figure_shells(numbers: dict) -> None:
     model = build_model(airbridge(), "B")
     topo = model.topology
     levels = model.labelled.levels.levels
     tris = compact_triangles(model, mesh_size=80.0)
     vacuum = next(v for v in topo.volumes.values() if v.domain.name == "vacuum")
     shell = vacuum.shells[0]
-    spans = {fid: spans_of(topo, levels, fid) for fid, _ in shell.faces}
+    spans = {fid: _spans_of(topo, levels, fid) for fid, _ in shell.faces}
 
     def role(fid: str) -> tuple[str, str]:
         f = topo.faces[fid]
@@ -338,8 +338,8 @@ def figure_shells(numbers: dict) -> None:
     legend_names = {}
     for fid, _sign in shell.faces:
         points, tri = tris[fid]
-        pts = np.column_stack([points[:, 0], points[:, 1], display_z(points[:, 2])])
-        pts = shrunk(pts, tri, 0.88)
+        pts = np.column_stack([points[:, 0], points[:, 1], _display_z(points[:, 2])])
+        pts = _shrunk(pts, tri, 0.88)
         name, colour = role(fid)
         legend_names[name] = colour
         f = topo.faces[fid]
@@ -421,7 +421,7 @@ ISLAND = (
 )  # x0, y0, x1, y1, z0, z1 in um: 10 x 10 x 1 um inside the vacuum region
 
 
-def island_catalogue():
+def _island_catalogue():
     base = real_catalogue()
     x0, y0, x1, y1, z0, z1 = ISLAND
     island = PrismRecord(
@@ -436,8 +436,8 @@ def island_catalogue():
     return replace(base, prisms=(*base.prisms, island))
 
 
-def figure_inner_void(numbers: dict) -> None:
-    model = build_model(island_catalogue(), "B")
+def _figure_inner_void(numbers: dict) -> None:
+    model = build_model(_island_catalogue(), "B")
     topo = model.topology
     by_name = {v.domain.name: v for v in topo.volumes.values()}
     vac = by_name["VACUUM_REGION"]
@@ -501,7 +501,7 @@ def figure_curved_wall_split() -> None:
     """Conceptual: a cylinder wall whose arc carries a foreign vertex, and the planned fix (split by a vertical edge)."""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.5, 3.9), sharey=True)
     # developed (unrolled) wall: u = arc length, z = height; the foreign vertex splits the arc at u = 0.4
-    for ax, split in ((ax1, False), (ax2, True)):
+    for ax in (ax1, ax2):
         ax.set_xlim(-0.05, 1.05)
         ax.set_ylim(-0.25, 1.3)
         ax.set_xticks([])
@@ -586,7 +586,7 @@ def real_example(numbers: dict) -> None:
     levels = model.labelled.levels.levels
     walls = [f for f in topo.faces.values() if f.kind == "wall"]
     per_group = Counter(model.routed.face_group[f.id] for f in walls)
-    multi = [f for f in walls if spans_of(topo, levels, f.id) > 1]
+    multi = [f for f in walls if _spans_of(topo, levels, f.id) > 1]
     numbers["real_input_B"] = {
         "levels": [str(z) for z in levels],
         "model_counts": model.counts,
@@ -609,11 +609,12 @@ def real_example(numbers: dict) -> None:
 
 
 def main() -> None:
+    """Write the assembly page's wall, shell and inner-void figures and their numbers."""
     numbers: dict = {}
     real_example(numbers)
-    figure_wall_anatomy(numbers)
-    figure_shells(numbers)
-    figure_inner_void(numbers)
+    _figure_wall_anatomy(numbers)
+    _figure_shells(numbers)
+    _figure_inner_void(numbers)
     figure_curved_wall_split()
     write_numbers("assembly", numbers)
     print("assembly: done")

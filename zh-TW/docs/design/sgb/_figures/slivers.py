@@ -62,6 +62,7 @@ from scgsim.geometry.sgb.records.grid import Grid, exact_z
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
 from scgsim.geometry.sgb.slivers.report import sliver_report
 from sgb_scenes import GRID, chip_prisms, conductor, footprint, rect_um
+from shapely.geometry import Polygon, box
 
 RED = PALETTE["bad"]
 MARGINS = (0.1, 0.5, 2.0)
@@ -75,7 +76,6 @@ def rings_grid(arr, curves, fi: int, window=None):
     rings = [cycle_polyline(arr, curves, c, 4.0) for c in arr.face_cycles(fi)]
     if window is None:
         return rings
-    from shapely.geometry import Polygon, box
 
     (x0, x1), (y0, y1) = window
     clipped = (
@@ -99,14 +99,14 @@ def face_width(arr, fi: int) -> float:
     return 2 * area / per if per else 0.0
 
 
-def pixel_grid(ax, xlim, ylim) -> None:
+def _pixel_grid(ax, xlim, ylim) -> None:
     for x in range(math.ceil(xlim[0]), math.floor(xlim[1]) + 1):
         ax.axvline(x - 0.5, color="#d0d0d0", lw=0.5, zorder=0)
     for y in range(math.ceil(ylim[0]), math.floor(ylim[1]) + 1):
         ax.axhline(y - 0.5, color="#d0d0d0", lw=0.5, zorder=0)
 
 
-def draw_cells(
+def _draw_cells(  # noqa: PLR0913 -- the axes, the colour rule, the ranges and the drawing options
     ax, layer, colour_of, xlim, ylim, narrow=10.0, raw=False, lw=1.0
 ) -> list[float]:
     arr = layer.raw_arrangement if raw else layer.arr
@@ -129,7 +129,7 @@ def draw_cells(
                 zorder=2,
             )
         )
-    pixel_grid(ax, xlim, ylim)
+    _pixel_grid(ax, xlim, ylim)
     ax.set_xlim(*xlim)
     ax.set_ylim(*ylim)
     ax.set_aspect("equal")
@@ -138,7 +138,7 @@ def draw_cells(
     return widths
 
 
-def pair_colour(label, fi=None) -> str:
+def _pair_colour(label, fi=None) -> str:
     below = getattr(label, "below", None)
     above = getattr(label, "above", None)
     names = (getattr(below, "name", "-"), getattr(above, "name", "-"))
@@ -151,7 +151,7 @@ def pair_colour(label, fi=None) -> str:
     return "#fbf6df"
 
 
-def domain_fill(domain, fi=None) -> str:
+def _domain_fill(domain, fi=None) -> str:
     if domain is None:
         return "#f2f2f2"
     return {"conductor": "#7aa3cf", "vacuum": "#fbf6df", "dielectric": "#cfe0f1"}[
@@ -159,14 +159,14 @@ def domain_fill(domain, fi=None) -> str:
     ]
 
 
-def level_layer(model, z: Fraction):
+def _level_layer(model, z: Fraction):
     return model.labelled.level_layers[model.labelled.levels.levels.index(z)]
 
 
 # --------------------------------------------------------------------------- 1. quantization sliver
 
 
-def cross(s, t):
+def _cross(s, t):
     (x1, y1), (x2, y2) = s
     (x3, y3), (x4, y4) = t
     d = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
@@ -177,9 +177,9 @@ def cross(s, t):
     )
 
 
-def quantization(numbers: dict):
+def _quantization(numbers: dict):
     l1, l2, l3 = ((0, 0), (1000, 1000)), ((0, 1000), (1000, 0)), ((0, 495), (995, 505))
-    exact = [cross(l1, l2), cross(l1, l3), cross(l2, l3)]
+    exact = [_cross(l1, l2), _cross(l1, l3), _cross(l2, l3)]
     sides = [
         math.dist(map(float, p), map(float, q))
         for p, q in itertools.combinations(exact, 2)
@@ -196,7 +196,7 @@ def quantization(numbers: dict):
     snapped = snap_round(
         [
             Segment(s[0], s[1], frozenset([n]))
-            for s, n in zip((l1, l2, l3), ("L1", "L2", "L3"))
+            for s, n in zip((l1, l2, l3), ("L1", "L2", "L3"), strict=True)
         ]
     )
     arr = build_arrangement(snapped.edges)
@@ -216,7 +216,7 @@ def quantization(numbers: dict):
     return l1, l2, l3, exact, arr
 
 
-def draw_quantization(ax_left, ax_right, data) -> None:
+def _draw_quantization(ax_left, ax_right, data) -> None:
     l1, l2, l3, exact, arr = data
     for line, colour in ((l1, "#1f77b4"), (l2, "#2ca02c"), (l3, "#d62728")):
         (x0, y0), (x1, y1) = line
@@ -263,7 +263,7 @@ def draw_quantization(ax_left, ax_right, data) -> None:
         ms=4,
         zorder=4,
     )
-    pixel_grid(ax_right, (496, 504), (496, 504))
+    _pixel_grid(ax_right, (496, 504), (496, 504))
     ax_right.set_xlim(496, 504)
     ax_right.set_ylim(496, 504)
     ax_right.set_aspect("equal")
@@ -276,7 +276,7 @@ def draw_quantization(ax_left, ax_right, data) -> None:
 # --------------------------------------------------------------------------- 2. phantom sliver
 
 
-def phantom_catalogue(global_projection: bool) -> PrismCatalogue:
+def _phantom_catalogue(global_projection: bool) -> PrismCatalogue:
     prisms = chip_prisms(GRID, 150.0)
     m1 = conductor("m1", rect_um(-100, -50, 100, 50), 0, "0.2", "m1")
     m2 = conductor("m2", rect_um(-99.996, -50, 100.004, 50), 3, "3.3", "m2")
@@ -305,10 +305,10 @@ def phantom_catalogue(global_projection: bool) -> PrismCatalogue:
     return PrismCatalogue(GRID, tuple(prisms), families, name="phantom")
 
 
-def phantom(numbers: dict):
+def _phantom(numbers: dict):
     local, glob = (
-        build_model_from_catalogue(phantom_catalogue(False), "B"),
-        build_model_from_catalogue(phantom_catalogue(True), "B"),
+        build_model_from_catalogue(_phantom_catalogue(False), "B"),
+        build_model_from_catalogue(_phantom_catalogue(True), "B"),
     )
     out = {}
     for name, m in (("local", local), ("global_emulated", glob)):
@@ -329,7 +329,7 @@ def phantom(numbers: dict):
     return local, glob
 
 
-def draw_phantom(ax_left, ax_right, local, glob) -> None:
+def _draw_phantom(ax_left, ax_right, local, glob) -> None:
     xlim, ylim = (99996, 100008), (-6, 6)
     for ax, model, title in (
         (
@@ -343,7 +343,7 @@ def draw_phantom(ax_left, ax_right, local, glob) -> None:
             "2b. Local arrangement: level z = 0 holds only curves that meet there",
         ),
     ):
-        draw_cells(ax, level_layer(model, Fraction(0)), pair_colour, xlim, ylim)
+        _draw_cells(ax, _level_layer(model, Fraction(0)), _pair_colour, xlim, ylim)
         ax.set_title(title, fontsize=8.5)
 
 
@@ -375,7 +375,7 @@ def seam_catalogue(
     return PrismCatalogue(GRID, tuple(prisms), name="seam")
 
 
-def seam(numbers: dict):
+def _seam(numbers: dict):
     model = build_model_from_catalogue(seam_catalogue(), "B", keep_raw=True)
     layer = next(s for s in model.labelled.slabs if s.plane == "slab[0,1/5]")
     raw = layer.raw_arrangement
@@ -410,7 +410,7 @@ def seam(numbers: dict):
     return model, layer
 
 
-def draw_seam(ax_left, ax_right, layer) -> None:
+def _draw_seam(ax_left, ax_right, layer) -> None:
     raw, raw_labels = layer.raw_arrangement, layer.raw_labels
     xlim, ylim = (-4, 6), (-5, 5)
     no_curves = [None] * len(raw.edges)
@@ -420,7 +420,7 @@ def draw_seam(ax_left, ax_right, layer) -> None:
             ax_left.add_patch(
                 PathPatch(
                     mpl_path(rings),
-                    facecolor=domain_fill(raw_labels[fi]),
+                    facecolor=_domain_fill(raw_labels[fi]),
                     edgecolor="none",
                     hatch="////" if face_width(raw, fi) < 10 else None,
                     zorder=2,
@@ -438,7 +438,7 @@ def draw_seam(ax_left, ax_right, layer) -> None:
             lw=2.0 if left == right else 1.2,
             zorder=3,
         )
-    pixel_grid(ax_left, xlim, ylim)
+    _pixel_grid(ax_left, xlim, ylim)
     ax_left.set_xlim(*xlim)
     ax_left.set_ylim(*ylim)
     ax_left.set_aspect("equal")
@@ -446,7 +446,7 @@ def draw_seam(ax_left, ax_right, layer) -> None:
         "3a. Noded cells before dissolution: the 2 nm overlap of two polygons\nof one entity is a cell; its two edges (red) have equal labels on both sides",
         fontsize=8.5,
     )
-    draw_cells(ax_right, layer, domain_fill, xlim, ylim)
+    _draw_cells(ax_right, layer, _domain_fill, xlim, ylim)
     ax_right.set_title(
         "3b. After dissolution: one conductor cell, no seam", fontsize=8.5
     )
@@ -461,7 +461,7 @@ def ring_catalogue(gap_um: float = 0.005):
     return real_catalogue(film=True, with_port=False, pad_polygon=pad)
 
 
-def source_gap(numbers: dict):
+def _source_gap(numbers: dict):
     model = build_model(ring_catalogue(), "A")
     rep = sliver_report(model, top=3, drift=False)
     numbers["source_gap"] = {
@@ -543,7 +543,7 @@ def derived_catalogue(edge_um: float):
     return with_extra_families(real_catalogue(film=True, with_port=False), window)
 
 
-def derived(numbers: dict):
+def _derived(numbers: dict):
     bands = (InsetRequest("band_pad", ConductorSurface("pad", "sheet"), MARGINS),)
     near = build_model(derived_catalogue(42.004), "A", insets=bands)
     snapped = build_model(derived_catalogue(42.0), "A", insets=bands)
@@ -556,7 +556,7 @@ def derived(numbers: dict):
             if f["value_um"] < 0.01
         ]
         out[name] = {
-            "level_cells": len(level_layer(m, Fraction(0)).arr.faces) - 1,
+            "level_cells": len(_level_layer(m, Fraction(0)).arr.faces) - 1,
             "model_faces": m.counts["faces"],
             "narrowest_face": rep["narrowest_faces"][0],
             "faces_narrower_than_10nm": thin,
@@ -567,7 +567,7 @@ def derived(numbers: dict):
     return near, snapped
 
 
-def band_fill(label, fi=None) -> str:
+def _band_fill(label, fi=None) -> str:
     if label.sheet is not None and label.sheet.kind == "port":
         return "#f3b4ae"
     if label.sheet is not None and label.bands:
@@ -575,16 +575,16 @@ def band_fill(label, fi=None) -> str:
     return "#dddddd"
 
 
-def draw_source(ax_gap, ax_a, ax_b, ring, near, snapped) -> None:
+def _draw_source(ax_gap, ax_a, ax_b, ring, near, snapped) -> None:  # noqa: PLR0913 -- the three axes and the three rings the example shows
     xlim, ylim = (29996, 30010), (49994, 50006)
-    layer = level_layer(ring, Fraction(0))
+    layer = _level_layer(ring, Fraction(0))
 
     def ring_fill(label, fi=None):
         if label.sheet is None:
             return "#a9cbe8"
         return "#7aa3cf" if label.sheet.name == "pad" else "#9a9a9a"
 
-    draw_cells(ax_gap, layer, ring_fill, xlim, ylim)
+    _draw_cells(ax_gap, layer, ring_fill, xlim, ylim)
     ax_gap.set_title(
         "4a. A 5 nm gap between pad and ground (source fact): the gap cell\nis 5 nm wide along its whole length; kept and reported",
         fontsize=8.5,
@@ -602,7 +602,9 @@ def draw_source(ax_gap, ax_a, ax_b, ring, near, snapped) -> None:
             "4c. Emulated derived-to-source snapping: the two curves coincide,\nthe cell is gone",
         ),
     ):
-        draw_cells(ax, level_layer(model, Fraction(0)), band_fill, xlim2, ylim2, lw=0.9)
+        _draw_cells(
+            ax, _level_layer(model, Fraction(0)), _band_fill, xlim2, ylim2, lw=0.9
+        )
         ax.set_title(title, fontsize=8.5)
 
 
@@ -661,12 +663,13 @@ def summary_table(numbers: dict) -> None:
 
 
 def main() -> None:
+    """Write the sliver gallery and its numbers."""
     numbers: dict = {}
-    q = quantization(numbers)
-    local, glob = phantom(numbers)
-    _, seam_layer = seam(numbers)
-    ring = source_gap(numbers)
-    near, snapped = derived(numbers)
+    q = _quantization(numbers)
+    local, glob = _phantom(numbers)
+    _, seam_layer = _seam(numbers)
+    ring = _source_gap(numbers)
+    near, snapped = _derived(numbers)
     coarse_grid_stand_in(numbers)
     summary_table(numbers)
 
@@ -675,7 +678,7 @@ def main() -> None:
     )
     for ax in axes.flat:
         ax.tick_params(labelsize=7)
-    draw_quantization(axes[0][0], axes[0][1], q)
+    _draw_quantization(axes[0][0], axes[0][1], q)
     axes[0][2].axis("off")
     axes[0][2].text(
         0,
@@ -684,7 +687,7 @@ def main() -> None:
         fontsize=9,
         va="center",
     )
-    draw_phantom(axes[1][0], axes[1][1], local, glob)
+    _draw_phantom(axes[1][0], axes[1][1], local, glob)
     axes[1][2].axis("off")
     axes[1][2].text(
         0,
@@ -693,7 +696,7 @@ def main() -> None:
         fontsize=9,
         va="center",
     )
-    draw_seam(axes[2][0], axes[2][1], seam_layer)
+    _draw_seam(axes[2][0], axes[2][1], seam_layer)
     axes[2][2].axis("off")
     axes[2][2].text(
         0,
@@ -702,7 +705,7 @@ def main() -> None:
         fontsize=9,
         va="center",
     )
-    draw_source(axes[3][0], axes[3][1], axes[3][2], ring, near, snapped)
+    _draw_source(axes[3][0], axes[3][1], axes[3][2], ring, near, snapped)
     for ax in axes.flat:
         if ax.axison:
             ax.set_xlabel("x (grid units, 1 nm)", fontsize=7)

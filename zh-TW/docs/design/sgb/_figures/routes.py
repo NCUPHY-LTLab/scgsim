@@ -71,24 +71,24 @@ GROUP_FILL = {
 VIEW = ((-24, 124), (-24, 124))
 
 
-def cell_group(model, layer, fi: int):
+def _cell_group(model, layer, fi: int):
     face = model.topology.faces.get(layer.face_ids[fi])
     return model.routed.face_group[face.id] if face is not None else None
 
 
-def level_of(model, z: Fraction):
+def _level_of(model, z: Fraction):
     return model.labelled.level_layers[model.labelled.levels.levels.index(z)]
 
 
-def figure_cells(a, b, numbers: dict) -> None:
+def _figure_cells(a, b, numbers: dict) -> None:
     panels = [
-        ("Route A, level z = 0 (sheet plane)", a, level_of(a, Fraction(0))),
+        ("Route A, level z = 0 (sheet plane)", a, _level_of(a, Fraction(0))),
         (
             "Route B, level z = 0 (metal bottom, port plane)",
             b,
-            level_of(b, Fraction(0)),
+            _level_of(b, Fraction(0)),
         ),
-        ("Route B, level z = 0.2 (metal top)", b, level_of(b, Fraction(1, 5))),
+        ("Route B, level z = 0.2 (metal top)", b, _level_of(b, Fraction(1, 5))),
     ]
     fig, axes = plt.subplots(1, 3, figsize=(15.5, 5.6))
     pcs = make_subplots(
@@ -96,10 +96,10 @@ def figure_cells(a, b, numbers: dict) -> None:
     )
     used = set()
     summary = []
-    for ax, (title, model, layer), col in zip(axes, panels, (1, 2, 3)):
+    for ax, (title, model, layer), col in zip(axes, panels, (1, 2, 3), strict=True):
         groups = []
         for fi in range(1, len(layer.arr.faces)):
-            group = cell_group(model, layer, fi)
+            group = _cell_group(model, layer, fi)
             groups.append(group)
             used.add(group)
             ax.add_patch(
@@ -116,9 +116,9 @@ def figure_cells(a, b, numbers: dict) -> None:
         plotly_cells(
             pcs,
             layer,
-            lambda lay, fi, _m=model: GROUP_FILL[cell_group(_m, lay, fi)],
+            lambda lay, fi, _m=model: GROUP_FILL[_cell_group(_m, lay, fi)],
             lambda lay, fi, _m=model: (
-                f"group: {cell_group(_m, lay, fi)}<br>"
+                f"group: {_cell_group(_m, lay, fi)}<br>"
                 + str(lay.labels[fi].sheet or "")
             ),
             1,
@@ -194,7 +194,7 @@ def face_batches(model, tris):
     return batches
 
 
-def figure_3d(a, b) -> None:
+def _figure_3d(a, b) -> None:
     fig = plt.figure(figsize=(13, 6.6))
     pcs = make_subplots(
         rows=1,
@@ -299,7 +299,7 @@ def emitted(model) -> dict:
     }
 
 
-def route_numbers(model) -> dict:
+def _route_numbers(model) -> dict:
     topo = model.topology
     out = emitted(model)
     free = next(
@@ -341,7 +341,7 @@ def midplane_scene(numbers: dict) -> None:
     model = build_model(stage_pad_in_ground("B"), "B")
     numbers["stage_scene_midplane_port"] = {
         "scene": "tests/sgb_scenes.py pad_in_ground('B'): port at z = 0.1 um",
-        **route_numbers(model),
+        **_route_numbers(model),
     }
 
 
@@ -351,7 +351,7 @@ def refinement_on_real_input(b_catalogue, numbers: dict) -> None:
     model = build_model(b_catalogue, "B", refinements=(request,))
     numbers["real_input_with_refinement_curve"] = {
         "request": "refinement curve (32, 55) -> (38, 55) um at z = 0",
-        **route_numbers(model),
+        **_route_numbers(model),
     }
 
 
@@ -370,7 +370,7 @@ def bands_on_real_input(catalogue, numbers: dict) -> None:
     model = build_model(catalogue, "B", insets=requests)
     numbers["route_B_bands"] = {
         "requests": "bands (0.1, 0.5, 2) um on pad top, pad bottom and the substrate-vacuum gap at z = 0",
-        **route_numbers(model),
+        **_route_numbers(model),
     }
 
 
@@ -382,7 +382,7 @@ def figure_abc_section() -> None:
         "Route B: conductor volume excluded",
         "Route C: conductor volume kept",
     )
-    for ax, title in zip(axes, titles):
+    for ax, title in zip(axes, titles, strict=True):
         ax.set_xlim(0, 10)
         ax.set_ylim(-3, 4.2)
         ax.add_patch(
@@ -453,18 +453,19 @@ def figure_abc_section() -> None:
 
 
 def main() -> None:
+    """Write the route figures and their numbers."""
     catalogue_b = real_catalogue()
     a = build_model(real_catalogue(film=True), "A", keep_raw=True)
     b = build_model(catalogue_b, "B", keep_raw=True)
     c = build_model(catalogue_b, "C")
     numbers = {
         "scene": "gds_pad_in_ground (production real input); Route A = the same GDS and stack with the thin_film profile",
-        "route_A": route_numbers(a),
-        "route_B": route_numbers(b),
-        "route_C": route_numbers(c),
+        "route_A": _route_numbers(a),
+        "route_B": _route_numbers(b),
+        "route_C": _route_numbers(c),
     }
-    figure_cells(a, b, numbers)
-    figure_3d(a, b)
+    _figure_cells(a, b, numbers)
+    _figure_3d(a, b)
     figure_abc_section()
     midplane_scene(numbers)
     refinement_on_real_input(catalogue_b, numbers)

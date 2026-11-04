@@ -20,10 +20,11 @@ import math
 import random
 import time
 from collections import Counter
+from fractions import Fraction
 
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-from _intro_common import (
+from intro_common import (
     COLOURS,
     FIG,
     build_example,
@@ -42,6 +43,7 @@ from scgsim.geometry.sgb.noding.snap_rounding import (
     snap_round,
 )
 from scgsim.geometry.sgb.noding.snap_rounding import canonical_key as canonical
+from scgsim.geometry.sgb.noding.spatial_hash import HotGrid
 from scgsim.geometry.sgb.records.carriers import ArcCarrier, Lineage
 from scgsim.geometry.sgb.slivers.report import sliver_report
 from sgb_emit_cases import pad_requests
@@ -71,11 +73,11 @@ def snap_state(segments, max_rounds=None):
         delta |= new_hot
         hits = engine.hits(keys, flags, hot, delta)
         new_edges, verified = {}, set()
-        for key, h in zip(keys, hits):
+        for key, h in zip(keys, hits, strict=True):
             chain = assemble_chain(key[0], key[1], h)
             if len(chain) == 2:
                 verified.add(key)
-            for u, v in zip(chain, chain[1:]):
+            for u, v in zip(chain, chain[1:], strict=False):
                 new_edges.setdefault(canonical(u, v), set()).update(edges[key])
         changed = set(new_edges) - verified
         delta = set()
@@ -86,7 +88,7 @@ def snap_state(segments, max_rounds=None):
 # --------------------------------------------------------------------------- measurements
 
 
-def seg_dist(pt, p, q) -> float:
+def _seg_dist(pt, p, q) -> float:
     dx, dy = q[0] - p[0], q[1] - p[1]
     t = max(
         0.0, min(1.0, ((pt[0] - p[0]) * dx + (pt[1] - p[1]) * dy) / (dx * dx + dy * dy))
@@ -94,7 +96,7 @@ def seg_dist(pt, p, q) -> float:
     return math.hypot(pt[0] - (p[0] + t * dx), pt[1] - (p[1] + t * dy))
 
 
-def proper_cross(a, b, c, d) -> bool:
+def _proper_cross(a, b, c, d) -> bool:
     def side(p, q, r):
         v = (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
         return (v > 0) - (v < 0)
@@ -102,13 +104,13 @@ def proper_cross(a, b, c, d) -> bool:
     return side(a, b, c) * side(a, b, d) < 0 and side(c, d, a) * side(c, d, b) < 0
 
 
-def measure(edges: dict, carriers: dict) -> dict:
+def _measure(edges: dict, carriers: dict) -> dict:
     keys = sorted(edges)
     verts = sorted({p for k in keys for p in k})
     crossings = 0
     for i in range(len(keys)):
         for j in range(i + 1, len(keys)):
-            if proper_cross(*keys[i], *keys[j]):
+            if _proper_cross(*keys[i], *keys[j]):
                 crossings += 1
     min_vertex_edge = math.inf
     on_interior = 0
@@ -116,14 +118,14 @@ def measure(edges: dict, carriers: dict) -> dict:
         for a, b in keys:
             if v == a or v == b:
                 continue
-            d = seg_dist(v, a, b)
+            d = _seg_dist(v, a, b)
             min_vertex_edge = min(min_vertex_edge, d)
             if d < 1e-9:
                 on_interior += 1
     deviation = 0.0
     for (a, b), names in edges.items():
         best = min(
-            max(seg_dist(a, *carriers[n]), seg_dist(b, *carriers[n])) for n in names
+            max(_seg_dist(a, *carriers[n]), _seg_dist(b, *carriers[n])) for n in names
         )
         deviation = max(deviation, best)
     return {
@@ -135,7 +137,7 @@ def measure(edges: dict, carriers: dict) -> dict:
     }
 
 
-def random_segments(rng, n, box):
+def _random_segments(rng, n, box):
     out = []
     while len(out) < n:
         a = (rng.randint(0, box), rng.randint(0, box))
@@ -145,19 +147,19 @@ def random_segments(rng, n, box):
     return out
 
 
-def trials(count=250, n=24, box=48, seed=3) -> dict:
+def _trials(count=250, n=24, box=48, seed=3) -> dict:
     rng = random.Random(seed)
     rows = {"round_1": [], "iterated": []}
     rounds = []
     for _ in range(count):
-        raw = random_segments(rng, n, box)
+        raw = _random_segments(rng, n, box)
         carriers = {f"c{i}": s for i, s in enumerate(raw)}
         segs = [Segment(a, b, frozenset([f"c{i}"])) for i, (a, b) in enumerate(raw)]
         e1, _ = snap_state(segs, 1)
         ef, r = snap_state(segs)
         rounds.append(r)
-        rows["round_1"].append(measure(e1, carriers))
-        rows["iterated"].append(measure(ef, carriers))
+        rows["round_1"].append(_measure(e1, carriers))
+        rows["iterated"].append(_measure(ef, carriers))
     out = {
         "trials": count,
         "segments_per_trial": n,
@@ -185,7 +187,7 @@ def dense_drift(count=1500, n=40, box=30, seed=11) -> dict:
     rng = random.Random(seed)
     worst, rounds = 0.0, Counter()
     for _ in range(count):
-        raw = random_segments(rng, n, box)
+        raw = _random_segments(rng, n, box)
         carriers = {f"c{i}": sg for i, sg in enumerate(raw)}
         edges, r = snap_state(
             [Segment(a, b, frozenset([f"c{i}"])) for i, (a, b) in enumerate(raw)]
@@ -195,7 +197,7 @@ def dense_drift(count=1500, n=40, box=30, seed=11) -> dict:
             worst = max(
                 worst,
                 min(
-                    max(seg_dist(a, *carriers[nm]), seg_dist(b, *carriers[nm]))
+                    max(_seg_dist(a, *carriers[nm]), _seg_dist(b, *carriers[nm]))
                     for nm in names
                 ),
             )
@@ -219,7 +221,7 @@ def example_models() -> dict:
     }
 
 
-def layout_like() -> dict:
+def _layout_like() -> dict:
     model = build_model_from_catalogue(random_layout(200, seed=1, route="B"), "B")
     drift = sliver_report(model)["snap_drift"]
     layers = model.labelled.slabs + model.labelled.level_layers
@@ -283,7 +285,6 @@ def level_stats() -> dict:
 
 def pixel_corners() -> dict:
     """Which segments make the pixel of the grid point (0, 0) hot: the pixel is the half-open square [-1/2, 1/2)^2."""
-    from scgsim.geometry.sgb.noding.spatial_hash import HotGrid
 
     grid = HotGrid([(0, 0)])
     cases = {
@@ -358,19 +359,19 @@ def scaling_rows():
     ]
 
 
-def slopes(xs, ys):
+def _slopes(xs, ys):
     return [
         round(math.log(y1 / y0) / math.log(x1 / x0), 2)
-        for (x0, y0), (x1, y1) in zip(zip(xs, ys), zip(xs[1:], ys[1:]))
+        for (x0, y0), (x1, y1) in zip(
+            zip(xs, ys, strict=True), zip(xs[1:], ys[1:], strict=True), strict=False
+        )
     ]
 
 
 # --------------------------------------------------------------------------- arc witness
 
 
-def quarter(radius: int) -> ArcCarrier:
-    from fractions import Fraction
-
+def _quarter(radius: int) -> ArcCarrier:
     return ArcCarrier(
         "arc",
         (Fraction(0), Fraction(0)),
@@ -382,15 +383,18 @@ def quarter(radius: int) -> ArcCarrier:
     )
 
 
-def chord_counts(radii) -> list[int]:
-    return [len(quarter(r).witness_points()) - 1 for r in radii]
+def _chord_counts(radii) -> list[int]:
+    return [len(_quarter(r).witness_points()) - 1 for r in radii]
 
 
-def arc_example():
-    arc = quarter(24)
+def _arc_example():
+    arc = _quarter(24)
     pts = arc.witness_points()
     pieces = arc.piece_ids()
-    segs = [Segment(a, b, frozenset([pid])) for pid, a, b in zip(pieces, pts, pts[1:])]
+    segs = [
+        Segment(a, b, frozenset([pid]))
+        for pid, a, b in zip(pieces, pts, pts[1:], strict=False)
+    ]
     segs.append(
         Segment((14, -2), (14, 26), frozenset(["line"]))
     )  # a foreign vertical segment crossing the arc
@@ -424,8 +428,8 @@ def arc_example():
     return arc, pts, edges, runs, result
 
 
-def arc_figure(radii, counts) -> dict:
-    arc, pts, edges, runs, result = arc_example()
+def _arc_figure(radii, counts) -> dict:
+    arc, pts, edges, runs, result = _arc_example()
     fig, axes = plt.subplots(
         1, 3, figsize=(14, 4.6), gridspec_kw={"width_ratios": [1, 1, 1.1]}
     )
@@ -433,7 +437,10 @@ def arc_figure(radii, counts) -> dict:
     exact = [(24 * math.cos(t), 24 * math.sin(t)) for t in th]
     for ax in axes[:2]:
         ax.plot(
-            *zip(*exact), color="#999", lw=1.2, label="exact carrier (circle, r = 24 g)"
+            *zip(*exact, strict=True),
+            color="#999",
+            lw=1.2,
+            label="exact carrier (circle, r = 24 g)",
         )
         ax.set_aspect("equal")
         ax.set_xlim(-1, 27)
@@ -444,7 +451,7 @@ def arc_figure(radii, counts) -> dict:
         ax.tick_params(labelsize=7)
     a = axes[0]
     a.plot(
-        *zip(*pts),
+        *zip(*pts, strict=True),
         color=COLOURS["pad"],
         lw=1.6,
         marker="o",
@@ -467,7 +474,7 @@ def arc_figure(radii, counts) -> dict:
         loc="left",
     )
     c = axes[2]
-    c.plot(*zip(*exact), color="#999", lw=1.0, ls=":")
+    c.plot(*zip(*exact, strict=True), color="#999", lw=1.0, ls=":")
     devs = []
     for run in runs:
         if len(run) < 2:
@@ -475,7 +482,7 @@ def arc_figure(radii, counts) -> dict:
         a_pt, b_pt = run[0], run[-1]
         real = realise(arc, arc, a_pt, b_pt)
         samples = sample_arc(real, a_pt, b_pt, 40)
-        c.plot(*zip(*samples), color=COLOURS["pad"], lw=2.4)
+        c.plot(*zip(*samples, strict=True), color=COLOURS["pad"], lw=2.4)
         c.plot(
             [a_pt[0], b_pt[0]],
             [a_pt[1], b_pt[1]],
@@ -508,14 +515,14 @@ def arc_figure(radii, counts) -> dict:
         "rounds": result.rounds,
         "arc_edges_after_merge": len([r for r in runs if len(r) > 1]),
         "arc_edge_deviations_g": [round(d, 4) for d in devs],
-        "chord_count_per_quarter_arc": dict(zip(radii, counts)),
+        "chord_count_per_quarter_arc": dict(zip(radii, counts, strict=True)),
     }
 
 
 # --------------------------------------------------------------------------- figures
 
 
-def guarantees_figure(t: dict) -> None:
+def _guarantees_figure(t: dict) -> None:
     fig, ax = plt.subplots(figsize=(7.5, 3.8))
     bins = [i * 0.1 for i in range(0, 21)]
     ax.hist(
@@ -585,7 +592,7 @@ def guarantees_figure(t: dict) -> None:
     save_plotly(fig2, "arrangement-guarantees")
 
 
-def complexity_figure(sizes, rows, radii, counts) -> None:
+def _complexity_figure(sizes, rows, radii, counts) -> None:
     fig, (a, b, c) = plt.subplots(1, 3, figsize=(14, 4.2))
     ns = [r["N"] for r in rows]
     a.loglog(
@@ -607,7 +614,7 @@ def complexity_figure(sizes, rows, radii, counts) -> None:
     a.minorticks_off()
     a.set_xlabel("features N")
     a.set_ylabel("count")
-    for n, r in zip(ns, rows):
+    for n, r in zip(ns, rows, strict=True):
         a.annotate(
             f"{r['hot_pixels']:,}",
             (n, r["hot_pixels"]),
@@ -719,15 +726,16 @@ def complexity_figure(sizes, rows, radii, counts) -> None:
 
 
 def main() -> None:
-    t = trials()
-    guarantees_figure(t)
-    layout = layout_like()
+    """Write the arrangement-guarantee and complexity figures, the arc witness and the numbers the page quotes."""
+    t = _trials()
+    _guarantees_figure(t)
+    layout = _layout_like()
     sizes = [timed_snap(n) for n in (2000, 4000, 8000, 16000, 32000, 64000)]
     rows = scaling_rows()
     radii = [3, 6, 12, 24, 100, 400, 1600, 5000, 8000, 20000, 100000]
-    counts = chord_counts(radii)
-    arc = arc_figure(radii, counts)
-    complexity_figure(sizes, rows, radii, counts)
+    counts = _chord_counts(radii)
+    arc = _arc_figure(radii, counts)
+    _complexity_figure(sizes, rows, radii, counts)
     numbers = {
         "random_trials": {
             k: (
@@ -742,23 +750,23 @@ def main() -> None:
         "level_stats": level_stats(),
         "timing": {
             "rows": sizes,
-            "slope_snap_plus_dcel": slopes(
+            "slope_snap_plus_dcel": _slopes(
                 [s["segments"] for s in sizes],
                 [s["snap_s"] + s["dcel_s"] for s in sizes],
             ),
         },
         "pipeline_rows": rows,
         "pipeline_slopes": {
-            "hot_pixels": slopes(
+            "hot_pixels": _slopes(
                 [r["N"] for r in rows], [r["hot_pixels"] for r in rows]
             ),
-            "level_edges": slopes(
+            "level_edges": _slopes(
                 [r["N"] for r in rows], [r["level_edges"] for r in rows]
             ),
         },
         "pixel_corners": pixel_corners(),
         "arc_witness": arc,
-        "chord_slope": slopes(radii[3:], counts[3:]),
+        "chord_slope": _slopes(radii[3:], counts[3:]),
     }
     write_numbers("arrangement-guarantees", numbers)
     print(json.dumps(numbers, indent=1))

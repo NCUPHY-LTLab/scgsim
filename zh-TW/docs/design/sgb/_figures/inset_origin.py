@@ -344,7 +344,7 @@ def scan(model, y_um: float) -> list[tuple[float, float, str, int | None, bool]]
     for fi in range(1, len(layer.arr.faces)):
         crossings = []
         for ring in kit.face_rings_um(layer, fi):
-            for (x0, y0), (x1, y1) in zip(ring, ring[1:] + ring[:1]):
+            for (x0, y0), (x1, y1) in zip(ring, ring[1:] + ring[:1], strict=True):
                 if (y0 <= y_um < y1) or (y1 <= y_um < y0):
                     crossings.append(x0 + (y_um - y0) * (x1 - x0) / (y1 - y0))
         crossings.sort()
@@ -355,7 +355,7 @@ def scan(model, y_um: float) -> list[tuple[float, float, str, int | None, bool]]
             if not label.bands
             else ("metal" if on_conductor(label) else "gap")
         )
-        for a, b in zip(crossings[::2], crossings[1::2]):
+        for a, b in zip(crossings[::2], crossings[1::2], strict=False):
             runs.append(
                 (a, b, kind, label.bands[0][1] if label.bands else None, under_port)
             )
@@ -548,6 +548,7 @@ def no_gap_edge_error() -> str:
 
 
 def main() -> None:
+    """Write the inset-origin figures and numbers."""
     kit.ensure_plotly_js()
     numbers: dict = {"margins_um": list(MARGINS)}
     with tempfile.TemporaryDirectory(prefix="inset-origin-") as scratch_name:

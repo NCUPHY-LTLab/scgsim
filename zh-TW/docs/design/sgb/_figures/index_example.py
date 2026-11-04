@@ -3,13 +3,13 @@ the production package ``scgsim.geometry.sgb``.
 
 The running example is the test scene ``sgb_scenes.pad_in_ground`` (a stage-level prism catalogue with the pad's
 chamfer, reflex notch, rounded corner and circular hole as exact arcs) with its lumped port on the hosts' support
-plane z = 0, where ``prisms.ports`` puts it for real input; see ``_intro_common.running_example``.
+plane z = 0, where ``prisms.ports`` puts it for real input; see ``intro_common.running_example``.
 
 Writes ``figures/index-example-input.svg`` (plan view of the source prisms and an x-z section with levels),
 ``figures/index-example-3d.html`` plus ``.svg`` (the written XAO of Route B, every face drawn once for each volume it
 bounds, pulled apart) and ``figures/index-numbers.json`` (the counts the page quotes).
 
-Run (from the repository root; see ``_intro_common.py`` for ``SGB_CORE``)::
+Run (from the repository root; see ``intro_common.py`` for ``SGB_CORE``)::
 
     $SGB_CORE/.artifacts/env/bin/python docs/design/sgb/_figures/index_example.py
 """
@@ -20,10 +20,11 @@ import json
 import tempfile
 from pathlib import Path
 
+import gmsh
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
-from _intro_common import (
+from intro_common import (
     COLOURS,
     build_example,
     draw_footprint,
@@ -40,6 +41,16 @@ from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.prisms.levels import build_levels
 from scgsim.geometry.sgb.sidecar.files import read_sidecar
+from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds
+from sgb_catalogue_report import measure
+from sgb_emit_cases import CASES, pad_requests
+from sgb_gmsh_oracle import (
+    gmsh_session,
+    mesh_coarsely,
+    mesh_quality,
+    size_from_mesh_hints,
+)
+from sgb_scenes import airbridge
 
 GROUP_COLOURS = {
     "SA": "#9ecae1",
@@ -58,7 +69,7 @@ GROUP_NAMES = {
 SHIFT = {"substrate": -60.0, "vacuum": 60.0}  # exploded view offsets (display units)
 
 
-def input_figure(catalogue) -> None:
+def _input_figure(catalogue) -> None:
     levels = build_levels(catalogue.prisms, catalogue.families).levels
     fig, (ax_plan, ax_sec) = plt.subplots(
         1, 2, figsize=(11.5, 4.6), gridspec_kw={"width_ratios": [1.15, 1]}
@@ -169,8 +180,6 @@ def surface_triangles(
     artifacts, sidecar, mesh_size: float = 60.0, mesh_size_min: float = 4.0
 ) -> dict:
     """Triangles of every written face, by planned face id: the written XAO opened in Gmsh and meshed in 2-D (display only)."""
-    import gmsh
-    from sgb_gmsh_oracle import gmsh_session
 
     triangles = {}
     with gmsh_session(artifacts.xao):
@@ -178,13 +187,18 @@ def surface_triangles(
         gmsh.option.setNumber("Mesh.MeshSizeMin", mesh_size_min)
         gmsh.model.mesh.generate(2)
         node_tags, coords, _ = gmsh.model.mesh.getNodes()
-        xyz = dict(zip(node_tags.tolist(), np.asarray(coords).reshape(-1, 3)))
+        xyz = dict(
+            zip(node_tags.tolist(), np.asarray(coords).reshape(-1, 3), strict=True)
+        )
         for tag, planned_id in enumerate(
             sidecar["binding"]["ids_by_tag"]["2"], start=1
         ):
             kinds, _, nodes = gmsh.model.mesh.getElements(2, tag)
             flat = [
-                n for kind, ns in zip(kinds, nodes) if kind == 2 for n in ns.tolist()
+                n
+                for kind, ns in zip(kinds, nodes, strict=True)
+                if kind == 2
+                for n in ns.tolist()
             ]
             used = sorted(set(flat))
             index = {n: i for i, n in enumerate(used)}
@@ -195,7 +209,7 @@ def surface_triangles(
     return triangles
 
 
-def group_kind(model, face_id: str) -> str:
+def _group_kind(model, face_id: str) -> str:
     return (model.routed.face_group.get(face_id) or "other").split("::")[0]
 
 
@@ -214,7 +228,7 @@ def exploded_traces(model, tri):
                 if face_id not in tri:
                     continue
                 xyz, tris = tri[face_id]
-                group = group_kind(model, face_id)
+                group = _group_kind(model, face_id)
                 z = np.array([stretch_z(v) for v in xyz[:, 2]]) + dz
                 batch = batches.setdefault(
                     (f"{volume.domain.name} ({status})", group),
@@ -239,7 +253,7 @@ def exploded_traces(model, tri):
     return batches
 
 
-def exploded_figures(model, artifacts, sidecar) -> dict:
+def _exploded_figures(model, artifacts, sidecar) -> dict:
     tri = surface_triangles(artifacts, sidecar)
     batches = exploded_traces(model, tri)
     fig = go.Figure()
@@ -299,9 +313,9 @@ def exploded_figures(model, artifacts, sidecar) -> dict:
     save_plotly(fig, "index-example-3d")
 
     polys, colours = [], []
-    for (volume, group), b in batches.items():
+    for (_, group), b in batches.items():
         pts = np.column_stack([b["x"], b["y"], b["z"]])
-        for i, j, k in zip(b["i"], b["j"], b["k"]):
+        for i, j, k in zip(b["i"], b["j"], b["k"], strict=True):
             polys.append(pts[[i, j, k]])
             colours.append(GROUP_COLOURS[group])
     f = plt.figure(figsize=(8.5, 6.2))
@@ -354,7 +368,7 @@ def exploded_figures(model, artifacts, sidecar) -> dict:
             f"{v.domain.name} written={vid in model.routed.emitted_volumes}"
             for vid, v in model.topology.volumes.items()
         ),
-        "face_groups_drawn": sorted({group_kind(model, f) for f in drawn_faces}),
+        "face_groups_drawn": sorted({_group_kind(model, f) for f in drawn_faces}),
     }
 
 
@@ -363,8 +377,6 @@ def exploded_figures(model, artifacts, sidecar) -> dict:
 
 def example_models() -> dict:
     """The five columns of the supplement table: the running example under Routes A, B, C, with bands, and the airbridge."""
-    from sgb_emit_cases import pad_requests
-    from sgb_scenes import airbridge
 
     return {
         "pad_in_ground_B": lambda: build_example("B"),
@@ -451,9 +463,6 @@ def counts() -> dict:
 
 def example_checks() -> dict:
     """The load, OCCT and coarse-mesh results of the seven running-example models (60 µm elements), as the catalogue report measures them."""
-    from sgb_catalogue_report import measure
-    from sgb_emit_cases import pad_requests
-    from sgb_scenes import airbridge
 
     models = {
         "pad_a": lambda: build_example("A"),
@@ -488,14 +497,6 @@ def example_checks() -> dict:
 
 def hinted_mesh_checks() -> dict:
     """The banded models meshed again with the size field of the sidecar's ``band_boundary`` hints (the recipe of emission.qmd#mesh-size-recipe)."""
-    from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds
-    from sgb_emit_cases import CASES, pad_requests
-    from sgb_gmsh_oracle import (
-        gmsh_session,
-        mesh_coarsely,
-        mesh_quality,
-        size_from_mesh_hints,
-    )
 
     coarse_um, near_um, growth_per_um = 60.0, 0.25, 2.0
     models = {
@@ -527,13 +528,14 @@ def hinted_mesh_checks() -> dict:
 
 
 def main() -> None:
+    """Write the running-example figures and the numbers of the overview page."""
     catalogue = running_example("B")
     model = build_example("B")
     with tempfile.TemporaryDirectory() as tmp:
         artifacts = emit_model(model, Path(tmp))
         sidecar = read_sidecar(artifacts.sidecar)
-        input_figure(catalogue)
-        view = exploded_figures(model, artifacts, sidecar)
+        _input_figure(catalogue)
+        view = _exploded_figures(model, artifacts, sidecar)
     numbers = counts()
     numbers["exploded_view"] = view
     numbers["running_example_checks"] = example_checks()

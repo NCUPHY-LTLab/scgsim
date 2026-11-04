@@ -30,6 +30,7 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from matplotlib.patches import PathPatch
 from matplotlib.path import Path as MplPath
+from shapely.geometry import LineString, Polygon
 
 HERE = Path(__file__).resolve().parent
 SGB_DOCS = HERE.parent
@@ -38,6 +39,10 @@ REPO = SGB_DOCS.parents[3]
 SGB_CORE = Path(os.environ.get("SGB_CORE", str(REPO)))
 sys.path.insert(0, str(SGB_CORE / "tests"))
 sys.path.insert(0, str(HERE))
+
+from scgsim.geometry.sgb.arrangement.arcs import sample_arc  # noqa: E402
+from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
+from sgb_scenes import lumped_port, pad_in_ground, rect_um  # noqa: E402
 
 FIG.mkdir(parents=True, exist_ok=True)
 G_UM = 0.001  # the model grid of the running example in micrometres (1 nm)
@@ -67,6 +72,7 @@ plt.rcParams.update(
 
 
 def save_svg(fig, name: str) -> Path:
+    """Save a Matplotlib figure as a static SVG under the figures folder, and as a PNG as well when ``SGB_QA_DIR`` is set."""
     path = FIG / f"{name}.svg"
     fig.savefig(
         path,
@@ -128,8 +134,6 @@ def running_example(route: str = "B", *, port_plane: str = "support"):
     ``port_plane="mid"`` returns the scene's own mid-plane port (an embedded sheet), used only where a figure
     illustrates what such a sheet does.
     """
-    from sgb_scenes import lumped_port, pad_in_ground, rect_um
-
     catalogue = pad_in_ground("A" if route == "A" else "B", with_port=False)
     plane_route = "A" if port_plane == "support" else "B"
     port = lumped_port("p1", rect_um(*PORT_OUTLINE_UM), plane_route)
@@ -146,8 +150,6 @@ def build_example(
     **kwargs,
 ):
     """The validated ``ConformalModel`` of the running example."""
-    from scgsim.geometry.sgb.model import build_model_from_catalogue
-
     return build_model_from_catalogue(
         running_example(route, port_plane=port_plane),
         route,
@@ -161,10 +163,12 @@ def build_example(
 
 
 def ring_um(ring) -> list[tuple[float, float]]:
+    """A ring of grid integers in micrometres."""
     return [(x * G_UM, y * G_UM) for x, y in ring]
 
 
 def mpl_path(rings: list[list[tuple[float, float]]]) -> MplPath:
+    """One compound Matplotlib path from several rings, so holes cut out of their outer ring."""
     verts, codes = [], []
     for ring in rings:
         verts += list(ring) + [ring[0]]
@@ -184,8 +188,6 @@ def cycle_polyline(
     arr, curves, cycle_index: int, step: float = 20.0
 ) -> list[tuple[float, float]]:
     """The boundary cycle of an arrangement as a polyline in grid units, arc edges sampled every ``step`` grid units."""
-    from scgsim.geometry.sgb.arrangement.arcs import sample_arc
-
     points: list[tuple[float, float]] = []
     for half_edge in arr.cycles[cycle_index].half_edges:
         edge_index = half_edge >> 1
@@ -214,6 +216,7 @@ def cell_rings_um(
 
 
 def domain_colour(domain) -> str:
+    """The fill colour of a labelled domain: conductor, substrate, vacuum or outside."""
     if domain is None:
         return "white"
     if domain.kind == "conductor":
@@ -237,6 +240,7 @@ def stretch_z(z: float, metal: float = 200.0) -> float:
 
 
 def prism_colour(prism) -> str:
+    """The fill colour of a prism by its material kind and owner."""
     if prism.material_kind == "port":
         return COLOURS["port"]
     if prism.material_kind == "conductor":
@@ -246,16 +250,12 @@ def prism_colour(prism) -> str:
 
 def footprint_polygon(prism):
     """Shapely polygon of a prism footprint in micrometres (arcs as their polyline witness)."""
-    from shapely.geometry import Polygon
-
     rings = [ring_um(r) for r in prism.footprint.rings()]
     return Polygon(rings[0], rings[1:])
 
 
 def section_intervals(prism, y_um: float) -> list[tuple[float, float]]:
     """x intervals (micrometres) where the plane y = y_um cuts the prism footprint."""
-    from shapely.geometry import LineString
-
     cut = footprint_polygon(prism).intersection(LineString([(-1e4, y_um), (1e4, y_um)]))
     if cut.is_empty:
         return []
@@ -263,7 +263,7 @@ def section_intervals(prism, y_um: float) -> list[tuple[float, float]]:
     return sorted((min(p.coords)[0], max(p.coords)[0]) for p in parts if p.length > 0)
 
 
-def draw_section(
+def draw_section(  # noqa: PLR0913 -- the axes, the catalogue and the drawing options of one section
     ax,
     catalogue,
     levels,

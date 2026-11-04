@@ -1,6 +1,6 @@
 """Figures of layered-model.qmd: prisms, levels, slabs, slab versus level arrangements, wall coalescing.
 
-Computed with the production package ``scgsim.geometry.sgb``: the running example (``_intro_common.running_example``,
+Computed with the production package ``scgsim.geometry.sgb``: the running example (``intro_common.running_example``,
 Route B, port on the support plane z = 0) and the extended example ``sgb_scenes.airbridge()``.  The wall-coalescing
 figure also builds the stage scene whose port lies at the metal mid-plane z = 0.1: the compiler never places a port
 there, but in that scene a level does cut the metal walls, which the running example no longer shows.
@@ -18,7 +18,7 @@ import math
 
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-from _intro_common import (
+from intro_common import (
     COLOURS,
     G_UM,
     build_example,
@@ -38,27 +38,29 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.prisms.levels import build_levels
 from sgb_scenes import airbridge
+from shapely.geometry import Polygon, box
+from shapely.ops import polylabel
 
 # --------------------------------------------------------------------------- stack of levels and slabs
 
 
-def active_names(spec, structure, k: int) -> list[str]:
+def _active_names(spec, structure, k: int) -> list[str]:
     return [spec.prisms[i].entity_id for i in structure.slab_active[k]]
 
 
-def stack_figure(specs: dict) -> dict:
+def _stack_figure(specs: dict) -> dict:
     fig, axes = plt.subplots(
         1, 2, figsize=(12.5, 5.2), gridspec_kw={"width_ratios": [1, 1]}
     )
     facts = {}
-    for ax, (name, y, spec) in zip(axes, specs.values()):
+    for ax, (name, y, spec) in zip(axes, specs.values(), strict=True):
         structure = build_levels(spec.prisms, spec.families)
         draw_section(ax, spec, structure.levels, y, label_slabs=False)
         for k in range(structure.slab_count):
             ax.text(
                 -152,
                 k + 0.5,
-                f"slab {k}: " + ", ".join(active_names(spec, structure, k)),
+                f"slab {k}: " + ", ".join(_active_names(spec, structure, k)),
                 va="center",
                 ha="left",
                 fontsize=7,
@@ -69,7 +71,7 @@ def stack_figure(specs: dict) -> dict:
         facts[name] = {
             "levels_um": [float(z) for z in structure.levels],
             "active_per_slab": [
-                active_names(spec, structure, k) for k in range(structure.slab_count)
+                _active_names(spec, structure, k) for k in range(structure.slab_count)
             ],
             "sheets_per_level": [
                 [spec.prisms[i].entity_id for i in s] for s in structure.level_sheets
@@ -100,16 +102,13 @@ def stack_figure(specs: dict) -> dict:
 # --------------------------------------------------------------------------- slab versus level arrangement
 
 
-def level_key(label) -> str:
+def _level_key(label) -> str:
     if label.sheet is not None:
         return f"sheet: {label.sheet.name}"
     return f"{domain_name(label.below)} | {domain_name(label.above)}"
 
 
-def draw_layer(ax, layer, fill, view) -> None:
-    from shapely.geometry import Polygon, box
-    from shapely.ops import polylabel
-
+def _draw_layer(ax, layer, fill, view) -> None:
     window = box(view[0][0], view[1][0], view[0][1], view[1][1])
     for fi in range(1, len(layer.arr.faces)):
         colour, text = fill(layer.labels[fi])
@@ -155,7 +154,7 @@ def slab_vs_level_figure(model) -> dict:
     }
 
     def level_fill(label):
-        key = level_key(label)
+        key = _level_key(label)
         return palette[key], key
 
     def slab_fill(domain):
@@ -185,7 +184,7 @@ def slab_vs_level_figure(model) -> dict:
         ),
     )
     for ax, layer, fill, title in panels:
-        draw_layer(ax, layer, fill, view)
+        _draw_layer(ax, layer, fill, view)
         ax.set_title(title, fontsize=9)
     axes[0].set_ylabel("y (µm)")
     fig.text(
@@ -204,8 +203,8 @@ def slab_vs_level_figure(model) -> dict:
             "edges": len(layer.arr.edges),
             "labels": sorted(
                 {
-                    level_key(l) if hasattr(l, "below") else domain_name(l)
-                    for l in layer.labels[1:]
+                    _level_key(label) if hasattr(label, "below") else domain_name(label)
+                    for label in layer.labels[1:]
                 }
             ),
         }
@@ -215,7 +214,7 @@ def slab_vs_level_figure(model) -> dict:
 # --------------------------------------------------------------------------- wall coalescing
 
 
-def wall_facts(model) -> dict:
+def _wall_facts(model) -> dict:
     topo = model.topology
     levels = list(topo.levels)
     metal_slab = (
@@ -238,7 +237,11 @@ def wall_facts(model) -> dict:
         xs, ys = [p[0] for p in pts], [p[1] for p in pts]
         mid = (sum(xs) / len(xs) * G_UM, sum(ys) / len(ys) * G_UM)
         z0, z1 = f.z_range
-        slabs = sum(1 for lo, hi in zip(levels, levels[1:]) if lo >= z0 and hi <= z1)
+        slabs = sum(
+            1
+            for lo, hi in zip(levels, levels[1:], strict=False)
+            if lo >= z0 and hi <= z1
+        )
         walls.append(
             {
                 "id": f.id,
@@ -264,11 +267,51 @@ def wall_facts(model) -> dict:
 
 def walls_figure(support, mid) -> dict:
     """Left: metal wall faces of the stage scene with the port at z = 0.1.  Right: counts for both port planes."""
-    facts, facts_support = wall_facts(mid), wall_facts(support)
+    facts, facts_support = _wall_facts(mid), _wall_facts(support)
     walls = facts["walls"]
     fig, axes = plt.subplots(
         1, 2, figsize=(12.5, 4.4), gridspec_kw={"width_ratios": [1.5, 1]}
     )
+    _draw_wall_pieces(walls, axes)
+    _draw_wall_counts(facts, facts_support, axes)
+    fig.tight_layout()
+    save_svg(fig, "layered-walls")
+
+    def totals(model, f) -> dict:
+        return {
+            "coalesced": f["coalesced"],
+            "uncoalesced": f["uncoalesced"],
+            "metal_coalesced": f["metal_coalesced"],
+            "metal_uncoalesced": f["metal_uncoalesced"],
+            "total_faces": len(model.topology.faces),
+            "horizontal_faces": sum(
+                1 for x in model.topology.faces.values() if x.kind == "horizontal"
+            ),
+            "levels_um": [float(z) for z in model.topology.levels],
+            "metal_walls_cut_inside_the_metal_layer": f[
+                "metal_walls_cut_inside_the_metal_layer"
+            ],
+        }
+
+    return {
+        "support_plane_port": totals(support, facts_support),
+        "mid_plane_port_stage_scene": {
+            **totals(mid, facts),
+            "split_walls": [
+                {
+                    "group": w["group"],
+                    "z": w["z"],
+                    "mid_um": [round(v, 1) for v in w["mid"]],
+                }
+                for w in walls
+                if w["cut"] and w["group"].startswith("MA::")
+            ],
+        },
+    }
+
+
+def _draw_wall_pieces(walls, axes):
+    """The metal wall faces of the stage scene with the port at z = 0.1, drawn piece by piece with their coalescing."""
     ax = axes[0]
     rows = (
         (
@@ -368,6 +411,10 @@ def walls_figure(support, mid) -> dict:
         bbox_to_anchor=(0, -0.38),
         ncol=3,
     )
+
+
+def _draw_wall_counts(facts, facts_support, axes):
+    """The metal wall faces of both builds, as built and with coalescing disabled."""
     b = axes[1]
     labels = ["port at z = 0\n(running example)", "port at z = 0.1\n(stage scene)"]
     per_slab = [facts_support["metal_uncoalesced"], facts["metal_uncoalesced"]]
@@ -394,46 +441,12 @@ def walls_figure(support, mid) -> dict:
     b.set_title("Metal wall faces of the pad-in-ground, Route B")
     b.legend(fontsize=7, frameon=False, loc="upper left")
     b.set_ylim(0, max(per_slab) * 1.18)
-    fig.tight_layout()
-    save_svg(fig, "layered-walls")
-
-    def totals(model, f) -> dict:
-        return {
-            "coalesced": f["coalesced"],
-            "uncoalesced": f["uncoalesced"],
-            "metal_coalesced": f["metal_coalesced"],
-            "metal_uncoalesced": f["metal_uncoalesced"],
-            "total_faces": len(model.topology.faces),
-            "horizontal_faces": sum(
-                1 for x in model.topology.faces.values() if x.kind == "horizontal"
-            ),
-            "levels_um": [float(z) for z in model.topology.levels],
-            "metal_walls_cut_inside_the_metal_layer": f[
-                "metal_walls_cut_inside_the_metal_layer"
-            ],
-        }
-
-    return {
-        "support_plane_port": totals(support, facts_support),
-        "mid_plane_port_stage_scene": {
-            **totals(mid, facts),
-            "split_walls": [
-                {
-                    "group": w["group"],
-                    "z": w["z"],
-                    "mid_um": [round(v, 1) for v in w["mid"]],
-                }
-                for w in walls
-                if w["cut"] and w["group"].startswith("MA::")
-            ],
-        },
-    }
 
 
 # --------------------------------------------------------------------------- 3-D prisms, levels, slabs
 
 
-def box_mesh(x0, x1, y0, y1, z0, z1):
+def _box_mesh(x0, x1, y0, y1, z0, z1):  # noqa: PLR0913 -- the two corners of an axis-aligned box
     xs = [x0, x1, x1, x0, x0, x1, x1, x0]
     ys = [y0, y0, y1, y1, y0, y0, y1, y1]
     zs = [z0, z0, z0, z0, z1, z1, z1, z1]
@@ -454,7 +467,7 @@ def box_mesh(x0, x1, y0, y1, z0, z1):
     return xs, ys, zs, tri
 
 
-def box_quads(x0, x1, y0, y1, z0, z1):
+def _box_quads(x0, x1, y0, y1, z0, z1):  # noqa: PLR0913 -- the two corners of an axis-aligned box
     c = [
         (x0, y0, z0),
         (x1, y0, z0),
@@ -478,7 +491,7 @@ def box_quads(x0, x1, y0, y1, z0, z1):
     ]
 
 
-def box_outline(x0, x1, y0, y1, z0, z1):
+def box_outline(x0, x1, y0, y1, z0, z1):  # noqa: PLR0913 -- the two corners of an axis-aligned box
     """The 12 edges of a box as one polyline with gaps (for a Scatter3d trace)."""
     c = [
         (x0, y0, z0),
@@ -535,7 +548,7 @@ def prism_boxes(spec, structure):
     return out
 
 
-def exploded_data(spec):
+def _exploded_data(spec):
     structure = build_levels(spec.prisms, spec.families)
     boxes = prism_boxes(spec, structure)
     views = {"prisms": [], "levels": [], "slabs": []}
@@ -562,8 +575,8 @@ def exploded_data(spec):
     return structure, boxes, views
 
 
-def exploded_figures(spec) -> dict:
-    structure, boxes, views = exploded_data(spec)
+def _exploded_figures(spec) -> dict:
+    structure, boxes, views = _exploded_data(spec)
     colour = {
         "ground_left": COLOURS["ground"],
         "ground_right": COLOURS["ground"],
@@ -572,12 +585,23 @@ def exploded_figures(spec) -> dict:
         "deck": COLOURS["pad"],
     }
     levels_z = [k * SPACING for k in range(len(structure.levels))]
+    _exploded_html(structure, views, colour, levels_z)
+    _exploded_svg(views, colour, levels_z)
+    return {
+        "metal_prisms": len(boxes),
+        "slab_pieces": len(views["slabs"]),
+        "levels": [float(z) for z in structure.levels],
+    }
+
+
+def _exploded_html(structure, views, colour, levels_z):
+    """The interactive exploded view with buttons for the prisms, levels and slabs."""
     fig = go.Figure()
     member: list[set[str]] = []  # which views show each trace
 
     def add_boxes(items, shown_in):
         for name, (x0, x1, y0, y1), z0, z1, hover in items:
-            xs, ys, zs, tri = box_mesh(x0, x1, y0, y1, z0, z1)
+            xs, ys, zs, tri = _box_mesh(x0, x1, y0, y1, z0, z1)
             fig.add_trace(
                 go.Mesh3d(
                     x=xs,
@@ -631,7 +655,7 @@ def exploded_figures(spec) -> dict:
         )
         member.append({"levels"})
     add_boxes(views["slabs"], {"slabs"})
-    for trace, views_of in zip(fig.data, member):
+    for trace, views_of in zip(fig.data, member, strict=True):
         trace.visible = "prisms" in views_of
     buttons = [
         dict(
@@ -667,6 +691,9 @@ def exploded_figures(spec) -> dict:
     )
     save_plotly(fig, "layered-exploded")
 
+
+def _exploded_svg(views, colour, levels_z):
+    """The static panels of the prisms, levels and slabs."""
     f = plt.figure(figsize=(13, 4.8))
     titles = (
         "1  prisms: footprint × [z0, z1]",
@@ -674,13 +701,14 @@ def exploded_figures(spec) -> dict:
         "3  slabs: prisms cut between levels (exploded)",
     )
     for n, (title, items) in enumerate(
-        zip(titles, (views["prisms"], views["prisms"], views["slabs"])), start=1
+        zip(titles, (views["prisms"], views["prisms"], views["slabs"]), strict=True),
+        start=1,
     ):
         ax = f.add_subplot(1, 3, n, projection="3d")
         for name, (x0, x1, y0, y1), z0, z1, _ in items:
             ax.add_collection3d(
                 Poly3DCollection(
-                    box_quads(x0, x1, y0, y1, z0, z1),
+                    _box_quads(x0, x1, y0, y1, z0, z1),
                     facecolors=colour[name],
                     edgecolors="#222",
                     linewidths=0.6,
@@ -716,21 +744,17 @@ def exploded_figures(spec) -> dict:
         ax.set_zticks([])
     f.tight_layout()
     save_svg(f, "layered-exploded")
-    return {
-        "metal_prisms": len(boxes),
-        "slab_pieces": len(views["slabs"]),
-        "levels": [float(z) for z in structure.levels],
-    }
 
 
 def main() -> None:
+    """Write the layered-model figures and their numbers."""
     pad = running_example("B")
     bridge = airbridge()
     support = build_example("B")
     mid = build_example("B", port_plane="mid")
     bridge_model = build_model_from_catalogue(bridge, "B")
     numbers = {
-        "stacks": stack_figure(
+        "stacks": _stack_figure(
             {
                 "running": ("pad_in_ground_B", 0.0, pad),
                 "extended": ("airbridge_B", 0.0, bridge),
@@ -738,7 +762,7 @@ def main() -> None:
         ),
         "layers": slab_vs_level_figure(support),
         "walls": walls_figure(support, mid),
-        "exploded": exploded_figures(bridge),
+        "exploded": _exploded_figures(bridge),
         "counts_pad_in_ground_B": support.counts,
         "counts_pad_in_ground_B_midplane_port_stage_scene": mid.counts,
         "airbridge_counts": bridge_model.counts,

@@ -63,15 +63,17 @@ PAD_SHEET = "pad"
 GAP = "SA::substrate|VACUUM_REGION::interface"
 
 
-def um(x: float) -> int:
+def _um(x: float) -> int:
     return round(x * 1000)
 
 
-def line_family(
+def _line_family(
     family_id: str, role: str, points_um, closed: bool, policy: str
 ) -> CurveFamilyRecord:
-    pts = [(um(x), um(y)) for x, y in points_um]
-    pairs = list(zip(pts, pts[1:])) + ([(pts[-1], pts[0])] if closed else [])
+    pts = [(_um(x), _um(y)) for x, y in points_um]
+    pairs = list(zip(pts, pts[1:], strict=False)) + (
+        [(pts[-1], pts[0])] if closed else []
+    )
     carriers = tuple(
         LineCarrier(
             f"{family_id}/{i}",
@@ -84,8 +86,8 @@ def line_family(
     return CurveFamilyRecord(family_id, role, carriers, (Fraction(0),), policy)
 
 
-def window_family() -> CurveFamilyRecord:
-    return line_family(
+def _window_family() -> CurveFamilyRecord:
+    return _line_family(
         "window",
         "partition",
         [(31.0, 55.0), (37.0, 55.0), (37.0, 65.0), (31.0, 65.0)],
@@ -94,7 +96,7 @@ def window_family() -> CurveFamilyRecord:
     )
 
 
-def requests(bands: bool, refine: bool):
+def _requests(bands: bool, refine: bool):
     insets = (
         (
             InsetRequest("band_pad", ConductorSurface("pad", "sheet"), MARGINS),
@@ -117,8 +119,8 @@ def requests(bands: bool, refine: bool):
 
 def scene(catalogue, window: bool, refine: bool, bands: bool, reverse: bool = False):
     """The Route A model with the chosen families; ``reverse`` lists the families in the opposite order."""
-    insets, refinements = requests(bands, refine)
-    cat = with_extra_families(catalogue, window_family()) if window else catalogue
+    insets, refinements = _requests(bands, refine)
+    cat = with_extra_families(catalogue, _window_family()) if window else catalogue
     if not reverse:
         return build_model(cat, "A", insets=insets, refinements=refinements)
     full = with_cut_families(cat, insets, refinements)
@@ -127,7 +129,7 @@ def scene(catalogue, window: bool, refine: bool, bands: bool, reverse: bool = Fa
     )
 
 
-def level0(model):
+def _level0(model):
     return model.labelled.level_layers[model.labelled.levels.levels.index(Fraction(0))]
 
 
@@ -153,7 +155,7 @@ EDGE_STYLE = {  # family -> (colour, width, label)
 GROUP_FILL = {"ground_0000": "#9a9a9a", "PORT::PORT_SHEET__P1__0000": "#f3b4ae"}
 
 
-def cell_colour(model, layer, fi: int) -> str:
+def _cell_colour(model, layer, fi: int) -> str:
     face = model.topology.faces.get(layer.face_ids[fi])
     group = model.routed.face_group[face.id] if face else None
     if group is None:
@@ -173,7 +175,7 @@ def cell_colour(model, layer, fi: int) -> str:
 
 def band_areas(model) -> dict:
     """Exact area (um^2) per (family, band) over the cells of the level z = 0 that the band groups carry (a port face is no band's surface)."""
-    layer = level0(model)
+    layer = _level0(model)
     out: dict[str, float] = {}
     for fi in range(1, len(layer.arr.faces)):
         sheet = layer.labels[fi].sheet
@@ -188,14 +190,14 @@ def band_areas(model) -> dict:
     return out
 
 
-def figure_level(model, numbers: dict) -> None:
-    layer = level0(model)
+def _figure_level(model, numbers: dict) -> None:
+    layer = _level0(model)
     arr = layer.arr
     fig, ax = plt.subplots(figsize=(10.5, 8.2))
     pcs = make_subplots(rows=1, cols=1)
     for fi in range(1, len(arr.faces)):
         rings = cell_rings_um(layer, fi)
-        colour = cell_colour(model, layer, fi)
+        colour = _cell_colour(model, layer, fi)
         ax.add_patch(PathPatch(mpl_path(rings), facecolor=colour, edgecolor="none"))
         pcs.add_shape(
             type="path",
@@ -216,7 +218,12 @@ def figure_level(model, numbers: dict) -> None:
         used[fam] = (colour, label)
         xs, ys = [], []
         for poly in polys:
-            ax.plot(*zip(*poly), color=colour, lw=width, solid_capstyle="round")
+            ax.plot(
+                *zip(*poly, strict=True),
+                color=colour,
+                lw=width,
+                solid_capstyle="round",
+            )
             xs += [p[0] for p in poly] + [None]
             ys += [p[1] for p in poly] + [None]
         pcs.add_trace(
@@ -256,8 +263,8 @@ def figure_level(model, numbers: dict) -> None:
         "Level z = 0 of the running example (Route A) with port, bands, a required window and a refinement curve",
     )
     handles = [
-        Line2D([0], [0], color=c, lw=2.5, ls="--" if k == "refine" else "-", label=l)
-        for k, (c, l) in used.items()
+        Line2D([0], [0], color=c, lw=2.5, ls="--" if k == "refine" else "-", label=name)
+        for k, (c, name) in used.items()
     ]
     handles += [
         Patch(facecolor="#6baed6", label="cells: pad bands (blue ramp, dark = edge)"),
@@ -287,7 +294,8 @@ def figure_level(model, numbers: dict) -> None:
 
 
 def counts(model) -> dict:
-    layer = level0(model)
+    """Counts of the level-0 arrangement, the face groups and the topology of a built model."""
+    layer = _level0(model)
     groups = {n: len(g.ids) for n, g in model.routed.groups.items() if g.dim == 2}
     return {
         "level_cells": len(layer.arr.faces) - 1,
@@ -307,7 +315,7 @@ def counts(model) -> dict:
 
 def port_invariance(numbers: dict) -> None:
     """The port moves no band but takes its footprint out of the gap bands: the exact area of every band label with and without the port."""
-    insets, _ = requests(True, False)
+    insets, _ = _requests(True, False)
     with_port = band_areas(build_model(real_catalogue(film=True), "A", insets=insets))
     without = band_areas(
         build_model(real_catalogue(film=True, with_port=False), "A", insets=insets)
@@ -348,17 +356,18 @@ def errors(numbers: dict) -> None:
     try:
         CurveFamilyRecord("t", "tile_seam", (carrier,), (Fraction(0),), "dissolve")
         numbers["dissolve_policy"] = "accepted"
-    except Exception as e:  # the policy was removed: tile seams are not a family
+    except ValueError as e:  # the policy was removed: tile seams are not a family
         numbers["dissolve_policy"] = {"error": type(e).__name__, "message": str(e)}
 
 
 def main() -> None:
+    """Write the cut-family figure and its numbers."""
     catalogue = real_catalogue(film=True)
     numbers: dict = {
         "scene": "gds_pad_in_ground with the thin_film profile (Route A) + bands (0.1, 0.5, 2.0 um) + window + refine"
     }
     full = scene(catalogue, True, True, True)
-    figure_level(full, numbers)
+    _figure_level(full, numbers)
     bands_only = scene(catalogue, False, False, True)
     numbers["ablation"] = {
         "port_and_physical_boundaries_only": counts(

@@ -61,15 +61,15 @@ VIEW = ((26.0, 74.0), (26.0, 74.0))  # the cutout, micrometres
 METAL_SLAB = "slab[0,1/5]"  # the only slab in which ground and pad are active
 
 
-def slab_index(model, plane: str) -> int:
+def _slab_index(model, plane: str) -> int:
     return next(k for k, s in enumerate(model.labelled.slabs) if s.plane == plane)
 
 
-def level_index(model, z: Fraction) -> int:
+def _level_index(model, z: Fraction) -> int:
     return model.labelled.levels.levels.index(z)
 
 
-def pad_prism(catalogue) -> PrismRecord:
+def _pad_prism(catalogue) -> PrismRecord:
     return next(p for p in catalogue.prisms if p.entity_id == "pad")
 
 
@@ -78,7 +78,7 @@ def with_tab(catalogue, *, same_entity: bool = True, priority: int = 0):
 
     ``same_entity`` adds it as a second polygon of the entity ``pad``; otherwise as the entity ``pad_tab`` of the same Net.
     """
-    pad = pad_prism(catalogue)
+    pad = _pad_prism(catalogue)
     shape = footprint(rect_um(44.0, 50.0, 56.0, 66.0))
     tab = replace(pad, footprint=shape, polygon=1, arcs=())
     if not same_entity:
@@ -86,11 +86,11 @@ def with_tab(catalogue, *, same_entity: bool = True, priority: int = 0):
     return replace(catalogue, prisms=(*catalogue.prisms, tab))
 
 
-def covering(layer, prisms, arr, face_index: int) -> list[int]:
+def _covering(layer, prisms, arr, face_index: int) -> list[int]:
     return layer.cells.hit(interior_point(arr, face_index))
 
 
-def cover_name(prism: PrismRecord) -> str:
+def _cover_name(prism: PrismRecord) -> str:
     return (
         prism.entity_id
         if prism.polygon == 0
@@ -101,8 +101,8 @@ def cover_name(prism: PrismRecord) -> str:
 # --------------------------------------------------------------------------- figure 1: slab labels
 
 
-def figure_slab_cells(model, numbers: dict) -> None:
-    k = slab_index(model, METAL_SLAB)
+def _figure_slab_cells(model, numbers: dict) -> None:
+    k = _slab_index(model, METAL_SLAB)
     layer = model.labelled.slabs[k]
     arr = layer.arr
     prisms = model.labelled.catalogue.prisms
@@ -119,7 +119,7 @@ def figure_slab_cells(model, numbers: dict) -> None:
                 lw=0.8,
             )
         )
-        hits = covering(layer, prisms, arr, fi)
+        hits = _covering(layer, prisms, arr, fi)
         rows.append(
             {
                 "cell": fi,
@@ -170,7 +170,7 @@ def figure_slab_cells(model, numbers: dict) -> None:
 # --------------------------------------------------------------------------- figure 2: level labels by linking
 
 
-def pair_of(label) -> tuple[str, str]:
+def _pair_of(label) -> tuple[str, str]:
     return domain_name(label.below), domain_name(label.above)
 
 
@@ -184,14 +184,14 @@ PAIR_COLOURS = {
 }
 
 
-def level_colour(label) -> str:
+def _level_colour(label) -> str:
     if label.sheet is not None and label.sheet.kind == "port":
         return PALETTE["port"]
-    return PAIR_COLOURS.get(pair_of(label), "#cccccc")
+    return PAIR_COLOURS.get(_pair_of(label), "#cccccc")
 
 
-def figure_level_links(model, numbers: dict) -> None:
-    indices = [level_index(model, Fraction(0)), level_index(model, Fraction(1, 5))]
+def _figure_level_links(model, numbers: dict) -> None:
+    indices = [_level_index(model, Fraction(0)), _level_index(model, Fraction(1, 5))]
     layers = model.labelled.level_layers
     fig, axes = plt.subplots(1, 2, figsize=(10.5, 5.0))
     pcs = make_subplots(
@@ -201,7 +201,7 @@ def figure_level_links(model, numbers: dict) -> None:
         horizontal_spacing=0.05,
     )
     summary = []
-    for col, (ax, li) in enumerate(zip(axes, indices), start=1):
+    for col, (ax, li) in enumerate(zip(axes, indices, strict=True), start=1):
         layer = layers[li]
         faces = 0
         for fi in range(1, len(layer.arr.faces)):
@@ -211,7 +211,7 @@ def figure_level_links(model, numbers: dict) -> None:
             ax.add_patch(
                 PathPatch(
                     mpl_path(cell_rings_um(layer, fi)),
-                    facecolor=level_colour(lab),
+                    facecolor=_level_colour(lab),
                     alpha=1.0 if needs else 0.55,
                     edgecolor=PALETTE["ink"],
                     lw=1.4 if needs else 0.5,
@@ -226,7 +226,7 @@ def figure_level_links(model, numbers: dict) -> None:
         plotly_cells(
             pcs,
             layer,
-            lambda lay, fi: level_colour(lay.labels[fi]),
+            lambda lay, fi: _level_colour(lay.labels[fi]),
             lambda lay, fi: (
                 level_label_text(lay.labels[fi])
                 + f"<br>needs a face: {lay.labels[fi].needs_face()}"
@@ -303,8 +303,8 @@ def classify_raw_edges(raw, raw_labels) -> tuple[list[int], list[int]]:
     return required, seams
 
 
-def raw_class(layer, prisms, raw, fi: int) -> str:
-    hits = covering(layer, prisms, raw, fi)
+def _raw_class(layer, prisms, raw, fi: int) -> str:
+    hits = _covering(layer, prisms, raw, fi)
     names = []
     for h in hits:
         p = prisms[h]
@@ -316,11 +316,10 @@ def raw_class(layer, prisms, raw, fi: int) -> str:
     return "+".join(names) if names else "vacuum only"
 
 
-def figure_dissolution(model, numbers: dict) -> None:
-    k = slab_index(model, METAL_SLAB)
+def _figure_dissolution(model, numbers: dict) -> None:
+    k = _slab_index(model, METAL_SLAB)
     layer = model.labelled.slabs[k]
     raw, raw_labels = layer.raw_arrangement, layer.raw_labels
-    no_curves = [None] * len(raw.edges)
     prisms = model.labelled.catalogue.prisms
     required, seams = classify_raw_edges(raw, raw_labels)
     stats = layer.stats
@@ -333,6 +332,45 @@ def figure_dissolution(model, numbers: dict) -> None:
         "pad+tab": "#c46a28",
     }
 
+    pcs, axes, fig = _dissolution_panels(layer, prisms, cls_colour)
+    _finish_dissolution_svg(stats, cls_colour, axes, fig)
+    _save_dissolution_html(layer, pcs)
+    covered: Counter = Counter()
+    for fi in range(1, len(raw.faces)):
+        area = raw.face_twice_area(fi) / 2 * G_UM**2
+        for h in _covering(layer, prisms, raw, fi):
+            if prisms[h].entity_id == "pad":
+                covered[_cover_name(prisms[h])] += area
+    pad_face = next(
+        fi
+        for fi in range(1, len(layer.arr.faces))
+        if layer.labels[fi].kind == "conductor" and layer.labels[fi].name == "pad"
+    )
+    face_area = face_exact_area(layer.arr, layer.edge_curve, pad_face) * G_UM**2
+    numbers["dissolution"] = {
+        "plane": layer.plane,
+        "raw_cells": stats["raw_faces"],
+        "cells_after": stats["faces_after"],
+        "raw_edges": stats["edges_before"],
+        "edges_after": stats["edges_after"],
+        "raw_edges_labels_differ": len(required),
+        "raw_edges_seam": len(seams),
+        "edges_merged_by_degree_two_removal": len(required) - stats["edges_after"],
+        "merged_pad_cell_area_um2": face_area,
+        "polygon_areas_um2": dict(covered),
+        "polygon_fraction_of_merged_cell": {
+            n: a / face_area for n, a in covered.items()
+        },
+        "membership_of_merged_cell": dict(layer.membership[pad_face]),
+    }
+
+
+def _dissolution_panels(layer, prisms, cls_colour):
+    """The three panels: the noded cells coloured by the prisms covering them, the same with the seams, and the dissolved cells."""
+    raw, raw_labels = layer.raw_arrangement, layer.raw_labels
+    no_curves = [None] * len(raw.edges)
+    required, seams = classify_raw_edges(raw, raw_labels)
+    stats = layer.stats
     fig, axes = plt.subplots(1, 3, figsize=(15.5, 5.2))
     pcs = make_subplots(
         rows=1,
@@ -345,7 +383,7 @@ def figure_dissolution(model, numbers: dict) -> None:
         ),
     )
     for fi in range(1, len(raw.faces)):
-        cls = raw_class(layer, prisms, raw, fi)
+        cls = _raw_class(layer, prisms, raw, fi)
         rings = cell_rings_um(layer, fi, arr=raw, curves=no_curves)
         axes[0].add_patch(
             PathPatch(
@@ -384,7 +422,12 @@ def figure_dissolution(model, numbers: dict) -> None:
             xs, ys = [], []
             for ei in group:
                 pts = edge_polyline_um(raw, no_curves, ei)
-                ax.plot(*zip(*pts), color=colour, lw=width, solid_capstyle="round")
+                ax.plot(
+                    *zip(*pts, strict=True),
+                    color=colour,
+                    lw=width,
+                    solid_capstyle="round",
+                )
                 xs += [p[0] for p in pts] + [None]
                 ys += [p[1] for p in pts] + [None]
             pcs.add_trace(
@@ -421,7 +464,7 @@ def figure_dissolution(model, numbers: dict) -> None:
         )
     for ei in range(len(layer.arr.edges)):
         pts = edge_polyline_um(layer.arr, layer.edge_curve, ei)
-        axes[2].plot(*zip(*pts), color=PALETTE["ink"], lw=1.4)
+        axes[2].plot(*zip(*pts, strict=True), color=PALETTE["ink"], lw=1.4)
         pcs.add_trace(
             go.Scatter(
                 x=[p[0] for p in pts],
@@ -434,12 +477,17 @@ def figure_dissolution(model, numbers: dict) -> None:
             row=1,
             col=3,
         )
+    return pcs, axes, fig
+
+
+def _finish_dissolution_svg(stats, cls_colour, axes, fig):
+    """Titles, legend and the static file of the dissolution figure."""
     titles = [
         f"A. noded cells: {stats['raw_faces']} cells, {stats['edges_before']} edges; colour = prisms covering the cell",
         "B. slab labels: the overlap cell and its neighbours carry the same label",
         f"C. after dissolution: {stats['faces_after']} cells, {stats['edges_after']} edges",
     ]
-    for ax, title in zip(axes, titles):
+    for ax, title in zip(axes, titles, strict=True):
         finish_plan(ax, *VIEW)
         ax.set_title(title, fontsize=8.5)
     handles = [
@@ -462,6 +510,10 @@ def figure_dissolution(model, numbers: dict) -> None:
     )
     fig.tight_layout()
     save_svg(fig, "labels-dissolution")
+
+
+def _save_dissolution_html(layer, pcs):
+    """The interactive copy of the dissolution figure."""
     for col in (1, 2, 3):
         pcs.update_xaxes(range=list(VIEW[0]), row=1, col=col)
         pcs.update_yaxes(
@@ -477,35 +529,6 @@ def figure_dissolution(model, numbers: dict) -> None:
     )
     save_plotly(pcs, "labels-dissolution")
 
-    covered: Counter = Counter()
-    for fi in range(1, len(raw.faces)):
-        area = raw.face_twice_area(fi) / 2 * G_UM**2
-        for h in covering(layer, prisms, raw, fi):
-            if prisms[h].entity_id == "pad":
-                covered[cover_name(prisms[h])] += area
-    pad_face = next(
-        fi
-        for fi in range(1, len(layer.arr.faces))
-        if layer.labels[fi].kind == "conductor" and layer.labels[fi].name == "pad"
-    )
-    face_area = face_exact_area(layer.arr, layer.edge_curve, pad_face) * G_UM**2
-    numbers["dissolution"] = {
-        "plane": layer.plane,
-        "raw_cells": stats["raw_faces"],
-        "cells_after": stats["faces_after"],
-        "raw_edges": stats["edges_before"],
-        "edges_after": stats["edges_after"],
-        "raw_edges_labels_differ": len(required),
-        "raw_edges_seam": len(seams),
-        "edges_merged_by_degree_two_removal": len(required) - stats["edges_after"],
-        "merged_pad_cell_area_um2": face_area,
-        "polygon_areas_um2": dict(covered),
-        "polygon_fraction_of_merged_cell": {
-            n: a / face_area for n, a in covered.items()
-        },
-        "membership_of_merged_cell": dict(layer.membership[pad_face]),
-    }
-
 
 # --------------------------------------------------------------------------- the other builds the page quotes
 
@@ -513,7 +536,7 @@ def figure_dissolution(model, numbers: dict) -> None:
 def per_entity_tab(catalogue, numbers: dict) -> None:
     """The same tab as its own entity of the same Net: production keeps the seam and the higher priority owns the overlap."""
     model = build_model(with_tab(catalogue, same_entity=False, priority=1), "B")
-    layer = model.labelled.slabs[slab_index(model, METAL_SLAB)]
+    layer = model.labelled.slabs[_slab_index(model, METAL_SLAB)]
     top = next(
         f
         for f in model.topology.faces.values()
@@ -528,7 +551,7 @@ def per_entity_tab(catalogue, numbers: dict) -> None:
         "plane": layer.plane,
         "cells_after": layer.stats["faces_after"],
         "edges_after": layer.stats["edges_after"],
-        "labels": sorted(domain_name(l) for l in layer.labels[1:]),
+        "labels": sorted(domain_name(label) for label in layer.labels[1:]),
         "pad_top_membership": dict(top.membership),
         "pad_tab_top_membership": dict(tab_top.membership),
         "groups": sorted(g for g in model.routed.groups if "::pad" in g),
@@ -548,7 +571,7 @@ def stage_scene_chords(numbers: dict) -> None:
     numbers["stage_scene_arcs"] = out
 
 
-def group_table(model, numbers: dict) -> None:
+def _group_table(model, numbers: dict) -> None:
     faces = {n: len(g.ids) for n, g in model.routed.groups.items() if g.dim == 2}
     numbers["route_b_groups"] = {
         "faces_per_group": faces,
@@ -573,7 +596,7 @@ def group_table(model, numbers: dict) -> None:
     }
 
 
-def error_messages(catalogue, numbers: dict) -> None:
+def _error_messages(catalogue, numbers: dict) -> None:
     box = footprint(
         rect_um(35.0, 45.0, 45.0, 55.0)
     )  # overlaps the pad's left end and the gap
@@ -627,7 +650,7 @@ def error_messages(catalogue, numbers: dict) -> None:
         ],
         ContactError,
     )
-    pad = pad_prism(catalogue)
+    pad = _pad_prism(catalogue)
     attempt(
         "same_net_equal_priority",
         [
@@ -666,6 +689,7 @@ def error_messages(catalogue, numbers: dict) -> None:
 
 
 def main() -> None:
+    """Write the label and dissolution figures and their numbers."""
     catalogue = real_catalogue()
     model = build_model(catalogue, "B")
     tab_model = build_model(with_tab(catalogue), "B", keep_raw=True)
@@ -673,13 +697,13 @@ def main() -> None:
         "scene": "gds_pad_in_ground (production real input), Route B",
         "tab_scene": "the same catalogue + a second polygon of the entity pad (x 44..56, y 50..66 um, z 0..0.2)",
     }
-    figure_slab_cells(model, numbers)
-    figure_level_links(model, numbers)
-    figure_dissolution(tab_model, numbers)
+    _figure_slab_cells(model, numbers)
+    _figure_level_links(model, numbers)
+    _figure_dissolution(tab_model, numbers)
     per_entity_tab(catalogue, numbers)
     stage_scene_chords(numbers)
-    group_table(model, numbers)
-    error_messages(catalogue, numbers)
+    _group_table(model, numbers)
+    _error_messages(catalogue, numbers)
     numbers["levels"] = [str(z) for z in model.labelled.levels.levels]
     numbers["plain_dissolution_stats"] = {
         s.plane: {

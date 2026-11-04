@@ -39,6 +39,7 @@ import matplotlib  # noqa: E402
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import plotly  # noqa: E402
 import plotly.graph_objects as go  # noqa: E402
 from matplotlib.patches import PathPatch  # noqa: E402
 from matplotlib.path import Path as MplPath  # noqa: E402
@@ -83,8 +84,6 @@ def ensure_plotly_js() -> None:
     FIGURES.mkdir(parents=True, exist_ok=True)
     target = FIGURES / "plotly.min.js"
     if not target.exists():
-        import plotly
-
         shutil.copyfile(
             Path(plotly.__file__).parent / "package_data" / "plotly.min.js", target
         )
@@ -143,7 +142,7 @@ def pad_requests(
     return tuple(out)
 
 
-def pad_model(
+def pad_model(  # noqa: PLR0913 -- the route, the bands and the build switches of the running example
     route: str = "A",
     margins: tuple[float, ...] | None = MARGINS,
     *,
@@ -249,6 +248,8 @@ def face_rings_um(
 
 @dataclass
 class Line:
+    """A polyline of one scene panel."""
+
     xs: list[float]
     ys: list[float]
     color: str = INK
@@ -260,6 +261,8 @@ class Line:
 
 @dataclass
 class Poly:
+    """A filled polygon of one scene panel: an outer ring and its holes."""
+
     rings: list[list[tuple[float, float]]]  # outer + holes (even-odd)
     fill: str = NEUTRAL
     edge: str = "rgba(0,0,0,0.55)"
@@ -271,6 +274,8 @@ class Poly:
 
 @dataclass
 class Pts:
+    """Markers of one scene panel."""
+
     xs: list[float]
     ys: list[float]
     color: str = INK
@@ -282,6 +287,8 @@ class Pts:
 
 @dataclass
 class Label:
+    """A text label of one scene panel, placed in data coordinates."""
+
     x: float
     y: float
     text: str
@@ -291,6 +298,8 @@ class Label:
 
 @dataclass
 class Panel:
+    """One axes of a scene: its limits, axis labels and the items drawn in it."""
+
     title: str = ""
     xlim: tuple[float, float] | None = None
     ylim: tuple[float, float] | None = None
@@ -338,7 +347,72 @@ def save_svg(fig, stem: str) -> None:
     plt.close(fig)
 
 
-def render_svg(
+def _draw_items_svg(ax, items: list) -> dict:
+    """Draw the items of one panel on matplotlib axes; the first handle of each named item feeds the legend."""
+    legend: dict = {}
+    for item in items:
+        if isinstance(item, Poly):
+            ax.add_patch(
+                PathPatch(
+                    _mpl_path(item.rings),
+                    facecolor=item.fill,
+                    edgecolor=_mpl_colour(item.edge) if item.edge_width else "none",
+                    lw=item.edge_width,
+                    alpha=item.alpha,
+                    fill=True,
+                )
+            )
+        elif isinstance(item, Line):
+            (h,) = ax.plot(
+                item.xs,
+                item.ys,
+                color=item.color,
+                lw=item.width,
+                ls=_MPL_DASH[item.dash],
+            )
+            if item.name:
+                legend.setdefault(item.name, h)
+        elif isinstance(item, Pts):
+            h = ax.scatter(
+                item.xs,
+                item.ys,
+                s=item.size**2 * 0.6,
+                c=item.color,
+                marker={"circle": "o", "square": "s", "x": "x"}.get(item.symbol, "o"),
+                linewidths=0.5,
+                zorder=3,
+            )
+            if item.name:
+                legend.setdefault(item.name, h)
+        elif isinstance(item, Label):
+            ax.text(
+                item.x,
+                item.y,
+                item.text,
+                color=item.color,
+                fontsize=item.size - 1,
+                ha="center",
+                va="center",
+                zorder=5,
+            )
+    return legend
+
+
+def _style_axes_svg(ax, panel: Panel) -> None:
+    """Limits, aspect, title and labels of one panel."""
+    if panel.xlim:
+        ax.set_xlim(*panel.xlim)
+    if panel.ylim:
+        ax.set_ylim(*panel.ylim)
+    if panel.equal:
+        ax.set_aspect("equal")
+    ax.set_title(panel.title, fontsize=9)
+    ax.set_xlabel(panel.xlabel, fontsize=8)
+    ax.set_ylabel(panel.ylabel, fontsize=8)
+    ax.tick_params(labelsize=7)
+
+
+def render_svg(  # noqa: PLR0913 -- the panels, the path and the four presentation options of one figure
     panels: list[Panel],
     path: Path,
     ncols: int = 1,
@@ -352,66 +426,10 @@ def render_svg(
     fig.patch.set_facecolor("white")
     flat = [ax for row in axes for ax in row]
     all_legend: dict = {}
-    for ax, panel in zip(flat, panels):
+    for ax, panel in zip(flat, panels, strict=True):
         ax.set_facecolor("white")
-        legend = {}
-        for item in panel.items:
-            if isinstance(item, Poly):
-                ax.add_patch(
-                    PathPatch(
-                        _mpl_path(item.rings),
-                        facecolor=item.fill,
-                        edgecolor=_mpl_colour(item.edge) if item.edge_width else "none",
-                        lw=item.edge_width,
-                        alpha=item.alpha,
-                        fill=True,
-                    )
-                )
-            elif isinstance(item, Line):
-                (h,) = ax.plot(
-                    item.xs,
-                    item.ys,
-                    color=item.color,
-                    lw=item.width,
-                    ls=_MPL_DASH[item.dash],
-                )
-                if item.name:
-                    legend.setdefault(item.name, h)
-            elif isinstance(item, Pts):
-                h = ax.scatter(
-                    item.xs,
-                    item.ys,
-                    s=item.size**2 * 0.6,
-                    c=item.color,
-                    marker={"circle": "o", "square": "s", "x": "x"}.get(
-                        item.symbol, "o"
-                    ),
-                    linewidths=0.5,
-                    zorder=3,
-                )
-                if item.name:
-                    legend.setdefault(item.name, h)
-            elif isinstance(item, Label):
-                ax.text(
-                    item.x,
-                    item.y,
-                    item.text,
-                    color=item.color,
-                    fontsize=item.size - 1,
-                    ha="center",
-                    va="center",
-                    zorder=5,
-                )
-        if panel.xlim:
-            ax.set_xlim(*panel.xlim)
-        if panel.ylim:
-            ax.set_ylim(*panel.ylim)
-        if panel.equal:
-            ax.set_aspect("equal")
-        ax.set_title(panel.title, fontsize=9)
-        ax.set_xlabel(panel.xlabel, fontsize=8)
-        ax.set_ylabel(panel.ylabel, fontsize=8)
-        ax.tick_params(labelsize=7)
+        legend = _draw_items_svg(ax, panel.items)
+        _style_axes_svg(ax, panel)
         all_legend.update({k: v for k, v in legend.items() if k not in all_legend})
         if legend and not shared_legend:
             ax.legend(
@@ -435,7 +453,7 @@ def render_svg(
     save_svg(fig, Path(path).stem)
 
 
-def render_html(
+def render_html(  # noqa: PLR0913 -- the panels, the path and the four presentation options of one figure
     panels: list[Panel],
     path: Path,
     ncols: int = 1,
@@ -584,7 +602,7 @@ def render_html(
     FIGURES.joinpath("plotly.min.js").exists() or ensure_plotly_js()
 
 
-def write_both(
+def write_both(  # noqa: PLR0913 -- the panels, the stem and the presentation options of both renderings
     panels: list[Panel],
     stem: str,
     ncols: int = 1,
@@ -594,6 +612,7 @@ def write_both(
     buttons=None,
     shared_legend: bool = False,
 ) -> None:
+    """Write a scene as a static SVG and as a Plotly HTML with the same stem, and report both sizes."""
     render_svg(
         panels,
         FIGURES / f"{stem}.svg",

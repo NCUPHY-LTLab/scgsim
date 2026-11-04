@@ -21,7 +21,7 @@ scgsim-id: "docs/design/sgb/index"
 
 輸入是五個 prism。以下使用 Route B 的形式：金屬厚 0.2 µm，port sheet 位於 host 導體的 support plane，也就是 PDK 宣告的 film attachment face（金屬貼著 substrate 的 $z = 0$）。它躺在 substrate 與 vacuum 的介面上，佔去那裡的 SA 面積，所以這個範例沒有 embedded face，金屬 wall 也不會被 port 切開；規則見 [Routes](routes.qmd#port-support-plane)。
 
-本頁的圖與數字由 production `scgsim.geometry.sgb` 計算。五個 prism 取自測試用的 stage 層 scene `tests/sgb_scenes.py` 的 `pad_in_ground`（可以直接寫出圓弧的 prism 目錄），port 則依編譯器放置 port 的規則放在 $z = 0$（`docs/design/sgb/_figures/_intro_common.py` 的 `running_example`）。
+本頁的圖與數字由 production `scgsim.geometry.sgb` 計算。五個 prism 取自測試用的 stage 層 scene `tests/sgb_scenes.py` 的 `pad_in_ground`（可以直接寫出圓弧的 prism 目錄），port 則依編譯器放置 port 的規則放在 $z = 0$（`docs/design/sgb/_figures/intro_common.py` 的 `running_example`）。
 
 ![執行範例的輸入。左：從上方看的 footprint。右：沿虛線的剖面，以及由 prism 頂面與底面高度形成的 level（虛線）。](figures/index-example-input.svg){#fig-input fig-alt="左圖：300 × 300 微米晶片的俯視圖。灰色 ground plane 中有一個白色矩形 cutout，裡面是一個藍色 pad，pad 有倒角、下緣有缺口、左下角為圓角並有一個圓孔，另有一個紅色 port 矩形從 pad 連到 ground。右圖：y = 0 的 x-z 剖面，下方是 substrate slab，中間的 slab 有兩塊灰色 ground 與兩塊藍色 pad，substrate 與這個 slab 之間的 level（z = 0）上，pad 與 ground 之間有一片紅色 port sheet，上方是 vacuum，共有四條虛線 level。"}
 

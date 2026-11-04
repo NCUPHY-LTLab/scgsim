@@ -131,7 +131,7 @@ def face_loops(model, sidecar, face_id: str) -> list[list[dict]]:
     ]
 
 
-def build_trace(model, sidecar) -> dict:
+def _build_trace(model, sidecar) -> dict:
     topo = model.topology
     ids_by_tag = sidecar["binding"]["ids_by_tag"]
     native = {fid: 1 + i for i, fid in enumerate(ids_by_tag["2"])}
@@ -234,7 +234,7 @@ def rounded_corner_index(model) -> int:
     return next(i for i, p in enumerate(support.rings[0]) if isinstance(p, ArcCarrier))
 
 
-def figure_trace(model, trace) -> None:
+def _figure_trace(model, trace) -> None:
     layer = next(
         a for a in model.labelled.level_layers if a.plane == "level[1/5]"
     )  # the pad's top face, z = 0.2 um
@@ -450,7 +450,7 @@ def stability() -> dict:
     return out
 
 
-def tables(rows, stab) -> str:
+def _tables(rows, stab) -> str:
     out = [
         "## Determinism (identity-determinism.json)",
         "",
@@ -489,12 +489,13 @@ def tables(rows, stab) -> str:
 
 
 def main() -> None:
+    """Write the identity trace figure, the determinism and stability tables and their numbers."""
     kit.ensure_plotly_js()
     model = kit.pad_model("B", MARGINS)
     with tempfile.TemporaryDirectory(prefix="identity-") as scratch:
         sidecar = read_sidecar(emit_model(model, Path(scratch)).sidecar)
-    trace = build_trace(model, sidecar)
-    figure_trace(model, trace)
+    trace = _build_trace(model, sidecar)
+    _figure_trace(model, trace)
     trace["model_digest"] = model.identity_digest()
     trace["counts"] = {
         **model.topology.counts(),
@@ -506,7 +507,7 @@ def main() -> None:
     (kit.FIGURES / "identity-determinism.json").write_text(json.dumps(rows, indent=1))
     stab = stability()
     (kit.FIGURES / "identity-stability.json").write_text(json.dumps(stab, indent=1))
-    (kit.FIGURES / "identity-tables.md").write_text(tables(rows, stab))
+    (kit.FIGURES / "identity-tables.md").write_text(_tables(rows, stab))
     print("model digest of the example:", trace["model_digest"])
     print("wrote identity-*")
 

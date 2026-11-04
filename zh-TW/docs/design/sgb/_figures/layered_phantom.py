@@ -18,7 +18,7 @@ import math
 
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-from _intro_common import COLOURS, G_UM, mpl_path, save_plotly, save_svg, write_numbers
+from intro_common import COLOURS, G_UM, mpl_path, save_plotly, save_svg, write_numbers
 from matplotlib.patches import PathPatch
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement
 from scgsim.geometry.sgb.model import build_model_from_catalogue
@@ -29,7 +29,7 @@ from sgb_scenes import GRID, chip_prisms, conductor, rect_um
 GAP_NM = 3  # lateral distance of the two edges: 3 grid units = 3 nm
 
 
-def two_layer_catalogue() -> PrismCatalogue:
+def _two_layer_catalogue() -> PrismCatalogue:
     half = 80.0
     x_m2 = 40.0 + GAP_NM * GRID.size_um
     prisms = (
@@ -63,19 +63,19 @@ def face_widths(arr) -> list[tuple[int, float, float]]:
     return out
 
 
-def rings_of(arr, fi):
+def _rings_of(arr, fi):
     return [
         [(x * G_UM, y * G_UM) for x, y in arr.cycle_points(c)]
         for c in arr.face_cycles(fi)
     ]
 
 
-def draw_arr(ax, arr, highlight: set[int], view) -> None:
+def _draw_arr(ax, arr, highlight: set[int], view) -> None:
     for fi in range(1, len(arr.faces)):
         hot = fi in highlight
         ax.add_patch(
             PathPatch(
-                mpl_path(rings_of(arr, fi)),
+                mpl_path(_rings_of(arr, fi)),
                 facecolor=COLOURS["bad"] if hot else "#e9eef5",
                 edgecolor="#222",
                 lw=0.8 if not hot else 0.3,
@@ -87,12 +87,52 @@ def draw_arr(ax, arr, highlight: set[int], view) -> None:
 
 
 def main() -> None:
-    spec = two_layer_catalogue()
+    """Write the phantom-sliver figure and its numbers."""
+    spec = _two_layer_catalogue()
     result = build_model_from_catalogue(spec, "B").labelled
     arr, snapped = global_arrangement(spec)
     widths = face_widths(arr)
     narrowest = min(widths, key=lambda w: w[1])
     sliver = {fi for fi, w, _ in widths if w < 0.01}
+    local, levels, local_cells = _local_level_stats(result)
+    _phantom_svg(spec, result, arr, narrowest, sliver, levels, local_cells)
+    _phantom_html(arr, widths, sliver)
+    numbers = {
+        "setup": {
+            "edge_gap_nm": GAP_NM,
+            "grid_nm": 1,
+            "m1_um": "[-40, 40] x [-30, 30], z 0 to 0.2",
+            "m2_um": "[-20, 40.003] x [-10, 20], z 3 to 3.2",
+        },
+        "global": {
+            "cells": len(arr.faces) - 1,
+            "edges": len(arr.edges),
+            "hot_pixels": snapped.hot_pixels,
+            "narrowest_width_nm": round(narrowest[1] * 1000, 3),
+            "narrowest_area_um2": round(narrowest[2], 4),
+            "sliver_cells": len(sliver),
+            "sliver_length_um": 30.0,
+        },
+        "local": {
+            "levels": levels,
+            "cells_total": local_cells,
+            "per_level": local,
+            "narrowest_width_um": min(
+                level["narrowest_width_um"]
+                for level in local
+                if level["narrowest_width_um"] is not None
+            ),
+        },
+        "cells_if_every_level_used_the_global_arrangement": (len(arr.faces) - 1)
+        * levels,
+        "build_validated": True,  # build_model_from_catalogue raises on a failed invariant
+    }
+    write_numbers("layered-phantom", numbers)
+    print(json.dumps(numbers, indent=1))
+
+
+def _local_level_stats(result):
+    """The cells and the narrowest cell of each level's own arrangement."""
     local = []
     for layer in result.level_layers:
         lw = face_widths(layer.arr) if len(layer.arr.faces) > 1 else []
@@ -106,9 +146,13 @@ def main() -> None:
                 else None,
             }
         )
-    local_cells = sum(l["cells"] for l in local)
+    local_cells = sum(level["cells"] for level in local)
     levels = len(result.level_layers)
+    return local, levels, local_cells
 
+
+def _phantom_svg(spec, result, arr, narrowest, sliver, levels, local_cells):  # noqa: PLR0913 -- the source, both arrangements, the sliver and the cell counts of one figure
+    """The static figure: the source, the global projection with its sliver, the zoom and the cell counts."""
     fig = plt.figure(figsize=(13, 7.2))
     gs = fig.add_gridspec(2, 3, height_ratios=[1, 1])
     a = fig.add_subplot(gs[0, 0])
@@ -141,7 +185,7 @@ def main() -> None:
     a.set_ylabel("y (µm)")
 
     b = fig.add_subplot(gs[0, 1])
-    draw_arr(b, arr, sliver, ((-60, 80), (-45, 60)))
+    _draw_arr(b, arr, sliver, ((-60, 80), (-45, 60)))
     b.annotate(
         "sliver: too thin to see here",
         (40.0, 5),
@@ -154,7 +198,7 @@ def main() -> None:
     b.set_xlabel("x (µm)")
 
     c = fig.add_subplot(gs[0, 2])
-    draw_arr(c, arr, sliver, ((39.995, 40.008), (-12, 22)))
+    _draw_arr(c, arr, sliver, ((39.995, 40.008), (-12, 22)))
     c.set_aspect("auto")
     c.set_xticks([40.0, 40.003])
     c.set_xticklabels(["40.000", "40.003"])
@@ -170,7 +214,7 @@ def main() -> None:
     ):
         ax = fig.add_subplot(gs[1, col])
         layer = result.level_layers[k]
-        draw_arr(ax, layer.arr, set(), ((-60, 80), (-45, 60)))
+        _draw_arr(ax, layer.arr, set(), ((-60, 80), (-45, 60)))
         ax.set_title(f"{title}: {len(layer.arr.faces) - 1} cells")
         ax.set_xlabel("x (µm)")
     d = fig.add_subplot(gs[1, 2])
@@ -197,12 +241,15 @@ def main() -> None:
     fig.tight_layout()
     save_svg(fig, "layered-phantom")
 
+
+def _phantom_html(arr, widths, sliver):
+    """The interactive copy of the global projection and the local ones."""
     # interactive: the global arrangement with a zoom button
     fi_ = go.Figure()
     shapes = []
     hover_x, hover_y, hover_t = [], [], []
     for fi in range(1, len(arr.faces)):
-        rings = rings_of(arr, fi)
+        rings = _rings_of(arr, fi)
         path = " ".join(
             "M " + " L ".join(f"{x:.4f},{y:.4f}" for x, y in r) + " Z" for r in rings
         )
@@ -271,39 +318,6 @@ def main() -> None:
         ],
     )
     save_plotly(fi_, "layered-phantom")
-
-    numbers = {
-        "setup": {
-            "edge_gap_nm": GAP_NM,
-            "grid_nm": 1,
-            "m1_um": "[-40, 40] x [-30, 30], z 0 to 0.2",
-            "m2_um": "[-20, 40.003] x [-10, 20], z 3 to 3.2",
-        },
-        "global": {
-            "cells": len(arr.faces) - 1,
-            "edges": len(arr.edges),
-            "hot_pixels": snapped.hot_pixels,
-            "narrowest_width_nm": round(narrowest[1] * 1000, 3),
-            "narrowest_area_um2": round(narrowest[2], 4),
-            "sliver_cells": len(sliver),
-            "sliver_length_um": 30.0,
-        },
-        "local": {
-            "levels": levels,
-            "cells_total": local_cells,
-            "per_level": local,
-            "narrowest_width_um": min(
-                l["narrowest_width_um"]
-                for l in local
-                if l["narrowest_width_um"] is not None
-            ),
-        },
-        "cells_if_every_level_used_the_global_arrangement": (len(arr.faces) - 1)
-        * levels,
-        "build_validated": True,  # build_model_from_catalogue raises on a failed invariant
-    }
-    write_numbers("layered-phantom", numbers)
-    print(json.dumps(numbers, indent=1))
 
 
 if __name__ == "__main__":
