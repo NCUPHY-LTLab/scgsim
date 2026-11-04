@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import shutil
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -24,12 +25,13 @@ from OCP.TopAbs import TopAbs_SOLID  # noqa: E402
 from OCP.TopExp import TopExp  # noqa: E402
 from OCP.TopTools import TopTools_IndexedMapOfShape  # noqa: E402
 from sgb_emit_cases import CASES  # noqa: E402
-from sgb_scenes import random_layout  # noqa: E402
+from sgb_scenes import random_layout, slab_model  # noqa: E402
 
 from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: E402
 from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file  # noqa: E402
 from scgsim.geometry.sgb.exchange.step import StepExportError, export_aedt_step  # noqa: E402
 from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
+from scgsim.geometry.sgb.records.grid import Grid  # noqa: E402
 from scgsim.geometry.sgb.sidecar.build import SidecarContext, build_sidecar  # noqa: E402
 from scgsim.geometry.sgb.slivers.report import sliver_report  # noqa: E402
 from scgsim.geometry.sgb.verification import ocp  # noqa: E402
@@ -38,6 +40,8 @@ from scgsim.geometry.sgb.verification.occt import (
     check_file,
     check_shape,
     read_brep,
+    read_shape,
+    sidecar_mismatches,
 )  # noqa: E402
 
 pytestmark = pytest.mark.occt
@@ -373,18 +377,78 @@ def test_the_guard_lists_every_face_of_each_solid_in_occ_order_with_area_and_cen
     )
 
 
-def test_a_sidecar_that_does_not_match_the_file_is_refused(exported, tmp_path):
-    """A sidecar that does not match the file is refused."""
+def written(model, folder):
+    """BREP and sidecar of a model, written into ``folder``."""
+    plan = plan_brep(model.topology, model.routed)
+    write_brep_file(plan, folder / "m.brep")
+    sidecar = build_sidecar(
+        model, plan, SidecarContext(sliver_report(model)["summary"])
+    )
+    return folder / "m.brep", sidecar
+
+
+def same_lattice_models(grid_sizes_um):
+    """One lattice at several physical grid sizes: the same ids and counts, different lengths."""
+    catalogue = slab_model("B", [("pad", "P", (-4, -4, 4, 4))], half=10)
+    return [
+        build_model_from_catalogue(replace(catalogue, grid=Grid(size)), "B")
+        for size in grid_sizes_um
+    ]
+
+
+def test_a_brep_of_the_same_topology_at_another_scale_is_refused(tmp_path):
+    """Same counts, different size: the sidecar's expected positions, areas and volumes name the mismatch."""
+    fine, coarse = same_lattice_models((0.001, 0.002))
+    (tmp_path / "fine").mkdir()
+    (tmp_path / "coarse").mkdir()
+    brep, sidecar = written(fine, tmp_path / "fine")
+    _, other_sidecar = written(coarse, tmp_path / "coarse")
+    assert sidecar["binding"]["ids_by_tag"] == other_sidecar["binding"]["ids_by_tag"]
+    assert export_aedt_step(brep, sidecar, tmp_path / "ok.step").path.is_file()
+    with pytest.raises(
+        StepExportError, match="does not belong to the sidecar"
+    ) as refused:
+        export_aedt_step(brep, other_sidecar, tmp_path / "x.step")
+    for what in (
+        "vertices not where",
+        "face areas differing",
+        "solid volumes differing",
+    ):
+        assert what in str(refused.value)
+    assert not (tmp_path / "x.step").exists()
+
+
+def test_a_brep_with_other_counts_than_the_sidecar_is_refused(
+    exported, models, tmp_path
+):
+    """A sidecar of another model (other entity counts) is refused, naming what differs."""
     _, _, sidecar, folder, _ = exported
-    wrong = {
-        **sidecar,
-        "binding": {
-            **sidecar["binding"],
-            "ids_by_tag": {**sidecar["binding"]["ids_by_tag"], "3": ["only-one"]},
-        },
-    }
-    with pytest.raises(StepExportError, match="solids"):
-        export_aedt_step(folder / "m.brep", wrong, tmp_path / "x.step")
+    plan = plan_brep(models["pad_c"].topology, models["pad_c"].routed)
+    other = build_sidecar(
+        models["pad_c"], plan, SidecarContext(sliver_report(models["pad_c"])["summary"])
+    )
+    with pytest.raises(
+        StepExportError,
+        match=r"does not belong to the sidecar.*(faces|solids): the shape has",
+    ):
+        export_aedt_step(folder / "m.brep", other, tmp_path / "x.step")
+    assert not (tmp_path / "x.step").exists()
+    assert sidecar["binding"]["ids_by_tag"][
+        "3"
+    ]  # the matching pair is what ``exported`` already exports
+
+
+@pytest.mark.parametrize("name", sorted(CASES))
+def test_every_case_belongs_to_its_own_sidecar_within_the_load_check_tolerances(
+    tmp_path, models, name
+):
+    """The BREP and the XAO of every named case match the expected block: the tolerances are loose enough for arcs and cylinders."""
+    model = models[name]
+    brep, sidecar = written(model, tmp_path)
+    plan = plan_brep(model.topology, model.routed)
+    write_xao_file(plan, tmp_path / "m.xao", brep=brep)
+    for path in (brep, tmp_path / "m.xao"):
+        assert sidecar_mismatches(read_shape(path), sidecar) == []
 
 
 def test_the_export_works_from_an_xao_too(exported, tmp_path):

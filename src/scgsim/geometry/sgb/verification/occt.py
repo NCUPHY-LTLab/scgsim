@@ -28,12 +28,13 @@ from __future__ import annotations
 import tempfile
 import time
 import xml.etree.ElementTree as ET
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from OCP.BOPAlgo import BOPAlgo_ArgumentAnalyzer
-from OCP.BRep import BRep_Builder
+from OCP.BRep import BRep_Builder, BRep_Tool
 from OCP.BRepCheck import BRepCheck_Analyzer
 from OCP.BRepGProp import BRepGProp
 from OCP.BRepTools import BRepTools
@@ -59,6 +60,11 @@ from scgsim.geometry.sgb.emission.measures import (
 from scgsim.geometry.sgb.emission.plan import BrepPlan
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.verification.ocp import require_ocp
+from scgsim.geometry.sgb.verification.tolerances import (
+    RELATIVE_TOLERANCE,
+    VERTEX_TOLERANCE_UM,
+    relative_error,
+)
 
 ARGUMENT_MODES = (
     "ArgumentTypeMode", "SelfInterMode", "SmallEdgeMode", "RebuildFaceMode", "TangentMode",
@@ -443,6 +449,98 @@ def plan_properties(
         "worst_face": worst_id,
     }
     return out
+
+
+def sidecar_mismatches(
+    shape: Any, sidecar: Mapping[str, Any], *, limit: int = 3
+) -> list[str]:
+    """Where a loaded shape differs from the sidecar's ``expected`` block, by tag order; empty when it belongs to it.
+
+    The OCP twin of :func:`~scgsim.geometry.sgb.verification.loaded.verify_loaded`'s counts, vertex
+    placement, face-area and solid-volume checks, with the same tolerances
+    (:mod:`~scgsim.geometry.sgb.verification.tolerances`) and the same tag order (``TopExp::MapShapes``).
+    Counts come first: when they differ the tag order means nothing, so only those are reported.  Each
+    other quantity lists at most ``limit`` of its mismatches, named by planned id.
+    """
+    require_ocp()
+    ids, expected = sidecar["binding"]["ids_by_tag"], sidecar["expected"]
+    kinds = (
+        ("0", TopAbs_VERTEX),
+        ("1", TopAbs_EDGE),
+        ("2", TopAbs_FACE),
+        ("3", TopAbs_SOLID),
+    )
+    found = {dim: _unique(shape, kind) for dim, kind in kinds}
+    wrong_counts = [
+        f"{what}: the shape has {found[dim].Extent()}, the sidecar plans {len(ids[dim])}"
+        for (dim, _), what in zip(
+            kinds, ("vertices", "edges", "faces", "solids"), strict=True
+        )
+        if found[dim].Extent() != len(ids[dim])
+    ]
+    if wrong_counts:
+        return wrong_counts
+    return [
+        *_vertex_mismatches(found["0"], ids["0"], expected["vertices_um"], limit),
+        *_measure_mismatches(
+            found["2"], ids["2"], expected["face_area_um2"], "face", "area", limit
+        ),
+        *_measure_mismatches(
+            found["3"], ids["3"], expected["solid_volume_um3"], "solid", "volume", limit
+        ),
+    ]
+
+
+def _vertex_mismatches(
+    vertices: Any, planned_ids: list[str], positions: list[list[float]], limit: int
+) -> list[str]:
+    out: list[str] = []
+    for tag, (planned_id, want) in enumerate(
+        zip(planned_ids, positions, strict=True), start=1
+    ):
+        point = BRep_Tool.Pnt_s(TopoDS.Vertex_s(vertices.FindKey(tag)))
+        got = [point.X(), point.Y(), point.Z()]
+        if (
+            max(abs(g - w) for g, w in zip(got, want, strict=True))
+            > VERTEX_TOLERANCE_UM
+        ):
+            out.append(f"vertex {planned_id}: at {_um(got)} um, planned {_um(want)} um")
+    return _first(out, limit, "vertices not where the plan puts them")
+
+
+def _measure_mismatches(  # noqa: PLR0913 - a shape map, its planned ids and values, and how to name them
+    shapes: Any,
+    planned_ids: list[str],
+    planned: list[float],
+    what: str,
+    measure: str,
+    limit: int,
+) -> list[str]:
+    props, out = GProp_GProps(), []
+    for tag, (planned_id, want) in enumerate(
+        zip(planned_ids, planned, strict=True), start=1
+    ):
+        shape = shapes.FindKey(tag)
+        if measure == "volume":
+            BRepGProp.VolumeProperties_s(shape, props)
+        else:
+            BRepGProp.SurfaceProperties_s(shape, props)
+        if props.Mass() <= 0 or relative_error(props.Mass(), want) > RELATIVE_TOLERANCE:
+            out.append(
+                f"{what} {planned_id}: {measure} {props.Mass():.9g}, planned {want:.9g}"
+            )
+    return _first(out, limit, f"{what} {measure}s differing from the plan")
+
+
+def _first(rows: list[str], limit: int, what: str) -> list[str]:
+    """The first ``limit`` rows of one kind of mismatch, with how many there are."""
+    if not rows:
+        return []
+    return [f"{len(rows)} {what}: " + "; ".join(rows[:limit])]
+
+
+def _um(values: list[float]) -> str:
+    return "(" + ", ".join(f"{v:.9g}" for v in values) + ")"
 
 
 # --------------------------------------------------------------------------- entry points

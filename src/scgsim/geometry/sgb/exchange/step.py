@@ -50,7 +50,7 @@ from OCP.XCAFApp import XCAFApp_Application
 from OCP.XCAFDoc import XCAFDoc_DocumentTool
 
 from scgsim.geometry.sgb.errors import SgbError
-from scgsim.geometry.sgb.verification.occt import read_shape
+from scgsim.geometry.sgb.verification.occt import read_shape, sidecar_mismatches
 from scgsim.geometry.sgb.verification.ocp import require_ocp
 
 LENGTH_UNIT = (
@@ -94,16 +94,19 @@ def export_aedt_step(
     """Write the solids of ``geometry_file`` (BREP or XAO) as a named STEP assembly in micrometres.
 
     Solids are matched to the sidecar by tag order (the ``TopExp::MapShapes`` order of the file), so each
-    gets the ``aedt_name`` of its planned volume.
+    gets the ``aedt_name`` of its planned volume.  A file that does not belong to the sidecar (counts,
+    vertex positions, face areas or solid volumes differ from its ``expected`` block) raises
+    :class:`StepExportError` before any name or guard is produced.
     """
     require_ocp()
     shape = read_shape(geometry_file)
+    mismatches = sidecar_mismatches(shape, sidecar)
+    if mismatches:
+        raise StepExportError(
+            f"{geometry_file} does not belong to the sidecar: " + "; ".join(mismatches)
+        )
     solids = _indexed(shape, TopAbs_SOLID)
     solid_ids = sidecar["binding"]["ids_by_tag"]["3"]
-    if solids.Extent() != len(solid_ids):
-        raise StepExportError(
-            f"{geometry_file}: {solids.Extent()} solids, the sidecar lists {len(solid_ids)}"
-        )
     names = [sidecar["volumes"][vid]["aedt_name"] for vid in solid_ids]
     all_faces = _indexed(shape, TopAbs_FACE)
     face_ids = sidecar["binding"]["ids_by_tag"]["2"]

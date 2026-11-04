@@ -28,9 +28,12 @@ import gmsh
 
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.stopwatch import elapsed_seconds
+from scgsim.geometry.sgb.verification.tolerances import (
+    RELATIVE_TOLERANCE,
+    VERTEX_TOLERANCE_UM,
+    relative_error,
+)
 
-VERTEX_TOLERANCE_UM = 1e-9
-RELATIVE_TOLERANCE = 1e-9
 DIMENSIONS = ("0", "1", "2", "3")
 
 
@@ -227,7 +230,7 @@ def _worst_relative_error(
     for tag, want in enumerate(planned, start=1):
         mass = gmsh.model.occ.getMass(dim, tag)
         negative += mass <= 0
-        worst = max(worst, abs(mass - want) / max(abs(want), 1e-30))
+        worst = max(worst, relative_error(mass, want))
     if negative:
         report.problems.append(
             f"{negative} {what}(s) with non-positive measure (shell orientation)"
