@@ -60,7 +60,7 @@ Overlap 的優先權不在這個函式的引數裡：同一個 Net 的兩個 Ent
 | Request | 欄位 | 結果 |
 |---|---|---|
 | `InsetRequest(request_id, support, margins_um, interface=None)` | `margins_um` 是嚴格遞增的正數（單位 µm，在格點上）；`interface` 選填，聲明該 face 預期的 interface 種類，找不到該種類的 cell 則 build 失敗 | $K+1$ 個 band $B_0 \dots B_K$，各成為 `…::<face kind>::band=k` 的 primary group |
-| `ConductorSurface(entity_id, side)` | `side` 為 `"sheet"`（Route A 的 sheet，一個 face 同時是 MA 與 MS）、`"top"`（對 vacuum，`MA::…`）或 `"bottom"`（對 dielectric，`MS::…`） | 有限導體的側壁 band 不在第一版 |
+| `ConductorSurface(entity_id, side)` | `side` 為 `"sheet"`（Route A 的 sheet；face 的哪一側是 vacuum、哪一側是 dielectric，決定它有 MA、MS 或兩個 row）、`"top"`（對 vacuum，`MA::…`）或 `"bottom"`（對 dielectric，`MS::…`） | 有限導體的側壁 band 不在第一版 |
 | `SolutionInterface(first_entity_id, second_entity_id, z_um=None)` | 兩個 solution region 之間、沒有導體的介面（gap：`SA::…`）；兩者在多個高度相遇時用 `z_um` 指定 | |
 | `RefinementRequest(request_id, z_um, points_um)` | 高度 `z_um` 的折線，mesher 把它嵌進含有它的 face | 只供 mesh 尺寸；落在任何已 emit 的 face 之外則是錯誤，不會悄悄丟掉 |
 :::
@@ -135,7 +135,7 @@ sidecar 是一個 JSON 檔：頂層的鍵依字母排序、每個頂層鍵佔一
 | `binding.ids_by_tag`、`counts` | 規劃 id 與 native tag 的對應（維度 `"0"` 到 `"3"`）；各種數量，含 `volumes_total`（包含未 emit 的 volume） | Palace：取代 live group 的 entity tag；AEDT：各 solid 的 face 順序 |
 | `physical_groups` | 每個 primary group（名稱為鍵）：`dim`、`tag`、`ids`、`native_tags`；surface 另有 `interface_type`、`entities`、`net`、`face_kind`（單一值）、`adjacent_domains`、`adjacent_volumes`、`band`、`area_um2`；volume 另有 `kind`（`vacuum`、`dielectric`、`conductor`）、`material` | 兩者；最重要的欄位 |
 | `unions` | `interface_types`（`MA` → group 清單…；Route A 的 `SHEET` group 同時列在 `SHEET`、`MA` 與 `MS`）與 `nets`（Net → 該 Net 外露導體表面的 group 清單） | 報告；Electrostatic 的 terminal 與 ground |
-| `surface_epr_rows` | 每個 Surface-EPR row（例如 `MA::pad::top::band=2`）與承載它的 group、entity、band，以及 `side`（`above`、`below`、`both` 或 `null`）與 `shared_face_group`（雙面 sheet 的 group，否則 `null`） | Palace 的 band 選取；internal boundary 的 crack 決定 |
+| `surface_epr_rows` | 每個 Surface-EPR row（例如 `MA::pad::top::band=2`）與承載它的 group、entity、band，以及 `side`、`face_sides` 與 `shared_face_group`（sheet 的 row 才有值，其他 row 為 `null`；`face_sides` 是 face id 對 `above`、`below` 或 `both` 的對照，只列出該 row 實際積分的 face，`side` 是它們共同的值，不一致時為 `mixed`） | Palace 的 band 選取；internal boundary 的 crack 決定 |
 | `mesh_hints` | `band_boundary`、`refinement_curve`、`curved_edge` 三種提示：edge id 與 native tag，以及來源的 request id；沒有尺寸 | Palace 的 mesh 尺寸 |
 | `volumes`、`faces` | 每個規劃的 volume：entity、kind、material、Net、是否 `emitted`、group、`volume_um3`、`aedt_name`；每個規劃的 face：group、`kind`、`face_kind`、`z_um`、兩側的 volume | AEDT 的 ledger；Palace 的相鄰關係 |
 | `embedded_faces`、`refinement_edges` | `(face, host volume)` 與 `(edge, host face)`：XAO 無法攜帶、mesher 必須重新套用的 embedding | Palace |
@@ -183,7 +183,7 @@ Route B 的 port 位於 support plane $z = 0$，是 substrate 與 vacuum 之間�
 - 這個 `faces` 例子是 ground 的 sidewall：`lineage.faces` 指出它來自 `ground_0000` 與 `substrate` 兩個 Entity，`membership` 是各 Entity 覆蓋的比例（wall 取底邊長度的比例）。
 - `volumes[*].aedt_name` 是已淨化、檢查過不衝突的 AEDT 名稱（volume group 的名稱本身就是 entity id，所以 `substrate` 仍是 `substrate`、`chip/air` 變成 `chip_air`；衝突時依 tag 順序加 `__2`、`__3`）。
 
-Route A 與 Route C 各有一處不同，其餘欄位相同。Route A 的導體是 sheet，名稱為 `<entity>[::band=k]`（裸的 entity id；`interface_type` 欄位仍是 `SHEET`，它是欄位值，不是名稱的一部分），一個 sheet group 同時承載該 Entity 的 MA 與 MS 兩個 row，所以它同時列在 `unions.interface_types` 的 `SHEET`、`MA` 與 `MS`。兩個 row 的 `shared_face_group` 都是這個 sheet group，`side` 說明各自積分 sheet 的哪一側（MA 看 sheet 上方的 vacuum，MS 看下方的 dielectric）。Route B／C 與單面的 row（例如 SA）這兩個欄位都是 `null`：
+Route A 與 Route C 各有一處不同，其餘欄位相同。Route A 的導體是 sheet，名稱為 `<entity>[::band=k]`（裸的 entity id；`interface_type` 欄位仍是 `SHEET`，它是欄位值，不是名稱的一部分），一個 sheet group 承載該 Entity 的 MA row（group 中有 face 的某一側是 vacuum 時才有）與 MS row（有 face 的某一側是 dielectric 時才有），沒有這種 face 的 row 不存在；它列在 `unions.interface_types` 的 `SHEET`，以及它實際承載 row 的 `MA` 與 `MS`。sheet 的每個 row 都有 `shared_face_group`（這個 sheet group）與 `face_sides`（face id 對 `above`、`below` 或 `both`，只列出該 row 實際積分的 face）；`side` 是 `face_sides` 共同的值，各 face 不一致時為 `mixed`。MA 看 face 的 vacuum 鄰居，MS 看 dielectric 鄰居，所以 consumer 可由 row 本身決定如何處理內部的雙面 face。Route B／C 與其他 row（例如 SA）這三個欄位都是 `null`：
 
 {{< include figures/consumer-excerpt-routea.md >}}
 

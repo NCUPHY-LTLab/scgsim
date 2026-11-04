@@ -197,7 +197,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 
 以下事項已由 Lead 在 brief 中定案，不再開放。標明「production」者已在階段 1 實作並有測試。
 
-- **Group 名稱帶 face kind（階段 1e）**：primary surface group 為 `<kind>::<entity>::<face kind>[::band=k]`，face kind 是 `top`、`bottom`、`sidewall`、`sheet`、`interface`。Route A 的 band sheet 為 `<entity>::band=k`，並列在 MA 與 MS 的 union 中；`surface_epr_rows` 把 MA 與 MS 兩個 row 都對到它，並以 `side` 標明兩側 face 的哪一側；Route B 在 top face 產生 `MA::<entity>::top::band=k`、在 bottom face 產生 `MS::<entity>::bottom::band=k`（production）。sidecar 另有 `mesh_hints`（band 邊界、refinement curve、曲線 edge；沒有尺寸）。
+- **Group 名稱帶 face kind（階段 1e）**：primary surface group 為 `<kind>::<entity>::<face kind>[::band=k]`，face kind 是 `top`、`bottom`、`sidewall`、`sheet`、`interface`。Route A 的 band sheet 為 `<entity>::band=k`，並列在 MA 與 MS 的 union 中；`surface_epr_rows` 在有 face 的某一側是 vacuum 時才給 MA row、是 dielectric 時才給 MS row，都對到它，並以 `face_sides` 逐 face 標明積分的一側、`side` 為共同值或 `mixed`；Route B 在 top face 產生 `MA::<entity>::top::band=k`、在 bottom face 產生 `MS::<entity>::bottom::band=k`（production）。sidecar 另有 `mesh_hints`（band 邊界、refinement curve、曲線 edge；沒有尺寸）。
 - **直線 inset member 的 lineage**：保留產生它的 primitive（`<support>/ring<r>/edge<k>`），與 arc member 相同。
 - **Area-weighted membership**：記錄於 lineage，各份額不互斥（production）。
 - **Band 面積單調性**：`band_area_monotone` 是 validation invariant（production）。

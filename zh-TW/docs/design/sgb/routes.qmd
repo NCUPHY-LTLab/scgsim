@@ -95,7 +95,7 @@ solver 常想要的是 *union*，例如「Net `pad` 的所有導體表面」或�
 }
 ```
 
-Route A 的 sheet group（以 `<entity>` 命名）同時承載 MA 與 MS 兩個 Surface EPR row，所以它也列在 `interface_types` 的 `MA` 與 `MS` 之下，Net 的聯集則是 `"P": ["pad"]`。同一份 solver 設定兩者都能讀：union 永遠是 primary group 名稱的清單，驗證器檢查每個成員都存在（`unions_reference_primary_groups`），也檢查沒有任何 entity 位於兩個 group（`groups_partition_each_dimension`）。physical tag 不是 identity：tag 依 group 名稱排序，新增 group 時會位移，所以使用者應儲存 group 名稱。
+Route A 的 sheet group（以 `<entity>` 命名）承載它所具有的 MA 與 MS Surface EPR row（有 face 的某一側是 vacuum 才有 MA，是 dielectric 才有 MS），所以它也列在 `interface_types` 中對應的 `MA` 與 `MS` 之下，Net 的聯集則是 `"P": ["pad"]`。同一份 solver 設定兩者都能讀：union 永遠是 primary group 名稱的清單，驗證器檢查每個成員都存在（`unions_reference_primary_groups`），也檢查沒有任何 entity 位於兩個 group（`groups_partition_each_dimension`）。physical tag 不是 identity：tag 依 group 名稱排序，新增 group 時會位移，所以使用者應儲存 group 名稱。
 
 ::: {.callout-important title="保證：一個 face，一個 group（依據：測試）"}
 沒有任何輸出的 face 或 volume 位於兩個 physical group，也沒有任何一個不在任何 group 中。union 只是 sidecar 與 solver 設定中的簿記。
@@ -154,7 +154,7 @@ D1 已決定 **Route C 屬於 v1**，production 已實作。導體 volume 保留
 
 ## 邊界情形
 
-- **Route A with Surface EPR band。** sheet face 同時是 metal-vacuum 與 metal-substrate 表面。有 inset band 時，它以 face 命名：`<entity>::band=k`（例如 `pad::band=2`）；sidecar 的 `surface_epr_rows` 把 Surface EPR 表中的 MA 與 MS 兩列都對應到同一個 group，並以 `side` 欄標明各自對應 sheet 的哪一側（MA 為 `above`、MS 為 `below`），兩列的 `shared_face_group` 都指向這個 sheet group（[Inset imprint](inset-imprint.qmd)）。
+- **Route A with Surface EPR band。** sheet face 同時是 metal-vacuum 與 metal-substrate 表面。有 inset band 時，它以 face 命名：`<entity>::band=k`（例如 `pad::band=2`）；sidecar 的 `surface_epr_rows` 在 group 中有 face 的某一側是 vacuum 時才有 MA 列、有某一側是 dielectric 時才有 MS 列；存在的列都對應到同一個 group，`shared_face_group` 指向這個 sheet group，`face_sides` 逐 face 列出積分的是哪一側，`side` 是它們共同的值（例如 MA 為 `above`、MS 為 `below`），不一致時為 `mixed`（[Inset imprint](inset-imprint.qmd)）。
 - **Route B 的 band。** 同一個 band family 對金屬的頂面（`MA::pad::top::band=k`）與底面（`MS::pad::bottom::band=k`）各產生一次；側壁不切 band。band 版本的執行範例（真實輸入，Route B；pad 的頂面與底面、substrate 與 vacuum 之間的 gap 各取 margin 0.1、0.5、2 µm）規劃 46 個 face、163 條 edge、142 個 vertex，24 個 group（`figures/routes-numbers.json` 的 `route_B_bands`）。
 - **不同 Net 的導體接觸**在每種 route 中都是錯誤，包括共用 edge 或 vertex 的兩個 Route A sheet，以及因 snap 而產生的接觸；`ContactError` 指出兩個 Entity 與位置（見 [label 頁](labels-and-dissolution.qmd)）。
 

@@ -132,7 +132,7 @@ XAO 無法攜帶 mesher 與 solver 設定所需的全部資訊，所以 writer �
 |---|---|
 | `binding`（`ids_by_tag`） | 每個維度的 planned id，依 native tag 順序排列：`tag = 1 + 位置` |
 | `physical_groups` | 每個 primary group：維度、physical `tag`、planned id、`native_tags`，以及 `interface_type`、`face_kind`、`entities`、`net`、`band`、面積與兩側的 volume |
-| `unions`、`surface_epr_rows` | `interface_types` 與 `nets` 兩組 primary group 名稱的清單；每個 Surface EPR row 讀取的 group（含 `side` 與 `shared_face_group`） |
+| `unions`、`surface_epr_rows` | `interface_types` 與 `nets` 兩組 primary group 名稱的清單；每個 Surface EPR row 讀取的 group（含 `side`、`face_sides` 與 `shared_face_group`） |
 | `embedded_faces`、`ports` | mesher 必須重新 embed 的 (face, host volume) 配對；lumped port 的來源識別、host 與 face |
 | `refinement_edges`、`mesh_hints` | (edge, host face) 配對，附 `written_as_free_edge`；`mesh_hints` 列出 band 邊界、refinement curve 與曲線 edge，沒有尺寸 |
 | `lineage` | edge 對應到 source carrier id、carrier 的描述、face 對應到 source entity id，以及依面積加權的 `membership` |

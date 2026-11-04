@@ -121,7 +121,7 @@ Face 的 `sources` 是其 boundary edge 的 base carrier ID 的集合，例如 `
 - `binding`（含 `ids_by_tag`）、`counts`、`tolerance_um`、`grid_um`、`route`、`route_policy`；
 - `physical_groups`：名稱、dimension、成員 ID、native tag、physical `tag`，以及 `interface_type`、`face_kind`、`entities`、`net`、`band`、面積與兩側的 volume；
 - `unions`：*group 名稱*的清單，絕不是重疊的 Gmsh group，分成 `interface_types`（`MA`、`MS`、`SA`……）與 `nets`。「Net `pad` 的所有導體表面」是 `unions.nets.pad`，例如 `[MA::pad::sidewall, MA::pad::top::band=0..3, MS::pad::bottom::band=0..3]`。每個輸出的 face 與 volume 恰好在一個 primary group 內，因為 Gmsh 的 MSH 輸出會依 group 重複 element，solver 可能誤讀；
-- `surface_epr_rows`：Surface EPR 的 row 對到承載它的 primary group，並以 `side` 與 `shared_face_group` 標明 Route A 的 sheet 讓 MA 與 MS 兩個 row 指向同一個 sheet group（以 entity id 命名，例如 `pad::band=2`）的哪一側；
+- `surface_epr_rows`：Surface EPR 的 row 對到承載它的 primary group，Route A 的 sheet group（以 entity id 命名，例如 `pad::band=2`）只在其中有 face 的某一側是 vacuum 時承載 MA row、有某一側是 dielectric 時承載 MS row；sheet 的 row 以 `shared_face_group` 指向該 group，`face_sides` 逐 face 列出積分的是哪一側（`above`、`below` 或 `both`，只列實際積分的 face），`side` 是共同的值或 `mixed`；
 - `embedded_faces`、`refinement_edges` 與 `ports`：不圍成 volume 的 face（volume 內部的 sheet，例如懸在 vacuum 中的 sheet；位於 support plane 的 port，包括範例的 port，是一般的 face，不在其中）與嵌入的 mesh-size 曲線，各帶 host volume 或 host face。BREP 與 XAO 都無法攜帶 mesh embedding，所以 mesher 會重新套用這些 `(face, host volume)` 與 `(edge, host face)` 配對；
 - `lineage`：`edges`（edge → carrier）、`carriers`、`faces`（face → entity）、`membership`、`vertical_edges`；
 - `insets`、`refinements`、`mesh_hints`、`slivers`、`arrangement`、`curved_wall_faces`、`surface_kinds`，以及 `expected`（`verify_loaded` 比對的預期值）。

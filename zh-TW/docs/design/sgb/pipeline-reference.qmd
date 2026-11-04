@@ -235,7 +235,7 @@ primary group 命名為 `<kind>::<qualified entity id>::<face kind>[::band=k]`�
 | `MS::<entity>::bottom`、`::top`、`::sidewall` | 導體 Entity 對 dielectric 的 face |
 | `MM::<a>\|<b>::interface` | 兩個導體 Entity 之間的 face |
 | <code>SA::&lt;a&gt;&#124;&lt;b&gt;::interface</code> | substrate–vacuum（或其他 dielectric 配對）face；<code>AA</code>、<code>SS</code> 是 vacuum–vacuum 與 dielectric–dielectric |
-| `<entity>[::band=k]`（導體，Route A） | Route A 的導體 sheet，名稱是裸的 entity id（Gmsh 的 Type 欄位標示它是 surface）；`surface_epr_rows` 把 MA 與 MS 兩個 row 都對到這個 group，並出現在 MA 與 MS 的 union 中 |
+| `<entity>[::band=k]`（導體，Route A） | Route A 的導體 sheet，名稱是裸的 entity id（Gmsh 的 Type 欄位標示它是 surface）；`surface_epr_rows` 在某個 face 的某一側是 vacuum 時給 MA row、是 dielectric 時給 MS row，都對到這個 group，並出現在對應的 MA 或 MS union 中 |
 | `PORT::<port sheet id>` | lumped port footprint（一個 sheet，不帶 face kind），是一個 face、一個 group：band 的 seam 在它的邊界停下 |
 | `EXT::<domain>::<face kind>` | 某 domain 的模型外邊界（Route C 的導體碰到邊界時也有 `EXT::<entity>::sidewall`） |
 | `<entity>`（volume） | 輸出的 volume，名稱是裸的 entity id（Route C 的導體內部也是）；Gmsh 的 Type 欄位標示它是 volume |

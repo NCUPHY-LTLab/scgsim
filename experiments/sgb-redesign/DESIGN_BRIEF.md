@@ -206,8 +206,12 @@ is an error.
   - Bands are generated per support face: Route A sheet (one face carrying
     both the metal–vacuum and metal–substrate rows), Route B top face (MA)
     **and bottom face (MS)** separately; sidewall bands are out of v1 scope.
-  - Route A sheet faces are named by the face (`SHEET::<net>::band=k`); the
-    MA and MS Surface-EPR rows both reference that one group.
+  - Route A sheet faces are named by the face (`SHEET::<net>::band=k`). A
+    sheet's MA row exists only when some face of it has vacuum on a side, and
+    its MS row only when some face has a dielectric on a side; each row
+    references that one group and lists `face_sides` (face id -> above/below/
+    both) for exactly the contributing faces, with `side` their common value
+    or `mixed`.
   - Curved walls: `addBSplineFilling` through four shared edges reproduces
     the cylinder exactly (deviation 1e-11 g); walls with more boundary edges
     need direct BREP writing (D8) or wall splitting. `addSurfaceFilling`
@@ -401,7 +405,8 @@ Resolving writer questions; these override earlier wording where they differ.
   two non-incident boundary edges of a face, measured on the exact carriers
   (arcs included), not 2A/P on the chord polygon.
 - **Route A sheet band groups** are named `SHEET::<net>::band=k`; the MA and
-  MS Surface-EPR rows both reference that group. Route B generates bands on
+  MS Surface-EPR rows (each existing only when some face has vacuum, resp. a
+  dielectric, on a side) reference that group. Route B generates bands on
   the top face (`MA::<net>::band=k`) and bottom face (`MS::<net>::band=k`).
 - **Edge id** = H(plane key, sorted endpoint vertex ids, sorted carrier-id
   set) — the prototype's formula is the design.
