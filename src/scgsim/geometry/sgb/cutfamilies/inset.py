@@ -15,8 +15,12 @@ Construction (no polygonised disk):
 * these *candidate* curves are noded together by snap rounding, and an edge is kept iff its midpoint is at
   distance ``>= m`` from the region boundary (the ``dist >= m`` cells of the design brief); dangling stubs go.
 
-Distance origin: only the support region's own boundary primitives.  Ports, contact caps, other bands and
-tile seams are never origins -- they are not inputs of this module.  Topology changes (a neck that splits, a
+Distance origins: only the region's gap edges (``SupportRegion.origins``; see ``cutfamilies.requests``).  The
+offset is built from those primitives alone: a line or arc per origin, a bridging arc at every reflex vertex
+between two consecutive origins, and a half circle round each end of a run of origins.  The rest of the
+boundary (the die edge, an edge shared with another conductor) only clips the candidates where they cross it,
+and a curve may end on it.  Ports, contact caps, other bands and tile seams are never origins -- they are not
+inputs of this module.  Topology changes (a neck that splits, a
 band that vanishes) are ordinary outcomes: the bands that survive are the ones the labels record.
 
 The offset of an oblique edge is not representable on the grid (its normal is irrational): curve end points
@@ -25,7 +29,7 @@ angle and normal is computed in fixed-precision decimals, so the end points -- a
 are identical on every platform.
 
 Members keep their generating primitive in the lineage: ``<support>/ring<r>/edge<k>``, for straight members
-and arcs alike; reflex arcs ``<support>/ring<r>/corner<k>``.
+and arcs alike; reflex arcs ``<support>/ring<r>/corner<k>``, end caps ``<support>/ring<r>/capstart<k>`` and ``capend<k>``.
 """
 
 from __future__ import annotations
@@ -45,14 +49,15 @@ from scgsim.geometry.sgb.records.carriers import (
     RingPrimitive,
 )
 from scgsim.geometry.sgb.records.families import CurveFamilyRecord
-from scgsim.geometry.sgb.records.support import SupportRegion
+from scgsim.geometry.sgb.records.support import DISTANCE_SLACK, SupportRegion
 
 Vec = tuple[Decimal, Decimal]
-KEEP_TOLERANCE = 1.5  # grid units: a kept edge may lie this much nearer the boundary than m (snap drift)
+KEEP_TOLERANCE = DISTANCE_SLACK  # a kept edge may lie this much nearer the origins than m (snap drift)
 PARALLEL_EPSILON = Decimal(
     "1e-9"
 )  # tangents closer to parallel than this are a straight or convex junction
 PIECE_SLACK = Decimal("1e-9")
+FREE_BOUNDARY = "~free"  # carrier id prefix of the boundary that is not an origin
 AddArc = Callable[[str, tuple[int, int], Fraction, bool, Point, Point], None]
 
 
@@ -178,6 +183,8 @@ def _generate_candidates(
     for ri, ring in enumerate(region.rings):
         count = len(ring)
         for pi, prim in enumerate(ring):
+            if not region.is_origin(ri, pi):
+                continue
             name = f"ring{ri}/edge{pi}"
             start = _offset_point(prim, margin, at_end=False)
             end = _offset_point(prim, margin, at_end=True)
@@ -187,10 +194,55 @@ def _generate_candidates(
                 radius = prim.radius - margin if prim.ccw else prim.radius + margin
                 if radius >= 1:
                     candidates.add_arc(name, prim.centre, radius, prim.ccw, start, end)
-            _corner_arcs(
-                f"ring{ri}/corner{pi}", prim, ring[(pi + 1) % count], margin, candidates
-            )
+            following = (pi + 1) % count
+            if region.is_origin(ri, following):
+                _corner_arcs(
+                    f"ring{ri}/corner{pi}", prim, ring[following], margin, candidates
+                )
+            else:
+                _cap_arcs(f"ring{ri}/capend{pi}", prim, margin, candidates, at_end=True)
+            if not region.is_origin(ri, (pi - 1) % count):
+                _cap_arcs(
+                    f"ring{ri}/capstart{pi}", prim, margin, candidates, at_end=False
+                )
     return candidates
+
+
+def _cap_arcs(
+    name: str,
+    prim: RingPrimitive,
+    margin: int,
+    candidates: _Candidates,
+    *,
+    at_end: bool,
+) -> None:
+    """Half circle of radius ``margin`` about an end of a run of origins, round the end away from the run.
+
+    The offset of the run stops at the end point; the points at distance ``margin`` from it close the curve
+    round that end.  The half circle starts at the offset end point on the interior side and turns the
+    other way at the run's start than at its end.  The part of it outside the region, or nearer to another
+    origin, is dropped when the candidates are selected.
+    """
+    vertex = _ends(prim)[1 if at_end else 0]
+    centre_point = (
+        circle_math.round_half_up(vertex[0]),
+        circle_math.round_half_up(vertex[1]),
+    )
+    nx, ny = _left_normal(prim, at_end=at_end)
+    rotation = circle_math.Rotation(circle_math.HALF_PI, ccw=not at_end)
+    centre = (Fraction(centre_point[0]), Fraction(centre_point[1]))
+    vector: Vec = (margin * nx, margin * ny)
+    previous = _offset_point(prim, margin, at_end=at_end)
+    for k in range(2):
+        vector = rotation.apply(*vector)
+        end = (
+            circle_math.round_half_up(vertex[0] + vector[0]),
+            circle_math.round_half_up(vertex[1] + vector[1]),
+        )
+        candidates.add_arc(
+            f"{name}.{k}", centre, Fraction(margin), not at_end, previous, end
+        )
+        previous = end
 
 
 def _corner_arcs(
@@ -256,14 +308,39 @@ def _boundary_of_eroded(
             Segment(p, q, frozenset([f"{arc.id}#{k}"]))
             for k, (p, q) in enumerate(zip(points, points[1:], strict=False))
         )
-    kept = _kept_edges(snap_round(segments).edges, region, margin)
+    segments.extend(_free_boundary_segments(region))
+    noded = [
+        e
+        for e in snap_round(segments).edges
+        if not any(c.startswith(FREE_BOUNDARY) for c in e.carriers)
+    ]
+    kept = _kept_edges(noded, region, margin)
     return _lines_of(family_id, kept), _arcs_of(kept, arc_pieces)
+
+
+def _free_boundary_segments(region: SupportRegion) -> list[Segment]:
+    """The boundary that is not an origin, as noding input only: it splits the candidates where they cross it."""
+    segments = []
+    for k, prim in enumerate(region.free_boundary):
+        if isinstance(prim, LineEdge):
+            segments.append(Segment(prim.p, prim.q, frozenset([f"{FREE_BOUNDARY}{k}"])))
+        else:
+            points = prim.witness_points()
+            segments.extend(
+                Segment(p, q, frozenset([f"{FREE_BOUNDARY}{k}#{j}"]))
+                for j, (p, q) in enumerate(zip(points, points[1:], strict=False))
+            )
+    return segments
 
 
 def _kept_edges(
     edges: Iterable[NodedEdge], region: SupportRegion, margin: int
 ) -> list[NodedEdge]:
-    """Edges whose midpoint is at least ``margin`` from the region boundary, with dangling stubs removed."""
+    """Edges whose midpoint is at least ``margin`` from the distance origins, with dangling stubs removed.
+
+    A curve may end on the part of the boundary that is not an origin (a band reaching the die edge), so
+    an end point there is not dangling.
+    """
     kept = []
     for e in edges:
         middle = (e.a[0] + e.b[0], e.a[1] + e.b[1], 2)
@@ -278,10 +355,22 @@ def _kept_edges(
         for e in kept:
             degree[e.a] = degree.get(e.a, 0) + 1
             degree[e.b] = degree.get(e.b, 0) + 1
-        pruned = [e for e in kept if degree[e.a] > 1 and degree[e.b] > 1]
+        pruned = [
+            e
+            for e in kept
+            if all(degree[v] > 1 or _on_free_boundary(region, v) for v in (e.a, e.b))
+        ]
         if len(pruned) == len(kept):
             return kept
         kept = pruned
+
+
+def _on_free_boundary(region: SupportRegion, vertex: Point) -> bool:
+    """Whether a curve end lies on the boundary that is not an origin (up to the snap drift)."""
+    return (
+        region.distance_to_free_boundary((float(vertex[0]), float(vertex[1])))
+        <= KEEP_TOLERANCE
+    )
 
 
 def _lines_of(family_id: str, kept: list[NodedEdge]) -> list[LineCarrier]:

@@ -3,9 +3,18 @@
 Owns turning a support selection into a :class:`SupportRegion`.  The face is found in a *physical
 pre-pass*: the level arrangement of the catalogue's prisms alone -- no ports, no cut families -- labelled
 as usual.  The cells whose label matches the selection are the support face; the edges that separate them
-from other cells are its boundary rings.  Because the pre-pass contains only physical prisms, the distance
-origin of a band is the physical boundary of its face and nothing else: ports, contact caps, other bands
-and tile seams cannot move it, by construction.
+from other cells are its boundary rings.  Because the pre-pass contains only physical prisms, ports, contact caps, other bands and tile seams cannot
+move a band, by construction (a port lying on the substrate surface counts as the exposed surface it covers).
+
+Distance origins.  Bands are measured only from *gap edges*: the parts of a conductor footprint's boundary
+whose coplanar neighbour, across the edge, is an exposed interface between two non-conductor solution regions
+with at least one dielectric (an SA or SS surface).  The Surface-EPR correction factor of a band comes from the
+metal-gap-metal cross-section, so an edge with no gap before it -- a conductor edge on the die or substrate
+outer edge, an edge shared with another conductor, an edge facing only vacuum -- has no meaningful band and is
+not an origin.  A conductor face is measured from the gap edges of its footprint, taken on the plane the
+conductor is attached to (its sheet plane, or the bottom of a finite body; the top face has the same
+footprint).  A solution interface is measured from the gap edges on its own boundary.  A support with no gap
+edge fails closed.
 
 Arc edges of the boundary are expressed on the exact circle of their source arc (centre and radius of the
 carrier) through the snapped end points, so offsets stay concentric with the source circle.
@@ -13,6 +22,7 @@ carrier) through the snapped end points, so offsets stay concentric with the sou
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from fractions import Fraction
 
@@ -72,8 +82,96 @@ def _resolve(
     layer, selected = _select_cells(request, catalogue, labelled)
     if request.interface is not None:
         _check_interface(request, layer, selected)
-    rings = _boundary_rings(request.request_id, layer, selected, labelled)
-    return ResolvedSupport(request, layer.level_z, SupportRegion(rings, margins))
+    is_origin = _origin_test(request, catalogue, labelled, layer)
+    rings, origin_mask = _boundary_rings(
+        request.request_id, layer, selected, labelled, is_origin
+    )
+    if not any(any(ring) for ring in origin_mask):
+        raise InputError(
+            f"inset request {request.request_id!r}: {_describe(request.support)} has no gap edge to "
+            "measure the bands from (a conductor edge counts only where exposed dielectric lies next to it)"
+        )
+    return ResolvedSupport(
+        request, layer.level_z, SupportRegion(rings, margins, origin_mask)
+    )
+
+
+def _describe(support: ConductorSurface | SolutionInterface) -> str:
+    if isinstance(support, ConductorSurface):
+        return f"the {support.side} of {support.entity_id!r}"
+    return (
+        f"the interface of {support.first_entity_id!r} and {support.second_entity_id!r}"
+    )
+
+
+# --------------------------------------------------------------------------- gap edges
+
+
+def _origin_test(
+    request: InsetRequest,
+    catalogue: PrismCatalogue,
+    labelled: LabelledArrangements,
+    layer: Layer,
+) -> Callable[[int], bool]:
+    """Whether a boundary half-edge of the support face is a distance origin (a gap edge)."""
+    arr = layer.arr
+    if isinstance(request.support, SolutionInterface):
+        return lambda h: (
+            _is_exposed_dielectric(layer.labels[arr.he_face[h]])
+            and _is_conductor_cell(layer.labels[arr.he_face[h ^ 1]])
+        )
+    attach = labelled.level_layers[_attach_level(request.support, catalogue, labelled)]
+    gap_sources = _gap_edge_sources(attach)
+    return lambda h: not gap_sources.isdisjoint(layer.edge_sources[h >> 1])
+
+
+def _attach_level(
+    support: ConductorSurface, catalogue: PrismCatalogue, labelled: LabelledArrangements
+) -> int:
+    """Level of the plane a conductor is attached to: its sheet plane, or the bottom of a finite body."""
+    prism = next(p for p in catalogue.prisms if p.entity_id == support.entity_id)
+    return labelled.levels.levels.index(prism.z0)
+
+
+def _gap_edge_sources(layer: Layer) -> frozenset[str]:
+    """The source edges of a level that have a conductor on one side and an exposed dielectric surface on the other."""
+    arr = layer.arr
+    sources: set[str] = set()
+    for edge in range(len(arr.edges)):
+        sides = (
+            layer.labels[arr.he_face[2 * edge]],
+            layer.labels[arr.he_face[2 * edge + 1]],
+        )
+        if (_is_conductor_cell(sides[0]) and _is_exposed_dielectric(sides[1])) or (
+            _is_conductor_cell(sides[1]) and _is_exposed_dielectric(sides[0])
+        ):
+            sources.update(layer.edge_sources[edge])
+    return frozenset(sources)
+
+
+def _is_conductor_cell(label: LevelLabel | None) -> bool:
+    """Whether a level cell (``None``: outside the model) lies under a conductor footprint.
+
+    A sheet conductor, or a finite conductor above or below the plane.
+    """
+    if label is None:
+        return False
+    if label.sheet is not None and label.sheet.kind == "conductor":
+        return True
+    return any(
+        domain is not None and domain.kind == "conductor"
+        for domain in (label.below, label.above)
+    )
+
+
+def _is_exposed_dielectric(label: LevelLabel | None) -> bool:
+    """Whether a level cell is an interface of two solution regions, at least one a dielectric (SA or SS)."""
+    if label is None or label.sheet is not None:
+        return False
+    if label.below is None or label.above is None:
+        return False
+    kinds = {label.below.kind, label.above.kind}
+    return "conductor" not in kinds and "dielectric" in kinds
 
 
 def _margins(request: InsetRequest, grid: Grid) -> tuple[int, ...]:
@@ -235,8 +333,13 @@ def _check_interface(request: InsetRequest, layer: Layer, selected: set[int]) ->
 
 
 def _boundary_rings(
-    request_id: str, layer: Layer, selected: set[int], labelled: LabelledArrangements
-) -> tuple[tuple[RingPrimitive, ...], ...]:
+    request_id: str,
+    layer: Layer,
+    selected: set[int],
+    labelled: LabelledArrangements,
+    is_origin: Callable[[int], bool],
+) -> tuple[tuple[tuple[RingPrimitive, ...], ...], tuple[tuple[bool, ...], ...]]:
+    """The boundary rings of the selected cells, and per primitive whether it is a distance origin."""
     arr = layer.arr
     next_half_edge: dict[int, int] = {}
     for cycle in arr.cycles:
@@ -265,13 +368,15 @@ def _boundary_rings(
             h = g
         rings.append(_from_smallest_vertex(arr, ring))
     rings.sort(key=lambda ring: (arr.origin(ring[0]), ring[0]))
-    return tuple(
+    primitives = tuple(
         tuple(
             _primitive(f"{request_id}/ring{ri}", k, layer, h, labelled)
             for k, h in enumerate(ring)
         )
         for ri, ring in enumerate(rings)
     )
+    origin_mask = tuple(tuple(is_origin(h) for h in ring) for ring in rings)
+    return primitives, origin_mask
 
 
 def _from_smallest_vertex(arr, ring: list[int]) -> list[int]:  # noqa: ANN001 - the arrangement of a layer

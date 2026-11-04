@@ -19,6 +19,7 @@ Does not own labels (``labelling``), dissolution or snapping.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterator
 from dataclasses import dataclass
 from fractions import Fraction
 from functools import cmp_to_key
@@ -335,7 +336,51 @@ def interior_point(arr: Arrangement, face_index: int) -> RepPoint:
     edge crosses it.  Even-odd over the sorted crossings gives the interior
     intervals; the widest one (leftmost on ties) gives the point.
     """
-    segments = arr.face_segments(face_index)
+    for _, mid, intervals in _strip_intervals(arr.face_segments(face_index)):
+        if intervals:
+            left, right = max(intervals, key=lambda i: i[1] - i[0])
+            return fraction_to_rep((left + right) / 2, mid)
+    raise ValueError("face has no interior point (degenerate face)")
+
+
+# Where, across a cell's width, its sample points lie (fractions of the width from the left).
+SAMPLE_FRACTIONS = (Fraction(1, 2), Fraction(1, 4), Fraction(3, 4), Fraction(1, 8))
+
+
+@dataclass(frozen=True)
+class StripCell:
+    """One trapezoid of a face: a strip between two vertex heights, cut to one interior interval."""
+
+    area: Fraction  # exact
+    points: tuple[RepPoint, ...]  # strictly inside, spread over the width at mid height
+
+
+def strip_cells(arr: Arrangement, face_index: int) -> list[StripCell]:
+    """The face cut into trapezoids whose exact areas add up to the face's area.
+
+    A decision that depends on where in the face a point lies (a distance band) is taken per
+    trapezoid and weighted by its area, so a single point on a zero-area locus cannot decide it.
+    """
+    cells = []
+    for height, mid, intervals in _strip_intervals(arr.face_segments(face_index)):
+        for left, right in intervals:
+            width = right - left
+            points = tuple(
+                fraction_to_rep(left + width * fraction, mid)
+                for fraction in SAMPLE_FRACTIONS
+            )
+            cells.append(StripCell(width * height, points))
+    return cells
+
+
+def _strip_intervals(
+    segments: list[tuple[Point, Point]],
+) -> Iterator[tuple[Fraction, Fraction, list[tuple[Fraction, Fraction]]]]:
+    """Per strip between distinct vertex heights, bottom up: its height, mid height and interior intervals.
+
+    No boundary vertex lies inside a strip, so every spanning edge crosses it; even-odd over the sorted
+    crossings at mid height gives the intervals of positive width (left to right).
+    """
     heights = sorted({p[1] for s in segments for p in s})
     for lo, hi in zip(heights, heights[1:], strict=False):
         mid = Fraction(lo + hi, 2)
@@ -346,11 +391,9 @@ def interior_point(arr: Arrangement, face_index: int) -> RepPoint:
             if min(py, qy) <= lo and max(py, qy) >= hi:
                 crossings.append(px + Fraction((qx - px) * (mid - py), qy - py))
         crossings.sort()
-        best: tuple[Fraction, Fraction] | None = None
-        for i in range(0, len(crossings) - 1, 2):
-            width = crossings[i + 1] - crossings[i]
-            if width > 0 and (best is None or width > best[0]):
-                best = (width, (crossings[i] + crossings[i + 1]) / 2)
-        if best is not None:
-            return fraction_to_rep(best[1], mid)
-    raise ValueError("face has no interior point (degenerate face)")
+        intervals = [
+            (crossings[i], crossings[i + 1])
+            for i in range(0, len(crossings) - 1, 2)
+            if crossings[i + 1] > crossings[i]
+        ]
+        yield Fraction(hi - lo), mid, intervals

@@ -26,6 +26,7 @@ from scgsim.geometry.sgb.arrangement.dcel import (
 from scgsim.geometry.sgb.derivation.arc_edges import realise_arc_edges
 from scgsim.geometry.sgb.derivation.ids import assign_ids
 from scgsim.geometry.sgb.derivation.layer import Layer, RawMeasurements
+from scgsim.geometry.sgb.labelling.bands import face_band
 from scgsim.geometry.sgb.labelling.dissolve import Dissolved, FamilyPolicies, dissolve
 from scgsim.geometry.sgb.labelling.linking import TAG, SlabEdges, link_faces
 from scgsim.geometry.sgb.labelling.membership import membership_shares
@@ -203,7 +204,12 @@ def _label_level_cells(
 
 
 def _level_extras_job(shared: Any, items: list[int]) -> list[Any]:
-    """Per face: its sheet owner and the entities whose footprint covers it."""
+    """Per face: its sheet owner, its bands and the entities whose footprint covers it.
+
+    Owner and coverage are footprint tests at one interior point: every footprint boundary is an
+    arrangement edge, so no face straddles one.  A band is a distance test, whose boundary can be
+    a line inside a face, so a band comes from the face's area (``face_band``), not from the point.
+    """
     arrangements, sheet_sets, supports, cover_sets, flat, prisms = shared
     out = []
     for i in items:
@@ -214,7 +220,7 @@ def _level_extras_job(shared: Any, items: list[int]) -> list[Any]:
         bands = tuple(
             (family_id, band)
             for family_id, support in supports[k]
-            if (band := support.band_of(point)) is not None
+            if (band := face_band(arrangements[k], fi, support)) is not None
         )
         entities = tuple(
             sorted({prisms[j].entity_id for s in cover_sets[k] for j in s.hit(point)})

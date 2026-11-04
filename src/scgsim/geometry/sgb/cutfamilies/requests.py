@@ -22,8 +22,18 @@ Inset margins
 
 ``margins_um`` are strictly increasing positive lengths on the model grid.  ``interface`` optionally
 states the interface type the face is expected to have (``"MA"``, ``"MS"``, ``"SA"``, ``"SHEET"`` ...);
-the build fails if the selected face has no cell of that type.  The distance origin is always the physical
-boundary of the support face itself: ports, other bands and seams never move a band.
+the build fails if the selected face has no cell of that type.
+
+Distance origins.  A band is the set of points of the support face whose distance to the *gap edges* lies
+between two margins; farther than the last margin is the last band.  A gap edge is a part of a conductor
+footprint's boundary with an exposed dielectric surface (an SA or SS interface) on its other side, in the plane
+the conductor is attached to (its sheet plane, or the bottom of a finite body), with lumped ports ignored.  The
+Surface-EPR correction factor of a band comes from the metal-gap-metal cross-section, so an edge with no gap
+before it is no origin: a conductor edge on the die or substrate outer edge or the model boundary, an edge
+shared with another conductor, an edge facing only vacuum.  The die outer edge, ports, other bands and seams
+therefore never move a band.  A conductor face is measured from the gap edges of its footprint (the top and
+bottom faces of a finite body have the same footprint); a solution interface from the gap edges on its own
+boundary.  A support with no gap edge is an ``InputError``.
 """
 
 from __future__ import annotations
