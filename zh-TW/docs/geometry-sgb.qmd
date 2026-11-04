@@ -15,6 +15,8 @@ lang: zh-TW
 
 `build_component_stack()` 組合兩個明確權威。PDK `LayerStack` 紀錄提供材料、製程層、Z／厚度、導體／求解角色及確切宿主體積。元件註記提供局部實體身分、埠、功能導體區域及拓撲選取器。Notebook 組合具名出現實例並指派最終 Net 映射，不手動指定 PDK 或元件事實。
 
+求解區域重疊時，先依材料種類決定：介質區域一律優先於 vacuum 區域，與 `mesh_order` 無關（導體在求解區域之前處理，不以 priority 比較）。只有同一種類的求解區域之間才由 `LayerLevel.mesh_order` 決定，並遵循 gdsfactory 慣例：數值較低者優先。`build_component_stack()` 將它一次轉換為內部 `priority`（`priority = -mesh_order`），同時套用於求解區域與導體紀錄。`SemanticEntitySpec.priority`，以及已儲存堆疊或註記紀錄中的 `priority`，一律表示數值較高者優先；`mesh_order` 不會直接當作 priority 使用。此轉換之前記錄的來源堆疊保留先前的 priority 數值，因此維持其已記錄身分。
+
 公開 Xmon 組合中的可重用子元件保留局部焊墊、耦合器、遮罩及接地臂金屬貢獻。該臂與殘餘接地平面重疊，因此不是獨立導體 Entity；若將它建模為獨立 Entity，就會重複金屬。根組合透過既有堆疊配方提供一個 D0 與一個 D1 平面，再使用明確物理導體層綁定，將出現實例局部的接地臂幾何聯集至 D1 平面；繪圖或遮罩層不隱含該目標。它不將完整接地平面 Entity 複製至每個子出現實例，也不自動建立平面。Notebook 負責共同平面、局部裝置 Entity 及具名接地連接之間的最終 `Net -> Entity` 映射。幾何不推論電氣連通性，也不合併子 Net 映射。
 
 ## 共用物理來源與表示 {#physical-representation}

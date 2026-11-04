@@ -88,8 +88,8 @@ def build_gds_stack_geometry_input(
 
     - `layers`: sequence of layer records. Each record maps one GDS
       `layer`/`datatype` pair to a semantic entity using `semantic_id`, `role`,
-      `material_id`, optional `priority`, optional `geometry_kind`, optional
-      `part_role`, optional `net_id`, optional `polygon_ids`, optional `labels`,
+      `material_id`, optional `priority` (higher wins), optional
+      `geometry_kind`, optional `part_role`, optional `net_id`, optional `polygon_ids`, optional `labels`,
       optional `attached_face_metal_semantic_id`, optional
       `route_representations`, optional `host_void_semantic_id`, and either
       `z_um` plus `thickness_um` or a `geometry` mapping.

@@ -179,7 +179,13 @@ def _non_negative_float(value: Any, field: str) -> float:
 
 @dataclass(frozen=True)
 class SemanticEntitySpec:
-    """Stable semantic object before route-aware construction planning."""
+    """Stable semantic object before route-aware construction planning.
+
+    `priority`: the HIGHER value wins between overlapping solution regions of
+    the same material kind; a dielectric region wins over a vacuum region
+    before priority is compared. PDK `mesh_order` (lower wins) is converted by
+    negation in source normalization.
+    """
 
     semantic_id: str
     role: str
