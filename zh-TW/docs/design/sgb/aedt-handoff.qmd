@@ -1,0 +1,63 @@
+---
+title: "交給 AEDT"
+description: "SGB 的 solid 如何經由 STEP 進入 AEDT：named solid、單位配方、預先切好的 band、face identity 的把關、port 與 material／boundary 的指派，以及 Imprint 為什麼只是後備。"
+lang: zh-TW
+scgsim-kind: "design"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/design/sgb/aedt-handoff"
+---
+
+AEDT 是 Gmsh 之外的另一個交接對象：同一組 solid 要以帶名稱的 solid 進入 AEDT，並由 sidecar 指派 material 與 boundary。實驗 E4 在 AEDT 2024.2（non-graphical）、PyAEDT 1.3.0、OCP 7.8.1 與 gmsh 4.15.2 上測試了這條路徑，只做 geometry／modeler，沒有 solve。Human 提出的採用條件已滿足；Lead 因此決定 D4，architecture review 尚待進行。下面只列事實與量測數字；「推論」會明確標示。
+
+```{mermaid}
+%%| label: fig-handoff-aedt
+%%| fig-cap: "AEDT 交接流程。E4（原型時期）以 PyAEDT 驗證了步驟 2 到 6 的動作；production 實作了匯出端（步驟 1 與 2：sidecar 的 aedt_name 與 export_aedt_step），匯入端（步驟 3 到 6）屬 AEDT adopter。每一步的事實見下文。"
+%%{init: {"flowchart": {"rankSpacing": 22, "nodeSpacing": 20, "padding": 6}}}%%
+flowchart TB
+  A["1. 讀取 sidecar：aedt_name、group 名稱、unions"] --> B["2. 寫出 XDE-assembly STEP：每個 solid 一個具名 component，band 已預先切好"]
+  B --> C["3. PyAEDT 匯入 STEP；斷言 object 集合等於預期的 aedt_name"]
+  C --> D["4. 以每個 solid 的 face 順序對應 tag 到 (object, face id)；以 face 數與面積／center 檢查把關"]
+  D --> E["5. 依 sidecar 名稱指派 material 與 Perfect E boundary"]
+  E --> F["6. 依 sidecar 的幾何以原生方式建立 port sheet 與 lumped port"]
+```
+
+## 決定的路徑
+
+1. **XDE assembly 的 STEP，每個 solid 一個具名 component。**名稱放在 PRODUCT 上才會保留。以下 E4 的實測結果使用當時的名稱（`VOL::<entity>`，現在 production 的 solid 名稱已去掉 `VOL::`，為 `substrate`、`vacuum`）。AEDT 匯入 `pad_in_ground_B` 得到 `VOL__substrate`（Solid，9 個 face，volume 8999999.9976 µm³，規劃值 9e6，相對誤差 −2.6e-10）與 `VOL__vacuum`（Solid，29 個 face，8984755.6840 對 8984755.6854，相對誤差 −1.6e-10）。若改寫成一般（flat）的獨立 shape，名稱會遺失，object 變成 `q1_flat_UM_Unnamed_1/2`，而且順序不等於檔案順序。
+2. **名稱先經過淨化。**AEDT 會移除 `[A-Za-z0-9_]` 以外的所有字元，並完全丟棄非 ASCII 的名稱：`VOL::vacuum` 變成 `VOLvacuum`，`MA::pad::band=2` 變成 `MApadband2`，`SA::substrate|vacuum` 變成 `vacuum`（`|` 之前的部分被丟掉），重複的名稱會被改成 `dup_1`、`dup`，且後綴的指派不依檔案順序。所以 SGB 把淨化且檢查過不衝突的 `aedt_name` 寫進 sidecar（production 的規則：每個 `[A-Za-z0-9_]` 以外的字元換成 `_`，例如 `chip/air` 變成 `chip_air`，volume 的 solid 名稱就是 entity id 淨化後的結果；淨化後撞名的 solid 依 tag 順序加 `__2`、`__3`），並在匯入後斷言 object 集合等於預期，絕不依賴 AEDT 自動加後綴。上面 AEDT 淨化的例子是原型時期的名稱。
+3. **單位配方，以及它的陷阱。**配方是 `xstep.cascade.unit=MM` 搭配 `write.step.unit=UM`：數字不變，標示為 µm；設定前必須先呼叫 `STEPControl_Controller.Init_s()` 與 `STEPCAFControl_Controller.Init_s()`，否則 `Interface_Static.SetCVal_s` 對第一個檔案會無聲失敗。
+
+   ::: {.callout-warning}
+   ## 陷阱：OCCT 的 STEP 單位
+   `STEPCAFControl_Writer` 會依 `xstep.cascade.unit` 把數字換算成 mm，而 `write.step.unit` 只改**標示**。`cascade=UM` 加 `write=UM` 會把數字除以 1000 卻標成 µm：AEDT 看到的模型小了 1000 倍，0.1 µm 的 metal slab 塌陷，vacuum solid 變成 20 個 face 的 Sheet，面積為負或零。E3 自己的 `model.step`（以 mm 標示 µm 的數字）同樣無法匯入。另一個也驗證過的配方是 `cascade=UM`、`write=MM`（數字除以 1000，標示 mm）；兩個配方的 volume 都在 2e-10 以內一致。
+   :::
+
+4. **Band 與所有分割在 solid 中預先切好，所以不需要 AEDT Imprint。**這就是 SGB 的 imprint：production 寫出的 `pad_in_ground_B_bands`（stage 層 scene，lumped port 在金屬的中間平面）的 BREP 本身就帶著這些分割，vacuum solid 有 56 個 face、substrate solid 有 24 個 face（sidecar 的 `expected.solid_faces`）。把 face 當成獨立的 STEP sheet 不是可行的載體：named sheet 只有在約 200 µm 以上才能保留（1000、300、200 µm 的正方形匯入為具名 `Sheet`，面積正確；100、50、30、20、10、5、1 µm 則以 `GrpcApiError ... Import` 失敗）；`pad_in_ground_B_bands` 的 21 個 band face 匯入後只有 1 個保留名稱，其餘 20 個是面積 0 的 Solid。
+5. **Face identity 來自每個 solid 內的 OCC face 順序。**在 4 個 case × 2 個 solid 上，OCC 的 face 順序等於 AEDT 的 face-id 順序。這是**觀察到的性質，不是文件保證**，所以每一次匯入都要把關，且 fail closed：檢查每個 object 的 face 數，以及每個 face 的面積與 center。E4 使用的容許值是面積相對誤差 2e-3、center 5e-3 µm：planar face 與 OCC 的差在 1e-6 以內；含 arc 的 face 最多差 2.5e-5（含 band 時 4.7e-5，另有一個 5 µm² 的 sliver 差 1.0e-3），含 arc 邊界的 face 的 center 差 ≤ 2.6e-3 µm。在 1e-3 的面積容許值下，`MA::pad::band=0`（tag 33，5 µm² 的 sliver）會失敗（1.007e-3）。AEDT 不經由 scripting 暴露 face 名稱：名稱存在專案的 Parasolid body 裡、也會出現在 AEDT 的匯出檔中，但 `GetFaceIDFromNameForFirstOperation` 回傳 −1，`FaceNameAndIDMap()` 為空。
+6. **Shared face 在 AEDT 中每個 solid 各有一份。**STEP 有 38 個 `ADVANCED_FACE` 對應 29 + 9 次 face 使用；AEDT 中兩個 solid 的 face-id 集合互不相交。以（面積，center）找到的重合配對：`pad_in_ground_B` 有 2 對（SA face），`_bands` 有 8 對。在 AEDT 內，conformity 是幾何上的，不是 topology 上的（這是 AEDT 的一般做法）。[推論：HFSS 會因為表面重合而得到 conformal mesh；E4 沒有做 mesh。]
+7. **Port 依 sidecar 以原生方式重建。**free face（lumped-port sheet）無法經由 STEP 傳遞：30 × 10 µm 的 `PORT::p1` 在與 solid 同一個 STEP 中被無聲丟棄。PyAEDT 依 sidecar 記錄的幾何以 `create_rectangle` 建立（面積 300，規劃值 300），再建立 `lumped_port`，得到 `Lumped Port`。（這是 prototype 的範例，port 在金屬中間平面，是 free face。production 的真實輸入把 port 放在 host 的 support plane，它是兩個 solid 共用的 face，會出現在 STEP 與 guard 裡；這個差別尚未在 AEDT 上驗證，見[使用契約](consumer-contract.qmd#sequence)。）
+8. **Material 與 boundary 依 sidecar 名稱指派。**2 個 solid 的名稱查找 0 次失敗；62 個 face（41 + 21）在逐一對照規劃面積與 center 之後，face 解析 0 次失敗。`VOL__vacuum` 指派為 `vacuum`、`VOL__substrate` 指派為 `silicon`，讀回與請求相同。由 sidecar 的 unions 建立 `Perfect E`（原型時期的 union `PEC::Ground` 為 7 個 face id，`PEC::pad` 為 29 個 face id，每個 tag 解析到擁有它的 object；production 對應 `unions.nets.<net>`），`boundary.props["Faces"]` 與請求相同。
+
+## Imprint 只作為後備
+
+AEDT 原生的 Imprint 可以運作，但不提供 identity。在 `pad_in_ground_B` 上以 21 個 band sheet 做 Imprint：vacuum 的 face 從 29 個變 41 個、substrate 從 9 個變 21 個，與 E4 所用的 `_bands` BREP 的數量完全相同（那份 BREP 是 vacuum 41 個 face、substrate 21 個 face；E4 尚未以 production 寫出的 BREP 重做），volume 不變。但它只回傳 `True`，沒有任何 id 對照：新的 face 取得全新的 id，順序與 band／tag 順序無關；face 名稱在 Imprint 後全部消失（vacuum 29 → 0，substrate 7 → 0），沒有被觸及的 face 也一樣。只能以（centroid，面積）把 sheet 對回 face：21 個 sheet 全部對到預期的 face（28 個不同的 face），最接近被拒絕的配對仍在容許值外 2.7 倍；只用 centroid 會有歧義（同心的環共用 centroid）。而且作為 tool 的 sheet 在 µm 尺度下無法從 STEP 匯入，必須在 AEDT 內由已匯入 solid 的 face 建立。這是幾何比對，不是 identity，因此只在需要時作為後備。
+
+## 其他格式，以及這條路徑做不到的事
+
+- SAT／Parasolid：OCP 7.8.1 與 gmsh 4.15.2 都沒有提供。IGES 在以 mm 縮放時可匯入，但沒有名稱（object 名稱為 `DE1`、`DE575`）。
+- E4 沒有做任何 solve，也沒有對複製的 face 做 HFSS mesh。
+- face 順序等於 face-id 順序是這個 AEDT 版本與匯入路徑的觀察結果（4 個 case 通過）。這個性質本身沒有不需要 AEDT 就能執行的自動測試，只在原型時期需要 AEDT 的 E4 實驗中驗證過，所以它仍是設計的要求，不是已被測試的事實。production 的匯出端已補上能補的部分並有測試（`tests/test_sgb_occt.py`）：`export_aedt_step` 為每個 solid 回傳依 OCC face 順序列出的 face（含面積與中心）作為匯入端的守衛清單；`aedt_name` 在 sidecar 中已消毒並保證無衝突；STEP 是 XDE assembly、單位為 µm 且數字等於模型數字、讀回的 volume 等於規劃值；`export_aedt_step` 在為 solid 命名之前，先把檔案與 sidecar 的 `expected` 區塊（依 tag 順序的 vertex 位置、face 面積、solid 體積與各類 entity 數量）逐項比對，不符即拒絕匯出；也可以從 XAO 匯出。**production 的輸出尚未實際匯入 AEDT 測過**（匯出端沒有啟動 AEDT）；上面的 AEDT 數字都是原型時期的 E4。
+
+E3 把 BREP 轉成 STEP 再讀回（見[補充：重現資料](#reproduction-data)的表），顯示 shared face 在 STEP 中被複製。在每個 case 中，多出的 face 數都等於 shared interior face 的數量（5、2、1、23 與 8）。STEP 把每個 solid 的 shell 分開儲存，所以被兩個 solid 共用的 face 會寫兩次；重新載入後 vertex 與 edge 也變多，因為被複製的 face 的邊界也一起被複製。
+
+## 補充：重現資料 {#reproduction-data}
+
+本頁的 AEDT 事實與數字來自實驗 E4（原型時期）；它的原始輸出沒有公開。在 AEDT 內重新驗證 production 的輸出，屬於 AEDT adoption 的工作。匯出端的敘述來自 production 的 `scgsim.geometry.sgb.exchange.step` 與 `sidecar/aedt.py`。這些實驗需要 AEDT 授權，不是自動測試；它們的輸入是原型寫出的 BREP。STEP 往返的表由 `zh-TW/docs/design/sgb/_figures/emission.py` 從各 case 的 `validation.json` 產生。
+
+### BREP 轉 STEP 再讀回（E3）
+
+::: {#tbl-step .askr-table-compact .askr-table-numeric}
+{{< include figures/emission-step-table.md >}}
+
+BREP 轉 STEP 再讀回（`validation.json`，`step`）。「多出的 face 數」是重新載入後的 face 數減去寫出的 face 數。
+:::

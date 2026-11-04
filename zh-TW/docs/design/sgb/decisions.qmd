@@ -1,0 +1,236 @@
+---
+title: "設計決議與待決事項"
+description: "SGB 重新設計的九項決議（D1 到 D9）：每一項的問題、選項、建議、後果、決定者與 production 實作狀態，以及原型與 production 提供的證據。"
+lang: zh-TW
+scgsim-kind: "design"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/design/sgb/decisions"
+---
+
+這一頁把 SGB 設計中需要決定、或已由 Human 或 Lead 決定的項目放在一起，讓你一眼看出哪些已定案、哪些仍然開放、哪些數字需要 Human 核准。每一項先說明問題、選項、建議與後果，再列出 prototype 提供的證據。
+
+「Human」表示由 Human 決定：一個數值，或一個會改變結果所代表意義的預設值。「Lead」表示由 Lead 提出決定或建議，再由 architecture review 審查實作選擇。「實作狀態」指 `scgsim.geometry.sgb`（階段 1，1a 到 1e）。證據有兩種：標明 **production** 的出自 production 的測試與 catalogue 報告，可以重現；標明**原型計算**的是原型時期的觀察，原型程式已移除，無法再重現，它的教訓整理在 `experiments/sgb-redesign/PROTOTYPE_LESSONS.md`。來源列在最後的「補充：重現資料」。
+
+::: {.askr-table-compact}
+| ID | 問題 | 決定 | 決定者 | production 實作狀態 | 已知缺口 |
+|---|---|---|---|---|---|
+| [D1](#d1) | 是否支援 Route C（保留 conductor volume）？ | 納入 v1 | Human（範圍）；細節由 architecture review | 已實作：Route C 保留並 mesh 導體 volume（以裸的 entity id `<entity>` 命名），lumped port 位於 host 的 support plane（與 Route B 相同）；測試與 catalogue 涵蓋三種 route | Palace 端的 material domain 與 Surface EPR lowering 由階段 3 處理 |
+| [D2](#d2) | sliver 的 threshold 與 derived-to-source snapping？ | v1 不設 threshold，只回報 | Human | 已實作：只回報；薄於 $g$ 的 slab 保留並以警告回報；catalogue 逐列記錄 mesh 品質與 drift | band 的 mesh 尺寸屬 Palace adopter（見 D2） |
+| [D3](#d3) | arc 如何做 noding？ | polyline witness 加 merge-back（暫定） | Lead，architecture review 中 | 已實作（1a） | witness 成本只在執行範例與 catalogue 量過，未在 scaling 量過 |
+| [D4](#d4) | AEDT 的 solid 交換與 face identity？ | XDE assembly 的 STEP、預先切好的 band | Lead，architecture review 中 | 匯出端已實作：`export_aedt_step`、sidecar 的 `aedt_name` 與 face 守衛清單；匯入端屬 AEDT adopter | production 的輸出尚未實際匯入 AEDT 測過 |
+| [D5](#d5) | surface 的 attribution 粒度？ | 預設 per Entity | Human | 已實作：命名 `<kind>::<entity>::<face kind>[::band=k]`、per-Entity 的 volume 與 seam、重疊的 priority 規則 | 大量 Entity 時 group 數的成本未重新量測 |
+| [D6](#d6) | 既有路徑的取代方式？ | 兩者移除，不留相容層 | Human，並經 architecture review | 待階段 4：舊路徑保留到 Palace 與 AEDT 切換（階段 3）之後 | 階段 3 尚未完成 |
+| [D7](#d7) | iterated snap rounding 的 drift 是否設上限？ | v1 只記錄 | Lead 建議，architecture review | 已實作（只記錄）；catalogue 逐列記錄，重新評估條件未被觸發 | drift 只在 catalogue 與測試的輸入上量過 |
+| [D8](#d8) | emission 用 Gmsh API 還是直接序列化？ | 直接 BREP/XAO 序列化 | Lead，architecture review 中 | 已實作（1d）；5-edge 圓柱 wall 以垂直 edge 切開，每一片是精確圓柱 | 跨平台逐位元組相同只是論證，未實測 |
+| [D9](#d9) | production kernel 的語言？ | Python orchestration 加 compiled kernel（建議） | Lead，architecture review | 否：production 目前是純 Python | compiled kernel 尚未量測 |
+:::
+
+
+## D1 Route C {#d1}
+
+Route C 把有限厚度的金屬保留為 conductor volume，並在內部做 mesh，所以 conductor 的內部是解的 domain；conductor 與 dielectric、conductor 與 vacuum 的界面是共用的 face。這讓現在可以處理有限導電率，之後也能接上超導的材料模型。
+
+::: {.askr-table-compact}
+| | |
+|---|---|
+| 決定 | Route C 納入 v1。它是 S7 的第三種 labelling 政策，不是另一條 pipeline。**production 已實作**（階段 1）：每個導體 Entity 的 volume 都被輸出並在內部 mesh，導體–dielectric 與導體–vacuum 的界面是共用 face；導體 sheet 被拒絕；lumped port 與 Route B 一樣位於 host 的 support plane，是 substrate 與 vacuum 之間、邊與導體 wall 共用的 face。 |
+| 選項 | （a）不支援。（b）當成第三種 labelling 政策支援（已選）。 |
+| 後果 | 會出現 conductor 內部的 volume group（以 `<entity>` 命名）；「Net X 的 PEC」的意義在 Route C 不再是一組 PEC face，因為界面是 conductor 與 dielectric 之間的共用 face；Palace 端的 material domain 與 Surface EPR 的 lowering 都要有對應規則（階段 3，見[欄位對應](consumer-mapping.qmd)）。Route A 與 Route B 的 contract 不變。 |
+| 決定者 | Human 已決定範圍；labelling 政策的細節由 architecture review。 |
+:::
+
+證據（production）：Route 是 labelling 政策，`RoutePolicy` 只決定是否排除導體 volume、是否接受導體 sheet、是否拒絕仍有限厚度的 film。測試涵蓋：Route C 輸出包含導體在內的每個 volume；導體界面是帶 per-Entity 名稱的共用 face；碰到模型邊界的導體有 `EXT` group；導體 sheet 被拒絕但 port sheet 被接受；由真實的 GDS 輸入建出的 Route C 以 GDS Entity 命名。catalogue 的 19 個 Route C 列全部通過 build、寫出、Gmsh 載入、粗略 mesh 與 OCCT 檢查，另有 4 列預期的拒絕（見 [Validation](validation.qmd#catalogue)）。原型時期 Route C 只是一個旗標，沒有測試也沒有 Gmsh 載入；那一次探測只說明規劃不需要新的程式，不代表已驗證，現在已由上述 production 測試取代。
+
+## D2 Sliver threshold 與 derived-to-source snapping {#d2}
+
+::: {.askr-table-compact}
+| | |
+|---|---|
+| 問題 | 多小的寬度、長度與角度算是缺陷？derived 曲線（inset band、refinement curve）可否在容差 $\tau_\mathrm{derived}$ 內 snap 到 source 曲線？ |
+| Human 的決定 | **v1 不設任何 sliver threshold，只回報。** 四種 sliver 來源中，量化、無關 layer 的投影與同 label 的 seam 已由設計消除；剩下的「來源近乎重合」視為幾何本來就是這個樣子，SGB 照樣建出，並在 sliver report 中列出 feature size、位置與 lineage。v1 不做 derived-to-source snapping，也不因窄 face 讓 build 失敗。同樣的原則適用於 Z：level 是宣告的精確 Z 值，不設 Z 的 threshold；比 $g$ 薄的 slab 會被保留並回報。prototype 的 `validate.py` 曾對這種 slab 中止 build；production 已移除這個中止，薄於 $g$ 的 slab 與垂直 edge 保留，並以兩個警告（`slabs_thinner_than_g_are_kept`、`vertical_edges_shorter_than_g_are_kept`）回報。 |
+| 重新評估的條件 | 真實 layout 或 extreme-case fixture 中出現由窄 face 造成的畸形 mesh element。production 的 extreme-case catalogue 現在逐列記錄 mesh 品質與 drift，這個條件因此可以評估：54 個建出的列在 4 µm 的粗略 mesh 下沒有 ≤ 0 的元素，`minSICN` 最小值為 0.0007（`edges_1_to_3_g`，Route A）；但執行範例 `pad_in_ground_B_bands` 在 60 µm 的粗略 mesh 有一個 `minSICN` 為 0 的元素，那是 meshing 的人為結果，不是窄 face 或幾何缺陷（見證據）。這裡不訂任何門檻。 |
+| 保留的選項 | （b）每個 layer 或 family 使用較粗的 snap grid；（c）在 $\tau_\mathrm{derived}$ 內做 derived-to-source snapping（source 曲線永不移動）。兩者在 v1 都不啟用；日後若啟用，每個數值都是 handoff 中寫明的數字。 |
+| 後果 | pipeline 不移動任何曲線；mesher 可能遇到來源本身的窄 face，但會由 sliver report 與 mesh 品質檢查顯示出來，不會靜默發生。經 snapping 才出現的不同 Net 接觸一律失敗（`ContactError`）。 |
+| 決定者 | **Human，已決定。** |
+:::
+
+證據：sliver 的寬度是 **feature size**，也就是同一個 cell 上兩條不相鄰邊界 edge 的最小距離，在精確 carrier 上量得，arc 也包含在內；chord polygon 的 $2A/P$ 另存為 `width_2a_over_p_um`。最窄的 cell：`pad_in_ground_A` 為 7.07 µm（$2A/P$ 為 28.48 µm）、`pad_in_ground_B` 為 0.1 µm（port plane 切出的垂直 wall；$2A/P$ 為 0.0998 µm）、含 band 的 case 為 0.0767 µm（$2A/P$ 約 0.397 µm）；最小角度皆為 90°；snap drift 為 0，這是因為 layout 的輸入本來就在 grid 上（by construction），不是超出報告所顯示的量測性質。這些最窄 cell 的數字，原型計算與 production 的 sliver 報告一致。sliver 報告只量測，不套用任何 threshold。在 production 的 extreme-case catalogue 中，`near_coincident_layers_2g`（兩層邊緣相距 2 g，產生真實的 2 nm sliver face）在 Route B 與 Route C 仍通過全部檢查：Gmsh 載入、conformal mesh、`BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer`；粗略 mesh 的 `minSICN` 最小值為 0.001，是 catalogue 中最低的幾組之一，但沒有 ≤ 0 的元素。相距 0.4 g 的 fixture 則被合併、沒有 sliver。執行範例 `pad_in_ground_B_bands` 在 60 µm 的粗略 mesh（相對於 0.1 µm 的 slab 與 0.077 µm 的 band 非常粗）有一個 `minSICN` 與 `gamma` 都為 0 的扁平元素；同一個 case 的 Route A 與 Route C 版本沒有（`minSICN` 最小值分別為 0.0020 與 0.0016）。這個元素不是窄 face 或幾何缺陷，而是 meshing 的人為結果：0.1 µm 的 band 條帶被約 60 µm 的元素 mesh，加上 layout 的對稱，使四條平行的 band 邊界 edge 各在 x = 0 有一個 node，3D Delaunay 把這四個共線的 node 連成體積為零的四面體。幾何通過 OCCT 檢查（含 self-interference），Gmsh API 的 oracle 對同一個 topology 重現同樣的四面體；改用依 sidecar `mesh_hints` 建立的 size field（band 邊界附近 0.25 µm，成長率每 µm 2，配方見 [Mesh size hint](emission.qmd#mesh-size-recipe)），`minSICN` 為 0.014。band 的 mesh 尺寸是 Palace adopter 的責任（見[使用契約](consumer-contract.qmd#sidecar)）。D2 因此不變，不設門檻，也不構成重新評估的條件。見 [Slivers](slivers.qmd)。
+
+## D3 Arc noding {#d3}
+
+::: {.askr-table-compact}
+| | |
+|---|---|
+| 問題 | circular arc 如何做 noding？ |
+| 選項 | （a）對 line 與 arc carrier 做原生 snap rounding（Eigenwillig 等人）。（b）**polyline witness**：arc 以 sagitta 至多 $g/4$ 的 chord 進入 snap rounding，帶著 arc carrier ID 與參數區間；rounding 之後，同一條 arc 中間沒有外來 hot pixel 的連續片段 merge 回一條 arc edge，由 carrier 經過其 snapped 端點實現。 |
+| Lead 的建議 | 暫定（b），待 review；（a）是升級路徑。 |
+| 理由 | （b）重用 polygon 的 noding kernel（rectilinear 工作則可用 KLayout 的整數 region engine），已實作並測試，且結構性 validation 能抓到錯誤的 merge；精確性留在 carrier 中。 |
+| 後果 | witness 的大小約以 $\sqrt{r/g}$ 成長：arc 很多的 layout 在 merge 之前要付這筆成本。一個交叉會把 arc 切開，各片段經由自己的 snapped 端點重新實現。原生 arc rounding 可以去掉 witness 與它的成本。 |
+| 實作狀態 | production 已實作（1a）：arc 以 polyline witness 進入 snap rounding，同一條 arc 中間沒有外來 hot pixel 的連續片段 merge 回一條 arc edge，由 carrier 經過其 snapped 端點實現；validator 的 `arc_edges_do_not_cross` 與 `arc_deviation_within_snap_bound` 是安全網。 |
+| 決定者 | Architecture review。 |
+:::
+
+證據（production，`figures/inset-numbers.json` 與 `figures/arrangement-guarantees-numbers.json`）：含 band 的 Route A 範例（margin 0.1、0.5、2 µm），z = 0 level 有 4 058 條 noded edge（4 050 個 hot pixel），dissolve 後剩 166 條。一段 8 µm 的 quarter arc 約 100 條 chord；pad 的 hot pixel 從 69（32 邊形 hole）增加到 516（`pad_in_ground_A`）。59 條 arc edge 的 realised arc 與精確圓的偏差平均 0.046、最大 0.632 grid unit。這些成本只在 running example 與 catalogue 上量過；scaling 的 layout 沒有 arc，所以大規模的 witness 成本沒有量測，不應外推。
+
+## D4 AEDT solid 交換 {#d4}
+
+AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAEDT 1.3.0，只做幾何與 modeler，不求解）的結論讓 Lead 決定這條路徑。
+
+::: {.askr-table-compact}
+| | |
+|---|---|
+| 選項 | （a）STEP 檔加 tag 表。（b）SAT。（c）由 planned topology 以 PyAEDT 原生建構。（d）把 band 以 AEDT 原生 Imprint 事後切出。 |
+| Lead 的決定 | （a）的 XDE assembly 形式，architecture review 中：OCCT 寫出 **XDE assembly 的 STEP**，每個 solid 一個具名 component；**band 與所有 partition 由 SGB 預先切好寫在 solid 中**，所以不需要 AEDT Imprint；face identity 由**每個 solid 的 face 順序**決定，並在每次 import 時以檢查把關；port 等 free face 由 PyAEDT 依 sidecar 的幾何以原生方式重建；AEDT 原生 Imprint 只作為 fallback。 |
+| 後果 | identity 由 SGB 的 sidecar 加上 face 順序承載，不是由 AEDT 看得到的名稱承載；sidecar 的 tag 順序必須等於 OCC 的 solid face 順序；這是設計要求，每次 import 都要守衛。production 的 `export_aedt_step` 為每個 solid 回傳依 OCC face 順序列出的 face（含面積與中心）作為守衛清單，測試檢查守衛清單、單位、名稱；`export_aedt_step` 在為 solid 命名之前，先把檔案與 sidecar 的 `expected` 區塊（依 tag 順序的 vertex 位置、face 面積、solid 體積與各類 entity 數量）逐項比對，不符即拒絕匯出。但「AEDT 的 face-id 順序等於 OCC 順序」這個性質仍只在原型時期的 AEDT 實驗（E4）中驗證過，沒有不需要 AEDT 的測試能固定它。AEDT 中共用 face 每個 solid 各有一份，conformity 在 AEDT 內是幾何上的。預先切好的 band face 取代 AEDT 的 non-model integration sheet（[Inset imprint](inset-imprint.qmd)）。 |
+| 實作狀態 | 匯出端已實作（1d，需要 OCP，即 `occt` dependency group）：`export_aedt_step` 寫出 XDE assembly 的 STEP，名稱是 sidecar 的 `aedt_name`（已消毒且檢查過碰撞）。匯入端是 AEDT adopter 的工作，不在階段 1。**production 的輸出尚未實際匯入 AEDT 測過**；匯入的證據仍是下面 E4 的原型輸出。 |
+| 決定者 | Lead 決定，architecture review 中（與 AEDT stage 的負責人一起）。 |
+:::
+
+證據（E4 原型實驗；其原始輸出沒有公開，在 AEDT 內重新驗證 production 輸出屬於 AEDT adoption 的工作）：
+
+- **名稱。** 只有 XDE assembly（名稱放在 PRODUCT 上）能讓 solid 名稱進到 AEDT；平的 free shape 會失去名稱。AEDT 會去掉 `[A-Za-z0-9_]` 以外的字元（非 ASCII 名稱整個被丟掉），所以 SGB 在 sidecar 寫入已消毒且檢查過碰撞的 `aedt_name`，import 後斷言 object 集合相同。
+- **單位。** OCCT 的 STEP 必須 `xstep.cascade.unit=MM` 搭配 `write.step.unit=UM`（數字不變，標示 µm）；寫成 UM 加 UM 會讓模型縮小 1 000 倍，金屬 slab 崩塌。兩個 solid 的體積相對誤差為 $-2.6 \times 10^{-10}$ 與 $-1.6 \times 10^{-10}$。
+- **Face 順序。** AEDT 不向 scripting 公開 face 名稱。在 4 個 case × 2 個 solid 上**觀察到** AEDT 的 face-id 順序等於 OCC 的 solid face 順序；平面 face 的面積與中心與 OCC 相符到 $10^{-6}$，含 arc 的 face 面積差最多 $2.5 \times 10^{-5}$（含 band 時 $4.7 \times 10^{-5}$，一個 5 µm² 的 sliver 為 $1.0 \times 10^{-3}$）。這是此 AEDT 版本與 import 路徑的觀察性質，不是文件保證，所以每次 import 都以 face 數量與逐 face 的面積與中心檢查把關，失敗即停。
+- **Sheet。** STEP 的 sheet body 在 µm 尺度不能可靠 import：1 000、300、200 µm 的方形以具名 Sheet 且面積精確地進來，100 µm 以下失敗；21 個 band face 只有 1 個保有名稱，其餘為面積 0 的 solid；30 × 10 µm 的 port sheet 被默默丟棄。
+- **Imprint。** 可行（face 數 29→41、9→21，與預先切好的模型一致，體積不變）但只回傳 `True`，沒有 id 對應，face 名稱被抹除；以 (centroid, area) 對應回去 21/21 個 sheet 都唯一匹配（最近的被拒配對在容差外 2.7 倍），但那是幾何比對。
+- **材料與 boundary。** 依 sidecar 的 group 名稱指派，62 個 face 的查找失敗 0 次；`Perfect E` 的 `Faces` 讀回等於請求；port 由 sidecar 幾何原生重建（面積 300 對 planned 300）並成功建出 `Lumped Port`。
+- **其他格式。** SAT 與 Parasolid 無法由 OCP 7.8.1 或 gmsh 4.15.2 輸出；E3 原本的 `model.step`（mm 標示、µm 數字）無法 import。
+
+## D5 Attribution 粒度 {#d5}
+
+::: {.askr-table-compact}
+| | |
+|---|---|
+| 問題 | surface 的 group 與 Surface EPR 的貢獻，要以 **Net**（例如原型的 `MA::pad`）還是以 **Entity**（每個 source 形狀）為單位？ |
+| 決定 | **預設 per Entity**：不同 Entity 之間的 seam 保留為 required edge，讓每個 Entity 的 Surface EPR 貢獻可以分開。報告依**界面種類**（MA、MS、SA）彙整，並可顯示總和；Net 只用在後端需要電氣 identity 的地方（Electrostatic 的 terminal 與 ground）。 |
+| 範例中 | running example 中每個 Net 只有一個 Entity，所以 per Net 與 per Entity 得到相同的 face，只有名稱不同。 |
+| 實作狀態 | **production 已實作。** 每個 domain 帶著擁有它的 Entity：同材料、同 Net 的兩個 Entity 是分開的 volume，中間是 required 的共用 face（兩個導體之間的 face 命名為 `MM::<a>\|<b>::<face kind>`），被排除的 volume 之間的共用 face 不輸出（Route B）。area-weighted membership 記錄每個 Entity 的份額，輸掉重疊的 Entity 仍列出自己的份額。 |
+| 同一 Net 的重疊 | 重疊區屬於宣告 priority 較高的 Entity；priority 相同或沒有宣告時 fail closed：`OverlapError` 指名兩個 Entity 與位置，並指出該由哪個來源補上 priority。這是 Lead 的預設，可以回復。 |
+| Priority 的來源與慣例 | 在 PDK 介面採 gdsfactory 慣例：**`mesh_order` 較低者勝**；SGB 內部（`SemanticEntitySpec.priority`）是「較高者勝」，所以 `mesh_order` 要在正規化時轉成內部的 priority；這個轉換由 develop 上的修正提供（PR NCUPHY-LTLab/scgsim#61），階段 1 的分支本身的 `normalization.py` 還不含它。先看材料種類（導體勝過 dielectric，dielectric 勝過 vacuum），同一種類內才比 priority。三個來源：（1）layer stack 的 `mesh_order`，用於不同 layer 的 Entity；（2）元件標註的 `priority`，用於同一個元件、同一個 layer 之內（PDK 填入）；（3）`GeometryPlan.set_entity_priorities`，用於不同 occurrence 之間的 assembly-level priority（整個 mapping 一次取代，任何一項無效則維持原狀）。錯誤訊息依 Entity 所在的 layer 與 occurrence 指出該補的來源。 |
+| 命名規則 | primary group 為 `<kind>::<qualified entity id>::<face kind>[::band=k]`，face kind 是 `top`、`bottom`、`sidewall`、`sheet`、`interface` 之一，所以一個 group 不會混入物理上不同的界面。例如 pad 的頂面 `MA::chip/q0/pad::top`、有 band 時 `MA::chip/q0/pad::top::band=2`；Route A 的 sheet 為 `<entity>[::band=k]`，同時列在 MA 與 MS 的 union 中；volume 為 `<entity>`（裸的 entity id 指物件本身，帶界面前綴的名稱指兩個東西之間的 face，維度由 Gmsh 的 Type 欄位標示；entity id 不可等於界面前綴或含 `::`，否則報 `InputError`）；lumped port 為 `PORT::<port sheet id>`（一個 sheet，不帶 face kind）。MA、MS、SA 等的總和是 sidecar 的 `unions.interface_types`；Net 層級的聯集在 `unions.nets`，只用於 Electrostatic 的 terminal 與 ground。名稱從不帶 native tag。 |
+| 後果 | seam 只在語意上需要時才存在；per Entity 會增加 cell、mesh constraint 與 physical group 的數量。N 很大時，group 數的成本需要處理（見證據；production 尚未重新量測）。 |
+| 決定者 | Human 已決定預設；同一 Net 重疊的規則是 Lead 預設。 |
+:::
+
+證據（原型計算，除非另註）：membership 已記錄（`TopoFace.membership`；sidecar 的 `lineage.membership`；production 同樣記錄）：horizontal face 為涵蓋面積比例，wall 為底邊長度比例；彼此不互斥，可總和超過 1，且包含背景 prism。N = 20 000 時，帶 lineage 的 sidecar 在 Python 中建構 2.57 s、序列化 1.57 s、94 MB，不帶 lineage 為 0.35 s、0.30 s、46 MB（這次量測早於 membership 的修正，目前寫出的 sidecar 更大，約 126 MB，尚未重新量測）。Gmsh API emission 中 `addPhysicalGroup` 的成本隨 group 數成長（目前保存的量測：N = 5 000 為 0.55 s、N = 20 000 為 10.0 s），validator 的 group 檢查已改為與 entity 數成線性（N = 20 000 為 2.1 s，斜率 1.09）；若 group 數成為瓶頸，可以改成每種 kind 一個 group 加 sidecar 中的 attribute 表。
+
+## D6 取代計畫 {#d6}
+
+::: {.askr-table-compact}
+| | |
+|---|---|
+| 決定 | 新 pipeline 上線時，既有的 polygon 與 curved 兩條幾何路徑都移除，**不保留相容層**；公開的 `GeometryPlan` API 維持不變。 |
+| 理由 | 設計是 fail-closed、沒有 fallback 幾何；第二條路徑等於對「這個 entity 是什麼」有第二個答案，並會同時維持兩套 identity 機制。 |
+| 後果 | handoff 的 ID 隨新的 content-addressed 機制改變，不保證切換前後可重現。S0 與 S1 沿用 develop 已有的固定 grid source preparation（在 declared grid 上做 source 正規化與 polygon Boolean）：它的 `GeometryGridContext` 攜帶 S4 使用的模型 grid $g$；從 S4 起才是新 pipeline。 |
+| 實作狀態 | **待階段 4。** 階段 1 的 SGB core 在 `scgsim.geometry.sgb`，與舊路徑（`compiler/`、`construction/`、被取代的 `planning/` 模組）並存：新 package 不 import 舊路徑（import-linter 契約 `sgb-core-independence` 強制），`src` 中也沒有任何舊路徑的程式 import 新 package。Palace 與 AEDT 仍呼叫舊路徑，切換是階段 3（Codex）；兩個 adopter 都切換之後，才在階段 4 一次移除舊的 `compiler/`、`construction/`、被取代的 `planning/`、它們的 model、測試與文件，不留相容層。階段 2 的[使用契約](consumer-contract.qmd)與[欄位對應](consumer-mapping.qmd)是給階段 3 的。S1 的抽出（把 `planning/` 中屬於 S1 的函式移到 S1 模組）也延到階段 4，因為 AEDT 的 `runtime_inventory.py` 把幾何模組路徑釘在名單裡。公開的 `GeometryPlan` 只新增一個方法：`set_entity_priorities`（assembly-level priority，見 [D5](#d5)）。 |
+| 決定者 | Human 已決定。 |
+:::
+
+## D7 Iterated snap rounding 的 drift 上限 {#d7}
+
+::: {.askr-table-compact}
+| | |
+|---|---|
+| 問題 | iterated snap rounding 的 drift 要限制（bounded-drift ISR，Packer），還是只記錄？ |
+| 選項 | （a）記錄每條 edge 的偏差。（b）以 bounded-drift ISR 限制它。 |
+| Lead 的建議（已記載於 brief） | v1 只記錄（a）：sliver 報告中的逐 edge 偏差加結構性 validation；若真實 layout 的輸入（或 extreme-case fixture catalogue）出現超過 1 g 的 drift，再重新評估 bounded-drift ISR（b）；隨機 segment 的對抗性集合（1.417 g、1.925 g）是壓力測試的證據，不是這個觸發條件。這裡沒有訂任何新的 drift 上限數值。production 的 catalogue 已逐列記錄 drift，觸發條件因此可以評估：54 個建出的列，最大的 snap drift 是 0 g，最大的 arc 偏離是 0.760 g（`arcs_crossing_shallow`），都低於 1 g，所以**沒有被觸發**；測試對每一列以 ≤ 1 g 斷言。 |
+| 實作狀態 | 已實作（只記錄）：sliver 報告記錄逐 edge 的偏差，validator 有 `arc_deviation_within_snap_bound` 警告與其他結構檢查；catalogue 逐列記錄 `max_snap_drift_grid` 與 `max_arc_deviation_grid`。 |
+| 後果 | layout 的 source 已在 grid 上，drift 只出現在斜向 carrier 的交叉處。（b）要付出實作複雜度，並可能改變 noding 的結果；（a）依賴記錄下來的偏差與 validation。 |
+| 決定者 | Architecture review；若 drift 上限的數值要進入 handoff 成為容差，則由 Human 決定。 |
+:::
+
+證據（production 計算）：每個數字都有輸入類型、樣本範圍與來源，來源是 `arrangement_guarantees.py` 的輸出 `figures/arrangement-guarantees-numbers.json`；最後一列是 production 的 catalogue 報告。
+
+::: {.askr-table-compact .askr-table-numeric}
+| 輸入 | 樣本範圍 | 量到的最大偏離 | 來源 |
+|---|---|---|---|
+| 一輪 snap rounding（隨機 segment） | 250 組 × 24 條 segment，整數端點在 48 × 48 的 box | 0.707 g（理論界 $\sqrt2/2$） | `random_trials.round_1` |
+| iterated rounding（隨機 segment） | 同上 | 1.417 g | `random_trials.iterated` |
+| iterated rounding（dense 對抗性隨機 segment） | 1 500 組 × 40 條 segment，30 × 30 的 box | 1.925 g | `dense_random` |
+| iterated rounding（類 layout） | 隨機 layout N = 200，6 298 條 edge | 0.605 g，沒有 edge 超過 bound | `layout_like.random_layout_n200` |
+| 五個 running example 的 edge | 見 `layout_like.examples`（五個範例，`arrangement-guarantees-numbers.json`） | snap drift 0（layout 輸入在 grid 上，by construction） | `snap_drift` |
+| derived（offset）arc 與精確圓的偏差 | 含 band 的 Route A，59 條 arc edge | 0.632 g | `arc_edges`（這是 arc 的證據，不能代替直線 segment 的證據） |
+| production catalogue | 23 個 fixture × 三種 route 中建出的 54 列 | snap drift 0 g（fixture 的輸入在 grid 上）；arc 偏離最大 0.760 g | `python tests/sgb_catalogue_report.py` 的 `max_snap_drift_grid`、`max_arc_deviation_grid` |
+:::
+
+先前提過的「類 layout 為 0.61–0.70 g」沒有可重現的來源，這裡不採用；類 layout 的可重現數字是上表的 0.605 g。
+
+## D8 Emission：Gmsh API 或直接序列化 {#d8}
+
+::: {.askr-table-compact}
+| | |
+|---|---|
+| 問題 | 模型是由 Gmsh/OCC API 由下而上呼叫建構，還是直接從 planned topology 寫成 BREP/XAO？ |
+| 選項 | （a）Gmsh API 建構：序列的，受 `synchronize`、平面 face 建構與 XAO 寫出所限。（b）直接 BREP/XAO 序列化：可分 chunk 平行寫出、mesher 只載入一次、明確寫出每個 orientation。 |
+| Lead 的決定 | （b），architecture review 中。emission 把 planned topology 直接寫成 OCCT `CASCADE Topology V1` 文字；Gmsh 只用來做 *mesh*（與作為測試 oracle），絕不用來建構幾何。 |
+| 理由 | （a）的成本隨規模成長得比線性快：同一個 Route B 隨機 layout，Gmsh API 的 oracle 在 N = 500、1 000、2 000 要 2.3 s、8.9 s、63.3 s（局部斜率 2.0 與 2.8），N = 5 000 超過 10 分鐘仍未完成；直接 writer 在 N = 1 000 要 0.49 s，N = 20 000 也只要 13.8 s。Gmsh API 也無法指定 solid 的 sense：oracle 重播出的 substrate solid 質量是負的（N = 500、1 000、2 000 都是，`figures/why-scaling-oracle.json`），也就是 solid 的內外顛倒。直接 writer 明確寫出每個 orientation。 |
+| 原型的限制 | **直接 writer 對 cylinder wall 並非「任意邊數都精確」。** 當一條宣告的 arc 帶著外來的 vertex（例如 port 的邊落在圓形 pad 上，或有一個 post 站在彎曲的邊上），wall 變成 5 條 boundary edge；arc 被切開的兩段各自經由 snapped 端點實現，落在略有不同的圓上，wall 的底邊與頂邊不在同一個圓柱面上，原型的直接 writer 因此拒絕這種 wall（Route B/C；Route A 的 sheet 沒有這個問題）。Gmsh API oracle 可以寫出它。 |
+| 修正（已實作） | 在外來 vertex 處以一條 vertical edge 把 wall 切開（頂部的 arc 在同一處切開）；每一段在自己的 realised 圓上是精確的圓柱，兩段共用那條 vertical edge。production 的 assembly 對 arc 上的每個外來 vertex 都加入這條垂直 edge，並反覆計算直到沒有新的 vertex 被迫加入；上下兩側的 horizontal face 與疊在上下的 wall 也看到同樣的切點，所以共用的 edge 仍然完整共用。驗證檢查 `curved_walls_are_single_cylinders` 斷言每面曲面 wall 都由同一個圓上的一條下 arc 與一條上 arc 圍成。 |
+| 範圍 | 只有宣告的 arc 會產生 cylinder wall；直線 wall 是平面，可以有任意多條邊界 edge，不需要切開。以 polygon 表示的圓（GDS 的 16–128 個點）永遠不會產生 cylinder wall，它們的 wall 是平面（見 [Assembly](assembly.qmd)）。 |
+| 後果 | 去掉大部分寫出成本，但不去掉載入成本；writer 成為 topology contract 的第二個實作，必須與 API 路徑保持一致（E3 的檢查比對 group 內容與體積）。planned ID 對 native tag 的綁定由 writer 的建構順序決定，並記錄在 sidecar。 |
+| 實作狀態 | 已實作（1d）：直接寫出 BREP 與 XAO（含 pcurve、圓柱與明確的 orientation），輸出對 `workers`、`tiles` 與 hash seed 逐位元組相同（同一台機器上測過；跨作業系統、CPU 或 libm 相同只是論證，尚未在第二個平台比較，見[使用契約](consumer-contract.qmd#determinism)）。 |
+| 決定者 | Lead 決定，architecture review 中。 |
+:::
+
+證據（production，`figures/why-scaling-measured.json`）：Route B 隨機 layout（seed 2）N = 20 000 時，直接 writer 寫出 BREP 與 XAO 在單一 worker 為 13.8 s、16 個 worker 為 9.1 s；載入到新的 Gmsh process 仍需 49.7 s，再做載入檢查 `verify_loaded` 15.3 s。Gmsh API 的 oracle 在這個規模跑不完（N = 2 000 就要 63.3 s）。輸出對任何 worker 數與 tile 配置逐位元相同。（原型的 E3 另外檢查過：直接 writer 重現解析體積的相對誤差為 0，airbridge 為 $2 \times 10^{-16}$，group 內容與 API 路徑相同。）Human 提出的採用條件，也就是 AEDT 能帶著語意消費直接寫出的幾何，已由 E4 滿足（見 [D4](#d4)）。
+
+這些時間來自 **polygon-only 的 layout：沒有 arc、沒有 cylinder wall、沒有 band**，所以大規模的 cylinder 精確性與 arc 的成本沒有量測，不應外推。
+
+證據（production）：catalogue 的 `arc_with_foreign_vertex`（Route A、B、C）與 `arc_with_foreign_vertex_from_post`（Route B、C）現在都建得出來，通過建構、寫出、Gmsh 載入、粗略 mesh 與全部 OCCT 檢查，原型時期被拒絕的兩個組合不再被拒絕（見 [Validation](validation.qmd#catalogue)）。測試另外檢查：外來 vertex 把 wall 變成兩個圓柱而不是 5-edge wall；兩片共用經過外來 vertex 的垂直 edge；圓盤的體積在切開後仍與封閉形式相符；port 兩次穿過圓形 pad 時，每個疊起來的 wall run 一致地切開；Route C 的切法相同；以多邊形近似的圓永遠不產生圓柱 wall；直線 wall 的邊界 edge 超過四條時不切開。production 的單次量測（`tests/sgb_catalogue_report.py --timings`，一個 1 000 個 feature 的 Route B 隨機 layout，14 284 個 face，只有 polygon，單一 worker）：推導加驗證 1.87 s，寫出 BREP 0.13 s、XAO 0.02 s，sidecar 0.56 s，產生 sliver 與 validation 報告 1.84 s，三個檔案共 33 MB。這是單次量測，時間四捨五入到 0.01 s，不是 scaling 結論。
+
+## D9 Production kernel 語言 {#d9}
+
+::: {.askr-table-compact}
+| | |
+|---|---|
+| 問題 | production pipeline 的 noding、half-edge 與 dissolution 核心用什麼語言撰寫？ |
+| 選項 | （a）純 Python，搭配更粗的 job 與 flat array。（b）Python orchestration，加上負責 noding、half-edge 結構與 dissolution 的 compiled kernel。 |
+| Lead 的建議 | （b）。 |
+| 理由 | 平行化量到的 Python 上限約 2×（N = 20 000、單一 process 為 1.98×），序列比例約 50%，而實測最好的 derivation 加速只有 1.17×（N = 20 000）到 1.26×（N = 5 000，見[平行化的 derivation](parallelism.qmd)）。序列的 stage 正是 half-edge 結構、dissolution、face assembly 與 noding driver。單是暫停 garbage collector 就有 30% 的改善，所以每條 edge 一個 Python 物件本身就是成本。 |
+| 後果 | packaging 與 release 多一個 compiled dependency；kernel 的語言（以及 KLayout 的整數 region engine 能否涵蓋 rectilinear 的情況）是 review 的一部分。收益應表述為第一個 compiled 實作的目標，不是 prototype 的結果。 |
+| 決定者 | Architecture review；packaging 的影響告知 Human。 |
+:::
+
+證據（production，`figures/why-scaling-measured.json`）：N = 20 000、單一 process 時，所有 stage 的時間加起來是 58.8 s（build wall time 為 61.6 s），其中 serial stage 為 29.7 s（50%）；Amdahl parallel fraction 單一 process 為 0.49–0.52，有 worker 時為 0.51–0.61（被 worker 的總計算量變大墊高，見[平行化的 derivation](parallelism.qmd)）。這是單次執行的結果，同一個 layout 的同一個推導在三次呼叫間差約 10%，所以這些數字只有量級的意義；它們全部來自 polygon-only 的 layout。原型的教訓（`experiments/sgb-redesign/PROTOTYPE_LESSONS.md`）把不足歸因於原型使用的語言，而不是演算法；compiled kernel 尚未量測。production 的階段 1 仍是純 Python，沒有開始 compiled kernel 的工作，這一項維持建議狀態。
+
+## 已解決的事項
+
+以下事項已由 Lead 在 brief 中定案，不再開放。標明「production」者已在階段 1 實作並有測試。
+
+- **Group 名稱帶 face kind（階段 1e）**：primary surface group 為 `<kind>::<entity>::<face kind>[::band=k]`，face kind 是 `top`、`bottom`、`sidewall`、`sheet`、`interface`。Route A 的 band sheet 為 `<entity>::band=k`，並列在 MA 與 MS 的 union 中；`surface_epr_rows` 在有 face 的某一側是 vacuum 時才給 MA row、是 dielectric 時才給 MS row，都對到它，並以 `face_sides` 逐 face 標明積分的一側、`side` 為共同值或 `mixed`；Route B 在 top face 產生 `MA::<entity>::top::band=k`、在 bottom face 產生 `MS::<entity>::bottom::band=k`（production）。sidecar 另有 `mesh_hints`（band 邊界、refinement curve、曲線 edge；沒有尺寸）。
+- **直線 inset member 的 lineage**：保留產生它的 primitive（`<support>/ring<r>/edge<k>`），與 arc member 相同。
+- **Area-weighted membership**：記錄於 lineage，各份額不互斥（production）。
+- **Band 面積單調性**：`band_area_monotone` 是 validation invariant（production）。
+- **Sliver 寬度**：定義為精確 carrier 上的 local feature size，不是 $2A/P$。
+- **Edge ID**：H(plane key、排序後的端點 vertex ID、排序後的 carrier 集合)。
+- **Physical tag 不是 identity**：tag 依排序後的 group 名稱，加入 group 就會位移；consumer 儲存 group 名稱。
+- **AMR 的說法**：conformal 的 AMR 讓 band edge 維持為 element edge，masked integral 沒有 indicator 切割的誤差；refinement 是否集中在 band edge 取決於 size hint 與 error estimator，在 Palace 實測之前不多作聲稱。
+- **Refinement curve** 是 `refinement_only`；落在沒有輸出 face 的片段是錯誤；`dissolve` edge 政策已移除，tile seam 不是 family（production）。
+- **不同 Net 的接觸**在每個 route 都是錯誤，包含 Route A 的 sheet 共用 edge 或 vertex，以及 snapping 造成的接觸；同一 Net 的有限厚度金屬只在 vertical edge 或 vertex 相接（non-manifold pinch）會被拒絕，sheet 可以在角落相接（production：`ContactError`、`NonManifoldError`）。
+- **Validation 不可在 production 關閉**；關閉開關只存在於 prototype 的測試中。validation 分三層（見 [stage 參考](pipeline-reference.qmd)）。
+- **Pixel 慣例**：pixel 以 grid point 為中心，$[c-g/2, c+g/2)^2$。
+- **Wall coalescing 的完整規則**與 **cut family 的目標 level** 已在 brief 中完整敘述（production）。
+- **Curve class**：v1 支援直線與圓弧（含由 GDS 邊界重建的圓）；`interpolation_spline` 與 B-spline 邊界 fail closed，B-spline carrier 留待之後的階段。
+- **scaling 的時間只有量級的意義**：數字有起伏（同一個 layout 的同一個推導在三次呼叫間差約 10%），而且 layout 只有 polygon；宣告的負載條件下的量測不在這些數字之內。
+
+## 補充：重現資料
+
+D3、D7、D8 與 D9 的數字可由下列檔案重現；圖與數字的腳本與執行方式列在 `docs/design/sgb/_figures/README.md`，本頁不重跑 prototype。
+
+::: {.askr-table-compact}
+| 資料 | 來源 |
+|---|---|
+| 一輪與 iterated 的 drift | `figures/arrangement-guarantees-numbers.json`（由 `_figures/arrangement_guarantees.py` 產生） |
+| 逐 edge 的 snap drift、arc 偏差、feature size | `figures/arrangement-guarantees-numbers.json` 的 `layout_like`；production 每次 build 寫出的 `<stem>.slivers.json` |
+| noding 的 edge 數與 hot pixel 數 | `figures/arrangement-guarantees-numbers.json` 的 `level_stats`、`figures/inset-numbers.json` 的 `level_z0` |
+| emission 的時間與載入時間 | `figures/why-scaling-measured.json`（`_figures/why_scaling.py measure`）、Gmsh API oracle 的 `figures/why-scaling-oracle.json` |
+| AEDT 實驗（E4） | 原型時期的實驗，原始輸出沒有公開；在 AEDT 內重新驗證 production 輸出屬於 AEDT adoption 的工作 |
+| Gmsh sewing 的觀察 | 隨機 N = 1 000 的 layout 中 vacuum 內外顛倒，以及縫合約 6 萬個 face 的 shell 花了 180 s 與 28 GB：這些數字在 prototype 第 3 階段量測一次，**沒有保存輸出檔**，目前記錄在 `experiments/sgb-redesign/DESIGN_BRIEF.md` 與 `PROTOTYPE_LESSONS.md` 中，應視為一次性的觀察 |
+| 原型的 extreme-case catalogue（22 個 fixture、39 列，帶 5-edge wall 的拒絕） | 原型時期的觀察；原型程式與輸出已移除，無法再重現。它的 5-edge wall 拒絕已由曲面 wall 的切開消除，現行的重現來源是下一列的 production catalogue |
+| production 的 extreme-case catalogue（23 個 fixture、63 列；mesh 品質與 drift） | 在 `scgsim` 套件根目錄執行 `python tests/sgb_catalogue_report.py --timings --out <資料夾>`（需要安裝 `occt` group 才會有 OCCT 欄）；測試 `tests/test_sgb_extreme_cases.py` |
+| priority 的 develop 端修正 | PR NCUPHY-LTLab/scgsim#61（`mesh_order` 轉內部 priority）；階段 1 的測試 `tests/test_sgb_priority.py` 檢查錯誤訊息指出的來源 |
+| 曲面 wall 的切開 | `tests/test_sgb_curved_walls.py` |
+| 驗證時間隨規模 | `figures/why-validator-scaling.json`（`_figures/why_scaling.py validators`） |
+| scaling 量測 | `figures/why-scaling-measured.json`（單次執行） |
+| 直接 writer 的時間與驗證 | `figures/why-scaling-measured.json`；build 寫出的 `<stem>.validation.json` |
+:::

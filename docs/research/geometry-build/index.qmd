@@ -1,0 +1,32 @@
+---
+title: "Geometry build performance"
+description: "How long the SGB geometry build takes as a chip grows, what comes after it, what its checks cost and whether parallel derivation is needed."
+scgsim-kind: "research"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/research/geometry-build/index"
+---
+
+**Conclusion.** The SGB geometry build is fast enough without parallel speed-up. Its time and memory grow almost linearly with the number of features on the chip, and writing it is about 80 times faster than building the same geometry through the Gmsh API at 2,000 features, a gap that widens with size. Parallel derivation is therefore not a goal of this design.
+
+The evidence, in the order the pages give it:
+
+- On random layouts with 1,000 to 20,000 features, deriving and validating the model takes 2.3 s, 14.5 s and 61.6 s; the local slopes are 1.13 and 1.05 (a slope of 1 is exactly linear). See [Scaling with chip size](scaling.qmd).
+- Writing the same model directly as BREP takes 0.77 s at 2,000 features, where the Gmsh API takes 64.7 s; the Gmsh API run at 5,000 features did not finish in 10 minutes. See [Direct writer and Gmsh load](emission-and-load.qmd).
+- The structural checks take about one fifth of the build time and scale with a slope of about 1.15. See [Cost of the checks](validation-cost.qmd).
+- The best parallel speed-up of the derivation is 1.17 to 1.26 times, and the whole path from derivation to a loadable model improves by 1.04 times at most. See [Parallel derivation](parallelism.qmd).
+
+## What each page answers
+
+| Page | Question |
+|---|---|
+| [Scaling with chip size](scaling.qmd) | How do derivation time, model size and peak memory grow with the number of features? |
+| [Direct writer and Gmsh load](emission-and-load.qmd) | How much faster is the direct BREP writer than building through the Gmsh API, and what does the rest of the path cost after the derivation? |
+| [Cost of the checks](validation-cost.qmd) | What do the structural checks and the OCCT checks cost, and how does that cost scale? |
+| [Parallel derivation](parallelism.qmd) | What do tiles and workers buy, what limits them, and is serial derivation sufficient? |
+| [Reproduction](reproduction.qmd) | On which machine and versions were the numbers measured, and how are they reproduced? |
+
+## What was measured
+
+The measurements run the production SGB core (`scgsim.geometry.sgb`; see [GeometryPlan and SGB Route A/B](../../geometry-sgb.qmd)) on random layouts: N small features on one chip, each in its own ground cutout, built with Route B. The layouts contain polygons only, with no circular arcs and no inset bands, so the cost of arcs and bands at large size is not measured and these numbers do not extend to them. The design reasoning behind the pipeline is written in Traditional Chinese: [Why plan first](../../../zh-TW/docs/design/sgb/why-plan-first.html).
+
+All numbers come from one machine with 64 hardware threads and 503 GiB of memory; each case ran once. [Reproduction](reproduction.qmd) lists the machine, the software versions, the data files and the commands.

@@ -1,0 +1,178 @@
+---
+title: "Identity、lineage 與 mapping chain"
+description: "每個 vertex、edge、face 與 volume 如何取得可重現的 content-addressed ID、語意名稱如何疊在其上，以及如何以查表從 solver attribute 追到 source 曲線。"
+lang: zh-TW
+scgsim-kind: "design"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/design/sgb/identity"
+---
+
+Solver 回報某個 attribute 的結果時，SGB 讓你能以查表（而不是看幾何）知道它是什麼：從 Palace attribute 一路追到 physical group、face、edge、carrier，最後到 source 曲線。這一頁說明這條 mapping chain、兩層 identity、每種 entity 的 hash 規則、lineage 記錄了什麼，並在 running example 上完整追一次。
+
+本頁以 Route B 含 band 的 pad-in-ground 範例（production 測試端的 stage-level scene `pad_in_ground("B")`，三個 margin 0.1、0.5、2 µm 的 band，lumped port 在 host 的 support plane z = 0）為例。查詢鏈的數字、圖與決定性的量測都由 `docs/design/sgb/_figures/identity.py` 對 production（`scgsim.geometry.sgb`）計算：建出模型、以 `emit_model` 寫出，再讀 sidecar `scgsim.sgb.sidecar.v1`，與 consumer 讀到的相同。
+
+## 以 running example 看：attribute 10
+
+Palace 回報 **attribute 10** 的 surface loss。你想知道它對應哪一塊 source 幾何，而且不想靠畫圖去猜。這次查詢只用 SGB 寫出的 record：
+
+```{mermaid}
+%%| label: fig-chain
+%%| fig-alt: "查詢鏈：從 Palace attribute，經 sidecar 的 physical group、atomic face、face 的 edge tag、atomic edge 與 carrier，到 inset request 與來源 Entity。"
+flowchart LR
+  A["Palace attribute<br/>10"] -->|"sidecar: physical_groups[*].tag"| B["physical group<br/>MA::pad::top::band=2"]
+  B -->|"group record: ids"| C["atomic faces<br/>f:a9b6…, f:ea12…"]
+  C -->|"expected.face_edges"| D["edge tags 41…52, 186…197"]
+  D -->|"binding.ids_by_tag"| E["atomic edge<br/>e:517f…"]
+  E -->|"lineage.edges"| F["carrier<br/>band_pad_top/ring0/edge9@m2000.0"]
+  F -->|"lineage.carriers、insets"| G["inset request band_pad_top<br/>support: entity pad, top"]
+  C -.->|"group record: native_tags"| N["native tags<br/>32, 39（只記錄）"]
+```
+
+每個箭頭都是一次查表。下列數字來自 production 的 sidecar（`scgsim.sgb.sidecar.v1`）；欄位的完整定義見[使用契約](consumer-contract.qmd#sidecar)。
+
+::: {.askr-table-compact}
+| 步驟 | 你手上有 | 查詢 | 你得到 |
+|---|---|---|---|
+| 1 | Palace attribute `10` | sidecar 的 `physical_groups`，找 `tag` 為 10 的那一筆 | group `MA::pad::top::band=2`（dimension 2；`interface_type` 為 `MA`、`face_kind` 為 `top`、`entities` 為 `[pad]`、`band` 為 `{family: band_pad_top, index: 2}`、面積 583.24 µm²） |
+| 2 | 同一筆 group record | `ids` 與 `native_tags` | 兩個 atomic face `f:a9b66997fc195ff6`、`f:ea12025c6c95ba52`，native tag 32 與 39；它在 `surface_epr_rows` 中是 row `MA::pad::top::band=2` 本身，也列在 `unions.interface_types.MA` 與 `unions.nets.pad` 之下 |
+| 3 | face `f:a9b6…` | `faces[…]`、`lineage.faces`、`lineage.membership` | z = 0.2 µm 的 horizontal face，負側是被排除的 pad volume `vol:d78b0b17d727ed12`、正側是 vacuum `vol:89bd58ad80d63355`；來源 `[band_pad_top]`；membership 為 `{pad: 1.0, vacuum: 1.0}` |
+| 4 | face tag 32 | `expected.face_edges[31]`，再以 `binding.ids_by_tag["1"][tag - 1]` 換成 edge id | 24 個 edge tag（41 到 52 與 186 到 197）；例如 tag 41 是 `e:517f4168eb525f24` |
+| 5 | edge `e:517f4168eb525f24` | `lineage.edges[…]` | carrier `band_pad_top/ring0/edge9@m2000.0`；tag 186 到 197 是同一個 family 在 margin 500 nm 的 carrier（`…@m500.0`），其中 `corner2`、`corner3` 是 reflex arc |
+| 6 | carrier 名稱 | `lineage.carriers[…]` | `{family: band_pad_top, kind: family_member, member: band_pad_top/ring0/edge9}`：family、support 的 ring 0、primitive 9、margin 2 000 nm |
+| 7 | family `band_pad_top` | `insets[]` 中 `request_id` 相同的那一筆 | support `{entity: pad, side: top}`、margins 0.1、0.5、2 µm、support 面積 5421.57 µm²：來源 Entity 是 `pad` |
+:::
+
+（這個 face 的 24 條 edge 是兩個 boundary loop：外圈 12 條在 0.5 µm 的 offset 上，內圈 12 條在 2 µm 的 offset 上，band B2 正是兩者之間。）
+
+同一個 group 的另一個 face `f:ea12025c6c95ba52` 是 hole 周圍的 ring，有 8 條 edge（`ring1` 的四段 quarter arc 在 0.5 µm 與 2 µm 各一組）。有一項檢查**不屬於**查詢本身，來自 `identity.py` 的計算：量得被追蹤的 edge（rounded corner 的 0.5 µm offset arc，carrier `band_pad_top/ring0/edge0@m500.0`）中點距 support curve 0.5 µm，正是 carrier 名稱裡的 margin。
+
+![`MA::pad::top::band=2` 的兩個 face（橘色）在 z = 0.2 µm 的 pad top 上，以及被追蹤的 edge（紅色）與它所 offset 的 support curve（黑色）。請看放大圖：紅色 arc 是黑色 rounded corner 的 0.5 µm offset。](figures/identity-trace-plan.svg){#fig-trace fig-alt="pad 的平面圖，兩個 band 2 的 face 被標出；放大圖是 rounded corner，被追蹤的 arc edge 距 support arc 半微米。"}
+
+{{< askr-chart-view src="figures/identity-trace-plan.html" label="檢視被追蹤的 face（游標移上去可看 face ID）" >}}
+
+另外兩次查詢的終點不同。`MA::pad::top::band=0` 碰到 pad 的外框，所以它的 edge 帶有 source edge `pad/polygon0/ring0/edge0 … edge8` 與 arc `pad/corner`，以及 0.1 µm offset 的 family member；它的 sources 是 `['band_pad_top', 'pad']`。pad 的 side wall（group `MA::pad::sidewall`，z 從 0 到 0.2 µm）的底邊與頂邊在同一個 carrier `pad/polygon0/ring0/edge2` 上，兩條 vertical edge 的 lineage 是 entity `pad`；它的 membership 是 `{pad: 1.0}`。與 port 相接的那面 wall（port 的一邊落在 pad 的底邊上）的 membership 是 `{pad: 1.0, p1: 0.208}`。
+
+## 兩層 identity
+
+::: {.askr-table-compact}
+| 層 | 例子 | 對什麼穩定 | 用途 |
+|---|---|---|---|
+| **Semantic identity** | `MA::pad::top::band=2`、<code>SA::substrate&#124;vacuum::interface::band=0</code>、`vacuum` | 不相關的修改、worker 數、tile 配置 | physical group、Surface EPR row、報告 |
+| **Atomic topology identity** | `f:5cba27a49e17b07e`、`e:3814641e4355b553` | 同樣的輸入得到同樣的 ID；只有 entity 自己的內容改變時才改變 | 每個輸出 entity 的計畫、lineage、sidecar |
+:::
+
+**Physical group** 是交給 solver 的一組 face 或 volume 的具名集合。這裡的 face 指輸出的 BREP face；它在 arrangement 中對應的平面區域稱為 cell，一個 face 可由一個或多個 cell 合併而成。語意名稱由 cell 的 label 組成：`<kind>::<entity>::<face kind>[::band=k]`。kind 是 surface 種類（`MA` 為 metal–vacuum、`MS` 為 metal–substrate、`MM` 為兩個導體之間、`SA` 為 substrate–vacuum、`PORT`、`EXT` 為外邊界）；entity 是擁有它的 Entity（或 domain）；face kind 是 `top`、`bottom`、`sidewall`、`sheet`、`interface`；有 inset band 時再加 band。volume 與 Route A 的 sheet 不帶前綴，名稱是 entity id 本身：volume 為 `<entity>`，sheet 為 `<entity>[::band=k]`（sheet 一定是 `sheet`，所以不再寫 face kind）；Surface EPR 的 MA 與 MS 兩個 row 仍寫成 `MA::<entity>::sheet[::band=k]` 與 `MS::<entity>::sheet[::band=k]`，都由 sidecar 的 `surface_epr_rows` 指到這個 sheet group。
+
+**命名規則。**裸的 entity id（`substrate`、`pad`、`chip/left`）指物件本身：它的 volume，Route A 導體則是它的 sheet；那是 volume 還是 surface，由 Gmsh 的 Type 欄位標示，名稱不必再重複維度。帶界面前綴的名稱（`MA::`、`MS::`、`MM::`、`SA::`、`AA::`、`SS::`、`EXT::`、`PORT::`）指**兩個東西之間的 face**。這些前綴保留，是因為它們帶著物理：前綴決定 Surface EPR 要對這個 face 套用哪一組 loss 參數（metal–vacuum、metal–substrate、substrate–vacuum 各有自己的 participation 與 loss），不只是分類標籤。因此 entity id 不可以等於這些前綴之一，也不可以含 `::`，否則名稱會有歧義；SGB 遇到這樣的 id 會直接報 `InputError`。
+
+D5 的 per-Entity 命名已在 production 實作，MA、MS、SA 的總和是 sidecar 的 `unions.interface_types`；running example 中每個 Net 只有一個 Entity，所以 per-Net 與 per-Entity 得到相同的 face，只有名稱不同。見 [D5](decisions.qmd#d5)。
+
+::: {.callout-note}
+## Attribute 不是 identity
+範例中的 attribute `10` 只是 `MA::pad::top::band=2` 在排序後 group 清單中的位置（在 `pad_in_ground_B_bands` 的 23 個 group 中，維度 2 的 group 依名稱排序編號）：Gmsh physical tag 依 group 名稱的順序發放。多加一個 group，名稱較後面的 attribute 就會位移。穩定的鍵是**名稱**；sidecar 把數字對回名稱。請儲存名稱，不要儲存數字。
+:::
+
+## Hash 規則
+
+每個 ID 的形式是 `<kind>:<16 位十六進位>`，是 canonical JSON payload 的 SHA-256 的前 64 bit（key 排序、Z 用精確分數）。沒有任何東西依賴列舉順序、worker 或 Python 的 hash seed。
+
+::: {.askr-table-compact}
+| Entity | Hash 的 payload |
+|---|---|
+| vertex `v:` | plane key、grid 座標 $(x, y)$ |
+| edge `e:` | plane key、排序後的兩個 vertex ID、排序後的 carrier ID 集合 |
+| vertical edge `ve:` | $(x, y)$、$z_\mathrm{lo}$、$z_\mathrm{hi}$ |
+| slab cell `c:` | slab key、domain、排序後的 boundary edge ID |
+| horizontal face `f:` | `"horizontal"`、plane key、label（domain、sheet owner、band）、排序後的 boundary edge ID |
+| wall face `f:` | `"wall"`、`wall[z_lo,z_hi]`、兩側的 domain、wall 直線的端點 $u, v$、排序後的底邊**與**頂邊 chain edge ID |
+| volume `vol:` | domain、排序後的 slab cell ID |
+:::
+
+Plane key 是 `level[z]` 或 `slab[z0,z1]`，$z$ 為精確分數（`level[1/5]` 是 0.2 µm）。同一個 grid point 在每個包含它的 plane 上各有一個 vertex ID。
+
+**Wall 的 ID 不含它的 vertical edge。** vertical column 的區段取決於哪些 level 切過這面 wall，而這要等模型中每一面 wall 都存在才知道。它們是 wall 的 derived data：ID 在 wall run 確定之後，由 $(x, y, z_\mathrm{lo}, z_\mathrm{hi})$ 得出。因此 wall coalescing（見 [assembly](assembly.qmd)）可以改變 vertical edge 的 ID，而不改變旁邊 wall 的 ID。
+
+**ID 屬於內容。** face 的 ID 只在它的邊界改變時才改變；band index 在 label 內，所以移動一個 margin 會改變 band 的 face，卻不動 ground plane。native Gmsh tag 從來不是輸入。
+
+## Lineage
+
+Edge 的 carrier 是產生它的曲線的 ID；重合的 edge 會合併它們的 carrier 集合。Carrier ID 有固定的形式：
+
+::: {.askr-table-compact}
+| Carrier | 形式 | 可追到 |
+|---|---|---|
+| source polygon edge | `pad/polygon0/ring0/edge8` | entity、polygon、ring、edge index |
+| source arc | `pad/corner`、`pad/hole/q0`（circle 的四段 quarter arc） | arc 的 `Lineage` record |
+| arc witness chord | `pad/hole/q0#37` | 它的 arc carrier（merge 時 chord index 會被丟掉） |
+| family member，直線或 arc | `band_pad_top/ring0/edge8@m100.0` | family、support 的 ring 與 primitive（`edge<k>`）、margin（nm）、片段 |
+| family member，reflex arc | `band_pad_top/ring0/corner1@m100.0` | family、ring、reflex corner 的序號、margin、片段 |
+:::
+
+直線 inset member 與 arc member 一樣，保留它是由哪個 primitive 產生的（`<support>/ring<r>/edge<k>`）。
+
+Face 的 `sources` 是其 boundary edge 的 base carrier ID 的集合，例如 `MA::pad::top::band=0` 為 `['band_pad_top', 'pad']`，`MA::pad::top::band=2` 為 `['band_pad_top']`。Wall 與 vertical edge 指向它們的 entity。
+
+**Membership**（D5 的預設，production 已實作）逐 face 記錄每個貢獻的 source entity 所涵蓋之面積比例：horizontal face 為涵蓋面積的比例，wall 為底邊長度中由該 entity 的 edge 承載的比例。比例彼此不互斥，總和可以超過 1，因為每個 cell 同時也被背景的 substrate 與 vacuum prism 涵蓋：`MA::pad::top::band=2` 的 face 是 `{pad: 1.0, vacuum: 1.0}`。Entity 是 lineage，不是「每個 Entity 都有獨立量測」的承諾。
+
+## Sidecar：native tag 只記錄，不信任
+
+直接 writer 把每個 planned ID 對到 native tag，規則是**依建構順序**：tag = 1 + 該 ID 在 `binding.ids_by_tag[dim]` 中的位置（OCCT 的 `TopExp::MapShapes` 前序），絕不靠幾何比對。「每個輸出的 native entity 恰好有一個 planned ID」若不成立，載入檢查與 OCCT 檢查就會失敗。production 的 `<stem>.sidecar.json`（`scgsim.sgb.sidecar.v1`，附 JSON Schema）記錄（逐欄位的定義在[使用契約](consumer-contract.qmd#sidecar)）：
+
+- `binding`（含 `ids_by_tag`）、`counts`、`tolerance_um`、`grid_um`、`route`、`route_policy`；
+- `physical_groups`：名稱、dimension、成員 ID、native tag、physical `tag`，以及 `interface_type`、`face_kind`、`entities`、`net`、`band`、面積與兩側的 volume；
+- `unions`：*group 名稱*的清單，絕不是重疊的 Gmsh group，分成 `interface_types`（`MA`、`MS`、`SA`……）與 `nets`。「Net `pad` 的所有導體表面」是 `unions.nets.pad`，例如 `[MA::pad::sidewall, MA::pad::top::band=0..3, MS::pad::bottom::band=0..3]`。每個輸出的 face 與 volume 恰好在一個 primary group 內，因為 Gmsh 的 MSH 輸出會依 group 重複 element，solver 可能誤讀；
+- `surface_epr_rows`：Surface EPR 的 row 對到承載它的 primary group，Route A 的 sheet group（以 entity id 命名，例如 `pad::band=2`）只在其中有 face 的某一側是 vacuum 時承載 MA row、有某一側是 dielectric 時承載 MS row；sheet 的 row 以 `shared_face_group` 指向該 group，`face_sides` 逐 face 列出積分的是哪一側（`above`、`below` 或 `both`，只列實際積分的 face），`side` 是共同的值或 `mixed`；
+- `embedded_faces`、`refinement_edges` 與 `ports`：不圍成 volume 的 face（volume 內部的 sheet，例如懸在 vacuum 中的 sheet；位於 support plane 的 port，包括範例的 port，是一般的 face，不在其中）與嵌入的 mesh-size 曲線，各帶 host volume 或 host face。BREP 與 XAO 都無法攜帶 mesh embedding，所以 mesher 會重新套用這些 `(face, host volume)` 與 `(edge, host face)` 配對；
+- `lineage`：`edges`（edge → carrier）、`carriers`、`faces`（face → entity）、`membership`、`vertical_edges`；
+- `insets`、`refinements`、`mesh_hints`、`slivers`、`arrangement`、`curved_wall_faces`、`surface_kinds`，以及 `expected`（`verify_loaded` 比對的預期值）。
+
+production 的測試以 Gmsh API 的 oracle（依建構順序把同一個 topology 重播一次）比對 entity、group 與 face 面積。
+
+## 決定性
+
+不論 worker 數、tile 配置或 Python hash seed，同樣的輸入得到同樣的 ID。production 的測試涵蓋：同一個輸入兩次推導得到相同的 ID 與 model digest；三個 `PYTHONHASHSEED` 下相同；wall 的 ID 不隨旁邊的 vertical edge 改變（`test_wall_ids_do_not_depend_on_the_vertical_edges_next_to_them`）；tile 與 worker 數不同時，ID 與五個輸出檔相同（同一台機器上）。逐項的狀態（測過、實測、只是論證）見[使用契約的決定性一節](consumer-contract.qmd#determinism)。
+
+實測（production）：`identity.py` 在全新的 interpreter 中，以四種（tile grid、worker）設定與三個 `PYTHONHASHSEED` 值重建兩個模型，並把 `ConformalModel.identity_digest()`（每一個 vertex、edge、face、volume 與 group 成員的 ID 的 hash）印出來。結果：十二次執行，每個模型都只有一個 digest（本頁的 Route B 含 band 範例為 `model:27ae3b50206900c9`，60 個 feature 的隨機 layout 為 `model:c0b6c914cb025f97`；完整表格見補充）。
+
+成立的原因：topology 是整數（grid point 與精確分數），ID 是對內容 hash，tile 切線落在 pixel 欄之間所以每個 hot pixel 只有一個 owner，合併結果依 item index 放回（見[平行化的 derivation](parallelism.qmd)）。直接 writer 的輸出對任何 worker 數逐位元相同。
+
+## 不相關的修改會改變什麼
+
+把範例中的 lumped port 移除（`pad_in_ground("B", with_port=False)`，同樣的 band 請求）。Band 的**曲線**完全沒變：每個 family 的 support 相同，沒有任何 band 的面積增加，gap band 只少掉 port 蓋住的面積（Route A 同樣的比較見 [Inset imprint](inset-imprint.qmd#band-measure)）。port 在 host 的 support plane（z = 0，substrate 的表面），所以它佔去 SA 介面的一塊，並且它的邊落在 pad 與 ground 的底邊上。改變的是 port 碰到的東西，見補充的表格：
+
+- **完全沒變的：**pad top 的四個 band group（`MA::pad::top::band=0…3`）、`MS::pad::bottom::band=1…3`、`MA::ground::top`、四個 `EXT` group，以及 `substrate` 與 `vacuum` 兩個 volume 的 ID 與成員。port 不在這些 face 的邊界上，volume 是對它的 cell 集合 hash，而 slab 的 cell 不受位於 level 上的 sheet 影響。
+- **改變的：**四個 `SA::substrate|vacuum::interface::band` group（port 的 footprint 從 SA 的 band cell 中挖掉，剩下的 face 有了新邊界，所以 ID 都是新的；面積也少了 port 蓋住的部分）、`MS::pad::bottom::band=0` 與 `MS::ground::bottom`（port 的角點把它們的底邊切成更多段）、`MA::pad::sidewall` 與 `MA::ground::sidewall`（wall 的底邊同樣多了 vertex，成員個數不變，但 ID 變了）。
+
+Vertex、edge、face、volume 的數量與有多少 ID 在兩次 build 之間保持相同，見補充的表格：60 個 face 中有 48 個、274 條 edge 中有 242 條保持原 ID；四個 volume 的 ID 都沒變。除了 `PORT::p1`，兩次 build 的 group 名稱相同。因此，不相關的修改只會改變內容被它碰到的 entity 的 ID，semantic 名稱不會移動。
+
+## 限制
+
+- ID 識別的是內容，不是意圖。移動過的 feature 是新 entity；把使用者的標籤跨過這種修改帶過去，是 SGB 之上那一層的命名政策。
+- 64 bit 的 digest 讓 ID 保持簡短。依生日界，一百萬個 entity 之間發生任何碰撞的機率約 $3 \times 10^{-8}$；最大的 scaling 執行（N = 20000，seed 2 的隨機 layout）有 285 871 個 face。production 對重複 ID fail closed，因為以 id 為 key 的容器否則會無聲地合併兩個撞名的 entity：驗證有 `vertex_ids_unique`、`edge_ids_unique`、`face_ids_unique`、`topology_keyed_by_entity_id` 與 `every_cell_in_exactly_one_volume`；assembly 在已有不同 record 存在某個 id 之下時拒絕覆寫；emission 拒絕同一個 planned id 被編兩次。碰撞本身仍然極不可能，這些檢查保證它不會無聲發生。
+- 「wall 的 ID 不含 vertical edge」有 production 的回歸測試；「不相關的修改只改變被碰到的 entity 的 ID」目前只由腳本量測（補充中的比較表），沒有回歸測試。
+
+## 補充：重現資料
+
+本頁所有數字與圖都由 `docs/design/sgb/_figures/identity.py` 對 production 計算（以 `SGB_CORE` 指向含 `scgsim.geometry.sgb` 與其 `tests/` 的 checkout，並用該 checkout 的 Python 執行）：範例是 `tests/sgb_scenes.py` 的 `pad_in_ground("B")`，lumped port 換成同一片 sheet 放在 z = 0（support plane；scene 本身為了測試 embedded sheet 把 Route B 的 port 放在金屬的中間平面，compiler 不會這樣放），band 請求與 `tests/sgb_emit_cases.py` 的 `pad_requests("B")` 相同；以 `emit_model` 寫出後讀 sidecar（`physical_groups`、`binding`、`expected`、`lineage`、`insets`）；port 比較各 build 一次有與沒有 port 的模型，比較 `Topology` 的 ID 集合與各 group 的成員。原始資料另存於 `figures/identity-trace.json`、`figures/identity-determinism.json`、`figures/identity-stability.json`，表格在 `figures/identity-tables.md`。
+
+決定性（production；四種 tile 與 worker 設定，各三個 `PYTHONHASHSEED`；每個格子是 `ConformalModel.identity_digest()`）：
+
+::: {.askr-table-compact}
+| Tiles | Workers | Hash seed | Digest，pad-in-ground B 含 band | Digest，隨機 layout（60 個 feature，seed 5） |
+|---|---|---|---|---|
+| 1×1 | 1 | 0, 1, 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 2×2 | 1 | 0, 1, 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 3×3 | 2 | 0, 1, 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 4×4 | 4 | 0, 1, 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+:::
+
+有與沒有 port 的 ID 比較（production；`figures/identity-stability.json`）：
+
+::: {.askr-table-compact .askr-table-numeric}
+| 種類 | 有 port | 無 port | 共有 | 只在有 port | 只在無 port |
+|---|---|---|---|---|---|
+| vertices | 321 | 305 | 305 | 16 | 0 |
+| edges | 274 | 250 | 242 | 32 | 8 |
+| faces | 60 | 59 | 48 | 12 | 11 |
+| volumes | 4 | 4 | 4 | 0 | 0 |
+:::

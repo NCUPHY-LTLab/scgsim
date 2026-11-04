@@ -1,0 +1,55 @@
+{
+ "assumptions": "each prism is one solid; boxes touching count as overlapping; layout pitch 260 um, seed 2",
+ "rows": [
+  {
+   "chip_sized_bodies": 3,
+   "coplanar_face_pairs": 496,
+   "ground_inner_wires_per_face": 100,
+   "mean_small_box_over_chip_area": 0.000876,
+   "n_features": 100,
+   "small_bodies": 124,
+   "small_x_chip_pairs": 372,
+   "small_x_small_pairs": 24
+  },
+  {
+   "chip_sized_bodies": 3,
+   "coplanar_face_pairs": 2512,
+   "ground_inner_wires_per_face": 500,
+   "mean_small_box_over_chip_area": 0.000162,
+   "n_features": 500,
+   "small_bodies": 628,
+   "small_x_chip_pairs": 1884,
+   "small_x_small_pairs": 128
+  },
+  {
+   "chip_sized_bodies": 3,
+   "coplanar_face_pairs": 4952,
+   "ground_inner_wires_per_face": 1000,
+   "mean_small_box_over_chip_area": 8.4e-05,
+   "n_features": 1000,
+   "small_bodies": 1238,
+   "small_x_chip_pairs": 3714,
+   "small_x_small_pairs": 238
+  },
+  {
+   "chip_sized_bodies": 3,
+   "coplanar_face_pairs": 25172,
+   "ground_inner_wires_per_face": 5000,
+   "mean_small_box_over_chip_area": 1.7e-05,
+   "n_features": 5000,
+   "small_bodies": 6293,
+   "small_x_chip_pairs": 18879,
+   "small_x_small_pairs": 1293
+  },
+  {
+   "chip_sized_bodies": 3,
+   "coplanar_face_pairs": 100064,
+   "ground_inner_wires_per_face": 20000,
+   "mean_small_box_over_chip_area": 4e-06,
+   "n_features": 20000,
+   "small_bodies": 25016,
+   "small_x_chip_pairs": 75048,
+   "small_x_small_pairs": 5016
+  }
+ ]
+}

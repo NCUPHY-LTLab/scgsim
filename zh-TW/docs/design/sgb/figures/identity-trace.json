@@ -1,0 +1,1599 @@
+{
+ "case": "pad_b_bands",
+ "route": "B",
+ "margins_um": [
+  0.1,
+  0.5,
+  2.0
+ ],
+ "schema": "scgsim.sgb.sidecar.v1",
+ "step1_palace_attribute": {
+  "attribute": 10,
+  "resolved_name": "MA::pad::top::band=2",
+  "source": "sidecar: physical_groups[*].tag"
+ },
+ "step2_physical_group": {
+  "name": "MA::pad::top::band=2",
+  "record": {
+   "adjacent_domains": [
+    {
+     "kind": "vacuum",
+     "material": "vacuum",
+     "name": "vacuum"
+    }
+   ],
+   "adjacent_volumes": [
+    "vol:89bd58ad80d63355"
+   ],
+   "area_um2": 583.239571701,
+   "band": {
+    "family": "band_pad_top",
+    "index": 2
+   },
+   "dim": 2,
+   "entities": [
+    "pad"
+   ],
+   "face_kind": "top",
+   "ids": [
+    "f:a9b66997fc195ff6",
+    "f:ea12025c6c95ba52"
+   ],
+   "interface_type": "MA",
+   "native_tags": [
+    32,
+    39
+   ],
+   "net": "pad",
+   "tag": 10
+  },
+  "union_membership": [
+   "interface_types.MA",
+   "nets.pad"
+  ],
+  "surface_epr_row": {
+   "band": 2,
+   "entities": [
+    "pad"
+   ],
+   "face_sides": null,
+   "group": "MA::pad::top::band=2",
+   "interface_type": "MA",
+   "shared_face_group": null,
+   "side": null
+  }
+ },
+ "step3_atomic_faces": [
+  {
+   "face": "f:a9b66997fc195ff6",
+   "native_tag": 32,
+   "record": {
+    "face_kind": "top",
+    "group": "MA::pad::top::band=2",
+    "kind": "horizontal",
+    "negative_volume": "vol:d78b0b17d727ed12",
+    "positive_volume": "vol:89bd58ad80d63355",
+    "z_um": [
+     0.2,
+     0.2
+    ]
+   },
+   "plane": "level[1/5]",
+   "label_bands": [
+    [
+     "band_pad_top",
+     2
+    ]
+   ],
+   "sources_lineage": [
+    "band_pad_top"
+   ],
+   "membership": {
+    "pad": 1.0,
+    "vacuum": 1.0
+   },
+   "edge_tags": [
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    186,
+    187,
+    188,
+    189,
+    190,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197
+   ],
+   "edge_ids": [
+    "e:517f4168eb525f24",
+    "e:75a8366fd6cabf72",
+    "e:523e42c4dbe5c616",
+    "e:78704422a8419e67",
+    "e:d37f375d597d9d4b",
+    "e:fdfeab50097563fe",
+    "e:3a4a65a5b3fb4434",
+    "e:65024cee7987afa8",
+    "e:82236ae7dfb46c04",
+    "e:a6b4673755f34b43",
+    "e:789b673b12ce241b",
+    "e:8e37066ffd4c635a",
+    "e:1d75defe0ba93f10",
+    "e:91c3feb3af63b6b0",
+    "e:1ba65ab001fe1e5a",
+    "e:32f2352649d0b6b7",
+    "e:5fb1b0339a885717",
+    "e:72b93f3bad4085fd",
+    "e:67ad608948d7a581",
+    "e:2406afef43ba7c0e",
+    "e:0f1fe6eb941bdfde",
+    "e:f9df312ea459c8d1",
+    "e:1c2e782f8a3e17f3",
+    "e:9c6ed53779848fbe"
+   ],
+   "loops": [
+    [
+     {
+      "edge": "e:1d75defe0ba93f10",
+      "carriers": [
+       "band_pad_top/ring0/edge9@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge9"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge9",
+        "support_curve": "straight edge",
+        "support_primitive": 9
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:91c3feb3af63b6b0",
+      "carriers": [
+       "band_pad_top/ring0/edge0@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge0"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge0",
+        "support_curve": "band_pad_top/ring0/edge0",
+        "source": "band_pad_top/band_pad_top/ring0/edge0",
+        "centre_um": [
+         -45.0,
+         -25.0
+        ],
+        "radius_um": 5.0
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:1ba65ab001fe1e5a",
+      "carriers": [
+       "band_pad_top/ring0/edge1@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge1"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge1",
+        "support_curve": "straight edge",
+        "support_primitive": 1
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:32f2352649d0b6b7",
+      "carriers": [
+       "band_pad_top/ring0/edge2@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge2"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge2",
+        "support_curve": "straight edge",
+        "support_primitive": 2
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:5fb1b0339a885717",
+      "carriers": [
+       "band_pad_top/ring0/corner2@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/corner2"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/corner2",
+        "support_curve": "reflex-corner arc 2 of ring 0"
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:72b93f3bad4085fd",
+      "carriers": [
+       "band_pad_top/ring0/edge3@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge3"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge3",
+        "support_curve": "straight edge",
+        "support_primitive": 3
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:67ad608948d7a581",
+      "carriers": [
+       "band_pad_top/ring0/corner3@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/corner3"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/corner3",
+        "support_curve": "reflex-corner arc 3 of ring 0"
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:2406afef43ba7c0e",
+      "carriers": [
+       "band_pad_top/ring0/edge4@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge4"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge4",
+        "support_curve": "straight edge",
+        "support_primitive": 4
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:0f1fe6eb941bdfde",
+      "carriers": [
+       "band_pad_top/ring0/edge5@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge5"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge5",
+        "support_curve": "straight edge",
+        "support_primitive": 5
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:f9df312ea459c8d1",
+      "carriers": [
+       "band_pad_top/ring0/edge6@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge6"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge6",
+        "support_curve": "straight edge",
+        "support_primitive": 6
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:1c2e782f8a3e17f3",
+      "carriers": [
+       "band_pad_top/ring0/edge7@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge7"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge7",
+        "support_curve": "straight edge",
+        "support_primitive": 7
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:9c6ed53779848fbe",
+      "carriers": [
+       "band_pad_top/ring0/edge8@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge8"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge8",
+        "support_curve": "straight edge",
+        "support_primitive": 8
+       }
+      ],
+      "orientation": -1
+     }
+    ],
+    [
+     {
+      "edge": "e:517f4168eb525f24",
+      "carriers": [
+       "band_pad_top/ring0/edge9@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge9"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge9",
+        "support_curve": "straight edge",
+        "support_primitive": 9
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:8e37066ffd4c635a",
+      "carriers": [
+       "band_pad_top/ring0/edge8@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge8"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge8",
+        "support_curve": "straight edge",
+        "support_primitive": 8
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:789b673b12ce241b",
+      "carriers": [
+       "band_pad_top/ring0/edge7@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge7"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge7",
+        "support_curve": "straight edge",
+        "support_primitive": 7
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:a6b4673755f34b43",
+      "carriers": [
+       "band_pad_top/ring0/edge6@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge6"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge6",
+        "support_curve": "straight edge",
+        "support_primitive": 6
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:82236ae7dfb46c04",
+      "carriers": [
+       "band_pad_top/ring0/edge5@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge5"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge5",
+        "support_curve": "straight edge",
+        "support_primitive": 5
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:65024cee7987afa8",
+      "carriers": [
+       "band_pad_top/ring0/edge4@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge4"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge4",
+        "support_curve": "straight edge",
+        "support_primitive": 4
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:3a4a65a5b3fb4434",
+      "carriers": [
+       "band_pad_top/ring0/corner3@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/corner3"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/corner3",
+        "support_curve": "reflex-corner arc 3 of ring 0"
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:fdfeab50097563fe",
+      "carriers": [
+       "band_pad_top/ring0/edge3@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge3"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge3",
+        "support_curve": "straight edge",
+        "support_primitive": 3
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:d37f375d597d9d4b",
+      "carriers": [
+       "band_pad_top/ring0/corner2@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/corner2"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/corner2",
+        "support_curve": "reflex-corner arc 2 of ring 0"
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:78704422a8419e67",
+      "carriers": [
+       "band_pad_top/ring0/edge2@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge2"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge2",
+        "support_curve": "straight edge",
+        "support_primitive": 2
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:523e42c4dbe5c616",
+      "carriers": [
+       "band_pad_top/ring0/edge1@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge1"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge1",
+        "support_curve": "straight edge",
+        "support_primitive": 1
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:75a8366fd6cabf72",
+      "carriers": [
+       "band_pad_top/ring0/edge0@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring0/edge0"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 0,
+        "member": "band_pad_top/ring0/edge0",
+        "support_curve": "band_pad_top/ring0/edge0",
+        "source": "band_pad_top/band_pad_top/ring0/edge0",
+        "centre_um": [
+         -45.0,
+         -25.0
+        ],
+        "radius_um": 5.0
+       }
+      ],
+      "orientation": -1
+     }
+    ]
+   ]
+  },
+  {
+   "face": "f:ea12025c6c95ba52",
+   "native_tag": 39,
+   "record": {
+    "face_kind": "top",
+    "group": "MA::pad::top::band=2",
+    "kind": "horizontal",
+    "negative_volume": "vol:d78b0b17d727ed12",
+    "positive_volume": "vol:89bd58ad80d63355",
+    "z_um": [
+     0.2,
+     0.2
+    ]
+   },
+   "plane": "level[1/5]",
+   "label_bands": [
+    [
+     "band_pad_top",
+     2
+    ]
+   ],
+   "sources_lineage": [
+    "band_pad_top"
+   ],
+   "membership": {
+    "pad": 1.0,
+    "vacuum": 1.0
+   },
+   "edge_tags": [
+    53,
+    54,
+    55,
+    56,
+    198,
+    199,
+    200,
+    201
+   ],
+   "edge_ids": [
+    "e:9107a426266c6dc5",
+    "e:24a8ae617bccaefc",
+    "e:99cbbb324f02449b",
+    "e:f9e3218d05011231",
+    "e:80e42c5358928cb0",
+    "e:9c10eab8b016a833",
+    "e:ef1cc37d8ab0cc60",
+    "e:5c4e6e843bd25142"
+   ],
+   "loops": [
+    [
+     {
+      "edge": "e:9107a426266c6dc5",
+      "carriers": [
+       "band_pad_top/ring1/edge3@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring1/edge3"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge3",
+        "support_curve": "band_pad_top/ring1/edge3",
+        "source": "band_pad_top/band_pad_top/ring1/edge3",
+        "centre_um": [
+         -25.0,
+         4.999999999999999
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:f9e3218d05011231",
+      "carriers": [
+       "band_pad_top/ring1/edge2@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring1/edge2"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge2",
+        "support_curve": "band_pad_top/ring1/edge2",
+        "source": "band_pad_top/band_pad_top/ring1/edge2",
+        "centre_um": [
+         -25.0,
+         4.999999999999999
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:99cbbb324f02449b",
+      "carriers": [
+       "band_pad_top/ring1/edge1@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring1/edge1"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge1",
+        "support_curve": "band_pad_top/ring1/edge1",
+        "source": "band_pad_top/band_pad_top/ring1/edge1",
+        "centre_um": [
+         -25.0,
+         5.000000000000001
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:24a8ae617bccaefc",
+      "carriers": [
+       "band_pad_top/ring1/edge0@m2000.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring1/edge0"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 2000,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge0",
+        "support_curve": "band_pad_top/ring1/edge0",
+        "source": "band_pad_top/band_pad_top/ring1/edge0",
+        "centre_um": [
+         -25.0,
+         5.000000000000001
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": -1
+     }
+    ],
+    [
+     {
+      "edge": "e:80e42c5358928cb0",
+      "carriers": [
+       "band_pad_top/ring1/edge3@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring1/edge3"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge3",
+        "support_curve": "band_pad_top/ring1/edge3",
+        "source": "band_pad_top/band_pad_top/ring1/edge3",
+        "centre_um": [
+         -25.0,
+         4.999999999999999
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": -1
+     },
+     {
+      "edge": "e:5c4e6e843bd25142",
+      "carriers": [
+       "band_pad_top/ring1/edge0@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring1/edge0"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge0",
+        "support_curve": "band_pad_top/ring1/edge0",
+        "source": "band_pad_top/band_pad_top/ring1/edge0",
+        "centre_um": [
+         -25.0,
+         5.000000000000001
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:ef1cc37d8ab0cc60",
+      "carriers": [
+       "band_pad_top/ring1/edge1@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring1/edge1"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge1",
+        "support_curve": "band_pad_top/ring1/edge1",
+        "source": "band_pad_top/band_pad_top/ring1/edge1",
+        "centre_um": [
+         -25.0,
+         5.000000000000001
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": 1
+     },
+     {
+      "edge": "e:9c10eab8b016a833",
+      "carriers": [
+       "band_pad_top/ring1/edge2@m500.0"
+      ],
+      "resolved": [
+       {
+        "kind": "family member",
+        "lineage_record": {
+         "family": "band_pad_top",
+         "kind": "family_member",
+         "member": "band_pad_top/ring1/edge2"
+        },
+        "family": "band_pad_top",
+        "margin_nm": 500,
+        "support_ring": 1,
+        "member": "band_pad_top/ring1/edge2",
+        "support_curve": "band_pad_top/ring1/edge2",
+        "source": "band_pad_top/band_pad_top/ring1/edge2",
+        "centre_um": [
+         -25.0,
+         4.999999999999999
+        ],
+        "radius_um": 8.0
+       }
+      ],
+      "orientation": -1
+     }
+    ]
+   ]
+  }
+ ],
+ "alt_group": {
+  "name": "MA::pad::top::band=0",
+  "face": "f:44fd2887758ead3c",
+  "sources_lineage": [
+   "band_pad_top",
+   "pad"
+  ],
+  "membership": {
+   "pad": 1.0,
+   "vacuum": 1.0
+  },
+  "loops": [
+   [
+    {
+     "edge": "e:8f219246ec532f03",
+     "carriers": [
+      "pad/polygon0/ring0/edge8"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge8",
+       "carrier": "pad/polygon0/ring0/edge8"
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:a7d4cdddfc4ca4d6",
+     "carriers": [
+      "pad/corner"
+     ],
+     "resolved": [
+      {
+       "kind": "source arc carrier",
+       "carrier": "pad/corner",
+       "source": "pad/polygon0/ring0/edge9",
+       "centre_um": [
+        -45.0,
+        -25.0
+       ],
+       "radius_um": 5.0
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:43951ca46ec4db01",
+     "carriers": [
+      "pad/polygon0/ring0/edge0"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge0",
+       "carrier": "pad/polygon0/ring0/edge0"
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:8443f1d91795ed79",
+     "carriers": [
+      "pad/polygon0/ring0/edge1"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge1",
+       "carrier": "pad/polygon0/ring0/edge1"
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:0da2febfa86166ce",
+     "carriers": [
+      "pad/polygon0/ring0/edge2"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge2",
+       "carrier": "pad/polygon0/ring0/edge2"
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:7e1296754e403a43",
+     "carriers": [
+      "pad/polygon0/ring0/edge3"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge3",
+       "carrier": "pad/polygon0/ring0/edge3"
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:df3747244baf0730",
+     "carriers": [
+      "pad/polygon0/ring0/edge4"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge4",
+       "carrier": "pad/polygon0/ring0/edge4"
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:c69009e9efc5c27b",
+     "carriers": [
+      "pad/polygon0/ring0/edge5"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge5",
+       "carrier": "pad/polygon0/ring0/edge5"
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:3e69b369a6f3238e",
+     "carriers": [
+      "pad/polygon0/ring0/edge6"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge6",
+       "carrier": "pad/polygon0/ring0/edge6"
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:86db5ea7826428b0",
+     "carriers": [
+      "pad/polygon0/ring0/edge7"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge7",
+       "carrier": "pad/polygon0/ring0/edge7"
+      }
+     ],
+     "orientation": -1
+    }
+   ],
+   [
+    {
+     "edge": "e:0c7f9a6e534f0281",
+     "carriers": [
+      "band_pad_top/ring0/edge9@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "lineage_record": {
+        "family": "band_pad_top",
+        "kind": "family_member",
+        "member": "band_pad_top/ring0/edge9"
+       },
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge9",
+       "support_curve": "straight edge",
+       "support_primitive": 9
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:3d6c7f411f769ade",
+     "carriers": [
+      "band_pad_top/ring0/edge8@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "lineage_record": {
+        "family": "band_pad_top",
+        "kind": "family_member",
+        "member": "band_pad_top/ring0/edge8"
+       },
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge8",
+       "support_curve": "straight edge",
+       "support_primitive": 8
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:960da506e800e788",
+     "carriers": [
+      "band_pad_top/ring0/edge7@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "lineage_record": {
+        "family": "band_pad_top",
+        "kind": "family_member",
+        "member": "band_pad_top/ring0/edge7"
+       },
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge7",
+       "support_curve": "straight edge",
+       "support_primitive": 7
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:b46f7331d0272ddc",
+     "carriers": [
+      "band_pad_top/ring0/edge6@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "lineage_record": {
+        "family": "band_pad_top",
+        "kind": "family_member",
+        "member": "band_pad_top/ring0/edge6"
+       },
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge6",
+       "support_curve": "straight edge",
+       "support_primitive": 6
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:d84c9a0c6590e340",
+     "carriers": [
+      "band_pad_top/ring0/edge5@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "lineage_record": {
+        "family": "band_pad_top",
+        "kind": "family_member",
+        "member": "band_pad_top/ring0/edge5"
+       },
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge5",
+       "support_curve": "straight edge",
+       "support_primitive": 5
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:f0840d4eeb2eb6d6",
+     "carriers": [
+      "band_pad_top/ring0/edge4@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "lineage_record": {
+        "family": "band_pad_top",
+        "kind": "family_member",
+        "member": "band_pad_top/ring0/edge4"
+       },
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge4",
+       "support_curve": "straight edge",
+       "support_primitive": 4
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:e7f9d66c42a7f63e",
+     "carriers": [
+      "band_pad_top/ring0/corner3@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "lineage_record": {
+        "family": "band_pad_top",
+        "kind": "family_member",
+        "member": "band_pad_top/ring0/corner3"
+       },
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/corner3",
+       "support_curve": "reflex-corner arc 3 of ring 0"
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:9c7d5cd7b3beb841",
+     "carriers": [
+      "band_pad_top/ring0/edge3@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "lineage_record": {
+        "family": "band_pad_top",
+        "kind": "family_member",
+        "member": "band_pad_top/ring0/edge3"
+       },
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge3",
+       "support_curve": "straight edge",
+       "support_primitive": 3
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:897829afa845833e",
+     "carriers": [
+      "band_pad_top/ring0/corner2@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "lineage_record": {
+        "family": "band_pad_top",
+        "kind": "family_member",
+        "member": "band_pad_top/ring0/corner2"
+       },
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/corner2",
+       "support_curve": "reflex-corner arc 2 of ring 0"
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:bea72965114126f3",
+     "carriers": [
+      "band_pad_top/ring0/edge2@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "lineage_record": {
+        "family": "band_pad_top",
+        "kind": "family_member",
+        "member": "band_pad_top/ring0/edge2"
+       },
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge2",
+       "support_curve": "straight edge",
+       "support_primitive": 2
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:3648eef0d8cafcf4",
+     "carriers": [
+      "band_pad_top/ring0/edge1@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "lineage_record": {
+        "family": "band_pad_top",
+        "kind": "family_member",
+        "member": "band_pad_top/ring0/edge1"
+       },
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge1",
+       "support_curve": "straight edge",
+       "support_primitive": 1
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:73709f74e83f27da",
+     "carriers": [
+      "band_pad_top/ring0/edge0@m100.0"
+     ],
+     "resolved": [
+      {
+       "kind": "family member",
+       "lineage_record": {
+        "family": "band_pad_top",
+        "kind": "family_member",
+        "member": "band_pad_top/ring0/edge0"
+       },
+       "family": "band_pad_top",
+       "margin_nm": 100,
+       "support_ring": 0,
+       "member": "band_pad_top/ring0/edge0",
+       "support_curve": "band_pad_top/ring0/edge0",
+       "source": "band_pad_top/band_pad_top/ring0/edge0",
+       "centre_um": [
+        -45.0,
+        -25.0
+       ],
+       "radius_um": 5.0
+      }
+     ],
+     "orientation": -1
+    }
+   ]
+  ]
+ },
+ "wall": {
+  "name": "MA::pad::sidewall",
+  "face": "f:26d14ad67f1ad69b",
+  "z_range": [
+   "0",
+   "1/5"
+  ],
+  "sources_lineage": [
+   "pad"
+  ],
+  "membership": {
+   "pad": 1.0
+  },
+  "loops": [
+   [
+    {
+     "edge": "ve:2ceb878a40cbefd5",
+     "carriers": [
+      "pad"
+     ],
+     "resolved": [
+      {
+       "kind": "source entity (vertical edge)",
+       "entity": "pad"
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "e:0da2febfa86166ce",
+     "carriers": [
+      "pad/polygon0/ring0/edge2"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge2",
+       "carrier": "pad/polygon0/ring0/edge2"
+      }
+     ],
+     "orientation": 1
+    },
+    {
+     "edge": "ve:86f934585e954169",
+     "carriers": [
+      "pad"
+     ],
+     "resolved": [
+      {
+       "kind": "source entity (vertical edge)",
+       "entity": "pad"
+      }
+     ],
+     "orientation": -1
+    },
+    {
+     "edge": "e:c214f60a8194ec04",
+     "carriers": [
+      "pad/polygon0/ring0/edge2"
+     ],
+     "resolved": [
+      {
+       "kind": "source edge",
+       "entity": "pad",
+       "polygon": "polygon0",
+       "ring": "ring0",
+       "edge": "edge2",
+       "carrier": "pad/polygon0/ring0/edge2"
+      }
+     ],
+     "orientation": -1
+    }
+   ]
+  ]
+ },
+ "walls_with_port_membership": [
+  {
+   "face": "f:5d0c9ae9fd6baca6",
+   "group": "MA::ground::sidewall",
+   "membership": {
+    "ground": 1.0,
+    "p1": 0.083333333
+   }
+  },
+  {
+   "face": "f:d9d24cf3f5dc840e",
+   "group": "MA::pad::sidewall",
+   "membership": {
+    "p1": 0.208333333,
+    "pad": 1.0
+   }
+  }
+ ],
+ "step7_inset_request": {
+  "request_id": "band_pad_top",
+  "support": {
+   "entity": "pad",
+   "side": "top"
+  },
+  "margins_um": [
+   0.1,
+   0.5,
+   2.0
+  ],
+  "support_area_um2": 5421.57302426
+ },
+ "traced_edge": {
+  "edge": "e:91c3feb3af63b6b0",
+  "carrier": "band_pad_top/ring0/edge0@m500.0",
+  "distance_to_support_um_at_midpoint": 0.5,
+  "support_curve": "band_pad_top/ring0/edge0"
+ },
+ "model_digest": "model:27ae3b50206900c9",
+ "counts": {
+  "vertices": 321,
+  "edges": 274,
+  "faces": 60,
+  "volumes": 4,
+  "groups": 23,
+  "emitted": {
+   "arcs": 85,
+   "cylinders": 5,
+   "edges": 270,
+   "faces": 56,
+   "free_edges": 0,
+   "free_faces": 0,
+   "pcurves": 352,
+   "shells": 2,
+   "solids": 2,
+   "surfaces": 30,
+   "vertices": 236,
+   "volumes_total": 4,
+   "wires": 75
+  }
+ }
+}

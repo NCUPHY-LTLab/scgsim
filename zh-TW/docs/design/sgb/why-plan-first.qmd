@@ -1,0 +1,193 @@
+---
+title: "為什麼先規劃：fragment 的成本與 identity"
+description: "為什麼先建 solid、再讓 CAD kernel 做 fragment，在晶片尺度下既慢又會遺失 identity；以及先推導 topology 能得到什麼，並附規劃後 pipeline 的實測 scaling。"
+lang: zh-TW
+scgsim-kind: "design"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/design/sgb/why-plan-first"
+---
+
+SGB 在呼叫 CAD kernel **之前**先推導晶片的 topology，而不是為每個 prism 建一個 solid、再請 kernel 一次對全部 solid 做 fragment。理由有兩個：全域 fragment 在晶片尺度下預期很慢，而且它交回的只是幾何，每個 face 的意義與來源必須事後還原。本頁依序說明這兩點，再用實測的 scaling 說明規劃後的 pipeline 實際花費多少。
+
+陳述分成兩種，標題會把它們分開。**論證**依據 OpenCASCADE（OCCT）Boolean 與 General Fuse 演算法的文件，以及對模型結構的計數；**我們沒有對全域 fragment 做 benchmark**，所以本頁沒有它的計時，論證中的不等式也都不是量測值。**量測**則是 production `scgsim.geometry.sgb` 的 scaling 執行：規劃後 pipeline 的時間、記憶體與 identity 性質，範圍到 $N = 20000$ 個特徵。
+
+## 執行範例的觀點
+
+pad-in-ground 晶片（[總覽](index.qmd#fig-input)）有五個 prism：substrate、vacuum 本體、帶 cutout 的 ground plane、pad，以及 port sheet。若建成 solid，substrate 與 vacuum 本體有整顆晶片那麼大，ground plane 也有整顆晶片那麼大，而且帶孔；pad 很小。在 Route B 的形式中，vacuum 本體涵蓋 $z = 0$ 到 $100$ µm，金屬就在這個範圍內，所以這些 solid 彼此重疊，kernel 必須把金屬從 vacuum 中切掉，而不只是融合相接的 face；port sheet 則與 substrate 的頂面共面。
+
+五個本體的情況下，任何做法都瞬間完成。問題是：同一個圖樣在一顆晶片上重複 $N$ 次時會怎樣，這才是真實元件 layout 的樣子。測試用的隨機 layout 產生器（`tests/sgb_scenes.py` 的 `random_layout`）正是這樣建構的：$N$ 個小特徵（矩形、L 形、倒角形與旋轉形），各自位於同一片 ground plane 的 cutout 中，下面是一個 substrate，上面是一個 vacuum 本體。以下依產生器的 prism 計數（seed 2；原因見[補充](#why-repro)）：
+
+![solids-first 模型交給 Boolean kernel 的東西。左：N = 36 個特徵的 layout；每個小特徵的 bounding box（橘）都落在 substrate、vacuum 與 ground 共用的 box（紅色虛線）之內。右：計數得到的 pair 與 wire 數量對 N 的關係。](figures/why-structure.svg){#fig-structure fig-alt="左圖：格點上 36 個藍色特徵的俯視圖，每個都在一個橘色 bounding box 內，全部落在一個紅色虛線的晶片大小 box 內。右圖：特徵數 N 從 100 到 20000 的對數-對數圖，有四條直線。三條與 N 成正比：小本體與晶片大小本體的 pair 數、每個 ground face 上的內部 wire 數，以及 coplanar face pair 數。第四條是小本體與小本體的 pair，位置較低。"}
+
+{{< askr-chart-view src="figures/why-structure.html" label="檢視計數得到的結構" >}}
+
+看 @fig-structure 時請注意：橘色的 box 從不超出紅色的 box。**小本體的 box 沒有任何性質能把它與晶片大小的本體分開。** 在 $N = 20000$ 時，有 25 016 個小本體、75 048 組「小本體與晶片大小本體」的 box pair（每個小本體三組），而「兩個小本體」的 pair 只有 5 016 組。ground plane 的頂面與底面各帶有 20 000 個內部 wire。
+
+## 一般論證
+
+### 「solids first」是什麼意思
+
+solids-first 流程為每個 prism（或每個材料區域）建一個 CAD solid，然後對全部 solid 執行一次 **General Fuse**（`fragment` 運算）。kernel 會對每一對本體做交集、切割每個 face、合併重合（*same-domain*）的 face，並傳回各個 fragment。之後必須有人判斷哪個 fragment 是哪個表面：哪一個是 pad 的 metal-vacuum 表面，哪一個屬於 port。
+
+SGB 做的剛好相反。它在平面上逐 level 決定這一切，kernel 只負責寫出結果。
+
+### 成本從哪裡來
+
+OCCT 的文件把 General Fuse 演算法描述為：依維度遞增對子形狀（sub-shape）進行一連串的 interference 檢查（vertex-vertex、vertex-edge、edge-edge、vertex-face、edge-face、face-face）、一個切割 face 的部分、same-domain 偵測，以及選用的 history。下面五點是晶片尺度的模型會對這個結構造成壓力的地方。它們是依據文件所述結構的論證，不是量測。
+
+::: {.askr-table-compact}
+| # | 文件記載的行為 | 為什麼晶片會碰上它 | 規劃後的 pipeline |
+|---|---|---|---|
+| 1 | 候選的 sub-shape pair 來自 bounding box（章節「Initialization」），所以篩選的效果取決於 box 有多小。 | 三個本體（substrate、vacuum、ground）的 box 就是整顆晶片。每個小本體都與這三者重疊：每個本體有三組無法剔除的 pair（[@fig-structure]）。 | 一個 level 的 2D arrangement 只接收在該處相遇的曲線；以空間 hash 依位置剔除。 |
+| 2 | face 會被建立在其上的 section edge 切割（章節「Build Images for Faces」）。 | ground plane 是單一個 face，兩側各有 $N$ 個內部 wire；每次與它發生 interference，面對的都是邊界有 $N$ 個 loop 的 face。 | 帶孔洞的區域是 arrangement 的一個 cell，由它的 half-edge 一次建成。 |
+| 3 | 重合的 face 會被偵測出來，並共用一個 image（「same domain」；edge 對應章節「Common Blocks」）。 | 每個金屬本體的底面都與 substrate 頂面、vacuum 底面及 ground 底面 coplanar。每個小本體有四組 coplanar 且 box 重疊的 face pair。 | coplanar 的鄰居就是同一個 level arrangement 的 cell；label 相同的 cell 以 dissolution 合併。 |
+| 4 | face-face interference 是一般的曲面-曲面求交（章節「Computation Order」）。 | 每個曲面都是平面、垂直 wall 或圓柱 wall。問題是二維的（XY 平面上的曲線）加上 Z；用 3D 求交器來解，動用的機制超過所需。 | 以 exact 整數運算做 planar noding；Z 只透過 level 進入。 |
+| 5 | 結果是一組帶有 *history*（`Modified`、`Generated`、`IsDeleted`；章節「General description of the Building Part」）的 fragment。 | 多個輸入可能對應到同一個 image（same-domain），一個輸入也可能對應到多個 fragment。identity 必須沿著 history 或靠幾何來還原。 | 每個輸出實體被建立時，它的來源與 id 就已知；沒有任何東西需要還原。 |
+:::
+
+合起來，論證如下。無法剔除的 pair 數量約為 $B \cdot N$（$B$ 為晶片大小本體的個數）。每一組 pair 的成本並不受小本體大小所限，因為對手是一個邊界上有 $N$ 個 wire 的 face。我們不知道前面的常數是多少，所以本頁不做任何計時主張。論證確實顯示的是：模型沒有任何部分對 kernel 而言是局部的；bounding box 篩選這個常用的防線，無法消除佔主導地位的交互作用。
+
+::: {.askr-mermaid-view view-label="檢視圖表"}
+```{mermaid}
+flowchart TB
+  subgraph F["Solids first（本頁反對的做法）"]
+    direction TB
+    F1["每個 prism 一個 solid<br/>N 個小的 + B 個晶片大小的"] --> F2["Box 篩選：<br/>B x N 組無法剔除"]
+    F2 --> F3["3D face-face 求交<br/>（平面與圓柱）"]
+    F3 --> F4["切割有 N 個<br/>內部 wire 的 face"]
+    F4 --> F5["合併 coplanar 的<br/>same-domain face"]
+    F5 --> F6["沿 history 還原<br/>fragment 來自哪個輸入"]
+    F6 --> F7["以 history 或幾何命名"]
+  end
+  subgraph P["規劃（SGB）"]
+    direction TB
+    P1["Prism<br/>level、slab"] --> P2["每個 level 與 slab 的<br/>局部 2D arrangement"]
+    P2 --> P3["標記 cell、<br/>dissolve seam"]
+    P3 --> P4["組裝共用的<br/>vertex、edge、face"]
+    P4 --> P5["直接寫出，<br/>id 已知"]
+  end
+```
+:::
+
+這張圖是**概念性**的。左側是上面的論證；右側是下面量測的 pipeline。
+
+### 會遺失哪些 identity
+
+fragment 傳回的是幾何。SGB 需要的不只是幾何：對每個表面，還需要 Net、材料配對、inset band 與來源曲線。在 solids-first 流程中，這些事實必須事後還原，而做法只有兩種。
+
+- **靠 history。** 從每個輸入的 sub-shape 沿著 `Modified` 與 `Generated` 追蹤。當兩個輸入對應到同一個 same-domain image 時，答案是模糊的（多個輸入共用一個輸出 face），合併之後還得重新決定 face 的擁有者。
+- **靠幾何。** 以座標或面積把 fragment 對應到來源。這正是設計所禁止的：比對容許值是由一個沒有人能審查的數字所做的決定，而且當兩條邊界只相差幾奈米時就會失效。
+
+規劃後的 pipeline 則改成向前傳遞 identity。
+
+::: {.askr-mermaid-view view-label="檢視圖表"}
+```{mermaid}
+flowchart TB
+  subgraph B["往回追（solids first）"]
+    direction TB
+    b1["來源 Entity"] --> b2["Solid"] --> b3["Fragment"] --> b4["History 或<br/>幾何比對"] --> b5["Semantic 名稱"]
+  end
+  subgraph W["向前傳遞（規劃）"]
+    direction TB
+    w1["來源 Entity<br/>與曲線"] --> w2["Carrier<br/>（記錄 lineage）"] --> w3["Atomic edge<br/>（內容雜湊的 id）"] --> w4["Face、volume<br/>（id、label、名稱）"] --> w5["寫出的實體<br/>依構造順序綁定 id"]
+  end
+```
+:::
+
+從 solver 實體回到來源的對應，就是把這條鏈反向讀一遍，完全不需要搜尋（見 [Identity](identity.qmd)）。
+
+## 規劃能換來什麼：實測
+
+本節的數字另有[幾何建構效能](../../research/geometry-build/index.qmd)研究逐頁整理：scaling、direct writer 與載入、檢查成本、平行化，以及機器、版本與重現指令。
+
+這一節是 production `scgsim.geometry.sgb` 的量測。scaling 執行建立 Route B 的隨機 layout（`tests/sgb_scenes.py` 的 `random_layout`，間距 260 µm），特徵數為 $N = 1000, 5000, 20000$，每個都有三個 slab 與四個 level，且 ground plane 上每個特徵各有一個孔。模型的 face 數從 14 215 成長到 285 871。每個 $N$ 都在九種排程下各自以一個新的 Python 行程建立（一個 tile 配一個 worker，以及 $4 \times 4$ 與 $8 \times 8$ 個 tile，各搭配 1、8、16、32 個 worker），所以記憶體是該次執行自己的。整個重跑在一台 64 核心的機器上共 970 s（約 16 分鐘）。**這些 scaling 執行全是 polygon-only 的 layout：沒有圓弧、沒有 witness 的弦、沒有圓柱 wall，也沒有 band。** 因此圓弧與 band 在大規模下的成本與 exactness 並沒有量測，本頁不外推。數字的來源列在本頁最後的補充。
+
+**隨機 layout 的 seed。** 先前原型的量測用 seed 1。production 對 seed 1、$N = 20000$ 的 layout 以 `NonManifoldError` 拒絕：同一個 Net 的兩個形狀（`f5879` 與 `f5879b`）只在一個 vertex 相接，這是 production fail closed 的輸入，原型當時沒有檢查而建得出來。所以本頁所有 $N$ 都改用 seed 2（seed 2 到 9 在 $N = 20000$ 都建得出來）；上面的結構計數也用同一個 seed。
+
+![規劃後 pipeline 的 wall time（左）與 peak memory（右）對特徵數 N 的關係，座標軸為對數。虛線的斜率為 1。紅線是測試用的 Gmsh-API oracle，只量到 N = 2000。](figures/why-scaling.svg){#fig-scaling fig-alt="N = 500 到 20000 的兩張對數-對數圖。左：推導、direct BREP writer 與 Gmsh 載入 XAO 三條上升的線，N = 1000、5000、20000，各自靠近斜率為 1 的虛線參考線；另一條紅色的 Gmsh API test oracle 只有 N = 500、1000、2000 三點，斜率明顯大於 1。右：父行程的 peak memory，單一 tile 與 4 × 4 tile 兩條線幾乎重合，略低於斜率為 1 的參考線。"}
+
+{{< askr-chart-view src="figures/why-scaling.html" label="檢視 scaling 資料" >}}
+
+看 @fig-scaling 時請注意：推導、direct writer 與載入的曲線都靠近斜率為 1 的虛線。$N = 1000$ 到 $5000$ 之間，推導的局部斜率是 1.13；$5000$ 到 $20000$ 之間是 1.05；模型的 face 數斜率為 1.01 與 0.99，peak memory 為 0.85 與 0.95。這些斜率是單次執行的結果，同一台機器上重複量測的時間會有起伏（見下），所以請把推導的斜率讀成 1.0 到 1.15 的範圍。在這個範圍內，規劃後的 pipeline 對模型大小是**近乎線性**的。紅色的 Gmsh-API oracle 則不是：$N = 500$、1000、2000 的時間是 2.3 s、8.9 s、63.3 s，局部斜率 2.0 與 2.8。
+
+::: {.askr-table-compact .askr-table-numeric}
+| N | Face 數 | 推導與驗證 S2-S9（s） | direct BREP/XAO write，單一行程（s） | direct write，16 個 worker（s） | Gmsh 載入 XAO（s） | Peak RSS，單一 tile（MB） | Peak RSS，4 × 4 tile（MB） |
+|---|---|---|---|---|---|---|---|
+| 1 000 | 14 215 | 2.33 | 0.49 | 0.44 | 1.56 | 135 | 143 |
+| 5 000 | 71 969 | 14.46 | 2.81 | 2.19 | 9.55 | 534 | 536 |
+| 20 000 | 285 871 | 61.64 | 13.80 | 9.14 | 49.67 | 2 001 | 1 979 |
+:::
+
+「推導與驗證」是 `build_model_from_catalogue` 的整段 wall time，包含結構驗證，且驗證在 production 中不能關閉。「direct write」是 emission 的規劃（`plan_brep`）加上寫出 BREP 與 XAO；16 個 worker 那一欄只重做這三步。Gmsh 載入是 `gmsh.open` 加 `synchronize`。Peak RSS 是 build 完成時父行程的最大常駐記憶體；**與原型不同，tile 沒有讓父行程的記憶體下降**（$N = 20000$ 時 2 001 MB 對 1 979 MB；我們沒有追查原因）；使用 worker 時父行程約 2 200 MB，每個 worker 約 2 000 MB。
+
+**單次執行的起伏。** 這台機器上沒有對同一個 layout 重複量測。唯一可比較的是中途被中止的那次重跑：它用 seed 1 的 $N = 1000$ layout，同一個一個 tile 的推導在三次不同的呼叫中量到 1.95 s、2.02 s 與 2.15 s，起伏約 10%。推導的最佳加速是 1.22 倍（$N = 1000$，$4 \times 4$ tile 與 32 個 worker）、1.26 倍（$N = 5000$，$8 \times 8$ tile 與 8 個 worker）與 1.17 倍（$N = 20000$，$8 \times 8$ tile 與 8 個 worker），而一個 worker 的 $4 \times 4$ 與 $8 \times 8$ tile 比一個 tile 還慢（$N = 20000$ 時 0.92 與 0.89 倍），所以這些加速的差距大多在起伏之內。本頁的數字用來看量級與斜率，不是用來比較兩次執行之間的小差距。
+
+### Emission 是尾巴
+
+逐步驟的時間、檔案大小與整條路徑的記憶體，見研究頁 [Direct writer 與 Gmsh 載入](../../research/geometry-build/emission-and-load.qmd)。
+
+推導完成之後，必須寫出 CAD 檔案與 sidecar，再由 Gmsh 載入，載入端還要執行載入檢查 `verify_loaded`。這些步驟是循序的，在 $N = 20000$ 時合計比推導還長。逐一呼叫來建立幾何的 Gmsh API，只保留作為**測試用 oracle**（`tests/sgb_gmsh_oracle.py`）；這裡的比較就是決策 D8 的證據，D8 讓 direct writer 成為 emission 的路徑。
+
+![N = 20000 時，從驗證過的模型到 Gmsh 可以 mesh 的模型所需的時間：direct BREP/XAO writer 的每一步（一個行程與 16 個 worker；兩者的 reports、sidecar、載入與載入檢查是同一次量測）。Gmsh-API oracle 在這個規模跑不完，所以不在圖中。](figures/why-tail.svg){#fig-tail fig-alt="兩條水平堆疊長條。第一條 direct BREP/XAO（單一行程）：推導與驗證 61.6 秒、寫出 CAD 檔案 13.8 秒、sliver 與 validation 報告 49.7 秒、sidecar 19.6 秒、Gmsh 載入 49.7 秒、載入檢查 15.3 秒，合計 210 秒。第二條使用 16 個 worker，寫出 CAD 檔案為 9.1 秒，合計 205 秒。"}
+
+{{< askr-chart-view src="figures/why-tail.html" label="檢視端到端的堆疊" >}}
+
+看 @fig-tail 時請注意：
+
+- **直接寫出 BREP/XAO 本身很便宜。** 規劃好的階層以文字寫出，沒有任何東西透過 API 建立：單一行程 13.8 s，16 個 worker 9.1 s（寫出 BREP 的部分從 6.5 s 降到 1.1 s，規劃 `plan_brep` 的 6.9 s 仍是循序的）。三個檔案共 $190 + 282 + 232 = 704$ MB（BREP 190 MB、XAO 282 MB、sidecar 232 MB）。
+- **sidecar 與報告不便宜。** 附有 lineage 與 membership 的 sidecar 在 $N = 20000$ 時要 19.6 s，sliver 與 validation 報告要 49.7 s。這兩項合計 69 s，比寫出 CAD 檔案本身多得多；它們與 CAD 檔案一起寫出，所以屬於 emission 的成本。
+- **載入不屬於 SGB。** Gmsh 解析 267 635 個 face 在 $N = 20000$ 時要 49.7 s，這是 Gmsh 讀取任何格式的下限，而且它和其他一切一樣，隨 face 數成長（局部斜率 1.13 與 1.19）。載入之後的 `verify_loaded` 再花 15.3 s。
+- **Gmsh API 的 oracle 比 direct writer 慢得多，而且不是線性成長。** 同一個 layout 在 $N = 1000$ 時 oracle 要 8.9 s，direct writer 要 0.49 s（約 18 倍）；$N = 2000$ 時 oracle 要 63.3 s。oracle 與主要的 scaling 重跑同時執行時更慢（同樣三個 $N$ 量到 2.6 s、9.7 s、107.7 s），所以它的時間對機器負載很敏感，請只看量級。一次 $N = 5000$ 的試跑超過 10 分鐘仍未完成，已中止，所以 oracle 沒有 $N = 5000$ 與 $N = 20000$ 的數字，也不外推。
+
+讀這張圖的結論：規劃去除了全域 fragment，並讓推導近乎線性；但在大 $N$ 時，端到端的時間仍由數個循序步驟決定，其中一個還在 SGB 之外：寫出、報告、sidecar、Gmsh 載入與載入檢查合計 148 s（單一行程）或 143 s（16 個 worker），相對於 62 s 的推導。平行化無法解決它們（見 [Parallel derivation](parallelism.qmd)）。推導本身的加速在 $N = 20000$ 最多約 1.2 倍，這是 CPython 的限制，不是演算法的限制（見[設計決議](decisions.qmd#d9)）。
+
+### 為什麼不透過 Gmsh API 建立 solid
+
+速度不是 oracle 不作為 emission 路徑的唯一原因。Gmsh API 中的 solid 是由 surface loop 建成的，而 API 無法指定 solid 的**方向**（face 的哪一側是內部）。這在 production 的 oracle 中可以直接量到：對 $N = 500$、1000、2000 的隨機 layout，oracle 建出的 substrate solid 的質量（有號體積）是負的（內外顛倒），vacuum 為正，但兩者的大小都不對：$N = 500$ 時是 $-1.11 \times 10^9$ 與 $1.26 \times 10^9$ µm³；direct writer 寫出的 XAO 載入後，兩個 solid 的質量都是正的，為 $3.570 \times 10^9$（vacuum，已扣掉金屬）與 $3.576 \times 10^9$ µm³（substrate），等於晶片面積乘上厚度（見 `figures/why-scaling-oracle.json` 的 `solid_mass_um3`）。
+
+- 負質量的 solid 仍然可以 mesh，所以不檢查就不會發現。oracle 因此不能直接當作 emission 路徑。
+- Sewing（`addSurfaceLoop(sewing=True)`）能讓 shell 內部互相一致，但絕對的方向仍然無法控制，而且對一個有數萬個 face 的 shell，時間與記憶體預期都不實用；這兩點本頁沒有用 production 的資料量測，所以不給數字。
+
+direct writer 逐 face 明確寫出每一個方向，所以事後沒有任何東西需要修復；載入時 `verify_loaded` 還會比對面積與體積。
+
+### Identity 性質
+
+Identity 是結果的性質，不是排程的性質。scaling 執行以九種排程建立每個模型：一個 tile 配一個 worker，以及 $4 \times 4$ 與 $8 \times 8$ 個 tile，各搭配 1、8、16、32 個 worker。接著把結果中每個 vertex、edge、face、volume、slab cell、level cell 與 physical group 成員的 id，雜湊成一個 digest（`ConformalModel.identity_digest`）。
+
+::: {.askr-table-compact}
+| N | 建立的排程數 | 不同的 id digest 數 | Digest | 驗證通過 |
+|---|---|---|---|---|
+| 1 000 | 9 | **1** | `model:4161931a3cebf80d` | 9 個全部 |
+| 5 000 | 9 | **1** | `model:36feb3b5ae8bec90` | 9 個全部 |
+| 20 000 | 9 | **1** | `model:e2a0da6b6426e68d` | 9 個全部 |
+:::
+
+::: {.callout-note title="性質：相同輸入得到相同 id（依構造成立；以 27 次執行量測）"}
+依構造，id 與 tile 配置及 worker 數無關；量測上，在 27 次 production 執行（3 種 $N$ 乘上 9 種排程）中，每個實體的 id 在每一種排程下都相同；production 的測試（`tests/test_sgb_tiling.py`）對執行範例、隨機 layout 與一個大型 layout，在不同的 tile 數與 worker 數下檢查 id 相同。理由：id 是內容的雜湊（level、格點座標、carrier、label）；edge 的 id 是 H(plane key、排序後的端點 vertex id、排序後的 carrier id 集合)；tile 的切線落在 pixel 欄列之間，所以沒有任何 tile 會產生幾何（見 [Parallel derivation](parallelism.qmd)、[Identity](identity.qmd)）。
+:::
+
+solids-first 的 fragment 無法提供這樣的性質：結果中 face 的順序，以及模糊的 face 被歸給哪個輸入，都取決於 kernel 的走訪順序。
+
+## 邊界情況與限制
+
+- **小型模型。** 對於只有幾個 prism 的模型，例如執行範例，兩種做法幾乎不花時間，差別在 identity，不在速度。成本論證要從數百個特徵起才有意義。
+- **只有 polygon-only 的 scaling。** 所有 scaling 與寫出時間都來自沒有圓弧、沒有 band 的 layout（direct writer 的計畫中圓弧數與圓柱 wall 數皆為 0）。圓弧的 witness 成本、圓柱 wall 的 exactness 與 band 的成本在大規模下沒有量測；本頁不外推。
+- **密集 layout。** scaling 執行使用的特徵間距為 260 µm，各自位於自己的 cutout。更密的 layout（相鄰特徵重疊更多）不在已量測的範圍內。設計預期同樣的近乎線性形狀，但沒有量測過。
+- **論證取決於 OCCT 文件記載的結構。** 如果改用結構不同的 kernel（例如穩健、帶索引的 3D Boolean 引擎），這個論證需要針對它重新進行。Identity 的論證則不取決於 kernel。
+- **非 prism 的本體**（斜側壁、Z 方向彎曲的橋）在第一版中不在規劃後 pipeline 的範圍內。它們是擴充點，不會被悄悄近似（見[總覽](index.qmd#glossary)）。
+- **Python 的限制。** 推導的計時來自 production 的 Python 實作（階段 1）；編譯式 kernel 尚未撰寫（D9）。它們呈現的是成本的形狀，不是編譯式實作可以達到的數字。
+
+## 參考資料
+
+- OpenCASCADE Technology，*Boolean Operations* 使用者指南：章節「Computation Order」、「Initialization」、「Build Images for Faces」、「Common Blocks」、「General description of the Building Part」與「Options」（gluing、parallel mode、oriented bounding box）。
+  <https://dev.opencascade.org/doc/overview/html/specification__boolean_operations.html>
+- Gmsh reference manual，`gmsh.model.occ` API（`fragment`、`synchronize`、`addPhysicalGroup`）。<https://gmsh.info/doc/texinfo/gmsh.html>
+- 本頁使用的量測輸出：`figures/why-scaling-measured.json`、`figures/why-scaling-oracle.json`、`figures/why-validator-scaling.json`（皆由 `_figures/why_scaling.py` 產生）。
+
+## 補充：重現資料 {#why-repro}
+
+本頁的圖與數字是**計算所得**，全部來自 production `scgsim.geometry.sgb`。Gmsh sewing 的成本與 vacuum 內外顛倒在大型 layout 上的情形沒有用 production 量測，主文只用 production oracle 的 solid 質量說明方向問題。
+
+- `docs/design/sgb/_figures/why_structure.py` 對測試 scene 的隨機 layout 產生器（`tests/sgb_scenes.py` 的 `random_layout`，Route B，間距 260 µm，seed 2）計數 box pair、wire 與 coplanar face，數字在 `figures/why-structure-numbers.json`；它不執行任何 Boolean 運算。
+- `docs/design/sgb/_figures/why_scaling.py measure` 對 $N = 1000, 5000, 20000$ 與九種排程各在一個新行程中建立模型並量測，一個 tile 的案例還寫出 BREP/XAO（1 與 16 個 worker）、以 Gmsh 載入並執行 `verify_loaded`，原始資料在 `figures/why-scaling-measured.json`（共 970 s，機器為 64 核心，Python 3.12）。`why_scaling.py oracle` 量測測試用的 Gmsh-API oracle（$N = 500, 1000, 2000$，含 solid 質量），`why_scaling.py validators` 量測每一項結構驗證的時間（`figures/why-validator-scaling.json`）。不帶參數執行時，腳本由這三個檔案畫出 `why-scaling` 與 `why-tail` 的圖，並寫出 `figures/why-scaling-numbers.json`。
+- 以 Python 3.12 與 `sgb-core` 分支的環境執行：`SGB_CORE=<sgb-core 工作樹> $SGB_CORE/.artifacts/env/bin/python docs/design/sgb/_figures/why_scaling.py measure`。

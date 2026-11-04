@@ -1,0 +1,322 @@
+{
+ "airbridge_B": {
+  "groups": 18,
+  "levels": 6,
+  "not_written": {
+   "arc_centre_vertices": 0,
+   "edges_only_on_those_faces": 4,
+   "faces_bounding_no_written_volume": 10,
+   "their_groups": [
+    "EXT::ground_left::sidewall",
+    "EXT::ground_right::sidewall",
+    "MM::deck|post_left::interface",
+    "MM::deck|post_right::interface",
+    "MM::ground_left|post_left::interface",
+    "MM::ground_right|post_right::interface"
+   ]
+  },
+  "planned": {
+   "edges": 78,
+   "faces": 43,
+   "vertices": 44,
+   "volumes": 7
+  },
+  "prisms": 7,
+  "slabs": 5,
+  "validation_checks": {
+   "passed": 31,
+   "total": 31,
+   "warnings": 4
+  },
+  "written": {
+   "arcs": 0,
+   "cylinders": 0,
+   "edges": 74,
+   "faces": 33,
+   "vertices": 44,
+   "volumes": 2
+  }
+ },
+ "exploded_view": {
+  "face_groups_drawn": [
+   "EXT",
+   "MA",
+   "MS",
+   "PORT",
+   "SA"
+  ],
+  "faces_drawn": 35,
+  "faces_planned": 39,
+  "mesh_size_min_um": 4.0,
+  "mesh_size_um": 60.0,
+  "surface_triangles_drawn": 1149,
+  "volumes": [
+   "ground written=False",
+   "pad written=False",
+   "substrate written=True",
+   "vacuum written=True"
+  ]
+ },
+ "hinted_mesh_checks": {
+  "coarse_um": 60.0,
+  "growth_per_um": 2.0,
+  "near_um": 0.25,
+  "pad_a_bands": {
+   "gamma_min": 0.005561936261621664,
+   "minSICN_min": 0.010600707256074511,
+   "tets": 135237
+  },
+  "pad_b_bands": {
+   "gamma_min": 0.014483151835154447,
+   "minSICN_min": 0.03966392068135268,
+   "tets": 144866
+  },
+  "pad_c_bands": {
+   "gamma_min": 0.0001485171058065326,
+   "minSICN_min": 0.004721307496233637,
+   "tets": 196381
+  },
+  "stage_pad_b_bands": {
+   "gamma_min": 0.000678283653366975,
+   "minSICN_min": 0.013831836012545494,
+   "tets": 141212
+  }
+ },
+ "pad_in_ground_A": {
+  "groups": 10,
+  "levels": 3,
+  "not_written": {
+   "arc_centre_vertices": 5,
+   "edges_only_on_those_faces": 0,
+   "faces_bounding_no_written_volume": 0,
+   "their_groups": []
+  },
+  "planned": {
+   "edges": 44,
+   "faces": 15,
+   "vertices": 39,
+   "volumes": 2
+  },
+  "prisms": 5,
+  "slabs": 2,
+  "validation_checks": {
+   "passed": 31,
+   "total": 31,
+   "warnings": 4
+  },
+  "written": {
+   "arcs": 5,
+   "cylinders": 0,
+   "edges": 44,
+   "faces": 15,
+   "vertices": 34,
+   "volumes": 2
+  }
+ },
+ "pad_in_ground_B": {
+  "groups": 14,
+  "levels": 4,
+  "not_written": {
+   "arc_centre_vertices": 10,
+   "edges_only_on_those_faces": 4,
+   "faces_bounding_no_written_volume": 4,
+   "their_groups": [
+    "EXT::ground::sidewall"
+   ]
+  },
+  "planned": {
+   "edges": 88,
+   "faces": 39,
+   "vertices": 66,
+   "volumes": 4
+  },
+  "prisms": 5,
+  "slabs": 3,
+  "validation_checks": {
+   "passed": 31,
+   "total": 31,
+   "warnings": 4
+  },
+  "written": {
+   "arcs": 10,
+   "cylinders": 5,
+   "edges": 84,
+   "faces": 35,
+   "vertices": 56,
+   "volumes": 2
+  }
+ },
+ "pad_in_ground_B_bands": {
+  "groups": 23,
+  "levels": 4,
+  "not_written": {
+   "arc_centre_vertices": 85,
+   "edges_only_on_those_faces": 4,
+   "faces_bounding_no_written_volume": 4,
+   "their_groups": [
+    "EXT::ground::sidewall"
+   ]
+  },
+  "planned": {
+   "edges": 274,
+   "faces": 60,
+   "vertices": 321,
+   "volumes": 4
+  },
+  "prisms": 5,
+  "slabs": 3,
+  "validation_checks": {
+   "passed": 31,
+   "total": 31,
+   "warnings": 4
+  },
+  "written": {
+   "arcs": 85,
+   "cylinders": 5,
+   "edges": 270,
+   "faces": 56,
+   "vertices": 236,
+   "volumes": 2
+  }
+ },
+ "pad_in_ground_C": {
+  "groups": 17,
+  "levels": 4,
+  "not_written": {
+   "arc_centre_vertices": 10,
+   "edges_only_on_those_faces": 0,
+   "faces_bounding_no_written_volume": 0,
+   "their_groups": []
+  },
+  "planned": {
+   "edges": 88,
+   "faces": 39,
+   "vertices": 66,
+   "volumes": 4
+  },
+  "prisms": 5,
+  "slabs": 3,
+  "validation_checks": {
+   "passed": 31,
+   "total": 31,
+   "warnings": 4
+  },
+  "written": {
+   "arcs": 10,
+   "cylinders": 5,
+   "edges": 88,
+   "faces": 39,
+   "vertices": 56,
+   "volumes": 4
+  }
+ },
+ "port": {
+  "levels_um": [
+   -100.0,
+   0.0,
+   0.2,
+   100.0
+  ],
+  "plane_z_um": 0.0
+ },
+ "running_example_checks": {
+  "bridge_b": {
+   "faces": 33,
+   "gamma_min": 0.0010000678019127145,
+   "gamma_p1": 0.013849477654511052,
+   "load_check": "ok",
+   "max_arc_deviation_grid": 0.0,
+   "max_snap_drift_grid": 0.0,
+   "mesh": "ok",
+   "minSICN_min": 0.010731325346807822,
+   "minSICN_p1": 0.010731627935407035,
+   "narrowest_face_um": 0.2,
+   "occt": "ok",
+   "tets": 1709
+  },
+  "pad_a": {
+   "faces": 15,
+   "gamma_min": 0.12158050262563726,
+   "gamma_p1": 0.3292282481619657,
+   "load_check": "ok",
+   "max_arc_deviation_grid": 0.0,
+   "max_snap_drift_grid": 0.0,
+   "mesh": "ok",
+   "minSICN_min": 0.11859589037993307,
+   "minSICN_p1": 0.3514582823760901,
+   "narrowest_face_um": 7.071068,
+   "occt": "ok",
+   "tets": 2003
+  },
+  "pad_a_bands": {
+   "faces": 30,
+   "gamma_min": 2.191289952777739e-05,
+   "gamma_p1": 0.0039035008617002817,
+   "load_check": "ok",
+   "max_arc_deviation_grid": 0.631601,
+   "max_snap_drift_grid": 0.0,
+   "mesh": "ok",
+   "minSICN_min": 0.002038626312392183,
+   "minSICN_p1": 0.0037844721114182038,
+   "narrowest_face_um": 0.076694,
+   "occt": "ok",
+   "tets": 3666
+  },
+  "pad_b": {
+   "faces": 35,
+   "gamma_min": 0.00012780111005788404,
+   "gamma_p1": 0.012485572344420548,
+   "load_check": "ok",
+   "max_arc_deviation_grid": 0.0,
+   "max_snap_drift_grid": 0.0,
+   "mesh": "ok",
+   "minSICN_min": 0.0054960324730440845,
+   "minSICN_p1": 0.010696340830726382,
+   "narrowest_face_um": 0.2,
+   "occt": "ok",
+   "tets": 2105
+  },
+  "pad_b_bands": {
+   "faces": 56,
+   "gamma_min": 3.564269014364285e-11,
+   "gamma_p1": 0.0014119677062644765,
+   "load_check": "ok",
+   "max_arc_deviation_grid": 0.631601,
+   "max_snap_drift_grid": 0.0,
+   "mesh": "ok",
+   "minSICN_min": 5.20554929248588e-06,
+   "minSICN_p1": 0.003919227839630383,
+   "narrowest_face_um": 0.076694,
+   "occt": "ok",
+   "tets": 3706
+  },
+  "pad_c": {
+   "faces": 39,
+   "gamma_min": 0.00012757865375646708,
+   "gamma_p1": 0.0003474001042173385,
+   "load_check": "ok",
+   "max_arc_deviation_grid": 0.0,
+   "max_snap_drift_grid": 0.0,
+   "mesh": "ok",
+   "minSICN_min": 0.00013893529461063414,
+   "minSICN_p1": 0.009089182562284203,
+   "narrowest_face_um": 0.2,
+   "occt": "ok",
+   "tets": 2654
+  },
+  "pad_c_bands": {
+   "faces": 60,
+   "gamma_min": 0.0,
+   "gamma_p1": 0.00012749279702108665,
+   "load_check": "ok",
+   "max_arc_deviation_grid": 0.631601,
+   "max_snap_drift_grid": 0.0,
+   "mesh": "ok",
+   "minSICN_min": -7.429426153383813e-15,
+   "minSICN_p1": 0.0037253870316421933,
+   "narrowest_face_um": 0.076694,
+   "occt": "ok",
+   "tets": 4891
+  }
+ }
+}

@@ -1,0 +1,78 @@
+---
+lang: zh-TW
+title: "重現方式"
+description: "幾何建構效能研究所用的機器、軟體版本、layout、資料檔與指令。"
+scgsim-kind: "research"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/research/geometry-build/reproduction"
+---
+
+**問題。**這些數字是在什麼環境量到的？要如何重現？
+
+**結果。**全部量測都在同一台工作站上，以單一 commit 的 production SGB core、seed 2 的隨機 layout 完成。量測腳本寫出 JSON 資料檔；一個繪圖腳本把這些檔案轉成本研究的圖表。
+
+## 適用於所有數字的一項限制
+
+每個 case 只跑一次，機器也沒有與其他工作隔離：Gmsh API 與 validator 執行前後，它的 load average 在 1.6 到 3.5 之間，scaling 的那次執行則沒有記錄。有多次量測的時間，彼此相差在約 25% 以內（direct writer 在 1,000 個特徵：0.35 s 與 0.44 s；Gmsh API 在 2,000 個特徵：63.3 s 與 64.7 s）。Gmsh API 在 2,000 個特徵的執行重複了三次，保存的 64.7 s 是最後一次；機器上另一個工作讓第一次花了 83.6 s。請用這些數字看量級與斜率，不要用它們比較兩個 case 之間的小差異。
+
+## 機器
+
+| 項目 | 內容 |
+|---|---|
+| CPU | AMD Ryzen Threadripper PRO 9975WX，32 核心，每核心 2 執行緒，1 個 socket（64 個硬體執行緒） |
+| 記憶體 | 503 GiB |
+| 作業系統 | Ubuntu 22.04.5 LTS，Linux 核心 6.8.0-138-generic，x86_64 |
+
+## 軟體
+
+| 項目 | 版本 |
+|---|---|
+| SGB core（`scgsim.geometry.sgb`，production 套件） | commit `c034f61` |
+| Python | 3.12.14 |
+| Gmsh（Python API） | 4.15.2 |
+| OCP（`cadquery-ocp-novtk`，OCCT 檢查使用） | 7.8.1.1.post1，建立在 OCCT 7.8.1 之上 |
+
+## Layout {#layouts}
+
+layout 產生器是 SGB 測試套件的 `random_layout`（`tests/sgb_scenes.py`）：N 個特徵排在方格上，間距 260 µm，各自位於同一片 ground plane 的獨立 cutout 中，下方是 substrate，上方是 vacuum 本體，以 Route B 建構。約四分之一的特徵另帶一個與它重疊、屬於同一個 Net 的形狀。特徵都是多邊形；沒有圓弧，也沒有 inset band。
+
+seed 一律是 2。不用 seed 1，是因為它在 20,000 個特徵時會產生同一個 Net 的兩個形狀（`f5879` 與 `f5879b`），它們只在一個 vertex 相接。production 的建構會以 `NonManifoldError` 拒絕這種輸入：同一個 Net 的 pinch 在設計上是不合法的，所以這個拒絕是正確的行為。seed 2 到 9 在 20,000 個特徵時都建得出來。
+
+scaling 量測在九種 tile 與 worker 排程下，各量 1,000、5,000 與 20,000 個特徵，共 27 個 case；每個 case 在自己的 Python 行程中執行，所以 peak memory 屬於該 case；整體共花 970 s。Gmsh API 的比較使用 500、1,000 與 2,000 個特徵，validator 計時則使用 1,000、5,000 與 20,000 個特徵。
+
+## 資料檔
+
+這些檔案與 SGB 設計頁面的資料放在一起，位於 `zh-TW/docs/design/sgb/figures/`。
+
+| 檔案 | 內容 | 產生者 |
+|---|---|---|
+| `why-scaling-measured.json` | 27 個 case：各 stage 的時間、數量、peak memory、identity digest；一個 tile 的執行中，寫出的檔案、Gmsh 載入與 `verify_loaded` | `why_scaling.py measure` |
+| `why-scaling-oracle.json` | Gmsh API 建構在 500、1,000 與 2,000 個特徵時的時間與 solid 質量 | `why_scaling.py oracle` |
+| `why-validator-scaling.json` | 十二項結構檢查在 1,000、5,000 與 20,000 個特徵時的時間；這是第二組計時，本研究不繪製 | `why_scaling.py validators` |
+| `emission-timing-data.json` | Gmsh API 與 direct writer 逐步驟的比較，以及每一項檢查（結構檢查與載入後的檢查）的時間 | `emission.py --measure` |
+| `emission-example-numbers.json` | 範例模型的數量，以及測試模型上的 OCCT 檢查時間 | `emission.py` |
+
+## 指令
+
+在 repository 根目錄，使用位於上述 commit 的 SGB core checkout 的 Python 環境執行。`SGB_CORE` 指向那個 checkout，腳本匯入的測試端 builder 也在其中。
+
+```bash
+SGB_CORE=<SGB core checkout>
+PY=<SGB core 環境的 Python 直譯器，已安裝 gmsh 與 OCP>
+export SGB_CORE
+
+$PY zh-TW/docs/design/sgb/_figures/why_scaling.py measure       # 約 16 分鐘
+$PY zh-TW/docs/design/sgb/_figures/why_scaling.py oracle
+$PY zh-TW/docs/design/sgb/_figures/why_scaling.py validators
+$PY zh-TW/docs/design/sgb/_figures/emission.py --measure
+```
+
+本研究的圖表只需要 `matplotlib` 與這些 JSON 檔，由同一個腳本為兩種語言寫出：
+
+```bash
+python3 docs/research/geometry-build/_figures/plots.py
+```
+
+腳本把 SVG 圖與 Markdown 表格寫到各語言頁面旁的 `figures/`，並寫出 `numbers.json`，內含文字引用的數值。資料只能透過重跑量測腳本來修改；繪圖腳本本身不含任何數字。
+
+量測腳本與它們的輸入，說明在 `zh-TW/docs/design/sgb/_figures/README.md`。

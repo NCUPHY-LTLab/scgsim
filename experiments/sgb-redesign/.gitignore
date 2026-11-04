@@ -1,0 +1,16 @@
+# Generated outputs are large (XAO, BREP, meshes); only sources and small notes
+# are tracked.
+e4_aedt_step/projects/
+e4_aedt_step/work/
+consumer-contract/out/
+__pycache__/
+*.pyc
+.pytest_cache/
+# Internal working notes (kept local, not published)
+REFRESH_NOTES.md
+REVISION_NOTES.md
+REVISION_R3_NOTES.md
+PAGE_PLAN.md
+REVIEW_R3.md
+INTEGRATION_MAP.md
+IMPLEMENTATION_PLAN.md

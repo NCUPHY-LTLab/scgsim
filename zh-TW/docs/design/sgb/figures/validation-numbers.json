@@ -1,0 +1,662 @@
+{
+ "checks_of_a_valid_build": [
+  {
+   "detail": "0 off-grid edges",
+   "name": "vertices_on_grid",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "shortest horizontal edge = 16000000 grid^2",
+   "name": "no_edge_shorter_than_g",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "every slab is at least one grid unit thick",
+   "name": "slabs_thinner_than_g_are_kept",
+   "passed": true,
+   "warning": true
+  },
+  {
+   "detail": "checked while labelling; a violation stops the build before this point",
+   "name": "no_different_net_contact",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "checked while labelling; a violation stops the build before this point",
+   "name": "no_non_manifold_pinch",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "every vertex id names one entity",
+   "name": "vertex_ids_unique",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "every edge id names one entity",
+   "name": "edge_ids_unique",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "every face id names one entity",
+   "name": "face_ids_unique",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "every vertex, edge, face and volume is stored under its own id",
+   "name": "topology_keyed_by_entity_id",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "8 labelled cells, each in one of 4 volumes",
+   "name": "every_cell_in_exactly_one_volume",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "no crossing edge, no vertex inside an edge",
+   "name": "arrangements_planar",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 arc edges sampled",
+   "name": "arc_edges_do_not_cross",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "max deviation of a realised arc from its exact carrier = 0.0000 grid units",
+   "name": "arc_deviation_within_snap_bound",
+   "passed": true,
+   "warning": true
+  },
+  {
+   "detail": "0 inset families: bands partition their support and area(R_m) is non-increasing in m",
+   "name": "band_area_monotone",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "raw = dissolved = enclosed area for every S_i and A_i",
+   "name": "area_conservation_per_arrangement",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "worst deviation = 0.000 of the snap bound",
+   "name": "prism_area_conserved_over_cells",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "5 shells: every edge used twice with opposite orientation",
+   "name": "shells_closed_and_oriented",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "chi = 2 - 2*genus for every shell",
+   "name": "shell_euler_characteristic",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 volumes without positive-volume shell",
+   "name": "every_volume_has_outer_shell",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "face-volume count histogram {1: 6, 2: 28}",
+   "name": "each_face_used_by_at_most_two_volumes",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 interior faces missing a side",
+   "name": "interior_faces_have_two_sides",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 curved walls, each bounded by one bottom and one top arc on one circle",
+   "name": "curved_walls_are_single_cylinders",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 non-planar walls",
+   "name": "walls_planar",
+   "passed": true,
+   "warning": true
+  },
+  {
+   "detail": "14 groups; empty: []",
+   "name": "physical_groups_non_empty",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 entities in more than one group",
+   "name": "groups_partition_each_dimension",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 emitted faces without group",
+   "name": "every_emitted_face_in_one_group",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 emitted faces without a name",
+   "name": "every_emitted_face_has_a_name",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 emitted volumes without group",
+   "name": "every_emitted_volume_in_one_group",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "unknown members: []",
+   "name": "unions_reference_primary_groups",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "0 dangling edges; 0 free edges of embedded faces",
+   "name": "every_edge_shared_by_two_faces",
+   "passed": true,
+   "warning": false
+  },
+  {
+   "detail": "no vertical edge is shorter than the grid",
+   "name": "vertical_edges_shorter_than_g_are_kept",
+   "passed": true,
+   "warning": true
+  }
+ ],
+ "defects": [
+  {
+   "defect": "remove the top face from the outer shell of the vacuum volume",
+   "details": {
+    "shell_euler_characteristic": "vol:7346ec1a4ff1ccf9/0: chi=1",
+    "shells_closed_and_oriented": "vol:7346ec1a4ff1ccf9/0: edge e:662347190b40543e used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:506a2115ac5c1fe2 used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:36bde89e55bf333e used 1 times; vol:7346ec1a4f"
+   },
+   "failing_checks": [
+    "shells_closed_and_oriented",
+    "shell_euler_characteristic"
+   ],
+   "meaning": "the shell is open"
+  },
+  {
+   "defect": "flip the orientation of one shell face",
+   "details": {
+    "shells_closed_and_oriented": "vol:7346ec1a4ff1ccf9/0: edge ve:0a323ee4f27ccc83 not used with opposite orientation; vol:7346ec1a4ff1ccf9/0: edge e:662347190b40543e not used with opposite orientation; vol:7346ec1a4ff1ccf9/0: edge ve"
+   },
+   "failing_checks": [
+    "shells_closed_and_oriented"
+   ],
+   "meaning": "faces disagree about the inside"
+  },
+  {
+   "defect": "put one face into two physical groups",
+   "details": {
+    "groups_partition_each_dimension": "1 entities in more than one group"
+   },
+   "failing_checks": [
+    "groups_partition_each_dimension"
+   ],
+   "meaning": "a face is double-booked"
+  },
+  {
+   "defect": "empty a physical group",
+   "details": {
+    "every_emitted_face_in_one_group": "1 emitted faces without group",
+    "physical_groups_non_empty": "14 groups; empty: ['PORT::PORT_SHEET__P1__0000']"
+   },
+   "failing_checks": [
+    "physical_groups_non_empty",
+    "every_emitted_face_in_one_group"
+   ],
+   "meaning": "a group names nothing"
+  },
+  {
+   "defect": "drop a face from its physical group",
+   "details": {
+    "every_emitted_face_in_one_group": "1 emitted faces without group"
+   },
+   "failing_checks": [
+    "every_emitted_face_in_one_group"
+   ],
+   "meaning": "an emitted face has no group"
+  },
+  {
+   "defect": "name a group that does not exist in a union",
+   "details": {
+    "unions_reference_primary_groups": "unknown members: ['MA::pad_typo']"
+   },
+   "failing_checks": [
+    "unions_reference_primary_groups"
+   ],
+   "meaning": "a union has a typo"
+  },
+  {
+   "defect": "remove the volume on one side of an interface face",
+   "details": {
+    "interior_faces_have_two_sides": "1 interior faces missing a side"
+   },
+   "failing_checks": [
+    "interior_faces_have_two_sides"
+   ],
+   "meaning": "an interface face with one side"
+  },
+  {
+   "defect": "change the recorded area of a level arrangement",
+   "details": {
+    "area_conservation_per_arrangement": "level[0]: raw 39200000002/39200000000 dissolved 39200000000/39200000000"
+   },
+   "failing_checks": [
+    "area_conservation_per_arrangement"
+   ],
+   "meaning": "area lost or gained by an arrangement"
+  },
+  {
+   "defect": "remove one cell of the deepest band of the pad top (banded model)",
+   "details": {
+    "band_area_monotone": "band_pad_top: bands cover 144000000.0 but the region has 400000000.0 grid^2"
+   },
+   "failing_checks": [
+    "band_area_monotone"
+   ],
+   "meaning": "bands no longer partition the support region"
+  },
+  {
+   "defect": "move the top arc of a curved wall to another circle (stage-level scene with arcs)",
+   "details": {
+    "curved_walls_are_single_cylinders": "1 curved walls whose top and bottom arcs lie on different circles: ['f:642f89665b40bd7f']"
+   },
+   "failing_checks": [
+    "curved_walls_are_single_cylinders"
+   ],
+   "meaning": "a curved wall is not one cylinder"
+  }
+ ],
+ "early_errors": {
+  "ContactError (contact check, after the arrangements)": "different-Net contact between P (entities pad) and other (entities touching_net) at (40.0000, 45.0000) um on slab[0,1/5] (grid g = 0.001 um; a gap smaller than the grid closes when the sources snap)",
+  "NonManifoldError (same-Net pinch at a corner, finite metal; before assembly)": "non-manifold pinch: VACUUM_REGION (pinched between conductors pad, pinch of Net P) touches itself along the vertical edge at (60.0000, 60.0000) um, z 0.0..0.2 um (slab[0,1/5]): two cells of one domain meet only at a vertex; give them a shared edge or separate them",
+  "OverlapError (labelling, S5)": "different-Net conductors overlap near (42.5000, 46.5000) um: other_net, pad",
+  "RouteError (route check, before S2)": "Route A needs film conductors as sheets, but these films are still finite after the physical interpretation: ground_0000, pad; select a profile that collapses them to sheets (for example thin_film) or choose Route B or C",
+  "SgbError (refinement curve in a cell with no face, assembly)": "refinement curve r/seg0 at (32.0000, 55.0000) um on level[1/5] lies in a cell that has no face (inside a volume): it cannot be embedded and is not dropped silently"
+ },
+ "occt_examples": {
+  "all_ok": true,
+  "max_face_area_relative_error": 1.347139329550679e-12,
+  "max_solid_volume_relative_error": 5.278648854037128e-16,
+  "reports": 16,
+  "rows": [
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 1.9601178917520005e-16,
+    "file": "brep",
+    "model": "real input, Route A",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 0.0,
+    "timings_s": {
+     "bop_argument_analyzer": 0.00749,
+     "brep_check": 0.0036,
+     "plan_properties": 0.00101,
+     "read": 0.00039,
+     "shape_analysis": 0.00019
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 1.9601178917520005e-16,
+    "file": "xao",
+    "model": "real input, Route A",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 0.0,
+    "timings_s": {
+     "bop_argument_analyzer": 0.00654,
+     "brep_check": 0.00272,
+     "plan_properties": 0.00098,
+     "read": 0.00067,
+     "shape_analysis": 0.00014
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 1.9601178917520005e-16,
+    "file": "brep",
+    "model": "real input, Route B",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 1.319662213509282e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.01155,
+     "brep_check": 0.00456,
+     "plan_properties": 0.0019,
+     "read": 0.00034,
+     "shape_analysis": 0.00026
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 1.9601178917520005e-16,
+    "file": "xao",
+    "model": "real input, Route B",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 1.319662213509282e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.01151,
+     "brep_check": 0.00472,
+     "plan_properties": 0.00181,
+     "read": 0.00115,
+     "shape_analysis": 0.00018
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 1.9601178917520005e-16,
+    "file": "brep",
+    "model": "real input, Route C",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 1.7763568394002506e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.01552,
+     "brep_check": 0.00613,
+     "plan_properties": 0.0023,
+     "read": 0.00036,
+     "shape_analysis": 0.00027
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 1.9601178917520005e-16,
+    "file": "xao",
+    "model": "real input, Route C",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 1.7763568394002506e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.01528,
+     "brep_check": 0.00578,
+     "plan_properties": 0.00218,
+     "read": 0.00111,
+     "shape_analysis": 0.0002
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.876876115224056e-14,
+    "file": "brep",
+    "model": "real input, Route A with bands",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 2.645802768793973e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.02379,
+     "brep_check": 0.00815,
+     "plan_properties": 0.00372,
+     "read": 0.00041,
+     "shape_analysis": 0.00027
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.876876115224056e-14,
+    "file": "xao",
+    "model": "real input, Route A with bands",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 2.645802768793973e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.02253,
+     "brep_check": 0.00919,
+     "plan_properties": 0.00391,
+     "read": 0.00115,
+     "shape_analysis": 0.00029
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.876876115224056e-14,
+    "file": "brep",
+    "model": "real input, Route B with bands",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 5.278648854037128e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.03642,
+     "brep_check": 0.01089,
+     "plan_properties": 0.00454,
+     "read": 0.00057,
+     "shape_analysis": 0.0004
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.876876115224056e-14,
+    "file": "xao",
+    "model": "real input, Route B with bands",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 5.278648854037128e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.03753,
+     "brep_check": 0.01137,
+     "plan_properties": 0.0045,
+     "read": 0.00156,
+     "shape_analysis": 0.00038
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.876876115224056e-14,
+    "file": "brep",
+    "model": "real input, Route C with bands",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 5.278648854037128e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.04319,
+     "brep_check": 0.01349,
+     "plan_properties": 0.00513,
+     "read": 0.00059,
+     "shape_analysis": 0.00041
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.876876115224056e-14,
+    "file": "xao",
+    "model": "real input, Route C with bands",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 5.278648854037128e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.04303,
+     "brep_check": 0.01341,
+     "plan_properties": 0.00514,
+     "read": 0.00149,
+     "shape_analysis": 0.00039
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.5376526277146434e-16,
+    "file": "brep",
+    "model": "airbridge, Route B (stage-level scene)",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 2.0735546910794079e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.01021,
+     "brep_check": 0.00386,
+     "plan_properties": 0.00151,
+     "read": 0.00034,
+     "shape_analysis": 0.00016
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.5376526277146434e-16,
+    "file": "xao",
+    "model": "airbridge, Route B (stage-level scene)",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 2.0735546910794079e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.0099,
+     "brep_check": 0.00378,
+     "plan_properties": 0.0015,
+     "read": 0.00078,
+     "shape_analysis": 0.00016
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 1.347139329550679e-12,
+    "file": "brep",
+    "model": "pad_in_ground, Route B (stage-level scene with arcs)",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 2.073117193669177e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.03607,
+     "brep_check": 0.00491,
+     "plan_properties": 0.00348,
+     "read": 0.00038,
+     "shape_analysis": 0.0003
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 1.347139329550679e-12,
+    "file": "xao",
+    "model": "pad_in_ground, Route B (stage-level scene with arcs)",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 2.073117193669177e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.03469,
+     "brep_check": 0.00519,
+     "plan_properties": 0.00324,
+     "read": 0.00089,
+     "shape_analysis": 0.0002
+    }
+   }
+  ],
+  "timing_ranges_ms": {
+   "bop_argument_analyzer": [
+    6.54,
+    43.19
+   ],
+   "brep_check": [
+    2.72,
+    13.49
+   ],
+   "plan_properties": [
+    0.98,
+    5.14
+   ],
+   "read": [
+    0.34,
+    1.56
+   ],
+   "shape_analysis": [
+    0.14,
+    0.41
+   ]
+  }
+ },
+ "scene": "gds_pad_in_ground (production real input), Route B",
+ "tampered_shell": {
+  "checks_failed": [
+   "shells_closed_and_oriented",
+   "shell_euler_characteristic"
+  ],
+  "checks_passed": 29,
+  "checks_total": 31,
+  "edges_used_once": 4,
+  "failing_details": {
+   "shell_euler_characteristic": "vol:7346ec1a4ff1ccf9/0: chi=1",
+   "shells_closed_and_oriented": "vol:7346ec1a4ff1ccf9/0: edge e:662347190b40543e used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:506a2115ac5c1fe2 used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:36bde89e55bf333e used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:7b1c3fb2db0eb5e5 used 1 times"
+  },
+  "raised_message": "2 invariant(s) failed: shells_closed_and_oriented: vol:7346ec1a4ff1ccf9/0: edge e:662347190b40543e used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:506a2115ac5c1fe2 used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:36bde89e55bf333e used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:7b1c3fb2db0eb5e5 used 1 times; shell_euler_characteristic: vol:7346ec1a4ff1ccf9/0: chi=1",
+  "removed_face": "f:85ac6a5796fbc9fe",
+  "removed_face_group": "EXT::VACUUM_REGION::top",
+  "shell_faces_after": 5,
+  "shell_faces_before": 6,
+  "warnings": [
+   "slabs_thinner_than_g_are_kept",
+   "arc_deviation_within_snap_bound",
+   "walls_planar",
+   "vertical_edges_shorter_than_g_are_kept"
+  ]
+ }
+}

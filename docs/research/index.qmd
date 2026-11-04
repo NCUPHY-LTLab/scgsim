@@ -15,6 +15,7 @@ data to examine the comparison.
 
 | Study | Focus | Scope |
 |---|---|---|
+| [Geometry build performance](geometry-build/index.qmd) | How SGB geometry build time and memory scale with chip size, what the direct BREP writer saves over the Gmsh API, what the checks cost and whether parallel derivation is needed | Measurements on one machine with the production SGB core; random polygon layouts of up to 20,000 features, each case run once |
 | [Circular Pad with a Uniform port](../history/curved-source-installation.qmd) | Curved-source geometry and the environment used for a Palace Eigenmode study | Historical study; its recorded source and Solver versions stay together |
 
 ## Research and tool documentation

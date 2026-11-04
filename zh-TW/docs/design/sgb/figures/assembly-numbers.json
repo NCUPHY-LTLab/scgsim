@@ -1,0 +1,312 @@
+{
+ "airbridge_vacuum_shell": {
+  "by_role": {
+   "horizontal face (cell of a level arrangement)": 6,
+   "wall coalesced over more than one slab": 4,
+   "wall of one slab": 14,
+   "wall on the outer chip boundary": 2
+  },
+  "coalesced_wall_groups": [
+   "EXT::vacuum::sidewall"
+  ],
+  "coalesced_wall_z_ranges": [
+   [
+    "1/5",
+    "100"
+   ],
+   [
+    "1/5",
+    "100"
+   ],
+   [
+    "1/5",
+    "100"
+   ],
+   [
+    "1/5",
+    "100"
+   ]
+  ],
+  "faces": 26,
+  "levels": [
+   "-100",
+   "0",
+   "1/5",
+   "3",
+   "33/10",
+   "100"
+  ],
+  "model_counts": {
+   "edges": 78,
+   "faces": 43,
+   "groups": 18,
+   "hot_pixels": 88,
+   "level_cells": 16,
+   "level_edges": 58,
+   "levels": 6,
+   "prisms": 7,
+   "slab_cells": 10,
+   "slab_edges": 38,
+   "slabs": 5,
+   "vertices": 44,
+   "volumes": 7
+  },
+  "scene": "tests/sgb_scenes.py airbridge(), Route B: stage-level scene",
+  "shells": 1,
+  "signed_volume_um3": 8982860.0,
+  "volumes": [
+   "deck",
+   "ground_left",
+   "ground_right",
+   "post_left",
+   "post_right",
+   "substrate",
+   "vacuum"
+  ]
+ },
+ "coalescing_counts": {
+  "airbridge_B": {
+   "edges_as_built": 78,
+   "edges_every_level_cuts": 94,
+   "faces_as_built": 43,
+   "faces_every_level_cuts": 51,
+   "scene": "stage-level scene airbridge()",
+   "vertices_as_built": 44,
+   "vertices_every_level_cuts": 52
+  },
+  "pad_in_ground_B": {
+   "faces_as_built": 41,
+   "faces_every_level_cuts": 61,
+   "scene": "stage-level scene pad_in_ground('B')"
+  },
+  "pad_in_ground_B_polygon_hole32": {
+   "edges_as_built": 175,
+   "edges_every_level_cuts": 267,
+   "faces_as_built": 68,
+   "faces_every_level_cuts": 115,
+   "scene": "stage-level scene pad_in_ground('B', hole_sides=32, rounded_corner=False)",
+   "vertices_as_built": 114,
+   "vertices_every_level_cuts": 159
+  },
+  "real_input_B": {
+   "edges_as_built": 73,
+   "edges_every_level_cuts": 97,
+   "faces_as_built": 34,
+   "faces_every_level_cuts": 46,
+   "scene": "production real input gds_pad_in_ground",
+   "vertices_as_built": 46,
+   "vertices_every_level_cuts": 58
+  },
+  "real_input_C": {
+   "edges_as_built": 73,
+   "edges_every_level_cuts": 97,
+   "faces_as_built": 34,
+   "faces_every_level_cuts": 46,
+   "scene": "production real input gds_pad_in_ground",
+   "vertices_as_built": 46,
+   "vertices_every_level_cuts": 58
+  }
+ },
+ "inner_void": {
+  "counts": {
+   "edges": 85,
+   "faces": 40,
+   "groups": 17,
+   "hot_pixels": 127,
+   "level_cells": 17,
+   "level_edges": 76,
+   "levels": 7,
+   "prisms": 6,
+   "slab_cells": 11,
+   "slab_edges": 49,
+   "slabs": 6,
+   "vertices": 54,
+   "volumes": 5
+  },
+  "scene": "gds_pad_in_ground real input + island (Net float, x 105..115, y 105..115, z 10..11 um), Route B",
+  "shell_checks": [
+   "7 shells: every edge used twice with opposite orientation",
+   "chi = 2 - 2*genus for every shell"
+  ],
+  "validation_passed": true,
+  "volumes": {
+   "VACUUM_REGION": {
+    "emitted": true,
+    "shells": [
+     {
+      "faces": 6,
+      "role": "outer",
+      "signed_volume_um3": 983920.0
+     },
+     {
+      "faces": 6,
+      "role": "inner",
+      "signed_volume_um3": -100.0
+     },
+     {
+      "faces": 26,
+      "role": "inner",
+      "signed_volume_um3": -101760.0
+     }
+    ]
+   },
+   "ground_0000": {
+    "emitted": false,
+    "shells": [
+     {
+      "faces": 13,
+      "role": "outer",
+      "signed_volume_um3": 1680.0
+     }
+    ]
+   },
+   "island": {
+    "emitted": false,
+    "shells": [
+     {
+      "faces": 6,
+      "role": "outer",
+      "signed_volume_um3": 100.0
+     }
+    ]
+   },
+   "pad": {
+    "emitted": false,
+    "shells": [
+     {
+      "faces": 8,
+      "role": "outer",
+      "signed_volume_um3": 80.0
+     }
+    ]
+   },
+   "substrate": {
+    "emitted": true,
+    "shells": [
+     {
+      "faces": 9,
+      "role": "outer",
+      "signed_volume_um3": 100000.0
+     }
+    ]
+   }
+  }
+ },
+ "real_input_B": {
+  "edges_by_kind": {
+   "horizontal": 48,
+   "vertical": 25
+  },
+  "faces_by_kind": {
+   "horizontal": 9,
+   "wall": 25
+  },
+  "levels": [
+   "-30",
+   "-10",
+   "0",
+   "1/5",
+   "101/5"
+  ],
+  "model_counts": {
+   "edges": 73,
+   "faces": 34,
+   "groups": 14,
+   "hot_pixels": 99,
+   "level_cells": 13,
+   "level_edges": 60,
+   "levels": 5,
+   "prisms": 5,
+   "slab_cells": 8,
+   "slab_edges": 37,
+   "slabs": 4,
+   "vertices": 46,
+   "volumes": 4
+  },
+  "volumes": {
+   "VACUUM_REGION": {
+    "emitted": true,
+    "shells": [
+     [
+      "outer",
+      6
+     ],
+     [
+      "inner",
+      26
+     ]
+    ]
+   },
+   "ground_0000": {
+    "emitted": false,
+    "shells": [
+     [
+      "outer",
+      13
+     ]
+    ]
+   },
+   "pad": {
+    "emitted": false,
+    "shells": [
+     [
+      "outer",
+      8
+     ]
+    ]
+   },
+   "substrate": {
+    "emitted": true,
+    "shells": [
+     [
+      "outer",
+      9
+     ]
+    ]
+   }
+  },
+  "walls_by_group": {
+   "EXT::VACUUM_REGION::sidewall": 4,
+   "MA::ground_0000::sidewall": 11,
+   "MA::pad::sidewall": 6,
+   "SA::substrate|VACUUM_REGION::sidewall": 4
+  },
+  "walls_spanning_more_than_one_slab": {
+   "count": 4,
+   "groups": [
+    "EXT::VACUUM_REGION::sidewall"
+   ],
+   "z_ranges": [
+    "-30..101/5"
+   ]
+  }
+ },
+ "wall_anatomy": {
+  "every_level_cuts_validates": true,
+  "faces_by_kind_as_built": {
+   "horizontal": 9,
+   "wall": 32
+  },
+  "model_edges": {
+   "as_built": 94,
+   "every_level_cuts": 132
+  },
+  "model_faces": {
+   "as_built": 41,
+   "every_level_cuts": 61
+  },
+  "model_vertices": {
+   "as_built": 70,
+   "every_level_cuts": 93
+  },
+  "scene": "tests/sgb_scenes.py pad_in_ground('B'): stage-level scene, port at z = 0.1 um",
+  "walls_drawn_as_built": {
+   "faces": 4,
+   "vertical_edge_segments_in_loops": 10
+  },
+  "walls_drawn_without_coalescing": {
+   "faces": 6,
+   "vertical_edge_segments_in_loops": 12
+  }
+ }
+}

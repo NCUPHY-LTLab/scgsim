@@ -1,0 +1,306 @@
+{
+ "margins_um": [
+  0.5,
+  1.0
+ ],
+ "pad_in_ground_route_b": {
+  "supports": {
+   "ground_0000_top": {
+    "origin_length_um": 160.0,
+    "free_boundary_length_um": 400.0,
+    "support_area_um2": 8400.0,
+    "bands": [
+     {
+      "band": 0,
+      "groups": [
+       "MA::ground_0000::top::band=0"
+      ],
+      "area_um2": 80.785398
+     },
+     {
+      "band": 1,
+      "groups": [
+       "MA::ground_0000::top::band=1"
+      ],
+      "area_um2": 82.356194
+     },
+     {
+      "band": 2,
+      "groups": [
+       "MA::ground_0000::top::band=2"
+      ],
+      "area_um2": 8236.858407
+     }
+    ]
+   },
+   "ground_0000_bottom": {
+    "origin_length_um": 160.0,
+    "free_boundary_length_um": 400.0,
+    "support_area_um2": 8400.0,
+    "bands": [
+     {
+      "band": 0,
+      "groups": [
+       "MS::ground_0000::bottom::band=0"
+      ],
+      "area_um2": 80.785398
+     },
+     {
+      "band": 1,
+      "groups": [
+       "MS::ground_0000::bottom::band=1"
+      ],
+      "area_um2": 82.356194
+     },
+     {
+      "band": 2,
+      "groups": [
+       "MS::ground_0000::bottom::band=2"
+      ],
+      "area_um2": 8236.858407
+     }
+    ]
+   },
+   "pad_top": {
+    "origin_length_um": 80.0,
+    "free_boundary_length_um": 0.0,
+    "support_area_um2": 400.0,
+    "bands": [
+     {
+      "band": 0,
+      "groups": [
+       "MA::pad::top::band=0"
+      ],
+      "area_um2": 39.0
+     },
+     {
+      "band": 1,
+      "groups": [
+       "MA::pad::top::band=1"
+      ],
+      "area_um2": 37.0
+     },
+     {
+      "band": 2,
+      "groups": [
+       "MA::pad::top::band=2"
+      ],
+      "area_um2": 324.0
+     }
+    ]
+   },
+   "pad_bottom": {
+    "origin_length_um": 80.0,
+    "free_boundary_length_um": 0.0,
+    "support_area_um2": 400.0,
+    "bands": [
+     {
+      "band": 0,
+      "groups": [
+       "MS::pad::bottom::band=0"
+      ],
+      "area_um2": 39.0
+     },
+     {
+      "band": 1,
+      "groups": [
+       "MS::pad::bottom::band=1"
+      ],
+      "area_um2": 37.0
+     },
+     {
+      "band": 2,
+      "groups": [
+       "MS::pad::bottom::band=2"
+      ],
+      "area_um2": 324.0
+     }
+    ]
+   },
+   "sa": {
+    "origin_length_um": 240.0,
+    "free_boundary_length_um": 0.0,
+    "support_area_um2": 1200.0,
+    "bands": [
+     {
+      "band": 0,
+      "groups": [
+       "SA::substrate|VACUUM_REGION::interface::band=0"
+      ],
+      "area_um2": 115.785398
+     },
+     {
+      "band": 1,
+      "groups": [
+       "SA::substrate|VACUUM_REGION::interface::band=1"
+      ],
+      "area_um2": 115.356194
+     },
+     {
+      "band": 2,
+      "groups": [
+       "SA::substrate|VACUUM_REGION::interface::band=2"
+      ],
+      "area_um2": 928.858407
+     }
+    ]
+   }
+  },
+  "port_area_um2": {
+   "PORT::PORT_SHEET__P1__0000": 40.0
+  },
+  "faces": 46,
+  "groups": 25
+ },
+ "section": {
+  "y=50": {
+   "die_x_um": [
+    0.0,
+    100.0
+   ],
+   "metal_x_um": [
+    [
+     0.0,
+     30.0
+    ],
+    [
+     40.0,
+     60.0
+    ],
+    [
+     70.0,
+     100.0
+    ]
+   ],
+   "gap_edges_x_um": [
+    30.0,
+    40.0
+   ],
+   "port_x_um": [
+    [
+     30.0,
+     40.0
+    ]
+   ]
+  },
+  "y=44": {
+   "die_x_um": [
+    0.0,
+    100.0
+   ],
+   "metal_x_um": [
+    [
+     0.0,
+     30.0
+    ],
+    [
+     40.0,
+     60.0
+    ],
+    [
+     70.0,
+     100.0
+    ]
+   ],
+   "gap_edges_x_um": [
+    30.0,
+    40.0
+   ],
+   "port_x_um": []
+  }
+ },
+ "thin_film_pair_route_a": {
+  "supports": {
+   "chip/left_sheet": {
+    "origin_length_um": 16.0,
+    "free_boundary_length_um": 0.0,
+    "support_area_um2": 16.0,
+    "bands": [
+     {
+      "band": 0,
+      "groups": [
+       "chip/left::band=0"
+      ],
+      "area_um2": 7.0
+     },
+     {
+      "band": 1,
+      "groups": [
+       "chip/left::band=1"
+      ],
+      "area_um2": 5.0
+     },
+     {
+      "band": 2,
+      "groups": [
+       "chip/left::band=2"
+      ],
+      "area_um2": 4.0
+     }
+    ]
+   },
+   "chip/right_sheet": {
+    "origin_length_um": 16.0,
+    "free_boundary_length_um": 0.0,
+    "support_area_um2": 16.0,
+    "bands": [
+     {
+      "band": 0,
+      "groups": [
+       "chip/right::band=0"
+      ],
+      "area_um2": 7.0
+     },
+     {
+      "band": 1,
+      "groups": [
+       "chip/right::band=1"
+      ],
+      "area_um2": 5.0
+     },
+     {
+      "band": 2,
+      "groups": [
+       "chip/right::band=2"
+      ],
+      "area_um2": 4.0
+     }
+    ]
+   },
+   "sa": {
+    "origin_length_um": 32.0,
+    "free_boundary_length_um": 44.0,
+    "support_area_um2": 64.0,
+    "bands": [
+     {
+      "band": 0,
+      "groups": [
+       "SA::substrate|upper_air::interface::band=0"
+      ],
+      "area_um2": 15.570796
+     },
+     {
+      "band": 1,
+      "groups": [
+       "SA::substrate|upper_air::interface::band=1"
+      ],
+      "area_um2": 18.712389
+     },
+     {
+      "band": 2,
+      "groups": [
+       "SA::substrate|upper_air::interface::band=2"
+      ],
+      "area_um2": 25.716815
+     }
+    ]
+   }
+  },
+  "port_area_um2": {
+   "PORT::port_sheet": 4.0
+  },
+  "faces": 31,
+  "groups": 20
+ },
+ "no_gap_edge_error": "inset request 'ground': the sheet of 'pad' has no gap edge to measure the bands from (a conductor edge counts only where exposed dielectric lies next to it)"
+}

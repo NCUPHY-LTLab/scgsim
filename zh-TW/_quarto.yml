@@ -4,6 +4,7 @@ project:
   resources:
   - askr-versions.json
   - MAINTAINING.md
+  - docs/design/sgb/figures/plotly.min.js
   render:
   - index.qmd
   - docs/*.qmd
@@ -12,8 +13,10 @@ project:
   - docs/course/*.qmd
   - docs/tutorials/*.qmd
   - docs/research/*.qmd
+  - docs/research/*/*.qmd
   - docs/history/*.qmd
   - docs/concepts/*.qmd
+  - docs/design/sgb/*.qmd
   - '!docs/concepts/geometry-en.qmd'
 execute:
   enabled: false
@@ -61,6 +64,8 @@ website:
       href: docs/reference.qmd
     - text: 貢獻
       href: docs/contributing.qmd
+    - text: SGB 設計
+      href: docs/design/sgb/index.qmd
     tools-collapse: false
     tools:
     - icon: github
@@ -131,6 +136,14 @@ website:
     collapse-level: 1
     contents:
     - docs/research/index.qmd
+    - section: 幾何建構效能
+      href: docs/research/geometry-build/index.qmd
+      contents:
+      - docs/research/geometry-build/scaling.qmd
+      - docs/research/geometry-build/emission-and-load.qmd
+      - docs/research/geometry-build/validation-cost.qmd
+      - docs/research/geometry-build/parallelism.qmd
+      - docs/research/geometry-build/reproduction.qmd
     - docs/history/curved-source-installation.qmd
   - id: contract
     title: 頁面
@@ -175,6 +188,31 @@ website:
       contents:
       - docs/errors.qmd
       - docs/convergence-status.qmd
+  - id: sgb-design
+    title: SGB 設計
+    style: floating
+    collapse-level: 1
+    contents:
+    - docs/design/sgb/index.qmd
+    - docs/design/sgb/why-plan-first.qmd
+    - docs/design/sgb/layered-model.qmd
+    - docs/design/sgb/arrangement.qmd
+    - docs/design/sgb/labels-and-dissolution.qmd
+    - docs/design/sgb/assembly.qmd
+    - docs/design/sgb/routes.qmd
+    - docs/design/sgb/cut-families.qmd
+    - docs/design/sgb/inset-imprint.qmd
+    - docs/design/sgb/identity.qmd
+    - docs/design/sgb/parallelism.qmd
+    - docs/design/sgb/slivers.qmd
+    - docs/design/sgb/validation.qmd
+    - docs/design/sgb/emission.qmd
+    - docs/design/sgb/aedt-handoff.qmd
+    - docs/design/sgb/brep-format.qmd
+    - docs/design/sgb/consumer-contract.qmd
+    - docs/design/sgb/consumer-mapping.qmd
+    - docs/design/sgb/pipeline-reference.qmd
+    - docs/design/sgb/decisions.qmd
 format:
   askr-html:
     html-math-method: mathjax

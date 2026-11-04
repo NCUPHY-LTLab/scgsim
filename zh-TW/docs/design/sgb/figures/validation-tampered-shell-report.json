@@ -1,0 +1,193 @@
+{
+ "model": "running example (real input), Route B; outer shell of the vacuum volume without its top face (face f:85ac6a5796fbc9fe)",
+ "passed": false,
+ "checks": [
+  {
+   "name": "vertices_on_grid",
+   "passed": true,
+   "warning": false,
+   "detail": "0 off-grid edges"
+  },
+  {
+   "name": "no_edge_shorter_than_g",
+   "passed": true,
+   "warning": false,
+   "detail": "shortest horizontal edge = 16000000 grid^2"
+  },
+  {
+   "name": "slabs_thinner_than_g_are_kept",
+   "passed": true,
+   "warning": true,
+   "detail": "every slab is at least one grid unit thick"
+  },
+  {
+   "name": "no_different_net_contact",
+   "passed": true,
+   "warning": false,
+   "detail": "checked while labelling; a violation stops the build before this point"
+  },
+  {
+   "name": "no_non_manifold_pinch",
+   "passed": true,
+   "warning": false,
+   "detail": "checked while labelling; a violation stops the build before this point"
+  },
+  {
+   "name": "vertex_ids_unique",
+   "passed": true,
+   "warning": false,
+   "detail": "every vertex id names one entity"
+  },
+  {
+   "name": "edge_ids_unique",
+   "passed": true,
+   "warning": false,
+   "detail": "every edge id names one entity"
+  },
+  {
+   "name": "face_ids_unique",
+   "passed": true,
+   "warning": false,
+   "detail": "every face id names one entity"
+  },
+  {
+   "name": "topology_keyed_by_entity_id",
+   "passed": true,
+   "warning": false,
+   "detail": "every vertex, edge, face and volume is stored under its own id"
+  },
+  {
+   "name": "every_cell_in_exactly_one_volume",
+   "passed": true,
+   "warning": false,
+   "detail": "8 labelled cells, each in one of 4 volumes"
+  },
+  {
+   "name": "arrangements_planar",
+   "passed": true,
+   "warning": false,
+   "detail": "no crossing edge, no vertex inside an edge"
+  },
+  {
+   "name": "arc_edges_do_not_cross",
+   "passed": true,
+   "warning": false,
+   "detail": "0 arc edges sampled"
+  },
+  {
+   "name": "arc_deviation_within_snap_bound",
+   "passed": true,
+   "warning": true,
+   "detail": "max deviation of a realised arc from its exact carrier = 0.0000 grid units"
+  },
+  {
+   "name": "band_area_monotone",
+   "passed": true,
+   "warning": false,
+   "detail": "0 inset families: bands partition their support and area(R_m) is non-increasing in m"
+  },
+  {
+   "name": "area_conservation_per_arrangement",
+   "passed": true,
+   "warning": false,
+   "detail": "raw = dissolved = enclosed area for every S_i and A_i"
+  },
+  {
+   "name": "prism_area_conserved_over_cells",
+   "passed": true,
+   "warning": false,
+   "detail": "worst deviation = 0.000 of the snap bound"
+  },
+  {
+   "name": "shells_closed_and_oriented",
+   "passed": false,
+   "warning": false,
+   "detail": "vol:7346ec1a4ff1ccf9/0: edge e:662347190b40543e used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:506a2115ac5c1fe2 used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:36bde89e55bf333e used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:7b1c3fb2db0eb5e5 used 1 times"
+  },
+  {
+   "name": "shell_euler_characteristic",
+   "passed": false,
+   "warning": false,
+   "detail": "vol:7346ec1a4ff1ccf9/0: chi=1"
+  },
+  {
+   "name": "every_volume_has_outer_shell",
+   "passed": true,
+   "warning": false,
+   "detail": "0 volumes without positive-volume shell"
+  },
+  {
+   "name": "each_face_used_by_at_most_two_volumes",
+   "passed": true,
+   "warning": false,
+   "detail": "face-volume count histogram {1: 6, 2: 28}"
+  },
+  {
+   "name": "interior_faces_have_two_sides",
+   "passed": true,
+   "warning": false,
+   "detail": "0 interior faces missing a side"
+  },
+  {
+   "name": "curved_walls_are_single_cylinders",
+   "passed": true,
+   "warning": false,
+   "detail": "0 curved walls, each bounded by one bottom and one top arc on one circle"
+  },
+  {
+   "name": "walls_planar",
+   "passed": true,
+   "warning": true,
+   "detail": "0 non-planar walls"
+  },
+  {
+   "name": "physical_groups_non_empty",
+   "passed": true,
+   "warning": false,
+   "detail": "14 groups; empty: []"
+  },
+  {
+   "name": "groups_partition_each_dimension",
+   "passed": true,
+   "warning": false,
+   "detail": "0 entities in more than one group"
+  },
+  {
+   "name": "every_emitted_face_in_one_group",
+   "passed": true,
+   "warning": false,
+   "detail": "0 emitted faces without group"
+  },
+  {
+   "name": "every_emitted_face_has_a_name",
+   "passed": true,
+   "warning": false,
+   "detail": "0 emitted faces without a name"
+  },
+  {
+   "name": "every_emitted_volume_in_one_group",
+   "passed": true,
+   "warning": false,
+   "detail": "0 emitted volumes without group"
+  },
+  {
+   "name": "unions_reference_primary_groups",
+   "passed": true,
+   "warning": false,
+   "detail": "unknown members: []"
+  },
+  {
+   "name": "every_edge_shared_by_two_faces",
+   "passed": true,
+   "warning": false,
+   "detail": "0 dangling edges; 0 free edges of embedded faces"
+  },
+  {
+   "name": "vertical_edges_shorter_than_g_are_kept",
+   "passed": true,
+   "warning": true,
+   "detail": "no vertical edge is shorter than the grid"
+  }
+ ],
+ "raised": "2 invariant(s) failed: shells_closed_and_oriented: vol:7346ec1a4ff1ccf9/0: edge e:662347190b40543e used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:506a2115ac5c1fe2 used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:36bde89e55bf333e used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:7b1c3fb2db0eb5e5 used 1 times; shell_euler_characteristic: vol:7346ec1a4ff1ccf9/0: chi=1"
+}

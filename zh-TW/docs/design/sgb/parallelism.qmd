@@ -1,0 +1,199 @@
+---
+title: "平行化的 derivation"
+description: "SGB 哪些部分平行執行、tile cut 如何讓平行結果與序列結果完全相同，以及 production 實際量到的加速、它的上限與限制它的 stage。"
+lang: zh-TW
+scgsim-kind: "design"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/design/sgb/parallelism"
+---
+
+SGB 可以把 derivation 切成許多獨立的 job 平行執行，而且平行的結果與序列的結果逐位元相同。這一頁說明哪些部分平行、tile 規則為什麼能保證結果相同、noding 為什麼每一輪都要同步，以及 production 實測的加速有多少、是什麼限制了它。
+
+production（`scgsim.geometry.sgb`）已實作 tile 與 worker 的平行：`build_sgb_geometry(workers=…, tiles=…)` 只改變推導與寫檔的方式，不改變任何一個 byte（同一台機器上測過，見[使用契約](consumer-contract.qmd#determinism)）；每個 stage 的序列／平行種類與時間記錄在 `ConformalModel`（`timings`、`stage_kind`、`amdahl`）。
+
+**結論先說：目前的平行化結果相同，但加速很小。**在 N = 5 000 與 20 000 個 feature 的隨機 layout 上，derivation 的最佳加速是 1.26× 與 1.17×；N = 20 000 時連同寫檔、報告、sidecar、Gmsh 載入與載入檢查的端到端加速約 1.04×。tile 沒有降低 parent process 的記憶體。限制加速的是序列 stage：N = 20 000、單一 process 時，序列 stage 佔所有 stage 時間的 50%（下文有逐 stage 的數字）。
+
+## 哪些平行、哪些不平行
+
+SGB 以 immutable record 上的 pure function *derive* 整個 conformal 模型，所以 derivation 是平行化的對象。production 把六個 stage 記為平行，其餘都是序列：
+
+::: {.askr-table-compact}
+| 平行的 stage（`stage_kind`） | 所屬的 pipeline stage | 工作 |
+|---|---|---|
+| `noding_kernels` | S4 | snap rounding 每一輪的 crossing pixel 與 hot-pixel hit |
+| `labelling` | S5 | 每個 cell 的 label |
+| `wall_runs`、`shells` | S6 | wall 的 run、shell 的組裝 |
+| `atomic_ids` | S8 | vertex、edge、face 的 ID |
+| `validation_shells` | S9 | 逐 shell 的結構檢查 |
+:::
+
+其餘 stage（S2、S4 的 `noding_driver`、`dcel_faces`、`linking`、`arc_realisation`，S5 的 `dissolution`，S6 的 `assembly_faces` 等，S7 與 S9 的 `validation_serial`）是序列的；完整的對照見[pipeline 參考](pipeline-reference.qmd)。有三件事刻意排除在外：
+
+- **Meshing**：Gmsh 的 meshing 本身已原生平行，不屬於 SGB。
+- **Emission（S10）**：直接序列化 BREP／XAO（D8，見[決策頁](decisions.qmd#d8)）。`plan` 是序列的，BREP 與 XAO 的文字以 chunk 為單位用 `workers` 個 process 算繪；sliver report、validation report 與 sidecar 是序列的。它們的時間見[端到端](#end-to-end)。
+- **Gmsh 與 OCC 的狀態**：絕不跨 worker 共用。
+
+Worker 是 **process**（需要 `fork` 的平台；沒有 `fork` 時，所有 stage 就在目前的 process 內執行）。每個 stage 函式是對 record 的 pure function，只在 `workers > 1` 且 job 多於一個時才使用 process：
+
+- `noding_kernels` 使用一個持續存在的 process pool，每個 tile 的 edge 與 hot pixel 以 pickle 傳給 worker。
+- 其餘平行 stage 每次呼叫時 fork 一個新的 pool，worker 以 copy-on-write 繼承 stage 的輸入，輸入不 pickle，只有精簡的結果傳回。
+- `workers = 1` 時，同一個函式在目前的 process 內逐 tile 執行，所以序列與平行是同一份程式碼。
+
+## Dependency graph
+
+```{mermaid}
+%%| label: fig-dag
+%%| fig-alt: "S1 到 S10 的 stage 相依圖；S4 的 noding kernel 對 tile 反覆 fork 與 join，S5、S6、S8、S9 各有一部分平行，S10 的算繪平行、其餘序列。"
+flowchart LR
+  S1["S1 interpretation<br/>per entity"]:::ser --> S2["S2 prism catalogue<br/>levels and slabs"]:::ser
+  S2 --> S3["S3 cut families<br/>per region × margin"]:::ser
+  S3 --> S4["S4 arrangement<br/>noding kernels: fork/join per round<br/>the rest serial"]:::mix
+  S4 --> S5["S5 labels, dissolution<br/>labelling parallel<br/>dissolution serial"]:::mix
+  S5 --> S6["S6 assembly<br/>wall runs, shells parallel<br/>the rest serial"]:::mix
+  S6 --> S7["S7 route<br/>serial"]:::ser
+  S6 --> S8["S8 identity and groups<br/>atomic ids parallel"]:::par
+  S7 --> S9["S9 validation<br/>shells parallel<br/>the rest serial"]:::mix
+  S8 --> S9
+  S9 --> S10["S10 emission<br/>render parallel<br/>plan, reports, sidecar serial"]:::mix
+  classDef par fill:#cfe8f7,stroke:#0072B2,color:#111
+  classDef ser fill:#fbd9c4,stroke:#D55E00,color:#111
+  classDef mix fill:#fff2cc,stroke:#b8860b,color:#111
+```
+
+藍色 stage 是平行的，橘色 stage 是序列的，黃色 stage 兩者混合。這張圖畫的是 production 目前的狀態；每一格的實際時間見[量到什麼](#what-was-measured)。
+
+## 以 running example 看：tile
+
+**tile** 是 pixel grid 上的一塊矩形。SGB 把模型範圍切成 $T \times T$ 個 tile，切線落在 **pixel 欄與列之間**，位置是 $c - \tfrac12$ grid unit。**hot pixel**（含有 vertex 或交點的 grid point，見 [Building an arrangement](arrangement.qmd)）因此恰好屬於一個 tile，tile 邊界本身不是任何幾何物件。
+
+![左：running example（Route A，含 band）的 z = 0 level 切成 2 × 2 個 tile，hot pixel 依所屬 tile 著色；紅色 edge 連接不同 tile 的 hot pixel，且切線上沒有任何 vertex。右（conceptual）：一條落在 pixel 欄 4 與 5 之間的切線與兩條 carrier。](figures/parallel-tiles.svg){#fig-tiles fig-alt="左圖為 pad 的平面圖，hot pixel 分成四種顏色，紅色 edge 跨越兩條切線；右圖為 pixel grid，一條垂直切線、五個彩色 hot pixel 與兩條經 snap rounding 的 carrier。"}
+
+{{< askr-chart-view src="figures/parallel-tiles.html" label="檢視 tile（游標移到 pixel 上可看所屬 tile）" >}}
+
+左圖請看：切線是 $x = y = -0.0005$ µm（$-\tfrac12$ nm）的虛線。這個 z = 0 level 共有 4 050 個 hot pixel、4 058 條 noded edge。2 × 2 時，有 56 條 noded edge 的兩端落在不同 tile，其中 14 條是 arc 的 witness chord；hot pixel 集中在有 hole 的圓弧的左半邊（左側兩個 tile 共 3 640 個，90%）。它們不會在切線處被分段，所以沒有 seam vertex、seam edge 或 seam face 進入 arrangement。
+
+::: {.askr-table-compact .askr-table-numeric}
+{{< include figures/parallel-table-tiles.md >}}
+:::
+
+每種切法下，4 050 個 pixel 都恰好計入一個 tile。
+
+## 規則
+
+1. **Tile 擁有 pixel。**切線只取決於模型範圍與 $T$。
+2. **每個 tile 收到完整、未裁切的 carrier**（曲線）——只要它碰到該 tile 的 pixel 範圍——對它們做 snap rounding，只保留落在自己 pixel 內的 edge 片段。tile 能看見其 pixel 內每個交點的兩側，以及 carrier 可能經過的每個 hot pixel。
+3. **合併時依序串接**沿每條 edge 的 chain 片段，並對交點 pixel 取聯集。切線上沒有任何東西留下，所以沒有東西需要 dissolve。
+
+由於每一輪結束後 hot pixel 集合都取聯集，而一輪的輸出只取決於這些集合，合併後的結果對任何 $T$ 與任何 worker 數都與單一 tile 的結果相同。這在隨機 segment、running example 與隨機 layout 上都以性質測試驗證（vertex、edge、face、volume 的 ID 與五個輸出檔完全相同；`tests/test_sgb_tiling.py`），[Identity 頁](identity.qmd)也列出不同 tile、worker 與 hash seed 設定下相同的 digest。本頁的 scaling 量測也是如此：每個 N 的九種 tile 與 worker 設定，`identity_digest()` 都只有一個值，而且都通過驗證。
+
+**為何不用 halo。**halo（裁切 carrier、在 tile 周圍多加一圈 cell、在 seam 切開再 dissolve）會在 seam 產生額外的 hot pixel 並破壞 identity。改成在 pixel 之間切，是消除問題而不是修補問題。
+
+## Noding 每一輪是一次 fork/join
+
+Snap rounding 是迭代的：把 chain 重新繞過它碰到的 hot pixel，可能讓它碰到新的 hot pixel。tile 無法獨自完成，因為 chain 的端點可能在別的 tile，所以每一輪都需要所有 hot pixel 的聯集。
+
+```{mermaid}
+%%| label: fig-rounds
+%%| fig-alt: "一輪 snap rounding：各 tile 找交點 pixel，join 取 hot pixel 聯集，各 tile 找 edge 碰到的 hot pixel，join 重新繞 chain，若有任何改變則再來一輪。"
+flowchart TB
+  A["edges and hot pixels<br/>of round r"] --> F1["fork: crossing pixels<br/>one job per tile"]
+  F1 --> J1["join: union of new hot pixels<br/>(barrier)"]
+  J1 --> F2["fork: hot pixels met by each edge<br/>one job per tile"]
+  F2 --> J2["join: re-route chains,<br/>mark changed edges (barrier)"]
+  J2 --> Q{"changed edge or<br/>new hot pixel?"}
+  Q -->|yes| A
+  Q -->|no| Z["noded edges, identical for every T"]
+```
+
+每一輪有兩次 fork/join。在七個 running example 的 49 個 arrangement（每個 slab 與 level 一個）中，41 個在一輪後收斂，8 個在兩輪後收斂（`layer.stats["snap_rounds"]`）。這個 barrier 是精確的，也保住 identity 性質，但它正是 noding 是一串小型 fork/join、而不是每個 tile 一個 job 的原因。
+
+## Granularity：job 單位是整段 per-tile derivation
+
+平行單位是 noding 輪次之後所有「逐 item」的工作。item（face、edge、vertex、wall、shell）由**其錨點所在的 tile 擁有**；每個平行 stage 對每個非空 tile 執行一次，結果依 item index 放回。序列與平行共用同一組 stage 函式，所以結果不可能依賴 $T$ 或 worker 數。
+
+Arrangement 的 cell 會跨越 tile（ground plane 是一個 cell，所有 cutout 都是它的 hole），所以 cell 的抽取（`dcel_faces`）與 `dissolution` 在全域上執行，是序列的。
+
+## 量到什麼 {#what-was-measured}
+
+結論先說：**tile 平行的結果與序列完全相同，但 derivation 的最佳加速只有 1.17×（N = 20 000）到 1.26×（N = 5 000）。**這些量測的獨立整理，以及「序列推導已經足夠」的結論，見研究頁[平行推導](../../research/geometry-build/parallelism.qmd)。
+
+設定：隨機 Route B layout（seed 2，間距 260 µm），N = 1 000、5 000、20 000 個 feature；1 × 1、4 × 4 與 8 × 8 個 tile；1、8、16 與 32 個 worker（共 27 個 case）。每個 case 在 64 核心的機器上用自己的 interpreter 執行一次，所以 peak memory 是該 case 自己的。加速是 1 × 1 tile、單一 worker 的 build 時間除以該 case 的 build 時間。**這些 layout 都只有 polygon：沒有 arc、沒有 band**，所以 arc 與 band 在大規模時的成本沒有量測，也不應由這些數字外推。每個 case 只跑一次、沒有重複，所以小的差異（尤其是 N = 1 000 約 2 s 的 build）不應被解讀為真實效果。
+
+![左：derivation 相對單一 process 的實測加速（藍、橘、深藍依序是 N = 1 000、5 000、20 000；實線 4 × 4 tile、虛線 8 × 8 tile），以及用 N = 20 000、單一 process 實測的序列比例畫出的 Amdahl 曲線。右：N = 20 000、單一 process 的各 stage 時間（藍色平行、橘色序列），以及 derivation 之後的寫檔、報告、sidecar、Gmsh 載入與載入檢查（灰色）。](figures/parallel-speedup.svg){#fig-speedup fig-alt="左圖：加速對 worker 數，各條實測曲線在 0.9 到 1.3 之間，虛線 Amdahl 曲線升向約 2；右圖：stage 時間的橫條圖，報告與 Gmsh 載入各約 50 秒，noding kernels 與 assembly faces 約 9 秒，其餘更小。"}
+
+{{< askr-chart-view src="figures/parallel-speedup.html" label="檢視加速與 stage 時間" >}}
+
+::: {.askr-table-compact .askr-table-numeric}
+{{< include figures/parallel-table-excerpt.md >}}
+:::
+
+（節錄；*Serial stage* 與 *Parallel stage* 是 `ConformalModel.amdahl` 記錄的兩類 stage 的 wall time，*Worker compute* 是 worker 內部計算時間的總和，*Parallel fraction* 是 Worker compute 除以 serial 加 parallel 的時間，*Limit* 是 parallel stage 完美擴展時可得的加速。完整 27 個 case 見最後的補充。）
+
+量測結果：
+
+- **加速很小。**有 worker 時，derivation 的加速是 1.06× 到 1.26×：N = 1 000 最高 1.22×，N = 5 000 最高 1.26×，N = 20 000 是 1.14× 到 1.17×（最佳：8 × 8 tile、8 個 worker，61.6 s 變 52.7 s）。只用一個 worker 時，tile 讓 N = 20 000 的時間多出 9–12%（加速 0.89×–0.92×）。
+- **8 個 worker 之後沒有再變快。**N = 20 000、4 × 4 tile 時，build 是 53.6 s（8 個 worker）、53.2 s（16 個）與 53.1 s（32 個），parallel stage 的 wall time 是 17.3 s、17.2 s 與 17.1 s。
+- **單一 process 的 parallel fraction 約 0.5。**1 × 1 tile 的 Amdahl parallel fraction 是 0.49 到 0.52，所以這種分解的上限是 1.98× 到 2.10×（N = 20 000 是 1.98×）。有 worker 時 fraction 變成 0.51–0.61、上限 2.05×–2.59×，但那是被墊高的：worker compute 的總和變大了（N = 20 000：29.1 s 變 34.4–43.7 s），單一 process 的數字才是這個分解較乾淨的估計。
+- **實測低於上限。**N = 20 000 時單一 process 的上限是 1.98×，實測最好是 1.17×。有 worker 時，序列 stage 也變長（29.7 s 變 32.0–32.7 s，約 +8–10%）；這個增加是量到的，本頁沒有量測它的原因。
+
+### 是什麼限制了加速 {#what-limits-the-speedup}
+
+**序列 stage 約佔一半。**N = 20 000、單一 process 時，所有 stage 的時間加起來是 58.8 s（build wall time 是 61.6 s）：序列 stage 29.7 s（50%）、平行 stage 29.2 s（50%）。有 16 個 worker 時，序列 stage 是 32.5 s，佔 build 的 61%。下表逐 stage 對照單一 process 與 4 × 4 tile、16 個 worker：
+
+::: {.askr-table-compact .askr-table-numeric}
+{{< include figures/parallel-table-stages.md >}}
+:::
+
+- **最大的序列 stage 是 `assembly_faces`（8.7 s）、`dissolution`（7.0 s）、`dcel_faces`（3.9 s）與 `noding_driver`（3.0 s）**，加起來 22.5 s，是 stage 總時間的 38%。它們有 worker 時沒有變快（倍數 0.85×–0.96×）。要明顯超過 1.2×，這幾個 stage 本身必須變快或被平行化。
+- **平行 stage 的收益不均。**`labelling`（3.95×）與 `atomic_ids`（3.31×）接近 tile 數帶來的預期；最大的平行 stage `noding_kernels` 只有 1.61×，`shells` 是 1.17×，`validation_shells` 是 1.39×。平行 stage 合計從 29.2 s 變 17.2 s（1.70×）。這張表指出哪幾個 stage 沒有擴展，但沒有量測它們為什麼沒有擴展。
+- **平行的部分不再隨 worker 數縮短。**上方 17.1–17.3 s 的 plateau 之下，worker compute 的總和是 34–37 s；若這些工作均勻分給 8 個 worker，每個只需 4–5 s。實際的 wall time 大得多，原因本頁沒有量測。
+
+::: {.askr-table-compact .askr-table-numeric}
+{{< include figures/parallel-table-workers.md >}}
+:::
+
+（N = 20 000、4 × 4 tile。）
+
+### 記憶體
+
+**tile 沒有降低 parent process 的 peak memory。**N = 20 000 時，單一 process 的 peak RSS 是 2 000 MB；tile 加單一 worker 是 1 975–1 979 MB（差 1%），有 worker 時是 2 207–2 233 MB（高 10–12%）。N = 1 000 與 5 000 的情形相同（見補充）。fork 出的 worker 各自的 peak RSS 約 2 000–2 030 MB，這個數字包含與 parent 共用的 page，所以不能直接相加成機器的總用量。
+
+::: {.askr-table-compact .askr-table-numeric}
+{{< include figures/parallel-table-memory.md >}}
+:::
+
+### 端到端 {#end-to-end}
+
+N = 20 000 時，derivation 之後還有寫檔、報告、sidecar、Gmsh 載入與載入檢查。單一 process 下，這些步驟合計 148 s，比 derivation 本身（61.6 s）長：
+
+::: {.askr-table-compact .askr-table-numeric}
+{{< include figures/parallel-table-endtoend.md >}}
+:::
+
+所以即使把 derivation 加速到實測最好的 1.17×（省 8.9 s），整條路徑從 209.8 s 變 200.8 s，端到端只有 1.04×；就算 derivation 達到單一 process 的上限 1.98×，端到端也只有 1.17×（179.3 s）。只看 derivation 加 BREP／XAO 檔案（75.4 s），1.17× 的 derivation 讓它變 66.5 s（1.13×）。sliver 與 validation report（49.7 s）和 Gmsh 載入（49.7 s）各自比整個 derivation 的平行部分更大，載入無論哪種格式都是下限。
+
+## 目前的限制與下一步
+
+- **加速很小。**最佳的 derivation 加速是 1.17×（N = 20 000）至 1.26×（N = 5 000），端到端約 1.04×；沒有證據顯示再增加 worker 或 tile 會有更大的收益（8、16、32 個 worker 的 build 時間相同）。
+- **限制加速的是序列 stage。**`assembly_faces`、`dissolution`、`dcel_faces` 與 `noding_driver`。縮短它們需要改這些 stage 本身，例如決策 [D9](decisions.qmd#d9) 的 compiled kernel；production 的階段 1 仍是純 Python，沒有 compiled kernel，D9 的收益不是本設計已量到的結果。
+- **只量了 polygon 的 layout。**arc 與 band 在大規模下的 scaling 沒有量測。
+- **沒有量到平行 stage 沒有擴展的原因。**上文只報告哪幾個 stage 沒有加速；要說明原因需要另外的量測。
+- **Tile 的平衡取決於幾何。**running example 的 2 × 2 切法中，4 050 個 hot pixel 有 3 640 個（90%）落在左半邊的兩個 tile，右側兩個 tile 只有 295 與 115 個；等面積的 tile 會讓工作量不均，要讓更多 worker 都有事做，需要依工作量切 tile。
+- **Gmsh 與 OCC 是單一 process 的物件。**本設計不會讓它們跨 worker 共用。
+
+## 參考文獻
+
+- Hobby, J. D. (1999). Practical segment intersection with finite precision output. *Computational Geometry* 13(4).
+- Guibas, L. and Marimont, D. (1998). Rounding arrangements dynamically. *International Journal of Computational Geometry and Applications* 8(2).
+- Halperin, D. and Packer, E. (2002). Iterated snap rounding. *Computational Geometry* 23(2).
+- KLayout, [`TilingProcessor`](https://www.klayout.de/doc/code/class_TilingProcessor.html).
+
+## 補充：重現資料
+
+本頁的 tile 圖由 `docs/design/sgb/_figures/parallel.py` 以 production runtime 計算（tile ownership、snap-round 輪數）；唯有 tile 圖右側的 pixel 示意是 conceptual。scaling 的資料不在這個 script 中量測，而是讀取 `figures/why-scaling-measured.json`（由 `_figures/why_scaling.py measure` 產生，27 個 case，約 16 分鐘；同一份資料也用於[為什麼先規劃](why-plan-first.qmd)）。script 把每個數字寫成 `figures/parallel-table-*.md`，由本頁引用；`figures/parallel-tables.md` 以英文列出全部表格與本頁引用的範圍，`figures/parallel-numbers.json` 列出其餘數字。
+
+完整的實測表（27 個 case，每個 case 一次執行）：
+
+::: {.askr-table-compact .askr-table-numeric}
+{{< include figures/parallel-table-full.md >}}
+:::

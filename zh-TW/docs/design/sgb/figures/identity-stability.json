@@ -1,0 +1,151 @@
+{
+ "same_group_names": "differ",
+ "vertices": {
+  "with_port": 321,
+  "without_port": 305,
+  "shared": 305,
+  "only_with_port": 16,
+  "only_without_port": 0
+ },
+ "edges": {
+  "with_port": 274,
+  "without_port": 250,
+  "shared": 242,
+  "only_with_port": 32,
+  "only_without_port": 8
+ },
+ "faces": {
+  "with_port": 60,
+  "without_port": 59,
+  "shared": 48,
+  "only_with_port": 12,
+  "only_without_port": 11
+ },
+ "volumes": {
+  "with_port": 4,
+  "without_port": 4,
+  "shared": 4,
+  "only_with_port": 0,
+  "only_without_port": 0
+ },
+ "groups": {
+  "EXT::substrate::bottom": {
+   "members_with_port": 1,
+   "members_without_port": 1,
+   "identical_members": true
+  },
+  "EXT::substrate::sidewall": {
+   "members_with_port": 4,
+   "members_without_port": 4,
+   "identical_members": true
+  },
+  "EXT::vacuum::sidewall": {
+   "members_with_port": 4,
+   "members_without_port": 4,
+   "identical_members": true
+  },
+  "EXT::vacuum::top": {
+   "members_with_port": 1,
+   "members_without_port": 1,
+   "identical_members": true
+  },
+  "MA::ground::sidewall": {
+   "members_with_port": 4,
+   "members_without_port": 4,
+   "identical_members": false
+  },
+  "MA::ground::top": {
+   "members_with_port": 1,
+   "members_without_port": 1,
+   "identical_members": true
+  },
+  "MA::pad::sidewall": {
+   "members_with_port": 14,
+   "members_without_port": 14,
+   "identical_members": false
+  },
+  "MA::pad::top::band=0": {
+   "members_with_port": 2,
+   "members_without_port": 2,
+   "identical_members": true
+  },
+  "MA::pad::top::band=1": {
+   "members_with_port": 2,
+   "members_without_port": 2,
+   "identical_members": true
+  },
+  "MA::pad::top::band=2": {
+   "members_with_port": 2,
+   "members_without_port": 2,
+   "identical_members": true
+  },
+  "MA::pad::top::band=3": {
+   "members_with_port": 1,
+   "members_without_port": 1,
+   "identical_members": true
+  },
+  "MS::ground::bottom": {
+   "members_with_port": 1,
+   "members_without_port": 1,
+   "identical_members": false
+  },
+  "MS::pad::bottom::band=0": {
+   "members_with_port": 2,
+   "members_without_port": 2,
+   "identical_members": false
+  },
+  "MS::pad::bottom::band=1": {
+   "members_with_port": 2,
+   "members_without_port": 2,
+   "identical_members": true
+  },
+  "MS::pad::bottom::band=2": {
+   "members_with_port": 2,
+   "members_without_port": 2,
+   "identical_members": true
+  },
+  "MS::pad::bottom::band=3": {
+   "members_with_port": 1,
+   "members_without_port": 1,
+   "identical_members": true
+  },
+  "PORT::p1": {
+   "members_with_port": 1,
+   "members_without_port": null,
+   "identical_members": false
+  },
+  "SA::substrate|vacuum::interface::band=0": {
+   "members_with_port": 3,
+   "members_without_port": 3,
+   "identical_members": false
+  },
+  "SA::substrate|vacuum::interface::band=1": {
+   "members_with_port": 3,
+   "members_without_port": 3,
+   "identical_members": false
+  },
+  "SA::substrate|vacuum::interface::band=2": {
+   "members_with_port": 3,
+   "members_without_port": 3,
+   "identical_members": false
+  },
+  "SA::substrate|vacuum::interface::band=3": {
+   "members_with_port": 2,
+   "members_without_port": 2,
+   "identical_members": false
+  },
+  "substrate": {
+   "members_with_port": 1,
+   "members_without_port": 1,
+   "identical_members": true
+  },
+  "vacuum": {
+   "members_with_port": 1,
+   "members_without_port": 1,
+   "identical_members": true
+  }
+ },
+ "groups_only_in_one_build": [
+  "PORT::p1"
+ ]
+}
