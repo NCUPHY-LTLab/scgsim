@@ -132,7 +132,7 @@ production 的測試以 Gmsh API 的 oracle（依建構順序把同一個 topolo
 
 不論 worker 數、tile 配置或 Python hash seed，同樣的輸入得到同樣的 ID。production 的測試涵蓋：同一個輸入兩次推導得到相同的 ID 與 model digest；三個 `PYTHONHASHSEED` 下相同；wall 的 ID 不隨旁邊的 vertical edge 改變（`test_wall_ids_do_not_depend_on_the_vertical_edges_next_to_them`）；tile 與 worker 數不同時，ID 與五個輸出檔相同（同一台機器上）。逐項的狀態（測過、實測、只是論證）見[使用契約的決定性一節](consumer-contract.qmd#determinism)。
 
-實測（production）：`identity.py` 在全新的 interpreter 中，以四種（tile grid、worker）設定與三個 `PYTHONHASHSEED` 值重建兩個模型，並把 `ConformalModel.identity_digest()`（每一個 vertex、edge、face、volume 與 group 成員的 ID 的 hash）印出來。結果：十二次執行，每個模型都只有一個 digest（本頁的 Route B 含 band 範例為 `model:29ac282c3d8eb0bd`，60 個 feature 的隨機 layout 為 `model:b00423575e10e9af`；完整表格見補充）。
+實測（production）：`identity.py` 在全新的 interpreter 中，以四種（tile grid、worker）設定與三個 `PYTHONHASHSEED` 值重建兩個模型，並把 `ConformalModel.identity_digest()`（每一個 vertex、edge、face、volume 與 group 成員的 ID 的 hash）印出來。結果：十二次執行，每個模型都只有一個 digest（本頁的 Route B 含 band 範例為 `model:27ae3b50206900c9`，60 個 feature 的隨機 layout 為 `model:c0b6c914cb025f97`；完整表格見補充）。
 
 成立的原因：topology 是整數（grid point 與精確分數），ID 是對內容 hash，tile 切線落在 pixel 欄之間所以每個 hot pixel 只有一個 owner，合併結果依 item index 放回（見[平行化的 derivation](parallelism.qmd)）。直接 writer 的輸出對任何 worker 數逐位元相同。
 
@@ -160,10 +160,10 @@ Vertex、edge、face、volume 的數量與有多少 ID 在兩次 build 之間保
 ::: {.askr-table-compact}
 | Tiles | Workers | Hash seed | Digest，pad-in-ground B 含 band | Digest，隨機 layout（60 個 feature，seed 5） |
 |---|---|---|---|---|
-| 1×1 | 1 | 0, 1, 12345 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
-| 2×2 | 1 | 0, 1, 12345 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
-| 3×3 | 2 | 0, 1, 12345 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
-| 4×4 | 4 | 0, 1, 12345 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
+| 1×1 | 1 | 0, 1, 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 2×2 | 1 | 0, 1, 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 3×3 | 2 | 0, 1, 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 4×4 | 4 | 0, 1, 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
 :::
 
 有與沒有 port 的 ID 比較（production；`figures/identity-stability.json`）：

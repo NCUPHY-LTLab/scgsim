@@ -38,9 +38,9 @@
    "dim": 2,
    "entities": ["pad"],
    "face_kind": "bottom",
-   "ids": ["f:120f732fa4504c88"],
+   "ids": ["f:487ca41cd08e5769"],
    "interface_type": "MS",
-   "native_tags": [1],
+   "native_tags": [3],
    "net": "P",
    "tag": 11
   },
@@ -63,9 +63,9 @@
    "dim": 2,
    "entities": ["PORT_SHEET__P1__0000"],
    "face_kind": "port",
-   "ids": ["f:2d1bc77f577fd23b"],
+   "ids": ["f:60d2e963bf0b88ab"],
    "interface_type": "PORT",
-   "native_tags": [3],
+   "native_tags": [5],
    "net": null,
    "tag": 12
   },

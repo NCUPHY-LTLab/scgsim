@@ -24,7 +24,7 @@
  },
  "grid_um": 0.001,
  "model": {
-  "identity_digest": "model:05bed26f68c4d486",
+  "identity_digest": "model:69a9185e77948a60",
   "name": "semantic_geometry_route_b"
  },
  "route": "B",

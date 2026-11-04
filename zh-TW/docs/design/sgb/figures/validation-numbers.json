@@ -303,7 +303,7 @@
  "occt_examples": {
   "all_ok": true,
   "max_face_area_relative_error": 1.347139329550679e-12,
-  "max_solid_volume_relative_error": 2.645802768793973e-16,
+  "max_solid_volume_relative_error": 5.278648854037128e-16,
   "reports": 16,
   "rows": [
    {
@@ -318,11 +318,11 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 0.0,
     "timings_s": {
-     "bop_argument_analyzer": 0.00729,
-     "brep_check": 0.00328,
+     "bop_argument_analyzer": 0.00749,
+     "brep_check": 0.0036,
      "plan_properties": 0.00101,
-     "read": 0.00042,
-     "shape_analysis": 0.0002
+     "read": 0.00039,
+     "shape_analysis": 0.00019
     }
    },
    {
@@ -337,11 +337,11 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 0.0,
     "timings_s": {
-     "bop_argument_analyzer": 0.00629,
-     "brep_check": 0.00254,
-     "plan_properties": 0.00099,
-     "read": 0.00076,
-     "shape_analysis": 0.00016
+     "bop_argument_analyzer": 0.00654,
+     "brep_check": 0.00272,
+     "plan_properties": 0.00098,
+     "read": 0.00067,
+     "shape_analysis": 0.00014
     }
    },
    {
@@ -356,9 +356,47 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 1.319662213509282e-16,
     "timings_s": {
-     "bop_argument_analyzer": 0.01138,
-     "brep_check": 0.00457,
-     "plan_properties": 0.00191,
+     "bop_argument_analyzer": 0.01155,
+     "brep_check": 0.00456,
+     "plan_properties": 0.0019,
+     "read": 0.00034,
+     "shape_analysis": 0.00026
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 1.9601178917520005e-16,
+    "file": "xao",
+    "model": "real input, Route B",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 1.319662213509282e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.01151,
+     "brep_check": 0.00472,
+     "plan_properties": 0.00181,
+     "read": 0.00115,
+     "shape_analysis": 0.00018
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 1.9601178917520005e-16,
+    "file": "brep",
+    "model": "real input, Route C",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 1.7763568394002506e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.01552,
+     "brep_check": 0.00613,
+     "plan_properties": 0.0023,
      "read": 0.00036,
      "shape_analysis": 0.00027
     }
@@ -369,206 +407,16 @@
     "brepcheck_valid": true,
     "face_area_max_relative_error": 1.9601178917520005e-16,
     "file": "xao",
-    "model": "real input, Route B",
-    "ok": true,
-    "problems": [],
-    "shells_with_free_edges": 0,
-    "solid_volume_max_relative_error": 1.319662213509282e-16,
-    "timings_s": {
-     "bop_argument_analyzer": 0.01159,
-     "brep_check": 0.00446,
-     "plan_properties": 0.00192,
-     "read": 0.00113,
-     "shape_analysis": 0.00026
-    }
-   },
-   {
-    "argument_analyzer_faulty": false,
-    "brepcheck_faulty": 0,
-    "brepcheck_valid": true,
-    "face_area_max_relative_error": 1.9601178917520005e-16,
-    "file": "brep",
     "model": "real input, Route C",
-    "ok": true,
-    "problems": [],
-    "shells_with_free_edges": 0,
-    "solid_volume_max_relative_error": 1.319662213509282e-16,
-    "timings_s": {
-     "bop_argument_analyzer": 0.01483,
-     "brep_check": 0.00674,
-     "plan_properties": 0.00239,
-     "read": 0.00047,
-     "shape_analysis": 0.00032
-    }
-   },
-   {
-    "argument_analyzer_faulty": false,
-    "brepcheck_faulty": 0,
-    "brepcheck_valid": true,
-    "face_area_max_relative_error": 1.9601178917520005e-16,
-    "file": "xao",
-    "model": "real input, Route C",
-    "ok": true,
-    "problems": [],
-    "shells_with_free_edges": 0,
-    "solid_volume_max_relative_error": 1.319662213509282e-16,
-    "timings_s": {
-     "bop_argument_analyzer": 0.01523,
-     "brep_check": 0.0062,
-     "plan_properties": 0.00213,
-     "read": 0.00119,
-     "shape_analysis": 0.00024
-    }
-   },
-   {
-    "argument_analyzer_faulty": false,
-    "brepcheck_faulty": 0,
-    "brepcheck_valid": true,
-    "face_area_max_relative_error": 2.876876115224056e-14,
-    "file": "brep",
-    "model": "real input, Route A with bands",
-    "ok": true,
-    "problems": [],
-    "shells_with_free_edges": 0,
-    "solid_volume_max_relative_error": 2.645802768793973e-16,
-    "timings_s": {
-     "bop_argument_analyzer": 0.02485,
-     "brep_check": 0.00937,
-     "plan_properties": 0.00412,
-     "read": 0.00045,
-     "shape_analysis": 0.00037
-    }
-   },
-   {
-    "argument_analyzer_faulty": false,
-    "brepcheck_faulty": 0,
-    "brepcheck_valid": true,
-    "face_area_max_relative_error": 2.876876115224056e-14,
-    "file": "xao",
-    "model": "real input, Route A with bands",
-    "ok": true,
-    "problems": [],
-    "shells_with_free_edges": 0,
-    "solid_volume_max_relative_error": 2.645802768793973e-16,
-    "timings_s": {
-     "bop_argument_analyzer": 0.02371,
-     "brep_check": 0.00957,
-     "plan_properties": 0.00373,
-     "read": 0.00158,
-     "shape_analysis": 0.00034
-    }
-   },
-   {
-    "argument_analyzer_faulty": false,
-    "brepcheck_faulty": 0,
-    "brepcheck_valid": true,
-    "face_area_max_relative_error": 2.876876115224056e-14,
-    "file": "brep",
-    "model": "real input, Route B with bands",
-    "ok": true,
-    "problems": [],
-    "shells_with_free_edges": 0,
-    "solid_volume_max_relative_error": 1.4551915228366853e-16,
-    "timings_s": {
-     "bop_argument_analyzer": 0.03851,
-     "brep_check": 0.01192,
-     "plan_properties": 0.00497,
-     "read": 0.00061,
-     "shape_analysis": 0.00039
-    }
-   },
-   {
-    "argument_analyzer_faulty": false,
-    "brepcheck_faulty": 0,
-    "brepcheck_valid": true,
-    "face_area_max_relative_error": 2.876876115224056e-14,
-    "file": "xao",
-    "model": "real input, Route B with bands",
-    "ok": true,
-    "problems": [],
-    "shells_with_free_edges": 0,
-    "solid_volume_max_relative_error": 1.4551915228366853e-16,
-    "timings_s": {
-     "bop_argument_analyzer": 0.04043,
-     "brep_check": 0.01167,
-     "plan_properties": 0.00501,
-     "read": 0.00161,
-     "shape_analysis": 0.00045
-    }
-   },
-   {
-    "argument_analyzer_faulty": false,
-    "brepcheck_faulty": 0,
-    "brepcheck_valid": true,
-    "face_area_max_relative_error": 2.876876115224056e-14,
-    "file": "brep",
-    "model": "real input, Route C with bands",
     "ok": true,
     "problems": [],
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 1.7763568394002506e-16,
     "timings_s": {
-     "bop_argument_analyzer": 0.04529,
-     "brep_check": 0.01438,
-     "plan_properties": 0.00567,
-     "read": 0.00066,
-     "shape_analysis": 0.00043
-    }
-   },
-   {
-    "argument_analyzer_faulty": false,
-    "brepcheck_faulty": 0,
-    "brepcheck_valid": true,
-    "face_area_max_relative_error": 2.876876115224056e-14,
-    "file": "xao",
-    "model": "real input, Route C with bands",
-    "ok": true,
-    "problems": [],
-    "shells_with_free_edges": 0,
-    "solid_volume_max_relative_error": 1.7763568394002506e-16,
-    "timings_s": {
-     "bop_argument_analyzer": 0.04514,
-     "brep_check": 0.01409,
-     "plan_properties": 0.00535,
-     "read": 0.00184,
-     "shape_analysis": 0.00057
-    }
-   },
-   {
-    "argument_analyzer_faulty": false,
-    "brepcheck_faulty": 0,
-    "brepcheck_valid": true,
-    "face_area_max_relative_error": 2.5376526277146434e-16,
-    "file": "brep",
-    "model": "airbridge, Route B (stage-level scene)",
-    "ok": true,
-    "problems": [],
-    "shells_with_free_edges": 0,
-    "solid_volume_max_relative_error": 2.0735546910794079e-16,
-    "timings_s": {
-     "bop_argument_analyzer": 0.01049,
-     "brep_check": 0.00421,
-     "plan_properties": 0.00156,
-     "read": 0.00038,
-     "shape_analysis": 0.00021
-    }
-   },
-   {
-    "argument_analyzer_faulty": false,
-    "brepcheck_faulty": 0,
-    "brepcheck_valid": true,
-    "face_area_max_relative_error": 2.5376526277146434e-16,
-    "file": "xao",
-    "model": "airbridge, Route B (stage-level scene)",
-    "ok": true,
-    "problems": [],
-    "shells_with_free_edges": 0,
-    "solid_volume_max_relative_error": 2.0735546910794079e-16,
-    "timings_s": {
-     "bop_argument_analyzer": 0.00974,
-     "brep_check": 0.00407,
-     "plan_properties": 0.00154,
-     "read": 0.00101,
+     "bop_argument_analyzer": 0.01528,
+     "brep_check": 0.00578,
+     "plan_properties": 0.00218,
+     "read": 0.00111,
      "shape_analysis": 0.0002
     }
    },
@@ -576,6 +424,158 @@
     "argument_analyzer_faulty": false,
     "brepcheck_faulty": 0,
     "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.876876115224056e-14,
+    "file": "brep",
+    "model": "real input, Route A with bands",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 2.645802768793973e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.02379,
+     "brep_check": 0.00815,
+     "plan_properties": 0.00372,
+     "read": 0.00041,
+     "shape_analysis": 0.00027
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.876876115224056e-14,
+    "file": "xao",
+    "model": "real input, Route A with bands",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 2.645802768793973e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.02253,
+     "brep_check": 0.00919,
+     "plan_properties": 0.00391,
+     "read": 0.00115,
+     "shape_analysis": 0.00029
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.876876115224056e-14,
+    "file": "brep",
+    "model": "real input, Route B with bands",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 5.278648854037128e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.03642,
+     "brep_check": 0.01089,
+     "plan_properties": 0.00454,
+     "read": 0.00057,
+     "shape_analysis": 0.0004
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.876876115224056e-14,
+    "file": "xao",
+    "model": "real input, Route B with bands",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 5.278648854037128e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.03753,
+     "brep_check": 0.01137,
+     "plan_properties": 0.0045,
+     "read": 0.00156,
+     "shape_analysis": 0.00038
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.876876115224056e-14,
+    "file": "brep",
+    "model": "real input, Route C with bands",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 5.278648854037128e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.04319,
+     "brep_check": 0.01349,
+     "plan_properties": 0.00513,
+     "read": 0.00059,
+     "shape_analysis": 0.00041
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.876876115224056e-14,
+    "file": "xao",
+    "model": "real input, Route C with bands",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 5.278648854037128e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.04303,
+     "brep_check": 0.01341,
+     "plan_properties": 0.00514,
+     "read": 0.00149,
+     "shape_analysis": 0.00039
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.5376526277146434e-16,
+    "file": "brep",
+    "model": "airbridge, Route B (stage-level scene)",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 2.0735546910794079e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.01021,
+     "brep_check": 0.00386,
+     "plan_properties": 0.00151,
+     "read": 0.00034,
+     "shape_analysis": 0.00016
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.5376526277146434e-16,
+    "file": "xao",
+    "model": "airbridge, Route B (stage-level scene)",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 2.0735546910794079e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.0099,
+     "brep_check": 0.00378,
+     "plan_properties": 0.0015,
+     "read": 0.00078,
+     "shape_analysis": 0.00016
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
     "face_area_max_relative_error": 1.347139329550679e-12,
     "file": "brep",
     "model": "pad_in_ground, Route B (stage-level scene with arcs)",
@@ -584,11 +584,11 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 2.073117193669177e-16,
     "timings_s": {
-     "bop_argument_analyzer": 0.03632,
-     "brep_check": 0.00546,
-     "plan_properties": 0.00325,
-     "read": 0.0004,
-     "shape_analysis": 0.00025
+     "bop_argument_analyzer": 0.03607,
+     "brep_check": 0.00491,
+     "plan_properties": 0.00348,
+     "read": 0.00038,
+     "shape_analysis": 0.0003
     }
    },
    {
@@ -603,34 +603,34 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 2.073117193669177e-16,
     "timings_s": {
-     "bop_argument_analyzer": 0.03647,
-     "brep_check": 0.00525,
-     "plan_properties": 0.00328,
-     "read": 0.00123,
-     "shape_analysis": 0.00028
+     "bop_argument_analyzer": 0.03469,
+     "brep_check": 0.00519,
+     "plan_properties": 0.00324,
+     "read": 0.00089,
+     "shape_analysis": 0.0002
     }
    }
   ],
   "timing_ranges_ms": {
    "bop_argument_analyzer": [
-    6.29,
-    45.29
+    6.54,
+    43.19
    ],
    "brep_check": [
-    2.54,
-    14.38
+    2.72,
+    13.49
    ],
    "plan_properties": [
-    0.99,
-    5.67
+    0.98,
+    5.14
    ],
    "read": [
-    0.36,
-    1.84
+    0.34,
+    1.56
    ],
    "shape_analysis": [
-    0.16,
-    0.57
+    0.14,
+    0.41
    ]
   }
  },

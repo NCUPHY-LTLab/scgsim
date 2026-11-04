@@ -24,9 +24,9 @@
    "dim": 2,
    "entities": ["chip/left"],
    "face_kind": "sheet",
-   "ids": ["f:105e50c3311ec8ae"],
+   "ids": ["f:5d1f74bc23d16ca3"],
    "interface_type": "SHEET",
-   "native_tags": [2],
+   "native_tags": [5],
    "net": "left",
    "tag": 10
   }
@@ -47,6 +47,9 @@
   "MA::chip/left::sheet::band=0": {
    "band": 0,
    "entities": ["chip/left"],
+   "face_sides": {
+    "f:5d1f74bc23d16ca3": "above"
+   },
    "group": "chip/left::band=0",
    "interface_type": "MA",
    "shared_face_group": "chip/left::band=0",
@@ -55,6 +58,9 @@
   "MS::chip/left::sheet::band=0": {
    "band": 0,
    "entities": ["chip/left"],
+   "face_sides": {
+    "f:5d1f74bc23d16ca3": "below"
+   },
    "group": "chip/left::band=0",
    "interface_type": "MS",
    "shared_face_group": "chip/left::band=0",

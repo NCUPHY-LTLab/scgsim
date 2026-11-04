@@ -2,18 +2,18 @@
 
 | tiles | workers | PYTHONHASHSEED | pad_in_ground B with bands | random layout (60 features, seed 5, Route B) |
 |---|---|---|---|---|
-| 1x1 | 1 | 0 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
-| 1x1 | 1 | 1 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
-| 1x1 | 1 | 12345 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
-| 2x2 | 1 | 0 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
-| 2x2 | 1 | 1 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
-| 2x2 | 1 | 12345 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
-| 3x3 | 2 | 0 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
-| 3x3 | 2 | 1 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
-| 3x3 | 2 | 12345 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
-| 4x4 | 4 | 0 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
-| 4x4 | 4 | 1 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
-| 4x4 | 4 | 12345 | `model:29ac282c3d8eb0bd` | `model:b00423575e10e9af` |
+| 1x1 | 1 | 0 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 1x1 | 1 | 1 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 1x1 | 1 | 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 2x2 | 1 | 0 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 2x2 | 1 | 1 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 2x2 | 1 | 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 3x3 | 2 | 0 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 3x3 | 2 | 1 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 3x3 | 2 | 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 4x4 | 4 | 0 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 4x4 | 4 | 1 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 4x4 | 4 | 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
 
 distinct digests per model: 1 and 1
 

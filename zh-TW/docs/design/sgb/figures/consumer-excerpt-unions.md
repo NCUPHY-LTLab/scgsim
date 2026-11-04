@@ -23,6 +23,7 @@
   "MA::pad::top::band=0": {
    "band": 0,
    "entities": ["pad"],
+   "face_sides": null,
    "group": "MA::pad::top::band=0",
    "interface_type": "MA",
    "shared_face_group": null,
@@ -31,6 +32,7 @@
   "SA::substrate|VACUUM_REGION::interface": {
    "band": null,
    "entities": ["VACUUM_REGION", "substrate"],
+   "face_sides": null,
    "group": "SA::substrate|VACUUM_REGION::interface",
    "interface_type": "SA",
    "shared_face_group": null,

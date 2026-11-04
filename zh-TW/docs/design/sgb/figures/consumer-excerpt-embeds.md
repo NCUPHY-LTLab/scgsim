@@ -19,7 +19,7 @@
   {
    "adjacent_volumes": ["vol:1a3729bef5cef625", "vol:7346ec1a4ff1ccf9"],
    "direction": [1.0, 0.0, 0.0],
-   "faces": ["f:2d1bc77f577fd23b"],
+   "faces": ["f:60d2e963bf0b88ab"],
    "group": "PORT::PORT_SHEET__P1__0000",
    "host_entity_ids": ["ground_0000", "pad"],
    "host_volumes": [],
