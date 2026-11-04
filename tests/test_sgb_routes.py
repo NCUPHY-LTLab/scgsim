@@ -154,7 +154,7 @@ def test_route_a_accepts_the_undeclared_finite_conductors_of_a_real_solid_input(
     tmp_path,
 ):
     """No physical declaration: today's contract lets Route A keep finite conductors as cutout shells."""
-    effective = gds_pad_in_ground(tmp_path)
+    effective = gds_pad_in_ground(tmp_path, with_port=False, attachment=(None, None))
     model = build_conformal_model(effective.build_input, effective.representation, "A")
     emitted = {
         model.topology.volumes[v].domain.name for v in model.routed.emitted_volumes
@@ -220,8 +220,10 @@ def test_the_bump_without_the_film_collapse_is_a_finite_input_for_routes_b_and_c
         assert not model.report.failures
 
 
-def test_route_b_from_a_real_input_excludes_conductors_and_embeds_the_port(tmp_path):
-    """Route B on the GDS input: the port at the 0.1 um mid-plane is an embedded sheet of the vacuum."""
+def test_route_b_from_a_real_input_excludes_conductors_and_puts_the_port_on_the_substrate(
+    tmp_path,
+):
+    """Route B on the GDS input: the port lies on the substrate top, a face between substrate and vacuum."""
     effective = gds_pad_in_ground(tmp_path)
     model = build_conformal_model(effective.build_input, effective.representation, "B")
     volumes = {v.domain.name: v for v in model.topology.volumes.values()}
@@ -230,7 +232,13 @@ def test_route_b_from_a_real_input_excludes_conductors_and_embeds_the_port(tmp_p
     }
     assert emitted == {"substrate", "VACUUM_REGION"}
     assert "PORT::PORT_SHEET__P1__0000" in model.routed.groups
-    assert len(volumes["VACUUM_REGION"].embedded_faces) == 1
+    (port_id,) = model.routed.groups["PORT::PORT_SHEET__P1__0000"].ids
+    port = model.topology.faces[port_id]
+    assert {port.neg_volume, port.pos_volume} == {
+        next(v.id for v in volumes.values() if v.domain.name == name)
+        for name in ("substrate", "VACUUM_REGION")
+    }
+    assert not any(v.embedded_faces for v in volumes.values())
     assert not model.report.failures
 
 

@@ -15,12 +15,13 @@ today's contract, ``planning.representation.validate_selected_route`` with
 * **Route B** -- every conductor is a finite prism whose volume is *excluded* from the emitted
   model; its boundary faces become faces of the neighbouring volumes.  Conductor sheets are
   rejected (today's ``cutout_boundary_shell`` is the only representation).  Lumped-port sheets
-  are accepted: a port at the mid-plane of its hosts is an embedded face of the vacuum between them.
+  are accepted: a port lies on the support plane of its hosts (the surface under the metal), so
+  it is a face of the interface there, never a free face.
 * **Route C** -- every conductor is a finite prism whose volume is *retained and meshed*:
   conductor-dielectric and conductor-vacuum interfaces are shared faces, the interior is a
   solution domain (finite conductivity today, superconducting material models later).  Conductor
-  sheets are rejected.  Lumped-port sheets are accepted and represented as in Route B: an embedded
-  face in the vacuum gap at the port plane whose edges are shared with the conductor walls.
+  sheets are rejected.  Lumped-port sheets are accepted and represented as in Route B: a face of
+  the interface in the gap at the support plane whose edges are shared with the conductor walls.
 
 Route is an early input: it changes which volumes are emitted and which primary group a face
 joins, never the arrangement or assembly algorithms.

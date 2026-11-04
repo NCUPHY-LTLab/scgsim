@@ -137,15 +137,14 @@ def test_the_automatic_vacuum_envelope_comes_from_the_prepared_enclosure(pad):
     )
 
 
-def test_a_port_sheet_is_a_sheet_prism_at_the_host_mid_plane_with_its_landings_removed(
+def test_a_port_sheet_is_a_sheet_prism_on_the_host_support_plane_with_its_landings_removed(
     pad,
 ):
-    """A port sheet is a sheet prism at the host mid plane with its landings removed."""
+    """A port sheet is a sheet prism on the substrate top (the metal's attachment plane) with its landings removed."""
     catalogue = build_prism_catalogue(pad.build_input, pad.representation)
     port = prism_of(catalogue, "PORT_SHEET__P1__0000")
-    assert port.is_sheet and port.z0 == Fraction(
-        1, 10
-    )  # middle of the finite 0..0.2 um hosts
+    # the 0..0.2 um hosts are films attached at their lower face: z = 0, not their mid-plane 0.1
+    assert port.is_sheet and port.z0 == 0
     assert port.material_kind == "port"
     # 12 x 4 um region minus one 1 x 4 um landing on each host
     assert port.footprint.twice_area() == 2 * 40 * UM * UM
@@ -243,18 +242,20 @@ def test_a_slab_thinner_than_the_grid_survives_from_the_source_to_the_arrangemen
     )  # 0.4 nm < the 1 nm grid, kept as declared
 
 
-def test_port_hosts_with_different_intervals_fail_closed(thin_film):
-    """Port hosts with different intervals fail closed."""
+def test_a_host_that_misses_the_effective_support_plane_fails_closed(thin_film):
+    """A finite effective body may confirm the support plane, never move it: a host that misses it fails closed."""
     entities = tuple(
         replace(e, semantic_id=e.semantic_id) for e in thin_film.build_input.entities
     )
     entity_records = dict(thin_film.representation.entities)
     right = entity_records["chip/right"]
-    entity_records["chip/right"] = replace_interval(right, (0.0, 0.25))
+    entity_records["chip/right"] = replace_interval(right, (1.0, 1.25))
     context = RepresentationContext(
         entity_records, dict(thin_film.representation.enclosures)
     )
-    with pytest.raises(InputError, match="do not share one effective Z interval"):
+    with pytest.raises(
+        InputError, match=r"host 'chip/right' does not meet the effective support plane"
+    ):
         build_prism_catalogue(
             replace(thin_film.build_input, entities=entities), context
         )
@@ -321,7 +322,7 @@ def test_the_vacuum_envelope_yields_to_the_substrate_and_ports_label_their_level
     )
     domains = {(d.kind, d.owner) for d in substrate_slab.labels if d is not None}
     assert domains == {("dielectric", "substrate"), ("vacuum", "VACUUM_REGION")}
-    port_level = next(a for a in result.level_layers if a.z == Fraction(1, 10))
+    port_level = next(a for a in result.level_layers if a.z == 0)
     owners = {f.sheet.name for f in port_level.labels[1:] if f.sheet is not None}
     assert owners == {"PORT_SHEET__P1__0000"}
 

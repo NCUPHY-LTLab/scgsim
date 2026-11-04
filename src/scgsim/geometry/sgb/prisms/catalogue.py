@@ -45,11 +45,8 @@ def build_prism_catalogue(
     }
     ring_primitives = bind_boundaries(build_input, grid, footprints)
     prisms: list[PrismRecord] = []
-    conductor_intervals = {}
     for entity in entities:
         interval = entity_interval(entity, representation)
-        if entity.material_kind == "conductor":
-            conductor_intervals[entity.semantic_id] = interval
         prisms.extend(
             entity_prisms(
                 entity,
@@ -59,7 +56,7 @@ def build_prism_catalogue(
                 physical_feature_kind(entity, build_input, representation),
             )
         )
-    prisms.extend(port_prisms(build_input, grid, conductor_intervals))
+    prisms.extend(port_prisms(build_input, grid, representation))
     if not prisms:
         raise InputError("the effective input has no entities")
     return PrismCatalogue(grid, tuple(prisms))

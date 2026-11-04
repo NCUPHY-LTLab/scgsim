@@ -95,21 +95,21 @@ def test_a_real_input_gives_all_five_files_and_a_model_gmsh_accepts(
     )
     with gmsh_session(artifacts.xao):
         apply_sidecar_embeds(sidecar)
-        mesh_coarsely(60.0)  # the embedded port sheet meshes with its host
+        mesh_coarsely(60.0)  # the port face meshes with the interface it lies on
 
 
-def test_the_port_of_a_real_input_is_an_embedded_sheet_in_route_b_and_a_face_between_volumes_in_route_a(
+def test_the_port_of_a_real_input_is_a_face_between_volumes_in_every_route(
     tmp_path, gds_input, films
 ):
-    """The port of a real input is an embedded sheet in route b and a face between volumes in route a."""
+    """The port of a real input is a face between two volumes in every route: it lies on a support plane."""
     b = read_sidecar(build(gds_input, "B", tmp_path / "b").sidecar)
     (port,) = b["ports"]
     assert port["port_index"] == 1 and port["direction"] == pytest.approx(
         [1.0, 0.0, 0.0]
     )
-    assert len(b["embedded_faces"]) == 1 and port["host_volumes"] == [
-        b["embedded_faces"][0]["host_volume"]
-    ]
+    # the port lies on the substrate top: a face between two volumes, never a free face
+    assert b["embedded_faces"] == [] and len(port["adjacent_volumes"]) == 2
+    assert port["z_um"] == 0.0
     a = read_sidecar(build(films, "A", tmp_path / "a").sidecar)
     assert a["embedded_faces"] == [] and len(a["ports"][0]["adjacent_volumes"]) == 2
 

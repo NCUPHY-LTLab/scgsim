@@ -241,7 +241,11 @@ def pad_in_ground(
 
 
 def lumped_port(name: str, outline: list[Um], route: str) -> PrismRecord:
-    """A lumped-port sheet: on the sheet plane in Route A, at the 0.2 um metal's mid-plane in Route B."""
+    """A lumped-port sheet on the sheet plane (Route A) or in the 0.2 um metal's mid-plane (Route B).
+
+    A stage-level scene: the arrangement accepts a sheet at any level, and the mid-plane one exercises an
+    embedded sheet.  The compiler's own ports (``prisms.ports``) lie on the hosts' support plane instead.
+    """
     plane = exact_z(0) if route == "A" else exact_z("0.1")
     identity = PortIdentity(
         name, name.upper(), 1, (1.0, 0.0, 0.0), ("pad", "ground"), "metal", "port"

@@ -4,10 +4,18 @@ Owns turning each adapter-authored ``PortSheetRegionRecord`` into a sheet prism 
 carries the port identity.  The semantics follow the compiler's port lowering
 (``planning.port_planning.lowering`` and the curved arrangement's ``port_planes``):
 
-* **Plane.**  The port sheet lies at the middle of its host conductors' effective Z
-  interval.  A Route-A host is a sheet (a zero-thickness interval), so the middle is
-  the sheet plane; a Route-B host is a finite body and the middle is its mid-plane.
-  Both hosts must share one interval.  One rule for both, because the prism catalogue
+* **Plane.**  The port sheet lies on the *physical support plane* of its host conductors:
+  the plane the source authored for them, projected through the common
+  ``PhysicalRepresentationPlan`` into the effective model.  A film host declares it as the
+  ``layer_attachment_face`` (lower or upper) of its ``PhysicalLayerDeclaration``; a host
+  that is a genuine zero-thickness source sheet is its own plane.  The authored planes of
+  all hosts must agree, every finite body interval must still meet the plane, and every
+  host must project to one effective plane.  A host without a declaration or an
+  attachment face fails closed: nothing is guessed from the body's interval, so a 0.2 um
+  metal on a substrate puts its port on the substrate surface, never in the vacuum above
+  it (the same rule as the AEDT junction preparation's source support plane).  A port
+  therefore lies in the plane of the surface under it and occupies part of that surface
+  instead of floating over it.  One rule for every route, because the prism catalogue
   does not know the route.
 * **Footprint.**  The *active remainder*: the authored region minus each host overlap
   (the landing of the port on its host).  The overlaps enter as extra hole rings, which
@@ -20,44 +28,72 @@ carries the port identity.  The semantics follow the compiler's port lowering
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from fractions import Fraction
 from math import hypot, isfinite
 
 from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.models.physical import (
+    PhysicalLayerDeclaration,
+    PhysicalRepresentationPlan,
+)
 from scgsim.geometry.models.regions import PortSheetRegionRecord
+from scgsim.geometry.models.representation import (
+    EntityRepresentation,
+    RepresentationContext,
+)
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.prisms.footprints import lattice_ring
-from scgsim.geometry.sgb.records.grid import Grid
+from scgsim.geometry.sgb.records.grid import Grid, exact_z
 from scgsim.geometry.sgb.records.prisms import Footprint, PortIdentity, PrismRecord
 
 PORT_MATERIAL = "lumped_port"
 JUNCTION_PARTITION_KEY = "rectangular_junction_partition"
+FILM_KINDS = ("stack_film", "local_film")
 
 
 def port_prisms(
     build_input: GeometryBuildInput,
     grid: Grid,
-    host_intervals: Mapping[str, tuple[Fraction, Fraction]],
+    representation: RepresentationContext,
 ) -> list[PrismRecord]:
     """One sheet prism per port sheet region, in source order.
 
-    ``host_intervals`` maps a conductor entity id to its effective ``(z0, z1)``.
+    ``representation`` carries each conductor's source and effective Z facts; the common
+    physical plan in the input's metadata projects the authored support planes.
     """
-    return [
-        _port_prism(region, grid, host_intervals)
-        for region in build_input.port_sheet_regions
-    ]
+    regions = build_input.port_sheet_regions
+    if not regions:
+        return []
+    plan = _physical_plan(build_input)
+    return [_port_prism(region, grid, representation, plan) for region in regions]
+
+
+def _physical_plan(build_input: GeometryBuildInput) -> PhysicalRepresentationPlan:
+    raw = build_input.metadata.get("physical_representation")
+    if raw is None:
+        raise InputError(
+            "a lumped port needs the common physical representation plan "
+            "(metadata 'physical_representation') to project its support plane; "
+            "interpret the physical geometry first"
+        )
+    try:
+        return PhysicalRepresentationPlan.from_payload(raw)
+    except (TypeError, ValueError, KeyError) as error:
+        raise InputError(
+            f"the physical representation plan is invalid: {error}"
+        ) from error
 
 
 def _port_prism(
     region: PortSheetRegionRecord,
     grid: Grid,
-    host_intervals: Mapping[str, tuple[Fraction, Fraction]],
+    representation: RepresentationContext,
+    plan: PhysicalRepresentationPlan,
 ) -> PrismRecord:
     what = f"port sheet {region.port_sheet_id!r}"
     hosts = tuple(dict.fromkeys(o.host_semantic_id for o in region.overlaps))
-    plane = _plane(what, hosts, host_intervals)
+    z = _support_plane(what, hosts, representation, plan)
     exterior = lattice_ring(region.exterior, grid, f"{what} exterior")
     holes = [
         lattice_ring(hole, grid, f"{what} hole {k}")
@@ -76,8 +112,8 @@ def _port_prism(
     return PrismRecord(
         entity_id=region.port_sheet_id,
         footprint=footprint,
-        z0=plane,
-        z1=plane,
+        z0=z,
+        z1=z,
         material=PORT_MATERIAL,
         material_kind="port",
         port=PortIdentity(
@@ -92,24 +128,110 @@ def _port_prism(
     )
 
 
-def _plane(
-    what: str, hosts: Sequence[str], intervals: Mapping[str, tuple[Fraction, Fraction]]
+def _support_plane(
+    what: str,
+    hosts: Sequence[str],
+    representation: RepresentationContext,
+    plan: PhysicalRepresentationPlan,
 ) -> Fraction:
+    """The effective plane every host of the port agrees on (fail closed otherwise)."""
     if not hosts:
         raise InputError(f"{what} has no host overlap, so its plane is undefined")
-    unknown = [h for h in hosts if h not in intervals]
+    unknown = [h for h in hosts if h not in representation.entities]
     if unknown:
         raise InputError(
             f"{what} references host(s) that are not conductor entities: {unknown}"
         )
-    distinct = {intervals[h] for h in hosts}
-    if len(distinct) != 1:
+    sources = {
+        host: _authored_plane(what, host, representation.entities[host], plan)
+        for host in hosts
+    }
+    if len({z for z, _ in sources.values()}) != 1:
         raise InputError(
-            f"{what} hosts {list(hosts)} do not share one effective Z interval: "
-            f"{sorted((str(z0), str(z1)) for z0, z1 in distinct)}"
+            f"{what} hosts do not share one authored support plane (source Z, um): "
+            f"{ {host: z for host, (z, _) in sources.items()} }"
         )
-    z0, z1 = distinct.pop()
-    return (z0 + z1) / 2
+    source_z = next(iter(sources.values()))[0]
+    effective = {
+        host: exact_z(_project(plan, source_z, layer_id))
+        for host, (_, layer_id) in sources.items()
+    }
+    if len(set(effective.values())) != 1:
+        raise InputError(
+            f"{what} hosts project to different effective support planes: "
+            f"{ {host: str(z) for host, z in effective.items()} }"
+        )
+    z = next(iter(effective.values()))
+    for host in hosts:
+        low, high = (
+            exact_z(v) for v in representation.entities[host].effective_z_interval_um
+        )
+        if not low <= z <= high:
+            raise InputError(
+                f"{what} host {host!r} does not meet the effective support plane "
+                f"z = {z} um (its effective interval is [{low}, {high}] um)"
+            )
+    return z
+
+
+def _authored_plane(
+    what: str,
+    host: str,
+    record: EntityRepresentation,
+    plan: PhysicalRepresentationPlan,
+) -> tuple[float, str | None]:
+    """The source Z a host authored for its support plane, and the layer that owns it.
+
+    A film's plane is its declared attachment face; a zero-thickness source interval is its
+    own plane.  A finite body interval may confirm the plane but never invents one.
+    """
+    layer_id = record.physical_layer_id
+    declaration = plan.declaration_index.get(layer_id) if layer_id is not None else None
+    low, high = record.source_z_interval_um
+    if declaration is not None and declaration.feature_kind in FILM_KINDS:
+        z = _attachment_z(what, host, declaration)
+        if not low <= z <= high:
+            raise InputError(
+                f"{what} host {host!r}: the authored attachment plane z = {z} um of "
+                f"{layer_id!r} lies outside its source interval [{low}, {high}] um"
+            )
+        return z, layer_id
+    if low == high:
+        return low, layer_id
+    reason = (
+        "has no physical layer declaration"
+        if declaration is None
+        else f"is a {declaration.feature_kind} body, not a film"
+    )
+    raise InputError(
+        f"{what} host {host!r} {reason}, so it has no authored support plane; the PDK "
+        "must declare layer_attachment_face (lower or upper) in the host layer's "
+        "physical_layer source_contact_facts"
+    )
+
+
+def _attachment_z(what: str, host: str, declaration: PhysicalLayerDeclaration) -> float:
+    try:
+        return declaration.attachment_z_um
+    except ValueError as error:
+        raise InputError(
+            f"{what} host {host!r}: physical layer {declaration.physical_layer_id!r} "
+            "has no attachment face; the PDK must declare layer_attachment_face "
+            "(lower or upper) in its source_contact_facts"
+        ) from error
+
+
+def _project(
+    plan: PhysicalRepresentationPlan, source_z: float, layer_id: str | None
+) -> float:
+    """The effective Z of an authored plane, through the common plan."""
+    point = (0.0, 0.0, source_z)
+    try:
+        if layer_id is None:
+            return plan.map_point(point)[2]
+        return plan.project_support_point(point, layer_id)[2]
+    except (KeyError, ValueError) as error:
+        raise InputError(f"cannot project the support plane: {error}") from error
 
 
 def port_direction(raw: object, what: str) -> tuple[float, float, float]:

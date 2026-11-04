@@ -61,6 +61,32 @@ class EffectiveInput:
 # --------------------------------------------------------------------------- GDS route
 
 
+def physical_layer(
+    name: str, thickness_um: float, declaration: str | None
+) -> dict[str, Any]:
+    """The ``physical_layer`` metadata of a metal that stands on z = 0, as the PDK declares it (or leaves it out)."""
+    if declaration is None:
+        return {}
+    film = declaration in {"lower", "upper"}
+    return {
+        "physical_layer": {
+            "physical_layer_id": f"{name}_metal",
+            "source_level_id": "metal",
+            "source_level_and_gds_pair": {"level": "metal"},
+            "source_interval_um": [0.0, thickness_um],
+            "material_id": "Al",
+            "feature_kind": "stack_film" if film else "finite_volume",
+            "physical_dimensions": {"normal_thickness_um": thickness_um}
+            if film
+            else {"axial_span_um": thickness_um},
+            "source_contact_facts": {"layer_attachment_face": declaration}
+            if film
+            else {},
+            "actual_entity_contact_graph": None,
+        }
+    }
+
+
 def gds_pad_in_ground(  # noqa: PLR0913 - a test builder with independent switches
     tmp_path: Path,
     *,
@@ -69,11 +95,16 @@ def gds_pad_in_ground(  # noqa: PLR0913 - a test builder with independent switch
     pad_polygon: gdstk.Polygon | None = None,
     nets: bool = True,
     extra_metadata: dict[str, Any] | None = None,
+    attachment: tuple[str | None, str | None] = ("lower", "lower"),
 ) -> EffectiveInput:
     """A 100 um die with a ground plane, a 20 um pad in a 40 um cutout and a lumped port.
 
     Ground (GDS layer 1) and pad (layer 2) belong to one logical metal layer; the port
-    (layer 9) bridges the 10 um gap and lands one micrometre on each host.
+    (layer 9) bridges the 10 um gap and lands one micrometre on each host.  The metal is a film
+    on the substrate top, as in the PDK: it declares its attachment at the lower face (z = 0), so
+    the port lies on the substrate surface.  ``attachment`` is the declaration of (ground, pad):
+    ``"lower"`` or ``"upper"`` for a film attached at that face, ``"finite_volume"`` for a body
+    declaration without an attachment face, ``None`` for no physical declaration at all.
     """
     library = gdstk.Library(unit=1e-6, precision=1e-9)
     cell = library.new_cell("TOP")
@@ -90,8 +121,10 @@ def gds_pad_in_ground(  # noqa: PLR0913 - a test builder with independent switch
     gds = tmp_path / "pad_in_ground.gds"
     library.write_gds(gds, timestamp=datetime(2000, 1, 1))
 
-    def metal(name: str, layer: int, net: str, **geometry: Any) -> dict[str, Any]:
-        """Metal."""
+    def metal(
+        name: str, layer: int, net: str, face: str | None, **geometry: Any
+    ) -> dict[str, Any]:
+        """A metal layer record; by default it declares the PDK's film on the substrate top (attached at its lower face)."""
         record: dict[str, Any] = {
             "semantic_id": name,
             "role": "conductor",
@@ -99,7 +132,10 @@ def gds_pad_in_ground(  # noqa: PLR0913 - a test builder with independent switch
             "layer": layer,
             "datatype": 0,
             "geometry": {"z_um": 0, "thickness_um": thickness_um, **geometry},
-            "metadata": {"logical_layer_id": "metal"},
+            "metadata": {
+                "logical_layer_id": "metal",
+                **physical_layer(name, thickness_um, face),
+            },
         }
         if nets:
             record["net_id"] = net
@@ -107,8 +143,8 @@ def gds_pad_in_ground(  # noqa: PLR0913 - a test builder with independent switch
 
     stack: dict[str, Any] = {
         "layers": [
-            metal("ground", 1, "G", route_ab_fused_selector_mode=True),
-            metal("pad", 2, "P"),
+            metal("ground", 1, "G", attachment[0], route_ab_fused_selector_mode=True),
+            metal("pad", 2, "P", attachment[1]),
         ],
         "solution_regions": {
             "substrate": {
