@@ -168,23 +168,36 @@ def test_semantic_names_carry_the_band_index_and_unions_list_primary_groups(band
         for k in range(4)
     )
     assert (
-        len(groups["PORT::p1"].ids) > 1
-    )  # one group although the bands cut it into several faces
+        len(groups["PORT::p1"].ids) == 1
+    )  # the band seams stop at the port boundary: one face
 
 
-def test_adding_the_port_does_not_change_any_band_boundary():
-    """The pre-pass sees physical prisms only: same carriers, same arcs, same band areas."""
+def test_adding_the_port_changes_no_band_but_keeps_the_seams_out_of_it():
+    """The pre-pass sees physical prisms only: same supports; the port takes its footprint away from the bands."""
     with_port = build_model_from_catalogue(
         pad_in_ground("A"), "A", insets=pad_requests("A")
     )
     without = build_model_from_catalogue(
         pad_in_ground("A", with_port=False), "A", insets=pad_requests("A")
     )
-    assert with_port.labelled.catalogue.families == without.labelled.catalogue.families
+    assert [f.support for f in with_port.labelled.catalogue.families] == [
+        f.support for f in without.labelled.catalogue.families
+    ]
+    port_um2 = 30 * 10  # the port outline 50..80 x -5..5 um
     for name in ("band_pad_top", "band_gap"):
-        a, b = exact_band_areas(with_port, name), exact_band_areas(without, name)
+        a = exact_band_areas(with_port, name, include_ports=False)
+        b = exact_band_areas(without, name)
         assert a.keys() == b.keys()
-        assert all(a[k] == pytest.approx(b[k], rel=1e-9) for k in a)
+        assert all(
+            a[k] <= b[k] * (1 + 1e-9) for k in a
+        )  # the port only takes area away
+    removed = sum(exact_band_areas(without, "band_gap").values()) - sum(
+        exact_band_areas(with_port, "band_gap", include_ports=False).values()
+    )
+    assert removed * 1e-6 == pytest.approx(port_um2, rel=1e-9)
+    assert exact_band_areas(with_port, "band_pad_top") == exact_band_areas(
+        without, "band_pad_top"
+    )  # the pad sheet is nowhere near the port
 
 
 @pytest.mark.slow

@@ -10,9 +10,11 @@ from __future__ import annotations
 import math
 
 import pytest
+from sgb_gmsh_oracle import gmsh_session, mesh_coarsely
 from sgb_inputs import gds_pad_in_ground, thin_film_pair
 from sgb_scenes import slab_model
 
+from scgsim.geometry.sgb import build_sgb_geometry
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
 from scgsim.geometry.sgb.arrangement.dcel import (
     Arrangement,
@@ -23,15 +25,22 @@ from scgsim.geometry.sgb.arrangement.dcel import (
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
     InsetRequest,
+    RefinementRequest,
     SolutionInterface,
 )
 from scgsim.geometry.sgb.errors import InputError, ValidationError
 from scgsim.geometry.sgb.labelling.bands import CLEARANCE, face_band
-from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
+from scgsim.geometry.sgb.model import (
+    ConformalModel,
+    build_conformal_model,
+    build_model_from_catalogue,
+)
 from scgsim.geometry.sgb.noding.snap_rounding import Segment, snap_round
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.geometry.sgb.records.prisms import LineEdge
 from scgsim.geometry.sgb.records.support import SupportRegion
+from scgsim.geometry.sgb.sidecar.files import read_sidecar
+from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds, verify_xao
 
 MARGINS = (0.5, 1.0)
 SA = SolutionInterface("substrate", "upper_air", z_um=0)
@@ -82,6 +91,15 @@ def test_a_face_that_holds_area_in_two_bands_fails_closed():
     ring = rectangle(0, 0, 10_000, 10_000)
     with pytest.raises(ValidationError, match="holds area in several bands"):
         face_band(arrange(ring), 1, support_of(ring, (2000,)))
+
+
+def test_a_port_face_across_two_bands_is_nominally_in_band_zero_inside_the_support():
+    """The band seams stop at a port's boundary, so its face may straddle: it carries band 0, none outside."""
+    ring = rectangle(0, 0, 10_000, 10_000)
+    arr = arrange(ring)
+    assert face_band(arr, 1, support_of(ring, (2000,)), nominal=True) == 0
+    outside = support_of(rectangle(20_000, 0, 30_000, 10_000), (2000,))
+    assert face_band(arr, 1, outside, nominal=True) is None
 
 
 def test_strip_cells_add_up_to_the_exact_face_area():
@@ -289,7 +307,10 @@ def test_route_a_thin_film_pair_solution_bands_ripple_out_of_the_two_sheets():
         if 4 <= box[0] and box[2] <= 6
     }
     assert gap[(4.0, -1.0, 6.0, 0.0)] == gap[(4.0, 4.0, 6.0, 5.0)] == 2
-    assert gap[(4.5, 1.0, 5.0, 3.0)] == gap[(5.0, 1.0, 5.5, 3.0)] == 1
+    # the seams at x = 4.5, 5.0 and 5.5 stop at the port boundary: the port is one face, left out of the bands
+    assert [box for box in gap if box[1] >= 1.0 and box[3] <= 3.0] == [
+        (4.0, 1.0, 6.0, 3.0)
+    ]
 
 
 def test_pad_in_ground_bands_run_along_the_cutout_edge_only(tmp_path):
@@ -331,3 +352,137 @@ def test_pad_in_ground_bands_run_along_the_cutout_edge_only(tmp_path):
             f.support for f in model.labelled.catalogue.families if f.family_id == "sa"
         )
         assert sa_support.free_boundary == ()
+
+
+# --------------------------------------------------------------------------- band seams stop at a port
+
+
+def all_interface_insets(effective, route, sa_pair):
+    """Bands on every supported surface of every conductor and on the SA interface at the port plane."""
+    sides = ("sheet",) if route == "A" else ("top", "bottom")
+    insets = [
+        InsetRequest(
+            f"band_{entity.semantic_id}_{side}".replace("/", "_"),
+            ConductorSurface(entity.semantic_id, side),
+            MARGINS,
+        )
+        for entity in effective.build_input.entities
+        if entity.material_kind == "conductor"
+        for side in sides
+    ]
+    insets.append(
+        InsetRequest("band_sa", SolutionInterface(*sa_pair, z_um=0.0), MARGINS)
+    )
+    return tuple(insets)
+
+
+PORT_CASES = {  # route -> (input, SA pair, port group, port area um^2, SA band areas um^2, mirror axis y in um)
+    "A": (
+        thin_film_pair,
+        ("substrate", "upper_air"),
+        "PORT::port_sheet",
+        4.0,
+        (15.571, 18.712, 25.717),
+        2.0,
+    ),
+    "B": (
+        gds_pad_in_ground,
+        ("substrate", "VACUUM_REGION"),
+        "PORT::PORT_SHEET__P1__0000",
+        40.0,
+        (115.785, 115.356, 928.858),
+        50.0,
+    ),
+}
+PORT_CASES["C"] = PORT_CASES["B"]
+
+
+@pytest.fixture(params=sorted(PORT_CASES))
+def banded_port_model(request, tmp_path):
+    """Every surface and the SA interface banded (0.5, 1.0 um) in a model with a lumped port, on each route."""
+    route = request.param
+    make_input, sa_pair, *rest = PORT_CASES[route]
+    effective = make_input(tmp_path) if route != "A" else make_input()
+    insets = all_interface_insets(effective, route, sa_pair)
+    model = build_conformal_model(
+        effective.build_input, effective.representation, route, insets=insets
+    )
+    return route, effective, insets, model, rest
+
+
+def corner_count(model: ConformalModel, face) -> int:
+    """Corners (direction changes) of a face's outer loop; edges split where a neighbour's seam ends are no corner."""
+    points = []
+    for edge_id, sign in face.loops[0]:
+        edge = model.topology.edges[edge_id]
+        vertex = model.topology.vertices[edge.v0 if sign > 0 else edge.v1]
+        points.append((vertex.x, vertex.y))
+    count = len(points)
+    return sum(
+        (points[i][0] - points[i - 1][0]) * (points[(i + 1) % count][1] - points[i][1])
+        != (points[i][1] - points[i - 1][1])
+        * (points[(i + 1) % count][0] - points[i][0])
+        for i in range(count)
+    )
+
+
+def test_inset_seams_stop_at_the_port_so_it_is_one_rectangle(banded_port_model):
+    """The port group is one rectangular face whose area is the footprint; the SA bands keep their areas."""
+    route, effective, insets, model, (group, area, sa_areas, y_mid) = banded_port_model
+    assert not model.report.failures
+    (face_id,) = model.routed.groups[group].ids
+    face = model.topology.faces[face_id]
+    assert len(face.loops) == 1 and corner_count(model, face) == 4
+    assert (
+        face.twice_xy_area * model.labelled.catalogue.grid.size_um** 2 / 2
+        == pytest.approx(area)
+    )
+    bands = band_areas_without_sheets(model, "band_sa")
+    assert [bands[k] for k in sorted(bands)] == pytest.approx(list(sa_areas), abs=1e-3)
+    assert_mirror_symmetric_about(model, "band_sa", y_mid)
+
+
+def test_the_files_of_a_banded_port_load_and_mesh(banded_port_model, tmp_path):
+    """The written model verifies against its sidecar, keeps one port face and meshes."""
+    route, effective, insets, _, (group, area, sa_areas, _) = banded_port_model
+    artifacts = build_sgb_geometry(
+        effective.build_input,
+        effective.representation,
+        route=route,
+        insets=insets,
+        output_dir=tmp_path / "out",
+    )
+    sidecar = read_sidecar(artifacts.sidecar)
+    assert len(sidecar["physical_groups"][group]["ids"]) == 1
+    assert sidecar["physical_groups"][group]["area_um2"] == pytest.approx(area)
+    sa = sidecar["physical_groups"]
+    found = [
+        sa[n]["area_um2"] for n in sorted(sa) if n.startswith("SA::") and "::band=" in n
+    ]
+    assert found == pytest.approx(list(sa_areas), abs=1e-3)
+    report = verify_xao(artifacts.xao, sidecar)
+    assert report.ok, report.problems
+    with gmsh_session(artifacts.xao):
+        apply_sidecar_embeds(sidecar)
+        mesh_coarsely(60.0)
+
+
+def test_a_refinement_curve_across_the_port_is_a_user_cut_and_stays_in_the_port():
+    """Explicit user curves are never clipped: the port holds the pieces of a curve crossing it."""
+    effective = thin_film_pair()
+    inset = InsetRequest("band_sa", SA, MARGINS)
+    across = RefinementRequest("across", 0.0, ((5.0, 0.5), (5.0, 3.5)))
+    model = build_conformal_model(
+        effective.build_input,
+        effective.representation,
+        "A",
+        insets=(inset,),
+        refinements=(across,),
+    )
+    (face_id,) = model.routed.groups["PORT::port_sheet"].ids
+    port = model.topology.faces[face_id]
+    assert (
+        port.refinement_edges
+    )  # the curve is embedded in the port: the seams' clip never touches it
+    assert corner_count(model, port) == 4
+    assert not model.report.failures

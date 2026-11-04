@@ -4,8 +4,10 @@ Owns the one place requests become cut families.  Physical boundaries need no fa
 prism footprints and implicit.  Everything else is explicit:
 
 * an inset request becomes a ``required`` family of boundaries of ``R_m`` (``inset``), one family per
-  support face, targeting the level the face lies on;
-* a refinement request becomes a ``refinement_only`` family of line members at its height.
+  support face, targeting the level the face lies on; the seams stop at the boundary of every lumped port
+  on that level, so a port stays one face;
+* a refinement request becomes a ``refinement_only`` family of line members at its height; it is a user
+  request and is never clipped, so it cuts a port it crosses.
 
 A family whose Z no prism defines adds an ordinary level (``prisms.levels``); the arrangement code never
 learns where a family came from.
@@ -14,6 +16,7 @@ learns where a family came from.
 from __future__ import annotations
 
 from dataclasses import replace
+from fractions import Fraction
 
 from scgsim.geometry.sgb.cutfamilies.inset import inset_family
 from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, RefinementRequest
@@ -22,7 +25,7 @@ from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.records.carriers import Lineage, LineCarrier
 from scgsim.geometry.sgb.records.families import CurveFamilyRecord
 from scgsim.geometry.sgb.records.grid import Grid, exact_z
-from scgsim.geometry.sgb.records.prisms import PrismCatalogue
+from scgsim.geometry.sgb.records.prisms import Footprint, PrismCatalogue
 
 
 def with_cut_families(
@@ -40,13 +43,29 @@ def with_cut_families(
             f"cut-family request ids must be unique, repeated: {', '.join(duplicates)}"
         )
     families = [
-        inset_family(support.request.request_id, support.region, (support.level,))
+        inset_family(
+            support.request.request_id,
+            support.region,
+            (support.level,),
+            _port_footprints(catalogue, support.level),
+        )
         for support in resolve_supports(catalogue, insets)
     ]
     families.extend(
         _refinement_family(request, catalogue.grid) for request in refinements
     )
     return replace(catalogue, families=(*catalogue.families, *families))
+
+
+def _port_footprints(
+    catalogue: PrismCatalogue, level: Fraction
+) -> tuple[Footprint, ...]:
+    """The footprints of the lumped-port sheets on a level, which the inset seams must not enter."""
+    return tuple(
+        prism.footprint
+        for prism in catalogue.prisms
+        if prism.material_kind == "port" and prism.z0 == level
+    )
 
 
 def _refinement_family(request: RefinementRequest, grid: Grid) -> CurveFamilyRecord:

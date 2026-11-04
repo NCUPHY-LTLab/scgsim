@@ -31,7 +31,10 @@ the conductor is attached to (its sheet plane, or the bottom of a finite body), 
 Surface-EPR correction factor of a band comes from the metal-gap-metal cross-section, so an edge with no gap
 before it is no origin: a conductor edge on the die or substrate outer edge or the model boundary, an edge
 shared with another conductor, an edge facing only vacuum.  The die outer edge, ports, other bands and seams
-therefore never move a band.  A conductor face is measured from the gap edges of its footprint (the top and
+therefore never move a band.  Ports also cut no band: a band seam stops at the boundary of a lumped port on the
+support's level, so the port is one face (a rectangular port stays one rectangle) and a band's geometry outside the
+port is what it would be without it.  Only the cuts that must exist split a port: a material or entity boundary, a
+host overlap, a junction partition, or a ``RefinementRequest`` curve crossing it.  A conductor face is measured from the gap edges of its footprint (the top and
 bottom faces of a finite body have the same footprint); a solution interface from the gap edges on its own
 boundary.  A support with no gap edge is an ``InputError``.
 """

@@ -405,11 +405,20 @@ def max_deviation(edges: list[NodedEdge], segments: list[Segment]) -> float:
     return worst
 
 
-def exact_band_areas(model: ConformalModel, family_id: str) -> dict[int, float]:
-    """Area (grid^2) of every band of a family from the level arrangements, arcs realised exactly."""
+def exact_band_areas(
+    model: ConformalModel, family_id: str, *, include_ports: bool = True
+) -> dict[int, float]:
+    """Area (grid^2) of every band of a family from the level arrangements, arcs realised exactly.
+
+    A port face is no band's surface and carries band 0 nominally (its band seams stop at its boundary);
+    ``include_ports=False`` leaves the port faces out, so the bands are what the groups carry.
+    """
     areas: dict[int, float] = {}
     for layer in model.labelled.level_layers:
         for fi in range(1, len(layer.arr.faces)):
+            sheet = layer.labels[fi].sheet
+            if not include_ports and sheet is not None and sheet.kind == "port":
+                continue
             for family, band in layer.labels[fi].bands:
                 if family == family_id:
                     areas[band] = areas.get(band, 0.0) + face_exact_area(

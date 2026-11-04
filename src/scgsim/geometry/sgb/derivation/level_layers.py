@@ -208,7 +208,8 @@ def _level_extras_job(shared: Any, items: list[int]) -> list[Any]:
 
     Owner and coverage are footprint tests at one interior point: every footprint boundary is an
     arrangement edge, so no face straddles one.  A band is a distance test, whose boundary can be
-    a line inside a face, so a band comes from the face's area (``face_band``), not from the point.
+    a line inside a face, so a band comes from the face's area (``face_band``), not from the point.  A port
+    face is the one face that may lie across bands (the seams stop at its boundary).
     """
     arrangements, sheet_sets, supports, cover_sets, flat, prisms = shared
     out = []
@@ -220,7 +221,15 @@ def _level_extras_job(shared: Any, items: list[int]) -> list[Any]:
         bands = tuple(
             (family_id, band)
             for family_id, support in supports[k]
-            if (band := face_band(arrangements[k], fi, support)) is not None
+            if (
+                band := face_band(
+                    arrangements[k],
+                    fi,
+                    support,
+                    nominal=owner is not None and owner.kind == "port",
+                )
+            )
+            is not None
         )
         entities = tuple(
             sorted({prisms[j].entity_id for s in cover_sets[k] for j in s.hit(point)})

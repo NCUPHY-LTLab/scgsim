@@ -19,9 +19,18 @@ Distance origins: only the region's gap edges (``SupportRegion.origins``; see ``
 offset is built from those primitives alone: a line or arc per origin, a bridging arc at every reflex vertex
 between two consecutive origins, and a half circle round each end of a run of origins.  The rest of the
 boundary (the die edge, an edge shared with another conductor) only clips the candidates where they cross it,
-and a curve may end on it.  Ports, contact caps, other bands and tile seams are never origins -- they are not
-inputs of this module.  Topology changes (a neck that splits, a
+and a curve may end on it.  Contact caps, other bands and tile seams are never origins -- they are not
+inputs of this module.  Ports are never origins either: a port footprint on the support's level is no origin
+and moves no band, but it keeps the band seams out of itself (below).  Topology changes (a neck that splits, a
 band that vanishes) are ordinary outcomes: the bands that survive are the ones the labels record.
+
+Ports.  A lumped-port sheet lies on the support's level and must stay one face, so no band seam may enter its
+interior.  The footprints of the ports on the level (the exterior rings minus host-overlap holes) join the noding
+as clip boundaries only: the candidates are cut where they cross a port boundary, the pieces whose midpoint lies
+in a port's interior are dropped, and a curve may end on the port boundary like on the free boundary.  Pieces
+along the port boundary or outside it are unchanged, and the distance origins never saw the port, so every band
+keeps its geometry outside the port.  Only the seams of this family are clipped: a refinement curve is a user
+request and is never clipped here.
 
 The offset of an oblique edge is not representable on the grid (its normal is irrational): curve end points
 are snapped to the lattice like every other vertex, so the carriers are exact up to the snap bound.  Every
@@ -39,7 +48,7 @@ from decimal import Decimal
 from fractions import Fraction
 
 from scgsim.geometry.sgb.noding.snap_rounding import NodedEdge, Segment, snap_round
-from scgsim.geometry.sgb.plane import Point
+from scgsim.geometry.sgb.plane import Point, point_in_ring
 from scgsim.geometry.sgb.records import circle_math
 from scgsim.geometry.sgb.records.carriers import (
     ArcCarrier,
@@ -49,6 +58,7 @@ from scgsim.geometry.sgb.records.carriers import (
     RingPrimitive,
 )
 from scgsim.geometry.sgb.records.families import CurveFamilyRecord
+from scgsim.geometry.sgb.records.prisms import Footprint
 from scgsim.geometry.sgb.records.support import DISTANCE_SLACK, SupportRegion
 
 Vec = tuple[Decimal, Decimal]
@@ -58,6 +68,7 @@ PARALLEL_EPSILON = Decimal(
 )  # tangents closer to parallel than this are a straight or convex junction
 PIECE_SLACK = Decimal("1e-9")
 FREE_BOUNDARY = "~free"  # carrier id prefix of the boundary that is not an origin
+PORT_BOUNDARY = "~port"  # carrier id prefix of a port footprint boundary (a clip boundary, never an origin)
 AddArc = Callable[[str, tuple[int, int], Fraction, bool, Point, Point], None]
 
 
@@ -65,12 +76,19 @@ def inset_family(
     family_id: str,
     region: SupportRegion,
     target_levels: tuple[Fraction, ...],
+    ports: tuple[Footprint, ...] = (),
 ) -> CurveFamilyRecord:
-    """The ``required`` cut family holding the boundaries of ``R_m`` for every margin of the region."""
+    """The ``required`` cut family holding the boundaries of ``R_m`` for every margin of the region.
+
+    ``ports`` are the footprints of the lumped ports on the region's level: no curve has a piece in their
+    interior, so a port stays one face where only band seams would cut it.
+    """
     lines: list[LineCarrier] = []
     arcs: list[ArcCarrier] = []
     for margin in region.margins:
-        margin_lines, margin_arcs = _boundary_of_eroded(family_id, region, margin)
+        margin_lines, margin_arcs = _boundary_of_eroded(
+            family_id, region, margin, ports
+        )
         lines.extend(margin_lines)
         arcs.extend(margin_arcs)
     return CurveFamilyRecord(
@@ -296,7 +314,7 @@ def _corner_arcs(
 
 
 def _boundary_of_eroded(
-    family_id: str, region: SupportRegion, margin: int
+    family_id: str, region: SupportRegion, margin: int, ports: tuple[Footprint, ...]
 ) -> tuple[list[LineCarrier], list[ArcCarrier]]:
     candidates = _generate_candidates(family_id, region, margin)
     segments = [Segment(p, q, frozenset([cid])) for cid, p, q in candidates.lines]
@@ -309,12 +327,14 @@ def _boundary_of_eroded(
             for k, (p, q) in enumerate(zip(points, points[1:], strict=False))
         )
     segments.extend(_free_boundary_segments(region))
+    segments.extend(_port_boundary_segments(ports))
     noded = [
         e
         for e in snap_round(segments).edges
         if not any(c.startswith(FREE_BOUNDARY) for c in e.carriers)
     ]
-    kept = _kept_edges(noded, region, margin)
+    clipped, port_ends = _clipped_to_ports(noded, ports)
+    kept = _kept_edges(clipped, region, margin, port_ends)
     return _lines_of(family_id, kept), _arcs_of(kept, arc_pieces)
 
 
@@ -333,13 +353,61 @@ def _free_boundary_segments(region: SupportRegion) -> list[Segment]:
     return segments
 
 
+def _port_boundary_segments(ports: tuple[Footprint, ...]) -> list[Segment]:
+    """The port footprint boundaries, as noding input only: they split the candidates where they cross them."""
+    return [
+        Segment(p, q, frozenset([f"{PORT_BOUNDARY}{k}.{r}.{j}"]))
+        for k, footprint in enumerate(ports)
+        for r, ring in enumerate(footprint.rings())
+        for j, (p, q) in enumerate(zip(ring, (*ring[1:], ring[0]), strict=True))
+    ]
+
+
+def _clipped_to_ports(
+    edges: list[NodedEdge], ports: tuple[Footprint, ...]
+) -> tuple[list[NodedEdge], set[Point]]:
+    """The edges without the pieces inside a port, and the vertices on a port boundary.
+
+    The noding split every candidate at the port boundaries, so a noded edge lies on a boundary (it
+    carries its carrier id) or wholly inside or outside every port, and its midpoint decides.  Edges
+    that lie on a port boundary only are the clip boundary itself and are dropped; an edge a candidate shares
+    with a port boundary stays, as a seam along the port is no cut of its interior.
+    """
+    if not ports:
+        return edges, set()
+    clipped: list[NodedEdge] = []
+    port_ends: set[Point] = set()
+    for e in edges:
+        on_boundary = any(c.startswith(PORT_BOUNDARY) for c in e.carriers)
+        if on_boundary:
+            port_ends.update((e.a, e.b))
+        elif _in_a_port(e, ports):
+            continue
+        carriers = frozenset(c for c in e.carriers if not c.startswith(PORT_BOUNDARY))
+        if carriers:
+            clipped.append(NodedEdge(e.a, e.b, carriers))
+    return clipped, port_ends
+
+
+def _in_a_port(edge: NodedEdge, ports: tuple[Footprint, ...]) -> bool:
+    """Whether the midpoint of an edge off every port boundary lies in the interior of a port."""
+    middle = (edge.a[0] + edge.b[0], edge.a[1] + edge.b[1], 2)
+    return any(
+        sum(point_in_ring(ring, middle) for ring in footprint.rings()) % 2 == 1
+        for footprint in ports
+    )
+
+
 def _kept_edges(
-    edges: Iterable[NodedEdge], region: SupportRegion, margin: int
+    edges: Iterable[NodedEdge],
+    region: SupportRegion,
+    margin: int,
+    port_ends: set[Point],
 ) -> list[NodedEdge]:
     """Edges whose midpoint is at least ``margin`` from the distance origins, with dangling stubs removed.
 
-    A curve may end on the part of the boundary that is not an origin (a band reaching the die edge), so
-    an end point there is not dangling.
+    A curve may end on the part of the boundary that is not an origin (a band reaching the die edge) or on
+    a port boundary (a seam stopping at a port), so an end point there is not dangling.
     """
     kept = []
     for e in edges:
@@ -358,7 +426,10 @@ def _kept_edges(
         pruned = [
             e
             for e in kept
-            if all(degree[v] > 1 or _on_free_boundary(region, v) for v in (e.a, e.b))
+            if all(
+                degree[v] > 1 or v in port_ends or _on_free_boundary(region, v)
+                for v in (e.a, e.b)
+            )
         ]
         if len(pruned) == len(kept):
             return kept

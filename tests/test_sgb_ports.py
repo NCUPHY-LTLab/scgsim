@@ -131,7 +131,7 @@ def test_a_port_removes_its_footprint_from_the_sa_bands_without_moving_a_band(
         without["insets"][0]["support_area_um2"]
     )
     assert with_port["insets"][0]["margins_um"] == [0.5, 1.0]
-    # one PORT group, possibly several faces (band seams split it)
+    # one PORT group of one face: the band seams stop at the port boundary
     assert [n for n in with_port["physical_groups"] if n.startswith("PORT::")] == [
         PORT_GROUP
     ]

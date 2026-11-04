@@ -10,6 +10,11 @@ So the band is decided from the face's area.  The face is cut into trapezoids wh
 add up to the face; each votes with the first of its sample points that is clear of every band
 boundary, and the face takes the band that holds its area.  Two bands with area each mean a cut
 is missing, which stops the build.
+
+A lumped-port face is the exception: band seams stop at the port boundary, so the one face of a port may
+lie across several bands.  It is no band's surface (its area is left out of every band group), yet it lies
+in the support region and the coverage check counts it, so it carries band 0 of every family whose support
+holds it (``nominal``).
 """
 
 from __future__ import annotations
@@ -32,8 +37,19 @@ OUTSIDE = -1
 """Verdict of a sample outside the support region (band indices are non-negative)."""
 
 
-def face_band(arr: Arrangement, face_index: int, support: SupportRegion) -> int | None:
-    """Band of a raw face in the support region (0 = closest to the origins); ``None`` outside it."""
+def face_band(
+    arr: Arrangement,
+    face_index: int,
+    support: SupportRegion,
+    *,
+    nominal: bool = False,
+) -> int | None:
+    """Band of a raw face in the support region (0 = closest to the origins); ``None`` outside it.
+
+    ``nominal`` is for a port face, which may straddle bands: see :func:`_nominal_band`.
+    """
+    if nominal:
+        return _nominal_band(arr, face_index, support)
     area_by_verdict: dict[int, Fraction] = {}
     for cell in strip_cells(arr, face_index):
         verdicts = {v for p in cell.points if (v := _verdict(p, support)) is not None}
@@ -51,6 +67,18 @@ def face_band(arr: Arrangement, face_index: int, support: SupportRegion) -> int 
         return support.band_of(interior_point(arr, face_index))
     (verdict,) = area_by_verdict
     return None if verdict == OUTSIDE else verdict
+
+
+def _nominal_band(
+    arr: Arrangement, face_index: int, support: SupportRegion
+) -> int | None:
+    """Band 0 for a face inside the support region, ``None`` outside.
+
+    A port face is no band's surface and the seams stop at its boundary, so it may lie across several bands.
+    One fixed label keeps its pieces alike wherever a user curve cuts it, and the support boundary is an
+    arrangement edge, so the face lies wholly inside or outside the region.
+    """
+    return 0 if support.contains(interior_point(arr, face_index)) else None
 
 
 def _straddle(arr: Arrangement, face_index: int, verdicts: set[int]) -> ValidationError:

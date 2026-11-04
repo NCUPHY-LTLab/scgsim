@@ -18,6 +18,9 @@ edge fails closed.
 
 Arc edges of the boundary are expressed on the exact circle of their source arc (centre and radius of the
 carrier) through the snapped end points, so offsets stay concentric with the source circle.
+
+The pre-pass leaves the ports out so they never move a band; the seams of the bands are clipped against the
+ports afterwards (``cutfamilies.inset``), so they stop at a port's boundary.
 """
 
 from __future__ import annotations

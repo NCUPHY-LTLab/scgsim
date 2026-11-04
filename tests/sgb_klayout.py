@@ -79,6 +79,21 @@ def region_of_rings(region: SupportRegion) -> db.Region:
     return result.merged()
 
 
+def port_region(model: ConformalModel, family_id: str) -> db.Region:
+    """The footprints of the lumped ports on the level of a family (a port face is no band's surface)."""
+    level = next(
+        f.target_levels[0]
+        for f in model.labelled.catalogue.families
+        if f.family_id == family_id
+    )
+    result = db.Region()
+    for prism in model.labelled.catalogue.prisms:
+        if prism.material_kind == "port" and prism.z0 == level:
+            for ring in prism.footprint.rings():
+                result ^= db.Region(db.Polygon([db.Point(*p) for p in ring]))
+    return result.merged()
+
+
 def disk_polygon(radius: int, sides: int = DISK_SIDES) -> db.Polygon:
     """A regular polygon approximating a disk (KLayout has no round shapes in its integer engine)."""
     return db.Polygon(
@@ -102,18 +117,21 @@ def eroded_klayout(region: db.Region, margin: int) -> db.Region:
 
 
 def comparison_rows(model: ConformalModel, family_id: str) -> list[dict]:
-    """Per margin: area of ``R_m`` (union of the bands >= k) exact against KLayout, plus the oracle's own noise estimate."""
+    """Per margin: area of ``R_m`` (union of the bands >= k) outside the ports, exact against KLayout, plus the oracle's own noise estimate."""
     family = next(
         f for f in model.labelled.catalogue.families if f.family_id == family_id
     )
     support = family.support
     assert support is not None
+    ports = port_region(model, family_id)
     kl_region = region_of_rings(support)
-    bands = exact_band_areas(model, family_id)
+    bands = exact_band_areas(model, family_id, include_ports=False)
     rows = []
     for k, margin in enumerate((0, *support.margins)):
         exact = sum(area for band, area in bands.items() if band >= k)
-        eroded = eroded_klayout(kl_region, margin)
+        eroded = (
+            eroded_klayout(kl_region, margin) - ports
+        )  # the band faces leave the port to the port
         polygon_area = float(eroded.area())
         perimeter = sum(poly.perimeter() for poly in eroded.each())
         rows.append(

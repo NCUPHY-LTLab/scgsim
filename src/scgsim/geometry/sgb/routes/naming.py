@@ -36,7 +36,8 @@ mixes physically different interfaces and a consumer can filter by it without re
 * ``interface`` -- a horizontal face between two solution regions, or two conductors.
 
 A face inside an inset band carries ``::band=k`` (the innermost band index of its label);
-a port stays one surface even where bands cut it.  Names never carry native tags.
+band seams stop at the boundary of a port, so a port is one face and carries no band.  Names never carry
+native tags.
 
 Surface-EPR rows keep the prefixed form for a sheet: its group ``pad::band=1`` carries the rows
 ``MA::pad::sheet::band=1`` and ``MS::pad::sheet::band=1`` (see :func:`sheet_row_id`).
