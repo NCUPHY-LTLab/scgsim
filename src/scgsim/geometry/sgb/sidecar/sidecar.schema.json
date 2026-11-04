@@ -321,7 +321,7 @@
       "properties": {
         "dim": {"const": 2},
         "tag": {"type": "integer", "minimum": 1},
-        "interface_type": {"enum": ["MA", "MS", "MM", "SA", "AA", "SS", "SHEET", "PORT", "EXT"]},
+        "interface_type": {"description": "Derived from the face structure, never parsed from the group name; SHEET is a Route A conductor sheet, whose group is named by the bare entity id.", "enum": ["MA", "MS", "MM", "SA", "AA", "SS", "SHEET", "PORT", "EXT"]},
         "ids": {"$ref": "#/$defs/idList"},
         "native_tags": {"$ref": "#/$defs/tagList"},
         "entities": {"$ref": "#/$defs/idList"},

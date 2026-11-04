@@ -174,12 +174,22 @@ def test_a_surface_group_names_its_entities_net_face_kind_and_adjacent_regions(
 
 
 def test_a_group_never_mixes_face_kinds_and_its_name_says_which_it_is(sidecars):
-    """``<kind>::<entity>::<face kind>[::band=k]``: the third part of the name is the group's one face kind."""
+    """``<kind>::<entity>::<face kind>[::band=k]``: the third part of the name is the group's one face kind.
+
+    A Route A sheet group is named by its bare entity id and has the face kind ``sheet`` without carrying it.
+    """
     for case, side in sidecars.items():
         for name, group in side["physical_groups"].items():
             if group["dim"] != 2 or group["interface_type"] == "PORT":
                 continue
-            assert name.split("::")[2] == group["face_kind"] in FACE_KINDS, (case, name)
+            if group["interface_type"] == "SHEET":
+                assert group["face_kind"] == "sheet", (case, name)
+                assert name.split("::")[0] in group["entities"], (case, name)
+            else:
+                assert name.split("::")[2] == group["face_kind"] in FACE_KINDS, (
+                    case,
+                    name,
+                )
             faces = [side["faces"][f] for f in group["ids"]]
             assert {f["face_kind"] for f in faces} == {group["face_kind"]}, (case, name)
     ports = [
@@ -201,7 +211,7 @@ def test_the_example_group_names_of_the_three_routes(sidecars):
     }
     assert surfaces["pad_a"] == [
         "EXT::substrate::bottom", "EXT::substrate::sidewall", "EXT::vacuum::sidewall", "EXT::vacuum::top",
-        "PORT::p1", "SA::substrate|vacuum::interface", "SHEET::ground::sheet", "SHEET::pad::sheet",
+        "PORT::p1", "SA::substrate|vacuum::interface", "ground", "pad",
     ]  # fmt: skip
     assert surfaces["pad_b"] == [
         "EXT::substrate::bottom", "EXT::substrate::sidewall", "EXT::vacuum::sidewall", "EXT::vacuum::top",
@@ -221,7 +231,7 @@ def test_route_a_sheet_groups_carry_both_surface_epr_rows(sidecars):
     assert (
         rows["MA::pad::sheet::band=2"]["group"]
         == rows["MS::pad::sheet::band=2"]["group"]
-        == "SHEET::pad::sheet::band=2"
+        == "pad::band=2"
     )
     assert rows["MA::pad::sheet::band=2"]["band"] == 2
     assert rows["MA::pad::sheet::band=2"]["entities"] == ["pad"]
@@ -238,11 +248,7 @@ def test_a_sheet_row_marks_the_side_of_the_two_sided_face_it_integrates(sidecars
     for k in range(4):
         ma, ms = rows[f"MA::pad::sheet::band={k}"], rows[f"MS::pad::sheet::band={k}"]
         assert (ma["side"], ms["side"]) == ("above", "below")
-        assert (
-            ma["shared_face_group"]
-            == ms["shared_face_group"]
-            == f"SHEET::pad::sheet::band={k}"
-        )
+        assert ma["shared_face_group"] == ms["shared_face_group"] == f"pad::band={k}"
     one_sided = [r for n, r in rows.items() if n.startswith("SA::")]
     assert one_sided and all(
         r["side"] is None and r["shared_face_group"] is None for r in one_sided
@@ -263,7 +269,7 @@ def test_route_b_bands_are_separate_top_ma_and_bottom_ms_rows(sidecars):
 def test_route_c_conductor_interiors_are_volume_groups_of_kind_conductor(sidecars):
     """Route c conductor interiors are volume groups of kind conductor."""
     groups = sidecars["pad_c"]["physical_groups"]
-    pad = groups["VOL::pad"]
+    pad = groups["pad"]
     assert (pad["dim"], pad["kind"], pad["net"], pad["entities"]) == (
         3,
         "conductor",
@@ -271,11 +277,11 @@ def test_route_c_conductor_interiors_are_volume_groups_of_kind_conductor(sidecar
         ["pad"],
     )
     assert (
-        groups["VOL::vacuum"]["kind"] == "vacuum"
-        and groups["VOL::substrate"]["kind"] == "dielectric"
+        groups["vacuum"]["kind"] == "vacuum"
+        and groups["substrate"]["kind"] == "dielectric"
     )
     assert (
-        "VOL::pad" not in sidecars["pad_b"]["physical_groups"]
+        "pad" not in sidecars["pad_b"]["physical_groups"]
     )  # Route B excludes the conductor volume
     volumes = sidecars["pad_b"]["volumes"]
     assert [v["emitted"] for v in volumes.values() if v["kind"] == "conductor"] == [
@@ -295,7 +301,11 @@ def test_unions_are_lists_of_primary_groups_and_each_group_is_listed_under_the_t
             n for n, g in side["physical_groups"].items() if g["dim"] == 2
         }
         listed = [g for members in by_type.values() for g in members]
-        sheets = {n for n in surface_groups if n.startswith("SHEET::")}
+        sheets = {
+            n
+            for n in surface_groups
+            if side["physical_groups"][n]["interface_type"] == "SHEET"
+        }
         assert sorted(listed) == sorted([*surface_groups, *sheets, *sheets]), name
         for kind, members in by_type.items():
             assert all(
@@ -313,7 +323,7 @@ def test_unions_are_lists_of_primary_groups_and_each_group_is_listed_under_the_t
 
 def test_net_unions_list_the_exposed_conductor_groups_of_each_route(sidecars):
     """Net unions list the exposed conductor groups of each route."""
-    assert sidecars["pad_a"]["unions"]["nets"]["pad"] == ["SHEET::pad::sheet"]
+    assert sidecars["pad_a"]["unions"]["nets"]["pad"] == ["pad"]
     finite = ["MA::pad::sidewall", "MA::pad::top", "MS::pad::bottom"]
     assert sidecars["pad_b"]["unions"]["nets"]["pad"] == finite
     assert sidecars["pad_c"]["unions"]["nets"]["pad"] == finite
@@ -357,7 +367,7 @@ def test_volume_records_carry_kind_material_aedt_name_and_planned_volume(sidecar
     vol = {
         v["entity"]: v for v in sidecars["pad_b"]["volumes"].values() if v["emitted"]
     }
-    assert vol["vacuum"]["aedt_name"] == "VOL__vacuum" and vol["substrate"][
+    assert vol["vacuum"]["aedt_name"] == "vacuum" and vol["substrate"][
         "volume_um3"
     ] == pytest.approx(9e6)
 
@@ -526,7 +536,7 @@ def palace_style_groups(side):
 def test_palace_can_rebuild_its_group_dict_from_the_sidecar(sidecars):
     """Palace can rebuild its group dict from the sidecar."""
     groups = palace_style_groups(sidecars["pad_b"])
-    assert set(groups["volumes"]) == {"VOL::substrate", "VOL::vacuum"}
+    assert set(groups["volumes"]) == {"substrate", "vacuum"}
     assert {
         "MA::pad::top",
         "MS::pad::bottom",
@@ -568,7 +578,7 @@ def test_aedt_can_rebuild_its_contribution_ledger_from_the_sidecar(sidecars):
 
 def test_aedt_names_keep_only_the_characters_aedt_keeps():
     """Aedt names keep only the characters aedt keeps."""
-    assert sanitise_aedt_name("VOL::chip/air") == "VOL__chip_air"
+    assert sanitise_aedt_name("chip/air") == "chip_air"
     assert sanitise_aedt_name("MA::pad::top::band=2") == "MA__pad__top__band_2"
     assert sanitise_aedt_name("SA::substrate|vacuum") == "SA__substrate_vacuum"
     assert sanitise_aedt_name("unié") == "uni_"
@@ -577,14 +587,12 @@ def test_aedt_names_keep_only_the_characters_aedt_keeps():
 
 def test_colliding_aedt_names_are_told_apart_deterministically_in_tag_order():
     """Colliding aedt names are told apart deterministically in tag order."""
-    names = aedt_names(
-        [("v1", "VOL::a/b"), ("v2", "VOL::a_b"), ("v3", "VOL::a.b"), ("v4", "VOL::c")]
-    )
+    names = aedt_names([("v1", "a/b"), ("v2", "a_b"), ("v3", "a.b"), ("v4", "c")])
     assert names == {
-        "v1": "VOL__a_b",
-        "v2": "VOL__a_b__2",
-        "v3": "VOL__a_b__3",
-        "v4": "VOL__c",
+        "v1": "a_b",
+        "v2": "a_b__2",
+        "v3": "a_b__3",
+        "v4": "c",
     }
     assert len(set(names.values())) == 4
 

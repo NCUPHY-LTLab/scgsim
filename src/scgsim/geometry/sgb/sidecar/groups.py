@@ -20,8 +20,13 @@ from scgsim.geometry.sgb.emission.plan import BrepPlan
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.records.labels import Domain
+from scgsim.geometry.sgb.routes.naming import (
+    SHEET,
+    interface_type_of,
+    net_of_surface,
+    sheet_row_id,
+)
 from scgsim.geometry.sgb.routes.naming import face_kind as naming_face_kind
-from scgsim.geometry.sgb.routes.naming import interface_type, net_of_surface
 
 SURFACE_EPR_TYPES = (
     "MA",
@@ -56,7 +61,7 @@ class SurfaceGroupRecord(TypedDict):
 
 
 class VolumeGroupRecord(TypedDict):
-    """One primary volume group (dimension 3), ``VOL::<entity>``."""
+    """One primary volume group (dimension 3), named by the bare entity id."""
 
     dim: int
     tag: int
@@ -87,13 +92,14 @@ def surface_group_records(
         if group.dim != 2:
             continue
         faces = [topology.faces[plan.face_ids[i]] for i in group.elements]
+        interface = _group_interface_type(group.name, faces)
         records[group.name] = SurfaceGroupRecord(
             dim=2,
             tag=group.tag,
-            interface_type=interface_type(group.name),
+            interface_type=interface,
             ids=[f.id for f in faces],
             native_tags=[face_tag[f.id] for f in faces],
-            entities=_owners(group.name, faces),
+            entities=_owners(interface, faces),
             net=_net(faces),
             face_kind=_group_face_kind(group.name, faces),
             adjacent_domains=_adjacent_domains(faces),
@@ -161,13 +167,13 @@ def surface_epr_rows(
     rows: dict[str, dict[str, Any]] = {}
     for name, record in sorted(surface_groups.items()):
         kind = record["interface_type"]
-        rest = name.split("::", 1)[1]
         band = record["band"]["index"] if record["band"] else None
-        if kind == "SHEET":
+        if kind == SHEET:
             faces = [model.topology.faces[f] for f in record["ids"]]
+            (entity,) = record["entities"]  # a sheet group is the sheet of one Entity
             for row_type, neighbour in (("MA", "vacuum"), ("MS", "dielectric")):
                 side = _sheet_side(faces, neighbour)
-                rows[f"{row_type}::{rest}"] = _row(
+                rows[sheet_row_id(row_type, entity, band)] = _row(
                     name, row_type, record, band, side, name
                 )
         elif kind in SURFACE_EPR_TYPES:
@@ -214,9 +220,19 @@ def _group_face_kind(name: str, faces: list[TopoFace]) -> str:
     return kinds.pop()
 
 
-def _owners(group_name: str, faces: list[TopoFace]) -> list[str]:
+def _group_interface_type(name: str, faces: list[TopoFace]) -> str:
+    """The one interface type of a group, from the structure of its faces (never from the name)."""
+    types = {interface_type_of(f.neg_domain, f.pos_domain, f.owner) for f in faces}
+    found = sorted(t for t in types if t is not None)
+    if len(types) != 1 or len(found) != 1:
+        raise SgbError(
+            f"physical group {name} mixes interface types {sorted(map(str, types))}"
+        )
+    return found[0]
+
+
+def _owners(kind: str, faces: list[TopoFace]) -> list[str]:
     """The Entities a surface belongs to: the conductor, the sheet or port owner, or the solution regions it separates."""
-    kind = interface_type(group_name)
     names: set[str] = set()
     for face in faces:
         if face.owner is not None:

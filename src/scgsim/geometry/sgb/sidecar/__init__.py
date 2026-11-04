@@ -26,12 +26,16 @@ Top-level fields and who uses them
     ``ids``, ``native_tags``, and for surfaces ``interface_type``, ``entities`` (owner ids),
     ``net``, ``face_kind``, ``adjacent_domains`` (solution regions: kind, material),
     ``adjacent_volumes``, ``band`` and ``area_um2``; for volumes ``kind`` (vacuum, dielectric,
-    conductor -- Route C conductor interiors are ``VOL::<entity>`` of kind conductor) and ``material``.
+    conductor -- Route C conductor interiors are the volume group ``<entity>`` of kind conductor) and
+    ``material``.  A volume group, and a Route A conductor sheet group, is named by the bare entity id
+    (the Gmsh Type column gives the dimension); ``interface_type`` of a sheet group is ``SHEET`` -- a
+    field derived from the face structure, not part of the name.
     Palace rebuilds ``groups = {volumes, boundary_surfaces, surface_groups, pec_surfaces,
     port_surfaces}`` from these: ``owner_semantic_ids`` = ``entities``, ``adjacent_solution_volume_ids``
     = ``adjacent_domains``, ``face_kind`` = ``face_kind`` (one per group, and part of its name:
-    ``<kind>::<entity>::<top|bottom|sidewall|sheet|interface>[::band=k]``), ``conductor_component_id`` / ``net_id`` =
-    ``entities`` / ``net``, PEC surfaces = the ``MA``/``MS``/``SHEET`` groups of a conductor.
+    ``<kind>::<entity>::<top|bottom|sidewall|sheet|interface>[::band=k]`` for a prefixed group; a sheet
+    group ``<entity>[::band=k]`` has face kind ``sheet`` without carrying it in the name),
+    ``conductor_component_id`` / ``net_id`` = ``entities`` / ``net``, PEC surfaces = the groups of interface type ``MA``/``MS``/``SHEET`` of a conductor.
 ``unions``
     ``interface_types`` (``MA`` -> groups ...; reports aggregate by interface type; a Route A ``SHEET``
     group is listed under ``SHEET``, ``MA`` and ``MS`` because it carries both rows) and ``nets``
@@ -39,7 +43,8 @@ Top-level fields and who uses them
     never overlapping Gmsh groups.
 ``surface_epr_rows``
     every Surface-EPR row (``MA::pad::top::band=2`` ...) and the group that carries it, with entities and
-    band: Palace's cumulative band selection.  A Route A sheet group carries both its MA and MS row; each
+    band: Palace's cumulative band selection.  A Route A sheet group (``pad::band=2``) carries both its
+    ``MA::pad::sheet::band=2`` and ``MS::pad::sheet::band=2`` row; each
     of those rows has ``shared_face_group`` (the sheet group) and ``side`` (``above``, ``below`` or ``both``),
     so the consumer decides internal-boundary cracking from the row alone.
 ``mesh_hints``

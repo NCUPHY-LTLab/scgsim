@@ -306,7 +306,7 @@ def test_the_step_is_an_assembly_of_named_solids_in_micrometres(exported):
     text = (folder / "m.step").read_text()
     products = re.findall(r"PRODUCT\('([^']*)'", text)
     expected = {v["aedt_name"] for v in sidecar["volumes"].values() if v["emitted"]}
-    assert export.object_names == expected == {"VOL__substrate", "VOL__vacuum"}
+    assert export.object_names == expected == {"substrate", "vacuum"}
     assert set(products) == expected | {"SGB_MODEL"}
     assert export.unit == "UM" and "SI_UNIT(.MICRO.,.METRE.)" in text
     assert "SI_UNIT(.MILLI.,.METRE.)" not in text

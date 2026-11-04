@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from fractions import Fraction
 
 import pytest
@@ -15,13 +16,14 @@ from sgb_scenes import (
     rect_um,
 )
 
-from scgsim.geometry.sgb.errors import OverlapError, RouteError
+from scgsim.geometry.sgb.errors import InputError, OverlapError, RouteError
 from scgsim.geometry.sgb.model import build_conformal_model, build_model_from_catalogue
 from scgsim.geometry.sgb.records.labels import Domain, SheetOwner
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.sgb.routes.naming import (
-    interface_type,
-    surface_epr_rows,
+    check_entity_names,
+    interface_type_of,
+    surface_epr_row_ids,
     surface_group,
     volume_group,
 )
@@ -41,10 +43,8 @@ def test_route_c_emits_every_volume_including_the_conductors(bridge_c):
     assert bridge_c.routed.emitted_volumes == frozenset(topology.volumes)
     groups = bridge_c.routed.groups
     for entity in ("deck", "ground_left", "ground_right", "post_left", "post_right"):
-        assert (
-            groups[f"VOL::{entity}"].dim == 3 and len(groups[f"VOL::{entity}"].ids) == 1
-        )
-    assert {"VOL::substrate", "VOL::vacuum"} <= set(groups)
+        assert groups[entity].dim == 3 and len(groups[entity].ids) == 1
+    assert {"substrate", "vacuum"} <= set(groups)
     total = sum(
         (s.signed_volume for v in topology.volumes.values() for s in v.shells),
         Fraction(0),
@@ -132,8 +132,8 @@ def test_route_c_from_a_real_input_names_the_gds_entities(tmp_path):
     model = build_conformal_model(effective.build_input, effective.representation, "C")
     groups = set(model.routed.groups)
     assert {
-        "VOL::ground_0000",
-        "VOL::pad",
+        "ground_0000",
+        "pad",
         "MA::pad::top",
         "MS::pad::bottom",
         "MA::ground_0000::top",
@@ -181,8 +181,8 @@ def test_a_finite_bump_stands_on_a_thin_film_sheet_in_route_a():
     assert not model.report.failures
     groups = model.routed.groups
     assert {
-        "SHEET::chip/left::sheet",
-        "SHEET::chip/right::sheet",
+        "chip/left",
+        "chip/right",
         "MA::chip/bump::top",
         "PORT::port_sheet",
     } <= set(groups)
@@ -195,7 +195,7 @@ def test_a_finite_bump_stands_on_a_thin_film_sheet_in_route_a():
     assert model.routed.unions["NET::left"] == [
         "MA::chip/bump::sidewall",
         "MA::chip/bump::top",
-        "SHEET::chip/left::sheet",
+        "chip/left",
     ]
     kinds = {
         p.entity_id: p.feature_kind
@@ -244,11 +244,11 @@ def test_thin_film_sheets_build_under_route_a_only():
         effective.build_input, effective.representation, "A"
     )
     assert {
-        "SHEET::chip/left::sheet",
-        "SHEET::chip/right::sheet",
+        "chip/left",
+        "chip/right",
         "PORT::port_sheet",
     } <= set(model_a.routed.groups)
-    assert model_a.routed.unions["NET::left"] == ["SHEET::chip/left::sheet"]
+    assert model_a.routed.unions["NET::left"] == ["chip/left"]
     for route in ("B", "C"):
         with pytest.raises(
             RouteError, match=rf"Route {route} keeps conductors finite.*chip/left"
@@ -265,7 +265,7 @@ def test_a_rectangular_junction_builds_with_a_conformal_port_between_its_termina
     assert not model.report.failures
     groups = model.routed.groups
     assert len(groups["PORT::sheet"].ids) == 1
-    assert {"SHEET::chip/left::sheet", "SHEET::chip/right::sheet"} <= set(groups)
+    assert {"chip/left", "chip/right"} <= set(groups)
     port = model.topology.faces[groups["PORT::sheet"].ids[0]]
     assert (
         port.twice_xy_area == 2 * 32
@@ -297,10 +297,7 @@ def test_seams_between_entities_of_one_net_stay_required_edges(route):
     model = build_model_from_catalogue(catalogue, route)
     groups = model.routed.groups
     if route == "A":
-        assert (
-            len(groups["SHEET::padL::sheet"].ids) == 1
-            and len(groups["SHEET::padR::sheet"].ids) == 1
-        )
+        assert len(groups["padL"].ids) == 1 and len(groups["padR"].ids) == 1
     else:
         assert {
             "MA::padL::top",
@@ -339,13 +336,13 @@ def test_face_lineage_records_the_overlap_share_of_the_entity_that_lost_it():
         adjoining_pads("A", priorities=(1, 2), overlap=2.0), "A"
     )
     topology = model.topology
-    face = topology.faces[model.routed.groups["SHEET::padR::sheet"].ids[0]]
+    face = topology.faces[model.routed.groups["padR"].ids[0]]
     assert face.membership["padR"] == pytest.approx(1.0)
     assert face.membership["padL"] == pytest.approx(
         0.2
     )  # the 2 x 10 um overlap is a fifth of padR's 100 um^2
     assert face.sources == ("padL", "padR")
-    assert topology.faces[model.routed.groups["SHEET::padL::sheet"].ids[0]].membership[
+    assert topology.faces[model.routed.groups["padL"].ids[0]].membership[
         "padL"
     ] == pytest.approx(1.0)
 
@@ -416,14 +413,14 @@ M2 = Domain("conductor", "Al", "N", "chip/q0/arm")
             V,
             SheetOwner("conductor", "chip/q0/pad", "N"),
             (),
-            "SHEET::chip/q0/pad::sheet",
+            "chip/q0/pad",
         ),
         (
             V,
             S,
             SheetOwner("conductor", "chip/q0/pad", "N"),
             (("fam", 1),),
-            "SHEET::chip/q0/pad::sheet::band=1",
+            "chip/q0/pad::band=1",
         ),
         (V, V, SheetOwner("port", "chip/q0/jj"), (("fam", 1),), "PORT::chip/q0/jj"),
         (None, V, None, (), "EXT::air::bottom"),
@@ -434,7 +431,7 @@ M2 = Domain("conductor", "Al", "N", "chip/q0/arm")
 def test_primary_group_names_follow_kind_double_colon_qualified_entity(
     neg, pos, owner, bands, name
 ):
-    """``<kind>::<qualified entity id>::<face kind>[::band=k]``: a face's name from the two sides alone."""
+    """``<kind>::<qualified entity id>::<face kind>[::band=k]``, or the bare entity id of a Route A sheet: a face's name from the two sides alone."""
     assert surface_group(neg, pos, owner, bands) == name
 
 
@@ -449,22 +446,47 @@ def test_a_vertical_face_is_a_sidewall_whatever_its_sides():
 
 
 def test_volume_groups_and_interface_types_and_surface_epr_rows():
-    """VOL names, interface-type prefixes, and the rows a banded Route A sheet carries."""
-    assert volume_group(M) == "VOL::chip/q0/pad"
-    assert interface_type("MA::chip/q0/pad::top::band=2") == "MA"
-    rows = surface_epr_rows(
-        [
-            "SHEET::pad::sheet::band=0",
-            "SHEET::pad::sheet::band=1",
-            "SA::a|b::interface::band=0",
-            "MA::x::top",
-            "EXT::air::top",
-        ]
+    """A volume is its bare entity id; the interface type comes from the structure, never from the name."""
+    assert volume_group(M) == "chip/q0/pad"
+    sheet = SheetOwner("conductor", "pad", "N")
+    assert interface_type_of(M, V, None) == "MA"
+    assert interface_type_of(V, V, sheet) == "SHEET"
+    assert interface_type_of(V, V, SheetOwner("port", "p1")) == "PORT"
+    assert interface_type_of(None, V, None) == "EXT"
+    assert interface_type_of(None, None, None) is None
+    # a banded Route A sheet carries both rows; every other banded group carries its own name
+    assert surface_epr_row_ids("pad::band=1", "SHEET", "pad", 1) == [
+        "MA::pad::sheet::band=1",
+        "MS::pad::sheet::band=1",
+    ]
+    assert surface_epr_row_ids("SA::a|b::interface::band=0", "SA", "", 0) == [
+        "SA::a|b::interface::band=0"
+    ]
+    assert surface_epr_row_ids("pad", "SHEET", "pad", None) == []  # unbanded: no row
+    assert surface_epr_row_ids("PORT::p1", "PORT", "p1", 1) == []
+
+
+@pytest.mark.parametrize(
+    "entity_id",
+    ["MA", "MS", "MM", "SA", "AA", "SS", "EXT", "PORT", "a::b", "chip/MA::x"],
+)
+def test_an_entity_id_that_would_make_a_group_name_ambiguous_is_rejected(entity_id):
+    """An id equal to an interface prefix, or containing ``::``, fails closed with the id in the message."""
+    with pytest.raises(InputError, match="entity id"):
+        check_entity_names(["substrate", entity_id])
+
+
+def test_ordinary_entity_ids_are_accepted():
+    """Qualified ids with slashes, and ids that merely start with a prefix, are fine."""
+    check_entity_names(["chip/left", "MA_pad", "SAx", "ground_0000", "vacuum"])
+
+
+def test_the_model_build_rejects_a_reserved_entity_id():
+    """The check runs on the catalogue, so hand-made prisms and real input alike are covered."""
+    catalogue = pad_in_ground("C")
+    prisms = tuple(
+        replace(p, entity_id="MA") if p.entity_id == "pad" else p
+        for p in catalogue.prisms
     )
-    assert rows == {
-        "MA::pad::sheet::band=0": "SHEET::pad::sheet::band=0",
-        "MS::pad::sheet::band=0": "SHEET::pad::sheet::band=0",
-        "MA::pad::sheet::band=1": "SHEET::pad::sheet::band=1",
-        "MS::pad::sheet::band=1": "SHEET::pad::sheet::band=1",
-        "SA::a|b::interface::band=0": "SA::a|b::interface::band=0",
-    }
+    with pytest.raises(InputError, match="'MA'"):
+        build_model_from_catalogue(PrismCatalogue(catalogue.grid, prisms), "C")

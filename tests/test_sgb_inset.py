@@ -150,20 +150,15 @@ def test_semantic_names_carry_the_band_index_and_unions_list_primary_groups(band
     groups = banded.routed.groups
     for k in range(4):
         assert (
-            f"SHEET::pad::sheet::band={k}" in groups
+            f"pad::band={k}" in groups
             and f"SA::substrate|vacuum::interface::band={k}" in groups
         )
-    assert not any(
-        n.startswith(("MA::pad", "MS::pad", "SHEET::pad::sheet::band=4"))
-        for n in groups
-    )
-    assert "SHEET::pad::sheet" not in groups  # the whole pad sheet is banded
-    assert banded.routed.unions["NET::pad"] == [
-        f"SHEET::pad::sheet::band={k}" for k in range(4)
-    ]
+    assert not any(n.startswith(("MA::pad", "MS::pad", "pad::band=4")) for n in groups)
+    assert "pad" not in groups  # the whole pad sheet is banded
+    assert banded.routed.unions["NET::pad"] == [f"pad::band={k}" for k in range(4)]
     rows = banded.routed.surface_epr_rows
     assert all(
-        rows[f"{kind}::pad::sheet::band={k}"] == f"SHEET::pad::sheet::band={k}"
+        rows[f"{kind}::pad::sheet::band={k}"] == f"pad::band={k}"
         for k in range(4)
         for kind in ("MA", "MS")
     )
@@ -295,9 +290,7 @@ def test_face_membership_is_area_weighted_and_non_exclusive(banded):
     """The deepest band lies wholly inside the pad; overlaps count for every covering entity."""
     faces = banded.topology.faces
     deepest = next(
-        f
-        for f in faces.values()
-        if banded.routed.face_group[f.id] == "SHEET::pad::sheet::band=3"
+        f for f in faces.values() if banded.routed.face_group[f.id] == "pad::band=3"
     )
     assert deepest.membership["pad"] == pytest.approx(1.0)
     assert deepest.membership["substrate"] == pytest.approx(1.0)
@@ -460,16 +453,14 @@ def test_a_refinement_curve_crossing_band_edges_is_split_at_every_crossing(route
     assert pieces == 5
     for face in model.topology.faces.values():
         if face.refinement_edges:
-            assert model.routed.face_group[face.id].startswith(
-                ("SHEET::pad", "MA::pad")
-            )
+            assert model.routed.face_group[face.id].startswith(("pad", "MA::pad"))
 
 
 # --------------------------------------------------------------------------- real inputs and new levels
 
 
 def test_bands_on_a_real_thin_film_sheet_use_the_qualified_entity_id():
-    """Source input through S0/S1: ``SHEET::chip/left::band=k``, and the lineage prefix is the request id."""
+    """Source input through S0/S1: ``chip/left::band=k``, and the lineage prefix is the request id."""
     from sgb_inputs import thin_film_pair  # noqa: PLC0415 -- a fixture used by the real-input tests only
 
     from scgsim.geometry.sgb.model import build_conformal_model  # noqa: PLC0415 -- used by these tests only
@@ -482,11 +473,11 @@ def test_bands_on_a_real_thin_film_sheet_use_the_qualified_entity_id():
         effective.build_input, effective.representation, "A", insets=(request,)
     )
     groups = model.routed.groups
-    assert {f"SHEET::chip/left::sheet::band={k}" for k in range(3)} <= set(groups)
-    assert "SHEET::chip/right::sheet" in groups  # the other Entity is untouched
+    assert {f"chip/left::band={k}" for k in range(3)} <= set(groups)
+    assert "chip/right" in groups  # the other Entity is untouched
     assert (
         model.routed.surface_epr_rows["MA::chip/left::sheet::band=2"]
-        == "SHEET::chip/left::sheet::band=2"
+        == "chip/left::band=2"
     )
     fam = family(model, "bands/left")
     assert all(c.lineage.member.startswith("bands/left/ring") for c in fam.carriers)

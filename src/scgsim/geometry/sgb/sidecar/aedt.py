@@ -15,7 +15,7 @@ AEDT_ALLOWED = re.compile(r"[^A-Za-z0-9_]")
 
 
 def sanitise_aedt_name(name: str) -> str:
-    """``name`` with every character AEDT would drop replaced by ``_`` (``VOL::chip/air`` -> ``VOL__chip_air``)."""
+    """``name`` with every character AEDT would drop replaced by ``_`` (``chip/air`` -> ``chip_air``)."""
     cleaned = AEDT_ALLOWED.sub("_", name)
     return cleaned or "_"
 

@@ -79,11 +79,11 @@ def test_all_invariants_pass(pad_a, pad_b, bridge):
 
 
 def test_route_a_has_two_volumes_and_per_entity_sheet_faces(pad_a):
-    """Route A: sheets are SHEET::<entity>::sheet faces, the port is PORT::<id>, no conductor volume exists."""
+    """Route A: sheets are faces named by the bare entity id, the port is PORT::<id>, no conductor volume exists."""
     groups = pad_a.routed.groups
     assert set(volume_by_name(pad_a)) == {"substrate", "vacuum"}
-    assert len(groups["SHEET::ground::sheet"].ids) == 1
-    assert len(groups["SHEET::pad::sheet"].ids) == 1
+    assert len(groups["ground"].ids) == 1
+    assert len(groups["pad"].ids) == 1
     assert len(groups["PORT::p1"].ids) == 1
     # the gap region and the hole in the pad are the two plain substrate/vacuum interface cells
     assert len(groups["SA::substrate|vacuum::interface"].ids) == 2
@@ -99,8 +99,8 @@ def test_route_b_excludes_conductor_volumes_but_keeps_their_boundary(pad_b):
     assert set(volumes) - emitted == {"ground", "pad"}
     groups = pad_b.routed.groups
     assert not any(
-        name.startswith(("SHEET::", "NET::")) for name in groups
-    )  # unions are not Gmsh groups
+        name.startswith("NET::") or name in ("ground", "pad") for name in groups
+    )  # no sheet groups, and unions are not Gmsh groups
     assert {
         "MA::pad::top",
         "MS::pad::bottom",
@@ -259,8 +259,8 @@ def test_semantic_names_do_not_depend_on_native_state(pad_a):
     """The group names are a function of the labels alone."""
     assert sorted(pad_a.routed.groups) == [
         "EXT::substrate::bottom", "EXT::substrate::sidewall", "EXT::vacuum::sidewall", "EXT::vacuum::top",
-        "PORT::p1", "SA::substrate|vacuum::interface", "SHEET::ground::sheet", "SHEET::pad::sheet",
-        "VOL::substrate", "VOL::vacuum",
+        "PORT::p1", "SA::substrate|vacuum::interface", "ground", "pad",
+        "substrate", "vacuum",
     ]  # fmt: skip
 
 
@@ -356,9 +356,9 @@ def test_no_entity_is_in_two_physical_groups_and_every_emitted_entity_is_in_one(
 
 def test_route_a_net_union_lists_the_entity_sheet_groups(pad_a):
     """Net unions list the primary groups of the Net's exposed surfaces."""
-    assert pad_a.routed.unions["NET::Ground"] == ["SHEET::ground::sheet"]
-    assert pad_a.routed.unions["NET::pad"] == ["SHEET::pad::sheet"]
-    assert pad_a.routed.unions["SHEET"] == ["SHEET::ground::sheet", "SHEET::pad::sheet"]
+    assert pad_a.routed.unions["NET::Ground"] == ["ground"]
+    assert pad_a.routed.unions["NET::pad"] == ["pad"]
+    assert pad_a.routed.unions["SHEET"] == ["ground", "pad"]
     assert (
         pad_a.routed.unions["MA"]
         == pad_a.routed.unions["MS"]

@@ -31,6 +31,7 @@ from scgsim.geometry.sgb.parallel import Runtime
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.sgb.routes.groups import RoutedModel, apply_route
+from scgsim.geometry.sgb.routes.naming import check_entity_names
 from scgsim.geometry.sgb.routes.policy import RoutePolicy, check_route, route_policy
 from scgsim.geometry.sgb.validation.report import ValidationReport
 from scgsim.geometry.sgb.validation.validate import validate_model
@@ -124,6 +125,9 @@ def build_model_from_catalogue(  # noqa: PLR0913 - the catalogue, the route and 
     """
     policy = route_policy(route)
     check_route(policy, catalogue.prisms)
+    check_entity_names(
+        p.entity_id for p in catalogue.prisms if p.material_kind != "port"
+    )
     catalogue = with_cut_families(catalogue, insets, refinements)
     # The pipeline allocates millions of small acyclic objects; the cyclic collector would only
     # re-scan them, so it is paused for the build.

@@ -4,21 +4,30 @@ Owns the primary physical-group names.  Surfaces are attributed **per Entity**, 
 Entity's Surface-EPR contribution is separable; reports aggregate by interface type and
 Net is used only where a backend needs electrical identity.
 
-``<kind>::<qualified entity id>::<face kind>[::band=k]``
+**A bare entity id names the object itself; a name with an interface prefix names a face between two
+things.**  Gmsh's Type column already says whether a group is a volume or a surface, so no prefix
+restates the dimension:
 
-* ``SHEET::<entity>::sheet`` -- a Route A conductor face; both its sides are the metal-air and the
-  metal-substrate surface of that Entity;
+* ``<entity>`` -- a volume (also the interior of a Route C conductor Entity), or, for a Route A
+  conductor sheet, the sheet itself: ``<entity>[::band=k]``, both its sides being the metal-air and the
+  metal-substrate surface of that Entity (it carries no face kind, because it is always a ``sheet``);
 * ``MA::<entity>::<face kind>`` / ``MS::<entity>::<face kind>`` -- a conductor surface against vacuum
   (metal-air) or against a dielectric (metal-substrate); ``MM::<a>|<b>::<face kind>`` between two
   conductor Entities;
 * ``SA::<dielectric>|<vacuum>::<face kind>``, ``AA::<a>|<b>::...``, ``SS::<a>|<b>::...`` -- interfaces
   between solution regions (substrate-air, air-air, substrate-substrate);
 * ``EXT::<domain>::<face kind>`` -- the model boundary;
-* ``PORT::<port sheet id>`` -- a lumped-port sheet (always one sheet, so it carries no face kind);
-* ``VOL::<entity>`` -- a volume (also the interior of a Route C conductor Entity).
+* ``PORT::<port sheet id>`` -- a lumped-port sheet (always one sheet, so it carries no face kind).
 
-**Face kind** (:data:`FACE_KINDS`) is part of the identity, so one primary group never mixes physically
-different interfaces and a consumer can filter by it without reading geometry:
+The interface prefixes stay because they carry the physics: they say which Surface-EPR loss parameters
+apply to the face.  An entity id equal to a prefix (:data:`RESERVED_PREFIXES`), or containing ``::``,
+would make a name ambiguous, so :func:`check_entity_names` rejects it.
+
+The interface type of a face (``MA``, ``MS`` ..., or ``SHEET`` for a Route A conductor sheet) is never
+read back from a name: :func:`interface_type_of` derives it from the domains and the sheet owner.
+
+**Face kind** (:data:`FACE_KINDS`) is part of the identity of a prefixed name, so one primary group never
+mixes physically different interfaces and a consumer can filter by it without reading geometry:
 
 * ``top`` / ``bottom`` -- a horizontal face with a conductor below / above it (the conductor's top or
   bottom); at the model boundary, the top or bottom of the domain;
@@ -28,15 +37,22 @@ different interfaces and a consumer can filter by it without reading geometry:
 
 A face inside an inset band carries ``::band=k`` (the innermost band index of its label);
 a port stays one surface even where bands cut it.  Names never carry native tags.
+
+Surface-EPR rows keep the prefixed form for a sheet: its group ``pad::band=1`` carries the rows
+``MA::pad::sheet::band=1`` and ``MS::pad::sheet::band=1`` (see :func:`sheet_row_id`).
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 
+from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.records.labels import Domain, SheetOwner
 
-INTERFACE_KINDS = ("MA", "MS", "MM", "SA", "AA", "SS", "SHEET", "PORT", "EXT")
+RESERVED_PREFIXES = ("MA", "MS", "MM", "SA", "AA", "SS", "EXT", "PORT")
+"""The interface prefixes of a prefixed group name; no entity id may equal one of them."""
+SHEET = "SHEET"
+"""Interface type of a Route A conductor sheet (a record field and a union key, never part of a group name)."""
 FACE_KINDS = ("top", "bottom", "sidewall", "sheet", "interface")
 """The face kinds a primary surface group name can carry (a port face is ``port`` and is not in a name)."""
 
@@ -58,7 +74,14 @@ def surface_group(  # noqa: PLR0913 - the two sides, the owner, the bands and th
         return None
     if owner is not None and owner.kind == "port":
         return base  # one sheet: no face kind, no band
+    if owner is not None:
+        # a conductor sheet: the entity id; its face kind is always sheet
+        return _banded(base, bands)
     name = f"{base}::{face_kind(neg, pos, owner, vertical=vertical)}"
+    return _banded(name, bands)
+
+
+def _banded(name: str, bands: tuple[tuple[str, int], ...]) -> str:
     return f"{name}::band={bands[0][1]}" if bands else name
 
 
@@ -88,7 +111,7 @@ def _base_group(
     neg: Domain | None, pos: Domain | None, owner: SheetOwner | None
 ) -> str | None:
     if owner is not None:
-        return f"PORT::{owner.name}" if owner.kind == "port" else f"SHEET::{owner.name}"
+        return f"PORT::{owner.name}" if owner.kind == "port" else owner.name
     if neg is None:
         return None if pos is None else f"EXT::{pos.name}"
     if pos is None:
@@ -119,13 +142,47 @@ def _solution_interface(a: Domain, b: Domain) -> str:
 
 
 def volume_group(domain: Domain) -> str:
-    """The primary group of a volume: ``VOL::<entity>``."""
-    return f"VOL::{domain.name}"
+    """The primary group of a volume: the entity id itself."""
+    return domain.name
 
 
-def interface_type(group: str) -> str:
-    """The interface-type prefix of a primary group name (``MA`` for ``MA::pad::top::band=1``)."""
-    return group.split("::", 1)[0]
+def interface_type_of(
+    neg: Domain | None, pos: Domain | None, owner: SheetOwner | None
+) -> str | None:
+    """The interface type of a face (``MA``, ``MS`` ... ``PORT``, ``EXT``, or ``SHEET``), from its structure.
+
+    A Route A conductor sheet is ``SHEET`` (it carries both the metal-air and the metal-substrate row);
+    a face with no name is ``None``.  Nothing is parsed from a group name.
+    """
+    if owner is not None:
+        return "PORT" if owner.kind == "port" else SHEET
+    base = _base_group(neg, pos, owner)
+    return None if base is None else base.split("::", 1)[0]
+
+
+def sheet_row_id(row_type: str, entity: str, band: int | None) -> str:
+    """The Surface-EPR row of a Route A sheet: ``MA::<entity>::sheet[::band=k]`` or the ``MS`` one."""
+    row = f"{row_type}::{entity}::sheet"
+    return row if band is None else f"{row}::band={band}"
+
+
+def check_entity_names(entity_ids: Iterable[str]) -> None:
+    """Fail closed on an entity id that would make a group name ambiguous.
+
+    A bare entity id names the object itself and a prefixed name a face, so an id equal to an
+    interface prefix, or one containing the ``::`` separator, is rejected.
+    """
+    for entity_id in sorted(set(entity_ids)):
+        if entity_id in RESERVED_PREFIXES:
+            raise InputError(
+                f"entity id {entity_id!r} is an interface prefix ({', '.join(RESERVED_PREFIXES)}), "
+                "so its physical-group name would be ambiguous; rename the entity"
+            )
+        if "::" in entity_id:
+            raise InputError(
+                f"entity id {entity_id!r} contains '::', the separator of physical-group names; "
+                "rename the entity"
+            )
 
 
 def net_of_surface(
@@ -140,21 +197,16 @@ def net_of_surface(
     return conductors[0].net if len(conductors) == 1 else None
 
 
-def surface_epr_rows(group_names: Iterable[str]) -> dict[str, str]:
-    """Surface-EPR row -> the primary group that carries it, for every banded group.
+def surface_epr_row_ids(
+    group: str, interface: str, entity: str, band: int | None
+) -> list[str]:
+    """The Surface-EPR rows a banded group carries, from facts the caller already has (never from the name).
 
-    A Route A sheet group (``SHEET::<entity>::sheet::band=k``) carries both the
-    ``MA::<entity>::sheet::band=k`` and the ``MS::<entity>::sheet::band=k`` row; every other banded
-    group (``MA``, ``MS``, ``SA``) carries its own row.
+    A Route A sheet group carries both the ``MA`` and the ``MS`` row of its Entity; every other banded
+    group carries its own name as its row; a port carries none.
     """
-    rows: dict[str, str] = {}
-    for name in sorted(group_names):
-        if "::band=" not in name:
-            continue
-        kind, rest = name.split("::", 1)
-        if kind == "SHEET":
-            rows[f"MA::{rest}"] = name
-            rows[f"MS::{rest}"] = name
-        else:
-            rows[name] = name
-    return rows
+    if band is None or interface == "PORT":
+        return []
+    if interface == SHEET:
+        return [sheet_row_id("MA", entity, band), sheet_row_id("MS", entity, band)]
+    return [group]

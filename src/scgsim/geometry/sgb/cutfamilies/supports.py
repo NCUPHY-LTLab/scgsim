@@ -38,7 +38,7 @@ from scgsim.geometry.sgb.records.grid import Grid, exact_z
 from scgsim.geometry.sgb.records.labels import LevelLabel
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.sgb.records.support import SupportRegion
-from scgsim.geometry.sgb.routes.naming import interface_type, surface_group
+from scgsim.geometry.sgb.routes.naming import interface_type_of
 
 
 @dataclass(frozen=True)
@@ -215,10 +215,10 @@ def _check_interface(request: InsetRequest, layer: Layer, selected: set[int]) ->
             f"inset request {request.request_id!r}: unknown interface type {request.interface!r}"
         )
     found = {
-        interface_type(name)
+        kind
         for f in selected
         if (
-            name := surface_group(
+            kind := interface_type_of(
                 layer.labels[f].below, layer.labels[f].above, layer.labels[f].sheet
             )
         )

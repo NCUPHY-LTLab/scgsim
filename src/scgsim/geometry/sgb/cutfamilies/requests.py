@@ -13,7 +13,7 @@ Inset margins
 
 * ``ConductorSurface(entity_id, side)`` -- a face of one conductor Entity.  ``side="sheet"`` is the face
   of a sheet conductor (a Route A sheet: one face carrying both the metal-air and the metal-substrate
-  surface, group ``SHEET::<entity>::sheet[::band=k]``); ``"top"`` and ``"bottom"`` are the faces at the
+  surface, group ``<entity>[::band=k]``, interface type ``SHEET``); ``"top"`` and ``"bottom"`` are the faces at the
   upper and lower Z of a finite conductor (groups ``MA::<entity>::<face kind>[::band=k]`` against vacuum
   and ``MS::<entity>::<face kind>[::band=k]`` against a dielectric).  Sidewall bands are not part of version 1.
 * ``SolutionInterface(first_entity_id, second_entity_id)`` -- the interface between two solution regions
