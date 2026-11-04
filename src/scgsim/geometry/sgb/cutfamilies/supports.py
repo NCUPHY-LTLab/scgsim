@@ -11,10 +11,16 @@ whose coplanar neighbour, across the edge, is an exposed interface between two n
 with at least one dielectric (an SA or SS surface).  The Surface-EPR correction factor of a band comes from the
 metal-gap-metal cross-section, so an edge with no gap before it -- a conductor edge on the die or substrate
 outer edge, an edge shared with another conductor, an edge facing only vacuum -- has no meaningful band and is
-not an origin.  A conductor face is measured from the gap edges of its footprint, taken on the plane the
-conductor is attached to (its sheet plane, or the bottom of a finite body; the top face has the same
-footprint).  A solution interface is measured from the gap edges on its own boundary.  A support with no gap
+not an origin.  A solution interface is measured from the gap edges on its own boundary.  A support with no gap
 edge fails closed.
+
+A conductor face is measured from the gap edges of its footprint on the plane the conductor is attached to (its
+sheet plane, or the bottom of a finite body).  On that plane the face is the support itself, and the physical
+pre-pass has already cut its boundary wherever the cell across it changes, so each boundary half-edge is an
+origin or not as a whole.  The top face of a finite conductor lies on another plane: each of its boundary edges
+is cut where a gap edge of the attachment plane that lies along the same source edge begins or ends
+(``cutfamilies.gap_intervals``), and only the pieces a gap edge covers are origins.  A source edge that faces a
+gap along part of its length is thus an origin along that part only.
 
 Arc edges of the boundary are expressed on the exact circle of their source arc (centre and radius of the
 carrier) through the snapped end points, so offsets stay concentric with the source circle.
@@ -29,6 +35,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from fractions import Fraction
 
+from scgsim.geometry.sgb.cutfamilies.gap_intervals import (
+    ArcSpan,
+    LineSpan,
+    Piece,
+    Span,
+    split_at_gaps,
+)
 from scgsim.geometry.sgb.cutfamilies.requests import (
     INTERFACE_TYPES,
     ConductorSurface,
@@ -85,9 +98,9 @@ def _resolve(
     layer, selected = _select_cells(request, catalogue, labelled)
     if request.interface is not None:
         _check_interface(request, layer, selected)
-    is_origin = _origin_test(request, catalogue, labelled, layer)
+    pieces_of = _origin_pieces(request, catalogue, labelled, layer)
     rings, origin_mask = _boundary_rings(
-        request.request_id, layer, selected, labelled, is_origin
+        request.request_id, layer, selected, labelled, pieces_of
     )
     if not any(any(ring) for ring in origin_mask):
         raise InputError(
@@ -110,22 +123,35 @@ def _describe(support: ConductorSurface | SolutionInterface) -> str:
 # --------------------------------------------------------------------------- gap edges
 
 
-def _origin_test(
+def _origin_pieces(
     request: InsetRequest,
     catalogue: PrismCatalogue,
     labelled: LabelledArrangements,
     layer: Layer,
-) -> Callable[[int], bool]:
-    """Whether a boundary half-edge of the support face is a distance origin (a gap edge)."""
+) -> Callable[[int], list[Piece]]:
+    """The pieces of a boundary half-edge of the support face, each saying whether it is a distance origin (a gap edge)."""
     arr = layer.arr
+
+    def whole(h: int, *, origin: bool) -> list[Piece]:
+        return [Piece(arr.origin(h), arr.target(h), origin)]
+
     if isinstance(request.support, SolutionInterface):
-        return lambda h: (
-            _is_exposed_dielectric(layer.labels[arr.he_face[h]])
-            and _is_conductor_cell(layer.labels[arr.he_face[h ^ 1]])
+        return lambda h: whole(
+            h,
+            origin=_is_exposed_dielectric(layer.labels[arr.he_face[h]])
+            and _is_conductor_cell(layer.labels[arr.he_face[h ^ 1]]),
         )
-    attach = labelled.level_layers[_attach_level(request.support, catalogue, labelled)]
-    gap_sources = _gap_edge_sources(attach)
-    return lambda h: not gap_sources.isdisjoint(layer.edge_sources[h >> 1])
+    if request.support.side == "top":
+        attach = labelled.level_layers[
+            _attach_level(request.support, catalogue, labelled)
+        ]
+        gaps = _gap_edges_by_source(attach, labelled)
+        return lambda h: _pieces_along_gaps(layer, h, labelled, gaps)
+    # The support is on its own plane, whose arrangement is cut wherever the cell across a boundary edge
+    # changes: a boundary edge is a gap edge as a whole, or not at all.
+    return lambda h: whole(
+        h, origin=_is_exposed_dielectric(layer.labels[arr.he_face[h ^ 1]])
+    )
 
 
 def _attach_level(
@@ -136,20 +162,64 @@ def _attach_level(
     return labelled.levels.levels.index(prism.z0)
 
 
-def _gap_edge_sources(layer: Layer) -> frozenset[str]:
-    """The source edges of a level that have a conductor on one side and an exposed dielectric surface on the other."""
+def _gap_edges_by_source(
+    layer: Layer, labelled: LabelledArrangements
+) -> dict[str, list[Span]]:
+    """The gap edges of a level, each travelled with its conductor on the left, by source edge.
+
+    A gap edge has a conductor on one side and an exposed dielectric surface on the other.
+    """
     arr = layer.arr
-    sources: set[str] = set()
+    by_source: dict[str, list[Span]] = {}
     for edge in range(len(arr.edges)):
-        sides = (
-            layer.labels[arr.he_face[2 * edge]],
-            layer.labels[arr.he_face[2 * edge + 1]],
-        )
-        if (_is_conductor_cell(sides[0]) and _is_exposed_dielectric(sides[1])) or (
-            _is_conductor_cell(sides[1]) and _is_exposed_dielectric(sides[0])
-        ):
-            sources.update(layer.edge_sources[edge])
-    return frozenset(sources)
+        for h in (2 * edge, 2 * edge + 1):
+            if _is_conductor_cell(
+                layer.labels[arr.he_face[h]]
+            ) and _is_exposed_dielectric(layer.labels[arr.he_face[h ^ 1]]):
+                span = _span_of(layer, h, labelled)
+                for source in layer.edge_sources[edge]:
+                    by_source.setdefault(source, []).append(span)
+    return by_source
+
+
+def _pieces_along_gaps(
+    layer: Layer,
+    half_edge: int,
+    labelled: LabelledArrangements,
+    gaps: dict[str, list[Span]],
+) -> list[Piece]:
+    """A boundary half-edge cut at the gap edges of another level along the same source edges."""
+    along = [
+        gap
+        for source in layer.edge_sources[half_edge >> 1]
+        for gap in gaps.get(source, ())
+    ]
+    return split_at_gaps(_span_of(layer, half_edge, labelled), along)
+
+
+def _span_of(layer: Layer, half_edge: int, labelled: LabelledArrangements) -> Span:
+    """A half-edge as a stretch of its carrier: a straight edge, or an arc about the centre of its source circle."""
+    arr = layer.arr
+    start, end = arr.origin(half_edge), arr.target(half_edge)
+    curve = layer.edge_curve[half_edge >> 1]
+    if curve is None:
+        return LineSpan(start, end)
+    root = _root_arc(layer, half_edge, labelled)
+    return ArcSpan(root.centre, _is_ccw(curve.ccw, half_edge), start, end)
+
+
+def _root_arc(
+    layer: Layer, half_edge: int, labelled: LabelledArrangements
+) -> ArcCarrier:
+    """The source arc whose exact circle an arc half-edge lies on."""
+    carrier_id = sorted(layer.arr.edges[half_edge >> 1].carriers)[0]
+    arc = labelled.arcs[carrier_id]
+    return labelled.arcs.get(arc.root_id, arc)
+
+
+def _is_ccw(edge_ccw: bool, half_edge: int) -> bool:
+    """Sense of travel of a half-edge along an arc edge that runs counter-clockwise (or not) from its start to its end."""
+    return edge_ccw if half_edge % 2 == 0 else not edge_ccw
 
 
 def _is_conductor_cell(label: LevelLabel | None) -> bool:
@@ -340,9 +410,12 @@ def _boundary_rings(
     layer: Layer,
     selected: set[int],
     labelled: LabelledArrangements,
-    is_origin: Callable[[int], bool],
+    pieces_of: Callable[[int], list[Piece]],
 ) -> tuple[tuple[tuple[RingPrimitive, ...], ...], tuple[tuple[bool, ...], ...]]:
-    """The boundary rings of the selected cells, and per primitive whether it is a distance origin."""
+    """The boundary rings of the selected cells, and per primitive whether it is a distance origin.
+
+    A boundary half-edge becomes one primitive, or several where it is a gap edge along part of its length.
+    """
     arr = layer.arr
     next_half_edge: dict[int, int] = {}
     for cycle in arr.cycles:
@@ -371,14 +444,17 @@ def _boundary_rings(
             h = g
         rings.append(_from_smallest_vertex(arr, ring))
     rings.sort(key=lambda ring: (arr.origin(ring[0]), ring[0]))
+    pieces = [[(h, piece) for h in ring for piece in pieces_of(h)] for ring in rings]
     primitives = tuple(
         tuple(
-            _primitive(f"{request_id}/ring{ri}", k, layer, h, labelled)
-            for k, h in enumerate(ring)
+            _primitive(f"{request_id}/ring{ri}", k, layer, h, piece, labelled)
+            for k, (h, piece) in enumerate(ring_pieces)
         )
-        for ri, ring in enumerate(rings)
+        for ri, ring_pieces in enumerate(pieces)
     )
-    origin_mask = tuple(tuple(is_origin(h) for h in ring) for ring in rings)
+    origin_mask = tuple(
+        tuple(piece.faces_gap for _, piece in ring_pieces) for ring_pieces in pieces
+    )
     return primitives, origin_mask
 
 
@@ -387,31 +463,29 @@ def _from_smallest_vertex(arr, ring: list[int]) -> list[int]:  # noqa: ANN001 - 
     return ring[first:] + ring[:first]
 
 
-def _primitive(
+def _primitive(  # noqa: PLR0913 - a primitive is a ring position, a half-edge and the piece of it
     ring_id: str,
     index: int,
     layer: Layer,
     half_edge: int,
+    piece: Piece,
     labelled: LabelledArrangements,
 ) -> RingPrimitive:
-    """A boundary half-edge as a straight edge or an arc on the exact circle of its source arc.
+    """A piece of a boundary half-edge as a straight edge or an arc on the exact circle of its source arc.
 
     ``ring_id`` is ``<support>/ring<r>``; the primitive's lineage member is ``<ring_id>/edge<index>``.
     """
-    arr = layer.arr
-    a, b = arr.origin(half_edge), arr.target(half_edge)
     curve = layer.edge_curve[half_edge >> 1]
+    a, b = piece.start, piece.end
     if curve is None:
         return LineEdge(a, b, index)
-    carrier_id = sorted(arr.edges[half_edge >> 1].carriers)[0]
-    arc = labelled.arcs[carrier_id]
-    root = labelled.arcs.get(arc.root_id, arc)
+    root = _root_arc(layer, half_edge, labelled)
     member = f"{ring_id}/edge{index}"
     return ArcCarrier(
         member,
         root.centre,
         root.radius,
-        curve.ccw if half_edge % 2 == 0 else not curve.ccw,
+        _is_ccw(curve.ccw, half_edge),
         (Fraction(a[0]), Fraction(a[1])),
         (Fraction(b[0]), Fraction(b[1])),
         Lineage(
