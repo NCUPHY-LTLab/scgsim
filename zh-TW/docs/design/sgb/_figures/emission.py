@@ -2,7 +2,7 @@
 
 Run (from anywhere)::
 
-    /home/ili/Githubs/SCQ_Design/packages/scgsim/.venv/bin/python docs/design/sgb/_figures/emission.py
+    .venv/bin/python zh-TW/docs/design/sgb/_figures/emission.py
 
 Everything is computed from the read-only prototype (``experiments/sgb-redesign/prototype``): the E3 outputs
 under ``outputs/e3_brep/`` (``timing.json``, ``sidecar_timing.json``, per-case ``validation.json`` /

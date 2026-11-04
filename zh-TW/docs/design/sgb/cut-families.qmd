@@ -9,7 +9,7 @@ scgsim-id: "docs/design/sgb/cut-families"
 
 SGB 中分割一個表面的方式，都共用同一個機制：**把曲線放進 arrangement，再由 labelling 決定這些曲線兩側的 cell 意味著什麼、哪些 edge 要保留**。材料邊界、port、inset band、refinement curve 都是如此。但它們不是每一種都需要同一種 record：有些分割直接來自 prism 的 footprint 與 label，不需要任何額外紀錄；只有無法從 prism 推出的特徵，才需要明確的 `CurveFamilyRecord`。本頁先分清這三類，再說明 family record、兩種 edge policy、band 距離的 distance-origin 規則、新增 family 的做法，以及曲線何時可以 embed 而不必成為 edge。
 
-[Label、required edge 與 dissolution](labels-and-dissolution.qmd) 是本頁的基礎；第一個完整的使用者是 [inset imprint](inset-imprint.qmd)。
+[Label、required edge 與 dissolution](labels-and-dissolution.qmd) 是本頁的基礎；第一個完整的使用者是 [inset imprint](inset-imprint.qmd)。production（`scgsim.geometry.sgb.cutfamilies`）以兩種有型別的請求產生 family：`InsetRequest`（inset band，support 是 `ConductorSurface` 或 `SolutionInterface`）與 `RefinementRequest`（refinement curve）；請求的欄位見[使用契約](consumer-contract.qmd#requests)。下面執行範例中的 window family（`partition` role）是原型為了展示 `required` policy 加入的，production 的請求 API 沒有它。
 
 ## 執行範例的觀點
 
@@ -35,7 +35,7 @@ window 與 refinement curve 是在**完全不修改 pipeline** 的情況下加�
 - **Band** 緊貼 physical boundary，包括圓角與 hole 周圍；window 與 port 不會移動它們（見下方 distance-origin 規則）。
 - 紫色的 **refinement curve** 穿過 band 與 pad，但沒有切開任何 cell。它在碰到的 required edge 處被切成 16 段，每一段屬於包含它的 face。
 
-各個 family 單獨加入時的貢獻（計算結果；prototype 對每一種組合從頭建構）：
+各個 family 單獨加入時的貢獻（原型計算；原型對每一種組合從頭建構，group 名稱是原型的 per-Net 形式）：
 
 ::: {.askr-table-compact .askr-table-numeric}
 | 存在的 family | $z=0$ 的 cell | $z=0$ 的 edge | 模型 face | Face group | Embedded curve 片段 |
@@ -47,7 +47,7 @@ window 與 refinement curve 是在**完全不修改 pipeline** 的情況下加�
 | 全部 family | 25 | 168 | 35 | 13 | 16 |
 :::
 
-window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它切開的 cell 保有原來的 label，所以 `SA::substrate|vacuum::band=2` 與 `SA::substrate|vacuum::band=3` 這兩個 group 各多一個 face（2 變 3、1 變 2）。refinement curve 沒有改變任何 cell、edge 或 face 的數量；它只增加 embedded curve 片段。band 讓 face group 從 6 增為 13，因為每個 band 都是自己的 group（Route A 中 pad 的 band 是 `SHEET::pad::band=k`，共 7 個 face）。
+window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它切開的 cell 保有原來的 label，所以 <code>SA::substrate&#124;vacuum::interface::band=2</code> 與 <code>SA::substrate&#124;vacuum::interface::band=3</code>（原型的名稱無 face kind）這兩個 group 各多一個 face（2 變 3、1 變 2）。refinement curve 沒有改變任何 cell、edge 或 face 的數量；它只增加 embedded curve 片段。band 讓 face group 從 6 增為 13，因為每個 band 都是自己的 group（Route A 中 pad 的 band 在原型是 `SHEET::pad::band=k`，production 是 `SHEET::pad::sheet::band=k`，共 7 個 face）。
 
 ## 三類分割
 
@@ -57,7 +57,7 @@ window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它�
 | 類別 | 做法 | 例子 |
 |---|---|---|
 | **(a) 共用的機制** | 曲線進入 arrangement；labelling 與 dissolution 決定 edge 的去留 | 所有分割 |
-| **(b) 不需要 record，由 prism 的 footprint 與 label 自然產生** | 來源 prism 的邊界曲線本來就在 arrangement 中；兩側 label 不同時，edge 就是 required | 材料邊界、contact cap（prism 重疊處因 label 不同而被切開）；prototype 的 port 是一個 sheet prism，也屬於這一類 |
+| **(b) 不需要 record，由 prism 的 footprint 與 label 自然產生** | 來源 prism 的邊界曲線本來就在 arrangement 中；兩側 label 不同時，edge 就是 required | 材料邊界、contact cap（prism 重疊處因 label 不同而被切開）；port 是一個 sheet prism（帶 `PortIdentity`），也屬於這一類 |
 | **(c) 需要明確的 `CurveFamilyRecord`** | 曲線不是任何 prism 的邊界，必須由 generator 產生並附上 edge policy | Surface EPR inset band、refinement curve，以及來源中沒有對應 prism 的明確 port footprint |
 :::
 
@@ -65,33 +65,33 @@ window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它�
 
 ## Family record
 
-**Cut family** 是一個不可變的 record，說的是：這些曲線，帶著這種意義，作用於這些 level，使用這個 edge policy。brief 的六個欄位與 prototype 的 record 對應如下。
+**Cut family** 是一個不可變的 record，說的是：這些曲線，帶著這種意義，作用於這些 level，使用這個 edge policy。brief 的六個欄位與 production 的 record 對應如下。
 
 ::: {.askr-table-compact}
-| Brief 欄位 | Prototype 欄位（`CurveFamilyRecord`） | 意義 |
+| Brief 欄位 | Production 欄位（`CurveFamilyRecord`） | 意義 |
 |---|---|---|
 | `family_id` | `family_id` | 名稱；每個成員 carrier id 的前綴（`band_pad_top/ring0/edge8@m100.0`、`window/0`） |
-| `role` | `role` | family 的用途：`inset_band`、`partition`、`refinement`；僅作描述，供報告與 lineage 使用 |
+| `role` | `role` | family 的用途：請求 API 產生 `inset_band` 與 `refinement`；僅作描述，供報告與 lineage 使用 |
 | generator | `carriers`、`arcs` | 曲線本身，由來源的函式在 arrangement 之前產生（offset、多邊形、使用者清單）；直線與圓弧 |
-| target selector | `target_levels` | 其 arrangement 會接收這些曲線的 level（目前由呼叫者給定 Z 值清單） |
+| target selector | `target_levels` | 其 arrangement 會接收這些曲線的 level；由請求解析出來（見下方 Target） |
 | edge policy | `edge_policy` | `required` 或 `refinement_only`；arrangement 各階段唯一讀取的欄位 |
 | distance origin | `support` | 對 offset family 而言，是產生這些曲線所依據的 support region，其 physical boundary 即距離的起點 |
 :::
 
 每個成員 carrier 都有 lineage record（family id 與成員名稱）；inset 的直線成員保留它的產生 primitive（`<support>/ring<r>/edge<k>`），和圓弧成員一樣。所以存活下來的 edge 永遠可以追溯到切出它的 family（[Identity](identity.qmd)）。
 
-目標 Z 若沒有任何 prism 定義，family 會加入該 level：它是一般的 level，active set 沒有任何變化（prototype 已實作這一點，目前沒有專屬的測試）。
+目標 Z 若沒有任何 prism 定義，family 會加入該 level：它是一般的 level，active set 沒有任何變化（production 已實作並有專屬的測試）。
 
 ### 各種分割與它們的來源
 
 ::: {.askr-table-compact}
-| Family | Generator | Target | Edge policy | 在 prototype 中 |
+| Family | Generator | Target | Edge policy | 在 production 中 |
 |---|---|---|---|---|
 | physical boundary | prism footprint | 各 prism active 的 level 與 slab | label 不同時 required | 有（即 arrangement 本身） |
-| lumped-port footprint | port sheet 的多邊形 | 它所在的平面 | required | 有，以 port prism（一個 sheet）；因為其 owner 與鄰居不同而為 required |
+| lumped-port footprint | port sheet 的多邊形 | 它所在的平面 | required | 有，以 port prism（一個 sheet）；因為其 owner 與鄰居不同而為 required；Route A 的 gap band 會把它切成多個 face，Route B 與 C 的 port 在 mid-plane，不被 band 切開 |
 | contact cap | prism 的重疊（自動） | 接觸的 level | label 不同時 required | 由 label 自然產生；沒有 family record |
-| Surface EPR inset band | 對 physical support region 以 margin $m_1 < \dots < m_k$ 做 offset | 選定的語意表面 | required；band 索引成為 label 的一部分 | 有（`inset_band`） |
-| mesh refinement curve | 使用者或自動 | 任何表面 | `refinement_only` | 有（本頁範例） |
+| Surface EPR inset band | 對 physical support region 以 margin $m_1 < \dots < m_k$ 做 offset | 選定的語意表面 | required；band 索引成為 label 的一部分 | 有（`InsetRequest`，role `inset_band`） |
+| mesh refinement curve | 使用者或自動 | 任何表面 | `refinement_only` | 有（`RefinementRequest`） |
 :::
 
 **Tile seam 不是 family。** 以 pixel 之間的切線做 tiling 時，沒有任何 seam 幾何進入 arrangement（[平行化推導](parallelism.qmd)），所以不需要為它設一種 edge policy；`dissolve` 這個 edge policy 因此已移除，`CurveFamilyRecord` 拒絕 `required` 與 `refinement_only` 以外的任何 policy（以 `dissolve` 建構會得到 `ValueError: t: unknown edge policy 'dissolve'`，由 script 產生）。
@@ -113,13 +113,13 @@ policy 決定 arrangement 在 **labelling 之後**，如何處理帶有該 famil
 
 family 指名它作用的 level。只有這些 level 的 arrangement 會接收曲線，所以曲線不會切開它原本不打算切的表面（[分層模型](layered-model.qmd)說明了為什麼 level 在這個意義上是局部的）。inset band 在 Route A 中以 sheet 平面為目標；在 Route B 中，同一個 band family 會對金屬的頂面（metal-vacuum 表面）與底面（metal-substrate 表面）各產生一次，是兩個獨立的 family。
 
-prototype 接受明確的 Z 值清單。依語意表面選取（例如「Net `pad` 的每個 metal-vacuum 表面」）是設計意圖，尚未實作；那是在 family 產生之前，把 selector 解析成 Z 值與 support 的一個薄薄的層。
+原型接受明確的 Z 值清單。production 依語意表面選取：`ConductorSurface(entity, side)` 選出某個導體 Entity 的 sheet、頂面或底面，`SolutionInterface(first, second)` 選出兩個 solution region 之間沒有導體的介面；在 family 產生之前，一個物理 pre-pass 把請求解析成 Z 值與 support 面，找不到對應的 cell 時 build 失敗（`interface` 欄位還可宣告預期的 interface 種類）。
 
 ## Distance-origin 規則
 
 inset 曲線由 support region 的 **physical boundary** 產生，在 arrangement 之前、任何分割之前就已算好。其他 family 產生的 seam（port、contact cap、其他 band，以及本頁的 window 與 refinement curve）永遠不是距離的起點。這修正了 solver 端 mask 的缺陷：mask 從已 mesh 表面的每條 edge 量距離，所以 port 或 seam 碰到 band 的地方，band 就被縮短。
 
-這條規則是 generator 的性質，所以由建構保證：generator 收到的是 support region 與 margin，對其他 family 一無所知。計算驗證：無論有沒有 window 與 refinement curve，範例中每個 band 的精確面積都完全相同（最大差異 $0.0$ µm²）；prototype 的 port 不變性檢查（`outputs/inset/port_invariance.json`）對 port 得到同樣的結論（family 完全相同；band 面積最大差異 $6 \times 10^{-8}$ grid unit²）。
+這條規則是 generator 的性質，所以由建構保證：generator 收到的是 support region 與 margin，對其他 family 一無所知。計算驗證：無論有沒有 window 與 refinement curve，範例中每個 band 的精確面積都完全相同（最大差異 $0.0$ µm²）；原型的 port 不變性檢查（`outputs/inset/port_invariance.json`）對 port 得到同樣的結論（family 完全相同；band 面積最大差異 $6 \times 10^{-8}$ grid unit²）。
 
 ## Family 可交換
 
@@ -187,9 +187,9 @@ flowchart TD
 - `required` 切開 cell，`refinement_only` embed 曲線；沒有 `dissolve`，tile seam 不是 family。
 - band 只從 physical boundary 量距離；其他 family 永遠不會移動它們。
 - 新的分割是一個 generator、一個 target 與一個 policy；沒有新的程式路徑。
-- 只有 dangling 的 refinement curve 與 Route B 的 port 可以被 embed；其他都是 edge。
+- 只有 dangling 的 refinement curve 與 Route B、C 的 port 可以被 embed；其他都是 edge。
 - 下一步：不同 family 的近乎重合曲線如何被回報，見 [Sliver](slivers.qmd)。
 
 ## 補充：重現資料
 
-本頁的圖與數字由 `zh-TW/docs/design/sgb/_figures/families.py` 在 `experiments/sgb-redesign/prototype` 的 prototype 上產生，數字取自 `figures/families-numbers.json`。Brief 對應第 4–6 節與第 14 節（policy、family、inset、refinement、target level）；prototype 模組為 `records`、`layers`、`dissolve`、`inset`、`emit`。
+本頁的圖與數字由 `zh-TW/docs/design/sgb/_figures/families.py` 在 `experiments/sgb-redesign/prototype` 的 prototype 上產生（原型計算），數字取自 `figures/families-numbers.json`。Brief 對應第 4–6 節與第 14 節（policy、family、inset、refinement、target level）；production 模組為 `records/families`、`cutfamilies`（`requests`、`supports`、`inset`、`generate`）、`labelling/dissolve`；測試 `tests/test_sgb_inset.py`。

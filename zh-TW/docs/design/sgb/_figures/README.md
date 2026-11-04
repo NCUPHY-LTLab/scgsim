@@ -66,3 +66,19 @@ The page `pipeline-reference.qmd` and `decisions.qmd` have no figures; their num
 | `validation.py` | `validation-shell.html/.svg`, `validation-tampered-shell-report.json`, `validation-numbers.json` | the vacuum shell without its top face and the edges it now uses once; the full validation report of that model; eight deliberate defects and the checks that fail for each; the two errors that stop a build before validation |
 
 All six rebuild models with the prototype (`build()`), take a few seconds each, and never edit the prototype.
+
+## Consumer contract (`consumer-contract.qmd`, `consumer-mapping.qmd`)
+
+| Script | Writes | Shows |
+|---|---|---|
+| `consumer_contract.py` | `consumer-excerpt-{head,groups,unions,embeds,body,routea,routec}.md`, `consumer-palace-rebuild.md`, `consumer-aedt-rows-table.md`, `consumer-run-table.md`, `consumer-files-table.md` | real excerpts of the production sidecar `scgsim.sgb.sidecar.v1` of a tiny model (Routes A, B, C), the Palace group dict rebuilt by the sidecar test's own `palace_style_groups`, the AEDT rows per group, the result of `verify_loaded` / `apply_sidecar_embeds` / `export_aedt_step` on that model, and the file sizes |
+
+Unlike the scripts above it does not use the prototype. First build the model with the sgb-core package (branch `claude/sgb-core`), then run the script with the same interpreter, because it imports the sgb-core test module:
+
+```bash
+SG=<sgb-core worktree>
+$SG/.artifacts/env/bin/python experiments/sgb-redesign/consumer-contract/generate_excerpt.py $SG/tests experiments/sgb-redesign/consumer-contract/out
+$SG/.artifacts/env/bin/python docs/design/sgb/_figures/consumer_contract.py
+```
+
+`generate_excerpt.py` writes the five files of each route under `out/route_<a|b|c>/`, `out/consumer_runs.json` and the STEP file; the script only reads them.

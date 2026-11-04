@@ -9,7 +9,7 @@ scgsim-id: "docs/design/sgb/inset-imprint"
 
 **Inset** 選出一個 surface 上距其物理邊界至少 $m$ 的部分；相鄰兩個 margin 之間的差形成 **band**。Surface EPR 在這些區域之上，還需要一個 field solution 與選定的 loss model：把 field 在各個區域上積分，才能估計 surface loss 有多少集中在邊緣附近。這一頁說明 SGB 如何把這些區域做成模型中精確的幾何：inset 曲線的規則、band 如何組成累積的「距邊緣至少 $m_k$」selection、solver 端有什麼改變，以及它與現行的 mask 做法有何不同。SGB 在 CAD／XAO 中直接解決 inset：一般的（upstream）Palace 只需要對普通的 surface group 積分，不需要、也不支援 fork 版 Palace 的原生 Mask／Inset。
 
-在 SGB 中，inset band 是 **cut family** 的第一個使用者：cut family 是把一組曲線連同語意 role 加進 arrangement 的 record（機制見 [Cut families](cut-families.qmd)，arrangement 見 [Building an arrangement](arrangement.qmd)，兩種 route 見 [Routes](routes.qmd)）。arrangement 中的平面區域稱為 **cell**，輸出後成為 BREP **face**。本頁每張圖與每個數字都是對 prototype 的**計算結果**，除非文字標明是 conceptual（概念示意）；產生方式見最後的補充。
+在 SGB 中，inset band 是 **cut family** 的第一個使用者：cut family 是把一組曲線連同語意 role 加進 arrangement 的 record（機制見 [Cut families](cut-families.qmd)，arrangement 見 [Building an arrangement](arrangement.qmd)，兩種 route 見 [Routes](routes.qmd)）。arrangement 中的平面區域稱為 **cell**，輸出後成為 BREP **face**。這些規則在 production（`scgsim.geometry.sgb.cutfamilies`）已實作，請求以 `InsetRequest`、`ConductorSurface`、`SolutionInterface` 表示（見[使用契約](consumer-contract.qmd#requests)）。本頁的圖與多數數字是對原型的**計算結果**（原型計算），production 重算過的另註；概念示意會標明 conceptual；產生方式見最後的補充。
 
 ## 以 running example 看
 
@@ -19,7 +19,7 @@ running example 的 pad 有 45° 的 chamfer、一個 reflex notch、一個 roun
 
 {{< askr-chart-view src="figures/inset-bands-pad.html" label="檢視 band（用按鈕放大 notch、hole 與 corner）" >}}
 
-每個 band 由一個或多個 cell 組成，輸出後成為 BREP face 與一個 physical group，名稱來自 label（Route A 的 sheet 為 `SHEET::pad::band=2`，Route B 的 top 與 bottom face 為 `MA::pad::band=2` 與 `MS::pad::band=2`，gap 為 <code>SA::substrate&#124;vacuum::band=0</code>）。下表的面積由精確 arc 計算（也就是後面 KLayout 比較所用的數字）：
+每個 band 由一個或多個 cell 組成，輸出後成為 BREP face 與一個 physical group，名稱來自 label（production 中 Route A 的 sheet 為 `SHEET::pad::sheet::band=2`，Route B 的 top 與 bottom face 為 `MA::pad::top::band=2` 與 `MS::pad::bottom::band=2`，gap 為 <code>SA::substrate&#124;vacuum::interface::band=0</code>）。下表是 production 的 Route A 範例（`pad_in_ground_A_bands`）；面積由精確 arc 計算，pad top 的數字與原型計算相同（也就是後面 KLayout 比較所用的數字），gap 的數字不同，見表後的說明：
 
 ::: {.askr-table-compact .askr-table-numeric}
 | Support surface | Band | Faces | 面積 (µm²) | Band ≥ k 的聯集，「$R_{m_k}$」(µm²) |
@@ -28,15 +28,15 @@ running example 的 pad 有 45° 的 chamfer、一個 reflex notch、一個 roun
 | pad top | B1 (0.1–0.5 µm) | 2 | 156.2232 | 5382.4661 |
 | pad top | B2 (0.5–2 µm) | 2 | 583.2396 | 5226.2429 |
 | pad top | B3 (≥ 2 µm) | 1 | 4643.0033 | 4643.0033 |
-| gap ring | B0 | 4 | 90.0766 | 13577.3650 |
-| gap ring | B1 | 4 | 360.0248 | 13487.2885 |
-| gap ring | B2 | 4 | 1346.3917 | 13127.2637 |
-| gap ring | B3 | 2 | 11780.8720 | 11780.8720 |
+| gap（substrate–vacuum） | B0 | 3 | 93.0717 | 13478.4270 |
+| gap | B1 | 3 | 371.3770 | 13385.3553 |
+| gap | B2 | 3 | 1380.0089 | 13013.9783 |
+| gap | B3 | 2 | 11633.9694 | 11633.9694 |
 :::
 
-同一個 surface 的 band 互不重疊，且加起來等於該 surface（pad top 的 B0 到 B3 總和為 5421.5730 µm²）。一個 band 可以不只一個 face：pad top 的 band 是沿外框的一圈加上繞 hole 的一圈，而 port footprint 把 gap band 切成更多片。同一個 band 的所有 face 共用一個 group 名稱。
+同一個 surface 的 band 互不重疊，且加起來等於該 surface（pad top 的 B0 到 B3 總和為 5421.5730 µm²，等於 sidecar `insets` 記錄的 support 面積）。gap 的 support 是整個 substrate–vacuum 介面，包含 pad 的圓形 hole（support 面積 13 778.4270 µm²）；Route A 的 port footprint（300 µm²）是 `PORT::p1` 的 face，所以 gap band 加起來是 13 478.4270 µm²，少了 port 的面積。一個 band 可以不只一個 face：pad top 的 band 是沿外框的一圈加上繞 hole 的一圈，而 port footprint 把 gap band 切成更多片。同一個 band 的所有 face 共用一個 group 名稱。原型計算的 gap ring 只取 pad 與 ground 之間的環（面積不同），所以原型表中 gap 的數字（例如 B0 為 90.0766 µm²）與上表不同。
 
-範例中的 group 是 prototype 目前 per Net 的名稱；預設將改為 per Entity（band 曲線不受影響，group 設計為 `MA::<entity>::band=k`，見 [D5](decisions.qmd#d5)）。
+group 依 D5 以 Entity 歸屬（band 曲線不受影響，見 [D5](decisions.qmd#d5)）。圖內的標示是原型計算的舊名稱。
 
 ## 規則：以 disk 做 erosion
 
@@ -66,7 +66,7 @@ $R_m$ 的邊界由 $R$ 的邊界依每種特徵各一條規則得出：
 | 半徑 $r$ 的 hole（concave arc） | 同心、半徑 $r + m$ 的圓 | hole，$r = 8$ µm |
 :::
 
-prototype（`sgbproto/inset.py`）並不畫出 disk。它寫出規則所給的 raw offset 曲線，以與其他曲線相同的 snap rounding 做 noding，並且只保留中點距 $R$ 邊界至少 $m$ 的 edge（$\operatorname{dist} \ge m$ 的判斷）；懸空的 stub 會被移除。規則在 convex corner 產生的重疊會被這個判斷切掉，而 topology 變化（見下）不需要任何特殊程式。
+實作（原型的 `sgbproto/inset.py`，production 的 `cutfamilies/inset.py`）並不畫出 disk。它寫出規則所給的 raw offset 曲線，以與其他曲線相同的 snap rounding 做 noding，並且只保留中點距 $R$ 邊界至少 $m$ 的 edge（$\operatorname{dist} \ge m$ 的判斷）；懸空的 stub 會被移除。規則在 convex corner 產生的重疊會被這個判斷切掉，而 topology 變化（見下）不需要任何特殊程式。
 
 ![pad top 上 $m = 1.5, 3, 6$ µm 的 erosion 邊界（比範例的 margin 大，形狀才看得見）。請看繞 reflex vertex 的 arc、維持尖角的 convex corner、在 6 µm 時縮小並消失的 rounded corner arc，以及變大的 hole 圓。](figures/inset-erosion-construction.svg){#fig-construction fig-alt="四個面板：reflex corner 繞 vertex 的 arc、chamfer 的 convex corner offset 維持尖角、rounded corner 的 offset arc 縮小直到消失、hole 的同心圓。"}
 
@@ -88,24 +88,24 @@ $$
 $Q(\ge m_1)$、$Q(\ge m_2)$、$Q(\ge m_3)$ 是累積且巢狀的：每一個都包含下一個。把它們相加會重複計算內部。要加的是 *band*（互不相交），或只讀*一個* selection，絕不是 selection 的總和。這與既有的多 margin Surface EPR 規則一致：margin 是彼此替代的觀察，絕不加總成物理 loss。
 :::
 
-以範例而言，Route A 的 pad top sheet 的 selection 就是一串 physical group 的 attribute（取自 direct writer 的 sidecar）：
+以範例而言，Route A 的 pad top sheet 的 selection 就是一串 physical group 的 attribute（取自 production 的 sidecar）：
 
 ::: {.askr-table-compact}
 | Selection | Margin | Group（attribute） |
 |---|---|---|
-| 整個 surface | 0 | `SHEET::pad::band=0..3`（10、11、12、13） |
-| $\ge m_1$ | 0.1 µm | `band=1..3`（11、12、13） |
-| $\ge m_2$ | 0.5 µm | `band=2..3`（12、13） |
-| $\ge m_3$ | 2 µm | `band=3`（13） |
+| 整個 surface | 0 | `SHEET::pad::sheet::band=0..3`（11、12、13、14） |
+| $\ge m_1$ | 0.1 µm | `band=1..3`（12、13、14） |
+| $\ge m_2$ | 0.5 µm | `band=2..3`（13、14） |
+| $\ge m_3$ | 2 µm | `band=3`（14） |
 :::
 
-Sidecar 的 `surface_epr_rows` 把 sheet 的 Surface EPR row `MA::pad::band=k` 與 `MS::pad::band=k` 都對到 `SHEET::pad::band=k`，其他有 band 的 group 則對到它自己。Union `PEC::pad` 列出四個 band group，所以 pad sheet 未加 mask 的 loss 就是對它們全部加總；這就是 band 加起來等於 baseline 的一致性檢查。Attribute 的數字依排序後的 group 名稱發放，加入 group 就會位移；請儲存 group 名稱（見 [Identity](identity.qmd)）。
+Sidecar 的 `surface_epr_rows` 把 sheet 的 Surface EPR row `MA::pad::sheet::band=k` 與 `MS::pad::sheet::band=k` 都對到 `SHEET::pad::sheet::band=k`（兩列的 `shared_face_group` 相同，`side` 分別是 `above` 與 `below`），其他有 band 的 group 則對到它自己。`unions.nets.pad` 列出四個 band group，所以 pad sheet 未加 mask 的 loss 就是對它們全部加總；這就是 band 加起來等於 baseline 的一致性檢查。Attribute 的數字依排序後的 group 名稱發放，加入 group 就會位移；請儲存 group 名稱（見 [Identity](identity.qmd)）。
 
 ## Distance origin
 
 曲線是由 **support region 的物理邊界**產生的，在 arrangement 之前、也在任何其他 partition 之前就算好。Port、contact cap、tile seam 與其他 band 都絕不是 origin：它們甚至不是 generator 的輸入。
 
-prototype 驗證了這個結果。把 lumped port 從範例中移除，family record 完全相同，且每個 band 的面積差不超過 $6 \times 10^{-8}$ grid unit²。在有 port 的模型中，port face 被 band 切成 7 個 face，但它們仍是同一個 group `PORT::p1`，因為 port 不屬於 Surface EPR 的 surface。
+原型驗證了這個結果（production 有對應的測試 `test_adding_the_port_does_not_change_any_band_boundary`）。把 lumped port 從範例中移除，family record 完全相同，且每個 band 的面積差不超過 $6 \times 10^{-8}$ grid unit²。在有 port 的 Route A 模型中，port face 被 band 切成 7 個 face（production 同樣是 7 個），但它們仍是同一個 group `PORT::p1`，因為 port 不屬於 Surface EPR 的 surface。
 
 band 曲線在 surface 被分成 group 之前，就由 support region 的物理邊界產生，所以 port、contact cap 或 tile seam 不可能成為 distance origin。這也是在 CAD 中解決 inset 的好處之一：距離的定義在幾何中寫死，不依賴 solver 如何解讀 patch 的周長。
 
@@ -131,18 +131,18 @@ Band **逐 support face** 產生：
 
 ![Band 的位置。Route A 每個 band 一個 sheet face。Route B 的有限厚度金屬 prism，其 top face（MA）與 bottom face（MS）各自獨立切 band；side wall 在 v1 不切 band。Conceptual 示意圖。](figures/inset-routes-section.svg){#fig-routes fig-alt="剖面圖：Route A 是基板上的一層有 band 的薄 sheet；Route B 是上下表面都有 band 的金屬塊。"}
 
-- **Route A。** sheet 是同時為 metal–vacuum 與 metal–substrate 的一個 face。它承載 band，並以 face 命名為 `SHEET::<net>::band=k`；Surface EPR 的 MA 與 MS 兩個 row 都參照這一個 group（`surface_epr_rows`）。
-- **Route B，top face。** 位於 $z = 0.2$ µm 的 family `band_pad_top` 產生 `MA::pad::band=k`。
-- **Route B，bottom face。** 位於 $z = 0$ 的 family `band_pad_bottom` 產生 `MS::pad::band=k`。儲存的 `pad_in_ground_B_bands` case 兩個 face 都切 band：59 個 face、250 條 edge、289 個 vertex 與 21 個 group，validation 通過，`PEC::pad` 列出八個 band group 與 `MA::pad`（side wall）。
+- **Route A。** sheet 是同時為 metal–vacuum 與 metal–substrate 的一個 face。它承載 band，並以 face 命名為 `SHEET::<entity>::sheet::band=k`；Surface EPR 的 MA 與 MS 兩個 row 都參照這一個 group（`surface_epr_rows`）。
+- **Route B，top face。** 位於 $z = 0.2$ µm 的 family `band_pad_top` 產生 `MA::pad::top::band=k`。
+- **Route B，bottom face。** 位於 $z = 0$ 的 family `band_pad_bottom` 產生 `MS::pad::bottom::band=k`。production 的 `pad_in_ground_B_bands` 兩個 face 都切 band：規劃 62 個 face、262 條 edge、313 個 vertex，23 個 group，validation 通過（31 項），`unions.nets.pad` 列出八個 band group 與 `MA::pad::sidewall`（side wall，不切 band）。
 - **Side wall** 不在 v1 範圍：side wall 的 band 會是 wall face 上的第三個 family，目前不產生。
 
 ## Solver 收到什麼
 
 每個 band 都是自己的 primary physical group。Masked integral 變成對 band group 的聯集做一般積分，以 attribute 選取（見上表）。solver 內部沒有任何東西會切開 element。
 
-prototype 的 Palace-facing 檢查對含 band 的 Route A 模型做 mesh（40 µm 的 mesh size，band 曲線附近有 1 µm 的 size field，13 170 個 node、70 775 個 tetrahedron，無重複 node，conformal）。對每個 band group，它計算 surface triangle 數，找出各 volume 中擁有這些 triangle 的 tetrahedron，並檢查每個 triangle 的 centroid 是否落在它的 band 內：
+原型的 Palace-facing 檢查對含 band 的 Route A 模型做 mesh（40 µm 的 mesh size，band 曲線附近有 1 µm 的 size field，13 170 個 node、70 775 個 tetrahedron，無重複 node，conformal；原型計算）。production 的測試（`test_band_faces_through_the_direct_writer`）對三種 route 的 band 範例做同樣形式的檢查：每個 band group 載入後的面積等於規劃、triangle 都是兩側數量相同的 tetrahedron 的 face、centroid 落在 band 內（Route A 有 8 個 band group，Route B 與 C 各 12 個）；這個測試沒有保存原型那樣的 triangle 數表。對每個 band group，它計算 surface triangle 數，找出各 volume 中擁有這些 triangle 的 tetrahedron，並檢查每個 triangle 的 centroid 是否落在它的 band 內：
 
-結果：八個 band group 的每一個，其 surface triangle 全部是 substrate 與 vacuum 各一個 tetrahedron 的 face，且每個 triangle 的 centroid 都在自己的 band 內（逐 group 的 triangle 數見補充）。
+原型計算的結果：八個 band group 的每一個，其 surface triangle 全部是 substrate 與 vacuum 各一個 tetrahedron 的 face，且每個 triangle 的 centroid 都在自己的 band 內（逐 group 的 triangle 數見補充）。
 這是 mesh 檢查：沒有任何 element 跨越 band 邊界，不是 Palace 的執行。
 
 ### 這對 adaptive refinement 為何重要
@@ -182,10 +182,10 @@ AEDT 端同樣不再需要 non-model sheet：band 由 SGB 預先切好寫在 STE
 
 - **只有直線與圓弧曲線。** line 與圓弧的 offset 仍是 line 與 arc。B-spline carrier 的 offset 無法精確表示，在 v1 **拒絕做 inset**；若要容許需要 Human 決定一個容差。
 - **topology 是整數，但有三個步驟使用浮點。** 某個 cell 屬於哪個 band 是由它的內部點到 support 邊界的浮點距離決定（比 snap bound 還薄的 cell 可能被分類成與精確 carrier 不同）；arc footprint 的包含測試使用 polyline witness 的 chord；arc 不交叉的檢查是取樣的。哪些 edge 存在則完全是整數。
-- **Arc noding 在 merge 之前很昂貴。** 使用 polyline witness（D3）時，含 band 的 z = 0 level 有 2 932 條 noded edge，dissolve 後剩 160 條。witness 約以 $\sqrt{r/g}$ 成長；arc 很多的 layout 必須預留這筆成本。直接 BREP writer（D8）對只有四條 boundary edge 的 cylinder wall 是精確的；當 arc 帶著外來的 vertex，wall 有五條 edge，目前的 writer 會拒絕，設計的修正是在該 vertex 處把 wall 切開（見 D8），在 production 的 stage 1 實作。
-- **薄的 band 要付出 element。** 0.1 µm 的 band 比 prototype 檢查所用的 1 µm size field 薄得多。prototype 不評估 mesh 品質；該檢查只證明 conformity。
+- **Arc noding 在 merge 之前很昂貴。** 使用 polyline witness（D3）時，含 band 的 z = 0 level 有 2 932 條 noded edge，dissolve 後剩 160 條（原型計算）。witness 約以 $\sqrt{r/g}$ 成長；arc 很多的 layout 必須預留這筆成本。當 band 的 arc 帶著外來的 vertex，wall 會在該 vertex 處被切開成兩個精確的圓柱（見 [D8](decisions.qmd#d8) 與[曲面 wall](assembly.qmd#curved-walls)），production 已實作。
+- **薄的 band 要付出 element。** 0.1 µm 的 band 比檢查所用的 1 µm size field 薄得多，這個檢查只證明 conformity，不評估 mesh 品質。production 的 catalogue 以粗略的 mesh 記錄 mesh 品質（含 band 的執行範例在 60 µm 的 mesh size 下，`pad_in_ground_B_bands` 有一個扁平元素，見 [Validation](validation.qmd#catalogue)），那不是對 band 做 refinement 的 mesh。band 的 mesh 尺寸（band 邊界附近的元素要接近最窄 margin 的量級，並向外成長）屬 Palace adopter 的責任，指引在 sidecar `mesh_hints` 的說明（`sidecar/hints.py`）與[使用契約](consumer-contract.qmd#sidecar)。
 - **Side wall 的 band** 不在 v1 範圍。
-- **還沒有 Palace 的執行。** 本頁的檢查是 mesh 檢查。用一般的 Palace 對 band group 求解、量測 Surface EPR 與 AMR 收斂行為，要等 Palace 端改接新的 XAO 與 sidecar 之後才能做。
+- **還沒有 Palace 的執行。** 本頁的檢查是 mesh 檢查（Palace 的 adopter 屬階段 3）。用一般的 Palace 對 band group 求解、量測 Surface EPR 與 AMR 收斂行為，要等 Palace 端改接新的 XAO 與 sidecar 之後才能做。
 
 ## 參考文獻
 
@@ -196,9 +196,9 @@ AEDT 端同樣不再需要 non-model sheet：band 由 SGB 預先切好寫在 STE
 
 ## 補充：重現資料
 
-本頁的圖與數字由 `docs/design/sgb/_figures/inset.py` 對 `experiments/sgb-redesign/prototype` 計算而得；產生的表格另存於 `figures/inset-tables.md`。prototype 的輸出在 `outputs/`：band 面積與 KLayout 比較在 `outputs/inset/klayout_comparison.json`（Route B 為 `klayout_comparison_route_B.json`），port 不變性在 `outputs/inset/port_invariance.json`，topology 變化在 `outputs/inset/topology_change.json`，Palace-facing 檢查在 `outputs/inset/palace_check.json` 與 `outputs/pad_in_ground_A_bands/stage_summary.json`，arc 偏差在 `outputs/pad_in_ground_A_bands/sliver_report.json`，Route A 的 attribute 取自 `outputs/e3_brep/pad_in_ground_A_bands/model.sidecar.json`。
+本頁的圖與（除標明 production 者外）數字由 `docs/design/sgb/_figures/inset.py` 對 `experiments/sgb-redesign/prototype` 計算而得；產生的表格另存於 `figures/inset-tables.md`。標明 production 的數字來自 `tests/sgb_emit_cases.py` 的 `pad_a_bands` 與 `pad_b_bands`（`emit_model` 之後讀 sidecar 的 `physical_groups` 與 `insets`）。production 的 KLayout 交叉檢查在 `tests/test_sgb_inset.py`，需要 KLayout，沒有安裝時略過；下方的 KLayout 比較表仍是原型計算的數字。prototype 的輸出在 `outputs/`：band 面積與 KLayout 比較在 `outputs/inset/klayout_comparison.json`（Route B 為 `klayout_comparison_route_B.json`），port 不變性在 `outputs/inset/port_invariance.json`，topology 變化在 `outputs/inset/topology_change.json`，Palace-facing 檢查在 `outputs/inset/palace_check.json` 與 `outputs/pad_in_ground_A_bands/stage_summary.json`，arc 偏差在 `outputs/pad_in_ground_A_bands/sliver_report.json`，Route A 的 attribute 取自 `outputs/e3_brep/pad_in_ground_A_bands/model.sidecar.json`。
 
-Palace-facing 檢查（含 band 的 Route A 模型，40 µm 的 mesh size 加上 band 曲線附近 1 µm 的 size field，13 170 個 node、70 775 個 tetrahedron）：
+Palace-facing 檢查（原型計算；含 band 的 Route A 模型，40 µm 的 mesh size 加上 band 曲線附近 1 µm 的 size field，13 170 個 node、70 775 個 tetrahedron）。group 名稱是原型的形式，對應 production 的 `SHEET::pad::sheet::band=k` 與 `SA::substrate|vacuum::interface::band=k`；原型的 gap 環與 production 的 gap support 不同，所以 face 數也不同：
 
 ::: {.askr-table-compact .askr-table-numeric}
 | Band group | Faces | Triangles | 兩側各自的 tet | 全部被 tet 共用 | Centroid 在 band 內 |

@@ -2,7 +2,7 @@
 
 Run (from anywhere)::
 
-    /home/ili/Githubs/SCQ_Design/packages/scgsim/.venv/bin/python docs/design/sgb/_figures/identity.py
+    .venv/bin/python zh-TW/docs/design/sgb/_figures/identity.py
 
 Computes, from the read-only prototype, a real mapping-chain lookup on the pad-in-ground example and the
 determinism evidence quoted by the page. Outputs go to ``docs/design/sgb/figures/`` (prefix ``identity-``):

@@ -1,0 +1,315 @@
+"""Half-edge structure and face extraction for a noded planar graph (stage S4).
+
+Owns turning snap-rounded edges into a doubly-connected edge list (DCEL):
+vertices, half-edges, boundary cycles, faces with holes and the nesting of
+connected components inside faces. Everything is exact integer arithmetic.
+
+Conventions
+-----------
+* Half-edge ``2*e`` runs ``a -> b`` of edge ``e`` (``a < b``), ``2*e + 1`` runs back.
+* A half-edge's face is on its *left*. Bounded faces are bounded by
+  counter-clockwise cycles of positive twice-area; every connected component
+  also has exactly one cycle of non-positive area (its outer boundary seen from
+  outside), which is a *hole* of the face that encloses the component.
+* Face 0 is always the unbounded face.
+
+Does not own labels (``labels``), dissolution (``dissolve``) or snapping.
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from dataclasses import dataclass
+from fractions import Fraction
+from functools import cmp_to_key
+
+from sgbproto.geometry import Point, RepPoint, fraction_to_rep, point_in_ring
+from sgbproto.snap_rounding import NodedEdge, cell_size_for
+
+
+@dataclass(frozen=True)
+class Cycle:
+    half_edges: tuple[int, ...]
+    twice_area: int
+    component: int
+
+
+@dataclass(frozen=True)
+class FaceRec:
+    outer: int | None  # cycle index; ``None`` for the unbounded face
+    holes: tuple[int, ...]
+
+
+class Arrangement:
+    """A noded planar graph with faces; build with :func:`build_arrangement`."""
+
+    def __init__(
+        self,
+        vertices: list[Point],
+        edges: list[NodedEdge],
+        edge_ends: list[tuple[int, int]],
+        cycles: list[Cycle],
+        faces: list[FaceRec],
+        he_face: list[int],
+        he_cycle: list[int],
+    ) -> None:
+        self.vertices = vertices
+        self.edges = edges
+        self.edge_ends = edge_ends
+        self.cycles = cycles
+        self.faces = faces
+        self.he_face = he_face
+        self.he_cycle = he_cycle
+
+    # -- half-edge accessors
+    def origin(self, h: int) -> Point:
+        a, b = self.edge_ends[h >> 1]
+        return self.vertices[b if h & 1 else a]
+
+    def target(self, h: int) -> Point:
+        a, b = self.edge_ends[h >> 1]
+        return self.vertices[a if h & 1 else b]
+
+    def cycle_points(self, cycle_index: int) -> list[Point]:
+        return [self.origin(h) for h in self.cycles[cycle_index].half_edges]
+
+    def face_cycles(self, face_index: int) -> list[int]:
+        face = self.faces[face_index]
+        return ([face.outer] if face.outer is not None else []) + list(face.holes)
+
+    def face_twice_area(self, face_index: int) -> int:
+        """Twice the area of the face (outer minus holes); 0 for the unbounded face."""
+        face = self.faces[face_index]
+        if face.outer is None:
+            return 0
+        return self.cycles[face.outer].twice_area + sum(self.cycles[c].twice_area for c in face.holes)
+
+    def face_segments(self, face_index: int) -> list[tuple[Point, Point]]:
+        segs = []
+        for c in self.face_cycles(face_index):
+            for h in self.cycles[c].half_edges:
+                segs.append((self.origin(h), self.target(h)))
+        return segs
+
+    def total_bounded_twice_area(self) -> int:
+        return sum(self.face_twice_area(i) for i in range(1, len(self.faces)))
+
+    def top_level_twice_area(self) -> int:
+        """Area enclosed by components not nested in any bounded face (independent of nesting)."""
+        return -sum(self.cycles[c].twice_area for c in self.faces[0].holes)
+
+
+# --------------------------------------------------------------------------- construction
+
+
+def _half(dx: int, dy: int) -> int:
+    return 0 if (dy > 0 or (dy == 0 and dx > 0)) else 1
+
+
+def _angle_compare(d1: tuple[int, int], d2: tuple[int, int]) -> int:
+    h1, h2 = _half(*d1), _half(*d2)
+    if h1 != h2:
+        return h1 - h2
+    c = d1[0] * d2[1] - d1[1] * d2[0]
+    return -1 if c > 0 else (1 if c < 0 else 0)
+
+
+_ANGLE_KEY = cmp_to_key(lambda p, q: _angle_compare(p[0], q[0]))
+
+
+def build_arrangement(edges: list[NodedEdge]) -> Arrangement:
+    """DCEL, cycles, faces and component nesting for noded edges (``a < b`` each)."""
+    edges = sorted(edges, key=lambda e: (e.a, e.b))
+    vertices = sorted({p for e in edges for p in (e.a, e.b)})
+    vindex = {p: i for i, p in enumerate(vertices)}
+    edge_ends = [(vindex[e.a], vindex[e.b]) for e in edges]
+    n_he = 2 * len(edges)
+
+    out: list[list[int]] = [[] for _ in vertices]
+    for ei, (a, b) in enumerate(edge_ends):
+        out[a].append(2 * ei)
+        out[b].append(2 * ei + 1)
+
+    def direction(h: int) -> tuple[int, int]:
+        a, b = edge_ends[h >> 1]
+        pa, pb = vertices[a], vertices[b]
+        return (pb[0] - pa[0], pb[1] - pa[1]) if h % 2 == 0 else (pa[0] - pb[0], pa[1] - pb[1])
+
+    position: dict[int, int] = {}
+    for lst in out:
+        if len(lst) > 2:
+            decorated = sorted(((direction(h), h) for h in lst), key=_ANGLE_KEY)
+            lst[:] = [h for _, h in decorated]
+        for i, h in enumerate(lst):
+            position[h] = i
+
+    next_he = [0] * n_he
+    for h in range(n_he):
+        head = edge_ends[h >> 1][0 if h & 1 else 1]
+        twin = h ^ 1
+        lst = out[head]
+        next_he[h] = lst[(position[twin] - 1) % len(lst)]
+
+    component = _components(len(vertices), edge_ends)
+
+    he_cycle = [-1] * n_he
+    cycles: list[Cycle] = []
+    for start in range(n_he):
+        if he_cycle[start] >= 0:
+            continue
+        seq: list[int] = []
+        h = start
+        area = 0
+        while he_cycle[h] < 0:
+            he_cycle[h] = len(cycles)
+            seq.append(h)
+            a, b = edge_ends[h >> 1]
+            o, t = (b, a) if h & 1 else (a, b)
+            po, pt = vertices[o], vertices[t]
+            area += po[0] * pt[1] - pt[0] * po[1]
+            h = next_he[h]
+        cycles.append(Cycle(tuple(seq), area, component[edge_ends[start >> 1][0]]))
+
+    faces, he_face = _faces_from_cycles(vertices, edge_ends, cycles, he_cycle)
+    return Arrangement(vertices, edges, edge_ends, cycles, faces, he_face, he_cycle)
+
+
+def _components(n: int, edge_ends: list[tuple[int, int]]) -> list[int]:
+    parent = list(range(n))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for a, b in edge_ends:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[max(ra, rb)] = min(ra, rb)
+    return [find(i) for i in range(n)]
+
+
+class BoxIndex:
+    """Uniform hash of bounding boxes for point-stabbing queries."""
+
+    def __init__(self, boxes: list[tuple[int, int, int, int]]) -> None:
+        extent = max([1] + [max(b[2] - b[0], b[3] - b[1]) for b in boxes])
+        gx0 = min([b[0] for b in boxes] + [0])
+        gx1 = max([b[2] for b in boxes] + [1])
+        gy0 = min([b[1] for b in boxes] + [0])
+        gy1 = max([b[3] for b in boxes] + [1])
+        self.size = cell_size_for(max(gx1 - gx0, gy1 - gy0, extent), len(boxes))
+        self.boxes = boxes
+        self.cells: dict[tuple[int, int], list[int]] = defaultdict(list)
+        self.large: list[int] = []
+        size = self.size
+        for i, (x0, y0, x1, y1) in enumerate(boxes):
+            nx, ny = x1 // size - x0 // size + 1, y1 // size - y0 // size + 1
+            if nx * ny > 64:
+                self.large.append(i)
+                continue
+            for cx in range(x0 // size, x1 // size + 1):
+                for cy in range(y0 // size, y1 // size + 1):
+                    self.cells[(cx, cy)].append(i)
+
+    def stab(self, x: int, y: int) -> list[int]:
+        out = []
+        for i in self.cells.get((x // self.size, y // self.size), ()):
+            b = self.boxes[i]
+            if b[0] <= x <= b[2] and b[1] <= y <= b[3]:
+                out.append(i)
+        for i in self.large:
+            b = self.boxes[i]
+            if b[0] <= x <= b[2] and b[1] <= y <= b[3]:
+                out.append(i)
+        return out
+
+
+def _faces_from_cycles(
+    vertices: list[Point],
+    edge_ends: list[tuple[int, int]],
+    cycles: list[Cycle],
+    he_cycle: list[int],
+) -> tuple[list[FaceRec], list[int]]:
+    """Faces = positive cycles; every component's outer cycle becomes a hole of its parent face."""
+    positive = [i for i, c in enumerate(cycles) if c.twice_area > 0]
+    outer_of_component: dict[int, int] = {}
+    for i, c in enumerate(cycles):
+        if c.twice_area <= 0:
+            outer_of_component[c.component] = i
+
+    def ring_points(ci: int) -> list[Point]:
+        pts = []
+        for h in cycles[ci].half_edges:
+            a, b = edge_ends[h >> 1]
+            pts.append(vertices[b if h & 1 else a])
+        return pts
+
+    rings = {ci: ring_points(ci) for ci in positive}
+    boxes = []
+    for ci in positive:
+        xs = [p[0] for p in rings[ci]]
+        ys = [p[1] for p in rings[ci]]
+        boxes.append((min(xs), min(ys), max(xs), max(ys)))
+    index = BoxIndex(boxes)
+
+    face_of_positive = {ci: k + 1 for k, ci in enumerate(positive)}
+    holes: dict[int, list[int]] = defaultdict(list)
+    for comp in sorted(outer_of_component):
+        ci = outer_of_component[comp]
+        probe = min(ring_points(ci))
+        best = None
+        for k in index.stab(*probe):
+            cand = positive[k]
+            if cycles[cand].component == comp:
+                continue
+            if not point_in_ring(rings[cand], (probe[0], probe[1], 1)):
+                continue
+            if best is None or cycles[cand].twice_area < cycles[best].twice_area:
+                best = cand
+        parent_face = 0 if best is None else face_of_positive[best]
+        holes[parent_face].append(ci)
+
+    faces = [FaceRec(None, tuple(holes[0]))]
+    for ci in positive:
+        faces.append(FaceRec(ci, tuple(holes[face_of_positive[ci]])))
+    he_face = [0] * len(he_cycle)
+    for fi, face in enumerate(faces):
+        for ci in ([face.outer] if face.outer is not None else []) + list(face.holes):
+            for h in cycles[ci].half_edges:
+                he_face[h] = fi
+    return faces, he_face
+
+
+# --------------------------------------------------------------------------- representative point
+
+
+def interior_point(arr: Arrangement, face_index: int) -> RepPoint:
+    """Deterministic exact point strictly inside a bounded face.
+
+    Scan the lowest horizontal strip between distinct vertex heights of the
+    face's boundary: no boundary vertex lies inside the strip, so every spanning
+    edge crosses it. Even-odd over the sorted crossings gives the interior
+    intervals; the widest one (leftmost on ties) gives the point.
+    """
+    segs = arr.face_segments(face_index)
+    ys = {p[1] for s in segs for p in s}
+    ordered = sorted(ys)
+    for lo, hi in zip(ordered, ordered[1:]):
+        ymid = Fraction(lo + hi, 2)
+        xs: list[Fraction] = []
+        for (px, py), (qx, qy) in segs:
+            if py == qy:
+                continue
+            if min(py, qy) <= lo and max(py, qy) >= hi:
+                xs.append(px + Fraction((qx - px) * (ymid - py), qy - py))
+        xs.sort()
+        best: tuple[Fraction, Fraction] | None = None
+        for i in range(0, len(xs) - 1, 2):
+            width = xs[i + 1] - xs[i]
+            if width > 0 and (best is None or width > best[0]):
+                best = (width, (xs[i] + xs[i + 1]) / 2)
+        if best is not None:
+            return fraction_to_rep(best[1], ymid)
+    raise ValueError("face has no interior point (degenerate face)")

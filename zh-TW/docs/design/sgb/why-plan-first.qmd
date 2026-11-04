@@ -100,6 +100,8 @@ flowchart TB
 
 原型的 scaling 執行建立 Route B 的隨機 layout，特徵數為 $N = 1000, 5000, 20000$，每個都有四個 level，且 ground plane 上每個特徵各有一個孔。模型的 face 數從 12 761 成長到 255 052。**這些 scaling 執行全是 polygon-only 的 layout：沒有圓弧、沒有 witness 的弦、沒有圓柱 wall，也沒有 band。** 因此圓弧與 band 在大規模下的成本與 exactness 並沒有量測，本頁不外推。數字的來源列在本頁最後的補充。
 
+production 的 `scgsim.geometry.sgb` 已實作同一個規劃方式，本頁下面的 scaling 圖與時間都是**原型計算**，production 沒有重新做 scaling。唯一的 production 量測是 `tests/sgb_catalogue_report.py --timings` 的一次執行（1 000 個 feature 的 Route B 隨機 layout，只有 polygon，14 284 個 face，單一 worker）：推導加驗證 1.87 s，寫出 BREP 0.13 s、XAO 0.02 s，sidecar 0.56 s，產生 sliver 與 validation 報告 1.84 s，三個檔案共 33 MB。這是單次量測，時間四捨五入到 0.01 s，隨機 layout 的產生器與原型不同（原型 $N = 1000$ 為 12 761 個 face），不能與下面的數字逐項比較。
+
 ![規劃後 pipeline 的 wall time（左）與 peak memory（右）對特徵數 N 的關係，座標軸為對數。虛線的斜率為 1。](figures/why-scaling.svg){#fig-scaling fig-alt="N = 1000、5000、20000 的兩張對數-對數圖。左：四條上升的線，分別是推導、Gmsh API 的 test oracle、direct BREP writer，以及 Gmsh 載入 BREP，並有一條斜率為 1 的虛線參考線。每一條都比參考線稍陡。右：父行程的 peak memory，分別為單一 tile 與 4 × 4 tile，幾乎與斜率為 1 的參考線平行。"}
 
 {{< askr-chart-view src="figures/why-scaling.html" label="檢視 scaling 資料" >}}
@@ -159,7 +161,7 @@ Identity 是結果的性質，不是排程的性質。scaling 執行以九種排
 :::
 
 ::: {.callout-note title="性質：相同輸入得到相同 id（依構造成立；以 27 次執行量測）"}
-依構造，id 與 tile 配置及 worker 數無關；量測上，在原型的 27 次執行（3 種 $N$ 乘上 9 種排程）中，每個實體的 id 在每一種排程下都相同。理由：id 是內容的雜湊（level、格點座標、carrier、label）；edge 的 id 是 H(plane key、排序後的端點 vertex id、排序後的 carrier id 集合)；tile 的切線落在 pixel 欄列之間，所以沒有任何 tile 會產生幾何（見 [Parallel derivation](parallelism.qmd)、[Identity](identity.qmd)）。
+依構造，id 與 tile 配置及 worker 數無關；量測上，在原型的 27 次執行（3 種 $N$ 乘上 9 種排程）中，每個實體的 id 在每一種排程下都相同；production 的測試（`tests/test_sgb_tiling.py`）對執行範例、隨機 layout 與一個大型 layout，在不同的 tile 數與 worker 數下檢查 id 相同。理由：id 是內容的雜湊（level、格點座標、carrier、label）；edge 的 id 是 H(plane key、排序後的端點 vertex id、排序後的 carrier id 集合)；tile 的切線落在 pixel 欄列之間，所以沒有任何 tile 會產生幾何（見 [Parallel derivation](parallelism.qmd)、[Identity](identity.qmd)）。
 :::
 
 solids-first 的 fragment 無法提供這樣的性質：結果中 face 的順序，以及模糊的 face 被歸給哪個輸入，都取決於 kernel 的走訪順序。
@@ -171,7 +173,7 @@ solids-first 的 fragment 無法提供這樣的性質：結果中 face 的順序
 - **密集 layout。** scaling 執行使用的特徵間距為 260 µm，各自位於自己的 cutout。更密的 layout（相鄰特徵重疊更多）不在已量測的範圍內。設計預期同樣的近乎線性形狀，但沒有量測過。
 - **論證取決於 OCCT 文件記載的結構。** 如果改用結構不同的 kernel（例如穩健、帶索引的 3D Boolean 引擎），這個論證需要針對它重新進行。Identity 的論證則不取決於 kernel。
 - **非 prism 的本體**（斜側壁、Z 方向彎曲的橋）在第一版中不在規劃後 pipeline 的範圍內。它們是擴充點，不會被悄悄近似（見[總覽](index.qmd#glossary)）。
-- **Python 的限制。** 推導的計時來自 Python 原型，編譯式 kernel 尚未撰寫（D9）。它們呈現的是成本的形狀，不是編譯式實作可以達到的數字。
+- **Python 的限制。** 推導的計時來自 Python 原型；production 的階段 1 同樣是 Python，編譯式 kernel 尚未撰寫（D9）。它們呈現的是成本的形狀，不是編譯式實作可以達到的數字。
 
 ## 參考資料
 

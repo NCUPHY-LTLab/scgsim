@@ -1,0 +1,195 @@
+---
+title: "Palace 與 AEDT 的欄位對應"
+description: "今天 Palace 的 group dict 與 record 欄位、AEDT 的 contribution ledger、Electrostatic 的 Net 終端，各自對到新 sidecar 的哪個欄位；哪些沒有對應、哪些要同一次切換、哪些之後移除，以及留給 Architecture Lead 的開放項目。"
+lang: zh-TW
+scgsim-kind: "design"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/design/sgb/consumer-mapping"
+---
+
+[上一頁](consumer-contract.qmd)說明 SGB 交出什麼。本頁是採用端的對照表：今天 Palace 從 SGB 取得的資料，以及 AEDT 今天從舊 planning 取得的 contribution ledger，各自要從新 sidecar 的哪個欄位取得。每一列標示三種狀態之一：**直接**（欄位語意相同）、**推得**（由 sidecar 欄位按一條規則算出）、**open**（新 sidecar 沒有對應，由採用端決定；不代表缺陷，只代表舊欄位是 Palace 或舊 planning 自己的字串）。
+
+舊契約的事實取自對現行程式的盤點（Palace 約 25 個 record 欄位；AEDT 只用 ledger），新欄位取自 sgb-core 的 sidecar 與它的測試。測試只證明下面兩件事：由 sidecar 可以重建 Palace group dict 的**四個鍵**（`volumes`、`boundary_surfaces`、`pec_surfaces`、`port_surfaces`），以及由 sidecar 可以列出 AEDT ledger 的 `(face, group, interface_type, entities, face_kind)`。其餘各列是閱讀兩邊程式後的對照，沒有被執行過；本頁用「直接／推得／open」把這個差別寫明。
+
+## Palace {#palace}
+
+### 入口與檔案 {#palace-files}
+
+::: {.askr-table-compact}
+| 今天 | 新 | 狀態 |
+|---|---|---|
+| `SemanticGeometryBuilder().build(build_input, route=, run_folder=, representation_context=)`，回傳值 Palace 不使用 | `build_sgb_geometry(build_input, representation, route=, output_dir=)`，回傳 `SgbArtifacts`，各檔路徑從它取得 | 直接 |
+| route 只接受 `"A"`、`"B"` | `"A"`、`"B"`、`"C"` | 直接；Route C 見[下方](#route-c) |
+| `geometry/semantic_geometry_route_a.xao`（Route B 為 `_b`） | `<output_dir>/semantic_geometry_route_a.xao`（B、C 為 `_b`、`_c`；檔名主幹相同） | 直接 |
+| `metadata/semantic_geometry/04_export_physical_groups.json`：一個 JSON list，每個 physical group 一筆 record | `<stem>.sidecar.json`：一個物件，`physical_groups` 以名稱為鍵 | 推得（下表） |
+| `02_build_route_construction_plan.json` 的 `metadata.curved_arrangement`；有來源曲線卻缺這個鍵就是 hard error | `arrangement`（`arc_edges`、`max_snap_drift_grid`、`max_arc_deviation_grid`）與 `curved_wall_faces`，永遠存在 | 直接；是否仍要求，由 manifest 的讀取端決定 |
+| `00_timing`、`01_validate_geometry_input`、`03_build_occ_geometry`、`engine_gate_*`（Palace 不讀） | `SgbArtifacts.timings`（回傳值）、`validation_report`、`sliver_report` | 直接 |
+| Palace 提供的 `geometry/design.gds` 與 `design.stack.json` | 不變：SGB 只取記憶體中的輸入 | 不變 |
+:::
+
+### group dict 的五個鍵 {#palace-groups}
+
+Palace 的 `mesh_xao_in_current_process` 交給下游的是 `groups = {volumes, boundary_surfaces, surface_groups, pec_surfaces, port_surfaces}`，每一項帶 `phys_group`、`tags`、`dim`、`source` 與下表的 record 欄位。
+
+::: {.askr-table-compact}
+| 鍵 | 今天 | 新 sidecar | 狀態 |
+|---|---|---|---|
+| `volumes` | 每個 dim 3 的 group（vacuum 與 dielectric） | `physical_groups` 中 `dim == 3` 的項目，名稱 `VOL::<entity>`；Route C 還有 `kind == "conductor"` 的項目 | 直接 |
+| `boundary_surfaces` | `source == "volume_interface"` 的 MA／MS／SA（`surface_epr=True`）與 MM／SS／AA（`surface_epr=False`），以及 `source == "domain_boundary"` 的外部邊界 | `dim == 2` 的項目：`MA`、`MS`、`SA` 與 Route A 的 `SHEET`（承載 MA 與 MS 兩個 row）是 Surface-EPR 項目（出現在 `surface_epr_rows`）；`MM`、`SS`、`AA` 不是；`EXT::<region>` 是外部邊界 | 推得 |
+| `pec_surfaces` | `MA` 與 `MS` 的別名，且有 `conductor_component_id` | `interface_type` 為 `MA`、`MS` 或 `SHEET` 且 `net` 不是 `null` 的項目（測試使用的規則） | 推得 |
+| `port_surfaces["P<index>"]` | lumped port，鍵為 `P<port.index>` | `ports[*]` 以 `group` 與 `physical_groups` 中的 `PORT::<id>` 連起來，鍵取 `P<port_index>` | 推得 |
+| `surface_groups` | 沒有結構化標記的 surface，只存 `{physical_name, dim}` | 新 sidecar 的每個 group 都是結構化的，沒有這一類 | open：保留空的鍵，或移除，由採用端決定 |
+:::
+
+下面是測試的 `palace_style_groups` 對範例 sidecar 重建的結果（每個鍵節錄一項）。注意 port 項目的 `owner_semantic_ids` 是 port sheet 自己；Palace 要求的、port 所接的兩個導體，在 `ports[*].host_entity_ids`。
+
+{{< include figures/consumer-palace-rebuild.md >}}
+
+### record 欄位 {#palace-fields}
+
+欄位按 Palace 的檢查（`record_validation.py`、`physical_groups.py`）分組。「sidecar 來源」欄的路徑都以 `physical_groups[<名稱>]` 為基準，除非另寫。
+
+::: {.askr-table-compact}
+| 今天的欄位 | 適用 | sidecar 來源 | 狀態 |
+|---|---|---|---|
+| `dimension`、`physical_name` | 全部 | `dim`；`physical_groups` 的鍵 | 直接 |
+| `route` | 全部（所有 record 必須相同） | 頂層 `route` | 直接 |
+| `phys_group`、`tags` | 全部 | `tag`、`native_tags`。Palace 今天讀 live 模型的 tag；`verify_loaded` 通過之後兩者相同 | 直接 |
+| `solver_use` | 全部（`not_solver_active` 的 record 被略過） | 沒有欄位。sidecar 只列已 emit 實體的 group，等於全部 solver-active | open：是否仍需要這個旗標 |
+| `role` | 全部 | 沒有欄位。可由 `dim` 與 `interface_type` 推得：dim 3 為 material volume，`EXT` 為 domain boundary，`PORT` 為 lumped port | 推得（採用端定規則） |
+| `sgb_record` | 全部 | Palace 自己蓋章，不來自 SGB | 不適用 |
+| `interface_type` | surface | `interface_type`。詞彙改變：`MS_MA` 變成 `SHEET`；`LUMPED_PORT` 變成 `PORT`；外部邊界是 `EXT`；`MA`、`MS`、`SA`、`MM`、`SS`、`AA` 不變 | 直接（詞彙對照） |
+| `surface_id` | surface | group 名稱（Palace 以 `(interface_type, surface_id)` 檢查唯一，名稱本身唯一） | 推得 |
+| `face_kind` | surface（單一值，`top`／`bottom`／`sidewall`／`interface`／`sheet_contact_cap`） | `face_kind`（單一值，也是 group 名稱的一段：`<kind>::<entity>::<face kind>[::band=k]`；值為 `top`、`bottom`、`sidewall`、`sheet`、`interface`，port 為 `port`）。group 不會混合種類，所以 Surface-EPR 的 `face_kind` 過濾可直接作用在 group 上；`sheet_contact_cap` 沒有對應 | 直接 |
+| `owner_semantic_ids` | 全部 | `entities`。port 的兩個宿主導體是 `ports[*].host_entity_ids` | 直接；port 例外 |
+| `adjacent_solution_volume_ids` | surface | `adjacent_domains[*].name`，其 `kind` 與 `material` 直接取代 `solution_material_kinds` 的查找。port 用 `ports[*].adjacent_volumes`（Route A 兩個，B 與 C 一個） | 直接 |
+| `conductor_component_id`、`net_id` | MA／MS／MS_MA | `entities`（導體 Entity）與 `net`。SA 與 port 的 `net` 為 `null`，與舊規則一致 | 直接，前提是 Palace 的 component id 就是 Entity id（測試與 sidecar 文件如此對應，採用端確認） |
+| `equipotential_id` | domain_boundary 與 structured surface（必須有此鍵） | 沒有欄位 | open |
+| `contact_kind` | domain_boundary 與 structured surface（必須有此鍵） | 沒有欄位 | open |
+| `representation` | volume 非空；surface 依 route 檢查（`solution_surface`、`surface_sheet`、`cutout_boundary_shell`、`lumped_port_sheet`） | 沒有欄位 | open |
+| `source_provenance` | volume：`volume_ids`、`stack_layer`、`conductor_source_layer_name`；port：`source_name`、`port_index`、`source_layer`、`target_layer`、`direction`、`source_polygon_id`、`direction_sign_convention` | `ids`（volume id）；`ports[*]` 的 `source_name`、`port_index`、`source_layer`、`target_layer`、`direction`、`port_sheet_id`。`stack_layer`、`conductor_source_layer_name`、`direction_sign_convention` 沒有欄位 | 部分直接；其餘 open |
+| `source_provenance.surface_contribution_ledger`（schema `scgsim.surface-contributions.v1`，含 `native_aggregation`、`mask_support`） | MA／MS／SA，今天必須有 | 沒有等價物。每個 Entity 的貢獻是 `lineage.membership`（依面積加權）；band 是 `insets`；沒有 native mask，`mask_support` 不再有意義 | open：[見下](#palace-mechanisms)與[open 項目](#open-items) |
+| `physical_attribute.material_ids`、`material_kinds` | volume | `material`、`kind`（`vacuum`、`dielectric`；Route C 另有 `conductor`） | 直接 |
+| `physical_attribute`：`port_index`、`port_name`、`source_layer`、`target_layer`、`direction` | port | `ports[*]`：`port_index`、`source_name`、`source_layer`、`target_layer`、`direction`（範例為 `[1, 0, 0]`） | 直接 |
+| `physical_attribute.embedded_volume_id`、`embedded_volume_plan_ids(_by_surface)` | port | `embedded_faces[*]`（`face`、`host_volume`）與 `ports[*].host_volumes`；沒有舊的 plan id | 直接（id 為新的 volume id） |
+| `owner_provenance` | port（兩列） | 沒有欄位；`ports[*].host_entity_ids` 與 `lineage` 提供來源 | open |
+| `entity_tags` | 全部（Palace 今天不使用） | `native_tags` | 直接 |
+| `surface_epr`（Palace 內部旗標） | surface | `group` 出現在 `surface_epr_rows` 的某一項 | 推得 |
+| `source`（`volume_interface`、`domain_boundary`、`SGB_RUNTIME_AUTHORITY`） | 全部 | `EXT` 為 `domain_boundary`，其餘 surface 為 `volume_interface`。`SGB_RUNTIME_AUTHORITY` 與 `SGB_DERIVATION_*_SHA` 是版本綁定的常數 | 推得；常數 open |
+| `metadata` | volume | 沒有欄位 | open |
+:::
+
+### 機制的對照 {#palace-mechanisms}
+
+::: {.askr-table-compact}
+| 今天的機制 | 新機制 | 備註 |
+|---|---|---|
+| **`MS_MA` 別名技巧。**一筆 `MS_MA` record 變成兩個共用同一個 physical group 的別名 `<surface_id>__MS` 與 `<surface_id>__MA`（`physical_groups.py` 428–461）。 | **`surface_epr_rows`。**Route A 的 `SHEET::<entity>::sheet[::band=k]` 是一個 primary group；它在 `surface_epr_rows` 裡有兩個 row，`MA::<entity>::sheet[::band=k]` 與 `MS::<entity>::sheet[::band=k]`，兩者的 `group` 欄位指向同一個 group。 | 採用端每個 row 建一個別名即可，行為與今天一致：兩個 row 共用一個 physical tag，`(interface_type, attribute)` 的唯一性檢查因類型不同而成立。Route B 與 C 的 MA、MS 是不同的 group，沒有別名。 |
+| **`CrackInternalBoundaryElements`。**`native_aggregation.policy == "shared_native_surface_once"` 且兩個 contribution 對一個 native row 時啟用（`config.py` 288–310）。 | sidecar 沒有 `native_aggregation`，但每個 `surface_epr_rows` 項目都有 `shared_face_group`（雙面 sheet 的 group，否則 `null`）與 `side`（`above`、`below`、`both` 或 `null`）。Route A 的 MA row 是 `above`、MS row 是 `below`，兩者的 `shared_face_group` 都是同一個 sheet group；Route B／C 與單面 row 兩者皆為 `null`。 | 推得：row 的 `shared_face_group` 非 `null` 就是「兩個 contribution 對一個 native row」，由這個欄位單獨決定是否 crack internal boundary，不需要其他資訊。 |
+| **Route B 的 transport group。**XAO 內有額外的 `SGB_PORT_SURFACE::<face plan id>` 與 `SGB_VOLUME::<volume plan id>`，`embed_route_b_port_surfaces` 讀取、`gmsh.model.mesh.embed`、再從 MSH 移除。 | **`embedded_faces`。**XAO 沒有 transport group；mesher 呼叫 `apply_sidecar_embeds(sidecar)`，對每個 `(face, host_volume)` 執行 `gmsh.model.mesh.embed(2, [face], 3, host)`。 | 沒有東西需要從 MSH 移除。舊的「被綁定的 face 聯集必須等於 port group 的所有 live tag」檢查，由 `verify_loaded` 對 physical group 成員的比對與 `embedded_faces` 的清單取代。Route C 的 port 同樣是嵌入的 face；Route A 沒有。 |
+| **refinement 的 embed 與尺寸。**`refinement.py` 由所有 surface group 的邊界線導出 Distance／Threshold 尺寸場。 | **`refinement_edges`。**`(edge, host_face)` 由 `apply_sidecar_embeds` 以 `gmsh.model.mesh.embed(1, edges, 2, host_face)` 嵌入；`refinements[*]` 列出每個 request 的點與 edge。 | 有 band 之後 surface group 的邊界線倍增，所以不再由所有 surface group 的邊界導出。**`mesh_hints`** 直接列出要解析的 edge：`band_boundary`（inset family 的 band 邊界，`source` 為 request id）、`refinement_curve`、`curved_edge`（每條圓弧 edge）；每筆有 edge id 與 native tag，**沒有尺寸**，Distance／Threshold 的數值由 mesher 決定。 |
+| **原生 `Mask: Inset`。**`surface_epr.py` 依 `inset_margins_um` 產生 native mask row；對聚合的雙邊 contribution 以 `mask_support.positive_inset_supported is False` 拒絕。 | **band 是普通的 group。**`insets[*]` 記錄 request、`margins_um` 與 `bands`（index → group 清單）；`surface_epr_rows` 的 `band` 標出每個 row 的 index。「距邊緣至少 $m_k$」的區域是 band $k$ 到 $K$ 的 group 聯集。 | 標準（upstream）Palace 對普通 surface group 積分即可；fork 版 Palace 的原生 Mask／Inset 不使用也不支援。被 band 取代的 support 沒有「整個 surface」的 group：總量是所有 band 的聯集。 |
+| **interface-type 總量。**舊 record 帶 `interface_type`，報告依它加總。 | **`unions.interface_types`。**`MA`、`MS`、`SA`… 是 primary group 名稱的清單。 | Route A 的 `SHEET` group 同時列在 `SHEET`、`MA` 與 `MS` 之下（它承載兩個 row），所以三種 route 都能直接取 `MA` 與 `MS` 的總量。聯集也包含 band 與 sidewall；做 band 選取要用 `surface_epr_rows`。 |
+| **`curved_arrangement` 與 `curve_source`。**manifest 與 `summary.py`、`plotting.py` 顯示。 | `arrangement` 與 `curved_wall_faces`。 | 單一路徑，不再有「是否走 curved 路徑」的分支。 |
+| **mesh 驗證。**live 3D group 名稱等於 volume group；每個 port 的三角形被兩個四面體共用；每個 port owner 與某個 `pec_surfaces` 共用 mesh edge。 | 名稱取自 `physical_groups` 中 `dim == 3` 的鍵；port 的 owner 是 `ports[*].host_entity_ids`。 | 載入階段的檢查已由 `verify_loaded` 涵蓋；mesh 之後的兩項檢查仍由 Palace 執行。 |
+| **manifest 與結果檔。**`mesh_manifest.json` 的 `groups[]`、index map 的 metadata，由 result reader 驗證。 | group 名稱與 tag 仍會出現在 index map 與 `palace.msh`。 | 舊 run 目錄無法對新名稱重新 resolve（`resolve_palace_result` 以 `mesh_manifest.json` 的 hash 為準）；manifest 的 `schema_version` 目前為 1，應升版。 |
+:::
+
+## AEDT {#aedt}
+
+### contribution ledger {#aedt-ledger}
+
+AEDT 今天只從舊 planning 取一樣東西：`plan_representation_contribution_geometry` 執行完整的 surface planner，AEDT 從每筆回傳的 record 只保留 `surface_id`、`owner_semantic_id`、`geometry_ref`、`normal_hint`、`surface_role`，以及 `side` 為 top 或 bottom 的 ledger record，並以 MA／MS／SA／MM 分類編入 `SurfaceEprSpec` 的 contribution。AEDT 不使用 XAO、Gmsh 或任何 sidecar。
+
+::: {.askr-table-compact}
+| ledger 欄位 | sidecar 來源 | 狀態 |
+|---|---|---|
+| `surface_id` | `faces` 的鍵（face id），或 group 名稱 | 直接 |
+| `owner_semantic_id` | `physical_groups[faces[f].group].entities`。SA 列出被隔開的兩個 region | 直接；SA 要選哪一個，AEDT 決定 |
+| `geometry_ref` | `lineage.faces[f]`（來源 Entity）、`faces[f].z_um`；edge 經 `lineage.edges` 與 `lineage.carriers` 追到來源 polygon 的 `(entity, polygon, ring, edge)` | 推得；sidecar 沒有座標，需要時回到 S0 的輸入或 BREP |
+| `normal_hint` | `faces[f].negative_volume` 與 `positive_volume`（法向反側與所指的一側），加上 `face_kind` | 推得 |
+| `surface_role` | `faces[f].face_kind` 與 `kind`（`horizontal` 或 `wall`） | 直接 |
+| `side`（top／bottom） | `faces[f].face_kind` 為 `top` 或 `bottom`（導體在 face 下方是它的 `top`，在上方是 `bottom`） | 直接 |
+| classification MA／MS／SA／MM | `physical_groups[g].interface_type`。Route A 的 `SHEET` 在 `surface_epr_rows` 中同時是 MA 與 MS | 直接 |
+| 每個來源的貢獻 | `lineage.membership[f]`，依面積加權、不互斥（總和可大於 1；wall 取底邊長度的比例） | 推得 |
+| AEDT 自己的 inset mask（128 邊形 KLayout complement-Minkowski） | `insets` 與 band group 的 face；band 已預先切在 STEP 的 solid 裡 | 取代 |
+| `source_dbu_um` | 頂層 `grid_um` | 直接 |
+:::
+
+範例模型的逐 group 資料如下，這正是測試重建的 ledger 內容（`face`、`group`、`interface_type`、`entities`、`face_kind`），加上 `adjacent_domains`。每個 group 只有一種 `face_kind`（ground 的 top 與 sidewall 是兩個 group），所以依 face 種類區分時直接看 group 即可。
+
+::: {.askr-table-compact}
+{{< include figures/consumer-aedt-rows-table.md >}}
+:::
+
+### STEP 與其餘指派 {#aedt-step}
+
+STEP 匯出與 face 順序把關的步驟在[上一頁](consumer-contract.qmd#sequence)。其餘 AEDT 端指派的來源：
+
+::: {.askr-table-compact}
+| AEDT 端動作 | sidecar 來源 |
+|---|---|
+| object 名稱 | `volumes[*].aedt_name`（`StepExport.object_names` 是同一集合） |
+| material | `volumes[*].material`（id；參數仍來自 stack） |
+| Perfect E | 導體 surface 的 group（`MA`、`MS`，Route A 為 `SHEET`），或某個 Net 的 `unions.nets[<net>]`；group 的 face id 經 guard 的 face 順序解成 AEDT 的 face id |
+| 重建 lumped port | `ports[*]`（`direction`、`z_um`、`host_entity_ids`、`faces`）與 `embedded_faces` |
+| band 的 face | `insets[*].bands` 與 `surface_epr_rows`；不需要 AEDT Imprint |
+:::
+
+## Electrostatic 的 Net {#nets}
+
+今天 Electrostatic 的 terminal 與 ground 由 `boundary_surfaces` 取得：`source == "volume_interface"`、solver-active、`interface_type` 為 MA 或 MS 的項目，按**完全相同的 `net_id`** 分組，同 Net 的導體組成一個 terminal；外部 ground 是 `source == "domain_boundary"` 的項目。
+
+新 sidecar 的 `unions.nets` 就是這個資訊：鍵是 Net，成員是該 Net 外露導體表面的 primary group 清單（內部名稱 `NET::<net>`，在 sidecar 中去掉前綴）。因為 surface 預設依 Entity 歸屬（決策 D5），一個 Net 會有許多 group；Net 只用在需要電氣身分的地方，也就是這裡。
+
+- terminal 是 `unions.nets[<net>]` 中各 group 的 physical tag（以 group 名稱查 live 模型）清單，在 config 裡列成屬性清單，**不**建立另一個重疊的 Gmsh group（MSH 會對每個 group 重複輸出元素，solver 可能誤讀）。
+- Net 的成員包含它的所有 band 與 sidewall（範例的 `P` 含 `MA::pad::sidewall`、三個 `MA::pad::top::band=k` 與 `MS::pad::bottom`）。Route A 的成員是 `SHEET` group，所以 terminal 與 EPR 的 row 分開處理：前者用 `unions.nets`，後者用 `surface_epr_rows`。
+- 外部 ground：`unions.interface_types.EXT` 中的 group（範例的 `EXT::VACUUM_REGION::bottom`、`::sidewall`、`::top`）。`EXT` 依 face 種類分成 `top`、`bottom`、`sidewall` 等 group（例如 `EXT::VACUUM_REGION::top`）。哪一個 Net 是 ground，仍由使用者的 config 決定，sidecar 不推論電氣連通性。
+- 沒有外露導體表面的 Net 不會出現在 `unions.nets`。
+
+## 同一次切換的、不變的與之後移除的 {#switches}
+
+下表依整合盤點的第 7.2 節（見[補充](#reproduction-data)）整理，並標明新 sidecar 對每一項提供什麼。決策 D6：兩條舊路徑在新 pipeline 落地時移除，沒有相容層。
+
+::: {.askr-table-compact}
+| 類別 | 項目 | 新 sidecar 與入口提供的 |
+|---|---|---|
+| **同一個 change set 切換** | Palace 的 sidecar 與 group 契約：`palace/mesh/build.py` 的 SGB 呼叫與三個檔案的讀取，`physical_groups.py`、`record_validation.py`、`refinement.py`、`provenance.py`，以及每個讀取 group 欄位的地方；result reader 驗證的 index-map metadata（`results/surface_readers.py`、`index_contract.py`、`presentation/surface_figures.py`），因為 `surface_contribution_ledger` 今天是 MA／MS／SA record 的必要證據 | 上面的欄位表；production 的 `build_sgb_geometry`、`verify_loaded`、`apply_sidecar_embeds` |
+| | Route B 的 port embedding：XAO transport group 與 `embed_route_b_port_surfaces` 一起改 | `embedded_faces` 與 `apply_sidecar_embeds` |
+| | `geometry/compiler` 公開 facade 與它在 docs、tests、knowledge 來源（`scripts/generate_knowledge_reference.py`、`docs/knowledge-sources.json`、`tests/test_knowledge_generator.py`）中的所有登錄 | 無 |
+| | AEDT 的 contribution ledger（`aedt/preparation/planar.py` 181–215）：保留舊 planning 到 AEDT 階段，或由新 sidecar 導出 ledger 並在同一次改完 | 上面的 ledger 對照表使後者可行；兩者的取捨尚未決定（[open 項目](#open-items)） |
+| **不變（S0 到 S1）** | `build_gds_stack_geometry_input`、`interpret_physical_geometry`、`GeometryBuildInput`、`RepresentationContext`、`GeometryGridContext`、`GeometryPlan`（含 `set_entity_priorities`）、`ApproximationProfile`、`PhysicalLayerDeclaration`；AEDT 目前使用的 S0／S1 符號（`aedt/eigenmode.py`、`aedt/preparation/*`、`aedt/specs/*`、junction partition） | 新入口的輸入就是它們的輸出；不重寫 |
+| **之後移除** | 兩家都切換之後：`geometry/compiler`、`construction`、`volume_planning`、`port_planning`、`models/{construction,tags}`、`primitives/topology_validation`，及 Palace v1 路徑與它們的測試 | 無 |
+| | AEDT 階段之後：`planning/` 其餘部分（surface、contact、domain、topology planning、evidence、tags）與 `primitives/{surface_records,geometry_refs,topology_validation,port_contract}` | 無 |
+:::
+
+### Route C 的採用端需求 {#route-c}
+
+Route C 保留導體 volume 並在內部 mesh，目的是有限導電率，以及未來的超導材料模型。sidecar 已經表達它：`route_policy.conductor_volumes` 是 `"retained"`，每個導體是一個 `VOL::<entity>` group，`kind` 為 `conductor`，並帶 `net` 與 `material`。Palace 端今天做不到：
+
+- volume 的 `material_kinds` 只接受 `vacuum` 與 `dielectric`（`physical_groups.py` 197–210）；config 要求每個 volume 恰有一個 `material_ids`，且 `stack["materials"][id]` 的 `kind` 是 vacuum 或 dielectric、`permittivity > 0`（`config.py` 470–545）。導體需要新的 material kind，以及 conductivity 欄位。
+- 「live 3D group 名稱等於 volume group」的檢查會多出導體 volume。
+- 導體表面的 `MA` 與 `MS` group 在 Route C 是導體 volume 與外側 volume 之間的共用 face；它們是否仍列為 PEC 邊界、還是改為有限導電率的介面條件，是 Palace 模型的決定（[open 項目](#open-items)）。
+- 導體之間共用的 face（同 Net 的接觸正常，不同 Net 是錯誤）會成為 `MM` group（例如 airbridge 的 deck 與 post）；今天 `MM` 只作為 `surface_epr=False` 的邊界。
+
+## 開放項目 {#open-items}
+
+以下只列事實與決定的位置。「Architecture Lead」是指 Codex 的 Architecture Lead；「Palace 採用端」與「AEDT 採用端」是各自的實作者。
+
+::: {.askr-table-compact}
+| # | 事實 | 在哪裡決定 |
+|---|---|---|
+| 1 | Palace 的 `representation`、`source_provenance`（`stack_layer`、`conductor_source_layer_name`、`direction_sign_convention`）、`equipotential_id`、`contact_kind`、`solver_use`、`owner_provenance`、`metadata` 在新 sidecar 沒有欄位。 | Palace 採用端改寫 `physical_groups.py` 與 `record_validation.py` 時決定每個欄位是移除、由規則推得，還是請 SGB core 新增（後者需要 Architecture Lead 同意並升版 schema）。 |
+| 2 | `surface_contribution_ledger` 今天是 MA／MS／SA record 的必要證據，並餵給 index map 與報告。新 sidecar 的等價資訊是 `lineage.membership` 與 `insets`，沒有 `native_aggregation` 與 `mask_support`。 | Palace 採用端與結果讀取端（同一個 change set，見上表第一列）。 |
+| 3 | `SGB_RUNTIME_AUTHORITY`、`SGB_DERIVATION_*_SHA` 與測試中的字串；manifest 的 `schema_version` 為 1；舊 run 目錄無法對新 group 名稱 resolve。 | Palace 採用端決定新值並升版 manifest。 |
+| 4 | Route C 的 Palace 需求：導體 material kind、conductivity 欄位、導體表面（`MA`、`MS`）在有限導電率下是否仍為 PEC、`MM` group 的處理。 | Architecture Lead 與 Palace 採用端；Route C 的物理意義屬於 D1。 |
+| 5 | AEDT contribution ledger：保留舊 planning（約 8.6k 行）直到 AEDT 階段，或同一次改由新 sidecar 導出。D6 只有在後者，或前者加上明確例外時才字面成立。 | Human 與 Lead 的決定（整合盤點 7.2 第 4 點）；AEDT 採用端執行。 |
+| 6 | production 的 STEP 匯出尚未在 AEDT 上匯入過；`StepExport` 的 guard 只在記憶體中；face 順序等於 face id 順序是觀察，不是保證；E4 的容許值是面積相對 $2 \times 10^{-3}$、center $5 \times 10^{-3}$ µm，匯出函式不規定容許值。 | AEDT 採用端：保存 guard 的方式、容許值，並在 AEDT 上跑一次 production 的 STEP。 |
+| 7 | `entities` 與 Palace 的 `conductor_component_id` 是否為同一個值（sidecar 文件與測試如此對應），尚未用實際的 Palace config 驗證；sidecar 的 Entity id 來自 S0 的輸入（範例中是 `ground_0000`、`VACUUM_REGION`）。 | Palace 採用端。 |
+| 8 | 不同作業系統、CPU 或 libm 之間 bytes 相同是論證，沒有在第二個平台上比較。 | SGB core 的所有者（在第二個平台上跑同一組 digest 測試）。 |
+| 9 | `surface_groups` 鍵在新 sidecar 沒有來源。 | Palace 採用端。 |
+:::
+
+## 補充：重現資料 {#reproduction-data}
+
+現行 Palace 與 AEDT 一側的欄位，取自 `src/scgsim/palace/mesh/`（`build.py`、`physical_groups.py`、`record_validation.py`、`refinement.py`）與 `src/scgsim/aedt/preparation/planar.py` 目前讀取的 record；新 sidecar 一側取自 `scgsim.geometry.sgb` 的 `sidecar/__init__.py`（套件說明中的對照）、`sidecar/build.py`、`sidecar/groups.py`、`routes/` 與 `tests/test_sgb_sidecar.py`。範例資料的產生方式與腳本見[上一頁的補充](consumer-contract.qmd#reproduction-data)。逐 group 表與重建的 group dict 由 `zh-TW/docs/design/sgb/_figures/consumer_contract.py` 產生。

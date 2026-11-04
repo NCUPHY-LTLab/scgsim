@@ -9,13 +9,15 @@ scgsim-id: "docs/design/sgb/parallelism"
 
 SGB 可以把 derivation 切成許多獨立的 job 平行執行，而且平行的結果與序列的結果逐位元相同。這一頁說明哪些部分平行、tile 規則為什麼能保證結果相同、noding 為什麼每一輪都要同步，以及 Python prototype 為什麼沒有量到穩定的加速、production 設計打算怎麼處理。
 
+production（`scgsim.geometry.sgb`）已實作 tile 與 worker 的平行：`build_sgb_geometry(workers=…, tiles=…)` 只改變推導與寫檔的方式，不改變任何一個 byte（同一台機器上測過，見[使用契約](consumer-contract.qmd#determinism)）；每個 stage 的序列／平行種類與時間記錄在 `ConformalModel`（`timings`、`stage_kind`、`amdahl`）。本頁的加速與 Amdahl 數字全是**原型計算**，production 沒有重新量測加速。
+
 ## 哪些平行、哪些不平行
 
 SGB 以 immutable record 上的 pure function *derive* 整個 conformal 模型，所以 derivation stage S1–S9 是平行化的對象。有三件事刻意排除在外：
 
 - **Meshing**：Gmsh 的 meshing 本身已原生平行，不屬於 SGB。
-- **Emission（S10）**：由下而上的 OCC 建構是序列的，且與 entity 數量成線性。在 prototype 中，N = 20 000 個 feature 時 Gmsh API 的 emission 需要 74–80 s（不同次執行），比整個 derivation（45–52 s）還長；`synchronize`、平面 face 建構與 XAO 寫出佔大宗。Lead 已決定（待 architecture review）改採 BREP/XAO 直接序列化（D8），見[決策頁](decisions.qmd#d8)。
-- **Volume connectivity**、dissolution 與 half-edge 結構（DCEL）：在 prototype 中是全域且序列的（見下表）。
+- **Emission（S10）**：由下而上的 OCC 建構是序列的，且與 entity 數量成線性。在 prototype 中，N = 20 000 個 feature 時 Gmsh API 的 emission 需要 74–80 s（不同次執行），比整個 derivation（45–52 s）還長；`synchronize`、平面 face 建構與 XAO 寫出佔大宗。改採 BREP/XAO 直接序列化（D8，production 已實作），見[決策頁](decisions.qmd#d8)。
+- **Volume connectivity**、dissolution 與 half-edge 結構（DCEL）：在原型與 production 中是全域且序列的（見下表）。
 
 Worker 是 **process**：stage 函式是對可 pickle 的 record 的 pure function，Gmsh/OCC 狀態絕不跨 worker 共用。
 
@@ -97,7 +99,7 @@ flowchart TB
 只對 noding 做 tiling **完全沒有加速**：noding 約佔 derivation 的 15%，其餘是序列的。因此平行單位是 noding 輪次之後所有「逐 item」的工作。item（face、edge、vertex、wall、volume）由**其錨點所在的 tile 擁有**；每個 stage 對每個非空 tile 執行一次，結果依 item index 放回。序列與平行共用同一組 stage 函式，所以結果不可能依賴 $T$ 或 worker 數。
 
 ::: {.askr-table-compact .askr-table-numeric}
-| Stage（prototype 名稱） | 種類 | N = 20 000，單一 process（s） |
+| Stage（原型名稱與計時） | 種類 | N = 20 000，單一 process（s） |
 |---|---|---|
 | `noding_kernels`（crossing pixel、hot-pixel hits） | parallel | 9.41 |
 | `dissolution` | serial | 5.83 |
@@ -110,7 +112,7 @@ flowchart TB
 | `validation_shells` | parallel | 3.00 |
 | `wall_runs` | parallel | 2.69 |
 | `validation_serial` | serial | 1.02 |
-| 其餘 serial stage（`linking`、`assembly_groups`、`assembly_registry`、`wall_prep`、`contact_check`、`shell_prep`、`manifold_check`、`arc_realisation`、`volume_connectivity`、`S2_levels`） | serial | 合計 3.56 |
+| 其餘 serial stage（`linking`、`assembly_groups`（production 為 `routes`）、`assembly_registry`、`wall_prep`、`contact_check`、`shell_prep`、`manifold_check`、`arc_realisation`、`volume_connectivity`、`S2_levels`（production 為 `levels`）） | serial | 合計 3.56 |
 | **build 的 wall time** | | **52.1**（serial stage 21.9，parallel stage 28.0） |
 | S10 emission（Gmsh API，不含 meshing） | sequential | 80.23 |
 :::
@@ -166,9 +168,9 @@ prototype 的筆記把加速偏低歸因於 prototype 的語言（CPython proces
 - **更粗的 job。** 先依 level、slab、layer 或 net group（輸入互不影響之處）平行，之後才把單一 level 切成 tile。
 - **Compiled kernel**：noding、half-edge 結構與 dissolution 由編譯過的 kernel 負責，Python 負責 orchestration（決策 D9）。rectilinear 的工作可用 KLayout 的整數 region engine 與它的 tiling processor；arc 需要我們自己針對 line 與 arc carrier 的 snap rounding（D3）。
 - **以 flat array 取代 Python 物件**來表示 vertex 與 edge，也就不受 garbage collector 影響。
-- **BREP/XAO 直接序列化**（D8，Lead 決定，architecture review 中）：可以分塊平行寫出，mesher 只需載入一次，emission 不再是最大的序列項。
+- **BREP/XAO 直接序列化**（D8，Lead 決定，architecture review 中；production 已實作）：可以分塊平行寫出，mesher 只需載入一次，emission 不再是最大的序列項。
 
-以上都沒有在這裡量測。prototype 量到的是演算法分解（tile 規則、barrier、序列比例）；它沒有量測 compiled kernel。D9 預期的收益應表述為第一個 compiled 實作的目標，不是本設計的結果。
+以上都沒有在這裡量測。production 的階段 1 仍是純 Python，沒有 compiled kernel，也沒有以 flat array 取代 Python 物件的重寫。prototype 量到的是演算法分解（tile 規則、barrier、序列比例）；它沒有量測 compiled kernel。D9 預期的收益應表述為第一個 compiled 實作的目標，不是本設計的結果。
 
 ## 限制
 

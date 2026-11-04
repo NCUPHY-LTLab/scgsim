@@ -2,7 +2,7 @@
 
 Run (from anywhere)::
 
-    /home/ili/Githubs/SCQ_Design/packages/scgsim/.venv/bin/python docs/design/sgb/_figures/parallel.py
+    .venv/bin/python zh-TW/docs/design/sgb/_figures/parallel.py
 
 Reads the measured scaling data of the prototype (``outputs/scaling.json``, produced by its ``examples/scaling.py``;
 this script does not re-measure anything) and recomputes the tile ownership of the running example from the

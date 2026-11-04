@@ -2,7 +2,7 @@
 
 Run (from anywhere)::
 
-    /home/ili/Githubs/SCQ_Design/packages/scgsim/.venv/bin/python docs/design/sgb/_figures/inset.py
+    .venv/bin/python zh-TW/docs/design/sgb/_figures/inset.py
 
 Every geometry figure is computed from the read-only prototype (``experiments/sgb-redesign/prototype``)
 by building the pad-in-ground example with Surface-EPR inset bands; nothing is copied from its HTML.

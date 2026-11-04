@@ -1,0 +1,252 @@
+---
+title: "SGB 輸出的使用契約"
+description: "build_sgb_geometry 的呼叫與回傳、五個檔案、決定性的保證（哪些測過、哪些只是論證）、sidecar scgsim.sgb.sidecar.v1 的每個欄位與實際節錄，以及 Palace 與 AEDT 讀取端各自的步驟。"
+lang: zh-TW
+scgsim-kind: "design"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/design/sgb/consumer-contract"
+---
+
+Palace 的 mesh 流程與 AEDT 的 geometry 流程要採用新的 SGB，需要知道兩件事：SGB 交給它們什麼，以及怎麼讀。本頁回答第一件事與讀取的順序：入口函式 `build_sgb_geometry`、它寫出的五個檔案、sidecar 的欄位，以及兩個讀取端的流程。今天的 Palace 與 AEDT 契約如何對到這些欄位，另見[對應表](consumer-mapping.qmd)。
+
+這裡描述的程式是階段 1 的 SGB core。它已經實作並有測試，但 Palace 與 AEDT 尚未切換過來；本頁的 sidecar 是 production 格式 `scgsim.sgb.sidecar.v1`，取代 [Emission](emission.qmd) 頁中原型的 `sgbproto-sidecar-2`。每一項保證都標明是**測過**（有自動測試）、**實測**（本頁產生範例時跑過一次）還是**論證**（由程式結構推得、尚未實測）。範例都是同一個小模型：100 µm 的晶片，帶一片 ground plane、一個 20 µm 的 pad 與一個 lumped port，pad 的上表面有 0.5 與 1 µm 兩個 inset margin（三個 band），另有一條 refinement curve。它比其他頁的執行範例小，只為了讓節錄能完整讀完；產生方式見[補充](#reproduction-data)。
+
+## 呼叫與回傳 {#call}
+
+入口是 `scgsim.geometry.sgb` 的 `build_sgb_geometry`，它刻意不從 `scgsim.geometry` 匯出（測過）。輸入是 S0 與 S1 的產物：有效（effective）的 `GeometryBuildInput`，以及 `interpret_physical_geometry` 一併回傳的 `RepresentationContext`；這兩個物件正是今天 Palace 傳給 `SemanticGeometryBuilder().build` 的那一組。Route A 的來源如果仍是有限厚度的 film，要先由 S1 的 approximation profile（例如 `thin_film`）收成 sheet，否則 Route A 會拒絕（見 [Route](routes.qmd)）。
+
+```python
+from scgsim.geometry.sgb import SgbArtifacts, build_sgb_geometry
+
+artifacts: SgbArtifacts = build_sgb_geometry(
+    build_input,                      # effective GeometryBuildInput（S1 的輸出）
+    representation,                   # RepresentationContext（S1 的輸出）
+    route="B",                        # "A"、"B" 或 "C"
+    insets=(InsetRequest(...),),      # Surface-EPR band；預設空
+    refinements=(RefinementRequest(...),),   # mesh 尺寸曲線；預設空
+    output_dir=run_dir / "geometry",
+    workers=1, tiles=1,               # 只改變推導與寫檔的方式，不改變任何一個 byte
+    strict=False,                     # True：寫出後以 OCCT 再檢查一次（需要 OCP）
+)
+```
+
+::: {.askr-table-compact}
+| 引數 | 意義 | 備註 |
+|---|---|---|
+| `build_input`、`representation` | S1 之後的 effective 輸入 | 格點 $g$ 取自輸入的 `GeometryGridContext`；sidecar 的 `grid_um` 記下它。 |
+| `route` | 三種 labelling policy，見下表 | 其他字串會丟出 `RouteError`。 |
+| `insets` | `InsetRequest` 的 tuple | 每個 request 是一個 cut family，結果是 band 的 primary group。 |
+| `refinements` | `RefinementRequest` 的 tuple | 只放進 sidecar 與 BREP，不改變任何 label。 |
+| `output_dir` | 輸出資料夾 | 不存在會建立；檔名由 route 決定（見下）。 |
+| `workers`、`tiles` | worker process 數、每個方向的 tile 數（`tiles=3` 是 3 × 3） | 預設 1 與 1；沒有 `fork` 的平台以單一 process 寫檔。 |
+| `strict` | 是否在寫出後執行 OCCT 檢查 | 需要 `occt` dependency group；沒有安裝時在 build 開始前就丟出 `OcctUnavailable`（測過）。 |
+:::
+
+Overlap 的優先權不在這個函式的引數裡：同一個 Net 的兩個 Entity 重疊時，由較高的 priority 擁有重疊區；priority 相同或缺少則 build 失敗並指名兩個 Entity。priority 有三個來源：layer stack 的 `mesh_order`（層之間，**較低者勝**，gdsfactory 慣例）、元件標註的 `priority`（同一個元件、同一層之內），以及 `GeometryPlan.set_entity_priorities`（不同 occurrence 之間；數值**較高者勝**，整個 mapping 一次取代，任何一項無效則維持原狀）。三者的錯誤訊息會指出該由哪個來源補上（測過）。
+
+### Route 與 request {#requests}
+
+::: {.askr-table-compact}
+| Route | 導體 | 輸出的 solid | 拒絕的輸入 |
+|---|---|---|---|
+| A | 薄膜是零厚度的 sheet；有限厚度的本體（bump、post）仍是 volume | 導體 volume 排除 | 經 S1 之後仍是有限厚度的 film（`stack_film`、`local_film`） |
+| B | 每個導體都是有限厚度的 prism | 導體 volume 排除，邊界面屬於相鄰 volume | 導體 sheet |
+| C | 與 B 相同的 prism | 導體 volume **保留**並在內部 mesh；導體–介電質與導體–真空的介面是共用 face | 導體 sheet |
+:::
+
+三種 route 的 lumped port 都能接受：Route A 的 port 是兩個 volume 之間的 face，Route B 與 C 的 port 是嵌在宿主 volume 內的 face（兩側是同一個 volume）。
+
+::: {.askr-table-compact}
+| Request | 欄位 | 結果 |
+|---|---|---|
+| `InsetRequest(request_id, support, margins_um, interface=None)` | `margins_um` 是嚴格遞增的正數（單位 µm，在格點上）；`interface` 選填，聲明該 face 預期的 interface 種類，找不到該種類的 cell 則 build 失敗 | $K+1$ 個 band $B_0 \dots B_K$，各成為 `…::<face kind>::band=k` 的 primary group |
+| `ConductorSurface(entity_id, side)` | `side` 為 `"sheet"`（Route A 的 sheet，一個 face 同時是 MA 與 MS）、`"top"`（對 vacuum，`MA::…`）或 `"bottom"`（對 dielectric，`MS::…`） | 有限導體的側壁 band 不在第一版 |
+| `SolutionInterface(first_entity_id, second_entity_id, z_um=None)` | 兩個 solution region 之間、沒有導體的介面（gap：`SA::…`）；兩者在多個高度相遇時用 `z_um` 指定 | |
+| `RefinementRequest(request_id, z_um, points_um)` | 高度 `z_um` 的折線，mesher 把它嵌進含有它的 face | 只供 mesh 尺寸；落在任何已 emit 的 face 之外則是錯誤，不會悄悄丟掉 |
+:::
+
+band 的幾何與 margin 規則見 [Surface EPR inset imprint](inset-imprint.qmd)；band 的距離原點永遠是 support face 自己的物理邊界，port、其他 band 與 seam 都不會移動它。
+
+### 失敗 {#failures}
+
+::: {.askr-table-compact}
+| 例外 | 何時 | 是否已寫出檔案 |
+|---|---|---|
+| `InputError`、`UnsupportedCurveError` | 輸入無法變成 prism；曲線不是直線或圓弧（spline 在第一版 fail closed） | 否 |
+| `RouteError` | route 不認得，或 prism 不適用該 route | 否；`output_dir` 也不會被建立（測過） |
+| `OverlapError`、`ContactError`、`NonManifoldError` | 重疊無法決定、不同 Net 的導體接觸（包含 snapping 造成的接觸）、volume 沿垂直 edge 碰到自己 | 否 |
+| `ValidationError` | 任一條結構 invariant 失敗；production 無法關閉驗證 | 否（驗證在 emission 之前；由程式順序論證） |
+| `OcctUnavailable` | `strict=True` 但沒有 OCP | 否，build 開始前即丟出（測過） |
+| `OcctCheckError` | `strict=True` 且寫出的 XAO 有 finding | 是，檔案已寫出 |
+| `SgbError`（writer） | direct writer 拒絕不能精確寫出的曲面 | 視拒絕發生的階段而定；此時 `output_dir` 已建立，部分檔案可能已存在 |
+:::
+
+這些例外都繼承 `SgbError`。檔案與報告怎麼讀見[結構 invariant 與失敗行為](validation.qmd)。
+
+### 回傳的 `SgbArtifacts` {#artifacts}
+
+`SgbArtifacts` 是 frozen dataclass：`xao`、`brep`、`sidecar`、`sliver_report`、`validation_report`（五個 `Path`）、`route`、`counts`（規劃與寫出的數量）、`timings`（各步驟秒數）與 `occt`（strict 模式的報告，否則 `None`）。`counts` 與 `timings` 只存在於回傳值，不寫進任何檔案。五個檔案名稱由 route 決定，都以 `semantic_geometry_route_<a|b|c>` 開頭：
+
+::: {.askr-table-compact .askr-table-numeric}
+{{< include figures/consumer-files-table.md >}}
+:::
+
+- **XAO** 是 Gmsh 開啟的檔案：內嵌 BREP、每個子形狀的 `TopExp::MapShapes` 索引，以及 primary physical group。
+- **BREP** 是同一份幾何；AEDT 的 STEP 匯出與 OCCT 檢查讀它（或讀 XAO）。
+- **sidecar** 是下一節的主角；沒有它，XAO 無法攜帶 embedding、lineage、band 與預期值。
+- **sliver report** 與 **validation report** 是報告：前者記錄 feature size 與 snap 偏離，後者列出通過的結構檢查，它們都不是讀取端必讀的檔案。
+
+`sidecar["files"]` 以檔名（相對於 sidecar 所在資料夾）列出其餘四個檔案。
+
+## 決定性：測過的與論證的 {#determinism}
+
+採用端最關心的是：同一個輸入是否永遠得到同一組檔案與同一組 id。下表區分已有測試的與只是論證的陳述。時間、`counts` 與 `timings` 不在任何檔案裡；sidecar 沒有時間戳與絕對路徑，數字取 12 位有效數字。
+
+::: {.askr-table-compact}
+| 陳述 | 狀態 | 依據 |
+|---|---|---|
+| 同一個輸入兩次推導得到相同的 id 與 model digest | 測過 | `test_sgb_determinism`；隨機 layout 與 pad-in-ground |
+| id 不受 Python hash 隨機化影響 | 測過 | 三個 `PYTHONHASHSEED`（0、1、12345）各一個 digest |
+| 五個檔案的每一個 byte 都不受 `workers` 與 `tiles` 影響 | 測過 | `workers=3, tiles=3` 與 `1, 1` 比較全部五個檔案；僅 Route B 的 GDS 範例 |
+| BREP 與 XAO 不受 worker 數與 chunk 大小影響 | 測過 | 數種 `workers` × `chunk_items` 組合 |
+| sidecar 的 bytes 不受 hash 隨機化影響；不受 tile 配置影響 | 測過 | 三個 seed、Route A／B／C；`tiles=3, workers=2` 與單 tile 的 sidecar 相同 |
+| BREP 的 bytes 固定 | 測過（單一環境） | 兩個案例（`pad_a`、`pad_b`）的 SHA-256 釘住在測試裡 |
+| 兩次獨立執行得到相同的檔案 | 實測 | 本頁範例的 Route A、B、C 各五個檔案，兩次執行逐位元組相同 |
+| **不同作業系統、CPU 或 libm 之間 bytes 相同** | **論證，未實測** | number policy 只用 IEEE `+ - * /`、`sqrt` 與 Python `%` 格式化，不呼叫 `sin`、`cos`、`atan2`；尚未在第二個平台上比較 |
+| 沒有 `fork` 的平台輸出相同 | 論證 | writer 改為單一 process 渲染同樣的函式；未在該平台測過 |
+| Gmsh 的 mesh 與 Palace 的結果相同 | **不保證** | 本頁不作此宣稱；physical tag 依排序後的名稱編號，不是 identity，使用端應儲存名稱 |
+:::
+
+## Sidecar `scgsim.sgb.sidecar.v1` {#sidecar}
+
+sidecar 是一個 JSON 檔：頂層的鍵依字母排序、每個頂層鍵佔一行，所以兩個 sidecar 的 diff 會直接指出變動的區塊。格式由套件內的 `sidecar.schema.json`（JSON Schema draft 2020-12）約束，所有測試案例發出的 sidecar 都經過它驗證（測過）。三條規則貫穿所有欄位：
+
+- **綁定靠建構順序，不靠幾何。**native tag 等於「規劃 id 在 `binding.ids_by_tag[dim]` 中的位置加 1」（也就是寫出的 compound 的 `TopExp::MapShapes` 順序）。
+- **primary group 分割每個維度。**每個已 emit 的 face 與 volume 恰好屬於一個 primary group；「某 Net 的所有 PEC face」這類聯集是 group 名稱的清單（`unions`），絕不是互相重疊的 Gmsh group。
+- **使用端儲存名稱。**group 的 `tag` 是 physical tag，依排序後的名稱編號，加入新 group 就會位移；名稱與 sidecar 的欄位才是 identity。
+
+### 欄位一覽 {#fields}
+
+::: {.askr-table-compact}
+| 頂層欄位 | 內容 | 主要使用者 |
+|---|---|---|
+| `schema`、`route`、`route_policy`、`grid_um`、`tolerance_um`、`model` | 格式版本；route；導體 volume 是 `excluded` 或 `retained`、是否允許導體 sheet；模型格點與寫檔容許值（µm）；`model.identity_digest`（模型的內容雜湊） | 兩者；Palace 的 manifest 與 provenance |
+| `files` | 其餘四個檔案的檔名 | 兩者 |
+| `binding.ids_by_tag`、`counts` | 規劃 id 與 native tag 的對應（維度 `"0"` 到 `"3"`）；各種數量，含 `volumes_total`（包含未 emit 的 volume） | Palace：取代 live group 的 entity tag；AEDT：各 solid 的 face 順序 |
+| `physical_groups` | 每個 primary group（名稱為鍵）：`dim`、`tag`、`ids`、`native_tags`；surface 另有 `interface_type`、`entities`、`net`、`face_kind`（單一值）、`adjacent_domains`、`adjacent_volumes`、`band`、`area_um2`；volume 另有 `kind`（`vacuum`、`dielectric`、`conductor`）、`material` | 兩者；最重要的欄位 |
+| `unions` | `interface_types`（`MA` → group 清單…；Route A 的 `SHEET` group 同時列在 `SHEET`、`MA` 與 `MS`）與 `nets`（Net → 該 Net 外露導體表面的 group 清單） | 報告；Electrostatic 的 terminal 與 ground |
+| `surface_epr_rows` | 每個 Surface-EPR row（例如 `MA::pad::top::band=2`）與承載它的 group、entity、band，以及 `side`（`above`、`below`、`both` 或 `null`）與 `shared_face_group`（雙面 sheet 的 group，否則 `null`） | Palace 的 band 選取；internal boundary 的 crack 決定 |
+| `mesh_hints` | `band_boundary`、`refinement_curve`、`curved_edge` 三種提示：edge id 與 native tag，以及來源的 request id；沒有尺寸 | Palace 的 mesh 尺寸 |
+| `volumes`、`faces` | 每個規劃的 volume：entity、kind、material、Net、是否 `emitted`、group、`volume_um3`、`aedt_name`；每個規劃的 face：group、`kind`、`face_kind`、`z_um`、兩側的 volume | AEDT 的 ledger；Palace 的相鄰關係 |
+| `embedded_faces`、`refinement_edges` | `(face, host volume)` 與 `(edge, host face)`：XAO 無法攜帶、mesher 必須重新套用的 embedding | Palace |
+| `ports` | 每個 lumped-port sheet：`port_index`、`source_name`、`direction`、`host_entity_ids`、`source_layer`、`target_layer`、`z_um`、`group`、`faces`、`host_volumes`、`adjacent_volumes` | 兩者 |
+| `lineage` | `edges`（edge → carrier id）、`carriers`（來源 polygon edge 或 family member）、`vertical_edges`、`faces`（來源 Entity）、`membership`（依面積加權，各比例不互斥，可大於 1） | 追溯；band edge 的辨識 |
+| `insets`、`refinements` | 每個 inset family：request id、support、margin（µm 與格點）、`band_count`、各 band 的 group；每個 refinement request 與它的 edge | Palace |
+| `slivers`、`arrangement`、`curved_wall_faces`、`surface_kinds` | sliver 報告摘要；snap 偏離與圓弧偏離的實測值（格點單位）、圓弧 edge 數；曲面 wall 的 face；plane 與 cylinder 的 face 數 | manifest 的 curved-arrangement provenance |
+| `expected` | `verify_loaded` 的預期值：vertex 位置、各 edge／face／solid 的邊界、face 面積、solid 體積 | `verify_loaded` |
+:::
+
+### 實際節錄 {#excerpts}
+
+以下節錄全部由範例的 sidecar 取出；被截短的清單以字串 `"..."` 結尾。先看版本、route、檔名與數量：
+
+{{< include figures/consumer-excerpt-head.md >}}
+
+`route_policy` 是 route 的兩個事實：導體 volume 是否保留、是否有導體 sheet。`counts` 中的 `volumes_total` 是 4，但這個 Route B 模型只 emit 兩個 solid（`solids`）：兩個導體 volume 被排除，但它們仍有規劃 id，`faces` 裡 face 的 `negative_volume` 或 `positive_volume` 也會指向它們（用 `volumes[*].emitted` 區分）。
+
+physical group 是核心。下面是一個 band 的 top face、pad 的 bottom face、port，以及一個 volume：
+
+{{< include figures/consumer-excerpt-groups.md >}}
+
+- `entities` 在導體 surface 上是導體 Entity（`pad`）；在 solution region 之間的 `SA` 上是被隔開的兩個 region；在 port 上是 port sheet 自己的 id，port 所接的兩個導體另在 `ports[*].host_entity_ids`。
+- `adjacent_domains` 直接給出兩側的 solution region 與它的 `kind`、`material`，不需要另外查表。
+- `face_kind` 是單一值，也寫在 group 名稱裡：`<kind>::<entity>::<top|bottom|sidewall|sheet|interface>[::band=k]`，所以一個 group 不會混合種類，依 face 種類過濾只需看名稱或這個欄位。範例中 ground 的 top 與 sidewall 是兩個 group（`MA::ground_0000::top` 與 `MA::ground_0000::sidewall`），見[對應表](consumer-mapping.qmd#aedt-ledger)的逐 group 表。port 例外：它永遠是一個 sheet，`face_kind` 為 `port`，名稱不帶 face kind 與 band。若某個 group 混合了種類，build 以 `SgbError` 停止。
+- `band` 帶 `family`（對應 `InsetRequest.request_id`）與 `index`。band 0 最靠近邊緣，最大的 index 是最內側的區域，這個範例中三個 band 的面積是 39、37 與 324 µm²，總和等於 pad 的 400 µm²。
+
+聯集、Surface-EPR row 與 inset family：
+
+{{< include figures/consumer-excerpt-unions.md >}}
+
+注意兩點。第一，`unions.interface_types.MA` 包含每個 `MA` group，**也包含所有 band 與 sidewall**；做 band 選取要用 `surface_epr_rows` 與 `insets[*].bands`，不是 union。第二，`unions.nets` 的鍵是 Net，成員是該 Net 外露導體表面的 primary group（沒有 SA、PORT 或 EXT）。
+
+embedding、mesh hint 與 port：
+
+{{< include figures/consumer-excerpt-embeds.md >}}
+
+Route B 的 port 是一個 free face：它在 `embedded_faces` 裡有一筆，host 是它所在的 vacuum volume；`ports[*].host_volumes` 與它一致，而 `adjacent_volumes` 只有一個。refinement curve 同樣是 free edge（`written_as_free_edge`），它的 host 是含有它的 face。`mesh_hints` 列出 mesher 應該讓元素沿著它走的 edge：`band_boundary` 是 inset family 的 band 邊界，`source` 為 request id；`refinement_curve` 是 refinement request 的曲線；`curved_edge` 是每條圓弧 edge（`source` 為 `null`，範例沒有圓弧）。每筆有 edge id 與 native tag（等於 `ids_by_tag["1"]` 中的位置加 1），**沒有尺寸**，尺寸由 mesher 決定。
+
+最後是綁定、單一 volume 與 face 的記錄、lineage，以及預期值（`ids_by_tag` 與 `expected` 的長清單被截短）：
+
+{{< include figures/consumer-excerpt-body.md >}}
+
+- `faces[*].negative_volume` 是 face 法向反側的 volume，`positive_volume` 是法向所指的一側；對水平 face，前者是下方。若某一側是被 Route B／A 排除的導體，它仍列出規劃 id，其 `volumes[*].emitted` 為 `false`。
+- 這個 `faces` 例子是 ground 的 sidewall：`lineage.faces` 指出它來自 `ground_0000` 與 `substrate` 兩個 Entity，`membership` 是各 Entity 覆蓋的比例（wall 取底邊長度的比例）。
+- `volumes[*].aedt_name` 是已淨化、檢查過不衝突的 AEDT 名稱（`VOL::substrate` 變成 `VOL__substrate`；衝突時依 tag 順序加 `__2`、`__3`）。
+
+Route A 與 Route C 各有一處不同，其餘欄位相同。Route A 的導體是 sheet，名稱為 `SHEET::<entity>::sheet[::band=k]`，一個 sheet group 同時承載該 Entity 的 MA 與 MS 兩個 row，所以它同時列在 `unions.interface_types` 的 `SHEET`、`MA` 與 `MS`。兩個 row 的 `shared_face_group` 都是這個 sheet group，`side` 說明各自積分 sheet 的哪一側（MA 看 sheet 上方的 vacuum，MS 看下方的 dielectric）。Route B／C 與單面的 row（例如 SA）這兩個欄位都是 `null`：
+
+{{< include figures/consumer-excerpt-routea.md >}}
+
+Route A 的 port 是兩個 volume 之間的 face，所以沒有 `embedded_faces`、`host_volumes` 為空、`adjacent_volumes` 有兩個。Route C 保留導體 volume，於是導體成為 `kind` 為 `conductor` 的 volume group，帶有 Net 與 material id：
+
+{{< include figures/consumer-excerpt-routec.md >}}
+
+sidecar 給的是 material **id**（`Al`、`Si`）與 `kind`，不含 permittivity、conductivity 等參數；這些仍來自 stack 的 `materials`，與今天一樣。
+
+## 讀取端的順序 {#sequence}
+
+### Palace mesher
+
+1. 取得 `SgbArtifacts`，以 `read_sidecar` 讀入 sidecar。
+2. 在 Gmsh 中開啟 XAO，關閉 `Geometry.OCCAutoFix`（需要修補表示規劃有缺陷，不該被悄悄修掉），執行 `gmsh.model.occ.synchronize()`。
+3. `verify_loaded(sidecar)`：在已載入的模型上比對 sidecar 的預期值；`report.raise_if_failed()` 在有任何差異時停止。
+4. `apply_sidecar_embeds(sidecar)`：把 port sheet 嵌進宿主 volume、refinement curve 嵌進宿主 face，回傳嵌入的 face 與 edge 數。
+5. 設定 mesh 尺寸：`mesh_hints` 指出要解析的 edge（沒有尺寸，數值由 mesher 決定）。
+6. 產生 mesh；config 由 live 模型的 physical group **名稱**對照 `physical_groups` 建立，不解析名稱字串。
+
+```python
+import gmsh
+from scgsim.geometry.sgb.sidecar.files import read_sidecar
+from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds, verify_loaded
+
+sidecar = read_sidecar(artifacts.sidecar)
+gmsh.initialize(["-noenv"])
+gmsh.option.setNumber("Geometry.OCCAutoFix", 0)
+gmsh.open(str(artifacts.xao))
+gmsh.model.occ.synchronize()
+verify_loaded(sidecar).raise_if_failed()   # 實體數、vertex 位置、邊界、group、面積、體積
+apply_sidecar_embeds(sidecar)              # 必須在載入檢查之後、產生 mesh 之前
+gmsh.model.mesh.generate(3)
+```
+
+`verify_loaded` 完全以 sidecar 提供的數字比對，不檢查模型本身：實體數；每個 vertex 的位置（容許 $10^{-9}$ µm，這同時證明 tag 編號，其餘檢查都依賴它）；每個 edge、face、solid 的邊界；physical group 的名稱、維度、tag 與成員；每個 face 的面積與 solid 的體積（相對容許 $10^{-9}$，非正值表示 shell 方向錯誤）。所有差異會收集後一起回報。`verify_xao(xao_path, sidecar)` 則在新的 Gmsh session 中做同樣的檢查並關閉它，適合只做檢查而不接著 mesh；從 BREP 載入的模型沒有 group，要用 `verify_loaded(sidecar, groups=False)`。
+
+在範例模型上跑完這段流程的結果如下（粗 mesh 只用來確認嵌入的 port 與 refinement curve 可以和宿主一起 mesh）：
+
+::: {.askr-table-compact}
+{{< include figures/consumer-run-table.md >}}
+:::
+
+### AEDT
+
+1. `export_aedt_step(brep_or_xao, sidecar, step_path)` 把已 emit 的 solid 寫成 STEP XDE assembly，每個 solid 一個以 `aedt_name` 命名的 component，單位標為 µm 而數字不變（`xstep.cascade.unit=MM`、`write.step.unit=UM`，且先呼叫兩個 `Init_s()`）。它需要 OCP；沒有安裝時丟出 `OcctUnavailable`，並指出 `occt` dependency group。回傳的 `StepExport` 帶有路徑、單位 `UM` 與每個 solid 的 guard。
+2. 在 AEDT 以 PyAEDT 匯入 STEP（這部分是採用端的程式）。
+3. **名稱把關。**匯入後 AEDT 的 object 集合必須等於 `StepExport.object_names`；不依賴 AEDT 自動加的後綴。
+4. **face 順序把關。**每個 solid 的 guard 依 OCC solid 的 face 順序列出 `face` id、`area_um2` 與 `centre_um`。對每個 object 檢查 face 數，以及每個 face 的面積與 center；任何不符就 fail closed。這個順序等於 AEDT face id 順序，是 E4 在 4 個案例觀察到的性質，不是文件保證（見[交給 AEDT](aedt-handoff.qmd)）；E4 使用的容許值是面積相對 $2 \times 10^{-3}$、center $5 \times 10^{-3}$ µm，`export_aedt_step` 本身不規定容許值。
+5. **重建 free face。**lumped-port sheet 無法經由 STEP 傳遞；依 `ports`（與 `embedded_faces`）記錄的幾何在 AEDT 內原生建立 sheet 與 lumped port。Route A 的 port 是兩個 solid 共用的 face，已在 STEP 的 solid 裡，需要的是 boundary 指派而不是新幾何（由 route 的定義推得；STEP 匯出只在 Route B 的案例上測過）。
+6. 以 `volumes[*].aedt_name` 與 `material` 指派 material，以 `physical_groups` 的 face 指派 boundary（face 到 AEDT face id 的對應由第 4 步的順序給出）。band 已預先切在 solid 的 face 裡，所以不需要 AEDT 的 Imprint。
+
+`StepExport` 只存在於記憶體中，不會寫成檔案。已測的部分：STEP 是具名的 assembly、單位與數字正確、重新讀回的 volume 等於規劃值、guard 列出每個 solid 的所有 face 且順序為 OCC 順序、sidecar 與檔案不符時拒絕、可從 XAO 匯出。**沒有測的部分：**用這個新的 STEP 匯入 AEDT。E4 在 AEDT 2024.2 上驗證的是原型的 STEP；production 的匯出採用同一個配方，但這個匯出本身尚未在 AEDT 上跑過。
+
+## 補充：重現資料 {#reproduction-data}
+
+本頁的範例由 `experiments/sgb-redesign/consumer-contract/generate_excerpt.py` 產生。它用 sgb-core 環境（分支 `claude/sgb-core`，階段 1e 的提交 `6d08e53`）與該分支測試資料夾中的 `sgb_inputs.gds_pad_in_ground`（Route B 與 C）和 `thin_film_pair`（Route A），呼叫 `build_sgb_geometry`，然後執行上文的 Palace 與 AEDT 步驟，把輸出放在同一個資料夾的 `out/`（含 `consumer_runs.json`）。Route B 與 C 的 inset 是 pad 上表面的 0.5 與 1 µm，refinement curve 是高度 0.2 µm 的 10 µm 線段；Route A 的 inset 是 `chip/left` 的 sheet。
+
+```bash
+SG=<sgb-core worktree>
+$SG/.artifacts/env/bin/python experiments/sgb-redesign/consumer-contract/generate_excerpt.py \
+    $SG/tests experiments/sgb-redesign/consumer-contract/out
+$SG/.artifacts/env/bin/python docs/design/sgb/_figures/consumer_contract.py
+```
+
+第二個腳本 `_figures/consumer_contract.py` 只讀 `out/`，寫出 `figures/consumer-*.md`（本頁與[對應表](consumer-mapping.qmd)引用的節錄與表格）。決定性的測試出自 sgb-core 的 `test_sgb_determinism.py`、`test_sgb_build.py`、`test_sgb_emission.py`、`test_sgb_sidecar.py` 與 `test_sgb_tiling.py`；STEP 的測試在 `test_sgb_occt.py`。

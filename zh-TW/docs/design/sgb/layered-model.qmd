@@ -11,7 +11,7 @@ SGB 處理的模型是有限個 **prism** 的集合：晶片在 **level** 處被
 
 ## 模型格點
 
-所有 XY 座標都落在同一個**模型格點** $g$ 上，預設是來源的資料庫單位 1 nm，宣告一次並記錄在 handoff 中。這個格點來自 develop 既有的固定格點來源準備（S0 與 S1）：來源的正規化與 polygon Boolean 在已宣告的格點上完成，`GeometryGridContext` 帶著 $g$ 往後傳，S4 的 snap rounding 使用的就是同一個 $g$。S4 起是新的 pipeline；原型不含 S0 與 S1，直接以格點上的整數座標建立 prism。S0 與 S1 交給 S2 的 prism 的合約，尚待 adapter 實作後驗證（見[總覽](index.qmd)）。Z 不受這個格點約束（見下文）。
+所有 XY 座標都落在同一個**模型格點** $g$ 上，預設是來源的資料庫單位 1 nm，宣告一次並記錄在 handoff 中。這個格點來自 develop 既有的固定格點來源準備（S0 與 S1）：來源的正規化與 polygon Boolean 在已宣告的格點上完成，`GeometryGridContext` 帶著 $g$ 往後傳，S4 的 snap rounding 使用的就是同一個 $g$。S2 起是新的 pipeline（production 實作在 `scgsim.geometry.sgb`）：S2 讀 S1 的 effective 輸入，格點取自其 `GeometryGridContext`，座標以精確的整數轉換，沒有格點資訊的輸入與不在格點上的頂點都會被拒絕（見[總覽](index.qmd)）。原型不含 S0 與 S1，直接以格點上的整數座標建立 prism。Z 不受這個格點約束（見下文）。
 
 ## 執行範例的觀點
 
@@ -67,11 +67,12 @@ $S_i$ 由 slab $i$ 的 active set 的 footprint 曲線建成。它的 label 是 
 
 - 導體勝過 dielectric 或 vacuum；
 - 兩個不同 Net 的導體在同一個 slab 中重疊，是錯誤；
-- dielectric 與 vacuum 之間，由明確的 priority 決定；優先順序相同但材料不同，是錯誤。
+- 同一個 Net 的兩個 Entity 重疊，由宣告的 priority 較高者擁有重疊區，priority 相同或缺少是錯誤；
+- dielectric 勝過 vacuum，同一種類內由明確的 priority 決定；優先順序相同但材料不同，是錯誤。
 
-同材料的重疊（例如同一個 Net 的兩個金屬 prism）不是錯誤：它們之間的 seam 不是 required edge，會被 dissolve（見 [Label、required edge 與 dissolution](labels-and-dissolution.qmd)）。
+同一個 Entity 的重疊（例如它的兩個 polygon）不是錯誤：它們之間的 seam 兩側 label 相同，會被 dissolve；不同 Entity 之間的 seam 因 label 的擁有者不同而保留為 required edge（見 [Label、required edge 與 dissolution](labels-and-dissolution.qmd)）。
 
-圖中的 label（`Ground`、`pad`）以 Net 命名，是原型目前的行為；決策 D5 已決定改為依 Entity 歸屬，完整說明見 [Route](routes.qmd) 與[設計決議](decisions.qmd#d5)。在執行範例中每個 Net 只有一個 Entity，所以 cell 不變，只有名稱不同。
+圖中的 label（`Ground`、`pad`）以 Net 命名，是原型計算的結果；production 依決策 D5 以 Entity 歸屬，完整說明見 [Route](routes.qmd) 與[設計決議](decisions.qmd#d5)。在執行範例中每個 Net 只有一個 Entity，所以 cell 不變，只有名稱不同。
 
 ### Level arrangement
 
@@ -152,21 +153,21 @@ airbridge 有七個 prism：substrate、vacuum、兩半 ground、兩根 post 與
 
 {{< askr-chart-view src="figures/layered-exploded.html" label="檢視 prism、level 與 slab" >}}
 
-看 @fig-exploded 時請注意：這裡每個金屬 prism 恰好只在一個 slab 中，所以它的 slab cell 是單純的矩形。vacuum 這個 prism 橫跨四個 slab，所以被 level 切成四片。deck 只在 slab 3，位於 slab 2 的 post 之上；deck 下方的 vacuum 屬於 slab 2，繞過 post 與兩側的 vacuum 相連。slab arrangement 共有 10 個 cell，level arrangement 共有 16 個（`layered-numbers.json`）。整個模型有 44 個 vertex、76 條 edge 與 37 個 face，兩個已 emit 的 volume（substrate 與 vacuum），以及第三個被排除的金屬 volume。
+看 @fig-exploded 時請注意：這裡每個金屬 prism 恰好只在一個 slab 中，所以它的 slab cell 是單純的矩形。vacuum 這個 prism 橫跨四個 slab，所以被 level 切成四片。deck 只在 slab 3，位於 slab 2 的 post 之上；deck 下方的 vacuum 屬於 slab 2，繞過 post 與兩側的 vacuum 相連。slab arrangement 共有 10 個 cell，level arrangement 共有 16 個（`layered-numbers.json`）。整個模型有 44 個 vertex、76 條 edge 與 37 個 face，兩個已 emit 的 volume（substrate 與 vacuum），以及第三個被排除的金屬 volume。以上是原型計算（金屬依 Net 合併成一個 volume）。production 的 slab 與 level cell 數相同（10 與 16），但依 Entity 歸屬：規劃 44 個 vertex、78 條 edge、43 個 face 與 7 個 volume（兩塊 ground、兩根 post、deck 各自一個，加上 substrate 與 vacuum），多出的 face 含導體 Entity 之間的共用 face；兩個已 emit 的 volume 仍是 substrate 與 vacuum。
 
 ## 邊界情況
 
 - **Sheet。** 在 Route A 中所有導體都是 sheet，所以模型只有晶片本體（以及任何 port sheet）的 level；沒有任何 slab 帶有金屬 prism。Route A 與 Route B 的差別只在 labelling policy（見 [Route](routes.qmd)）。
-- **Family 以某個 level 為 target。** cut family（band、refinement curve）把它的曲線加到它所指定的 level。若 family 指定的 Z 沒有任何 prism 定義，它會新增該 level：那是一個普通的 level，不改變任何 active set（原型已實作這一點，但尚無測試）。本設計範例中的所有 family 都指向既有的 level（見 [Cut family](cut-families.qmd)）。
-- **薄的 slab。** Level 是宣告的精確 Z 值，不設任何 Z 的 threshold。兩個 prism 的高度只差幾奈米，就會產生一個比 $g$ 還薄的 slab；它會被保留並回報，不會使 build 失敗（決策 D2，見 [Sliver](slivers.qmd)）。原型目前在驗證時會因這種 slab 中止，這是原型的行為，production 階段 1 會移除（見 [Validation](validation.qmd)）。
-- **同一 Net 的金屬重疊。** 不是錯誤。重疊的 seam 會被 dissolve，合併後 face 的 lineage 保有兩個 prism。
+- **Family 以某個 level 為 target。** cut family（band、refinement curve）把它的曲線加到它所指定的 level。若 family 指定的 Z 沒有任何 prism 定義，它會新增該 level：那是一個普通的 level，不改變任何 active set（production 已實作並有測試）。本設計範例中的所有 family 都指向既有的 level（見 [Cut family](cut-families.qmd)）。
+- **薄的 slab。** Level 是宣告的精確 Z 值，不設任何 Z 的 threshold。兩個 prism 的高度只差幾奈米，就會產生一個比 $g$ 還薄的 slab；它會被保留並回報，不會使 build 失敗（決策 D2，見 [Sliver](slivers.qmd)）。原型曾在驗證時因這種 slab 中止；production 已移除這個中止，薄 slab 以兩個警告回報（見 [Validation](validation.qmd)），並有測試保證它從來源保留到 arrangement。
+- **同一 Net 的金屬重疊。** 同一個 Entity 的重疊不是錯誤，seam 會被 dissolve，合併後 face 的 lineage 保有兩個 prism。兩個 Entity 的重疊由 priority 決定（較高者擁有重疊區，seam 保留，輸掉的 Entity 在 membership 中仍列出份額）；priority 相同或缺少則為錯誤。原型計算的圖依 Net 合併。
 - **不同 Net 的金屬重疊或接觸。** 同一個 slab 中的重疊是錯誤，會使 build 中止。接觸也是錯誤，而且在每一種 route 中都是：包含兩片 Route A sheet 共用一條 edge 或一個 vertex，以及由 snapping 造成的接觸（在 g = 1 nm 時 4 nm 的間隙可以通過，在 g = 10 nm 時則不行）。接觸以 `ContactError` 在 build 的早期丟出。
 - **Non-manifold 的 pinch。** 同一 Net 的有限厚度金屬若只沿著一條垂直 edge 或在一個 vertex 相遇，會在組裝之前被拒絕，錯誤為 `NonManifoldError`，訊息指出 Net、entity、位置與 vertex 或垂直 edge。Route B 中，一個 hole 碰到自己的外邊界也屬於這一類；Route A 的 sheet 則可以在轉角相遇，也接受有 pinch 的 hole。
 - **非 prism 的本體。** 截面隨 $z$ 改變的本體（斜側壁）不是 prism。它是模型的擴充點，不會被悄悄近似。
 
 ## 補充：重現資料
 
-本頁的圖與數字是**計算所得**，來自 `experiments/sgb-redesign/prototype`：
+本頁的圖與數字是**計算所得**，來自 `experiments/sgb-redesign/prototype`（原型計算；production 的 `pad_in_ground_B` 與 `pad_in_ground_A` 的 level、slab、level cell、vertex、edge、face 數量相同）：
 
 - `docs/design/sgb/_figures/layered_model.py` 產生 level 與 slab 的剖面、arrangement 比較、wall 計數與 airbridge 的 3D 圖，數字在 `figures/layered-numbers.json`。
 - `docs/design/sgb/_figures/layered_phantom.py` 產生兩層金屬的 phantom sliver 範例，數字在 `figures/layered-phantom-numbers.json`。
