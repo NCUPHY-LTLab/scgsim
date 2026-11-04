@@ -66,7 +66,7 @@ format:
             else {"docs/current.qmd": f"Original {label} current body.\n"}
         ),
         "docs/styles.css": f"original {label} consumer stylesheet",
-        "_extensions/arfiligol/askr/_extension.yml": "version: 0.13.3\n",
+        "_extensions/arfiligol/askr/_extension.yml": "version: 0.14.0\n",
         "_extensions/arfiligol/askr/theme.txt": f"theme from {label}",
     }
 
@@ -450,9 +450,9 @@ def test_source_owned_pages_profile_remains_an_error(publisher, profile):
 
 
 def test_build_metadata_records_verified_askr_commit(publisher):
-    """Publication metadata names the separately verified Askr 0.13.3 commit."""
+    """Publication metadata names the separately verified Askr 0.14.0 commit."""
     output = publisher.invoke()
     assert (
         json.loads((output / "build.json").read_text())["askr_commit"]
-        == "243d3dbdd234004bbe0538b9518fb76027903915"
+        == "ab12c10b61d590c00ce1316f700ed56227027d71"
     )
