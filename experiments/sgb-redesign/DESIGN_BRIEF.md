@@ -206,7 +206,7 @@ is an error.
   - Bands are generated per support face: Route A sheet (one face carrying
     both the metal–vacuum and metal–substrate rows), Route B top face (MA)
     **and bottom face (MS)** separately; sidewall bands are out of v1 scope.
-  - Route A sheet faces are named by the face (`SHEET::<net>::band=k`). A
+  - A Route A sheet group is named by its entity id (`<entity>::band=k`). A
     sheet's MA row exists only when some face of it has vacuum on a side, and
     its MS row only when some face has a dielectric on a side; each row
     references that one group and lists `face_sides` (face id -> above/below/
@@ -233,8 +233,10 @@ is an error.
 
 Two identity layers:
 - **Semantic identity** (stable across unrelated edits): physical names from
-  labels, e.g. `MA::Net=xmon_pad::band=2`, `SA::substrate|vacuum::band=0`,
-  `VOL::vacuum_outer`. Used for physical groups, Surface-EPR rows and reports.
+  labels, e.g. `MA::xmon/pad::top::band=2`,
+  `SA::substrate|vacuum::interface::band=0`, `vacuum_outer` (a volume is
+  named by its entity id). Used for physical groups, Surface-EPR rows and
+  reports.
 - **Atomic topology identity** (reproducible, content-addressed): vertex =
   H(level, grid coordinate); edge = H(carrier id, endpoint ids, level|slab);
   face = H(label, sorted boundary edge ids); volume = H(domain, cell set).
@@ -404,10 +406,11 @@ Resolving writer questions; these override earlier wording where they differ.
 - **Sliver width** is the local feature size: the minimum distance between
   two non-incident boundary edges of a face, measured on the exact carriers
   (arcs included), not 2A/P on the chord polygon.
-- **Route A sheet band groups** are named `SHEET::<net>::band=k`; the MA and
+- **Route A sheet band groups** are named `<entity>::band=k`; the MA and
   MS Surface-EPR rows (each existing only when some face has vacuum, resp. a
   dielectric, on a side) reference that group. Route B generates bands on
-  the top face (`MA::<net>::band=k`) and bottom face (`MS::<net>::band=k`).
+  the top face (`MA::<entity>::top::band=k`) and bottom face
+  (`MS::<entity>::bottom::band=k`).
 - **Edge id** = H(plane key, sorted endpoint vertex ids, sorted carrier-id
   set) — the prototype's formula is the design.
 - **Validation cannot be disabled** in production builds; a test-only switch
@@ -524,3 +527,12 @@ Resolving writer questions; these override earlier wording where they differ.
   interface-type unions; `surface_epr_rows` mark the side of two-sided
   internal faces; the sidecar carries `mesh_hints` (band boundaries,
   refinement curves, curved edges; no sizes).
+- **Group naming by entity id (Human, after stage 1e)**: a volume group and a
+  Route A sheet group are named by the bare entity id (`substrate`,
+  `chip/q0/pad::band=2`); the `VOL::` and `SHEET::` prefixes are gone because
+  the group's dimension already says what it is. Face groups keep their
+  interface prefix (`MA`, `MS`, `MM`, `SA`, `AA`, `SS`, `EXT`, `PORT`), and an
+  entity id equal to one of these or containing `::` is an input error. The
+  Surface-EPR row ids of a sheet stay `MA::<entity>::sheet[::band=k]` and
+  `MS::<entity>::sheet[::band=k]`. The interface type is derived from the
+  topology, never parsed from a name.
