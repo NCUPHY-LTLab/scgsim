@@ -3,117 +3,328 @@
   "panels": [
    {
     "cells": 5,
-    "edges": 28,
+    "edges": 23,
     "groups": {
-     "PEC::Ground": 1,
-     "PEC::pad": 1,
-     "PORT::p1": 1,
-     "SA::substrate|vacuum": 2
+     "None": 1,
+     "PORT::PORT_SHEET__P1__0000": 1,
+     "SA::substrate|VACUUM_REGION::interface": 1,
+     "ground_0000": 1,
+     "pad": 1
     },
     "panel": "Route A, level z = 0 (sheet plane)",
     "plane": "level[0]"
    },
    {
     "cells": 5,
-    "edges": 28,
+    "edges": 23,
     "groups": {
-     "None": 4,
-     "PORT::p1": 1
+     "MS::ground_0000::bottom": 1,
+     "MS::pad::bottom": 1,
+     "None": 1,
+     "PORT::PORT_SHEET__P1__0000": 1,
+     "SA::substrate|VACUUM_REGION::interface": 1
     },
-    "panel": "Route B, level z = 0.1 (port plane): the same five cells",
-    "plane": "level[1/10]"
-   },
-   {
-    "cells": 4,
-    "edges": 22,
-    "groups": {
-     "MS::Ground": 1,
-     "MS::pad": 1,
-     "SA::substrate|vacuum": 2
-    },
-    "panel": "Route B, level z = 0 (metal bottom)",
+    "panel": "Route B, level z = 0 (metal bottom, port plane)",
     "plane": "level[0]"
    },
    {
     "cells": 4,
-    "edges": 22,
+    "edges": 21,
     "groups": {
-     "MA::Ground": 1,
-     "MA::pad": 1,
+     "MA::ground_0000::top": 1,
+     "MA::pad::top": 1,
      "None": 2
     },
     "panel": "Route B, level z = 0.2 (metal top)",
     "plane": "level[1/5]"
    }
   ],
-  "route_A_level0_and_route_B_level_0.1_have_identical_edges": true,
-  "shared_edge_count": 28
+  "route_A_level0_and_route_B_level0_have_identical_edges": true,
+  "shared_edge_count": 23
  },
- "route_A": {
+ "real_input_with_refinement_curve": {
   "counts": {
-   "edges": 44,
-   "emitted_volumes": 2,
-   "faces": 15,
-   "groups": 8,
-   "hot_pixels": 516,
-   "level_cells": 7,
-   "level_edges": 36,
-   "levels": 3,
+   "arcs": 0,
+   "cylinders": 0,
+   "edges": 74,
+   "faces": 34,
+   "free_edges": 1,
+   "free_faces": 0,
+   "groups": 14,
+   "hot_pixels": 101,
+   "level_cells": 13,
+   "level_edges": 60,
+   "levels": 5,
+   "pcurves": 149,
    "prisms": 5,
-   "slab_cells": 2,
-   "slab_edges": 8,
-   "slabs": 2,
-   "vertices": 39,
-   "volumes": 2
+   "shells": 3,
+   "slab_cells": 8,
+   "slab_edges": 37,
+   "slabs": 4,
+   "solids": 2,
+   "surfaces": 30,
+   "vertices": 48,
+   "volumes": 4,
+   "wires": 36
   },
   "edges_by_kind": {
-   "horizontal": 36,
-   "vertical": 8
+   "horizontal": 48,
+   "refinement": 1,
+   "vertical": 25
   },
-  "emission_native_entities_by_dim": {
-   "0": 34,
-   "1": 44,
-   "2": 15,
-   "3": 2
-  },
+  "embedded_faces": [],
   "faces_by_kind": {
-   "horizontal": 7,
-   "wall": 8
+   "horizontal": 9,
+   "wall": 25
   },
-  "level_cells_total": 7,
-  "mesh_conformal": true,
-  "mesh_nodes": 655,
+  "level_cells_total": 13,
+  "model_counts": {
+   "edges": 74,
+   "faces": 34,
+   "groups": 14,
+   "hot_pixels": 101,
+   "level_cells": 13,
+   "level_edges": 60,
+   "levels": 5,
+   "prisms": 5,
+   "slab_cells": 8,
+   "slab_edges": 37,
+   "slabs": 4,
+   "vertices": 48,
+   "volumes": 4
+  },
+  "ports": [
+   {
+    "adjacent_volumes": [
+     "vol:1a3729bef5cef625",
+     "vol:7346ec1a4ff1ccf9"
+    ],
+    "group": "PORT::PORT_SHEET__P1__0000",
+    "host_volumes": [],
+    "z_um": 0.0
+   }
+  ],
   "primary_groups_faces": {
-   "EXT::substrate": 5,
-   "EXT::vacuum": 5,
-   "PEC::Ground": 1,
-   "PEC::pad": 1,
-   "PORT::p1": 1,
-   "SA::substrate|vacuum": 2
+   "EXT::VACUUM_REGION::bottom": 1,
+   "EXT::VACUUM_REGION::sidewall": 4,
+   "EXT::VACUUM_REGION::top": 1,
+   "MA::ground_0000::sidewall": 11,
+   "MA::ground_0000::top": 1,
+   "MA::pad::sidewall": 6,
+   "MA::pad::top": 1,
+   "MS::ground_0000::bottom": 1,
+   "MS::pad::bottom": 1,
+   "PORT::PORT_SHEET__P1__0000": 1,
+   "SA::substrate|VACUUM_REGION::interface": 2,
+   "SA::substrate|VACUUM_REGION::sidewall": 4
   },
   "primary_groups_volumes": {
-   "VOL::substrate": 1,
-   "VOL::vacuum": 1
+   "VACUUM_REGION": 1,
+   "substrate": 1
   },
+  "refinement_edges": [
+   {
+    "edge": "e:756dcaa3004c6031",
+    "family": "ref",
+    "host_face": "f:2ea9880cc00e7a72",
+    "written_as_free_edge": true
+   }
+  ],
+  "request": "refinement curve (32, 55) -> (38, 55) um at z = 0",
   "unions": {
-   "PEC::Ground": [
-    "PEC::Ground"
+   "EXT": [
+    "EXT::VACUUM_REGION::bottom",
+    "EXT::VACUUM_REGION::sidewall",
+    "EXT::VACUUM_REGION::top"
    ],
-   "PEC::pad": [
-    "PEC::pad"
+   "MA": [
+    "MA::ground_0000::sidewall",
+    "MA::ground_0000::top",
+    "MA::pad::sidewall",
+    "MA::pad::top"
+   ],
+   "MS": [
+    "MS::ground_0000::bottom",
+    "MS::pad::bottom"
+   ],
+   "NET::G": [
+    "MA::ground_0000::sidewall",
+    "MA::ground_0000::top",
+    "MS::ground_0000::bottom"
+   ],
+   "NET::P": [
+    "MA::pad::sidewall",
+    "MA::pad::top",
+    "MS::pad::bottom"
+   ],
+   "PORT": [
+    "PORT::PORT_SHEET__P1__0000"
+   ],
+   "SA": [
+    "SA::substrate|VACUUM_REGION::interface",
+    "SA::substrate|VACUUM_REGION::sidewall"
    ]
   },
-  "validation_checks_passed": {
-   "checks": 21,
-   "passed": true
+  "validation": {
+   "checks": 31,
+   "every_edge_shared_by_two_faces": "0 dangling edges; 0 free edges of embedded faces",
+   "passed": true,
+   "warnings": [
+    "slabs_thinner_than_g_are_kept",
+    "arc_deviation_within_snap_bound",
+    "walls_planar",
+    "vertical_edges_shorter_than_g_are_kept"
+   ]
   },
   "volumes": {
+   "VACUUM_REGION": {
+    "embedded_faces": 0,
+    "emitted": true,
+    "shells": 2
+   },
+   "ground_0000": {
+    "embedded_faces": 0,
+    "emitted": false,
+    "shells": 1
+   },
+   "pad": {
+    "embedded_faces": 0,
+    "emitted": false,
+    "shells": 1
+   },
    "substrate": {
     "embedded_faces": 0,
     "emitted": true,
     "shells": 1
+   }
+  }
+ },
+ "route_A": {
+  "counts": {
+   "arcs": 0,
+   "cylinders": 0,
+   "edges": 39,
+   "faces": 15,
+   "free_edges": 0,
+   "free_faces": 0,
+   "groups": 10,
+   "hot_pixels": 57,
+   "level_cells": 9,
+   "level_edges": 39,
+   "levels": 4,
+   "pcurves": 64,
+   "prisms": 5,
+   "shells": 3,
+   "slab_cells": 4,
+   "slab_edges": 16,
+   "slabs": 3,
+   "solids": 2,
+   "surfaces": 12,
+   "vertices": 29,
+   "volumes": 2,
+   "wires": 16
+  },
+  "edges_by_kind": {
+   "horizontal": 31,
+   "vertical": 8
+  },
+  "embedded_faces": [],
+  "faces_by_kind": {
+   "horizontal": 7,
+   "wall": 8
+  },
+  "level_cells_total": 9,
+  "model_counts": {
+   "edges": 39,
+   "faces": 15,
+   "groups": 10,
+   "hot_pixels": 57,
+   "level_cells": 9,
+   "level_edges": 39,
+   "levels": 4,
+   "prisms": 5,
+   "slab_cells": 4,
+   "slab_edges": 16,
+   "slabs": 3,
+   "vertices": 29,
+   "volumes": 2
+  },
+  "ports": [
+   {
+    "adjacent_volumes": [
+     "vol:1a3729bef5cef625",
+     "vol:94df6e603076bf52"
+    ],
+    "group": "PORT::PORT_SHEET__P1__0000",
+    "host_volumes": [],
+    "z_um": 0.0
+   }
+  ],
+  "primary_groups_faces": {
+   "EXT::VACUUM_REGION::bottom": 1,
+   "EXT::VACUUM_REGION::sidewall": 4,
+   "EXT::VACUUM_REGION::top": 1,
+   "PORT::PORT_SHEET__P1__0000": 1,
+   "SA::substrate|VACUUM_REGION::interface": 2,
+   "SA::substrate|VACUUM_REGION::sidewall": 4,
+   "ground_0000": 1,
+   "pad": 1
+  },
+  "primary_groups_volumes": {
+   "VACUUM_REGION": 1,
+   "substrate": 1
+  },
+  "refinement_edges": [],
+  "unions": {
+   "EXT": [
+    "EXT::VACUUM_REGION::bottom",
+    "EXT::VACUUM_REGION::sidewall",
+    "EXT::VACUUM_REGION::top"
+   ],
+   "MA": [
+    "ground_0000",
+    "pad"
+   ],
+   "MS": [
+    "ground_0000",
+    "pad"
+   ],
+   "NET::G": [
+    "ground_0000"
+   ],
+   "NET::P": [
+    "pad"
+   ],
+   "PORT": [
+    "PORT::PORT_SHEET__P1__0000"
+   ],
+   "SA": [
+    "SA::substrate|VACUUM_REGION::interface",
+    "SA::substrate|VACUUM_REGION::sidewall"
+   ],
+   "SHEET": [
+    "ground_0000",
+    "pad"
+   ]
+  },
+  "validation": {
+   "checks": 31,
+   "every_edge_shared_by_two_faces": "0 dangling edges; 0 free edges of embedded faces",
+   "passed": true,
+   "warnings": [
+    "slabs_thinner_than_g_are_kept",
+    "arc_deviation_within_snap_bound",
+    "walls_planar",
+    "vertical_edges_shorter_than_g_are_kept"
+   ]
+  },
+  "volumes": {
+   "VACUUM_REGION": {
+    "embedded_faces": 0,
+    "emitted": true,
+    "shells": 2
    },
-   "vacuum": {
+   "substrate": {
     "embedded_faces": 0,
     "emitted": true,
     "shells": 1
@@ -122,10 +333,523 @@
  },
  "route_B": {
   "counts": {
+   "arcs": 0,
+   "cylinders": 0,
+   "edges": 73,
+   "faces": 34,
+   "free_edges": 0,
+   "free_faces": 0,
+   "groups": 14,
+   "hot_pixels": 99,
+   "level_cells": 13,
+   "level_edges": 60,
+   "levels": 5,
+   "pcurves": 149,
+   "prisms": 5,
+   "shells": 3,
+   "slab_cells": 8,
+   "slab_edges": 37,
+   "slabs": 4,
+   "solids": 2,
+   "surfaces": 30,
+   "vertices": 46,
+   "volumes": 4,
+   "wires": 36
+  },
+  "edges_by_kind": {
+   "horizontal": 48,
+   "vertical": 25
+  },
+  "embedded_faces": [],
+  "faces_by_kind": {
+   "horizontal": 9,
+   "wall": 25
+  },
+  "level_cells_total": 13,
+  "model_counts": {
+   "edges": 73,
+   "faces": 34,
+   "groups": 14,
+   "hot_pixels": 99,
+   "level_cells": 13,
+   "level_edges": 60,
+   "levels": 5,
+   "prisms": 5,
+   "slab_cells": 8,
+   "slab_edges": 37,
+   "slabs": 4,
+   "vertices": 46,
+   "volumes": 4
+  },
+  "ports": [
+   {
+    "adjacent_volumes": [
+     "vol:1a3729bef5cef625",
+     "vol:7346ec1a4ff1ccf9"
+    ],
+    "group": "PORT::PORT_SHEET__P1__0000",
+    "host_volumes": [],
+    "z_um": 0.0
+   }
+  ],
+  "primary_groups_faces": {
+   "EXT::VACUUM_REGION::bottom": 1,
+   "EXT::VACUUM_REGION::sidewall": 4,
+   "EXT::VACUUM_REGION::top": 1,
+   "MA::ground_0000::sidewall": 11,
+   "MA::ground_0000::top": 1,
+   "MA::pad::sidewall": 6,
+   "MA::pad::top": 1,
+   "MS::ground_0000::bottom": 1,
+   "MS::pad::bottom": 1,
+   "PORT::PORT_SHEET__P1__0000": 1,
+   "SA::substrate|VACUUM_REGION::interface": 2,
+   "SA::substrate|VACUUM_REGION::sidewall": 4
+  },
+  "primary_groups_volumes": {
+   "VACUUM_REGION": 1,
+   "substrate": 1
+  },
+  "refinement_edges": [],
+  "unions": {
+   "EXT": [
+    "EXT::VACUUM_REGION::bottom",
+    "EXT::VACUUM_REGION::sidewall",
+    "EXT::VACUUM_REGION::top"
+   ],
+   "MA": [
+    "MA::ground_0000::sidewall",
+    "MA::ground_0000::top",
+    "MA::pad::sidewall",
+    "MA::pad::top"
+   ],
+   "MS": [
+    "MS::ground_0000::bottom",
+    "MS::pad::bottom"
+   ],
+   "NET::G": [
+    "MA::ground_0000::sidewall",
+    "MA::ground_0000::top",
+    "MS::ground_0000::bottom"
+   ],
+   "NET::P": [
+    "MA::pad::sidewall",
+    "MA::pad::top",
+    "MS::pad::bottom"
+   ],
+   "PORT": [
+    "PORT::PORT_SHEET__P1__0000"
+   ],
+   "SA": [
+    "SA::substrate|VACUUM_REGION::interface",
+    "SA::substrate|VACUUM_REGION::sidewall"
+   ]
+  },
+  "validation": {
+   "checks": 31,
+   "every_edge_shared_by_two_faces": "0 dangling edges; 0 free edges of embedded faces",
+   "passed": true,
+   "warnings": [
+    "slabs_thinner_than_g_are_kept",
+    "arc_deviation_within_snap_bound",
+    "walls_planar",
+    "vertical_edges_shorter_than_g_are_kept"
+   ]
+  },
+  "volumes": {
+   "VACUUM_REGION": {
+    "embedded_faces": 0,
+    "emitted": true,
+    "shells": 2
+   },
+   "ground_0000": {
+    "embedded_faces": 0,
+    "emitted": false,
+    "shells": 1
+   },
+   "pad": {
+    "embedded_faces": 0,
+    "emitted": false,
+    "shells": 1
+   },
+   "substrate": {
+    "embedded_faces": 0,
+    "emitted": true,
+    "shells": 1
+   }
+  }
+ },
+ "route_B_bands": {
+  "counts": {
+   "arcs": 12,
+   "cylinders": 0,
+   "edges": 169,
+   "faces": 52,
+   "free_edges": 0,
+   "free_faces": 0,
+   "groups": 24,
+   "hot_pixels": 519,
+   "level_cells": 31,
+   "level_edges": 156,
+   "levels": 5,
+   "pcurves": 245,
+   "prisms": 5,
+   "shells": 3,
+   "slab_cells": 8,
+   "slab_edges": 37,
+   "slabs": 4,
+   "solids": 2,
+   "surfaces": 30,
+   "vertices": 130,
+   "volumes": 4,
+   "wires": 60
+  },
+  "edges_by_kind": {
+   "horizontal": 144,
+   "vertical": 25
+  },
+  "embedded_faces": [],
+  "faces_by_kind": {
+   "horizontal": 27,
+   "wall": 25
+  },
+  "level_cells_total": 31,
+  "model_counts": {
+   "edges": 169,
+   "faces": 52,
+   "groups": 24,
+   "hot_pixels": 519,
+   "level_cells": 31,
+   "level_edges": 156,
+   "levels": 5,
+   "prisms": 5,
+   "slab_cells": 8,
+   "slab_edges": 37,
+   "slabs": 4,
+   "vertices": 142,
+   "volumes": 4
+  },
+  "ports": [
+   {
+    "adjacent_volumes": [
+     "vol:1a3729bef5cef625",
+     "vol:7346ec1a4ff1ccf9"
+    ],
+    "group": "PORT::PORT_SHEET__P1__0000",
+    "host_volumes": [],
+    "z_um": 0.0
+   }
+  ],
+  "primary_groups_faces": {
+   "EXT::VACUUM_REGION::bottom": 1,
+   "EXT::VACUUM_REGION::sidewall": 4,
+   "EXT::VACUUM_REGION::top": 1,
+   "MA::ground_0000::sidewall": 11,
+   "MA::ground_0000::top": 1,
+   "MA::pad::sidewall": 6,
+   "MA::pad::top::band=0": 1,
+   "MA::pad::top::band=1": 1,
+   "MA::pad::top::band=2": 1,
+   "MA::pad::top::band=3": 1,
+   "MS::ground_0000::bottom": 1,
+   "MS::pad::bottom::band=0": 1,
+   "MS::pad::bottom::band=1": 1,
+   "MS::pad::bottom::band=2": 1,
+   "MS::pad::bottom::band=3": 1,
+   "PORT::PORT_SHEET__P1__0000": 7,
+   "SA::substrate|VACUUM_REGION::interface": 1,
+   "SA::substrate|VACUUM_REGION::interface::band=0": 2,
+   "SA::substrate|VACUUM_REGION::interface::band=1": 2,
+   "SA::substrate|VACUUM_REGION::interface::band=2": 2,
+   "SA::substrate|VACUUM_REGION::interface::band=3": 1,
+   "SA::substrate|VACUUM_REGION::sidewall": 4
+  },
+  "primary_groups_volumes": {
+   "VACUUM_REGION": 1,
+   "substrate": 1
+  },
+  "refinement_edges": [],
+  "requests": "bands (0.1, 0.5, 2) um on pad top, pad bottom and the substrate-vacuum gap at z = 0",
+  "unions": {
+   "EXT": [
+    "EXT::VACUUM_REGION::bottom",
+    "EXT::VACUUM_REGION::sidewall",
+    "EXT::VACUUM_REGION::top"
+   ],
+   "MA": [
+    "MA::ground_0000::sidewall",
+    "MA::ground_0000::top",
+    "MA::pad::sidewall",
+    "MA::pad::top::band=0",
+    "MA::pad::top::band=1",
+    "MA::pad::top::band=2",
+    "MA::pad::top::band=3"
+   ],
+   "MS": [
+    "MS::ground_0000::bottom",
+    "MS::pad::bottom::band=0",
+    "MS::pad::bottom::band=1",
+    "MS::pad::bottom::band=2",
+    "MS::pad::bottom::band=3"
+   ],
+   "NET::G": [
+    "MA::ground_0000::sidewall",
+    "MA::ground_0000::top",
+    "MS::ground_0000::bottom"
+   ],
+   "NET::P": [
+    "MA::pad::sidewall",
+    "MA::pad::top::band=0",
+    "MA::pad::top::band=1",
+    "MA::pad::top::band=2",
+    "MA::pad::top::band=3",
+    "MS::pad::bottom::band=0",
+    "MS::pad::bottom::band=1",
+    "MS::pad::bottom::band=2",
+    "MS::pad::bottom::band=3"
+   ],
+   "PORT": [
+    "PORT::PORT_SHEET__P1__0000"
+   ],
+   "SA": [
+    "SA::substrate|VACUUM_REGION::interface",
+    "SA::substrate|VACUUM_REGION::interface::band=0",
+    "SA::substrate|VACUUM_REGION::interface::band=1",
+    "SA::substrate|VACUUM_REGION::interface::band=2",
+    "SA::substrate|VACUUM_REGION::interface::band=3",
+    "SA::substrate|VACUUM_REGION::sidewall"
+   ]
+  },
+  "validation": {
+   "checks": 31,
+   "every_edge_shared_by_two_faces": "0 dangling edges; 0 free edges of embedded faces",
+   "passed": true,
+   "warnings": [
+    "slabs_thinner_than_g_are_kept",
+    "arc_deviation_within_snap_bound",
+    "walls_planar",
+    "vertical_edges_shorter_than_g_are_kept"
+   ]
+  },
+  "volumes": {
+   "VACUUM_REGION": {
+    "embedded_faces": 0,
+    "emitted": true,
+    "shells": 2
+   },
+   "ground_0000": {
+    "embedded_faces": 0,
+    "emitted": false,
+    "shells": 1
+   },
+   "pad": {
+    "embedded_faces": 0,
+    "emitted": false,
+    "shells": 1
+   },
+   "substrate": {
+    "embedded_faces": 0,
+    "emitted": true,
+    "shells": 1
+   }
+  }
+ },
+ "route_C": {
+  "counts": {
+   "arcs": 0,
+   "cylinders": 0,
+   "edges": 73,
+   "faces": 34,
+   "free_edges": 0,
+   "free_faces": 0,
+   "groups": 16,
+   "hot_pixels": 99,
+   "level_cells": 13,
+   "level_edges": 60,
+   "levels": 5,
+   "pcurves": 149,
+   "prisms": 5,
+   "shells": 5,
+   "slab_cells": 8,
+   "slab_edges": 37,
+   "slabs": 4,
+   "solids": 4,
+   "surfaces": 30,
+   "vertices": 46,
+   "volumes": 4,
+   "wires": 36
+  },
+  "edges_by_kind": {
+   "horizontal": 48,
+   "vertical": 25
+  },
+  "embedded_faces": [],
+  "faces_by_kind": {
+   "horizontal": 9,
+   "wall": 25
+  },
+  "level_cells_total": 13,
+  "model_counts": {
+   "edges": 73,
+   "faces": 34,
+   "groups": 16,
+   "hot_pixels": 99,
+   "level_cells": 13,
+   "level_edges": 60,
+   "levels": 5,
+   "prisms": 5,
+   "slab_cells": 8,
+   "slab_edges": 37,
+   "slabs": 4,
+   "vertices": 46,
+   "volumes": 4
+  },
+  "ports": [
+   {
+    "adjacent_volumes": [
+     "vol:1a3729bef5cef625",
+     "vol:7346ec1a4ff1ccf9"
+    ],
+    "group": "PORT::PORT_SHEET__P1__0000",
+    "host_volumes": [],
+    "z_um": 0.0
+   }
+  ],
+  "primary_groups_faces": {
+   "EXT::VACUUM_REGION::bottom": 1,
+   "EXT::VACUUM_REGION::sidewall": 4,
+   "EXT::VACUUM_REGION::top": 1,
+   "MA::ground_0000::sidewall": 11,
+   "MA::ground_0000::top": 1,
+   "MA::pad::sidewall": 6,
+   "MA::pad::top": 1,
+   "MS::ground_0000::bottom": 1,
+   "MS::pad::bottom": 1,
+   "PORT::PORT_SHEET__P1__0000": 1,
+   "SA::substrate|VACUUM_REGION::interface": 2,
+   "SA::substrate|VACUUM_REGION::sidewall": 4
+  },
+  "primary_groups_volumes": {
+   "VACUUM_REGION": 1,
+   "ground_0000": 1,
+   "pad": 1,
+   "substrate": 1
+  },
+  "refinement_edges": [],
+  "unions": {
+   "EXT": [
+    "EXT::VACUUM_REGION::bottom",
+    "EXT::VACUUM_REGION::sidewall",
+    "EXT::VACUUM_REGION::top"
+   ],
+   "MA": [
+    "MA::ground_0000::sidewall",
+    "MA::ground_0000::top",
+    "MA::pad::sidewall",
+    "MA::pad::top"
+   ],
+   "MS": [
+    "MS::ground_0000::bottom",
+    "MS::pad::bottom"
+   ],
+   "NET::G": [
+    "MA::ground_0000::sidewall",
+    "MA::ground_0000::top",
+    "MS::ground_0000::bottom"
+   ],
+   "NET::P": [
+    "MA::pad::sidewall",
+    "MA::pad::top",
+    "MS::pad::bottom"
+   ],
+   "PORT": [
+    "PORT::PORT_SHEET__P1__0000"
+   ],
+   "SA": [
+    "SA::substrate|VACUUM_REGION::interface",
+    "SA::substrate|VACUUM_REGION::sidewall"
+   ]
+  },
+  "validation": {
+   "checks": 31,
+   "every_edge_shared_by_two_faces": "0 dangling edges; 0 free edges of embedded faces",
+   "passed": true,
+   "warnings": [
+    "slabs_thinner_than_g_are_kept",
+    "arc_deviation_within_snap_bound",
+    "walls_planar",
+    "vertical_edges_shorter_than_g_are_kept"
+   ]
+  },
+  "volumes": {
+   "VACUUM_REGION": {
+    "embedded_faces": 0,
+    "emitted": true,
+    "shells": 2
+   },
+   "ground_0000": {
+    "embedded_faces": 0,
+    "emitted": true,
+    "shells": 1
+   },
+   "pad": {
+    "embedded_faces": 0,
+    "emitted": true,
+    "shells": 1
+   },
+   "substrate": {
+    "embedded_faces": 0,
+    "emitted": true,
+    "shells": 1
+   }
+  }
+ },
+ "scene": "gds_pad_in_ground (production real input); Route A = the same GDS and stack with the thin_film profile",
+ "stage_scene_midplane_port": {
+  "counts": {
+   "arcs": 10,
+   "cylinders": 5,
+   "edges": 90,
+   "faces": 37,
+   "free_edges": 0,
+   "free_faces": 1,
+   "groups": 14,
+   "hot_pixels": 2500,
+   "level_cells": 15,
+   "level_edges": 80,
+   "levels": 5,
+   "pcurves": 180,
+   "prisms": 5,
+   "shells": 2,
+   "slab_cells": 10,
+   "slab_edges": 52,
+   "slabs": 4,
+   "solids": 2,
+   "surfaces": 33,
+   "vertices": 60,
+   "volumes": 4,
+   "wires": 42
+  },
+  "edges_by_kind": {
+   "horizontal": 60,
+   "vertical": 34
+  },
+  "embedded_faces": [
+   {
+    "face": "f:b99c4ede093bf1c6",
+    "group": "PORT::p1",
+    "host_volume": "vol:c7a35b73d74a6940"
+   }
+  ],
+  "faces_by_kind": {
+   "horizontal": 9,
+   "wall": 32
+  },
+  "level_cells_total": 15,
+  "model_counts": {
    "edges": 94,
-   "emitted_volumes": 2,
    "faces": 41,
-   "groups": 10,
+   "groups": 14,
    "hot_pixels": 2500,
    "level_cells": 15,
    "level_edges": 80,
@@ -137,53 +861,85 @@
    "vertices": 70,
    "volumes": 4
   },
-  "edges_by_kind": {
-   "horizontal": 60,
-   "vertical": 34
-  },
-  "emission_native_entities_by_dim": {
-   "0": 60,
-   "1": 90,
-   "2": 37,
-   "3": 2
-  },
-  "faces_by_kind": {
-   "horizontal": 9,
-   "wall": 32
-  },
-  "level_cells_total": 15,
-  "mesh_conformal": true,
-  "mesh_nodes": 639,
+  "ports": [
+   {
+    "adjacent_volumes": [
+     "vol:c7a35b73d74a6940"
+    ],
+    "group": "PORT::p1",
+    "host_volumes": [
+     "vol:c7a35b73d74a6940"
+    ],
+    "z_um": 0.1
+   }
+  ],
   "primary_groups_faces": {
-   "EXT::substrate": 5,
-   "EXT::vacuum": 5,
-   "MA::Ground": 6,
-   "MA::pad": 16,
-   "MS::Ground": 1,
-   "MS::pad": 1,
+   "EXT::substrate::bottom": 1,
+   "EXT::substrate::sidewall": 4,
+   "EXT::vacuum::sidewall": 4,
+   "EXT::vacuum::top": 1,
+   "MA::ground::sidewall": 5,
+   "MA::ground::top": 1,
+   "MA::pad::sidewall": 15,
+   "MA::pad::top": 1,
+   "MS::ground::bottom": 1,
+   "MS::pad::bottom": 1,
    "PORT::p1": 1,
-   "SA::substrate|vacuum": 2
+   "SA::substrate|vacuum::interface": 2
   },
   "primary_groups_volumes": {
-   "VOL::substrate": 1,
-   "VOL::vacuum": 1
+   "substrate": 1,
+   "vacuum": 1
   },
+  "refinement_edges": [],
+  "scene": "tests/sgb_scenes.py pad_in_ground('B'): port at z = 0.1 um",
   "unions": {
-   "PEC::Ground": [
-    "MA::Ground",
-    "MS::Ground"
+   "EXT": [
+    "EXT::substrate::bottom",
+    "EXT::substrate::sidewall",
+    "EXT::vacuum::sidewall",
+    "EXT::vacuum::top"
    ],
-   "PEC::pad": [
-    "MA::pad",
-    "MS::pad"
+   "MA": [
+    "MA::ground::sidewall",
+    "MA::ground::top",
+    "MA::pad::sidewall",
+    "MA::pad::top"
+   ],
+   "MS": [
+    "MS::ground::bottom",
+    "MS::pad::bottom"
+   ],
+   "NET::Ground": [
+    "MA::ground::sidewall",
+    "MA::ground::top",
+    "MS::ground::bottom"
+   ],
+   "NET::pad": [
+    "MA::pad::sidewall",
+    "MA::pad::top",
+    "MS::pad::bottom"
+   ],
+   "PORT": [
+    "PORT::p1"
+   ],
+   "SA": [
+    "SA::substrate|vacuum::interface"
    ]
   },
-  "validation_checks_passed": {
-   "checks": 21,
-   "passed": true
+  "validation": {
+   "checks": 31,
+   "every_edge_shared_by_two_faces": "0 dangling edges; 2 free edges of embedded faces",
+   "passed": true,
+   "warnings": [
+    "slabs_thinner_than_g_are_kept",
+    "arc_deviation_within_snap_bound",
+    "walls_planar",
+    "vertical_edges_shorter_than_g_are_kept"
+   ]
   },
   "volumes": {
-   "Ground": {
+   "ground": {
     "embedded_faces": 0,
     "emitted": false,
     "shells": 1

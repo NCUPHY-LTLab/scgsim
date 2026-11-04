@@ -3,8 +3,8 @@
   "1000": {
    "all_validation_passed": true,
    "configurations": 9,
-   "distinct_ids_digests": 1,
-   "ids_digest": "build:394277f44754d5a5",
+   "distinct_identity_digests": 1,
+   "identity_digest": "model:4161931a3cebf80d",
    "tiles_per_side": [
     1,
     4,
@@ -20,8 +20,8 @@
   "20000": {
    "all_validation_passed": true,
    "configurations": 9,
-   "distinct_ids_digests": 1,
-   "ids_digest": "build:a1305dc586c23466",
+   "distinct_identity_digests": 1,
+   "identity_digest": "model:e2a0da6b6426e68d",
    "tiles_per_side": [
     1,
     4,
@@ -37,8 +37,8 @@
   "5000": {
    "all_validation_passed": true,
    "configurations": 9,
-   "distinct_ids_digests": 1,
-   "ids_digest": "build:4550335d7ad39cd3",
+   "distinct_identity_digests": 1,
+   "identity_digest": "model:36feb3b5ae8bec90",
    "tiles_per_side": [
     1,
     4,
@@ -53,146 +53,261 @@
   }
  },
  "local_log_slope": {
-  "api_emit_s": [
-   0.97,
-   1.18
-  ],
   "brep_write_s": [
-   1.15,
-   1.04
+   1.08,
+   1.15
   ],
   "derive_s": [
-   0.91,
-   1.18
+   1.13,
+   1.05
   ],
   "faces": [
-   1.0,
+   1.01,
+   0.99
+  ],
+  "gmsh_load_s": [
+   1.13,
+   1.19
+  ],
+  "reports_s": [
+   1.12,
    1.0
   ],
-  "gmsh_load_s": [
-   1.21,
-   1.06
-  ],
   "rss_mb": [
-   0.89,
-   0.98
+   0.85,
+   0.95
   ],
   "rss_tiled_mb": [
-   0.81,
+   0.82,
    0.94
+  ],
+  "sidecar_s": [
+   1.09,
+   1.04
+  ],
+  "verify_loaded_s": [
+   0.99,
+   0.99
   ]
  },
+ "machine": {
+  "cpu_count": 64,
+  "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+  "python": "3.12.14",
+  "total_wall_s": 970.3
+ },
+ "oracle_local_log_slope": [
+  1.96,
+  2.83
+ ],
+ "oracle_ratio_to_direct_write_at_1000": 18.0,
+ "schedules": [
+  "T1w1",
+  "T4w1",
+  "T4w8",
+  "T4w16",
+  "T4w32",
+  "T8w1",
+  "T8w8",
+  "T8w16",
+  "T8w32"
+ ],
  "series": {
-  "api_emit_s": [
-   3.277,
-   15.566,
-   80.235
-  ],
   "brep_write_s": [
-   0.439,
-   2.8,
-   11.758
+   0.492,
+   2.81,
+   13.799
   ],
   "brep_write_w16_s": [
-   0.289,
-   1.941,
-   8.661
+   0.443,
+   2.193,
+   9.138
   ],
   "derive_s": [
-   2.339,
-   10.158,
-   52.055
+   2.332,
+   14.459,
+   61.644
   ],
   "faces": [
-   12761,
-   63664,
-   255052
+   14215,
+   71969,
+   285871
+  ],
+  "file_mb": [
+   {
+    "brep": 8.8,
+    "sidecar": 11.2,
+    "slivers": 0.0,
+    "validation": 0.0,
+    "xao": 13.1
+   },
+   {
+    "brep": 46.2,
+    "sidecar": 57.3,
+    "slivers": 0.0,
+    "validation": 0.0,
+    "xao": 68.7
+   },
+   {
+    "brep": 190.3,
+    "sidecar": 232.2,
+    "slivers": 0.0,
+    "validation": 0.0,
+    "xao": 281.7
+   }
   ],
   "gmsh_load_s": [
-   1.0653691939660348,
-   7.466365414031316,
-   32.59144364000531
+   1.559,
+   9.553,
+   49.67
   ],
   "n": [
    1000,
    5000,
    20000
   ],
-  "native_entities": [
-   61494,
-   306867,
-   1229980
+  "oracle": {
+   "emit_s": [
+    2.284,
+    8.88,
+    63.291
+   ],
+   "load_s": [
+    0.62,
+    1.483,
+    3.355
+   ],
+   "n": [
+    500,
+    1000,
+    2000
+   ],
+   "timed_out_at_n": []
+  },
+  "reports_s": [
+   2.052,
+   12.432,
+   49.74
   ],
   "rss_mb": [
-   331.3,
-   1387.3,
-   5386.2
+   135.0,
+   534.3,
+   2000.5
   ],
   "rss_tiled_mb": [
-   147.3,
-   540.4,
-   2002.2
+   142.8,
+   536.3,
+   1978.8
+  ],
+  "sidecar_s": [
+   0.804,
+   4.622,
+   19.636
+  ],
+  "verify_loaded_s": [
+   0.795,
+   3.894,
+   15.271
+  ],
+  "written_counts": [
+   {
+    "arcs": 0,
+    "cylinders": 0,
+    "edges": 30829,
+    "faces": 13345,
+    "solids": 2,
+    "surfaces": 9703,
+    "vertices": 20552
+   },
+   {
+    "arcs": 0,
+    "cylinders": 0,
+    "edges": 155947,
+    "faces": 67241,
+    "solids": 2,
+    "surfaces": 48837,
+    "vertices": 104098
+   },
+   {
+    "arcs": 0,
+    "cylinders": 0,
+    "edges": 620297,
+    "faces": 267635,
+    "solids": 2,
+    "surfaces": 194615,
+    "vertices": 414156
+   }
   ]
  },
- "sidecar": {
-  "1000": {
-   "with_lineage_MB": 4.6,
-   "with_lineage_s": 0.11,
-   "without_lineage_s": 0.02
-  },
-  "20000": {
-   "with_lineage_MB": 93.9,
-   "with_lineage_s": 4.14,
-   "without_lineage_s": 0.65
-  },
-  "5000": {
-   "with_lineage_MB": 23.2,
-   "with_lineage_s": 0.92,
-   "without_lineage_s": 0.13
-  }
- },
- "source": [
-  "outputs/scaling.json",
-  "outputs/e3_brep/timing.json"
- ],
+ "source": "figures/why-scaling-measured.json (python why_scaling.py measure), figures/why-scaling-oracle.json (python why_scaling.py oracle)",
  "speedups": {
   "1000": {
-   "best_speedup": 1.51,
+   "all": {
+    "T1w1": 1.0,
+    "T4w1": 1.02,
+    "T4w16": 1.19,
+    "T4w32": 1.22,
+    "T4w8": 1.15,
+    "T8w1": 1.03,
+    "T8w16": 1.15,
+    "T8w32": 1.06,
+    "T8w8": 1.21
+   },
+   "best_speedup": 1.22,
    "tiles_per_side": 4,
-   "workers": 8
+   "workers": 32
   },
   "20000": {
-   "best_speedup": 1.2,
-   "tiles_per_side": 4,
-   "workers": 16
+   "all": {
+    "T1w1": 1.0,
+    "T4w1": 0.92,
+    "T4w16": 1.16,
+    "T4w32": 1.16,
+    "T4w8": 1.15,
+    "T8w1": 0.89,
+    "T8w16": 1.16,
+    "T8w32": 1.14,
+    "T8w8": 1.17
+   },
+   "best_speedup": 1.17,
+   "tiles_per_side": 8,
+   "workers": 8
   },
   "5000": {
-   "best_speedup": 1.1,
+   "all": {
+    "T1w1": 1.0,
+    "T4w1": 0.96,
+    "T4w16": 1.24,
+    "T4w32": 1.25,
+    "T4w8": 1.22,
+    "T8w1": 0.97,
+    "T8w16": 1.26,
+    "T8w32": 1.22,
+    "T8w8": 1.26
+   },
+   "best_speedup": 1.26,
    "tiles_per_side": 8,
    "workers": 8
   }
  },
  "stack_n20000": {
-  "Gmsh-API oracle": {
-   "derive_s": 44.4,
-   "load_s": 41.7,
-   "sidecar_s": 0.0,
-   "total_s": 161.7,
-   "write_s": 75.6
-  },
   "direct BREP/XAO, 16 workers": {
-   "derive_s": 44.4,
-   "load_s": 37.4,
-   "sidecar_s": 4.1,
-   "total_s": 94.4,
-   "write_s": 8.4
+   "derive_s": 61.6,
+   "gmsh_load_s": 49.7,
+   "reports_s": 49.7,
+   "sidecar_s": 19.6,
+   "total_s": 205.1,
+   "verify_loaded_s": 15.3,
+   "write_s": 9.1
   },
   "direct BREP/XAO, one process": {
-   "derive_s": 44.4,
-   "load_s": 37.4,
-   "sidecar_s": 4.1,
-   "total_s": 97.8,
-   "write_s": 11.8
+   "derive_s": 61.6,
+   "gmsh_load_s": 49.7,
+   "reports_s": 49.7,
+   "sidecar_s": 19.6,
+   "total_s": 209.8,
+   "verify_loaded_s": 15.3,
+   "write_s": 13.8
   }
  }
 }

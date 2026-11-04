@@ -1,0 +1,376 @@
+{
+ "planned": {
+  "vertices": 66,
+  "edges": 88,
+  "faces": 39,
+  "volumes": 4
+ },
+ "emitted": {
+  "vertices": 56,
+  "edges": 84,
+  "faces": 35,
+  "solids": 2,
+  "wires": 39,
+  "shells": 2,
+  "surfaces": 30,
+  "cylinders": 5,
+  "arcs": 10,
+  "pcurves": 166,
+  "free_faces": 0,
+  "free_edges": 0
+ },
+ "section_bases": {
+  "total": 219,
+  "V": 219,
+  "E": 163,
+  "W": 79,
+  "F": 40,
+  "S": 5,
+  "SO": 3
+ },
+ "faces_used_by_two_shells": 3,
+ "faces_used_by_one_shell": 32,
+ "groups": {
+  "EXT::substrate::bottom": {
+   "dim": 2,
+   "tag": 1,
+   "members": 1
+  },
+  "EXT::substrate::sidewall": {
+   "dim": 2,
+   "tag": 2,
+   "members": 4
+  },
+  "EXT::vacuum::sidewall": {
+   "dim": 2,
+   "tag": 3,
+   "members": 4
+  },
+  "EXT::vacuum::top": {
+   "dim": 2,
+   "tag": 4,
+   "members": 1
+  },
+  "MA::ground::sidewall": {
+   "dim": 2,
+   "tag": 5,
+   "members": 4
+  },
+  "MA::ground::top": {
+   "dim": 2,
+   "tag": 6,
+   "members": 1
+  },
+  "MA::pad::sidewall": {
+   "dim": 2,
+   "tag": 7,
+   "members": 14
+  },
+  "MA::pad::top": {
+   "dim": 2,
+   "tag": 8,
+   "members": 1
+  },
+  "MS::ground::bottom": {
+   "dim": 2,
+   "tag": 9,
+   "members": 1
+  },
+  "MS::pad::bottom": {
+   "dim": 2,
+   "tag": 10,
+   "members": 1
+  },
+  "PORT::p1": {
+   "dim": 2,
+   "tag": 11,
+   "members": 1
+  },
+  "SA::substrate|vacuum::interface": {
+   "dim": 2,
+   "tag": 12,
+   "members": 2
+  },
+  "substrate": {
+   "dim": 3,
+   "tag": 1,
+   "members": 1
+  },
+  "vacuum": {
+   "dim": 3,
+   "tag": 2,
+   "members": 1
+  }
+ },
+ "ids_by_tag": {
+  "0": 56,
+  "1": 84,
+  "2": 35,
+  "3": 2
+ },
+ "sidecar_bytes": 32604,
+ "embedded_faces": 0,
+ "free_faces": 0,
+ "bytes": {
+  "brep": 18970,
+  "xao": 30630
+ },
+ "shared_face": {
+  "face_id": "f:9d1ffbd71300203f",
+  "reference": 21,
+  "group": "SA::substrate|vacuum::interface",
+  "upper": "vacuum",
+  "lower": "substrate",
+  "upper_sign": "-",
+  "lower_sign": "+",
+  "shared_references": [
+   13,
+   18,
+   21
+  ]
+ },
+ "groups_3d": {
+  "faces": 35,
+  "triangles": 1610
+ },
+ "timing": {
+  "head": {
+   "500": {
+    "api_total_s": 2.3518019290058874,
+    "direct_total_s": 0.19629044097382575,
+    "ratio": 11.981235139817569,
+    "groups_share": 0.5063088286760337,
+    "groups": 1875,
+    "faces": 6718,
+    "load_api_s": 0.6201215059845708,
+    "load_direct_xao_s": 0.5055119640310295,
+    "load_direct_brep_s": 0.4640566339949146
+   },
+   "1000": {
+    "api_total_s": 8.48331221099943,
+    "direct_total_s": 0.3490018980228342,
+    "ratio": 24.307352650684983,
+    "groups_share": 0.7160035715949761,
+    "groups": 3691,
+    "faces": 13345,
+    "load_api_s": 1.4828476310358383,
+    "load_direct_xao_s": 1.2707179500139318,
+    "load_direct_brep_s": 1.207284637959674
+   },
+   "2000": {
+    "api_total_s": 64.74101893499028,
+    "direct_total_s": 0.7671114469994791,
+    "ratio": 84.39584520374683,
+    "groups_share": 0.91571188438574,
+    "groups": 7484,
+    "faces": 26912,
+    "load_api_s": 3.4595351799507625,
+    "load_direct_xao_s": 3.0587299870094284,
+    "load_direct_brep_s": 2.7685324539779685
+   }
+  },
+  "tail": {
+   "1000": {
+    "write_w1_s": 0.492,
+    "write_w16_s": 0.443,
+    "write_speedup": 1.110609480812641,
+    "plan_w1_s": 0.253,
+    "plan_share_w16": 0.6072234762979685,
+    "render_w1_s": 0.239,
+    "render_w16_s": 0.174,
+    "reports_s": 2.052,
+    "sidecar_s": 0.804,
+    "gmsh_load_s": 1.559,
+    "verify_loaded_s": 0.795,
+    "file_mb": {
+     "xao": 13.102884,
+     "brep": 8.758257,
+     "sidecar": 11.156864,
+     "slivers": 0.012408,
+     "validation": 0.004896
+    },
+    "build_s": 2.332,
+    "per_entity_us_w16": 6.8442357012637896,
+    "written_counts": {
+     "vertices": 20552,
+     "edges": 30829,
+     "faces": 13345,
+     "solids": 2,
+     "surfaces": 9703,
+     "cylinders": 0,
+     "arcs": 0
+    }
+   },
+   "5000": {
+    "write_w1_s": 2.81,
+    "write_w16_s": 2.193,
+    "write_speedup": 1.2813497492020063,
+    "plan_w1_s": 1.632,
+    "plan_share_w16": 0.7533059735522115,
+    "render_w1_s": 1.1780000000000002,
+    "render_w16_s": 0.541,
+    "reports_s": 12.432,
+    "sidecar_s": 4.622,
+    "gmsh_load_s": 9.553,
+    "verify_loaded_s": 3.894,
+    "file_mb": {
+     "xao": 68.702562,
+     "brep": 46.191455,
+     "sidecar": 57.341957,
+     "slivers": 0.012459,
+     "validation": 0.004903
+    },
+    "build_s": 14.459,
+    "per_entity_us_w16": 6.700561588335584,
+    "written_counts": {
+     "vertices": 104098,
+     "edges": 155947,
+     "faces": 67241,
+     "solids": 2,
+     "surfaces": 48837,
+     "cylinders": 0,
+     "arcs": 0
+    }
+   },
+   "20000": {
+    "write_w1_s": 13.799,
+    "write_w16_s": 9.138,
+    "write_speedup": 1.5100678485445393,
+    "plan_w1_s": 6.87,
+    "plan_share_w16": 0.7925147734734077,
+    "render_w1_s": 6.928999999999999,
+    "render_w16_s": 1.8960000000000001,
+    "reports_s": 49.74,
+    "sidecar_s": 19.636,
+    "gmsh_load_s": 49.67,
+    "verify_loaded_s": 15.271,
+    "file_mb": {
+     "xao": 281.699498,
+     "brep": 190.255797,
+     "sidecar": 232.213465,
+     "slivers": 0.012556,
+     "validation": 0.00491
+    },
+    "build_s": 61.644,
+    "per_entity_us_w16": 7.01795884763549,
+    "written_counts": {
+     "vertices": 414156,
+     "edges": 620297,
+     "faces": 267635,
+     "solids": 2,
+     "surfaces": 194615,
+     "cylinders": 0,
+     "arcs": 0
+    }
+   }
+  }
+ },
+ "validator": {
+  "slope_range_of_checks_over_0.1s": [
+   1.0030406298219678,
+   1.3511698148191043
+  ],
+  "per_check_at_largest": {
+   "planarity": 4.541829545982182,
+   "face_areas": 3.9927657669759355,
+   "shells": 3.925358145032078,
+   "counts_and_vertex_placement": 3.407706825993955,
+   "boundaries": 3.077941467985511,
+   "volumes": 2.5014221890014596,
+   "physical_groups": 1.4404733639676124,
+   "groups": 0.6620185099891387,
+   "edges_in_faces": 0.6375449789920822,
+   "contact_check": 0.35048854403430596,
+   "manifold_check": 0.2828443059697747,
+   "atomic_ids": 0.2712893090210855,
+   "grid_and_lengths": 0.2631353579927236,
+   "face_sides": 0.09520818601595238,
+   "areas": 0.05880532000446692,
+   "prism_areas": 0.058525425964035094,
+   "cylinders": 0.031038095010444522,
+   "bands": 0.004176830989308655,
+   "arcs": 0.0016888959798961878
+  },
+  "verify_total_s": {
+   "1000": 0.5784513800172135,
+   "5000": 3.695137489004992,
+   "20000": 14.42034308402799
+  },
+  "structural_total_s": {
+   "1000": 0.32855894893873483,
+   "5000": 2.3053140959818847,
+   "20000": 11.183951450977474
+  },
+  "slopes": {
+   "planarity": 1.1485928118963644,
+   "face_areas": 1.0114834164340685,
+   "shells": 1.2389985682038138,
+   "counts_and_vertex_placement": 1.3511698148191043,
+   "boundaries": 1.0030406298219678,
+   "volumes": 1.0250580660958297,
+   "physical_groups": 1.056211983376158,
+   "groups": 1.2474206034658708,
+   "edges_in_faces": 1.1253647102205555,
+   "contact_check": 1.1413598898593664,
+   "manifold_check": 1.1156780771277064,
+   "atomic_ids": 1.16803423250604,
+   "grid_and_lengths": 1.039556865652634,
+   "face_sides": 1.1074561905020242,
+   "areas": 1.0266600319571404,
+   "prism_areas": 1.0020410022196369,
+   "cylinders": 1.21208204983007,
+   "bands": 0.9887672821462784,
+   "arcs": 0.8858380527965767
+  }
+ },
+ "occt": {
+  "brep_check_ms": [
+   2.4,
+   22.700000000000003
+  ],
+  "bop_ms": [
+   7.8,
+   222.8
+  ],
+  "total_ms": [
+   12.799999999999999,
+   262.0
+  ],
+  "reports": 14,
+  "all_ok": true,
+  "max_face_error": 1.347139329550679e-12,
+  "max_volume_error": 7.947381932093733e-14,
+  "excluded_free_faces": 0
+ },
+ "catalogue": {
+  "combinations": 63,
+  "fixtures": 23,
+  "passed": 54,
+  "refused": {
+   "ContactError": 3,
+   "NonManifoldError": 6
+  },
+  "occt_ms": {
+   "brep_check_ms": [
+    1.3125459663569927,
+    9.347337996587157
+   ],
+   "bop_ms": [
+    3.9075739914551377,
+    51.596101955510676
+   ],
+   "shape_plan_ms": [
+    0.638306955806911,
+    5.883092992007732
+   ],
+   "occt_total_ms": [
+    6.638217018917203,
+    62.51940497895703
+   ]
+  },
+  "refusal_ms": [
+   1.4239149750210345,
+   22.671875020023435
+  ]
+ }
+}

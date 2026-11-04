@@ -7,15 +7,15 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/arrangement"
 ---
 
-SGB 把一組精確的曲線變成一個 **arrangement**：一個 planar graph，它的 vertex 全都落在同一個格點上、edge 彼此不交叉，而每條 edge 仍記得它所來自的精確曲線。做法是帶 exact carrier 的 snap rounding，production 實作在 `scgsim.geometry.sgb.noding` 與 `arrangement`（整數運算的 iterated snap rounding、tile 平行、half-edge 結構與圓弧的 realisation）。本頁先在一個小範例上走完每一步（原型計算），再說明哪些性質是保證的、哪些是量測的、成本多少，以及圓弧如何納入。
+SGB 把一組精確的曲線變成一個 **arrangement**：一個 planar graph，它的 vertex 全都落在同一個格點上、edge 彼此不交叉，而每條 edge 仍記得它所來自的精確曲線。做法是帶 exact carrier 的 snap rounding，production 實作在 `scgsim.geometry.sgb.noding` 與 `arrangement`（整數運算的 iterated snap rounding、tile 平行、half-edge 結構與圓弧的 realisation）。本頁先在一個小範例上走完每一步（以 production 的 noding kernel 逐 round 執行），再說明哪些性質是保證的、哪些是量測的、成本多少，以及圓弧如何納入。
 
 **Arrangement** 是由一組曲線對 XY 平面做的 planar 分割，以 vertex、edge 與 cell 儲存（見[詞彙表](index.qmd#glossary)）。輸入是一個 level 或一個 slab 的曲線（見 [2.5D layered model](layered-model.qmd)），輸出是帶有 cell 的 noded graph。cell 是 arrangement 中的平面區域，之後寫出的 BREP face 則是另一個東西。
 
 ## 執行範例的觀點
 
-pad-in-ground 的 footprint 本來就在格點上：每條直線 edge 都終止於格點，圓的四段 quarter arc 也終止於格點。所以當原型建立 `pad_in_ground_B` 在 $z = 0$ 的 level arrangement 時，snapping 沒有移動任何東西；工作是 **noding**（找出曲線在哪裡相遇）與建立 face。
+pad-in-ground 的 footprint 本來就在格點上：每條直線 edge 都終止於格點，圓的四段 quarter arc 也終止於格點。所以當 production 建立 `pad_in_ground_B` 的 level arrangement 時，snapping 沒有移動任何東西；工作是 **noding**（找出曲線在哪裡相遇）與建立 face。
 
-這個 arrangement 由 500 條 segment 建成，其中幾乎全是 pad 的圓孔與圓角的 polyline witness 的弦（見[曲線類別](#curve-classes)）。snap rounding 在一個 round 內找到 496 個 hot pixel，dissolution 之後，這個 arrangement 有 22 條 edge 與 4 個 cell。在 $z = 0.1$ µm（執行範例的中間平面 port），port sheet 碰到兩道 wall 的地方，996 條 segment（兩個 slab 的 edge 加上 port 的）在兩個 round 內得到 500 個 hot pixel 與 28 條 edge（`outputs/pad_in_ground_B/stage_summary.json`）。
+以金屬頂面所在的 $z = 0.2$ µm level 為例，這個 arrangement 由 500 條 segment 建成，其中幾乎全是 pad 的圓孔與圓角的 polyline witness 的弦（見[曲線類別](#curve-classes)）。snap rounding 在一個 round 內找到 496 個 hot pixel，dissolution 之後，這個 arrangement 有 22 條 edge 與 4 個 cell。port sheet 所在的 $z = 0$ level 有 504 條 segment（兩個 slab 的 edge 加上 port 的 4 條），在兩個 round 內得到 500 個 hot pixel，dissolution 之後有 28 條 edge 與 5 個 cell（port 是其中一個 cell；`figures/arrangement-guarantees-numbers.json` 的 `level_stats`）。
 
 Snapping 只有在曲線於非格點的位置**交叉**，或彼此距離小於一個 pixel 時才重要。在執行範例中，這發生在 chamfer 斜邊的 offset，它們是由 Surface EPR 的 inset band 加入的（見 [Inset imprint](inset-imprint.qmd)）。在那裡，sliver 報告量到的 drift：衍生圓弧在 0.63 grid unit 以下，直線 edge 為 0。這個 0 是依構造得到的：layout 的輸入本來就在格點上，而 inset 的直線 carrier 的端點在產生時已四捨五入到格點，所以報告量的是對這些已四捨五入的 carrier 的偏離，不是對精確 offset 的偏離（斜邊的 offset 含 $\sqrt{2}$，無法精確表示）。
 
@@ -61,9 +61,7 @@ Snapping 只有在曲線於非格點的位置**交叉**，或彼此距離小於�
 
 **Carrier** 是一條曲線的精確定義：通過兩個格點的直線、一個圓（圓心、半徑），或一條來源 B-spline。carrier 從不移動。vertex 才會移動：arrangement 的每個 vertex 都是格點上的點。
 
-格點 $c$ 的 **pixel** 是 half-open 正方形 $[c_x - g/2,\ c_x + g/2) \times [c_y - g/2,\ c_y + g/2)$。只碰到 pixel 一個角的 segment 不會使它變成 hot，唯一的例外是左下角屬於該 pixel。以下是原型的判斷式對 $(0, 0)$ 的 pixel 的量測結果：
-
-原型的判斷式對這四個角的處理列在本頁最後的補充。
+格點 $c$ 的 **pixel** 是 half-open 正方形 $[c_x - g/2,\ c_x + g/2) \times [c_y - g/2,\ c_y + g/2)$。只碰到 pixel 一個角的 segment 不會使它變成 hot，唯一的例外是左下角屬於該 pixel。production 的判斷式對這四個角的處理列在本頁最後的補充。
 
 這個慣例讓 pixel 鋪滿平面而不重疊，所以在 pixel 邊界上的一個點或一條 segment 恰好屬於一個 pixel。這也讓 tile 的切線可以落在 pixel 欄列之間（見 [Parallel derivation](parallelism.qmd)）。判斷式是整數比較：當 $c$ 位於 segment 的 bounding box 內，且 $2\,\lvert (b-a)\times(c-a)\rvert < \lvert b_x-a_x\rvert + \lvert b_y-a_y\rvert$ 時，segment $ab$ 碰到 $c$ 的 pixel；兩邊相等的情況依上面的角規則決定。
 
@@ -76,13 +74,13 @@ Snapping 只有在曲線於非格點的位置**交叉**，或彼此距離小於�
 5. 只要有任何改道後的 edge 碰到它先前沒被穿過的 hot pixel，就**反覆**。結果就是 **noded** edge 集合。
 6. **Cell。** 建立 half-edge 結構，並抽取帶孔洞的有界 cell。
 
-Hobby（1999）與 Guibas 和 Marimont（1998）把 snap rounding 定義為這個程序的第一個 round。Halperin 和 Packer（2002）則如上所述加以反覆。原型與 production 實作的都是反覆的形式，且只使用整數運算；production 以 500 輪為上限，不收斂時丟出 `RuntimeError`。
+Hobby（1999）與 Guibas 和 Marimont（1998）把 snap rounding 定義為這個程序的第一個 round。Halperin 和 Packer（2002）則如上所述加以反覆。production 實作的是反覆的形式，且只使用整數運算，以 500 輪為上限，不收斂時丟出 `RuntimeError`。
 
 ::: {.callout-important title="設計決策：exact 運算決定 topology"}
 交點、pixel 判定與排序使用精確的整數運算；輸出頂點仍經 snapping，與原 carrier 的幾何偏離另外記錄。arrangement 的 topology 因此與 edge 或 tile 的處理順序無關，tile 可以被確定性地合併。「exact」說的是這些判定，不是說輸出頂點恰好在 carrier 上。
 :::
 
-整個 pipeline 仍有三個浮點步驟，它們不改變 arrangement 的 topology，但會影響別處的結果：inset band 的 band 歸屬（以到 support 邊界的浮點距離分類）、圓弧 footprint 的點測試（使用 witness 的弦），以及驗證時取樣的圓弧交叉檢查。只有直線 footprint 的 slab label 是完全以整數判定的。
+整個 pipeline 仍有三個浮點步驟，它們不改變 arrangement 的 topology，但會影響別處的結果：inset band 的 band 歸屬（以 face 的面積與其中取樣點到 gap edge 的浮點距離分類）、圓弧 footprint 的點測試（使用 witness 的弦），以及驗證時取樣的圓弧交叉檢查。只有直線 footprint 的 slab label 是完全以整數判定的。
 
 ### Carrier 與 lineage
 
@@ -119,9 +117,9 @@ drift 的數字來自不同的輸入，不能互相取代，下表逐一標出�
 |---|---|---|---|
 | 隨機 segment，整數端點 | 250 組 × 24 條，$48 \times 48$ 方框 | 1.417 | `arrangement_guarantees.py` |
 | 隨機 segment，整數端點，較密 | 1 500 組 × 40 條，$30 \times 30$ 方框 | 1.925 | `arrangement_guarantees.py` |
-| 隨機 layout（Route B，旋轉矩形等） | $N = 200$ 個特徵、5 854 條 edge | 0.605 | `arrangement_guarantees.py` |
-| 執行範例的直線 edge | `pad_in_ground_A`、`_B`（有無 band）、`airbridge_B` | 0（依構造：對已四捨五入的 carrier 量） | 各案例的 `sliver_report.json` |
-| 執行範例中由 offset 衍生的圓弧（不是直線 segment 的證據） | `pad_in_ground_A_bands` 47 條、`pad_in_ground_B_bands` 88 條圓弧 edge | 0.632（偏離精確圓） | 各案例的 `sliver_report.json` |
+| 隨機 layout（Route B，旋轉矩形等） | $N = 200$ 個特徵、6 298 條 edge | 0.605 | `arrangement_guarantees.py` |
+| 執行範例的直線 edge | `pad_in_ground_A`、`_B`（有無 band）、`airbridge_B` | 0（依構造：對已四捨五入的 carrier 量） | 各案例的 sliver report（`arrangement_guarantees.py`） |
+| 執行範例中由 offset 衍生的圓弧（不是直線 segment 的證據） | `pad_in_ground_A_bands` 59 條、`pad_in_ground_B_bands` 90 條圓弧 edge | 0.632（偏離精確圓） | 各案例的 sliver report（`arrangement_guarantees.py`） |
 :::
 
 三點要小心。第一，一個 round 的 $\sqrt{2}/2\,g$ 界限不適用於反覆之後的結果：兩組對抗性樣本都超過它。第二，layout 類的輸入只有 $N = 200$ 的隨機 layout 這一個可重現的數字（0.605 g）；沒有其他可重現來源的範圍數字，本頁不引用。第三，圓弧的 0.632 g 量的是 offset 圓弧偏離精確圓的程度，不是直線 segment 的 drift，不能拿來當直線的證據。
@@ -130,17 +128,17 @@ layout 的來源本來就在格點上，所以 drift 只出現在斜向 carrier 
 
 ## 成本
 
-原型把 edge 與 hot pixel 放進均勻的空間 hash，大約每個格子一個物件。對 layout 類的輸入（每個格子的曲線數量有上限），每個 round 預期的成本約為 $n + k$（$n$ 條 edge、$k$ 個交點），再加上每條 edge 上 pixel 的排序。我們做的是量測，並不主張最壞情況：文獻對反覆輸出的大小有界限，而設計倚賴的是量測與 validator，不是那個界限。
+production 把 edge 與 hot pixel 放進均勻的空間 hash，大約每個格子一個物件。對 layout 類的輸入（每個格子的曲線數量有上限），每個 round 預期的成本約為 $n + k$（$n$ 條 edge、$k$ 個交點），再加上每條 edge 上 pixel 的排序。我們做的是量測，並不主張最壞情況：文獻對反覆輸出的大小有界限，而設計倚賴的是量測與 validator，不是那個界限。
 
-![左：原型 scaling 執行中 hot pixel 與 noded edge 對 N 的關係。中：一個固定密度的合成 arrangement 中，snap rounding 加 DCEL 的時間對 segment 數的關係。右：polyline witness 的大小對 quarter arc 半徑的關係。](figures/arrangement-complexity.svg){#fig-cost fig-alt="三張對數-對數圖。左：N = 1000、5000、20000 個特徵時，hot pixel 與 noded edge 的增長倍數與 N 相同，從約 31 000 增加到約 630 000。中：2 000 到 64 000 條 segment 的 snap rounding 加 DCEL 時間，上升的斜率比 1 稍陡。右：半徑從 3 到 100 000 grid unit 時，每個 quarter arc 的弦數，沿著斜率 1/2 的線。"}
+![左：production scaling 執行中 hot pixel 與 noded edge 對 N 的關係。中：一個固定密度的合成 arrangement 中，snap rounding 加 DCEL 的時間對 segment 數的關係。右：polyline witness 的大小對 quarter arc 半徑的關係。](figures/arrangement-complexity.svg){#fig-cost fig-alt="三張對數-對數圖。左：N = 1000、5000、20000 個特徵時，hot pixel 與 noded edge 的增長倍數與 N 相同，從約 31 000 增加到約 630 000。中：2 000 到 64 000 條 segment 的 snap rounding 加 DCEL 時間，上升的斜率比 1 稍陡。右：半徑從 3 到 100 000 grid unit 時，每個 quarter arc 的弦數，沿著斜率 1/2 的線。"}
 
 {{< askr-chart-view src="figures/arrangement-complexity.html" label="檢視成本資料" >}}
 
 看 @fig-cost 時請注意：
 
-- **大小是線性的。** hot pixel 數量從 $N = 1000$（31 474）到 $N = 5000$（157 270），再到 $N = 20000$（631 159），斜率皆為 1.0。所有 arrangement 規劃的 edge 數從 29 245 增加到 584 962，斜率相同（目前的 `outputs/scaling.json`）。這些 scaling 全是 polygon-only 的 layout，沒有圓弧、witness 的弦與 band，所以圓弧與 band 在大規模下的成本沒有量測，不外推。
-- **時間近乎線性。** 對於一個固定密度的短 segment 合成 arrangement，時間（snap rounding 加 DCEL，取三次最佳）從 2 000 到 64 000 條 segment，局部斜率介於 1.1 與 1.6 之間。最後一步用了四個 round（snap rounding 約 3.2 s、DCEL 約 0.7 s），其他步驟用了三個。在完整 pipeline 的 $N = 20000$ 時，noding 的 kernel 與 driver 花 12.9 s（總共 52.1 s），DCEL 花 3.5 s。這些計時是單次執行，同一台機器上重複量測會有明顯起伏（見[為什麼先規劃](why-plan-first.qmd)）。
-- **Round 很少。** 隨機集合需要兩到五個 round，200 個特徵的 layout 其每層 arrangement 需要一到兩個，範例則是一到兩個（`stage_summary.json`：`snap_rounds`）。
+- **大小是線性的。** hot pixel 數量從 $N = 1000$（31 273）到 $N = 5000$（158 575），再到 $N = 20000$（630 556），局部斜率為 1.01 與 1.00。所有 arrangement 規劃的 edge 數從 31 699 增加到 638 533，斜率相同（`figures/why-scaling-measured.json`，production 的量測）。這些 scaling 全是 polygon-only 的 layout，沒有圓弧、witness 的弦與 band，所以圓弧與 band 在大規模下的成本沒有量測，不外推。
+- **時間近乎線性。** 對於一個固定密度的短 segment 合成 arrangement，時間（snap rounding 加 DCEL，取三次最佳）從 2 000 到 64 000 條 segment，局部斜率介於 0.97 與 1.52 之間。最後一步用了四個 round（snap rounding 約 3.8 s、DCEL 約 0.7 s），其他步驟用了三個。在完整 pipeline 的 $N = 20000$ 時，noding 的 kernel 與 driver 花 12.8 s（推導與驗證總共 61.6 s），DCEL 花 3.9 s。這些計時是單次執行，同一台機器上重複量測會有明顯起伏（見[為什麼先規劃](why-plan-first.qmd)）。
+- **Round 很少。** 隨機集合需要兩到五個 round，200 個特徵的 layout 其每層 arrangement 需要一到兩個，範例則是一到兩個（`level_stats` 與 `layout_like`：`snap_rounds`）。
 
 Noding 不能是每個 tile 各自獨立的工作，因為改道後的弦可能終止在另一個 tile：每個 round 都是對 hot pixel 聯集的 barrier（見 [Parallel derivation](parallelism.qmd)）。
 
@@ -163,11 +161,11 @@ Noding 不能是每個 tile 各自獨立的工作，因為改道後的弦可能�
 
 在 @fig-arc 中，六條弦在 snap rounding 之後變成九條 edge（外來 segment 變成兩條 edge，並把它所穿過的那條弦切成兩段），再合併成兩條圓弧 edge，與精確圓的偏離為 0.40 g。計數來自 `arrangement_guarantees.py`：10 個 hot pixel、2 個 round。
 
-真實模型上的偏離（原型計算）：來源圓弧的端點是精確的格點，偏離為 0；inset band 的衍生 offset 圓弧，端點被 snap，在 `pad_in_ground_A_bands` 的 47 條 edge 上平均 0.057 g、最大 0.632 g，在 `pad_in_ground_B_bands` 的 88 條 edge 上平均 0.031 g、最大 0.632 g。production 的同名範例最大偏離同為 0.632 g（`pad_in_ground_B_bands` 的 sliver report 記錄 100 條 arc edge，平均 0.027 g）。
+真實模型上的偏離（production 的 sliver report）：來源圓弧的端點是精確的格點，偏離為 0；inset band 的衍生 offset 圓弧，端點被 snap，在 `pad_in_ground_A_bands` 的 59 條 arc edge 上平均 0.046 g、最大 0.632 g，在 `pad_in_ground_B_bands` 的 90 條 arc edge 上平均 0.030 g、最大 0.632 g（port 在 $z = 0$）。
 
 圓弧若被外來的 vertex 切開（例如 port 的 edge 終止在圓形 pad 的圓弧上），每一段圓弧各自由它 snap 後的端點 realise，落在各自的圓上，偏離量以段為單位記錄。以這樣的圓弧為底的圓柱 wall（Route B 與 Route C）如果不處理就會有 5 條邊界 edge；production 在 assembly 中於該 vertex 處用一條垂直 edge 把 wall 切開，底邊與頂邊的圓弧都在同一個格點被切開，每一片是自己圓上的精確圓柱（見 [Assembly](assembly.qmd#curved-walls)）。原型的 direct writer 曾因此拒絕這個案例。完全由 polygon 組成的圓（GDS 的 16 到 128 個點）不會產生圓柱 wall，它們的 wall 是平面。
 
-witness 的代價是大小。半徑為 $r$ 的 quarter arc 約需要 $\sqrt{r/g}$ 乘上一個常數的弦數：$r = 100$ g 時 12 條，$r = 8\,\mu$m（8 000 g，也就是 pad 的孔）時 100 條，$r = 100\,\mu$m（100 000 g）時 352 條；從 $r = 24$ g 到 $100\,000$ g，斜率介於 0.47 與 0.50 之間（`arrangement_guarantees.py`）。對執行範例帶 inset band 的 $z = 0$ level 而言，弦合併之前，noded arrangement 有 2 932 條 edge 與 2 918 個 hot pixel，合併之後是 160 條 edge（`outputs/pad_in_ground_A_bands/stage_summary.json`）。對原型而言這很便宜，但對於圓弧很多的 layout，是需要預算的成本。圓弧的原生 snap rounding（Eigenwillig 等人）是升級路徑；structural validation 則是 witness 的安全網（見 [Validation](validation.qmd)）。
+witness 的代價是大小。半徑為 $r$ 的 quarter arc 約需要 $\sqrt{r/g}$ 乘上一個常數的弦數：$r = 100$ g 時 12 條，$r = 8\,\mu$m（8 000 g，也就是 pad 的孔）時 100 條，$r = 100\,\mu$m（100 000 g）時 352 條；從 $r = 24$ g 到 $100\,000$ g，斜率介於 0.47 與 0.50 之間（`arrangement_guarantees.py`）。對執行範例 `pad_in_ground_A_bands`（Route A，三個 margin 的 band）的 $z = 0$ level 而言，弦合併之前，noded arrangement 有 4 064 條 edge 與 4 050 個 hot pixel，合併之後是 172 條 edge（`figures/arrangement-guarantees-numbers.json` 的 `level_stats`）。對這個範例而言這很便宜，但對於圓弧很多的 layout，是需要預算的成本。圓弧的原生 snap rounding（Eigenwillig 等人）是升級路徑；structural validation 則是 witness 的安全網（見 [Validation](validation.qmd)）。
 
 ## 邊界情況
 
@@ -182,17 +180,17 @@ witness 的代價是大小。半徑為 $r$ 的 quarter arc 約需要 $\sqrt{r/g}
 
 ## 補充：重現資料
 
-本頁的圖與數字是**計算所得**；scaling 與 pipeline 大小的數字取自目前的 `outputs/scaling.json`，該檔案在初稿之後被較新的執行覆寫，已重新產生。逐步範例由 `docs/design/sgb/_figures/arrangement_steps.py` 產生，數字在 `figures/arrangement-steps-numbers.json`；腳本逐個 round 執行原型自己的 kernel，並檢查最後的 edge 集合等於 `snap_round` 的結果。保證、drift、成本與圓弧 witness 由 `arrangement_guarantees.py` 產生，數字在 `figures/arrangement-guarantees-numbers.json`；執行範例的數字讀自原型的 `outputs/<case>/stage_summary.json` 與 `sliver_report.json`，pipeline 的大小讀自 `outputs/scaling.json`。
+本頁的圖與數字是**計算所得**，全部來自 production `scgsim.geometry.sgb`。scaling 與 pipeline 大小的數字取自 `why_scaling.py measure` 的結果 `figures/why-scaling-measured.json`（seed 2 的隨機 layout，一個 tile、一個 worker）。逐步範例由 `docs/design/sgb/_figures/arrangement_steps.py` 產生，數字在 `figures/arrangement-steps-numbers.json`；腳本逐個 round 執行 production 的 noding kernel，並檢查最後的 edge 集合等於 `snap_round` 的結果。保證、drift、成本與圓弧 witness 由 `arrangement_guarantees.py` 產生，數字在 `figures/arrangement-guarantees-numbers.json`；執行範例的數字由該腳本對 production 模型建立 sliver report 與 level 統計得到。
 
 ::: {.askr-table-compact .askr-table-numeric}
-| N | Hot pixel 數 | Level arrangement 的 edge 數 | Slab arrangement 的 edge 數 | noding kernel（s） | noding driver（s） | DCEL（s） |
+| N | Hot pixel 數 | Level arrangement 的 edge 數 | Slab arrangement 的 edge 數 | noding kernel（階段 wall time，s） | noding driver（s） | DCEL（s） |
 |---|---|---|---|---|---|---|
-| 1 000 | 31 474 | 19 494 | 9 751 | 0.413 | 0.110 | 0.116 |
-| 5 000 | 157 270 | 97 282 | 48 645 | 1.510 | 0.524 | 0.581 |
-| 20 000 | 631 159 | 389 972 | 194 990 | 9.410 | 3.471 | 3.534 |
+| 1 000 | 31 273 | 21 130 | 10 569 | 0.372 | 0.101 | 0.112 |
+| 5 000 | 158 575 | 107 114 | 53 561 | 2.266 | 0.692 | 0.891 |
+| 20 000 | 630 556 | 425 686 | 212 847 | 9.784 | 3.041 | 3.850 |
 :::
 
-pixel 判定對 $(0, 0)$ 的 pixel 與四個角的處理（原型計算，由 `arrangement_guarantees.py` 的 `pixel_corners` 計算；production 的 `tests/test_sgb_snap_rounding.py` 有一個測試，斷言只碰到 pixel 一個角的 segment 只在左下角使它變成 hot）：
+pixel 判定對 $(0, 0)$ 的 pixel 與四個角的處理（由 `arrangement_guarantees.py` 的 `pixel_corners` 以 production 的 `HotGrid` 計算；`tests/test_sgb_snap_rounding.py` 有一個測試，斷言只碰到 pixel 一個角的 segment 只在左下角使它變成 hot）：
 
 ::: {.askr-table-compact}
 | 一條 segment …… | 是否碰到該 pixel |

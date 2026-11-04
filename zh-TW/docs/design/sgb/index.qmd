@@ -19,19 +19,21 @@ scgsim-id: "docs/design/sgb/index"
 
 本設計的每一頁都使用同一顆晶片，稱為 **pad-in-ground**：下方是 substrate，上方是 vacuum，一片帶矩形 cutout 的 ground plane，cutout 內有一個 pad，pad 與 ground 之間有一片 lumped-port sheet。pad 有一個 chamfer、一個 reflex notch、一個圓角和一個圓形孔洞，涵蓋了演算法必須處理的各種轉角。需要多層金屬時，改用第二個較小的範例（由兩根 post 撐起的類 airbridge deck）。
 
-輸入是五個 prism。以下使用 Route B 的形式：金屬厚 0.2 µm，port sheet 位於金屬的中間平面，$z = 0.1$ µm。這是為了說明而選的 stage 層範例：port 位於 vacuum volume 內部，所以會出現 embedded face，並把金屬 wall 切成兩片。實際輸入的 port 放在 host 導體的 support plane，也就是 PDK 宣告的 film attachment face（金屬貼著 substrate 的 $z = 0$）；它躺在 substrate 與 vacuum 的介面上，佔去那裡的 SA 面積，規則見 [Routes](routes.qmd#port-support-plane)。
+輸入是五個 prism。以下使用 Route B 的形式：金屬厚 0.2 µm，port sheet 位於 host 導體的 support plane，也就是 PDK 宣告的 film attachment face（金屬貼著 substrate 的 $z = 0$）。它躺在 substrate 與 vacuum 的介面上，佔去那裡的 SA 面積，所以這個範例沒有 embedded face，金屬 wall 也不會被 port 切開；規則見 [Routes](routes.qmd#port-support-plane)。
 
-![執行範例的輸入。左：從上方看的 footprint。右：沿虛線的剖面，以及由 prism 頂面與底面高度形成的 level（虛線）。](figures/index-example-input.svg){#fig-input fig-alt="左圖：300 × 300 微米晶片的俯視圖。灰色 ground plane 中有一個白色矩形 cutout，裡面是一個藍色 pad，pad 有倒角、下緣有缺口、左下角為圓角並有一個圓孔，另有一個紅色 port 矩形從 pad 連到 ground。右圖：y = 0 的 x-z 剖面，下方是 substrate slab，中間的 slab 有兩塊灰色 ground 與兩塊藍色 pad，中間的 level 上有一片紅色 port sheet，上方是 vacuum，共有五條虛線 level。"}
+本頁的圖與數字由 production `scgsim.geometry.sgb` 計算。五個 prism 取自測試用的 stage 層 scene `tests/sgb_scenes.py` 的 `pad_in_ground`（可以直接寫出圓弧的 prism 目錄），port 則依編譯器放置 port 的規則放在 $z = 0$（`docs/design/sgb/_figures/_intro_common.py` 的 `running_example`）。
 
-SGB 從這五個 prism 推導出下面的實體模型。為了讓每個 volume 與每個 face 都看得見，圖中把它們拆開：
+![執行範例的輸入。左：從上方看的 footprint。右：沿虛線的剖面，以及由 prism 頂面與底面高度形成的 level（虛線）。](figures/index-example-input.svg){#fig-input fig-alt="左圖：300 × 300 微米晶片的俯視圖。灰色 ground plane 中有一個白色矩形 cutout，裡面是一個藍色 pad，pad 有倒角、下緣有缺口、左下角為圓角並有一個圓孔，另有一個紅色 port 矩形從 pad 連到 ground。右圖：y = 0 的 x-z 剖面，下方是 substrate slab，中間的 slab 有兩塊灰色 ground 與兩塊藍色 pad，substrate 與這個 slab 之間的 level（z = 0）上，pad 與 ground 之間有一片紅色 port sheet，上方是 vacuum，共有四條虛線 level。"}
 
-![從五個 prism 推導出的實體模型（Route B），拆開顯示：substrate 向下移、vacuum 向上移，兩個金屬 volume 留在原位。每個 face 對它所圍住的每個 volume 各畫一次。金屬層畫得比實際厚 200 倍，face 的三角化由 Gmsh 完成，僅供顯示。](figures/index-example-3d.svg){#fig-3d fig-alt="三層晶片大小的疊層拆開後的立體圖。最下方偏紫色的一層是 substrate 側，帶有 metal-substrate face。中間一層是 pad 與 ground 的薄金屬 prism，帶有藍色 wall。最上方是 vacuum 側，有淺藍色的 gap 表面與 pad 的頂面 face。黑線標出每個 face 的邊界。"}
+SGB 從這五個 prism 推導出下面的實體模型（Route B）。為了讓每個 volume 與每個 face 都看得見，圖中把它們拆開：
+
+![從五個 prism 推導出的實體模型（Route B），拆開顯示：substrate 向下移、vacuum 向上移，ground 與 pad 這兩個被排除的金屬 volume 留在原位。每個 face 對它所圍住的每個 volume 各畫一次。圖畫的是 direct writer 寫出的 XAO（35 個 face）；金屬層畫得比實際厚 200 倍，face 的三角化由 Gmsh 完成，僅供顯示。](figures/index-example-3d.svg){#fig-3d fig-alt="三層晶片大小的疊層拆開後的立體圖。最下方偏紫色的一層是 substrate 側，帶有 metal-substrate face。中間一層是 pad 與 ground 的薄金屬 prism，帶有藍色 wall。最上方是 vacuum 側，有淺藍色的 gap 表面與 pad 的頂面 face。黑線標出每個 face 的邊界。"}
 
 {{< askr-chart-view src="figures/index-example-3d.html" label="檢視推導出的 3D 實體" >}}
 
 看 @fig-3d 時請注意：黑色輪廓是 BREP face 的邊界。metal-vacuum 表面（藍）與 substrate-vacuum gap（淺藍）的邊界只畫一次，並由兩側的 volume 共用。正是這種共用，讓模型不需要任何 fragment 運算就能 conformal。
 
-在這個 Route B 範例中，規劃了 41 個 face，寫出 37 個：ground volume 在晶片邊緣的 4 道 wall 不圍住任何已 emit 的 volume，所以只被規劃而不被寫出（原因見 [Route A 與 Route B](routes.qmd)）。完整的數量表在本頁最後的補充。
+在這個 Route B 範例中，規劃了 39 個 face，寫出 35 個：ground volume 在晶片邊緣的 4 道 wall 不圍住任何已 emit 的 volume，所以只被規劃而不被寫出，圖中也就沒有畫它們（原因見 [Route A 與 Route B](routes.qmd)）。port 的 face 圍住 substrate 與 vacuum 兩個已 emit 的 volume，位於它們之間；SA 的 gap 面是從 pad 與 ground 之間扣掉 port 的 footprint 之後剩下的部分。完整的數量表在本頁最後的補充。
 
 ## SGB 給你什麼
 
@@ -44,7 +46,7 @@ SGB 從這五個 prism 推導出下面的實體模型。為了讓每個 volume �
 
 無論哪一個 solver 使用，這些事實都相同。Palace 透過 Gmsh 讀取 XAO，並由 Gmsh 產生 mesh；AEDT 階段之後會讀取同樣的 solid（見 [Emission](emission.qmd)）。
 
-production 的 group 名稱依決策 D5 以 Entity 歸屬，形式為 `<kind>::<entity>::<face kind>[::band=k]`（例如 pad 的頂面是 `MA::pad::top`，有 inset band 時是 `MA::pad::top::band=2`），完整說明見 [Route](routes.qmd) 與[設計決議](decisions.qmd#d5)。圖內的標示（原型計算）可能仍是舊的 per-Net 名稱，例如 `MA::pad`。
+production 的 group 名稱依決策 D5 以 Entity 歸屬，形式為 `<kind>::<entity>::<face kind>[::band=k]`（例如 pad 的頂面是 `MA::pad::top`，有 inset band 時是 `MA::pad::top::band=2`），完整說明見 [Route](routes.qmd) 與[設計決議](decisions.qmd#d5)。
 
 ### 如何檢查結果
 
@@ -58,9 +60,9 @@ production 的 extreme-case catalogue（`tests/sgb_catalogue_report.py`，每個
 
 - **範圍。** 23 個 fixture 乘上 Route A、B、C，共 63 列。其中 54 列建出模型，並全部通過：build 與結構檢查、direct write、Gmsh 載入（`verify_loaded`）、一次粗略的 3D mesh，以及 `BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer`（含 self-interference）與 `ShapeAnalysis` 的 OCCT 檢查。另外 9 列是預期的拒絕：6 個 `NonManifoldError`（`exactly_tangent_arc_line`、`kissing_corners_same_net`、`hole_touches_outer`，各在 Route B 與 Route C）與 3 個 `ContactError`（`kissing_corners_different_nets`，三種 route）。原型時期 direct writer 對 5-edge 圓柱 wall 的拒絕已不存在：`arc_with_foreign_vertex` 與 `arc_with_foreign_vertex_from_post` 在 Route B 與 C 都建得出來（見 [Assembly](assembly.qmd#curved-walls)）。
 - **每個 fixture 的 mesh 品質與 drift。** catalogue 現在每列記錄它們，D2 與 D7 重新評估的條件因此有資料可看。對 54 個建出的列，以 4 µm 的 mesh size 對 40 × 40 × 20 µm 的 fixture 做粗略的四面體 mesh：Gmsh 的 `minSICN`（1 為正四面體，≤ 0 為翻轉或扁平）最小值落在 0.0007 到 0.312 之間，`gamma` 最小值落在 $7 \times 10^{-6}$ 到 0.306 之間；沒有任何一列出現 ≤ 0 的元素。最大的 snap drift 是 0（輸入本來就在格點上），最大的 arc 偏離是 0.760 grid unit（`arcs_crossing_shallow`），低於 1 g，所以 D7 的重新評估條件沒有被觸發（測試以 ≤ 1 g 斷言）。這些數字是記錄，不是驗收門檻。
-- **執行範例。** 七個執行範例（`pad_in_ground` 的 Route A、B、C 與各自含 band 的版本，以及 Route B 的 `airbridge`）也全部載入並通過 OCCT 檢查。它們以 60 µm 的 mesh size 做粗略 mesh，相對於 0.1 µm 的 slab 與 0.077 µm 的 band 非常粗；其中 `pad_in_ground_B_bands` 的 `minSICN` 與 `gamma` 最小值為 0，也就是粗略 mesh 中有一個扁平元素。這是 meshing 的人為結果，不是幾何缺陷：0.1 µm 的 band 條帶被約 60 µm 的元素 mesh，加上 layout 的對稱，使四條平行的 band 邊界 edge 各在 x = 0 有一個 node，3D Delaunay 把這四個共線的 node 連成體積為零的四面體。幾何通過 OCCT 檢查（含 self-interference），Gmsh API 的 oracle 對同一個 topology 重現同樣的四面體；改用依 sidecar `mesh_hints` 建立的 size field（band 邊界附近約 0.2 µm，成長率至多每 µm 8），`minSICN` 大於 $10^{-4}$（測試 `test_pad_b_bands_meshed_by_its_hints_has_no_flat_tetrahedron`）。尺寸指引寫在 `sidecar/hints.py` 的 docstring；band 的 mesh 尺寸是 Palace adopter 的責任（見[使用契約](consumer-contract.qmd#sidecar)）。D2 不變：不設門檻。（見 [Sliver](slivers.qmd#d2) 與[設計決議](decisions.qmd#d2)。）
+- **執行範例。** 七個執行範例（port 放在 support plane 的 `pad_in_ground` 的 Route A、B、C 與各自含 band 的版本，以及 Route B 的 `airbridge`）也全部載入並通過 OCCT 檢查（`docs/design/sgb/_figures/index_example.py` 以 `tests/sgb_catalogue_report.py` 的 `measure` 重新量測，數字在 `figures/index-numbers.json`）。它們以 60 µm 的 mesh size 做粗略 mesh，相對於 0.2 µm 的金屬與 0.077 µm 的 band 非常粗；七個範例的 `minSICN` 最小值落在 $2 \times 10^{-5}$ 到 0.119 之間，`gamma` 最小值落在 $10^{-7}$ 到 0.122 之間，沒有任何一列出現扁平或翻轉的元素。這和 CODE 測試中使用的 stage 層 case 不同：`tests/sgb_emit_cases.py` 的 `pad_b_bands` 把 Route B 的 port 放在金屬中間平面 $z = 0.1$，同樣以 60 µm 粗略 mesh 時 `minSICN` 與 `gamma` 的最小值為 0（一個扁平元素）；成因是 0.1 µm 的 band 條帶被約 60 µm 的元素 mesh，加上 layout 的對稱，使四條平行的 band 邊界 edge 各在 x = 0 有一個 node，3D Delaunay 把這四個共線的 node 連成體積為零的四面體。這是 meshing 的人為結果，不是幾何缺陷：幾何通過 OCCT 檢查（含 self-interference），Gmsh API 的 oracle 對同一個 topology 重現同樣的四面體；改用依 sidecar `mesh_hints` 建立的 size field（band 邊界附近約 0.2 µm，成長率至多每 µm 8），`minSICN` 大於 $10^{-4}$（測試 `test_pad_b_bands_meshed_by_its_hints_has_no_flat_tetrahedron`）。port 放在 support plane 時，這個 60 µm 的粗略 mesh 沒有再產生扁平元素，但這只是這組 mesh 參數下的結果，不是保證：band 的 mesh 尺寸仍是 Palace adopter 的責任，尺寸指引寫在 `sidecar/hints.py` 的 docstring（見[使用契約](consumer-contract.qmd#sidecar)）。D2 不變：不設門檻。（見 [Sliver](slivers.qmd#d2) 與[設計決議](decisions.qmd#d2)。）
 - **隨機 layout 與注入缺陷。** 測試在 $N = 100$ 的隨機 layout（三種 route）上跑完整的 OCCT 檢查，在 $N = 1000$（Route B，標為 `slow`）上跑 self-interference 關閉的便宜檢查，皆通過。五種注入的缺陷（內環反向、共用 face 在一個 shell 中翻面、vertex 偏離曲線 $10^{-4}$ µm、缺一個 face、wire 有缺口）每一種都被 `BRepCheck_Analyzer` 抓到，其餘檢查的涵蓋範圍見 [Validation](validation.qmd)。
-- **Runtime validator 的成本（原型計算）。** 原型在 $N = 1000$、5 000、20 000 的 polygon-only layout 上量到，每一項 validator 的時間對 face 數的局部斜率介於 0.79 與 1.16，也就是近乎線性。production 的 validator 沒有重新做這個 scaling 量測。
+- **Runtime validator 的成本（production 量測）。** 在 $N = 1000$、5 000、20 000、seed 2 的 polygon-only layout 上（14 215、71 969、285 871 個 face，一個 tile、一個 worker），31 項檢查合計的時間是 0.33 s、2.20 s、10.59 s，對 face 數的局部斜率是 1.16 與 1.14，也就是近乎線性。逐項看，除了 `cylinders` 之外，每一項 validator 的局部斜率介於 0.97 與 1.31；`cylinders` 的 1.6 只出現在 $N = 1000$ 到 5 000，這些 layout 沒有 cylinder wall，那項檢查在這兩個 $N$ 都不到 0.01 s，近乎雜訊（`figures/why-validator-scaling.json`，`python why_scaling.py validators`）。這是單次執行，不含圓弧與 band。
 
 還有三件事要說清楚。第一，AEDT 端：`export_aedt_step` 只做匯出，production 的輸出尚未實際匯入 AEDT 測試過；匯入的證據仍是原型時期的 E4 實驗（[交給 AEDT](aedt-handoff.qmd)）。第二，catalogue 的 fixture 都很小（不到 100 個 face），所以以上的檢查成本與 mesh 數字不代表大型 layout。第三，決定性（逐位元組相同）在同一台機器上測過；跨平台只是論證，尚未實測（見[使用契約](consumer-contract.qmd#determinism)）。各項檢查的細節見 [Validation](validation.qmd)。
 
@@ -200,16 +202,16 @@ flowchart TB
 
 ## 補充：重現資料
 
-下表是 production（`scgsim.geometry.sgb`）對執行範例與延伸範例的數字，每一列同時列出「規劃」與「實際輸出」：規劃是 S6 組裝好的 topology（`ConformalModel.counts`），實際輸出是 direct writer 寫出的實體數量（sidecar 的 `counts`）。
+下表是 production（`scgsim.geometry.sgb`）對執行範例（port 在 support plane $z = 0$）與延伸範例的數字，每一列同時列出「規劃」與「實際輸出」：規劃是 S6 組裝好的 topology（`ConformalModel.counts`），實際輸出是 direct writer 寫出的實體數量（sidecar 的 `counts`）。
 
 ::: {.askr-table-compact .askr-table-numeric}
 | 量（規劃／實際輸出） | `pad_in_ground_B` | `pad_in_ground_A`（sheet 金屬） | `pad_in_ground_C` | `pad_in_ground_B_bands`（3 個 margin） | `airbridge_B`（延伸範例） |
 |---|---|---|---|---|---|
 | Prism 數 | 5 | 5 | 5 | 5 | 7 |
-| Level / slab 數 | 5 / 4 | 3 / 2 | 5 / 4 | 5 / 4 | 6 / 5 |
-| Vertex | 70 / 60 | 39 / 34 | 70 / 60 | 313 / 228 | 44 / 44 |
-| Edge | 94 / 90 | 44 / 44 | 94 / 94 | 262 / 258 | 78 / 74 |
-| Face | 41 / 37 | 15 / 15 | 41 / 41 | 62 / 58 | 43 / 33 |
+| Level / slab 數 | 4 / 3 | 3 / 2 | 4 / 3 | 4 / 3 | 6 / 5 |
+| Vertex | 66 / 56 | 39 / 34 | 66 / 56 | 321 / 236 | 44 / 44 |
+| Edge | 88 / 84 | 44 / 44 | 88 / 88 | 280 / 276 | 78 / 74 |
+| Face | 39 / 35 | 15 / 15 | 39 / 39 | 66 / 62 | 43 / 33 |
 | Volume | 4 / 2 | 2 / 2 | 4 / 4 | 4 / 2 | 7 / 2 |
 | Physical group 數 | 14 | 10 | 17 | 23 | 18 |
 | 通過的 structural validation 檢查 | 31 / 31 | 31 / 31 | 31 / 31 | 31 / 31 | 31 / 31 |
@@ -223,4 +225,4 @@ flowchart TB
 
 最後一列是 `ValidationReport` 記錄的檢查數。每個範例寫出後都通過 `verify_loaded` 與 OCCT 檢查（見上文 catalogue 報告）。
 
-這些數字由 `tests/sgb_emit_cases.py` 的 `CASES`（`pad_b`、`pad_a`、`pad_c`、`pad_b_bands`、`bridge_b`）直接重建：`emit_model(CASES[name](), 資料夾)` 之後讀 `model.counts` 與 sidecar 的 `counts`。catalogue 的數字由 `python tests/sgb_catalogue_report.py --timings --out <資料夾>` 在 `scgsim` 套件根目錄產生。原型計算的舊版數字（例如 `pad_in_ground_B_bands` 規劃 59 個 face、`airbridge_B` 規劃 37 個 face、3 個 volume）與上表不同，差異的原因已核對，不是缺陷：`pad_in_ground_B_bands` 多 3 個 face，是因為 `SolutionInterface` 取整個 substrate–vacuum 介面，pad 的圓形 hole 的 SA face 也被切 band（原型只切 gap 環）；`airbridge_B` 多 6 個規劃的 face，是 4 個同一個 Net 的不同 Entity 之間的 `MM` 接觸 face（Route B 不輸出）加上 2 個依 Entity 切開的外側 sidewall，7 個 volume 是 substrate、vacuum 與每個導體 Entity 各一個，皆為 D5 的 per-Entity 歸屬。原型的圖與數字由 `docs/design/sgb/_figures/index_example.py` 讀取原型的輸出得到，腳本與其執行方式列在 `docs/design/sgb/_figures/README.md`。
+這些數字由 `docs/design/sgb/_figures/index_example.py` 重建：以 `running_example`（`tests/sgb_scenes.py` 的 `pad_in_ground`，port 放在 $z = 0$）與 `airbridge()` 建立模型，`model.counts` 是規劃的數量，寫出後讀 sidecar 的 `counts` 是實際輸出，數字在 `figures/index-numbers.json`。要注意：`tests/sgb_emit_cases.py` 的 `pad_b`、`pad_c`、`pad_b_bands` 等 case 使用 scene 自己的 Route B port，位於金屬中間平面 $z = 0.1$，所以多一個 level 與一個 slab，並把兩道金屬 wall 切開；那組 case 的 `pad_b` 是規劃 41、寫出 37 個 face，`pad_b_bands` 是 62／58，與上表不同。Route A 的 port 本來就在 $z = 0$，所以 `pad_in_ground_A` 在兩組之間相同。`airbridge_B` 的 7 個 volume 是 substrate、vacuum 與每個導體 Entity 各一個，加上 4 個同一個 Net 的不同 Entity 之間的 `MM` 接觸 face（Route B 不輸出）與依 Entity 切開的外側 sidewall，皆為 D5 的 per-Entity 歸屬。`pad_in_ground_B_bands` 的 `SolutionInterface` 取整個 substrate–vacuum 介面，所以 pad 圓形 hole 的 SA face 也被切 band，port 的 footprint 則從 SA 與它的 band 中扣掉（band 的距離只從 gap edge 量起）。圖與數字的腳本與執行方式列在 `docs/design/sgb/_figures/README.md`。

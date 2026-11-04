@@ -1,9 +1,10 @@
 """Figures of arrangement.qmd: iterated snap rounding on a tiny input, step by step.
 
 The input is five exact integer carriers on a 12 x 12 grid (a triangle c1-c3, a long crossing segment c4 and a short
-segment c5). The script re-runs the prototype's own kernels (``crossing_pixels_kernel``, ``hits_kernel``,
-``assemble_chain``) round by round, records every state, checks that the result equals ``snap_round`` and then builds
-the DCEL faces with ``build_arrangement``.
+segment c5). The script re-runs the production kernels of ``scgsim.geometry.sgb.noding.snap_rounding``
+(``crossing_pixels_kernel``, ``hits_kernel``, ``assemble_chain``, through ``SerialEngine``) round by round, records
+every state, checks that the result equals ``snap_round`` and then builds the DCEL faces with
+``scgsim.geometry.sgb.arrangement.dcel.build_arrangement``.
 
 Writes ``figures/arrangement-steps.svg`` (six panels), ``figures/arrangement-steps.html`` (one step at a time)
 and ``figures/arrangement-steps-numbers.json``.
@@ -20,9 +21,9 @@ import plotly.graph_objects as go
 
 from _intro_common import COLOURS, save_plotly, save_svg, write_numbers
 
-from sgbproto.arrangement import build_arrangement, interior_point
-from sgbproto.snap_rounding import (
-    NodedEdge, SerialEngine, Segment, _crossing, assemble_chain, canonical, snap_round,
+from scgsim.geometry.sgb.arrangement.dcel import build_arrangement, interior_point
+from scgsim.geometry.sgb.noding.snap_rounding import (
+    NodedEdge, Segment, SerialEngine, assemble_chain, canonical_key as canonical, proper_crossing as _crossing, snap_round,
 )
 
 CARRIERS = [((1, 1), (10, 4)), ((10, 4), (12, 9)), ((12, 9), (1, 1)), ((2, 0), (12, 8)), ((6, 2), (10, 5))]

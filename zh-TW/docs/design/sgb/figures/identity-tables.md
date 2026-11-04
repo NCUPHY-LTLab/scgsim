@@ -2,18 +2,18 @@
 
 | tiles | workers | PYTHONHASHSEED | pad_in_ground B with bands | random layout (60 features, seed 5, Route B) |
 |---|---|---|---|---|
-| 1x1 | 1 | 0 | `build:22a139898b1f72d2` | `build:4208c3b044b51b94` |
-| 1x1 | 1 | 1 | `build:22a139898b1f72d2` | `build:4208c3b044b51b94` |
-| 1x1 | 1 | 12345 | `build:22a139898b1f72d2` | `build:4208c3b044b51b94` |
-| 2x2 | 1 | 0 | `build:22a139898b1f72d2` | `build:4208c3b044b51b94` |
-| 2x2 | 1 | 1 | `build:22a139898b1f72d2` | `build:4208c3b044b51b94` |
-| 2x2 | 1 | 12345 | `build:22a139898b1f72d2` | `build:4208c3b044b51b94` |
-| 3x3 | 2 | 0 | `build:22a139898b1f72d2` | `build:4208c3b044b51b94` |
-| 3x3 | 2 | 1 | `build:22a139898b1f72d2` | `build:4208c3b044b51b94` |
-| 3x3 | 2 | 12345 | `build:22a139898b1f72d2` | `build:4208c3b044b51b94` |
-| 4x4 | 4 | 0 | `build:22a139898b1f72d2` | `build:4208c3b044b51b94` |
-| 4x4 | 4 | 1 | `build:22a139898b1f72d2` | `build:4208c3b044b51b94` |
-| 4x4 | 4 | 12345 | `build:22a139898b1f72d2` | `build:4208c3b044b51b94` |
+| 1x1 | 1 | 0 | `model:cc7d521c1c0f888f` | `model:b00423575e10e9af` |
+| 1x1 | 1 | 1 | `model:cc7d521c1c0f888f` | `model:b00423575e10e9af` |
+| 1x1 | 1 | 12345 | `model:cc7d521c1c0f888f` | `model:b00423575e10e9af` |
+| 2x2 | 1 | 0 | `model:cc7d521c1c0f888f` | `model:b00423575e10e9af` |
+| 2x2 | 1 | 1 | `model:cc7d521c1c0f888f` | `model:b00423575e10e9af` |
+| 2x2 | 1 | 12345 | `model:cc7d521c1c0f888f` | `model:b00423575e10e9af` |
+| 3x3 | 2 | 0 | `model:cc7d521c1c0f888f` | `model:b00423575e10e9af` |
+| 3x3 | 2 | 1 | `model:cc7d521c1c0f888f` | `model:b00423575e10e9af` |
+| 3x3 | 2 | 12345 | `model:cc7d521c1c0f888f` | `model:b00423575e10e9af` |
+| 4x4 | 4 | 0 | `model:cc7d521c1c0f888f` | `model:b00423575e10e9af` |
+| 4x4 | 4 | 1 | `model:cc7d521c1c0f888f` | `model:b00423575e10e9af` |
+| 4x4 | 4 | 12345 | `model:cc7d521c1c0f888f` | `model:b00423575e10e9af` |
 
 distinct digests per model: 1 and 1
 
@@ -21,31 +21,35 @@ distinct digests per model: 1 and 1
 
 | kind | with port | without port | shared | only with port | only without port |
 |---|---|---|---|---|---|
-| vertices | 289 | 281 | 281 | 8 | 0 |
-| edges | 250 | 238 | 234 | 16 | 4 |
-| faces | 59 | 56 | 54 | 5 | 2 |
-| volumes | 4 | 4 | 1 | 3 | 3 |
+| vertices | 321 | 305 | 305 | 16 | 0 |
+| edges | 280 | 250 | 242 | 38 | 8 |
+| faces | 66 | 59 | 48 | 18 | 11 |
+| volumes | 4 | 4 | 4 | 0 | 0 |
+
+groups in only one of the two builds: PORT::p1
 
 | group | members with port | members without port | identical members |
 |---|---|---|---|
-| `EXT::substrate` | 5 | 5 | True |
-| `EXT::vacuum` | 5 | 5 | True |
-| `MA::Ground` | 6 | 5 | False |
-| `MA::pad` | 15 | 14 | False |
-| `MA::pad::band=0` | 2 | 2 | True |
-| `MA::pad::band=1` | 2 | 2 | True |
-| `MA::pad::band=2` | 2 | 2 | True |
-| `MA::pad::band=3` | 1 | 1 | True |
-| `MS::Ground` | 1 | 1 | True |
-| `MS::pad::band=0` | 2 | 2 | True |
-| `MS::pad::band=1` | 2 | 2 | True |
-| `MS::pad::band=2` | 2 | 2 | True |
-| `MS::pad::band=3` | 1 | 1 | True |
-| `PORT::p1` | 1 | None | False |
-| `SA::substrate|vacuum` | 1 | 1 | True |
-| `SA::substrate|vacuum::band=0` | 2 | 2 | True |
-| `SA::substrate|vacuum::band=1` | 2 | 2 | True |
-| `SA::substrate|vacuum::band=2` | 2 | 2 | True |
-| `SA::substrate|vacuum::band=3` | 1 | 1 | True |
-| `VOL::substrate` | 1 | 1 | True |
-| `VOL::vacuum` | 1 | 1 | False |
+| `EXT::substrate::bottom` | 1 | 1 | True |
+| `EXT::substrate::sidewall` | 4 | 4 | True |
+| `EXT::vacuum::sidewall` | 4 | 4 | True |
+| `EXT::vacuum::top` | 1 | 1 | True |
+| `MA::ground::sidewall` | 4 | 4 | False |
+| `MA::ground::top` | 1 | 1 | True |
+| `MA::pad::sidewall` | 14 | 14 | False |
+| `MA::pad::top::band=0` | 2 | 2 | True |
+| `MA::pad::top::band=1` | 2 | 2 | True |
+| `MA::pad::top::band=2` | 2 | 2 | True |
+| `MA::pad::top::band=3` | 1 | 1 | True |
+| `MS::ground::bottom` | 1 | 1 | False |
+| `MS::pad::bottom::band=0` | 2 | 2 | False |
+| `MS::pad::bottom::band=1` | 2 | 2 | True |
+| `MS::pad::bottom::band=2` | 2 | 2 | True |
+| `MS::pad::bottom::band=3` | 1 | 1 | True |
+| `PORT::p1` | 7 | None | False |
+| `SA::substrate|vacuum::interface::band=0` | 3 | 3 | False |
+| `SA::substrate|vacuum::interface::band=1` | 3 | 3 | False |
+| `SA::substrate|vacuum::interface::band=2` | 3 | 3 | False |
+| `SA::substrate|vacuum::interface::band=3` | 2 | 2 | False |
+| `substrate` | 1 | 1 | True |
+| `vacuum` | 1 | 1 | True |

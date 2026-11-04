@@ -3,8 +3,8 @@
 A two-metal model with unrelated layers: M1 at z = 0 to 0.2 um and M2 at z = 3 to 3.2 um, separated by vacuum. The
 right edge of M2 lies 3 nm beside the right edge of M1 when both are projected on the XY plane. The script builds
 
-* the *local* arrangements with the prototype pipeline (``build``), where every level arrangement only receives the
-  curves of the slabs that touch it, and
+* the *local* arrangements with the production pipeline (``build_model_from_catalogue``), where every level arrangement
+  only receives the curves of the slabs that touch it, and
 * a *global* arrangement: one snap-rounded arrangement of every prism footprint curve (what a single projection
   of all layers would give), which every level would then have to use.
 
@@ -20,38 +20,31 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from matplotlib.patches import PathPatch
 
-from _intro_common import COLOURS, G_UM, FIG, mpl_path, save_plotly, save_svg, write_numbers
+from _intro_common import COLOURS, G_UM, mpl_path, save_plotly, save_svg, write_numbers
+from sgb_scenes import GRID, chip_prisms, conductor, rect_um
 
-from sgbproto.arrangement import build_arrangement
-from sgbproto.pipeline import build
-from sgbproto.records import Footprint, Grid, ModelSpec, PrismRecord, z_value
-from sgbproto.snap_rounding import Segment, snap_round
+from scgsim.geometry.sgb.arrangement.dcel import build_arrangement
+from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.noding.snap_rounding import Segment, snap_round
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 
-GRID = Grid()
 GAP_NM = 3  # lateral distance of the two edges: 3 grid units = 3 nm
 
 
-def rect(x0, y0, x1, y1):
-    pts = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
-    return Footprint.from_rings([(GRID.snap(x), GRID.snap(y)) for x, y in pts])
-
-
-def two_layer_spec() -> ModelSpec:
+def two_layer_catalogue() -> PrismCatalogue:
     half = 80.0
-    chip = rect(-half, -half, half, half)
-    x_m2 = 40.0 + GAP_NM * GRID.g
+    x_m2 = 40.0 + GAP_NM * GRID.size_um
     prisms = (
-        PrismRecord("substrate", chip, z_value(-100), z_value(0), "substrate", "dielectric", role="body"),
-        PrismRecord("vacuum", chip, z_value(0), z_value(100), "vacuum", "vacuum", role="body"),
-        PrismRecord("m1", rect(-40, -30, 40, 30), z_value(0), z_value("0.2"), "Al", "conductor", net_id="m1"),
-        PrismRecord("m2", rect(-20, -10, x_m2, 20), z_value(3), z_value("3.2"), "Al", "conductor", net_id="m2"),
+        *chip_prisms(GRID, half),
+        conductor("m1", rect_um(-40, -30, 40, 30), 0, "0.2", "m1"),
+        conductor("m2", rect_um(-20, -10, x_m2, 20), 3, "3.2", "m2"),
     )
-    return ModelSpec(GRID, prisms, name="two_layer_phantom", meta={"route": "B"})
+    return PrismCatalogue(GRID, prisms, name="two_layer_phantom")
 
 
-def global_arrangement(spec: ModelSpec):
+def global_arrangement(catalogue: PrismCatalogue):
     """One arrangement of every footprint curve of every prism, as a single projection of all layers would give."""
-    segments = [Segment(c.p, c.q, frozenset([c.id])) for p in spec.prisms for c in p.carriers()]
+    segments = [Segment(c.p, c.q, frozenset([c.id])) for p in catalogue.prisms for c in p.carriers()]
     snapped = snap_round(segments)
     return build_arrangement(snapped.edges), snapped
 
@@ -78,8 +71,8 @@ def draw_arr(ax, arr, highlight: set[int], view) -> None:
 
 
 def main() -> None:
-    spec = two_layer_spec()
-    result = build(spec)
+    spec = two_layer_catalogue()
+    result = build_model_from_catalogue(spec, "B").labelled
     arr, snapped = global_arrangement(spec)
     widths = face_widths(arr)
     narrowest = min(widths, key=lambda w: w[1])
@@ -87,7 +80,7 @@ def main() -> None:
     local = []
     for layer in result.level_layers:
         lw = face_widths(layer.arr) if len(layer.arr.faces) > 1 else []
-        local.append({"plane": layer.plane, "cells": len(layer.arr.faces) - 1, "edges": len(layer.arr.edges),
+        local.append({"plane": f"z = {float(layer.level_z):g}", "cells": len(layer.arr.faces) - 1, "edges": len(layer.arr.edges),
                       "narrowest_width_um": round(min(w for _, w, _ in lw), 4) if lw else None})
     local_cells = sum(l["cells"] for l in local)
     levels = len(result.level_layers)
@@ -157,7 +150,7 @@ def main() -> None:
         "local": {"levels": levels, "cells_total": local_cells, "per_level": local,
                   "narrowest_width_um": min(l["narrowest_width_um"] for l in local if l["narrowest_width_um"] is not None)},
         "cells_if_every_level_used_the_global_arrangement": (len(arr.faces) - 1) * levels,
-        "build_validated": not result.report.failures,
+        "build_validated": True,  # build_model_from_catalogue raises on a failed invariant
     }
     write_numbers("layered-phantom", numbers)
     print(json.dumps(numbers, indent=1))

@@ -19,37 +19,37 @@
     "cells": 1,
     "edges": 4,
     "narrowest_width_um": 80.0,
-    "plane": "level[-100]"
+    "plane": "z = -100"
    },
    {
     "cells": 2,
     "edges": 8,
     "narrowest_width_um": 34.2857,
-    "plane": "level[0]"
+    "plane": "z = 0"
    },
    {
     "cells": 2,
     "edges": 8,
     "narrowest_width_um": 34.2857,
-    "plane": "level[1/5]"
+    "plane": "z = 0.2"
    },
    {
     "cells": 2,
     "edges": 8,
     "narrowest_width_um": 20.0003,
-    "plane": "level[3]"
+    "plane": "z = 3"
    },
    {
     "cells": 2,
     "edges": 8,
     "narrowest_width_um": 20.0003,
-    "plane": "level[16/5]"
+    "plane": "z = 3.2"
    },
    {
     "cells": 1,
     "edges": 4,
     "narrowest_width_um": 80.0,
-    "plane": "level[100]"
+    "plane": "z = 100"
    }
   ]
  },

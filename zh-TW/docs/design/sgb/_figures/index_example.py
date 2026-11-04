@@ -1,30 +1,40 @@
-"""Figures of the overview page: the pad-in-ground running example as input and as derived solids.
+"""Figures of the overview page: the pad-in-ground running example as input and as derived solids, computed with
+the production package ``scgsim.geometry.sgb``.
+
+The running example is the test scene ``sgb_scenes.pad_in_ground`` (a stage-level prism catalogue with the pad's
+chamfer, reflex notch, rounded corner and circular hole as exact arcs) with its lumped port on the hosts' support
+plane z = 0, where ``prisms.ports`` puts it for real input; see ``_intro_common.running_example``.
 
 Writes ``figures/index-example-input.svg`` (plan view of the source prisms and an x-z section with levels),
-``figures/index-example-3d.html`` plus ``.svg`` (exploded volumes, computed from the planned topology) and
-``figures/index-numbers.json`` (the counts the page quotes).
+``figures/index-example-3d.html`` plus ``.svg`` (the written XAO of Route B, every face drawn once for each volume it
+bounds, pulled apart) and ``figures/index-numbers.json`` (the counts the page quotes).
 
-Run:  .venv/bin/python docs/design/sgb/_figures/index_example.py   (from the package root)
+Run (from the repository root; see ``_intro_common.py`` for ``SGB_CORE``)::
+
+    $SGB_CORE/.artifacts/env/bin/python docs/design/sgb/_figures/index_example.py
 """
 
 from __future__ import annotations
 
 import json
+import tempfile
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
 from matplotlib.lines import Line2D
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from mpl_toolkits.mplot3d.art3d import Line3DCollection, Poly3DCollection
 
 from _intro_common import (
-    COLOURS, OUTPUTS, draw_footprint, draw_section, save_plotly, save_svg, stretch_z, write_numbers,
+    COLOURS, build_example, draw_footprint, draw_section, running_example, save_plotly, save_svg, stretch_z,
+    write_numbers,
 )
 
-from sgbproto.emit import surface_triangles
-from sgbproto.levels import build_levels
-from sgbproto.pipeline import build
-from sgbproto.scenes import airbridge, pad_in_ground
+from scgsim.geometry.sgb.build import emit_model
+from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.prisms.levels import build_levels
+from scgsim.geometry.sgb.sidecar.files import read_sidecar
 
 GROUP_COLOURS = {"SA": "#9ecae1", "MA": "#2171b5", "MS": "#6a51a3", "EXT": "#bdbdbd", "PORT": "#d62728"}
 GROUP_NAMES = {
@@ -37,10 +47,10 @@ GROUP_NAMES = {
 SHIFT = {"substrate": -60.0, "vacuum": 60.0}  # exploded view offsets (display units)
 
 
-def input_figure(spec) -> None:
-    levels = build_levels(spec.prisms, spec.families).levels
+def input_figure(catalogue) -> None:
+    levels = build_levels(catalogue.prisms, catalogue.families).levels
     fig, (ax_plan, ax_sec) = plt.subplots(1, 2, figsize=(11.5, 4.6), gridspec_kw={"width_ratios": [1.15, 1]})
-    for prism in spec.prisms:
+    for prism in catalogue.prisms:
         if prism.entity_id in ("substrate", "vacuum"):
             continue
         colour = {"ground": COLOURS["ground"], "pad": COLOURS["pad"], "p1": COLOURS["port"]}[prism.entity_id]
@@ -60,7 +70,7 @@ def input_figure(spec) -> None:
     ax_plan.set_title("Source prisms, plan view (footprints)")
     ax_plan.axhline(0, color="#e08a1e", lw=0.8, ls=":")
     ax_plan.text(-158, 3, "section y = 0", color="#e08a1e", fontsize=8)
-    draw_section(ax_sec, spec, levels, 0.0)
+    draw_section(ax_sec, catalogue, levels, 0.0)
     ax_sec.set_title("x-z section at y = 0 (levels equally spaced, not to scale)")
     ax_sec.legend(handles=[Line2D([0], [0], color=c, lw=6, label=n) for n, c in
                            (("substrate", COLOURS["substrate"]), ("vacuum", COLOURS["vacuum"]), ("ground", COLOURS["ground"]),
@@ -81,37 +91,60 @@ def outline_segments(pts, tris, z):
             for (u, v), n in count.items() if n == 1]
 
 
-def exploded_traces(topo, tri):
+def surface_triangles(artifacts, sidecar, mesh_size: float = 60.0, mesh_size_min: float = 4.0) -> dict:
+    """Triangles of every written face, by planned face id: the written XAO opened in Gmsh and meshed in 2-D (display only)."""
+    from sgb_gmsh_oracle import gmsh_session
+
+    import gmsh
+
+    triangles = {}
+    with gmsh_session(artifacts.xao):
+        gmsh.option.setNumber("Mesh.MeshSizeMax", mesh_size)
+        gmsh.option.setNumber("Mesh.MeshSizeMin", mesh_size_min)
+        gmsh.model.mesh.generate(2)
+        node_tags, coords, _ = gmsh.model.mesh.getNodes()
+        xyz = dict(zip(node_tags.tolist(), np.asarray(coords).reshape(-1, 3)))
+        for tag, planned_id in enumerate(sidecar["binding"]["ids_by_tag"]["2"], start=1):
+            kinds, _, nodes = gmsh.model.mesh.getElements(2, tag)
+            flat = [n for kind, ns in zip(kinds, nodes) if kind == 2 for n in ns.tolist()]
+            used = sorted(set(flat))
+            index = {n: i for i, n in enumerate(used)}
+            triangles[planned_id] = (np.array([xyz[n] for n in used]), np.array([index[n] for n in flat]).reshape(-1, 3))
+    return triangles
+
+
+def group_kind(model, face_id: str) -> str:
+    return (model.routed.face_group.get(face_id) or "other").split("::")[0]
+
+
+def exploded_traces(model, tri):
     """Face triangles grouped by (volume, group) with the exploded offset and the stretched metal layer applied."""
     batches: dict[tuple[str, str], dict] = {}
-    for vol in topo.volumes.values():
-        dz = SHIFT.get(vol.domain.name, 0.0)
-        status = "emitted" if vol.emitted else "excluded PEC volume"
-        for shell in vol.shells:
-            for fid, _ in shell.faces:
-                if fid not in tri:
+    for volume_id, volume in model.topology.volumes.items():
+        dz = SHIFT.get(volume.domain.name, 0.0)
+        status = "written" if volume_id in model.routed.emitted_volumes else "excluded metal volume"
+        for shell in volume.shells:
+            for face_id, _ in shell.faces:
+                if face_id not in tri:
                     continue
-                xyz, tris = tri[fid]
-                used, local = np.unique(tris, return_inverse=True)  # keep only the nodes of this face
-                pts, tris = xyz[used], local.reshape(-1, 3)
-                group = topo.faces[fid].group.split("::")[0]
-                z = np.array([stretch_z(v) for v in pts[:, 2]]) + dz
-                batch = batches.setdefault((f"{vol.domain.name} ({status})", group), {"x": [], "y": [], "z": [], "i": [], "j": [], "k": []})
+                xyz, tris = tri[face_id]
+                group = group_kind(model, face_id)
+                z = np.array([stretch_z(v) for v in xyz[:, 2]]) + dz
+                batch = batches.setdefault((f"{volume.domain.name} ({status})", group), {"x": [], "y": [], "z": [], "i": [], "j": [], "k": [], "outline": []})
                 base = len(batch["x"])
-                batch["x"] += [round(float(v), 2) for v in pts[:, 0]]
-                batch["y"] += [round(float(v), 2) for v in pts[:, 1]]
+                batch["x"] += [round(float(v), 2) for v in xyz[:, 0]]
+                batch["y"] += [round(float(v), 2) for v in xyz[:, 1]]
                 batch["z"] += [round(float(v), 2) for v in z]
                 batch["i"] += [int(v) for v in tris[:, 0] + base]
                 batch["j"] += [int(v) for v in tris[:, 1] + base]
                 batch["k"] += [int(v) for v in tris[:, 2] + base]
-                batch.setdefault("outline", []).extend(outline_segments(pts, tris, z))
+                batch["outline"].extend(outline_segments(xyz, tris, z))
     return batches
 
 
-def exploded_figures(result) -> int:
-    topo = result.topology
-    tri = surface_triangles(topo, mesh_size=60.0, mesh_size_min=4.0)
-    batches = exploded_traces(topo, tri)
+def exploded_figures(model, artifacts, sidecar) -> dict:
+    tri = surface_triangles(artifacts, sidecar)
+    batches = exploded_traces(model, tri)
     fig = go.Figure()
     shown = set()
     for (volume, group), b in sorted(batches.items()):
@@ -120,7 +153,7 @@ def exploded_figures(result) -> int:
                                 hovertext=f"{volume}: {group} faces", hoverinfo="text"))
         shown.add(group)
     fig.update_layout(
-        title="pad_in_ground_B, exploded: substrate moved down, vacuum up, the two excluded metal volumes in place",
+        title="pad_in_ground (Route B), exploded: substrate moved down, vacuum up, the pad and ground volumes in place",
         height=640, legend=dict(orientation="h", y=-0.02),
         scene=dict(aspectmode="manual", aspectratio=dict(x=1, y=1, z=0.6), xaxis_title="x (µm)", yaxis_title="y (µm)",
                    zaxis=dict(title="z (µm; metal layer drawn 200× thicker)", range=[-200, 200]),
@@ -129,7 +162,9 @@ def exploded_figures(result) -> int:
     xs, ys, zs = [], [], []
     for b in batches.values():
         for p, q in b["outline"]:
-            xs += [round(p[0], 2), round(q[0], 2), None]; ys += [round(p[1], 2), round(q[1], 2), None]; zs += [round(p[2], 2), round(q[2], 2), None]
+            xs += [round(p[0], 2), round(q[0], 2), None]
+            ys += [round(p[1], 2), round(q[1], 2), None]
+            zs += [round(p[2], 2), round(q[2], 2), None]
     fig.add_trace(go.Scatter3d(x=xs, y=ys, z=zs, mode="lines", line=dict(color="#222", width=2), name="face boundaries", hoverinfo="skip"))
     save_plotly(fig, "index-example-3d")
 
@@ -142,95 +177,117 @@ def exploded_figures(result) -> int:
     f = plt.figure(figsize=(8.5, 6.2))
     ax = f.add_subplot(111, projection="3d")
     ax.add_collection3d(Poly3DCollection(polys, facecolors=colours, edgecolors="none", alpha=0.35))
-    from mpl_toolkits.mplot3d.art3d import Line3DCollection
-
     ax.add_collection3d(Line3DCollection([seg for b in batches.values() for seg in b["outline"]], colors="#222", linewidths=0.6))
-    ax.set_xlim(-150, 150); ax.set_ylim(-150, 150); ax.set_zlim(-200, 200)
-    ax.set_box_aspect((1, 1, 0.6)); ax.view_init(elev=22, azim=-55)
-    ax.set_xlabel("x (µm)"); ax.set_ylabel("y (µm)"); ax.set_zlabel("z (display)")
+    ax.set_xlim(-150, 150)
+    ax.set_ylim(-150, 150)
+    ax.set_zlim(-200, 200)
+    ax.set_box_aspect((1, 1, 0.6))
+    ax.view_init(elev=22, azim=-55)
+    ax.set_xlabel("x (µm)")
+    ax.set_ylabel("y (µm)")
+    ax.set_zlabel("z (display)")
     ax.legend(handles=[Line2D([0], [0], color=c, lw=6, label=GROUP_NAMES[g]) for g, c in GROUP_COLOURS.items()],
               loc="upper left", fontsize=7, frameon=False)
-    ax.set_title("pad_in_ground_B, exploded (metal layer drawn 200× thicker)")
+    ax.set_title("pad_in_ground (Route B), exploded (metal layer drawn 200× thicker)")
     save_svg(f, "index-example-3d")
-    return sum(len(t[1]) for t in tri.values())
+    drawn_faces = sorted({fid for v in model.topology.volumes.values() for s in v.shells for fid, _ in s.faces if fid in tri})
+    return {"surface_triangles_drawn": sum(len(t[1]) for t in tri.values()), "mesh_size_um": 60.0, "mesh_size_min_um": 4.0,
+            "faces_drawn": len(drawn_faces), "faces_planned": len(model.topology.faces),
+            "volumes": sorted(f"{v.domain.name} written={vid in model.routed.emitted_volumes}" for vid, v in model.topology.volumes.items()),
+            "face_groups_drawn": sorted({group_kind(model, f) for f in drawn_faces})}
 
 
-def centre_vertices() -> dict:
-    """Planned vertices that only carry an arc's centre (rebuilt from the prototype; not written by the direct writer)."""
-    specs = {"pad_in_ground_A": pad_in_ground("A"), "pad_in_ground_B": pad_in_ground("B"),
-             "pad_in_ground_B_bands": pad_in_ground("B", bands_um=(0.1, 0.5, 2.0)), "airbridge_B": airbridge()}
-    out = {}
-    for case, spec in specs.items():
-        topo = build(spec).topology
-        centres = {e.centre_vertex for e in topo.edges.values() if e.centre_vertex}
-        volumes = {v.id: v for v in topo.volumes.values()}
-        unwritten = [f for f in topo.faces.values() if not any(volumes[v].emitted for v in (f.neg_volume, f.pos_volume) if v)]
-        used = {e for f in topo.faces.values() if f not in unwritten for loop in f.loops for e, _ in loop}
-        out[case] = {"planned_vertices": len(topo.vertices), "arc_centre_vertices": len(centres),
-                     "arc_edges": sum(1 for e in topo.edges.values() if e.curve is not None),
-                     "faces_bounding_no_emitted_volume": len(unwritten), "their_groups": sorted({f.group for f in unwritten}),
-                     "edges_only_on_those_faces": sum(1 for e in topo.edges.values() if e.id not in used and e.kind != "refinement")}
-    return out
+# --------------------------------------------------------------------------- the table of the supplement
 
 
-def extreme_summary() -> dict:
-    """Counts and OCCT-check times read from the extreme-case catalogue (outputs/extreme/catalogue.md)."""
-    rows = []
-    for line in (OUTPUTS / "extreme" / "catalogue.md").read_text().splitlines():
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) == 12 and cells[0] not in ("fixture", "---") and not cells[0].startswith("-"):
-            rows.append(cells)
-    refusals = {"NonManifoldError": 0, "ContactError": 0, "direct writer refused (5-edge wall)": 0}
-    passing, brep, bop = 0, [], []
-    for r in rows:
-        if "NonManifoldError" in r[4]:
-            refusals["NonManifoldError"] += 1
-        elif "ContactError" in r[4]:
-            refusals["ContactError"] += 1
-        elif "writer refused" in r[5]:
-            refusals["direct writer refused (5-edge wall)"] += 1
-        else:
-            passing += 1
-            brep.append(float(r[8].split()[1]))
-            bop.append(float(r[9].split()[1]))
-    return {"rows": len(rows), "fixtures": len({r[0] for r in rows}), "passing_rows": passing, "expected_refusals": refusals,
-            "brepcheck_ms_min_max": [min(brep), max(brep)], "bop_argument_analyzer_ms_min_max": [min(bop), max(bop)]}
+def example_models() -> dict:
+    """The five columns of the supplement table: the running example under Routes A, B, C, with bands, and the airbridge."""
+    from sgb_emit_cases import pad_requests
+    from sgb_scenes import airbridge
+
+    return {
+        "pad_in_ground_B": lambda: build_example("B"),
+        "pad_in_ground_A": lambda: build_example("A"),
+        "pad_in_ground_C": lambda: build_example("C"),
+        "pad_in_ground_B_bands": lambda: build_example("B", insets=pad_requests("B")),
+        "airbridge_B": lambda: build_model_from_catalogue(airbridge(), "B"),
+    }
+
+
+def unwritten(model) -> dict:
+    """Faces that bound no written volume, the edges only they use, and the planned-only arc-centre vertices."""
+    topo = model.topology
+    emitted = model.routed.emitted_volumes
+    dead = [f for f in topo.faces.values() if not any(v in emitted for v in (f.neg_volume, f.pos_volume) if v)]
+    used = {e for f in topo.faces.values() if f not in dead for loop in f.loops for e, _ in loop}
+    return {"faces_bounding_no_written_volume": len(dead), "their_groups": sorted({model.routed.face_group.get(f.id) or "(no group)" for f in dead}),
+            "edges_only_on_those_faces": sum(1 for e in topo.edges.values() if e.id not in used and e.kind != "refinement"),
+            "arc_centre_vertices": len({e.centre_vertex for e in topo.edges.values() if e.centre_vertex})}
 
 
 def counts() -> dict:
-    """Planned counts (stage summaries) and what the direct writer wrote and Gmsh loaded back (e3_brep validation)."""
+    """Planned counts (the model) and what the direct writer wrote (the sidecar), for the supplement table."""
     out = {}
-    for case in ("pad_in_ground_A", "pad_in_ground_B", "pad_in_ground_B_bands", "airbridge_B"):
-        s4 = json.loads((OUTPUTS / case / "stage_summary.json").read_text())["stages"]
-        written = json.loads((OUTPUTS / "e3_brep" / case / "validation.json").read_text())
+    for case, build in example_models().items():
+        model = build()
+        with tempfile.TemporaryDirectory() as tmp:
+            artifacts = emit_model(model, Path(tmp))
+            sidecar = read_sidecar(artifacts.sidecar)
+            gap = unwritten(model)
+        written = sidecar["counts"]
+        assert written["vertices"] == model.counts["vertices"] - gap["arc_centre_vertices"] == model.counts["vertices"] - written["arcs"]
+        checks = model.report.checks
         out[case] = {
-            "prisms": s4["S2_prism_catalogue"]["prisms"],
-            "levels": s4["S2_prism_catalogue"]["levels"],
-            "slabs": s4["S2_prism_catalogue"]["slabs"],
-            "topology": s4["S6_topology"],
-            "groups": s4["S6_topology"].get("groups", len(s4["S8_groups"])),
-            "validation_checks": s4["S9_validation"],
-            "written_by_direct_writer": written["verify_brep"]["counts"]["native"],
-            "gmsh_boundary_mismatches": written["verify_brep"]["boundaries_mismatching"],
-            "gmsh_loaded_counts_equal_planned": written["verify_brep"]["counts"]["native"] == written["verify_brep"]["counts"]["planned"],
+            "prisms": model.counts["prisms"], "levels": model.counts["levels"], "slabs": model.counts["slabs"],
+            "planned": {k: model.counts[k] for k in ("vertices", "edges", "faces", "volumes")},
+            "written": {"vertices": written["vertices"], "edges": written["edges"], "faces": written["faces"], "volumes": written["solids"],
+                        "arcs": written["arcs"], "cylinders": written["cylinders"]},
+            "groups": model.counts["groups"],
+            "validation_checks": {"total": len(checks), "passed": sum(1 for c in checks if c.passed), "warnings": sum(1 for c in checks if c.warning)},
+            "not_written": gap,
         }
     return out
 
 
+def example_checks() -> dict:
+    """The load, OCCT and coarse-mesh results of the seven running-example models (60 µm elements), as the catalogue report measures them."""
+    from sgb_catalogue_report import measure
+    from sgb_emit_cases import pad_requests
+    from sgb_scenes import airbridge
+
+    models = {
+        "pad_a": lambda: build_example("A"),
+        "pad_b": lambda: build_example("B"),
+        "pad_c": lambda: build_example("C"),
+        "bridge_b": lambda: build_model_from_catalogue(airbridge(), "B"),
+        "pad_a_bands": lambda: build_example("A", insets=pad_requests("A")),
+        "pad_b_bands": lambda: build_example("B", insets=pad_requests("B")),
+        "pad_c_bands": lambda: build_example("C", insets=pad_requests("C")),
+    }
+    keep = ("faces", "load_check", "occt", "mesh", "tets", "minSICN_min", "minSICN_p1", "gamma_min", "gamma_p1",
+            "max_snap_drift_grid", "max_arc_deviation_grid", "narrowest_face_um")
+    out = {}
+    for name, build in models.items():
+        with tempfile.TemporaryDirectory() as tmp:
+            row = measure(build(), Path(tmp), mesh_size=60.0)
+        out[name] = {k: row.get(k) for k in keep}
+    return out
+
+
 def main() -> None:
-    spec = pad_in_ground("B")
-    result = build(spec)
-    input_figure(spec)
-    triangles = exploded_figures(result)
+    catalogue = running_example("B")
+    model = build_example("B")
+    with tempfile.TemporaryDirectory() as tmp:
+        artifacts = emit_model(model, Path(tmp))
+        sidecar = read_sidecar(artifacts.sidecar)
+        input_figure(catalogue)
+        view = exploded_figures(model, artifacts, sidecar)
     numbers = counts()
-    numbers["extreme_catalogue"] = extreme_summary()
-    for case, extra in centre_vertices().items():
-        numbers[case]["arc_centre_vertices"] = extra
-        assert numbers[case]["written_by_direct_writer"]["0"] == extra["planned_vertices"] - extra["arc_centre_vertices"]
-    numbers["exploded_view"] = {"surface_triangles_drawn": triangles, "mesh_size_um": 60.0, "mesh_size_min_um": 4.0,
-                                "volume_domains": sorted(f"{v.domain.name} emitted={v.emitted}" for v in result.topology.volumes.values())}
+    numbers["exploded_view"] = view
+    numbers["running_example_checks"] = example_checks()
+    numbers["port"] = {"plane_z_um": 0.0, "levels_um": [float(z) for z in build_levels(catalogue.prisms).levels]}
     write_numbers("index", numbers)
-    print(json.dumps(numbers, indent=1)[:1200])
+    print(json.dumps(numbers, indent=1)[:3000])
 
 
 if __name__ == "__main__":

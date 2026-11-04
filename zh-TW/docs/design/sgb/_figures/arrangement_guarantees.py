@@ -2,11 +2,11 @@
 
 Computed here (the page quotes these numbers):
 
-* guarantees of iterated snap rounding on random segment sets and on layout-like inputs: no crossings, no vertex on an
+* guarantees of iterated snap rounding (``scgsim.geometry.sgb.noding``) on random segment sets and on layout-like inputs: no crossings, no vertex on an
   edge interior, minimum edge length, minimum vertex-edge distance, maximum deviation from the carriers, and the same
   measurements after round 1 only (classic snap rounding);
-* cost: snap-rounding plus DCEL time against the number of segments, and hot pixels against N from the prototype's
-  ``outputs/scaling.json``;
+* cost: snap-rounding plus DCEL time against the number of segments, and hot pixels against N from the production
+  scaling run (``figures/why-scaling-measured.json``, written by ``why_scaling.py measure``);
 * the polyline witness of a circular arc: chord count against radius, and a worked example with a foreign segment.
 
 Writes ``figures/arrangement-guarantees.html/.svg``, ``arrangement-complexity.html/.svg``,
@@ -25,15 +25,16 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from _intro_common import COLOURS, OUTPUTS, save_plotly, save_svg, write_numbers
+from _intro_common import COLOURS, FIG, build_example, save_plotly, save_svg, write_numbers
+from sgb_emit_cases import pad_requests
+from sgb_scenes import airbridge, random_layout
 
-from sgbproto.arcs import realise, sample_arc
-from sgbproto.arrangement import build_arrangement
-from sgbproto.pipeline import build
-from sgbproto.records import ArcCarrier, Lineage
-from sgbproto.scenes import random_layout
-from sgbproto.sliver import sliver_report
-from sgbproto.snap_rounding import Segment, SerialEngine, assemble_chain, canonical, snap_round
+from scgsim.geometry.sgb.arrangement.arcs import realise, sample_arc
+from scgsim.geometry.sgb.arrangement.dcel import build_arrangement
+from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.noding.snap_rounding import Segment, SerialEngine, assemble_chain, canonical_key as canonical, snap_round
+from scgsim.geometry.sgb.records.carriers import ArcCarrier, Lineage
+from scgsim.geometry.sgb.slivers.report import sliver_report
 
 SQRT_HALF = math.sqrt(2) / 2
 
@@ -165,24 +166,50 @@ def dense_drift(count=1500, n=40, box=30, seed=11) -> dict:
     return {"trials": count, "segments_per_trial": n, "box_g": box, "max_deviation_g": round(worst, 4), "rounds_histogram": dict(sorted(rounds.items()))}
 
 
+def example_models() -> dict:
+    """The running examples of the page (port on the support plane) and the airbridge, as production models."""
+    return {
+        "pad_in_ground_A": lambda: build_example("A"),
+        "pad_in_ground_B": lambda: build_example("B"),
+        "pad_in_ground_A_bands": lambda: build_example("A", insets=pad_requests("A")),
+        "pad_in_ground_B_bands": lambda: build_example("B", insets=pad_requests("B")),
+        "airbridge_B": lambda: build_model_from_catalogue(airbridge(), "B"),
+    }
+
+
 def layout_like() -> dict:
-    result = build(random_layout(200, seed=1, route="B"))
-    drift = sliver_report(result)["snap_drift"]
-    rounds = Counter(s.stats["snap_rounds"] for s in result.slabs + result.level_layers)
+    model = build_model_from_catalogue(random_layout(200, seed=1, route="B"), "B")
+    drift = sliver_report(model)["snap_drift"]
+    layers = model.labelled.slabs + model.labelled.level_layers
+    rounds = Counter(layer.stats["snap_rounds"] for layer in layers)
     cases = {}
-    for case in ("pad_in_ground_A", "pad_in_ground_B", "pad_in_ground_A_bands", "pad_in_ground_B_bands", "airbridge_B"):
-        rep = json.loads((OUTPUTS / case / "sliver_report.json").read_text())
-        cases[case] = {"max_snap_drift_g": rep["snap_drift"]["max_grid_units"], "edges_measured": rep["snap_drift"]["edges_measured"],
-                       "arc_edges": rep["arc_edges"]["count"], "max_arc_deviation_g": rep["arc_edges"]["max_deviation_grid"],
-                       "mean_arc_deviation_g": rep["arc_edges"]["mean_deviation_grid"]}
+    for case, build in example_models().items():
+        built = build()
+        report = sliver_report(built)
+        cases[case] = {"max_snap_drift_g": report["snap_drift"]["max_grid_units"], "edges_measured": report["snap_drift"]["edges_measured"],
+                       "arc_edges": report["arc_edges"]["count"], "max_arc_deviation_g": report["arc_edges"]["max_deviation_grid"],
+                       "mean_arc_deviation_g": report["arc_edges"]["mean_deviation_grid"],
+                       "snap_rounds": sorted(layer.stats["snap_rounds"] for layer in built.labelled.slabs + built.labelled.level_layers)}
     return {"random_layout_n200": {"max_snap_drift_g": drift["max_grid_units"], "edges_measured": drift["edges_measured"],
                                    "edges_over_bound": drift["edges_over_bound"], "snap_rounds_histogram": dict(sorted(rounds.items()))},
-            "outputs": cases}
+            "examples": cases}
+
+
+def level_stats() -> dict:
+    """What the page quotes about single level arrangements of the running example (segments, hot pixels, rounds, edges)."""
+    out = {}
+    for name, build in (("pad_in_ground_B", lambda: build_example("B")), ("pad_in_ground_A_bands", lambda: build_example("A", insets=pad_requests("A"))),
+                        ("pad_in_ground_B_midplane_port_stage_scene", lambda: build_example("B", port_plane="mid"))):
+        model = build()
+        out[name] = {f"level_z={float(layer.level_z):g}": {**{k: layer.stats[k] for k in ("segments", "hot_pixels", "snap_rounds", "edges_before", "edges_after")},
+                                                         "cells": len(layer.arr.faces) - 1}
+                     for layer in model.labelled.level_layers}
+    return out
 
 
 def pixel_corners() -> dict:
     """Which segments make the pixel of the grid point (0, 0) hot: the pixel is the half-open square [-1/2, 1/2)^2."""
-    from sgbproto.snap_rounding import HotGrid
+    from scgsim.geometry.sgb.noding.spatial_hash import HotGrid
 
     grid = HotGrid([(0, 0)])
     cases = {
@@ -223,9 +250,11 @@ def timed_snap(n: int, seed=7) -> dict:
 
 
 def scaling_rows():
-    rows = [r for r in json.loads((OUTPUTS / "scaling.json").read_text())["rows"] if r["tiles_per_side"] == 1 and r["workers"] == 1]
+    """Arrangement sizes and stage times of the one-tile, one-worker production runs of ``why_scaling.py measure``."""
+    measured = json.loads((FIG / "why-scaling-measured.json").read_text())["rows"]
+    rows = [r for r in measured if r["tiles_per_side"] == 1 and r["workers"] == 1]
     return [{"N": r["n_features"], "hot_pixels": r["counts"]["hot_pixels"], "level_edges": r["counts"]["level_edges"],
-             "slab_edges": r["counts"]["slab_edges"], "noding_kernels_s": r["stage_worker_compute_s"]["noding_kernels"],
+             "slab_edges": r["counts"]["slab_edges"], "noding_kernels_s": r["stage_s"]["noding_kernels"],
              "noding_driver_s": r["stage_s"]["noding_driver"], "dcel_faces_s": r["stage_s"]["dcel_faces"], "build_s": r["build_wall_s"]} for r in rows]
 
 
@@ -355,7 +384,7 @@ def complexity_figure(sizes, rows, radii, counts) -> None:
     a.set_xticks(ns); a.set_xticklabels([str(n) for n in ns]); a.minorticks_off(); a.set_xlabel("features N"); a.set_ylabel("count")
     for n, r in zip(ns, rows):
         a.annotate(f"{r['hot_pixels']:,}", (n, r["hot_pixels"]), textcoords="offset points", xytext=(-4, 7), fontsize=7, ha="right")
-    a.set_title("Prototype pipeline: size of the arrangements"); a.legend(fontsize=8, frameon=False); a.grid(True, color="#ddd", lw=0.5)
+    a.set_title("Production pipeline: size of the arrangements"); a.legend(fontsize=8, frameon=False); a.grid(True, color="#ddd", lw=0.5)
     b.loglog([s["segments"] for s in sizes], [s["snap_s"] + s["dcel_s"] for s in sizes], "o-", color=COLOURS["pad"], label="snap rounding + DCEL")
     b.loglog([s["segments"] for s in sizes], [s["segments"] / sizes[0]["segments"] * (sizes[0]["snap_s"] + sizes[0]["dcel_s"]) for s in sizes], ":", color="#999", label="slope 1")
     b.set_xticks([s["segments"] for s in sizes]); b.set_xticklabels([f"{s['segments'] // 1000}k" for s in sizes]); b.minorticks_off()
@@ -391,6 +420,7 @@ def main() -> None:
         "random_trials": {k: ({kk: vv for kk, vv in v.items() if kk != "deviations"} if isinstance(v, dict) else v) for k, v in t.items()},
         "dense_random": dense_drift(),
         "layout_like": layout,
+        "level_stats": level_stats(),
         "timing": {"rows": sizes, "slope_snap_plus_dcel": slopes([s["segments"] for s in sizes], [s["snap_s"] + s["dcel_s"] for s in sizes])},
         "pipeline_rows": rows,
         "pipeline_slopes": {"hot_pixels": slopes([r["N"] for r in rows], [r["hot_pixels"] for r in rows]),

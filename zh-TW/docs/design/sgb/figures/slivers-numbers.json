@@ -15,28 +15,28 @@
  "derived_vs_source": {
   "after_emulated_snap": {
    "faces_narrower_than_10nm": [],
-   "level_cells": 14,
-   "model_faces": 24,
+   "level_cells": 8,
+   "model_faces": 18,
    "narrowest_face": {
-    "area_um2": 3.22,
+    "area_um2": 7.96,
     "bounded": false,
-    "group": "SHEET::pad::band=0",
-    "id": "f:88d4bf5fc796819b",
+    "group": "pad::band=0",
+    "id": "f:941414375dff0424",
     "kind": "horizontal",
     "location_um": [
-     -29.025,
-     0.975,
+     40.05,
+     50.0,
      0.0
     ],
     "measure": "local feature size",
-    "perimeter_um": 91.0754,
+    "perimeter_um": 159.2,
     "plane": "level[0]",
     "sources": [
-     "band_pad_top",
+     "band_pad",
      "pad"
     ],
     "value_um": 0.1,
-    "width_2a_over_p_um": 0.070711
+    "width_2a_over_p_um": 0.1
    },
    "narrowest_face_um": 0.1,
    "validation_passed": true
@@ -44,72 +44,433 @@
   "before": {
    "faces_narrower_than_10nm": [
     {
-     "area_um2": 4756.717208,
+     "area_um2": 255.96,
      "bounded": false,
-     "group": "SHEET::pad::band=3",
-     "id": "f:b579888864a7c06e",
+     "group": "pad::band=3",
+     "id": "f:08cc26479a9d340d",
      "kind": "horizontal",
      "location_um": [
-      -47.998,
-      -11.25,
+      42.002,
+      46.75,
       0.0
      ],
      "measure": "local feature size",
-     "perimeter_um": 380.1331,
+     "perimeter_um": 64.008,
      "plane": "level[0]",
      "sources": [
-      "band_pad_top",
+      "band_pad",
       "window"
      ],
      "value_um": 0.004,
-     "width_2a_over_p_um": 25.026585
+     "width_2a_over_p_um": 7.99775
     },
     {
-     "area_um2": 0.16,
+     "area_um2": 0.04,
      "bounded": false,
-     "group": "SHEET::pad::band=3",
-     "id": "f:f718506242250aa5",
+     "group": "pad::band=3",
+     "id": "f:f45d230e45f7bffd",
      "kind": "horizontal",
      "location_um": [
-      -47.998,
-      0.0,
+      42.002,
+      50.0,
       0.0
      ],
      "measure": "local feature size",
-     "perimeter_um": 80.008,
+     "perimeter_um": 20.008,
      "plane": "level[0]",
      "sources": [
-      "band_pad_top",
+      "band_pad",
       "window"
      ],
      "value_um": 0.004,
-     "width_2a_over_p_um": 0.004
+     "width_2a_over_p_um": 0.003998
     }
    ],
-   "level_cells": 15,
-   "model_faces": 25,
+   "level_cells": 9,
+   "model_faces": 19,
    "narrowest_face": {
-    "area_um2": 4756.717208,
+    "area_um2": 255.96,
     "bounded": false,
-    "group": "SHEET::pad::band=3",
-    "id": "f:b579888864a7c06e",
+    "group": "pad::band=3",
+    "id": "f:08cc26479a9d340d",
     "kind": "horizontal",
     "location_um": [
-     -47.998,
-     -11.25,
+     42.002,
+     46.75,
      0.0
     ],
     "measure": "local feature size",
-    "perimeter_um": 380.1331,
+    "perimeter_um": 64.008,
     "plane": "level[0]",
     "sources": [
-     "band_pad_top",
+     "band_pad",
      "window"
     ],
     "value_um": 0.004,
-    "width_2a_over_p_um": 25.026585
+    "width_2a_over_p_um": 7.99775
    },
    "narrowest_face_um": 0.004,
+   "validation_passed": true
+  }
+ },
+ "example_reports": {
+  "airbridge_B (stage-level scene)": {
+   "arc_edges": {
+    "count": 0,
+    "max_deviation_grid": 0.0,
+    "mean_deviation_grid": 0.0
+   },
+   "max_arc_deviation_grid": 0.0,
+   "max_snap_drift_grid": 0.0,
+   "narrowest_face_entry": {
+    "area_um2": 60.0,
+    "bounded": false,
+    "group": "EXT::ground_left::sidewall",
+    "id": "f:0af5b2fba0fc1a9f",
+    "kind": "wall",
+    "location_um": [
+     -150.0,
+     0.0,
+     0.1
+    ],
+    "measure": "local feature size",
+    "perimeter_um": 600.4,
+    "plane": "wall[0,1/5]",
+    "sources": [
+     "ground_left",
+     "substrate",
+     "vacuum"
+    ],
+    "value_um": 0.2,
+    "width_2a_over_p_um": 0.199867
+   },
+   "narrowest_face_um": 0.2,
+   "shortest_edge_entry": {
+    "id": "ve:736c3386ee90a96c",
+    "kind": "vertical",
+    "location_um": [
+     -20.0,
+     150.0,
+     0.1
+    ],
+    "plane": "column(-20000, 150000)[0,1/5]",
+    "sources": [
+     "ground_left",
+     "substrate",
+     "vacuum"
+    ],
+    "value_um": 0.2
+   },
+   "shortest_edge_um": 0.2,
+   "smallest_angle_deg": 90.0,
+   "thin_slab_count": 0,
+   "thin_slabs": [],
+   "validation_passed": true
+  },
+  "pad_a_bands (stage-level scene with arcs)": {
+   "arc_edges": {
+    "count": 59,
+    "max_deviation_grid": 0.631601,
+    "mean_deviation_grid": 0.045518
+   },
+   "max_arc_deviation_grid": 0.631601,
+   "max_snap_drift_grid": 0.0,
+   "narrowest_face_entry": {
+    "area_um2": 32.8161,
+    "bounded": false,
+    "group": "SA::substrate|vacuum::interface::band=0",
+    "id": "f:72da18debb7dcc89",
+    "kind": "horizontal",
+    "location_um": [
+     47.0855,
+     17.7855,
+     0.0
+    ],
+    "measure": "local feature size",
+    "perimeter_um": 660.7438,
+    "plane": "level[0]",
+    "sources": [
+     "band_gap",
+     "p1",
+     "pad"
+    ],
+    "value_um": 0.076694,
+    "width_2a_over_p_um": 0.099331
+   },
+   "narrowest_face_um": 0.076694,
+   "shortest_edge_entry": {
+    "id": "e:f36a00db537f65eb",
+    "kind": "horizontal",
+    "location_um": [
+     38.0355,
+     30.0855,
+     0.0
+    ],
+    "plane": "level[0]",
+    "sources": [
+     "band_gap/ring1/corner1@m100.0"
+    ],
+    "value_um": 0.076694
+   },
+   "shortest_edge_um": 0.076694,
+   "smallest_angle_deg": 90.0,
+   "thin_slab_count": 0,
+   "thin_slabs": [],
+   "validation_passed": true
+  },
+  "pad_b_bands (stage-level scene with arcs)": {
+   "arc_edges": {
+    "count": 100,
+    "max_deviation_grid": 0.631601,
+    "mean_deviation_grid": 0.026856
+   },
+   "max_arc_deviation_grid": 0.631601,
+   "max_snap_drift_grid": 0.0,
+   "narrowest_face_entry": {
+    "area_um2": 33.8161,
+    "bounded": false,
+    "group": "SA::substrate|vacuum::interface::band=0",
+    "id": "f:10f7f89e8f4e2b44",
+    "kind": "horizontal",
+    "location_um": [
+     47.0855,
+     9.0355,
+     0.0
+    ],
+    "measure": "local feature size",
+    "perimeter_um": 680.5438,
+    "plane": "level[0]",
+    "sources": [
+     "band_gap",
+     "pad"
+    ],
+    "value_um": 0.076694,
+    "width_2a_over_p_um": 0.09938
+   },
+   "narrowest_face_um": 0.076694,
+   "shortest_edge_entry": {
+    "id": "e:f36a00db537f65eb",
+    "kind": "horizontal",
+    "location_um": [
+     38.0355,
+     30.0855,
+     0.0
+    ],
+    "plane": "level[0]",
+    "sources": [
+     "band_gap/ring1/corner1@m100.0"
+    ],
+    "value_um": 0.076694
+   },
+   "shortest_edge_um": 0.076694,
+   "smallest_angle_deg": 90.0,
+   "thin_slab_count": 0,
+   "thin_slabs": [],
+   "validation_passed": true
+  },
+  "real input, Route A": {
+   "arc_edges": {
+    "count": 0,
+    "max_deviation_grid": 0.0,
+    "mean_deviation_grid": 0.0
+   },
+   "max_arc_deviation_grid": 0.0,
+   "max_snap_drift_grid": 0.0,
+   "narrowest_face_entry": {
+    "area_um2": 40.0,
+    "bounded": false,
+    "group": "PORT::PORT_SHEET__P1__0000",
+    "id": "f:2d1bc77f577fd23b",
+    "kind": "horizontal",
+    "location_um": [
+     35.0,
+     50.0,
+     0.0
+    ],
+    "measure": "local feature size",
+    "perimeter_um": 28.0,
+    "plane": "level[0]",
+    "sources": [
+     "PORT_SHEET__P1__0000",
+     "ground_0000",
+     "pad"
+    ],
+    "value_um": 4.0,
+    "width_2a_over_p_um": 2.857143
+   },
+   "narrowest_face_um": 4.0,
+   "shortest_edge_entry": {
+    "id": "e:d84eeecdbbdb7582",
+    "kind": "horizontal",
+    "location_um": [
+     30.0,
+     50.0,
+     0.0
+    ],
+    "plane": "level[0]",
+    "sources": [
+     "PORT_SHEET__P1__0000/polygon0/ring1/edge0",
+     "ground_0000/polygon0/ring1/edge4"
+    ],
+    "value_um": 4.0
+   },
+   "shortest_edge_um": 4.0,
+   "smallest_angle_deg": 90.0,
+   "thin_slab_count": 0,
+   "thin_slabs": [],
+   "validation_passed": true
+  },
+  "real input, Route A with bands": {
+   "arc_edges": {
+    "count": 12,
+    "max_deviation_grid": 0.0,
+    "mean_deviation_grid": 0.0
+   },
+   "max_arc_deviation_grid": 0.0,
+   "max_snap_drift_grid": 0.0,
+   "narrowest_face_entry": {
+    "area_um2": 7.62,
+    "bounded": false,
+    "group": "SA::substrate|VACUUM_REGION::interface::band=0",
+    "id": "f:2257d645f7c103a6",
+    "kind": "horizontal",
+    "location_um": [
+     44.95,
+     42.0,
+     0.0
+    ],
+    "measure": "local feature size",
+    "perimeter_um": 152.7657,
+    "plane": "level[0]",
+    "sources": [
+     "PORT_SHEET__P1__0000",
+     "band_gap",
+     "pad"
+    ],
+    "value_um": 0.1,
+    "width_2a_over_p_um": 0.099761
+   },
+   "narrowest_face_um": 0.1,
+   "shortest_edge_entry": {
+    "id": "e:03090a17b3e16a96",
+    "kind": "horizontal",
+    "location_um": [
+     30.05,
+     48.0,
+     0.0
+    ],
+    "plane": "level[0]",
+    "sources": [
+     "PORT_SHEET__P1__0000/polygon0/ring0/edge0"
+    ],
+    "value_um": 0.1
+   },
+   "shortest_edge_um": 0.1,
+   "smallest_angle_deg": 90.0,
+   "thin_slab_count": 0,
+   "thin_slabs": [],
+   "validation_passed": true
+  },
+  "real input, Route B": {
+   "arc_edges": {
+    "count": 0,
+    "max_deviation_grid": 0.0,
+    "mean_deviation_grid": 0.0
+   },
+   "max_arc_deviation_grid": 0.0,
+   "max_snap_drift_grid": 0.0,
+   "narrowest_face_entry": {
+    "area_um2": 6.0,
+    "bounded": false,
+    "group": "MA::ground_0000::sidewall",
+    "id": "f:179b3dd8d7bb9c70",
+    "kind": "wall",
+    "location_um": [
+     0.0,
+     15.0,
+     0.1
+    ],
+    "measure": "local feature size",
+    "perimeter_um": 60.4,
+    "plane": "wall[0,1/5]",
+    "sources": [
+     "ground_0000",
+     "substrate"
+    ],
+    "value_um": 0.2,
+    "width_2a_over_p_um": 0.198675
+   },
+   "narrowest_face_um": 0.2,
+   "shortest_edge_entry": {
+    "id": "ve:02d61e6ed6c838ab",
+    "kind": "vertical",
+    "location_um": [
+     40.0,
+     52.0,
+     0.1
+    ],
+    "plane": "column(40000, 52000)[0,1/5]",
+    "sources": [
+     "PORT_SHEET__P1__0000",
+     "pad"
+    ],
+    "value_um": 0.2
+   },
+   "shortest_edge_um": 0.2,
+   "smallest_angle_deg": 90.0,
+   "thin_slab_count": 0,
+   "thin_slabs": [],
+   "validation_passed": true
+  },
+  "real input, Route B with bands": {
+   "arc_edges": {
+    "count": 12,
+    "max_deviation_grid": 0.0,
+    "mean_deviation_grid": 0.0
+   },
+   "max_arc_deviation_grid": 0.0,
+   "max_snap_drift_grid": 0.0,
+   "narrowest_face_entry": {
+    "area_um2": 7.62,
+    "bounded": false,
+    "group": "SA::substrate|VACUUM_REGION::interface::band=0",
+    "id": "f:2257d645f7c103a6",
+    "kind": "horizontal",
+    "location_um": [
+     44.95,
+     42.0,
+     0.0
+    ],
+    "measure": "local feature size",
+    "perimeter_um": 152.7657,
+    "plane": "level[0]",
+    "sources": [
+     "PORT_SHEET__P1__0000",
+     "band_gap",
+     "pad"
+    ],
+    "value_um": 0.1,
+    "width_2a_over_p_um": 0.099761
+   },
+   "narrowest_face_um": 0.1,
+   "shortest_edge_entry": {
+    "id": "e:03090a17b3e16a96",
+    "kind": "horizontal",
+    "location_um": [
+     30.05,
+     48.0,
+     0.0
+    ],
+    "plane": "level[0]",
+    "sources": [
+     "PORT_SHEET__P1__0000/polygon0/ring0/edge0"
+    ],
+    "value_um": 0.1
+   },
+   "shortest_edge_um": 0.1,
+   "smallest_angle_deg": 90.0,
+   "thin_slab_count": 0,
+   "thin_slabs": [],
    "validation_passed": true
   }
  },
@@ -142,24 +503,25 @@
    "model_edges": 79,
    "model_faces": 34,
    "narrowest_face": {
-    "area_um2": 0.4,
+    "area_um2": 69999.6,
     "bounded": false,
-    "group": "EXT::vacuum",
-    "id": "f:027de583cfd1fbec",
+    "group": "EXT::substrate::bottom",
+    "id": "f:1407f64679af0aca",
     "kind": "horizontal",
     "location_um": [
-     -99.998,
-     0.0,
-     100.0
+     -49.999,
+     25.0,
+     -100.0
     ],
     "measure": "local feature size",
-    "perimeter_um": 200.008,
-    "plane": "level[100]",
+    "perimeter_um": 1800.008,
+    "plane": "level[-100]",
     "sources": [
-     "gp"
+     "global_projection",
+     "substrate"
     ],
     "value_um": 0.004,
-    "width_2a_over_p_um": 0.004
+    "width_2a_over_p_um": 77.776988
    },
    "narrowest_face_um": 0.004,
    "planes_of_those_faces": [
@@ -181,11 +543,11 @@
    "narrowest_face": {
     "area_um2": 20.0,
     "bounded": false,
-    "group": "MA::m1",
-    "id": "f:1d7f131029b4413c",
+    "group": "MA::m1::sidewall",
+    "id": "f:1667e499ea640380",
     "kind": "wall",
     "location_um": [
-     -100.0,
+     100.0,
      0.0,
      0.1
     ],
@@ -230,7 +592,6 @@
   "snapped_bounded_faces": 0,
   "snapped_edges": 6,
   "snapped_hot_pixels": 7,
-  "snapped_max_vertex_drift_grid": 0.7071,
   "snapped_rounds": 2,
   "snapped_shortest_edge_grid": 495.025251881154
  },
@@ -242,76 +603,112 @@
   "raw_cells": 4,
   "raw_edges": 14,
   "raw_narrowest_cell_width_grid": 1.99990000499975,
+  "scene": "stage-level: two polygons of one entity, same Net",
   "slab": "slab[0,1/5]"
+ },
+ "seam_as_two_entities": {
+  "cells_after": 3,
+  "edges_after": 13,
+  "labels": [
+   "a",
+   "b",
+   "vacuum"
+  ],
+  "narrowest_face": {
+   "area_um2": 4000.08,
+   "bounded": false,
+   "group": "MS::a::bottom",
+   "id": "f:3500a78cd1761d3f",
+   "kind": "horizontal",
+   "location_um": [
+    -24.999,
+    -10.0,
+    0.0
+   ],
+   "measure": "local feature size",
+   "perimeter_um": 280.004,
+   "plane": "level[0]",
+   "sources": [
+    "a",
+    "b"
+   ],
+   "value_um": 0.002,
+   "width_2a_over_p_um": 28.571592
+  },
+  "narrowest_face_um": 0.002
  },
  "source_gap": {
   "gap_um": 0.005,
-  "model_faces": 13,
+  "model_faces": 14,
   "narrowest_faces": [
    {
-    "area_um2": 1.6001,
+    "area_um2": 0.7999,
     "bounded": false,
-    "group": "SA::substrate|vacuum",
-    "id": "f:1c52b3bd619c73ae",
+    "group": "SA::substrate|VACUUM_REGION::interface",
+    "id": "f:fe1697e555157018",
     "kind": "horizontal",
     "location_um": [
-     -50.0025,
-     0.0,
+     30.0025,
+     50.0,
      0.0
     ],
     "measure": "local feature size",
-    "perimeter_um": 640.04,
+    "perimeter_um": 319.96,
     "plane": "level[0]",
     "sources": [
-     "ground",
+     "ground_0000",
      "pad"
     ],
     "value_um": 0.005,
     "width_2a_over_p_um": 0.005
    },
    {
-    "area_um2": 6000.0,
+    "area_um2": 1000.0,
     "bounded": false,
-    "group": "PEC::pad",
-    "id": "f:2f5500f495c6671b",
-    "kind": "horizontal",
+    "group": "SA::substrate|VACUUM_REGION::sidewall",
+    "id": "f:6bb1445bdd058f99",
+    "kind": "wall",
     "location_um": [
-     0.0,
-     0.0,
-     0.0
+     50.0,
+     100.0,
+     -5.0
     ],
     "measure": "local feature size",
-    "perimeter_um": 320.0,
-    "plane": "level[0]",
+    "perimeter_um": 220.0,
+    "plane": "wall[-10,0]",
     "sources": [
-     "pad"
+     "ground_0000",
+     "substrate"
     ],
-    "value_um": 60.0,
-    "width_2a_over_p_um": 37.5
+    "value_um": 10.0,
+    "width_2a_over_p_um": 9.090909
    }
   ],
+  "scene": "real input (thin_film, no port) with the pad 5 nm short of the cutout on every side",
   "shortest_edges": [
    {
-    "id": "e:b5e959c62271b348",
-    "kind": "horizontal",
+    "id": "ve:3d12f758a2615a39",
+    "kind": "vertical",
     "location_um": [
-     -50.0,
      0.0,
-     0.0
+     0.0,
+     -5.0
     ],
-    "plane": "level[0]",
+    "plane": "column(0, 0)[-10,0]",
     "sources": [
-     "pad/polygon0/ring0/edge3"
+     "ground_0000",
+     "substrate"
     ],
-    "value_um": 60.0
+    "value_um": 10.0
    }
   ],
   "summary": {
    "max_arc_deviation_grid": null,
    "max_snap_drift_grid": null,
    "narrowest_face_um": 0.005,
-   "shortest_edge_um": 60.0,
-   "smallest_angle_deg": 90.0
+   "shortest_edge_um": 10.0,
+   "smallest_angle_deg": 90.0,
+   "thin_slab_count": 0
   },
   "validation_passed": true
  }

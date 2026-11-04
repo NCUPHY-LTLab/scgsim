@@ -9,7 +9,7 @@ scgsim-id: "docs/design/sgb/consumer-contract"
 
 Palace 的 mesh 流程與 AEDT 的 geometry 流程要採用新的 SGB，需要知道兩件事：SGB 交給它們什麼，以及怎麼讀。本頁回答第一件事與讀取的順序：入口函式 `build_sgb_geometry`、它寫出的五個檔案、sidecar 的欄位，以及兩個讀取端的流程。今天的 Palace 與 AEDT 契約如何對到這些欄位，另見[對應表](consumer-mapping.qmd)。
 
-這裡描述的程式是階段 1 的 SGB core。它已經實作並有測試，但 Palace 與 AEDT 尚未切換過來；本頁的 sidecar 是 production 格式 `scgsim.sgb.sidecar.v1`，取代 [Emission](emission.qmd) 頁中原型的 `sgbproto-sidecar-2`。每一項保證都標明是**測過**（有自動測試）、**實測**（本頁產生範例時跑過一次）還是**論證**（由程式結構推得、尚未實測）。範例都是同一個小模型：100 µm 的晶片，帶一片 ground plane、一個 20 µm 的 pad 與一個 lumped port，pad 的上表面有 0.5 與 1 µm 兩個 inset margin（三個 band），另有一條 refinement curve。它比其他頁的執行範例小，只為了讓節錄能完整讀完；產生方式見[補充](#reproduction-data)。
+這裡描述的程式是階段 1 的 SGB core。它已經實作並有測試，但 Palace 與 AEDT 尚未切換過來；本頁的 sidecar 是 production 格式 `scgsim.sgb.sidecar.v1`。每一項保證都標明是**測過**（有自動測試）、**實測**（本頁產生範例時跑過一次）還是**論證**（由程式結構推得、尚未實測）。範例都是同一個小模型：100 µm 的晶片，帶一片 ground plane、一個 20 µm 的 pad 與一個 lumped port，pad 的上表面有 0.5 與 1 µm 兩個 inset margin（三個 band），另有一條 refinement curve。它比其他頁的執行範例小，只為了讓節錄能完整讀完；產生方式見[補充](#reproduction-data)。
 
 ## 呼叫與回傳 {#call}
 
@@ -54,7 +54,7 @@ Overlap 的優先權不在這個函式的引數裡：同一個 Net 的兩個 Ent
 | C | 與 B 相同的 prism | 導體 volume **保留**並在內部 mesh；導體–介電質與導體–真空的介面是共用 face | 導體 sheet |
 :::
 
-三種 route 的 lumped port 都能接受。port 位於 host 導體的 **support plane**（PDK 宣告的 film attachment face，例如金屬貼附的 substrate 上表面），不是金屬的中間平面；host 沒有宣告 `layer_attachment_face` 時 build 以 `InputError` 停止（見 [Routes](routes.qmd#port-support-plane)）。所以三種 route 的 port 都是兩個 volume 之間的 face，不是 free face；port 佔去它在 SA 平面上的面積，但不移動任何 band。
+三種 route 的 lumped port 都能接受。port 位於 host 導體的 **support plane**（PDK 宣告的 film attachment face，例如金屬貼附的 substrate 上表面）；host 沒有宣告 `layer_attachment_face` 時 build 以 `InputError` 停止（見 [Routes](routes.qmd#port-support-plane)）。所以三種 route 的 port 都是兩個 volume 之間的 face，不是 free face；port 佔去它在 SA 平面上的面積，但不移動任何 band。
 
 ::: {.askr-table-compact}
 | Request | 欄位 | 結果 |
@@ -65,7 +65,7 @@ Overlap 的優先權不在這個函式的引數裡：同一個 Net 的兩個 Ent
 | `RefinementRequest(request_id, z_um, points_um)` | 高度 `z_um` 的折線，mesher 把它嵌進含有它的 face | 只供 mesh 尺寸；落在任何已 emit 的 face 之外則是錯誤，不會悄悄丟掉 |
 :::
 
-band 的幾何與 margin 規則見 [Surface EPR inset imprint](inset-imprint.qmd)；band 的距離原點永遠是 support face 自己的物理邊界，port、其他 band 與 seam 都不會移動它。
+band 的幾何與 margin 規則見 [Surface EPR inset imprint](inset-imprint.qmd)；band 的距離只從 gap edge 量起，量法見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)。
 
 ### 失敗 {#failures}
 

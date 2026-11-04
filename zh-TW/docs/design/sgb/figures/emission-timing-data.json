@@ -1,0 +1,394 @@
+{
+ "layout": "random_layout(n, seed=2, route='B')",
+ "cpu_count": 64,
+ "load_average_at_start": [
+  2.01513671875,
+  2.04638671875,
+  3.52880859375
+ ],
+ "head": [
+  {
+   "n": 500,
+   "counts": {
+    "prisms": 631,
+    "slabs": 3,
+    "levels": 4,
+    "slab_edges": 5360,
+    "slab_cells": 1171,
+    "level_edges": 10712,
+    "level_cells": 2340,
+    "hot_pixels": 15853,
+    "vertices": 10414,
+    "edges": 15923,
+    "faces": 7198,
+    "volumes": 669,
+    "groups": 1875
+   },
+   "groups": 1875,
+   "direct": {
+    "plan_s": 0.07881818496389315,
+    "render_brep_s": 0.07169270201120526,
+    "render_xao_s": 0.04577955399872735,
+    "plan_counts": {
+     "vertices": 10414,
+     "edges": 15592,
+     "faces": 6718,
+     "solids": 2,
+     "wires": 8256,
+     "shells": 2,
+     "surfaces": 4884,
+     "cylinders": 0,
+     "arcs": 0,
+     "pcurves": 30232,
+     "free_faces": 0,
+     "free_edges": 0
+    },
+    "xao_bytes": 6560363,
+    "brep_bytes": 4384626
+   },
+   "api": {
+    "occ_build_s": 0.6515197840053588,
+    "synchronize_s": 0.3410501630278304,
+    "physical_groups_s": 1.1907380799530074,
+    "write_xao_s": 0.16849390201969072,
+    "total_s": 2.3518019290058874,
+    "xao_bytes": 5889302
+   },
+   "load": {
+    "api_xao_s": 0.6201215059845708,
+    "direct_xao_s": 0.5055119640310295,
+    "direct_brep_s": 0.4640566339949146
+   }
+  },
+  {
+   "n": 1000,
+   "counts": {
+    "prisms": 1241,
+    "slabs": 3,
+    "levels": 4,
+    "slab_edges": 10569,
+    "slab_cells": 2325,
+    "level_edges": 21130,
+    "level_cells": 4648,
+    "hot_pixels": 31273,
+    "vertices": 20552,
+    "edges": 31410,
+    "faces": 14215,
+    "volumes": 1323,
+    "groups": 3691
+   },
+   "groups": 3691,
+   "direct": {
+    "plan_s": 0.1715139839798212,
+    "render_brep_s": 0.11135742103215307,
+    "render_xao_s": 0.06613049301085994,
+    "plan_counts": {
+     "vertices": 20552,
+     "edges": 30829,
+     "faces": 13345,
+     "solids": 2,
+     "wires": 16411,
+     "shells": 2,
+     "surfaces": 9703,
+     "cylinders": 0,
+     "arcs": 0,
+     "pcurves": 59926,
+     "free_faces": 0,
+     "free_edges": 0
+    },
+    "xao_bytes": 13102865,
+    "brep_bytes": 8758257
+   },
+   "api": {
+    "occ_build_s": 1.283354008977767,
+    "synchronize_s": 0.6982809960027225,
+    "physical_groups_s": 6.074081842030864,
+    "write_xao_s": 0.4275953639880754,
+    "total_s": 8.48331221099943,
+    "xao_bytes": 11780103
+   },
+   "load": {
+    "api_xao_s": 1.4828476310358383,
+    "direct_xao_s": 1.2707179500139318,
+    "direct_brep_s": 1.207284637959674
+   }
+  },
+  {
+   "n": 2000,
+   "counts": {
+    "prisms": 2522,
+    "slabs": 3,
+    "levels": 4,
+    "slab_edges": 21426,
+    "slab_cells": 4693,
+    "level_edges": 42844,
+    "level_cells": 9384,
+    "hot_pixels": 63421,
+    "vertices": 41624,
+    "edges": 63660,
+    "faces": 28807,
+    "volumes": 2690,
+    "groups": 7484
+   },
+   "groups": 7484,
+   "direct": {
+    "plan_s": 0.4873181009897962,
+    "render_brep_s": 0.1659795250161551,
+    "render_xao_s": 0.11381382099352777,
+    "plan_counts": {
+     "vertices": 41624,
+     "edges": 62375,
+     "faces": 26912,
+     "solids": 2,
+     "wires": 33072,
+     "shells": 2,
+     "surfaces": 19535,
+     "cylinders": 0,
+     "arcs": 0,
+     "pcurves": 120968,
+     "free_faces": 0,
+     "free_edges": 0
+    },
+    "xao_bytes": 26999109,
+    "brep_bytes": 18108669
+   },
+   "api": {
+    "occ_build_s": 2.7321589370258152,
+    "synchronize_s": 1.7360104359686375,
+    "physical_groups_s": 59.28412044601282,
+    "write_xao_s": 0.9887291159830056,
+    "total_s": 64.74101893499028,
+    "xao_bytes": 24206983
+   },
+   "load": {
+    "api_xao_s": 3.4595351799507625,
+    "direct_xao_s": 3.0587299870094284,
+    "direct_brep_s": 2.7685324539779685
+   }
+  }
+ ],
+ "validator": [
+  {
+   "n": 1000,
+   "counts": {
+    "prisms": 1241,
+    "slabs": 3,
+    "levels": 4,
+    "slab_edges": 10569,
+    "slab_cells": 2325,
+    "level_edges": 21130,
+    "level_cells": 4648,
+    "hot_pixels": 31273,
+    "vertices": 20552,
+    "edges": 31410,
+    "faces": 14215,
+    "volumes": 1323,
+    "groups": 3691
+   },
+   "written": {
+    "vertices": 20552,
+    "edges": 30829,
+    "faces": 13345,
+    "solids": 2
+   },
+   "build_s": 2.0675515840412118,
+   "stage_s": {
+    "levels": 0.0020314750145189464,
+    "noding_driver": 0.08104092488065362,
+    "dcel_faces": 0.08135654695797712,
+    "dissolution": 0.18377938104094937,
+    "arc_realisation": 0.014352041005622596,
+    "linking": 0.03401455900166184,
+    "contact_check": 0.011402467032894492,
+    "manifold_check": 0.00993909197859466,
+    "assembly_registry": 0.017069422989152372,
+    "volume_connectivity": 0.00595237803645432,
+    "wall_prep": 0.015212142956443131,
+    "assembly_faces": 0.3404235750203952,
+    "shell_prep": 0.010323243972379714,
+    "routes": 0.03743935300735757,
+    "validation_serial": 0.05925761198159307,
+    "noding_kernels": 0.3092267790925689,
+    "labelling": 0.13965859601739794,
+    "atomic_ids": 0.25678251904901117,
+    "wall_runs": 0.030594433017540723,
+    "shells": 0.16365239000879228,
+    "validation_shells": 0.09382545098196715
+   },
+   "validator_s": {
+    "grid_and_lengths": 0.011619745986536145,
+    "atomic_ids": 0.008146849984768778,
+    "planarity": 0.14458667498547584,
+    "arcs": 0.00011829897994175553,
+    "bands": 0.00021481502335518599,
+    "areas": 0.0026992560015060008,
+    "prism_areas": 0.0028924180078320205,
+    "shells": 0.09526640200056136,
+    "face_sides": 0.0034291790216229856,
+    "cylinders": 0.000816655985545367,
+    "groups": 0.015665819984860718,
+    "edges_in_faces": 0.021761273965239525
+   },
+   "load_s": 1.2593855829909444,
+   "verify_s": 0.5784513800172135,
+   "verify_phases_s": {
+    "counts_and_vertex_placement": 0.05906307999975979,
+    "boundaries": 0.15166099200723693,
+    "physical_groups": 0.06050816603237763,
+    "volumes": 0.11537255102302879,
+    "face_areas": 0.19181512302020565
+   },
+   "peak_rss_mb": 715.0234375
+  },
+  {
+   "n": 5000,
+   "counts": {
+    "prisms": 6296,
+    "slabs": 3,
+    "levels": 4,
+    "slab_edges": 53561,
+    "slab_cells": 11709,
+    "level_edges": 107114,
+    "level_cells": 23416,
+    "hot_pixels": 158575,
+    "vertices": 104098,
+    "edges": 159167,
+    "faces": 71969,
+    "volumes": 6701,
+    "groups": 18689
+   },
+   "written": {
+    "vertices": 104098,
+    "edges": 155947,
+    "faces": 67241,
+    "solids": 2
+   },
+   "build_s": 12.564258790982421,
+   "stage_s": {
+    "levels": 0.009879562014248222,
+    "noding_driver": 0.5696747110923752,
+    "dcel_faces": 0.6929724930087104,
+    "dissolution": 1.3692267560400069,
+    "arc_realisation": 0.07184060697909445,
+    "linking": 0.20724930305732414,
+    "contact_check": 0.0717381130089052,
+    "manifold_check": 0.06452829000772908,
+    "assembly_registry": 0.1325138040119782,
+    "volume_connectivity": 0.032914846029598266,
+    "wall_prep": 0.08986145100789145,
+    "assembly_faces": 1.8917526460136287,
+    "shell_prep": 0.0731605349574238,
+    "routes": 0.22689273301512003,
+    "validation_serial": 0.37831372203072533,
+    "noding_kernels": 1.9155816059792414,
+    "labelling": 0.7364700949983671,
+    "atomic_ids": 1.3362355649587698,
+    "wall_runs": 0.16879777796566486,
+    "shells": 1.03038768802071,
+    "validation_shells": 0.7592025609919801
+   },
+   "validator_s": {
+    "grid_and_lengths": 0.06274195696460083,
+    "atomic_ids": 0.042802861018572,
+    "planarity": 0.9782059430144727,
+    "arcs": 0.0005252749542705715,
+    "bands": 0.001072502986062318,
+    "areas": 0.014168763998895884,
+    "prism_areas": 0.013385177997406572,
+    "shells": 0.7697815620340407,
+    "face_sides": 0.02112443099031225,
+    "cylinders": 0.005517871002666652,
+    "groups": 0.1276532780029811,
+    "edges_in_faces": 0.13206807000096887
+   },
+   "load_s": 8.818404889956582,
+   "verify_s": 3.695137489004992,
+   "verify_phases_s": {
+    "counts_and_vertex_placement": 0.9382229070179164,
+    "boundaries": 0.775261259987019,
+    "physical_groups": 0.34897294803522527,
+    "volumes": 0.6342466190108098,
+    "face_areas": 0.9983992620254867
+   },
+   "peak_rss_mb": 2160.765625
+  },
+  {
+   "n": 20000,
+   "counts": {
+    "prisms": 25019,
+    "slabs": 3,
+    "levels": 4,
+    "slab_edges": 212847,
+    "slab_cells": 46530,
+    "level_edges": 425686,
+    "level_cells": 93058,
+    "hot_pixels": 630556,
+    "vertices": 414156,
+    "edges": 632768,
+    "faces": 285871,
+    "volumes": 26496,
+    "groups": 74293
+   },
+   "written": {
+    "vertices": 414156,
+    "edges": 620297,
+    "faces": 267635,
+    "solids": 2
+   },
+   "build_s": 59.61371515097562,
+   "stage_s": {
+    "levels": 0.04388924496015534,
+    "noding_driver": 2.892966721963603,
+    "dcel_faces": 3.6335529659991153,
+    "dissolution": 6.678636007010937,
+    "arc_realisation": 0.29291126097086817,
+    "linking": 0.9001502789906226,
+    "contact_check": 0.35048854403430596,
+    "manifold_check": 0.2828443059697747,
+    "assembly_registry": 0.666002786019817,
+    "volume_connectivity": 0.14962770702550188,
+    "wall_prep": 0.43017850298201665,
+    "assembly_faces": 8.508411937975325,
+    "shell_prep": 0.49390152702108026,
+    "routes": 1.292641810956411,
+    "validation_serial": 1.8122326410375535,
+    "noding_kernels": 9.189844680018723,
+    "labelling": 3.0757800649735145,
+    "atomic_ids": 5.491871181002352,
+    "wall_runs": 0.74350007600151,
+    "shells": 5.644384387996979,
+    "validation_shells": 3.8764221819583327
+   },
+   "validator_s": {
+    "grid_and_lengths": 0.2631353579927236,
+    "atomic_ids": 0.2712893090210855,
+    "planarity": 4.541829545982182,
+    "arcs": 0.0016888959798961878,
+    "bands": 0.004176830989308655,
+    "areas": 0.05880532000446692,
+    "prism_areas": 0.058525425964035094,
+    "shells": 3.925358145032078,
+    "face_sides": 0.09520818601595238,
+    "cylinders": 0.031038095010444522,
+    "groups": 0.6620185099891387,
+    "edges_in_faces": 0.6375449789920822
+   },
+   "load_s": 45.97318481403636,
+   "verify_s": 14.42034308402799,
+   "verify_phases_s": {
+    "counts_and_vertex_placement": 3.407706825993955,
+    "boundaries": 3.077941467985511,
+    "physical_groups": 1.4404733639676124,
+    "volumes": 2.5014221890014596,
+    "face_areas": 3.9927657669759355
+   },
+   "peak_rss_mb": 7600.6875
+  }
+ ],
+ "load_average_at_end": [
+  1.57666015625,
+  2.34423828125,
+  3.30908203125
+ ],
+ "rerun_note": "head N=2000 was run three times: 83.6 s total (another job was running on the machine), 65.8 s and 64.7 s; the last is stored"
+}

@@ -46,45 +46,90 @@
   "trials": 1500
  },
  "layout_like": {
-  "outputs": {
+  "examples": {
    "airbridge_B": {
     "arc_edges": 0,
     "edges_measured": 96,
     "max_arc_deviation_g": 0.0,
     "max_snap_drift_g": 0.0,
-    "mean_arc_deviation_g": 0.0
+    "mean_arc_deviation_g": 0.0,
+    "snap_rounds": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     2,
+     2
+    ]
    },
    "pad_in_ground_A": {
     "arc_edges": 5,
     "edges_measured": 39,
     "max_arc_deviation_g": 0.0,
     "max_snap_drift_g": 0.0,
-    "mean_arc_deviation_g": 0.0
+    "mean_arc_deviation_g": 0.0,
+    "snap_rounds": [
+     1,
+     1,
+     1,
+     1,
+     2
+    ]
    },
    "pad_in_ground_A_bands": {
-    "arc_edges": 47,
+    "arc_edges": 59,
     "edges_measured": 129,
     "max_arc_deviation_g": 0.631601,
     "max_snap_drift_g": 0.0,
-    "mean_arc_deviation_g": 0.05714
+    "mean_arc_deviation_g": 0.045518,
+    "snap_rounds": [
+     1,
+     1,
+     1,
+     1,
+     2
+    ]
    },
    "pad_in_ground_B": {
-    "arc_edges": 25,
-    "edges_measured": 107,
+    "arc_edges": 15,
+    "edges_measured": 73,
     "max_arc_deviation_g": 0.0,
     "max_snap_drift_g": 0.0,
-    "mean_arc_deviation_g": 0.0
+    "mean_arc_deviation_g": 0.0,
+    "snap_rounds": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     2
+    ]
    },
    "pad_in_ground_B_bands": {
-    "arc_edges": 88,
-    "edges_measured": 200,
+    "arc_edges": 90,
+    "edges_measured": 190,
     "max_arc_deviation_g": 0.631601,
     "max_snap_drift_g": 0.0,
-    "mean_arc_deviation_g": 0.030518
+    "mean_arc_deviation_g": 0.02984,
+    "snap_rounds": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     2
+    ]
    }
   },
   "random_layout_n200": {
-   "edges_measured": 5854,
+   "edges_measured": 6298,
    "edges_over_bound": 0,
    "max_snap_drift_g": 0.605107,
    "snap_rounds_histogram": {
@@ -93,45 +138,149 @@
    }
   }
  },
+ "level_stats": {
+  "pad_in_ground_A_bands": {
+   "level_z=-100": {
+    "cells": 1,
+    "edges_after": 4,
+    "edges_before": 4,
+    "hot_pixels": 4,
+    "segments": 4,
+    "snap_rounds": 1
+   },
+   "level_z=0": {
+    "cells": 26,
+    "edges_after": 172,
+    "edges_before": 4064,
+    "hot_pixels": 4050,
+    "segments": 4046,
+    "snap_rounds": 2
+   },
+   "level_z=100": {
+    "cells": 1,
+    "edges_after": 4,
+    "edges_before": 4,
+    "hot_pixels": 4,
+    "segments": 4,
+    "snap_rounds": 1
+   }
+  },
+  "pad_in_ground_B": {
+   "level_z=-100": {
+    "cells": 1,
+    "edges_after": 4,
+    "edges_before": 4,
+    "hot_pixels": 4,
+    "segments": 4,
+    "snap_rounds": 1
+   },
+   "level_z=0": {
+    "cells": 5,
+    "edges_after": 28,
+    "edges_before": 502,
+    "hot_pixels": 500,
+    "segments": 504,
+    "snap_rounds": 2
+   },
+   "level_z=0.2": {
+    "cells": 4,
+    "edges_after": 22,
+    "edges_before": 496,
+    "hot_pixels": 496,
+    "segments": 500,
+    "snap_rounds": 1
+   },
+   "level_z=100": {
+    "cells": 1,
+    "edges_after": 4,
+    "edges_before": 4,
+    "hot_pixels": 4,
+    "segments": 4,
+    "snap_rounds": 1
+   }
+  },
+  "pad_in_ground_B_midplane_port_stage_scene": {
+   "level_z=-100": {
+    "cells": 1,
+    "edges_after": 4,
+    "edges_before": 4,
+    "hot_pixels": 4,
+    "segments": 4,
+    "snap_rounds": 1
+   },
+   "level_z=0": {
+    "cells": 4,
+    "edges_after": 22,
+    "edges_before": 496,
+    "hot_pixels": 496,
+    "segments": 500,
+    "snap_rounds": 1
+   },
+   "level_z=0.1": {
+    "cells": 5,
+    "edges_after": 28,
+    "edges_before": 502,
+    "hot_pixels": 500,
+    "segments": 996,
+    "snap_rounds": 2
+   },
+   "level_z=0.2": {
+    "cells": 4,
+    "edges_after": 22,
+    "edges_before": 496,
+    "hot_pixels": 496,
+    "segments": 500,
+    "snap_rounds": 1
+   },
+   "level_z=100": {
+    "cells": 1,
+    "edges_after": 4,
+    "edges_before": 4,
+    "hot_pixels": 4,
+    "segments": 4,
+    "snap_rounds": 1
+   }
+  }
+ },
  "pipeline_rows": [
   {
    "N": 1000,
-   "build_s": 2.339,
-   "dcel_faces_s": 0.116,
-   "hot_pixels": 31474,
-   "level_edges": 19494,
-   "noding_driver_s": 0.11,
-   "noding_kernels_s": 0.413,
-   "slab_edges": 9751
+   "build_s": 2.332,
+   "dcel_faces_s": 0.112,
+   "hot_pixels": 31273,
+   "level_edges": 21130,
+   "noding_driver_s": 0.101,
+   "noding_kernels_s": 0.372,
+   "slab_edges": 10569
   },
   {
    "N": 5000,
-   "build_s": 10.158,
-   "dcel_faces_s": 0.581,
-   "hot_pixels": 157270,
-   "level_edges": 97282,
-   "noding_driver_s": 0.524,
-   "noding_kernels_s": 1.51,
-   "slab_edges": 48645
+   "build_s": 14.459,
+   "dcel_faces_s": 0.891,
+   "hot_pixels": 158575,
+   "level_edges": 107114,
+   "noding_driver_s": 0.692,
+   "noding_kernels_s": 2.266,
+   "slab_edges": 53561
   },
   {
    "N": 20000,
-   "build_s": 52.055,
-   "dcel_faces_s": 3.534,
-   "hot_pixels": 631159,
-   "level_edges": 389972,
-   "noding_driver_s": 3.471,
-   "noding_kernels_s": 9.41,
-   "slab_edges": 194990
+   "build_s": 61.644,
+   "dcel_faces_s": 3.85,
+   "hot_pixels": 630556,
+   "level_edges": 425686,
+   "noding_driver_s": 3.041,
+   "noding_kernels_s": 9.784,
+   "slab_edges": 212847
   }
  ],
  "pipeline_slopes": {
   "hot_pixels": [
-   1.0,
+   1.01,
    1.0
   ],
   "level_edges": [
-   1.0,
+   1.01,
    1.0
   ]
  },
@@ -170,66 +319,66 @@
  "timing": {
   "rows": [
    {
-    "dcel_s": 0.008,
+    "dcel_s": 0.007,
     "edges": 3067,
     "faces": 35,
     "hot_pixels": 4483,
     "rounds": 3,
     "segments": 2000,
-    "snap_s": 0.036
+    "snap_s": 0.037
    },
    {
-    "dcel_s": 0.015,
+    "dcel_s": 0.019,
     "edges": 6186,
     "faces": 72,
     "hot_pixels": 9004,
     "rounds": 3,
     "segments": 4000,
-    "snap_s": 0.079
+    "snap_s": 0.076
    },
    {
-    "dcel_s": 0.034,
+    "dcel_s": 0.037,
     "edges": 12492,
     "faces": 177,
     "hot_pixels": 18067,
     "rounds": 3,
     "segments": 8000,
-    "snap_s": 0.186
+    "snap_s": 0.212
    },
    {
-    "dcel_s": 0.138,
+    "dcel_s": 0.141,
     "edges": 24914,
     "faces": 311,
     "hot_pixels": 36093,
     "rounds": 3,
     "segments": 16000,
-    "snap_s": 0.469
+    "snap_s": 0.572
    },
    {
-    "dcel_s": 0.249,
+    "dcel_s": 0.327,
     "edges": 49976,
     "faces": 730,
     "hot_pixels": 72235,
     "rounds": 3,
     "segments": 32000,
-    "snap_s": 1.075
+    "snap_s": 1.375
    },
    {
-    "dcel_s": 0.679,
+    "dcel_s": 0.683,
     "edges": 99630,
     "faces": 1408,
     "hot_pixels": 144285,
     "rounds": 4,
     "segments": 64000,
-    "snap_s": 3.206
+    "snap_s": 4.008
    }
   ],
   "slope_snap_plus_dcel": [
-   1.1,
-   1.23,
-   1.46,
-   1.13,
-   1.55
+   1.11,
+   1.39,
+   1.52,
+   1.26,
+   1.46
   ]
  }
 }

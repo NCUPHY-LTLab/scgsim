@@ -70,7 +70,7 @@ Route C 把有限厚度的金屬保留為 conductor volume，並在內部做 mes
 | 決定者 | Architecture review。 |
 :::
 
-證據（原型計算；production 的相同數字另註）：含 band 的 Route A 範例，z = 0 level 有 2 932 條 noded edge，dissolve 後剩 160 條。一段 8 µm 的 quarter arc 約 100 條 chord；pad 的 hot pixel 從 69（32 邊形 hole）增加到 516（prototype 的 phase 2 紀錄；production 的 `pad_in_ground_A` 同樣是 516）。47 條 arc edge 的 realised arc 與精確圓的偏差最大 0.632 grid unit（production 的含 band 範例同為 0.632）。這些成本只在 running example 與 catalogue 上量過；scaling 的 layout 沒有 arc，所以大規模的 witness 成本沒有量測，不應外推。
+證據（production，`figures/inset-numbers.json` 與 `figures/arrangement-guarantees-numbers.json`）：含 band 的 Route A 範例（margin 0.1、0.5、2 µm），z = 0 level 有 4 064 條 noded edge（4 050 個 hot pixel），dissolve 後剩 172 條。一段 8 µm 的 quarter arc 約 100 條 chord；pad 的 hot pixel 從 69（32 邊形 hole）增加到 516（`pad_in_ground_A`）。59 條 arc edge 的 realised arc 與精確圓的偏差平均 0.046、最大 0.632 grid unit。這些成本只在 running example 與 catalogue 上量過；scaling 的 layout 沒有 arc，所以大規模的 witness 成本沒有量測，不應外推。
 
 ## D4 AEDT solid 交換 {#d4}
 
@@ -139,7 +139,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | 決定者 | Architecture review；若 drift 上限的數值要進入 handoff 成為容差，則由 Human 決定。 |
 :::
 
-證據（原型計算，最後一列除外）：每個數字都有輸入類型、樣本範圍與來源，來源是 `arrangement_guarantees.py` 的輸出 `figures/arrangement-guarantees-numbers.json`，以及各案例的 `sliver_report.json`；最後一列是 production 的 catalogue。
+證據（production 計算）：每個數字都有輸入類型、樣本範圍與來源，來源是 `arrangement_guarantees.py` 的輸出 `figures/arrangement-guarantees-numbers.json`；最後一列是 production 的 catalogue 報告。
 
 ::: {.askr-table-compact .askr-table-numeric}
 | 輸入 | 樣本範圍 | 量到的最大偏離 | 來源 |
@@ -147,9 +147,9 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | 一輪 snap rounding（隨機 segment） | 250 組 × 24 條 segment，整數端點在 48 × 48 的 box | 0.707 g（理論界 $\sqrt2/2$） | `random_trials.round_1` |
 | iterated rounding（隨機 segment） | 同上 | 1.417 g | `random_trials.iterated` |
 | iterated rounding（dense 對抗性隨機 segment） | 1 500 組 × 40 條 segment，30 × 30 的 box | 1.925 g | `dense_random` |
-| iterated rounding（類 layout） | 隨機 layout N = 200，5 854 條 edge | 0.605 g，沒有 edge 超過 bound | `layout_like.random_layout_n200` |
-| 五個 running example 的 edge | 見 `sliver_report.json` | snap drift 0（layout 輸入在 grid 上，by construction） | `snap_drift` |
-| derived（offset）arc 與精確圓的偏差 | 含 band 的 Route A，47 條 arc edge | 0.632 g | `arc_edges`（這是 arc 的證據，不能代替直線 segment 的證據） |
+| iterated rounding（類 layout） | 隨機 layout N = 200，6 298 條 edge | 0.605 g，沒有 edge 超過 bound | `layout_like.random_layout_n200` |
+| 五個 running example 的 edge | 見 `layout_like.examples`（五個範例，`arrangement-guarantees-numbers.json`） | snap drift 0（layout 輸入在 grid 上，by construction） | `snap_drift` |
+| derived（offset）arc 與精確圓的偏差 | 含 band 的 Route A，59 條 arc edge | 0.632 g | `arc_edges`（這是 arc 的證據，不能代替直線 segment 的證據） |
 | production catalogue | 23 個 fixture × 三種 route 中建出的 54 列 | snap drift 0 g（fixture 的輸入在 grid 上）；arc 偏離最大 0.760 g | `python tests/sgb_catalogue_report.py` 的 `max_snap_drift_grid`、`max_arc_deviation_grid` |
 :::
 
@@ -163,7 +163,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | 問題 | 模型是由 Gmsh/OCC API 由下而上呼叫建構，還是直接從 planned topology 寫成 BREP/XAO？ |
 | 選項 | （a）Gmsh API 建構：序列的，受 `synchronize`、平面 face 建構與 XAO 寫出所限。（b）直接 BREP/XAO 序列化：可分 chunk 平行寫出、mesher 只載入一次、明確寫出每個 orientation。 |
 | Lead 的決定 | （b），architecture review 中。emission 把 planned topology 直接寫成 OCCT `CASCADE Topology V1` 文字；Gmsh 只用來做 *mesh*（與作為測試 oracle），絕不用來建構幾何。 |
-| 理由 | （a）是線性但序列、且很大：N = 20 000 時 emission 74–80 s，derivation 約 45–52 s。Gmsh API 也無法控制 solid 的 sense：即使縫合（sewing）也一樣，隨機 layout 上曾出現 vacuum 內外顛倒，大型 shell 的縫合又慢又耗記憶體。直接 writer 明確寫出每個 orientation。 |
+| 理由 | （a）的成本隨規模成長得比線性快：同一個 Route B 隨機 layout，Gmsh API 的 oracle 在 N = 500、1 000、2 000 要 2.3 s、8.9 s、63.3 s（局部斜率 2.0 與 2.8），N = 5 000 超過 10 分鐘仍未完成；直接 writer 在 N = 1 000 要 0.49 s，N = 20 000 也只要 13.8 s。Gmsh API 也無法指定 solid 的 sense：oracle 重播出的 substrate solid 質量是負的（N = 500、1 000、2 000 都是，`figures/why-scaling-oracle.json`），也就是 solid 的內外顛倒。直接 writer 明確寫出每個 orientation。 |
 | 原型的限制 | **直接 writer 對 cylinder wall 並非「任意邊數都精確」。** 當一條宣告的 arc 帶著外來的 vertex（例如 port 的邊落在圓形 pad 上，或有一個 post 站在彎曲的邊上），wall 變成 5 條 boundary edge；arc 被切開的兩段各自經由 snapped 端點實現，落在略有不同的圓上，wall 的底邊與頂邊不在同一個圓柱面上，原型的直接 writer 因此拒絕這種 wall（Route B/C；Route A 的 sheet 沒有這個問題）。Gmsh API oracle 可以寫出它。 |
 | 修正（已實作） | 在外來 vertex 處以一條 vertical edge 把 wall 切開（頂部的 arc 在同一處切開）；每一段在自己的 realised 圓上是精確的圓柱，兩段共用那條 vertical edge。production 的 assembly 對 arc 上的每個外來 vertex 都加入這條垂直 edge，並反覆計算直到沒有新的 vertex 被迫加入；上下兩側的 horizontal face 與疊在上下的 wall 也看到同樣的切點，所以共用的 edge 仍然完整共用。驗證檢查 `curved_walls_are_single_cylinders` 斷言每面曲面 wall 都由同一個圓上的一條下 arc 與一條上 arc 圍成。 |
 | 範圍 | 只有宣告的 arc 會產生 cylinder wall；直線 wall 是平面，可以有任意多條邊界 edge，不需要切開。以 polygon 表示的圓（GDS 的 16–128 個點）永遠不會產生 cylinder wall，它們的 wall 是平面（見 [Assembly](assembly.qmd)）。 |
@@ -172,7 +172,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | 決定者 | Lead 決定，architecture review 中。 |
 :::
 
-證據（E3，原型計算）：寫出模型，N = 20 000 時 Gmsh API emission 75.6 s；直接 XAO 在單一 worker 為 11.8 s、16 個 worker 為 8.4 s；直接 BREP 在 16 個 worker 為 8.7 s。載入到新的 Gmsh process 仍需 41.7 s（API 的 XAO）、37.4 s（直接 XAO）與 32.6 s（直接 BREP）。直接 writer 重現解析體積的相對誤差為 0（airbridge 為 $2 \times 10^{-16}$），group 內容與 API 路徑相同；輸出對任何 worker 數逐位元相同。Human 提出的採用條件，也就是 AEDT 能帶著語意消費直接寫出的幾何，已由 E4 滿足（見 [D4](#d4)）。
+證據（production，`figures/why-scaling-measured.json`）：Route B 隨機 layout（seed 2）N = 20 000 時，直接 writer 寫出 BREP 與 XAO 在單一 worker 為 13.8 s、16 個 worker 為 9.1 s；載入到新的 Gmsh process 仍需 49.7 s，再做載入檢查 `verify_loaded` 15.3 s。Gmsh API 的 oracle 在這個規模跑不完（N = 2 000 就要 63.3 s）。輸出對任何 worker 數與 tile 配置逐位元相同。（原型的 E3 另外檢查過：直接 writer 重現解析體積的相對誤差為 0，airbridge 為 $2 \times 10^{-16}$，group 內容與 API 路徑相同。）Human 提出的採用條件，也就是 AEDT 能帶著語意消費直接寫出的幾何，已由 E4 滿足（見 [D4](#d4)）。
 
 這些時間來自 **polygon-only 的 layout：沒有 arc、沒有 cylinder wall、沒有 band**，所以大規模的 cylinder 精確性與 arc 的成本沒有量測，不應外推。
 
@@ -186,12 +186,12 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | 問題 | production pipeline 的 noding、half-edge 與 dissolution 核心用什麼語言撰寫？ |
 | 選項 | （a）純 Python，搭配更粗的 job 與 flat array。（b）Python orchestration，加上負責 noding、half-edge 結構與 dissolution 的 compiled kernel。 |
 | Lead 的建議 | （b）。 |
-| 理由 | 平行化量到的 Python 上限約 2.3×，序列比例約 45%，而 prototype 沒有量到穩定的加速（目前保存的量測最高 1.20×，見[平行化的 derivation](parallelism.qmd)）。序列的 stage 正是 half-edge 結構、dissolution、face assembly 與 noding driver。單是暫停 garbage collector 就有 30% 的改善，所以每條 edge 一個 Python 物件本身就是成本。 |
+| 理由 | 平行化量到的 Python 上限約 2×（N = 20 000、單一 process 為 1.98×），序列比例約 50%，而實測最好的 derivation 加速只有 1.17×（N = 20 000）到 1.26×（N = 5 000，見[平行化的 derivation](parallelism.qmd)）。序列的 stage 正是 half-edge 結構、dissolution、face assembly 與 noding driver。單是暫停 garbage collector 就有 30% 的改善，所以每條 edge 一個 Python 物件本身就是成本。 |
 | 後果 | packaging 與 release 多一個 compiled dependency；kernel 的語言（以及 KLayout 的整數 region engine 能否涵蓋 rectilinear 的情況）是 review 的一部分。收益應表述為第一個 compiled 實作的目標，不是 prototype 的結果。 |
 | 決定者 | Architecture review；packaging 的影響告知 Human。 |
 :::
 
-證據：目前保存的量測，N = 20 000 時 serial stage 為 52.1 s 中的 21.9 s（42%）；Amdahl parallel fraction 單一 process 為 0.56–0.60，N ≥ 5 000 且有 worker 時為 0.58–0.70。同一個 case 的 build 時間在不同次執行間落在 45–74 s，所以這些數字只有量級的意義，prototype 的時間不是最終數字，production 實作會在宣告的負載條件下重新量測；它們全部來自 polygon-only 的 layout。prototype 的筆記把不足歸因於 prototype 的語言，而不是演算法；compiled kernel 尚未量測。production 的階段 1 仍是純 Python，沒有開始 compiled kernel 的工作，這一項維持建議狀態。
+證據（production，`figures/why-scaling-measured.json`）：N = 20 000、單一 process 時，所有 stage 的時間加起來是 58.8 s（build wall time 為 61.6 s），其中 serial stage 為 29.7 s（50%）；Amdahl parallel fraction 單一 process 為 0.49–0.52，有 worker 時為 0.51–0.61（被 worker 的總計算量變大墊高，見[平行化的 derivation](parallelism.qmd)）。這是單次執行的結果，同一個 layout 的同一個推導在三次呼叫間差約 10%，所以這些數字只有量級的意義；它們全部來自 polygon-only 的 layout。prototype 的筆記把不足歸因於 prototype 的語言，而不是演算法；compiled kernel 尚未量測。production 的階段 1 仍是純 Python，沒有開始 compiled kernel 的工作，這一項維持建議狀態。
 
 ## 已解決的事項
 
@@ -211,26 +211,26 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 - **Pixel 慣例**：pixel 以 grid point 為中心，$[c-g/2, c+g/2)^2$。
 - **Wall coalescing 的完整規則**與 **cut family 的目標 level** 已在 brief 中完整敘述（production）。
 - **Curve class**：v1 支援直線與圓弧（含由 GDS 邊界重建的圓）；`interpolation_spline` 與 B-spline 邊界 fail closed，B-spline carrier 留待之後的階段。
-- **原型時間不是最終數字**：scaling 的數字很吵（同一個 N = 20 000 的 case 在 45 到 74 s 之間）且只有 polygon；production 的實作在宣告的負載條件下重新量測。
+- **scaling 的時間只有量級的意義**：數字有起伏（同一個 layout 的同一個推導在三次呼叫間差約 10%），而且 layout 只有 polygon；宣告的負載條件下的量測不在這些數字之內。
 
 ## 補充：重現資料
 
-D3、D7、D8 與 D9 的數字可由下列檔案重現；本頁不重跑 prototype。
+D3、D7、D8 與 D9 的數字可由下列檔案重現；圖與數字的腳本與執行方式列在 `docs/design/sgb/_figures/README.md`，本頁不重跑 prototype。
 
 ::: {.askr-table-compact}
 | 資料 | 來源 |
 |---|---|
 | 一輪與 iterated 的 drift | `figures/arrangement-guarantees-numbers.json`（由 `_figures/arrangement_guarantees.py` 產生） |
-| 逐 edge 的 snap drift、arc 偏差、feature size | `outputs/<case>/sliver_report.json` |
-| noding 的 edge 數與 hot pixel 數 | `outputs/<case>/stage_summary.json` |
-| emission 的時間與載入時間 | `outputs/e3_brep/timing.json`、`outputs/e3_brep/sidecar_timing.json`、`outputs/scaling.json` |
+| 逐 edge 的 snap drift、arc 偏差、feature size | `figures/arrangement-guarantees-numbers.json` 的 `layout_like`；production 每次 build 寫出的 `<stem>.slivers.json` |
+| noding 的 edge 數與 hot pixel 數 | `figures/arrangement-guarantees-numbers.json` 的 `level_stats`、`figures/inset-numbers.json` 的 `level_z0` |
+| emission 的時間與載入時間 | `figures/why-scaling-measured.json`（`_figures/why_scaling.py measure`）、Gmsh API oracle 的 `figures/why-scaling-oracle.json` |
 | AEDT 實驗 | `experiments/sgb-redesign/e4_aedt_step/README.md` 與 `out/*.json` |
 | Gmsh sewing 的觀察 | 隨機 N = 1 000 的 layout 中 vacuum 內外顛倒，以及縫合約 6 萬個 face 的 shell 花了 180 s 與 28 GB：這些數字在 prototype 第 3 階段量測一次，**沒有保存輸出檔**，目前只記錄在 prototype 的筆記與 brief 中，應視為一次性的觀察 |
 | 原型的 extreme-case catalogue（22 個 fixture、39 列，帶 5-edge wall 的拒絕） | `outputs/extreme/catalogue.md`、`outputs/extreme/rows.json`；測試 `tests/test_extreme_cases.py` |
 | production 的 extreme-case catalogue（23 個 fixture、63 列；mesh 品質與 drift） | 在 `scgsim` 套件根目錄執行 `python tests/sgb_catalogue_report.py --timings --out <資料夾>`（需要安裝 `occt` group 才會有 OCCT 欄）；測試 `tests/test_sgb_extreme_cases.py` |
 | priority 的 develop 端修正 | PR NCUPHY-LTLab/scgsim#61（`mesh_order` 轉內部 priority）；階段 1 的測試 `tests/test_sgb_priority.py` 檢查錯誤訊息指出的來源 |
 | 曲面 wall 的切開 | `tests/test_sgb_curved_walls.py` |
-| 驗證時間隨規模 | `outputs/validator_scaling.md` |
-| 目前保存的 scaling 量測 | `outputs/scaling.json`（單次執行） |
-| 直接 writer 的時間與驗證 | `outputs/e3_brep/timing.json`、`outputs/e3_brep/<case>/validation.json`、`outputs/e3_brep/sidecar_timing.json` |
+| 驗證時間隨規模 | `figures/why-validator-scaling.json`（`_figures/why_scaling.py validators`） |
+| scaling 量測 | `figures/why-scaling-measured.json`（單次執行） |
+| 直接 writer 的時間與驗證 | `figures/why-scaling-measured.json`；build 寫出的 `<stem>.validation.json` |
 :::

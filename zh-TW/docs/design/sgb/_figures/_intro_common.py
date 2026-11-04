@@ -1,14 +1,26 @@
 """Shared helpers for the figure scripts of the overview, why-plan-first, layered-model and arrangement pages.
 
-Owns: the prototype import path, output directories, the colour palette, the Plotly and SVG writers, and the
-drawing of footprints and arrangement cells. It derives nothing; every geometry comes from the prototype.
+Owns: the production import path, output directories, the colour palette, the Plotly and SVG writers, the
+running example (pad in ground, port on the support plane) as a prism catalogue, and the drawing of footprints
+and arrangement cells.  It derives nothing itself; every geometry comes from ``scgsim.geometry.sgb``.
+
+Run every script with the Python of the sgb-core checkout (branch ``claude/sgb-core``), which has ``scgsim`` with
+``geometry.sgb`` installed::
+
+    SGB_CORE=<sgb-core worktree>   # optional; defaults to this checkout
+    $SGB_CORE/.artifacts/env/bin/python docs/design/sgb/_figures/<script>.py
+
+The test-side scene builders (``sgb_scenes``, ``sgb_emit_cases``, ``sgb_catalogue_report`` ...) are imported from
+``$SGB_CORE/tests``, which is put on ``sys.path`` here at run time; nothing of them is copied.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import matplotlib
@@ -23,12 +35,12 @@ HERE = Path(__file__).resolve().parent
 SGB_DOCS = HERE.parent
 FIG = SGB_DOCS / "figures"
 REPO = SGB_DOCS.parents[3]
-PROTOTYPE = REPO / "experiments" / "sgb-redesign" / "prototype"
-OUTPUTS = PROTOTYPE / "outputs"
-sys.path.insert(0, str(PROTOTYPE))
+SGB_CORE = Path(os.environ.get("SGB_CORE", str(REPO)))
+sys.path.insert(0, str(SGB_CORE / "tests"))
+sys.path.insert(0, str(HERE))
 
 FIG.mkdir(parents=True, exist_ok=True)
-G_UM = 0.001  # grid unit of the prototype in micrometres
+G_UM = 0.001  # the model grid of the running example in micrometres (1 nm)
 
 COLOURS = {
     "substrate": "#cfe0f1",
@@ -54,7 +66,7 @@ plt.rcParams.update({
 
 def save_svg(fig, name: str) -> Path:
     path = FIG / f"{name}.svg"
-    fig.savefig(path, format="svg", bbox_inches="tight", facecolor="white")
+    fig.savefig(path, format="svg", bbox_inches="tight", facecolor="white", metadata={"Date": None})
     qa = os.environ.get("SGB_QA_DIR")  # optional PNG copy for visual checks while developing
     if qa:
         fig.savefig(Path(qa) / f"{name}.png", format="png", dpi=110, bbox_inches="tight", facecolor="white")
@@ -77,6 +89,43 @@ def write_numbers(name: str, data: dict) -> Path:
     return path
 
 
+# --------------------------------------------------------------------------- the running example
+
+
+PORT_OUTLINE_UM = (50, -5, 80, 5)  # the gap between the pad edge (x = 50) and the ground cutout (x = 80)
+
+
+def running_example(route: str = "B", *, port_plane: str = "support"):
+    """The pad-in-ground prism catalogue under ``route`` with the lumped port on the support plane (z = 0).
+
+    The footprints are the test scene ``sgb_scenes.pad_in_ground`` (chamfer, reflex notch, rounded corner and a
+    circular hole, with exact arcs).  Its own Route-B port lies at the metal mid-plane z = 0.1 for the stage
+    tests; this function replaces it with the port as the compiler places it (``prisms.ports``): a sheet on the
+    plane the hosts' physical declaration names, here the substrate surface z = 0, whatever the route.
+    ``port_plane="mid"`` returns the scene's own mid-plane port (an embedded sheet), used only where a figure
+    illustrates what such a sheet does.
+    """
+    from sgb_scenes import lumped_port, pad_in_ground, rect_um
+
+    catalogue = pad_in_ground("A" if route == "A" else "B", with_port=False)
+    plane_route = "A" if port_plane == "support" else "B"
+    port = lumped_port("p1", rect_um(*PORT_OUTLINE_UM), plane_route)
+    name = f"pad_in_ground_{route}" + ("" if port_plane == "support" else "_midport")
+    return replace(catalogue, prisms=(*catalogue.prisms, port), name=name)
+
+
+def build_example(route: str = "B", *, port_plane: str = "support", insets=(), refinements=(), **kwargs):
+    """The validated ``ConformalModel`` of the running example."""
+    from scgsim.geometry.sgb.model import build_model_from_catalogue
+
+    return build_model_from_catalogue(
+        running_example(route, port_plane=port_plane), route, insets=insets, refinements=refinements, **kwargs
+    )
+
+
+# --------------------------------------------------------------------------- drawing
+
+
 def ring_um(ring) -> list[tuple[float, float]]:
     return [(x * G_UM, y * G_UM) for x, y in ring]
 
@@ -95,10 +144,25 @@ def draw_footprint(ax, footprint, **kwargs) -> None:
     ax.add_patch(PathPatch(mpl_path(rings), **kwargs))
 
 
+def cycle_polyline(arr, curves, cycle_index: int, step: float = 20.0) -> list[tuple[float, float]]:
+    """The boundary cycle of an arrangement as a polyline in grid units, arc edges sampled every ``step`` grid units."""
+    from scgsim.geometry.sgb.arrangement.arcs import sample_arc
+
+    points: list[tuple[float, float]] = []
+    for half_edge in arr.cycles[cycle_index].half_edges:
+        edge_index = half_edge >> 1
+        edge, curve = arr.edges[edge_index], curves[edge_index]
+        if curve is None:
+            points.append(arr.origin(half_edge))
+            continue
+        chord = math.hypot(edge.b[0] - edge.a[0], edge.b[1] - edge.a[1])
+        samples = sample_arc(curve, edge.a, edge.b, max(3, int(chord / step) + 2))
+        points.extend(samples[:-1] if half_edge % 2 == 0 else samples[::-1][:-1])
+    return points
+
+
 def cell_rings_um(layer, face_index: int, step: float = 20.0) -> list[list[tuple[float, float]]]:
     """Boundary rings of an arrangement face with arc edges sampled, in micrometres."""
-    from sgbproto.arcs import cycle_polyline
-
     arr = layer.arr
     return [[(x * G_UM, y * G_UM) for x, y in cycle_polyline(arr, layer.edge_curve, c, step)] for c in arr.face_cycles(face_index)]
 
@@ -107,12 +171,13 @@ def domain_colour(domain) -> str:
     if domain is None:
         return "white"
     if domain.kind == "conductor":
-        return COLOURS["pad"] if domain.net == "pad" else COLOURS["ground"]
+        return COLOURS["pad"] if domain.owner == "pad" else COLOURS["ground"]
     return COLOURS["substrate"] if domain.material == "substrate" else COLOURS["vacuum"]
 
 
 def domain_name(domain) -> str:
-    return "none" if domain is None else (domain.net if domain.kind == "conductor" else domain.material)
+    """The owning entity id of a domain (``none`` outside the model)."""
+    return "none" if domain is None else domain.name
 
 
 def stretch_z(z: float, metal: float = 200.0) -> float:
@@ -126,10 +191,10 @@ def stretch_z(z: float, metal: float = 200.0) -> float:
 
 
 def prism_colour(prism) -> str:
-    if prism.role == "port":
+    if prism.material_kind == "port":
         return COLOURS["port"]
     if prism.material_kind == "conductor":
-        return COLOURS["pad"] if prism.net_id == "pad" else COLOURS["ground"]
+        return COLOURS["pad"] if prism.entity_id == "pad" else COLOURS["ground"]
     return COLOURS["substrate"] if prism.material == "substrate" else COLOURS["vacuum"]
 
 
@@ -152,11 +217,11 @@ def section_intervals(prism, y_um: float) -> list[tuple[float, float]]:
     return sorted((min(p.coords)[0], max(p.coords)[0]) for p in parts if p.length > 0)
 
 
-def draw_section(ax, spec, levels, y_um: float, x_range=(-155, 155), label_slabs: bool = True,
+def draw_section(ax, catalogue, levels, y_um: float, x_range=(-155, 155), label_slabs: bool = True,
                  skip: tuple[str, ...] = ()) -> None:
     """x-z section of a model at y = y_um with levels drawn equally spaced (the vertical axis is not to scale)."""
     index = {z: k for k, z in enumerate(levels)}
-    for prism in spec.prisms:
+    for prism in catalogue.prisms:
         if prism.entity_id in skip:
             continue
         for x0, x1 in section_intervals(prism, y_um):

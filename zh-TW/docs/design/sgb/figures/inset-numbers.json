@@ -1,0 +1,32 @@
+{
+ "arc_deviation": {
+  "arc_edges": 59,
+  "mean": 0.045518197053341224,
+  "max": 0.6316010800756544,
+  "snap_bound": 0.7071067811865476
+ },
+ "level_z0": {
+  "noded_edges_before_dissolution": 4064,
+  "hot_pixels": 4050,
+  "edges_after_dissolution": 172,
+  "faces": 26
+ },
+ "extreme_band_comparisons": {
+  "rows": 60,
+  "families": 20,
+  "all_within_oracle_noise": true,
+  "max_relative": 1.9535595665920247e-05
+ },
+ "route_b_comparison": {
+  "band_pad_top": {
+   "max_relative": 1.6100311039298348e-06,
+   "same_exact_areas_as_route_a_pad": true,
+   "within_oracle_noise": true
+  },
+  "band_pad_bottom": {
+   "max_relative": 1.6100311039298348e-06,
+   "same_exact_areas_as_route_a_pad": true,
+   "within_oracle_noise": true
+  }
+ }
+}

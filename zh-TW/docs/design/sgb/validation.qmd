@@ -24,9 +24,9 @@ SGB 推導出的模型要交給 mesher 與 solver，所以在寫出之前必須�
 幾點說明：
 
 - **第 1 層的 OCCT 檢查**（`scgsim.geometry.sgb.verification.occt` 的 `check_file`）依序做四件事：(1) `BRepCheck_Analyzer`（開啟 geometry control）：問每個唯一的 vertex、edge、wire、face、shell 與 solid 是否 `IsValid`，並報告各自的狀態清單與在各 context 中的狀態（edge 在 face 中、face 在 shell 中等）；(2) `BOPAlgo_ArgumentAnalyzer`（Boolean 運算的前置檢查），開啟型別、self-interference、過小 edge、無法重建的 face、tangent face、未合併的 vertex 與 edge（conformity 缺陷）、C0 連續性與 pcurve 對 3-D 曲線等九個模式；(3) 輕量的 `ShapeAnalysis` 檢查：每個 shell 的自由 edge 與不良（non-manifold 或定向不一致）edge、短於 tolerance 十倍的 edge；(4) 與規劃交叉比對：每個 solid 的體積與每個 face 的面積對比規劃值。free 的 port sheet 不進 `BOPAlgo_ArgumentAnalyzer` 的 solid 分析（報告記為 excluded free face），由 `BRepCheck_Analyzer` 與面積比對涵蓋。
-- **範例的結果（production）。** 七個執行範例（`pad_in_ground` 的 Route A、B、C 與各自含 band 的版本，以及 Route B 的 `airbridge`）各對寫出的 BREP 與 XAO 做一次，共 14 份報告，全部通過：`BRepCheck_Analyzer` 判定有效且沒有 faulty 的 sub-shape；`BOPAlgo_ArgumentAnalyzer`（含 self-interference）沒有 fault 或結果；`ShapeAnalysis` 沒有帶自由 edge 或不良 edge 的 shell；與規劃交叉比對，face 面積的最大相對誤差為 $1.3 \times 10^{-12}$，solid 體積的最大相對誤差為 $7.8 \times 10^{-14}$。單次執行的耗時，`BRepCheck_Analyzer` 2.8 到 20.9 ms，`BOPAlgo_ArgumentAnalyzer` 7.5 到 220 ms。測試對 17 個具名的模型（`tests/sgb_emit_cases.py` 的 `CASES`）檢查同樣的項目。原型時期對五個執行範例也得到相同形式的結果（體積誤差 $2.1 \times 10^{-16}$）。五個刻意製造的缺陷作為負對照（反轉的內 wire、shell 內翻轉的共用 face、vertex 移離曲線 $10^{-4}$ µm、缺一個 face 的開放 shell、有缺口的 wire），每一個都被 `BRepCheck_Analyzer` 抓到；其餘檢查各自能抓到哪幾種，測試記錄為下限（例如 vertex 偏離 $10^{-4}$ µm 只有 `BOPAlgo_ArgumentAnalyzer` 同時看得到，因為面積與體積的變化小於 $10^{-7}$，規劃比對看不到）。
+- **範例的結果（production）。** 六個真實輸入的模型（`pad_in_ground` 的 Route A、B、C 與各自含 band 的版本）加上兩個 stage 層的 scene（Route B 的 `airbridge`，以及有圓弧與圓柱 wall 的 `pad_in_ground`），各對寫出的 BREP 與 XAO 做一次，共 16 份報告（`figures/validation-numbers.json` 的 `occt_examples`），全部通過：`BRepCheck_Analyzer` 判定有效且沒有 faulty 的 sub-shape；`BOPAlgo_ArgumentAnalyzer`（含 self-interference）沒有 fault 或結果；`ShapeAnalysis` 沒有帶自由 edge 或不良 edge 的 shell；與規劃交叉比對，face 面積的最大相對誤差為 $1.3 \times 10^{-12}$（出現在有圓柱 wall 的 stage 層 scene；六個真實輸入的模型最大為 $2.9 \times 10^{-14}$），solid 體積的最大相對誤差為 $2.6 \times 10^{-16}$。單次執行的耗時，`BRepCheck_Analyzer` 2.5 到 15.8 ms，`BOPAlgo_ArgumentAnalyzer` 6.3 到 46.5 ms（這台機器；隨機器而異）。測試對 17 個具名的模型（`tests/sgb_emit_cases.py` 的 `CASES`）檢查同樣的項目。五個刻意製造的缺陷作為負對照（`tests/sgb_occt_mutations.py`、`tests/test_sgb_occt.py`：反轉的內 wire、shell 內翻轉的共用 face、vertex 移離曲線 $10^{-4}$ µm、缺一個 face 的開放 shell、有缺口的 wire），每一個都被 `BRepCheck_Analyzer` 抓到；其餘檢查各自能抓到哪幾種，測試記錄為下限（例如 vertex 偏離 $10^{-4}$ µm 只有 `BOPAlgo_ArgumentAnalyzer` 同時看得到，因為面積與體積的變化小於 $10^{-7}$，規劃比對看不到）。
 - **極端案例 catalogue 與隨機 layout。** 見下一節。
-- **Runtime validator 的 scaling（原型計算）。** 對 N = 1000、5000、20000 個 feature 的 polygon layout（F = 12 761、63 664、255 052 個 face），每個 validator 與 load check 的成本對 face 數的 log-log 斜率在 0.79 到 1.16 之間，所以每一項都近似線性。N = 20000 時最貴的是 face 面積（8.4 s）、planarity（5.5 s）、edge 邊界（4.1 s）與 volume（4.0 s）；`physical_groups` 原本隨 group 數呈二次成長，已修正為近乎線性。mesher 端的 `verify_loaded` 在 N = 20000 時為 30.2 s，Gmsh 載入為 50.6 s，同一次執行的 build wall 為 74.2 s（同一台機器上，不同次執行的 build wall 可以差到數十 %）。**這些量測都是只有直線的 polygon layout，沒有圓弧也沒有 band，所以圓弧與 band 在大規模下的成本與精確度沒有量測，不外推；production 的 validator 沒有重新做這個 scaling 量測。**
+- **Runtime validator 的 scaling（production 量測）。** 對 Route B 隨機 layout（seed 2）N = 1000、5000、20000 個 feature（F = 14 215、71 969、285 871 個 face），31 項結構 check 各自的成本對 face 數的 log-log 局部斜率在 0.97 到 1.31 之間（`cylinders` 在 N = 1000 到 5000 之間為 1.6，但它在 N = 20000 時只花 0.03 s），所有 check 成本合計的斜率約為 1.15（1.16 與 1.14），所以每一項都近似線性。N = 20000 時所有 check 的成本合計 10.6 s（驗證階段的 wall time 為 5.7 s）；最貴的是 planarity（4.6 s）與 shells（3.9 s），接著是 groups（0.67 s）與 edges_in_faces（0.65 s）。mesher 端的 `verify_loaded` 在 N = 20000 時為 15.3 s，Gmsh 載入為 49.7 s，推導與驗證合計為 61.6 s（`figures/why-validator-scaling.json`、`figures/why-scaling-numbers.json`；單次執行，同一台機器上不同次執行的時間可以差到 10% 以上）。**這些量測都是只有直線的 polygon layout，沒有圓弧也沒有 band，所以圓弧與 band 在大規模下的成本沒有量測，不外推。**
 - **OCP 是 optional dependency。** 它是 `cadquery-ocp-novtk==7.8.1.1.post1` 對 OCCT 的 binding（OCCT 7.8.1，與 Gmsh 使用的相同），放在 `occt` dependency group（`uv sync --group occt`）；使用 OCCT 的測試標為 `occt`，沒有安裝時略過。終端使用者（例如經由 OrcaPen SC PDK）不會安裝 OCP。strict mode 與 `export_aedt_step` 需要 OCP；目前 CI 還沒有安裝這個 group，所以第 1 層的測試只在安裝了它的環境執行。
 - **第 2 層的 mesher load check** 是 `verify_loaded`：給定 sidecar 與剛開啟 XAO 的 Gmsh 模型，逐項比對 sidecar 內記錄的預期值（各維度的數量、每個 vertex 的位置、每個 edge、face、solid 的邊界、每個 face 的面積與每個 solid 的體積、physical group 的名稱、維度、tag 與成員），而不是檢視模型本身；`apply_sidecar_embeds` 重新套用 XAO 無法攜帶的 embedding。
 - **驗證在 production build 中不能被停用。** build 函式沒有任何關閉驗證的參數（測試斷言這一點）；原型保留的 `run_validation` 與 `check_planarity` 開關僅供測試使用。
@@ -55,9 +55,9 @@ production 的 catalogue（`tests/sgb_extreme_cases.py` 的 fixture，`tests/sgb
 
 ## 執行範例的觀點
 
-執行範例（Route B）的有效 build 記錄 31 個 check，全部通過，其中四個是不會使 build 失敗的*警告*（arc deviation、wall 平面性，以及兩個關於薄於 $g$ 的 slab 與垂直 edge 的報告）。下面的 shell 是**原型計算**（原型的 21 個 check 版本）：vacuum volume 的 shell，一個由 29 個 face 組成的封閉曲面。要看這些 check 在保護什麼，移除一個 face（晶片頂面，`EXT::vacuum`），再向驗證器問一次。
+執行範例（真實輸入，Route B）的有效 build 記錄 31 個 check，全部通過，其中四個是不會使 build 失敗的*警告*（arc deviation、wall 平面性，以及兩個關於薄於 $g$ 的 slab 與垂直 edge 的報告）。下面的 shell 取自 vacuum volume：`VACUUM_REGION` 把晶片包在裡面，所以它有兩個 shell（外側的盒子與包住晶片的空腔，見[從 arrangement 到實體](assembly.qmd#shell-與內部-void)），這裡取外側的盒子：一個由 6 個 face 組成的封閉曲面。要看這些 check 在保護什麼，移除一個 face（晶片頂面，`EXT::VACUUM_REGION::top`），再向驗證器問一次。
 
-![移除頂面的 vacuum shell。shell 現在只使用一次的四條 edge 以紅色標出；在有效的 shell 中，每條 edge 都以相反方向被使用兩次。](figures/validation-shell.svg){#fig-shell fig-alt="缺少頂面的晶片 volume 的三維視圖：紅色矩形勾勒出 z = 100 µm 處開口的頂部，其餘 face 大多為淡色，位於它下方。"}
+![移除頂面的 vacuum 外側 shell。shell 現在只使用一次的四條 edge 以紅色標出；在有效的 shell 中，每條 edge 都以相反方向被使用兩次。](figures/validation-shell.svg){#fig-shell fig-alt="缺少頂面的方盒的三維視圖：紅色矩形勾勒出 z = 20.2 µm 處開口的頂部，其餘五個面為淡灰色。"}
 
 {{< askr-chart-view src="figures/validation-shell.html" label="檢視被竄改的 shell" >}}
 
@@ -65,19 +65,19 @@ production 的 catalogue（`tests/sgb_extreme_cases.py` 的 fixture，`tests/sgb
 
 ```json
 { "name": "shells_closed_and_oriented", "passed": false, "warning": false,
-  "detail": "vol:066a0154103816f2/0: edge e:eaabc374ec653f31 used 1 times; ... (4 edges)" },
+  "detail": "vol:7346ec1a4ff1ccf9/0: edge e:662347190b40543e used 1 times; ... (4 edges)" },
 { "name": "shell_euler_characteristic", "passed": false, "warning": false,
-  "detail": "vol:066a0154103816f2/0: chi=1" }
+  "detail": "vol:7346ec1a4ff1ccf9/0: chi=1" }
 ```
 
 以及 build 拋出的例外（`ValidationError`，訊息節錄）：
 
 ```text
-2 invariant(s) failed: shells_closed_and_oriented: vol:066a0154103816f2/0: edge ... used 1 times; ...;
-shell_euler_characteristic: vol:066a0154103816f2/0: chi=1
+2 invariant(s) failed: shells_closed_and_oriented: vol:7346ec1a4ff1ccf9/0: edge ... used 1 times; ...;
+shell_euler_characteristic: vol:7346ec1a4ff1ccf9/0: chi=1
 ```
 
-原型的 21 個 check 中仍有 19 個通過（含兩個警告）。兩個失敗從兩個方向說同一件事：四條 edge 只被使用一次（shell 上破洞的開口邊界），而曲面的 Euler characteristic 是 1，封閉曲面需要偶數。報告指出 volume、shell 的索引與 edge id，edge id 又透過 lineage 通往來源 prism（[Identity](identity.qmd)）。production 的 `tests/test_sgb_validation.py` 也以同樣的方式竄改模型（刪掉一個 wall face，期望 `every_edge_shared_by_two_faces` 或 `shells_closed_and_oriented` 失敗）。
+31 個 check 中仍有 29 個通過（含四個警告）。兩個失敗從兩個方向說同一件事：四條 edge 只被使用一次（shell 上破洞的開口邊界），而曲面的 Euler characteristic 是 1，封閉曲面需要偶數。報告指出 volume、shell 的索引與 edge id，edge id 又透過 lineage 通往來源 prism（[Identity](identity.qmd)）。production 的 `tests/test_sgb_validation.py` 也以同樣的方式竄改模型（刪掉一個 wall face，期望 `every_edge_shared_by_two_faces` 或 `shells_closed_and_oriented` 失敗）。
 
 ## 各類 check 能證明什麼
 
@@ -115,10 +115,10 @@ SGB 各頁使用的「保證」並不都是同一種強度。本頁與其他頁�
 ::: {.askr-table-compact}
 | 中止 | 由誰拋出 | 範例（計算結果） |
 |---|---|---|
-| 來源無法詮釋 | route check、labelling 規則；priority 缺少或相同時 `OverlapError` 會指出該由 layer stack、元件標註或 `GeometryPlan` 的哪一個來源補上 | `Route A needs film conductors as sheets, but these films are still finite after the physical interpretation: …; select a profile that collapses them to sheets (for example thin_film) or choose Route B or C`；`different-Net conductors overlap near (-42524.750, -29999.500) grid units: other_net, pad` |
-| Non-manifold pinch | contact 階段的專用檢查，在 arrangement 之後、assembly 之前 | `NonManifoldError`：`non-manifold pinch: Net pad (entities pad, pinch) touches itself along the vertical edge at (50.0000, 18.0000) um, z 0.0..0.1 um (slab[0,1/10]) …`；同 Net 的有限厚度金屬只在 vertex 或 vertical edge 相接，或 hole 在 Route B 碰到自己的外邊界；Route A 的 sheet 可以在轉角相接 |
+| 來源無法詮釋 | route check、labelling 規則；priority 缺少或相同時 `OverlapError` 會指出該由 layer stack、元件標註或 `GeometryPlan` 的哪一個來源補上 | `Route A needs film conductors as sheets, but these films are still finite after the physical interpretation: …; select a profile that collapses them to sheets (for example thin_film) or choose Route B or C`；`different-Net conductors overlap near (42.5000, 46.5000) um: other_net, pad` |
+| Non-manifold pinch | contact 階段的專用檢查，在 arrangement 之後、assembly 之前 | `NonManifoldError`：`non-manifold pinch: VACUUM_REGION (pinched between conductors pad, pinch of Net P) touches itself along the vertical edge at (60.0000, 60.0000) um, z 0.0..0.2 um (slab[0,1/5]) …`（一小塊同 Net 的有限厚度金屬只在轉角碰到 pad，兩側的 vacuum 只在那條 vertical edge 相接）；同 Net 的有限厚度金屬只在 vertex 或 vertical edge 相接，或 hole 在 Route B 碰到自己的外邊界；Route A 的 sheet 可以在轉角相接 |
 | 不同 Net 接觸 | contact check，在 arrangement 之後、assembly 之前 | `ContactError`：指出兩個 Net、各自的 Entity、位置與 plane；包含只因 snap 或較粗 grid 而封閉的 gap |
-| Refinement 位置錯誤 | assembly | `SgbError`：`refinement curve r/0 at (-70.0000, -8.0000) um on level[1/10] lies in a cell that has no face …` |
+| Refinement 位置錯誤 | assembly | `SgbError`：`refinement curve r/seg0 at (32.0000, 55.0000) um on level[1/5] lies in a cell that has no face …` |
 | 推導出的結構不一致 | assembly：slab-edge chain 無法追溯、level cell 對其 slab cell 看法不一、wall 連到不同 volume 的 cell | 指出 edge 或 wall id 的 `SgbError` |
 | Invariant 失敗 | 驗證器，S9 階段 | 列出每一個失敗 check 的 `ValidationError` |
 :::
@@ -205,18 +205,19 @@ id 是 64 bit 的內容雜湊，碰撞機率極低，但以 id 為 key 的容器
 ::: {.askr-table-compact}
 | 缺陷 | 失敗的 check |
 |---|---|
-| 從 vacuum shell 移除頂面 | `shells_closed_and_oriented`、`shell_euler_characteristic` |
+| 從 vacuum 外側 shell 移除頂面 | `shells_closed_and_oriented`、`shell_euler_characteristic` |
 | 翻轉一個 shell face 的定向 | `shells_closed_and_oriented` |
 | 把一個 face 放進兩個 physical group | `groups_partition_each_dimension` |
 | 清空一個 physical group | `physical_groups_non_empty`、`every_emitted_face_in_one_group` |
 | 把一個 face 從其 physical group 移除 | `every_emitted_face_in_one_group` |
 | 在 union 中指名不存在的 group | `unions_reference_primary_groups` |
 | 移除介面 face 一側的 volume | `interior_faces_have_two_sides` |
-| 改掉某個 slab arrangement 記錄的面積 | `area_conservation_per_arrangement` |
+| 改掉某個 level arrangement 記錄的面積 | `area_conservation_per_arrangement` |
 | 移除最深 inset band 的一個 cell（有 band 的模型） | `band_area_monotone` |
+| 把曲面 wall 的上 arc 換到別的圓（stage 層的 scene，需要圓弧） | `curved_walls_are_single_cylinders` |
 :::
 
-這九種缺陷是原型計算：只有兩種（移除 shell 的一個 face、破壞 band 的劃分）是原型測試套件裡的測試，其餘由 figure script 套用。production 的 `tests/test_sgb_validation.py` 各自以單元測試竄改模型並斷言對應的 check 失敗（刪掉一個 face、翻轉 loop、face 進兩個 group、清空 group 或移除成員、union 指向未知 group、interface face 少一側、面積不守恆、band 的劃分或面積單調性），另外新增一個：把曲面 wall 的上 arc 換到別的圓，由 `curved_walls_are_single_cylinders` 抓到。每一種缺陷都被指名它的 check 抓到，沒有被不相關的 check 抓到；若兩條陳述都描述同一種缺陷（少了一個 face 既留下未封閉的 edge，也讓 Euler characteristic 錯誤），則被抓到兩次。驗證器是針對規劃缺陷的安全網，不是關於來源的證明。
+這十種缺陷由本頁的 script 對 production 套件套用：前九種各對真實輸入（Route B；band 的那種對加了 band 請求的版本）的全新 build 竄改 record，最後一種需要圓弧，用 stage 層 scene `pad_in_ground("B")`（`tests/sgb_scenes.py`），再以 `validate_model` 重新驗證。production 的 `tests/test_sgb_validation.py` 各自以單元測試竄改模型並斷言對應的 check 失敗（刪掉一個 face、翻轉 loop、face 進兩個 group、清空 group 或移除成員、union 指向未知 group、interface face 少一側、面積不守恆、band 的劃分或面積單調性、把曲面 wall 的上 arc 換到別的圓）。每一種缺陷都被指名它的 check 抓到，沒有被不相關的 check 抓到；若兩條陳述都描述同一種缺陷（少了一個 face 既留下未封閉的 edge，也讓 Euler characteristic 錯誤；清空一個 group 既使它為空，也讓它原本的 face 沒有 group），則被抓到兩次。驗證器是針對規劃缺陷的安全網，不是關於來源的證明。
 
 ## 遇到失敗怎麼辦
 
@@ -258,4 +259,4 @@ flowchart LR
 
 ## 補充：重現資料
 
-圖與被竄改 shell 的範例由 `zh-TW/docs/design/sgb/_figures/validation.py` 在 `experiments/sgb-redesign/prototype` 的 prototype 上產生（原型計算）；數字在 `figures/validation-numbers.json`。production 的數字：invariant 清單是 `ConformalModel.report`（`validation_report` 檔案）的 31 個 check；catalogue 由 `python tests/sgb_catalogue_report.py --timings --out <資料夾>` 在 `scgsim` 套件根目錄產生（寫出 `catalogue.json`）；OCCT 的數字由 `check_file` 對 `tests/sgb_emit_cases.py` 的 `CASES` 逐一取得（單次執行，耗時隨機器而異）。原型的 OCCT 數字取自 `outputs/occt/reports/*.json` 與 `outputs/occt/negative_controls.{json,md}`；原型的 validator 與 load check 的 scaling 取自 `outputs/validator_scaling.md`。Brief 對應第 11 節與第 14 節；production 模組為 `validation`、`derivation/contacts`、`verification/loaded`、`verification/occt`；測試為 `tests/test_sgb_validation.py`、`tests/test_sgb_extreme_cases.py`、`tests/test_sgb_occt.py`。名詞見[詞彙表](index.qmd#glossary)。
+圖與被竄改 shell 的範例由 `zh-TW/docs/design/sgb/_figures/validation.py` 以 production 套件 `scgsim.geometry.sgb` 產生（`SGB_CORE` 指向 `claude/sgb-core` 的 checkout，用它的 Python 環境執行）；數字在 `figures/validation-numbers.json`，被竄改模型的完整報告在 `figures/validation-tampered-shell-report.json`（不含各 check 的耗時，它們不屬於任何輸出檔）。執行範例是 `tests/sgb_inputs.py` 的真實輸入 `gds_pad_in_ground`（Route B）。production 的數字：invariant 清單是 `ConformalModel.report`（`validation_report` 檔案）的 31 個 check；OCCT 的數字由 script 對六個真實輸入的模型與兩個 stage 層的 scene 以 `check_file` 取得（單次執行，耗時隨機器而異，需要 OCP）；catalogue 由 `python tests/sgb_catalogue_report.py --timings --out <資料夾>` 在 `scgsim` 套件根目錄產生（寫出 `catalogue.json`）。原型的 validator 與 load check 的 scaling 取自 `outputs/validator_scaling.md`（原型計算，沒有以 production 重做）。Brief 對應第 11 節與第 14 節；production 模組為 `validation`、`derivation/contacts`、`verification/loaded`、`verification/occt`；測試為 `tests/test_sgb_validation.py`、`tests/test_sgb_extreme_cases.py`、`tests/test_sgb_occt.py`。名詞見[詞彙表](index.qmd#glossary)。

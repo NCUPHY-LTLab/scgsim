@@ -1,7 +1,7 @@
 """Figure of why-plan-first.qmd: what a "build solids, then fragment" workflow hands to a Boolean kernel.
 
 This script does not run a Boolean operation and does not time one. It counts structure that is a fact of the
-input: for the Route B random layouts of the prototype, treat every prism as a separately built solid and count
+input: for the Route B random layouts of the production test scenes (``sgb_scenes.random_layout``), treat every prism as a separately built solid and count
 (a) the pairs whose bounding boxes overlap, split by whether a chip-sized body is involved, (b) the inner wires
 on the host faces of the ground plane, and (c) the coplanar face pairs whose boxes overlap.
 
@@ -18,8 +18,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from _intro_common import COLOURS, draw_footprint, save_plotly, save_svg, write_numbers
-
-from sgbproto.scenes import random_layout
+from sgb_scenes import random_layout
 
 NS = (100, 500, 1000, 5000, 20000)
 CHIP_BODIES = ("substrate", "vacuum", "ground")
@@ -55,7 +54,7 @@ def feature_pairs(boxes) -> int:
 
 
 def structure(n: int) -> dict:
-    spec = random_layout(n, seed=1, route="B")
+    spec = random_layout(n, seed=2, route="B")
     big = {p.entity_id: p for p in spec.prisms if p.entity_id in CHIP_BODIES}
     small = [p for p in spec.prisms if p.entity_id not in CHIP_BODIES]
     big_boxes = {k: box(p) for k, p in big.items()}
@@ -79,7 +78,7 @@ def structure(n: int) -> dict:
 
 
 def schematic(ax, n: int = 36) -> None:
-    spec = random_layout(n, seed=1, route="B")
+    spec = random_layout(n, seed=2, route="B")
     for p in spec.prisms:
         if p.entity_id in CHIP_BODIES:
             continue
@@ -123,7 +122,7 @@ def main() -> None:
                       legend=dict(orientation="h", y=-0.25))
     save_plotly(fig, "why-structure")
     numbers = {"rows": [{k: (round(v, 6) if isinstance(v, float) else v) for k, v in r.items()} for r in rows],
-               "assumptions": "each prism is one solid; boxes touching count as overlapping; layout pitch 260 um, seed 1"}
+               "assumptions": "each prism is one solid; boxes touching count as overlapping; layout pitch 260 um, seed 2"}
     write_numbers("why-structure", numbers)
     print(json.dumps(numbers["rows"], indent=1))
 

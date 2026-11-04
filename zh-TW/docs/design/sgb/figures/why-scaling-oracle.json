@@ -1,0 +1,49 @@
+{
+ "rows": [
+  {
+   "n_features": 500,
+   "oracle_emit_s": 2.284,
+   "oracle_load_s": 0.62,
+   "solid_mass_um3": {
+    "gmsh_api_oracle": {
+     "vacuum": 1262099628.5,
+     "substrate": -1111865111.2
+    },
+    "direct_writer": [
+     3569865651.3,
+     3576040000.0
+    ]
+   }
+  },
+  {
+   "n_features": 1000,
+   "oracle_emit_s": 8.88,
+   "oracle_load_s": 1.483,
+   "solid_mass_um3": {
+    "gmsh_api_oracle": {
+     "vacuum": 2368215217.2,
+     "substrate": -2232217736.8
+    },
+    "direct_writer": [
+     6910344986.8,
+     6922240000.0
+    ]
+   }
+  },
+  {
+   "n_features": 2000,
+   "oracle_emit_s": 63.291,
+   "oracle_load_s": 3.355,
+   "solid_mass_um3": {
+    "gmsh_api_oracle": {
+     "vacuum": 4590367264.0,
+     "substrate": -4528773313.4
+    },
+    "direct_writer": [
+     13665522979.9,
+     13689000000.0
+    ]
+   }
+  }
+ ]
+}

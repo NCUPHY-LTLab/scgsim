@@ -1,9 +1,8 @@
 {
  "airbridge_counts": {
-  "edges": 76,
-  "emitted_volumes": 2,
-  "faces": 37,
-  "groups": 7,
+  "edges": 78,
+  "faces": 43,
+  "groups": 18,
   "hot_pixels": 88,
   "level_cells": 16,
   "level_edges": 58,
@@ -13,13 +12,27 @@
   "slab_edges": 38,
   "slabs": 5,
   "vertices": 44,
-  "volumes": 3
+  "volumes": 7
  },
  "counts_pad_in_ground_B": {
+  "edges": 88,
+  "faces": 39,
+  "groups": 14,
+  "hot_pixels": 1508,
+  "level_cells": 11,
+  "level_edges": 58,
+  "levels": 4,
+  "prisms": 5,
+  "slab_cells": 6,
+  "slab_edges": 30,
+  "slabs": 3,
+  "vertices": 66,
+  "volumes": 4
+ },
+ "counts_pad_in_ground_B_midplane_port_stage_scene": {
   "edges": 94,
-  "emitted_volumes": 2,
   "faces": 41,
-  "groups": 10,
+  "groups": 14,
   "hot_pixels": 2500,
   "level_cells": 15,
   "level_edges": 80,
@@ -45,21 +58,21 @@
  },
  "layers": {
   "A_1": {
-   "cells": 4,
-   "edges": 22,
+   "cells": 5,
+   "edges": 28,
    "labels": [
-    "substrate | Ground",
+    "sheet: p1",
+    "substrate | ground",
     "substrate | pad",
     "substrate | vacuum"
    ]
   },
   "A_2": {
-   "cells": 5,
-   "edges": 28,
+   "cells": 4,
+   "edges": 22,
    "labels": [
-    "Ground | Ground",
-    "pad | pad",
-    "sheet: p1",
+    "ground | vacuum",
+    "pad | vacuum",
     "vacuum | vacuum"
    ]
   },
@@ -67,7 +80,7 @@
    "cells": 4,
    "edges": 22,
    "labels": [
-    "Ground",
+    "ground",
     "pad",
     "vacuum"
    ]
@@ -125,23 +138,16 @@
      "pad"
     ],
     [
-     "vacuum",
-     "ground",
-     "pad"
-    ],
-    [
      "vacuum"
     ]
    ],
    "levels_um": [
     -100.0,
     0.0,
-    0.1,
     0.2,
     100.0
    ],
    "sheets_per_level": [
-    [],
     [],
     [
      "p1"
@@ -152,57 +158,82 @@
   }
  },
  "walls": {
-  "coalesced": 32,
-  "horizontal_faces": 9,
-  "metal_coalesced": 20,
-  "metal_uncoalesced": 36,
-  "split_walls": [
-   {
-    "group": "MA::pad",
-    "mid_um": [
-     50.0,
-     -3.0
-    ],
-    "z": [
-     0.0,
-     0.1
-    ]
-   },
-   {
-    "group": "MA::pad",
-    "mid_um": [
-     50.0,
-     -3.0
-    ],
-    "z": [
-     0.1,
-     0.2
-    ]
-   },
-   {
-    "group": "MA::Ground",
-    "mid_um": [
-     80.0,
-     0.0
-    ],
-    "z": [
-     0.0,
-     0.1
-    ]
-   },
-   {
-    "group": "MA::Ground",
-    "mid_um": [
-     80.0,
-     0.0
-    ],
-    "z": [
-     0.1,
-     0.2
-    ]
-   }
-  ],
-  "total_faces": 41,
-  "uncoalesced": 52
+  "mid_plane_port_stage_scene": {
+   "coalesced": 32,
+   "horizontal_faces": 9,
+   "levels_um": [
+    -100.0,
+    0.0,
+    0.1,
+    0.2,
+    100.0
+   ],
+   "metal_coalesced": 20,
+   "metal_uncoalesced": 36,
+   "metal_walls_cut_inside_the_metal_layer": 4,
+   "split_walls": [
+    {
+     "group": "MA::pad::sidewall",
+     "mid_um": [
+      50.0,
+      -3.0
+     ],
+     "z": [
+      0.0,
+      0.1
+     ]
+    },
+    {
+     "group": "MA::pad::sidewall",
+     "mid_um": [
+      50.0,
+      -3.0
+     ],
+     "z": [
+      0.1,
+      0.2
+     ]
+    },
+    {
+     "group": "MA::ground::sidewall",
+     "mid_um": [
+      80.0,
+      0.0
+     ],
+     "z": [
+      0.0,
+      0.1
+     ]
+    },
+    {
+     "group": "MA::ground::sidewall",
+     "mid_um": [
+      80.0,
+      0.0
+     ],
+     "z": [
+      0.1,
+      0.2
+     ]
+    }
+   ],
+   "total_faces": 41,
+   "uncoalesced": 52
+  },
+  "support_plane_port": {
+   "coalesced": 30,
+   "horizontal_faces": 9,
+   "levels_um": [
+    -100.0,
+    0.0,
+    0.2,
+    100.0
+   ],
+   "metal_coalesced": 18,
+   "metal_uncoalesced": 18,
+   "metal_walls_cut_inside_the_metal_layer": 0,
+   "total_faces": 39,
+   "uncoalesced": 30
+  }
  }
 }

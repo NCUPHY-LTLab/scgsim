@@ -1,12 +1,14 @@
 """Figures of layered-model.qmd: prisms, levels, slabs, slab versus level arrangements, wall coalescing.
 
-Computed from the prototype: ``pad_in_ground("B")`` (running example) and ``airbridge()`` (extended example).
+Computed with the production package ``scgsim.geometry.sgb``: the running example (``_intro_common.running_example``,
+Route B, port on the support plane z = 0) and the extended example ``sgb_scenes.airbridge()``.  The wall-coalescing
+figure also builds the stage scene whose port lies at the metal mid-plane z = 0.1: the compiler never places a port
+there, but in that scene a level does cut the metal walls, which the running example no longer shows.
 
 Writes ``figures/layered-stack.svg`` (x-z sections with levels, slabs and active sets),
 ``figures/layered-exploded.html`` and ``.svg`` (3-D view prisms -> levels -> slabs of the airbridge),
-``figures/layered-slab-vs-level.svg`` (plan views of S_1, A_1, A_2 of the running example),
-``figures/layered-walls.svg`` (wall faces of the running example with and without coalescing) and
-``figures/layered-numbers.json``.
+``figures/layered-slab-vs-level.svg`` (plan views of A_1, S_1, A_2 of the running example),
+``figures/layered-walls.svg`` (wall faces with and without coalescing) and ``figures/layered-numbers.json``.
 """
 
 from __future__ import annotations
@@ -22,13 +24,13 @@ from matplotlib.patches import PathPatch
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from _intro_common import (
-    COLOURS, G_UM, cell_rings_um, domain_colour, domain_name, draw_section, mpl_path, prism_colour, save_plotly, save_svg,
-    write_numbers,
+    COLOURS, G_UM, build_example, cell_rings_um, domain_colour, domain_name, draw_section, mpl_path, running_example,
+    save_plotly, save_svg, write_numbers,
 )
 
-from sgbproto.levels import build_levels
-from sgbproto.pipeline import build
-from sgbproto.scenes import airbridge, pad_in_ground
+from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.prisms.levels import build_levels
+from sgb_scenes import airbridge
 
 # --------------------------------------------------------------------------- stack of levels and slabs
 
@@ -63,8 +65,6 @@ def stack_figure(specs: dict) -> dict:
 
 # --------------------------------------------------------------------------- slab versus level arrangement
 
-LEVEL_PALETTE = ["#9aa0a6", "#3a6ea5", "#f2e8b6", "#bfe3d0", "#cfe0f1", "#d6453d", "#e0b0ff", "#f4a582"]
-
 
 def level_key(label) -> str:
     if label.sheet is not None:
@@ -86,14 +86,18 @@ def draw_layer(ax, layer, fill, view) -> None:
             biggest = max(inside.geoms, key=lambda g: g.area) if hasattr(inside, "geoms") else inside
             p = polylabel(biggest, tolerance=0.5)
             ax.text(p.x, p.y, text.replace(" | ", "\n| "), fontsize=6.5, ha="center", va="center", bbox=dict(facecolor="white", edgecolor="none", alpha=0.8, pad=1.2))
-    ax.set_xlim(*view[0]); ax.set_ylim(*view[1]); ax.set_aspect("equal")
+    ax.set_xlim(*view[0])
+    ax.set_ylim(*view[1])
+    ax.set_aspect("equal")
     ax.set_xlabel("x (µm)")
 
 
-def slab_vs_level_figure(result) -> dict:
-    s1, a1, a2 = result.slabs[1], result.level_layers[1], result.level_layers[2]
-    palette = {"substrate | Ground": "#d9d9d9", "substrate | pad": "#c6dbef", "substrate | vacuum": "#e5f2e5",
-               "Ground | Ground": "#bdbdbd", "pad | pad": "#9ecae1", "vacuum | vacuum": "#fbf6df", "sheet: p1": COLOURS["port"]}
+def slab_vs_level_figure(model) -> dict:
+    """The arrangements around the metal: A_1 (z = 0, the port sheet lies here), the metal slab S_1 and A_2 (z = 0.2)."""
+    lab = model.labelled
+    a1, s1, a2 = lab.level_layers[1], lab.slabs[1], lab.level_layers[2]
+    palette = {"substrate | ground": "#d9d9d9", "substrate | pad": "#c6dbef", "substrate | vacuum": "#e5f2e5",
+               "ground | vacuum": "#bdbdbd", "pad | vacuum": "#9ecae1", "vacuum | vacuum": "#fbf6df", "sheet: p1": COLOURS["port"]}
 
     def level_fill(label):
         key = level_key(label)
@@ -104,10 +108,11 @@ def slab_vs_level_figure(result) -> dict:
 
     view = ((-100, 100), (-75, 75))
     fig, axes = plt.subplots(1, 3, figsize=(14, 4.8), sharey=True)
+    z1 = float(lab.levels.levels[2])
     panels = (
         (axes[0], a1, level_fill, f"A_1 at z = 0: {len(a1.arr.faces) - 1} cells, {len(a1.arr.edges)} edges"),
-        (axes[1], s1, slab_fill, f"S_1, slab 0 to 0.1 µm: {len(s1.arr.faces) - 1} cells, {len(s1.arr.edges)} edges"),
-        (axes[2], a2, level_fill, f"A_2 at z = 0.1 µm: {len(a2.arr.faces) - 1} cells, {len(a2.arr.edges)} edges"),
+        (axes[1], s1, slab_fill, f"S_1, slab 0 to {z1:g} µm: {len(s1.arr.faces) - 1} cells, {len(s1.arr.edges)} edges"),
+        (axes[2], a2, level_fill, f"A_2 at z = {z1:g} µm: {len(a2.arr.faces) - 1} cells, {len(a2.arr.edges)} edges"),
     )
     for ax, layer, fill, title in panels:
         draw_layer(ax, layer, fill, view)
@@ -126,9 +131,10 @@ def slab_vs_level_figure(result) -> dict:
 # --------------------------------------------------------------------------- wall coalescing
 
 
-def wall_facts(result) -> dict:
-    topo = result.topology
+def wall_facts(model) -> dict:
+    topo = model.topology
     levels = list(topo.levels)
+    metal_slab = (levels[1], levels[-2])  # the metal layer of the running example: the slabs between its two faces
     walls = []
     for f in topo.faces.values():
         if f.kind != "wall":
@@ -146,22 +152,24 @@ def wall_facts(result) -> dict:
         mid = (sum(xs) / len(xs) * G_UM, sum(ys) / len(ys) * G_UM)
         z0, z1 = f.z_range
         slabs = sum(1 for lo, hi in zip(levels, levels[1:]) if lo >= z0 and hi <= z1)
-        walls.append({"id": f.id, "group": f.group, "z": (float(z0), float(z1)), "slabs": slabs, "mid": mid,
-                      "length_um": length * G_UM / 2, "curved": f.curved})
+        walls.append({"id": f.id, "group": model.routed.face_group.get(f.id) or "", "z": (float(z0), float(z1)), "slabs": slabs, "mid": mid,
+                      "length_um": length * G_UM / 2, "curved": f.curved, "cut": (z0, z1) != metal_slab})
     metal = [w for w in walls if w["group"].startswith("MA::")]
     return {"walls": walls, "coalesced": len(walls), "uncoalesced": sum(w["slabs"] for w in walls),
-            "metal_coalesced": len(metal), "metal_uncoalesced": sum(w["slabs"] for w in metal)}
+            "metal_coalesced": len(metal), "metal_uncoalesced": sum(w["slabs"] for w in metal),
+            "metal_walls_cut_inside_the_metal_layer": sum(1 for w in metal if w["cut"])}
 
 
-def walls_figure(result) -> dict:
-    facts = wall_facts(result)
+def walls_figure(support, mid) -> dict:
+    """Left: metal wall faces of the stage scene with the port at z = 0.1.  Right: counts for both port planes."""
+    facts, facts_support = wall_facts(mid), wall_facts(support)
     walls = facts["walls"]
     fig, axes = plt.subplots(1, 2, figsize=(12.5, 4.4), gridspec_kw={"width_ratios": [1.5, 1]})
     ax = axes[0]
-    rows = (("pad outline", lambda w: w["group"] == "MA::pad" and math.hypot(w["mid"][0] + 25, w["mid"][1] - 5) > 12, (0.0, 0.0)),
-            ("ground cutout", lambda w: w["group"] == "MA::Ground" and abs(w["mid"][0]) < 85 and abs(w["mid"][1]) < 65, (0.0, 0.0)),
-            ("pad hole (r = 8 µm)", lambda w: w["group"] == "MA::pad" and math.hypot(w["mid"][0] + 25, w["mid"][1] - 5) <= 12, (-25.0, 5.0)))
-    x_offset, ticks, labels = 0.0, [], []
+    rows = (("pad outline", lambda w: w["group"] == "MA::pad::sidewall" and math.hypot(w["mid"][0] + 25, w["mid"][1] - 5) > 12, (0.0, 0.0)),
+            ("ground cutout", lambda w: w["group"] == "MA::ground::sidewall" and abs(w["mid"][0]) < 85 and abs(w["mid"][1]) < 65, (0.0, 0.0)),
+            ("pad hole (r = 8 µm)", lambda w: w["group"] == "MA::pad::sidewall" and math.hypot(w["mid"][0] + 25, w["mid"][1] - 5) <= 12, (-25.0, 5.0)))
+    x_offset = 0.0
     for title, pick, centre in rows:
         columns: dict[tuple, list] = {}
         for w in (w for w in walls if pick(w)):
@@ -178,25 +186,44 @@ def walls_figure(result) -> dict:
         ax.text(start, 0.212, title, ha="left", fontsize=8, fontweight="bold")
         x_offset += 12
     ax.axhline(0.1, color="#222", ls="--", lw=1.0, zorder=10)
-    ax.set_xlim(-4, x_offset); ax.set_ylim(-0.01, 0.24)
-    ax.set_xlabel("wall pieces in boundary order, width = plan length (µm)"); ax.set_ylabel("z (µm)")
-    ax.set_title("Metal wall faces of the running example (one bar per face)")
+    ax.set_xlim(-4, x_offset)
+    ax.set_ylim(-0.01, 0.24)
+    ax.set_xlabel("wall pieces in boundary order, width = plan length (µm)")
+    ax.set_ylabel("z (µm)")
+    ax.set_title("Metal wall faces of the stage scene with the port at z = 0.1 µm (one bar per face)")
     ax.legend(handles=[Line2D([0], [0], color=COLOURS["pad"], lw=8, label="one face spans both slabs (coalesced)"),
                        Line2D([0], [0], color=COLOURS["bad"], lw=8, label="cut at z = 0.1 µm where the port touches"),
                        Line2D([0], [0], color="#222", lw=1.2, ls="--", label="level z = 0.1 µm (port sheet plane)")],
               fontsize=7, frameon=False, loc="lower left", bbox_to_anchor=(0, -0.38), ncol=3)
     b = axes[1]
-    bars = b.bar(["one wall per slab\n(no coalescing)", "coalesced"], [facts["metal_uncoalesced"], facts["metal_coalesced"]], color=[COLOURS["ground"], COLOURS["pad"]])
-    for bar in bars:
-        b.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.2, f"{int(bar.get_height())}", ha="center", fontsize=9)
-    b.set_ylabel("metal wall faces"); b.set_title("Metal wall faces of pad_in_ground_B")
+    labels = ["port at z = 0\n(running example)", "port at z = 0.1\n(stage scene)"]
+    per_slab = [facts_support["metal_uncoalesced"], facts["metal_uncoalesced"]]
+    merged = [facts_support["metal_coalesced"], facts["metal_coalesced"]]
+    width = 0.38
+    for offset, values, colour, name in ((-width / 2, per_slab, COLOURS["ground"], "one wall per slab (no coalescing)"),
+                                         (width / 2, merged, COLOURS["pad"], "coalesced")):
+        bars = b.bar([i + offset for i in range(2)], values, width, color=colour, label=name)
+        for bar in bars:
+            b.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.4, f"{int(bar.get_height())}", ha="center", fontsize=9)
+    b.set_xticks(range(2))
+    b.set_xticklabels(labels, fontsize=8)
+    b.set_ylabel("metal wall faces")
+    b.set_title("Metal wall faces of the pad-in-ground, Route B")
+    b.legend(fontsize=7, frameon=False, loc="upper left")
+    b.set_ylim(0, max(per_slab) * 1.18)
     fig.tight_layout()
     save_svg(fig, "layered-walls")
-    return {"coalesced": facts["coalesced"], "uncoalesced": facts["uncoalesced"],
-            "metal_coalesced": facts["metal_coalesced"], "metal_uncoalesced": facts["metal_uncoalesced"],
-            "split_walls": [{"group": w["group"], "z": w["z"], "mid_um": [round(v, 1) for v in w["mid"]]} for w in walls if w["slabs"] == 1 and w["group"].startswith("MA::")],
-            "total_faces": len(result.topology.faces),
-            "horizontal_faces": sum(1 for f in result.topology.faces.values() if f.kind == "horizontal")}
+
+    def totals(model, f) -> dict:
+        return {"coalesced": f["coalesced"], "uncoalesced": f["uncoalesced"], "metal_coalesced": f["metal_coalesced"],
+                "metal_uncoalesced": f["metal_uncoalesced"], "total_faces": len(model.topology.faces),
+                "horizontal_faces": sum(1 for x in model.topology.faces.values() if x.kind == "horizontal"),
+                "levels_um": [float(z) for z in model.topology.levels],
+                "metal_walls_cut_inside_the_metal_layer": f["metal_walls_cut_inside_the_metal_layer"]}
+
+    return {"support_plane_port": totals(support, facts_support),
+            "mid_plane_port_stage_scene": {**totals(mid, facts),
+                "split_walls": [{"group": w["group"], "z": w["z"], "mid_um": [round(v, 1) for v in w["mid"]]} for w in walls if w["cut"] and w["group"].startswith("MA::")]}}
 
 
 # --------------------------------------------------------------------------- 3-D prisms, levels, slabs
@@ -306,16 +333,19 @@ def exploded_figures(spec) -> dict:
 
 
 def main() -> None:
-    pad = pad_in_ground("B")
+    pad = running_example("B")
     bridge = airbridge()
-    result = build(pad)
+    support = build_example("B")
+    mid = build_example("B", port_plane="mid")
+    bridge_model = build_model_from_catalogue(bridge, "B")
     numbers = {
         "stacks": stack_figure({"running": ("pad_in_ground_B", 0.0, pad), "extended": ("airbridge_B", 0.0, bridge)}),
-        "layers": slab_vs_level_figure(result),
-        "walls": walls_figure(result),
+        "layers": slab_vs_level_figure(support),
+        "walls": walls_figure(support, mid),
         "exploded": exploded_figures(bridge),
-        "counts_pad_in_ground_B": result.counts,
-        "airbridge_counts": build(bridge).counts,
+        "counts_pad_in_ground_B": support.counts,
+        "counts_pad_in_ground_B_midplane_port_stage_scene": mid.counts,
+        "airbridge_counts": bridge_model.counts,
     }
     write_numbers("layered", numbers)
     print(json.dumps(numbers, indent=1))

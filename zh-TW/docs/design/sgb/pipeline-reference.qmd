@@ -9,7 +9,7 @@ scgsim-id: "docs/design/sgb/pipeline-reference"
 
 這一頁是查詢用的：每個 stage 讀什麼、產生什麼、出問題時怎麼辦，以及 stage 之間傳遞的 record 欄位。stage 與 record 的設計見[總覽](index.qmd)，名詞見[術語表](index.qmd#glossary)。
 
-名稱與欄位是 production 的（`scgsim.geometry.sgb` 的 `records`、`prisms`、`noding`、`arrangement`、`labelling`、`derivation`、`assembly`、`routes`、`validation`、`emission`、`sidecar`）；與原型（`sgbproto/`）不同之處另註。**S0 與 S1 不在 SGB package 中**：它們沿用 develop 的固定 grid source preparation，S2 直接讀它們的產物（effective `GeometryBuildInput` 與 `RepresentationContext`）。原型沒有 S0 與 S1，直接從 `ModelSpec` 開始，所以原型能跑通並不代表與 `GeometryPlan` 整合；production 的 S2 則由真實輸入的測試涵蓋。
+名稱與欄位是 production 的（`scgsim.geometry.sgb` 的 `records`、`prisms`、`noding`、`arrangement`、`labelling`、`derivation`、`assembly`、`routes`、`validation`、`emission`、`sidecar`）。**S0 與 S1 不在 SGB package 中**：它們沿用 develop 的固定 grid source preparation，S2 直接讀它們的產物（effective `GeometryBuildInput` 與 `RepresentationContext`）；S2 由真實輸入的測試涵蓋。
 
 本頁分開使用兩個詞：**cell** 是 arrangement 中的平面區域；**face** 是 topology 中實際輸出的 BREP face，一個 face 由一個或多個 cell 合併而成（horizontal face），或是 wall。
 
@@ -31,7 +31,7 @@ scgsim-id: "docs/design/sgb/pipeline-reference"
 | S10 | Emission | 計畫 → BREP/XAO 直接序列化 | 逐 chunk 平行寫出；其餘序列 | `SgbArtifacts.timings`：`plan`、`write_brep`、`write_xao`、`reports`、`sidecar`（strict mode 另有 `occt`） |
 :::
 
-Route A、Route B 與 Route C 是 S7 的 labelling 政策（以及 S1 的 prism 詮釋），不是不同的 pipeline。Route C 保留 conductor volume 並在內部做 mesh（D1，納入 v1），production 已實作並有測試；原型時期它只是一個旗標。
+Route A、Route B 與 Route C 是 S7 的 labelling 政策（以及 S1 的 prism 詮釋），不是不同的 pipeline。Route C 保留 conductor volume 並在內部做 mesh（D1，納入 v1），production 已實作並有測試。
 
 ## Stage 細節
 
@@ -53,7 +53,7 @@ S0 與 S1 沿用 develop 中已有的 fixed-grid source preparation：source 的
 
 ### S1 Physical interpretation
 
-目前的 Thin Film contract 保留真實的金屬宣告：`PhysicalLayerDeclaration` 帶有厚度（例如 100 nm）與 source identity。S1 以 `interpret_physical_geometry` 與明確的 approximation profile（例如 `thin_film`）把它轉成零厚度的 effective sheet。Route A 拒絕的是**經過 S1 之後**仍然有厚度的 conductor，也就是沒有任何 profile 把它對應成 sheet；它不是要求 source 一開始就是零厚度。production 的 route check 只拒絕經過 S1 之後仍宣告為 film（`stack_film`、`local_film`）的有限厚度導體；`finite_volume` 本體（bump、post 等）與沒有物理宣告的導體照樣接受。原型在入口直接對所有有厚度的 conductor 拋出 `RouteError`，那是原型的簡化，不是 S1 的設計。
+目前的 Thin Film contract 保留真實的金屬宣告：`PhysicalLayerDeclaration` 帶有厚度（例如 100 nm）與 source identity。S1 以 `interpret_physical_geometry` 與明確的 approximation profile（例如 `thin_film`）把它轉成零厚度的 effective sheet。Route A 拒絕的是**經過 S1 之後**仍然有厚度的 conductor，也就是沒有任何 profile 把它對應成 sheet；它不是要求 source 一開始就是零厚度。route check 只拒絕經過 S1 之後仍宣告為 film（`stack_film`、`local_film`）的有限厚度導體；`finite_volume` 本體（bump、post 等）與沒有物理宣告的導體照樣接受。
 
 ::: {.askr-table-compact}
 | | |
@@ -77,7 +77,7 @@ S0 與 S1 沿用 develop 中已有的 fixed-grid source preparation：source 的
 | 失敗 | `InputError`：沒有格點資訊、頂點不在宣告的格點上、conductor 不在 representation context 中、port 沒有 host、host 沒有宣告 `layer_attachment_face`、host 的宣告平面彼此不同、重建紀錄不合法；`UnsupportedCurveError`：spline 邊界；`ValueError`：$z_1 < z_0$ 的 prism、沒有 Net 的 conductor；`RouteError`：route 不認得，或 prism 不適用該 route |
 :::
 
-S2 從 S1 收到的內容：每個 effective prism 帶有 footprint（外圈與 hole，宣告的 arc 以四段 quarter `ArcCarrier` 表示）、Z 區間（精確分數）、材料、Net、priority 與 entity ID；另記下來源的 layer 與 occurrence，讓 priority 衝突的錯誤訊息能指出該補哪個來源。座標在宣告的格點上，不在格點上的頂點會以 `InputError` 指名 Entity。**Lumped port 的平面**是 host 導體的 support plane：S2 讀每個 host 的 `PhysicalLayerDeclaration`（film 的 `layer_attachment_face`，或零厚度 source sheet 自己的平面），用共同的 `PhysicalRepresentationPlan` 投影到 effective 模型；所有 host 必須落在同一個 effective 平面，host 沒有宣告時以 `InputError` 指名 host（PDK 必須宣告 `layer_attachment_face`），沒有中間平面的後備。port 因此與它下方的介面同一個平面：它佔去該處的 SA 面積，但不移動 band（見 [Routes](routes.qmd#port-support-plane)）。測試涵蓋由 GDS 與 layer stack、thin-film profile、junction 與 `GeometryPlan` snapshot 得到的真實輸入，也涵蓋每個 Entity 的 identity 與 lineage 通過 S0 的 polygon Boolean 之後仍然保留，以及薄於 $g$ 的 slab 從來源保留到 arrangement。
+S2 從 S1 收到的內容：每個 effective prism 帶有 footprint（外圈與 hole，宣告的 arc 以四段 quarter `ArcCarrier` 表示）、Z 區間（精確分數）、材料、Net、priority 與 entity ID；另記下來源的 layer 與 occurrence，讓 priority 衝突的錯誤訊息能指出該補哪個來源。座標在宣告的格點上，不在格點上的頂點會以 `InputError` 指名 Entity。**Lumped port 的平面**是 host 導體的 support plane：S2 讀每個 host 的 `PhysicalLayerDeclaration`（film 的 `layer_attachment_face`，或零厚度 source sheet 自己的平面），用共同的 `PhysicalRepresentationPlan` 投影到 effective 模型；所有 host 必須落在同一個 effective 平面，host 沒有宣告時以 `InputError` 指名 host（PDK 必須宣告 `layer_attachment_face`）。port 因此與它下方的介面同一個平面：它佔去該處的 SA 面積，但不移動 band（見 [Routes](routes.qmd#port-support-plane)）。測試涵蓋由 GDS 與 layer stack、thin-film profile、junction 與 `GeometryPlan` snapshot 得到的真實輸入，也涵蓋每個 Entity 的 identity 與 lineage 通過 S0 的 polygon Boolean 之後仍然保留，以及薄於 $g$ 的 slab 從來源保留到 arrangement。
 
 ### S3 Cut families
 
@@ -143,7 +143,7 @@ Tile seam 不是 family，所以沒有 `dissolve` edge 政策；`dissolve` 這�
 
 ### S8 Identity 與 group
 
-production 依 D5 以 Entity 歸屬命名 group，見 [D5](decisions.qmd#d5)；原型是 per Net。
+production 依 D5 以 Entity 歸屬命名 group，見 [D5](decisions.qmd#d5)。
 
 ::: {.askr-table-compact}
 | | |
@@ -195,8 +195,8 @@ production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C �
 | `Footprint` | `outer`（CCW ring）、`holes`（CW ring）、`arc_runs` | 整數 grid 座標；arc 以 chord run 加 `arc_runs` 表示 |
 | `PrismRecord` | `entity_id`、`footprint`、`z0`、`z1`（精確分數）、`material`、`material_kind`（`conductor`、`dielectric`、`vacuum`、`port`）、`net_id`、`priority`、`polygon`、`arcs`、`port`（`PortIdentity`）、`feature_kind`、`occurrence`、`layer` | `z0 == z1` 是 sheet（`is_sheet`）；conductor 必須有 `net_id`；port prism 一定是 sheet 且帶 `PortIdentity`；`feature_kind`（`stack_film`、`local_film`、`finite_volume`）供 Route A 的規則使用，`occurrence` 與 `layer` 供 priority 錯誤訊息指出來源 |
 | `CurveFamilyRecord` | `family_id`、`role`、`carriers`、`target_levels`、`edge_policy`（`required`、`refinement_only`）、`arcs`、`support` | inset band 的 `support` 是 `SupportRegion`；carrier id 形如 `band_pad_top/ring0/edge8@m100.0`（primitive、margin、片段），reflex arc 是 `…/corner<k>@m<margin>` |
-| `SupportRegion` | `rings`（精確 primitive，內部在左側）、`margins`（grid unit，遞增） | inset family 的 distance origin |
-| `PrismCatalogue` | `grid`、`prisms`、`families`、`name` | arrangement 階段的輸入；route 是 build 函式的引數，不在 catalogue 內（原型的 `ModelSpec` 把 route 放在 `meta`） |
+| `SupportRegion` | `rings`（精確 primitive，內部在左側）、`margins`（grid unit，遞增）、`origin_mask`（每個 primitive 是否為 gap edge） | inset family 的 support；`origins` 是 distance origin（gap edge，見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)），其餘邊界是 `free_boundary` |
+| `PrismCatalogue` | `grid`、`prisms`、`families`、`name` | arrangement 階段的輸入；route 是 build 函式的引數，不在 catalogue 內 |
 | `LevelStructure` | `levels`、`slab_active`、`level_sheets`、`level_families` | level 是排序後相異的 Z 值；slab $i$ 是 $(z_i, z_{i+1})$ |
 | `Domain` | `kind`、`material`、`net`、`owner` | 佔據 slab cell 的東西；`name` 是擁有它的 Entity（D5） |
 | `SheetOwner` | `kind`（`conductor`、`port`）、`name`、`net` | 零厚度 face 的 owner |
@@ -242,7 +242,7 @@ primary group 命名為 `<kind>::<qualified entity id>::<face kind>[::band=k]`�
 | `<name>::band=k` | 同一種 face 位於其 support region 的 inset band $k$ 內（Route A：`pad::band=k`；Route B 與 C：`MA::pad::top::band=k` 與 `MS::pad::bottom::band=k`） |
 :::
 
-裸的 entity id 指物件本身，帶界面前綴的名稱指兩個東西之間的 face（見 [Identity](identity.qmd)）。原型（per Net）的名稱是 `MA::<net>`、`MS::<net>`、`PEC::<net>` 等；`PEC::<net>` 在 production 由 `unions.nets` 取代。
+裸的 entity id 指物件本身，帶界面前綴的名稱指兩個東西之間的 face（見 [Identity](identity.qmd)）。Net 的 PEC 不是一組 face：它由 `unions.nets` 列出該 Net 所有導體表面的 group。
 
 ## 每個模型寫出的檔案
 
@@ -257,7 +257,7 @@ primary group 命名為 `<kind>::<qualified entity id>::<face kind>[::band=k]`�
 | `….validation.json` | `passed`、檢查清單（不含時間）與 `counts` |
 :::
 
-原型另外寫 `identity.json`、`stage_summary.json`、`arrangements.json` 與 Gmsh API oracle 的 `sgbproto-sidecar-1`；production 沒有這幾個檔案（stage 的時間與數量在 `ConformalModel` 與 `SgbArtifacts` 的 `timings`、`counts` 中，不寫進任何檔案）。
+stage 的時間與數量在 `ConformalModel` 與 `SgbArtifacts` 的 `timings`、`counts` 中，不寫進任何檔案。
 
 ## Validation 檢查
 

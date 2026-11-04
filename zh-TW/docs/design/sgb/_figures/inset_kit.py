@@ -2,16 +2,22 @@
 
 Owns three things only:
 
-* locating the read-only prototype and the output folder (``docs/design/sgb/figures``);
+* locating the production SGB core (``scgsim.geometry.sgb``, the ``SGB_CORE`` checkout) with its test-side scene
+  builders, the shared pad-in-ground running example, and the small geometry helpers that turn a level arrangement
+  into polylines;
 * one small scene description (panels of lines, polygons, points and labels) that is drawn twice,
   as a self-contained-page Plotly HTML (sharing one ``plotly.min.js``) and as a matplotlib SVG;
 * the colour palette used on those pages.
 
-It computes nothing about SGB; every number comes from the prototype or from the page's own script.
+It computes nothing about SGB by itself; every number comes from the production package or from the page's own script.
+Run the scripts that import this module with the Python of the SGB core checkout::
+
+    SGB_CORE=<sgb-core checkout> <sgb-core>/.artifacts/env/bin/python docs/design/sgb/_figures/<script>.py
 """
 
 from __future__ import annotations
 
+import math
 import os
 import shutil
 import sys
@@ -20,11 +26,12 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 FIGURES = HERE.parent / "figures"
-PROTOTYPE = HERE.parents[4] / "experiments" / "sgb-redesign" / "prototype"
-PROTOTYPE_OUTPUTS = PROTOTYPE / "outputs"
+ROOT = HERE.parents[4]
+# The checkout that contains scgsim.geometry.sgb and its tests (defaults to this one).
+SGB_CORE = Path(os.environ.get("SGB_CORE", str(ROOT)))
 
-if str(PROTOTYPE) not in sys.path:
-    sys.path.insert(0, str(PROTOTYPE))
+if str(SGB_CORE / "tests") not in sys.path:
+    sys.path.insert(0, str(SGB_CORE / "tests"))  # sgb_scenes, sgb_emit_cases, sgb_inputs: the test-side scene builders
 
 import matplotlib  # noqa: E402
 
@@ -35,7 +42,24 @@ from matplotlib.patches import PathPatch  # noqa: E402
 from matplotlib.path import Path as MplPath  # noqa: E402
 from plotly.subplots import make_subplots  # noqa: E402
 
+try:
+    from sgb_scenes import lumped_port, pad_in_ground, rect_um  # noqa: E402
+
+    from scgsim.geometry.sgb.arrangement.arcs import sample_arc  # noqa: E402
+    from scgsim.geometry.sgb.cutfamilies.requests import ConductorSurface, InsetRequest, SolutionInterface  # noqa: E402
+    from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue  # noqa: E402
+    from scgsim.geometry.sgb.records.carriers import LineEdge  # noqa: E402
+    from scgsim.geometry.sgb.records.prisms import PrismCatalogue  # noqa: E402
+except ImportError as error:  # pragma: no cover -- a usage message, not logic
+    raise SystemExit(
+        f"{error}\nThese figures are computed by the production SGB core: set SGB_CORE to a checkout that contains "
+        "scgsim.geometry.sgb and its tests/, and run this script with that checkout's Python "
+        "(<sgb-core>/.artifacts/env/bin/python)."
+    ) from error
+
 G_UM = 0.001  # um per grid unit (default grid, 1 nm)
+MARGINS = (0.1, 0.5, 2.0)  # the running example's three margins (um)
+LEVEL_Z0 = 1  # index of the z = 0 level (levels of the pad-in-ground example: -100, 0, 100 um, plus 0.2 in Route B)
 
 # One colour family per kind of thing; sequential ramps run from the edge band (dark) inwards (light).
 PAD_BANDS = ["#08306b", "#2171b5", "#6baed6", "#c6dbef"]
@@ -57,6 +81,98 @@ def ensure_plotly_js() -> None:
         import plotly
 
         shutil.copyfile(Path(plotly.__file__).parent / "package_data" / "plotly.min.js", target)
+
+
+# --------------------------------------------------------------------------- the production running example
+
+
+def pad_catalogue(route: str = "A", *, with_port: bool = True, **scene_options) -> PrismCatalogue:
+    """The pad-in-ground running example as a stage-level prism catalogue, its lumped port on the support plane.
+
+    The scene is ``tests/sgb_scenes.py::pad_in_ground`` (ground with a cutout; a pad with a chamfer, a 20 x 15 um notch,
+    a 5 um rounded corner and a circular hole of radius 8 um).  That scene puts the Route B port at the 0.2 um metal's
+    mid-plane to exercise an embedded sheet; the compiler never does: a port lies on the plane its hosts' film
+    declares (``prisms.ports``), which for a metal on the substrate is z = 0, the substrate surface.  So the port is
+    replaced here by the same sheet at z = 0, whatever the route.  ``scene_options`` go to ``pad_in_ground``.
+    """
+    scene = pad_in_ground(route, with_port=False, **scene_options)
+    if not with_port:
+        return scene
+    port = lumped_port("p1", rect_um(50, -5, 80, 5), "A")  # "A" selects the z = 0 sheet plane, the support plane
+    assert port.z0 == port.z1 == 0
+    return PrismCatalogue(scene.grid, (*scene.prisms, port), name=scene.name)
+
+
+def pad_requests(route: str, margins: tuple[float, ...] = MARGINS, *, regions: tuple[str, ...] = ("pad", "gap")) -> tuple[InsetRequest, ...]:
+    """Bands on the pad (its sheet in Route A, top and bottom face otherwise) and on the substrate-vacuum gap."""
+    out: list[InsetRequest] = []
+    if "pad" in regions:
+        if route == "A":
+            out.append(InsetRequest("band_pad_top", ConductorSurface("pad", "sheet"), margins))
+        else:
+            out.append(InsetRequest("band_pad_top", ConductorSurface("pad", "top"), margins))
+            out.append(InsetRequest("band_pad_bottom", ConductorSurface("pad", "bottom"), margins))
+    if "gap" in regions:
+        out.append(InsetRequest("band_gap", SolutionInterface("substrate", "vacuum"), margins))
+    return tuple(out)
+
+
+def pad_model(route: str = "A", margins: tuple[float, ...] | None = MARGINS, *, with_port: bool = True,
+              regions: tuple[str, ...] = ("pad", "gap"), tiles: int = 1, workers: int = 1, keep_raw: bool = False,
+              **scene_options) -> ConformalModel:
+    """The validated production model of the running example (``margins=None``: no bands).
+
+    ``tiles`` and ``workers`` configure the per-tile runtime (the model is the same for every value); ``keep_raw`` keeps the
+    pre-dissolution arrangements; ``scene_options`` go to ``pad_in_ground``.
+    """
+    insets = pad_requests(route, margins, regions=regions) if margins else ()
+    return build_model_from_catalogue(pad_catalogue(route, with_port=with_port, **scene_options), route, insets=insets,
+                                      tiles=tiles, workers=workers, keep_raw=keep_raw)
+
+
+# --------------------------------------------------------------------------- arrangement helpers
+
+
+def edge_polyline(arr, curves, edge_index: int, step: float = 150.0) -> list[tuple[float, float]]:
+    """One arrangement edge as a polyline in grid units, a -> b (arcs sampled about every ``step`` grid units)."""
+    e = arr.edges[edge_index]
+    curve = curves[edge_index]
+    if curve is None:
+        return [e.a, e.b]
+    chord = math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1])
+    return sample_arc(curve, e.a, e.b, max(3, int(chord / step) + 2))
+
+
+def cycle_polyline(arr, curves, cycle_index: int, step: float = 150.0) -> list[tuple[float, float]]:
+    """A boundary cycle of half-edges as a closed-loop polyline in grid units (arcs realised), in travel order."""
+    points: list[tuple[float, float]] = []
+    for h in arr.cycles[cycle_index].half_edges:
+        run = edge_polyline(arr, curves, h >> 1, step)
+        if h & 1:
+            run = run[::-1]
+        points.extend(run[:-1])
+    return points
+
+
+def primitive_polyline(prim, n: int = 80) -> list[tuple[float, float]]:
+    """A support-region primitive (line or exact arc) as a polyline in um."""
+    if isinstance(prim, LineEdge):
+        return [(prim.p[0] * G_UM, prim.p[1] * G_UM), (prim.q[0] * G_UM, prim.q[1] * G_UM)]
+    t0, sweep = (float(v) for v in prim.sweep())
+    cx, cy, r = float(prim.centre[0]), float(prim.centre[1]), float(prim.radius)
+    return [((cx + r * math.cos(t0 + sweep * i / n)) * G_UM, (cy + r * math.sin(t0 + sweep * i / n)) * G_UM) for i in range(n + 1)]
+
+
+def layer_edge_polylines(layer, predicate, step: float = 150.0) -> list[list[tuple[float, float]]]:
+    """Polylines (um) of the edges of a layer whose carrier ids satisfy ``predicate``."""
+    return [[(x * G_UM, y * G_UM) for x, y in edge_polyline(layer.arr, layer.edge_curve, ei, step)]
+            for ei, src in enumerate(layer.edge_sources) if predicate(src)]
+
+
+def face_rings_um(layer, face_index: int, step: float = 150.0) -> list[list[tuple[float, float]]]:
+    """The boundary cycles (outer first, then holes) of a face in um."""
+    arr = layer.arr
+    return [[(x * G_UM, y * G_UM) for x, y in cycle_polyline(arr, layer.edge_curve, c, step)] for c in arr.face_cycles(face_index)]
 
 
 # --------------------------------------------------------------------------- scene description
