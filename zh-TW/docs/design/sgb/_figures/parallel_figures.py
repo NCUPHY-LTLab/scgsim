@@ -16,10 +16,11 @@ import plotly.graph_objects as go  # noqa: E402
 from inset_kit import Label, Line, Panel, Poly, Pts  # noqa: E402
 from parallel_tables import G, emission_seconds, rows_by
 from plotly.subplots import make_subplots  # noqa: E402
+from sgb_emit_cases import CASES  # noqa: E402
+
 from scgsim.geometry.sgb.derivation.labelled import model_bbox  # noqa: E402
 from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
 from scgsim.geometry.sgb.noding.tiling import tile_cut_lines, tile_index  # noqa: E402
-from sgb_emit_cases import CASES  # noqa: E402
 
 TILE_COLOURS = [
     "#E69F00",

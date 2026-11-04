@@ -17,11 +17,6 @@ import numpy as np  # noqa: E402
 from inset_figures import LEVEL_Z0
 from matplotlib.collections import PolyCollection
 from matplotlib.patches import Rectangle
-from scgsim.geometry.sgb.arrangement.arcs import face_exact_area  # noqa: E402
-from scgsim.geometry.sgb.build import emit_model  # noqa: E402
-from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: E402
-from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: E402
-from scgsim.geometry.sgb.verification.loaded import verify_loaded  # noqa: E402
 from sgb_gmsh_oracle import (  # noqa: E402
     band_mesh_report,
     check_mesh_conformity,
@@ -29,6 +24,12 @@ from sgb_gmsh_oracle import (  # noqa: E402
     mesh_coarsely,
     refine_near,
 )
+
+from scgsim.geometry.sgb.arrangement.arcs import face_exact_area  # noqa: E402
+from scgsim.geometry.sgb.build import emit_model  # noqa: E402
+from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: E402
+from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: E402
+from scgsim.geometry.sgb.verification.loaded import verify_loaded  # noqa: E402
 
 # --------------------------------------------------------------------------- 5. mask vs imprint (2-D gmsh illustration)
 

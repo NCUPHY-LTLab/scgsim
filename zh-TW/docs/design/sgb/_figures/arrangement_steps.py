@@ -19,6 +19,7 @@ from fractions import Fraction
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from intro_common import save_plotly, save_svg, write_numbers
+
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement, interior_point
 from scgsim.geometry.sgb.noding.snap_rounding import (
     NodedEdge,

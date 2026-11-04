@@ -48,6 +48,8 @@ from matplotlib.colors import to_rgba
 from matplotlib.patches import Patch, PathPatch
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from plotly.subplots import make_subplots
+from sgb_scenes import pad_in_ground as stage_pad_in_ground
+
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
@@ -55,7 +57,6 @@ from scgsim.geometry.sgb.cutfamilies.requests import (
     RefinementRequest,
     SolutionInterface,
 )
-from sgb_scenes import pad_in_ground as stage_pad_in_ground
 
 GROUP_FILL = {
     "ground_0000": "#7f7f7f",

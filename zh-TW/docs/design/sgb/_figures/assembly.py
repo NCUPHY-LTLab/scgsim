@@ -45,11 +45,12 @@ from labels_common import (
 from matplotlib.colors import to_rgba
 from matplotlib.patches import Patch, Polygon
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from sgb_scenes import airbridge, footprint, rect_um
+from sgb_scenes import pad_in_ground as stage_pad_in_ground
+
 from scgsim.geometry.sgb.assembly import walls as walls_module
 from scgsim.geometry.sgb.records.grid import exact_z
 from scgsim.geometry.sgb.records.prisms import PrismRecord
-from sgb_scenes import airbridge, footprint, rect_um
-from sgb_scenes import pad_in_ground as stage_pad_in_ground
 
 G = 0.001
 

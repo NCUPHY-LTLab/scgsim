@@ -14,8 +14,6 @@ import gmsh
 import inset_kit as kit  # noqa: E402  (also puts the production core's tests on sys.path)
 import sgb_occt_mutations as mutations  # noqa: E402
 from emission_common import bundle, case_models, markdown_table, write_figure_file
-from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds, verify_loaded  # noqa: E402
-from scgsim.geometry.sgb.verification.occt import check_file, check_shape, read_brep  # noqa: E402
 from sgb_extreme_cases import build_model
 from sgb_extreme_cases import cases as extreme_cases  # noqa: E402
 from sgb_gmsh_oracle import (  # noqa: E402
@@ -26,6 +24,9 @@ from sgb_gmsh_oracle import (  # noqa: E402
     mesh_coarsely,
     refine_near,
 )
+
+from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds, verify_loaded  # noqa: E402
+from scgsim.geometry.sgb.verification.occt import check_file, check_shape, read_brep  # noqa: E402
 
 # --------------------------------------------------------------------------- loaded checks of the examples
 

@@ -8,11 +8,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import inset_kit as kit  # noqa: E402  (also puts the production core's tests on sys.path)
+from sgb_scenes import airbridge  # noqa: E402
+
 from scgsim.geometry.sgb.build import emit_model  # noqa: E402
 from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: E402
 from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
 from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: E402
-from sgb_scenes import airbridge  # noqa: E402
 
 FIGURES = kit.FIGURES
 DATA = FIGURES / "emission-timing-data.json"
