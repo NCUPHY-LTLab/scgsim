@@ -52,7 +52,7 @@ E3 把 BREP 轉成 STEP 再讀回（見[補充：重現資料](#reproduction-dat
 
 ## 補充：重現資料 {#reproduction-data}
 
-本頁的 AEDT 事實與數字來自實驗 E4（原型時期）；它的原始輸出沒有公開。在 AEDT 內重新驗證 production 的輸出，屬於 AEDT adoption 的工作。匯出端的敘述來自 production 的 `scgsim.geometry.sgb.exchange.step` 與 `sidecar/aedt.py`。這些實驗需要 AEDT 授權，不是自動測試；它們使用的輸入是 `experiments/sgb-redesign/prototype/outputs/e3_brep/<case>/`。STEP 往返的表由 `docs/design/sgb/_figures/emission.py` 從各 case 的 `validation.json` 產生。
+本頁的 AEDT 事實與數字來自實驗 E4（原型時期）；它的原始輸出沒有公開。在 AEDT 內重新驗證 production 的輸出，屬於 AEDT adoption 的工作。匯出端的敘述來自 production 的 `scgsim.geometry.sgb.exchange.step` 與 `sidecar/aedt.py`。這些實驗需要 AEDT 授權，不是自動測試；它們的輸入是原型寫出的 BREP。STEP 往返的表由 `zh-TW/docs/design/sgb/_figures/emission.py` 從各 case 的 `validation.json` 產生。
 
 ### BREP 轉 STEP 再讀回（E3）
 
