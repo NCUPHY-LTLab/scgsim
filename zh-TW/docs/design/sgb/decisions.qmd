@@ -9,7 +9,7 @@ scgsim-id: "docs/design/sgb/decisions"
 
 這一頁把 SGB 設計中需要決定、或已由 Human 或 Lead 決定的項目放在一起，讓你一眼看出哪些已定案、哪些仍然開放、哪些數字需要 Human 核准。每一項先說明問題、選項、建議與後果，再列出 prototype 提供的證據。
 
-「Human」表示由 Human 決定：一個數值，或一個會改變結果所代表意義的預設值。「Lead」表示由 Lead 提出決定或建議，再由 architecture review 審查實作選擇。「實作狀態」指 `scgsim.geometry.sgb`（階段 1，1a 到 1e）。證據有兩種：標明**原型計算**的出自 prototype 的輸出；標明 **production** 的出自 production 的測試與 catalogue 報告。來源列在最後的「補充：重現資料」。
+「Human」表示由 Human 決定：一個數值，或一個會改變結果所代表意義的預設值。「Lead」表示由 Lead 提出決定或建議，再由 architecture review 審查實作選擇。「實作狀態」指 `scgsim.geometry.sgb`（階段 1，1a 到 1e）。證據有兩種：標明 **production** 的出自 production 的測試與 catalogue 報告，可以重現；標明**原型計算**的是原型時期的觀察，原型程式已移除，無法再重現，它的教訓整理在 `experiments/sgb-redesign/PROTOTYPE_LESSONS.md`。來源列在最後的「補充：重現資料」。
 
 ::: {.askr-table-compact}
 | ID | 問題 | 決定 | 決定者 | production 實作狀態 | 已知缺口 |
@@ -191,7 +191,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | 決定者 | Architecture review；packaging 的影響告知 Human。 |
 :::
 
-證據（production，`figures/why-scaling-measured.json`）：N = 20 000、單一 process 時，所有 stage 的時間加起來是 58.8 s（build wall time 為 61.6 s），其中 serial stage 為 29.7 s（50%）；Amdahl parallel fraction 單一 process 為 0.49–0.52，有 worker 時為 0.51–0.61（被 worker 的總計算量變大墊高，見[平行化的 derivation](parallelism.qmd)）。這是單次執行的結果，同一個 layout 的同一個推導在三次呼叫間差約 10%，所以這些數字只有量級的意義；它們全部來自 polygon-only 的 layout。prototype 的筆記把不足歸因於 prototype 的語言，而不是演算法；compiled kernel 尚未量測。production 的階段 1 仍是純 Python，沒有開始 compiled kernel 的工作，這一項維持建議狀態。
+證據（production，`figures/why-scaling-measured.json`）：N = 20 000、單一 process 時，所有 stage 的時間加起來是 58.8 s（build wall time 為 61.6 s），其中 serial stage 為 29.7 s（50%）；Amdahl parallel fraction 單一 process 為 0.49–0.52，有 worker 時為 0.51–0.61（被 worker 的總計算量變大墊高，見[平行化的 derivation](parallelism.qmd)）。這是單次執行的結果，同一個 layout 的同一個推導在三次呼叫間差約 10%，所以這些數字只有量級的意義；它們全部來自 polygon-only 的 layout。原型的教訓（`experiments/sgb-redesign/PROTOTYPE_LESSONS.md`）把不足歸因於原型使用的語言，而不是演算法；compiled kernel 尚未量測。production 的階段 1 仍是純 Python，沒有開始 compiled kernel 的工作，這一項維持建議狀態。
 
 ## 已解決的事項
 
@@ -225,8 +225,8 @@ D3、D7、D8 與 D9 的數字可由下列檔案重現；圖與數字的腳本與
 | noding 的 edge 數與 hot pixel 數 | `figures/arrangement-guarantees-numbers.json` 的 `level_stats`、`figures/inset-numbers.json` 的 `level_z0` |
 | emission 的時間與載入時間 | `figures/why-scaling-measured.json`（`_figures/why_scaling.py measure`）、Gmsh API oracle 的 `figures/why-scaling-oracle.json` |
 | AEDT 實驗（E4） | 原型時期的實驗，原始輸出沒有公開；在 AEDT 內重新驗證 production 輸出屬於 AEDT adoption 的工作 |
-| Gmsh sewing 的觀察 | 隨機 N = 1 000 的 layout 中 vacuum 內外顛倒，以及縫合約 6 萬個 face 的 shell 花了 180 s 與 28 GB：這些數字在 prototype 第 3 階段量測一次，**沒有保存輸出檔**，目前只記錄在 prototype 的筆記與 brief 中，應視為一次性的觀察 |
-| 原型的 extreme-case catalogue（22 個 fixture、39 列，帶 5-edge wall 的拒絕） | `outputs/extreme/catalogue.md`、`outputs/extreme/rows.json`；測試 `tests/test_extreme_cases.py` |
+| Gmsh sewing 的觀察 | 隨機 N = 1 000 的 layout 中 vacuum 內外顛倒，以及縫合約 6 萬個 face 的 shell 花了 180 s 與 28 GB：這些數字在 prototype 第 3 階段量測一次，**沒有保存輸出檔**，目前記錄在 `experiments/sgb-redesign/DESIGN_BRIEF.md` 與 `PROTOTYPE_LESSONS.md` 中，應視為一次性的觀察 |
+| 原型的 extreme-case catalogue（22 個 fixture、39 列，帶 5-edge wall 的拒絕） | 原型時期的觀察；原型程式與輸出已移除，無法再重現。它的 5-edge wall 拒絕已由曲面 wall 的切開消除，現行的重現來源是下一列的 production catalogue |
 | production 的 extreme-case catalogue（23 個 fixture、63 列；mesh 品質與 drift） | 在 `scgsim` 套件根目錄執行 `python tests/sgb_catalogue_report.py --timings --out <資料夾>`（需要安裝 `occt` group 才會有 OCCT 欄）；測試 `tests/test_sgb_extreme_cases.py` |
 | priority 的 develop 端修正 | PR NCUPHY-LTLab/scgsim#61（`mesh_order` 轉內部 priority）；階段 1 的測試 `tests/test_sgb_priority.py` 檢查錯誤訊息指出的來源 |
 | 曲面 wall 的切開 | `tests/test_sgb_curved_walls.py` |

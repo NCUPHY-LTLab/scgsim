@@ -13,7 +13,7 @@ scgsim-id: "docs/research/geometry-build/validation-cost"
 - The structural checks take 0.33, 2.31 and 11.2 s at 1,000, 5,000 and 20,000 features: 16% to 19% of the build time in the same run. Their total scales with a slope of 1.20 and then 1.14 against the number of faces.
 - The check on the loaded Gmsh model, `verify_loaded`, takes 0.58, 3.70 and 14.4 s.
 - Individual checks scale with slopes between 0.89 and 1.35; among the checks that take more than 0.1 s at the largest size the slopes lie between 1.00 and 1.35.
-- The OCCT checks were run only on small test models, where they take 6.6 to 262 ms. They were not measured on models of 1,000 features or more, so their scaling is unknown.
+- The OCCT checks were run only on small test models, where they take 6.2 to 259.2 ms. They were not measured on models of 1,000 features or more, so their scaling is unknown.
 
 ## Three groups of checks
 

@@ -12,7 +12,7 @@ scgsim-id: "docs/design/sgb/index"
 重新設計的 semantic geometry builder（SGB）把順序倒過來。它把晶片描述成有限個 **prism**，**在任何 CAD kernel 介入之前**就推導出完整的 topology 與每個 cell 的意義，再自己把結果寫成 BREP/XAO 檔案。Gmsh 不建立幾何：它載入檔案並對其產生 **mesh**，測試中也把它當作 oracle。模型上不執行任何三維 Boolean 運算。
 
 ::: {.callout-note title="實作狀態"}
-這個設計已有 production 實作：`scgsim.geometry.sgb`（階段 1，1a 到 1e）。它從真實的 `GeometryBuildInput` 建立 prism，一路做到 snap-rounded arrangement、label、dissolution、assembly、Route A、B、C、per-Entity 的命名、inset band 與 refinement curve、直接寫出 BREP/XAO 與 JSON sidecar，公開入口是 `build_sgb_geometry`。Palace 與 AEDT 尚未切換過來：舊的幾何路徑保留到兩個 adopter 都改接之後（階段 3），移除在階段 4（[D6](decisions.qmd#d6)）。要接 Palace 或 AEDT，請讀 [SGB 輸出的使用契約](consumer-contract.qmd)與[欄位對應](consumer-mapping.qmd)。本設計的圖與數字，凡是標明**原型計算**者出自 `experiments/sgb-redesign/prototype`；標明 **production** 者出自 `scgsim.geometry.sgb` 的測試與 catalogue 報告。
+這個設計已有 production 實作：`scgsim.geometry.sgb`（階段 1，1a 到 1e）。它從真實的 `GeometryBuildInput` 建立 prism，一路做到 snap-rounded arrangement、label、dissolution、assembly、Route A、B、C、per-Entity 的命名、inset band 與 refinement curve、直接寫出 BREP/XAO 與 JSON sidecar，公開入口是 `build_sgb_geometry`。Palace 與 AEDT 尚未切換過來：舊的幾何路徑保留到兩個 adopter 都改接之後（階段 3），移除在階段 4（[D6](decisions.qmd#d6)）。要接 Palace 或 AEDT，請讀 [SGB 輸出的使用契約](consumer-contract.qmd)與[欄位對應](consumer-mapping.qmd)。本設計的圖與數字都出自 `scgsim.geometry.sgb` 的測試與 catalogue 報告（標明 **production**）；少數標明**原型**的是原型時期的一次性觀察。原型程式已經移除，它留下的教訓整理在 `experiments/sgb-redesign/PROTOTYPE_LESSONS.md`。
 :::
 
 ## 執行範例：輸入與輸出
@@ -161,7 +161,7 @@ flowchart TB
 - *一個 Palace attribute 如何追溯到來源曲線？* [Identity](identity.qmd)。
 - *哪些已決定、哪些還開放？* [設計決議](decisions.qmd)。
 
-本設計的圖有兩種：**計算所得**的圖與數字來自 `experiments/sgb-redesign/prototype` 的原型（本設計稱為「原型計算」），或來自 production 的測試與 catalogue 報告（稱為「production」）；**概念性**的圖是手繪的規則示意，圖說會註明是哪一種。互動式圖可以在檢視器中開啟並縮放，每張都附有一張顯示關鍵視角的靜態圖。除非圖中註明「grid units $g$」，長度單位為微米，格點單位為奈米。
+本設計的圖有兩種：**計算所得**的圖與數字來自 production 的測試與 catalogue 報告（稱為「production」）；文中少數標明「原型計算」的數字是原型時期的觀察，原型程式已移除，無法再由本 repository 重現；**概念性**的圖是手繪的規則示意，圖說會註明是哪一種。互動式圖可以在檢視器中開啟並縮放，每張都附有一張顯示關鍵視角的靜態圖。除非圖中註明「grid units $g$」，長度單位為微米，格點單位為奈米。
 
 ## 詞彙表 {#glossary}
 

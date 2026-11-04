@@ -169,7 +169,7 @@ production 依 D5 以 Entity 歸屬命名 group，見 [D5](decisions.qmd#d5)。
 
 Validation 分三層，production 都已實作：（1）開發階段的測試以 OCP 執行 OCCT 的 `BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`，並做 Gmsh 載入檢查（OCP 在 `occt` dependency group，CI 尚未安裝，`occt` 測試在 CI 略過）；（2）每個 production build 在寫出前以 SGB 自己的結構 invariant 失敗即停，並在 mesher 的 `verify_loaded`（數量、vertex 位置、邊界、面積、體積、group）失敗即停；（3）`strict=True` 時對寫出的 XAO 執行 OCCT 檢查。終端使用者的安裝（例如經由 OrcaPen SC PDK）不會裝 OCP。
 
-production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C 下共 63 列：54 列建出並通過每一項檢查（建構加 31 項結構檢查、直接寫出、Gmsh 載入、conformal mesh、`BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer` 的所有模式、`ShapeAnalysis`、與計畫的交叉核對）；9 列是預期的拒絕（6 個 `NonManifoldError`、3 個 `ContactError`）。原型時期 direct writer 對 5-edge wall 的兩個拒絕，現在由曲面 wall 的切開消除。每一列也記錄粗略 mesh 的品質（`minSICN`、`gamma`）與 snap drift、arc 偏離，作為 D2 與 D7 重新評估的依據（見 [Validation](validation.qmd#catalogue)）。五個刻意注入的缺陷各被 `BRepCheck_Analyzer` 抓到。執行期的 validator 耗時對 face 數大致線性是原型計算（斜率 0.79–1.16，N = 1 000 到 20 000，polygon-only），production 沒有重新量測。
+production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C 下共 63 列：54 列建出並通過每一項檢查（建構加 31 項結構檢查、直接寫出、Gmsh 載入、conformal mesh、`BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer` 的所有模式、`ShapeAnalysis`、與計畫的交叉核對）；9 列是預期的拒絕（6 個 `NonManifoldError`、3 個 `ContactError`）。原型時期 direct writer 對 5-edge wall 的兩個拒絕，現在由曲面 wall 的切開消除。每一列也記錄粗略 mesh 的品質（`minSICN`、`gamma`）與 snap drift、arc 偏離，作為 D2 與 D7 重新評估的依據（見 [Validation](validation.qmd#catalogue)）。五個刻意注入的缺陷各被 `BRepCheck_Analyzer` 抓到。執行期的 validator 耗時對 face 數近乎線性（production 量測：31 項檢查合計的局部斜率 1.16 與 1.14，N = 1 000 到 20 000，polygon-only，單次執行；見 [Validation](validation.qmd)）。
 
 ### S10 Emission
 
