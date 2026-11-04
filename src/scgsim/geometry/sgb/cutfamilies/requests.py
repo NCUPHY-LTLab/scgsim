@@ -4,7 +4,7 @@ Owns the public vocabulary for asking SGB to partition a surface: *which* surfac
 entity and face, or by the two solution regions an interface lies between) and *how* (margins in
 micrometres, or a curve to embed).  A request is plain data; ``generate`` turns it into a
 ``CurveFamilyRecord`` before the arrangements are built.  Nothing here refers to a solver: the bands are
-geometry, and each is its own primary physical group (``MA::<entity>::band=k`` and so on), so a backend
+geometry, and each is its own primary physical group (``MA::<entity>::<face kind>::band=k`` and so on), so a backend
 integrates a plain surface integral over the union of the band groups it needs.
 
 Inset margins
@@ -13,11 +13,11 @@ Inset margins
 
 * ``ConductorSurface(entity_id, side)`` -- a face of one conductor Entity.  ``side="sheet"`` is the face
   of a sheet conductor (a Route A sheet: one face carrying both the metal-air and the metal-substrate
-  surface, group ``SHEET::<entity>::band=k``); ``"top"`` and ``"bottom"`` are the faces at the upper and
-  lower Z of a finite conductor (groups ``MA::<entity>::band=k`` against vacuum and
-  ``MS::<entity>::band=k`` against a dielectric).  Sidewall bands are not part of version 1.
+  surface, group ``SHEET::<entity>::sheet[::band=k]``); ``"top"`` and ``"bottom"`` are the faces at the
+  upper and lower Z of a finite conductor (groups ``MA::<entity>::<face kind>[::band=k]`` against vacuum
+  and ``MS::<entity>::<face kind>[::band=k]`` against a dielectric).  Sidewall bands are not part of version 1.
 * ``SolutionInterface(first_entity_id, second_entity_id)`` -- the interface between two solution regions
-  where no conductor lies (the gap between a pad and its ground, ``SA::<a>|<b>::band=k``).  ``z_um``
+  where no conductor lies (the gap between a pad and its ground, ``SA::<a>|<b>::interface[::band=k]``).  ``z_um``
   picks the level when the pair meets at several.
 
 ``margins_um`` are strictly increasing positive lengths on the model grid.  ``interface`` optionally

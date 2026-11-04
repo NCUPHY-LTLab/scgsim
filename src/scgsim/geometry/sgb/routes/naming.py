@@ -124,7 +124,7 @@ def volume_group(domain: Domain) -> str:
 
 
 def interface_type(group: str) -> str:
-    """The interface-type prefix of a primary group name (``MA`` for ``MA::pad::band=1``)."""
+    """The interface-type prefix of a primary group name (``MA`` for ``MA::pad::top::band=1``)."""
     return group.split("::", 1)[0]
 
 

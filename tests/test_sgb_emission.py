@@ -20,13 +20,15 @@ from sgb_gmsh_oracle import (
     emit_with_gmsh_api,
     gmsh_session,
     mesh_coarsely,
+    mesh_quality,
     refine_near,
+    size_from_mesh_hints,
 )
 from sgb_scenes import random_layout
 
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.emission.numbers import angle_of
-from scgsim.geometry.sgb.emission.plan import plan_brep
+from scgsim.geometry.sgb.emission.plan import check_one_tag_per_id, plan_brep
 from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file
 from scgsim.geometry.sgb.errors import SgbError
 from scgsim.geometry.sgb.model import build_model_from_catalogue
@@ -439,6 +441,21 @@ def test_an_edge_that_leaves_its_plane_is_refused():
         plan_brep(topology, model.routed)
 
 
+def test_a_planned_id_numbered_twice_is_refused_in_every_dimension(models):
+    """Every planned id maps to exactly one native tag, so a repeated id is an error, not a quiet merge."""
+    plan = plan_brep(models["pad_b_bands"].topology, models["pad_b_bands"].routed)
+    check_one_tag_per_id(plan.found)
+    assert len(plan.tags()) == sum(
+        len(ids)
+        for ids in (plan.vertex_ids, plan.edge_ids, plan.face_ids, plan.solid_ids)
+    )
+    for ids in (plan.vertex_ids, plan.edge_ids, plan.face_ids, plan.solid_ids):
+        ids.append(ids[0])
+        with pytest.raises(SgbError, match="more than one native tag"):
+            check_one_tag_per_id(plan.found)
+        ids.pop()
+
+
 # --------------------------------------------------------------------------- paths the examples do not all exercise
 
 
@@ -572,6 +589,28 @@ def test_band_faces_through_the_direct_writer(tmp_path, models, name):
         assert (
             len(set(row["tets_per_side"].values())) == 1
         )  # the same triangles are tet faces on both sides
+
+
+def test_pad_b_bands_meshed_by_its_hints_has_no_flat_tetrahedron(tmp_path, models):
+    """The 0.1 um band strips need elements of that order; a uniform 60 um mesh puts a zero-volume tet on them.
+
+    With ``pad_b_bands`` at a uniform 60 um, four parallel band-boundary edges symmetric about x = 0 each get
+    a node at x = 0, and Delaunay joins those four collinear nodes into a tetrahedron of volume zero
+    (``minSICN`` 0).  The geometry is sound (OCCT checks pass, the Gmsh-API emission of the same topology
+    has the same flat tets, a 5 um margin set or a slightly asymmetric cutout has none), so the remedy is
+    sizing: the sidecar's ``band_boundary`` hints with the recipe of ``sidecar.hints``.
+    """
+    model = models["pad_b_bands"]
+    plan, path = written(model, tmp_path, "xao")
+    sidecar = sidecar_of(model, plan)
+    with gmsh_session(path):
+        apply_sidecar_embeds(sidecar)
+        size_from_mesh_hints(sidecar, coarse=60.0, near=0.2, growth=8.0)
+        mesh_coarsely(60.0)
+        quality = mesh_quality()
+        conformity = check_mesh_conformity(model, plan.tags())
+    assert quality["minSICN_min"] > 1e-4
+    assert conformity["conformal"], conformity["problems"]
 
 
 # --------------------------------------------------------------------------- the Gmsh-API oracle

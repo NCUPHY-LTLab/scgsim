@@ -12,7 +12,7 @@ regardless of worker count, tile layout or iteration order.
   change whenever a neighbouring wall starts or ends on the column
 * volume = H(domain, sorted cell ids)
 
-Semantic names (``MA::<net>`` ...) belong to later stages.  Native Gmsh tags are
+Semantic names (``MA::<entity>::<face kind>`` ...) belong to later stages.  Native Gmsh tags are
 never part of identity.
 """
 

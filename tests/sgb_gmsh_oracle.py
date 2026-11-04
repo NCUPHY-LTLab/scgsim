@@ -212,6 +212,46 @@ def refine_near(  # noqa: PLR0913 -- a test helper
         gmsh.option.setNumber(option, 0)
 
 
+def size_from_mesh_hints(  # noqa: PLR0913 -- the hint kinds and the three sizing numbers of the recipe
+    sidecar: dict,
+    *,
+    coarse: float,
+    near: float,
+    growth: float,
+    kinds: tuple[str, ...] = ("band_boundary",),
+) -> None:
+    """Background size field driven by the sidecar's mesh hints (the recipe ``sidecar.hints`` documents).
+
+    The element size is ``near`` on the hinted edges and grows by ``growth`` per micrometre of distance
+    (so it is ``coarse`` from ``(coarse - near) / growth`` away), in the current session.
+    """
+    field_api = gmsh.model.mesh.field
+    curves = sorted(
+        {
+            t
+            for h in sidecar["mesh_hints"]
+            if h["kind"] in kinds
+            for t in h["native_tags"]
+        }
+    )
+    dist = field_api.add("Distance")
+    field_api.setNumbers(dist, "CurvesList", curves)
+    field_api.setNumber(dist, "Sampling", 50)
+    ramp = field_api.add("Threshold")
+    field_api.setNumber(ramp, "InField", dist)
+    field_api.setNumber(ramp, "SizeMin", near)
+    field_api.setNumber(ramp, "SizeMax", coarse)
+    field_api.setNumber(ramp, "DistMin", 0.0)
+    field_api.setNumber(ramp, "DistMax", (coarse - near) / growth)
+    field_api.setAsBackgroundMesh(ramp)
+    for option in (
+        "Mesh.MeshSizeFromPoints",
+        "Mesh.MeshSizeFromCurvature",
+        "Mesh.MeshSizeExtendFromBoundary",
+    ):
+        gmsh.option.setNumber(option, 0)
+
+
 def _tet_face_counters(
     model: ConformalModel, tags: dict[str, tuple[int, int]]
 ) -> dict[str, Counter]:

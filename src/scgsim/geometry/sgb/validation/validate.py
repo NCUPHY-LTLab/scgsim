@@ -13,7 +13,7 @@ from scgsim.geometry.sgb.derivation.labelled import LabelledArrangements
 from scgsim.geometry.sgb.parallel import Runtime
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.sgb.routes.groups import RoutedModel
-from scgsim.geometry.sgb.validation import arrangements
+from scgsim.geometry.sgb.validation import arrangements, ids
 from scgsim.geometry.sgb.validation import topology as topology_checks
 from scgsim.geometry.sgb.validation.report import ValidationReport
 
@@ -39,6 +39,8 @@ def validate_model(
                 True,
                 "checked while labelling; a violation stops the build before this point",
             )
+    with report.timed("atomic_ids"):
+        ids.check_atomic_ids_unique(report, layers, topology)
     with report.timed("planarity"):
         arrangements.check_planar(report, layers, rt)
     with rt.serial("validation_serial"):

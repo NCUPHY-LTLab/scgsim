@@ -16,6 +16,7 @@ Does not own the text of the records (``records``) or the file layout (``writer`
 from __future__ import annotations
 
 import gc
+from collections import Counter
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -234,10 +235,30 @@ def _finish(  # noqa: PLR0913 - the walk's products travel together
     edge_pcs: list[list[int]] = [[] for _ in found.edge_ids]
     for pc, e in enumerate(pc_edge.tolist()):
         edge_pcs[e].append(pc)
+    check_one_tag_per_id(found)
     return BrepPlan(
         tolerance, found, verts, edge_v, kind, direction, span, centre, radius, sense, surf_kind, surf_geom,
         surf_radius, pc_edge, pc_surf, edge_pcs, _group_plans(routed, found), write_pcurves=pcurves,
     )  # fmt: skip
+
+
+def check_one_tag_per_id(found: Numbering) -> None:
+    """Every planned id maps to exactly one native tag: no id is numbered twice, within or across dimensions.
+
+    The sidecar binds an id to ``tag = 1 + position`` and a consumer inverts that map; an id listed twice
+    would send two native shapes to one planned entity.
+    """
+    listed = [
+        *found.vertex_ids,
+        *found.edge_ids,
+        *found.face_ids,
+        *found.solid_ids,
+    ]
+    repeated = sorted(i for i, n in Counter(listed).items() if n > 1)
+    if repeated:
+        raise SgbError(
+            f"{len(repeated)} planned ids map to more than one native tag: {repeated[:3]}"
+        )
 
 
 def _arc_records(  # noqa: PLR0913 - the edge arrays travel together

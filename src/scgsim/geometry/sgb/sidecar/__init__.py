@@ -44,7 +44,7 @@ Top-level fields and who uses them
     so the consumer decides internal-boundary cracking from the row alone.
 ``mesh_hints``
     ``band_boundary`` / ``refinement_curve`` / ``curved_edge`` entries: edge ids and native tags plus the
-    source request id; no sizes (the mesher decides).
+    source request id; no sizes (the mesher decides; ``hints`` documents the sizing the bands need).
 ``volumes`` / ``faces``
     per planned volume: group, kind, material, Net, ``emitted``, planned volume and ``aedt_name``;
     per planned face: group, ``face_kind``, ``z_um``, the volumes on its two sides.  AEDT's contribution

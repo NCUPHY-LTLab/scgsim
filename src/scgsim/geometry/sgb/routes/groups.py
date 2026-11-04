@@ -55,7 +55,7 @@ class RoutedModel:
     unions: dict[str, list[str]]
     surface_epr_rows: dict[
         str, str
-    ]  # Surface-EPR row ("MA::pad::band=2") -> the primary group that carries it
+    ]  # Surface-EPR row ("MA::pad::top::band=2") -> the primary group that carries it
 
     def is_emitted_face(self, face_neg: str | None, face_pos: str | None) -> bool:
         """Whether a face with these two side volumes bounds an emitted volume."""

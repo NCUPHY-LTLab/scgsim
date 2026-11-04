@@ -9,7 +9,8 @@ import pytest
 from sgb_scenes import pad_in_ground
 
 from scgsim.geometry.sgb import model as model_module
-from scgsim.geometry.sgb.errors import ValidationError
+from scgsim.geometry.sgb.assembly.builder import register
+from scgsim.geometry.sgb.errors import SgbError, ValidationError
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.parallel import Runtime
 from scgsim.geometry.sgb.records.labels import LevelLabel
@@ -148,6 +149,48 @@ def test_a_prism_whose_footprint_area_is_lost_over_its_cells_is_caught():
     key = next(iter(slab.raw.prism_twice_area))
     slab.raw.prism_twice_area[key] //= 2
     assert "prism_area_conserved_over_cells" in failed(model)
+
+
+@pytest.mark.parametrize(
+    ("dimension", "ids_of", "check"),
+    [
+        ("vertex", lambda layer: layer.vertex_ids, "vertex_ids_unique"),
+        ("edge", lambda layer: layer.edge_ids, "edge_ids_unique"),
+        ("face", lambda layer: layer.face_ids, "face_ids_unique"),
+    ],
+)
+def test_two_entities_sharing_an_atomic_id_are_caught(dimension, ids_of, check):
+    """A repeated id would merge two entities in the dict-keyed topology; validation names the dimension."""
+    model = fresh()
+    ids = ids_of(model.labelled.level_layers[1])
+    first, second = (1, 2) if dimension == "face" else (0, 1)
+    ids[second] = ids[first]
+    assert check in failed(model)
+
+
+def test_a_record_stored_under_another_entitys_id_is_caught():
+    """The topology tables are keyed by the id each record carries."""
+    model = fresh()
+    first, second = list(model.topology.faces.values())[:2]
+    first.id = second.id
+    assert "topology_keyed_by_entity_id" in failed(model)
+
+
+def test_a_volume_that_swallowed_another_volumes_cells_is_caught():
+    """Two volumes with one id leave the lost one's cells in no volume."""
+    model = fresh()
+    del model.topology.volumes[next(iter(model.topology.volumes))]
+    assert "every_cell_in_exactly_one_volume" in failed(model)
+
+
+def test_assembly_refuses_to_register_a_different_entity_under_a_known_id():
+    """The assembly tables never let a later entity replace an earlier one."""
+    model = fresh()
+    vertices = model.topology.vertices
+    known = next(iter(vertices.values()))
+    register(vertices, replace(known))  # the same record again is fine
+    with pytest.raises(SgbError, match="share the atomic id"):
+        register(vertices, replace(known, x=known.x + 1))
 
 
 def test_the_band_area_hook_checks_monotonicity_and_the_support_area():

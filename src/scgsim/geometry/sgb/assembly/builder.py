@@ -28,6 +28,7 @@ import math
 from collections import defaultdict
 from dataclasses import dataclass
 from math import lcm
+from typing import TypeVar
 
 from scgsim.geometry.sgb import identity
 from scgsim.geometry.sgb.arrangement.arcs import RealisedArc, realise
@@ -56,6 +57,22 @@ from scgsim.geometry.sgb.records.carriers import ArcCarrier
 from scgsim.geometry.sgb.records.labels import Domain, LevelLabel
 
 Entry = tuple[str, int]  # (edge id, +1 / -1 relative to the edge's v0 -> v1 direction)
+Record = TypeVar("Record", TopoVertex, TopoEdge, TopoFace, TopoVolume)
+
+
+def register(table: dict[str, Record], record: Record) -> None:
+    """Store a record under its id; a different record already there means two entities share the id.
+
+    A plain ``table[id] = record`` would let the later entity replace the earlier one without a trace.
+    Registering the same record twice (a point shared by two refinement curves) is fine.
+    """
+    known = table.get(record.id)
+    if known is None:
+        table[record.id] = record
+    elif known != record:
+        raise SgbError(
+            f"two distinct {type(record).__name__} records share the atomic id {record.id}"
+        )
 
 
 @dataclass(frozen=True)
@@ -135,8 +152,9 @@ class _Assembly:
             ids: dict[Point, str] = {}
             for p, vertex_id in zip(layer.arr.vertices, layer.vertex_ids, strict=True):
                 ids[p] = vertex_id
-                self.vertices[vertex_id] = TopoVertex(
-                    vertex_id, p[0], p[1], layer.level_z, zs
+                register(
+                    self.vertices,
+                    TopoVertex(vertex_id, p[0], p[1], layer.level_z, zs),
                 )
             self.vid_at.append(ids)
             for e, eid, sources, curve in zip(
@@ -163,11 +181,13 @@ class _Assembly:
         if curve is not None:
             centre = identity.digest("vc", [eid])
             zs = int(layer.level_z * self.zden)
-            self.vertices[centre] = TopoVertex(
-                centre, curve.centre[0], curve.centre[1], layer.level_z, zs
+            register(
+                self.vertices,
+                TopoVertex(centre, curve.centre[0], curve.centre[1], layer.level_z, zs),
             )
-        self.edges[eid] = TopoEdge(
-            eid, "horizontal", v0, v1, layer.plane, sources, curve, centre
+        register(
+            self.edges,
+            TopoEdge(eid, "horizontal", v0, v1, layer.plane, sources, curve, centre),
         )
         self.lineage[eid] = list(sources)
 
@@ -177,8 +197,15 @@ class _Assembly:
         if p not in ids:
             layer = self.A[level]
             vertex_id = identity.vertex_id(layer.plane, p)
-            self.vertices[vertex_id] = TopoVertex(
-                vertex_id, p[0], p[1], layer.level_z, int(layer.level_z * self.zden)
+            register(
+                self.vertices,
+                TopoVertex(
+                    vertex_id,
+                    p[0],
+                    p[1],
+                    layer.level_z,
+                    int(layer.level_z * self.zden),
+                ),
             )
             ids[p] = vertex_id
         return ids[p]
@@ -248,7 +275,7 @@ class _Assembly:
             domain = self.slabs[members[0][0]].labels[members[0][1]]
             cells = tuple(sorted(self.slabs[k].face_ids[fi] for k, fi in members))
             vid = identity.volume_id(domain, list(cells))
-            volumes[vid] = TopoVolume(vid, domain, cells)
+            register(volumes, TopoVolume(vid, domain, cells))
             self.domain_of[vid] = domain
             for node in members:
                 self.volume_of[node] = vid
@@ -311,7 +338,7 @@ class _Assembly:
                 if self._uses_split_edge(k, fa):
                     area = self._loops_twice_area(loops)
                 face_id = layer.face_ids[fa]
-                self.faces[face_id] = TopoFace(
+                face = TopoFace(
                     face_id,
                     "horizontal",
                     layer.plane,
@@ -328,6 +355,7 @@ class _Assembly:
                     bands=label.bands,
                     membership=layer.membership[fa],
                 )
+                register(self.faces, face)
                 for loop in loops:
                     for eid, _ in loop:
                         edge = self.edges[eid]
@@ -430,7 +458,7 @@ class _Assembly:
             bottom_ids + top_ids,
         )
         curved = is_curved(run, self.A)
-        self.faces[face_id] = TopoFace(
+        wall = TopoFace(
             face_id,
             "wall",
             plane,
@@ -448,6 +476,7 @@ class _Assembly:
             bulge_volume=self._bulge(piece, float(z_hi - z_lo)) if curved else 0.0,
             membership=self._wall_membership(piece),
         )
+        register(self.faces, wall)
 
     def _column(self, p: Point, k0: int, k1: int, *, up: bool) -> list[Entry]:
         """Vertical edge segments of column ``p`` between levels k0 and k1 (split at the column's cuts)."""
@@ -456,15 +485,17 @@ class _Assembly:
         levels = self.levels.levels
         for lo, hi in zip(stops, stops[1:], strict=False):
             eid = identity.vertical_edge_id(p, levels[lo], levels[hi])
-            if eid not in self.edges:
-                self.edges[eid] = TopoEdge(
-                    eid,
-                    "vertical",
-                    self._vertex_at(lo, p),
-                    self._vertex_at(hi, p),
-                    f"column{p}[{levels[lo]},{levels[hi]}]",
-                    (),
-                )
+            vertical = TopoEdge(
+                eid,
+                "vertical",
+                self._vertex_at(lo, p),
+                self._vertex_at(hi, p),
+                f"column{p}[{levels[lo]},{levels[hi]}]",
+                self.edges[eid].sources if eid in self.edges else (),
+            )
+            register(
+                self.edges, vertical
+            )  # the column is shared by every wall that meets it
             segments.append((eid, 1 if up else -1))
         return segments if up else list(reversed(segments))
 
@@ -530,8 +561,8 @@ class _Assembly:
                 ids = []
                 for p in (edge.a, edge.b):
                     vid = identity.vertex_id(layer.plane, p)
-                    self.vertices.setdefault(
-                        vid,
+                    register(
+                        self.vertices,
                         TopoVertex(
                             vid,
                             p[0],
@@ -541,8 +572,9 @@ class _Assembly:
                         ),
                     )
                     ids.append(vid)
-                self.edges[eid] = TopoEdge(
-                    eid, "refinement", ids[0], ids[1], layer.plane, sources
+                register(
+                    self.edges,
+                    TopoEdge(eid, "refinement", ids[0], ids[1], layer.plane, sources),
                 )
                 self.lineage[eid] = list(sources)
                 face.refinement_edges.append(eid)
