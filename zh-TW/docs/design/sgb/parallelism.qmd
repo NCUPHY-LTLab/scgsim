@@ -115,7 +115,7 @@ Arrangement 的 cell 會跨越 tile（ground plane 是一個 cell，所有 cutou
 
 ## 量到什麼 {#what-was-measured}
 
-結論先說：**tile 平行的結果與序列完全相同，但 derivation 的最佳加速只有 1.17×（N = 20 000）到 1.26×（N = 5 000）。**
+結論先說：**tile 平行的結果與序列完全相同，但 derivation 的最佳加速只有 1.17×（N = 20 000）到 1.26×（N = 5 000）。**這些量測的獨立整理，以及「序列推導已經足夠」的結論，見研究頁[平行推導](../../research/geometry-build/parallelism.qmd)。
 
 設定：隨機 Route B layout（seed 2，間距 260 µm），N = 1 000、5 000、20 000 個 feature；1 × 1、4 × 4 與 8 × 8 個 tile；1、8、16 與 32 個 worker（共 27 個 case）。每個 case 在 64 核心的機器上用自己的 interpreter 執行一次，所以 peak memory 是該 case 自己的。加速是 1 × 1 tile、單一 worker 的 build 時間除以該 case 的 build 時間。**這些 layout 都只有 polygon：沒有 arc、沒有 band**，所以 arc 與 band 在大規模時的成本沒有量測，也不應由這些數字外推。每個 case 只跑一次、沒有重複，所以小的差異（尤其是 N = 1 000 約 2 s 的 build）不應被解讀為真實效果。
 

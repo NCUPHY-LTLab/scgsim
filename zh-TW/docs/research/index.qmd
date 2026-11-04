@@ -14,6 +14,7 @@ scgsim-id: "docs/research/index"
 
 | 研究 | 聚焦問題 | 適用範圍 |
 |---|---|---|
+| [幾何建構效能](geometry-build/index.qmd) | SGB 幾何建構的時間與記憶體如何隨晶片大小成長、direct BREP writer 相對 Gmsh API 省下多少、檢查花多少成本，以及是否需要平行推導 | 在一台機器上以 production SGB core 量測；最多 20,000 個特徵的隨機多邊形 layout，每個 case 只跑一次 |
 | [Circular Pad 與 Uniform port](../history/curved-source-installation.qmd) | 曲線來源幾何，以及 Palace Eigenmode 研究使用的環境 | 歷史研究；保留當時配對的來源與 Solver 版本 |
 
 ## 研究與工具文件

@@ -98,6 +98,8 @@ flowchart TB
 
 ## 規劃能換來什麼：實測
 
+本節的數字另有[幾何建構效能](../../research/geometry-build/index.qmd)研究逐頁整理：scaling、direct writer 與載入、檢查成本、平行化，以及機器、版本與重現指令。
+
 這一節是 production `scgsim.geometry.sgb` 的量測。scaling 執行建立 Route B 的隨機 layout（`tests/sgb_scenes.py` 的 `random_layout`，間距 260 µm），特徵數為 $N = 1000, 5000, 20000$，每個都有三個 slab 與四個 level，且 ground plane 上每個特徵各有一個孔。模型的 face 數從 14 215 成長到 285 871。每個 $N$ 都在九種排程下各自以一個新的 Python 行程建立（一個 tile 配一個 worker，以及 $4 \times 4$ 與 $8 \times 8$ 個 tile，各搭配 1、8、16、32 個 worker），所以記憶體是該次執行自己的。整個重跑在一台 64 核心的機器上共 970 s（約 16 分鐘）。**這些 scaling 執行全是 polygon-only 的 layout：沒有圓弧、沒有 witness 的弦、沒有圓柱 wall，也沒有 band。** 因此圓弧與 band 在大規模下的成本與 exactness 並沒有量測，本頁不外推。數字的來源列在本頁最後的補充。
 
 **隨機 layout 的 seed。** 先前原型的量測用 seed 1。production 對 seed 1、$N = 20000$ 的 layout 以 `NonManifoldError` 拒絕：同一個 Net 的兩個形狀（`f5879` 與 `f5879b`）只在一個 vertex 相接，這是 production fail closed 的輸入，原型當時沒有檢查而建得出來。所以本頁所有 $N$ 都改用 seed 2（seed 2 到 9 在 $N = 20000$ 都建得出來）；上面的結構計數也用同一個 seed。
@@ -121,6 +123,8 @@ flowchart TB
 **單次執行的起伏。** 這台機器上沒有對同一個 layout 重複量測。唯一可比較的是中途被中止的那次重跑：它用 seed 1 的 $N = 1000$ layout，同一個一個 tile 的推導在三次不同的呼叫中量到 1.95 s、2.02 s 與 2.15 s，起伏約 10%。推導的最佳加速是 1.22 倍（$N = 1000$，$4 \times 4$ tile 與 32 個 worker）、1.26 倍（$N = 5000$，$8 \times 8$ tile 與 8 個 worker）與 1.17 倍（$N = 20000$，$8 \times 8$ tile 與 8 個 worker），而一個 worker 的 $4 \times 4$ 與 $8 \times 8$ tile 比一個 tile 還慢（$N = 20000$ 時 0.92 與 0.89 倍），所以這些加速的差距大多在起伏之內。本頁的數字用來看量級與斜率，不是用來比較兩次執行之間的小差距。
 
 ### Emission 是尾巴
+
+逐步驟的時間、檔案大小與整條路徑的記憶體，見研究頁 [Direct writer 與 Gmsh 載入](../../research/geometry-build/emission-and-load.qmd)。
 
 推導完成之後，必須寫出 CAD 檔案與 sidecar，再由 Gmsh 載入，載入端還要執行載入檢查 `verify_loaded`。這些步驟是循序的，在 $N = 20000$ 時合計比推導還長。逐一呼叫來建立幾何的 Gmsh API，只保留作為**測試用 oracle**（`tests/sgb_gmsh_oracle.py`）；這裡的比較就是決策 D8 的證據，D8 讓 direct writer 成為 emission 的路徑。
 

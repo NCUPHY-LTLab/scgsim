@@ -80,7 +80,7 @@ Gmsh API 還有第二個弱點，是任何計時都看不出來的：`addSurface
 
 {{< askr-chart-view src="figures/emission-timing.html" label="檢視計時圖表" >}}
 
-這些計時全部來自只含 polygon 的隨機 layout：沒有 arc、沒有 polyline witness、沒有 cylinder wall，也沒有 band。arc 與 band 在大規模下的成本沒有量測過，不能由這裡外推。
+這些計時全部來自只含 polygon 的隨機 layout：沒有 arc、沒有 polyline witness、沒有 cylinder wall，也沒有 band。arc 與 band 在大規模下的成本沒有量測過，不能由這裡外推。這些計時的完整整理與重現方式，見研究頁 [Direct writer 與 Gmsh 載入](../../research/geometry-build/emission-and-load.qmd)；檢查的成本見[檢查的成本](../../research/geometry-build/validation-cost.qmd)。
 
 - **Oracle 的成本集中在 physical group，而且超線性。**N = 500、1,000、2,000 時，oracle 的合計是 2.35 s、8.48 s、64.7 s，direct writer（plan 加算繪）是 0.20 s、0.35 s、0.77 s，差 12 倍、24 倍、84 倍。oracle 的 `addPhysicalGroup` 一階段是 1.19 s、6.07 s、59.3 s（佔 51%、72%、92%），而 group 數只是 1,875、3,691、7,484 個（約 3.7 N）：group 數每加倍，這個 stage 的時間是 5.1 倍與 9.8 倍。其餘三個 stage（OCC build、`synchronize`、寫出 XAO）加起來是 1.16 s、2.41 s、5.46 s，N 每加倍約為 2.1 倍與 2.3 倍。direct writer 不經過 Gmsh 的 group 登記，group 資訊寫在 XAO 的 `<groups>` 與 sidecar 裡。
 - **Direct writer 隨 N 大致線性。**N = 1,000、5,000、20,000 時，plan 加算繪（16 個 worker）是 0.44 s、2.19 s、9.14 s，每個寫出的元素（vertex、edge、face）約 6.7 到 7.0 µs。

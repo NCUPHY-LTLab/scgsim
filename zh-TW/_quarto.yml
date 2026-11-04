@@ -13,6 +13,7 @@ project:
   - docs/course/*.qmd
   - docs/tutorials/*.qmd
   - docs/research/*.qmd
+  - docs/research/*/*.qmd
   - docs/history/*.qmd
   - docs/concepts/*.qmd
   - docs/design/sgb/*.qmd
@@ -135,6 +136,14 @@ website:
     collapse-level: 1
     contents:
     - docs/research/index.qmd
+    - section: 幾何建構效能
+      href: docs/research/geometry-build/index.qmd
+      contents:
+      - docs/research/geometry-build/scaling.qmd
+      - docs/research/geometry-build/emission-and-load.qmd
+      - docs/research/geometry-build/validation-cost.qmd
+      - docs/research/geometry-build/parallelism.qmd
+      - docs/research/geometry-build/reproduction.qmd
     - docs/history/curved-source-installation.qmd
   - id: contract
     title: 頁面

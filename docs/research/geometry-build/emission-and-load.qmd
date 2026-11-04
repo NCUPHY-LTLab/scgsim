@@ -1,0 +1,69 @@
+---
+title: "Direct writer and Gmsh load"
+description: "The direct BREP writer against building the same geometry through the Gmsh API, and the cost of every step between the derived model and a model Gmsh has loaded and checked."
+scgsim-kind: "research"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/research/geometry-build/emission-and-load"
+---
+
+**Questions.** How much faster is the direct BREP writer than building the same geometry through the Gmsh API? And once the derivation is done, what do writing the files, the reports and the sidecar, loading in Gmsh and checking the loaded model cost?
+
+**Results.**
+
+- The direct writer needs 0.20, 0.35 and 0.77 s at 500, 1,000 and 2,000 features; the Gmsh API needs 2.35, 8.48 and 64.7 s, which is 12, 24 and 84 times as long. The Gmsh API run at 5,000 features was stopped after 10 minutes without finishing, against 2.2 to 2.8 s for the direct writer.
+- The Gmsh API route also builds solids with the wrong sign of mass (the substrate comes out negative).
+- After the derivation, the rest of the path costs 148 s at 20,000 features (one process), more than twice the 61.6 s of the derivation itself. Every step scales almost linearly.
+
+## Direct writer against the Gmsh API
+
+The **direct writer** plans the BREP topology from the derived model and writes the BREP and XAO files as text; nothing is built through an API. The **Gmsh API construction** is the test-side builder that the SGB tests use as a reference: it creates every entity through `gmsh.model.occ`, synchronizes, and then registers every physical group with `addPhysicalGroup`. Both produce a model for the same layouts (random layouts, Route B, seed 2).
+
+![Left: total time of the direct writer and of the Gmsh API construction at 500, 1,000 and 2,000 features, with a slope-1 line from the first Gmsh API point. Right: the Gmsh API time split into its steps; the label gives the total and the share taken by addPhysicalGroup.](figures/api-vs-direct.svg){#fig-api fig-alt="Left: log-log chart; the Gmsh API line rises from 2.35 to 64.7 seconds, much steeper than the slope-1 reference, and the direct writer line rises from 0.20 to 0.77 seconds. Right: stacked bars of the Gmsh API time; the addPhysicalGroup part is 51, 72 and 92 percent of the total and dominates the largest bar."}
+
+In @fig-api the Gmsh API line is steeper than the reference: its local slope against N is 1.85 and then 2.93, while the direct writer's time grows slowly. The step that takes over is `addPhysicalGroup`, whose share of the total is 51%, 72% and 92%.
+
+::: {.askr-table-compact .askr-table-numeric}
+{{< include figures/api-table.md >}}
+:::
+
+*Direct writer* is the planning plus the rendering of BREP and XAO with 16 workers; *Faces* is the number of faces written. These times come from a run of their own. The tail table below times the same direct write in the scaling run: at 1,000 features it reads 0.44 s there against 0.35 s here.
+
+### The solids come out with the wrong mass
+
+A Gmsh API solid is built from a surface loop, and the API does not let the caller choose which side of the faces is the inside. The test builder's solids were reopened and their mass (signed volume) was measured:
+
+::: {.askr-table-compact .askr-table-numeric}
+{{< include figures/mass-table.md >}}
+:::
+
+The substrate has a negative mass and the vacuum a positive one, and neither matches the direct writer's solids. The direct writer's two solids both have positive mass, and the substrate's equals the chip area times its thickness. A solid with negative mass still meshes, so the error stays invisible unless it is checked. The direct writer writes the orientation of every face explicitly, and the check on the loaded model compares the volumes with the plan (see [Cost of the checks](validation-cost.qmd)).
+
+## What follows the derivation
+
+After the derivation, the pipeline writes the files, writes the reports and the sidecar, lets Gmsh load the XAO, and runs `verify_loaded` on the loaded model. The **sidecar** is the JSON file that carries each entity's lineage and group membership next to the BREP and XAO files. The **reports** are the sliver and validation reports written with the files. `verify_loaded` is the check that compares the loaded Gmsh model with the plan.
+
+![Left: the time from a validated model to a loaded and checked model at 20,000 features, with the direct writer in one process and with 16 workers. Right: every step after the derivation against the number of features, with a slope-1 line from the derivation at 1,000 features.](figures/tail.svg){#fig-tail fig-alt="Left: two horizontal stacked bars at 20,000 features. One process: derivation 61.6 seconds, write 13.8, reports 49.7, sidecar 19.6, Gmsh load 49.7, verify_loaded 15.3, total 210 seconds. Sixteen workers: write 9.1 seconds, total 205 seconds. Right: log-log lines for the five steps after the derivation, each close to the slope-1 reference."}
+
+::: {.askr-table-compact .askr-table-numeric}
+{{< include figures/tail-table.md >}}
+:::
+
+At 20,000 features the steps after the derivation add up to 148 s with one process, against 61.6 s for the derivation. The slopes between 1,000 and 20,000 features are 1.08 to 1.15 for writing, 1.00 to 1.12 for the reports, 1.04 to 1.09 for the sidecar, 1.13 and 1.19 for the Gmsh load and 0.99 for `verify_loaded` (the exact values are in `numbers.json` beside the figures). Using 16 workers for the BREP and XAO rendering shortens the write from 13.8 s to 9.1 s and changes the total by 5 s.
+
+The two largest steps are the reports (49.7 s) and the Gmsh load (49.7 s). The reports take that long although the files they produce are small (12.6 kB and 4.9 kB). At 2,000 features Gmsh loads the XAO written by the Gmsh API in 3.46 s and the direct writer's in 3.06 s, so the writer changes the load time by about 13%, far less than the size of the model does:
+
+::: {.askr-table-compact .askr-table-numeric}
+{{< include figures/load-table.md >}}
+:::
+
+## Files and memory of the whole path
+
+::: {.askr-table-compact .askr-table-numeric}
+{{< include figures/files-table.md >}}
+:::
+
+The sidecar is larger than the BREP at every size (232 MB against 190 MB at 20,000 features). *Faces written* is the number of faces in the BREP file. The last column is the peak memory of one process that builds the model, writes the files, loads the XAO in Gmsh and runs `verify_loaded`: 7.6 GB at 20,000 features, against 2.0 GB for the build alone ([Scaling with chip size](scaling.qmd)).
+
+## Interpretation
+
+Writing the geometry directly removes the part of the Gmsh API route that grows faster than linearly. What remains after the derivation is made of near-linear steps, and the two largest of them, the reports and the Gmsh load, do not depend on the derivation. Parallel derivation cannot shorten them either; the effect on the whole path is in [Parallel derivation](parallelism.qmd#end-to-end).
