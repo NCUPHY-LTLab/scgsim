@@ -165,17 +165,23 @@ A **cut family** is an immutable record:
 | physical boundaries | prism footprints | levels/slabs where active | required iff labels differ |
 | lumped port footprint | port sheet polygon | its plane | required |
 | contact caps | (automatic: overlap of prisms) | contact level | required iff labels differ |
-| Surface-EPR inset bands | offset of a *physical support region* by margins m_1<…<m_k | selected semantic surfaces | required; band index joins the label |
+| Surface-EPR inset bands | offsets of the support's *gap edges* by margins m_1<…<m_k | selected semantic surfaces | required; band index joins the label |
 | mesh refinement curves | user/automatic | any surface | `refinement_only`: kept as edges, not a label change |
 | tile seams | parallel scheduler | all levels | always dissolved |
 
 Adding a new partition kind = writing a generator + selecting a target +
 choosing an edge policy. No new code path in assembly or emission.
 
-**Distance-origin rule** (fixes a defect of solver-side masks): inset curves
-are generated from the *physical boundary of the support region*, computed
-before arrangement and before any partition. Seams created by other families
-(ports, contact caps, tile seams, other bands) are never distance origins.
+**Distance-origin rule**: inset bands are measured only from *gap edges*,
+computed before arrangement and before any partition. A gap edge is a part of
+a conductor footprint boundary whose coplanar neighbour on the conductor's
+attachment plane is an exposed SA or SS surface. Die or model boundary edges,
+conductor contacts and vacuum-only edges are not origins. A support with no
+gap edge fails closed. Seams created by other families (ports, contact caps,
+tile seams, other bands) are never distance origins. The 2D Surface-EPR
+correction factor is computed on the gap cross-section, which is why only gap
+edges count. Band labels are decided by area; a face that straddles two bands
+is an error.
 
 ## 6. Inset imprint (first consumer)
 
@@ -240,10 +246,15 @@ Two identity layers:
   group. Unions such as "all PEC faces of Net X" are lists of primary
   groups in the sidecar and solver config, never overlapping Gmsh groups
   (MSH output duplicates elements per group, which solvers can misread).
-- Embedded sheets that bound no volume (Route-B mid-plane lumped port) are
-  emitted as faces embedded in their host volume; XAO cannot carry the
-  embedding, so the sidecar records `(face, host volume)` and the mesher
-  re-applies it.
+- A lumped port lies on its hosts' authored support plane: the PDK layer
+  attachment face, projected through the physical representation plan. Hosts
+  must agree on that plane, there is no mid-plane fallback, and a missing
+  attachment fails closed. On a substrate the port is therefore part of the
+  substrate surface, not an embedded sheet.
+- The generic embedded-sheet mechanism stays for faces that bound no volume
+  (a stage-level test fixture is the only current example): they are emitted
+  as faces embedded in their host volume; XAO cannot carry the embedding, so
+  the sidecar records `(face, host volume)` and the mesher re-applies it.
   Emission binds native tags to planned IDs by construction order, not by
   geometry matching.
 
