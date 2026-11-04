@@ -24,6 +24,7 @@ from scgsim.geometry.sgb.routes.naming import (
     SHEET,
     interface_type_of,
     net_of_surface,
+    sheet_face_sides,
     sheet_row_id,
 )
 from scgsim.geometry.sgb.routes.naming import face_kind as naming_face_kind
@@ -152,64 +153,73 @@ def surface_epr_rows(
 ) -> dict[str, dict[str, Any]]:
     """Every Surface-EPR row and the primary group that carries it.
 
-    ``MA``, ``MS`` and ``SA`` groups carry their own row.  A Route A sheet group carries both the
-    metal-air and the metal-substrate row of its Entity: one face, integrated once per side, so its two
-    rows name the same ``shared_face_group`` and say which side of the sheet they integrate:
+    ``MA``, ``MS`` and ``SA`` groups carry their own row.  A Route A sheet group carries the metal-air
+    row of its Entity (``MA::<entity>::sheet[::band=k]``) when a face of it has vacuum on some side, and
+    the metal-substrate row (``MS::...``) when a face has a dielectric on some side; a row with no such
+    face does not exist.  Both rows of one sheet group integrate the same face, once per side, so they
+    name the same ``shared_face_group``.  Each row carries:
 
-    * ``side`` -- ``above`` or ``below`` (the side of the sheet whose neighbour is vacuum for the MA row,
-      a dielectric for the MS row), ``both`` when both neighbours qualify, ``None`` for a one-sided row;
-    * ``shared_face_group`` -- the sheet group when the row integrates one side of a two-sided face,
-      else ``None``.  A consumer that treats an internal two-sided face (cracking it, or counting the
-      face once) decides from this field alone.
-
-    ``band`` is the band index, or ``None`` for an unbanded group.
+    * ``face_sides`` -- for a sheet row, face id -> ``above``, ``below`` or ``both``: the side of that
+      face whose neighbour the row integrates, listing exactly the faces that have such a neighbour;
+      ``None`` for every other row;
+    * ``side`` -- for a sheet row, the common ``face_sides`` value, or ``mixed`` when the faces
+      disagree; ``None`` for every other row;
+    * ``shared_face_group`` -- the sheet group for a sheet row, else ``None``.  A consumer that treats
+      an internal two-sided face (cracking it, or counting the face once) decides from this field and
+      ``face_sides``;
+    * ``band`` -- the band index, or ``None`` for an unbanded group.
     """
     rows: dict[str, dict[str, Any]] = {}
     for name, record in sorted(surface_groups.items()):
         kind = record["interface_type"]
         band = record["band"]["index"] if record["band"] else None
         if kind == SHEET:
-            faces = [model.topology.faces[f] for f in record["ids"]]
             (entity,) = record["entities"]  # a sheet group is the sheet of one Entity
-            for row_type, neighbour in (("MA", "vacuum"), ("MS", "dielectric")):
-                side = _sheet_side(faces, neighbour)
+            for row_type, face_sides in _face_sides_by_row_type(model, record).items():
                 rows[sheet_row_id(row_type, entity, band)] = _row(
-                    name, row_type, record, band, side, name
+                    name, row_type, record, band, face_sides
                 )
         elif kind in SURFACE_EPR_TYPES:
-            rows[name] = _row(name, kind, record, band, None, None)
+            rows[name] = _row(name, kind, record, band, None)
     return rows
 
 
-def _sheet_side(faces: list[TopoFace], neighbour_kind: str) -> str | None:
-    """Which side of a sheet group has a neighbour of this kind: ``above``, ``below`` or ``both`` (``None`` for neither)."""
-    above = any(
-        f.pos_domain is not None and f.pos_domain.kind == neighbour_kind for f in faces
-    )
-    below = any(
-        f.neg_domain is not None and f.neg_domain.kind == neighbour_kind for f in faces
-    )
-    return (
-        "both" if above and below else "above" if above else "below" if below else None
-    )
+def _face_sides_by_row_type(
+    model: ConformalModel, record: SurfaceGroupRecord
+) -> dict[str, dict[str, str]]:
+    """Row type -> face id -> side, over the faces of a sheet group; a row type no face has a neighbour for is absent."""
+    out: dict[str, dict[str, str]] = {}
+    for face_id in record["ids"]:
+        face = model.topology.faces[face_id]
+        for row_type, side in sheet_face_sides(
+            face.neg_domain, face.pos_domain
+        ).items():
+            out.setdefault(row_type, {})[face_id] = side
+    return out
 
 
-def _row(  # noqa: PLR0913 - the fields of one row
+def _row(
     group: str,
     row_type: str,
     record: SurfaceGroupRecord,
     band: int | None,
-    side: str | None,
-    shared_face_group: str | None,
+    face_sides: dict[str, str] | None,
 ) -> dict[str, Any]:
     return {
         "group": group,
         "interface_type": row_type,
         "entities": record["entities"],
         "band": band,
-        "side": side,
-        "shared_face_group": shared_face_group,
+        "side": None if face_sides is None else _common_side(face_sides),
+        "face_sides": face_sides,
+        "shared_face_group": None if face_sides is None else group,
     }
+
+
+def _common_side(face_sides: dict[str, str]) -> str:
+    """The side every face agrees on, else ``mixed``."""
+    sides = set(face_sides.values())
+    return sides.pop() if len(sides) == 1 else "mixed"
 
 
 def _group_face_kind(name: str, faces: list[TopoFace]) -> str:

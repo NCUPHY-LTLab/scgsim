@@ -12,8 +12,12 @@ from pathlib import Path
 import jsonschema
 import pytest
 from sgb_emit_cases import CASES, pad_model
+from sgb_scenes import GRID, conductor, footprint, rect_um
 
 from scgsim.geometry.sgb.emission.plan import plan_brep
+from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.records.grid import exact_z
+from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
 from scgsim.geometry.sgb.routes.naming import FACE_KINDS
 from scgsim.geometry.sgb.sidecar.aedt import aedt_names, sanitise_aedt_name
 from scgsim.geometry.sgb.sidecar.build import SidecarContext, build_sidecar
@@ -88,7 +92,22 @@ def test_the_schema_rejects_what_a_consumer_must_not_see(sidecars):
                     "entities": [],
                     "band": None,
                     "side": "left",
+                    "face_sides": None,
                     "shared_face_group": None,
+                }
+            },
+        },
+        {
+            **good,
+            "surface_epr_rows": {
+                "x": {
+                    "group": "g",
+                    "interface_type": "MA",
+                    "entities": [],
+                    "band": None,
+                    "side": "above",
+                    "face_sides": {"f:1": "left"},
+                    "shared_face_group": "g",
                 }
             },
         },
@@ -224,8 +243,8 @@ def test_the_example_group_names_of_the_three_routes(sidecars):
     )
 
 
-def test_route_a_sheet_groups_carry_both_surface_epr_rows(sidecars):
-    """Route a sheet groups carry both surface epr rows."""
+def test_a_sheet_on_a_substrate_carries_both_surface_epr_rows(sidecars):
+    """A sheet with vacuum above and a dielectric below carries an MA and an MS row."""
     side = sidecars["pad_a_bands"]
     rows = side["surface_epr_rows"]
     assert (
@@ -249,14 +268,84 @@ def test_a_sheet_row_marks_the_side_of_the_two_sided_face_it_integrates(sidecars
         ma, ms = rows[f"MA::pad::sheet::band={k}"], rows[f"MS::pad::sheet::band={k}"]
         assert (ma["side"], ms["side"]) == ("above", "below")
         assert ma["shared_face_group"] == ms["shared_face_group"] == f"pad::band={k}"
+        assert set(ma["face_sides"].values()) == {"above"}
+        assert set(ms["face_sides"].values()) == {"below"}
+        assert ma["face_sides"].keys() == ms["face_sides"].keys()
     one_sided = [r for n, r in rows.items() if n.startswith("SA::")]
     assert one_sided and all(
-        r["side"] is None and r["shared_face_group"] is None for r in one_sided
+        r["side"] is None and r["face_sides"] is None and r["shared_face_group"] is None
+        for r in one_sided
     )
     finite = sidecars["pad_b_bands"]["surface_epr_rows"]
     assert all(
-        r["side"] is None and r["shared_face_group"] is None for r in finite.values()
+        r["side"] is None and r["face_sides"] is None and r["shared_face_group"] is None
+        for r in finite.values()
     )
+
+
+def test_a_floating_sheet_has_vacuum_on_both_sides_so_it_has_no_ms_row(sidecars):
+    """The floating sheet has an MA row (side both) and neither an MS row nor an MS union entry."""
+    side = sidecars["floating_sheet_a"]
+    rows = side["surface_epr_rows"]
+    (face,) = side["physical_groups"]["float"]["ids"]
+    assert rows["MA::float::sheet"]["face_sides"] == {face: "both"}
+    assert rows["MA::float::sheet"]["side"] == "both"
+    assert "MS::float::sheet" not in rows
+    unions = side["unions"]["interface_types"]
+    assert "float" in unions["MA"] and "float" not in unions.get("MS", [])
+    assert "float" in unions["SHEET"]
+
+
+def mixed_neighbour_sheet():
+    """A sheet crossing the edge of a narrower substrate: dielectric below one face, vacuum below the other."""
+    inner, outer = rect_um(-20, -20, 20, 20), rect_um(-40, -40, 40, 40)
+    prisms = [
+        PrismRecord(
+            "substrate",
+            footprint(inner),
+            exact_z(-100),
+            exact_z(0),
+            "substrate",
+            "dielectric",
+        ),
+        PrismRecord(
+            "air_low",
+            footprint(outer, [inner]),
+            exact_z(-100),
+            exact_z(0),
+            "vacuum",
+            "vacuum",
+        ),
+        PrismRecord(
+            "vacuum", footprint(outer), exact_z(0), exact_z(100), "vacuum", "vacuum"
+        ),
+        conductor("pad", rect_um(-30, -5, 10, 5), 0, 0, "N"),
+    ]
+    return build_model_from_catalogue(
+        PrismCatalogue(GRID, tuple(prisms), name="mixed_neighbours"), "A"
+    )
+
+
+def test_a_sheet_group_with_different_neighbours_reports_them_per_face():
+    """Over the substrate a face has MA above and MS below; beyond its edge vacuum lies on both sides."""
+    model = mixed_neighbour_sheet()
+    assert model.report.to_dict()["passed"]
+    side = sidecar_of(model)
+    rows, faces = side["surface_epr_rows"], side["physical_groups"]["pad"]["ids"]
+    assert len(faces) == 2
+    ma, ms = rows["MA::pad::sheet"], rows["MS::pad::sheet"]
+    assert sorted(ma["face_sides"]) == sorted(faces)
+    assert sorted(ma["face_sides"].values()) == ["above", "both"]
+    assert ma["side"] == "mixed"
+    (over_substrate,) = ms[
+        "face_sides"
+    ]  # only the face over the substrate has a dielectric
+    assert ms["face_sides"] == {over_substrate: "below"}
+    assert ma["face_sides"][over_substrate] == "above"
+    assert ms["side"] == "below"
+    unions = side["unions"]["interface_types"]
+    assert unions["MA"] == unions["MS"] == ["pad"]
+    assert not list(jsonschema.Draft202012Validator(sidecar_schema()).iter_errors(side))
 
 
 def test_route_b_bands_are_separate_top_ma_and_bottom_ms_rows(sidecars):
@@ -294,27 +383,30 @@ def test_route_c_conductor_interiors_are_volume_groups_of_kind_conductor(sidecar
 def test_unions_are_lists_of_primary_groups_and_each_group_is_listed_under_the_types_it_carries_rows_for(
     sidecars,
 ):
-    """Every group is in its own interface union; a Route A sheet group is also under MA and MS (it carries both rows)."""
+    """Every group is in its own interface union; a Route A sheet group is also under MA / MS exactly when it carries that row."""
     for name, side in sidecars.items():
         by_type = side["unions"]["interface_types"]
-        surface_groups = {
-            n for n, g in side["physical_groups"].items() if g["dim"] == 2
+        groups = side["physical_groups"]
+        surface_groups = {n for n, g in groups.items() if g["dim"] == 2}
+        sheet_rows = {
+            (row["group"], row["interface_type"])
+            for row in side["surface_epr_rows"].values()
+            if row["face_sides"] is not None
         }
+        sheets = {n for n in surface_groups if groups[n]["interface_type"] == "SHEET"}
         listed = [g for members in by_type.values() for g in members]
-        sheets = {
-            n
-            for n in surface_groups
-            if side["physical_groups"][n]["interface_type"] == "SHEET"
-        }
-        assert sorted(listed) == sorted([*surface_groups, *sheets, *sheets]), name
+        assert sorted(listed) == sorted(
+            [*surface_groups, *(g for g, _ in sheet_rows)]
+        ), name
         for kind, members in by_type.items():
             assert all(
-                side["physical_groups"][m]["interface_type"] == kind
-                or (kind in ("MA", "MS") and m in sheets)
+                groups[m]["interface_type"] == kind or (m, kind) in sheet_rows
                 for m in members
             ), name
-        if sheets:
-            assert set(by_type["MA"]) >= sheets and set(by_type["MS"]) >= sheets, name
+        for kind in ("MA", "MS"):
+            assert {m for m in by_type.get(kind, []) if m in sheets} == {
+                g for g, row_type in sheet_rows if row_type == kind
+            }, name
         for net, members in side["unions"]["nets"].items():
             assert members and all(
                 side["physical_groups"][m]["net"] == net for m in members

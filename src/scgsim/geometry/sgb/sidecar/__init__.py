@@ -38,15 +38,18 @@ Top-level fields and who uses them
     ``conductor_component_id`` / ``net_id`` = ``entities`` / ``net``, PEC surfaces = the groups of interface type ``MA``/``MS``/``SHEET`` of a conductor.
 ``unions``
     ``interface_types`` (``MA`` -> groups ...; reports aggregate by interface type; a Route A ``SHEET``
-    group is listed under ``SHEET``, ``MA`` and ``MS`` because it carries both rows) and ``nets``
+    group is listed under ``SHEET``, and under ``MA`` / ``MS`` when it carries that row) and ``nets``
     (Net -> exposed conductor groups; Electrostatic terminals and grounds).  Lists of primary groups,
     never overlapping Gmsh groups.
 ``surface_epr_rows``
     every Surface-EPR row (``MA::pad::top::band=2`` ...) and the group that carries it, with entities and
-    band: Palace's cumulative band selection.  A Route A sheet group (``pad::band=2``) carries both its
-    ``MA::pad::sheet::band=2`` and ``MS::pad::sheet::band=2`` row; each
-    of those rows has ``shared_face_group`` (the sheet group) and ``side`` (``above``, ``below`` or ``both``),
-    so the consumer decides internal-boundary cracking from the row alone.
+    band: Palace's cumulative band selection.  A Route A sheet group (``pad::band=2``) carries
+    ``MA::pad::sheet::band=2`` when a face of it has vacuum on some side and ``MS::pad::sheet::band=2``
+    when a face has a dielectric on some side; a sheet with vacuum on both sides has no ``MS`` row.  A sheet
+    row has ``shared_face_group`` (the sheet group), ``face_sides`` (face id -> ``above``, ``below`` or
+    ``both``, only the faces that have that neighbour) and ``side`` (their common value, or ``mixed``), so
+    the consumer decides internal-boundary cracking from the row alone; every other row has ``None``
+    for the three.
 ``mesh_hints``
     ``band_boundary`` / ``refinement_curve`` / ``curved_edge`` entries: edge ids and native tags plus the
     source request id; no sizes (the mesher decides; ``hints`` documents the sizing the bands need).

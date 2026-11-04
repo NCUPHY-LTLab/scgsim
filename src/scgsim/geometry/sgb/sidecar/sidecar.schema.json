@@ -84,18 +84,24 @@
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["group", "interface_type", "entities", "band", "side", "shared_face_group"],
+        "required": ["group", "interface_type", "entities", "band", "side", "face_sides", "shared_face_group"],
         "properties": {
           "group": {"type": "string"},
           "interface_type": {"enum": ["MA", "MS", "SA"]},
           "entities": {"type": "array", "items": {"type": "string"}},
           "band": {"type": ["integer", "null"], "minimum": 0},
           "side": {
-            "description": "Which side of a two-sided sheet face the row integrates; null for a one-sided row.",
-            "enum": ["above", "below", "both", null]
+            "description": "A sheet row: the side every face in face_sides agrees on, or mixed when they disagree; null for any other row.",
+            "enum": ["above", "below", "both", "mixed", null]
+          },
+          "face_sides": {
+            "description": "A sheet row: face id -> the side of that face whose neighbour (vacuum for MA, dielectric for MS) the row integrates, listing exactly the faces that have such a neighbour; null for any other row.",
+            "type": ["object", "null"],
+            "minProperties": 1,
+            "additionalProperties": {"enum": ["above", "below", "both"]}
           },
           "shared_face_group": {
-            "description": "The sheet group when the row integrates one side of an internal two-sided face, else null.",
+            "description": "The sheet group for a sheet row (its MA and MS rows integrate the same two-sided face), else null.",
             "type": ["string", "null"]
           }
         }

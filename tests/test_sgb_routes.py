@@ -23,6 +23,7 @@ from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.sgb.routes.naming import (
     check_entity_names,
     interface_type_of,
+    sheet_face_sides,
     surface_epr_row_ids,
     surface_group,
     volume_group,
@@ -462,11 +463,20 @@ def test_volume_groups_and_interface_types_and_surface_epr_rows():
     assert interface_type_of(V, V, SheetOwner("port", "p1")) == "PORT"
     assert interface_type_of(None, V, None) == "EXT"
     assert interface_type_of(None, None, None) is None
-    # a banded Route A sheet carries both rows; every other banded group carries its own name
-    assert surface_epr_row_ids("pad::band=1", "SHEET", "pad", 1) == [
+    # a banded Route A sheet carries the rows its neighbours give; every other banded group carries its own name
+    assert sheet_face_sides(V, V) == {"MA": "both"}  # vacuum on both sides: no MS row
+    assert sheet_face_sides(S, V) == {"MA": "above", "MS": "below"}
+    assert sheet_face_sides(V, S) == {"MA": "below", "MS": "above"}
+    assert sheet_face_sides(None, V) == {"MA": "above"}
+    assert surface_epr_row_ids(
+        "pad::band=1", "SHEET", "pad", 1, sheet_face_sides(S, V)
+    ) == [
         "MA::pad::sheet::band=1",
         "MS::pad::sheet::band=1",
     ]
+    assert surface_epr_row_ids(
+        "pad::band=1", "SHEET", "pad", 1, sheet_face_sides(V, V)
+    ) == ["MA::pad::sheet::band=1"]
     assert surface_epr_row_ids("SA::a|b::interface::band=0", "SA", "", 0) == [
         "SA::a|b::interface::band=0"
     ]

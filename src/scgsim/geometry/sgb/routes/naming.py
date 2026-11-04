@@ -9,8 +9,9 @@ things.**  Gmsh's Type column already says whether a group is a volume or a surf
 restates the dimension:
 
 * ``<entity>`` -- a volume (also the interior of a Route C conductor Entity), or, for a Route A
-  conductor sheet, the sheet itself: ``<entity>[::band=k]``, both its sides being the metal-air and the
-  metal-substrate surface of that Entity (it carries no face kind, because it is always a ``sheet``);
+  conductor sheet, the sheet itself: ``<entity>[::band=k]``, whose two sides are the metal-air and the
+  metal-substrate surface of that Entity wherever a vacuum or a dielectric lies against them (it carries no
+  face kind, because it is always a ``sheet``);
 * ``MA::<entity>::<face kind>`` / ``MS::<entity>::<face kind>`` -- a conductor surface against vacuum
   (metal-air) or against a dielectric (metal-substrate); ``MM::<a>|<b>::<face kind>`` between two
   conductor Entities;
@@ -39,8 +40,10 @@ A face inside an inset band carries ``::band=k`` (the innermost band index of it
 band seams stop at the boundary of a port, so a port is one face and carries no band.  Names never carry
 native tags.
 
-Surface-EPR rows keep the prefixed form for a sheet: its group ``pad::band=1`` carries the rows
-``MA::pad::sheet::band=1`` and ``MS::pad::sheet::band=1`` (see :func:`sheet_row_id`).
+Surface-EPR rows keep the prefixed form for a sheet: its group ``pad::band=1`` carries the row
+``MA::pad::sheet::band=1`` when a face of the group has vacuum on some side, and ``MS::pad::sheet::band=1``
+when a face has a dielectric on some side (see :func:`sheet_row_id` and :func:`sheet_face_sides`).  A sheet
+with vacuum on both sides has no ``MS`` row.
 """
 
 from __future__ import annotations
@@ -54,6 +57,8 @@ RESERVED_PREFIXES = ("MA", "MS", "MM", "SA", "AA", "SS", "EXT", "PORT")
 """The interface prefixes of a prefixed group name; no entity id may equal one of them."""
 SHEET = "SHEET"
 """Interface type of a Route A conductor sheet (a record field and a union key, never part of a group name)."""
+SHEET_ROW_NEIGHBOURS = {"MA": "vacuum", "MS": "dielectric"}
+"""The Surface-EPR row types of a sheet face and the kind of neighbour each one integrates."""
 FACE_KINDS = ("top", "bottom", "sidewall", "sheet", "interface")
 """The face kinds a primary surface group name can carry (a port face is ``port`` and is not in a name)."""
 
@@ -152,8 +157,8 @@ def interface_type_of(
 ) -> str | None:
     """The interface type of a face (``MA``, ``MS`` ... ``PORT``, ``EXT``, or ``SHEET``), from its structure.
 
-    A Route A conductor sheet is ``SHEET`` (it carries both the metal-air and the metal-substrate row);
-    a face with no name is ``None``.  Nothing is parsed from a group name.
+    A Route A conductor sheet is ``SHEET`` (its ``MA`` and ``MS`` rows follow the neighbours of its faces,
+    see :func:`sheet_face_sides`); a face with no name is ``None``.  Nothing is parsed from a group name.
     """
     if owner is not None:
         return "PORT" if owner.kind == "port" else SHEET
@@ -198,16 +203,37 @@ def net_of_surface(
     return conductors[0].net if len(conductors) == 1 else None
 
 
+def sheet_face_sides(neg: Domain | None, pos: Domain | None) -> dict[str, str]:
+    """The Surface-EPR row types of one sheet face and the side of the face each one integrates.
+
+    ``MA`` is the neighbour of kind vacuum, ``MS`` the one of kind dielectric (:data:`SHEET_ROW_NEIGHBOURS`).
+    A side is ``above`` (the neighbour is the ``pos`` domain), ``below`` (the ``neg`` domain) or ``both``.
+    A row type the face has no neighbour for is absent.
+    """
+    out: dict[str, str] = {}
+    for row_type, kind in SHEET_ROW_NEIGHBOURS.items():
+        above = pos is not None and pos.kind == kind
+        below = neg is not None and neg.kind == kind
+        if above or below:
+            out[row_type] = "both" if above and below else "above" if above else "below"
+    return out
+
+
 def surface_epr_row_ids(
-    group: str, interface: str, entity: str, band: int | None
+    group: str,
+    interface: str,
+    entity: str,
+    band: int | None,
+    sheet_sides: dict[str, str] | None = None,
 ) -> list[str]:
     """The Surface-EPR rows a banded group carries, from facts the caller already has (never from the name).
 
-    A Route A sheet group carries both the ``MA`` and the ``MS`` row of its Entity; every other banded
-    group carries its own name as its row; a port carries none.
+    A Route A sheet group carries the ``MA`` and ``MS`` rows of its Entity that ``sheet_sides`` (the
+    :func:`sheet_face_sides` of one of its faces) names; every other banded group carries its own name as
+    its row; a port carries none.
     """
     if band is None or interface == "PORT":
         return []
     if interface == SHEET:
-        return [sheet_row_id("MA", entity, band), sheet_row_id("MS", entity, band)]
+        return [sheet_row_id(row_type, entity, band) for row_type in sheet_sides or ()]
     return [group]
