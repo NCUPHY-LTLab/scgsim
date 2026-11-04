@@ -10,6 +10,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import MappingProxyType
 from typing import Any
 
 from scgsim.diagnostics import diagnostic_stage, progress
@@ -152,6 +153,9 @@ class _WrittenGeometrySource:
 class GeometryPlan:
     """Bind named source occurrences and final Nets before backend preparation."""
 
+    # Immutable default, so a plan assembled without ``__init__`` (tests build them that way) has no priorities.
+    _entity_priorities: Mapping[str, int] = MappingProxyType({})
+
     def __init__(  # noqa: PLR0913 - constructor preserves the established plan contract
         self,
         component: Any,
@@ -179,6 +183,7 @@ class GeometryPlan:
             self.root_id: (component, None, (1.0, 0.0, 0.0, 1.0, 0.0, 0.0))
         }
         self._nets: dict[str, tuple[str, ...]] = {}
+        self._entity_priorities = MappingProxyType({})
         self._vacuum_region: VacuumRegionSpec | None = None
         self._boundary_curves = ()
         self._boundary_reconstruction = ()
@@ -292,6 +297,31 @@ class GeometryPlan:
             prepared[net] = unique
         self._nets = prepared
 
+    def set_entity_priorities(self, priorities: Mapping[str, int]) -> None:
+        """Replace the assembly-level overlap priority of Entities after validating every reference.
+
+        Where two Entities of one Net overlap, the one with the **higher** priority owns the
+        overlap region (equal or missing priorities make the overlap an error that names both
+        Entities).  This is the third source of priority, for overlaps between *occurrences*
+        (for example two components placed over each other); the other two are the layer stack's
+        ``mesh_order`` between layers (there a lower ``mesh_order`` wins, the gdsfactory
+        convention) and the component annotation ``priority`` within one component and layer.
+        A priority given here overrides what the source declared and is carried into the
+        snapshot Entities' ``priority``.  The mapping is replaced as a whole and unchanged
+        when any entry is invalid.
+        """
+        if not isinstance(priorities, Mapping):
+            raise TypeError("priorities must map qualified Entity IDs to integers")
+        available = {entity.semantic_id for entity in self.entities}
+        prepared: dict[str, int] = {}
+        for entity_id, value in priorities.items():
+            if not isinstance(entity_id, str) or entity_id not in available:
+                raise ValueError(f"priority has unknown Entity ID {entity_id!r}")
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"priority of Entity {entity_id!r} must be an integer")
+            prepared[entity_id] = value
+        self._entity_priorities = MappingProxyType(prepared)
+
     def _validate_registered_sources(self) -> None:
         """Reject authored descendants that would disappear during GDS flattening."""
 
@@ -338,7 +368,7 @@ class GeometryPlan:
         visit(self._component, self.root_id)
 
     def _stack(self) -> dict[str, Any]:
-        return GeometryPlanStackAssembler(
+        stack = GeometryPlanStackAssembler(
             component=self._component,
             root_id=self.root_id,
             instances=self._instances,
@@ -347,6 +377,10 @@ class GeometryPlan:
             material_records=self._material_records,
             coupon_padding_um=self._coupon_padding_um,
         ).assemble()
+        for record in stack["layers"]:
+            if record["semantic_id"] in self._entity_priorities:
+                record["priority"] = self._entity_priorities[record["semantic_id"]]
+        return stack
 
     @with_grid_work_cache
     @with_source_grid
@@ -376,6 +410,12 @@ class GeometryPlan:
             if not members or any(member not in available for member in members):
                 raise ValueError(
                     f"Net {net!r} changed after set_nets; call set_nets again"
+                )
+        for entity_id in self._entity_priorities:
+            if entity_id not in available:
+                raise ValueError(
+                    f"priority of Entity {entity_id!r} changed after set_entity_priorities; "
+                    "call set_entity_priorities again"
                 )
         if self._vacuum_region is not None:
             stack = dict(apply_vacuum_region_to_stack(stack, self._vacuum_region))
