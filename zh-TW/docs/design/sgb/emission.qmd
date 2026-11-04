@@ -9,7 +9,7 @@ scgsim-id: "docs/design/sgb/emission"
 
 Emission 把已經決定好的 topology 變成 Gmsh 與 AEDT 能載入的檔案。它本身不做任何決定：不做 Boolean operation、不做 healing，也不搜尋幾何。它要保證三件事：每個共用的元素只寫一次，所以結果是 conformal；每個 Gmsh 元素都能用編號對回 planned id；檔案載入後與規劃相符。檔案內部的逐行格式見 [BREP 與 XAO 檔案格式](brep-format.qmd)，交給 AEDT 的部分見 [交給 AEDT](aedt-handoff.qmd)。emission 在 production 已實作（`scgsim.geometry.sgb.emission`、`sidecar`、`verification`、`exchange`，階段 1d 與 1e）；公開入口 `build_sgb_geometry` 寫出 BREP、XAO、sidecar、sliver report 與 validation report 五個檔案，呼叫與回傳見[使用契約](consumer-contract.qmd#call)。本頁的計時、檔案摘錄與 id 是**原型計算**（原型的 sidecar 格式 `sgbproto-sidecar-2`），production 的數量、group 與 sidecar 欄位另註。
 
-執行範例是 pad-in-ground 模型，metal 具有有限厚度（[Route B](routes.qmd)）：下方是 substrate，上方是 vacuum，ground plane 有一個 cutout，pad 有 chamfer、notch 與圓孔，pad 與 ground 之間有一片 lumped-port sheet。
+執行範例是 pad-in-ground 模型，metal 具有有限厚度（[Route B](routes.qmd)）：下方是 substrate，上方是 vacuum，ground plane 有一個 cutout，pad 有 chamfer、notch 與圓孔，pad 與 ground 之間有一片 lumped-port sheet。本頁是 prototype 的範例，port 在金屬的中間平面，所以輸出為 free face；production 的真實輸入把 port 放在 host 的 support plane，它是兩個 solid 共用的 face（見 [Routes](routes.qmd#port-support-plane)）。
 
 ## 發出 CAD 時的執行範例 {#the-running-example-at-the-point-of-emission}
 
@@ -125,9 +125,9 @@ Gmsh 的輸出會為 face 所屬的每個 physical group 重複其 element，sol
 | `PORT::p1` | 1 | lumped port（free face） |
 | `EXT::substrate::bottom`、`EXT::substrate::sidewall` | 1、4 | 外側 box |
 | `EXT::vacuum::top`、`EXT::vacuum::sidewall` | 1、4 | 外側 box |
-| `VOL::substrate`、`VOL::vacuum`（volume） | 各 1 | 輸出的兩個 volume |
+| `substrate`、`vacuum`（volume） | 各 1 | 輸出的兩個 volume |
 
-production 的 `pad_in_ground_B` 的 primary group（`MA`：metal–vacuum 側，`MS`：metal–substrate 側，`SA`：substrate–vacuum 表面，`EXT`：外側 box，`PORT`：lumped port，`VOL`：volume）。名稱是 `<kind>::<entity>::<face kind>`。
+production 的 `pad_in_ground_B` 的 primary group（`MA`：metal–vacuum 側，`MS`：metal–substrate 側，`SA`：substrate–vacuum 表面，`EXT`：外側 box，`PORT`：lumped port）；volume 的 group 沒有前綴，名稱就是 entity id（`substrate`、`vacuum`）。surface 的名稱是 `<kind>::<entity>::<face kind>`。
 :::
 
 ![重新開啟的 `pad_in_ground_B.xao`（原型計算），以 `MeshSizeMax` 40 µm 對表面做 mesh（1,593 個 triangle），並依 physical group 上色。左：整個模型，縱軸已拉伸。右：cutout 的俯視圖；橘色的 substrate 表面從 pad 的圓孔中露出，紅色的 port sheet 橫跨 pad 與 ground 之間的間隙。互動版本在滑鼠停留時顯示每個 face 的 Gmsh face tag 與 planned id。](figures/emission-groups-3d.svg){#fig-groups fig-alt="左圖是 300 乘 300 微米的 box，灰色 ground plane 上有一個 cutout。右圖是 cutout 的俯視圖：橘色的 substrate 表面、帶有圓孔與 notch 的藍色 pad，以及 pad 與 ground 之間一個小的紅色長方形。"}
@@ -174,7 +174,7 @@ XAO 無法攜帶 mesher 與 solver 設定所需的全部資訊，所以 writer �
  },
 ```
 
-**Embedded face 與 curve** 是 free 的元素：不界定任何 volume 的 face（位於 vacuum 中間的 port sheet）與 refinement curve。BREP 可以把它們放在 compound 之下，範例就是這樣處理 port face。但 BREP 無法表達該 face 位於 vacuum volume 之內，所以 sidecar 記錄這個配對，由 mesher 在載入後重新套用：
+**Embedded face 與 curve** 是 free 的元素：不界定任何 volume 的 face（位於 vacuum 中間的 sheet，例如這個範例的中間平面 port）與 refinement curve。BREP 可以把它們放在 compound 之下，範例就是這樣處理 port face。但 BREP 無法表達該 face 位於 vacuum volume 之內，所以 sidecar 記錄這個配對，由 mesher 在載入後重新套用：
 
 ```{.json filename="semantic_geometry_route_b.sidecar.json（節錄）"}
  "embedded_faces": [
@@ -188,7 +188,7 @@ XAO 無法攜帶 mesher 與 solver 設定所需的全部資訊，所以 writer �
 
 sidecar 的大小：production 的 `pad_in_ground_B` 為 33.8 kB（單次輸出）。大型 layout 的大小是原型計算：沒有 lineage 時 sidecar 很小，加上 lineage 後大小約為兩倍（N = 20,000 時 45.9 MB 對 93.9 MB；較晚、含 membership 的執行留下的檔案是 125.7 MB，見[補充：重現資料](#reproduction-data)）。production 的 1 000 個 feature 的 layout 三個檔案共 33 MB。它以固定順序寫出，所以對任何 worker 數都是 byte-identical（測試）。
 
-group 名稱的規則（D5，production 已實作 per-Entity）見 [D5](decisions.qmd#d5)。在執行範例中每個 Net 只有一個 Entity，所以 per-Net 與 per-Entity 得到相同的 face，只有名稱不同。Route C 由 production 實作，導體內部成為輸出的 solid，並有 `VOL::<entity>` group。
+group 名稱的規則（D5，production 已實作 per-Entity）見 [D5](decisions.qmd#d5)。在執行範例中每個 Net 只有一個 Entity，所以 per-Net 與 per-Entity 得到相同的 face，只有名稱不同。Route C 由 production 實作，導體內部成為輸出的 solid，並有以 `<entity>` 命名的 volume group。
 
 
 ## 交給 Gmsh mesher {#handoff-to-the-gmsh-mesher}
@@ -278,7 +278,7 @@ SGB 提供幾何與 hint；mesh 演算法由 Gmsh 負責。hint 是關於 curve 
 
 測試用的 size field 是一個由選定 curve 出發的 `Distance` field，餵給 `Threshold` field：靠近 curve 時給出 `refine_size`，並在 `DistMin` 與 `DistMax` 之間成長到全域最大值。band 測試使用 `refine_size` 1.0 µm，範圍 1–20 µm。band 測試中 `MeshSizeMin` 維持 0，因為 2 µm 的下限無法解析 0.1 µm 的 band；gmsh-API 路徑也以同樣方式失敗。其他範例的 mesh 使用 `MeshSizeMin` = 2 µm，因為 0.2 µm 的 metal 厚度否則會迫使到處都出現很小的 element。
 
-兩個 band case 與一條 refinement curve 在測試中都經過 direct writer。載入後，每個 band group 的 mesh 使得它的 triangle 都是兩側數量相同的 tetrahedron 的 face，且 centroid 落在 band 內（production 的 `pad_in_ground_A_bands` 有 8 個 band group，Route B 與 C 的 band 範例各 12 個，全部如此；Route A 把 band group 命名為 `SHEET::<entity>::sheet::band=k`，Route B 與 C 對 pad 的上表面（`MA::<entity>::top`）與下表面（`MS::<entity>::bottom`）各自產生 band；原型的 triangle 數見補充）。
+兩個 band case 與一條 refinement curve 在測試中都經過 direct writer。載入後，每個 band group 的 mesh 使得它的 triangle 都是兩側數量相同的 tetrahedron 的 face，且 centroid 落在 band 內（production 的 `pad_in_ground_A_bands` 有 8 個 band group，Route B 與 C 的 band 範例各 12 個，全部如此；Route A 把 band group 命名為 `<entity>::band=k`，Route B 與 C 對 pad 的上表面（`MA::<entity>::top`）與下表面（`MS::<entity>::bottom`）各自產生 band；原型的 triangle 數見補充）。
 
 
 對 refinement curve，測試檢查：該 edge 在載入的檔案中是 free 的（沒有任何 face 擁有它）、它被切成多於一個 element，以及 sidecar 的該列 `written_as_free_edge` 為 true。
@@ -403,5 +403,5 @@ runtime validator 逐項的耗時（polygon-only 的隨機 layout，一次執行
 ::: {#tbl-bands .askr-table-compact .askr-table-numeric}
 {{< include figures/emission-bands-table.md >}}
 
-經過 direct writer 的 inset band case（`validation.json`，`verify_xao`）。原型計算：Route A 把 band group 命名為 `SHEET::<net>::band=k`（production 為 `SHEET::<entity>::sheet::band=k`）；Route B 對 pad 的上表面（`MA`）與下表面（`MS`）各自產生 band。
+經過 direct writer 的 inset band case（`validation.json`，`verify_xao`）。原型計算：Route A 把 band group 命名為 `SHEET::<net>::band=k`（production 為 `<entity>::band=k`）；Route B 對 pad 的上表面（`MA`）與下表面（`MS`）各自產生 band。
 :::

@@ -57,11 +57,13 @@ flowchart LR
 ::: {.askr-table-compact}
 | 層 | 例子 | 對什麼穩定 | 用途 |
 |---|---|---|---|
-| **Semantic identity** | `MA::pad::top::band=2`、<code>SA::substrate&#124;vacuum::interface::band=0</code>、`VOL::vacuum` | 不相關的修改、worker 數、tile 配置 | physical group、Surface EPR row、報告 |
+| **Semantic identity** | `MA::pad::top::band=2`、<code>SA::substrate&#124;vacuum::interface::band=0</code>、`vacuum` | 不相關的修改、worker 數、tile 配置 | physical group、Surface EPR row、報告 |
 | **Atomic topology identity** | `f:5cba27a49e17b07e`、`e:3814641e4355b553` | 同樣的輸入得到同樣的 ID；只有 entity 自己的內容改變時才改變 | 每個輸出 entity 的計畫、lineage、sidecar |
 :::
 
-**Physical group** 是交給 solver 的一組 face 或 volume 的具名集合。這裡的 face 指輸出的 BREP face；它在 arrangement 中對應的平面區域稱為 cell，一個 face 可由一個或多個 cell 合併而成。語意名稱由 cell 的 label 組成：`<kind>::<entity>::<face kind>[::band=k]`。kind 是 surface 種類（`MA` 為 metal–vacuum、`MS` 為 metal–substrate、`MM` 為兩個導體之間、`SA` 為 substrate–vacuum、`PORT`、`EXT` 為外邊界、`VOL` 為 volume）；entity 是擁有它的 Entity（或 domain）；face kind 是 `top`、`bottom`、`sidewall`、`sheet`、`interface`；有 inset band 時再加 band。Route A 的 sheet 命名為 `SHEET::<entity>::sheet[::band=k]`；Surface EPR 的 MA 與 MS 兩個 row 都由 sidecar 的 `surface_epr_rows` 指到它。
+**Physical group** 是交給 solver 的一組 face 或 volume 的具名集合。這裡的 face 指輸出的 BREP face；它在 arrangement 中對應的平面區域稱為 cell，一個 face 可由一個或多個 cell 合併而成。語意名稱由 cell 的 label 組成：`<kind>::<entity>::<face kind>[::band=k]`。kind 是 surface 種類（`MA` 為 metal–vacuum、`MS` 為 metal–substrate、`MM` 為兩個導體之間、`SA` 為 substrate–vacuum、`PORT`、`EXT` 為外邊界）；entity 是擁有它的 Entity（或 domain）；face kind 是 `top`、`bottom`、`sidewall`、`sheet`、`interface`；有 inset band 時再加 band。volume 與 Route A 的 sheet 不帶前綴，名稱是 entity id 本身：volume 為 `<entity>`，sheet 為 `<entity>[::band=k]`（sheet 一定是 `sheet`，所以不再寫 face kind）；Surface EPR 的 MA 與 MS 兩個 row 仍寫成 `MA::<entity>::sheet[::band=k]` 與 `MS::<entity>::sheet[::band=k]`，都由 sidecar 的 `surface_epr_rows` 指到這個 sheet group。
+
+**命名規則。**裸的 entity id（`substrate`、`pad`、`chip/left`）指物件本身：它的 volume，Route A 導體則是它的 sheet；那是 volume 還是 surface，由 Gmsh 的 Type 欄位標示，名稱不必再重複維度。帶界面前綴的名稱（`MA::`、`MS::`、`MM::`、`SA::`、`AA::`、`SS::`、`EXT::`、`PORT::`）指**兩個東西之間的 face**。這些前綴保留，是因為它們帶著物理：前綴決定 Surface EPR 要對這個 face 套用哪一組 loss 參數（metal–vacuum、metal–substrate、substrate–vacuum 各有自己的 participation 與 loss），不只是分類標籤。因此 entity id 不可以等於這些前綴之一，也不可以含 `::`，否則名稱會有歧義；SGB 遇到這樣的 id 會直接報 `InputError`。
 
 D5 的 per-Entity 命名已在 production 實作，MA、MS、SA 的總和是 sidecar 的 `unions.interface_types`；running example 中每個 Net 只有一個 Entity，所以與原型的差別只有名稱。見 [D5](decisions.qmd#d5)。
 
@@ -119,8 +121,8 @@ Face 的 `sources` 是其 boundary edge 的 base carrier ID 的集合，例如 `
 - `binding`（含 `ids_by_tag`）、`counts`、`tolerance_um`、`grid_um`、`route`、`route_policy`；
 - `physical_groups`：名稱、dimension、成員 ID、native tag、physical `tag`，以及 `interface_type`、`face_kind`、`entities`、`net`、`band`、面積與兩側的 volume；
 - `unions`：*group 名稱*的清單，絕不是重疊的 Gmsh group，分成 `interface_types`（`MA`、`MS`、`SA`……）與 `nets`。「Net `pad` 的所有導體表面」是 `unions.nets.pad`，例如 `[MA::pad::sidewall, MA::pad::top::band=0..3, MS::pad::bottom::band=0..3]`。每個輸出的 face 與 volume 恰好在一個 primary group 內，因為 Gmsh 的 MSH 輸出會依 group 重複 element，solver 可能誤讀；
-- `surface_epr_rows`：Surface EPR 的 row 對到承載它的 primary group，並以 `side` 與 `shared_face_group` 標明 Route A 的 sheet 讓 MA 與 MS 兩個 row 指向同一個 `SHEET::…` group 的哪一側；
-- `embedded_faces`、`refinement_edges` 與 `ports`：不圍成 volume 的 face（Route B 與 C 的 mid-plane port）與嵌入的 mesh-size 曲線，各帶 host volume 或 host face。BREP 與 XAO 都無法攜帶 mesh embedding，所以 mesher 會重新套用這些 `(face, host volume)` 與 `(edge, host face)` 配對；
+- `surface_epr_rows`：Surface EPR 的 row 對到承載它的 primary group，並以 `side` 與 `shared_face_group` 標明 Route A 的 sheet 讓 MA 與 MS 兩個 row 指向同一個 sheet group（以 entity id 命名，例如 `pad::band=2`）的哪一側；
+- `embedded_faces`、`refinement_edges` 與 `ports`：不圍成 volume 的 face（volume 內部的 sheet，例如範例的中間平面 port；位於 support plane 的 port 是一般的 face，不在其中）與嵌入的 mesh-size 曲線，各帶 host volume 或 host face。BREP 與 XAO 都無法攜帶 mesh embedding，所以 mesher 會重新套用這些 `(face, host volume)` 與 `(edge, host face)` 配對；
 - `lineage`：`edges`（edge → carrier）、`carriers`、`faces`（face → entity）、`membership`、`vertical_edges`；
 - `insets`、`refinements`、`mesh_hints`、`slivers`、`arrangement`、`curved_wall_faces`、`surface_kinds`，以及 `expected`（`verify_loaded` 比對的預期值）。
 

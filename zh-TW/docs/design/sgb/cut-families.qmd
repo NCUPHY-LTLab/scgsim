@@ -47,7 +47,7 @@ window 與 refinement curve 是在**完全不修改 pipeline** 的情況下加�
 | 全部 family | 25 | 168 | 35 | 13 | 16 |
 :::
 
-window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它切開的 cell 保有原來的 label，所以 <code>SA::substrate&#124;vacuum::interface::band=2</code> 與 <code>SA::substrate&#124;vacuum::interface::band=3</code>（原型的名稱無 face kind）這兩個 group 各多一個 face（2 變 3、1 變 2）。refinement curve 沒有改變任何 cell、edge 或 face 的數量；它只增加 embedded curve 片段。band 讓 face group 從 6 增為 13，因為每個 band 都是自己的 group（Route A 中 pad 的 band 在原型是 `SHEET::pad::band=k`，production 是 `SHEET::pad::sheet::band=k`，共 7 個 face）。
+window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它切開的 cell 保有原來的 label，所以 <code>SA::substrate&#124;vacuum::interface::band=2</code> 與 <code>SA::substrate&#124;vacuum::interface::band=3</code>（原型的名稱無 face kind）這兩個 group 各多一個 face（2 變 3、1 變 2）。refinement curve 沒有改變任何 cell、edge 或 face 的數量；它只增加 embedded curve 片段。band 讓 face group 從 6 增為 13，因為每個 band 都是自己的 group（Route A 中 pad 的 band 在原型沿用 `SHEET` 前綴的舊名稱，production 是 `pad::band=k`，共 7 個 face）。
 
 ## 三類分割
 
@@ -88,7 +88,7 @@ window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它�
 | Family | Generator | Target | Edge policy | 在 production 中 |
 |---|---|---|---|---|
 | physical boundary | prism footprint | 各 prism active 的 level 與 slab | label 不同時 required | 有（即 arrangement 本身） |
-| lumped-port footprint | port sheet 的多邊形 | 它所在的平面 | required | 有，以 port prism（一個 sheet）；因為其 owner 與鄰居不同而為 required；Route A 的 gap band 會把它切成多個 face，Route B 與 C 的 port 在 mid-plane，不被 band 切開 |
+| lumped-port footprint | port sheet 的多邊形 | 它所在的平面 | required | 有，以 port prism（一個 sheet）；因為其 owner 與鄰居不同而為 required；port 位於 host 的 support plane，與 SA 介面同一個平面，所以三種 route 的 gap band 都會把它切成多個 face，同一個 group `PORT::<id>`；port 只佔去自己的面積，不移動 band 的邊界 |
 | contact cap | prism 的重疊（自動） | 接觸的 level | label 不同時 required | 由 label 自然產生；沒有 family record |
 | Surface EPR inset band | 對 physical support region 以 margin $m_1 < \dots < m_k$ 做 offset | 選定的語意表面 | required；band 索引成為 label 的一部分 | 有（`InsetRequest`，role `inset_band`） |
 | mesh refinement curve | 使用者或自動 | 任何表面 | `refinement_only` | 有（`RefinementRequest`） |
@@ -160,7 +160,7 @@ assembly 與 emission 讀的是 cell、label 與 edge id。family 只以 edge �
 `mesh.embed` 會強迫 mesh edge（或 mesh face）沿著一個不屬於模型邊界的特徵。SGB 恰好在兩個地方使用它：
 
 - **dangling 或交叉的 refinement curve**（`refinement_only`）：emitter 把每一段 embed 到包含它的 face 中；
-- **Route B 的 mid-plane port**：embed 在其 host volume 中的 face（[Routes](routes.qmd#the-route-b-port-is-an-embedded-face)）。
+- **volume 內部的 sheet**（例如執行範例中間平面的 port）：embed 在其 host volume 中的 face（[Routes](routes.qmd#the-route-b-port-is-an-embedded-face)）。真實輸入的 port 位於 support plane，不是這一類。
 
 其他一切都必須是 arrangement edge，因為 embedded 的特徵沒有 identity：它不在任何 physical group，沒有 cell label，也不能攜帶 band。
 
@@ -179,7 +179,7 @@ flowchart TD
 關於 embedding 的兩點：
 
 - refinement curve 的某一段若落在**沒有 face 的 cell**（level 兩側是同一個 domain，那裡不輸出任何東西），或落在沒有任何輸出 volume 的 face 中，就沒有東西可以 embed。這是**錯誤**，不會被默默丟棄：build 以 `SgbError` 中止（以 Route B 在 $z = 0.1$ 的 refinement curve 計算：`refinement curve r/0 at (-70.0000, -8.0000) um on level[1/10] lies in a cell that has no face (inside a volume): it cannot be embedded and is not dropped silently`）。要把 `refinement_only` family 指向其 cell 有 face 的 level。
-- XAO 不攜帶 mesh embedding。sidecar 同時記錄 face-in-volume 的配對（`embedded_faces`，Route B 的 port）與 curve-in-face 的配對（`refinement_edges`，refinement curve），使 mesher 能由 sidecar 重新套用（[Emission](emission.qmd)）。
+- XAO 不攜帶 mesh embedding。sidecar 同時記錄 face-in-volume 的配對（`embedded_faces`，volume 內部的 sheet；真實輸入的 port 不在其中）與 curve-in-face 的配對（`refinement_edges`，refinement curve），使 mesher 能由 sidecar 重新套用（[Emission](emission.qmd)）。
 
 ## 小結
 
@@ -187,7 +187,7 @@ flowchart TD
 - `required` 切開 cell，`refinement_only` embed 曲線；沒有 `dissolve`，tile seam 不是 family。
 - band 只從 physical boundary 量距離；其他 family 永遠不會移動它們。
 - 新的分割是一個 generator、一個 target 與一個 policy；沒有新的程式路徑。
-- 只有 dangling 的 refinement curve 與 Route B、C 的 port 可以被 embed；其他都是 edge。
+- 只有 dangling 的 refinement curve 與 volume 內部的 sheet 可以被 embed；其他都是 edge。port 位於 support plane 時是一般的 face。
 - 下一步：不同 family 的近乎重合曲線如何被回報，見 [Sliver](slivers.qmd)。
 
 ## 補充：重現資料

@@ -77,7 +77,7 @@ def excerpts(a: dict[str, Any], b: dict[str, Any], c: dict[str, Any]) -> None:
     write("consumer-excerpt-head.md", json_block(title, head))
     groups = {
         n: b["physical_groups"][n]
-        for n in ("MA::pad::top::band=0", "MS::pad::bottom", "PORT::PORT_SHEET__P1__0000", "VOL::substrate")
+        for n in ("MA::pad::top::band=0", "MS::pad::bottom", "PORT::PORT_SHEET__P1__0000", "substrate")
     }
     write("consumer-excerpt-groups.md", json_block(title, {"physical_groups": groups}))
     rows = {n: b["surface_epr_rows"][n] for n in ("MA::pad::top::band=0", "SA::substrate|VACUUM_REGION::interface")}
@@ -97,8 +97,10 @@ def excerpts(a: dict[str, Any], b: dict[str, Any], c: dict[str, Any]) -> None:
             },
         ),
     )
-    face = next(iter(b["faces"]))
-    volume = "vol:1a3729bef5cef625"
+    # a ground sidewall (a wall between the substrate and the vacuum) and the substrate volume, found by name:
+    # ids change whenever the geometry does, the group and entity names do not
+    face = next(fid for fid, record in b["faces"].items() if record["group"] == "MA::ground_0000::sidewall")
+    volume = next(vid for vid, record in b["volumes"].items() if record["entity"] == "substrate")
     lineage = b["lineage"]
     pick_edge = next(iter(lineage["edges"]))
     pick_carrier = lineage["edges"][pick_edge][0]
@@ -120,7 +122,7 @@ def excerpts(a: dict[str, Any], b: dict[str, Any], c: dict[str, Any]) -> None:
     write("consumer-excerpt-body.md", json_block(title, body))
     route_a = {
         "route_policy": a["route_policy"],
-        "physical_groups": {"SHEET::chip/left::sheet::band=0": a["physical_groups"]["SHEET::chip/left::sheet::band=0"]},
+        "physical_groups": {"chip/left::band=0": a["physical_groups"]["chip/left::band=0"]},
         "surface_epr_rows": {
             n: a["surface_epr_rows"][n] for n in ("MA::chip/left::sheet::band=0", "MS::chip/left::sheet::band=0")
         },
@@ -129,7 +131,7 @@ def excerpts(a: dict[str, Any], b: dict[str, Any], c: dict[str, Any]) -> None:
         "ports": [{k: a["ports"][0][k] for k in ("group", "host_entity_ids", "host_volumes", "adjacent_volumes")}],
     }
     write("consumer-excerpt-routea.md", json_block("semantic_geometry_route_a.sidecar.json（節錄）", route_a))
-    conductor = {n: c["physical_groups"][n] for n in ("VOL::pad",)}
+    conductor = {n: c["physical_groups"][n] for n in ("pad",)}
     write(
         "consumer-excerpt-routec.md",
         json_block(
@@ -146,7 +148,7 @@ def palace_rebuild(b: dict[str, Any]) -> None:
 
     groups = palace_style_groups(b)
     selection = {
-        "volumes": {"VOL::substrate": groups["volumes"]["VOL::substrate"]},
+        "volumes": {"substrate": groups["volumes"]["substrate"]},
         "boundary_surfaces": {"MA::pad::top::band=0": groups["boundary_surfaces"]["MA::pad::top::band=0"]},
         "pec_surfaces": {"MA::pad::top::band=0": groups["pec_surfaces"]["MA::pad::top::band=0"]},
         "port_surfaces": groups["port_surfaces"],
@@ -213,7 +215,7 @@ def run_tables(b: dict[str, Any]) -> None:
         ("`apply_sidecar_embeds` 嵌入的 face／edge", lambda r: f"{r['apply_sidecar_embeds']['faces']} / {r['apply_sidecar_embeds']['edges']}"),
         ("粗 mesh（`Mesh.MeshSizeMax` = 60 µm）的節點數", lambda r: str(r["mesh_nodes"])),
         ("`export_aedt_step` 的 object 名稱", lambda r: "、".join(f"`{n}`" for n in r["step_export"]["object_names"])),
-        ("各 solid 的 guard face 數", lambda r: "、".join(f"{n.removeprefix('VOL__')} {k}" for n, k in r["step_export"]["faces_per_solid"].items())),
+        ("各 solid 的 guard face 數", lambda r: "、".join(f"{n} {k}" for n, k in r["step_export"]["faces_per_solid"].items())),
     ]
     for label, fmt in rows:
         first, second = pair(fmt)

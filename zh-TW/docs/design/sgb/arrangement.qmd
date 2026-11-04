@@ -15,7 +15,7 @@ SGB 把一組精確的曲線變成一個 **arrangement**：一個 planar graph�
 
 pad-in-ground 的 footprint 本來就在格點上：每條直線 edge 都終止於格點，圓的四段 quarter arc 也終止於格點。所以當原型建立 `pad_in_ground_B` 在 $z = 0$ 的 level arrangement 時，snapping 沒有移動任何東西；工作是 **noding**（找出曲線在哪裡相遇）與建立 face。
 
-這個 arrangement 由 500 條 segment 建成，其中幾乎全是 pad 的圓孔與圓角的 polyline witness 的弦（見[曲線類別](#curve-classes)）。snap rounding 在一個 round 內找到 496 個 hot pixel，dissolution 之後，這個 arrangement 有 22 條 edge 與 4 個 cell。在 $z = 0.1$ µm，port sheet 碰到兩道 wall 的地方，996 條 segment（兩個 slab 的 edge 加上 port 的）在兩個 round 內得到 500 個 hot pixel 與 28 條 edge（`outputs/pad_in_ground_B/stage_summary.json`）。
+這個 arrangement 由 500 條 segment 建成，其中幾乎全是 pad 的圓孔與圓角的 polyline witness 的弦（見[曲線類別](#curve-classes)）。snap rounding 在一個 round 內找到 496 個 hot pixel，dissolution 之後，這個 arrangement 有 22 條 edge 與 4 個 cell。在 $z = 0.1$ µm（執行範例的中間平面 port），port sheet 碰到兩道 wall 的地方，996 條 segment（兩個 slab 的 edge 加上 port 的）在兩個 round 內得到 500 個 hot pixel 與 28 條 edge（`outputs/pad_in_ground_B/stage_summary.json`）。
 
 Snapping 只有在曲線於非格點的位置**交叉**，或彼此距離小於一個 pixel 時才重要。在執行範例中，這發生在 chamfer 斜邊的 offset，它們是由 Surface EPR 的 inset band 加入的（見 [Inset imprint](inset-imprint.qmd)）。在那裡，sliver 報告量到的 drift：衍生圓弧在 0.63 grid unit 以下，直線 edge 為 0。這個 0 是依構造得到的：layout 的輸入本來就在格點上，而 inset 的直線 carrier 的端點在產生時已四捨五入到格點，所以報告量的是對這些已四捨五入的 carrier 的偏離，不是對精確 offset 的偏離（斜邊的 offset 含 $\sqrt{2}$，無法精確表示）。
 

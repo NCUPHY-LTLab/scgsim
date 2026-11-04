@@ -22,7 +22,7 @@
  },
  "port_surfaces": {
   "PORT::PORT_SHEET__P1__0000": {
-   "adjacent_solution_volume_ids": ["VACUUM_REGION"],
+   "adjacent_solution_volume_ids": ["VACUUM_REGION", "substrate"],
    "face_kind": "port",
    "interface_type": "PORT",
    "net_id": null,
@@ -31,7 +31,7 @@
   }
  },
  "volumes": {
-  "VOL::substrate": {
+  "substrate": {
    "material_kind": "dielectric",
    "owner_semantic_ids": ["substrate"],
    "phys_group": 2

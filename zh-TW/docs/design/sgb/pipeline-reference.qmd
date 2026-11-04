@@ -74,10 +74,10 @@ S0 與 S1 沿用 develop 中已有的 fixed-grid source preparation：source 的
 | 輸出 | `PrismCatalogue`（`Grid`、`PrismRecord` 清單、`CurveFamilyRecord`）與 `LevelStructure`（level、slab、active set、每個 level 的 sheet、family 目標；family 目標的 Z 若沒有任何 prism 定義，會加入一個一般 level） |
 | Record | `Grid`、`Lineage`、`LineCarrier`、`ArcCarrier`、`Footprint`、`PrismRecord`、`PortIdentity`、`PrismCatalogue`、`LevelStructure` |
 | 平行單位 | entity |
-| 失敗 | `InputError`：沒有格點資訊、頂點不在宣告的格點上、conductor 不在 representation context 中、port 沒有 host 或 host 的區間不同、重建紀錄不合法；`UnsupportedCurveError`：spline 邊界；`ValueError`：$z_1 < z_0$ 的 prism、沒有 Net 的 conductor；`RouteError`：route 不認得，或 prism 不適用該 route |
+| 失敗 | `InputError`：沒有格點資訊、頂點不在宣告的格點上、conductor 不在 representation context 中、port 沒有 host、host 沒有宣告 `layer_attachment_face`、host 的宣告平面彼此不同、重建紀錄不合法；`UnsupportedCurveError`：spline 邊界；`ValueError`：$z_1 < z_0$ 的 prism、沒有 Net 的 conductor；`RouteError`：route 不認得，或 prism 不適用該 route |
 :::
 
-S2 從 S1 收到的內容：每個 effective prism 帶有 footprint（外圈與 hole，宣告的 arc 以四段 quarter `ArcCarrier` 表示）、Z 區間（精確分數）、材料、Net、priority 與 entity ID；另記下來源的 layer 與 occurrence，讓 priority 衝突的錯誤訊息能指出該補哪個來源。座標在宣告的格點上，不在格點上的頂點會以 `InputError` 指名 Entity。測試涵蓋由 GDS 與 layer stack、thin-film profile、junction 與 `GeometryPlan` snapshot 得到的真實輸入，也涵蓋每個 Entity 的 identity 與 lineage 通過 S0 的 polygon Boolean 之後仍然保留，以及薄於 $g$ 的 slab 從來源保留到 arrangement。
+S2 從 S1 收到的內容：每個 effective prism 帶有 footprint（外圈與 hole，宣告的 arc 以四段 quarter `ArcCarrier` 表示）、Z 區間（精確分數）、材料、Net、priority 與 entity ID；另記下來源的 layer 與 occurrence，讓 priority 衝突的錯誤訊息能指出該補哪個來源。座標在宣告的格點上，不在格點上的頂點會以 `InputError` 指名 Entity。**Lumped port 的平面**是 host 導體的 support plane：S2 讀每個 host 的 `PhysicalLayerDeclaration`（film 的 `layer_attachment_face`，或零厚度 source sheet 自己的平面），用共同的 `PhysicalRepresentationPlan` 投影到 effective 模型；所有 host 必須落在同一個 effective 平面，host 沒有宣告時以 `InputError` 指名 host（PDK 必須宣告 `layer_attachment_face`），沒有中間平面的後備。port 因此與它下方的介面同一個平面：它佔去該處的 SA 面積，但不移動 band（見 [Routes](routes.qmd#port-support-plane)）。測試涵蓋由 GDS 與 layer stack、thin-film profile、junction 與 `GeometryPlan` snapshot 得到的真實輸入，也涵蓋每個 Entity 的 identity 與 lineage 通過 S0 的 polygon Boolean 之後仍然保留，以及薄於 $g$ 的 slab 從來源保留到 arrangement。
 
 ### S3 Cut families
 
@@ -220,7 +220,7 @@ production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C �
 | `TopoEdge` | `id`、`kind`（`horizontal`、`vertical`、`refinement`）、`v0`、`v1`、`plane`、`sources`、`curve`、`centre_vertex` | arc edge 的 `curve` 是 `RealisedArc` |
 | `TopoFace` | `id`、`kind`（`horizontal`、`wall`）、`plane`、`loops`、`neg_domain`、`pos_domain`、`owner`、`neg_volume`、`pos_volume`、`planar`、`z_range`、`twice_xy_area`、`sources`、`membership`、`bands`、`cylinder`、`bulge_volume`、`refinement_edges` | `loops` 是 `((edge id, ±1), …)`，第一個 loop 是外圈；恰好一個 primary group，由 `RoutedModel.face_group` 給出；`cylinder` 是曲面 wall 的（下 arc edge id，上 arc edge id），`curved` 是由它推得的屬性；`membership` 是 entity → 涵蓋面積比例（horizontal face 為涵蓋面積比例，wall 為底邊長度比例；彼此不互斥，總和可超過 1，且包含背景 prism） |
 | `Shell` | `faces`（(face id, ±1), …）、`signed_volume`、`role`（`outer`、`inner`） | inner shell 是 void（例如 Route B 中完全被 dielectric 包住的導體） |
-| `TopoVolume` | `id`、`domain`、`cells`、`shells`、`embedded_faces` | `embedded_faces` 不圍成任何 volume（Route B 與 C 的 port）；是否輸出由 `RoutedModel.emitted_volumes` 決定 |
+| `TopoVolume` | `id`、`domain`、`cells`、`shells`、`embedded_faces` | `embedded_faces` 不圍成任何 volume（volume 內部的 sheet；位於 support plane 的 port 不在其中）；是否輸出由 `RoutedModel.emitted_volumes` 決定 |
 | `Topology` | `grid_um`、`levels`、`vertices`、`edges`、`faces`、`volumes`、`lineage` | `lineage[edge id] = carrier ID`；group 與 union 在 `RoutedModel`：`groups[name] = PhysicalGroup(dim, ids)` 對每個維度做 partition，`unions`、`surface_epr_rows` 另列 |
 :::
 
@@ -235,14 +235,14 @@ primary group 命名為 `<kind>::<qualified entity id>::<face kind>[::band=k]`�
 | `MS::<entity>::bottom`、`::top`、`::sidewall` | 導體 Entity 對 dielectric 的 face |
 | `MM::<a>\|<b>::interface` | 兩個導體 Entity 之間的 face |
 | <code>SA::&lt;a&gt;&#124;&lt;b&gt;::interface</code> | substrate–vacuum（或其他 dielectric 配對）face；<code>AA</code>、<code>SS</code> 是 vacuum–vacuum 與 dielectric–dielectric |
-| `SHEET::<entity>::sheet` | Route A 的導體 sheet；`surface_epr_rows` 把 MA 與 MS 兩個 row 都對到這個 group，並出現在 MA 與 MS 的 union 中 |
+| `<entity>[::band=k]`（導體，Route A） | Route A 的導體 sheet，名稱是裸的 entity id（Gmsh 的 Type 欄位標示它是 surface）；`surface_epr_rows` 把 MA 與 MS 兩個 row 都對到這個 group，並出現在 MA 與 MS 的 union 中 |
 | `PORT::<port sheet id>` | lumped port footprint（一個 sheet，不帶 face kind），即使被 band 切開也是一個 group |
 | `EXT::<domain>::<face kind>` | 某 domain 的模型外邊界（Route C 的導體碰到邊界時也有 `EXT::<entity>::sidewall`） |
-| `VOL::<entity>` | 輸出的 volume（Route C 的導體內部也是） |
-| `<name>::band=k` | 同一種 face 位於其 support region 的 inset band $k$ 內（Route A：`SHEET::pad::sheet::band=k`；Route B 與 C：`MA::pad::top::band=k` 與 `MS::pad::bottom::band=k`） |
+| `<entity>`（volume） | 輸出的 volume，名稱是裸的 entity id（Route C 的導體內部也是）；Gmsh 的 Type 欄位標示它是 volume |
+| `<name>::band=k` | 同一種 face 位於其 support region 的 inset band $k$ 內（Route A：`pad::band=k`；Route B 與 C：`MA::pad::top::band=k` 與 `MS::pad::bottom::band=k`） |
 :::
 
-原型（per Net）的名稱是 `MA::<net>`、`MS::<net>`、`PEC::<net>` 等；`PEC::<net>` 在 production 由 `unions.nets` 取代。
+裸的 entity id 指物件本身，帶界面前綴的名稱指兩個東西之間的 face（見 [Identity](identity.qmd)）。原型（per Net）的名稱是 `MA::<net>`、`MS::<net>`、`PEC::<net>` 等；`PEC::<net>` 在 production 由 `unions.nets` 取代。
 
 ## 每個模型寫出的檔案
 
@@ -299,7 +299,7 @@ production 對含 band 的 Route B 模型執行 31 項檢查（`validation_repor
 | `SgbError` | 基底類別：source 或規劃上的缺陷 |
 | `OverlapError` | 不同 Net 的 conductor 重疊；同一個 Net 的兩個 Entity 以相同 priority 重疊；同 priority 的 dielectric 材料不同 |
 | `NonManifoldError` | `SgbError` 的子類別：同一個 domain 的兩個 cell 只在 vertex 相接（non-manifold pinch），在 assembly 之前由 `check_manifold` 丟出 |
-| `InputError`、`UnsupportedCurveError` | `SgbError` 的子類別：effective 輸入無法變成 prism（沒有格點資訊、頂點不在格點上、port 沒有 host、重建紀錄不合法）；`UnsupportedCurveError` 是 spline 邊界 |
+| `InputError`、`UnsupportedCurveError` | `SgbError` 的子類別：effective 輸入無法變成 prism（沒有格點資訊、頂點不在格點上、port 沒有 host、host 沒有宣告 attachment face、重建紀錄不合法）；`UnsupportedCurveError` 是 spline 邊界 |
 | `OcctUnavailable`、`OcctCheckError` | `SgbError` 的子類別：`strict=True` 但沒有 OCP；OCCT 檢查有 finding |
 | `ContactError` | `OverlapError` 的子類別：不同 Net 的 conductor 接觸（共用 edge 或 vertex），包含只因 snapping 才出現的接觸；訊息指名兩個 Net、各自的 entity、位置（µm）、plane 與 grid |
 | `RouteError` | route 不認得，或 prism 對該 route 不合法（Route A 的仍有限厚度的 film；Route B 與 C 的導體 sheet） |

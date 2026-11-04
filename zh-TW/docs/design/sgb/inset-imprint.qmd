@@ -19,7 +19,7 @@ running example 的 pad 有 45° 的 chamfer、一個 reflex notch、一個 roun
 
 {{< askr-chart-view src="figures/inset-bands-pad.html" label="檢視 band（用按鈕放大 notch、hole 與 corner）" >}}
 
-每個 band 由一個或多個 cell 組成，輸出後成為 BREP face 與一個 physical group，名稱來自 label（production 中 Route A 的 sheet 為 `SHEET::pad::sheet::band=2`，Route B 的 top 與 bottom face 為 `MA::pad::top::band=2` 與 `MS::pad::bottom::band=2`，gap 為 <code>SA::substrate&#124;vacuum::interface::band=0</code>）。下表是 production 的 Route A 範例（`pad_in_ground_A_bands`）；面積由精確 arc 計算，pad top 的數字與原型計算相同（也就是後面 KLayout 比較所用的數字），gap 的數字不同，見表後的說明：
+每個 band 由一個或多個 cell 組成，輸出後成為 BREP face 與一個 physical group，名稱來自 label（production 中 Route A 的 sheet 為 `pad::band=2`，Route B 的 top 與 bottom face 為 `MA::pad::top::band=2` 與 `MS::pad::bottom::band=2`，gap 為 <code>SA::substrate&#124;vacuum::interface::band=0</code>）。下表是 production 的 Route A 範例（`pad_in_ground_A_bands`）；面積由精確 arc 計算，pad top 的數字與原型計算相同（也就是後面 KLayout 比較所用的數字），gap 的數字不同，見表後的說明：
 
 ::: {.askr-table-compact .askr-table-numeric}
 | Support surface | Band | Faces | 面積 (µm²) | Band ≥ k 的聯集，「$R_{m_k}$」(µm²) |
@@ -93,17 +93,21 @@ $Q(\ge m_1)$、$Q(\ge m_2)$、$Q(\ge m_3)$ 是累積且巢狀的：每一個都�
 ::: {.askr-table-compact}
 | Selection | Margin | Group（attribute） |
 |---|---|---|
-| 整個 surface | 0 | `SHEET::pad::sheet::band=0..3`（11、12、13、14） |
+| 整個 surface | 0 | `pad::band=0..3`（11、12、13、14） |
 | $\ge m_1$ | 0.1 µm | `band=1..3`（12、13、14） |
 | $\ge m_2$ | 0.5 µm | `band=2..3`（13、14） |
 | $\ge m_3$ | 2 µm | `band=3`（14） |
 :::
 
-Sidecar 的 `surface_epr_rows` 把 sheet 的 Surface EPR row `MA::pad::sheet::band=k` 與 `MS::pad::sheet::band=k` 都對到 `SHEET::pad::sheet::band=k`（兩列的 `shared_face_group` 相同，`side` 分別是 `above` 與 `below`），其他有 band 的 group 則對到它自己。`unions.nets.pad` 列出四個 band group，所以 pad sheet 未加 mask 的 loss 就是對它們全部加總；這就是 band 加起來等於 baseline 的一致性檢查。Attribute 的數字依排序後的 group 名稱發放，加入 group 就會位移；請儲存 group 名稱（見 [Identity](identity.qmd)）。
+Sidecar 的 `surface_epr_rows` 把 sheet 的 Surface EPR row `MA::pad::sheet::band=k` 與 `MS::pad::sheet::band=k` 都對到 `pad::band=k`（兩列的 `shared_face_group` 相同，`side` 分別是 `above` 與 `below`），其他有 band 的 group 則對到它自己。`unions.nets.pad` 列出四個 band group，所以 pad sheet 未加 mask 的 loss 就是對它們全部加總；這就是 band 加起來等於 baseline 的一致性檢查。Attribute 的數字依排序後的 group 名稱發放，加入 group 就會位移；請儲存 group 名稱（見 [Identity](identity.qmd)）。
 
 ## Distance origin
 
 曲線是由 **support region 的物理邊界**產生的，在 arrangement 之前、也在任何其他 partition 之前就算好。Port、contact cap、tile seam 與其他 band 都絕不是 origin：它們甚至不是 generator 的輸入。
+
+::: {.callout-note title="port 在 SA 平面上：佔去面積，不移動 band"}
+lumped port 位於 host 的 support plane，也就是 SA 介面所在的平面（[Routes](routes.qmd#port-support-plane)）。port 的 footprint 因此不屬於 SA：SA band 的 face 不含 port 蓋住的部分，port 仍是單一 group `PORT::<id>`（band 的 seam 可以把它切成數個 face）。band 的 distance origin 仍是金屬的物理邊界，port 不移動任何 band；每個 SA band 的面積只會少掉 port 蓋住的部分，所有 band 加上 port 的面積等於沒有 port 時的 band 總和。
+:::
 
 原型驗證了這個結果（production 有對應的測試 `test_adding_the_port_does_not_change_any_band_boundary`）。把 lumped port 從範例中移除，family record 完全相同，且每個 band 的面積差不超過 $6 \times 10^{-8}$ grid unit²。在有 port 的 Route A 模型中，port face 被 band 切成 7 個 face（production 同樣是 7 個），但它們仍是同一個 group `PORT::p1`，因為 port 不屬於 Surface EPR 的 surface。
 
@@ -131,7 +135,7 @@ Band **逐 support face** 產生：
 
 ![Band 的位置。Route A 每個 band 一個 sheet face。Route B 的有限厚度金屬 prism，其 top face（MA）與 bottom face（MS）各自獨立切 band；side wall 在 v1 不切 band。Conceptual 示意圖。](figures/inset-routes-section.svg){#fig-routes fig-alt="剖面圖：Route A 是基板上的一層有 band 的薄 sheet；Route B 是上下表面都有 band 的金屬塊。"}
 
-- **Route A。** sheet 是同時為 metal–vacuum 與 metal–substrate 的一個 face。它承載 band，並以 face 命名為 `SHEET::<entity>::sheet::band=k`；Surface EPR 的 MA 與 MS 兩個 row 都參照這一個 group（`surface_epr_rows`）。
+- **Route A。** sheet 是同時為 metal–vacuum 與 metal–substrate 的一個 face。它承載 band，並以 face 命名為 `<entity>::band=k`；Surface EPR 的 MA 與 MS 兩個 row 都參照這一個 group（`surface_epr_rows`）。
 - **Route B，top face。** 位於 $z = 0.2$ µm 的 family `band_pad_top` 產生 `MA::pad::top::band=k`。
 - **Route B，bottom face。** 位於 $z = 0$ 的 family `band_pad_bottom` 產生 `MS::pad::bottom::band=k`。production 的 `pad_in_ground_B_bands` 兩個 face 都切 band：規劃 62 個 face、262 條 edge、313 個 vertex，23 個 group，validation 通過（31 項），`unions.nets.pad` 列出八個 band group 與 `MA::pad::sidewall`（side wall，不切 band）。
 - **Side wall** 不在 v1 範圍：side wall 的 band 會是 wall face 上的第三個 family，目前不產生。
@@ -198,7 +202,7 @@ AEDT 端同樣不再需要 non-model sheet：band 由 SGB 預先切好寫在 STE
 
 本頁的圖與（除標明 production 者外）數字由 `docs/design/sgb/_figures/inset.py` 對 `experiments/sgb-redesign/prototype` 計算而得；產生的表格另存於 `figures/inset-tables.md`。標明 production 的數字來自 `tests/sgb_emit_cases.py` 的 `pad_a_bands` 與 `pad_b_bands`（`emit_model` 之後讀 sidecar 的 `physical_groups` 與 `insets`）。production 的 KLayout 交叉檢查在 `tests/test_sgb_inset.py`，需要 KLayout，沒有安裝時略過；下方的 KLayout 比較表仍是原型計算的數字。prototype 的輸出在 `outputs/`：band 面積與 KLayout 比較在 `outputs/inset/klayout_comparison.json`（Route B 為 `klayout_comparison_route_B.json`），port 不變性在 `outputs/inset/port_invariance.json`，topology 變化在 `outputs/inset/topology_change.json`，Palace-facing 檢查在 `outputs/inset/palace_check.json` 與 `outputs/pad_in_ground_A_bands/stage_summary.json`，arc 偏差在 `outputs/pad_in_ground_A_bands/sliver_report.json`，Route A 的 attribute 取自 `outputs/e3_brep/pad_in_ground_A_bands/model.sidecar.json`。
 
-Palace-facing 檢查（原型計算；含 band 的 Route A 模型，40 µm 的 mesh size 加上 band 曲線附近 1 µm 的 size field，13 170 個 node、70 775 個 tetrahedron）。group 名稱是原型的形式，對應 production 的 `SHEET::pad::sheet::band=k` 與 `SA::substrate|vacuum::interface::band=k`；原型的 gap 環與 production 的 gap support 不同，所以 face 數也不同：
+Palace-facing 檢查（原型計算；含 band 的 Route A 模型，40 µm 的 mesh size 加上 band 曲線附近 1 µm 的 size field，13 170 個 node、70 775 個 tetrahedron）。group 名稱是原型的形式，對應 production 的 `pad::band=k` 與 `SA::substrate|vacuum::interface::band=k`；原型的 gap 環與 production 的 gap support 不同，所以 face 數也不同：
 
 ::: {.askr-table-compact .askr-table-numeric}
 | Band group | Faces | Triangles | 兩側各自的 tet | 全部被 tet 共用 | Centroid 在 band 內 |

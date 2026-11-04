@@ -2,7 +2,7 @@
 {
  "embedded_faces": [],
  "physical_groups": {
-  "SHEET::chip/left::sheet::band=0": {
+  "chip/left::band=0": {
    "adjacent_domains": [
     {
      "kind": "dielectric",
@@ -47,17 +47,17 @@
   "MA::chip/left::sheet::band=0": {
    "band": 0,
    "entities": ["chip/left"],
-   "group": "SHEET::chip/left::sheet::band=0",
+   "group": "chip/left::band=0",
    "interface_type": "MA",
-   "shared_face_group": "SHEET::chip/left::sheet::band=0",
+   "shared_face_group": "chip/left::band=0",
    "side": "above"
   },
   "MS::chip/left::sheet::band=0": {
    "band": 0,
    "entities": ["chip/left"],
-   "group": "SHEET::chip/left::sheet::band=0",
+   "group": "chip/left::band=0",
    "interface_type": "MS",
-   "shared_face_group": "SHEET::chip/left::sheet::band=0",
+   "shared_face_group": "chip/left::band=0",
    "side": "below"
   }
  },
@@ -65,15 +65,15 @@
   "interface_types": {
    "AA": ["AA::lower_air|upper_air::interface"],
    "EXT": ["EXT::lower_air::bottom", "EXT::lower_air::sidewall", "EXT::substrate::bottom", "EXT::upper_air::sidewall", "EXT::upper_air::top"],
-   "MA": ["SHEET::chip/left::sheet::band=0", "SHEET::chip/left::sheet::band=1", "SHEET::chip/left::sheet::band=2", "SHEET::chip/right::sheet"],
-   "MS": ["SHEET::chip/left::sheet::band=0", "SHEET::chip/left::sheet::band=1", "SHEET::chip/left::sheet::band=2", "SHEET::chip/right::sheet"],
+   "MA": ["chip/left::band=0", "chip/left::band=1", "chip/left::band=2", "chip/right"],
+   "MS": ["chip/left::band=0", "chip/left::band=1", "chip/left::band=2", "chip/right"],
    "PORT": ["PORT::port_sheet"],
    "SA": ["SA::substrate|lower_air::sidewall", "SA::substrate|upper_air::interface"],
-   "SHEET": ["SHEET::chip/left::sheet::band=0", "SHEET::chip/left::sheet::band=1", "SHEET::chip/left::sheet::band=2", "SHEET::chip/right::sheet"]
+   "SHEET": ["chip/left::band=0", "chip/left::band=1", "chip/left::band=2", "chip/right"]
   },
   "nets": {
-   "left": ["SHEET::chip/left::sheet::band=0", "SHEET::chip/left::sheet::band=1", "SHEET::chip/left::sheet::band=2"],
-   "right": ["SHEET::chip/right::sheet"]
+   "left": ["chip/left::band=0", "chip/left::band=1", "chip/left::band=2"],
+   "right": ["chip/right"]
   }
  }
 }

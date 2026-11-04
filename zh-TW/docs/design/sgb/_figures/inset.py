@@ -440,7 +440,7 @@ def figure_routes_section() -> None:
     for i in range(len(edges) - 1):
         k = min(i, 4 - i)
         ax.plot([edges[i], edges[i + 1]], [0, 0], color=kit.PAD_BANDS[k], lw=7, solid_capstyle="butt")
-    ax.text(5, 0.65, "one face per band: SHEET::pad::band=k", fontsize=8, ha="center")
+    ax.text(5, 0.65, "one face per band: pad::band=k", fontsize=8, ha="center")
     ax.text(5, 0.2, "(the sheet is metal-vacuum and metal-substrate at once)", fontsize=7, ha="center", color="#555")
     ax.annotate("MA row and MS row both\nread these band groups", (2.2, 0), (0.3, 1.5), fontsize=7, arrowprops=dict(arrowstyle="->", lw=0.8))
     # Route B: a finite prism; the top face and bottom face each carry bands

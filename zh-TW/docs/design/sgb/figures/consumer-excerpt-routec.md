@@ -1,10 +1,10 @@
 ```{.json filename="semantic_geometry_route_c.sidecar.json（節錄）"}
 {
  "physical_groups": {
-  "VOL::pad": {
+  "pad": {
    "dim": 3,
    "entities": ["pad"],
-   "ids": ["vol:fa23674ad71dd6d4"],
+   "ids": ["vol:db1f20149f6a7bc4"],
    "interface_type": null,
    "kind": "conductor",
    "material": "Al",

@@ -54,7 +54,7 @@ Overlap 的優先權不在這個函式的引數裡：同一個 Net 的兩個 Ent
 | C | 與 B 相同的 prism | 導體 volume **保留**並在內部 mesh；導體–介電質與導體–真空的介面是共用 face | 導體 sheet |
 :::
 
-三種 route 的 lumped port 都能接受：Route A 的 port 是兩個 volume 之間的 face，Route B 與 C 的 port 是嵌在宿主 volume 內的 face（兩側是同一個 volume）。
+三種 route 的 lumped port 都能接受。port 位於 host 導體的 **support plane**（PDK 宣告的 film attachment face，例如金屬貼附的 substrate 上表面），不是金屬的中間平面；host 沒有宣告 `layer_attachment_face` 時 build 以 `InputError` 停止（見 [Routes](routes.qmd#port-support-plane)）。所以三種 route 的 port 都是兩個 volume 之間的 face，不是 free face；port 佔去它在 SA 平面上的面積，但不移動任何 band。
 
 ::: {.askr-table-compact}
 | Request | 欄位 | 結果 |
@@ -173,7 +173,7 @@ embedding、mesh hint 與 port：
 
 {{< include figures/consumer-excerpt-embeds.md >}}
 
-Route B 的 port 是一個 free face：它在 `embedded_faces` 裡有一筆，host 是它所在的 vacuum volume；`ports[*].host_volumes` 與它一致，而 `adjacent_volumes` 只有一個。refinement curve 同樣是 free edge（`written_as_free_edge`），它的 host 是含有它的 face。`mesh_hints` 列出 mesher 應該讓元素沿著它走的 edge：`band_boundary` 是 inset family 的 band 邊界，`source` 為 request id；`refinement_curve` 是 refinement request 的曲線；`curved_edge` 是每條圓弧 edge（`source` 為 `null`，範例沒有圓弧）。每筆有 edge id 與 native tag（等於 `ids_by_tag["1"]` 中的位置加 1），**沒有尺寸**，尺寸由 mesher 決定。
+Route B 的 port 位於 support plane $z = 0$，是 substrate 與 vacuum 之間的 face：`embedded_faces` 是空的，`ports[*].host_volumes` 為空，`adjacent_volumes` 有兩個，`z_um` 是 0。只有 refinement curve 是 free edge（`written_as_free_edge`），它的 host 是含有它的 face。`mesh_hints` 列出 mesher 應該讓元素沿著它走的 edge：`band_boundary` 是 inset family 的 band 邊界，`source` 為 request id；`refinement_curve` 是 refinement request 的曲線；`curved_edge` 是每條圓弧 edge（`source` 為 `null`，範例沒有圓弧）。每筆有 edge id 與 native tag（等於 `ids_by_tag["1"]` 中的位置加 1），**沒有尺寸**，尺寸由 mesher 決定。
 
 最後是綁定、單一 volume 與 face 的記錄、lineage，以及預期值（`ids_by_tag` 與 `expected` 的長清單被截短）：
 
@@ -181,13 +181,13 @@ Route B 的 port 是一個 free face：它在 `embedded_faces` 裡有一筆，ho
 
 - `faces[*].negative_volume` 是 face 法向反側的 volume，`positive_volume` 是法向所指的一側；對水平 face，前者是下方。若某一側是被 Route B／A 排除的導體，它仍列出規劃 id，其 `volumes[*].emitted` 為 `false`。
 - 這個 `faces` 例子是 ground 的 sidewall：`lineage.faces` 指出它來自 `ground_0000` 與 `substrate` 兩個 Entity，`membership` 是各 Entity 覆蓋的比例（wall 取底邊長度的比例）。
-- `volumes[*].aedt_name` 是已淨化、檢查過不衝突的 AEDT 名稱（`VOL::substrate` 變成 `VOL__substrate`；衝突時依 tag 順序加 `__2`、`__3`）。
+- `volumes[*].aedt_name` 是已淨化、檢查過不衝突的 AEDT 名稱（volume group 的名稱本身就是 entity id，所以 `substrate` 仍是 `substrate`、`chip/air` 變成 `chip_air`；衝突時依 tag 順序加 `__2`、`__3`）。
 
-Route A 與 Route C 各有一處不同，其餘欄位相同。Route A 的導體是 sheet，名稱為 `SHEET::<entity>::sheet[::band=k]`，一個 sheet group 同時承載該 Entity 的 MA 與 MS 兩個 row，所以它同時列在 `unions.interface_types` 的 `SHEET`、`MA` 與 `MS`。兩個 row 的 `shared_face_group` 都是這個 sheet group，`side` 說明各自積分 sheet 的哪一側（MA 看 sheet 上方的 vacuum，MS 看下方的 dielectric）。Route B／C 與單面的 row（例如 SA）這兩個欄位都是 `null`：
+Route A 與 Route C 各有一處不同，其餘欄位相同。Route A 的導體是 sheet，名稱為 `<entity>[::band=k]`（裸的 entity id；`interface_type` 欄位仍是 `SHEET`，它是欄位值，不是名稱的一部分），一個 sheet group 同時承載該 Entity 的 MA 與 MS 兩個 row，所以它同時列在 `unions.interface_types` 的 `SHEET`、`MA` 與 `MS`。兩個 row 的 `shared_face_group` 都是這個 sheet group，`side` 說明各自積分 sheet 的哪一側（MA 看 sheet 上方的 vacuum，MS 看下方的 dielectric）。Route B／C 與單面的 row（例如 SA）這兩個欄位都是 `null`：
 
 {{< include figures/consumer-excerpt-routea.md >}}
 
-Route A 的 port 是兩個 volume 之間的 face，所以沒有 `embedded_faces`、`host_volumes` 為空、`adjacent_volumes` 有兩個。Route C 保留導體 volume，於是導體成為 `kind` 為 `conductor` 的 volume group，帶有 Net 與 material id：
+Route A 的 port 同樣是兩個 volume 之間的 face（sheet 平面就是它的 support plane），欄位與上面相同：`host_volumes` 為空、`adjacent_volumes` 有兩個。Route C 保留導體 volume，於是導體成為 `kind` 為 `conductor` 的 volume group，帶有 Net 與 material id：
 
 {{< include figures/consumer-excerpt-routec.md >}}
 
@@ -200,7 +200,7 @@ sidecar 給的是 material **id**（`Al`、`Si`）與 `kind`，不含 permittivi
 1. 取得 `SgbArtifacts`，以 `read_sidecar` 讀入 sidecar。
 2. 在 Gmsh 中開啟 XAO，關閉 `Geometry.OCCAutoFix`（需要修補表示規劃有缺陷，不該被悄悄修掉），執行 `gmsh.model.occ.synchronize()`。
 3. `verify_loaded(sidecar)`：在已載入的模型上比對 sidecar 的預期值；`report.raise_if_failed()` 在有任何差異時停止。
-4. `apply_sidecar_embeds(sidecar)`：把 port sheet 嵌進宿主 volume、refinement curve 嵌進宿主 face，回傳嵌入的 face 與 edge 數。
+4. `apply_sidecar_embeds(sidecar)`：把 sidecar 記錄的 embedding 重新套用：refinement curve 嵌進宿主 face，`embedded_faces` 若有項目則把 face 嵌進宿主 volume（port 位於 support plane 時沒有），回傳嵌入的 face 與 edge 數。
 5. 設定 mesh 尺寸：`mesh_hints` 指出要解析的 edge（沒有尺寸，數值由 mesher 決定）。
 6. 產生 mesh；config 由 live 模型的 physical group **名稱**對照 `physical_groups` 建立，不解析名稱字串。
 
@@ -221,7 +221,7 @@ gmsh.model.mesh.generate(3)
 
 `verify_loaded` 完全以 sidecar 提供的數字比對，不檢查模型本身：實體數；每個 vertex 的位置（容許 $10^{-9}$ µm，這同時證明 tag 編號，其餘檢查都依賴它）；每個 edge、face、solid 的邊界；physical group 的名稱、維度、tag 與成員；每個 face 的面積與 solid 的體積（相對容許 $10^{-9}$，非正值表示 shell 方向錯誤）。所有差異會收集後一起回報。`verify_xao(xao_path, sidecar)` 則在新的 Gmsh session 中做同樣的檢查並關閉它，適合只做檢查而不接著 mesh；從 BREP 載入的模型沒有 group，要用 `verify_loaded(sidecar, groups=False)`。
 
-在範例模型上跑完這段流程的結果如下（粗 mesh 只用來確認嵌入的 port 與 refinement curve 可以和宿主一起 mesh）：
+在範例模型上跑完這段流程的結果如下（粗 mesh 只用來確認嵌入的 refinement curve 可以和宿主一起 mesh，port face 可以和相鄰 volume 一起 mesh）：
 
 ::: {.askr-table-compact}
 {{< include figures/consumer-run-table.md >}}
@@ -233,7 +233,7 @@ gmsh.model.mesh.generate(3)
 2. 在 AEDT 以 PyAEDT 匯入 STEP（這部分是採用端的程式）。
 3. **名稱把關。**匯入後 AEDT 的 object 集合必須等於 `StepExport.object_names`；不依賴 AEDT 自動加的後綴。
 4. **face 順序把關。**每個 solid 的 guard 依 OCC solid 的 face 順序列出 `face` id、`area_um2` 與 `centre_um`。對每個 object 檢查 face 數，以及每個 face 的面積與 center；任何不符就 fail closed。這個順序等於 AEDT face id 順序，是 E4 在 4 個案例觀察到的性質，不是文件保證（見[交給 AEDT](aedt-handoff.qmd)）；E4 使用的容許值是面積相對 $2 \times 10^{-3}$、center $5 \times 10^{-3}$ µm，`export_aedt_step` 本身不規定容許值。
-5. **重建 free face。**lumped-port sheet 無法經由 STEP 傳遞；依 `ports`（與 `embedded_faces`）記錄的幾何在 AEDT 內原生建立 sheet 與 lumped port。Route A 的 port 是兩個 solid 共用的 face，已在 STEP 的 solid 裡，需要的是 boundary 指派而不是新幾何（由 route 的定義推得；STEP 匯出只在 Route B 的案例上測過）。
+5. **建立 port。**port 位於 support plane，是兩個 solid 共用的 face，已在 STEP 的 solid 裡（guard 列出它），可由 `ports[*].faces` 找到；需要的是 boundary 指派，或依 `ports` 記錄的幾何在 AEDT 內原生建立 sheet 與 lumped port。這一步由 face 結構與 route 的定義推得；STEP 匯出只在 Route B 的案例上測過，port 在 AEDT 內的建立尚未用這個 STEP 跑過。若 sidecar 的 `embedded_faces` 有項目（volume 內部的 sheet，真實輸入不產生），那個 sheet 無法經由 STEP 傳遞，必須依 `ports` 與 `embedded_faces` 記錄的幾何原生建立。
 6. 以 `volumes[*].aedt_name` 與 `material` 指派 material，以 `physical_groups` 的 face 指派 boundary（face 到 AEDT face id 的對應由第 4 步的順序給出）。band 已預先切在 solid 的 face 裡，所以不需要 AEDT 的 Imprint。
 
 `StepExport` 只存在於記憶體中，不會寫成檔案。已測的部分：STEP 是具名的 assembly、單位與數字正確、重新讀回的 volume 等於規劃值、guard 列出每個 solid 的所有 face 且順序為 OCC 順序、sidecar 與檔案不符時拒絕、可從 XAO 匯出。**沒有測的部分：**用這個新的 STEP 匯入 AEDT。E4 在 AEDT 2024.2 上驗證的是原型的 STEP；production 的匯出採用同一個配方，但這個匯出本身尚未在 AEDT 上跑過。
@@ -241,6 +241,8 @@ gmsh.model.mesh.generate(3)
 ## 補充：重現資料 {#reproduction-data}
 
 本頁的範例由 `experiments/sgb-redesign/consumer-contract/generate_excerpt.py` 產生。它用 sgb-core 環境（分支 `claude/sgb-core`，階段 1e 的提交 `6d08e53`）與該分支測試資料夾中的 `sgb_inputs.gds_pad_in_ground`（Route B 與 C）和 `thin_film_pair`（Route A），呼叫 `build_sgb_geometry`，然後執行上文的 Palace 與 AEDT 步驟，把輸出放在同一個資料夾的 `out/`（含 `consumer_runs.json`）。Route B 與 C 的 inset 是 pad 上表面的 0.5 與 1 µm，refinement curve 是高度 0.2 µm 的 10 µm 線段；Route A 的 inset 是 `chip/left` 的 sheet。
+
+同一個腳本還寫出第二組 `out/all_interfaces/route_{a,b,c}/`：每個 entity 的每個支援表面（Route B 與 C 是各導體的 `top` 與 `bottom`，Route A 是兩個 sheet）加上 SA 介面都要求 0.5 與 1 µm 的 band，並用 gmsh 重新打開每個 `.xao`，量 volume、surface、physical group、port 的 $z$、SA band 與 `PORT::` 的面積，再以 `mesh_hints` 的建議（band 邊界 0.25 µm、逐步長到 60 µm）產生 mesh（摘要在 `out/all_interfaces/summary.json`）。這一組的 port 在 $z = 0$、與 SA 面積的關係見 [Routes](routes.qmd#port-support-plane)。
 
 ```bash
 SG=<sgb-core worktree>

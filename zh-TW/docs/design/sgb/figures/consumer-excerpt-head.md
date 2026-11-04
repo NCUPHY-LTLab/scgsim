@@ -3,17 +3,17 @@
  "counts": {
   "arcs": 0,
   "cylinders": 0,
-  "edges": 92,
-  "faces": 38,
+  "edges": 86,
+  "faces": 36,
   "free_edges": 1,
-  "free_faces": 1,
-  "pcurves": 175,
+  "free_faces": 0,
+  "pcurves": 161,
   "shells": 3,
   "solids": 2,
-  "surfaces": 33,
-  "vertices": 64,
+  "surfaces": 30,
+  "vertices": 60,
   "volumes_total": 4,
-  "wires": 43
+  "wires": 40
  },
  "files": {
   "brep": "semantic_geometry_route_b.brep",
@@ -24,7 +24,7 @@
  },
  "grid_um": 0.001,
  "model": {
-  "identity_digest": "model:ec604ad79acc721c",
+  "identity_digest": "model:05bed26f68c4d486",
   "name": "semantic_geometry_route_b"
  },
  "route": "B",

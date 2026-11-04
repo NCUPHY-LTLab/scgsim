@@ -13,7 +13,7 @@ Arrangement 只告訴我們平面被曲線切成哪些 **cell**（平面區域�
 
 ## 執行範例的觀點
 
-執行範例是 *pad-in-ground* 晶片（見[總覽](index.qmd)）。在 Route B（有限厚度的金屬，見 [Routes](routes.qmd)）中，金屬厚 0.2 µm，port sheet 位於其中間平面，所以 Z level 為 $-100, 0, 0.1, 0.2, 100$ µm，模型有四個 slab。取第一個金屬 slab $(0, 0.1)$ µm 來看：有三個 prism 在其中 active，分別是 vacuum 方塊、ground plane（含 cutout）與 pad（含 hole）。slab arrangement $S_i$ 只沿這三個 footprint 的邊界曲線切割平面，沒有其他曲線。它有四個 **cell**，也就是 edge 之間的連通區域。
+執行範例是 *pad-in-ground* 晶片（見[總覽](index.qmd)）。在 Route B（有限厚度的金屬，見 [Routes](routes.qmd)）中，金屬厚 0.2 µm，port sheet 位於其中間平面（這是執行範例的設定，真實輸入的 port 在 support plane，見 [Routes](routes.qmd#port-support-plane)），所以 Z level 為 $-100, 0, 0.1, 0.2, 100$ µm，模型有四個 slab。取第一個金屬 slab $(0, 0.1)$ µm 來看：有三個 prism 在其中 active，分別是 vacuum 方塊、ground plane（含 cutout）與 pad（含 hole）。slab arrangement $S_i$ 只沿這三個 footprint 的邊界曲線切割平面，沒有其他曲線。它有四個 **cell**，也就是 edge 之間的連通區域。
 
 ![Route B 中 slab (0, 0.1) µm 的四個 cell，以及覆蓋各 cell 的 prism。同時被導體與 vacuum 方塊覆蓋的 cell，其 label 取導體。](figures/labels-slab-cells.svg){#fig-slab-cells fig-alt="晶片 cutout 區域的平面圖，標示四個 cell（ground、vacuum gap、pad、pad hole 內的 vacuum），旁邊的表列出各 cell 被哪些 prism 覆蓋，以及最後得到的 slab label。"}
 
@@ -134,7 +134,7 @@ dissolution 改變的是數量，不是面積。驗證器（[驗證](validation.
 
 **Attribution policy** 決定輸出中一個表面被區分得多細，也就是 solver 看得到哪些 label 差異。D5 已決定，production 已實作：
 
-- 表面**預設依 Entity 歸屬**。不同 Entity 之間的 seam 保留為 required edge，讓每個 Entity 對 Surface EPR 的貢獻可以分開；primary group 的命名規則是 `<kind>::<qualified entity id>::<face kind>[::band=k]`（例如 `MA::chip/q0/pad::top::band=2`；Route A 的 sheet 是 `SHEET::<entity>::sheet[::band=k]`）；
+- 表面**預設依 Entity 歸屬**。不同 Entity 之間的 seam 保留為 required edge，讓每個 Entity 對 Surface EPR 的貢獻可以分開；primary group 的命名規則是 `<kind>::<qualified entity id>::<face kind>[::band=k]`（例如 `MA::chip/q0/pad::top::band=2`；Route A 的 sheet 與 volume 一樣以裸的 entity id 命名，sheet 為 `<entity>[::band=k]`）；
 - 報告依 **interface type**（MA／MS／SA）彙總並可顯示總和，這些總和是 sidecar 中的 union；
 - Net 只在後端需要電性身分時使用（例如 Electrostatic 的 terminal 與 ground），Net 層級的 union 也只用於這種情形；
 - 同一個 Net 的重疊區域，屬於宣告 priority 較高的 Entity；priority 相同或缺少時 fail closed（Lead 的預設，可改）。

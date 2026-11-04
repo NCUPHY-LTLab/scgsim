@@ -27,7 +27,7 @@ SGB 把 sliver 的來源分成四種：其中三種是推導方式造成的人�
 
 表格的讀法：
 
-- **Route B 的 0.1 µm**（最短 edge、最窄 face）是金屬厚度的一半：$z = 0.1$ 的 port 平面把兩面金屬 wall 各切成兩半。這是模型本身的幾何，是 grid 的 100 倍。
+- **Route B 的 0.1 µm**（最短 edge、最窄 face）是金屬厚度的一半：$z = 0.1$ 的 port 平面把兩面金屬 wall 各切成兩半。這是模型本身的幾何，是 grid 的 100 倍。真實輸入的 port 位於 support plane（$z = 0$），不切開 wall，這條 0.1 µm 的 edge 也就不存在。
 - **Route A 的 7.071 µm** 是 pad 5 µm 圓角的 chord（最短 edge），也是它旁邊 face 的寬度；接著是 10 µm 的 port。
 - **band 版本的 0.0767 µm** 是 0.1 µm gap-band 曲線在 pad 兩個 chamfer 角上的短片段（margin 半徑的圓弧）及其旁邊窄 cell 的長度。它們的 lineage 指出 family（`band_gap/ring1/corner2@m100.0`）與 Entity。
 - **「最窄 face」是 face 的 local feature size**：兩條不相鄰的邊界 edge 之間的最小距離，在精確的 carrier 上量測（圓弧以解析方式處理，而非用 chord）。因此由圓弧圍成的 face 以其真實寬度回報，大 face 內部的細窄通道與孤立的窄 cell 同樣會被找到。chord 多邊形的比值 $2A/P$ 仍保留在每筆資料的 `width_2a_over_p_um` 中，僅供參考。
@@ -91,7 +91,7 @@ SGB 把 sliver 的來源分成四種：其中三種是推導方式造成的人�
 
 相距 5 nm 的兩條邊界不是人為結果。一個 pad 位於 ground cutout 之內，cutout 的每一邊都比 pad 寬 5 nm，就是一圈 5 nm 寬的環形 gap（panel 4a）。模型通過驗證（13 個 face）：幾何是合法的，solver 甚至可能需要那個 gap。SGB 保留它並**回報**它。
 
-該 gap 的 report 資料（原型計算，取自 `slivers-numbers.json`，節錄；group 名稱是原型的 per-Net 形式，production 為 `SA::substrate|vacuum::interface`、`SHEET::pad::sheet::band=3`）：
+該 gap 的 report 資料（原型計算，取自 `slivers-numbers.json`，節錄；group 名稱是原型的 per-Net 形式，production 為 `SA::substrate|vacuum::interface`、`pad::band=3`）：
 
 ```json
 { "id": "f:1c52b3bd619c73ae", "kind": "horizontal", "group": "SA::substrate|vacuum",

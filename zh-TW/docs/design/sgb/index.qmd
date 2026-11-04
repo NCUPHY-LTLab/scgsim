@@ -19,7 +19,7 @@ scgsim-id: "docs/design/sgb/index"
 
 本設計的每一頁都使用同一顆晶片，稱為 **pad-in-ground**：下方是 substrate，上方是 vacuum，一片帶矩形 cutout 的 ground plane，cutout 內有一個 pad，pad 與 ground 之間有一片 lumped-port sheet。pad 有一個 chamfer、一個 reflex notch、一個圓角和一個圓形孔洞，涵蓋了演算法必須處理的各種轉角。需要多層金屬時，改用第二個較小的範例（由兩根 post 撐起的類 airbridge deck）。
 
-輸入是五個 prism。以下使用 Route B 的形式：金屬厚 0.2 µm，port sheet 位於金屬的中間平面，$z = 0.1$ µm。
+輸入是五個 prism。以下使用 Route B 的形式：金屬厚 0.2 µm，port sheet 位於金屬的中間平面，$z = 0.1$ µm。這是為了說明而選的 stage 層範例：port 位於 vacuum volume 內部，所以會出現 embedded face，並把金屬 wall 切成兩片。實際輸入的 port 放在 host 導體的 support plane，也就是 PDK 宣告的 film attachment face（金屬貼著 substrate 的 $z = 0$）；它躺在 substrate 與 vacuum 的介面上，佔去那裡的 SA 面積，規則見 [Routes](routes.qmd#port-support-plane)。
 
 ![執行範例的輸入。左：從上方看的 footprint。右：沿虛線的剖面，以及由 prism 頂面與底面高度形成的 level（虛線）。](figures/index-example-input.svg){#fig-input fig-alt="左圖：300 × 300 微米晶片的俯視圖。灰色 ground plane 中有一個白色矩形 cutout，裡面是一個藍色 pad，pad 有倒角、下緣有缺口、左下角為圓角並有一個圓孔，另有一個紅色 port 矩形從 pad 連到 ground。右圖：y = 0 的 x-z 剖面，下方是 substrate slab，中間的 slab 有兩塊灰色 ground 與兩塊藍色 pad，中間的 level 上有一片紅色 port sheet，上方是 vacuum，共有五條虛線 level。"}
 

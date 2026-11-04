@@ -7,10 +7,10 @@
  },
  "binding": {
   "ids_by_tag": {
-   "0": ["v:889c0afb53729cd6", "v:5ae72f37e0d2bca6", "..."],
-   "1": ["e:f1a409262d686007", "e:717d8fb4f6b8f22d", "..."],
-   "2": ["f:27ce1e55539dce2b", "f:487ca41cd08e5769", "..."],
-   "3": ["vol:1a3729bef5cef625", "vol:9d66ce4f20452849"]
+   "0": ["v:0b075ec90c6426c9", "v:1441394c11c5a86e", "..."],
+   "1": ["e:96097c2a7413a1df", "e:4e13462abbf1c19c", "..."],
+   "2": ["f:120f732fa4504c88", "f:27ce1e55539dce2b", "..."],
+   "3": ["vol:1a3729bef5cef625", "vol:7346ec1a4ff1ccf9"]
   },
   "rule": "planned id -> native tag: tag = 1 + position in ids_by_tag[dim] (TopExp::MapShapes pre-order of the written compound); never by geometry"
  },
@@ -20,20 +20,20 @@
    [2, 3],
    "..."
   ],
-  "face_area_um2": [10000.0, 400.0, "..."],
+  "face_area_um2": [400.0, 10000.0, "..."],
   "face_edges": [
-   [1, 2, 3, 4],
-   [5, 6, 7, 8, 9, 10],
+   [1, 2, 3, 4, 5, 6],
+   [7, 8, 9, 10],
    "..."
   ],
   "solid_faces": [
-   [1, 2, 3, 4, 5, 6, 7, 8],
-   [1, 4, 5, 6, 7, 8, 9, 10, "..."]
+   [1, 2, 3, 4, 5, 6, 7, 8, "..."],
+   [2, 3, 4, 5, 7, 8, 9, 10, "..."]
   ],
   "solid_volume_um3": [100000.0, 882160.0],
   "vertices_um": [
-   [0.0, 100.0, -10.0],
-   [0.0, 0.0, -10.0],
+   [40.0, 48.0, 0.0],
+   [40.0, 40.0, 0.0],
    "..."
   ]
  },
@@ -42,23 +42,21 @@
    "face_kind": "sidewall",
    "group": "MA::ground_0000::sidewall",
    "kind": "wall",
-   "negative_volume": "vol:f8f1d1c3d3854405",
-   "positive_volume": "vol:9d66ce4f20452849",
+   "negative_volume": "vol:739993ecf3919fb3",
+   "positive_volume": "vol:7346ec1a4ff1ccf9",
    "z_um": [0.0, 0.2]
   }
  },
  "lineage": {
   "carriers": {
-   "PORT_SHEET__P1__0000/polygon0/ring0/edge4": {
-    "edge": 4,
-    "entity": "PORT_SHEET__P1__0000",
-    "kind": "polygon_edge",
-    "polygon": 0,
-    "ring": 0
+   "pad_top/ring0/edge5@m1000.0": {
+    "family": "pad_top",
+    "kind": "family_member",
+    "member": "pad_top/ring0/edge5"
    }
   },
   "edges": {
-   "e:02213c44b2348835": ["PORT_SHEET__P1__0000/polygon0/ring0/edge4"]
+   "e:06120918c00195e2": ["pad_top/ring0/edge5@m1000.0"]
   },
   "faces": {
    "f:179b3dd8d7bb9c70": ["ground_0000", "substrate"]
@@ -73,17 +71,17 @@
  "slivers": {
   "max_arc_deviation_grid": 0.0,
   "max_snap_drift_grid": 0.0,
-  "narrowest_face_um": 0.1,
-  "shortest_edge_um": 0.1,
+  "narrowest_face_um": 0.2,
+  "shortest_edge_um": 0.2,
   "smallest_angle_deg": 90.0,
   "thin_slab_count": 0
  },
  "volumes": {
   "vol:1a3729bef5cef625": {
-   "aedt_name": "VOL__substrate",
+   "aedt_name": "substrate",
    "emitted": true,
    "entity": "substrate",
-   "group": "VOL::substrate",
+   "group": "substrate",
    "kind": "dielectric",
    "material": "Si",
    "net": null,

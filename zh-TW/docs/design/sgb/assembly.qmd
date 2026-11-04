@@ -36,7 +36,7 @@ flowchart LR
 
 Route B 的執行範例在金屬層有 $0$、$0.1$ 與 $0.2$ µm 三個 level。它的 pad 有九條直邊、一個圓角與一個圓形 hole。41 個 face 中，9 個是 horizontal face（需要 face 的 level arrangement cell，見 label 頁），32 個是 wall（production 與原型計算的數量相同）。有趣的是 wall。
 
-沿 pad 輪廓看連續三邊：從 $(10, -30)$ 到 $(50, -30)$ µm 的底邊、$x = 50$ µm 的右側壁（到 $(50, 18)$），以及到 $(38, 30)$ 的 chamfer。port sheet 在 $x = 50$、$z = 0.1$ 處接觸 pad。@fig-wall-anatomy 把這三面 wall 攤開。
+沿 pad 輪廓看連續三邊：從 $(10, -30)$ 到 $(50, -30)$ µm 的底邊、$x = 50$ µm 的右側壁（到 $(50, 18)$），以及到 $(38, 30)$ 的 chamfer。port sheet 在 $x = 50$、$z = 0.1$ 處接觸 pad（執行範例的中間平面 port；真實輸入的 port 在 support plane，不切開金屬 wall）。@fig-wall-anatomy 把這三面 wall 攤開。
 
 ![Route B 中沿 pad 連續三邊的 wall。上：實際建出的結果。下：若每個 level 都切每一面 wall 的同一個模型。紅色線段是 vertical edge；黑色線段是 level arrangement 的 edge；圓點是 vertex。](figures/assembly-wall-anatomy.svg){#fig-wall-anatomy fig-alt="同樣三面 wall 的上下兩張立面圖。上圖中底邊 wall 與 chamfer wall 各是一個從 z = 0 到 z = 0.2 的矩形，x = 50 的 wall 在 z = 0.1 被切成兩片，且兩片在共用的 z = 0.1 線上有三條 edge。下圖中每面 wall 都在 z = 0.1 被切成兩片。"}
 
@@ -54,7 +54,7 @@ Route B 的執行範例在金屬層有 $0$、$0.1$ 與 $0.2$ µm 三個 level。
 
 兩種特殊情形：
 
-- 兩側是*同一個* volume 的 face，是不圍出任何 volume 的 sheet。它是 **embedded**：列在它的 host volume 上，但有自由邊界，**不屬於任何 shell**。Route B 的 lumped port 就是執行範例中的例子；見 [Routes](routes.qmd)。
+- 兩側是*同一個* volume 的 face，是不圍出任何 volume 的 sheet。它是 **embedded**：列在它的 host volume 上，但有自由邊界，**不屬於任何 shell**。執行範例中間平面的 lumped port 就是這種例子（真實輸入的 port 位於 support plane，是兩個 volume 之間的 face，不屬此類）；見 [Routes](routes.qmd#the-route-b-port-is-an-embedded-face)。
 - 只有一側有 volume 的 face 位於模型的外邊界上，其 physical group 為 `EXT::<domain>`。
 
 ## Wall
@@ -134,12 +134,12 @@ Volume 的 **shell** 是它的 face 的集合。SGB 把它們分組為連通的�
 沒有任何一步使用容差：1–3 步是 snap 後 grid 上的整數 topology，4–5 步是組合性的。assembly 本身用到的浮點數值（曲面 shell 的 volume 中的圓弧弓形面積、圓弧偏差）從不決定哪個 entity 存在；assembly 之前還有三處浮點（圓弧 footprint 的 witness 測試、inset band 歸屬、抽樣的圓弧交叉檢查），見 [label 頁](labels-and-dissolution.qmd)。
 
 ::: {.callout-important title="保證的範圍：shell 內的 face，不含 embedded face（依據：建構，並由測試與計算的 fixture 驗證）"}
-兩個 volume 是 conformal，是因為它們由相同的原子建出，而不是因為 kernel 發現它們重合，這一點適用於 volume 的 shell。embedded 的 port face 不在任何 shell 內；它與 host volume 的關係由 sidecar 記錄，由 mesher 重新套用。production 的測試與 catalogue 對寫出的模型（Route A、B、C 與 airbridge）做粗略 mesh，conformity 檢查沒有發現問題（沒有重複節點）。
+兩個 volume 是 conformal，是因為它們由相同的原子建出，而不是因為 kernel 發現它們重合，這一點適用於 volume 的 shell。embedded 的 sheet（例如範例中間平面的 port face）不在任何 shell 內；它與 host volume 的關係由 sidecar 記錄，由 mesher 重新套用。production 的測試與 catalogue 對寫出的模型（Route A、B、C 與 airbridge）做粗略 mesh，conformity 檢查沒有發現問題（沒有重複節點）。
 :::
 
 ## 邊界情形
 
-- **Volume 內部的 sheet。** Route B 的 port 是兩側為同一個 volume 的 face，它是 embedded，有自由邊界，且不屬於任何 shell；驗證器明確計入它的自由 edge（執行範例為 2 條，且沒有任何 dangling edge）。
+- **Volume 內部的 sheet。** 範例中間平面的 port 是兩側為同一個 volume 的 face，它是 embedded，有自由邊界，且不屬於任何 shell；驗證器明確計入它的自由 edge（執行範例為 2 條，且沒有任何 dangling edge）。
 - **Volume 沿一條 edge 接觸自己（non-manifold pinch）。** 見第 5 步：由 `NonManifoldError` 在 assembly 之前拒絕，錯誤訊息指出 Net、Entity 與位置。
 - **不同 Net 接觸。** 在 assembly 之前，不同 Net 的導體在任何 route 中只要共用 edge 或 vertex，就會被 contact check 以 `ContactError` 拒絕（見 [label 頁](labels-and-dissolution.qmd)）；它們必須以 gap 隔開，或屬於同一個 Net。
 - **已檢查的極端案例。** production 的極端案例 catalogue 中，`stacked_corner_touch`、`stacked_vertex_on_wall_edge`、`port_edge_on_metal_sidewall`、`floating_conductor` 與 `nested_holes` 這些會用到 column 規則、coalescing 與 inner shell 的 fixture，在可建出的 route 上都通過全部 check（結構驗證、寫出 BREP 與 XAO、Gmsh 載入、conformal mesh、OCCT 檢查）；圓弧上有外來 vertex 的兩個 fixture 也通過（見[曲面 wall](#curved-walls)）。

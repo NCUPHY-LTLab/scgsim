@@ -30,7 +30,7 @@ pad-in-ground 晶片的輸入（[總覽](index.qmd#fig-input)）是五個 prism�
 | 3 | $0.2$ 到 $100$ | vacuum | 金屬已經結束 |
 :::
 
-port sheet $p_1$ 位於 level $0.1$ µm。它不填滿任何 slab；它附屬於它所在的 level。level 帶有它的 sheet，slab 帶有它的 active prism。
+port sheet $p_1$ 位於 level $0.1$ µm（執行範例的 port 刻意放在金屬的中間平面，用來說明 embedded face 與被切開的 wall；真實輸入的 port 位於 host 的 support plane（$z = 0$），見 [Routes](routes.qmd#port-support-plane)）。它不填滿任何 slab；它附屬於它所在的 level。level 帶有它的 sheet，slab 帶有它的 active prism。
 
 ### 每個 level 與每個 slab 各一個 arrangement
 
