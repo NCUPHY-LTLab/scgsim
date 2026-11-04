@@ -236,7 +236,7 @@ gmsh.model.mesh.generate(3)
 5. **建立 port。**port 位於 support plane，是兩個 solid 共用的 face，已在 STEP 的 solid 裡（guard 列出它），可由 `ports[*].faces` 找到；需要的是 boundary 指派，或依 `ports` 記錄的幾何在 AEDT 內原生建立 sheet 與 lumped port。這一步由 face 結構與 route 的定義推得；STEP 匯出只在 Route B 的案例上測過，port 在 AEDT 內的建立尚未用這個 STEP 跑過。若 sidecar 的 `embedded_faces` 有項目（volume 內部的 sheet，真實輸入不產生），那個 sheet 無法經由 STEP 傳遞，必須依 `ports` 與 `embedded_faces` 記錄的幾何原生建立。
 6. 以 `volumes[*].aedt_name` 與 `material` 指派 material，以 `physical_groups` 的 face 指派 boundary（face 到 AEDT face id 的對應由第 4 步的順序給出）。band 已預先切在 solid 的 face 裡，所以不需要 AEDT 的 Imprint。
 
-`StepExport` 只存在於記憶體中，不會寫成檔案。已測的部分：STEP 是具名的 assembly、單位與數字正確、重新讀回的 volume 等於規劃值、guard 列出每個 solid 的所有 face 且順序為 OCC 順序、sidecar 與檔案不符時拒絕、可從 XAO 匯出。**沒有測的部分：**用這個新的 STEP 匯入 AEDT。E4 在 AEDT 2024.2 上驗證的是原型的 STEP；production 的匯出採用同一個配方，但這個匯出本身尚未在 AEDT 上跑過。
+`StepExport` 只存在於記憶體中，不會寫成檔案。已測的部分：STEP 是具名的 assembly、單位與數字正確、重新讀回的 volume 等於規劃值、guard 列出每個 solid 的所有 face 且順序為 OCC 順序、可從 XAO 匯出；此外 `export_aedt_step` 在為 solid 命名之前，先把檔案與 sidecar 的 `expected` 區塊（依 tag 順序的 vertex 位置、face 面積、solid 體積與各類 entity 數量）逐項比對，不符即拒絕匯出。**沒有測的部分：**用這個新的 STEP 匯入 AEDT。E4 在 AEDT 2024.2 上驗證的是原型的 STEP；production 的匯出採用同一個配方，但這個匯出本身尚未在 AEDT 上跑過。
 
 ## 補充：重現資料 {#reproduction-data}
 

@@ -46,7 +46,7 @@ AEDT 原生的 Imprint 可以運作，但不提供 identity。在 `pad_in_ground
 
 - SAT／Parasolid：OCP 7.8.1 與 gmsh 4.15.2 都沒有提供。IGES 在以 mm 縮放時可匯入，但沒有名稱（object 名稱為 `DE1`、`DE575`）。
 - E4 沒有做任何 solve，也沒有對複製的 face 做 HFSS mesh。
-- face 順序等於 face-id 順序是這個 AEDT 版本與匯入路徑的觀察結果（4 個 case 通過）。這個性質本身沒有不需要 AEDT 就能執行的自動測試，只在原型時期需要 AEDT 的 E4 實驗中驗證過，所以它仍是設計的要求，不是已被測試的事實。production 的匯出端已補上能補的部分並有測試（`tests/test_sgb_occt.py`）：`export_aedt_step` 為每個 solid 回傳依 OCC face 順序列出的 face（含面積與中心）作為匯入端的守衛清單；`aedt_name` 在 sidecar 中已消毒並保證無衝突；STEP 是 XDE assembly、單位為 µm 且數字等於模型數字、讀回的 volume 等於規劃值；sidecar 與檔案不符時拒絕匯出；也可以從 XAO 匯出。**production 的輸出尚未實際匯入 AEDT 測過**（匯出端沒有啟動 AEDT）；上面的 AEDT 數字都是原型時期的 E4。
+- face 順序等於 face-id 順序是這個 AEDT 版本與匯入路徑的觀察結果（4 個 case 通過）。這個性質本身沒有不需要 AEDT 就能執行的自動測試，只在原型時期需要 AEDT 的 E4 實驗中驗證過，所以它仍是設計的要求，不是已被測試的事實。production 的匯出端已補上能補的部分並有測試（`tests/test_sgb_occt.py`）：`export_aedt_step` 為每個 solid 回傳依 OCC face 順序列出的 face（含面積與中心）作為匯入端的守衛清單；`aedt_name` 在 sidecar 中已消毒並保證無衝突；STEP 是 XDE assembly、單位為 µm 且數字等於模型數字、讀回的 volume 等於規劃值；`export_aedt_step` 在為 solid 命名之前，先把檔案與 sidecar 的 `expected` 區塊（依 tag 順序的 vertex 位置、face 面積、solid 體積與各類 entity 數量）逐項比對，不符即拒絕匯出；也可以從 XAO 匯出。**production 的輸出尚未實際匯入 AEDT 測過**（匯出端沒有啟動 AEDT）；上面的 AEDT 數字都是原型時期的 E4。
 
 E3 把 BREP 轉成 STEP 再讀回（見[補充：重現資料](#reproduction-data)的表），顯示 shared face 在 STEP 中被複製。在每個 case 中，多出的 face 數都等於 shared interior face 的數量（5、2、1、23 與 8）。STEP 把每個 solid 的 shell 分開儲存，所以被兩個 solid 共用的 face 會寫兩次；重新載入後 vertex 與 edge 也變多，因為被複製的 face 的邊界也一起被複製。
 
