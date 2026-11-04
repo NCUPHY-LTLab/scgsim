@@ -201,7 +201,7 @@ sidecar 給的是 material **id**（`Al`、`Si`）與 `kind`，不含 permittivi
 2. 在 Gmsh 中開啟 XAO，關閉 `Geometry.OCCAutoFix`（需要修補表示規劃有缺陷，不該被悄悄修掉），執行 `gmsh.model.occ.synchronize()`。
 3. `verify_loaded(sidecar)`：在已載入的模型上比對 sidecar 的預期值；`report.raise_if_failed()` 在有任何差異時停止。
 4. `apply_sidecar_embeds(sidecar)`：把 sidecar 記錄的 embedding 重新套用：refinement curve 嵌進宿主 face，`embedded_faces` 若有項目則把 face 嵌進宿主 volume（port 位於 support plane 時沒有），回傳嵌入的 face 與 edge 數。
-5. 設定 mesh 尺寸：`mesh_hints` 指出要解析的 edge（沒有尺寸，數值由 mesher 決定）。
+5. 設定 mesh 尺寸：`mesh_hints` 指出要解析的 edge（沒有尺寸，數值由 mesher 決定；建議的配方見 [Mesh size hint](emission.qmd#mesh-size-recipe)）。
 6. 產生 mesh；config 由 live 模型的 physical group **名稱**對照 `physical_groups` 建立，不解析名稱字串。
 
 ```python
@@ -240,9 +240,9 @@ gmsh.model.mesh.generate(3)
 
 ## 補充：重現資料 {#reproduction-data}
 
-本頁的範例由 `experiments/sgb-redesign/consumer-contract/generate_excerpt.py` 產生。它用 sgb-core 環境（分支 `claude/sgb-core`，階段 1e 的提交 `6d08e53`）與該分支測試資料夾中的 `sgb_inputs.gds_pad_in_ground`（Route B 與 C）和 `thin_film_pair`（Route A），呼叫 `build_sgb_geometry`，然後執行上文的 Palace 與 AEDT 步驟，把輸出放在同一個資料夾的 `out/`（含 `consumer_runs.json`）。Route B 與 C 的 inset 是 pad 上表面的 0.5 與 1 µm，refinement curve 是高度 0.2 µm 的 10 µm 線段；Route A 的 inset 是 `chip/left` 的 sheet。
+本頁的範例由 `experiments/sgb-redesign/consumer-contract/generate_excerpt.py` 產生。它用 SGB core 的環境與其測試資料夾中的 `sgb_inputs.gds_pad_in_ground`（Route B 與 C）和 `thin_film_pair`（Route A），呼叫 `build_sgb_geometry`，然後執行上文的 Palace 與 AEDT 步驟，把輸出放在同一個資料夾的 `out/`（含 `consumer_runs.json`）。Route B 與 C 的 inset 是 pad 上表面的 0.5 與 1 µm，refinement curve 是高度 0.2 µm 的 10 µm 線段；Route A 的 inset 是 `chip/left` 的 sheet。
 
-同一個腳本還寫出第二組 `out/all_interfaces/route_{a,b,c}/`：每個 entity 的每個支援表面（Route B 與 C 是各導體的 `top` 與 `bottom`，Route A 是兩個 sheet）加上 SA 介面都要求 0.5 與 1 µm 的 band，並用 gmsh 重新打開每個 `.xao`，量 volume、surface、physical group、port 的 $z$、SA band 與 `PORT::` 的面積，再以 `mesh_hints` 的建議（band 邊界 0.25 µm、逐步長到 60 µm）產生 mesh（摘要在 `out/all_interfaces/summary.json`）。這一組的 port 在 $z = 0$、與 SA 面積的關係見 [Routes](routes.qmd#port-support-plane)。
+同一個腳本還寫出第二組 `out/all_interfaces/route_{a,b,c}/`：每個 entity 的每個支援表面（Route B 與 C 是各導體的 `top` 與 `bottom`，Route A 是兩個 sheet）加上 SA 介面都要求 0.5 與 1 µm 的 band，並用 gmsh 重新打開每個 `.xao`，量 volume、surface、physical group、port 的 $z$、SA band 與 `PORT::` 的面積，再以 `mesh_hints` 的建議（band 邊界 0.25 µm、每 µm 2 的成長率長到 60 µm，配方見 [Mesh size hint](emission.qmd#mesh-size-recipe)）產生 mesh（摘要在 `out/all_interfaces/summary.json`）。這一組的 port 在 $z = 0$、與 SA 面積的關係見 [Routes](routes.qmd#port-support-plane)。
 
 ```bash
 SG=<sgb-core worktree>

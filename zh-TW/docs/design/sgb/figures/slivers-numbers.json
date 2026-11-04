@@ -176,26 +176,25 @@
    "max_arc_deviation_grid": 0.631601,
    "max_snap_drift_grid": 0.0,
    "narrowest_face_entry": {
-    "area_um2": 32.8161,
+    "area_um2": 131.4819,
     "bounded": false,
-    "group": "SA::substrate|vacuum::interface::band=0",
-    "id": "f:72da18debb7dcc89",
+    "group": "SA::substrate|vacuum::interface::band=1",
+    "id": "f:67fa4319ab888d61",
     "kind": "horizontal",
     "location_um": [
-     47.0855,
-     17.7855,
+     19.0355,
+     27.0855,
      0.0
     ],
     "measure": "local feature size",
-    "perimeter_um": 660.7438,
+    "perimeter_um": 663.6451,
     "plane": "level[0]",
     "sources": [
      "band_gap",
-     "p1",
-     "pad"
+     "p1"
     ],
     "value_um": 0.076694,
-    "width_2a_over_p_um": 0.099331
+    "width_2a_over_p_um": 0.396242
    },
    "narrowest_face_um": 0.076694,
    "shortest_edge_entry": {

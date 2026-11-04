@@ -4,14 +4,14 @@
    "face_groups": 15,
    "faces_in_SA_groups": 14,
    "faces_in_pad_sheet_band_groups": 4,
-   "level_cells": 22,
-   "level_edges": 117,
+   "level_cells": 16,
+   "level_edges": 111,
    "level_hot_pixels": 442,
-   "level_noded_edges": 471,
+   "level_noded_edges": 465,
    "refinement_pieces": 8,
    "topology": {
-    "edges": 141,
-    "faces": 32,
+    "edges": 135,
+    "faces": 26,
     "vertices": 122
    },
    "validation_passed": true
@@ -20,14 +20,14 @@
    "face_groups": 15,
    "faces_in_SA_groups": 12,
    "faces_in_pad_sheet_band_groups": 4,
-   "level_cells": 20,
-   "level_edges": 101,
+   "level_cells": 14,
+   "level_edges": 95,
    "level_hot_pixels": 427,
-   "level_noded_edges": 447,
+   "level_noded_edges": 441,
    "refinement_pieces": 0,
    "topology": {
-    "edges": 117,
-    "faces": 30,
+    "edges": 111,
+    "faces": 24,
     "vertices": 107
    },
    "validation_passed": true
@@ -36,14 +36,14 @@
    "face_groups": 15,
    "faces_in_SA_groups": 12,
    "faces_in_pad_sheet_band_groups": 4,
-   "level_cells": 20,
-   "level_edges": 109,
+   "level_cells": 14,
+   "level_edges": 103,
    "level_hot_pixels": 436,
-   "level_noded_edges": 463,
+   "level_noded_edges": 457,
    "refinement_pieces": 8,
    "topology": {
-    "edges": 133,
-    "faces": 30,
+    "edges": 127,
+    "faces": 24,
     "vertices": 116
    },
    "validation_passed": true
@@ -52,14 +52,14 @@
    "face_groups": 15,
    "faces_in_SA_groups": 14,
    "faces_in_pad_sheet_band_groups": 4,
-   "level_cells": 22,
-   "level_edges": 109,
+   "level_cells": 16,
+   "level_edges": 103,
    "level_hot_pixels": 433,
-   "level_noded_edges": 455,
+   "level_noded_edges": 449,
    "refinement_pieces": 0,
    "topology": {
-    "edges": 125,
-    "faces": 32,
+    "edges": 119,
+    "faces": 26,
     "vertices": 113
    },
    "validation_passed": true
@@ -83,20 +83,20 @@
  },
  "band_areas_um2": {
   "band_gap:band=0": {
-   "bands_only": 23.991415926535893,
-   "with_window_and_refine": 23.991415926535893
+   "bands_only": 23.191415926535896,
+   "with_window_and_refine": 23.191415926535896
   },
   "band_gap:band=1": {
-   "bands_only": 95.79398223686154,
-   "with_window_and_refine": 95.79398223686154
+   "bands_only": 92.59398223686154,
+   "with_window_and_refine": 92.59398223686154
   },
   "band_gap:band=2": {
-   "bands_only": 356.78097245096177,
-   "with_window_and_refine": 356.78097245096177
+   "bands_only": 344.78097245096177,
+   "with_window_and_refine": 344.78097245096177
   },
   "band_gap:band=3": {
-   "bands_only": 723.4336293856406,
-   "with_window_and_refine": 723.4336293856406
+   "bands_only": 699.4336293856406,
+   "with_window_and_refine": 699.4336293856406
   },
   "band_pad:band=0": {
    "bands_only": 7.96,
@@ -144,7 +144,7 @@
   },
   {
    "arcs": 12,
-   "carriers": 36,
+   "carriers": 30,
    "edge_policy": "required",
    "family_id": "band_gap",
    "has_support_region": true,
@@ -178,7 +178,7 @@
   "EXT::VACUUM_REGION::bottom": 1,
   "EXT::VACUUM_REGION::sidewall": 4,
   "EXT::VACUUM_REGION::top": 1,
-  "PORT::PORT_SHEET__P1__0000": 7,
+  "PORT::PORT_SHEET__P1__0000": 1,
   "SA::substrate|VACUUM_REGION::interface": 1,
   "SA::substrate|VACUUM_REGION::interface::band=0": 2,
   "SA::substrate|VACUUM_REGION::interface::band=1": 2,
@@ -195,7 +195,7 @@
   "EXT::VACUUM_REGION::bottom": 1,
   "EXT::VACUUM_REGION::sidewall": 4,
   "EXT::VACUUM_REGION::top": 1,
-  "PORT::PORT_SHEET__P1__0000": 7,
+  "PORT::PORT_SHEET__P1__0000": 1,
   "SA::substrate|VACUUM_REGION::interface": 1,
   "SA::substrate|VACUUM_REGION::interface::band=0": 2,
   "SA::substrate|VACUUM_REGION::interface::band=1": 2,
@@ -210,7 +210,7 @@
  },
  "identity_digest_equal_when_family_order_reversed": true,
  "level_edges_by_family": {
-  "band_gap": 54,
+  "band_gap": 48,
   "band_pad": 21,
   "physical boundary": 20,
   "port": 16,
@@ -220,10 +220,10 @@
  "max_band_area_difference_um2": 0.0,
  "port_invariance": {
   "band_areas_um2_with_port": {
-   "band_gap:band=0": 23.991415926535893,
-   "band_gap:band=1": 95.79398223686154,
-   "band_gap:band=2": 356.78097245096177,
-   "band_gap:band=3": 723.4336293856406,
+   "band_gap:band=0": 23.191415926535896,
+   "band_gap:band=1": 92.59398223686154,
+   "band_gap:band=2": 344.78097245096177,
+   "band_gap:band=3": 699.4336293856406,
    "band_pad:band=0": 7.96,
    "band_pad:band=1": 31.04,
    "band_pad:band=2": 105.0,
@@ -239,7 +239,9 @@
    "band_pad:band=2": 105.0,
    "band_pad:band=3": 256.0
   },
-  "max_band_area_difference_um2": 0.0
+  "gap_area_removed_um2": 40.0,
+  "largest_band_area_increase_um2": 0.0,
+  "other_bands_max_abs_difference_um2": 0.0
  },
  "refinement_in_faceless_cell": {
   "error": "SgbError",

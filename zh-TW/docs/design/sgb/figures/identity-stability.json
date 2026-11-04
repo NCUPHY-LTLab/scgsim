@@ -8,17 +8,17 @@
   "only_without_port": 0
  },
  "edges": {
-  "with_port": 280,
+  "with_port": 274,
   "without_port": 250,
   "shared": 242,
-  "only_with_port": 38,
+  "only_with_port": 32,
   "only_without_port": 8
  },
  "faces": {
-  "with_port": 66,
+  "with_port": 60,
   "without_port": 59,
   "shared": 48,
-  "only_with_port": 18,
+  "only_with_port": 12,
   "only_without_port": 11
  },
  "volumes": {
@@ -110,7 +110,7 @@
    "identical_members": true
   },
   "PORT::p1": {
-   "members_with_port": 7,
+   "members_with_port": 1,
    "members_without_port": null,
    "identical_members": false
   },

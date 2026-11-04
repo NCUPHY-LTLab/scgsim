@@ -149,7 +149,7 @@
   "port_area_um2": {
    "PORT::PORT_SHEET__P1__0000": 40.0
   },
-  "faces": 50,
+  "faces": 46,
   "groups": 25
  },
  "section": {
@@ -299,7 +299,7 @@
   "port_area_um2": {
    "PORT::port_sheet": 4.0
   },
-  "faces": 34,
+  "faces": 31,
   "groups": 20
  },
  "no_gap_edge_error": "inset request 'ground': the sheet of 'pad' has no gap edge to measure the bands from (a conductor edge counts only where exposed dielectric lies next to it)"

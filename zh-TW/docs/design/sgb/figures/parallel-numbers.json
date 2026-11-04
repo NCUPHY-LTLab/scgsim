@@ -17,10 +17,10 @@
     295,
     115
    ],
-   "edges": 4064,
-   "edges_between_tiles": 62,
+   "edges": 4058,
+   "edges_between_tiles": 56,
    "arc_chords_between_tiles": 14,
-   "median_length_um_between_tiles": 47.858000000000004,
+   "median_length_um_between_tiles": 54.9,
    "x_cuts_um": [
     -0.0005
    ],
@@ -42,7 +42,7 @@
     155,
     5
    ],
-   "edges": 4064,
+   "edges": 4058,
    "edges_between_tiles": 38,
    "arc_chords_between_tiles": 6,
    "median_length_um_between_tiles": 54.9,
@@ -76,10 +76,10 @@
     8,
     1
    ],
-   "edges": 4064,
-   "edges_between_tiles": 64,
+   "edges": 4058,
+   "edges_between_tiles": 58,
    "arc_chords_between_tiles": 14,
-   "median_length_um_between_tiles": 47.292,
+   "median_length_um_between_tiles": 54.5,
    "x_cuts_um": [
     -75.0005,
     -0.0005,

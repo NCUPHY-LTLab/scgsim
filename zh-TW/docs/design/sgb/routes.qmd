@@ -118,7 +118,7 @@ lumped port 的 sheet 放在 host 導體的**物理 support plane**：導體貼�
 效果有三個。
 
 1. **port 是兩個 volume 之間的 face。** 在 gap 內，這個平面上方是 vacuum、下方是 substrate，所以 Route B 與 C 的 port 與 Route A 一樣，是兩個 volume 之間的一般 face：`embedded_faces` 沒有它，`ports[*].host_volumes` 為空，`adjacent_volumes` 有兩個。它的邊與相鄰金屬的 wall 和底面共用。
-2. **port 佔去它在 SA 平面上的面積。** 同一個平面的 substrate–vacuum 介面減去 port footprint，所以 SA band 的 face 不含 port 蓋住的部分；port 仍是一個 group `PORT::<id>`，band 的 seam 可以把它切成數個 face。
+2. **port 佔去它在 SA 平面上的面積。** 同一個平面的 substrate–vacuum 介面減去 port footprint，所以 SA band 的 face 不含 port 蓋住的部分；band 的 seam 在 port 的邊界停下，所以 port 是一個 face，group `PORT::<id>` 就是這個 face（規則見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)）。
 3. **band 不動。** band 的 distance origin 是 gap edge，判斷時 port 當作不存在（見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)）；port 只拿走它蓋住的面積，不移動任何 band 的邊界。
 
 在 pad-in-ground 範例（production 的真實輸入，Route B 與 C；SA 的 `SolutionInterface("substrate", "VACUUM_REGION", z_um=0.0)`，margin 0.5 與 1 µm）中，gap 環的 support 面積是 1 200 µm²，port footprint 是 40 µm²（12 × 4 µm 減去兩端各 1 × 4 µm 的 landing）：
@@ -155,7 +155,7 @@ D1 已決定 **Route C 屬於 v1**，production 已實作。導體 volume 保留
 ## 邊界情形
 
 - **Route A with Surface EPR band。** sheet face 同時是 metal-vacuum 與 metal-substrate 表面。有 inset band 時，它以 face 命名：`<entity>::band=k`（例如 `pad::band=2`）；sidecar 的 `surface_epr_rows` 把 Surface EPR 表中的 MA 與 MS 兩列都對應到同一個 group，並以 `side` 欄標明各自對應 sheet 的哪一側（MA 為 `above`、MS 為 `below`），兩列的 `shared_face_group` 都指向這個 sheet group（[Inset imprint](inset-imprint.qmd)）。
-- **Route B 的 band。** 同一個 band family 對金屬的頂面（`MA::pad::top::band=k`）與底面（`MS::pad::bottom::band=k`）各產生一次；側壁不切 band。band 版本的執行範例（真實輸入，Route B；pad 的頂面與底面、substrate 與 vacuum 之間的 gap 各取 margin 0.1、0.5、2 µm）規劃 52 個 face、169 條 edge、142 個 vertex，24 個 group（`figures/routes-numbers.json` 的 `route_B_bands`）。
+- **Route B 的 band。** 同一個 band family 對金屬的頂面（`MA::pad::top::band=k`）與底面（`MS::pad::bottom::band=k`）各產生一次；側壁不切 band。band 版本的執行範例（真實輸入，Route B；pad 的頂面與底面、substrate 與 vacuum 之間的 gap 各取 margin 0.1、0.5、2 µm）規劃 46 個 face、163 條 edge、142 個 vertex，24 個 group（`figures/routes-numbers.json` 的 `route_B_bands`）。
 - **不同 Net 的導體接觸**在每種 route 中都是錯誤，包括共用 edge 或 vertex 的兩個 Route A sheet，以及因 snap 而產生的接觸；`ContactError` 指出兩個 Entity 與位置（見 [label 頁](labels-and-dissolution.qmd)）。
 
 ## 小結

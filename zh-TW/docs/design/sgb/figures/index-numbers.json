@@ -57,6 +57,31 @@
    "vacuum written=True"
   ]
  },
+ "hinted_mesh_checks": {
+  "coarse_um": 60.0,
+  "growth_per_um": 2.0,
+  "near_um": 0.25,
+  "pad_a_bands": {
+   "gamma_min": 0.005561936261621664,
+   "minSICN_min": 0.010600707256074511,
+   "tets": 135237
+  },
+  "pad_b_bands": {
+   "gamma_min": 0.014483151835154447,
+   "minSICN_min": 0.03966392068135268,
+   "tets": 144866
+  },
+  "pad_c_bands": {
+   "gamma_min": 0.0001485171058065326,
+   "minSICN_min": 0.004721307496233637,
+   "tets": 196381
+  },
+  "stage_pad_b_bands": {
+   "gamma_min": 0.000678283653366975,
+   "minSICN_min": 0.013831836012545494,
+   "tets": 141212
+  }
+ },
  "pad_in_ground_A": {
   "groups": 10,
   "levels": 3,
@@ -133,8 +158,8 @@
    ]
   },
   "planned": {
-   "edges": 280,
-   "faces": 66,
+   "edges": 274,
+   "faces": 60,
    "vertices": 321,
    "volumes": 4
   },
@@ -148,8 +173,8 @@
   "written": {
    "arcs": 85,
    "cylinders": 5,
-   "edges": 276,
-   "faces": 62,
+   "edges": 270,
+   "faces": 56,
    "vertices": 236,
    "volumes": 2
   }
@@ -224,18 +249,18 @@
    "tets": 2003
   },
   "pad_a_bands": {
-   "faces": 36,
-   "gamma_min": 0.00021053618346006338,
-   "gamma_p1": 0.004123081434085681,
+   "faces": 30,
+   "gamma_min": 2.191289952777739e-05,
+   "gamma_p1": 0.0039035008617002817,
    "load_check": "ok",
    "max_arc_deviation_grid": 0.631601,
    "max_snap_drift_grid": 0.0,
    "mesh": "ok",
-   "minSICN_min": 0.002503094204002597,
-   "minSICN_p1": 0.003755514351755122,
+   "minSICN_min": 0.002038626312392183,
+   "minSICN_p1": 0.0037844721114182038,
    "narrowest_face_um": 0.076694,
    "occt": "ok",
-   "tets": 3657
+   "tets": 3666
   },
   "pad_b": {
    "faces": 35,
@@ -252,18 +277,18 @@
    "tets": 2105
   },
   "pad_b_bands": {
-   "faces": 62,
-   "gamma_min": 7.998873032453565e-05,
-   "gamma_p1": 0.0029464386723294404,
+   "faces": 56,
+   "gamma_min": 3.564269014364285e-11,
+   "gamma_p1": 0.0014119677062644765,
    "load_check": "ok",
    "max_arc_deviation_grid": 0.631601,
    "max_snap_drift_grid": 0.0,
    "mesh": "ok",
-   "minSICN_min": 0.0027385315082750134,
-   "minSICN_p1": 0.0043861153683469436,
+   "minSICN_min": 5.20554929248588e-06,
+   "minSICN_p1": 0.003919227839630383,
    "narrowest_face_um": 0.076694,
    "occt": "ok",
-   "tets": 3772
+   "tets": 3706
   },
   "pad_c": {
    "faces": 39,
@@ -280,18 +305,18 @@
    "tets": 2654
   },
   "pad_c_bands": {
-   "faces": 66,
-   "gamma_min": 9.800025444790432e-08,
-   "gamma_p1": 0.0001035362273018502,
+   "faces": 60,
+   "gamma_min": 0.0,
+   "gamma_p1": 0.00012749279702108665,
    "load_check": "ok",
    "max_arc_deviation_grid": 0.631601,
    "max_snap_drift_grid": 0.0,
    "mesh": "ok",
-   "minSICN_min": 2.0273690976699446e-05,
-   "minSICN_p1": 0.004105690088826528,
+   "minSICN_min": -7.429426153383813e-15,
+   "minSICN_p1": 0.0037253870316421933,
    "narrowest_face_um": 0.076694,
    "occt": "ok",
-   "tets": 4967
+   "tets": 4891
   }
  }
 }

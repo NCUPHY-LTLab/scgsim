@@ -278,6 +278,16 @@ band 從哪裡量起、每個 band 的範圍，見 [Inset band 怎麼量](inset-
 
 對 refinement curve，測試檢查：該 edge 在載入的檔案中是 free 的（沒有任何 face 擁有它）、它被切成多於一個 element，以及 sidecar 的該列 `written_as_free_edge` 為 true。
 
+### 建議的尺寸配方 {#mesh-size-recipe}
+
+band 可以比整個模型窄得多（0.1 µm 的條帶在 100 µm 以上的晶片裡），沒有依 hint 設定尺寸的 mesh 會用比條帶寬數百倍的元素去 mesh 它，可能產生體積為零的四面體，而幾何本身沒有問題。建議這樣建立 size field：
+
+- **hint 邊附近：**元素大小約為最窄 band margin 的一半（margin 為 0.5 µm 時取 0.25 µm；margin 小到 0.1 µm 時取 0.1 到 0.2 µm）。
+- **向外成長：**成長率為**每 µm 2**：以 `band_boundary` hint 的 `native_tags` 建立 `Distance` field，再餵給 `Threshold` field，其 `DistMax` 等於（全域大小 − 近端大小）÷ 2，單位 µm。
+- **關掉會蓋過它的來源：**`Mesh.MeshSizeFromPoints`、`Mesh.MeshSizeFromCurvature` 與 `Mesh.MeshSizeExtendFromBoundary`。
+
+較陡的成長率（例如每 µm 8）會讓 Gmsh 預設的 3D Delaunay 演算法在 band 的 seam 附近產生近乎平坦的四面體；請使用每 µm 2 以下的成長率，或啟用 Netgen 最佳化（`Mesh.OptimizeNetgen = 1`）。參考實作是測試端 `tests/sgb_gmsh_oracle.py` 的 `size_from_mesh_hints`；`experiments/sgb-redesign/consumer-contract/generate_excerpt.py` 用這個配方（近端 0.25 µm、全域 60 µm、每 µm 2）對 [使用契約](consumer-contract.qmd#reproduction-data) 的 all-interfaces 範例做 mesh，Route B 與 C 的 `minSICN` 最小值為 $5.7 \times 10^{-5}$，沒有體積為零的四面體；再啟用 Netgen 最佳化，最小值升到 $9.0 \times 10^{-3}$（Route B）與 $5.7 \times 10^{-4}$（Route C）。
+
 ## 交給 AEDT {#handing-the-solids-to-aedt}
 
 AEDT 的交接已有結論：以 XDE assembly 的 STEP 匯入具名 solid，band 在寫檔時就切好，face identity 來自每個 solid 內的 face 順序，port 由 PyAEDT 依 sidecar 以原生方式重建。完整的事實、量測數字與未決事項見 [交給 AEDT](aedt-handoff.qmd)。

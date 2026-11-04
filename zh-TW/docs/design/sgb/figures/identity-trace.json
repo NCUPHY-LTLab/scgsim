@@ -41,8 +41,8 @@
    ],
    "interface_type": "MA",
    "native_tags": [
-    36,
-    45
+    32,
+    39
    ],
    "net": "pad",
    "tag": 10
@@ -65,7 +65,7 @@
  "step3_atomic_faces": [
   {
    "face": "f:a9b66997fc195ff6",
-   "native_tag": 36,
+   "native_tag": 32,
    "record": {
     "face_kind": "top",
     "group": "MA::pad::top::band=2",
@@ -92,30 +92,30 @@
     "vacuum": 1.0
    },
    "edge_tags": [
-    5,
-    6,
-    7,
-    8,
-    9,
-    10,
-    11,
-    12,
-    13,
-    14,
-    15,
-    16,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    186,
+    187,
+    188,
+    189,
+    190,
+    191,
     192,
     193,
     194,
     195,
     196,
-    197,
-    198,
-    199,
-    200,
-    201,
-    202,
-    203
+    197
    ],
    "edge_ids": [
     "e:517f4168eb525f24",
@@ -710,7 +710,7 @@
   },
   {
    "face": "f:ea12025c6c95ba52",
-   "native_tag": 45,
+   "native_tag": 39,
    "record": {
     "face_kind": "top",
     "group": "MA::pad::top::band=2",
@@ -737,14 +737,14 @@
     "vacuum": 1.0
    },
    "edge_tags": [
-    17,
-    18,
-    19,
-    20,
-    204,
-    205,
-    206,
-    207
+    53,
+    54,
+    55,
+    56,
+    198,
+    199,
+    200,
+    201
    ],
    "edge_ids": [
     "e:9107a426266c6dc5",
@@ -1572,27 +1572,27 @@
   "distance_to_support_um_at_midpoint": 0.5,
   "support_curve": "band_pad_top/ring0/edge0"
  },
- "model_digest": "model:cc7d521c1c0f888f",
+ "model_digest": "model:29ac282c3d8eb0bd",
  "counts": {
   "vertices": 321,
-  "edges": 280,
-  "faces": 66,
+  "edges": 274,
+  "faces": 60,
   "volumes": 4,
   "groups": 23,
   "emitted": {
    "arcs": 85,
    "cylinders": 5,
-   "edges": 276,
-   "faces": 62,
+   "edges": 270,
+   "faces": 56,
    "free_edges": 0,
    "free_faces": 0,
-   "pcurves": 358,
+   "pcurves": 352,
    "shells": 2,
    "solids": 2,
    "surfaces": 30,
    "vertices": 236,
    "volumes_total": 4,
-   "wires": 81
+   "wires": 75
   }
  }
 }

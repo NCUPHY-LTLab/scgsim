@@ -24,9 +24,9 @@
    "dim": 2,
    "entities": ["chip/left"],
    "face_kind": "sheet",
-   "ids": ["f:c6a511988c40c746"],
+   "ids": ["f:105e50c3311ec8ae"],
    "interface_type": "SHEET",
-   "native_tags": [7],
+   "native_tags": [2],
    "net": "left",
    "tag": 10
   }

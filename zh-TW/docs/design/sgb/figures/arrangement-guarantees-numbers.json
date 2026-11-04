@@ -6,17 +6,17 @@
   ],
   "arc_edges_after_merge": 2,
   "chord_count_per_quarter_arc": {
-   "3": 2,
-   "6": 3,
-   "12": 4,
-   "24": 6,
    "100": 12,
-   "400": 23,
+   "100000": 352,
+   "12": 4,
    "1600": 45,
-   "5000": 79,
-   "8000": 100,
    "20000": 158,
-   "100000": 352
+   "24": 6,
+   "3": 2,
+   "400": 23,
+   "5000": 79,
+   "6": 3,
+   "8000": 100
   },
   "chords": 6,
   "edges_after_snap": 9,
@@ -83,7 +83,7 @@
    },
    "pad_in_ground_A_bands": {
     "arc_edges": 59,
-    "edges_measured": 129,
+    "edges_measured": 123,
     "max_arc_deviation_g": 0.631601,
     "max_snap_drift_g": 0.0,
     "mean_arc_deviation_g": 0.045518,
@@ -113,7 +113,7 @@
    },
    "pad_in_ground_B_bands": {
     "arc_edges": 90,
-    "edges_measured": 190,
+    "edges_measured": 184,
     "max_arc_deviation_g": 0.631601,
     "max_snap_drift_g": 0.0,
     "mean_arc_deviation_g": 0.02984,
@@ -149,11 +149,11 @@
     "snap_rounds": 1
    },
    "level_z=0": {
-    "cells": 26,
-    "edges_after": 172,
-    "edges_before": 4064,
+    "cells": 20,
+    "edges_after": 166,
+    "edges_before": 4058,
     "hot_pixels": 4050,
-    "segments": 4046,
+    "segments": 4052,
     "snap_rounds": 2
    },
    "level_z=100": {

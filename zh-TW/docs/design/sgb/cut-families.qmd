@@ -32,7 +32,7 @@ window 是在**完全不修改 pipeline** 的情況下加入的：它只是被�
 @fig-families-level 的看點：
 
 - 綠色的 **window** 位於 gap 左側，左邊緣在離 ground cutout 0.5 與 2 µm 之間的 band 內，並穿過 2 µm 的 band 曲線進入最內側的 band；每一個交點都是 arrangement 中普通的 vertex。
-- **Band** 緊貼 gap edge（pad 與 ground 的邊，包括 pad 轉角的圓弧）；window 與 port 不會移動它們（見下方 distance-origin 規則）。port 的矩形被 gap band 的曲線切成 7 個 face，都屬於同一個 group `PORT::PORT_SHEET__P1__0000`。
+- **Band** 緊貼 gap edge（pad 與 ground 的邊，包括 pad 轉角的圓弧）；window 與 port 不會移動它們（見下方 distance-origin 規則）。band 的 seam 在 port 的邊界停下（規則見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)），所以 port 的矩形是一個 face，也就是 group `PORT::PORT_SHEET__P1__0000`。
 - 紫色的 **refinement curve** 穿過 band 與 pad，但沒有切開任何 cell。它在碰到的 required edge 處被切成 8 段，每一段屬於包含它的 face。
 
 各個 family 單獨加入時的貢獻（每一種組合都從頭建構；group 名稱是 production 的）：
@@ -41,10 +41,10 @@ window 是在**完全不修改 pipeline** 的情況下加入的：它只是被�
 | 存在的 family | $z=0$ 的 cell | $z=0$ 的 edge | 模型 face | Face group | Embedded curve 片段 |
 |---|---|---|---|---|---|
 | 邊界與 port | 5 | 23 | 15 | 8 | 0 |
-| + band | 20 | 101 | 30 | 15 | 0 |
-| + band + window | 22 | 109 | 32 | 15 | 0 |
-| + band + refinement | 20 | 109 | 30 | 15 | 8 |
-| 全部 family | 22 | 117 | 32 | 15 | 8 |
+| + band | 14 | 95 | 24 | 15 | 0 |
+| + band + window | 16 | 103 | 26 | 15 | 0 |
+| + band + refinement | 14 | 103 | 24 | 15 | 8 |
+| 全部 family | 16 | 111 | 26 | 15 | 8 |
 :::
 
 window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它切開的 cell 保有原來的 label，所以 <code>SA::substrate&#124;VACUUM_REGION::interface::band=2</code> 與 <code>SA::substrate&#124;VACUUM_REGION::interface::band=3</code> 這兩個 group 各多一個 face（2 變 3、1 變 2）。refinement curve 沒有改變任何 cell 或 face 的數量；它只增加 embedded curve 片段（8 段），以及它與 required edge 的交點：每個交點成為 vertex，把被碰到的那條 edge 切成兩段（$z = 0$ 的 edge 多 8 條）。band 讓 face group 從 8 增為 15，因為每個 band 都是自己的 group（Route A 中 pad 的 band 是 `pad::band=k`，各一個 face，共 4 個；gap 的 band 是 `SA::…::interface::band=k`）。
@@ -88,7 +88,7 @@ window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它�
 | Family | Generator | Target | Edge policy | 在 production 中 |
 |---|---|---|---|---|
 | physical boundary | prism footprint | 各 prism active 的 level 與 slab | label 不同時 required | 有（即 arrangement 本身） |
-| lumped-port footprint | port sheet 的多邊形 | 它所在的平面 | required | 有，以 port prism（一個 sheet）；因為其 owner 與鄰居不同而為 required；port 位於 host 的 support plane，與 SA 介面同一個平面，所以三種 route 的 gap band 都會把它切成多個 face，同一個 group `PORT::<id>`；port 只佔去自己的面積，不移動 band 的邊界 |
+| lumped-port footprint | port sheet 的多邊形 | 它所在的平面 | required | 有，以 port prism（一個 sheet）；因為其 owner 與鄰居不同而為 required；port 位於 host 的 support plane，與 SA 介面同一個平面，band 的 seam 在 port 的邊界停下，所以三種 route 的 port 都是一個 face，group `PORT::<id>` 就是這個 face（見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)）；port 只佔去自己的面積，不移動 band 的邊界 |
 | contact cap | prism 的重疊（自動） | 接觸的 level | label 不同時 required | 由 label 自然產生；沒有 family record |
 | Surface EPR inset band | 對 physical support region 以 margin $m_1 < \dots < m_k$ 做 offset | 選定的語意表面 | required；band 索引成為 label 的一部分 | 有（`InsetRequest`，role `inset_band`） |
 | mesh refinement curve | 使用者或自動 | 任何表面 | `refinement_only` | 有（`RefinementRequest`） |
@@ -119,7 +119,7 @@ family 指名它作用的 level。只有這些 level 的 arrangement 會接收�
 
 inset 曲線由 support region 與它的 **gap edge**（面向裸露 substrate 的金屬邊，什麼是 gap edge、為什麼只有它們是距離的起點，見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)）產生，在 arrangement 之前、任何分割之前就已算好。其他 family 產生的 seam（port、contact cap、其他 band，以及本頁的 window 與 refinement curve）永遠不是距離的起點。這修正了 solver 端 mask 的缺陷：mask 從已 mesh 表面的每條 edge 量距離，所以 port 或 seam 碰到 band 的地方，band 就被縮短。
 
-這條規則是 generator 的性質，所以由建構保證：generator 收到的是 support region 與 margin，對其他 family 一無所知。計算驗證：無論有沒有 window 與 refinement curve，範例中每個 band 的精確面積都完全相同（最大差異 $0.0$ µm²）；對 port 也是：同樣的 band 請求在有與沒有 port 的模型上，每個 band 的精確面積完全相同（最大差異 $0.0$ µm²；port 蓋住的面積仍屬於 band 的 cell，只是那個 cell 的 face 是 `PORT::<id>`，不在 SA band group 中）。
+這條規則是 generator 的性質，所以由建構保證：generator 收到的是 support region 與 margin，對其他 family 一無所知。計算驗證：無論有沒有 window 與 refinement curve，範例中每個 band 的精確面積都完全相同（最大差異 $0.0$ µm²）；對 port 也是：同樣的 band 請求在有與沒有 port 的模型上，pad 的 band 面積完全相同（最大差異 $0.0$ µm²），沒有任何 gap band 的面積增加；gap band 合計只少掉 port 蓋住的 40 µm²，那一塊是 `PORT::<id>` 的 face，不在 SA band group 中。
 
 ## Family 可交換
 

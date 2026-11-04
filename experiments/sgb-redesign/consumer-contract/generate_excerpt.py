@@ -109,7 +109,7 @@ print(json.dumps({r: {k: v for k, v in d.items() if k != "step_export"} for r, d
 ALL_MARGINS = (0.5, 1.0)
 COARSE_UM = 60.0  # the model-scale element size (the Route B/C die is 100 um wide)
 NEAR_UM = 0.25  # half the thinnest band (0.5 um) next to every band boundary, the recipe of sidecar.hints
-GROWTH = 8.0  # size growth per micrometre away from the hinted edges
+GROWTH = 2.0  # size growth per micrometre away from the hinted edges
 
 
 def conductor_ids(effective):

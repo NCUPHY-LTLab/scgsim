@@ -274,6 +274,33 @@ def example_checks() -> dict:
     return out
 
 
+def hinted_mesh_checks() -> dict:
+    """The banded models meshed again with the size field of the sidecar's ``band_boundary`` hints (the recipe of emission.qmd#mesh-size-recipe)."""
+    from sgb_emit_cases import CASES, pad_requests
+    from sgb_gmsh_oracle import gmsh_session, mesh_coarsely, mesh_quality, size_from_mesh_hints
+    from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds
+
+    coarse_um, near_um, growth_per_um = 60.0, 0.25, 2.0
+    models = {
+        "pad_a_bands": lambda: build_example("A", insets=pad_requests("A")),
+        "pad_b_bands": lambda: build_example("B", insets=pad_requests("B")),
+        "pad_c_bands": lambda: build_example("C", insets=pad_requests("C")),
+        "stage_pad_b_bands": CASES["pad_b_bands"],  # the stage-level scene with its Route B port at the metal mid-plane
+    }
+    out = {"coarse_um": coarse_um, "near_um": near_um, "growth_per_um": growth_per_um}
+    for name, build in models.items():
+        with tempfile.TemporaryDirectory() as tmp:
+            artifacts = emit_model(build(), Path(tmp))
+            sidecar = read_sidecar(artifacts.sidecar)
+            with gmsh_session(artifacts.xao):
+                apply_sidecar_embeds(sidecar)
+                size_from_mesh_hints(sidecar, coarse=coarse_um, near=near_um, growth=growth_per_um)
+                mesh_coarsely(coarse_um)
+                quality = mesh_quality()
+        out[name] = {"tets": quality["tets"], "minSICN_min": quality["minSICN_min"], "gamma_min": quality["gamma_min"]}
+    return out
+
+
 def main() -> None:
     catalogue = running_example("B")
     model = build_example("B")
@@ -285,6 +312,7 @@ def main() -> None:
     numbers = counts()
     numbers["exploded_view"] = view
     numbers["running_example_checks"] = example_checks()
+    numbers["hinted_mesh_checks"] = hinted_mesh_checks()
     numbers["port"] = {"plane_z_um": 0.0, "levels_um": [float(z) for z in build_levels(catalogue.prisms).levels]}
     write_numbers("index", numbers)
     print(json.dumps(numbers, indent=1)[:3000])

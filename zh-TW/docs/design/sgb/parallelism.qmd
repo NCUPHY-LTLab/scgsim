@@ -70,7 +70,7 @@ flowchart LR
 
 {{< askr-chart-view src="figures/parallel-tiles.html" label="檢視 tile（游標移到 pixel 上可看所屬 tile）" >}}
 
-左圖請看：切線是 $x = y = -0.0005$ µm（$-\tfrac12$ nm）的虛線。這個 z = 0 level 共有 4 050 個 hot pixel、4 064 條 noded edge。2 × 2 時，有 62 條 noded edge 的兩端落在不同 tile，其中 14 條是 arc 的 witness chord；hot pixel 集中在有 hole 的圓弧的左半邊（左側兩個 tile 共 3 640 個，90%）。它們不會在切線處被分段，所以沒有 seam vertex、seam edge 或 seam face 進入 arrangement。
+左圖請看：切線是 $x = y = -0.0005$ µm（$-\tfrac12$ nm）的虛線。這個 z = 0 level 共有 4 050 個 hot pixel、4 058 條 noded edge。2 × 2 時，有 56 條 noded edge 的兩端落在不同 tile，其中 14 條是 arc 的 witness chord；hot pixel 集中在有 hole 的圓弧的左半邊（左側兩個 tile 共 3 640 個，90%）。它們不會在切線處被分段，所以沒有 seam vertex、seam edge 或 seam face 進入 arrangement。
 
 ::: {.askr-table-compact .askr-table-numeric}
 {{< include figures/parallel-table-tiles.md >}}

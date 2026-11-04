@@ -125,10 +125,13 @@ def cell_colour(model, layer, fi: int) -> str:
 
 
 def band_areas(model) -> dict:
-    """Exact area (um^2) per (family, band) over the cells of the level z = 0."""
+    """Exact area (um^2) per (family, band) over the cells of the level z = 0 that the band groups carry (a port face is no band's surface)."""
     layer = level0(model)
     out: dict[str, float] = {}
     for fi in range(1, len(layer.arr.faces)):
+        sheet = layer.labels[fi].sheet
+        if sheet is not None and sheet.kind == "port":
+            continue
         for fam, k in layer.labels[fi].bands:
             key = f"{fam}:band={k}"
             out[key] = out.get(key, 0.0) + face_exact_area(layer.arr, layer.edge_curve, fi) * G_UM**2
@@ -195,13 +198,16 @@ def counts(model) -> dict:
 
 
 def port_invariance(numbers: dict) -> None:
-    """The port never moves a band: the exact area of every band label with and without the port in the model."""
+    """The port moves no band but takes its footprint out of the gap bands: the exact area of every band label with and without the port."""
     insets, _ = requests(True, False)
     with_port = band_areas(build_model(real_catalogue(film=True), "A", insets=insets))
     without = band_areas(build_model(real_catalogue(film=True, with_port=False), "A", insets=insets))
+    gap = [k for k in without if k.startswith("band_gap:")]
     numbers["port_invariance"] = {
         "band_areas_um2_with_port": with_port, "band_areas_um2_without_port": without,
-        "max_band_area_difference_um2": max(abs(with_port[k] - without[k]) for k in without),
+        "largest_band_area_increase_um2": max(with_port[k] - without[k] for k in without),
+        "gap_area_removed_um2": sum(without[k] - with_port[k] for k in gap),
+        "other_bands_max_abs_difference_um2": max((abs(with_port[k] - without[k]) for k in without if k not in gap), default=0.0),
     }
 
 

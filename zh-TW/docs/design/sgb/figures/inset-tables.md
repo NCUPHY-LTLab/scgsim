@@ -11,9 +11,9 @@
 | gap | B2 | `SA::substrate|vacuum::interface::band=2` | 3 | 1380.0089 | 13013.9783 |
 | gap | B3 | `SA::substrate|vacuum::interface::band=3` | 2 | 11633.9694 | 11633.9694 |
 
-PORT::p1: 7 faces, 300.0000 um^2 (the port footprint takes this area out of the gap bands)
+PORT::p1: 1 faces, 300.0000 um^2 (the port footprint takes this area out of the gap bands)
 
-## Band areas by family (cells carrying the band label, port cells included)
+## Band areas by family (cells the band groups carry, the port face left out)
 
 | family | band | area (um^2) |
 |---|---|---|
@@ -21,10 +21,10 @@ PORT::p1: 7 faces, 300.0000 um^2 (the port footprint takes this area out of the 
 | band_pad_top | B1 | 156.2232 |
 | band_pad_top | B2 | 583.2396 |
 | band_pad_top | B3 | 4643.0033 |
-| band_gap | B0 | 95.0717 |
-| band_gap | B1 | 379.3770 |
-| band_gap | B2 | 1410.0089 |
-| band_gap | B3 | 11893.9694 |
+| band_gap | B0 | 93.0717 |
+| band_gap | B1 | 371.3770 |
+| band_gap | B2 | 1380.0089 |
+| band_gap | B3 | 11633.9694 |
 
 ## KLayout cross-check (tests/sgb_klayout.py::comparison_rows on the Route A build)
 
@@ -34,33 +34,33 @@ PORT::p1: 7 faces, 300.0000 um^2 (the port footprint takes this area out of the 
 | pad top | 0.1 | 1 | 5382.4661 | 5382.4575 | +0.00867 | +1.6e-06 | 0.196 |
 | pad top | 0.5 | 1 | 5226.2429 | 5226.2351 | +0.00779 | +1.5e-06 | 0.195 |
 | pad top | 2 | 1 | 4643.0033 | 4643.0019 | +0.00142 | +3.1e-07 | 0.194 |
-| gap | 0 | 2 | 13778.4270 | 13778.4268 | +0.00017 | +1.2e-08 | 0.476 |
-| gap | 0.1 | 2 | 13683.3553 | 13683.3599 | -0.00466 | -3.4e-07 | 0.475 |
-| gap | 0.5 | 2 | 13303.9783 | 13303.9840 | -0.00572 | -4.3e-07 | 0.474 |
-| gap | 2 | 2 | 11893.9694 | 11893.9680 | +0.00136 | +1.1e-07 | 0.467 |
+| gap | 0 | 2 | 13478.4270 | 13478.4268 | +0.00017 | +1.2e-08 | 0.496 |
+| gap | 0.1 | 2 | 13385.3553 | 13385.3599 | -0.00466 | -3.5e-07 | 0.495 |
+| gap | 0.5 | 2 | 13013.9783 | 13013.9840 | -0.00572 | -4.4e-07 | 0.493 |
+| gap | 2 | 2 | 11633.9694 | 11633.9680 | +0.00136 | +1.2e-07 | 0.483 |
 
 ## Mesh check of the Route A band groups (production writer, Gmsh; no Palace is run)
 
-mesh size 40 um, 1 um on the band curves; nodes: 13455, tetrahedra: 72356, duplicate nodes: 0, conformal: True
+mesh size 40 um, 1 um on the band curves; nodes: 13377, tetrahedra: 71994, duplicate nodes: 0, conformal: True
 
 | band group | faces | triangles | tets on each side | all triangles shared by tets | centroids inside band |
 |---|---|---|---|---|---|
 | `SA::substrate|vacuum::interface::band=0` | 3 | 1857 | 1857 + 1857 | True | True |
 | `SA::substrate|vacuum::interface::band=1` | 3 | 1904 | 1904 + 1904 | True | True |
 | `SA::substrate|vacuum::interface::band=2` | 3 | 3692 | 3692 + 3692 | True | True |
-| `SA::substrate|vacuum::interface::band=3` | 2 | 3684 | 3684 + 3684 | True | True |
+| `SA::substrate|vacuum::interface::band=3` | 2 | 3672 | 3672 + 3672 | True | True |
 | `pad::band=0` | 2 | 790 | 790 + 790 | True | True |
 | `pad::band=1` | 2 | 807 | 807 + 807 | True | True |
-| `pad::band=2` | 2 | 1595 | 1595 + 1595 | True | True |
-| `pad::band=3` | 1 | 1659 | 1659 + 1659 | True | True |
+| `pad::band=2` | 2 | 1591 | 1591 + 1591 | True | True |
+| `pad::band=3` | 1 | 1663 | 1663 + 1663 | True | True |
 
 ## The same mesh check under every route
 
 | route | mesh size (um) | band groups | nodes | tetrahedra | duplicate nodes | conformal | every band group passes |
 |---|---|---|---|---|---|---|---|
-| A | 40 | 8 | 13455 | 72356 | 0 | True | True |
-| B | 60 | 12 | 13276 | 51151 | 0 | True | True |
-| C | 60 | 12 | 13367 | 68945 | 0 | True | True |
+| A | 40 | 8 | 13377 | 71994 | 0 | True | True |
+| B | 60 | 12 | 13144 | 50254 | 0 | True | True |
+| C | 60 | 12 | 13253 | 68083 | 0 | True | True |
 
 ## Mask against imprint (inset-mask-vs-imprint.json)
 
@@ -77,14 +77,16 @@ mesh size 40 um, 1 um on the band curves; nodes: 13455, tetrahedra: 72356, dupli
 
 groups: MA::pad::top::band=0, MA::pad::top::band=1, MA::pad::top::band=2, MA::pad::top::band=3, MS::pad::bottom::band=0, MS::pad::bottom::band=1, MS::pad::bottom::band=2, MS::pad::bottom::band=3
 validation passed: True (31 checks)
-counts: 66 faces, 280 edges, 321 vertices, 23 groups
+counts: 60 faces, 274 edges, 321 vertices, 23 groups
 unions NET::pad: ["MA::pad::sidewall", "MA::pad::top::band=0", "MA::pad::top::band=1", "MA::pad::top::band=2", "MA::pad::top::band=3", "MS::pad::bottom::band=0", "MS::pad::bottom::band=1", "MS::pad::bottom::band=2", "MS::pad::bottom::band=3"]
 surface_epr_rows (Route A): {"MA::pad::sheet::band=0": "pad::band=0", "MA::pad::sheet::band=1": "pad::band=1", "MA::pad::sheet::band=2": "pad::band=2", "MA::pad::sheet::band=3": "pad::band=3", "MS::pad::sheet::band=0": "pad::band=0", "MS::pad::sheet::band=1": "pad::band=1", "MS::pad::sheet::band=2": "pad::band=2", "MS::pad::sheet::band=3": "pad::band=3", "SA::substrate|vacuum::interface::band=0": "SA::substrate|vacuum::interface::band=0", "SA::substrate|vacuum::interface::band=1": "SA::substrate|vacuum::interface::band=1", "SA::substrate|vacuum::interface::band=2": "SA::substrate|vacuum::interface::band=2", "SA::substrate|vacuum::interface::band=3": "SA::substrate|vacuum::interface::band=3"}
 
 ## Port invariance (Route A, with and without the lumped port)
 
-family records equal: True
-largest band-area difference: 5.96e-08 grid unit^2
+supports of the families equal: True
+largest increase of a band area: 0 grid unit^2
+gap area taken out by the port: 300.0000 um^2
+pad-top band areas equal: True
 
 ## Topology change (margins 4, 9, 30 um on the pad top)
 

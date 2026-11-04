@@ -515,11 +515,11 @@ def build_tables(model_a, topology_change: dict, mask_rows: list[dict], meshes: 
             out.append(f"| {label} | B{k} | `{prefix}{k}` | {len(per_band[k])} | {total[k]:.4f} | {sum(a for b, a in total.items() if b >= k):.4f} |")
     port = areas["PORT::p1"]
     out += ["", f"PORT::p1: {len(port)} faces, {sum(port):.4f} um^2 (the port footprint takes this area out of the gap bands)"]
-    # the exact band areas by family (cells carrying the band label, port cells included): they partition the support region
-    out += ["", "## Band areas by family (cells carrying the band label, port cells included)", "",
+    # the exact band areas by family (cells the band groups carry; the port face is no band's surface)
+    out += ["", "## Band areas by family (cells the band groups carry, the port face left out)", "",
             "| family | band | area (um^2) |", "|---|---|---|"]
     for family in ("band_pad_top", "band_gap"):
-        for k, a in sorted(exact_band_areas(model_a, family).items()):
+        for k, a in sorted(exact_band_areas(model_a, family, include_ports=False).items()):
             out.append(f"| {family} | B{k} | {a * 1e-6:.4f} |")
     out += ["", "## KLayout cross-check (tests/sgb_klayout.py::comparison_rows on the Route A build)", "",
             "| region | margin (um) | components (KLayout) | exact area (um^2) | KLayout area (um^2) | difference (um^2) | relative | oracle rounding bound (um^2) |",
@@ -560,15 +560,20 @@ def build_tables(model_a, topology_change: dict, mask_rows: list[dict], meshes: 
             f"counts: {counts['faces']} faces, {counts['edges']} edges, {counts['vertices']} vertices, {len(model_b.routed.groups)} groups",
             "unions NET::pad: " + json.dumps(union),
             "surface_epr_rows (Route A): " + json.dumps(model_a.routed.surface_epr_rows)]
-    # the port does not move any band: same families, same band areas with and without it
+    # the port moves no band: same supports, and it only takes its footprint out of the gap bands
     without = kit.pad_model("A", MARGINS, with_port=False)
-    same = model_a.labelled.catalogue.families == without.labelled.catalogue.families
-    worst = 0.0
+    same = [f.support for f in model_a.labelled.catalogue.families] == [f.support for f in without.labelled.catalogue.families]
+    increase, removed, pad_top_equal = 0.0, 0.0, True
     for family in ("band_pad_top", "band_gap"):
-        a, b = exact_band_areas(model_a, family), exact_band_areas(without, family)
-        worst = max(worst, max(abs(a[k] - b[k]) for k in a))
+        a, b = exact_band_areas(model_a, family, include_ports=False), exact_band_areas(without, family)
+        increase = max(increase, max(a[k] - b[k] for k in a))
+        if family == "band_gap":
+            removed = (sum(b.values()) - sum(a.values())) * 1e-6
+        else:
+            pad_top_equal = a == exact_band_areas(without, family)
     out += ["", "## Port invariance (Route A, with and without the lumped port)", "",
-            f"family records equal: {same}", f"largest band-area difference: {worst:.3g} grid unit^2"]
+            f"supports of the families equal: {same}", f"largest increase of a band area: {increase:.3g} grid unit^2",
+            f"gap area taken out by the port: {removed:.4f} um^2", f"pad-top band areas equal: {pad_top_equal}"]
     out += ["", "## Topology change (margins 4, 9, 30 um on the pad top)", "", json.dumps(topology_change)]
     out += ["", "## Sagitta of a 128-gon disc, m (1 - cos(pi / 128)), in nm", "",
             "| margin (um) | sagitta (nm) |", "|---|---|"] + [f"| {m} | {m * 1000 * (1 - math.cos(math.pi / 128)):.3f} |" for m in MARGINS]

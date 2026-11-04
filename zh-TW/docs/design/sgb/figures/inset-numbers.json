@@ -6,10 +6,10 @@
   "snap_bound": 0.7071067811865476
  },
  "level_z0": {
-  "noded_edges_before_dissolution": 4064,
+  "noded_edges_before_dissolution": 4058,
   "hot_pixels": 4050,
-  "edges_after_dissolution": 172,
-  "faces": 26
+  "edges_after_dissolution": 166,
+  "faces": 20
  },
  "extreme_band_comparisons": {
   "rows": 60,
