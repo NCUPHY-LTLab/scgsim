@@ -54,29 +54,47 @@ COLOURS = {
     "bad": "#c0392b",
 }
 
-plt.rcParams.update({
-    "font.size": 9,
-    "axes.titlesize": 10,
-    "axes.titleweight": "bold",
-    "figure.facecolor": "white",
-    "axes.facecolor": "white",
-    "svg.fonttype": "none",
-})
+plt.rcParams.update(
+    {
+        "font.size": 9,
+        "axes.titlesize": 10,
+        "axes.titleweight": "bold",
+        "figure.facecolor": "white",
+        "axes.facecolor": "white",
+        "svg.fonttype": "none",
+    }
+)
 
 
 def save_svg(fig, name: str) -> Path:
     path = FIG / f"{name}.svg"
-    fig.savefig(path, format="svg", bbox_inches="tight", facecolor="white", metadata={"Date": None})
-    qa = os.environ.get("SGB_QA_DIR")  # optional PNG copy for visual checks while developing
+    fig.savefig(
+        path,
+        format="svg",
+        bbox_inches="tight",
+        facecolor="white",
+        metadata={"Date": None},
+    )
+    qa = os.environ.get(
+        "SGB_QA_DIR"
+    )  # optional PNG copy for visual checks while developing
     if qa:
-        fig.savefig(Path(qa) / f"{name}.png", format="png", dpi=110, bbox_inches="tight", facecolor="white")
+        fig.savefig(
+            Path(qa) / f"{name}.png",
+            format="png",
+            dpi=110,
+            bbox_inches="tight",
+            facecolor="white",
+        )
     plt.close(fig)
     return path
 
 
 def save_plotly(fig: go.Figure, name: str) -> Path:
     """Plotly HTML that loads the one shared ``plotly.min.js`` next to it (plotly writes it if missing)."""
-    fig.update_layout(paper_bgcolor="white", plot_bgcolor="white", font=dict(color="#222"))
+    fig.update_layout(
+        paper_bgcolor="white", plot_bgcolor="white", font=dict(color="#222")
+    )
     path = FIG / f"{name}.html"
     fig.write_html(path, include_plotlyjs="directory", config={"displaylogo": False})
     return path
@@ -92,7 +110,12 @@ def write_numbers(name: str, data: dict) -> Path:
 # --------------------------------------------------------------------------- the running example
 
 
-PORT_OUTLINE_UM = (50, -5, 80, 5)  # the gap between the pad edge (x = 50) and the ground cutout (x = 80)
+PORT_OUTLINE_UM = (
+    50,
+    -5,
+    80,
+    5,
+)  # the gap between the pad edge (x = 50) and the ground cutout (x = 80)
 
 
 def running_example(route: str = "B", *, port_plane: str = "support"):
@@ -114,12 +137,23 @@ def running_example(route: str = "B", *, port_plane: str = "support"):
     return replace(catalogue, prisms=(*catalogue.prisms, port), name=name)
 
 
-def build_example(route: str = "B", *, port_plane: str = "support", insets=(), refinements=(), **kwargs):
+def build_example(
+    route: str = "B",
+    *,
+    port_plane: str = "support",
+    insets=(),
+    refinements=(),
+    **kwargs,
+):
     """The validated ``ConformalModel`` of the running example."""
     from scgsim.geometry.sgb.model import build_model_from_catalogue
 
     return build_model_from_catalogue(
-        running_example(route, port_plane=port_plane), route, insets=insets, refinements=refinements, **kwargs
+        running_example(route, port_plane=port_plane),
+        route,
+        insets=insets,
+        refinements=refinements,
+        **kwargs,
     )
 
 
@@ -134,7 +168,9 @@ def mpl_path(rings: list[list[tuple[float, float]]]) -> MplPath:
     verts, codes = [], []
     for ring in rings:
         verts += list(ring) + [ring[0]]
-        codes += [MplPath.MOVETO] + [MplPath.LINETO] * (len(ring) - 1) + [MplPath.CLOSEPOLY]
+        codes += (
+            [MplPath.MOVETO] + [MplPath.LINETO] * (len(ring) - 1) + [MplPath.CLOSEPOLY]
+        )
     return MplPath(verts, codes)
 
 
@@ -144,7 +180,9 @@ def draw_footprint(ax, footprint, **kwargs) -> None:
     ax.add_patch(PathPatch(mpl_path(rings), **kwargs))
 
 
-def cycle_polyline(arr, curves, cycle_index: int, step: float = 20.0) -> list[tuple[float, float]]:
+def cycle_polyline(
+    arr, curves, cycle_index: int, step: float = 20.0
+) -> list[tuple[float, float]]:
     """The boundary cycle of an arrangement as a polyline in grid units, arc edges sampled every ``step`` grid units."""
     from scgsim.geometry.sgb.arrangement.arcs import sample_arc
 
@@ -161,10 +199,18 @@ def cycle_polyline(arr, curves, cycle_index: int, step: float = 20.0) -> list[tu
     return points
 
 
-def cell_rings_um(layer, face_index: int, step: float = 20.0) -> list[list[tuple[float, float]]]:
+def cell_rings_um(
+    layer, face_index: int, step: float = 20.0
+) -> list[list[tuple[float, float]]]:
     """Boundary rings of an arrangement face with arc edges sampled, in micrometres."""
     arr = layer.arr
-    return [[(x * G_UM, y * G_UM) for x, y in cycle_polyline(arr, layer.edge_curve, c, step)] for c in arr.face_cycles(face_index)]
+    return [
+        [
+            (x * G_UM, y * G_UM)
+            for x, y in cycle_polyline(arr, layer.edge_curve, c, step)
+        ]
+        for c in arr.face_cycles(face_index)
+    ]
 
 
 def domain_colour(domain) -> str:
@@ -217,8 +263,15 @@ def section_intervals(prism, y_um: float) -> list[tuple[float, float]]:
     return sorted((min(p.coords)[0], max(p.coords)[0]) for p in parts if p.length > 0)
 
 
-def draw_section(ax, catalogue, levels, y_um: float, x_range=(-155, 155), label_slabs: bool = True,
-                 skip: tuple[str, ...] = ()) -> None:
+def draw_section(
+    ax,
+    catalogue,
+    levels,
+    y_um: float,
+    x_range=(-155, 155),
+    label_slabs: bool = True,
+    skip: tuple[str, ...] = (),
+) -> None:
     """x-z section of a model at y = y_um with levels drawn equally spaced (the vertical axis is not to scale)."""
     index = {z: k for k, z in enumerate(levels)}
     for prism in catalogue.prisms:
@@ -227,18 +280,51 @@ def draw_section(ax, catalogue, levels, y_um: float, x_range=(-155, 155), label_
         for x0, x1 in section_intervals(prism, y_um):
             k0, k1 = index[prism.z0], index[prism.z1]
             if prism.is_sheet:
-                ax.plot([x0, x1], [k0, k0], color=prism_colour(prism), lw=3.5, solid_capstyle="butt", zorder=5)
+                ax.plot(
+                    [x0, x1],
+                    [k0, k0],
+                    color=prism_colour(prism),
+                    lw=3.5,
+                    solid_capstyle="butt",
+                    zorder=5,
+                )
             else:
                 alpha = 0.55 if prism.material_kind != "conductor" else 0.95
-                ax.add_patch(plt.Rectangle((x0, k0), x1 - x0, k1 - k0, facecolor=prism_colour(prism), alpha=alpha,
-                                           edgecolor="#333", lw=0.6, zorder=3 if prism.material_kind != "conductor" else 4))
+                ax.add_patch(
+                    plt.Rectangle(
+                        (x0, k0),
+                        x1 - x0,
+                        k1 - k0,
+                        facecolor=prism_colour(prism),
+                        alpha=alpha,
+                        edgecolor="#333",
+                        lw=0.6,
+                        zorder=3 if prism.material_kind != "conductor" else 4,
+                    )
+                )
     for z, k in index.items():
         ax.axhline(k, color="#555", lw=0.7, ls="--", zorder=6)
-        ax.text(x_range[1] + 3, k, f"level {k}: z = {float(z):g} µm", va="center", ha="left", fontsize=8)
+        ax.text(
+            x_range[1] + 3,
+            k,
+            f"level {k}: z = {float(z):g} µm",
+            va="center",
+            ha="left",
+            fontsize=8,
+        )
     if label_slabs:
         for k in range(len(levels) - 1):
-            ax.text(x_range[0] + 2, k + 0.5, f"slab {k}", va="center", ha="left", fontsize=8, color="#222", zorder=10,
-                    bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=1))
+            ax.text(
+                x_range[0] + 2,
+                k + 0.5,
+                f"slab {k}",
+                va="center",
+                ha="left",
+                fontsize=8,
+                color="#222",
+                zorder=10,
+                bbox=dict(facecolor="white", edgecolor="none", alpha=0.85, pad=1),
+            )
     ax.set_xlim(*x_range)
     ax.set_ylim(-0.1, len(levels) - 0.9)
     ax.set_xlabel("x (µm)")

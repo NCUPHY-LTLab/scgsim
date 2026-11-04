@@ -23,20 +23,31 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
-from matplotlib.lines import Line2D
-from mpl_toolkits.mplot3d.art3d import Line3DCollection, Poly3DCollection
-
 from _intro_common import (
-    COLOURS, build_example, draw_footprint, draw_section, running_example, save_plotly, save_svg, stretch_z,
+    COLOURS,
+    build_example,
+    draw_footprint,
+    draw_section,
+    running_example,
+    save_plotly,
+    save_svg,
+    stretch_z,
     write_numbers,
 )
-
+from matplotlib.lines import Line2D
+from mpl_toolkits.mplot3d.art3d import Line3DCollection, Poly3DCollection
 from scgsim.geometry.sgb.build import emit_model
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.prisms.levels import build_levels
 from scgsim.geometry.sgb.sidecar.files import read_sidecar
 
-GROUP_COLOURS = {"SA": "#9ecae1", "MA": "#2171b5", "MS": "#6a51a3", "EXT": "#bdbdbd", "PORT": "#d62728"}
+GROUP_COLOURS = {
+    "SA": "#9ecae1",
+    "MA": "#2171b5",
+    "MS": "#6a51a3",
+    "EXT": "#bdbdbd",
+    "PORT": "#d62728",
+}
 GROUP_NAMES = {
     "SA": "SA  substrate|vacuum gap surface",
     "MA": "MA  metal-vacuum surface",
@@ -49,19 +60,63 @@ SHIFT = {"substrate": -60.0, "vacuum": 60.0}  # exploded view offsets (display u
 
 def input_figure(catalogue) -> None:
     levels = build_levels(catalogue.prisms, catalogue.families).levels
-    fig, (ax_plan, ax_sec) = plt.subplots(1, 2, figsize=(11.5, 4.6), gridspec_kw={"width_ratios": [1.15, 1]})
+    fig, (ax_plan, ax_sec) = plt.subplots(
+        1, 2, figsize=(11.5, 4.6), gridspec_kw={"width_ratios": [1.15, 1]}
+    )
     for prism in catalogue.prisms:
         if prism.entity_id in ("substrate", "vacuum"):
             continue
-        colour = {"ground": COLOURS["ground"], "pad": COLOURS["pad"], "p1": COLOURS["port"]}[prism.entity_id]
-        draw_footprint(ax_plan, prism.footprint, facecolor=colour, edgecolor="#222", lw=0.6, alpha=0.9 if prism.entity_id != "p1" else 1.0)
-    ax_plan.add_patch(plt.Rectangle((-150, -150), 300, 300, fill=False, edgecolor="#555", lw=0.8, ls="--"))
-    ax_plan.annotate("ground plane (cutout 160 × 120 µm)", (-140, 120), fontsize=8, ha="left", bbox=dict(facecolor="white", edgecolor="none", pad=1))
-    ax_plan.annotate("pad: chamfer, reflex notch,\nrounded corner, circular hole", (-5, 28), xytext=(-120, 75), fontsize=8, ha="left",
-                     arrowprops=dict(arrowstyle="-", color="#222", lw=0.6), bbox=dict(facecolor="white", edgecolor="none", pad=1))
-    ax_plan.annotate("lumped port p1", (65, 0), xytext=(40, -45), fontsize=8, ha="left", color=COLOURS["port"],
-                     arrowprops=dict(arrowstyle="-", color=COLOURS["port"], lw=0.8), bbox=dict(facecolor="white", edgecolor="none", pad=1))
-    ax_plan.annotate("substrate (z < 0) and vacuum (z > 0)\nboth span the 300 × 300 µm chip", (0, -140), fontsize=8, ha="center", bbox=dict(facecolor="white", edgecolor="none", pad=1))
+        colour = {
+            "ground": COLOURS["ground"],
+            "pad": COLOURS["pad"],
+            "p1": COLOURS["port"],
+        }[prism.entity_id]
+        draw_footprint(
+            ax_plan,
+            prism.footprint,
+            facecolor=colour,
+            edgecolor="#222",
+            lw=0.6,
+            alpha=0.9 if prism.entity_id != "p1" else 1.0,
+        )
+    ax_plan.add_patch(
+        plt.Rectangle(
+            (-150, -150), 300, 300, fill=False, edgecolor="#555", lw=0.8, ls="--"
+        )
+    )
+    ax_plan.annotate(
+        "ground plane (cutout 160 × 120 µm)",
+        (-140, 120),
+        fontsize=8,
+        ha="left",
+        bbox=dict(facecolor="white", edgecolor="none", pad=1),
+    )
+    ax_plan.annotate(
+        "pad: chamfer, reflex notch,\nrounded corner, circular hole",
+        (-5, 28),
+        xytext=(-120, 75),
+        fontsize=8,
+        ha="left",
+        arrowprops=dict(arrowstyle="-", color="#222", lw=0.6),
+        bbox=dict(facecolor="white", edgecolor="none", pad=1),
+    )
+    ax_plan.annotate(
+        "lumped port p1",
+        (65, 0),
+        xytext=(40, -45),
+        fontsize=8,
+        ha="left",
+        color=COLOURS["port"],
+        arrowprops=dict(arrowstyle="-", color=COLOURS["port"], lw=0.8),
+        bbox=dict(facecolor="white", edgecolor="none", pad=1),
+    )
+    ax_plan.annotate(
+        "substrate (z < 0) and vacuum (z > 0)\nboth span the 300 × 300 µm chip",
+        (0, -140),
+        fontsize=8,
+        ha="center",
+        bbox=dict(facecolor="white", edgecolor="none", pad=1),
+    )
     ax_plan.set_xlim(-160, 160)
     ax_plan.set_ylim(-160, 160)
     ax_plan.set_aspect("equal")
@@ -72,10 +127,23 @@ def input_figure(catalogue) -> None:
     ax_plan.text(-158, 3, "section y = 0", color="#e08a1e", fontsize=8)
     draw_section(ax_sec, catalogue, levels, 0.0)
     ax_sec.set_title("x-z section at y = 0 (levels equally spaced, not to scale)")
-    ax_sec.legend(handles=[Line2D([0], [0], color=c, lw=6, label=n) for n, c in
-                           (("substrate", COLOURS["substrate"]), ("vacuum", COLOURS["vacuum"]), ("ground", COLOURS["ground"]),
-                            ("pad", COLOURS["pad"]), ("port sheet", COLOURS["port"]))],
-                  loc="upper center", ncol=3, fontsize=7, frameon=False, bbox_to_anchor=(0.5, -0.12))
+    ax_sec.legend(
+        handles=[
+            Line2D([0], [0], color=c, lw=6, label=n)
+            for n, c in (
+                ("substrate", COLOURS["substrate"]),
+                ("vacuum", COLOURS["vacuum"]),
+                ("ground", COLOURS["ground"]),
+                ("pad", COLOURS["pad"]),
+                ("port sheet", COLOURS["port"]),
+            )
+        ],
+        loc="upper center",
+        ncol=3,
+        fontsize=7,
+        frameon=False,
+        bbox_to_anchor=(0.5, -0.12),
+    )
     fig.tight_layout()
     save_svg(fig, "index-example-input")
 
@@ -87,15 +155,22 @@ def outline_segments(pts, tris, z):
         for u, v in ((a, b), (b, c), (c, a)):
             key = (min(u, v), max(u, v))
             count[key] = count.get(key, 0) + 1
-    return [((float(pts[u, 0]), float(pts[u, 1]), float(z[u])), (float(pts[v, 0]), float(pts[v, 1]), float(z[v])))
-            for (u, v), n in count.items() if n == 1]
+    return [
+        (
+            (float(pts[u, 0]), float(pts[u, 1]), float(z[u])),
+            (float(pts[v, 0]), float(pts[v, 1]), float(z[v])),
+        )
+        for (u, v), n in count.items()
+        if n == 1
+    ]
 
 
-def surface_triangles(artifacts, sidecar, mesh_size: float = 60.0, mesh_size_min: float = 4.0) -> dict:
+def surface_triangles(
+    artifacts, sidecar, mesh_size: float = 60.0, mesh_size_min: float = 4.0
+) -> dict:
     """Triangles of every written face, by planned face id: the written XAO opened in Gmsh and meshed in 2-D (display only)."""
-    from sgb_gmsh_oracle import gmsh_session
-
     import gmsh
+    from sgb_gmsh_oracle import gmsh_session
 
     triangles = {}
     with gmsh_session(artifacts.xao):
@@ -104,12 +179,19 @@ def surface_triangles(artifacts, sidecar, mesh_size: float = 60.0, mesh_size_min
         gmsh.model.mesh.generate(2)
         node_tags, coords, _ = gmsh.model.mesh.getNodes()
         xyz = dict(zip(node_tags.tolist(), np.asarray(coords).reshape(-1, 3)))
-        for tag, planned_id in enumerate(sidecar["binding"]["ids_by_tag"]["2"], start=1):
+        for tag, planned_id in enumerate(
+            sidecar["binding"]["ids_by_tag"]["2"], start=1
+        ):
             kinds, _, nodes = gmsh.model.mesh.getElements(2, tag)
-            flat = [n for kind, ns in zip(kinds, nodes) if kind == 2 for n in ns.tolist()]
+            flat = [
+                n for kind, ns in zip(kinds, nodes) if kind == 2 for n in ns.tolist()
+            ]
             used = sorted(set(flat))
             index = {n: i for i, n in enumerate(used)}
-            triangles[planned_id] = (np.array([xyz[n] for n in used]), np.array([index[n] for n in flat]).reshape(-1, 3))
+            triangles[planned_id] = (
+                np.array([xyz[n] for n in used]),
+                np.array([index[n] for n in flat]).reshape(-1, 3),
+            )
     return triangles
 
 
@@ -122,7 +204,11 @@ def exploded_traces(model, tri):
     batches: dict[tuple[str, str], dict] = {}
     for volume_id, volume in model.topology.volumes.items():
         dz = SHIFT.get(volume.domain.name, 0.0)
-        status = "written" if volume_id in model.routed.emitted_volumes else "excluded metal volume"
+        status = (
+            "written"
+            if volume_id in model.routed.emitted_volumes
+            else "excluded metal volume"
+        )
         for shell in volume.shells:
             for face_id, _ in shell.faces:
                 if face_id not in tri:
@@ -130,7 +216,18 @@ def exploded_traces(model, tri):
                 xyz, tris = tri[face_id]
                 group = group_kind(model, face_id)
                 z = np.array([stretch_z(v) for v in xyz[:, 2]]) + dz
-                batch = batches.setdefault((f"{volume.domain.name} ({status})", group), {"x": [], "y": [], "z": [], "i": [], "j": [], "k": [], "outline": []})
+                batch = batches.setdefault(
+                    (f"{volume.domain.name} ({status})", group),
+                    {
+                        "x": [],
+                        "y": [],
+                        "z": [],
+                        "i": [],
+                        "j": [],
+                        "k": [],
+                        "outline": [],
+                    },
+                )
                 base = len(batch["x"])
                 batch["x"] += [round(float(v), 2) for v in xyz[:, 0]]
                 batch["y"] += [round(float(v), 2) for v in xyz[:, 1]]
@@ -148,16 +245,39 @@ def exploded_figures(model, artifacts, sidecar) -> dict:
     fig = go.Figure()
     shown = set()
     for (volume, group), b in sorted(batches.items()):
-        fig.add_trace(go.Mesh3d(x=b["x"], y=b["y"], z=b["z"], i=b["i"], j=b["j"], k=b["k"], color=GROUP_COLOURS[group], opacity=0.6,
-                                flatshading=True, name=GROUP_NAMES[group], legendgroup=group, showlegend=group not in shown,
-                                hovertext=f"{volume}: {group} faces", hoverinfo="text"))
+        fig.add_trace(
+            go.Mesh3d(
+                x=b["x"],
+                y=b["y"],
+                z=b["z"],
+                i=b["i"],
+                j=b["j"],
+                k=b["k"],
+                color=GROUP_COLOURS[group],
+                opacity=0.6,
+                flatshading=True,
+                name=GROUP_NAMES[group],
+                legendgroup=group,
+                showlegend=group not in shown,
+                hovertext=f"{volume}: {group} faces",
+                hoverinfo="text",
+            )
+        )
         shown.add(group)
     fig.update_layout(
         title="pad_in_ground (Route B), exploded: substrate moved down, vacuum up, the pad and ground volumes in place",
-        height=640, legend=dict(orientation="h", y=-0.02),
-        scene=dict(aspectmode="manual", aspectratio=dict(x=1, y=1, z=0.6), xaxis_title="x (µm)", yaxis_title="y (µm)",
-                   zaxis=dict(title="z (µm; metal layer drawn 200× thicker)", range=[-200, 200]),
-                   camera=dict(eye=dict(x=1.5, y=-1.6, z=0.9))),
+        height=640,
+        legend=dict(orientation="h", y=-0.02),
+        scene=dict(
+            aspectmode="manual",
+            aspectratio=dict(x=1, y=1, z=0.6),
+            xaxis_title="x (µm)",
+            yaxis_title="y (µm)",
+            zaxis=dict(
+                title="z (µm; metal layer drawn 200× thicker)", range=[-200, 200]
+            ),
+            camera=dict(eye=dict(x=1.5, y=-1.6, z=0.9)),
+        ),
     )
     xs, ys, zs = [], [], []
     for b in batches.values():
@@ -165,7 +285,17 @@ def exploded_figures(model, artifacts, sidecar) -> dict:
             xs += [round(p[0], 2), round(q[0], 2), None]
             ys += [round(p[1], 2), round(q[1], 2), None]
             zs += [round(p[2], 2), round(q[2], 2), None]
-    fig.add_trace(go.Scatter3d(x=xs, y=ys, z=zs, mode="lines", line=dict(color="#222", width=2), name="face boundaries", hoverinfo="skip"))
+    fig.add_trace(
+        go.Scatter3d(
+            x=xs,
+            y=ys,
+            z=zs,
+            mode="lines",
+            line=dict(color="#222", width=2),
+            name="face boundaries",
+            hoverinfo="skip",
+        )
+    )
     save_plotly(fig, "index-example-3d")
 
     polys, colours = [], []
@@ -176,8 +306,16 @@ def exploded_figures(model, artifacts, sidecar) -> dict:
             colours.append(GROUP_COLOURS[group])
     f = plt.figure(figsize=(8.5, 6.2))
     ax = f.add_subplot(111, projection="3d")
-    ax.add_collection3d(Poly3DCollection(polys, facecolors=colours, edgecolors="none", alpha=0.35))
-    ax.add_collection3d(Line3DCollection([seg for b in batches.values() for seg in b["outline"]], colors="#222", linewidths=0.6))
+    ax.add_collection3d(
+        Poly3DCollection(polys, facecolors=colours, edgecolors="none", alpha=0.35)
+    )
+    ax.add_collection3d(
+        Line3DCollection(
+            [seg for b in batches.values() for seg in b["outline"]],
+            colors="#222",
+            linewidths=0.6,
+        )
+    )
     ax.set_xlim(-150, 150)
     ax.set_ylim(-150, 150)
     ax.set_zlim(-200, 200)
@@ -186,15 +324,38 @@ def exploded_figures(model, artifacts, sidecar) -> dict:
     ax.set_xlabel("x (µm)")
     ax.set_ylabel("y (µm)")
     ax.set_zlabel("z (display)")
-    ax.legend(handles=[Line2D([0], [0], color=c, lw=6, label=GROUP_NAMES[g]) for g, c in GROUP_COLOURS.items()],
-              loc="upper left", fontsize=7, frameon=False)
+    ax.legend(
+        handles=[
+            Line2D([0], [0], color=c, lw=6, label=GROUP_NAMES[g])
+            for g, c in GROUP_COLOURS.items()
+        ],
+        loc="upper left",
+        fontsize=7,
+        frameon=False,
+    )
     ax.set_title("pad_in_ground (Route B), exploded (metal layer drawn 200× thicker)")
     save_svg(f, "index-example-3d")
-    drawn_faces = sorted({fid for v in model.topology.volumes.values() for s in v.shells for fid, _ in s.faces if fid in tri})
-    return {"surface_triangles_drawn": sum(len(t[1]) for t in tri.values()), "mesh_size_um": 60.0, "mesh_size_min_um": 4.0,
-            "faces_drawn": len(drawn_faces), "faces_planned": len(model.topology.faces),
-            "volumes": sorted(f"{v.domain.name} written={vid in model.routed.emitted_volumes}" for vid, v in model.topology.volumes.items()),
-            "face_groups_drawn": sorted({group_kind(model, f) for f in drawn_faces})}
+    drawn_faces = sorted(
+        {
+            fid
+            for v in model.topology.volumes.values()
+            for s in v.shells
+            for fid, _ in s.faces
+            if fid in tri
+        }
+    )
+    return {
+        "surface_triangles_drawn": sum(len(t[1]) for t in tri.values()),
+        "mesh_size_um": 60.0,
+        "mesh_size_min_um": 4.0,
+        "faces_drawn": len(drawn_faces),
+        "faces_planned": len(model.topology.faces),
+        "volumes": sorted(
+            f"{v.domain.name} written={vid in model.routed.emitted_volumes}"
+            for vid, v in model.topology.volumes.items()
+        ),
+        "face_groups_drawn": sorted({group_kind(model, f) for f in drawn_faces}),
+    }
 
 
 # --------------------------------------------------------------------------- the table of the supplement
@@ -218,11 +379,32 @@ def unwritten(model) -> dict:
     """Faces that bound no written volume, the edges only they use, and the planned-only arc-centre vertices."""
     topo = model.topology
     emitted = model.routed.emitted_volumes
-    dead = [f for f in topo.faces.values() if not any(v in emitted for v in (f.neg_volume, f.pos_volume) if v)]
-    used = {e for f in topo.faces.values() if f not in dead for loop in f.loops for e, _ in loop}
-    return {"faces_bounding_no_written_volume": len(dead), "their_groups": sorted({model.routed.face_group.get(f.id) or "(no group)" for f in dead}),
-            "edges_only_on_those_faces": sum(1 for e in topo.edges.values() if e.id not in used and e.kind != "refinement"),
-            "arc_centre_vertices": len({e.centre_vertex for e in topo.edges.values() if e.centre_vertex})}
+    dead = [
+        f
+        for f in topo.faces.values()
+        if not any(v in emitted for v in (f.neg_volume, f.pos_volume) if v)
+    ]
+    used = {
+        e
+        for f in topo.faces.values()
+        if f not in dead
+        for loop in f.loops
+        for e, _ in loop
+    }
+    return {
+        "faces_bounding_no_written_volume": len(dead),
+        "their_groups": sorted(
+            {model.routed.face_group.get(f.id) or "(no group)" for f in dead}
+        ),
+        "edges_only_on_those_faces": sum(
+            1
+            for e in topo.edges.values()
+            if e.id not in used and e.kind != "refinement"
+        ),
+        "arc_centre_vertices": len(
+            {e.centre_vertex for e in topo.edges.values() if e.centre_vertex}
+        ),
+    }
 
 
 def counts() -> dict:
@@ -235,15 +417,33 @@ def counts() -> dict:
             sidecar = read_sidecar(artifacts.sidecar)
             gap = unwritten(model)
         written = sidecar["counts"]
-        assert written["vertices"] == model.counts["vertices"] - gap["arc_centre_vertices"] == model.counts["vertices"] - written["arcs"]
+        assert (
+            written["vertices"]
+            == model.counts["vertices"] - gap["arc_centre_vertices"]
+            == model.counts["vertices"] - written["arcs"]
+        )
         checks = model.report.checks
         out[case] = {
-            "prisms": model.counts["prisms"], "levels": model.counts["levels"], "slabs": model.counts["slabs"],
-            "planned": {k: model.counts[k] for k in ("vertices", "edges", "faces", "volumes")},
-            "written": {"vertices": written["vertices"], "edges": written["edges"], "faces": written["faces"], "volumes": written["solids"],
-                        "arcs": written["arcs"], "cylinders": written["cylinders"]},
+            "prisms": model.counts["prisms"],
+            "levels": model.counts["levels"],
+            "slabs": model.counts["slabs"],
+            "planned": {
+                k: model.counts[k] for k in ("vertices", "edges", "faces", "volumes")
+            },
+            "written": {
+                "vertices": written["vertices"],
+                "edges": written["edges"],
+                "faces": written["faces"],
+                "volumes": written["solids"],
+                "arcs": written["arcs"],
+                "cylinders": written["cylinders"],
+            },
             "groups": model.counts["groups"],
-            "validation_checks": {"total": len(checks), "passed": sum(1 for c in checks if c.passed), "warnings": sum(1 for c in checks if c.warning)},
+            "validation_checks": {
+                "total": len(checks),
+                "passed": sum(1 for c in checks if c.passed),
+                "warnings": sum(1 for c in checks if c.warning),
+            },
             "not_written": gap,
         }
     return out
@@ -264,8 +464,20 @@ def example_checks() -> dict:
         "pad_b_bands": lambda: build_example("B", insets=pad_requests("B")),
         "pad_c_bands": lambda: build_example("C", insets=pad_requests("C")),
     }
-    keep = ("faces", "load_check", "occt", "mesh", "tets", "minSICN_min", "minSICN_p1", "gamma_min", "gamma_p1",
-            "max_snap_drift_grid", "max_arc_deviation_grid", "narrowest_face_um")
+    keep = (
+        "faces",
+        "load_check",
+        "occt",
+        "mesh",
+        "tets",
+        "minSICN_min",
+        "minSICN_p1",
+        "gamma_min",
+        "gamma_p1",
+        "max_snap_drift_grid",
+        "max_arc_deviation_grid",
+        "narrowest_face_um",
+    )
     out = {}
     for name, build in models.items():
         with tempfile.TemporaryDirectory() as tmp:
@@ -276,16 +488,23 @@ def example_checks() -> dict:
 
 def hinted_mesh_checks() -> dict:
     """The banded models meshed again with the size field of the sidecar's ``band_boundary`` hints (the recipe of emission.qmd#mesh-size-recipe)."""
-    from sgb_emit_cases import CASES, pad_requests
-    from sgb_gmsh_oracle import gmsh_session, mesh_coarsely, mesh_quality, size_from_mesh_hints
     from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds
+    from sgb_emit_cases import CASES, pad_requests
+    from sgb_gmsh_oracle import (
+        gmsh_session,
+        mesh_coarsely,
+        mesh_quality,
+        size_from_mesh_hints,
+    )
 
     coarse_um, near_um, growth_per_um = 60.0, 0.25, 2.0
     models = {
         "pad_a_bands": lambda: build_example("A", insets=pad_requests("A")),
         "pad_b_bands": lambda: build_example("B", insets=pad_requests("B")),
         "pad_c_bands": lambda: build_example("C", insets=pad_requests("C")),
-        "stage_pad_b_bands": CASES["pad_b_bands"],  # the stage-level scene with its Route B port at the metal mid-plane
+        "stage_pad_b_bands": CASES[
+            "pad_b_bands"
+        ],  # the stage-level scene with its Route B port at the metal mid-plane
     }
     out = {"coarse_um": coarse_um, "near_um": near_um, "growth_per_um": growth_per_um}
     for name, build in models.items():
@@ -294,10 +513,16 @@ def hinted_mesh_checks() -> dict:
             sidecar = read_sidecar(artifacts.sidecar)
             with gmsh_session(artifacts.xao):
                 apply_sidecar_embeds(sidecar)
-                size_from_mesh_hints(sidecar, coarse=coarse_um, near=near_um, growth=growth_per_um)
+                size_from_mesh_hints(
+                    sidecar, coarse=coarse_um, near=near_um, growth=growth_per_um
+                )
                 mesh_coarsely(coarse_um)
                 quality = mesh_quality()
-        out[name] = {"tets": quality["tets"], "minSICN_min": quality["minSICN_min"], "gamma_min": quality["gamma_min"]}
+        out[name] = {
+            "tets": quality["tets"],
+            "minSICN_min": quality["minSICN_min"],
+            "gamma_min": quality["gamma_min"],
+        }
     return out
 
 
@@ -313,7 +538,10 @@ def main() -> None:
     numbers["exploded_view"] = view
     numbers["running_example_checks"] = example_checks()
     numbers["hinted_mesh_checks"] = hinted_mesh_checks()
-    numbers["port"] = {"plane_z_um": 0.0, "levels_um": [float(z) for z in build_levels(catalogue.prisms).levels]}
+    numbers["port"] = {
+        "plane_z_um": 0.0,
+        "levels_um": [float(z) for z in build_levels(catalogue.prisms).levels],
+    }
     write_numbers("index", numbers)
     print(json.dumps(numbers, indent=1)[:3000])
 

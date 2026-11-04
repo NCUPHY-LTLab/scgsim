@@ -31,10 +31,18 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PAGES = (HERE.parent / "emission.qmd", HERE.parent / "brep-format.qmd")
-SGB_CORE = Path(os.environ.get("SGB_CORE", HERE.parents[4]))  # checkout with scgsim.geometry.sgb
+SGB_CORE = Path(
+    os.environ.get("SGB_CORE", HERE.parents[4])
+)  # checkout with scgsim.geometry.sgb
 STEM = "semantic_geometry_route_b"
-SIDECAR_BLOCK = re.compile(rf'^```\{{\.json filename="(?P<name>{STEM}\.sidecar\.json)（節錄(?P<variant>[^）]*)）"\}}\n(?P<body>.*?)^```', re.S | re.M)
-FILE_BLOCK = re.compile(r'^```\{\.\w+ filename="(?P<name>[\w.]+), lines? (?P<first>\d+)(?:-(?P<last>\d+))?[^"]*"\}\n(?P<body>.*?)^```', re.S | re.M)
+SIDECAR_BLOCK = re.compile(
+    rf'^```\{{\.json filename="(?P<name>{STEM}\.sidecar\.json)（節錄(?P<variant>[^）]*)）"\}}\n(?P<body>.*?)^```',
+    re.S | re.M,
+)
+FILE_BLOCK = re.compile(
+    r'^```\{\.\w+ filename="(?P<name>[\w.]+), lines? (?P<first>\d+)(?:-(?P<last>\d+))?[^"]*"\}\n(?P<body>.*?)^```',
+    re.S | re.M,
+)
 GENERATE = """
 import sys
 sys.path.insert(0, sys.argv[1])
@@ -59,7 +67,12 @@ def _quoted_blocks(text: str):
 def _write_example(scratch: Path) -> None:
     """Write the example (plain, and with one refinement curve) with the production core into ``scratch``."""
     python = SGB_CORE / ".artifacts" / "env" / "bin" / "python"
-    subprocess.run([str(python), "-c", GENERATE, str(HERE), str(scratch)], cwd=SGB_CORE, check=True, env={**os.environ, "SGB_CORE": str(SGB_CORE)})
+    subprocess.run(
+        [str(python), "-c", GENERATE, str(HERE), str(scratch)],
+        cwd=SGB_CORE,
+        check=True,
+        env={**os.environ, "SGB_CORE": str(SGB_CORE)},
+    )
 
 
 def _differences(excerpt: object, actual: object, path: str) -> list[str]:
@@ -77,7 +90,11 @@ def _differences(excerpt: object, actual: object, path: str) -> list[str]:
     if isinstance(excerpt, list) and isinstance(actual, list):
         out = []
         for i, item in enumerate(x for x in excerpt if x != "…"):
-            out += _differences(item, actual[i], f"{path}[{i}]") if i < len(actual) else [f"{path}[{i}]: missing"]
+            out += (
+                _differences(item, actual[i], f"{path}[{i}]")
+                if i < len(actual)
+                else [f"{path}[{i}]: missing"]
+            )
         return out
     return [] if excerpt == actual else [f"{path}: {excerpt!r} != {actual!r}"]
 
@@ -87,15 +104,22 @@ def _check_sidecar_blocks(scratch: Path, problems: list[str]) -> int:
     sidecars: dict[str, dict] = {}
     for match in blocks:
         variant = "refinement" if "refinement" in match["variant"] else "plain"
-        sidecar = sidecars.setdefault(variant, json.loads((scratch / variant / f"{STEM}.sidecar.json").read_text()))
+        sidecar = sidecars.setdefault(
+            variant,
+            json.loads((scratch / variant / f"{STEM}.sidecar.json").read_text()),
+        )
         body = match["body"].strip().rstrip(",")
         excerpt = json.loads("{" + body + "}")
         for key, value in excerpt.items():  # a top-level key, or a group name
             actual = sidecar.get(key, sidecar["physical_groups"].get(key))
             if actual is None:
-                problems.append(f"sidecar block: {key!r} is neither a sidecar key nor a physical group")
+                problems.append(
+                    f"sidecar block: {key!r} is neither a sidecar key nor a physical group"
+                )
             else:
-                problems += [f"sidecar block {key}{d}" for d in _differences(value, actual, "")]
+                problems += [
+                    f"sidecar block {key}{d}" for d in _differences(value, actual, "")
+                ]
     return len(blocks)
 
 
@@ -107,14 +131,20 @@ def main() -> int:
         _write_example(scratch)
         blocks = [block for page in PAGES for block in _quoted_blocks(page.read_text())]
         for name, first, last, body in blocks:
-            lines = cache.setdefault(name, (scratch / "plain" / name).read_text().split("\n"))
-            expected = [line.rstrip() for line in lines[first - 1:last]]
+            lines = cache.setdefault(
+                name, (scratch / "plain" / name).read_text().split("\n")
+            )
+            expected = [line.rstrip() for line in lines[first - 1 : last]]
             if [line.rstrip() for line in body] != expected:
-                problems.append(f"{name} lines {first}-{last}: the block differs from the file")
+                problems.append(
+                    f"{name} lines {first}-{last}: the block differs from the file"
+                )
         sidecar_blocks = _check_sidecar_blocks(scratch, problems)
     for problem in problems:
         print(problem)
-    print(f"{len(blocks)} file blocks and {sidecar_blocks} sidecar blocks checked, {len(problems)} mismatching")
+    print(
+        f"{len(blocks)} file blocks and {sidecar_blocks} sidecar blocks checked, {len(problems)} mismatching"
+    )
     return 1 if problems else 0
 
 

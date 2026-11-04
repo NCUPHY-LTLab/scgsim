@@ -37,7 +37,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import plotly.graph_objects as go  # noqa: E402
-from matplotlib.patches import PathPatch  # noqa: E402
 from matplotlib.path import Path as MplPath  # noqa: E402
 
 G_UM = 0.001  # um per grid unit (default grid, 1 nm)
@@ -60,18 +59,25 @@ PALETTE = {
 }
 # primary physical-group prefix -> colour (shared by the 3D views)
 GROUP_COLOURS = {
-    "SA": "#9ecae1", "MA": "#2171b5", "MS": "#6a51a3", "MM": "#e08a1e", "EXT": "#bdbdbd", "PORT": "#d62728",
+    "SA": "#9ecae1",
+    "MA": "#2171b5",
+    "MS": "#6a51a3",
+    "MM": "#e08a1e",
+    "EXT": "#bdbdbd",
+    "PORT": "#d62728",
     "SHEET": "#7f7f7f",
 }
 
-plt.rcParams.update({
-    "font.size": 9,
-    "axes.titlesize": 10,
-    "axes.titleweight": "bold",
-    "figure.facecolor": "white",
-    "axes.facecolor": "white",
-    "svg.fonttype": "none",
-})
+plt.rcParams.update(
+    {
+        "font.size": 9,
+        "axes.titlesize": 10,
+        "axes.titleweight": "bold",
+        "figure.facecolor": "white",
+        "axes.facecolor": "white",
+        "svg.fonttype": "none",
+    }
+)
 
 
 def ensure_plotly_js() -> None:
@@ -81,16 +87,26 @@ def ensure_plotly_js() -> None:
     if not target.exists():
         import plotly
 
-        shutil.copyfile(Path(plotly.__file__).parent / "package_data" / "plotly.min.js", target)
+        shutil.copyfile(
+            Path(plotly.__file__).parent / "package_data" / "plotly.min.js", target
+        )
 
 
 def save_svg(fig, name: str) -> Path:
     FIGURES.mkdir(parents=True, exist_ok=True)
     path = FIGURES / f"{name}.svg"
     fig.savefig(path, format="svg", bbox_inches="tight", facecolor="white")
-    qa = os.environ.get("SGB_QA_DIR")  # optional PNG copy for visual checks while developing
+    qa = os.environ.get(
+        "SGB_QA_DIR"
+    )  # optional PNG copy for visual checks while developing
     if qa:
-        fig.savefig(Path(qa) / f"{name}.png", format="png", dpi=100, bbox_inches="tight", facecolor="white")
+        fig.savefig(
+            Path(qa) / f"{name}.png",
+            format="png",
+            dpi=100,
+            bbox_inches="tight",
+            facecolor="white",
+        )
     plt.close(fig)
     return path
 
@@ -98,7 +114,9 @@ def save_svg(fig, name: str) -> Path:
 def save_plotly(fig: go.Figure, name: str) -> Path:
     """Plotly HTML that loads the shared ``plotly.min.js`` next to it."""
     ensure_plotly_js()
-    fig.update_layout(paper_bgcolor="white", plot_bgcolor="white", font=dict(color="#222"))
+    fig.update_layout(
+        paper_bgcolor="white", plot_bgcolor="white", font=dict(color="#222")
+    )
     path = FIGURES / f"{name}.html"
     fig.write_html(path, include_plotlyjs="directory", config={"displaylogo": False})
     return path
@@ -157,11 +175,15 @@ def real_catalogue(*, film: bool = False, **options):
     return build_prism_catalogue(effective.build_input, effective.representation)
 
 
-def build_model(catalogue, route: str, *, insets=(), refinements=(), keep_raw: bool = False):
+def build_model(
+    catalogue, route: str, *, insets=(), refinements=(), keep_raw: bool = False
+):
     """The validated conformal model of a catalogue under a route (stages S4 to S9)."""
     from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: PLC0415
 
-    return build_model_from_catalogue(catalogue, route, insets=insets, refinements=refinements, keep_raw=keep_raw)
+    return build_model_from_catalogue(
+        catalogue, route, insets=insets, refinements=refinements, keep_raw=keep_raw
+    )
 
 
 def with_extra_families(catalogue, *families):
@@ -178,15 +200,21 @@ def mpl_path(rings) -> MplPath:
     verts, codes = [], []
     for ring in rings:
         verts += list(ring) + [ring[0]]
-        codes += [MplPath.MOVETO] + [MplPath.LINETO] * (len(ring) - 1) + [MplPath.CLOSEPOLY]
+        codes += (
+            [MplPath.MOVETO] + [MplPath.LINETO] * (len(ring) - 1) + [MplPath.CLOSEPOLY]
+        )
     return MplPath(verts, codes)
 
 
 def svg_path(rings) -> str:
-    return " ".join("M " + " L ".join(f"{x:.4f},{y:.4f}" for x, y in ring) + " Z" for ring in rings)
+    return " ".join(
+        "M " + " L ".join(f"{x:.4f},{y:.4f}" for x, y in ring) + " Z" for ring in rings
+    )
 
 
-def cycle_polyline(arr, curves, cycle_index: int, step: float = 150.0) -> list[tuple[float, float]]:
+def cycle_polyline(
+    arr, curves, cycle_index: int, step: float = 150.0
+) -> list[tuple[float, float]]:
     """A boundary cycle as a closed float polyline, grid units, every realised arc edge sampled."""
     from scgsim.geometry.sgb.arrangement.arcs import sample_arc  # noqa: PLC0415
 
@@ -212,10 +240,15 @@ def cell_rings_um(layer, face_index: int, step: float = 150.0, arr=None, curves=
     """
     arr = arr if arr is not None else layer.arr
     curves = curves if curves is not None else layer.edge_curve
-    return [[(x * G_UM, y * G_UM) for x, y in cycle_polyline(arr, curves, c, step)] for c in arr.face_cycles(face_index)]
+    return [
+        [(x * G_UM, y * G_UM) for x, y in cycle_polyline(arr, curves, c, step)]
+        for c in arr.face_cycles(face_index)
+    ]
 
 
-def edge_polyline_um(arr, curves, ei: int, step: float = 150.0) -> list[tuple[float, float]]:
+def edge_polyline_um(
+    arr, curves, ei: int, step: float = 150.0
+) -> list[tuple[float, float]]:
     """One arrangement edge as a polyline in micrometres (arc edges sampled)."""
     from scgsim.geometry.sgb.arrangement.arcs import sample_arc  # noqa: PLC0415
 
@@ -239,19 +272,48 @@ def finish_plan(ax, xlim, ylim, title: str | None = None) -> None:
         ax.set_title(title)
 
 
-def plotly_cells(fig, layer, colour_of, text_of, row: int, col: int, xlim, ylim, line="rgba(0,0,0,0.55)") -> None:
+def plotly_cells(
+    fig,
+    layer,
+    colour_of,
+    text_of,
+    row: int,
+    col: int,
+    xlim,
+    ylim,
+    line="rgba(0,0,0,0.55)",
+) -> None:
     """Add the cells of a layer as filled even-odd paths with one hover marker per cell (``colour_of(layer, face)``)."""
     hx, hy, ht = [], [], []
     for fi in range(1, len(layer.arr.faces)):
         rings = cell_rings_um(layer, fi)
-        fig.add_shape(type="path", path=svg_path(rings), fillcolor=colour_of(layer, fi), fillrule="evenodd",
-                      line=dict(color=line, width=0.5), layer="below", row=row, col=col)
+        fig.add_shape(
+            type="path",
+            path=svg_path(rings),
+            fillcolor=colour_of(layer, fi),
+            fillrule="evenodd",
+            line=dict(color=line, width=0.5),
+            layer="below",
+            row=row,
+            col=col,
+        )
         x, y = rings[0][0]
         hx.append(x)
         hy.append(y)
         ht.append(text_of(layer, fi))
-    fig.add_trace(go.Scatter(x=hx, y=hy, mode="markers", marker=dict(size=4, color="black"), text=ht, hoverinfo="text",
-                             showlegend=False), row=row, col=col)
+    fig.add_trace(
+        go.Scatter(
+            x=hx,
+            y=hy,
+            mode="markers",
+            marker=dict(size=4, color="black"),
+            text=ht,
+            hoverinfo="text",
+            showlegend=False,
+        ),
+        row=row,
+        col=col,
+    )
     fig.update_xaxes(range=list(xlim), row=row, col=col)
     fig.update_yaxes(range=list(ylim), row=row, col=col)
 
@@ -259,7 +321,11 @@ def plotly_cells(fig, layer, colour_of, text_of, row: int, col: int, xlim, ylim,
 # --------------------------------------------------------------------------- label colours and names
 
 # colour of a domain by its owning entity (production names: the real input's entities are what the groups show)
-OWNER_COLOURS = {"ground_0000": PALETTE["ground"], "ground": PALETTE["ground"], "pad": PALETTE["pad"]}
+OWNER_COLOURS = {
+    "ground_0000": PALETTE["ground"],
+    "ground": PALETTE["ground"],
+    "pad": PALETTE["pad"],
+}
 
 
 def domain_colour(domain) -> str:
@@ -296,7 +362,6 @@ def stretch_z(z, metal: float = 200.0, top: float = 0.2):
 def loaded_model(model) -> Iterator[dict[str, tuple[int, int]]]:
     """Write the model's BREP/XAO with the production writer, open it in Gmsh and yield ``planned id -> (dim, tag)``."""
     import gmsh  # noqa: PLC0415
-
     from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: PLC0415
     from scgsim.geometry.sgb.emission.writer import write_brep_file, write_xao_file  # noqa: PLC0415
 
@@ -316,7 +381,9 @@ def loaded_model(model) -> Iterator[dict[str, tuple[int, int]]]:
             gmsh.finalize()
 
 
-def compact_triangles(model, mesh_size: float, mesh_size_min: float = 0.0) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+def compact_triangles(
+    model, mesh_size: float, mesh_size_min: float = 0.0
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     """Per emitted face id ``(points, triangles)`` of a surface mesh of the written model; only the points that face uses.
 
     The surface mesh is Gmsh's, made from the XAO that the production writer produced (display only).  A face that
@@ -346,6 +413,19 @@ def compact_triangles(model, mesh_size: float, mesh_size_min: float = 0.0) -> di
 
 
 def mesh_trace(points, tri, colour, name, hover, opacity=0.6, **kw) -> go.Mesh3d:
-    return go.Mesh3d(x=np.round(points[:, 0], 3), y=np.round(points[:, 1], 3), z=np.round(points[:, 2], 3),
-                     i=tri[:, 0], j=tri[:, 1], k=tri[:, 2], color=colour, opacity=opacity, flatshading=True,
-                     name=name, hovertext=hover, hoverinfo="text", showlegend=False, **kw)
+    return go.Mesh3d(
+        x=np.round(points[:, 0], 3),
+        y=np.round(points[:, 1], 3),
+        z=np.round(points[:, 2], 3),
+        i=tri[:, 0],
+        j=tri[:, 1],
+        k=tri[:, 2],
+        color=colour,
+        opacity=opacity,
+        flatshading=True,
+        name=name,
+        hovertext=hover,
+        hoverinfo="text",
+        showlegend=False,
+        **kw,
+    )

@@ -4,15 +4,13 @@ Run with the sgb-core environment:
   <sgb-core>/.artifacts/env/bin/python generate_excerpt.py <sgb-core>/tests <out_dir>
 It uses the sgb-core test helper ``sgb_inputs.gds_pad_in_ground`` (100 um die, ground plane, 20 um pad, one lumped port).
 """
+
 import sys
 import tempfile
 from pathlib import Path
 
 tests, out = Path(sys.argv[1]), Path(sys.argv[2])
 sys.path.insert(0, str(tests))
-
-from sgb_gmsh_oracle import mesh_coarsely, mesh_quality, size_from_mesh_hints  # noqa: E402
-from sgb_inputs import gds_pad_in_ground, thin_film_pair  # noqa: E402
 
 from scgsim.geometry.sgb import build_sgb_geometry  # noqa: E402
 from scgsim.geometry.sgb.cutfamilies.requests import (  # noqa: E402
@@ -21,6 +19,8 @@ from scgsim.geometry.sgb.cutfamilies.requests import (  # noqa: E402
     RefinementRequest,
     SolutionInterface,
 )
+from sgb_gmsh_oracle import mesh_coarsely, mesh_quality, size_from_mesh_hints  # noqa: E402
+from sgb_inputs import gds_pad_in_ground, thin_film_pair  # noqa: E402
 
 with tempfile.TemporaryDirectory() as tmp:
     effective = gds_pad_in_ground(Path(tmp))
@@ -29,7 +29,9 @@ with tempfile.TemporaryDirectory() as tmp:
             effective.build_input,
             effective.representation,
             route=route,
-            insets=(InsetRequest("pad_top", ConductorSurface("pad", "top"), (0.5, 1.0)),),
+            insets=(
+                InsetRequest("pad_top", ConductorSurface("pad", "top"), (0.5, 1.0)),
+            ),
             refinements=(RefinementRequest("ref", 0.2, ((45.0, 45.0), (55.0, 45.0))),),
             output_dir=out / f"route_{route.lower()}",
         )
@@ -42,7 +44,9 @@ artifacts = build_sgb_geometry(
     films.build_input,
     films.representation,
     route="A",
-    insets=(InsetRequest("band_left", ConductorSurface("chip/left", "sheet"), (0.5, 1.0)),),
+    insets=(
+        InsetRequest("band_left", ConductorSurface("chip/left", "sheet"), (0.5, 1.0)),
+    ),
     output_dir=out / "route_a",
 )
 print("A", artifacts.counts)
@@ -51,7 +55,6 @@ print("A", artifacts.counts)
 import json  # noqa: E402
 
 import gmsh  # noqa: E402
-
 from scgsim.geometry.sgb.exchange.step import export_aedt_step  # noqa: E402
 from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: E402
 from scgsim.geometry.sgb.verification.loaded import (  # noqa: E402
@@ -62,7 +65,9 @@ from scgsim.geometry.sgb.verification.loaded import (  # noqa: E402
 runs: dict[str, object] = {}
 for route in "BC":
     folder = out / f"route_{route.lower()}"
-    sidecar = read_sidecar(folder / f"semantic_geometry_route_{route.lower()}.sidecar.json")
+    sidecar = read_sidecar(
+        folder / f"semantic_geometry_route_{route.lower()}.sidecar.json"
+    )
     # the Palace-side sequence: open, synchronize, verify, embed, mesh
     gmsh.initialize(["-noenv"])
     gmsh.option.setNumber("General.Terminal", 0)
@@ -77,7 +82,9 @@ for route in "BC":
     gmsh.finalize()
     # the AEDT-side export and its guard
     step = export_aedt_step(
-        folder / f"semantic_geometry_route_{route.lower()}.brep", sidecar, folder / "aedt_model.step"
+        folder / f"semantic_geometry_route_{route.lower()}.brep",
+        sidecar,
+        folder / "aedt_model.step",
     )
     runs[route] = {
         "verify_loaded": {
@@ -98,8 +105,19 @@ for route in "BC":
             "first_guard_rows": {s.aedt_name: s.faces[:2] for s in step.solids},
         },
     }
-(out / "consumer_runs.json").write_text(json.dumps(runs, indent=1, sort_keys=True) + "\n")
-print(json.dumps({r: {k: v for k, v in d.items() if k != "step_export"} for r, d in runs.items()}, indent=1, sort_keys=True)[:3000])
+(out / "consumer_runs.json").write_text(
+    json.dumps(runs, indent=1, sort_keys=True) + "\n"
+)
+print(
+    json.dumps(
+        {
+            r: {k: v for k, v in d.items() if k != "step_export"}
+            for r, d in runs.items()
+        },
+        indent=1,
+        sort_keys=True,
+    )[:3000]
+)
 
 # ---------------------------------------------------------------- every entity, every surface, plus SA
 # One extra set in ``<out>/all_interfaces/route_{a,b,c}/``: each entity gets inset bands on every supported
@@ -114,19 +132,29 @@ GROWTH = 2.0  # size growth per micrometre away from the hinted edges
 
 def conductor_ids(effective):
     """Semantic ids of the conductor entities of an effective input, in input order."""
-    return [e.semantic_id for e in effective.build_input.entities if e.material_kind == "conductor"]
+    return [
+        e.semantic_id
+        for e in effective.build_input.entities
+        if e.material_kind == "conductor"
+    ]
 
 
 def all_interface_insets(effective, route, sa_pair):
     """Bands on every supported surface of every conductor and on the SA interface at the port plane."""
     sides = ("sheet",) if route == "A" else ("top", "bottom")
     insets = [
-        InsetRequest(f"band_{entity}_{side}".replace("/", "_"), ConductorSurface(entity, side), ALL_MARGINS)
+        InsetRequest(
+            f"band_{entity}_{side}".replace("/", "_"),
+            ConductorSurface(entity, side),
+            ALL_MARGINS,
+        )
         for entity in conductor_ids(effective)
         for side in sides
     ]
     first, second = sa_pair
-    insets.append(InsetRequest("band_sa", SolutionInterface(first, second, z_um=0.0), ALL_MARGINS))
+    insets.append(
+        InsetRequest("band_sa", SolutionInterface(first, second, z_um=0.0), ALL_MARGINS)
+    )
     return tuple(insets)
 
 
@@ -141,13 +169,23 @@ def summarise(folder, route):
     gmsh.model.occ.synchronize()
     volumes = gmsh.model.getEntities(3)
     surfaces = gmsh.model.getEntities(2)
-    groups = {gmsh.model.getPhysicalName(d, t): (d, t) for d, t in gmsh.model.getPhysicalGroups()}
+    groups = {
+        gmsh.model.getPhysicalName(d, t): (d, t)
+        for d, t in gmsh.model.getPhysicalGroups()
+    }
 
     def group_area(name):
         dim, tag = groups[name]
-        return sum(gmsh.model.occ.getMass(dim, e) for e in gmsh.model.getEntitiesForPhysicalGroup(dim, tag))
+        return sum(
+            gmsh.model.occ.getMass(dim, e)
+            for e in gmsh.model.getEntitiesForPhysicalGroup(dim, tag)
+        )
 
-    sa_bands = {n: group_area(n) for n in sorted(groups) if n.startswith("SA::") and "::band=" in n}
+    sa_bands = {
+        n: group_area(n)
+        for n in sorted(groups)
+        if n.startswith("SA::") and "::band=" in n
+    }
     port_group = next(n for n in groups if n.startswith("PORT::"))
     port_area = group_area(port_group)
     (port,) = sidecar["ports"]
@@ -202,5 +240,7 @@ with tempfile.TemporaryDirectory() as tmp:
         )
         print("all_interfaces", route, artifacts.counts)
         summaries[route] = summarise(folder, route)
-(all_dir / "summary.json").write_text(json.dumps(summaries, indent=1, sort_keys=True) + "\n")
+(all_dir / "summary.json").write_text(
+    json.dumps(summaries, indent=1, sort_keys=True) + "\n"
+)
 print(json.dumps(summaries, indent=1, sort_keys=True))

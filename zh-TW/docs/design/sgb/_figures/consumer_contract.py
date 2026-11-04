@@ -16,8 +16,8 @@ test ``test_aedt_can_rebuild_its_contribution_ledger_from_the_sidecar``.
 from __future__ import annotations
 
 import json
-import sys
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -51,7 +51,9 @@ def pretty(value: Any, indent: int = 0) -> str:
     if isinstance(value, dict):
         if not value:
             return "{}"
-        items = [f'{pad} "{k}": {pretty(v, indent + 1)}' for k, v in sorted(value.items())]
+        items = [
+            f'{pad} "{k}": {pretty(v, indent + 1)}' for k, v in sorted(value.items())
+        ]
         return "{\n" + ",\n".join(items) + "\n" + pad + "}"
     if isinstance(value, list) and any(isinstance(v, (dict, list)) for v in value):
         items = [f"{pad} {pretty(v, indent + 1)}" for v in value]
@@ -73,17 +75,40 @@ def write(name: str, text: str) -> None:
 def excerpts(a: dict[str, Any], b: dict[str, Any], c: dict[str, Any]) -> None:
     """The JSON excerpts of Route B (and the one Route C difference)."""
     title = "semantic_geometry_route_b.sidecar.json（節錄）"
-    head = {k: b[k] for k in ("schema", "route", "route_policy", "grid_um", "tolerance_um", "model", "files", "counts")}
+    head = {
+        k: b[k]
+        for k in (
+            "schema",
+            "route",
+            "route_policy",
+            "grid_um",
+            "tolerance_um",
+            "model",
+            "files",
+            "counts",
+        )
+    }
     write("consumer-excerpt-head.md", json_block(title, head))
     groups = {
         n: b["physical_groups"][n]
-        for n in ("MA::pad::top::band=0", "MS::pad::bottom", "PORT::PORT_SHEET__P1__0000", "substrate")
+        for n in (
+            "MA::pad::top::band=0",
+            "MS::pad::bottom",
+            "PORT::PORT_SHEET__P1__0000",
+            "substrate",
+        )
     }
     write("consumer-excerpt-groups.md", json_block(title, {"physical_groups": groups}))
-    rows = {n: b["surface_epr_rows"][n] for n in ("MA::pad::top::band=0", "SA::substrate|VACUUM_REGION::interface")}
+    rows = {
+        n: b["surface_epr_rows"][n]
+        for n in ("MA::pad::top::band=0", "SA::substrate|VACUUM_REGION::interface")
+    }
     write(
         "consumer-excerpt-unions.md",
-        json_block(title, {"unions": b["unions"], "surface_epr_rows": rows, "insets": b["insets"]}),
+        json_block(
+            title,
+            {"unions": b["unions"], "surface_epr_rows": rows, "insets": b["insets"]},
+        ),
     )
     write(
         "consumer-excerpt-embeds.md",
@@ -99,13 +124,22 @@ def excerpts(a: dict[str, Any], b: dict[str, Any], c: dict[str, Any]) -> None:
     )
     # a ground sidewall (a wall between the substrate and the vacuum) and the substrate volume, found by name:
     # ids change whenever the geometry does, the group and entity names do not
-    face = next(fid for fid, record in b["faces"].items() if record["group"] == "MA::ground_0000::sidewall")
-    volume = next(vid for vid, record in b["volumes"].items() if record["entity"] == "substrate")
+    face = next(
+        fid
+        for fid, record in b["faces"].items()
+        if record["group"] == "MA::ground_0000::sidewall"
+    )
+    volume = next(
+        vid for vid, record in b["volumes"].items() if record["entity"] == "substrate"
+    )
     lineage = b["lineage"]
     pick_edge = next(iter(lineage["edges"]))
     pick_carrier = lineage["edges"][pick_edge][0]
     body = {
-        "binding": {"rule": b["binding"]["rule"], "ids_by_tag": shorten(b["binding"]["ids_by_tag"])},
+        "binding": {
+            "rule": b["binding"]["rule"],
+            "ids_by_tag": shorten(b["binding"]["ids_by_tag"]),
+        },
         "volumes": {volume: b["volumes"][volume]},
         "faces": {face: b["faces"][face]},
         "lineage": {
@@ -118,25 +152,48 @@ def excerpts(a: dict[str, Any], b: dict[str, Any], c: dict[str, Any]) -> None:
         "arrangement": b["arrangement"],
         "expected": shorten(b["expected"]),
     }
-    body["expected"]["solid_faces"] = [row[:8] + ["..."] if len(row) > 8 else row for row in body["expected"]["solid_faces"]]
+    body["expected"]["solid_faces"] = [
+        row[:8] + ["..."] if len(row) > 8 else row
+        for row in body["expected"]["solid_faces"]
+    ]
     write("consumer-excerpt-body.md", json_block(title, body))
     route_a = {
         "route_policy": a["route_policy"],
-        "physical_groups": {"chip/left::band=0": a["physical_groups"]["chip/left::band=0"]},
+        "physical_groups": {
+            "chip/left::band=0": a["physical_groups"]["chip/left::band=0"]
+        },
         "surface_epr_rows": {
-            n: a["surface_epr_rows"][n] for n in ("MA::chip/left::sheet::band=0", "MS::chip/left::sheet::band=0")
+            n: a["surface_epr_rows"][n]
+            for n in ("MA::chip/left::sheet::band=0", "MS::chip/left::sheet::band=0")
         },
         "unions": a["unions"],
         "embedded_faces": a["embedded_faces"],
-        "ports": [{k: a["ports"][0][k] for k in ("group", "host_entity_ids", "host_volumes", "adjacent_volumes")}],
+        "ports": [
+            {
+                k: a["ports"][0][k]
+                for k in (
+                    "group",
+                    "host_entity_ids",
+                    "host_volumes",
+                    "adjacent_volumes",
+                )
+            }
+        ],
     }
-    write("consumer-excerpt-routea.md", json_block("semantic_geometry_route_a.sidecar.json（節錄）", route_a))
+    write(
+        "consumer-excerpt-routea.md",
+        json_block("semantic_geometry_route_a.sidecar.json（節錄）", route_a),
+    )
     conductor = {n: c["physical_groups"][n] for n in ("pad",)}
     write(
         "consumer-excerpt-routec.md",
         json_block(
             "semantic_geometry_route_c.sidecar.json（節錄）",
-            {"route": c["route"], "route_policy": c["route_policy"], "physical_groups": conductor},
+            {
+                "route": c["route"],
+                "route_policy": c["route_policy"],
+                "physical_groups": conductor,
+            },
         ),
     )
 
@@ -149,16 +206,18 @@ def palace_rebuild(b: dict[str, Any]) -> None:
     groups = palace_style_groups(b)
     selection = {
         "volumes": {"substrate": groups["volumes"]["substrate"]},
-        "boundary_surfaces": {"MA::pad::top::band=0": groups["boundary_surfaces"]["MA::pad::top::band=0"]},
-        "pec_surfaces": {"MA::pad::top::band=0": groups["pec_surfaces"]["MA::pad::top::band=0"]},
+        "boundary_surfaces": {
+            "MA::pad::top::band=0": groups["boundary_surfaces"]["MA::pad::top::band=0"]
+        },
+        "pec_surfaces": {
+            "MA::pad::top::band=0": groups["pec_surfaces"]["MA::pad::top::band=0"]
+        },
         "port_surfaces": groups["port_surfaces"],
     }
     sizes = {k: len(v) for k, v in groups.items()}
     text = json_block("palace_style_groups(sidecar)（節錄）", selection)
     text += (
-        "\n各鍵的項目數："
-        + "、".join(f"`{k}` {n}" for k, n in sizes.items())
-        + "。\n"
+        "\n各鍵的項目數：" + "、".join(f"`{k}` {n}" for k, n in sizes.items()) + "。\n"
     )
     write("consumer-palace-rebuild.md", text)
 
@@ -177,13 +236,19 @@ def aedt_rows(b: dict[str, Any]) -> None:
     for name, faces in sorted(by_group.items()):
         record = b["physical_groups"][name]
         kinds = ", ".join(f"`{k}`" for k in sorted({f["face_kind"] for _, f in faces}))
-        assert kinds == f"`{record['face_kind']}`", name  # one face kind per group, equal to the group's own
+        assert kinds == f"`{record['face_kind']}`", (
+            name
+        )  # one face kind per group, equal to the group's own
         low = min(f["z_um"][0] for _, f in faces)
         high = max(f["z_um"][1] for _, f in faces)
         z_text = f"{low:g}" if low == high else f"{low:g} 到 {high:g}"
         entities = "、".join(f"`{e}`" for e in record["entities"])
-        domains = "、".join(f"`{d['name']}`（{d['kind']}）" for d in record["adjacent_domains"])
-        lines.append(f"| {_code(name)} | {len(faces)} | `{record['interface_type']}` | {entities} | {kinds} | {z_text} | {domains} |")
+        domains = "、".join(
+            f"`{d['name']}`（{d['kind']}）" for d in record["adjacent_domains"]
+        )
+        lines.append(
+            f"| {_code(name)} | {len(faces)} | `{record['interface_type']}` | {entities} | {kinds} | {z_text} | {domains} |"
+        )
     write("consumer-aedt-rows-table.md", "\n".join(lines) + "\n")
 
 
@@ -199,23 +264,63 @@ def run_tables(b: dict[str, Any]) -> None:
         "| 項目 | Route B | Route C |",
         "|:---|:---|:---|",
     ]
+
     def pair(fmt) -> tuple[str, str]:
         return fmt(runs["B"]), fmt(runs["C"])
+
     rows = [
         ("`verify_loaded` 是否通過", lambda r: str(r["verify_loaded"]["ok"])),
         (
             "載入後與規劃的實體數（vertex／edge／face／solid）",
-            lambda r: " / ".join(str(r["verify_loaded"]["counts"]["native"][d]) for d in "0123"),
+            lambda r: " / ".join(
+                str(r["verify_loaded"]["counts"]["native"][d]) for d in "0123"
+            ),
         ),
-        ("physical group（規劃／載入）", lambda r: f"{r['verify_loaded']['groups']['planned']} / {r['verify_loaded']['groups']['loaded']}"),
-        ("vertex 最大偏移 (µm)", lambda r: f"{r['verify_loaded']['max_vertex_offset_um']:g}"),
-        ("邊界不符的數量（edge、face、solid）", lambda r: ", ".join(str(r["verify_loaded"]["boundaries_mismatching"][k]) for k in ("edges", "faces", "solids"))),
-        ("face 面積最大相對誤差", lambda r: f"{r['verify_loaded']['max_relative_face_area_error']:.2e}"),
-        ("solid 體積最大相對誤差", lambda r: f"{r['verify_loaded']['max_relative_volume_error']:.2e}"),
-        ("`apply_sidecar_embeds` 嵌入的 face／edge", lambda r: f"{r['apply_sidecar_embeds']['faces']} / {r['apply_sidecar_embeds']['edges']}"),
-        ("粗 mesh（`Mesh.MeshSizeMax` = 60 µm）的節點數", lambda r: str(r["mesh_nodes"])),
-        ("`export_aedt_step` 的 object 名稱", lambda r: "、".join(f"`{n}`" for n in r["step_export"]["object_names"])),
-        ("各 solid 的 guard face 數", lambda r: "、".join(f"{n} {k}" for n, k in r["step_export"]["faces_per_solid"].items())),
+        (
+            "physical group（規劃／載入）",
+            lambda r: (
+                f"{r['verify_loaded']['groups']['planned']} / {r['verify_loaded']['groups']['loaded']}"
+            ),
+        ),
+        (
+            "vertex 最大偏移 (µm)",
+            lambda r: f"{r['verify_loaded']['max_vertex_offset_um']:g}",
+        ),
+        (
+            "邊界不符的數量（edge、face、solid）",
+            lambda r: ", ".join(
+                str(r["verify_loaded"]["boundaries_mismatching"][k])
+                for k in ("edges", "faces", "solids")
+            ),
+        ),
+        (
+            "face 面積最大相對誤差",
+            lambda r: f"{r['verify_loaded']['max_relative_face_area_error']:.2e}",
+        ),
+        (
+            "solid 體積最大相對誤差",
+            lambda r: f"{r['verify_loaded']['max_relative_volume_error']:.2e}",
+        ),
+        (
+            "`apply_sidecar_embeds` 嵌入的 face／edge",
+            lambda r: (
+                f"{r['apply_sidecar_embeds']['faces']} / {r['apply_sidecar_embeds']['edges']}"
+            ),
+        ),
+        (
+            "粗 mesh（`Mesh.MeshSizeMax` = 60 µm）的節點數",
+            lambda r: str(r["mesh_nodes"]),
+        ),
+        (
+            "`export_aedt_step` 的 object 名稱",
+            lambda r: "、".join(f"`{n}`" for n in r["step_export"]["object_names"]),
+        ),
+        (
+            "各 solid 的 guard face 數",
+            lambda r: "、".join(
+                f"{n} {k}" for n, k in r["step_export"]["faces_per_solid"].items()
+            ),
+        ),
     ]
     for label, fmt in rows:
         first, second = pair(fmt)
