@@ -16,6 +16,7 @@ from sgb_inputs import gds_pad_in_ground
 from test_sgb_band_labels import PORT_CASES, all_interface_insets
 
 from scgsim.geometry.models.input import GdsBoundaryReconstructionSpec
+from scgsim.geometry.sgb.cutfamilies.requests import RefinementRequest
 from scgsim.geometry.sgb.emission.measures import planned_face_area_um2
 from scgsim.geometry.sgb.model import build_conformal_model
 
@@ -153,3 +154,18 @@ def test_bands_on_the_circular_pad_and_its_port_keep_one_port_face(circular_pad,
         PORT_WIDTH_UM * PORT_HEIGHT_UM - GROUND_LANDING_UM2 - pad_landing_area_um2()
     )
     assert area == pytest.approx(expected, abs=AREA_TOLERANCE_UM2)
+
+
+@pytest.mark.parametrize("route", ["B", "C"])
+def test_a_refinement_curve_across_the_arc_builds(tmp_path, route):
+    """A refinement curve that crosses the circular pad cuts its wall into arcs travelled either way; it still builds."""
+    effective, curved = circular_pad_input(tmp_path)
+    refinement = RefinementRequest("across_arc", 0.0, ((35.0, 49.0), (45.0, 49.0)))
+    model = build_conformal_model(
+        replace(curved, port_sheet_regions=()),
+        effective.representation,
+        route,
+        refinements=(refinement,),
+    )
+    assert not model.report.failures
+    assert "curved_walls_are_single_cylinders" in {c.name for c in model.report.checks}

@@ -104,6 +104,43 @@ def test_a_cylinder_whose_top_arc_is_on_another_circle_is_caught():
     assert "curved_walls_are_single_cylinders" in failed(model)
 
 
+def test_a_cylinder_whose_top_arc_runs_the_other_way_is_accepted():
+    """An edge's direction is arbitrary: the same arc travelled from its other end is the same cylinder."""
+    model = fresh()
+    wall = next(f for f in model.topology.faces.values() if f.curved)
+    top = model.topology.edges[wall.cylinder[1]]
+    assert top.curve is not None
+    top.v0, top.v1 = top.v1, top.v0
+    top.curve = replace(
+        top.curve, ccw=not top.curve.ccw, bulge_left=not top.curve.bulge_left
+    )
+    assert "curved_walls_are_single_cylinders" not in failed(model)
+
+
+def test_a_cylinder_whose_top_arc_is_the_complementary_arc_is_caught():
+    """Same circle and end points but the other way round the circle: not the same arc."""
+    model = fresh()
+    wall = next(f for f in model.topology.faces.values() if f.curved)
+    top = model.topology.edges[wall.cylinder[1]]
+    assert top.curve is not None
+    top.v0, top.v1 = top.v1, top.v0
+    assert "curved_walls_are_single_cylinders" in failed(model)
+
+
+def test_a_cylinder_whose_top_arc_ends_elsewhere_is_caught():
+    """Same circle, different end point: the top arc spans another part of the circle."""
+    model = fresh()
+    wall = next(f for f in model.topology.faces.values() if f.curved)
+    top = model.topology.edges[wall.cylinder[1]]
+    other = next(
+        v
+        for v in model.topology.vertices.values()
+        if v.id not in (top.v0, top.v1) and v.z == model.topology.vertices[top.v1].z
+    )
+    top.v1 = other.id
+    assert "curved_walls_are_single_cylinders" in failed(model)
+
+
 def test_a_lost_face_leaves_dangling_edges_and_an_open_shell():
     """Every edge is shared by two faces; shells are closed."""
     model = fresh()

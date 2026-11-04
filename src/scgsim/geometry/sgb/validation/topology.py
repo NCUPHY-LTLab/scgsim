@@ -98,7 +98,7 @@ def check_face_sides(report: ValidationReport, topology: Topology) -> None:
 
 
 def check_cylinders(report: ValidationReport, topology: Topology) -> None:
-    """A curved wall is one cylinder: its bottom and top arc are on the same circle (same centre, radius, sense)."""
+    """A curved wall is one cylinder: its bottom and top arc are the same arc of one circle."""
     bad = []
     count = 0
     for face in topology.faces.values():
@@ -106,14 +106,14 @@ def check_cylinders(report: ValidationReport, topology: Topology) -> None:
             continue
         count += 1
         bottom, top = (topology.edges[eid] for eid in face.cylinder)
-        if not _same_circle(bottom, top):
+        if not _same_circle(topology, bottom, top):
             bad.append(face.id)
     report.add(
         "curved_walls_are_single_cylinders",
         not bad,
-        f"{len(bad)} curved walls whose top and bottom arcs lie on different circles: {bad[:3]}"
+        f"{len(bad)} curved walls whose top and bottom arcs are not the same arc of one circle: {bad[:3]}"
         if bad
-        else f"{count} curved walls, each bounded by one bottom and one top arc on one circle",
+        else f"{count} curved walls, each bounded by one bottom and one top arc, the same arc of one circle",
     )
     walls = [
         f.id
@@ -125,16 +125,33 @@ def check_cylinders(report: ValidationReport, topology: Topology) -> None:
     )
 
 
-def _same_circle(bottom: TopoEdge, top: TopoEdge) -> bool:
+def _same_circle(topology: Topology, bottom: TopoEdge, top: TopoEdge) -> bool:
+    """Whether two arcs are the same arc of one circle, seen from above: same centre, radius and end points.
+
+    An edge's direction is arbitrary, so the top arc may run between the same two points the other way; its
+    sense of travel is then reversed too, and the two arcs are still the same arc.
+    """
     a, b = bottom.curve, top.curve
     if a is None or b is None:
         return False
-    return (
+    if not (
         abs(a.centre[0] - b.centre[0]) <= CYLINDER_TOLERANCE
         and abs(a.centre[1] - b.centre[1]) <= CYLINDER_TOLERANCE
         and abs(a.radius - b.radius) <= CYLINDER_TOLERANCE
-        and a.ccw == b.ccw
-    )
+    ):
+        return False
+    a_ends = (_xy(topology, bottom.v0), _xy(topology, bottom.v1))
+    b_ends = (_xy(topology, top.v0), _xy(topology, top.v1))
+    if a_ends == b_ends:
+        return a.ccw == b.ccw
+    if a_ends == b_ends[::-1]:
+        return a.ccw != b.ccw
+    return False
+
+
+def _xy(topology: Topology, vertex_id: str) -> tuple[float, float]:
+    vertex = topology.vertices[vertex_id]
+    return (vertex.x, vertex.y)
 
 
 def check_groups(
