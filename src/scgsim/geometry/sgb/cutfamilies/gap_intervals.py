@@ -14,8 +14,8 @@ centre (arcs, by the sign of a cross product, as an arc spans at most a quarter 
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections.abc import Sequence
+from dataclasses import dataclass
 from fractions import Fraction
 from functools import cmp_to_key
 

@@ -22,15 +22,22 @@ from scgsim.geometry.sgb.model import build_conformal_model
 PORT_GROUP = "PORT::PORT_SHEET__P1__0000"
 PAD_CENTRE_UM, PAD_RADIUS_UM = (50.0, 50.0), 10.0
 PORT_WIDTH_UM, PORT_HEIGHT_UM = 12.0, 4.0  # the authored rectangle (29, 48) - (41, 52)
-GROUND_LANDING_UM2 = 1.0 * PORT_HEIGHT_UM  # 1 um on the straight edge of the ground cutout
-PAD_LANDING_X_UM = 41.0  # the port ends 1 um inside the pad, whose left-most point is x = 40
-AREA_TOLERANCE_UM2 = 0.01  # the lattice is 0.001 um: chord drift of the reconstructed circle
+GROUND_LANDING_UM2 = (
+    1.0 * PORT_HEIGHT_UM
+)  # 1 um on the straight edge of the ground cutout
+PAD_LANDING_X_UM = (
+    41.0  # the port ends 1 um inside the pad, whose left-most point is x = 40
+)
+AREA_TOLERANCE_UM2 = (
+    0.01  # the lattice is 0.001 um: chord drift of the reconstructed circle
+)
 
 
 def circular_pad_input(directory):
     """The pad-in-ground input with the pad's GDS polyline reconstructed as one exact circle."""
     effective = gds_pad_in_ground(
-        directory, pad_polygon=gdstk.ellipse(PAD_CENTRE_UM, PAD_RADIUS_UM, tolerance=0.01)
+        directory,
+        pad_polygon=gdstk.ellipse(PAD_CENTRE_UM, PAD_RADIUS_UM, tolerance=0.01),
     )
     (polygon,) = [p for p in effective.build_input.polygons if p.object_name == "pad"]
     count = len(polygon.exterior)
@@ -91,19 +98,25 @@ def test_the_port_landing_on_the_circular_pad_builds_and_validates(circular_pad,
 
 
 @pytest.mark.parametrize("route", ["B", "C"])
-def test_the_port_area_is_the_authored_rectangle_without_its_landings(circular_pad, route):
+def test_the_port_area_is_the_authored_rectangle_without_its_landings(
+    circular_pad, route
+):
     """12 x 4 um minus the 1 um landing on the ground cutout minus the circular-segment landing on the pad."""
     effective, curved = circular_pad
     model = build_conformal_model(curved, effective.representation, route)
     (face_id,) = model.routed.groups[PORT_GROUP].ids
     area = planned_face_area_um2(model.topology, model.topology.faces[face_id])
-    expected = PORT_WIDTH_UM * PORT_HEIGHT_UM - GROUND_LANDING_UM2 - pad_landing_area_um2()
+    expected = (
+        PORT_WIDTH_UM * PORT_HEIGHT_UM - GROUND_LANDING_UM2 - pad_landing_area_um2()
+    )
     assert expected == pytest.approx(40.2683, abs=1e-4)
     assert area == pytest.approx(expected, abs=AREA_TOLERANCE_UM2)
 
 
 @pytest.mark.parametrize("route", ["B", "C"])
-def test_the_port_and_the_pad_share_arc_edges_carrying_the_pad_arc_only(circular_pad, route):
+def test_the_port_and_the_pad_share_arc_edges_carrying_the_pad_arc_only(
+    circular_pad, route
+):
     """The port's boundary on the circle is the pad's own arc: the same edges, with no port or polyline carrier."""
     effective, curved = circular_pad
     model = build_conformal_model(curved, effective.representation, route)
@@ -136,5 +149,7 @@ def test_bands_on_the_circular_pad_and_its_port_keep_one_port_face(circular_pad,
     assert model.report.failures == []
     (face_id,) = model.routed.groups[PORT_GROUP].ids
     area = planned_face_area_um2(model.topology, model.topology.faces[face_id])
-    expected = PORT_WIDTH_UM * PORT_HEIGHT_UM - GROUND_LANDING_UM2 - pad_landing_area_um2()
+    expected = (
+        PORT_WIDTH_UM * PORT_HEIGHT_UM - GROUND_LANDING_UM2 - pad_landing_area_um2()
+    )
     assert area == pytest.approx(expected, abs=AREA_TOLERANCE_UM2)
