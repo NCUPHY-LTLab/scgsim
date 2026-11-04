@@ -13,8 +13,9 @@ import inset_kit as kit  # noqa: E402  (also puts the production core's tests on
 import numpy as np  # noqa: E402
 from inset_kit import G_UM as G
 from inset_kit import MARGINS, Line, Panel, Poly, Pts, primitive_polyline  # noqa: E402
-from scgsim.geometry.sgb.arrangement.arcs import face_exact_area  # noqa: E402
 from sgb_klayout import eroded_klayout, region_of_rings  # noqa: E402
+
+from scgsim.geometry.sgb.arrangement.arcs import face_exact_area  # noqa: E402
 
 LEVEL_Z0 = kit.LEVEL_Z0
 MEMBER_MARGIN = re.compile(r"@m(\d+(?:\.\d+)?)$")

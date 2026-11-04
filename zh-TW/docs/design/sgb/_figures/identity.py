@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import inset_kit as kit  # noqa: E402  (also puts the production core's tests on sys.path)
 from inset_kit import G_UM as G
 from inset_kit import MARGINS, Line, Panel, Poly, Pts  # noqa: E402
+
 from scgsim.geometry.sgb.build import emit_model  # noqa: E402
 from scgsim.geometry.sgb.records.carriers import ArcCarrier, base_carrier_id  # noqa: E402
 from scgsim.geometry.sgb.records.support import distance_to_primitive  # noqa: E402

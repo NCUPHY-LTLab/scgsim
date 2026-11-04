@@ -33,6 +33,9 @@ from intro_common import (
     write_numbers,
 )
 from plotly.subplots import make_subplots
+from sgb_emit_cases import pad_requests
+from sgb_scenes import airbridge, random_layout
+
 from scgsim.geometry.sgb.arrangement.arcs import realise, sample_arc
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement
 from scgsim.geometry.sgb.model import build_model_from_catalogue
@@ -46,8 +49,6 @@ from scgsim.geometry.sgb.noding.snap_rounding import canonical_key as canonical
 from scgsim.geometry.sgb.noding.spatial_hash import HotGrid
 from scgsim.geometry.sgb.records.carriers import ArcCarrier, Lineage
 from scgsim.geometry.sgb.slivers.report import sliver_report
-from sgb_emit_cases import pad_requests
-from sgb_scenes import airbridge, random_layout
 
 SQRT_HALF = math.sqrt(2) / 2
 

@@ -47,6 +47,7 @@ from inset_tables import (
     noded_edges,
     route_b_comparison,
 )
+
 from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
 
 

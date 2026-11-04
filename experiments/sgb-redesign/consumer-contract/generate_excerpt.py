@@ -12,6 +12,9 @@ from pathlib import Path
 tests, out = Path(sys.argv[1]), Path(sys.argv[2])
 sys.path.insert(0, str(tests))
 
+from sgb_gmsh_oracle import mesh_coarsely, mesh_quality, size_from_mesh_hints  # noqa: E402
+from sgb_inputs import gds_pad_in_ground, thin_film_pair  # noqa: E402
+
 from scgsim.geometry.sgb import build_sgb_geometry  # noqa: E402
 from scgsim.geometry.sgb.cutfamilies.requests import (  # noqa: E402
     ConductorSurface,
@@ -19,8 +22,6 @@ from scgsim.geometry.sgb.cutfamilies.requests import (  # noqa: E402
     RefinementRequest,
     SolutionInterface,
 )
-from sgb_gmsh_oracle import mesh_coarsely, mesh_quality, size_from_mesh_hints  # noqa: E402
-from sgb_inputs import gds_pad_in_ground, thin_film_pair  # noqa: E402
 
 with tempfile.TemporaryDirectory() as tmp:
     effective = gds_pad_in_ground(Path(tmp))
@@ -55,6 +56,7 @@ print("A", artifacts.counts)
 import json  # noqa: E402
 
 import gmsh  # noqa: E402
+
 from scgsim.geometry.sgb.exchange.step import export_aedt_step  # noqa: E402
 from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: E402
 from scgsim.geometry.sgb.verification.loaded import (  # noqa: E402

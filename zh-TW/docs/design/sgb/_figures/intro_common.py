@@ -40,9 +40,10 @@ SGB_CORE = Path(os.environ.get("SGB_CORE", str(REPO)))
 sys.path.insert(0, str(SGB_CORE / "tests"))
 sys.path.insert(0, str(HERE))
 
+from sgb_scenes import lumped_port, pad_in_ground, rect_um  # noqa: E402
+
 from scgsim.geometry.sgb.arrangement.arcs import sample_arc  # noqa: E402
 from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
-from sgb_scenes import lumped_port, pad_in_ground, rect_um  # noqa: E402
 
 FIG.mkdir(parents=True, exist_ok=True)
 G_UM = 0.001  # the model grid of the running example in micrometres (1 nm)

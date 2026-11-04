@@ -46,6 +46,9 @@ from labels_common import (
 )
 from matplotlib.patches import Patch, PathPatch
 from plotly.subplots import make_subplots  # noqa: F401 -- kept for parity with the other figure scripts
+from sgb_scenes import GRID, chip_prisms, conductor, footprint, rect_um
+from shapely.geometry import Polygon, box
+
 from scgsim.geometry.sgb.arrangement.dcel import build_arrangement
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
@@ -61,14 +64,9 @@ from scgsim.geometry.sgb.records.families import CurveFamilyRecord
 from scgsim.geometry.sgb.records.grid import Grid, exact_z
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue, PrismRecord
 from scgsim.geometry.sgb.slivers.report import sliver_report
-from sgb_scenes import GRID, chip_prisms, conductor, footprint, rect_um
-from shapely.geometry import Polygon, box
 
 RED = PALETTE["bad"]
 MARGINS = (0.1, 0.5, 2.0)
-
-
-# --------------------------------------------------------------------------- shared drawing (grid units)
 
 
 def rings_grid(arr, curves, fi: int, window=None):

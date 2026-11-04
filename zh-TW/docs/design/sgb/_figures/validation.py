@@ -43,6 +43,9 @@ from labels_common import (
 from matplotlib.colors import to_rgba
 from matplotlib.patches import Patch
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from sgb_scenes import airbridge, footprint, rect_um
+from sgb_scenes import pad_in_ground as stage_pad_in_ground
+
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
     InsetRequest,
@@ -65,8 +68,6 @@ from scgsim.geometry.sgb.records.labels import LevelLabel
 from scgsim.geometry.sgb.records.prisms import PrismRecord
 from scgsim.geometry.sgb.validation.validate import validate_model
 from scgsim.geometry.sgb.verification.occt import check_file
-from sgb_scenes import airbridge, footprint, rect_um
-from sgb_scenes import pad_in_ground as stage_pad_in_ground
 
 G = 0.001
 MARGINS = (0.1, 0.5, 2.0)

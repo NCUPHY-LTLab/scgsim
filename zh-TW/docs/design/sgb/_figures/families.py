@@ -44,6 +44,7 @@ from labels_common import (
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch, PathPatch
 from plotly.subplots import make_subplots
+
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
 from scgsim.geometry.sgb.cutfamilies.generate import with_cut_families
 from scgsim.geometry.sgb.cutfamilies.requests import (

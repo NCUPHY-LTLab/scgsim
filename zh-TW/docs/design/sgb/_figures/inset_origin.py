@@ -35,6 +35,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import inset_kit as kit  # noqa: E402  (also puts the production core's tests on sys.path)
 from inset_kit import Label, Line, Panel, Poly, Pts, primitive_polyline  # noqa: E402
+from sgb_inputs import gds_pad_in_ground, thin_film_pair  # noqa: E402
+from sgb_scenes import slab_model  # noqa: E402
+
 from scgsim.geometry.sgb.build import build_sgb_geometry  # noqa: E402
 from scgsim.geometry.sgb.cutfamilies.requests import (  # noqa: E402
     ConductorSurface,
@@ -45,8 +48,6 @@ from scgsim.geometry.sgb.errors import InputError  # noqa: E402
 from scgsim.geometry.sgb.model import build_conformal_model, build_model_from_catalogue  # noqa: E402
 from scgsim.geometry.sgb.records.carriers import LineEdge  # noqa: E402
 from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: E402
-from sgb_inputs import gds_pad_in_ground, thin_film_pair  # noqa: E402
-from sgb_scenes import slab_model  # noqa: E402
 
 G = kit.G_UM
 MARGINS = (0.5, 1.0)

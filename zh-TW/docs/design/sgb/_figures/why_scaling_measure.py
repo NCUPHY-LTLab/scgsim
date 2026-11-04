@@ -24,8 +24,9 @@ sys.path.insert(
 )
 sys.path.insert(0, str(HERE))
 
-from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
 from sgb_scenes import random_layout  # noqa: E402
+
+from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
 
 NS = (1000, 5000, 20000)
 # Seed 1 is not used: at N = 20000 it draws two shapes of one Net that touch at a single vertex, which production
@@ -75,6 +76,8 @@ def run_child(n: int, tiles: int, workers: int) -> dict:
 def emit_and_load(model) -> dict:
     """Direct writer (1 and 16 workers), Gmsh load and the load-side check of the written files."""
     # loaded here, after the build's peak memory was recorded, so the emission modules and Gmsh stay out of that number
+    from sgb_gmsh_oracle import gmsh_session  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
+
     from scgsim.geometry.sgb.build import emit_model  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
     from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
     from scgsim.geometry.sgb.emission.writer import (  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
@@ -83,7 +86,6 @@ def emit_and_load(model) -> dict:
     )
     from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
     from scgsim.geometry.sgb.verification.loaded import verify_loaded  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
-    from sgb_gmsh_oracle import gmsh_session  # noqa: PLC0415 -- loaded after the build's peak memory is recorded
 
     out: dict = {}
     with tempfile.TemporaryDirectory() as tmp:
@@ -195,8 +197,9 @@ def run_oracle_child(n: int) -> dict:
     whose faces are listed in the wrong sense has a negative mass.
     """
     import gmsh  # noqa: PLC0415 -- only the oracle case needs Gmsh; the build cases report peak memory
-    from scgsim.geometry.sgb.build import emit_model  # noqa: PLC0415 -- only the oracle case emits; the build cases report peak memory and load no emission code
     from sgb_gmsh_oracle import emit_with_gmsh_api, gmsh_session  # noqa: PLC0415 -- only the oracle case needs Gmsh; the build cases report peak memory
+
+    from scgsim.geometry.sgb.build import emit_model  # noqa: PLC0415 -- only the oracle case emits; the build cases report peak memory and load no emission code
 
     model = build_model_from_catalogue(random_layout(n, seed=SEED, route="B"), "B")
     with tempfile.TemporaryDirectory() as tmp:

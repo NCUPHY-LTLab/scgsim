@@ -37,11 +37,6 @@ from intro_common import (
 )
 from matplotlib.lines import Line2D
 from mpl_toolkits.mplot3d.art3d import Line3DCollection, Poly3DCollection
-from scgsim.geometry.sgb.build import emit_model
-from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.prisms.levels import build_levels
-from scgsim.geometry.sgb.sidecar.files import read_sidecar
-from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds
 from sgb_catalogue_report import measure
 from sgb_emit_cases import CASES, pad_requests
 from sgb_gmsh_oracle import (
@@ -51,6 +46,12 @@ from sgb_gmsh_oracle import (
     size_from_mesh_hints,
 )
 from sgb_scenes import airbridge
+
+from scgsim.geometry.sgb.build import emit_model
+from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.prisms.levels import build_levels
+from scgsim.geometry.sgb.sidecar.files import read_sidecar
+from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds
 
 GROUP_COLOURS = {
     "SA": "#9ecae1",

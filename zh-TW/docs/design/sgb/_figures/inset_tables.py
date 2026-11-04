@@ -14,10 +14,11 @@ import numpy as np  # noqa: E402
 from inset_figures import LEVEL_Z0
 from inset_kit import MARGINS  # noqa: E402
 from inset_mask import group_face_areas
-from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
 from sgb_extreme_cases import FIXTURES, build_model  # noqa: E402
 from sgb_klayout import comparison_rows  # noqa: E402
 from sgb_scenes import exact_band_areas  # noqa: E402
+
+from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
 
 
 def build_tables(

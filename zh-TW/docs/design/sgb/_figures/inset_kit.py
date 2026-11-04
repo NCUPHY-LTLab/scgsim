@@ -46,6 +46,8 @@ from matplotlib.path import Path as MplPath  # noqa: E402
 from plotly.subplots import make_subplots  # noqa: E402
 
 try:
+    from sgb_scenes import lumped_port, pad_in_ground, rect_um  # noqa: E402
+
     from scgsim.geometry.sgb.arrangement.arcs import sample_arc  # noqa: E402
     from scgsim.geometry.sgb.cutfamilies.requests import (  # noqa: E402
         ConductorSurface,
@@ -55,7 +57,6 @@ try:
     from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue  # noqa: E402
     from scgsim.geometry.sgb.records.carriers import LineEdge  # noqa: E402
     from scgsim.geometry.sgb.records.prisms import PrismCatalogue  # noqa: E402
-    from sgb_scenes import lumped_port, pad_in_ground, rect_um  # noqa: E402
 except ImportError as error:  # pragma: no cover -- a usage message, not logic
     raise SystemExit(
         f"{error}\nThese figures are computed by the production SGB core: set SGB_CORE to a checkout that contains "

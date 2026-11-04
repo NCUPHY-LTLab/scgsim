@@ -35,11 +35,12 @@ from intro_common import (
 from matplotlib.lines import Line2D
 from matplotlib.patches import PathPatch
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-from scgsim.geometry.sgb.model import build_model_from_catalogue
-from scgsim.geometry.sgb.prisms.levels import build_levels
 from sgb_scenes import airbridge
 from shapely.geometry import Polygon, box
 from shapely.ops import polylabel
+
+from scgsim.geometry.sgb.model import build_model_from_catalogue
+from scgsim.geometry.sgb.prisms.levels import build_levels
 
 # --------------------------------------------------------------------------- stack of levels and slabs
 
