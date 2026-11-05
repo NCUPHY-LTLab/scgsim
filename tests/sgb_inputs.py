@@ -96,8 +96,13 @@ def gds_pad_in_ground(  # noqa: PLR0913 - a test builder with independent switch
     nets: bool = True,
     extra_metadata: dict[str, Any] | None = None,
     attachment: tuple[str | None, str | None] = ("lower", "lower"),
+    die_um: float = 100.0,
 ) -> EffectiveInput:
-    """A 100 um die with a ground plane, a 20 um pad in a 40 um cutout and a lumped port.
+    """A ``die_um`` (default 100 um) die with a ground plane, a 20 um pad in a 40 um cutout and a lumped port.
+
+    The cutout, pad and port keep their size and sit in the middle of the die; the substrate is a tenth
+    of the die thick and the vacuum padding a fifth of it (never less than the 10 and 20 um of the
+    100 um die), so a larger die scales only the distances the benchmark of ``scgsim.meshing`` varies.
 
     Ground (GDS layer 1) and pad (layer 2) belong to one logical metal layer; the port
     (layer 9) bridges the 10 um gap and lands one micrometre on each host.  The metal is a film
@@ -108,16 +113,24 @@ def gds_pad_in_ground(  # noqa: PLR0913 - a test builder with independent switch
     """
     library = gdstk.Library(unit=1e-6, precision=1e-9)
     cell = library.new_cell("TOP")
-    die = gdstk.rectangle((0, 0), (100, 100))
-    cutout = gdstk.rectangle((30, 30), (70, 70))
+    centre = die_um / 2
+    substrate_um = max(10.0, die_um / 10)
+    die = gdstk.rectangle((0, 0), (die_um, die_um))
+    cutout = gdstk.rectangle((centre - 20, centre - 20), (centre + 20, centre + 20))
     ground = gdstk.boolean(die, cutout, "not", precision=1e-9)[0]
     ground.layer = 1
     cell.add(ground)
-    pad = pad_polygon or gdstk.rectangle((40, 40), (60, 60))
+    pad = pad_polygon or gdstk.rectangle(
+        (centre - 10, centre - 10), (centre + 10, centre + 10)
+    )
     pad.layer = 2
     cell.add(pad)
     if with_port:
-        cell.add(gdstk.rectangle((29, 48), (41, 52), layer=9))
+        cell.add(
+            gdstk.rectangle(
+                (centre - 21, centre - 2), (centre - 9, centre + 2), layer=9
+            )
+        )
     gds = tmp_path / "pad_in_ground.gds"
     library.write_gds(gds, timestamp=datetime(2000, 1, 1))
 
@@ -150,13 +163,13 @@ def gds_pad_in_ground(  # noqa: PLR0913 - a test builder with independent switch
             "substrate": {
                 "material_id": "Si",
                 "geometry": {
-                    "z_um": -10,
-                    "thickness_um": 10,
+                    "z_um": -substrate_um,
+                    "thickness_um": substrate_um,
                     "domain_bounds_um": {
                         "x_min_um": 0,
-                        "x_max_um": 100,
+                        "x_max_um": die_um,
                         "y_min_um": 0,
-                        "y_max_um": 100,
+                        "y_max_um": die_um,
                     },
                 },
             }
@@ -184,7 +197,9 @@ def gds_pad_in_ground(  # noqa: PLR0913 - a test builder with independent switch
         },
     }
     stack = dict(
-        apply_vacuum_region_to_stack(stack, VacuumRegionSpec.from_padding(20.0))
+        apply_vacuum_region_to_stack(
+            stack, VacuumRegionSpec.from_padding(max(20.0, die_um / 5))
+        )
     )
     stack_file = tmp_path / "pad_in_ground.json"
     stack_file.write_text(json.dumps(stack, default=list), encoding="utf-8")
