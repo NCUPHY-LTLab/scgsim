@@ -1,4 +1,4 @@
-"""Benchmark of ``scgsim.meshing`` against two reference recipes on fixed SGB cases.
+"""Benchmark of ``scgsim.meshing``: three sizing recipes through one pipeline, on fixed SGB cases.
 
 Usage (from the repository root, with the test and palace dependencies synced)::
 
@@ -6,14 +6,19 @@ Usage (from the repository root, with the test and palace dependencies synced)::
         [--no-determinism] [--compare experiments/meshing-benchmark/baseline.json]
 
 For each case it builds the SGB XAO and v2 sidecar with the test input builders (``tests/`` goes on
-``sys.path``), then meshes it three ways in fresh worker processes:
+``sys.path``), then meshes it with ``mesh_sgb`` in fresh worker processes, once per method (see ``METHODS``):
 
-* ``module``: ``mesh_sgb`` with the default rules/1 (3D Delaunay) and the provisional threshold 0.01;
-* ``module_hxt``: the same with ``RuleSet(algorithm_3d=HXT)``, the former default;
+* ``module``: ``FeatureRecipe`` with repair, 3D Delaunay and the provisional threshold 0.01;
+* ``module_hxt``: the same with ``MesherOptions(algorithm_3d=HXT)``, the former default;
 * ``module_outline``: the same with the optional conductor-outline rule on (5 um on the conductors'
   outline edges, growing to the coarse size over 300 um); the table calls it "module + conductor-outline";
-* ``R8``: HXT with only the global maximum size (bounding-box diagonal / 20), the cheap reference;
-* ``RP``: the uniform policy of Palace today, 5 um on every curve growing to 300 um, 2D algorithm 5.
+* ``R8``: ``GlobalSizeRecipe`` (only the global maximum size, bounding-box diagonal / 20), HXT, one mesh;
+* ``RP``: ``UniformBoundaryRecipe`` (5 um on every curve growing to 300 um, as Palace does today),
+  2D algorithm 5, one mesh;
+* ``repair_only``: ``module`` on a sidecar without film facts.
+
+``R8`` and ``RP`` run with ``Budgets(max_rounds=0)``: no repair, but the threshold still applies, so a mesh
+below it is rejected and its numbers come from the report the error carries.
 
 It writes ``OUTPUT_DIR/results.json`` (numbers only: no paths) and prints the table of the README.  The
 module is run twice per case, in separate directories, to check that mesh and report are identical.
@@ -28,10 +33,9 @@ import math
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from importlib.metadata import version
 from pathlib import Path
-from types import MappingProxyType
 from typing import Any
 
 import gdstk
@@ -44,20 +48,46 @@ from test_sgb_band_labels import PORT_CASES, all_interface_insets  # noqa: E402
 
 from scgsim.geometry.models.input import GdsBoundaryReconstructionSpec  # noqa: E402
 from scgsim.geometry.sgb.build import build_sgb_geometry  # noqa: E402
-from scgsim.meshing import MeshRepairError, RuleSet, mesh_sgb  # noqa: E402
-from scgsim.meshing.driver import measure_bounding_box, run_round  # noqa: E402
-from scgsim.meshing.features import load_features  # noqa: E402
-from scgsim.meshing.job import MeshJob  # noqa: E402
-from scgsim.meshing.policy import DELAUNAY, HXT, SizeRequests, coarse_size  # noqa: E402
+from scgsim.meshing import (  # noqa: E402
+    HXT,
+    Budgets,
+    FeatureRecipe,
+    GlobalSizeRecipe,
+    MesherOptions,
+    MeshRepairError,
+    SizingRecipe,
+    UniformBoundaryRecipe,
+    mesh_sgb,
+)
 
 # Decision C (quality measure and threshold) is the Human's; 0.01 is what the feasibility prototype used.
 PROVISIONAL_THRESHOLD = 0.01
 PAD_RADIUS_UM = 10.0
-# The uniform policy Palace applies today: 5 um at every curve growing to 300 um, 2D algorithm 5.
-RP_NEAR_UM, RP_FAR_UM, RP_ALGORITHM_2D = 5.0, 300.0, 5
 # Cases whose repair-only variant runs too (no sidecar facts: the loop alone must find the sidewalls).
 REPAIR_ONLY_CASES = ("B_1mm",)
-METHODS = ("module", "module_outline", "module_hxt", "R8", "RP", "repair_only")
+# The references are not repaired: one mesh, judged by the threshold.
+NO_REPAIR = Budgets(max_rounds=0)
+
+
+@dataclass(frozen=True)
+class Method:
+    """What one benchmark method passes to ``mesh_sgb``."""
+
+    recipe: SizingRecipe
+    mesher: MesherOptions = MesherOptions()
+    budgets: Budgets = Budgets()
+
+
+# The mesher settings are those the former benchmark code gave each reference: R8 meshed with HXT, and RP
+# with 2D algorithm 5 and the default 3D Delaunay.
+METHODS: dict[str, Method] = {
+    "module": Method(FeatureRecipe()),
+    "module_outline": Method(FeatureRecipe(conductor_outline=True)),
+    "module_hxt": Method(FeatureRecipe(), MesherOptions(algorithm_3d=HXT)),
+    "R8": Method(GlobalSizeRecipe(), MesherOptions(algorithm_3d=HXT), NO_REPAIR),
+    "RP": Method(UniformBoundaryRecipe(), MesherOptions(algorithm_2d=5), NO_REPAIR),
+    "repair_only": Method(FeatureRecipe()),
+}
 METHOD_LABELS = {
     "module_outline": "module + conductor-outline",
     "module_hxt": "module, HXT",
@@ -74,7 +104,6 @@ def main(argv: list[str] | None = None) -> int:
         "threshold": PROVISIONAL_THRESHOLD,
     }
     results["threshold_status"] = "provisional (decision C is open)"
-    results["rules"] = RuleSet().version
     results["cases"] = {}
     for name in args.cases:
         print(f"== {name}", flush=True)
@@ -200,13 +229,8 @@ def _run_case(name: str, args: argparse.Namespace) -> dict[str, Any]:
     xao, sidecar = _build_case(name, directory)
     outcome: dict[str, Any] = {"build_seconds": round(time.perf_counter() - started, 2)}
     meshes = args.output_dir / "meshes" / name
-    outcome["module"] = _run_module(xao, sidecar, meshes / "module")
-    outcome["module_hxt"] = _run_module(
-        xao, sidecar, meshes / "module_hxt", RuleSet(algorithm_3d=HXT)
-    )
-    outcome["module_outline"] = _run_module(
-        xao, sidecar, meshes / "module_outline", RuleSet(conductor_outline=True)
-    )
+    for method in ("module", "module_hxt", "module_outline"):
+        outcome[method] = _run_method(xao, sidecar, meshes / method, method)
     if not args.no_determinism:
         outcome["determinism"] = _determinism(
             outcome["module"],
@@ -214,31 +238,33 @@ def _run_case(name: str, args: argparse.Namespace) -> dict[str, Any]:
             sidecar,
             args.output_dir / "meshes" / name / "module_again",
         )
-    outcome["R8"] = _run_reference(
-        xao, sidecar, args.output_dir / "meshes" / name / "R8", "R8"
-    )
-    outcome["RP"] = _run_reference(
-        xao, sidecar, args.output_dir / "meshes" / name / "RP", "RP"
-    )
+    for method in ("R8", "RP"):
+        outcome[method] = _run_method(xao, sidecar, meshes / method, method)
     if name in REPAIR_ONLY_CASES:
-        outcome["repair_only"] = _run_module(
-            xao,
-            _without_film_facts(sidecar),
-            args.output_dir / "meshes" / name / "repair_only",
+        outcome["repair_only"] = _run_method(
+            xao, _without_film_facts(sidecar), meshes / "repair_only", "repair_only"
         )
     return outcome
 
 
-def _run_module(
-    xao: Path,
-    sidecar: Path | dict[str, Any],
-    directory: Path,
-    ruleset: RuleSet = RuleSet(),  # noqa: B008 -- a frozen dataclass is a safe default
+def _run_method(
+    xao: Path, sidecar: Path | dict[str, Any], directory: Path, method: str
 ) -> dict[str, Any]:
-    """``mesh_sgb`` with ``ruleset``; a failed repair is a result, not an error."""
+    """``mesh_sgb`` with the settings of ``method``; a rejected mesh is a result, not an error.
+
+    A rejection carries the report of the mesh that failed, so its tetrahedra, minimum quality and count
+    below the threshold are read from there; the stop reason is the run's status.
+    """
+    settings = METHODS[method]
     try:
         report = mesh_sgb(
-            xao, sidecar, directory, threshold=PROVISIONAL_THRESHOLD, ruleset=ruleset
+            xao,
+            sidecar,
+            directory,
+            threshold=PROVISIONAL_THRESHOLD,
+            recipe=settings.recipe,
+            budgets=settings.budgets,
+            mesher=settings.mesher,
         ).report
         mesh_file = directory / f"{xao.stem}.msh"
     except MeshRepairError as failure:
@@ -246,14 +272,20 @@ def _run_module(
         mesh_file = directory / f"{xao.stem}.rejected.msh"
     mesh = report["mesh"] or {}
     return {
+        "recipe": {
+            "name": report["recipe"]["name"],
+            "version": report["recipe"]["version"],
+        },
+        "algorithm_2d": report["mesher"]["algorithm_2d"],
+        "algorithm_3d": mesh.get("algorithm_3d"),
         "tetrahedra": mesh.get("tetrahedra"),
         "min_quality": mesh.get("min_quality"),
         "bad_count": mesh.get("bad_count"),
         "rounds": report["rounds"],
         "stop": report["stop"],
+        "status": "accepted" if report["stop"] == "clean" else "rejected",
         "seconds": round(report["timing"]["total_seconds"], 2),
         "fallback": mesh.get("fallback"),
-        "algorithm_3d": mesh.get("algorithm_3d"),
         "refined_curves": mesh.get("refined_curves"),
         "smallest_size_um": mesh.get("smallest_size_um"),
         "mesh_sha256": _sha256(mesh_file) if mesh_file.is_file() else None,
@@ -274,66 +306,11 @@ def _determinism(
     first: dict[str, Any], xao: Path, sidecar: Path, directory: Path
 ) -> dict[str, Any]:
     """Run the module again in another directory; mesh bytes and report (without timing) must match."""
-    second = _run_module(xao, sidecar, directory)
+    second = _run_method(xao, sidecar, directory, "module")
     return {
         "same_mesh": first["mesh_sha256"] == second["mesh_sha256"],
         "same_report": first["report"] == second["report"],
     }
-
-
-def _run_reference(
-    xao: Path, sidecar: Path, directory: Path, recipe: str
-) -> dict[str, Any]:
-    """R8 or RP: one round, no repair, bad elements counted but not attributed."""
-    directory.mkdir(parents=True, exist_ok=True)
-    box = measure_bounding_box(xao, directory)
-    if recipe == "R8":
-        job = MeshJob(
-            xao,
-            sidecar,
-            directory / "mesh.msh",
-            _r8_sizes(box),
-            PROVISIONAL_THRESHOLD,
-            algorithm_3d=HXT,
-            attribute=False,
-        )
-    else:
-        curves = len(load_features(sidecar).binding.ids_by_dimension[1])
-        job = MeshJob(
-            xao,
-            sidecar,
-            directory / "mesh.msh",
-            _rp_sizes(curves),
-            PROVISIONAL_THRESHOLD,
-            algorithm_3d=DELAUNAY,
-            algorithm_2d=RP_ALGORITHM_2D,
-            attribute=False,
-        )
-    outcome = run_round(job, directory)
-    audit = outcome.audit
-    return {
-        "tetrahedra": audit.tetrahedra if audit else None,
-        "min_quality": audit.min_quality if audit else None,
-        "bad_count": audit.bad_count if audit else None,
-        "rounds": 0,
-        "stop": "-" if audit else "mesh_crash",
-        "seconds": round(outcome.wall_seconds, 2),
-        "fallback": outcome.fallback,
-    }
-
-
-def _r8_sizes(box: Any) -> SizeRequests:
-    """HXT with the global maximum size only (the algorithm is the job's default)."""
-    return SizeRequests(
-        coarse_size(box, RuleSet()), RuleSet().gradation, MappingProxyType({})
-    )
-
-
-def _rp_sizes(curve_count: int) -> SizeRequests:
-    """5 um on every curve, growing to 300 um over 300 um (DistMax = (max - size) / gradation = 300)."""
-    gradation = (RP_FAR_UM - RP_NEAR_UM) / RP_FAR_UM
-    curves = {tag: RP_NEAR_UM for tag in range(1, curve_count + 1)}
-    return SizeRequests(RP_FAR_UM, gradation, MappingProxyType(curves))
 
 
 def _sha256(path: Path) -> str:
@@ -346,14 +323,17 @@ def _sha256(path: Path) -> str:
 def compact(results: dict[str, Any]) -> dict[str, Any]:
     """The numbers worth committing: counts, qualities, stops and times; no meshes, hashes or reports."""
     keep = (
+        "recipe",
+        "algorithm_2d",
+        "algorithm_3d",
         "tetrahedra",
         "min_quality",
         "bad_count",
         "rounds",
         "stop",
+        "status",
         "seconds",
         "fallback",
-        "algorithm_3d",
         "refined_curves",
         "smallest_size_um",
     )
@@ -372,8 +352,8 @@ def compact(results: dict[str, Any]) -> dict[str, Any]:
 def _table(results: dict[str, Any]) -> str:
     """The markdown table of the README."""
     header = (
-        "| case | method | tetrahedra | min SICN | below threshold | rounds | stop | seconds | fallback |\n"
-        "|---|---|---:|---:|---:|---:|---|---:|---|\n"
+        "| case | method | recipe | 2D / 3D | tetrahedra | min SICN | below | rounds | status | seconds | fallback |\n"
+        "|---|---|---|---|---:|---:|---:|---:|---|---:|---|\n"
     )
     rows = []
     for name, case in results["cases"].items():
@@ -387,9 +367,17 @@ def _row(name: str, method: str, entry: dict[str, Any]) -> str:
     quality = "-" if entry["min_quality"] is None else f"{entry['min_quality']:.4g}"
     tetrahedra = "-" if entry["tetrahedra"] is None else f"{entry['tetrahedra']:,}"
     fallback = "yes" if entry["fallback"] else "no"
+    algorithm_2d = "default" if entry["algorithm_2d"] is None else entry["algorithm_2d"]
+    status = (
+        entry["status"]
+        if entry["status"] == "accepted"
+        else f"rejected ({entry['stop']})"
+    )
+    recipe = entry["recipe"]["version"].removeprefix("scgsim.meshing.")
     return (
-        f"| {name} | {METHOD_LABELS.get(method, method)} | {tetrahedra} | {quality} | {entry['bad_count']} | {entry['rounds']} "
-        f"| {entry['stop']} | {entry['seconds']:.1f} | {fallback} |"
+        f"| {name} | {METHOD_LABELS.get(method, method)} | {recipe} | {algorithm_2d} / {entry['algorithm_3d']} "
+        f"| {tetrahedra} | {quality} | {entry['bad_count']} | {entry['rounds']} "
+        f"| {status} | {entry['seconds']:.1f} | {fallback} |"
     )
 
 
