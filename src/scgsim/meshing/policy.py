@@ -35,9 +35,9 @@ class RuleSet:
     # Size grows by 1 um per um of distance from a refined curve.  Gradation of 1.5 or more created new
     # near-flat tetrahedra at the edge of the refined region.
     gradation: float = 1.0
-    # A film wall of thickness t gets elements of at most this multiple of t ...
+    # A film wall of thickness t gets elements of at most this multiple of t, but only when that is finer
+    # than this fraction of the coarse size; a thicker wall is already resolved and gets no size.
     film_sidewall_thickness_multiple: float = 25.0
-    # ... and never coarser than this fraction of the coarse size.
     film_sidewall_ceiling_fraction: float = 0.5
     # Repair: a bad element's longest edge, times this, is the first size tried for the curves around it.
     repair_edge_fraction: float = 0.5
@@ -192,11 +192,16 @@ def ladder_size(target: float, max_size: float) -> float:
 def _film_sidewall_size(
     feature: Feature, max_size: float, ruleset: RuleSet
 ) -> float | None:
-    """Elements at a film wall: a multiple of its thickness, no coarser than the ceiling, on the ladder."""
-    wanted = min(
-        ruleset.film_sidewall_thickness_multiple * feature.fact("thickness_um"),
-        ruleset.film_sidewall_ceiling_fraction * max_size,
-    )
+    """Elements at a thin film wall: a multiple of its thickness, on the ladder; nothing for a thick one.
+
+    The rule binds only when the thickness multiple is finer than the ceiling (a fraction of the coarse
+    size).  A wall at or above the ceiling, such as a 10 um substrate in a 1 mm model, is already resolved
+    relative to the coarse size, so sizing it would only add elements; the repair loop still catches
+    anything such a wall leaves.
+    """
+    wanted = ruleset.film_sidewall_thickness_multiple * feature.fact("thickness_um")
+    if wanted >= ruleset.film_sidewall_ceiling_fraction * max_size:
+        return None
     return ladder_size(wanted, max_size)
 
 

@@ -11,15 +11,15 @@ from scgsim.meshing import repair
 from scgsim.meshing.policy import BoundingBox, RuleSet
 from scgsim.meshing.repair import Budgets, RepairInputs, refine_sizes, repair_mesh
 
-# A model whose coarse size is 10 um, so the ladder is 5, 2.5, 1.25, ...
-BOX = BoundingBox((0.0, 0.0, 0.0), (200.0, 0.0, 0.0))
+# A model whose coarse size is 20 um (ceiling 10), so the ladder is 10, 5, 2.5, 1.25, ...
+BOX = BoundingBox((0.0, 0.0, 0.0), (400.0, 0.0, 0.0))
 LONG = 100.0  # a curve length well above the 1 um floor
 
 
 def inputs_for(
     tmp_path: Path, *entries, budgets: Budgets | None = None
 ) -> RepairInputs:
-    """The loop's inputs for a model with the given features and a 10 um coarse size."""
+    """The loop's inputs for a model with the given features and a 20 um coarse size."""
     return RepairInputs(
         xao=tmp_path / "case.xao",
         sidecar=tmp_path / "case.sidecar.json",

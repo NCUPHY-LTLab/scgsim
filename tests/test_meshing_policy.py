@@ -64,18 +64,35 @@ def test_a_point_two_micron_film_gets_the_ladder_size_under_five_microns(
     assert requests.gradation == 1.0
 
 
-def test_a_thick_film_is_no_coarser_than_half_the_coarse_size():
-    """A thick film is no coarser than half the coarse size."""
-    requests = size_requests(
-        features_of(film([1], thickness_um=10.0)), box_with_diagonal(400.0), RuleSet()
+def test_a_film_wall_whose_rule_would_not_bind_gets_no_size():
+    """A wall at or above the ceiling is already resolved relative to the coarse size."""
+    rules = RuleSet()
+    box = box_with_diagonal(400.0)  # coarse size 20, ceiling 10
+    thick = size_requests(features_of(film([1], thickness_um=10.0)), box, rules)
+    assert thick.curve_sizes == {}  # 25 x 10 = 250, far above the ceiling
+    on_the_ceiling = size_requests(features_of(film([1], thickness_um=0.4)), box, rules)
+    assert on_the_ceiling.curve_sizes == {}  # 25 x 0.4 = 10 = ceiling: not binding
+    just_under = size_requests(features_of(film([1], thickness_um=0.39)), box, rules)
+    assert just_under.curve_sizes == {
+        1: pytest.approx(5.0)
+    }  # 9.75 -> the rung below 10
+
+
+def test_a_ten_micron_substrate_in_a_millimetre_model_is_left_alone():
+    """The case that cost 10 % of the tetrahedra: 25 x 10 um is far above half the coarse size."""
+    box = box_with_diagonal(2042.1)
+    assert (
+        size_requests(
+            features_of(film([1], thickness_um=10.0)), box, RuleSet()
+        ).curve_sizes
+        == {}
     )
-    assert requests.curve_sizes[1] == pytest.approx(10.0)  # 400 / 20 / 2, not 25 x 10
 
 
 def test_the_size_is_never_above_the_thickness_multiple_and_always_on_the_ladder():
-    """The size is never above the thickness multiple and always on the ladder."""
+    """Every thin wall that gets a size is on the max/2^k ladder and at most 25 times its thickness."""
     max_size = 100.0
-    for thickness in (0.05, 0.2, 0.7, 1.0, 3.3):
+    for thickness in (0.05, 0.2, 0.7, 1.0):
         size = size_requests(
             features_of(film([1], thickness_um=thickness)),
             box_with_diagonal(max_size * 20),
