@@ -492,7 +492,7 @@ def example_checks() -> dict:
 
 
 def cheap_recipe_mesh_checks() -> dict:
-    """The banded models meshed again with the cheap recipe: HXT, ``MeshSizeMax`` = bounding-box diagonal / 20, no size field (emission.qmd#mesh-size-recipe)."""
+    """The banded models meshed again with the cheap recipe: HXT, ``MeshSizeMax`` = bounding-box diagonal / 20, no size field (emission.qmd#mesh-recipe)."""
 
     models = {
         "pad_a_bands": lambda: build_example("A", insets=pad_requests("A")),
