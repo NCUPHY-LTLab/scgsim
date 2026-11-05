@@ -1,0 +1,360 @@
+{
+  "environment": {
+    "gmsh": "4.15.2",
+    "python": "3.13.13",
+    "scgsim": "2.0.0rc15"
+  },
+  "threshold": 0.01,
+  "threshold_status": "provisional (decision C is open)",
+  "rules": "scgsim.meshing.rules/1",
+  "cases": {
+    "A": {
+      "module": {
+        "tetrahedra": 7163,
+        "min_quality": 0.12996387284581382,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 0.47,
+        "fallback": null,
+        "algorithm_3d": 10,
+        "refined_curves": 20,
+        "smallest_size_um": 0.514781514819637
+      },
+      "module_outline": {
+        "tetrahedra": 7163,
+        "min_quality": 0.12996387284581382,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 0.46,
+        "fallback": null,
+        "algorithm_3d": 10,
+        "refined_curves": 20,
+        "smallest_size_um": 0.514781514819637
+      },
+      "R8": {
+        "tetrahedra": 6887,
+        "min_quality": 0.3368790934056305,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "-",
+        "seconds": 0.19,
+        "fallback": null
+      },
+      "RP": {
+        "tetrahedra": 825,
+        "min_quality": 0.1055840959041736,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "-",
+        "seconds": 0.19,
+        "fallback": null
+      },
+      "determinism": {
+        "same_mesh": true,
+        "same_report": true
+      }
+    },
+    "B": {
+      "module": {
+        "tetrahedra": 11249,
+        "min_quality": 0.018275435794733733,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 5.85,
+        "fallback": null,
+        "algorithm_3d": 10,
+        "refined_curves": 59,
+        "smallest_size_um": 2.55318551434037
+      },
+      "module_outline": {
+        "tetrahedra": 35333,
+        "min_quality": 0.04167279178315163,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 5.29,
+        "fallback": null,
+        "algorithm_3d": 10,
+        "refined_curves": 59,
+        "smallest_size_um": 2.55318551434037
+      },
+      "R8": {
+        "tetrahedra": 7365,
+        "min_quality": 0.019816404415288456,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "-",
+        "seconds": 2.0,
+        "fallback": null
+      },
+      "RP": {
+        "tetrahedra": 8491,
+        "min_quality": 0.020783243772792167,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "-",
+        "seconds": 0.65,
+        "fallback": null
+      },
+      "determinism": {
+        "same_mesh": true,
+        "same_report": true
+      }
+    },
+    "C": {
+      "module": {
+        "tetrahedra": 14747,
+        "min_quality": 0.018275435794733733,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 8.6,
+        "fallback": null,
+        "algorithm_3d": 10,
+        "refined_curves": 59,
+        "smallest_size_um": 2.55318551434037
+      },
+      "module_outline": {
+        "tetrahedra": 39924,
+        "min_quality": 0.04167279178315163,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 11.07,
+        "fallback": null,
+        "algorithm_3d": 10,
+        "refined_curves": 59,
+        "smallest_size_um": 2.55318551434037
+      },
+      "R8": {
+        "tetrahedra": 8737,
+        "min_quality": 0.019816404415288456,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "-",
+        "seconds": 4.66,
+        "fallback": null
+      },
+      "RP": {
+        "tetrahedra": 10508,
+        "min_quality": 0.020783243772792167,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "-",
+        "seconds": 0.68,
+        "fallback": null
+      },
+      "determinism": {
+        "same_mesh": true,
+        "same_report": true
+      }
+    },
+    "circB": {
+      "module": {
+        "tetrahedra": 10983,
+        "min_quality": 0.018534183957863395,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 4.97,
+        "fallback": null,
+        "algorithm_3d": 10,
+        "refined_curves": 59,
+        "smallest_size_um": 2.55318551434037
+      },
+      "module_outline": {
+        "tetrahedra": 35180,
+        "min_quality": 0.04110520118099055,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 4.36,
+        "fallback": null,
+        "algorithm_3d": 10,
+        "refined_curves": 59,
+        "smallest_size_um": 2.55318551434037
+      },
+      "R8": {
+        "tetrahedra": 7220,
+        "min_quality": 0.0199131674444236,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "-",
+        "seconds": 1.34,
+        "fallback": null
+      },
+      "RP": {
+        "tetrahedra": 8235,
+        "min_quality": 0.021340534488328036,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "-",
+        "seconds": 0.65,
+        "fallback": null
+      },
+      "determinism": {
+        "same_mesh": true,
+        "same_report": true
+      }
+    },
+    "B_1mm": {
+      "module": {
+        "tetrahedra": 37260,
+        "min_quality": 0.017376842041508182,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 24.09,
+        "fallback": null,
+        "algorithm_3d": 10,
+        "refined_curves": 59,
+        "smallest_size_um": 3.1907918209480703
+      },
+      "module_outline": {
+        "tetrahedra": 113038,
+        "min_quality": 0.02259158575436178,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 9.94,
+        "fallback": null,
+        "algorithm_3d": 10,
+        "refined_curves": 59,
+        "smallest_size_um": 3.1907918209480703
+      },
+      "R8": {
+        "tetrahedra": 9664,
+        "min_quality": 0.002062702454353472,
+        "bad_count": 123,
+        "rounds": 0,
+        "stop": "-",
+        "seconds": 2.03,
+        "fallback": null
+      },
+      "RP": {
+        "tetrahedra": 100227,
+        "min_quality": 0.016073682569500012,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "-",
+        "seconds": 4.67,
+        "fallback": null
+      },
+      "repair_only": {
+        "tetrahedra": 41154,
+        "min_quality": 0.011114954630657557,
+        "bad_count": 0,
+        "rounds": 7,
+        "stop": "clean",
+        "seconds": 111.4,
+        "fallback": null,
+        "algorithm_3d": 10,
+        "refined_curves": 30,
+        "smallest_size_um": 1.5953959104740352
+      },
+      "determinism": {
+        "same_mesh": true,
+        "same_report": true
+      }
+    },
+    "circB_2mm": {
+      "module": {
+        "tetrahedra": 67727,
+        "min_quality": 0.01674658906064335,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 47.59,
+        "fallback": null,
+        "algorithm_3d": 10,
+        "refined_curves": 59,
+        "smallest_size_um": 3.1907535519294554
+      },
+      "module_outline": {
+        "tetrahedra": 87015,
+        "min_quality": 0.01856642683436446,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 25.36,
+        "fallback": null,
+        "algorithm_3d": 10,
+        "refined_curves": 59,
+        "smallest_size_um": 3.1907535519294554
+      },
+      "R8": {
+        "tetrahedra": 9344,
+        "min_quality": 0.001036108983590778,
+        "bad_count": 120,
+        "rounds": 0,
+        "stop": "-",
+        "seconds": 2.28,
+        "fallback": null
+      },
+      "RP": {
+        "tetrahedra": 205692,
+        "min_quality": 0.015006522656360318,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "-",
+        "seconds": 10.46,
+        "fallback": null
+      },
+      "determinism": {
+        "same_mesh": true,
+        "same_report": true
+      }
+    },
+    "circB_4mm": {
+      "module": {
+        "tetrahedra": 126841,
+        "min_quality": 0.015669536756784553,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 93.92,
+        "fallback": null,
+        "algorithm_3d": 10,
+        "refined_curves": 59,
+        "smallest_size_um": 3.190734420117364
+      },
+      "module_outline": {
+        "tetrahedra": 126836,
+        "min_quality": 0.015669536756784553,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 95.21,
+        "fallback": null,
+        "algorithm_3d": 10,
+        "refined_curves": 59,
+        "smallest_size_um": 3.190734420117364
+      },
+      "R8": {
+        "tetrahedra": 8579,
+        "min_quality": 0.0004609117549784265,
+        "bad_count": 122,
+        "rounds": 0,
+        "stop": "-",
+        "seconds": 1.23,
+        "fallback": null
+      },
+      "RP": {
+        "tetrahedra": 419045,
+        "min_quality": 0.01199464407501302,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "-",
+        "seconds": 23.96,
+        "fallback": null
+      },
+      "determinism": {
+        "same_mesh": true,
+        "same_report": true
+      }
+    }
+  }
+}
