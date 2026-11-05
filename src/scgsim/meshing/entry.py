@@ -74,8 +74,9 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
 
     Raises :class:`~scgsim.meshing.errors.MeshRepairError` carrying the report when the loop stops
     without an accepted mesh (rounds spent, a mesh over the tetrahedron budget even when clean, bad
-    elements the repair loop cannot refine, a clean mesh whose order could not be raised, or a mesher crash).  The report is written then too, and the last
-    mesh is kept as ``<stem>.rejected.msh`` when a round made one.
+    elements the repair loop cannot refine, a clean mesh whose order could not be raised, or a mesher
+    crash).  The report is written then too, and the last mesh is kept as ``<stem>.rejected.msh`` when a
+    round made one.
     """
     if not math.isfinite(threshold):
         raise ValueError(f"threshold must be a finite number, got {threshold!r}.")
