@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,14 @@ from test_sgb_band_labels import PORT_CASES, all_interface_insets
 pytest.importorskip("gmsh", reason="the meshing module needs Gmsh (extra: palace)")
 
 from scgsim.geometry.sgb.build import build_sgb_geometry  # noqa: E402
-from scgsim.meshing import Budgets, MeshRepairError, RuleSet, mesh_sgb  # noqa: E402
+from scgsim.meshing import (  # noqa: E402
+    Budgets,
+    MeshRepairError,
+    MeshResult,
+    RuleSet,
+    mesh_sgb,
+    repair,
+)
 from scgsim.meshing.driver import measure_bounding_box, run_round  # noqa: E402
 from scgsim.meshing.features import load_features  # noqa: E402
 from scgsim.meshing.job import MeshJob  # noqa: E402
@@ -75,7 +83,7 @@ def test_the_module_meshes_the_pad_in_ground_clean_and_keeps_the_xao_groups(
     assert "clean after 0 refinement rounds" in result.summary_path.read_text(
         encoding="utf-8"
     )
-    assert not (tmp_path / ".meshing-work").exists()
+    assert not list(tmp_path.glob(".meshing-work*"))
 
 
 def test_the_sidecar_may_be_passed_decoded(pad_in_ground_b, tmp_path):
@@ -192,3 +200,57 @@ def test_a_repair_that_cannot_reach_the_threshold_fails_with_the_report_and_keep
     )
     assert (tmp_path / f"{pad_in_ground_b.xao.stem}.rejected.msh").is_file()
     assert not (tmp_path / f"{pad_in_ground_b.xao.stem}.msh").exists()
+
+
+def test_a_rerun_leaves_only_the_mesh_its_report_describes(pad_in_ground_b, tmp_path):
+    """A failed rerun removes the earlier accepted mesh, and a clean rerun removes the rejected one."""
+    stem = pad_in_ground_b.xao.stem
+    mesh_sgb(
+        pad_in_ground_b.xao, pad_in_ground_b.sidecar, tmp_path, threshold=THRESHOLD
+    )
+    with pytest.raises(MeshRepairError):
+        mesh_sgb(
+            pad_in_ground_b.xao,
+            pad_in_ground_b.sidecar,
+            tmp_path,
+            threshold=0.9,
+            budgets=Budgets(max_rounds=1),
+        )
+    assert not (tmp_path / f"{stem}.msh").exists()
+    assert (tmp_path / f"{stem}.rejected.msh").is_file()
+    mesh_sgb(
+        pad_in_ground_b.xao, pad_in_ground_b.sidecar, tmp_path, threshold=THRESHOLD
+    )
+    assert (tmp_path / f"{stem}.msh").is_file()
+    assert not (tmp_path / f"{stem}.rejected.msh").exists()
+
+
+def test_overlapping_calls_sharing_an_output_directory_keep_their_own_files(
+    pad_in_ground_b, tmp_path, monkeypatch
+):
+    """A call that runs entirely after another's first round leaves the other's round mesh intact."""
+    models = tmp_path / "models"
+    models.mkdir()
+    a, b = models / "a.xao", models / "b.xao"
+    shutil.copyfile(pad_in_ground_b.xao, a)
+    shutil.copyfile(pad_in_ground_b.xao, b)
+    output = tmp_path / "out"
+    real_round = repair.run_round
+    inner: list[MeshResult] = []
+    started_inner = []
+
+    def round_then_another_call(job, work_dir):
+        outcome = real_round(job, work_dir)
+        # The first call runs the second one to completion after its round.
+        if not started_inner:
+            started_inner.append(True)
+            inner.append(
+                mesh_sgb(b, pad_in_ground_b.sidecar, output, threshold=THRESHOLD)
+            )
+        return outcome
+
+    monkeypatch.setattr(repair, "run_round", round_then_another_call)
+    outer = mesh_sgb(a, pad_in_ground_b.sidecar, output, threshold=THRESHOLD)
+    assert (outer.mesh.name, inner[0].mesh.name) == ("a.msh", "b.msh")
+    assert outer.mesh.read_bytes() == inner[0].mesh.read_bytes()
+    assert not list(output.glob(".meshing-work*"))

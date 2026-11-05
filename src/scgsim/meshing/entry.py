@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import shutil
+import tempfile
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -18,7 +19,7 @@ from .policy import RuleSet
 from .repair import STOP_CLEAN, Budgets, RepairInputs, RepairOutcome, repair_mesh
 from .report import QualityReport, build_report, write_report
 
-_WORK_DIR_NAME = ".meshing-work"
+_WORK_DIR_PREFIX = ".meshing-work-"
 
 
 @dataclass(frozen=True)
@@ -56,8 +57,10 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
     started = time.perf_counter()
     xao = Path(xao)
     files = _Files(Path(output_dir), xao.stem)
-    work_dir = files.directory / _WORK_DIR_NAME
-    work_dir.mkdir(parents=True, exist_ok=True)
+    files.directory.mkdir(parents=True, exist_ok=True)
+    # One work directory per call, so calls sharing an output directory never read or delete each
+    # other's files; it sits in the output directory so the final mesh is moved, not copied.
+    work_dir = Path(tempfile.mkdtemp(prefix=_WORK_DIR_PREFIX, dir=files.directory))
     try:
         sidecar_path, features = _resolve_sidecar(sidecar, work_dir)
         outcome = repair_mesh(
@@ -123,8 +126,14 @@ def _resolve_sidecar(
 def _deliver(
     outcome: RepairOutcome, report: QualityReport, files: _Files
 ) -> MeshResult:
-    """Move the last mesh into place and return it, or raise with the report when the loop failed."""
+    """Move the last mesh into place and return it, or raise with the report when the loop failed.
+
+    The report has just been rewritten, so a mesh an earlier run left under the other name is removed:
+    the directory never holds a mesh that the report beside it does not describe.
+    """
     if outcome.stop != STOP_CLEAN:
+        files.mesh.unlink(missing_ok=True)
+        files.rejected.unlink(missing_ok=True)
         if outcome.last_mesh is not None:
             shutil.move(outcome.last_mesh, files.rejected)
         raise MeshRepairError(
@@ -134,5 +143,6 @@ def _deliver(
     assert (
         outcome.last_mesh is not None
     )  # a clean stop follows a round that made a mesh
+    files.rejected.unlink(missing_ok=True)
     shutil.move(outcome.last_mesh, files.mesh)
     return MeshResult(files.mesh, files.report, files.summary, report)
