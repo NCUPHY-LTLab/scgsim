@@ -280,7 +280,7 @@ SGB 只知道精確的 topology，所以 sidecar 的 `mesh_features` 陳述關�
 | `port_edge` | port sheet id | 無 | lumped port 的 face 的邊界 edge |
 :::
 
-`film_sidewall` 的本體是導體（Route B 沒有導體 volume，但 sidewall 仍是導體與 vacuum 之間的 face），或是不貼著模型外界的 dielectric；vacuum 與模型外界的 wall 不是薄膜。被 level 切開的 wall 仍算同一根柱：範例中 port 在 metal 的中間平面 $z = 0.1$，把 pad 的部分 wall 切成兩段，`thickness_um` 仍是 0.2，而不是 0.1。Route A 的導體是 sheet，沒有 sidewall，所以沒有 `film_sidewall`。gap 或 spacing 的事實不在 sidecar 裡；之後新增一種 `kind` 或一項 fact 是相容的擴充，`kind` 在清單之外則是 schema 錯誤。
+`film_sidewall` 的本體是導體（Route B 沒有導體 volume，但 sidewall 仍是導體與 vacuum 之間的 face），或是不貼著模型外界的 dielectric；導體與 dielectric 共用的 wall 同時屬於兩者，所以兩邊都保有完整的柱。vacuum 與模型外界的 wall 不是薄膜。被 level 切開的 wall 仍算同一根柱：範例中 port 在 metal 的中間平面 $z = 0.1$，把 pad 的部分 wall 切成兩段，`thickness_um` 仍是 0.2，而不是 0.1。Route A 的導體是 sheet，沒有 sidewall，所以沒有 `film_sidewall`。gap 或 spacing 的事實不在 sidecar 裡；之後新增一種 `kind` 或一項 fact 是相容的擴充，`kind` 在清單之外則是 schema 錯誤。
 
 測試用的 size field 是一個由選定 curve 出發的 `Distance` field，餵給 `Threshold` field：靠近 curve 時給出 `refine_size`，並在 `DistMin` 與 `DistMax` 之間成長到全域最大值。band 測試使用 `refine_size` 1.0 µm，範圍 1–20 µm。band 測試中 `MeshSizeMin` 維持 0，因為 2 µm 的下限無法解析 0.1 µm 的 band；gmsh-API 路徑也以同樣方式失敗。其他範例的 mesh 使用 `MeshSizeMin` = 2 µm，因為 0.2 µm 的 metal 厚度否則會迫使到處都出現很小的 element。
 

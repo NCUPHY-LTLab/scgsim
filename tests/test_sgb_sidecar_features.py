@@ -9,7 +9,7 @@ import jsonschema
 import pytest
 from sgb_emit_cases import CASES, pad_requests
 from sgb_extreme_cases import catalogue_of, chip, disk
-from sgb_scenes import GRID, chip_prisms, footprint, pad_in_ground, rect_um
+from sgb_scenes import GRID, chip_prisms, conductor, footprint, pad_in_ground, rect_um
 
 from scgsim.geometry.sgb.cutfamilies.requests import ConductorSurface, InsetRequest
 from scgsim.geometry.sgb.emission.plan import plan_brep
@@ -244,7 +244,24 @@ def test_a_dielectric_film_off_the_model_boundary_is_a_film(route):
     )
 
 
-# --------------------------------------------------------------------------- band boundaries
+@pytest.mark.parametrize("route", ["B", "C"])
+def test_a_wall_shared_with_a_conductor_stays_part_of_the_dielectric_film(route):
+    """A 0.05 um conductor along the oxide's whole right wall: the oxide keeps its 0.1 um column, the conductor its own."""
+    prisms = [
+        *oxide_model(route).labelled.catalogue.prisms,
+        conductor("strip", rect_um(10, -10, 20, 10), 0, "0.05", "S"),
+    ]
+    model = build_model_from_catalogue(
+        PrismCatalogue(GRID, tuple(prisms), name="film_and_strip"), route
+    )
+    films = features_of(sidecar_of(model), "film_sidewall")
+    assert [(f["source"], f["facts"]["thickness_um"]) for f in films] == [
+        ("oxide", 0.1),
+        ("strip", 0.05),
+    ]
+    oxide, strip = films
+    shared = set(oxide["native_tags"]) & set(strip["native_tags"])
+    assert shared, "the edges of the shared wall belong to both bodies"
 
 
 def test_band_boundary_keeps_the_edges_of_the_inset_family_and_adds_its_margins(

@@ -128,14 +128,15 @@ def _film_sidewalls(
 
 
 def _film_bodies(wall: TopoFace) -> list[str]:
-    """The finite bodies a sidewall belongs to: its conductors, else its dielectrics when it is not on the model boundary."""
+    """The finite bodies a sidewall belongs to: its conductors, and its dielectrics when it is not on the model boundary.
+
+    A wall shared by a conductor and a dielectric belongs to both, so each body keeps its whole column.
+    """
     sides = [d for d in (wall.neg_domain, wall.pos_domain) if d is not None]
-    conductors = {d.name for d in sides if d.kind == "conductor"}
-    if conductors:
-        return sorted(conductors)
-    if len(sides) < 2:  # noqa: PLR2004 - a wall with one side missing lies on the model boundary
-        return []
-    return sorted({d.name for d in sides if d.kind == "dielectric"})
+    bodies = {d.name for d in sides if d.kind == "conductor"}
+    if len(sides) == 2:  # noqa: PLR2004 - a wall with one side missing lies on the model boundary
+        bodies |= {d.name for d in sides if d.kind == "dielectric"}
+    return sorted(bodies)
 
 
 def _wall_columns(topology: Topology, walls: list[TopoFace]) -> list[list[TopoFace]]:
