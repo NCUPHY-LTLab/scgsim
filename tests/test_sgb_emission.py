@@ -21,8 +21,8 @@ from sgb_gmsh_oracle import (
     gmsh_session,
     mesh_coarsely,
     mesh_quality,
+    mesh_with_cheap_recipe,
     refine_near,
-    size_from_mesh_hints,
 )
 from sgb_scenes import random_layout
 
@@ -591,22 +591,24 @@ def test_band_faces_through_the_direct_writer(tmp_path, models, name):
         )  # the same triangles are tet faces on both sides
 
 
-def test_pad_b_bands_meshed_by_its_hints_has_no_flat_tetrahedron(tmp_path, models):
-    """The 0.1 um band strips need elements of that order; a uniform 60 um mesh puts a zero-volume tet on them.
+def test_pad_b_bands_meshed_with_the_cheap_recipe_has_no_flat_tetrahedron(
+    tmp_path, models
+):
+    """The 0.1 um band strips make a uniform 60 um mesh put a zero-volume tet on them; the cheap recipe does not.
 
-    With ``pad_b_bands`` at a uniform 60 um, four parallel band-boundary edges symmetric about x = 0 each get
-    a node at x = 0, and Delaunay joins those four collinear nodes into a tetrahedron of volume zero
-    (``minSICN`` 0).  The geometry is sound (OCCT checks pass, the Gmsh-API emission of the same topology
-    has the same flat tets, a 5 um margin set or a slightly asymmetric cutout has none), so the remedy is
-    sizing: the sidecar's ``band_boundary`` hints with the recipe of ``sidecar.hints``.
+    With ``pad_b_bands`` at a uniform 60 um and Delaunay, four parallel band-boundary edges symmetric about
+    x = 0 each get a node at x = 0, and Delaunay joins those four collinear nodes into a tetrahedron of
+    volume zero (``minSICN`` 0).  The geometry is sound (OCCT checks pass, the Gmsh-API emission of the same
+    topology has the same flat tets, a 5 um margin set or a slightly asymmetric cutout has none), so the
+    remedy is the mesher's: a maximum size of a twentieth of the bounding-box diagonal with HXT (the default
+    algorithm when HXT aborts), no size field and no use of the band features.
     """
     model = models["pad_b_bands"]
     plan, path = written(model, tmp_path, "xao")
     sidecar = sidecar_of(model, plan)
     with gmsh_session(path):
         apply_sidecar_embeds(sidecar)
-        size_from_mesh_hints(sidecar, coarse=60.0, near=0.2, growth=8.0)
-        mesh_coarsely(60.0)
+        mesh_with_cheap_recipe(path, sidecar)
         quality = mesh_quality()
         conformity = check_mesh_conformity(model, plan.tags())
     assert quality["minSICN_min"] > 1e-4
