@@ -9,7 +9,9 @@ sidebar: contribution
 ```bash
 git clone --branch develop https://github.com/NCUPHY-LTLab/scgsim.git
 cd scgsim
-uv sync --extra palace --extra dev
+uv sync --group dev
 ```
+
+`dev` 群組會安裝所有選用套件，以及測試、品質檢查與 OpenCASCADE 工具，與 CI 測試工作安裝的內容相同。
 
 請閱讀[架構與資料流程](architecture.qmd)了解模組職責；[維護者指南](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md)說明儲存庫與文件維護方式；[文件導覽圖](documentation-map.qmd)則列出各頁用途。
