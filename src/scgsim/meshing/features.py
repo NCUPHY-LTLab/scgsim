@@ -69,13 +69,24 @@ class Binding:
         return ids[tag - 1] if 1 <= tag <= len(ids) else None
 
 
+# Interface types of the surface groups that belong to a conductor (metal-air, metal-substrate and the
+# sheet of a Route A conductor); the entities of such a group are conductors.
+_CONDUCTOR_INTERFACES = ("MA", "MS", "SHEET")
+
+
 @dataclass(frozen=True)
 class PhysicalGroup:
-    """A primary physical group of the sidecar: its name, dimension and member planned ids."""
+    """A primary physical group of the sidecar: its name, dimension, member planned ids and owners.
+
+    ``interface_type`` and ``entities`` are the sidecar's own fields of a surface group (``None`` and
+    empty for a group that has none).
+    """
 
     name: str
     dimension: int
     ids: tuple[str, ...]
+    interface_type: str | None = None
+    entities: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -103,6 +114,15 @@ class SidecarFeatures:
     groups: tuple[PhysicalGroup, ...]
     embedded_faces: tuple[EmbeddedFace, ...]
     embedded_edges: tuple[EmbeddedEdge, ...]
+
+    def conductor_entities(self) -> frozenset[str]:
+        """Ids of the conductors: the owners of the metal interface groups (MA, MS, or a Route A sheet)."""
+        return frozenset(
+            entity
+            for group in self.groups
+            if group.interface_type in _CONDUCTOR_INTERFACES
+            for entity in group.entities
+        )
 
     def features_by_curve(self) -> dict[int, tuple[Feature, ...]]:
         """The features that cover each native curve tag, in sidecar order."""
@@ -224,6 +244,8 @@ def _read_groups(raw: Any) -> tuple[PhysicalGroup, ...]:
             name,
             int(_require_mapping(group, f"physical group {name}")["dim"]),
             tuple(_require_list(group.get("ids", []), f"physical group {name} ids")),
+            group.get("interface_type"),
+            tuple(group.get("entities") or ()),
         )
         for name, group in sorted(groups.items())
     )

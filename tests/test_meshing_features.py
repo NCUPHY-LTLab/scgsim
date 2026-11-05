@@ -177,3 +177,15 @@ def test_a_sidecar_file_loads(tmp_path: Path):
     path = tmp_path / "case.sidecar.json"
     path.write_text(json.dumps(sidecar_with(film([1, 2]))), encoding="utf-8")
     assert load_features(path).features[0].native_tags == (1, 2)
+
+
+def test_the_conductors_are_the_owners_of_the_metal_interface_groups():
+    """Conductors come from MA, MS and sheet groups, not from the substrate or vacuum interfaces."""
+    sidecar = sidecar_with(film([1]))
+    sidecar["physical_groups"]["SHEET::chip"] = {
+        "dim": 2,
+        "ids": [],
+        "interface_type": "SHEET",
+        "entities": ["chip/left"],
+    }
+    assert read_features(sidecar).conductor_entities() == {"pad", "chip/left"}

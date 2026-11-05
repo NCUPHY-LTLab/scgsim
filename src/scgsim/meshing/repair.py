@@ -182,7 +182,10 @@ def _job(
         sidecar=inputs.sidecar,
         msh=inputs.work_dir / f"round_{index:02d}.msh",
         sizes=SizeRequests(
-            initial.max_size, initial.gradation, MappingProxyType(dict(curve_sizes))
+            initial.max_size,
+            initial.gradation,
+            MappingProxyType(dict(curve_sizes)),
+            initial.fields,
         ),
         threshold=inputs.threshold,
     )

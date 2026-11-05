@@ -47,6 +47,21 @@ class RuleSet:
     # Repair: shorter curves (the 0.2 um vertical edges of a film wall) are ignored, since refining a
     # curve cannot shorten an element edge below its length.
     repair_min_curve_length_um: float = 1.0
+    # Conductor-outline rule, off by default: a Palace AMR comparison found that resolving the edges of
+    # the conductors in the initial mesh needs fewer degrees of freedom for a 0.1 % capacitance, and the
+    # validation decides the default.  When on, the outline edges of the conductors (their film walls,
+    # arcs and the port edges; never the outer domain, the substrate walls or band edges) get this size ...
+    conductor_outline: bool = False
+    conductor_edge_size_um: float = 5.0
+    # ... growing linearly to the coarse size over this distance.
+    conductor_edge_grow_um: float = 300.0
+
+    def __post_init__(self) -> None:
+        """Reject sizes that cannot define a field."""
+        if not (self.conductor_edge_size_um > 0 and self.conductor_edge_grow_um > 0):
+            raise ValueError(
+                "the conductor-outline size and growth distance must be positive."
+            )
 
 
 @dataclass(frozen=True)
@@ -63,12 +78,27 @@ class BoundingBox:
 
 
 @dataclass(frozen=True)
+class SizeField:
+    """``size`` on ``curves``, growing linearly to the coarse size over ``distance`` micrometres."""
+
+    curves: tuple[int, ...]  # native curve tags
+    size: float
+    distance: float
+
+
+@dataclass(frozen=True)
 class SizeRequests:
-    """What the mesher is asked for: a coarse size, a gradation and the finer size of some curves."""
+    """What the mesher is asked for: a coarse size and where it must be finer.
+
+    ``curve_sizes`` are graded by ``gradation`` (size per micrometre of distance).  ``fields`` grow over a
+    distance of their own and stay as they are while the repair loop refines ``curve_sizes``; the finest
+    size at a point wins.
+    """
 
     max_size: float
     gradation: float
     curve_sizes: Mapping[int, float]  # native curve tag -> element size
+    fields: tuple[SizeField, ...] = ()
 
 
 SizeRule = Callable[[Feature, float, RuleSet], float | None]
@@ -87,7 +117,45 @@ def size_requests(
         size = feature_size(covering, max_size, ruleset)
         if size is not None:
             curve_sizes[tag] = size
-    return SizeRequests(max_size, ruleset.gradation, MappingProxyType(curve_sizes))
+    return SizeRequests(
+        max_size,
+        ruleset.gradation,
+        MappingProxyType(curve_sizes),
+        _outline_fields(features, max_size, ruleset),
+    )
+
+
+def conductor_outline_curves(features: SidecarFeatures) -> tuple[int, ...]:
+    """Native tags of the conductors' outline edges: film walls, arcs and port edges, in ascending order.
+
+    A feature counts when a conductor owns it (``source``).  Port edges are the exception: their source is
+    the port sheet, not a conductor, but they are the outline where the port lands on the conductors.
+    Band edges, the outer domain and the walls of a substrate are never included.
+    """
+    conductors = features.conductor_entities()
+    tags: set[int] = set()
+    for feature in features.features:
+        if feature.kind == "port_edge" or (
+            feature.kind in ("film_sidewall", "arc") and feature.source in conductors
+        ):
+            tags.update(feature.native_tags)
+    return tuple(sorted(tags))
+
+
+def _outline_fields(
+    features: SidecarFeatures, max_size: float, ruleset: RuleSet
+) -> tuple[SizeField, ...]:
+    """The conductor-outline field, when the rule is on and finer than the coarse size."""
+    if not ruleset.conductor_outline or ruleset.conductor_edge_size_um >= max_size:
+        return ()
+    curves = conductor_outline_curves(features)
+    if not curves:
+        return ()
+    return (
+        SizeField(
+            curves, ruleset.conductor_edge_size_um, ruleset.conductor_edge_grow_um
+        ),
+    )
 
 
 def coarse_size(bounding_box: BoundingBox, ruleset: RuleSet) -> float:

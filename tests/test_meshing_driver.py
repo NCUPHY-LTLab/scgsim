@@ -14,7 +14,7 @@ from scgsim.meshing import driver
 from scgsim.meshing.driver import WorkerExit, measure_bounding_box, run_round
 from scgsim.meshing.errors import MeshingError
 from scgsim.meshing.job import DELAUNAY, HXT, MeshJob
-from scgsim.meshing.policy import SizeRequests
+from scgsim.meshing.policy import SizeField, SizeRequests
 
 
 def job_in(tmp_path: Path, **overrides) -> MeshJob:
@@ -23,7 +23,12 @@ def job_in(tmp_path: Path, **overrides) -> MeshJob:
         "xao": tmp_path / "case.xao",
         "sidecar": tmp_path / "case.sidecar.json",
         "msh": tmp_path / "round.msh",
-        "sizes": SizeRequests(10.0, 1.0, MappingProxyType({3: 2.5, 4: 2.5, 9: 1.25})),
+        "sizes": SizeRequests(
+            10.0,
+            1.0,
+            MappingProxyType({3: 2.5, 4: 2.5, 9: 1.25}),
+            (SizeField((3, 5), 5.0, 300.0),),
+        ),
         "threshold": 0.01,
     }
     return MeshJob(**(fields | overrides))
@@ -96,6 +101,7 @@ def test_the_request_carries_the_sizes_and_the_options(tmp_path, monkeypatch):
     assert request["algorithm_3d"] == HXT and request["algorithm_2d"] is None
     assert request["max_size"] == 10.0 and request["gradation"] == 1.0
     assert request["curve_sizes"] == {"3": 2.5, "4": 2.5, "9": 1.25}
+    assert request["fields"] == [{"curves": [3, 5], "size": 5.0, "distance": 300.0}]
     assert request["threshold"] == 0.01 and request["attribute"] is False
     assert MeshJob.from_json(request) == job_in(tmp_path, attribute=False)
 

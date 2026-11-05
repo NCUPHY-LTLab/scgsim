@@ -24,11 +24,19 @@ def sidecar_with(*features: dict[str, Any], **extra: Any) -> dict[str, Any]:
             }
         },
         "physical_groups": {
-            "MA::pad::sidewall": {"dim": 2, "ids": ["f0", "f1"], "native_tags": [1, 2]},
+            "MA::pad::sidewall": {
+                "dim": 2,
+                "ids": ["f0", "f1"],
+                "native_tags": [1, 2],
+                "interface_type": "MA",
+                "entities": ["pad"],
+            },
             "SA::substrate|VACUUM::interface": {
                 "dim": 2,
                 "ids": ["f2"],
                 "native_tags": [3],
+                "interface_type": "SA",
+                "entities": ["substrate", "VACUUM"],
             },
             "substrate": {"dim": 3, "ids": ["vol0"], "native_tags": [1]},
         },

@@ -11,7 +11,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from .policy import SizeRequests
+from .policy import SizeField, SizeRequests
 
 # Gmsh Mesh.Algorithm3D values.
 DELAUNAY = 1
@@ -46,6 +46,10 @@ class MeshJob:
             "curve_sizes": {
                 str(t): s for t, s in sorted(self.sizes.curve_sizes.items())
             },
+            "fields": [
+                {"curves": list(f.curves), "size": f.size, "distance": f.distance}
+                for f in self.sizes.fields
+            ],
             "threshold": self.threshold,
             "algorithm_3d": self.algorithm_3d,
             "algorithm_2d": self.algorithm_2d,
@@ -60,6 +64,14 @@ class MeshJob:
             gradation=float(raw["gradation"]),
             curve_sizes=MappingProxyType(
                 {int(t): float(s) for t, s in raw["curve_sizes"].items()}
+            ),
+            fields=tuple(
+                SizeField(
+                    tuple(int(c) for c in f["curves"]),
+                    float(f["size"]),
+                    float(f["distance"]),
+                )
+                for f in raw["fields"]
             ),
         )
         return cls(

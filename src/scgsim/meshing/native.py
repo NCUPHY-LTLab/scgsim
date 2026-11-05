@@ -18,7 +18,7 @@ from .audit import audit_current_mesh
 from .features import SidecarFeatures
 from .findings import MeshAudit
 from .job import MeshJob
-from .policy import BoundingBox, SizeRequests
+from .policy import BoundingBox, SizeField, SizeRequests
 
 # Distance fields sample each curve; one sample per half element keeps the distance accurate to the
 # element size.  The bounds keep a 0.2 um sidewall edge and a 4 mm outline both affordable.
@@ -86,14 +86,11 @@ def _set_options(job: MeshJob) -> None:
 
 def _add_size_fields(sizes: SizeRequests) -> None:
     """Background size field: each requested size near its curves, growing to ``max_size`` with distance."""
-    if not sizes.curve_sizes:
+    wanted = [*_graded_fields(sizes), *sizes.fields]
+    if not wanted:
         return
-    curves_by_size: dict[float, list[int]] = defaultdict(list)
-    for curve, size in sorted(sizes.curve_sizes.items()):
-        curves_by_size[size].append(curve)
     fields = [
-        _size_field(curves, size, sizes)
-        for size, curves in sorted(curves_by_size.items())
+        _size_field(list(w.curves), w.size, sizes.max_size, w.distance) for w in wanted
     ]
     background = fields[0] if len(fields) == 1 else _minimum_of(fields)
     gmsh.model.mesh.field.setAsBackgroundMesh(background)
@@ -106,22 +103,35 @@ def _add_size_fields(sizes: SizeRequests) -> None:
     option.setNumber("Mesh.MeshSizeFromCurvature", 0)
 
 
-def _size_field(curves: list[int], size: float, sizes: SizeRequests) -> int:
-    """Threshold of the distance to ``curves``: ``size`` on them, ``max_size`` from ``dist_max`` away.
+def _graded_fields(sizes: SizeRequests) -> list[SizeField]:
+    """One field per distinct size of ``curve_sizes``, grown by the gradation.
 
-    The growth is ``gradation`` um of size per um of distance: 1 or less stayed clean, 1.5 or more
-    created new near-flat tetrahedra where the refined region ends.
+    The gradation is 1 um of size per um of distance: 1 or less stayed clean, 1.5 or more created new
+    near-flat tetrahedra where the refined region ends.
     """
+    curves_by_size: dict[float, list[int]] = defaultdict(list)
+    for curve, size in sorted(sizes.curve_sizes.items()):
+        curves_by_size[size].append(curve)
+    return [
+        SizeField(tuple(curves), size, (sizes.max_size - size) / sizes.gradation)
+        for size, curves in sorted(curves_by_size.items())
+    ]
+
+
+def _size_field(
+    curves: list[int], size: float, max_size: float, distance: float
+) -> int:
+    """Threshold of the distance to ``curves``: ``size`` on them, ``max_size`` from ``distance`` away."""
     field = gmsh.model.mesh.field
-    distance = field.add("Distance")
-    field.setNumbers(distance, "CurvesList", curves)
-    field.setNumber(distance, "Sampling", _samples(curves, size))
+    distance_field = field.add("Distance")
+    field.setNumbers(distance_field, "CurvesList", curves)
+    field.setNumber(distance_field, "Sampling", _samples(curves, size))
     threshold = field.add("Threshold")
-    field.setNumber(threshold, "InField", distance)
+    field.setNumber(threshold, "InField", distance_field)
     field.setNumber(threshold, "SizeMin", size)
-    field.setNumber(threshold, "SizeMax", sizes.max_size)
+    field.setNumber(threshold, "SizeMax", max_size)
     field.setNumber(threshold, "DistMin", 0.0)
-    field.setNumber(threshold, "DistMax", (sizes.max_size - size) / sizes.gradation)
+    field.setNumber(threshold, "DistMax", distance)
     return threshold
 
 

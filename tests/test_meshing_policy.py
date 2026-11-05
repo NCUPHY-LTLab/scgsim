@@ -9,7 +9,13 @@ import pytest
 from meshing_support import feature, features_of, film
 
 from scgsim.meshing import RULES_VERSION, RuleSet
-from scgsim.meshing.policy import BoundingBox, coarse_size, ladder_size, size_requests
+from scgsim.meshing.policy import (
+    BoundingBox,
+    coarse_size,
+    conductor_outline_curves,
+    ladder_size,
+    size_requests,
+)
 
 
 def box_with_diagonal(diagonal: float) -> BoundingBox:
@@ -127,3 +133,71 @@ def test_ladder_size_is_the_largest_rung_not_above_the_target():
     assert ladder_size(1000.0, 100.0) == 50.0  # the first rung is max / 2
     with pytest.raises(ValueError, match="positive target"):
         ladder_size(0.0, 100.0)
+
+
+def outline_features():
+    """Features with owners: pad film 1-2, pad arc 3, substrate film 4-5, band 6, unowned arc 7, port 8."""
+    pad_film = film([1, 2])
+    pad_film["source"] = "pad"
+    substrate_film = film([4, 5], 100.0)
+    substrate_film["source"] = "substrate"
+    pad_arc = feature("arc", [3], {"radius_um": 10.0}, source="pad")
+    shared_arc = feature("arc", [7], {"radius_um": 1.0}, source=None)
+    band = feature(
+        "band_boundary", [6], {"margins_um": [0.5], "narrowest_band_um": 0.5}
+    )
+    port = feature("port_edge", [8], source="port")
+    return features_of(pad_film, pad_arc, substrate_film, band, shared_arc, port)
+
+
+def test_the_conductor_outline_rule_is_off_by_default():
+    """The conductor outline rule is off by default."""
+    rules = RuleSet()
+    assert rules.conductor_outline is False
+    assert (rules.conductor_edge_size_um, rules.conductor_edge_grow_um) == (5.0, 300.0)
+    assert (
+        size_requests(outline_features(), box_with_diagonal(2000.0), rules).fields == ()
+    )
+
+
+def test_the_conductor_outline_is_film_walls_and_arcs_of_conductors_and_the_port_edges():
+    """The conductor outline is film walls and arcs of conductors and the port edges."""
+    assert conductor_outline_curves(outline_features()) == (1, 2, 3, 8)
+
+
+def test_the_outline_field_has_the_edge_size_and_grows_over_its_own_distance():
+    """The outline field has the edge size and grows over its own distance."""
+    rules = RuleSet(conductor_outline=True)
+    requests = size_requests(outline_features(), box_with_diagonal(2000.0), rules)
+    (outline,) = requests.fields
+    assert (outline.curves, outline.size, outline.distance) == (
+        (1, 2, 3, 8),
+        5.0,
+        300.0,
+    )
+    assert requests.gradation == 1.0  # the film sizes keep their own grading
+
+
+def test_the_outline_rule_adds_to_the_a_priori_film_sizes_instead_of_replacing_them():
+    """The outline rule adds to the a priori film sizes instead of replacing them."""
+    plain = size_requests(outline_features(), box_with_diagonal(2000.0), RuleSet())
+    outlined = size_requests(
+        outline_features(), box_with_diagonal(2000.0), RuleSet(conductor_outline=True)
+    )
+    assert dict(outlined.curve_sizes) == dict(plain.curve_sizes)
+
+
+def test_an_outline_size_not_below_the_coarse_size_asks_for_nothing():
+    """An outline size not below the coarse size asks for nothing."""
+    rules = RuleSet(conductor_outline=True)
+    assert (
+        size_requests(outline_features(), box_with_diagonal(100.0), rules).fields == ()
+    )
+
+
+def test_the_outline_sizes_must_be_positive():
+    """The outline sizes must be positive."""
+    with pytest.raises(ValueError, match="positive"):
+        RuleSet(conductor_edge_size_um=0.0)
+    with pytest.raises(ValueError, match="positive"):
+        RuleSet(conductor_edge_grow_um=-1.0)
