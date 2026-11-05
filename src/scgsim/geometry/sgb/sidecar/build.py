@@ -22,6 +22,7 @@ from scgsim.geometry.sgb.emission.surfaces import CYLINDER
 from scgsim.geometry.sgb.model import ConformalModel
 from scgsim.geometry.sgb.sidecar.aedt import aedt_names
 from scgsim.geometry.sgb.sidecar.expected import expected_record
+from scgsim.geometry.sgb.sidecar.features import mesh_features
 from scgsim.geometry.sgb.sidecar.groups import (
     band_groups,
     face_kind,
@@ -30,10 +31,9 @@ from scgsim.geometry.sgb.sidecar.groups import (
     unions,
     volume_group_records,
 )
-from scgsim.geometry.sgb.sidecar.hints import mesh_hints
 from scgsim.geometry.sgb.sidecar.lineage import edge_family, lineage_record
 
-SCHEMA = "scgsim.sgb.sidecar.v1"
+SCHEMA = "scgsim.sgb.sidecar.v2"
 BINDING_RULE = (
     "planned id -> native tag: tag = 1 + position in ids_by_tag[dim] "
     "(TopExp::MapShapes pre-order of the written compound); never by geometry"
@@ -59,6 +59,7 @@ def build_sidecar(
     lineage = lineage_record(model, plan)
     embedded = _embedded_faces(model, plan)
     refinement_edges = _refinement_edges(model, plan, lineage["carriers"])
+    ports = _ports(model, plan, embedded)
     policy = model.policy
     return {
         "schema": SCHEMA,
@@ -90,8 +91,8 @@ def build_sidecar(
         "faces": _faces(model, plan),
         "embedded_faces": embedded,
         "refinement_edges": refinement_edges,
-        "mesh_hints": mesh_hints(model, plan, lineage["carriers"]),
-        "ports": _ports(model, plan, embedded),
+        "mesh_features": mesh_features(model, plan, lineage["carriers"], ports),
+        "ports": ports,
         "lineage": lineage,
         "insets": _insets(model),
         "refinements": _refinements(model.refinements, refinement_edges),

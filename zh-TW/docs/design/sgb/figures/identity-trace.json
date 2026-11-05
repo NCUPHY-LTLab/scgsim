@@ -6,7 +6,7 @@
   0.5,
   2.0
  ],
- "schema": "scgsim.sgb.sidecar.v1",
+ "schema": "scgsim.sgb.sidecar.v2",
  "step1_palace_attribute": {
   "attribute": 10,
   "resolved_name": "MA::pad::top::band=2",

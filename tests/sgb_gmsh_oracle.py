@@ -8,6 +8,10 @@ They never ship: Gmsh's API cannot express the sense of a solid, which is one re
 
 from __future__ import annotations
 
+import json
+import math
+import subprocess
+import sys
 from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -212,44 +216,62 @@ def refine_near(  # noqa: PLR0913 -- a test helper
         gmsh.option.setNumber(option, 0)
 
 
-def size_from_mesh_hints(  # noqa: PLR0913 -- the hint kinds and the three sizing numbers of the recipe
-    sidecar: dict,
-    *,
-    coarse: float,
-    near: float,
-    growth: float,
-    kinds: tuple[str, ...] = ("band_boundary",),
-) -> None:
-    """Background size field driven by the sidecar's mesh hints (the recipe ``sidecar.hints`` documents).
+HXT = 10
+HXT_CHILD = (
+    "import json, sys\n"
+    "sys.path.insert(0, sys.argv[1])\n"
+    "from pathlib import Path\n"
+    "from sgb_gmsh_oracle import mesh_with_hxt_in_new_session\n"
+    "mesh_with_hxt_in_new_session(Path(sys.argv[2]), json.load(sys.stdin))\n"
+)
+FRONTAL_DELAUNAY_FALLBACK = 1  # the Delaunay algorithm Gmsh uses by default
 
-    The element size is ``near`` on the hinted edges and grows by ``growth`` per micrometre of distance
-    (so it is ``coarse`` from ``(coarse - near) / growth`` away), in the current session.
+
+def mesh_with_cheap_recipe(path: Path, sidecar: dict) -> int:
+    """Generate a 3D mesh in the current session with the cheap recipe; returns the ``Mesh.Algorithm3D`` it used.
+
+    The recipe (measured 2026-11-05, Gmsh 4.15): no size field, HXT and ``MeshSizeMax`` = bounding-box
+    diagonal / 20.  The sidecar's ``mesh_features`` state facts about the geometry and no sizes; this recipe
+    needs none of them (a test that wants a feature-driven field builds it from the features).
+
+    HXT of Gmsh 4.15.2 aborts the process on some of these models (heap corruption on ``pad_b_bands`` and
+    ``pad_c_bands`` at diagonal / 20), and an abort cannot be caught in the session.  So HXT is tried first in
+    a child process that opens ``path`` itself; when the child dies, the session meshes with the default
+    algorithm instead; any mesher that runs HXT on these models needs the same fallback.
     """
-    field_api = gmsh.model.mesh.field
-    curves = sorted(
-        {
-            t
-            for h in sidecar["mesh_hints"]
-            if h["kind"] in kinds
-            for t in h["native_tags"]
-        }
+    algorithm = HXT if _hxt_survives(path, sidecar) else FRONTAL_DELAUNAY_FALLBACK
+    _generate_mesh(algorithm)
+    return algorithm
+
+
+def _hxt_survives(path: Path, sidecar: dict) -> bool:
+    child = subprocess.run(
+        [sys.executable, "-c", HXT_CHILD, str(Path(__file__).parent), str(path)],
+        input=json.dumps(sidecar),
+        text=True,
+        capture_output=True,
+        check=False,
     )
-    dist = field_api.add("Distance")
-    field_api.setNumbers(dist, "CurvesList", curves)
-    field_api.setNumber(dist, "Sampling", 50)
-    ramp = field_api.add("Threshold")
-    field_api.setNumber(ramp, "InField", dist)
-    field_api.setNumber(ramp, "SizeMin", near)
-    field_api.setNumber(ramp, "SizeMax", coarse)
-    field_api.setNumber(ramp, "DistMin", 0.0)
-    field_api.setNumber(ramp, "DistMax", (coarse - near) / growth)
-    field_api.setAsBackgroundMesh(ramp)
-    for option in (
-        "Mesh.MeshSizeFromPoints",
-        "Mesh.MeshSizeFromCurvature",
-        "Mesh.MeshSizeExtendFromBoundary",
-    ):
-        gmsh.option.setNumber(option, 0)
+    return child.returncode == 0
+
+
+def mesh_with_hxt_in_new_session(path: Path, sidecar: dict) -> None:
+    """Open ``path`` in a fresh session, re-apply the sidecar's embeddings and mesh with HXT (run in a child process)."""
+    from scgsim.geometry.sgb.verification.loaded import (  # noqa: PLC0415 -- used here only
+        apply_sidecar_embeds,
+    )
+
+    with gmsh_session(path):
+        apply_sidecar_embeds(sidecar)
+        _generate_mesh(HXT)
+
+
+def _generate_mesh(algorithm: int) -> None:
+    x0, y0, z0, x1, y1, z1 = gmsh.model.getBoundingBox(-1, -1)
+    diagonal = math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2 + (z1 - z0) ** 2)
+    gmsh.option.setNumber("Mesh.MeshSizeMax", diagonal / 20)
+    gmsh.option.setNumber("Mesh.Algorithm3D", algorithm)
+    gmsh.model.mesh.generate(3)
 
 
 def _tet_face_counters(

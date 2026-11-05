@@ -2,6 +2,6 @@
 |:---|:---|---:|
 | `xao` | `semantic_geometry_route_b.xao` | 29.8 |
 | `brep` | `semantic_geometry_route_b.brep` | 17.5 |
-| `sidecar` | `semantic_geometry_route_b.sidecar.json` | 37.3 |
+| `sidecar` | `semantic_geometry_route_b.sidecar.json` | 39.4 |
 | `sliver_report` | `semantic_geometry_route_b.slivers.json` | 12.1 |
 | `validation_report` | `semantic_geometry_route_b.validation.json` | 4.9 |

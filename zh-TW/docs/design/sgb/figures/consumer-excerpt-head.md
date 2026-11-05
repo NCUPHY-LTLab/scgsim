@@ -32,7 +32,7 @@
   "conductor_sheets": false,
   "conductor_volumes": "excluded"
  },
- "schema": "scgsim.sgb.sidecar.v1",
+ "schema": "scgsim.sgb.sidecar.v2",
  "tolerance_um": 1e-07
 }
 ```

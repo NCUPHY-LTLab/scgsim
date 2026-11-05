@@ -137,7 +137,9 @@ def build_model_from_catalogue(  # noqa: PLR0913 - the catalogue, the route and 
     """The validated conformal model of a prism catalogue under a route, with the requested cut families.
 
     ``insets`` (Surface-EPR bands) and ``refinements`` (mesh-size curves) are the typed requests of
-    ``cutfamilies.requests``; they become cut families before the arrangements are built.
+    ``cutfamilies.requests``; they become cut families before the arrangements are built.  Pass bands only as
+    ``insets``: the sidecar reads each band family's support and margins from its request, so a catalogue that
+    already carries inset families builds but fails when its sidecar is written.
     """
     policy = route_policy(route)
     check_route(policy, catalogue.prisms)

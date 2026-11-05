@@ -1,7 +1,7 @@
 """What a loaded model must look like: the expectations of the load-side check (design brief section 14).
 
-Owns the ``expected`` block of the sidecar.  The mesher loads the XAO and calls
-:func:`~scgsim.geometry.sgb.emission.verify.verify_loaded` with the sidecar alone, so the block carries
+Owns the ``expected`` block of the sidecar.  The tests load the XAO and call
+:func:`~scgsim.geometry.sgb.verification.loaded.verify_loaded` with the sidecar alone, so the block carries
 everything that check compares, by native tag (tag = 1 + position in ``ids_by_tag``):
 
 * ``vertices_um`` -- where each vertex must sit (this proves the numbering; every other check relies on it);

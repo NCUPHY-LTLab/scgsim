@@ -117,7 +117,7 @@ def excerpts(a: dict[str, Any], b: dict[str, Any], c: dict[str, Any]) -> None:
             {
                 "embedded_faces": b["embedded_faces"],
                 "refinement_edges": b["refinement_edges"],
-                "mesh_hints": [shorten(h, 3) for h in b["mesh_hints"]],
+                "mesh_features": [shorten(f, 3) for f in b["mesh_features"]],
                 "ports": b["ports"],
             },
         ),

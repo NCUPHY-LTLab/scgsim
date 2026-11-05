@@ -1,18 +1,18 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://scgsim.invalid/schemas/scgsim.sgb.sidecar.v1.json",
-  "title": "scgsim.sgb.sidecar.v1",
+  "$id": "https://scgsim.invalid/schemas/scgsim.sgb.sidecar.v2.json",
+  "title": "scgsim.sgb.sidecar.v2",
   "description": "Sidecar of the SGB XAO/BREP: planned ids bound to native tags by construction order, primary physical groups with their semantic facts, unions, embeddings, lineage and the load-side expectations.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema", "route", "route_policy", "grid_um", "tolerance_um", "model", "files", "binding", "counts",
     "physical_groups", "unions", "surface_epr_rows", "volumes", "faces", "embedded_faces", "refinement_edges",
-    "mesh_hints", "ports", "lineage", "insets", "refinements", "slivers", "arrangement", "curved_wall_faces",
+    "mesh_features", "ports", "lineage", "insets", "refinements", "slivers", "arrangement", "curved_wall_faces",
     "surface_kinds", "expected"
   ],
   "properties": {
-    "schema": {"const": "scgsim.sgb.sidecar.v1"},
+    "schema": {"const": "scgsim.sgb.sidecar.v2"},
     "route": {"enum": ["A", "B", "C"]},
     "route_policy": {
       "type": "object",
@@ -171,19 +171,17 @@
         }
       }
     },
-    "mesh_hints": {
-      "description": "Edges the mesher should resolve (no sizes): band boundaries, refinement curves, curved edges.",
+    "mesh_features": {
+      "description": "Facts about the geometry for the mesher (no sizes): film sidewalls, band boundaries, arcs, refinement curves, port edges. Sorted by kind, source and canonical JSON of the facts.",
       "type": "array",
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["kind", "source", "edges", "native_tags"],
-        "properties": {
-          "kind": {"enum": ["band_boundary", "refinement_curve", "curved_edge"]},
-          "source": {"description": "The inset or refinement request id; null for curved edges.", "type": ["string", "null"]},
-          "edges": {"$ref": "#/$defs/idList"},
-          "native_tags": {"$ref": "#/$defs/tagList"}
-        }
+        "oneOf": [
+          {"$ref": "#/$defs/filmSidewall"},
+          {"$ref": "#/$defs/bandBoundary"},
+          {"$ref": "#/$defs/arcFeature"},
+          {"$ref": "#/$defs/refinementCurve"},
+          {"$ref": "#/$defs/portEdge"}
+        ]
       }
     },
     "ports": {
@@ -319,6 +317,88 @@
   "$defs": {
     "idList": {"type": "array", "items": {"type": "string"}},
     "tagList": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+    "meshFeature": {
+      "description": "The members every mesh feature has; the kind decides the source and the facts.",
+      "type": "object",
+      "required": ["kind", "source", "edges", "native_tags", "facts"],
+      "properties": {
+        "edges": {"allOf": [{"$ref": "#/$defs/idList"}, {"minItems": 1}]},
+        "native_tags": {"allOf": [{"$ref": "#/$defs/tagList"}, {"minItems": 1}]}
+      }
+    },
+    "filmSidewall": {
+      "description": "Every edge of the sidewall faces of a finite body; thickness_um is the z extent of the sidewall column.",
+      "allOf": [{"$ref": "#/$defs/meshFeature"}],
+      "properties": {
+        "kind": {"const": "film_sidewall"},
+        "source": {"description": "The entity id of the body.", "type": "string"},
+        "edges": {}, "native_tags": {},
+        "facts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["thickness_um"],
+          "properties": {"thickness_um": {"type": "number", "exclusiveMinimum": 0}}
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "bandBoundary": {
+      "description": "The edges of an inset family; margins_um are the request's margins, ascending, and narrowest_band_um the smallest difference between consecutive margins with 0 prepended.",
+      "allOf": [{"$ref": "#/$defs/meshFeature"}],
+      "properties": {
+        "kind": {"const": "band_boundary"},
+        "source": {"description": "The inset request id.", "type": "string"},
+        "edges": {}, "native_tags": {},
+        "facts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["margins_um", "narrowest_band_um"],
+          "properties": {
+            "margins_um": {"type": "array", "minItems": 1, "items": {"type": "number", "exclusiveMinimum": 0}},
+            "narrowest_band_um": {"type": "number", "exclusiveMinimum": 0}
+          }
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "arcFeature": {
+      "description": "The circular-arc edges of one carrier radius.",
+      "allOf": [{"$ref": "#/$defs/meshFeature"}],
+      "properties": {
+        "kind": {"const": "arc"},
+        "source": {"description": "The one entity that owns the arcs; null when no single entity does.", "type": ["string", "null"]},
+        "edges": {}, "native_tags": {},
+        "facts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["radius_um"],
+          "properties": {"radius_um": {"type": "number", "exclusiveMinimum": 0}}
+        }
+      },
+      "unevaluatedProperties": false
+    },
+    "refinementCurve": {
+      "description": "The refinement-only curves of a refinement request.",
+      "allOf": [{"$ref": "#/$defs/meshFeature"}],
+      "properties": {
+        "kind": {"const": "refinement_curve"},
+        "source": {"description": "The refinement request id.", "type": "string"},
+        "edges": {}, "native_tags": {},
+        "facts": {"type": "object", "additionalProperties": false, "maxProperties": 0}
+      },
+      "unevaluatedProperties": false
+    },
+    "portEdge": {
+      "description": "The boundary edges of the faces of a lumped-port sheet.",
+      "allOf": [{"$ref": "#/$defs/meshFeature"}],
+      "properties": {
+        "kind": {"const": "port_edge"},
+        "source": {"description": "The port sheet id.", "type": "string"},
+        "edges": {}, "native_tags": {},
+        "facts": {"type": "object", "additionalProperties": false, "maxProperties": 0}
+      },
+      "unevaluatedProperties": false
+    },
     "groupLists": {"type": "object", "additionalProperties": {"$ref": "#/$defs/idList"}},
     "surfaceGroup": {
       "type": "object",

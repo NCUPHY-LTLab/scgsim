@@ -1,6 +1,6 @@
 ---
 title: "SGB 輸出的使用契約"
-description: "build_sgb_geometry 的呼叫與回傳、五個檔案、決定性的保證（哪些測過、哪些只是論證）、sidecar scgsim.sgb.sidecar.v1 的每個欄位與實際節錄，以及 Palace 與 AEDT 讀取端各自的步驟。"
+description: "build_sgb_geometry 的呼叫與回傳、五個檔案、決定性的保證（哪些測過、哪些只是論證）、sidecar scgsim.sgb.sidecar.v2 的每個欄位與實際節錄，以及 Palace 與 AEDT 讀取端各自的步驟。"
 lang: zh-TW
 scgsim-kind: "design"
 scgsim-status: "CONVERGING"
@@ -9,7 +9,7 @@ scgsim-id: "docs/design/sgb/consumer-contract"
 
 Palace 的 mesh 流程與 AEDT 的 geometry 流程要採用新的 SGB，需要知道兩件事：SGB 交給它們什麼，以及怎麼讀。本頁回答第一件事與讀取的順序：入口函式 `build_sgb_geometry`、它寫出的五個檔案、sidecar 的欄位，以及兩個讀取端的流程。今天的 Palace 與 AEDT 契約如何對到這些欄位，另見[對應表](consumer-mapping.qmd)。
 
-這裡描述的程式是階段 1 的 SGB core。它已經實作並有測試，但 Palace 與 AEDT 尚未切換過來；本頁的 sidecar 是 production 格式 `scgsim.sgb.sidecar.v1`。每一項保證都標明是**測過**（有自動測試）、**實測**（本頁產生範例時跑過一次）還是**論證**（由程式結構推得、尚未實測）。範例都是同一個小模型：100 µm 的晶片，帶一片 ground plane、一個 20 µm 的 pad 與一個 lumped port，pad 的上表面有 0.5 與 1 µm 兩個 inset margin（三個 band），另有一條 refinement curve。它比其他頁的執行範例小，只為了讓節錄能完整讀完；產生方式見[補充](#reproduction-data)。
+這裡描述的程式是階段 1 的 SGB core。它已經實作並有測試，但 Palace 與 AEDT 尚未切換過來；本頁的 sidecar 是 production 格式 `scgsim.sgb.sidecar.v2`。每一項保證都標明是**測過**（有自動測試）、**實測**（本頁產生範例時跑過一次）還是**論證**（由程式結構推得、尚未實測）。範例都是同一個小模型：100 µm 的晶片，帶一片 ground plane、一個 20 µm 的 pad 與一個 lumped port，pad 的上表面有 0.5 與 1 µm 兩個 inset margin（三個 band），另有一條 refinement curve。它比其他頁的執行範例小，只為了讓節錄能完整讀完；產生方式見[補充](#reproduction-data)。
 
 ## 呼叫與回傳 {#call}
 
@@ -117,7 +117,7 @@ band 的幾何與 margin 規則見 [Surface EPR inset imprint](inset-imprint.qmd
 | Gmsh 的 mesh 與 Palace 的結果相同 | **不保證** | 本頁不作此宣稱；physical tag 依排序後的名稱編號，不是 identity，使用端應儲存名稱 |
 :::
 
-## Sidecar `scgsim.sgb.sidecar.v1` {#sidecar}
+## Sidecar `scgsim.sgb.sidecar.v2` {#sidecar}
 
 sidecar 是一個 JSON 檔：頂層的鍵依字母排序、每個頂層鍵佔一行，所以兩個 sidecar 的 diff 會直接指出變動的區塊。格式由套件內的 `sidecar.schema.json`（JSON Schema draft 2020-12）約束，所有測試案例發出的 sidecar 都經過它驗證（測過）。三條規則貫穿所有欄位：
 
@@ -136,14 +136,14 @@ sidecar 是一個 JSON 檔：頂層的鍵依字母排序、每個頂層鍵佔一
 | `physical_groups` | 每個 primary group（名稱為鍵）：`dim`、`tag`、`ids`、`native_tags`；surface 另有 `interface_type`、`entities`、`net`、`face_kind`（單一值）、`adjacent_domains`、`adjacent_volumes`、`band`、`area_um2`；volume 另有 `kind`（`vacuum`、`dielectric`、`conductor`）、`material` | 兩者；最重要的欄位 |
 | `unions` | `interface_types`（`MA` → group 清單…；Route A 的 `SHEET` group 同時列在 `SHEET`、`MA` 與 `MS`）與 `nets`（Net → 該 Net 外露導體表面的 group 清單） | 報告；Electrostatic 的 terminal 與 ground |
 | `surface_epr_rows` | 每個 Surface-EPR row（例如 `MA::pad::top::band=2`）與承載它的 group、entity、band，以及 `side`、`face_sides` 與 `shared_face_group`（sheet 的 row 才有值，其他 row 為 `null`；`face_sides` 是 face id 對 `above`、`below` 或 `both` 的對照，只列出該 row 實際積分的 face，`side` 是它們共同的值，不一致時為 `mixed`） | Palace 的 band 選取；internal boundary 的 crack 決定 |
-| `mesh_hints` | `band_boundary`、`refinement_curve`、`curved_edge` 三種提示：edge id 與 native tag，以及來源的 request id；沒有尺寸 | Palace 的 mesh 尺寸 |
+| `mesh_features` | `film_sidewall`、`band_boundary`、`arc`、`refinement_curve`、`port_edge` 五種幾何事實：edge id 與 native tag、來源（entity、request 或 port 的 id），以及該種的 `facts`（薄膜厚度、band 的 margin、圓弧半徑）；沒有尺寸 | mesher 的尺寸決定（Palace） |
 | `volumes`、`faces` | 每個規劃的 volume：entity、kind、material、Net、是否 `emitted`、group、`volume_um3`、`aedt_name`；每個規劃的 face：group、`kind`、`face_kind`、`z_um`、兩側的 volume | AEDT 的 ledger；Palace 的相鄰關係 |
 | `embedded_faces`、`refinement_edges` | `(face, host volume)` 與 `(edge, host face)`：XAO 無法攜帶、mesher 必須重新套用的 embedding | Palace |
 | `ports` | 每個 lumped-port sheet：`port_index`、`source_name`、`direction`、`host_entity_ids`、`source_layer`、`target_layer`、`z_um`、`group`、`faces`、`host_volumes`、`adjacent_volumes` | 兩者 |
 | `lineage` | `edges`（edge → carrier id）、`carriers`（來源 polygon edge 或 family member）、`vertical_edges`、`faces`（來源 Entity）、`membership`（依面積加權，各比例不互斥，可大於 1） | 追溯；band edge 的辨識 |
 | `insets`、`refinements` | 每個 inset family：request id、support、margin（µm 與格點）、`band_count`、各 band 的 group；每個 refinement request 與它的 edge | Palace |
 | `slivers`、`arrangement`、`curved_wall_faces`、`surface_kinds` | sliver 報告摘要；snap 偏離與圓弧偏離的實測值（格點單位）、圓弧 edge 數；曲面 wall 的 face；plane 與 cylinder 的 face 數 | manifest 的 curved-arrangement provenance |
-| `expected` | `verify_loaded` 的預期值：vertex 位置、各 edge／face／solid 的邊界、face 面積、solid 體積 | `verify_loaded` |
+| `expected` | `verify_loaded` 的預期值：vertex 位置、各 edge／face／solid 的邊界、face 面積、solid 體積 | SGB 的測試與手動診斷（`verify_loaded`） |
 :::
 
 ### 實際節錄 {#excerpts}
@@ -169,11 +169,11 @@ physical group 是核心。下面是一個 band 的 top face、pad 的 bottom fa
 
 注意兩點。第一，`unions.interface_types.MA` 包含每個 `MA` group，**也包含所有 band 與 sidewall**；做 band 選取要用 `surface_epr_rows` 與 `insets[*].bands`，不是 union。第二，`unions.nets` 的鍵是 Net，成員是該 Net 外露導體表面的 primary group（沒有 SA、PORT 或 EXT）。
 
-embedding、mesh hint 與 port：
+embedding、mesh feature 與 port：
 
 {{< include figures/consumer-excerpt-embeds.md >}}
 
-Route B 的 port 位於 support plane $z = 0$，是 substrate 與 vacuum 之間的 face：`embedded_faces` 是空的，`ports[*].host_volumes` 為空，`adjacent_volumes` 有兩個，`z_um` 是 0。只有 refinement curve 是 free edge（`written_as_free_edge`），它的 host 是含有它的 face。`mesh_hints` 列出 mesher 應該讓元素沿著它走的 edge：`band_boundary` 是 inset family 的 band 邊界，`source` 為 request id；`refinement_curve` 是 refinement request 的曲線；`curved_edge` 是每條圓弧 edge（`source` 為 `null`，範例沒有圓弧）。每筆有 edge id 與 native tag（等於 `ids_by_tag["1"]` 中的位置加 1），**沒有尺寸**，尺寸由 mesher 決定。
+Route B 的 port 位於 support plane $z = 0$，是 substrate 與 vacuum 之間的 face：`embedded_faces` 是空的，`ports[*].host_volumes` 為空，`adjacent_volumes` 有兩個，`z_um` 是 0。只有 refinement curve 是 free edge（`written_as_free_edge`），它的 host 是含有它的 face。`mesh_features` 列出 mesher 決定尺寸時需要知道的 edge 與它們的幾何事實，各筆依 `kind` 排序：`film_sidewall` 是導體（或不貼著模型外界的 dielectric）sidewall face 的所有 edge，`facts.thickness_um` 是有輸出的 sidewall 疊成的柱高（`ground_0000` 與 `pad` 是 0.2 µm，substrate 是 10 µm；它為什麼會隨 route 改變，見 [Mesh feature](emission.qmd#mesh-features)）；`band_boundary` 是 inset family 的 band 邊界，`source` 為 request id，`facts` 帶 request 的 `margins_um`（0.5 與 1 µm）與 `narrowest_band_um`（相鄰 margin 的最小差，從 0 起算，這裡是 0.5 µm）；`port_edge` 是 lumped-port face 的邊界 edge；`refinement_curve` 是 refinement request 的曲線；`arc` 是同一個 `(entity, 半徑)` 的圓弧 edge，`facts.radius_um` 是 carrier 的半徑（範例是方形 pad，沒有圓弧，所以沒有 `arc` 筆）。每筆有 edge id 與 native tag（等於 `ids_by_tag["1"]` 中的位置加 1）；**任何欄位都不是尺寸**，尺寸由 mesher 決定。清單內的 `kind` 若在上述五種之外，或某種缺少它的 `facts`，都是 schema 錯誤。
 
 最後是綁定、單一 volume 與 face 的記錄、lineage，以及預期值（`ids_by_tag` 與 `expected` 的長清單被截短）：
 
@@ -197,31 +197,32 @@ sidecar 給的是 material **id**（`Al`、`Si`）與 `kind`，不含 permittivi
 
 ### Palace mesher
 
-1. 取得 `SgbArtifacts`，以 `read_sidecar` 讀入 sidecar。
+1. 取得 `SgbArtifacts`，以 `read_sidecar` 讀入 sidecar。XAO 與 sidecar 一律取自同一個 `SgbArtifacts`：mesher 信任這一對檔案，不再比對（見 [Validation](validation.qmd)）。
 2. 在 Gmsh 中開啟 XAO，關閉 `Geometry.OCCAutoFix`（需要修補表示規劃有缺陷，不該被悄悄修掉），執行 `gmsh.model.occ.synchronize()`。
-3. `verify_loaded(sidecar)`：在已載入的模型上比對 sidecar 的預期值；`report.raise_if_failed()` 在有任何差異時停止。
-4. `apply_sidecar_embeds(sidecar)`：把 sidecar 記錄的 embedding 重新套用：refinement curve 嵌進宿主 face，`embedded_faces` 若有項目則把 face 嵌進宿主 volume（port 位於 support plane 時沒有），回傳嵌入的 face 與 edge 數。
-5. 設定 mesh 尺寸：`mesh_hints` 指出要解析的 edge（沒有尺寸，數值由 mesher 決定；建議的配方見 [Mesh size hint](emission.qmd#mesh-size-recipe)）。
-6. 產生 mesh；config 由 live 模型的 physical group **名稱**對照 `physical_groups` 建立，不解析名稱字串。
+3. `apply_sidecar_embeds(sidecar)`：把 sidecar 記錄的 embedding 重新套用：refinement curve 嵌進宿主 face，`embedded_faces` 若有項目則把 face 嵌進宿主 volume（port 位於 support plane 時沒有），回傳嵌入的 face 與 edge 數。
+4. 設定 mesh 尺寸：`mesh_features` 給出要解析的 edge 與它們的幾何事實（沒有尺寸，數值由 mesher 決定；測試用的配方見 [測試用的 mesh 配方](emission.qmd#mesh-recipe)）。
+5. 產生 mesh；config 由 live 模型的 physical group **名稱**對照 `physical_groups` 建立，不解析名稱字串。
 
 ```python
 import gmsh
 from scgsim.geometry.sgb.sidecar.files import read_sidecar
-from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds, verify_loaded
+from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds
 
 sidecar = read_sidecar(artifacts.sidecar)
 gmsh.initialize(["-noenv"])
 gmsh.option.setNumber("Geometry.OCCAutoFix", 0)
 gmsh.open(str(artifacts.xao))
 gmsh.model.occ.synchronize()
-verify_loaded(sidecar).raise_if_failed()   # 實體數、vertex 位置、邊界、group、面積、體積
-apply_sidecar_embeds(sidecar)              # 必須在載入檢查之後、產生 mesh 之前
+apply_sidecar_embeds(sidecar)              # 必須在產生 mesh 之前
 gmsh.model.mesh.generate(3)
 ```
 
-`verify_loaded` 完全以 sidecar 提供的數字比對，不檢查模型本身：實體數；每個 vertex 的位置（容許 $10^{-9}$ µm，這同時證明 tag 編號，其餘檢查都依賴它）；每個 edge、face、solid 的邊界；physical group 的名稱、維度、tag 與成員；每個 face 的面積與 solid 的體積（相對容許 $10^{-9}$，非正值表示 shell 方向錯誤）。所有差異會收集後一起回報。`verify_xao(xao_path, sidecar)` 則在新的 Gmsh session 中做同樣的檢查並關閉它，適合只做檢查而不接著 mesh；從 BREP 載入的模型沒有 group，要用 `verify_loaded(sidecar, groups=False)`。
+::: {.callout-note collapse="true" title="診斷用的載入檢查：verify_loaded 與 verify_xao"}
 
-在範例模型上跑完這段流程的結果如下（粗 mesh 只用來確認嵌入的 refinement curve 可以和宿主一起 mesh，port face 可以和相鄰 volume 一起 mesh）：
+懷疑檔案被替換或損壞時，可以在開啟 XAO 之後呼叫 `verify_loaded(sidecar)`，`report.raise_if_failed()` 在有任何差異時停止。它完全以 sidecar 提供的數字比對，不檢查模型本身：實體數；每個 vertex 的位置（容許 $10^{-9}$ µm，這同時證明 tag 編號，其餘檢查都依賴它）；每個 edge、face、solid 的邊界；physical group 的名稱、維度、tag 與成員；每個 face 的面積與 solid 的體積（相對容許 $10^{-9}$，非正值表示 shell 方向錯誤）。所有差異會收集後一起回報。`verify_xao(xao_path, sidecar)` 則在新的 Gmsh session 中做同樣的檢查並關閉它；從 BREP 載入的模型沒有 group，要用 `verify_loaded(sidecar, groups=False)`。SGB 的測試對每個寫出的模型都執行這項檢查。
+:::
+
+在範例模型上跑完這段流程、並另外以 `verify_loaded` 檢查的結果如下（粗 mesh 只用來確認嵌入的 refinement curve 可以和宿主一起 mesh，port face 可以和相鄰 volume 一起 mesh）：
 
 ::: {.askr-table-compact}
 {{< include figures/consumer-run-table.md >}}
@@ -242,7 +243,7 @@ gmsh.model.mesh.generate(3)
 
 本頁的範例由 `experiments/sgb-redesign/consumer-contract/generate_excerpt.py` 產生。它用 SGB core 的環境與其測試資料夾中的 `sgb_inputs.gds_pad_in_ground`（Route B 與 C）和 `thin_film_pair`（Route A），呼叫 `build_sgb_geometry`，然後執行上文的 Palace 與 AEDT 步驟，把輸出放在同一個資料夾的 `out/`（含 `consumer_runs.json`）。Route B 與 C 的 inset 是 pad 上表面的 0.5 與 1 µm，refinement curve 是高度 0.2 µm 的 10 µm 線段；Route A 的 inset 是 `chip/left` 的 sheet。
 
-同一個腳本還寫出第二組 `out/all_interfaces/route_{a,b,c}/`：每個 entity 的每個支援表面（Route B 與 C 是各導體的 `top` 與 `bottom`，Route A 是兩個 sheet）加上 SA 介面都要求 0.5 與 1 µm 的 band，並用 gmsh 重新打開每個 `.xao`，量 volume、surface、physical group、port 的 $z$、SA band 與 `PORT::` 的面積，再以 `mesh_hints` 的建議（band 邊界 0.25 µm、每 µm 2 的成長率長到 60 µm，配方見 [Mesh size hint](emission.qmd#mesh-size-recipe)）產生 mesh（摘要在 `out/all_interfaces/summary.json`）。這一組的 port 在 $z = 0$、與 SA 面積的關係見 [Routes](routes.qmd#port-support-plane)。
+同一個腳本還寫出第二組 `out/all_interfaces/route_{a,b,c}/`：每個 entity 的每個支援表面（Route B 與 C 是各導體的 `top` 與 `bottom`，Route A 是兩個 sheet）加上 SA 介面都要求 0.5 與 1 µm 的 band，並用 gmsh 重新打開每個 `.xao`，量 volume、surface、physical group、port 的 $z$、SA band 與 `PORT::` 的面積，再以測試用的配方（HXT、最大尺寸取 bounding box 對角線的 1/20、不設 size field，見 [測試用的 mesh 配方](emission.qmd#mesh-recipe)）產生 mesh（摘要在 `out/all_interfaces/summary.json`）。這一組的 port 在 $z = 0$、與 SA 面積的關係見 [Routes](routes.qmd#port-support-plane)。
 
 ```bash
 SG=<sgb-core worktree>

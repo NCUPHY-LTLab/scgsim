@@ -39,12 +39,7 @@ from matplotlib.lines import Line2D
 from mpl_toolkits.mplot3d.art3d import Line3DCollection, Poly3DCollection
 from sgb_catalogue_report import measure
 from sgb_emit_cases import CASES, pad_requests
-from sgb_gmsh_oracle import (
-    gmsh_session,
-    mesh_coarsely,
-    mesh_quality,
-    size_from_mesh_hints,
-)
+from sgb_gmsh_oracle import gmsh_session, mesh_quality, mesh_with_cheap_recipe
 from sgb_scenes import airbridge
 
 from scgsim.geometry.sgb.build import emit_model
@@ -496,10 +491,9 @@ def example_checks() -> dict:
     return out
 
 
-def hinted_mesh_checks() -> dict:
-    """The banded models meshed again with the size field of the sidecar's ``band_boundary`` hints (the recipe of emission.qmd#mesh-size-recipe)."""
+def cheap_recipe_mesh_checks() -> dict:
+    """The banded models meshed again with the cheap recipe: HXT, ``MeshSizeMax`` = bounding-box diagonal / 20, no size field (emission.qmd#mesh-recipe)."""
 
-    coarse_um, near_um, growth_per_um = 60.0, 0.25, 2.0
     models = {
         "pad_a_bands": lambda: build_example("A", insets=pad_requests("A")),
         "pad_b_bands": lambda: build_example("B", insets=pad_requests("B")),
@@ -508,19 +502,17 @@ def hinted_mesh_checks() -> dict:
             "pad_b_bands"
         ],  # the stage-level scene with its Route B port at the metal mid-plane
     }
-    out = {"coarse_um": coarse_um, "near_um": near_um, "growth_per_um": growth_per_um}
+    out: dict = {"max_size": "bounding-box diagonal / 20", "algorithm3d": "HXT (10)"}
     for name, build in models.items():
         with tempfile.TemporaryDirectory() as tmp:
             artifacts = emit_model(build(), Path(tmp))
             sidecar = read_sidecar(artifacts.sidecar)
             with gmsh_session(artifacts.xao):
                 apply_sidecar_embeds(sidecar)
-                size_from_mesh_hints(
-                    sidecar, coarse=coarse_um, near=near_um, growth=growth_per_um
-                )
-                mesh_coarsely(coarse_um)
+                algorithm = mesh_with_cheap_recipe(artifacts.xao, sidecar)
                 quality = mesh_quality()
         out[name] = {
+            "algorithm3d_used": algorithm,
             "tets": quality["tets"],
             "minSICN_min": quality["minSICN_min"],
             "gamma_min": quality["gamma_min"],
@@ -540,7 +532,7 @@ def main() -> None:
     numbers = counts()
     numbers["exploded_view"] = view
     numbers["running_example_checks"] = example_checks()
-    numbers["hinted_mesh_checks"] = hinted_mesh_checks()
+    numbers["cheap_recipe_mesh_checks"] = cheap_recipe_mesh_checks()
     numbers["port"] = {
         "plane_z_um": 0.0,
         "levels_um": [float(z) for z in build_levels(catalogue.prisms).levels],
