@@ -8,7 +8,8 @@ Usage (from the repository root, with the test and palace dependencies synced)::
 For each case it builds the SGB XAO and v2 sidecar with the test input builders (``tests/`` goes on
 ``sys.path``), then meshes it three ways in fresh worker processes:
 
-* ``module``: ``mesh_sgb`` with the default rules/1 and the provisional threshold 0.01;
+* ``module``: ``mesh_sgb`` with the default rules/1 (3D Delaunay) and the provisional threshold 0.01;
+* ``module_hxt``: the same with ``RuleSet(algorithm_3d=HXT)``, the former default;
 * ``module_outline``: the same with the optional conductor-outline rule on (5 um on the conductors'
   outline edges, growing to the coarse size over 300 um); the table calls it "module + conductor-outline";
 * ``R8``: HXT with only the global maximum size (bounding-box diagonal / 20), the cheap reference;
@@ -46,8 +47,8 @@ from scgsim.geometry.sgb.build import build_sgb_geometry  # noqa: E402
 from scgsim.meshing import MeshRepairError, RuleSet, mesh_sgb  # noqa: E402
 from scgsim.meshing.driver import measure_bounding_box, run_round  # noqa: E402
 from scgsim.meshing.features import load_features  # noqa: E402
-from scgsim.meshing.job import DELAUNAY, MeshJob  # noqa: E402
-from scgsim.meshing.policy import SizeRequests, coarse_size  # noqa: E402
+from scgsim.meshing.job import MeshJob  # noqa: E402
+from scgsim.meshing.policy import DELAUNAY, HXT, SizeRequests, coarse_size  # noqa: E402
 
 # Decision C (quality measure and threshold) is the Human's; 0.01 is what the feasibility prototype used.
 PROVISIONAL_THRESHOLD = 0.01
@@ -56,9 +57,10 @@ PAD_RADIUS_UM = 10.0
 RP_NEAR_UM, RP_FAR_UM, RP_ALGORITHM_2D = 5.0, 300.0, 5
 # Cases whose repair-only variant runs too (no sidecar facts: the loop alone must find the sidewalls).
 REPAIR_ONLY_CASES = ("B_1mm",)
-METHODS = ("module", "module_outline", "R8", "RP", "repair_only")
+METHODS = ("module", "module_outline", "module_hxt", "R8", "RP", "repair_only")
 METHOD_LABELS = {
     "module_outline": "module + conductor-outline",
+    "module_hxt": "module, HXT",
     "repair_only": "module, repair only",
 }
 
@@ -199,6 +201,9 @@ def _run_case(name: str, args: argparse.Namespace) -> dict[str, Any]:
     outcome: dict[str, Any] = {"build_seconds": round(time.perf_counter() - started, 2)}
     meshes = args.output_dir / "meshes" / name
     outcome["module"] = _run_module(xao, sidecar, meshes / "module")
+    outcome["module_hxt"] = _run_module(
+        xao, sidecar, meshes / "module_hxt", RuleSet(algorithm_3d=HXT)
+    )
     outcome["module_outline"] = _run_module(
         xao, sidecar, meshes / "module_outline", RuleSet(conductor_outline=True)
     )
@@ -289,6 +294,7 @@ def _run_reference(
             directory / "mesh.msh",
             _r8_sizes(box),
             PROVISIONAL_THRESHOLD,
+            algorithm_3d=HXT,
             attribute=False,
         )
     else:

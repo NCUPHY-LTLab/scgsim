@@ -10,28 +10,40 @@
   "cases": {
     "A": {
       "module": {
-        "tetrahedra": 7163,
-        "min_quality": 0.12996387284581382,
+        "tetrahedra": 6820,
+        "min_quality": 0.12976214598616367,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 0.47,
+        "seconds": 0.35,
         "fallback": null,
-        "algorithm_3d": 10,
-        "refined_curves": 20,
-        "smallest_size_um": 0.514781514819637
+        "algorithm_3d": 1,
+        "refined_curves": 0,
+        "smallest_size_um": null
       },
       "module_outline": {
-        "tetrahedra": 7163,
-        "min_quality": 0.12996387284581382,
+        "tetrahedra": 6820,
+        "min_quality": 0.12976214598616367,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 0.46,
+        "seconds": 0.38,
+        "fallback": null,
+        "algorithm_3d": 1,
+        "refined_curves": 0,
+        "smallest_size_um": null
+      },
+      "module_hxt": {
+        "tetrahedra": 6887,
+        "min_quality": 0.3368790934056305,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 0.35,
         "fallback": null,
         "algorithm_3d": 10,
-        "refined_curves": 20,
-        "smallest_size_um": 0.514781514819637
+        "refined_curves": 0,
+        "smallest_size_um": null
       },
       "R8": {
         "tetrahedra": 6887,
@@ -48,7 +60,7 @@
         "bad_count": 0,
         "rounds": 0,
         "stop": "-",
-        "seconds": 0.19,
+        "seconds": 0.21,
         "fallback": null
       },
       "determinism": {
@@ -58,27 +70,39 @@
     },
     "B": {
       "module": {
-        "tetrahedra": 11249,
-        "min_quality": 0.018275435794733733,
+        "tetrahedra": 13601,
+        "min_quality": 0.03634925855894273,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 5.85,
+        "seconds": 0.9,
         "fallback": null,
-        "algorithm_3d": 10,
-        "refined_curves": 59,
+        "algorithm_3d": 1,
+        "refined_curves": 51,
         "smallest_size_um": 2.55318551434037
       },
       "module_outline": {
-        "tetrahedra": 35333,
-        "min_quality": 0.04167279178315163,
+        "tetrahedra": 40339,
+        "min_quality": 0.04522268487291938,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 5.29,
+        "seconds": 1.23,
+        "fallback": null,
+        "algorithm_3d": 1,
+        "refined_curves": 51,
+        "smallest_size_um": 2.55318551434037
+      },
+      "module_hxt": {
+        "tetrahedra": 10453,
+        "min_quality": 0.019156715632182245,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 5.28,
         "fallback": null,
         "algorithm_3d": 10,
-        "refined_curves": 59,
+        "refined_curves": 51,
         "smallest_size_um": 2.55318551434037
       },
       "R8": {
@@ -87,7 +111,7 @@
         "bad_count": 0,
         "rounds": 0,
         "stop": "-",
-        "seconds": 2.0,
+        "seconds": 2.01,
         "fallback": null
       },
       "RP": {
@@ -106,27 +130,39 @@
     },
     "C": {
       "module": {
-        "tetrahedra": 14747,
-        "min_quality": 0.018275435794733733,
+        "tetrahedra": 17208,
+        "min_quality": 0.02696387951495548,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 8.6,
+        "seconds": 0.88,
         "fallback": null,
-        "algorithm_3d": 10,
-        "refined_curves": 59,
+        "algorithm_3d": 1,
+        "refined_curves": 51,
         "smallest_size_um": 2.55318551434037
       },
       "module_outline": {
-        "tetrahedra": 39924,
-        "min_quality": 0.04167279178315163,
+        "tetrahedra": 45056,
+        "min_quality": 0.04522268487291938,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 11.07,
+        "seconds": 1.25,
+        "fallback": null,
+        "algorithm_3d": 1,
+        "refined_curves": 51,
+        "smallest_size_um": 2.55318551434037
+      },
+      "module_hxt": {
+        "tetrahedra": 13959,
+        "min_quality": 0.019156715632182245,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 9.55,
         "fallback": null,
         "algorithm_3d": 10,
-        "refined_curves": 59,
+        "refined_curves": 51,
         "smallest_size_um": 2.55318551434037
       },
       "R8": {
@@ -135,7 +171,7 @@
         "bad_count": 0,
         "rounds": 0,
         "stop": "-",
-        "seconds": 4.66,
+        "seconds": 4.62,
         "fallback": null
       },
       "RP": {
@@ -154,27 +190,39 @@
     },
     "circB": {
       "module": {
-        "tetrahedra": 10983,
-        "min_quality": 0.018534183957863395,
+        "tetrahedra": 13021,
+        "min_quality": 0.027693251988220792,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 4.97,
+        "seconds": 0.9,
         "fallback": null,
-        "algorithm_3d": 10,
-        "refined_curves": 59,
+        "algorithm_3d": 1,
+        "refined_curves": 51,
         "smallest_size_um": 2.55318551434037
       },
       "module_outline": {
-        "tetrahedra": 35180,
-        "min_quality": 0.04110520118099055,
+        "tetrahedra": 39585,
+        "min_quality": 0.04997874671889143,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 4.36,
+        "seconds": 1.21,
+        "fallback": null,
+        "algorithm_3d": 1,
+        "refined_curves": 51,
+        "smallest_size_um": 2.55318551434037
+      },
+      "module_hxt": {
+        "tetrahedra": 10104,
+        "min_quality": 0.015880640065648512,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 4.82,
         "fallback": null,
         "algorithm_3d": 10,
-        "refined_curves": 59,
+        "refined_curves": 51,
         "smallest_size_um": 2.55318551434037
       },
       "R8": {
@@ -192,7 +240,7 @@
         "bad_count": 0,
         "rounds": 0,
         "stop": "-",
-        "seconds": 0.65,
+        "seconds": 0.67,
         "fallback": null
       },
       "determinism": {
@@ -202,27 +250,39 @@
     },
     "B_1mm": {
       "module": {
-        "tetrahedra": 37260,
-        "min_quality": 0.017376842041508182,
+        "tetrahedra": 52338,
+        "min_quality": 0.025631950028536524,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 24.09,
+        "seconds": 2.65,
         "fallback": null,
-        "algorithm_3d": 10,
-        "refined_curves": 59,
+        "algorithm_3d": 1,
+        "refined_curves": 51,
         "smallest_size_um": 3.1907918209480703
       },
       "module_outline": {
-        "tetrahedra": 113038,
-        "min_quality": 0.02259158575436178,
+        "tetrahedra": 149218,
+        "min_quality": 0.02047004397764714,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 9.94,
+        "seconds": 4.72,
+        "fallback": null,
+        "algorithm_3d": 1,
+        "refined_curves": 51,
+        "smallest_size_um": 3.1907918209480703
+      },
+      "module_hxt": {
+        "tetrahedra": 33795,
+        "min_quality": 0.01715641534567334,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 24.6,
         "fallback": null,
         "algorithm_3d": 10,
-        "refined_curves": 59,
+        "refined_curves": 51,
         "smallest_size_um": 3.1907918209480703
       },
       "R8": {
@@ -231,7 +291,7 @@
         "bad_count": 123,
         "rounds": 0,
         "stop": "-",
-        "seconds": 2.03,
+        "seconds": 2.02,
         "fallback": null
       },
       "RP": {
@@ -240,19 +300,19 @@
         "bad_count": 0,
         "rounds": 0,
         "stop": "-",
-        "seconds": 4.67,
+        "seconds": 4.75,
         "fallback": null
       },
       "repair_only": {
-        "tetrahedra": 41154,
-        "min_quality": 0.011114954630657557,
+        "tetrahedra": 31791,
+        "min_quality": 0.014793587269907144,
         "bad_count": 0,
-        "rounds": 7,
+        "rounds": 3,
         "stop": "clean",
-        "seconds": 111.4,
+        "seconds": 3.91,
         "fallback": null,
-        "algorithm_3d": 10,
-        "refined_curves": 30,
+        "algorithm_3d": 1,
+        "refined_curves": 35,
         "smallest_size_um": 1.5953959104740352
       },
       "determinism": {
@@ -262,27 +322,39 @@
     },
     "circB_2mm": {
       "module": {
-        "tetrahedra": 67727,
-        "min_quality": 0.01674658906064335,
+        "tetrahedra": 98678,
+        "min_quality": 0.018776683040089805,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 47.59,
+        "seconds": 5.09,
         "fallback": null,
-        "algorithm_3d": 10,
-        "refined_curves": 59,
+        "algorithm_3d": 1,
+        "refined_curves": 51,
         "smallest_size_um": 3.1907535519294554
       },
       "module_outline": {
-        "tetrahedra": 87015,
-        "min_quality": 0.01856642683436446,
+        "tetrahedra": 127251,
+        "min_quality": 0.02519717650736591,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 25.36,
+        "seconds": 6.67,
+        "fallback": null,
+        "algorithm_3d": 1,
+        "refined_curves": 51,
+        "smallest_size_um": 3.1907535519294554
+      },
+      "module_hxt": {
+        "tetrahedra": 61787,
+        "min_quality": 0.01692946765803848,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 47.93,
         "fallback": null,
         "algorithm_3d": 10,
-        "refined_curves": 59,
+        "refined_curves": 51,
         "smallest_size_um": 3.1907535519294554
       },
       "R8": {
@@ -291,7 +363,7 @@
         "bad_count": 120,
         "rounds": 0,
         "stop": "-",
-        "seconds": 2.28,
+        "seconds": 2.3,
         "fallback": null
       },
       "RP": {
@@ -300,7 +372,7 @@
         "bad_count": 0,
         "rounds": 0,
         "stop": "-",
-        "seconds": 10.46,
+        "seconds": 10.52,
         "fallback": null
       },
       "determinism": {
@@ -310,27 +382,39 @@
     },
     "circB_4mm": {
       "module": {
-        "tetrahedra": 126841,
-        "min_quality": 0.015669536756784553,
+        "tetrahedra": 187568,
+        "min_quality": 0.010158259156096243,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 93.92,
+        "seconds": 11.14,
         "fallback": null,
-        "algorithm_3d": 10,
-        "refined_curves": 59,
+        "algorithm_3d": 1,
+        "refined_curves": 51,
         "smallest_size_um": 3.190734420117364
       },
       "module_outline": {
-        "tetrahedra": 126836,
-        "min_quality": 0.015669536756784553,
+        "tetrahedra": 187568,
+        "min_quality": 0.010158259156096243,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 95.21,
+        "seconds": 13.09,
+        "fallback": null,
+        "algorithm_3d": 1,
+        "refined_curves": 51,
+        "smallest_size_um": 3.190734420117364
+      },
+      "module_hxt": {
+        "tetrahedra": 115766,
+        "min_quality": 0.015148681411534923,
+        "bad_count": 0,
+        "rounds": 0,
+        "stop": "clean",
+        "seconds": 111.03,
         "fallback": null,
         "algorithm_3d": 10,
-        "refined_curves": 59,
+        "refined_curves": 51,
         "smallest_size_um": 3.190734420117364
       },
       "R8": {
@@ -339,7 +423,7 @@
         "bad_count": 122,
         "rounds": 0,
         "stop": "-",
-        "seconds": 1.23,
+        "seconds": 1.2,
         "fallback": null
       },
       "RP": {
@@ -348,7 +432,7 @@
         "bad_count": 0,
         "rounds": 0,
         "stop": "-",
-        "seconds": 23.96,
+        "seconds": 24.03,
         "fallback": null
       },
       "determinism": {
