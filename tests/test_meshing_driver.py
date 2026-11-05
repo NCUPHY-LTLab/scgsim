@@ -13,8 +13,8 @@ from meshing_support import audit_of, bad_element
 from scgsim.meshing import driver
 from scgsim.meshing.driver import WorkerExit, measure_bounding_box, run_round
 from scgsim.meshing.errors import MeshingError
-from scgsim.meshing.job import DELAUNAY, HXT, MeshJob
-from scgsim.meshing.policy import SizeField, SizeRequests
+from scgsim.meshing.job import MeshJob
+from scgsim.meshing.policy import DELAUNAY, HXT, SizeField, SizeRequests
 
 
 def job_in(tmp_path: Path, **overrides) -> MeshJob:
@@ -30,6 +30,7 @@ def job_in(tmp_path: Path, **overrides) -> MeshJob:
             (SizeField((3, 5), 5.0, 300.0),),
         ),
         "threshold": 0.01,
+        "algorithm_3d": HXT,
     }
     return MeshJob(**(fields | overrides))
 
@@ -153,11 +154,21 @@ def test_when_the_fallback_fails_too_the_round_has_no_mesh_and_both_reasons(
     assert len(worker.requests) == 2  # one retry, never more
 
 
-def test_a_delaunay_round_is_not_retried(tmp_path, monkeypatch):
-    """A delaunay round is not retried."""
-    worker = ScriptedWorker(killed_by(6))
+def test_a_delaunay_round_that_fails_is_retried_once_with_hxt(tmp_path, monkeypatch):
+    """The retry goes to the other algorithm, whichever was first."""
+    worker = ScriptedWorker(killed_by(11), succeeds())
     monkeypatch.setattr(driver, "launch_worker", worker)
     outcome = run_round(job_in(tmp_path, algorithm_3d=DELAUNAY), tmp_path)
+    assert outcome.audit is not None and outcome.algorithm_3d == HXT
+    assert outcome.fallback is not None and "algorithm 1" in outcome.fallback
+    assert [r["algorithm_3d"] for r in worker.requests] == [DELAUNAY, HXT]
+
+
+def test_another_algorithm_is_not_retried(tmp_path, monkeypatch):
+    """Only the two algorithms the module uses have a fallback."""
+    worker = ScriptedWorker(killed_by(6))
+    monkeypatch.setattr(driver, "launch_worker", worker)
+    outcome = run_round(job_in(tmp_path, algorithm_3d=4), tmp_path)
     assert outcome.audit is None and outcome.fallback is None
     assert len(worker.requests) == 1
 

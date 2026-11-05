@@ -10,6 +10,7 @@ from meshing_support import feature, features_of, film
 
 from scgsim.meshing import RULES_VERSION, RuleSet
 from scgsim.meshing.policy import (
+    DELAUNAY,
     BoundingBox,
     coarse_size,
     conductor_outline_curves,
@@ -28,6 +29,7 @@ def test_the_default_rule_set_is_the_measured_one():
     rules = RuleSet()
     assert rules.version == RULES_VERSION == "scgsim.meshing.rules/1"
     assert (rules.max_size_divisor, rules.gradation) == (20.0, 1.0)
+    assert rules.algorithm_3d == DELAUNAY
     assert rules.film_sidewall_thickness_multiple == 25.0
     with pytest.raises(dataclasses.FrozenInstanceError):
         rules.gradation = 2.0  # type: ignore[misc]

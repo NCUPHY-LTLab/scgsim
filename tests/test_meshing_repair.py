@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from meshing_support import audit_of, bad_element, features_of, film, outcome_of
 
 from scgsim.meshing import repair
-from scgsim.meshing.policy import BoundingBox, RuleSet
+from scgsim.meshing.policy import DELAUNAY, HXT, BoundingBox, RuleSet
 from scgsim.meshing.repair import Budgets, RepairInputs, refine_sizes, repair_mesh
 
 # A model whose coarse size is 20 um (ceiling 10), so the ladder is 10, 5, 2.5, 1.25, ...
@@ -248,3 +249,16 @@ def test_a_budget_of_n_rounds_allows_n_plus_one_meshes(tmp_path, monkeypatch, ro
     jobs = script_rounds(monkeypatch, bad_until_finer_than(1, 0.0))
     repair_mesh(inputs_for(tmp_path, film([1]), budgets=Budgets(max_rounds=rounds)))
     assert len(jobs) == rounds + 1
+
+
+def test_the_rule_set_chooses_the_algorithm_of_every_round(tmp_path, monkeypatch):
+    """Delaunay by default; HXT when the rule set says so."""
+    jobs = script_rounds(monkeypatch, bad_until_finer_than(7, 1.0))
+    repair_mesh(inputs_for(tmp_path, film([1])))
+    assert {job.algorithm_3d for job in jobs} == {DELAUNAY}
+    jobs.clear()
+    hxt_inputs = replace(
+        inputs_for(tmp_path, film([1])), ruleset=RuleSet(algorithm_3d=HXT)
+    )
+    repair_mesh(hxt_inputs)
+    assert {job.algorithm_3d for job in jobs} == {HXT}

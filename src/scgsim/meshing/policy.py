@@ -20,16 +20,25 @@ from .features import Feature, SidecarFeatures
 
 RULES_VERSION = "scgsim.meshing.rules/1"
 
+# Gmsh Mesh.Algorithm3D values.
+DELAUNAY = 1
+HXT = 10
+
 
 @dataclass(frozen=True)
 class RuleSet:
     """A named, versioned set of sizing parameters.
 
-    The defaults were measured on 2026-11-05 (Gmsh 4.15.2, HXT).  Changing a number means a new version;
+    The defaults were measured on 2026-11-05 (Gmsh 4.15.2).  Changing a number means a new version;
     the version and every parameter are recorded in each quality report.
     """
 
     version: str = RULES_VERSION
+    # 3D algorithm.  With the same size fields, Delaunay meshed the 1, 2 and 4 mm chips 9 to 10 times faster
+    # than HXT (4 mm: 11 s against 115 s; HXT spends 98 % of its time in its optimiser, on one thread) and
+    # stayed clean at 0.01 on all seven benchmark cases, with about 1.5 times the tetrahedra.  HXT is the
+    # other choice (and the retry when the first fails).
+    algorithm_3d: int = DELAUNAY
     # Coarse size away from every feature: the bounding-box diagonal over this number.
     max_size_divisor: float = 20.0
     # Size grows by 1 um per um of distance from a refined curve.  Gradation of 1.5 or more created new
@@ -206,7 +215,7 @@ def _film_sidewall_size(
 
 
 def _no_size(_feature: Feature, _max_size: float, _ruleset: RuleSet) -> float | None:
-    """No a priori size: HXT with only the coarse size meshed these curves cleanly in rules/1."""
+    """No a priori size: a mesh with only the coarse size was clean at these curves in rules/1."""
     return None
 
 

@@ -11,11 +11,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from .policy import SizeField, SizeRequests
-
-# Gmsh Mesh.Algorithm3D values.
-DELAUNAY = 1
-HXT = 10
+from .policy import DELAUNAY, SizeField, SizeRequests
 
 
 @dataclass(frozen=True)
@@ -31,7 +27,7 @@ class MeshJob:
     msh: Path
     sizes: SizeRequests
     threshold: float
-    algorithm_3d: int = HXT
+    algorithm_3d: int = DELAUNAY
     algorithm_2d: int | None = None
     attribute: bool = True
 

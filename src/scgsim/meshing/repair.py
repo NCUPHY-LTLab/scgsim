@@ -188,6 +188,7 @@ def _job(
             initial.fields,
         ),
         threshold=inputs.threshold,
+        algorithm_3d=inputs.ruleset.algorithm_3d,
     )
 
 

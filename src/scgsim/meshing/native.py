@@ -73,9 +73,13 @@ def _embed(features: SidecarFeatures) -> None:
 
 def _set_options(job: MeshJob) -> None:
     option = gmsh.option
-    # HXT (10) with only a global maximum size meshed every 100 um case cleanly; it is also the algorithm
-    # whose boundary recovery handles the thin films.  The driver retries with Delaunay (1) if HXT dies.
+    # Delaunay (1) is the default (see RuleSet.algorithm_3d); HXT (10) is the other choice.  The driver
+    # retries a failed round with the other one, since HXT can abort the whole process.
     option.setNumber("Mesh.Algorithm3D", job.algorithm_3d)
+    # One thread.  HXT with 4 or 16 threads was faster (25 s to 11 s and 6-8 s on the 1 mm chip) but not
+    # reproducible: two identical runs gave 33,758 and 33,761 tetrahedra.  Gmsh's default is 1; setting
+    # it states that determinism depends on it.
+    option.setNumber("General.NumThreads", 1)
     option.setNumber("Mesh.MeshSizeMax", job.sizes.max_size)
     if job.algorithm_2d is not None:
         option.setNumber("Mesh.Algorithm", job.algorithm_2d)

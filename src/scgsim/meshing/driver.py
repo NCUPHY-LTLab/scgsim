@@ -1,4 +1,4 @@
-"""Runs one meshing round in a fresh worker process, retrying once with Delaunay if HXT fails.
+"""Runs one meshing round in a fresh worker process, retrying once with the other 3D algorithm if it fails.
 
 Owns the process boundary: it writes the request, launches ``scgsim.meshing.worker`` and reads the result.
 It imports no Gmsh.  A round that returns a mesh is a :class:`RoundOutcome` with the audit; a round that
@@ -17,10 +17,11 @@ from pathlib import Path
 
 from .errors import MeshingError
 from .findings import MeshAudit
-from .job import DELAUNAY, HXT, MeshJob
-from .policy import BoundingBox
+from .job import MeshJob
+from .policy import DELAUNAY, HXT, BoundingBox
 
 _STDERR_TAIL_CHARS = 400
+_OTHER_ALGORITHM = {HXT: DELAUNAY, DELAUNAY: HXT}
 
 
 @dataclass(frozen=True)
@@ -57,16 +58,18 @@ def measure_bounding_box(xao: Path, work_dir: Path) -> BoundingBox:
 
 
 def run_round(job: MeshJob, work_dir: Path) -> RoundOutcome:
-    """Mesh ``job`` once; if HXT exits on a signal or reports an error, retry once with Delaunay.
+    """Mesh ``job`` once; if the worker exits on a signal or reports an error, retry once with the other algorithm.
 
-    The fallback is recorded in the outcome, so a report can say which algorithm made the final mesh.
+    HXT is the one seen to abort the whole process (heap corruption), Delaunay is the one that answers
+    when it does; a Delaunay failure is retried with HXT.  The fallback is recorded in the outcome, so a
+    report can say which algorithm made the final mesh.
     """
     started = time.perf_counter()
     audit, failure = _attempt(job, work_dir)
     fallback = None
-    if audit is None and job.algorithm_3d == HXT:
+    if audit is None and job.algorithm_3d in _OTHER_ALGORITHM:
         fallback = failure
-        job = replace(job, algorithm_3d=DELAUNAY)
+        job = replace(job, algorithm_3d=_OTHER_ALGORITHM[job.algorithm_3d])
         audit, failure = _attempt(job, work_dir)
     return RoundOutcome(
         audit=audit,
