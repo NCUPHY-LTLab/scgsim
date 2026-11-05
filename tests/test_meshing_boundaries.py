@@ -20,7 +20,12 @@ PARENT_PROCESS_MODULES = (
     "entry",
     "errors",
     "features",
-    "policy",
+    "sizing",
+    "mesher",
+    "recipes",
+    "recipes.feature",
+    "recipes.global_size",
+    "recipes.uniform_boundary",
     "findings",
     "job",
     "driver",
@@ -30,18 +35,28 @@ PARENT_PROCESS_MODULES = (
 
 
 def meshing_sources() -> list[Path]:
-    """Every module file of the meshing package."""
-    return sorted(Path(scgsim.meshing.__file__).parent.glob("*.py"))
+    """Every module file of the meshing package, the recipes included."""
+    return sorted(Path(scgsim.meshing.__file__).parent.rglob("*.py"))
+
+
+def module_imported_from(source: Path, node: ast.ImportFrom) -> str:
+    """Absolute name of the module an ``import from`` names, a relative one resolved against the file's package."""
+    if not node.level:
+        return node.module or ""
+    root = Path(scgsim.meshing.__file__).parent
+    package = ["scgsim", "meshing", *source.relative_to(root).parts[:-1]]
+    parent = package[: len(package) - node.level + 1]
+    return ".".join([*parent, node.module] if node.module else parent)
 
 
 def imported_modules(source: Path) -> set[str]:
-    """Absolute names of every module a file imports (relative imports resolved to ``scgsim.meshing``)."""
+    """Absolute names of every module a file imports."""
     names: set[str] = set()
     for node in ast.walk(ast.parse(source.read_text(encoding="utf-8"))):
         if isinstance(node, ast.Import):
             names.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
-            base = "scgsim.meshing" if node.level else (node.module or "")
+            base = module_imported_from(source, node)
             names.add(base)
             names.update(f"{base}.{alias.name}" for alias in node.names)
     return names
@@ -56,6 +71,21 @@ def test_no_meshing_module_imports_sgb_aedt_or_palace(source: Path):
         if any(name == f or name.startswith(f"{f}.") for f in FORBIDDEN)
     }
     assert not offending
+
+
+@pytest.mark.parametrize(
+    "source",
+    sorted((Path(scgsim.meshing.__file__).parent / "recipes").glob("[a-z]*.py")),
+    ids=lambda p: p.name,
+)
+def test_a_recipe_imports_no_other_recipe(source: Path):
+    """A recipe imports no other recipe: each strategy stands alone beside the shared sizing vocabulary."""
+    siblings = {
+        f"scgsim.meshing.recipes.{other.stem}"
+        for other in source.parent.glob("[a-z]*.py")
+        if other != source
+    }
+    assert not imported_modules(source) & siblings
 
 
 def test_the_contract_is_declared_in_the_import_linter_configuration():

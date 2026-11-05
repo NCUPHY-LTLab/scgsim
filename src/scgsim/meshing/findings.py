@@ -15,7 +15,7 @@ from typing import Any
 # radius ratio (1 is a regular tetrahedron, 0 a flat one, negative an inverted one).
 QUALITY_MEASURE = "minSICN"
 
-# Where a bad element touches the model's entities, from the most to the least specific.  Rules/1 refines
+# Where a bad element touches the model's entities, from the most to the least specific.  The repair loop refines
 # curves, so an element that touches only a face or nothing is reported but cannot be repaired.
 LOCATIONS = ("point", "curve", "surface", "interior")
 REPAIRABLE_LOCATIONS = ("point", "curve")
@@ -55,7 +55,7 @@ class BadElement:
 
     @property
     def repairable(self) -> bool:
-        """Whether the element touches a curve or a point, which is all rules/1 can refine."""
+        """Whether the element touches a curve or a point, which is all the repair loop can refine."""
         return self.location in REPAIRABLE_LOCATIONS
 
     @classmethod
@@ -91,6 +91,10 @@ class MeshAudit:
     ]  # sorted by element tag; empty when attribution was not requested
     mesh_seconds: float
     audit_seconds: float
+
+    def accepted(self, max_tetrahedra: int) -> bool:
+        """Whether the loop stops with this mesh: no tetrahedron below the threshold, within the budget."""
+        return self.bad_count == 0 and self.tetrahedra <= max_tetrahedra
 
     def to_json(self) -> dict[str, Any]:
         """The JSON form of the audit."""

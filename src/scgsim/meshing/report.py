@@ -1,30 +1,36 @@
 """The quality report: a JSON document and a short text summary of one meshing run.
 
-Owns what a run says about itself: the rule-set version and parameters, the threshold, how the loop
-stopped, the counts, and the bad elements that remain with their location, groups and feature kinds.  All
-timings sit under one ``timing`` key, so two runs of the same input compare equal without it.
+Owns what a run says about itself: the recipe (name, version, parameters), the repair policy, the mesher
+options and the budgets, the threshold, how the loop stopped, the counts, and the bad elements that remain
+with their location, groups and feature kinds.  The counts and the minimum quality are measured on the
+linear mesh, before any elevation to a higher order; the report says so.  All timings sit under one
+``timing`` key, so two runs of the same input compare equal without it.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any, TypedDict
 
 from .findings import QUALITY_MEASURE, BadElement
-from .policy import RuleSet
-from .repair import Budgets, RepairOutcome
+from .mesher import MesherOptions
+from .recipes import SizingRecipe
+from .repair import Budgets, RepairOutcome, RepairPolicy
 
-REPORT_VERSION = "scgsim.meshing.report/1"
+REPORT_VERSION = "scgsim.meshing.report/2"
 MAX_LISTED_ELEMENTS = 200
+MEASURED_ON = "linear mesh before elevation"
 
 
 class QualityReport(TypedDict):
     """Shape of the report; the nested records are plain JSON mappings."""
 
     report_version: str
-    rules: dict[str, Any]
+    recipe: dict[str, Any]
+    repair: dict[str, Any]
+    mesher: dict[str, Any]
     quality_measure: str
     threshold: float
     stop: str
@@ -36,24 +42,38 @@ class QualityReport(TypedDict):
     timing: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class RunSettings:
+    """What the caller chose for a run, as the report records it."""
+
+    threshold: float
+    recipe: SizingRecipe
+    repair: RepairPolicy
+    mesher: MesherOptions
+    budgets: Budgets
+
+
 def build_report(
-    outcome: RepairOutcome,
-    *,
-    threshold: float,
-    ruleset: RuleSet,
-    budgets: Budgets,
-    total_seconds: float,
+    outcome: RepairOutcome, settings: RunSettings, total_seconds: float
 ) -> QualityReport:
     """The report of a finished loop.  ``mesh`` is ``None`` when no round produced a mesh."""
     audit = outcome.last_audit
     return QualityReport(
         report_version=REPORT_VERSION,
-        rules={"version": ruleset.version, "parameters": asdict(ruleset)},
+        recipe={
+            "name": settings.recipe.name,
+            "version": settings.recipe.version,
+            "parameters": asdict(settings.recipe)
+            if is_dataclass(settings.recipe)
+            else {},
+        },
+        repair=asdict(settings.repair),
+        mesher=asdict(settings.mesher),
         quality_measure=QUALITY_MEASURE,
-        threshold=threshold,
+        threshold=settings.threshold,
         stop=outcome.stop,
         rounds=outcome.rounds,
-        budgets=asdict(budgets),
+        budgets=asdict(settings.budgets),
         mesh=None
         if audit is None
         else {
@@ -62,6 +82,8 @@ def build_report(
             "min_quality": audit.min_quality,
             "min_gamma": audit.min_gamma,
             "bad_count": audit.bad_count,
+            "measured_on": MEASURED_ON,
+            "geometry_order": outcome.geometry_order,
             "algorithm_3d": outcome.algorithm_3d,
             "fallback": outcome.fallback,
             "refined_curves": len(outcome.curve_sizes),
@@ -84,7 +106,7 @@ def render_text(report: QualityReport) -> str:
     """A short human summary of ``report``."""
     mesh = report["mesh"]
     lines = [
-        f"scgsim.meshing {report['rules']['version']}: {_headline(report)}",
+        f"scgsim.meshing {report['recipe']['version']}: {_headline(report)}",
         f"  quality measure {report['quality_measure']}, threshold {report['threshold']:g}",
     ]
     if mesh is None:
@@ -93,7 +115,8 @@ def render_text(report: QualityReport) -> str:
         fallback = f", fallback after {mesh['fallback']}" if mesh["fallback"] else ""
         lines.append(
             f"  {mesh['tetrahedra']} tetrahedra, min quality {mesh['min_quality']:.4g}, "
-            f"{mesh['bad_count']} below the threshold; algorithm {mesh['algorithm_3d']}{fallback}"
+            f"{mesh['bad_count']} below the threshold ({mesh['measured_on']}); "
+            f"algorithm {mesh['algorithm_3d']}{fallback}, geometry order {mesh['geometry_order']}"
         )
         lines.append(
             f"  {mesh['refined_curves']} refined curves, smallest size "

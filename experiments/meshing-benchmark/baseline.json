@@ -6,62 +6,97 @@
   },
   "threshold": 0.01,
   "threshold_status": "provisional (decision C is open)",
-  "rules": "scgsim.meshing.rules/1",
   "cases": {
     "A": {
       "module": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 1,
         "tetrahedra": 6820,
         "min_quality": 0.12976214598616367,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 0.35,
+        "status": "accepted",
+        "seconds": 0.5,
         "fallback": null,
-        "algorithm_3d": 1,
         "refined_curves": 0,
         "smallest_size_um": null
       },
       "module_outline": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 1,
         "tetrahedra": 6820,
         "min_quality": 0.12976214598616367,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 0.38,
+        "status": "accepted",
+        "seconds": 0.5,
         "fallback": null,
-        "algorithm_3d": 1,
         "refined_curves": 0,
         "smallest_size_um": null
       },
       "module_hxt": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 10,
         "tetrahedra": 6887,
         "min_quality": 0.3368790934056305,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 0.35,
+        "status": "accepted",
+        "seconds": 0.46,
         "fallback": null,
-        "algorithm_3d": 10,
         "refined_curves": 0,
         "smallest_size_um": null
       },
       "R8": {
+        "recipe": {
+          "name": "global-size",
+          "version": "scgsim.meshing.global-size/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 10,
         "tetrahedra": 6887,
         "min_quality": 0.3368790934056305,
         "bad_count": 0,
         "rounds": 0,
-        "stop": "-",
-        "seconds": 0.19,
-        "fallback": null
+        "stop": "clean",
+        "status": "accepted",
+        "seconds": 0.48,
+        "fallback": null,
+        "refined_curves": 0,
+        "smallest_size_um": null
       },
       "RP": {
+        "recipe": {
+          "name": "uniform-boundary",
+          "version": "scgsim.meshing.uniform-boundary/1"
+        },
+        "algorithm_2d": 5,
+        "algorithm_3d": 1,
         "tetrahedra": 825,
         "min_quality": 0.1055840959041736,
         "bad_count": 0,
         "rounds": 0,
-        "stop": "-",
-        "seconds": 0.21,
-        "fallback": null
+        "stop": "clean",
+        "status": "accepted",
+        "seconds": 0.49,
+        "fallback": null,
+        "refined_curves": 110,
+        "smallest_size_um": 5.0
       },
       "determinism": {
         "same_mesh": true,
@@ -70,58 +105,94 @@
     },
     "B": {
       "module": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 1,
         "tetrahedra": 13601,
         "min_quality": 0.03634925855894273,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 0.9,
+        "status": "accepted",
+        "seconds": 1.04,
         "fallback": null,
-        "algorithm_3d": 1,
         "refined_curves": 51,
         "smallest_size_um": 2.55318551434037
       },
       "module_outline": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 1,
         "tetrahedra": 40339,
         "min_quality": 0.04522268487291938,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 1.23,
+        "status": "accepted",
+        "seconds": 1.39,
         "fallback": null,
-        "algorithm_3d": 1,
         "refined_curves": 51,
         "smallest_size_um": 2.55318551434037
       },
       "module_hxt": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 10,
         "tetrahedra": 10453,
         "min_quality": 0.019156715632182245,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 5.28,
+        "status": "accepted",
+        "seconds": 5.47,
         "fallback": null,
-        "algorithm_3d": 10,
         "refined_curves": 51,
         "smallest_size_um": 2.55318551434037
       },
       "R8": {
+        "recipe": {
+          "name": "global-size",
+          "version": "scgsim.meshing.global-size/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 10,
         "tetrahedra": 7365,
         "min_quality": 0.019816404415288456,
         "bad_count": 0,
         "rounds": 0,
-        "stop": "-",
-        "seconds": 2.01,
-        "fallback": null
+        "stop": "clean",
+        "status": "accepted",
+        "seconds": 2.33,
+        "fallback": null,
+        "refined_curves": 0,
+        "smallest_size_um": null
       },
       "RP": {
+        "recipe": {
+          "name": "uniform-boundary",
+          "version": "scgsim.meshing.uniform-boundary/1"
+        },
+        "algorithm_2d": 5,
+        "algorithm_3d": 1,
         "tetrahedra": 8491,
         "min_quality": 0.020783243772792167,
         "bad_count": 0,
         "rounds": 0,
-        "stop": "-",
-        "seconds": 0.65,
-        "fallback": null
+        "stop": "clean",
+        "status": "accepted",
+        "seconds": 0.95,
+        "fallback": null,
+        "refined_curves": 173,
+        "smallest_size_um": 5.0
       },
       "determinism": {
         "same_mesh": true,
@@ -130,58 +201,94 @@
     },
     "C": {
       "module": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 1,
         "tetrahedra": 17208,
         "min_quality": 0.02696387951495548,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 0.88,
+        "status": "accepted",
+        "seconds": 1.07,
         "fallback": null,
-        "algorithm_3d": 1,
         "refined_curves": 51,
         "smallest_size_um": 2.55318551434037
       },
       "module_outline": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 1,
         "tetrahedra": 45056,
         "min_quality": 0.04522268487291938,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 1.25,
+        "status": "accepted",
+        "seconds": 1.39,
         "fallback": null,
-        "algorithm_3d": 1,
         "refined_curves": 51,
         "smallest_size_um": 2.55318551434037
       },
       "module_hxt": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 10,
         "tetrahedra": 13959,
         "min_quality": 0.019156715632182245,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 9.55,
+        "status": "accepted",
+        "seconds": 9.63,
         "fallback": null,
-        "algorithm_3d": 10,
         "refined_curves": 51,
         "smallest_size_um": 2.55318551434037
       },
       "R8": {
+        "recipe": {
+          "name": "global-size",
+          "version": "scgsim.meshing.global-size/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 10,
         "tetrahedra": 8737,
         "min_quality": 0.019816404415288456,
         "bad_count": 0,
         "rounds": 0,
-        "stop": "-",
-        "seconds": 4.62,
-        "fallback": null
+        "stop": "clean",
+        "status": "accepted",
+        "seconds": 5.01,
+        "fallback": null,
+        "refined_curves": 0,
+        "smallest_size_um": null
       },
       "RP": {
+        "recipe": {
+          "name": "uniform-boundary",
+          "version": "scgsim.meshing.uniform-boundary/1"
+        },
+        "algorithm_2d": 5,
+        "algorithm_3d": 1,
         "tetrahedra": 10508,
         "min_quality": 0.020783243772792167,
         "bad_count": 0,
         "rounds": 0,
-        "stop": "-",
-        "seconds": 0.68,
-        "fallback": null
+        "stop": "clean",
+        "status": "accepted",
+        "seconds": 0.95,
+        "fallback": null,
+        "refined_curves": 173,
+        "smallest_size_um": 5.0
       },
       "determinism": {
         "same_mesh": true,
@@ -190,58 +297,94 @@
     },
     "circB": {
       "module": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 1,
         "tetrahedra": 13021,
         "min_quality": 0.027693251988220792,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 0.9,
+        "status": "accepted",
+        "seconds": 1.0,
         "fallback": null,
-        "algorithm_3d": 1,
         "refined_curves": 51,
         "smallest_size_um": 2.55318551434037
       },
       "module_outline": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 1,
         "tetrahedra": 39585,
         "min_quality": 0.04997874671889143,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 1.21,
+        "status": "accepted",
+        "seconds": 1.32,
         "fallback": null,
-        "algorithm_3d": 1,
         "refined_curves": 51,
         "smallest_size_um": 2.55318551434037
       },
       "module_hxt": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 10,
         "tetrahedra": 10104,
         "min_quality": 0.015880640065648512,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 4.82,
+        "status": "accepted",
+        "seconds": 4.97,
         "fallback": null,
-        "algorithm_3d": 10,
         "refined_curves": 51,
         "smallest_size_um": 2.55318551434037
       },
       "R8": {
+        "recipe": {
+          "name": "global-size",
+          "version": "scgsim.meshing.global-size/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 10,
         "tetrahedra": 7220,
         "min_quality": 0.0199131674444236,
         "bad_count": 0,
         "rounds": 0,
-        "stop": "-",
-        "seconds": 1.34,
-        "fallback": null
+        "stop": "clean",
+        "status": "accepted",
+        "seconds": 1.64,
+        "fallback": null,
+        "refined_curves": 0,
+        "smallest_size_um": null
       },
       "RP": {
+        "recipe": {
+          "name": "uniform-boundary",
+          "version": "scgsim.meshing.uniform-boundary/1"
+        },
+        "algorithm_2d": 5,
+        "algorithm_3d": 1,
         "tetrahedra": 8235,
         "min_quality": 0.021340534488328036,
         "bad_count": 0,
         "rounds": 0,
-        "stop": "-",
-        "seconds": 0.67,
-        "fallback": null
+        "stop": "clean",
+        "status": "accepted",
+        "seconds": 0.94,
+        "fallback": null,
+        "refined_curves": 155,
+        "smallest_size_um": 5.0
       },
       "determinism": {
         "same_mesh": true,
@@ -250,68 +393,110 @@
     },
     "B_1mm": {
       "module": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 1,
         "tetrahedra": 52338,
         "min_quality": 0.025631950028536524,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 2.65,
+        "status": "accepted",
+        "seconds": 2.86,
         "fallback": null,
-        "algorithm_3d": 1,
         "refined_curves": 51,
         "smallest_size_um": 3.1907918209480703
       },
       "module_outline": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 1,
         "tetrahedra": 149218,
         "min_quality": 0.02047004397764714,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 4.72,
+        "status": "accepted",
+        "seconds": 4.66,
         "fallback": null,
-        "algorithm_3d": 1,
         "refined_curves": 51,
         "smallest_size_um": 3.1907918209480703
       },
       "module_hxt": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 10,
         "tetrahedra": 33795,
         "min_quality": 0.01715641534567334,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 24.6,
+        "status": "accepted",
+        "seconds": 24.61,
         "fallback": null,
-        "algorithm_3d": 10,
         "refined_curves": 51,
         "smallest_size_um": 3.1907918209480703
       },
       "R8": {
+        "recipe": {
+          "name": "global-size",
+          "version": "scgsim.meshing.global-size/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 10,
         "tetrahedra": 9664,
         "min_quality": 0.002062702454353472,
         "bad_count": 123,
         "rounds": 0,
-        "stop": "-",
-        "seconds": 2.02,
-        "fallback": null
+        "stop": "rounds",
+        "status": "rejected",
+        "seconds": 2.31,
+        "fallback": null,
+        "refined_curves": 0,
+        "smallest_size_um": null
       },
       "RP": {
+        "recipe": {
+          "name": "uniform-boundary",
+          "version": "scgsim.meshing.uniform-boundary/1"
+        },
+        "algorithm_2d": 5,
+        "algorithm_3d": 1,
         "tetrahedra": 100227,
         "min_quality": 0.016073682569500012,
         "bad_count": 0,
         "rounds": 0,
-        "stop": "-",
-        "seconds": 4.75,
-        "fallback": null
+        "stop": "clean",
+        "status": "accepted",
+        "seconds": 4.92,
+        "fallback": null,
+        "refined_curves": 173,
+        "smallest_size_um": 5.0
       },
       "repair_only": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 1,
         "tetrahedra": 31791,
         "min_quality": 0.014793587269907144,
         "bad_count": 0,
         "rounds": 3,
         "stop": "clean",
-        "seconds": 3.91,
+        "status": "accepted",
+        "seconds": 4.27,
         "fallback": null,
-        "algorithm_3d": 1,
         "refined_curves": 35,
         "smallest_size_um": 1.5953959104740352
       },
@@ -322,58 +507,94 @@
     },
     "circB_2mm": {
       "module": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 1,
         "tetrahedra": 98678,
         "min_quality": 0.018776683040089805,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 5.09,
+        "status": "accepted",
+        "seconds": 5.2,
         "fallback": null,
-        "algorithm_3d": 1,
         "refined_curves": 51,
         "smallest_size_um": 3.1907535519294554
       },
       "module_outline": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 1,
         "tetrahedra": 127251,
         "min_quality": 0.02519717650736591,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 6.67,
+        "status": "accepted",
+        "seconds": 6.72,
         "fallback": null,
-        "algorithm_3d": 1,
         "refined_curves": 51,
         "smallest_size_um": 3.1907535519294554
       },
       "module_hxt": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 10,
         "tetrahedra": 61787,
         "min_quality": 0.01692946765803848,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 47.93,
+        "status": "accepted",
+        "seconds": 48.33,
         "fallback": null,
-        "algorithm_3d": 10,
         "refined_curves": 51,
         "smallest_size_um": 3.1907535519294554
       },
       "R8": {
+        "recipe": {
+          "name": "global-size",
+          "version": "scgsim.meshing.global-size/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 10,
         "tetrahedra": 9344,
         "min_quality": 0.001036108983590778,
         "bad_count": 120,
         "rounds": 0,
-        "stop": "-",
-        "seconds": 2.3,
-        "fallback": null
+        "stop": "rounds",
+        "status": "rejected",
+        "seconds": 2.61,
+        "fallback": null,
+        "refined_curves": 0,
+        "smallest_size_um": null
       },
       "RP": {
+        "recipe": {
+          "name": "uniform-boundary",
+          "version": "scgsim.meshing.uniform-boundary/1"
+        },
+        "algorithm_2d": 5,
+        "algorithm_3d": 1,
         "tetrahedra": 205692,
         "min_quality": 0.015006522656360318,
         "bad_count": 0,
         "rounds": 0,
-        "stop": "-",
-        "seconds": 10.52,
-        "fallback": null
+        "stop": "clean",
+        "status": "accepted",
+        "seconds": 10.84,
+        "fallback": null,
+        "refined_curves": 155,
+        "smallest_size_um": 5.0
       },
       "determinism": {
         "same_mesh": true,
@@ -382,58 +603,94 @@
     },
     "circB_4mm": {
       "module": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 1,
         "tetrahedra": 187568,
         "min_quality": 0.010158259156096243,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 11.14,
+        "status": "accepted",
+        "seconds": 10.9,
         "fallback": null,
-        "algorithm_3d": 1,
         "refined_curves": 51,
         "smallest_size_um": 3.190734420117364
       },
       "module_outline": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 1,
         "tetrahedra": 187568,
         "min_quality": 0.010158259156096243,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 13.09,
+        "status": "accepted",
+        "seconds": 13.17,
         "fallback": null,
-        "algorithm_3d": 1,
         "refined_curves": 51,
         "smallest_size_um": 3.190734420117364
       },
       "module_hxt": {
+        "recipe": {
+          "name": "features",
+          "version": "scgsim.meshing.features/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 10,
         "tetrahedra": 115766,
         "min_quality": 0.015148681411534923,
         "bad_count": 0,
         "rounds": 0,
         "stop": "clean",
-        "seconds": 111.03,
+        "status": "accepted",
+        "seconds": 111.77,
         "fallback": null,
-        "algorithm_3d": 10,
         "refined_curves": 51,
         "smallest_size_um": 3.190734420117364
       },
       "R8": {
+        "recipe": {
+          "name": "global-size",
+          "version": "scgsim.meshing.global-size/1"
+        },
+        "algorithm_2d": null,
+        "algorithm_3d": 10,
         "tetrahedra": 8579,
         "min_quality": 0.0004609117549784265,
         "bad_count": 122,
         "rounds": 0,
-        "stop": "-",
-        "seconds": 1.2,
-        "fallback": null
+        "stop": "rounds",
+        "status": "rejected",
+        "seconds": 1.48,
+        "fallback": null,
+        "refined_curves": 0,
+        "smallest_size_um": null
       },
       "RP": {
+        "recipe": {
+          "name": "uniform-boundary",
+          "version": "scgsim.meshing.uniform-boundary/1"
+        },
+        "algorithm_2d": 5,
+        "algorithm_3d": 1,
         "tetrahedra": 419045,
         "min_quality": 0.01199464407501302,
         "bad_count": 0,
         "rounds": 0,
-        "stop": "-",
-        "seconds": 24.03,
-        "fallback": null
+        "stop": "clean",
+        "status": "accepted",
+        "seconds": 24.15,
+        "fallback": null,
+        "refined_curves": 155,
+        "smallest_size_um": 5.0
       },
       "determinism": {
         "same_mesh": true,

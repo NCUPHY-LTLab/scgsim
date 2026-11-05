@@ -1,9 +1,11 @@
 # Meshing benchmark
 
-This benchmark meshes seven fixed SGB cases with `scgsim.meshing` and with two reference recipes,
-and records tetrahedron count, minimum quality, elements below the threshold, repair rounds, stop
-reason, time and whether the other 3D algorithm had to be used as a fallback. Run it again after every rule change and compare
-with `baseline.json`.
+This benchmark meshes seven fixed SGB cases with `scgsim.meshing`, through its three sizing recipes
+(`FeatureRecipe`, `GlobalSizeRecipe`, `UniformBoundaryRecipe`), and records for each run the recipe and
+its version, the 2D and 3D algorithms, tetrahedron count, minimum quality, elements below the
+threshold, repair rounds, status, time and whether the other 3D algorithm had to be used as a
+fallback. Run it again after every change of a recipe, the repair loop or the mesher options and
+compare with `baseline.json`.
 
 ## Run it
 
@@ -16,6 +18,9 @@ uv run python experiments/meshing-benchmark/run.py OUTPUT_DIR \
 ```
 
 The full run takes about 7 minutes on one workstation, mostly the HXT column on the 2 mm and 4 mm chips.
+`results.json` records the Gmsh version once, in its `environment` section; each run lists its recipe
+(name and version), `algorithm_2d` (`null` is Gmsh's default) and `algorithm_3d` (the one that made the
+mesh, after any fallback).
 Useful options:
 
 - `--cases B circB` runs only those cases (`A B C circB B_1mm circB_2mm circB_4mm`).
@@ -46,71 +51,90 @@ model four orders of magnitude larger. That is where near-flat tetrahedra appear
 
 ## Methods
 
-- **module** is `mesh_sgb` with the default `RuleSet` (`scgsim.meshing.rules/1`: 3D Delaunay, a priori
-  film-wall sizes) and the threshold **0.01 on minSICN. The threshold is provisional**: the quality
-  measure and bound are decision C, which is still open.
-- **module + conductor-outline** is the same with `RuleSet(conductor_outline=True)`, the optional rule
-  that sizes the conductors' outline edges at 5 um, growing to the coarse size over 300 um.
-- **module, HXT** is the same with `RuleSet(algorithm_3d=10)`, the algorithm the module used before
-  the timing study below.
-- **R8** is HXT with only the global maximum size (bounding-box diagonal / 20): the cheap reference.
-- **RP** is the uniform policy Palace applies today, 5 um on every curve growing to 300 um, with 2D
-  algorithm 5 and 3D Delaunay. It uses the module's own Distance/Threshold field, so its element
-  counts differ slightly from the earlier prototype's.
+Every method is one `mesh_sgb` call with the provisional threshold **0.01 on minSICN** (the quality
+measure and bound are decision C, which is still open). The recipe chooses only the initial sizes;
+repair, the threshold check and the report are the same for all of them.
+
+- **module** is `FeatureRecipe()` (`scgsim.meshing.features/1`: a priori film-wall sizes), the default
+  `RepairPolicy` and `Budgets`, and 3D Delaunay.
+- **module + conductor-outline** is the same with `FeatureRecipe(conductor_outline=True)`, the optional
+  rule that sizes the conductors' outline edges at 5 um, growing to the coarse size over 300 um.
+- **module, HXT** is the same with `MesherOptions(algorithm_3d=10)`, the algorithm the module used
+  before the timing study below.
+- **R8** is `GlobalSizeRecipe()` (`scgsim.meshing.global-size/1`: only the global maximum size,
+  bounding-box diagonal / 20, no curve sizes), HXT, and `Budgets(max_rounds=0)`: the cheap reference.
+- **RP** is `UniformBoundaryRecipe()` (`scgsim.meshing.uniform-boundary/1`: 5 um on every curve growing
+  to 300 um, as Palace does today), 2D algorithm 5, 3D Delaunay, and `Budgets(max_rounds=0)`. It uses
+  the module's own Distance/Threshold field, so its element counts differ slightly from the earlier
+  prototype's.
 - **module, repair only** (`B_1mm` only) is the module with the `film_sidewall` features removed from
   the sidecar, so the repair loop must find the film walls from the bad elements alone.
 
-Every method runs in a fresh worker process. R8 and RP are one round with no repair; their bad
-elements are counted, not attributed.
+Every method runs in a fresh worker process.
+
+### How to read "rejected"
+
+`Budgets(max_rounds=0)` turns repair off, not the threshold: R8 and RP are one mesh, and a mesh with a
+tetrahedron below the threshold is **rejected** (`MeshRepairError`; the status column shows
+`rejected (rounds)`, the stop reason of a loop whose round budget is spent). Their tetrahedra, minimum
+SICN and count below the threshold are read from the report the error carries, so a rejected run
+still has its numbers. A rejected run is not a failure of the benchmark; it says that the recipe on its own
+does not meet the threshold on that case. The earlier table gave the references no status (their stop
+reason was `-`); their numbers are unchanged, and only R8 on the three large chips is now rejected.
 
 ## Result
 
-Gmsh 4.15.2, threshold 0.01 (provisional). "below" counts tetrahedra under the threshold.
+Gmsh 4.15.2, threshold 0.01 (provisional). "below" counts tetrahedra under the threshold; "recipe" is
+the recipe's version without the `scgsim.meshing.` prefix; "2D / 3D" are the Gmsh algorithms of the mesh
+(`default` is Gmsh's own 2D choice). Seconds are the whole `mesh_sgb` call, so the R8 and RP times
+include the extent probe and the audit's attribution of bad elements, which the earlier table did not.
 
-| case | method | tetrahedra | min SICN | below | rounds | stop | seconds | fallback |
-|---|---|---:|---:|---:|---:|---|---:|---|
-| A | module | 6,820 | 0.1298 | 0 | 0 | clean | 0.3 | no |
-| A | module + conductor-outline | 6,820 | 0.1298 | 0 | 0 | clean | 0.4 | no |
-| A | module, HXT | 6,887 | 0.3369 | 0 | 0 | clean | 0.3 | no |
-| A | R8 | 6,887 | 0.3369 | 0 | 0 | - | 0.2 | no |
-| A | RP | 825 | 0.1056 | 0 | 0 | - | 0.2 | no |
-| B | module | 13,601 | 0.03635 | 0 | 0 | clean | 0.9 | no |
-| B | module + conductor-outline | 40,339 | 0.04522 | 0 | 0 | clean | 1.2 | no |
-| B | module, HXT | 10,453 | 0.01916 | 0 | 0 | clean | 5.3 | no |
-| B | R8 | 7,365 | 0.01982 | 0 | 0 | - | 2.0 | no |
-| B | RP | 8,491 | 0.02078 | 0 | 0 | - | 0.7 | no |
-| C | module | 17,208 | 0.02696 | 0 | 0 | clean | 0.9 | no |
-| C | module + conductor-outline | 45,056 | 0.04522 | 0 | 0 | clean | 1.2 | no |
-| C | module, HXT | 13,959 | 0.01916 | 0 | 0 | clean | 9.6 | no |
-| C | R8 | 8,737 | 0.01982 | 0 | 0 | - | 4.6 | no |
-| C | RP | 10,508 | 0.02078 | 0 | 0 | - | 0.7 | no |
-| circB | module | 13,021 | 0.02769 | 0 | 0 | clean | 0.9 | no |
-| circB | module + conductor-outline | 39,585 | 0.04998 | 0 | 0 | clean | 1.2 | no |
-| circB | module, HXT | 10,104 | 0.01588 | 0 | 0 | clean | 4.8 | no |
-| circB | R8 | 7,220 | 0.01991 | 0 | 0 | - | 1.3 | no |
-| circB | RP | 8,235 | 0.02134 | 0 | 0 | - | 0.7 | no |
-| B_1mm | module | 52,338 | 0.02563 | 0 | 0 | clean | 2.6 | no |
-| B_1mm | module + conductor-outline | 149,218 | 0.02047 | 0 | 0 | clean | 4.7 | no |
-| B_1mm | module, HXT | 33,795 | 0.01716 | 0 | 0 | clean | 24.6 | no |
-| B_1mm | R8 | 9,664 | 0.002063 | 123 | 0 | - | 2.0 | no |
-| B_1mm | RP | 100,227 | 0.01607 | 0 | 0 | - | 4.8 | no |
-| B_1mm | module, repair only | 31,791 | 0.01479 | 0 | 3 | clean | 3.9 | no |
-| circB_2mm | module | 98,678 | 0.01878 | 0 | 0 | clean | 5.1 | no |
-| circB_2mm | module + conductor-outline | 127,251 | 0.0252 | 0 | 0 | clean | 6.7 | no |
-| circB_2mm | module, HXT | 61,787 | 0.01693 | 0 | 0 | clean | 47.9 | no |
-| circB_2mm | R8 | 9,344 | 0.001036 | 120 | 0 | - | 2.3 | no |
-| circB_2mm | RP | 205,692 | 0.01501 | 0 | 0 | - | 10.5 | no |
-| circB_4mm | module | 187,568 | 0.01016 | 0 | 0 | clean | 11.1 | no |
-| circB_4mm | module + conductor-outline | 187,568 | 0.01016 | 0 | 0 | clean | 13.1 | no |
-| circB_4mm | module, HXT | 115,766 | 0.01515 | 0 | 0 | clean | 111.0 | no |
-| circB_4mm | R8 | 8,579 | 0.0004609 | 122 | 0 | - | 1.2 | no |
-| circB_4mm | RP | 419,045 | 0.01199 | 0 | 0 | - | 24.0 | no |
+| case | method | recipe | 2D / 3D | tetrahedra | min SICN | below | rounds | status | seconds | fallback |
+|---|---|---|---|---:|---:|---:|---:|---|---:|---|
+| A | module | features/1 | default / 1 | 6,820 | 0.1298 | 0 | 0 | accepted | 0.5 | no |
+| A | module + conductor-outline | features/1 | default / 1 | 6,820 | 0.1298 | 0 | 0 | accepted | 0.5 | no |
+| A | module, HXT | features/1 | default / 10 | 6,887 | 0.3369 | 0 | 0 | accepted | 0.5 | no |
+| A | R8 | global-size/1 | default / 10 | 6,887 | 0.3369 | 0 | 0 | accepted | 0.5 | no |
+| A | RP | uniform-boundary/1 | 5 / 1 | 825 | 0.1056 | 0 | 0 | accepted | 0.5 | no |
+| B | module | features/1 | default / 1 | 13,601 | 0.03635 | 0 | 0 | accepted | 1.0 | no |
+| B | module + conductor-outline | features/1 | default / 1 | 40,339 | 0.04522 | 0 | 0 | accepted | 1.4 | no |
+| B | module, HXT | features/1 | default / 10 | 10,453 | 0.01916 | 0 | 0 | accepted | 5.5 | no |
+| B | R8 | global-size/1 | default / 10 | 7,365 | 0.01982 | 0 | 0 | accepted | 2.3 | no |
+| B | RP | uniform-boundary/1 | 5 / 1 | 8,491 | 0.02078 | 0 | 0 | accepted | 0.9 | no |
+| C | module | features/1 | default / 1 | 17,208 | 0.02696 | 0 | 0 | accepted | 1.1 | no |
+| C | module + conductor-outline | features/1 | default / 1 | 45,056 | 0.04522 | 0 | 0 | accepted | 1.4 | no |
+| C | module, HXT | features/1 | default / 10 | 13,959 | 0.01916 | 0 | 0 | accepted | 9.6 | no |
+| C | R8 | global-size/1 | default / 10 | 8,737 | 0.01982 | 0 | 0 | accepted | 5.0 | no |
+| C | RP | uniform-boundary/1 | 5 / 1 | 10,508 | 0.02078 | 0 | 0 | accepted | 0.9 | no |
+| circB | module | features/1 | default / 1 | 13,021 | 0.02769 | 0 | 0 | accepted | 1.0 | no |
+| circB | module + conductor-outline | features/1 | default / 1 | 39,585 | 0.04998 | 0 | 0 | accepted | 1.3 | no |
+| circB | module, HXT | features/1 | default / 10 | 10,104 | 0.01588 | 0 | 0 | accepted | 5.0 | no |
+| circB | R8 | global-size/1 | default / 10 | 7,220 | 0.01991 | 0 | 0 | accepted | 1.6 | no |
+| circB | RP | uniform-boundary/1 | 5 / 1 | 8,235 | 0.02134 | 0 | 0 | accepted | 0.9 | no |
+| B_1mm | module | features/1 | default / 1 | 52,338 | 0.02563 | 0 | 0 | accepted | 2.9 | no |
+| B_1mm | module + conductor-outline | features/1 | default / 1 | 149,218 | 0.02047 | 0 | 0 | accepted | 4.7 | no |
+| B_1mm | module, HXT | features/1 | default / 10 | 33,795 | 0.01716 | 0 | 0 | accepted | 24.6 | no |
+| B_1mm | R8 | global-size/1 | default / 10 | 9,664 | 0.002063 | 123 | 0 | rejected (rounds) | 2.3 | no |
+| B_1mm | RP | uniform-boundary/1 | 5 / 1 | 100,227 | 0.01607 | 0 | 0 | accepted | 4.9 | no |
+| B_1mm | module, repair only | features/1 | default / 1 | 31,791 | 0.01479 | 0 | 3 | accepted | 4.3 | no |
+| circB_2mm | module | features/1 | default / 1 | 98,678 | 0.01878 | 0 | 0 | accepted | 5.2 | no |
+| circB_2mm | module + conductor-outline | features/1 | default / 1 | 127,251 | 0.0252 | 0 | 0 | accepted | 6.7 | no |
+| circB_2mm | module, HXT | features/1 | default / 10 | 61,787 | 0.01693 | 0 | 0 | accepted | 48.3 | no |
+| circB_2mm | R8 | global-size/1 | default / 10 | 9,344 | 0.001036 | 120 | 0 | rejected (rounds) | 2.6 | no |
+| circB_2mm | RP | uniform-boundary/1 | 5 / 1 | 205,692 | 0.01501 | 0 | 0 | accepted | 10.8 | no |
+| circB_4mm | module | features/1 | default / 1 | 187,568 | 0.01016 | 0 | 0 | accepted | 10.9 | no |
+| circB_4mm | module + conductor-outline | features/1 | default / 1 | 187,568 | 0.01016 | 0 | 0 | accepted | 13.2 | no |
+| circB_4mm | module, HXT | features/1 | default / 10 | 115,766 | 0.01515 | 0 | 0 | accepted | 111.8 | no |
+| circB_4mm | R8 | global-size/1 | default / 10 | 8,579 | 0.0004609 | 122 | 0 | rejected (rounds) | 1.5 | no |
+| circB_4mm | RP | uniform-boundary/1 | 5 / 1 | 419,045 | 0.01199 | 0 | 0 | accepted | 24.1 | no |
 
 What the table shows:
 
 - **R8 is not enough on the large chips.** HXT with only a global size leaves 120 to 123 near-flat
-  tetrahedra at the film walls on the 1, 2 and 4 mm chips, and none on the 100 um chips.
-- **The a priori film rule removes them without any repair round.** Every module run is clean in round
+  tetrahedra at the film walls on the 1, 2 and 4 mm chips, and none on the 100 um chips. The three
+  large-chip runs are the ones marked `rejected (rounds)`: the same numbers the earlier benchmark
+  printed for R8, now judged by the threshold.
+- **The a priori film rule removes them without any repair round.** Every module run is accepted in round
   0, and takes 2.6 s (1 mm), 5.1 s (2 mm) and 11.1 s (4 mm). On the 4 mm chip the module has 45 % of the
   tetrahedra of RP (187,568 against 419,045) and half of its time.
 - **The repair loop works on real meshes.** Without the film facts, the loop alone cleans `B_1mm` in 3
@@ -148,7 +172,7 @@ Variants of the same size field (seconds are the mesh generation):
 
 | variant | `B_1mm` | `circB_4mm` |
 |---|---|---|
-| HXT, one thread (rules/1 before) | 24.9 s, 33,795 tets, 0.0172, 0 below | 114.6 s, 115,766 tets, 0.0151, 0 below |
+| HXT, one thread (features/1 before) | 24.9 s, 33,795 tets, 0.0172, 0 below | 114.6 s, 115,766 tets, 0.0151, 0 below |
 | Delaunay (3D algorithm 1) | 2.7 s, 52,338 tets, 0.0256, 0 below | 11.7 s, 187,568 tets, 0.0102, 0 below |
 | HXT, `MeshSizeExtendFromBoundary=1` | 75.9 s, 847,464 tets, 0.0217, 0 below | not finished after 14 CPU minutes |
 | HXT, Distance sampling capped at 200 | 23.2 s, 32,476 tets, 0.0116, 0 below | 59.2 s, 90,810 tets, 0.0117, 0 below |
@@ -157,7 +181,7 @@ Variants of the same size field (seconds are the mesh generation):
 
 - **Delaunay is the default now.** It is 9 to 10 times faster, clean on all seven cases and
   reproducible, with 1.5 times the tetrahedra of HXT. HXT remains available as
-  `RuleSet(algorithm_3d=10)` and is the retry when Delaunay fails.
+  `MesherOptions(algorithm_3d=10)` and is the retry when Delaunay fails.
 - **Extension from the boundary** multiplies the tetrahedra by 25 on the 1 mm chip.
 - **The Distance sampling is not the cost.** Field evaluation shows up in the 1D step (1.4 s and 5.1 s)
   and costs nothing in 3D. Capping the sampling at 200 only made the mesh coarser: samples 20 um apart

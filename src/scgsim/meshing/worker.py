@@ -36,10 +36,15 @@ def _mesh(request_path: Path) -> dict[str, object]:
     job = MeshJob.from_json(json.loads(request_path.read_text(encoding="utf-8")))
     features = load_features(job.sidecar)
     try:
-        audit = mesh_in_current_process(job, features)
+        done = mesh_in_current_process(job, features)
     except Exception as error:  # noqa: BLE001 -- Gmsh raises a bare Exception; the driver decides what a failure means
         return {"ok": False, "error": str(error)}
-    return {"ok": True, "audit": audit.to_json()}
+    return {
+        "ok": True,
+        "audit": done.audit.to_json(),
+        "elevated": done.elevated,
+        "elevation_error": done.elevation_error,
+    }
 
 
 def _probe(xao: Path) -> dict[str, object]:
