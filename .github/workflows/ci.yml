@@ -305,7 +305,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y libglu1-mesa
       - name: Install locked offline test and quality dependencies
-        run: uv sync --locked --group test --group quality --group occt --extra aedt-epr --extra palace --extra visualization
+        run: uv sync --locked --group dev
       - name: Run the complete public non-native suite
         run: uv run --locked --no-sync python -m pytest tests -m 'not private_golden'
       - name: Check format, lint, readable style, types, and import layers
