@@ -8,8 +8,10 @@ They never ship: Gmsh's API cannot express the sense of a solid, which is one re
 
 from __future__ import annotations
 
+import json
 import math
-import multiprocessing
+import subprocess
+import sys
 from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -215,6 +217,13 @@ def refine_near(  # noqa: PLR0913 -- a test helper
 
 
 HXT = 10
+HXT_CHILD = (
+    "import json, sys\n"
+    "sys.path.insert(0, sys.argv[1])\n"
+    "from pathlib import Path\n"
+    "from sgb_gmsh_oracle import mesh_with_hxt_in_new_session\n"
+    "mesh_with_hxt_in_new_session(Path(sys.argv[2]), json.load(sys.stdin))\n"
+)
 FRONTAL_DELAUNAY_FALLBACK = 1  # the Delaunay algorithm Gmsh uses by default
 
 
@@ -227,8 +236,8 @@ def mesh_with_cheap_recipe(path: Path, sidecar: dict) -> int:
 
     HXT of Gmsh 4.15.2 aborts the process on some of these models (heap corruption on ``pad_b_bands`` and
     ``pad_c_bands`` at diagonal / 20), and an abort cannot be caught in the session.  So HXT is tried first in
-    a spawned child that opens ``path`` itself; when the child dies, the session meshes with the default
-    algorithm instead.  The meshing module of the package applies the same rule.
+    a child process that opens ``path`` itself; when the child dies, the session meshes with the default
+    algorithm instead; any mesher that runs HXT on these models needs the same fallback.
     """
     algorithm = HXT if _hxt_survives(path, sidecar) else FRONTAL_DELAUNAY_FALLBACK
     _generate_mesh(algorithm)
@@ -236,15 +245,18 @@ def mesh_with_cheap_recipe(path: Path, sidecar: dict) -> int:
 
 
 def _hxt_survives(path: Path, sidecar: dict) -> bool:
-    child = multiprocessing.get_context("spawn").Process(
-        target=_mesh_in_new_session, args=(path, sidecar)
+    child = subprocess.run(
+        [sys.executable, "-c", HXT_CHILD, str(Path(__file__).parent), str(path)],
+        input=json.dumps(sidecar),
+        text=True,
+        capture_output=True,
+        check=False,
     )
-    child.start()
-    child.join()
-    return child.exitcode == 0
+    return child.returncode == 0
 
 
-def _mesh_in_new_session(path: Path, sidecar: dict) -> None:
+def mesh_with_hxt_in_new_session(path: Path, sidecar: dict) -> None:
+    """Open ``path`` in a fresh session, re-apply the sidecar's embeddings and mesh with HXT (run in a child process)."""
     from scgsim.geometry.sgb.verification.loaded import (  # noqa: PLC0415 -- used here only
         apply_sidecar_embeds,
     )

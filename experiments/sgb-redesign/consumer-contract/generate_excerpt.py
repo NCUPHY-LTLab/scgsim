@@ -12,7 +12,7 @@ from pathlib import Path
 tests, out = Path(sys.argv[1]), Path(sys.argv[2])
 sys.path.insert(0, str(tests))
 
-from sgb_gmsh_oracle import mesh_coarsely, mesh_quality, size_from_mesh_hints  # noqa: E402
+from sgb_gmsh_oracle import mesh_quality, mesh_with_cheap_recipe  # noqa: E402
 from sgb_inputs import gds_pad_in_ground, thin_film_pair  # noqa: E402
 
 from scgsim.geometry.sgb import build_sgb_geometry  # noqa: E402
@@ -127,9 +127,6 @@ print(
 # interface, margins (0.5, 1.0).  The lumped port lies on the hosts' support plane (the substrate top), so it
 # occupies part of the SA plane: SA band faces exclude it while every band origin stays the metal edge.
 ALL_MARGINS = (0.5, 1.0)
-COARSE_UM = 60.0  # the model-scale element size (the Route B/C die is 100 um wide)
-NEAR_UM = 0.25  # half the thinnest band (0.5 um) next to every band boundary, the recipe of sidecar.hints
-GROWTH = 2.0  # size growth per micrometre away from the hinted edges
 
 
 def conductor_ids(effective):
@@ -161,7 +158,7 @@ def all_interface_insets(effective, route, sa_pair):
 
 
 def summarise(folder, route):
-    """Open an .xao with gmsh: counts, group names, the port plane, SA/PORT areas, and a hint-sized mesh."""
+    """Open an .xao with gmsh: counts, group names, the port plane, SA/PORT areas, and a mesh from the cheap recipe."""
     stem = f"semantic_geometry_route_{route.lower()}"
     sidecar = read_sidecar(folder / f"{stem}.sidecar.json")
     gmsh.initialize(["-noenv"])
@@ -192,8 +189,7 @@ def summarise(folder, route):
     port_area = group_area(port_group)
     (port,) = sidecar["ports"]
     apply_sidecar_embeds(sidecar)
-    size_from_mesh_hints(sidecar, coarse=COARSE_UM, near=NEAR_UM, growth=GROWTH)
-    seconds = mesh_coarsely(COARSE_UM)
+    algorithm = mesh_with_cheap_recipe(folder / f"{stem}.xao", sidecar)
     quality = mesh_quality()
     nodes = len(gmsh.model.mesh.getNodes()[0])
     gmsh.finalize()
@@ -208,13 +204,11 @@ def summarise(folder, route):
         "embedded_faces": len(sidecar["embedded_faces"]),
         "port_group_area_um2": port_area,
         "sa_band_areas_um2": sa_bands,
-        "mesh_hint_kinds": sorted({h["kind"] for h in sidecar["mesh_hints"]}),
+        "mesh_feature_kinds": sorted({f["kind"] for f in sidecar["mesh_features"]}),
         "mesh": {
-            "coarse_um": COARSE_UM,
-            "near_um": NEAR_UM,
-            "growth_per_um": GROWTH,
+            "recipe": "HXT, MeshSizeMax = bounding-box diagonal / 20, no size field",
+            "algorithm3d_used": algorithm,
             "nodes": nodes,
-            "seconds": round(seconds, 2),
             "tets": quality.get("tets"),
             "minSICN_min": quality.get("minSICN_min"),
         },

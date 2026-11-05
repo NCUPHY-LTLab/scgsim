@@ -37,6 +37,34 @@
    "volumes": 2
   }
  },
+ "cheap_recipe_mesh_checks": {
+  "algorithm3d": "HXT (10)",
+  "max_size": "bounding-box diagonal / 20",
+  "pad_a_bands": {
+   "algorithm3d_used": 10,
+   "gamma_min": 0.00036033574345660643,
+   "minSICN_min": 0.005866101568020448,
+   "tets": 12000
+  },
+  "pad_b_bands": {
+   "algorithm3d_used": 10,
+   "gamma_min": 0.00038442144058708496,
+   "minSICN_min": 0.005078510674738006,
+   "tets": 12330
+  },
+  "pad_c_bands": {
+   "algorithm3d_used": 10,
+   "gamma_min": 0.00035105008892789895,
+   "minSICN_min": 0.005149075483181782,
+   "tets": 13966
+  },
+  "stage_pad_b_bands": {
+   "algorithm3d_used": 1,
+   "gamma_min": 6.9096379519120554e-06,
+   "minSICN_min": 0.0007086333636657944,
+   "tets": 11591
+  }
+ },
  "exploded_view": {
   "face_groups_drawn": [
    "EXT",
@@ -56,31 +84,6 @@
    "substrate written=True",
    "vacuum written=True"
   ]
- },
- "hinted_mesh_checks": {
-  "coarse_um": 60.0,
-  "growth_per_um": 2.0,
-  "near_um": 0.25,
-  "pad_a_bands": {
-   "gamma_min": 0.005561936261621664,
-   "minSICN_min": 0.010600707256074511,
-   "tets": 135237
-  },
-  "pad_b_bands": {
-   "gamma_min": 0.014483151835154447,
-   "minSICN_min": 0.03966392068135268,
-   "tets": 144866
-  },
-  "pad_c_bands": {
-   "gamma_min": 0.0001485171058065326,
-   "minSICN_min": 0.004721307496233637,
-   "tets": 196381
-  },
-  "stage_pad_b_bands": {
-   "gamma_min": 0.000678283653366975,
-   "minSICN_min": 0.013831836012545494,
-   "tets": 141212
-  }
  },
  "pad_in_ground_A": {
   "groups": 10,

@@ -7,7 +7,7 @@ Run, with the Python of the checkout that contains the production SGB core (``sc
 Computes, with the production package, a real mapping-chain lookup on the pad-in-ground running example (Route B with
 inset bands, its lumped port on the support plane z = 0) and the determinism evidence quoted by the page.  The model is
 built, written with ``emit_model`` into a scratch folder and the lookup reads the written sidecar
-(``scgsim.sgb.sidecar.v1``) exactly as a consumer would.  Outputs go to ``docs/design/sgb/figures/`` (prefix ``identity-``):
+(``scgsim.sgb.sidecar.v2``) exactly as a consumer would.  Outputs go to ``docs/design/sgb/figures/`` (prefix ``identity-``):
 
 * ``identity-trace.json``        every step of the lookup  Palace attribute -> source curve (also quoted in the page)
 * ``identity-trace-plan.html``   the traced faces and edge in the plan view (+ ``.svg``)

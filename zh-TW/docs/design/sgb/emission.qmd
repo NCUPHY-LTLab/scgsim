@@ -126,7 +126,7 @@ running example 的 primary group（`MA`：metal–vacuum 側，`MS`：metal–s
 
 {{< askr-chart-view src="figures/emission-groups-3d.html" label="依 physical group 檢視模型" >}}
 
-XAO 無法攜帶 mesher 與 solver 設定所需的全部資訊，所以 writer 也會在它旁邊寫一個 JSON **sidecar**，即 `<stem>.sidecar.json`（格式 `scgsim.sgb.sidecar.v1`，附 JSON Schema）。它只含 planned id 與 group 名稱：沒有 native handle。每個欄位的定義見[使用契約](consumer-contract.qmd#sidecar)，下表只列出與 emission 有關的主要欄位：
+XAO 無法攜帶 mesher 與 solver 設定所需的全部資訊，所以 writer 也會在它旁邊寫一個 JSON **sidecar**，即 `<stem>.sidecar.json`（格式 `scgsim.sgb.sidecar.v2`，附 JSON Schema）。它只含 planned id 與 group 名稱：沒有 native handle。每個欄位的定義見[使用契約](consumer-contract.qmd#sidecar)，下表只列出與 emission 有關的主要欄位：
 
 | Sidecar key | 內容 |
 |---|---|
@@ -134,7 +134,7 @@ XAO 無法攜帶 mesher 與 solver 設定所需的全部資訊，所以 writer �
 | `physical_groups` | 每個 primary group：維度、physical `tag`、planned id、`native_tags`，以及 `interface_type`、`face_kind`、`entities`、`net`、`band`、面積與兩側的 volume |
 | `unions`、`surface_epr_rows` | `interface_types` 與 `nets` 兩組 primary group 名稱的清單；每個 Surface EPR row 讀取的 group（含 `side`、`face_sides` 與 `shared_face_group`） |
 | `embedded_faces`、`ports` | mesher 必須重新 embed 的 (face, host volume) 配對；lumped port 的來源識別、host 與 face |
-| `refinement_edges`、`mesh_hints` | (edge, host face) 配對，附 `written_as_free_edge`；`mesh_hints` 列出 band 邊界、refinement curve 與曲線 edge，沒有尺寸 |
+| `refinement_edges`、`mesh_features` | (edge, host face) 配對，附 `written_as_free_edge`；`mesh_features` 列出薄膜 sidewall、band 邊界、圓弧、refinement curve 與 port 的 edge，並附上這些 edge 的幾何事實（厚度、margin、半徑），沒有尺寸 |
 | `lineage` | edge 對應到 source carrier id、carrier 的描述、face 對應到 source entity id，以及依面積加權的 `membership` |
 | `expected` | `verify_loaded` 比對的預期值（vertex 位置、edge、face、solid 的邊界、face 面積與 solid 體積） |
 | `counts`、`curved_wall_faces`、`route`、`route_policy`、`grid_um`、`tolerance_um` | 實際寫出的內容 |
@@ -260,14 +260,27 @@ pad 的 volume 與封閉形式一致（300 × 300 × 100 µm 的 substrate，以
 
 solid 的 **sense**（shell 的哪一側是內部）正是 mass 檢查要保護的性質。Gmsh API 無法指定它（見上文）；writer 則明確寫出每一個 orientation，單元測試也確認：把 solid 的 shell 反向，以及只把內部 shell 反向，都會讓 volume 如預期地改變。
 
-## Mesh size hint {#mesh-size-hints}
+## Mesh feature {#mesh-features}
 
-SGB 提供幾何與 hint；mesh 演算法由 Gmsh 負責。hint 是關於 curve 的陳述，由 mesher 轉成 size field。來源有三種：
+SGB 只知道精確的 topology，所以 sidecar 的 `mesh_features` 陳述關於 edge 的**幾何事實**：這組 edge 是厚 0.2 µm 的薄膜 sidewall，這組 edge 是寬 0.5 與 1 µm 的 band 邊界，這組 edge 是半徑 10 µm 的圓弧。任何 mesh 尺寸都不在 sidecar 裡：尺寸與演算法由 mesher 決定，同一份事實可以支援不同的策略。事實來自三種 edge：
 
 - **已經存在的 edge。**inset band 的 edge 與 port footprint 的 edge 都是模型的 edge（見 [inset imprint](inset-imprint.qmd) 與 [cut families](cut-families.qmd)）。sidecar 的 `lineage.edges` 指名每條 edge 的 source carrier，例如 `pad_in_ground_B_bands` 中的 `band_pad_top/ring0/edge1@m2000.0`，所以 mesher 可以用該前綴選出某個 family 的 curve，不需要額外的幾何。
 - **Refinement-only curve。**採用 `refinement_only` policy 的 cut family 會把它的 curve 保留為 free edge，且不改變任何 label；落在沒有輸出 face 的 curve 是錯誤。writer 把它們放在 compound 之下，sidecar 在 `refinement_edges` 列出 `(edge, host face)`，mesher 以 `mesh.embed(1, curves, 2, face)` embed 它們，讓 mesh node 落在該 curve 上。
-- **Sidecar 的 `mesh_hints`。**production 把這三種來源整理成清單：`band_boundary`（inset family 的 edge，`source` 是請求 id）、`refinement_curve`（refinement 請求的曲線）與 `curved_edge`（每條圓弧 edge），每筆列出 planned edge id 與 native tag；沒有尺寸，mesher 自己決定。
-- **大小數值。**這些數字（全域最大與最小、curve 附近的大小、恢復到全域大小的距離）屬於 solver 設定，不屬於幾何。
+- **薄膜的 sidewall 與圓弧。**這兩種 edge 的事實（z 方向的厚度、圓弧的半徑）直接取自 slab 的 level 與 arc 的 carrier，不必再從 mesh 量。
+
+`mesh_features` 是一個清單，每筆有 `kind`、`source`、`edges`（planned id）、`native_tags`（tag = 1 + `ids_by_tag["1"]` 中的位置）與 `facts`。清單依 `(kind, source, facts 的標準 JSON)` 排序，每筆內的 edge 依 tag 排序；數字與 sidecar 的其他 µm 數值用同一個 12 位有效數字的寫法，所以對任何 worker 數與 tile 配置都是 byte-identical（測試）。
+
+::: {.askr-table-compact}
+| `kind` | `source` | `facts` | edge |
+|---|---|---|---|
+| `film_sidewall` | 本體的 entity id | `thickness_um`：sidewall 柱的 z 範圍 | 該本體 sidewall face 的所有 edge（上下外框與垂直 edge） |
+| `band_boundary` | inset request id | `margins_um`（由小到大）、`narrowest_band_um`（相鄰 margin 的最小差，起點 0） | inset family 的 edge |
+| `arc` | 擁有這些圓弧的唯一 entity；沒有唯一者時為 `null` | `radius_um`：carrier 的半徑 | 同一個 `(entity, 半徑)` 的圓弧 edge |
+| `refinement_curve` | refinement request id | 無 | refinement request 的曲線 |
+| `port_edge` | port sheet id | 無 | lumped port 的 face 的邊界 edge |
+:::
+
+`film_sidewall` 的本體是導體（Route B 沒有導體 volume，但 sidewall 仍是導體與 vacuum 之間的 face），或是不貼著模型外界的 dielectric；vacuum 與模型外界的 wall 不是薄膜。被 level 切開的 wall 仍算同一根柱：範例中 port 在 metal 的中間平面 $z = 0.1$，把 pad 的部分 wall 切成兩段，`thickness_um` 仍是 0.2，而不是 0.1。Route A 的導體是 sheet，沒有 sidewall，所以沒有 `film_sidewall`。gap 或 spacing 的事實不在 sidecar 裡；之後新增一種 `kind` 或一項 fact 是相容的擴充，`kind` 在清單之外則是 schema 錯誤。
 
 測試用的 size field 是一個由選定 curve 出發的 `Distance` field，餵給 `Threshold` field：靠近 curve 時給出 `refine_size`，並在 `DistMin` 與 `DistMax` 之間成長到全域最大值。band 測試使用 `refine_size` 1.0 µm，範圍 1–20 µm。band 測試中 `MeshSizeMin` 維持 0，因為 2 µm 的下限無法解析 0.1 µm 的 band；gmsh-API 路徑也以同樣方式失敗。其他範例的 mesh 使用 `MeshSizeMin` = 2 µm，因為 0.2 µm 的 metal 厚度否則會迫使到處都出現很小的 element。
 
@@ -278,15 +291,11 @@ band 從哪裡量起、每個 band 的範圍，見 [Inset band 怎麼量](inset-
 
 對 refinement curve，測試檢查：該 edge 在載入的檔案中是 free 的（沒有任何 face 擁有它）、它被切成多於一個 element，以及 sidecar 的該列 `written_as_free_edge` 為 true。
 
-### 建議的尺寸配方 {#mesh-size-recipe}
+### 測試用的 mesh 配方 {#mesh-recipe}
 
-band 可以比整個模型窄得多（0.1 µm 的條帶在 100 µm 以上的晶片裡），沒有依 hint 設定尺寸的 mesh 會用比條帶寬數百倍的元素去 mesh 它，可能產生體積為零的四面體，而幾何本身沒有問題。建議這樣建立 size field：
+band 可以比整個模型窄得多（0.1 µm 的條帶在 100 µm 以上的晶片裡）。在 Gmsh 4.15.2 上量測的結果是，最便宜的配方就夠用：**HXT（`Mesh.Algorithm3D` = 10），`Mesh.MeshSizeMax` 取 bounding box 對角線的 1/20，不設 size field**。同一個 `pad_in_ground` 的三個含 band 的執行範例（Route A、B、C）用它做 mesh，`minSICN` 最小值為 0.0059、0.0051 與 0.0051，沒有體積為零的四面體；先前依 band 邊界設定 0.25 µm 近端尺寸的 size field，得到的最小值分別是 0.011、0.040 與 0.0047，而且要多出十倍以上的四面體。[使用契約](consumer-contract.qmd#reproduction-data)的 all-interfaces 範例（每個支援表面與 SA 介面都有 0.5 與 1 µm 的 band）以同樣的配方做 mesh，`minSICN` 最小值在 Route A 是 0.32、在 Route B 與 C 是 0.020。
 
-- **hint 邊附近：**元素大小約為最窄 band margin 的一半（margin 為 0.5 µm 時取 0.25 µm；margin 小到 0.1 µm 時取 0.1 到 0.2 µm）。
-- **向外成長：**成長率為**每 µm 2**：以 `band_boundary` hint 的 `native_tags` 建立 `Distance` field，再餵給 `Threshold` field，其 `DistMax` 等於（全域大小 − 近端大小）÷ 2，單位 µm。
-- **關掉會蓋過它的來源：**`Mesh.MeshSizeFromPoints`、`Mesh.MeshSizeFromCurvature` 與 `Mesh.MeshSizeExtendFromBoundary`。
-
-較陡的成長率（例如每 µm 8）會讓 Gmsh 預設的 3D Delaunay 演算法在 band 的 seam 附近產生近乎平坦的四面體；請使用每 µm 2 以下的成長率，或啟用 Netgen 最佳化（`Mesh.OptimizeNetgen = 1`）。參考實作是測試端 `tests/sgb_gmsh_oracle.py` 的 `size_from_mesh_hints`；`experiments/sgb-redesign/consumer-contract/generate_excerpt.py` 用這個配方（近端 0.25 µm、全域 60 µm、每 µm 2）對 [使用契約](consumer-contract.qmd#reproduction-data) 的 all-interfaces 範例做 mesh，Route B 與 C 的 `minSICN` 最小值為 $5.7 \times 10^{-5}$，沒有體積為零的四面體；再啟用 Netgen 最佳化，最小值升到 $9.0 \times 10^{-3}$（Route B）與 $5.7 \times 10^{-4}$（Route C）。
+HXT 在某些模型上會讓 Gmsh 4.15.2 的 process 直接中止（heap 損毀，無法在 session 內捕捉）：`tests/sgb_emit_cases.py` 的 `pad_b_bands` 與 `pad_c_bands` 在這個尺寸就會。測試端的 `mesh_with_cheap_recipe`（`tests/sgb_gmsh_oracle.py`）因此先在子 process 以 HXT 試一次，子 process 結束異常時，改在 session 內用預設的 3D 演算法（`Mesh.Algorithm3D` = 1）；這個模型因此得到 0.0007。需要更好品質的 mesher 可以改用 `mesh_features` 做 feature 驅動的 size field，這是 mesher 的決定，不是 sidecar 的內容。
 
 ## 交給 AEDT {#handing-the-solids-to-aedt}
 
