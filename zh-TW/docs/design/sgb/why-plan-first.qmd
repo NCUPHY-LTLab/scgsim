@@ -126,7 +126,7 @@ flowchart TB
 
 逐步驟的時間、檔案大小與整條路徑的記憶體，見研究頁 [Direct writer 與 Gmsh 載入](../../research/geometry-build/emission-and-load.qmd)。
 
-推導完成之後，必須寫出 CAD 檔案與 sidecar，再由 Gmsh 載入，載入端還要執行載入檢查 `verify_loaded`。這些步驟是循序的，在 $N = 20000$ 時合計比推導還長。逐一呼叫來建立幾何的 Gmsh API，只保留作為**測試用 oracle**（`tests/sgb_gmsh_oracle.py`）；這裡的比較就是決策 D8 的證據，D8 讓 direct writer 成為 emission 的路徑。
+推導完成之後，必須寫出 CAD 檔案與 sidecar，再由 Gmsh 載入；量測還包含測試用的載入檢查 `verify_loaded`。這些步驟是循序的，在 $N = 20000$ 時合計比推導還長。逐一呼叫來建立幾何的 Gmsh API，只保留作為**測試用 oracle**（`tests/sgb_gmsh_oracle.py`）；這裡的比較就是決策 D8 的證據，D8 讓 direct writer 成為 emission 的路徑。
 
 ![N = 20000 時，從驗證過的模型到 Gmsh 可以 mesh 的模型所需的時間：direct BREP/XAO writer 的每一步（一個行程與 16 個 worker；兩者的 reports、sidecar、載入與載入檢查是同一次量測）。Gmsh-API oracle 在這個規模跑不完，所以不在圖中。](figures/why-tail.svg){#fig-tail fig-alt="兩條水平堆疊長條。第一條 direct BREP/XAO（單一行程）：推導與驗證 61.6 秒、寫出 CAD 檔案 13.8 秒、sliver 與 validation 報告 49.7 秒、sidecar 19.6 秒、Gmsh 載入 49.7 秒、載入檢查 15.3 秒，合計 210 秒。第二條使用 16 個 worker，寫出 CAD 檔案為 9.1 秒，合計 205 秒。"}
 
@@ -148,7 +148,7 @@ flowchart TB
 - 負質量的 solid 仍然可以 mesh，所以不檢查就不會發現。oracle 因此不能直接當作 emission 路徑。
 - Sewing（`addSurfaceLoop(sewing=True)`）能讓 shell 內部互相一致，但絕對的方向仍然無法控制，而且對一個有數萬個 face 的 shell，時間與記憶體預期都不實用；這兩點本頁沒有用 production 的資料量測，所以不給數字。
 
-direct writer 逐 face 明確寫出每一個方向，所以事後沒有任何東西需要修復；載入時 `verify_loaded` 還會比對面積與體積。
+direct writer 逐 face 明確寫出每一個方向，所以事後沒有任何東西需要修復；測試在載入後以 `verify_loaded` 比對面積與體積，確認方向正確。
 
 ### Identity 性質
 

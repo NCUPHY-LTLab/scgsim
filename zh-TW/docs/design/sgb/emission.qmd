@@ -190,17 +190,16 @@ Gmsh 只用來對寫出的模型做 mesh，以及作為 test oracle，絕不建�
 
 ```{mermaid}
 %%| label: fig-handoff
-%%| fig-cap: "mesher 的概念性流程。步驟 1 到 5 由 production 的 verify_loaded 與 apply_sidecar_embeds 實作並有測試；步驟 6 是 solver 設定，屬於 Palace adopter（階段 3）。"
+%%| fig-cap: "mesher 的概念性流程。步驟 3 的 embedding 由 production 的 apply_sidecar_embeds 實作並有測試；步驟 5 是 solver 設定，屬於 Palace adopter（階段 3）。"
 %%{init: {"flowchart": {"rankSpacing": 22, "nodeSpacing": 20, "padding": 6}}}%%
 flowchart TB
-  A["1. 開啟 XAO：幾何與 primary physical group 連同名稱一起載入"] --> B["2. 檢查載入結果：數量、邊界、面積、volume、group"]
-  B --> C["3. 讀取 sidecar：由 ids_by_tag 得到 planned id 到 tag 的對應"]
-  C --> D["4. 重新套用 embed：(face, host volume) 與 (edge, host face)；由 band 與 refinement curve 建立 size field"]
-  D --> E["5. 產生 mesh"]
-  E --> F["6. Solver 設定（Palace）：依名稱從 sidecar 取得 group；union 展開成 primary 名稱"]
+  A["1. 開啟 XAO：幾何與 primary physical group 連同名稱一起載入"] --> C["2. 讀取同一次 build 的 sidecar：由 ids_by_tag 得到 planned id 到 tag 的對應"]
+  C --> D["3. 重新套用 embed：(face, host volume) 與 (edge, host face)；由 mesh_features 決定尺寸"]
+  D --> E["4. 產生 mesh"]
+  E --> F["5. Solver 設定（Palace）：依名稱從 sidecar 取得 group；union 展開成 primary 名稱"]
 ```
 
-production 的測試與 catalogue 報告執行步驟 1 到 5：開啟 XAO、`verify_loaded`、`apply_sidecar_embeds` 重新套用 embed，接著用 size field 產生粗略的 3-D mesh，並檢查它是否 conformal。
+mesher 直接信任這兩個檔案，不再比對（理由與成對使用的限制見 [Validation](validation.qmd)）。production 的測試與 catalogue 報告執行步驟 1 到 4，並在開啟 XAO 之後多做一次 `verify_loaded`，確認寫出的檔案載入後與規劃相同（見[載入後的檢查](#validation-after-loading)），最後檢查粗略的 3-D mesh 是否 conformal。
 
 ```python
 # 概念性程式碼：mesher 在 gmsh.open("….xao") 之後的步驟 3 與 4。
@@ -218,8 +217,8 @@ SGB 分三層驗證，讓有問題的檔案在成本最低的地方被抓到。�
 
 | 層 | 何時執行 | 檢查內容 |
 |---|---|---|
-| 1. 開發測試 | 在 fixture 與隨機 layout 上（需要 `occt` dependency group；CI 尚未安裝，這些測試在 CI 略過） | OpenCASCADE 自己的 `BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`、`ShapeAnalysis_Shell`、與 plan 的面積／volume 比對，加上下列 Gmsh 載入檢查 |
-| 2. 每一次 production build | 寫出之前，以及 mesher 載入之後 | SGB 的[結構不變量](validation.qmd)（fail closed，無法停用）；然後是 `verify_loaded`：載入模型的數量、vertex 位置、邊界、面積、volume 與 group |
+| 1. 開發測試 | 在 fixture 與隨機 layout 上（需要 `occt` dependency group；CI 尚未安裝，這些測試在 CI 略過） | OpenCASCADE 自己的 `BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`、`ShapeAnalysis_Shell`、與 plan 的面積／volume 比對，加上下列 Gmsh 載入檢查 `verify_loaded`：載入模型的數量、vertex 位置、邊界、面積、volume 與 group |
+| 2. 每一次 production build | 寫出之前 | SGB 的[結構不變量](validation.qmd)（fail closed，無法停用） |
 | 3. Strict mode（選用） | `build_sgb_geometry(…, strict=True)`，需要 OCP | 對剛寫出的 XAO 執行第 1 層的 OCCT 檢查（self-interference 關閉）；沒有 OCP 時在 build 開始前就以 `OcctUnavailable` 停止 |
 
 第 1 層與第 3 層使用 OCP，也就是 OpenCASCADE 的 Python binding（`cadquery-ocp-novtk==7.8.1.1.post1`，建立在 OCCT 7.8.1 之上，與這裡使用的 Gmsh 是同一個 OCCT 版本）。OCP 在 `occt` dependency group（`uv sync --group occt`），不是必要的相依套件：使用者安裝（例如透過 OrcaPen SC PDK）不會安裝它。`BOPAlgo_ArgumentAnalyzer` 開啟 self-interference、small-edge、face-rebuild、tangency、merge-vertex、merge-edge、continuity 與 curve-on-surface 等模式（`scgsim.geometry.sgb.verification.occt`）；merge 模式能找出重合但未共用的 vertex 與 edge，這是 conformity 的缺陷。該模組也會把 kernel 算出的 volume 與 face 面積與 plan 比較。
@@ -232,7 +231,7 @@ OCCT 檢查有三組結果，範圍由小到大（詳細見 [Validation](validat
 
 **極端案例 catalogue。**23 個 fixture 在 Route A、B、C 下共 63 列：54 列建出，並通過 build 與結構檢查、寫出、Gmsh 載入、conformal mesh 與全部 OCCT 檢查；9 列是預期的拒絕（6 個 `NonManifoldError`、3 個 `ContactError`），它們在 build 階段就丟出（1.5 到 22.1 ms），不會拖到寫出之後。這些 fixture 針對容易出問題的幾何：近乎相切的 arc 與直線、淺角度相交的 arc、1 到 3 個 g 長的 edge、頂點相接、重疊的共線 edge、接觸外框的洞、會被 inset 切斷的細頸、會消失的 band、很小的 reflex 角、浮動導體、巢狀的洞、堆疊 slab 的角接觸、port 邊落在 metal sidewall 上、穿過 band 邊界的 refinement curve、相距 0.4 g 與 2 g 的兩層邊，以及圓弧上有外來 vertex 的 wall。54 個通過的組合中，`BRepCheck_Analyzer` 耗時 1.2 到 8.5 ms，`BOPAlgo_ArgumentAnalyzer` 全部模式 3.7 到 48.3 ms（單次執行，@tbl-extreme-timing）。每一列也記錄粗略 mesh 的 `minSICN`、`gamma` 與 drift（D2、D7 的依據）。測試另外在隨機 layout（$N = 100$ 的三種 route 做完整檢查，$N = 1,000$ 的 Route B 做 self-interference 關閉的檢查）上跑 OCCT 檢查，全部通過；尚未量測 $N = 1,000$ 以上的 OCCT 檢查成本。
 
-**Runtime validator 的規模。**validator（第 2 層）在 N = 1,000、5,000、20,000 的隨機 layout（seed 2，polygon-only）上逐項計時：耗時 0.1 s 以上的各項，對 face 數 F 的 slope 在 1.00 到 1.35 之間（band 與 arc 檢查在這些 layout 上沒有工作量，各不到 5 ms），所以成本大致隨 face 數線性成長。N = 20,000（F = 285,871）時，`verify_loaded` 共 14.4 s，各項結構檢查的時間相加是 11.2 s；最大的幾項是 `planarity`（4.5 s）、載入側的 `face_areas`（4.0 s）與 `shells`（3.9 s）（逐項在補充的 @tbl-validator）。
+**Runtime validator 的規模。**結構檢查（第 2 層）與測試用的 `verify_loaded` 在 N = 1,000、5,000、20,000 的隨機 layout（seed 2，polygon-only）上逐項計時：耗時 0.1 s 以上的各項，對 face 數 F 的 slope 在 1.00 到 1.35 之間（band 與 arc 檢查在這些 layout 上沒有工作量，各不到 5 ms），所以成本大致隨 face 數線性成長。N = 20,000（F = 285,871）時，`verify_loaded` 共 14.4 s，各項結構檢查的時間相加是 11.2 s；最大的幾項是 `planarity`（4.5 s）、載入側的 `face_areas`（4.0 s）與 `shells`（3.9 s）（逐項在補充的 @tbl-validator）。
 
 **注入缺陷。**為了知道這些檢查能不能抓到問題，另外對寫出的模型注入五種缺陷：內側 wire 反向、shell 中一個 shared face 反向、vertex 離開 curve 1e-4 µm、少一個 face 造成 open shell、wire 有缺口。`BRepCheck_Analyzer` 五種都抓到（production 的測試斷言這一點）。其餘檢查各自能抓到的種類，測試記錄為下限：vertex 偏離 1e-4 µm 只有 `BOPAlgo_ArgumentAnalyzer` 同時看得到（面積與體積的變化小於 1e-7，規劃比對看不到）；wire 有缺口時 `BOPAlgo_ArgumentAnalyzer` 與 `ShapeAnalysis_Shell` 也看得到。沒有單一檢查能涵蓋全部，所以併用。
 
@@ -240,7 +239,7 @@ OCCT 檢查有三組結果，範圍由小到大（詳細見 [Validation](validat
 
 ### 載入後對 Gmsh 模型的檢查
 
-第 2 層在載入的模型上檢查元素數量、邊界、vertex 位置、group、volume、面積，並產生粗略的 3-D mesh。三個執行範例（`pad_in_ground_A`、`pad_in_ground_B`、`airbridge_B`）全部通過：元素數量與 plan 相同，邊界不一致數為 0，vertex 與規劃位置的偏差為 0，volume 的最大相對誤差分別是 0、$5.4 \times 10^{-13}$ 與 $2.1 \times 10^{-16}$，face 面積的最大相對誤差不超過 $3.1 \times 10^{-12}$，粗略 3-D mesh 都是 conformal 且沒有重複 node，Gmsh-API oracle 的 entity 數與 group 成員與 plan 相同（oracle 的 face 面積與 plan 相差：平面 face 最大 $1.3 \times 10^{-12}$，oracle 自己建立的 curved wall 最大 $1.8 \times 10^{-8}$，測試容許 $10^{-3}$）。完整表格見[補充：重現資料](#reproduction-data)。production 的 catalogue 對每一個建出的列做同樣的載入檢查，全部 `ok`；production 的測試對寫出的檔案做來回檢查（數量、邊界、group、體積、面積與 conformal mesh：`test_round_trip_counts_boundaries_groups_volumes_areas_and_a_conformal_mesh`），並以 Gmsh API 的 oracle 比對 entity、group 與 face 面積（`test_the_gmsh_api_oracle_agrees_on_entities_groups_and_face_areas`）。
+測試以 `verify_loaded` 在載入的模型上檢查元素數量、邊界、vertex 位置、group、volume、面積，並產生粗略的 3-D mesh。三個執行範例（`pad_in_ground_A`、`pad_in_ground_B`、`airbridge_B`）全部通過：元素數量與 plan 相同，邊界不一致數為 0，vertex 與規劃位置的偏差為 0，volume 的最大相對誤差分別是 0、$5.4 \times 10^{-13}$ 與 $2.1 \times 10^{-16}$，face 面積的最大相對誤差不超過 $3.1 \times 10^{-12}$，粗略 3-D mesh 都是 conformal 且沒有重複 node，Gmsh-API oracle 的 entity 數與 group 成員與 plan 相同（oracle 的 face 面積與 plan 相差：平面 face 最大 $1.3 \times 10^{-12}$，oracle 自己建立的 curved wall 最大 $1.8 \times 10^{-8}$，測試容許 $10^{-3}$）。完整表格見[補充：重現資料](#reproduction-data)。production 的 catalogue 對每一個建出的列做同樣的載入檢查，全部 `ok`；production 的測試對寫出的檔案做來回檢查（數量、邊界、group、體積、面積與 conformal mesh：`test_round_trip_counts_boundaries_groups_volumes_areas_and_a_conformal_mesh`），並以 Gmsh API 的 oracle 比對 entity、group 與 face 面積（`test_the_gmsh_api_oracle_agrees_on_entities_groups_and_face_areas`）。
 
 
 每項檢查能抓到什麼：
@@ -273,14 +272,26 @@ SGB 只知道精確的 topology，所以 sidecar 的 `mesh_features` 陳述關�
 ::: {.askr-table-compact}
 | `kind` | `source` | `facts` | edge |
 |---|---|---|---|
-| `film_sidewall` | 本體的 entity id | `thickness_um`：sidewall 柱的 z 範圍 | 該本體 sidewall face 的所有 edge（上下外框與垂直 edge） |
+| `film_sidewall` | 本體的 entity id | `thickness_um`：有輸出的 sidewall 疊成的柱高 | 該本體有輸出的 sidewall face 的所有 edge（上下外框與垂直 edge） |
 | `band_boundary` | inset request id | `margins_um`（由小到大）、`narrowest_band_um`（相鄰 margin 的最小差，起點 0） | inset family 的 edge |
 | `arc` | 擁有這些圓弧的唯一 entity；沒有唯一者時為 `null` | `radius_um`：carrier 的半徑 | 同一個 `(entity, 半徑)` 的圓弧 edge |
 | `refinement_curve` | refinement request id | 無 | refinement request 的曲線 |
 | `port_edge` | port sheet id | 無 | lumped port 的 face 的邊界 edge |
 :::
 
-`film_sidewall` 的本體是導體（Route B 沒有導體 volume，但 sidewall 仍是導體與 vacuum 之間的 face），或是不貼著模型外界的 dielectric；導體與 dielectric 共用的 wall 同時屬於兩者，所以兩邊都保有完整的柱。vacuum 與模型外界的 wall 不是薄膜。被 level 切開的 wall 仍算同一根柱：範例中 port 在 metal 的中間平面 $z = 0.1$，把 pad 的部分 wall 切成兩段，`thickness_um` 仍是 0.2，而不是 0.1。Route A 的導體是 sheet，沒有 sidewall，所以沒有 `film_sidewall`。gap 或 spacing 的事實不在 sidecar 裡；之後新增一種 `kind` 或一項 fact 是相容的擴充，`kind` 在清單之外則是 schema 錯誤。
+`film_sidewall` 的本體是導體（Route B 沒有導體 volume，但 sidewall 仍是導體與 vacuum 之間的 face），或是不貼著模型外界的 dielectric；導體與 dielectric 共用的 wall 同時屬於兩者。vacuum 與模型外界的 wall 不是薄膜。
+
+`thickness_um` 描述 mesher 實際收到的幾何：同一個本體上下相疊、而且**有輸出**的 wall 組成一根柱，厚度是這根柱的總高。被 level 切開的 wall 仍算同一根柱：範例中 port 在 metal 的中間平面 $z = 0.1$，把 pad 的部分 wall 切成兩段，`thickness_um` 仍是 0.2，而不是 0.1。沒有輸出的 wall 不計入，所以同一個本體的厚度會隨 route 改變。以同一個 Net 上相鄰的兩個導體為例，較厚的 0.2 µm，較薄的 0.1 µm，兩者之間共用一段 0.1 µm 高的 wall：
+
+::: {.askr-table-compact}
+| Route | 計入的 sidewall | 較厚導體的 `thickness_um` |
+|---|---|---|
+| A | 薄膜導體是 sheet，沒有 sidewall；有限厚度的本體（bump、post）照 B 的規則 | 兩者都是 sheet，沒有導體的 `film_sidewall` |
+| B | 面對求解區域的 wall；兩個導體之間的 wall 不輸出 | 外側 0.2；與較薄導體相鄰的一側只剩上段，是 0.1 |
+| C | 所有 wall，包括導體之間的介面 | 0.2 |
+:::
+
+Route B 的 0.1 是正確的事實：在 mesher 要 mesh 的區域裡，那一側只是一個 0.1 µm 高的台階。比較不同 route 的 `thickness_um` 時，差異來自哪些 wall 有輸出，不代表幾何有錯。gap 或 spacing 的事實不在 sidecar 裡；之後新增一種 `kind` 或一項 fact 是相容的擴充，`kind` 在清單之外則是 schema 錯誤。
 
 測試用的 size field 是一個由選定 curve 出發的 `Distance` field，餵給 `Threshold` field：靠近 curve 時給出 `refine_size`，並在 `DistMin` 與 `DistMax` 之間成長到全域最大值。band 測試使用 `refine_size` 1.0 µm，範圍 1–20 µm。band 測試中 `MeshSizeMin` 維持 0，因為 2 µm 的下限無法解析 0.1 µm 的 band；gmsh-API 路徑也以同樣方式失敗。其他範例的 mesh 使用 `MeshSizeMin` = 2 µm，因為 0.2 µm 的 metal 厚度否則會迫使到處都出現很小的 element。
 

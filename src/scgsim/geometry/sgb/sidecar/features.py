@@ -20,8 +20,10 @@ the block is byte-identical for any worker count and tile layout.  Lengths are r
 micrometre value of the sidecar (``emission.measures.rounded``).
 
 A wall of a film can be split in z by a level that crosses it (a port plane in the middle of a conductor).  The
-thickness is that of the whole *column*: walls of one body that stand on the same horizontal edge, one on
-top of the other, are one column, and its thickness is the sum of their heights.
+thickness is that of the whole *column*: emitted walls of one body that stand on the same horizontal edge, one
+on top of the other, are one column, and its thickness is the sum of their heights.  Only emitted walls count,
+because the thickness describes the geometry the mesher receives, so it can differ between routes: in Route B
+the wall between two touching conductors is not emitted, and the wall above it is a column of its own height.
 """
 
 from __future__ import annotations

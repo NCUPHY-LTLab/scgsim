@@ -7,8 +7,9 @@ and XAO (no CAD kernel, no Boolean), next to the sidecar that binds planned ids 
 sliver report and the validation report.  With ``strict=True`` the written XAO is also read back with
 OCP and put through OpenCASCADE's own checks (the optional ``occt`` dependency group).
 
-The mesher takes it from there: open the XAO in Gmsh, ``verify_loaded`` against the sidecar
-(``scgsim.geometry.sgb.verification.loaded``), re-apply the sidecar's embeddings, mesh.
+The mesher takes it from there: open the XAO in Gmsh, re-apply the sidecar's embeddings, mesh.  It trusts
+the XAO and sidecar of one build and does not check them again; the tests do that with ``verify_loaded``
+(``scgsim.geometry.sgb.verification.loaded``), which also serves to diagnose a file suspected to be wrong.
 
 Every file is byte-identical for any ``workers`` and ``tiles`` value.
 """

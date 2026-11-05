@@ -52,8 +52,8 @@ production 的 group 名稱依決策 D5 以 Entity 歸屬，形式為 `<kind>::<
 
 設計中有三個層次，production 都已實作：
 
-1. **開發測試**：在 fixture 與隨機 layout 上，以 OCP 綁定執行 OpenCASCADE 自己的檢查（`BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`），並做 Gmsh 載入檢查。OCP 在 `occt` dependency group（`cadquery-ocp-novtk==7.8.1.1.post1`），相關測試標為 `occt`；目前 CI 還沒有安裝這個 group，所以 `occt` 測試在 CI 中被略過，只在安裝了該 group 的環境執行。
-2. **每一次 production build 都 fail closed**：寫出任何東西之前，先檢查 SGB 自己的 structural invariant（一次 build 記錄 31 項，其中 4 項是不使 build 失敗的警告）；mesher 載入後再做 `verify_loaded`（數量、邊界、面積、體積、group）。production 中無法關閉驗證。
+1. **開發測試**：在 fixture 與隨機 layout 上，以 OCP 綁定執行 OpenCASCADE 自己的檢查（`BRepCheck_Analyzer` 與 `BOPAlgo_ArgumentAnalyzer`），並做 Gmsh 載入檢查 `verify_loaded`（數量、邊界、面積、體積、group）。OCP 在 `occt` dependency group（`cadquery-ocp-novtk==7.8.1.1.post1`），相關測試標為 `occt`；目前 CI 還沒有安裝這個 group，所以 `occt` 測試在 CI 中被略過，只在安裝了該 group 的環境執行。
+2. **每一次 production build 都 fail closed**：寫出任何東西之前，先檢查 SGB 自己的 structural invariant（一次 build 記錄 31 項，其中 4 項是不使 build 失敗的警告）。production 中無法關閉驗證。mesher 信任同一次 build 寫出的檔案，不再檢查（見 [Validation](validation.qmd)）。
 3. **Strict mode**（選用）：`build_sgb_geometry(..., strict=True)` 在已安裝 OCP 時，對寫出的 XAO 再執行 OCCT 檢查；沒有 OCP 時，在 build 開始前就以 `OcctUnavailable` 停止，並指出 `occt` dependency group。一般使用者安裝（例如透過 OrcaPen SC PDK）不會安裝 OCP。
 
 production 的 extreme-case catalogue（`tests/sgb_catalogue_report.py`，每個 fixture 與 route 一列）結果如下。

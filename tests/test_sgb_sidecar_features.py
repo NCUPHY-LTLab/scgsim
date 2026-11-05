@@ -244,6 +244,27 @@ def test_a_dielectric_film_off_the_model_boundary_is_a_film(route):
     )
 
 
+@pytest.mark.parametrize(
+    ("route", "thick"),
+    [("B", [0.1, 0.2]), ("C", [0.2])],
+)
+def test_the_thickness_counts_only_emitted_walls_so_it_follows_the_route(route, thick):
+    """Two touching conductors of one Net, 0.2 and 0.1 um: Route B does not emit the wall between them."""
+    prisms = [
+        *chip_prisms(GRID, 40.0),
+        conductor("thick", rect_um(-10, -5, 0, 5), 0, "0.2", "N"),
+        conductor("thin", rect_um(0, -5, 10, 5), 0, "0.1", "N"),
+    ]
+    model = build_model_from_catalogue(
+        PrismCatalogue(GRID, tuple(prisms), name="touching"), route
+    )
+    films = features_of(sidecar_of(model), "film_sidewall")
+    assert [
+        f["facts"]["thickness_um"] for f in films if f["source"] == "thick"
+    ] == thick
+    assert [f["facts"]["thickness_um"] for f in films if f["source"] == "thin"] == [0.1]
+
+
 @pytest.mark.parametrize("route", ["B", "C"])
 def test_a_wall_shared_with_a_conductor_stays_part_of_the_dielectric_film(route):
     """A 0.05 um conductor along the oxide's whole right wall: the oxide keeps its 0.1 um column, the conductor its own."""

@@ -16,9 +16,16 @@ SGB 推導出的模型要交給 mesher 與 solver，所以在寫出之前必須�
 ::: {.askr-table-compact}
 | 層 | 何時執行 | 做什麼 | 失敗時 |
 |---|---|---|---|
-| **1. 開發測試** | 在安裝了 `occt` dependency group 的環境（目前 CI 不安裝，`occt` 測試在 CI 中略過），涵蓋範例、極端案例 fixture 與隨機 layout | 對寫出的 BREP/XAO 執行 OCCT 自己的檢查：`BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer`（透過 OCP），以及 Gmsh load check | 測試失敗；是 SGB 或 writer 的缺陷 |
-| **2. 每一次 production build** | 每一次 build，寫出之前與 mesher 載入時 | 在寫出之前，對 SGB 自己的結構 invariant（本頁其餘部分）fail closed；mesher 載入後用 `verify_loaded` 做 load check（數量、vertex 位置、邊界、面積、volume、group） | build 中止，不回傳模型；load check 回報問題清單，`raise_if_failed` 停止 |
+| **1. 開發測試** | 在安裝了 `occt` dependency group 的環境（目前 CI 不安裝，`occt` 測試在 CI 中略過），涵蓋範例、極端案例 fixture 與隨機 layout | 對寫出的 BREP/XAO 執行 OCCT 自己的檢查：`BRepCheck_Analyzer`、`BOPAlgo_ArgumentAnalyzer`（透過 OCP），以及 Gmsh 載入檢查 `verify_loaded`（數量、vertex 位置、邊界、面積、volume、group） | 測試失敗；是 SGB 或 writer 的缺陷 |
+| **2. 每一次 production build** | 每一次 build，寫出之前 | 對 SGB 自己的結構 invariant（本頁其餘部分）fail closed | build 中止，不回傳模型 |
 | **3. 選用的 strict mode** | `build_sgb_geometry(..., strict=True)`，需要 OCP | 對剛寫出的 XAO 執行第 1 層的 OCCT 檢查（便宜的版本：self-interference 關閉） | `OcctCheckError`（檔案已寫出）；沒有 OCP 時在 build 開始前就以 `OcctUnavailable` 停止 |
+:::
+
+mesher 不再重新檢查寫出的檔案：第 1 層確認 writer 寫出的檔案與規劃一致，第 2 層確認每一個規劃本身成立，所以 mesher 直接信任同一次 build 寫出的 XAO 與 sidecar。
+
+::: {.callout-important title="XAO 與 sidecar 必須來自同一次 build"}
+
+mesher 不比對它收到的兩個檔案。把一次 build 的 XAO 配上另一次 build 的 sidecar，tag 會對到錯誤的 planned id，mesh 仍然會產生，也不會報錯。成對傳遞 `SgbArtifacts` 的 `xao` 與 `sidecar`，就不會發生這種情況。
 :::
 
 幾點說明：
@@ -26,9 +33,9 @@ SGB 推導出的模型要交給 mesher 與 solver，所以在寫出之前必須�
 - **第 1 層的 OCCT 檢查**（`scgsim.geometry.sgb.verification.occt` 的 `check_file`）依序做四件事：(1) `BRepCheck_Analyzer`（開啟 geometry control）：問每個唯一的 vertex、edge、wire、face、shell 與 solid 是否 `IsValid`，並報告各自的狀態清單與在各 context 中的狀態（edge 在 face 中、face 在 shell 中等）；(2) `BOPAlgo_ArgumentAnalyzer`（Boolean 運算的前置檢查），開啟型別、self-interference、過小 edge、無法重建的 face、tangent face、未合併的 vertex 與 edge（conformity 缺陷）、C0 連續性與 pcurve 對 3-D 曲線等九個模式；(3) 輕量的 `ShapeAnalysis` 檢查：每個 shell 的自由 edge 與不良（non-manifold 或定向不一致）edge、短於 tolerance 十倍的 edge；(4) 與規劃交叉比對：每個 solid 的體積與每個 face 的面積對比規劃值。free 的 port sheet 不進 `BOPAlgo_ArgumentAnalyzer` 的 solid 分析（報告記為 excluded free face），由 `BRepCheck_Analyzer` 與面積比對涵蓋。
 - **範例的結果（production）。** 六個真實輸入的模型（`pad_in_ground` 的 Route A、B、C 與各自含 band 的版本）加上兩個 stage 層的 scene（Route B 的 `airbridge`，以及有圓弧與圓柱 wall 的 `pad_in_ground`），各對寫出的 BREP 與 XAO 做一次，共 16 份報告（`figures/validation-numbers.json` 的 `occt_examples`），全部通過：`BRepCheck_Analyzer` 判定有效且沒有 faulty 的 sub-shape；`BOPAlgo_ArgumentAnalyzer`（含 self-interference）沒有 fault 或結果；`ShapeAnalysis` 沒有帶自由 edge 或不良 edge 的 shell；與規劃交叉比對，face 面積的最大相對誤差為 $1.3 \times 10^{-12}$（出現在有圓柱 wall 的 stage 層 scene；六個真實輸入的模型最大為 $2.9 \times 10^{-14}$），solid 體積的最大相對誤差為 $2.6 \times 10^{-16}$。單次執行的耗時，`BRepCheck_Analyzer` 2.5 到 15.8 ms，`BOPAlgo_ArgumentAnalyzer` 6.3 到 46.5 ms（這台機器；隨機器而異）。測試對 17 個具名的模型（`tests/sgb_emit_cases.py` 的 `CASES`）檢查同樣的項目。五個刻意製造的缺陷作為負對照（`tests/sgb_occt_mutations.py`、`tests/test_sgb_occt.py`：反轉的內 wire、shell 內翻轉的共用 face、vertex 移離曲線 $10^{-4}$ µm、缺一個 face 的開放 shell、有缺口的 wire），每一個都被 `BRepCheck_Analyzer` 抓到；其餘檢查各自能抓到哪幾種，測試記錄為下限（例如 vertex 偏離 $10^{-4}$ µm 只有 `BOPAlgo_ArgumentAnalyzer` 同時看得到，因為面積與體積的變化小於 $10^{-7}$，規劃比對看不到）。
 - **極端案例 catalogue 與隨機 layout。** 見下一節。
-- **Runtime validator 的 scaling（production 量測）。** 對 Route B 隨機 layout（seed 2）N = 1000、5000、20000 個 feature（F = 14 215、71 969、285 871 個 face），31 項結構 check 各自的成本對 face 數的 log-log 局部斜率在 0.97 到 1.31 之間（`cylinders` 在 N = 1000 到 5000 之間為 1.6，但它在 N = 20000 時只花 0.03 s），所有 check 成本合計的斜率約為 1.15（1.16 與 1.14），所以每一項都近似線性。N = 20000 時所有 check 的成本合計 10.6 s（驗證階段的 wall time 為 5.7 s）；最貴的是 planarity（4.6 s）與 shells（3.9 s），接著是 groups（0.67 s）與 edges_in_faces（0.65 s）。mesher 端的 `verify_loaded` 在 N = 20000 時為 15.3 s，Gmsh 載入為 49.7 s，推導與驗證合計為 61.6 s（`figures/why-validator-scaling.json`、`figures/why-scaling-numbers.json`；單次執行，同一台機器上不同次執行的時間可以差到 10% 以上）。**這些量測都是只有直線的 polygon layout，沒有圓弧也沒有 band，所以圓弧與 band 在大規模下的成本沒有量測，不外推。**
+- **Runtime validator 的 scaling（production 量測）。** 對 Route B 隨機 layout（seed 2）N = 1000、5000、20000 個 feature（F = 14 215、71 969、285 871 個 face），31 項結構 check 各自的成本對 face 數的 log-log 局部斜率在 0.97 到 1.31 之間（`cylinders` 在 N = 1000 到 5000 之間為 1.6，但它在 N = 20000 時只花 0.03 s），所有 check 成本合計的斜率約為 1.15（1.16 與 1.14），所以每一項都近似線性。N = 20000 時所有 check 的成本合計 10.6 s（驗證階段的 wall time 為 5.7 s）；最貴的是 planarity（4.6 s）與 shells（3.9 s），接著是 groups（0.67 s）與 edges_in_faces（0.65 s）。測試用的 `verify_loaded` 在 N = 20000 時為 15.3 s，Gmsh 載入為 49.7 s，推導與驗證合計為 61.6 s（`figures/why-validator-scaling.json`、`figures/why-scaling-numbers.json`；單次執行，同一台機器上不同次執行的時間可以差到 10% 以上）。**這些量測都是只有直線的 polygon layout，沒有圓弧也沒有 band，所以圓弧與 band 在大規模下的成本沒有量測，不外推。**
 - **OCP 是 optional dependency。** 它是 `cadquery-ocp-novtk==7.8.1.1.post1` 對 OCCT 的 binding（OCCT 7.8.1，與 Gmsh 使用的相同），放在 `occt` dependency group（`uv sync --group occt`）；使用 OCCT 的測試標為 `occt`，沒有安裝時略過。終端使用者（例如經由 OrcaPen SC PDK）不會安裝 OCP。strict mode 與 `export_aedt_step` 需要 OCP；目前 CI 還沒有安裝這個 group，所以第 1 層的測試只在安裝了它的環境執行。
-- **第 2 層的 mesher load check** 是 `verify_loaded`：給定 sidecar 與剛開啟 XAO 的 Gmsh 模型，逐項比對 sidecar 內記錄的預期值（各維度的數量、每個 vertex 的位置、每個 edge、face、solid 的邊界、每個 face 的面積與每個 solid 的體積、physical group 的名稱、維度、tag 與成員），而不是檢視模型本身；`apply_sidecar_embeds` 重新套用 XAO 無法攜帶的 embedding。
+- **第 1 層的 Gmsh 載入檢查** 是 `verify_loaded`：給定 sidecar 與剛開啟 XAO 的 Gmsh 模型，逐項比對 sidecar 內記錄的預期值（各維度的數量、每個 vertex 的位置、每個 edge、face、solid 的邊界、每個 face 的面積與每個 solid 的體積、physical group 的名稱、維度、tag 與成員），而不是檢視模型本身。測試與極端案例 catalogue 對每個寫出的模型執行它；懷疑檔案被替換或損壞時，也可以用 `verify_xao` 手動診斷。
 - **驗證在 production build 中不能被停用。** build 函式沒有任何關閉驗證的參數（測試斷言這一點）；原型保留的 `run_validation` 與 `check_planarity` 開關僅供測試使用。
 
 本頁其餘部分是第 2 層的第一半：SGB 自己的結構 invariant。
@@ -238,7 +245,7 @@ flowchart LR
   SC --> S6["assembly<br/>SgbError：chain、refinement 位置"]
   S6 --> S9["S9 驗證<br/>ValidationError"]
   S9 --> S10["emission<br/>每個 native entity 一個 planned id"]
-  S10 --> L2["mesher load check (第 2 層)；<br/>選用的 OCCT strict mode (第 3 層)"]
+  S10 --> L2["選用的 OCCT strict mode (第 3 層)"]
   S9 -. "任何失敗：中止，不回傳" .-> X(("中止"))
   S1 -.-> X
   S5 -.-> X
@@ -251,7 +258,7 @@ flowchart LR
 
 ## 小結
 
-- 驗證有三層：開發測試中的 OCCT 檢查、每一次 production build 的 SGB 結構 invariant 加 mesher load check，以及選用的 OCCT strict mode。七個執行範例與 catalogue 中 54 個可建出的列都通過全部檢查，另外 9 列是預期中的拒絕。
+- 驗證有三層：開發測試中的 OCCT 檢查與 Gmsh 載入檢查、每一次 production build 的 SGB 結構 invariant，以及選用的 OCCT strict mode。mesher 信任同一次 build 寫出的檔案，不再檢查。七個執行範例與 catalogue 中 54 個可建出的列都通過全部檢查，另外 9 列是預期中的拒絕。
 - 結構 invariant 在一次 build 中共記錄 31 個 check，涵蓋 arrangement、contact、shell 與 face、physical group；其中四個是警告，一個是抽樣。
 - 每個 check 都從完成的 record 重新計算它的陳述，所以 assembly 的缺陷無法躲在自己的簿記後面。
 - 任何硬性失敗都會拋出例外；不修補，也不回傳模型。不同 Net 的接觸與 refinement 位置錯誤在更早的階段就會中止。
