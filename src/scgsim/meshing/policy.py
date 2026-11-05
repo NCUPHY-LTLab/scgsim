@@ -132,11 +132,11 @@ def conductor_outline_curves(features: SidecarFeatures) -> tuple[int, ...]:
     the port sheet, not a conductor, but they are the outline where the port lands on the conductors.
     Band edges, the outer domain and the walls of a substrate are never included.
     """
-    conductors = features.conductor_entities()
     tags: set[int] = set()
     for feature in features.features:
         if feature.kind == "port_edge" or (
-            feature.kind in ("film_sidewall", "arc") and feature.source in conductors
+            feature.kind in ("film_sidewall", "arc")
+            and feature.source in features.conductors
         ):
             tags.update(feature.native_tags)
     return tuple(sorted(tags))

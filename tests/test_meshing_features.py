@@ -179,13 +179,13 @@ def test_a_sidecar_file_loads(tmp_path: Path):
     assert load_features(path).features[0].native_tags == (1, 2)
 
 
-def test_the_conductors_are_the_owners_of_the_metal_interface_groups():
-    """Conductors come from MA, MS and sheet groups, not from the substrate or vacuum interfaces."""
+def test_the_conductors_are_the_entities_of_conductor_volumes_emitted_or_not():
+    """A Route B conductor volume is listed unemitted; a dielectric is not a conductor."""
     sidecar = sidecar_with(film([1]))
-    sidecar["physical_groups"]["SHEET::chip"] = {
-        "dim": 2,
-        "ids": [],
-        "interface_type": "SHEET",
-        "entities": ["chip/left"],
+    sidecar["volumes"]["vol2"] = {
+        "entity": "ground",
+        "kind": "conductor",
+        "emitted": True,
     }
-    assert read_features(sidecar).conductor_entities() == {"pad", "chip/left"}
+    assert read_features(sidecar).conductors == {"pad", "ground"}
+    assert read_features(sidecar_with()).conductors == {"pad"}

@@ -69,24 +69,13 @@ class Binding:
         return ids[tag - 1] if 1 <= tag <= len(ids) else None
 
 
-# Interface types of the surface groups that belong to a conductor (metal-air, metal-substrate and the
-# sheet of a Route A conductor); the entities of such a group are conductors.
-_CONDUCTOR_INTERFACES = ("MA", "MS", "SHEET")
-
-
 @dataclass(frozen=True)
 class PhysicalGroup:
-    """A primary physical group of the sidecar: its name, dimension, member planned ids and owners.
-
-    ``interface_type`` and ``entities`` are the sidecar's own fields of a surface group (``None`` and
-    empty for a group that has none).
-    """
+    """A primary physical group of the sidecar: its name, dimension and member planned ids."""
 
     name: str
     dimension: int
     ids: tuple[str, ...]
-    interface_type: str | None = None
-    entities: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -114,15 +103,9 @@ class SidecarFeatures:
     groups: tuple[PhysicalGroup, ...]
     embedded_faces: tuple[EmbeddedFace, ...]
     embedded_edges: tuple[EmbeddedEdge, ...]
-
-    def conductor_entities(self) -> frozenset[str]:
-        """Ids of the conductors: the owners of the metal interface groups (MA, MS, or a Route A sheet)."""
-        return frozenset(
-            entity
-            for group in self.groups
-            if group.interface_type in _CONDUCTOR_INTERFACES
-            for entity in group.entities
-        )
+    # Ids of the entities whose volume is a conductor, emitted or not: a feature's ``source`` is one of
+    # these when a conductor owns the feature (a dielectric or the vacuum is not in the set).
+    conductors: frozenset[str] = frozenset()
 
     def features_by_curve(self) -> dict[int, tuple[Feature, ...]]:
         """The features that cover each native curve tag, in sidecar order."""
@@ -154,6 +137,7 @@ def read_features(sidecar: Mapping[str, Any]) -> SidecarFeatures:
         groups=_read_groups(sidecar.get("physical_groups")),
         embedded_faces=_read_embedded_faces(sidecar, binding),
         embedded_edges=_read_embedded_edges(sidecar, binding),
+        conductors=_read_conductors(sidecar.get("volumes")),
     )
 
 
@@ -244,8 +228,6 @@ def _read_groups(raw: Any) -> tuple[PhysicalGroup, ...]:
             name,
             int(_require_mapping(group, f"physical group {name}")["dim"]),
             tuple(_require_list(group.get("ids", []), f"physical group {name} ids")),
-            group.get("interface_type"),
-            tuple(group.get("entities") or ()),
         )
         for name, group in sorted(groups.items())
     )
@@ -276,6 +258,16 @@ def _read_embedded_edges(
         for entry in _require_list(
             sidecar.get("refinement_edges", []), "refinement_edges"
         )
+    )
+
+
+def _read_conductors(raw: Any) -> frozenset[str]:
+    """Entities of the sidecar's volumes whose kind is conductor (Route B lists the unemitted ones too)."""
+    volumes = _require_mapping(raw, "volumes")
+    return frozenset(
+        _require_string(volume.get("entity"), "volume entity")
+        for volume in (_require_mapping(v, "volume") for v in volumes.values())
+        if volume.get("kind") == "conductor"
     )
 
 

@@ -12,7 +12,7 @@ EDGE_COUNT = 12
 
 
 def sidecar_with(*features: dict[str, Any], **extra: Any) -> dict[str, Any]:
-    """A minimal v2 sidecar: twelve edges e0..e11, three faces, two volumes, one face group."""
+    """A minimal v2 sidecar: twelve edges e0..e11, three faces, a substrate and an unemitted conductor ``pad``."""
     document: dict[str, Any] = {
         "schema": "scgsim.sgb.sidecar.v2",
         "binding": {
@@ -28,17 +28,17 @@ def sidecar_with(*features: dict[str, Any], **extra: Any) -> dict[str, Any]:
                 "dim": 2,
                 "ids": ["f0", "f1"],
                 "native_tags": [1, 2],
-                "interface_type": "MA",
-                "entities": ["pad"],
             },
             "SA::substrate|VACUUM::interface": {
                 "dim": 2,
                 "ids": ["f2"],
                 "native_tags": [3],
-                "interface_type": "SA",
-                "entities": ["substrate", "VACUUM"],
             },
             "substrate": {"dim": 3, "ids": ["vol0"], "native_tags": [1]},
+        },
+        "volumes": {
+            "vol0": {"entity": "substrate", "kind": "dielectric", "emitted": True},
+            "vol1": {"entity": "pad", "kind": "conductor", "emitted": False},
         },
         "mesh_features": list(features),
         "embedded_faces": [],
