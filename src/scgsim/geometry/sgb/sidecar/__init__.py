@@ -1,4 +1,4 @@
-"""The production sidecar ``scgsim.sgb.sidecar.v1`` (design brief sections 7 and 12, decision D8).
+"""The production sidecar ``scgsim.sgb.sidecar.v2`` (design brief sections 7 and 12, decision D8).
 
 The sidecar is the JSON companion of the XAO/BREP.  It binds every planned id to its native tag *by
 construction order* (tag = 1 + position in ``ids_by_tag``, the ``TopExp::MapShapes`` pre-order of the
@@ -50,9 +50,12 @@ Top-level fields and who uses them
     ``both``, only the faces that have that neighbour) and ``side`` (their common value, or ``mixed``), so
     the consumer decides internal-boundary cracking from the row alone; every other row has ``None``
     for the three.
-``mesh_hints``
-    ``band_boundary`` / ``refinement_curve`` / ``curved_edge`` entries: edge ids and native tags plus the
-    source request id; no sizes (the mesher decides; ``hints`` documents the sizing the bands need).
+``mesh_features``
+    facts about the geometry for the mesher, never a size: ``film_sidewall`` (the sidewall outline of a
+    finite body, with its ``thickness_um``), ``band_boundary`` (an inset family's edges, with the request's
+    ``margins_um`` and ``narrowest_band_um``), ``arc`` (the circular-arc edges of one ``radius_um``),
+    ``refinement_curve`` and ``port_edge``; each entry lists edge ids and native tags and the request, entity
+    or port it comes from.  The mesher decides every size (see ``features``).
 ``volumes`` / ``faces``
     per planned volume: group, kind, material, Net, ``emitted``, planned volume and ``aedt_name``;
     per planned face: group, ``face_kind``, ``z_um``, the volumes on its two sides.  AEDT's contribution

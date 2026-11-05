@@ -1,4 +1,4 @@
-"""The production sidecar ``scgsim.sgb.sidecar.v1``: schema, binding, group facts, unions, lineage, determinism."""
+"""The production sidecar ``scgsim.sgb.sidecar.v2``: schema, binding, group facts, unions, lineage, mesh features, determinism."""
 
 from __future__ import annotations
 
@@ -65,24 +65,13 @@ def test_every_emitted_sidecar_validates_against_the_schema(sidecars, name):
 
 
 def test_the_schema_rejects_what_a_consumer_must_not_see(sidecars):
-    """Negative controls: a missing block, an unknown top-level field, a wrong version and a bad AEDT name."""
+    """Negative controls: a missing block, the removed v1 block, an unknown top-level field, a wrong version and a bad AEDT name."""
     validator = jsonschema.Draft202012Validator(sidecar_schema())
     good = sidecars["pad_b"]
     assert not list(validator.iter_errors(good))
     for broken in (
-        {k: v for k, v in good.items() if k != "mesh_hints"},
-        {
-            **good,
-            "mesh_hints": [
-                {
-                    "kind": "curved_edge",
-                    "source": None,
-                    "edges": [],
-                    "native_tags": [],
-                    "size": 1.0,
-                }
-            ],
-        },
+        {k: v for k, v in good.items() if k != "mesh_features"},
+        {**good, "mesh_hints": []},
         {
             **good,
             "surface_epr_rows": {
@@ -113,7 +102,7 @@ def test_the_schema_rejects_what_a_consumer_must_not_see(sidecars):
         },
         {k: v for k, v in good.items() if k != "expected"},
         {**good, "stowaway": 1},
-        {**good, "schema": "scgsim.sgb.sidecar.v2"},
+        {**good, "schema": "scgsim.sgb.sidecar.v1"},
         {**good, "route": "D"},
         {
             **good,
@@ -537,48 +526,6 @@ def test_refinement_requests_list_their_edges_and_host_faces(sidecars):
     (pair,) = side["refinement_edges"]
     assert pair["edge"] == request["edges"][0] and pair["family"] == "ref"
     assert side["faces"][pair["host_face"]]["group"] is not None
-
-
-def test_mesh_hints_list_band_boundaries_refinement_curves_and_curved_edges_without_sizes(
-    sidecars,
-):
-    """Hints name edges and their source request, never a size."""
-    banded = sidecars["pad_b_bands"]
-    hints = {(h["kind"], h["source"]): h for h in banded["mesh_hints"]}
-    assert {k for k in hints if k[0] == "band_boundary"} == {
-        ("band_boundary", "band_pad_top"), ("band_boundary", "band_pad_bottom"), ("band_boundary", "band_gap"),
-    }  # fmt: skip
-    assert ("curved_edge", None) in hints and not any(
-        k[0] == "refinement_curve" for k in hints
-    )
-    ids = banded["binding"]["ids_by_tag"]["1"]
-    for hint in banded["mesh_hints"]:
-        assert set(hint) == {"kind", "source", "edges", "native_tags"}  # no sizes
-        assert (
-            hint["edges"] and [ids[t - 1] for t in hint["native_tags"]] == hint["edges"]
-        )
-    carriers = banded["lineage"]["carriers"]
-    for (kind, source), hint in hints.items():
-        if kind == "band_boundary":
-            assert all(
-                any(
-                    carriers[c].get("family") == source
-                    for c in banded["lineage"]["edges"][e]
-                )
-                for e in hint["edges"]
-            )
-    assert (
-        len(hints[("curved_edge", None)]["edges"]) == banded["arrangement"]["arc_edges"]
-    )
-    refined = sidecars["pad_a_refinement"]
-    (curve,) = (h for h in refined["mesh_hints"] if h["kind"] == "refinement_curve")
-    assert (
-        curve["source"] == "ref"
-        and curve["edges"] == refined["refinements"][0]["edges"]
-    )
-    assert sidecars["pad_a"]["mesh_hints"] == [
-        h for h in sidecars["pad_a"]["mesh_hints"] if h["kind"] == "curved_edge"
-    ]
 
 
 def test_arrangement_and_sliver_summaries_are_numbers_for_the_manifest(sidecars):

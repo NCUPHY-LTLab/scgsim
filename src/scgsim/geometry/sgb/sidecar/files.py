@@ -37,7 +37,7 @@ def read_sidecar(path: Path) -> dict[str, Any]:
 
 
 def sidecar_schema() -> dict[str, Any]:
-    """The JSON Schema (draft 2020-12) of ``scgsim.sgb.sidecar.v1``."""
+    """The JSON Schema (draft 2020-12) of ``scgsim.sgb.sidecar.v2``."""
     text = (
         resources.files("scgsim.geometry.sgb.sidecar")
         .joinpath(SCHEMA_FILE)
