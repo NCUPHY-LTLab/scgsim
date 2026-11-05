@@ -1,4 +1,7 @@
-"""The load-side checks the mesher runs on the opened XAO (design brief section 14, "Validation layers").
+"""The load check the tests run on the opened XAO (design brief section 14, "Validation layers").
+
+The mesher trusts the XAO and sidecar of one build and does not run it; it also serves to diagnose a
+file suspected to be wrong.
 
 Owns :func:`verify_loaded`: given the sidecar and a Gmsh model that has just opened the XAO (and called
 ``gmsh.model.occ.synchronize()``), prove that what was loaded is what was planned -- never by

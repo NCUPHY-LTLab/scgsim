@@ -72,5 +72,6 @@ Top-level fields and who uses them
     inset families (request id, support, margins, band -> groups), refinement requests, the sliver
     report summary and the measured snap drift / arc deviation.
 ``expected``
-    the expectations of ``verify_loaded`` (positions, boundaries, areas, volumes).
+    the expectations of ``verify_loaded`` (positions, boundaries, areas, volumes), the load check the tests
+    run; the mesher trusts the files of one build and does not read it.
 """
