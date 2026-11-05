@@ -6,7 +6,7 @@ Gmsh must re-apply after loading the XAO.  It imports nothing from SGB: the side
 contract, so a sidecar from any worker count, tile layout or machine reads the same way.
 
 A feature states what is true of a set of edges (this set is the outline of a 0.2 um film wall); it never
-states a mesh size.  Sizes come from the rule set in ``policy``.
+states a mesh size.  Sizes come from a sizing recipe (``recipes``).
 """
 
 from __future__ import annotations

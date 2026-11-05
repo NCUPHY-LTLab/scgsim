@@ -13,8 +13,9 @@ from meshing_support import audit_of, bad_element
 from scgsim.meshing import driver
 from scgsim.meshing.driver import WorkerExit, measure_bounding_box, run_round
 from scgsim.meshing.errors import MeshingError
-from scgsim.meshing.job import MeshJob
-from scgsim.meshing.policy import DELAUNAY, HXT, SizeField, SizeRequests
+from scgsim.meshing.job import Elevation, MeshJob
+from scgsim.meshing.mesher import DELAUNAY, HXT, MesherOptions
+from scgsim.meshing.sizing import SizeField, SizeRequests
 
 
 def job_in(tmp_path: Path, **overrides) -> MeshJob:
@@ -30,7 +31,7 @@ def job_in(tmp_path: Path, **overrides) -> MeshJob:
             (SizeField((3, 5), 5.0, 300.0),),
         ),
         "threshold": 0.01,
-        "algorithm_3d": HXT,
+        "mesher": MesherOptions(algorithm_3d=HXT),
     }
     return MeshJob(**(fields | overrides))
 
@@ -50,12 +51,21 @@ class ScriptedWorker:
         return self.behaviours.pop(0)(Path(result))
 
 
-def succeeds(audit=None) -> Callable[[Path], WorkerExit]:
+def succeeds(
+    audit=None, *, elevated=False, elevation_error=None
+) -> Callable[[Path], WorkerExit]:
     """A worker behaviour that writes a successful result around ``audit``."""
 
     def behaviour(result: Path) -> WorkerExit:
         result.write_text(
-            json.dumps({"ok": True, "audit": (audit or audit_of()).to_json()})
+            json.dumps(
+                {
+                    "ok": True,
+                    "audit": (audit or audit_of()).to_json(),
+                    "elevated": elevated,
+                    "elevation_error": elevation_error,
+                }
+            )
         )
         return WorkerExit(0, "")
 
@@ -99,12 +109,59 @@ def test_the_request_carries_the_sizes_and_the_options(tmp_path, monkeypatch):
     monkeypatch.setattr(driver, "launch_worker", worker)
     run_round(job_in(tmp_path, attribute=False), tmp_path)
     (request,) = worker.requests
-    assert request["algorithm_3d"] == HXT and request["algorithm_2d"] is None
+    assert request["mesher"] == {
+        "algorithm_2d": None,
+        "algorithm_3d": HXT,
+        "geometry_order": 1,
+        "high_order_optimize": True,
+    }
+    assert request["elevation"] is None
     assert request["max_size"] == 10.0 and request["gradation"] == 1.0
     assert request["curve_sizes"] == {"3": 2.5, "4": 2.5, "9": 1.25}
     assert request["fields"] == [{"curves": [3, 5], "size": 5.0, "distance": 300.0}]
     assert request["threshold"] == 0.01 and request["attribute"] is False
     assert MeshJob.from_json(request) == job_in(tmp_path, attribute=False)
+
+
+def test_the_request_carries_the_two_dimensional_algorithm_and_the_order(
+    tmp_path, monkeypatch
+):
+    """The 2D algorithm, the order, the optimisation switch and the elevation target travel with the job."""
+    worker = ScriptedWorker(succeeds(elevated=True))
+    monkeypatch.setattr(driver, "launch_worker", worker)
+    job = job_in(
+        tmp_path,
+        mesher=MesherOptions(
+            algorithm_2d=5,
+            algorithm_3d=DELAUNAY,
+            geometry_order=2,
+            high_order_optimize=False,
+        ),
+        elevation=Elevation(tmp_path / "round.elevated.msh", 1234),
+    )
+    run_round(job, tmp_path)
+    (request,) = worker.requests
+    assert request["mesher"]["algorithm_2d"] == 5
+    assert request["mesher"]["geometry_order"] == 2
+    assert request["mesher"]["high_order_optimize"] is False
+    assert request["elevation"] == {
+        "msh": str(tmp_path / "round.elevated.msh"),
+        "max_tetrahedra": 1234,
+    }
+    assert MeshJob.from_json(request) == job
+
+
+def test_the_outcome_says_whether_the_worker_elevated_the_mesh(tmp_path, monkeypatch):
+    """An elevated mesh and an elevation error both come back with the audit of the linear mesh."""
+    worker = ScriptedWorker(
+        succeeds(elevated=True), succeeds(elevation_error="setOrder failed")
+    )
+    monkeypatch.setattr(driver, "launch_worker", worker)
+    elevated = run_round(job_in(tmp_path), tmp_path)
+    failed = run_round(job_in(tmp_path), tmp_path)
+    assert (elevated.elevated, elevated.elevation_error) == (True, None)
+    assert (failed.elevated, failed.elevation_error) == (False, "setOrder failed")
+    assert failed.audit is not None and failed.fallback is None
 
 
 def test_hxt_killed_by_a_signal_is_retried_once_with_delaunay_and_the_fallback_is_recorded(
@@ -118,7 +175,7 @@ def test_hxt_killed_by_a_signal_is_retried_once_with_delaunay_and_the_fallback_i
     assert outcome.algorithm_3d == DELAUNAY
     assert outcome.fallback is not None and "signal 6" in outcome.fallback
     assert "invalid pointer" in outcome.fallback
-    assert [r["algorithm_3d"] for r in worker.requests] == [HXT, DELAUNAY]
+    assert [r["mesher"]["algorithm_3d"] for r in worker.requests] == [HXT, DELAUNAY]
     assert worker.requests[1]["curve_sizes"] == worker.requests[0]["curve_sizes"]
 
 
@@ -158,17 +215,21 @@ def test_a_delaunay_round_that_fails_is_retried_once_with_hxt(tmp_path, monkeypa
     """The retry goes to the other algorithm, whichever was first."""
     worker = ScriptedWorker(killed_by(11), succeeds())
     monkeypatch.setattr(driver, "launch_worker", worker)
-    outcome = run_round(job_in(tmp_path, algorithm_3d=DELAUNAY), tmp_path)
+    outcome = run_round(
+        job_in(tmp_path, mesher=MesherOptions(algorithm_3d=DELAUNAY)), tmp_path
+    )
     assert outcome.audit is not None and outcome.algorithm_3d == HXT
     assert outcome.fallback is not None and "algorithm 1" in outcome.fallback
-    assert [r["algorithm_3d"] for r in worker.requests] == [DELAUNAY, HXT]
+    assert [r["mesher"]["algorithm_3d"] for r in worker.requests] == [DELAUNAY, HXT]
 
 
 def test_another_algorithm_is_not_retried(tmp_path, monkeypatch):
     """Only the two algorithms the module uses have a fallback."""
     worker = ScriptedWorker(killed_by(6))
     monkeypatch.setattr(driver, "launch_worker", worker)
-    outcome = run_round(job_in(tmp_path, algorithm_3d=4), tmp_path)
+    outcome = run_round(
+        job_in(tmp_path, mesher=MesherOptions(algorithm_3d=4)), tmp_path
+    )
     assert outcome.audit is None and outcome.fallback is None
     assert len(worker.requests) == 1
 

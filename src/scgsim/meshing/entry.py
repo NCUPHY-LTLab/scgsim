@@ -15,9 +15,17 @@ from typing import Any
 from .driver import measure_bounding_box
 from .errors import MeshRepairError
 from .features import SidecarFeatures, load_features, read_features
-from .policy import RuleSet
-from .repair import STOP_CLEAN, Budgets, RepairInputs, RepairOutcome, repair_mesh
-from .report import QualityReport, build_report, write_report
+from .mesher import MesherOptions
+from .recipes import FeatureRecipe, SizingRecipe
+from .repair import (
+    STOP_CLEAN,
+    Budgets,
+    RepairInputs,
+    RepairOutcome,
+    RepairPolicy,
+    repair_mesh,
+)
+from .report import QualityReport, RunSettings, build_report, write_report
 
 _WORK_DIR_PREFIX = ".meshing-work-"
 
@@ -32,20 +40,29 @@ class MeshResult:
     report: QualityReport
 
 
-def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and the two policy objects
+def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and the four policy objects
     xao: Path | str,
     sidecar: Path | str | Mapping[str, Any],
     output_dir: Path | str,
     *,
     threshold: float,
-    ruleset: RuleSet = RuleSet(),  # noqa: B008 -- a frozen dataclass is a safe default
+    recipe: SizingRecipe = FeatureRecipe(),  # noqa: B008 -- a frozen dataclass is a safe default
+    repair: RepairPolicy = RepairPolicy(),  # noqa: B008 -- a frozen dataclass is a safe default
     budgets: Budgets = Budgets(),  # noqa: B008 -- a frozen dataclass is a safe default
+    mesher: MesherOptions = MesherOptions(),  # noqa: B008 -- a frozen dataclass is a safe default
 ) -> MeshResult:
     """Mesh the SGB model in ``xao`` so that no tetrahedron is below ``threshold``.
 
     ``sidecar`` is the ``scgsim.sgb.sidecar.v2`` file next to the XAO, or its decoded content.  The mesh
     ``<xao stem>.msh`` and the report ``<xao stem>.quality.json`` / ``.quality.txt`` are written to
     ``output_dir``.  ``threshold`` has no default: it is the element-quality bound the caller requires.
+
+    The pipeline is the same for every recipe: ``recipe`` chooses the initial sizes, ``repair`` how the
+    loop refines around bad elements, ``budgets`` when it gives up (``Budgets(max_rounds=0)`` meshes once
+    without repair; the threshold still applies), and ``mesher`` the Gmsh algorithms and the order of the
+    delivered mesh.  The threshold and the report's counts refer to the linear mesh: with
+    ``mesher.geometry_order`` above 1 the accepted mesh is raised to that order afterwards, in the worker
+    that still has the CAD, and the file at ``<xao stem>.msh`` is the elevated one.
 
     Two things are the caller's to keep, and are not checked:
 
@@ -57,7 +74,7 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
 
     Raises :class:`~scgsim.meshing.errors.MeshRepairError` carrying the report when the loop stops
     without an accepted mesh (rounds spent, a mesh over the tetrahedron budget even when clean, bad
-    elements the rules cannot refine, or a mesher crash).  The report is written then too, and the last
+    elements the repair loop cannot refine, a clean mesh whose order could not be raised, or a mesher crash).  The report is written then too, and the last
     mesh is kept as ``<stem>.rejected.msh`` when a round made one.
     """
     if not math.isfinite(threshold):
@@ -75,20 +92,20 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
             RepairInputs(
                 xao=xao,
                 sidecar=sidecar_path,
-                features=features,
-                bounding_box=measure_bounding_box(xao, work_dir),
+                initial=recipe.size_requests(
+                    features, measure_bounding_box(xao, work_dir)
+                ),
                 threshold=threshold,
-                ruleset=ruleset,
+                policy=repair,
                 budgets=budgets,
+                mesher=mesher,
                 work_dir=work_dir,
             )
         )
         report = build_report(
             outcome,
-            threshold=threshold,
-            ruleset=ruleset,
-            budgets=budgets,
-            total_seconds=time.perf_counter() - started,
+            RunSettings(threshold, recipe, repair, mesher, budgets),
+            time.perf_counter() - started,
         )
         write_report(report, files.report, files.summary)
         return _deliver(outcome, report, files)
@@ -148,9 +165,10 @@ def _deliver(
             f"meshing stopped without a clean mesh ({outcome.stop}); see {files.report}.",
             dict(report),
         )
-    assert (
-        outcome.last_mesh is not None
-    )  # a clean stop follows a round that made a mesh
+    # A clean stop follows a round that made a mesh, and one that also made the elevated mesh when the
+    # mesher options asked for a higher order.
+    delivered = outcome.elevated_mesh or outcome.last_mesh
+    assert delivered is not None
     files.rejected.unlink(missing_ok=True)
-    shutil.move(outcome.last_mesh, files.mesh)
+    shutil.move(delivered, files.mesh)
     return MeshResult(files.mesh, files.report, files.summary, report)

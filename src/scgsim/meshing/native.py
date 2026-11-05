@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 import time
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 import gmsh
@@ -18,7 +19,7 @@ from .audit import audit_current_mesh
 from .features import SidecarFeatures
 from .findings import MeshAudit
 from .job import MeshJob
-from .policy import BoundingBox, SizeField, SizeRequests
+from .sizing import BoundingBox, SizeField, SizeRequests
 
 # Distance fields sample each curve; one sample per half element keeps the distance accurate to the
 # element size.  The bounds keep a 0.2 um sidewall edge and a 4 mm outline both affordable.
@@ -27,8 +28,22 @@ _MAX_SAMPLES = 8000
 _MSH_VERSION = 4.1
 
 
-def mesh_in_current_process(job: MeshJob, features: SidecarFeatures) -> MeshAudit:
-    """Run ``job`` in a fresh Gmsh session of this process and return the audit of the mesh it wrote."""
+@dataclass(frozen=True)
+class NativeRound:
+    """What a worker round produced: the audit of the linear mesh, and whether it was also elevated."""
+
+    audit: MeshAudit
+    elevated: bool
+    elevation_error: str | None  # why an acceptable mesh was not elevated
+
+
+def mesh_in_current_process(job: MeshJob, features: SidecarFeatures) -> NativeRound:
+    """Run ``job`` in a fresh Gmsh session of this process and return what it wrote.
+
+    The linear mesh is audited and written first.  Raising the order happens last, in this session, because
+    placing the extra nodes of a curved element on its CAD face needs the CAD that only this session still
+    has: a mesh read back from a file has lost it.
+    """
     gmsh.initialize(["-noenv"])
     try:
         gmsh.option.setNumber("General.Terminal", 0)
@@ -43,13 +58,32 @@ def mesh_in_current_process(job: MeshJob, features: SidecarFeatures) -> MeshAudi
             features, job.threshold, attribute=job.attribute, mesh_seconds=mesh_seconds
         )
         _write(job.msh)
-        return audit
+        return _elevate_if_accepted(job, audit)
     finally:
         gmsh.finalize()
 
 
+def _elevate_if_accepted(job: MeshJob, audit: MeshAudit) -> NativeRound:
+    """Raise the order of the mesh and write it, when the job asks and the loop would accept this mesh.
+
+    A mesh the loop rejects is never delivered, so elevating it would only cost time.  The audit above
+    stays the one of the linear mesh: it is not repeated after the order is raised.
+    """
+    elevation = job.elevation
+    if elevation is None or not audit.accepted(elevation.max_tetrahedra):
+        return NativeRound(audit, elevated=False, elevation_error=None)
+    try:
+        gmsh.model.mesh.setOrder(job.mesher.geometry_order)
+        if job.mesher.high_order_optimize:
+            gmsh.model.mesh.optimize("HighOrder")
+        _write(elevation.msh)
+    except Exception as error:  # noqa: BLE001 -- Gmsh raises a bare Exception; the loop decides what a failure means
+        return NativeRound(audit, elevated=False, elevation_error=str(error))
+    return NativeRound(audit, elevated=True, elevation_error=None)
+
+
 def bounding_box_of(xao: Path) -> BoundingBox:
-    """Bounding box of the model in ``xao`` (the rules size the coarse mesh from its diagonal)."""
+    """Bounding box of the model in ``xao`` (a recipe may size the coarse mesh from its diagonal)."""
     gmsh.initialize(["-noenv"])
     try:
         gmsh.option.setNumber("General.Terminal", 0)
@@ -73,16 +107,20 @@ def _embed(features: SidecarFeatures) -> None:
 
 def _set_options(job: MeshJob) -> None:
     option = gmsh.option
-    # Delaunay (1) is the default (see RuleSet.algorithm_3d); HXT (10) is the other choice.  The driver
-    # retries a failed round with the other one, since HXT can abort the whole process.
-    option.setNumber("Mesh.Algorithm3D", job.algorithm_3d)
+    # Delaunay (1) is the default (see MesherOptions.algorithm_3d); HXT (10) is the other choice.  The
+    # driver retries a failed round with the other one, since HXT can abort the whole process.
+    option.setNumber("Mesh.Algorithm3D", job.mesher.algorithm_3d)
+    # Generate and audit a linear mesh without Gmsh's automatic optimisation; the order is raised
+    # afterwards, once the audit has passed (see _elevate_if_accepted).
+    option.setNumber("Mesh.ElementOrder", 1)
+    option.setNumber("Mesh.HighOrderOptimize", 0)
     # One thread.  HXT with 4 or 16 threads was faster (25 s to 11 s and 6-8 s on the 1 mm chip) but not
     # reproducible: two identical runs gave 33,758 and 33,761 tetrahedra.  Gmsh's default is 1; setting
     # it states that determinism depends on it.
     option.setNumber("General.NumThreads", 1)
     option.setNumber("Mesh.MeshSizeMax", job.sizes.max_size)
-    if job.algorithm_2d is not None:
-        option.setNumber("Mesh.Algorithm", job.algorithm_2d)
+    if job.mesher.algorithm_2d is not None:
+        option.setNumber("Mesh.Algorithm", job.mesher.algorithm_2d)
     option.setNumber("Mesh.MshFileVersion", _MSH_VERSION)
     # Save only what the XAO's physical groups name, so the file carries the groups and nothing extra.
     option.setNumber("Mesh.SaveAll", 0)

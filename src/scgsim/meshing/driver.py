@@ -18,7 +18,8 @@ from pathlib import Path
 from .errors import MeshingError
 from .findings import MeshAudit
 from .job import MeshJob
-from .policy import DELAUNAY, HXT, BoundingBox
+from .mesher import DELAUNAY, HXT
+from .sizing import BoundingBox
 
 _STDERR_TAIL_CHARS = 400
 _OTHER_ALGORITHM = {HXT: DELAUNAY, DELAUNAY: HXT}
@@ -41,6 +42,10 @@ class RoundOutcome:
     fallback: str | None  # why HXT was abandoned for Delaunay; None when it was not
     failure: str | None  # why no mesh exists; None when the round produced one
     wall_seconds: float
+    elevated: bool = False  # the worker also wrote the elevated mesh the job asked for
+    elevation_error: str | None = (
+        None  # why it could not, when the linear mesh was acceptable
+    )
 
 
 def measure_bounding_box(xao: Path, work_dir: Path) -> BoundingBox:
@@ -65,18 +70,21 @@ def run_round(job: MeshJob, work_dir: Path) -> RoundOutcome:
     report can say which algorithm made the final mesh.
     """
     started = time.perf_counter()
-    audit, failure = _attempt(job, work_dir)
+    attempt = _attempt(job, work_dir)
     fallback = None
-    if audit is None and job.algorithm_3d in _OTHER_ALGORITHM:
-        fallback = failure
-        job = replace(job, algorithm_3d=_OTHER_ALGORITHM[job.algorithm_3d])
-        audit, failure = _attempt(job, work_dir)
+    if attempt.audit is None and job.mesher.algorithm_3d in _OTHER_ALGORITHM:
+        fallback = attempt.failure
+        other = _OTHER_ALGORITHM[job.mesher.algorithm_3d]
+        job = replace(job, mesher=replace(job.mesher, algorithm_3d=other))
+        attempt = _attempt(job, work_dir)
     return RoundOutcome(
-        audit=audit,
-        algorithm_3d=job.algorithm_3d,
+        audit=attempt.audit,
+        algorithm_3d=job.mesher.algorithm_3d,
         fallback=fallback,
-        failure=failure,
+        failure=attempt.failure,
         wall_seconds=time.perf_counter() - started,
+        elevated=attempt.elevated,
+        elevation_error=attempt.elevation_error,
     )
 
 
@@ -96,7 +104,17 @@ def launch_worker(arguments: Sequence[str]) -> WorkerExit:
     return WorkerExit(completed.returncode, completed.stderr[-_STDERR_TAIL_CHARS:])
 
 
-def _attempt(job: MeshJob, work_dir: Path) -> tuple[MeshAudit | None, str | None]:
+@dataclass(frozen=True)
+class _Attempt:
+    """What one worker process came back with: an audit, or the reason there is none."""
+
+    audit: MeshAudit | None
+    failure: str | None = None
+    elevated: bool = False
+    elevation_error: str | None = None
+
+
+def _attempt(job: MeshJob, work_dir: Path) -> _Attempt:
     """One worker process: the audit of its mesh, or the reason it made none."""
     work_dir.mkdir(parents=True, exist_ok=True)
     request_path = work_dir / "request.json"
@@ -104,12 +122,17 @@ def _attempt(job: MeshJob, work_dir: Path) -> tuple[MeshAudit | None, str | None
     result_path.unlink(missing_ok=True)
     request_path.write_text(json.dumps(job.to_json()), encoding="utf-8")
     finished = launch_worker(["mesh", str(request_path), str(result_path)])
+    algorithm = job.mesher.algorithm_3d
     if finished.returncode != 0 or not result_path.is_file():
-        return None, f"algorithm {job.algorithm_3d}: {_describe(finished)}"
+        return _Attempt(None, f"algorithm {algorithm}: {_describe(finished)}")
     result = json.loads(result_path.read_text(encoding="utf-8"))
     if not result["ok"]:
-        return None, f"algorithm {job.algorithm_3d}: {result['error']}"
-    return MeshAudit.from_json(result["audit"]), None
+        return _Attempt(None, f"algorithm {algorithm}: {result['error']}")
+    return _Attempt(
+        MeshAudit.from_json(result["audit"]),
+        elevated=result["elevated"],
+        elevation_error=result["elevation_error"],
+    )
 
 
 def _describe(finished: WorkerExit) -> str:

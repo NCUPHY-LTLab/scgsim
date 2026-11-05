@@ -6,20 +6,31 @@ Owns :class:`MeshJob` and its JSON form.  It imports no Gmsh, so both sides of t
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from .policy import DELAUNAY, SizeField, SizeRequests
+from .mesher import MesherOptions
+from .sizing import SizeField, SizeRequests
+
+
+@dataclass(frozen=True)
+class Elevation:
+    """Where the worker writes the elevated mesh, and the largest linear mesh it elevates."""
+
+    msh: Path
+    max_tetrahedra: int
 
 
 @dataclass(frozen=True)
 class MeshJob:
     """Mesh one XAO once, with the given sizes, and audit the result.
 
+    The audit always measures the linear mesh, which is written to ``msh``.  With an ``elevation``, a linear
+    mesh that the loop would accept (no tetrahedron below the threshold, within the tetrahedron budget) is
+    then raised to ``mesher.geometry_order`` in the same session and written to ``elevation.msh``.
     ``attribute=False`` counts the bad elements without attributing them, for meshes nobody repairs.
-    ``algorithm_2d`` is Gmsh's surface algorithm, left at its default when ``None``.
     """
 
     xao: Path
@@ -27,9 +38,9 @@ class MeshJob:
     msh: Path
     sizes: SizeRequests
     threshold: float
-    algorithm_3d: int = DELAUNAY
-    algorithm_2d: int | None = None
+    mesher: MesherOptions = MesherOptions()
     attribute: bool = True
+    elevation: Elevation | None = None
 
     def to_json(self) -> dict[str, Any]:
         """The JSON form of the job; curve sizes are keyed by tag in ascending order."""
@@ -47,9 +58,14 @@ class MeshJob:
                 for f in self.sizes.fields
             ],
             "threshold": self.threshold,
-            "algorithm_3d": self.algorithm_3d,
-            "algorithm_2d": self.algorithm_2d,
+            "mesher": asdict(self.mesher),
             "attribute": self.attribute,
+            "elevation": None
+            if self.elevation is None
+            else {
+                "msh": str(self.elevation.msh),
+                "max_tetrahedra": self.elevation.max_tetrahedra,
+            },
         }
 
     @classmethod
@@ -76,9 +92,11 @@ class MeshJob:
             msh=Path(raw["msh"]),
             sizes=sizes,
             threshold=float(raw["threshold"]),
-            algorithm_3d=int(raw["algorithm_3d"]),
-            algorithm_2d=None
-            if raw["algorithm_2d"] is None
-            else int(raw["algorithm_2d"]),
+            mesher=MesherOptions(**raw["mesher"]),
             attribute=bool(raw["attribute"]),
+            elevation=None
+            if raw["elevation"] is None
+            else Elevation(
+                Path(raw["elevation"]["msh"]), int(raw["elevation"]["max_tetrahedra"])
+            ),
         )
