@@ -31,7 +31,10 @@ STOP_UNATTRIBUTED = (
 
 @dataclass(frozen=True)
 class Budgets:
-    """Limits of the loop: refinement rounds after the first mesh, and tetrahedra in a mesh."""
+    """Limits of the loop: refinement rounds after the first mesh, and tetrahedra in any accepted mesh.
+
+    ``max_tetrahedra`` is a hard cap: a mesh above it is rejected even when its quality is clean.
+    """
 
     max_rounds: int = 8
     max_tetrahedra: int = 2_000_000
@@ -193,11 +196,14 @@ def _job(
 
 
 def _stop_reason(audit: MeshAudit, index: int, inputs: RepairInputs) -> str | None:
-    """The reason to stop after a round that made a mesh; ``None`` to refine and go on."""
-    if audit.bad_count == 0:
-        return STOP_CLEAN
+    """The reason to stop after a round that made a mesh; ``None`` to refine and go on.
+
+    The tetrahedron budget comes first: it caps every mesh the loop accepts, a clean one included.
+    """
     if audit.tetrahedra > inputs.budgets.max_tetrahedra:
         return STOP_ELEMENTS
+    if audit.bad_count == 0:
+        return STOP_CLEAN
     if index >= inputs.budgets.max_rounds:
         return STOP_ROUNDS
     return None

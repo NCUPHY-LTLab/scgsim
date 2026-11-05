@@ -176,13 +176,14 @@ def test_the_tetrahedron_budget_ends_a_loop_that_is_still_bad(tmp_path, monkeypa
     assert (outcome.stop, outcome.rounds, len(jobs)) == ("elements", 0, 1)
 
 
-def test_a_clean_mesh_over_the_tetrahedron_budget_is_still_clean(tmp_path, monkeypatch):
-    """A clean mesh over the tetrahedron budget is still clean."""
-    script_rounds(monkeypatch, lambda job: audit_of(tetrahedra=5000))
+def test_a_clean_mesh_over_the_tetrahedron_budget_is_rejected(tmp_path, monkeypatch):
+    """The budget caps every accepted mesh: a clean round over it stops with ``elements``, not ``clean``."""
+    jobs = script_rounds(monkeypatch, lambda job: audit_of(tetrahedra=5000))
     outcome = repair_mesh(
         inputs_for(tmp_path, film([1]), budgets=Budgets(max_tetrahedra=10))
     )
-    assert outcome.stop == "clean"
+    assert (outcome.stop, outcome.rounds, len(jobs)) == ("elements", 0, 1)
+    assert outcome.last_mesh == jobs[0].msh
 
 
 def test_a_crash_keeps_the_last_mesh_that_was_made(tmp_path, monkeypatch):

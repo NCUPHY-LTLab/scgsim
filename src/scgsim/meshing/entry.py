@@ -47,10 +47,18 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
     ``<xao stem>.msh`` and the report ``<xao stem>.quality.json`` / ``.quality.txt`` are written to
     ``output_dir``.  ``threshold`` has no default: it is the element-quality bound the caller requires.
 
+    Two things are the caller's to keep, and are not checked:
+
+    * ``xao`` and ``sidecar`` are the pair one SGB build wrote (``SgbArtifacts.xao`` and ``.sidecar``).
+      The module trusts SGB's output; a sidecar of another build binds the wrong tags and still meshes.
+    * One call at a time per output target (``output_dir`` and XAO stem).  Calls with different stems
+      may share ``output_dir`` and run at once; two at once for the same target may leave the mesh of one
+      beside the report of the other.
+
     Raises :class:`~scgsim.meshing.errors.MeshRepairError` carrying the report when the loop stops
-    before the mesh is clean (rounds or tetrahedron budget spent, bad elements the rules cannot refine,
-    or a mesher crash).  The report is written then too, and the last mesh is kept as
-    ``<stem>.rejected.msh`` when a round made one.
+    without an accepted mesh (rounds spent, a mesh over the tetrahedron budget even when clean, bad
+    elements the rules cannot refine, or a mesher crash).  The report is written then too, and the last
+    mesh is kept as ``<stem>.rejected.msh`` when a round made one.
     """
     if not math.isfinite(threshold):
         raise ValueError(f"threshold must be a finite number, got {threshold!r}.")
