@@ -166,7 +166,8 @@ class Attribution:
         names: set[str] = set()
         for face in faces:
             planned = self._binding.id_of(2, face)
-            names.update(self._groups_of_face.get(planned, ()))
+            if planned is not None:
+                names.update(self._groups_of_face.get(planned, ()))
         return tuple(sorted(names))
 
     def _feature_kinds(self, curves: Iterable[int]) -> tuple[str, ...]:

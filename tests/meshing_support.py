@@ -25,7 +25,11 @@ def sidecar_with(*features: dict[str, Any], **extra: Any) -> dict[str, Any]:
         },
         "physical_groups": {
             "MA::pad::sidewall": {"dim": 2, "ids": ["f0", "f1"], "native_tags": [1, 2]},
-            "SA::substrate|VACUUM::interface": {"dim": 2, "ids": ["f2"], "native_tags": [3]},
+            "SA::substrate|VACUUM::interface": {
+                "dim": 2,
+                "ids": ["f2"],
+                "native_tags": [3],
+            },
             "substrate": {"dim": 3, "ids": ["vol0"], "native_tags": [1]},
         },
         "mesh_features": list(features),
@@ -37,7 +41,10 @@ def sidecar_with(*features: dict[str, Any], **extra: Any) -> dict[str, Any]:
 
 
 def feature(
-    kind: str, tags: list[int], facts: dict[str, Any] | None = None, source: str | None = "src"
+    kind: str,
+    tags: list[int],
+    facts: dict[str, Any] | None = None,
+    source: str | None = "src",
 ) -> dict[str, Any]:
     """A ``mesh_features`` entry over the edges with the given native tags."""
     return {
@@ -82,7 +89,9 @@ def bad_element(
         sgb_ids=(),
         groups=("MA::pad::sidewall",),
         feature_kinds=("film_sidewall",),
-        candidates=tuple(CurveCandidate(t, edge, length) for t, edge, length in candidates),
+        candidates=tuple(
+            CurveCandidate(t, edge, length) for t, edge, length in candidates
+        ),
     )
 
 

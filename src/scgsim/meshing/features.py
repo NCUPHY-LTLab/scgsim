@@ -161,7 +161,7 @@ def _read_binding(raw: Any) -> Binding:
 def _read_feature(raw: Any, binding: Binding) -> Feature:
     entry = _require_mapping(raw, "mesh_features entry")
     kind = entry.get("kind")
-    if kind not in _REQUIRED_FACTS:
+    if not isinstance(kind, str) or kind not in _REQUIRED_FACTS:
         raise SidecarError(
             f"mesh_features kind {kind!r} is unknown; expected one of {', '.join(FEATURE_KINDS)}."
         )

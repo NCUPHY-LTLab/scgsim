@@ -97,3 +97,13 @@ layers =
     scgsim.geometry.sgb.verification
     scgsim.geometry.sgb.sidecar
     scgsim.geometry.sgb.emission
+
+[importlinter:contract:meshing-reads-contracts-only]
+name = The meshing module reads the sidecar JSON and the XAO, never SGB, AEDT or Palace code
+type = forbidden
+source_modules =
+    scgsim.meshing
+forbidden_modules =
+    scgsim.geometry
+    scgsim.aedt
+    scgsim.palace
