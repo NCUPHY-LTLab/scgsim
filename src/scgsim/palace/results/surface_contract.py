@@ -1,11 +1,16 @@
-"""Validate native dielectric-film and Inset index/config bindings.
+"""Validate Surface-EPR index entries and match them to the config's ``Dielectric`` rows.
 
-MA, MS and SA denote metal-air, metal-substrate and substrate-air interfaces.
-Historical masks retain their recorded material-side and length conventions."""
+MA, MS and SA denote metal-air, metal-substrate and substrate-air interfaces.  An index entry of index-map
+schema 3 is one Palace ``Dielectric`` row.  It lists the sidecar rows it integrates (``metadata.rows``, each
+with its group, band, side, entities, Net and attributes) and the film it applies (``epr_spec``).  A
+whole-surface entry has ``baseline_index == index``.  A margin entry carries ``inset`` and is the union of
+the bands of a whole-surface entry from the margin's band inwards.  Native Mask/Inset rows do not exist.
+"""
 
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from typing import Any
 
 from scgsim.palace.results.artifacts import (
@@ -15,349 +20,292 @@ from scgsim.palace.results.artifacts import (
     optional_dict,
 )
 
+DIELECTRIC_SECTION = "Boundaries.Postprocessing.Dielectric"
+SURFACE_INTERFACE_TYPES = ("MA", "MS", "SA")
+FILM_SCHEMA = "scgsim.palace.surface-film.v2"
 
-def surface_mask_entries(index_map: dict[str, Any]) -> tuple[dict[str, Any], ...]:
-    """Return validated native Inset rows without inferring identity from names."""
+_SIDES = {"above", "below", "both"}
+_ROW_SIDES = _SIDES | {"mixed"}
+
+
+def surface_epr_entries(index_map: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
+    """The validated Surface-EPR index entries by index: whole surfaces first, then margins.
+
+    Reads only the index map; ``validate_surface_epr_config`` matches the entries to a config.
+    """
     entries = expect_list(index_map.get("entries"), "palace_index_map.entries")
-    dielectric = tuple(
-        expect_mapping(entry, "palace dielectric index entry")
-        for entry in entries
-        if expect_scalar(expect_mapping(entry, "palace index entry"), "section", str)
-        == "Boundaries.Postprocessing.Dielectric"
+    dielectric = sorted(
+        (
+            expect_mapping(entry, "palace dielectric index entry")
+            for entry in entries
+            if expect_mapping(entry, "palace index entry").get("section")
+            == DIELECTRIC_SECTION
+        ),
+        key=lambda entry: expect_scalar(entry, "index", int),
     )
-    masks = tuple(entry for entry in dielectric if "mask" in entry)
-    if not masks:
-        return ()
-    by_index = {expect_scalar(entry, "index", int): entry for entry in dielectric}
+    for entry in dielectric:
+        _validate_entry(entry)
+    by_index = {entry["index"]: entry for entry in dielectric}
     if len(by_index) != len(dielectric):
         raise ValueError("surface EPR index entries must have unique indices.")
-    baselines = tuple(entry for entry in dielectric if "mask" not in entry)
-    baseline_indexes = sorted(expect_scalar(entry, "index", int) for entry in baselines)
-    mask_indexes = sorted(expect_scalar(entry, "index", int) for entry in masks)
-    if baseline_indexes != list(range(1, len(baselines) + 1)):
+    wholes = [entry for entry in dielectric if "inset" not in entry]
+    margins = [entry for entry in dielectric if "inset" in entry]
+    if [entry["index"] for entry in wholes] != list(range(1, len(wholes) + 1)):
         raise ValueError(
-            "surface EPR baselines must retain the initial contiguous indices."
+            "surface EPR whole-surface entries must retain the initial contiguous indices."
         )
-    if mask_indexes != list(range(len(baselines) + 1, len(dielectric) + 1)):
-        raise ValueError("surface EPR masks must append after all baseline rows.")
-    _validate_baseline_films(baselines)
-    _validate_baseline_indices(by_index, dielectric)
-    _validate_mask_bindings(by_index, masks)
-    _validate_margin_sequences(baseline_indexes, by_index, masks)
-    return tuple(sorted(masks, key=lambda entry: expect_scalar(entry, "index", int)))
+    if [entry["index"] for entry in margins] != list(
+        range(len(wholes) + 1, len(dielectric) + 1)
+    ):
+        raise ValueError("surface EPR margin entries must append after all surfaces.")
+    for entry in wholes:
+        if expect_scalar(entry, "baseline_index", int) != entry["index"]:
+            raise ValueError(
+                "a whole-surface entry's baseline_index must equal its index."
+            )
+    _validate_surface_inventory(wholes)
+    _validate_margins(by_index, wholes, margins)
+    return tuple(dielectric)
 
 
-def validate_surface_mask_config(
+def entry_rows(entry: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """The sidecar rows of one validated Surface-EPR entry."""
+    return entry["metadata"]["rows"]
+
+
+def validate_surface_epr_config(
     config: dict[str, Any], index_map: dict[str, Any]
 ) -> None:
-    """Match dielectric rows, film values and optional Inset margins to index evidence."""
-    masks = surface_mask_entries(index_map)
+    """Match the config's ``Dielectric`` rows, film values and cracking switch to the index evidence."""
+    entries = surface_epr_entries(index_map)
     boundaries = optional_dict(config.get("Boundaries")) or {}
     postprocessing = optional_dict(boundaries.get("Postprocessing")) or {}
-    declared_rows = postprocessing.get("Dielectric")
-    config_declares_masks = isinstance(declared_rows, list) and any(
-        isinstance(row, dict) and "Mask" in row for row in declared_rows
-    )
-    current_entries = [
-        entry
-        for entry in index_map["entries"]
-        if entry.get("section") == "Boundaries.Postprocessing.Dielectric"
-        and isinstance(entry.get("epr_spec"), dict)
-        and entry["epr_spec"].get("schema_version") == "scgsim.palace.surface-film.v2"
+    rows = [
+        expect_mapping(row, "config dielectric row")
+        for row in expect_list(
+            postprocessing.get("Dielectric", []),
+            "config.Boundaries.Postprocessing.Dielectric",
+            allow_empty=True,
+        )
     ]
-    if not masks:
-        if config_declares_masks:
-            raise ValueError("config contains unindexed surface EPR masks.")
-        if not current_entries:
-            return
-    # Current unmasked integrations use the same config/index binding as historical Masks.
-    _validate_fragment_inventory(current_entries)
-    rows = expect_list(
-        postprocessing.get("Dielectric"),
-        "config.Boundaries.Postprocessing.Dielectric",
-        allow_empty=True,
-    )
-    configured = {
-        expect_scalar(
-            expect_mapping(row, "config dielectric row"), "Index", int
-        ): expect_mapping(row, "config dielectric row")
-        for row in rows
-    }
-    model = expect_mapping(config.get("Model"), "config.Model")
-    model_l0_m = model.get("L0")
-    if (
-        isinstance(model_l0_m, bool)
-        or not isinstance(model_l0_m, (int, float))
-        or not math.isfinite(float(model_l0_m))
-        or model_l0_m <= 0
-    ):
-        raise ValueError("config Model.L0 must be a finite positive length.")
-    dielectric_entries = [
-        expect_mapping(entry, "palace dielectric index entry")
-        for entry in expect_list(index_map.get("entries"), "palace_index_map.entries")
-        if expect_mapping(entry, "palace index entry").get("section")
-        == "Boundaries.Postprocessing.Dielectric"
-    ]
-    indexed_dielectric_indexes = {
-        expect_scalar(entry, "index", int) for entry in dielectric_entries
-    }
-    if (
-        len(configured) != len(rows)
-        or set(configured) != indexed_dielectric_indexes
-        or len(rows) != len(dielectric_entries)
-    ):
+    if any("Mask" in row for row in rows):
+        raise ValueError("native Mask surface EPR rows are not accepted.")
+    configured = {expect_scalar(row, "Index", int): row for row in rows}
+    if len(configured) != len(rows) or set(configured) != {
+        entry["index"] for entry in entries
+    }:
         raise ValueError("config and index evidence disagree on dielectric rows.")
-    indexed_mask_indexes = {expect_scalar(entry, "index", int) for entry in masks}
-    configured_mask_indexes = {
-        index for index, row in configured.items() if "Mask" in row
-    }
-    if configured_mask_indexes != indexed_mask_indexes:
-        raise ValueError("config and index evidence disagree on masked surface rows.")
-    _validate_configured_films(
-        configured, dielectric_entries, indexed_mask_indexes, model_l0_m
+    model = expect_mapping(config.get("Model"), "config.Model")
+    model_l0_m = _positive_number(model.get("L0"), "config Model.L0")
+    for entry in entries:
+        _match_configured_row(configured[entry["index"]], entry, model_l0_m)
+    _validate_internal_boundary_cracking(model, entries)
+
+
+def _validate_entry(entry: dict[str, Any]) -> None:
+    """One entry: its rows, the film it applies, and that its fields agree with its rows."""
+    if expect_scalar(entry, "role", str) != "surface_epr":
+        raise ValueError("surface EPR index entry role must be surface_epr.")
+    metadata = expect_mapping(entry.get("metadata"), "surface EPR metadata")
+    rows = expect_list(metadata.get("rows"), "surface EPR rows")
+    for row in rows:
+        _validate_row(expect_mapping(row, "surface EPR row"))
+    row_ids = [row["row"] for row in rows]
+    if len(set(row_ids)) != len(row_ids):
+        raise ValueError("surface EPR rows repeat a row id within one entry.")
+    if len({row["interface_type"] for row in rows}) != 1:
+        raise ValueError("surface EPR rows of one entry share one interface type.")
+    attributes = _positive_ints(entry.get("attributes"), "surface EPR attributes")
+    if attributes != sorted({a for row in rows for a in row["attributes"]}):
+        raise ValueError("surface EPR attributes disagree with their row evidence.")
+    if entry.get("physical_names") != sorted({row["group"] for row in rows}):
+        raise ValueError("surface EPR physical names disagree with their row evidence.")
+    _validate_film(expect_mapping(entry.get("epr_spec"), "surface EPR spec"))
+
+
+def _validate_row(row: dict[str, Any]) -> None:
+    """The identity a reader relies on in one sidecar row: group, band, side, entities, Net, attributes."""
+    for field in ("row", "group", "face_kind"):
+        _non_empty_text(row.get(field), f"surface EPR row {field}")
+    if row.get("interface_type") not in SURFACE_INTERFACE_TYPES:
+        raise ValueError("surface EPR interface_type must be MA, MS, or SA.")
+    band = row.get("band")
+    if band is not None and (type(band) is not int or band < 0):
+        raise ValueError("surface EPR row band must be null or a non-negative integer.")
+    if row.get("side") is not None and row["side"] not in _ROW_SIDES:
+        raise ValueError("surface EPR row side is invalid.")
+    face_sides = row.get("face_sides")
+    if face_sides is not None and (
+        not isinstance(face_sides, dict)
+        or not all(
+            isinstance(face, str) and side in _SIDES
+            for face, side in face_sides.items()
+        )
+    ):
+        raise ValueError("surface EPR row face_sides is invalid.")
+    shared = row.get("shared_face_group")
+    if shared is not None:
+        _non_empty_text(shared, "surface EPR row shared_face_group")
+    entities = expect_list(row.get("entities"), "surface EPR row entities")
+    for entity in entities:
+        _non_empty_text(entity, "surface EPR row entity")
+    if row.get("net") is not None:
+        _non_empty_text(row["net"], "surface EPR row net")
+    _positive_ints(row.get("attributes"), "surface EPR row attributes")
+    lineage = expect_mapping(row.get("lineage"), "surface EPR row lineage")
+    expect_mapping(lineage.get("membership"), "surface EPR lineage membership")
+
+
+def _validate_film(spec: dict[str, Any]) -> None:
+    """The film values, the Model.L0 they were converted with, and their SI thickness."""
+    if spec.get("schema_version") != FILM_SCHEMA:
+        raise ValueError(f"surface EPR spec schema must be {FILM_SCHEMA!r}.")
+    thickness = _positive_number(spec.get("thickness"), "surface EPR thickness")
+    _positive_number(spec.get("permittivity"), "surface EPR permittivity")
+    loss = spec.get("loss_tangent")
+    if loss is not None and (_finite(loss) is None or loss < 0):
+        raise ValueError("surface EPR loss_tangent has an invalid value.")
+    scale = _positive_number(spec.get("model_l0_m"), "surface EPR model_l0_m")
+    physical = _positive_number(
+        spec.get("film_thickness_m"), "surface EPR SI thickness"
     )
-
-
-def _validate_margin_sequences(
-    baseline_indexes: list[int],
-    by_index: dict[int, dict[str, Any]],
-    masks: tuple[dict[str, Any], ...],
-) -> None:
-    """Require each baseline mask sequence to retain its ordered micrometre margins."""
-    for baseline_index in baseline_indexes:
-        baseline = by_index[baseline_index]
-        epr_spec = expect_mapping(baseline.get("epr_spec"), "surface EPR spec")
-        if "inset_margins_um" in epr_spec:
-            expected_margins = expect_list(
-                epr_spec.get("inset_margins_um"), "surface EPR inset margins"
-            )
-            if not expected_margins:
-                raise ValueError(
-                    "surface EPR inset margins must be non-empty when present."
-                )
-            for margin in expected_margins:
-                if (
-                    isinstance(margin, bool)
-                    or not isinstance(margin, (int, float))
-                    or not math.isfinite(float(margin))
-                    or margin < 0
-                ):
-                    raise ValueError(
-                        "surface EPR inset margins must be finite non-negative reals."
-                    )
-        else:
-            expected_margins = []
-        masked_for_baseline = sorted(
-            (
-                entry
-                for entry in masks
-                if expect_scalar(entry, "baseline_index", int) == baseline_index
-            ),
-            key=lambda entry: expect_scalar(
-                expect_mapping(entry["mask"], "surface EPR mask"), "margin_index", int
-            ),
-        )
-        ordinals = [
-            expect_scalar(
-                expect_mapping(entry["mask"], "surface EPR mask"), "margin_index", int
-            )
-            for entry in masked_for_baseline
+    if not math.isclose(physical, thickness * scale, rel_tol=1e-12):
+        raise ValueError("surface EPR SI thickness conflicts with recorded Model.L0")
+    margins = spec.get("inset_margins_um")
+    if margins is not None:
+        values = [
+            _positive_number(margin, "surface EPR inset margin")
+            for margin in expect_list(margins, "surface EPR inset margins")
         ]
-        if ordinals != list(range(len(expected_margins))):
-            raise ValueError(
-                "surface EPR mask ordinals must match the configured margin sequence."
-            )
-        margins = [
-            expect_mapping(entry["mask"], "surface EPR mask").get("margin_um")
-            for entry in masked_for_baseline
-        ]
-        if margins != expected_margins:
-            raise ValueError(
-                "surface EPR mask margins must match the configured margin sequence."
-            )
+        if any(b <= a for a, b in zip(values, values[1:], strict=False)):
+            raise ValueError("surface EPR inset margins must be strictly increasing.")
 
 
-def _validate_mask_bindings(
-    by_index: dict[int, dict[str, Any]], masks: tuple[dict[str, Any], ...]
-) -> None:
-    """Bind each Inset to its baseline and preserve the Model.L0 length conversion."""
-    for entry in masks:
-        index = expect_scalar(entry, "index", int)
-        baseline_index = expect_scalar(entry, "baseline_index", int)
-        if index == baseline_index or "mask" in by_index[baseline_index]:
-            raise ValueError("masked surface EPR row must bind one unmasked baseline.")
-        mask = expect_mapping(entry.get("mask"), "surface EPR mask")
-        if mask.get("type") != "Inset":
-            raise ValueError("surface EPR mask type must be Inset.")
-        margin_index = expect_scalar(mask, "margin_index", int)
-        if margin_index < 0:
-            raise ValueError("surface EPR mask margin_index must be non-negative.")
-        for field in ("margin_um", "native_margin", "model_l0_m"):
-            value = mask.get(field)
-            if (
-                isinstance(value, bool)
-                or not isinstance(value, (int, float))
-                or not math.isfinite(float(value))
-                or value < 0
-            ):
-                raise ValueError(
-                    f"surface EPR mask {field} must be finite non-negative."
-                )
-        if float(mask["model_l0_m"]) <= 0:
-            raise ValueError("surface EPR mask model_l0_m must be positive.")
-        expected_native_margin = (
-            float(mask["margin_um"]) * 1e-6 / float(mask["model_l0_m"])
-        )
-        if float(mask["native_margin"]) != expected_native_margin:
-            raise ValueError("surface EPR mask native margin disagrees with Model.L0.")
-        baseline = by_index[baseline_index]
-        for field in ("attributes", "physical_names", "metadata", "epr_spec"):
-            if entry.get(field) != baseline.get(field):
-                raise ValueError(
-                    "masked surface EPR row must retain baseline provenance."
-                )
-
-
-def _validate_baseline_indices(
-    by_index: dict[int, dict[str, Any]], dielectric: tuple[dict[str, Any], ...]
-) -> None:
-    """Require baseline links to identify existing unmasked dielectric rows."""
-    for entry in dielectric:
-        index = expect_scalar(entry, "index", int)
-        baseline_index = expect_scalar(entry, "baseline_index", int)
-        if baseline_index < 1 or baseline_index not in by_index:
-            raise ValueError(
-                "surface EPR baseline_index must identify a dielectric row."
-            )
-        if "mask" not in entry and baseline_index != index:
-            raise ValueError(
-                "unmasked surface EPR row baseline_index must equal index."
-            )
-
-
-def _validate_baseline_films(baselines: tuple[dict[str, Any], ...]) -> None:
-    """Validate recorded material, source-surface and SI/native film-thickness identities."""
-    for baseline in baselines:
-        metadata = expect_mapping(baseline.get("metadata"), "surface EPR metadata")
-        if metadata.get("interface_type") not in {"MA", "MS", "SA"}:
-            raise ValueError("surface EPR interface_type must be MA, MS, or SA.")
-        for field in ("surface_id", "face_kind"):
-            if not isinstance(metadata.get(field), str) or not metadata[field]:
-                raise ValueError(f"surface EPR {field} must be non-empty text.")
-        owners = expect_list(
-            metadata.get("owner_semantic_ids"), "surface EPR owner semantic ids"
-        )
-        if not owners or not all(isinstance(owner, str) and owner for owner in owners):
-            raise ValueError("surface EPR owners must be non-empty text.")
-        expect_mapping(metadata.get("source_provenance"), "surface EPR provenance")
-        epr_spec = expect_mapping(baseline.get("epr_spec"), "surface EPR spec")
-        film_v2 = epr_spec.get("schema_version") == "scgsim.palace.surface-film.v2"
-        for field, positive in (
-            ("thickness", True),
-            ("permittivity", True),
-            ("loss_tangent", False),
-        ):
-            value = epr_spec.get(field)
-            if field == "loss_tangent" and film_v2 and value is None:
-                continue
-            if (
-                isinstance(value, bool)
-                or not isinstance(value, (int, float))
-                or not math.isfinite(float(value))
-                or (value <= 0 if positive else value < 0)
-            ):
-                raise ValueError(f"surface EPR {field} has an invalid value.")
-        if film_v2:
-            scale = epr_spec.get("model_l0_m")
-            physical = epr_spec.get("film_thickness_m")
-            if (
-                isinstance(scale, bool)
-                or not isinstance(scale, (int, float))
-                or not math.isfinite(scale)
-                or scale <= 0
-                or isinstance(physical, bool)
-                or not isinstance(physical, (int, float))
-                or not math.isfinite(physical)
-                or physical <= 0
-                or not math.isclose(
-                    physical, epr_spec["thickness"] * scale, rel_tol=1e-12
-                )
-            ):
-                raise ValueError(
-                    "surface EPR SI thickness conflicts with recorded Model.L0"
-                )
-
-
-def _validate_configured_films(
-    configured: dict[int, dict[str, Any]],
-    dielectric_entries: list[dict[str, Any]],
-    indexed_mask_indexes: set[int],
-    model_l0_m: float,
-) -> None:
-    """Match configured film fields and native margins to each exact dielectric index."""
-    for entry in dielectric_entries:
-        index = expect_scalar(entry, "index", int)
-        row = configured.get(index)
-        if row is None:
-            raise ValueError("surface EPR index is absent from config.")
-        if expect_list(
-            row.get("Attributes"), "config dielectric Attributes"
-        ) != expect_list(entry.get("attributes"), "surface EPR index attributes"):
-            raise ValueError(
-                "config surface EPR attributes do not match index evidence."
-            )
-        metadata = expect_mapping(entry.get("metadata"), "surface EPR metadata")
-        epr_spec = expect_mapping(entry.get("epr_spec"), "surface EPR spec")
-        if epr_spec.get("schema_version") == "scgsim.palace.surface-film.v2" and float(
-            epr_spec["model_l0_m"]
-        ) != float(model_l0_m):
-            raise ValueError("surface film Model.L0 disagrees with config")
-        expected_fields = {
-            "Type": metadata.get("interface_type"),
-            "Thickness": epr_spec.get("thickness"),
-            "Permittivity": epr_spec.get("permittivity"),
-            "LossTan": 0.0
-            if epr_spec.get("loss_tangent") is None
-            else epr_spec["loss_tangent"],
-        }
-        if any(
-            key not in row or row[key] != value
-            for key, value in expected_fields.items()
-        ):
-            raise ValueError(
-                "config surface EPR fields do not match source index evidence."
-            )
-        if index not in indexed_mask_indexes:
-            continue
-        mask = expect_mapping(row.get("Mask"), "config dielectric Mask")
-        evidence = expect_mapping(entry.get("mask"), "surface EPR mask")
-        if mask != {"Type": "Inset", "Margin": evidence["native_margin"]}:
-            raise ValueError("config surface EPR mask does not match index evidence.")
-        if float(evidence["model_l0_m"]) != float(model_l0_m):
-            raise ValueError("surface EPR mask Model.L0 disagrees with config.")
-
-
-def _validate_fragment_inventory(current_entries: list[dict[str, Any]]) -> None:
-    """Reject repeated surface identities and physical attributes within an interface type."""
-    identities: set[tuple[str, str]] = set()
-    physical_members: set[tuple[str, int]] = set()
-    for entry in current_entries:
-        if "mask" in entry:
-            continue
-        metadata = expect_mapping(entry.get("metadata"), "surface EPR metadata")
-        interface = expect_scalar(metadata, "interface_type", str)
-        surface_id = expect_scalar(metadata, "surface_id", str)
-        if interface not in {"MA", "MS", "SA"} or not surface_id:
-            raise ValueError("surface EPR integration identity is invalid.")
-        identity = (interface, surface_id)
-        if identity in identities:
-            raise ValueError("surface EPR surface identity is duplicated.")
-        identities.add(identity)
-        attributes = expect_list(entry.get("attributes"), "surface EPR attributes")
-        for attribute in attributes:
-            if type(attribute) is not int or attribute <= 0:
-                raise ValueError("surface EPR attributes must be positive integers.")
-            member = (interface, attribute)
-            if member in physical_members:
+def _validate_surface_inventory(wholes: list[dict[str, Any]]) -> None:
+    """Reject a sidecar row or a physical attribute used twice within an interface type."""
+    row_ids: set[str] = set()
+    members: set[tuple[str, int]] = set()
+    for entry in wholes:
+        for row in entry_rows(entry):
+            if row["row"] in row_ids:
+                raise ValueError("surface EPR row is duplicated.")
+            row_ids.add(row["row"])
+        interface_type = entry_rows(entry)[0]["interface_type"]
+        for attribute in entry["attributes"]:
+            if (interface_type, attribute) in members:
                 raise ValueError("surface EPR physical attribute is duplicated.")
-            physical_members.add(member)
+            members.add((interface_type, attribute))
+
+
+def _validate_margins(
+    by_index: dict[int, dict[str, Any]],
+    wholes: list[dict[str, Any]],
+    margins: list[dict[str, Any]],
+) -> None:
+    """Bind each margin to its whole surface, its bands and its place in the spec's margin sequence."""
+    seen: dict[int, list[int]] = {entry["index"]: [] for entry in wholes}
+    for entry in margins:
+        inset = expect_mapping(entry.get("inset"), "surface EPR inset")
+        baseline = by_index.get(expect_scalar(entry, "baseline_index", int))
+        if baseline is None or baseline not in wholes:
+            raise ValueError("a margin entry must bind one whole-surface entry.")
+        margin_index = expect_scalar(inset, "margin_index", int)
+        margin_um = _positive_number(inset.get("margin_um"), "surface EPR margin_um")
+        first_band = expect_scalar(inset, "first_band", int)
+        bands = expect_list(inset.get("bands"), "surface EPR inset bands")
+        rows = entry_rows(entry)
+        if (
+            margin_index < 0
+            or first_band < 1
+            or bands != sorted(row["band"] for row in rows if row["band"] is not None)
+            or len(bands) != len(rows)
+            or min(bands) < first_band
+        ):
+            raise ValueError("surface EPR inset disagrees with its band rows.")
+        configured = baseline["epr_spec"].get("inset_margins_um", [])
+        if margin_index >= len(configured) or configured[margin_index] != margin_um:
+            raise ValueError(
+                "surface EPR margin disagrees with the configured margin sequence."
+            )
+        if margin_index in seen[baseline["index"]]:
+            raise ValueError("surface EPR margin ordinal is duplicated.")
+        seen[baseline["index"]].append(margin_index)
+        if (
+            entry["epr_spec"] != baseline["epr_spec"]
+            or entry_rows(entry)[0]["interface_type"]
+            != entry_rows(baseline)[0]["interface_type"]
+            or not set(entry["attributes"]) <= set(baseline["attributes"])
+            or not {row["row"] for row in rows}
+            <= {row["row"] for row in entry_rows(baseline)}
+        ):
+            raise ValueError(
+                "a margin entry must be part of its whole surface and share its film."
+            )
+
+
+def _match_configured_row(
+    row: dict[str, Any], entry: dict[str, Any], model_l0_m: float
+) -> None:
+    """One config row against its index entry: attributes, type, film values, Model.L0."""
+    if (
+        expect_list(row.get("Attributes"), "config dielectric Attributes")
+        != entry["attributes"]
+    ):
+        raise ValueError("config surface EPR attributes do not match index evidence.")
+    spec = entry["epr_spec"]
+    if float(spec["model_l0_m"]) != float(model_l0_m):
+        raise ValueError("surface film Model.L0 disagrees with config")
+    expected = {
+        "Type": entry_rows(entry)[0]["interface_type"],
+        "Thickness": spec["thickness"],
+        "Permittivity": spec["permittivity"],
+        # Palace needs a numeric loss tangent; the index keeps an unknown one as null.
+        "LossTan": 0.0 if spec["loss_tangent"] is None else spec["loss_tangent"],
+    }
+    if any(key not in row or row[key] != value for key, value in expected.items()):
+        raise ValueError(
+            "config surface EPR fields do not match source index evidence."
+        )
+
+
+def _validate_internal_boundary_cracking(
+    model: dict[str, Any], entries: tuple[dict[str, Any], ...]
+) -> None:
+    """``CrackInternalBoundaryElements`` is set exactly when a row integrates a two-sided sheet face."""
+    needed = any(
+        row["shared_face_group"] is not None
+        for entry in entries
+        for row in entry_rows(entry)
+    )
+    if (model.get("CrackInternalBoundaryElements") is True) != needed:
+        raise ValueError(
+            "config Model.CrackInternalBoundaryElements disagrees with the shared-face rows."
+        )
+
+
+def _finite(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value) if math.isfinite(value) else None
+
+
+def _positive_number(value: Any, label: str) -> float:
+    number = _finite(value)
+    if number is None or number <= 0:
+        raise ValueError(f"{label} must be a finite positive number.")
+    return number
+
+
+def _positive_ints(value: Any, label: str) -> list[int]:
+    items = expect_list(value, label)
+    if not all(type(item) is int and item > 0 for item in items) or items != sorted(
+        set(items)
+    ):
+        raise ValueError(f"{label} must be sorted unique positive integers.")
+    return items
+
+
+def _non_empty_text(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{label} must be non-empty text.")
+    return value

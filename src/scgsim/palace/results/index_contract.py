@@ -1,10 +1,17 @@
-"""Validate route, terminal, port and Physical Group correspondence in sealed inputs."""
+"""Validate route, terminal, port and Physical Group correspondence in sealed inputs.
+
+Only the current schemas are read: mesh manifest 2 and palace index map 3.  Run folders of older schemas are
+not read; ``require_manifest_schema`` and ``require_index_map_schema`` reject them with the recorded schema
+in the message.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
+from scgsim.palace.mesh.manifest import MANIFEST_SCHEMA_VERSION
 from scgsim.palace.results.artifacts import (
     expect_list,
     expect_mapping,
@@ -12,9 +19,33 @@ from scgsim.palace.results.artifacts import (
     optional_dict,
 )
 from scgsim.palace.results.surface_contract import (
-    surface_mask_entries,
-    validate_surface_mask_config,
+    DIELECTRIC_SECTION,
+    entry_rows,
+    surface_epr_entries,
+    validate_surface_epr_config,
 )
+
+INDEX_MAP_SCHEMA_VERSION = 3
+
+
+def require_manifest_schema(manifest: Mapping[str, Any]) -> None:
+    """Reject a mesh manifest that is not the current schema, naming the recorded one."""
+    recorded = manifest.get("schema_version")
+    if type(recorded) is not int or recorded != MANIFEST_SCHEMA_VERSION:
+        raise ValueError(
+            f"mesh manifest schema_version {recorded!r} is not readable: only schema_version "
+            f"{MANIFEST_SCHEMA_VERSION} is read, and run folders of older schemas are not."
+        )
+
+
+def require_index_map_schema(index_map: Mapping[str, Any]) -> None:
+    """Reject a palace index map that is not the current schema, naming the recorded one."""
+    recorded = index_map.get("schema_version")
+    if type(recorded) is not int or recorded != INDEX_MAP_SCHEMA_VERSION:
+        raise ValueError(
+            f"palace index map schema_version {recorded!r} is not readable: only schema_version "
+            f"{INDEX_MAP_SCHEMA_VERSION} is read, and run folders of older schemas are not."
+        )
 
 
 @dataclass(frozen=True)
@@ -31,8 +62,8 @@ class RouteConsistency:
 
     def validate(self) -> None:
         """Check mesh/index schema and route agreement before interpreting configured groups."""
-        if expect_scalar(self.mesh_manifest, "schema_version", int, fallback=0) != 1:
-            raise ValueError("mesh manifest schema_version must be integer 1.")
+        require_manifest_schema(self.mesh_manifest)
+        require_index_map_schema(self.index_map)
         if expect_scalar(self.mesh_manifest, "route", str, fallback="") != self.route:
             raise ValueError("mesh manifest route does not match resolved route.")
         thin_film = self.handoff_metadata.get("route_a_thin_film")
@@ -49,31 +80,51 @@ class RouteConsistency:
         if run_route != self.route or handoff_route != self.route:
             raise ValueError("metadata route does not match resolved route.")
 
-        index_schema = expect_scalar(self.index_map, "schema_version", int, fallback=0)
-        if index_schema not in {1, 2}:
-            raise ValueError("palace index map schema_version must be integer 1 or 2.")
-        if self.problem == "Eigenmode" and index_schema != 1:
-            raise ValueError(
-                "Eigenmode palace index map schema_version must be integer 1."
-            )
         validate_index_entries(self.index_map)
-        entries = expect_list(self.index_map.get("entries"), "palace_index_map.entries")
-        for entry in entries:
-            candidate = expect_scalar(
-                cast(dict[str, Any], optional_dict(entry)).get("metadata", {}),
-                "route",
-                str,
-                fallback="",
-            )
-            if not candidate:
-                candidate = expect_scalar(entry, "route", str, fallback="")
-            if candidate in {"A", "B"} and candidate != self.route:
-                raise ValueError("index map route is inconsistent with run route.")
+        _validate_index_against_manifest(self.index_map, self.mesh_manifest)
 
         run_problem = expect_scalar(self.run_metadata, "problem", str)
         handoff_problem = expect_scalar(self.handoff_metadata, "problem", str)
         if run_problem != self.problem or handoff_problem != self.problem:
             raise ValueError("metadata problem does not match resolved problem.")
+
+
+_SECTION_DIMENSIONS = {
+    "Boundaries.Terminal": 2,
+    "Boundaries.LumpedPort": 2,
+    DIELECTRIC_SECTION: 2,
+    "Domains.Postprocessing.Energy": 3,
+}
+
+
+def _validate_index_against_manifest(
+    index_map: dict[str, Any], mesh_manifest: dict[str, Any]
+) -> None:
+    """Every attribute an index entry lists is a manifest attribute of the right dimension and group.
+
+    The manifest names the primary SGB group of each solver attribute, so an entry's ``physical_names``
+    (and, for a Surface-EPR row, the row's ``group``) must be the groups of the attributes it lists.
+    """
+    primary_group: dict[tuple[int, int], str] = {}
+    for record in expect_list(mesh_manifest.get("groups"), "mesh manifest groups"):
+        for attribute in expect_list(record.get("attributes"), "manifest attributes"):
+            primary_group[(record["dimension"], attribute)] = record["group"]
+    for entry in expect_list(index_map.get("entries"), "palace_index_map.entries"):
+        dimension = _SECTION_DIMENSIONS[entry["section"]]
+        try:
+            groups = {primary_group[(dimension, a)] for a in entry["attributes"]}
+        except KeyError as exc:
+            raise ValueError(
+                f"index attribute {exc.args[0][1]} is not a mesh manifest attribute."
+            ) from exc
+        if groups != set(entry["physical_names"]):
+            raise ValueError("index physical_names disagree with the mesh manifest.")
+    for entry in surface_epr_entries(index_map):
+        for row in entry_rows(entry):
+            if {primary_group[(2, a)] for a in row["attributes"]} != {row["group"]}:
+                raise ValueError(
+                    "index surface row group disagrees with the mesh manifest."
+                )
 
 
 def validate_config_index_correspondence(
@@ -92,8 +143,7 @@ def validate_config_index_correspondence(
         )
         if index_counts["terminal"] != len(terminals):
             raise ValueError("terminal count mismatch between config and index map.")
-        if expect_scalar(index_map, "schema_version", int) == 2:
-            _validate_ground_boundary_resolution(boundaries, index_map)
+        _validate_ground_boundary_resolution(boundaries, index_map)
     else:
         ports = expect_list(
             boundaries.get("LumpedPort", []),
@@ -125,7 +175,7 @@ def validate_config_index_correspondence(
             ).get("Energy"),
             "config.Domains.Postprocessing.Energy",
         ),
-        "Boundaries.Postprocessing.Dielectric": post_diel,
+        DIELECTRIC_SECTION: post_diel,
     }
     entries = expect_list(index_map.get("entries"), "palace_index_map.entries")
     for section, configured in expected_sections.items():
@@ -153,7 +203,7 @@ def validate_config_index_correspondence(
                 raise ValueError(
                     f"config/index Attributes mismatch for {section} {position}."
                 )
-    validate_surface_mask_config(config, index_map)
+    validate_surface_epr_config(config, index_map)
 
 
 def validate_config_problem(config: dict[str, Any], problem: str) -> None:
@@ -247,7 +297,7 @@ def validate_index_entries(index_map: dict[str, Any]) -> None:
         "Boundaries.Terminal": "terminal",
         "Boundaries.LumpedPort": "port_surface",
         "Domains.Postprocessing.Energy": "domain_energy",
-        "Boundaries.Postprocessing.Dielectric": "surface_epr",
+        DIELECTRIC_SECTION: "surface_epr",
     }
     indices: dict[str, list[int]] = {section: [] for section in expected_roles}
     names: set[tuple[str, str]] = set()
@@ -287,7 +337,7 @@ def validate_index_entries(index_map: dict[str, Any]) -> None:
     for section, values in indices.items():
         if values and sorted(values) != list(range(1, len(values) + 1)):
             raise ValueError(f"index map {section} entries must be ordered 1..N.")
-    surface_mask_entries(index_map)
+    surface_epr_entries(index_map)
 
 
 def _validate_entry_role(
@@ -302,14 +352,8 @@ def _validate_entry_role(
         )
     elif section == "Boundaries.LumpedPort":
         expect_scalar(entry, "port_name", str)
-        owners = expect_list(
-            metadata.get("owner_semantic_ids"), "port owner semantic ids"
-        )
-        if len(owners) != 2 or not all(
-            isinstance(owner, str) and owner for owner in owners
-        ):
-            raise ValueError("lumped port index entry must have exactly two owners.")
+        hosts = expect_list(metadata.get("host_entity_ids"), "port host entity ids")
+        if len(hosts) != 2 or not all(isinstance(host, str) and host for host in hosts):
+            raise ValueError("lumped port index entry must have exactly two hosts.")
     elif section == "Domains.Postprocessing.Energy":
         expect_mapping(metadata.get("material"), "domain index material")
-    elif section == "Boundaries.Postprocessing.Dielectric":
-        expect_mapping(metadata.get("physical_attribute"), "surface index attributes")

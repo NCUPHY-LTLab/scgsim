@@ -21,6 +21,7 @@ from ..execution.handoff import HandoffPlan, prepare_handoff
 from ..mesh.build import MeshBuildResult, build_route_mesh
 from ..mesh.controls import MeshControls
 from ..mesh.summary import summary_from_files
+from ..results.index_contract import INDEX_MAP_SCHEMA_VERSION
 from .config import (
     MODEL_L0_M,
     TerminalBinding,
@@ -502,7 +503,7 @@ class ElectrostaticSim:
         )
         metadata_dir = self._mesh_result.output_dir / "metadata"
         index_payload = {
-            "schema_version": 2,
+            "schema_version": INDEX_MAP_SCHEMA_VERSION,
             "entries": [
                 *result.terminal_index_map,
                 *result.domain_energy_index_map,

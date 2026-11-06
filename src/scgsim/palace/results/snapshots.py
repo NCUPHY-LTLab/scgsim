@@ -13,11 +13,11 @@ from scgsim.palace.results.report_models import (
     AmrPassSnapshot,
     CollectedSnapshots,
     SurfaceEprSeriesSnapshot,
-    SurfaceMaskEprSeriesSnapshot,
+    SurfaceMarginEprSeriesSnapshot,
 )
 from scgsim.palace.results.surface_readers import (
     SurfaceEprReader,
-    SurfaceMaskEprReader,
+    SurfaceMarginEprReader,
 )
 from scgsim.palace.results.tables import read_csv_table
 
@@ -55,11 +55,11 @@ def _same_primary_physics(left: AmrPassSnapshot, right: AmrPassSnapshot) -> bool
     return False
 
 
-def _same_masked_physics(
-    left: tuple[SurfaceMaskEprSeriesSnapshot, ...] | None,
-    right: tuple[SurfaceMaskEprSeriesSnapshot, ...] | None,
+def _same_margin_physics(
+    left: tuple[SurfaceMarginEprSeriesSnapshot, ...] | None,
+    right: tuple[SurfaceMarginEprSeriesSnapshot, ...] | None,
 ) -> bool:
-    """Compare native masked contributions while preserving unavailable mask data."""
+    """Compare margin-row contributions while preserving unavailable margin data."""
     if left is None or right is None:
         return left is right
     return tuple(
@@ -82,32 +82,11 @@ def _problem_size_conflicts(left: AmrPassSnapshot, right: AmrPassSnapshot) -> bo
     )
 
 
-def declares_surface_masks(
-    config: dict[str, Any] | None, index_map: dict[str, Any] | None
-) -> bool:
-    """Detect native mask declarations in config or structured index evidence."""
-    boundaries = config.get("Boundaries") if isinstance(config, dict) else None
-    postprocessing = (
-        boundaries.get("Postprocessing") if isinstance(boundaries, dict) else None
-    )
-    dielectric = (
-        postprocessing.get("Dielectric") if isinstance(postprocessing, dict) else None
-    )
-    if isinstance(dielectric, list) and any(
-        isinstance(row, dict) and "Mask" in row for row in dielectric
-    ):
-        return True
-    entries = index_map.get("entries") if isinstance(index_map, dict) else None
-    return isinstance(entries, list) and any(
-        isinstance(entry, dict) and "mask" in entry for entry in entries
-    )
-
-
 def collect_amr_passes(
     root: Path,
     problem: str,
     surface_bindings: tuple[dict[str, Any], ...] | None,
-    surface_mask_bindings: tuple[dict[str, Any], ...] | None,
+    surface_margin_bindings: tuple[dict[str, Any], ...] | None,
     *,
     failed_attempt: bool,
 ) -> CollectedSnapshots:
@@ -129,7 +108,7 @@ def collect_amr_passes(
             path=path,
             problem=problem,
             surface_bindings=surface_bindings,
-            surface_mask_bindings=surface_mask_bindings,
+            surface_margin_bindings=surface_margin_bindings,
         ).load_optional()
         if snapshot is not None:
             snapshots.append(snapshot)
@@ -141,7 +120,7 @@ def collect_amr_passes(
         path=results,
         problem=problem,
         surface_bindings=surface_bindings,
-        surface_mask_bindings=surface_mask_bindings,
+        surface_margin_bindings=surface_margin_bindings,
     ).load_optional()
     if parent is None:
         return CollectedSnapshots(tuple(snapshots), "unreadable")
@@ -155,8 +134,8 @@ def collect_amr_passes(
         ):
             return CollectedSnapshots((*snapshots, parent), "readable")
         parent = replace(parent, pass_index=snapshots[-1].pass_index)
-        if _same_masked_physics(
-            snapshots[-1].surface_mask_epr, parent.surface_mask_epr
+        if _same_margin_physics(
+            snapshots[-1].surface_margin_epr, parent.surface_margin_epr
         ):
             snapshots[-1] = replace(parent, pass_index=snapshots[-1].pass_index)
             return CollectedSnapshots(tuple(snapshots), "readable")
@@ -172,7 +151,7 @@ class SnapshotReader:
     path: Path
     problem: str
     surface_bindings: tuple[dict[str, Any], ...] | None
-    surface_mask_bindings: tuple[dict[str, Any], ...] | None
+    surface_margin_bindings: tuple[dict[str, Any], ...] | None
 
     def load_optional(self) -> AmrPassSnapshot | None:
         """Return no snapshot when native files are absent or unreadable."""
@@ -207,6 +186,10 @@ class SnapshotReader:
             if capacitance is not None
             else 0
         )
+        # Margin rows are Dielectric rows of the same table, so both readers expect all of its columns.
+        surface_count = len(self.surface_bindings or ()) + len(
+            self.surface_margin_bindings or ()
+        )
         surface_epr = SurfaceEprReader(
             self.path / "surface-Q.csv",
             problem=self.problem,
@@ -215,17 +198,16 @@ class SnapshotReader:
             frequencies_ghz=frequencies,
             expected_rows=expected_rows,
             bindings=self.surface_bindings,
-            surface_count=len(self.surface_bindings or ())
-            + len(self.surface_mask_bindings or ()),
+            surface_count=surface_count,
         ).read()
-        surface_mask_epr = SurfaceMaskEprReader(
-            self.path / "surface-mask-Q.csv",
-            self.path / "surface-mask-energy.csv",
+        surface_margin_epr = SurfaceMarginEprReader(
+            self.path / "surface-Q.csv",
             problem=self.problem,
             pass_index=self.pass_index,
             source=self.source,
             expected_rows=expected_rows,
-            bindings=self.surface_mask_bindings,
+            bindings=self.surface_margin_bindings,
+            surface_count=surface_count,
         ).read()
         error_norm = None if error_indicators is None else error_indicators.get("Norm")
         palace_payload = read_optional_json(self.path / "palace.json")
@@ -266,7 +248,7 @@ class SnapshotReader:
                 if palace_payload
                 else None
             ),
-            surface_mask_epr=surface_mask_epr,
+            surface_margin_epr=surface_margin_epr,
             native_iteration=_native_iteration(problem_block),
         )
 
@@ -328,12 +310,12 @@ def surface_snapshots(
     return tuple(snapshot for pass_ in passes for snapshot in (pass_.surface_epr or ()))
 
 
-def surface_mask_snapshots(
+def surface_margin_snapshots(
     passes: Sequence[AmrPassSnapshot],
-) -> tuple[SurfaceMaskEprSeriesSnapshot, ...]:
-    """Flatten available native-mask series without merging them into baseline surfaces."""
+) -> tuple[SurfaceMarginEprSeriesSnapshot, ...]:
+    """Flatten available margin-row series without merging them into whole-surface rows."""
     return tuple(
-        snapshot for pass_ in passes for snapshot in (pass_.surface_mask_epr or ())
+        snapshot for pass_ in passes for snapshot in (pass_.surface_margin_epr or ())
     )
 
 

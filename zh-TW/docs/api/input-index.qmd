@@ -34,7 +34,7 @@ scgsim-status: "CONVERGING"
 
 ### scgsim.palace
 
-`CapacitanceReference`, `EigenmodeSim`, `ElectrostaticSim`, `MeshQualityReport`, `PalaceAmrAnalysis`, `PalaceAmrReport`, `PalaceCost`, `PalaceEprResult`, `PalaceFailureDiagnosis`, `PalacePerformance`, `PalaceProvenance`, `PalaceResultSelection`, `PalaceReturnedReceipt`, `PalaceTrustReport`, `ParsedTable`, `PassCostRecord`, `PhysicsQuantitiesReport`, `ResolvedPalaceResult`, `SimulationBenchmarkReport`, `SurfaceMaskEprRecord`, `SurfaceMaskEprSeriesSnapshot`, `analyze_amr`, `check_mesh_quality`, `epr_result`, `inspect_run_trustworthiness`, `reanalyze_epr`, `resolve_epr_result`, `resolve_palace_result`, `show_amr_analysis`, `show_epr`.
+`CapacitanceReference`, `EigenmodeSim`, `ElectrostaticSim`, `MeshQualityReport`, `PalaceAmrAnalysis`, `PalaceAmrReport`, `PalaceCost`, `PalaceEprResult`, `PalaceFailureDiagnosis`, `PalacePerformance`, `PalaceProvenance`, `PalaceResultSelection`, `PalaceReturnedReceipt`, `PalaceTrustReport`, `ParsedTable`, `PassCostRecord`, `PhysicsQuantitiesReport`, `ResolvedPalaceResult`, `SimulationBenchmarkReport`, `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot`, `analyze_amr`, `check_mesh_quality`, `epr_result`, `inspect_run_trustworthiness`, `reanalyze_epr`, `resolve_epr_result`, `resolve_palace_result`, `show_amr_analysis`, `show_epr`.
 
 ### scgsim.palace.mesh.quality
 
@@ -62,7 +62,7 @@ scgsim-status: "CONVERGING"
 | `src/scgsim/geometry/__init__.py` | `592524fe7659e8a336af03a3544270e996ccbbd510ea9e7cd16b0ae0bd668a35` |
 | `src/scgsim/geometry/compiler/__init__.py` | `5483f9a15796f25576abba930e87c08690961d64a5ba748261e2c24bdb880a69` |
 | `src/scgsim/geometry/models/__init__.py` | `2fec191dd1d7708d1f7effe40cd01882d86d71a8263b1f2008cef33dccf692ad` |
-| `src/scgsim/palace/__init__.py` | `f99083ffedb333cd62e8edd5501a9110e4bb21256f37b2afe992882b31ffc40a` |
+| `src/scgsim/palace/__init__.py` | `44ebdfe7b799c2916d42d27630782a5e39cecb0e29f7dff13f190757cbe8d14f` |
 | `src/scgsim/palace/mesh/quality/__init__.py` | `f8ba7cc897bbba9dda491709e1189dab2709ff82357759cc98f882f3c65ca5d7` |
 | `src/scgsim/semantics/__init__.py` | `a1902da7627ee76ba95283fc2861b6d785400c303a09e6e875375f55a056e39c` |
 | `src/scgsim/visualization/__init__.py` | `181a1bf3c38a632bc163c6ac9ee55dcbc6ca1bcc85bc6bca3e16afbe43e21ad1` |

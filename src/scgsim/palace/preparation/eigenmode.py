@@ -23,6 +23,7 @@ from ..mesh.build import MeshBuildResult, build_route_mesh
 from ..mesh.controls import MeshControls
 from ..mesh.summary import summary_from_files
 from ..results.epr import PalaceEprResult, reanalyze_epr, show_epr
+from ..results.index_contract import INDEX_MAP_SCHEMA_VERSION
 from .config import (
     MODEL_L0_M,
     LayoutPortBinding,
@@ -675,7 +676,10 @@ class EigenmodeSim:
                 chosen = request[name]
                 if chosen is not None and set(chosen) - configured:
                     raise ValueError(f"EPR request selects an unknown {name} binding")
-        index_payload = {"schema_version": 1, "entries": result.index_entries}
+        index_payload = {
+            "schema_version": INDEX_MAP_SCHEMA_VERSION,
+            "entries": result.index_entries,
+        }
         json.loads(self._mesh_result.mesh_manifest_path.read_text(encoding="utf-8"))
         if request is not None:
             index_payload["epr_request"] = {

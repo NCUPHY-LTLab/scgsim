@@ -26,7 +26,6 @@ from scgsim.palace.results.artifacts import (
     validate_timestamp,
 )
 from scgsim.palace.results.models import PalaceReturnedReceipt
-from scgsim.palace.results.surface_contract import surface_mask_entries
 from scgsim.palace.results.tables import count_index_entries, output_families
 
 _RUNTIME_COMPATIBILITY_PATH = "metadata/palace_runtime_compatibility.json"
@@ -175,7 +174,7 @@ def validate_returned_state_agreement(
 
 
 def _required_output_records(
-    problem: str, *, index_counts: dict[str, int], masks_configured: bool = False
+    problem: str, *, index_counts: dict[str, int]
 ) -> tuple[dict[str, Any], ...]:
     """List native output families required by the written problem and configured selectors."""
     families = output_families(problem, index_counts)
@@ -183,11 +182,6 @@ def _required_output_records(
     for family in families:
         rel = f"results/palace/{family}.csv"
         records.append({"path": rel, "bytes": 0, "sha256": ""})
-    if masks_configured:
-        for name in ("surface-mask-Q", "surface-mask-energy"):
-            records.append(
-                {"path": f"results/palace/{name}.csv", "bytes": 0, "sha256": ""}
-            )
     records.append({"path": "results/palace/palace.json", "bytes": 0, "sha256": ""})
     return tuple(records)
 
@@ -379,7 +373,6 @@ def _validate_returned_outputs(
     required_outputs = _required_output_records(
         problem,
         index_counts=count_index_entries(index_map),
-        masks_configured=bool(surface_mask_entries(index_map)),
     )
     config = read_json(root / "config.json")
     required_outputs += tuple(

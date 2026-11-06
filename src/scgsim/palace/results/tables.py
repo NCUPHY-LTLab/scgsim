@@ -55,58 +55,6 @@ def output_families(problem: str, index_counts: dict[str, int]) -> tuple[str, ..
     )
 
 
-def validate_surface_mask_table(
-    table: ParsedTable,
-    *,
-    problem: str,
-    expected_rows: int,
-    entries: tuple[dict[str, Any], ...],
-) -> None:
-    """Validate ordered mask rows, finite participation and positive finite or lossless Q."""
-    index_name = "m" if problem == "Eigenmode" else "i"
-    indexes = [expect_scalar(entry, "index", int) for entry in entries]
-    if table.name == "surface-mask-Q":
-        expected_headers = (
-            index_name,
-            *(
-                header
-                for index in indexes
-                for header in (f"p_surf_mask[{index}]", f"Q_surf_mask[{index}]")
-            ),
-        )
-    elif table.name == "surface-mask-energy":
-        expected_headers = (
-            index_name,
-            *(f"E_surf_mask[{index}] (J)" for index in indexes),
-        )
-    else:
-        raise ValueError(f"unsupported surface mask table {table.name!r}.")
-    if table.headers != expected_headers:
-        raise ValueError(f"{table.path} native mask headers are malformed.")
-    if len(table.rows) != expected_rows:
-        raise ValueError(f"{table.path} must contain {expected_rows} result rows.")
-    _require_ordered_index(table, index_name, expected_rows)
-    for row in table.rows:
-        for header in table.headers[1:]:
-            value = row.get(header)
-            if (
-                value is None
-                or isinstance(value, bool)
-                or not isinstance(value, (int, float))
-                or math.isnan(value)
-            ):
-                raise ValueError(f"{table.path} contains an invalid mask value.")
-            if header.startswith("Q_surf_mask["):
-                if value <= 0 or (math.isinf(value) and value < 0):
-                    raise ValueError(
-                        f"{table.path} mask Q must be positive finite or +inf."
-                    )
-            elif not math.isfinite(value) or value < 0:
-                raise ValueError(
-                    f"{table.path} mask values must be finite and non-negative."
-                )
-
-
 def validate_table(
     problem: str,
     table: ParsedTable,

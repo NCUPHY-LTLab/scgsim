@@ -10,23 +10,20 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from scgsim.palace.presentation.epr import show_epr as render
 from scgsim.palace.results.artifacts import confined_path, sha256
 from scgsim.palace.results.epr_model import (
     PalaceEprResult,
     checked_number,
-    surface_distance_band,
 )
 from scgsim.palace.results.models import ResolvedRunData
-from scgsim.palace.results.surface_contract import surface_mask_entries
+from scgsim.palace.results.surface_contract import entry_rows
 from scgsim.palace.results.tables import (
     count_index_entries,
-    eigenmode_count,
     output_families,
     read_csv_table,
-    validate_surface_mask_table,
     validate_table,
 )
 from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
@@ -99,17 +96,6 @@ def _iteration_result(
         table = read_csv_table(verified(f"{family}.csv"))
         validate_table(result.problem, table, counts, result.provenance.config)
         tables[family] = table
-    masks = surface_mask_entries(result.provenance.index_map)
-    if masks:
-        for family in ("surface-mask-Q", "surface-mask-energy"):
-            table = read_csv_table(verified(f"{family}.csv"))
-            validate_surface_mask_table(
-                table,
-                problem=result.problem,
-                expected_rows=eigenmode_count(result.provenance.config),
-                entries=masks,
-            )
-            tables[family] = table
     return replace(
         result, tables=tables, provenance=replace(result.provenance, palace_json=native)
     ), prefix
@@ -157,15 +143,6 @@ def epr_result(
         if junctions
         else tuple({"m": item["m"]} for item in eig)
     )
-    masks_requested = any("mask" in entry for entry in surfaces.values())
-    mask_q_table = (
-        result.tables["surface-mask-Q"].rows if masks_requested else (None,) * len(eig)
-    )
-    mask_energy_table = (
-        result.tables["surface-mask-energy"].rows
-        if masks_requested
-        else (None,) * len(eig)
-    )
     rows: list[dict[str, Any]] = []
     _ModeExtraction(
         domain_table,
@@ -173,9 +150,6 @@ def epr_result(
         eig,
         junctions,
         l0,
-        mask_energy_table,
-        mask_q_table,
-        masks_requested,
         port_table,
         rows,
         selected,
@@ -330,8 +304,6 @@ def _source_provenance(
             "domain-E",
             "surface-Q",
             "port-EPR",
-            "surface-mask-Q",
-            "surface-mask-energy",
         )
     }
     source_outputs.add(f"{output_prefix}/palace.json")
@@ -358,11 +330,6 @@ def _source_provenance(
         "palace_native_iteration": palace_iteration,
         "palace_json_sha256": (
             palace_output.get("sha256") if palace_output is not None else None
-        ),
-        **(
-            {"surface_distance_bands": index["surface_distance_bands"]}
-            if "surface_distance_bands" in index
-            else {}
         ),
         "source_reference": {
             "receipt_schema": result.returned_receipt.schema,
@@ -392,9 +359,6 @@ class _ModeExtraction:
     eig: tuple[dict[str, Any], ...]
     junctions: Mapping[int, Mapping[str, Any]]
     l0: float
-    mask_energy_table: tuple[dict[str, Any] | None, ...]
-    mask_q_table: tuple[dict[str, Any] | None, ...]
-    masks_requested: bool
     port_table: tuple[dict[str, Any], ...]
     rows: list[dict[str, Any]]
     selected: Mapping[str, set[str]]
@@ -403,33 +367,18 @@ class _ModeExtraction:
 
     def extract(self) -> None:
         """Append mode rows in the native table order."""
-        for (
-            mode_row,
-            surface_row,
-            domain_row,
-            port_row,
-            mask_q_row,
-            mask_energy_row,
-        ) in zip(
+        for mode_row, surface_row, domain_row, port_row in zip(
             self.eig,
             self.surface_table,
             self.domain_table,
             self.port_table,
-            self.mask_q_table,
-            self.mask_energy_table,
             strict=True,
         ):
             mode = int(mode_row["m"])
             if any(
-                int(item.get("m", item.get("i"))) != mode
-                for item in (surface_row, domain_row, port_row)
+                _row_index(row) != mode for row in (surface_row, domain_row, port_row)
             ):
                 raise ValueError("Palace EPR mode tables do not align")
-            if self.masks_requested and (
-                cast(Mapping[str, Any], mask_q_row)["m"] != mode
-                or cast(Mapping[str, Any], mask_energy_row)["m"] != mode
-            ):
-                raise ValueError("Palace EPR mask tables do not align with the mode")
             normalization = checked_number(
                 domain_row["E_elec (J)"], "electric energy"
             ) + checked_number(domain_row["E_cap (J)"], "capacitive energy")
@@ -437,7 +386,7 @@ class _ModeExtraction:
                 normalization, "normalization energy", positive=True
             )
             surface_items = _mode_surface_items(
-                self.surfaces, self.selected, self.l0, surface_row, mask_q_row
+                self.surfaces, self.selected, self.l0, surface_row
             )
             bulk = [
                 {
@@ -454,7 +403,7 @@ class _ModeExtraction:
             port = [
                 {
                     "port_name": item["port_name"],
-                    "owner_semantic_ids": item["metadata"]["owner_semantic_ids"],
+                    "host_entity_ids": item["metadata"]["host_entity_ids"],
                     "index": number,
                     "participation": float(port_row[f"p[{number}]"]),
                     "signed_palace": True,
@@ -475,6 +424,11 @@ class _ModeExtraction:
                     "junction": port,
                 }
             )
+
+
+def _row_index(row: Mapping[str, Any]) -> int:
+    """The mode (``m``) or excitation (``i``) a native table row belongs to."""
+    return int(row["m"] if "m" in row else row["i"])
 
 
 def _selected_outputs(
@@ -502,7 +456,7 @@ def _selected_outputs(
         raise ValueError("Palace EPR selection payload is invalid")
     available = {
         "surface_interfaces": {
-            item["metadata"]["interface_type"] for item in surfaces.values()
+            entry_rows(item)[0]["interface_type"] for item in surfaces.values()
         },
         "bulk_domain_ids": {item["entry_name"] for item in domains.values()},
         "port_names": {item["port_name"] for item in junctions.values()},
@@ -529,13 +483,13 @@ def _mode_surface_items(
     selected: Mapping[str, set[str]],
     l0: float,
     surface_row: Mapping[str, Any],
-    mask_q_row: Mapping[str, Any] | None,
 ) -> list[dict[str, Any]]:
-    """Bind one mode surface participation to recorded film assumptions."""
+    """Bind one mode's surface participation to the recorded sidecar rows and film assumptions."""
     surface_items: list[dict[str, Any]] = []
     for number, entry in sorted(surfaces.items()):
-        metadata = entry["metadata"]
-        if metadata["interface_type"] not in selected["surface_interfaces"]:
+        rows = entry_rows(entry)
+        interface_type = rows[0]["interface_type"]
+        if interface_type not in selected["surface_interfaces"]:
             continue
         spec = entry["epr_spec"]
         native_thickness = checked_number(
@@ -553,75 +507,46 @@ def _mode_surface_items(
         )
         if not math.isclose(physical, native_thickness * l0, rel_tol=1e-12):
             raise ValueError("film SI/native thickness mismatch")
-        recorded_loss = spec.get("loss_tangent")
-        historical_ambiguous_zero = (
-            spec.get("schema_version") != "scgsim.palace.surface-film.v2"
-            and recorded_loss == 0
-        )
-        loss = None if historical_ambiguous_zero else recorded_loss
+        loss = spec.get("loss_tangent")
         assumption = film_assumptions(
             {
                 "film_thickness_m": physical,
                 "film_relative_permittivity": spec["permittivity"],
                 "loss_tangent": loss,
-                "source": spec.get(
-                    "source",
-                    "historical_ambiguous_zero"
-                    if historical_ambiguous_zero
-                    else "historical",
-                ),
+                "source": spec.get("source", "recorded"),
                 "preset": spec.get("preset"),
             }
         )
-        mask = entry.get("mask")
-        distance_band = (
-            surface_distance_band(metadata["surface_distance_band"])
-            if "surface_distance_band" in metadata
-            else None
-        )
-        if distance_band is not None and mask is not None:
-            raise ValueError("Palace geometric bands cannot use fork-only mask rows")
+        inset = entry.get("inset")
+        # A margin row is named and attributed by the whole surface it is part of.
+        whole = entry_rows(surfaces[entry["baseline_index"]])
         participation = checked_number(
-            (
-                cast(Mapping[str, Any], mask_q_row)[f"p_surf_mask[{number}]"]
-                if mask is not None
-                else surface_row[f"p_surf[{number}]"]
-            ),
-            "surface participation",
+            surface_row[f"p_surf[{number}]"], "surface participation"
         )
         surface_items.append(
             {
-                "group_id": f"palace_surface_{entry.get('baseline_index', number)}",
+                "group_id": f"palace_surface_{entry['baseline_index']}",
                 "index": number,
-                "baseline_index": entry.get("baseline_index", number),
-                "owner_semantic_ids": metadata["owner_semantic_ids"],
-                "interface_kind": metadata["interface_type"],
-                "field_side": metadata["face_kind"],
-                "surface_id": metadata["surface_id"],
-                "members": metadata["source_provenance"],
-                **(
-                    {"attributes": list(entry["attributes"])}
-                    if "attributes" in entry
-                    else {}
-                ),
-                "evaluation_kind": "geometric_band"
-                if distance_band is not None
-                else "requested_margin"
-                if mask is not None
+                "baseline_index": entry["baseline_index"],
+                "interface_kind": interface_type,
+                "name": surfaces[entry["baseline_index"]]["entry_name"],
+                "rows": [row["row"] for row in rows],
+                "face_kinds": sorted({row["face_kind"] for row in whole}),
+                "entities": sorted({e for row in whole for e in row["entities"]}),
+                "nets": sorted({row["net"] for row in whole if row["net"] is not None}),
+                "attributes": list(entry["attributes"]),
+                # Lineage membership is attribution only: it weights nothing.
+                "lineage": {
+                    face: dict(owners)
+                    for row in rows
+                    for face, owners in row["lineage"]["membership"].items()
+                },
+                "evaluation_kind": "requested_margin"
+                if inset is not None
                 else "unmasked_baseline",
-                "margin_um": (
-                    None
-                    if distance_band is not None
-                    else float(mask["margin_um"])
-                    if mask is not None
-                    else 0.0
-                ),
-                "margin_index": mask["margin_index"] if mask is not None else None,
-                **(
-                    {"surface_distance_band": distance_band}
-                    if distance_band is not None
-                    else {}
-                ),
+                "margin_um": 0.0 if inset is None else float(inset["margin_um"]),
+                "margin_index": None if inset is None else inset["margin_index"],
+                **({"bands": list(inset["bands"])} if inset is not None else {}),
                 "original_participation": participation,
                 "participation": participation,
                 "original_assumptions": assumption,
@@ -631,15 +556,10 @@ def _mode_surface_items(
                     "thickness_model_l0_units": native_thickness,
                     "model_l0_m": l0,
                     "relative_permittivity": spec["permittivity"],
-                    "loss_tangent": recorded_loss,
+                    "loss_tangent": loss,
                     "source": spec.get("source"),
                     "preset": spec.get("preset"),
                 },
-                "loss_provenance": (
-                    "historical_ambiguous_zero"
-                    if historical_ambiguous_zero
-                    else "recorded"
-                ),
                 "inverse_q": inverse_quality_factor(participation, loss),
             }
         )

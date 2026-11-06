@@ -191,7 +191,7 @@ def build_surface_epr_postprocessing(
     *,
     model_l0_m: float = 1e-6,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Emit Palace ``Dielectric`` rows and their index entries from the Surface-EPR rows of ``groups``.
+    """Emit Palace ``Dielectric`` rows and their index entries (index map schema 3) from the Surface-EPR rows of ``groups``.
 
     For each spec (interface type) and each surface unit of that type -- an unbanded row, or all bands of
     one support -- one baseline row covers every attribute of the unit.  For each inset margin of the spec,
@@ -203,7 +203,6 @@ def build_surface_epr_postprocessing(
     index_map: list[dict[str, Any]] = []
     margin_requests: list[_MarginRequest] = []
     all_rows = rows_of(groups)
-    masks_requested = any("inset_margins_um" in preset for preset in specs.values())
     members: set[tuple[str, int]] = set()
     for interface_type, preset in sorted(specs.items()):
         units = _units(all_rows, interface_type, preset)
@@ -221,8 +220,7 @@ def build_surface_epr_postprocessing(
             index = len(rows) + 1
             rows.append(_dielectric_row(index, interface_type, attributes, snapshot))
             entry = _index_entry(index, unit.name, unit.rows, attributes, snapshot)
-            if masks_requested:
-                entry["baseline_index"] = index
+            entry["baseline_index"] = index
             index_map.append(entry)
             margin_requests.extend(
                 _MarginRequest(index, unit, margin_index, margin)
@@ -402,6 +400,7 @@ def _row_metadata(row: Mapping[str, Any]) -> dict[str, Any]:
         "row": row["row"],
         "group": row["group"],
         "interface_type": row["interface_type"],
+        "face_kind": row["face_kind"],
         "band": row["band"],
         "side": row["side"],
         "face_sides": row["face_sides"],

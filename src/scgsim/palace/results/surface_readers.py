@@ -1,4 +1,4 @@
-"""Bind native surface and mask CSV rows to recorded semantic surface identities."""
+"""Bind native surface-Q CSV columns to the Surface-EPR rows recorded in the index map."""
 
 from __future__ import annotations
 
@@ -12,16 +12,11 @@ from scgsim.palace.results.index_contract import validate_index_entries
 from scgsim.palace.results.report_models import (
     SurfaceEprRecord,
     SurfaceEprSeriesSnapshot,
-    SurfaceMaskEprRecord,
-    SurfaceMaskEprSeriesSnapshot,
+    SurfaceMarginEprRecord,
+    SurfaceMarginEprSeriesSnapshot,
 )
-from scgsim.palace.results.tables import (
-    read_csv_table,
-    validate_surface_mask_table,
-    validate_surface_table,
-)
-
-_SURFACE_TYPES = ("MA", "MS", "SA")
+from scgsim.palace.results.surface_contract import entry_rows, surface_epr_entries
+from scgsim.palace.results.tables import read_csv_table, validate_surface_table
 
 
 def _surface_inverse_loss(records: Sequence[SurfaceEprRecord]) -> float | None:
@@ -35,169 +30,72 @@ def _surface_inverse_loss(records: Sequence[SurfaceEprRecord]) -> float | None:
     return inverse_loss if math.isfinite(inverse_loss) and inverse_loss >= 0 else None
 
 
-def _optional_string(value: Any) -> str | None:
-    """Read an optional semantic identifier while rejecting empty or nontext identities."""
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value:
-        raise ValueError("optional semantic identity must be a non-empty string.")
-    return value
-
-
 def read_surface_bindings(
     index_map: dict[str, Any] | None,
 ) -> tuple[dict[str, Any], ...] | None:
-    """Bind baseline dielectric indices to exact recorded surface and conductor provenance."""
-    if index_map is None:
-        return None
-    try:
-        validate_index_entries(index_map)
-        entries = [
-            entry
-            for entry in index_map["entries"]
-            if entry["section"] == "Boundaries.Postprocessing.Dielectric"
-        ]
-        entries.sort(key=lambda entry: entry["index"])
-        bindings: list[dict[str, Any]] = []
-        for entry in entries:
-            if "mask" in entry:
-                continue
-            metadata = entry["metadata"]
-            interface_type = metadata.get("interface_type")
-            surface_id = metadata.get("surface_id")
-            face_kind = metadata.get("face_kind")
-            owners = metadata.get("owner_semantic_ids")
-            provenance = metadata.get("source_provenance")
-            if interface_type not in _SURFACE_TYPES:
-                raise ValueError("surface interface_type must be MA, MS, or SA.")
-            if not isinstance(surface_id, str) or not surface_id:
-                raise ValueError("surface_id must be a non-empty string.")
-            if not isinstance(face_kind, str) or not face_kind:
-                raise ValueError("face_kind must be a non-empty string.")
-            if (
-                not isinstance(owners, list)
-                or not owners
-                or not all(isinstance(owner, str) and owner for owner in owners)
-            ):
-                raise ValueError("owner_semantic_ids must be non-empty strings.")
-            if not isinstance(provenance, dict):
-                raise TypeError("source_provenance must be a mapping.")
-            epr_spec = entry.get("epr_spec")
-            loss_tangent = (
-                epr_spec.get("loss_tangent") if isinstance(epr_spec, dict) else None
-            )
-            if (
-                isinstance(epr_spec, dict)
-                and epr_spec.get("schema_version") != "scgsim.palace.surface-film.v2"
-                and loss_tangent == 0
-            ):
-                loss_tangent = None
-            if loss_tangent is not None and (
-                isinstance(loss_tangent, bool)
-                or not isinstance(loss_tangent, (int, float))
-                or not math.isfinite(float(loss_tangent))
-                or loss_tangent < 0
-            ):
-                raise ValueError(
-                    "surface loss_tangent must be finite and non-negative."
-                )
-            bindings.append(
-                {
-                    "index": entry["index"],
-                    "interface_type": interface_type,
-                    "surface_id": surface_id,
-                    "face_kind": face_kind,
-                    "owner_semantic_ids": tuple(owners),
-                    "net_id": _optional_string(metadata.get("net_id")),
-                    "equipotential_id": _optional_string(
-                        metadata.get("equipotential_id")
-                    ),
-                    "source_provenance": provenance,
-                    "loss_tangent": (
-                        None if loss_tangent is None else float(loss_tangent)
-                    ),
-                }
-            )
-        return tuple(bindings) or None
-    except (KeyError, TypeError, ValueError):
-        return None
+    """Bind each whole-surface Dielectric index to the sidecar rows, Entities and Nets it integrates."""
+    entries = _entries(index_map)
+    bindings = tuple(
+        _identity(entry) | {"lineage": _lineage(entry)}
+        for entry in entries
+        if "inset" not in entry
+    )
+    return bindings or None
 
 
-def read_surface_mask_bindings(
+def read_surface_margin_bindings(
     index_map: dict[str, Any] | None,
 ) -> tuple[dict[str, Any], ...] | None:
-    """Bind native Inset indices to their recorded baseline and ordered margin metadata."""
+    """Bind each margin Dielectric index to its whole surface and the bands it unions."""
+    entries = _entries(index_map)
+    bindings = tuple(
+        _identity(entry)
+        | {
+            "baseline_index": entry["baseline_index"],
+            "margin_index": entry["inset"]["margin_index"],
+            "margin_um": float(entry["inset"]["margin_um"]),
+            "bands": tuple(entry["inset"]["bands"]),
+        }
+        for entry in entries
+        if "inset" in entry
+    )
+    return bindings or None
+
+
+def _entries(index_map: dict[str, Any] | None) -> tuple[dict[str, Any], ...]:
+    """The validated Surface-EPR entries, or none when the index map is absent or unreadable."""
     if index_map is None:
-        return None
+        return ()
     try:
         validate_index_entries(index_map)
-        bindings: list[dict[str, Any]] = []
-        for entry in sorted(index_map["entries"], key=lambda item: item["index"]):
-            if (
-                entry.get("section") != "Boundaries.Postprocessing.Dielectric"
-                or "mask" not in entry
-            ):
-                continue
-            metadata = entry["metadata"]
-            mask = entry["mask"]
-            owners = metadata.get("owner_semantic_ids")
-            provenance = metadata.get("source_provenance")
-            if (
-                metadata.get("interface_type") not in _SURFACE_TYPES
-                or not isinstance(metadata.get("surface_id"), str)
-                or not metadata["surface_id"]
-                or not isinstance(metadata.get("face_kind"), str)
-                or not metadata["face_kind"]
-                or not isinstance(owners, list)
-                or not owners
-                or not all(isinstance(owner, str) and owner for owner in owners)
-                or not isinstance(provenance, dict)
-            ):
-                raise ValueError("surface mask provenance is incomplete.")
-            epr_spec = entry.get("epr_spec")
-            loss_tangent = (
-                epr_spec.get("loss_tangent") if isinstance(epr_spec, dict) else None
-            )
-            if (
-                isinstance(epr_spec, dict)
-                and epr_spec.get("schema_version") != "scgsim.palace.surface-film.v2"
-                and loss_tangent == 0
-            ):
-                loss_tangent = None
-            if loss_tangent is not None and (
-                isinstance(loss_tangent, bool)
-                or not isinstance(loss_tangent, (int, float))
-                or not math.isfinite(float(loss_tangent))
-                or loss_tangent < 0
-            ):
-                raise ValueError(
-                    "surface mask loss_tangent must be finite and non-negative."
-                )
-            bindings.append(
-                {
-                    "index": int(entry["index"]),
-                    "baseline_index": int(entry["baseline_index"]),
-                    "margin_index": int(mask["margin_index"]),
-                    "margin_um": float(mask["margin_um"]),
-                    "native_margin": float(mask["native_margin"]),
-                    "model_l0_m": float(mask["model_l0_m"]),
-                    "interface_type": metadata["interface_type"],
-                    "surface_id": metadata["surface_id"],
-                    "face_kind": metadata["face_kind"],
-                    "owner_semantic_ids": tuple(owners),
-                    "net_id": _optional_string(metadata.get("net_id")),
-                    "equipotential_id": _optional_string(
-                        metadata.get("equipotential_id")
-                    ),
-                    "source_provenance": provenance,
-                    "loss_tangent": (
-                        None if loss_tangent is None else float(loss_tangent)
-                    ),
-                }
-            )
-        return tuple(bindings) or None
+        return surface_epr_entries(index_map)
     except (KeyError, TypeError, ValueError):
-        return None
+        return ()
+
+
+def _identity(entry: dict[str, Any]) -> dict[str, Any]:
+    """What a result record says about the surface its column integrates."""
+    rows = entry_rows(entry)
+    return {
+        "index": entry["index"],
+        "interface_type": rows[0]["interface_type"],
+        "name": entry["entry_name"],
+        "rows": tuple(row["row"] for row in rows),
+        "face_kinds": tuple(sorted({row["face_kind"] for row in rows})),
+        "entities": tuple(sorted({e for row in rows for e in row["entities"]})),
+        "nets": tuple(sorted({row["net"] for row in rows if row["net"] is not None})),
+        "attributes": tuple(entry["attributes"]),
+        "loss_tangent": entry["epr_spec"]["loss_tangent"],
+    }
+
+
+def _lineage(entry: dict[str, Any]) -> dict[str, dict[str, float]]:
+    """Which Entities share each face of the rows, as attribution only."""
+    return {
+        face: dict(owners)
+        for row in entry_rows(entry)
+        for face, owners in row["lineage"]["membership"].items()
+    }
 
 
 @dataclass(frozen=True)
@@ -211,21 +109,15 @@ class SurfaceEprReader:
     frequencies_ghz: tuple[float, ...] | None
     expected_rows: int
     bindings: tuple[dict[str, Any], ...] | None
-    surface_count: int | None = None
+    surface_count: int
 
     def read(self) -> tuple[SurfaceEprSeriesSnapshot, ...] | None:
-        """Read baseline participation and loss series in native mode or excitation order."""
+        """Read whole-surface participation and loss series in native mode or excitation order."""
         if not self.path.is_file() or not self.bindings or self.expected_rows <= 0:
             return None
         try:
             table = read_csv_table(self.path)
-            validate_surface_table(
-                table,
-                len(self.bindings)
-                if self.surface_count is None
-                else self.surface_count,
-                self.expected_rows,
-            )
+            validate_surface_table(table, self.surface_count, self.expected_rows)
             snapshots: list[SurfaceEprSeriesSnapshot] = []
             index_name = "m" if self.problem == "Eigenmode" else "i"
             for row in table.rows:
@@ -282,75 +174,41 @@ class SurfaceEprReader:
 
 
 @dataclass(frozen=True)
-class SurfaceMaskEprReader:
-    """Load both native mask tables as one source-local, all-or-nothing snapshot."""
+class SurfaceMarginEprReader:
+    """The margin rows of the same surface-Q table, read as an all-or-nothing source-local snapshot."""
 
-    q_path: Path
-    energy_path: Path
+    path: Path
     problem: str
     pass_index: int
     source: str
     expected_rows: int
     bindings: tuple[dict[str, Any], ...] | None
+    surface_count: int
 
-    def read(self) -> tuple[SurfaceMaskEprSeriesSnapshot, ...] | None:
-        """Read mask participation and energy together as one source-local snapshot."""
-        if (
-            not self.q_path.is_file()
-            or not self.energy_path.is_file()
-            or not self.bindings
-            or self.expected_rows <= 0
-        ):
+    def read(self) -> tuple[SurfaceMarginEprSeriesSnapshot, ...] | None:
+        """Read margin participation and Q for every mode or excitation."""
+        if not self.path.is_file() or not self.bindings or self.expected_rows <= 0:
             return None
         try:
-            q_table = read_csv_table(self.q_path)
-            energy_table = read_csv_table(self.energy_path)
-            validate_surface_mask_table(
-                q_table,
-                problem=self.problem,
-                expected_rows=self.expected_rows,
-                entries=self.bindings,
-            )
-            validate_surface_mask_table(
-                energy_table,
-                problem=self.problem,
-                expected_rows=self.expected_rows,
-                entries=self.bindings,
-            )
+            table = read_csv_table(self.path)
+            validate_surface_table(table, self.surface_count, self.expected_rows)
             index_name = "m" if self.problem == "Eigenmode" else "i"
-            snapshots: list[SurfaceMaskEprSeriesSnapshot] = []
-            for q_row, energy_row in zip(q_table.rows, energy_table.rows, strict=True):
-                series_index = int(q_row[index_name])
-                if energy_row[index_name] != q_row[index_name]:
-                    raise ValueError("native mask Q and energy rows do not align.")
-                records = tuple(
-                    SurfaceMaskEprRecord(
-                        **binding,
-                        participation=float(q_row[f"p_surf_mask[{binding['index']}]"]),
-                        quality_factor=float(q_row[f"Q_surf_mask[{binding['index']}]"]),
-                        energy_j=float(
-                            energy_row[f"E_surf_mask[{binding['index']}] (J)"]
-                        ),
-                        contribution_status=(
-                            "zero_contribution"
-                            if q_row[f"p_surf_mask[{binding['index']}]"] == 0
-                            or energy_row[f"E_surf_mask[{binding['index']}] (J)"] == 0
-                            else "available"
-                        ),
-                    )
-                    for binding in self.bindings
+            return tuple(
+                SurfaceMarginEprSeriesSnapshot(
+                    pass_index=self.pass_index,
+                    source=self.source,
+                    series_index=int(row[index_name]),
+                    series_kind="mode" if self.problem == "Eigenmode" else "excitation",
+                    records=tuple(
+                        SurfaceMarginEprRecord(
+                            **binding,
+                            participation=float(row[f"p_surf[{binding['index']}]"]),
+                            quality_factor=float(row[f"Q_surf[{binding['index']}]"]),
+                        )
+                        for binding in self.bindings
+                    ),
                 )
-                snapshots.append(
-                    SurfaceMaskEprSeriesSnapshot(
-                        pass_index=self.pass_index,
-                        source=self.source,
-                        series_index=series_index,
-                        series_kind="mode"
-                        if self.problem == "Eigenmode"
-                        else "excitation",
-                        records=records,
-                    )
-                )
-            return tuple(snapshots)
+                for row in table.rows
+            )
         except (KeyError, OSError, TypeError, ValueError):
             return None
