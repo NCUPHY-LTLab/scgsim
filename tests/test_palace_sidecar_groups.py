@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import pytest
-from palace_sgb_support import effective_input, sidecar_of, surface_epr_specs
+from palace_sgb_support import effective_input, sidecar_of
 from test_sgb_band_labels import PORT_CASES, all_interface_insets
 
 from scgsim.palace.mesh.attributes import lower_surface_group
-from scgsim.palace.mesh.insets import inset_requests
 from scgsim.palace.mesh.physical_groups import groups_from_sidecar, rows_of
 
 
@@ -70,7 +69,10 @@ def test_boundaries_ports_and_pec_follow_the_sidecar_rules(routed):
     port_groups = {p["group"] for p in sidecar["ports"]}
     assert not port_groups & set(boundaries)
     for name, record in boundaries.items():
-        assert (record["source"] == "domain_boundary") == name.startswith("EXT::")
+        group = sidecar["physical_groups"][name]
+        assert (record["source"] == "domain_boundary") == (
+            group["interface_type"] == "EXT"
+        )
         assert record["surface_epr"] == bool(record["rows"])
         assert record["interface_type"] not in {"PORT"}
     pec = groups["pec_surfaces"]
@@ -144,7 +146,7 @@ def _synthetic_group(sides: dict[str, tuple[str, str]]) -> tuple[dict, dict]:
     for position, row_type in enumerate(("MA", "MS")):
         face_sides = {f: s[position] for f, s in sides.items() if s[position]}
         if face_sides:
-            rows[f"{row_type}::e::sheet"] = {
+            rows[f"{row_type}::e__sheet"] = {
                 "face_sides": face_sides,
                 "shared_face_group": "e",
             }
@@ -158,14 +160,14 @@ def test_a_sheet_over_vacuum_and_dielectric_gives_ma_and_ms_on_one_attribute():
     )
     (part,) = lower_surface_group("e", record, rows, 5)
     assert part.attribute == 5
-    assert part.rows == (("MA::e::sheet", "above"), ("MS::e::sheet", "below"))
+    assert part.rows == (("MA::e__sheet", "above"), ("MS::e__sheet", "below"))
 
 
 def test_a_floating_sheet_with_vacuum_on_both_sides_has_an_ma_row_and_no_ms_row():
     """A sheet in vacuum: one attribute carrying only MA, integrated on both sides."""
     record, rows = _synthetic_group({"f1": ("both", ""), "f2": ("both", "")})
     (part,) = lower_surface_group("e", record, rows, 1)
-    assert part.rows == (("MA::e::sheet", "both"),)
+    assert part.rows == (("MA::e__sheet", "both"),)
 
 
 def test_a_sheet_over_vacuum_and_dielectric_in_different_places_splits_by_signature():
@@ -183,11 +185,11 @@ def test_a_sheet_over_vacuum_and_dielectric_in_different_places_splits_by_signat
     assert [p.name for p in parts] == ["e#1", "e#2", "e#3"]
     by_faces = {p.faces: p.rows for p in parts}
     assert by_faces[("f1", "f3")] == (
-        ("MA::e::sheet", "above"),
-        ("MS::e::sheet", "below"),
+        ("MA::e__sheet", "above"),
+        ("MS::e__sheet", "below"),
     )
-    assert by_faces[("f2",)] == (("MA::e::sheet", "below"), ("MS::e::sheet", "above"))
-    assert by_faces[("f4",)] == (("MA::e::sheet", "both"),)
+    assert by_faces[("f2",)] == (("MA::e__sheet", "below"), ("MS::e__sheet", "above"))
+    assert by_faces[("f4",)] == (("MA::e__sheet", "both"),)
     assert sorted(t for p in parts for t in p.tags) == [1, 2, 3, 4]
 
 
@@ -195,7 +197,7 @@ def test_a_group_row_that_covers_only_some_faces_leaves_the_others_unsigned():
     """A row listing some faces of its group puts the rest on an attribute with no row."""
     record, rows = _synthetic_group({"f1": ("above", ""), "f2": ("", "")})
     parts = lower_surface_group("e", record, rows, 1)
-    assert sorted(p.rows for p in parts) == [(), (("MA::e::sheet", "above"),)]
+    assert sorted(p.rows for p in parts) == [(), (("MA::e__sheet", "above"),)]
 
 
 def test_bands_become_separate_groups_with_family_margins(tmp_path):
@@ -226,57 +228,8 @@ def test_route_a_sheet_rows_share_the_attribute_of_their_group(tmp_path):
         effective, "A", tmp_path, all_interface_insets(effective, "A", sa_pair)
     )
     rows = rows_of(groups_from_sidecar(sidecar))
-    ma, ms = rows["MA::chip/left::sheet::band=1"], rows["MS::chip/left::sheet::band=1"]
+    ma, ms = rows["MA::chip/left__sheet::band=1"], rows["MS::chip/left__sheet::band=1"]
     assert set(ma["attribute_sides"]) == set(ms["attribute_sides"])
     assert set(ma["attribute_sides"].values()) == {"above"}
     assert set(ms["attribute_sides"].values()) == {"below"}
     assert ma["shared_face_group"] == ms["shared_face_group"] == "chip/left::band=1"
-
-
-def test_inset_requests_derive_the_supports_and_union_the_margins_per_support(tmp_path):
-    """Margins of different specs on one support merge; sidewalls and unbanded interfaces get none."""
-    effective = effective_input("B", tmp_path)
-    sidecar = sidecar_of(effective, "B", tmp_path)
-    requests = inset_requests(
-        surface_epr_specs(MA=[1.0, 2.0], MS=[0.5], SA=None), sidecar
-    )
-    by_support = {(r.support.entity_id, r.support.side): r.margins_um for r in requests}
-    assert by_support == {
-        ("ground_0000", "top"): (1.0, 2.0),
-        ("ground_0000", "bottom"): (0.5,),
-        ("pad", "top"): (1.0, 2.0),
-        ("pad", "bottom"): (0.5,),
-    }
-    assert len({r.request_id for r in requests}) == len(requests)
-
-
-def test_an_sa_spec_with_margins_requests_the_interface_at_its_level(tmp_path):
-    """SA margins band the solution interface, at the level the sidecar's SA face lies on."""
-    effective = effective_input("B", tmp_path)
-    sidecar = sidecar_of(effective, "B", tmp_path)
-    (request,) = inset_requests(surface_epr_specs(SA=[0.5]), sidecar)
-    assert request.margins_um == (0.5,)
-    assert {request.support.first_entity_id, request.support.second_entity_id} == {
-        "substrate",
-        "VACUUM_REGION",
-    }
-    assert request.support.z_um == 0.0
-
-
-def test_a_route_a_sheet_serves_both_specs_with_one_request(tmp_path):
-    """Route A has one sheet face per conductor for MA and MS: one request with both margin lists merged."""
-    effective = effective_input("A", tmp_path)
-    sidecar = sidecar_of(effective, "A", tmp_path)
-    requests = inset_requests(surface_epr_specs(MA=[0.5, 1.0], MS=[2.0]), sidecar)
-    assert {(r.support.entity_id, r.support.side) for r in requests} == {
-        ("chip/left", "sheet"),
-        ("chip/right", "sheet"),
-    }
-    assert all(r.margins_um == (0.5, 1.0, 2.0) for r in requests)
-
-
-def test_no_margins_request_no_insets(tmp_path):
-    """Specs without margins, or no specs, request nothing."""
-    sidecar = sidecar_of(effective_input("B", tmp_path), "B", tmp_path)
-    assert inset_requests(surface_epr_specs(MA=None, MS=None), sidecar) == ()
-    assert inset_requests({}, sidecar) == ()

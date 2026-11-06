@@ -1,21 +1,25 @@
 """Surface-EPR lowering: Palace ``Dielectric`` rows over the attributes of SGB's rows and bands.
 
-``inset_margins_um`` are geometry: SGB cuts them into the model as bands (``mesh()`` requests them from
-these specs), and a margin ``m_k`` is the union of the attributes of bands ``k`` to ``K`` of its support,
-listed as plain attributes.  Stock Palace integrates plain attributes; native Mask/Inset is neither written
-nor accepted.  Omit ``inset_margins_um`` for baseline rows only.
+``inset_margins_um`` and ``inset_margins_by_entity_um`` are geometry: SGB cuts them into the model as bands
+(``mesh()`` requests them from these specs), and a margin ``m_k`` is the union of the attributes of bands
+``k`` to ``K`` of every band family that serves the spec, listed as plain attributes.  The bands of a family
+come from the sidecar (``insets[*].bands``, or ``expansion.banded[*].bands`` of a type-level request), never
+from group names.  Stock Palace integrates plain attributes; native Mask/Inset is neither written nor
+accepted.  Omit both margin keys for baseline rows only.
 """
 
 from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from numbers import Real
 from typing import Any, cast
 
 from scgsim.semantics.epr import film_assumptions
 
+from ..mesh.insets import check_bandable_face_kinds
+from ..mesh.margins import margins_of
 from ..mesh.physical_groups import Groups, rows_of, same_length
 
 
@@ -60,6 +64,7 @@ def _normalize_interface_spec(
             "face_kinds",
             "required",
             "inset_margins_um",
+            "inset_margins_by_entity_um",
         }
     )
     if unknown:
@@ -110,6 +115,10 @@ def _normalize_interface_spec(
     if not isinstance(required, bool):
         raise TypeError(f"Surface EPR {interface_type} required must be a bool.")
     _set_inset_margins(interface_type, raw, resolved)
+    if "face_kinds" in resolved and (
+        "inset_margins_um" in resolved or "inset_margins_by_entity_um" in resolved
+    ):
+        check_bandable_face_kinds(interface_type, resolved["face_kinds"])
     return {
         **(
             {"thickness": float(thickness)}
@@ -154,35 +163,52 @@ def _resolve_film_material(
 def _set_inset_margins(
     interface_type: str, raw: Mapping[str, Any], resolved: dict[str, Any]
 ) -> None:
-    """Retain the ordered, strictly increasing positive margins SGB cuts into the model as bands."""
+    """Retain the margins SGB cuts into the model as bands: the spec's, and those of customised conductors."""
     if "inset_margins_um" in raw:
-        inset_margins_um = raw["inset_margins_um"]
-        if isinstance(inset_margins_um, (str, bytes)) or not isinstance(
-            inset_margins_um, (list, tuple)
-        ):
-            raise TypeError(
-                f"Surface EPR {interface_type} inset_margins_um must be an ordered non-empty sequence."
-            )
-        if not inset_margins_um:
+        resolved["inset_margins_um"] = _validated_margins(
+            raw["inset_margins_um"], f"Surface EPR {interface_type} inset_margins_um"
+        )
+    if "inset_margins_by_entity_um" in raw:
+        resolved["inset_margins_by_entity_um"] = _by_entity_margins(
+            interface_type, raw["inset_margins_by_entity_um"]
+        )
+
+
+def _by_entity_margins(interface_type: str, raw: Any) -> dict[str, list[float]]:
+    """Margins per customised conductor, checked like ``inset_margins_um``."""
+    label = f"Surface EPR {interface_type} inset_margins_by_entity_um"
+    if interface_type == "SA":
+        raise ValueError(
+            f"{label} customises conductors, and an SA interface lies between solution regions; "
+            "use inset_margins_um for SA."
+        )
+    if not isinstance(raw, Mapping) or not raw:
+        raise TypeError(f"{label} must be a non-empty mapping of entity id to margins.")
+    result: dict[str, list[float]] = {}
+    for entity, margins in sorted(raw.items(), key=lambda item: str(item[0])):
+        if not isinstance(entity, str) or not entity:
+            raise ValueError(f"{label} keys must be non-empty entity ids.")
+        result[entity] = _validated_margins(margins, f"{label}[{entity!r}]")
+    return result
+
+
+def _validated_margins(margins: Any, label: str) -> list[float]:
+    """The ordered, strictly increasing positive margins of one sequence."""
+    if isinstance(margins, (str, bytes)) or not isinstance(margins, (list, tuple)):
+        raise TypeError(f"{label} must be an ordered non-empty sequence.")
+    if not margins:
+        raise ValueError(f"{label} must be non-empty.")
+    normalized = []
+    for margin in margins:
+        if not _positive(margin):
             raise ValueError(
-                f"Surface EPR {interface_type} inset_margins_um must be non-empty."
+                f"{label} values must be finite positive reals "
+                "(the whole surface is the baseline row)."
             )
-        normalized_margins = []
-        for margin in inset_margins_um:
-            if not _positive(margin):
-                raise ValueError(
-                    f"Surface EPR {interface_type} inset_margins_um values must be finite positive reals "
-                    "(the whole surface is the baseline row)."
-                )
-            normalized_margins.append(float(margin))
-        if any(
-            b <= a
-            for a, b in zip(normalized_margins, normalized_margins[1:], strict=False)
-        ):
-            raise ValueError(
-                f"Surface EPR {interface_type} inset_margins_um must be strictly increasing."
-            )
-        resolved["inset_margins_um"] = normalized_margins
+        normalized.append(float(margin))
+    if any(b <= a for a, b in zip(normalized, normalized[1:], strict=False)):
+        raise ValueError(f"{label} must be strictly increasing.")
+    return normalized
 
 
 def build_surface_epr_postprocessing(
@@ -194,8 +220,9 @@ def build_surface_epr_postprocessing(
     """Emit Palace ``Dielectric`` rows and their index entries (index map schema 3) from the Surface-EPR rows of ``groups``.
 
     For each spec (interface type) and each surface unit of that type -- an unbanded row, or all bands of
-    one support -- one baseline row covers every attribute of the unit.  For each inset margin of the spec,
-    a further row covers the attributes of the unit's bands from the margin's band to the last.
+    one band family -- one baseline row covers every attribute of the unit.  For each inset margin of the
+    unit (the spec's, or its conductor's own), a further row covers the attributes of the unit's bands from
+    the margin's band to the last.
     """
     if not _positive(model_l0_m):
         raise ValueError("Model.L0 must be a finite positive length in metres.")
@@ -224,9 +251,7 @@ def build_surface_epr_postprocessing(
             index_map.append(entry)
             margin_requests.extend(
                 _MarginRequest(index, unit, margin_index, margin)
-                for margin_index, margin in enumerate(
-                    preset.get("inset_margins_um", ())
-                )
+                for margin_index, margin in enumerate(unit.margins_um)
             )
 
     for request in margin_requests:
@@ -254,11 +279,17 @@ def build_surface_epr_postprocessing(
 
 @dataclass(frozen=True)
 class _Unit:
-    """The rows of one interface type that one baseline row covers: an unbanded row, or all bands of a support."""
+    """The rows of one interface type that one baseline row covers: an unbanded row, or all bands of a family.
+
+    ``family`` is the sidecar record of the band family (``margins_um`` and ``bands``, band index to the
+    groups that carry it) and ``margins_um`` the margins this unit is asked for; an unbanded row has neither.
+    """
 
     name: str
     interface_type: str
     rows: tuple[Mapping[str, Any], ...]
+    family: Mapping[str, Any] | None = None
+    margins_um: tuple[float, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -272,12 +303,9 @@ class _MarginRequest:
 
     def first_band(self) -> int | None:
         """Index of the first band at least ``margin_um`` from the gap edge, or None for an unbanded unit."""
-        margins = next(
-            (row["margins_um"] for row in self.unit.rows if row["band"] is not None),
-            None,
-        )
-        if margins is None:
+        if self.unit.family is None:
             return None
+        margins = self.unit.family["margins_um"]
         for position, margin in enumerate(margins):
             if same_length(margin, self.margin_um):
                 return position + 1
@@ -287,15 +315,17 @@ class _MarginRequest:
         )
 
     def selected_rows(self) -> tuple[Mapping[str, Any], ...]:
-        """The rows of the bands from the margin's band to the last."""
+        """The rows on the groups of the family's bands from the margin's band to the last."""
         first = self.first_band()
-        if first is None:
+        if first is None or self.unit.family is None:
             return ()
-        return tuple(
-            row
-            for row in self.unit.rows
-            if row["band"] is not None and row["band"] >= first
-        )
+        groups = {
+            group
+            for band, band_groups in self.unit.family["bands"].items()
+            if int(band) >= first
+            for group in band_groups
+        }
+        return tuple(row for row in self.unit.rows if row["group"] in groups)
 
     def description(self, selected: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         """How the row was selected, for the index map."""
@@ -312,28 +342,68 @@ def _units(
     interface_type: str,
     preset: Mapping[str, Any],
 ) -> list[_Unit]:
-    """The surface units of one interface type, in the established sorted order."""
+    """The surface units of one interface type, in sorted row order.
+
+    A row with no band is a unit of its own (a sidewall, or a face SGB did not band).  The banded rows of one
+    band family are one unit: SGB gives each face one family, whose bands are listed in the sidecar.
+    """
     face_filter = preset.get("face_kinds")
-    members: dict[str, list[Mapping[str, Any]]] = {}
+    singles: list[_Unit] = []
+    by_family: dict[str, list[Mapping[str, Any]]] = {}
     for row_id, row in sorted(rows.items()):
         if row["interface_type"] != interface_type:
             continue
         if face_filter is not None and row["face_kind"] not in face_filter:
             continue
-        members.setdefault(_unit_name(row_id, row), []).append({**row, "row": row_id})
+        if row["band"] is None:
+            singles.append(_Unit(row_id, interface_type, ({**row, "row": row_id},)))
+        else:
+            by_family.setdefault(row["family"], []).append({**row, "row": row_id})
+    banded = [
+        _family_unit(interface_type, preset, sorted(members, key=_band_order))
+        for members in by_family.values()
+    ]
+    return sorted(
+        [*_unbanded_names_apart(singles, banded), *banded], key=lambda unit: unit.name
+    )
+
+
+def _unbanded_names_apart(singles: list[_Unit], banded: list[_Unit]) -> list[_Unit]:
+    """Rename an unbanded unit that shares its label with a band family.
+
+    The solution interface of one dielectric-vacuum pair lies at several heights, and only some of them
+    can be banded (the substrate underside has no gap edge).  Entry names must tell them apart.
+    """
+    taken = {unit.name for unit in banded}
     return [
-        _Unit(name, interface_type, tuple(sorted(items, key=_band_order)))
-        for name, items in members.items()
+        replace(unit, name=f"{unit.name}__unbanded") if unit.name in taken else unit
+        for unit in singles
     ]
 
 
-def _unit_name(row_id: str, row: Mapping[str, Any]) -> str:
-    """The row id without its band suffix: all bands of one support share a unit."""
-    return row_id if row["band"] is None else row_id.rsplit("::band=", 1)[0]
+def _family_unit(
+    interface_type: str, preset: Mapping[str, Any], members: Sequence[Mapping[str, Any]]
+) -> _Unit:
+    first = members[0]
+    return _Unit(
+        _unit_label(first),
+        interface_type,
+        tuple(members),
+        family={"margins_um": first["margins_um"], "bands": first["family_bands"]},
+        margins_um=tuple(margins_of(preset, first["entities"])),
+    )
+
+
+def _unit_label(first_band_row: Mapping[str, Any]) -> str:
+    """A label for the index: the row id of a family's first band without its band suffix.
+
+    Only a label.  Which rows a margin selects comes from the sidecar's bands, never from names.
+    """
+    return first_band_row["row"].removesuffix(f"::band={first_band_row['band']}")
 
 
 def _band_order(row: Mapping[str, Any]) -> tuple[int, str]:
-    return (-1 if row["band"] is None else row["band"], row["row"])
+    return (row["band"], row["row"])
 
 
 def _unit_attributes(rows: Sequence[Mapping[str, Any]]) -> list[int]:

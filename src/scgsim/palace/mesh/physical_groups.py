@@ -9,7 +9,9 @@ mapping from a name to a JSON-serialisable record:
     the ``dim == 2`` groups except ports: conductor surfaces and ``SA`` / ``MM`` / ``SS`` / ``AA``
     interfaces (``source == "volume_interface"``) and the ``EXT`` outer boundary
     (``source == "domain_boundary"``).  ``surface_epr`` is true when the group carries a Surface-EPR row, and
-    ``rows`` holds those rows;
+    ``rows`` holds those rows.  A row on a band names its band family and carries the family's ``margins_um``
+    and ``family_bands`` (band index to groups), read from the sidecar's ``insets`` -- from ``bands`` for a
+    concrete request, from ``expansion.banded[*].bands`` for a type-level one;
 ``pec_surfaces``
     the groups of interface type ``MA``, ``MS`` or ``SHEET`` that have a Net: the conductor surfaces;
 ``port_surfaces``
@@ -112,21 +114,55 @@ def _surface_groups(
 
 
 def _rows_by_group(sidecar: Mapping[str, Any]) -> defaultdict[str, dict[str, Any]]:
-    """The Surface-EPR rows of each group, each with the facts a consumer needs to select its attributes."""
-    margins = {inset["request_id"]: inset["margins_um"] for inset in sidecar["insets"]}
+    """The Surface-EPR rows of each group, each with the facts a consumer needs to select its attributes.
+
+    A banded row names its band family and carries the family's margins and bands (band index to the groups
+    that carry it), all read from the sidecar's ``insets``.
+    """
+    families = band_families(sidecar)
     physical = sidecar["physical_groups"]
     by_group: defaultdict[str, dict[str, Any]] = defaultdict(dict)
     for row_id, row in sidecar["surface_epr_rows"].items():
         group = physical[row["group"]]
         family = group["band"]["family"] if group["band"] else None
-        by_group[row["group"]][row_id] = {
-            **row,
-            "net": group["net"],
-            "face_kind": group["face_kind"],
-            "family": family,
-            "margins_um": None if family is None else list(margins[family]),
-        }
+        record = {**row, "net": group["net"], "face_kind": group["face_kind"]}
+        if family is None:
+            record.update(family=None, margins_um=None, family_bands=None)
+        else:
+            if family not in families:
+                raise ValueError(
+                    f"group {row['group']!r} is a band of {family!r}, which no sidecar inset lists."
+                )
+            record.update(
+                family=family,
+                margins_um=list(families[family]["margins_um"]),
+                family_bands={
+                    index: list(names)
+                    for index, names in families[family]["bands"].items()
+                },
+            )
+        by_group[row["group"]][row_id] = record
     return by_group
+
+
+def band_families(sidecar: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    """Every band family of the sidecar by family id, each with its ``margins_um`` and ``bands``.
+
+    A concrete inset request is its own family.  A type-level request (``expansion``) lists the families it
+    was expanded into under ``expansion.banded``; a family there with ``bands == {}`` has no band left to
+    integrate (a lumped port covers the whole face), and the faces under ``expansion.skipped`` have no
+    family at all.
+    """
+    families: dict[str, Mapping[str, Any]] = {}
+    for inset in sidecar["insets"]:
+        if "expansion" in inset:
+            families.update(
+                (family["request_id"], family)
+                for family in inset["expansion"]["banded"]
+            )
+        else:
+            families[inset["request_id"]] = inset
+    return families
 
 
 def _surface_record(

@@ -4,7 +4,8 @@ MA, MS and SA denote metal-air, metal-substrate and substrate-air interfaces.  A
 schema 3 is one Palace ``Dielectric`` row.  It lists the sidecar rows it integrates (``metadata.rows``, each
 with its group, band, side, entities, Net and attributes) and the film it applies (``epr_spec``).  A
 whole-surface entry has ``baseline_index == index``.  A margin entry carries ``inset`` and is the union of
-the bands of a whole-surface entry from the margin's band inwards.  Native Mask/Inset rows do not exist.
+the bands of a whole-surface entry from the margin's band inwards; its margins are those of the spec, or of
+the customised conductor the surface belongs to (``inset_margins_by_entity_um``).  Native Mask/Inset rows do not exist.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
+from scgsim.palace.mesh.margins import margins_of
 from scgsim.palace.results.artifacts import (
     expect_list,
     expect_mapping,
@@ -173,12 +175,23 @@ def _validate_film(spec: dict[str, Any]) -> None:
         raise ValueError("surface EPR SI thickness conflicts with recorded Model.L0")
     margins = spec.get("inset_margins_um")
     if margins is not None:
-        values = [
-            _positive_number(margin, "surface EPR inset margin")
-            for margin in expect_list(margins, "surface EPR inset margins")
-        ]
-        if any(b <= a for a, b in zip(values, values[1:], strict=False)):
-            raise ValueError("surface EPR inset margins must be strictly increasing.")
+        _validate_margin_sequence(margins)
+    by_entity = spec.get("inset_margins_by_entity_um")
+    if by_entity is not None:
+        for entity, entity_margins in expect_mapping(
+            by_entity, "surface EPR inset margins by entity"
+        ).items():
+            _non_empty_text(entity, "surface EPR customised entity")
+            _validate_margin_sequence(entity_margins)
+
+
+def _validate_margin_sequence(margins: Any) -> None:
+    values = [
+        _positive_number(margin, "surface EPR inset margin")
+        for margin in expect_list(margins, "surface EPR inset margins")
+    ]
+    if any(b <= a for a, b in zip(values, values[1:], strict=False)):
+        raise ValueError("surface EPR inset margins must be strictly increasing.")
 
 
 def _validate_surface_inventory(wholes: list[dict[str, Any]]) -> None:
@@ -222,7 +235,10 @@ def _validate_margins(
             or min(bands) < first_band
         ):
             raise ValueError("surface EPR inset disagrees with its band rows.")
-        configured = baseline["epr_spec"].get("inset_margins_um", [])
+        configured = margins_of(
+            baseline["epr_spec"],
+            {entity for row in entry_rows(baseline) for entity in row["entities"]},
+        )
         if margin_index >= len(configured) or configured[margin_index] != margin_um:
             raise ValueError(
                 "surface EPR margin disagrees with the configured margin sequence."

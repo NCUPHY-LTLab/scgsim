@@ -144,7 +144,7 @@ def test_a_component_meshes_to_a_palace_mesh_and_a_config(route, route_a, route_
     result = {"A": route_a, "B": route_b}[route]
     manifest, mesh = check_run(result, route)
     names = set(mesh.physical_names.values())
-    assert any("::band=" in name for name in names)
+    assert banded_groups_of(result) and banded_groups_of(result) <= names
     config = config_of(result, route, SPECS)
     assert_config_binds_the_mesh(config.config, mesh)
     assert manifest["route"] == route
@@ -152,6 +152,69 @@ def test_a_component_meshes_to_a_palace_mesh_and_a_config(route, route_a, route_
     # The unbanded build used to find the supports is gone, and only the final model is on disk.
     assert manifest["insets"]
     assert_readers_accept_the_run(result, route, manifest, config)
+
+
+def sidecar_of_run(result):
+    """The decoded sidecar of a mesh run."""
+    return json.loads(result.sidecar_path.read_text(encoding="utf-8"))
+
+
+def banded_groups_of(result):
+    """The surface groups SGB cut into bands, read from the sidecar's ``band`` field."""
+    return {
+        name
+        for name, group in sidecar_of_run(result)["physical_groups"].items()
+        if group.get("band") is not None
+    }
+
+
+def band_families(sidecar):
+    """Every band family of a sidecar once: concrete requests, and the families of type-level expansions.
+
+    A Route A sheet serves an MA and an MS request, so both expansions list the same family.
+    """
+    families = {}
+    for inset in sidecar["insets"]:
+        for family in inset["expansion"]["banded"] if "expansion" in inset else [inset]:
+            families[family["request_id"]] = family
+    return list(families.values())
+
+
+def expected_margin_attributes(result, entry):
+    """The attributes of bands first_band..K of the family that serves a margin entry, from the sidecar alone."""
+    first_band = entry["inset"]["first_band"]
+    group = entry["metadata"]["rows"][0]["group"]
+    (family,) = (
+        f
+        for f in band_families(sidecar_of_run(result))
+        if any(group in names for names in f["bands"].values())
+    )
+    wanted = [
+        name
+        for band, names in family["bands"].items()
+        if int(band) >= first_band
+        for name in names
+    ]
+    return sorted(
+        a
+        for name in wanted
+        for a in result.groups["boundary_surfaces"][name]["attributes"]
+    )
+
+
+def assert_margin_rows_select_the_bands_of_their_families(result, config):
+    """Each margin ``Dielectric`` row lists the attributes of the family's bands from its margin inwards."""
+    rows = {
+        row["Index"]: row
+        for row in config.config["Boundaries"]["Postprocessing"]["Dielectric"]
+    }
+    margin_entries = [e for e in config.surface_epr_index_map if "inset" in e]
+    assert margin_entries
+    for entry in margin_entries:
+        wanted = expected_margin_attributes(result, entry)
+        assert rows[entry["index"]]["Attributes"] == wanted
+        assert entry["attributes"] == wanted
+    return {e["entry_name"]: e["inset"]["margin_um"] for e in margin_entries}
 
 
 def assert_readers_accept_the_run(result, route, manifest, config):
@@ -191,21 +254,35 @@ def assert_readers_accept_the_run(result, route, manifest, config):
     assert summary["dof_estimate"]["status"] == "available"
 
 
-def test_route_b_gets_an_ma_ms_and_sa_band_family_per_support(route_b):
-    """The bands requested from the specs: MA tops, MS bottoms and the SA interface."""
-    families = {
-        i["request_id"] for i in json.loads(route_b.sidecar_path.read_text())["insets"]
-    }
+def test_route_b_sends_one_request_per_spec_and_gets_a_band_family_per_support(
+    route_b,
+):
+    """The bands requested from the specs: one type-level request each, expanded to MA tops, MS bottoms and the SA gap."""
+    insets = sidecar_of_run(route_b)["insets"]
+    assert {i["request_id"] for i in insets} == {"epr_MA", "epr_MS", "epr_SA"}
+    families = band_families(sidecar_of_run(route_b))
     assert len(families) == 5
-    assert any("VACUUM_REGION" in f for f in families)
+    assert any("VACUUM_REGION" in f["request_id"] for f in families)
+
+
+def test_the_default_path_margin_rows_select_the_bands_of_their_families(
+    route_a, route_b
+):
+    """Routes A and B: the config's margin rows list exactly the band attributes the sidecar's families give."""
+    for route, result in (("A", route_a), ("B", route_b)):
+        config = config_of(result, route, SPECS)
+        margins = assert_margin_rows_select_the_bands_of_their_families(result, config)
+        assert set(margins.values()) == {0.5, 1.0}
 
 
 def test_route_a_attributes_split_where_the_row_signature_changes(route_a):
     """Route A sheet bands carry the MA row (above) and the MS row (below) on one attribute each."""
     left_bands = [
         record
-        for name, record in route_a.groups["boundary_surfaces"].items()
-        if name.startswith("chip/left::band=")
+        for record in route_a.groups["boundary_surfaces"].values()
+        if record["interface_type"] == "SHEET"
+        and record["entities"] == ["chip/left"]
+        and record["band"] is not None
     ]
     assert len(left_bands) == 3
     for record in left_bands:
@@ -372,10 +449,7 @@ def test_the_unbanded_build_is_skipped_without_margins(tmp_path):
         effective_input("B", tmp_path), "B", tmp_path, specs=surface_epr_specs(MA=None)
     )
     assert json.loads(result.sidecar_path.read_text())["insets"] == []
-    assert not any(
-        "::band=" in name
-        for name in read_msh22(result.mesh_path).physical_names.values()
-    )
+    assert not banded_groups_of(result)
 
 
 def test_a_mesh_with_the_wrong_sidecar_is_refused(route_b, tmp_path):
@@ -394,3 +468,42 @@ def test_a_mesh_with_the_wrong_sidecar_is_refused(route_b, tmp_path):
         lower_mesh_in_current_process(
             source_mesh=route_b.mesh_path, mesh_path=tmp_path / "out.msh", groups=groups
         )
+
+
+CUSTOM_SPECS = {
+    # route -> (conductor with its own margins, its margins, the spec's own margins)
+    "A": ("chip/left", [0.25], [0.5, 1.0]),
+    "B": ("pad", [0.25, 0.5], [0.5, 1.0]),
+}
+
+
+@pytest.mark.parametrize("route", ["A", "B"])
+def test_the_custom_path_bands_one_conductor_with_its_own_margins(route, tmp_path):
+    """One conductor customised: two builds, concrete request for it, type-level request for the rest."""
+    entity, own, rest = CUSTOM_SPECS[route]
+    specs = surface_epr_specs(MA=rest, MS=[0.5], SA=[0.5])
+    specs["MA"]["inset_margins_by_entity_um"] = {entity: own}
+    result = mesh_run(effective_input(route, tmp_path), route, tmp_path, specs=specs)
+    check_run(result, route)
+    sidecar = sidecar_of_run(result)
+    concrete = [i for i in sidecar["insets"] if "expansion" not in i]
+    assert [i["support"]["entity"] for i in concrete] == [entity]
+    (type_ma,) = (i for i in sidecar["insets"] if i["request_id"] == "epr_MA")
+    assert type_ma["support"]["exclude_entity_ids"] == [entity]
+    assert entity not in {
+        f["support"]["entity"] for f in type_ma["expansion"]["banded"]
+    }
+
+    config = config_of(result, route, specs)
+    margins = assert_margin_rows_select_the_bands_of_their_families(result, config)
+    ma_margins = {
+        name.split("__inset_")[0]: [] for name in margins if name.startswith("MA::")
+    }
+    for name, margin in sorted(margins.items()):
+        if name.startswith("MA::"):
+            ma_margins[name.split("__inset_")[0]].append(margin)
+    own_rows = [m for n, m in ma_margins.items() if entity in n]
+    other_rows = [m for n, m in ma_margins.items() if entity not in n]
+    assert own_rows == [own]
+    assert other_rows and all(m == rest for m in other_rows)
+    assert_config_binds_the_mesh(config.config, read_msh22(result.mesh_path))

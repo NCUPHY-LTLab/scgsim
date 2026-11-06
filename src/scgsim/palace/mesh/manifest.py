@@ -55,17 +55,25 @@ def build_mesh_manifest(  # noqa: PLR0913 -- the manifest records each independe
         },
         "arrangement": dict(sidecar["arrangement"]),
         "curved_wall_faces": len(sidecar["curved_wall_faces"]),
-        "insets": [
-            {
-                "request_id": inset["request_id"],
-                "support": inset["support"],
-                "margins_um": inset["margins_um"],
-            }
-            for inset in sidecar["insets"]
-        ],
+        "insets": [_inset_record(inset) for inset in sidecar["insets"]],
         "meshing": dict(meshing),
         "groups": attribute_entries(groups),
     }
+
+
+def _inset_record(inset: Mapping[str, Any]) -> dict[str, Any]:
+    """One inset request as given; a type-level request also lists the families it banded and the faces it skipped."""
+    record = {
+        "request_id": inset["request_id"],
+        "support": inset["support"],
+        "margins_um": inset["margins_um"],
+    }
+    if "expansion" in inset:
+        record["banded"] = [
+            family["request_id"] for family in inset["expansion"]["banded"]
+        ]
+        record["skipped"] = inset["expansion"]["skipped"]
+    return record
 
 
 def attribute_entries(groups: Groups) -> list[dict[str, Any]]:

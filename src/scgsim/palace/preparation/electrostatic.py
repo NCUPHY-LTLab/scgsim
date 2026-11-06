@@ -232,6 +232,17 @@ class ElectrostaticSim:
 
         Surface EPR is geometry: its inset margins become bands that ``mesh()`` cuts into the model, so
         this runs before ``mesh()``.  Calling it again invalidates the mesh, config and handoff.
+
+        Each spec (``"MA"``, ``"MS"``, ``"SA"``) may carry:
+
+        * ``inset_margins_um``: strictly increasing positive margins in micrometres.  ``mesh()`` asks SGB
+          for bands at these margins on every face of the type, in one geometry build.
+        * ``face_kinds``: restrict the spec to some of ``"sheet"``, ``"top"``, ``"bottom"`` and
+          ``"interface"``.  With margins, a kind SGB cannot band (``"sidewall"``) raises ``ValueError``.
+        * ``inset_margins_by_entity_um`` (``MA`` and ``MS``): ``{entity_id: [margins]}`` gives chosen
+          conductors their own margins; the rest of the type keeps ``inset_margins_um``, if given.  This
+          builds the geometry twice (once to find the conductors' faces), and a named entity with no face
+          of the type raises ``ValueError`` from ``mesh()``.
         """
         route = (
             representation.strip().upper() if isinstance(representation, str) else ""
