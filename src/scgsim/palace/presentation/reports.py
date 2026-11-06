@@ -21,7 +21,11 @@ from scgsim.palace.presentation.plotting import (
 from scgsim.palace.results.amr_analysis import analyze_amr
 from scgsim.palace.results.amr_models import PalaceAmrAnalysis
 from scgsim.palace.results.artifacts import read_json
-from scgsim.palace.results.index_contract import validate_index_entries
+from scgsim.palace.results.index_contract import (
+    require_index_map_schema,
+    require_manifest_schema,
+    validate_index_entries,
+)
 from scgsim.palace.results.inspection import (
     failure_diagnosis,
     result_selection,
@@ -35,14 +39,11 @@ from scgsim.palace.results.report_models import (
     PalaceResultSelection,
     PassCostRecord,
 )
-from scgsim.palace.results.snapshots import (
-    collect_amr_passes,
-    declares_surface_masks,
-)
-from scgsim.palace.results.surface_contract import validate_surface_mask_config
+from scgsim.palace.results.snapshots import collect_amr_passes
+from scgsim.palace.results.surface_contract import validate_surface_epr_config
 from scgsim.palace.results.surface_readers import (
     read_surface_bindings,
-    read_surface_mask_bindings,
+    read_surface_margin_bindings,
 )
 
 from .trust import PalaceTrustReport as PalaceTrustReport
@@ -231,6 +232,8 @@ def _build_trust_report(
         raise FileNotFoundError(f"required artifact missing: {handoff_path}")
     handoff = read_json(handoff_path)
     mesh_manifest = read_optional_json(root / "metadata" / "mesh_manifest.json")
+    if mesh_manifest is not None:
+        require_manifest_schema(mesh_manifest)
     mesh_thin_film = (
         mesh_manifest.get("route_a_thin_film")
         if isinstance(mesh_manifest, dict)
@@ -255,20 +258,18 @@ def _build_trust_report(
         if resolved is not None
         else read_optional_json(root / "metadata" / "palace_index_map.json")
     )
-    if declares_surface_masks(config, index_map):
-        if not isinstance(config, dict) or not isinstance(index_map, dict):
-            raise ValueError(
-                "declared surface masks require config and index evidence."
-            )
+    if index_map is not None:
+        require_index_map_schema(index_map)
         validate_index_entries(index_map)
-        validate_surface_mask_config(config, index_map)
+        if config is not None:
+            validate_surface_epr_config(config, index_map)
     surface_bindings = read_surface_bindings(index_map)
-    surface_mask_bindings = read_surface_mask_bindings(index_map)
+    surface_margin_bindings = read_surface_margin_bindings(index_map)
     collected = collect_amr_passes(
         root,
         problem,
         surface_bindings,
-        surface_mask_bindings,
+        surface_margin_bindings,
         failed_attempt=receipt is not None and receipt.get("status") == "failed",
     )
     passes = collected.passes

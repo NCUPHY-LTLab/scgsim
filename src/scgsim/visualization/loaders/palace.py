@@ -11,6 +11,13 @@ from ..preview import GeometryPreview
 from ..scene import FIXED_COLORS, SceneMode, ScenePart, color_for_identity
 from .common import file_sha256, read_json_record
 
+# These numbers belong to the Palace contract (``palace.mesh.manifest`` and ``palace.results.index_contract``).
+# The loader cannot import Palace: AEDT's runtime source closure reaches this module through
+# ``scgsim.visualization``, and AEDT must not ship Palace or SGB.  A test pins them equal.
+MANIFEST_SCHEMA_VERSION = 2
+INDEX_MAP_SCHEMA_VERSION = 3
+_DIELECTRIC_SECTION = "Boundaries.Postprocessing.Dielectric"
+
 
 def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
     """Bind one Palace mesh to its exact semantic/config metadata."""
@@ -35,6 +42,8 @@ def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
 
     mesh_manifest = read_json_record(paths["metadata/mesh_manifest.json"])
     index_map = read_json_record(paths["metadata/palace_index_map.json"])
+    _require_schema(mesh_manifest, "mesh manifest", MANIFEST_SCHEMA_VERSION)
+    _require_schema(index_map, "palace index map", INDEX_MAP_SCHEMA_VERSION)
     config = read_json_record(paths["config.json"])
     mesh = meshio.read(paths["palace.msh"])
     grid = _high_order_grid(mesh, mesh_manifest, pv)
@@ -65,6 +74,16 @@ def inspect_palace_geometry(run_dir: str | Path) -> GeometryPreview:
             "mesh": SceneMode(tuple(mesh_parts)),
         },
     )
+
+
+def _require_schema(record: Mapping[str, Any], name: str, expected: int) -> None:
+    """Run folders of older schemas are not read; the message names the recorded one."""
+    recorded = record.get("schema_version")
+    if type(recorded) is not int or recorded != expected:
+        raise ValueError(
+            f"{name} schema_version {recorded!r} is not readable: only schema_version "
+            f"{expected} is read, and run folders of older schemas are not."
+        )
 
 
 @dataclass(frozen=True)
@@ -146,16 +165,19 @@ def _bind_mesh_selection(
     physical_array = np.asarray(physical)
     cell_types_array = np.asarray(cell_types)
 
-    grouped_records: dict[tuple[int, int], list[Mapping[str, Any]]] = {}
+    # The manifest lists one entry per solver attribute, each naming its primary SGB group.
+    records: dict[tuple[int, int], Mapping[str, Any]] = {}
     for record in mesh_manifest.get("groups", ()):
         for attribute in record["attributes"]:
             key = (int(record["dimension"]), int(attribute))
-            grouped_records.setdefault(key, []).append(record)
+            if key in records:
+                raise ValueError(f"Palace mesh manifest lists attribute {key!r} twice")
+            records[key] = record
     actual = {
         (int(dim), int(attribute))
         for dim, attribute in zip(dimensions, physical, strict=True)
     }
-    if actual != set(grouped_records):
+    if actual != set(records):
         raise ValueError("Palace mesh physical tags do not match mesh manifest")
     field_names: dict[tuple[int, int], list[str]] = {}
     for name, value in mesh.field_data.items():
@@ -163,13 +185,6 @@ def _bind_mesh_selection(
         field_names.setdefault(key, []).append(str(name))
     if actual != set(field_names):
         raise ValueError("Palace mesh field names do not cover every physical tag")
-    records = {
-        key: next(
-            (item for item in items if item.get("solver_use") == "solver_active"),
-            items[0],
-        )
-        for key, items in grouped_records.items()
-    }
 
     return _MeshSelection(
         grid,
@@ -202,15 +217,8 @@ def _palace_materials(
         raise ValueError("Palace volume groups and config materials do not match")
     for attribute in sorted(assignments):
         record = records[(3, attribute)]
-        physical = record.get("physical_attribute", {})
-        if not isinstance(physical, Mapping):
-            raise TypeError("Palace physical material identity must be a mapping")
-        kinds = tuple(physical.get("material_kinds", ()))
-        ids = tuple(physical.get("material_ids", ()))
-        if len(kinds) != 1 or len(ids) != 1:
-            raise ValueError("Palace volume requires one exact material identity")
-        material_id = str(ids[0])
-        kind = str(kinds[0])
+        material_id = str(record["material"])
+        kind = str(record["kind"])
         dataset = cells(3, attribute)
         parts.append(
             ScenePart(
@@ -320,7 +328,7 @@ def _palace_surface_epr(
 ) -> list[ScenePart]:
     entries: dict[int, Mapping[str, Any]] = {}
     for item in index_map.get("entries", ()):
-        if item.get("section") != "Boundaries.Postprocessing.Dielectric":
+        if item.get("section") != _DIELECTRIC_SECTION:
             continue
         index = int(item["index"])
         if index in entries:
@@ -349,15 +357,9 @@ def _palace_surface_epr(
         if (2, attribute) not in records:
             raise ValueError(f"Surface-EPR attribute {attribute} is absent from mesh")
         kinds = {
-            str(
-                item.get("interface_type")
-                or (
-                    item.get("metadata", {}).get("interface_type")
-                    if isinstance(item.get("metadata"), Mapping)
-                    else ""
-                )
-            )
+            row["interface_type"]
             for item in mappings
+            for row in item["metadata"]["rows"]
         }
         role = (
             "MS_MA"
@@ -368,20 +370,9 @@ def _palace_surface_epr(
         )
         if not role:
             raise ValueError(f"unsupported Surface-EPR mapping: {sorted(kinds)!r}")
+        # A margin row only re-selects attributes of its whole surface, which names them.
         labels = sorted(
-            {
-                str(
-                    item.get("surface_id")
-                    or (
-                        item.get("metadata", {}).get("surface_id")
-                        if isinstance(item.get("metadata"), Mapping)
-                        else None
-                    )
-                    or item.get("entry_name")
-                    or item["index"]
-                )
-                for item in mappings
-            }
+            {str(item["entry_name"]) for item in mappings if "inset" not in item}
         )
         dataset = cells(2, attribute)
         parts.append(

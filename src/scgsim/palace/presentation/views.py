@@ -14,26 +14,24 @@ from scgsim.palace.presentation.plotting import (
 )
 from scgsim.palace.presentation.surface_figures import (
     SURFACE_TYPES,
-    latest_mask_snapshot,
+    latest_margin_snapshot,
     series_label,
     surface_loss_html,
-    surface_mask_html,
-    surface_mask_participation_figure,
+    surface_margin_html,
+    surface_margin_participation_figure,
     surface_ranking_figure,
 )
 from scgsim.palace.results.amr_models import PalaceAmrAnalysis
 from scgsim.palace.results.observations import read_optional_json
 from scgsim.palace.results.report_models import (
     SurfaceEprSeriesSnapshot,
-    SurfaceMaskEprSeriesSnapshot,
+    SurfaceMarginEprSeriesSnapshot,
 )
 from scgsim.palace.results.snapshots import (
-    surface_mask_snapshots,
+    surface_margin_snapshots,
     surface_snapshots,
 )
-from scgsim.palace.results.surface_readers import (
-    read_surface_mask_bindings,
-)
+from scgsim.palace.results.surface_readers import read_surface_margin_bindings
 
 
 @dataclass(frozen=True)
@@ -93,21 +91,21 @@ class PhysicsQuantitiesReport:
 
     @property
     def snapshots(self) -> tuple[SurfaceEprSeriesSnapshot, ...]:
-        """Expose detached baseline surface series in their native pass and mode order."""
+        """Expose detached whole-surface series in their native pass and mode order."""
         return surface_snapshots(self.trust.passes)
 
     @property
-    def masked_snapshots(self) -> tuple[SurfaceMaskEprSeriesSnapshot, ...]:
-        """Expose native Inset series separately from the unmasked baseline surfaces."""
-        return surface_mask_snapshots(self.trust.passes)
+    def margin_snapshots(self) -> tuple[SurfaceMarginEprSeriesSnapshot, ...]:
+        """Expose margin-row series separately from the whole-surface rows."""
+        return surface_margin_snapshots(self.trust.passes)
 
     @property
-    def masks_configured(self) -> bool:
-        """Check the current run index for explicit native Inset bindings."""
+    def margins_configured(self) -> bool:
+        """Check the run's index map for margin rows."""
         index_map = read_optional_json(
             self.trust.run_dir / "metadata" / "palace_index_map.json"
         )
-        return bool(read_surface_mask_bindings(index_map))
+        return bool(read_surface_margin_bindings(index_map))
 
     def _ipython_display_(self) -> None:
         from IPython.display import HTML, display  # noqa: PLC0415 -- IPython is optional; detached result reading needs no notebook runtime.
@@ -136,28 +134,28 @@ class PhysicsQuantitiesReport:
             if ranking is not None:
                 show_figure(ranking)
             display(HTML(surface_loss_html(latest, self.trust.problem)))
-            mask_latest = latest_mask_snapshot(
-                self.masked_snapshots,
+            margin_latest = latest_margin_snapshot(
+                self.margin_snapshots,
                 pass_index=latest.pass_index,
                 source=latest.source,
                 series_index=latest.series_index,
             )
-            if mask_latest is not None:
+            if margin_latest is not None:
                 for interface_type in SURFACE_TYPES:
-                    figure = surface_mask_participation_figure(
-                        mask_latest,
+                    figure = surface_margin_participation_figure(
+                        margin_latest,
                         latest,
                         interface_type,
                         self.trust.theme,
                     )
                     if figure is not None:
                         show_figure(figure)
-                display(HTML(surface_mask_html(mask_latest)))
-            elif self.masks_configured:
+                display(HTML(surface_margin_html(margin_latest)))
+            elif self.margins_configured:
                 display(
                     HTML(
-                        "<p style='opacity:0.75'>Native masked Surface EPR is "
-                        "unavailable for the selected source/pass; baseline "
+                        "<p style='opacity:0.75'>Margin-row Surface EPR is "
+                        "unavailable for the selected source/pass; whole-surface "
                         "Surface-EPR remains separately readable.</p>"
                     )
                 )

@@ -1,11 +1,10 @@
-"""Render surface participation, native margins and loss views from detached records."""
+"""Render surface participation, margin rows and loss views from detached records."""
 
 from __future__ import annotations
 
 import html
-import json
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Any
 
 from scgsim.palace.presentation.plotting import (
@@ -20,9 +19,10 @@ from scgsim.palace.presentation.plotting import (
     theme_tokens,
 )
 from scgsim.palace.results.report_models import (
+    SurfaceEprRecord,
     SurfaceEprSeriesSnapshot,
-    SurfaceMaskEprRecord,
-    SurfaceMaskEprSeriesSnapshot,
+    SurfaceMarginEprRecord,
+    SurfaceMarginEprSeriesSnapshot,
 )
 
 SURFACE_TYPES = ("MA", "MS", "SA")
@@ -60,14 +60,14 @@ def surface_total_figure(
     ).figure()
 
 
-def latest_mask_snapshot(
-    snapshots: Sequence[SurfaceMaskEprSeriesSnapshot],
+def latest_margin_snapshot(
+    snapshots: Sequence[SurfaceMarginEprSeriesSnapshot],
     *,
     pass_index: int,
     source: str,
     series_index: int,
-) -> SurfaceMaskEprSeriesSnapshot | None:
-    """Select the native-mask series bound to one exact pass, source and mode."""
+) -> SurfaceMarginEprSeriesSnapshot | None:
+    """Select the margin series bound to one exact pass, source and mode."""
     return next(
         (
             snapshot
@@ -80,13 +80,13 @@ def latest_mask_snapshot(
     )
 
 
-def surface_mask_participation_figure(
-    snapshot: SurfaceMaskEprSeriesSnapshot,
+def surface_margin_participation_figure(
+    snapshot: SurfaceMarginEprSeriesSnapshot,
     baseline: SurfaceEprSeriesSnapshot,
     interface_type: str,
     theme: ReportTheme,
 ) -> Any | None:
-    """Compare recorded Inset participation against the matching unmasked interface baseline."""
+    """Compare margin-row participation against the whole-surface row of the same interface."""
     records = [
         record for record in snapshot.records if record.interface_type == interface_type
     ]
@@ -95,13 +95,13 @@ def surface_mask_participation_figure(
     baseline_by_index = {record.index: record for record in baseline.records}
     go = plotly()
     figure = go.Figure()
-    grouped: dict[int, list[SurfaceMaskEprRecord]] = {}
+    grouped: dict[int, list[SurfaceMarginEprRecord]] = {}
     for record in records:
         grouped.setdefault(record.baseline_index, []).append(record)
     for color_index, (baseline_index, series) in enumerate(sorted(grouped.items())):
         ordered = sorted(series, key=lambda item: item.margin_index)
         first = ordered[0]
-        label = f"#{baseline_index} {first.face_kind} · {first.owner_semantic_ids[0]}"
+        label = f"#{baseline_index} {'/'.join(first.face_kinds)} · {first.entities[0]}"
         figure.add_scatter(
             x=[record.margin_um for record in ordered],
             y=[record.participation for record in ordered],
@@ -112,25 +112,22 @@ def surface_mask_participation_figure(
                 [
                     record.index,
                     record.margin_index,
-                    record.energy_j,
+                    ", ".join(str(band) for band in record.bands),
                     (
                         "unavailable / +inf"
                         if math.isinf(record.quality_factor)
                         else f"{record.quality_factor:.6g}"
                     ),
-                    record.contribution_status,
-                    record.retained_area_status,
-                    record.surface_id,
-                    ", ".join(record.owner_semantic_ids),
+                    record.name,
+                    ", ".join(record.entities),
                 ]
                 for record in ordered
             ],
             hovertemplate=(
                 "margin=%{x:.6g} µm<br>participation=%{y:.6g}"
-                "<br>masked index=%{customdata[0]}<br>ordinal=%{customdata[1]}"
-                "<br>energy=%{customdata[2]:.6g} J<br>native Q=%{customdata[3]}"
-                "<br>contribution=%{customdata[4]}<br>retained area=%{customdata[5]}"
-                "<br>surface=%{customdata[6]}<br>owners=%{customdata[7]}"
+                "<br>margin index=%{customdata[0]}<br>ordinal=%{customdata[1]}"
+                "<br>bands=%{customdata[2]}<br>native Q=%{customdata[3]}"
+                "<br>surface=%{customdata[4]}<br>entities=%{customdata[5]}"
                 "<extra>%{fullData.name}</extra>"
             ),
         )
@@ -140,16 +137,16 @@ def surface_mask_participation_figure(
                 x=[0.0],
                 y=[baseline_record.participation],
                 mode="markers",
-                name=f"baseline {label}",
+                name=f"whole surface {label}",
                 marker={
                     "symbol": "diamond",
                     "size": 9,
                     "color": COLORWAY[color_index % len(COLORWAY)],
                 },
-                hovertemplate="baseline participation=%{y:.6g}<extra>%{fullData.name}</extra>",
+                hovertemplate="whole-surface participation=%{y:.6g}<extra>%{fullData.name}</extra>",
             )
     FigureStyle(
-        title=f"{series_label(snapshot)}: {interface_type} native Inset-mask participation "
+        title=f"{series_label(snapshot)}: {interface_type} margin-row participation "
         f"vs margin ({snapshot.source})",
         height=460,
         margin={"l": 78, "r": 220, "t": 72, "b": 64},
@@ -157,23 +154,20 @@ def surface_mask_participation_figure(
         showlegend=True,
         theme=theme,
     ).apply(figure)
-    figure.update_xaxes(title="Inset margin (µm)", rangemode="tozero")
+    figure.update_xaxes(title="Margin from the gap edge (µm)", rangemode="tozero")
     figure.update_yaxes(title="participation", rangemode="tozero")
     figure.update_layout(legend={"x": 1.02, "xanchor": "left", "y": 1})
     return figure
 
 
-def surface_mask_html(snapshot: SurfaceMaskEprSeriesSnapshot) -> str:
-    """Render exact native mask margins and their source-bound contributions."""
-    zeroes = sum(
-        record.contribution_status == "zero_contribution" for record in snapshot.records
-    )
+def surface_margin_html(snapshot: SurfaceMarginEprSeriesSnapshot) -> str:
+    """Explain what a margin row integrates and where its records stay available."""
+    del snapshot  # the explanation holds for every margin snapshot
     return (
-        "<p style='opacity:0.75'>Native mask Q and energy remain available in "
-        "<code>masked_snapshots</code>. The native Inset output does not retain "
-        "surface area support; zero participation or energy is reported as "
-        "<code>zero_contribution</code>, not as proof of excluded geometry. "
-        f"This snapshot contains {zeroes} zero-contribution mask record(s).</p>"
+        "<p style='opacity:0.75'>A margin row is the union of the SGB bands from its margin "
+        "inwards, measured from the gap edge, listed as plain attributes of one Palace "
+        "dielectric row. It is an alternative to its whole-surface row, never an addition. "
+        "Its records remain available in <code>margin_snapshots</code>.</p>"
     )
 
 
@@ -216,7 +210,7 @@ def surface_ranking_figure(
     ranking_limit: int | None,
     theme: ReportTheme,
 ) -> Any | None:
-    """Rank individual source surfaces while retaining readable provenance labels."""
+    """Rank individual surface rows while retaining readable Entity and row labels."""
     records = sorted(
         snapshot.records, key=lambda record: (-record.participation, record.index)
     )
@@ -226,21 +220,18 @@ def surface_ranking_figure(
     tokens = theme_tokens(theme)
     go = plotly()
     labels = [
-        f"#{record.index} {record.interface_type} · {record.face_kind}"
-        f"<br>{record.owner_semantic_ids[0]}"
+        f"#{record.index} {record.interface_type} · {'/'.join(record.face_kinds)}"
+        f"<br>{record.entities[0]}"
         for record in visible
     ]
     custom = [
         [
-            record.surface_id,
-            ", ".join(record.owner_semantic_ids),
-            record.face_kind,
-            record.net_id or "unassigned",
-            record.equipotential_id or "unassigned",
-            _source_provenance_label(
-                record.source_provenance,
-                interface_type=record.interface_type,
-            ),
+            record.name,
+            ", ".join(record.entities),
+            ", ".join(record.face_kinds),
+            ", ".join(record.nets) or "unassigned",
+            ", ".join(record.rows),
+            _lineage_label(record),
         ]
         for record in visible
     ]
@@ -259,9 +250,9 @@ def surface_ranking_figure(
                 customdata=custom,
                 hovertemplate=(
                     "%{x:.6g}<br>surface=%{customdata[0]}"
-                    "<br>owners=%{customdata[1]}<br>face=%{customdata[2]}"
-                    "<br>net=%{customdata[3]}<br>equipotential=%{customdata[4]}"
-                    "<br>source=%{customdata[5]}<extra>%{y}</extra>"
+                    "<br>entities=%{customdata[1]}<br>face=%{customdata[2]}"
+                    "<br>net=%{customdata[3]}<br>rows=%{customdata[4]}"
+                    "<br>lineage=%{customdata[5]}<extra>%{y}</extra>"
                 ),
             )
         ]
@@ -324,87 +315,16 @@ def surface_loss_html(snapshot: SurfaceEprSeriesSnapshot, problem: str) -> str:
 
 
 def series_label(
-    snapshot: SurfaceEprSeriesSnapshot | SurfaceMaskEprSeriesSnapshot,
+    snapshot: SurfaceEprSeriesSnapshot | SurfaceMarginEprSeriesSnapshot,
 ) -> str:
     """Label a solver mode or electrostatic excitation without merging their series."""
     noun = "Mode" if snapshot.series_kind == "mode" else "Excitation"
     return f"{noun} {snapshot.series_index}"
 
 
-def _source_provenance_label(
-    provenance: dict[str, Any],
-    *,
-    interface_type: str | None = None,
-) -> str:
-    """Summarize recorded conductor and source-surface identities for hover inspection."""
-    record_ids = provenance.get("source_record_ids")
-    label = "structured provenance retained"
-    if (
-        isinstance(record_ids, list)
-        and record_ids
-        and all(isinstance(record_id, str) for record_id in record_ids)
-    ):
-        suffix = f" (+{len(record_ids) - 1})" if len(record_ids) > 1 else ""
-        label = f"{record_ids[0]}{suffix}"
-    contributions = _surface_contribution_records(
-        provenance,
-        interface_type=interface_type,
+def _lineage_label(record: SurfaceEprRecord) -> str:
+    """Which Entities share the faces of a row, as recorded attribution (it weights nothing)."""
+    sharing = sorted(
+        {entity for owners in record.lineage.values() for entity in owners}
     )
-    if not contributions:
-        return label
-    sides = tuple(
-        dict.fromkeys(
-            str(record["side"])
-            for record in contributions
-            if isinstance(record.get("side"), str)
-        )
-    )
-    suffix = f"; {len(contributions)} contribution(s)"
-    if sides:
-        suffix += f" ({'/'.join(sides)})"
-    return f"{label}{suffix}"
-
-
-def _surface_contribution_records(
-    provenance: Mapping[str, Any],
-    *,
-    interface_type: str | None = None,
-) -> tuple[Mapping[str, Any], ...]:
-    """Expose recorded source contribution records without inferring new ownership."""
-    records: list[Mapping[str, Any]] = []
-    ledger = provenance.get("surface_contribution_ledger")
-    if isinstance(ledger, (list, tuple)):
-        records.extend(record for record in ledger if isinstance(record, Mapping))
-    else:
-        sources = provenance.get("sources", ())
-        if isinstance(sources, (list, tuple)):
-            for source in sources:
-                if isinstance(source, Mapping):
-                    records.extend(_surface_contribution_records(source))
-    deduplicated: dict[str, Mapping[str, Any]] = {}
-    identities: dict[str, str] = {}
-    for record in records:
-        contribution_id = record.get("contribution_id")
-        if not isinstance(contribution_id, str) or not contribution_id:
-            continue
-        identity = _serialized_report_contribution(record)
-        previous = identities.setdefault(contribution_id, identity)
-        if previous != identity:
-            raise ValueError(
-                f"conflicting repeated surface contribution {contribution_id!r}"
-            )
-        deduplicated.setdefault(contribution_id, record)
-    return tuple(
-        record
-        for record in deduplicated.values()
-        if interface_type is None or record.get("classification") == interface_type
-    )
-
-
-def _serialized_report_contribution(record: Mapping[str, Any]) -> str:
-    """Canonicalize one complete serialized EvidenceResult transport record."""
-    return json.dumps(
-        dict(record),
-        sort_keys=True,
-        separators=(",", ":"),
-    )
+    return f"{len(record.lineage)} face(s) shared among {', '.join(sharing) or 'no Entity'}"
