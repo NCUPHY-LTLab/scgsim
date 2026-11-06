@@ -541,7 +541,8 @@ Resolving writer questions; these override earlier wording where they differ.
   (`MA::D1_pad__bottom`, `SA::substrate|vacuum__interface::band=1`, sheet rows
   `MA::pad__sheet::band=1`); names carry no height. Only when one band group
   would hold faces of two band families do that group's faces gain the side of
-  the dielectric they lie on (`__interface__top` / `__interface__bottom`); a
+  the dielectric they lie on (`__interface__top` / `__interface__bottom`), for
+  every band group of each family involved; a
   group that still holds two families is an input error. An entity id
   containing `__` is an input error. The older forms quoted above
   (`::<face kind>`) are superseded by this entry.

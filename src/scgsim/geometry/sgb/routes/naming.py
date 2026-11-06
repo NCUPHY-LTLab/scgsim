@@ -46,10 +46,10 @@ native tags and never carry a height.
 **Qualifier, only on a band collision.**  A band index is local to one band family.  A conductor face is
 named by its entity and side, which already identify the support; an ``interface`` support is a pair of
 solution regions, and the same pair meets at several levels, so two families can end up with the same
-``<base>__interface::band=k``.  Only then do the faces of that one group gain the side of the dielectric
-they lie on, again with ``__``: ``SA::substrate|vacuum__interface__top::band=1`` (the dielectric is below
+``<base>__interface::band=k``.  Only then does every band group of each family involved (all its bands, so
+one family never carries two name forms) gain the side of the dielectric its faces lie on, again with ``__``: ``SA::substrate|vacuum__interface__top::band=1`` (the dielectric is below
 the face) and ``...__interface__bottom::band=1`` (it is above).  The pass is
-:func:`~scgsim.geometry.sgb.routes.groups.apply_route`'s, after the first naming; the ``face_kind`` of
+:func:`~scgsim.geometry.sgb.routes.face_names.name_faces`'s, after the first naming; the ``face_kind`` of
 the group stays ``interface``.  A group that still holds two families after qualifying is an error.
 
 Surface-EPR rows keep the prefixed form for a sheet: its group ``pad::band=1`` carries the row

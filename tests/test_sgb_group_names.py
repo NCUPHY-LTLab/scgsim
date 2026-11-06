@@ -10,7 +10,6 @@ import pytest
 from sgb_scenes import airbridge, pad_in_ground
 
 from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, InterfaceSurfaces
-from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 
@@ -29,10 +28,12 @@ def banded(catalogue: PrismCatalogue, route: str, *types: str):
 
 
 def surface_groups(model) -> set[str]:
+    """The names of the surface (dimension 2) groups."""
     return {n for n, g in model.routed.groups.items() if g.dim == 2}
 
 
 def volume_groups(model) -> set[str]:
+    """The names of the volume (dimension 3) groups."""
     return {n for n, g in model.routed.groups.items() if g.dim == 3}
 
 

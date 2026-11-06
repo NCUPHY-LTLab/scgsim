@@ -83,12 +83,14 @@ flowchart LR
 
 **Entity id 不可含 `__`。**face kind 靠雙底線與 entity 分開，id 若含 `__`，名稱就無法判讀。SGB 在檢查 entity id 的地方（與 `::`、界面前綴同一處，`routes.naming.check_entity_names`）直接報 `InputError`，訊息指出 id 並建議改用單底線；`D1_pad` 這類單底線的 id 照常可用。lumped port 的 sheet id 由 SGB 產生（例如 `PORT_SHEET__P1__0000`），它的名稱 `PORT::<id>` 不帶 face kind，不受這條限制。
 
-**限定詞只在碰撞時出現。**band 的編號 `k` 只在同一個 band family 內有意義。導體 face 的名稱（Entity 加 `top`、`bottom` 或 sheet）本來就指向唯一的 support；介面的 support 卻是「一對 solution region」，同一對會在好幾個高度相遇（例如基板的上表面與下表面都是 substrate–vacuum），所以兩個 family 的 band 可能叫出同一個名稱。只有在一個 band group 會收進兩個 family 的 face 時，那個 group 的 face 才改用它們所在的位置命名，也就是 dielectric 在 face 的哪一側，同樣以 `__` 接上：dielectric 在 face 下方用 `__top`（這個 face 是 dielectric 的頂面），在上方用 `__bottom`。例如基板上表面與下表面各有一個 family 時：
+**限定詞只在碰撞時出現。**band 的編號 `k` 只在同一個 band family 內有意義。導體 face 的名稱（Entity 加 `top`、`bottom` 或 sheet）本來就指向唯一的 support；介面的 support 卻是「一對 solution region」，同一對會在好幾個高度相遇（例如基板的上表面與下表面都是 substrate–vacuum），所以兩個 family 的 band 可能叫出同一個名稱。只有在某個 family 的任何一個 band group 會和另一個 family 共用時，限定詞才出現，而且作用在整個 family：牽涉到的每個 family 的所有 band group（包含沒有碰撞的那幾個 band）都改用它們所在的位置命名，也就是 dielectric 在 face 的哪一側，同樣以 `__` 接上，讓一個 family 的名稱只有一種形式：dielectric 在 face 下方用 `__top`（這個 face 是 dielectric 的頂面），在上方用 `__bottom`。例如基板上表面的 family 有三個 band、下表面的 family 有兩個 band 時：
 
-- <code>SA::substrate&#124;vacuum__interface__top::band=0</code>，只含上表面（z = 0）的 face；
-- <code>SA::substrate&#124;vacuum__interface__bottom::band=0</code>，只含下表面（z = −100 µm）的 face。
+- <code>SA::substrate&#124;vacuum__interface__top::band=0</code> 到 `band=2`，只含上表面（z = 0）的 face；
+- <code>SA::substrate&#124;vacuum__interface__bottom::band=0</code> 與 `band=1`，只含下表面（z = −100 µm）的 face。
 
-限定詞不改變 `face_kind`：這些 group 的 `face_kind` 仍是 `interface`，依 face 種類過濾照舊可用。不碰撞的 group 不加限定詞，所以同一個 family 的不同 band 可能有的帶、有的不帶（只有一個 family 擁有的 band 編號就沒有碰撞）；要找一個 family 的 band group，讀 `insets[*].bands`（或 `expansion.banded[*].bands`），不要從名稱推測。限定詞在第一次命名之後、依排序後的拓樸決定，與 `workers`、`tiles` 無關；`surface_epr_rows`、sidecar 的 `band`、`insets`、`mesh_features`、`unions` 與 AEDT 相關欄位讀到的都是最後的名稱。
+上表面 family 的 `band=2` 沒有和下表面撞名，仍然帶 `__top`。
+
+限定詞不改變 `face_kind`：這些 group 的 `face_kind` 仍是 `interface`，依 face 種類過濾照舊可用。從不碰撞的 family 與沒有 band 的介面（`SA::substrate|vacuum__interface`）維持原本的形式；要找一個 family 的 band group，讀 `insets[*].bands`（或 `expansion.banded[*].bands`），不要從名稱推測。限定詞在第一次命名之後、依排序後的拓樸決定，與 `workers`、`tiles` 無關；`surface_epr_rows`、sidecar 的 `band`、`insets`、`mesh_features`、`unions` 與 AEDT 相關欄位讀到的都是最後的名稱。
 
 加上限定詞之後，若一個 group 仍會收進兩個 family 的 band label（例如兩個指定 face 的請求選到同一個 face），build 以 `InputError` 停止，訊息指出 group 名稱與兩個 family。
 

@@ -33,8 +33,9 @@ Top-level fields and who uses them
     Palace rebuilds ``groups = {volumes, boundary_surfaces, surface_groups, pec_surfaces,
     port_surfaces}`` from these: ``owner_semantic_ids`` = ``entities``, ``adjacent_solution_volume_ids``
     = ``adjacent_domains``, ``face_kind`` = ``face_kind`` (one per group, and part of its name:
-    ``<kind>::<entity>__<top|bottom|sidewall|sheet|interface>[::band=k]`` for a prefixed group, where the faces of
-    an ``interface`` band group that two families would share gain the side of the dielectric they lie on
+    ``<kind>::<entity>__<top|bottom|sidewall|sheet|interface>[::band=k]`` for a prefixed group, where, when a band group
+    of an ``interface`` family is shared with another family, every band group of both families gains the side of the dielectric
+    its faces lie on
     (``...__interface__top::band=k`` and ``...__interface__bottom::band=k``, still ``face_kind`` ``interface``);
     a sheet group ``<entity>[::band=k]`` has face kind ``sheet`` without carrying it in the name),
     ``conductor_component_id`` / ``net_id`` = ``entities`` / ``net``, PEC surfaces = the groups of interface type ``MA``/``MS``/``SHEET`` of a conductor.

@@ -2,8 +2,8 @@
 
 Owns the two-pass naming of faces.  The first pass names each face from its two sides
 (:func:`~scgsim.geometry.sgb.routes.naming.surface_group`).  A band index is local to its band family, so
-when that name would put the banded faces of two families into one group, the second pass names *the faces
-of that group* again with the side of the dielectric they lie on (``...__interface__top::band=1`` and
+when that name would put the banded faces of two families into one group, the second pass names *every band
+group of those families* again with the side of the dielectric they lie on (``...__interface__top::band=1`` and
 ``...__interface__bottom::band=1``).  A group that still holds two families after that is an error: two concrete
 requests on one face cannot both be banded.
 
@@ -22,18 +22,28 @@ from scgsim.geometry.sgb.routes.naming import surface_group
 def name_faces(topology: Topology, emitted: frozenset[str]) -> dict[str, str | None]:
     """Face id -> its final primary group (``None`` for a face without a name).
 
-    Only faces that bound an emitted volume can share a group, so only they decide a collision.
+    Only faces that bound an emitted volume can share a group, so only they decide a collision.  The unit of
+    qualification is the band family: when any band group of a family is shared with another family, *every*
+    band group of each family involved gains the side of its dielectric, so one family never carries two
+    name forms.
     """
     faces = sorted(topology.faces.items())
     first = {fid: _name(face, qualified=False) for fid, face in faces}
-    shared = {
-        group
-        for group, families in _band_families(faces, first, emitted).items()
+    colliding = {
+        family
+        for families in _band_families(faces, first, emitted).values()
         if len(families) > 1
+        for family in families
     }
-    final = {fid: _name(face, qualified=first[fid] in shared) for fid, face in faces}
+    final = {
+        fid: _name(face, qualified=_has_family(face, colliding)) for fid, face in faces
+    }
     _check_one_band_family(_band_families(faces, final, emitted))
     return final
+
+
+def _has_family(face: TopoFace, families: set[str]) -> bool:
+    return not _is_port(face) and any(family in families for family, _ in face.bands)
 
 
 def _name(face: TopoFace, *, qualified: bool) -> str | None:

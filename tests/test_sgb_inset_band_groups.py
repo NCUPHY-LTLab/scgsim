@@ -83,18 +83,17 @@ PLAIN = "SA::substrate|vacuum__interface"
 def test_the_reviewers_two_level_model_gets_one_band_group_per_dielectric_side(
     two_level_model,
 ):
-    """The same pair at z = 0 (substrate below) and z = -100 (substrate above), bands 0 and 1 on both levels.
+    """The same pair at z = 0 (substrate below) and z = -100 (substrate above).
 
-    Band 2 exists on the top level only, so no second family shares it and its group is not qualified.
+    The qualifier applies to a whole family: band 2 exists on the top level only and collides with nothing, but
+    its family collides in bands 0 and 1, so all three bands of the top family carry ``__top``.
     """
     groups = {n for n in two_level_model.routed.groups if "__interface" in n}
     assert groups == {
-        f"{TOP}::band=0",
-        f"{TOP}::band=1",
-        f"{BOTTOM}::band=0",
-        f"{BOTTOM}::band=1",
-        f"{PLAIN}::band=2",
+        *(f"{TOP}::band={k}" for k in range(3)),
+        *(f"{BOTTOM}::band={k}" for k in range(2)),
     }
+    assert not [n for n in two_level_model.routed.groups if n.startswith(f"{PLAIN}::")]
     for name in groups:
         expected = -100.0 if name.startswith(BOTTOM) else 0.0
         assert level_of(two_level_model, name) == {expected}, name
@@ -154,11 +153,7 @@ def test_each_level_has_its_own_families_margins_and_band_groups(two_level_model
         if f["request_id"] == "sa::substrate|vacuum::z=-100.0"
     )
     assert top["margins_um"] == [0.5, 1.0] and bottom["margins_um"] == [0.5]
-    assert top["bands"] == {
-        "0": [f"{TOP}::band=0"],
-        "1": [f"{TOP}::band=1"],
-        "2": [f"{PLAIN}::band=2"],
-    }
+    assert top["bands"] == {str(k): [f"{TOP}::band={k}"] for k in range(3)}
     assert bottom["bands"] == {str(k): [f"{BOTTOM}::band={k}"] for k in range(2)}
     for name, group in side["physical_groups"].items():
         if "__interface" not in name or "::band=" not in name:

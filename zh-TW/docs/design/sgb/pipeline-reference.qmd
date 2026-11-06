@@ -239,7 +239,7 @@ primary group 命名為 `<kind>::<qualified entity id>__<face kind>[::band=k]`�
 | `PORT::<port sheet id>` | lumped port footprint（一個 sheet，不帶 face kind），是一個 face、一個 group：band 的 seam 在它的邊界停下 |
 | `EXT::<domain>__<face kind>` | 某 domain 的模型外邊界（Route C 的導體碰到邊界時也有 `EXT::<entity>__sidewall`） |
 | `<entity>`（volume） | 輸出的 volume，名稱是裸的 entity id（Route C 的導體內部也是）；Gmsh 的 Type 欄位標示它是 volume |
-| `<name>::band=k` | 同一種 face 位於其 support region 的 inset band $k$ 內（Route A：`pad::band=k`；Route B 與 C：`MA::pad__top::band=k` 與 `MS::pad__bottom::band=k`；介面：<code>SA::&lt;a&gt;&#124;&lt;b&gt;__interface::band=k</code>，兩個 family 共用時是 <code>SA::&lt;a&gt;&#124;&lt;b&gt;__interface__top::band=k</code> 或 <code>…__interface__bottom::band=k</code>） |
+| `<name>::band=k` | 同一種 face 位於其 support region 的 inset band $k$ 內（Route A：`pad::band=k`；Route B 與 C：`MA::pad__top::band=k` 與 `MS::pad__bottom::band=k`；介面：<code>SA::&lt;a&gt;&#124;&lt;b&gt;__interface::band=k</code>，兩個 family 共用時，這兩個 family 的所有 band 都是 <code>SA::&lt;a&gt;&#124;&lt;b&gt;__interface__top::band=k</code> 或 <code>…__interface__bottom::band=k</code>） |
 :::
 
 裸的 entity id 指物件本身，帶界面前綴的名稱指兩個東西之間的 face（見 [Identity](identity.qmd)）。Net 的 PEC 不是一組 face：它由 `unions.nets` 列出該 Net 所有導體表面的 group。
