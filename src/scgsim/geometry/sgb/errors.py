@@ -15,6 +15,10 @@ class InputError(SgbError):
     """The effective input cannot be turned into prisms (names the entity)."""
 
 
+class NoGapEdgeError(InputError):
+    """An inset support face has no gap edge to measure its bands from (a type-level request skips it)."""
+
+
 class UnsupportedCurveError(InputError):
     """A source boundary uses a curve class this version does not carry (splines)."""
 

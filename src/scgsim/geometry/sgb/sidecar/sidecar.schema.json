@@ -239,22 +239,9 @@
       }
     },
     "insets": {
+      "description": "The inset requests as given, by request id.  A concrete request is the record of its face; a type-level request lists the faces it was expanded into and the faces it skipped.",
       "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["request_id", "support", "interface", "margins_um", "margins_grid", "band_count", "support_area_um2", "bands"],
-        "properties": {
-          "request_id": {"type": "string"},
-          "support": {"type": "object"},
-          "interface": {"type": ["string", "null"]},
-          "margins_um": {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}},
-          "margins_grid": {"type": "array", "items": {"type": "integer", "minimum": 1}},
-          "band_count": {"type": "integer", "minimum": 1},
-          "support_area_um2": {"type": ["number", "null"]},
-          "bands": {"description": "Band index -> primary groups.", "type": "object", "additionalProperties": {"$ref": "#/$defs/idList"}}
-        }
-      }
+      "items": {"oneOf": [{"$ref": "#/$defs/insetFace"}, {"$ref": "#/$defs/insetType"}]}
     },
     "refinements": {
       "type": "array",
@@ -315,6 +302,63 @@
     }
   },
   "$defs": {
+    "insetFace": {
+      "description": "One band family: the request of a face.  margins_um is the sorted union of the margins of every request that landed on the face.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "support", "interface", "margins_um", "margins_grid", "band_count", "support_area_um2", "bands"],
+      "properties": {
+        "request_id": {"type": "string"},
+        "support": {"type": "object"},
+        "interface": {"type": ["string", "null"]},
+        "margins_um": {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}},
+        "margins_grid": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+        "band_count": {"type": "integer", "minimum": 1},
+        "support_area_um2": {"type": ["number", "null"]},
+        "bands": {"description": "Band index -> primary groups.", "type": "object", "additionalProperties": {"$ref": "#/$defs/idList"}}
+      }
+    },
+    "insetType": {
+      "description": "A type-level request (every face of a Surface-EPR type) with the families that carry its bands and the faces it left unbanded.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "support", "interface", "margins_um", "expansion"],
+      "properties": {
+        "request_id": {"type": "string"},
+        "support": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["interface_type", "face_kinds", "exclude_entity_ids"],
+          "properties": {
+            "interface_type": {"enum": ["MA", "MS", "SA"]},
+            "face_kinds": {"type": ["array", "null"], "items": {"enum": ["sheet", "top", "bottom", "interface"]}},
+            "exclude_entity_ids": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "interface": {"type": "null"},
+        "margins_um": {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}},
+        "expansion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["banded", "skipped"],
+          "properties": {
+            "banded": {"description": "The faces banded, each as the record of its family (ids <request id>::<entity>::<side>, or of the first request on a shared face).", "type": "array", "items": {"$ref": "#/$defs/insetFace"}},
+            "skipped": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["support", "reason"],
+                "properties": {
+                  "support": {"type": "object"},
+                  "reason": {"enum": ["no_gap_edge"]}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "idList": {"type": "array", "items": {"type": "string"}},
     "tagList": {"type": "array", "items": {"type": "integer", "minimum": 1}},
     "meshFeature": {

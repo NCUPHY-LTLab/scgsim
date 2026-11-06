@@ -69,8 +69,13 @@ Top-level fields and who uses them
 ``lineage``
     edge -> carriers -> source polygon edge or family member; face -> source Entities; membership.
 ``insets`` / ``refinements`` / ``slivers`` / ``arrangement``
-    inset families (request id, support, margins, band -> groups), refinement requests, the sliver
-    report summary and the measured snap drift / arc deviation.
+    the inset requests as given, refinement requests, the sliver report summary and the measured snap
+    drift / arc deviation.  A concrete inset request is the record of its face (request id, support,
+    margins, band -> groups; the margins are the union of every request on that face).  A type-level
+    request (every face of a Surface-EPR type) has the request as given (type, face kinds, excluded
+    entities, margins) and its ``expansion``: ``banded``, the record of each face it banded (ids
+    ``<request id>::<entity>::<side>``), and ``skipped``, each face left unbanded with the reason
+    (``no_gap_edge``).  A build without a type-level request writes the same bytes as before they existed.
 ``expected``
     the expectations of ``verify_loaded`` (positions, boundaries, areas, volumes), the load check the tests
     run; the mesher trusts the files of one build and does not read it.

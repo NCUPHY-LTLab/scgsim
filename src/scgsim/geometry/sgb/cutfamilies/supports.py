@@ -27,6 +27,11 @@ carrier) through the snapped end points, so offsets stay concentric with the sou
 
 The pre-pass leaves the ports out so they never move a band; the seams of the bands are clipped against the
 ports afterwards (``cutfamilies.inset``), so they stop at a port's boundary.
+
+A type-level request (:class:`InterfaceSurfaces`) is turned into concrete faces here too, because the same labels that find
+a face find the faces of a type: :func:`faces_of_type` lists, in the pre-pass, every conductor face with a
+Surface-EPR row of the type and every solution interface of it, each as a :class:`FaceId`.  Whether such a face
+has a gap edge is only known when it is resolved (:class:`NoGapEdgeError`).
 """
 
 from __future__ import annotations
@@ -43,9 +48,15 @@ from scgsim.geometry.sgb.cutfamilies.gap_intervals import (
     split_at_gaps,
 )
 from scgsim.geometry.sgb.cutfamilies.requests import (
+    BAND_TYPES,
+    FACE_KINDS,
     INTERFACE_TYPES,
+    ConcreteSupport,
     ConductorSurface,
+    FaceKind,
     InsetRequest,
+    InterfaceSurfaces,
+    Side,
     SolutionInterface,
 )
 from scgsim.geometry.sgb.derivation.labelled import (
@@ -53,7 +64,7 @@ from scgsim.geometry.sgb.derivation.labelled import (
     derive_from_catalogue,
 )
 from scgsim.geometry.sgb.derivation.layer import Layer
-from scgsim.geometry.sgb.errors import InputError
+from scgsim.geometry.sgb.errors import InputError, NoGapEdgeError
 from scgsim.geometry.sgb.records.carriers import (
     ArcCarrier,
     Lineage,
@@ -64,7 +75,11 @@ from scgsim.geometry.sgb.records.grid import Grid, exact_z
 from scgsim.geometry.sgb.records.labels import LevelLabel
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.sgb.records.support import SupportRegion
-from scgsim.geometry.sgb.routes.naming import interface_type_of
+from scgsim.geometry.sgb.routes.naming import (
+    SHEET,
+    interface_type_of,
+    sheet_face_sides,
+)
 
 
 @dataclass(frozen=True)
@@ -76,35 +91,62 @@ class ResolvedSupport:
     region: SupportRegion
 
 
-def resolve_supports(
-    catalogue: PrismCatalogue, requests: tuple[InsetRequest, ...]
-) -> list[ResolvedSupport]:
-    """The support face of every inset request, found in the physical pre-pass."""
-    if not requests:
-        return []
+@dataclass(frozen=True, order=True)
+class FaceId:
+    """One bandable face, whoever asked for it: its kind, the entities it belongs to and the level it lies on.
+
+    ``kind`` is one of :data:`~scgsim.geometry.sgb.cutfamilies.requests.FACE_KINDS`.  A conductor face has its one
+    entity; an interface has its two solution regions, the dielectric first (the order of its group name).
+    Two requests land on the same face exactly when their :class:`FaceId` s are equal.
+    """
+
+    kind: FaceKind
+    entities: tuple[str, ...]
+    level: Fraction
+
+    def support(self) -> ConductorSurface | SolutionInterface:
+        """The concrete support that selects this face."""
+        if self.kind == "interface":
+            first, second = self.entities
+            return SolutionInterface(first, second, float(self.level))
+        return ConductorSurface(self.entities[0], self.kind)
+
+    def label(self) -> str:
+        """The face as a request-id suffix: ``<entity>::<side>`` or ``<first>|<second>::z=<z>`` (entity ids never hold ``::``)."""
+        if self.kind == "interface":
+            return f"{'|'.join(self.entities)}::z={float(self.level)}"
+        return f"{self.entities[0]}::{self.kind}"
+
+
+def physical_labelling(catalogue: PrismCatalogue) -> LabelledArrangements:
+    """The physical pre-pass: the catalogue's prisms without ports or cut families, labelled."""
     physical = replace(
         catalogue,
         prisms=tuple(p for p in catalogue.prisms if p.material_kind != "port"),
         families=(),
     )
-    labelled = derive_from_catalogue(physical)
-    return [_resolve(request, catalogue, labelled) for request in requests]
+    return derive_from_catalogue(physical)
 
 
-def _resolve(
+def resolve_support(
     request: InsetRequest, catalogue: PrismCatalogue, labelled: LabelledArrangements
 ) -> ResolvedSupport:
-    margins = _margins(request, catalogue.grid)
-    layer, selected = _select_cells(request, catalogue, labelled)
+    """The support face of one concrete inset request, found in the physical pre-pass.
+
+    Raises :class:`NoGapEdgeError` (an :class:`InputError`) when the face has no gap edge to measure from.
+    """
+    support = concrete_support(request)
+    margins = lattice_margins(request, catalogue.grid)
+    layer, selected = _select_cells(request, support, catalogue, labelled)
     if request.interface is not None:
         _check_interface(request, layer, selected)
-    pieces_of = _origin_pieces(request, catalogue, labelled, layer)
+    pieces_of = _origin_pieces(support, catalogue, labelled, layer)
     rings, origin_mask = _boundary_rings(
         request.request_id, layer, selected, labelled, pieces_of
     )
     if not any(any(ring) for ring in origin_mask):
-        raise InputError(
-            f"inset request {request.request_id!r}: {_describe(request.support)} has no gap edge to "
+        raise NoGapEdgeError(
+            f"inset request {request.request_id!r}: {_describe(support)} has no gap edge to "
             "measure the bands from (a conductor edge counts only where exposed dielectric lies next to it)"
         )
     return ResolvedSupport(
@@ -112,7 +154,16 @@ def _resolve(
     )
 
 
-def _describe(support: ConductorSurface | SolutionInterface) -> str:
+def concrete_support(request: InsetRequest) -> ConcreteSupport:
+    """The face a request names; a type-level request names none (``inset_plan`` expands it into faces first)."""
+    if isinstance(request.support, InterfaceSurfaces):
+        raise InputError(
+            f"inset request {request.request_id!r}: a type-level support names no single face"
+        )
+    return request.support
+
+
+def _describe(support: ConcreteSupport) -> str:
     if isinstance(support, ConductorSurface):
         return f"the {support.side} of {support.entity_id!r}"
     return (
@@ -124,7 +175,7 @@ def _describe(support: ConductorSurface | SolutionInterface) -> str:
 
 
 def _origin_pieces(
-    request: InsetRequest,
+    support: ConcreteSupport,
     catalogue: PrismCatalogue,
     labelled: LabelledArrangements,
     layer: Layer,
@@ -135,16 +186,14 @@ def _origin_pieces(
     def whole(h: int, *, origin: bool) -> list[Piece]:
         return [Piece(arr.origin(h), arr.target(h), origin)]
 
-    if isinstance(request.support, SolutionInterface):
+    if isinstance(support, SolutionInterface):
         return lambda h: whole(
             h,
             origin=_is_exposed_dielectric(layer.labels[arr.he_face[h]])
             and _is_conductor_cell(layer.labels[arr.he_face[h ^ 1]]),
         )
-    if request.support.side == "top":
-        attach = labelled.level_layers[
-            _attach_level(request.support, catalogue, labelled)
-        ]
+    if support.side == "top":
+        attach = labelled.level_layers[_attach_level(support, catalogue, labelled)]
         gaps = _gap_edges_by_source(attach, labelled)
         return lambda h: _pieces_along_gaps(layer, h, labelled, gaps)
     # The support is on its own plane, whose arrangement is cut wherever the cell across a boundary edge
@@ -247,7 +296,8 @@ def _is_exposed_dielectric(label: LevelLabel | None) -> bool:
     return "conductor" not in kinds and "dielectric" in kinds
 
 
-def _margins(request: InsetRequest, grid: Grid) -> tuple[int, ...]:
+def lattice_margins(request: InsetRequest, grid: Grid) -> tuple[int, ...]:
+    """The margins of a request as positive, strictly increasing multiples of the model grid (grid units)."""
     if not request.margins_um:
         raise InputError(
             f"inset request {request.request_id!r} needs at least one margin"
@@ -272,9 +322,11 @@ def _margins(request: InsetRequest, grid: Grid) -> tuple[int, ...]:
 
 
 def _select_cells(
-    request: InsetRequest, catalogue: PrismCatalogue, labelled: LabelledArrangements
+    request: InsetRequest,
+    support: ConcreteSupport,
+    catalogue: PrismCatalogue,
+    labelled: LabelledArrangements,
 ) -> tuple[Layer, set[int]]:
-    support = request.support
     if isinstance(support, ConductorSurface):
         z = _conductor_level(request, support, catalogue)
         level = labelled.levels.levels.index(z)
@@ -493,3 +545,145 @@ def _primitive(  # noqa: PLR0913 - a primitive is a ring position, a half-edge a
         ),
         root.root_id,
     )
+
+
+# --------------------------------------------------------------------------- faces by identity and by type
+
+
+def locate_face(
+    request: InsetRequest, catalogue: PrismCatalogue, labelled: LabelledArrangements
+) -> FaceId:
+    """The face a concrete request names, with the same checks on its entities and levels as resolving it."""
+    support = concrete_support(request)
+    if isinstance(support, ConductorSurface):
+        level = _conductor_level(request, support, catalogue)
+        return FaceId(support.side, (support.entity_id,), level)
+    k = _interface_level(request, support, catalogue, labelled)
+    first, second = sorted(
+        (support.first_entity_id, support.second_entity_id),
+        key=lambda entity: (_is_vacuum(catalogue, entity), entity),
+    )
+    return FaceId("interface", (first, second), labelled.levels.levels[k])
+
+
+def _is_vacuum(catalogue: PrismCatalogue, entity_id: str) -> bool:
+    return any(
+        p.entity_id == entity_id and p.material_kind == "vacuum"
+        for p in catalogue.prisms
+    )
+
+
+def faces_of_type(
+    request_id: str,
+    support: InterfaceSurfaces,
+    catalogue: PrismCatalogue,
+    labelled: LabelledArrangements,
+) -> list[FaceId]:
+    """Every face the sidecar would give a Surface-EPR row of the type, in the order of :class:`FaceId`.
+
+    The faces come from the labels of the physical pre-pass and from the interface-type rules the sidecar's rows
+    come from (``routes.naming``), so a request by type and the model it banded cannot disagree about what a
+    face is.  Sidewalls are never listed (no sidewall bands in version 1).  Whether a face has a gap edge is not
+    asked here.
+    """
+    kinds = _checked_kinds(request_id, support)
+    excluded = _checked_exclusions(request_id, support, catalogue)
+    if support.interface_type in ("MA", "MS"):
+        faces = _conductor_faces_of_type(
+            support.interface_type, kinds, excluded, catalogue, labelled
+        )
+    elif "interface" in kinds:
+        faces = _solution_faces_of_type(excluded, labelled)
+    else:
+        faces = []
+    return sorted(faces)
+
+
+def _checked_kinds(request_id: str, support: InterfaceSurfaces) -> tuple[str, ...]:
+    if support.interface_type not in BAND_TYPES:
+        raise InputError(
+            f"inset request {request_id!r}: bands are asked for by Surface-EPR type {', '.join(BAND_TYPES)}, "
+            f"not {support.interface_type!r}"
+        )
+    if support.face_kinds is None:
+        return FACE_KINDS
+    unknown = sorted(set(support.face_kinds) - set(FACE_KINDS))
+    if unknown or not support.face_kinds:
+        raise InputError(
+            f"inset request {request_id!r}: face_kinds must name some of {', '.join(FACE_KINDS)} "
+            f"(sidewalls are not banded), got {list(support.face_kinds)}"
+        )
+    return support.face_kinds
+
+
+def _checked_exclusions(
+    request_id: str, support: InterfaceSurfaces, catalogue: PrismCatalogue
+) -> frozenset[str]:
+    entities = {p.entity_id for p in catalogue.prisms if p.material_kind != "port"}
+    unknown = sorted(set(support.exclude_entity_ids) - entities)
+    if unknown:
+        raise InputError(
+            f"inset request {request_id!r}: exclude_entity_ids names no entity of the model: {', '.join(unknown)}"
+        )
+    return frozenset(support.exclude_entity_ids)
+
+
+def _conductor_faces_of_type(
+    row_type: str,
+    kinds: tuple[str, ...],
+    excluded: frozenset[str],
+    catalogue: PrismCatalogue,
+    labelled: LabelledArrangements,
+) -> list[FaceId]:
+    """The sheets and the top and bottom faces of the conductors that have a cell with a row of ``row_type``."""
+    faces: list[FaceId] = []
+    conductors = {
+        p.entity_id for p in catalogue.prisms if p.material_kind == "conductor"
+    }
+    for entity in sorted(conductors - excluded):
+        prism = next(p for p in catalogue.prisms if p.entity_id == entity)
+        sides: tuple[Side, ...] = ("sheet",) if prism.is_sheet else ("top", "bottom")
+        for side in sides:
+            level = prism.z1 if side == "top" else prism.z0
+            layer = labelled.level_layers[labelled.levels.levels.index(level)]
+            cells = _conductor_cells(layer, ConductorSurface(entity, side))
+            if side in kinds and any(
+                row_type in _surface_epr_types(layer.labels[f]) for f in cells
+            ):
+                faces.append(FaceId(side, (entity,), level))
+    return faces
+
+
+def _conductor_cells(layer: Layer, surface: ConductorSurface) -> set[int]:
+    return _faces(layer, lambda label: _on_conductor(label, surface))
+
+
+def _surface_epr_types(label: LevelLabel) -> set[str]:
+    """The Surface-EPR row types of a level cell: its interface type, or for a Route A sheet the types of its neighbours."""
+    kind = interface_type_of(label.below, label.above, label.sheet)
+    if kind == SHEET:
+        return set(sheet_face_sides(label.below, label.above))
+    return {kind} if kind in BAND_TYPES else set()
+
+
+def _solution_faces_of_type(
+    excluded: frozenset[str], labelled: LabelledArrangements
+) -> list[FaceId]:
+    """Each substrate-air pair of solution regions on each level where they meet."""
+    faces: set[FaceId] = set()
+    for level, layer in zip(labelled.levels.levels, labelled.level_layers, strict=True):
+        for f in range(1, len(layer.arr.faces)):
+            label = layer.labels[f]
+            if (
+                label.sheet is not None
+                or label.below is None
+                or label.above is None
+                or interface_type_of(label.below, label.above, None) != "SA"
+            ):
+                continue
+            first, second = sorted(
+                (label.below, label.above), key=lambda d: (d.kind == "vacuum", d.owner)
+            )
+            if not {first.owner, second.owner} & excluded:
+                faces.add(FaceId("interface", (first.owner, second.owner), level))
+    return list(faces)

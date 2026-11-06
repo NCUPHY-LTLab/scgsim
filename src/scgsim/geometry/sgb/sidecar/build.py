@@ -10,9 +10,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from scgsim.geometry.sgb.cutfamilies.inset_plan import TypeExpansion
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
     InsetRequest,
+    InterfaceSurfaces,
     RefinementRequest,
     SolutionInterface,
 )
@@ -20,6 +22,7 @@ from scgsim.geometry.sgb.emission.measures import planned_volume_um3, rounded
 from scgsim.geometry.sgb.emission.plan import BrepPlan
 from scgsim.geometry.sgb.emission.surfaces import CYLINDER
 from scgsim.geometry.sgb.model import ConformalModel
+from scgsim.geometry.sgb.records.support import SupportRegion
 from scgsim.geometry.sgb.sidecar.aedt import aedt_names
 from scgsim.geometry.sgb.sidecar.expected import expected_record
 from scgsim.geometry.sgb.sidecar.features import mesh_features
@@ -226,46 +229,99 @@ def _ports(
 
 
 def _insets(model: ConformalModel) -> list[dict[str, Any]]:
-    """Inset families: the request, the margins, and the primary groups of each band."""
-    grid = model.topology.grid_um
-    bands = band_groups(model.topology, model.routed.face_group)
-    supports = {
-        f.family_id: f.support
-        for f in model.labelled.catalogue.families
-        if f.support is not None
-    }
+    """The inset requests as given.
+
+    A concrete request is the record of its face (its family).  A type-level request lists the families that carry
+    its bands, each as the record of its face, and the faces it skipped with the reason.
+    """
+    facts = _FamilyFacts(
+        model.topology.grid_um,
+        band_groups(model.topology, model.routed.face_group),
+        {
+            f.family_id: f.support
+            for f in model.labelled.catalogue.families
+            if f.support is not None
+        },
+    )
+    families = {r.request_id: r for r in model.inset_plan.requests}
+    expansions = {e.request.request_id: e for e in model.inset_plan.expansions}
     out = []
     for request in sorted(model.insets, key=lambda r: r.request_id):
-        support = supports.get(request.request_id)
-        out.append(
-            {
-                "request_id": request.request_id,
-                "support": _support_record(request),
-                "interface": request.interface,
-                "margins_um": list(request.margins_um),
-                "margins_grid": list(support.margins) if support else [],
-                "band_count": len(request.margins_um) + 1,
-                "support_area_um2": rounded(support.area() * grid * grid)
-                if support
-                else None,
-                "bands": {
-                    str(index): names
-                    for index, names in bands.get(request.request_id, {}).items()
-                },
-            }
-        )
+        if isinstance(request.support, InterfaceSurfaces):
+            out.append(
+                _type_record(request, expansions[request.request_id], families, facts)
+            )
+        else:
+            out.append(_face_record(families[request.request_id], facts))
     return out
 
 
-def _support_record(request: InsetRequest) -> dict[str, Any]:
-    support = request.support
+@dataclass(frozen=True)
+class _FamilyFacts:
+    """What the model knows about its band families: the grid, each family's band groups and support region."""
+
+    grid_um: float
+    bands: dict[str, dict[int, list[str]]]
+    regions: dict[str, SupportRegion]
+
+
+def _face_record(request: InsetRequest, facts: _FamilyFacts) -> dict[str, Any]:
+    """One band family: its request (margins are the union of every request on the face), margins in grid units, area and band groups."""
+    region = facts.regions.get(request.request_id)
+    return {
+        "request_id": request.request_id,
+        "support": _support_record(request.support),
+        "interface": request.interface,
+        "margins_um": list(request.margins_um),
+        "margins_grid": list(region.margins) if region else [],
+        "band_count": len(request.margins_um) + 1,
+        "support_area_um2": rounded(region.area() * facts.grid_um * facts.grid_um)
+        if region
+        else None,
+        "bands": {
+            str(index): names
+            for index, names in facts.bands.get(request.request_id, {}).items()
+        },
+    }
+
+
+def _type_record(
+    request: InsetRequest,
+    expansion: TypeExpansion,
+    families: dict[str, InsetRequest],
+    facts: _FamilyFacts,
+) -> dict[str, Any]:
+    """A type-level request as given, and the faces it was expanded into or skipped."""
+    return {
+        "request_id": request.request_id,
+        "support": _support_record(request.support),
+        "interface": None,
+        "margins_um": list(request.margins_um),
+        "expansion": {
+            "banded": [_face_record(families[i], facts) for i in expansion.banded],
+            "skipped": [
+                {"support": _support_record(s.support), "reason": s.reason}
+                for s in expansion.skipped
+            ],
+        },
+    }
+
+
+def _support_record(
+    support: ConductorSurface | SolutionInterface | InterfaceSurfaces,
+) -> dict[str, Any]:
     if isinstance(support, ConductorSurface):
         return {"entity": support.entity_id, "side": support.side}
-    assert isinstance(support, SolutionInterface)
+    if isinstance(support, SolutionInterface):
+        return {
+            "first_entity": support.first_entity_id,
+            "second_entity": support.second_entity_id,
+            "z_um": support.z_um,
+        }
     return {
-        "first_entity": support.first_entity_id,
-        "second_entity": support.second_entity_id,
-        "z_um": support.z_um,
+        "interface_type": support.interface_type,
+        "face_kinds": None if support.face_kinds is None else list(support.face_kinds),
+        "exclude_entity_ids": list(support.exclude_entity_ids),
     }
 
 
