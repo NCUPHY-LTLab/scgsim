@@ -141,8 +141,9 @@ The index map (schema v3) records, for each surface row, its `row` and `group`,
 nothing. A one-sided row maps `above` or `below` to Palace's postprocessing side.
 A Route A sheet with vacuum on both sides is one face integrated from both sides,
 which needs Palace's internal-boundary cracking; SCGSim writes
-`Model.CrackInternalBoundaryElements` exactly when a row has a
-`shared_face_group`. A sheet over vacuum and dielectric in different places gives
+`Model.CrackInternalBoundaryElements` exactly when a configured row has a
+`shared_face_group`, so a run that configures no `MA` or `MS` film on a sheet
+keeps Palace's default. A sheet over vacuum and dielectric in different places gives
 separate `MA` and `MS` rows on different attributes.
 :::
 

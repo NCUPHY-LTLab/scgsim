@@ -22,6 +22,7 @@ from scgsim.palace.preparation.config import (
     build_electrostatic_config,
     configure_numerical_controls,
 )
+from scgsim.palace.results.surface_contract import validate_surface_epr_config
 
 NETS = {"A": ("left", "right"), "B": ("P", "G")}
 PORTS = {
@@ -163,17 +164,29 @@ def test_domain_materials_come_from_the_volume_materials(case):
     }
 
 
-def test_cracking_is_written_exactly_for_shared_two_sided_rows(case):
-    """Route A (sheet rows with a shared face group) cracks internal boundaries; Route B leaves the default."""
+@pytest.mark.parametrize(
+    ("films", "shared_rows_on_route_a"),
+    [({}, False), ({"SA": None}, False), ({"MA": None, "MS": None}, True)],
+)
+def test_cracking_is_written_exactly_for_configured_shared_rows(
+    case, films, shared_rows_on_route_a
+):
+    """Only a configured row on a Route A sheet cracks internal boundaries; the run's own check agrees."""
     route, groups = case
     first, second = NETS[route]
-    model = electrostatic(
-        groups, [TerminalBinding("t", first)], ground_net_ids=[second]
-    ).config["Model"]
-    if route == "A":
+    result = electrostatic(
+        groups,
+        [TerminalBinding("t", first)],
+        ground_net_ids=[second],
+        surface_epr_specs=surface_epr_specs(**films),
+    )
+    model = result.config["Model"]
+    if route == "A" and shared_rows_on_route_a:
         assert model["CrackInternalBoundaryElements"] is True
     else:
         assert "CrackInternalBoundaryElements" not in model
+    entries = [*result.domain_energy_index_map, *result.surface_epr_index_map]
+    validate_surface_epr_config(result.config, {"entries": entries})
 
 
 def test_surface_rows_select_the_attributes_of_their_rows(case):

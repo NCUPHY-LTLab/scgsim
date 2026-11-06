@@ -109,7 +109,7 @@ def build_electrostatic_config(  # noqa: PLR0913 - config builder preserves its 
             "Postprocessing": {"Energy": energy_rows, "Probe": []},
         },
     }
-    if _requires_internal_boundary_cracking(groups):
+    if _requires_internal_boundary_cracking(epr_index_map):
         config["Model"]["CrackInternalBoundaryElements"] = True
     if epr_rows:
         config["Boundaries"]["Postprocessing"] = {"Dielectric": epr_rows}
@@ -229,7 +229,7 @@ def build_eigenmode_config(  # noqa: PLR0913 - config builder preserves its name
             "Postprocessing": {"Energy": energy_rows, "Probe": []},
         },
     }
-    if _requires_internal_boundary_cracking(groups):
+    if _requires_internal_boundary_cracking(epr_index):
         config["Model"]["CrackInternalBoundaryElements"] = True
     return EigenmodeConfigBuildResult(
         config=config,
@@ -240,19 +240,20 @@ def build_eigenmode_config(  # noqa: PLR0913 - config builder preserves its name
 
 
 def _requires_internal_boundary_cracking(
-    groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
+    epr_index: Sequence[Mapping[str, Any]],
 ) -> bool:
-    """Whether a Surface-EPR row integrates one two-sided face from both sides.
+    """Whether a configured Surface-EPR row integrates one two-sided face from both sides.
 
     A row has a ``shared_face_group`` exactly when it belongs to a Route A conductor sheet, an internal face
     whose MA and MS rows integrate the same face once per side.  Palace keeps the two sides apart only when it
     cracks internal boundary elements (``Model.CrackInternalBoundaryElements``, which then duplicates the
-    nodes of the sheet), so the key is written exactly then and left at Palace's default otherwise.
+    nodes of the sheet), so the key is written exactly when a configured row integrates such a face and left
+    at Palace's default otherwise.  Sidecar rows no spec selects integrate nothing and do not count.
     """
     return any(
         row["shared_face_group"] is not None
-        for info in groups.get("boundary_surfaces", {}).values()
-        for row in info["rows"].values()
+        for entry in epr_index
+        for row in entry["metadata"]["rows"]
     )
 
 
