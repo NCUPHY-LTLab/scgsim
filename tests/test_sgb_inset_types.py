@@ -82,7 +82,7 @@ def test_route_a_bands_every_sheet_for_both_ma_and_ms_with_one_family():
     assert {"a::band=0", "a::band=1", "a::band=2", "b::band=2"} <= set(
         model.routed.groups
     )
-    assert {"MA::a::sheet::band=1", "MS::a::sheet::band=1"} <= set(
+    assert {"MA::a__sheet::band=1", "MS::a__sheet::band=1"} <= set(
         model.routed.surface_epr_rows
     )
 
@@ -95,7 +95,7 @@ def test_finite_conductors_band_the_top_for_ma_and_the_bottom_for_ms(route):
     assert expansion_of(model, "ms") == (["ms::a::bottom", "ms::b::bottom"], [])
     assert expansion_of(model, "sa") == ([f"sa::{GAP}"], [])
     assert not [g for g in band_groups_of(model) if "sidewall" in g]
-    assert {"MA::a::top::band=2", "MS::a::bottom::band=2"} <= set(model.routed.groups)
+    assert {"MA::a__top::band=2", "MS::a__bottom::band=2"} <= set(model.routed.groups)
 
 
 def test_a_floating_sheet_in_vacuum_has_an_ma_row_but_no_gap_edge_and_no_ms_row():
@@ -164,8 +164,8 @@ def test_excluded_entities_are_left_out_and_their_own_requests_band_them():
     model = build(catalogue, "B", own, *by_type("MA", exclude_entity_ids=("a",)))
     assert expansion_of(model, "ma")[0] == ["ma::b::top"]
     assert family_margins(model) == {"a_top": (0.25,), "ma::b::top": MARGINS}
-    assert "MA::a::top::band=1" in model.routed.groups
-    assert "MA::a::top::band=2" not in model.routed.groups
+    assert "MA::a__top::band=1" in model.routed.groups
+    assert "MA::a__top::band=2" not in model.routed.groups
     record = {r["request_id"]: r for r in sidecar_of(model)["insets"]}
     assert record["ma"]["support"]["exclude_entity_ids"] == ["a"]
     assert record["a_top"]["margins_um"] == [0.25]
@@ -418,7 +418,7 @@ def test_the_sidecar_records_the_request_as_given_its_banded_faces_and_its_skipp
     assert sa["interface"] is None and sa["margins_um"] == [0.5, 1.0]
     assert [f["request_id"] for f in sa["expansion"]["banded"]] == [f"sa::{GAP}"]
     assert sa["expansion"]["banded"][0]["bands"]["0"] == [
-        "SA::substrate|vacuum::interface::z=0.0::band=0"
+        "SA::substrate|vacuum__interface::band=0"
     ]
     assert sa["expansion"]["skipped"] == [
         {

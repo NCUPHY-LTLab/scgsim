@@ -9,10 +9,10 @@ to read the faces from the sidecar.
 * **One family per face.**  Requests that land on one face are one family whose margins are the sorted union of
   theirs: a Route A sheet serves an ``MA`` and an ``MS`` request with one family.  A concrete request keeps its
   own id; a face asked for only by type is a family with the id ``<id of the first request in id order>::<entity>::<side>``
-  (``<first>|<second>::z=<z>`` for an interface), so ids, lineage and band group names depend on the requests and
+  (``<first>|<second>::z=<z>`` for an interface), so ids, lineage and band group names (up to the collision qualifier) depend on the requests and
   the faces only, never on ``workers`` or ``tiles``.  Two concrete requests on one face are not merged, and
   the build refuses them: both families would put their bands into the same physical groups
-  (``routes.groups.apply_route``); a type-level request meeting two of them is refused here, earlier.
+  (``routes.face_names.name_faces``); a type-level request meeting two of them is refused here, earlier.
 * **No gap edge.**  A concrete request fails closed on a face with no gap edge.  A face only type-level requests
   ask for is skipped and recorded (:class:`SkippedFace`), because "every face of a type" includes faces bands cannot be
   measured on (the substrate underside).

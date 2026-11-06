@@ -14,6 +14,9 @@ one -- so the unions are lists of primary group names, never overlapping Gmsh gr
 * Net unions: ``NET::<net>`` lists the primary groups of the Net's exposed conductor
   surfaces (Electrostatic terminals and grounds), whichever route produced them.
 
+The face names, with the qualifier a band collision needs, come from
+:func:`~scgsim.geometry.sgb.routes.face_names.name_faces`; everything below reads those final names.
+
 Native tags are never part of this plan; they follow sorted group names and are only
 recorded by emission.
 """
@@ -23,15 +26,15 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from scgsim.geometry.sgb.assembly.records import TopoFace, Topology
-from scgsim.geometry.sgb.errors import InputError, SgbError
+from scgsim.geometry.sgb.assembly.records import Topology
+from scgsim.geometry.sgb.errors import SgbError
+from scgsim.geometry.sgb.routes.face_names import name_faces
 from scgsim.geometry.sgb.routes.naming import (
     SHEET,
     interface_type_of,
     net_of_surface,
     sheet_face_sides,
     surface_epr_row_ids,
-    surface_group,
     volume_group,
 )
 from scgsim.geometry.sgb.routes.policy import RoutePolicy
@@ -60,7 +63,7 @@ class RoutedModel:
     unions: dict[str, list[str]]
     surface_epr_rows: dict[
         str, str
-    ]  # Surface-EPR row ("MA::pad::top::band=2") -> the primary group that carries it
+    ]  # Surface-EPR row ("MA::pad__top::band=2") -> the primary group that carries it
 
     def is_emitted_face(self, face_neg: str | None, face_pos: str | None) -> bool:
         """Whether a face with these two side volumes bounds an emitted volume."""
@@ -74,33 +77,22 @@ def apply_route(topology: Topology, policy: RoutePolicy) -> RoutedModel:
     emitted = frozenset(
         vid for vid, v in topology.volumes.items() if policy.is_emitted(v.domain)
     )
-    face_group: dict[str, str | None] = {}
+    face_group = name_faces(topology, emitted)
     groups: dict[str, PhysicalGroup] = {}
     # surface group -> its interface type, from the face structure (never from the name)
     group_types: dict[str, str] = {}
     epr_rows: dict[str, str] = {}
-    # banded surface group -> the band families its faces carry (one, or the build stops)
-    group_families: dict[str, set[str]] = {}
     # sheet group -> the row types (MA, MS) some face of it has a neighbour for
     sheet_row_types: dict[str, set[str]] = defaultdict(set)
     net_groups: dict[str, set[str]] = defaultdict(set)
     for fid, face in sorted(topology.faces.items()):
-        group = surface_group(
-            face.neg_domain,
-            face.pos_domain,
-            face.owner,
-            face.bands,
-            vertical=face.kind == "wall",
-            level=face.z_range[0],
-        )
-        face_group[fid] = group
+        group = face_group[fid]
         bounds_emitted = any(
             v is not None and v in emitted for v in (face.neg_volume, face.pos_volume)
         )
         if group is None or not bounds_emitted:
             continue
         groups.setdefault(group, PhysicalGroup(2)).ids.append(fid)
-        _check_one_band_family(group, face, group_families)
         interface = interface_type_of(face.neg_domain, face.pos_domain, face.owner)
         if interface is not None:
             group_types[group] = interface
@@ -137,29 +129,6 @@ def apply_route(topology: Topology, policy: RoutePolicy) -> RoutedModel:
         _unions(group_types, sheet_row_types, net_groups),
         dict(sorted(epr_rows.items())),
     )
-
-
-def _check_one_band_family(
-    group: str, face: TopoFace, group_families: dict[str, set[str]]
-) -> None:
-    """Fail closed when one group would collect the band labels of two families.
-
-    A band index is local to its family, so a group named by the index alone and holding two families' faces
-    would let a consumer who selects one family's band select the other's faces.  Naming a banded interface
-    by its level keeps families on different faces apart; what remains is two requests on one face, whose
-    cells carry a label of each family.
-    """
-    if not face.bands or (face.owner is not None and face.owner.kind == "port"):
-        return
-    families = group_families.setdefault(group, set())
-    families.update(family for family, _ in face.bands)
-    if len(families) > 1:
-        first, second = sorted(families)[:2]
-        raise InputError(
-            f"physical group {group!r} would hold the faces of two band families, {first!r} and {second!r}; "
-            "a band index belongs to one family, so ask for each face once in the inset requests "
-            "(two requests on the same face cannot both be banded)"
-        )
 
 
 def _unions(

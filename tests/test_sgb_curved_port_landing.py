@@ -129,7 +129,7 @@ def test_the_port_and_the_pad_share_arc_edges_carrying_the_pad_arc_only(
     assert all(s.startswith("pad/") for edge in arcs for s in edge.sources)
     pad_bottom = {
         e
-        for face_id in model.routed.groups["MS::pad::bottom"].ids
+        for face_id in model.routed.groups["MS::pad__bottom"].ids
         for e, _ in topology.faces[face_id].loops[0]
     }
     assert {edge.id for edge in arcs} <= pad_bottom

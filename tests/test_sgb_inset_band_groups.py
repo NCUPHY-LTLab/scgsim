@@ -1,9 +1,11 @@
-"""Band groups name their support: a banded interface carries its level, and a group never mixes two families.
+"""A band group never mixes two families: the dielectric-side qualifier on a collision, an error on a second collision.
 
 A band index is local to a band family, so a group named by the index alone and holding the faces of two
 families would let a consumer who selects one family's band select the other's.  A conductor face is named by its
-entity and side, which already identify the support; an interface support is a pair of solution regions at one Z,
-so a banded interface group carries ``z=<z>``.  What is left (two concrete requests on one face) is an error.
+entity and side, which already identify the support; an interface support is a pair of solution regions, and the
+same pair meets at several levels.  Only when two families would share a banded interface group do the faces of
+that group gain the side of the dielectric they lie on (``__interface__top`` / ``__interface__bottom``); a group
+that still holds two families (two concrete requests on one face) is an error.  A name never carries a height.
 """
 
 from __future__ import annotations
@@ -71,42 +73,77 @@ def level_of(model, group: str) -> set[float]:
     }
 
 
-def test_a_banded_interface_group_carries_the_level_it_lies_on(two_level_model):
-    """The same substrate-vacuum pair at z = 0 and z = -100 gives distinct band groups, each on one level."""
-    groups = {n for n in two_level_model.routed.groups if "interface::" in n}
+TOP = "SA::substrate|vacuum__interface__top"
+BOTTOM = "SA::substrate|vacuum__interface__bottom"
+
+
+PLAIN = "SA::substrate|vacuum__interface"
+
+
+def test_the_reviewers_two_level_model_gets_one_band_group_per_dielectric_side(
+    two_level_model,
+):
+    """The same pair at z = 0 (substrate below) and z = -100 (substrate above), bands 0 and 1 on both levels.
+
+    Band 2 exists on the top level only, so no second family shares it and its group is not qualified.
+    """
+    groups = {n for n in two_level_model.routed.groups if "__interface" in n}
     assert groups == {
-        f"SA::substrate|vacuum::interface::z={z}::band={k}"
-        for z, bands in ((0.0, (0, 1, 2)), (-100.0, (0, 1)))
-        for k in bands
+        f"{TOP}::band=0",
+        f"{TOP}::band=1",
+        f"{BOTTOM}::band=0",
+        f"{BOTTOM}::band=1",
+        f"{PLAIN}::band=2",
     }
     for name in groups:
-        expected = float(name.split("::z=")[1].split("::")[0])
+        expected = -100.0 if name.startswith(BOTTOM) else 0.0
         assert level_of(two_level_model, name) == {expected}, name
+        assert "z=" not in name
 
 
-def test_the_group_name_agrees_with_the_family_id_suffix(two_level_model):
-    """``z=<z>`` of a group is the ``z=<z>`` of the expanded request id of the same face."""
-    (expanded,) = (
-        r.request_id
-        for r in two_level_model.inset_plan.requests
-        if r.request_id.startswith("sa::")
-    )
-    suffix = expanded.split("::")[-1]
-    assert suffix == "z=-100.0"
-    assert f"SA::substrate|vacuum::interface::{suffix}::band=0" in (
-        two_level_model.routed.groups
-    )
+def test_the_qualifier_is_the_side_of_the_dielectric_not_the_height(two_level_model):
+    """At z = 0 the substrate lies below the face (the face is its top); at z = -100 above it (its bottom)."""
+    for name, group in two_level_model.routed.groups.items():
+        if group.dim != 2 or "__interface__" not in name:
+            continue
+        for fid in group.ids:
+            face = two_level_model.topology.faces[fid]
+            substrate_below = face.neg_domain.name == "substrate"
+            assert name.startswith(TOP if substrate_below else BOTTOM), name
 
 
 def test_an_unbanded_interface_keeps_one_group_across_levels():
-    """No inset request: both levels are one ``SA::...::interface`` group, as before."""
+    """No inset request: both levels are one ``SA::...__interface`` group, with no qualifier and no height."""
     model = build_model_from_catalogue(two_level_catalogue(), "A")
-    assert level_of(model, "SA::substrate|vacuum::interface") == {0.0, -100.0}
-    assert not [n for n in model.routed.groups if "::z=" in n]
+    assert level_of(model, "SA::substrate|vacuum__interface") == {0.0, -100.0}
+    assert not [n for n in model.routed.groups if "z=" in n or "__interface__" in n]
+
+
+def test_a_single_level_band_model_has_no_qualifier():
+    """One family on the pair: its bands are ``SA::...__interface::band=k``; the other level stays unbanded."""
+    model = build_model_from_catalogue(
+        two_level_catalogue(),
+        "A",
+        insets=(
+            InsetRequest(
+                "top_sa", SolutionInterface("substrate", "vacuum", 0.0), (0.5, 1.0)
+            ),
+        ),
+    )
+    groups = {n for n in model.routed.groups if "__interface" in n}
+    assert groups == {
+        "SA::substrate|vacuum__interface",
+        *(f"SA::substrate|vacuum__interface::band={k}" for k in range(3)),
+    }
+    assert level_of(model, "SA::substrate|vacuum__interface") == {-100.0}
+    assert {
+        level_of(model, f"SA::substrate|vacuum__interface::band={k}").pop()
+        for k in range(3)
+    } == {0.0}
 
 
 def test_each_level_has_its_own_families_margins_and_band_groups(two_level_model):
-    """The sidecar gives a family its own margins and bands, and no band group holds faces of two levels."""
+    """The sidecar gives a family its own margins and bands, each family on its own qualified groups."""
     side = sidecar_of(two_level_model)
     assert not list(jsonschema.Draft202012Validator(sidecar_schema()).iter_errors(side))
     insets = {r["request_id"]: r for r in side["insets"]}
@@ -117,23 +154,47 @@ def test_each_level_has_its_own_families_margins_and_band_groups(two_level_model
         if f["request_id"] == "sa::substrate|vacuum::z=-100.0"
     )
     assert top["margins_um"] == [0.5, 1.0] and bottom["margins_um"] == [0.5]
-    prefix = "SA::substrate|vacuum::interface::"
-    assert top["bands"] == {str(k): [f"{prefix}z=0.0::band={k}"] for k in range(3)}
-    assert bottom["bands"] == {
-        str(k): [f"{prefix}z=-100.0::band={k}"] for k in range(2)
+    assert top["bands"] == {
+        "0": [f"{TOP}::band=0"],
+        "1": [f"{TOP}::band=1"],
+        "2": [f"{PLAIN}::band=2"],
     }
+    assert bottom["bands"] == {str(k): [f"{BOTTOM}::band={k}"] for k in range(2)}
     for name, group in side["physical_groups"].items():
-        if "interface::z=" not in name:
+        if "__interface" not in name or "::band=" not in name:
             continue
-        family = top if "z=0.0" in name else bottom
+        family = bottom if name.startswith(BOTTOM) else top
+        assert group["face_kind"] == "interface"
         assert group["band"] == {
             "family": family["request_id"],
             "index": group["band"]["index"],
         }
         assert {side["faces"][fid]["z_um"][0] for fid in group["ids"]} == {
-            float(name.split("::z=")[1].split("::")[0])
+            0.0 if family is top else -100.0
+        }
+        assert {side["faces"][fid]["face_kind"] for fid in group["ids"]} == {
+            "interface"
         }
         assert side["surface_epr_rows"][name]["group"] == name
+        assert side["surface_epr_rows"][name]["band"] == group["band"]["index"]
+    assert {n for n in side["surface_epr_rows"] if n.startswith("SA::")} == {
+        n for n in side["physical_groups"] if n.startswith("SA::") and "::band=" in n
+    }
+    assert side["unions"]["interface_types"]["SA"] == sorted(
+        n for n in side["physical_groups"] if n.startswith("SA::")
+    )
+
+
+def test_the_qualified_names_do_not_depend_on_workers_or_tiles(two_level_model):
+    """The qualifier pass reads the sorted topology only."""
+    other = build_model_from_catalogue(
+        two_level_catalogue(), "A", insets=two_level_requests(), tiles=2, workers=2
+    )
+    assert other.routed.face_group == two_level_model.routed.face_group
+    assert (
+        sidecar_of(other)["surface_epr_rows"]
+        == sidecar_of(two_level_model)["surface_epr_rows"]
+    )
 
 
 def test_two_concrete_requests_on_one_face_are_refused():
@@ -151,14 +212,36 @@ def test_two_concrete_requests_on_one_face_are_refused():
 
 
 def test_two_concrete_interface_requests_on_one_face_are_refused():
-    """The same holds for an interface: the level in the name does not separate two families on one face."""
+    """The qualifier does not separate two families on one face: the group it still shares is named in the error."""
     top = SolutionInterface("substrate", "vacuum", 0.0)
-    with pytest.raises(InputError, match="two band families"):
+    with pytest.raises(InputError, match="two band families") as raised:
         build_model_from_catalogue(
             two_level_catalogue(),
             "A",
             insets=(InsetRequest("one", top, (0.5,)), InsetRequest("two", top, (1.0,))),
         )
+    message = str(raised.value)
+    assert f"physical group '{TOP}::band=" in message
+    assert "'one'" in message and "'two'" in message
+
+
+def test_the_still_colliding_group_is_named_after_the_qualifier():
+    """Two concrete requests on the top level and a third family below: only the top group collides."""
+    top = SolutionInterface("substrate", "vacuum", 0.0)
+    bottom = SolutionInterface("substrate", "vacuum", -100.0)
+    with pytest.raises(InputError, match="two band families") as raised:
+        build_model_from_catalogue(
+            two_level_catalogue(),
+            "A",
+            insets=(
+                InsetRequest("one", top, (0.5,)),
+                InsetRequest("two", top, (1.0,)),
+                InsetRequest("below", bottom, (0.5,)),
+            ),
+        )
+    message = str(raised.value)
+    assert TOP in message and BOTTOM not in message
+    assert "'one'" in message and "'two'" in message and "'below'" not in message
 
 
 # --------------------------------------------------------------------------- expansion.banded

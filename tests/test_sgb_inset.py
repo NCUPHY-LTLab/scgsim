@@ -151,20 +151,20 @@ def test_semantic_names_carry_the_band_index_and_unions_list_primary_groups(band
     for k in range(4):
         assert (
             f"pad::band={k}" in groups
-            and f"SA::substrate|vacuum::interface::z=0.0::band={k}" in groups
+            and f"SA::substrate|vacuum__interface::band={k}" in groups
         )
     assert not any(n.startswith(("MA::pad", "MS::pad", "pad::band=4")) for n in groups)
     assert "pad" not in groups  # the whole pad sheet is banded
     assert banded.routed.unions["NET::pad"] == [f"pad::band={k}" for k in range(4)]
     rows = banded.routed.surface_epr_rows
     assert all(
-        rows[f"{kind}::pad::sheet::band={k}"] == f"pad::band={k}"
+        rows[f"{kind}::pad__sheet::band={k}"] == f"pad::band={k}"
         for k in range(4)
         for kind in ("MA", "MS")
     )
     assert all(
-        rows[f"SA::substrate|vacuum::interface::z=0.0::band={k}"]
-        == f"SA::substrate|vacuum::interface::z=0.0::band={k}"
+        rows[f"SA::substrate|vacuum__interface::band={k}"]
+        == f"SA::substrate|vacuum__interface::band={k}"
         for k in range(4)
     )
     assert (
@@ -240,19 +240,19 @@ def test_route_b_and_c_band_the_pad_top_as_ma_and_the_pad_bottom_as_ms():
         groups = model.routed.groups
         for k in range(4):
             assert (
-                f"MA::pad::top::band={k}" in groups
-                and f"MS::pad::bottom::band={k}" in groups
+                f"MA::pad__top::band={k}" in groups
+                and f"MS::pad__bottom::band={k}" in groups
             )
         assert (
-            "MA::pad::sidewall" in groups
+            "MA::pad__sidewall" in groups
         )  # the sidewalls are not banded (out of version 1)
         assert (
-            model.routed.surface_epr_rows["MS::pad::bottom::band=2"]
-            == "MS::pad::bottom::band=2"
+            model.routed.surface_epr_rows["MS::pad__bottom::band=2"]
+            == "MS::pad__bottom::band=2"
         )
         assert set(model.routed.unions["NET::pad"]) >= {
-            f"MA::pad::top::band={k}" for k in range(4)
-        } | {f"MS::pad::bottom::band={k}" for k in range(4)}
+            f"MA::pad__top::band={k}" for k in range(4)
+        } | {f"MS::pad__bottom::band={k}" for k in range(4)}
 
 
 def test_straight_inset_members_keep_their_generating_primitive_in_the_lineage(banded):
@@ -374,7 +374,7 @@ def test_the_expected_interface_type_is_checked_against_the_labels():
             InsetRequest("r", ConductorSurface("pad", "top"), (0.5,), interface="MA"),
         ),
     )
-    assert "MA::pad::top::band=1" in model.routed.groups
+    assert "MA::pad__top::band=1" in model.routed.groups
     message = request_error(
         InsetRequest("r", ConductorSurface("pad", "top"), (0.5,), interface="MS"), "B"
     )
@@ -489,7 +489,7 @@ def test_bands_on_a_real_thin_film_sheet_use_the_qualified_entity_id():
     assert {f"chip/left::band={k}" for k in range(3)} <= set(groups)
     assert "chip/right" in groups  # the other Entity is untouched
     assert (
-        model.routed.surface_epr_rows["MA::chip/left::sheet::band=2"]
+        model.routed.surface_epr_rows["MA::chip/left__sheet::band=2"]
         == "chip/left::band=2"
     )
     fam = family(model, "bands/left")
@@ -510,7 +510,7 @@ def test_bands_on_the_top_of_a_real_finite_conductor(tmp_path):
     model = build_conformal_model(
         effective.build_input, effective.representation, "B", insets=(request,)
     )
-    assert {f"MA::pad::top::band={k}" for k in range(3)} <= set(model.routed.groups)
+    assert {f"MA::pad__top::band={k}" for k in range(3)} <= set(model.routed.groups)
     assert exact_band_areas(model, "pad_top").keys() == {0, 1, 2}
     assert sum(exact_band_areas(model, "pad_top").values()) * 1e-6 == pytest.approx(
         400.0, rel=1e-9

@@ -33,9 +33,10 @@ Top-level fields and who uses them
     Palace rebuilds ``groups = {volumes, boundary_surfaces, surface_groups, pec_surfaces,
     port_surfaces}`` from these: ``owner_semantic_ids`` = ``entities``, ``adjacent_solution_volume_ids``
     = ``adjacent_domains``, ``face_kind`` = ``face_kind`` (one per group, and part of its name:
-    ``<kind>::<entity>::<top|bottom|sidewall|sheet|interface>[::band=k]`` for a prefixed group, where a banded
-    ``interface`` is ``...::interface::z=<z>::band=k`` (its level, so the families of one pair at two levels
-    never share a group); a sheet group ``<entity>[::band=k]`` has face kind ``sheet`` without carrying it in the name),
+    ``<kind>::<entity>__<top|bottom|sidewall|sheet|interface>[::band=k]`` for a prefixed group, where the faces of
+    an ``interface`` band group that two families would share gain the side of the dielectric they lie on
+    (``...__interface__top::band=k`` and ``...__interface__bottom::band=k``, still ``face_kind`` ``interface``);
+    a sheet group ``<entity>[::band=k]`` has face kind ``sheet`` without carrying it in the name),
     ``conductor_component_id`` / ``net_id`` = ``entities`` / ``net``, PEC surfaces = the groups of interface type ``MA``/``MS``/``SHEET`` of a conductor.
 ``unions``
     ``interface_types`` (``MA`` -> groups ...; reports aggregate by interface type; a Route A ``SHEET``
@@ -43,9 +44,9 @@ Top-level fields and who uses them
     (Net -> exposed conductor groups; Electrostatic terminals and grounds).  Lists of primary groups,
     never overlapping Gmsh groups.
 ``surface_epr_rows``
-    every Surface-EPR row (``MA::pad::top::band=2`` ...) and the group that carries it, with entities and
+    every Surface-EPR row (``MA::pad__top::band=2`` ...) and the group that carries it, with entities and
     band: Palace's cumulative band selection.  A Route A sheet group (``pad::band=2``) carries
-    ``MA::pad::sheet::band=2`` when a face of it has vacuum on some side and ``MS::pad::sheet::band=2``
+    ``MA::pad__sheet::band=2`` when a face of it has vacuum on some side and ``MS::pad__sheet::band=2``
     when a face has a dielectric on some side; a sheet with vacuum on both sides has no ``MS`` row.  A sheet
     row has ``shared_face_group`` (the sheet group), ``face_sides`` (face id -> ``above``, ``below`` or
     ``both``, only the faces that have that neighbour) and ``side`` (their common value, or ``mixed``), so

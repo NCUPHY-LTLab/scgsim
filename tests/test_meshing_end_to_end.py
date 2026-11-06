@@ -140,7 +140,7 @@ def test_bad_elements_are_attributed_to_planned_ids_groups_and_feature_kinds(
     wall_elements = [e for e in on_curves if film_tags & {c.tag for c in e.candidates}]
     assert wall_elements
     assert all("film_sidewall" in e.feature_kinds for e in wall_elements)
-    assert any(any(g.endswith("::sidewall") for g in e.groups) for e in wall_elements)
+    assert any(any(g.endswith("__sidewall") for g in e.groups) for e in wall_elements)
 
 
 def test_the_conductor_outline_rule_meshes_clean_with_more_elements_near_the_conductors(

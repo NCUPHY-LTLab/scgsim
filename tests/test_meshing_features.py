@@ -54,7 +54,7 @@ def test_the_binding_groups_and_embeddings_are_carried_for_the_audit():
     assert result.binding.id_of(2, 3) == "f2"
     assert result.binding.id_of(1, 99) is None
     assert {g.name: (g.dimension, g.ids) for g in result.groups}[
-        "MA::pad::sidewall"
+        "MA::pad__sidewall"
     ] == (2, ("f0", "f1"))
     assert [(e.face, e.host_volume) for e in result.embedded_faces] == [(3, 2)]
     assert [(e.edge, e.host_face) for e in result.embedded_edges] == [(4, 2)]
