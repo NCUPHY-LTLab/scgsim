@@ -40,6 +40,14 @@ A face inside an inset band carries ``::band=k`` (the innermost band index of it
 band seams stop at the boundary of a port, so a port is one face and carries no band.  Names never carry
 native tags.
 
+**A banded interface also carries its level.**  A band index is local to one band family, and a family's
+support is one face: for a conductor face the name (entity and ``top`` / ``bottom`` / ``sheet``) already says
+which, but an interface support is a pair of solution regions *at one Z*, and the same pair meets at several
+levels.  A banded ``interface`` face is therefore ``<base>::interface::z=<z>::band=<k>``, with ``<z>`` in
+the format of the request ids ``cutfamilies.supports`` expands (``z=0.0``, ``z=-100.0``), so two families on
+one pair never share a band group.  An unbanded interface keeps ``<base>::interface``: one group across levels
+is correct there.
+
 Surface-EPR rows keep the prefixed form for a sheet: its group ``pad::band=1`` carries the row
 ``MA::pad::sheet::band=1`` when a face of the group has vacuum on some side, and ``MS::pad::sheet::band=1``
 when a face has a dielectric on some side (see :func:`sheet_row_id` and :func:`sheet_face_sides`).  A sheet
@@ -49,6 +57,7 @@ with vacuum on both sides has no ``MS`` row.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from fractions import Fraction
 
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.records.labels import Domain, SheetOwner
@@ -70,10 +79,12 @@ def surface_group(  # noqa: PLR0913 - the two sides, the owner, the bands and th
     bands: tuple[tuple[str, int], ...] = (),
     *,
     vertical: bool = False,
+    level: Fraction | None = None,
 ) -> str | None:
     """The single primary physical-group name of a face from the domains on its two sides.
 
-    ``vertical`` says the face is a wall (``sidewall``); otherwise it is horizontal.
+    ``vertical`` says the face is a wall (``sidewall``); otherwise it is horizontal.  ``level`` is the Z
+    (micrometres) of a horizontal face, which a banded ``interface`` face needs for its name.
     """
     base = _base_group(neg, pos, owner)
     if base is None:
@@ -83,8 +94,22 @@ def surface_group(  # noqa: PLR0913 - the two sides, the owner, the bands and th
     if owner is not None:
         # a conductor sheet: the entity id; its face kind is always sheet
         return _banded(base, bands)
-    name = f"{base}::{face_kind(neg, pos, owner, vertical=vertical)}"
+    kind = face_kind(neg, pos, owner, vertical=vertical)
+    name = f"{base}::{kind}"
+    if kind == "interface" and bands:
+        name = f"{name}::{level_label(_required_level(level, name))}"
     return _banded(name, bands)
+
+
+def level_label(level: Fraction) -> str:
+    """The level of an interface as it appears in names and request ids: ``z=<z>`` with ``<z>`` a float in micrometres."""
+    return f"z={float(level)}"
+
+
+def _required_level(level: Fraction | None, name: str) -> Fraction:
+    if level is None:
+        raise ValueError(f"a banded interface face {name!r} needs the level it lies on")
+    return level
 
 
 def _banded(name: str, bands: tuple[tuple[str, int], ...]) -> str:

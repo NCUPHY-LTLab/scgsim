@@ -57,13 +57,19 @@ flowchart LR
 ::: {.askr-table-compact}
 | 層 | 例子 | 對什麼穩定 | 用途 |
 |---|---|---|---|
-| **Semantic identity** | `MA::pad::top::band=2`、<code>SA::substrate&#124;vacuum::interface::band=0</code>、`vacuum` | 不相關的修改、worker 數、tile 配置 | physical group、Surface EPR row、報告 |
+| **Semantic identity** | `MA::pad::top::band=2`、<code>SA::substrate&#124;vacuum::interface::z=0.0::band=0</code>、`vacuum` | 不相關的修改、worker 數、tile 配置 | physical group、Surface EPR row、報告 |
 | **Atomic topology identity** | `f:5cba27a49e17b07e`、`e:3814641e4355b553` | 同樣的輸入得到同樣的 ID；只有 entity 自己的內容改變時才改變 | 每個輸出 entity 的計畫、lineage、sidecar |
 :::
 
 **Physical group** 是交給 solver 的一組 face 或 volume 的具名集合。這裡的 face 指輸出的 BREP face；它在 arrangement 中對應的平面區域稱為 cell，一個 face 可由一個或多個 cell 合併而成。語意名稱由 cell 的 label 組成：`<kind>::<entity>::<face kind>[::band=k]`。kind 是 surface 種類（`MA` 為 metal–vacuum、`MS` 為 metal–substrate、`MM` 為兩個導體之間、`SA` 為 substrate–vacuum、`PORT`、`EXT` 為外邊界）；entity 是擁有它的 Entity（或 domain）；face kind 是 `top`、`bottom`、`sidewall`、`sheet`、`interface`；有 inset band 時再加 band。volume 與 Route A 的 sheet 不帶前綴，名稱是 entity id 本身：volume 為 `<entity>`，sheet 為 `<entity>[::band=k]`（sheet 一定是 `sheet`，所以不再寫 face kind）；Surface EPR 的 MA 與 MS 兩個 row 仍寫成 `MA::<entity>::sheet[::band=k]` 與 `MS::<entity>::sheet[::band=k]`，都由 sidecar 的 `surface_epr_rows` 指到這個 sheet group。
 
 **命名規則。**裸的 entity id（`substrate`、`pad`、`chip/left`）指物件本身：它的 volume，Route A 導體則是它的 sheet；那是 volume 還是 surface，由 Gmsh 的 Type 欄位標示，名稱不必再重複維度。帶界面前綴的名稱（`MA::`、`MS::`、`MM::`、`SA::`、`AA::`、`SS::`、`EXT::`、`PORT::`）指**兩個東西之間的 face**。這些前綴保留，是因為它們帶著物理：前綴決定 Surface EPR 要對這個 face 套用哪一組 loss 參數（metal–vacuum、metal–substrate、substrate–vacuum 各有自己的 participation 與 loss），不只是分類標籤。因此 entity id 不可以等於這些前綴之一，也不可以含 `::`，否則名稱會有歧義；SGB 遇到這樣的 id 會直接報 `InputError`。
+
+::: {#band-group-names}
+**有 band 的介面要帶高度。**band 的編號 `k` 只在同一個 band family 內有意義，所以一個 band group 的名稱必須指出它屬於哪一個 family 的 support。導體 face 的名稱（Entity 加 `top`、`bottom` 或 sheet）本來就指向唯一的 support；但介面的 support 是「一對 solution region 在某個高度」，同一對會在好幾個高度相遇（例如基板的上表面與下表面都是 substrate–vacuum），名稱若不帶高度，兩個高度的 band 就會落進同一個 group，選其中一個 family 的 band 會連另一層的 face 一起選到。所以有 band 的 `interface` face 命名為 `<kind>::<a>|<b>::interface::z=<z>::band=k`，例如 <code>SA::substrate&#124;vacuum::interface::z=0.0::band=1</code> 與 <code>SA::substrate&#124;vacuum::interface::z=-100.0::band=1</code>；`z=<z>` 與按種類展開的 request id 後綴（`<id>::<a>|<b>::z=<z>`）同一格式（µm，浮點數）。沒有 band 的介面維持 `SA::substrate|vacuum::interface`，跨高度是一個 group，這裡是對的。導體 face 的 band 名稱（`pad::band=2`、`MA::pad::top::band=2`）不變。
+
+即使這樣，若一個 primary group 仍會收進兩個不同 family 的 band label（例如兩個指定 face 的請求選到同一個 face），build 以 `InputError` 停止，訊息指出 group 名稱與兩個 family。
+:::
 
 D5 的 per-Entity 命名已在 production 實作，MA、MS、SA 的總和是 sidecar 的 `unions.interface_types`；running example 中每個 Net 只有一個 Entity，所以 per-Net 與 per-Entity 得到相同的 face，只有名稱不同。見 [D5](decisions.qmd#d5)。
 
@@ -132,7 +138,7 @@ production 的測試以 Gmsh API 的 oracle（依建構順序把同一個 topolo
 
 不論 worker 數、tile 配置或 Python hash seed，同樣的輸入得到同樣的 ID。production 的測試涵蓋：同一個輸入兩次推導得到相同的 ID 與 model digest；三個 `PYTHONHASHSEED` 下相同；wall 的 ID 不隨旁邊的 vertical edge 改變（`test_wall_ids_do_not_depend_on_the_vertical_edges_next_to_them`）；tile 與 worker 數不同時，ID 與五個輸出檔相同（同一台機器上）。逐項的狀態（測過、實測、只是論證）見[使用契約的決定性一節](consumer-contract.qmd#determinism)。
 
-實測（production）：`identity.py` 在全新的 interpreter 中，以四種（tile grid、worker）設定與三個 `PYTHONHASHSEED` 值重建兩個模型，並把 `ConformalModel.identity_digest()`（每一個 vertex、edge、face、volume 與 group 成員的 ID 的 hash）印出來。結果：十二次執行，每個模型都只有一個 digest（本頁的 Route B 含 band 範例為 `model:27ae3b50206900c9`，60 個 feature 的隨機 layout 為 `model:c0b6c914cb025f97`；完整表格見補充）。
+實測（production）：`identity.py` 在全新的 interpreter 中，以四種（tile grid、worker）設定與三個 `PYTHONHASHSEED` 值重建兩個模型，並把 `ConformalModel.identity_digest()`（每一個 vertex、edge、face、volume 與 group 成員的 ID 的 hash）印出來。結果：十二次執行，每個模型都只有一個 digest（本頁的 Route B 含 band 範例為 `model:80b075081bd167aa`，60 個 feature 的隨機 layout 為 `model:c0b6c914cb025f97`；完整表格見補充）。
 
 成立的原因：topology 是整數（grid point 與精確分數），ID 是對內容 hash，tile 切線落在 pixel 欄之間所以每個 hot pixel 只有一個 owner，合併結果依 item index 放回（見[平行化的 derivation](parallelism.qmd)）。直接 writer 的輸出對任何 worker 數逐位元相同。
 
@@ -141,7 +147,7 @@ production 的測試以 Gmsh API 的 oracle（依建構順序把同一個 topolo
 把範例中的 lumped port 移除（`pad_in_ground("B", with_port=False)`，同樣的 band 請求）。Band 的**曲線**完全沒變：每個 family 的 support 相同，沒有任何 band 的面積增加，gap band 只少掉 port 蓋住的面積（Route A 同樣的比較見 [Inset imprint](inset-imprint.qmd#band-measure)）。port 在 host 的 support plane（z = 0，substrate 的表面），所以它佔去 SA 介面的一塊，並且它的邊落在 pad 與 ground 的底邊上。改變的是 port 碰到的東西，見補充的表格：
 
 - **完全沒變的：**pad top 的四個 band group（`MA::pad::top::band=0…3`）、`MS::pad::bottom::band=1…3`、`MA::ground::top`、四個 `EXT` group，以及 `substrate` 與 `vacuum` 兩個 volume 的 ID 與成員。port 不在這些 face 的邊界上，volume 是對它的 cell 集合 hash，而 slab 的 cell 不受位於 level 上的 sheet 影響。
-- **改變的：**四個 `SA::substrate|vacuum::interface::band` group（port 的 footprint 從 SA 的 band cell 中挖掉，剩下的 face 有了新邊界，所以 ID 都是新的；面積也少了 port 蓋住的部分）、`MS::pad::bottom::band=0` 與 `MS::ground::bottom`（port 的角點把它們的底邊切成更多段）、`MA::pad::sidewall` 與 `MA::ground::sidewall`（wall 的底邊同樣多了 vertex，成員個數不變，但 ID 變了）。
+- **改變的：**四個 `SA::substrate|vacuum::interface::z=0.0::band=k` group（port 的 footprint 從 SA 的 band cell 中挖掉，剩下的 face 有了新邊界，所以 ID 都是新的；面積也少了 port 蓋住的部分）、`MS::pad::bottom::band=0` 與 `MS::ground::bottom`（port 的角點把它們的底邊切成更多段）、`MA::pad::sidewall` 與 `MA::ground::sidewall`（wall 的底邊同樣多了 vertex，成員個數不變，但 ID 變了）。
 
 Vertex、edge、face、volume 的數量與有多少 ID 在兩次 build 之間保持相同，見補充的表格：60 個 face 中有 48 個、274 條 edge 中有 242 條保持原 ID；四個 volume 的 ID 都沒變。除了 `PORT::p1`，兩次 build 的 group 名稱相同。因此，不相關的修改只會改變內容被它碰到的 entity 的 ID，semantic 名稱不會移動。
 
@@ -160,10 +166,10 @@ Vertex、edge、face、volume 的數量與有多少 ID 在兩次 build 之間保
 ::: {.askr-table-compact}
 | Tiles | Workers | Hash seed | Digest，pad-in-ground B 含 band | Digest，隨機 layout（60 個 feature，seed 5） |
 |---|---|---|---|---|
-| 1×1 | 1 | 0, 1, 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
-| 2×2 | 1 | 0, 1, 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
-| 3×3 | 2 | 0, 1, 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
-| 4×4 | 4 | 0, 1, 12345 | `model:27ae3b50206900c9` | `model:c0b6c914cb025f97` |
+| 1×1 | 1 | 0, 1, 12345 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
+| 2×2 | 1 | 0, 1, 12345 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
+| 3×3 | 2 | 0, 1, 12345 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
+| 4×4 | 4 | 0, 1, 12345 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
 :::
 
 有與沒有 port 的 ID 比較（production；`figures/identity-stability.json`）：

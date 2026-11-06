@@ -33,8 +33,9 @@ Top-level fields and who uses them
     Palace rebuilds ``groups = {volumes, boundary_surfaces, surface_groups, pec_surfaces,
     port_surfaces}`` from these: ``owner_semantic_ids`` = ``entities``, ``adjacent_solution_volume_ids``
     = ``adjacent_domains``, ``face_kind`` = ``face_kind`` (one per group, and part of its name:
-    ``<kind>::<entity>::<top|bottom|sidewall|sheet|interface>[::band=k]`` for a prefixed group; a sheet
-    group ``<entity>[::band=k]`` has face kind ``sheet`` without carrying it in the name),
+    ``<kind>::<entity>::<top|bottom|sidewall|sheet|interface>[::band=k]`` for a prefixed group, where a banded
+    ``interface`` is ``...::interface::z=<z>::band=k`` (its level, so the families of one pair at two levels
+    never share a group); a sheet group ``<entity>[::band=k]`` has face kind ``sheet`` without carrying it in the name),
     ``conductor_component_id`` / ``net_id`` = ``entities`` / ``net``, PEC surfaces = the groups of interface type ``MA``/``MS``/``SHEET`` of a conductor.
 ``unions``
     ``interface_types`` (``MA`` -> groups ...; reports aggregate by interface type; a Route A ``SHEET``
@@ -75,7 +76,10 @@ Top-level fields and who uses them
     request (every face of a Surface-EPR type) has the request as given (type, face kinds, excluded
     entities, margins) and its ``expansion``: ``banded``, the record of each face it banded (ids
     ``<request id>::<entity>::<side>``), and ``skipped``, each face left unbanded with the reason
-    (``no_gap_edge``).  A build without a type-level request writes the same bytes as before they existed.
+    (``no_gap_edge``).  ``banded`` lists the families the physical pre-pass created, before any port is
+    placed; whether a family has bands to integrate is read from its own ``bands`` and from
+    ``surface_epr_rows``, because a port can cover a family's whole face (``bands`` is then ``{}``).
+    A build without a type-level request writes the same bytes as before they existed.
 ``expected``
     the expectations of ``verify_loaded`` (positions, boundaries, areas, volumes), the load check the tests
     run; the mesher trusts the files of one build and does not read it.

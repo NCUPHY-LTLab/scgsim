@@ -151,7 +151,7 @@ def test_semantic_names_carry_the_band_index_and_unions_list_primary_groups(band
     for k in range(4):
         assert (
             f"pad::band={k}" in groups
-            and f"SA::substrate|vacuum::interface::band={k}" in groups
+            and f"SA::substrate|vacuum::interface::z=0.0::band={k}" in groups
         )
     assert not any(n.startswith(("MA::pad", "MS::pad", "pad::band=4")) for n in groups)
     assert "pad" not in groups  # the whole pad sheet is banded
@@ -163,8 +163,8 @@ def test_semantic_names_carry_the_band_index_and_unions_list_primary_groups(band
         for kind in ("MA", "MS")
     )
     assert all(
-        rows[f"SA::substrate|vacuum::interface::band={k}"]
-        == f"SA::substrate|vacuum::interface::band={k}"
+        rows[f"SA::substrate|vacuum::interface::z=0.0::band={k}"]
+        == f"SA::substrate|vacuum::interface::z=0.0::band={k}"
         for k in range(4)
     )
     assert (

@@ -78,6 +78,7 @@ from scgsim.geometry.sgb.records.support import SupportRegion
 from scgsim.geometry.sgb.routes.naming import (
     SHEET,
     interface_type_of,
+    level_label,
     sheet_face_sides,
 )
 
@@ -114,7 +115,7 @@ class FaceId:
     def label(self) -> str:
         """The face as a request-id suffix: ``<entity>::<side>`` or ``<first>|<second>::z=<z>`` (entity ids never hold ``::``)."""
         if self.kind == "interface":
-            return f"{'|'.join(self.entities)}::z={float(self.level)}"
+            return f"{'|'.join(self.entities)}::{level_label(self.level)}"
         return f"{self.entities[0]}::{self.kind}"
 
 

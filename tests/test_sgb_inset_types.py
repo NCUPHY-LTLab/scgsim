@@ -247,17 +247,15 @@ def test_a_concrete_request_keeps_its_id_and_takes_the_margins_of_a_type_request
     assert record["a_sheet"]["margins_um"] == [0.25, 0.5, 1.0]
 
 
-def test_two_concrete_requests_on_one_face_stay_two_families_as_before():
-    """Today's behaviour: both are accepted and cut the face; a type-level request meeting both is refused."""
+def test_two_concrete_requests_on_one_face_are_refused_and_a_type_request_meeting_both_says_so_first():
+    """Both families would share the band groups of the face: refused (see test_sgb_inset_band_groups)."""
     catalogue = slab_model("A", TWO_PADS, half=20)
     pair = (
         InsetRequest("first", ConductorSurface("a", "sheet"), (0.5,)),
         InsetRequest("second", ConductorSurface("a", "sheet"), (1.0,)),
     )
-    assert family_margins(build(catalogue, "A", *pair)) == {
-        "first": (0.5,),
-        "second": (1.0,),
-    }
+    with pytest.raises(InputError, match="two band families, 'first' and 'second'"):
+        build(catalogue, "A", *pair)
     with pytest.raises(InputError, match="name the same face"):
         build(catalogue, "A", *pair, *by_type("MA"))
 
@@ -420,7 +418,7 @@ def test_the_sidecar_records_the_request_as_given_its_banded_faces_and_its_skipp
     assert sa["interface"] is None and sa["margins_um"] == [0.5, 1.0]
     assert [f["request_id"] for f in sa["expansion"]["banded"]] == [f"sa::{GAP}"]
     assert sa["expansion"]["banded"][0]["bands"]["0"] == [
-        "SA::substrate|vacuum::interface::band=0"
+        "SA::substrate|vacuum::interface::z=0.0::band=0"
     ]
     assert sa["expansion"]["skipped"] == [
         {

@@ -178,7 +178,7 @@
    "narrowest_face_entry": {
     "area_um2": 131.4819,
     "bounded": false,
-    "group": "SA::substrate|vacuum::interface::band=1",
+    "group": "SA::substrate|vacuum::interface::z=0.0::band=1",
     "id": "f:67fa4319ab888d61",
     "kind": "horizontal",
     "location_um": [
@@ -228,7 +228,7 @@
    "narrowest_face_entry": {
     "area_um2": 33.8161,
     "bounded": false,
-    "group": "SA::substrate|vacuum::interface::band=0",
+    "group": "SA::substrate|vacuum::interface::z=0.0::band=0",
     "id": "f:10f7f89e8f4e2b44",
     "kind": "horizontal",
     "location_um": [
@@ -276,18 +276,18 @@
    "max_arc_deviation_grid": 0.0,
    "max_snap_drift_grid": 0.0,
    "narrowest_face_entry": {
-    "area_um2": 40.0,
+    "area_um2": 1160.0,
     "bounded": false,
-    "group": "PORT::PORT_SHEET__P1__0000",
-    "id": "f:2d1bc77f577fd23b",
+    "group": "SA::substrate|VACUUM_REGION::interface",
+    "id": "f:2ea9880cc00e7a72",
     "kind": "horizontal",
     "location_um": [
-     35.0,
+     30.0,
      50.0,
      0.0
     ],
     "measure": "local feature size",
-    "perimeter_um": 28.0,
+    "perimeter_um": 252.0,
     "plane": "level[0]",
     "sources": [
      "PORT_SHEET__P1__0000",
@@ -295,21 +295,20 @@
      "pad"
     ],
     "value_um": 4.0,
-    "width_2a_over_p_um": 2.857143
+    "width_2a_over_p_um": 9.206349
    },
    "narrowest_face_um": 4.0,
    "shortest_edge_entry": {
-    "id": "e:d84eeecdbbdb7582",
+    "id": "e:7e88aa41fe5fca70",
     "kind": "horizontal",
     "location_um": [
-     30.0,
+     40.0,
      50.0,
      0.0
     ],
     "plane": "level[0]",
     "sources": [
-     "PORT_SHEET__P1__0000/polygon0/ring1/edge0",
-     "ground_0000/polygon0/ring1/edge4"
+     "pad/polygon0/ring0/edge3"
     ],
     "value_um": 4.0
    },
@@ -330,7 +329,7 @@
    "narrowest_face_entry": {
     "area_um2": 7.62,
     "bounded": false,
-    "group": "SA::substrate|VACUUM_REGION::interface::band=0",
+    "group": "SA::substrate|VACUUM_REGION::interface::z=0.0::band=0",
     "id": "f:2257d645f7c103a6",
     "kind": "horizontal",
     "location_um": [
@@ -410,7 +409,6 @@
     ],
     "plane": "column(40000, 52000)[0,1/5]",
     "sources": [
-     "PORT_SHEET__P1__0000",
      "pad"
     ],
     "value_um": 0.2
@@ -432,7 +430,7 @@
    "narrowest_face_entry": {
     "area_um2": 7.62,
     "bounded": false,
-    "group": "SA::substrate|VACUUM_REGION::interface::band=0",
+    "group": "SA::substrate|VACUUM_REGION::interface::z=0.0::band=0",
     "id": "f:2257d645f7c103a6",
     "kind": "horizontal",
     "location_um": [

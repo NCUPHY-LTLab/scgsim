@@ -60,7 +60,7 @@ Palace 的 `mesh_xao_in_current_process` 交給下游的是 `groups = {volumes, 
 | `sgb_record` | 全部 | Palace 自己蓋章，不來自 SGB | 不適用 |
 | `interface_type` | surface | `interface_type`。詞彙改變：`MS_MA` 變成 `SHEET`；`LUMPED_PORT` 變成 `PORT`；外部邊界是 `EXT`；`MA`、`MS`、`SA`、`MM`、`SS`、`AA` 不變 | 直接（詞彙對照） |
 | `surface_id` | surface | group 名稱（Palace 以 `(interface_type, surface_id)` 檢查唯一，名稱本身唯一） | 推得 |
-| `face_kind` | surface（單一值，`top`／`bottom`／`sidewall`／`interface`／`sheet_contact_cap`） | `face_kind`（單一值，也是 group 名稱的一段：`<kind>::<entity>::<face kind>[::band=k]`；值為 `top`、`bottom`、`sidewall`、`sheet`、`interface`，port 為 `port`）。group 不會混合種類，所以 Surface-EPR 的 `face_kind` 過濾可直接作用在 group 上；`sheet_contact_cap` 沒有對應 | 直接 |
+| `face_kind` | surface（單一值，`top`／`bottom`／`sidewall`／`interface`／`sheet_contact_cap`） | `face_kind`（單一值，也是 group 名稱的一段：`<kind>::<entity>::<face kind>[::band=k]`，有 band 的 `interface` 另帶高度（見 [identity](identity.qmd#band-group-names)）；值為 `top`、`bottom`、`sidewall`、`sheet`、`interface`，port 為 `port`）。group 不會混合種類，所以 Surface-EPR 的 `face_kind` 過濾可直接作用在 group 上；`sheet_contact_cap` 沒有對應 | 直接 |
 | `owner_semantic_ids` | 全部 | `entities`。port 的兩個宿主導體是 `ports[*].host_entity_ids` | 直接；port 例外 |
 | `adjacent_solution_volume_ids` | surface | `adjacent_domains[*].name`，其 `kind` 與 `material` 直接取代 `solution_material_kinds` 的查找。port 用 `ports[*].adjacent_volumes`（三種 route 都是兩個：port 位於 support plane，是兩個 volume 之間的 face） | 直接 |
 | `conductor_component_id`、`net_id` | MA／MS／MS_MA | `entities`（導體 Entity）與 `net`。SA 與 port 的 `net` 為 `null`，與舊規則一致 | 直接，前提是 Palace 的 component id 就是 Entity id（測試與 sidecar 文件如此對應，採用端確認） |

@@ -148,9 +148,9 @@ insets = (
 )
 ```
 
-**一個 face 只有一個 family。**多個請求選到同一個 face 時，它們共用一個 family，margin 取所有請求的聯集（相同的長度只算一次），band 數隨之增加；上面的寫法讓兩者不落在同一個 face，就不會悄悄混用 margin。一個指定 face 的請求保有自己的 `request_id`，只由按種類的請求選到的 face 則是 `<request_id>::<entity>::<side>`（介面是 <code>&lt;request_id&gt;::&lt;first&gt;&#124;&lt;second&gt;::z=&lt;z&gt;</code>）；多個請求共用時取 id 排序最前的請求。這些 id 是 lineage（`<id>/ring<r>/edge<k>`）、`mesh_features` 的 `band_boundary` 來源與 `insets` 的鍵，它們只由請求和 face 決定，不隨 `workers`、`tiles` 或執行次數改變。兩個指定 face 的請求選到同一個 face 時，兩者各做一個 family，沒有聯集；按種類的請求再碰到這樣的 face 則是 `InputError`。
+**一個 face 只有一個 family。**多個請求選到同一個 face 時，它們共用一個 family，margin 取所有請求的聯集（相同的長度只算一次），band 數隨之增加；上面的寫法讓兩者不落在同一個 face，就不會悄悄混用 margin。一個指定 face 的請求保有自己的 `request_id`，只由按種類的請求選到的 face 則是 `<request_id>::<entity>::<side>`（介面是 <code>&lt;request_id&gt;::&lt;first&gt;&#124;&lt;second&gt;::z=&lt;z&gt;</code>）；多個請求共用時取 id 排序最前的請求。這些 id 是 lineage（`<id>/ring<r>/edge<k>`）、`mesh_features` 的 `band_boundary` 來源與 `insets` 的鍵，它們只由請求和 face 決定，不隨 `workers`、`tiles` 或執行次數改變。兩個指定 face 的請求選到同一個 face 時，兩者不會合併：兩個 family 的 band 會落進同名的 group，band 編號只在各自的 family 內有意義，所以 build 以 `InputError` 停止（訊息指出 group 與兩個 family 的 id，規則見 [identity](identity.qmd#band-group-names)）；每個 face 只寫一次請求。
 
-**沒有 gap edge 的 face 會被略過。**「某種類的每個 face」也包含量不出 band 的 face：基板下方的 SA 介面（旁邊沒有附著導體）、整片蓋住 die 的 ground plane、懸空的導體，都沒有 gap edge（定義見[上一節](#band-measure)）。按種類要求時 SGB 略過這些 face，把每一個記在 sidecar 該請求的 `expansion.skipped`（原因 `no_gap_edge`），build 不失敗。所以要確認某個導體真的有 band，看 `expansion.banded`，不要只看 build 有沒有成功；而指定 face 的寫法維持失敗，因為你點名的 face 沒有 gap edge 是輸入錯誤。
+**沒有 gap edge 的 face 會被略過。**「某種類的每個 face」也包含量不出 band 的 face：基板下方的 SA 介面（旁邊沒有附著導體）、整片蓋住 die 的 ground plane、懸空的導體，都沒有 gap edge（定義見[上一節](#band-measure)）。按種類要求時 SGB 略過這些 face，把每一個記在 sidecar 該請求的 `expansion.skipped`（原因 `no_gap_edge`），build 不失敗。所以要確認某個導體真的有 band，看 `expansion.banded` 與 `expansion.skipped`，不要只看 build 有沒有成功。`expansion.banded` 列的是 physical pre-pass 建出的 family；family 有沒有可積分的 band，要讀那個 family 自己的 `bands`，以及最後的 `surface_epr_rows`，因為 port 是之後才放上去的，可以把一個 family 的 face 整個蓋住（例如矩形 port 蓋住整個 SA gap，只在兩塊 sheet 上各留 0.5 µm 的 landing）：該 family 仍列在 `expansion.banded`，`bands` 是 `{}`，`expansion.skipped` 是空的，`surface_epr_rows` 也沒有該 SA 的 row。指定 face 的寫法維持失敗，因為你點名的 face 沒有 gap edge 是輸入錯誤。
 
 下表是兩個真實輸入各以 MA、MS、SA 三個請求（margin 0.5 與 1 µm）展開的結果，最後一列是整片被 ground 蓋住的 die（`InterfaceSurfaces("MA")` 略過它的 top，同一個 face 以 `ConductorSurface` 要求則失敗）。pad-in-ground 的基板下方有一層 vacuum，所以 z = −10 µm 的 SA 介面被略過；thin-film pair 的 sheet 一側是 vacuum、另一側是 substrate，MA 與 MS 的請求共用同一個 family：
 
@@ -168,7 +168,7 @@ running example 的 pad 有 45° 的 chamfer、一個 reflex notch、一個 roun
 
 {{< askr-chart-view src="figures/inset-bands-pad.html" label="檢視 band（用按鈕放大 notch、hole 與 corner）" >}}
 
-每個 band 由一個或多個 cell 組成，輸出後成為 BREP face 與一個 physical group，名稱來自 label（production 中 Route A 的 sheet 為 `pad::band=2`，Route B 的 top 與 bottom face 為 `MA::pad::top::band=2` 與 `MS::pad::bottom::band=2`，gap 為 <code>SA::substrate&#124;vacuum::interface::band=0</code>）。下表是 Route A 範例（production 的 `pad_in_ground_A_bands`）；面積由精確 arc 計算，是後面 KLayout 比較所用的數字：
+每個 band 由一個或多個 cell 組成，輸出後成為 BREP face 與一個 physical group，名稱來自 label（production 中 Route A 的 sheet 為 `pad::band=2`，Route B 的 top 與 bottom face 為 `MA::pad::top::band=2` 與 `MS::pad::bottom::band=2`，gap 為 <code>SA::substrate&#124;vacuum::interface::z=0.0::band=0</code>，介面的名稱帶高度，規則見 [identity](identity.qmd#band-group-names)）。下表是 Route A 範例（production 的 `pad_in_ground_A_bands`）；面積由精確 arc 計算，是後面 KLayout 比較所用的數字：
 
 ::: {.askr-table-compact .askr-table-numeric}
 | Support surface | Band | Faces | 面積 (µm²) | Band ≥ k 的聯集，「$R_{m_k}$」(µm²) |
@@ -350,10 +350,10 @@ mesh 檢查（含 band 的 Route A 模型；最大 40 µm，band 曲線附近 1 
 ::: {.askr-table-compact .askr-table-numeric}
 | Band group | Faces | Triangles | 兩側各自的 tet | 全部被 tet 共用 | Centroid 在 band 內 |
 |---|---|---|---|---|---|
-| <code>SA::substrate&#124;vacuum::interface::band=0</code> | 3 | 1857 | 1857 + 1857 | 是 | 是 |
-| <code>SA::substrate&#124;vacuum::interface::band=1</code> | 3 | 1904 | 1904 + 1904 | 是 | 是 |
-| <code>SA::substrate&#124;vacuum::interface::band=2</code> | 3 | 3692 | 3692 + 3692 | 是 | 是 |
-| <code>SA::substrate&#124;vacuum::interface::band=3</code> | 2 | 3672 | 3672 + 3672 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum::interface::z=0.0::band=0</code> | 3 | 1857 | 1857 + 1857 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum::interface::z=0.0::band=1</code> | 3 | 1904 | 1904 + 1904 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum::interface::z=0.0::band=2</code> | 3 | 3692 | 3692 + 3692 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum::interface::z=0.0::band=3</code> | 2 | 3672 | 3672 + 3672 | 是 | 是 |
 | `pad::band=0` | 2 | 790 | 790 + 790 | 是 | 是 |
 | `pad::band=1` | 2 | 807 | 807 + 807 | 是 | 是 |
 | `pad::band=2` | 2 | 1591 | 1591 + 1591 | 是 | 是 |

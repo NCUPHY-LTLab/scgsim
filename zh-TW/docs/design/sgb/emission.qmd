@@ -297,7 +297,7 @@ Route B 的 0.1 是正確的事實：在 mesher 要 mesh 的區域裡，那一�
 
 band 從哪裡量起、每個 band 的範圍，見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)。
 
-三個 band case 與一條 refinement curve 在測試中都經過 direct writer。載入後，每個 band group 的 mesh 使得它的 triangle 都恰好是每個相鄰 volume 中一個 tetrahedron 的 face（沒有 element 跨過 band 的邊界），且 centroid 以 exact carrier 的距離判斷落在該 band 內（`pad_in_ground_A_bands` 有 8 個 band group，Route B 與 C 的 band 範例各 12 個，全部如此，@tbl-bands；Route A 把 band group 命名為 `<entity>::band=k`（sheet）與 `SA::substrate|vacuum::interface::band=k`，Route B 與 C 對 pad 的上表面（`MA::<entity>::top`）與下表面（`MS::<entity>::bottom`）各自產生 band，另有 `SA::…::band=k`；逐 group 的 triangle 數見 [inset imprint](inset-imprint.qmd)）。
+三個 band case 與一條 refinement curve 在測試中都經過 direct writer。載入後，每個 band group 的 mesh 使得它的 triangle 都恰好是每個相鄰 volume 中一個 tetrahedron 的 face（沒有 element 跨過 band 的邊界），且 centroid 以 exact carrier 的距離判斷落在該 band 內（`pad_in_ground_A_bands` 有 8 個 band group，Route B 與 C 的 band 範例各 12 個，全部如此，@tbl-bands；Route A 把 band group 命名為 `<entity>::band=k`（sheet）與 `SA::substrate|vacuum::interface::z=0.0::band=k`，Route B 與 C 對 pad 的上表面（`MA::<entity>::top`）與下表面（`MS::<entity>::bottom`）各自產生 band，另有 `SA::…::z=0.0::band=k`（介面的名稱帶高度，見 [identity](identity.qmd#band-group-names)）；逐 group 的 triangle 數見 [inset imprint](inset-imprint.qmd)）。
 
 
 對 refinement curve，測試檢查：該 edge 在載入的檔案中是 free 的（沒有任何 face 擁有它）、它被切成多於一個 element，以及 sidecar 的該列 `written_as_free_edge` 為 true。
@@ -421,5 +421,5 @@ runtime validator 逐項的耗時（polygon-only 的隨機 layout，seed 2，單
 ::: {#tbl-bands .askr-table-compact .askr-table-numeric}
 {{< include figures/emission-bands-table.md >}}
 
-經過 direct writer 的 inset band case（margin 0.1、0.5、2.0 µm，四個 band）。Route A 把 band group 命名為 `<entity>::band=k` 與 `SA::substrate|vacuum::interface::band=k`；Route B 與 C 對 pad 的上表面（`MA`）與下表面（`MS`）各自產生 band，再加上 `SA` 的 band。
+經過 direct writer 的 inset band case（margin 0.1、0.5、2.0 µm，四個 band）。Route A 把 band group 命名為 `<entity>::band=k` 與 `SA::substrate|vacuum::interface::z=0.0::band=k`；Route B 與 C 對 pad 的上表面（`MA`）與下表面（`MS`）各自產生 band，再加上 `SA` 的 band。
 :::

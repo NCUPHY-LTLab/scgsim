@@ -558,10 +558,10 @@
    "MS::pad::bottom::band=3": 1,
    "PORT::PORT_SHEET__P1__0000": 1,
    "SA::substrate|VACUUM_REGION::interface": 1,
-   "SA::substrate|VACUUM_REGION::interface::band=0": 2,
-   "SA::substrate|VACUUM_REGION::interface::band=1": 2,
-   "SA::substrate|VACUUM_REGION::interface::band=2": 2,
-   "SA::substrate|VACUUM_REGION::interface::band=3": 1,
+   "SA::substrate|VACUUM_REGION::interface::z=0.0::band=0": 2,
+   "SA::substrate|VACUUM_REGION::interface::z=0.0::band=1": 2,
+   "SA::substrate|VACUUM_REGION::interface::z=0.0::band=2": 2,
+   "SA::substrate|VACUUM_REGION::interface::z=0.0::band=3": 1,
    "SA::substrate|VACUUM_REGION::sidewall": 4
   },
   "primary_groups_volumes": {
@@ -613,10 +613,10 @@
    ],
    "SA": [
     "SA::substrate|VACUUM_REGION::interface",
-    "SA::substrate|VACUUM_REGION::interface::band=0",
-    "SA::substrate|VACUUM_REGION::interface::band=1",
-    "SA::substrate|VACUUM_REGION::interface::band=2",
-    "SA::substrate|VACUUM_REGION::interface::band=3",
+    "SA::substrate|VACUUM_REGION::interface::z=0.0::band=0",
+    "SA::substrate|VACUUM_REGION::interface::z=0.0::band=1",
+    "SA::substrate|VACUUM_REGION::interface::z=0.0::band=2",
+    "SA::substrate|VACUUM_REGION::interface::z=0.0::band=3",
     "SA::substrate|VACUUM_REGION::sidewall"
    ]
   },

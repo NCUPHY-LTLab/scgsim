@@ -477,8 +477,8 @@ def test_volume_groups_and_interface_types_and_surface_epr_rows():
     assert surface_epr_row_ids(
         "pad::band=1", "SHEET", "pad", 1, sheet_face_sides(V, V)
     ) == ["MA::pad::sheet::band=1"]
-    assert surface_epr_row_ids("SA::a|b::interface::band=0", "SA", "", 0) == [
-        "SA::a|b::interface::band=0"
+    assert surface_epr_row_ids("SA::a|b::interface::z=0.0::band=0", "SA", "", 0) == [
+        "SA::a|b::interface::z=0.0::band=0"
     ]
     assert surface_epr_row_ids("pad", "SHEET", "pad", None) == []  # unbanded: no row
     assert surface_epr_row_ids("PORT::p1", "PORT", "p1", 1) == []

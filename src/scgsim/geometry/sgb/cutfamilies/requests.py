@@ -20,7 +20,7 @@ face of a Surface-EPR type.  There are two forms of support, and they serve diff
   upper and lower Z of a finite conductor (groups ``MA::<entity>::<face kind>[::band=k]`` against vacuum
   and ``MS::<entity>::<face kind>[::band=k]`` against a dielectric).  Sidewall bands are not part of version 1.
 * ``SolutionInterface(first_entity_id, second_entity_id)`` -- the interface between two solution regions
-  where no conductor lies (the gap between a pad and its ground, ``SA::<a>|<b>::interface[::band=k]``).  ``z_um``
+  where no conductor lies (the gap between a pad and its ground, ``SA::<a>|<b>::interface[::z=<z>::band=k]``).  ``z_um``
   picks the level when the pair meets at several.
 
 A concrete request is exact: it fails closed on a face that is not there, has no gap edge or whose

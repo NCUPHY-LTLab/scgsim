@@ -50,7 +50,7 @@ def _band_areas_section(areas):
     ]
     for prefix, label in (
         ("pad::band=", "pad top"),
-        ("SA::substrate|vacuum::interface::band=", "gap"),
+        ("SA::substrate|vacuum::interface::z=0.0::band=", "gap"),
     ):
         per_band = {k: areas[f"{prefix}{k}"] for k in range(4)}
         total = {k: sum(v) for k, v in per_band.items()}

@@ -6,10 +6,10 @@
 | pad top | B1 | `pad::band=1` | 2 | 156.2232 | 5382.4661 |
 | pad top | B2 | `pad::band=2` | 2 | 583.2396 | 5226.2429 |
 | pad top | B3 | `pad::band=3` | 1 | 4643.0033 | 4643.0033 |
-| gap | B0 | `SA::substrate|vacuum::interface::band=0` | 3 | 93.0717 | 13478.4270 |
-| gap | B1 | `SA::substrate|vacuum::interface::band=1` | 3 | 371.3770 | 13385.3553 |
-| gap | B2 | `SA::substrate|vacuum::interface::band=2` | 3 | 1380.0089 | 13013.9783 |
-| gap | B3 | `SA::substrate|vacuum::interface::band=3` | 2 | 11633.9694 | 11633.9694 |
+| gap | B0 | `SA::substrate|vacuum::interface::z=0.0::band=0` | 3 | 93.0717 | 13478.4270 |
+| gap | B1 | `SA::substrate|vacuum::interface::z=0.0::band=1` | 3 | 371.3770 | 13385.3553 |
+| gap | B2 | `SA::substrate|vacuum::interface::z=0.0::band=2` | 3 | 1380.0089 | 13013.9783 |
+| gap | B3 | `SA::substrate|vacuum::interface::z=0.0::band=3` | 2 | 11633.9694 | 11633.9694 |
 
 PORT::p1: 1 faces, 300.0000 um^2 (the port footprint takes this area out of the gap bands)
 
@@ -45,10 +45,10 @@ mesh size 40 um, 1 um on the band curves; nodes: 13377, tetrahedra: 71994, dupli
 
 | band group | faces | triangles | tets on each side | all triangles shared by tets | centroids inside band |
 |---|---|---|---|---|---|
-| `SA::substrate|vacuum::interface::band=0` | 3 | 1857 | 1857 + 1857 | True | True |
-| `SA::substrate|vacuum::interface::band=1` | 3 | 1904 | 1904 + 1904 | True | True |
-| `SA::substrate|vacuum::interface::band=2` | 3 | 3692 | 3692 + 3692 | True | True |
-| `SA::substrate|vacuum::interface::band=3` | 2 | 3672 | 3672 + 3672 | True | True |
+| `SA::substrate|vacuum::interface::z=0.0::band=0` | 3 | 1857 | 1857 + 1857 | True | True |
+| `SA::substrate|vacuum::interface::z=0.0::band=1` | 3 | 1904 | 1904 + 1904 | True | True |
+| `SA::substrate|vacuum::interface::z=0.0::band=2` | 3 | 3692 | 3692 + 3692 | True | True |
+| `SA::substrate|vacuum::interface::z=0.0::band=3` | 2 | 3672 | 3672 + 3672 | True | True |
 | `pad::band=0` | 2 | 790 | 790 + 790 | True | True |
 | `pad::band=1` | 2 | 807 | 807 + 807 | True | True |
 | `pad::band=2` | 2 | 1591 | 1591 + 1591 | True | True |
@@ -79,7 +79,7 @@ groups: MA::pad::top::band=0, MA::pad::top::band=1, MA::pad::top::band=2, MA::pa
 validation passed: True (31 checks)
 counts: 60 faces, 274 edges, 321 vertices, 23 groups
 unions NET::pad: ["MA::pad::sidewall", "MA::pad::top::band=0", "MA::pad::top::band=1", "MA::pad::top::band=2", "MA::pad::top::band=3", "MS::pad::bottom::band=0", "MS::pad::bottom::band=1", "MS::pad::bottom::band=2", "MS::pad::bottom::band=3"]
-surface_epr_rows (Route A): {"MA::pad::sheet::band=0": "pad::band=0", "MA::pad::sheet::band=1": "pad::band=1", "MA::pad::sheet::band=2": "pad::band=2", "MA::pad::sheet::band=3": "pad::band=3", "MS::pad::sheet::band=0": "pad::band=0", "MS::pad::sheet::band=1": "pad::band=1", "MS::pad::sheet::band=2": "pad::band=2", "MS::pad::sheet::band=3": "pad::band=3", "SA::substrate|vacuum::interface::band=0": "SA::substrate|vacuum::interface::band=0", "SA::substrate|vacuum::interface::band=1": "SA::substrate|vacuum::interface::band=1", "SA::substrate|vacuum::interface::band=2": "SA::substrate|vacuum::interface::band=2", "SA::substrate|vacuum::interface::band=3": "SA::substrate|vacuum::interface::band=3"}
+surface_epr_rows (Route A): {"MA::pad::sheet::band=0": "pad::band=0", "MA::pad::sheet::band=1": "pad::band=1", "MA::pad::sheet::band=2": "pad::band=2", "MA::pad::sheet::band=3": "pad::band=3", "MS::pad::sheet::band=0": "pad::band=0", "MS::pad::sheet::band=1": "pad::band=1", "MS::pad::sheet::band=2": "pad::band=2", "MS::pad::sheet::band=3": "pad::band=3", "SA::substrate|vacuum::interface::z=0.0::band=0": "SA::substrate|vacuum::interface::z=0.0::band=0", "SA::substrate|vacuum::interface::z=0.0::band=1": "SA::substrate|vacuum::interface::z=0.0::band=1", "SA::substrate|vacuum::interface::z=0.0::band=2": "SA::substrate|vacuum::interface::z=0.0::band=2", "SA::substrate|vacuum::interface::z=0.0::band=3": "SA::substrate|vacuum::interface::z=0.0::band=3"}
 
 ## Port invariance (Route A, with and without the lumped port)
 

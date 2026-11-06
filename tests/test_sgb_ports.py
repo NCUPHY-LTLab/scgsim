@@ -28,7 +28,7 @@ from scgsim.geometry.sgb.sidecar.files import read_sidecar
 from scgsim.geometry.sgb.verification.loaded import verify_xao
 
 PORT_GROUP = "PORT::PORT_SHEET__P1__0000"
-SA_BANDS = "SA::substrate|VACUUM_REGION::interface::band="
+SA_BANDS = "SA::substrate|VACUUM_REGION::interface::z=0.0::band="
 SA_INTERFACE = SolutionInterface("substrate", "VACUUM_REGION", z_um=0.0)
 PORT_AREA_UM2 = 40.0  # 12 x 4 um region minus a 1 x 4 um landing on each host
 

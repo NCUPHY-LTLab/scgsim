@@ -254,7 +254,7 @@ def figure_bands(model_a) -> None:
             [-1e4],
             kit.GAP_BANDS[0],
             8,
-            name="SA::substrate|vacuum::interface::band=0..3 (gap, orange ramp)",
+            name="SA::substrate|vacuum::interface::z=0.0::band=0..3 (gap, orange ramp)",
             symbol="square",
         ),
         Pts(

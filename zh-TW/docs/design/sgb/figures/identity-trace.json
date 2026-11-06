@@ -1573,7 +1573,7 @@
   "distance_to_support_um_at_midpoint": 0.5,
   "support_curve": "band_pad_top/ring0/edge0"
  },
- "model_digest": "model:27ae3b50206900c9",
+ "model_digest": "model:80b075081bd167aa",
  "counts": {
   "vertices": 321,
   "edges": 274,

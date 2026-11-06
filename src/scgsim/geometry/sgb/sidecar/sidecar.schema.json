@@ -342,7 +342,7 @@
           "additionalProperties": false,
           "required": ["banded", "skipped"],
           "properties": {
-            "banded": {"description": "The faces banded, each as the record of its family (ids <request id>::<entity>::<side>, or of the first request on a shared face).", "type": "array", "items": {"$ref": "#/$defs/insetFace"}},
+            "banded": {"description": "The families the physical pre-pass created, each as the record of its family (ids <request id>::<entity>::<side>, or of the first request on a shared face).  A port placed later can cover a whole face: read whether a family has bands from its own bands and from surface_epr_rows.", "type": "array", "items": {"$ref": "#/$defs/insetFace"}},
             "skipped": {
               "type": "array",
               "items": {

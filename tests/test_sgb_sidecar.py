@@ -243,7 +243,9 @@ def test_a_sheet_on_a_substrate_carries_both_surface_epr_rows(sidecars):
     )
     assert rows["MA::pad::sheet::band=2"]["band"] == 2
     assert rows["MA::pad::sheet::band=2"]["entities"] == ["pad"]
-    assert rows["SA::substrate|vacuum::interface::band=0"]["interface_type"] == "SA"
+    assert (
+        rows["SA::substrate|vacuum::interface::z=0.0::band=0"]["interface_type"] == "SA"
+    )
     unbanded = sidecars["pad_a"]["surface_epr_rows"]
     assert (
         unbanded["MA::pad::sheet"]["band"] is None and "MA::ground::sheet" in unbanded

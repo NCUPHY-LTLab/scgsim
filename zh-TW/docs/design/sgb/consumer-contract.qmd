@@ -145,7 +145,7 @@ sidecar 是一個 JSON 檔：頂層的鍵依字母排序、每個頂層鍵佔一
 | `embedded_faces`、`refinement_edges` | `(face, host volume)` 與 `(edge, host face)`：XAO 無法攜帶、mesher 必須重新套用的 embedding | Palace |
 | `ports` | 每個 lumped-port sheet：`port_index`、`source_name`、`direction`、`host_entity_ids`、`source_layer`、`target_layer`、`z_um`、`group`、`faces`、`host_volumes`、`adjacent_volumes` | 兩者 |
 | `lineage` | `edges`（edge → carrier id）、`carriers`（來源 polygon edge 或 family member）、`vertical_edges`、`faces`（來源 Entity）、`membership`（依面積加權，各比例不互斥，可大於 1） | 追溯；band edge 的辨識 |
-| `insets`、`refinements` | 依 request id 排序的 inset 請求。指定 face 的請求是它那個 face 的 family：request id、support、margin（µm 與格點；一個 face 被多個請求選到時是聯集）、`band_count`、各 band 的 group。按種類的請求（`InterfaceSurfaces`）記請求本身（種類、`face_kinds`、`exclude_entity_ids`、margin）與 `expansion`：`banded` 是它展開成的每個 face 的 family 記錄，`skipped` 是略過的 face 與原因（`no_gap_edge`）；每個 refinement request 與它的 edge | Palace |
+| `insets`、`refinements` | 依 request id 排序的 inset 請求。指定 face 的請求是它那個 face 的 family：request id、support、margin（µm 與格點；一個 face 被多個請求選到時是聯集）、`band_count`、各 band 的 group。按種類的請求（`InterfaceSurfaces`）記請求本身（種類、`face_kinds`、`exclude_entity_ids`、margin）與 `expansion`：`banded` 是 physical pre-pass 建出的 family 記錄（每個展開的 face 一筆），`skipped` 是略過的 face 與原因（`no_gap_edge`）；`banded` 不保證每個 family 都有可積分的 band，因為 port 是之後才放上去的，可以把一個 family 的 face 整個蓋住（該 family 的 `bands` 是 `{}`，也沒有它的 `surface_epr_rows`），所以要用某個 family 的 band，讀它自己的 `bands` 與最後的 `surface_epr_rows`；每個 refinement request 與它的 edge | Palace |
 | `slivers`、`arrangement`、`curved_wall_faces`、`surface_kinds` | sliver 報告摘要；snap 偏離與圓弧偏離的實測值（格點單位）、圓弧 edge 數；曲面 wall 的 face；plane 與 cylinder 的 face 數 | manifest 的 curved-arrangement provenance |
 | `expected` | `verify_loaded` 的預期值：vertex 位置、各 edge／face／solid 的邊界、face 面積、solid 體積 | SGB 的測試與手動診斷（`verify_loaded`） |
 :::
@@ -164,7 +164,7 @@ physical group 是核心。下面是一個 band 的 top face、pad 的 bottom fa
 
 - `entities` 在導體 surface 上是導體 Entity（`pad`）；在 solution region 之間的 `SA` 上是被隔開的兩個 region；在 port 上是 port sheet 自己的 id，port 所接的兩個導體另在 `ports[*].host_entity_ids`。
 - `adjacent_domains` 直接給出兩側的 solution region 與它的 `kind`、`material`，不需要另外查表。
-- `face_kind` 是單一值，也寫在 group 名稱裡：`<kind>::<entity>::<top|bottom|sidewall|sheet|interface>[::band=k]`，所以一個 group 不會混合種類，依 face 種類過濾只需看名稱或這個欄位。範例中 ground 的 top 與 sidewall 是兩個 group（`MA::ground_0000::top` 與 `MA::ground_0000::sidewall`），見[對應表](consumer-mapping.qmd#aedt-ledger)的逐 group 表。port 例外：它永遠是一個 sheet，`face_kind` 為 `port`，名稱不帶 face kind 與 band。若某個 group 混合了種類，build 以 `SgbError` 停止。
+- `face_kind` 是單一值，也寫在 group 名稱裡：`<kind>::<entity>::<top|bottom|sidewall|sheet|interface>[::band=k]`，所以一個 group 不會混合種類，依 face 種類過濾只需看名稱或這個欄位。有 band 的 `interface` 名稱另帶高度（`...::interface::z=<z>::band=k`），規則見 [identity](identity.qmd#band-group-names)。範例中 ground 的 top 與 sidewall 是兩個 group（`MA::ground_0000::top` 與 `MA::ground_0000::sidewall`），見[對應表](consumer-mapping.qmd#aedt-ledger)的逐 group 表。port 例外：它永遠是一個 sheet，`face_kind` 為 `port`，名稱不帶 face kind 與 band。若某個 group 混合了種類，build 以 `SgbError` 停止。
 - `band` 帶 `family`（對應 `insets` 中的 family id：指定 face 的 `InsetRequest.request_id`，或按種類展開後的 id）與 `index`。band 0 最靠近邊緣，最大的 index 是最內側的區域，這個範例中三個 band 的面積是 39、37 與 324 µm²，總和等於 pad 的 400 µm²。
 
 聯集、Surface-EPR row 與 inset family：
@@ -173,7 +173,7 @@ physical group 是核心。下面是一個 band 的 top face、pad 的 bottom fa
 
 注意兩點。第一，`unions.interface_types.MA` 包含每個 `MA` group，**也包含所有 band 與 sidewall**；做 band 選取要用 `surface_epr_rows` 與 `insets[*].bands`，不是 union。第二，`unions.nets` 的鍵是 Net，成員是該 Net 外露導體表面的 primary group（沒有 SA、PORT 或 EXT）。
 
-按種類要求的 `insets` 記錄長這樣。這是 pad-in-ground（Route B）對 `InterfaceSurfaces("SA")`、margin 0.5 與 1 µm 的記錄：`banded` 的每一筆就是一個指定 face 請求的記錄（id 是 `<request id>::<first>|<second>::z=<z>`），`skipped` 是基板下方 z = −10 µm 的 SA 介面，它旁邊沒有導體，所以量不出 band：
+按種類要求的 `insets` 記錄長這樣。這是 pad-in-ground（Route B）對 `InterfaceSurfaces("SA")`、margin 0.5 與 1 µm 的記錄：`banded` 的每一筆就是一個指定 face 請求的記錄（id 是 `<request id>::<first>|<second>::z=<z>`），`skipped` 是基板下方 z = −10 µm 的 SA 介面，它旁邊沒有導體，所以量不出 band；`banded` 的 family 是否有 band 要看它自己的 `bands`（這個例子都有）：
 
 {{< include figures/inset-types-record.md >}}
 

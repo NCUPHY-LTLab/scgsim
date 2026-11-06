@@ -46,7 +46,7 @@ SGB 從這五個 prism 推導出下面的實體模型（Route B）。為了讓�
 
 無論哪一個 solver 使用，這些事實都相同。Palace 透過 Gmsh 讀取 XAO，並由 Gmsh 產生 mesh；AEDT 階段之後會讀取同樣的 solid（見 [Emission](emission.qmd)）。
 
-production 的 group 名稱依決策 D5 以 Entity 歸屬，形式為 `<kind>::<entity>::<face kind>[::band=k]`（例如 pad 的頂面是 `MA::pad::top`，有 inset band 時是 `MA::pad::top::band=2`），完整說明見 [Route](routes.qmd) 與[設計決議](decisions.qmd#d5)。
+production 的 group 名稱依決策 D5 以 Entity 歸屬，形式為 `<kind>::<entity>::<face kind>[::band=k]`（例如 pad 的頂面是 `MA::pad::top`，有 inset band 時是 `MA::pad::top::band=2`；有 band 的介面另帶高度，見 [identity](identity.qmd#band-group-names)），完整說明見 [Route](routes.qmd) 與[設計決議](decisions.qmd#d5)。
 
 ### 如何檢查結果
 

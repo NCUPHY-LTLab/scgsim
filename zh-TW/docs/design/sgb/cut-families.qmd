@@ -47,7 +47,7 @@ window 是在**完全不修改 pipeline** 的情況下加入的：它只是被�
 | 全部 family | 16 | 111 | 26 | 15 | 8 |
 :::
 
-window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它切開的 cell 保有原來的 label，所以 <code>SA::substrate&#124;VACUUM_REGION::interface::band=2</code> 與 <code>SA::substrate&#124;VACUUM_REGION::interface::band=3</code> 這兩個 group 各多一個 face（2 變 3、1 變 2）。refinement curve 沒有改變任何 cell 或 face 的數量；它只增加 embedded curve 片段（8 段），以及它與 required edge 的交點：每個交點成為 vertex，把被碰到的那條 edge 切成兩段（$z = 0$ 的 edge 多 8 條）。band 讓 face group 從 8 增為 15，因為每個 band 都是自己的 group（Route A 中 pad 的 band 是 `pad::band=k`，各一個 face，共 4 個；gap 的 band 是 `SA::…::interface::band=k`）。
+window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它切開的 cell 保有原來的 label，所以 <code>SA::substrate&#124;VACUUM_REGION::interface::z=0.0::band=2</code> 與 <code>SA::substrate&#124;VACUUM_REGION::interface::z=0.0::band=3</code> 這兩個 group 各多一個 face（2 變 3、1 變 2）。refinement curve 沒有改變任何 cell 或 face 的數量；它只增加 embedded curve 片段（8 段），以及它與 required edge 的交點：每個交點成為 vertex，把被碰到的那條 edge 切成兩段（$z = 0$ 的 edge 多 8 條）。band 讓 face group 從 8 增為 15，因為每個 band 都是自己的 group（Route A 中 pad 的 band 是 `pad::band=k`，各一個 face，共 4 個；gap 的 band 是 `SA::…::interface::z=0.0::band=k`）。
 
 ## 三類分割
 

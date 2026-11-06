@@ -125,21 +125,21 @@
      {
       "band": 0,
       "groups": [
-       "SA::substrate|VACUUM_REGION::interface::band=0"
+       "SA::substrate|VACUUM_REGION::interface::z=0.0::band=0"
       ],
       "area_um2": 115.785398
      },
      {
       "band": 1,
       "groups": [
-       "SA::substrate|VACUUM_REGION::interface::band=1"
+       "SA::substrate|VACUUM_REGION::interface::z=0.0::band=1"
       ],
       "area_um2": 115.356194
      },
      {
       "band": 2,
       "groups": [
-       "SA::substrate|VACUUM_REGION::interface::band=2"
+       "SA::substrate|VACUUM_REGION::interface::z=0.0::band=2"
       ],
       "area_um2": 928.858407
      }
@@ -275,21 +275,21 @@
      {
       "band": 0,
       "groups": [
-       "SA::substrate|upper_air::interface::band=0"
+       "SA::substrate|upper_air::interface::z=0.0::band=0"
       ],
       "area_um2": 15.570796
      },
      {
       "band": 1,
       "groups": [
-       "SA::substrate|upper_air::interface::band=1"
+       "SA::substrate|upper_air::interface::z=0.0::band=1"
       ],
       "area_um2": 18.712389
      },
      {
       "band": 2,
       "groups": [
-       "SA::substrate|upper_air::interface::band=2"
+       "SA::substrate|upper_air::interface::z=0.0::band=2"
       ],
       "area_um2": 25.716815
      }

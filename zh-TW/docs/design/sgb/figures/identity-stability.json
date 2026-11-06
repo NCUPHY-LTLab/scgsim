@@ -114,22 +114,22 @@
    "members_without_port": null,
    "identical_members": false
   },
-  "SA::substrate|vacuum::interface::band=0": {
+  "SA::substrate|vacuum::interface::z=0.0::band=0": {
    "members_with_port": 3,
    "members_without_port": 3,
    "identical_members": false
   },
-  "SA::substrate|vacuum::interface::band=1": {
+  "SA::substrate|vacuum::interface::z=0.0::band=1": {
    "members_with_port": 3,
    "members_without_port": 3,
    "identical_members": false
   },
-  "SA::substrate|vacuum::interface::band=2": {
+  "SA::substrate|vacuum::interface::z=0.0::band=2": {
    "members_with_port": 3,
    "members_without_port": 3,
    "identical_members": false
   },
-  "SA::substrate|vacuum::interface::band=3": {
+  "SA::substrate|vacuum::interface::z=0.0::band=3": {
    "members_with_port": 2,
    "members_without_port": 2,
    "identical_members": false
