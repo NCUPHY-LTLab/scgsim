@@ -84,9 +84,9 @@ S2 從 S1 收到的內容：每個 effective prism 帶有 footprint（外圈與 
 ::: {.askr-table-compact}
 | | |
 |---|---|
-| 輸入 | prism 與 family 請求：`InsetRequest`（support 為 `ConductorSurface` 或 `SolutionInterface`，margin 序列）、`RefinementRequest`（折線）；port footprint 是 port prism，不經過請求 |
+| 輸入 | prism 與 family 請求：`InsetRequest`（support 為 `ConductorSurface`、`SolutionInterface` 或按 Surface EPR 種類選出所有 face 的 `InterfaceSurfaces`，margin 序列）、`RefinementRequest`（折線）；port footprint 是 port prism，不經過請求 |
 | 輸出 | `CurveFamilyRecord`：carrier（line）、arc、目標 level、edge 政策、support region |
-| Record | `CurveFamilyRecord`、`SupportRegion`（由精確 line 與 arc primitive 組成的 ring，加上 margin）、`InsetRequest`、`ConductorSurface`、`SolutionInterface`、`RefinementRequest` |
+| Record | `CurveFamilyRecord`、`SupportRegion`（由精確 line 與 arc primitive 組成的 ring，加上 margin）、`InsetRequest`、`ConductorSurface`、`SolutionInterface`、`InterfaceSurfaces`、`RefinementRequest` |
 | 平行單位 | region × margin |
 | 失敗 | `InputError`：請求找不到對應的 face、margin 不是遞增的正整數格點倍數、request id 重複、宣告的 interface 種類與 cell 的 label 不符；v1 拒絕對 B-spline carrier 做 inset；空的 band 是結果，不是失敗；edge 政策只有 `required` 與 `refinement_only`，其他值會被 `CurveFamilyRecord` 拒絕 |
 :::

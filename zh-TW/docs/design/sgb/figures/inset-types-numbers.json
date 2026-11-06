@@ -1,0 +1,452 @@
+{
+ "margins_um": [
+  0.5,
+  1.0
+ ],
+ "identical_to_concrete_requests": {
+  "B": true,
+  "A": true
+ },
+ "requests": {
+  "pad_in_ground_route_b": [
+   {
+    "expansion": {
+     "banded": [
+      {
+       "band_count": 3,
+       "bands": {
+        "0": [
+         "MA::ground_0000::top::band=0"
+        ],
+        "1": [
+         "MA::ground_0000::top::band=1"
+        ],
+        "2": [
+         "MA::ground_0000::top::band=2"
+        ]
+       },
+       "interface": null,
+       "margins_grid": [
+        500,
+        1000
+       ],
+       "margins_um": [
+        0.5,
+        1.0
+       ],
+       "request_id": "ma::ground_0000::top",
+       "support": {
+        "entity": "ground_0000",
+        "side": "top"
+       },
+       "support_area_um2": 8400.0
+      },
+      {
+       "band_count": 3,
+       "bands": {
+        "0": [
+         "MA::pad::top::band=0"
+        ],
+        "1": [
+         "MA::pad::top::band=1"
+        ],
+        "2": [
+         "MA::pad::top::band=2"
+        ]
+       },
+       "interface": null,
+       "margins_grid": [
+        500,
+        1000
+       ],
+       "margins_um": [
+        0.5,
+        1.0
+       ],
+       "request_id": "ma::pad::top",
+       "support": {
+        "entity": "pad",
+        "side": "top"
+       },
+       "support_area_um2": 400.0
+      }
+     ],
+     "skipped": []
+    },
+    "interface": null,
+    "margins_um": [
+     0.5,
+     1.0
+    ],
+    "request_id": "ma",
+    "support": {
+     "exclude_entity_ids": [],
+     "face_kinds": null,
+     "interface_type": "MA"
+    }
+   },
+   {
+    "expansion": {
+     "banded": [
+      {
+       "band_count": 3,
+       "bands": {
+        "0": [
+         "MS::ground_0000::bottom::band=0"
+        ],
+        "1": [
+         "MS::ground_0000::bottom::band=1"
+        ],
+        "2": [
+         "MS::ground_0000::bottom::band=2"
+        ]
+       },
+       "interface": null,
+       "margins_grid": [
+        500,
+        1000
+       ],
+       "margins_um": [
+        0.5,
+        1.0
+       ],
+       "request_id": "ms::ground_0000::bottom",
+       "support": {
+        "entity": "ground_0000",
+        "side": "bottom"
+       },
+       "support_area_um2": 8400.0
+      },
+      {
+       "band_count": 3,
+       "bands": {
+        "0": [
+         "MS::pad::bottom::band=0"
+        ],
+        "1": [
+         "MS::pad::bottom::band=1"
+        ],
+        "2": [
+         "MS::pad::bottom::band=2"
+        ]
+       },
+       "interface": null,
+       "margins_grid": [
+        500,
+        1000
+       ],
+       "margins_um": [
+        0.5,
+        1.0
+       ],
+       "request_id": "ms::pad::bottom",
+       "support": {
+        "entity": "pad",
+        "side": "bottom"
+       },
+       "support_area_um2": 400.0
+      }
+     ],
+     "skipped": []
+    },
+    "interface": null,
+    "margins_um": [
+     0.5,
+     1.0
+    ],
+    "request_id": "ms",
+    "support": {
+     "exclude_entity_ids": [],
+     "face_kinds": null,
+     "interface_type": "MS"
+    }
+   },
+   {
+    "expansion": {
+     "banded": [
+      {
+       "band_count": 3,
+       "bands": {
+        "0": [
+         "SA::substrate|VACUUM_REGION::interface::band=0"
+        ],
+        "1": [
+         "SA::substrate|VACUUM_REGION::interface::band=1"
+        ],
+        "2": [
+         "SA::substrate|VACUUM_REGION::interface::band=2"
+        ]
+       },
+       "interface": null,
+       "margins_grid": [
+        500,
+        1000
+       ],
+       "margins_um": [
+        0.5,
+        1.0
+       ],
+       "request_id": "sa::substrate|VACUUM_REGION::z=0.0",
+       "support": {
+        "first_entity": "substrate",
+        "second_entity": "VACUUM_REGION",
+        "z_um": 0.0
+       },
+       "support_area_um2": 1200.0
+      }
+     ],
+     "skipped": [
+      {
+       "reason": "no_gap_edge",
+       "support": {
+        "first_entity": "substrate",
+        "second_entity": "VACUUM_REGION",
+        "z_um": -10.0
+       }
+      }
+     ]
+    },
+    "interface": null,
+    "margins_um": [
+     0.5,
+     1.0
+    ],
+    "request_id": "sa",
+    "support": {
+     "exclude_entity_ids": [],
+     "face_kinds": null,
+     "interface_type": "SA"
+    }
+   }
+  ],
+  "thin_film_pair_route_a": [
+   {
+    "expansion": {
+     "banded": [
+      {
+       "band_count": 3,
+       "bands": {
+        "0": [
+         "chip/left::band=0"
+        ],
+        "1": [
+         "chip/left::band=1"
+        ],
+        "2": [
+         "chip/left::band=2"
+        ]
+       },
+       "interface": null,
+       "margins_grid": [
+        500,
+        1000
+       ],
+       "margins_um": [
+        0.5,
+        1.0
+       ],
+       "request_id": "ma::chip/left::sheet",
+       "support": {
+        "entity": "chip/left",
+        "side": "sheet"
+       },
+       "support_area_um2": 16.0
+      },
+      {
+       "band_count": 3,
+       "bands": {
+        "0": [
+         "chip/right::band=0"
+        ],
+        "1": [
+         "chip/right::band=1"
+        ],
+        "2": [
+         "chip/right::band=2"
+        ]
+       },
+       "interface": null,
+       "margins_grid": [
+        500,
+        1000
+       ],
+       "margins_um": [
+        0.5,
+        1.0
+       ],
+       "request_id": "ma::chip/right::sheet",
+       "support": {
+        "entity": "chip/right",
+        "side": "sheet"
+       },
+       "support_area_um2": 16.0
+      }
+     ],
+     "skipped": []
+    },
+    "interface": null,
+    "margins_um": [
+     0.5,
+     1.0
+    ],
+    "request_id": "ma",
+    "support": {
+     "exclude_entity_ids": [],
+     "face_kinds": null,
+     "interface_type": "MA"
+    }
+   },
+   {
+    "expansion": {
+     "banded": [
+      {
+       "band_count": 3,
+       "bands": {
+        "0": [
+         "chip/left::band=0"
+        ],
+        "1": [
+         "chip/left::band=1"
+        ],
+        "2": [
+         "chip/left::band=2"
+        ]
+       },
+       "interface": null,
+       "margins_grid": [
+        500,
+        1000
+       ],
+       "margins_um": [
+        0.5,
+        1.0
+       ],
+       "request_id": "ma::chip/left::sheet",
+       "support": {
+        "entity": "chip/left",
+        "side": "sheet"
+       },
+       "support_area_um2": 16.0
+      },
+      {
+       "band_count": 3,
+       "bands": {
+        "0": [
+         "chip/right::band=0"
+        ],
+        "1": [
+         "chip/right::band=1"
+        ],
+        "2": [
+         "chip/right::band=2"
+        ]
+       },
+       "interface": null,
+       "margins_grid": [
+        500,
+        1000
+       ],
+       "margins_um": [
+        0.5,
+        1.0
+       ],
+       "request_id": "ma::chip/right::sheet",
+       "support": {
+        "entity": "chip/right",
+        "side": "sheet"
+       },
+       "support_area_um2": 16.0
+      }
+     ],
+     "skipped": []
+    },
+    "interface": null,
+    "margins_um": [
+     0.5,
+     1.0
+    ],
+    "request_id": "ms",
+    "support": {
+     "exclude_entity_ids": [],
+     "face_kinds": null,
+     "interface_type": "MS"
+    }
+   },
+   {
+    "expansion": {
+     "banded": [
+      {
+       "band_count": 3,
+       "bands": {
+        "0": [
+         "SA::substrate|upper_air::interface::band=0"
+        ],
+        "1": [
+         "SA::substrate|upper_air::interface::band=1"
+        ],
+        "2": [
+         "SA::substrate|upper_air::interface::band=2"
+        ]
+       },
+       "interface": null,
+       "margins_grid": [
+        500,
+        1000
+       ],
+       "margins_um": [
+        0.5,
+        1.0
+       ],
+       "request_id": "sa::substrate|upper_air::z=0.0",
+       "support": {
+        "first_entity": "substrate",
+        "second_entity": "upper_air",
+        "z_um": 0.0
+       },
+       "support_area_um2": 64.0
+      }
+     ],
+     "skipped": []
+    },
+    "interface": null,
+    "margins_um": [
+     0.5,
+     1.0
+    ],
+    "request_id": "sa",
+    "support": {
+     "exclude_entity_ids": [],
+     "face_kinds": null,
+     "interface_type": "SA"
+    }
+   }
+  ],
+  "covered_die_route_b": [
+   {
+    "expansion": {
+     "banded": [],
+     "skipped": [
+      {
+       "reason": "no_gap_edge",
+       "support": {
+        "entity": "ground",
+        "side": "top"
+       }
+      }
+     ]
+    },
+    "interface": null,
+    "margins_um": [
+     0.5,
+     1.0
+    ],
+    "request_id": "ma",
+    "support": {
+     "exclude_entity_ids": [],
+     "face_kinds": null,
+     "interface_type": "MA"
+    }
+   }
+  ]
+ }
+}
