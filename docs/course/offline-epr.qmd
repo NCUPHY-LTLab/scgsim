@@ -121,8 +121,9 @@ being ignored. Reanalysis cannot repair missing fields or recover uncomputed
 sidewalls.
 
 Surface, bulk and port/junction partitions remain separate. Alternative inset
-margins are separate evaluations, not additive edge bands; keep the unmasked
-baseline distinct, including an explicitly requested zero margin. The known
+margins are separate evaluations, not additive edge bands; keep the baseline row
+distinct from the margin rows (for AEDT, including an explicitly requested zero
+margin). The known
 baseline inverse-Q subtotal omits unknown loss and uncomputed channels. It is
 not total device Q or T1. The [report contract](../report-model.qmd) defines
 visible coverage and ordering; the [EPR concept](../eigenmode-epr.qmd) defines

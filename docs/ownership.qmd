@@ -42,11 +42,13 @@ establish them as complete or failed. See the
 | Target area | Owns | Must not take ownership of |
 |---|---|---|
 | `scgsim.geometry` | Source-facing component/occurrence and stack adaptation, GeometryPlan/snapshot, normalized inputs, vacuum/curve preparation and detached summaries | Compiler stage orchestration, Palace/AEDT physics or execution state |
-| `scgsim.geometry.compiler` | Advanced builder, derived records, pipeline validators and construction dispatch | Component source ownership or solver state |
+| `scgsim.geometry.compiler` | Advanced builder, derived records, pipeline validators and construction dispatch | Component source ownership, solver state or Palace's geometry |
+| `scgsim.geometry.sgb` | The SGB core Palace builds geometry with: arrangement, XAO and sidecar, bands | Meshing, solver state or component source ownership |
+| `scgsim.meshing` | Sizing recipes, the quality audit, the repair loop and the meshing report over SGB's XAO | Palace attributes, solver state or physical convergence judgments |
 | `scgsim.geometry.models` and lower primitives | One canonical model/type definition and shared source/compiler primitives | Duplicate definitions, source-to-planning dependency cycles |
 | `scgsim.semantics` | Stdlib-only immutable, revision-bound facts | Mutable backend objects, solver tags interpreted as source truth |
 | `scgsim.palace.preparation` | Separate Electrostatic and Eigenmode setup objects, mutable state/invalidation, and shared preparation functions | A common Simulation base, Palace submission, or merged state owners |
-| `scgsim.palace.mesh` | Route build, dynamic Gmsh worker, native mesh summaries, and offline mesh-quality reader | Result receipt custody or physical convergence judgments |
+| `scgsim.palace.mesh` | The SGB build and meshing call for a run, group lowering to solver attributes, native mesh summaries, and the offline mesh-quality reader | Result receipt custody or physical convergence judgments |
 | `scgsim.palace.execution` | Manual handoff packages and standalone host receipt recording | Automatic solver submission or result interpretation |
 | `scgsim.palace.results` | Returned artifact/custody validation, result data, and detached EPR | Solver execution or plotting state |
 | `scgsim.palace.presentation` | Palace trust, physics and cost projections and report figures | A common cross-solver physical quantity model |

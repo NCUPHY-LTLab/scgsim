@@ -1,138 +1,82 @@
-"""Geometry-mesh controls, independent of Palace's finite-element order."""
+"""Geometry-mesh controls: the choices Palace passes through to ``scgsim.meshing``.
+
+Palace sizes nothing itself.  The recipe, the mesher options, the budgets and the quality threshold are
+those of :func:`scgsim.meshing.mesh_sgb`; this module only keeps them together, validates the types and
+writes them down for the manifest.  Geometry order is independent of the finite-element order of
+``set_numerical(order=...)``.
+"""
 
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, replace
 from numbers import Real
-from typing import Any, cast
+from typing import Any
 
-MESH_CONTROL_KEYS = (
-    "size_policy",
-    "algorithm_3d",
-    "threads",
-    "surface_threads",
-    "geometry_order",
-    "high_order_optimize",
-)
+from scgsim.meshing import Budgets, FeatureRecipe, MesherOptions, SizingRecipe
+from scgsim.meshing.report import recipe_record
+
+# Provisional (Human decision H2, issue 65): the minimum signed inverse condition number (minSICN) every tetrahedron must reach.
+DEFAULT_QUALITY_THRESHOLD = 0.01
 
 
 @dataclass(frozen=True)
-class MeshSizing:
-    """One normalized sizing policy shared by preparation and the fresh worker."""
+class MeshControls:
+    """The meshing choices of one Palace simulation."""
 
-    size_policy: str
-    refined_mesh_size: float | None
-    max_mesh_size: float | None
+    recipe: SizingRecipe = FeatureRecipe()  # noqa: RUF009 -- a frozen dataclass is a safe default
+    mesher: MesherOptions = MesherOptions()  # noqa: RUF009 -- a frozen dataclass is a safe default
+    budgets: Budgets = Budgets()  # noqa: RUF009 -- a frozen dataclass is a safe default
+    quality_threshold: float = DEFAULT_QUALITY_THRESHOLD
 
     def __post_init__(self) -> None:
-        _validate_size_policy(self.size_policy)
-        if self.size_policy == "gmsh_default":
-            if self.refined_mesh_size is not None or self.max_mesh_size is not None:
-                raise ValueError("gmsh_default conflicts with explicit mesh sizes.")
-            return
-        for name in ("refined_mesh_size", "max_mesh_size"):
-            value = getattr(self, name)
-            if (
-                isinstance(value, bool)
-                or not isinstance(value, Real)
-                or not math.isfinite(value)
-                or value <= 0
-            ):
-                raise ValueError(f"{name} must be finite and > 0.")
-            object.__setattr__(self, name, float(value))
-        if cast(float, self.max_mesh_size) < cast(float, self.refined_mesh_size):
-            raise ValueError("max_mesh_size must be >= refined_mesh_size.")
+        """Reject a value of the wrong type or a threshold that is not a finite number."""
+        # SizingRecipe is a protocol without runtime checks: a recipe is anything with the two identity
+        # fields and the sizing method.
+        if not (
+            callable(getattr(self.recipe, "size_requests", None))
+            and hasattr(self.recipe, "name")
+            and hasattr(self.recipe, "version")
+        ):
+            raise TypeError("recipe must be a scgsim.meshing sizing recipe.")
+        if not isinstance(self.mesher, MesherOptions):
+            raise TypeError("mesher must be scgsim.meshing.MesherOptions.")
+        if not isinstance(self.budgets, Budgets):
+            raise TypeError("budgets must be scgsim.meshing.Budgets.")
+        threshold = self.quality_threshold
+        if (
+            isinstance(threshold, bool)
+            or not isinstance(threshold, Real)
+            or not math.isfinite(threshold)
+        ):
+            raise ValueError("quality_threshold must be a finite number.")
+
+    def updated(
+        self,
+        *,
+        recipe: SizingRecipe | None = None,
+        mesher: MesherOptions | None = None,
+        budgets: Budgets | None = None,
+        quality_threshold: float | None = None,
+    ) -> MeshControls:
+        """These controls with every supplied value replaced; omitted values are retained."""
+        changes = {
+            name: value
+            for name, value in {
+                "recipe": recipe,
+                "mesher": mesher,
+                "budgets": budgets,
+                "quality_threshold": quality_threshold,
+            }.items()
+            if value is not None
+        }
+        return replace(self, **changes)
 
     def to_payload(self) -> dict[str, Any]:
-        """Serialize the exact normalized mesh sizing controls."""
+        """The JSON form recorded in the mesh manifest (recipe name, version and parameters, not its class)."""
         return {
-            "size_policy": self.size_policy,
-            "refined_mesh_size": self.refined_mesh_size,
-            "max_mesh_size": self.max_mesh_size,
+            "recipe": recipe_record(self.recipe),
+            "mesher": asdict(self.mesher),
+            "budgets": asdict(self.budgets),
+            "quality_threshold": float(self.quality_threshold),
         }
-
-    @classmethod
-    def from_payload(cls, payload: Mapping[str, Any]) -> MeshSizing:
-        """Restore normalized mesh sizing from the process payload."""
-        return cls(
-            payload["size_policy"],
-            payload["refined_mesh_size"],
-            payload["max_mesh_size"],
-        )
-
-
-def _validate_size_policy(size_policy: str) -> None:
-    if size_policy not in ("scgsim_default", "gmsh_default"):
-        raise ValueError("size_policy must be 'scgsim_default' or 'gmsh_default'.")
-
-
-def normalize_mesh_sizing(
-    *,
-    size_policy: str = "scgsim_default",
-    refined_mesh_size: float | None = None,
-    max_mesh_size: float | None = None,
-) -> MeshSizing:
-    """Apply the selected sizing policy and its existing defaults."""
-    _validate_size_policy(size_policy)
-    if size_policy == "scgsim_default":
-        refined_mesh_size = 5.0 if refined_mesh_size is None else refined_mesh_size
-        max_mesh_size = 300.0 if max_mesh_size is None else max_mesh_size
-    return MeshSizing(size_policy, refined_mesh_size, max_mesh_size)
-
-
-def update_mesh_sizing(
-    current: MeshSizing,
-    *,
-    size_policy: str | None = None,
-    refined_mesh_size: float | None = None,
-    max_mesh_size: float | None = None,
-) -> MeshSizing:
-    """Apply supplied sizing changes while retaining omitted controls."""
-    policy = current.size_policy if size_policy is None else size_policy
-    _validate_size_policy(policy)
-    if policy == "scgsim_default" and current.size_policy == policy:
-        if refined_mesh_size is None:
-            refined_mesh_size = current.refined_mesh_size
-        if max_mesh_size is None:
-            max_mesh_size = current.max_mesh_size
-    return normalize_mesh_sizing(
-        size_policy=policy,
-        refined_mesh_size=refined_mesh_size,
-        max_mesh_size=max_mesh_size,
-    )
-
-
-def mesh_controls(  # noqa: PLR0913 -- supported independent native controls retain their keyword API
-    *,
-    size_policy: str = "scgsim_default",
-    algorithm_3d: str = "Delaunay",
-    threads: int = 1,
-    surface_threads: int = 1,
-    geometry_order: int = 1,
-    high_order_optimize: bool = True,
-) -> dict[str, Any]:
-    """Normalize supported native controls without imposing a research envelope."""
-    _validate_size_policy(size_policy)
-    if algorithm_3d not in {"Delaunay", "HXT"}:
-        raise ValueError("algorithm_3d must be 'Delaunay' or 'HXT'.")
-    for name, value in (("threads", threads), ("surface_threads", surface_threads)):
-        if isinstance(value, bool) or not isinstance(value, int):
-            raise TypeError(f"{name} must be an integer native Gmsh thread setting.")
-    if (
-        isinstance(geometry_order, bool)
-        or not isinstance(geometry_order, int)
-        or geometry_order < 1
-    ):
-        raise ValueError("geometry_order must be a positive integer.")
-    if not isinstance(high_order_optimize, bool):
-        raise TypeError("high_order_optimize must be a bool.")
-    return dict(
-        size_policy=size_policy,
-        algorithm_3d=algorithm_3d,
-        threads=threads,
-        surface_threads=surface_threads,
-        geometry_order=geometry_order,
-        high_order_optimize=high_order_optimize,
-    )

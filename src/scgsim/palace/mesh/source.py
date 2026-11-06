@@ -1,4 +1,4 @@
-"""Write paired mesh source artifacts and preserve version-bound source provenance."""
+"""Write paired mesh source artifacts (GDS, stack, receipts) and validate the declared Route-A film provenance."""
 
 from __future__ import annotations
 
@@ -12,13 +12,6 @@ from pathlib import Path
 from typing import Any
 
 from scgsim.geometry.models.physical import PhysicalRepresentationPlan
-
-from .provenance import (
-    GSIM_SHA,
-    SGB_DERIVATION_BASE_SHA,
-    SGB_DERIVATION_IMPORTED_SHA,
-    SGB_RUNTIME_AUTHORITY,
-)
 
 
 def scgsim_version() -> str:
@@ -45,83 +38,6 @@ def write_json(path: Path, payload: Mapping[str, Any]) -> None:
     """Write a paired UTF-8 JSON artifact with the established formatting."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-
-
-def build_mesh_manifest(
-    *,
-    groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
-    mesh_name: str,
-    route: str,
-    route_a_thin_film: Mapping[str, Any] | None,
-) -> dict[str, Any]:
-    """Build a compact manifest from structured groups only."""
-    entries: list[dict[str, Any]] = []
-
-    for section in (
-        "volumes",
-        "boundary_surfaces",
-        "surface_groups",
-        "pec_surfaces",
-        "port_surfaces",
-    ):
-        for name, info in groups.get(section, {}).items():
-            if not isinstance(info, Mapping):
-                continue
-            entry = {
-                "name": name,
-                "section": section,
-                "dimension": int(info.get("dim", 0) or 0),
-                "tags": list(info.get("tags", ())),
-                "attributes": [
-                    int(item) for item in _physical_group_values(info.get("phys_group"))
-                ],
-                "structured": bool(info.get("sgb_record") == "final_physical_group"),
-                "source": str(info.get("source", "")),
-            }
-            for key in (
-                "route",
-                "role",
-                "solver_use",
-                "representation",
-                "surface_id",
-                "interface_type",
-                "face_kind",
-                "owner_semantic_ids",
-                "adjacent_solution_volume_ids",
-                "conductor_component_id",
-                "net_id",
-                "equipotential_id",
-                "source_provenance",
-                "physical_attribute",
-                "contact_kind",
-                "source_id",
-                "interface_of",
-                "embedded_volume_id",
-                "direction",
-            ):
-                if key in info:
-                    entry[key] = info[key]
-            entries.append(entry)
-
-    return {
-        "schema_version": 1,
-        "route": route,
-        **(
-            {"route_a_thin_film": dict(route_a_thin_film)}
-            if route_a_thin_film is not None
-            else {}
-        ),
-        "mesh_file": mesh_name,
-        "source": {
-            "gsim": GSIM_SHA,
-            "scgsim_sgb": SGB_RUNTIME_AUTHORITY,
-            "sgb_derivation": {
-                "base": SGB_DERIVATION_BASE_SHA,
-                "imported_development": SGB_DERIVATION_IMPORTED_SHA,
-            },
-        },
-        "groups": entries,
-    }
 
 
 def route_a_thin_film_provenance(
@@ -287,12 +203,3 @@ def component_gds_top_cell_name(*, component: Any, gds_path: Path) -> str:
             f"Candidates: {names}"
         )
     return top_cells[0].name
-
-
-def _physical_group_values(value: Any) -> tuple[int, ...]:
-    raw = value if isinstance(value, (list, tuple, set)) else (value,)
-    return tuple(
-        int(item)
-        for item in raw
-        if isinstance(item, int) and not isinstance(item, bool)
-    )

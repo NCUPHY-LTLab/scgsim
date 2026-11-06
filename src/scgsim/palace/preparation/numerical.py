@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from numbers import Real
 from typing import Any
 
-from ..mesh.controls import mesh_controls, normalize_mesh_sizing
 from .config_models import positive_finite
 
 
@@ -39,19 +38,8 @@ class _AmrSettings:
 
 
 @dataclass(frozen=True)
-class _MeshSettings:
-    algorithm_3d: str
-    threads: int
-    surface_threads: int
-    geometry_order: int
-    high_order_optimize: bool
-
-
-@dataclass(frozen=True)
 class _ControlSettings:
-    sizing: Any
     solver: _SolverSettings
-    mesh: _MeshSettings
     amr: _AmrSettings
 
 
@@ -64,14 +52,6 @@ def configure_numerical_controls(  # noqa: PLR0913 - stable named notebook contr
     preconditioner: str = "Default",
     device: str = "CPU",
     ksp_type: str | None = None,
-    size_policy: str = "scgsim_default",
-    refined_mesh_size: float | None = None,
-    max_mesh_size: float | None = None,
-    algorithm_3d: str = "Delaunay",
-    threads: int = 1,
-    surface_threads: int = 1,
-    geometry_order: int = 1,
-    high_order_optimize: bool = True,
     amr_max_passes: int | None = 0,
     amr_nonconformal: bool = False,
     amr_nc_levels: int | None = None,
@@ -85,6 +65,9 @@ def configure_numerical_controls(  # noqa: PLR0913 - stable named notebook contr
     output_grid_function: bool | None = None,
 ) -> dict[str, Any]:
     """Validate notebook numerical controls for Palace config synthesis.
+
+    Mesh controls are not numerical controls: ``set_mesh`` holds the recipe, mesher options, budgets and
+    quality threshold of ``scgsim.meshing``.
 
     ``amr_max_passes`` becomes ``Model.Refinement.MaxIts``.
     ``amr_nonconformal`` becomes ``Model.Refinement.Nonconformal`` and defaults
@@ -100,11 +83,6 @@ def configure_numerical_controls(  # noqa: PLR0913 - stable named notebook contr
     solver = _SolverSettings(
         order, tolerance, max_iterations, solver_type, preconditioner, device, ksp_type
     )
-    sizing = normalize_mesh_sizing(
-        size_policy=size_policy,
-        refined_mesh_size=refined_mesh_size,
-        max_mesh_size=max_mesh_size,
-    )
     amr = _AmrSettings(
         amr_max_passes,
         amr_nonconformal,
@@ -119,20 +97,7 @@ def configure_numerical_controls(  # noqa: PLR0913 - stable named notebook contr
         output_grid_function,
     )
     _validate_amr_controls(amr)
-    return _assemble_controls(
-        _ControlSettings(
-            sizing,
-            solver,
-            _MeshSettings(
-                algorithm_3d,
-                threads,
-                surface_threads,
-                geometry_order,
-                high_order_optimize,
-            ),
-            amr,
-        )
-    )
+    return _assemble_controls(_ControlSettings(solver, amr))
 
 
 def _validate_solver_controls(
@@ -229,27 +194,15 @@ def _validate_optional_boolean(value: bool | None, name: str) -> None:
 def _assemble_controls(
     settings: _ControlSettings,
 ) -> dict[str, Any]:
-    sizing = settings.sizing
     solver = settings.solver
-    mesh = settings.mesh
     amr = settings.amr
     controls = {
-        **mesh_controls(
-            size_policy=sizing.size_policy,
-            algorithm_3d=mesh.algorithm_3d,
-            threads=mesh.threads,
-            surface_threads=mesh.surface_threads,
-            geometry_order=mesh.geometry_order,
-            high_order_optimize=mesh.high_order_optimize,
-        ),
         "order": int(solver.order),
         "tolerance": float(solver.tolerance),
         "max_iterations": int(solver.max_iterations),
         "solver_type": str(solver.solver_type),
         "preconditioner": str(solver.preconditioner),
         "device": str(solver.device),
-        "refined_mesh_size": sizing.refined_mesh_size,
-        "max_mesh_size": sizing.max_mesh_size,
         "amr_max_passes": int(amr.max_passes) if amr.max_passes is not None else None,
         "amr_nonconformal": bool(amr.nonconformal),
         "amr_tolerance": float(amr.tolerance) if amr.tolerance is not None else None,

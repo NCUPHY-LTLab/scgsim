@@ -206,18 +206,18 @@ OCC（Open CASCADE）是 Gmsh 使用的 CAD 核心。SGB 將已規劃的點、�
 
 本節說明建構器如何使用計畫：建立規劃中的 CAD 點、曲線、環、面、殼與體積，再將匯出的原生實體回綁到規劃身分。曾展示已撤回距離帶子面的歷史 XAO 圖，保留於[距離帶歷史頁](../history/sgb-geometric-bands.qmd)。
 
-### 網格階段使用已建構幾何及自己的尺寸政策
+### 網格階段使用已建構幾何及自己的尺寸配方
 
-Palace 網格準備會在新的 Gmsh 程序讀取匯出的 XAO 與實體群組對應，並在求解體積中建立四面體。產生交給 Palace 的網格輸入前，流程會檢查埠與體積面的必要共形關係。網格尺寸政策屬於這個階段：它控制元素尺寸；來源 DBU 與組裝 XY 網格則控制幾何座標。加密網格無法補上缺少的來源語意，也不會改變接面所有權。
+Palace 以 SGB 建立幾何，並用 `scgsim.meshing` 模組在新的 Gmsh 程序中，為匯出的 XAO 與和它成對的 sidecar 產生網格。模組在求解體積中建立四面體、修復有壞元素接觸的曲線，若有四面體持續低於品質門檻就以錯誤中止。接著 Palace 把 SGB 的實體群組降階為求解器屬性，並寫出交給 Palace 的網格輸入。尺寸配方屬於網格化階段：它控制元素尺寸；來源 DBU 與組裝 XY 網格則控制幾何座標。加密網格無法補上缺少的來源語意，也不會改變接面所有權。
 
-網格控制項請見[Palace 準備契約](../specs/palace-electrostatic-sgb.qmd#palace-mesh-size-policy)。
+網格控制項請見 [Palace 網格控制](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
 
 ## 4. 現行能力與歷史界線 {#distance-bands}
 
 目前 SGB 路徑會將來源形狀、材料與物理解讀、最終 Net 宣告、明確的埠與接面要求、介面所有權、共用平面歸屬及三維拓樸交給後端建構。Gmsh／Palace 與 AEDT 在各自支援範圍內共用來源事實，但原生建構與執行仍由各後端負責。
 
-::: {.callout-warning title="SGB 幾何距離帶已撤回"}
-SCGSim 目前不提供先前的幾何表面距離帶產生器。舊分區及其子 CAD 面保留在[距離帶歷史頁](../history/sgb-geometric-bands.qmd)。Palace 原生 Mask／Inset 設定是另一種求解器輸入：選定的 Palace 執行檔若支援該設定，準備流程可用它選取區域；它不會要求 SGB 將來源幾何切成距離帶。現行原生設定界線請見[Palace Electrostatic 契約](../specs/palace-electrostatic-sgb.qmd#native-mask-inset)。
+::: {.callout-warning title="GeometryPlan 距離帶產生器已撤回"}
+SCGSim 目前不提供先前的 GeometryPlan 表面距離帶產生器。舊分區及其子 CAD 面保留在[距離帶歷史頁](../history/sgb-geometric-bands.qmd)。Palace 的 Surface EPR 邊距是另一條路徑：`mesh()` 建立幾何時，`inset_margins_um` 會請 SGB 把內縮帶切進模型，Palace 再把它們當作普通屬性積分。鍵與限制請見[本徵模態契約](../specs/palace-eigenmode.qmd#surface-epr-margins)。
 :::
 
 一般多邊形輪廓即使近似圓弧，仍是多邊形。明確宣告的曲線則走保留曲線意圖的獨立 OCC 路徑，並有各自的路線支援範圍；詳見[曲線契約](../geometry-sgb.qmd#source-curves)。來源、物理表示及後端的正式契約請參閱[SGB 幾何契約](../geometry-sgb.qmd)。

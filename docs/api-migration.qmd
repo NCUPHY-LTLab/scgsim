@@ -55,7 +55,8 @@ the v2 package and the corresponding old-to-new map.
 
 - Keep `scgsim.geometry`, `scgsim.palace`, `scgsim.aedt`, and
   `scgsim.visualization` as package entrypoints; keep `scgsim.geometry.compiler`
-  as the explicit advanced compiler surface.
+  as the explicit advanced compiler surface. Palace no longer builds through it:
+  see [Palace meshing and Surface EPR](#palace-mesh-migration).
 - Treat documented facades and declared exports as public. A private or
   importable implementation module is not automatically a supported API.
 - Move each supported symbol to its single responsibility owner and re-export
@@ -330,6 +331,92 @@ meanings. Do not map old module strings onto new paths while resolving old
 receipts. Handoff and receipt histories remain separate from Q3D request
 versioning; Q3D remains v3 only. This map does not claim native Q3D completion.
 
+## Palace meshing and Surface EPR {#palace-mesh-migration}
+
+Palace now builds its geometry with SGB and meshes it with `scgsim.meshing`.
+This section maps each removed mesh option to its replacement and lists the other
+changes a Palace study has to make. The old options are removed with no
+compatibility layer, so a script that passes one fails until it is updated.
+
+### Geometry
+
+`mesh()` calls `build_sgb_geometry` from `scgsim.geometry.sgb` and no longer uses
+`scgsim.geometry.compiler`. `SemanticGeometryBuilder`, `build_route_construction_plan`
+and `export_physical_group_records` remain available for advanced builds; Palace
+neither calls them nor reads their plan and group files.
+
+### Mesh controls
+
+`set_mesh` now takes `recipe`, `mesher`, `budgets` and `quality_threshold`; the
+[Palace mesh controls](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)
+define them. `set_mesh` on both facades and `build_route_mesh` changed alike, and
+Eigenmode and Electrostatic share the defaults.
+
+::: {.askr-table-compact}
+| Removed | Replacement |
+|---|---|
+| `size_policy`, `refined_mesh_size`, `max_mesh_size`; `set_numerical(refined_mesh_size=, max_mesh_size=)` | `recipe`: `FeatureRecipe` (default), `GlobalSizeRecipe` or `UniformBoundaryRecipe` |
+| `algorithm_3d` | `mesher=MesherOptions(algorithm_3d=...)`, with `scgsim.meshing.DELAUNAY` or `HXT` |
+| `geometry_order`, `high_order_optimize` | `MesherOptions(geometry_order=..., high_order_optimize=...)` |
+| `threads`, `surface_threads` | None. Meshing runs on one thread, because HXT with several threads was not reproducible. |
+| none | `quality_threshold` (default 0.01 minSICN) and `budgets` (`Budgets`) |
+:::
+
+The recipe closest to each former sizing choice, and what changes when you switch,
+is below. Neither recipe reproduces the old mesh element for element.
+
+::: {.askr-table-compact}
+| Former setting | Closest recipe | What changes |
+|---|---|---|
+| `scgsim_default` (refined 5 µm, maximum 300 µm) | `UniformBoundaryRecipe()` | Before, only the boundary curves of the `boundary_surfaces`, `pec_surfaces` and `port_surfaces` groups were sized, with settable sizes and 2D algorithm 5. Now every curve of the model is sized, the 2D algorithm comes from `MesherOptions` (pass `algorithm_2d=5` to match), and the threshold and repair apply. |
+| `gmsh_default` (no size field) | `GlobalSizeRecipe()` | Before, Gmsh chose its own sizes with no maximum. Now the maximum size is the bounding-box diagonal over 20, `MesherOptions()` uses Delaunay (the benchmark that measured this recipe used HXT), and the threshold and repair apply. |
+| `algorithm_3d`, `threads` | `MesherOptions(algorithm_3d=...)` | Meshing runs on one thread. |
+:::
+
+The default is none of these: `FeatureRecipe()` sizes the curves the geometry
+calls for, with `MesherOptions()` (Delaunay) and `Budgets()`. A mesh that cannot
+reach the quality threshold now raises `MeshRepairError` and stops the run,
+where mesh quality never blocked a run before.
+
+### Surface EPR
+
+Surface-EPR margins became geometry, and the changes follow from that:
+
+- Call `set_surface_epr` before `mesh()`. Calling it afterwards invalidates the mesh.
+- `inset_margins_um` asks SGB for bands. It accepts only positive, strictly
+  increasing margins, so drop a leading `0.0`: the baseline row is always present.
+- Palace no longer writes native `Mask` or `Inset`, so margin rows need no Palace
+  fork build. The result readers reject a config that contains native `Mask` rows.
+- `inset_margins_by_entity_um` is new, for per-conductor margins on `MA` and `MS`.
+  `face_kinds` accepts `sheet`, `top`, `bottom` and `interface`, and rejects
+  `sidewall` when the spec asks for margins.
+
+The [Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins) defines
+the keys and rows. SGB group names attach the face kind with `__`, as in
+`MA::pad__top::band=1`; the rule is in the
+[SGB design pages](../zh-TW/docs/design/sgb/identity.html#band-group-names).
+
+### Results
+
+Palace now writes mesh manifest `schema_version` 2 and index map `schema_version`
+3, and reads only those. Run folders of older schemas and detached EPR results of
+`scgsim.palace.epr-result.v1` are rejected, as described in
+[Palace run schemas](report-model.qmd#palace-run-schemas). The renames below have no
+old-name aliases.
+
+::: {.askr-table-compact}
+| Before | Now |
+|---|---|
+| `SurfaceMaskEprRecord`, `SurfaceMaskEprSeriesSnapshot` | `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot` |
+| `PhysicsQuantitiesReport.masked_snapshots` | `PhysicsQuantitiesReport.margin_snapshots` |
+| `scgsim.palace.epr-result.v1` | `scgsim.palace.epr-result.v2` |
+| `surface-mask-Q.csv` and `surface-mask-energy.csv` | Margin rows are read from `surface-Q.csv` |
+:::
+
+`scgsim.palace.check_mesh_quality(mesh_path)` is unchanged: it still reads the
+stored solver mesh (MSH 2.2 ASCII). The minimum SICN in the meshing report is a
+different measurement, taken on the linear mesh before any elevation.
+
 ## Palace package symbols
 
 `scgsim.palace` retains its current 25 package-facade names. The inventory
@@ -340,7 +427,7 @@ groups those exports by their v2 responsibility owner.
 - **Current owner and responsibility:** `scgsim.palace.results`; custody-aware result loading. **Facade exports:** `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`.
 - **Current owner and responsibility:** `scgsim.palace.results`; detached EPR values and offline reanalysis. **Facade exports:** `PalaceEprResult`, `epr_result`, `reanalyze_epr`, `resolve_epr_result`.
 - **Current owner and responsibility:** `scgsim.palace.presentation`; solver-specific plot over detached EPR. **Facade exports:** `show_epr`.
-- **Current owner and responsibility:** `scgsim.palace.results.report_data`; detached data records consumed by Palace presentation. **Facade exports:** `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PassCostRecord`, `SurfaceMaskEprRecord`, `SurfaceMaskEprSeriesSnapshot`.
+- **Current owner and responsibility:** `scgsim.palace.results.report_data`; detached data records consumed by Palace presentation. **Facade exports:** `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PassCostRecord`, `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot`.
 - **Current owner and responsibility:** `scgsim.palace.presentation.reports`; trust, physics and benchmark views over retained result evidence. **Facade exports:** `PalaceTrustReport`, `PhysicsQuantitiesReport`, `SimulationBenchmarkReport`, `inspect_run_trustworthiness`.
 - **Current owner and responsibility:** `scgsim.palace.mesh.quality`; offline file reader, separate from mesh construction and solver execution. **Facade exports:** `MeshQualityReport`, `check_mesh_quality`.
 
@@ -355,13 +442,13 @@ explicit migration entries in addition to the package facade.
 - **Baseline direct import `scgsim.palace.eigenmode` → current source candidate `scgsim.palace.preparation.eigenmode`.** Declared symbols: `EigenmodeSim`.
 - **Baseline direct import `scgsim.palace.handoff` → current source candidate `scgsim.palace.execution.handoff`.** Declared symbols: `HandoffPlan`, `HandoffProfile`, `prepare_handoff`.
 - **Baseline direct import `scgsim.palace.resolve` → current source candidate `scgsim.palace.results.resolve`.** Declared symbols: `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`.
-- **Baseline direct import `scgsim.palace.report`.** Declared symbols: `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`. Current source candidate: `scgsim.palace.presentation.reports` retains this direct export list; data records are defined in `scgsim.palace.results.report_data`. The package facade retains the other report exports, including `SimulationBenchmarkReport` and surface-mask records.
+- **Baseline direct import `scgsim.palace.report`.** Declared symbols: `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`. Current source candidate: `scgsim.palace.presentation.reports` retains this direct export list; data records are defined in `scgsim.palace.results.report_data`. The package facade retains the other report exports, including `SimulationBenchmarkReport` and surface-margin records.
 
 
 The current `scgsim.palace.results.report_data` direct module exports
 `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`,
 `PassCostRecord`, `SurfaceEprRecord`, `SurfaceEprSeriesSnapshot`,
-`SurfaceMaskEprRecord`, and `SurfaceMaskEprSeriesSnapshot`. The
+`SurfaceMarginEprRecord`, and `SurfaceMarginEprSeriesSnapshot`. The
 `scgsim.palace.presentation.reports` module retains the seven direct exports
 listed above.
 

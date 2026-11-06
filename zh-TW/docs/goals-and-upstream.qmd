@@ -11,7 +11,7 @@ SCGSim 是從 [gsim](https://github.com/gdsfactory/gsim) 衍生出的獨立下�
 
 套件會將幾何與材料資料連結至明確計算，接著保留回傳量的單位、來源與模型背景。請參閱[支援的計算](backend-support.qmd)與[教學](examples.qmd)。
 
-已接受的 1.1.0 來源模型包含明確定義的曲線邊界，以及由呼叫端選擇的 GDS 邊界重建。曲線會綁定至來源 Entity 與放置的出現位置；僅含多邊形的輸入則保留其多邊形邊界。Palace 透過 `scgsim.geometry.compiler` 使用曲線意圖；AEDT 仍不支援曲線降階。已接受的 Palace 行為也會將 Gmsh 幾何階數與有限元素階數分開，並透過脫離原物件的摘要提供網格生成記錄。[GeometryPlan 契約](geometry-sgb.qmd)規範確切的曲線記錄；[Palace 契約](specs/palace-electrostatic-sgb.qmd)規範網格控制與摘要的意義。
+已接受的 1.1.0 來源模型包含明確定義的曲線邊界，以及由呼叫端選擇的 GDS 邊界重建。曲線會綁定至來源 Entity 與放置的出現位置；僅含多邊形的輸入則保留其多邊形邊界。Palace 透過 `scgsim.geometry.sgb` 建置曲線意圖；AEDT 仍不支援曲線降階。Palace 也會將 Gmsh 幾何階數與有限元素階數分開，並透過脫離原物件的摘要提供網格生成記錄。[GeometryPlan 契約](geometry-sgb.qmd)規範確切的曲線記錄；[Palace 契約](specs/palace-electrostatic-sgb.qmd)規範網格控制與摘要的意義。
 
 ## 範圍 {#scope}
 

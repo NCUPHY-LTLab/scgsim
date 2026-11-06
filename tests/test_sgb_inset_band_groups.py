@@ -50,10 +50,14 @@ def two_level_catalogue() -> PrismCatalogue:
 
 
 def two_level_requests() -> tuple[InsetRequest, ...]:
-    """A type-level request (both levels) and a concrete one on the top level, with different margins."""
+    """One concrete request per level, with different margins (each level is its own face and family)."""
     return (
-        InsetRequest("sa", InterfaceSurfaces("SA"), (0.5,)),
-        InsetRequest("top_sa", SolutionInterface("substrate", "vacuum", 0.0), (1.0,)),
+        InsetRequest(
+            "top_sa", SolutionInterface("substrate", "vacuum", 0.0), (0.5, 1.0)
+        ),
+        InsetRequest(
+            "bottom_sa", SolutionInterface("substrate", "vacuum", -100.0), (0.5,)
+        ),
     )
 
 
@@ -146,12 +150,7 @@ def test_each_level_has_its_own_families_margins_and_band_groups(two_level_model
     side = sidecar_of(two_level_model)
     assert not list(jsonschema.Draft202012Validator(sidecar_schema()).iter_errors(side))
     insets = {r["request_id"]: r for r in side["insets"]}
-    top = insets["top_sa"]
-    (bottom,) = (
-        f
-        for f in insets["sa"]["expansion"]["banded"]
-        if f["request_id"] == "sa::substrate|vacuum::z=-100.0"
-    )
+    top, bottom = insets["top_sa"], insets["bottom_sa"]
     assert top["margins_um"] == [0.5, 1.0] and bottom["margins_um"] == [0.5]
     assert top["bands"] == {str(k): [f"{TOP}::band={k}"] for k in range(3)}
     assert bottom["bands"] == {str(k): [f"{BOTTOM}::band={k}"] for k in range(2)}

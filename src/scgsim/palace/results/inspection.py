@@ -201,11 +201,7 @@ def _snapshot_artifact_paths(path: Path, problem: str) -> tuple[Path, ...]:
         if problem == "Eigenmode"
         else ("terminal-C.csv", "surface-Q.csv", "error-indicators.csv", "palace.json")
     )
-    return tuple(
-        candidate
-        for name in (*names, "surface-mask-Q.csv", "surface-mask-energy.csv")
-        if (candidate := path / name).is_file()
-    )
+    return tuple(candidate for name in names if (candidate := path / name).is_file())
 
 
 def failure_diagnosis(

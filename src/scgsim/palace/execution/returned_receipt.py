@@ -95,36 +95,14 @@ def _read_json(path: Path) -> dict[str, Any]:
     return data
 
 
-def _mask_outputs_configured(root: Path) -> bool:
-    config = _read_json(root / "config.json")
-    boundaries = config.get("Boundaries")
-    if not isinstance(boundaries, dict):
-        raise TypeError("config Boundaries must be a JSON object.")
-    postprocessing = boundaries.get("Postprocessing", {})
-    if not isinstance(postprocessing, dict):
-        raise TypeError("config Boundaries.Postprocessing must be a JSON object.")
-    dielectric = postprocessing.get("Dielectric", [])
-    if not isinstance(dielectric, list):
-        raise TypeError("config dielectric postprocessing must be a list.")
-    return any(isinstance(row, dict) and "Mask" in row for row in dielectric)
-
-
 def _required_output_paths(
     problem: str,
     log_path: str | None,
     *,
     config: dict[str, Any],
-    masks_configured: bool = False,
 ) -> list[str]:
     families = _output_families(problem, config)
     paths = [f"results/palace/{family}.csv" for family in families]
-    if masks_configured:
-        paths.extend(
-            (
-                "results/palace/surface-mask-Q.csv",
-                "results/palace/surface-mask-energy.csv",
-            )
-        )
     paths.append("results/palace/palace.json")
     if log_path:
         paths.append(log_path)
@@ -190,7 +168,6 @@ def iteration_output_paths(
     problem: str,
     *,
     config: dict[str, Any] | None = None,
-    masks_configured: bool = False,
 ) -> list[str]:
     """Return the present output tables beneath recognized iteration folders."""
     families = (
@@ -201,8 +178,6 @@ def iteration_output_paths(
     paths: list[str] = []
     for directory in _iteration_directories(root):
         names = [*families, "palace"]
-        if masks_configured:
-            names.extend(("surface-mask-Q", "surface-mask-energy"))
         for name in names:
             path = directory / f"{name}.{'json' if name == 'palace' else 'csv'}"
             if path.is_file():
@@ -476,20 +451,17 @@ def _receipt_payload(context: _ReceiptContext) -> dict[str, Any]:
         context.root, context.handoff_metadata
     )
     compatibility_required = _compatibility_required(context.handoff_metadata)
-    masks_configured = _mask_outputs_configured(context.root)
     config = _read_json(context.root / "config.json")
     output_paths = [
         *_required_output_paths(
             context.problem,
             context.args.log_path,
             config=config,
-            masks_configured=masks_configured,
         ),
         *iteration_output_paths(
             context.root,
             context.problem,
             config=config,
-            masks_configured=masks_configured,
         ),
         *amr_diagnostic_output_paths(context.root, config),
         *([RUNTIME_COMPATIBILITY_PATH] if compatibility_required is not None else []),

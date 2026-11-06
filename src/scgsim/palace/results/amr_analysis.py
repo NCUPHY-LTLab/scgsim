@@ -36,7 +36,7 @@ from scgsim.palace.results.report_models import (
 from scgsim.palace.results.snapshots import collect_amr_passes
 from scgsim.palace.results.surface_readers import (
     read_surface_bindings,
-    read_surface_mask_bindings,
+    read_surface_margin_bindings,
 )
 
 
@@ -154,7 +154,7 @@ def _analysis_source(result: ResolvedRunData | PartialAmrReport) -> _AnalysisSou
             result.run_dir,
             result.problem,
             read_surface_bindings(index_map),
-            read_surface_mask_bindings(index_map),
+            read_surface_margin_bindings(index_map),
             failed_attempt=result.status != "completed",
         )
         context = AmrAnalysisContext(

@@ -17,7 +17,7 @@ def _plain_view(value: Any) -> Any:
 
 
 def _show_view(result: Any, *, mode: int | None) -> dict[str, Any]:
-    """Select exactly one mode and summarize known baseline loss and contribution coverage."""
+    """Select exactly one mode and summarize known whole-surface loss and coverage."""
     selected = [row for row in result.rows if mode is None or row["mode"] == mode]
     if len(selected) != 1:
         raise ValueError("show_epr requires one exact mode")
@@ -33,9 +33,9 @@ def _show_view(result: Any, *, mode: int | None) -> dict[str, Any]:
         "row": row,
         "coverage": {
             "surface_rows": len(surface),
-            "source_surfaces": len({item["surface_id"] for item in surface}),
-            "geometric_bands": sum(
-                item["evaluation_kind"] == "geometric_band" for item in surface
+            "source_surfaces": len({item["name"] for item in surface}),
+            "margin_rows": sum(
+                item["evaluation_kind"] == "requested_margin" for item in surface
             ),
             "bulk_domains": len(row["bulk"]),
             "ports": len(row["junction"]),
@@ -50,13 +50,16 @@ def _show_view(result: Any, *, mode: int | None) -> dict[str, Any]:
 
 
 def _surface_label(item: Mapping[str, Any]) -> str:
-    """Label source owners and interface, retaining explicit margin or historical band units."""
-    owners = ",".join(item["owner_semantic_ids"])
-    label = f"{owners} / {item['interface_kind']} / {item['evaluation_kind']}"
-    if item["evaluation_kind"] == "geometric_band":
-        band = item["surface_distance_band"]
-        upper = "∞" if band["upper_um"] is None else f"{band['upper_um']:g}"
-        return f"{label} [{band['lower_um']:g}, {upper}) µm"
+    """Label a surface row by its Palace index, entry name, Entities and interface, with its margin in micrometres.
+
+    The Palace ``Dielectric`` index is unique per row, so two margins of one baseline that print alike (1000.001
+    and 1000.002 um both read ``1000 µm``) stay apart; the entry name keeps the label readable.
+    """
+    entities = ",".join(item["entities"])
+    label = (
+        f"[{item['index']}] {item['name']}: {entities} / {item['interface_kind']} / "
+        f"{item['evaluation_kind']}"
+    )
     return f"{label} {item['margin_um']:g} µm"
 
 
@@ -82,17 +85,18 @@ def show_epr(result: Any, *, mode: int | None = None) -> Any:
                         {
                             "group_id": item["group_id"],
                             "index": item["index"],
-                            "surface_id": item["surface_id"],
-                            "surface_distance_band": item.get("surface_distance_band"),
-                            "field_side": item["field_side"],
-                            "members": item["members"],
+                            "name": item["name"],
+                            "rows": item["rows"],
+                            "face_kinds": item["face_kinds"],
+                            "nets": item["nets"],
+                            "bands": item.get("bands"),
+                            "lineage": item["lineage"],
                             "inverse_q": item["inverse_q"],
                             "assumptions": item["assumptions"],
                             "original_assumptions": item["original_assumptions"],
                             "recorded_native_assumptions": item.get(
                                 "recorded_native_assumptions"
                             ),
-                            "loss_provenance": item.get("loss_provenance"),
                             "assumption_update": item.get("assumption_update"),
                         }
                     ),
@@ -135,8 +139,8 @@ def show_epr(result: Any, *, mode: int | None = None) -> Any:
             f"{coverage['bulk_domains']} bulk domains; {coverage['ports']} ports. "
             f"Known baseline 1/Q subtotal: {coverage['known_baseline_subtotal']}; "
             f"{coverage['unknown_baseline_losses']} baseline losses unknown. "
-            f"{coverage['geometric_bands']} geometric bands are displayed separately "
-            "and excluded from the unmasked baseline subtotal. "
+            f"{coverage['margin_rows']} margin rows are displayed separately "
+            "and excluded from the whole-surface subtotal. "
             "Sidewalls uncomputed when unselected; requested margins are alternatives."
         ),
         xref="paper",

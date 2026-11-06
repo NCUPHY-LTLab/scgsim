@@ -1,4 +1,4 @@
-"""Portable Palace EPR records, retained historical provenance and immutable serialization."""
+"""Portable Palace EPR records, their recorded provenance and immutable serialization."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ from types import MappingProxyType
 from typing import Any
 
 from scgsim.semantics.epr import film_assumptions, inverse_quality_factor
+
+EPR_RESULT_SCHEMA = "scgsim.palace.epr-result.v2"
 
 
 def checked_number(value: Any, name: str, *, positive: bool = False) -> float:
@@ -24,41 +26,6 @@ def checked_number(value: Any, name: str, *, positive: bool = False) -> float:
             f"{name} must be finite and {'positive' if positive else 'non-negative'}"
         )
     return float(value)
-
-
-def surface_distance_band(value: Any) -> dict[str, Any]:
-    """Validate retained geometric-band provenance in micrometres without rebuilding geometry."""
-    if not isinstance(value, Mapping):
-        raise TypeError("Palace geometric-band provenance must be a mapping")
-    required = {
-        "parent_surface_id",
-        "source_entity_id",
-        "source_polygon_id",
-        "lower_um",
-        "upper_um",
-        "band_index",
-        "component_index",
-        "precision_um",
-    }
-    missing = required.difference(value)
-    if missing:
-        raise ValueError(
-            f"Palace geometric-band provenance is missing fields: {sorted(missing)}"
-        )
-    canonical_fields = {"distances_um", "boundary_segments"}
-    if canonical_fields.issubset(value):
-        if not isinstance(value["distances_um"], (list, tuple)):
-            raise TypeError("Palace geometric-band distances_um must be a sequence")
-        if not isinstance(value["boundary_segments"], (list, tuple)):
-            raise TypeError(
-                "Palace geometric-band boundary_segments must be a sequence"
-            )
-    elif not canonical_fields.isdisjoint(value) or "origin_segments" not in value:
-        raise ValueError("Palace geometric-band source-boundary schema is invalid")
-    elif not isinstance(value["origin_segments"], (list, tuple)):
-        raise TypeError("Palace geometric-band origin_segments must be a sequence")
-    _validate_band_scalars(value)
-    return dict(value)
 
 
 def _plain(value: Any) -> Any:
@@ -169,7 +136,7 @@ class PalaceEprResult:
     def to_payload(self) -> dict[str, Any]:
         """Serialize mode rows and provenance under the detached EPR schema."""
         return {
-            "schema_version": "scgsim.palace.epr-result.v1",
+            "schema_version": EPR_RESULT_SCHEMA,
             "rows": _plain(self.rows),
             "provenance": _plain(self.provenance),
         }
@@ -178,10 +145,18 @@ class PalaceEprResult:
     def from_payload(cls, payload: Mapping[str, Any]) -> PalaceEprResult:
         """Validate the schema before reconstructing an immutable detached EPR result."""
         if (
-            not isinstance(payload, Mapping)
-            or set(payload) != {"schema_version", "rows", "provenance"}
-            or payload.get("schema_version") != "scgsim.palace.epr-result.v1"
+            isinstance(payload, Mapping)
+            and payload.get("schema_version") != EPR_RESULT_SCHEMA
         ):
+            raise ValueError(
+                f"Palace EPR payload schema {payload.get('schema_version')!r} is not readable: "
+                f"only {EPR_RESULT_SCHEMA!r} is read, and results of older schemas are not."
+            )
+        if not isinstance(payload, Mapping) or set(payload) != {
+            "schema_version",
+            "rows",
+            "provenance",
+        }:
             raise ValueError("Palace EPR payload is not canonical")
         return cls(tuple(payload["rows"]), payload["provenance"])
 
@@ -190,39 +165,24 @@ def _validate_surface_result(
     surface: Any, group_sources: dict[str, tuple[Any, ...]]
 ) -> None:
     """Validate film values and preserve original-group identity across modes."""
-    for name in (
-        "group_id",
-        "surface_id",
-        "interface_kind",
-        "field_side",
-        "evaluation_kind",
-    ):
+    for name in ("group_id", "name", "interface_kind", "evaluation_kind"):
         if not isinstance(surface.get(name), str) or not surface[name]:
             raise ValueError(f"Palace EPR surface {name} is missing")
     if surface["interface_kind"] not in {"MA", "MS", "SA"} or surface[
         "evaluation_kind"
-    ] not in {
-        "unmasked_baseline",
-        "requested_margin",
-        "geometric_band",
-    }:
+    ] not in {"unmasked_baseline", "requested_margin"}:
         raise ValueError("Palace EPR surface identity is invalid")
-    is_band = surface["evaluation_kind"] == "geometric_band"
-    if is_band:
-        surface_distance_band(surface.get("surface_distance_band"))
-        if surface.get("margin_um") is not None:
-            raise ValueError("Palace geometric-band result must not claim a margin")
-    else:
-        checked_number(surface.get("margin_um"), "surface margin")
-    if not isinstance(surface.get("members"), Mapping):
-        raise TypeError("Palace EPR source provenance must be a mapping")
-    owners = surface.get("owner_semantic_ids")
-    if (
-        not isinstance(owners, (list, tuple))
-        or not owners
-        or any(not isinstance(owner, str) or not owner for owner in owners)
-    ):
-        raise ValueError("Palace EPR surface owners are invalid")
+    checked_number(surface.get("margin_um"), "surface margin")
+    for name in ("rows", "entities"):
+        values = surface.get(name)
+        if (
+            not isinstance(values, (list, tuple))
+            or not values
+            or any(not isinstance(value, str) or not value for value in values)
+        ):
+            raise ValueError(f"Palace EPR surface {name} are invalid")
+    if not isinstance(surface.get("lineage"), Mapping):
+        raise TypeError("Palace EPR surface lineage must be a mapping")
     checked_number(surface.get("original_participation"), "original participation")
     checked_number(surface.get("participation"), "participation")
     assumption = film_assumptions(surface.get("assumptions"), allow_unknown=True)
@@ -242,9 +202,9 @@ def _validate_surface_result(
     ):
         raise ValueError("Palace EPR inverse_q disagrees with participation and loss")
     source = (
-        surface["surface_id"],
+        surface["name"],
         surface["interface_kind"],
-        tuple(owners),
+        tuple(surface["entities"]),
         tuple(sorted(original.items())),
     )
     prior = group_sources.setdefault(surface["group_id"], source)
@@ -252,25 +212,6 @@ def _validate_surface_result(
         raise ValueError(
             "Palace EPR original group identity has conflicting provenance"
         )
-
-
-def _validate_band_scalars(value: Any) -> None:
-    """Validate retained historical geometric-band scalar identities and units."""
-    for name in ("parent_surface_id", "source_entity_id"):
-        if not isinstance(value[name], str) or not value[name]:
-            raise ValueError(f"Palace geometric-band {name} must be non-empty text")
-    source_polygon_id = value["source_polygon_id"]
-    if source_polygon_id is not None and not isinstance(source_polygon_id, str):
-        raise TypeError("Palace geometric-band source_polygon_id must be text or None")
-    if source_polygon_id == "":
-        raise ValueError("Palace geometric-band source_polygon_id must not be empty")
-    for name in ("band_index", "component_index"):
-        if type(value[name]) is not int or value[name] < 0:
-            raise ValueError(f"Palace geometric-band {name} must be non-negative")
-    checked_number(value["lower_um"], "geometric-band lower_um")
-    if value["upper_um"] is not None:
-        checked_number(value["upper_um"], "geometric-band upper_um")
-    checked_number(value["precision_um"], "geometric-band precision_um", positive=True)
 
 
 def _validate_ports(ports: Any) -> None:

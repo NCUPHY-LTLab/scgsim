@@ -21,7 +21,7 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 
 ## 遷移規則 {#migration-rules}
 
-- 保留 `scgsim.geometry`、`scgsim.palace`、`scgsim.aedt` 及 `scgsim.visualization` 作為套件入口；`scgsim.geometry.compiler` 保留為明確的進階編譯器介面。
+- 保留 `scgsim.geometry`、`scgsim.palace`、`scgsim.aedt` 及 `scgsim.visualization` 作為套件入口；`scgsim.geometry.compiler` 保留為明確的進階編譯器介面。Palace 不再經由它建置：見 [Palace 網格化與 Surface EPR](#palace-mesh-migration)。
 - 以文件列出的門面與宣告匯出為公開介面；私有或可匯入的實作模組不會自動成為受支援 API。
 - 將每個受支援符號移至單一責任模組，從套件門面重新匯出核准的高階符號；不保留可呼叫的第二份舊實作或相容包裝。
 - 不恢復 Q3D input-v1 或 input-v2；具本體支援的 input-v3 是已接受的 Q3D 契約。已接受候選版本有原生僅建構觀察，但不代表 C/G 求解或矩陣結果已完成。
@@ -150,6 +150,66 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 
 目前產生端使用 runtime-source v28，共 284 條排序且唯一的路徑。清單從目前所有 AEDT 模組、兩個 AEDT 視覺化載入器，以及 V27 保留的非 AEDT 路徑開始，再沿 AST 解析的匯入及套件初始化檔閉合；相較凍結的 V27 283 條路徑，新增 `scgsim/geometry/primitives/topology_validation.py`。各模組雜湊及正規化清單摘要識別其來源。歷史 V1–V27 讀取器保留原本的路徑、雜湊、修訂規則與結構意義。解析舊收據時，不把舊模組字串映射到新路徑。交接與收據歷史和 Q3D 要求版本分開；Q3D 仍只支援 v3。此對照不宣稱原生 Q3D 已完成。
 
+## Palace 網格化與 Surface EPR {#palace-mesh-migration}
+
+Palace 現在以 SGB 建立幾何，並用 `scgsim.meshing` 產生網格。本節把每個被移除的網格選項對應到它的替代，並列出 Palace 研究還需要做的其他修改。舊選項已移除，沒有相容層，所以仍傳入舊選項的腳本會失敗，直到更新為止。
+
+### 幾何
+
+`mesh()` 呼叫 `scgsim.geometry.sgb` 的 `build_sgb_geometry`，不再使用 `scgsim.geometry.compiler`。`SemanticGeometryBuilder`、`build_route_construction_plan` 與 `export_physical_group_records` 仍可供進階建構使用；Palace 不呼叫它們，也不讀它們的規劃與群組檔。
+
+### 網格控制
+
+`set_mesh` 現在接受 `recipe`、`mesher`、`budgets` 與 `quality_threshold`，定義見 [Palace 網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。兩個外觀介面上的 `set_mesh` 與 `build_route_mesh` 同樣改了，本徵模態與 Electrostatic 共用預設值。
+
+::: {.askr-table-compact}
+| 已移除 | 替代 |
+|---|---|
+| `size_policy`、`refined_mesh_size`、`max_mesh_size`；`set_numerical(refined_mesh_size=, max_mesh_size=)` | `recipe`：`FeatureRecipe`（預設）、`GlobalSizeRecipe` 或 `UniformBoundaryRecipe` |
+| `algorithm_3d` | `mesher=MesherOptions(algorithm_3d=...)`，搭配 `scgsim.meshing.DELAUNAY` 或 `HXT` |
+| `geometry_order`、`high_order_optimize` | `MesherOptions(geometry_order=..., high_order_optimize=...)` |
+| `threads`、`surface_threads` | 無。網格化只用單一執行緒，因為多執行緒的 HXT 無法重現。 |
+| 無 | `quality_threshold`（預設 0.01 minSICN）與 `budgets`（`Budgets`） |
+:::
+
+下表列出最接近每個舊尺寸選擇的配方，以及改用後有什麼不同。兩個配方都不會逐元素重現舊網格。
+
+::: {.askr-table-compact}
+| 舊設定 | 最接近的配方 | 改變之處 |
+|---|---|---|
+| `scgsim_default`（細化 5 µm、最大 300 µm） | `UniformBoundaryRecipe()` | 以前只替 `boundary_surfaces`、`pec_surfaces` 與 `port_surfaces` 群組的邊界曲線設尺寸，尺寸可設定，2D 演算法為 5。現在模型的每條曲線都設尺寸，2D 演算法由 `MesherOptions` 決定（傳入 `algorithm_2d=5` 可對齊），且門檻與修復都會作用。 |
+| `gmsh_default`（沒有尺寸場） | `GlobalSizeRecipe()` | 以前由 Gmsh 自選尺寸，沒有最大值。現在最大尺寸是包圍盒對角線除以 20，`MesherOptions()` 使用 Delaunay（量測此配方的基準測試用的是 HXT），且門檻與修復都會作用。 |
+| `algorithm_3d`、`threads` | `MesherOptions(algorithm_3d=...)` | 網格化只用單一執行緒。 |
+:::
+
+預設值不是上述任何一個：`FeatureRecipe()` 為幾何本身需要的曲線設尺寸，並搭配 `MesherOptions()`（Delaunay）與 `Budgets()`。網格達不到品質門檻時，現在會拋出 `MeshRepairError` 並中止執行；以前網格品質從不阻擋執行。
+
+### Surface EPR
+
+Surface EPR 邊距變成了幾何，隨之而來的改變如下：
+
+- 請在 `mesh()` 之前呼叫 `set_surface_epr`。在它之後呼叫，會使網格失效。
+- `inset_margins_um` 向 SGB 要求帶。它只接受正的嚴格遞增邊距，所以請去掉開頭的 `0.0`：基準列一定存在。
+- Palace 不再寫出原生 `Mask` 或 `Inset`，所以邊距列不需要 Palace 分支版本。結果讀取器會拒絕含有原生 `Mask` 列的設定檔。
+- `inset_margins_by_entity_um` 是新增的，用於 `MA` 與 `MS` 的逐導體邊距。`face_kinds` 接受 `sheet`、`top`、`bottom` 與 `interface`，規格要求邊距時會拒絕 `sidewall`。
+
+鍵與列的定義見[本徵模態契約](specs/palace-eigenmode.qmd#surface-epr-margins)。SGB 群組名稱以 `__` 接上面種類，例如 `MA::pad__top::band=1`；規則見 [SGB 設計頁](design/sgb/identity.qmd#band-group-names)。
+
+### 結果
+
+Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_version` 3，且只讀這兩種。舊結構的執行資料夾與 `scgsim.palace.epr-result.v1` 的獨立 EPR 結果都會被拒絕，見 [Palace 執行結構](report-model.qmd#palace-run-schemas)。下列更名沒有舊名稱別名。
+
+::: {.askr-table-compact}
+| 以前 | 現在 |
+|---|---|
+| `SurfaceMaskEprRecord`、`SurfaceMaskEprSeriesSnapshot` | `SurfaceMarginEprRecord`、`SurfaceMarginEprSeriesSnapshot` |
+| `PhysicsQuantitiesReport.masked_snapshots` | `PhysicsQuantitiesReport.margin_snapshots` |
+| `scgsim.palace.epr-result.v1` | `scgsim.palace.epr-result.v2` |
+| `surface-mask-Q.csv` 與 `surface-mask-energy.csv` | 邊距列從 `surface-Q.csv` 讀取 |
+:::
+
+`scgsim.palace.check_mesh_quality(mesh_path)` 不變：它仍讀取儲存的求解器網格（MSH 2.2 ASCII）。網格化報告中的最小 SICN 是另一種量測，在升階之前的線性網格上量得。
+
 ## Palace 套件符號 {#palace-package-symbols}
 
 `scgsim.palace` 保留目前 25 個套件門面名稱，下列清單依 v2 責任模組分組。
@@ -159,7 +219,7 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 - **目前負責模組與責任：** `scgsim.palace.results`; 依資料保管關係載入結果。 **門面匯出：** `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`.
 - **目前負責模組與責任：** `scgsim.palace.results`; 獨立 EPR 數值與離線重新分析。 **門面匯出：** `PalaceEprResult`, `epr_result`, `reanalyze_epr`, `resolve_epr_result`.
 - **目前負責模組與責任：** `scgsim.palace.presentation`; 依求解器對獨立 EPR 繪圖。 **門面匯出：** `show_epr`.
-- **目前負責模組與責任：** `scgsim.palace.results.report_data`; 供 Palace 呈現使用的獨立資料。 **門面匯出：** `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PassCostRecord`, `SurfaceMaskEprRecord`, `SurfaceMaskEprSeriesSnapshot`.
+- **目前負責模組與責任：** `scgsim.palace.results.report_data`; 供 Palace 呈現使用的獨立資料。 **門面匯出：** `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PassCostRecord`, `SurfaceMarginEprRecord`, `SurfaceMarginEprSeriesSnapshot`.
 - **目前負責模組與責任：** `scgsim.palace.presentation.reports`; 根據保留結果證據提供可信度、物理與效能比較檢視。 **門面匯出：** `PalaceTrustReport`, `PhysicsQuantitiesReport`, `SimulationBenchmarkReport`, `inspect_run_trustworthiness`.
 - **目前負責模組與責任：** `scgsim.palace.mesh.quality`; 離線檔案讀取器，與網格建構及求解器執行分開。 **門面匯出：** `MeshQualityReport`, `check_mesh_quality`.
 
@@ -173,10 +233,10 @@ AEDT 2023.2 使用限於該次交易的 PyAEDT 同節點 gRPC 相容設定，並
 - **基準直接匯入 `scgsim.palace.eigenmode` → 目前候選來源 `scgsim.palace.preparation.eigenmode`.** 宣告符號： `EigenmodeSim`.
 - **基準直接匯入 `scgsim.palace.handoff` → 目前候選來源 `scgsim.palace.execution.handoff`.** 宣告符號： `HandoffPlan`, `HandoffProfile`, `prepare_handoff`.
 - **基準直接匯入 `scgsim.palace.resolve` → 目前候選來源 `scgsim.palace.results.resolve`.** 宣告符號： `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`.
-- **基準直接匯入 `scgsim.palace.report`.** 宣告符號： `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`. 目前候選來源： `scgsim.palace.presentation.reports` 保留此直接匯出清單；資料定義位於 `scgsim.palace.results.report_data`. 套件門面保留其他報告匯出，包含 `SimulationBenchmarkReport` 及表面遮罩資料。
+- **基準直接匯入 `scgsim.palace.report`.** 宣告符號： `AmrPassSnapshot`, `PalaceFailureDiagnosis`, `PalaceResultSelection`, `PalaceTrustReport`, `PassCostRecord`, `PhysicsQuantitiesReport`, `inspect_run_trustworthiness`. 目前候選來源： `scgsim.palace.presentation.reports` 保留此直接匯出清單；資料定義位於 `scgsim.palace.results.report_data`. 套件門面保留其他報告匯出，包含 `SimulationBenchmarkReport` 及表面邊距資料。
 
 
-目前 `scgsim.palace.results.report_data` 直接模組匯出 `AmrPassSnapshot`、`PalaceFailureDiagnosis`、`PalaceResultSelection`、`PassCostRecord`、`SurfaceEprRecord`、`SurfaceEprSeriesSnapshot`、`SurfaceMaskEprRecord` 及 `SurfaceMaskEprSeriesSnapshot`。`scgsim.palace.presentation.reports` 保留上列七個直接匯出。
+目前 `scgsim.palace.results.report_data` 直接模組匯出 `AmrPassSnapshot`、`PalaceFailureDiagnosis`、`PalaceResultSelection`、`PassCostRecord`、`SurfaceEprRecord`、`SurfaceEprSeriesSnapshot`、`SurfaceMarginEprRecord` 及 `SurfaceMarginEprSeriesSnapshot`。`scgsim.palace.presentation.reports` 保留上列七個直接匯出。
 
 `scgsim.palace._epr_results` 與 `scgsim._mesh_quality` 是基準私有實作路徑，受支援名稱由 `scgsim.palace` 重新匯出。目前分別由 `scgsim.palace.results` 與 `scgsim.palace.mesh.quality` 負責；舊私有匯入路徑不是相容介面。
 

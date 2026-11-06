@@ -204,18 +204,18 @@ The returned native entity tags can change when CAD is exported and reopened. SC
 
 This section explains how the builder consumes a plan: it creates the planned CAD points, curves, loops, surfaces, shells and volumes, then binds exported native entities back to planned identities. The historical XAO view that showed the withdrawn distance-band children is retained on the [historical bands page](../history/sgb-geometric-bands.qmd).
 
-### Meshing uses the built geometry and its own size policy
+### Meshing uses the built geometry and its own sizing recipe
 
-The Palace mesh-preparation step reads the exported XAO and its physical-group mapping in a fresh Gmsh process. It creates tetrahedra in solution volumes and checks required port-to-volume conformity before producing the mesh input for Palace. The chosen mesh-size policy belongs to this step: it controls element sizing, while the source DBU and assembly XY grid control geometry coordinates. A finer mesh does not repair missing source meaning or change a junction's ownership.
+Palace builds its geometry with SGB and meshes the exported XAO, with the sidecar that pairs with it, using the `scgsim.meshing` module in a fresh Gmsh process. The module creates tetrahedra in solution volumes, repairs the curves that bad elements touch, and stops with an error if a tetrahedron stays below the quality threshold. Palace then lowers SGB's physical groups to solver attributes and writes the mesh input for Palace. The chosen sizing recipe belongs to the meshing step: it controls element sizing, while the source DBU and assembly XY grid control geometry coordinates. A finer mesh does not repair missing source meaning or change a junction's ownership.
 
-For exact mesh controls, see the [Palace preparation contract](../specs/palace-electrostatic-sgb.qmd#palace-mesh-size-policy).
+For exact mesh controls, see the [Palace mesh controls](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
 
 ## 4. Current capability and historical boundary {#distance-bands}
 
 The current SGB path carries source shapes, material/physical interpretation, final Net declarations, explicit port and junction requests, interface ownership, shared planar membership and canonical three-dimensional boundaries into backend construction. Gmsh/Palace and AEDT share those source facts where each backend supports them, while their native construction and execution remain separate.
 
-::: {.callout-warning title="SGB geometric distance bands are withdrawn"}
-SCGSim does not currently provide the former geometry-level surface-distance-band producer. Those old partitions and their child CAD surfaces are described for historical context on the [SGB geometric-bands page](../history/sgb-geometric-bands.qmd). Palace's native Mask/Inset setting is a separate solver input: it can select a region during Palace preparation when the chosen executable supports that setting. It does not ask SGB to cut the source geometry into geometric bands. See the [Palace Electrostatic contract](../specs/palace-electrostatic-sgb.qmd#native-mask-inset) for the current native-setting boundary.
+::: {.callout-warning title="The GeometryPlan distance-band producer is withdrawn"}
+SCGSim does not currently provide the former GeometryPlan surface-distance-band producer. Those old partitions and their child CAD surfaces are described for historical context on the [SGB geometric-bands page](../history/sgb-geometric-bands.qmd). Palace Surface-EPR margins are a different path: `inset_margins_um` asks SGB to cut inset bands into the model when `mesh()` builds the geometry, and Palace integrates them as ordinary attributes. See the [Eigenmode contract](../specs/palace-eigenmode.qmd#surface-epr-margins) for the keys and limits.
 :::
 
 Ordinary polygonal outlines remain polygon geometry. Explicitly declared curves use a separate OCC path and have their own route support; see the [curve contract](../geometry-sgb.qmd#source-curves). For the formal source, physical representation and backend contracts, continue to the [SGB geometry contract](../geometry-sgb.qmd).

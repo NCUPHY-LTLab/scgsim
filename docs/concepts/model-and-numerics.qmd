@@ -33,22 +33,22 @@ route is not an automatic repair for a difficult mesh. See the
 
 ## Read numerical changes beside the quantity
 
-Mesh size, geometric mesh order, finite-element order, adaptive passes, solver
-settings and search controls determine different parts of the numerical
-calculation. Palace's geometric order controls the mesh representation; FEM
+Mesh sizing, the mesh quality threshold, geometric mesh order, finite-element
+order, adaptive passes, solver settings and search controls determine different
+parts of the numerical calculation. Palace's geometric order controls the mesh representation; FEM
 order controls the field approximation. A native stopping flag describes its
 configured criterion. It is useful alongside the actual changes in the
 capacitance, frequency or participation you intend to use.
 
-The 1.1.0 Palace mesh summary records the native mesh controls and
+The Palace mesh summary records the meshing controls and the native
 topology. Its Eigenmode degree-of-freedom value is a topology-based estimate,
 not a native solver count or a convergence measure. The linear-tetrahedron
 quality report also does not evaluate curved high-order element quality.
 
-Keep the three high-order controls separate: `geometry_order` creates the mesh
+Keep the three high-order controls separate: `MesherOptions.geometry_order` creates the mesh
 geometry, FEM order controls the field approximation, and Palace
 `HighOrderOutput` controls serialization. Palace's native import default
-`RemoveCurvature=false` preserves imported high-order geometry nodes. For Palace Surface EPR, native Mask/Inset margins are separate evaluations from SGB geometry. The selected Palace executable must support Mask/Inset; see the [Palace Electrostatic contract](../specs/palace-electrostatic-sgb.qmd#native-mask-inset). The former SGB geometry-distance-band producer is withdrawn.
+`RemoveCurvature=false` preserves imported high-order geometry nodes. For Palace Surface EPR, each inset margin is a separate evaluation over bands that SGB cuts into the geometry, so Palace needs no special configuration for it; see the [Eigenmode contract](../specs/palace-eigenmode.qmd#surface-epr-margins).
 
 An algebraic eigenpair residual and an adaptive mesh indicator describe
 different quantities. A frequency can change little while a field-sensitive

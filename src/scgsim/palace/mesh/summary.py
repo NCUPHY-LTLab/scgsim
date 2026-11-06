@@ -127,8 +127,6 @@ def mesh_summary(
         mesh_sha256=mesh_sha256,
         manifest_sha256=manifest_sha256,
         meshing=copy.deepcopy(observed),
-        curve_source=copy.deepcopy(manifest.get("curve_source")),
-        curved_arrangement=copy.deepcopy(manifest.get("curved_arrangement")),
         finite_element_order=fem_order,
         dof_estimate=dict(
             status="unavailable",

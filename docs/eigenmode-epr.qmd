@@ -1,6 +1,6 @@
 ---
 title: "Interpreting Eigenmode EPR"
-description: "Energy normalization, physical partitions, masks and attributed loss assumptions."
+description: "Energy normalization, physical partitions, inset margins and attributed loss assumptions."
 scgsim-kind: "concept"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/eigenmode-epr"
@@ -92,9 +92,9 @@ ambiguous origin. The reader preserves the raw value but treats its effective
 loss as unknown; the inverse-$Q$ contribution remains unavailable.
 :::
 
-## Historical SGB geometry distance bands {#surface-distance-band-correction}
+## Inset margins and the withdrawn distance bands {#surface-distance-band-correction}
 
-SGB geometry-level distance bands were a withdrawn geometry partition and Palace aggregation path. They are not part of the current producer. Palace native Mask/Inset margins remain a separate Surface EPR option through `inset_margins_um`; the selected Palace executable must implement that native configuration. An unmasked baseline is requested by omitting the margin field. Native margins are alternative evaluations, not disjoint geometry regions, so do not add them as bands.
+The GeometryPlan distance-band producer and its Palace aggregation path were withdrawn and are not part of the current package. Palace Surface EPR offers inset margins through `inset_margins_um` instead: each margin $m$ adds a row for the part of a surface at least $m$ from the nearest gap edge, next to the whole-surface baseline row. SGB cuts those parts into the geometry and stock Palace integrates them as ordinary attributes; see the [margin contract](specs/palace-eigenmode.qmd#surface-epr-margins). The baseline row is always present. Margin rows are alternative evaluations of the same surface, not disjoint bands, so do not add them.
 
 ### Future Q2D correction (paused)
 
@@ -110,9 +110,8 @@ This relation is not part of the current Palace band results. The Palace
 cutoff totals are direct Palace EPR outputs; they are not converted by this
 Q2D relation.
 
-Archived mask margins are alternative interface estimates. Read a saved
-unmasked baseline and its requested margins separately; do not add them as
-disjoint bands. AEDT evaluates horizontal top/bottom
+Margin rows are alternative interface estimates. Read a saved baseline row and
+its requested margins separately; do not add them as disjoint bands. AEDT evaluates horizontal top/bottom
 interfaces and does not calculate sidewall film energy. Palace sidewalls also
 remain uncomputed where they were not selected. Changing a film-loss assumption
 on stored evidence can revise the loss estimate without another field solve;

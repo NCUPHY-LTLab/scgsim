@@ -17,40 +17,41 @@ ordinary sequence; [Xmon EPR](../tutorial-xmon-palace.qmd) adds optional physics
 | Standalone source | `set_geometry(component)` and `set_stack(stack)` on a fresh unbound simulation |
 | Output | `set_output_dir(path)` |
 | Eigenmode | `set_eigenmode(*, num_modes=10, target=None, tolerance=1e-6, save=0)` |
-| Mesh controls | `set_mesh(...)` accepts the shared mesh-size policy and Palace meshing controls |
+| Mesh controls | `set_mesh(...)` accepts the shared sizing recipe, mesher options, repair budgets and quality threshold |
 | Mesh summary | `mesh_summary()` returns detached meshing evidence |
 | Numerical controls | `set_numerical(...)` retains explicit order, linear solver, AMR and output choices |
 | Source/settings view | `input_summary()` returns detached source plus settings, no file/native I/O |
-| Surface model | `set_surface_epr(*, representation, specs, route_a_thin_film=None)` |
+| Surface model | `set_surface_epr(*, representation, specs, route_a_thin_film=None)`, before `mesh()` |
 | Authored port | `add_port(qualified_name, *, layer, layout_sheet=True, inductance)` |
 | Output selection | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |
 | Preparation | `mesh()`, `write_config()`, then `prepare_handoff(*, profile, executable, resources=None, setup_commands=(), petsc_options=())` |
 
-SCGSim 1.1.0 adds Gmsh algorithm, thread, surface-thread, geometric
-order and high-order optimization controls to `set_mesh(...)`. Geometric order
-is distinct from the FEM order configured through `set_numerical(...)`; solver
-settings preserve the current mesh controls. The shared
-[Palace mesh controls](palace-electrostatic-sgb.qmd#palace-mesh-controls-110-candidate)
-and [mesh-size policy](palace-electrostatic-sgb.qmd#palace-mesh-size-policy)
-define defaults, invalidation, native generation and manifest behavior.
+Geometric order is distinct from the FEM order configured through
+`set_numerical(...)`; solver settings preserve the current mesh controls. The
+Eigenmode and Electrostatic facades share one set of mesh controls and
+defaults, described in the
+[Palace mesh controls](palace-electrostatic-sgb.qmd#palace-mesh-controls), which
+also state that a mesh below the quality threshold stops `mesh()`.
 
 ## Eigenmode mesh and AMR defaults (CONVERGING)
 
-A fresh `EigenmodeSim` selects `gmsh_default` sizing and writes
-`Model.Refinement.Nonconformal=true`. Before `write_config()`, provide
-`amr_max_passes` through `set_numerical(...)`. For a positive pass limit, also
-provide `amr_tolerance` and `amr_update_fraction`; setting
-`amr_max_passes=0` disables adaptive refinement and allows those two values to
-remain unset. Omitted values in later `set_numerical(...)` calls retain their
-current settings. These are input controls, not adequacy recommendations.
-Electrostatic retains its existing AMR defaults in the shared contract.
+A fresh `EigenmodeSim` uses the shared default mesh controls
+(`FeatureRecipe()`, `MesherOptions()`, `Budgets()` and a `0.01` quality
+threshold) and writes `Model.Refinement.Nonconformal=true`. Before
+`write_config()`, provide `amr_max_passes` through `set_numerical(...)`. For a
+positive pass limit, also provide `amr_tolerance` and `amr_update_fraction`;
+setting `amr_max_passes=0` disables adaptive refinement and allows those two
+values to remain unset. Omitted values in later `set_numerical(...)` calls
+retain their current settings. These are input controls, not adequacy
+recommendations. Electrostatic retains its existing AMR defaults in the shared
+contract.
 
 `mesh_summary()` reports recorded meshing controls, native element and region
 counts, and mesh identities. Its Nédélec degree-of-freedom value is a
 topological estimate from primary-corner tetrahedra and the configured FEM
 order, not a solver-reported DOF count. Changing FEM order refreshes that
-estimate without remeshing. These mesh additions are ACCEPTED; they do
-not establish numerical adequacy.
+estimate without remeshing. These mesh records do not establish numerical
+adequacy.
 
 Target frequency is in hertz, mesh lengths in micrometres, inductance in henries.
 Ordinary Eigenmode does not require surface specs, ports or an EPR request.
@@ -58,7 +59,7 @@ A bound plan carries the shared envelope and cannot be partially replaced by
 standalone geometry/stack or conflicting envelope setters. The
 [GeometryPlan contract](../geometry-sgb.qmd) owns source identity and route
 preparation. The [Electrostatic/shared Palace contract](palace-electrostatic-sgb.qmd)
-owns native multi-margin lowering and shared config controls.
+owns the shared mesh controls and config controls.
 
 ## Selection and physical meaning
 
@@ -79,7 +80,8 @@ resolves to an explicit dielectric. `loss_tangent` may be supplied directly or
 read from that material; an unknown value remains distinguishable in SCGSim's
 index. The current `surface-film.v2` producer rejects missing or duplicated
 surface and physical-attribute identities rather than dropping or deduplicating
-them. Film thickness sets the surface model. Native Mask/Inset margins set any requested lateral exclusion; the selected Palace executable must support that configuration. The SGB geometry-distance-band producer described below is withdrawn.
+them. Film thickness sets the surface model, and
+[inset margins](#surface-epr-margins) set any requested exclusion near the gaps.
 
 Palace 0.18.1 forms native surface integrands from the configured type and the
 neighboring solution elements: `MA` and `SA` use the vacuum-side trace, while
@@ -91,9 +93,69 @@ and [neighbor-material rules](https://github.com/awslabs/palace/blob/0dc74cdf8c3
 for the native mapping. Choose `MA`, `MS`, or `SA` to match the
 intended native interface model.
 
-### Historical SGB geometry distance bands (WITHDRAWN) {#surface-distance-bands-converging}
+### Surface-EPR margins {#surface-epr-margins}
 
-The former SGB geometry-level distance-band producer and its Palace result aggregation are withdrawn from the current SCGSim interface. The preserved [GeometryPlan section](../geometry-sgb.qmd#surface-distance-bands) records this historical design. Current native Mask/Inset margins remain a separate Surface EPR option; the configured Palace executable must support Mask/Inset. See the [Palace Electrostatic contract](palace-electrostatic-sgb.qmd#native-mask-inset). The former `SurfaceBandSelection.field_side` value named a result selection and did not override Palace native adjacency; it is not a current API.
+An inset margin $m$ selects the part of a surface at least $m$ µm from the
+nearest gap edge, the edge of a conductor footprint that faces exposed
+substrate. SGB cuts that part into the model as band faces, so stock Palace
+integrates ordinary attributes; SCGSim writes no native `Mask` or `Inset`
+configuration, and no special Palace build is needed. The
+[SGB design pages](../zh-TW/docs/design/sgb/inset-imprint.html#band-measure)
+(Traditional Chinese) define how distance is measured.
+
+::: {.callout-important title="Call set_surface_epr before mesh()"}
+Margins are geometry: `mesh()` hands them to SGB with the rest of the model.
+Configure `set_surface_epr` first. Calling it after `mesh()` invalidates the mesh,
+config and handoff, and `mesh()` must run again.
+:::
+
+Each spec (`"MA"`, `"MS"`, `"SA"`) takes these margin keys next to its film
+inputs:
+
+::: {.askr-table-compact}
+| Key | Meaning |
+|---|---|
+| `inset_margins_um` | Strictly increasing positive margins in µm. `mesh()` asks SGB for bands at these margins on every face of the spec's type, in one geometry build. Omit it for baseline rows only. |
+| `inset_margins_by_entity_um` | `{entity_id: [margins]}` for `MA` and `MS`. Each named conductor takes its own margins, and the rest of the type keeps `inset_margins_um`, if given. It adds one extra, unbanded geometry build to find the conductors' faces. A named conductor with no face of that type raises `ValueError` from `mesh()`. It is rejected for `SA`, whose interface lies between solution regions and has no owning conductor. |
+| `face_kinds` | Restricts the spec to some of `"sheet"`, `"top"`, `"bottom"` and `"interface"`. When the spec asks for margins, `"sidewall"` is rejected because SGB never bands sidewalls. |
+:::
+
+A margin of `0` is rejected: the baseline row already covers the whole surface.
+
+One face has one band family, so it takes one set of margins. A Route A sheet
+carries both an `MA` and an `MS` row, so when both specs reach it they must give
+it the same margins, compared on the model grid (`0.3` and `0.1 + 0.2` agree).
+Differing margins on one sheet are an error: `mesh()` raises `ValueError`
+naming the conductor, the face and both sets when it can see the conflict from
+`inset_margins_by_entity_um`, and otherwise SGB refuses the build with an
+`InputError` that names the two requests. Margins are never merged. Every margin
+must be a positive multiple of the model grid; a customised margin off the grid
+is refused by `mesh()` before any comparison.
+
+Each surface row gets a baseline row that covers all its faces. Each margin adds a
+further row covering the bands from that margin outward. Margin rows are
+alternative evaluations of the same surface, not disjoint bands: read each row
+separately and do not add them. SGB bands a face only where it has a gap edge, so
+a face without one, such as the underside of a substrate, is covered only by the
+baseline row. The manifest lists the faces SGB skipped.
+
+Group names attach the face kind to the entity with `__`, for example
+`MA::pad__top::band=1`. The [naming rule](../zh-TW/docs/design/sgb/identity.html#band-group-names)
+is owned by the SGB design pages; read band membership from the index map instead
+of parsing names.
+
+::: {.callout-note collapse="true" title="Rows, sides and cracked sheets"}
+The index map (schema v3) records, for each surface row, its `row` and `group`,
+`interface_type`, `band`, `side`, `face_sides`, `entities`, `net` and
+`attributes`, and the lineage membership as attribution only: lineage weights
+nothing. A one-sided row maps `above` or `below` to Palace's postprocessing side.
+A Route A sheet with vacuum on both sides is one face integrated from both sides,
+which needs Palace's internal-boundary cracking; SCGSim writes
+`Model.CrackInternalBoundaryElements` exactly when a configured row has a
+`shared_face_group`, so a run that configures no `MA` or `MS` film on a sheet
+keeps Palace's default. A sheet over vacuum and dielectric in different places gives
+separate `MA` and `MS` rows on different attributes.
+:::
 
 ## Results and offline analysis
 

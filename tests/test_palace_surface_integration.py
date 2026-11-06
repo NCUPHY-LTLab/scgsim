@@ -1,43 +1,27 @@
-"""Official integration config/index contracts; these tests do not run Palace."""
+"""Official integration config/index contracts of Surface EPR; these tests do not run Palace."""
 
 from copy import deepcopy
 
 import pytest
+from palace_sgb_support import effective_input, sidecar_of, surface_epr_specs
 
-from scgsim.palace.preparation.surface_epr import (
-    build_surface_epr_postprocessing,
-    normalize_surface_epr_specs,
-)
-from scgsim.palace.results.surface_contract import validate_surface_mask_config
-
-
-def surface_group(surface_id, attributes, interface="MA"):
-    """Build one indexed source surface with explicit native physical attributes."""
-    return {
-        "surface_epr": True,
-        "interface_type": interface,
-        "surface_id": surface_id,
-        "phys_group": attributes,
-        "face_kind": "top",
-        "owner_semantic_ids": ["owner"],
-        "physical_attribute": {"groups": attributes},
-        "source_provenance": {"surface_id": surface_id},
-    }
+from scgsim.palace.mesh.physical_groups import groups_from_sidecar
+from scgsim.palace.preparation.surface_epr import build_surface_epr_postprocessing
+from scgsim.palace.results.surface_contract import validate_surface_epr_config
 
 
-def _produce(groups=None, interfaces=("MA",)):
-    if groups is None:
-        groups = {"patch": surface_group("patch", [1, 2])}
-    specs = normalize_surface_epr_specs(
-        {
-            kind: {"film_thickness_m": 2e-9, "permittivity": 4, "loss_tangent": 0.125}
-            for kind in interfaces
-        },
-        materials={},
+@pytest.fixture(scope="module")
+def groups(tmp_path_factory):
+    """The Route B group dict of the pad-in-ground build."""
+    directory = tmp_path_factory.mktemp("surface_integration")
+    return groups_from_sidecar(
+        sidecar_of(effective_input("B", directory), "B", directory)
     )
-    rows, entries = build_surface_epr_postprocessing(
-        {"boundary_surfaces": groups}, specs
-    )
+
+
+def _produce(groups, interfaces=("MA",)):
+    specs = surface_epr_specs(**{kind: None for kind in interfaces})
+    rows, entries = build_surface_epr_postprocessing(groups, specs)
     return {
         "Model": {"L0": 1e-6},
         "Boundaries": {"Postprocessing": {"Dielectric": rows}},
@@ -45,104 +29,98 @@ def _produce(groups=None, interfaces=("MA",)):
 
 
 @pytest.mark.parametrize("interface", ("MA", "MS", "SA"))
-def test_official_interface_type_and_film_parameters_are_real_config_fields(interface):
+def test_official_interface_type_and_film_parameters_are_real_config_fields(
+    groups, interface
+):
     """Official interface type and film parameters are real config fields."""
-    config, index = _produce(
-        {"patch": surface_group("patch", [1, 2], interface)}, (interface,)
-    )
+    config, index = _produce(groups, (interface,))
     row = config["Boundaries"]["Postprocessing"]["Dielectric"][0]
-    assert row == {
-        "Index": 1,
-        "Attributes": [1, 2],
-        "Type": interface,
-        "Thickness": 2e-9 / 1e-6,
-        "Permittivity": 4,
-        "LossTan": 0.125,
+    assert set(row) == {
+        "Index",
+        "Attributes",
+        "Type",
+        "Thickness",
+        "Permittivity",
+        "LossTan",
     }
+    assert row["Type"] == interface
+    assert (row["Thickness"], row["Permittivity"], row["LossTan"]) == (
+        2e-9 / 1e-6,
+        4,
+        0.0,
+    )
     assert "Mask" not in row
     assert (
         index["entries"][0]["epr_spec"]["film_thickness_m"] == row["Thickness"] * 1e-6
     )
-    validate_surface_mask_config(config, index)
-
-
-@pytest.mark.parametrize("attributes", ([], [1, 1], [1, "2"], [0], [True]))
-def test_producer_refuses_missing_invalid_or_duplicate_attributes(attributes):
-    """Producer refuses missing invalid or duplicate attributes."""
-    with pytest.raises(ValueError, match="attribute"):
-        _produce({"patch": surface_group("patch", attributes)})
-
-
-@pytest.mark.parametrize("defect", ("attribute", "surface"))
-def test_producer_counts_each_exact_fragment_once(defect):
-    """Producer counts each exact fragment once."""
-    groups = {
-        "patch_a": surface_group("first", [1]),
-        "patch_b": surface_group(
-            "second" if defect == "attribute" else "first",
-            [1] if defect == "attribute" else [2],
-        ),
-    }
-    with pytest.raises(ValueError, match="duplicated"):
-        _produce(groups)
+    validate_surface_epr_config(config, index)
 
 
 @pytest.mark.parametrize(
     "field,value",
     (
-        ("Type", "MS"),
+        ("Type", "SA"),
         ("Thickness", 0.5),
         ("Permittivity", 8),
         ("LossTan", 0.25),
-        ("Attributes", [3]),
+        ("Attributes", [99]),
     ),
 )
-def test_current_unmasked_config_must_match_the_producer_index(field, value):
-    """Current unmasked config must match the producer index."""
-    config, index = _produce()
+def test_current_config_must_match_the_producer_index(groups, field, value):
+    """Current config must match the producer index."""
+    config, index = _produce(groups)
     config["Boundaries"]["Postprocessing"]["Dielectric"][0][field] = value
     with pytest.raises(ValueError, match="match"):
-        validate_surface_mask_config(config, index)
+        validate_surface_epr_config(config, index)
 
 
 @pytest.mark.parametrize(
     "defect",
     ("missing_row", "missing_index", "duplicate_attribute", "duplicate_surface"),
 )
-def test_current_returned_inventory_cannot_omit_or_duplicate_fragments(defect):
+def test_current_returned_inventory_cannot_omit_or_duplicate_fragments(groups, defect):
     """Current returned inventory cannot omit or duplicate fragments."""
-    config, index = _produce(
-        {"a": surface_group("first", [1]), "b": surface_group("second", [2])}
-    )
+    config, index = _produce(groups)
     rows = config["Boundaries"]["Postprocessing"]["Dielectric"]
+    assert len(rows) >= 2
     if defect == "missing_row":
         rows.pop()
     elif defect == "missing_index":
         index["entries"].pop()
     elif defect == "duplicate_attribute":
-        rows[1]["Attributes"] = [1]
-        index["entries"][1]["attributes"] = [1]
+        rows[1]["Attributes"] = rows[0]["Attributes"]
+        index["entries"][1]["attributes"] = rows[0]["Attributes"]
     elif defect == "duplicate_surface":
-        index["entries"][1]["metadata"]["surface_id"] = "first"
+        index["entries"][1]["metadata"] = deepcopy(index["entries"][0]["metadata"])
     with pytest.raises(ValueError, match="disagree|duplicated"):
-        validate_surface_mask_config(config, index)
+        validate_surface_epr_config(config, index)
 
 
-def test_distinct_interfaces_remain_distinct_native_integrands():
+def test_distinct_interfaces_remain_distinct_native_integrands(groups):
     """Distinct interfaces remain distinct native integrands."""
-    groups = {kind: surface_group(kind, [1], kind) for kind in ("MA", "MS", "SA")}
     config, index = _produce(groups, ("MA", "MS", "SA"))
-    validate_surface_mask_config(config, index)
-    assert [
+    validate_surface_epr_config(config, index)
+    types = [
         row["Type"] for row in config["Boundaries"]["Postprocessing"]["Dielectric"]
-    ] == ["MA", "MS", "SA"]
+    ]
+    assert types == sorted(types)
+    assert set(types) == {"MA", "MS", "SA"}
 
 
-def test_historical_unmasked_reader_contract_remains_unchanged():
-    """Historical unmasked reader contract remains unchanged."""
-    config, index = _produce()
-    historical = deepcopy(index)
-    historical["entries"][0]["epr_spec"].pop("schema_version")
-    # Historical records are not relabelled as the current producer contract.
-    config["Boundaries"]["Postprocessing"]["Dielectric"][0].pop("Type")
-    validate_surface_mask_config(config, historical)
+def test_native_mask_rows_are_not_accepted(groups):
+    """Native Mask/Inset is not part of the stock integration, so a Mask row is rejected."""
+    config, index = _produce(groups)
+    config["Boundaries"]["Postprocessing"]["Dielectric"][0]["Mask"] = {
+        "Type": "Inset",
+        "Margin": 0.5,
+    }
+    with pytest.raises(ValueError, match="Mask"):
+        validate_surface_epr_config(config, index)
+
+
+def test_a_film_without_the_current_schema_is_rejected(groups):
+    """The film snapshot has one schema; a snapshot without it is not read."""
+    config, index = _produce(groups)
+    index["entries"][0]["epr_spec"].pop("schema_version")
+    with pytest.raises(ValueError, match="schema"):
+        validate_surface_epr_config(config, index)

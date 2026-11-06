@@ -11,16 +11,22 @@ from typing import Any, Literal
 
 @dataclass(frozen=True)
 class SurfaceEprRecord:
-    """One solver-native surface result bound to structured SGB provenance."""
+    """One solver-native Surface-EPR row over a whole surface, bound to the sidecar rows it integrates.
+
+    ``rows`` are the sidecar ``surface_epr_rows`` ids; ``entities`` are the SGB Entities whose surfaces they
+    are and ``nets`` their exact Nets.  ``lineage`` maps each face to the Entities that share it, as
+    attribution only: it weights nothing.
+    """
 
     index: int
     interface_type: str
-    surface_id: str
-    face_kind: str
-    owner_semantic_ids: tuple[str, ...]
-    net_id: str | None
-    equipotential_id: str | None
-    source_provenance: dict[str, Any]
+    name: str
+    rows: tuple[str, ...]
+    face_kinds: tuple[str, ...]
+    entities: tuple[str, ...]
+    nets: tuple[str, ...]
+    attributes: tuple[int, ...]
+    lineage: dict[str, dict[str, float]]
     participation: float
     quality_factor: float
     loss_tangent: float | None
@@ -41,39 +47,39 @@ class SurfaceEprSeriesSnapshot:
 
 
 @dataclass(frozen=True)
-class SurfaceMaskEprRecord:
-    """One native Inset-mask result, explicitly bound to its unmasked surface."""
+class SurfaceMarginEprRecord:
+    """One margin row: the union of the SGB bands from ``margin_um`` inwards, bound to its whole surface.
+
+    The row is an ordinary Palace ``Dielectric`` row over the attributes of those bands, so it is one of
+    the alternatives to its whole-surface row ``baseline_index`` and never adds to it.
+    """
 
     index: int
     baseline_index: int
     margin_index: int
     margin_um: float
-    native_margin: float
-    model_l0_m: float
+    bands: tuple[int, ...]
     interface_type: str
-    surface_id: str
-    face_kind: str
-    owner_semantic_ids: tuple[str, ...]
-    net_id: str | None
-    equipotential_id: str | None
-    source_provenance: dict[str, Any]
+    name: str
+    rows: tuple[str, ...]
+    face_kinds: tuple[str, ...]
+    entities: tuple[str, ...]
+    nets: tuple[str, ...]
+    attributes: tuple[int, ...]
     participation: float
     quality_factor: float
-    energy_j: float
     loss_tangent: float | None
-    contribution_status: Literal["available", "zero_contribution"]
-    retained_area_status: Literal["unavailable"] = "unavailable"
 
 
 @dataclass(frozen=True)
-class SurfaceMaskEprSeriesSnapshot:
-    """Native Inset-mask values for one mode or excitation at one source pass."""
+class SurfaceMarginEprSeriesSnapshot:
+    """Margin-row values for one mode or excitation at one source pass."""
 
     pass_index: int
     source: str
     series_index: int
     series_kind: Literal["mode", "excitation"]
-    records: tuple[SurfaceMaskEprRecord, ...]
+    records: tuple[SurfaceMarginEprRecord, ...]
 
 
 @dataclass(frozen=True)
@@ -94,7 +100,7 @@ class AmrPassSnapshot:
     mesh_elements: int | None
     elapsed_total_s: float | None
     peak_node_memory_mb: float | None
-    surface_mask_epr: tuple[SurfaceMaskEprSeriesSnapshot, ...] | None = None
+    surface_margin_epr: tuple[SurfaceMarginEprSeriesSnapshot, ...] | None = None
     native_iteration: int | None = None
     terminal_ids: tuple[str, ...] | None = None
 

@@ -15,24 +15,24 @@ lang: zh-TW
 | 獨立來源 | 在新的未綁定模擬上呼叫 `set_geometry(component)` 與 `set_stack(stack)` |
 | 輸出 | `set_output_dir(path)` |
 | 本徵模態 | `set_eigenmode(*, num_modes=10, target=None, tolerance=1e-6, save=0)` |
-| 網格控制 | `set_mesh(...)` 接受共用網格尺寸策略與 Palace 網格控制 |
+| 網格控制 | `set_mesh(...)` 接受共用的尺寸配方、網格器選項、修復預算與品質門檻 |
 | 網格摘要 | `mesh_summary()` 回傳獨立的網格產生資料 |
 | 數值控制 | `set_numerical(...)` 保留明確的階數、線性求解器、AMR 與輸出選擇 |
 | 來源／設定檢視 | `input_summary()` 回傳獨立的來源與設定，不進行檔案或原生 I/O |
-| 表面模型 | `set_surface_epr(*, representation, specs, route_a_thin_film=None)` |
+| 表面模型 | `set_surface_epr(*, representation, specs, route_a_thin_film=None)`，須在 `mesh()` 之前 |
 | 來源指定的埠 | `add_port(qualified_name, *, layer, layout_sheet=True, inductance)` |
 | 輸出選取 | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |
 | 準備 | `mesh()`、`write_config()`，接著 `prepare_handoff(*, profile, executable, resources=None, setup_commands=(), petsc_options=())` |
 
-SCGSim 1.1.0 在 `set_mesh(...)` 加入 Gmsh 演算法、執行緒、表面執行緒、幾何階數及高階最佳化控制。幾何階數與透過 `set_numerical(...)` 設定的 FEM 階數不同；求解器設定會保留目前的網格控制。共用的 [Palace 網格控制](palace-electrostatic-sgb.qmd#palace-mesh-controls-110-candidate) 與[網格尺寸策略](palace-electrostatic-sgb.qmd#palace-mesh-size-policy) 定義預設值、失效處理、原生產生方式及清單行為。
+幾何階數與透過 `set_numerical(...)` 設定的 FEM 階數不同；求解器設定會保留目前的網格控制。本徵模態與 Electrostatic 兩個外觀介面共用同一組網格控制與預設值，記載於 [Palace 網格控制](palace-electrostatic-sgb.qmd#palace-mesh-controls)，該節也說明網格低於品質門檻時 `mesh()` 會中止。
 
 ## 本徵模態網格與 AMR 預設值（CONVERGING） {#eigenmode-mesh-and-amr-defaults-converging}
 
-新的 `EigenmodeSim` 選用 `gmsh_default` 尺寸策略，並寫入 `Model.Refinement.Nonconformal=true`。在 `write_config()` 之前，透過 `set_numerical(...)` 提供 `amr_max_passes`。若迭代上限為正值，也必須提供 `amr_tolerance` 與 `amr_update_fraction`；設定 `amr_max_passes=0` 會停用自適應細化，並允許另外兩值維持未設定。之後的 `set_numerical(...)` 呼叫若省略某值，就保留目前設定。這些是輸入控制，不是充分性建議。Electrostatic 保留共用契約中既有的 AMR 預設值。
+新的 `EigenmodeSim` 使用共用的預設網格控制（`FeatureRecipe()`、`MesherOptions()`、`Budgets()` 與 `0.01` 品質門檻），並寫入 `Model.Refinement.Nonconformal=true`。在 `write_config()` 之前，透過 `set_numerical(...)` 提供 `amr_max_passes`。若迭代上限為正值，也必須提供 `amr_tolerance` 與 `amr_update_fraction`；設定 `amr_max_passes=0` 會停用自適應細化，並允許另外兩值維持未設定。之後的 `set_numerical(...)` 呼叫若省略某值，就保留目前設定。這些是輸入控制，不是充分性建議。Electrostatic 保留共用契約中既有的 AMR 預設值。
 
-`mesh_summary()` 回報紀錄的網格控制、原生元素與區域數量及網格身分。其 Nédélec 自由度值是根據主角點四面體及設定的 FEM 階數所做的拓撲估計，不是求解器回報的 DOF 數量。變更 FEM 階數會更新此估計，不重新產生網格。這些網格功能已為 ACCEPTED，但不確立數值充分性。
+`mesh_summary()` 回報紀錄的網格控制、原生元素與區域數量及網格身分。其 Nédélec 自由度值是根據主角點四面體及設定的 FEM 階數所做的拓撲估計，不是求解器回報的 DOF 數量。變更 FEM 階數會更新此估計，不重新產生網格。這些網格紀錄不確立數值充分性。
 
-目標頻率單位為赫茲，網格長度為微米，電感為亨利。一般本徵模態分析不要求表面規格、埠或 EPR 要求。綁定的計畫攜帶共用包絡，不能用獨立幾何／堆疊或互相衝突的包絡設定器局部取代。[GeometryPlan 契約](../geometry-sgb.qmd) 負責來源身分及路徑準備。[Electrostatic／共用 Palace 契約](palace-electrostatic-sgb.qmd) 負責原生多邊距轉換與共用設定控制。
+目標頻率單位為赫茲，網格長度為微米，電感為亨利。一般本徵模態分析不要求表面規格、埠或 EPR 要求。綁定的計畫攜帶共用包絡，不能用獨立幾何／堆疊或互相衝突的包絡設定器局部取代。[GeometryPlan 契約](../geometry-sgb.qmd) 負責來源身分及路徑準備。[Electrostatic／共用 Palace 契約](palace-electrostatic-sgb.qmd) 負責共用網格控制與共用設定控制。
 
 ## 選取與物理意義 {#selection-and-physical-meaning}
 
@@ -40,13 +40,39 @@ SCGSim 1.1.0 在 `set_mesh(...)` 加入 Gmsh 演算法、執行緒、表面執�
 
 ### 表面薄膜輸入與原生材料側 {#surface-film-inputs-and-native-material-side}
 
-表面薄膜輸入將確切的來源表面及物理屬性綁定至 Palace `MA`、`MS` 或 `SA` 類型及其薄膜假設。`thickness`（原生模型單位）與 `film_thickness_m`（透過 `Model.L0` 轉換）必須恰好提供一項；數值 `permittivity` 與能解析至明確介電材料的 `material_id` 也必須恰好提供一項。`loss_tangent` 可直接提供，或從該材料讀取；未知值在 SCGSim 索引中仍可辨別。目前的 `surface-film.v2` 產生器會拒絕缺少或重複的表面及物理屬性身分，不將它們丟棄或去重。薄膜厚度設定表面模型。若要求橫向排除，則使用原生 Mask／Inset 邊距；指定的 Palace 可執行檔必須支援此設定。下述 SGB 幾何距離帶產生器已撤回。
+表面薄膜輸入將確切的來源表面及物理屬性綁定至 Palace `MA`、`MS` 或 `SA` 類型及其薄膜假設。`thickness`（原生模型單位）與 `film_thickness_m`（透過 `Model.L0` 轉換）必須恰好提供一項；數值 `permittivity` 與能解析至明確介電材料的 `material_id` 也必須恰好提供一項。`loss_tangent` 可直接提供，或從該材料讀取；未知值在 SCGSim 索引中仍可辨別。目前的 `surface-film.v2` 產生器會拒絕缺少或重複的表面及物理屬性身分，不將它們丟棄或去重。薄膜厚度設定表面模型，而[內縮邊距](#surface-epr-margins)設定靠近間隙處要求的排除範圍。
 
 Palace 0.18.1 根據設定類型及相鄰求解元素建立原生表面被積函數：`MA` 與 `SA` 使用真空側的場跡，`MS` 使用基板側的場跡。`MA` 使用法向電場；`MS` 使用基板介電率加權的法向場；`SA` 則依薄膜介電率結合切向與法向項。原生映射請見 Palace 0.18.1 的[設定](https://github.com/awslabs/palace/blob/0dc74cdf8c36c58b69b21c4a06e816048ec0b83f/palace/utils/configfile.cpp#L624)及[鄰接材料規則](https://github.com/awslabs/palace/blob/0dc74cdf8c36c58b69b21c4a06e816048ec0b83f/palace/fem/coefficient.hpp#L331)。請選擇符合預定原生介面模型的 `MA`、`MS` 或 `SA`。
 
-### 歷史 SGB 幾何距離帶（已撤回） {#surface-distance-bands-converging}
+### Surface EPR 邊距 {#surface-epr-margins}
 
-先前的 SGB 幾何距離帶產生器及其 Palace 結果彙總已從目前 SCGSim 介面撤回。[GeometryPlan 區段](../geometry-sgb.qmd#surface-distance-bands)保留這項歷史設計。現行原生 Mask／Inset 邊距仍是不同的 Surface EPR 選項；指定的 Palace 可執行檔必須支援 Mask／Inset。請見 [Palace Electrostatic 契約](palace-electrostatic-sgb.qmd#native-mask-inset)。舊版 `SurfaceBandSelection.field_side` 用來指定結果選取，不會覆寫 Palace 原生鄰接規則；它不是現行 API。
+內縮邊距 $m$ 選出表面上距最近 gap edge（導體輪廓上面向裸露 substrate 的邊）至少 $m$ µm 的部分。SGB 把該部分以帶面切進模型，所以一般的 Palace 對普通屬性積分；SCGSim 不寫出原生 `Mask` 或 `Inset` 設定，也不需要特殊的 Palace 建置。距離如何量測，由 [SGB 設計頁](../design/sgb/inset-imprint.qmd#band-measure)定義。
+
+::: {.callout-important title="請在 mesh() 之前呼叫 set_surface_epr"}
+邊距是幾何：`mesh()` 會把它們連同其餘模型一起交給 SGB。請先設定 `set_surface_epr`。在 `mesh()` 之後再呼叫它，會使網格、設定檔及交接失效，必須重新執行 `mesh()`。
+:::
+
+每個規格（`"MA"`、`"MS"`、`"SA"`）除了薄膜輸入，還可帶這些邊距鍵：
+
+::: {.askr-table-compact}
+| 鍵 | 意義 |
+|---|---|
+| `inset_margins_um` | 嚴格遞增的正邊距，單位 µm。`mesh()` 會請 SGB 在這些邊距處，替規格類型的每個面切出帶，只需一次幾何建置。省略則只有基準列。 |
+| `inset_margins_by_entity_um` | `{entity_id: [margins]}`，適用於 `MA` 與 `MS`。每個點名的導體使用自己的邊距，其餘面維持 `inset_margins_um`（若有給）。它會多一次不含帶的幾何建置，用來找出這些導體的面。點名的導體若沒有該類型的面，`mesh()` 會拋出 `ValueError`。`SA` 不接受此鍵，因為 SA 介面位於求解區域之間，沒有所屬導體。 |
+| `face_kinds` | 把規格限制在 `"sheet"`、`"top"`、`"bottom"` 與 `"interface"` 的某些種類。規格要求邊距時，`"sidewall"` 會被拒絕，因為 SGB 從不為側壁切帶。 |
+:::
+
+邊距 `0` 會被拒絕：基準列已涵蓋整個表面。
+
+一個面只有一個帶族，所以只取一組邊距。Route A 的 sheet 同時有 `MA` 與 `MS` 列，兩個規格都涵蓋它時必須給相同的邊距，並以模型格點比較（`0.3` 與 `0.1 + 0.2` 視為相同）。同一個 sheet 上的邊距不同是錯誤：能從 `inset_margins_by_entity_um` 看出衝突時，`mesh()` 會拋出 `ValueError`，指出導體、面與兩組邊距；否則由 SGB 以 `InputError` 拒絕建置，訊息指出兩個請求。邊距不會被合併。每個邊距都必須是模型格點的正整數倍；客製邊距若不在格點上，`mesh()` 會在比較之前就拒絕。
+
+每個表面列都有一個涵蓋全部面的基準列。每個邊距再多一列，涵蓋從該邊距往外的各帶。邊距列是同一表面的替代評估，不是互斥的帶：請分開讀取每一列，不要相加。SGB 只在面有 gap edge 時才切帶，所以沒有 gap edge 的面（例如基板底面）只由基準列涵蓋。SGB 略過的面會列在清單中。
+
+群組名稱以 `__` 把面種類接在 entity 之後，例如 `MA::pad__top::band=1`。[命名規則](../design/sgb/identity.qmd#band-group-names)由 SGB 設計頁負責；請從索引映射讀取帶的成員，不要解析名稱。
+
+::: {.callout-note collapse="true" title="列、側與裂開的 sheet"}
+索引映射（結構 v3）為每個表面列記錄 `row` 與 `group`、`interface_type`、`band`、`side`、`face_sides`、`entities`、`net` 與 `attributes`，並以譜系成員資格作為歸屬資訊：譜系不加權任何東西。單側列把 `above` 或 `below` 對應到 Palace 後處理的側。兩側都是真空的 Route A sheet 是一個從兩側積分的面，需要 Palace 的內部邊界裂開；SCGSim 恰好在某個已設定的列有 `shared_face_group` 時寫出 `Model.CrackInternalBoundaryElements`；沒有在 sheet 上設定 `MA` 或 `MS` 膜層的執行，會保留 Palace 的預設值。在不同位置分別位於真空與介電質之上的 sheet，會在不同屬性上得到各自的 `MA` 與 `MS` 列。
+:::
 
 ## 結果與離線分析 {#results-and-offline-analysis}
 

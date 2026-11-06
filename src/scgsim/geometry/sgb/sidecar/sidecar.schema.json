@@ -303,7 +303,7 @@
   },
   "$defs": {
     "insetFace": {
-      "description": "One band family: the request of a face.  margins_um is the sorted union of the margins of every request that landed on the face.",
+      "description": "One band family: the request of a face.  Every request that landed on the face asks these margins.",
       "type": "object",
       "additionalProperties": false,
       "required": ["request_id", "support", "interface", "margins_um", "margins_grid", "band_count", "support_area_um2", "bands"],

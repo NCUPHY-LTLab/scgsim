@@ -9,7 +9,9 @@ from pathlib import Path
 
 import pytest
 
+from scgsim.meshing import HXT, Budgets, MesherOptions
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
+from scgsim.palace.mesh.controls import MeshControls
 from scgsim.palace.preparation.config import (
     build_eigenmode_config,
     configure_numerical_controls,
@@ -21,11 +23,12 @@ def _config(sim):
         groups={
             "volumes": {
                 "vacuum": {
-                    "phys_group": 1,
-                    "physical_attribute": {"material_ids": ["vacuum"]},
+                    "attributes": [1],
+                    "material": "vacuum",
+                    "entities": ["vacuum"],
                 }
             },
-            "pec_surfaces": {"conductor": {"phys_group": 2}},
+            "pec_surfaces": {"conductor": {"attributes": [2]}},
         },
         ports=(),
         materials={
@@ -57,7 +60,7 @@ def test_new_eigenmode_keeps_amr_unspecified_until_case_configuration():
             "amr_update_fraction",
         )
     )
-    sim.set_mesh(algorithm_3d="HXT")
+    sim.set_mesh(mesher=MesherOptions(algorithm_3d=HXT))
     sim.set_numerical(order=2)
     with pytest.raises(ValueError, match="explicit amr_max_passes"):
         _config(sim)
@@ -92,7 +95,7 @@ def test_complete_case_controls_survive_later_setters_and_json_transport():
         amr_nonconformal=False,
     )
     sim.set_numerical(order=2, tolerance=1e-7)
-    sim.set_mesh(threads=2)
+    sim.set_mesh(budgets=Budgets(max_rounds=3))
     encoded = json.loads(json.dumps(sim.numerical))
     assert configure_numerical_controls(**encoded) == sim.numerical
     assert _config(sim)["Model"]["Refinement"] == {
@@ -110,7 +113,7 @@ def test_explicit_zero_disables_amr_without_inventing_tolerance_or_fraction():
     sim = EigenmodeSim()
     sim.set_numerical(amr_max_passes=0)
     sim.set_numerical(order=2)
-    sim.set_mesh(geometry_order=2)
+    sim.set_mesh(mesher=MesherOptions(geometry_order=2))
     assert _config(sim)["Model"]["Refinement"] == {
         "UniformLevels": 0,
         "MaxIts": 0,
@@ -143,14 +146,10 @@ def test_invalid_case_controls_do_not_partially_apply_other_changes(invalid):
 
 
 def test_electrostatic_retains_existing_sizing_and_amr_defaults():
-    """Keep Electrostatic sizing and AMR defaults unchanged by Eigenmode rules."""
+    """Keep Electrostatic mesh controls and AMR defaults unchanged by Eigenmode rules."""
     sim = ElectrostaticSim()
     assert sim.numerical == configure_numerical_controls()
-    assert sim.numerical["size_policy"] == "scgsim_default"
-    assert (sim.numerical["refined_mesh_size"], sim.numerical["max_mesh_size"]) == (
-        5.0,
-        300.0,
-    )
+    assert sim.mesh_controls == MeshControls()
     assert sim.numerical["amr_nonconformal"] is False
     assert sim.numerical["amr_max_passes"] == 0
     assert sim.numerical["amr_tolerance"] == 0.01

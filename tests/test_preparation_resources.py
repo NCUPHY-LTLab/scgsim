@@ -105,46 +105,33 @@ def test_failure_drains_owned_work_and_bounds_submission():
         assert ordered_map(lambda n: n + 1, [1, 2]) == [2, 3]
 
 
-@pytest.mark.parametrize(
-    "threads,surface_threads", ((3, 1), (1, 3), (0, 1), (-1, 1), (1, 0), (1, -1))
-)
-def test_mesh_budget_rejects_before_child(threads, surface_threads, tmp_path):
-    """Reject native thread requests outside the explicit preparation budget."""
-    from scgsim.palace.mesh.process import (  # noqa: PLC0415 - exercise only the process budget guard.
-        mesh_from_route_xao,
+def test_native_meshing_cannot_run_inside_a_preparation_worker():
+    """Native meshing holds the budget itself, so a worker task may not start it."""
+    from scgsim.preparation import (  # noqa: PLC0415 -- isolate the private guard test; private-import: verify scoped native ownership
+        native_preparation,  # private-import: exercise scoped native ownership
     )
 
+    def task(_):
+        with native_preparation():
+            pytest.fail("native meshing entered inside a worker")
+
     with preparation_resources(max_workers=2):
-        with pytest.raises(ValueError, match="must be positive and fit"):
-            mesh_from_route_xao(
-                xao_path=tmp_path / "unused.xao",
-                route="B",
-                records=[],
-                stack={},
-                mesh_path=tmp_path / "unused.msh",
-                refined_mesh_size=None,
-                max_mesh_size=None,
-                mesh_controls={
-                    "size_policy": "gmsh_default",
-                    "threads": threads,
-                    "surface_threads": surface_threads,
-                },
-            )
-    assert not (tmp_path / "unused.msh").exists()
+        with pytest.raises(RuntimeError, match="inside a preparation worker"):
+            ordered_map(task, range(2))
 
 
 def test_one_worker_and_unscoped_native_guard_preserve_serial_behavior():
     """Keep one-worker maps serial and bypass native guards outside a scope."""
     from scgsim.preparation import (  # noqa: PLC0415 -- isolate the private guard test; private-import: verify scoped native ownership
-        native_preparation,  # private-import: exercise scoped native budget checks
+        native_preparation,  # private-import: exercise scoped native ownership
     )
 
-    with native_preparation({"threads": 0, "surface_threads": -1}):
+    with native_preparation():
         assert current_preparation_workers() is None
     caller = get_ident()
     with preparation_resources(max_workers=1):
         assert ordered_map(lambda n: get_ident(), range(3)) == [caller] * 3
-        with native_preparation({"threads": 1, "surface_threads": 1}):
+        with native_preparation():
             assert current_preparation_workers() == 1
 
 
@@ -157,11 +144,8 @@ def test_budget_is_required():
 
 def test_mesh_preparation_keeps_parallel_mapping_before_native(monkeypatch, tmp_path):
     """Run parallel mapping at the real mesh construction boundary before native work."""
-    from scgsim.geometry.compiler.builder import (  # noqa: PLC0415 -- adapter is needed only in this mesh orchestration test
-        SemanticGeometryBuilder,
-    )
-    from scgsim.palace.mesh.build import (  # noqa: PLC0415 -- adapter is needed only in this mesh orchestration test
-        build_route_mesh,
+    from scgsim.palace.mesh import (  # noqa: PLC0415 -- the module is needed only in this mesh orchestration test
+        build as mesh_build,
     )
 
     class StopBeforeNative(Exception):
@@ -174,12 +158,12 @@ def test_mesh_preparation_keeps_parallel_mapping_before_native(monkeypatch, tmp_
         barrier.wait(timeout=5)
         return n, get_ident()
 
-    def construction(self, *args, **kwargs):
+    def construction(*args, **kwargs):
         observed.extend(ordered_map(task, range(2)))
         raise StopBeforeNative
 
     # Stop at the real construction call boundary: no fake XAO or native result.
-    monkeypatch.setattr(SemanticGeometryBuilder, "build", construction)
+    monkeypatch.setattr(mesh_build, "build_sgb_geometry", construction)
     source = b"file-only identity for construction wiring"
     stack = {
         "metadata": {
@@ -189,16 +173,14 @@ def test_mesh_preparation_keeps_parallel_mapping_before_native(monkeypatch, tmp_
     }
     with preparation_resources(max_workers=2):
         with pytest.raises(StopBeforeNative):
-            build_route_mesh(
+            mesh_build.build_route_mesh(
                 component=None,
                 stack=stack,
                 route="B",
                 output_dir=tmp_path / "run",
                 source_gds_bytes=source,
                 representation_context=object(),
-                source_geometry_input=SimpleNamespace(
-                    boundary_curves=(), boundary_reconstruction=()
-                ),
+                source_geometry_input=SimpleNamespace(),
             )
     assert [row[0] for row in observed] == [0, 1]
     assert len({row[1] for row in observed}) == 2

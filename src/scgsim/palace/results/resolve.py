@@ -30,6 +30,8 @@ from scgsim.palace.results.artifacts import (
 from scgsim.palace.results.epr import epr_result
 from scgsim.palace.results.index_contract import (
     RouteConsistency,
+    require_index_map_schema,
+    require_manifest_schema,
     validate_config_index_correspondence,
     validate_config_problem,
 )
@@ -56,14 +58,11 @@ from scgsim.palace.results.receipt_contract import (
     build_returned_receipt,
     validate_returned_state_agreement,
 )
-from scgsim.palace.results.surface_contract import surface_mask_entries
 from scgsim.palace.results.tables import (
     PROBLEM_FAMILIES,
     count_index_entries,
-    eigenmode_count,
     output_families,
     read_csv_table,
-    validate_surface_mask_table,
     validate_table,
 )
 
@@ -79,6 +78,18 @@ _REQUIRED_FILES = (
     "palace.msh",
     "results/palace/palace.json",
 )
+
+
+_SCHEMA_FILES = (
+    "metadata/palace_index_map.json",
+    "metadata/mesh_manifest.json",
+)
+
+
+def _require_file(path: Path) -> None:
+    """Raise when a required artifact of the run folder is missing."""
+    if not path.exists():
+        raise FileNotFoundError(f"required artifact missing: {path}")
 
 
 @dataclass(frozen=True)
@@ -161,10 +172,16 @@ def resolve_palace_result(
         raise ValueError("expected_handoff_id must be a non-empty string.")
 
     root = Path(run_dir).expanduser().resolve()
+    # The recorded schemas come first: a run folder of an older schema is rejected with its recorded
+    # version, whatever solver output it lacks.
+    for relative in _SCHEMA_FILES:
+        _require_file(root / relative)
+    index_map = read_json(root / "metadata/palace_index_map.json")
+    mesh_manifest = read_json(root / "metadata/mesh_manifest.json")
+    require_manifest_schema(mesh_manifest)
+    require_index_map_schema(index_map)
     for relative in _REQUIRED_FILES:
-        path = root / relative
-        if not path.exists():
-            raise FileNotFoundError(f"required artifact missing: {path}")
+        _require_file(root / relative)
 
     handoff_metadata = read_json(root / "metadata" / "palace_handoff_metadata.json")
     run_metadata = read_json(root / "metadata" / "palace_run_metadata.json")
@@ -172,8 +189,6 @@ def resolve_palace_result(
     archive_manifest = read_json(
         root / "metadata" / "palace_handoff_archive_manifest.json"
     )
-    index_map = read_json(root / "metadata/palace_index_map.json")
-    mesh_manifest = read_json(root / "metadata/mesh_manifest.json")
     config = read_json(root / "config.json")
     palace_payload = read_json(root / "results/palace/palace.json")
     receipt_payload = read_json(root / RETURNED_RECEIPT_FILE)
@@ -272,27 +287,6 @@ def _discover_results(
         table = read_csv_table(path)
         validate_table(problem, table, index_counts, config)
         discovered[family] = table
-    mask_entries = surface_mask_entries(
-        read_json(root / "metadata" / "palace_index_map.json")
-    )
-    if mask_entries:
-        expected_rows = (
-            eigenmode_count(config)
-            if problem == "Eigenmode"
-            else index_counts["terminal"]
-        )
-        for name in ("surface-mask-Q", "surface-mask-energy"):
-            path = results_root / f"{name}.csv"
-            if not path.is_file():
-                raise FileNotFoundError(f"required result family is missing: {path}")
-            table = read_csv_table(path)
-            validate_surface_mask_table(
-                table,
-                problem=problem,
-                expected_rows=expected_rows,
-                entries=mask_entries,
-            )
-            discovered[name] = table
     return discovered
 
 

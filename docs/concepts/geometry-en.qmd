@@ -348,8 +348,8 @@ Native surfaces outside the physical groups remain CAD diagnostic data; they do 
 
 ### Meshing respects the geometry already established
 
-The Palace mesh builder reads the XAO, groups and controls in a fresh Gmsh process.
-`gmsh_default` uses Gmsh's native sizing behaviour without injecting SCGSim custom size fields. Holes, ports and bands are still real geometric constraints and affect the mesh.
+Palace meshes the XAO with the sidecar that pairs with it, using the `scgsim.meshing` module in a fresh Gmsh process.
+The sizing recipe sets the element sizes, and the quality threshold decides whether the mesh is accepted. Holes, ports and bands are still real geometric constraints and affect the mesh.
 A small cut distance therefore adds more than an integration option: it can also add CAD partitions and conformal-meshing work.
 
 After three-dimensional mesh generation, checks still cover tetrahedra in solution volumes, conformity between port and volume faces, and node contact between ports and conductor boundaries.

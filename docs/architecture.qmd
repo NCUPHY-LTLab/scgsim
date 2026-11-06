@@ -37,13 +37,15 @@ scgsim/
 │   ├── source/       # component input, occurrence, stack and normalization
 │   ├── models/       # source and construction records
 │   ├── compiler/     # advanced build API, derived records and validators
+│   ├── sgb/          # SGB core: arrangement, XAO and sidecar that Palace builds on
 │   ├── planning/     # domain, interface, surface, volume and tag planning
 │   ├── construction/ # native OCC construction, correspondence and export
 │   └── primitives/   # shared Entity, loop, grid and spatial operations
+├── meshing/          # sizing recipes, quality audit and repair loop over SGB's XAO
 ├── semantics/        # immutable solver-independent facts
 ├── palace/
 │   ├── preparation/  # distinct Electrostatic and Eigenmode input state owners
-│   ├── mesh/         # route build, Gmsh worker, summaries and offline quality
+│   ├── mesh/         # SGB build, meshing call, group lowering, summaries and offline quality
 │   │   └── quality/  # detached offline MSH reader and report
 │   ├── execution/    # manual handoff and host receipt recorder
 │   ├── results/      # custody-aware result and EPR reading
@@ -124,7 +126,9 @@ stack adapters, physical representation interpretation, and input summaries.
 The `geometry.compiler` facade is for advanced builds: it exposes
 `SemanticGeometryBuilder`, route-plan construction, derived records, stage
 operations, and validators. Input validation is defined in
-`geometry.source.validation` and re-exported by `geometry.compiler`.
+`geometry.source.validation` and re-exported by `geometry.compiler`. Palace does
+not build through this facade: it calls `build_sgb_geometry` from
+`scgsim.geometry.sgb` and meshes the result with `scgsim.meshing`.
 `interpret_physical_geometry` from `scgsim.geometry` returns the effective
 input, stack, and representation plan. Pass `plan.context` to
 `build_route_construction_plan` from `scgsim.geometry.compiler` when you need
@@ -153,8 +157,9 @@ arrangement, and physical-group export remain in construction.
 
 Palace keeps two distinct mutable preparation owners: Electrostatic and
 Eigenmode setup state, invalidation, and failure ordering remain specific to
-each facade. Mesh construction retains its dynamic Gmsh worker boundary and
-native observation; offline mesh-quality reading stays separate. Manual
+each facade. Mesh construction keeps its worker boundary: the meshing module runs Gmsh in
+child processes, and Palace lowers the groups to solver attributes in one more
+worker. Offline mesh-quality reading stays separate. Manual
 handoff and its standalone host recorder remain execution-owned, while strict
 result/EPR resolution remains offline and Palace reports remain
 solver-specific. AEDT likewise keeps its `EigenmodeSim` state facade, but one
@@ -211,9 +216,10 @@ flowchart LR
   PLAN --> SNAPSHOT["Immutable source snapshot"]
   SNAPSHOT --> INPUT["Normalized GeometryBuildInput"]
   INPUT --> SOURCE["scgsim.geometry source API"]
-  SOURCE --> COMPILER["scgsim.geometry.compiler"]
+  SOURCE --> SGB["scgsim.geometry.sgb"]
   INPUT --> AEDT["AEDT native geometry and bindings"]
-  COMPILER --> PALACE["Palace backend preparation"]
+  SGB --> MESHING["scgsim.meshing"]
+  MESHING --> PALACE["Palace backend preparation"]
   PALACE --> HANDOFF["Run-and-handoff contracts"]
   AEDT --> HANDOFF
   HANDOFF --> PROFILE["Selected machine profile"]
@@ -230,14 +236,14 @@ source model includes authored curve declarations and explicit GDS
 reconstruction records in that snapshot while preserving Entity/Net ownership.
 `scgsim.geometry` owns the source-facing plan and snapshot; the
 `scgsim.geometry.compiler` surface owns route planning and derived construction
-records. Palace consumes curve intent through this compiler; AEDT curve
+records. Palace consumes curve intent through SGB (`scgsim.geometry.sgb`); AEDT curve
 lowering is unsupported. The
 [GeometryPlan contract](geometry-sgb.qmd) owns exact curve identity and
 arrangement semantics. Native observations do not replace source identity or
 establish connectivity. AEDT binding evidence retains source members and
 coverage through native aggregation.
 
-On the Palace OCC path, stock shell AutoFix may replace native face tags while
+On the compiler's OCC path, stock shell AutoFix may replace native face tags while
 correcting shell orientation. Geometry construction maps repaired faces to source surfaces by
 complete native wire/edge correspondence and carries that mapping through
 export and backend construction. Source `SurfaceID`s remain authoritative;
@@ -256,7 +262,8 @@ owns the exact behavior and failure boundary.
 | Named occurrences and the final `Net -> Entity` assignment | Notebook `GeometryPlan` |
 | Immutable normalized source geometry | `GeometryPlan` and `GeometryBuildInput` |
 | Revision-bound material, interface, owner, side, and evidence facts | `scgsim.semantics` internal stdlib core |
-| Geometry names, topology, Route A/B surfaces | `scgsim.geometry.compiler` |
+| Geometry names, topology, Route A/B surfaces | `scgsim.geometry.sgb` for Palace; `scgsim.geometry.compiler` for the advanced builder |
+| Tetrahedral meshing of SGB geometry, sizing recipes and the quality threshold | `scgsim.meshing` |
 | Palace and AEDT implementation | `scgsim.palace` and `scgsim.aedt` |
 | Native geometry bindings and derived aggregates | Backend adapters, with source members and coverage retained |
 | Solver-bound geometry inspection and preview evidence | `scgsim.visualization` |
@@ -299,7 +306,8 @@ are maintained in the [Backend Support Matrix](backend-support.qmd).
 
 Palace mesh-quality inspection is an offline reader under
 `scgsim.palace.mesh.quality` over the emitted MSH file.
-It neither owns mesh construction nor starts a native backend. The reader binds
+It neither owns mesh construction (the `scgsim.meshing` audit holds the
+threshold) nor starts a native backend. The reader binds
 one immutable parsed snapshot to the file bytes and leaves mesh acceptance and
 scientific convergence outside the report contract. See
 [Tetrahedral Mesh Quality](mesh-quality.qmd).
@@ -338,14 +346,13 @@ problem-specific orchestration. The old direct problem-module paths were
 removed; their current defining modules are `preparation.electrostatic` and
 `preparation.eigenmode`.
 
-The accepted 1.1.0 Palace mesh behavior separates Gmsh geometric order from FEM
-order and keeps the Delaunay/HXT choice, thread settings and high-order
-optimization outcome with the generated mesh. `mesh_summary()` returns detached
+Palace's mesh behavior separates Gmsh geometric order from FEM order and keeps
+the sizing recipe, algorithm choice, quality threshold and result, and
+high-order optimization outcome with the generated mesh. `mesh_summary()` returns detached
 meshing evidence bound to the mesh and manifest identities; Palace report and
 resolved-result views read the same recorded authority. The Eigenmode summary's
 topological degree-of-freedom estimate is not an actual solver degree-of-freedom
-count, and Electrostatic does not claim an unavailable H1 estimate. These mesh
-and summary additions are ACCEPTED.
+count, and Electrostatic does not claim an unavailable H1 estimate.
 
 ## AEDT execution lifecycle
 

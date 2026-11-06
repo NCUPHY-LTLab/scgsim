@@ -19,8 +19,8 @@ See [supported calculations](backend-support.qmd) and the [tutorials](examples.q
 The accepted 1.1.0 source model includes explicit authored curve boundaries
 and caller-selected GDS boundary reconstruction. Curves remain bound to source
 Entities and placed occurrences; polygon-only inputs retain their polygon
-boundaries. Palace consumes curve intent through `scgsim.geometry.compiler`, while
-AEDT curve lowering remains unsupported. The accepted Palace behavior also
+boundaries. Palace builds curve intent through `scgsim.geometry.sgb`, while
+AEDT curve lowering remains unsupported. Palace also
 separates Gmsh geometric order from finite-element order and exposes
 mesh-generation records through a detached summary. The
 [GeometryPlan contract](geometry-sgb.qmd) owns exact

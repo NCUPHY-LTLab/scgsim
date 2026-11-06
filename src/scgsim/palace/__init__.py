@@ -30,8 +30,8 @@ from .results.report_data import (
     PalaceFailureDiagnosis,
     PalaceResultSelection,
     PassCostRecord,
-    SurfaceMaskEprRecord,
-    SurfaceMaskEprSeriesSnapshot,
+    SurfaceMarginEprRecord,
+    SurfaceMarginEprSeriesSnapshot,
 )
 from .results.resolve import (
     PalaceCost,
@@ -63,8 +63,8 @@ __all__ = [
     "PhysicsQuantitiesReport",
     "ResolvedPalaceResult",
     "SimulationBenchmarkReport",
-    "SurfaceMaskEprRecord",
-    "SurfaceMaskEprSeriesSnapshot",
+    "SurfaceMarginEprRecord",
+    "SurfaceMarginEprSeriesSnapshot",
     "analyze_amr",
     "check_mesh_quality",
     "epr_result",

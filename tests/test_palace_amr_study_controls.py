@@ -21,23 +21,17 @@ from scgsim.palace.preparation.numerical import (
 
 _GROUPS = {
     "volumes": {
-        "vacuum": {
-            "phys_group": 1,
-            "physical_attribute": {"material_ids": ["vacuum"]},
-        }
+        "vacuum": {"attributes": [1], "material": "vacuum", "entities": ["vacuum"]}
     },
-    "boundary_surfaces": {
+    "boundary_surfaces": {},
+    "pec_surfaces": {
         "contact": {
-            "sgb_record": "final_physical_group",
-            "source": "volume_interface",
-            "solver_use": "solver_active",
-            "interface_type": "MA",
-            "conductor_component_id": "metal",
-            "net_id": "net",
-            "phys_group": 2,
+            "entity": "metal",
+            "entities": ["metal"],
+            "net": "net",
+            "attributes": [2],
         }
     },
-    "pec_surfaces": {"conductor": {"phys_group": 2}},
 }
 _MATERIALS = {"vacuum": {"kind": "vacuum", "permittivity": 1.0, "loss_tangent": 0.0}}
 
@@ -183,7 +177,7 @@ def test_new_optional_controls_retain_choices_across_later_setters(
     sim = sim_type()
     sim.set_numerical(ksp_type="Default", amr_nc_levels=0, save_adapt_diagnostics=False)
     sim.set_numerical(order=2)
-    sim.set_mesh(threads=1)
+    sim.set_mesh(quality_threshold=0.02)
     assert sim.numerical["ksp_type"] == "Default"
     assert build_refinement({**sim.numerical, "amr_max_passes": 0})["MaxNCLevels"] == 0
     assert (

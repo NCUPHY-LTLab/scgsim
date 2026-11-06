@@ -365,27 +365,50 @@ def fmt_mb(value: Any) -> str:
 def mesh_summary_html(
     summary: Mapping[str, Any], *, card_html: Callable[[str, Any], str]
 ) -> str:
-    """Keep geometric discretization distinct from native solver measurements."""
+    """Keep the meshing record (recipe, mesher, quality) distinct from native solver measurements."""
     if summary["status"] == "not_recorded":
-        return "<section><h4>Geometry mesh</h4><p>Mesh observations were not recorded in this historical manifest.</p></section>"
+        return "<section><h4>Geometry mesh</h4><p>Mesh observations were not recorded in this manifest.</p></section>"
     meshing = summary["meshing"]
     estimate = summary["dof_estimate"]
-    stats, effective = meshing["statistics"], meshing["effective"]
+    stats, mesher = meshing["statistics"], meshing["mesher"]
+    linear = meshing["linear_mesh"]
+    recipe, budgets = meshing["recipe"], meshing["budgets"]
     cards = [
+        ("Sizing recipe", f"{recipe['name']} v{recipe['version']}"),
         (
             "Geometry / FEM order",
-            f"{effective['geometry_order']} / {fmt(summary['finite_element_order'])}",
+            f"{mesher['geometry_order']} / {fmt(summary['finite_element_order'])}",
         ),
         (
             "Native nodes / elements",
             f"{stats['node_count']} / {stats['element_count']}",
         ),
-        ("3D algorithm", effective["algorithm_3d"]),
         (
-            "Volume / surface thread options",
-            f"{fmt(effective['volume_threads'])} / {fmt(effective['surface_threads_2d'])}",
+            "3D / 2D algorithm",
+            f"{mesher['algorithm_3d']} / {fmt(mesher['algorithm_2d'] or 'Gmsh default')}",
         ),
-        ("HighOrder optimization", meshing["high_order_optimization"]["status"]),
+        (
+            "HighOrder optimization",
+            "applied"
+            if mesher["high_order_optimize"] and mesher["geometry_order"] > 1
+            else "not applied",
+        ),
+        (
+            "Quality threshold (min SICN)",
+            f"{fmt(meshing['threshold'])} ({meshing['quality_measure']})",
+        ),
+        (
+            "Min SICN / elements below threshold",
+            f"{fmt(linear['min_quality'])} / {linear['bad_count']}",
+        ),
+        (
+            "Repair loop",
+            f"{meshing['stop']} after {meshing['rounds']} of {budgets['max_rounds']} rounds",
+        ),
+        (
+            "Tetrahedra / budget",
+            f"{linear['tetrahedra']} / {budgets['max_tetrahedra']}",
+        ),
         ("ND topological DOF estimate", fmt(estimate.get("value"))),
     ]
     items = "".join(card_html(label, value) for label, value in cards)
@@ -429,21 +452,18 @@ def mesh_summary_html(
     types = ", ".join(
         f"{record['name']}: {record['count']}" for record in stats["element_types"]
     )
-    curve_context = "; ".join(
-        f"{label}: {'recorded' if summary.get(key) is not None else 'not recorded'}"
-        for label, key in (
-            ("Source curves", "curve_source"),
-            ("Native curve arrangement", "curved_arrangement"),
-        )
+    parameters = ", ".join(
+        f"{key}={value}" for key, value in recipe["parameters"].items()
     )
     return (
         "<section><h4>Geometry mesh</h4>"
         f'<div style="display:flex;flex-wrap:wrap">{items}</div>'
-        "<p>The ND estimate uses the configured FEM order and tetrahedral primary-corner topology before boundary constraints; it is not actual solver DOF. Electrostatic H1 estimation is unavailable. Thread options are not measured thread utilization.</p>"
+        "<p>The ND estimate uses the configured FEM order and tetrahedral primary-corner topology before boundary constraints; it is not actual solver DOF. Electrostatic H1 estimation is unavailable. Quality is measured on the linear mesh, before any elevation to the geometry order.</p>"
         "<details><summary>Physical regions and mesh discretization</summary>"
         f"<p>Gmsh {html.escape(str(meshing['gmsh_version']))}. {html.escape(types)}.</p>"
-        "<p>Edge statistics count unique PRIMARY CORNER CHORDS within each region, not curved arc lengths. Point regions have no edges; missing historical statistics are not recorded.</p>"
+        f"<p>Recipe {html.escape(recipe['name'])} v{html.escape(str(recipe['version']))}: {html.escape(parameters or 'no parameters')}.</p>"
+        "<p>Edge statistics count unique PRIMARY CORNER CHORDS within each region, not curved arc lengths. Point regions have no edges.</p>"
         f"<table><thead><tr>{header}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
-        f"<p>{html.escape(curve_context)}. Full controls and provenance remain available in mesh_summary() and report data.</p>"
+        "<p>Full controls, repair policy, the quality report hash and the provenance remain available in mesh_summary() and report data.</p>"
         "</details></section>"
     )

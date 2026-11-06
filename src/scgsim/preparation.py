@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from contextvars import ContextVar, copy_context
@@ -131,8 +131,13 @@ def ordered_map(function: Callable[[_T], _R], items: Iterable[_T]) -> list[_R]:
 
 
 @contextmanager
-def native_preparation(mesh_controls: Mapping[str, object]) -> Iterator[None]:
-    """Reserve the pool budget only while the native mesh child is running."""
+def native_preparation() -> Iterator[None]:
+    """Hold the preparation budget while native meshing runs in child processes.
+
+    Meshing is single-threaded (the meshing module fixes one Gmsh thread for reproducibility), so the
+    children need no share of the worker budget; the guard only keeps native meshing out of a preparation
+    worker and serialises it with other budgeted stages.
+    """
     state = _state.get()
     if state is None:
         yield
@@ -140,16 +145,6 @@ def native_preparation(mesh_controls: Mapping[str, object]) -> Iterator[None]:
     if _worker_depth.get():
         raise RuntimeError("Native meshing cannot run inside a preparation worker.")
     with state.lock:
-        for name in ("threads", "surface_threads"):
-            value = mesh_controls[name]
-            if isinstance(value, bool) or not isinstance(value, int):
-                raise TypeError("Scoped Gmsh thread counts must be positive integers.")
-            if value <= 0 or value > state.max_workers:
-                raise ValueError(
-                    "Gmsh threads and surface_threads must be positive and fit "
-                    "preparation_resources max_workers; lower the requested mesh "
-                    "threads or increase the explicit preparation budget."
-                )
         token = _worker_depth.set(1)
         try:
             yield

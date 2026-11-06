@@ -206,25 +206,25 @@ def test_a_type_request_takes_no_expected_interface_and_validates_its_margins():
 # --------------------------------------------------------------------------- one family per face
 
 
-def test_requests_on_one_face_make_one_family_with_the_union_of_their_margins():
-    """MA and MS requests on a Route A sheet; two requests of one type; equal margins count once."""
+def test_requests_on_one_face_asking_the_same_margins_make_one_family():
+    """MA and MS requests on a Route A sheet; two requests of one type; one family each, with their margins."""
     catalogue = slab_model("A", TWO_PADS, half=20)
     split = build(
         catalogue,
         "A",
         InsetRequest("ma", InterfaceSurfaces("MA"), (0.5, 2.0)),
-        InsetRequest("ms", InterfaceSurfaces("MS"), (1.0, 2.0)),
+        InsetRequest("ms", InterfaceSurfaces("MS"), (0.5, 2.0)),
     )
     assert family_margins(split) == {
-        "ma::a::sheet": (0.5, 1.0, 2.0),
-        "ma::b::sheet": (0.5, 1.0, 2.0),
+        "ma::a::sheet": (0.5, 2.0),
+        "ma::b::sheet": (0.5, 2.0),
     }
     assert expansion_of(split, "ms")[0] == ["ma::a::sheet", "ma::b::sheet"]
-    assert "a::band=3" in split.routed.groups
+    assert "a::band=2" in split.routed.groups and "a::band=3" not in split.routed.groups
     again = build(
         catalogue,
         "A",
-        InsetRequest("z", InterfaceSurfaces("MA", face_kinds=("sheet",)), (0.5,)),
+        InsetRequest("z", InterfaceSurfaces("MA", face_kinds=("sheet",)), (0.5, 1.0)),
         InsetRequest("y", InterfaceSurfaces("MA"), (0.5, 1.0)),
     )
     assert family_margins(again)["y::a::sheet"] == (
@@ -233,18 +233,51 @@ def test_requests_on_one_face_make_one_family_with_the_union_of_their_margins():
     )  # the id of the first request in id order
 
 
-def test_a_concrete_request_keeps_its_id_and_takes_the_margins_of_a_type_request_on_its_face():
-    """The concrete family is the one family of the face; its record shows the union."""
+def test_margins_equal_on_the_grid_are_the_same_margins_however_they_are_written():
+    """0.3 and 0.1 + 0.2 are one multiple of the model grid: one family, not two values."""
     catalogue = slab_model("A", TWO_PADS, half=20)
-    named = InsetRequest("a_sheet", ConductorSurface("a", "sheet"), (0.25, 0.5))
+    model = build(
+        catalogue,
+        "A",
+        InsetRequest("ma", InterfaceSurfaces("MA"), (0.3,)),
+        InsetRequest("ms", InterfaceSurfaces("MS"), (0.1 + 0.2,)),
+    )
+    assert family_margins(model) == {"ma::a::sheet": (0.3,), "ma::b::sheet": (0.3,)}
+    record = sidecar_of(model)["insets"]
+    assert all(i["margins_grid"] == [300] for i in record[0]["expansion"]["banded"])
+
+
+def test_requests_on_one_face_asking_different_margins_are_refused():
+    """One face has one band family and so one set of margins: MA and MS may not differ on a Route A sheet."""
+    catalogue = slab_model("A", TWO_PADS, half=20)
+    with pytest.raises(InputError, match="ask different margins") as error:
+        build(
+            catalogue,
+            "A",
+            InsetRequest("ma", InterfaceSurfaces("MA"), (0.5, 2.0)),
+            InsetRequest("ms", InterfaceSurfaces("MS"), (1.0, 2.0)),
+        )
+    message = str(error.value)
+    assert "'ma'" in message and "'ms'" in message
+    assert "[0.5, 2.0]" in message and "[1.0, 2.0]" in message
+    assert "same margins" in message
+
+
+def test_a_concrete_request_keeps_its_id_and_must_ask_the_margins_of_a_type_request_on_its_face():
+    """The concrete family is the one family of the face and keeps its id; the type request must agree."""
+    catalogue = slab_model("A", TWO_PADS, half=20)
+    named = InsetRequest("a_sheet", ConductorSurface("a", "sheet"), (0.5, 1.0))
     model = build(catalogue, "A", named, *by_type("MA", margins=(0.5, 1.0)))
     assert family_margins(model) == {
-        "a_sheet": (0.25, 0.5, 1.0),
+        "a_sheet": (0.5, 1.0),
         "ma::b::sheet": (0.5, 1.0),
     }
     assert expansion_of(model, "ma")[0] == ["a_sheet", "ma::b::sheet"]
     record = {r["request_id"]: r for r in sidecar_of(model)["insets"]}
-    assert record["a_sheet"]["margins_um"] == [0.25, 0.5, 1.0]
+    assert record["a_sheet"]["margins_um"] == [0.5, 1.0]
+    differing = InsetRequest("a_sheet", ConductorSurface("a", "sheet"), (0.25, 0.5))
+    with pytest.raises(InputError, match="'a_sheet' and 'ma' ask different margins"):
+        build(catalogue, "A", differing, *by_type("MA", margins=(0.5, 1.0)))
 
 
 def test_two_concrete_requests_on_one_face_are_refused_with_or_without_a_type_request():
@@ -262,7 +295,7 @@ def test_two_concrete_requests_on_one_face_are_refused_with_or_without_a_type_re
 def test_generated_ids_must_not_repeat_a_request_id():
     """A request named like an expanded family is refused, not silently merged."""
     catalogue = slab_model("A", TWO_PADS, half=20)
-    clash = InsetRequest("ma::a::sheet", ConductorSurface("b", "sheet"), (0.5,))
+    clash = InsetRequest("ma::a::sheet", ConductorSurface("b", "sheet"), MARGINS)
     with pytest.raises(InputError, match="repeated: ma::a::sheet"):
         build(catalogue, "A", clash, *by_type("MA", face_kinds=("sheet",)))
 

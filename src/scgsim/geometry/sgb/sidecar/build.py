@@ -266,7 +266,7 @@ class _FamilyFacts:
 
 
 def _face_record(request: InsetRequest, facts: _FamilyFacts) -> dict[str, Any]:
-    """One band family: its request (margins are the union of every request on the face), margins in grid units, area and band groups."""
+    """One band family: its request (every request on the face asks these margins), margins in grid units, area and band groups."""
     region = facts.regions.get(request.request_id)
     return {
         "request_id": request.request_id,

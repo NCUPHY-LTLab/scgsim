@@ -23,7 +23,7 @@ scgsim-id: "docs/provenance"
 
 Human 於 2026-10-09 接受 SCGSim 2.0 實作／API；來源候選版本為 `a932a173edb5c56ae14740ff5177190996255bdd`（tree `2745321736e53e2a4fe8d150f2e9d8bd176669db`）。該候選版本使用 `2.0.0.dev1` 中繼資料；目前採用雙版本的候選版本中繼資料升至 `2.0.0rc3`，不會改寫較早產物的識別資訊。Runtime-source v13 會記錄其宣告的模組位元組與實測內容摘要，但其 Git 修訂版本觀察可能如實標示為無法取得；它不會證明完整的傳遞相依樹。先前六筆完整原生觀察，以及後續僅建置的 Q3D 觀察，仍分別綁定至[API 遷移證據](api-migration.qmd#accepted-scope-and-evidence-status)所述的執行環境識別資訊。
 
-目前 Palace 幾何權威來源為 `scgsim.geometry.compiler`。Palace 仍會序列化既有的 `scgsim_sgb` 欄位，其目前值會指向該權威來源。欄位名稱不會要求從舊套件匯入內容。歷史收據值與 runtime-source 清單會保留其記錄的模組識別資訊，不會改寫為目前路徑。
+目前 Palace 幾何權威來源為 `scgsim.geometry.sgb`。Palace 仍會序列化既有的 `scgsim_sgb` 欄位，其目前值會指向該權威來源。欄位名稱不會要求從舊套件匯入內容。歷史收據值與 runtime-source 清單會保留其記錄的模組識別資訊，不會改寫為目前路徑。
 
 ## 發布界線 {#publication-boundary}
 

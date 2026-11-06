@@ -1,6 +1,6 @@
 ---
 title: "Palace Electrostatic + SGB"
-description: "Electrostatic Net binding, shared Palace mesh controls, native margins and detached mesh summaries."
+description: "Electrostatic Net binding, the mesh controls both Palace facades share, Surface-EPR margin bands and detached mesh summaries."
 scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
 scgsim-id: "docs/specs/palace-electrostatic-sgb"
@@ -9,9 +9,8 @@ scgsim-id: "docs/specs/palace-electrostatic-sgb"
 ::: {.callout-note title="Accepted behavior and delivery status"}
 The backend, Route A/B lowering, handoff, Slurm execution, strict result
 resolution and existing report summaries are part of the accepted V1 scope.
-The Palace mesh controls and detached mesh summary documented below are also
-ACCEPTED for SCGSim 1.1.0. Recorded exercise evidence retains its limits;
-stabilization and release delivery remain separate.
+Recorded exercise evidence retains its limits; stabilization and release
+delivery remain separate.
 :::
 
 ## Public surface {#candidate-surface}
@@ -63,8 +62,9 @@ preflight and pipeline exit codes, and `solver_exit_code=null`. Receipts use
 | Physical Ground binding | `add_ground` | Select conductor components for Palace Ground by exact SGB net identity. |
 | Problem controls | `set_electrostatic` | Declare Electrostatic-specific config controls. |
 | Output identity | `set_output_dir` | Bind the mesh/config/handoff output location. |
-| Mesh controls | `set_mesh(...)` | Select the shared size policy, optional explicit sizes and Palace meshing controls. |
-| Mesh | `mesh` | Request the SGB-backed Palace mesh path. |
+| Surface films | `set_surface_epr` | Declare surface films and their inset margins; run it before `mesh()`. |
+| Mesh controls | `set_mesh(...)` | Select the sizing recipe, mesher options, repair budgets and quality threshold. |
+| Mesh | `mesh` | Build the SGB geometry, mesh it with `scgsim.meshing` and lower its groups to Palace attributes. |
 | Config | `write_config` | Write the Palace Electrostatic configuration for the reviewed mesh identities. |
 
 These methods are accepted public APIs.
@@ -77,83 +77,105 @@ state. A successful change retains the existing mesh/config invalidation
 boundary; this does not change operational failures inside `mesh()` or
 `write_config()`.
 
-## Palace mesh controls (1.1.0) {#palace-mesh-controls-110-candidate}
+## Palace mesh controls {#palace-mesh-controls}
 
-Both Palace facades accept the following optional controls through
-`set_mesh(...)`. Omitted fields retain their current effective settings;
-initial values for the new controls are shown below.
+`mesh()` builds the geometry with SGB, meshes it with `scgsim.meshing` and
+writes the Palace mesh, so the mesh controls are the controls of that module.
+Both Palace facades accept them through `set_mesh(...)`, with the same defaults.
+Omitted arguments retain their current settings. A change that alters a setting
+invalidates the mesh, config and handoff; an invalid proposed value leaves the
+prior state intact.
 
-| Control | Initial value | Meaning |
-|---|---:|---|
-| `algorithm_3d` | `"Delaunay"` | Select the 3D Gmsh algorithm: Delaunay or HXT. |
-| `threads` | `1` | Set Gmsh general and 3D volume thread counts. |
-| `surface_threads` | `1` | Set Gmsh 1D/2D surface thread counts. |
-| `geometry_order` | `1` | Set mesh geometry order independently of Palace FEM order. |
-| `high_order_optimize` | `True` | At elevated geometry order, select one native high-order optimization invocation. |
+::: {.askr-table-compact}
+| Control | Default | Meaning |
+|---|---|---|
+| `recipe` | `FeatureRecipe()` | Chooses the initial element sizes: `FeatureRecipe`, `GlobalSizeRecipe` or `UniformBoundaryRecipe`. |
+| `mesher` | `MesherOptions()` | Gmsh algorithms and the order of the delivered mesh: `algorithm_2d` (Gmsh's default when `None`), `algorithm_3d` (Delaunay), `geometry_order` (1) and `high_order_optimize` (`True`). |
+| `budgets` | `Budgets()` | When the repair loop gives up: `max_rounds` (8 refinement rounds) and `max_tetrahedra` (2,000,000). |
+| `quality_threshold` | `0.01` | The minimum signed inverse condition number (minSICN) every tetrahedron must reach. |
+:::
 
-At geometry order 1, high-order optimization is not applicable. At an elevated
-order, the default enables one explicit native optimization after order
-elevation. The worker disables Gmsh's automatic optimization so this choice has
-one recorded outcome. `set_numerical(...)` retains these mesh controls. An
-effective mesh-control update invalidates the mesh, config and handoff; an
-invalid proposed update leaves prior facade state intact.
+Import `FeatureRecipe`, `GlobalSizeRecipe`, `UniformBoundaryRecipe`,
+`MesherOptions`, `Budgets` and the `DELAUNAY` and `HXT` algorithm constants from
+`scgsim.meshing`. The repair policy is not a Palace control: Palace always uses
+the module's default `RepairPolicy`.
 
-Mesh construction generates the 3D mesh, applies the selected geometric order,
-performs the chosen optimization once, and then saves the final mesh. Native
-construction or fitting errors propagate as errors; the preparation path does
-not replace a curved mesh with a straight or lower-order fallback.
+::: {.callout-important title="A mesh below the quality threshold stops the run"}
+`mesh()` raises `scgsim.meshing.MeshRepairError`, carrying the quality report,
+when the repair loop cannot bring every tetrahedron to `quality_threshold`
+within `budgets`. It also raises when the mesh needs more than
+`max_tetrahedra`, when only elements the loop cannot refine remain, when the
+accepted mesh cannot be raised to `geometry_order`, or when Gmsh produces no mesh. No mesh path
+is returned, so config and handoff preparation cannot continue. The report is
+written to the run's `mesh` folder, and the last mesh, if a round made one, stays
+there as a `.rejected.msh` file.
 
-For the converging Gmsh-isolation scope, SCGSim-owned Gmsh sessions initialize
-with `readConfigFiles=False`, so Gmsh system configuration files do not silently
-change the owned worker's starting options. Geometry helpers that find Gmsh
-already initialized continue to skip initialization; this flag affects only
-SCGSim-owned initialization, leaving the existing borrowed-session option,
-model, and finalization behavior unchanged.
-The detached `meshing.effective` record reads back Gmsh's actual
-`Mesh.MeshSizeFactor`. This value is observational metadata, not a public mesh
-control or requested setting. Historical records without the field remain
-without it; readers do not infer a value for them.
+When this happens, read the report, then raise `Budgets.max_rounds`, choose a
+recipe that sizes the offending curves finer, or lower `quality_threshold` and
+record the lower value with the study. `Budgets(max_rounds=0)` runs a recipe
+once without repair; it turns off repair only, so a first mesh below the
+threshold is still rejected.
+:::
 
-## Mesh-size policy (CONVERGING) {#palace-mesh-size-policy}
+### Sizing recipes {#palace-mesh-recipes}
 
-Both Palace facades accept `size_policy` through `set_mesh(...)`. A fresh
-`EigenmodeSim` starts with `gmsh_default`; a fresh `ElectrostaticSim` keeps its
-existing `scgsim_default` sizing. `scgsim_default` uses `5 µm` refined and
-`300 µm` maximum mesh sizes unless the caller supplies an explicit pair. An
-example that passes `10` and `200` overrides those sizes for that example; it
-does not change the package defaults.
+A recipe decides only the initial element sizes. Repair, the threshold and the
+report are the same for every recipe. Start with `FeatureRecipe`: it sizes the
+curves the geometry itself calls for, and its defaults were measured to reach the
+default threshold on 1 to 4 mm chips.
 
-Select `gmsh_default` to use Gmsh 4.15.2's native size selection. SCGSim does
-not add mesh-size fields or callbacks. It leaves Gmsh's native minimum,
-maximum, factor, point, curvature and boundary sizing options untouched, and
-does not apply SCGSim's size overrides. The policy leaves the geometry,
-physical groups, junctions or Surface EPR requests. Mesh sizing
-remains separate from the 3D meshing algorithm and Palace FEM or AMR controls;
-choosing this policy does not promise fewer elements.
+::: {.askr-table-compact}
+| Recipe | Sizes | Parameters (defaults) |
+|---|---|---|
+| `FeatureRecipe` | A coarse maximum size, the bounding-box diagonal over `max_size_divisor`, with finer elements at thin film sidewalls (a multiple of the film thickness when that is finer than half the coarse size). An optional rule sizes the outlines of the conductors. | `max_size_divisor=20`, `gradation=1`, `film_sidewall_thickness_multiple=25`, `film_sidewall_ceiling_fraction=0.5`, `conductor_outline=False`, `conductor_edge_size_um=5`, `conductor_edge_grow_um=300` |
+| `GlobalSizeRecipe` | Only the coarse maximum size, the bounding-box diagonal over `max_size_divisor`. A cheap reference that leaves near-flat tetrahedra at thin metal sidewalls, so it relies on repair rounds. | `max_size_divisor=20`, `gradation=1` |
+| `UniformBoundaryRecipe` | Every curve of the model at `near_um`, growing to `far_um` over `far_um` micrometres. It ignores what each curve is. | `near_um=5`, `far_um=300` |
+:::
 
-Omitting `size_policy` (or passing `None`) retains the selected policy.
-Omitting size arguments while `scgsim_default` is active retains its current
-pair, including caller-supplied values. Selecting `gmsh_default` clears
-retained SCGSim size overrides. Selecting `scgsim_default` again restores
-`5 µm` and `300 µm` unless the same call provides an explicit pair. Supplying
-mesh sizes while `gmsh_default` is active is rejected without changing prior
-settings. `set_numerical(...)` continues to configure FEM and AMR; it cannot
-add explicit mesh sizes while `gmsh_default` is active.
+Each recipe has a name and a version, recorded with its parameters in the mesh
+manifest, so a run states which sizing rules produced its mesh.
 
-The requested mesh record retains the selected policy and size values,
-including `None`. The effective mesh record reads Gmsh's native minimum,
-maximum and factor, plus its point, curvature and boundary sizing options.
-These records distinguish caller settings from the native options observed
-for that mesh.
+### Mesher options {#palace-mesh-mesher}
 
-## Mesh manifest and detached summary (1.1.0) {#mesh-manifest-and-detached-summary-110-candidate}
+`MesherOptions` sets how Gmsh meshes whatever the sizes. Delaunay is the default
+3D algorithm; `scgsim.meshing.HXT` is the alternative. Meshing runs on one
+thread, and there are no thread controls.
 
-The mesh manifest retains its existing groups and adds `meshing` evidence for
-the actual Gmsh version, requested and effective controls, high-order
-optimization outcome, node and element types, physical-region element counts,
-and edge-length statistics. Edge lengths for high-order meshes are explicitly
-labeled as primary-corner chords and reported in micrometres; they are not
-curved-edge arc lengths.
+`geometry_order` is the polynomial order of the delivered mesh, independent of
+the finite-element order of `set_numerical(order=...)`. The audit, the threshold
+and the repair loop always see the linear mesh. When `geometry_order` is above
+1, the module raises the order of the mesh the loop accepted, optionally runs
+Gmsh's `HighOrder` optimisation once (`high_order_optimize`), and writes that
+mesh. A failure to fit curved elements raises an error; it is never replaced by
+a straight or lower-order mesh.
+
+## What `mesh()` writes {#palace-mesh-outputs}
+
+The run folder holds the SGB model (`geometry/`, with the XAO and its sidecar),
+the meshing report (`mesh/`, as JSON and text), `palace.msh` and the mesh
+manifest (`metadata/`). `palace.msh` is a Gmsh MSH 2.2 ASCII file, the format
+Palace reads. Palace lowers SGB's named groups to solver attributes from the
+sidecar alone: it splits a surface group only where its faces are integrated by
+different Surface-EPR rows or sides, so the attributes partition the faces and
+nothing is counted twice. Electrical identity is the Net; the Terminal and
+Ground bindings use the exact Net of the sidecar.
+
+The meshing report states that minSICN and the count of tetrahedra below the
+threshold were measured on the linear mesh before any elevation, and records
+the order of the delivered mesh. To measure the stored solver mesh itself, use
+the [mesh-quality reader](../mesh-quality.qmd).
+
+## Mesh manifest and detached summary {#mesh-manifest-and-detached-summary}
+
+The mesh manifest (`schema_version` 2) records the route and its policy, the
+sidecar schema and model identity digest, the Surface-EPR inset requests with
+the band families they produced and the faces SGB skipped, the recipe (name,
+version and parameters), repair policy, mesher options, budgets and threshold,
+the path and SHA-256 of the quality report, and one entry per solver attribute
+with the SGB group it came from. It also records the Gmsh version, node and
+element types, physical-region element counts and edge-length statistics. Edge
+lengths for high-order meshes are explicitly labeled as primary-corner chords
+and reported in micrometres; they are not curved-edge arc lengths.
 
 Both Palace facades and a resolved Palace run expose `mesh_summary()`. It returns
 a detached value bound to the mesh and manifest identities. The Palace report
@@ -161,15 +183,16 @@ reads this same summary authority. Eigenmode includes an Nédélec topological
 degree-of-freedom estimate based on primary-corner tetrahedron topology and the
 configured FEM order. It is not an actual solver degree-of-freedom count;
 changing FEM order updates the estimate without remeshing. Electrostatic's
-H1 estimate is unavailable. The existing linear-tetrahedron
-[mesh-quality reader](../mesh-quality.qmd) does not calculate curved-element
-quality.
+H1 estimate is unavailable. The [mesh-quality reader](../mesh-quality.qmd) does
+not calculate curved-element quality.
 
-## Native Mask/Inset and withdrawn geometry bands {#native-mask-inset}
+## Surface-EPR margins {#surface-epr-margins}
 
-Palace native Mask/Inset margins remain available through `inset_margins_um`; omit the field for an unmasked baseline. A non-empty request requires a Palace executable that supports the native Mask/Inset configuration. These margins do not modify SGB source geometry.
-
-The separate SGB geometry-level distance-band producer has been withdrawn. Older pages describing `GeometryPlan.set_surface_distance_bands(...)` are historical references and do not describe a current producer. Native Mask/Inset rows must not be interpreted as disjoint geometry bands.
+Surface-EPR inset margins are cut into the geometry as bands, so `set_surface_epr`
+belongs before `mesh()`. The [Eigenmode contract](palace-eigenmode.qmd#surface-epr-margins)
+owns the margin keys, the face kinds and the rows they produce, and Electrostatic
+accepts the same specs. Calling `set_surface_epr` again invalidates the mesh,
+config and handoff.
 
 ## Source and geometry authority
 
@@ -182,9 +205,9 @@ Prefer `set_plan(snapshot)` for the shared source-first course. The standalone
 supported on a fresh unbound simulation; do not mix them with a plan snapshot.
 The [GeometryPlan contract](../geometry-sgb.qmd) owns occurrence/Nets, generated
 vacuum, contact and Route-A/B semantics. The current source-facing geometry
-authority is `scgsim.geometry`; route planning and derived construction are
-owned by `scgsim.geometry.compiler`. External SGB and gsim are derivation
-history only.
+authority is `scgsim.geometry`. Palace builds its geometry with
+`scgsim.geometry.sgb` (`build_sgb_geometry`) and meshes it with
+`scgsim.meshing`. External SGB and gsim are derivation history only.
 
 The [Electrostatic lesson](../course/palace-electrostatic.qmd) teaches exact Net
 terminals/ground and the real mesh/config sequence. The separate
@@ -225,12 +248,14 @@ attributes separately and their exact union must equal
 `Boundaries.Ground.Attributes`. Existing
 `exterior_boundary_policy="none"` plus
 `unassigned_conductor_policy="ground"` remains the implicit-ground path.
-New Electrostatic authoring writes index-map schema v2. The resolver retains
-schema-v1 read support for sealed historical runs, but only schema v2 carries
-and can claim the physical-versus-exterior Ground split.
+Electrostatic authoring writes index-map schema v3, which carries the
+physical-versus-exterior Ground split. The resolver reads only the current index
+map and mesh manifest schemas; the
+[report contract](../report-model.qmd#palace-run-schemas) states what happens to
+a run folder of an older schema.
 
 External gsim and historical SGB revisions are derivation evidence only. The
-runtime geometry authority is the in-tree `scgsim.geometry.compiler` and the
+runtime geometry authority is the in-tree `scgsim.geometry.sgb` and the
 current `scgsim.palace` implementation.
 
 See [Geometry and SGB Route A/B](../geometry-sgb.qmd),

@@ -87,8 +87,10 @@ The integrated derivation inputs were gsim downstream
 `0.2.0+scq.1`, revision `8f5dc6c05255d003a9c6d8959537bcf8068379d3`,
 and historical SGB revision `e74a343154c6b19b6ba32d6fb297e700cfe08ff2`.
 They explain origin, not runtime dependencies, support expansion or API
-compatibility. Current source geometry uses the in-tree `scgsim.geometry` API
-and `scgsim.geometry.compiler` for route planning and derived construction.
+compatibility. Current source geometry uses the in-tree `scgsim.geometry` API.
+Palace builds its geometry with `scgsim.geometry.sgb` and meshes it with
+`scgsim.meshing`; `scgsim.geometry.compiler` remains the advanced route-building
+API and Palace no longer uses it.
 
 ## Engineering convergence
 

@@ -13,12 +13,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from ..mesh.build import MeshBuildResult
-from ..mesh.provenance import (
-    GSIM_SHA,
-    SGB_DERIVATION_BASE_SHA,
-    SGB_DERIVATION_IMPORTED_SHA,
-    SGB_RUNTIME_AUTHORITY,
-)
+from ..mesh.provenance import SGB_RUNTIME_AUTHORITY
 from ..preparation.transforms import SCHEMA_VERSION
 from .archive import (
     run_archive_arcname,
@@ -462,13 +457,8 @@ def _identity() -> dict[str, Any]:
     return {
         "scgsim": scgsim,
         "candidate_state": "converging",
-        "gsim_meshing": GSIM_SHA,
         "gsim_portable_handoff": PORTABLE_HANDOFF_SHA,
         "scgsim_sgb": SGB_RUNTIME_AUTHORITY,
-        "sgb_derivation": {
-            "base": SGB_DERIVATION_BASE_SHA,
-            "imported_development": SGB_DERIVATION_IMPORTED_SHA,
-        },
     }
 
 
