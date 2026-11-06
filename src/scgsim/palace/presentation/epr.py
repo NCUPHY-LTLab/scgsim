@@ -50,13 +50,14 @@ def _show_view(result: Any, *, mode: int | None) -> dict[str, Any]:
 
 
 def _surface_label(item: Mapping[str, Any]) -> str:
-    """Label a surface row by its entry name, Entities and interface, with its margin in micrometres.
+    """Label a surface row by its Palace index, entry name, Entities and interface, with its margin in micrometres.
 
-    The entry name keeps two faces of one material pair (a banded family and an unbanded face) apart.
+    The Palace ``Dielectric`` index is unique per row, so two margins of one baseline that print alike (1000.001
+    and 1000.002 um both read ``1000 µm``) stay apart; the entry name keeps the label readable.
     """
     entities = ",".join(item["entities"])
     label = (
-        f"{item['name']}: {entities} / {item['interface_kind']} / "
+        f"[{item['index']}] {item['name']}: {entities} / {item['interface_kind']} / "
         f"{item['evaluation_kind']}"
     )
     return f"{label} {item['margin_um']:g} µm"

@@ -186,8 +186,9 @@ def _shared_margins(
 ) -> tuple[float, ...]:
     """The margins every ask on ``face`` gives; asks that differ on the model grid are an error."""
     first = asks[0]
+    expected = _on_grid(first, face, grid)
     for other in asks[1:]:
-        if _on_grid(other.margins_um, grid) != _on_grid(first.margins_um, grid):
+        if _on_grid(other, face, grid) != expected:
             raise ValueError(
                 f"Surface EPR {first.interface_type} ({first.key}) asks inset margins "
                 f"{list(first.margins_um)} um and {other.interface_type} ({other.key}) asks "
@@ -197,16 +198,22 @@ def _shared_margins(
     return first.margins_um
 
 
-def _on_grid(margins_um: tuple[float, ...], grid: Grid) -> tuple[float, ...]:
-    """The margins as multiples of the model grid, so ``0.3`` and ``0.1 + 0.2`` compare equal.
+def _on_grid(ask: _Ask, face: ConductorSurface, grid: Grid) -> tuple[int, ...]:
+    """The margins of ``ask`` as multiples of the model grid, so ``0.3`` and ``0.1 + 0.2`` compare equal.
 
-    A margin off the lattice stays in micrometres; SGB refuses it when the request is built.
+    A margin off the lattice is refused here: compared as a raw length it could pass for an index.
     """
-    units = (grid.lattice_units(margin) for margin in margins_um)
-    return tuple(
-        margin if unit is None else unit
-        for unit, margin in zip(units, margins_um, strict=True)
-    )
+    units: list[int] = []
+    for margin in ask.margins_um:
+        unit = grid.lattice_units(margin)
+        if unit is None or unit <= 0:
+            raise ValueError(
+                f"Surface EPR {ask.interface_type} ({ask.key}) inset margin {margin} um for the "
+                f"{face.side} of {face.entity_id!r} is not a positive multiple of the "
+                f"{grid.size_um} um model grid."
+            )
+        units.append(unit)
+    return tuple(units)
 
 
 def _conductor_faces(

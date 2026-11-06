@@ -182,6 +182,25 @@ def test_one_sheet_named_by_two_specs_is_one_request_with_its_one_set_of_margins
     assert ms.support == InterfaceSurfaces("MS", exclude_entity_ids=("chip/left",))
 
 
+@pytest.mark.parametrize(
+    ("ma", "ms"),
+    [([0.003], [1.0]), ([1.0], [0.003]), ([0.0015], None)],
+    ids=["ms-off-grid", "ma-off-grid", "one-spec-off-grid"],
+)
+def test_an_off_grid_customised_margin_is_refused_before_comparing(
+    route_a_sidecar, ma, ms
+):
+    """On a 0.003 um grid, 1.0 um is off the lattice; compared raw it would pass for grid index 1."""
+    sidecar = {**route_a_sidecar, "grid_um": 0.003}
+    specs = customised({"chip/left": ma}, MA=None, MS=None)
+    if ms is not None:
+        specs["MS"]["inset_margins_by_entity_um"] = {"chip/left": ms}
+    with pytest.raises(
+        ValueError, match="not a positive multiple of the 0.003 um model grid"
+    ):
+        inset_requests(specs, sidecar)
+
+
 @pytest.mark.parametrize("entity", ["nobody", "VACUUM_REGION", "substrate"])
 def test_a_named_entity_without_a_face_of_the_type_is_an_error(route_b_sidecar, entity):
     """Unknown entities, and regions that are not conductors, have no MA face to band."""
