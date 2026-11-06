@@ -54,7 +54,7 @@ SGB 對這個階層使用兩種順序，兩者對審查都很重要。
 
 每個共用的元素只寫一次，並以 index 引用。兩個 solid 相接處，它們的 shell 指名同一筆 face record，一次用 `+`、一次用 `-`。符號是該次使用的 orientation（FORWARD 或 REVERSED）：`+` 表示 face 自身的 normal 指向 solid 外側。@fig-shared 顯示範例中 substrate／vacuum 的 interface。
 
-![概念性剖面圖，標示 running example 的真實 reference。`SA` 是 substrate 與 vacuum 之間的 interface 類別（Surface EPR 的 SA，見 [identity](identity.qmd)），face `SA::substrate|vacuum::interface` 只存在一次。vacuum 的 shell 以反向使用它（`-21`），因為 face 的 normal（+z）指向 vacuum；substrate 的 shell 則以 `+21` 使用它。](figures/emission-shared-face.svg){#fig-shared fig-alt="上下堆疊的兩個方塊，vacuum 在上、substrate 在下，中間有一個橘色的 face，由兩個 solid 各使用一次。vacuum 的 shell record 以負號列出它，substrate 的 shell record 以正號列出它。"}
+![概念性剖面圖，標示 running example 的真實 reference。`SA` 是 substrate 與 vacuum 之間的 interface 類別（Surface EPR 的 SA，見 [identity](identity.qmd)），face `SA::substrate|vacuum__interface` 只存在一次。vacuum 的 shell 以反向使用它（`-21`），因為 face 的 normal（+z）指向 vacuum；substrate 的 shell 則以 `+21` 使用它。](figures/emission-shared-face.svg){#fig-shared fig-alt="上下堆疊的兩個方塊，vacuum 在上、substrate 在下，中間有一個橘色的 face，由兩個 solid 各使用一次。vacuum 的 shell record 以負號列出它，substrate 的 shell record 以正號列出它。"}
 
 ::: {.callout-important}
 ## 保證：以共用達成 conformal
@@ -110,16 +110,16 @@ Gmsh 的輸出會為 face 所屬的每個 physical group 重複其 element，sol
 ::: {#tbl-groups .askr-table-compact .askr-table-numeric}
 | Primary group | Face 數 | 意義 |
 |---|---|---|
-| `MA::pad::top`、`MA::pad::sidewall` | 1、14 | pad 對 vacuum 的頂面與側壁 |
-| `MA::ground::top`、`MA::ground::sidewall` | 1、4 | ground 對 vacuum |
-| `MS::pad::bottom`、`MS::ground::bottom` | 各 1 | 金屬對 substrate |
-| `SA::substrate\|vacuum::interface` | 2 | substrate 對 vacuum（gap 與 pad hole；port 蓋住的部分不在其中） |
+| `MA::pad__top`、`MA::pad__sidewall` | 1、14 | pad 對 vacuum 的頂面與側壁 |
+| `MA::ground__top`、`MA::ground__sidewall` | 1、4 | ground 對 vacuum |
+| `MS::pad__bottom`、`MS::ground__bottom` | 各 1 | 金屬對 substrate |
+| `SA::substrate\|vacuum__interface` | 2 | substrate 對 vacuum（gap 與 pad hole；port 蓋住的部分不在其中） |
 | `PORT::p1` | 1 | lumped port（substrate 與 vacuum 之間的 face） |
-| `EXT::substrate::bottom`、`EXT::substrate::sidewall` | 1、4 | 外側 box |
-| `EXT::vacuum::top`、`EXT::vacuum::sidewall` | 1、4 | 外側 box |
+| `EXT::substrate__bottom`、`EXT::substrate__sidewall` | 1、4 | 外側 box |
+| `EXT::vacuum__top`、`EXT::vacuum__sidewall` | 1、4 | 外側 box |
 | `substrate`、`vacuum`（volume） | 各 1 | 輸出的兩個 volume |
 
-running example 的 primary group（`MA`：metal–vacuum 側，`MS`：metal–substrate 側，`SA`：substrate–vacuum 表面，`EXT`：外側 box，`PORT`：lumped port）；volume 的 group 沒有前綴，名稱就是 entity id（`substrate`、`vacuum`）。surface 的名稱是 `<kind>::<entity>::<face kind>`。
+running example 的 primary group（`MA`：metal–vacuum 側，`MS`：metal–substrate 側，`SA`：substrate–vacuum 表面，`EXT`：外側 box，`PORT`：lumped port）；volume 的 group 沒有前綴，名稱就是 entity id（`substrate`、`vacuum`）。surface 的名稱是 `<kind>::<entity>__<face kind>`。
 :::
 
 ![重新開啟的 `semantic_geometry_route_b.xao`，以 `MeshSizeMax` 40 µm 對表面做 mesh（1,610 個 triangle），並依 physical group 上色。左：整個模型，縱軸已拉伸。右：cutout 的俯視圖；橘色的 substrate 表面從 pad 的圓孔中露出，紅色的 port face 橫跨 pad 與 ground 之間的間隙，它在 z = 0，佔去橘色 interface 的一部分。互動版本在滑鼠停留時顯示每個 face 的 Gmsh face tag 與 planned id。](figures/emission-groups-3d.svg){#fig-groups fig-alt="左圖是 300 乘 300 微米的 box，灰色 ground plane 上有一個 cutout。右圖是 cutout 的俯視圖：橘色的 substrate 表面、帶有圓孔與 notch 的藍色 pad，以及 pad 與 ground 之間一個小的紅色長方形。"}
@@ -142,7 +142,7 @@ XAO 無法攜帶 mesher 與 solver 設定所需的全部資訊，所以 writer �
 一筆 group 條目把三套編號串在一起。running example 中 substrate／vacuum 的 face（節錄）：
 
 ```{.json filename="semantic_geometry_route_b.sidecar.json（節錄）"}
-  "SA::substrate|vacuum::interface": {
+  "SA::substrate|vacuum__interface": {
    "dim": 2,
    "face_kind": "interface",
    "ids": ["f:9d1ffbd71300203f", "f:f8d4f101da9d41b5"],
@@ -159,8 +159,8 @@ XAO 無法攜帶 mesher 與 solver 設定所需的全部資訊，所以 writer �
 ```{.json filename="semantic_geometry_route_b.sidecar.json（節錄）"}
  "unions": {
   "nets": {
-   "Ground": ["MA::ground::sidewall", "MA::ground::top", "MS::ground::bottom"],
-   "pad": ["MA::pad::sidewall", "MA::pad::top", "MS::pad::bottom"]
+   "Ground": ["MA::ground__sidewall", "MA::ground__top", "MS::ground__bottom"],
+   "pad": ["MA::pad__sidewall", "MA::pad__top", "MS::pad__bottom"]
   },
   "interface_types": { "…": ["…"] }
  },
@@ -297,7 +297,7 @@ Route B 的 0.1 是正確的事實：在 mesher 要 mesh 的區域裡，那一�
 
 band 從哪裡量起、每個 band 的範圍，見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)。
 
-三個 band case 與一條 refinement curve 在測試中都經過 direct writer。載入後，每個 band group 的 mesh 使得它的 triangle 都恰好是每個相鄰 volume 中一個 tetrahedron 的 face（沒有 element 跨過 band 的邊界），且 centroid 以 exact carrier 的距離判斷落在該 band 內（`pad_in_ground_A_bands` 有 8 個 band group，Route B 與 C 的 band 範例各 12 個，全部如此，@tbl-bands；Route A 把 band group 命名為 `<entity>::band=k`（sheet）與 `SA::substrate|vacuum::interface::z=0.0::band=k`，Route B 與 C 對 pad 的上表面（`MA::<entity>::top`）與下表面（`MS::<entity>::bottom`）各自產生 band，另有 `SA::…::z=0.0::band=k`（介面的名稱帶高度，見 [identity](identity.qmd#band-group-names)）；逐 group 的 triangle 數見 [inset imprint](inset-imprint.qmd)）。
+三個 band case 與一條 refinement curve 在測試中都經過 direct writer。載入後，每個 band group 的 mesh 使得它的 triangle 都恰好是每個相鄰 volume 中一個 tetrahedron 的 face（沒有 element 跨過 band 的邊界），且 centroid 以 exact carrier 的距離判斷落在該 band 內（`pad_in_ground_A_bands` 有 8 個 band group，Route B 與 C 的 band 範例各 12 個，全部如此，@tbl-bands；Route A 把 band group 命名為 `<entity>::band=k`（sheet）與 `SA::substrate|vacuum__interface::band=k`，Route B 與 C 對 pad 的上表面（`MA::<entity>__top`）與下表面（`MS::<entity>__bottom`）各自產生 band，另有 `SA::…__interface::band=k`（介面；名稱規則見 [identity](identity.qmd#band-group-names)）；逐 group 的 triangle 數見 [inset imprint](inset-imprint.qmd)）。
 
 
 對 refinement curve，測試檢查：該 edge 在載入的檔案中是 free 的（沒有任何 face 擁有它）、它被切成多於一個 element，以及 sidecar 的該列 `written_as_free_edge` 為 true。
@@ -421,5 +421,5 @@ runtime validator 逐項的耗時（polygon-only 的隨機 layout，seed 2，單
 ::: {#tbl-bands .askr-table-compact .askr-table-numeric}
 {{< include figures/emission-bands-table.md >}}
 
-經過 direct writer 的 inset band case（margin 0.1、0.5、2.0 µm，四個 band）。Route A 把 band group 命名為 `<entity>::band=k` 與 `SA::substrate|vacuum::interface::z=0.0::band=k`；Route B 與 C 對 pad 的上表面（`MA`）與下表面（`MS`）各自產生 band，再加上 `SA` 的 band。
+經過 direct writer 的 inset band case（margin 0.1、0.5、2.0 µm，四個 band）。Route A 把 band group 命名為 `<entity>::band=k` 與 `SA::substrate|vacuum__interface::band=k`；Route B 與 C 對 pad 的上表面（`MA`）與下表面（`MS`）各自產生 band，再加上 `SA` 的 band。
 :::

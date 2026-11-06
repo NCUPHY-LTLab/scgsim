@@ -226,20 +226,20 @@ production 的 extreme-case catalogue 有 23 個 fixture，在 Route A、B、C �
 
 ## Physical group 名稱
 
-primary group 命名為 `<kind>::<qualified entity id>::<face kind>[::band=k]`（D5，production 已實作）。face kind 是 `top`、`bottom`、`sidewall`、`sheet`、`interface` 之一；port 與 volume 不帶 face kind；有 band 的 `interface` 另帶高度（[命名規則](identity.qmd#band-group-names)）。MA、MS、SA 等的總和是 sidecar 中的 `unions.interface_types`，Net 層級的 union 在 `unions.nets`，只用於 Electrostatic。
+primary group 命名為 `<kind>::<qualified entity id>__<face kind>[::band=k]`（D5，production 已實作）。face kind 是 `top`、`bottom`、`sidewall`、`sheet`、`interface` 之一；port 與 volume 不帶 face kind；兩個 family 共用 band group 時 `interface` 後另帶 `__top` 或 `__bottom`（[命名規則](identity.qmd#band-group-names)）。MA、MS、SA 等的總和是 sidecar 中的 `unions.interface_types`，Net 層級的 union 在 `unions.nets`，只用於 Electrostatic。
 
 ::: {.askr-table-compact}
 | 名稱 | 意義 |
 |---|---|
-| `MA::<entity>::top`、`::bottom`、`::sidewall` | 導體 Entity 對 vacuum 的 face（頂面、底面、側壁） |
-| `MS::<entity>::bottom`、`::top`、`::sidewall` | 導體 Entity 對 dielectric 的 face |
-| `MM::<a>\|<b>::interface` | 兩個導體 Entity 之間的 face |
-| <code>SA::&lt;a&gt;&#124;&lt;b&gt;::interface</code> | substrate–vacuum（或其他 dielectric 配對）face；<code>AA</code>、<code>SS</code> 是 vacuum–vacuum 與 dielectric–dielectric |
+| `MA::<entity>__top`、`MA::<entity>__bottom`、`MA::<entity>__sidewall` | 導體 Entity 對 vacuum 的 face（頂面、底面、側壁） |
+| `MS::<entity>__bottom`、`MS::<entity>__top`、`MS::<entity>__sidewall` | 導體 Entity 對 dielectric 的 face |
+| <code>MM::&lt;a&gt;&#124;&lt;b&gt;__interface</code> | 兩個導體 Entity 之間的 face |
+| <code>SA::&lt;a&gt;&#124;&lt;b&gt;__interface</code> | substrate–vacuum（或其他 dielectric 配對）face；<code>AA</code>、<code>SS</code> 是 vacuum–vacuum 與 dielectric–dielectric |
 | `<entity>[::band=k]`（導體，Route A） | Route A 的導體 sheet，名稱是裸的 entity id（Gmsh 的 Type 欄位標示它是 surface）；`surface_epr_rows` 在某個 face 的某一側是 vacuum 時給 MA row、是 dielectric 時給 MS row，都對到這個 group，並出現在對應的 MA 或 MS union 中 |
 | `PORT::<port sheet id>` | lumped port footprint（一個 sheet，不帶 face kind），是一個 face、一個 group：band 的 seam 在它的邊界停下 |
-| `EXT::<domain>::<face kind>` | 某 domain 的模型外邊界（Route C 的導體碰到邊界時也有 `EXT::<entity>::sidewall`） |
+| `EXT::<domain>__<face kind>` | 某 domain 的模型外邊界（Route C 的導體碰到邊界時也有 `EXT::<entity>__sidewall`） |
 | `<entity>`（volume） | 輸出的 volume，名稱是裸的 entity id（Route C 的導體內部也是）；Gmsh 的 Type 欄位標示它是 volume |
-| `<name>::band=k` | 同一種 face 位於其 support region 的 inset band $k$ 內（Route A：`pad::band=k`；Route B 與 C：`MA::pad::top::band=k` 與 `MS::pad::bottom::band=k`；介面帶高度：<code>SA::&lt;a&gt;&#124;&lt;b&gt;::interface::z=&lt;z&gt;::band=k</code>） |
+| `<name>::band=k` | 同一種 face 位於其 support region 的 inset band $k$ 內（Route A：`pad::band=k`；Route B 與 C：`MA::pad__top::band=k` 與 `MS::pad__bottom::band=k`；介面：<code>SA::&lt;a&gt;&#124;&lt;b&gt;__interface::band=k</code>，兩個 family 共用時是 <code>SA::&lt;a&gt;&#124;&lt;b&gt;__interface__top::band=k</code> 或 <code>…__interface__bottom::band=k</code>） |
 :::
 
 裸的 entity id 指物件本身，帶界面前綴的名稱指兩個東西之間的 face（見 [Identity](identity.qmd)）。Net 的 PEC 不是一組 face：它由 `unions.nets` 列出該 Net 所有導體表面的 group。

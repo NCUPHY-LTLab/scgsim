@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import inset_kit as kit  # noqa: E402  (also puts the production core's tests on sys.path)
 import numpy as np  # noqa: E402
+from group_facts import banded_groups
 from inset_figures import LEVEL_Z0
 from inset_kit import MARGINS  # noqa: E402
 from inset_mask import group_face_areas
@@ -50,7 +51,7 @@ def _band_areas_section(areas):
     ]
     for prefix, label in (
         ("pad::band=", "pad top"),
-        ("SA::substrate|vacuum::interface::z=0.0::band=", "gap"),
+        ("SA::substrate|vacuum__interface::band=", "gap"),
     ):
         per_band = {k: areas[f"{prefix}{k}"] for k in range(4)}
         total = {k: sum(v) for k, v in per_band.items()}
@@ -178,11 +179,9 @@ def _route_b_section(model_a):
     out = []
     # Route B: the example bands the top face (MA) and the bottom face (MS)
     model_b = kit.pad_model("B", MARGINS)
-    groups = sorted(
-        n
-        for n in model_b.routed.groups
-        if "::band=" in n and n.startswith(("MA::pad", "MS::pad"))
-    )
+    unions = model_b.routed.unions
+    pad_surfaces = {*unions["MA"], *unions["MS"]} & set(unions["NET::pad"])
+    groups = sorted(n for n in banded_groups(model_b) if n in pad_surfaces)
     counts = model_b.topology.counts()
     union = model_b.routed.unions["NET::pad"]
     out += [

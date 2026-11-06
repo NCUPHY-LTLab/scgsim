@@ -30,6 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import inset_kit as kit  # noqa: E402  (also puts the production core's tests on sys.path)
+from group_facts import band_of_group  # noqa: E402
 from inset_kit import G_UM as G
 from inset_kit import MARGINS, Line, Panel, Poly, Pts  # noqa: E402
 
@@ -41,9 +42,9 @@ from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: E402
 CASE = (
     "pad_b_bands"  # tests/sgb_emit_cases.py name of the case; the port is on z = 0 here
 )
-TARGET_GROUP = "MA::pad::top::band=2"
-ALT_GROUP = "MA::pad::top::band=0"
-WALL_GROUP = "MA::pad::sidewall"
+TARGET_GROUP = "MA::pad__top::band=2"
+ALT_GROUP = "MA::pad__top::band=0"
+WALL_GROUP = "MA::pad__sidewall"
 CARRIER = re.compile(
     r"^(?P<family>[^/]+)/ring(?P<ring>\d+)/(?P<kind>edge|corner)(?P<index>\d+)(?:\.(?P<piece>\d+))?@m(?P<margin>\d+(?:\.\d+)?)$"
 )
@@ -260,7 +261,7 @@ def _figure_trace(model, trace) -> None:
                     rings, "#e08214", "rgba(0,0,0,0.8)", 0.8, hover=f"{group}<br>{fid}"
                 )
             )
-        elif group.startswith("MA::pad::top::band"):
+        elif (band_of_group(model, group) or ("",))[0] == "band_pad_top":
             polys.append(
                 Poly(
                     rings, "#c6dbef", "rgba(0,0,0,0.5)", 0.4, hover=f"{group}<br>{fid}"
@@ -315,7 +316,7 @@ def _figure_trace(model, trace) -> None:
             [-1e4],
             "#c6dbef",
             8,
-            name="other MA::pad::top band faces",
+            name="other MA::pad__top band faces",
             symbol="square",
         ),
     ]

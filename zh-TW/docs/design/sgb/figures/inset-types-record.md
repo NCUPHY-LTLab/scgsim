@@ -6,13 +6,13 @@
     "band_count": 3,
     "bands": {
      "0": [
-      "SA::substrate|VACUUM_REGION::interface::z=0.0::band=0"
+      "SA::substrate|VACUUM_REGION__interface::band=0"
      ],
      "1": [
-      "SA::substrate|VACUUM_REGION::interface::z=0.0::band=1"
+      "SA::substrate|VACUUM_REGION__interface::band=1"
      ],
      "2": [
-      "SA::substrate|VACUUM_REGION::interface::z=0.0::band=2"
+      "SA::substrate|VACUUM_REGION__interface::band=2"
      ]
     },
     "interface": null,

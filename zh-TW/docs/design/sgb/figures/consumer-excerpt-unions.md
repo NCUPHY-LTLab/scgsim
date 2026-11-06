@@ -4,9 +4,9 @@
   {
    "band_count": 3,
    "bands": {
-    "0": ["MA::pad::top::band=0"],
-    "1": ["MA::pad::top::band=1"],
-    "2": ["MA::pad::top::band=2"]
+    "0": ["MA::pad__top::band=0"],
+    "1": ["MA::pad__top::band=1"],
+    "2": ["MA::pad__top::band=2"]
    },
    "interface": null,
    "margins_grid": [500, 1000],
@@ -20,20 +20,20 @@
   }
  ],
  "surface_epr_rows": {
-  "MA::pad::top::band=0": {
+  "MA::pad__top::band=0": {
    "band": 0,
    "entities": ["pad"],
    "face_sides": null,
-   "group": "MA::pad::top::band=0",
+   "group": "MA::pad__top::band=0",
    "interface_type": "MA",
    "shared_face_group": null,
    "side": null
   },
-  "SA::substrate|VACUUM_REGION::interface": {
+  "SA::substrate|VACUUM_REGION__interface": {
    "band": null,
    "entities": ["VACUUM_REGION", "substrate"],
    "face_sides": null,
-   "group": "SA::substrate|VACUUM_REGION::interface",
+   "group": "SA::substrate|VACUUM_REGION__interface",
    "interface_type": "SA",
    "shared_face_group": null,
    "side": null
@@ -41,15 +41,15 @@
  },
  "unions": {
   "interface_types": {
-   "EXT": ["EXT::VACUUM_REGION::bottom", "EXT::VACUUM_REGION::sidewall", "EXT::VACUUM_REGION::top"],
-   "MA": ["MA::ground_0000::sidewall", "MA::ground_0000::top", "MA::pad::sidewall", "MA::pad::top::band=0", "MA::pad::top::band=1", "MA::pad::top::band=2"],
-   "MS": ["MS::ground_0000::bottom", "MS::pad::bottom"],
+   "EXT": ["EXT::VACUUM_REGION__bottom", "EXT::VACUUM_REGION__sidewall", "EXT::VACUUM_REGION__top"],
+   "MA": ["MA::ground_0000__sidewall", "MA::ground_0000__top", "MA::pad__sidewall", "MA::pad__top::band=0", "MA::pad__top::band=1", "MA::pad__top::band=2"],
+   "MS": ["MS::ground_0000__bottom", "MS::pad__bottom"],
    "PORT": ["PORT::PORT_SHEET__P1__0000"],
-   "SA": ["SA::substrate|VACUUM_REGION::interface", "SA::substrate|VACUUM_REGION::sidewall"]
+   "SA": ["SA::substrate|VACUUM_REGION__interface", "SA::substrate|VACUUM_REGION__sidewall"]
   },
   "nets": {
-   "G": ["MA::ground_0000::sidewall", "MA::ground_0000::top", "MS::ground_0000::bottom"],
-   "P": ["MA::pad::sidewall", "MA::pad::top::band=0", "MA::pad::top::band=1", "MA::pad::top::band=2", "MS::pad::bottom"]
+   "G": ["MA::ground_0000__sidewall", "MA::ground_0000__top", "MS::ground_0000__bottom"],
+   "P": ["MA::pad__sidewall", "MA::pad__top::band=0", "MA::pad__top::band=1", "MA::pad__top::band=2", "MS::pad__bottom"]
   }
  }
 }

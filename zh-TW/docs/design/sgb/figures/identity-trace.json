@@ -9,11 +9,11 @@
  "schema": "scgsim.sgb.sidecar.v2",
  "step1_palace_attribute": {
   "attribute": 10,
-  "resolved_name": "MA::pad::top::band=2",
+  "resolved_name": "MA::pad__top::band=2",
   "source": "sidecar: physical_groups[*].tag"
  },
  "step2_physical_group": {
-  "name": "MA::pad::top::band=2",
+  "name": "MA::pad__top::band=2",
   "record": {
    "adjacent_domains": [
     {
@@ -57,7 +57,7 @@
     "pad"
    ],
    "face_sides": null,
-   "group": "MA::pad::top::band=2",
+   "group": "MA::pad__top::band=2",
    "interface_type": "MA",
    "shared_face_group": null,
    "side": null
@@ -69,7 +69,7 @@
    "native_tag": 32,
    "record": {
     "face_kind": "top",
-    "group": "MA::pad::top::band=2",
+    "group": "MA::pad__top::band=2",
     "kind": "horizontal",
     "negative_volume": "vol:d78b0b17d727ed12",
     "positive_volume": "vol:89bd58ad80d63355",
@@ -714,7 +714,7 @@
    "native_tag": 39,
    "record": {
     "face_kind": "top",
-    "group": "MA::pad::top::band=2",
+    "group": "MA::pad__top::band=2",
     "kind": "horizontal",
     "negative_volume": "vol:d78b0b17d727ed12",
     "positive_volume": "vol:89bd58ad80d63355",
@@ -990,7 +990,7 @@
   }
  ],
  "alt_group": {
-  "name": "MA::pad::top::band=0",
+  "name": "MA::pad__top::band=0",
   "face": "f:44fd2887758ead3c",
   "sources_lineage": [
    "band_pad_top",
@@ -1459,7 +1459,7 @@
   ]
  },
  "wall": {
-  "name": "MA::pad::sidewall",
+  "name": "MA::pad__sidewall",
   "face": "f:26d14ad67f1ad69b",
   "z_range": [
    "0",
@@ -1539,7 +1539,7 @@
  "walls_with_port_membership": [
   {
    "face": "f:5d0c9ae9fd6baca6",
-   "group": "MA::ground::sidewall",
+   "group": "MA::ground__sidewall",
    "membership": {
     "ground": 1.0,
     "p1": 0.083333333
@@ -1547,7 +1547,7 @@
   },
   {
    "face": "f:d9d24cf3f5dc840e",
-   "group": "MA::pad::sidewall",
+   "group": "MA::pad__sidewall",
    "membership": {
     "p1": 0.208333333,
     "pad": 1.0
@@ -1573,7 +1573,7 @@
   "distance_to_support_um_at_midpoint": 0.5,
   "support_curve": "band_pad_top/ring0/edge0"
  },
- "model_digest": "model:80b075081bd167aa",
+ "model_digest": "model:ea7f893fddc6733c",
  "counts": {
   "vertices": 321,
   "edges": 274,

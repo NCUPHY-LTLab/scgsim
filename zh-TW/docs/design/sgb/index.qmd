@@ -41,12 +41,12 @@ SGB 從這五個 prism 推導出下面的實體模型（Route B）。為了讓�
 
 1. **Topology**：由 vertex、edge、face、shell 與 volume 組成，每一個共用邊界只存在一份。相鄰的 volume 共用它們之間的 face 與 edge。
 2. **Semantic label**：每個 cell 的材料、擁有者（Net 或 port）、interface 種類，以及 Surface EPR 的 band。cell 與 BREP face 的差別見詞彙表。
-3. **Identity**：每個實體有一個 semantic 名稱（例如 `MA::pad::top::band=2`）與一個依內容定址的 atomic id，並附有回到產生它的來源曲線的 lineage。
+3. **Identity**：每個實體有一個 semantic 名稱（例如 `MA::pad__top::band=2`）與一個依內容定址的 atomic id，並附有回到產生它的來源曲線的 lineage。
 4. **CAD 檔案與 sidecar**：直接由 topology 寫出的 BREP 與 XAO 檔案，不經任何 Boolean 運算；以及一個 JSON **sidecar**，記錄每個 native 實體對應的規劃 id、physical group、lineage 與依面積加權的 membership。
 
 無論哪一個 solver 使用，這些事實都相同。Palace 透過 Gmsh 讀取 XAO，並由 Gmsh 產生 mesh；AEDT 階段之後會讀取同樣的 solid（見 [Emission](emission.qmd)）。
 
-production 的 group 名稱依決策 D5 以 Entity 歸屬，形式為 `<kind>::<entity>::<face kind>[::band=k]`（例如 pad 的頂面是 `MA::pad::top`，有 inset band 時是 `MA::pad::top::band=2`；有 band 的介面另帶高度，見 [identity](identity.qmd#band-group-names)），完整說明見 [Route](routes.qmd) 與[設計決議](decisions.qmd#d5)。
+production 的 group 名稱依決策 D5 以 Entity 歸屬，形式為 `<kind>::<entity>__<face kind>[::band=k]`（例如 pad 的頂面是 `MA::pad__top`，有 inset band 時是 `MA::pad__top::band=2`；face kind 以雙底線接在 entity 後面，命名規則見 [identity](identity.qmd#band-group-names)），完整說明見 [Route](routes.qmd) 與[設計決議](decisions.qmd#d5)。
 
 ### 如何檢查結果
 
@@ -187,14 +187,14 @@ flowchart TB
 | **Wall** | 沿著 slab edge、位於兩個 slab label 不同的 cell 之間的垂直 face。 | [Assembly](assembly.qmd) |
 | **Shell** | 圍出一個 volume 的封閉水平 face 與 wall 集合；帶有內部空洞的 volume 擁有不只一個 shell。 | [Assembly](assembly.qmd) |
 | **Volume** | 同一個 domain（材料相同且擁有它的 Entity 相同）的連通區域，由 shell 圍出。 | [Assembly](assembly.qmd) |
-| **Semantic identity** | 由 label 推得的名稱，不受無關修改影響，例如 `MA::pad::top::band=2`。 | [Identity](identity.qmd) |
+| **Semantic identity** | 由 label 推得的名稱，不受無關修改影響，例如 `MA::pad__top::band=2`。 | [Identity](identity.qmd) |
 | **Atomic identity** | vertex、edge、face 或 volume 依內容定址的 id；相同輸入無論 worker 數或 tile 配置為何，都得到相同的 id。 | [Identity](identity.qmd) |
 | **Lineage** | 記錄 edge 或 face 回到其 carrier 與來源 entity 的路徑，合併後的 face 另附依面積加權的 membership。 | [Identity](identity.qmd) |
 | **Membership** | 對單一 face 而言，每個貢獻的來源 entity 其 footprint 所覆蓋的面積比例（wall 則是底邊長度的比例）。各比例不互斥，總和可以大於 1。Entity 是 lineage，不是「每個 entity 都有各自量測值」的承諾。 | [Identity](identity.qmd) |
 | **Physical group** | 交給 mesher 與 solver 的、已命名的一組已 emit 的 face 或 volume。每個已 emit 的實體恰好屬於一個 primary group；像「Net X 的所有導體表面」這種聯集，是 group 名稱的清單，絕不是互相重疊的 group。native tag 依排序後的名稱編號，不是 identity。 | [Identity](identity.qmd)、[Emission](emission.qmd) |
 | **Sidecar** | 與 BREP/XAO 檔案並列寫出的 JSON 檔（production 格式 `scgsim.sgb.sidecar.v2`，附 JSON Schema）：native tag 對應的規劃 id、physical group 與其聯集、embedded face、refinement curve、Surface EPR row、曲面 wall、mesh feature（幾何事實）、計數與 lineage。欄位見[使用契約](consumer-contract.qmd#sidecar)。 | [Emission](emission.qmd) |
 | **Feature size** | face 的寬度，定義為兩條互不相接的邊界 edge 之間的最小距離，在精確的 carrier 上量測（含圓弧）；sliver 報告用它衡量 face 有多薄。 | [Sliver](slivers.qmd) |
-| **MA / MS / SA** | interface 種類的縮寫：MA 是 metal–vacuum（金屬與真空之間），MS 是 metal–substrate（金屬與基板之間），SA 是 substrate–vacuum（基板與真空之間，也就是 gap 表面）。它們是 Surface EPR 的 row 所用的分類，也出現在 physical group 名稱中（例如 `MA::pad::top`）。見 [概念：geometry](../../concepts/geometry.qmd) 與 [Inset imprint](inset-imprint.qmd)。 | [Identity](identity.qmd) |
+| **MA / MS / SA** | interface 種類的縮寫：MA 是 metal–vacuum（金屬與真空之間），MS 是 metal–substrate（金屬與基板之間），SA 是 substrate–vacuum（基板與真空之間，也就是 gap 表面）。它們是 Surface EPR 的 row 所用的分類，也出現在 physical group 名稱中（例如 `MA::pad__top`）。見 [概念：geometry](../../concepts/geometry.qmd) 與 [Inset imprint](inset-imprint.qmd)。 | [Identity](identity.qmd) |
 | **Net / Entity** | Entity 是元件中一個有名字的來源形狀（例如 pad）；Net 是形成同一條電氣導體的一組 Entity。定義見 [概念：geometry](../../concepts/geometry.qmd#entity-occurrence-and-net)。 | [Route](routes.qmd) |
 | **Route A / B / C** | 三種 labelling policy：Route A 把金屬當成零厚度的 sheet；Route B 把有限厚度金屬的 volume 排除，只留下邊界；Route C 保留導體 volume 並在內部做 mesh。見 [Route](routes.qmd)。 | [Route](routes.qmd) |
 | **Strict mode** | 選用的 production 設定：在已安裝 OCP 綁定時，對寫出的檔案執行 OpenCASCADE 的有效性檢查，這是每次 build 都會執行的 structural 檢查之外的額外一層。 | [Validation](validation.qmd) |
@@ -220,7 +220,7 @@ flowchart TB
 規劃與實際輸出的差，可以逐項對上（對這五個案例重建 topology 並檢查）：
 
 - **Vertex：** 圓弧 edge 在規劃中各帶一個只用來記錄圓心的 vertex，不寫出。規劃的 vertex 數減去圓弧 edge 數（sidecar 的 `counts.arcs`：依欄位順序為 10、5、10、85、0），恰好等於寫出的數量。
-- **Face 與 edge：** 不圍住任何已 emit volume 的 face 不寫出，只屬於它們的 edge 也不寫出。Route A 與 Route C 沒有這類 face。`pad_in_ground_B` 與 `pad_in_ground_B_bands` 各有 4 個（全是 `EXT::ground::sidewall`，ground volume 在晶片邊緣的 wall），只屬於它們的有 4 條垂直 edge。`airbridge_B` 有 10 個：6 個是兩塊 ground 在晶片邊緣的 `EXT::*::sidewall`，4 個是被排除的導體 Entity 之間的 `MM::*::interface`（ground 與 post、deck 與 post），只屬於它們的有 4 條垂直 edge。
+- **Face 與 edge：** 不圍住任何已 emit volume 的 face 不寫出，只屬於它們的 edge 也不寫出。Route A 與 Route C 沒有這類 face。`pad_in_ground_B` 與 `pad_in_ground_B_bands` 各有 4 個（全是 `EXT::ground__sidewall`，ground volume 在晶片邊緣的 wall），只屬於它們的有 4 條垂直 edge。`airbridge_B` 有 10 個：6 個是兩塊 ground 在晶片邊緣的 `EXT::*__sidewall`，4 個是被排除的導體 Entity 之間的 `MM::*__interface`（ground 與 post、deck 與 post），只屬於它們的有 4 條垂直 edge。
 - **Volume：** `airbridge_B` 規劃 7 個 volume，因為 D5 之後每個導體 Entity 各自一個 volume（兩塊 ground、兩根 post、deck、substrate、vacuum）；輸出的是 substrate 與 vacuum。
 
 最後一列是 `ValidationReport` 記錄的檢查數。每個範例寫出後都通過 `verify_loaded` 與 OCCT 檢查（見上文 catalogue 報告）。

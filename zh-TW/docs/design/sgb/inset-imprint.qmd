@@ -168,7 +168,7 @@ running example 的 pad 有 45° 的 chamfer、一個 reflex notch、一個 roun
 
 {{< askr-chart-view src="figures/inset-bands-pad.html" label="檢視 band（用按鈕放大 notch、hole 與 corner）" >}}
 
-每個 band 由一個或多個 cell 組成，輸出後成為 BREP face 與一個 physical group，名稱來自 label（production 中 Route A 的 sheet 為 `pad::band=2`，Route B 的 top 與 bottom face 為 `MA::pad::top::band=2` 與 `MS::pad::bottom::band=2`，gap 為 <code>SA::substrate&#124;vacuum::interface::z=0.0::band=0</code>，介面的名稱帶高度，規則見 [identity](identity.qmd#band-group-names)）。下表是 Route A 範例（production 的 `pad_in_ground_A_bands`）；面積由精確 arc 計算，是後面 KLayout 比較所用的數字：
+每個 band 由一個或多個 cell 組成，輸出後成為 BREP face 與一個 physical group，名稱來自 label（production 中 Route A 的 sheet 為 `pad::band=2`，Route B 的 top 與 bottom face 為 `MA::pad__top::band=2` 與 `MS::pad__bottom::band=2`，gap 為 <code>SA::substrate&#124;vacuum__interface::band=0</code>，名稱不帶高度，規則見 [identity](identity.qmd#band-group-names)）。下表是 Route A 範例（production 的 `pad_in_ground_A_bands`）；面積由精確 arc 計算，是後面 KLayout 比較所用的數字：
 
 ::: {.askr-table-compact .askr-table-numeric}
 | Support surface | Band | Faces | 面積 (µm²) | Band ≥ k 的聯集，「$R_{m_k}$」(µm²) |
@@ -248,7 +248,7 @@ $Q(\ge m_1)$、$Q(\ge m_2)$、$Q(\ge m_3)$ 是累積且巢狀的：每一個都�
 | $\ge m_3$ | 2 µm | `band=3`（14） |
 :::
 
-Sidecar 的 `surface_epr_rows` 把 sheet 的 Surface EPR row `MA::pad::sheet::band=k` 與 `MS::pad::sheet::band=k` 都對到 `pad::band=k`（pad 上方是 vacuum、下方是 substrate，所以兩個 row 都存在；兩列的 `shared_face_group` 相同，`face_sides` 逐 face 列出積分的一側，`side` 分別是 `above` 與 `below`。sheet 兩側都是 vacuum 時只有 MA row），其他有 band 的 group 則對到它自己。`unions.nets.pad` 列出四個 band group，所以 pad sheet 未加 mask 的 loss 就是對它們全部加總；這就是 band 加起來等於 baseline 的一致性檢查。Attribute 的數字依排序後的 group 名稱發放，加入 group 就會位移；請儲存 group 名稱（見 [Identity](identity.qmd)）。
+Sidecar 的 `surface_epr_rows` 把 sheet 的 Surface EPR row `MA::pad__sheet::band=k` 與 `MS::pad__sheet::band=k` 都對到 `pad::band=k`（pad 上方是 vacuum、下方是 substrate，所以兩個 row 都存在；兩列的 `shared_face_group` 相同，`face_sides` 逐 face 列出積分的一側，`side` 分別是 `above` 與 `below`。sheet 兩側都是 vacuum 時只有 MA row），其他有 band 的 group 則對到它自己。`unions.nets.pad` 列出四個 band group，所以 pad sheet 未加 mask 的 loss 就是對它們全部加總；這就是 band 加起來等於 baseline 的一致性檢查。Attribute 的數字依排序後的 group 名稱發放，加入 group 就會位移；請儲存 group 名稱（見 [Identity](identity.qmd)）。
 
 ## Port 不移動 band
 
@@ -279,8 +279,8 @@ Band **逐 support face** 產生：
 ![Band 的位置。Route A 每個 band 一個 sheet face。Route B 的有限厚度金屬 prism，其 top face（MA）與 bottom face（MS）各自獨立切 band；side wall 在 v1 不切 band。Conceptual 示意圖。](figures/inset-routes-section.svg){#fig-routes fig-alt="剖面圖：Route A 是基板上的一層有 band 的薄 sheet；Route B 是上下表面都有 band 的金屬塊。"}
 
 - **Route A。** sheet 的 face 依兩側的鄰居可同時是 metal–vacuum 與 metal–substrate。它承載 band，並以 face 命名為 `<entity>::band=k`；Surface EPR 的 MA row（某個 face 的某一側是 vacuum 時才有）與 MS row（某個 face 的某一側是 dielectric 時才有）都參照這一個 group（`surface_epr_rows`）。
-- **Route B，top face。** 位於 $z = 0.2$ µm 的 family `band_pad_top` 產生 `MA::pad::top::band=k`。
-- **Route B，bottom face。** 位於 $z = 0$ 的 family `band_pad_bottom` 產生 `MS::pad::bottom::band=k`。Route B 的範例兩個 face 都切 band：規劃 60 個 face、274 條 edge、321 個 vertex，23 個 group，validation 通過（31 項），`unions.nets.pad` 列出八個 band group 與 `MA::pad::sidewall`（side wall，不切 band）；port 在 z = 0 的 support plane，是 substrate 與 vacuum 之間的一個 face，不在金屬的 top 或 bottom face 上，也不移動任何 band。
+- **Route B，top face。** 位於 $z = 0.2$ µm 的 family `band_pad_top` 產生 `MA::pad__top::band=k`。
+- **Route B，bottom face。** 位於 $z = 0$ 的 family `band_pad_bottom` 產生 `MS::pad__bottom::band=k`。Route B 的範例兩個 face 都切 band：規劃 60 個 face、274 條 edge、321 個 vertex，23 個 group，validation 通過（31 項），`unions.nets.pad` 列出八個 band group 與 `MA::pad__sidewall`（side wall，不切 band）；port 在 z = 0 的 support plane，是 substrate 與 vacuum 之間的一個 face，不在金屬的 top 或 bottom face 上，也不移動任何 band。
 - **Side wall** 不在 v1 範圍：side wall 的 band 會是 wall face 上的第三個 family，目前不產生。
 
 ## Solver 收到什麼
@@ -350,10 +350,10 @@ mesh 檢查（含 band 的 Route A 模型；最大 40 µm，band 曲線附近 1 
 ::: {.askr-table-compact .askr-table-numeric}
 | Band group | Faces | Triangles | 兩側各自的 tet | 全部被 tet 共用 | Centroid 在 band 內 |
 |---|---|---|---|---|---|
-| <code>SA::substrate&#124;vacuum::interface::z=0.0::band=0</code> | 3 | 1857 | 1857 + 1857 | 是 | 是 |
-| <code>SA::substrate&#124;vacuum::interface::z=0.0::band=1</code> | 3 | 1904 | 1904 + 1904 | 是 | 是 |
-| <code>SA::substrate&#124;vacuum::interface::z=0.0::band=2</code> | 3 | 3692 | 3692 + 3692 | 是 | 是 |
-| <code>SA::substrate&#124;vacuum::interface::z=0.0::band=3</code> | 2 | 3672 | 3672 + 3672 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum__interface::band=0</code> | 3 | 1857 | 1857 + 1857 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum__interface::band=1</code> | 3 | 1904 | 1904 + 1904 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum__interface::band=2</code> | 3 | 3692 | 3692 + 3692 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum__interface::band=3</code> | 2 | 3672 | 3672 + 3672 | 是 | 是 |
 | `pad::band=0` | 2 | 790 | 790 + 790 | 是 | 是 |
 | `pad::band=1` | 2 | 807 | 807 + 807 | 是 | 是 |
 | `pad::band=2` | 2 | 1591 | 1591 + 1591 | 是 | 是 |

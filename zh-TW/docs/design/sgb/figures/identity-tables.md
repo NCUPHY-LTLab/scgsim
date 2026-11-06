@@ -2,18 +2,18 @@
 
 | tiles | workers | PYTHONHASHSEED | pad_in_ground B with bands | random layout (60 features, seed 5, Route B) |
 |---|---|---|---|---|
-| 1x1 | 1 | 0 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
-| 1x1 | 1 | 1 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
-| 1x1 | 1 | 12345 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
-| 2x2 | 1 | 0 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
-| 2x2 | 1 | 1 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
-| 2x2 | 1 | 12345 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
-| 3x3 | 2 | 0 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
-| 3x3 | 2 | 1 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
-| 3x3 | 2 | 12345 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
-| 4x4 | 4 | 0 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
-| 4x4 | 4 | 1 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
-| 4x4 | 4 | 12345 | `model:80b075081bd167aa` | `model:c0b6c914cb025f97` |
+| 1x1 | 1 | 0 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
+| 1x1 | 1 | 1 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
+| 1x1 | 1 | 12345 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
+| 2x2 | 1 | 0 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
+| 2x2 | 1 | 1 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
+| 2x2 | 1 | 12345 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
+| 3x3 | 2 | 0 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
+| 3x3 | 2 | 1 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
+| 3x3 | 2 | 12345 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
+| 4x4 | 4 | 0 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
+| 4x4 | 4 | 1 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
+| 4x4 | 4 | 12345 | `model:ea7f893fddc6733c` | `model:c10a91b4661ff323` |
 
 distinct digests per model: 1 and 1
 
@@ -30,26 +30,26 @@ groups in only one of the two builds: PORT::p1
 
 | group | members with port | members without port | identical members |
 |---|---|---|---|
-| `EXT::substrate::bottom` | 1 | 1 | True |
-| `EXT::substrate::sidewall` | 4 | 4 | True |
-| `EXT::vacuum::sidewall` | 4 | 4 | True |
-| `EXT::vacuum::top` | 1 | 1 | True |
-| `MA::ground::sidewall` | 4 | 4 | False |
-| `MA::ground::top` | 1 | 1 | True |
-| `MA::pad::sidewall` | 14 | 14 | False |
-| `MA::pad::top::band=0` | 2 | 2 | True |
-| `MA::pad::top::band=1` | 2 | 2 | True |
-| `MA::pad::top::band=2` | 2 | 2 | True |
-| `MA::pad::top::band=3` | 1 | 1 | True |
-| `MS::ground::bottom` | 1 | 1 | False |
-| `MS::pad::bottom::band=0` | 2 | 2 | False |
-| `MS::pad::bottom::band=1` | 2 | 2 | True |
-| `MS::pad::bottom::band=2` | 2 | 2 | True |
-| `MS::pad::bottom::band=3` | 1 | 1 | True |
+| `EXT::substrate__bottom` | 1 | 1 | True |
+| `EXT::substrate__sidewall` | 4 | 4 | True |
+| `EXT::vacuum__sidewall` | 4 | 4 | True |
+| `EXT::vacuum__top` | 1 | 1 | True |
+| `MA::ground__sidewall` | 4 | 4 | False |
+| `MA::ground__top` | 1 | 1 | True |
+| `MA::pad__sidewall` | 14 | 14 | False |
+| `MA::pad__top::band=0` | 2 | 2 | True |
+| `MA::pad__top::band=1` | 2 | 2 | True |
+| `MA::pad__top::band=2` | 2 | 2 | True |
+| `MA::pad__top::band=3` | 1 | 1 | True |
+| `MS::ground__bottom` | 1 | 1 | False |
+| `MS::pad__bottom::band=0` | 2 | 2 | False |
+| `MS::pad__bottom::band=1` | 2 | 2 | True |
+| `MS::pad__bottom::band=2` | 2 | 2 | True |
+| `MS::pad__bottom::band=3` | 1 | 1 | True |
 | `PORT::p1` | 1 | None | False |
-| `SA::substrate|vacuum::interface::z=0.0::band=0` | 3 | 3 | False |
-| `SA::substrate|vacuum::interface::z=0.0::band=1` | 3 | 3 | False |
-| `SA::substrate|vacuum::interface::z=0.0::band=2` | 3 | 3 | False |
-| `SA::substrate|vacuum::interface::z=0.0::band=3` | 2 | 2 | False |
+| `SA::substrate|vacuum__interface::band=0` | 3 | 3 | False |
+| `SA::substrate|vacuum__interface::band=1` | 3 | 3 | False |
+| `SA::substrate|vacuum__interface::band=2` | 3 | 3 | False |
+| `SA::substrate|vacuum__interface::band=3` | 2 | 2 | False |
 | `substrate` | 1 | 1 | True |
 | `vacuum` | 1 | 1 | True |

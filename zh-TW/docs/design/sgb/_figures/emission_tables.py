@@ -60,11 +60,11 @@ def _tag_rows(topo, plan, sidecar) -> list[list[str]]:
     for i in range(len(plan.face_ids)):
         first_face_of.setdefault(group_of[(2, i)][0], i)
     for name in (
-        "SA::substrate|vacuum::interface",
-        "MS::pad::bottom",
-        "MA::pad::top",
+        "SA::substrate|vacuum__interface",
+        "MS::pad__bottom",
+        "MA::pad__top",
         "PORT::p1",
-        "MA::ground::top",
+        "MA::ground__top",
     ):
         picks.append(
             (

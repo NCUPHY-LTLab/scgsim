@@ -59,7 +59,7 @@ Overlap 的優先權不在這個函式的引數裡：同一個 Net 的兩個 Ent
 ::: {.askr-table-compact}
 | Request | 欄位 | 結果 |
 |---|---|---|
-| `InsetRequest(request_id, support, margins_um, interface=None)` | `support` 是下面三種之一；`margins_um` 是嚴格遞增的正數（單位 µm，在格點上）；`interface` 選填，聲明指定 face 預期的 interface 種類，找不到該種類的 cell 則 build 失敗（按種類的 support 不用它） | 每個 face 得到 $K+1$ 個 band $B_0 \dots B_K$，各成為 `…::<face kind>::band=k` 的 primary group |
+| `InsetRequest(request_id, support, margins_um, interface=None)` | `support` 是下面三種之一；`margins_um` 是嚴格遞增的正數（單位 µm，在格點上）；`interface` 選填，聲明指定 face 預期的 interface 種類，找不到該種類的 cell 則 build 失敗（按種類的 support 不用它） | 每個 face 得到 $K+1$ 個 band $B_0 \dots B_K$，各成為 `…__<face kind>::band=k` 的 primary group |
 | `InterfaceSurfaces(interface_type, face_kinds=None, exclude_entity_ids=())` | `interface_type` 為 `"MA"`、`"MS"` 或 `"SA"`；`face_kinds` 取自 `"sheet"`、`"top"`、`"bottom"`、`"interface"`，`None` 是所有可以切 band 的種類；`exclude_entity_ids` 略過這些 Entity 的 face | **這個種類的每一個 face**：SGB 自己找出 face，沒有 gap edge 的 face 略過並記在 sidecar（見[兩種寫法](inset-imprint.qmd#request-forms)） |
 | `ConductorSurface(entity_id, side)` | `side` 為 `"sheet"`（Route A 的 sheet；face 的哪一側是 vacuum、哪一側是 dielectric，決定它有 MA、MS 或兩個 row）、`"top"`（對 vacuum，`MA::…`）或 `"bottom"`（對 dielectric，`MS::…`） | 有限導體的側壁 band 不在第一版 |
 | `SolutionInterface(first_entity_id, second_entity_id, z_um=None)` | 兩個 solution region 之間、沒有導體的介面（gap：`SA::…`）；兩者在多個高度相遇時用 `z_um` 指定 | |
@@ -139,7 +139,7 @@ sidecar 是一個 JSON 檔：頂層的鍵依字母排序、每個頂層鍵佔一
 | `binding.ids_by_tag`、`counts` | 規劃 id 與 native tag 的對應（維度 `"0"` 到 `"3"`）；各種數量，含 `volumes_total`（包含未 emit 的 volume） | Palace：取代 live group 的 entity tag；AEDT：各 solid 的 face 順序 |
 | `physical_groups` | 每個 primary group（名稱為鍵）：`dim`、`tag`、`ids`、`native_tags`；surface 另有 `interface_type`、`entities`、`net`、`face_kind`（單一值）、`adjacent_domains`、`adjacent_volumes`、`band`、`area_um2`；volume 另有 `kind`（`vacuum`、`dielectric`、`conductor`）、`material` | 兩者；最重要的欄位 |
 | `unions` | `interface_types`（`MA` → group 清單…；Route A 的 `SHEET` group 同時列在 `SHEET`、`MA` 與 `MS`）與 `nets`（Net → 該 Net 外露導體表面的 group 清單） | 報告；Electrostatic 的 terminal 與 ground |
-| `surface_epr_rows` | 每個 Surface-EPR row（例如 `MA::pad::top::band=2`）與承載它的 group、entity、band，以及 `side`、`face_sides` 與 `shared_face_group`（sheet 的 row 才有值，其他 row 為 `null`；`face_sides` 是 face id 對 `above`、`below` 或 `both` 的對照，只列出該 row 實際積分的 face，`side` 是它們共同的值，不一致時為 `mixed`） | Palace 的 band 選取；internal boundary 的 crack 決定 |
+| `surface_epr_rows` | 每個 Surface-EPR row（例如 `MA::pad__top::band=2`）與承載它的 group、entity、band，以及 `side`、`face_sides` 與 `shared_face_group`（sheet 的 row 才有值，其他 row 為 `null`；`face_sides` 是 face id 對 `above`、`below` 或 `both` 的對照，只列出該 row 實際積分的 face，`side` 是它們共同的值，不一致時為 `mixed`） | Palace 的 band 選取；internal boundary 的 crack 決定 |
 | `mesh_features` | `film_sidewall`、`band_boundary`、`arc`、`refinement_curve`、`port_edge` 五種幾何事實：edge id 與 native tag、來源（entity、request 或 port 的 id），以及該種的 `facts`（薄膜厚度、band 的 margin、圓弧半徑）；沒有尺寸 | mesher 的尺寸決定（Palace） |
 | `volumes`、`faces` | 每個規劃的 volume：entity、kind、material、Net、是否 `emitted`、group、`volume_um3`、`aedt_name`；每個規劃的 face：group、`kind`、`face_kind`、`z_um`、兩側的 volume | AEDT 的 ledger；Palace 的相鄰關係 |
 | `embedded_faces`、`refinement_edges` | `(face, host volume)` 與 `(edge, host face)`：XAO 無法攜帶、mesher 必須重新套用的 embedding | Palace |
@@ -164,7 +164,7 @@ physical group 是核心。下面是一個 band 的 top face、pad 的 bottom fa
 
 - `entities` 在導體 surface 上是導體 Entity（`pad`）；在 solution region 之間的 `SA` 上是被隔開的兩個 region；在 port 上是 port sheet 自己的 id，port 所接的兩個導體另在 `ports[*].host_entity_ids`。
 - `adjacent_domains` 直接給出兩側的 solution region 與它的 `kind`、`material`，不需要另外查表。
-- `face_kind` 是單一值，也寫在 group 名稱裡：`<kind>::<entity>::<top|bottom|sidewall|sheet|interface>[::band=k]`，所以一個 group 不會混合種類，依 face 種類過濾只需看名稱或這個欄位。有 band 的 `interface` 名稱另帶高度（`...::interface::z=<z>::band=k`），規則見 [identity](identity.qmd#band-group-names)。範例中 ground 的 top 與 sidewall 是兩個 group（`MA::ground_0000::top` 與 `MA::ground_0000::sidewall`），見[對應表](consumer-mapping.qmd#aedt-ledger)的逐 group 表。port 例外：它永遠是一個 sheet，`face_kind` 為 `port`，名稱不帶 face kind 與 band。若某個 group 混合了種類，build 以 `SgbError` 停止。
+- `face_kind` 是單一值，也寫在 group 名稱裡：`<kind>::<entity>__<top|bottom|sidewall|sheet|interface>[::band=k]`，所以一個 group 不會混合種類，依 face 種類過濾只需看名稱或這個欄位。face kind 以雙底線接在 entity 後面；兩個 family 共用同一個 band `interface` group 時，才在 `interface` 後再接 `__top` 或 `__bottom`（`face_kind` 仍是 `interface`），規則見 [identity](identity.qmd#band-group-names)。範例中 ground 的 top 與 sidewall 是兩個 group（`MA::ground_0000__top` 與 `MA::ground_0000__sidewall`），見[對應表](consumer-mapping.qmd#aedt-ledger)的逐 group 表。port 例外：它永遠是一個 sheet，`face_kind` 為 `port`，名稱不帶 face kind 與 band。若某個 group 混合了種類，build 以 `SgbError` 停止。
 - `band` 帶 `family`（對應 `insets` 中的 family id：指定 face 的 `InsetRequest.request_id`，或按種類展開後的 id）與 `index`。band 0 最靠近邊緣，最大的 index 是最內側的區域，這個範例中三個 band 的面積是 39、37 與 324 µm²，總和等於 pad 的 400 µm²。
 
 聯集、Surface-EPR row 與 inset family：

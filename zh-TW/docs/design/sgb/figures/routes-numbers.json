@@ -7,7 +7,7 @@
     "groups": {
      "None": 1,
      "PORT::PORT_SHEET__P1__0000": 1,
-     "SA::substrate|VACUUM_REGION::interface": 1,
+     "SA::substrate|VACUUM_REGION__interface": 1,
      "ground_0000": 1,
      "pad": 1
     },
@@ -18,11 +18,11 @@
     "cells": 5,
     "edges": 23,
     "groups": {
-     "MS::ground_0000::bottom": 1,
-     "MS::pad::bottom": 1,
+     "MS::ground_0000__bottom": 1,
+     "MS::pad__bottom": 1,
      "None": 1,
      "PORT::PORT_SHEET__P1__0000": 1,
-     "SA::substrate|VACUUM_REGION::interface": 1
+     "SA::substrate|VACUUM_REGION__interface": 1
     },
     "panel": "Route B, level z = 0 (metal bottom, port plane)",
     "plane": "level[0]"
@@ -31,8 +31,8 @@
     "cells": 4,
     "edges": 21,
     "groups": {
-     "MA::ground_0000::top": 1,
-     "MA::pad::top": 1,
+     "MA::ground_0000__top": 1,
+     "MA::pad__top": 1,
      "None": 2
     },
     "panel": "Route B, level z = 0.2 (metal top)",
@@ -105,18 +105,18 @@
    }
   ],
   "primary_groups_faces": {
-   "EXT::VACUUM_REGION::bottom": 1,
-   "EXT::VACUUM_REGION::sidewall": 4,
-   "EXT::VACUUM_REGION::top": 1,
-   "MA::ground_0000::sidewall": 11,
-   "MA::ground_0000::top": 1,
-   "MA::pad::sidewall": 6,
-   "MA::pad::top": 1,
-   "MS::ground_0000::bottom": 1,
-   "MS::pad::bottom": 1,
+   "EXT::VACUUM_REGION__bottom": 1,
+   "EXT::VACUUM_REGION__sidewall": 4,
+   "EXT::VACUUM_REGION__top": 1,
+   "MA::ground_0000__sidewall": 11,
+   "MA::ground_0000__top": 1,
+   "MA::pad__sidewall": 6,
+   "MA::pad__top": 1,
+   "MS::ground_0000__bottom": 1,
+   "MS::pad__bottom": 1,
    "PORT::PORT_SHEET__P1__0000": 1,
-   "SA::substrate|VACUUM_REGION::interface": 2,
-   "SA::substrate|VACUUM_REGION::sidewall": 4
+   "SA::substrate|VACUUM_REGION__interface": 2,
+   "SA::substrate|VACUUM_REGION__sidewall": 4
   },
   "primary_groups_volumes": {
    "VACUUM_REGION": 1,
@@ -133,36 +133,36 @@
   "request": "refinement curve (32, 55) -> (38, 55) um at z = 0",
   "unions": {
    "EXT": [
-    "EXT::VACUUM_REGION::bottom",
-    "EXT::VACUUM_REGION::sidewall",
-    "EXT::VACUUM_REGION::top"
+    "EXT::VACUUM_REGION__bottom",
+    "EXT::VACUUM_REGION__sidewall",
+    "EXT::VACUUM_REGION__top"
    ],
    "MA": [
-    "MA::ground_0000::sidewall",
-    "MA::ground_0000::top",
-    "MA::pad::sidewall",
-    "MA::pad::top"
+    "MA::ground_0000__sidewall",
+    "MA::ground_0000__top",
+    "MA::pad__sidewall",
+    "MA::pad__top"
    ],
    "MS": [
-    "MS::ground_0000::bottom",
-    "MS::pad::bottom"
+    "MS::ground_0000__bottom",
+    "MS::pad__bottom"
    ],
    "NET::G": [
-    "MA::ground_0000::sidewall",
-    "MA::ground_0000::top",
-    "MS::ground_0000::bottom"
+    "MA::ground_0000__sidewall",
+    "MA::ground_0000__top",
+    "MS::ground_0000__bottom"
    ],
    "NET::P": [
-    "MA::pad::sidewall",
-    "MA::pad::top",
-    "MS::pad::bottom"
+    "MA::pad__sidewall",
+    "MA::pad__top",
+    "MS::pad__bottom"
    ],
    "PORT": [
     "PORT::PORT_SHEET__P1__0000"
    ],
    "SA": [
-    "SA::substrate|VACUUM_REGION::interface",
-    "SA::substrate|VACUUM_REGION::sidewall"
+    "SA::substrate|VACUUM_REGION__interface",
+    "SA::substrate|VACUUM_REGION__sidewall"
    ]
   },
   "validation": {
@@ -261,12 +261,12 @@
    }
   ],
   "primary_groups_faces": {
-   "EXT::VACUUM_REGION::bottom": 1,
-   "EXT::VACUUM_REGION::sidewall": 4,
-   "EXT::VACUUM_REGION::top": 1,
+   "EXT::VACUUM_REGION__bottom": 1,
+   "EXT::VACUUM_REGION__sidewall": 4,
+   "EXT::VACUUM_REGION__top": 1,
    "PORT::PORT_SHEET__P1__0000": 1,
-   "SA::substrate|VACUUM_REGION::interface": 2,
-   "SA::substrate|VACUUM_REGION::sidewall": 4,
+   "SA::substrate|VACUUM_REGION__interface": 2,
+   "SA::substrate|VACUUM_REGION__sidewall": 4,
    "ground_0000": 1,
    "pad": 1
   },
@@ -277,9 +277,9 @@
   "refinement_edges": [],
   "unions": {
    "EXT": [
-    "EXT::VACUUM_REGION::bottom",
-    "EXT::VACUUM_REGION::sidewall",
-    "EXT::VACUUM_REGION::top"
+    "EXT::VACUUM_REGION__bottom",
+    "EXT::VACUUM_REGION__sidewall",
+    "EXT::VACUUM_REGION__top"
    ],
    "MA": [
     "ground_0000",
@@ -299,8 +299,8 @@
     "PORT::PORT_SHEET__P1__0000"
    ],
    "SA": [
-    "SA::substrate|VACUUM_REGION::interface",
-    "SA::substrate|VACUUM_REGION::sidewall"
+    "SA::substrate|VACUUM_REGION__interface",
+    "SA::substrate|VACUUM_REGION__sidewall"
    ],
    "SHEET": [
     "ground_0000",
@@ -393,18 +393,18 @@
    }
   ],
   "primary_groups_faces": {
-   "EXT::VACUUM_REGION::bottom": 1,
-   "EXT::VACUUM_REGION::sidewall": 4,
-   "EXT::VACUUM_REGION::top": 1,
-   "MA::ground_0000::sidewall": 11,
-   "MA::ground_0000::top": 1,
-   "MA::pad::sidewall": 6,
-   "MA::pad::top": 1,
-   "MS::ground_0000::bottom": 1,
-   "MS::pad::bottom": 1,
+   "EXT::VACUUM_REGION__bottom": 1,
+   "EXT::VACUUM_REGION__sidewall": 4,
+   "EXT::VACUUM_REGION__top": 1,
+   "MA::ground_0000__sidewall": 11,
+   "MA::ground_0000__top": 1,
+   "MA::pad__sidewall": 6,
+   "MA::pad__top": 1,
+   "MS::ground_0000__bottom": 1,
+   "MS::pad__bottom": 1,
    "PORT::PORT_SHEET__P1__0000": 1,
-   "SA::substrate|VACUUM_REGION::interface": 2,
-   "SA::substrate|VACUUM_REGION::sidewall": 4
+   "SA::substrate|VACUUM_REGION__interface": 2,
+   "SA::substrate|VACUUM_REGION__sidewall": 4
   },
   "primary_groups_volumes": {
    "VACUUM_REGION": 1,
@@ -413,36 +413,36 @@
   "refinement_edges": [],
   "unions": {
    "EXT": [
-    "EXT::VACUUM_REGION::bottom",
-    "EXT::VACUUM_REGION::sidewall",
-    "EXT::VACUUM_REGION::top"
+    "EXT::VACUUM_REGION__bottom",
+    "EXT::VACUUM_REGION__sidewall",
+    "EXT::VACUUM_REGION__top"
    ],
    "MA": [
-    "MA::ground_0000::sidewall",
-    "MA::ground_0000::top",
-    "MA::pad::sidewall",
-    "MA::pad::top"
+    "MA::ground_0000__sidewall",
+    "MA::ground_0000__top",
+    "MA::pad__sidewall",
+    "MA::pad__top"
    ],
    "MS": [
-    "MS::ground_0000::bottom",
-    "MS::pad::bottom"
+    "MS::ground_0000__bottom",
+    "MS::pad__bottom"
    ],
    "NET::G": [
-    "MA::ground_0000::sidewall",
-    "MA::ground_0000::top",
-    "MS::ground_0000::bottom"
+    "MA::ground_0000__sidewall",
+    "MA::ground_0000__top",
+    "MS::ground_0000__bottom"
    ],
    "NET::P": [
-    "MA::pad::sidewall",
-    "MA::pad::top",
-    "MS::pad::bottom"
+    "MA::pad__sidewall",
+    "MA::pad__top",
+    "MS::pad__bottom"
    ],
    "PORT": [
     "PORT::PORT_SHEET__P1__0000"
    ],
    "SA": [
-    "SA::substrate|VACUUM_REGION::interface",
-    "SA::substrate|VACUUM_REGION::sidewall"
+    "SA::substrate|VACUUM_REGION__interface",
+    "SA::substrate|VACUUM_REGION__sidewall"
    ]
   },
   "validation": {
@@ -541,28 +541,28 @@
    }
   ],
   "primary_groups_faces": {
-   "EXT::VACUUM_REGION::bottom": 1,
-   "EXT::VACUUM_REGION::sidewall": 4,
-   "EXT::VACUUM_REGION::top": 1,
-   "MA::ground_0000::sidewall": 11,
-   "MA::ground_0000::top": 1,
-   "MA::pad::sidewall": 6,
-   "MA::pad::top::band=0": 1,
-   "MA::pad::top::band=1": 1,
-   "MA::pad::top::band=2": 1,
-   "MA::pad::top::band=3": 1,
-   "MS::ground_0000::bottom": 1,
-   "MS::pad::bottom::band=0": 1,
-   "MS::pad::bottom::band=1": 1,
-   "MS::pad::bottom::band=2": 1,
-   "MS::pad::bottom::band=3": 1,
+   "EXT::VACUUM_REGION__bottom": 1,
+   "EXT::VACUUM_REGION__sidewall": 4,
+   "EXT::VACUUM_REGION__top": 1,
+   "MA::ground_0000__sidewall": 11,
+   "MA::ground_0000__top": 1,
+   "MA::pad__sidewall": 6,
+   "MA::pad__top::band=0": 1,
+   "MA::pad__top::band=1": 1,
+   "MA::pad__top::band=2": 1,
+   "MA::pad__top::band=3": 1,
+   "MS::ground_0000__bottom": 1,
+   "MS::pad__bottom::band=0": 1,
+   "MS::pad__bottom::band=1": 1,
+   "MS::pad__bottom::band=2": 1,
+   "MS::pad__bottom::band=3": 1,
    "PORT::PORT_SHEET__P1__0000": 1,
-   "SA::substrate|VACUUM_REGION::interface": 1,
-   "SA::substrate|VACUUM_REGION::interface::z=0.0::band=0": 2,
-   "SA::substrate|VACUUM_REGION::interface::z=0.0::band=1": 2,
-   "SA::substrate|VACUUM_REGION::interface::z=0.0::band=2": 2,
-   "SA::substrate|VACUUM_REGION::interface::z=0.0::band=3": 1,
-   "SA::substrate|VACUUM_REGION::sidewall": 4
+   "SA::substrate|VACUUM_REGION__interface": 1,
+   "SA::substrate|VACUUM_REGION__interface::band=0": 2,
+   "SA::substrate|VACUUM_REGION__interface::band=1": 2,
+   "SA::substrate|VACUUM_REGION__interface::band=2": 2,
+   "SA::substrate|VACUUM_REGION__interface::band=3": 1,
+   "SA::substrate|VACUUM_REGION__sidewall": 4
   },
   "primary_groups_volumes": {
    "VACUUM_REGION": 1,
@@ -572,52 +572,52 @@
   "requests": "bands (0.1, 0.5, 2) um on pad top, pad bottom and the substrate-vacuum gap at z = 0",
   "unions": {
    "EXT": [
-    "EXT::VACUUM_REGION::bottom",
-    "EXT::VACUUM_REGION::sidewall",
-    "EXT::VACUUM_REGION::top"
+    "EXT::VACUUM_REGION__bottom",
+    "EXT::VACUUM_REGION__sidewall",
+    "EXT::VACUUM_REGION__top"
    ],
    "MA": [
-    "MA::ground_0000::sidewall",
-    "MA::ground_0000::top",
-    "MA::pad::sidewall",
-    "MA::pad::top::band=0",
-    "MA::pad::top::band=1",
-    "MA::pad::top::band=2",
-    "MA::pad::top::band=3"
+    "MA::ground_0000__sidewall",
+    "MA::ground_0000__top",
+    "MA::pad__sidewall",
+    "MA::pad__top::band=0",
+    "MA::pad__top::band=1",
+    "MA::pad__top::band=2",
+    "MA::pad__top::band=3"
    ],
    "MS": [
-    "MS::ground_0000::bottom",
-    "MS::pad::bottom::band=0",
-    "MS::pad::bottom::band=1",
-    "MS::pad::bottom::band=2",
-    "MS::pad::bottom::band=3"
+    "MS::ground_0000__bottom",
+    "MS::pad__bottom::band=0",
+    "MS::pad__bottom::band=1",
+    "MS::pad__bottom::band=2",
+    "MS::pad__bottom::band=3"
    ],
    "NET::G": [
-    "MA::ground_0000::sidewall",
-    "MA::ground_0000::top",
-    "MS::ground_0000::bottom"
+    "MA::ground_0000__sidewall",
+    "MA::ground_0000__top",
+    "MS::ground_0000__bottom"
    ],
    "NET::P": [
-    "MA::pad::sidewall",
-    "MA::pad::top::band=0",
-    "MA::pad::top::band=1",
-    "MA::pad::top::band=2",
-    "MA::pad::top::band=3",
-    "MS::pad::bottom::band=0",
-    "MS::pad::bottom::band=1",
-    "MS::pad::bottom::band=2",
-    "MS::pad::bottom::band=3"
+    "MA::pad__sidewall",
+    "MA::pad__top::band=0",
+    "MA::pad__top::band=1",
+    "MA::pad__top::band=2",
+    "MA::pad__top::band=3",
+    "MS::pad__bottom::band=0",
+    "MS::pad__bottom::band=1",
+    "MS::pad__bottom::band=2",
+    "MS::pad__bottom::band=3"
    ],
    "PORT": [
     "PORT::PORT_SHEET__P1__0000"
    ],
    "SA": [
-    "SA::substrate|VACUUM_REGION::interface",
-    "SA::substrate|VACUUM_REGION::interface::z=0.0::band=0",
-    "SA::substrate|VACUUM_REGION::interface::z=0.0::band=1",
-    "SA::substrate|VACUUM_REGION::interface::z=0.0::band=2",
-    "SA::substrate|VACUUM_REGION::interface::z=0.0::band=3",
-    "SA::substrate|VACUUM_REGION::sidewall"
+    "SA::substrate|VACUUM_REGION__interface",
+    "SA::substrate|VACUUM_REGION__interface::band=0",
+    "SA::substrate|VACUUM_REGION__interface::band=1",
+    "SA::substrate|VACUUM_REGION__interface::band=2",
+    "SA::substrate|VACUUM_REGION__interface::band=3",
+    "SA::substrate|VACUUM_REGION__sidewall"
    ]
   },
   "validation": {
@@ -716,18 +716,18 @@
    }
   ],
   "primary_groups_faces": {
-   "EXT::VACUUM_REGION::bottom": 1,
-   "EXT::VACUUM_REGION::sidewall": 4,
-   "EXT::VACUUM_REGION::top": 1,
-   "MA::ground_0000::sidewall": 11,
-   "MA::ground_0000::top": 1,
-   "MA::pad::sidewall": 6,
-   "MA::pad::top": 1,
-   "MS::ground_0000::bottom": 1,
-   "MS::pad::bottom": 1,
+   "EXT::VACUUM_REGION__bottom": 1,
+   "EXT::VACUUM_REGION__sidewall": 4,
+   "EXT::VACUUM_REGION__top": 1,
+   "MA::ground_0000__sidewall": 11,
+   "MA::ground_0000__top": 1,
+   "MA::pad__sidewall": 6,
+   "MA::pad__top": 1,
+   "MS::ground_0000__bottom": 1,
+   "MS::pad__bottom": 1,
    "PORT::PORT_SHEET__P1__0000": 1,
-   "SA::substrate|VACUUM_REGION::interface": 2,
-   "SA::substrate|VACUUM_REGION::sidewall": 4
+   "SA::substrate|VACUUM_REGION__interface": 2,
+   "SA::substrate|VACUUM_REGION__sidewall": 4
   },
   "primary_groups_volumes": {
    "VACUUM_REGION": 1,
@@ -738,36 +738,36 @@
   "refinement_edges": [],
   "unions": {
    "EXT": [
-    "EXT::VACUUM_REGION::bottom",
-    "EXT::VACUUM_REGION::sidewall",
-    "EXT::VACUUM_REGION::top"
+    "EXT::VACUUM_REGION__bottom",
+    "EXT::VACUUM_REGION__sidewall",
+    "EXT::VACUUM_REGION__top"
    ],
    "MA": [
-    "MA::ground_0000::sidewall",
-    "MA::ground_0000::top",
-    "MA::pad::sidewall",
-    "MA::pad::top"
+    "MA::ground_0000__sidewall",
+    "MA::ground_0000__top",
+    "MA::pad__sidewall",
+    "MA::pad__top"
    ],
    "MS": [
-    "MS::ground_0000::bottom",
-    "MS::pad::bottom"
+    "MS::ground_0000__bottom",
+    "MS::pad__bottom"
    ],
    "NET::G": [
-    "MA::ground_0000::sidewall",
-    "MA::ground_0000::top",
-    "MS::ground_0000::bottom"
+    "MA::ground_0000__sidewall",
+    "MA::ground_0000__top",
+    "MS::ground_0000__bottom"
    ],
    "NET::P": [
-    "MA::pad::sidewall",
-    "MA::pad::top",
-    "MS::pad::bottom"
+    "MA::pad__sidewall",
+    "MA::pad__top",
+    "MS::pad__bottom"
    ],
    "PORT": [
     "PORT::PORT_SHEET__P1__0000"
    ],
    "SA": [
-    "SA::substrate|VACUUM_REGION::interface",
-    "SA::substrate|VACUUM_REGION::sidewall"
+    "SA::substrate|VACUUM_REGION__interface",
+    "SA::substrate|VACUUM_REGION__sidewall"
    ]
   },
   "validation": {
@@ -874,18 +874,18 @@
    }
   ],
   "primary_groups_faces": {
-   "EXT::substrate::bottom": 1,
-   "EXT::substrate::sidewall": 4,
-   "EXT::vacuum::sidewall": 4,
-   "EXT::vacuum::top": 1,
-   "MA::ground::sidewall": 5,
-   "MA::ground::top": 1,
-   "MA::pad::sidewall": 15,
-   "MA::pad::top": 1,
-   "MS::ground::bottom": 1,
-   "MS::pad::bottom": 1,
+   "EXT::substrate__bottom": 1,
+   "EXT::substrate__sidewall": 4,
+   "EXT::vacuum__sidewall": 4,
+   "EXT::vacuum__top": 1,
+   "MA::ground__sidewall": 5,
+   "MA::ground__top": 1,
+   "MA::pad__sidewall": 15,
+   "MA::pad__top": 1,
+   "MS::ground__bottom": 1,
+   "MS::pad__bottom": 1,
    "PORT::p1": 1,
-   "SA::substrate|vacuum::interface": 2
+   "SA::substrate|vacuum__interface": 2
   },
   "primary_groups_volumes": {
    "substrate": 1,
@@ -895,36 +895,36 @@
   "scene": "tests/sgb_scenes.py pad_in_ground('B'): port at z = 0.1 um",
   "unions": {
    "EXT": [
-    "EXT::substrate::bottom",
-    "EXT::substrate::sidewall",
-    "EXT::vacuum::sidewall",
-    "EXT::vacuum::top"
+    "EXT::substrate__bottom",
+    "EXT::substrate__sidewall",
+    "EXT::vacuum__sidewall",
+    "EXT::vacuum__top"
    ],
    "MA": [
-    "MA::ground::sidewall",
-    "MA::ground::top",
-    "MA::pad::sidewall",
-    "MA::pad::top"
+    "MA::ground__sidewall",
+    "MA::ground__top",
+    "MA::pad__sidewall",
+    "MA::pad__top"
    ],
    "MS": [
-    "MS::ground::bottom",
-    "MS::pad::bottom"
+    "MS::ground__bottom",
+    "MS::pad__bottom"
    ],
    "NET::Ground": [
-    "MA::ground::sidewall",
-    "MA::ground::top",
-    "MS::ground::bottom"
+    "MA::ground__sidewall",
+    "MA::ground__top",
+    "MS::ground__bottom"
    ],
    "NET::pad": [
-    "MA::pad::sidewall",
-    "MA::pad::top",
-    "MS::pad::bottom"
+    "MA::pad__sidewall",
+    "MA::pad__top",
+    "MS::pad__bottom"
    ],
    "PORT": [
     "PORT::p1"
    ],
    "SA": [
-    "SA::substrate|vacuum::interface"
+    "SA::substrate|vacuum__interface"
    ]
   },
   "validation": {

@@ -127,7 +127,7 @@
    "warning": false
   },
   {
-   "detail": "0 curved walls, each bounded by one bottom and one top arc on one circle",
+   "detail": "0 curved walls, each bounded by one bottom and one top arc, the same arc of one circle",
    "name": "curved_walls_are_single_cylinders",
    "passed": true,
    "warning": false
@@ -285,7 +285,7 @@
   {
    "defect": "move the top arc of a curved wall to another circle (stage-level scene with arcs)",
    "details": {
-    "curved_walls_are_single_cylinders": "1 curved walls whose top and bottom arcs lie on different circles: ['f:642f89665b40bd7f']"
+    "curved_walls_are_single_cylinders": "1 curved walls whose top and bottom arcs are not the same arc of one circle: ['f:642f89665b40bd7f']"
    },
    "failing_checks": [
     "curved_walls_are_single_cylinders"
@@ -318,11 +318,11 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 0.0,
     "timings_s": {
-     "bop_argument_analyzer": 0.00749,
-     "brep_check": 0.0036,
-     "plan_properties": 0.00101,
-     "read": 0.00039,
-     "shape_analysis": 0.00019
+     "bop_argument_analyzer": 0.00737,
+     "brep_check": 0.00347,
+     "plan_properties": 0.00099,
+     "read": 0.00044,
+     "shape_analysis": 0.00018
     }
    },
    {
@@ -337,11 +337,11 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 0.0,
     "timings_s": {
-     "bop_argument_analyzer": 0.00654,
-     "brep_check": 0.00272,
-     "plan_properties": 0.00098,
-     "read": 0.00067,
-     "shape_analysis": 0.00014
+     "bop_argument_analyzer": 0.00594,
+     "brep_check": 0.00283,
+     "plan_properties": 0.00095,
+     "read": 0.00063,
+     "shape_analysis": 0.00011
     }
    },
    {
@@ -356,11 +356,11 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 1.319662213509282e-16,
     "timings_s": {
-     "bop_argument_analyzer": 0.01155,
-     "brep_check": 0.00456,
-     "plan_properties": 0.0019,
-     "read": 0.00034,
-     "shape_analysis": 0.00026
+     "bop_argument_analyzer": 0.01055,
+     "brep_check": 0.00428,
+     "plan_properties": 0.00169,
+     "read": 0.00031,
+     "shape_analysis": 0.00016
     }
    },
    {
@@ -375,11 +375,11 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 1.319662213509282e-16,
     "timings_s": {
-     "bop_argument_analyzer": 0.01151,
-     "brep_check": 0.00472,
-     "plan_properties": 0.00181,
-     "read": 0.00115,
-     "shape_analysis": 0.00018
+     "bop_argument_analyzer": 0.0117,
+     "brep_check": 0.00469,
+     "plan_properties": 0.00191,
+     "read": 0.00075,
+     "shape_analysis": 0.00023
     }
    },
    {
@@ -394,48 +394,48 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 1.7763568394002506e-16,
     "timings_s": {
-     "bop_argument_analyzer": 0.01552,
-     "brep_check": 0.00613,
-     "plan_properties": 0.0023,
-     "read": 0.00036,
-     "shape_analysis": 0.00027
-    }
-   },
-   {
-    "argument_analyzer_faulty": false,
-    "brepcheck_faulty": 0,
-    "brepcheck_valid": true,
-    "face_area_max_relative_error": 1.9601178917520005e-16,
-    "file": "xao",
-    "model": "real input, Route C",
-    "ok": true,
-    "problems": [],
-    "shells_with_free_edges": 0,
-    "solid_volume_max_relative_error": 1.7763568394002506e-16,
-    "timings_s": {
-     "bop_argument_analyzer": 0.01528,
-     "brep_check": 0.00578,
-     "plan_properties": 0.00218,
-     "read": 0.00111,
-     "shape_analysis": 0.0002
-    }
-   },
-   {
-    "argument_analyzer_faulty": false,
-    "brepcheck_faulty": 0,
-    "brepcheck_valid": true,
-    "face_area_max_relative_error": 2.876876115224056e-14,
-    "file": "brep",
-    "model": "real input, Route A with bands",
-    "ok": true,
-    "problems": [],
-    "shells_with_free_edges": 0,
-    "solid_volume_max_relative_error": 2.645802768793973e-16,
-    "timings_s": {
-     "bop_argument_analyzer": 0.02379,
-     "brep_check": 0.00815,
-     "plan_properties": 0.00372,
+     "bop_argument_analyzer": 0.01501,
+     "brep_check": 0.00607,
+     "plan_properties": 0.00275,
      "read": 0.00041,
+     "shape_analysis": 0.00021
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 1.9601178917520005e-16,
+    "file": "xao",
+    "model": "real input, Route C",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 1.7763568394002506e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.01532,
+     "brep_check": 0.00605,
+     "plan_properties": 0.0021,
+     "read": 0.00092,
+     "shape_analysis": 0.00022
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.876876115224056e-14,
+    "file": "brep",
+    "model": "real input, Route A with bands",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 2.645802768793973e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.02259,
+     "brep_check": 0.00811,
+     "plan_properties": 0.00353,
+     "read": 0.00039,
      "shape_analysis": 0.00027
     }
    },
@@ -451,11 +451,11 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 2.645802768793973e-16,
     "timings_s": {
-     "bop_argument_analyzer": 0.02253,
-     "brep_check": 0.00919,
-     "plan_properties": 0.00391,
-     "read": 0.00115,
-     "shape_analysis": 0.00029
+     "bop_argument_analyzer": 0.02445,
+     "brep_check": 0.00853,
+     "plan_properties": 0.00424,
+     "read": 0.00098,
+     "shape_analysis": 0.00037
     }
    },
    {
@@ -470,49 +470,49 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 5.278648854037128e-16,
     "timings_s": {
-     "bop_argument_analyzer": 0.03642,
-     "brep_check": 0.01089,
-     "plan_properties": 0.00454,
-     "read": 0.00057,
-     "shape_analysis": 0.0004
-    }
-   },
-   {
-    "argument_analyzer_faulty": false,
-    "brepcheck_faulty": 0,
-    "brepcheck_valid": true,
-    "face_area_max_relative_error": 2.876876115224056e-14,
-    "file": "xao",
-    "model": "real input, Route B with bands",
-    "ok": true,
-    "problems": [],
-    "shells_with_free_edges": 0,
-    "solid_volume_max_relative_error": 5.278648854037128e-16,
-    "timings_s": {
-     "bop_argument_analyzer": 0.03753,
-     "brep_check": 0.01137,
-     "plan_properties": 0.0045,
-     "read": 0.00156,
-     "shape_analysis": 0.00038
-    }
-   },
-   {
-    "argument_analyzer_faulty": false,
-    "brepcheck_faulty": 0,
-    "brepcheck_valid": true,
-    "face_area_max_relative_error": 2.876876115224056e-14,
-    "file": "brep",
-    "model": "real input, Route C with bands",
-    "ok": true,
-    "problems": [],
-    "shells_with_free_edges": 0,
-    "solid_volume_max_relative_error": 5.278648854037128e-16,
-    "timings_s": {
-     "bop_argument_analyzer": 0.04319,
-     "brep_check": 0.01349,
-     "plan_properties": 0.00513,
+     "bop_argument_analyzer": 0.03555,
+     "brep_check": 0.01099,
+     "plan_properties": 0.00448,
      "read": 0.00059,
-     "shape_analysis": 0.00041
+     "shape_analysis": 0.00037
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.876876115224056e-14,
+    "file": "xao",
+    "model": "real input, Route B with bands",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 5.278648854037128e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.0354,
+     "brep_check": 0.01032,
+     "plan_properties": 0.00473,
+     "read": 0.0018,
+     "shape_analysis": 0.00035
+    }
+   },
+   {
+    "argument_analyzer_faulty": false,
+    "brepcheck_faulty": 0,
+    "brepcheck_valid": true,
+    "face_area_max_relative_error": 2.876876115224056e-14,
+    "file": "brep",
+    "model": "real input, Route C with bands",
+    "ok": true,
+    "problems": [],
+    "shells_with_free_edges": 0,
+    "solid_volume_max_relative_error": 5.278648854037128e-16,
+    "timings_s": {
+     "bop_argument_analyzer": 0.04222,
+     "brep_check": 0.01297,
+     "plan_properties": 0.00505,
+     "read": 0.00059,
+     "shape_analysis": 0.00039
     }
    },
    {
@@ -527,10 +527,10 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 5.278648854037128e-16,
     "timings_s": {
-     "bop_argument_analyzer": 0.04303,
-     "brep_check": 0.01341,
-     "plan_properties": 0.00514,
-     "read": 0.00149,
+     "bop_argument_analyzer": 0.04201,
+     "brep_check": 0.01315,
+     "plan_properties": 0.00507,
+     "read": 0.00164,
      "shape_analysis": 0.00039
     }
    },
@@ -546,10 +546,10 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 2.0735546910794079e-16,
     "timings_s": {
-     "bop_argument_analyzer": 0.01021,
-     "brep_check": 0.00386,
-     "plan_properties": 0.00151,
-     "read": 0.00034,
+     "bop_argument_analyzer": 0.00966,
+     "brep_check": 0.00393,
+     "plan_properties": 0.00149,
+     "read": 0.00035,
      "shape_analysis": 0.00016
     }
    },
@@ -566,10 +566,10 @@
     "solid_volume_max_relative_error": 2.0735546910794079e-16,
     "timings_s": {
      "bop_argument_analyzer": 0.0099,
-     "brep_check": 0.00378,
-     "plan_properties": 0.0015,
-     "read": 0.00078,
-     "shape_analysis": 0.00016
+     "brep_check": 0.00388,
+     "plan_properties": 0.00147,
+     "read": 0.00083,
+     "shape_analysis": 0.00015
     }
    },
    {
@@ -584,11 +584,11 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 2.073117193669177e-16,
     "timings_s": {
-     "bop_argument_analyzer": 0.03607,
-     "brep_check": 0.00491,
-     "plan_properties": 0.00348,
-     "read": 0.00038,
-     "shape_analysis": 0.0003
+     "bop_argument_analyzer": 0.03613,
+     "brep_check": 0.00497,
+     "plan_properties": 0.00345,
+     "read": 0.00039,
+     "shape_analysis": 0.00022
     }
    },
    {
@@ -603,34 +603,34 @@
     "shells_with_free_edges": 0,
     "solid_volume_max_relative_error": 2.073117193669177e-16,
     "timings_s": {
-     "bop_argument_analyzer": 0.03469,
-     "brep_check": 0.00519,
-     "plan_properties": 0.00324,
-     "read": 0.00089,
+     "bop_argument_analyzer": 0.03631,
+     "brep_check": 0.00505,
+     "plan_properties": 0.00336,
+     "read": 0.00121,
      "shape_analysis": 0.0002
     }
    }
   ],
   "timing_ranges_ms": {
    "bop_argument_analyzer": [
-    6.54,
-    43.19
+    5.94,
+    42.22
    ],
    "brep_check": [
-    2.72,
-    13.49
+    2.83,
+    13.15
    ],
    "plan_properties": [
-    0.98,
-    5.14
+    0.95,
+    5.07
    ],
    "read": [
-    0.34,
-    1.56
+    0.31,
+    1.8
    ],
    "shape_analysis": [
-    0.14,
-    0.41
+    0.11,
+    0.39
    ]
   }
  },
@@ -649,7 +649,7 @@
   },
   "raised_message": "2 invariant(s) failed: shells_closed_and_oriented: vol:7346ec1a4ff1ccf9/0: edge e:662347190b40543e used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:506a2115ac5c1fe2 used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:36bde89e55bf333e used 1 times; vol:7346ec1a4ff1ccf9/0: edge e:7b1c3fb2db0eb5e5 used 1 times; shell_euler_characteristic: vol:7346ec1a4ff1ccf9/0: chi=1",
   "removed_face": "f:85ac6a5796fbc9fe",
-  "removed_face_group": "EXT::VACUUM_REGION::top",
+  "removed_face_group": "EXT::VACUUM_REGION__top",
   "shell_faces_after": 5,
   "shell_faces_before": 6,
   "warnings": [

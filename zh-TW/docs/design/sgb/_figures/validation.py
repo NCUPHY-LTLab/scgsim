@@ -96,7 +96,7 @@ def _top_face_id(model) -> str:
     return next(
         fid
         for fid, _ in _vacuum_volume(model).shells[0].faces
-        if model.routed.face_group[fid] == "EXT::VACUUM_REGION::top"
+        if model.routed.face_group[fid] == "EXT::VACUUM_REGION__top"
     )
 
 
@@ -114,8 +114,8 @@ def _flip_one_face(model):
 
 def _face_in_two_groups(model):
     groups = model.routed.groups
-    groups["MS::pad::bottom"].ids = groups["MS::pad::bottom"].ids + [
-        groups["MA::pad::top"].ids[0]
+    groups["MS::pad__bottom"].ids = groups["MS::pad__bottom"].ids + [
+        groups["MA::pad__top"].ids[0]
     ]
 
 
@@ -124,8 +124,8 @@ def _empty_group(model):
 
 
 def _face_without_group(model):
-    model.routed.groups["MA::pad::sidewall"].ids = model.routed.groups[
-        "MA::pad::sidewall"
+    model.routed.groups["MA::pad__sidewall"].ids = model.routed.groups[
+        "MA::pad__sidewall"
     ].ids[1:]
 
 
@@ -137,7 +137,7 @@ def _interior_face_one_sided(model):
     face = next(
         f
         for f in model.topology.faces.values()
-        if model.routed.face_group[f.id] == "SA::substrate|VACUUM_REGION::interface"
+        if model.routed.face_group[f.id] == "SA::substrate|VACUUM_REGION__interface"
     )
     face.pos_volume = None
 

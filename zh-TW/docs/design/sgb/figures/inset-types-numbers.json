@@ -16,13 +16,13 @@
        "band_count": 3,
        "bands": {
         "0": [
-         "MA::ground_0000::top::band=0"
+         "MA::ground_0000__top::band=0"
         ],
         "1": [
-         "MA::ground_0000::top::band=1"
+         "MA::ground_0000__top::band=1"
         ],
         "2": [
-         "MA::ground_0000::top::band=2"
+         "MA::ground_0000__top::band=2"
         ]
        },
        "interface": null,
@@ -45,13 +45,13 @@
        "band_count": 3,
        "bands": {
         "0": [
-         "MA::pad::top::band=0"
+         "MA::pad__top::band=0"
         ],
         "1": [
-         "MA::pad::top::band=1"
+         "MA::pad__top::band=1"
         ],
         "2": [
-         "MA::pad::top::band=2"
+         "MA::pad__top::band=2"
         ]
        },
        "interface": null,
@@ -92,13 +92,13 @@
        "band_count": 3,
        "bands": {
         "0": [
-         "MS::ground_0000::bottom::band=0"
+         "MS::ground_0000__bottom::band=0"
         ],
         "1": [
-         "MS::ground_0000::bottom::band=1"
+         "MS::ground_0000__bottom::band=1"
         ],
         "2": [
-         "MS::ground_0000::bottom::band=2"
+         "MS::ground_0000__bottom::band=2"
         ]
        },
        "interface": null,
@@ -121,13 +121,13 @@
        "band_count": 3,
        "bands": {
         "0": [
-         "MS::pad::bottom::band=0"
+         "MS::pad__bottom::band=0"
         ],
         "1": [
-         "MS::pad::bottom::band=1"
+         "MS::pad__bottom::band=1"
         ],
         "2": [
-         "MS::pad::bottom::band=2"
+         "MS::pad__bottom::band=2"
         ]
        },
        "interface": null,
@@ -168,13 +168,13 @@
        "band_count": 3,
        "bands": {
         "0": [
-         "SA::substrate|VACUUM_REGION::interface::z=0.0::band=0"
+         "SA::substrate|VACUUM_REGION__interface::band=0"
         ],
         "1": [
-         "SA::substrate|VACUUM_REGION::interface::z=0.0::band=1"
+         "SA::substrate|VACUUM_REGION__interface::band=1"
         ],
         "2": [
-         "SA::substrate|VACUUM_REGION::interface::z=0.0::band=2"
+         "SA::substrate|VACUUM_REGION__interface::band=2"
         ]
        },
        "interface": null,
@@ -379,13 +379,13 @@
        "band_count": 3,
        "bands": {
         "0": [
-         "SA::substrate|upper_air::interface::z=0.0::band=0"
+         "SA::substrate|upper_air__interface::band=0"
         ],
         "1": [
-         "SA::substrate|upper_air::interface::z=0.0::band=1"
+         "SA::substrate|upper_air__interface::band=1"
         ],
         "2": [
-         "SA::substrate|upper_air::interface::z=0.0::band=2"
+         "SA::substrate|upper_air__interface::band=2"
         ]
        },
        "interface": null,

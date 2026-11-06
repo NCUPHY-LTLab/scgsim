@@ -1,7 +1,7 @@
 ```{.json filename="semantic_geometry_route_b.sidecar.json（節錄）"}
 {
  "physical_groups": {
-  "MA::pad::top::band=0": {
+  "MA::pad__top::band=0": {
    "adjacent_domains": [
     {
      "kind": "vacuum",
@@ -24,7 +24,7 @@
    "net": "P",
    "tag": 7
   },
-  "MS::pad::bottom": {
+  "MS::pad__bottom": {
    "adjacent_domains": [
     {
      "kind": "dielectric",

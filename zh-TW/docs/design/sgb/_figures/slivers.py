@@ -514,7 +514,7 @@ def coarse_grid_stand_in(numbers: dict) -> None:
             "gap_nm": 4,
             "model_faces": m.counts["faces"],
             "gap_faces": sum(
-                m.routed.face_group[f.id] == "SA::substrate|vacuum::interface"
+                m.routed.face_group[f.id] == "SA::substrate|vacuum__interface"
                 for f in m.topology.faces.values()
             ),
             "validation_passed": not m.report.failures,

@@ -44,7 +44,7 @@
   "conductor_volumes": "excluded"
  },
  "surface_epr_rows": {
-  "MA::chip/left::sheet::band=0": {
+  "MA::chip/left__sheet::band=0": {
    "band": 0,
    "entities": ["chip/left"],
    "face_sides": {
@@ -55,7 +55,7 @@
    "shared_face_group": "chip/left::band=0",
    "side": "above"
   },
-  "MS::chip/left::sheet::band=0": {
+  "MS::chip/left__sheet::band=0": {
    "band": 0,
    "entities": ["chip/left"],
    "face_sides": {
@@ -69,12 +69,12 @@
  },
  "unions": {
   "interface_types": {
-   "AA": ["AA::lower_air|upper_air::interface"],
-   "EXT": ["EXT::lower_air::bottom", "EXT::lower_air::sidewall", "EXT::substrate::bottom", "EXT::upper_air::sidewall", "EXT::upper_air::top"],
+   "AA": ["AA::lower_air|upper_air__interface"],
+   "EXT": ["EXT::lower_air__bottom", "EXT::lower_air__sidewall", "EXT::substrate__bottom", "EXT::upper_air__sidewall", "EXT::upper_air__top"],
    "MA": ["chip/left::band=0", "chip/left::band=1", "chip/left::band=2", "chip/right"],
    "MS": ["chip/left::band=0", "chip/left::band=1", "chip/left::band=2", "chip/right"],
    "PORT": ["PORT::port_sheet"],
-   "SA": ["SA::substrate|lower_air::sidewall", "SA::substrate|upper_air::interface"],
+   "SA": ["SA::substrate|lower_air__sidewall", "SA::substrate|upper_air__interface"],
    "SHEET": ["chip/left::band=0", "chip/left::band=1", "chip/left::band=2", "chip/right"]
   },
   "nets": {

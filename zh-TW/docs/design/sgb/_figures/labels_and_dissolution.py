@@ -541,12 +541,12 @@ def per_entity_tab(catalogue, numbers: dict) -> None:
     top = next(
         f
         for f in model.topology.faces.values()
-        if model.routed.face_group[f.id] == "MA::pad::top"
+        if model.routed.face_group[f.id] == "MA::pad__top"
     )
     tab_top = next(
         f
         for f in model.topology.faces.values()
-        if model.routed.face_group[f.id] == "MA::pad_tab::top"
+        if model.routed.face_group[f.id] == "MA::pad_tab__top"
     )
     numbers["tab_as_second_entity"] = {
         "plane": layer.plane,
@@ -581,15 +581,15 @@ def _group_table(model, numbers: dict) -> None:
     pad_top = next(
         f
         for f in model.topology.faces.values()
-        if model.routed.face_group[f.id] == "MA::pad::top"
+        if model.routed.face_group[f.id] == "MA::pad__top"
     )
     pad_walls = [
         f
         for f in model.topology.faces.values()
-        if model.routed.face_group[f.id] == "MA::pad::sidewall"
+        if model.routed.face_group[f.id] == "MA::pad__sidewall"
     ]
     numbers["membership_record"] = {
-        "top_face_group": "MA::pad::top",
+        "top_face_group": "MA::pad__top",
         "top_face_membership": dict(pad_top.membership),
         "pad_sidewalls": sorted(
             [dict(w.membership) for w in pad_walls], key=lambda m: sorted(m.items())
