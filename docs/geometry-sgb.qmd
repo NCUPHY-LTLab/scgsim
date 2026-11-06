@@ -17,8 +17,10 @@ reconstruct geometry meaning from solver-generated labels.
 
 `scgsim.geometry` is the source-facing facade: `GeometryPlan`, detached
 snapshots, normalized input models, adapters, stack/vacuum/curve preparation,
-and summaries. `scgsim.geometry.compiler` owns the advanced route builder,
-derived construction records, stage validators, and dispatch. The source
+and summaries. Palace builds this geometry with `scgsim.geometry.sgb`
+(`build_sgb_geometry`) and meshes it with `scgsim.meshing`. `scgsim.geometry.compiler`
+remains the advanced route builder, with derived construction records, stage
+validators, and dispatch; Palace does not use it. The source
 validator is defined in `scgsim.geometry.source.validation` and re-exported by
 the compiler facade. Direct defining modules and model aliases are listed in
 the [API migration reference](api-migration.qmd#geometry-and-compiler-api).
@@ -116,7 +118,7 @@ three explicit anchors; an open arc uses start, on-arc and end anchors.
 Overlapping replacement chains or competing whole-boundary declarations
 cannot own the same source segments.
 
-For active declarations, the in-tree compiler builds one native OCC planar
+For active declarations, the in-tree geometry builder builds one native OCC planar
 arrangement before assigning material interfaces. Native Boolean history
 retains source membership and trimmed parameter intervals. The same arranged
 curves bound metal, dielectric and vacuum complements and port partitions.
@@ -340,7 +342,7 @@ Only Route A and Route B are in the current direction.
 
 SCGSim no longer exposes the SGB geometry-level distance-band producer. This section preserves the former design boundary for readers of older material; its `GeometryPlan.set_surface_distance_bands(...)`, `SurfaceDistanceBandSpec`, and Palace aggregation APIs are not current interfaces.
 
-The withdrawn design partitioned an explicitly selected planar parent surface from its original exterior and hole edges, retained source lineage for each child, and passed those geometric regions into CAD and meshing. Its cumulative EPR aggregation depended on a completed Palace result and did not require Q2D. These historical regions were distinct from native Palace Mask/Inset rows: native Mask/Inset requests remain available through `inset_margins_um` when the selected Palace executable supports them. See the current [Palace Electrostatic contract](specs/palace-electrostatic-sgb.qmd#native-mask-inset) for that path.
+The withdrawn design partitioned an explicitly selected planar parent surface from its original exterior and hole edges, retained source lineage for each child, and passed those geometric regions into CAD and meshing. Its cumulative EPR aggregation depended on a completed Palace result and did not require Q2D. These historical regions were distinct from Palace's Surface-EPR margin rows, which `inset_margins_um` still requests: SGB cuts those bands into the model when `mesh()` builds the geometry. See the current [Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins) for that path.
 
 ## Internal semantic projection
 
@@ -473,7 +475,6 @@ from scgsim.preparation import preparation_resources
 with preparation_resources(max_workers=30):
     snapshot = plan.prepare()
     sim.set_plan(snapshot)
-    sim.set_mesh(threads=30, surface_threads=30)
     sim.mesh()
 ```
 
@@ -483,12 +484,13 @@ Results and task-local source audits merge in input order. Fixed-grid operands
 share the same boundary network and labelled cells; source-path ownership and
 face transitions remain deterministic. Unquantized parent planes keep their
 separate construction path. Nested work reuses the budget rather than creating
-another pool. Preparation tasks finish before the Gmsh child starts; its
-requested thread limits must be positive and fit the explicit scope's budget.
+another pool. Preparation tasks finish before the meshing child processes
+start. Meshing runs on one Gmsh thread, so it takes no share of the worker budget;
+the scope only keeps it out of a preparation worker.
 
 This setting bounds SCGSim preparation workers; allocate the corresponding
-CPUs through the scheduler separately. Gmsh thread limits and Palace MPI/OpenMP
-settings control their own stages. `preparation_diagnostics(output_dir, profile=False)`
+CPUs through the scheduler separately. Palace MPI/OpenMP settings control the
+solver stage. `preparation_diagnostics(output_dir, profile=False)`
 can record stage timings alongside this scope without selecting parallelism.
 
 Each source-preparation call also reuses hierarchy extraction for the same

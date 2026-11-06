@@ -6,7 +6,7 @@ scgsim-status: "HISTORICAL"
 scgsim-id: "docs/course/palace-surface-bands"
 ---
 
-This page documents a withdrawn SGB geometry-band workflow. Current SCGSim source does not provide its geometry producer or result aggregation API. The steps and code below are historical records, not current instructions. Native Palace Mask/Inset margins remain available separately when the selected executable supports them; see the [current contract](../specs/palace-electrostatic-sgb.qmd#native-mask-inset).
+This page documents a withdrawn geometry-band workflow, with its own producer and result aggregation API, which current SCGSim does not provide. The steps and code below are historical records, not current instructions. To get margin rows for Palace Surface EPR today, use `inset_margins_um` in `set_surface_epr`, described in the [current contract](../specs/palace-eigenmode.qmd#surface-epr-margins).
 
 The former workflow partitioned a planar Palace EPR parent by distance from its
 original boundary and read six returned band totals. It used a geometry plan
@@ -78,12 +78,11 @@ band workflow.
 
 ## Choose mesh sizing
 
-The shared `size_policy` selects how Gmsh chooses element sizes. To use its
-native sizing while keeping the Delaunay 3D algorithm, call:
-
-```python
-sim.set_mesh(size_policy="gmsh_default", algorithm_3d="Delaunay")
-```
+The archived workflow ran when Palace sizing was a choice between SCGSim's
+uniform boundary sizes and Gmsh's native sizes. The current controls differ:
+`set_mesh` takes a sizing recipe, and the closest recipe to Gmsh's native sizing
+is `GlobalSizeRecipe()`. The [migration map](../api-migration.qmd#palace-mesh-migration)
+lists which recipe replaces each former option, and what changes with it.
 
 For this example, select the Eigenmode AMR settings before writing config:
 
@@ -100,14 +99,11 @@ Those values are caller choices for this example, not library defaults or
 adequacy criteria. A positive pass limit requires both tolerance and update
 fraction. Later calls may omit these controls to retain the selected values;
 `amr_max_passes=0` disables adaptive refinement and allows tolerance and update
-fraction to remain unset. Mesh sizing does not change physical groups,
-junctions or the surface-band partition. Palace band totals are direct EPR
+fraction to remain unset. Palace band totals are direct EPR
 contributions; no Q2D factor is applied. Returned totals are cumulative tails
 (`distance >= cutoff`): the `0.5 µm` total includes the `1 µm` total, so do not
 add the two values. See the [distance-band concept](../concepts/geometry.qmd#distance-bands)
-for the interval diagram and the shared
-[Palace mesh-size policy](../specs/palace-electrostatic-sgb.qmd#palace-mesh-size-policy)
-for defaults, state transitions and retained mesh evidence.
+for the interval diagram.
 
 After setting these controls, call `sim.mesh()` and `sim.write_config()` before
 preparing the Palace handoff.
@@ -134,9 +130,8 @@ Read the selected iteration with `epr_result(resolved, palace_iteration=iteratio
 Pass the selections, selected mode, `palace_iteration=iteration`, and `cutoffs_um=(0.5, 1.0)` to `aggregate_surface_bands(...)`. Cutoffs must match declared source-band boundaries; the aggregation requires the complete band and component inventory and counts each physical fragment once per interface per cutoff. The totals retain source parent, interface, recorded side, mode, native iteration, and normalization. Keep the `PalaceSurfaceBandTotals` value and `to_payload()` output with that identity. The `>= 0.5 µm` total includes the `>= 1 µm` total; do not add these cumulative tails. This offline aggregation reads existing Palace results and does not run
 Palace or apply a Q2D correction.
 
-Native Mask/Inset remains available separately through `inset_margins_um` when the selected Palace executable supports it; it does not create these withdrawn geometry bands. The pinned
+The pinned
 [SimplePad SurfaceBands workflow](https://github.com/OrPenStrike/orcapen-sc-pdk/blob/d413d04565b3ff6946fd8b6ef237283dc187e552/notebooks/src/SCGSimExamples/SurfaceBands/SimplePad/palace_eigenmode_bands.qmd)
 and [shared interface model](https://github.com/OrPenStrike/orcapen-sc-pdk/blob/d413d04565b3ff6946fd8b6ef237283dc187e552/notebooks/src/SCGSimExamples/SurfaceBands/SimplePad/simplepad_interface_model.json)
-are historical references to an earlier paired-Q2D workflow. Follow the
-GeometryPlan and result-reading steps on this page for the current Palace-only
-band workflow.
+are historical references to an earlier paired-Q2D workflow, and neither runs
+on the current package.

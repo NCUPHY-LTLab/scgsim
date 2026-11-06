@@ -32,14 +32,16 @@ sim.set_electrostatic(
     unassigned_conductor_policy="error",
     exterior_boundary_policy="none",
 )
-sim.set_mesh(refined_mesh_size=5.0, max_mesh_size=300.0)
+sim.set_mesh(quality_threshold=0.01)
 ```
 
-Use `set_mesh(...)` to choose `algorithm_3d`, `threads`, `surface_threads`,
-`geometry_order`, and `high_order_optimize`. Geometric order describes the mesh
-representation and is independent of Palace's FEM order. Initial values and
-update behavior are in the shared
-[Palace mesh contract](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls-110-candidate).
+`set_mesh(...)` chooses the sizing `recipe`, the `mesher` options (algorithms and
+geometry order), the repair `budgets` and the `quality_threshold`. This example
+keeps the default recipe and states the default threshold, so you can see where
+to change it. Geometric order describes the mesh representation and is
+independent of Palace's FEM order. The controls, their defaults and what happens
+when the mesh cannot reach the threshold are in the shared
+[Palace mesh controls](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
 
 The terminal and ground selectors are exact final Net IDs. They are not
 geometric center guesses. The explicit `error` policy makes uncovered conductor
@@ -66,13 +68,16 @@ For a Route-A study, configure `representation="A"` with the appropriate
 explicit `route_a_thin_film` before meshing. `substrate_face` preserves physical
 face coordinates; `metal_gap_equivalent` is the separate supported two-face
 normalization. Consult the [geometry contract](../geometry-sgb.qmd) before
-changing that approximation. Surface films and their native inset margins are
-optional postprocessing specifications, with attributed thickness/permittivity/
-loss assumptions rather than inferred material measurements.
+changing that approximation. Surface films are optional postprocessing specifications, with attributed
+thickness/permittivity/loss assumptions rather than inferred material
+measurements. Their inset margins are cut into the geometry, so configure them
+with `set_surface_epr` before `mesh()`; see the
+[margin contract](../specs/palace-eigenmode.qmd#surface-epr-margins).
 
-The mesh is a real preparation operation and can fail natively. Writing config
+The mesh is a real preparation operation. It can fail natively, and it stops
+with `MeshRepairError` when a tetrahedron stays below the quality threshold. Writing config
 binds terminal and Ground attributes to that mesh. Inspect the exact index map
-alongside the config: schema v2 distinguishes physical Ground from exterior
+alongside the config: schema v3 distinguishes physical Ground from exterior
 Ground, so you can tell which conductor and boundary policy was lowered.
 After meshing, `sim.mesh_summary()` exposes detached native generation
 observations, including mesh controls, element/region counts and exact mesh

@@ -74,8 +74,7 @@ PALACE_SETUP_COMMANDS = ()
 AEDT_CORES = 4
 AEDT_RAM_LIMIT_PERCENT = 80
 
-PALACE_REFINED_MESH_UM = 10.0
-PALACE_MAX_MESH_UM = 200.0
+PALACE_MESH_QUALITY_THRESHOLD = 0.01  # minimum scaled Jacobian of every tetrahedron
 PALACE_FEM_ORDER = 2
 PALACE_AMR_MAX_PASSES = 10
 PALACE_AMR_TOLERANCE = 0.02
@@ -86,7 +85,7 @@ Q3D_MAXIMUM_PASSES = 10
 Q3D_CONVERGENCE_PERCENT = 1.0
 ```
 
-The mesh pair controls Palace element sizing; FEM order controls field approximation separately. Q3D frequency and pass settings define the native matrix request. Keep these inputs with the returned run because they affect the extracted matrix.
+The default sizing recipe sets Palace element sizes and the quality threshold is the bar the mesh must reach (see the [Palace mesh controls](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)); FEM order controls field approximation separately. Q3D frequency and pass settings define the native matrix request. Keep these inputs with the returned run because they affect the extracted matrix.
 
 Check: review units, choose solver controls for your model, and use a fresh run name for each preparation.
 
@@ -159,10 +158,7 @@ palace_sim.set_electrostatic(
     unassigned_conductor_policy="error",
     exterior_boundary_policy="none",
 )
-palace_sim.set_mesh(
-    refined_mesh_size=PALACE_REFINED_MESH_UM,
-    max_mesh_size=PALACE_MAX_MESH_UM,
-)
+palace_sim.set_mesh(quality_threshold=PALACE_MESH_QUALITY_THRESHOLD)
 palace_sim.set_numerical(
     order=PALACE_FEM_ORDER,
     tolerance=1e-6,

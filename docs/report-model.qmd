@@ -43,16 +43,27 @@ junction history, and energy balance. They preserve existing projections and
 eligibility; a valid partial-row frequency remains visible while unavailable
 EPR values stay as gaps, with no fallback to an earlier pass.
 
-## Palace mesh context (1.1.0) {#palace-mesh-context-110-candidate}
+## Palace mesh context {#palace-mesh-context}
 
 The Palace report reads the same detached `mesh_summary()` authority exposed by
-the facade and resolved run. It binds recorded meshing controls, Gmsh version,
-native node/element/region counts, high-order optimization outcome and edge
-length statistics to the mesh and manifest identities. For elevated geometric
+the facade and resolved run. It binds the recorded sizing recipe, repair policy,
+mesher options, quality threshold and the minSICN measured on the linear mesh
+(before any elevation), together with the Gmsh version, native node/element/region
+counts, the order of the delivered mesh, high-order optimization outcome and edge
+length statistics, to the mesh and manifest identities. For elevated geometric
 order, reported edge lengths are primary-corner chords rather than curved-edge
 lengths. The Eigenmode degree-of-freedom value is a topological estimate, not a
-solver-reported count. Historical manifests without these fields retain
-`not_recorded`; the report does not infer missing meshing history.
+solver-reported count.
+
+::: {#palace-run-schemas .callout-important title="Palace run folders of older schemas are not read"}
+Resolution and inspection read only mesh manifest `schema_version` 2 and Palace
+index map `schema_version` 3, and detached EPR results read only
+`scgsim.palace.epr-result.v2`. A run folder with manifest `schema_version` 1 or
+index map `schema_version` 1 or 2, and a detached result of an older schema, is
+rejected with an error that names the recorded version, whatever else it holds.
+To read such a study again, rerun the preparation with the current package and
+execute it again.
+:::
 
 ## Research interpretation and retained observations
 
@@ -166,30 +177,34 @@ policies. EPR normalization and unknown-loss interpretation remain separate.
 
 The separate [Tetrahedral Mesh Quality](mesh-quality.qmd) report is bound to a
 single MSH file read. Its volume, orientation, and condition evidence are
-geometry diagnostics, not solver results, and do not create a hidden quality
-threshold or convergence claim.
+geometry diagnostics, not solver results, and apply no quality threshold of
+their own or convergence claim.
 
-## Multi-margin Surface EPR reading surface
+## Margin rows of Palace Surface EPR {#palace-margin-rows}
 
-The existing inspection and strict-resolution split also governs native
-multi-margin Surface EPR. `inspect_run_trustworthiness()` may inspect a
-completed, failed, or partial package and marks unavailable mask data as
-unavailable without changing the receipt state. A missing or unreadable mask
-pair makes that source's masked snapshot unavailable while a valid baseline
-snapshot remains readable. A strict completed resolution of a run that
-requested masks requires the sealed `surface-mask-Q.csv` and
-`surface-mask-energy.csv` files from the same required result source. Missing
-mask files prevent strict resolution, and an existing receipt or artifact
+The existing inspection and strict-resolution split also governs Palace margin
+rows. A margin row is a `Dielectric` row over the bands SGB cut at and beyond
+that margin, so it sits in the same `surface-Q.csv` table as the baseline rows.
+`inspect_run_trustworthiness()` may inspect a completed, failed, or partial
+package and marks unavailable margin data as unavailable without changing the
+receipt state. Each source reads its margin rows as one all-or-nothing snapshot:
+if its table cannot be read or does not match the index map, that source has no
+margin snapshot. A strict completed resolution of a run that requested surface
+rows requires the sealed `surface-Q.csv` from the same required result source;
+a missing file prevents strict resolution, and an existing receipt or artifact
 SHA-256 mismatch remains fatal.
 
-`PhysicsQuantitiesReport.snapshots` remains the baseline-only surface. The
-typed `PhysicsQuantitiesReport.masked_snapshots` surface exposes complete
-snapshots for the requested masks while preserving interface identity, margin
-value and ordinal, mode or excitation, refinement pass, native index, and
-source identity. Duplicate requested margins therefore remain separately
-traceable; they are not duplicate contributions to a loss total.
+`PhysicsQuantitiesReport.snapshots` remains the baseline-only surface. The typed
+`PhysicsQuantitiesReport.margin_snapshots` surface exposes
+`SurfaceMarginEprSeriesSnapshot` values, each holding
+`SurfaceMarginEprRecord` rows with the interface, margin value (`margin_um`) and
+ordinal (`margin_index`), the baseline row it belongs to (`baseline_index`), the
+bands it covers, its entities and Nets, the mode or excitation, the refinement
+pass, the native index and the source identity. Each margin row is one of several
+alternatives to its baseline row; duplicate requested margins stay separately
+traceable and are never duplicate contributions to a loss total.
 
-`show_physics_quantities()` presents the latest masked participation versus
+`show_physics_quantities()` presents the latest margin participation versus
 margin for each mode or excitation and exact interface, using the native
 surface traces. Run trustworthiness remains the authority for AMR history and
 evidence; the physics presentation does not reinterpret refinement evidence.
@@ -201,9 +216,8 @@ contribution caused by unknown loss remains unavailable rather than being
 converted into a lifetime claim; participation and energy evidence stay
 visible.
 
-This report surface is **STABILIZED** and does not add a cumulative
-disjoint edge-band interpretation, portable export format, or scientific
-acceptance claim.
+This report surface adds no cumulative disjoint edge-band interpretation,
+portable export format, or scientific acceptance claim.
 
 ## Current Palace scope
 

@@ -54,7 +54,7 @@ sim.set_surface_epr(
             "loss_tangent": record["loss_tangent"],
             "source": record["source"],
             "preset": preset_names[kind],
-            "inset_margins_um": (0.0, 0.01, 0.05, 0.1),
+            "inset_margins_um": (0.01, 0.05, 0.1),
         }
         for kind, record in interface_presets.items()
     },
@@ -71,7 +71,6 @@ sim.set_epr_request(
     port_names=(port_name,),
 )
 sim.set_eigenmode(num_modes=2, target=2e9, tolerance=1e-6, save=0)
-sim.set_mesh(refined_mesh_size=5.0, max_mesh_size=300.0)
 sim.set_numerical(
     order=2,
     tolerance=1e-6,
@@ -90,12 +89,20 @@ sim.set_numerical(
 )
 ```
 
-The example requests native Palace Mask/Inset margins through `inset_margins_um`; the `0.0` entry is the unmasked baseline. Use a Palace executable that supports the native Mask/Inset configuration. Omit `inset_margins_um` when only the baseline is needed. These margins do not partition SGB geometry.
+The example requests margin rows through `inset_margins_um`. Each margin adds a
+row for the part of the surface at least that many micrometres from the nearest
+gap edge, next to the whole-surface baseline row. `set_surface_epr` runs before
+`mesh()` because SGB cuts the margins into the geometry; the
+[Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins) lists the
+keys and limits. Omit `inset_margins_um` when only the baseline is needed. The
+example sets no mesh controls, so `mesh()` uses the default `FeatureRecipe` and
+quality threshold described in the
+[Palace mesh controls](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
 
 The MA/MS/SA records are the OrPen `LiteratureCentral` modeling presets, not
 material measurements. Replace them only with source-attributed records for
-your study. The four requested margins are separate alternatives to the
-unmasked baseline. `bulk_domain_ids=None` selects all configured bulk energy
+your study. The three requested margins are separate alternatives to the
+baseline row. `bulk_domain_ids=None` selects all configured bulk energy
 entries, and the selection does not remove physical domains or change the
 normalization. Palace's external Region surface remains natural PMC when left
 unspecified; see the [EPR methods guide](eigenmode-epr.qmd#workflow-and-state-contract)
