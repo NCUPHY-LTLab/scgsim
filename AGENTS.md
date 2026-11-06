@@ -6,8 +6,10 @@ presentation, visualization, configuration, tests, package documentation,
 the documentation site, and Preview operations, plus the Palace and AEDT
 backend implementations and their related tests and documentation.
 
-Use `$github-flow` for ownership coordination, CI, branches, review and delivery;
-squash after CI and `cross-review-gate` pass.
+Use `$github-flow` for shared ownership coordination, CI, branches, review and
+delivery. Until `cross-review-gate` is verified and required here, do not enable
+per-PR auto-merge; use the currently authorized merge path only after required
+CI passes.
 
 Read the task-relevant entry and smallest applicable contract. `README.md`,
 `docs/goals-and-upstream.qmd`, `docs/architecture.qmd`, `docs/geometry-sgb.qmd`

@@ -11,7 +11,7 @@ SCGSim 擁有可重用的幾何、求解器準備、交接、結果與報告 API
 
 網站使用 Askr 原生呈現方式。Overview 介紹套件；Tutorial 引導使用者完成計算；Concept 說明模型；Contract 提供精確的介面參考。既有文件網址仍可使用。
 
-儲存庫配置、實作責任、文件建置與發行程序，列於次要的[維護者入口](https://github.com/OrPenStrike/scgsim/blob/develop/MAINTAINING.md)。
+儲存庫配置、實作責任、文件建置與發行程序，列於次要的[維護者入口](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md)。
 
 ## 已接受的 SCGSim 2.0 所有權 {#accepted-scgsim-2.0-ownership}
 
@@ -45,7 +45,7 @@ Human 於 2026-10-09 接受 v2 模組與 API 結構，候選版本為 `a932a173e
 
 狀態界線必須保持可觀察。Palace Electrostatic 與 Eigenmode 準備流程各自保留可變狀態及失效／失敗順序；Gmsh 工作程序是程序界線，其網格觀察器不是離線品質讀取器。AEDT `EigenmodeSim` 保留可變設定與失效狀態；單一交易則負責收據狀態轉換與 Desktop 釋放優先順序。幾何 snapshot 保持脫離原物件；編譯器記錄是衍生輸出；後端標記是觀察資料，不是來源權威。搬移程式碼時必須保留這些所有權與失敗契約。
 
-SCGSim Development Lead 擁有受追蹤的來源。固定工作者只能在有限工作期間內寫入指派的路徑；共用 facade、收據與套件中繼資料路徑，同一時間只能有一位寫入者。架構與完整子模組遷移契約，與已接受的來源樹一同記錄。原生觀察與求解器專屬結果解讀仍由不同負責方管理，不得因目錄重整而暗示這些工作已完成。
+Palace 與 AEDT 後端實作、測試及技術文件仍屬不同來源責任，詳見[儲存庫根目錄指南](../../AGENTS.md)。原生觀察與求解器專屬結果解讀仍維持各自的技術界線；目錄重整不代表這些工作已完成。貢獻者協調與交付請遵循共用的 [$github-flow](https://github.com/arfiligol/agent-skills/tree/main/github-flow)。
 
 ## 實作與專案參考資料 {#implementation-and-project-references}
 
@@ -56,6 +56,6 @@ SCGSim Development Lead 擁有受追蹤的來源。固定工作者只能在有�
 | [目標與衍生來源](goals-and-upstream.qmd) | 目前範圍與上游關係 |
 | [路線圖](roadmap.qmd) | 延後實作的類別與文件方向 |
 | [歷史錯誤](errors.qmd) | 依修訂版本記錄的診斷觀察 |
-| [儲存庫維護](https://github.com/OrPenStrike/scgsim/blob/develop/MAINTAINING.md) | 建置、版本目錄與發布程序 |
+| [儲存庫維護](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md) | 建置、版本目錄與發布程序 |
 
 這些次要參考資料將實作細節保留在研究者學習流程之外。契約頁面會說明公開 API 與物理結果意義；它們不是發行檢查清單。
