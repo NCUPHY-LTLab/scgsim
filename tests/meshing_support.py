@@ -24,12 +24,12 @@ def sidecar_with(*features: dict[str, Any], **extra: Any) -> dict[str, Any]:
             }
         },
         "physical_groups": {
-            "MA::pad::sidewall": {
+            "MA::pad__sidewall": {
                 "dim": 2,
                 "ids": ["f0", "f1"],
                 "native_tags": [1, 2],
             },
-            "SA::substrate|VACUUM::interface": {
+            "SA::substrate|VACUUM__interface": {
                 "dim": 2,
                 "ids": ["f2"],
                 "native_tags": [3],
@@ -95,7 +95,7 @@ def bad_element(
         surfaces=(),
         volumes=(),
         sgb_ids=(),
-        groups=("MA::pad::sidewall",),
+        groups=("MA::pad__sidewall",),
         feature_kinds=("film_sidewall",),
         candidates=tuple(
             CurveCandidate(t, edge, length) for t, edge, length in candidates

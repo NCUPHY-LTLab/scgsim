@@ -12,23 +12,26 @@ restates the dimension:
   conductor sheet, the sheet itself: ``<entity>[::band=k]``, whose two sides are the metal-air and the
   metal-substrate surface of that Entity wherever a vacuum or a dielectric lies against them (it carries no
   face kind, because it is always a ``sheet``);
-* ``MA::<entity>::<face kind>`` / ``MS::<entity>::<face kind>`` -- a conductor surface against vacuum
-  (metal-air) or against a dielectric (metal-substrate); ``MM::<a>|<b>::<face kind>`` between two
+* ``MA::<entity>__<face kind>`` / ``MS::<entity>__<face kind>`` -- a conductor surface against vacuum
+  (metal-air) or against a dielectric (metal-substrate); ``MM::<a>|<b>__<face kind>`` between two
   conductor Entities;
-* ``SA::<dielectric>|<vacuum>::<face kind>``, ``AA::<a>|<b>::...``, ``SS::<a>|<b>::...`` -- interfaces
+* ``SA::<dielectric>|<vacuum>__<face kind>``, ``AA::<a>|<b>__...``, ``SS::<a>|<b>__...`` -- interfaces
   between solution regions (substrate-air, air-air, substrate-substrate);
-* ``EXT::<domain>::<face kind>`` -- the model boundary;
+* ``EXT::<domain>__<face kind>`` -- the model boundary;
 * ``PORT::<port sheet id>`` -- a lumped-port sheet (always one sheet, so it carries no face kind).
 
 The interface prefixes stay because they carry the physics: they say which Surface-EPR loss parameters
-apply to the face.  An entity id equal to a prefix (:data:`RESERVED_PREFIXES`), or containing ``::``,
-would make a name ambiguous, so :func:`check_entity_names` rejects it.
+apply to the face.  An entity id equal to a prefix (:data:`RESERVED_PREFIXES`), or containing ``::`` or
+``__``, would make a name ambiguous, so :func:`check_entity_names` rejects it.
 
 The interface type of a face (``MA``, ``MS`` ..., or ``SHEET`` for a Route A conductor sheet) is never
 read back from a name: :func:`interface_type_of` derives it from the domains and the sheet owner.
 
-**Face kind** (:data:`FACE_KINDS`) is part of the identity of a prefixed name, so one primary group never
-mixes physically different interfaces and a consumer can filter by it without reading geometry:
+**Face kind** (:data:`FACE_KINDS`) is part of the identity of a prefixed name, attached to the entity part
+with a double underscore (``MA::D1_pad__bottom``) -- every other separator is ``::``, and ``__`` sets the
+face kind apart from the single underscores common in entity ids (``D1_pad``, ``ground_0000``).  So one
+primary group never mixes physically different interfaces and a consumer can filter by the ``face_kind`` field
+of the sidecar without reading geometry:
 
 * ``top`` / ``bottom`` -- a horizontal face with a conductor below / above it (the conductor's top or
   bottom); at the model boundary, the top or bottom of the domain;
@@ -38,10 +41,19 @@ mixes physically different interfaces and a consumer can filter by it without re
 
 A face inside an inset band carries ``::band=k`` (the innermost band index of its label);
 band seams stop at the boundary of a port, so a port is one face and carries no band.  Names never carry
-native tags.
+native tags and never carry a height.
+
+**Qualifier, only on a band collision.**  A band index is local to one band family.  A conductor face is
+named by its entity and side, which already identify the support; an ``interface`` support is a pair of
+solution regions, and the same pair meets at several levels, so two families can end up with the same
+``<base>__interface::band=k``.  Only then does every band group of each family involved (all its bands, so
+one family never carries two name forms) gain the side of the dielectric its faces lie on, again with ``__``: ``SA::substrate|vacuum__interface__top::band=1`` (the dielectric is below
+the face) and ``...__interface__bottom::band=1`` (it is above).  The pass is
+:func:`~scgsim.geometry.sgb.routes.face_names.name_faces`'s, after the first naming; the ``face_kind`` of
+the group stays ``interface``.  A group that still holds two families after qualifying is an error.
 
 Surface-EPR rows keep the prefixed form for a sheet: its group ``pad::band=1`` carries the row
-``MA::pad::sheet::band=1`` when a face of the group has vacuum on some side, and ``MS::pad::sheet::band=1``
+``MA::pad__sheet::band=1`` when a face of the group has vacuum on some side, and ``MS::pad__sheet::band=1``
 when a face has a dielectric on some side (see :func:`sheet_row_id` and :func:`sheet_face_sides`).  A sheet
 with vacuum on both sides has no ``MS`` row.
 """
@@ -61,30 +73,50 @@ SHEET_ROW_NEIGHBOURS = {"MA": "vacuum", "MS": "dielectric"}
 """The Surface-EPR row types of a sheet face and the kind of neighbour each one integrates."""
 FACE_KINDS = ("top", "bottom", "sidewall", "sheet", "interface")
 """The face kinds a primary surface group name can carry (a port face is ``port`` and is not in a name)."""
+FACE_KIND_SEPARATOR = "__"
+"""Attaches the face kind (and a qualifier) to the entity part of a name; an entity id may not contain it."""
 
 
-def surface_group(  # noqa: PLR0913 - the two sides, the owner, the bands and the orientation
+def surface_group(  # noqa: PLR0913 - the two sides, the owner, the bands, the orientation and the qualifier
     neg: Domain | None,
     pos: Domain | None,
     owner: SheetOwner | None,
     bands: tuple[tuple[str, int], ...] = (),
     *,
     vertical: bool = False,
+    qualified: bool = False,
 ) -> str | None:
     """The single primary physical-group name of a face from the domains on its two sides.
 
-    ``vertical`` says the face is a wall (``sidewall``); otherwise it is horizontal.
+    ``vertical`` says the face is a wall (``sidewall``); otherwise it is horizontal.  ``qualified`` adds
+    :func:`interface_side` to the name of an ``interface`` face: the second naming of a band group that two
+    band families would share (see the module docstring).
     """
-    base = _base_group(neg, pos, owner)
-    if base is None:
+    named = _prefix_and_entity(neg, pos, owner)
+    if named is None:
         return None
-    if owner is not None and owner.kind == "port":
-        return base  # one sheet: no face kind, no band
-    if owner is not None:
-        # a conductor sheet: the entity id; its face kind is always sheet
-        return _banded(base, bands)
-    name = f"{base}::{face_kind(neg, pos, owner, vertical=vertical)}"
+    prefix, entity = named
+    if prefix == "PORT":
+        return f"PORT::{entity}"  # one sheet: no face kind, no band
+    if prefix == SHEET:
+        return _banded(entity, bands)  # the entity id; its face kind is always sheet
+    kind = face_kind(neg, pos, owner, vertical=vertical)
+    name = f"{prefix}::{entity}{FACE_KIND_SEPARATOR}{kind}"
+    if qualified and kind == "interface":
+        name = f"{name}{FACE_KIND_SEPARATOR}{interface_side(neg, pos)}"
     return _banded(name, bands)
+
+
+def interface_side(neg: Domain | None, pos: Domain | None) -> str:
+    """Which side of the first-named region of an interface face the face lies on: ``top`` or ``bottom``.
+
+    ``top`` when that region (the dielectric of an ``SA`` face) is below the face, so the face is its top;
+    ``bottom`` when it is above.  Both domains must exist.
+    """
+    if neg is None or pos is None:
+        raise ValueError("an interface face has a domain on each side")
+    first, _ = _ordered_pair(neg, pos)
+    return "top" if first == neg else "bottom"
 
 
 def _banded(name: str, bands: tuple[tuple[str, int], ...]) -> str:
@@ -113,29 +145,39 @@ def face_kind(
     return "interface"
 
 
-def _base_group(
+def _prefix_and_entity(
     neg: Domain | None, pos: Domain | None, owner: SheetOwner | None
-) -> str | None:
+) -> tuple[str, str] | None:
+    """The interface type of a face and the entity part of its name (``("MA", "D1_pad")``), or ``None`` for no name.
+
+    A Route A conductor sheet is ``("SHEET", <entity>)`` and a port ``("PORT", <port sheet id>)``.
+    """
     if owner is not None:
-        return f"PORT::{owner.name}" if owner.kind == "port" else owner.name
+        return ("PORT" if owner.kind == "port" else SHEET, owner.name)
     if neg is None:
-        return None if pos is None else f"EXT::{pos.name}"
+        return None if pos is None else ("EXT", pos.name)
     if pos is None:
-        return f"EXT::{neg.name}"
+        return ("EXT", neg.name)
     conductors = [d for d in (neg, pos) if d.kind == "conductor"]
     if len(conductors) == 2:
-        first, second = sorted((neg.name, pos.name))
-        return f"MM::{first}|{second}"
+        first, second = _ordered_pair(neg, pos)
+        return ("MM", f"{first.name}|{second.name}")
     if conductors:
         metal = conductors[0]
         other = pos if metal == neg else neg
-        return f"{'MA' if other.kind == 'vacuum' else 'MS'}::{metal.name}"
+        return ("MA" if other.kind == "vacuum" else "MS", metal.name)
     return _solution_interface(neg, pos)
 
 
-def _solution_interface(a: Domain, b: Domain) -> str:
-    """Substrate-air, air-air or substrate-substrate, dielectric first."""
+def _ordered_pair(a: Domain, b: Domain) -> tuple[Domain, Domain]:
+    """The two domains of an interface in the order of its name: dielectric before vacuum, then by name."""
     first, second = sorted((a, b), key=lambda d: (d.kind == "vacuum", d.name))
+    return first, second
+
+
+def _solution_interface(a: Domain, b: Domain) -> tuple[str, str]:
+    """Substrate-air, air-air or substrate-substrate, dielectric first."""
+    first, second = _ordered_pair(a, b)
     kinds = {a.kind, b.kind}
     kind = (
         "SA"
@@ -144,7 +186,7 @@ def _solution_interface(a: Domain, b: Domain) -> str:
         if kinds == {"vacuum"}
         else "SS"
     )
-    return f"{kind}::{first.name}|{second.name}"
+    return kind, f"{first.name}|{second.name}"
 
 
 def volume_group(domain: Domain) -> str:
@@ -160,15 +202,13 @@ def interface_type_of(
     A Route A conductor sheet is ``SHEET`` (its ``MA`` and ``MS`` rows follow the neighbours of its faces,
     see :func:`sheet_face_sides`); a face with no name is ``None``.  Nothing is parsed from a group name.
     """
-    if owner is not None:
-        return "PORT" if owner.kind == "port" else SHEET
-    base = _base_group(neg, pos, owner)
-    return None if base is None else base.split("::", 1)[0]
+    named = _prefix_and_entity(neg, pos, owner)
+    return None if named is None else named[0]
 
 
 def sheet_row_id(row_type: str, entity: str, band: int | None) -> str:
-    """The Surface-EPR row of a Route A sheet: ``MA::<entity>::sheet[::band=k]`` or the ``MS`` one."""
-    row = f"{row_type}::{entity}::sheet"
+    """The Surface-EPR row of a Route A sheet: ``MA::<entity>__sheet[::band=k]`` or the ``MS`` one."""
+    row = f"{row_type}::{entity}{FACE_KIND_SEPARATOR}sheet"
     return row if band is None else f"{row}::band={band}"
 
 
@@ -176,7 +216,8 @@ def check_entity_names(entity_ids: Iterable[str]) -> None:
     """Fail closed on an entity id that would make a group name ambiguous.
 
     A bare entity id names the object itself and a prefixed name a face, so an id equal to an
-    interface prefix, or one containing the ``::`` separator, is rejected.
+    interface prefix, or one containing the ``::`` separator or the ``__`` that attaches a face kind,
+    is rejected.
     """
     for entity_id in sorted(set(entity_ids)):
         if entity_id in RESERVED_PREFIXES:
@@ -188,6 +229,12 @@ def check_entity_names(entity_ids: Iterable[str]) -> None:
             raise InputError(
                 f"entity id {entity_id!r} contains '::', the separator of physical-group names; "
                 "rename the entity"
+            )
+        if FACE_KIND_SEPARATOR in entity_id:
+            raise InputError(
+                f"entity id {entity_id!r} contains '{FACE_KIND_SEPARATOR}', which attaches the face kind "
+                "to the entity in a physical-group name (MA::D1_pad__bottom); use single underscores "
+                "(D1_pad) and rename the entity"
             )
 
 

@@ -138,32 +138,32 @@ dissolution 改變的是數量，不是面積。驗證器（[驗證](validation.
 
 **Attribution policy** 決定輸出中一個表面被區分得多細，也就是 solver 看得到哪些 label 差異。D5 已決定，production 已實作：
 
-- 表面**預設依 Entity 歸屬**。不同 Entity 之間的 seam 保留為 required edge，讓每個 Entity 對 Surface EPR 的貢獻可以分開；primary group 的命名規則是 `<kind>::<qualified entity id>::<face kind>[::band=k]`（例如 `MA::chip/q0/pad::top::band=2`；Route A 的 sheet 與 volume 一樣以裸的 entity id 命名，sheet 為 `<entity>[::band=k]`）；
+- 表面**預設依 Entity 歸屬**。不同 Entity 之間的 seam 保留為 required edge，讓每個 Entity 對 Surface EPR 的貢獻可以分開；primary group 的命名規則是 `<kind>::<qualified entity id>__<face kind>[::band=k]`（例如 `MA::chip/q0/pad__top::band=2`；Route A 的 sheet 與 volume 一樣以裸的 entity id 命名，sheet 為 `<entity>[::band=k]`）；
 - 報告依 **interface type**（MA／MS／SA）彙總並可顯示總和，這些總和是 sidecar 中的 union；
 - Net 只在後端需要電性身分時使用（例如 Electrostatic 的 terminal 與 ground），Net 層級的 union 也只用於這種情形；
 - 同一個 Net 的重疊區域，屬於宣告 priority 較高的 Entity；priority 相同或缺少時 fail closed（Lead 的預設，可改）。
 
-同一個 Net 的兩個 Entity 因此是兩個不同的 domain：各自成為獨立的 volume，之間的共用 face 保留（兩個導體之間是 `MM::<a>|<b>::<face kind>`），輸掉重疊的 Entity 仍在 membership 中列出自己的份額。以上面的 pad 與 tab 為例，若 tab 是另一個 Entity `pad_tab`（Net 相同、`priority=1`），production 不會把它們 dissolve 成一個 cell：slab $(0, 0.2)$ µm 的 label 有 `pad` 與 `pad_tab` 兩個導體 Entity，cell 為 5 個、edge 為 28 條（上面的 dissolution 例子是同一個 Entity 的兩個多邊形：4 個、25 條）；pad 與 tab 各有自己的 face 與 group（`MA::pad::top` 與 `MA::pad_tab::top`），重疊區屬於 priority 較高的 `pad_tab`。
+同一個 Net 的兩個 Entity 因此是兩個不同的 domain：各自成為獨立的 volume，之間的共用 face 保留（兩個導體之間是 `MM::<a>|<b>__<face kind>`），輸掉重疊的 Entity 仍在 membership 中列出自己的份額。以上面的 pad 與 tab 為例，若 tab 是另一個 Entity `pad_tab`（Net 相同、`priority=1`），production 不會把它們 dissolve 成一個 cell：slab $(0, 0.2)$ µm 的 label 有 `pad` 與 `pad_tab` 兩個導體 Entity，cell 為 5 個、edge 為 28 條（上面的 dissolution 例子是同一個 Entity 的兩個多邊形：4 個、25 條）；pad 與 tab 各有自己的 face 與 group（`MA::pad__top` 與 `MA::pad_tab__top`），重疊區屬於 priority 較高的 `pad_tab`。
 
 在 production 中，這個 policy 是由 route 擁有的單一函式（`routes.naming.surface_group`）。對 Route B 的執行範例（真實輸入），它產生下列 primary physical group（共 12 個 face group 加兩個 volume group `VACUUM_REGION` 與 `substrate`；數量取自 `ConformalModel.routed.groups`）：
 
 ::: {.askr-table-compact .askr-table-numeric}
 | Primary group | 意義 | Face 數 |
 |---|---|---|
-| `MA::pad::top`、`MA::pad::sidewall` | pad 金屬對 vacuum：頂面、側壁 | 1、6 |
-| `MA::ground_0000::top`、`MA::ground_0000::sidewall` | ground 金屬對 vacuum | 1、11 |
-| `MS::pad::bottom`、`MS::ground_0000::bottom` | 金屬對 substrate | 各 1 |
-| `SA::substrate\|VACUUM_REGION::interface` | substrate 對 vacuum：gap（已扣掉 port 的面積）與 substrate 的底面 | 2 |
-| `SA::substrate\|VACUUM_REGION::sidewall` | substrate 的四個側面對 vacuum | 4 |
+| `MA::pad__top`、`MA::pad__sidewall` | pad 金屬對 vacuum：頂面、側壁 | 1、6 |
+| `MA::ground_0000__top`、`MA::ground_0000__sidewall` | ground 金屬對 vacuum | 1、11 |
+| `MS::pad__bottom`、`MS::ground_0000__bottom` | 金屬對 substrate | 各 1 |
+| `SA::substrate\|VACUUM_REGION__interface` | substrate 對 vacuum：gap（已扣掉 port 的面積）與 substrate 的底面 | 2 |
+| `SA::substrate\|VACUUM_REGION__sidewall` | substrate 的四個側面對 vacuum | 4 |
 | `PORT::PORT_SHEET__P1__0000` | lumped-port face | 1 |
-| `EXT::VACUUM_REGION::bottom`、`::sidewall`、`::top` | 模型外部邊界 | 1、4、1 |
+| `EXT::VACUUM_REGION__bottom`、`EXT::VACUUM_REGION__sidewall`、`EXT::VACUUM_REGION__top` | 模型外部邊界 | 1、4、1 |
 :::
 
-側壁的 face 數比幾何的邊數多，是因為 wall 的單位是 slab edge：adapter 把 port 的 landing 標在 host 的輪廓上，所以 pad 左側的輪廓在 $(40, 48)$ 與 $(40, 52)$ µm 多了兩個 vertex，那一邊是三條來源 edge，carrier 不同的度數為 2 的 vertex 不會被 dissolution 移除（見上），每條 slab edge 各有一面 wall。pad 的 6 個 `MA::pad::sidewall` 因此是四邊中的三邊各一片，加上左側的三片。`ground_0000` 的 11 個則是 cutout 左側同樣的三片，加上外輪廓左側在 $(0, 30)$ µm 的共線 vertex（GDS 中 die 減 cutout 的結果留下來的來源 vertex）把外側左壁切成兩片，其餘六面各一片。
+側壁的 face 數比幾何的邊數多，是因為 wall 的單位是 slab edge：adapter 把 port 的 landing 標在 host 的輪廓上，所以 pad 左側的輪廓在 $(40, 48)$ 與 $(40, 52)$ µm 多了兩個 vertex，那一邊是三條來源 edge，carrier 不同的度數為 2 的 vertex 不會被 dissolution 移除（見上），每條 slab edge 各有一面 wall。pad 的 6 個 `MA::pad__sidewall` 因此是四邊中的三邊各一片，加上左側的三片。`ground_0000` 的 11 個則是 cutout 左側同樣的三片，加上外輪廓左側在 $(0, 30)$ µm 的共線 vertex（GDS 中 die 減 cutout 的結果留下來的來源 vertex）把外側左壁切成兩片，其餘六面各一片。
 
-被重疊的 Entity 以 lineage 保存，並以 **area-weighted membership** 記錄：對每個貢獻的來源 Entity，記錄該 Entity 的 footprint 所覆蓋的、輸出 face 面積的比例。比例是非互斥的（重疊處對每個覆蓋它的 Entity 都計入），總和可以大於 1。production 對每個 face 記錄它（sidecar 的 `lineage.membership`）。執行範例中 pad 的頂面（`MA::pad::top`）為 `{"pad": 1.0, "VACUUM_REGION": 1.0}`：vacuum prism 也覆蓋它，所以比例總和為 2。wall 沒有 footprint，Entity 的比例是 wall 底部邊界長度中由該 Entity 的 edge 所承擔的比例：pad 的六面 wall 都是 `pad: 1.0`，被 port 蓋住那一片多一項 `PORT_SHEET__P1__0000: 1.0`，因為它的整條底邊都是 port 的 edge。
+被重疊的 Entity 以 lineage 保存，並以 **area-weighted membership** 記錄：對每個貢獻的來源 Entity，記錄該 Entity 的 footprint 所覆蓋的、輸出 face 面積的比例。比例是非互斥的（重疊處對每個覆蓋它的 Entity 都計入），總和可以大於 1。production 對每個 face 記錄它（sidecar 的 `lineage.membership`）。執行範例中 pad 的頂面（`MA::pad__top`）為 `{"pad": 1.0, "VACUUM_REGION": 1.0}`：vacuum prism 也覆蓋它，所以比例總和為 2。wall 沒有 footprint，Entity 的比例是 wall 底部邊界長度中由該 Entity 的 edge 所承擔的比例：pad 的六面 wall 都是 `pad: 1.0`，被 port 蓋住那一片多一項 `PORT_SHEET__P1__0000: 1.0`，因為它的整條底邊都是 port 的 edge。
 
-對上述 pad 加 tab 的例子，若 tab 是另一個 Entity `pad_tab`（priority 較高），`pad_tab` 的頂面（`MA::pad_tab::top`）的 membership 是 `pad_tab` 1.0、`pad` 0.625、`VACUUM_REGION` 1.0：輸掉重疊的 `pad` 仍列出重疊份額（重疊的 12 × 10 µm 佔 tab 頂面 12 × 16 µm 的 0.625），總和大於 1。`pad` 自己的頂面（`MA::pad::top`）則是 `pad` 1.0、`VACUUM_REGION` 1.0。同一個 Entity 的兩個多邊形則被 dissolve：合併後的 cell（472 µm²）membership 為 `pad` 1.0、`VACUUM_REGION` 1.0；兩個多邊形各自的面積比例（polygon 0 為 400 µm²，占 0.847；polygon 1 為 192 µm²，占 0.407，重疊的 120 µm² 兩邊都計入）記錄在 `labels-numbers.json`，但不是 membership 的鍵，因為 membership 以 Entity 為單位。membership 在 dissolution 之後仍然保留：slab 的 cell 帶有被併掉的 footprint 的聯集。
+對上述 pad 加 tab 的例子，若 tab 是另一個 Entity `pad_tab`（priority 較高），`pad_tab` 的頂面（`MA::pad_tab__top`）的 membership 是 `pad_tab` 1.0、`pad` 0.625、`VACUUM_REGION` 1.0：輸掉重疊的 `pad` 仍列出重疊份額（重疊的 12 × 10 µm 佔 tab 頂面 12 × 16 µm 的 0.625），總和大於 1。`pad` 自己的頂面（`MA::pad__top`）則是 `pad` 1.0、`VACUUM_REGION` 1.0。同一個 Entity 的兩個多邊形則被 dissolve：合併後的 cell（472 µm²）membership 為 `pad` 1.0、`VACUUM_REGION` 1.0；兩個多邊形各自的面積比例（polygon 0 為 400 µm²，占 0.847；polygon 1 為 192 µm²，占 0.407，重疊的 120 µm² 兩邊都計入）記錄在 `labels-numbers.json`，但不是 membership 的鍵，因為 membership 以 Entity 為單位。membership 在 dissolution 之後仍然保留：slab 的 cell 帶有被併掉的 footprint 的聯集。
 
 ## 小結
 

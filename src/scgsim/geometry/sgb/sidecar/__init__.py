@@ -33,8 +33,11 @@ Top-level fields and who uses them
     Palace rebuilds ``groups = {volumes, boundary_surfaces, surface_groups, pec_surfaces,
     port_surfaces}`` from these: ``owner_semantic_ids`` = ``entities``, ``adjacent_solution_volume_ids``
     = ``adjacent_domains``, ``face_kind`` = ``face_kind`` (one per group, and part of its name:
-    ``<kind>::<entity>::<top|bottom|sidewall|sheet|interface>[::band=k]`` for a prefixed group; a sheet
-    group ``<entity>[::band=k]`` has face kind ``sheet`` without carrying it in the name),
+    ``<kind>::<entity>__<top|bottom|sidewall|sheet|interface>[::band=k]`` for a prefixed group, where, when a band group
+    of an ``interface`` family is shared with another family, every band group of both families gains the side of the dielectric
+    its faces lie on
+    (``...__interface__top::band=k`` and ``...__interface__bottom::band=k``, still ``face_kind`` ``interface``);
+    a sheet group ``<entity>[::band=k]`` has face kind ``sheet`` without carrying it in the name),
     ``conductor_component_id`` / ``net_id`` = ``entities`` / ``net``, PEC surfaces = the groups of interface type ``MA``/``MS``/``SHEET`` of a conductor.
 ``unions``
     ``interface_types`` (``MA`` -> groups ...; reports aggregate by interface type; a Route A ``SHEET``
@@ -42,9 +45,9 @@ Top-level fields and who uses them
     (Net -> exposed conductor groups; Electrostatic terminals and grounds).  Lists of primary groups,
     never overlapping Gmsh groups.
 ``surface_epr_rows``
-    every Surface-EPR row (``MA::pad::top::band=2`` ...) and the group that carries it, with entities and
+    every Surface-EPR row (``MA::pad__top::band=2`` ...) and the group that carries it, with entities and
     band: Palace's cumulative band selection.  A Route A sheet group (``pad::band=2``) carries
-    ``MA::pad::sheet::band=2`` when a face of it has vacuum on some side and ``MS::pad::sheet::band=2``
+    ``MA::pad__sheet::band=2`` when a face of it has vacuum on some side and ``MS::pad__sheet::band=2``
     when a face has a dielectric on some side; a sheet with vacuum on both sides has no ``MS`` row.  A sheet
     row has ``shared_face_group`` (the sheet group), ``face_sides`` (face id -> ``above``, ``below`` or
     ``both``, only the faces that have that neighbour) and ``side`` (their common value, or ``mixed``), so
@@ -69,8 +72,16 @@ Top-level fields and who uses them
 ``lineage``
     edge -> carriers -> source polygon edge or family member; face -> source Entities; membership.
 ``insets`` / ``refinements`` / ``slivers`` / ``arrangement``
-    inset families (request id, support, margins, band -> groups), refinement requests, the sliver
-    report summary and the measured snap drift / arc deviation.
+    the inset requests as given, refinement requests, the sliver report summary and the measured snap
+    drift / arc deviation.  A concrete inset request is the record of its face (request id, support,
+    margins, band -> groups; the margins are the union of every request on that face).  A type-level
+    request (every face of a Surface-EPR type) has the request as given (type, face kinds, excluded
+    entities, margins) and its ``expansion``: ``banded``, the record of each face it banded (ids
+    ``<request id>::<entity>::<side>``), and ``skipped``, each face left unbanded with the reason
+    (``no_gap_edge``).  ``banded`` lists the families the physical pre-pass created, before any port is
+    placed; whether a family has bands to integrate is read from its own ``bands`` and from
+    ``surface_epr_rows``, because a port can cover a family's whole face (``bands`` is then ``{}``).
+    A build without a type-level request writes the same bytes as before they existed.
 ``expected``
     the expectations of ``verify_loaded`` (positions, boundaries, areas, volumes), the load check the tests
     run; the mesher trusts the files of one build and does not read it.

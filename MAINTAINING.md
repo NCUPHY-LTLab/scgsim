@@ -15,13 +15,11 @@ Public component and executable notebook sources belong to OrPen SC PDK.
 
 ## Source ownership
 
-The Architecture, Palace and AEDT Leads own the source responsibilities listed
-in [AGENTS.md](AGENTS.md). Architecture decides integration order; SCQ Integration
-performs public privacy review and protected merges. Resolve current Lead
-identities and shared delivery rules through `$scq-collaboration-roles`.
-
-Existing writers retain their assigned paths and running services. Coordinate
-with the assigned writer before changing a shared path or taking over a scope.
+Palace and AEDT backend implementations, tests and technical documentation
+remain distinct source responsibilities as described in [AGENTS.md](AGENTS.md).
+Keep native solver observations and result interpretation within their stated
+technical boundaries. Follow the repository root guide and shared `$github-flow`
+for contributor coordination and delivery.
 
 ## Writing documentation
 
@@ -165,13 +163,9 @@ open items.
 
 ## Larger proposals across projects
 
-Send a major architecture, cross-package contract, or system-wide proposal to
-the nearest owning Lead. Before writing an execution plan, that Lead checks the
-repository, branch and base revision, related source, open work, contracts, and
-existing capabilities. Keep the plan in the current work packet. For authorized
-delivery, the repository's Git owner completes the assigned branch and push
-steps and reads back the remote result; a proposal does not transfer that
-ownership.
+Route major architecture, cross-package contract, or system-wide proposals
+through the repository's shared contribution process. Preserve the source and
+solver ownership boundaries in [AGENTS.md](AGENTS.md).
 
 ## Historical structural acceptance
 

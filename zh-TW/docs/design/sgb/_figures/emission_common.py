@@ -38,18 +38,18 @@ STAGE_COLOURS = {  # one colour per named stage, shared by the plotly and matplo
     "load into Gmsh": "#444444",
 }
 GROUP_COLOURS = {
-    "MA::pad::top": "#0072B2",
-    "MA::pad::sidewall": "#7fb8e0",
-    "MS::pad::bottom": "#56B4E9",
-    "MA::ground::top": "#8C8C8C",
-    "MA::ground::sidewall": "#b0b0b0",
-    "MS::ground::bottom": "#CFCFCF",
-    "SA::substrate|vacuum::interface": "#E69F00",
+    "MA::pad__top": "#0072B2",
+    "MA::pad__sidewall": "#7fb8e0",
+    "MS::pad__bottom": "#56B4E9",
+    "MA::ground__top": "#8C8C8C",
+    "MA::ground__sidewall": "#b0b0b0",
+    "MS::ground__bottom": "#CFCFCF",
+    "SA::substrate|vacuum__interface": "#E69F00",
     "PORT::p1": "#D55E00",
-    "EXT::substrate::bottom": "#009E73",
-    "EXT::substrate::sidewall": "#4fc3a1",
-    "EXT::vacuum::top": "#CC79A7",
-    "EXT::vacuum::sidewall": "#e3a8c9",
+    "EXT::substrate__bottom": "#009E73",
+    "EXT::substrate__sidewall": "#4fc3a1",
+    "EXT::vacuum__top": "#CC79A7",
+    "EXT::vacuum__sidewall": "#e3a8c9",
 }
 GROUP_OPACITY = {name: 0.12 for name in GROUP_COLOURS if name.startswith("EXT")}
 

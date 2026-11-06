@@ -9,7 +9,7 @@ scgsim-id: "docs/design/sgb/cut-families"
 
 SGB 中分割一個表面的方式，都共用同一個機制：**把曲線放進 arrangement，再由 labelling 決定這些曲線兩側的 cell 意味著什麼、哪些 edge 要保留**。材料邊界、port、inset band、refinement curve 都是如此。但它們不是每一種都需要同一種 record：有些分割直接來自 prism 的 footprint 與 label，不需要任何額外紀錄；只有無法從 prism 推出的特徵，才需要明確的 `CurveFamilyRecord`。本頁先分清這三類，再說明 family record、兩種 edge policy、band 距離的 distance-origin 規則、新增 family 的做法，以及曲線何時可以 embed 而不必成為 edge。
 
-[Label、required edge 與 dissolution](labels-and-dissolution.qmd) 是本頁的基礎；第一個完整的使用者是 [inset imprint](inset-imprint.qmd)。production（`scgsim.geometry.sgb.cutfamilies`）以兩種有型別的請求產生 family：`InsetRequest`（inset band，support 是 `ConductorSurface` 或 `SolutionInterface`）與 `RefinementRequest`（refinement curve）；請求的欄位見[使用契約](consumer-contract.qmd#requests)。下面執行範例中的 window family（`partition` role）是本頁為了展示 `required` policy 直接加進 prism catalogue 的 family，production 的請求 API 沒有它。
+[Label、required edge 與 dissolution](labels-and-dissolution.qmd) 是本頁的基礎；第一個完整的使用者是 [inset imprint](inset-imprint.qmd)。production（`scgsim.geometry.sgb.cutfamilies`）以兩種有型別的請求產生 family：`InsetRequest`（inset band，support 是 `ConductorSurface`、`SolutionInterface` 或 `InterfaceSurfaces`）與 `RefinementRequest`（refinement curve）；請求的欄位見[使用契約](consumer-contract.qmd#requests)。下面執行範例中的 window family（`partition` role）是本頁為了展示 `required` policy 直接加進 prism catalogue 的 family，production 的請求 API 沒有它。
 
 ## 執行範例的觀點
 
@@ -47,7 +47,7 @@ window 是在**完全不修改 pipeline** 的情況下加入的：它只是被�
 | 全部 family | 16 | 111 | 26 | 15 | 8 |
 :::
 
-window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它切開的 cell 保有原來的 label，所以 <code>SA::substrate&#124;VACUUM_REGION::interface::band=2</code> 與 <code>SA::substrate&#124;VACUUM_REGION::interface::band=3</code> 這兩個 group 各多一個 face（2 變 3、1 變 2）。refinement curve 沒有改變任何 cell 或 face 的數量；它只增加 embedded curve 片段（8 段），以及它與 required edge 的交點：每個交點成為 vertex，把被碰到的那條 edge 切成兩段（$z = 0$ 的 edge 多 8 條）。band 讓 face group 從 8 增為 15，因為每個 band 都是自己的 group（Route A 中 pad 的 band 是 `pad::band=k`，各一個 face，共 4 個；gap 的 band 是 `SA::…::interface::band=k`）。
+window 讓 cell 數增加二、face 數增加二，卻沒有新的 group：它切開的 cell 保有原來的 label，所以 <code>SA::substrate&#124;VACUUM_REGION__interface::band=2</code> 與 <code>SA::substrate&#124;VACUUM_REGION__interface::band=3</code> 這兩個 group 各多一個 face（2 變 3、1 變 2）。refinement curve 沒有改變任何 cell 或 face 的數量；它只增加 embedded curve 片段（8 段），以及它與 required edge 的交點：每個交點成為 vertex，把被碰到的那條 edge 切成兩段（$z = 0$ 的 edge 多 8 條）。band 讓 face group 從 8 增為 15，因為每個 band 都是自己的 group（Route A 中 pad 的 band 是 `pad::band=k`，各一個 face，共 4 個；gap 的 band 是 `SA::…__interface::band=k`）。
 
 ## 三類分割
 
@@ -113,7 +113,7 @@ policy 決定 arrangement 在 **labelling 之後**，如何處理帶有該 famil
 
 family 指名它作用的 level。只有這些 level 的 arrangement 會接收曲線，所以曲線不會切開它原本不打算切的表面（[分層模型](layered-model.qmd)說明了為什麼 level 在這個意義上是局部的）。inset band 在 Route A 中以 sheet 平面為目標；在 Route B 中，同一個 band family 會對金屬的頂面（metal-vacuum 表面）與底面（metal-substrate 表面）各產生一次，是兩個獨立的 family。
 
-原型接受明確的 Z 值清單。production 依語意表面選取：`ConductorSurface(entity, side)` 選出某個導體 Entity 的 sheet、頂面或底面，`SolutionInterface(first, second)` 選出兩個 solution region 之間沒有導體的介面；在 family 產生之前，一個物理 pre-pass 把請求解析成 Z 值與 support 面，找不到對應的 cell 時 build 失敗（`interface` 欄位還可宣告預期的 interface 種類）。
+原型接受明確的 Z 值清單。production 依語意表面選取：`ConductorSurface(entity, side)` 選出某個導體 Entity 的 sheet、頂面或底面，`SolutionInterface(first, second)` 選出兩個 solution region 之間沒有導體的介面；`InterfaceSurfaces(type)` 則按 Surface EPR 種類（`MA`、`MS`、`SA`）選出所有這種 face，由 SGB 在同一個 pre-pass 中展開（見[要 band 的兩種寫法](inset-imprint.qmd#request-forms)）；在 family 產生之前，一個物理 pre-pass 把請求解析成 Z 值與 support 面，找不到對應的 cell 時 build 失敗（`interface` 欄位還可宣告預期的 interface 種類）。
 
 ## Distance-origin 規則 {#distance-origin}
 

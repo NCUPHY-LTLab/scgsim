@@ -7,7 +7,7 @@
    "wall on the outer chip boundary": 2
   },
   "coalesced_wall_groups": [
-   "EXT::vacuum::sidewall"
+   "EXT::vacuum__sidewall"
   ],
   "coalesced_wall_z_ranges": [
    [
@@ -266,15 +266,15 @@
    }
   },
   "walls_by_group": {
-   "EXT::VACUUM_REGION::sidewall": 4,
-   "MA::ground_0000::sidewall": 11,
-   "MA::pad::sidewall": 6,
-   "SA::substrate|VACUUM_REGION::sidewall": 4
+   "EXT::VACUUM_REGION__sidewall": 4,
+   "MA::ground_0000__sidewall": 11,
+   "MA::pad__sidewall": 6,
+   "SA::substrate|VACUUM_REGION__sidewall": 4
   },
   "walls_spanning_more_than_one_slab": {
    "count": 4,
    "groups": [
-    "EXT::VACUUM_REGION::sidewall"
+    "EXT::VACUUM_REGION__sidewall"
    ],
    "z_ranges": [
     "-30..101/5"

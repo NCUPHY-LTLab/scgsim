@@ -4,7 +4,7 @@
    "all_validation_passed": true,
    "configurations": 9,
    "distinct_identity_digests": 1,
-   "identity_digest": "model:4161931a3cebf80d",
+   "identity_digest": "model:9095ca2ad1603d63",
    "tiles_per_side": [
     1,
     4,
@@ -21,7 +21,7 @@
    "all_validation_passed": true,
    "configurations": 9,
    "distinct_identity_digests": 1,
-   "identity_digest": "model:e2a0da6b6426e68d",
+   "identity_digest": "model:f1c080e474d97bfc",
    "tiles_per_side": [
     1,
     4,
@@ -38,7 +38,7 @@
    "all_validation_passed": true,
    "configurations": 9,
    "distinct_identity_digests": 1,
-   "identity_digest": "model:36feb3b5ae8bec90",
+   "identity_digest": "model:69a7ed793ef3730b",
    "tiles_per_side": [
     1,
     4,

@@ -9,7 +9,7 @@ scgsim-id: "docs/design/sgb/inset-imprint"
 
 **Inset** 選出一個 surface 上距 **gap edge**（面向裸露 substrate 的金屬邊，定義見 [Inset band 怎麼量](#band-measure)）至少 $m$ 的部分；相鄰兩個 margin 之間的差形成 **band**。Surface EPR 在這些區域之上，還需要一個 field solution 與選定的 loss model：把 field 在各個區域上積分，才能估計 surface loss 有多少集中在邊緣附近。這一頁說明 SGB 如何把這些區域做成模型中精確的幾何：inset 曲線的規則、band 如何組成累積的「距邊緣至少 $m_k$」selection、solver 端有什麼改變，以及它與現行的 mask 做法有何不同。SGB 在 CAD／XAO 中直接解決 inset：一般的（upstream）Palace 只需要對普通的 surface group 積分，不需要、也不支援 fork 版 Palace 的原生 Mask／Inset。
 
-在 SGB 中，inset band 是 **cut family** 的第一個使用者：cut family 是把一組曲線連同語意 role 加進 arrangement 的 record（機制見 [Cut families](cut-families.qmd)，arrangement 見 [Building an arrangement](arrangement.qmd)，兩種 route 見 [Routes](routes.qmd)）。arrangement 中的平面區域稱為 **cell**，輸出後成為 BREP **face**。這些規則在 production（`scgsim.geometry.sgb.cutfamilies`）已實作，請求以 `InsetRequest`、`ConductorSurface`、`SolutionInterface` 表示（見[使用契約](consumer-contract.qmd#requests)）。本頁的圖與數字是**對 production 的計算結果**：running example 的 pad-in-ground 是 production 測試端的 stage-level scene（`tests/sgb_scenes.py`），以 `build_model_from_catalogue` 建出，lumped port 放在 host 的 support plane（z = 0）；概念示意會標明 conceptual；產生方式見最後的補充。
+在 SGB 中，inset band 是 **cut family** 的第一個使用者：cut family 是把一組曲線連同語意 role 加進 arrangement 的 record（機制見 [Cut families](cut-families.qmd)，arrangement 見 [Building an arrangement](arrangement.qmd)，兩種 route 見 [Routes](routes.qmd)）。arrangement 中的平面區域稱為 **cell**，輸出後成為 BREP **face**。這些規則在 production（`scgsim.geometry.sgb.cutfamilies`）已實作，請求以 `InsetRequest` 與三種 support 表示：指定 face 的 `ConductorSurface`、`SolutionInterface`，以及按 Surface EPR 種類選出所有 face 的 `InterfaceSurfaces`（見[要 band 的兩種寫法](#request-forms)與[使用契約](consumer-contract.qmd#requests)）。本頁的圖與數字是**對 production 的計算結果**：running example 的 pad-in-ground 是 production 測試端的 stage-level scene（`tests/sgb_scenes.py`），以 `build_model_from_catalogue` 建出，lumped port 放在 host 的 support plane（z = 0）；概念示意會標明 conceptual；產生方式見最後的補充。
 
 ## Inset band 怎麼量 {#band-measure}
 
@@ -94,11 +94,71 @@ band 的邊界是 arrangement 的 edge，所以一個 face 不會跨過兩個 ba
 ::: {.askr-table-compact}
 | 情形 | 例 |
 |---|---|
-| **support 沒有任何 gap edge** | 一整片 ground plane 蓋住整個 die、沒有任何開口：`inset request 'ground_top': the top of 'ground' has no gap edge to measure the bands from (a conductor edge counts only where exposed dielectric lies next to it)`。懸空、旁邊只有 vacuum 的導體也是同樣的情形 |
+| **指定的 support 沒有任何 gap edge** | 一整片 ground plane 蓋住整個 die、沒有任何開口：`inset request 'ground_top': the top of 'ground' has no gap edge to measure the bands from (a conductor edge counts only where exposed dielectric lies next to it)`。懸空、旁邊只有 vacuum 的導體也是同樣的情形。按種類要求時這種 face 不是錯誤，會被略過（見[要 band 的兩種寫法](#request-forms)） |
 | margin 不合法 | 沒有 margin、margin 不是 model grid 的正整數倍、margin 沒有嚴格遞增 |
 | support 選不到面 | 實體不是導體、`side` 與導體的種類不符（有限厚度的導體要 `top` 或 `bottom`，sheet 要 `sheet`）、`SolutionInterface` 的兩個 region 沒有共同介面、介面在多個高度出現而沒有給 `z_um`、`interface` 宣告的種類找不到 |
 | request id 重複 | 每個 request id 是 family 的名稱，必須唯一 |
 :::
+
+## 要 band 的兩種寫法 {#request-forms}
+
+要求 band 的一方（例如 Palace）通常只知道「Surface EPR 的 MA 種類，margin 0.5 與 1 µm」，不知道模型裡哪些導體有這種 face：那取決於 route（Route A 是 sheet，Route B 與 C 是有限導體的 top 或 bottom）和 face 兩側的鄰居。`InsetRequest` 的 support 因此有兩種寫法。兩者並存，各有用途，彼此的行為不變：
+
+::: {.askr-table-compact}
+| 寫法 | 用在 | SGB 做什麼 |
+|---|---|---|
+| `InterfaceSurfaces(interface_type, face_kinds=None, exclude_entity_ids=())` | 某個 Surface EPR 種類（`"MA"`、`"MS"`、`"SA"`）的**每一個** face | 自己找出這些 face，替每個量得出 band 的 face 各做一個 band family；量不出的 face 略過並記錄 |
+| `ConductorSurface(entity_id, side)`、`SolutionInterface(first, second, z_um=None)` | 只替**選定**的 face 要 band，例如某一塊 pad 的 top，或某個導體要用不同的 margin | 就是那一個 face；選不到或沒有 gap edge 時 build 失敗 |
+:::
+
+### 按種類要求
+
+```python
+from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, InterfaceSurfaces
+
+insets = tuple(
+    InsetRequest(kind.lower(), InterfaceSurfaces(kind), (0.5, 1.0))
+    for kind in ("MA", "MS", "SA")
+)
+build_sgb_geometry(build_input, representation, route="B", insets=insets, output_dir=out)
+```
+
+SGB 在 [physical pre-pass](cut-families.qmd) 的 label 上找 face，用的是替 sidecar 的 `surface_epr_rows` 決定 row 的同一套 interface 種類規則，所以「要求的 face」與「結果裡有 row 的 face」不會不一致：
+
+::: {.askr-table-compact}
+| 種類 | 展開成的 face |
+|---|---|
+| `MA`、`MS` | Route A：有該種類 row 的 sheet。一側是 vacuum、另一側是 dielectric 的 sheet 兩種 row 都有，一個 family 同時服務 MA 與 MS 的請求；兩側都是 vacuum 的懸空 sheet 只有 MA。Route B 與 C：有限導體中，有該種類 cell 的 top 或 bottom face（top 通常面向 vacuum 是 MA，bottom 貼著 dielectric 是 MS）。側壁不切 band |
+| `SA` | 每一對 dielectric 與 vacuum 的 solution region，在它們相遇的每一個高度上的介面 |
+:::
+
+`AA` 旁邊沒有導體，不會有 gap edge；`MM` 與 `SS` 不是 Surface EPR 的貢獻。所以 `interface_type` 只接受 `MA`、`MS`、`SA`，其他值是 `InputError`。
+
+兩個選填欄位縮小範圍：
+
+- `face_kinds`：只留下這些種類的 face，值取自 `"sheet"`、`"top"`、`"bottom"`、`"interface"`（`"interface"` 是 SA 的介面）；`None` 是所有可以切 band 的種類。側壁不能切 band，寫 `"sidewall"` 是 `InputError`。
+- `exclude_entity_ids`：略過屬於這些 Entity 的 face。導體 face 依它的 Entity；介面只要兩側有一側是這個 Entity 就略過。名單裡有模型沒有的 Entity 是 `InputError`。
+
+**指定與按種類並用。**需要替某幾個導體用不同的 margin 時，替它們寫指定 face 的請求，再用 `exclude_entity_ids` 讓按種類的請求避開它們：
+
+```python
+insets = (
+    InsetRequest("pad_top", ConductorSurface("pad", "top"), (0.1, 0.5)),
+    InsetRequest("ma", InterfaceSurfaces("MA", exclude_entity_ids=("pad",)), (0.5, 1.0)),
+)
+```
+
+**一個 face 只有一個 family。**多個請求選到同一個 face 時，它們共用一個 family，margin 取所有請求的聯集（相同的長度只算一次），band 數隨之增加；上面的寫法讓兩者不落在同一個 face，就不會悄悄混用 margin。一個指定 face 的請求保有自己的 `request_id`，只由按種類的請求選到的 face 則是 `<request_id>::<entity>::<side>`（介面是 <code>&lt;request_id&gt;::&lt;first&gt;&#124;&lt;second&gt;::z=&lt;z&gt;</code>）；多個請求共用時取 id 排序最前的請求。這些 id 是 lineage（`<id>/ring<r>/edge<k>`）、`mesh_features` 的 `band_boundary` 來源與 `insets` 的鍵，它們只由請求和 face 決定，不隨 `workers`、`tiles` 或執行次數改變。兩個指定 face 的請求選到同一個 face 時，兩者不會合併：兩個 family 的 band 會落進同名的 group，band 編號只在各自的 family 內有意義，所以 SGB 在規劃 band 時就以 `InputError` 停止，訊息指出兩個請求的 id 與那個 face。即使之後有 port 蓋滿這個 face、最後沒有任何 band，也一樣停止。每個 face 只寫一次請求，把所有 margin 放在同一個請求裡。
+
+**沒有 gap edge 的 face 會被略過。**「某種類的每個 face」也包含量不出 band 的 face：基板下方的 SA 介面（旁邊沒有附著導體）、整片蓋住 die 的 ground plane、懸空的導體，都沒有 gap edge（定義見[上一節](#band-measure)）。按種類要求時 SGB 略過這些 face，把每一個記在 sidecar 該請求的 `expansion.skipped`（原因 `no_gap_edge`），build 不失敗。所以要確認某個導體真的有 band，看 `expansion.banded` 與 `expansion.skipped`，不要只看 build 有沒有成功。`expansion.banded` 列的是 physical pre-pass 建出的 family；family 有沒有可積分的 band，要讀那個 family 自己的 `bands`，以及最後的 `surface_epr_rows`，因為 port 是之後才放上去的，可以把一個 family 的 face 整個蓋住（例如矩形 port 蓋住整個 SA gap，只在兩塊 sheet 上各留 0.5 µm 的 landing）：該 family 仍列在 `expansion.banded`，`bands` 是 `{}`，`expansion.skipped` 是空的，`surface_epr_rows` 也沒有該 SA 的 row。指定 face 的寫法維持失敗，因為你點名的 face 沒有 gap edge 是輸入錯誤。
+
+下表是兩個真實輸入各以 MA、MS、SA 三個請求（margin 0.5 與 1 µm）展開的結果，最後一列是整片被 ground 蓋住的 die（`InterfaceSurfaces("MA")` 略過它的 top，同一個 face 以 `ConductorSurface` 要求則失敗）。pad-in-ground 的基板下方有一層 vacuum，所以 z = −10 µm 的 SA 介面被略過；thin-film pair 的 sheet 一側是 vacuum、另一側是 substrate，MA 與 MS 的請求共用同一個 family：
+
+::: {.askr-table-compact}
+{{< include figures/inset-types-table.md >}}
+:::
+
+以這些請求建出的模型，與手寫對應的指定 face 請求（使用上表的 id）建出的模型有相同的 `model.identity_digest`（`_figures/inset_types.py` 計算並檢查；測試 `test_a_type_request_gives_the_model_of_the_equivalent_concrete_requests`）。
 
 ## 以 running example 看
 
@@ -108,7 +168,7 @@ running example 的 pad 有 45° 的 chamfer、一個 reflex notch、一個 roun
 
 {{< askr-chart-view src="figures/inset-bands-pad.html" label="檢視 band（用按鈕放大 notch、hole 與 corner）" >}}
 
-每個 band 由一個或多個 cell 組成，輸出後成為 BREP face 與一個 physical group，名稱來自 label（production 中 Route A 的 sheet 為 `pad::band=2`，Route B 的 top 與 bottom face 為 `MA::pad::top::band=2` 與 `MS::pad::bottom::band=2`，gap 為 <code>SA::substrate&#124;vacuum::interface::band=0</code>）。下表是 Route A 範例（production 的 `pad_in_ground_A_bands`）；面積由精確 arc 計算，是後面 KLayout 比較所用的數字：
+每個 band 由一個或多個 cell 組成，輸出後成為 BREP face 與一個 physical group，名稱來自 label（production 中 Route A 的 sheet 為 `pad::band=2`，Route B 的 top 與 bottom face 為 `MA::pad__top::band=2` 與 `MS::pad__bottom::band=2`，gap 為 <code>SA::substrate&#124;vacuum__interface::band=0</code>，名稱不帶高度，規則見 [identity](identity.qmd#band-group-names)）。下表是 Route A 範例（production 的 `pad_in_ground_A_bands`）；面積由精確 arc 計算，是後面 KLayout 比較所用的數字：
 
 ::: {.askr-table-compact .askr-table-numeric}
 | Support surface | Band | Faces | 面積 (µm²) | Band ≥ k 的聯集，「$R_{m_k}$」(µm²) |
@@ -188,7 +248,7 @@ $Q(\ge m_1)$、$Q(\ge m_2)$、$Q(\ge m_3)$ 是累積且巢狀的：每一個都�
 | $\ge m_3$ | 2 µm | `band=3`（14） |
 :::
 
-Sidecar 的 `surface_epr_rows` 把 sheet 的 Surface EPR row `MA::pad::sheet::band=k` 與 `MS::pad::sheet::band=k` 都對到 `pad::band=k`（pad 上方是 vacuum、下方是 substrate，所以兩個 row 都存在；兩列的 `shared_face_group` 相同，`face_sides` 逐 face 列出積分的一側，`side` 分別是 `above` 與 `below`。sheet 兩側都是 vacuum 時只有 MA row），其他有 band 的 group 則對到它自己。`unions.nets.pad` 列出四個 band group，所以 pad sheet 未加 mask 的 loss 就是對它們全部加總；這就是 band 加起來等於 baseline 的一致性檢查。Attribute 的數字依排序後的 group 名稱發放，加入 group 就會位移；請儲存 group 名稱（見 [Identity](identity.qmd)）。
+Sidecar 的 `surface_epr_rows` 把 sheet 的 Surface EPR row `MA::pad__sheet::band=k` 與 `MS::pad__sheet::band=k` 都對到 `pad::band=k`（pad 上方是 vacuum、下方是 substrate，所以兩個 row 都存在；兩列的 `shared_face_group` 相同，`face_sides` 逐 face 列出積分的一側，`side` 分別是 `above` 與 `below`。sheet 兩側都是 vacuum 時只有 MA row），其他有 band 的 group 則對到它自己。`unions.nets.pad` 列出四個 band group，所以 pad sheet 未加 mask 的 loss 就是對它們全部加總；這就是 band 加起來等於 baseline 的一致性檢查。Attribute 的數字依排序後的 group 名稱發放，加入 group 就會位移；請儲存 group 名稱（見 [Identity](identity.qmd)）。
 
 ## Port 不移動 band
 
@@ -219,8 +279,8 @@ Band **逐 support face** 產生：
 ![Band 的位置。Route A 每個 band 一個 sheet face。Route B 的有限厚度金屬 prism，其 top face（MA）與 bottom face（MS）各自獨立切 band；side wall 在 v1 不切 band。Conceptual 示意圖。](figures/inset-routes-section.svg){#fig-routes fig-alt="剖面圖：Route A 是基板上的一層有 band 的薄 sheet；Route B 是上下表面都有 band 的金屬塊。"}
 
 - **Route A。** sheet 的 face 依兩側的鄰居可同時是 metal–vacuum 與 metal–substrate。它承載 band，並以 face 命名為 `<entity>::band=k`；Surface EPR 的 MA row（某個 face 的某一側是 vacuum 時才有）與 MS row（某個 face 的某一側是 dielectric 時才有）都參照這一個 group（`surface_epr_rows`）。
-- **Route B，top face。** 位於 $z = 0.2$ µm 的 family `band_pad_top` 產生 `MA::pad::top::band=k`。
-- **Route B，bottom face。** 位於 $z = 0$ 的 family `band_pad_bottom` 產生 `MS::pad::bottom::band=k`。Route B 的範例兩個 face 都切 band：規劃 60 個 face、274 條 edge、321 個 vertex，23 個 group，validation 通過（31 項），`unions.nets.pad` 列出八個 band group 與 `MA::pad::sidewall`（side wall，不切 band）；port 在 z = 0 的 support plane，是 substrate 與 vacuum 之間的一個 face，不在金屬的 top 或 bottom face 上，也不移動任何 band。
+- **Route B，top face。** 位於 $z = 0.2$ µm 的 family `band_pad_top` 產生 `MA::pad__top::band=k`。
+- **Route B，bottom face。** 位於 $z = 0$ 的 family `band_pad_bottom` 產生 `MS::pad__bottom::band=k`。Route B 的範例兩個 face 都切 band：規劃 60 個 face、274 條 edge、321 個 vertex，23 個 group，validation 通過（31 項），`unions.nets.pad` 列出八個 band group 與 `MA::pad__sidewall`（side wall，不切 band）；port 在 z = 0 的 support plane，是 substrate 與 vacuum 之間的一個 face，不在金屬的 top 或 bottom face 上，也不移動任何 band。
 - **Side wall** 不在 v1 範圍：side wall 的 band 會是 wall face 上的第三個 family，目前不產生。
 
 ## Solver 收到什麼
@@ -290,10 +350,10 @@ mesh 檢查（含 band 的 Route A 模型；最大 40 µm，band 曲線附近 1 
 ::: {.askr-table-compact .askr-table-numeric}
 | Band group | Faces | Triangles | 兩側各自的 tet | 全部被 tet 共用 | Centroid 在 band 內 |
 |---|---|---|---|---|---|
-| <code>SA::substrate&#124;vacuum::interface::band=0</code> | 3 | 1857 | 1857 + 1857 | 是 | 是 |
-| <code>SA::substrate&#124;vacuum::interface::band=1</code> | 3 | 1904 | 1904 + 1904 | 是 | 是 |
-| <code>SA::substrate&#124;vacuum::interface::band=2</code> | 3 | 3692 | 3692 + 3692 | 是 | 是 |
-| <code>SA::substrate&#124;vacuum::interface::band=3</code> | 2 | 3672 | 3672 + 3672 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum__interface::band=0</code> | 3 | 1857 | 1857 + 1857 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum__interface::band=1</code> | 3 | 1904 | 1904 + 1904 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum__interface::band=2</code> | 3 | 3692 | 3692 + 3692 | 是 | 是 |
+| <code>SA::substrate&#124;vacuum__interface::band=3</code> | 2 | 3672 | 3672 + 3672 | 是 | 是 |
 | `pad::band=0` | 2 | 790 | 790 + 790 | 是 | 是 |
 | `pad::band=1` | 2 | 807 | 807 + 807 | 是 | 是 |
 | `pad::band=2` | 2 | 1591 | 1591 + 1591 | 是 | 是 |
@@ -314,3 +374,5 @@ KLayout 交叉檢查（區域以 1 nm database unit 表示，補集以 512 邊�
 | gap | 0.5 | 13013.9783 | 13013.9840 | −0.00572 | −4.4e−07 | 0.493 |
 | gap | 2 | 11633.9694 | 11633.9680 | +0.00136 | +1.2e−07 | 0.483 |
 :::
+
+「要 band 的兩種寫法」一節的表格與 sidecar 節錄由 `_figures/inset_types.py` 產生，執行方式與 `inset_origin.py` 相同。它以 `build_sgb_geometry` 建 `gds_pad_in_ground`（Route B）與 `thin_film_pair`（Route A），各以 `InterfaceSurfaces("MA")`、`"MS"`、`"SA"`（margin 0.5 與 1 µm）要求 band，再以手寫的指定 face 請求（使用展開後的 id）重建一次並比較 `model.identity_digest`；最後一列是 `tests/sgb_scenes.py::slab_model` 的一個蓋住整個 die 的導體。輸出是 `figures/inset-types-table.md`、`figures/inset-types-record.md` 與 `figures/inset-types-numbers.json`。

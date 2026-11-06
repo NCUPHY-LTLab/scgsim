@@ -96,7 +96,7 @@ SGB 把 sliver 的來源分成四種：其中三種是推導方式造成的人�
 該 gap 的 report 資料（取自 `slivers-numbers.json`，節錄）：
 
 ```json
-{ "id": "f:fe1697e555157018", "kind": "horizontal", "group": "SA::substrate|VACUUM_REGION::interface",
+{ "id": "f:fe1697e555157018", "kind": "horizontal", "group": "SA::substrate|VACUUM_REGION__interface",
   "value_um": 0.005, "measure": "local feature size", "bounded": false,
   "width_2a_over_p_um": 0.005, "area_um2": 0.7999, "perimeter_um": 319.96,
   "plane": "level[0]", "location_um": [30.0025, 50.0, 0.0],

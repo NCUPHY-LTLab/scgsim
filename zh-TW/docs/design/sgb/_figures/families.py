@@ -24,6 +24,7 @@ from __future__ import annotations
 from dataclasses import replace
 from fractions import Fraction
 
+from group_facts import band_of_group
 from labels_common import (
     G_UM,
     PALETTE,
@@ -60,8 +61,7 @@ from scgsim.geometry.sgb.records.families import CurveFamilyRecord
 
 MARGINS = (0.1, 0.5, 2.0)
 VIEW = ((26.0, 74.0), (26.0, 74.0))
-PAD_SHEET = "pad"
-GAP = "SA::substrate|VACUUM_REGION::interface"
+GAP = "SA::substrate|VACUUM_REGION__interface"
 
 
 def _um(x: float) -> int:
@@ -163,11 +163,12 @@ def _cell_colour(model, layer, fi: int) -> str:
         return "#f5f5f5"
     if group in GROUP_FILL:
         return GROUP_FILL[group]
-    if "::band=" in group:
-        k = int(group.rsplit("=", 1)[1])
+    label = band_of_group(model, group)
+    if label is not None:
+        family, k = label
         ramp = (
             ["#08306b", "#2171b5", "#6baed6", "#c6dbef"]
-            if group.startswith(PAD_SHEET)
+            if family == "band_pad"
             else ["#7f2704", "#d94801", "#fd8d3c", "#fdd0a2"]
         )
         return ramp[k]
@@ -308,7 +309,9 @@ def counts(model) -> dict:
         "face_groups": len(groups),
         "faces_in_SA_groups": sum(n for g, n in groups.items() if g.startswith("SA")),
         "faces_in_pad_sheet_band_groups": sum(
-            n for g, n in groups.items() if g.startswith(f"{PAD_SHEET}::band=")
+            n
+            for g, n in groups.items()
+            if (label := band_of_group(model, g)) and label[0] == "band_pad"
         ),
         "validation_passed": not model.report.failures,
     }

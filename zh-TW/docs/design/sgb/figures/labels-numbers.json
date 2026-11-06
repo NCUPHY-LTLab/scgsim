@@ -72,7 +72,6 @@
  "membership_record": {
   "pad_sidewalls": [
    {
-    "PORT_SHEET__P1__0000": 1.0,
     "pad": 1.0
    },
    {
@@ -91,7 +90,7 @@
     "pad": 1.0
    }
   ],
-  "top_face_group": "MA::pad::top",
+  "top_face_group": "MA::pad__top",
   "top_face_membership": {
    "VACUUM_REGION": 1.0,
    "pad": 1.0
@@ -155,18 +154,18 @@
  },
  "route_b_groups": {
   "faces_per_group": {
-   "EXT::VACUUM_REGION::bottom": 1,
-   "EXT::VACUUM_REGION::sidewall": 4,
-   "EXT::VACUUM_REGION::top": 1,
-   "MA::ground_0000::sidewall": 11,
-   "MA::ground_0000::top": 1,
-   "MA::pad::sidewall": 6,
-   "MA::pad::top": 1,
-   "MS::ground_0000::bottom": 1,
-   "MS::pad::bottom": 1,
+   "EXT::VACUUM_REGION__bottom": 1,
+   "EXT::VACUUM_REGION__sidewall": 4,
+   "EXT::VACUUM_REGION__top": 1,
+   "MA::ground_0000__sidewall": 11,
+   "MA::ground_0000__top": 1,
+   "MA::pad__sidewall": 6,
+   "MA::pad__top": 1,
+   "MS::ground_0000__bottom": 1,
+   "MS::pad__bottom": 1,
    "PORT::PORT_SHEET__P1__0000": 1,
-   "SA::substrate|VACUUM_REGION::interface": 2,
-   "SA::substrate|VACUUM_REGION::sidewall": 4
+   "SA::substrate|VACUUM_REGION__interface": 2,
+   "SA::substrate|VACUUM_REGION__sidewall": 4
   },
   "volumes": [
    "VACUUM_REGION",
@@ -236,12 +235,12 @@
   "cells_after": 5,
   "edges_after": 28,
   "groups": [
-   "MA::pad::sidewall",
-   "MA::pad::top",
-   "MA::pad_tab::sidewall",
-   "MA::pad_tab::top",
-   "MS::pad::bottom",
-   "MS::pad_tab::bottom"
+   "MA::pad__sidewall",
+   "MA::pad__top",
+   "MA::pad_tab__sidewall",
+   "MA::pad_tab__top",
+   "MS::pad__bottom",
+   "MS::pad_tab__bottom"
   ],
   "labels": [
    "VACUUM_REGION",

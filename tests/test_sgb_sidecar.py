@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+from itertools import permutations
 from pathlib import Path
 
 import jsonschema
@@ -161,9 +162,9 @@ def test_a_surface_group_names_its_entities_net_face_kind_and_adjacent_regions(
     """A surface group names its entities, Net, one face kind and the regions on its sides."""
     groups = sidecars["pad_b"]["physical_groups"]
     ma, wall, ms = (
-        groups["MA::pad::top"],
-        groups["MA::pad::sidewall"],
-        groups["MS::pad::bottom"],
+        groups["MA::pad__top"],
+        groups["MA::pad__sidewall"],
+        groups["MS::pad__bottom"],
     )
     assert ma["entities"] == wall["entities"] == ms["entities"] == ["pad"]
     assert ma["net"] == ms["net"] == "pad"
@@ -174,7 +175,7 @@ def test_a_surface_group_names_its_entities_net_face_kind_and_adjacent_regions(
     )
     assert [d["kind"] for d in ma["adjacent_domains"]] == ["vacuum"]
     assert [d["kind"] for d in ms["adjacent_domains"]] == ["dielectric"]
-    sa = groups["SA::substrate|vacuum::interface"]
+    sa = groups["SA::substrate|vacuum__interface"]
     assert sa["face_kind"] == "interface"
     assert sa["entities"] == ["substrate", "vacuum"] and sa["net"] is None
     assert sorted(d["kind"] for d in sa["adjacent_domains"]) == ["dielectric", "vacuum"]
@@ -182,7 +183,7 @@ def test_a_surface_group_names_its_entities_net_face_kind_and_adjacent_regions(
 
 
 def test_a_group_never_mixes_face_kinds_and_its_name_says_which_it_is(sidecars):
-    """``<kind>::<entity>::<face kind>[::band=k]``: the third part of the name is the group's one face kind.
+    """``<kind>::<entity>__<face kind>[::band=k]`` is rebuilt from the group's fields, never read back from the name.
 
     A Route A sheet group is named by its bare entity id and has the face kind ``sheet`` without carrying it.
     """
@@ -190,14 +191,20 @@ def test_a_group_never_mixes_face_kinds_and_its_name_says_which_it_is(sidecars):
         for name, group in side["physical_groups"].items():
             if group["dim"] != 2 or group["interface_type"] == "PORT":
                 continue
+            band = group["band"]
+            tail = "" if band is None else f"::band={band['index']}"
             if group["interface_type"] == "SHEET":
                 assert group["face_kind"] == "sheet", (case, name)
-                assert name.split("::")[0] in group["entities"], (case, name)
-            else:
-                assert name.split("::")[2] == group["face_kind"] in FACE_KINDS, (
+                assert name in {f"{entity}{tail}" for entity in group["entities"]}, (
                     case,
                     name,
                 )
+            else:
+                assert group["face_kind"] in FACE_KINDS, (case, name)
+                assert name in {
+                    f"{group['interface_type']}::{'|'.join(order)}__{group['face_kind']}{tail}"
+                    for order in permutations(group["entities"])
+                }, (case, name)
             faces = [side["faces"][f] for f in group["ids"]]
             assert {f["face_kind"] for f in faces} == {group["face_kind"]}, (case, name)
     ports = [
@@ -218,17 +225,17 @@ def test_the_example_group_names_of_the_three_routes(sidecars):
         for case in ("pad_a", "pad_b", "pad_c")
     }
     assert surfaces["pad_a"] == [
-        "EXT::substrate::bottom", "EXT::substrate::sidewall", "EXT::vacuum::sidewall", "EXT::vacuum::top",
-        "PORT::p1", "SA::substrate|vacuum::interface", "ground", "pad",
+        "EXT::substrate__bottom", "EXT::substrate__sidewall", "EXT::vacuum__sidewall", "EXT::vacuum__top",
+        "PORT::p1", "SA::substrate|vacuum__interface", "ground", "pad",
     ]  # fmt: skip
     assert surfaces["pad_b"] == [
-        "EXT::substrate::bottom", "EXT::substrate::sidewall", "EXT::vacuum::sidewall", "EXT::vacuum::top",
-        "MA::ground::sidewall", "MA::ground::top", "MA::pad::sidewall", "MA::pad::top",
-        "MS::ground::bottom", "MS::pad::bottom", "PORT::p1", "SA::substrate|vacuum::interface",
+        "EXT::substrate__bottom", "EXT::substrate__sidewall", "EXT::vacuum__sidewall", "EXT::vacuum__top",
+        "MA::ground__sidewall", "MA::ground__top", "MA::pad__sidewall", "MA::pad__top",
+        "MS::ground__bottom", "MS::pad__bottom", "PORT::p1", "SA::substrate|vacuum__interface",
     ]  # fmt: skip
     assert (
-        "EXT::ground::sidewall" in surfaces["pad_c"]
-        and "MM::ground|pad::interface" not in surfaces["pad_c"]
+        "EXT::ground__sidewall" in surfaces["pad_c"]
+        and "MM::ground|pad__interface" not in surfaces["pad_c"]
     )
 
 
@@ -237,16 +244,16 @@ def test_a_sheet_on_a_substrate_carries_both_surface_epr_rows(sidecars):
     side = sidecars["pad_a_bands"]
     rows = side["surface_epr_rows"]
     assert (
-        rows["MA::pad::sheet::band=2"]["group"]
-        == rows["MS::pad::sheet::band=2"]["group"]
+        rows["MA::pad__sheet::band=2"]["group"]
+        == rows["MS::pad__sheet::band=2"]["group"]
         == "pad::band=2"
     )
-    assert rows["MA::pad::sheet::band=2"]["band"] == 2
-    assert rows["MA::pad::sheet::band=2"]["entities"] == ["pad"]
-    assert rows["SA::substrate|vacuum::interface::band=0"]["interface_type"] == "SA"
+    assert rows["MA::pad__sheet::band=2"]["band"] == 2
+    assert rows["MA::pad__sheet::band=2"]["entities"] == ["pad"]
+    assert rows["SA::substrate|vacuum__interface::band=0"]["interface_type"] == "SA"
     unbanded = sidecars["pad_a"]["surface_epr_rows"]
     assert (
-        unbanded["MA::pad::sheet"]["band"] is None and "MA::ground::sheet" in unbanded
+        unbanded["MA::pad__sheet"]["band"] is None and "MA::ground__sheet" in unbanded
     )  # every Surface-EPR row, banded or not
 
 
@@ -254,7 +261,7 @@ def test_a_sheet_row_marks_the_side_of_the_two_sided_face_it_integrates(sidecars
     """The MA row sees the vacuum above the sheet, the MS row the substrate below; both name the shared face group."""
     rows = sidecars["pad_a_bands"]["surface_epr_rows"]
     for k in range(4):
-        ma, ms = rows[f"MA::pad::sheet::band={k}"], rows[f"MS::pad::sheet::band={k}"]
+        ma, ms = rows[f"MA::pad__sheet::band={k}"], rows[f"MS::pad__sheet::band={k}"]
         assert (ma["side"], ms["side"]) == ("above", "below")
         assert ma["shared_face_group"] == ms["shared_face_group"] == f"pad::band={k}"
         assert set(ma["face_sides"].values()) == {"above"}
@@ -277,9 +284,9 @@ def test_a_floating_sheet_has_vacuum_on_both_sides_so_it_has_no_ms_row(sidecars)
     side = sidecars["floating_sheet_a"]
     rows = side["surface_epr_rows"]
     (face,) = side["physical_groups"]["float"]["ids"]
-    assert rows["MA::float::sheet"]["face_sides"] == {face: "both"}
-    assert rows["MA::float::sheet"]["side"] == "both"
-    assert "MS::float::sheet" not in rows
+    assert rows["MA::float__sheet"]["face_sides"] == {face: "both"}
+    assert rows["MA::float__sheet"]["side"] == "both"
+    assert "MS::float__sheet" not in rows
     unions = side["unions"]["interface_types"]
     assert "float" in unions["MA"] and "float" not in unions.get("MS", [])
     assert "float" in unions["SHEET"]
@@ -322,7 +329,7 @@ def test_a_sheet_group_with_different_neighbours_reports_them_per_face():
     side = sidecar_of(model)
     rows, faces = side["surface_epr_rows"], side["physical_groups"]["pad"]["ids"]
     assert len(faces) == 2
-    ma, ms = rows["MA::pad::sheet"], rows["MS::pad::sheet"]
+    ma, ms = rows["MA::pad__sheet"], rows["MS::pad__sheet"]
     assert sorted(ma["face_sides"]) == sorted(faces)
     assert sorted(ma["face_sides"].values()) == ["above", "both"]
     assert ma["side"] == "mixed"
@@ -340,8 +347,8 @@ def test_a_sheet_group_with_different_neighbours_reports_them_per_face():
 def test_route_b_bands_are_separate_top_ma_and_bottom_ms_rows(sidecars):
     """Route b bands are separate top ma and bottom ms rows."""
     rows = sidecars["pad_b_bands"]["surface_epr_rows"]
-    assert rows["MA::pad::top::band=1"]["group"] == "MA::pad::top::band=1"
-    assert rows["MS::pad::bottom::band=1"]["group"] == "MS::pad::bottom::band=1"
+    assert rows["MA::pad__top::band=1"]["group"] == "MA::pad__top::band=1"
+    assert rows["MS::pad__bottom::band=1"]["group"] == "MS::pad__bottom::band=1"
 
 
 def test_route_c_conductor_interiors_are_volume_groups_of_kind_conductor(sidecars):
@@ -405,7 +412,7 @@ def test_unions_are_lists_of_primary_groups_and_each_group_is_listed_under_the_t
 def test_net_unions_list_the_exposed_conductor_groups_of_each_route(sidecars):
     """Net unions list the exposed conductor groups of each route."""
     assert sidecars["pad_a"]["unions"]["nets"]["pad"] == ["pad"]
-    finite = ["MA::pad::sidewall", "MA::pad::top", "MS::pad::bottom"]
+    finite = ["MA::pad__sidewall", "MA::pad__top", "MS::pad__bottom"]
     assert sidecars["pad_b"]["unions"]["nets"]["pad"] == finite
     assert sidecars["pad_c"]["unions"]["nets"]["pad"] == finite
 
@@ -461,7 +468,7 @@ def test_face_records_carry_group_kind_z_and_the_two_sides(sidecars):
     top = next(
         f
         for f in faces.values()
-        if f["group"] == "MA::pad::top" and f["face_kind"] == "top"
+        if f["group"] == "MA::pad__top" and f["face_kind"] == "top"
     )
     assert top["z_um"] == [0.2, 0.2] and top["negative_volume"] is not None
 
@@ -510,7 +517,7 @@ def test_inset_families_record_request_margins_and_the_group_of_every_band(sidec
         2.0,
     ]
     assert top["margins_grid"] == [100, 500, 2000] and top["band_count"] == 4
-    assert top["bands"] == {str(k): [f"MA::pad::top::band={k}"] for k in range(4)}
+    assert top["bands"] == {str(k): [f"MA::pad__top::band={k}"] for k in range(4)}
     assert by_request["band_gap"]["support"]["first_entity"] == "substrate"
     for group in (
         g for g in side["physical_groups"].values() if g["dim"] == 2 and g["band"]
@@ -577,10 +584,10 @@ def test_palace_can_rebuild_its_group_dict_from_the_sidecar(sidecars):
     groups = palace_style_groups(sidecars["pad_b"])
     assert set(groups["volumes"]) == {"substrate", "vacuum"}
     assert {
-        "MA::pad::top",
-        "MS::pad::bottom",
-        "MA::ground::top",
-        "MS::ground::bottom",
+        "MA::pad__top",
+        "MS::pad__bottom",
+        "MA::ground__top",
+        "MS::ground__bottom",
     } <= set(groups["pec_surfaces"])
     for name, record in groups["pec_surfaces"].items():
         kinds = {d for d in record["adjacent_solution_volume_ids"]}
@@ -609,7 +616,7 @@ def test_aedt_can_rebuild_its_contribution_ledger_from_the_sidecar(sidecars):
             )
     assert {kind for _, _, kind, _, _ in ledger} == {"MA", "MS", "SA"}
     assert all(owners for _, _, _, owners, _ in ledger)
-    assert {k for _, g, kind, _, k in ledger if g == "MS::pad::bottom"} == {"bottom"}
+    assert {k for _, g, kind, _, k in ledger if g == "MS::pad__bottom"} == {"bottom"}
 
 
 # --------------------------------------------------------------------------- AEDT names
@@ -618,7 +625,7 @@ def test_aedt_can_rebuild_its_contribution_ledger_from_the_sidecar(sidecars):
 def test_aedt_names_keep_only_the_characters_aedt_keeps():
     """Aedt names keep only the characters aedt keeps."""
     assert sanitise_aedt_name("chip/air") == "chip_air"
-    assert sanitise_aedt_name("MA::pad::top::band=2") == "MA__pad__top__band_2"
+    assert sanitise_aedt_name("MA::pad__top::band=2") == "MA__pad__top__band_2"
     assert sanitise_aedt_name("SA::substrate|vacuum") == "SA__substrate_vacuum"
     assert sanitise_aedt_name("unié") == "uni_"
     assert sanitise_aedt_name("") == "_"

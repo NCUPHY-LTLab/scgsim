@@ -154,7 +154,7 @@ def surface_epr_rows(
     """Every Surface-EPR row and the primary group that carries it.
 
     ``MA``, ``MS`` and ``SA`` groups carry their own row.  A Route A sheet group carries the metal-air
-    row of its Entity (``MA::<entity>::sheet[::band=k]``) when a face of it has vacuum on some side, and
+    row of its Entity (``MA::<entity>__sheet[::band=k]``) when a face of it has vacuum on some side, and
     the metal-substrate row (``MS::...``) when a face has a dielectric on some side; a row with no such
     face does not exist.  Both rows of one sheet group integrate the same face, once per side, so they
     name the same ``shared_face_group``.  Each row carries:

@@ -82,7 +82,7 @@ def test_the_horizontal_faces_above_and_below_carry_the_split_so_edges_stay_shar
         )
         return [e for e, _ in face.loops[0] if topology.edges[e].curve is not None]
 
-    assert len(arc_edges("MA::disk::top")) == len(arc_edges("MS::disk::bottom")) == 5
+    assert len(arc_edges("MA::disk__top")) == len(arc_edges("MS::disk__bottom")) == 5
     assert model.report.failures == []
 
 

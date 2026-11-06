@@ -125,7 +125,7 @@
    "narrowest_face_entry": {
     "area_um2": 60.0,
     "bounded": false,
-    "group": "EXT::ground_left::sidewall",
+    "group": "EXT::ground_left__sidewall",
     "id": "f:0af5b2fba0fc1a9f",
     "kind": "wall",
     "location_um": [
@@ -178,7 +178,7 @@
    "narrowest_face_entry": {
     "area_um2": 131.4819,
     "bounded": false,
-    "group": "SA::substrate|vacuum::interface::band=1",
+    "group": "SA::substrate|vacuum__interface::band=1",
     "id": "f:67fa4319ab888d61",
     "kind": "horizontal",
     "location_um": [
@@ -228,7 +228,7 @@
    "narrowest_face_entry": {
     "area_um2": 33.8161,
     "bounded": false,
-    "group": "SA::substrate|vacuum::interface::band=0",
+    "group": "SA::substrate|vacuum__interface::band=0",
     "id": "f:10f7f89e8f4e2b44",
     "kind": "horizontal",
     "location_um": [
@@ -276,18 +276,18 @@
    "max_arc_deviation_grid": 0.0,
    "max_snap_drift_grid": 0.0,
    "narrowest_face_entry": {
-    "area_um2": 40.0,
+    "area_um2": 1160.0,
     "bounded": false,
-    "group": "PORT::PORT_SHEET__P1__0000",
-    "id": "f:2d1bc77f577fd23b",
+    "group": "SA::substrate|VACUUM_REGION__interface",
+    "id": "f:2ea9880cc00e7a72",
     "kind": "horizontal",
     "location_um": [
-     35.0,
+     30.0,
      50.0,
      0.0
     ],
     "measure": "local feature size",
-    "perimeter_um": 28.0,
+    "perimeter_um": 252.0,
     "plane": "level[0]",
     "sources": [
      "PORT_SHEET__P1__0000",
@@ -295,21 +295,20 @@
      "pad"
     ],
     "value_um": 4.0,
-    "width_2a_over_p_um": 2.857143
+    "width_2a_over_p_um": 9.206349
    },
    "narrowest_face_um": 4.0,
    "shortest_edge_entry": {
-    "id": "e:d84eeecdbbdb7582",
+    "id": "e:7e88aa41fe5fca70",
     "kind": "horizontal",
     "location_um": [
-     30.0,
+     40.0,
      50.0,
      0.0
     ],
     "plane": "level[0]",
     "sources": [
-     "PORT_SHEET__P1__0000/polygon0/ring1/edge0",
-     "ground_0000/polygon0/ring1/edge4"
+     "pad/polygon0/ring0/edge3"
     ],
     "value_um": 4.0
    },
@@ -330,7 +329,7 @@
    "narrowest_face_entry": {
     "area_um2": 7.62,
     "bounded": false,
-    "group": "SA::substrate|VACUUM_REGION::interface::band=0",
+    "group": "SA::substrate|VACUUM_REGION__interface::band=0",
     "id": "f:2257d645f7c103a6",
     "kind": "horizontal",
     "location_um": [
@@ -381,7 +380,7 @@
    "narrowest_face_entry": {
     "area_um2": 6.0,
     "bounded": false,
-    "group": "MA::ground_0000::sidewall",
+    "group": "MA::ground_0000__sidewall",
     "id": "f:179b3dd8d7bb9c70",
     "kind": "wall",
     "location_um": [
@@ -410,7 +409,6 @@
     ],
     "plane": "column(40000, 52000)[0,1/5]",
     "sources": [
-     "PORT_SHEET__P1__0000",
      "pad"
     ],
     "value_um": 0.2
@@ -432,7 +430,7 @@
    "narrowest_face_entry": {
     "area_um2": 7.62,
     "bounded": false,
-    "group": "SA::substrate|VACUUM_REGION::interface::band=0",
+    "group": "SA::substrate|VACUUM_REGION__interface::band=0",
     "id": "f:2257d645f7c103a6",
     "kind": "horizontal",
     "location_um": [
@@ -504,7 +502,7 @@
    "narrowest_face": {
     "area_um2": 69999.6,
     "bounded": false,
-    "group": "EXT::substrate::bottom",
+    "group": "EXT::substrate__bottom",
     "id": "f:1407f64679af0aca",
     "kind": "horizontal",
     "location_um": [
@@ -542,7 +540,7 @@
    "narrowest_face": {
     "area_um2": 20.0,
     "bounded": false,
-    "group": "MA::m1::sidewall",
+    "group": "MA::m1__sidewall",
     "id": "f:1667e499ea640380",
     "kind": "wall",
     "location_um": [
@@ -616,7 +614,7 @@
   "narrowest_face": {
    "area_um2": 4000.08,
    "bounded": false,
-   "group": "MS::a::bottom",
+   "group": "MS::a__bottom",
    "id": "f:3500a78cd1761d3f",
    "kind": "horizontal",
    "location_um": [
@@ -643,7 +641,7 @@
    {
     "area_um2": 0.7999,
     "bounded": false,
-    "group": "SA::substrate|VACUUM_REGION::interface",
+    "group": "SA::substrate|VACUUM_REGION__interface",
     "id": "f:fe1697e555157018",
     "kind": "horizontal",
     "location_um": [
@@ -664,7 +662,7 @@
    {
     "area_um2": 1000.0,
     "bounded": false,
-    "group": "SA::substrate|VACUUM_REGION::sidewall",
+    "group": "SA::substrate|VACUUM_REGION__sidewall",
     "id": "f:6bb1445bdd058f99",
     "kind": "wall",
     "location_um": [

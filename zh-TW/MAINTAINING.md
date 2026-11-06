@@ -8,9 +8,7 @@
 
 ## 來源分工 {#source-ownership}
 
-Architecture 負責共用程式、套件文件、文件網站與 Preview；Palace 與 AEDT Lead 各自負責後端、測試與技術文件。各 Lead 提交及推送自己的工作分支，Architecture 決定整合順序，Integration 負責公開隱私審查與受保護合併。精確範圍以 [AGENTS.md](../AGENTS.md) 為準。
-
-現有寫入者保留指派路徑與執行中的服務。變更共用路徑或接手範圍前，先與該寫入者協調。
+Palace 與 AEDT 後端實作、測試及技術文件仍屬不同來源責任，詳見[儲存庫根目錄指南](../AGENTS.md)。原生求解器觀察與結果解讀應維持各自明定的技術界線。貢獻者協調與交付請遵循根目錄指南及共用 `$github-flow`。
 
 ## 原生呈現 {#native-presentation}
 
@@ -85,7 +83,7 @@ manifest 是讀取器的輸入，不代表有權存取或發布其資料。缺�
 
 ## 跨專案的大型提案 {#larger-proposals-across-projects}
 
-重大架構、跨套件契約或系統層級提案，請交由最近的擁有者 Lead 處理。在撰寫執行計畫前，該 Lead 會檢查儲存庫、分支與基底修訂版本、相關來源、未結工作、契約及既有能力。請將計畫保留在目前工作資料包中。若已授權交付，儲存庫 Git 擁有者會完成指派的分支與推送步驟，並讀回遠端結果；提案不會移轉該所有權。
+重大架構、跨套件契約或系統層級提案，請遵循儲存庫共用的貢獻流程。並維持 [AGENTS.md](../AGENTS.md) 所列的來源與求解器所有權界線。
 
 ## 歷史結構驗收 {#historical-structural-acceptance}
 

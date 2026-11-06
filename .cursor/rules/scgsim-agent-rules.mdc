@@ -3,8 +3,6 @@ description: SCGSim agent routing adapter
 alwaysApply: true
 ---
 
-Read `AGENTS.md` before search, edits, validation, or Git work. This is
-`OrPenStrike/scgsim`, whose tracked source is solely owned by the SCGSim
-Development Lead. Its delivery profile is `develop-main`. Shared
-lifecycle, ownership, collaboration, and model-routing policy comes from
-`$scq-collaboration-roles`; this adapter adds no parallel policy.
+Read the root `AGENTS.md` for SCGSim's domain, paths, and CI guidance. Follow
+`$github-flow` for ownership coordination, branches, review, and delivery.
+This rule is only an entry-point pointer; it adds no parallel policy.

@@ -20,8 +20,9 @@ Sub-packages follow the stages of the design brief, lowest layer first:
                    result, the contact and non-manifold checks, and the entry point
                    :func:`~scgsim.geometry.sgb.derivation.labelled.derive_labelled_arrangements`
 
-* ``cutfamilies``  S3: typed requests (inset bands, refinement curves) and their generators;
-                   the inset support face is found in a physical pre-pass
+* ``cutfamilies``  S3: typed requests (inset bands of chosen faces or of every face of a Surface-EPR type,
+                   refinement curves) and their generators; the inset support face is found in a
+                   physical pre-pass
 * ``assembly``     S6: vertices, edges, horizontal faces, walls (coalescing, curved walls
                    split into exact cylinders), vertical edges, volumes and shells
 * ``routes``       S7/S8: Route A, B and C as labelling policies, decision-D5 names,

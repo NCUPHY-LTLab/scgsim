@@ -6,11 +6,11 @@
   <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
    <cc:Work>
     <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
-    <dc:date>2026-11-04T15:38:35.606038</dc:date>
+    <dc:date>2026-11-06T10:38:07.761695</dc:date>
     <dc:format>image/svg+xml</dc:format>
     <dc:creator>
      <cc:Agent>
-      <dc:title>Matplotlib v3.11.2, https://matplotlib.org/</dc:title>
+      <dc:title>Matplotlib v3.11.1, https://matplotlib.org/</dc:title>
      </cc:Agent>
     </dc:creator>
    </cc:Work>
@@ -475,82 +475,82 @@ L 405.611153 127.084535
 L 230.622826 143.638472 
 L 230.653639 156.763918 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
     <path d="M 230.653639 156.763918 
 L 230.622826 143.638472 
 L 158.896715 192.726173 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
     <path d="M 230.653639 156.763918 
 L 240.193182 188.631821 
 L 320.673327 184.578582 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
     <path d="M 320.673327 184.578582 
 L 320.942634 171.073836 
 L 230.622826 143.638472 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
     <path d="M 230.622826 143.638472 
 L 320.942634 171.073836 
 L 240.193182 175.072333 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
     <path d="M 158.896715 192.726173 
 L 240.193182 188.631821 
 L 230.653639 156.763918 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
     <path d="M 158.621908 179.111524 
 L 230.622826 143.638472 
 L 240.193182 175.072333 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
     <path d="M 158.896715 192.726173 
 L 230.622826 143.638472 
 L 158.621908 179.111524 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
     <path d="M 320.673327 184.578582 
 L 250.550407 223.231283 
 L 320.942634 171.073836 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
     <path d="M 320.673327 184.578582 
 L 240.193182 188.631821 
 L 250.550407 223.231283 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
     <path d="M 250.550407 223.231283 
 L 240.193182 188.631821 
 L 158.896715 192.726173 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
     <path d="M 320.942634 171.073836 
 L 250.586739 209.21 
 L 240.193182 175.072333 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
     <path d="M 250.586739 209.21 
 L 158.621908 179.111524 
 L 240.193182 175.072333 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
     <path d="M 158.896715 192.726173 
 L 158.621908 179.111524 
 L 250.586739 209.21 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
     <path d="M 250.550407 223.231283 
 L 250.586739 209.21 
 L 320.942634 171.073836 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
     <path d="M 250.550407 223.231283 
 L 158.896715 192.726173 
 L 250.586739 209.21 
 z
-" clip-path="url(#p7d54a59ce9)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
+" clip-path="url(#p608a65ab85)" style="fill: #e8a09a; fill-opacity: 0.9; stroke: #c0392b; stroke-width: 0.6"/>
    </g>
    <g id="text_30">
     <text style="font-weight: 700; font-size: 9px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle" x="235.698047" y="14.038594" transform="rotate(-0 235.698047 14.038594)">Inner shell of the vacuum volume: the six faces of a floating metal island (10 x 10 x 1 µm)</text>
@@ -558,7 +558,7 @@ z
   </g>
  </g>
  <defs>
-  <clipPath id="p7d54a59ce9">
+  <clipPath id="p608a65ab85">
    <rect x="69.378047" y="20.038594" width="332.64" height="332.64"/>
   </clipPath>
  </defs>

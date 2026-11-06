@@ -31,52 +31,52 @@
  "faces_used_by_two_shells": 3,
  "faces_used_by_one_shell": 32,
  "groups": {
-  "EXT::substrate::bottom": {
+  "EXT::substrate__bottom": {
    "dim": 2,
    "tag": 1,
    "members": 1
   },
-  "EXT::substrate::sidewall": {
+  "EXT::substrate__sidewall": {
    "dim": 2,
    "tag": 2,
    "members": 4
   },
-  "EXT::vacuum::sidewall": {
+  "EXT::vacuum__sidewall": {
    "dim": 2,
    "tag": 3,
    "members": 4
   },
-  "EXT::vacuum::top": {
+  "EXT::vacuum__top": {
    "dim": 2,
    "tag": 4,
    "members": 1
   },
-  "MA::ground::sidewall": {
+  "MA::ground__sidewall": {
    "dim": 2,
    "tag": 5,
    "members": 4
   },
-  "MA::ground::top": {
+  "MA::ground__top": {
    "dim": 2,
    "tag": 6,
    "members": 1
   },
-  "MA::pad::sidewall": {
+  "MA::pad__sidewall": {
    "dim": 2,
    "tag": 7,
    "members": 14
   },
-  "MA::pad::top": {
+  "MA::pad__top": {
    "dim": 2,
    "tag": 8,
    "members": 1
   },
-  "MS::ground::bottom": {
+  "MS::ground__bottom": {
    "dim": 2,
    "tag": 9,
    "members": 1
   },
-  "MS::pad::bottom": {
+  "MS::pad__bottom": {
    "dim": 2,
    "tag": 10,
    "members": 1
@@ -86,7 +86,7 @@
    "tag": 11,
    "members": 1
   },
-  "SA::substrate|vacuum::interface": {
+  "SA::substrate|vacuum__interface": {
    "dim": 2,
    "tag": 12,
    "members": 2
@@ -108,7 +108,7 @@
   "2": 35,
   "3": 2
  },
- "sidecar_bytes": 32730,
+ "sidecar_bytes": 34601,
  "embedded_faces": 0,
  "free_faces": 0,
  "bytes": {
@@ -118,7 +118,7 @@
  "shared_face": {
   "face_id": "f:9d1ffbd71300203f",
   "reference": 21,
-  "group": "SA::substrate|vacuum::interface",
+  "group": "SA::substrate|vacuum__interface",
   "upper": "vacuum",
   "lower": "substrate",
   "upper_sign": "-",

@@ -173,7 +173,7 @@
    "metal_walls_cut_inside_the_metal_layer": 4,
    "split_walls": [
     {
-     "group": "MA::pad::sidewall",
+     "group": "MA::pad__sidewall",
      "mid_um": [
       50.0,
       -3.0
@@ -184,7 +184,7 @@
      ]
     },
     {
-     "group": "MA::pad::sidewall",
+     "group": "MA::pad__sidewall",
      "mid_um": [
       50.0,
       -3.0
@@ -195,7 +195,7 @@
      ]
     },
     {
-     "group": "MA::ground::sidewall",
+     "group": "MA::ground__sidewall",
      "mid_um": [
       80.0,
       0.0
@@ -206,7 +206,7 @@
      ]
     },
     {
-     "group": "MA::ground::sidewall",
+     "group": "MA::ground__sidewall",
      "mid_um": [
       80.0,
       0.0

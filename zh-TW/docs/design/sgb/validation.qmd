@@ -62,7 +62,7 @@ production 的 catalogue（`tests/sgb_extreme_cases.py` 的 fixture，`tests/sgb
 
 ## 執行範例的觀點
 
-執行範例（真實輸入，Route B）的有效 build 記錄 31 個 check，全部通過，其中四個是不會使 build 失敗的*警告*（arc deviation、wall 平面性，以及兩個關於薄於 $g$ 的 slab 與垂直 edge 的報告）。下面的 shell 取自 vacuum volume：`VACUUM_REGION` 把晶片包在裡面，所以它有兩個 shell（外側的盒子與包住晶片的空腔，見[從 arrangement 到實體](assembly.qmd#shell-與內部-void)），這裡取外側的盒子：一個由 6 個 face 組成的封閉曲面。要看這些 check 在保護什麼，移除一個 face（晶片頂面，`EXT::VACUUM_REGION::top`），再向驗證器問一次。
+執行範例（真實輸入，Route B）的有效 build 記錄 31 個 check，全部通過，其中四個是不會使 build 失敗的*警告*（arc deviation、wall 平面性，以及兩個關於薄於 $g$ 的 slab 與垂直 edge 的報告）。下面的 shell 取自 vacuum volume：`VACUUM_REGION` 把晶片包在裡面，所以它有兩個 shell（外側的盒子與包住晶片的空腔，見[從 arrangement 到實體](assembly.qmd#shell-與內部-void)），這裡取外側的盒子：一個由 6 個 face 組成的封閉曲面。要看這些 check 在保護什麼，移除一個 face（晶片頂面，`EXT::VACUUM_REGION__top`），再向驗證器問一次。
 
 ![移除頂面的 vacuum 外側 shell。shell 現在只使用一次的四條 edge 以紅色標出；在有效的 shell 中，每條 edge 都以相反方向被使用兩次。](figures/validation-shell.svg){#fig-shell fig-alt="缺少頂面的方盒的三維視圖：紅色矩形勾勒出 z = 20.2 µm 處開口的頂部，其餘五個面為淡灰色。"}
 
