@@ -107,16 +107,22 @@ def band_at(
     return layer.labels[face].bands
 
 
-def band_areas_um2(model: ConformalModel) -> dict[str, float]:
-    """Emitted area of every band group of the pad's top face."""
-    return {
-        name: sum(
-            planned_face_area_um2(model.topology, model.topology.faces[fid])
-            for fid in group.ids
+def band_areas_um2(model: ConformalModel) -> dict[int, float]:
+    """Emitted area of every band group of the pad's top face, by band index (read from the faces, not the names)."""
+    areas: dict[int, float] = {}
+    for group in model.routed.groups.values():
+        faces = (
+            [model.topology.faces[fid] for fid in group.ids] if group.dim == 2 else []
         )
-        for name, group in model.routed.groups.items()
-        if name.startswith("MA::pad::top::band=")
-    }
+        tops = [
+            f
+            for f in faces
+            if f.bands and f.neg_domain is not None and f.neg_domain.name == "pad"
+        ]
+        if tops and len(tops) == len(faces):
+            (index,) = {f.bands[0][1] for f in tops}
+            areas[index] = sum(planned_face_area_um2(model.topology, f) for f in tops)
+    return areas
 
 
 # --------------------------------------------------------------------------- a pad hanging over the substrate edge
@@ -146,8 +152,8 @@ def test_a_source_edge_that_faces_a_gap_along_part_of_its_length_is_an_origin_th
     # Left strip, two half-edge strips and two quarter discs at the ends x = 0.
     near_gap = 0.5 * 8 + 2 * 3.5 * 0.5 + 2 * math.pi * 0.5**2 / 4
     areas = band_areas_um2(model)
-    assert areas["MA::pad::top::band=0"] == pytest.approx(near_gap, rel=1e-6)
-    assert areas["MA::pad::top::band=1"] == pytest.approx(64 - near_gap, rel=1e-6)
+    assert areas[0] == pytest.approx(near_gap, rel=1e-6)
+    assert areas[1] == pytest.approx(64 - near_gap, rel=1e-6)
 
 
 @pytest.mark.parametrize("route", ROUTES)

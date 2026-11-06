@@ -86,7 +86,7 @@ def test_route_a_has_two_volumes_and_per_entity_sheet_faces(pad_a):
     assert len(groups["pad"].ids) == 1
     assert len(groups["PORT::p1"].ids) == 1
     # the gap region and the hole in the pad are the two plain substrate/vacuum interface cells
-    assert len(groups["SA::substrate|vacuum::interface"].ids) == 2
+    assert len(groups["SA::substrate|vacuum__interface"].ids) == 2
 
 
 def test_route_b_excludes_conductor_volumes_but_keeps_their_boundary(pad_b):
@@ -102,20 +102,20 @@ def test_route_b_excludes_conductor_volumes_but_keeps_their_boundary(pad_b):
         name.startswith("NET::") or name in ("ground", "pad") for name in groups
     )  # no sheet groups, and unions are not Gmsh groups
     assert {
-        "MA::pad::top",
-        "MS::pad::bottom",
-        "MA::ground::top",
-        "MS::ground::bottom",
+        "MA::pad__top",
+        "MS::pad__bottom",
+        "MA::ground__top",
+        "MS::ground__bottom",
     } <= set(groups)
     assert pad_b.routed.unions["NET::pad"] == [
-        "MA::pad::sidewall",
-        "MA::pad::top",
-        "MS::pad::bottom",
+        "MA::pad__sidewall",
+        "MA::pad__top",
+        "MS::pad__bottom",
     ]
     assert pad_b.routed.unions["NET::Ground"] == [
-        "MA::ground::sidewall",
-        "MA::ground::top",
-        "MS::ground::bottom",
+        "MA::ground__sidewall",
+        "MA::ground__top",
+        "MS::ground__bottom",
     ]
     # the lumped port is a sheet inside the vacuum volume: an embedded face
     assert len(volumes["vacuum"].embedded_faces) == 1
@@ -170,7 +170,7 @@ def test_route_a_accepts_finite_conductors_that_are_not_films():
             model.topology.volumes[v].domain.name for v in model.routed.emitted_volumes
         }
         assert emitted == {"substrate", "vacuum"}
-        assert {"MA::pad::top", "MS::pad::bottom"} <= set(model.routed.groups)
+        assert {"MA::pad__top", "MS::pad__bottom"} <= set(model.routed.groups)
 
 
 def test_unknown_route_is_rejected():
@@ -258,8 +258,8 @@ def test_lineage_maps_every_edge_to_source_entities(pad_b):
 def test_semantic_names_do_not_depend_on_native_state(pad_a):
     """The group names are a function of the labels alone."""
     assert sorted(pad_a.routed.groups) == [
-        "EXT::substrate::bottom", "EXT::substrate::sidewall", "EXT::vacuum::sidewall", "EXT::vacuum::top",
-        "PORT::p1", "SA::substrate|vacuum::interface", "ground", "pad",
+        "EXT::substrate__bottom", "EXT::substrate__sidewall", "EXT::vacuum__sidewall", "EXT::vacuum__top",
+        "PORT::p1", "SA::substrate|vacuum__interface", "ground", "pad",
         "substrate", "vacuum",
     ]  # fmt: skip
 
@@ -299,7 +299,7 @@ def test_curve_families_required_and_refinement_only():
 
     def gap_faces(model):
         """Gap faces."""
-        return len(model.routed.groups["SA::substrate|vacuum::interface"].ids)
+        return len(model.routed.groups["SA::substrate|vacuum__interface"].ids)
 
     assert (
         gap_faces(families) == gap_faces(plain) + 1
@@ -334,7 +334,7 @@ def test_a_refinement_curve_in_a_cell_without_a_face_is_an_error_not_a_silent_dr
     hosts = [f for f in model.topology.faces.values() if f.refinement_edges]
     assert (
         len(hosts) == 1
-        and model.routed.face_group[hosts[0].id] == "SA::substrate|vacuum::interface"
+        and model.routed.face_group[hosts[0].id] == "SA::substrate|vacuum__interface"
     )
 
 

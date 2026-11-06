@@ -180,12 +180,13 @@ def summarise(folder, route):
             for e in gmsh.model.getEntitiesForPhysicalGroup(dim, tag)
         )
 
+    # the facts come from the sidecar fields, not from parsing the group names
     sa_bands = {
         n: group_area(n)
-        for n in sorted(groups)
-        if n.startswith("SA::") and "::band=" in n
+        for n, g in sorted(sidecar["physical_groups"].items())
+        if g["interface_type"] == "SA" and g["band"] is not None
     }
-    port_group = next(n for n in groups if n.startswith("PORT::"))
+    port_group = sidecar["ports"][0]["group"]
     port_area = group_area(port_group)
     (port,) = sidecar["ports"]
     apply_sidecar_embeds(sidecar)

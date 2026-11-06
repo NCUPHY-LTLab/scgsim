@@ -1,7 +1,7 @@
 ```{.json filename="palace_style_groups(sidecar)（節錄）"}
 {
  "boundary_surfaces": {
-  "MA::pad::top::band=0": {
+  "MA::pad__top::band=0": {
    "adjacent_solution_volume_ids": ["VACUUM_REGION"],
    "face_kind": "top",
    "interface_type": "MA",
@@ -11,7 +11,7 @@
   }
  },
  "pec_surfaces": {
-  "MA::pad::top::band=0": {
+  "MA::pad__top::band=0": {
    "adjacent_solution_volume_ids": ["VACUUM_REGION"],
    "face_kind": "top",
    "interface_type": "MA",

@@ -67,7 +67,7 @@ def _find_shared_face(topo, plan) -> _SharedFace:
         if abs(r) in {abs(x) for x in plan.found.shells[1]}
     ]
     face_no = next(
-        f for f in shared if group_of_face[f - 1] == "SA::substrate|vacuum::interface"
+        f for f in shared if group_of_face[f - 1] == "SA::substrate|vacuum__interface"
     )  # 1-based face number (index + 1)
     signs = {
         k: next(1 if r > 0 else -1 for r in shell if abs(r) == face_no)

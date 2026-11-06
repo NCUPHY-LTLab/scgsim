@@ -80,7 +80,7 @@ def unrolled_walls(model):
     topo = model.topology
     out = []
     for f in topo.faces.values():
-        if f.kind != "wall" or model.routed.face_group[f.id] != "MA::pad::sidewall":
+        if f.kind != "wall" or model.routed.face_group[f.id] != "MA::pad__sidewall":
             continue
         verts = []
         for eid, sign in f.loops[0]:

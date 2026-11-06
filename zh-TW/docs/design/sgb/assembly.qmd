@@ -114,7 +114,7 @@ wall column（某個 grid 點上方的垂直線）在下列情況於該 level �
 
 在執行範例（真實輸入）中，Route A 有兩個 volume（`substrate`、`VACUUM_REGION`）。Route B 有四個：`substrate`、`VACUUM_REGION`、`ground_0000` 與 `pad`；後兩者是 Route B 從輸出模型中排除的導體 volume。Route C（D1）保留導體 volume 並在內部 mesh，所以四個都輸出。它是 S7 的另一種 policy，assembly 對三種 route 完全相同。
 
-因為 domain 帶著擁有它的 Entity（D5），同材料、同 Net 的兩個 Entity 是分開的 volume。production 的 airbridge 模型（stage 層的 scene）因此有七個 volume：兩塊 ground、兩根 post、deck、substrate 與 vacuum，導體 Entity 之間的 face 是共用 face（`MM::<a>|<b>::interface`；Route B 排除它們，Route C 輸出它們）。
+因為 domain 帶著擁有它的 Entity（D5），同材料、同 Net 的兩個 Entity 是分開的 volume。production 的 airbridge 模型（stage 層的 scene）因此有七個 volume：兩塊 ground、兩根 post、deck、substrate 與 vacuum，導體 Entity 之間的 face 是共用 face（`MM::<a>|<b>__interface`；Route B 排除它們，Route C 輸出它們）。
 
 ## Shell 與內部 void
 

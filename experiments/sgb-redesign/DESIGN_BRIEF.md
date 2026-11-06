@@ -233,8 +233,8 @@ is an error.
 
 Two identity layers:
 - **Semantic identity** (stable across unrelated edits): physical names from
-  labels, e.g. `MA::xmon/pad::top::band=2`,
-  `SA::substrate|vacuum::interface::band=0`, `vacuum_outer` (a volume is
+  labels, e.g. `MA::xmon/pad__top::band=2`,
+  `SA::substrate|vacuum__interface::band=0`, `vacuum_outer` (a volume is
   named by its entity id). Used for physical groups, Surface-EPR rows and
   reports.
 - **Atomic topology identity** (reproducible, content-addressed): vertex =
@@ -409,8 +409,8 @@ Resolving writer questions; these override earlier wording where they differ.
 - **Route A sheet band groups** are named `<entity>::band=k`; the MA and
   MS Surface-EPR rows (each existing only when some face has vacuum, resp. a
   dielectric, on a side) reference that group. Route B generates bands on
-  the top face (`MA::<entity>::top::band=k`) and bottom face
-  (`MS::<entity>::bottom::band=k`).
+  the top face (`MA::<entity>__top::band=k`) and bottom face
+  (`MS::<entity>__bottom::band=k`).
 - **Edge id** = H(plane key, sorted endpoint vertex ids, sorted carrier-id
   set) — the prototype's formula is the design.
 - **Validation cannot be disabled** in production builds; a test-only switch
@@ -536,3 +536,13 @@ Resolving writer questions; these override earlier wording where they differ.
   Surface-EPR row ids of a sheet stay `MA::<entity>::sheet[::band=k]` and
   `MS::<entity>::sheet[::band=k]`. The interface type is derived from the
   topology, never parsed from a name.
+- **Group naming with `__` (Human, 2026-11-06)**: the face kind attaches to the
+  entity part with a double underscore and every other separator stays `::`
+  (`MA::D1_pad__bottom`, `SA::substrate|vacuum__interface::band=1`, sheet rows
+  `MA::pad__sheet::band=1`); names carry no height. Only when one band group
+  would hold faces of two band families do that group's faces gain the side of
+  the dielectric they lie on (`__interface__top` / `__interface__bottom`), for
+  every band group of each family involved; a
+  group that still holds two families is an input error. An entity id
+  containing `__` is an input error. The older forms quoted above
+  (`::<face kind>`) are superseded by this entry.

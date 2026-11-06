@@ -40,7 +40,7 @@
  "faces": {
   "f:179b3dd8d7bb9c70": {
    "face_kind": "sidewall",
-   "group": "MA::ground_0000::sidewall",
+   "group": "MA::ground_0000__sidewall",
    "kind": "wall",
    "negative_volume": "vol:739993ecf3919fb3",
    "positive_volume": "vol:7346ec1a4ff1ccf9",

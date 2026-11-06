@@ -92,8 +92,8 @@ def excerpts(a: dict[str, Any], b: dict[str, Any], c: dict[str, Any]) -> None:
     groups = {
         n: b["physical_groups"][n]
         for n in (
-            "MA::pad::top::band=0",
-            "MS::pad::bottom",
+            "MA::pad__top::band=0",
+            "MS::pad__bottom",
             "PORT::PORT_SHEET__P1__0000",
             "substrate",
         )
@@ -101,7 +101,7 @@ def excerpts(a: dict[str, Any], b: dict[str, Any], c: dict[str, Any]) -> None:
     write("consumer-excerpt-groups.md", json_block(title, {"physical_groups": groups}))
     rows = {
         n: b["surface_epr_rows"][n]
-        for n in ("MA::pad::top::band=0", "SA::substrate|VACUUM_REGION::interface")
+        for n in ("MA::pad__top::band=0", "SA::substrate|VACUUM_REGION__interface")
     }
     write(
         "consumer-excerpt-unions.md",
@@ -127,7 +127,7 @@ def excerpts(a: dict[str, Any], b: dict[str, Any], c: dict[str, Any]) -> None:
     face = next(
         fid
         for fid, record in b["faces"].items()
-        if record["group"] == "MA::ground_0000::sidewall"
+        if record["group"] == "MA::ground_0000__sidewall"
     )
     volume = next(
         vid for vid, record in b["volumes"].items() if record["entity"] == "substrate"
@@ -164,7 +164,7 @@ def excerpts(a: dict[str, Any], b: dict[str, Any], c: dict[str, Any]) -> None:
         },
         "surface_epr_rows": {
             n: a["surface_epr_rows"][n]
-            for n in ("MA::chip/left::sheet::band=0", "MS::chip/left::sheet::band=0")
+            for n in ("MA::chip/left__sheet::band=0", "MS::chip/left__sheet::band=0")
         },
         "unions": a["unions"],
         "embedded_faces": a["embedded_faces"],
@@ -207,10 +207,10 @@ def palace_rebuild(b: dict[str, Any]) -> None:
     selection = {
         "volumes": {"substrate": groups["volumes"]["substrate"]},
         "boundary_surfaces": {
-            "MA::pad::top::band=0": groups["boundary_surfaces"]["MA::pad::top::band=0"]
+            "MA::pad__top::band=0": groups["boundary_surfaces"]["MA::pad__top::band=0"]
         },
         "pec_surfaces": {
-            "MA::pad::top::band=0": groups["pec_surfaces"]["MA::pad::top::band=0"]
+            "MA::pad__top::band=0": groups["pec_surfaces"]["MA::pad__top::band=0"]
         },
         "port_surfaces": groups["port_surfaces"],
     }

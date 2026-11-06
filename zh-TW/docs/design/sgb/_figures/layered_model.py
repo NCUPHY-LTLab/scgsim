@@ -318,7 +318,7 @@ def _draw_wall_pieces(walls, axes):
         (
             "pad outline",
             lambda w: (
-                w["group"] == "MA::pad::sidewall"
+                w["group"] == "MA::pad__sidewall"
                 and math.hypot(w["mid"][0] + 25, w["mid"][1] - 5) > 12
             ),
             (0.0, 0.0),
@@ -326,7 +326,7 @@ def _draw_wall_pieces(walls, axes):
         (
             "ground cutout",
             lambda w: (
-                w["group"] == "MA::ground::sidewall"
+                w["group"] == "MA::ground__sidewall"
                 and abs(w["mid"][0]) < 85
                 and abs(w["mid"][1]) < 65
             ),
@@ -335,7 +335,7 @@ def _draw_wall_pieces(walls, axes):
         (
             "pad hole (r = 8 µm)",
             lambda w: (
-                w["group"] == "MA::pad::sidewall"
+                w["group"] == "MA::pad__sidewall"
                 and math.hypot(w["mid"][0] + 25, w["mid"][1] - 5) <= 12
             ),
             (-25.0, 5.0),

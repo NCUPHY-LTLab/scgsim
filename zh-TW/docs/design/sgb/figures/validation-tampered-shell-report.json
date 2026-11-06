@@ -132,7 +132,7 @@
    "name": "curved_walls_are_single_cylinders",
    "passed": true,
    "warning": false,
-   "detail": "0 curved walls, each bounded by one bottom and one top arc on one circle"
+   "detail": "0 curved walls, each bounded by one bottom and one top arc, the same arc of one circle"
   },
   {
    "name": "walls_planar",

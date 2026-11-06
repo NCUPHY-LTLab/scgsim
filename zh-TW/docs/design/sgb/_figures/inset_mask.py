@@ -342,8 +342,8 @@ def figure_routes_section() -> None:
             lw=6,
             solid_capstyle="butt",
         )
-    ax.text(5, 1.2, "top face: MA::pad::top::band=k", fontsize=8, ha="center")
-    ax.text(5, -0.55, "bottom face: MS::pad::bottom::band=k", fontsize=8, ha="center")
+    ax.text(5, 1.2, "top face: MA::pad__top::band=k", fontsize=8, ha="center")
+    ax.text(5, -0.55, "bottom face: MS::pad__bottom::band=k", fontsize=8, ha="center")
     ax.text(
         8.25, 0.3, "side walls:\nnot banded in v1", fontsize=7, ha="left", color="#555"
     )
@@ -379,7 +379,7 @@ def mesh_check(model, size: float) -> dict:
             for name, group in sidecar[
                 "physical_groups"
             ].items():  # the loaded area of every band group equals the plan
-                if "::band=" in name:
+                if group.get("band") is not None:
                     area = sum(
                         gmsh.model.occ.getMass(2, t) for t in group["native_tags"]
                     )

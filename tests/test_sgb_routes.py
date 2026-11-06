@@ -22,6 +22,7 @@ from scgsim.geometry.sgb.records.labels import Domain, SheetOwner
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.sgb.routes.naming import (
     check_entity_names,
+    interface_side,
     interface_type_of,
     sheet_face_sides,
     surface_epr_row_ids,
@@ -58,16 +59,16 @@ def test_route_c_conductor_interfaces_are_shared_faces_with_per_entity_names(bri
     topology, routed = bridge_c.topology, bridge_c.routed
     groups = routed.groups
     assert {
-        "MA::deck::top",
-        "MA::post_left::sidewall",
-        "MS::ground_left::bottom",
-        "MM::deck|post_left::interface",
-        "MM::ground_left|post_left::interface",
+        "MA::deck__top",
+        "MA::post_left__sidewall",
+        "MS::ground_left__bottom",
+        "MM::deck|post_left__interface",
+        "MM::ground_left|post_left__interface",
     } <= set(groups)
     for name in (
-        "MA::deck::top",
-        "MS::ground_left::bottom",
-        "MM::deck|post_left::interface",
+        "MA::deck__top",
+        "MS::ground_left__bottom",
+        "MM::deck|post_left__interface",
     ):
         for face_id in groups[name].ids:
             face = topology.faces[face_id]
@@ -77,7 +78,7 @@ def test_route_c_conductor_interfaces_are_shared_faces_with_per_entity_names(bri
             )
     # the Net union lists the exposed conductor surfaces, never the internal MM faces
     union = routed.unions["NET::Ground"]
-    assert "MA::deck::top" in union and not any(
+    assert "MA::deck__top" in union and not any(
         name.startswith("MM::") for name in union
     )
     assert routed.unions["MM"] == sorted(n for n in groups if n.startswith("MM::"))
@@ -85,7 +86,7 @@ def test_route_c_conductor_interfaces_are_shared_faces_with_per_entity_names(bri
 
 def test_route_c_conductor_reaching_the_model_boundary_has_an_ext_group(bridge_c):
     """The ground halves run to the chip edge: those faces are EXT::<entity>::<face kind>."""
-    assert {"EXT::ground_left::sidewall", "EXT::ground_right::sidewall"} <= set(
+    assert {"EXT::ground_left__sidewall", "EXT::ground_right__sidewall"} <= set(
         bridge_c.routed.groups
     )
 
@@ -135,19 +136,19 @@ def test_route_c_from_a_real_input_names_the_gds_entities(tmp_path):
     assert {
         "ground_0000",
         "pad",
-        "MA::pad::top",
-        "MS::pad::bottom",
-        "MA::ground_0000::top",
+        "MA::pad__top",
+        "MS::pad__bottom",
+        "MA::ground_0000__top",
     } <= groups
     assert model.routed.unions["NET::P"] == [
-        "MA::pad::sidewall",
-        "MA::pad::top",
-        "MS::pad::bottom",
+        "MA::pad__sidewall",
+        "MA::pad__top",
+        "MS::pad__bottom",
     ]
     assert model.routed.unions["NET::G"] == [
-        "MA::ground_0000::sidewall",
-        "MA::ground_0000::top",
-        "MS::ground_0000::bottom",
+        "MA::ground_0000__sidewall",
+        "MA::ground_0000__top",
+        "MS::ground_0000__bottom",
     ]
 
 
@@ -161,7 +162,7 @@ def test_route_a_accepts_the_undeclared_finite_conductors_of_a_real_solid_input(
         model.topology.volumes[v].domain.name for v in model.routed.emitted_volumes
     }
     assert emitted == {"substrate", "VACUUM_REGION"}
-    assert {"MA::pad::top", "MS::pad::bottom", "MA::ground_0000::top"} <= set(
+    assert {"MA::pad__top", "MS::pad__bottom", "MA::ground_0000__top"} <= set(
         model.routed.groups
     )
 
@@ -184,7 +185,7 @@ def test_a_finite_bump_stands_on_a_thin_film_sheet_in_route_a():
     assert {
         "chip/left",
         "chip/right",
-        "MA::chip/bump::top",
+        "MA::chip/bump__top",
         "PORT::port_sheet",
     } <= set(groups)
     bump = next(
@@ -194,8 +195,8 @@ def test_a_finite_bump_stands_on_a_thin_film_sheet_in_route_a():
         bump.id not in model.routed.emitted_volumes
     )  # an excluded finite volume with PEC boundary faces
     assert model.routed.unions["NET::left"] == [
-        "MA::chip/bump::sidewall",
-        "MA::chip/bump::top",
+        "MA::chip/bump__sidewall",
+        "MA::chip/bump__top",
         "chip/left",
     ]
     kinds = {
@@ -217,7 +218,7 @@ def test_the_bump_without_the_film_collapse_is_a_finite_input_for_routes_b_and_c
         model = build_conformal_model(
             effective.build_input, effective.representation, route
         )
-        assert {"MA::chip/bump::top", "PORT::port_sheet"} <= set(model.routed.groups)
+        assert {"MA::chip/bump__top", "PORT::port_sheet"} <= set(model.routed.groups)
         assert not model.report.failures
 
 
@@ -309,10 +310,10 @@ def test_seams_between_entities_of_one_net_stay_required_edges(route):
         assert len(groups["padL"].ids) == 1 and len(groups["padR"].ids) == 1
     else:
         assert {
-            "MA::padL::top",
-            "MA::padR::top",
-            "MS::padL::bottom",
-            "MS::padR::bottom",
+            "MA::padL__top",
+            "MA::padR__top",
+            "MS::padL__bottom",
+            "MS::padR__bottom",
         } <= set(groups)
     # the Net union is the only place the two Entities meet
     net_union = model.routed.unions["NET::N"]
@@ -395,27 +396,27 @@ M2 = Domain("conductor", "Al", "N", "chip/q0/arm")
 @pytest.mark.parametrize(
     ("neg", "pos", "owner", "bands", "name"),
     [
-        (V, S, None, (), "SA::substrate|air::interface"),
-        (S, V, None, (), "SA::substrate|air::interface"),
-        (M, V, None, (), "MA::chip/q0/pad::top"),
-        (V, M, None, (), "MA::chip/q0/pad::bottom"),
-        (S, M, None, (), "MS::chip/q0/pad::bottom"),
-        (M, S, None, (), "MS::chip/q0/pad::top"),
-        (M, V, None, (("fam", 2),), "MA::chip/q0/pad::top::band=2"),
-        (M2, M, None, (), "MM::chip/q0/arm|chip/q0/pad::interface"),
+        (V, S, None, (), "SA::substrate|air__interface"),
+        (S, V, None, (), "SA::substrate|air__interface"),
+        (M, V, None, (), "MA::chip/q0/pad__top"),
+        (V, M, None, (), "MA::chip/q0/pad__bottom"),
+        (S, M, None, (), "MS::chip/q0/pad__bottom"),
+        (M, S, None, (), "MS::chip/q0/pad__top"),
+        (M, V, None, (("fam", 2),), "MA::chip/q0/pad__top::band=2"),
+        (M2, M, None, (), "MM::chip/q0/arm|chip/q0/pad__interface"),
         (
             V,
             Domain("vacuum", "vacuum", owner="air2"),
             None,
             (),
-            "AA::air|air2::interface",
+            "AA::air|air2__interface",
         ),
         (
             S,
             Domain("dielectric", "SiO2", owner="oxide"),
             None,
             (),
-            "SS::oxide|substrate::interface",
+            "SS::oxide|substrate__interface",
         ),
         (
             V,
@@ -432,25 +433,55 @@ M2 = Domain("conductor", "Al", "N", "chip/q0/arm")
             "chip/q0/pad::band=1",
         ),
         (V, V, SheetOwner("port", "chip/q0/jj"), (("fam", 1),), "PORT::chip/q0/jj"),
-        (None, V, None, (), "EXT::air::bottom"),
-        (S, None, None, (), "EXT::substrate::top"),
+        (
+            Domain("dielectric", "SiO2", owner="D1_substrate"),
+            Domain("vacuum", "vacuum", owner="VACUUM_REGION"),
+            None,
+            (),
+            "SA::D1_substrate|VACUUM_REGION__interface",
+        ),
+        (None, V, None, (), "EXT::air__bottom"),
+        (S, None, None, (), "EXT::substrate__top"),
         (None, None, None, (), None),
     ],
 )
 def test_primary_group_names_follow_kind_double_colon_qualified_entity(
     neg, pos, owner, bands, name
 ):
-    """``<kind>::<qualified entity id>::<face kind>[::band=k]``, or the bare entity id of a Route A sheet: a face's name from the two sides alone."""
+    """``<kind>::<qualified entity id>__<face kind>[::band=k]``, or the bare entity id of a Route A sheet: a face's name from the two sides alone."""
     assert surface_group(neg, pos, owner, bands) == name
+
+
+def test_a_qualified_interface_face_adds_the_side_of_the_dielectric_it_lies_on():
+    """The qualifier is the second naming of a band collision: ``__top`` when the dielectric is below the face."""
+    below, above = (S, V), (V, S)  # (neg, pos): the substrate is below / above the face
+    assert interface_side(*below) == "top" and interface_side(*above) == "bottom"
+    bands = (("fam", 1),)
+    assert surface_group(*below, None, bands, qualified=True) == (
+        "SA::substrate|air__interface__top::band=1"
+    )
+    assert surface_group(*above, None, bands, qualified=True) == (
+        "SA::substrate|air__interface__bottom::band=1"
+    )
+    assert surface_group(*below, None, qualified=True) == (
+        "SA::substrate|air__interface__top"
+    )
+    # only an interface face takes a qualifier: a conductor face already says which side it is
+    assert surface_group(M, V, None, bands, qualified=True) == (
+        "MA::chip/q0/pad__top::band=1"
+    )
+    assert surface_group(*below, None, bands, vertical=True, qualified=True) == (
+        "SA::substrate|air__sidewall::band=1"
+    )
 
 
 def test_a_vertical_face_is_a_sidewall_whatever_its_sides():
     """Walls carry the face kind ``sidewall``; a conductor wall against vacuum is MA, a sheet has no wall."""
-    assert surface_group(M, V, None, vertical=True) == "MA::chip/q0/pad::sidewall"
-    assert surface_group(S, V, None, vertical=True) == "SA::substrate|air::sidewall"
-    assert surface_group(None, V, None, vertical=True) == "EXT::air::sidewall"
+    assert surface_group(M, V, None, vertical=True) == "MA::chip/q0/pad__sidewall"
+    assert surface_group(S, V, None, vertical=True) == "SA::substrate|air__sidewall"
+    assert surface_group(None, V, None, vertical=True) == "EXT::air__sidewall"
     assert surface_group(M2, M, None, (("fam", 1),), vertical=True) == (
-        "MM::chip/q0/arm|chip/q0/pad::sidewall::band=1"
+        "MM::chip/q0/arm|chip/q0/pad__sidewall::band=1"
     )
 
 
@@ -471,14 +502,14 @@ def test_volume_groups_and_interface_types_and_surface_epr_rows():
     assert surface_epr_row_ids(
         "pad::band=1", "SHEET", "pad", 1, sheet_face_sides(S, V)
     ) == [
-        "MA::pad::sheet::band=1",
-        "MS::pad::sheet::band=1",
+        "MA::pad__sheet::band=1",
+        "MS::pad__sheet::band=1",
     ]
     assert surface_epr_row_ids(
         "pad::band=1", "SHEET", "pad", 1, sheet_face_sides(V, V)
-    ) == ["MA::pad::sheet::band=1"]
-    assert surface_epr_row_ids("SA::a|b::interface::band=0", "SA", "", 0) == [
-        "SA::a|b::interface::band=0"
+    ) == ["MA::pad__sheet::band=1"]
+    assert surface_epr_row_ids("SA::a|b__interface::band=0", "SA", "", 0) == [
+        "SA::a|b__interface::band=0"
     ]
     assert surface_epr_row_ids("pad", "SHEET", "pad", None) == []  # unbanded: no row
     assert surface_epr_row_ids("PORT::p1", "PORT", "p1", 1) == []
@@ -486,17 +517,42 @@ def test_volume_groups_and_interface_types_and_surface_epr_rows():
 
 @pytest.mark.parametrize(
     "entity_id",
-    ["MA", "MS", "MM", "SA", "AA", "SS", "EXT", "PORT", "a::b", "chip/MA::x"],
+    [
+        "MA",
+        "MS",
+        "MM",
+        "SA",
+        "AA",
+        "SS",
+        "EXT",
+        "PORT",
+        "a::b",
+        "chip/MA::x",
+        "a__b",
+        "D1__pad",
+        "pad__",
+        "__pad",
+        "chip/q0__top",
+    ],
 )
 def test_an_entity_id_that_would_make_a_group_name_ambiguous_is_rejected(entity_id):
-    """An id equal to an interface prefix, or containing ``::``, fails closed with the id in the message."""
-    with pytest.raises(InputError, match="entity id"):
+    """An id equal to an interface prefix, or containing ``::`` or ``__``, fails closed with the id in the message."""
+    with pytest.raises(InputError, match="entity id") as raised:
         check_entity_names(["substrate", entity_id])
+    assert repr(entity_id) in str(raised.value)
+
+
+def test_the_message_for_a_double_underscore_says_what_to_write_instead():
+    """The double underscore attaches the face kind, so the message points at the single underscore."""
+    with pytest.raises(InputError, match="'__'.*single underscores"):
+        check_entity_names(["D1__pad"])
 
 
 def test_ordinary_entity_ids_are_accepted():
     """Qualified ids with slashes, and ids that merely start with a prefix, are fine."""
-    check_entity_names(["chip/left", "MA_pad", "SAx", "ground_0000", "vacuum"])
+    check_entity_names(
+        ["chip/left", "MA_pad", "SAx", "ground_0000", "D1_pad", "vacuum", "_pad_"]
+    )
 
 
 def test_the_model_build_rejects_a_reserved_entity_id():
@@ -508,3 +564,24 @@ def test_the_model_build_rejects_a_reserved_entity_id():
     )
     with pytest.raises(InputError, match="'MA'"):
         build_model_from_catalogue(PrismCatalogue(catalogue.grid, prisms), "C")
+
+
+@pytest.mark.parametrize("route", ["A", "C"])
+def test_the_model_build_rejects_an_entity_id_with_a_double_underscore(route):
+    """``D1__pad`` would read as entity ``D1`` with face kind ``pad``; ``D1_pad`` is fine."""
+    catalogue = pad_in_ground(route)
+    for entity_id, accepted in (("D1__pad", False), ("D1_pad", True)):
+        prisms = tuple(
+            replace(p, entity_id=entity_id) if p.entity_id == "pad" else p
+            for p in catalogue.prisms
+        )
+        if accepted:
+            model = build_model_from_catalogue(
+                PrismCatalogue(catalogue.grid, prisms), route
+            )
+            assert entity_id in model.routed.groups
+        else:
+            with pytest.raises(InputError, match="'D1__pad'.*'__'"):
+                build_model_from_catalogue(
+                    PrismCatalogue(catalogue.grid, prisms), route
+                )

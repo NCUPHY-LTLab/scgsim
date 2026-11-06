@@ -457,7 +457,9 @@ def test_the_files_of_a_banded_port_load_and_mesh(banded_port_model, tmp_path):
     assert sidecar["physical_groups"][group]["area_um2"] == pytest.approx(area)
     sa = sidecar["physical_groups"]
     found = [
-        sa[n]["area_um2"] for n in sorted(sa) if n.startswith("SA::") and "::band=" in n
+        sa[n]["area_um2"]
+        for n in sorted(sa)
+        if sa[n]["interface_type"] == "SA" and sa[n]["band"] is not None
     ]
     assert found == pytest.approx(list(sa_areas), abs=1e-3)
     report = verify_xao(artifacts.xao, sidecar)

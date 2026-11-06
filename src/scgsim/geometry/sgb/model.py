@@ -21,7 +21,8 @@ from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb import identity
 from scgsim.geometry.sgb.assembly.builder import assemble_topology
 from scgsim.geometry.sgb.assembly.records import Topology
-from scgsim.geometry.sgb.cutfamilies.generate import with_cut_families
+from scgsim.geometry.sgb.cutfamilies.generate import build_cut_families
+from scgsim.geometry.sgb.cutfamilies.inset_plan import InsetPlan
 from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, RefinementRequest
 from scgsim.geometry.sgb.derivation.labelled import (
     LabelledArrangements,
@@ -59,8 +60,11 @@ class ConformalModel:
     counts: dict[str, int] = field(default_factory=dict)
     insets: tuple[
         InsetRequest, ...
-    ] = ()  # the cut-family requests the model was built with
+    ] = ()  # the inset requests the model was built with, as given
     refinements: tuple[RefinementRequest, ...] = ()
+    inset_plan: InsetPlan = field(
+        default_factory=InsetPlan
+    )  # the band families the inset requests became
 
     @property
     def policy(self) -> RoutePolicy:
@@ -146,7 +150,8 @@ def build_model_from_catalogue(  # noqa: PLR0913 - the catalogue, the route and 
     check_entity_names(
         p.entity_id for p in catalogue.prisms if p.material_kind != "port"
     )
-    catalogue = with_cut_families(catalogue, insets, refinements)
+    cut_families = build_cut_families(catalogue, insets, refinements)
+    catalogue = cut_families.catalogue
     # The pipeline allocates millions of small acyclic objects; the cyclic collector would only
     # re-scan them, so it is paused for the build.
     was_enabled = gc.isenabled()
@@ -156,6 +161,7 @@ def build_model_from_catalogue(  # noqa: PLR0913 - the catalogue, the route and 
             rt.keep_raw = keep_raw
             model = _build(catalogue, policy, rt)
             model.insets, model.refinements = insets, refinements
+            model.inset_plan = cut_families.insets
             return model
     finally:
         if was_enabled:

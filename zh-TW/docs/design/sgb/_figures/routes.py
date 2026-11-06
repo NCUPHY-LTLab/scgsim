@@ -61,11 +61,11 @@ from scgsim.geometry.sgb.cutfamilies.requests import (
 GROUP_FILL = {
     "ground_0000": "#7f7f7f",
     "pad": "#3a6ea5",
-    "MS::ground_0000::bottom": "#a9a9a9",
-    "MS::pad::bottom": "#8f7bc2",
-    "MA::ground_0000::top": "#5b5f64",
-    "MA::pad::top": "#2171b5",
-    "SA::substrate|VACUUM_REGION::interface": "#9ecae1",
+    "MS::ground_0000__bottom": "#a9a9a9",
+    "MS::pad__bottom": "#8f7bc2",
+    "MA::ground_0000__top": "#5b5f64",
+    "MA::pad__top": "#2171b5",
+    "SA::substrate|VACUUM_REGION__interface": "#9ecae1",
     "PORT::PORT_SHEET__P1__0000": "#d62728",
     None: "#f5f5f5",
 }

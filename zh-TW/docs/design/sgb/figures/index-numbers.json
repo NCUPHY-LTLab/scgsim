@@ -7,12 +7,12 @@
    "edges_only_on_those_faces": 4,
    "faces_bounding_no_written_volume": 10,
    "their_groups": [
-    "EXT::ground_left::sidewall",
-    "EXT::ground_right::sidewall",
-    "MM::deck|post_left::interface",
-    "MM::deck|post_right::interface",
-    "MM::ground_left|post_left::interface",
-    "MM::ground_right|post_right::interface"
+    "EXT::ground_left__sidewall",
+    "EXT::ground_right__sidewall",
+    "MM::deck|post_left__interface",
+    "MM::deck|post_right__interface",
+    "MM::ground_left|post_left__interface",
+    "MM::ground_right|post_right__interface"
    ]
   },
   "planned": {
@@ -124,7 +124,7 @@
    "edges_only_on_those_faces": 4,
    "faces_bounding_no_written_volume": 4,
    "their_groups": [
-    "EXT::ground::sidewall"
+    "EXT::ground__sidewall"
    ]
   },
   "planned": {
@@ -157,7 +157,7 @@
    "edges_only_on_those_faces": 4,
    "faces_bounding_no_written_volume": 4,
    "their_groups": [
-    "EXT::ground::sidewall"
+    "EXT::ground__sidewall"
    ]
   },
   "planned": {

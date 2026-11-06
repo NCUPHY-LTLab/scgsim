@@ -195,7 +195,7 @@ def _family_features(
                 and record["family"] in roles
             ):
                 edges_of_family[str(record["family"])].add(edge_id)
-    requests = {request.request_id: request for request in model.insets}
+    requests = {request.request_id: request for request in model.inset_plan.requests}
     for family, edge_ids in sorted(edges_of_family.items()):
         if roles[family] == BAND_FAMILY_ROLE:
             yield "band_boundary", family, edge_ids, _band_facts(requests, family)
@@ -227,7 +227,7 @@ def _arcs(
     topology = model.topology
     band_entity = {
         r.request_id: r.support.entity_id
-        for r in model.insets
+        for r in model.inset_plan.requests
         if isinstance(r.support, ConductorSurface)
     }
     edges_of_arc: dict[tuple[str | None, float], set[str]] = defaultdict(set)

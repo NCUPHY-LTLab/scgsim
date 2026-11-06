@@ -4,21 +4,43 @@ Owns the public vocabulary for asking SGB to partition a surface: *which* surfac
 entity and face, or by the two solution regions an interface lies between) and *how* (margins in
 micrometres, or a curve to embed).  A request is plain data; ``generate`` turns it into a
 ``CurveFamilyRecord`` before the arrangements are built.  Nothing here refers to a solver: the bands are
-geometry, and each is its own primary physical group (``MA::<entity>::<face kind>::band=k`` and so on), so a backend
+geometry, and each is its own primary physical group (``MA::<entity>__<face kind>::band=k`` and so on), so a backend
 integrates a plain surface integral over the union of the band groups it needs.
 
 Inset margins
 -------------
-``InsetRequest(request_id, support, margins_um)`` asks for the bands ``B_0 .. B_K`` of one support face:
+``InsetRequest(request_id, support, margins_um)`` asks for the bands ``B_0 .. B_K`` of one support face, or of every
+face of a Surface-EPR type.  There are two forms of support, and they serve different uses.
+
+*Concrete* supports name one face.  Use them to band chosen faces only (one pad's top, one gap):
 
 * ``ConductorSurface(entity_id, side)`` -- a face of one conductor Entity.  ``side="sheet"`` is the face
   of a sheet conductor (a Route A sheet: one face whose metal-air and metal-substrate rows follow its
   neighbours, group ``<entity>[::band=k]``, interface type ``SHEET``); ``"top"`` and ``"bottom"`` are the faces at the
-  upper and lower Z of a finite conductor (groups ``MA::<entity>::<face kind>[::band=k]`` against vacuum
-  and ``MS::<entity>::<face kind>[::band=k]`` against a dielectric).  Sidewall bands are not part of version 1.
+  upper and lower Z of a finite conductor (groups ``MA::<entity>__<face kind>[::band=k]`` against vacuum
+  and ``MS::<entity>__<face kind>[::band=k]`` against a dielectric).  Sidewall bands are not part of version 1.
 * ``SolutionInterface(first_entity_id, second_entity_id)`` -- the interface between two solution regions
-  where no conductor lies (the gap between a pad and its ground, ``SA::<a>|<b>::interface[::band=k]``).  ``z_um``
+  where no conductor lies (the gap between a pad and its ground, ``SA::<a>|<b>__interface[::band=k]``).  ``z_um``
   picks the level when the pair meets at several.
+
+A concrete request is exact: it fails closed on a face that is not there, has no gap edge or whose
+representation does not fit.
+
+*Type-level* support names no face.  ``InterfaceSurfaces(interface_type)`` asks for "every face of this
+Surface-EPR type" (``"MA"``, ``"MS"`` or ``"SA"``) and SGB finds the faces itself, from the same labels and
+interface-type rules that give the sidecar its ``surface_epr_rows``:
+
+* ``"MA"`` / ``"MS"`` -- the sheet of a Route A conductor that has a row of that type (a sheet with vacuum on
+  one side and a dielectric on the other carries both), and the top and bottom faces of a finite conductor that
+  have a cell of that type.  Sidewalls are never banded.
+* ``"SA"`` -- each solution interface between a dielectric and a vacuum, on each level where it lies.
+
+``face_kinds`` narrows the faces to some of ``"sheet"``, ``"top"``, ``"bottom"`` and ``"interface"``;
+``exclude_entity_ids`` leaves out the faces of the named entities (a conductor face by its entity, a solution
+interface when either side is that entity), so concrete requests for those entities never meet the type-level one.
+A face with no gap edge is skipped and recorded in the sidecar, never an error.  Each face becomes one family with the
+id ``<request id>::<entity>::<side>`` (``<request id>::<first>|<second>::z=<z>`` for an interface); a face that several
+requests land on is one family with the union of their margins (``cutfamilies.inset_plan``).
 
 ``margins_um`` are strictly increasing positive lengths on the model grid.  ``interface`` optionally
 states the interface type the face is expected to have (``"MA"``, ``"MS"``, ``"SA"``, ``"SHEET"`` ...);
@@ -46,6 +68,13 @@ from typing import Literal
 
 Side = Literal["sheet", "top", "bottom"]
 INTERFACE_TYPES = ("MA", "MS", "MM", "SA", "AA", "SS", "SHEET")
+BAND_TYPES = ("MA", "MS", "SA")
+"""The Surface-EPR types a type-level request can ask for: metal-air, metal-substrate and substrate-air.  The other
+interface types have no band: an ``AA`` surface has no conductor next to it, so it never has a gap edge; ``MM`` and ``SS`` are
+not Surface-EPR contributions."""
+FaceKind = Literal["sheet", "top", "bottom", "interface"]
+FACE_KINDS: tuple[FaceKind, ...] = ("sheet", "top", "bottom", "interface")
+"""The face kinds a band can lie on: a conductor sheet, the top or bottom of a finite conductor, a solution interface."""
 
 
 @dataclass(frozen=True)
@@ -66,16 +95,31 @@ class SolutionInterface:
 
 
 @dataclass(frozen=True)
-class InsetRequest:
-    """Bands of one support face at the given margins."""
+class InterfaceSurfaces:
+    """Every face of one Surface-EPR type (``MA``, ``MS`` or ``SA``), found by SGB.
 
-    request_id: (
-        str  # the family id; also the lineage prefix ``<request id>/ring<r>/edge<k>``
-    )
-    support: ConductorSurface | SolutionInterface
+    ``face_kinds`` keeps only those kinds of face (``None``: every bandable kind) and ``exclude_entity_ids`` drops the
+    faces of the named entities.
+    """
+
+    interface_type: str
+    face_kinds: tuple[str, ...] | None = None
+    exclude_entity_ids: tuple[str, ...] = ()
+
+
+ConcreteSupport = ConductorSurface | SolutionInterface
+"""A support that names one face."""
+
+
+@dataclass(frozen=True)
+class InsetRequest:
+    """Bands of one support face (or of every face of a type) at the given margins."""
+
+    request_id: str  # the family id of a face; also the lineage prefix ``<request id>/ring<r>/edge<k>``
+    support: ConductorSurface | SolutionInterface | InterfaceSurfaces
     margins_um: tuple[float, ...]
     interface: str | None = (
-        None  # expected interface type of the face, checked against its labels
+        None  # expected interface type of the face, checked against its labels (a concrete support only)
     )
 
 
