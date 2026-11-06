@@ -88,12 +88,13 @@ release precedence. Geometry snapshots remain detached; compiler records are
 derived outputs, and backend tags remain observations rather than source
 authority. Relocation must preserve these ownership and failure contracts.
 
-The SCGSim Development Lead owns tracked source. A fixed worker may write only
-its assigned paths under a bounded lease; shared facade, receipt and package
-metadata paths have one writer at a time. The architecture and complete
-submodule migration contract are recorded alongside the accepted source tree.
-Native observations and solver-specific result interpretation remain
-separately owned and must not be implied by a directory reorganization.
+Palace and AEDT backend implementations, tests and technical documentation
+remain distinct source responsibilities as described in the repository
+[root guide](../AGENTS.md). Native observations and solver-specific result
+interpretation retain their technical boundaries; a directory reorganization
+does not imply that those activities are complete. Follow the shared
+[$github-flow](https://github.com/arfiligol/agent-skills/tree/main/github-flow)
+for contributor coordination and delivery.
 
 ## Implementation and project references
 
