@@ -64,7 +64,8 @@ PORT_CAPACITANCE_F = 0.0
 NUM_MODES = 1
 SEARCH_FREQUENCY_HZ = 1e9
 EIGENMODE_TOLERANCE = 1e-6
-MESH_QUALITY_THRESHOLD = 0.01  # minimum scaled Jacobian of every tetrahedron
+REFINED_MESH_SIZE_UM = 10.0
+MAX_MESH_SIZE_UM = 200.0
 FEM_ORDER = 2
 AMR_MAX_PASSES = 10
 AMR_TOLERANCE = 0.02
@@ -94,7 +95,7 @@ PRESET_NAMES = {
 }
 ```
 
-The mesh quality threshold, FEM order and adaptive controls affect different parts of the numerical request. A maximum pass count is a limit, not a statement that every pass will complete. Review actual returned mode and EPR rows with these settings.
+Mesh size, FEM order and adaptive controls affect different parts of the numerical request. A maximum pass count is a limit, not a statement that every pass will complete. Review actual returned mode and EPR rows with these settings.
 
 Check: choose the film preset, AEDT release and a fresh run ID before preparing the model.
 
@@ -199,7 +200,11 @@ palace_sim.set_eigenmode(
     tolerance=EIGENMODE_TOLERANCE,
     save=1,
 )
-palace_sim.set_mesh(quality_threshold=MESH_QUALITY_THRESHOLD)
+palace_sim.set_mesh(
+    size_policy="scgsim_default",
+    refined_mesh_size=REFINED_MESH_SIZE_UM,
+    max_mesh_size=MAX_MESH_SIZE_UM,
+)
 palace_sim.set_numerical(
     order=FEM_ORDER,
     tolerance=EIGENMODE_TOLERANCE,
@@ -217,7 +222,7 @@ palace_sim.set_numerical(
 )
 ```
 
-The default sizing recipe applies, and `mesh()` stops with an error if a tetrahedron stays below the quality threshold; see the [Palace mesh controls](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls). Palace's port declares inductance in henries; it does not add a capacitive branch, so `PORT_CAPACITANCE_F = 0.0` remains a model note.
+The explicit `scgsim_default` mesh policy keeps the selected size controls active. Palace's port declares inductance in henries; it does not add a capacitive branch, so `PORT_CAPACITANCE_F = 0.0` remains a model note.
 
 ### HFSS
 

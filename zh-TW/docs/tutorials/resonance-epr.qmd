@@ -177,7 +177,7 @@ sim.set_epr_request(
     bulk_domain_ids=None, port_names=(port_name,),
 )
 sim.set_eigenmode(num_modes=1, target=1e9, tolerance=1e-6, save=1)
-sim.set_mesh(quality_threshold=0.01)  # 每個四面體的最小縮放 Jacobian
+sim.set_mesh(refined_mesh_size=10.0, max_mesh_size=200.0)
 sim.set_numerical(
     order=2, tolerance=1e-6, max_iterations=2000,
     solver_type="Default", preconditioner="Default", device="CPU",
@@ -189,7 +189,7 @@ mesh_path = sim.mesh()
 config_path = sim.write_config()
 ```
 
-埠電感單位為亨利，搜尋目標單位為赫茲。套用預設尺寸配方；若有四面體持續低於品質門檻，`mesh()` 會中止，見 [Palace 網格控制](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。Palace 埠 API 僅支援電感；C = 0 不會增加電容支路。未指定的外部邊界沿用 Palace 自然 PMC 慣例。報告中的表面、體積與埠數值仍分開呈現。
+埠電感單位為亨利，搜尋目標單位為赫茲，網格尺寸單位為微米。Palace 埠 API 僅支援電感；C = 0 不會增加電容支路。未指定的外部邊界沿用 Palace 自然 PMC 慣例。報告中的表面、體積與埠數值仍分開呈現。
 
 ### AEDT
 

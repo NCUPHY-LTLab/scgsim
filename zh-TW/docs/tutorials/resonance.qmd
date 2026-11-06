@@ -66,7 +66,8 @@ NUM_MODES = 1
 SEARCH_FREQUENCY_HZ = 1e9
 EIGENMODE_TOLERANCE = 1e-6
 
-MESH_QUALITY_THRESHOLD = 0.01  # 每個四面體的最小縮放 Jacobian
+REFINED_MESH_SIZE_UM = 10.0
+MAX_MESH_SIZE_UM = 200.0
 FEM_ORDER = 2
 AMR_MAX_PASSES = 10
 AMR_TOLERANCE = 0.02
@@ -89,7 +90,7 @@ AEDT_CORES = 4
 AEDT_RAM_LIMIT_PERCENT = 80
 ```
 
-搜尋目標用來協助定位模態，不是求解所得的頻率。網格品質門檻、FEM 階數與自適應控制各自影響不同環節。Palace 的目標使用赫茲；HFSS 執行控制記錄使用 GHz。
+搜尋目標用來協助定位模態，不是求解所得的頻率。網格尺寸、FEM 階數與自適應控制各自影響不同環節。Palace 的目標使用赫茲；HFSS 執行控制記錄使用 GHz。
 
 檢查：確認單位，並在準備另一個模型前選擇新的執行識別碼。
 
@@ -165,7 +166,11 @@ palace_sim.set_eigenmode(
     tolerance=EIGENMODE_TOLERANCE,
     save=1,
 )
-palace_sim.set_mesh(quality_threshold=MESH_QUALITY_THRESHOLD)
+palace_sim.set_mesh(
+    size_policy="scgsim_default",
+    refined_mesh_size=REFINED_MESH_SIZE_UM,
+    max_mesh_size=MAX_MESH_SIZE_UM,
+)
 palace_sim.set_numerical(
     order=FEM_ORDER,
     tolerance=EIGENMODE_TOLERANCE,
@@ -183,7 +188,7 @@ palace_sim.set_numerical(
 )
 ```
 
-套用預設尺寸配方；若有四面體持續低於品質門檻，`mesh()` 會以錯誤中止，見 [Palace 網格控制](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。Palace 埠的電感單位為亨利；`PORT_CAPACITANCE_F` 為零，而且 Palace 不會透過此埠 API 加入電容支路。
+明確選用 `scgsim_default` 網格策略後，10 µm 與 200 µm 尺寸控制才會生效。Palace 埠的電感單位為亨利；`PORT_CAPACITANCE_F` 為零，而且 Palace 不會透過此埠 API 加入電容支路。
 
 ### HFSS
 
