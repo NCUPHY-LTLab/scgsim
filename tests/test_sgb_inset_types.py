@@ -247,17 +247,16 @@ def test_a_concrete_request_keeps_its_id_and_takes_the_margins_of_a_type_request
     assert record["a_sheet"]["margins_um"] == [0.25, 0.5, 1.0]
 
 
-def test_two_concrete_requests_on_one_face_are_refused_and_a_type_request_meeting_both_says_so_first():
-    """Both families would share the band groups of the face: refused (see test_sgb_inset_band_groups)."""
+def test_two_concrete_requests_on_one_face_are_refused_with_or_without_a_type_request():
+    """Both families would share the band groups of the face: refused at planning (see test_sgb_inset_band_groups)."""
     catalogue = slab_model("A", TWO_PADS, half=20)
     pair = (
         InsetRequest("first", ConductorSurface("a", "sheet"), (0.5,)),
         InsetRequest("second", ConductorSurface("a", "sheet"), (1.0,)),
     )
-    with pytest.raises(InputError, match="two band families, 'first' and 'second'"):
-        build(catalogue, "A", *pair)
-    with pytest.raises(InputError, match="name the same face"):
-        build(catalogue, "A", *pair, *by_type("MA"))
+    for requests in (pair, (*pair, *by_type("MA"))):
+        with pytest.raises(InputError, match="'first' and 'second' name the same face"):
+            build(catalogue, "A", *requests)
 
 
 def test_generated_ids_must_not_repeat_a_request_id():

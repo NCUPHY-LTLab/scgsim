@@ -92,7 +92,7 @@ flowchart LR
 
 限定詞不改變 `face_kind`：這些 group 的 `face_kind` 仍是 `interface`，依 face 種類過濾照舊可用。從不碰撞的 family 與沒有 band 的介面（`SA::substrate|vacuum__interface`）維持原本的形式；要找一個 family 的 band group，讀 `insets[*].bands`（或 `expansion.banded[*].bands`），不要從名稱推測。限定詞在第一次命名之後、依排序後的拓樸決定，與 `workers`、`tiles` 無關；`surface_epr_rows`、sidecar 的 `band`、`insets`、`mesh_features`、`unions` 與 AEDT 相關欄位讀到的都是最後的名稱。
 
-加上限定詞之後，若一個 group 仍會收進兩個 family 的 band label（例如兩個指定 face 的請求選到同一個 face），build 以 `InputError` 停止，訊息指出 group 名稱與兩個 family。
+加上限定詞之後，若一個 group 仍會收進兩個 family 的 band label，build 以 `InputError` 停止，訊息指出 group 名稱與兩個 family。兩個指定 face 的請求選到同一個 face 的情形更早就被擋下：SGB 在規劃 band 時依請求解析出的 face 拒收（見 [Inset band](inset-imprint.qmd#request-forms)）。
 
 **不要從名稱解析 face kind 或 band。**名稱只用來識別；face kind、band、介面種類與 Entity 請讀 sidecar 的 `face_kind`、`band`、`interface_type`、`entities` 欄位。
 :::

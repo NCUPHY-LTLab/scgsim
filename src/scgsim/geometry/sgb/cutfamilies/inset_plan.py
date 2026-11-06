@@ -10,9 +10,10 @@ to read the faces from the sidecar.
   theirs: a Route A sheet serves an ``MA`` and an ``MS`` request with one family.  A concrete request keeps its
   own id; a face asked for only by type is a family with the id ``<id of the first request in id order>::<entity>::<side>``
   (``<first>|<second>::z=<z>`` for an interface), so ids, lineage and band group names (up to the collision qualifier) depend on the requests and
-  the faces only, never on ``workers`` or ``tiles``.  Two concrete requests on one face are not merged, and
-  the build refuses them: both families would put their bands into the same physical groups
-  (``routes.face_names.name_faces``); a type-level request meeting two of them is refused here, earlier.
+  the faces only, never on ``workers`` or ``tiles``.  Two concrete requests on one face are not merged: they
+  are refused here, by the face they resolve to, because both families would put their bands into the same
+  physical groups.  Refusing them before any partition also covers a face a port later covers entirely, where
+  no band group is left to collide.
 * **No gap edge.**  A concrete request fails closed on a face with no gap edge.  A face only type-level requests
   ask for is skipped and recorded (:class:`SkippedFace`), because "every face of a type" includes faces bands cannot be
   measured on (the substrate underside).
@@ -147,13 +148,9 @@ def _jobs(
     named: list[_NamedFace], typed: dict[FaceId, list[InsetRequest]], grid: Grid
 ) -> list[_FamilyJob]:
     """The families to build: named faces in request order, then the faces only a type asked for in face order."""
-    named_at: dict[FaceId, int] = {}
-    for item in named:
-        named_at[item.face] = named_at.get(item.face, 0) + 1
-    jobs = [
-        _named_job(item, typed.get(item.face, []), named_at, grid) for item in named
-    ]
-    for face in sorted(set(typed) - set(named_at)):
+    named_faces = _faces_named_once(named)
+    jobs = [_named_job(item, typed.get(item.face, []), grid) for item in named]
+    for face in sorted(set(typed) - named_faces):
         asks = sorted(typed[face], key=lambda r: r.request_id)
         family_id = f"{asks[0].request_id}::{face.label()}"
         request = _with_margins(InsetRequest(family_id, face.support(), ()), asks, grid)
@@ -161,21 +158,25 @@ def _jobs(
     return jobs
 
 
-def _named_job(
-    item: _NamedFace,
-    asks: list[InsetRequest],
-    named_at: dict[FaceId, int],
-    grid: Grid,
-) -> _FamilyJob:
+def _faces_named_once(named: list[_NamedFace]) -> set[FaceId]:
+    """The faces the concrete requests name; two concrete requests naming one face are an error."""
+    by_face: dict[FaceId, list[str]] = {}
+    for item in named:
+        by_face.setdefault(item.face, []).append(item.request.request_id)
+    for face, ids in sorted(by_face.items()):
+        if len(ids) > 1:
+            names = " and ".join(repr(i) for i in sorted(ids))
+            raise InputError(
+                f"inset requests {names} name the same face ({face.label()}); a face has one band "
+                "family, so name it once with all its margins in one request"
+            )
+    return set(by_face)
+
+
+def _named_job(item: _NamedFace, asks: list[InsetRequest], grid: Grid) -> _FamilyJob:
     """The family of a concrete request: as written, or with the margins of the type-level requests on its face."""
     if not asks:
         return _FamilyJob(item.request, item.face, named=True)
-    if named_at[item.face] > 1:
-        raise InputError(
-            f"inset request {item.request.request_id!r} and another concrete request name the same face "
-            f"({item.face.label()}) that a type-level request also asks for; leave the face out of the "
-            "type-level request with exclude_entity_ids, or name it once"
-        )
     ordered = sorted(asks, key=lambda r: r.request_id)
     merged = _with_margins(item.request, [item.request, *ordered], grid)
     return _FamilyJob(merged, item.face, ordered, named=True)

@@ -193,38 +193,23 @@ def test_the_qualified_names_do_not_depend_on_workers_or_tiles(two_level_model):
 
 
 def test_two_concrete_requests_on_one_face_are_refused():
-    """Two families on one face would share band group names: fail closed, naming the group and both families."""
+    """A face has one band family: two concrete requests naming it are refused at planning, naming both."""
     pad = ConductorSurface("top_pad", "sheet")
-    with pytest.raises(InputError) as raised:
+    with pytest.raises(InputError, match="name the same face") as raised:
         build_model_from_catalogue(
             two_level_catalogue(),
             "A",
             insets=(InsetRequest("one", pad, (0.5,)), InsetRequest("two", pad, (1.0,))),
         )
     message = str(raised.value)
-    assert "physical group 'top_pad::band=" in message
     assert "'one'" in message and "'two'" in message
 
 
 def test_two_concrete_interface_requests_on_one_face_are_refused():
-    """The qualifier does not separate two families on one face: the group it still shares is named in the error."""
-    top = SolutionInterface("substrate", "vacuum", 0.0)
-    with pytest.raises(InputError, match="two band families") as raised:
-        build_model_from_catalogue(
-            two_level_catalogue(),
-            "A",
-            insets=(InsetRequest("one", top, (0.5,)), InsetRequest("two", top, (1.0,))),
-        )
-    message = str(raised.value)
-    assert f"physical group '{TOP}::band=" in message
-    assert "'one'" in message and "'two'" in message
-
-
-def test_the_still_colliding_group_is_named_after_the_qualifier():
-    """Two concrete requests on the top level and a third family below: only the top group collides."""
+    """The same holds for a solution interface; a request on another level is not part of the error."""
     top = SolutionInterface("substrate", "vacuum", 0.0)
     bottom = SolutionInterface("substrate", "vacuum", -100.0)
-    with pytest.raises(InputError, match="two band families") as raised:
+    with pytest.raises(InputError, match="name the same face") as raised:
         build_model_from_catalogue(
             two_level_catalogue(),
             "A",
@@ -235,7 +220,6 @@ def test_the_still_colliding_group_is_named_after_the_qualifier():
             ),
         )
     message = str(raised.value)
-    assert TOP in message and BOTTOM not in message
     assert "'one'" in message and "'two'" in message and "'below'" not in message
 
 
@@ -291,3 +275,16 @@ def test_a_family_the_pre_pass_banded_may_have_no_band_once_a_port_covers_its_fa
         for row in side["surface_epr_rows"].values()
         if row["interface_type"] == "SA"
     ]
+
+
+def test_two_concrete_requests_on_a_face_a_port_covers_are_refused():
+    """The refusal does not depend on emitted bands: a port covering the whole face leaves none, and it still fails."""
+    gap = SolutionInterface("substrate", "vacuum", 0.0)
+    with pytest.raises(InputError, match="name the same face") as raised:
+        build_model_from_catalogue(
+            covered_gap_catalogue(),
+            "A",
+            insets=(InsetRequest("one", gap, (0.5,)), InsetRequest("two", gap, (1.0,))),
+        )
+    message = str(raised.value)
+    assert "'one'" in message and "'two'" in message
