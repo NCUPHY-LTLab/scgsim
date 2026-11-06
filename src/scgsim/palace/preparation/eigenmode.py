@@ -15,11 +15,12 @@ from scgsim.geometry.models.input import VacuumRegionSpec
 from scgsim.geometry.models.physical import ApproximationProfile
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 from scgsim.geometry.source.summary import InputSummary, summarize_geometry_input
+from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
 from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
 
 from ..execution.handoff import HandoffPlan, prepare_handoff
 from ..mesh.build import MeshBuildResult, build_route_mesh
-from ..mesh.controls import MESH_CONTROL_KEYS, MeshSizing, update_mesh_sizing
+from ..mesh.controls import MeshControls
 from ..mesh.summary import summary_from_files
 from ..results.epr import PalaceEprResult, reanalyze_epr, show_epr
 from .config import (
@@ -63,9 +64,9 @@ class EigenmodeSim:
     target_hz: float | None = None
     eigenmode_tolerance: float = 1e-6
     save_fields: int = 0
+    mesh_controls: MeshControls = field(default_factory=MeshControls)
     numerical: dict[str, Any] = field(
         default_factory=lambda: configure_numerical_controls(
-            size_policy="gmsh_default",
             amr_nonconformal=True,
             amr_max_passes=None,
             amr_tolerance=None,
@@ -173,6 +174,7 @@ class EigenmodeSim:
             "eigenmode_tolerance": self.eigenmode_tolerance,
             "save_fields": self.save_fields,
             "numerical": self.numerical,
+            "mesh": self.mesh_controls.to_payload(),
             "indium_ground_bumps": self.indium_ground_bumps,
         }
         return InputSummary(data)
@@ -278,7 +280,11 @@ class EigenmodeSim:
         route_a_thin_film: RouteAThinFilm | None = None,
         approximation_profile: ApproximationProfile | None = None,
     ) -> None:
-        """Configure Surface EPR and the required Route-A thin-film lowering."""
+        """Configure Surface EPR and the required Route-A thin-film lowering.
+
+        Surface EPR is geometry: its inset margins become bands that ``mesh()`` cuts into the model, so
+        this runs before ``mesh()``.  Calling it again invalidates the mesh, config and handoff.
+        """
         route = (
             representation.strip().upper() if isinstance(representation, str) else ""
         )
@@ -384,49 +390,31 @@ class EigenmodeSim:
         self.save_fields = normalized_save
         self._invalidate_config()
 
-    def set_mesh(  # noqa: PLR0913 - preserve the public keyword controls.
+    def set_mesh(
         self,
         *,
-        size_policy: str | None = None,
-        refined_mesh_size: float | None = None,
-        max_mesh_size: float | None = None,
-        algorithm_3d: str | None = None,
-        threads: int | None = None,
-        surface_threads: int | None = None,
-        geometry_order: int | None = None,
-        high_order_optimize: bool | None = None,
+        recipe: SizingRecipe | None = None,
+        mesher: MesherOptions | None = None,
+        budgets: Budgets | None = None,
+        quality_threshold: float | None = None,
     ) -> None:
         """Set geometry-mesh controls; every omitted value retains its setting.
 
-        Selecting ``gmsh_default`` clears SCG sizes and rejects explicit sizes.
-        Switching back to ``scgsim_default`` restores 5/300 unless sizes are given.
-        Geometry order is independent of ``set_numerical(order=...)``. Elevated
-        geometry is optimized with Gmsh HighOrder once when enabled.
+        These are the controls of ``scgsim.meshing.mesh_sgb``: ``recipe`` (``FeatureRecipe``,
+        ``GlobalSizeRecipe`` or ``UniformBoundaryRecipe``) chooses the initial element sizes, ``mesher``
+        (``MesherOptions``) the Gmsh algorithms and the geometry order, ``budgets`` when the repair loop
+        gives up, and ``quality_threshold`` the minimum scaled Jacobian of every tetrahedron (default
+        0.01).  A mesh that cannot reach the threshold raises ``MeshRepairError`` from ``mesh()``.
+        Geometry order is independent of ``set_numerical(order=...)``.
         """
-        sizing = update_mesh_sizing(
-            MeshSizing.from_payload(self.numerical),
-            size_policy=size_policy,
-            refined_mesh_size=refined_mesh_size,
-            max_mesh_size=max_mesh_size,
+        controls = self.mesh_controls.updated(
+            recipe=recipe,
+            mesher=mesher,
+            budgets=budgets,
+            quality_threshold=quality_threshold,
         )
-        proposed = dict(self.numerical)
-        proposed.update(sizing.to_payload())
-        proposed.update(
-            {
-                key: value
-                for key, value in {
-                    "algorithm_3d": algorithm_3d,
-                    "threads": threads,
-                    "surface_threads": surface_threads,
-                    "geometry_order": geometry_order,
-                    "high_order_optimize": high_order_optimize,
-                }.items()
-                if value is not None
-            }
-        )
-        numerical = configure_numerical_controls(**proposed)
-        if numerical != self.numerical:
-            self.numerical = numerical
+        if controls != self.mesh_controls:
+            self.mesh_controls = controls
             self._invalidate_mesh()
 
     def set_numerical(  # noqa: PLR0913 - preserve the public keyword controls.
@@ -439,8 +427,6 @@ class EigenmodeSim:
         preconditioner: str = "Default",
         device: str = "CPU",
         ksp_type: str | None = None,
-        refined_mesh_size: float | None = None,
-        max_mesh_size: float | None = None,
         amr_max_passes: int | None = None,
         amr_nonconformal: bool | None = None,
         amr_nc_levels: int | None = None,
@@ -463,23 +449,6 @@ class EigenmodeSim:
         Omitted Krylov and nonconformal-level controls retain current choices.
         Explicit ``ksp_type="Default"`` uses Palace's problem-specific default.
         """
-        if (refined_mesh_size is None) != (max_mesh_size is None):
-            raise ValueError(
-                "refined_mesh_size and max_mesh_size must be provided together."
-            )
-        previous_mesh_sizes = {
-            "refined_mesh_size": self.numerical["refined_mesh_size"],
-            "max_mesh_size": self.numerical["max_mesh_size"],
-        }
-        sizing = update_mesh_sizing(
-            MeshSizing.from_payload(self.numerical),
-            refined_mesh_size=refined_mesh_size,
-            max_mesh_size=max_mesh_size,
-        )
-        mesh_sizes = {
-            "refined_mesh_size": sizing.refined_mesh_size,
-            "max_mesh_size": sizing.max_mesh_size,
-        }
         self.numerical = configure_numerical_controls(
             order=order,
             tolerance=tolerance,
@@ -493,8 +462,6 @@ class EigenmodeSim:
                 if amr_nc_levels is None
                 else amr_nc_levels
             ),
-            **mesh_sizes,
-            **{key: self.numerical[key] for key in MESH_CONTROL_KEYS},
             amr_max_passes=(
                 self.numerical["amr_max_passes"]
                 if amr_max_passes is None
@@ -526,17 +493,14 @@ class EigenmodeSim:
             output_paraview=output_paraview,
             output_grid_function=output_grid_function,
         )
-        if (
-            self.numerical["refined_mesh_size"]
-            != previous_mesh_sizes["refined_mesh_size"]
-            or self.numerical["max_mesh_size"] != previous_mesh_sizes["max_mesh_size"]
-        ):
-            self._invalidate_mesh()
-        else:
-            self._invalidate_config()
+        self._invalidate_config()
 
     def mesh(self) -> Path:
-        """Invalidate prior derived state, prepare the source, and build a new mesh."""
+        """Invalidate prior derived state, prepare the source, and build a new mesh.
+
+        Surface EPR is geometry: ``set_surface_epr`` runs before ``mesh()``, which cuts the inset
+        margins of its specs into the model as bands.  Without Surface EPR no bands are requested.
+        """
         self._invalidate_mesh()
         if (
             (self.component is None and self._plan_snapshot is None)
@@ -602,9 +566,11 @@ class EigenmodeSim:
                 stack=prepared.stack,
                 route=self.route,
                 output_dir=self.output_dir,
-                refined_mesh_size=self.numerical["refined_mesh_size"],
-                max_mesh_size=self.numerical["max_mesh_size"],
-                **{key: self.numerical[key] for key in MESH_CONTROL_KEYS},
+                surface_epr_specs=self.surface_epr_specs,
+                recipe=self.mesh_controls.recipe,
+                mesher=self.mesh_controls.mesher,
+                budgets=self.mesh_controls.budgets,
+                quality_threshold=self.mesh_controls.quality_threshold,
                 source_gds_bytes=self._plan_snapshot.gds_bytes,
                 source_geometry_input=prepared.geometry_input,
                 representation_context=prepared.physical_plan.context,
@@ -632,9 +598,11 @@ class EigenmodeSim:
             stack=prepared.stack,
             route=self.route,
             output_dir=self.output_dir,
-            refined_mesh_size=self.numerical["refined_mesh_size"],
-            max_mesh_size=self.numerical["max_mesh_size"],
-            **{key: self.numerical[key] for key in MESH_CONTROL_KEYS},
+            surface_epr_specs=self.surface_epr_specs,
+            recipe=self.mesh_controls.recipe,
+            mesher=self.mesh_controls.mesher,
+            budgets=self.mesh_controls.budgets,
+            quality_threshold=self.mesh_controls.quality_threshold,
             indium_ground_bump_fill=prepared.indium_ground_bump_fill,
             source_geometry_input=prepared.geometry_input,
             representation_context=prepared.physical_plan.context,
@@ -687,9 +655,10 @@ class EigenmodeSim:
         if request is not None:
             available = {
                 "surface_interfaces": {
-                    item["metadata"]["interface_type"]
+                    row["interface_type"]
                     for item in result.index_entries
                     if item["section"] == "Boundaries.Postprocessing.Dielectric"
+                    for row in item["metadata"]["rows"]
                 },
                 "bulk_domain_ids": {
                     item["entry_name"]

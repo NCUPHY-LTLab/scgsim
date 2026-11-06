@@ -1,4 +1,8 @@
-"""Synthesize electrostatic Terminal and Ground boundaries from SGB groups."""
+"""Synthesize electrostatic Terminal and Ground boundaries from the attributes of SGB groups.
+
+A Terminal is the attributes of the conductor surfaces of one exact Net (the sidecar's ``unions.nets``), the
+exterior Ground is the attributes of the ``EXT`` groups, and a physical Ground is chosen by Net.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +10,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from .config_models import TerminalBinding, optional_string, physical_group_values
+from .config_models import TerminalBinding, optional_string
 
 
 @dataclass
@@ -21,9 +25,7 @@ class _BoundaryState:
 
     def collect_conductors(self) -> None:
         """Collect active conductor component, net and physical-attribute identities."""
-        for physical_name, info in self.groups.get("boundary_surfaces", {}).items():
-            if not _is_active_conductor_surface(info):
-                continue
+        for physical_name, info in self.groups.get("pec_surfaces", {}).items():
             component_id, net_id, attrs = _conductor_identity(info)
             self._record_component(physical_name, component_id, net_id, attrs)
         if not self.component_attrs:
@@ -97,29 +99,17 @@ def build_electrostatic_boundaries(
     )
 
 
-def _is_active_conductor_surface(info: Any) -> bool:
-    if not isinstance(info, Mapping):
-        return False
-    return (
-        info.get("sgb_record") == "final_physical_group"
-        and info.get("source") == "volume_interface"
-        and info.get("solver_use") == "solver_active"
-        and str(info.get("interface_type")).upper() in {"MA", "MS"}
-    )
-
-
 def _conductor_identity(info: Mapping[str, Any]) -> tuple[str, str, tuple[int, ...]]:
-    component_id = optional_string(info.get("conductor_component_id"))
-    net_id = optional_string(info.get("net_id"))
+    """The conductor component (the sidecar Entity id), its exact Net and its attributes."""
+    component_id = optional_string(info.get("entity"))
+    net_id = optional_string(info.get("net"))
     if component_id is None:
-        raise ValueError(
-            "SGB solver-active conductor surface missing conductor_component_id."
-        )
+        raise ValueError("SGB conductor surface missing its Entity id.")
     if net_id is None:
         raise ValueError(
             f"SGB conductor component {component_id!r} missing exact net_id."
         )
-    attrs = physical_group_values(info.get("phys_group"))
+    attrs = tuple(int(value) for value in info.get("attributes", ()))
     if not attrs:
         raise ValueError(
             f"SGB conductor component {component_id!r} has no physical attributes."
@@ -205,9 +195,8 @@ def _terminal_index_entry(
     net_id = str(terminal.net_id).strip()
     physical_names = sorted(
         physical_name
-        for physical_name, info in state.groups.get("boundary_surfaces", {}).items()
-        if isinstance(info, Mapping)
-        and optional_string(info.get("conductor_component_id")) in matching
+        for physical_name, info in state.groups.get("pec_surfaces", {}).items()
+        if optional_string(info.get("entity")) in matching
     )
     return {
         "section": "Boundaries.Terminal",
@@ -274,23 +263,14 @@ def _exterior_grounds(
     physical_names: set[str] = set()
     if policy == "ground":
         for physical_name, info in groups.get("boundary_surfaces", {}).items():
-            if _is_active_exterior_surface(info):
-                attrs.update(physical_group_values(info.get("phys_group")))
+            if info.get("source") == "domain_boundary":
+                attrs.update(int(value) for value in info["attributes"])
                 physical_names.add(str(physical_name))
         if not attrs:
             raise ValueError(
                 "exterior_boundary_policy='ground' requires at least one exterior boundary."
             )
     return attrs, physical_names
-
-
-def _is_active_exterior_surface(info: Any) -> bool:
-    return (
-        isinstance(info, Mapping)
-        and info.get("sgb_record") == "final_physical_group"
-        and info.get("source") == "domain_boundary"
-        and info.get("solver_use") == "solver_active"
-    )
 
 
 def _assemble_boundaries(
