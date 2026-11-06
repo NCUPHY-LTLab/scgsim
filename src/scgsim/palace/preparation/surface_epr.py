@@ -16,11 +16,12 @@ from dataclasses import dataclass, replace
 from numbers import Real
 from typing import Any, cast
 
+from scgsim.geometry.sgb.records.grid import Grid
 from scgsim.semantics.epr import film_assumptions
 
 from ..mesh.insets import check_bandable_face_kinds
 from ..mesh.margins import margins_of
-from ..mesh.physical_groups import Groups, rows_of, same_length
+from ..mesh.physical_groups import Groups, rows_of
 
 
 def normalize_surface_epr_specs(
@@ -281,8 +282,9 @@ def build_surface_epr_postprocessing(
 class _Unit:
     """The rows of one interface type that one baseline row covers: an unbanded row, or all bands of a family.
 
-    ``family`` is the sidecar record of the band family (``margins_um`` and ``bands``, band index to the
-    groups that carry it) and ``margins_um`` the margins this unit is asked for; an unbanded row has neither.
+    ``family`` is the sidecar record of the band family (``margins_grid`` in model-grid units with the
+    ``grid_um`` they are measured in, and ``bands``, band index to the groups that carry it) and ``margins_um``
+    the margins this unit is asked for; an unbanded row has neither.
     """
 
     name: str
@@ -305,13 +307,14 @@ class _MarginRequest:
         """Index of the first band at least ``margin_um`` from the gap edge, or None for an unbanded unit."""
         if self.unit.family is None:
             return None
-        margins = self.unit.family["margins_um"]
-        for position, margin in enumerate(margins):
-            if same_length(margin, self.margin_um):
-                return position + 1
+        family = self.unit.family
+        # A margin is the same length as a band's when both are the same multiple of the model grid.
+        wanted = Grid(family["grid_um"]).lattice_units(self.margin_um)
+        if wanted is not None and wanted in family["margins_grid"]:
+            return list(family["margins_grid"]).index(wanted) + 1
         raise ValueError(
             f"Surface EPR {self.unit.interface_type} margin {self.margin_um} um is not among "
-            f"the margins {margins} of the bands of {self.unit.name!r}."
+            f"the margins {family['margins_um']} of the bands of {self.unit.name!r}."
         )
 
     def selected_rows(self) -> tuple[Mapping[str, Any], ...]:
@@ -389,7 +392,12 @@ def _family_unit(
         _unit_label(first),
         interface_type,
         tuple(members),
-        family={"margins_um": first["margins_um"], "bands": first["family_bands"]},
+        family={
+            "margins_um": first["margins_um"],
+            "margins_grid": first["margins_grid"],
+            "grid_um": first["grid_um"],
+            "bands": first["family_bands"],
+        },
         margins_um=tuple(margins_of(preset, first["entities"])),
     )
 

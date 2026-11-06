@@ -66,7 +66,7 @@ Overlap 的優先權不在這個函式的引數裡：同一個 Net 的兩個 Ent
 | `RefinementRequest(request_id, z_um, points_um)` | 高度 `z_um` 的折線，mesher 把它嵌進含有它的 face | 只供 mesh 尺寸；落在任何已 emit 的 face 之外則是錯誤，不會悄悄丟掉 |
 :::
 
-**兩種寫法各有用途。**只知道「Surface EPR 的 MA 種類要這些 margin」的呼叫端用 `InterfaceSurfaces`，不必先 build 一次再從 sidecar 找 face；要替選定的 face（例如某一塊 pad 的 top）要 band，或要用不同的 margin，用 `ConductorSurface` 與 `SolutionInterface`，它們維持精確：選不到或沒有 gap edge 時 build 失敗。兩者可以並用，用 `exclude_entity_ids` 讓按種類的請求避開已指定的導體；一個 face 被多個請求選到時只做一個 family，margin 取聯集。展開規則、id 與略過的條件見 [要 band 的兩種寫法](inset-imprint.qmd#request-forms)。
+**兩種寫法各有用途。**只知道「Surface EPR 的 MA 種類要這些 margin」的呼叫端用 `InterfaceSurfaces`，不必先 build 一次再從 sidecar 找 face；要替選定的 face（例如某一塊 pad 的 top）要 band，或要用不同的 margin，用 `ConductorSurface` 與 `SolutionInterface`，它們維持精確：選不到或沒有 gap edge 時 build 失敗。兩者可以並用，用 `exclude_entity_ids` 讓按種類的請求避開已指定的導體；一個 face 被多個請求選到時只做一個 family，所以這些請求必須要求相同的 margin（以模型格點比較），不同時 build 以 `InputError` 停止。展開規則、id 與略過的條件見 [要 band 的兩種寫法](inset-imprint.qmd#request-forms)。
 
 band 的幾何與 margin 規則見 [Surface EPR inset imprint](inset-imprint.qmd)；band 的距離只從 gap edge 量起，量法見 [Inset band 怎麼量](inset-imprint.qmd#band-measure)。
 
@@ -145,7 +145,7 @@ sidecar 是一個 JSON 檔：頂層的鍵依字母排序、每個頂層鍵佔一
 | `embedded_faces`、`refinement_edges` | `(face, host volume)` 與 `(edge, host face)`：XAO 無法攜帶、mesher 必須重新套用的 embedding | Palace |
 | `ports` | 每個 lumped-port sheet：`port_index`、`source_name`、`direction`、`host_entity_ids`、`source_layer`、`target_layer`、`z_um`、`group`、`faces`、`host_volumes`、`adjacent_volumes` | 兩者 |
 | `lineage` | `edges`（edge → carrier id）、`carriers`（來源 polygon edge 或 family member）、`vertical_edges`、`faces`（來源 Entity）、`membership`（依面積加權，各比例不互斥，可大於 1） | 追溯；band edge 的辨識 |
-| `insets`、`refinements` | 依 request id 排序的 inset 請求。指定 face 的請求是它那個 face 的 family：request id、support、margin（µm 與格點；一個 face 被多個請求選到時是聯集）、`band_count`、各 band 的 group。按種類的請求（`InterfaceSurfaces`）記請求本身（種類、`face_kinds`、`exclude_entity_ids`、margin）與 `expansion`：`banded` 是 physical pre-pass 建出的 family 記錄（每個展開的 face 一筆），`skipped` 是略過的 face 與原因（`no_gap_edge`）；`banded` 不保證每個 family 都有可積分的 band，因為 port 是之後才放上去的，可以把一個 family 的 face 整個蓋住（該 family 的 `bands` 是 `{}`，也沒有它的 `surface_epr_rows`），所以要用某個 family 的 band，讀它自己的 `bands` 與最後的 `surface_epr_rows`；每個 refinement request 與它的 edge | Palace |
+| `insets`、`refinements` | 依 request id 排序的 inset 請求。指定 face 的請求是它那個 face 的 family：request id、support、margin（µm 與格點；一個 face 被多個請求選到時，它們要求的 margin 相同）、`band_count`、各 band 的 group。按種類的請求（`InterfaceSurfaces`）記請求本身（種類、`face_kinds`、`exclude_entity_ids`、margin）與 `expansion`：`banded` 是 physical pre-pass 建出的 family 記錄（每個展開的 face 一筆），`skipped` 是略過的 face 與原因（`no_gap_edge`）；`banded` 不保證每個 family 都有可積分的 band，因為 port 是之後才放上去的，可以把一個 family 的 face 整個蓋住（該 family 的 `bands` 是 `{}`，也沒有它的 `surface_epr_rows`），所以要用某個 family 的 band，讀它自己的 `bands` 與最後的 `surface_epr_rows`；每個 refinement request 與它的 edge | Palace |
 | `slivers`、`arrangement`、`curved_wall_faces`、`surface_kinds` | sliver 報告摘要；snap 偏離與圓弧偏離的實測值（格點單位）、圓弧 edge 數；曲面 wall 的 face；plane 與 cylinder 的 face 數 | manifest 的 curved-arrangement provenance |
 | `expected` | `verify_loaded` 的預期值：vertex 位置、各 edge／face／solid 的邊界、face 面積、solid 體積 | SGB 的測試與手動診斷（`verify_loaded`） |
 :::

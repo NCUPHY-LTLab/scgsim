@@ -50,9 +50,15 @@ def _show_view(result: Any, *, mode: int | None) -> dict[str, Any]:
 
 
 def _surface_label(item: Mapping[str, Any]) -> str:
-    """Label the Entities and interface of a surface row, with its margin in micrometres."""
+    """Label a surface row by its entry name, Entities and interface, with its margin in micrometres.
+
+    The entry name keeps two faces of one material pair (a banded family and an unbanded face) apart.
+    """
     entities = ",".join(item["entities"])
-    label = f"{entities} / {item['interface_kind']} / {item['evaluation_kind']}"
+    label = (
+        f"{item['name']}: {entities} / {item['interface_kind']} / "
+        f"{item['evaluation_kind']}"
+    )
     return f"{label} {item['margin_um']:g} µm"
 
 

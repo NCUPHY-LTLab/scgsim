@@ -81,6 +81,29 @@ def test_the_old_mesh_options_are_gone(sim_type, removed):
     assert removed not in sim.numerical
 
 
+class PlainRecipe:
+    """A sizing recipe that is not a dataclass: only the two identity fields and the sizing method."""
+
+    name = "plain"
+    version = "1"
+
+    def size_requests(self, features, bounding_box):
+        """No sizes: the controls never call it."""
+        return {}
+
+
+@pytest.mark.parametrize("sim_type", [ElectrostaticSim, EigenmodeSim])
+def test_a_plain_class_recipe_passes_set_mesh_and_the_input_summary(sim_type):
+    """The manifest records a non-dataclass recipe by name and version with no parameters, as the report does."""
+    sim = sim_type()
+    sim.set_mesh(recipe=PlainRecipe())
+    assert sim.mesh_controls.to_payload()["recipe"] == {
+        "name": "plain",
+        "version": "1",
+        "parameters": {},
+    }
+
+
 def test_invalid_mesh_controls_are_refused():
     """Wrong types and a non-finite threshold fail before any state changes."""
     sim = ElectrostaticSim()

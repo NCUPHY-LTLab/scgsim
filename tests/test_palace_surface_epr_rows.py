@@ -93,7 +93,7 @@ def test_each_margin_row_names_its_bands_and_lineage_in_the_index(tmp_path):
 
 def test_route_a_sheet_rows_share_attributes_and_keep_their_sides(tmp_path):
     """MA and MS rows of one sheet band sit on the same attributes; the index keeps the side of each."""
-    specs = surface_epr_specs(MA=[0.5, 1.0], MS=[0.75])
+    specs = surface_epr_specs(MA=[0.5, 1.0], MS=[0.5, 1.0])
     groups = banded_groups("A", tmp_path, specs)
     rows, entries = build_surface_epr_postprocessing(groups, specs)
     by_name = {entry["entry_name"]: entry for entry in entries}
@@ -102,9 +102,9 @@ def test_route_a_sheet_rows_share_attributes_and_keep_their_sides(tmp_path):
     assert ma["attributes"] == ms["attributes"]
     assert {r["side"] for r in ma["metadata"]["rows"]} == {"above"}
     assert {r["side"] for r in ms["metadata"]["rows"]} == {"below"}
-    # The MS margin 0.75 is the second margin of the support (0.5, 0.75, 1.0): bands 2 and 3 are selected.
-    assert by_name["MS::chip/left__sheet__inset_0"]["inset"]["first_band"] == 2
-    assert by_name["MA::chip/left__sheet__inset_1"]["inset"]["first_band"] == 3
+    # Both specs ask the sheet's one set of margins (0.5, 1.0): margin 0.5 selects bands 1 and 2, 1.0 band 2.
+    assert by_name["MS::chip/left__sheet__inset_0"]["inset"]["first_band"] == 1
+    assert by_name["MA::chip/left__sheet__inset_1"]["inset"]["first_band"] == 2
     assert {row["Type"] for row in rows} == {"MA", "MS"}
 
 
@@ -290,22 +290,86 @@ def test_the_custom_path_gives_a_conductor_its_own_margin_rows(tmp_path):
     ] == [(0.5, 1), (1.0, 2)]
 
 
-def test_a_customised_sheet_still_serves_the_other_spec_from_the_union_of_margins(
-    tmp_path,
-):
-    """Route A: MA customises ``chip/left``; MS keeps its own margin on the same family."""
-    specs = surface_epr_specs(MA=[1.0], MS=[0.75])
+def test_a_customised_sheet_serves_both_specs_from_its_one_set_of_margins(tmp_path):
+    """Route A: MA and MS customise ``chip/left`` alike; each spec selects its rows from the one family."""
+    specs = surface_epr_specs(MA=[1.0], MS=[1.0])
     specs["MA"]["inset_margins_by_entity_um"] = {"chip/left": [0.5]}
+    specs["MS"]["inset_margins_by_entity_um"] = {"chip/left": [0.5]}
     sidecar = banded_sidecar("A", tmp_path, specs)
     groups = groups_from_sidecar(sidecar)
     _, entries = build_surface_epr_postprocessing(groups, specs)
     insets = {e["entry_name"]: e["inset"] for e in entries if "inset" in e}
-    # chip/left: margins (0.5, 0.75) -> MA 0.5 selects bands 1.., MS 0.75 selects bands 2..
-    assert insets["MA::chip/left__sheet__inset_0"]["first_band"] == 1
-    assert insets["MS::chip/left__sheet__inset_0"]["first_band"] == 2
-    # chip/right: margins (0.75, 1.0) -> MS 0.75 selects bands 1.., MA 1.0 selects bands 2..
-    assert insets["MS::chip/right__sheet__inset_0"]["first_band"] == 1
-    assert insets["MA::chip/right__sheet__inset_0"]["first_band"] == 2
+    # chip/left: margins (0.5) -> both specs select bands 1..; chip/right: margins (1.0) -> bands 1..
+    for interface_type in ("MA", "MS"):
+        assert insets[f"{interface_type}::chip/left__sheet__inset_0"]["first_band"] == 1
+        assert (
+            insets[f"{interface_type}::chip/right__sheet__inset_0"]["first_band"] == 1
+        )
+
+
+def test_one_sheet_takes_one_set_of_margins_however_they_are_written(tmp_path):
+    """MA writes 0.3 and MS 0.1 + 0.2: the same multiple of the grid, so one request, not two values."""
+    specs = surface_epr_specs(MA=None, MS=None)
+    specs["MA"]["inset_margins_by_entity_um"] = {"chip/left": [0.3]}
+    specs["MS"]["inset_margins_by_entity_um"] = {"chip/left": [0.1 + 0.2]}
+    sidecar = sidecar_of(effective_input("A", tmp_path), "A", tmp_path)
+    (request,) = inset_requests(specs, sidecar)
+    assert request.request_id == "epr::chip/left::sheet"
+    assert request.margins_um == (0.3,)
+
+
+@pytest.mark.parametrize(
+    ("ma", "ms"),
+    [
+        (
+            {"inset_margins_by_entity_um": {"chip/left": [0.3]}},
+            {"inset_margins_by_entity_um": {"chip/left": [0.2]}},
+        ),
+        (
+            {"inset_margins_by_entity_um": {"chip/left": [0.3]}},
+            {"inset_margins_um": [0.2]},
+        ),
+        (
+            {"inset_margins_um": [0.3]},
+            {"inset_margins_by_entity_um": {"chip/left": [0.2]}},
+        ),
+    ],
+    ids=["both customise", "MA customises, MS by type", "MS customises, MA by type"],
+)
+def test_differing_margins_on_one_sheet_are_refused_naming_both(tmp_path, ma, ms):
+    """A sheet is one band family: MA and MS may not give it different margins, whichever key they use."""
+    specs = surface_epr_specs(MA=None, MS=None)
+    specs["MA"].update(ma)
+    specs["MS"].update(ms)
+    sidecar = sidecar_of(effective_input("A", tmp_path), "A", tmp_path)
+    with pytest.raises(ValueError, match="takes one set of margins") as raised:
+        inset_requests(specs, sidecar)
+    message = str(raised.value)
+    assert "'chip/left'" in message and "sheet" in message
+    assert "0.3" in message and "0.2" in message
+    assert "MA" in message and "MS" in message
+
+
+def test_a_type_level_spec_alone_on_a_customised_conductor_gets_no_request_of_its_own(
+    tmp_path,
+):
+    """Route B: pad top is MA's and pad bottom MS's face, so MS by type does not meet MA's customised margins."""
+    specs = surface_epr_specs(MA=[1.0], MS=[0.5])
+    specs["MA"]["inset_margins_by_entity_um"] = {"pad": [0.25]}
+    sidecar = sidecar_of(effective_input("B", tmp_path), "B", tmp_path)
+    named = [
+        r for r in inset_requests(specs, sidecar) if r.request_id.startswith("epr::")
+    ]
+    assert [(r.request_id, r.margins_um) for r in named] == [("epr::pad::top", (0.25,))]
+
+
+def test_a_margin_is_found_among_the_bands_by_grid_identity(tmp_path):
+    """The family records 0.3; a spec that writes 0.1 + 0.2 selects the same band."""
+    groups = banded_groups("B", tmp_path, surface_epr_specs(MA=[0.3]))
+    specs = surface_epr_specs(MA=[0.1 + 0.2])
+    _, entries = build_surface_epr_postprocessing(groups, specs)
+    (entry,) = (e for e in entries if e["entry_name"] == "MA::pad__top__inset_0")
+    assert entry["inset"]["first_band"] == 1
 
 
 def test_a_customised_margin_the_conductor_was_not_banded_with_is_an_error(tmp_path):

@@ -41,7 +41,8 @@ from scgsim.palace.results.tables import count_index_entries
 
 pytestmark = pytest.mark.slow
 
-SPECS = surface_epr_specs(MA=[0.5, 1.0], MS=[0.5], SA=[0.5])
+# A Route A sheet is one face for MA and MS, so both ask the same margins.
+SPECS = surface_epr_specs(MA=[0.5, 1.0], MS=[0.5, 1.0], SA=[0.5])
 
 
 def check_run(result, route):
@@ -481,8 +482,12 @@ CUSTOM_SPECS = {
 def test_the_custom_path_bands_one_conductor_with_its_own_margins(route, tmp_path):
     """One conductor customised: two builds, concrete request for it, type-level request for the rest."""
     entity, own, rest = CUSTOM_SPECS[route]
-    specs = surface_epr_specs(MA=rest, MS=[0.5], SA=[0.5])
+    specs = surface_epr_specs(MA=rest, MS=rest, SA=[0.5])
     specs["MA"]["inset_margins_by_entity_um"] = {entity: own}
+    if (
+        route == "A"
+    ):  # the sheet is the face of both MA and MS, so MS takes the conductor's margins too
+        specs["MS"]["inset_margins_by_entity_um"] = {entity: own}
     result = mesh_run(effective_input(route, tmp_path), route, tmp_path, specs=specs)
     check_run(result, route)
     sidecar = sidecar_of_run(result)
@@ -506,4 +511,22 @@ def test_the_custom_path_bands_one_conductor_with_its_own_margins(route, tmp_pat
     other_rows = [m for n, m in ma_margins.items() if entity not in n]
     assert own_rows == [own]
     assert other_rows and all(m == rest for m in other_rows)
+    assert_config_binds_the_mesh(config.config, read_msh22(result.mesh_path))
+
+
+def test_a_sheet_asked_the_same_margins_in_different_spellings_by_ma_and_ms_meshes(
+    tmp_path,
+):
+    """MA and MS write one sheet's margins as 0.3 and 0.1 + 0.2: the same multiple of the grid, one family."""
+    specs = surface_epr_specs(MA=None, MS=None)
+    specs["MA"]["inset_margins_by_entity_um"] = {"chip/left": [0.3]}
+    specs["MS"]["inset_margins_by_entity_um"] = {"chip/left": [0.1 + 0.2]}
+    result = mesh_run(effective_input("A", tmp_path), "A", tmp_path, specs=specs)
+    check_run(result, "A")
+    (family,) = (i for i in sidecar_of_run(result)["insets"] if "expansion" not in i)
+    assert family["support"]["entity"] == "chip/left"
+    assert family["margins_grid"] == [300]
+    config = config_of(result, "A", specs)
+    margins = assert_margin_rows_select_the_bands_of_their_families(result, config)
+    assert {name.split("::")[0] for name in margins} == {"MA", "MS"}
     assert_config_binds_the_mesh(config.config, read_msh22(result.mesh_path))

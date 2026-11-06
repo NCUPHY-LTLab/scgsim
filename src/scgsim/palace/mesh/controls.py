@@ -14,8 +14,9 @@ from numbers import Real
 from typing import Any
 
 from scgsim.meshing import Budgets, FeatureRecipe, MesherOptions, SizingRecipe
+from scgsim.meshing.report import recipe_record
 
-# Provisional (Human decision H2, issue 65): the minimum scaled Jacobian every tetrahedron must reach.
+# Provisional (Human decision H2, issue 65): the minimum signed inverse condition number (minSICN) every tetrahedron must reach.
 DEFAULT_QUALITY_THRESHOLD = 0.01
 
 
@@ -74,11 +75,7 @@ class MeshControls:
     def to_payload(self) -> dict[str, Any]:
         """The JSON form recorded in the mesh manifest (recipe name, version and parameters, not its class)."""
         return {
-            "recipe": {
-                "name": self.recipe.name,
-                "version": self.recipe.version,
-                "parameters": asdict(self.recipe),  # type: ignore[call-overload]
-            },
+            "recipe": recipe_record(self.recipe),
             "mesher": asdict(self.mesher),
             "budgets": asdict(self.budgets),
             "quality_threshold": float(self.quality_threshold),

@@ -23,7 +23,7 @@ Use the Palace
 for recorded geometric order, native element types, and generation statistics.
 
 This reader is separate from the quality audit that `mesh()` runs. That audit
-measures the minimum scaled Jacobian (minSICN) on the linear mesh before any
+measures the minimum signed inverse condition number (minSICN) on the linear mesh before any
 elevation to the geometry order, holds it to the mesh's quality threshold and
 writes its own report; see the
 [Palace mesh controls](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).

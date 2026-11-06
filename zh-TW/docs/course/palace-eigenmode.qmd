@@ -24,7 +24,7 @@ sim.set_numerical(amr_max_passes=0)
 display(sim.input_summary())
 ```
 
-`set_mesh(...)` 決定網格如何設尺寸與檢查：`recipe` 設定初始元素尺寸，`mesher` 設定 Gmsh 演算法與幾何階數，`budgets` 決定修復迴圈要努力到什麼程度，`quality_threshold` 則是每個四面體必須達到的最小縮放 Jacobian。本範例傳入預設值 `FeatureRecipe()` 與 `0.01`，讓你看到該在哪裡修改；省略 `set_mesh` 會得到相同的網格。幾何階數控制網格表示法，與 Palace 的 FEM 階數無關。各配方、參數，以及網格達不到門檻時會發生什麼事，見共用的 [Palace 網格控制](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
+`set_mesh(...)` 決定網格如何設尺寸與檢查：`recipe` 設定初始元素尺寸，`mesher` 設定 Gmsh 演算法與幾何階數，`budgets` 決定修復迴圈要努力到什麼程度，`quality_threshold` 則是每個四面體必須達到的最小有號反條件數（minSICN）。本範例傳入預設值 `FeatureRecipe()` 與 `0.01`，讓你看到該在哪裡修改；省略 `set_mesh` 會得到相同的網格。幾何階數控制網格表示法，與 Palace 的 FEM 階數無關。各配方、參數，以及網格達不到門檻時會發生什麼事，見共用的 [Palace 網格控制](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
 
 這些是範例明確指定的控制項：target 單位是 Hz，配方的尺寸單位是微米。請依 SCQ 研究所需的模態與數量選擇設定，並在研究紀錄中保留所選值與後續變更。`save` 控制原生儲存場輸出。全新的 `EigenmodeSim` 會寫入 `Nonconformal=true`。此單網格範例明確設定 `amr_max_passes=0`，以停用自適應細化。呼叫 `write_config()` 前，請透過 `set_numerical(...)` 提供 `amr_max_passes`；若通過次數上限大於零，也必須由呼叫端選定 `amr_tolerance` 與 `amr_update_fraction`。後續呼叫若省略這些控制項，會沿用目前值。請在其所控制的操作旁記錄選用的數值與輸出控制項，不要將它們藏在 Notebook 輔助程式中。
 

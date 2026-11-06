@@ -1,4 +1,4 @@
-"""From inset requests to the band families of a model: type-level expansion, union of margins and skipped faces.
+"""From inset requests to the band families of a model: type-level expansion, one set of margins per face and skipped faces.
 
 Owns the step between the requests a caller writes and the concrete requests ``cutfamilies.supports`` resolves
 (one band family per face).  A concrete request (:class:`ConductorSurface` or :class:`SolutionInterface`) is one
@@ -6,9 +6,10 @@ face and stays exactly as written.  A type-level request (:class:`InterfaceSurfa
 SGB would give a Surface-EPR row of that type (``supports.faces_of_type``), so a consumer never builds the model once
 to read the faces from the sidecar.
 
-* **One family per face.**  Requests that land on one face are one family whose margins are the sorted union of
-  theirs: a Route A sheet serves an ``MA`` and an ``MS`` request with one family.  A concrete request keeps its
-  own id; a face asked for only by type is a family with the id ``<id of the first request in id order>::<entity>::<side>``
+* **One family per face, one set of margins.**  Requests that land on one face are one family, so they must ask
+  for the same margins (equal lattice lengths, so ``0.3`` and ``0.1 + 0.2`` agree): a Route A sheet serves an
+  ``MA`` and an ``MS`` request with one family, and two requests that differ on one face are refused.  A concrete
+  request keeps its own id; a face asked for only by type is a family with the id ``<id of the first request in id order>::<entity>::<side>``
   (``<first>|<second>::z=<z>`` for an interface), so ids, lineage and band group names (up to the collision qualifier) depend on the requests and
   the faces only, never on ``workers`` or ``tiles``.  Two concrete requests on one face are not merged: they
   are refused here, by the face they resolve to, because both families would put their bands into the same
@@ -21,7 +22,7 @@ to read the faces from the sidecar.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
@@ -153,7 +154,8 @@ def _jobs(
     for face in sorted(set(typed) - named_faces):
         asks = sorted(typed[face], key=lambda r: r.request_id)
         family_id = f"{asks[0].request_id}::{face.label()}"
-        request = _with_margins(InsetRequest(family_id, face.support(), ()), asks, grid)
+        margins = _shared_margins(face, asks, grid)
+        request = InsetRequest(family_id, face.support(), margins)
         jobs.append(_FamilyJob(request, face, asks))
     return jobs
 
@@ -174,23 +176,25 @@ def _faces_named_once(named: list[_NamedFace]) -> set[FaceId]:
 
 
 def _named_job(item: _NamedFace, asks: list[InsetRequest], grid: Grid) -> _FamilyJob:
-    """The family of a concrete request: as written, or with the margins of the type-level requests on its face."""
+    """The family of a concrete request, as written; the type-level requests on its face must ask the same margins."""
     if not asks:
         return _FamilyJob(item.request, item.face, named=True)
     ordered = sorted(asks, key=lambda r: r.request_id)
-    merged = _with_margins(item.request, [item.request, *ordered], grid)
-    return _FamilyJob(merged, item.face, ordered, named=True)
+    _shared_margins(item.face, [item.request, *ordered], grid)
+    return _FamilyJob(item.request, item.face, ordered, named=True)
 
 
-def _with_margins(
-    request: InsetRequest, asks: list[InsetRequest], grid: Grid
-) -> InsetRequest:
-    """The request with the sorted union of the margins of ``asks`` (equal lattice lengths count once)."""
-    by_units: dict[int, float] = {}
-    for ask in asks:
-        for margin in ask.margins_um:
-            units = grid.lattice_units(margin)
-            if units is not None:
-                by_units.setdefault(units, margin)
-    margins = tuple(by_units[units] for units in sorted(by_units))
-    return replace(request, margins_um=margins)
+def _shared_margins(
+    face: FaceId, asks: list[InsetRequest], grid: Grid
+) -> tuple[float, ...]:
+    """The margins every request on ``face`` asks for; requests that differ on the lattice are an error."""
+    first = asks[0]
+    expected = lattice_margins(first, grid)
+    for ask in asks[1:]:
+        if lattice_margins(ask, grid) != expected:
+            raise InputError(
+                f"inset requests {first.request_id!r} and {ask.request_id!r} ask different margins "
+                f"({list(first.margins_um)} and {list(ask.margins_um)} um) for the same face ({face.label()}); "
+                "a face has one band family, so every request on it must ask the same margins"
+            )
+    return first.margins_um

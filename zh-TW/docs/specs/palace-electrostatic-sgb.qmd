@@ -62,7 +62,7 @@ prepare shared GeometryPlan snapshot
 | `recipe` | `FeatureRecipe()` | 決定初始元素尺寸：`FeatureRecipe`、`GlobalSizeRecipe` 或 `UniformBoundaryRecipe`。 |
 | `mesher` | `MesherOptions()` | Gmsh 演算法與輸出網格的階數：`algorithm_2d`（為 `None` 時用 Gmsh 預設）、`algorithm_3d`（Delaunay）、`geometry_order`（1）與 `high_order_optimize`（`True`）。 |
 | `budgets` | `Budgets()` | 修復迴圈何時放棄：`max_rounds`（8 輪細化）與 `max_tetrahedra`（2,000,000）。 |
-| `quality_threshold` | `0.01` | 每個四面體必須達到的最小縮放 Jacobian（minSICN）。 |
+| `quality_threshold` | `0.01` | 每個四面體必須達到的最小有號反條件數（minSICN）。 |
 :::
 
 請從 `scgsim.meshing` 匯入 `FeatureRecipe`、`GlobalSizeRecipe`、`UniformBoundaryRecipe`、`MesherOptions`、`Budgets`，以及演算法常數 `DELAUNAY` 與 `HXT`。修復策略不是 Palace 控制：Palace 一律使用模組預設的 `RepairPolicy`。

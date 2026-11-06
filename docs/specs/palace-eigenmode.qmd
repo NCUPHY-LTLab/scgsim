@@ -122,6 +122,14 @@ inputs:
 
 A margin of `0` is rejected: the baseline row already covers the whole surface.
 
+One face has one band family, so it takes one set of margins. A Route A sheet
+carries both an `MA` and an `MS` row, so when both specs reach it they must give
+it the same margins, compared on the model grid (`0.3` and `0.1 + 0.2` agree).
+Differing margins on one sheet are an error: `mesh()` raises `ValueError`
+naming the conductor, the face and both sets when it can see the conflict from
+`inset_margins_by_entity_um`, and otherwise SGB refuses the build with an
+`InputError` that names the two requests. Margins are never merged.
+
 Each surface row gets a baseline row that covers all its faces. Each margin adds a
 further row covering the bands from that margin outward. Margin rows are
 alternative evaluations of the same surface, not disjoint bands: read each row

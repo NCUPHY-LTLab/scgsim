@@ -40,7 +40,7 @@ interface-type rules that give the sidecar its ``surface_epr_rows``:
 interface when either side is that entity), so concrete requests for those entities never meet the type-level one.
 A face with no gap edge is skipped and recorded in the sidecar, never an error.  Each face becomes one family with the
 id ``<request id>::<entity>::<side>`` (``<request id>::<first>|<second>::z=<z>`` for an interface); a face that several
-requests land on is one family with the union of their margins (``cutfamilies.inset_plan``).
+requests land on is one family, so they must ask the same margins on the model grid (``cutfamilies.inset_plan``).
 
 ``margins_um`` are strictly increasing positive lengths on the model grid.  ``interface`` optionally
 states the interface type the face is expected to have (``"MA"``, ``"MS"``, ``"SA"``, ``"SHEET"`` ...);

@@ -296,6 +296,9 @@ class EigenmodeSim:
           conductors their own margins; the rest of the type keeps ``inset_margins_um``, if given.  This
           builds the geometry twice (once to find the conductors' faces), and a named entity with no face
           of the type raises ``ValueError`` from ``mesh()``.
+
+        One face has one set of margins: a Route A sheet reached by both ``MA`` and ``MS`` must get the same
+        margins from both (compared on the model grid), or ``mesh()`` raises.
         """
         route = (
             representation.strip().upper() if isinstance(representation, str) else ""
@@ -415,7 +418,7 @@ class EigenmodeSim:
         These are the controls of ``scgsim.meshing.mesh_sgb``: ``recipe`` (``FeatureRecipe``,
         ``GlobalSizeRecipe`` or ``UniformBoundaryRecipe``) chooses the initial element sizes, ``mesher``
         (``MesherOptions``) the Gmsh algorithms and the geometry order, ``budgets`` when the repair loop
-        gives up, and ``quality_threshold`` the minimum scaled Jacobian of every tetrahedron (default
+        gives up, and ``quality_threshold`` the minimum signed inverse condition number (minSICN) of every tetrahedron (default
         0.01).  A mesh that cannot reach the threshold raises ``MeshRepairError`` from ``mesh()``.
         Geometry order is independent of ``set_numerical(order=...)``.
         """

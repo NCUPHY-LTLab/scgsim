@@ -30,7 +30,7 @@ display(sim.input_summary())
 `set_mesh(...)` chooses how the mesh is sized and checked: `recipe` sets the
 initial element sizes, `mesher` the Gmsh algorithms and the geometry order,
 `budgets` how hard the repair loop tries, and `quality_threshold` the minimum
-scaled Jacobian every tetrahedron must reach. This example passes the defaults,
+signed inverse condition number (minSICN) every tetrahedron must reach. This example passes the defaults,
 `FeatureRecipe()` and `0.01`, so you can see where to change them; leaving
 `set_mesh` out gives the same mesh. Geometric order describes the mesh
 representation and is independent of Palace's FEM order. The recipes, their

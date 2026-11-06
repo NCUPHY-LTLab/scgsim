@@ -13,7 +13,7 @@ lang: zh-TW
 
 Palace 網格可儲存彎曲高階元素。此讀取器只對原生 Gmsh type-4 四節點四面體計算品質指標。高階元素另行計數並排除於這些指標之外，因此只有高階四面體的網格沒有 3D 品質指標。紀錄的幾何階數、原生元素類型及產生統計請見 Palace [網格摘要](specs/palace-electrostatic-sgb.qmd#mesh-manifest-and-detached-summary)。
 
-此讀取器與 `mesh()` 執行的品質稽核是分開的。該稽核在升階之前的線性網格上量測最小縮放 Jacobian（minSICN），以網格的品質門檻檢查它，並寫出自己的報告；見 [Palace 網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。`check_mesh_quality()` 則在升階之後量測儲存的求解器網格，使用不同的指標，且不套用門檻。兩份報告彼此不能取代。
+此讀取器與 `mesh()` 執行的品質稽核是分開的。該稽核在升階之前的線性網格上量測最小有號反條件數（minSICN），以網格的品質門檻檢查它，並寫出自己的報告；見 [Palace 網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。`check_mesh_quality()` 則在升階之後量測儲存的求解器網格，使用不同的指標，且不套用門檻。兩份報告彼此不能取代。
 
 產生階段的邊統計與 `MeshQualityReport` 分開。Palace 摘要記錄每個物理區域的唯一主角點邊數，以及直線弦長的最小值、平均值與最大值，單位為微米。在彎曲高階元素上，它們仍是弦長，不是曲線弧長或高階品質指標。點區域的邊數為零，沒有長度極值。
 

@@ -92,7 +92,7 @@ prior state intact.
 | `recipe` | `FeatureRecipe()` | Chooses the initial element sizes: `FeatureRecipe`, `GlobalSizeRecipe` or `UniformBoundaryRecipe`. |
 | `mesher` | `MesherOptions()` | Gmsh algorithms and the order of the delivered mesh: `algorithm_2d` (Gmsh's default when `None`), `algorithm_3d` (Delaunay), `geometry_order` (1) and `high_order_optimize` (`True`). |
 | `budgets` | `Budgets()` | When the repair loop gives up: `max_rounds` (8 refinement rounds) and `max_tetrahedra` (2,000,000). |
-| `quality_threshold` | `0.01` | The minimum scaled Jacobian (minSICN) every tetrahedron must reach. |
+| `quality_threshold` | `0.01` | The minimum signed inverse condition number (minSICN) every tetrahedron must reach. |
 :::
 
 Import `FeatureRecipe`, `GlobalSizeRecipe`, `UniformBoundaryRecipe`,

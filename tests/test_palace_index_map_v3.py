@@ -19,6 +19,7 @@ from palace_sgb_support import (
     surface_epr_specs,
 )
 
+from scgsim.palace import resolve_palace_result
 from scgsim.palace.mesh.insets import inset_requests
 from scgsim.palace.mesh.manifest import MANIFEST_SCHEMA_VERSION, build_mesh_manifest
 from scgsim.palace.mesh.physical_groups import groups_from_sidecar
@@ -73,7 +74,7 @@ class Run:
 
     def __init__(self, route: str, problem: str, directory: Path) -> None:
         directory.mkdir(exist_ok=True)
-        specs = surface_epr_specs(MA=[0.5, 1.0], MS=[0.5], SA=None)
+        specs = surface_epr_specs(MA=[0.5, 1.0], MS=[0.5, 1.0], SA=None)
         effective = effective_input(route, directory)
         unbanded = sidecar_of(effective, route, directory)
         self.sidecar = sidecar_of(
@@ -293,6 +294,39 @@ def test_a_run_folder_of_older_schemas_is_not_inspected(tmp_path):
     )
     with pytest.raises(ValueError, match="mesh manifest schema_version 1"):
         inspect_run_trustworthiness(run.root)
+
+
+@pytest.mark.parametrize(
+    ("file", "old", "message"),
+    [
+        (
+            "metadata/mesh_manifest.json",
+            {"schema_version": 1},
+            "mesh manifest schema_version 1",
+        ),
+        (
+            "metadata/palace_index_map.json",
+            {"schema_version": 2},
+            "palace index map schema_version 2",
+        ),
+    ],
+)
+def test_resolve_reports_an_old_schema_before_missing_solver_output(
+    tmp_path, file, old, message
+):
+    """A run folder of an older schema that also lacks solver output is rejected for its schema, not a missing file."""
+    run = Run("B", "Eigenmode", tmp_path)
+    good = {
+        "metadata/mesh_manifest.json": run.manifest,
+        "metadata/palace_index_map.json": run.index,
+    }
+    (run.root / "metadata").mkdir(parents=True, exist_ok=True)
+    for name, payload in good.items():
+        (run.root / name).write_text(json.dumps(payload))
+    (run.root / file).write_text(json.dumps(old))
+    assert not (run.root / "results/palace/palace.json").exists()
+    with pytest.raises(ValueError, match=message):
+        resolve_palace_result(run.root, expected_handoff_id="any")
 
 
 def test_an_old_detached_epr_result_is_rejected_naming_its_schema():

@@ -53,6 +53,15 @@ class RunSettings:
     budgets: Budgets
 
 
+def recipe_record(recipe: SizingRecipe) -> dict[str, Any]:
+    """A recipe as the report and the Palace mesh manifest record it: name, version, and dataclass fields."""
+    return {
+        "name": recipe.name,
+        "version": recipe.version,
+        "parameters": asdict(recipe) if is_dataclass(recipe) else {},  # type: ignore[call-overload]
+    }
+
+
 def build_report(
     outcome: RepairOutcome, settings: RunSettings, total_seconds: float
 ) -> QualityReport:
@@ -60,13 +69,7 @@ def build_report(
     audit = outcome.last_audit
     return QualityReport(
         report_version=REPORT_VERSION,
-        recipe={
-            "name": settings.recipe.name,
-            "version": settings.recipe.version,
-            "parameters": asdict(settings.recipe)
-            if is_dataclass(settings.recipe)
-            else {},
-        },
+        recipe=recipe_record(settings.recipe),
         repair=asdict(settings.repair),
         mesher=asdict(settings.mesher),
         quality_measure=QUALITY_MEASURE,

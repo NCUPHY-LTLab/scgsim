@@ -13,15 +13,18 @@ Palace states what it wants and lets SGB find the faces.
   spec's type-level request then leaves those conductors out (``exclude_entity_ids``), so a face never has
   two requests of one spec.
 
-A Route A sheet carries both an ``MA`` and an ``MS`` row, so the requests of both specs can meet on one face;
-SGB then keeps one band family with the union of their margins, and each spec selects its own margins from
-it (see :mod:`.physical_groups` and ``preparation.surface_epr``).
+A Route A sheet carries both an ``MA`` and an ``MS`` row, so the requests of both specs can meet on one face.
+One face is one band family with one set of margins, so those requests must ask the same margins (compared on
+the model grid, so ``0.3`` and ``0.1 + 0.2`` agree); differing ones are an error, found here on the custom
+path and by SGB on the default path.  Each spec selects its margins from the family (see
+:mod:`.physical_groups` and ``preparation.surface_epr``).
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, cast
 
 from scgsim.geometry.sgb.cutfamilies.requests import (
@@ -31,6 +34,7 @@ from scgsim.geometry.sgb.cutfamilies.requests import (
     InterfaceSurfaces,
     Side,
 )
+from scgsim.geometry.sgb.records.grid import Grid
 
 # The kinds of face a conductor Entity has that SGB can band: a concrete request names one of these.
 CONDUCTOR_FACE_KINDS: tuple[Side, ...] = ("sheet", "top", "bottom")
@@ -108,32 +112,101 @@ def _type_request(interface_type: str, spec: Mapping[str, Any]) -> InsetRequest:
 def _named_conductor_requests(
     specs: Mapping[str, Mapping[str, Any]], sidecar: Mapping[str, Any]
 ) -> list[InsetRequest]:
-    """One concrete request per face of a customised conductor, with the margins every spec gives that face.
+    """One concrete request per face of a customised conductor, with the one set of margins the face takes.
 
-    A Route A sheet is one face for both ``MA`` and ``MS``; two concrete requests may not name one face, so
-    the margins of the specs that customise it are merged into one request.
+    A Route A sheet is one face for both ``MA`` and ``MS``, and one face has one band family, so every spec
+    that reaches it must give it the same margins: the customised ones by entity, the others by type.  Two
+    concrete requests may not name one face, so the specs' margins become one request.
     """
-    margins_by_face: dict[ConductorSurface, set[float]] = defaultdict(set)
+    grid = Grid(sidecar["grid_um"])
+    asks_by_face: dict[ConductorSurface, list[_Ask]] = defaultdict(list)
     for interface_type, spec in sorted(specs.items()):
-        for entity, margins in sorted(
-            (spec.get("inset_margins_by_entity_um") or {}).items()
-        ):
+        for entity in sorted(spec.get("inset_margins_by_entity_um") or ()):
             faces = _conductor_faces(interface_type, spec, entity, sidecar)
             if not faces:
                 raise ValueError(
                     f"Surface EPR {interface_type} inset_margins_by_entity_um names {entity!r}, which has "
                     f"no {interface_type} face to band" + _face_kinds_note(spec) + "."
                 )
+            ask = _ask_for(interface_type, spec, entity)
             for face in faces:
-                margins_by_face[face].update(float(margin) for margin in margins)
+                asks_by_face[face].append(ask)
+    _add_type_level_asks(asks_by_face, specs, sidecar)
     return [
         InsetRequest(
             f"epr::{face.entity_id}::{face.side}",
             face,
-            tuple(sorted(margins_by_face[face])),
+            _shared_margins(face, asks_by_face[face], grid),
         )
-        for face in sorted(margins_by_face, key=lambda f: (f.entity_id, f.side))
+        for face in sorted(asks_by_face, key=lambda f: (f.entity_id, f.side))
     ]
+
+
+@dataclass(frozen=True)
+class _Ask:
+    """The margins one Surface-EPR spec gives a conductor, and which key of the spec they came from."""
+
+    interface_type: str
+    key: str
+    margins_um: tuple[float, ...]
+
+
+def _ask_for(interface_type: str, spec: Mapping[str, Any], entity: str) -> _Ask:
+    """The margins ``spec`` gives the customised ``entity``."""
+    margins = spec["inset_margins_by_entity_um"][entity]
+    return _Ask(
+        interface_type, "inset_margins_by_entity_um", tuple(map(float, margins))
+    )
+
+
+def _add_type_level_asks(
+    asks_by_face: dict[ConductorSurface, list[_Ask]],
+    specs: Mapping[str, Mapping[str, Any]],
+    sidecar: Mapping[str, Any],
+) -> None:
+    """Add the type-level margins of the specs that reach a customised face without customising it.
+
+    They are asked of SGB by type, not by face, but they land on this face too and must agree with it.
+    A face only they reach gets no concrete request.
+    """
+    for interface_type, spec in sorted(specs.items()):
+        margins = spec.get("inset_margins_um")
+        if not margins:
+            continue
+        ask = _Ask(interface_type, "inset_margins_um", tuple(map(float, margins)))
+        own = spec.get("inset_margins_by_entity_um") or {}
+        for entity in sorted({face.entity_id for face in asks_by_face} - set(own)):
+            for face in _conductor_faces(interface_type, spec, entity, sidecar):
+                if face in asks_by_face:
+                    asks_by_face[face].append(ask)
+
+
+def _shared_margins(
+    face: ConductorSurface, asks: list[_Ask], grid: Grid
+) -> tuple[float, ...]:
+    """The margins every ask on ``face`` gives; asks that differ on the model grid are an error."""
+    first = asks[0]
+    for other in asks[1:]:
+        if _on_grid(other.margins_um, grid) != _on_grid(first.margins_um, grid):
+            raise ValueError(
+                f"Surface EPR {first.interface_type} ({first.key}) asks inset margins "
+                f"{list(first.margins_um)} um and {other.interface_type} ({other.key}) asks "
+                f"{list(other.margins_um)} um for the {face.side} of {face.entity_id!r}; "
+                "one sheet is one band family and takes one set of margins."
+            )
+    return first.margins_um
+
+
+def _on_grid(margins_um: tuple[float, ...], grid: Grid) -> tuple[float, ...]:
+    """The margins as multiples of the model grid, so ``0.3`` and ``0.1 + 0.2`` compare equal.
+
+    A margin off the lattice stays in micrometres; SGB refuses it when the request is built.
+    """
+    units = (grid.lattice_units(margin) for margin in margins_um)
+    return tuple(
+        margin if unit is None else unit
+        for unit, margin in zip(units, margins_um, strict=True)
+    )
 
 
 def _conductor_faces(

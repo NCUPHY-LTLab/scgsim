@@ -9,7 +9,8 @@ mapping from a name to a JSON-serialisable record:
     the ``dim == 2`` groups except ports: conductor surfaces and ``SA`` / ``MM`` / ``SS`` / ``AA``
     interfaces (``source == "volume_interface"``) and the ``EXT`` outer boundary
     (``source == "domain_boundary"``).  ``surface_epr`` is true when the group carries a Surface-EPR row, and
-    ``rows`` holds those rows.  A row on a band names its band family and carries the family's ``margins_um``
+    ``rows`` holds those rows.  A row on a band names its band family and carries the family's ``margins_um``,
+    ``margins_grid`` (the same margins in model-grid units, the identity a margin is looked up by), ``grid_um``
     and ``family_bands`` (band index to groups), read from the sidecar's ``insets`` -- from ``bands`` for a
     concrete request, from ``expansion.banded[*].bands`` for a type-level one;
 ``pec_surfaces``
@@ -25,7 +26,6 @@ electrical identity is the Net.
 
 from __future__ import annotations
 
-import math
 from collections import defaultdict
 from collections.abc import Mapping
 from typing import Any
@@ -116,8 +116,8 @@ def _surface_groups(
 def _rows_by_group(sidecar: Mapping[str, Any]) -> defaultdict[str, dict[str, Any]]:
     """The Surface-EPR rows of each group, each with the facts a consumer needs to select its attributes.
 
-    A banded row names its band family and carries the family's margins and bands (band index to the groups
-    that carry it), all read from the sidecar's ``insets``.
+    A banded row names its band family and carries the family's margins (in micrometres and in model-grid
+    units, with the grid) and bands (band index to the groups that carry it), all read from the sidecar.
     """
     families = band_families(sidecar)
     physical = sidecar["physical_groups"]
@@ -127,7 +127,9 @@ def _rows_by_group(sidecar: Mapping[str, Any]) -> defaultdict[str, dict[str, Any
         family = group["band"]["family"] if group["band"] else None
         record = {**row, "net": group["net"], "face_kind": group["face_kind"]}
         if family is None:
-            record.update(family=None, margins_um=None, family_bands=None)
+            record.update(
+                family=None, margins_um=None, margins_grid=None, family_bands=None
+            )
         else:
             if family not in families:
                 raise ValueError(
@@ -136,6 +138,8 @@ def _rows_by_group(sidecar: Mapping[str, Any]) -> defaultdict[str, dict[str, Any
             record.update(
                 family=family,
                 margins_um=list(families[family]["margins_um"]),
+                margins_grid=list(families[family]["margins_grid"]),
+                grid_um=sidecar["grid_um"],
                 family_bands={
                     index: list(names)
                     for index, names in families[family]["bands"].items()
@@ -268,8 +272,3 @@ def rows_of(groups: Groups) -> dict[str, dict[str, Any]]:
                 "membership": membership,
             }
     return rows
-
-
-def same_length(first: float, second: float) -> bool:
-    """Whether two margins in micrometres are the same length (the sidecar rounds to twelve digits)."""
-    return math.isclose(first, second, rel_tol=1e-9, abs_tol=1e-12)

@@ -168,16 +168,16 @@ def test_a_customised_conductor_is_banded_on_each_face_that_has_a_row_of_the_typ
     )
 
 
-def test_one_sheet_named_by_two_specs_is_one_request_with_both_margin_lists(
+def test_one_sheet_named_by_two_specs_is_one_request_with_its_one_set_of_margins(
     route_a_sidecar,
 ):
     """Route A: the MA and MS rows of a sheet lie on one face, and a face is named once."""
     specs = customised({"chip/left": [0.5]}, MA=None, MS=[2.0])
-    specs["MS"]["inset_margins_by_entity_um"] = {"chip/left": [0.25, 0.5]}
+    specs["MS"]["inset_margins_by_entity_um"] = {"chip/left": [0.5]}
     requests = inset_requests(specs, route_a_sidecar)
     (sheet,) = [r for r in requests if isinstance(r.support, ConductorSurface)]
     assert sheet.support == ConductorSurface("chip/left", "sheet")
-    assert sheet.margins_um == (0.25, 0.5)
+    assert sheet.margins_um == (0.5,)
     (ms,) = [r for r in requests if r.request_id == "epr_MS"]
     assert ms.support == InterfaceSurfaces("MS", exclude_entity_ids=("chip/left",))
 

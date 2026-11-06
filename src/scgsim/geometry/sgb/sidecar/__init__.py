@@ -74,7 +74,7 @@ Top-level fields and who uses them
 ``insets`` / ``refinements`` / ``slivers`` / ``arrangement``
     the inset requests as given, refinement requests, the sliver report summary and the measured snap
     drift / arc deviation.  A concrete inset request is the record of its face (request id, support,
-    margins, band -> groups; the margins are the union of every request on that face).  A type-level
+    margins, band -> groups; every request on that face asks the same margins).  A type-level
     request (every face of a Surface-EPR type) has the request as given (type, face kinds, excluded
     entities, margins) and its ``expansion``: ``banded``, the record of each face it banded (ids
     ``<request id>::<entity>::<side>``), and ``skipped``, each face left unbanded with the reason
