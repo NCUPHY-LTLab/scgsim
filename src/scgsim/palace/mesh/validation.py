@@ -1,10 +1,53 @@
-"""Validate saved native connectivity and port-to-volume conformity."""
+"""Validate that the mesh matches its groups, and its connectivity and port-to-volume conformity."""
 
 from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from typing import Any
+
+
+def live_physical_groups() -> dict[tuple[int, str], tuple[int, tuple[int, ...]]]:
+    """Map live gmsh (dimension, physical name) -> (physical-group, entity tags)."""
+    import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only on native paths.
+
+    live: dict[tuple[int, str], tuple[int, tuple[int, ...]]] = {}
+    for dim, phys_group in gmsh.model.getPhysicalGroups():
+        name = gmsh.model.getPhysicalName(dim, phys_group)
+        if not name:
+            continue
+        live[(int(dim), str(name))] = (
+            int(phys_group),
+            tuple(
+                sorted(
+                    int(tag)
+                    for tag in gmsh.model.getEntitiesForPhysicalGroup(dim, phys_group)
+                )
+            ),
+        )
+    return live
+
+
+def validate_mesh_matches_groups(
+    groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
+    live: Mapping[tuple[int, str], tuple[int, tuple[int, ...]]],
+) -> None:
+    """Require every primary group of the sidecar to be a physical group of the mesh on the same entities.
+
+    The meshing module trusts that the XAO and sidecar are one build's pair; this is Palace's own check that
+    the mesh it was handed is the one its groups were derived from, before it renumbers anything.
+    """
+    for section in ("volumes", "boundary_surfaces", "port_surfaces"):
+        for record in groups[section].values():
+            key = (int(record["dim"]), record["group"])
+            if key not in live:
+                raise ValueError(
+                    f"mesh has no physical group {record['group']!r} of dimension {key[0]}."
+                )
+            if live[key][1] != tuple(sorted(int(tag) for tag in record["tags"])):
+                raise ValueError(
+                    f"physical group {record['group']!r} covers other entities in the mesh than in the sidecar."
+                )
 
 
 def validate_tetrahedral_solution_groups(
@@ -19,7 +62,7 @@ def validate_tetrahedral_solution_groups(
     live_volume_names = {name for (dim, name) in live if dim == 3}
     if live_volume_names != expected:
         raise ValueError(
-            "XAO live 3D physical groups differ from structured solution volumes: "
+            "live 3D physical groups differ from the solution volumes of the sidecar: "
             f"live={sorted(live_volume_names)}, solution={sorted(expected)}."
         )
     for name, info in groups.get("volumes", {}).items():
@@ -44,17 +87,20 @@ def validate_tetrahedral_solution_groups(
 def validate_port_pec_node_intersections(
     groups: Mapping[str, Mapping[str, Mapping[str, Any]]],
 ) -> None:
-    """Require each SGB port terminal edge to share actual nodes with its PEC owner."""
+    """Require each lumped port to share a mesh edge with the PEC attributes of each of its host conductors.
+
+    The hosts are the sidecar's ``ports[*].host_entity_ids``.
+    """
     for key, port in groups.get("port_surfaces", {}).items():
         port_edges = _surface_mesh_edges(port.get("tags", ()))
         if not port_edges:
             raise ValueError(f"SGB lumped-port sheet {key!r} has no mesh nodes.")
-        for owner_id in port.get("owner_semantic_ids", ()):
+        for owner_id in port["host_entity_ids"]:
             owner_tags = {
                 int(tag)
                 for info in groups.get("pec_surfaces", {}).values()
-                if owner_id in info.get("owner_semantic_ids", ())
-                for tag in info.get("tags", ())
+                if owner_id in info["entities"]
+                for tag in info["tags"]
             }
             if not owner_tags:
                 raise ValueError(

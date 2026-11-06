@@ -1,4 +1,4 @@
-"""Run Gmsh lowering across a private JSON process boundary; no geometry construction."""
+"""Run Palace's Gmsh lowering across a private JSON process boundary; no geometry construction."""
 
 from __future__ import annotations
 
@@ -11,61 +11,38 @@ from tempfile import TemporaryDirectory
 from typing import Any
 
 from scgsim.diagnostics import diagnostic_stage, worker_config
-from scgsim.preparation import native_preparation
 
-from .controls import MeshSizing
+from .physical_groups import Groups
 
 
-def mesh_from_route_xao(  # noqa: PLR0913 -- process request preserves explicit source identities and controls
-    *,
-    xao_path: Path,
-    route: str,
-    records: Sequence[Any],
-    stack: Mapping[str, Any],
-    mesh_path: Path,
-    refined_mesh_size: float | None,
-    max_mesh_size: float | None,
-    mesh_controls: Mapping[str, Any],
-) -> tuple[Path, dict[str, dict[str, Any]], dict[str, Any]]:
-    """Mesh an SGB XAO in one fresh Gmsh process.
+def lower_mesh_in_worker(
+    *, source_mesh: Path, mesh_path: Path, groups: Groups, run_dir: Path
+) -> dict[str, Any]:
+    """Lower the module's mesh to solver attributes in one fresh Gmsh process and return its observations.
 
-    SGB has already written the exact XAO and structured sidecar in the caller.
-    The fresh boundary contains only Gmsh's native XAO lowering. It changes
-    process lifetime only: the XAO, structured records, exact physical mapping,
-    refinement, Algorithm3D and validations remain the same mesh path for both
-    routes.
+    The fresh boundary keeps Gmsh state out of the calling process.  The request carries the group dict (which
+    already holds the attribute plan); the paths are relative to ``run_dir``.  Returns the worker's mapping
+    with ``gmsh_version`` and ``statistics`` of the written ``palace.msh``.
     """
-    sizing = MeshSizing(mesh_controls["size_policy"], refined_mesh_size, max_mesh_size)
-    request = {
-        "xao_path": xao_path.relative_to(mesh_path.parent).as_posix(),
-        "route": route,
-        "records": list(records),
-        "stack": dict(stack),
-        "mesh_path": mesh_path.relative_to(mesh_path.parent).as_posix(),
-        **sizing.to_payload(),
-        "mesh_controls": {
-            key: value for key, value in mesh_controls.items() if key != "size_policy"
-        },
+    request: dict[str, Any] = {
+        "source_mesh": source_mesh.relative_to(run_dir).as_posix(),
+        "mesh_path": mesh_path.relative_to(run_dir).as_posix(),
+        "groups": groups,
     }
     diagnostic_config = worker_config()
     if diagnostic_config is not None:
         request["preparation_diagnostics"] = diagnostic_config
-    with native_preparation(mesh_controls):
-        result = _run_gmsh_worker(request=request, run_dir=mesh_path.parent)
-    groups = result.get("groups")
-    if not isinstance(groups, dict):
-        raise TypeError("fresh Gmsh mesh worker result lacks structured groups.")
+    result = _run_gmsh_worker(request=request, run_dir=run_dir)
     if not mesh_path.is_file():
         raise FileNotFoundError("fresh Gmsh mesh worker did not write the MSH file.")
-    meshing = result["meshing"]
-    if not isinstance(meshing, dict):
-        raise TypeError("fresh Gmsh mesh worker result lacks meshing observations.")
-    return mesh_path, groups, meshing
+    if not isinstance(result.get("statistics"), dict):
+        raise TypeError("fresh Gmsh mesh worker result lacks mesh statistics.")
+    return dict(result)
 
 
 @diagnostic_stage("palace.mesh.worker_wait")
 def _run_gmsh_worker(*, request: Mapping[str, Any], run_dir: Path) -> Mapping[str, Any]:
-    """Run unchanged gsim-derived XAO lowering in a fresh process."""
+    """Run the attribute lowering in a fresh process."""
     with TemporaryDirectory(prefix="scgsim-gmsh-worker-", dir=run_dir) as temporary:
         temporary_path = Path(temporary)
         temporary_path.chmod(0o700)

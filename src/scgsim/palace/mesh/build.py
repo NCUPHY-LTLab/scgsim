@@ -1,4 +1,4 @@
-"""Orchestrate geometry preparation, the fresh mesh worker, and paired artifacts.
+"""Orchestrate one Palace mesh: SGB geometry, the meshing module, Palace's lowering, paired artifacts.
 
 Portions adapted from gsim 0.2.0+scq.1, revision
 8f5dc6c05255d003a9c6d8959537bcf8068379d3.
@@ -9,28 +9,29 @@ See NOTICE and LICENSES/gsim-LICENSE.txt for retained upstream notices.
 
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
+import shutil
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any
 
 from scgsim.diagnostics import diagnostic_stage
-from scgsim.geometry.compiler.builder import SemanticGeometryBuilder
+from scgsim.geometry.models.input import GeometryBuildInput
+from scgsim.geometry.models.representation import RepresentationContext
+from scgsim.geometry.sgb import SgbArtifacts, build_sgb_geometry
+from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest
+from scgsim.meshing import Budgets, MesherOptions, MeshResult, SizingRecipe, mesh_sgb
+from scgsim.preparation import native_preparation
 
-from .controls import mesh_controls, normalize_mesh_sizing
-from .process import mesh_from_route_xao
-from .provenance import (
-    GSIM_HIGH_ORDER_DERIVATION_SHA,
-    GSIM_SHA,
-    SGB_DERIVATION_BASE_SHA,
-    SGB_DERIVATION_IMPORTED_SHA,
-    SGB_RUNTIME_AUTHORITY,
-)
+from .controls import MeshControls
+from .insets import inset_requests, requests_wanted
+from .manifest import build_mesh_manifest
+from .physical_groups import Groups, groups_from_sidecar
+from .process import lower_mesh_in_worker
+from .provenance import SGB_RUNTIME_AUTHORITY
 from .source import (
-    build_mesh_manifest,
     component_gds_top_cell_name,
     route_a_thin_film_provenance,
     scgsim_version,
@@ -40,6 +41,8 @@ from .source import (
     write_json,
 )
 
+_UNBANDED_DIR = ".unbanded"
+
 
 @dataclass(frozen=True)
 class MeshBuildResult:
@@ -47,12 +50,13 @@ class MeshBuildResult:
 
     output_dir: Path
     mesh_path: Path
-    groups: dict[str, dict[str, Any]]
+    groups: Groups
     mesh_manifest_path: Path
     provenance_path: Path
     stack_path: Path
     xao_path: Path
     sidecar_path: Path
+    quality_report_path: Path
 
 
 @diagnostic_stage("palace.mesh.prepare")
@@ -62,22 +66,23 @@ def build_route_mesh(  # noqa: PLR0913 -- preserve the supported mesh preparatio
     stack: Mapping[str, Any],
     route: str,
     output_dir: str | Path,
-    size_policy: str = "scgsim_default",
-    refined_mesh_size: float | None = None,
-    max_mesh_size: float | None = None,
-    algorithm_3d: str = "Delaunay",
-    threads: int = 1,
-    surface_threads: int = 1,
-    geometry_order: int = 1,
-    high_order_optimize: bool = True,
+    surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
+    recipe: SizingRecipe | None = None,
+    mesher: MesherOptions | None = None,
+    budgets: Budgets | None = None,
+    quality_threshold: float | None = None,
     port_sheet_source_layers: Sequence[Mapping[str, Any]] = (),
     indium_ground_bump_fill: Mapping[str, Any] | None = None,
     source_gds_bytes: bytes | None = None,
-    source_geometry_input: Any | None = None,
-    representation_context: Any | None = None,
+    source_geometry_input: GeometryBuildInput | None = None,
+    representation_context: RepresentationContext | None = None,
 ) -> MeshBuildResult:
-    """Lower Route-A/Route-B SGB geometry, mesh it, and emit artifacts."""
+    """Build Route-A/Route-B SGB geometry, mesh it to the quality threshold, and emit artifacts.
 
+    ``surface_epr_specs`` supply the inset margins that SGB cuts into the geometry as bands.  A mesh the
+    meshing module cannot bring to ``quality_threshold`` raises :class:`scgsim.meshing.MeshRepairError`
+    carrying the quality report.
+    """
     if representation_context is None or source_geometry_input is None:
         raise ValueError(
             "fresh Palace mesh requires neutral effective geometry input and representation_context from preparation"
@@ -86,89 +91,54 @@ def build_route_mesh(  # noqa: PLR0913 -- preserve the supported mesh preparatio
         raise TypeError("stack must be a mapping after set_stack processing.")
     if route not in {"A", "B"}:
         raise ValueError("route must be either 'A' or 'B'.")
-
-    sizing = normalize_mesh_sizing(
-        size_policy=size_policy,
-        refined_mesh_size=refined_mesh_size,
-        max_mesh_size=max_mesh_size,
-    )
-    refined_mesh_size = sizing.refined_mesh_size
-    max_mesh_size = sizing.max_mesh_size
-    controls = mesh_controls(
-        size_policy=sizing.size_policy,
-        algorithm_3d=algorithm_3d,
-        threads=threads,
-        surface_threads=surface_threads,
-        geometry_order=geometry_order,
-        high_order_optimize=high_order_optimize,
+    controls = MeshControls().updated(
+        recipe=recipe,
+        mesher=mesher,
+        budgets=budgets,
+        quality_threshold=quality_threshold,
     )
     thin_film = route_a_thin_film_provenance(stack, route)
     stack = with_port_sheet_metadata(stack, port_sheet_source_layers)
     paths = _prepare_paths(output_dir, route)
     top_cell = _write_sources(component, stack, source_gds_bytes, paths)
-    # Source placement, curves, holes and endpoint projection are already bound.
-    build_input = source_geometry_input
-    source_curve_provenance = {
-        "boundary_curves": [asdict(r) for r in build_input.boundary_curves],
-        "boundary_reconstruction": [
-            asdict(r) for r in build_input.boundary_reconstruction
-        ],
-    }
     _write_optional_bump_receipt(indium_ground_bump_fill, paths)
 
-    # SGB/OCC construction remains in the calling process. Only Gmsh lowering
-    # receives a fresh native-process boundary after an XAO has been written.
-    SemanticGeometryBuilder().build(
-        build_input,
-        route=cast(Literal["A", "B"], route),
-        run_folder=paths.run_dir,
-        representation_context=representation_context,
+    artifacts = _build_geometry(
+        source_geometry_input,
+        representation_context,
+        route,
+        surface_epr_specs,
+        paths,
     )
-    if not paths.xao_path.is_file():
-        raise FileNotFoundError(
-            f"SGB Route-{route} XAO not generated: {paths.xao_path}"
-        )
-    if not paths.sidecar_path.is_file():
-        raise FileNotFoundError(
-            f"SGB Route-{route} sidecar not generated: {paths.sidecar_path}"
-        )
+    sidecar_bytes = artifacts.sidecar.read_bytes()
+    sidecar = json.loads(sidecar_bytes)
+    groups = groups_from_sidecar(sidecar)
 
-    records = json.loads(paths.sidecar_path.read_text(encoding="utf-8"))
-    if not isinstance(records, list):
-        raise TypeError("04_export_physical_groups.json must contain a list")
-
-    mesh_path, groups, meshing = mesh_from_route_xao(
-        xao_path=paths.xao_path,
-        route=route,
-        records=records,
-        stack=stack,
-        mesh_path=paths.mesh_path,
-        refined_mesh_size=refined_mesh_size,
-        max_mesh_size=max_mesh_size,
-        mesh_controls=controls,
-    )
+    # The mesh and the lowering run in processes of their own; the preparation budget is reserved
+    # for the whole native stage.
+    with native_preparation():
+        meshed = _mesh_geometry(artifacts, paths, controls)
+        observed = lower_mesh_in_worker(
+            source_mesh=meshed.mesh,
+            mesh_path=paths.mesh_path,
+            groups=groups,
+            run_dir=paths.run_dir,
+        )
+    # The module's linear-or-elevated MSH 4.1 is an intermediate; palace.msh carries the same elements.
+    meshed.mesh.unlink()
 
     manifest = build_mesh_manifest(
         groups=groups,
-        mesh_name=mesh_path.name,
+        sidecar=sidecar,
+        sidecar_file={
+            "path": paths.relative(artifacts.sidecar),
+            "sha256": hashlib.sha256(sidecar_bytes).hexdigest(),
+        },
+        mesh_name=paths.mesh_path.name,
         route=route,
         route_a_thin_film=thin_film,
+        meshing=_meshing_record(meshed, observed, paths),
     )
-    manifest["meshing"] = meshing
-    manifest["curve_source"] = source_curve_provenance
-    construction_plan = json.loads(
-        (paths.semantic_dir / "02_build_route_construction_plan.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    native_curves = construction_plan.get("metadata", {}).get("curved_arrangement")
-    if native_curves is not None:
-        manifest["curved_arrangement"] = copy.deepcopy(native_curves)
-    elif build_input.boundary_curves or build_input.boundary_reconstruction:
-        raise ValueError(
-            "curved SGB construction lacks native curved-arrangement provenance"
-        )
-    manifest["source"]["gsim_high_order_meshing"] = GSIM_HIGH_ORDER_DERIVATION_SHA
     write_json(paths.manifest_path, manifest)
     write_json(
         paths.provenance_path,
@@ -176,31 +146,24 @@ def build_route_mesh(  # noqa: PLR0913 -- preserve the supported mesh preparatio
             "scgsim_version": scgsim_version(),
             "route": route,
             **({"route_a_thin_film": thin_film} if thin_film is not None else {}),
-            "source_sha": {
-                "gsim": GSIM_SHA,
-                "scgsim_sgb": SGB_RUNTIME_AUTHORITY,
-                "sgb_derivation": {
-                    "base": SGB_DERIVATION_BASE_SHA,
-                    "imported_development": SGB_DERIVATION_IMPORTED_SHA,
-                },
-            },
+            "geometry_authority": SGB_RUNTIME_AUTHORITY,
             "component_top_cell": top_cell,
             "run_dir": ".",
-            "stack_path": str(paths.stack_path.relative_to(paths.run_dir)),
-            "xao_path": str(paths.xao_path.relative_to(paths.run_dir)),
-            "sidecar_path": str(paths.sidecar_path.relative_to(paths.run_dir)),
+            "stack_path": paths.relative(paths.stack_path),
+            "xao_path": paths.relative(artifacts.xao),
+            "sidecar_path": paths.relative(artifacts.sidecar),
         },
     )
-
     return MeshBuildResult(
         output_dir=paths.run_dir,
-        mesh_path=mesh_path,
+        mesh_path=paths.mesh_path,
         groups=groups,
         mesh_manifest_path=paths.manifest_path,
         provenance_path=paths.provenance_path,
         stack_path=paths.stack_path,
-        xao_path=paths.xao_path,
-        sidecar_path=paths.sidecar_path,
+        xao_path=artifacts.xao,
+        sidecar_path=artifacts.sidecar,
+        quality_report_path=meshed.report_path,
     )
 
 
@@ -210,14 +173,16 @@ class _BuildPaths:
 
     run_dir: Path
     geometry_dir: Path
-    semantic_dir: Path
+    mesh_dir: Path
     gds_path: Path
     stack_path: Path
-    xao_path: Path
-    sidecar_path: Path
     mesh_path: Path
     manifest_path: Path
     provenance_path: Path
+
+    def relative(self, path: Path) -> str:
+        """``path`` as a POSIX path relative to the run folder."""
+        return path.relative_to(self.run_dir).as_posix()
 
 
 def _prepare_paths(output_dir: str | Path, route: str) -> _BuildPaths:
@@ -225,36 +190,27 @@ def _prepare_paths(output_dir: str | Path, route: str) -> _BuildPaths:
     if run_dir.exists() and any(run_dir.iterdir()):
         raise ValueError(f"output_dir must be empty before mesh: {run_dir}")
     geometry_dir = run_dir / "geometry"
-    semantic_dir = run_dir / "metadata" / "semantic_geometry"
+    mesh_dir = run_dir / "mesh"
 
     for path in (
         run_dir,
         geometry_dir,
-        semantic_dir,
+        mesh_dir,
+        run_dir / "metadata",
         run_dir / "logs",
         run_dir / "results" / "palace",
     ):
         path.mkdir(parents=True, exist_ok=True)
 
-    gds_path = geometry_dir / "design.gds"
-    stack_path = geometry_dir / "design.stack.json"
-    xao_path = geometry_dir / f"semantic_geometry_route_{route.lower()}.xao"
-    sidecar_path = semantic_dir / "04_export_physical_groups.json"
-    mesh_path = run_dir / "palace.msh"
-    manifest_path = run_dir / "metadata" / "mesh_manifest.json"
-    provenance_path = run_dir / "metadata" / f"route_{route.lower()}_provenance.json"
-
     return _BuildPaths(
-        run_dir,
-        geometry_dir,
-        semantic_dir,
-        gds_path,
-        stack_path,
-        xao_path,
-        sidecar_path,
-        mesh_path,
-        manifest_path,
-        provenance_path,
+        run_dir=run_dir,
+        geometry_dir=geometry_dir,
+        mesh_dir=mesh_dir,
+        gds_path=geometry_dir / "design.gds",
+        stack_path=geometry_dir / "design.stack.json",
+        mesh_path=run_dir / "palace.msh",
+        manifest_path=run_dir / "metadata" / "mesh_manifest.json",
+        provenance_path=run_dir / "metadata" / f"route_{route.lower()}_provenance.json",
     )
 
 
@@ -301,3 +257,87 @@ def _write_optional_bump_receipt(
             gds_path=paths.gds_path,
             receipt=receipt,
         )
+
+
+def _build_geometry(
+    build_input: GeometryBuildInput,
+    representation: RepresentationContext,
+    route: str,
+    surface_epr_specs: Mapping[str, Mapping[str, Any]] | None,
+    paths: _BuildPaths,
+) -> SgbArtifacts:
+    """Build the route's geometry with the Surface-EPR bands the specs ask for.
+
+    Which supports carry a Surface-EPR row is a fact of the built model, so a request for bands first builds
+    the same input without bands and reads its sidecar (see :mod:`.insets`).
+    """
+    insets: tuple[InsetRequest, ...] = ()
+    if requests_wanted(surface_epr_specs):
+        insets = _insets_from_unbanded_build(
+            build_input, representation, route, surface_epr_specs or {}, paths
+        )
+    return build_sgb_geometry(
+        build_input,
+        representation,
+        route=route,
+        insets=insets,
+        output_dir=paths.geometry_dir,
+    )
+
+
+def _insets_from_unbanded_build(
+    build_input: GeometryBuildInput,
+    representation: RepresentationContext,
+    route: str,
+    surface_epr_specs: Mapping[str, Mapping[str, Any]],
+    paths: _BuildPaths,
+) -> tuple[InsetRequest, ...]:
+    scratch = paths.geometry_dir / _UNBANDED_DIR
+    try:
+        unbanded = build_sgb_geometry(
+            build_input, representation, route=route, output_dir=scratch
+        )
+        sidecar = json.loads(unbanded.sidecar.read_text(encoding="utf-8"))
+        return inset_requests(surface_epr_specs, sidecar)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+@diagnostic_stage("palace.mesh.module")
+def _mesh_geometry(
+    artifacts: SgbArtifacts, paths: _BuildPaths, controls: MeshControls
+) -> MeshResult:
+    """Mesh the XAO to the threshold with the meshing module; the sidecar is the pair of this XAO."""
+    return mesh_sgb(
+        artifacts.xao,
+        artifacts.sidecar,
+        paths.mesh_dir,
+        threshold=controls.quality_threshold,
+        recipe=controls.recipe,
+        budgets=controls.budgets,
+        mesher=controls.mesher,
+    )
+
+
+def _meshing_record(
+    meshed: MeshResult, observed: Mapping[str, Any], paths: _BuildPaths
+) -> dict[str, Any]:
+    """The meshing section of the manifest: the settings and report of the module, and the written mesh."""
+    report = meshed.report
+    return {
+        "recipe": report["recipe"],
+        "repair": report["repair"],
+        "mesher": report["mesher"],
+        "budgets": report["budgets"],
+        "threshold": report["threshold"],
+        "quality_measure": report["quality_measure"],
+        "stop": report["stop"],
+        "rounds": report["rounds"],
+        "linear_mesh": report["mesh"],
+        "quality_report": {
+            "path": paths.relative(meshed.report_path),
+            "sha256": hashlib.sha256(meshed.report_path.read_bytes()).hexdigest(),
+        },
+        "gmsh_version": observed["gmsh_version"],
+        "statistics": observed["statistics"],
+    }

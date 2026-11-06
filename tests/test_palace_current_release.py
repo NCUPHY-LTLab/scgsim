@@ -156,6 +156,7 @@ def test_new_handoff_uses_explicit_native_compatibility_and_records_identity(tmp
         stack_path=metadata / "stack.json",
         xao_path=run_dir / "geometry.xao",
         sidecar_path=metadata / "sidecar.json",
+        quality_report_path=run_dir / "mesh" / "quality.json",
     )
     plan = prepare_handoff(
         profile="direct-local",
