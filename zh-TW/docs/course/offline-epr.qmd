@@ -87,4 +87,4 @@ print([(row["mode"], row["native_pass"], row["status"]) for row in history.rows]
 
 重新分析時依序套用已記錄假設、介面預設值，再套用精確群組覆寫。省略欄位會保留原值；`loss_tangent=None` 明確表示損耗未知，`0.0` 則表示已知為零。未知群組 ID 會導致失敗，不會遭到忽略。重新分析無法修補缺漏場資料，也無法還原未計算的側壁。
 
-Surface、bulk 與 port／junction 分區仍各自獨立。不同的內縮邊界距離是分開評估，不是可相加的邊緣帶；未遮罩基線也要分開保留，包括明確要求的零距離。已知基線的反 Q 小計不包含未知損耗與未計算通道；它不是元件總 Q 或 T1。[報告契約](../report-model.qmd)定義可見範圍與排序；[EPR 概念](../eigenmode-epr.qmd)定義正規化與假設。選擇下一個物理模型時，請回到[課程索引](../examples.qmd)。
+Surface、bulk 與 port／junction 分區仍各自獨立。不同的內縮邊界距離是分開評估，不是可相加的邊緣帶；基準列也要與邊距列分開保留（對 AEDT 而言，包括明確要求的零距離）。已知基線的反 Q 小計不包含未知損耗與未計算通道；它不是元件總 Q 或 T1。[報告契約](../report-model.qmd)定義可見範圍與排序；[EPR 概念](../eigenmode-epr.qmd)定義正規化與假設。選擇下一個物理模型時，請回到[課程索引](../examples.qmd)。

@@ -11,7 +11,7 @@ lang: zh-TW
 
 樹內 `scgsim.geometry` API 是 SCGSim 目前的來源幾何權威。它使用結構化 PDK 與元件語意，不從求解器產生的標籤重建幾何意義。
 
-`scgsim.geometry` 是面向來源的外觀介面：`GeometryPlan`、獨立快照、正規化輸入模型、轉接器、堆疊／真空／曲線準備及摘要。`scgsim.geometry.compiler` 負責進階路徑建構器、衍生建構紀錄、階段驗證器及分派。來源驗證器定義於 `scgsim.geometry.source.validation`，由編譯器外觀介面重新匯出。直接定義模組及模型別名列於 [API 遷移參考](api-migration.qmd#geometry-and-compiler-api)。
+`scgsim.geometry` 是面向來源的外觀介面：`GeometryPlan`、獨立快照、正規化輸入模型、轉接器、堆疊／真空／曲線準備及摘要。Palace 以 `scgsim.geometry.sgb`（`build_sgb_geometry`）建立此幾何，並用 `scgsim.meshing` 產生網格。`scgsim.geometry.compiler` 仍是進階路徑建構器，含衍生建構紀錄、階段驗證器及分派；Palace 不使用它。來源驗證器定義於 `scgsim.geometry.source.validation`，由編譯器外觀介面重新匯出。直接定義模組及模型別名列於 [API 遷移參考](api-migration.qmd#geometry-and-compiler-api)。
 
 `build_component_stack()` 組合兩個明確權威。PDK `LayerStack` 紀錄提供材料、製程層、Z／厚度、導體／求解角色及確切宿主體積。元件註記提供局部實體身分、埠、功能導體區域及拓撲選取器。Notebook 組合具名出現實例並指派最終 Net 映射，不手動指定 PDK 或元件事實。
 
@@ -37,7 +37,7 @@ Palace 與 AEDT 使用同一個選定解讀。不同明確近似設定保留不�
 
 `GdsBoundaryReconstructionSpec` 要求明確有序的 `segment_indices`：索引 `i` 表示由頂點 `i` 至 `(i + 1) % N` 的原始邊。選定連續鏈可跨越索引零。`closed=True` 選取整個環；部分鏈保留原端點，每個未選取直線段維持不變。`anchor_indices` 識別重建使用的原始頂點，`degree` 及 `parameter_interval` 保留要求的樣條操作。閉合圓重建使用三個明確錨點；開放弧使用起點、弧上點及終點錨點。重疊替換鏈或互相競爭的整體邊界宣告，不能擁有相同來源線段。
 
-對啟用的宣告，樹內編譯器在指派材料介面前建立單一原生 OCC 平面排列。原生布林歷史保留來源成員及修剪參數區間。相同排列曲線構成金屬、介電與真空補集及埠分割的邊界。指定堆疊提供 Z；共用排列邊的集體原生 1D 至 2D 掃掠建立精確直紋壁，並保留修剪曲線幾何。它保留共用上緣，以及每個來源頂點的一條垂直邊。由表面起始的殼接著形成求解體積，包含內部 PEC 空腔殼。原生建構錯誤向外傳遞；沒有直線邊備援、逐表面重新擬合或全域體積修復。
+對啟用的宣告，樹內幾何建構器在指派材料介面前建立單一原生 OCC 平面排列。原生布林歷史保留來源成員及修剪參數區間。相同排列曲線構成金屬、介電與真空補集及埠分割的邊界。指定堆疊提供 Z；共用排列邊的集體原生 1D 至 2D 掃掠建立精確直紋壁，並保留修剪曲線幾何。它保留共用上緣，以及每個來源頂點的一條垂直邊。由表面起始的殼接著形成求解體積，包含內部 PEC 空腔殼。原生建構錯誤向外傳遞；沒有直線邊備援、逐表面重新擬合或全域體積修復。
 
 標準 Gmsh 殼 AutoFix 修正殼方向時可能替換原生面標記。SGB 透過完整原生線框／邊對應，將各修復面重新綁定至來源 `SurfaceID`，再將來源映射帶入匯出與後端建構。來源身分固定，數值 Gmsh 標記可以改變；不使用標記、座標、面積或順序猜測替代面。已觀察的 Circle Route B 建構中，共用面與金屬切口邊界仍綁定來源，埠薄片保持獨立表示。若無法保留對應或必要拓撲，原生建構會失敗，不輸出備援幾何。
 
@@ -109,7 +109,7 @@ Q3D GeometryPlan 前端屬於已接受的 v2 實作／API（2026-10-09 接受，
 
 SCGSim 已不再提供 SGB 幾何距離帶產生器。本節保留舊設計範圍，供閱讀舊資料時參考；`GeometryPlan.set_surface_distance_bands(...)`、`SurfaceDistanceBandSpec` 與 Palace 彙總 API 都不是現行介面。
 
-已撤回的設計會從指定平面父面及原始外環、孔環邊界切出幾何區域，為各子區保留來源譜系，並將區域送入 CAD 與網格流程。其 EPR 彙總依賴已完成的 Palace 結果，不需要 Q2D。這些歷史區域不同於 Palace 原生 Mask／Inset 資料列：當指定的 Palace 可執行檔支援時，仍可透過 `inset_margins_um` 要求原生 Mask／Inset。請見現行 [Palace Electrostatic 契約](specs/palace-electrostatic-sgb.qmd#native-mask-inset)。
+已撤回的設計會從指定平面父面及原始外環、孔環邊界切出幾何區域，為各子區保留來源譜系，並將區域送入 CAD 與網格流程。其 EPR 彙總依賴已完成的 Palace 結果，不需要 Q2D。這些歷史區域不同於 Palace 的 Surface EPR 邊距列，後者仍透過 `inset_margins_um` 要求：`mesh()` 建立幾何時，SGB 會把這些帶切進模型。請見現行[本徵模態契約](specs/palace-eigenmode.qmd#surface-epr-margins)。
 
 ## 內部語意投影 {#internal-semantic-projection}
 
@@ -159,13 +159,12 @@ from scgsim.preparation import preparation_resources
 with preparation_resources(max_workers=30):
     snapshot = plan.prepare()
     sim.set_plan(snapshot)
-    sim.set_mesh(threads=30, surface_threads=30)
     sim.mesh()
 ```
 
-此範圍對獨立來源配方、具索引的來源路徑批次、零面積支撐分類及逐運算元重建，重用單一執行緒池。結果與工作區域來源稽核依輸入順序合併。固定格點運算元共用相同邊界網路及標記單元；來源路徑歸屬及面轉換維持可重現。未量化父平面保留獨立建構路徑。巢狀工作重用預算，不建立另一個池。準備工作在 Gmsh 子程序啟動前完成；其要求執行緒上限必須為正值，且符合明確範圍的預算。
+此範圍對獨立來源配方、具索引的來源路徑批次、零面積支撐分類及逐運算元重建，重用單一執行緒池。結果與工作區域來源稽核依輸入順序合併。固定格點運算元共用相同邊界網路及標記單元；來源路徑歸屬及面轉換維持可重現。未量化父平面保留獨立建構路徑。巢狀工作重用預算，不建立另一個池。準備工作在網格化子程序啟動前完成。網格化只用單一 Gmsh 執行緒，所以不佔用工作者預算；此範圍只會讓它不在準備工作者內執行。
 
-此設定限制 SCGSim 準備工作者；對應 CPU 請另透過排程器配置。Gmsh 執行緒上限與 Palace MPI／OpenMP 設定控制各自階段。`preparation_diagnostics(output_dir, profile=False)` 可在此範圍旁記錄階段時間，不選擇平行度。
+此設定限制 SCGSim 準備工作者；對應 CPU 請另透過排程器配置。Palace MPI／OpenMP 設定控制求解階段。`preparation_diagnostics(output_dir, profile=False)` 可在此範圍旁記錄階段時間，不選擇平行度。
 
 每次來源準備呼叫，也會對同一個新讀取 GDS 儲存格及排除參考清單重用階層擷取。快取隨該次呼叫結束。
 

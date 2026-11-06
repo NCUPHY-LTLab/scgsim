@@ -23,29 +23,30 @@ preview.show_surface_epr()
 preview.show_mesh()
 ```
 
-在 Palace 1.1.0 工作流程中，預覽會保留高階網格連通性與曲線邊界表示。呼叫 `mesh()` 後，`sim.mesh_summary()` 會回傳與網格及 manifest 綁定的分離生成證據。紀錄包含選定控制項與原生元素／區域數量；邊長統計會標示為主角點間的弦長。預覽與摘要描述的是已準備的幾何，不是求解場，也不是曲線元素品質指標。
+Palace 工作流程中，預覽會保留高階網格連通性與曲線邊界表示。呼叫 `mesh()` 後，`sim.mesh_summary()` 會回傳與網格及 manifest 綁定的分離生成證據。紀錄包含尺寸配方、網格器選項、品質門檻與結果，以及原生元素／區域數量；邊長統計會標示為主角點間的弦長。預覽與摘要描述的是已準備的幾何，不是求解場，也不是曲線元素品質指標。
 
-已解析的 Palace 報告會將可見網格摘要保留為六張卡片：幾何／FEM 階數、原生節點／元素數量、3D 演算法、體積／表面執行緒選項、`HighOrder` 最佳化狀態，以及 ND 拓撲 DOF 估算值。Gmsh 詳細資料與分區表格位於可收合的「物理區域與網格離散化」區段。其邊數及以微米表示的最小／平均／最大長度，是主角點之間唯一的直線弦長，不是曲線弧長。點區域的邊數為零，也沒有長度極值；缺少的歷史觀測仍標示為 `not_recorded`。
+已解析的 Palace 報告以卡片呈現網格摘要：尺寸配方、幾何／FEM 階數、原生節點／元素數量、3D／2D 演算法、`HighOrder` 最佳化狀態、品質門檻、最小 SICN 與低於門檻的元素數量、修復迴圈的結果、四面體數量與其預算，以及 ND 拓撲 DOF 估算值。最小 SICN 與元素數量是在升階之前的線性網格上量得。Gmsh 詳細資料與分區表格位於可收合的「物理區域與網格離散化」區段。其邊數及以微米表示的最小／平均／最大長度，是主角點之間唯一的直線弦長，不是曲線弧長。點區域的邊數為零，也沒有長度極值。
 
-若要取得完整分離的控制紀錄，請直接選取請求值與有效值：
+若要取得完整分離的控制紀錄，請直接讀取配方、修復策略、網格器選項、預算與品質報告：
 
 ```python
 summary = sim.mesh_summary()
-requested = summary["meshing"]["requested"]
-effective = summary["meshing"]["effective"]
+meshing = summary["meshing"]
+recipe, mesher = meshing["recipe"], meshing["mesher"]
+quality = meshing["linear_mesh"]
 ```
 
-摘要也會保留網格／manifest 識別及來源曲線脈絡；已解析結果與報告可透過各自的 `mesh_summary()` 方法提供相同資料。ND 卡片會根據施加邊界條件前、以主角點構成的四面體估算拓撲；它不是原生求解器 DOF 計數。Electrostatic 的 H1 估算不可用；執行緒選項也不是實測的執行緒使用率。
+摘要也會保留網格／manifest 識別；已解析結果與報告可透過各自的 `mesh_summary()` 方法提供相同資料。ND 卡片會根據施加邊界條件前、以主角點構成的四面體估算拓撲；它不是原生求解器 DOF 計數。Electrostatic 的 H1 估算不可用。
 
 請依已準備來源核對圖例中的確切語意 ID 與數量。不可用模式會明確標示。在 Notebook 中互動檢視時，`preview.explore("materials")` 會顯示已綁定場景，並可旋轉與縮放。固定的 `show_*` 檢視則會寫出可攜式聯絡圖與 manifest。在 `prepare_handoff()` 前產生這些檔案，會將它們納入既有 Palace 封存檔；事後建立的 sidecar 不會追溯納入該封存檔。
 
-網格診斷只回答儲存四面體的較狹義問題：
+網格診斷回答的問題與網格化步驟的品質門檻不同：它們逐一量測儲存的求解器網格本身的四面體：
 
 ```python
-quality = sim.check_mesh_quality()
-print(quality.show_summary())
-print(quality.show_worst_elements(metric="kappa_j", limit=10))
-quality.show_elements(metric="volume", limit=10).show()
+stored = sim.check_mesh_quality()
+print(stored.show_summary())
+print(stored.show_worst_elements(metric="kappa_j", limit=10))
+stored.show_elements(metric="volume", limit=10).show()
 ```
 
 請區分精確奇異、數值不可用與有限診斷值。厚度很薄但非零的四面體不會被重新標記為完全共平面。排序結果描述此檔案與指標，不會提供科學通過／失敗門檻，也不會修復網格。單位、選取／其餘項目限制與序列化方式由[網格契約](../mesh-quality.qmd)定義。

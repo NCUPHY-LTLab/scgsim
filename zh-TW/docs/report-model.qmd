@@ -25,9 +25,13 @@ AEDT `ResolvedRun.show_all_results()` 的順序為身分、數值資料、基準
 
 數值圖形顯示頻率、依模態與介面區分的表面參與率、接面歷史及能量平衡。它們保留既有投影與資格規則；有效的部分資料列頻率仍可見，不可用的 EPR 值保留為缺口，不退回較早的迭代。
 
-## Palace 網格內容（1.1.0） {#palace-mesh-context-110-candidate}
+## Palace 網格內容 {#palace-mesh-context}
 
-Palace 報告讀取與外觀介面及已解析執行相同的獨立 `mesh_summary()` 資料來源。它將紀錄的網格控制、Gmsh 版本、原生節點／元素／區域數量、高階最佳化結果及邊長統計綁定至網格與清單身分。較高幾何階數的回報邊長是主角點弦長，不是曲邊長度。本徵模態自由度值是拓撲估計，不是求解器回報的數量。歷史清單若缺少這些欄位，保留 `not_recorded`；報告不推論缺少的網格歷史。
+Palace 報告讀取與外觀介面及已解析執行相同的獨立 `mesh_summary()` 資料來源。它將紀錄的尺寸配方、修復策略、網格器選項、品質門檻與在線性網格（升階之前）量得的 minSICN，連同 Gmsh 版本、原生節點／元素／區域數量、輸出網格的階數、高階最佳化結果及邊長統計，綁定至網格與清單身分。較高幾何階數的回報邊長是主角點弦長，不是曲邊長度。本徵模態自由度值是拓撲估計，不是求解器回報的數量。
+
+::: {#palace-run-schemas .callout-important title="舊結構的 Palace 執行資料夾不會被讀取"}
+解析與檢查只讀取網格清單 `schema_version` 2 與 Palace 索引映射 `schema_version` 3，獨立 EPR 結果只讀取 `scgsim.palace.epr-result.v2`。清單 `schema_version` 為 1、或索引映射 `schema_version` 為 1 或 2 的執行資料夾，以及舊結構的獨立結果，都會被拒絕，錯誤訊息會指出記錄的版本，無論資料夾裡還有什麼。若要再次讀取這樣的研究，請用目前的套件重新準備，並重新執行。
+:::
 
 ## 研究解讀與保留觀察 {#research-interpretation-and-retained-observations}
 
@@ -61,19 +65,19 @@ AEDT `ResolvedRun` 以 `epr_result()` 提供綁定的 EPR 紀錄，以 `show_all
 
 僅對 Palace，已接受的 V1 行為保留原生本徵模態 `eig.csv` 的 `Q` 欄位中正無窮大，並明確標為**原生回報的無窮大 Q**。該值無法提供有限 Q 檢視；報告不推論物理無損模型，也不以有限數字或零取代。其他有效頻率／能量資料不僅因此 Q 值而被拒絕。[Palace 原生 Q 契約](specs/palace-eigenmode.qmd#native-eigenmode-q) 負責限縮的原始值允許範圍，以及維持不變的其他欄位／NaN／負無窮大政策。EPR 正規化及未知損耗解讀維持分開。
 
-獨立的[四面體網格品質](mesh-quality.qmd) 報告綁定單次 MSH 檔案讀取。其體積、方向及條件資料是幾何診斷，不是求解器結果，也不產生隱藏品質門檻或收斂結論。
+獨立的[四面體網格品質](mesh-quality.qmd) 報告綁定單次 MSH 檔案讀取。其體積、方向及條件資料是幾何診斷，不是求解器結果，自己不套用品質門檻，也不產生收斂結論。
 
-## 多邊距 Surface EPR 讀取介面 {#multi-margin-surface-epr-reading-surface}
+## Palace Surface EPR 的邊距列 {#palace-margin-rows}
 
-既有的檢查與嚴格解析區分，也適用於原生多邊距 Surface EPR。`inspect_run_trustworthiness()` 可檢查完成、失敗或部分套件，並將不可用的遮罩資料標為不可用，不改變憑證狀態。缺少或無法讀取的遮罩檔案配對，會使該來源的遮罩快照不可用，而有效基準快照仍可讀。對要求遮罩的執行進行嚴格完成解析時，需要同一必要結果來源中已封存的 `surface-mask-Q.csv` 與 `surface-mask-energy.csv`。缺少遮罩檔案會阻止嚴格解析；既有憑證或產物 SHA-256 不符仍為致命錯誤。
+既有的檢查與嚴格解析區分，也適用於 Palace 邊距列。邊距列是涵蓋 SGB 在該邊距及更外側切出之各帶的 `Dielectric` 列，因此和基準列放在同一張 `surface-Q.csv` 表。`inspect_run_trustworthiness()` 可檢查完成、失敗或部分套件，並將不可用的邊距資料標為不可用，不改變憑證狀態。每個來源把它的邊距列當成一個全有或全無的快照讀取：若其表格無法讀取，或與索引映射不符，該來源就沒有邊距快照。對要求表面列的執行進行嚴格完成解析時，需要同一必要結果來源中已封存的 `surface-Q.csv`；缺少檔案會阻止嚴格解析，既有憑證或產物 SHA-256 不符仍為致命錯誤。
 
-`PhysicsQuantitiesReport.snapshots` 保持只含基準的介面。型別化的 `PhysicsQuantitiesReport.masked_snapshots` 提供要求遮罩的完整快照，同時保留介面身分、邊距值與序號、模態或激發、細化迭代、原生索引及來源身分。因此重複要求的邊距仍可分別追溯，不是損耗總量中的重複貢獻。
+`PhysicsQuantitiesReport.snapshots` 保持只含基準的介面。型別化的 `PhysicsQuantitiesReport.margin_snapshots` 提供 `SurfaceMarginEprSeriesSnapshot` 值，每個值含 `SurfaceMarginEprRecord` 資料列，記錄介面、邊距值（`margin_um`）與序號（`margin_index`）、所屬基準列（`baseline_index`）、涵蓋的帶、其 entity 與 Net、模態或激發、細化迭代、原生索引及來源身分。每個邊距列都是其基準列的替代評估之一；重複要求的邊距仍可分別追溯，不是損耗總量中的重複貢獻。
 
-`show_physics_quantities()` 使用原生表面場跡，對每個模態或激發及確切介面，呈現最新的遮罩參與率對邊距關係。執行可信度仍負責 AMR 歷史與資料；物理量呈現不重新解讀細化資料。
+`show_physics_quantities()` 使用原生表面場跡，對每個模態或激發及確切介面，呈現最新的邊距參與率對邊距關係。執行可信度仍負責 AMR 歷史與資料；物理量呈現不重新解讀細化資料。
 
 原生零參與率或表面能量只表示原生貢獻為零。沒有幾何資料支持時，它不證明某區域在幾何上已完全排除。因未知損耗而不可用的逆 Q 貢獻保持不可用，不轉換成壽命結論；參與率及能量資料仍維持可見。
 
-此報告介面為 **STABILIZED**，不新增累積互斥邊緣帶解讀、可攜匯出格式或科學接受結論。
+此報告介面不新增累積互斥邊緣帶解讀、可攜匯出格式或科學接受結論。
 
 ## 目前 Palace 範圍 {#current-palace-scope}
 

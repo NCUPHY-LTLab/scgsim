@@ -59,7 +59,7 @@ python3 -m http.server 4321 --bind 0.0.0.0 --directory _site
 - [專案方向](docs/roadmap.qmd)
 - [歷史診斷紀錄](docs/errors.qmd)
 
-整合時採用的衍生輸入為 gsim 下游版本 `0.2.0+scq.1`、修訂版本 `8f5dc6c05255d003a9c6d8959537bcf8068379d3`，以及歷史 SGB 修訂版本 `e74a343154c6b19b6ba32d6fb297e700cfe08ff2`。這些資料說明來源沿革，不代表執行階段相依性、支援範圍擴張或 API 相容性。目前來源幾何使用樹內的 `scgsim.geometry` API，以及用於路徑規劃與衍生建構的 `scgsim.geometry.compiler`。
+整合時採用的衍生輸入為 gsim 下游版本 `0.2.0+scq.1`、修訂版本 `8f5dc6c05255d003a9c6d8959537bcf8068379d3`，以及歷史 SGB 修訂版本 `e74a343154c6b19b6ba32d6fb297e700cfe08ff2`。這些資料說明來源沿革，不代表執行階段相依性、支援範圍擴張或 API 相容性。目前來源幾何使用樹內的 `scgsim.geometry` API。Palace 以 `scgsim.geometry.sgb` 建立幾何，並用 `scgsim.meshing` 產生網格；`scgsim.geometry.compiler` 仍是進階的路徑建構 API，Palace 不再使用它。
 
 ## 工程收斂 {#engineering-convergence}
 

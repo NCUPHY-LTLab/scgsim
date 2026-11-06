@@ -21,11 +21,11 @@ Route A 的 `substrate_face` 與 `metal_gap_equivalent` 近似設定，在座標
 
 ## 對照物理量判讀數值變化 {#read-numerical-changes-beside-the-quantity}
 
-網格大小、幾何網格階數、有限元素階數、自適應通過次數、求解器設定與搜尋控制，分別決定數值計算的不同部分。Palace 的幾何階數控制網格表示法；FEM 階數控制場近似。原生停止旗標描述設定的停止準則。判讀時應一併檢視目標電容、頻率或參與率的實際變化。
+網格尺寸配方、網格品質門檻、幾何網格階數、有限元素階數、自適應通過次數、求解器設定與搜尋控制，分別決定數值計算的不同部分。Palace 的幾何階數控制網格表示法；FEM 階數控制場近似。原生停止旗標描述設定的停止準則。判讀時應一併檢視目標電容、頻率或參與率的實際變化。
 
-1.1.0 版 Palace 網格摘要會記錄原生網格控制項與拓撲。本徵模的自由度數值是依拓撲估算，並非原生求解器計數，也不是收斂度量。線性四面體品質報告也不會評估曲線高階元素的品質。
+Palace 網格摘要會記錄網格化控制項與原生拓撲。本徵模的自由度數值是依拓撲估算，並非原生求解器計數，也不是收斂度量。線性四面體品質報告也不會評估曲線高階元素的品質。
 
-請分別處理三種高階控制：`geometry_order` 建立網格幾何，FEM 階數控制場近似，而 Palace `HighOrderOutput` 控制序列化。Palace 原生匯入預設值 `RemoveCurvature=false` 會保留匯入的高階幾何節點。Palace Surface EPR 的原生 Mask／Inset 邊距是與 SGB 幾何分區不同的評估。指定的 Palace 可執行檔必須支援 Mask／Inset；請見[Palace Electrostatic 契約](../specs/palace-electrostatic-sgb.qmd#native-mask-inset)。先前的 SGB 幾何距離帶產生器已撤回。
+請分別處理三種高階控制：`MesherOptions.geometry_order` 建立網格幾何，FEM 階數控制場近似，而 Palace `HighOrderOutput` 控制序列化。Palace 原生匯入預設值 `RemoveCurvature=false` 會保留匯入的高階幾何節點。Palace Surface EPR 的每個內縮邊距，是對 SGB 切進幾何之帶的一次獨立評估，因此 Palace 不需要特殊設定；請見[本徵模態契約](../specs/palace-eigenmode.qmd#surface-epr-margins)。
 
 代數本徵對殘差與自適應網格指標描述的是不同物理量。頻率可能變化很小，但對場敏感的表面貢獻仍可能變動。請檢視該貢獻可取得的歷程，不要以其他觀測量的穩定性代替判斷。
 

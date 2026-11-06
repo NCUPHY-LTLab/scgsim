@@ -170,7 +170,7 @@ sim.set_electrostatic(
     save_fields=1, unassigned_conductor_policy="error",
     exterior_boundary_policy="none",
 )
-sim.set_mesh(refined_mesh_size=10.0, max_mesh_size=200.0)
+sim.set_mesh(quality_threshold=0.01)  # 每個四面體的最小縮放 Jacobian
 sim.set_numerical(
     order=2, tolerance=1e-6, max_iterations=2000,
     solver_type="Default", preconditioner="Default", device="CPU",
@@ -182,7 +182,7 @@ mesh_path = sim.mesh()
 config_path = sim.write_config()
 ```
 
-網格尺寸與真空補距的單位是微米；FEM 與 AMR 控制項是原生數值請求。MA／MS／SA 的 `LiteratureCentral` 紀錄是 PDK 提供並已歸屬的模型假設，不是量測介面損耗。
+真空補距的單位是微米；預設尺寸配方決定 Palace 的元素尺寸，品質門檻是網格必須達到的標準（見 [Palace 網格控制](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)）；FEM 與 AMR 控制項是原生數值請求。MA／MS／SA 的 `LiteratureCentral` 紀錄是 PDK 提供並已歸屬的模型假設，不是量測介面損耗。
 
 ### AEDT Q3D v3
 

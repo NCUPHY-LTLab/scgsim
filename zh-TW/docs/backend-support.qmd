@@ -37,14 +37,13 @@ AEDT 可使用保留的原生儲存場計算 EPR，無須重新求解本徵模�
 
 ## Palace 執行檔功能
 
-官方 Palace v0.18.1 的設定結構定義 `Nonconformal`，但未定義表面 EPR 邊界列使用的原生 `Mask`／`Inset`
-設定。這些邊界列需要相容的 Palace 分支版本。[Palace
-本徵模指南](course/palace-eigenmode.qmd#native-maskinset-for-surface-epr)列有官方設定結構與一個已記錄的分支來源。
+Surface EPR 的邊距列是涵蓋 SGB 切進幾何之各帶的普通 `Dielectric` 列，因此一般的 Palace 執行檔就能計算。SCGSim 不寫出原生 `Mask` 或 `Inset` 設定。[Palace
+本徵模指南](course/palace-eigenmode.qmd#surface-epr-margin-rows)示範如何要求這些列。
 
 ## 來源與結果的差異 {#source-and-result-differences}
 
 Palace、以來源為起點的 HFSS 本徵模，以及 Q3D C/G 準備前端共用 GeometryPlan。Q3D 也支援不依賴來源的 v3 實體定義；Q2D 接收明確定義的截面資料，不會推測切片。共用來源幾何不代表邊界條件相同，也不會讓集總電容、共振、S 參數與每單位長度矩陣彼此等價。請依各結果的單位，以及原生導體／端口／模態順序判讀。
 
-1.1.0 版 Palace 來源路徑支援明確定義的曲線，以及由呼叫端選擇的 GDS 邊界重建。這些輸入會保留其來源 Entity 與出現位置識別資訊，再由 `scgsim.geometry.compiler` 降階處理。AEDT 不支援曲線意圖。Palace 的 `geometry_order` 控制幾何網格表示法，與場問題使用的 FEM 階數分開。這些控制項及回傳的網格摘要描述的是網格生成方式，不代表求解器準確度。
+1.1.0 版 Palace 來源路徑支援明確定義的曲線，以及由呼叫端選擇的 GDS 邊界重建。這些輸入會保留其來源 Entity 與出現位置識別資訊，再由 `scgsim.geometry.sgb` 建成幾何。AEDT 不支援曲線意圖。Palace 的 `MesherOptions.geometry_order` 控制幾何網格表示法，與場問題使用的 FEM 階數分開。這些控制項及回傳的網格摘要描述的是網格生成方式，不代表求解器準確度。
 
 請從[教學](examples.qmd)開始。支援請求的確切規格見 [Palace Electrostatic](specs/palace-electrostatic-sgb.qmd)、[Palace Eigenmode](specs/palace-eigenmode.qmd) 與 [AEDT 執行環境類型](specs/aedt-runtime.qmd)。
