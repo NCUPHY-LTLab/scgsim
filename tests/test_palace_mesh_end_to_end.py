@@ -23,6 +23,7 @@ from test_sgb_curved_port_landing import circular_pad_input
 from scgsim.meshing import Budgets, MesherOptions, MeshRepairError
 from scgsim.palace.mesh.native import lower_mesh_in_current_process
 from scgsim.palace.mesh.quality.reader import read_msh22
+from scgsim.palace.mesh.summary import mesh_summary
 from scgsim.palace.preparation.config import (
     LayoutPortBinding,
     TerminalBinding,
@@ -30,6 +31,13 @@ from scgsim.palace.preparation.config import (
     build_electrostatic_config,
     configure_numerical_controls,
 )
+from scgsim.palace.presentation.plotting import mesh_summary_html
+from scgsim.palace.results.index_contract import (
+    INDEX_MAP_SCHEMA_VERSION,
+    RouteConsistency,
+    validate_config_index_correspondence,
+)
+from scgsim.palace.results.tables import count_index_entries
 
 pytestmark = pytest.mark.slow
 
@@ -143,6 +151,44 @@ def test_a_component_meshes_to_a_palace_mesh_and_a_config(route, route_a, route_
     assert manifest["route_policy"]["conductor_sheets"] is (route == "A")
     # The unbanded build used to find the supports is gone, and only the final model is on disk.
     assert manifest["insets"]
+    assert_readers_accept_the_run(result, route, manifest, config)
+
+
+def assert_readers_accept_the_run(result, route, manifest, config):
+    """The manifest the build wrote and the index map of its config satisfy the readers, and render."""
+    entries = [
+        *config.terminal_index_map,
+        *config.domain_energy_index_map,
+        *config.surface_epr_index_map,
+    ]
+    index = {
+        "schema_version": INDEX_MAP_SCHEMA_VERSION,
+        "entries": entries,
+        "ground_boundary": config.ground_boundary_resolution,
+    }
+    metadata = {
+        "route": route,
+        "problem": "Electrostatic",
+        "route_a_thin_film": manifest.get("route_a_thin_film"),
+    }
+    RouteConsistency(
+        route,
+        metadata,
+        metadata,
+        manifest,
+        index,
+        count_index_entries(index),
+        "Electrostatic",
+    ).validate()
+    validate_config_index_correspondence(
+        config.config, index, count_index_entries(index), "Electrostatic"
+    )
+    summary = mesh_summary(manifest, problem="Eigenmode", fem_order=2)
+    html = mesh_summary_html(
+        summary, card_html=lambda label, value: f"{label}: {value}"
+    )
+    assert "features" in html and "Quality threshold" in html
+    assert summary["dof_estimate"]["status"] == "available"
 
 
 def test_route_b_gets_an_ma_ms_and_sa_band_family_per_support(route_b):
@@ -201,9 +247,9 @@ def test_port_footprint_is_checked_against_the_mesh(route_b, tmp_path):
 
 def lower_mesh_in_current_process_check(result, tmp_path):
     """Re-open ``palace.msh`` and run the structural validators on it, then break a host and expect a refusal."""
-    import gmsh
+    import gmsh  # noqa: PLC0415 -- Gmsh is optional and loaded only where a native mesh is checked.
 
-    from scgsim.palace.mesh.validation import (
+    from scgsim.palace.mesh.validation import (  # noqa: PLC0415 -- the validators are the unit under test, loaded beside Gmsh.
         validate_port_pec_node_intersections,
         validate_port_tetrahedron_face_conformality,
     )

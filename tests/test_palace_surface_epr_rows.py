@@ -70,6 +70,7 @@ def test_each_margin_row_names_its_bands_and_lineage_in_the_index(tmp_path):
         "row",
         "group",
         "interface_type",
+        "face_kind",
         "band",
         "side",
         "face_sides",

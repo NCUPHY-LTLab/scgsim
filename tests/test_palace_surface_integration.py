@@ -7,7 +7,7 @@ from palace_sgb_support import effective_input, sidecar_of, surface_epr_specs
 
 from scgsim.palace.mesh.physical_groups import groups_from_sidecar
 from scgsim.palace.preparation.surface_epr import build_surface_epr_postprocessing
-from scgsim.palace.results.surface_contract import validate_surface_mask_config
+from scgsim.palace.results.surface_contract import validate_surface_epr_config
 
 
 @pytest.fixture(scope="module")
@@ -53,7 +53,7 @@ def test_official_interface_type_and_film_parameters_are_real_config_fields(
     assert (
         index["entries"][0]["epr_spec"]["film_thickness_m"] == row["Thickness"] * 1e-6
     )
-    validate_surface_mask_config(config, index)
+    validate_surface_epr_config(config, index)
 
 
 @pytest.mark.parametrize(
@@ -71,7 +71,7 @@ def test_current_config_must_match_the_producer_index(groups, field, value):
     config, index = _produce(groups)
     config["Boundaries"]["Postprocessing"]["Dielectric"][0][field] = value
     with pytest.raises(ValueError, match="match"):
-        validate_surface_mask_config(config, index)
+        validate_surface_epr_config(config, index)
 
 
 @pytest.mark.parametrize(
@@ -93,13 +93,13 @@ def test_current_returned_inventory_cannot_omit_or_duplicate_fragments(groups, d
     elif defect == "duplicate_surface":
         index["entries"][1]["metadata"] = deepcopy(index["entries"][0]["metadata"])
     with pytest.raises(ValueError, match="disagree|duplicated"):
-        validate_surface_mask_config(config, index)
+        validate_surface_epr_config(config, index)
 
 
 def test_distinct_interfaces_remain_distinct_native_integrands(groups):
     """Distinct interfaces remain distinct native integrands."""
     config, index = _produce(groups, ("MA", "MS", "SA"))
-    validate_surface_mask_config(config, index)
+    validate_surface_epr_config(config, index)
     types = [
         row["Type"] for row in config["Boundaries"]["Postprocessing"]["Dielectric"]
     ]
@@ -107,11 +107,20 @@ def test_distinct_interfaces_remain_distinct_native_integrands(groups):
     assert set(types) == {"MA", "MS", "SA"}
 
 
-def test_historical_unmasked_reader_contract_remains_unchanged(groups):
-    """Historical unmasked reader contract remains unchanged."""
+def test_native_mask_rows_are_not_accepted(groups):
+    """Native Mask/Inset is not part of the stock integration, so a Mask row is rejected."""
     config, index = _produce(groups)
-    historical = deepcopy(index)
-    historical["entries"][0]["epr_spec"].pop("schema_version")
-    # Historical records are not relabelled as the current producer contract.
-    config["Boundaries"]["Postprocessing"]["Dielectric"][0].pop("Type")
-    validate_surface_mask_config(config, historical)
+    config["Boundaries"]["Postprocessing"]["Dielectric"][0]["Mask"] = {
+        "Type": "Inset",
+        "Margin": 0.5,
+    }
+    with pytest.raises(ValueError, match="Mask"):
+        validate_surface_epr_config(config, index)
+
+
+def test_a_film_without_the_current_schema_is_rejected(groups):
+    """The film snapshot has one schema; a snapshot without it is not read."""
+    config, index = _produce(groups)
+    index["entries"][0]["epr_spec"].pop("schema_version")
+    with pytest.raises(ValueError, match="schema"):
+        validate_surface_epr_config(config, index)
