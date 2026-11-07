@@ -8,7 +8,17 @@ from __future__ import annotations
 
 
 class SgbError(Exception):
-    """Base class of every SGB failure."""
+    """Base class of every SGB failure.
+
+    ``location_um`` is the ``(x, y)`` position in micrometres of the defect when the raising stage knows it,
+    so a caller can show it without reading the message.
+    """
+
+    def __init__(
+        self, message: str = "", *, location_um: tuple[float, float] | None = None
+    ) -> None:
+        super().__init__(message)
+        self.location_um = location_um
 
 
 class InputError(SgbError):

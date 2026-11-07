@@ -1,5 +1,12 @@
 """Source-facing semantic geometry API; input ownership remains with caller/components."""
 
+from scgsim.geometry.drc import (
+    LayoutCheckError,
+    LayoutCheckReport,
+    LayoutFinding,
+    SkippedRule,
+    simulation_drc,
+)
 from scgsim.geometry.models.common import (
     Coordinate,
     CurveKindLiteral,
@@ -60,6 +67,9 @@ __all__ = [
     "GeometryPlan",
     "GeometryPlanSnapshot",
     "InputSummary",
+    "LayoutCheckError",
+    "LayoutCheckReport",
+    "LayoutFinding",
     "LayoutPolygonSpec",
     "LumpedSupport",
     "PathInput",
@@ -68,6 +78,7 @@ __all__ = [
     "PortSheetRegionRecord",
     "RouteLiteral",
     "SemanticEntitySpec",
+    "SkippedRule",
     "SourceCurveSpec",
     "VacuumRegionSpec",
     "Vector3D",
@@ -76,5 +87,6 @@ __all__ = [
     "build_component_stack",
     "build_gds_stack_geometry_input",
     "build_gdsfactory_geometry_input",
+    "simulation_drc",
     "summarize_geometry_input",
 ]

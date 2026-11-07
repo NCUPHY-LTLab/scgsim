@@ -98,6 +98,7 @@ website:
       contents:
       - docs/course/working-model.qmd
       - docs/course/source-observations.qmd
+      - docs/course/layout-check.qmd
       - docs/course/aedt-inputs.qmd
       - docs/course/solver-observations.qmd
     - section: 執行並讀取結果

@@ -22,7 +22,7 @@ scgsim-status: "CONVERGING"
 
 ### scgsim.geometry
 
-`ApproximationProfile`, `BoundaryCurveChainSpec`, `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `GeometryPlan`, `GeometryPlanSnapshot`, `InputSummary`, `JunctionTerminalBinding`, `LayoutPolygonSpec`, `LumpedSupport`, `PathInput`, `PhysicalLayerDeclaration`, `PhysicalRepresentationPlan`, `PolygonRing`, `PortSheetOverlapRecord`, `PortSheetRegionRecord`, `RectangularJunctionSpec`, `RouteLiteral`, `SemanticEntitySpec`, `SourceCurveSpec`, `VacuumRegionSpec`, `Vector3D`, `apply_vacuum_region_to_stack`, `bind_source_curves`, `build_component_stack`, `build_gds_stack_geometry_input`, `build_gdsfactory_geometry_input`, `interpret_physical_geometry`, `interpret_physical_layers`, `summarize_geometry_input`, `with_rectangular_junctions`.
+`ApproximationProfile`, `BoundaryCurveChainSpec`, `Coordinate`, `CurveKindLiteral`, `CurveOrientationLiteral`, `GdsBoundaryReconstructionSpec`, `GeometryBuildInput`, `GeometryPlan`, `GeometryPlanSnapshot`, `InputSummary`, `JunctionTerminalBinding`, `LayoutCheckError`, `LayoutCheckReport`, `LayoutFinding`, `LayoutPolygonSpec`, `LumpedSupport`, `PathInput`, `PhysicalLayerDeclaration`, `PhysicalRepresentationPlan`, `PolygonRing`, `PortSheetOverlapRecord`, `PortSheetRegionRecord`, `RectangularJunctionSpec`, `RouteLiteral`, `SemanticEntitySpec`, `SkippedRule`, `SourceCurveSpec`, `VacuumRegionSpec`, `Vector3D`, `apply_vacuum_region_to_stack`, `bind_source_curves`, `build_component_stack`, `build_gds_stack_geometry_input`, `build_gdsfactory_geometry_input`, `interpret_physical_geometry`, `interpret_physical_layers`, `simulation_drc`, `summarize_geometry_input`, `with_rectangular_junctions`.
 
 ### scgsim.geometry.compiler
 
@@ -53,13 +53,13 @@ scgsim-status: "CONVERGING"
 | 來源 | SHA-256 |
 |---|---|
 | `scripts/generate_knowledge_reference.py` | `753ed86a4f527917bb62becaca2b55fc57020da2bac29f2088285b75d4eae5ee` |
-| `docs/knowledge-sources.json` | `1229ba7f8b43d098f11c103ce5d3c61103c8aef160b1b0b1fe2af5c45b6de9a4` |
+| `docs/knowledge-sources.json` | `e3d3b82ac2f01a30af7f5e1571527372b5df70b1f04a150dc16e976fd6960612` |
 | `src/scgsim/aedt/epr/workflow.py` | `e820d10b5c7ef94a160d1e985a2466da5952c49522d656651f35c9bc313f4162` |
 | `docs/api/analyze-epr-usage.md` | `39dd5b84a8154ae373bc495141fc82d015ea59aa2210793c072f5c0d6069ddba` |
 | `zh-TW/docs/api/analyze-epr-usage.md` | `5cdfd9f0aa8b57e1dbd3365b3907235c12b4a33d985358b6eb321a0d15c7675c` |
 | `src/scgsim/aedt/__init__.py` | `d9b6b6fdca3d03f0657a8fd73d11ca395d060a6388e0722a4c8705b5c814a039` |
 | `src/scgsim/aedt/specs/__init__.py` | `face6e5583a1326d130bb35845350c0363c31bd2bc277664b271b385e9ec5ec3` |
-| `src/scgsim/geometry/__init__.py` | `592524fe7659e8a336af03a3544270e996ccbbd510ea9e7cd16b0ae0bd668a35` |
+| `src/scgsim/geometry/__init__.py` | `1921dcf087a5d8da50bd2f1a4a37025b6a4f6b05cffbb68f2657e11d422b754c` |
 | `src/scgsim/geometry/compiler/__init__.py` | `5483f9a15796f25576abba930e87c08690961d64a5ba748261e2c24bdb880a69` |
 | `src/scgsim/geometry/models/__init__.py` | `2fec191dd1d7708d1f7effe40cd01882d86d71a8263b1f2008cef33dccf692ad` |
 | `src/scgsim/palace/__init__.py` | `44ebdfe7b799c2916d42d27630782a5e39cecb0e29f7dff13f190757cbe8d14f` |
@@ -101,6 +101,7 @@ README 與英文 `docs/*.qmd` 會收錄於離線 bundle；以下文件僅保留�
 - `zh-TW/docs/course/aedt-saved-fields.qmd`
 - `zh-TW/docs/course/execute.qmd`
 - `zh-TW/docs/course/installation.qmd`
+- `zh-TW/docs/course/layout-check.qmd`
 - `zh-TW/docs/course/offline-epr.qmd`
 - `zh-TW/docs/course/palace-eigenmode.qmd`
 - `zh-TW/docs/course/palace-electrostatic.qmd`

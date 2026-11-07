@@ -102,7 +102,8 @@ def _owning_conductor(
     if len({p.net_id for p in conductors}) > 1:
         names = ", ".join(sorted({p.entity_id for p in conductors}))
         raise OverlapError(
-            f"different-Net conductors overlap near {format_location(where, grid)}: {names}"
+            f"different-Net conductors overlap near {format_location(where, grid)}: {names}",
+            location_um=location_um(where, grid),
         )
     top = max(p.priority for p in conductors)
     leaders = sorted({p.entity_id for p in conductors if p.priority == top})
@@ -111,7 +112,8 @@ def _owning_conductor(
         raise OverlapError(
             f"same-Net entities {' and '.join(leaders)} overlap near {format_location(where, grid)} with "
             f"equal priority {top}: declare distinct entity priorities (SemanticEntitySpec.priority) so "
-            f"that exactly one of them owns the overlap; {priority_source(tied)}"
+            f"that exactly one of them owns the overlap; {priority_source(tied)}",
+            location_um=location_um(where, grid),
         )
     return next(p for p in conductors if p.priority == top)
 
@@ -128,7 +130,8 @@ def _resolve_solution(hit: list[PrismRecord], where: RepPoint, grid: Grid) -> Do
         raise OverlapError(
             "ambiguous equal-priority solution regions of different materials near "
             f"{format_location(where, grid)}: {names}; declare distinct entity priorities "
-            f"(SemanticEntitySpec.priority); {priority_source(winners)}"
+            f"(SemanticEntitySpec.priority); {priority_source(winners)}",
+            location_um=location_um(where, grid),
         )
     owner = max(winners, key=lambda p: p.entity_id)
     return Domain(owner.material_kind, owner.material, owner=owner.entity_id)
@@ -202,7 +205,8 @@ def resolve_owner(
         if len(ports) > 1 or len(hit) - len(ports) > len(landing):
             names = ", ".join(sorted(p.entity_id for p in hit))
             raise OverlapError(
-                f"a port sheet overlaps another sheet near {format_location(where, grid)}: {names}"
+                f"a port sheet overlaps another sheet near {format_location(where, grid)}: {names}",
+                location_um=location_um(where, grid),
             )
         if not landing:
             return SheetOwner("port", ports[0].entity_id)
@@ -249,8 +253,12 @@ def without_landings(
     return owner, kept
 
 
+def location_um(where: RepPoint, grid: Grid) -> tuple[float, float]:
+    """A point of the plane in micrometres."""
+    return grid.to_um(where[0] / where[2]), grid.to_um(where[1] / where[2])
+
+
 def format_location(where: RepPoint, grid: Grid) -> str:
     """A point of the plane in micrometres, for error messages."""
-    x = grid.to_um(where[0] / where[2])
-    y = grid.to_um(where[1] / where[2])
+    x, y = location_um(where, grid)
     return f"({x:.4f}, {y:.4f}) um"

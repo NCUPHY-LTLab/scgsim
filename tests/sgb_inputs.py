@@ -449,15 +449,21 @@ def _plan_level(name: str, material: str, interval: tuple[float, float], role: s
     )
 
 
-def electrode_plan(monkeypatch, *, gap_um: float = 10.0, same_net: bool = False):
-    """A real, unprepared ``GeometryPlan``: a 20 um pad and a 30 um electrode ``gap_um`` apart.
+@dataclass(frozen=True)
+class ElectrodeSource:
+    """The inputs of a ``GeometryPlan``: a component, its layer stack and its material records."""
 
-    The Nets are A and B, or both A with ``same_net``.  A negative ``gap_um`` makes them overlap.  The
-    component, layer stack and material records are small public stand-ins for a PDK.
+    component: Any
+    layer_stack: Any
+    material_records: dict[str, dict[str, Any]]
+
+
+def electrode_source(monkeypatch, *, gap_um: float = 10.0) -> ElectrodeSource:
+    """A 20 um pad and a 30 um electrode ``gap_um`` apart; a negative gap makes them overlap.
+
+    The component, layer stack and material records are small public stand-ins for a PDK.
     """
     import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
-
-    from scgsim.geometry import GeometryPlan  # noqa: PLC0415 -- the plan needs the optional layout stack above
 
     # Restore process-local PDK state after this public generic fixture.
     monkeypatch.setattr(
@@ -488,15 +494,27 @@ def electrode_plan(monkeypatch, *, gap_um: float = 10.0, same_net: bool = False)
             "metal": _plan_level("metal", "PEC", (0, 0.2), "conductor"),
         }
     )
+    materials = {
+        "PEC": {"kind": "conductor"},
+        "vacuum": {"kind": "vacuum"},
+        "Si": {"kind": "dielectric", "permittivity": 11.45},
+    }
+    return ElectrodeSource(component, stack, materials)
+
+
+def electrode_plan(monkeypatch, *, gap_um: float = 10.0, same_net: bool = False):
+    """A real, unprepared ``GeometryPlan`` over :func:`electrode_source`.
+
+    The Nets are A and B, or both A with ``same_net``.  A negative ``gap_um`` makes them overlap.
+    """
+    from scgsim.geometry import GeometryPlan  # noqa: PLC0415 -- the plan needs the optional layout stack
+
+    source = electrode_source(monkeypatch, gap_um=gap_um)
     plan = GeometryPlan(
-        component,
+        source.component,
         root_id="chip",
-        layer_stack=stack,
-        material_records={
-            "PEC": {"kind": "conductor"},
-            "vacuum": {"kind": "vacuum"},
-            "Si": {"kind": "dielectric", "permittivity": 11.45},
-        },
+        layer_stack=source.layer_stack,
+        material_records=source.material_records,
         coupon_padding_um=10,
         grid_size_um=GRID_UM,
     )

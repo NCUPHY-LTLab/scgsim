@@ -272,6 +272,7 @@ class _SourceLowering:
                 job = source_recipe_job(
                     lower_layer_record,
                     record,
+                    subject=record.get("semantic_id"),
                     materials=self.source.stack.materials,
                     source_polygons=self.source.polygons_by_layer,
                     cell_bounds_um=self.source.cell_bounds_um,

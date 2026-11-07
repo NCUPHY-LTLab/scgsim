@@ -513,6 +513,7 @@ class GeometryPlan:
                     job = source_recipe_job(
                         selector,
                         entity_from_layer_record(record, materials=stack["materials"]),
+                        subject=record["semantic_id"],
                         source_cell=source.source_cells[cell.name],
                         transform=transform,
                         excluded_reference_indexes=source.child_reference_indexes[path],
@@ -556,6 +557,7 @@ class GeometryPlan:
                         job = source_recipe_job(
                             occurrence_include_polygon,
                             contribution,
+                            subject=f"{path}/{contribution['source_local_id']}",
                             source_cell=source.source_cells[cell.name],
                             transform=transform,
                             excluded_reference_indexes=source.child_reference_indexes[
@@ -589,6 +591,7 @@ class GeometryPlan:
                     job = source_recipe_job(
                         occurrence_port_polygon,
                         record,
+                        subject=record["name"],
                         source_cell=source.source_cells[cell.name],
                         transform=transform,
                         excluded_reference_indexes=source.child_reference_indexes[path],

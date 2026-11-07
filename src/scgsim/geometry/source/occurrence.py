@@ -40,6 +40,18 @@ class SourceRecipeJob:
     comparison_error: str | None = None
     error: Exception | None = None
     traceback: Any = None
+    subject: str | None = None  # the Entity, contribution or port the recipe extracts
+
+
+class SourceRecipeError(ValueError):
+    """A source recipe refused its input; ``subject`` names what it was extracting.
+
+    The message is the recipe's own, so callers that match on it are unaffected.
+    """
+
+    def __init__(self, message: str, *, subject: str) -> None:
+        super().__init__(message)
+        self.subject = subject
 
 
 def source_recipe_job(  # noqa: PLR0913 -- acquisition and comparison controls stay distinct from the forwarded recipe arguments
@@ -50,6 +62,7 @@ def source_recipe_job(  # noqa: PLR0913 -- acquisition and comparison controls s
     excluded_reference_indexes=(),
     expected=None,
     comparison_error=None,
+    subject=None,
     **kwargs,
 ):
     """Prepare worker-owned inputs on the source thread, before pool dispatch."""
@@ -65,7 +78,12 @@ def source_recipe_job(  # noqa: PLR0913 -- acquisition and comparison controls s
             for layer, polygons in source_polygons.items()
         }
     return SourceRecipeJob(
-        function, deepcopy(args), copied, deepcopy(expected), comparison_error
+        function,
+        deepcopy(args),
+        copied,
+        deepcopy(expected),
+        comparison_error,
+        subject=subject,
     )
 
 
@@ -79,9 +97,14 @@ def run_source_recipe(job):
     """Execute one source recipe and preserve its ordered failure behavior."""
     if job.error is not None:
         raise job.error.with_traceback(job.traceback)
-    result = job.function(*job.args, **job.kwargs)
-    if job.comparison_error is not None and result != job.expected:
-        raise ValueError(job.comparison_error)
+    try:
+        result = job.function(*job.args, **job.kwargs)
+        if job.comparison_error is not None and result != job.expected:
+            raise ValueError(job.comparison_error)
+    except ValueError as error:
+        if job.subject is None:
+            raise
+        raise SourceRecipeError(str(error), subject=job.subject) from error
     return result
 
 

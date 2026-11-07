@@ -124,7 +124,8 @@ def _raise_contact(
         f"different-Net contact between {' and '.join(parts)} at "
         f"({grid.to_um(point[0]):.4f}, {grid.to_um(point[1]):.4f}) um "
         f"on {layer.plane} (grid g = {grid.size_um} um; "
-        "a gap smaller than the grid closes when the sources snap)"
+        "a gap smaller than the grid closes when the sources snap)",
+        location_um=(grid.to_um(point[0]), grid.to_um(point[1])),
     )
 
 
@@ -154,7 +155,8 @@ def _raise_pinch(
         f"non-manifold pinch: {what} touches itself along the vertical edge at "
         f"({grid.to_um(point[0]):.4f}, {grid.to_um(point[1]):.4f}) um, "
         f"z {float(z_lo)}..{float(z_hi)} um ({layer.plane}): two cells of one domain "
-        "meet only at a vertex; give them a shared edge or separate them"
+        "meet only at a vertex; give them a shared edge or separate them",
+        location_um=(grid.to_um(point[0]), grid.to_um(point[1])),
     )
 
 

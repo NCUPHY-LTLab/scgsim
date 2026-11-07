@@ -26,6 +26,11 @@ _FORBIDDEN_AUTHOR_KEYS = {
     "physical_group_name",
 }
 
+GROUND_CONTRIBUTION_KEYS = frozenset(
+    {"local_id", "plane_id", "level", "layer", "selector_point_um"}
+)
+"""The exact keys of one ``ground_plane_contributions`` record (``docs/geometry-sgb.qmd``)."""
+
 
 def source_path(value: Any) -> str:
     """Validate one slash-separated component or occurrence identity."""
@@ -171,16 +176,16 @@ class GeometryPlanStackAssembler:
         for path, (cell, _, transform) in self.instances.items():
             semantics = component_semantics(cell, path)
             declarations.extend(
-                _entity_declaration(path, raw, transform, net_owners)
+                entity_declaration(path, raw, transform, net_owners)
                 for raw in semantics.get("conductor_regions", ())
             )
             for raw in semantics.get("ground_plane_contributions", ()):
-                contribution = _ground_contribution(
+                contribution = ground_contribution(
                     path, raw, transform, contribution_ids
                 )
                 contributions.append(contribution)
             for raw in semantics.get("ports", ()):
-                ports.append(_source_port(path, cell, raw, transform, len(ports) + 1))
+                ports.append(source_port(path, cell, raw, transform, len(ports) + 1))
         return declarations, ports, contributions
 
     def _validate_physical_planes(
@@ -260,12 +265,13 @@ class GeometryPlanStackAssembler:
             )
 
 
-def _entity_declaration(
+def entity_declaration(
     path: str,
     raw: Any,
     transform: tuple[float, ...],
     net_owners: Mapping[str, str],
 ) -> dict[str, Any]:
+    """Qualify one ``conductor_regions`` record with its occurrence path, Net and transformed selectors."""
     if not isinstance(raw, Mapping):
         raise TypeError(f"{path} conductor records must be mappings")
     if set(raw) & _FORBIDDEN_AUTHOR_KEYS:
@@ -300,19 +306,14 @@ def _entity_declaration(
     }
 
 
-def _ground_contribution(
+def ground_contribution(
     path: str,
     raw: Any,
     transform: tuple[float, ...],
     contribution_ids: set[tuple[str, str]],
 ) -> tuple[str, dict[str, Any]]:
-    if not isinstance(raw, Mapping) or set(raw) != {
-        "local_id",
-        "plane_id",
-        "level",
-        "layer",
-        "selector_point_um",
-    }:
+    """Validate one ``ground_plane_contributions`` record; return its target plane ID and the transformed record."""
+    if not isinstance(raw, Mapping) or set(raw) != GROUND_CONTRIBUTION_KEYS:
         raise ValueError(
             f"{path} ground contribution needs local_id, plane_id, level, layer, selector_point_um"
         )
@@ -337,13 +338,14 @@ def _ground_contribution(
     }
 
 
-def _source_port(
+def source_port(
     path: str,
     cell: Any,
     raw: Any,
     transform: tuple[float, ...],
     port_index: int,
 ) -> dict[str, Any]:
+    """Validate one ``ports`` record against the cell's own port and return its source-sheet record."""
     if not isinstance(raw, Mapping) or set(raw) != {
         "name",
         "layer",

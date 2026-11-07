@@ -1,0 +1,64 @@
+---
+title: "Check a layout from its own tests"
+description: "Call simulation_drc in a layout repository's pytest to see every geometry finding with its layer and location."
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/layout-check"
+---
+
+`simulation_drc` answers "will this layout simulate?" while you are still drawing it. It runs the checks and the source and SGB stages that a Palace Route B run uses, stops before meshing, and returns every finding instead of the first refusal. Each finding names the rule, the layer, the Entity and the position in micrometres. A layout that passes reaches `mesh()` without a geometry refusal.
+
+## Call it from pytest
+
+Assemble the component the way you assemble it for a simulation, then pass the same plan inputs. `instances` registers each placed child by the path `GeometryPlan.register_instance` takes, and `nets` maps each Net to its qualified Entity IDs.
+
+```python
+from scgsim.geometry import simulation_drc
+
+
+def test_qubit_simulates(assembled, layer_stack, material_records, children, nets):
+    report = simulation_drc(
+        assembled,
+        layer_stack=layer_stack,
+        material_records=material_records,
+        instances=children,      # {"chip/device": ref, ...}
+        nets=nets,               # {"Ground": ("chip/ground",), ...}
+        inset_margins_um=(0.5, 1.0),  # optional: also checks the Surface-EPR bands
+    )
+    report.raise_for_findings()
+```
+
+`raise_for_findings()` raises one `LayoutCheckError` whose message lists every finding, so one failing test shows the whole to-do list. `report.ok` and `report.findings` serve a test that wants to assert on a single rule. `print(report)` gives the plain text a terminal or CI log shows:
+
+```text
+layout check: 1 finding(s)
+[polygon-validity] layer 2/0, entity chip/device/Disk, at (89.7810, -64.4030) um
+    polygon is invalid: Ring Self-intersection[89.781 -64.403]
+    fix: redraw the outline so that it does not cross itself
+[sgb-structure] skipped: physical interpretation refused the layout
+```
+
+## What each rule checks
+
+| Rule | Reports |
+|---|---|
+| `polygon-validity` | Self-intersecting, zero-area or vertex-repeating polygons of the flattened component, and vertices that sit off the source grid |
+| `semantic-contract` | `component_semantics` and `ground_plane_contributions` keys that differ from the [documented contract](../geometry-sgb.qmd#component-to-backend-geometry-contract), ports and levels the layer stack does not declare, registered instances that do not exist |
+| `physical-interpretation` | The first refusal of `GeometryPlan` construction, `prepare()` and the physical interpretation |
+| `sgb-structure` | The first refusal of SGB's structural validation, and model edges or faces narrower than `min_feature_um` |
+| `surface-epr-bands` | The first refusal while cutting the bands for `inset_margins_um` |
+
+The first two rules read the component and always report. The last three are the production stages, run in order. A stage that refuses ends the run, and every later stage appears in the report as *skipped* with the reason; a skipped rule is never a passed rule. The production stages also wait while `semantic-contract` has findings, because they would only refuse the same record.
+
+## Inputs the check needs from you
+
+The signature carries what `GeometryPlan` takes. These keywords supply the rest, each with the plan's own behavior as its default.
+
+| Keyword | Meaning |
+|---|---|
+| `root_id` | First segment of every path in `instances`; `"chip"` by default |
+| `coupon_padding_um` | The plan's padding around the component; `0.0` by default |
+| `vacuum_padding_um` | What `GeometryPlan.set_vacuum_region` takes; `None` sets no region, so give it when the layer stack declares none |
+| `min_feature_um` | The narrowest horizontal edge or face you accept. SCGSim sets no width limit, so without this keyword no sliver is reported |
+
+The check uses Route B with the default approximation profile, as `EigenmodeSim` does unless you select Route A.

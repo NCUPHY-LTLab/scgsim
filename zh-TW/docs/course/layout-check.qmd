@@ -1,0 +1,65 @@
+---
+lang: zh-TW
+title: "在版圖自己的測試中檢查版圖"
+description: "在版圖儲存庫的 pytest 中呼叫 simulation_drc，取得每項幾何發現及其圖層與位置。"
+scgsim-kind: "course"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/course/layout-check"
+---
+
+`simulation_drc` 讓你在繪製版圖時就能回答「這個版圖能模擬嗎？」。它執行 Palace Route B 所用的檢查與來源、SGB 階段，在建立網格前停止，並回報所有發現，而不是只回報第一個拒絕。每項發現都指出規則、圖層、Entity 及以微米為單位的位置。通過檢查的版圖執行 `mesh()` 時不會遇到幾何拒絕。
+
+## 在 pytest 中呼叫
+
+以模擬時組裝元件的方式組裝，再傳入相同的 plan 輸入。`instances` 以 `GeometryPlan.register_instance` 接受的路徑登錄每個放置的子元件，`nets` 把每個 Net 對應到完整限定的 Entity ID。
+
+```python
+from scgsim.geometry import simulation_drc
+
+
+def test_qubit_simulates(assembled, layer_stack, material_records, children, nets):
+    report = simulation_drc(
+        assembled,
+        layer_stack=layer_stack,
+        material_records=material_records,
+        instances=children,      # {"chip/device": ref, ...}
+        nets=nets,               # {"Ground": ("chip/ground",), ...}
+        inset_margins_um=(0.5, 1.0),  # 選用：同時檢查 Surface-EPR 能帶
+    )
+    report.raise_for_findings()
+```
+
+`raise_for_findings()` 會擲出一個 `LayoutCheckError`，訊息列出所有發現，所以一次失敗的測試就能看到完整的待辦清單。若測試只想斷言單一規則，可使用 `report.ok` 與 `report.findings`。`print(report)` 給出終端機或 CI 記錄中的純文字：
+
+```text
+layout check: 1 finding(s)
+[polygon-validity] layer 2/0, entity chip/device/Disk, at (89.7810, -64.4030) um
+    polygon is invalid: Ring Self-intersection[89.781 -64.403]
+    fix: redraw the outline so that it does not cross itself
+[sgb-structure] skipped: physical interpretation refused the layout
+```
+
+## 各規則檢查的內容
+
+| 規則 | 回報內容 |
+|---|---|
+| `polygon-validity` | 攤平元件中自我相交、面積為零或重複頂點的多邊形，以及不在來源網格上的頂點 |
+| `semantic-contract` | 與[已記載契約](../geometry-sgb.qmd#component-to-backend-geometry-contract)不符的 `component_semantics` 與 `ground_plane_contributions` 鍵、圖層堆疊未宣告的連接埠與層級、不存在的已登錄實例 |
+| `physical-interpretation` | `GeometryPlan` 建構、`prepare()` 與物理詮釋的第一個拒絕 |
+| `sgb-structure` | SGB 結構驗證的第一個拒絕，以及比 `min_feature_um` 更窄的模型邊或面 |
+| `surface-epr-bands` | 依 `inset_margins_um` 切出能帶時的第一個拒絕 |
+
+前兩項規則讀取元件，一律回報。後三項是依序執行的正式階段。某階段拒絕就結束執行，之後的每個階段在報告中標示為*略過*並附原因；略過的規則絕不算通過。`semantic-contract` 有發現時，正式階段也會等待，因為它們只會對同一筆記錄再拒絕一次。
+
+## 檢查需要你提供的輸入
+
+簽章帶有 `GeometryPlan` 所需的輸入。下列關鍵字補足其餘部分，預設值就是 plan 本身的行為。
+
+| 關鍵字 | 意義 |
+|---|---|
+| `root_id` | `instances` 中每個路徑的第一段；預設為 `"chip"` |
+| `coupon_padding_um` | plan 在元件四周的邊界；預設為 `0.0` |
+| `vacuum_padding_um` | `GeometryPlan.set_vacuum_region` 接受的值；`None` 表示不設定真空區域，圖層堆疊未宣告真空時請提供 |
+| `min_feature_um` | 你可接受的最窄水平邊或面。SCGSim 不設定寬度下限，因此未提供此關鍵字時不會回報任何細長結構 |
+
+檢查使用 Route B 與預設近似設定檔，與 `EigenmodeSim` 在未選 Route A 時相同。
