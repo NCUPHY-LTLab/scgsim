@@ -29,14 +29,17 @@ def check(monkeypatch, *, gap_um=10.0, edit=None, **options):
 
 
 def rules(report):
+    """The rule of each finding, in report order."""
     return [finding.rule for finding in report.findings]
 
 
 def skipped(report):
+    """The reason each skipped rule did not run, by rule."""
     return {item.rule: item.reason for item in report.skipped}
 
 
 def test_clean_component_is_ok(monkeypatch):
+    """A clean component reports no finding and renders as ok."""
     report = check(monkeypatch)
 
     assert report.ok
@@ -46,6 +49,7 @@ def test_clean_component_is_ok(monkeypatch):
 
 
 def test_clean_component_with_margins_runs_the_band_rule(monkeypatch):
+    """With margins, a clean component also runs and passes the band rule."""
     report = check(monkeypatch, inset_margins_um=(0.5, 1.0))
 
     assert report.ok
@@ -53,6 +57,7 @@ def test_clean_component_with_margins_runs_the_band_rule(monkeypatch):
 
 
 def test_bands_rule_is_skipped_without_margins(monkeypatch):
+    """Without margins the band rule is skipped, which is neither a failure nor a pass."""
     report = check(monkeypatch)
 
     assert skipped(report) == {"surface-epr-bands": "inset_margins_um was not given"}
@@ -60,6 +65,8 @@ def test_bands_rule_is_skipped_without_margins(monkeypatch):
 
 
 def test_rule_1_self_intersecting_polygon(monkeypatch):
+    """A bow tie is reported with its layer and crossing point."""
+
     def bow_tie(component):
         component.add_polygon(((40, 0), (50, 10), (50, 0), (40, 10)), layer=(3, 0))
 
@@ -77,12 +84,15 @@ class DegenerateRings:
     name = "degenerate"
 
     def dup(self):
+        """The ring is already flat; flattening a copy changes nothing."""
         return self
 
     def flatten(self):
+        """Nothing to flatten: the cell has no references."""
         pass
 
     def write_gds(self, path):
+        """Write the degenerate rings as they are, without gdsfactory's clean-up."""
         import gdstk  # noqa: PLC0415 -- same optional stack as the fixture
 
         cell = gdstk.Cell(self.name)
@@ -96,6 +106,7 @@ class DegenerateRings:
 
 
 def test_rule_1_zero_area_and_repeated_vertex():
+    """A collapsed ring and a ring with a repeated vertex are each reported once."""
     findings = polygon_findings(DegenerateRings(), {(3, 0): ["chip/line"]})
 
     by_layer = {finding.layer: finding for finding in findings}
@@ -107,7 +118,9 @@ def test_rule_1_zero_area_and_repeated_vertex():
     assert by_layer[(4, 0)].location_um == (30.0, 0.0)
 
 
-def test_rule_1_vertices_off_the_grid(monkeypatch):
+def test_rule_1_ignores_vertices_off_the_grid(monkeypatch):
+    """The source stage rounds off-grid vertices, so a rotated instance alone is no finding."""
+
     def rotated(component):
         import gdsfactory as gf  # noqa: PLC0415 -- same optional stack as the fixture
 
@@ -117,12 +130,12 @@ def test_rule_1_vertices_off_the_grid(monkeypatch):
 
     report = check(monkeypatch, edit=rotated)
 
-    (finding,) = [item for item in report.findings if item.rule == "polygon-validity"]
-    assert finding.layer == (3, 0)
-    assert "off the 0.001 um source grid" in finding.message
+    assert not [item for item in report.findings if item.rule == "polygon-validity"]
 
 
 def test_rule_2_semantic_contract_keys(monkeypatch):
+    """Ground-contribution keys that differ from the contract are reported."""
+
     def wrong_keys(component):
         component.info["component_semantics"]["ground_plane_contributions"] = [
             {"local_id": "g", "plane_id": "P", "mask_layer": [1, 0]}
@@ -138,6 +151,8 @@ def test_rule_2_semantic_contract_keys(monkeypatch):
 
 
 def test_rule_2_unknown_top_level_key(monkeypatch):
+    """An unknown top-level semantics key is reported."""
+
     def extra(component):
         component.info["component_semantics"]["nets"] = {}
 
@@ -150,6 +165,8 @@ def test_rule_2_unknown_top_level_key(monkeypatch):
 
 
 def test_rule_2_port_and_level_must_be_declared(monkeypatch):
+    """A port or level the layer stack does not declare is reported."""
+
     def bad_records(component):
         semantics = component.info["component_semantics"]
         semantics["conductor_regions"][0]["level"] = "no_such_level"
@@ -168,9 +185,10 @@ def test_rule_2_port_and_level_must_be_declared(monkeypatch):
 
 
 def test_rule_2_registered_instance_must_exist(monkeypatch):
+    """A registered reference that is not placed in the component is reported."""
     source = electrode_source(monkeypatch)
     other = electrode_source(monkeypatch)
-    import gdsfactory as gf
+    import gdsfactory as gf  # noqa: PLC0415 -- optional stack, skipped above when absent
 
     child = gf.Component()
     child.info["component_semantics"] = {"schema_version": 2}
@@ -191,6 +209,8 @@ def test_rule_2_registered_instance_must_exist(monkeypatch):
 
 
 def test_rule_2_findings_skip_the_production_stages(monkeypatch):
+    """Semantic findings skip rules 3 to 5 instead of letting them refuse the same record."""
+
     def extra(component):
         component.info["component_semantics"]["nets"] = {}
 
@@ -205,6 +225,7 @@ def test_rule_2_findings_skip_the_production_stages(monkeypatch):
 
 
 def test_rule_3_plan_refusal_is_a_finding_and_skips_the_rest(monkeypatch):
+    """A plan refusal becomes a finding and the later rules are skipped."""
     report = check(
         monkeypatch, nets={"A": ("chip/no_such_entity",)}, inset_margins_um=(1.0,)
     )
@@ -217,6 +238,8 @@ def test_rule_3_plan_refusal_is_a_finding_and_skips_the_rest(monkeypatch):
 
 
 def test_rule_3_names_the_entity_and_layer_of_a_source_refusal(monkeypatch):
+    """A source refusal names its Entity and layer."""
+
     def unmatched_selector(component):
         region = component.info["component_semantics"]["conductor_regions"][0]
         region["geometry"] = {"selector_point_um": [500.0, 500.0]}
@@ -231,6 +254,7 @@ def test_rule_3_names_the_entity_and_layer_of_a_source_refusal(monkeypatch):
 
 
 def test_rule_4_sgb_refusal_carries_its_location(monkeypatch):
+    """An SGB refusal carries the location the error reports."""
     report = check(monkeypatch, gap_um=-5.0, inset_margins_um=(0.5,))
 
     (finding,) = report.findings
@@ -241,6 +265,7 @@ def test_rule_4_sgb_refusal_carries_its_location(monkeypatch):
 
 
 def test_rule_4_touching_nets_name_the_contact_point(monkeypatch):
+    """Two Nets that touch are reported at the contact point."""
     report = check(monkeypatch, gap_um=0.0)
 
     (finding,) = report.findings
@@ -250,6 +275,7 @@ def test_rule_4_touching_nets_name_the_contact_point(monkeypatch):
 
 
 def test_rule_4_slivers_only_count_against_the_callers_limit(monkeypatch):
+    """Slivers are findings only under the limit the caller sets."""
     assert check(monkeypatch).ok
     narrow = check(monkeypatch, gap_um=0.5, min_feature_um=1.0)
 
@@ -260,6 +286,7 @@ def test_rule_4_slivers_only_count_against_the_callers_limit(monkeypatch):
 
 
 def test_rule_5_band_margins_off_the_grid(monkeypatch):
+    """Margins off the model grid are a band-rule finding."""
     report = check(monkeypatch, inset_margins_um=(0.0005,))
 
     (finding,) = report.findings
@@ -267,6 +294,8 @@ def test_rule_5_band_margins_off_the_grid(monkeypatch):
 
 
 def test_raise_for_findings_lists_every_finding(monkeypatch):
+    """raise_for_findings lists every finding in one error."""
+
     def two_defects(component):
         component.add_polygon(((40, 0), (50, 10), (50, 0), (40, 10)), layer=(3, 0))
         component.add_polygon(((60, 0), (70, 10), (70, 0), (60, 10)), layer=(4, 0))

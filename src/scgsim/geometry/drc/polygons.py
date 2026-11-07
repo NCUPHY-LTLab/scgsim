@@ -1,21 +1,18 @@
 """Rule 1: every source polygon of the flattened component is a usable ring.
 
-Owns the per-polygon checks: self-intersection, zero area, repeated vertices and off-grid vertices. It
-works on the component's own GDS, never on a later stage's result, so it reports whatever the stages
-after it do.
+Owns the per-polygon checks: self-intersection, zero area and repeated vertices. It works on the
+component's own GDS, never on a later stage's result, so it reports whatever the stages after it do.
 
-Two views of the same component are read. Validity is judged on the component flattened by
-gdsfactory, which rounds every vertex to the database unit; a ring that collapses or crosses itself in
-that rounding is invalid here, as it would be when the source stage rounds it. Off-grid vertices are
-judged on the references expanded exactly, before any rounding.
+Validity is judged on the component flattened by gdsfactory, which rounds every vertex to the database
+unit; a ring that collapses or crosses itself in that rounding is invalid here, as it would be when the
+source stage rounds it. Vertices off the grid are not findings: the source stage rounds them, and a ring
+that rounding breaks is reported here or by the physical-interpretation rule.
 """
 
 from __future__ import annotations
 
 import re
-from collections import defaultdict
 from collections.abc import Iterator, Mapping, Sequence
-from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -23,7 +20,6 @@ from typing import Any
 import numpy as np
 
 from scgsim.geometry.drc.report import POLYGON_VALIDITY, Layer, LayoutFinding, Location
-from scgsim.geometry.sgb.records.grid import Grid
 
 _REASON_POINT = re.compile(r"\[(\S+) (\S+)\]")
 
@@ -42,26 +38,21 @@ def polygon_findings(
 
     flat = component.dup()
     flat.flatten()
-    _, flat_polygons = _gds_polygons(flat)
     findings: list[LayoutFinding] = []
-    for polygon in flat_polygons:
+    for polygon in _gds_polygons(flat):
         layer = (polygon.layer, polygon.datatype)
         findings.extend(_ring_findings(np.asarray(polygon.points), layer, owner(layer)))
-    grid, exact_polygons = _gds_polygons(component)
-    findings.extend(_off_grid_findings(exact_polygons, grid, owner))
     return findings
 
 
-def _gds_polygons(component: Any) -> tuple[Grid, list[Any]]:
-    """The component's polygons with references expanded, and the grid of its database unit."""
+def _gds_polygons(component: Any) -> list[Any]:
+    """The component's polygons with references expanded."""
     import gdstk  # noqa: PLC0415 - optional layout dependency, needed only by a layout check
 
     with TemporaryDirectory(prefix="scgsim-drc-") as folder:
         gds_file = Path(folder) / "component.gds"
         component.write_gds(gds_file)
         library = gdstk.read_gds(str(gds_file))
-    # The pipeline takes the database unit as its model grid (``source_grid_context``).
-    grid = Grid(float(Decimal(str(library.precision)) * Decimal("1000000")))
     # KLayout also writes a ``$$$CONTEXT_INFO$$$`` metadata cell with one zero-area polygon on 0/0, and
     # gdstk lists it as the top-level cell; the component's own cell is found by name.
     top = next(
@@ -69,7 +60,7 @@ def _gds_polygons(component: Any) -> tuple[Grid, list[Any]]:
         for cell in library.cells
         if isinstance(cell, gdstk.Cell) and cell.name == component.name
     )
-    return grid, top.get_polygons()
+    return top.get_polygons()
 
 
 def _ring_findings(points: Any, layer: Layer, entity: str) -> Iterator[LayoutFinding]:
@@ -105,33 +96,6 @@ def _ring_findings(points: Any, layer: Layer, entity: str) -> Iterator[LayoutFin
             f"polygon is invalid: {reason}",
             "redraw the outline so that it does not cross itself",
         )
-
-
-def _off_grid_findings(
-    polygons: Sequence[Any], grid: Grid, owner: Any
-) -> Iterator[LayoutFinding]:
-    """One finding per layer that has vertices off the grid; instances rotated off 90 degrees cause them."""
-    off_grid: dict[Layer, list[Location]] = defaultdict(list)
-    for polygon in polygons:
-        layer = (polygon.layer, polygon.datatype)
-        off_grid[layer].extend(_off_grid_vertices(polygon.points, grid))
-    for layer, vertices in off_grid.items():
-        if vertices:
-            yield _finding(
-                layer,
-                owner(layer),
-                vertices[0],
-                f"{len(vertices)} vertices lie off the {grid.size_um} um source grid; the source stage rounds them",
-                "place instances at multiples of the grid and rotate them by multiples of 90 degrees",
-            )
-
-
-def _off_grid_vertices(points: Any, grid: Grid) -> list[Location]:
-    return [
-        _vertex(point)
-        for point in points
-        if any(grid.lattice_units(float(value)) is None for value in point)
-    ]
 
 
 def _reason_location(reason: str) -> Location | None:

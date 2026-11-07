@@ -43,7 +43,7 @@ layout check: 1 finding(s)
 
 | 規則 | 回報內容 |
 |---|---|
-| `polygon-validity` | 攤平元件中自我相交、面積為零或重複頂點的多邊形，以及不在來源網格上的頂點 |
+| `polygon-validity` | 攤平元件中自我相交、面積為零或重複頂點的多邊形 |
 | `semantic-contract` | 與[已記載契約](../geometry-sgb.qmd#component-to-backend-geometry-contract)不符的 `component_semantics` 與 `ground_plane_contributions` 鍵、圖層堆疊未宣告的連接埠與層級、不存在的已登錄實例 |
 | `physical-interpretation` | `GeometryPlan` 建構、`prepare()` 與物理詮釋的第一個拒絕 |
 | `sgb-structure` | SGB 結構驗證的第一個拒絕，以及比 `min_feature_um` 更窄的模型邊或面 |

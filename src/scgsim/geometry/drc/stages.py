@@ -34,6 +34,7 @@ from scgsim.geometry.sgb.errors import (
     NonManifoldError,
     OverlapError,
     SgbError,
+    ValidationError,
 )
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
@@ -246,6 +247,8 @@ def _message(error: Exception) -> str:
 
 
 def _hint(rule: str, error: Exception) -> str:
+    if rule == SURFACE_EPR_BANDS and isinstance(error, ValidationError):
+        return "SGB's own consistency check refused the bands at this location; report it to SCGSim with this finding"
     if rule == SURFACE_EPR_BANDS and not isinstance(error, OverlapError):
         return "give inset_margins_um strictly increasing positive multiples of the model grid, or fix the geometry the message names"
     if isinstance(error, ContactError):

@@ -42,7 +42,7 @@ layout check: 1 finding(s)
 
 | Rule | Reports |
 |---|---|
-| `polygon-validity` | Self-intersecting, zero-area or vertex-repeating polygons of the flattened component, and vertices that sit off the source grid |
+| `polygon-validity` | Self-intersecting, zero-area or vertex-repeating polygons of the flattened component |
 | `semantic-contract` | `component_semantics` and `ground_plane_contributions` keys that differ from the [documented contract](../geometry-sgb.qmd#component-to-backend-geometry-contract), ports and levels the layer stack does not declare, registered instances that do not exist |
 | `physical-interpretation` | The first refusal of `GeometryPlan` construction, `prepare()` and the physical interpretation |
 | `sgb-structure` | The first refusal of SGB's structural validation, and model edges or faces narrower than `min_feature_um` |
