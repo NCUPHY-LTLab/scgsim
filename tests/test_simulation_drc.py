@@ -7,10 +7,11 @@ import pickle
 import pytest
 from sgb_inputs import electrode_source
 
-from scgsim.geometry import LayoutCheckError, simulation_drc
+from scgsim.geometry import GeometryPlan, LayoutCheckError, simulation_drc
 from scgsim.geometry.drc import stages
 from scgsim.geometry.drc.polygons import polygon_findings
 from scgsim.geometry.source.occurrence import SourceRecipeError
+from scgsim.palace.preparation.workflow import prepare_mesh_input
 
 pytest.importorskip("gdsfactory")
 
@@ -444,3 +445,85 @@ def test_a_self_intersection_is_found_through_the_public_gdsfactory_path(monkeyp
     assert [
         item.layer for item in report.findings if item.rule == "polygon-validity"
     ] == [(3, 0)]
+
+
+PORT = "chip/between"
+
+
+def add_port_between_electrodes(component):
+    """A valid 1 x 1 um port sheet at x=25..26, y=1..2 on 9/0, in the gap between the electrodes."""
+    component.add_polygon(((25, 1), (26, 1), (26, 2), (25, 2)), layer=(9, 0))
+    component.add_port(
+        name="between", center=(25.5, 1.5), width=1, orientation=0, layer=(9, 0)
+    )
+    component.info["component_semantics"]["ports"] = [
+        {"name": "between", "layer": [9, 0], "target_layer": "metal"}
+    ]
+
+
+def test_an_authored_port_is_checked_unless_the_caller_leaves_it_out(monkeypatch):
+    """``ports=None`` checks every authored port; a list keeps only the requested ones."""
+    everything = check(monkeypatch, edit=add_port_between_electrodes)
+    omitted = check(monkeypatch, edit=add_port_between_electrodes, ports=[])
+    banded = check(
+        monkeypatch,
+        edit=add_port_between_electrodes,
+        ports=[],
+        inset_margins_um=(0.5, 1.0),
+    )
+
+    assert not everything.ok
+    assert omitted.ok
+    assert banded.ok
+    assert "surface-epr-bands" not in skipped(banded)
+
+
+def test_the_requested_port_is_checked_again(monkeypatch):
+    """Naming the port brings its refusal back."""
+    report = check(monkeypatch, edit=add_port_between_electrodes, ports=[PORT])
+
+    assert not report.ok
+
+
+def test_dropped_port_sheets_match_what_palace_prepares(monkeypatch):
+    """Palace's own preparation, given no requested port, drops the sheet; the check reaches the same verdict."""
+    source = electrode_source(monkeypatch)
+    add_port_between_electrodes(source.component)
+    plan = GeometryPlan(
+        source.component,
+        root_id="chip",
+        layer_stack=source.layer_stack,
+        material_records=source.material_records,
+        coupon_padding_um=10.0,
+    )
+    plan.set_nets(NETS)
+    snapshot = plan.prepare()
+
+    def palace_prepared(records):
+        return prepare_mesh_input(
+            component=None,
+            stack=snapshot.stack,
+            route="B",
+            route_a_thin_film=None,
+            vacuum_region=None,
+            indium_ground_bumps=None,
+            build_input=snapshot.geometry_input,
+            port_sheet_source_layers=records,
+        )
+
+    assert palace_prepared([]).geometry_input.port_sheet_regions == ()
+    assert len(palace_prepared(None).geometry_input.port_sheet_regions) == 1
+    assert check(monkeypatch, edit=add_port_between_electrodes, ports=[]).ok
+
+
+def test_an_unknown_port_name_is_the_callers_error(monkeypatch):
+    """A requested port the layout does not author raises; it is not a finding."""
+    with pytest.raises(ValueError, match="not authored ports"):
+        check(monkeypatch, edit=add_port_between_electrodes, ports=["chip/nothing"])
+
+
+@pytest.mark.parametrize("ports", ["chip/between", [1], ["a", "a"]])
+def test_ports_must_be_distinct_names(monkeypatch, ports):
+    """``ports`` is a sequence of distinct names, never a bare string."""
+    with pytest.raises(TypeError):
+        check(monkeypatch, ports=ports)

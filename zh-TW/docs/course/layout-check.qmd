@@ -60,6 +60,7 @@ layout check: 1 finding(s)
 | `root_id` | `instances` 中每個路徑的第一段；預設為 `"chip"` |
 | `coupon_padding_um` | plan 在元件四周的邊界；預設為 `0.0` |
 | `vacuum_padding_um` | `GeometryPlan.set_vacuum_region` 接受的值；`None` 表示不設定真空區域，圖層堆疊未宣告真空時請提供 |
+| `ports` | 模擬將以 `add_port()` 要求的已創作連接埠之完整限定名稱，例如 `"chip/device/o_junction_lumped"`。只有這些連接埠片會進入物理詮釋，與 `EigenmodeSim.mesh()` 相同，因此你未要求的片不會造成發現。`None` 檢查所有已創作的連接埠；版圖未創作的名稱會擲出 `ValueError` |
 | `min_feature_um` | 你可接受的最窄水平邊或面。SCGSim 不設定寬度下限，因此未提供此關鍵字時不會回報任何細長結構 |
 
 檢查使用 Route B 與預設近似設定檔，與 `EigenmodeSim` 在未選 Route A 時相同。

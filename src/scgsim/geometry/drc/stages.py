@@ -42,6 +42,7 @@ from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
 from scgsim.geometry.source.occurrence import SourceRecipeError
 from scgsim.geometry.source.plan import GeometryPlan
+from scgsim.geometry.source.ports import select_authored_ports
 
 REFUSALS = (SgbError, ValueError)
 """The errors a production stage raises to refuse a layout. ``SourceRecipeError`` is a ``ValueError``."""
@@ -69,6 +70,7 @@ class StageInputs:
     )
     inset_margins_um: list[float] | None  # already validated
     min_feature_um: float | None
+    ports: tuple[str, ...] | None  # authored port names to keep; None keeps every port
 
 
 @dataclass
@@ -125,15 +127,42 @@ class _Stages:
         and the plan is the line between them.
         """
         plan = self._build_plan()
+        snapshot = self._attempt(PHYSICAL_INTERPRETATION, plan.prepare)
+        if snapshot is None:
+            return None
+        # A port the caller names but the layout does not author is the caller's error, not a finding.
+        geometry_input = select_authored_ports(
+            snapshot.geometry_input, self._requested_port_records(snapshot.stack)
+        )
 
-        def step() -> tuple[Any, RepresentationContext]:
-            snapshot = plan.prepare()
+        def interpret() -> tuple[Any, RepresentationContext]:
             effective, _, physical = interpret_physical_geometry(
-                snapshot.geometry_input, snapshot.stack, PROFILE
+                geometry_input, snapshot.stack, PROFILE
             )
             return effective, physical.context
 
-        return self._attempt(PHYSICAL_INTERPRETATION, step)
+        return self._attempt(PHYSICAL_INTERPRETATION, interpret)
+
+    def _requested_port_records(
+        self, stack: Mapping[str, Any]
+    ) -> list[dict[str, Any]] | None:
+        """The port records ``EigenmodeSim.mesh()`` passes on for the requested ports, in request order."""
+        names = self._inputs.ports
+        if names is None:
+            return None
+        available = {
+            record["name"]: record
+            for record in stack["metadata"].get("port_sheet_source_layers", ())
+        }
+        unknown = [name for name in names if name not in available]
+        if unknown:
+            raise ValueError(
+                f"ports {unknown} are not authored ports; the layout authors {sorted(available)}"
+            )
+        return [
+            {**available[name], "port_index": index}
+            for index, name in enumerate(names, start=1)
+        ]
 
     def check_structure(
         self, effective: Any, context: RepresentationContext

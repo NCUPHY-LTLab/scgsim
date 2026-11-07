@@ -21,6 +21,7 @@ from scgsim.geometry.models.physical import (
 from scgsim.geometry.planning.physical import interpret_physical_geometry
 from scgsim.geometry.source.adapter_records import solution_region_entity
 from scgsim.geometry.source.ground_bumps import prepare_indium_ground_bump_fill
+from scgsim.geometry.source.ports import select_authored_ports
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 from scgsim.semantics.snapshot import canonical_sha256, to_plain
 
@@ -88,7 +89,7 @@ def prepare_mesh_input(  # noqa: PLR0913 - explicit preparation controls preserv
     else:
         # Synchronize source selections before the single physical interpretation.
         build_input = _synchronize_solution_regions(build_input, prepared_stack)
-        build_input = _select_authored_ports(build_input, port_sheet_source_layers)
+        build_input = select_authored_ports(build_input, port_sheet_source_layers)
     if indium_fill is not None:
         build_input = replace(
             build_input,
@@ -158,45 +159,6 @@ def _synchronize_solution_regions(
             build_input,
             entities=(*retained, *by_id.values()),
             solution_regions=prepared_stack["solution_regions"],
-        )
-    return build_input
-
-
-def _select_authored_ports(
-    build_input: GeometryBuildInput,
-    port_sheet_source_layers: Sequence[Mapping[str, Any]] | None,
-) -> GeometryBuildInput:
-    """Keep exact source identities while assigning request-order port indices."""
-    if port_sheet_source_layers is not None:
-        selected = []
-        for source_index, record in enumerate(port_sheet_source_layers):
-            matches = tuple(
-                region
-                for region in build_input.port_sheet_regions
-                if region.metadata.get("source_name") == record["name"]
-            )
-            if not matches:
-                raise ValueError(
-                    f"normalized source has no authored port {record['name']!r}"
-                )
-            selected.extend(
-                replace(
-                    region,
-                    metadata={
-                        **region.metadata,
-                        "source_index": source_index,
-                        "port_index": record["port_index"],
-                    },
-                )
-                for region in matches
-            )
-        build_input = replace(
-            build_input,
-            port_sheet_regions=tuple(selected),
-            metadata={
-                **build_input.metadata,
-                "port_sheet_source_layers": list(port_sheet_source_layers),
-            },
         )
     return build_input
 

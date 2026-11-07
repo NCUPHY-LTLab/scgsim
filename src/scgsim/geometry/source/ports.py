@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from math import isfinite, sqrt
 from typing import Any, Protocol, TypeGuard, cast
 
-from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
+from scgsim.geometry.models.input import (
+    GeometryBuildInput,
+    LayoutPolygonSpec,
+    SemanticEntitySpec,
+)
 from scgsim.geometry.models.regions import PortSheetOverlapRecord, PortSheetRegionRecord
 from scgsim.geometry.primitives.grid import (
     current_grid_size_um,
@@ -376,3 +381,45 @@ class _AreaPolygon(Protocol):
     def area(self) -> float:
         """Return the polygon's unsigned area."""
         ...
+
+
+def select_authored_ports(
+    build_input: GeometryBuildInput,
+    port_sheet_source_layers: Sequence[Mapping[str, Any]] | None,
+) -> GeometryBuildInput:
+    """Keep only the requested port sheets, with exact source identities and request-order port indices.
+
+    ``None`` keeps every authored sheet. A name with no authored sheet raises ``ValueError``.
+    """
+    if port_sheet_source_layers is not None:
+        selected = []
+        for source_index, record in enumerate(port_sheet_source_layers):
+            matches = tuple(
+                region
+                for region in build_input.port_sheet_regions
+                if region.metadata.get("source_name") == record["name"]
+            )
+            if not matches:
+                raise ValueError(
+                    f"normalized source has no authored port {record['name']!r}"
+                )
+            selected.extend(
+                replace(
+                    region,
+                    metadata={
+                        **region.metadata,
+                        "source_index": source_index,
+                        "port_index": record["port_index"],
+                    },
+                )
+                for region in matches
+            )
+        build_input = replace(
+            build_input,
+            port_sheet_regions=tuple(selected),
+            metadata={
+                **build_input.metadata,
+                "port_sheet_source_layers": list(port_sheet_source_layers),
+            },
+        )
+    return build_input

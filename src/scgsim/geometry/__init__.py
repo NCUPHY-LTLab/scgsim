@@ -1,12 +1,12 @@
-"""Source-facing semantic geometry API; input ownership remains with caller/components."""
+"""Source-facing semantic geometry API; input ownership remains with caller/components.
 
-from scgsim.geometry.drc import (
-    LayoutCheckError,
-    LayoutCheckReport,
-    LayoutFinding,
-    SkippedRule,
-    simulation_drc,
-)
+The layout check (``simulation_drc`` and its report types) loads on first use. It reaches the whole SGB
+package, which the AEDT runtime source bundle, built from this module's imports, does not ship.
+"""
+
+import importlib
+from typing import Any
+
 from scgsim.geometry.models.common import (
     Coordinate,
     CurveKindLiteral,
@@ -90,3 +90,21 @@ __all__ = [
     "simulation_drc",
     "summarize_geometry_input",
 ]
+
+
+_LAYOUT_CHECK_NAMES = frozenset(
+    {
+        "LayoutCheckError",
+        "LayoutCheckReport",
+        "LayoutFinding",
+        "SkippedRule",
+        "simulation_drc",
+    }
+)
+
+
+def __getattr__(name: str) -> Any:
+    """Load the layout check on first use (see the module docstring)."""
+    if name in _LAYOUT_CHECK_NAMES:
+        return getattr(importlib.import_module("scgsim.geometry.drc"), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

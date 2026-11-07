@@ -59,6 +59,7 @@ The signature carries what `GeometryPlan` takes. These keywords supply the rest,
 | `root_id` | First segment of every path in `instances`; `"chip"` by default |
 | `coupon_padding_um` | The plan's padding around the component; `0.0` by default |
 | `vacuum_padding_um` | What `GeometryPlan.set_vacuum_region` takes; `None` sets no region, so give it when the layer stack declares none |
+| `ports` | The qualified names of the authored ports the simulation will request with `add_port()`, such as `"chip/device/o_junction_lumped"`. Only those port sheets reach the physical interpretation, as in `EigenmodeSim.mesh()`, so a sheet you do not request cannot cause a finding. `None` checks every authored port; a name the layout does not author raises `ValueError` |
 | `min_feature_um` | The narrowest horizontal edge or face you accept. SCGSim sets no width limit, so without this keyword no sliver is reported |
 
 The check uses Route B with the default approximation profile, as `EigenmodeSim` does unless you select Route A.

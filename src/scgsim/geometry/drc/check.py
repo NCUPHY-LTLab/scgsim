@@ -41,6 +41,7 @@ def simulation_drc(  # noqa: PLR0913 - the plan's inputs plus the optional rule 
     coupon_padding_um: float = 0.0,
     vacuum_padding_um: Any = None,
     min_feature_um: float | None = None,
+    ports: Sequence[str] | None = None,
 ) -> LayoutCheckReport:
     """Check whether ``component`` reaches ``mesh()`` without a geometry refusal, and report every finding.
 
@@ -55,11 +56,16 @@ def simulation_drc(  # noqa: PLR0913 - the plan's inputs plus the optional rule 
     * ``root_id`` is the first segment of every path in ``instances``.
     * ``coupon_padding_um`` is the plan's required padding around the component, as ``0.0`` (none).
     * ``vacuum_padding_um`` is what ``GeometryPlan.set_vacuum_region`` takes; ``None`` sets no region.
+    * ``ports`` lists the qualified names of the authored ports the simulation will request with
+      ``add_port()``, such as ``"chip/device/o_junction_lumped"``. Only those port sheets reach the
+      physical interpretation, as in ``EigenmodeSim.mesh()``, so a sheet you do not request cannot
+      cause a finding. ``None`` (the default) checks every authored port. A name the layout does not
+      author raises ``ValueError``.
     * ``min_feature_um`` is the smallest model edge or face width you accept; ``None`` reports no
       sliver, because SCGSim sets no such limit itself.
     """
     margins = _checked_inputs(
-        root_id, coupon_padding_um, inset_margins_um, min_feature_um
+        root_id, coupon_padding_um, inset_margins_um, min_feature_um, ports
     )
     registered = dict(instances or {})
     cells = {root_id: component} | _registered_cells(registered)
@@ -83,6 +89,7 @@ def simulation_drc(  # noqa: PLR0913 - the plan's inputs plus the optional rule 
             vacuum_padding_um=vacuum_padding_um,
             inset_margins_um=margins,
             min_feature_um=min_feature_um,
+            ports=None if ports is None else tuple(ports),
         )
     )
     return LayoutCheckReport((*findings, *outcome.findings), tuple(outcome.skipped))
@@ -93,6 +100,7 @@ def _checked_inputs(
     coupon_padding_um: float,
     inset_margins_um: Sequence[float] | None,
     min_feature_um: float | None,
+    ports: Sequence[str] | None,
 ) -> list[float] | None:
     """Refuse a caller's bad argument with the error the plan or Palace would raise; return the margins.
 
@@ -103,6 +111,13 @@ def _checked_inputs(
         raise ValueError("coupon_padding_um must be nonnegative")
     if min_feature_um is not None and not is_positive_real(min_feature_um):
         raise ValueError("min_feature_um must be a finite positive number or None")
+    if ports is not None and (
+        isinstance(ports, (str, bytes))
+        or not isinstance(ports, Sequence)
+        or not all(isinstance(name, str) for name in ports)
+        or len(set(ports)) != len(ports)
+    ):
+        raise TypeError("ports must be a sequence of distinct port names or None")
     if inset_margins_um is None:
         return None
     return validated_margins(inset_margins_um, "inset_margins_um")
