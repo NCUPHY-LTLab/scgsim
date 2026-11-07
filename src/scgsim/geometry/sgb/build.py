@@ -154,6 +154,21 @@ def emit_model(
     )
 
 
+def check_emission(model: ConformalModel, *, sliver_top: int = 10) -> dict[str, Any]:
+    """Run the emission steps of :func:`emit_model` that can refuse a model, and write no file.
+
+    These are the BREP planner, the sliver report and the sidecar; a model they accept is one the
+    writer serialises. Returns the sliver report (worst ``sliver_top`` entries per measure).
+    """
+    plan = plan_brep(model.topology, model.routed)
+    slivers = sliver_report(model, top=sliver_top)
+    context = SidecarContext(
+        files={}, sliver_summary=slivers["summary"], name=model.policy.name
+    )
+    build_sidecar(model, plan, context)
+    return slivers
+
+
 def _strict_check(
     xao: Path, model: ConformalModel, plan: BrepPlan, timings: dict[str, float]
 ) -> OcctReport:

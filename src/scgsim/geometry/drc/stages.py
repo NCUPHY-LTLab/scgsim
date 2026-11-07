@@ -9,7 +9,7 @@ geometry of its own. A stage that refuses stops the stages after it, which are r
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -24,6 +24,7 @@ from scgsim.geometry.drc.report import (
 from scgsim.geometry.models.physical import ApproximationProfile
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.planning.physical import interpret_physical_geometry
+from scgsim.geometry.sgb.build import check_emission
 from scgsim.geometry.sgb.cutfamilies.requests import (
     BAND_TYPES,
     InsetRequest,
@@ -39,10 +40,13 @@ from scgsim.geometry.sgb.errors import (
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
-from scgsim.geometry.sgb.slivers.report import sliver_report
 from scgsim.geometry.source.occurrence import SourceRecipeError
 from scgsim.geometry.source.plan import GeometryPlan
 
+REFUSALS = (SgbError, ValueError)
+"""The errors a production stage raises to refuse a layout. ``SourceRecipeError`` is a ``ValueError``."""
+DEFAULT_SLIVER_TOP = 10
+"""Entries per measure the production sidecar summarises; ``check_emission`` needs no more without a limit."""
 ROUTE = "B"
 """The route ``EigenmodeSim`` uses unless the caller selects Route A."""
 PROFILE = ApproximationProfile("route_b", "v1", {})
@@ -63,7 +67,7 @@ class StageInputs:
     vacuum_padding_um: (
         Any  # the forms GeometryPlan.set_vacuum_region takes, or None for no region
     )
-    inset_margins_um: Sequence[float] | None
+    inset_margins_um: list[float] | None  # already validated
     min_feature_um: float | None
 
 
@@ -113,43 +117,62 @@ class _Stages:
         self._plan: GeometryPlan | None = None
 
     def interpret(self) -> tuple[Any, RepresentationContext] | None:
-        """Rule 3: the plan, ``prepare()`` and the physical interpretation of Route B."""
-        try:
-            plan = self._build_plan()
+        """Rule 3: the plan, ``prepare()`` and the physical interpretation of Route B.
+
+        Building the plan checks the caller's own arguments (the root ID, padding, instances, Nets and
+        vacuum region), so its errors propagate. After it, a ``ValueError`` from ``prepare()`` or the
+        interpretation is a refusal of the layout: ``prepare()`` raises plain ``ValueError`` for both,
+        and the plan is the line between them.
+        """
+        plan = self._build_plan()
+
+        def step() -> tuple[Any, RepresentationContext]:
             snapshot = plan.prepare()
             effective, _, physical = interpret_physical_geometry(
                 snapshot.geometry_input, snapshot.stack, PROFILE
             )
-        except Exception as error:  # noqa: BLE001 - a production refusal is a finding, whatever its type
-            self._outcome.findings.append(self._refusal(PHYSICAL_INTERPRETATION, error))
-            return None
-        return effective, physical.context
+            return effective, physical.context
+
+        return self._attempt(PHYSICAL_INTERPRETATION, step)
 
     def check_structure(
         self, effective: Any, context: RepresentationContext
     ) -> PrismCatalogue | None:
-        """Rule 4: SGB's structural validation, then the sliver report against the caller's limit."""
-        try:
+        """Rule 4: the model and the emission steps ``build_sgb_geometry`` runs, then the sliver limit."""
+
+        def step() -> PrismCatalogue:
             catalogue = build_prism_catalogue(effective, context)
             model = build_model_from_catalogue(catalogue, ROUTE)
-        except Exception as error:  # noqa: BLE001 - a production refusal is a finding, whatever its type
-            self._outcome.findings.append(self._refusal(SGB_STRUCTURE, error))
-            return None
-        self._outcome.findings.extend(self._sliver_findings(model))
-        return catalogue
+            slivers = check_emission(model, sliver_top=self._sliver_top(model))
+            self._outcome.findings.extend(self._sliver_findings(slivers))
+            return catalogue
+
+        return self._attempt(SGB_STRUCTURE, step)
 
     def check_bands(self, catalogue: PrismCatalogue) -> None:
-        """Rule 5: build the model again with the Surface-EPR bands of the caller's margins."""
+        """Rule 5: the same checks on the model built with the Surface-EPR bands of the caller's margins."""
         margins = self._inputs.inset_margins_um
-        if not margins:
+        if margins is None:
             self._outcome.skipped.append(
                 SkippedRule(SURFACE_EPR_BANDS, "inset_margins_um was not given")
             )
             return
+
+        def step() -> None:
+            banded = build_model_from_catalogue(
+                catalogue, ROUTE, insets=_band_requests(margins)
+            )
+            check_emission(banded)
+
+        self._attempt(SURFACE_EPR_BANDS, step)
+
+    def _attempt[T](self, rule: str, step: Callable[[], T]) -> T | None:
+        """``step()``, or a finding for ``rule`` when it refuses the layout; any other error propagates."""
         try:
-            build_model_from_catalogue(catalogue, ROUTE, insets=_band_requests(margins))
-        except Exception as error:  # noqa: BLE001 - a production refusal is a finding, whatever its type
-            self._outcome.findings.append(self._refusal(SURFACE_EPR_BANDS, error))
+            return step()
+        except REFUSALS as error:
+            self._outcome.findings.append(self._refusal(rule, error))
+            return None
 
     def _build_plan(self) -> GeometryPlan:
         inputs = self._inputs
@@ -196,7 +219,13 @@ class _Stages:
         except (StopIteration, KeyError, TypeError, ValueError):
             return None  # a contribution or port has no Entity of its own
 
-    def _sliver_findings(self, model: ConformalModel) -> list[LayoutFinding]:
+    def _sliver_top(self, model: ConformalModel) -> int:
+        """How many entries per measure the sliver report needs: all of them under a caller limit."""
+        if self._inputs.min_feature_um is None:
+            return DEFAULT_SLIVER_TOP
+        return len(model.topology.edges) + len(model.topology.faces)
+
+    def _sliver_findings(self, report: Mapping[str, Any]) -> list[LayoutFinding]:
         """Horizontal edges and faces narrower than the limit the caller set; the report itself sets no limit.
 
         Vertical edges and walls measure the thickness the layer stack declares, which is no layout defect.
@@ -204,9 +233,6 @@ class _Stages:
         limit = self._inputs.min_feature_um
         if limit is None:
             return []
-        topology = model.topology
-        everything = len(topology.edges) + len(topology.faces)
-        report = sliver_report(model, top=everything, drift=False)
         return [
             _sliver_finding(entry, what, limit)
             for what, key in (("edge", "shortest_edges"), ("face", "narrowest_faces"))
@@ -233,7 +259,7 @@ def _band_requests(margins_um: Sequence[float]) -> tuple[InsetRequest, ...]:
         InsetRequest(
             f"epr_{interface_type}",
             InterfaceSurfaces(interface_type),
-            tuple(float(margin) for margin in margins_um),
+            tuple(margins_um),
         )
         for interface_type in BAND_TYPES
     )

@@ -38,6 +38,7 @@ from scgsim.geometry.source.occurrence import (
     occurrence_polygons_for_entity,
     occurrence_port_polygon,
     run_source_recipe,
+    selector_location,
     source_recipe_job,
     with_occurrence_extraction_cache,
 )
@@ -50,7 +51,8 @@ from scgsim.geometry.source.plan_assembly import (
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 
 
-def _affine(reference: Any) -> tuple[float, float, float, float, float, float]:
+def instance_affine(reference: Any) -> tuple[float, float, float, float, float, float]:
+    """The rigid ``(a, b, c, d, x, y)`` placement of one reference in its parent; anything else is refused."""
     from klayout import db as kdb  # noqa: PLC0415 - transforms are needed only during occurrence registration
 
     transform = reference.dcplx_trans
@@ -73,9 +75,10 @@ def _affine(reference: Any) -> tuple[float, float, float, float, float, float]:
     return values
 
 
-def _compose(
+def compose_affine(
     parent: tuple[float, ...], child: tuple[float, ...]
 ) -> tuple[float, float, float, float, float, float]:
+    """The placement of a child inside a parent that is itself placed: ``parent`` applied after ``child``."""
     a, b, c, d, x, y = parent
     e, f, g, h, u, v = child
     return (
@@ -261,7 +264,7 @@ class GeometryPlan:
             raise ValueError("the same source occurrence is already registered")
         child = reference.cell
         component_semantics(child, path)
-        transform = _compose(parent_transform, _affine(reference))
+        transform = compose_affine(parent_transform, instance_affine(reference))
         self._instances[path] = (child, reference, transform)
 
     @property
@@ -335,7 +338,8 @@ class GeometryPlan:
                 or reference.cell != cell
                 or sum(item.instance == reference.instance for item in parent.insts)
                 != 1
-                or _compose(parent_transform, _affine(reference)) != transform
+                or compose_affine(parent_transform, instance_affine(reference))
+                != transform
             ):
                 raise ValueError(
                     f"registered occurrence {path!r} changed before prepare"
@@ -514,6 +518,7 @@ class GeometryPlan:
                         selector,
                         entity_from_layer_record(record, materials=stack["materials"]),
                         subject=record["semantic_id"],
+                        location_um=selector_location(record["geometry"]),
                         source_cell=source.source_cells[cell.name],
                         transform=transform,
                         excluded_reference_indexes=source.child_reference_indexes[path],
@@ -558,6 +563,7 @@ class GeometryPlan:
                             occurrence_include_polygon,
                             contribution,
                             subject=f"{path}/{contribution['source_local_id']}",
+                            location_um=selector_location(contribution),
                             source_cell=source.source_cells[cell.name],
                             transform=transform,
                             excluded_reference_indexes=source.child_reference_indexes[
@@ -592,6 +598,7 @@ class GeometryPlan:
                         occurrence_port_polygon,
                         record,
                         subject=record["name"],
+                        location_um=selector_location(record),
                         source_cell=source.source_cells[cell.name],
                         transform=transform,
                         excluded_reference_indexes=source.child_reference_indexes[path],

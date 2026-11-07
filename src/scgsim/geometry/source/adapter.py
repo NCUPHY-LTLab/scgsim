@@ -37,6 +37,7 @@ from scgsim.geometry.source.occurrence import (
     failed_source_recipe,
     read_polygons_by_layer,
     run_source_recipe,
+    selector_location,
     source_recipe_job,
     with_occurrence_extraction_cache,
 )
@@ -273,6 +274,7 @@ class _SourceLowering:
                     lower_layer_record,
                     record,
                     subject=record.get("semantic_id"),
+                    location_um=selector_location(record.get("geometry")),
                     materials=self.source.stack.materials,
                     source_polygons=self.source.polygons_by_layer,
                     cell_bounds_um=self.source.cell_bounds_um,

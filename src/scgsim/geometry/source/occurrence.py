@@ -41,17 +41,52 @@ class SourceRecipeJob:
     error: Exception | None = None
     traceback: Any = None
     subject: str | None = None  # the Entity, contribution or port the recipe extracts
+    location_um: tuple[float, float] | None = (
+        None  # its selector point, in the world frame
+    )
 
 
 class SourceRecipeError(ValueError):
     """A source recipe refused its input; ``subject`` names what it was extracting.
 
-    The message is the recipe's own, so callers that match on it are unaffected.
+    ``location_um`` is the subject's selector point in the world frame (micrometres) when the stage
+    has one. The message is the recipe's own, so callers that match on it are unaffected.
     """
 
-    def __init__(self, message: str, *, subject: str) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        subject: str,
+        location_um: tuple[float, float] | None = None,
+    ) -> None:
         super().__init__(message)
         self.subject = subject
+        self.location_um = location_um
+
+    def __reduce__(self):
+        # Keyword-only arguments would not survive the default exception pickling.
+        return (
+            _rebuilt_source_recipe_error,
+            (str(self), self.subject, self.location_um),
+        )
+
+
+def _rebuilt_source_recipe_error(message, subject, location_um):
+    return SourceRecipeError(message, subject=subject, location_um=location_um)
+
+
+def selector_location(geometry: Any) -> tuple[float, float] | None:
+    """The ``selector_point_um`` of a geometry record as an ``(x, y)`` pair, or ``None`` without a usable one."""
+    point = geometry.get("selector_point_um") if isinstance(geometry, Mapping) else None
+    if (
+        isinstance(point, Sequence)
+        and not isinstance(point, (str, bytes))
+        and len(point) >= 2
+        and all(isinstance(item, (int, float)) and isfinite(item) for item in point[:2])
+    ):
+        return float(point[0]), float(point[1])
+    return None
 
 
 def source_recipe_job(  # noqa: PLR0913 -- acquisition and comparison controls stay distinct from the forwarded recipe arguments
@@ -63,6 +98,7 @@ def source_recipe_job(  # noqa: PLR0913 -- acquisition and comparison controls s
     expected=None,
     comparison_error=None,
     subject=None,
+    location_um=None,
     **kwargs,
 ):
     """Prepare worker-owned inputs on the source thread, before pool dispatch."""
@@ -84,6 +120,7 @@ def source_recipe_job(  # noqa: PLR0913 -- acquisition and comparison controls s
         deepcopy(expected),
         comparison_error,
         subject=subject,
+        location_um=location_um,
     )
 
 
@@ -104,7 +141,9 @@ def run_source_recipe(job):
     except ValueError as error:
         if job.subject is None:
             raise
-        raise SourceRecipeError(str(error), subject=job.subject) from error
+        raise SourceRecipeError(
+            str(error), subject=job.subject, location_um=job.location_um
+        ) from error
     return result
 
 

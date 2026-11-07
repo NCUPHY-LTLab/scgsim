@@ -458,7 +458,12 @@ class ElectrodeSource:
     material_records: dict[str, dict[str, Any]]
 
 
-def electrode_source(monkeypatch, *, gap_um: float = 10.0) -> ElectrodeSource:
+def electrode_source(
+    monkeypatch,
+    *,
+    gap_um: float = 10.0,
+    metal_interval: tuple[float, float] = (0, 0.2),
+) -> ElectrodeSource:
     """A 20 um pad and a 30 um electrode ``gap_um`` apart; a negative gap makes them overlap.
 
     The component, layer stack and material records are small public stand-ins for a PDK.
@@ -491,7 +496,7 @@ def electrode_source(monkeypatch, *, gap_um: float = 10.0) -> ElectrodeSource:
                 "VACUUM_REGION", "vacuum", (-10, 12), "solution_region"
             ),
             "substrate": _plan_level("substrate", "Si", (-5, 0), "solution_region"),
-            "metal": _plan_level("metal", "PEC", (0, 0.2), "conductor"),
+            "metal": _plan_level("metal", "PEC", metal_interval, "conductor"),
         }
     )
     materials = {

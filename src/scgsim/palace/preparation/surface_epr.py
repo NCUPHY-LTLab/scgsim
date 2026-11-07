@@ -10,12 +10,14 @@ accepted.  Omit both margin keys for baseline rows only.
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from numbers import Real
 from typing import Any, cast
 
+from scgsim.geometry.sgb.cutfamilies.requests import (
+    is_positive_real,
+    validated_margins,
+)
 from scgsim.geometry.sgb.records.grid import Grid
 from scgsim.semantics.epr import film_assumptions
 
@@ -78,7 +80,7 @@ def _normalize_interface_spec(
         raise ValueError(
             f"Surface EPR {interface_type} requires exactly one native thickness or film_thickness_m."
         )
-    if thickness is not None and not _positive(thickness):
+    if thickness is not None and not is_positive_real(thickness):
         raise ValueError(f"Surface EPR {interface_type} requires positive thickness.")
     if thickness_m is not None:
         film_assumptions({"film_thickness_m": thickness_m}, partial=True)
@@ -91,7 +93,7 @@ def _normalize_interface_spec(
     numeric, default_loss, resolved = _resolve_film_material(
         interface_type, material_id, numeric, materials
     )
-    if not _positive(numeric):
+    if not is_positive_real(numeric):
         raise ValueError(
             f"Surface EPR {interface_type} requires positive resolved permittivity."
         )
@@ -166,7 +168,7 @@ def _set_inset_margins(
 ) -> None:
     """Retain the margins SGB cuts into the model as bands: the spec's, and those of customised conductors."""
     if "inset_margins_um" in raw:
-        resolved["inset_margins_um"] = _validated_margins(
+        resolved["inset_margins_um"] = validated_margins(
             raw["inset_margins_um"], f"Surface EPR {interface_type} inset_margins_um"
         )
     if "inset_margins_by_entity_um" in raw:
@@ -189,27 +191,8 @@ def _by_entity_margins(interface_type: str, raw: Any) -> dict[str, list[float]]:
     for entity, margins in sorted(raw.items(), key=lambda item: str(item[0])):
         if not isinstance(entity, str) or not entity:
             raise ValueError(f"{label} keys must be non-empty entity ids.")
-        result[entity] = _validated_margins(margins, f"{label}[{entity!r}]")
+        result[entity] = validated_margins(margins, f"{label}[{entity!r}]")
     return result
-
-
-def _validated_margins(margins: Any, label: str) -> list[float]:
-    """The ordered, strictly increasing positive margins of one sequence."""
-    if isinstance(margins, (str, bytes)) or not isinstance(margins, (list, tuple)):
-        raise TypeError(f"{label} must be an ordered non-empty sequence.")
-    if not margins:
-        raise ValueError(f"{label} must be non-empty.")
-    normalized = []
-    for margin in margins:
-        if not _positive(margin):
-            raise ValueError(
-                f"{label} values must be finite positive reals "
-                "(the whole surface is the baseline row)."
-            )
-        normalized.append(float(margin))
-    if any(b <= a for a, b in zip(normalized, normalized[1:], strict=False)):
-        raise ValueError(f"{label} must be strictly increasing.")
-    return normalized
 
 
 def build_surface_epr_postprocessing(
@@ -225,7 +208,7 @@ def build_surface_epr_postprocessing(
     unit (the spec's, or its conductor's own), a further row covers the attributes of the unit's bands from
     the margin's band to the last.
     """
-    if not _positive(model_l0_m):
+    if not is_positive_real(model_l0_m):
         raise ValueError("Model.L0 must be a finite positive length in metres.")
     rows: list[dict[str, Any]] = []
     index_map: list[dict[str, Any]] = []
@@ -489,12 +472,3 @@ def _row_metadata(row: Mapping[str, Any]) -> dict[str, Any]:
         # Lineage membership is attribution only: it weights nothing.
         "lineage": {"membership": row["membership"]},
     }
-
-
-def _positive(value: Any) -> bool:
-    return (
-        isinstance(value, Real)
-        and not isinstance(value, bool)
-        and math.isfinite(float(value))
-        and float(value) > 0.0
-    )

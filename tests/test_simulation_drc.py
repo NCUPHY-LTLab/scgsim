@@ -2,20 +2,24 @@
 
 from __future__ import annotations
 
+import pickle
+
 import pytest
 from sgb_inputs import electrode_source
 
 from scgsim.geometry import LayoutCheckError, simulation_drc
+from scgsim.geometry.drc import stages
 from scgsim.geometry.drc.polygons import polygon_findings
+from scgsim.geometry.source.occurrence import SourceRecipeError
 
 pytest.importorskip("gdsfactory")
 
 NETS = {"A": ("chip/pad",), "B": ("chip/electrode",)}
 
 
-def check(monkeypatch, *, gap_um=10.0, edit=None, **options):
+def check(monkeypatch, *, gap_um=10.0, metal=(0, 0.2), edit=None, **options):
     """Run the check on the electrode scene; ``edit`` may change the component before it runs."""
-    source = electrode_source(monkeypatch, gap_um=gap_um)
+    source = electrode_source(monkeypatch, gap_um=gap_um, metal_interval=metal)
     if edit is not None:
         edit(source.component)
     options.setdefault("nets", NETS)
@@ -224,15 +228,16 @@ def test_rule_2_findings_skip_the_production_stages(monkeypatch):
     assert all("semantic-contract" in reason for reason in skipped(report).values())
 
 
-def test_rule_3_plan_refusal_is_a_finding_and_skips_the_rest(monkeypatch):
-    """A plan refusal becomes a finding and the later rules are skipped."""
-    report = check(
-        monkeypatch, nets={"A": ("chip/no_such_entity",)}, inset_margins_um=(1.0,)
-    )
+def test_rule_3_refusal_skips_the_later_rules(monkeypatch):
+    """A refusal of ``prepare()`` becomes a finding and the later rules are skipped with the reason."""
 
-    (finding,) = report.findings
-    assert finding.rule == "physical-interpretation"
-    assert "unknown Entity ID 'chip/no_such_entity'" in finding.message
+    def unmatched_selector(component):
+        region = component.info["component_semantics"]["conductor_regions"][0]
+        region["geometry"] = {"selector_point_um": [500.0, 500.0]}
+
+    report = check(monkeypatch, edit=unmatched_selector, inset_margins_um=(1.0,))
+
+    assert rules(report) == ["physical-interpretation"]
     assert set(skipped(report)) == {"sgb-structure", "surface-epr-bands"}
     assert "physical interpretation refused" in skipped(report)["sgb-structure"]
 
@@ -251,6 +256,7 @@ def test_rule_3_names_the_entity_and_layer_of_a_source_refusal(monkeypatch):
     assert finding.entity == "chip/pad"
     assert finding.layer == (1, 0)
     assert "matched 0 fused polygons" in finding.message
+    assert finding.location_um == (500.0, 500.0)
 
 
 def test_rule_4_sgb_refusal_carries_its_location(monkeypatch):
@@ -308,3 +314,133 @@ def test_raise_for_findings_lists_every_finding(monkeypatch):
     assert "2 finding(s)" in message
     assert "layer 3/0" in message
     assert "layer 4/0" in message
+
+
+def test_rule_4_and_5_run_the_emission_checks_of_the_build(monkeypatch):
+    """A metal thinner than ten times the BREP tolerance passes the model but not the planner."""
+    for margins in (None, (0.5, 1.0)):
+        report = check(monkeypatch, metal=(0, 5e-7), inset_margins_um=margins)
+
+        (finding,) = report.findings
+        assert finding.rule == "sgb-structure"
+        assert "edge shorter than 10 x tolerance" in finding.message
+
+
+def test_rule_1_survives_a_malformed_conductor_record(monkeypatch):
+    """Rule 1 attributes polygons from usable records only, and rule 2 reports the bad one."""
+
+    def append_number(component):
+        component.info["component_semantics"]["conductor_regions"].append(42)
+        component.add_polygon(((40, 0), (50, 10), (50, 0), (40, 10)), layer=(3, 0))
+
+    report = check(monkeypatch, edit=append_number)
+
+    assert sorted(set(rules(report))) == ["polygon-validity", "semantic-contract"]
+    (semantic,) = [item for item in report.findings if item.rule == "semantic-contract"]
+    assert "conductor records must be mappings" in semantic.message
+
+
+def test_rule_1_survives_unusable_layer_pairs(monkeypatch):
+    """A layer pair that is not two integers is ignored by the attribution and reported by rule 2."""
+
+    def odd_layer(component):
+        component.info["component_semantics"]["conductor_regions"][0]["gds_layer"] = [
+            "a",
+            None,
+        ]
+
+    report = check(monkeypatch, edit=odd_layer)
+
+    assert "semantic-contract" in rules(report)
+
+
+@pytest.mark.parametrize(
+    ("options", "error"),
+    [
+        ({"inset_margins_um": (True,)}, ValueError),
+        ({"inset_margins_um": "1"}, TypeError),
+        ({"inset_margins_um": ()}, ValueError),
+        ({"inset_margins_um": 3}, TypeError),
+        ({"inset_margins_um": (2.0, 1.0)}, ValueError),
+        ({"coupon_padding_um": "wide"}, TypeError),
+        ({"coupon_padding_um": -1.0}, ValueError),
+        ({"min_feature_um": 0.0}, ValueError),
+        ({"root_id": "a/b"}, ValueError),
+    ],
+)
+def test_a_bad_argument_raises_instead_of_becoming_a_finding(
+    monkeypatch, options, error
+):
+    """Invalid caller input is the caller's error, even when the layout also has findings."""
+    with pytest.raises(error):
+        check(monkeypatch, **options)
+
+
+def test_a_net_naming_an_unknown_entity_is_the_callers_error(monkeypatch):
+    """Nets are an argument of the call, so a wrong Entity ID raises from the plan."""
+    with pytest.raises(ValueError, match="unknown Entity ID"):
+        check(monkeypatch, nets={"A": ("chip/no_such_entity",)})
+
+
+def test_an_unexpected_failure_in_a_stage_propagates(monkeypatch):
+    """Only the declared refusal types become findings; a bug in a stage is not relabelled."""
+
+    def broken(*_args, **_kwargs):
+        raise AttributeError("bug in a stage")
+
+    monkeypatch.setattr(stages, "build_prism_catalogue", broken)
+
+    with pytest.raises(AttributeError, match="bug in a stage"):
+        check(monkeypatch)
+
+
+def test_source_recipe_error_survives_pickling():
+    """The error crosses a process boundary with its subject and location."""
+    error = SourceRecipeError("refused", subject="chip/pad", location_um=(1.0, 2.0))
+
+    copy = pickle.loads(pickle.dumps(error))  # noqa: S301 -- own object
+
+    assert (str(copy), copy.subject, copy.location_um) == (
+        "refused",
+        "chip/pad",
+        (1.0, 2.0),
+    )
+
+
+def test_ground_contribution_finding_carries_layer_and_location(monkeypatch):
+    """A record with a layer and selector keeps both in the finding; a record without says so."""
+
+    def contributions(component):
+        component.info["component_semantics"]["ground_plane_contributions"] = [
+            {
+                "local_id": "g",
+                "plane_id": "P",
+                "layer": [1, 0],
+                "selector_point_um": [3.0, 4.0],
+                "unexpected": 1,
+            },
+            {"local_id": "h", "plane_id": "P", "mask_layer": [1, 0]},
+        ]
+
+    report = check(monkeypatch, edit=contributions)
+
+    by_entity = {item.entity: item for item in report.findings}
+    assert by_entity["chip/g"].layer == (1, 0)
+    assert by_entity["chip/g"].location_um == (3.0, 4.0)
+    assert "unavailable" not in by_entity["chip/g"].message
+    assert by_entity["chip/h"].layer is None
+    assert by_entity["chip/h"].location_um is None
+    assert "layer and location unavailable" in by_entity["chip/h"].message
+
+
+def test_a_self_intersection_is_found_through_the_public_gdsfactory_path(monkeypatch):
+    """The polygon goes through ``add_polygon`` and ``write_gds`` only; no double stands in for the writer."""
+
+    def bow_tie(component):
+        component.add_polygon(((40, 0), (50, 10), (50, 0), (40, 10)), layer=(3, 0))
+
+    report = check(monkeypatch, edit=bow_tie)
+
+    assert [
+        item.layer for item in report.findings if item.rule == "polygon-validity"
+    ] == [(3, 0)]

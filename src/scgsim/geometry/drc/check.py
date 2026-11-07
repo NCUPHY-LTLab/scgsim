@@ -21,6 +21,12 @@ from scgsim.geometry.drc.report import (
 )
 from scgsim.geometry.drc.semantics import entities_by_layer, semantic_findings
 from scgsim.geometry.drc.stages import StageInputs, run_production_stages
+from scgsim.geometry.sgb.cutfamilies.requests import (
+    is_positive_real,
+    validated_margins,
+)
+from scgsim.geometry.source.normalization import finite_number
+from scgsim.geometry.source.plan_assembly import source_path
 
 
 def simulation_drc(  # noqa: PLR0913 - the plan's inputs plus the optional rule controls
@@ -52,6 +58,9 @@ def simulation_drc(  # noqa: PLR0913 - the plan's inputs plus the optional rule 
     * ``min_feature_um`` is the smallest model edge or face width you accept; ``None`` reports no
       sliver, because SCGSim sets no such limit itself.
     """
+    margins = _checked_inputs(
+        root_id, coupon_padding_um, inset_margins_um, min_feature_um
+    )
     registered = dict(instances or {})
     cells = {root_id: component} | _registered_cells(registered)
     findings = polygon_findings(component, entities_by_layer(cells))
@@ -72,11 +81,31 @@ def simulation_drc(  # noqa: PLR0913 - the plan's inputs plus the optional rule 
             nets=nets,
             coupon_padding_um=coupon_padding_um,
             vacuum_padding_um=vacuum_padding_um,
-            inset_margins_um=inset_margins_um,
+            inset_margins_um=margins,
             min_feature_um=min_feature_um,
         )
     )
     return LayoutCheckReport((*findings, *outcome.findings), tuple(outcome.skipped))
+
+
+def _checked_inputs(
+    root_id: str,
+    coupon_padding_um: float,
+    inset_margins_um: Sequence[float] | None,
+    min_feature_um: float | None,
+) -> list[float] | None:
+    """Refuse a caller's bad argument with the error the plan or Palace would raise; return the margins.
+
+    These are mistakes in the call, not defects of the layout, so they never become findings.
+    """
+    source_path(root_id)
+    if finite_number(coupon_padding_um, "coupon_padding_um") < 0:
+        raise ValueError("coupon_padding_um must be nonnegative")
+    if min_feature_um is not None and not is_positive_real(min_feature_um):
+        raise ValueError("min_feature_um must be a finite positive number or None")
+    if inset_margins_um is None:
+        return None
+    return validated_margins(inset_margins_um, "inset_margins_um")
 
 
 def _registered_cells(instances: Mapping[str, Any]) -> dict[str, Any]:

@@ -63,8 +63,10 @@ boundary.  A support with no gap edge is an ``InputError``.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
-from typing import Literal
+from numbers import Real
+from typing import Any, Literal
 
 Side = Literal["sheet", "top", "bottom"]
 INTERFACE_TYPES = ("MA", "MS", "MM", "SA", "AA", "SS", "SHEET")
@@ -134,3 +136,32 @@ class RefinementRequest:
     request_id: str
     z_um: float
     points_um: tuple[tuple[float, float], ...]
+
+
+def is_positive_real(value: Any) -> bool:
+    """Whether ``value`` is a finite real number above zero (a ``bool`` is not one)."""
+    return (
+        isinstance(value, Real)
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+        and float(value) > 0.0
+    )
+
+
+def validated_margins(margins: Any, label: str) -> list[float]:
+    """The ordered, strictly increasing positive margins of one sequence; ``label`` names it in the error."""
+    if isinstance(margins, (str, bytes)) or not isinstance(margins, (list, tuple)):
+        raise TypeError(f"{label} must be an ordered non-empty sequence.")
+    if not margins:
+        raise ValueError(f"{label} must be non-empty.")
+    normalized = []
+    for margin in margins:
+        if not is_positive_real(margin):
+            raise ValueError(
+                f"{label} values must be finite positive reals "
+                "(the whole surface is the baseline row)."
+            )
+        normalized.append(float(margin))
+    if any(b <= a for a, b in zip(normalized, normalized[1:], strict=False)):
+        raise ValueError(f"{label} must be strictly increasing.")
+    return normalized
