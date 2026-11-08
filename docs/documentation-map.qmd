@@ -9,6 +9,8 @@ scgsim-status: "CONVERGING"
 
 Use Tutorial to choose one of the five complete calculation workflows.
 Backend course pages retain their paths and anchors as detailed references.
+To check from a layout repository that a layout can be modeled, use the
+[layout modeling check](layout-modeling-check.qmd).
 
 ## Page migration
 
@@ -19,7 +21,7 @@ Backend course pages retain their paths and anchors as detailed references.
 | `docs/course/*.qmd` | Retain backend and task detail at existing URLs; link to the complete goal guides. |
 | `docs/tutorials/*.qmd` | Retain the five complete goal guides linked from Tutorial and the reference index. |
 | `docs/concepts/*.qmd`, `docs/eigenmode-epr.qmd` | Retain in Concept. |
-| `docs/backend-support.qmd`, `docs/specs/*.qmd`, `docs/execution-profiles.qmd`, `docs/mesh-quality.qmd`, `docs/report-model.qmd`, `docs/api-migration.qmd`, `docs/notebook-ux.qmd` | Retain in Contract as the source for supported behavior and detailed interfaces. |
+| `docs/backend-support.qmd`, `docs/specs/*.qmd`, `docs/execution-profiles.qmd`, `docs/mesh-quality.qmd`, `docs/layout-modeling-check.qmd`, `docs/report-model.qmd`, `docs/api-migration.qmd`, `docs/notebook-ux.qmd` | Retain in Contract as the source for supported behavior and detailed interfaces. |
 | `docs/architecture.qmd`, `docs/goals-and-upstream.qmd`, `docs/provenance.qmd`, `docs/roadmap.qmd`, `docs/errors.qmd`, `docs/convergence-status.qmd`, `docs/ownership.qmd` | Keep their URLs and group them under Contribution as project and maintenance references. |
 | `docs/history/aedt-capacitance-pre-v3.qmd` | Keep in the Historical reference group. |
 | `docs/history/curved-source-installation.qmd` | Keep as the pinned historical environment and native Palace setup for the Circular Pad study. |

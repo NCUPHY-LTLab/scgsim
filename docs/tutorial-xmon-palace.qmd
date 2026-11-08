@@ -119,6 +119,10 @@ from IPython.display import display
 display(sim.input_summary())
 ```
 
+To learn that SCGSim can model a layout before setting up a simulation, the
+layout repository can run the [layout modeling check](layout-modeling-check.qmd),
+which stops before meshing.
+
 ## Build inputs, execute and read the return
 
 ```python

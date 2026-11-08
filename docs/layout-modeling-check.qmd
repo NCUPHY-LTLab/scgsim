@@ -1,0 +1,67 @@
+---
+title: "Layout Modeling Check"
+description: "Check from a layout repository that SCGSim can model a layout, before any simulation is set up."
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/layout-modeling-check"
+---
+
+`simulation_drc()` tells a layout repository whether SCGSim can model its
+layout. It runs the same preparation and geometry build that
+`EigenmodeSim.mesh()` runs, then stops before meshing. A layout that cannot be
+modeled is refused with the error the build raises, and a layout that can be
+modeled returns `None`.
+
+## Call it while drawing and in tests
+
+The check needs the layout Component and the PDK data a simulation would use:
+the layer stack and the material records. SCGSim does not depend on a PDK, so
+the layout repository passes them in.
+
+```python
+from scgsim.palace import simulation_drc
+
+
+def test_the_layout_can_be_modeled():
+    simulation_drc(
+        component,
+        layer_stack=layer_stack,
+        material_records=material_records,
+        surface_epr_specs=surface_epr_specs,
+    )
+```
+
+Call it from the repository's tests and while the layout is being drawn. Pass
+`surface_epr_specs` when the layout will be used for Surface EPR: the specs are
+the ones [`set_surface_epr`](specs/palace-eigenmode.qmd#surface-epr-margins)
+takes, and their margins are cut into the geometry as bands, so a layout that
+cannot carry them is refused here too. For an assembly, pass `instances` as
+`{"chip/device": reference, ...}`, as `GeometryPlan.register_instance` takes
+them; the plan's root is named `chip`.
+
+The check builds the geometry and does not mesh or solve, so it can be repeated
+as the layout changes. It stops at the first refusal. Read the message, fix the
+layout, and run it again. The [error archive](errors.qmd) records diagnostics
+seen in practice.
+
+## What the check uses
+
+The settings are fixed:
+
+- Route B;
+- every authored port;
+- no nets;
+- zero coupon padding.
+
+`simulation_drc()` writes into a temporary folder and removes it. It adds no
+rules of its own and no report type, so the error is the one `mesh()` would
+raise for the same layout and settings.
+
+::: {.callout-note title="What a pass means"}
+`simulation_drc()` only checks that the layout can be modeled directly. It does
+not promise that nets, Electrostatic terminals, Route A, junctions, lumped
+supports or a vacuum region will work. To check a specific simulation, run that
+simulation's own `mesh()`.
+:::
+
+AEDT is outside this check: its modeling runs inside AEDT, not through SGB.
