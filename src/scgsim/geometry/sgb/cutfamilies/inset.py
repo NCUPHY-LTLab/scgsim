@@ -20,8 +20,10 @@ Construction (no polygonised disk), per margin:
 
 The regions and seams travel with the family (``CurveFamilyRecord.regions``): labelling locates a face in them
 and the Imprint check proves that the level arrangement kept every seam (``labelling.bands``).  Neither proves
-that the candidates contain the whole level set ``dist = m``: a cell the candidates leave crossing it takes the
-side of its sample.
+that the candidates contain the whole level set ``dist = m``.  One failure is refused: where two neighbouring
+offsets neither meet nor cross (an outline drawn as many short edges with small turns between them), the curve
+has a gap and one cell lies on both sides of the margin (``inset_regions``).  A piece the candidates miss
+without leaving such a gap is not detected.
 
 Distance origins: only the region's gap edges (``SupportRegion.origins``; see ``cutfamilies.requests``).  The
 offset is built from those primitives alone: a line or arc per origin, a bridging arc at every reflex vertex
@@ -361,7 +363,7 @@ def _margin_seams(  # noqa: PLR0913 - one margin of one support, with its ports 
             Segment(p, q, frozenset([f"{arc.id}#{k}"]))
             for k, (p, q) in enumerate(zip(points, points[1:], strict=False))
         )
-    cells = margin_cells(segments, region, margin, ports, grid_um)
+    cells = margin_cells(family_id, segments, region, margin, ports, grid_um)
     lines, line_seams = _lines_of(family_id, cells.required, band)
     arcs, arc_seams = _arcs_of(cells.required, arc_pieces, band)
     return _MarginSeams(

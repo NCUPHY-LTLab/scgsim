@@ -6,6 +6,7 @@ per cell, whether it lies in the support and on which side of the margin:
 1. **Arrangement.**  The candidates join the support boundary (every ring, origins and the rest) and the port
    footprint boundaries in one snap-rounded arrangement (``arrangement.dcel``).  Every candidate is an edge, so
    no cell crosses the level set ``dist = m`` wherever the candidates contain it.
+   Where a gap in the candidates leaves one cell on both sides of the margin, the margin is refused.
 2. **Support.**  A cell lies in the support when the support boundary has it on its interior side; the
    classification follows the boundary's orientation from cell to cell, so it is exact (no sample point).
 3. **Side.**  One sample point of the cell whose distance to the origins differs from ``m`` by more than the
@@ -25,6 +26,7 @@ Positive-area cells are the only cells an arrangement has, so a band region that
 
 from __future__ import annotations
 
+import math
 from collections import deque
 from dataclasses import dataclass
 
@@ -81,7 +83,8 @@ class MarginCells:
     region_rings: tuple[tuple[Point, ...], ...]
 
 
-def margin_cells(
+def margin_cells(  # noqa: PLR0913 - one margin of one support, with its ports and grid
+    family_id: str,
     candidates: list[Segment],
     region: SupportRegion,
     margin: int,
@@ -97,6 +100,7 @@ def margin_cells(
     ]
     arr = build_arrangement(snap_round(segments).edges)
     in_support = _cells_in_support(arr, directions)
+    _check_curve_closed(arr, in_support, region, margin, family_id, grid_um)
     inside = {
         face: _in_region(arr, face, region, margin)
         for face, held in enumerate(in_support)
@@ -196,6 +200,73 @@ def _inconsistent_support(arr: Arrangement, face: int) -> ValidationError:
         f"inset cell at {arr.face_anchor(face)} (grid units) lies both inside and outside its support "
         "region: the support boundary is not a set of oriented rings"
     )
+
+
+def _check_curve_closed(  # noqa: PLR0913 - one margin's cells, its support and what names it
+    arr: Arrangement,
+    in_support: list[bool],
+    region: SupportRegion,
+    margin: int,
+    family_id: str,
+    grid_um: float,
+) -> None:
+    """Refuse a margin whose iso-distance curve has a gap, so that one cell holds both sides of the margin.
+
+    A candidate edge whose midpoint lies at the margin (within the slack of a cut) and that has the same cell on
+    both sides is a loose end of a curve piece.  Two loose ends are legitimate: the overlap of two offsets past a
+    convex crossing, which lies just outside ``R_m`` (it is nearer the next origin), and a dangling stub of one
+    side.  Beside a gap the curve stops short of the next piece, so the same cell lies clearly inside ``R_m`` on
+    one side of the loose end and clearly outside it on the other: two probes, one slack beyond the cut's own
+    uncertainty on each side of the edge, find that.  Two coincident offsets on the centre line of a gap ``2m``
+    wide separate two cells and are never loose ends.
+    """
+    for ei, edge in enumerate(arr.edges):
+        face = arr.he_face[2 * ei]
+        if face != arr.he_face[2 * ei + 1] or not in_support[face]:
+            continue
+        if all(c.startswith("~") for c in edge.carriers):
+            continue
+        x, y = (edge.a[0] + edge.b[0]) / 2, (edge.a[1] + edge.b[1]) / 2
+        if abs(region.distance((x, y)) - margin) > DISTANCE_SLACK:
+            continue
+        if _straddles(arr, face, edge, region, margin):
+            raise ValidationError(
+                f"inset family {family_id!r}: the inset curve at m = {margin * grid_um:g} um is not "
+                f"closed near ({x * grid_um:.4f}, {y * grid_um:.4f}) um: two offsets of the support "
+                "boundary neither meet nor cross there, so the band regions cannot be told apart "
+                "(outlines drawn as many short edges do this; draw true arcs or fewer, longer edges)"
+            )
+
+
+PROBE_DENOMINATOR = 1000  # probe points are rational with this denominator (a thousandth of a grid unit)
+
+
+def _straddles(
+    arr: Arrangement, face: int, edge: NodedEdge, region: SupportRegion, margin: int
+) -> bool:
+    """Whether the cell holds a point clearly inside ``R_m`` on one side of a loose end and clearly outside on the other."""
+    dx, dy = edge.b[0] - edge.a[0], edge.b[1] - edge.a[1]
+    length = math.hypot(dx, dy)
+    reach = 2 * DISTANCE_SLACK / length
+    mx, my = (edge.a[0] + edge.b[0]) / 2, (edge.a[1] + edge.b[1]) / 2
+    rings = [arr.cycle_points(c) for c in arr.face_cycles(face)]
+    sides = set()
+    for sign in (1, -1):
+        px, py = mx - sign * dy * reach, my + sign * dx * reach
+        probe = (
+            round(px * PROBE_DENOMINATOR),
+            round(py * PROBE_DENOMINATOR),
+            PROBE_DENOMINATOR,
+        )
+        if sum(point_in_ring(ring, probe) for ring in rings) % 2 == 0:
+            return (
+                False  # the probe left the cell: the curve separates the two sides here
+            )
+        distance = region.distance((px, py))
+        if abs(distance - margin) <= DISTANCE_SLACK:
+            return False
+        sides.add(distance > margin)
+    return len(sides) == 2
 
 
 def _in_region(arr: Arrangement, face: int, region: SupportRegion, margin: int) -> bool:

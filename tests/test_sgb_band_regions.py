@@ -486,3 +486,16 @@ def test_a_narrow_neck_splits_the_inner_band_into_two_islands():
     assert (
         band_at(model, "ma::pad::top", 0.0, 0.0) == 1
     )  # the neck centre is 0.75 um from its edges
+
+
+def test_a_polygon_circle_whose_neighbouring_offsets_do_not_meet_is_refused():
+    """A 256-gon of radius 20 um: at 0.5 um most neighbouring offsets neither meet nor cross, so R_m and
+    its outside are one cell.  The build refuses instead of labelling that cell from one sample."""
+    points = [
+        (20 * math.cos(2 * math.pi * k / 256), 20 * math.sin(2 * math.pi * k / 256))
+        for k in range(256)
+    ]
+    with pytest.raises(
+        ValidationError, match=r"the inset curve at m = 0\.5 um is not closed near"
+    ):
+        build_model_from_catalogue(route_b_pad(points), "B", insets=type_bands())
