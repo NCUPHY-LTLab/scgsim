@@ -48,6 +48,10 @@ Palace 0.18.1 根據設定類型及相鄰求解元素建立原生表面被積函
 
 內縮邊距 $m$ 選出表面上距最近 gap edge（導體輪廓上面向裸露 substrate 的邊）至少 $m$ µm 的部分。SGB 把該部分以帶面切進模型，所以一般的 Palace 對普通屬性積分；SCGSim 不寫出原生 `Mask` 或 `Inset` 設定，也不需要特殊的 Palace 建置。距離如何量測，由 [SGB 設計頁](../design/sgb/inset-imprint.qmd#band-measure)定義。
 
+::: {.callout-warning title="圓請以圓弧畫，不要用很多短邊"}
+以很多短邊畫成的多邊形導體輪廓（例如多邊形圓、取樣很密的圓頭）可能讓 inset 曲線不封閉：相鄰兩條邊的 offset 既不相接也不相交。這時 SGB 拒絕這個 layout，訊息是 `inset family '…': the inset curve at m = … um is not closed near (x, y) um`，不會輸出錯誤的 band。請以真正的圓弧畫這種輪廓，或改用較少、較長的邊。決定結果的是每個頂點的轉角，不是邊長。以外接圓半徑 5、20、100 µm 的正 $n$ 邊形 pad、margin 0.5 與 1.0 µm、1 nm 的 grid 量測：64 邊（每個頂點 5.6°）與 128 邊（2.8°）建出預期的 band 面積；256 邊（1.4°）以上在每個半徑都被拒絕；真正的圓弧在每個半徑都通過。其他形狀、margin 與 grid 沒有量測。原因與量測見 [band 的建立](../design/sgb/inset-imprint.qmd#band-regions)。
+:::
+
 ::: {.callout-important title="請在 mesh() 之前呼叫 set_surface_epr"}
 邊距是幾何：`mesh()` 會把它們連同其餘模型一起交給 SGB。請先設定 `set_surface_epr`。在 `mesh()` 之後再呼叫它，會使網格、設定檔及交接失效，必須重新執行 `mesh()`。
 :::
