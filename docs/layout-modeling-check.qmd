@@ -65,7 +65,10 @@ the message does not match the layout you drew, report it to SCGSim.
 
 The settings are fixed:
 
-- Route B and Palace's default airbox, with no vacuum region;
+- Route B and Palace's default airbox;
+- a 1 µm vacuum region on all six faces when the layout has no vacuum of its
+  own, and the layout's own vacuum when it has one, so the metal has air faces
+  for `MA` and `SA` bands;
 - zero coupon padding;
 - for `EigenmodeSim`, every authored port with a fixed inductance, which does
   not change the geometry;
@@ -80,7 +83,7 @@ rules of its own and no report type, so the error is the one that class's
 A pass means the model built with the fixed settings above was accepted; it
 does not say how many bands were cut. It does not promise that other settings will model: Route A,
 nets or Electrostatic terminals, junctions, lumped supports, indium bumps or a
-vacuum region. To check a specific set-up, run that simulation's own `mesh()`.
+different vacuum region. To check a specific set-up, run that simulation's own `mesh()`.
 :::
 
 AEDT is outside this check: its STEP import is not covered yet.

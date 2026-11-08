@@ -6,6 +6,8 @@ marker error, so what is compared is the geometry stage both share.
 
 from __future__ import annotations
 
+import json
+import math
 from types import SimpleNamespace
 
 import pytest
@@ -70,13 +72,29 @@ LAYER_STACK = SimpleNamespace(
 )
 
 
+# The same stack with no vacuum level, so the layout owns no vacuum.
+NO_VACUUM_STACK = SimpleNamespace(
+    layers={
+        name: layer
+        for name, layer in LAYER_STACK.layers.items()
+        if name != "VACUUM_REGION"
+    }
+)
+# Pad outlines inside the 20 um square: a 64-sided polygon circle and a diamond, which touch their bounds at single points.
+CIRCLE_PAD = tuple(
+    (10 + 10 * math.cos(2 * math.pi * i / 64), 10 + 10 * math.sin(2 * math.pi * i / 64))
+    for i in range(64)
+)
+DIAMOND_PAD = ((10, 0), (20, 10), (10, 20), (0, 10))
+
 SIMULATIONS = [EigenmodeSim, ElectrostaticSim]
 
 
-def two_pads(monkeypatch, *, gap_um, port=False):
+def two_pads(monkeypatch, *, gap_um, port=False, pad=None):
     """A 20 um pad and a 30 um electrode ``gap_um`` apart; a negative gap makes them overlap.
 
     With ``port`` a lumped-port sheet bridges the gap, as an authored port of the component.
+    ``pad`` replaces the square pad's outline, drawn inside the same 20 um square.
     """
     import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
 
@@ -89,7 +107,8 @@ def two_pads(monkeypatch, *, gap_um, port=False):
     gf.gpdk.PDK.activate()
     component = gf.Component()
     far = 20.0 + gap_um
-    component.add_polygon(((0, 0), (20, 0), (20, 20), (0, 20)), layer=(1, 0))
+    pad = pad or ((0, 0), (20, 0), (20, 20), (0, 20))
+    component.add_polygon(pad, layer=(1, 0))
     component.add_polygon(
         ((far, 0), (far + 30, 0), (far + 30, 20), (far, 20)), layer=(2, 0)
     )
@@ -118,10 +137,10 @@ def two_pads(monkeypatch, *, gap_um, port=False):
     return component
 
 
-def check(simulation, component, **options):
+def check(simulation, component, *, layer_stack=LAYER_STACK, **options):
     """``simulation.simulation_drc`` with the stand-in PDK data."""
     return simulation.simulation_drc(
-        component, layer_stack=LAYER_STACK, material_records=MATERIALS, **options
+        component, layer_stack=layer_stack, material_records=MATERIALS, **options
     )
 
 
@@ -239,3 +258,77 @@ def test_invalid_surface_epr_specs_are_refused_as_set_surface_epr_refuses_them(
     component = two_pads(monkeypatch, gap_um=10.0)
     with pytest.raises(TypeError, match="surface_epr specs must be a mapping"):
         check(simulation, component, surface_epr_specs=specs)
+
+
+def check_sidecars(monkeypatch, simulation, component, **options):
+    """The sidecar of every real SGB build ``simulation_drc`` makes, read before its folder is removed."""
+    sidecars = []
+    real = simulation._build_geometry  # noqa: SLF001 -- the geometry half the check runs
+
+    def recording(self, output_dir):
+        geometry = real(self, output_dir)
+        sidecars.append(json.loads(geometry.artifacts.sidecar.read_bytes()))
+        return geometry
+
+    monkeypatch.setattr(simulation, "_build_geometry", recording)
+    check(simulation, component, **options)
+    return sidecars
+
+
+def ma_band_groups(sidecar):
+    """The MA band physical groups of a sidecar."""
+    return [
+        name
+        for name in sidecar["physical_groups"]
+        if name.startswith("MA") and "band=" in name
+    ]
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+def test_a_layout_with_no_vacuum_is_wrapped_so_ma_bands_are_cut(
+    monkeypatch, simulation
+):
+    """With no vacuum in the layout the check adds one, so the metal has air faces to band."""
+    component = two_pads(monkeypatch, gap_um=10.0)
+    (sidecar,) = check_sidecars(
+        monkeypatch,
+        simulation,
+        component,
+        layer_stack=NO_VACUUM_STACK,
+        surface_epr_specs=BANDED,
+    )
+    assert ma_band_groups(sidecar)
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+@pytest.mark.parametrize("pad", [CIRCLE_PAD, DIAMOND_PAD], ids=["circle", "diamond"])
+def test_pads_touching_the_vacuum_at_a_point_pass(monkeypatch, simulation, pad):
+    """The 1 um wrap leaves air around a polygon circle and a diamond, which a flush vacuum pinches."""
+    component = two_pads(monkeypatch, gap_um=10.0, pad=pad)
+    assert (
+        check(
+            simulation,
+            component,
+            layer_stack=NO_VACUUM_STACK,
+            surface_epr_specs=BANDED,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+def test_a_layout_with_its_own_vacuum_gets_no_vacuum_region(monkeypatch, simulation):
+    """When the stack carries ``VACUUM_REGION`` the check adds none and does not raise."""
+    added = []
+    real = simulation.set_vacuum_region
+
+    def recording(self, padding=0.0):
+        added.append(padding)
+        return real(self, padding)
+
+    monkeypatch.setattr(simulation, "set_vacuum_region", recording)
+    component = two_pads(monkeypatch, gap_um=10.0)
+    assert check(simulation, component, surface_epr_specs=BANDED) is None
+    assert added == []
+    assert check(simulation, component, layer_stack=NO_VACUUM_STACK) is None
+    assert added == [1.0]
