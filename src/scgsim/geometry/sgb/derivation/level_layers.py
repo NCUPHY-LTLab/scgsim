@@ -27,7 +27,12 @@ from scgsim.geometry.sgb.derivation.arc_edges import realise_arc_edges
 from scgsim.geometry.sgb.derivation.ids import assign_ids
 from scgsim.geometry.sgb.derivation.layer import Layer, RawMeasurements
 from scgsim.geometry.sgb.errors import InputError
-from scgsim.geometry.sgb.labelling.bands import face_band
+from scgsim.geometry.sgb.labelling.bands import (
+    LevelSupport,
+    check_seams_kept,
+    face_bands,
+    level_supports,
+)
 from scgsim.geometry.sgb.labelling.dissolve import Dissolved, FamilyPolicies, dissolve
 from scgsim.geometry.sgb.labelling.linking import TAG, SlabEdges, link_faces
 from scgsim.geometry.sgb.labelling.membership import membership_shares
@@ -40,9 +45,9 @@ from scgsim.geometry.sgb.records.carriers import (
     ArcCarrier,
     base_carrier_id,
 )
+from scgsim.geometry.sgb.records.families import CurveFamilyRecord
 from scgsim.geometry.sgb.records.labels import LevelLabel, SheetOwner
 from scgsim.geometry.sgb.records.prisms import PrismCatalogue
-from scgsim.geometry.sgb.records.support import SupportRegion
 
 
 @dataclass
@@ -54,7 +59,7 @@ class _RawLevel:
     above_link: list[int] | None
     sheets: PrismSet | None
     policies: FamilyPolicies
-    supports: list[tuple[str, SupportRegion]]  # inset families targeting this level
+    supports: list[LevelSupport]  # inset families targeting this level
     stats: dict[str, int]
 
 
@@ -90,16 +95,16 @@ def build_level_layers(
             "hot_pixels": snapped.hot_pixels,
             "snap_rounds": snapped.rounds,
         }
-        supports = [
-            (catalogue.families[i].family_id, support)
-            for i in levels.level_families[level]
-            if (support := catalogue.families[i].support) is not None
-        ]
+        supports = level_supports(
+            catalogue.families[i] for i in levels.level_families[level]
+        )
         raw_levels.append(
             _RawLevel(arrangement, below, above, sheets, policies, supports, stats)
         )
 
     extras = _label_level_cells(catalogue, slabs, raw_levels, rt)
+    with rt.serial("band_seam_check"):
+        _check_band_seams(catalogue, levels, raw_levels, extras)
     layers = _dissolve_levels(levels, slabs, raw_levels, extras, rt)
     tag_sources = [_tag_sources(slabs, level) for level in range(len(levels.levels))]
     assign_ids(layers, tag_sources, rt)
@@ -108,6 +113,37 @@ def build_level_layers(
             realise_arc_edges(layer, arcs, register=False)
     _check_ports_keep_a_face(catalogue, layers)
     return layers
+
+
+def _check_band_seams(
+    catalogue: PrismCatalogue,
+    levels: LevelStructure,
+    raw_levels: list[_RawLevel],
+    extras: dict[
+        tuple[int, int],
+        tuple[SheetOwner | None, tuple[tuple[str, int], ...], tuple[str, ...]],
+    ],
+) -> None:
+    """The Imprint check of every level with band families: each seam kept, the faces beside it in its bands."""
+    for k, raw in enumerate(raw_levels):
+        if not raw.supports:
+            continue
+        faces = range(1, len(raw.arrangement.faces))
+        bands: list[dict[str, int]] = [{}]
+        bands.extend(dict(extras[(k, fi)][1]) for fi in faces)
+        ports = {
+            fi
+            for fi in faces
+            if (owner := extras[(k, fi)][0]) is not None and owner.kind == "port"
+        }
+        check_seams_kept(
+            raw.arrangement,
+            bands,
+            ports,
+            (catalogue.families[i] for i in levels.level_families[k]),
+            catalogue.grid,
+            f"the level at z = {float(levels.levels[k])} um",
+        )
 
 
 def _check_ports_keep_a_face(catalogue: PrismCatalogue, layers: list[Layer]) -> None:
@@ -147,15 +183,20 @@ def _level_segments(
     refinement: set[str] = set()
     for family_index in levels.level_families[level]:
         family = catalogue.families[family_index]
-        members = [(c.id, c.p, c.q) for c in family.carriers]
-        for arc in family.arcs:
-            points = arc.witness_points()
-            members.extend(zip(arc.piece_ids(), points, points[1:], strict=False))
-        for carrier_id, p, q in members:
-            segments.append(Segment(p, q, frozenset([carrier_id])))
-            policy = required if family.edge_policy == "required" else refinement
-            policy.add(base_carrier_id(carrier_id))
+        policy = required if family.edge_policy == "required" else refinement
+        for segment in family_segments(family):
+            segments.append(segment)
+            policy.update(base_carrier_id(c) for c in segment.carriers)
     return segments, FamilyPolicies(frozenset(required), frozenset(refinement))
+
+
+def family_segments(family: CurveFamilyRecord) -> list[Segment]:
+    """The segments a cut family enters its level's noding as: each line whole, each arc as its witness chords."""
+    members = [(c.id, c.p, c.q) for c in family.carriers]
+    for arc in family.arcs:
+        points = arc.witness_points()
+        members.extend(zip(arc.piece_ids(), points, points[1:], strict=False))
+    return [Segment(p, q, frozenset([carrier_id])) for carrier_id, p, q in members]
 
 
 def _slab_edge_segments(slab: Layer, arcs: dict[str, ArcCarrier]) -> list[Segment]:
@@ -226,9 +267,9 @@ def _level_extras_job(shared: Any, items: list[int]) -> list[Any]:
 
     Owner and coverage are footprint tests at one interior point: every footprint boundary is an
     arrangement edge, so no face straddles one.  A port's footprint is its authored region whole;
-    over a host conductor of the port the cell is the host's surface, not the port (``without_landings``).  A band is a distance test, whose boundary can be
-    a line inside a face, so a band comes from the face's area (``face_band``), not from the point.  A port
-    face is the one face that may lie across bands (the seams stop at its boundary).
+    over a host conductor of the port the cell is the host's surface, not the port (``without_landings``).  The
+    band seams are arrangement edges too, so the same point located in the band regions gives the face's band
+    (``face_bands``).  A port face is the one face that may lie across bands (the seams stop at its boundary).
     """
     arrangements, sheet_sets, supports, cover_sets, flat, prisms = shared
     out = []
@@ -239,18 +280,8 @@ def _level_extras_job(shared: Any, items: list[int]) -> list[Any]:
         owner = sheets.owner_at(point) if sheets is not None else None
         covering = sorted({j for s in cover_sets[k] for j in s.hit(point)})
         owner, kept = without_landings(owner, [prisms[j] for j in covering])
-        bands = tuple(
-            (family_id, band)
-            for family_id, support in supports[k]
-            if (
-                band := face_band(
-                    arrangements[k],
-                    fi,
-                    support,
-                    nominal=owner is not None and owner.kind == "port",
-                )
-            )
-            is not None
+        bands = face_bands(
+            point, supports[k], nominal=owner is not None and owner.kind == "port"
         )
         entities = tuple(sorted({p.entity_id for p in kept}))
         out.append((owner, bands, entities))

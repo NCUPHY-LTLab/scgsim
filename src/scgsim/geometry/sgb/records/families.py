@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import Literal
 
+from scgsim.geometry.sgb.records.band_regions import BandRegions
 from scgsim.geometry.sgb.records.carriers import ArcCarrier, LineCarrier
 from scgsim.geometry.sgb.records.support import SupportRegion
 
@@ -31,6 +32,9 @@ class CurveFamilyRecord:
     arcs: tuple[ArcCarrier, ...] = ()
     support: SupportRegion | None = (
         None  # inset bands: the region whose bands the family partitions
+    )
+    regions: BandRegions | None = (
+        None  # inset bands: the regions R_m and the required seams, established before Imprint
     )
 
     def __post_init__(self) -> None:
