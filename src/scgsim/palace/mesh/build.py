@@ -83,33 +83,25 @@ def build_route_mesh(  # noqa: PLR0913 -- preserve the supported mesh preparatio
     meshing module cannot bring to ``quality_threshold`` raises :class:`scgsim.meshing.MeshRepairError`
     carrying the quality report.
     """
-    if representation_context is None or source_geometry_input is None:
-        raise ValueError(
-            "fresh Palace mesh requires neutral effective geometry input and representation_context from preparation"
-        )
-    if not isinstance(stack, Mapping):
-        raise TypeError("stack must be a mapping after set_stack processing.")
-    if route not in {"A", "B"}:
-        raise ValueError("route must be either 'A' or 'B'.")
     controls = MeshControls().updated(
         recipe=recipe,
         mesher=mesher,
         budgets=budgets,
         quality_threshold=quality_threshold,
     )
-    thin_film = route_a_thin_film_provenance(stack, route)
-    stack = with_port_sheet_metadata(stack, port_sheet_source_layers)
-    paths = _prepare_paths(output_dir, route)
-    top_cell = _write_sources(component, stack, source_gds_bytes, paths)
-    _write_optional_bump_receipt(indium_ground_bump_fill, paths)
-
-    artifacts = _build_geometry(
-        source_geometry_input,
-        representation_context,
-        route,
-        surface_epr_specs,
-        paths,
+    built = build_route_geometry(
+        component=component,
+        stack=stack,
+        route=route,
+        output_dir=output_dir,
+        surface_epr_specs=surface_epr_specs,
+        port_sheet_source_layers=port_sheet_source_layers,
+        indium_ground_bump_fill=indium_ground_bump_fill,
+        source_gds_bytes=source_gds_bytes,
+        source_geometry_input=source_geometry_input,
+        representation_context=representation_context,
     )
+    paths, artifacts = built.paths, built.artifacts
     sidecar_bytes = artifacts.sidecar.read_bytes()
     sidecar = json.loads(sidecar_bytes)
     groups = groups_from_sidecar(sidecar)
@@ -136,7 +128,7 @@ def build_route_mesh(  # noqa: PLR0913 -- preserve the supported mesh preparatio
         },
         mesh_name=paths.mesh_path.name,
         route=route,
-        route_a_thin_film=thin_film,
+        route_a_thin_film=built.route_a_thin_film,
         meshing=_meshing_record(meshed, observed, paths),
     )
     write_json(paths.manifest_path, manifest)
@@ -145,9 +137,13 @@ def build_route_mesh(  # noqa: PLR0913 -- preserve the supported mesh preparatio
         {
             "scgsim_version": scgsim_version(),
             "route": route,
-            **({"route_a_thin_film": thin_film} if thin_film is not None else {}),
+            **(
+                {"route_a_thin_film": built.route_a_thin_film}
+                if built.route_a_thin_film is not None
+                else {}
+            ),
             "geometry_authority": SGB_RUNTIME_AUTHORITY,
-            "component_top_cell": top_cell,
+            "component_top_cell": built.top_cell,
             "run_dir": ".",
             "stack_path": paths.relative(paths.stack_path),
             "xao_path": paths.relative(artifacts.xao),
@@ -168,7 +164,7 @@ def build_route_mesh(  # noqa: PLR0913 -- preserve the supported mesh preparatio
 
 
 @dataclass(frozen=True)
-class _BuildPaths:
+class BuildPaths:
     """Paired source and result locations shared by one mesh preparation."""
 
     run_dir: Path
@@ -185,7 +181,59 @@ class _BuildPaths:
         return path.relative_to(self.run_dir).as_posix()
 
 
-def _prepare_paths(output_dir: str | Path, route: str) -> _BuildPaths:
+@dataclass(frozen=True)
+class RouteGeometry:
+    """The SGB geometry of one run folder, before any meshing."""
+
+    paths: BuildPaths
+    artifacts: SgbArtifacts
+    top_cell: str
+    route_a_thin_film: dict[str, Any] | None
+
+
+@diagnostic_stage("palace.mesh.geometry")
+def build_route_geometry(  # noqa: PLR0913 -- the keyword set of build_route_mesh, minus the mesh controls.
+    *,
+    component: Any,
+    stack: Mapping[str, Any],
+    route: str,
+    output_dir: str | Path,
+    surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
+    port_sheet_source_layers: Sequence[Mapping[str, Any]] = (),
+    indium_ground_bump_fill: Mapping[str, Any] | None = None,
+    source_gds_bytes: bytes | None = None,
+    source_geometry_input: GeometryBuildInput | None = None,
+    representation_context: RepresentationContext | None = None,
+) -> RouteGeometry:
+    """Write the sources and build the Route-A/Route-B SGB geometry, the stages of a mesh before meshing.
+
+    This is the modeling path ``build_route_mesh`` and the layout modeling check share: a layout SGB
+    cannot model is refused here, with the error SGB raises.
+    """
+    if representation_context is None or source_geometry_input is None:
+        raise ValueError(
+            "fresh Palace mesh requires neutral effective geometry input and representation_context from preparation"
+        )
+    if not isinstance(stack, Mapping):
+        raise TypeError("stack must be a mapping after set_stack processing.")
+    if route not in {"A", "B"}:
+        raise ValueError("route must be either 'A' or 'B'.")
+    thin_film = route_a_thin_film_provenance(stack, route)
+    stack = with_port_sheet_metadata(stack, port_sheet_source_layers)
+    paths = _prepare_paths(output_dir, route)
+    top_cell = _write_sources(component, stack, source_gds_bytes, paths)
+    _write_optional_bump_receipt(indium_ground_bump_fill, paths)
+    artifacts = _build_geometry(
+        source_geometry_input,
+        representation_context,
+        route,
+        surface_epr_specs,
+        paths,
+    )
+    return RouteGeometry(paths, artifacts, top_cell, thin_film)
+
+
+def _prepare_paths(output_dir: str | Path, route: str) -> BuildPaths:
     run_dir = Path(output_dir).expanduser().resolve()
     if run_dir.exists() and any(run_dir.iterdir()):
         raise ValueError(f"output_dir must be empty before mesh: {run_dir}")
@@ -202,7 +250,7 @@ def _prepare_paths(output_dir: str | Path, route: str) -> _BuildPaths:
     ):
         path.mkdir(parents=True, exist_ok=True)
 
-    return _BuildPaths(
+    return BuildPaths(
         run_dir=run_dir,
         geometry_dir=geometry_dir,
         mesh_dir=mesh_dir,
@@ -218,7 +266,7 @@ def _write_sources(
     component: Any,
     stack: Mapping[str, Any],
     source_gds_bytes: bytes | None,
-    paths: _BuildPaths,
+    paths: BuildPaths,
 ) -> str:
     if source_gds_bytes is None:
         if component is None:
@@ -246,7 +294,7 @@ def _write_sources(
 
 
 def _write_optional_bump_receipt(
-    indium_ground_bump_fill: Mapping[str, Any] | None, paths: _BuildPaths
+    indium_ground_bump_fill: Mapping[str, Any] | None, paths: BuildPaths
 ) -> None:
     if indium_ground_bump_fill is not None:
         receipt = indium_ground_bump_fill.get("receipt")
@@ -264,7 +312,7 @@ def _build_geometry(
     representation: RepresentationContext,
     route: str,
     surface_epr_specs: Mapping[str, Mapping[str, Any]] | None,
-    paths: _BuildPaths,
+    paths: BuildPaths,
 ) -> SgbArtifacts:
     """Build the route's geometry with the Surface-EPR bands the specs ask for.
 
@@ -294,7 +342,7 @@ def _unbanded_sidecar(
     build_input: GeometryBuildInput,
     representation: RepresentationContext,
     route: str,
-    paths: _BuildPaths,
+    paths: BuildPaths,
 ) -> dict[str, Any]:
     """The sidecar of a build without bands; the build itself is a scratch folder that is removed."""
     scratch = paths.geometry_dir / _UNBANDED_DIR
@@ -309,7 +357,7 @@ def _unbanded_sidecar(
 
 @diagnostic_stage("palace.mesh.module")
 def _mesh_geometry(
-    artifacts: SgbArtifacts, paths: _BuildPaths, controls: MeshControls
+    artifacts: SgbArtifacts, paths: BuildPaths, controls: MeshControls
 ) -> MeshResult:
     """Mesh the XAO to the threshold with the meshing module; the sidecar is the pair of this XAO."""
     return mesh_sgb(
@@ -324,7 +372,7 @@ def _mesh_geometry(
 
 
 def _meshing_record(
-    meshed: MeshResult, observed: Mapping[str, Any], paths: _BuildPaths
+    meshed: MeshResult, observed: Mapping[str, Any], paths: BuildPaths
 ) -> dict[str, Any]:
     """The meshing section of the manifest: the settings and report of the module, and the written mesh."""
     report = meshed.report

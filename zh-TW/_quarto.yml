@@ -159,6 +159,7 @@ website:
       contents:
       - docs/geometry-sgb.qmd
       - docs/geometry-preview.qmd
+      - docs/layout-modeling-check.qmd
       - docs/specs/physical-representation.qmd
       - docs/specs/palace-electrostatic-sgb.qmd
       - docs/specs/palace-eigenmode.qmd

@@ -96,6 +96,8 @@ from IPython.display import display
 display(sim.input_summary())
 ```
 
+若想在建立模擬之前就得知 SCGSim 能否為版圖建模，版圖儲存庫可以執行[版圖建模檢查](layout-modeling-check.qmd)，它會在建立網格之前停止。
+
 ## 建立輸入、執行並讀取回傳資料 {#build-inputs-execute-and-read-the-return}
 
 ```python

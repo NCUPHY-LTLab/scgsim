@@ -3,12 +3,15 @@
 This class prepares geometry and manual handoff files; it never runs Palace.
 """
 
+# long-file: the setters, mesh(), its geometry half and simulation_drc share the simulation's private state; a split would reach into it.
+
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, Literal
 
 from scgsim.geometry.models.input import VacuumRegionSpec
@@ -19,7 +22,12 @@ from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
 from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
 
 from ..execution.handoff import HandoffPlan, prepare_handoff
-from ..mesh.build import MeshBuildResult, build_route_mesh
+from ..mesh.build import (
+    MeshBuildResult,
+    RouteGeometry,
+    build_route_geometry,
+    build_route_mesh,
+)
 from ..mesh.controls import MeshControls
 from ..mesh.summary import summary_from_files
 from ..results.epr import PalaceEprResult, reanalyze_epr, show_epr
@@ -35,6 +43,7 @@ from .inputs import (
     non_negative_number,
     validate_stack_material_kinds,
 )
+from .layout_snapshot import prepare_layout_snapshot
 from .ports import RequestedPort, resolve_layout_ports
 from .surface_epr import normalize_surface_epr_specs
 from .transforms import (
@@ -45,6 +54,17 @@ from .transforms import (
     validate_positive_number,
 )
 from .workflow import persist_problem_files, prepare_mesh_input
+
+# The geometry build never reads a port's inductance, but ``add_port`` requires a positive one.
+_PORT_INDUCTANCE_H = 1.0e-9
+
+
+@dataclass(frozen=True)
+class _GeometryRequest:
+    """The resolved ports and the geometry keywords that ``mesh()`` and the modeling check both build from."""
+
+    ports: list[LayoutPortBinding]
+    source: dict[str, Any]
 
 
 @dataclass
@@ -525,79 +545,154 @@ class EigenmodeSim:
             raise ValueError(
                 "set_geometry(), set_stack(), and set_output_dir() must run before mesh()."
             )
-        if self._plan_snapshot is not None:
-            if (
-                self.indium_ground_bumps is not None
-                and self.indium_ground_bumps["fill"]
-            ):
+        request = self._geometry_request(self.stack)
+        self._mesh_result = build_route_mesh(
+            **request.source,
+            output_dir=self.output_dir,
+            recipe=self.mesh_controls.recipe,
+            mesher=self.mesh_controls.mesher,
+            budgets=self.mesh_controls.budgets,
+            quality_threshold=self.mesh_controls.quality_threshold,
+        )
+        self._resolved_ports = request.ports
+        return self._mesh_result.mesh_path
+
+    @classmethod
+    def simulation_drc(
+        cls,
+        component: Any,
+        *,
+        layer_stack: Any,
+        material_records: Mapping[str, Mapping[str, Any]],
+        instances: Mapping[str, Any] | None = None,
+        surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> None:
+        """Return ``None`` when an ``EigenmodeSim`` can model ``component``; otherwise raise the error ``mesh()`` raises.
+
+        This runs the preparation and SGB geometry build of ``mesh()`` and stops before meshing, with fixed
+        settings: Route B, Palace's default airbox, no vacuum region, zero coupon padding, and every authored port with a fixed inductance (the geometry never reads it).  The
+        error is the stage's own, unchanged.  The geometry is written to a temporary folder that is removed.
+        With ``surface_epr_specs`` the bands are cut as ``set_surface_epr(representation="B", specs=...)``
+        would cut them.
+
+        A pass means the layout can be modeled with these settings.  It does not promise that other
+        settings (Route A, nets, junctions, lumped supports, a vacuum region) will model; run that
+        simulation's own ``mesh()`` for that.
+
+        Args:
+            component: The layout Component under check.
+            layer_stack: The PDK layer stack, as ``GeometryPlan`` takes it.
+            material_records: The PDK material records, as ``GeometryPlan`` takes them.
+            instances: ``{"chip/device": reference, ...}`` for an assembly, as ``GeometryPlan.register_instance``.
+            surface_epr_specs: The specs ``set_surface_epr`` takes; their margins become bands.
+        """
+        snapshot = prepare_layout_snapshot(
+            component,
+            layer_stack=layer_stack,
+            material_records=material_records,
+            instances=instances,
+        )
+        sim = cls()
+        sim.set_plan(snapshot)
+        for port in snapshot.stack["metadata"].get("port_sheet_source_layers", ()):
+            sim.add_port(
+                port["name"],
+                layer=port["target_layer"],
+                layout_sheet=True,
+                inductance=_PORT_INDUCTANCE_H,
+            )
+        if surface_epr_specs is not None:
+            sim.set_surface_epr(representation="B", specs=surface_epr_specs)
+        with TemporaryDirectory(prefix="scgsim-simulation-drc-") as folder:
+            # The geometry build requires an empty folder; the temporary one is, and goes away with the check.
+            sim._build_geometry(folder)  # noqa: SLF001 -- the check is a classmethod of the same class
+
+    def _build_geometry(self, output_dir: str | Path) -> RouteGeometry:
+        """Run the preparation and SGB geometry build of ``mesh()`` into ``output_dir``, then stop.
+
+        This is the modeling path ``mesh()`` shares, used by ``simulation_drc``.  The simulation's own output folder and mesh state are left as they were.
+        """
+        if (
+            self.component is None and self._plan_snapshot is None
+        ) or self.stack is None:
+            raise ValueError(
+                "set_geometry() or set_plan(), and set_stack(), must run before the geometry build."
+            )
+        return build_route_geometry(
+            **self._geometry_request(self.stack).source, output_dir=output_dir
+        )
+
+    def _geometry_request(self, stack: Mapping[str, Any]) -> _GeometryRequest:
+        """Resolve ports and prepare the geometry input, everything before the SGB build, for a plan or a Component."""
+        if self._plan_snapshot is None:
+            return self._component_geometry_request(stack)
+        if self.indium_ground_bumps is not None and self.indium_ground_bumps["fill"]:
+            raise ValueError(
+                "GeometryPlan source already owns its geometry; add authored bumps before prepare()"
+            )
+        available_records = self._plan_snapshot.stack["metadata"].get(
+            "port_sheet_source_layers", ()
+        )
+        available = {record["name"]: record for record in available_records}
+        if len(available) != len(available_records):
+            raise ValueError("GeometryPlan port names must be unique")
+        resolved, source_records = [], []
+        for requested in self.ports:
+            record = available.get(requested.name)
+            if record is None or record["target_layer"] != requested.layer:
                 raise ValueError(
-                    "GeometryPlan source already owns its geometry; add authored bumps before prepare()"
+                    f"GeometryPlan has no matching authored port {requested.name!r}"
                 )
-            available_records = self._plan_snapshot.stack["metadata"].get(
-                "port_sheet_source_layers", ()
-            )
-            available = {record["name"]: record for record in available_records}
-            if len(available) != len(available_records):
-                raise ValueError("GeometryPlan port names must be unique")
-            resolved, source_records = [], []
-            for requested in self.ports:
-                record = available.get(requested.name)
-                if record is None or record["target_layer"] != requested.layer:
-                    raise ValueError(
-                        f"GeometryPlan has no matching authored port {requested.name!r}"
-                    )
-                resolved.append(
-                    LayoutPortBinding(
-                        index=len(resolved) + 1,
-                        name=requested.name,
-                        target_layer=requested.layer,
-                        source_layer=f"{record['layer']}/{record['datatype']}",
-                        direction=tuple(record["direction"]),
-                        inductance=requested.inductance,
-                    )
+            resolved.append(
+                LayoutPortBinding(
+                    index=len(resolved) + 1,
+                    name=requested.name,
+                    target_layer=requested.layer,
+                    source_layer=f"{record['layer']}/{record['datatype']}",
+                    direction=tuple(record["direction"]),
+                    inductance=requested.inductance,
                 )
-                source_records.append({**record, "port_index": len(resolved)})
-            source_stack = self._plan_snapshot.stack
-            prepared = prepare_mesh_input(
-                component=None,
-                stack=source_stack,
-                route=self.route,
-                route_a_thin_film=self.route_a_thin_film,
-                approximation_profile=self.approximation_profile,
-                airbox=self.airbox,
-                vacuum_region=(
-                    None
-                    if "VACUUM_REGION" in source_stack["solution_regions"]
-                    else self.vacuum_region
-                ),
-                indium_ground_bumps=None,
-                build_input=self._plan_snapshot.geometry_input,
-                port_sheet_source_layers=source_records,
             )
-            if prepared.materials is not None:
-                self._materials = prepared.materials
-            self._mesh_result = build_route_mesh(
-                component=None,
-                stack=prepared.stack,
-                route=self.route,
-                output_dir=self.output_dir,
-                surface_epr_specs=self.surface_epr_specs,
-                recipe=self.mesh_controls.recipe,
-                mesher=self.mesh_controls.mesher,
-                budgets=self.mesh_controls.budgets,
-                quality_threshold=self.mesh_controls.quality_threshold,
-                source_gds_bytes=self._plan_snapshot.gds_bytes,
-                source_geometry_input=prepared.geometry_input,
-                representation_context=prepared.physical_plan.context,
-            )
-            self._resolved_ports = resolved
-            return self._mesh_result.mesh_path
+            source_records.append({**record, "port_index": len(resolved)})
+        source_stack = self._plan_snapshot.stack
+        prepared = prepare_mesh_input(
+            component=None,
+            stack=source_stack,
+            route=self.route,
+            route_a_thin_film=self.route_a_thin_film,
+            approximation_profile=self.approximation_profile,
+            airbox=self.airbox,
+            vacuum_region=(
+                None
+                if "VACUUM_REGION" in source_stack["solution_regions"]
+                else self.vacuum_region
+            ),
+            indium_ground_bumps=None,
+            build_input=self._plan_snapshot.geometry_input,
+            port_sheet_source_layers=source_records,
+        )
+        if prepared.materials is not None:
+            self._materials = prepared.materials
+        return _GeometryRequest(
+            resolved,
+            {
+                "component": None,
+                "stack": prepared.stack,
+                "route": self.route,
+                "surface_epr_specs": self.surface_epr_specs,
+                "source_gds_bytes": self._plan_snapshot.gds_bytes,
+                "source_geometry_input": prepared.geometry_input,
+                "representation_context": prepared.physical_plan.context,
+            },
+        )
+
+    def _component_geometry_request(self, stack: Mapping[str, Any]) -> _GeometryRequest:
         resolved, source_records = (
             resolve_layout_ports(self.component, self.ports) if self.ports else ([], [])
         )
         prepared = prepare_mesh_input(
             component=self.component,
-            stack=self.stack,
+            stack=stack,
             route=self.route,
             route_a_thin_film=self.route_a_thin_film,
             approximation_profile=self.approximation_profile,
@@ -608,22 +703,18 @@ class EigenmodeSim:
         )
         if prepared.materials is not None:
             self._materials = prepared.materials
-        self._mesh_result = build_route_mesh(
-            component=prepared.component,
-            stack=prepared.stack,
-            route=self.route,
-            output_dir=self.output_dir,
-            surface_epr_specs=self.surface_epr_specs,
-            recipe=self.mesh_controls.recipe,
-            mesher=self.mesh_controls.mesher,
-            budgets=self.mesh_controls.budgets,
-            quality_threshold=self.mesh_controls.quality_threshold,
-            indium_ground_bump_fill=prepared.indium_ground_bump_fill,
-            source_geometry_input=prepared.geometry_input,
-            representation_context=prepared.physical_plan.context,
+        return _GeometryRequest(
+            resolved,
+            {
+                "component": prepared.component,
+                "stack": prepared.stack,
+                "route": self.route,
+                "surface_epr_specs": self.surface_epr_specs,
+                "indium_ground_bump_fill": prepared.indium_ground_bump_fill,
+                "source_geometry_input": prepared.geometry_input,
+                "representation_context": prepared.physical_plan.context,
+            },
         )
-        self._resolved_ports = resolved
-        return self._mesh_result.mesh_path
 
     def mesh_summary(self) -> dict[str, Any]:
         """Detach actual mesh observations and the current FEM topology estimate."""

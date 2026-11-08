@@ -1,0 +1,55 @@
+---
+title: "版圖建模檢查"
+description: "在版圖儲存庫中，於建立任何模擬之前，檢查 Palace 模擬能否為版圖建模。"
+lang: zh-TW
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/layout-modeling-check"
+---
+
+每個 Palace 模擬類別都有類別層級的 `simulation_drc()`，讓版圖儲存庫得知該模擬能否為其版圖建模。它執行該類別 `mesh()` 所執行的同一段準備與幾何建構，然後在建立網格之前停止。無法建模的版圖會被拒絕，並拋出建構階段的原始錯誤；可以建模的版圖則回傳 `None`。
+
+檢查能找出使建模失敗的版圖缺陷：形狀不正確、重疊、微小的錯位、錯誤的語意宣告、沒有落在應有位置的端口薄片，以及放不進所繪間隙的 Surface EPR 條帶。它不預測最終的模擬幾何。
+
+## 呼叫版圖所要用的每個模擬的檢查 {#call-the-check-of-each-simulation-the-layout-is-for}
+
+`EigenmodeSim` 會選取並編號已定義的端口薄片，`ElectrostaticSim` 則不會，因此兩者各有自己的檢查。預定用於 Eigenmode 模擬的元件呼叫 `EigenmodeSim.simulation_drc`；兩者都要用的元件則兩個都呼叫。
+
+檢查需要版圖 Component，以及模擬會使用的 PDK 資料：層堆疊與材料紀錄。SCGSim 不依賴 PDK，因此由版圖儲存庫傳入。使用前需安裝 `scgsim[palace]`。
+
+```python
+from scgsim.palace import EigenmodeSim, ElectrostaticSim
+
+
+def test_the_layout_can_be_modeled():
+    for simulation in (EigenmodeSim, ElectrostaticSim):
+        simulation.simulation_drc(
+            component,
+            layer_stack=layer_stack,
+            material_records=material_records,
+            surface_epr_specs=surface_epr_specs,
+        )
+```
+
+請在儲存庫的測試中，以及繪製版圖的過程中呼叫它。請傳入模擬將使用的 `surface_epr_specs`：它與 [`set_surface_epr`](specs/palace-eigenmode.qmd#surface-epr-margins) 接受的規格相同，其邊界間距會作為條帶切入幾何，因此無法容納這些條帶的版圖在此也會被拒絕。條帶只切在規格所選的面上，所以沒有這類面的版圖會通過，但不會切出條帶。若是組裝件，請以 `{"chip/device": reference, ...}` 傳入 `instances`，格式與 `GeometryPlan.register_instance` 相同；計畫的根名稱為 `chip`。實例會依映射中的順序註冊，所以請先列父層、再列子層（`chip/device` 在 `chip/device/pads` 之前）。
+
+檢查只建構幾何，不建立網格也不求解，因此可在版圖變動時反覆執行。它會在第一個拒絕處停止：閱讀訊息、修正版圖，再執行一次。[錯誤封存](errors.qmd)記錄了實際遇到的診斷。
+
+拒絕也可能來自 SGB 的缺陷，而非版圖本身。若訊息與你所繪的版圖不符，請回報給 SCGSim。
+
+## 檢查使用的設定 {#what-the-check-uses}
+
+設定是固定的：
+
+- Route B 與 Palace 預設的 airbox，不設真空區域；
+- coupon 填充為零；
+- `EigenmodeSim`：所有已定義的端口，電感為固定值，不影響幾何；
+- `ElectrostaticSim`：不設端子；未給 `surface_epr_specs` 時使用空的 Surface EPR，因為 `mesh()` 要求 Surface EPR。
+
+`simulation_drc()` 寫入暫存資料夾並於結束後移除。它不加入自己的規則，也沒有報告型別，因此錯誤與相同版圖、相同設定下該類別 `mesh()` 所拋出的相同。
+
+::: {.callout-note title="通過代表什麼"}
+通過代表以上述固定設定建出的模型被接受，但不代表切出了多少條帶。它不保證其他設定能夠建模：Route A、net 或 Electrostatic 端子、接面、集總支撐、銦凸塊或真空區域。若要檢查特定設定，請執行該模擬自己的 `mesh()`。
+:::
+
+AEDT 不在此檢查範圍內：其 STEP 匯入尚未涵蓋。

@@ -4,7 +4,7 @@ description: "了解 SCGSim 各主題的閱讀路徑與 OrcaPen 原始頁面。"
 sidebar: contribution
 ---
 
-請從「教學」選擇五種完整計算流程之一。各後端課程頁保留原有網址與定位點，作為細節參考。
+請從「教學」選擇五種完整計算流程之一。各後端課程頁保留原有網址與定位點，作為細節參考。若要在版圖儲存庫中檢查版圖能否建模，請使用[版圖建模檢查](layout-modeling-check.qmd)。
 
 ## 頁面調整方式 {#page-migration}
 
@@ -15,7 +15,7 @@ sidebar: contribution
 | `docs/course/*.qmd` | 保留各後端與工作細節的原網址，並連結至完整目標教學。 |
 | `docs/tutorials/*.qmd` | 保留五份完整目標教學，並從「教學」及參考索引連結。 |
 | `docs/concepts/*.qmd`、`docs/eigenmode-epr.qmd` | 保留於「概念」。 |
-| `docs/backend-support.qmd`、`docs/specs/*.qmd`、`docs/execution-profiles.qmd`、`docs/mesh-quality.qmd`、`docs/report-model.qmd`、`docs/api-migration.qmd`、`docs/notebook-ux.qmd` | 保留於「契約」，作為支援行為與詳細介面的依據。 |
+| `docs/backend-support.qmd`、`docs/specs/*.qmd`、`docs/execution-profiles.qmd`、`docs/mesh-quality.qmd`、`docs/layout-modeling-check.qmd`、`docs/report-model.qmd`、`docs/api-migration.qmd`、`docs/notebook-ux.qmd` | 保留於「契約」，作為支援行為與詳細介面的依據。 |
 | `docs/architecture.qmd`、`docs/goals-and-upstream.qmd`、`docs/provenance.qmd`、`docs/roadmap.qmd`、`docs/errors.qmd`、`docs/convergence-status.qmd`、`docs/ownership.qmd` | 保留原網址，並歸入「貢獻」中的專案與維護參考。 |
 | `docs/history/aedt-capacitance-pre-v3.qmd` | 保留於歷史參考。 |
 | `docs/history/curved-source-installation.qmd` | 保留為 Circular Pad 研究所固定的歷史環境與 Palace 原生設定。 |
