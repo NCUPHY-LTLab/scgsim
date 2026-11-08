@@ -43,7 +43,11 @@ from .inputs import (
     non_negative_number,
     validate_stack_material_kinds,
 )
-from .layout_snapshot import prepare_layout_snapshot
+from .layout_snapshot import (
+    DRC_VACUUM_PADDING_UM,
+    prepare_layout_snapshot,
+    snapshot_owns_vacuum,
+)
 from .ports import RequestedPort, resolve_layout_ports
 from .surface_epr import normalize_surface_epr_specs
 from .transforms import (
@@ -266,9 +270,8 @@ class EigenmodeSim:
         padding: float | list[float] | tuple[float, ...] | Mapping[str, Any] = 0.0,
     ) -> None:
         """Set six-direction padding for a route-aware generated vacuum region."""
-        if (
-            self._plan_snapshot is not None
-            and "VACUUM_REGION" in self._plan_snapshot.stack["solution_regions"]
+        if self._plan_snapshot is not None and snapshot_owns_vacuum(
+            self._plan_snapshot
         ):
             raise ValueError("GeometryPlan owns the outer vacuum envelope")
         if self.airbox:
@@ -570,13 +573,13 @@ class EigenmodeSim:
         """Return ``None`` when an ``EigenmodeSim`` can model ``component``; otherwise raise the error ``mesh()`` raises.
 
         This runs the preparation and SGB geometry build of ``mesh()`` and stops before meshing, with fixed
-        settings: Route B, Palace's default airbox, no vacuum region, zero coupon padding, and every authored port with a fixed inductance (the geometry never reads it).  The
+        settings: Route B, Palace's default airbox, a 1 um vacuum region when the layout has none of its own, zero coupon padding, and every authored port with a fixed inductance (the geometry never reads it).  The
         error is the stage's own, unchanged.  The geometry is written to a temporary folder that is removed.
         With ``surface_epr_specs`` the bands are cut as ``set_surface_epr(representation="B", specs=...)``
         would cut them.
 
         A pass means the layout can be modeled with these settings.  It does not promise that other
-        settings (Route A, nets, junctions, lumped supports, a vacuum region) will model; run that
+        settings (Route A, nets, junctions, lumped supports, another vacuum region) will model; run that
         simulation's own ``mesh()`` for that.
 
         Args:
@@ -594,6 +597,9 @@ class EigenmodeSim:
         )
         sim = cls()
         sim.set_plan(snapshot)
+        if not snapshot_owns_vacuum(snapshot):
+            # Without vacuum above it a conductor has no metal-air face, so MA and SA bands would cut nothing.
+            sim.set_vacuum_region(DRC_VACUUM_PADDING_UM)
         for port in snapshot.stack["metadata"].get("port_sheet_source_layers", ()):
             sim.add_port(
                 port["name"],

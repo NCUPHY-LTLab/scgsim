@@ -9,6 +9,11 @@ from scgsim.geometry.source.plan import GeometryPlan, GeometryPlanSnapshot
 
 _ROOT_ID = "chip"
 
+# The check wraps a layout that has no vacuum of its own in this padding on all six faces.  The vacuum must be
+# strictly larger than the geometry: a flush vacuum leaves no air above the metal and pinches at any conductor
+# that touches the boundary at a single point (a polygon circle, a diamond).
+DRC_VACUUM_PADDING_UM = 1.0
+
 
 def prepare_layout_snapshot(
     component: Any,
@@ -32,3 +37,12 @@ def prepare_layout_snapshot(
     for path, reference in (instances or {}).items():
         plan.register_instance(path, reference)
     return plan.prepare()
+
+
+def snapshot_owns_vacuum(snapshot: GeometryPlanSnapshot) -> bool:
+    """Whether the plan carries its own outer vacuum envelope, the fact ``set_vacuum_region`` refuses on.
+
+    The envelope is the solution region named ``VACUUM_REGION``.  A vacuum-material region under another
+    name, such as the flip-chip gap of a PDK, fills a cavity and is not the envelope.
+    """
+    return "VACUUM_REGION" in snapshot.stack["solution_regions"]

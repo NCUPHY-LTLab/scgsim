@@ -41,7 +41,8 @@ def test_the_layout_can_be_modeled():
 
 設定是固定的：
 
-- Route B 與 Palace 預設的 airbox，不設真空區域；
+- Route B 與 Palace 預設的 airbox；
+- 版圖本身沒有真空時，在六個面各加 1 µm 的真空區域；版圖有自己的真空時，使用該真空。如此金屬才有空氣面可供切出 `MA` 與 `SA` 條帶；
 - coupon 填充為零；
 - `EigenmodeSim`：所有已定義的端口，電感為固定值，不影響幾何；
 - `ElectrostaticSim`：不設端子；未給 `surface_epr_specs` 時使用空的 Surface EPR，因為 `mesh()` 要求 Surface EPR。
@@ -49,7 +50,7 @@ def test_the_layout_can_be_modeled():
 `simulation_drc()` 寫入暫存資料夾並於結束後移除。它不加入自己的規則，也沒有報告型別，因此錯誤與相同版圖、相同設定下該類別 `mesh()` 所拋出的相同。
 
 ::: {.callout-note title="通過代表什麼"}
-通過代表以上述固定設定建出的模型被接受，但不代表切出了多少條帶。它不保證其他設定能夠建模：Route A、net 或 Electrostatic 端子、接面、集總支撐、銦凸塊或真空區域。若要檢查特定設定，請執行該模擬自己的 `mesh()`。
+通過代表以上述固定設定建出的模型被接受，但不代表切出了多少條帶。它不保證其他設定能夠建模：Route A、net 或 Electrostatic 端子、接面、集總支撐、銦凸塊或不同的真空區域。若要檢查特定設定，請執行該模擬自己的 `mesh()`。
 :::
 
 AEDT 不在此檢查範圍內：其 STEP 匯入尚未涵蓋。
