@@ -31,7 +31,7 @@ def test_the_layout_can_be_modeled():
         )
 ```
 
-請在儲存庫的測試中，以及繪製版圖的過程中呼叫它。請傳入模擬將使用的 `surface_epr_specs`：它與 [`set_surface_epr`](specs/palace-eigenmode.qmd#surface-epr-margins) 接受的規格相同，其邊界間距會作為條帶切入幾何，因此無法容納這些條帶的版圖在此也會被拒絕。若是組裝件，請以 `{"chip/device": reference, ...}` 傳入 `instances`，格式與 `GeometryPlan.register_instance` 相同；計畫的根名稱為 `chip`。
+請在儲存庫的測試中，以及繪製版圖的過程中呼叫它。請傳入模擬將使用的 `surface_epr_specs`：它與 [`set_surface_epr`](specs/palace-eigenmode.qmd#surface-epr-margins) 接受的規格相同，其邊界間距會作為條帶切入幾何，因此無法容納這些條帶的版圖在此也會被拒絕。條帶只切在規格所選的面上，所以沒有這類面的版圖會通過，但不會切出條帶。若是組裝件，請以 `{"chip/device": reference, ...}` 傳入 `instances`，格式與 `GeometryPlan.register_instance` 相同；計畫的根名稱為 `chip`。實例會依映射中的順序註冊，所以請先列父層、再列子層（`chip/device` 在 `chip/device/pads` 之前）。
 
 檢查只建構幾何，不建立網格也不求解，因此可在版圖變動時反覆執行。它會在第一個拒絕處停止：閱讀訊息、修正版圖，再執行一次。[錯誤封存](errors.qmd)記錄了實際遇到的診斷。
 
@@ -49,7 +49,7 @@ def test_the_layout_can_be_modeled():
 `simulation_drc()` 寫入暫存資料夾並於結束後移除。它不加入自己的規則，也沒有報告型別，因此錯誤與相同版圖、相同設定下該類別 `mesh()` 所拋出的相同。
 
 ::: {.callout-note title="通過代表什麼"}
-通過代表所繪版圖在上述固定設定下可被該模擬建模。它不保證其他設定能夠建模：Route A、net 或 Electrostatic 端子、接面、集總支撐、銦凸塊或真空區域。若要檢查特定設定，請執行該模擬自己的 `mesh()`。
+通過代表以上述固定設定建出的模型被接受，但不代表切出了多少條帶。它不保證其他設定能夠建模：Route A、net 或 Electrostatic 端子、接面、集總支撐、銦凸塊或真空區域。若要檢查特定設定，請執行該模擬自己的 `mesh()`。
 :::
 
 AEDT 不在此檢查範圍內：其 STEP 匯入尚未涵蓋。

@@ -228,3 +228,14 @@ def test_the_check_never_meshes_and_leaves_no_folder(monkeypatch, tmp_path, simu
     component = two_pads(monkeypatch, gap_um=10.0)
     assert check(simulation, component, surface_epr_specs=BANDED) is None
     assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+@pytest.mark.parametrize("specs", [[], ""])
+def test_invalid_surface_epr_specs_are_refused_as_set_surface_epr_refuses_them(
+    monkeypatch, simulation, specs
+):
+    """A falsy non-mapping is not read as "no Surface EPR"; the setter refuses it, as it does in a simulation."""
+    component = two_pads(monkeypatch, gap_um=10.0)
+    with pytest.raises(TypeError, match="surface_epr specs must be a mapping"):
+        check(simulation, component, surface_epr_specs=specs)

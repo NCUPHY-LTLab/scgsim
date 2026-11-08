@@ -46,9 +46,12 @@ Call it from the repository's tests and while the layout is being drawn. Pass
 `surface_epr_specs` with the specs the simulations will use: they are the ones
 [`set_surface_epr`](specs/palace-eigenmode.qmd#surface-epr-margins) takes, and
 their margins are cut into the geometry as bands, so a layout that cannot carry
-them is refused here too. For an assembly, pass `instances` as
-`{"chip/device": reference, ...}`, as `GeometryPlan.register_instance` takes
-them; the plan's root is named `chip`.
+them is refused here too. Bands are cut only on the faces the specs select, so
+a layout with no such face passes with no bands. For an assembly, pass
+`instances` as `{"chip/device": reference, ...}`, as
+`GeometryPlan.register_instance` takes them; the plan's root is named `chip`.
+They are registered in the mapping's order, so list a parent before its
+children (`chip/device` before `chip/device/pads`).
 
 The check builds the geometry and does not mesh or solve, so it can be repeated
 as the layout changes. It stops at the first refusal. Read the message, fix the
@@ -74,8 +77,8 @@ rules of its own and no report type, so the error is the one that class's
 `mesh()` raises for the same layout and settings.
 
 ::: {.callout-note title="What a pass means"}
-A pass means the drawn layout can be modeled by that simulation with the fixed
-settings above. It does not promise that other settings will model: Route A,
+A pass means the model built with the fixed settings above was accepted; it
+does not say how many bands were cut. It does not promise that other settings will model: Route A,
 nets or Electrostatic terminals, junctions, lumped supports, indium bumps or a
 vacuum region. To check a specific set-up, run that simulation's own `mesh()`.
 :::

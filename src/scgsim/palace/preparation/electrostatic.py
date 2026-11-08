@@ -454,7 +454,11 @@ class ElectrostaticSim:
         )
         sim = cls()
         sim.set_plan(snapshot)
-        sim.set_surface_epr(representation="B", specs=surface_epr_specs or {})
+        # Only an absent argument becomes an empty Surface EPR; any value given is validated by the setter.
+        sim.set_surface_epr(
+            representation="B",
+            specs={} if surface_epr_specs is None else surface_epr_specs,
+        )
         with TemporaryDirectory(prefix="scgsim-simulation-drc-") as folder:
             # The geometry build requires an empty folder; the temporary one is, and goes away with the check.
             sim._build_geometry(folder)  # noqa: SLF001 -- the check is a classmethod of the same class
