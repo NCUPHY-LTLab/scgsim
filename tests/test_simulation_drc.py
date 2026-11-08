@@ -1,4 +1,4 @@
-"""``simulation_drc`` runs the modeling stages of ``mesh()`` on a layout and stops before meshing.
+"""Each Palace simulation's ``simulation_drc`` runs its ``mesh()`` modeling stages on a layout and stops before meshing.
 
 No test here runs Gmsh or a solver: where ``mesh()`` is compared, its meshing stage is replaced by a
 marker error, so what is compared is the geometry stage both share.
@@ -13,7 +13,7 @@ import pytest
 import scgsim.palace.mesh.build as build_module
 from scgsim.geometry import GeometryPlan
 from scgsim.geometry.models.physical import PhysicalLayerDeclaration
-from scgsim.palace import EigenmodeSim, simulation_drc
+from scgsim.palace import EigenmodeSim, ElectrostaticSim
 
 MATERIALS = {
     "PEC": {"kind": "conductor"},
@@ -29,9 +29,23 @@ class MeshingReached(Exception):
 
 
 def level(name, material, interval, role):
-    """One layer-stack level carrying its neutral physical declaration."""
+    """One layer-stack level carrying its neutral physical declaration.
+
+    The conductor is a film attached by its lower face, which is what a port sheet needs to land on.
+    """
+    film = role == "conductor"
     declaration = PhysicalLayerDeclaration(
-        name, name, {"level": name}, interval, material, "finite_volume", {}, {}
+        name,
+        name,
+        {"level": name},
+        interval,
+        material,
+        "stack_film" if film else "finite_volume",
+        {"normal_thickness_um": interval[1] - interval[0]}
+        if film
+        else {"axial_span_um": interval[1] - interval[0]},
+        {"layer_attachment_face": "lower"} if film else {},
+        {},
     )
     return SimpleNamespace(
         material=material,
@@ -41,7 +55,7 @@ def level(name, material, interval, role):
         info={
             "simulation_role": role,
             "include_in_component_simulation": True,
-            "part_role": "signal",
+            "part_role": "face_metal",
             "physical_layer": declaration.to_payload(),
         },
     )
@@ -56,8 +70,14 @@ LAYER_STACK = SimpleNamespace(
 )
 
 
-def two_pads(monkeypatch, *, gap_um):
-    """A 20 um pad and a 30 um electrode ``gap_um`` apart; a negative gap makes them overlap."""
+SIMULATIONS = [EigenmodeSim, ElectrostaticSim]
+
+
+def two_pads(monkeypatch, *, gap_um, port=False):
+    """A 20 um pad and a 30 um electrode ``gap_um`` apart; a negative gap makes them overlap.
+
+    With ``port`` a lumped-port sheet bridges the gap, as an authored port of the component.
+    """
     import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
 
     # Restore process-local PDK state after this public generic fixture.
@@ -80,17 +100,49 @@ def two_pads(monkeypatch, *, gap_um):
             {"semantic_id": "electrode", "level": "metal", "gds_layer": [2, 0]},
         ],
     }
+    if port:
+        # The sheet reaches 5 um into each conductor, so it lands on both.
+        component.add_polygon(
+            ((15, 8), (far + 5, 8), (far + 5, 12), (15, 12)), layer=(9, 0)
+        )
+        component.add_port(
+            name="P1",
+            center=(20 + gap_um / 2, 10),
+            width=4,
+            orientation=0,
+            layer=(9, 0),
+        )
+        component.info["component_semantics"]["ports"] = [
+            {"name": "P1", "layer": [9, 0], "target_layer": "metal"}
+        ]
     return component
 
 
-def check(component, **options):
-    """``simulation_drc`` with the stand-in PDK data."""
-    return simulation_drc(
+def check(simulation, component, **options):
+    """``simulation.simulation_drc`` with the stand-in PDK data."""
+    return simulation.simulation_drc(
         component, layer_stack=LAYER_STACK, material_records=MATERIALS, **options
     )
 
 
-def mesh_refusal(component, tmp_path, monkeypatch, specs=None):
+def configured(simulation, snapshot, specs):
+    """A ``simulation`` set up as ``simulation_drc`` sets it up, from the settings a user would write."""
+    sim = simulation()
+    sim.set_plan(snapshot)
+    for port in snapshot.stack["metadata"]["port_sheet_source_layers"]:
+        if simulation is EigenmodeSim:
+            sim.add_port(
+                port["name"],
+                layer=port["target_layer"],
+                layout_sheet=True,
+                inductance=1e-9,
+            )
+    if specs is not None or simulation is ElectrostaticSim:
+        sim.set_surface_epr(representation="B", specs=specs or {})
+    return sim
+
+
+def mesh_refusal(simulation, component, tmp_path, monkeypatch, specs=None):
     """The error ``mesh()`` raises before meshing, for the plan and settings ``simulation_drc`` builds."""
 
     def meshing_reached(*_args, **_kwargs):
@@ -103,10 +155,7 @@ def mesh_refusal(component, tmp_path, monkeypatch, specs=None):
         material_records=MATERIALS,
         coupon_padding_um=0.0,
     )
-    sim = EigenmodeSim()
-    sim.set_plan(plan.prepare())
-    if specs is not None:
-        sim.set_surface_epr(representation="B", specs=specs)
+    sim = configured(simulation, plan.prepare(), specs)
     sim.set_output_dir(tmp_path / "run")
     monkeypatch.setattr(build_module, "mesh_sgb", meshing_reached)
     with pytest.raises(Exception) as error:  # noqa: PT011 -- the type is what the test compares
@@ -114,22 +163,35 @@ def mesh_refusal(component, tmp_path, monkeypatch, specs=None):
     return error.value
 
 
-def test_a_layout_that_models_returns_none(monkeypatch):
-    """Two separate pads on a substrate model directly."""
-    assert check(two_pads(monkeypatch, gap_um=10.0)) is None
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+@pytest.mark.parametrize("port", [False, True])
+def test_a_layout_that_models_returns_none(monkeypatch, simulation, port):
+    """Two separate pads on a substrate, with or without an authored port, model directly."""
+    component = two_pads(monkeypatch, gap_um=10.0, port=port)
+    assert check(simulation, component) is None
 
 
-def test_a_refused_layout_raises_the_error_mesh_raises(monkeypatch, tmp_path):
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+def test_a_layout_with_bands_returns_none(monkeypatch, simulation):
+    """Bands cut from Surface-EPR margins fit the gap between the pads."""
+    component = two_pads(monkeypatch, gap_um=10.0, port=True)
+    assert check(simulation, component, surface_epr_specs=BANDED) is None
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+def test_a_refused_layout_raises_the_error_mesh_raises(
+    monkeypatch, tmp_path, simulation
+):
     """Overlapping electrodes are refused by the geometry build, with the same type and message as ``mesh()``."""
     component = two_pads(monkeypatch, gap_um=-5.0)
-    expected = mesh_refusal(component, tmp_path, monkeypatch)
+    expected = mesh_refusal(simulation, component, tmp_path, monkeypatch)
     assert not isinstance(expected, MeshingReached)
     with pytest.raises(type(expected)) as raised:
-        check(component)
+        check(simulation, component)
     assert str(raised.value) == str(expected)
 
 
-def geometry_inset_requests(monkeypatch, **options):
+def geometry_inset_requests(monkeypatch, simulation, **options):
     """The ``insets`` of every SGB build ``simulation_drc`` makes."""
     builds = []
     real = build_module.build_sgb_geometry
@@ -139,19 +201,23 @@ def geometry_inset_requests(monkeypatch, **options):
         return real(*args, **kwargs)
 
     monkeypatch.setattr(build_module, "build_sgb_geometry", recording)
-    check(two_pads(monkeypatch, gap_um=10.0), **options)
+    check(simulation, two_pads(monkeypatch, gap_um=10.0), **options)
     return builds
 
 
-def test_surface_epr_specs_reach_the_band_build(monkeypatch):
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+def test_surface_epr_specs_reach_the_band_build(monkeypatch, simulation):
     """With specs, the SGB build asks for their bands; without, it asks for none."""
-    assert geometry_inset_requests(monkeypatch) == [()]
-    (requests,) = geometry_inset_requests(monkeypatch, surface_epr_specs=BANDED)
+    assert geometry_inset_requests(monkeypatch, simulation) == [()]
+    (requests,) = geometry_inset_requests(
+        monkeypatch, simulation, surface_epr_specs=BANDED
+    )
     assert [request.request_id for request in requests] == ["epr_MA"]
     assert requests[0].margins_um == (0.5, 1.0)
 
 
-def test_the_check_never_meshes_and_leaves_no_folder(monkeypatch, tmp_path):
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+def test_the_check_never_meshes_and_leaves_no_folder(monkeypatch, tmp_path, simulation):
     """Meshing is not reached, and the temporary run folder is removed."""
 
     def meshing_reached(*_args, **_kwargs):
@@ -160,5 +226,5 @@ def test_the_check_never_meshes_and_leaves_no_folder(monkeypatch, tmp_path):
     monkeypatch.setattr(build_module, "mesh_sgb", meshing_reached)
     monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
     component = two_pads(monkeypatch, gap_um=10.0)
-    assert check(component, surface_epr_specs=BANDED) is None
+    assert check(simulation, component, surface_epr_specs=BANDED) is None
     assert list(tmp_path.iterdir()) == []

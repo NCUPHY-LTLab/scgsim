@@ -3,12 +3,15 @@
 This class prepares geometry and manual handoff files; it never runs Palace.
 """
 
+# long-file: the setters, mesh(), its geometry half and simulation_drc share the simulation's private state; a split would reach into it.
+
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, Literal
 
 from scgsim.geometry.models.input import VacuumRegionSpec
@@ -40,6 +43,7 @@ from .inputs import (
     non_negative_number,
     validate_stack_material_kinds,
 )
+from .layout_snapshot import prepare_layout_snapshot
 from .ports import RequestedPort, resolve_layout_ports
 from .surface_epr import normalize_surface_epr_specs
 from .transforms import (
@@ -50,6 +54,9 @@ from .transforms import (
     validate_positive_number,
 )
 from .workflow import persist_problem_files, prepare_mesh_input
+
+# The geometry build never reads a port's inductance, but ``add_port`` requires a positive one.
+_PORT_INDUCTANCE_H = 1.0e-9
 
 
 @dataclass(frozen=True)
@@ -550,17 +557,66 @@ class EigenmodeSim:
         self._resolved_ports = request.ports
         return self._mesh_result.mesh_path
 
-    def build_geometry(self, output_dir: str | Path) -> RouteGeometry:
+    @classmethod
+    def simulation_drc(
+        cls,
+        component: Any,
+        *,
+        layer_stack: Any,
+        material_records: Mapping[str, Mapping[str, Any]],
+        instances: Mapping[str, Any] | None = None,
+        surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> None:
+        """Return ``None`` when an ``EigenmodeSim`` can model ``component``; otherwise raise the error ``mesh()`` raises.
+
+        This runs the preparation and SGB geometry build of ``mesh()`` and stops before meshing, with fixed
+        settings: Route B, Palace's default airbox, no vacuum region, zero coupon padding, and every authored port with a fixed inductance (the geometry never reads it).  The
+        error is the stage's own, unchanged.  The geometry is written to a temporary folder that is removed.
+        With ``surface_epr_specs`` the bands are cut as ``set_surface_epr(representation="B", specs=...)``
+        would cut them.
+
+        A pass means the layout can be modeled with these settings.  It does not promise that other
+        settings (Route A, nets, junctions, lumped supports, a vacuum region) will model; run that
+        simulation's own ``mesh()`` for that.
+
+        Args:
+            component: The layout Component under check.
+            layer_stack: The PDK layer stack, as ``GeometryPlan`` takes it.
+            material_records: The PDK material records, as ``GeometryPlan`` takes them.
+            instances: ``{"chip/device": reference, ...}`` for an assembly, as ``GeometryPlan.register_instance``.
+            surface_epr_specs: The specs ``set_surface_epr`` takes; their margins become bands.
+        """
+        snapshot = prepare_layout_snapshot(
+            component,
+            layer_stack=layer_stack,
+            material_records=material_records,
+            instances=instances,
+        )
+        sim = cls()
+        sim.set_plan(snapshot)
+        for port in snapshot.stack["metadata"].get("port_sheet_source_layers", ()):
+            sim.add_port(
+                port["name"],
+                layer=port["target_layer"],
+                layout_sheet=True,
+                inductance=_PORT_INDUCTANCE_H,
+            )
+        if surface_epr_specs is not None:
+            sim.set_surface_epr(representation="B", specs=surface_epr_specs)
+        with TemporaryDirectory(prefix="scgsim-simulation-drc-") as folder:
+            # The geometry build requires an empty folder; the temporary one is, and goes away with the check.
+            sim._build_geometry(folder)  # noqa: SLF001 -- the check is a classmethod of the same class
+
+    def _build_geometry(self, output_dir: str | Path) -> RouteGeometry:
         """Run the preparation and SGB geometry build of ``mesh()`` into ``output_dir``, then stop.
 
-        This is the modeling path ``mesh()`` shares: it refuses a layout the same way, with the same error,
-        and does not mesh.  The simulation's own output folder and mesh state are left as they were.
+        This is the modeling path ``mesh()`` shares, used by ``simulation_drc``.  The simulation's own output folder and mesh state are left as they were.
         """
         if (
             self.component is None and self._plan_snapshot is None
         ) or self.stack is None:
             raise ValueError(
-                "set_geometry() or set_plan(), and set_stack(), must run before build_geometry()."
+                "set_geometry() or set_plan(), and set_stack(), must run before the geometry build."
             )
         return build_route_geometry(
             **self._geometry_request(self.stack).source, output_dir=output_dir

@@ -1,41 +1,52 @@
 ---
 title: "Layout Modeling Check"
-description: "Check from a layout repository that SCGSim can model a layout, before any simulation is set up."
+description: "Check from a layout repository that a Palace simulation can model a layout, before any simulation is set up."
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/layout-modeling-check"
 ---
 
-`simulation_drc()` tells a layout repository whether SCGSim can model its
-layout. It runs the same preparation and geometry build that
-`EigenmodeSim.mesh()` runs, then stops before meshing. A layout that cannot be
-modeled is refused with the error the build raises, and a layout that can be
-modeled returns `None`.
+Each Palace simulation class has a class-level `simulation_drc()` that tells a
+layout repository whether that simulation can model its layout. It runs the
+same preparation and geometry build that the class's `mesh()` runs, then stops
+before meshing. A layout that cannot be modeled is refused with the error the
+build raises, and a layout that can be modeled returns `None`.
 
-## Call it while drawing and in tests
+The check catches layout defects that stop modeling: malformed shapes,
+overlaps, tiny misalignments, wrong semantic declarations, port sheets that do
+not sit where they should, and Surface EPR bands that do not fit the drawn
+gaps. It does not predict the final simulation geometry.
+
+## Call the check of each simulation the layout is for
+
+`EigenmodeSim` selects and numbers the authored port sheets and
+`ElectrostaticSim` does not, so the two have separate checks. A component meant
+for an Eigenmode simulation calls `EigenmodeSim.simulation_drc`; one meant for
+both calls both.
 
 The check needs the layout Component and the PDK data a simulation would use:
 the layer stack and the material records. SCGSim does not depend on a PDK, so
-the layout repository passes them in.
+the layout repository passes them in. It needs `scgsim[palace]` installed.
 
 ```python
-from scgsim.palace import simulation_drc
+from scgsim.palace import EigenmodeSim, ElectrostaticSim
 
 
 def test_the_layout_can_be_modeled():
-    simulation_drc(
-        component,
-        layer_stack=layer_stack,
-        material_records=material_records,
-        surface_epr_specs=surface_epr_specs,
-    )
+    for simulation in (EigenmodeSim, ElectrostaticSim):
+        simulation.simulation_drc(
+            component,
+            layer_stack=layer_stack,
+            material_records=material_records,
+            surface_epr_specs=surface_epr_specs,
+        )
 ```
 
 Call it from the repository's tests and while the layout is being drawn. Pass
-`surface_epr_specs` when the layout will be used for Surface EPR: the specs are
-the ones [`set_surface_epr`](specs/palace-eigenmode.qmd#surface-epr-margins)
-takes, and their margins are cut into the geometry as bands, so a layout that
-cannot carry them is refused here too. For an assembly, pass `instances` as
+`surface_epr_specs` with the specs the simulations will use: they are the ones
+[`set_surface_epr`](specs/palace-eigenmode.qmd#surface-epr-margins) takes, and
+their margins are cut into the geometry as bands, so a layout that cannot carry
+them is refused here too. For an assembly, pass `instances` as
 `{"chip/device": reference, ...}`, as `GeometryPlan.register_instance` takes
 them; the plan's root is named `chip`.
 
@@ -44,24 +55,29 @@ as the layout changes. It stops at the first refusal. Read the message, fix the
 layout, and run it again. The [error archive](errors.qmd) records diagnostics
 seen in practice.
 
+A refusal can also come from a defect in SGB rather than from the layout. If
+the message does not match the layout you drew, report it to SCGSim.
+
 ## What the check uses
 
 The settings are fixed:
 
-- Route B;
-- every authored port;
-- no nets;
-- zero coupon padding.
+- Route B and Palace's default airbox, with no vacuum region;
+- zero coupon padding;
+- for `EigenmodeSim`, every authored port with a fixed inductance, which does
+  not change the geometry;
+- for `ElectrostaticSim`, no terminals, and an empty Surface EPR when
+  `surface_epr_specs` is not given, because `mesh()` requires Surface EPR.
 
 `simulation_drc()` writes into a temporary folder and removes it. It adds no
-rules of its own and no report type, so the error is the one `mesh()` would
-raise for the same layout and settings.
+rules of its own and no report type, so the error is the one that class's
+`mesh()` raises for the same layout and settings.
 
 ::: {.callout-note title="What a pass means"}
-`simulation_drc()` only checks that the layout can be modeled directly. It does
-not promise that nets, Electrostatic terminals, Route A, junctions, lumped
-supports or a vacuum region will work. To check a specific simulation, run that
-simulation's own `mesh()`.
+A pass means the drawn layout can be modeled by that simulation with the fixed
+settings above. It does not promise that other settings will model: Route A,
+nets or Electrostatic terminals, junctions, lumped supports, indium bumps or a
+vacuum region. To check a specific set-up, run that simulation's own `mesh()`.
 :::
 
-AEDT is outside this check: its modeling runs inside AEDT, not through SGB.
+AEDT is outside this check: its STEP import is not covered yet.

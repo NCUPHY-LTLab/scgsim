@@ -10,7 +10,6 @@ from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
 
 from .preparation.eigenmode import EigenmodeSim
 from .preparation.electrostatic import ElectrostaticSim
-from .preparation.simulation_drc import simulation_drc
 from .presentation.amr import PalaceAmrReport, show_amr_analysis
 from .presentation.reports import (
     PalaceTrustReport,
@@ -75,5 +74,4 @@ __all__ = [
     "resolve_palace_result",
     "show_amr_analysis",
     "show_epr",
-    "simulation_drc",
 ]

@@ -9,6 +9,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, Literal
 
 from scgsim.geometry.models.input import VacuumRegionSpec
@@ -18,7 +19,12 @@ from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
 from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
 
 from ..execution.handoff import HandoffPlan, prepare_handoff
-from ..mesh.build import MeshBuildResult, build_route_mesh
+from ..mesh.build import (
+    MeshBuildResult,
+    RouteGeometry,
+    build_route_geometry,
+    build_route_mesh,
+)
 from ..mesh.controls import MeshControls
 from ..mesh.summary import summary_from_files
 from ..results.index_contract import INDEX_MAP_SCHEMA_VERSION
@@ -33,6 +39,7 @@ from .inputs import (
     non_negative_number,
     validate_stack_material_kinds,
 )
+from .layout_snapshot import prepare_layout_snapshot
 from .surface_epr import normalize_surface_epr_specs
 from .transforms import (
     RouteAThinFilm,
@@ -400,6 +407,78 @@ class ElectrostaticSim:
             )
         if self.surface_epr_specs is None:
             raise ValueError("set_surface_epr() must run before mesh().")
+        self._mesh_result = build_route_mesh(
+            **self._geometry_source(self.stack),
+            output_dir=self.output_dir,
+            recipe=self.mesh_controls.recipe,
+            mesher=self.mesh_controls.mesher,
+            budgets=self.mesh_controls.budgets,
+            quality_threshold=self.mesh_controls.quality_threshold,
+        )
+        return self._mesh_result.mesh_path
+
+    @classmethod
+    def simulation_drc(
+        cls,
+        component: Any,
+        *,
+        layer_stack: Any,
+        material_records: Mapping[str, Mapping[str, Any]],
+        instances: Mapping[str, Any] | None = None,
+        surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> None:
+        """Return ``None`` when an ``ElectrostaticSim`` can model ``component``; otherwise raise the error ``mesh()`` raises.
+
+        This runs the preparation and SGB geometry build of ``mesh()`` and stops before meshing, with fixed
+        settings: Route B, Palace's default airbox, no vacuum region, zero coupon padding and no terminals (they are not needed before meshing).  The
+        error is the stage's own, unchanged.  The geometry is written to a temporary folder that is removed.
+        With ``surface_epr_specs`` the bands are cut as ``set_surface_epr(representation="B", specs=...)``
+        would cut them; ``ElectrostaticSim`` requires Surface EPR, so none given means ``{}``.
+
+        A pass means the layout can be modeled with these settings.  It does not promise that other
+        settings (Route A, nets, terminals, junctions, lumped supports, a vacuum region) will model; run that
+        simulation's own ``mesh()`` for that.
+
+        Args:
+            component: The layout Component under check.
+            layer_stack: The PDK layer stack, as ``GeometryPlan`` takes it.
+            material_records: The PDK material records, as ``GeometryPlan`` takes them.
+            instances: ``{"chip/device": reference, ...}`` for an assembly, as ``GeometryPlan.register_instance``.
+            surface_epr_specs: The specs ``set_surface_epr`` takes; their margins become bands.
+        """
+        snapshot = prepare_layout_snapshot(
+            component,
+            layer_stack=layer_stack,
+            material_records=material_records,
+            instances=instances,
+        )
+        sim = cls()
+        sim.set_plan(snapshot)
+        sim.set_surface_epr(representation="B", specs=surface_epr_specs or {})
+        with TemporaryDirectory(prefix="scgsim-simulation-drc-") as folder:
+            # The geometry build requires an empty folder; the temporary one is, and goes away with the check.
+            sim._build_geometry(folder)  # noqa: SLF001 -- the check is a classmethod of the same class
+
+    def _build_geometry(self, output_dir: str | Path) -> RouteGeometry:
+        """Run the preparation and SGB geometry build of ``mesh()`` into ``output_dir``, then stop.
+
+        This is the modeling path ``mesh()`` shares, used by ``simulation_drc``.  The simulation's own
+        output folder and mesh state are left as they were.
+        """
+        if (
+            self.component is None and self._plan_snapshot is None
+        ) or self.stack is None:
+            raise ValueError(
+                "set_geometry() or set_plan(), and set_stack(), must run before the geometry build."
+            )
+        if self.surface_epr_specs is None:
+            raise ValueError("set_surface_epr() must run before the geometry build.")
+        return build_route_geometry(
+            **self._geometry_source(self.stack), output_dir=output_dir
+        )
+
+    def _geometry_source(self, stack: Mapping[str, Any]) -> dict[str, Any]:
+        """Prepare the geometry input, everything in ``mesh()`` before the SGB build, for a plan or a Component."""
         if self._plan_snapshot is not None:
             if (
                 self.indium_ground_bumps is not None
@@ -425,24 +504,18 @@ class ElectrostaticSim:
             )
             if prepared.materials is not None:
                 self._materials = prepared.materials
-            self._mesh_result = build_route_mesh(
-                component=None,
-                stack=prepared.stack,
-                route=self.route,
-                output_dir=self.output_dir,
-                surface_epr_specs=self.surface_epr_specs,
-                recipe=self.mesh_controls.recipe,
-                mesher=self.mesh_controls.mesher,
-                budgets=self.mesh_controls.budgets,
-                quality_threshold=self.mesh_controls.quality_threshold,
-                source_gds_bytes=self._plan_snapshot.gds_bytes,
-                source_geometry_input=prepared.geometry_input,
-                representation_context=prepared.physical_plan.context,
-            )
-            return self._mesh_result.mesh_path
+            return {
+                "component": None,
+                "stack": prepared.stack,
+                "route": self.route,
+                "surface_epr_specs": self.surface_epr_specs,
+                "source_gds_bytes": self._plan_snapshot.gds_bytes,
+                "source_geometry_input": prepared.geometry_input,
+                "representation_context": prepared.physical_plan.context,
+            }
         prepared = prepare_mesh_input(
             component=self.component,
-            stack=self.stack,
+            stack=stack,
             route=self.route,
             route_a_thin_film=self.route_a_thin_film,
             approximation_profile=self.approximation_profile,
@@ -452,21 +525,15 @@ class ElectrostaticSim:
         )
         if prepared.materials is not None:
             self._materials = prepared.materials
-        self._mesh_result = build_route_mesh(
-            component=prepared.component,
-            stack=prepared.stack,
-            route=self.route,
-            output_dir=self.output_dir,
-            surface_epr_specs=self.surface_epr_specs,
-            recipe=self.mesh_controls.recipe,
-            mesher=self.mesh_controls.mesher,
-            budgets=self.mesh_controls.budgets,
-            quality_threshold=self.mesh_controls.quality_threshold,
-            indium_ground_bump_fill=prepared.indium_ground_bump_fill,
-            source_geometry_input=prepared.geometry_input,
-            representation_context=prepared.physical_plan.context,
-        )
-        return self._mesh_result.mesh_path
+        return {
+            "component": prepared.component,
+            "stack": prepared.stack,
+            "route": self.route,
+            "surface_epr_specs": self.surface_epr_specs,
+            "indium_ground_bump_fill": prepared.indium_ground_bump_fill,
+            "source_geometry_input": prepared.geometry_input,
+            "representation_context": prepared.physical_plan.context,
+        }
 
     def mesh_summary(self) -> dict[str, Any]:
         """Detach actual mesh observations and the current FEM topology estimate."""
