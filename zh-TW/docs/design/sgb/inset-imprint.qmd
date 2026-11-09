@@ -102,8 +102,8 @@ band 的區域、seam 與標記怎麼建立、在哪裡會拒絕，見下一節[
 
 SGB 先替每個 support 與每個 margin 算出 **band 區域** $R_m$（support 中距 gap edge 至少 $m$ 的部分），再只在不同 band 之間切 **seam**（band 之間的分界 edge），之後檢查 Imprint 把每條 seam 都保留下來，最後以區域決定每個 face 的 band。這樣 band 的分界在 Imprint 之前就已確定，不需要事後從 face 的面積猜回來。
 
-::: {.callout-warning title="以很多短邊畫成的圓會被拒絕"}
-以多邊形近似的圓或圓角（例如 256 邊以上的多邊形圓、取樣很密的 CPW 圓頭）在某些尺寸與 margin 下，相鄰兩條邊的 offset 既不相接也不相交，inset 曲線因而不封閉。SGB 拒絕這種 layout，訊息是 `inset family '…': the inset curve at m = … um is not closed near (x, y) um`，不會輸出錯誤的 band。請以真正的圓弧畫圓，或改用較少、較長的邊；量得的範圍見下方的[限制](#band-regions-limits)。
+::: {.callout-tip title="曲線輪廓與窄 band 的網格"}
+曲線的點數請保持適中，並為窄 band 選擇能解析其寬度與曲率的網格設定。建議與 `pad_b_bands` 上量得的配方比較，見 Palace 契約的[為窄 band 產生網格](../../specs/palace-eigenmode.qmd#surface-epr-band-meshing)與[曲線輪廓與多邊形圓](../../specs/palace-eigenmode.qmd#surface-epr-curved-outlines)。
 :::
 
 ![四個步驟（概念圖）。上排由左到右：建區域、只切必要的 seam、Imprint 與檢查、以點定位標記。下排以 10 × 10 µm 的正方形示意前兩步：點線是兩個 margin 的候選 offset，實線是切出的 seam。](figures/inset-regions-steps.svg){#fig-band-regions fig-alt="四個方框由左到右以箭頭相連，下方兩張正方形示意圖：一張有延伸到邊界的點線，一張只剩兩圈實線正方形。"}
@@ -158,21 +158,22 @@ band 的編號跟著 margin 的區間：某個區間沒有面積時，它的 ban
 
 ### 限制 {#band-regions-limits}
 
-Imprint 檢查證明的是**已建立的邊界在 Imprint 之後仍在**，不證明候選 offset 涵蓋了整條等距曲線。等距曲線不封閉時，同一個 cell 兩側都有，SGB 以 `the inset curve at m = … um is not closed` 拒絕（見上面的提醒）；其他候選 offset 漏掉的部分不會成為 seam，也不會被這個檢查發現。
+Imprint 檢查證明的是**已建立的邊界在 Imprint 之後仍在**，不證明候選 offset 涵蓋了整條等距曲線。兩條直線 origin 之間的 offset 一定在共同交點相接；有 arc 參與的 convex 接點仍靠兩條已 round 的 offset 相交。等距曲線不封閉時，同一個 cell 兩側都有，SGB 以 `the inset curve at m = … um is not closed near (x, y) um` 拒絕，位置是曲線停下的一端；其他候選 offset 漏掉的部分不會成為 seam，也不會被這個檢查發現。
 
 ::: {.callout-note collapse="true" title="量得的範圍：以多邊形近似的圓"}
-下表是正 $n$ 邊形 pad（外接圓半徑 $R$，Route B，MA band，margin 0.5 與 1.0 µm，grid 1 nm）的結果。「不相接」是相鄰兩邊的 offset 既不共用端點也不相交的轉角數。造成問題的是每個頂點的轉角 $360°/n$，不是邊長：$R = 100$ µm 的 256 邊形邊長 2.45 µm，仍被拒絕。
+下表是正 $n$ 邊形 pad（外接圓半徑 20 µm，Route B，MA band，margin 0.5 與 1.0 µm，grid 1 nm）pad 頂面三個 band 的面積，與理想正多邊形 erosion 的手算值比較。殘差來自 grid round 後的多邊形與理想多邊形之差，不是遺失的 band。
 
 ::: {.askr-table-compact .askr-table-numeric}
-| $n$ | 轉角 | $R = 5$ µm 邊長 (µm) | $R = 20$ µm 邊長 (µm) | $R = 100$ µm 邊長 (µm) | 不相接（0.5 µm） | 結果 |
-|---|---|---|---|---|---|---|
-| 64 | 5.6° | 0.49 | 1.96 | 9.81 | 0 | 通過，band 面積與手算相差 $\le 2.5 \times 10^{-4}$ |
-| 128 | 2.8° | 0.25 | 0.98 | 4.91 | 16–24 個 | 通過（其他交點仍把曲線封閉），面積與手算相差 $\le 2.3 \times 10^{-4}$ |
-| 256 | 1.4° | 0.12 | 0.49 | 2.45 | 160–184 個 | 拒絕 |
-| 512、1024 | ≤ 0.7° | ≤ 0.061 | ≤ 0.245 | ≤ 1.227 | 過半 | 拒絕 |
+| $n$ | 轉角 | 邊長 (µm) | band 0、1、2 面積 (µm²) | 手算 (µm²) |
+|---|---|---|---|---|
+| 64 | 5.6° | 1.96 | 62.01、60.46、1132.16 | 62.02、60.45、1132.15 |
+| 128 | 2.8° | 0.98 | 62.06、60.45、1133.64 | 62.04、60.47、1133.62 |
+| 256 | 1.4° | 0.49 | 62.06、60.46、1134.01 | 62.04、60.47、1133.99 |
+| 512 | 0.70° | 0.245 | 62.05、60.47、1134.09 | 62.05、60.48、1134.08 |
+| 1024 | 0.35° | 0.123 | 62.05、60.47、1134.11 | 62.05、60.48、1134.11 |
 :::
 
-以真正圓弧畫的圓在三種半徑都通過，面積與精確值相差 $\le 2.3 \times 10^{-6}$。表外的形狀（不同的 margin、grid、轉角不均勻的取樣）沒有量測；同樣的情形也可能出現在取樣很密的 CPW 圓頭。
+256 與 1024 邊形的面積在 snap bound 內符合手算，由測試 `test_a_polygon_circle_gives_the_hand_calculated_bands` 檢查。表外的形狀、margin 與 grid 沒有量測。可以建出 band 不代表網格容易產生：曲線的點數請參考 [Palace 契約](../../specs/palace-eigenmode.qmd#surface-epr-curved-outlines)。
 :::
 
 ::: {.callout-note collapse="true" title="空的 band 與建構錯誤不同"}
@@ -295,7 +296,17 @@ $R_m$ 的邊界由 origin 依每種特徵各一條規則得出（下表以 $O = 
 | 半徑 $r$ 的 hole（concave arc） | 同心、半徑 $r + m$ 的圓 | hole，$r = 8$ µm |
 :::
 
-實作（`scgsim.geometry.sgb.cutfamilies.inset`）並不畫出 disk。它寫出規則所給的 raw offset 曲線（候選 offset），與 support 邊界、port 邊界一起以相同的 snap rounding 做 noding，再依 cell 在 $R_m$ 的哪一側只留下分隔不同 band 的 seam（見[先建 band 區域，再切 seam](#band-regions)）。規則在 convex corner 產生的重疊兩側同一個 band，不會成為 seam，而 topology 變化（見下）不需要任何特殊程式。
+實作（`scgsim.geometry.sgb.cutfamilies.inset`）並不畫出 disk。它寫出規則所給的 raw offset 曲線（候選 offset），與 support 邊界、port 邊界一起以相同的 snap rounding 做 noding，再依 cell 在 $R_m$ 的哪一側只留下分隔不同 band 的 seam（見[先建 band 區域，再切 seam](#band-regions)）。topology 變化（見下）不需要任何特殊程式。
+
+**convex vertex 的共同交點。**兩條直線 origin 在 convex vertex $V$ 相接時，兩條 offset 都經過它們的共同交點
+
+$$
+Q = V + m\,\frac{n_0 + n_1}{1 + n_0 \cdot n_1},
+$$
+
+其中 $n_0$、$n_1$ 是指向內側的單位法向量。$Q$ 由精確的 vertex 與法向量以十進位計算，只 round 一次，兩條 offset 共用這個 grid 點，所以一定相接。若各自 round 自己的端點，轉角 $\theta$ 很小時兩條 offset 只重疊 $m\tan(\theta/2)$，約一個 grid，兩次各達半個 grid 的 round 就可能讓它們分開。offset 越過 $Q$ 的部分（最多到自己未裁切的端點）距另一條 origin 的直線都小於 $m$；只要另一條 origin 至少長 $m\max(\sin\theta, \tan(\theta/2))$，這些點的垂足都落在它上面，offset 就在 $Q$ 結束。另一條 origin 更短時（例如 boolean 或 snap 留下的幾 nm 小階），它的 offset 可能被相鄰的 offset 超過，等距曲線便沿著這條 offset 越過 $Q$，所以 offset 保留未裁切的端點。兩個交點交錯的 offset 會反向，仍原樣保留，讓候選曲線保持連通；它圍出的 cell 與其他 cell 一樣由距離決定。
+
+例：45° 三角形在 $V = (10, -10)$ µm 的角，$y = -10$ 與 $x + y = 0$ 兩條邊的 offset 交於 $Q = (10 - m(1 + \sqrt2),\ -10 + m)$，round 後在 $m = 0.5$ µm 是 $(8.793, -9.5)$ µm，在 $m = 1.0$ µm 是 $(7.586, -9.0)$ µm，兩條 seam 都停在那裡（測試 `test_the_offsets_at_a_45_degree_corner_end_at_their_hand_calculated_join`）。
 
 ![pad top 上 $m = 1.5, 3, 6$ µm 的 erosion 邊界（比範例的 margin 大，形狀才看得見）。請看繞 reflex vertex 的 arc、維持尖角的 convex corner、在 6 µm 時縮小並消失的 rounded corner arc，以及變大的 hole 圓。](figures/inset-erosion-construction.svg){#fig-construction fig-alt="四個面板：reflex corner 繞 vertex 的 arc、chamfer 的 convex corner offset 維持尖角、rounded corner 的 offset arc 縮小直到消失、hole 的同心圓。"}
 
@@ -409,7 +420,7 @@ AEDT 端同樣不再需要 non-model sheet：band 由 SGB 預先切好寫在 STE
 
 - **只有直線與圓弧曲線。** line 與圓弧的 offset 仍是 line 與 arc。B-spline carrier 的 offset 無法精確表示，在 v1 **拒絕做 inset**；若要容許需要 Human 決定一個容差。
 - **topology 是整數，但有三個步驟使用浮點。** 候選 arrangement 的 cell 在 $R_m$ 的哪一側，由一個取樣點到 gap edge 的浮點距離決定（比 snap bound 還薄的 cell 可能被分類成與精確 carrier 不同）；arc footprint 的包含測試使用 polyline witness 的 chord；arc 不交叉的檢查是取樣的。哪些 edge 存在則完全是整數。
-- **以很多短邊畫成的圓可能被拒絕。** 見[限制](#band-regions-limits)。
+- **以很多短邊畫成的曲線會讓網格更難產生。** band 仍會建出，但每條短邊都迫使周圍元素變小；拒絕的情形見[限制](#band-regions-limits)，點數的建議見 [Palace 契約](../../specs/palace-eigenmode.qmd#surface-epr-curved-outlines)。
 - **Arc noding 在 merge 之前很昂貴。** 使用 polyline witness（D3）時，含 band 的 Route A 範例的 z = 0 level 有 4 058 條 noded edge（4 050 個 hot pixel），dissolve 後剩 166 條。witness 約以 $\sqrt{r/g}$ 成長；arc 很多的 layout 必須預留這筆成本。當 band 的 arc 帶著外來的 vertex，wall 會在該 vertex 處被切開成兩個精確的圓柱（見 [D8](decisions.qmd#d8) 與[曲面 wall](assembly.qmd#curved-walls)），production 已實作。
 - **薄的 band 要付出 element。** 0.1 µm 的 band 比檢查所用的 1 µm size field 薄得多，這個檢查只證明 conformity，不評估 mesh 品質。production 的 catalogue 以粗略的 mesh 記錄 mesh 品質（含 band 的執行範例在 60 µm 的 mesh size 下，`pad_in_ground_C_bands` 有一個扁平元素，見 [Validation](validation.qmd#catalogue)），那不是對 band 做 refinement 的 mesh。band 的 mesh 尺寸屬 mesher 的責任：sidecar 的 `band_boundary` 只給出 margin 與最窄 band 的寬度（`narrowest_band_um`），不給尺寸；測試用的配方見 [測試用的 mesh 配方](emission.qmd#mesh-recipe)，欄位見[使用契約](consumer-contract.qmd#sidecar)。
 - **Side wall 的 band** 不在 v1 範圍。

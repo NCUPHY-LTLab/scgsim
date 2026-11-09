@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 250" width="800" height="250" font-family="Helvetica, Arial, sans-serif" font-size="24">
+  <title>A straight mesh edge across a curved 0.1 um band</title>
+  <desc>To scale, 240 px per um. The top of a conductor corner of radius R = 5 um, its 0.1 um band 0 along the gap edge, and a straight mesh edge of length L = 2.8 um with both ends on the gap edge. Its midpoint lies s = R - sqrt(R^2 - (L/2)^2) = 0.2 um inside the edge, past the band. The triangle it forms with a node on the inner band boundary has its centroid d = 0.17 um from the edge.</desc>
+  <rect width="800" height="250" fill="#ffffff"/>
+  <circle cx="400.0" cy="1250.00" r="1200.00" fill="#d6e2f0"/>
+  <circle cx="400.0" cy="1250.00" r="1188.00" fill="none" stroke="#f2a541" stroke-width="24.00"/>
+  <circle cx="400.0" cy="1250.00" r="1176.00" fill="none" stroke="#1f2937" stroke-width="1" stroke-dasharray="6 4"/>
+  <circle cx="400.0" cy="1250.00" r="1200.00" fill="none" stroke="#1f2937" stroke-width="2.4"/>
+  <polygon points="64.00,98.00 736.00,98.00 277.07,80.44" fill="#b42318" fill-opacity="0.10" stroke="#b42318" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <line x1="64.00" y1="98.00" x2="736.00" y2="98.00" stroke="#b42318" stroke-width="3"/>
+  <circle cx="64.00" cy="98.00" r="5" fill="#1f2937"/>
+  <circle cx="736.00" cy="98.00" r="5" fill="#1f2937"/>
+  <circle cx="277.07" cy="80.44" r="4" fill="#1f2937"/>
+  <circle cx="359.02" cy="92.15" r="5" fill="#ffffff" stroke="#b42318" stroke-width="2.2"/>
+  <g stroke="#1f2937" stroke-width="1.2">
+    <line x1="400.00" y1="50.00" x2="400.00" y2="98.00"/>
+    <line x1="394.00" y1="50.00" x2="406.00" y2="50.00"/>
+    <line x1="394.00" y1="98.00" x2="406.00" y2="98.00"/>
+    <line x1="89.42" y1="102.48" x2="113.42" y2="60.89"/>
+    <line x1="354.02" y1="96.15" x2="319.02" y2="162.15"/>
+  </g>
+  <text x="412.00" y="42.00" fill="#1f2937">s = 0.2 µm</text>
+  <text x="315.02" y="180.15" text-anchor="middle" fill="#b42318">d = 0.17 µm</text>
+  <text x="550.00" y="128.00" text-anchor="middle" fill="#b42318">L = 2.8 µm</text>
+  <text x="117.42" y="56.89" text-anchor="start" fill="#1f2937">w = 0.1 µm</text>
+  <text x="618.38" y="56.23" fill="#1f2937">R = 5 µm</text>
+</svg>
