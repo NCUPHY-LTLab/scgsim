@@ -222,12 +222,13 @@ def _on_source_lattice(polygons: Sequence[Any]) -> Sequence[Any]:
         return polygons
     import gdstk  # noqa: PLC0415 -- the optional native GDS kernel, needed only when reading a bound source cell
 
+    def on_lattice(point: Sequence[float]) -> tuple[float, float]:
+        x, y = canonical_grid_point(point, context.grid_size_um)
+        return x, y
+
     return [
         gdstk.Polygon(
-            [
-                canonical_grid_point(point, context.grid_size_um)
-                for point in polygon.points
-            ],
+            [on_lattice(point) for point in polygon.points],
             polygon.layer,
             polygon.datatype,
         )
