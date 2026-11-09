@@ -106,4 +106,5 @@ markers = [
     "private_golden: owner-authorized external returned-data fixtures; explicit manifest required; excluded from public CI",
     "slow: multi-second tests (worker-process and large random layouts); deselect with -m 'not slow'",
     "occt: official OpenCASCADE checks through OCP (dependency group `occt`); skipped when OCP is not installed",
+    "pdk: needs the public OrcaPen SC PDK; CI runs these in the pdk-tests job against the pinned PDK",
 ]

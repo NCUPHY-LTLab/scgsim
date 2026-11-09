@@ -291,6 +291,7 @@ def test_effective_input_keeps_explicit_intents_and_regenerates_generated_ones()
     assert len(intents) == 3
 
 
+@pytest.mark.pdk
 def test_public_simplepad_prepares_route_a_thin_film_ports():
     """The public 100 nm SimplePad plans Route A with its one-cell port landing."""
     pytest.importorskip("gdsfactory", reason="SimplePad layout needs gdsfactory")

@@ -21,6 +21,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         action="store_true",
         help="Require private golden execution with an explicit manifest",
     )
+    parser.addoption(
+        "--fail-on-skip",
+        action="store_true",
+        help="Fail the run when any test or module is skipped",
+    )
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -52,6 +57,36 @@ def pytest_collection_modifyitems(
                     reason="NOT_RUN: no owner-authorized private fixture manifest supplied"
                 )
             )
+
+
+def pytest_sessionfinish(session: pytest.Session) -> None:
+    """Turn any skip into a failure when the caller asked for a complete run.
+
+    CI installs every dependency a selected test needs, so a skip there means a
+    missing or broken dependency, which would otherwise pass unnoticed.
+    """
+    if not session.config.getoption("fail_on_skip"):
+        return
+    if _skipped_reports(session.config) and session.exitstatus == pytest.ExitCode.OK:
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+def pytest_terminal_summary(
+    terminalreporter: pytest.TerminalReporter, config: pytest.Config
+) -> None:
+    """Say why a run with skips failed under --fail-on-skip."""
+    skipped = _skipped_reports(config)
+    if config.getoption("fail_on_skip") and skipped:
+        terminalreporter.write_sep(
+            "=",
+            f"--fail-on-skip: {len(skipped)} skipped, so this run fails (-rs lists them)",
+            red=True,
+        )
+
+
+def _skipped_reports(config: pytest.Config) -> list[object]:
+    reporter = config.pluginmanager.get_plugin("terminalreporter")
+    return list(reporter.stats.get("skipped", [])) if reporter is not None else []
 
 
 @pytest.fixture

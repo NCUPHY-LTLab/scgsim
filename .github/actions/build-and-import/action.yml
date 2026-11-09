@@ -1,0 +1,110 @@
+name: Build and import SCGSim
+description: >-
+  Check the version contract, import the editable source, build the wheel and
+  import it in a clean environment, for one Python version. Two named CI jobs
+  call this instead of a matrix, because a matrix job skipped by its `if:`
+  never reports its per-version check names and would leave them pending.
+
+inputs:
+  python-version:
+    description: Python version to build and import with
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up UV and Python
+      uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d # v10.0.0
+      with:
+        version: "0.12.4"
+        python-version: ${{ inputs.python-version }}
+
+    - name: Sync editable environment
+      shell: bash
+      run: uv sync --locked
+
+    - name: Verify package version contract
+      shell: bash
+      env:
+        TARGET_LINE: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
+        EVENT_NAME: ${{ github.event_name }}
+        PR_HEAD_BRANCH: ${{ github.head_ref }}
+        PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+      run: |
+        # A same-repository develop -> main promotion reviews prerelease source.
+        # The resulting main push must still satisfy the stable version policy.
+        if [ "$EVENT_NAME" = pull_request ] && [ "$TARGET_LINE" = main ] &&
+           [ "$PR_HEAD_BRANCH" = develop ] && [ "$PR_HEAD_REPOSITORY" = "$GITHUB_REPOSITORY" ]; then
+          TARGET_LINE=develop
+        fi
+        case "$TARGET_LINE" in
+          develop|main) line="$TARGET_LINE" ;;
+          *) line=any ;;
+        esac
+        uv run --locked python scripts/check_version.py --line "$line"
+        uv run --locked python -m unittest discover -s tests -p 'test_version_policy.py'
+
+    - name: Verify editable import from src
+      shell: bash
+      run: |
+        uv run --locked python - <<'PY'
+        import os
+        import pathlib
+
+        import scgsim
+        import scgsim.geometry
+        import scgsim.geometry.compiler
+        from scgsim.palace import EigenmodeSim, ElectrostaticSim
+
+        repo_root = pathlib.Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+        source = pathlib.Path(scgsim.__file__).resolve()
+        src_root = (repo_root / "src").resolve()
+        if not source.is_relative_to(src_root):
+            raise SystemExit(f"unexpected scgsim location: {source}")
+        print(scgsim.__version__)
+        print(scgsim.geometry.__name__, scgsim.geometry.compiler.__name__,
+              ElectrostaticSim.__name__, EigenmodeSim.__name__)
+        PY
+
+    - name: Build distribution artifacts
+      shell: bash
+      run: uv build --no-sources
+
+    - name: Inspect wheel contents
+      shell: bash
+      run: |
+        python - <<'PY'
+        import glob
+        import zipfile
+        from pathlib import Path
+
+        for path in glob.glob("dist/*.whl"):
+            wheel = Path(path).resolve()
+            print(wheel)
+            with zipfile.ZipFile(wheel) as zf:
+                for name in zf.namelist():
+                    print(name)
+        PY
+
+    - name: Verify wheel import in isolated environment
+      shell: bash
+      env:
+        PYTHON_VERSION: ${{ inputs.python-version }}
+      run: |
+        uv venv --clear --python "$PYTHON_VERSION" .venv-wheel
+        uv pip install --python .venv-wheel/bin/python dist/*.whl
+        .venv-wheel/bin/python - <<'PY'
+        import scgsim
+        import scgsim.geometry
+        import scgsim.geometry.compiler
+        from importlib.metadata import version as metadata_version
+        import pathlib
+        from scgsim.palace import EigenmodeSim, ElectrostaticSim
+
+        print(scgsim.__version__)
+        if scgsim.__version__ != metadata_version("scgsim"):
+            raise SystemExit("version mismatch between package and metadata")
+        print(scgsim.geometry.__name__, scgsim.geometry.compiler.__name__,
+              ElectrostaticSim.__name__, EigenmodeSim.__name__)
+        print(pathlib.Path(scgsim.__file__).resolve())
+        PY

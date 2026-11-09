@@ -26,7 +26,9 @@ Documentation Pages 工作流程會在推送至 `develop`／`main` 或手動派�
 
 CI 會先判定事件差異的類型。草稿拉取請求只執行分類，並刻意略過產品工作；將拉取請求標記為 Ready 後，才會啟動適用的檢查。確認為純 Markdown 文字的 `README.md` 或 `docs/**/*.md` 變更，會在本機驗證 Markdown 連結路徑；含有行內程式碼歧義的文件則走產品檢查流程。可執行或不支援的內容、QMD／Notebook 檔案、共用設定、相依套件與來源變更，也會執行產品檢查。若無法取得比較資訊，同樣執行產品檢查。
 
-非草稿產品變更與手動派送會保留 Python 3.12／3.13 套件版本、發行套件建置、可編輯匯入與隔離 wheel 匯入檢查。獨立的 Python 3.12 `docs-smoke` 工作會使用固定版本的公開 PDK，以純檔案準備流程執行目前來源範例。Ready 的產品拉取請求與 develop／main 推送會執行這項檢查，並納入 `required` 結果。離線測試工作也會執行完整品質入口 `scripts/check_quality.py`，涵蓋 Ruff 格式與程式檢查、可讀性、標準及原有嚴格 Pyright 設定，以及六條匯入層契約。
+非草稿產品變更、推送至 `develop` 或 `main`，以及手動派送，會執行快速層。`build-and-import` 在 Python 3.12 與 3.13 檢查套件版本、發行套件建置、可編輯匯入與隔離 wheel 匯入。`fast-tests` 執行公開離線測試套件，但不含 `slow`、`pdk` 與 `private_golden` 測試。`quality` 執行完整品質入口 `scripts/check_quality.py`，涵蓋 Ruff 格式與程式檢查、可讀性、標準及原有嚴格 Pyright 設定，以及六條匯入層契約。兩者都安裝 `occt` 相依群組，所以 Pyright 能解析 OCP，標記為 `occt` 的 OCCT 檢查也會執行。`docs-smoke` 使用固定版本的公開 PDK，以純檔案準備流程執行目前來源範例。`pdk-tests` 以 `README.md` 安裝的公開 OrcaPen SC PDK 修訂版本，依該 PDK 凍結的鎖定檔建立環境並安裝目前的 SCGSim wheel，執行標記為 `pdk` 的測試。測試工作都會加上 `--fail-on-skip`：它們已安裝測試所需的全部相依套件，因此任何略過都會使執行失敗，不會無聲通過。
+
+Nightly 工作流程在 UTC 18:30（台灣時間 02:30）於 `develop` 執行重型層，也可手動派送到任何分支。`full-tests` 執行含 `slow` 測試的完整公開套件，`docs-render` 執行 Pages 渲染但不部署。任何失敗都會使該次執行失敗。CI 只使用公開輸入並排除私有基準資料，不會呼叫 AEDT 或 Palace 求解器。
 
 ## 產生 API 參考頁 {#generated-api-references}
 
@@ -65,7 +67,7 @@ python3 -m http.server 4321 --bind 0.0.0.0 --directory _site
 
 目前工程收斂工作仍為 `CONVERGING`。請在[收斂狀態頁](docs/convergence-status.qmd)分別追蹤語意狀態與儲存庫交付狀態。
 
-必要交付流程是建立拉取請求、通過必要檢查，且不得略過檢查。字面名稱為 `required` 的檢查一律會產生終止結果，且只接受所選變更範圍宣告的結果。失敗或取消的工作，以及未預期的略過，都視為失敗。
+必要交付流程是建立拉取請求、通過必要檢查，且不得略過檢查。每個 CI 工作都是獨立的檢查，失敗時會直接顯示是哪一項：`change-scope`、`build-and-import (3.12)`、`build-and-import (3.13)`、`fast-tests`、`quality`、`docs-smoke` 與 `pdk-tests`。因條件而略過的工作（草稿拉取請求或純文件流程）會回報成功。分類失敗時其他工作也會略過，所以 `change-scope` 本身也是必要檢查。失敗或取消的工作都視為失敗。
 
 每個修復拉取請求都應附上回歸案例，或說明未納入案例的理由、採用的替代證據及任何尚存缺口。若變更涉及計算，請使用獨立的公開解析回歸案例確認正規化、參與率與群組識別，並將這些結果與回傳資料相容性分開報告。計算程序不明的歷史彙總不是正確性判準；請保留其歷史紀錄，不要據此推導容許差異。
 

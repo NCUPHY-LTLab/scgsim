@@ -24,7 +24,7 @@ SCGSim 工程收斂工作目前仍為 `CONVERGING`。本頁記錄目前的維護
 | 後續平台工作 | `AFTER TOOLCHAIN` | macOS 語音／AI 工作會在共用工具鏈完成後進行。 |
 | Tier B | `SUPPORTED` | 此收斂工作不會撤銷或重新分類 Tier B 支援。 |
 
-拉取請求事件（包括草稿）、推送至 `develop` 或 `main`，以及手動派送，都會執行 Python 3.12／3.13 矩陣檢查：確認套件版本契約、建置發行套件，並驗證可編輯來源與 wheel 匯入。Python 3.12 離線工作會執行完整的公開非原生測試套件、對三個已設定模組執行嚴格 Pyright 檢查，以及對受追蹤 Python 檔案執行 Ruff F 檢查。另一個 Python 3.12 `docs-smoke` 工作會使用固定版本的公開 PDK，以純檔案準備流程執行目前的來源範例。三項工作都成功，必要工作才會通過。CI 不會呼叫 AEDT 或 Palace 原生求解器，也不會使用私有基準資料。在推送至 `develop` 或 `main`，或手動派送時執行的 Pages 渲染是獨立工作，並已停用程式碼執行。
+Ready 的拉取請求、推送至 `develop` 或 `main`，以及手動派送，會以各自獨立的檢查執行快速層：`build-and-import` 在 Python 3.12 與 3.13 確認套件版本契約、建置發行套件，並驗證可編輯來源與 wheel 匯入；`fast-tests` 執行不含 `slow` 測試的公開非原生測試套件；`quality` 執行 `scripts/check_quality.py`；`docs-smoke` 使用固定版本的公開 PDK，以純檔案準備流程執行目前的來源範例；`pdk-tests` 以固定版本的公開 OrcaPen SC PDK 執行依賴 PDK 的測試。`develop` 上的夜間工作流程會執行含 `slow` 測試的完整套件，以及不部署的 Pages 渲染。CI 不會呼叫 AEDT 或 Palace 原生求解器，也不會使用私有基準資料。在推送至 `develop` 或 `main`，或手動派送時執行的 Pages 渲染是獨立工作，並已停用程式碼執行。
 
 ## 目前檢查狀態 {#current-check-status}
 

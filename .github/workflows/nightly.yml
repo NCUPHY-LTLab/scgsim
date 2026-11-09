@@ -1,0 +1,59 @@
+name: Nightly
+
+# The heavy tier that pull requests skip: the whole public suite with `slow`
+# tests, and the real Quarto render of the Pages site without deploying it.
+# No solver runs here. A failure fails the run, which GitHub reports like any
+# other failed workflow.
+on:
+  schedule:
+    # 18:30 UTC is 02:30 in Taiwan. Scheduled runs use the default branch (develop).
+    - cron: "30 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  full-tests:
+    name: full-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up UV and Python
+        uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d # v10.0.0
+        with:
+          version: "0.12.4"
+          python-version: "3.12"
+      - name: Install the Gmsh wheel system runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libglu1-mesa
+      - name: Install locked offline test dependencies
+        run: uv sync --locked --group dev
+      # `pdk` tests need the PDK's own environment; CI's pdk-tests job runs them.
+      - name: Run the complete public suite, slow tests included
+        run: >-
+          uv run --locked --no-sync python -m pytest tests
+          -m 'not private_golden and not pdk' -rs --fail-on-skip --durations=20
+
+  docs-render:
+    name: docs-render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - uses: quarto-dev/quarto-actions/setup@8a96df13519ee81fd526f2dfca5962811136661b # v2.2.0
+        with:
+          version: '1.10.18'
+      # The same render docs.yml deploys: content from the current develop and
+      # main heads, presentation from this checkout. Nothing is uploaded.
+      - name: Render frozen sources and version catalogue without execution or deployment
+        run: python scripts/build_docs_site.py --output "$RUNNER_TEMP/scgsim-pages"
