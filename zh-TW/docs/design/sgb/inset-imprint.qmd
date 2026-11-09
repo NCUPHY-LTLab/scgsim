@@ -19,7 +19,7 @@ scgsim-id: "docs/design/sgb/inset-imprint"
 
 band 把一個 **support face**（要被分段的面）依「離 **distance origin** 多遠」切開。distance origin 只有一種：**gap edge**。
 
-**gap edge** 是導體 footprint 的一段邊，並且在導體的 support plane 上，這段邊的另一側是**裸露的 substrate 表面**：兩個 solution region 的介面，其中至少一個是 dielectric，也就是 `SA` 或 `SS` 介面。導體的 support plane 是它附著的那個平面：Route A 的 sheet 所在的平面，或 Route B、C 有限厚度金屬的底面所在的平面（top face 的 footprint 與 bottom face 相同）。判斷時 lumped port 一律當作不存在：port 蓋在 gap 上，並不會讓兩側的金屬邊不再面向 gap。
+**gap edge** 是導體 footprint 的一段邊，並且在導體的 support plane 上，這段邊的另一側是**裸露的 substrate 表面**：兩個 solution region 的介面，其中至少一個是 dielectric，也就是 `SA` 或 `SS` 介面。導體的 support plane 是它附著的那個平面：Route A 的 sheet 所在的平面，或 Route B、C 有限厚度金屬貼著 dielectric 的那個面（MS face）所在的平面。正放的 die 上那是金屬的底面；翻轉的 die（flip chip 的上層 die D1，或貼在 substrate 下方的 film，例如 TSV 背面的 landing）上，金屬掛在 substrate 下方，那是金屬的頂面。兩個面都貼著 dielectric 或都沒有時，仍取底面。top face 與 bottom face 的 footprint 相同，所以另一個面也從同一組 gap edge 量起。判斷時 lumped port 一律當作不存在：port 蓋在 gap 上，並不會讓兩側的金屬邊不再面向 gap。
 
 下列的邊**不是** origin：
 
@@ -208,7 +208,7 @@ SGB 在 [physical pre-pass](cut-families.qmd) 的 label 上找 face，用的是�
 ::: {.askr-table-compact}
 | 種類 | 展開成的 face |
 |---|---|
-| `MA`、`MS` | Route A：有該種類 row 的 sheet。一側是 vacuum、另一側是 dielectric 的 sheet 兩種 row 都有，一個 family 同時服務 MA 與 MS 的請求；兩側都是 vacuum 的懸空 sheet 只有 MA。Route B 與 C：有限導體中，有該種類 cell 的 top 或 bottom face（top 通常面向 vacuum 是 MA，bottom 貼著 dielectric 是 MS）。側壁不切 band |
+| `MA`、`MS` | Route A：有該種類 row 的 sheet。一側是 vacuum、另一側是 dielectric 的 sheet 兩種 row 都有，一個 family 同時服務 MA 與 MS 的請求；兩側都是 vacuum 的懸空 sheet 只有 MA。Route B 與 C：有限導體中，有該種類 cell 的 top 或 bottom face（正放的 die 上 top 面向 vacuum 是 MA、bottom 貼著 dielectric 是 MS；翻轉的 D1 相反，bottom 面向 gap 是 MA、top 貼著 D1 的 substrate 是 MS）。側壁不切 band |
 | `SA` | 每一對 dielectric 與 vacuum 的 solution region，在它們相遇的每一個高度上的介面 |
 :::
 

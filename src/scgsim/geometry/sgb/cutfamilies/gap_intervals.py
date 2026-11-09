@@ -3,7 +3,8 @@
 Owns cutting one boundary edge of a support face (a straight edge or an arc, travelled with the face on its left)
 at the ends of the gap edges of another level that lie along it, and saying which of the pieces face a gap.
 
-A support face on a plane above its conductor's attachment plane (the top of a finite conductor) is bounded by the
+A support face on a plane other than its conductor's attachment plane (the face of a finite conductor away from
+its substrate: the top on an upright die, the bottom on a flipped one) is bounded by the
 same source edges as the footprint on the attachment plane, but a source edge may face a gap only along part of its
 length there.  The two levels are noded separately, so their pieces of one source edge end at different vertices; the
 interval a gap edge covers along the source edge is what both levels agree on.  Edges are compared along their shared

@@ -14,13 +14,15 @@ outer edge, an edge shared with another conductor, an edge facing only vacuum --
 not an origin.  A solution interface is measured from the gap edges on its own boundary.  A support with no gap
 edge fails closed.
 
-A conductor face is measured from the gap edges of its footprint on the plane the conductor is attached to (its
-sheet plane, or the bottom of a finite body).  On that plane the face is the support itself, and the physical
-pre-pass has already cut its boundary wherever the cell across it changes, so each boundary half-edge is an
-origin or not as a whole.  The top face of a finite conductor lies on another plane: each of its boundary edges
-is cut where a gap edge of the attachment plane that lies along the same source edge begins or ends
-(``cutfamilies.gap_intervals``), and only the pieces a gap edge covers are origins.  A source edge that faces a
-gap along part of its length is thus an origin along that part only.
+A conductor face is measured from the gap edges of its footprint on the plane the conductor is attached to: its
+sheet plane, or the face of a finite body that lies on a dielectric (its metal-substrate face).  That is the
+bottom on an upright die and the top on a flipped one (the upper die of a flip chip, a film under a substrate);
+a body with a dielectric on neither face, or on both, keeps its bottom.  On that plane the face is the support
+itself, and the physical pre-pass has already cut its boundary wherever the cell across it changes, so each
+boundary half-edge is an origin or not as a whole.  The other face of a finite conductor lies on another plane:
+each of its boundary edges is cut where a gap edge of the attachment plane that lies along the same source edge
+begins or ends (``cutfamilies.gap_intervals``), and only the pieces a gap edge covers are origins.  A source edge
+that faces a gap along part of its length is thus an origin along that part only.
 
 Arc edges of the boundary are expressed on the exact circle of their source arc (centre and radius of the
 carrier) through the snapped end points, so offsets stay concentric with the source circle.
@@ -197,8 +199,10 @@ def _origin_pieces(
             origin=_is_exposed_dielectric(layer.labels[arr.he_face[h]])
             and _is_conductor_cell(layer.labels[arr.he_face[h ^ 1]]),
         )
-    if support.side == "top":
-        attach = labelled.level_layers[_attach_level(support, catalogue, labelled)]
+    attach = labelled.level_layers[
+        _attach_level(support.entity_id, catalogue, labelled)
+    ]
+    if attach is not layer:
         gaps = _gap_edges_by_source(attach, labelled)
         return lambda h: _pieces_along_gaps(layer, h, labelled, gaps)
     # The support is on its own plane, whose arrangement is cut wherever the cell across a boundary edge
@@ -209,11 +213,34 @@ def _origin_pieces(
 
 
 def _attach_level(
-    support: ConductorSurface, catalogue: PrismCatalogue, labelled: LabelledArrangements
+    entity_id: str, catalogue: PrismCatalogue, labelled: LabelledArrangements
 ) -> int:
-    """Level of the plane a conductor is attached to: its sheet plane, or the bottom of a finite body."""
-    prism = next(p for p in catalogue.prisms if p.entity_id == support.entity_id)
-    return labelled.levels.levels.index(prism.z0)
+    """Level of the plane a conductor is attached to: its sheet plane, or the face of a finite body on a dielectric.
+
+    The gap edges lie where the conductor meets the substrate, so the attachment plane is the face with a
+    metal-substrate (``MS``) cell: the bottom on an upright die, the top on a flipped die whose film hangs under
+    its substrate.  A body with a dielectric on neither face, or on both, keeps its bottom.
+    """
+    prism = next(p for p in catalogue.prisms if p.entity_id == entity_id)
+    bottom = labelled.levels.levels.index(prism.z0)
+    if prism.is_sheet:
+        return bottom
+    top = labelled.levels.levels.index(prism.z1)
+    if not _lies_on_dielectric(
+        labelled.level_layers[bottom], ConductorSurface(entity_id, "bottom")
+    ) and _lies_on_dielectric(
+        labelled.level_layers[top], ConductorSurface(entity_id, "top")
+    ):
+        return top
+    return bottom
+
+
+def _lies_on_dielectric(layer: Layer, surface: ConductorSurface) -> bool:
+    """Whether some cell of a conductor's top or bottom face is a metal-substrate (``MS``) interface."""
+    return any(
+        "MS" in _surface_epr_types(layer.labels[f])
+        for f in _conductor_cells(layer, surface)
+    )
 
 
 def _gap_edges_by_source(
