@@ -1,6 +1,7 @@
 """Call-local reuse of genuine gdstk extraction; no solver or mesh work."""
 
 import json
+import math
 from contextvars import copy_context
 from threading import Thread
 
@@ -8,6 +9,9 @@ import gdstk
 import pytest
 
 from scgsim.geometry import build_gds_stack_geometry_input
+from scgsim.geometry.models.grid import GeometryGridContext
+from scgsim.geometry.primitives.grid import geometry_grid_scope
+from scgsim.geometry.primitives.grid_regions import canonical_grid_point
 from scgsim.geometry.source import occurrence as occurrence
 
 
@@ -190,3 +194,40 @@ def test_public_adapter_reads_fresh_library_per_call(tmp_path, extractions):
     assert len(extractions) == 2
     assert extractions[0][0] is not extractions[1][0]
     assert occurrence._EXTRACTION_CACHE.get() is None  # noqa: SLF001 - verify adapter scope cleanup
+
+
+def test_one_extraction_realizes_on_each_bound_grid(extractions):
+    """A cell read once realizes its rotated polygon on whichever grid is bound.
+
+    The extraction cache keys on the cell alone, so the extraction keeps the
+    authored points and each source recipe rounds them to its own grid.
+    """
+    local = gdstk.Cell("LOCAL")
+    local.add(gdstk.rectangle((0, 0), (1, 0.5), layer=1))
+    rotated = gdstk.Cell("ROTATED")
+    rotated.add(gdstk.Reference(local, rotation=math.radians(30)))
+    entity = occurrence.entity_from_layer_record(
+        {
+            "semantic_id": "metal",
+            "role": "conductor",
+            "material_id": "PEC",
+            "layer": 1,
+            "datatype": 0,
+            "z_um": 0,
+            "thickness_um": 1,
+        },
+        materials={"PEC": {"kind": "conductor"}},
+    )
+    realized = {}
+    with occurrence._occurrence_extraction_scope():  # noqa: SLF001 - exercise call-local cache scope
+        for step in (0.001, 0.01):
+            with geometry_grid_scope(GeometryGridContext(step)):
+                (polygon,) = occurrence.gds_polygons_for_entity(
+                    entity,
+                    polygons_by_layer=occurrence.read_polygons_by_layer(rotated),
+                )
+            realized[step] = polygon.exterior
+    assert len(extractions) == 1
+    for step, ring in realized.items():
+        assert all(canonical_grid_point(point, step) == point for point in ring)
+    assert realized[0.001] != realized[0.01]
