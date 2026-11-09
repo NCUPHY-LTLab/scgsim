@@ -83,7 +83,10 @@ def nodes(records):
         )
 
     return sorted(
-        (ring_nodes(record["exterior"]), tuple(sorted(map(ring_nodes, record["holes"]))))
+        (
+            ring_nodes(record["exterior"]),
+            tuple(sorted(map(ring_nodes, record["holes"]))),
+        )
         for record in records
     )
 
