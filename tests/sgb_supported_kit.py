@@ -21,7 +21,7 @@ import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
-from shapely.geometry import Polygon, box
+from shapely.geometry import LineString, Polygon, box
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
@@ -49,8 +49,12 @@ CONTOUR_SNAP_UM = math.sqrt(2) / 2 * GRID.size_um
 TURN_REFUSAL = (
     r"turn by less than 2\.8125 degrees each.*at most 128 points per full circle"
 )
-# shapely's buffer arcs: 1024 chords per quarter circle leave an area error below 1e-6 um^2 at 1 um.
-BUFFER_QUAD_SEGMENTS = 1024
+# Double-precision sums of face areas: a band that vanishes comes out as +-4e-16 um^2 rather than 0, which a
+# zero snap bound (no contour) must still accept.  Relative to the area, far below any snap bound.
+FLOAT_ROUNDOFF = 1e-12
+# The stadium end caps: 128 chords per quarter circle fall short of a quarter disk of radius 1 um by 2e-5 um^2,
+# under 2 % of the snap bound of the 1.57 um arc that bounds it (1.1e-3 um^2).
+BUFFER_QUAD_SEGMENTS = 128
 
 Um = tuple[float, float]
 Point = tuple[int, int]
@@ -359,12 +363,32 @@ class ReferenceBands:
 def reference(scene: Scene) -> dict[str, ReferenceBands]:
     """Exact erosion of the scene's lattice polygons, one entry per band family the build must produce."""
     expectations = (scene.expectations or planar_expectations)(scene)
-    return {family: exact_bands(*pair) for family, pair in expectations.items()}
+    die_edge = die_shape(scene).boundary
+    return {
+        family: exact_bands(support, gap_edges(origin, die_edge))
+        for family, (support, origin) in expectations.items()
+    }
 
 
-def exact_bands(support: BaseGeometry, origin: BaseGeometry) -> ReferenceBands:
-    """Band k of ``support``: the part within ``m_k`` of ``origin`` and not within ``m_(k-1)``; band K the rest."""
-    grown = [origin.buffer(m, quad_segs=BUFFER_QUAD_SEGMENTS) for m in MARGINS]
+def gap_edges(origin: BaseGeometry, die_edge: BaseGeometry) -> BaseGeometry:
+    """The distance origins of a band family: the origin region's boundary, less the die edge."""
+    return origin.boundary.difference(die_edge)
+
+
+def exact_bands(support: BaseGeometry, edges: BaseGeometry) -> ReferenceBands:
+    """Band k of ``support``: the part within ``m_k`` of the gap ``edges`` and not within ``m_(k-1)``; band K the rest.
+
+    The points within ``m`` of the edges are the union of one stadium per edge segment, which is the definition
+    of that distance.  A stadium's straight sides are exact and only its end caps are polygonised, from inside,
+    so a band that erodes away is covered by straight sides and has no reference area.  (Buffering a closed
+    ring as a whole is not used: when its inner offset collapses, GEOS leaves a small hole, about 0.0012 um^2
+    in a 16-gon of radius 1 um at a 1 um margin.)
+    """
+    segments = [LineString(pair) for pair in segment_pairs(edges)]
+    grown = [
+        unary_union([seg.buffer(m, quad_segs=BUFFER_QUAD_SEGMENTS) for seg in segments])
+        for m in MARGINS
+    ]
     near = [support.intersection(g).area for g in grown]
     contours = [g.boundary.intersection(support).length for g in grown]
     areas = (
@@ -380,6 +404,16 @@ def exact_bands(support: BaseGeometry, origin: BaseGeometry) -> ReferenceBands:
     return ReferenceBands(areas, tuple(length * CONTOUR_SNAP_UM for length in lengths))
 
 
+def segment_pairs(lines: BaseGeometry) -> list[tuple[Um, Um]]:
+    """Every straight segment of a line geometry (a line string, a ring or a collection of them)."""
+    parts = getattr(lines, "geoms", [lines])
+    pairs = []
+    for part in parts:
+        coords = list(part.coords)
+        pairs += list(zip(coords, coords[1:], strict=False))
+    return pairs
+
+
 def assert_exact_bands(scene: Scene) -> None:
     """The build has the reference's band families, each band within its snap bound of the exact erosion."""
     model = build_model_from_catalogue(catalogue(scene), "B", insets=type_bands())
@@ -390,7 +424,14 @@ def assert_exact_bands(scene: Scene) -> None:
         for band, (area, exact, bound) in enumerate(
             zip(got[family], ref.areas, ref.bounds, strict=True)
         ):
-            assert abs(area - exact) <= bound, (family, band, area, exact, bound)
+            roundoff = FLOAT_ROUNDOFF * max(1.0, abs(exact))
+            assert abs(area - exact) <= bound + roundoff, (
+                family,
+                band,
+                area,
+                exact,
+                bound,
+            )
 
 
 def shape(outer: list[Point], holes: Sequence[list[Point]] = ()) -> Polygon:
@@ -400,6 +441,12 @@ def shape(outer: list[Point], holes: Sequence[list[Point]] = ()) -> Polygon:
         [(x * um, y * um) for x, y in outer],
         [[(x * um, y * um) for x, y in h] for h in holes],
     )
+
+
+def die_shape(scene: Scene) -> Polygon:
+    """The die box as a micrometre shapely polygon, on the lattice like the prisms."""
+    um = GRID.size_um
+    return box(*(lattice(v) * um for v in scene.die))
 
 
 def conductor_shape(c: Conductor) -> Polygon:
@@ -413,8 +460,7 @@ def planar_expectations(scene: Scene) -> dict[str, Expectation]:
     A conductor is banded from the exposed substrate around it, SA from the metal.  A port sheet on the
     substrate surface (z = 0) is no origin, and the part of it over the gap is a port face, not an SA face.
     """
-    um = GRID.size_um
-    die = box(*(lattice(v) * um for v in scene.die))
+    die = die_shape(scene)
     shapes = {c.entity: conductor_shape(c) for c in scene.conductors}
     metal = unary_union(list(shapes.values()))
     exposed = die.difference(metal)

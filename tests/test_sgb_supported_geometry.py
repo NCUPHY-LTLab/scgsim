@@ -13,9 +13,17 @@ import pytest
 import sgb_supported_cells as disk_qubit
 import sgb_supported_pdk_cells as pdk
 from sgb_supported_kit import (
+    MARGINS,
     TURN_REFUSAL,
+    Conductor,
+    Scene,
     assert_exact_bands,
     catalogue,
+    die_box,
+    ngon,
+    rect,
+    reference,
+    to_lattice,
     turns_degrees,
     type_bands,
 )
@@ -43,6 +51,7 @@ SLOW = {
     "cell11_bumps_flip_chip",
     "cell19_launcher",
     "cell20_comb",
+    "meander_long_outline",
 }
 
 
@@ -82,3 +91,49 @@ def test_a_resampled_spline_strip_turns_at_least_the_rule_at_every_vertex(name):
     """The resampled strips that build above keep every lattice vertex at 2.8125 degrees or more."""
     ring = SCENES[name]().conductors[0].outer
     assert min(abs(t) for t in turns_degrees(ring)) >= 360 / 128
+
+
+def test_the_long_meander_has_outlines_of_500_to_900_vertices_within_the_turn_rule():
+    """The stress case of 500 to 900 vertices in one outline, drawn inside the 128-points-per-circle rule.
+
+    The scene builds with exact bands in the parametrised test above (``meander_long_outline``).
+    """
+    scene = SCENES["meander_long_outline"]()
+    sizes = {c.entity: len(c.outer) for c in scene.conductors}
+    assert 500 <= sizes["signal"] <= 900
+    for c in scene.conductors:
+        assert min(abs(t) for t in turns_degrees(c.outer)) >= 360 / 128, c.entity
+
+
+def test_a_band_that_erodes_away_has_no_reference_area_and_builds_empty():
+    """A 16-gon of radius 1 um: its inradius, 0.98 um, is below the 1 um margin, so the last band is empty.
+
+    The reference must say so (a buffered ring leaves a 0.0012 um^2 hole here) and the build must agree.
+    """
+    scene = Scene(
+        "collapse",
+        (),
+        die_box(21.0),
+        [Conductor("disk", "disk", to_lattice(ngon(1.0, 16)))],
+    )
+    expected = reference(scene)
+    for family in ("ma::disk::top", "ms::disk::bottom"):
+        assert expected[family].areas[-1] == pytest.approx(0.0, abs=1e-12)
+        assert expected[family].bounds[-1] == 0.0
+    assert_exact_bands(scene)
+
+
+@pytest.mark.parametrize(("side", "last_band"), [(2.4, 0.4**2), (1.8, 0.0)])
+def test_the_reference_of_a_square_is_its_hand_calculated_erosion(side, last_band):
+    """An axis-aligned square of side s: band k holds the points between margins, (s - 2 m_k)^2 at most."""
+    half = side / 2
+    scene = Scene(
+        "square",
+        (),
+        die_box(10.0),
+        [Conductor("pad", "pad", to_lattice(rect(-half, -half, half, half)))],
+    )
+    inner = [max(side - 2 * m, 0.0) ** 2 for m in MARGINS]
+    expected = (side**2 - inner[0], inner[0] - inner[1], inner[1])
+    assert reference(scene)["ma::pad::top"].areas == pytest.approx(expected, abs=1e-9)
+    assert expected[-1] == pytest.approx(last_band, abs=1e-12)

@@ -162,6 +162,44 @@ def cell15_euler_u_turn() -> Scene:
     )
 
 
+MEANDER_TURNS = 12
+MEANDER_R = 25.0
+MEANDER_LEG = 150.0
+MEANDER_POINTS_PER_CIRCLE = (
+    48  # 7.5 degrees per vertex, 3.75 where a bend meets a straight
+)
+
+
+def meander_long_outline() -> Scene:
+    """Cells 13 and 15 combined: a CPW meander, w 10 / g 6, whose outlines have 500 to 900 vertices.
+
+    Twelve U-turns of radius 25, each drawn as a circular bend with 48 points per full circle, join thirteen
+    straight legs 150 um long; both ends lie on the die edge.  Every vertex on a bend turns 7.5 degrees and
+    every vertex where a bend meets a straight 3.75, inside the 128-points-per-circle rule.
+    """
+    pitch, chords = 2 * MEANDER_R, MEANDER_POINTS_PER_CIRCLE // 2
+    x_left, x_right = -50.0, MEANDER_LEG + 50.0
+    pieces: list[list[Um]] = [[(x_left, 0.0), (MEANDER_LEG, 0.0)]]
+    for k in range(MEANDER_TURNS):
+        y = pitch * k
+        heading_right = k % 2 == 0
+        x = MEANDER_LEG if heading_right else 0.0
+        sweep = (
+            180.0 if heading_right else -180.0
+        )  # turn left at the right end, right at the left end
+        pieces.append(arc_path((x, y + MEANDER_R), MEANDER_R, -90.0, sweep, chords))
+        end = (
+            x_right
+            if k == MEANDER_TURNS - 1
+            else (0.0 if heading_right else MEANDER_LEG)
+        )
+        pieces.append([(x, y + pitch), (end, y + pitch)])
+    top = pitch * MEANDER_TURNS + 30.0
+    die = (x_left, -30.0, x_right, top)
+    corners = ([(x_right, top), (x_left, top)], [(x_right, -30.0), (x_left, -30.0)])
+    return cpw_scene("meander_long_outline", (13, 15), die, pieces, 10.0, corners)
+
+
 def cell16_coupled_pair() -> Scene:
     """Cell 16: two 7 um traces with 6 um gaps on either side of a 3 um ground rib, leaving in Euler bends.
 
@@ -678,6 +716,7 @@ SCENES = {
     "cell13_circular_bend": cell13_circular_bend,
     "cell14_euler_bend": cell14_euler_bend,
     "cell15_euler_u_turn": cell15_euler_u_turn,
+    "meander_long_outline": meander_long_outline,
     "cell16_coupled_pair": cell16_coupled_pair,
     "cell17_t_junction": cell17_t_junction,
     "cell17_shorted_end": cell17_shorted_end,

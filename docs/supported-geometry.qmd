@@ -49,6 +49,7 @@ The dimensions measured across the PDK cells, and covered by the samples, are:
 | Polygon-circle radii | 1 to 350 µm |
 | Straight edges | any angle, with kinks from 0.86° |
 | Lumped-port sheets | 0.27 to 150 µm wide |
+| Vertices in one outline | up to 604, in a CPW meander of twelve bends |
 | Surface-EPR margins | 0.5 and 1.0 µm |
 
 Only these two margins were measured. A larger margin in a narrow gap or rib

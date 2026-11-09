@@ -29,6 +29,7 @@ scgsim-id: "docs/supported-geometry"
 | 多邊形圓的半徑 | 1 至 350 µm |
 | 直邊 | 任意角度，轉折從 0.86° 起 |
 | 集總埠薄片 | 寬 0.27 至 150 µm |
+| 單一輪廓的頂點數 | 最多 604，在有十二個彎道的 CPW meander 中 |
 | Surface-EPR margin | 0.5 與 1.0 µm |
 
 只量測了這兩個 margin。在窄的 gap 或肋條中使用較大的 margin，會改變哪些 band 存在；這是合法的結果，但不在本頁涵蓋範圍內。
