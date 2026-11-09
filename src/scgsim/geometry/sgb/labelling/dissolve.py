@@ -10,7 +10,10 @@ minimal arrangement without the rest:
 * every other edge dissolves: its two cells merge;
 * afterwards degree-2 vertices whose two edges have the same carrier set are
   removed (this erases witness splits of one arc and other same-carrier chains),
-  except where a refinement-only curve ends: that vertex stays on the boundary.
+  except where a refinement-only curve ends: that vertex stays on the boundary;
+* a merged chain whose chord would cross another edge or pass through a vertex
+  is split again at one of its own vertices, so the rebuilt arrangement stays
+  planar.
 
 Does not own labelling (``prism_set``) or geometry changes: dissolution never
 moves a vertex.
@@ -18,13 +21,17 @@ moves a vertex.
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
 from scgsim.geometry.sgb.arrangement.dcel import Arrangement, build_arrangement
-from scgsim.geometry.sgb.noding.snap_rounding import NodedEdge
-from scgsim.geometry.sgb.plane import Point
+from scgsim.geometry.sgb.noding.snap_rounding import (
+    NodedEdge,
+    crossing_pixels_kernel,
+    hits_kernel,
+)
+from scgsim.geometry.sgb.plane import Point, point_in_ring
 from scgsim.geometry.sgb.records.carriers import MEMBER_ONLY, base_carrier_id
 
 EdgeSides = tuple[
@@ -65,7 +72,7 @@ def dissolve(
     # A refinement curve that ends on a boundary chain pins that vertex: the mesher embeds the
     # curve in the face and needs the boundary edge to end there.
     pinned = {p for ei in refinement_edges for p in (arr.edges[ei].a, arr.edges[ei].b)}
-    chains = _merge_degree_two(arr, kept, labels, pinned)
+    chains = _planar_chords(arr, _merge_degree_two(arr, kept, labels, pinned))
     new_arr = build_arrangement([chain.edge for chain in chains])
     new_labels = _face_labels(new_arr, chains)
     face_map = _old_to_new_faces(arr, new_arr, chains)
@@ -189,6 +196,124 @@ def _try_join(
     incident[u].add(new_key)
     incident[w].add(new_key)
     del incident[vertex]
+
+
+def _planar_chords(arr: Arrangement, chains: list[_Chain]) -> list[_Chain]:
+    """Split merged chains until no chord crosses an edge, passes through a vertex or repeats an edge.
+
+    The rebuilt arrangement draws every chain as one straight edge, its chord.  The pieces a chain
+    replaced were noded, but the chord of a long arc run can leave them.  Where a port edge splits
+    an arc and not the concentric band arc beside it, the split arc's new end lies between the
+    band arc and its chord, and the band arc's chord crosses the split arc's chord and the port
+    edge (Issue #108).  The test is the planarity check's own: exact crossings, rounded to their
+    hot pixel, and the hot pixels an edge touches.  A chain is split only at one of its own
+    vertices, a vertex of the noded arrangement, so no vertex moves; an arc chain keeps its one
+    carrier and is realised piece by piece.
+    """
+    while True:
+        keys = [(chain.edge.a, chain.edge.b) for chain in chains]
+        merged = [len(chain.pieces) > 1 for chain in chains]
+        if not any(merged):
+            return chains
+        ends = {p for key in keys for p in key}
+        hot = ends | crossing_pixels_kernel(keys, merged)
+        touched = hits_kernel(keys, merged, hot, set())
+        repeated = {key for key, count in Counter(keys).items() if count > 1}
+        blocked = [
+            i
+            for i, key in enumerate(keys)
+            if merged[i] and (key in repeated or any(p not in key for p in touched[i]))
+        ]
+        if not blocked:
+            return chains
+        splits = _split_vertices(arr, chains, blocked, ends, touched)
+        chains = sorted(
+            (
+                part
+                for i, chain in enumerate(chains)
+                for part in (
+                    _split_chain(arr, chain, splits[i]) if i in splits else (chain,)
+                )
+            ),
+            key=lambda chain: (chain.edge.a, chain.edge.b),
+        )
+
+
+def _split_vertices(
+    arr: Arrangement,
+    chains: list[_Chain],
+    blocked: list[int],
+    ends: set[Point],
+    touched: list[list[Point]],
+) -> dict[int, int]:
+    """Where each blocked chain splits: the path index of its vertex nearest an end it encloses.
+
+    An end of another chain between a chain's path and its chord, or on the chord, is what makes
+    the chord leave the path, so the chain splits beside it; the other chain of a crossing, whose
+    path encloses no foreign end, keeps its chord.  When no blocked chain encloses an end, each
+    is split at its middle vertex, so every round makes progress.
+    """
+    splits: dict[int, int] = {}
+    for i in blocked:
+        path = _path(arr, chains[i])
+        own = set(path)
+        enclosed = [p for p in touched[i] if p in ends and p not in own] + [
+            p for p in _ends_in_box(ends, path) if p not in own and _encloses(path, p)
+        ]
+        if enclosed:
+            splits[i] = min(
+                range(1, len(path) - 1),
+                key=lambda k: min(_distance_sq(path[k], p) for p in enclosed),
+            )
+    return splits or {i: len(chains[i].pieces) // 2 for i in blocked}
+
+
+def _path(arr: Arrangement, chain: _Chain) -> list[Point]:
+    """The chain's vertices in order from ``edge.a`` to ``edge.b``."""
+    path = [chain.edge.a]
+    for index, sign in chain.pieces:
+        piece = arr.edges[index]
+        path.append(piece.b if sign > 0 else piece.a)
+    return path
+
+
+def _ends_in_box(ends: set[Point], path: list[Point]) -> list[Point]:
+    """The chain ends inside the bounding box of a path."""
+    xs, ys = [p[0] for p in path], [p[1] for p in path]
+    x_lo, x_hi, y_lo, y_hi = min(xs), max(xs), min(ys), max(ys)
+    return sorted(p for p in ends if x_lo <= p[0] <= x_hi and y_lo <= p[1] <= y_hi)
+
+
+def _encloses(path: list[Point], point: Point) -> bool:
+    """Whether ``point`` lies inside the ring the path closes with its chord (exact, off the ring)."""
+    return point_in_ring(path, (point[0], point[1], 1))
+
+
+def _distance_sq(p: Point, q: Point) -> int:
+    return (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2
+
+
+def _split_chain(arr: Arrangement, chain: _Chain, at: int) -> tuple[_Chain, _Chain]:
+    """The chain as two chains meeting at its ``at``-th path vertex, each with ``a < b``."""
+    index, sign = chain.pieces[at - 1]
+    piece = arr.edges[index]
+    vertex = piece.b if sign > 0 else piece.a
+    halves = (
+        _Chain(
+            NodedEdge(chain.edge.a, vertex, chain.edge.carriers),
+            chain.sides,
+            chain.pieces[:at],
+        ),
+        _Chain(
+            NodedEdge(vertex, chain.edge.b, chain.edge.carriers),
+            chain.sides,
+            chain.pieces[at:],
+        ),
+    )
+    first, second = (
+        half if half.edge.a < half.edge.b else _reversed(half) for half in halves
+    )
+    return first, second
 
 
 def _oriented(chain: _Chain, toward: Point) -> _Chain:
