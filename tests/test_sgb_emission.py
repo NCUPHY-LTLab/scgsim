@@ -20,8 +20,6 @@ from sgb_gmsh_oracle import (
     emit_with_gmsh_api,
     gmsh_session,
     mesh_coarsely,
-    mesh_quality,
-    mesh_with_cheap_recipe,
     refine_near,
 )
 from sgb_scenes import random_layout
@@ -40,6 +38,8 @@ from scgsim.geometry.sgb.verification.loaded import (
     verify_loaded,
     verify_xao,
 )
+from scgsim.meshing import mesh_sgb
+from scgsim.palace.mesh.controls import DEFAULT_QUALITY_THRESHOLD
 
 
 def sidecar_of(model, plan):
@@ -591,27 +591,31 @@ def test_band_faces_through_the_direct_writer(tmp_path, models, name):
         )  # the same triangles are tet faces on both sides
 
 
-def test_pad_b_bands_meshed_with_the_cheap_recipe_has_no_flat_tetrahedron(
+def test_pad_b_bands_meshes_through_the_production_api_clean_and_conformal(
     tmp_path, models
 ):
-    """The 0.1 um band strips make a uniform 60 um mesh put a zero-volume tet on them; the cheap recipe does not.
+    """``mesh_sgb`` with its default recipe and the production quality threshold meshes ``pad_b_bands``.
 
-    With ``pad_b_bands`` at a uniform 60 um and Delaunay, four parallel band-boundary edges symmetric about
-    x = 0 each get a node at x = 0, and Delaunay joins those four collinear nodes into a tetrahedron of
-    volume zero (``minSICN`` 0).  The geometry is sound (OCCT checks pass, the Gmsh-API emission of the same
-    topology has the same flat tets, a 5 um margin set or a slightly asymmetric cutout has none), so the
-    remedy is the mesher's: a maximum size of a twentieth of the bounding-box diagonal with HXT (the default
-    algorithm when HXT aborts), no size field and no use of the band features.
+    This is the supported path from an SGB build to a mesh: ``FeatureRecipe()``, the default repair policy,
+    budgets and mesher, and the threshold the Palace simulations use by default.  The delivered mesh has no
+    tetrahedron below that threshold and passes the conformity oracle: no coincident nodes, every planned face
+    triangulated once, and each band face shared by the tetrahedra on both of its sides.  It promises neither
+    that every narrow curved band is resolved by this recipe nor anything about convergence, and it says nothing
+    about a cheaper recipe: a single uniform size on this scene can stop in Gmsh's boundary recovery.
     """
     model = models["pad_b_bands"]
     plan, path = written(model, tmp_path, "xao")
-    sidecar = sidecar_of(model, plan)
+    result = mesh_sgb(
+        path,
+        sidecar_of(model, plan),
+        tmp_path / "mesh",
+        threshold=DEFAULT_QUALITY_THRESHOLD,
+    )
+    assert result.report["stop"] == "clean"
+    assert result.report["mesh"]["min_quality"] >= DEFAULT_QUALITY_THRESHOLD
     with gmsh_session(path):
-        apply_sidecar_embeds(sidecar)
-        mesh_with_cheap_recipe(path, sidecar)
-        quality = mesh_quality()
+        gmsh.merge(str(result.mesh))
         conformity = check_mesh_conformity(model, plan.tags())
-    assert quality["minSICN_min"] > 1e-4
     assert conformity["conformal"], conformity["problems"]
 
 
