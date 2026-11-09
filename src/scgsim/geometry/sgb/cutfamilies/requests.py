@@ -49,7 +49,8 @@ the build fails if the selected face has no cell of that type.
 Distance origins.  A band is the set of points of the support face whose distance to the *gap edges* lies
 between two margins; farther than the last margin is the last band.  A gap edge is a part of a conductor
 footprint's boundary with an exposed dielectric surface (an SA or SS interface) on its other side, in the plane
-the conductor is attached to (its sheet plane, or the bottom of a finite body), with lumped ports ignored.  The
+the conductor is attached to (its sheet plane, or the face of a finite body that lies on a dielectric: the bottom
+on an upright die, the top on a flipped one), with lumped ports ignored.  The
 Surface-EPR correction factor of a band comes from the metal-gap-metal cross-section, so an edge with no gap
 before it is no origin: a conductor edge on the die or substrate outer edge or the model boundary, an edge
 shared with another conductor, an edge facing only vacuum.  The die outer edge, ports, other bands and seams
