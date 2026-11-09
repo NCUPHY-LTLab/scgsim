@@ -27,6 +27,7 @@ from scgsim.geometry.source.polygon_ops import (
     point_in_ring,
     realized_on_lattice,
     ring_from_gdstk_polygon,
+    without_repeated_vertices,
 )
 
 
@@ -198,7 +199,7 @@ def _extract_polygons_by_layer(
                 )
     else:
         polygons = cell.get_polygons(apply_repetitions=True, depth=None)
-    for polygon in polygons:
+    for polygon in without_repeated_vertices(polygons):
         result.setdefault(
             (int(polygon.layer), int(polygon.datatype)),
             [],
