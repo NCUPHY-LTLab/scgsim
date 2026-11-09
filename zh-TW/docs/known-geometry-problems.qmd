@@ -1,0 +1,118 @@
+---
+title: "已知的幾何問題"
+description: "SCGSim 會拒絕、或建出與設計原意不同的 layout 幾何，其發生原因，以及為何修正屬於 layout。"
+lang: zh-TW
+scgsim-kind: "contract"
+scgsim-status: "CONVERGING"
+scgsim-id: "docs/known-geometry-problems"
+---
+
+本頁列出已知在 SCGSim 中會失敗、或建出的結果與 layout 原意不同的幾何。每個情況都說明問題在哪裡、出了什麼錯與原因，以及 SCGSim 為何不遷就它。每個情況的修正方式都是修改 layout。SCGSim 支援的圖形列在[支援的幾何](supported-geometry.qmd)。
+
+圖依各情況回報的尺寸，在 SGB 1 nm 的 grid 上重新畫成，不使用任何 PDK 程式碼。問題以紅色標示；右側的面板放大問題處，紅色虛線框標出放大的位置。
+
+SCGSim 依照收到的輪廓建立幾何。它不會封閉奈米級的縫隙、刪除短邊或重新取樣曲線，因為它無法分辨繪圖缺陷與刻意畫出的特徵。以 `EigenmodeSim.simulation_drc` 或 `ElectrostaticSim.simulation_drc` 檢查 layout（[版圖建模檢查](layout-modeling-check.qmd)）能找出會停止建構的情況；其他情況則需要檢視 layout 本身。
+
+## PDK cell 中的繪圖缺陷 {#drawing-defects}
+
+對 OrcaPen SC PDK cell 的調查找到一些畫出的形狀與 PDK 程式碼原意不同的地方。每一項都已連同 PDK 程式碼中的原因回報給 PDK：[orcapen-sc-pdk#47](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/issues/47)（C1 至 C4）與 [orcapen-sc-pdk#58](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/issues/58)（A1、A6）。它們是繪圖缺陷，因此修正屬於 PDK。
+
+### C1：圓盤與引線扇形之間的裂縫 {#c1-crack}
+
+![接面座標中的圓盤（左）與其引線扇形；放大圖顯示裂縫 0.21 µm 的開口，以及裂縫收攏處約 10 nm 的階差。](assets/supported-geometry/problem-c1-crack.svg){fig-alt="圓盤與扇形，兩側各有一條以紅色標示的楔形細縫，以及裂縫的兩張放大圖。"}
+
+**出了什麼錯。** 在 Disk Qubit 放射狀引線扇形的兩側，扇形與圓盤之間各留下一條長 18.26 µm 的楔形縫：開口寬 0.21 µm，收攏成 9.9 nm 的階差。SCGSim 依原圖建立它。裂縫兩側成為 gap edge，圓盤沿著它們多出 band：band 0 約增加 9 %（樣本中為 446 對 410 µm²）。原因在繪圖：扇形的三點弧與圓盤的 32 點多邊形只共用一個頂點，所以兩者的聯集留下縫隙（PDK 的 `_radial_taper` 與 `_disk_and_junction`）。
+
+**SCGSim 為何不修正。** 0.21 µm 的縫隙是合法的繪圖特徵，所以 SCGSim 保留它。請讓扇形的弧落在圓盤自己的頂點上，或在聯集之前把扇形延伸進圓盤，使聯集成為一條乾淨的輪廓。
+
+### C2 與 C3：爪形中的零寬度狹縫 {#c2-c3-slits}
+
+![標出兩條狹縫的爪形；放大圖顯示長 1.305 µm 的狹縫 C2 與其 1 nm 的底部。](assets/supported-geometry/problem-c2-c3-slits.svg){fig-alt="爪形下半部，兩條紅色短線標出狹縫伸入金屬之處，以及一條狹縫與其底部的放大圖。"}
+
+**出了什麼錯。** 每個爪形都有長 1.305 µm（C2）與 2.282 µm（C3）、底部寬 1 nm 的狹縫。幾何可以建立，band 也不受影響，但每條狹縫都留下 1 nm 的邊與 1 nm 寬的壁面，網格產生器必須解析它們。狹縫存在時，有一次量測的 Disk Qubit 執行最後沒有得到可用的網格。原因在繪圖：爪形透過 r 10 的圓形視窗拼接修圓的片段，切點捨入後相差 1 個 grid 單位，狹縫正好結束在視窗的頂點上（PDK 的 `_claw_segment`）。
+
+**SCGSim 為何不修正。** 1 nm 的邊落在 SCGSim 的 grid 上，是合法的幾何。請在整個爪形輪廓上修圓角，而不是透過視窗把修圓的片段拼接進去。
+
+### C4：爪形外角的缺口 {#c4-corner-bite}
+
+![爪形的外角；放大圖顯示尖角與殘留圓角之間的缺口。](assets/supported-geometry/problem-c4-corner-bite.svg){fig-alt="爪形外角，在尖角與圓角之間有一個以紅色勾勒的小缺口。"}
+
+**出了什麼錯。** 每個爪形外角都有一個 57.7° 的尖角，接著是 2.766 與 0.136 µm 的邊，以及 r ≈ 5 的殘留圓角。它可以建立，但這個角不是原本要的形狀，0.136 µm 的邊會迫使網格在該處變得很小。原因在繪圖：先把角修圓（`_claw_segment`），漸縮又把尖角加回來（`_claw_taper`）。
+
+**SCGSim 為何不修正。** 這個輪廓是合法的幾何。請先加漸縮再修圓角，或只修剩下的角。
+
+### A1：Purcell IDC 的指因 1 nm 而分離 {#a1-detached-fingers}
+
+![兩組交錯的梳；下方梳子的每一指都從其漏斗上方 1 nm 處開始，如放大圖所示。](assets/supported-geometry/problem-a1-detached-fingers.svg){fig-alt="兩組交錯的指狀梳，下方每一指的底部有紅色標記，以及其中一指底下 1 nm 縫隙的放大圖。"}
+
+**出了什麼錯。** 在 Purcell 濾波器 cell 中，十根 IDC 指從應該長出它們的漏斗上方 1 nm 處開始，因此成為十個浮接的獨立導體。原因在繪圖：指長（59.92476 µm）不在 grid 上，梳子也沒有自己的主幹，所以梳子與漏斗捨入到不同的 grid 點。在 SGB 原生的複本上，建構在第一條狹縫處以 `Imprint lost band boundaries … is in band 2, expected 1` 停止。推測這個錯誤的原因是：狹縫只有一個 grid 單位寬，兩側的 band seam 落在同一組 grid 點上，Imprint 無法把它們分隔的 band 分開。即使能建立，這些指也是浮接的，電容會是錯的。
+
+**SCGSim 為何不修正。** 在繪圖中這些指是各自獨立的導體，SCGSim 無法得知它們原本應該相連。請給梳子自己的主幹，並使用落在 grid 上的指長。
+
+### A6：接地遮罩沒有的蝕刻邊框 {#a6-etch-frame}
+
+![帶 CPW 的晶片；紅色實線是蝕刻層上 2300 × 1000 的邊框，虛線是 2200 × 900 的晶片邊。放大圖顯示一個角。](assets/supported-geometry/problem-a6-etch-frame.svg){fig-alt="有 CPW 穿過的接地平面，晶片周圍 50 µm 的邊框以紅色勾勒，以及一個角的放大圖。"}
+
+**出了什麼錯。** 在 airbridge 範例晶片中，蝕刻層有一圈圍繞 2200 × 900 晶片、寬 50 µm 的邊框，接地遮罩卻沒有；兩層相差 320 000 µm²。SCGSim 由遮罩推導接地，所以它的接地會延伸到切割道上，而 PDK 以蝕刻層推導的金屬不會。切割道距 CPW 超過 400 µm，對 CPW 的影響很小。
+
+**SCGSim 為何不修正。** SCGSim 文件化的接地形式是平面扣除接地遮罩，它不讀取蝕刻層。請也把邊框放進接地遮罩，或把它從蝕刻層移除，使兩者給出相同的金屬。
+
+## 超出 128 點範圍的曲線 {#curves-outside-scope}
+
+曲線輪廓受支援的範圍是每整圈最多 128 點，也就是每個頂點至少轉 2.8125°（[曲線規則](supported-geometry.qmd#curve-rule)）。下面的情況都在範圍之外。
+
+### 每整圈多於 128 點的多邊形圓 {#dense-circles}
+
+![半徑 10 µm 的 256 點圓；放大圖顯示相距 0.245 µm、每個轉 1.41° 的頂點。](assets/supported-geometry/problem-dense-circle.svg){fig-alt="一個多邊形圓，以及放大後以紅點標出的幾個頂點。"}
+
+**出了什麼錯。** 以正多邊形圓、margin 0.5 與 1.0 µm 量測：
+
+| 每整圈點數 | 每個頂點的轉角 | 結果 |
+| --- | --- | --- |
+| 144 至 224 | 2.5° 至 1.6° | 視情況而定：180 與 224 點在 r = 10 µm 被拒絕，在 r = 75 µm 可建立 |
+| 256 | 1.41° | 在 r = 5、10、50 與 150 µm 都被拒絕 |
+
+被拒絕的曲線以 `the inset curve at m = … um is not closed near (x, y) um` 停止建構：相鄰兩條邊在 band margin 處的 offset 既不相接也不相交，因此無法分辨 band 區域。決定結果的不是邊長：半徑 150 µm 的 256 點圓邊長 3.68 µm，仍被拒絕。推測的原因（由量測推論，未單獨驗證）：在凸頂點之後，相鄰兩條邊的 offset 重疊約 $m\theta^2/2$（$\theta$ 為轉角），轉角小時這與每條 offset 端點捨入到 grid 的量（最多半個 grid 單位）相當，所以兩條 offset 可能錯開。PDK 預設的 `"fabrication"` 設定每整圈 256 點，就是這樣被拒絕。
+
+**SCGSim 為何不修正。** 支援範圍定為每整圈 128 點；曾嘗試在 SGB 的 band 建構中修正，但沒有採用。請以 `curve_sampling="simulation"` 建立用於模擬的元件。
+
+### 以 258 點畫成的 spline 條帶 {#spline-258}
+
+![PDK 所畫的插值 spline 條帶；放大圖顯示末端附近轉角最小的頂點。](assets/supported-geometry/problem-spline-258.svg){fig-alt="一條波浪狀條帶，以及其末端的放大圖，頂點以紅點標示。"}
+
+**出了什麼錯。** `interpolation_spline_strip` 與 `bspline_strip` 每條邊以 129 點畫成，依每段 span 取樣，而不是依 `curve_sampling`。它們最平的頂點只轉 0.058° 與 0.012°，建構以與密多邊形圓相同的 `inset curve … not closed` 訊息被拒絕。
+
+**SCGSim 為何不修正。** 這些條帶超出 128 點的範圍。請重新取樣每條條帶，使每個頂點都轉至少 2.8125°；重新取樣後的條帶能建出精確的 band（[支援的幾何](supported-geometry.qmd#pads-and-parts)中的 cell 21）。如何重新取樣由 PDK 決定（[orcapen-sc-pdk#52](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/issues/52)）。
+
+### Spline 曲線不會以曲線形式讀取 {#spline-curves}
+
+![B-spline 條帶及其控制多邊形（紅色虛線）：spline 邊界所宣告的曲線。](assets/supported-geometry/problem-spline-curve.svg){fig-alt="一條彎曲條帶，五個控制點以紅色虛線多邊形相連。"}
+
+**出了什麼錯。** cell 把邊宣告為 spline 邊界曲線時，建構以 `UnsupportedCurveError: … 'bspline' curves are not supported yet (this version carries lines and circular arcs)` 停止，`interpolation_spline` 也一樣。
+
+**SCGSim 為何不修正。** SGB 能精確地為直線與圓弧做 offset；spline 的 offset 沒有精確形式，讀取 spline 需要一個尚未決定的容差。這由 [scgsim#109](https://github.com/NCUPHY-LTLab/scgsim/issues/109) 追蹤。在那之前，請把條帶畫成符合曲線規則的多邊形。
+
+## 連續多個轉角小於 2.8125° 的頂點 {#small-turn-runs}
+
+![cell 15 的 Euler U 形彎；放大圖標出中心線的前幾個頂點，轉角為 0.15°、0.9°、1.8° 與 2.7°。](assets/supported-geometry/problem-small-turn-runs.svg){fig-alt="CPW U 形彎，放大圖中以紅點標出中心線的前幾個頂點。"}
+
+曲線規則以每個頂點陳述，但有些受支援的 cell 含有轉角較小的頂點，而它們依原圖能建出精確的 band：
+
+- 90° Euler 彎道（cell 14）的前兩個頂點轉 0.30° 與 1.8°，180° U 形彎（cell 15）的前四個頂點轉 0.15°、0.9°、1.8° 與 2.7°，弦長 11 至 14 µm；
+- 漸縮（cell 18）分別轉折 0.86° 與 1.72°。
+
+除了這些 cell 之外，連續多個轉角小於 2.8125° 的頂點未經驗證：它們可能可以建立，也可能像密多邊形圓一樣被拒絕。
+
+![半徑 50 µm 的 16 點圓加上一個轉 0.3° 的頂點；放大圖把它與原本的邊（虛線）對照。](assets/supported-geometry/problem-single-vertex.svg){fig-alt="一個 16 邊形，標出一個多加的頂點，以及放大圖中該頂點略在虛線原邊之外。"}
+
+也量測了較長的邊之間單一個轉角較小的頂點：在半徑 50 µm 的 16 點圓上加入一個頂點，兩側邊長 9.8 µm。
+
+| 該頂點的轉角 | 結果 |
+| --- | --- |
+| 2.9°、2.7°、1.41°、0.3° 與 0.01°，凸角 | 可建立，band 精確 |
+| 2.7° 與 0.01°，凹角 | 可建立，band 精確 |
+| 0°（直邊上的一點） | 可建立，band 精確 |
+
+直邊上的一點不會改變軸向邊的 band。在斜邊上，兩半的 offset 會在該點結束於一個 grid 點，因此 band 面積會移動約 10⁻⁴ µm² 的量級，仍在 snap 界限之內。這些都是 margin 0.5 與 1.0 µm 下的觀察，不是保證。
+
+**SCGSim 為何不擴大規則。** 支援範圍是依量測的圓與 PDK cell 訂定的；要擴大範圍，需要量測新的圖形並另行決定。

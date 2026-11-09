@@ -15,7 +15,10 @@ build raises, and a layout that can be modeled returns `None`.
 The check catches layout defects that stop modeling: malformed shapes,
 overlaps, tiny misalignments, wrong semantic declarations, port sheets that do
 not sit where they should, and Surface EPR bands that do not fit the drawn
-gaps. It does not predict the final simulation geometry.
+gaps. It does not predict the final simulation geometry. The patterns SCGSim is
+tested on are listed in [Supported Geometry](supported-geometry.qmd), and the
+known failures with their layout fixes in
+[Known Geometry Problems](known-geometry-problems.qmd).
 
 ## Call the check of each simulation the layout is for
 

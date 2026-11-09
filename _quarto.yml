@@ -157,6 +157,8 @@ website:
     - section: Geometry and physical model
       contents:
       - docs/geometry-sgb.qmd
+      - docs/supported-geometry.qmd
+      - docs/known-geometry-problems.qmd
       - docs/geometry-preview.qmd
       - docs/layout-modeling-check.qmd
       - docs/specs/physical-representation.qmd

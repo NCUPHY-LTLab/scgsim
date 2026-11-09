@@ -103,20 +103,19 @@ configuration, and no special Palace build is needed. The
 [SGB design pages](../../zh-TW/docs/design/sgb/inset-imprint.html#band-measure)
 (Traditional Chinese) define how distance is measured.
 
-::: {.callout-warning title="Draw circles as arcs, not as many short edges"}
-A conductor outline drawn as a polygon with many short edges, such as a
-polygon circle or a finely sampled rounded tip, can leave the inset curve open:
-two neighbouring edge offsets neither meet nor cross. SGB then refuses the
-layout with `inset family '…': the inset curve at m = … um is not closed near
-(x, y) um` rather than return wrong bands. Draw such outlines with true arcs, or
-with fewer, longer edges. What decides it is the turn at each vertex, not the
-edge length. Measured with regular n-gon pads of circumradius 5, 20 and 100 µm,
-margins 0.5 and 1.0 µm on a 1 nm grid: 64 sides (5.6° per vertex) and 128 sides
-(2.8°) build with the expected band areas; 256 sides (1.4°) and more are refused
-at every radius; true arcs build at every radius. Other shapes, margins and
-grids were not measured. The
+::: {.callout-warning title="Draw curves with at most 128 points per full circle"}
+A curved conductor outline drawn as a polygon is supported when it uses at most
+128 points per full circle, so that every vertex turns by at least 2.8125°.
+A denser outline, such as a 256-point circle or a finely sampled spline, can
+leave the inset curve open: two neighbouring edge offsets neither meet nor
+cross. SGB then refuses the layout with `inset family '…': the inset curve at
+m = … um is not closed near (x, y) um` rather than return wrong bands. What
+decides it is the turn at each vertex, not the edge length. Build PDK
+components with `curve_sampling="simulation"`, or declare true arcs.
+[Supported Geometry](../supported-geometry.qmd#curve-rule) gives the rule, the
+measurements and the layout fixes; the
 [band construction](../../zh-TW/docs/design/sgb/inset-imprint.html#band-regions)
-(Traditional Chinese) explains the cause and the measurements.
+(Traditional Chinese) explains the cause.
 :::
 
 ::: {.callout-important title="Call set_surface_epr before mesh()"}
