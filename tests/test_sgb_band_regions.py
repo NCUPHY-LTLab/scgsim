@@ -19,7 +19,9 @@ from sgb_scenes import (
     slab_model,
     units,
 )
+from shapely.geometry import Polygon
 
+import scgsim.geometry.sgb.cutfamilies.inset as inset
 import scgsim.geometry.sgb.derivation.level_layers as level_layers
 from scgsim.geometry.sgb.arrangement.arcs import face_exact_area
 from scgsim.geometry.sgb.cutfamilies.requests import (
@@ -30,6 +32,7 @@ from scgsim.geometry.sgb.cutfamilies.requests import (
 )
 from scgsim.geometry.sgb.errors import ValidationError
 from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
+from scgsim.geometry.sgb.noding.snap_rounding import Segment
 from scgsim.geometry.sgb.plane import point_in_ring
 from scgsim.geometry.sgb.records.carriers import Lineage, circle_arcs
 from scgsim.geometry.sgb.records.grid import exact_z
@@ -488,14 +491,132 @@ def test_a_narrow_neck_splits_the_inner_band_into_two_islands():
     )  # the neck centre is 0.75 um from its edges
 
 
-def test_a_polygon_circle_whose_neighbouring_offsets_do_not_meet_is_refused():
-    """A 256-gon of radius 20 um: at 0.5 um most neighbouring offsets neither meet nor cross, so R_m and
-    its outside are one cell.  The build refuses instead of labelling that cell from one sample."""
-    points = [
-        (20 * math.cos(2 * math.pi * k / 256), 20 * math.sin(2 * math.pi * k / 256))
-        for k in range(256)
+def regular_polygon(n: int, radius: float = 20.0) -> list[tuple[float, float]]:
+    """A regular n-gon of circumradius ``radius`` um with its vertices on the 1 nm grid, as a layout draws a circle."""
+    return [
+        (
+            round(radius * math.cos(2 * math.pi * k / n), 3),
+            round(radius * math.sin(2 * math.pi * k / n), 3),
+        )
+        for k in range(n)
     ]
+
+
+def snap_bound(points) -> float:
+    """Area bound of an oblique band: each of its two contours lies within sqrt(2)/2 grid of the exact one."""
+    perimeter = sum(
+        math.dist(p, q) for p, q in zip(points, points[1:] + points[:1], strict=True)
+    )
+    return 2 * perimeter * math.sqrt(2) / 2 * GRID.size_um
+
+
+def assert_polygon_bands(model: ConformalModel, points) -> None:
+    """The pad's MA bands and the SA bands round it equal the polygon's erosion and dilation within the snap bound."""
+    top, sa = polygon_bands(points)
+    bound = snap_bound(points)
+    for family, expected in (("ma::pad::top", top), (SA_FAMILY, sa)):
+        got = band_areas(model, family)
+        assert sorted(got) == [0, 1, 2]
+        for band, area in expected.items():
+            assert abs(got[band] - area) <= bound, (family, band, got[band], area)
+
+
+@pytest.mark.parametrize("n", [256, 1024])
+def test_a_polygon_circle_gives_the_hand_calculated_bands(n):
+    """Regular 256- and 1024-gons of radius 20 um turn by 1.4 and 0.35 degrees per vertex.  Past such a vertex
+    two separately rounded offsets overlap by about a grid unit and need not meet; both pass through their
+    shared join, so every contour closes and the bands are the polygon's erosion."""
+    points = regular_polygon(n)
+    model = build_model_from_catalogue(route_b_pad(points), "B", insets=type_bands())
+    assert_polygon_bands(model, points)
+
+
+def test_the_offsets_at_a_45_degree_corner_end_at_their_hand_calculated_join():
+    """The 45-degree triangle's corner V = (10, -10) um: the offsets of y = -10 and of x + y = 0 meet at
+    Q = (10 - m (1 + sqrt 2), -10 + m), the corner's bisector at m / sin(22.5 degrees) from V.  Rounded once,
+    that is (8.793, -9.5) um at m = 0.5 and (7.586, -9.0) um at m = 1.0, and both seams end there."""
+    points = [(-10.0, -10.0), (10.0, -10.0), (-10.0, 10.0)]
+    model = build_model_from_catalogue(route_b_pad(points), "B", insets=type_bands())
+    family = next(
+        f for f in model.labelled.catalogue.families if f.family_id == "ma::pad::top"
+    )
+    for m, join in ((0.5, (8793, -9500)), (1.0, (7586, -9000))):
+        exact = (10 - m * (1 + math.sqrt(2)), -10 + m)
+        assert join == tuple(round(c / GRID.size_um) for c in exact)
+        ending_there = [c for c in family.carriers if join in (c.p, c.q)]
+        assert len(ending_there) == 2, (m, ending_there)
+
+
+def test_an_edge_whose_offset_is_overtaken_keeps_the_contour_closed():
+    """A reflex vertex, an 8 nm edge and a 1-degree convex vertex, as a boolean of a polygon-drawn round end
+    leaves them.  At m = 1.0 um the join past the short edge lies behind its start, so its offset reverses; it
+    still links its neighbours, and the bands are the polygon's within the snap bound (the vanished edge moves
+    the closed-form areas by under 1e-3 um^2)."""
+    points_nm = [
+        (0, 0),
+        (8750, -4500),
+        (8757, -4504),
+        (16957, -9004),
+        (16957, 15000),
+        (0, 15000),
+    ]
+    points = [(x / 1000, y / 1000) for x, y in points_nm]
+    model = build_model_from_catalogue(route_b_pad(points), "B", insets=type_bands())
+    assert_polygon_bands(model, points)
+
+
+def test_a_sharp_corner_after_a_nanometre_step_keeps_its_offset_past_the_join():
+    """A triangle whose 123.5-degree convex corner follows an 80 nm edge after a 2-degree reflex step.  The
+    80 nm edge is too short to cover the corner's join, so the long edge's offset runs past the join, where the
+    level set follows it round the overtaken step.  The bands are the polygon's erosion, computed independently
+    with Shapely, within the snap bound."""
+    corner = (
+        20.0 + 0.08 * math.cos(math.radians(-2)),
+        0.08 * math.sin(math.radians(-2)),
+    )
+    apex = (
+        corner[0] + 20 * math.cos(math.radians(121.5)),
+        corner[1] + 20 * math.sin(math.radians(121.5)),
+    )
+    points = [
+        (round(x, 3), round(y, 3)) for x, y in [(0.0, 0.0), (20.0, 0.0), corner, apex]
+    ]
+    model = build_model_from_catalogue(route_b_pad(points), "B", insets=type_bands())
+    pad = Polygon(points)
+    inner = [pad.buffer(-r, quad_segs=1024).area for r in MARGINS]
+    expected = {0: pad.area - inner[0], 1: inner[0] - inner[1], 2: inner[1]}
+    got = band_areas(model, "ma::pad::top")
+    assert sorted(got) == [0, 1, 2]
+    for band, area in expected.items():
+        assert abs(got[band] - area) <= snap_bound(points), (band, got[band], area)
+
+
+def test_an_open_inset_curve_is_refused_at_its_open_end(monkeypatch):
+    """Example B with one side of the 2 um contour made to stop 0.1 um short of its corner: R_m and the band
+    outside it become one cell through the gap.  The build refuses and names an end of the gap: the corner
+    where the neighbouring side ends, or the point where the shortened side stops."""
+    original = inset.margin_cells
+    stops: list[tuple[int, int]] = []
+
+    def stopping_short(family_id, candidates, *args):
+        side = [s for s in candidates if "/ring0/edge0@m2000" in next(iter(s.carriers))]
+        if not side:
+            return original(family_id, candidates, *args)
+        ((a, b, carriers),) = side  # the side runs from corner to corner
+        step = (
+            round(100 * (b[0] - a[0]) / math.dist(a, b)),
+            round(100 * (b[1] - a[1]) / math.dist(a, b)),
+        )
+        stops.append((a, (a[0] + step[0], a[1] + step[1])))
+        kept = [s for s in candidates if s not in side]
+        return original(family_id, [*kept, Segment(stops[-1][1], b, carriers)], *args)
+
+    monkeypatch.setattr(inset, "margin_cells", stopping_short)
     with pytest.raises(
-        ValidationError, match=r"the inset curve at m = 0\.5 um is not closed near"
-    ):
-        build_model_from_catalogue(route_b_pad(points), "B", insets=type_bands())
+        ValidationError, match=r"the inset curve at m = 2 um is not closed near"
+    ) as refused:
+        build_model_from_catalogue(square_model(), "A", insets=(square_bands(),))
+    gap_ends = [
+        f"near ({x * GRID.size_um:.4f}, {y * GRID.size_um:.4f}) um" for x, y in stops[0]
+    ]
+    assert any(end in str(refused.value) for end in gap_ends), gap_ends

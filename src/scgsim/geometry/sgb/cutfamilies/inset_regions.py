@@ -230,12 +230,40 @@ def _check_curve_closed(  # noqa: PLR0913 - one margin's cells, its support and 
         if abs(region.distance((x, y)) - margin) > DISTANCE_SLACK:
             continue
         if _straddles(arr, face, edge, region, margin):
+            x, y = _open_end(arr, face, region, margin) or (x, y)
             raise ValidationError(
                 f"inset family {family_id!r}: the inset curve at m = {margin * grid_um:g} um is not "
                 f"closed near ({x * grid_um:.4f}, {y * grid_um:.4f}) um: two offsets of the support "
-                "boundary neither meet nor cross there, so the band regions cannot be told apart "
-                "(outlines drawn as many short edges do this; draw true arcs or fewer, longer edges)"
+                "boundary neither meet nor cross there, so the band regions cannot be told apart"
             )
+
+
+def _open_end(
+    arr: Arrangement, face: int, region: SupportRegion, margin: int
+) -> tuple[float, float] | None:
+    """Where the curve stops short in a cell: a vertex inside the support where only one candidate edge ends, at the margin.
+
+    The loose edge that revealed the gap can lie anywhere on the curve the gap left open, far from the gap
+    itself, so the error names such an end instead when the cell has one.  An end on the free boundary is a
+    clipped seam, not a gap.
+    """
+    degree: dict[Point, int] = {}
+    in_face: set[Point] = set()
+    for ei, edge in enumerate(arr.edges):
+        if all(c.startswith("~") for c in edge.carriers):
+            continue
+        for v in (edge.a, edge.b):
+            degree[v] = degree.get(v, 0) + 1
+        if arr.he_face[2 * ei] == face == arr.he_face[2 * ei + 1]:
+            in_face.update((edge.a, edge.b))
+    ends = sorted(
+        v
+        for v in in_face
+        if degree[v] == 1
+        and abs(region.distance(v) - margin) <= DISTANCE_SLACK
+        and region.distance_to_free_boundary(v) > DISTANCE_SLACK
+    )
+    return (float(ends[0][0]), float(ends[0][1])) if ends else None
 
 
 PROBE_DENOMINATOR = 1000  # probe points are rational with this denominator (a thousandth of a grid unit)

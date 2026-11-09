@@ -10,8 +10,10 @@ Construction (no polygonised disk), per margin:
 1. **Candidates.**  Every line is offset by ``m`` toward the region interior (a line); every convex arc
    (centre on the interior side) becomes the concentric arc of radius ``rho - m`` (it vanishes to a sharp corner
    when ``m >= rho``); every concave arc (a hole) the concentric arc of radius ``r + m``; at every reflex vertex
-   the offset curves leave a gap bridged by an arc of radius ``m`` centred at the vertex; at convex vertices the
-   offset lines overlap and simply cross -- convex corners stay sharp.
+   the offset curves leave a gap bridged by an arc of radius ``m`` centred at the vertex; at a convex vertex
+   between two straight origins both offsets pass through their common point, rounded once, and end there
+   unless a short neighbour needs more (:func:`_convex_join`) -- convex corners stay sharp.  Any other convex
+   junction (one with an arc) lets the two offsets overlap and cross.
 2. **Region.**  The candidates, the support boundary and the port boundaries form a small arrangement; its cells
    lie in ``R_m`` or outside it, one sample point per cell deciding (``cutfamilies.inset_regions``).
 3. **Required seams.**  Only the candidate edges between a cell of ``R_m`` and a cell outside it become
@@ -21,9 +23,10 @@ Construction (no polygonised disk), per margin:
 The regions and seams travel with the family (``CurveFamilyRecord.regions``): labelling locates a face in them
 and the Imprint check proves that the level arrangement kept every seam (``labelling.bands``).  Neither proves
 that the candidates contain the whole level set ``dist = m``.  One failure is refused: where two neighbouring
-offsets neither meet nor cross (an outline drawn as many short edges with small turns between them), the curve
-has a gap and one cell lies on both sides of the margin (``inset_regions``).  A piece the candidates miss
-without leaving such a gap is not detected.
+offsets neither meet nor cross, the curve has a gap and one cell lies on both sides of the margin
+(``inset_regions``).  The shared joins rule that out between two straight origins, however small the turn or
+short the edge; a convex junction with an arc still relies on its two rounded offsets crossing.  A piece the
+candidates miss without leaving such a gap is not detected.
 
 Distance origins: only the region's gap edges (``SupportRegion.origins``; see ``cutfamilies.requests``).  The
 offset is built from those primitives alone: a line or arc per origin, a bridging arc at every reflex vertex
@@ -58,6 +61,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 from fractions import Fraction
+from itertools import pairwise
 
 from scgsim.geometry.sgb.cutfamilies.inset_regions import (
     PortClip,
@@ -225,26 +229,122 @@ def _generate_candidates(
             if not region.is_origin(ri, pi):
                 continue
             name = f"ring{ri}/edge{pi}"
-            start = _offset_point(prim, margin, at_end=False)
-            end = _offset_point(prim, margin, at_end=True)
+            previous = ring[(pi - 1) % count]
+            following = ring[(pi + 1) % count]
+            previous_is_origin = region.is_origin(ri, (pi - 1) % count)
+            following_is_origin = region.is_origin(ri, (pi + 1) % count)
             if isinstance(prim, LineEdge):
-                candidates.add_line(name, start, end)
+                before = (
+                    _convex_join(previous, prim, margin) if previous_is_origin else None
+                )
+                after = (
+                    _convex_join(prim, following, margin)
+                    if following_is_origin
+                    else None
+                )
+                for p, q in pairwise(_line_offset(prim, margin, before, after)):
+                    candidates.add_line(name, p, q)
             else:
+                start = _offset_point(prim, margin, at_end=False)
+                end = _offset_point(prim, margin, at_end=True)
                 radius = prim.radius - margin if prim.ccw else prim.radius + margin
                 if radius >= 1:
                     candidates.add_arc(name, prim.centre, radius, prim.ccw, start, end)
-            following = (pi + 1) % count
-            if region.is_origin(ri, following):
+            if following_is_origin:
                 _corner_arcs(
-                    f"ring{ri}/corner{pi}", prim, ring[following], margin, candidates
+                    f"ring{ri}/corner{pi}", prim, following, margin, candidates
                 )
             else:
                 _cap_arcs(f"ring{ri}/capend{pi}", prim, margin, candidates, at_end=True)
-            if not region.is_origin(ri, (pi - 1) % count):
+            if not previous_is_origin:
                 _cap_arcs(
                     f"ring{ri}/capstart{pi}", prim, margin, candidates, at_end=False
                 )
     return candidates
+
+
+@dataclass(frozen=True)
+class _Join:
+    """Where the offsets of two consecutive straight origins meet across a convex vertex.
+
+    ``first_stops`` says whether the offset of the first origin may end at the join, ``second_starts`` whether
+    the offset of the second may start there; otherwise each runs on to its own untrimmed end point.
+    """
+
+    point: Point
+    first_stops: bool
+    second_starts: bool
+
+
+def _line_offset(
+    prim: LineEdge, margin: int, before: _Join | None, after: _Join | None
+) -> list[Point]:
+    """The vertices of the offset of a straight origin, from start to end.
+
+    The offset runs between its untrimmed end points, through the join it shares with each neighbour across a
+    convex vertex, and is cut back to a join where that drops no point of the level set (:func:`_convex_join`).
+    """
+    points = []
+    if before is None or not before.second_starts:
+        points.append(_offset_point(prim, margin, at_end=False))
+    if before is not None:
+        points.append(before.point)
+    if after is not None:
+        points.append(after.point)
+    if after is None or not after.first_stops:
+        points.append(_offset_point(prim, margin, at_end=True))
+    return points
+
+
+def _convex_join(
+    prim: RingPrimitive, following: RingPrimitive, margin: int
+) -> _Join | None:
+    """The common point of the offsets of two straight origins across a convex vertex, rounded once.
+
+    Both offsets pass through this one lattice point, so they always meet there.  Rounding only each offset's
+    own end point can leave them apart: past a convex vertex with turn ``theta`` the two offsets overlap by
+    ``m tan(theta / 2)``, about a grid unit where an outline is drawn as many short edges, and two independent
+    roundings of up to half a grid unit each can open a gap there.
+
+    The point is ``Q = V + m (n0 + n1) / (1 + n0 . n1)``, with ``V`` the vertex and ``n0``, ``n1`` the unit
+    normals toward the interior: ``n0 . (Q - V) = n1 . (Q - V) = m``, so ``Q`` lies on both offset lines.  It
+    is computed from the exact vertex and normals, in the decimals every other end point uses, so an oblique
+    pair of offsets is not first rounded and then intersected.  ``None`` when the primitives are not two lines
+    or the vertex is not convex (a straight junction, or a reflex corner, which an arc bridges).
+
+    Past the join, an offset runs on to its untrimmed end point, ``m tan(theta / 2)`` further.  Each of those
+    points is nearer than ``m`` to the other origin's line, and its foot on that line lies within
+    ``reach = m max(sin(theta), tan(theta / 2))`` of ``V``.  So when the other origin is at least ``reach``
+    long, every such point is nearer than ``m`` to it, no part of the level set lies there, and the offset may
+    stop at the join.  A shorter neighbour (a step of a few nanometres that a boolean or a snap left) can be
+    overtaken by its own neighbours, and the level set then follows this offset past the join: the offset
+    keeps its untrimmed end.  A piece whose two joins cross comes out reversed; it stays, from one end back to
+    the other, so the curve stays connected, and the cell it closes is decided like every other
+    (``inset_regions``).
+    """
+    if not (isinstance(prim, LineEdge) and isinstance(following, LineEdge)):
+        return None
+    t0 = _unit_tangent(prim, at_end=True)
+    t1 = _unit_tangent(following, at_end=False)
+    sine = t0[0] * t1[1] - t0[1] * t1[0]
+    if sine <= PARALLEL_EPSILON:
+        return None
+    n0 = _left_normal(prim, at_end=True)
+    n1 = _left_normal(following, at_end=False)
+    scale = margin / (1 + n0[0] * n1[0] + n0[1] * n1[1])
+    x, y = _ends(prim)[1]
+    point = (
+        circle_math.round_half_up(x + scale * (n0[0] + n1[0])),
+        circle_math.round_half_up(y + scale * (n0[1] + n1[1])),
+    )
+    tan_half = sine / (1 + t0[0] * t1[0] + t0[1] * t1[1])
+    reach = margin * max(sine, tan_half)
+    return _Join(point, _length(following) >= reach, _length(prim) >= reach)
+
+
+def _length(line: LineEdge) -> Decimal:
+    dx, dy = Decimal(line.q[0] - line.p[0]), Decimal(line.q[1] - line.p[1])
+    return circle_math.sqrt(dx * dx + dy * dy)
 
 
 def _cap_arcs(
