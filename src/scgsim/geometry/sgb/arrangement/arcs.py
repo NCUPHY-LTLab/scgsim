@@ -21,6 +21,7 @@ Does not own arrangement building; it supplies the geometry the later stages con
 from __future__ import annotations
 
 import math
+from collections.abc import Iterator
 from dataclasses import dataclass
 from fractions import Fraction
 
@@ -30,6 +31,9 @@ from scgsim.geometry.sgb.records.carriers import ArcCarrier, Lineage
 
 SAMPLES = 33
 CROSSING_EPSILON = 1e-7
+# Grid units added on both sides of a segment's clipped y range when it is entered into the
+# crossing cells: it covers float rounding of the clip, and only ever adds candidate cells.
+CELL_PAD = 1e-6
 
 
 @dataclass(frozen=True)
@@ -196,14 +200,41 @@ def _edge_polyline(
 def _segment_cells(
     polylines: list[list[tuple[float, float]]], size: float
 ) -> dict[tuple[int, int], list[tuple[int, int]]]:
+    """Broad phase: every ``(edge, segment)`` listed under each ``size`` cell the segment passes through.
+
+    Two segments that cross share the cell of their crossing point, so testing the pairs of each cell
+    finds every crossing.  A segment goes only into the cells along its path, not every cell of its
+    bounding box: the box of an oblique segment holds about (length / size)^2 cells, and the boxes of
+    long oblique edges across a die overlap, so their pairs were tested again in every shared cell.
+    """
     cells: dict[tuple[int, int], list[tuple[int, int]]] = {}
     for edge, polyline in enumerate(polylines):
         for segment in range(len(polyline) - 1):
-            (x0, y0), (x1, y1) = polyline[segment], polyline[segment + 1]
-            for cx in range(int(min(x0, x1) // size), int(max(x0, x1) // size) + 1):
-                for cy in range(int(min(y0, y1) // size), int(max(y0, y1) // size) + 1):
-                    cells.setdefault((cx, cy), []).append((edge, segment))
+            for cell in _cells_on_segment(
+                polyline[segment], polyline[segment + 1], size
+            ):
+                cells.setdefault(cell, []).append((edge, segment))
     return cells
+
+
+def _cells_on_segment(
+    p: tuple[float, float], q: tuple[float, float], size: float
+) -> Iterator[tuple[int, int]]:
+    # Column by column: clip the segment to the column's closed x interval, then take the rows its
+    # clipped y range covers.  A point of the segment lies in its column's clipped piece, so its cell
+    # is listed; CELL_PAD absorbs rounding of the clipped y values (a larger range, never a smaller one).
+    (x0, y0), (x1, y1) = sorted((p, q))
+    first, last = int(x0 // size), int(x1 // size)
+    for column in range(first, last + 1):
+        if first == last:
+            ya, yb = y0, y1
+        else:
+            slope = (y1 - y0) / (x1 - x0)
+            ya = y0 + slope * (max(x0, column * size) - x0)
+            yb = y0 + slope * (min(x1, (column + 1) * size) - x0)
+        low, high = min(ya, yb) - CELL_PAD, max(ya, yb) + CELL_PAD
+        for row in range(int(low // size), int(high // size) + 1):
+            yield column, row
 
 
 def _segments_cross(
