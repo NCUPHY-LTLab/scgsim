@@ -7,7 +7,7 @@ recipe and occurrence selectors.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from math import isfinite
 from typing import Any, cast
 
@@ -140,6 +140,38 @@ def fused_gdstk_components(
             ),
         )
     )
+
+
+def without_repeated_vertices(polygons: Iterable[Any]) -> list[Any]:
+    """Drop exactly repeated consecutive vertices from GDS polygons as they are read.
+
+    gdsfactory also stores a circle's closing point, so a 32-gon arrives as 33
+    points with one vertex listed twice in a row; KLayout starts the stored walk
+    at its lowest point, so the repeat usually sits mid-walk (Issue #107). A
+    repeated vertex is a zero-length edge and carries no geometry, and the
+    cutline split cannot order points along it. Only exactly equal neighbours,
+    the last and first included, are dropped; near points stay, so no
+    tolerance enters here. A polygon without a repeat is returned as the same
+    object.
+    """
+    import gdstk  # noqa: PLC0415 -- load the optional GDS kernel only when source polygons are read
+
+    result = []
+    for polygon in polygons:
+        points = [(float(x), float(y)) for x, y in polygon.points]
+        # Keep the first of each run, so a repeated closing point goes, not the start.
+        kept = [
+            point
+            for index, point in enumerate(points)
+            if index == 0 or point != points[index - 1]
+        ]
+        if len(kept) > 1 and kept[-1] == kept[0]:
+            kept.pop()
+        if len(kept) == len(points):
+            result.append(polygon)
+            continue
+        result.append(gdstk.Polygon(kept, polygon.layer, polygon.datatype))
+    return result
 
 
 def ring_from_gdstk_polygon(polygon: Any) -> tuple[tuple[float, float], ...]:
