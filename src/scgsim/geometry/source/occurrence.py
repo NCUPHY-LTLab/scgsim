@@ -15,18 +15,17 @@ from typing import Any
 
 from scgsim.geometry.models.input import LayoutPolygonSpec, SemanticEntitySpec
 from scgsim.geometry.primitives.grid import (
-    current_grid_context,
     in_occurrence_frame,
     preserve_declared_source,
     split_gdstk_cutline_loop,
 )
-from scgsim.geometry.primitives.grid_regions import canonical_grid_point
 from scgsim.geometry.source.ground import derived_ground_polygons
 from scgsim.geometry.source.normalization import gds_layer
 from scgsim.geometry.source.polygon_ops import (
     fused_gdstk_components,
     point_in_layout_polygon,
     point_in_ring,
+    realized_on_lattice,
     ring_from_gdstk_polygon,
 )
 
@@ -199,41 +198,12 @@ def _extract_polygons_by_layer(
                 )
     else:
         polygons = cell.get_polygons(apply_repetitions=True, depth=None)
-    for polygon in _on_source_lattice(polygons):
+    for polygon in polygons:
         result.setdefault(
             (int(polygon.layer), int(polygon.datatype)),
             [],
         ).append(polygon)
     return {key: tuple(value) for key, value in result.items()}
-
-
-def _on_source_lattice(polygons: Sequence[Any]) -> Sequence[Any]:
-    """Round flattened polygons to the bound grid, as flattening a GDS cell does.
-
-    gdstk applies a reference's rotation in floating point, so a rotated
-    instance's points fall up to half a grid step off the lattice the cell is
-    stored on. A copy of the same shape drawn directly stays on it, and a union
-    of the two then keeps both outlines and their crossings (Issue #104).
-    Rounding every flattened point makes identical copies identical.
-    """
-    context = current_grid_context()
-    if context is None:
-        # An unbound historical input has no declared lattice to round to.
-        return polygons
-    import gdstk  # noqa: PLC0415 -- the optional native GDS kernel, needed only when reading a bound source cell
-
-    def on_lattice(point: Sequence[float]) -> tuple[float, float]:
-        x, y = canonical_grid_point(point, context.grid_size_um)
-        return x, y
-
-    return [
-        gdstk.Polygon(
-            [on_lattice(point) for point in polygon.points],
-            polygon.layer,
-            polygon.datatype,
-        )
-        for polygon in polygons
-    ]
 
 
 def entity_from_layer_record(
@@ -317,7 +287,7 @@ def gds_polygons_for_entity(
 
     layer = int(entity.geometry["gds_layer"])
     datatype = int(entity.geometry["gds_datatype"])
-    candidates = polygons_by_layer.get((layer, datatype), ())
+    candidates = realized_on_lattice(polygons_by_layer.get((layer, datatype), ()))
     if not candidates:
         return ()
 

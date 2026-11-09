@@ -2,8 +2,9 @@
 
 This is the case of Issue #104: the PDK keeps a 45 degree line's ground mask on the line instance,
 rotated 225 degrees, and also unions it into the die's ground mask, where KLayout has already rounded
-it to the database grid.  Reading the rotated instance must round it the same way, so the two copies
-coincide and the plane minus the mask has the single mask's outline, with no nanometre steps.
+it to the database grid.  Deriving the ground must round the rotated instance the same way, so the two
+copies coincide and the plane minus the mask has the single mask's outline, with no nanometre steps.
+Reading the cell keeps the instance as authored: that is the geometry the source audits compare against.
 """
 
 from __future__ import annotations
@@ -81,12 +82,14 @@ def edges(ring):
     return [math.dist(a, b) for a, b in zip(ring, (*ring[1:], ring[0]), strict=False)]
 
 
-def test_the_rotated_instance_copy_is_read_on_the_lattice():
-    """Flattening rounds the instance's rotated strip onto the direct copy, point for point."""
+def test_reading_the_cell_keeps_the_rotated_instance_as_authored():
+    """Flattening keeps the floating-point rotation; only the ground's realization rounds it."""
     with geometry_grid_scope(GRID):
         polygons = read_polygons_by_layer(layout(with_instance=True))[MASK_LAYER]
     rings = sorted(sorted(map(tuple, polygon.points.tolist())) for polygon in polygons)
-    assert rings[0] == rings[1] == sorted(direct_mask())
+    assert sorted(direct_mask()) in rings
+    (instance,) = [ring for ring in rings if ring != sorted(direct_mask())]
+    assert all(lattice(x) != x or lattice(y) != y for x, y in instance)
 
 
 def test_a_mask_drawn_twice_derives_the_single_mask_ground():

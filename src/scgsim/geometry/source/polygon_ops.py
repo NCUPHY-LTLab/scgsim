@@ -20,6 +20,7 @@ from scgsim.geometry.primitives.grid import (
     polygon_boolean,
     split_gdstk_cutline_loop,
 )
+from scgsim.geometry.primitives.grid_regions import canonical_grid_point
 
 
 def _fused_boolean_candidates(candidates):
@@ -150,6 +151,43 @@ def ring_from_gdstk_polygon(polygon: Any) -> tuple[tuple[float, float], ...]:
     if len(points) < 3:
         raise ValueError("GDS polygon requires at least 3 unique points")
     return points
+
+
+def realized_on_lattice(polygons: Sequence[Any]) -> Sequence[Any]:
+    """Round a source recipe's flattened polygons to the bound grid when realizing it.
+
+    gdstk applies a reference's rotation in floating point, so a rotated
+    instance's points fall up to half a grid step off the lattice the cell is
+    stored on. A copy of the same shape drawn directly stays on it, and a union
+    of the two then keeps both outlines and their crossings (Issue #104).
+    Rounding makes identical copies identical before the recipe's Booleans.
+
+    The preservation reference keeps the points as authored: its result is the
+    original geometry the source and contact audits compare against, and
+    rounding can make two disjoint polygons touch. A polygon that rounds to no
+    area is left out, so the audit reports the lost component or hole.
+    """
+    context = current_grid_context()
+    if context is None or SOURCE_INTENT.get():
+        return polygons
+    import gdstk  # noqa: PLC0415 -- the optional native GDS kernel, needed only when realizing a bound source recipe
+
+    def on_lattice(polygon: Any) -> list[tuple[float, float]]:
+        points: list[tuple[float, float]] = []
+        for point in polygon.points:
+            x, y = canonical_grid_point(point, context.grid_size_um)
+            # Two points that round to one node become one vertex, not a zero-length edge.
+            if not points or points[-1] != (x, y):
+                points.append((x, y))
+        if len(points) > 1 and points[0] == points[-1]:
+            points.pop()
+        return points
+
+    rounded = (
+        gdstk.Polygon(on_lattice(polygon), polygon.layer, polygon.datatype)
+        for polygon in polygons
+    )
+    return tuple(polygon for polygon in rounded if polygon.area() > 0)
 
 
 def layout_polygon_region(gdstk: Any, polygon: LayoutPolygonSpec) -> tuple[Any, ...]:
