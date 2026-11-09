@@ -1,0 +1,166 @@
+"""The broad phase of the sampled arc-crossing check: no crossing is lost, and a long segment costs its length.
+
+``sampled_crossings`` tests only the segment pairs that share one of its 256-unit cells.  These tests
+compare its pairs with an all-pairs exact reference over seeded random edge sets, and lock down that a long
+oblique segment is listed in O(length) cells, not in every cell of its bounding box.
+"""
+
+from __future__ import annotations
+
+import math
+import random
+
+import pytest
+
+from scgsim.geometry.sgb.arrangement.arcs import (  # private-import: the broad phase and its exact test are the contract under test
+    RealisedArc,
+    _edge_polyline,
+    _segment_cells,
+    _segments_cross,
+    sampled_crossings,
+)
+from scgsim.geometry.sgb.arrangement.dcel import Arrangement
+from scgsim.geometry.sgb.noding.snap_rounding import NodedEdge
+
+CELL = 256  # the cell size sampled_crossings uses, in grid units
+STEP = 8.0  # its default arc sampling step
+
+
+def edges_only(segments: list[tuple[tuple[int, int], tuple[int, int]]]) -> Arrangement:
+    """An arrangement holding just these edges: the crossing check reads nothing else.
+
+    The edges may cross, which a built arrangement never does; that is the failure the check looks for.
+    """
+    edges = [NodedEdge(a, b, frozenset()) for a, b in segments]
+    return Arrangement([], edges, [], [], [], [], [])
+
+
+def arc_through(centre: tuple[int, int], radius: int, degrees0: float, sweep: float):
+    """End points on the lattice and the realised arc of ``radius`` about ``centre`` between them."""
+    a0, a1 = math.radians(degrees0), math.radians(degrees0 + sweep)
+    a = (
+        round(centre[0] + radius * math.cos(a0)),
+        round(centre[1] + radius * math.sin(a0)),
+    )
+    b = (
+        round(centre[0] + radius * math.cos(a1)),
+        round(centre[1] + radius * math.sin(a1)),
+    )
+    ccw = sweep > 0
+    curve = RealisedArc(
+        "arc",
+        "arc",
+        (float(centre[0]), float(centre[1])),
+        float(radius),
+        ccw,
+        not ccw,
+        0.0,
+        0.0,
+    )
+    return (a, b), curve
+
+
+def random_layer(rng: random.Random):
+    """A seeded edge set mixing the cases the cells must not lose.
+
+    Lattice segments on multiples of 128 cross on cell lines and at cell corners; long segments span
+    many cells in both directions; axis-aligned segments lie on cell lines; arcs are sampled chains.
+    """
+    segments, curves = [], []
+    for _ in range(rng.randint(2, 18)):
+        kind = rng.random()
+        if kind < 0.3:
+            a = (128 * rng.randint(-6, 6), 128 * rng.randint(-6, 6))
+            b = (128 * rng.randint(-6, 6), 128 * rng.randint(-6, 6))
+            curve = None
+        elif kind < 0.55:
+            span = rng.choice((600, 3000))
+            a = (rng.randint(-span, span), rng.randint(-span, span))
+            b = (rng.randint(-span, span), rng.randint(-span, span))
+            curve = None
+        elif kind < 0.7:
+            line, lo, hi = (
+                256 * rng.randint(-3, 3),
+                rng.randint(-900, 0),
+                rng.randint(1, 900),
+            )
+            a, b = (
+                ((line, lo), (line, hi))
+                if rng.random() < 0.5
+                else ((lo, line), (hi, line))
+            )
+            curve = None
+        else:
+            centre = (rng.randint(-800, 800), rng.randint(-800, 800))
+            sweep = rng.choice((-1, 1)) * rng.uniform(20, 170)
+            (a, b), curve = arc_through(
+                centre, rng.randint(40, 700), rng.uniform(0, 360), sweep
+            )
+        if a != b:
+            segments.append((a, b))
+            curves.append(curve)
+    return edges_only(segments), curves
+
+
+def all_pairs_crossings(
+    arr: Arrangement, curves: list[RealisedArc | None]
+) -> list[tuple[int, int]]:
+    """The reference: every segment of every edge against every segment of every later edge."""
+    polylines = [_edge_polyline(arr, curves, e, STEP) for e in range(len(arr.edges))]
+    found = set()
+    for i, first in enumerate(polylines):
+        for j in range(i + 1, len(polylines)):
+            second = polylines[j]
+            if any(
+                _segments_cross(p, q, r, s)
+                for p, q in zip(first, first[1:], strict=False)
+                for r, s in zip(second, second[1:], strict=False)
+            ):
+                found.add((i, j))
+    return sorted(found)
+
+
+def test_the_cells_lose_no_crossing_of_the_all_pairs_reference():
+    """Seeded random edge sets, crossings on cell lines and corners included: the same pairs as all pairs."""
+    rng = random.Random(115)
+    crossing_pairs = 0
+    for _ in range(400):
+        arr, curves = random_layer(rng)
+        expected = all_pairs_crossings(arr, curves)
+        assert sampled_crossings(arr, curves) == expected
+        crossing_pairs += len(expected)
+    assert crossing_pairs > 1000  # the sets do cross, so the comparison is not vacuous
+
+
+@pytest.mark.parametrize(
+    "first, second",
+    [
+        (
+            ((0, 0), (512, 512)),
+            ((0, 512), (512, 0)),
+        ),  # cross at the cell corner (256, 256)
+        (
+            ((256, -300), (256, 300)),
+            ((-300, 0), (700, 0)),
+        ),  # both on cell lines, cross at (256, 0)
+        (
+            ((0, 0), (1024, 256)),
+            ((512, -100), (512, 900)),
+        ),  # cross at (512, 128) on a column line
+    ],
+)
+def test_a_crossing_on_a_cell_line_or_corner_is_found(first, second):
+    """A crossing point on the boundary between cells is in a cell both segments are listed in."""
+    assert sampled_crossings(edges_only([first, second]), [None, None]) == [(0, 1)]
+
+
+@pytest.mark.parametrize("start", [(0, 0), (100, 37)])
+def test_a_long_45_degree_segment_is_listed_in_cells_along_its_path(start):
+    """A 0.58 mm diagonal at 1 nm grid: O(length) cells, not the 1601 x 1601 cells of its bounding box."""
+    end = (start[0] + 409_839, start[1] + 409_839)
+    cells = _segment_cells([[start, end]], float(CELL))
+    columns = end[0] // CELL - start[0] // CELL + 1
+    rows = end[1] // CELL - start[1] // CELL + 1
+    # each column holds the rows its clipped piece spans, plus at most one more on each side for the pad
+    assert len(cells) <= rows + 3 * columns
+    assert len(cells) < columns * rows / 300
