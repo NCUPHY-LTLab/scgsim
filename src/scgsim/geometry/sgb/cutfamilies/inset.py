@@ -1,40 +1,48 @@
 """Surface-EPR inset bands (design brief sections 5 and 6): the first cut-family generator.
 
 Owns generating, from a *support region* ``R`` (rings of exact line and arc primitives), the boundary
-curves of ``R_m = R (-) D(m)`` (Minkowski erosion by a disk) for the margins ``m_1 < ... < m_K``.  The bands
-are ``B_0 = R \\ R_{m_1}``, ``B_k = R_{m_k} \\ R_{m_{k+1}}``, ``B_K = R_{m_K}``; "at least ``m_k`` from the
-edge" is the union of the bands ``>= k``.
+curves of ``R_m = R (-) D(m)`` (Minkowski erosion by a disk) for the margins ``m_1 < ... < m_K``, and the
+regions themselves.  The bands are ``B_0 = R \\ R_{m_1}``, ``B_k = R_{m_k} \\ R_{m_{k+1}}``, ``B_K = R_{m_K}``;
+"at least ``m_k`` from the edge" is the union of the bands ``>= k``.
 
-Construction (no polygonised disk):
+Construction (no polygonised disk), per margin:
 
-* every line is offset by ``m`` toward the region interior (a line);
-* every convex arc (centre on the interior side) becomes the concentric arc of radius ``rho - m`` (it
-  vanishes to a sharp corner when ``m >= rho``); every concave arc (a hole) the concentric arc of radius ``r + m``;
-* at every reflex vertex the offset curves leave a gap bridged by an arc of radius ``m`` centred at the vertex;
-  at convex vertices the offset lines overlap and simply cross -- convex corners stay sharp;
-* these *candidate* curves are noded together by snap rounding, and an edge is kept iff its midpoint is at
-  distance ``>= m`` from the region boundary (the ``dist >= m`` cells of the design brief); dangling stubs go.
+1. **Candidates.**  Every line is offset by ``m`` toward the region interior (a line); every convex arc
+   (centre on the interior side) becomes the concentric arc of radius ``rho - m`` (it vanishes to a sharp corner
+   when ``m >= rho``); every concave arc (a hole) the concentric arc of radius ``r + m``; at every reflex vertex
+   the offset curves leave a gap bridged by an arc of radius ``m`` centred at the vertex; at convex vertices the
+   offset lines overlap and simply cross -- convex corners stay sharp.
+2. **Region.**  The candidates, the support boundary and the port boundaries form a small arrangement; its cells
+   lie in ``R_m`` or outside it, one sample point per cell deciding (``cutfamilies.inset_regions``).
+3. **Required seams.**  Only the candidate edges between a cell of ``R_m`` and a cell outside it become
+   carriers, each recording the side band ``k`` lies on (:class:`BandSeam`).  The overlap at a convex corner,
+   the part of a cap outside its run and two coincident offsets with the same band on both sides are no seams.
+
+The regions and seams travel with the family (``CurveFamilyRecord.regions``): labelling locates a face in them
+and the Imprint check proves that the level arrangement kept every seam (``labelling.bands``).  Neither proves
+that the candidates contain the whole level set ``dist = m``.  One failure is refused: where two neighbouring
+offsets neither meet nor cross (an outline drawn as many short edges with small turns between them), the curve
+has a gap and one cell lies on both sides of the margin (``inset_regions``).  A piece the candidates miss
+without leaving such a gap is not detected.
 
 Distance origins: only the region's gap edges (``SupportRegion.origins``; see ``cutfamilies.requests``).  The
 offset is built from those primitives alone: a line or arc per origin, a bridging arc at every reflex vertex
 between two consecutive origins, and a half circle round each end of a run of origins.  The rest of the
 boundary (the die edge, an edge shared with another conductor) only clips the candidates where they cross it,
-and a curve may end on it.  Contact caps, other bands and tile seams are never origins -- they are not
+and a seam may end on it.  Contact caps, other bands and tile seams are never origins -- they are not
 inputs of this module.  Ports are never origins either: a port footprint on the support's level is no origin
 and moves no band, but it keeps the band seams out of itself (below).  Topology changes (a neck that splits, a
-band that vanishes) are ordinary outcomes: the bands that survive are the ones the labels record.
+band that vanishes) are ordinary outcomes: the bands that survive are the ones the regions hold.
 
 Ports.  A lumped-port sheet lies on the support's level and must stay one face, so no band seam may enter its
-interior.  The footprints of the ports on the level (the authored region whole) join the noding as clip
-boundaries only: the candidates are cut where they cross a port boundary, the pieces whose midpoint lies in a
-port's interior are dropped, and a curve may end on the port boundary like on the free boundary.  The part of a
-port that lands on a host conductor is the host's surface, not the port (labelling), so a piece inside the
-landing is kept: a port's *active* interior is its footprint minus the footprints of its hosts (:class:`PortClip`).
-A seam never crosses a host boundary: it lies in the support region, which is either wholly the host's surface
-or wholly outside it.  Pieces
-along the port boundary or outside it are unchanged, and the distance origins never saw the port, so every band
-keeps its geometry outside the port.  Only the seams of this family are clipped: a refinement curve is a user
-request and is never clipped here.
+interior.  The footprints of the ports on the level (the authored region whole) join the arrangement as clip
+boundaries only: a seam is cut where it crosses a port boundary, no edge in a port's interior is a seam, and a
+seam may end on the port boundary like on the free boundary.  The part of a port that lands on a host conductor
+is the host's surface, not the port (labelling), so a seam inside the landing stays: a port's *active* interior
+is its footprint minus the footprints of its hosts (:class:`PortClip`).  A seam never crosses a host boundary:
+it lies in the support region, which is either wholly the host's surface or wholly outside it.  The distance
+origins never saw the port, so every band keeps its geometry outside the port.  Only the seams of this family
+are clipped: a refinement curve is a user request and is never clipped here.
 
 The offset of an oblique edge is not representable on the grid (its normal is irrational): curve end points
 are snapped to the lattice like every other vertex, so the carriers are exact up to the snap bound.  Every
@@ -47,14 +55,23 @@ and arcs alike; reflex arcs ``<support>/ring<r>/corner<k>``, end caps ``<support
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from decimal import Decimal
 from fractions import Fraction
 
-from scgsim.geometry.sgb.noding.snap_rounding import NodedEdge, Segment, snap_round
-from scgsim.geometry.sgb.plane import Point, point_in_ring
+from scgsim.geometry.sgb.cutfamilies.inset_regions import (
+    PortClip,
+    RequiredEdge,
+    margin_cells,
+)
+from scgsim.geometry.sgb.noding.snap_rounding import Segment
+from scgsim.geometry.sgb.plane import Point
 from scgsim.geometry.sgb.records import circle_math
+from scgsim.geometry.sgb.records.band_regions import (
+    BandRegions,
+    BandSeam,
+    MarginRegion,
+)
 from scgsim.geometry.sgb.records.carriers import (
     ArcCarrier,
     Lineage,
@@ -63,38 +80,13 @@ from scgsim.geometry.sgb.records.carriers import (
     RingPrimitive,
 )
 from scgsim.geometry.sgb.records.families import CurveFamilyRecord
-from scgsim.geometry.sgb.records.prisms import Footprint
-from scgsim.geometry.sgb.records.support import DISTANCE_SLACK, SupportRegion
+from scgsim.geometry.sgb.records.support import SupportRegion
 
 Vec = tuple[Decimal, Decimal]
-KEEP_TOLERANCE = DISTANCE_SLACK  # a kept edge may lie this much nearer the origins than m (snap drift)
 PARALLEL_EPSILON = Decimal(
     "1e-9"
 )  # tangents closer to parallel than this are a straight or convex junction
 PIECE_SLACK = Decimal("1e-9")
-FREE_BOUNDARY = "~free"  # carrier id prefix of the boundary that is not an origin
-PORT_BOUNDARY = "~port"  # carrier id prefix of a port footprint boundary (a clip boundary, never an origin)
-
-
-@dataclass(frozen=True)
-class PortClip:
-    """A lumped port as the seams see it: its footprint and the footprints of the hosts it lands on."""
-
-    footprint: Footprint
-    landings: tuple[Footprint, ...] = ()
-
-    def holds(self, point: tuple[int, int, int]) -> bool:
-        """Whether a point off every boundary lies in the port's active interior (off its hosts)."""
-        return _inside(self.footprint, point) and not any(
-            _inside(host, point) for host in self.landings
-        )
-
-
-def _inside(footprint: Footprint, point: tuple[int, int, int]) -> bool:
-    return sum(point_in_ring(ring, point) for ring in footprint.rings()) % 2 == 1
-
-
-AddArc = Callable[[str, tuple[int, int], Fraction, bool, Point, Point], None]
 
 
 def inset_family(
@@ -102,19 +94,23 @@ def inset_family(
     region: SupportRegion,
     target_levels: tuple[Fraction, ...],
     ports: tuple[PortClip, ...] = (),
+    grid_um: float = 1.0,
 ) -> CurveFamilyRecord:
-    """The ``required`` cut family holding the boundaries of ``R_m`` for every margin of the region.
+    """The ``required`` cut family of the seams between the bands of the region, with its regions ``R_m``.
 
-    ``ports`` are the lumped ports on the region's level: no curve has a piece in their active interior, so a port stays one face where only band seams would cut it.
+    ``ports`` are the lumped ports on the region's level: no seam has a piece in their active interior, so a
+    port stays one face where only band seams would cut it.  ``grid_um`` only scales the locations in errors.
     """
     lines: list[LineCarrier] = []
     arcs: list[ArcCarrier] = []
-    for margin in region.margins:
-        margin_lines, margin_arcs = _boundary_of_eroded(
-            family_id, region, margin, ports
-        )
-        lines.extend(margin_lines)
-        arcs.extend(margin_arcs)
+    seams: list[BandSeam] = []
+    regions: list[MarginRegion] = []
+    for band, margin in enumerate(region.margins, start=1):
+        found = _margin_seams(family_id, region, band, margin, ports, grid_um)
+        lines.extend(found.lines)
+        arcs.extend(found.arcs)
+        seams.extend(found.seams)
+        regions.append(found.region)
     return CurveFamilyRecord(
         family_id,
         "inset_band",
@@ -123,6 +119,7 @@ def inset_family(
         "required",
         tuple(arcs),
         region,
+        BandRegions(tuple(regions), tuple(seams)),
     )
 
 
@@ -334,12 +331,28 @@ def _corner_arcs(
         previous = end
 
 
-# --------------------------------------------------------------------------- noding and selection
+# --------------------------------------------------------------------------- regions and seams
 
 
-def _boundary_of_eroded(
-    family_id: str, region: SupportRegion, margin: int, ports: tuple[PortClip, ...]
-) -> tuple[list[LineCarrier], list[ArcCarrier]]:
+@dataclass(frozen=True)
+class _MarginSeams:
+    """The carriers one margin contributes, the seams they are, and its region ``R_m``."""
+
+    lines: list[LineCarrier]
+    arcs: list[ArcCarrier]
+    seams: list[BandSeam]
+    region: MarginRegion
+
+
+def _margin_seams(  # noqa: PLR0913 - one margin of one support, with its ports and grid
+    family_id: str,
+    region: SupportRegion,
+    band: int,
+    margin: int,
+    ports: tuple[PortClip, ...],
+    grid_um: float,
+) -> _MarginSeams:
+    """The required seams of ``R_m`` as carriers, each recording the side band ``band`` lies on."""
     candidates = _generate_candidates(family_id, region, margin)
     segments = [Segment(p, q, frozenset([cid])) for cid, p, q in candidates.lines]
     arc_pieces: dict[str, tuple[ArcCarrier, list[Point]]] = {}
@@ -350,159 +363,68 @@ def _boundary_of_eroded(
             Segment(p, q, frozenset([f"{arc.id}#{k}"]))
             for k, (p, q) in enumerate(zip(points, points[1:], strict=False))
         )
-    segments.extend(_free_boundary_segments(region))
-    segments.extend(_port_boundary_segments(ports))
-    noded = [
-        e
-        for e in snap_round(segments).edges
-        if not any(c.startswith(FREE_BOUNDARY) for c in e.carriers)
-    ]
-    clipped, port_ends = _clipped_to_ports(noded, ports)
-    kept = _kept_edges(clipped, region, margin, port_ends)
-    return _lines_of(family_id, kept), _arcs_of(kept, arc_pieces)
-
-
-def _free_boundary_segments(region: SupportRegion) -> list[Segment]:
-    """The boundary that is not an origin, as noding input only: it splits the candidates where they cross it."""
-    segments = []
-    for k, prim in enumerate(region.free_boundary):
-        if isinstance(prim, LineEdge):
-            segments.append(Segment(prim.p, prim.q, frozenset([f"{FREE_BOUNDARY}{k}"])))
-        else:
-            points = prim.witness_points()
-            segments.extend(
-                Segment(p, q, frozenset([f"{FREE_BOUNDARY}{k}#{j}"]))
-                for j, (p, q) in enumerate(zip(points, points[1:], strict=False))
-            )
-    return segments
-
-
-def _port_boundary_segments(ports: tuple[PortClip, ...]) -> list[Segment]:
-    """The port footprint boundaries, as noding input only: they split the candidates where they cross them."""
-    return [
-        Segment(p, q, frozenset([f"{PORT_BOUNDARY}{k}.{r}.{j}"]))
-        for k, clip in enumerate(ports)
-        for r, ring in enumerate(clip.footprint.rings())
-        for j, (p, q) in enumerate(zip(ring, (*ring[1:], ring[0]), strict=True))
-    ]
-
-
-def _clipped_to_ports(
-    edges: list[NodedEdge], ports: tuple[PortClip, ...]
-) -> tuple[list[NodedEdge], set[Point]]:
-    """The edges without the pieces inside a port, and the vertices on a port boundary.
-
-    The noding split every candidate at the port boundaries, so a noded edge lies on a boundary (it
-    carries its carrier id) or wholly inside or outside every port, and its midpoint decides.  Edges
-    that lie on a port boundary only are the clip boundary itself and are dropped; an edge a candidate shares
-    with a port boundary stays, as a seam along the port is no cut of its interior.
-    """
-    if not ports:
-        return edges, set()
-    clipped: list[NodedEdge] = []
-    port_ends: set[Point] = set()
-    for e in edges:
-        on_boundary = any(c.startswith(PORT_BOUNDARY) for c in e.carriers)
-        if on_boundary:
-            port_ends.update((e.a, e.b))
-        elif _in_a_port(e, ports):
-            continue
-        carriers = frozenset(c for c in e.carriers if not c.startswith(PORT_BOUNDARY))
-        if carriers:
-            clipped.append(NodedEdge(e.a, e.b, carriers))
-    return clipped, port_ends
-
-
-def _in_a_port(edge: NodedEdge, ports: tuple[PortClip, ...]) -> bool:
-    """Whether the midpoint of an edge off every port boundary lies in the active interior of a port."""
-    middle = (edge.a[0] + edge.b[0], edge.a[1] + edge.b[1], 2)
-    return any(clip.holds(middle) for clip in ports)
-
-
-def _kept_edges(
-    edges: Iterable[NodedEdge],
-    region: SupportRegion,
-    margin: int,
-    port_ends: set[Point],
-) -> list[NodedEdge]:
-    """Edges whose midpoint is at least ``margin`` from the distance origins, with dangling stubs removed.
-
-    A curve may end on the part of the boundary that is not an origin (a band reaching the die edge) or on
-    a port boundary (a seam stopping at a port), so an end point there is not dangling.
-    """
-    kept = []
-    for e in edges:
-        middle = (e.a[0] + e.b[0], e.a[1] + e.b[1], 2)
-        if (
-            region.contains(middle)
-            and region.distance((middle[0] / 2, middle[1] / 2))
-            >= margin - KEEP_TOLERANCE
-        ):
-            kept.append(e)
-    while True:
-        degree: dict[Point, int] = {}
-        for e in kept:
-            degree[e.a] = degree.get(e.a, 0) + 1
-            degree[e.b] = degree.get(e.b, 0) + 1
-        pruned = [
-            e
-            for e in kept
-            if all(
-                degree[v] > 1 or v in port_ends or _on_free_boundary(region, v)
-                for v in (e.a, e.b)
-            )
-        ]
-        if len(pruned) == len(kept):
-            return kept
-        kept = pruned
-
-
-def _on_free_boundary(region: SupportRegion, vertex: Point) -> bool:
-    """Whether a curve end lies on the boundary that is not an origin (up to the snap drift)."""
-    return (
-        region.distance_to_free_boundary((float(vertex[0]), float(vertex[1])))
-        <= KEEP_TOLERANCE
+    cells = margin_cells(family_id, segments, region, margin, ports, grid_um)
+    lines, line_seams = _lines_of(family_id, cells.required, band)
+    arcs, arc_seams = _arcs_of(cells.required, arc_pieces, band)
+    return _MarginSeams(
+        lines, arcs, line_seams + arc_seams, MarginRegion(margin, cells.region_rings)
     )
 
 
-def _lines_of(family_id: str, kept: list[NodedEdge]) -> list[LineCarrier]:
-    """Straight members: the kept edges that carry no arc witness chord."""
+def _lines_of(
+    family_id: str, required: list[RequiredEdge], band: int
+) -> tuple[list[LineCarrier], list[BandSeam]]:
+    """Straight members: the seams that carry no arc witness chord, each with the side of ``R_m``."""
     lines: list[LineCarrier] = []
+    seams: list[BandSeam] = []
     pieces_of_line: dict[str, int] = {}
-    for e in kept:
+    for seam in required:
+        e = seam.edge
         if any("#" in c for c in e.carriers):
             continue
-        source = sorted(e.carriers)[
-            0
-        ]  # the offset line (one primitive of the support) this piece lies on
+        # Coincident offsets of one margin from several primitives: the carrier is named after one of them
+        # for its lineage; which side is R_m was read from the cells, never from that name.
+        source = sorted(e.carriers)[0]
         n = pieces_of_line.get(source, 0)
         pieces_of_line[source] = n + 1
         member = source.split("@", 1)[0]
-        lines.append(
-            LineCarrier(
-                f"{source}.{n}",
-                e.a,
-                e.b,
-                Lineage("family_member", family_id=family_id, member=member),
-            )
+        carrier = LineCarrier(
+            f"{source}.{n}",
+            e.a,
+            e.b,
+            Lineage("family_member", family_id=family_id, member=member),
         )
-    return lines
+        lines.append(carrier)
+        seams.append(BandSeam(carrier.id, band, seam.inside_left))
+    return lines, seams
 
 
 def _arcs_of(
-    kept: list[NodedEdge], arc_pieces: dict[str, tuple[ArcCarrier, list[Point]]]
-) -> list[ArcCarrier]:
-    kept_pieces: dict[str, set[int]] = {}
+    required: list[RequiredEdge],
+    arc_pieces: dict[str, tuple[ArcCarrier, list[Point]]],
+    band: int,
+) -> tuple[list[ArcCarrier], list[BandSeam]]:
+    """Arc members: maximal runs of seam chords of each candidate arc with ``R_m`` on one side of the arc."""
+    kept_side: dict[str, dict[int, bool]] = {}
     kept_points: dict[
         tuple[str, int], set[Point]
-    ] = {}  # end points of the kept (possibly trimmed) part of each chord
-    for e in kept:
+    ] = {}  # end points of the seam (possibly trimmed) part of each chord
+    for seam in required:
+        e = seam.edge
         for c in e.carriers:
             base, _, k = c.partition("#")
-            if k:
-                kept_pieces.setdefault(base, set()).add(int(k))
-                kept_points.setdefault((base, int(k)), set()).update((e.a, e.b))
-    return _arc_runs(kept_pieces, arc_pieces, kept_points)
+            if not k:
+                continue
+            chord = int(k)
+            points = arc_pieces[base][1]
+            along = _along((points[chord], points[chord + 1]), e.b) >= _along(
+                (points[chord], points[chord + 1]), e.a
+            )
+            kept_side.setdefault(base, {}).setdefault(
+                chord, seam.inside_left if along else not seam.inside_left
+            )
+            kept_points.setdefault((base, chord), set()).update((e.a, e.b))
+    return _arc_runs(kept_side, arc_pieces, kept_points, band)
 
 
 def _along(chord: tuple[Point, Point], point: Point) -> int:
@@ -512,22 +434,26 @@ def _along(chord: tuple[Point, Point], point: Point) -> int:
 
 
 def _arc_runs(
-    kept_pieces: dict[str, set[int]],
+    kept_side: dict[str, dict[int, bool]],
     arc_pieces: dict[str, tuple[ArcCarrier, list[Point]]],
     kept_points: dict[tuple[str, int], set[Point]],
-) -> list[ArcCarrier]:
-    """Maximal runs of kept witness chords of each candidate arc, as sub-arcs through their end points.
+    band: int,
+) -> tuple[list[ArcCarrier], list[BandSeam]]:
+    """Maximal runs of seam chords of each candidate arc, as sub-arcs through their end points.
 
-    A chord trimmed where another carrier crosses it (the crossing lies inside the chord) ends the run at the
-    crossing, not at the chord's far end; otherwise the arc would stick out past the crossing as a dangling stub.
+    A run is consecutive chords with ``R_m`` on the same side of the arc.  A chord trimmed where another
+    carrier crosses it (the crossing lies inside the chord) ends the run at the crossing, not at the chord's
+    far end; otherwise the arc would stick out past the crossing into cells of one side.
     """
     out: list[ArcCarrier] = []
-    for arc_id in sorted(kept_pieces):
+    seams: list[BandSeam] = []
+    for arc_id in sorted(kept_side):
         arc, points = arc_pieces[arc_id]
-        indices = sorted(kept_pieces[arc_id])
+        sides = kept_side[arc_id]
+        indices = sorted(sides)
         runs, start = [], indices[0]
         for previous, current in zip(indices, indices[1:], strict=False):
-            if current != previous + 1:
+            if current != previous + 1 or sides[current] != sides[previous]:
                 runs.append((start, previous))
                 start = current
         runs.append((start, indices[-1]))
@@ -544,16 +470,16 @@ def _arc_runs(
                 )
             if a == b:
                 continue
-            out.append(
-                ArcCarrier(
-                    f"{arc_id}.{i}",
-                    arc.centre,
-                    arc.radius,
-                    arc.ccw,
-                    (Fraction(a[0]), Fraction(a[1])),
-                    (Fraction(b[0]), Fraction(b[1])),
-                    arc.lineage,
-                    arc.root_id,
-                )
+            carrier = ArcCarrier(
+                f"{arc_id}.{i}",
+                arc.centre,
+                arc.radius,
+                arc.ccw,
+                (Fraction(a[0]), Fraction(a[1])),
+                (Fraction(b[0]), Fraction(b[1])),
+                arc.lineage,
+                arc.root_id,
             )
-    return out
+            out.append(carrier)
+            seams.append(BandSeam(carrier.id, band, sides[k0]))
+    return out, seams

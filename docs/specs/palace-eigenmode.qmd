@@ -100,8 +100,24 @@ nearest gap edge, the edge of a conductor footprint that faces exposed
 substrate. SGB cuts that part into the model as band faces, so stock Palace
 integrates ordinary attributes; SCGSim writes no native `Mask` or `Inset`
 configuration, and no special Palace build is needed. The
-[SGB design pages](../zh-TW/docs/design/sgb/inset-imprint.html#band-measure)
+[SGB design pages](../../zh-TW/docs/design/sgb/inset-imprint.html#band-measure)
 (Traditional Chinese) define how distance is measured.
+
+::: {.callout-warning title="Draw circles as arcs, not as many short edges"}
+A conductor outline drawn as a polygon with many short edges, such as a
+polygon circle or a finely sampled rounded tip, can leave the inset curve open:
+two neighbouring edge offsets neither meet nor cross. SGB then refuses the
+layout with `inset family '…': the inset curve at m = … um is not closed near
+(x, y) um` rather than return wrong bands. Draw such outlines with true arcs, or
+with fewer, longer edges. What decides it is the turn at each vertex, not the
+edge length. Measured with regular n-gon pads of circumradius 5, 20 and 100 µm,
+margins 0.5 and 1.0 µm on a 1 nm grid: 64 sides (5.6° per vertex) and 128 sides
+(2.8°) build with the expected band areas; 256 sides (1.4°) and more are refused
+at every radius; true arcs build at every radius. Other shapes, margins and
+grids were not measured. The
+[band construction](../../zh-TW/docs/design/sgb/inset-imprint.html#band-regions)
+(Traditional Chinese) explains the cause and the measurements.
+:::
 
 ::: {.callout-important title="Call set_surface_epr before mesh()"}
 Margins are geometry: `mesh()` hands them to SGB with the rest of the model.
@@ -140,7 +156,7 @@ a face without one, such as the underside of a substrate, is covered only by the
 baseline row. The manifest lists the faces SGB skipped.
 
 Group names attach the face kind to the entity with `__`, for example
-`MA::pad__top::band=1`. The [naming rule](../zh-TW/docs/design/sgb/identity.html#band-group-names)
+`MA::pad__top::band=1`. The [naming rule](../../zh-TW/docs/design/sgb/identity.html#band-group-names)
 is owned by the SGB design pages; read band membership from the index map instead
 of parsing names.
 

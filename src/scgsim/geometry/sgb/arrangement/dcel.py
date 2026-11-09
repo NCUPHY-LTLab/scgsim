@@ -356,11 +356,7 @@ class StripCell:
 
 
 def strip_cells(arr: Arrangement, face_index: int) -> list[StripCell]:
-    """The face cut into trapezoids whose exact areas add up to the face's area.
-
-    A decision that depends on where in the face a point lies (a distance band) is taken per
-    trapezoid and weighted by its area, so a single point on a zero-area locus cannot decide it.
-    """
+    """The face cut into trapezoids whose exact areas add up to the face's area."""
     cells = []
     for height, mid, intervals in _strip_intervals(arr.face_segments(face_index)):
         for left, right in intervals:
@@ -371,6 +367,19 @@ def strip_cells(arr: Arrangement, face_index: int) -> list[StripCell]:
             )
             cells.append(StripCell(width * height, points))
     return cells
+
+
+def sample_points(arr: Arrangement, face_index: int) -> Iterator[RepPoint]:
+    """Exact points strictly inside a face, bottom strip first, produced only as far as they are read.
+
+    A caller that needs one point with a property (clear of a band boundary) stops at the first that has it,
+    so a face is cut into strips only as far as that.
+    """
+    for _, mid, intervals in _strip_intervals(arr.face_segments(face_index)):
+        for left, right in intervals:
+            width = right - left
+            for fraction in SAMPLE_FRACTIONS:
+                yield fraction_to_rep(left + width * fraction, mid)
 
 
 def _strip_intervals(

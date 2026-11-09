@@ -19,8 +19,9 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from fractions import Fraction
 
-from scgsim.geometry.sgb.cutfamilies.inset import PortClip, inset_family
+from scgsim.geometry.sgb.cutfamilies.inset import inset_family
 from scgsim.geometry.sgb.cutfamilies.inset_plan import InsetPlan, plan_insets
+from scgsim.geometry.sgb.cutfamilies.inset_regions import PortClip
 from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest, RefinementRequest
 from scgsim.geometry.sgb.errors import InputError
 from scgsim.geometry.sgb.records.carriers import Lineage, LineCarrier
@@ -61,6 +62,7 @@ def build_cut_families(
             support.region,
             (support.level,),
             _port_footprints(catalogue, support.level),
+            catalogue.grid.size_um,
         )
         for support in plan.supports
     ]

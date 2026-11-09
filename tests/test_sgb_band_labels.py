@@ -1,8 +1,9 @@
-"""A face's band comes from the area it covers, never from one sample point on a band boundary.
+"""A face's band comes from the band regions built before Imprint, never from one sample point on a band boundary.
 
 Where two offsets coincide (a gap exactly twice the margin wide) the distance to the origins equals
-the margin on a line, and a point sampled on that line would put its face one band too high.  Bands are
-measured from gap edges only: conductor edges with exposed dielectric next to them.
+the margin on a line, and a point sampled on that line would put its face one band too high.  The region
+``dist >= m`` has no area there, so it has no cell, no seam and no face.  Bands are measured from gap edges
+only: conductor edges with exposed dielectric next to them.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from scgsim.geometry.sgb.arrangement.dcel import (
     interior_point,
     strip_cells,
 )
+from scgsim.geometry.sgb.cutfamilies.inset import inset_family
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
     InsetRequest,
@@ -29,7 +31,11 @@ from scgsim.geometry.sgb.cutfamilies.requests import (
     SolutionInterface,
 )
 from scgsim.geometry.sgb.errors import InputError, ValidationError
-from scgsim.geometry.sgb.labelling.bands import CLEARANCE, face_band
+from scgsim.geometry.sgb.labelling.bands import (
+    check_seams_kept,
+    face_bands,
+    level_supports,
+)
 from scgsim.geometry.sgb.model import (
     ConformalModel,
     build_conformal_model,
@@ -37,8 +43,9 @@ from scgsim.geometry.sgb.model import (
 )
 from scgsim.geometry.sgb.noding.snap_rounding import Segment, snap_round
 from scgsim.geometry.sgb.prisms.catalogue import build_prism_catalogue
+from scgsim.geometry.sgb.records.grid import Grid
 from scgsim.geometry.sgb.records.prisms import LineEdge
-from scgsim.geometry.sgb.records.support import SupportRegion
+from scgsim.geometry.sgb.records.support import DISTANCE_SLACK, SupportRegion
 from scgsim.geometry.sgb.sidecar.files import read_sidecar
 from scgsim.geometry.sgb.verification.loaded import apply_sidecar_embeds, verify_xao
 
@@ -71,35 +78,50 @@ def support_of(ring: list[tuple[int, int]], margins: tuple[int, ...]) -> Support
 # --------------------------------------------------------------------------- the rule on one face
 
 
+def banded(ring: list[tuple[int, int]], margins: tuple[int, ...]):
+    """The band family of a support bounded by one polygonal ring, ready for labelling."""
+    family = inset_family("f", support_of(ring, margins), (0,))
+    return family, level_supports([family])
+
+
 def test_a_face_on_the_medial_axis_takes_the_band_of_its_area_not_of_its_midline():
-    """A strip twice as wide as the margin: d == margin on the midline only, the area is below it."""
+    """A strip twice as wide as the margin: d == margin on the midline only, so no region and no seam."""
     ring = rectangle(0, 0, 2000, 10_000)
     arr = arrange(ring)
     support = support_of(ring, (1000,))
     assert support.band_of(interior_point(arr, 1)) == 1  # the single-point rule
-    assert face_band(arr, 1, support) == 0
+    family, supports = banded(ring, (1000,))
+    assert family.carriers == () and family.arcs == ()
+    assert family.regions.regions[0].rings == ()
+    assert face_bands(interior_point(arr, 1), supports) == (("f", 0),)
 
 
 def test_a_face_outside_the_support_has_no_band():
     """Outside the witness polygon of the region, whatever the distance."""
     arr = arrange(rectangle(5000, 0, 6000, 1000))
-    assert face_band(arr, 1, support_of(rectangle(0, 0, 2000, 2000), (500,))) is None
+    _, supports = banded(rectangle(0, 0, 2000, 2000), (500,))
+    assert face_bands(interior_point(arr, 1), supports) == ()
 
 
 def test_a_face_that_holds_area_in_two_bands_fails_closed():
-    """A missing cut: the band boundary crosses the face, so no one band describes it."""
+    """A missing cut: the level holds the support but not the seam, so the Imprint check refuses it."""
     ring = rectangle(0, 0, 10_000, 10_000)
-    with pytest.raises(ValidationError, match="holds area in several bands"):
-        face_band(arrange(ring), 1, support_of(ring, (2000,)))
+    family, supports = banded(ring, (2000,))
+    assert len(family.regions.seams) == 4  # the 6 x 6 square at 2000 from every edge
+    arr = arrange(ring)
+    bands = [{}, dict(face_bands(interior_point(arr, 1), supports))]
+    with pytest.raises(ValidationError, match="not covered by level edges"):
+        check_seams_kept(arr, bands, set(), [family], Grid(0.001), "z = 0")
 
 
 def test_a_port_face_across_two_bands_is_nominally_in_band_zero_inside_the_support():
     """The band seams stop at a port's boundary, so its face may straddle: it carries band 0, none outside."""
     ring = rectangle(0, 0, 10_000, 10_000)
     arr = arrange(ring)
-    assert face_band(arr, 1, support_of(ring, (2000,)), nominal=True) == 0
-    outside = support_of(rectangle(20_000, 0, 30_000, 10_000), (2000,))
-    assert face_band(arr, 1, outside, nominal=True) is None
+    _, supports = banded(ring, (2000,))
+    assert face_bands(interior_point(arr, 1), supports, nominal=True) == (("f", 0),)
+    _, outside = banded(rectangle(20_000, 0, 30_000, 10_000), (2000,))
+    assert face_bands(interior_point(arr, 1), outside, nominal=True) == ()
 
 
 def test_strip_cells_add_up_to_the_exact_face_area():
@@ -170,7 +192,7 @@ def assert_labels_match_the_distance_to(model, family_id, rects: list[Rect]):
     """Every raw cell's clear interior samples lie in the band of their distance to the rectangles (um)."""
     grid = model.labelled.catalogue.grid.size_um
     margins = [m * grid for m in margins_of(model, family_id)]
-    clearance = CLEARANCE * grid
+    clearance = DISTANCE_SLACK * grid
     checked = 0
     for layer in model.labelled.level_layers:
         arr = layer.raw_arrangement
@@ -225,11 +247,16 @@ def test_two_sheets_a_gap_of_exactly_twice_the_margin_apart_never_reach_the_uppe
         "A",
         sa(),
     )
-    # the two offsets at 1.0 um coincide on x = 0: the faces on either side of it are band 1, not 2
-    on_the_axis = [
-        band for box, band, *_ in band_rows(model, "sa") if 0 in (box[0], box[2])
-    ]
-    assert on_the_axis == [1, 1]
+    # the two offsets at 1.0 um coincide on x = 0 with band 1 on both sides: no seam there, so the band-1
+    # face runs across the axis (one ring round both sheets), and no face ends on x = 0
+    rows = band_rows(model, "sa")
+    assert not [box for box, *_ in rows if 0 in (box[0], box[2])]
+    (across,) = [row for row in rows if row[0][0] < 0 < row[0][2] and row[1] != 2]
+    within = [
+        90 + 2 * r * 19 + math.pi * r * r for r in MARGINS
+    ]  # a 9 x 10 um sheet grown by r
+    assert across[1] == 1
+    assert across[3] == pytest.approx(2 * (within[1] - within[0]), rel=1e-6)
     assert_labels_match_the_distance_to(model, "sa", sheets)
     assert_mirror_symmetric_about(model, "sa", y_mid=5.0)
 

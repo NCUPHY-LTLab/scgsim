@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="410" viewBox="0 0 900 410" font-family="Noto Sans TC, PingFang TC, Microsoft JhengHei, sans-serif" font-size="16">
+  <title>例 B：10 × 10 µm 正方形，四邊都是距離起點，margin 2 與 4 µm</title>
+  <desc>比例 25 px／µm。左圖是正確的切法：2 µm 的 6 × 6 µm 正方形 seam 與 4 µm 的 2 × 2 µm 正方形 seam 都是實線，band 面積 64、32、4 µm²。右圖是故意拿掉 4 µm loop 的錯誤結果：內側 loop 以紅色虛線表示缺少，剩下的 6 × 6 µm face 同時含 band 1 與 band 2，它的四個角距離都是 2 µm；Imprint 檢查以 ValidationError 拒絕。</desc>
+  <rect width="900" height="410" fill="#ffffff"/>
+  <!-- left: complete -->
+  <g transform="translate(60,60)">
+    <rect x="0" y="0" width="250" height="250" fill="#c6dbef" stroke="#111111" stroke-width="5"/>
+    <rect x="50" y="50" width="150" height="150" fill="#6baed6" stroke="#111111" stroke-width="2"/>
+    <rect x="100" y="100" width="50" height="50" fill="#2171b5" stroke="#111111" stroke-width="2"/>
+    <g fill="#111111" text-anchor="middle">
+      <text x="125" y="30">band 0：64 µm²</text>
+      <text x="125" y="80">band 1：32 µm²</text>
+      <text x="125" y="130" fill="#ffffff">band 2</text>
+      <text x="125" y="146" fill="#ffffff">4 µm²</text>
+      <text x="125" y="275">10 µm</text>
+      <text x="125" y="-30" font-weight="bold">正確：兩圈 seam 都在</text>
+    </g>
+    <g fill="#111111" font-size="15" text-anchor="middle">
+      <text x="125" y="230">2 µm 處：6 × 6 µm</text>
+      <text x="125" y="180">4 µm 處：2 × 2 µm</text>
+    </g>
+  </g>
+  <!-- right: faulty -->
+  <g transform="translate(500,60)">
+    <rect x="0" y="0" width="250" height="250" fill="#c6dbef" stroke="#111111" stroke-width="5"/>
+    <rect x="50" y="50" width="150" height="150" fill="#e8e0f0" stroke="#111111" stroke-width="2"/>
+    <rect x="100" y="100" width="50" height="50" fill="none" stroke="#c0392b" stroke-width="2.5" stroke-dasharray="7,5"/>
+    <g fill="#c0392b"><circle cx="50" cy="50" r="4"/><circle cx="200" cy="50" r="4"/><circle cx="50" cy="200" r="4"/><circle cx="200" cy="200" r="4"/></g>
+    <g fill="#111111" text-anchor="middle">
+      <text x="125" y="30">band 0：64 µm²</text>
+      <text x="125" y="80">一個 36 µm² 的 face</text>
+      <text x="125" y="96">跨 band 1 與 band 2</text>
+      <text x="125" y="275">10 µm</text>
+      <text x="125" y="-30" font-weight="bold">錯誤：缺少 4 µm loop → 拒絕</text>
+    </g>
+    <g fill="#c0392b" font-size="15" text-anchor="middle">
+      <text x="125" y="180">缺少的 4 µm seam</text>
+      <text x="125" y="230">紅點：角落 d = 2 µm</text>
+    </g>
+  </g>
+  <g transform="translate(60,362)" fill="#111111">
+    <line x1="0" y1="-5" x2="28" y2="-5" stroke="#111111" stroke-width="5"/><text x="36" y="0">gap edge</text>
+    <line x1="150" y1="-5" x2="178" y2="-5" stroke="#111111" stroke-width="2"/><text x="186" y="0">保留的 seam</text>
+    <line x1="320" y1="-5" x2="348" y2="-5" stroke="#c0392b" stroke-width="2.5" stroke-dasharray="7,5"/><text x="356" y="0">應有但缺少的 seam</text>
+  </g>
+  <g transform="translate(60,394)" fill="#111111">
+    <rect x="0" y="-14" width="16" height="16" fill="#c6dbef"/><text x="24" y="0">band 0</text>
+    <rect x="110" y="-14" width="16" height="16" fill="#6baed6"/><text x="134" y="0">band 1</text>
+    <rect x="220" y="-14" width="16" height="16" fill="#2171b5"/><text x="244" y="0">band 2</text>
+    <rect x="330" y="-14" width="16" height="16" fill="#e8e0f0" stroke="#111111" stroke-width="0.5"/><text x="354" y="0">跨兩個 band 的 face（錯誤）</text>
+  </g>
+</svg>

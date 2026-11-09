@@ -85,11 +85,9 @@ lumped port 與金屬都在同一個 support plane 上：PDK 宣告金屬是附�
 
 port 只拿走它蓋住的面積：port 的 footprint 不再屬於 SA，所以 SA band 的 face 不含 port 蓋住的部分。band 的 seam 在 port 的邊界停下，不會穿進 port 的 sheet，所以 port 是**一個 face**（矩形的 port 就是一個矩形 face），group `PORT::<id>` 就是這個 face；明確的 `RefinementRequest` 曲線則仍嵌在這個 face 內，不會把它切開。port 不會移動任何 band，因為 gap edge 的判斷把 port 當作不存在：pad-in-ground 的 port 蓋住 40 µm² 的 SA，SA 的三個 band 面積加上這 40 µm² 等於沒有 port 時的面積，每個 band 都只少不多（測試 `test_a_port_removes_its_footprint_from_the_sa_bands_without_moving_a_band`）。
 
-### 以面積決定 band，以及什麼會失敗
+### 什麼會失敗
 
-band 的邊界是 arrangement 的 edge，所以一個 face 不會跨過兩個 band 的邊界。一個 face 屬於哪個 band，是**由它的面積決定**：face 被分成面積可精確求和的梯形，每一塊取一個離所有 margin 都夠遠的取樣點，判斷它的距離落在哪個 band，面積所在的 band 就是 face 的 band。所以剛好落在 margin 上的點不會讓 face 被分錯：例如上面兩片 sheet 的 gap 恰好是 margin 的兩倍，中線上的點距離等於 1.0 µm，但這條線兩側的面積都在 `band=1`。如果一個 face 的面積分在兩個 band，代表缺了一道切割，build 以 `ValidationError`（`holds area in several bands`）**失敗**，不會任選一個。
-
-`InputError` 在建立 band 的 request 時就拋出，包括：
+band 的區域、seam 與標記怎麼建立、在哪裡會拒絕，見下一節[先建 band 區域，再切 seam](#band-regions)。`InputError` 則在建立 band 的 request 時就拋出，包括：
 
 ::: {.askr-table-compact}
 | 情形 | 例 |
@@ -98,6 +96,88 @@ band 的邊界是 arrangement 的 edge，所以一個 face 不會跨過兩個 ba
 | margin 不合法 | 沒有 margin、margin 不是 model grid 的正整數倍、margin 沒有嚴格遞增 |
 | support 選不到面 | 實體不是導體、`side` 與導體的種類不符（有限厚度的導體要 `top` 或 `bottom`，sheet 要 `sheet`）、`SolutionInterface` 的兩個 region 沒有共同介面、介面在多個高度出現而沒有給 `z_um`、`interface` 宣告的種類找不到 |
 | request id 重複 | 每個 request id 是 family 的名稱，必須唯一 |
+:::
+
+## 先建 band 區域，再切 seam {#band-regions}
+
+SGB 先替每個 support 與每個 margin 算出 **band 區域** $R_m$（support 中距 gap edge 至少 $m$ 的部分），再只在不同 band 之間切 **seam**（band 之間的分界 edge），之後檢查 Imprint 把每條 seam 都保留下來，最後以區域決定每個 face 的 band。這樣 band 的分界在 Imprint 之前就已確定，不需要事後從 face 的面積猜回來。
+
+::: {.callout-warning title="以很多短邊畫成的圓會被拒絕"}
+以多邊形近似的圓或圓角（例如 256 邊以上的多邊形圓、取樣很密的 CPW 圓頭）在某些尺寸與 margin 下，相鄰兩條邊的 offset 既不相接也不相交，inset 曲線因而不封閉。SGB 拒絕這種 layout，訊息是 `inset family '…': the inset curve at m = … um is not closed near (x, y) um`，不會輸出錯誤的 band。請以真正的圓弧畫圓，或改用較少、較長的邊；量得的範圍見下方的[限制](#band-regions-limits)。
+:::
+
+![四個步驟（概念圖）。上排由左到右：建區域、只切必要的 seam、Imprint 與檢查、以點定位標記。下排以 10 × 10 µm 的正方形示意前兩步：點線是兩個 margin 的候選 offset，實線是切出的 seam。](figures/inset-regions-steps.svg){#fig-band-regions fig-alt="四個方框由左到右以箭頭相連，下方兩張正方形示意圖：一張有延伸到邊界的點線，一張只剩兩圈實線正方形。"}
+
+1. **區域。**對每個 margin，[候選 offset](#erosion-rule)、support 的整圈邊界與 port 的邊界組成一個小 arrangement（cell 是其中的平面區域）。cell 是否在 support 內由邊界的方向決定，是精確的；cell 在 $R_m$ 內或外，由一個與 margin 相差超過 cut 容許量（`DISTANCE_SLACK`，1.5 個 grid）的取樣點決定。只有正面積的 cell，所以只是一條線或一個點的區域不會成為 band。
+2. **必要的 seam。**只有帶候選 offset、兩側都在 support 內、而且一側在 $R_m$ 內一側在外的 edge 才成為 seam；每條 seam 記錄兩側的 band（內側 $k$，外側 $k - 1$）。兩側同一個 band 的 edge 不切，例如 convex corner 外延伸的 offset，以及寬度剛好 $2m$ 的 gap 的中線。seam 只能停在 support 邊界或 port 邊界上，這就是 band 到達 die edge 或 port 時的「裁切」；停在其他地方代表邊界遺失，會被拒絕。
+3. **Imprint 與檢查。**seam 與 level 上其他曲線一起進入 level arrangement（Imprint）。之後每條 seam 都必須由帶著它 carrier 的 level edge 從頭到尾覆蓋、沒有缺口，而且兩側 face 的 band 正是 seam 記錄的 band；缺一段、缺整圈或 face 標錯，都以 `ValidationError`（`Imprint lost band boundaries on …`）拒絕，訊息以 µm 指出位置。
+4. **標記。**face 的內部點先判斷是否在 support 內（support 邊界是 arrangement 的 edge，face 不會跨過它），再數它落在幾個 $R_m$ 內，那個數就是 band。lumped port 的 face 仍標成 band 0（nominal），不與 seam 比對。
+
+band 的編號跟著 margin 的區間：某個區間沒有面積時，它的 band 就沒有 face，其他 band 的編號不變。
+
+### 例 A：直線 gap 與它的中線 {#band-example-gap}
+
+兩片 Route A sheet（各 9 × 10 µm）以直線 gap 相對，SA 介面以 margin 0.5 與 1.0 µm 切 band，距離從兩邊的 gap edge 量起。下圖是 gap 中段的橫截面：
+
+![例 A 的三種 gap 寬度（1.6、2.0、2.6 µm）。實線是切的 seam；紅色點線是寬 2.0 µm 時兩條 1.0 µm offset 重合的中線，兩側都是 band 1，不切。](figures/inset-example-gap.svg){#fig-band-gap fig-alt="三列橫截面，兩端粗黑線是 gap edge，中間依 band 著色並以直線分段；中間一列的正中央有一條紅色點線。"}
+
+::: {.askr-table-compact .askr-table-numeric}
+| gap 寬 (µm) | 橫跨 gap 的 band | seam 位置（距左邊 gap edge，µm） | 中線 |
+|---|---|---|---|
+| 1.6（$< 2m$） | 0、1、0 | 0.5、1.1 | 在 band 1 內，沒有 1.0 µm 的 seam |
+| 2.0（$= 2m$） | 0、1、0 | 0.5、1.5 | 距離剛好 1.0 µm，但兩側都是 band 1：不切 |
+| 2.6（$> 2m$） | 0、1、2、1、0 | 0.5、1.0、1.6、2.1 | 在 0.6 µm 寬的 band 2 內 |
+:::
+
+三種寬度的 SA band 面積都等於手算的距離區域：每片 sheet 外擴 $r$ 的面積 $90 + 38r + \pi r^2$ µm²，兩片在 gap 中重疊的部分是寬 $(2r - w)$、長 10 µm 的長條加上兩端兩個 corner 圓的 lens（測試 `test_example_a_a_straight_gap_has_the_bands_of_its_distance_and_no_centre_seam`）。寬 2.0 µm 時，band 1 是繞兩片 sheet 的一個 face，穿過中線，面積 $2 \times (131.14 - 109.79) = 42.71$ µm²。
+
+### 例 B：正方形的內圈 {#band-example-square}
+
+一片 10 × 10 µm 的 Route A sheet，四邊都是 gap edge，margin 2 與 4 µm。2 µm 的 contour 圍出 6 × 6 µm，4 µm 的 contour 圍出 2 × 2 µm，中心距邊 5 µm：
+
+![例 B。左：兩圈 seam 都在，band 面積 64、32、4 µm²。右：故意拿掉 4 µm 的 loop（紅色虛線）之後，剩下的 6 × 6 µm face 跨 band 1 與 band 2，四個角的距離都是 2 µm，所以只看角落無法發現；Imprint 檢查拒絕這個結果。](figures/inset-example-square.svg){#fig-band-square fig-alt="兩個並排的正方形。左邊有兩圈實線，內圈深藍；右邊外圈實線、內圈是紅色虛線，中間淺紫色。"}
+
+::: {.askr-table-compact .askr-table-numeric}
+| band | 範圍 | 面積 (µm²) | face |
+|---|---|---|---|
+| 0 | $d < 2$ µm | $100 - 36 = 64$ | 1 |
+| 1 | $2 \le d < 4$ µm | $36 - 4 = 32$ | 1 |
+| 2 | $d \ge 4$ µm | $4$ | 1 |
+:::
+
+兩圈各是四條 seam；邊的 offset 延伸過轉角的部分兩側同一個 band，不切。把 4 µm 那一圈從 Imprint 的輸入拿掉，build 以 `seam '…' of 'pad': 1 of its 1 piece(s) … not covered by level edges (a cut is missing)` 停止，不會輸出那個跨兩個 band 的 face（測試 `test_a_missing_loop_is_refused`；只拿掉一邊也一樣，`test_a_missing_segment_of_a_seam_is_refused`）。這些面積是手算的幾何，不是模擬結果。
+
+::: {.callout-note collapse="true" title="考量：重合的 offset、距離起點、精度、兩側的來源與 port"}
+- **重合的 offset。**兩條 offset 可以落在同一條線上（例 A 寬 $2m$ 的中線）。哪一側是哪個 band 由 cell 的取樣決定，不從其中一條 offset 的名稱推回來；carrier 的名稱只用一條 offset 的來源，作為 lineage。
+- **距離起點。**只有 gap edge 是距離起點（見[距離從哪裡量起](#band-measure)）。support 的其他邊界（die edge、與另一導體相接的邊）與 port 的邊界只在 arrangement 中切開候選曲線，讓 seam 可以停在上面。
+- **精度。**端點 snap 到 grid，arc 以 witness chord 切開，所以 cut 與精確 offset 最多相差 `DISTANCE_SLACK`。取樣點必須與 margin 相差超過它才算數；比它還薄、沒有這種取樣點的 cell，以內部點 `d >= m` 決定，與 cut 本身一樣精確。沒有新增任何面積門檻：很窄但有面積的區域就是一個 band。
+- **兩側的來源。**每條 seam 記錄的是它兩側 cell 的 band，Imprint 檢查與標記都用這份記錄比對，不重新推算方向。
+- **port。**port 內的 edge 不是 seam，所以 port 仍是一個 face；沿著 port 邊界的 seam 不切開 port 的內部，保留。port 的 face 不與 seam 比對，因為它可以橫跨 band。
+- **獨立的限制不受影響。**不切的 seam 只是 band family 自己的 carrier；同一位置的材料邊界、port、其他 family 與 refinement curve 是各自的 carrier，照常保留。
+:::
+
+### 限制 {#band-regions-limits}
+
+Imprint 檢查證明的是**已建立的邊界在 Imprint 之後仍在**，不證明候選 offset 涵蓋了整條等距曲線。等距曲線不封閉時，同一個 cell 兩側都有，SGB 以 `the inset curve at m = … um is not closed` 拒絕（見上面的提醒）；其他候選 offset 漏掉的部分不會成為 seam，也不會被這個檢查發現。
+
+::: {.callout-note collapse="true" title="量得的範圍：以多邊形近似的圓"}
+下表是正 $n$ 邊形 pad（外接圓半徑 $R$，Route B，MA band，margin 0.5 與 1.0 µm，grid 1 nm）的結果。「不相接」是相鄰兩邊的 offset 既不共用端點也不相交的轉角數。造成問題的是每個頂點的轉角 $360°/n$，不是邊長：$R = 100$ µm 的 256 邊形邊長 2.45 µm，仍被拒絕。
+
+::: {.askr-table-compact .askr-table-numeric}
+| $n$ | 轉角 | $R = 5$ µm 邊長 (µm) | $R = 20$ µm 邊長 (µm) | $R = 100$ µm 邊長 (µm) | 不相接（0.5 µm） | 結果 |
+|---|---|---|---|---|---|---|
+| 64 | 5.6° | 0.49 | 1.96 | 9.81 | 0 | 通過，band 面積與手算相差 $\le 2.5 \times 10^{-4}$ |
+| 128 | 2.8° | 0.25 | 0.98 | 4.91 | 16–24 個 | 通過（其他交點仍把曲線封閉），面積與手算相差 $\le 2.3 \times 10^{-4}$ |
+| 256 | 1.4° | 0.12 | 0.49 | 2.45 | 160–184 個 | 拒絕 |
+| 512、1024 | ≤ 0.7° | ≤ 0.061 | ≤ 0.245 | ≤ 1.227 | 過半 | 拒絕 |
+:::
+
+以真正圓弧畫的圓在三種半徑都通過，面積與精確值相差 $\le 2.3 \times 10^{-6}$。表外的形狀（不同的 margin、grid、轉角不均勻的取樣）沒有量測；同樣的情形也可能出現在取樣很密的 CPW 圓頭。
+:::
+
+::: {.callout-note collapse="true" title="空的 band 與建構錯誤不同"}
+- **空的 band 是正確的結果。**寬 1.6 µm 的長條沒有任何一點距兩條長邊都至少 1.0 µm，所以 band 2 沒有 face；build 通過，sidecar 只列出有面積的 band。例 A 寬 2.0 µm 的中線也是：band 2 在那裡只是一條線，不是 band。
+- **建構錯誤會拒絕。**seam 缺一段或缺整圈、face 標在 seam 記錄以外的 band、seam 停在 support 與 port 邊界以外的地方、等距曲線不封閉，都是 `ValidationError`。
 :::
 
 ## 要 band 的兩種寫法 {#request-forms}
@@ -187,7 +267,7 @@ running example 的 pad 有 45° 的 chamfer、一個 reflex notch、一個 roun
 
 group 依 D5 以 Entity 歸屬（band 曲線不受影響，見 [D5](decisions.qmd#d5)）：volume 與 Route A 的 sheet 以 entity id 命名，介面前綴（`MA`、`MS`、`SA`、`PORT`、`EXT`）保留。
 
-## 規則：以 disk 做 erosion
+## 規則：以 disk 做 erosion {#erosion-rule}
 
 對 support region $R$（*物理上*的 surface，由精確的 line 與 arc 圍成）與它的 distance origin $O \subseteq \partial R$（gap edge，見 [Inset band 怎麼量](#band-measure)），距 $O$ 至少 $m$ 的區域是 $R$ 減去 $O$ 的半徑 $m$ 鄰域。running example 的兩個 support（pad top 與 gap）的整條邊界都是 gap edge，$O = \partial R$，這時它就是以半徑 $m$ 的 disk $D(m)$ 做的 Minkowski erosion：
 
@@ -215,7 +295,7 @@ $R_m$ 的邊界由 origin 依每種特徵各一條規則得出（下表以 $O = 
 | 半徑 $r$ 的 hole（concave arc） | 同心、半徑 $r + m$ 的圓 | hole，$r = 8$ µm |
 :::
 
-實作（`scgsim.geometry.sgb.cutfamilies.inset`）並不畫出 disk。它寫出規則所給的 raw offset 曲線，以與其他曲線相同的 snap rounding 做 noding，並且只保留中點距 origin 至少 $m$ 的 edge（$\operatorname{dist} \ge m$ 的判斷）；懸空的 stub 會被移除。規則在 convex corner 產生的重疊會被這個判斷切掉，而 topology 變化（見下）不需要任何特殊程式。
+實作（`scgsim.geometry.sgb.cutfamilies.inset`）並不畫出 disk。它寫出規則所給的 raw offset 曲線（候選 offset），與 support 邊界、port 邊界一起以相同的 snap rounding 做 noding，再依 cell 在 $R_m$ 的哪一側只留下分隔不同 band 的 seam（見[先建 band 區域，再切 seam](#band-regions)）。規則在 convex corner 產生的重疊兩側同一個 band，不會成為 seam，而 topology 變化（見下）不需要任何特殊程式。
 
 ![pad top 上 $m = 1.5, 3, 6$ µm 的 erosion 邊界（比範例的 margin 大，形狀才看得見）。請看繞 reflex vertex 的 arc、維持尖角的 convex corner、在 6 µm 時縮小並消失的 rounded corner arc，以及變大的 hole 圓。](figures/inset-erosion-construction.svg){#fig-construction fig-alt="四個面板：reflex corner 繞 vertex 的 arc、chamfer 的 convex corner offset 維持尖角、rounded corner 的 offset arc 縮小直到消失、hole 的同心圓。"}
 
@@ -328,7 +408,8 @@ AEDT 端同樣不再需要 non-model sheet：band 由 SGB 預先切好寫在 STE
 ## 限制與未決事項
 
 - **只有直線與圓弧曲線。** line 與圓弧的 offset 仍是 line 與 arc。B-spline carrier 的 offset 無法精確表示，在 v1 **拒絕做 inset**；若要容許需要 Human 決定一個容差。
-- **topology 是整數，但有三個步驟使用浮點。** 某個 cell 屬於哪個 band 是由它的面積與其中取樣點到 gap edge 的浮點距離決定（比 snap bound 還薄的 cell 可能被分類成與精確 carrier 不同）；arc footprint 的包含測試使用 polyline witness 的 chord；arc 不交叉的檢查是取樣的。哪些 edge 存在則完全是整數。
+- **topology 是整數，但有三個步驟使用浮點。** 候選 arrangement 的 cell 在 $R_m$ 的哪一側，由一個取樣點到 gap edge 的浮點距離決定（比 snap bound 還薄的 cell 可能被分類成與精確 carrier 不同）；arc footprint 的包含測試使用 polyline witness 的 chord；arc 不交叉的檢查是取樣的。哪些 edge 存在則完全是整數。
+- **以很多短邊畫成的圓可能被拒絕。** 見[限制](#band-regions-limits)。
 - **Arc noding 在 merge 之前很昂貴。** 使用 polyline witness（D3）時，含 band 的 Route A 範例的 z = 0 level 有 4 058 條 noded edge（4 050 個 hot pixel），dissolve 後剩 166 條。witness 約以 $\sqrt{r/g}$ 成長；arc 很多的 layout 必須預留這筆成本。當 band 的 arc 帶著外來的 vertex，wall 會在該 vertex 處被切開成兩個精確的圓柱（見 [D8](decisions.qmd#d8) 與[曲面 wall](assembly.qmd#curved-walls)），production 已實作。
 - **薄的 band 要付出 element。** 0.1 µm 的 band 比檢查所用的 1 µm size field 薄得多，這個檢查只證明 conformity，不評估 mesh 品質。production 的 catalogue 以粗略的 mesh 記錄 mesh 品質（含 band 的執行範例在 60 µm 的 mesh size 下，`pad_in_ground_C_bands` 有一個扁平元素，見 [Validation](validation.qmd#catalogue)），那不是對 band 做 refinement 的 mesh。band 的 mesh 尺寸屬 mesher 的責任：sidecar 的 `band_boundary` 只給出 margin 與最窄 band 的寬度（`narrowest_band_um`），不給尺寸；測試用的配方見 [測試用的 mesh 配方](emission.qmd#mesh-recipe)，欄位見[使用契約](consumer-contract.qmd#sidecar)。
 - **Side wall 的 band** 不在 v1 範圍。
