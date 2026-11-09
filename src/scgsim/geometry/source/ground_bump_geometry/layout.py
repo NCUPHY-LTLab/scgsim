@@ -9,7 +9,10 @@ from tempfile import TemporaryDirectory
 from typing import Any, Mapping
 
 from scgsim.geometry.primitives.grid import polygon_boolean
-from scgsim.geometry.source.polygon_ops import without_repeated_vertices
+from scgsim.geometry.source.polygon_ops import (
+    flattened_polygons,
+    without_repeated_vertices,
+)
 
 
 def polygon_center(polygon: Any) -> tuple[float, float]:
@@ -99,7 +102,9 @@ def gdstk_cell(library: Any, name: str) -> Any:
 def gds_layer_polygons(cell: Any, layer: tuple[int, int]) -> list[Any]:
     """Read repeated source polygons from one exact GDS layer pair."""
     return without_repeated_vertices(
-        cell.get_polygons(layer=layer[0], datatype=layer[1], apply_repetitions=True)
+        polygon
+        for polygon in flattened_polygons(cell)
+        if (polygon.layer, polygon.datatype) == layer
     )
 
 

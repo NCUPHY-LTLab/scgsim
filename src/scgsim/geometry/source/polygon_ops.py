@@ -8,7 +8,7 @@ recipe and occurrence selectors.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from math import isfinite
+from math import degrees, isfinite
 from typing import Any, cast
 
 from scgsim.geometry.models.input import LayoutPolygonSpec
@@ -141,6 +141,87 @@ def fused_gdstk_components(
             ),
         )
     )
+
+
+def flattened_polygons(
+    cell: Any, *, excluded_reference_indexes: Sequence[int] = ()
+) -> list[Any]:
+    """Flatten a GDS cell's polygons, placing quarter-turn references exactly.
+
+    gdstk places a reference with the cosine and sine of its rotation in
+    radians, and cos(pi/2) is 6e-17, not 0. A cell placed at 90, 180 or 270
+    degrees therefore lands up to about 1e-14 um off the lattice it is drawn
+    on, and two of its shapes that met exactly no longer do (Issue #112). A
+    whole number of quarter turns, as GDS stores the angle in degrees, maps
+    the lattice onto itself, so such a reference is placed by swapping and
+    negating coordinates. Any other rotation, and a reference to an unparsed
+    raw cell, keeps gdstk's placement: a rotated point is off the lattice as
+    authored. The order is gdstk's: the cell's own shapes, then each
+    reference in turn, each shape with its repetitions. References at
+    ``excluded_reference_indexes`` of the top cell are left out.
+    """
+    polygons = list(cell.get_polygons(apply_repetitions=True, depth=0))
+    excluded = set(excluded_reference_indexes)
+    for index, reference in enumerate(cell.references):
+        if index not in excluded:
+            polygons.extend(_placed_reference_polygons(reference))
+    return polygons
+
+
+def _placed_reference_polygons(reference: Any) -> list[Any]:
+    import gdstk  # noqa: PLC0415 -- load the optional GDS kernel only when source polygons are read
+
+    turns = _quarter_turns(reference.rotation)
+    if turns is None or not isinstance(reference.cell, gdstk.Cell):
+        return list(reference.get_polygons(apply_repetitions=True, depth=None))
+    origin_x, origin_y = (float(value) for value in reference.origin)
+    offsets = (
+        [tuple(map(float, offset)) for offset in reference.repetition.get_offsets()]
+        if reference.repetition.size
+        else [(0.0, 0.0)]
+    )
+    placed = []
+    for polygon in flattened_polygons(reference.cell):
+        points = [
+            _quarter_turned(
+                (float(x), float(y)),
+                turns,
+                reference.magnification,
+                reference.x_reflection,
+            )
+            for x, y in polygon.points
+        ]
+        for offset_x, offset_y in offsets:
+            placed.append(
+                gdstk.Polygon(
+                    [
+                        (x + origin_x + offset_x, y + origin_y + offset_y)
+                        for x, y in points
+                    ],
+                    polygon.layer,
+                    polygon.datatype,
+                )
+            )
+    return placed
+
+
+def _quarter_turns(rotation: float) -> int | None:
+    # gdstk reads the GDS angle in degrees and stores radians; converting back
+    # recovers 90, 180 or 270 exactly, so no angle tolerance is involved.
+    angle = degrees(rotation)
+    if angle % 90 != 0:
+        return None
+    return int(angle // 90) % 4
+
+
+def _quarter_turned(
+    point: tuple[float, float], turns: int, magnification: float, x_reflection: bool
+) -> tuple[float, float]:
+    # gdstk's order: reflect across X, scale, then rotate about the origin.
+    x, y = point[0] * magnification, point[1] * magnification
+    if x_reflection:
+        y = -y
+    return ((x, y), (-y, x), (-x, -y), (y, -x))[turns]
 
 
 def without_repeated_vertices(polygons: Iterable[Any]) -> list[Any]:
