@@ -22,6 +22,7 @@ from scgsim.geometry.primitives.grid import (
 from scgsim.geometry.source.ground import derived_ground_polygons
 from scgsim.geometry.source.normalization import gds_layer
 from scgsim.geometry.source.polygon_ops import (
+    flattened_polygons,
     fused_gdstk_components,
     point_in_layout_polygon,
     point_in_ring,
@@ -189,16 +190,9 @@ def _extract_polygons_by_layer(
     # Canonical public PDK cells use hierarchy.  SGB's Level-0 contract is
     # flattened layout polygons, so preserve every referenced source polygon
     # rather than silently lowering only the top cell's direct shapes.
-    if excluded_reference_indexes:
-        polygons = list(cell.get_polygons(apply_repetitions=True, depth=0))
-        excluded = set(excluded_reference_indexes)
-        for index, reference in enumerate(cell.references):
-            if index not in excluded:
-                polygons.extend(
-                    reference.get_polygons(apply_repetitions=True, depth=None)
-                )
-    else:
-        polygons = cell.get_polygons(apply_repetitions=True, depth=None)
+    polygons = flattened_polygons(
+        cell, excluded_reference_indexes=excluded_reference_indexes
+    )
     for polygon in without_repeated_vertices(polygons):
         result.setdefault(
             (int(polygon.layer), int(polygon.datatype)),
