@@ -197,16 +197,25 @@ retain historical interpretation. Original source identity is retained alongside
 computational change ledger, and walls inherit their snapped layout endpoints.
 Z coordinates, film thickness, mesh, quadrature, and solver tolerances remain
 separate; the XY grid does not assert that every 3D coordinate lies on it.
-The fixed-grid XY boundaries form one shared noded network. Each original
-directed ring edge carries its operand, ring and segment order through
-explicit grid-pixel incidence; coincident edges retain every source. Raw
-intersection and native-grid near-vertex events split these directed paths
-before rounding.
+The fixed-grid XY boundaries are noded once for each Z range. A Z range's
+network holds every operand whose closed Z range meets that range, touching
+included, and every operand that has no Z range; operands whose Z ranges are
+separated never share nodes. A bump that spans the D0-to-D1 gap is therefore
+noded with the metal of both dies, while a D1 vertex does not split a D0
+outline. One limit follows from this grouping: when a D0 conductor and a bump
+share an edge and a D1 vertex lies on it, the bump outline gets that vertex
+and the D0 outline does not. Within each network, every original directed ring
+edge carries its operand, ring and segment order through explicit grid-pixel
+incidence; coincident edges retain every source. Raw intersection and
+native-grid near-vertex events split these directed paths before rounding.
 
 Directed edge transitions determine face membership, and each operand is reconstructed
 from those same cells without another grid snap. Ambiguous source paths or
-inconsistent labels fail explicitly. Physical contact, hole and component
-checks still compare against the original inputs.
+inconsistent labels fail explicitly. Source recipes round flattened layout
+points to the grid before their Booleans, so a mask placed through a rotated
+reference and drawn again directly unions to one outline. Physical contact,
+hole and component checks still compare against the original, unrounded
+inputs.
 
 For component-semantics schema v2, the paired stack adds derived source
 occurrence records, not a new user polygon-selection API. Each
