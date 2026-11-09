@@ -179,6 +179,69 @@ def test_public_ground_recipe_retains_pre_lowering_contact_identity(
         assert geometry_grid_context(result) == GRID
 
 
+@pytest.mark.parametrize("rotation_deg,changed", ((0.0, False), (1.0, True)))
+def test_public_rotated_reference_contact_is_checked_against_authored_points(
+    tmp_path, rotation_deg, changed
+):
+    """A rotation whose rounding makes two disjoint same-Net conductors touch is refused.
+
+    Two 10 nm squares, 1 nm apart on separate conductor layers, are placed through a
+    reference rotated 1 degree. Their corners (74, 28) nm and (75, 28) nm both round to
+    (74, 29) nm, so the realized squares share a vertex. The contact check must compare
+    against the authored, disjoint squares and refuse, not against already-rounded ones.
+    """
+    import math  # noqa: PLC0415 -- the rotation is needed only by this adapter test
+
+    import gdstk  # noqa: PLC0415 -- optional GDS dependency is needed only by this adapter test
+
+    from scgsim.geometry import build_gds_stack_geometry_input  # noqa: PLC0415 -- keep this test-specific dependency scoped to its contract test
+
+    library = gdstk.Library(unit=1e-6, precision=1e-9)
+    pair = library.new_cell("PAIR")
+    pair.add(gdstk.rectangle((0.064, 0.028), (0.074, 0.038), layer=1))
+    pair.add(gdstk.rectangle((0.075, 0.028), (0.085, 0.038), layer=2))
+    top = library.new_cell("TOP")
+    top.add(gdstk.Reference(pair, rotation=math.radians(rotation_deg)))
+    gds = tmp_path / "source.gds"
+    library.write_gds(gds)
+    stack = tmp_path / "stack.json"
+    stack.write_text(
+        json.dumps(
+            {
+                "layers": [
+                    {
+                        "semantic_id": f"chip/{name}",
+                        "layer": layer,
+                        "datatype": 0,
+                        "role": "conductor",
+                        "material_id": "metal",
+                        "net_id": "A",
+                        "z_um": 0,
+                        "thickness_um": 0,
+                    }
+                    for name, layer in (("left", 1), ("right", 2))
+                ],
+                "solution_regions": {},
+                "materials": {"metal": {"kind": "conductor"}},
+            }
+        )
+    )
+
+    def build():
+        return build_gds_stack_geometry_input(
+            gds_file=gds, stack_file=stack, top_cell_name="TOP", grid_size_um=0.001
+        )
+
+    if changed:
+        with pytest.raises(
+            ValueError, match="conductor contact changed at grid: chip/left, chip/right"
+        ):
+            build()
+    else:
+        (relation,) = build().metadata["geometry_grid_contact_relations"]
+        assert relation["requested_de9im"] == relation["realized_de9im"] == "FF2FF1212"
+
+
 def test_mixed_intermediate_chain_preserves_area_and_auxiliary_residue():
     """Verify that mixed intermediate chain preserves area and auxiliary residue."""
     from shapely import Polygon, intersection  # noqa: PLC0415 -- keep geometry imports scoped to the contract that exercises them

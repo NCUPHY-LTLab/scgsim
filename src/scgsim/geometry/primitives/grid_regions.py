@@ -98,7 +98,8 @@ def region_key(point: Sequence[float], grid_size: float | None) -> RegionKey:
     )
 
 
-def _canonical_grid_point(point: Sequence[float], grid_size: float | None) -> GridPoint:
+def canonical_grid_point(point: Sequence[float], grid_size: float | None) -> GridPoint:
+    """Return the lattice node nearest a point, spelled as the grid spells it."""
     if grid_size is None:
         return tuple(point)
 
@@ -186,7 +187,7 @@ class _RingReconstructor:
                 key = self.point_key(point)
                 canonical = self.vertex_index.coordinates.get(key)
                 points.append(
-                    _canonical_grid_point(point, self.vertex_index.grid_size)
+                    canonical_grid_point(point, self.vertex_index.grid_size)
                     if canonical is None
                     else canonical
                 )

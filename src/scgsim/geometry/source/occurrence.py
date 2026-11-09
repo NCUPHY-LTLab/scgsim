@@ -25,6 +25,7 @@ from scgsim.geometry.source.polygon_ops import (
     fused_gdstk_components,
     point_in_layout_polygon,
     point_in_ring,
+    realized_on_lattice,
     ring_from_gdstk_polygon,
 )
 
@@ -286,7 +287,7 @@ def gds_polygons_for_entity(
 
     layer = int(entity.geometry["gds_layer"])
     datatype = int(entity.geometry["gds_datatype"])
-    candidates = polygons_by_layer.get((layer, datatype), ())
+    candidates = realized_on_lattice(polygons_by_layer.get((layer, datatype), ()))
     if not candidates:
         return ()
 

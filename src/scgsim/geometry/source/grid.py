@@ -1,9 +1,15 @@
-"""Project assembled source polygons onto their bound XY grid."""
+"""Project assembled source polygons onto their bound XY grid.
+
+Polygons are noded only against geometry they can touch: the operands whose Z
+ranges meet. Two dies of a flip chip therefore never split each other's
+outlines, while a bump is still noded with the metal on both faces it joins.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 from decimal import Decimal
@@ -43,6 +49,7 @@ from scgsim.geometry.source.ports import (
     port_sheet_overlaps,
     port_sheet_target_layer_matches,
 )
+from scgsim.semantics.route_a import geometry_z_range, same_z
 
 if TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
@@ -54,6 +61,8 @@ class _SourcePolygonIdentity(TypedDict):
 
 
 _SourceRing = Sequence[Sequence[float]]
+_ZRange = tuple[float, float]
+_EVERY_Z: _ZRange = (-math.inf, math.inf)
 
 
 @dataclass(frozen=True)
@@ -78,6 +87,37 @@ class _ProjectedPolygons:
 
     records: tuple[LayoutPolygonSpec, ...]
     by_id: Mapping[str, LayoutPolygonSpec]
+
+
+@dataclass(frozen=True)
+class _NodingGroups:
+    """One grid arrangement per source Z range, and the range of each operand.
+
+    The arrangement of a Z range holds every operand whose closed Z range meets
+    it, which is the set the SGB nodes together on that range's levels and slab.
+    Each operand is projected from the arrangement of its own range.
+    """
+
+    arrangements: Mapping[_ZRange, GridArrangement]
+    z_ranges: Mapping[str, _ZRange]
+
+    def arrangement_for(self, operand_id: str) -> GridArrangement:
+        """Return the arrangement an operand is projected from."""
+        return self.arrangements[self.z_ranges[operand_id]]
+
+    @property
+    def metadata(self) -> list[dict[str, object]]:
+        """Describe each Z range's arrangement in ascending Z order.
+
+        An operand without a Z range is recorded with ``z_range_um`` None.
+        """
+        return [
+            {
+                "z_range_um": None if z_range == _EVERY_Z else list(z_range),
+                **arrangement.metadata,
+            }
+            for z_range, arrangement in self.arrangements.items()
+        ]
 
 
 _Arguments = ParamSpec("_Arguments")
@@ -242,14 +282,87 @@ def _grid_operands(build_input: GeometryBuildInput) -> tuple[GridOperand, ...]:
     return tuple(operands)
 
 
+def _noding_groups(
+    build_input: GeometryBuildInput,
+    source: _SourcePolygonInputs,
+    context: GeometryGridContext,
+) -> _NodingGroups:
+    operands = _grid_operands(build_input)
+    z_ranges = _operand_z_ranges(build_input, source)
+    arrangements: dict[_ZRange, GridArrangement] = {}
+    by_members: dict[tuple[str, ...], GridArrangement] = {}
+    for z_range in sorted(set(z_ranges.values())):
+        members = tuple(
+            operand
+            for operand in operands
+            if _z_ranges_meet(z_ranges[operand.operand_id], z_range)
+        )
+        key = tuple(operand.operand_id for operand in members)
+        if key not in by_members:
+            by_members[key] = build_grid_arrangement(members, context)
+        arrangements[z_range] = by_members[key]
+    return _NodingGroups(arrangements, z_ranges)
+
+
+def _operand_z_ranges(
+    build_input: GeometryBuildInput, source: _SourcePolygonInputs
+) -> dict[str, _ZRange]:
+    z_ranges = {
+        polygon.polygon_id: _owner_z_range(source.owners.get(polygon.polygon_id))
+        for polygon in build_input.polygons
+    }
+    for port in build_input.port_sheet_regions:
+        host_ranges = [
+            _owner_z_range(host) for host in _port_sheet_hosts(port, source).values()
+        ]
+        # A port sheet lies on its hosts' layer; spanning every host keeps it
+        # noded with each conductor it may overlap.
+        z_ranges["PORT::" + port.port_sheet_id] = (
+            (min(low for low, _ in host_ranges), max(high for _, high in host_ranges))
+            if host_ranges
+            else _EVERY_Z
+        )
+    return z_ranges
+
+
+def _owner_z_range(owner: SemanticEntitySpec | None) -> _ZRange:
+    # Without a Z range nothing says which operands this one never touches, so
+    # it is noded with all of them.
+    if owner is None or not {"z_min_um", "z_max_um", "z_um"} & owner.geometry.keys():
+        return _EVERY_Z
+    return geometry_z_range(owner.geometry, owner.semantic_id)
+
+
+def _z_ranges_meet(first: _ZRange, second: _ZRange) -> bool:
+    # Closed ranges: metal that only touches another face still shares that
+    # level, as a bump touches the metal on each die.
+    low, high = max(first[0], second[0]), min(first[1], second[1])
+    return low <= high or same_z(low, high)
+
+
+def _port_sheet_hosts(
+    port: PortSheetRegionRecord, source: _SourcePolygonInputs
+) -> dict[str, SemanticEntitySpec]:
+    return {
+        polygon_id: entity
+        for polygon_id, entity in source.owners.items()
+        if is_port_sheet_host_entity(entity)
+        and port_sheet_target_layer_matches(
+            entity, cast(str, port.metadata["target_layer"])
+        )
+    }
+
+
 def _project_layout_polygons(
     build_input: GeometryBuildInput,
     source: _SourcePolygonInputs,
-    arrangement: GridArrangement,
+    groups: _NodingGroups,
 ) -> _ProjectedPolygons:
     projected: list[LayoutPolygonSpec] = []
     for polygon in build_input.polygons:
-        regions_for_polygon = arrangement.operand_regions(polygon.polygon_id)
+        regions_for_polygon = groups.arrangement_for(
+            polygon.polygon_id
+        ).operand_regions(polygon.polygon_id)
         if len(regions_for_polygon) != 1:
             raise ValueError(
                 "source polygon component identity changed at grid: "
@@ -291,8 +404,6 @@ def _validate_conductor_contacts(
     context: GeometryGridContext,
 ) -> list[dict[str, object]]:
     from shapely import Polygon, union_all  # noqa: PLC0415 — load native topology only after projection validation.
-
-    from scgsim.semantics.route_a import geometry_z_range  # noqa: PLC0415 — preserve the existing source Z policy boundary.
 
     conductors = [
         entity for entity in build_input.entities if entity.material_kind == "conductor"
@@ -351,12 +462,15 @@ def _project_port_regions(
     build_input: GeometryBuildInput,
     source: _SourcePolygonInputs,
     projected_polygons: _ProjectedPolygons,
-    arrangement: GridArrangement,
+    groups: _NodingGroups,
     geometry_polygon: Callable[..., BaseGeometry],
 ) -> tuple[PortSheetRegionRecord, ...]:
     projected_ports: list[PortSheetRegionRecord] = []
     for port in build_input.port_sheet_regions:
-        regions_for_port = arrangement.operand_regions("PORT::" + port.port_sheet_id)
+        operand_id = "PORT::" + port.port_sheet_id
+        regions_for_port = groups.arrangement_for(operand_id).operand_regions(
+            operand_id
+        )
         if len(regions_for_port) != 1:
             raise ValueError(
                 f"port sheet component identity changed at grid: {port.port_sheet_id}"
@@ -370,14 +484,7 @@ def _project_port_regions(
             (overlap.host_semantic_id, overlap.host_polygon_id)
             for overlap in port.overlaps
         }
-        eligible_hosts = {
-            polygon_id: entity
-            for polygon_id, entity in source.owners.items()
-            if is_port_sheet_host_entity(entity)
-            and port_sheet_target_layer_matches(
-                entity, cast(str, port.metadata["target_layer"])
-            )
-        }
+        eligible_hosts = _port_sheet_hosts(port, source)
         raw_port = geometry_polygon(port.exterior, port.holes)
         effective_port = geometry_polygon(oriented_exterior, oriented_holes)
         contact_relations: list[dict[str, str]] = []
@@ -452,7 +559,7 @@ def _project_port_regions(
 def _project_entities(
     build_input: GeometryBuildInput,
     projected_polygons: _ProjectedPolygons,
-    arrangement: GridArrangement,
+    groups: _NodingGroups,
     context: GeometryGridContext,
     geometry_operations: _GeometryOperations,
 ) -> tuple[SemanticEntitySpec, ...]:
@@ -475,6 +582,8 @@ def _project_entities(
                     "source Entity support changed component identity at grid: "
                     f"{entity.semantic_id}"
                 )
+            # An Entity's polygons share its Z range, so they share one arrangement.
+            arrangement = groups.arrangement_for(entity.polygon_ids[0])
             outer, holes = regions(
                 combined, arrangement.vertices, context.grid_size_um
             )[0]
@@ -513,7 +622,7 @@ def _project_metadata(
     build_input: GeometryBuildInput,
     source: _SourcePolygonInputs,
     context: GeometryGridContext,
-    arrangement: GridArrangement,
+    groups: _NodingGroups,
     contact_relations: list[dict[str, object]],
 ) -> dict[str, Any]:
     return {
@@ -527,7 +636,7 @@ def _project_metadata(
                 default=list,
             ).encode()
         ).hexdigest(),
-        "geometry_grid_arrangement": arrangement.metadata,
+        "geometry_grid_arrangement": groups.metadata,
         "geometry_grid_source_audits": source_grid_audits()
         or build_input.metadata.get("geometry_grid_source_audits", ()),
         "geometry_grid_contact_relations": contact_relations,
@@ -545,8 +654,8 @@ def _apply_geometry_grid(
         fresh_audits,
         use_source_preimage=bound_context is None or bool(fresh_audits),
     )
-    arrangement = build_grid_arrangement(_grid_operands(build_input), context)
-    projected_polygons = _project_layout_polygons(build_input, source, arrangement)
+    groups = _noding_groups(build_input, source, context)
+    projected_polygons = _project_layout_polygons(build_input, source, groups)
 
     from shapely import Polygon, union_all  # noqa: PLC0415 — native geometry is needed only after source projection.
 
@@ -559,18 +668,18 @@ def _apply_geometry_grid(
         build_input,
         source,
         projected_polygons,
-        arrangement,
+        groups,
         geometry_operations.polygon,
     )
     projected_entities = _project_entities(
         build_input,
         projected_polygons,
-        arrangement,
+        groups,
         context,
         geometry_operations,
     )
     source_metadata = _project_metadata(
-        build_input, source, context, arrangement, contact_relations
+        build_input, source, context, groups, contact_relations
     )
     return replace(
         build_input,

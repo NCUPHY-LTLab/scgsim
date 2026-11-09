@@ -27,7 +27,7 @@ def test_projection_preserves_complete_public_payload_hash():
 
     # The typed Route B fixture uses cutout_boundary_shell.
     assert _payload_sha256(projected) == (
-        "720b5140ecdcac2a2ec9ae5b907aa9969415cbe29ae073f743246b22f5805c8f"
+        "75eb111e38526bea2b1afd5b39dcd6b72b4efa53f08d8b6a850c348df634bd02"
     )
 
 

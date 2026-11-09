@@ -21,6 +21,7 @@ from scgsim.geometry.primitives.loops import canonical_loop_sort_key
 from scgsim.geometry.source.polygon_ops import (
     fused_gdstk_components,
     point_in_layout_polygon,
+    realized_on_lattice,
     ring_from_gdstk_polygon,
 )
 from scgsim.geometry.source.polygon_ops import (
@@ -54,10 +55,12 @@ def derived_ground_polygons(
         )
         base = (gdstk.Polygon(exterior),)
     else:
-        base = tuple(plane_polygons)
+        base = tuple(realized_on_lattice(plane_polygons))
     without_mask = polygon_boolean(
         base,
-        _merged_gdstk_polygons(polygons_by_layer.get(mask_key, ())),
+        _merged_gdstk_polygons(
+            realized_on_lattice(polygons_by_layer.get(mask_key, ()))
+        ),
         "not",
         precision=1e-9,
     )
@@ -83,8 +86,8 @@ def derived_ground_polygons(
             raise TypeError(
                 f"{entity.semantic_id} include_layer must be a GDS layer pair"
             )
-        candidates = polygons_by_layer.get(
-            (int(include_layer[0]), int(include_layer[1])), ()
+        candidates = realized_on_lattice(
+            polygons_by_layer.get((int(include_layer[0]), int(include_layer[1])), ())
         )
         # Fuse exact contacts before applying an explicit selector; ownership
         # still comes from the authored layer and selector, not proximity.
