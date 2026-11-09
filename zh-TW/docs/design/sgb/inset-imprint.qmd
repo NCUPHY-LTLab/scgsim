@@ -102,8 +102,8 @@ band 的區域、seam 與標記怎麼建立、在哪裡會拒絕，見下一節[
 
 SGB 先替每個 support 與每個 margin 算出 **band 區域** $R_m$（support 中距 gap edge 至少 $m$ 的部分），再只在不同 band 之間切 **seam**（band 之間的分界 edge），之後檢查 Imprint 把每條 seam 都保留下來，最後以區域決定每個 face 的 band。這樣 band 的分界在 Imprint 之前就已確定，不需要事後從 face 的面積猜回來。
 
-::: {.callout-tip title="曲線輪廓與窄 band 的網格"}
-曲線的點數請保持適中，並為窄 band 選擇能解析其寬度與曲率的網格設定。建議與 `pad_b_bands` 上量得的配方比較，見 Palace 契約的[為窄 band 產生網格](../../specs/palace-eigenmode.qmd#surface-epr-band-meshing)與[曲線輪廓與多邊形圓](../../specs/palace-eigenmode.qmd#surface-epr-curved-outlines)。
+::: {.callout-tip title="band 的網格與曲線輪廓"}
+band 是切進幾何的 CAD 面，任何網格尺寸下網格都與 band 邊界共形，所以 SCGSim 從最小的初始網格開始，細化交給 Palace AMR。網格策略、曲線取樣的建議與已驗證的範圍，見 Palace 契約的[為 band 產生網格](../../specs/palace-eigenmode.qmd#surface-epr-band-meshing)與[曲線輪廓](../../specs/palace-eigenmode.qmd#surface-epr-curved-outlines)。
 :::
 
 ![四個步驟（概念圖）。上排由左到右：建區域、只切必要的 seam、Imprint 與檢查、以點定位標記。下排以 10 × 10 µm 的正方形示意前兩步：點線是兩個 margin 的候選 offset，實線是切出的 seam。](figures/inset-regions-steps.svg){#fig-band-regions fig-alt="四個方框由左到右以箭頭相連，下方兩張正方形示意圖：一張有延伸到邊界的點線，一張只剩兩圈實線正方形。"}
@@ -173,7 +173,7 @@ Imprint 檢查證明的是**已建立的邊界在 Imprint 之後仍在**，不�
 | 1024 | 0.35° | 0.123 | 62.05、60.47、1134.11 | 62.05、60.48、1134.11 |
 :::
 
-256 與 1024 邊形的面積在 snap bound 內符合手算，由測試 `test_a_polygon_circle_gives_the_hand_calculated_bands` 檢查。表外的形狀、margin 與 grid 沒有量測。可以建出 band 不代表網格容易產生：曲線的點數請參考 [Palace 契約](../../specs/palace-eigenmode.qmd#surface-epr-curved-outlines)。
+256 與 1024 邊形的面積在 snap bound 內符合手算，由測試 `test_a_polygon_circle_gives_the_hand_calculated_bands` 檢查。表外的形狀、margin 與 grid 沒有量測。能建出 band 不代表這樣的取樣適合模擬：曲線取樣的建議與已驗證的範圍見 [Palace 契約](../../specs/palace-eigenmode.qmd#surface-epr-curved-outlines)。
 :::
 
 ::: {.callout-note collapse="true" title="空的 band 與建構錯誤不同"}
@@ -420,9 +420,9 @@ AEDT 端同樣不再需要 non-model sheet：band 由 SGB 預先切好寫在 STE
 
 - **只有直線與圓弧曲線。** line 與圓弧的 offset 仍是 line 與 arc。B-spline carrier 的 offset 無法精確表示，在 v1 **拒絕做 inset**；若要容許需要 Human 決定一個容差。
 - **topology 是整數，但有三個步驟使用浮點。** 候選 arrangement 的 cell 在 $R_m$ 的哪一側，由一個取樣點到 gap edge 的浮點距離決定（比 snap bound 還薄的 cell 可能被分類成與精確 carrier 不同）；arc footprint 的包含測試使用 polyline witness 的 chord；arc 不交叉的檢查是取樣的。哪些 edge 存在則完全是整數。
-- **以很多短邊畫成的曲線會讓網格更難產生。** band 仍會建出，但每條短邊都迫使周圍元素變小；拒絕的情形見[限制](#band-regions-limits)，點數的建議見 [Palace 契約](../../specs/palace-eigenmode.qmd#surface-epr-curved-outlines)。
+- **過密的多邊形曲線會讓網格更難產生。** 每條短邊都迫使周圍元素變小；拒絕的情形見[限制](#band-regions-limits)，取樣的建議與已驗證的範圍見 [Palace 契約](../../specs/palace-eigenmode.qmd#surface-epr-curved-outlines)。
 - **Arc noding 在 merge 之前很昂貴。** 使用 polyline witness（D3）時，含 band 的 Route A 範例的 z = 0 level 有 4 058 條 noded edge（4 050 個 hot pixel），dissolve 後剩 166 條。witness 約以 $\sqrt{r/g}$ 成長；arc 很多的 layout 必須預留這筆成本。當 band 的 arc 帶著外來的 vertex，wall 會在該 vertex 處被切開成兩個精確的圓柱（見 [D8](decisions.qmd#d8) 與[曲面 wall](assembly.qmd#curved-walls)），production 已實作。
-- **薄的 band 要付出 element。** 0.1 µm 的 band 比檢查所用的 1 µm size field 薄得多，這個檢查只證明 conformity，不評估 mesh 品質。production 的 catalogue 以粗略的 mesh 記錄 mesh 品質（含 band 的執行範例在 60 µm 的 mesh size 下，`pad_in_ground_C_bands` 有一個扁平元素，見 [Validation](validation.qmd#catalogue)），那不是對 band 做 refinement 的 mesh。band 的 mesh 尺寸屬 mesher 的責任：sidecar 的 `band_boundary` 只給出 margin 與最窄 band 的寬度（`narrowest_band_um`），不給尺寸；測試用的配方見 [測試用的 mesh 配方](emission.qmd#mesh-recipe)，欄位見[使用契約](consumer-contract.qmd#sidecar)。
+- **band 的網格尺寸不由 SGB 決定。** 0.1 µm 的 band 比檢查所用的 1 µm size field 薄得多，這個檢查只證明 conformity，不評估 mesh 品質。production 的 catalogue 以粗略的 mesh 記錄 mesh 品質（含 band 的執行範例在 60 µm 的 mesh size 下，`pad_in_ground_C_bands` 有一個扁平元素，見 [Validation](validation.qmd#catalogue)），那不是對 band 做 refinement 的 mesh。band 的 mesh 尺寸屬 mesher 的責任：sidecar 的 `band_boundary` 只給出 margin 與最窄 band 的寬度（`narrowest_band_um`），不給尺寸；測試用的配方見 [測試用的 mesh 配方](emission.qmd#mesh-recipe)，欄位見[使用契約](consumer-contract.qmd#sidecar)，網格策略見 [Palace 契約](../../specs/palace-eigenmode.qmd#surface-epr-band-meshing)。
 - **Side wall 的 band** 不在 v1 範圍。
 - **還沒有 Palace 的執行。** 本頁的檢查是 mesh 檢查（Palace 的 adopter 屬階段 3）。用一般的 Palace 對 band group 求解、量測 Surface EPR 與 AMR 收斂行為，要等 Palace 端改接新的 XAO 與 sidecar 之後才能做。
 

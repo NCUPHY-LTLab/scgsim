@@ -103,10 +103,11 @@ configuration, and no special Palace build is needed. The
 [SGB design pages](../../zh-TW/docs/design/sgb/inset-imprint.html#band-measure)
 (Traditional Chinese) define how distance is measured.
 
-Narrow bands need a mesh that resolves them, and outlines drawn as many short
-edges make both the bands and the mesh harder to build: see
-[meshing narrow bands](#surface-epr-band-meshing) and
-[curved outlines](#surface-epr-curved-outlines) below.
+Bands are mesh boundaries at any mesh size, so they start from the same
+minimal mesh as the rest of the model and leave refinement to Palace AMR:
+[meshing bands](#surface-epr-band-meshing) explains why, and
+[curved outlines](#surface-epr-curved-outlines) gives the supported curve
+sampling.
 
 ::: {.callout-important title="Call set_surface_epr before mesh()"}
 Margins are geometry: `mesh()` hands them to SGB with the rest of the model.
@@ -162,14 +163,55 @@ keeps Palace's default. A sheet over vacuum and dielectric in different places g
 separate `MA` and `MS` rows on different attributes.
 :::
 
-### Meshing narrow bands {#surface-epr-band-meshing}
+### Meshing bands {#surface-epr-band-meshing}
 
-Choose mesh settings that resolve the width of your narrowest band and the
-curvature of the gap edges it follows. SGB delivers valid band geometry, but
-that does not promise that every coarse recipe meshes it faithfully. A mesh
-that passes the quality threshold does not promise it either: minSICN measures
-the shape of each tetrahedron, not how closely the triangles follow a curved
-band, and neither says whether Surface EPR has converged.
+Start from a minimal initial mesh, the default `FeatureRecipe()`, and let Palace
+AMR refine it where the solution needs more elements. Bands do not call for a
+finer starting mesh. SGB cuts them into the geometry as CAD faces, so the mesh
+is conformal to every band boundary at any mesh size: each band boundary is a
+chain of mesh edges and each band face has its own triangles, so a coarse mesh
+does not merge neighbouring bands. The
+[AMR controls](#eigenmode-mesh-and-amr-defaults-converging) above set the
+refinement, and [AMR analysis](../amr-analysis.qmd) reads what it did.
+
+The quality threshold checks element shape only. minSICN measures each
+tetrahedron, not where its faces lie relative to a band, and a mesh that passes
+it does not establish converged Surface EPR.
+
+### Curved outlines {#surface-epr-curved-outlines}
+
+Draw curved outlines as moderate polygons. For OrcaPen SC PDK components, pass
+`curve_sampling="simulation"`; the PDK's
+[curve-sampling guide](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/develop/docs/usage/curve-sampling.md)
+owns the profiles and how to set your own. With polygon outlines every band
+boundary is straight, so even the minimal linear mesh represents each band
+exactly, and AMR refines from there.
+
+Keep the point count in that range rather than above it. Overly dense polygon
+approximations of circles cause meshing and simulation problems: many tiny
+edges force tiny elements around them, and every band offset has to pass
+through many short joins. Outlines sampled as the PDK's simulation profile
+produces them, 16, 24 or 32 segments per full circle chosen by its diameter and
+never more than 32, are the supported and verified case. Denser sampling, such
+as the PDK's default 256-segment fabrication profile, is outside the verified
+scope.
+
+When SGB cannot close or keep a band boundary, it refuses the layout instead of
+returning wrong bands, with
+`inset family '…': the inset curve at m = … um is not closed near (x, y) um` or
+`Imprint lost band boundaries on …`. Return to the simulation profile in that
+case; the [SGB design pages](../../zh-TW/docs/design/sgb/inset-imprint.html#band-regions-limits)
+(Traditional Chinese) describe what each check covers.
+
+#### True arcs and narrow bands {#surface-epr-true-arcs}
+
+Where a route carries true arcs, SGB cuts each band along the exact arc, but a
+linear mesh follows the arc with straight chords between nodes on it. The band
+triangles stay in their group; where the chords are long compared with the band
+width, they no longer lie where the band is. AMR subdivides these linear
+elements and does not by itself move them back onto the arc. This is why the
+polygon profile is preferred under the minimal-mesh strategy: its band
+boundaries are already straight.
 
 ![To scale: the top of a 5 µm rounded corner (blue) with its 0.1 µm band 0
 (orange) along the gap edge. A straight mesh edge of length $L$ = 2.8 µm
@@ -177,79 +219,27 @@ band, and neither says whether Surface EPR has converged.
 the triangle it closes with a node on the band's inner boundary has its centroid
 $d$ = 0.17 µm from the edge.](../assets/curved-band-mesh-edge.svg){#fig-curved-band-mesh-edge fig-alt="A curved conductor edge with a thin orange band along it, and a long straight red line between two points on the edge that dips below the band."}
 
-SGB cuts a band along exact arcs, but a linear mesh follows each arc with
-straight chords. The triangles stay in the band's group; where the chords are
-long, they no longer lie where the band is.
-
 ::: {.callout-note collapse="true" title="How far a chord leaves a curved band"}
 A chord of length $L$ with both ends on an edge of radius $R$ runs
 $s = R - \sqrt{R^2 - (L/2)^2} \approx L^2/(8R)$ inside the edge at its
 middle. It stays within a band of width $w$ only while $s \le w$, that is
 while $L \lesssim \sqrt{8Rw}$: about 2 µm for $R$ = 5 µm and $w$ = 0.1 µm.
-A recipe whose elements along that edge are longer gives band triangles that
-reach into the next band, as in the figure. This is a property of the linear
-mesh, not of the CAD bands: their faces are exact up to the grid, and a finer
-size along the edge brings the mesh back inside them.
+Longer elements along that edge give band triangles that reach into the next
+band, as in the figure. This is a property of the linear mesh, not of the CAD
+bands, whose faces are exact up to the grid.
+
+The test scene `pad_b_bands` illustrates the size of the effect. It is a pad of
+about 100 × 60 µm in a ground cutout, built through Route B with 0.2 µm metal,
+a 5 µm rounded corner and an 8 µm hole; its pad top, pad bottom and
+substrate–vacuum interface carry margins 0.1, 0.5 and 2 µm, 12 band groups in
+all. The default `FeatureRecipe()` gives 31,037 tetrahedra in about
+5 s and passes quality and conformity, but its chords cross the narrow curved
+bands: a band-0 triangle at the rounded corner has its centroid 0.18 µm from
+the gap edge, outside its 0–0.1 µm band. A uniform 1 µm boundary recipe,
+`UniformBoundaryRecipe(near_um=1.0, far_um=20.0)`, follows the curves at
+145,350 tetrahedra in about 15 s, about five times the elements. Neither recipe
+establishes converged Surface EPR.
 :::
-
-The test scene `pad_b_bands` shows the cost. It is a pad of about
-100 × 60 µm in a ground cutout, built through Route B with 0.2 µm metal, with a
-chamfer, a 5 µm rounded corner, an 8 µm hole and a lumped port; its pad top, pad
-bottom and substrate–vacuum interface carry margins 0.1, 0.5 and 2 µm, 12 band
-groups in all. Meshed through `scgsim.meshing.mesh_sgb` at the default quality
-threshold 0.01:
-
-::: {.askr-table-compact .askr-table-numeric}
-| Recipe | Tetrahedra | Time, one local run | Quality and conformity | Band triangles' centroids inside their band |
-|---|---|---|---|---|
-| `FeatureRecipe()` (default) | 31,037 | about 5 s | pass | fail in bands 0 and 1 |
-| `UniformBoundaryRecipe(near_um=1.0, far_um=20.0)` | 145,350 | about 15 s | pass | pass in all 12 groups |
-:::
-
-With the default recipe, for example, a band-0 triangle at the rounded corner
-has its centroid 0.18 µm from the gap edge, outside its 0–0.1 µm band. Every
-group is still meshed and shared by the tetrahedra on both of its sides.
-
-To use the finer setting:
-
-```python
-from scgsim.meshing import UniformBoundaryRecipe
-
-sim.set_mesh(
-    recipe=UniformBoundaryRecipe(near_um=1.0, far_um=20.0),
-)
-```
-
-These are one scene's numbers, not a universal setting or a new default, and
-neither row establishes capacitance or EPR convergence. Finer sizes along every
-curve cost elements quickly, so choose them for your own layout and confirm that
-the Surface EPR rows you report stop changing as the mesh is refined. The [sizing recipes](palace-electrostatic-sgb.qmd#palace-mesh-recipes)
-list the recipes and their parameters.
-
-### Curved outlines and polygon circles {#surface-epr-curved-outlines}
-
-Keep the number of points on curved outlines moderate. A circle drawn as a
-polygon with very many short edges makes the mesh, the simulation and the band
-construction all harder: every short edge forces small elements around it, and
-every vertex is one more join for the band offsets to resolve. Prefer, in this
-order:
-
-1. Draw true arcs where the route carries them.
-2. For OrcaPen SC PDK components, pass `curve_sampling="simulation"`, which
-   draws each full circle with 16, 24 or 32 segments chosen by its diameter. The
-   PDK's [curve-sampling guide](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/develop/docs/usage/curve-sampling.md)
-   owns the profiles and how to set your own.
-3. Otherwise, sample curves no more finely than the geometry you need.
-
-SGB joins the offsets of neighbouring straight edges at their common point, so
-polygon circles build with their expected bands; regular polygons of 64 to 1024
-sides with radius 20 µm and margins 0.5 and 1.0 µm gave band areas within
-0.02 µm² of the polygon's own erosion. When SGB cannot close or keep a band
-boundary, it refuses the layout instead of returning wrong bands, with
-`inset family '…': the inset curve at m = … um is not closed near (x, y) um` or
-`Imprint lost band boundaries on …`. Coarser curve sampling is then the first
-thing to try; the [SGB design pages](../../zh-TW/docs/design/sgb/inset-imprint.html#band-regions-limits)
-(Traditional Chinese) describe what each check covers.
 
 ## Results and offline analysis
 

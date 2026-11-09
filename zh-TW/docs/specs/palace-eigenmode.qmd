@@ -48,7 +48,7 @@ Palace 0.18.1 根據設定類型及相鄰求解元素建立原生表面被積函
 
 內縮邊距 $m$ 選出表面上距最近 gap edge（導體輪廓上面向裸露 substrate 的邊）至少 $m$ µm 的部分。SGB 把該部分以帶面切進模型，所以一般的 Palace 對普通屬性積分；SCGSim 不寫出原生 `Mask` 或 `Inset` 設定，也不需要特殊的 Palace 建置。距離如何量測，由 [SGB 設計頁](../design/sgb/inset-imprint.qmd#band-measure)定義。
 
-窄的 band 需要能解析它的網格；以很多短邊畫成的輪廓會讓 band 與網格都更難建立。請見下方的[為窄 band 產生網格](#surface-epr-band-meshing)與[曲線輪廓](#surface-epr-curved-outlines)。
+在任何網格尺寸下，band 都是網格的邊界，所以它和模型其餘部分一樣從最小的網格開始，細化交給 Palace AMR：原因見下方的[為 band 產生網格](#surface-epr-band-meshing)，支援的曲線取樣見[曲線輪廓](#surface-epr-curved-outlines)。
 
 ::: {.callout-important title="請在 mesh() 之前呼叫 set_surface_epr"}
 邊距是幾何：`mesh()` 會把它們連同其餘模型一起交給 SGB。請先設定 `set_surface_epr`。在 `mesh()` 之後再呼叫它，會使網格、設定檔及交接失效，必須重新執行 `mesh()`。
@@ -76,50 +76,31 @@ Palace 0.18.1 根據設定類型及相鄰求解元素建立原生表面被積函
 索引映射（結構 v3）為每個表面列記錄 `row` 與 `group`、`interface_type`、`band`、`side`、`face_sides`、`entities`、`net` 與 `attributes`，並以譜系成員資格作為歸屬資訊：譜系不加權任何東西。單側列把 `above` 或 `below` 對應到 Palace 後處理的側。兩側都是真空的 Route A sheet 是一個從兩側積分的面，需要 Palace 的內部邊界裂開；SCGSim 恰好在某個已設定的列有 `shared_face_group` 時寫出 `Model.CrackInternalBoundaryElements`；沒有在 sheet 上設定 `MA` 或 `MS` 膜層的執行，會保留 Palace 的預設值。在不同位置分別位於真空與介電質之上的 sheet，會在不同屬性上得到各自的 `MA` 與 `MS` 列。
 :::
 
-### 為窄 band 產生網格 {#surface-epr-band-meshing}
+### 為 band 產生網格 {#surface-epr-band-meshing}
 
-請選擇能解析最窄 band 寬度、以及它所沿 gap edge 曲率的網格設定。SGB 產生的 band 幾何是有效的，但這不保證每一種粗糙的配方都能忠實地為它產生網格。通過品質門檻的網格也不保證這一點：minSICN 量的是每個四面體的形狀，不是三角形貼合彎曲 band 的程度；兩者都不代表 Surface EPR 已經收斂。
+請從最小的初始網格（預設的 `FeatureRecipe()`）開始，讓 Palace AMR 在解需要更多元素的地方細化。band 不需要更細的初始網格。SGB 把 band 以 CAD 面切進幾何，所以在任何網格尺寸下，網格都與每條 band 邊界共形（conformal）：每條 band 邊界都是一串網格邊，每個 band 面都有自己的三角形，因此粗的網格不會把相鄰的 band 合併。細化由上方的 [AMR 控制](#eigenmode-mesh-and-amr-defaults-converging)設定，細化做了什麼可用 [AMR 分析](../amr-analysis.qmd)讀取。
+
+品質門檻只檢查元素形狀。minSICN 量的是每個四面體的形狀，不是它的面落在 band 的哪裡；通過門檻的網格不代表 Surface EPR 已經收斂。
+
+### 曲線輪廓 {#surface-epr-curved-outlines}
+
+請把曲線輪廓畫成點數適中的多邊形。使用 OrcaPen SC PDK 元件時，傳入 `curve_sampling="simulation"`；設定檔及自訂方式由 PDK 的[曲線取樣說明](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/develop/docs/usage/curve-sampling.md)負責。輪廓是多邊形時，每條 band 邊界都是直線，所以即使是最小的線性網格也能精確表示每個 band，AMR 再從這裡細化。
+
+請把點數保持在這個範圍，不要更密。過密的多邊形圓會造成網格與模擬的問題：大量極短的邊迫使周圍的元素變得極小，每條 band offset 也必須經過許多短小的接點。依 PDK simulation 設定檔取樣的輪廓（每個完整圓依直徑以 16、24 或 32 段繪製，最多 32 段）是支援且已驗證的情形。更密的取樣，例如 PDK 預設、每圓 256 段的 fabrication 設定檔，不在已驗證的範圍內。
+
+SGB 無法封閉或保留某條 band 邊界時，會拒絕這個 layout，而不是輸出錯誤的 band，訊息是 `inset family '…': the inset curve at m = … um is not closed near (x, y) um` 或 `Imprint lost band boundaries on …`。這時請改回 simulation 設定檔；各項檢查涵蓋的範圍見 [SGB 設計頁](../design/sgb/inset-imprint.qmd#band-regions-limits)。
+
+#### 真正的圓弧與窄 band {#surface-epr-true-arcs}
+
+route 帶有真正的圓弧時，SGB 沿精確的圓弧切出 band，但線性網格以兩端都在圓弧上的直弦去近似圓弧。這些三角形仍屬於該 band 的群組；弦比 band 寬度長得多時，它們所在的位置就不再是 band 所在的位置。AMR 細分的是這些線性元素，本身不會把它們移回圓弧上。這就是在最小網格策略下偏好多邊形設定檔的原因：它的 band 邊界本來就是直線。
 
 ![按比例繪製：5 µm 圓角（藍色）的頂端，以及沿 gap edge 寬 0.1 µm 的 band 0（橙色）。一條長 $L$ = 2.8 µm、兩端都在邊上的直線網格邊（紅色），中點在邊內 $s$ = 0.2 µm，已越過 band；它與 band 內側邊界上的一個節點構成的三角形，形心距邊 $d$ = 0.17 µm。](../assets/curved-band-mesh-edge.svg){#fig-curved-band-mesh-edge fig-alt="一條彎曲的導體邊，沿邊有一道細的橙色 band；一條紅色長直線連接邊上兩點，中段落到 band 之下。"}
 
-SGB 沿精確的圓弧切出 band，但線性網格以直的弦去近似每段圓弧。這些三角形仍屬於該 band 的群組；弦一長，它們所在的位置就不再是 band 所在的位置。
-
 ::: {.callout-note collapse="true" title="弦離開彎曲 band 多遠"}
-兩端都在半徑 $R$ 的邊上、長度 $L$ 的弦，中點在邊內 $s = R - \sqrt{R^2 - (L/2)^2} \approx L^2/(8R)$。只有 $s \le w$ 時它才留在寬 $w$ 的 band 內，也就是 $L \lesssim \sqrt{8Rw}$：$R$ = 5 µm、$w$ = 0.1 µm 時約 2 µm。沿該邊的元素比這更長的配方，會讓 band 的三角形伸進下一個 band，如上圖。這是線性網格的性質，不是 CAD band 的性質：band 的面在 grid 精度內是精確的，沿該邊用更細的尺寸，網格就會回到 band 之內。
+兩端都在半徑 $R$ 的邊上、長度 $L$ 的弦，中點在邊內 $s = R - \sqrt{R^2 - (L/2)^2} \approx L^2/(8R)$。只有 $s \le w$ 時它才留在寬 $w$ 的 band 內，也就是 $L \lesssim \sqrt{8Rw}$：$R$ = 5 µm、$w$ = 0.1 µm 時約 2 µm。沿該邊的元素比這更長時，band 的三角形會伸進下一個 band，如上圖。這是線性網格的性質，不是 CAD band 的性質：band 的面在 grid 精度內是精確的。
+
+測試場景 `pad_b_bands` 顯示了這個效應的大小。它是一個約 100 × 60 µm、位於 ground 開口中的 pad，以 Route B 建立、金屬厚 0.2 µm，帶有一個 5 µm 圓角與一個 8 µm 的孔；pad 頂面、pad 底面與基板–真空介面的 margin 都是 0.1、0.5 與 2 µm，共 12 個 band 群組。預設的 `FeatureRecipe()` 產生 31,037 個四面體，約 5 s，通過品質與 conformity 檢查，但它的弦越過窄的彎曲 band：圓角處一個 band 0 三角形的形心距 gap edge 0.18 µm，在它 0–0.1 µm 的 band 之外。邊界一律 1 µm 的配方 `UniformBoundaryRecipe(near_um=1.0, far_um=20.0)` 會貼合曲線，產生 145,350 個四面體，約 15 s，元素數約為五倍。兩個配方都不代表 Surface EPR 已經收斂。
 :::
-
-測試場景 `pad_b_bands` 顯示了代價。它是一個約 100 × 60 µm、位於 ground 開口中的 pad，以 Route B 建立、金屬厚 0.2 µm，帶有一個倒角、一個 5 µm 圓角、一個 8 µm 的孔與一個 lumped port；pad 頂面、pad 底面與基板–真空介面的 margin 都是 0.1、0.5 與 2 µm，共 12 個 band 群組。以 `scgsim.meshing.mesh_sgb` 在預設品質門檻 0.01 下產生網格：
-
-::: {.askr-table-compact .askr-table-numeric}
-| 配方 | 四面體數 | 時間（本機一次） | 品質與 conformity | band 三角形的形心在其 band 內 |
-|---|---|---|---|---|
-| `FeatureRecipe()`（預設） | 31,037 | 約 5 s | 通過 | band 0 與 1 未通過 |
-| `UniformBoundaryRecipe(near_um=1.0, far_um=20.0)` | 145,350 | 約 15 s | 通過 | 12 個群組全部通過 |
-:::
-
-例如使用預設配方時，圓角處一個 band 0 三角形的形心距 gap edge 0.18 µm，在它 0–0.1 µm 的 band 之外。每個群組仍有網格，也由兩側的四面體共用。
-
-使用較細的設定：
-
-```python
-from scgsim.meshing import UniformBoundaryRecipe
-
-sim.set_mesh(
-    recipe=UniformBoundaryRecipe(near_um=1.0, far_um=20.0),
-)
-```
-
-這些是單一場景的數字，不是通用設定或新的預設值；兩列都不代表電容或 EPR 已經收斂。沿每條曲線使用更細的尺寸，元素數會快速增加，所以請依自己的 layout 選擇，並確認所報告的 Surface EPR 列在網格加密後不再改變。[尺寸配方](palace-electrostatic-sgb.qmd#palace-mesh-recipes)列出各配方及其參數。
-
-### 曲線輪廓與多邊形圓 {#surface-epr-curved-outlines}
-
-曲線輪廓上的點數請保持適中。以非常多短邊畫成的多邊形圓，會讓網格、模擬與 band 的建立都更困難：每條短邊都迫使周圍的元素變小，每個頂點也多一個需要接合的 band offset。建議依序：
-
-1. route 支援圓弧時，畫成真正的圓弧。
-2. 使用 OrcaPen SC PDK 元件時，傳入 `curve_sampling="simulation"`，每個完整圓依直徑以 16、24 或 32 段繪製。設定檔及自訂方式由 PDK 的[曲線取樣說明](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/blob/develop/docs/usage/curve-sampling.md)負責。
-3. 其他情況下，曲線的取樣不要比所需的幾何更密。
-
-SGB 讓相鄰兩條直線邊的 offset 在共同交點相接，所以多邊形圓會建出預期的 band：半徑 20 µm、64 到 1024 邊的正多邊形，在 margin 0.5 與 1.0 µm 下，band 面積與多邊形本身的 erosion 相差不超過 0.02 µm²。SGB 無法封閉或保留某條 band 邊界時，會拒絕這個 layout，而不是輸出錯誤的 band，訊息是 `inset family '…': the inset curve at m = … um is not closed near (x, y) um` 或 `Imprint lost band boundaries on …`。這時請先嘗試較粗的曲線取樣；各項檢查涵蓋的範圍見 [SGB 設計頁](../design/sgb/inset-imprint.qmd#band-regions-limits)。
 
 ## 結果與離線分析 {#results-and-offline-analysis}
 
