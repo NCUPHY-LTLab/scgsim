@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="306" viewBox="0 0 360 306" font-family="sans-serif">
+<rect width="360" height="306" fill="#f3efe6"/>
+<path d="M91.91,210.64 L206.81,210.64 L321.70,157.02 L360.00,157.02 L360.00,149.36 L321.70,149.36 L206.81,95.74 L91.91,95.74 Z" fill="#d9822b" fill-opacity="1.0" fill-rule="evenodd" stroke="#3d3d3d" stroke-width="0.6" stroke-opacity="0.6"/>
+<path d="M0.00,306.38 L360.00,306.38 L360.00,161.62 L321.70,161.62 L206.81,275.74 L26.81,275.74 L26.81,30.64 L206.81,30.64 L321.70,144.77 L360.00,144.77 L360.00,0.00 L0.00,0.00 Z" fill="#9aabbd" fill-opacity="1.0" fill-rule="evenodd" stroke="#3d3d3d" stroke-width="0.6" stroke-opacity="0.6"/>
+<path d="M26.81,210.64 L91.91,210.64 L91.91,95.74 L26.81,95.74 Z" fill="#e9c46a" fill-opacity="0.9" fill-rule="evenodd" stroke="#3d3d3d" stroke-width="0.6" stroke-opacity="0.6"/>
+<rect x="8.0" y="272.0" width="84.60" height="28" fill="white" fill-opacity="0.8"/><line x1="12.0" y1="294.0" x2="88.60" y2="294.0" stroke="#3d3d3d" stroke-width="2.5"/><text x="50.30" y="288.0" text-anchor="middle" font-size="12" fill="#3d3d3d">100 µm</text>
+</svg>

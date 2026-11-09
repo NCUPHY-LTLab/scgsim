@@ -158,6 +158,7 @@ website:
     - section: 幾何與物理模型
       contents:
       - docs/geometry-sgb.qmd
+      - docs/supported-geometry.qmd
       - docs/geometry-preview.qmd
       - docs/layout-modeling-check.qmd
       - docs/specs/physical-representation.qmd

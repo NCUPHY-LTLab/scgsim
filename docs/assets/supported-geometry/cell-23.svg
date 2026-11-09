@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="720" viewBox="0 0 360 720" font-family="sans-serif">
+<rect width="360" height="720" fill="#f3efe6"/>
+<path d="M0.00,390.00 L360.00,390.00 L360.00,330.00 L0.00,330.00 Z" fill="#d9822b" fill-opacity="1.0" fill-rule="evenodd" stroke="#3d3d3d" stroke-width="0.6" stroke-opacity="0.6"/>
+<path d="M0.00,720.00 L360.00,720.00 L360.00,426.00 L0.00,426.00 Z" fill="#9aabbd" fill-opacity="1.0" fill-rule="evenodd" stroke="#3d3d3d" stroke-width="0.6" stroke-opacity="0.6"/>
+<path d="M0.00,294.00 L360.00,294.00 L360.00,0.00 L0.00,0.00 Z" fill="#9aabbd" fill-opacity="1.0" fill-rule="evenodd" stroke="#3d3d3d" stroke-width="0.6" stroke-opacity="0.6"/>
+<path d="M138.00,654.00 L222.00,654.00 L222.00,570.00 L138.00,570.00 Z" fill="#9aabbd" fill-opacity="1.0" fill-rule="evenodd" stroke="#3d3d3d" stroke-width="0.6" stroke-opacity="0.6"/>
+<path d="M138.00,150.00 L222.00,150.00 L222.00,66.00 L138.00,66.00 Z" fill="#9aabbd" fill-opacity="1.0" fill-rule="evenodd" stroke="#3d3d3d" stroke-width="0.6" stroke-opacity="0.6"/>
+<path d="M144.00,612.00 L216.00,612.00 L216.00,108.00 L144.00,108.00 Z" fill="#4f6479" fill-opacity="0.6" fill-rule="evenodd" stroke="#3d3d3d" stroke-width="0.6" stroke-opacity="0.6"/>
+<rect x="8.0" y="686.0" width="68.00" height="28" fill="white" fill-opacity="0.8"/><line x1="12.0" y1="708.0" x2="72.00" y2="708.0" stroke="#3d3d3d" stroke-width="2.5"/><text x="42.00" y="702.0" text-anchor="middle" font-size="12" fill="#3d3d3d">10 µm</text>
+</svg>

@@ -103,7 +103,7 @@ band 的區域、seam 與標記怎麼建立、在哪裡會拒絕，見下一節[
 SGB 先替每個 support 與每個 margin 算出 **band 區域** $R_m$（support 中距 gap edge 至少 $m$ 的部分），再只在不同 band 之間切 **seam**（band 之間的分界 edge），之後檢查 Imprint 把每條 seam 都保留下來，最後以區域決定每個 face 的 band。這樣 band 的分界在 Imprint 之前就已確定，不需要事後從 face 的面積猜回來。
 
 ::: {.callout-warning title="以很多短邊畫成的圓會被拒絕"}
-以多邊形近似的圓或圓角（例如 256 邊以上的多邊形圓、取樣很密的 CPW 圓頭）在某些尺寸與 margin 下，相鄰兩條邊的 offset 既不相接也不相交，inset 曲線因而不封閉。SGB 拒絕這種 layout，訊息是 `inset family '…': the inset curve at m = … um is not closed near (x, y) um`，不會輸出錯誤的 band。請以真正的圓弧畫圓，或改用較少、較長的邊；量得的範圍見下方的[限制](#band-regions-limits)。
+以多邊形近似的圓或圓角（例如 256 邊以上的多邊形圓、取樣很密的 CPW 圓頭）在某些尺寸與 margin 下，相鄰兩條邊的 offset 既不相接也不相交，inset 曲線因而不封閉。SGB 拒絕這種 layout，訊息是 `inset family '…': the inset curve at m = … um is not closed near (x, y) um`，不會輸出錯誤的 band。受支援的是每整圈最多 128 點的多邊形曲線（每個頂點至少轉 2.8125°），或真正的圓弧；規則與 layout 的修改方式見[支援的幾何](../../supported-geometry.qmd#curve-rule)，量得的範圍見下方的[限制](#band-regions-limits)。
 :::
 
 ![四個步驟（概念圖）。上排由左到右：建區域、只切必要的 seam、Imprint 與檢查、以點定位標記。下排以 10 × 10 µm 的正方形示意前兩步：點線是兩個 margin 的候選 offset，實線是切出的 seam。](figures/inset-regions-steps.svg){#fig-band-regions fig-alt="四個方框由左到右以箭頭相連，下方兩張正方形示意圖：一張有延伸到邊界的點線，一張只剩兩圈實線正方形。"}
@@ -409,7 +409,7 @@ AEDT 端同樣不再需要 non-model sheet：band 由 SGB 預先切好寫在 STE
 
 - **只有直線與圓弧曲線。** line 與圓弧的 offset 仍是 line 與 arc。B-spline carrier 的 offset 無法精確表示，在 v1 **拒絕做 inset**；若要容許需要 Human 決定一個容差。
 - **topology 是整數，但有三個步驟使用浮點。** 候選 arrangement 的 cell 在 $R_m$ 的哪一側，由一個取樣點到 gap edge 的浮點距離決定（比 snap bound 還薄的 cell 可能被分類成與精確 carrier 不同）；arc footprint 的包含測試使用 polyline witness 的 chord；arc 不交叉的檢查是取樣的。哪些 edge 存在則完全是整數。
-- **以很多短邊畫成的圓可能被拒絕。** 見[限制](#band-regions-limits)。
+- **每整圈超過 128 點的多邊形曲線可能被拒絕。** 見[限制](#band-regions-limits)與[支援的幾何](../../supported-geometry.qmd#curve-rule)。
 - **Arc noding 在 merge 之前很昂貴。** 使用 polyline witness（D3）時，含 band 的 Route A 範例的 z = 0 level 有 4 058 條 noded edge（4 050 個 hot pixel），dissolve 後剩 166 條。witness 約以 $\sqrt{r/g}$ 成長；arc 很多的 layout 必須預留這筆成本。當 band 的 arc 帶著外來的 vertex，wall 會在該 vertex 處被切開成兩個精確的圓柱（見 [D8](decisions.qmd#d8) 與[曲面 wall](assembly.qmd#curved-walls)），production 已實作。
 - **薄的 band 要付出 element。** 0.1 µm 的 band 比檢查所用的 1 µm size field 薄得多，這個檢查只證明 conformity，不評估 mesh 品質。production 的 catalogue 以粗略的 mesh 記錄 mesh 品質（含 band 的執行範例在 60 µm 的 mesh size 下，`pad_in_ground_C_bands` 有一個扁平元素，見 [Validation](validation.qmd#catalogue)），那不是對 band 做 refinement 的 mesh。band 的 mesh 尺寸屬 mesher 的責任：sidecar 的 `band_boundary` 只給出 margin 與最窄 band 的寬度（`narrowest_band_um`），不給尺寸；測試用的配方見 [測試用的 mesh 配方](emission.qmd#mesh-recipe)，欄位見[使用契約](consumer-contract.qmd#sidecar)。
 - **Side wall 的 band** 不在 v1 範圍。

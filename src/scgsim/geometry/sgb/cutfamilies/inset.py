@@ -21,9 +21,9 @@ Construction (no polygonised disk), per margin:
 The regions and seams travel with the family (``CurveFamilyRecord.regions``): labelling locates a face in them
 and the Imprint check proves that the level arrangement kept every seam (``labelling.bands``).  Neither proves
 that the candidates contain the whole level set ``dist = m``.  One failure is refused: where two neighbouring
-offsets neither meet nor cross (an outline drawn as many short edges with small turns between them), the curve
-has a gap and one cell lies on both sides of the margin (``inset_regions``).  A piece the candidates miss
-without leaving such a gap is not detected.
+offsets neither meet nor cross (an outline whose vertices turn by small angles, such as a polygon circle with
+more than 128 points per full circle), the curve has a gap and one cell lies on both sides of the margin
+(``inset_regions``).  A piece the candidates miss without leaving such a gap is not detected.
 
 Distance origins: only the region's gap edges (``SupportRegion.origins``; see ``cutfamilies.requests``).  The
 offset is built from those primitives alone: a line or arc per origin, a bridging arc at every reflex vertex
