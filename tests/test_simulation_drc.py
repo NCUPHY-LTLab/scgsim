@@ -30,10 +30,10 @@ class MeshingReached(Exception):
     """Raised in place of meshing: the geometry stage had no refusal."""
 
 
-def level(name, material, interval, role):
+def level(name, material, interval, role, *, face="lower"):
     """One layer-stack level carrying its neutral physical declaration.
 
-    The conductor is a film attached by its lower face, which is what a port sheet needs to land on.
+    The conductor is a film attached by its ``face``; the lower face is what a port sheet needs to land on.
     """
     film = role == "conductor"
     declaration = PhysicalLayerDeclaration(
@@ -46,7 +46,7 @@ def level(name, material, interval, role):
         {"normal_thickness_um": interval[1] - interval[0]}
         if film
         else {"axial_span_um": interval[1] - interval[0]},
-        {"layer_attachment_face": "lower"} if film else {},
+        {"layer_attachment_face": face} if film else {},
         {},
     )
     return SimpleNamespace(
