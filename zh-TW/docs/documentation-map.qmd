@@ -15,7 +15,7 @@ sidebar: contribution
 | `docs/course/*.qmd` | 保留各後端與工作細節的原網址，並連結至完整目標教學。 |
 | `docs/tutorials/*.qmd` | 保留五份完整目標教學，並從「教學」及參考索引連結。 |
 | `docs/concepts/*.qmd`、`docs/eigenmode-epr.qmd` | 保留於「概念」。 |
-| `docs/backend-support.qmd`、`docs/specs/*.qmd`、`docs/execution-profiles.qmd`、`docs/mesh-quality.qmd`、`docs/layout-modeling-check.qmd`、`docs/supported-geometry.qmd`、`docs/report-model.qmd`、`docs/api-migration.qmd`、`docs/notebook-ux.qmd` | 保留於「契約」，作為支援行為與詳細介面的依據。 |
+| `docs/backend-support.qmd`、`docs/specs/*.qmd`、`docs/execution-profiles.qmd`、`docs/mesh-quality.qmd`、`docs/layout-modeling-check.qmd`、`docs/supported-geometry.qmd`、`docs/known-geometry-problems.qmd`、`docs/report-model.qmd`、`docs/api-migration.qmd`、`docs/notebook-ux.qmd` | 保留於「契約」，作為支援行為與詳細介面的依據。 |
 | `docs/architecture.qmd`、`docs/goals-and-upstream.qmd`、`docs/provenance.qmd`、`docs/roadmap.qmd`、`docs/errors.qmd`、`docs/convergence-status.qmd`、`docs/ownership.qmd` | 保留原網址，並歸入「貢獻」中的專案與維護參考。 |
 | `docs/history/aedt-capacitance-pre-v3.qmd` | 保留於歷史參考。 |
 | `docs/history/curved-source-installation.qmd` | 保留為 Circular Pad 研究所固定的歷史環境與 Palace 原生設定。 |

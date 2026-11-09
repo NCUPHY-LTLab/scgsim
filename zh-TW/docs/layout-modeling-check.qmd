@@ -9,7 +9,7 @@ scgsim-id: "docs/layout-modeling-check"
 
 每個 Palace 模擬類別都有類別層級的 `simulation_drc()`，讓版圖儲存庫得知該模擬能否為其版圖建模。它執行該類別 `mesh()` 所執行的同一段準備與幾何建構，然後在建立網格之前停止。無法建模的版圖會被拒絕，並拋出建構階段的原始錯誤；可以建模的版圖則回傳 `None`。
 
-檢查能找出使建模失敗的版圖缺陷：形狀不正確、重疊、微小的錯位、錯誤的語意宣告、沒有落在應有位置的端口薄片，以及放不進所繪間隙的 Surface EPR 條帶。它不預測最終的模擬幾何。SCGSim 經過測試的圖形，以及被拒絕的版圖該如何修改，列在[支援的幾何](supported-geometry.qmd)。
+檢查能找出使建模失敗的版圖缺陷：形狀不正確、重疊、微小的錯位、錯誤的語意宣告、沒有落在應有位置的端口薄片，以及放不進所繪間隙的 Surface EPR 條帶。它不預測最終的模擬幾何。SCGSim 經過測試的圖形列在[支援的幾何](supported-geometry.qmd)，已知的失敗情況及版圖的修改方式列在[已知的幾何問題](known-geometry-problems.qmd)。
 
 ## 呼叫版圖所要用的每個模擬的檢查 {#call-the-check-of-each-simulation-the-layout-is-for}
 

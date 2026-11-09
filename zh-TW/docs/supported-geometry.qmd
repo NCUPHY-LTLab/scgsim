@@ -1,13 +1,13 @@
 ---
 title: "支援的幾何"
-description: "SCGSim 能以 Surface-EPR band 建立的 layout 圖形、曲線輪廓的規則、會被拒絕的情況，以及如何修改 layout。"
+description: "SCGSim 能以 Surface-EPR band 建立的 layout 圖形，每個都附圖與尺寸，以及繪製曲線輪廓的規則。"
 lang: zh-TW
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/supported-geometry"
 ---
 
-本頁列出 SCGSim 的幾何建構器（SGB）經過測試的 layout 圖形，以及使用這些圖形的 OrcaPen SC PDK cell 的尺寸。由這些圖形組成、且落在下列範圍內的 layout，建出的 Surface-EPR band 面積與精確幾何相符。沒有列出的圖形未經驗證：它可能可以建立，也可能被 SCGSim 以訊息拒絕。layout 被拒絕時，請修改 layout；下面各節說明每個已知情況該怎麼改。
+本頁列出 SCGSim 的幾何建構器（SGB）經過測試的 layout 圖形，每個圖形都附有圖，以及使用它的 OrcaPen SC PDK cell 的尺寸；本頁也說明繪製曲線輪廓的規則。由這些圖形組成、且落在下列範圍內的 layout，建出的 Surface-EPR band 面積與精確幾何相符。沒有列出的圖形未經驗證。已知會失敗或需要修改 layout 的情況及其原因，列在[已知的幾何問題](known-geometry-problems.qmd)。
 
 ## 模擬之前先檢查 layout
 
@@ -33,23 +33,98 @@ scgsim-id: "docs/supported-geometry"
 
 只量測了這兩個 margin。在窄的 gap 或肋條中使用較大的 margin，會改變哪些 band 存在；這是合法的結果，但不在本頁涵蓋範圍內。
 
+## 受支援的 unit cell {#unit-cells}
+
+圖由測試樣本畫成。灰色是接地，其他顏色是各自獨立的導體，米色是裸露的 substrate，黃色是集總埠薄片。深灰色表示立在平面金屬之上的金屬：bump、airbridge 的橋墩與橋面。尺寸的單位是 µm。
+
+### Disk Qubit 的 cell {#disk-qubit-cells}
+
+這些是覆晶 Disk Qubit 所用的圖形。
+
+::: {layout-ncol=2}
+![**1 圓盤島。** 32 點多邊形，r 110.5（測試建置為 119.8），每個頂點 11.25°。](assets/supported-geometry/cell-01.svg){fig-alt="裸露 substrate 上的一個 32 點多邊形圓盤。"}
+
+![**2 接地淨空圓。** 兩個晶粒的接地上 r 350 的 32 點開孔。](assets/supported-geometry/cell-02.svg){fig-alt="接地方塊中有一個 32 點的圓形開孔。"}
+
+![**3 爪形弧。** 45° 環扇形，r 170.5 至 230.5（寬 60），內弧為 4 段弦；四個爪形各有一個。](assets/supported-geometry/cell-03.svg){fig-alt="爪形：環扇形漸縮成窄 CPW，位於接地開孔內。"}
+
+![**4 圓角內角。** 以 4 段弦畫的 r 5 圓角，位於爪形的八個內角。](assets/supported-geometry/cell-04.svg){fig-alt="以四段弦修圓的爪形內角近照。"}
+
+![**5 爪形至 CPW 的漸縮。** 任意角度的直邊，32.3°（測試建置為 35.1°），在 r 350 處收窄成 3 µm 頸部。](assets/supported-geometry/cell-05.svg){fig-alt="從爪形收窄到 3 µm CPW 的直線漸縮邊。"}
+
+![**6 正交 CPW 直線段。** 寬 3、gap 40，位於爪形線路上。](assets/supported-geometry/cell-06.svg){fig-alt="水平 CPW：訊號線位於兩條接地帶之間。"}
+
+![**7 45° CPW 直線段。** 讀取線寬 7、gap 6，驅動線寬 4、gap 6，位於控制晶粒上。](assets/supported-geometry/cell-07.svg){fig-alt="斜跨晶粒的 CPW。"}
+
+![**8 圓頭 CPW 末端。** 16 點圓頭：金屬 r 2 位於 r 8 的開孔內；讀取線末端為 r 3.5。](assets/supported-geometry/cell-08.svg){fig-alt="CPW 以半圓頭結束，位於半圓形接地開孔內。"}
+
+![**9 放射狀漸縮扇形。** 接面引線由 2 µm 頸部展開到圓盤上 20° 的弧；張角 ±8.30°、29.24° 與 26.17°。](assets/supported-geometry/cell-09.svg){fig-alt="圓盤引線以扇形展開接到圓盤，對面是接地舌片。"}
+
+![**10 接面區。** 兩條帶 r 1 圓頭的引線之間 0.27 × 5.66 的集總薄片。](assets/supported-geometry/cell-10.svg){fig-alt="兩個帶圓頭的引線末端，以及其間的窄集總薄片。"}
+
+![**11 銦 bump 墊。** 20 與 40 的軸向方形，在 r 400 上 24 個位置，連接兩個晶粒的接地。](assets/supported-geometry/cell-11.svg){fig-alt="淨空邊緣附近接地上的三個方形 bump。"}
+
+![**12 帶遮罩開孔的接地。** 1000 × 1000 的方形扣除遮罩開孔，兩個晶粒都有。](assets/supported-geometry/cell-12.svg){fig-alt="qubit 晶粒：圓盤、四個爪形、接面引線與帶開孔的接地。"}
+:::
+
+在 cell 10 中，模擬只看到集總薄片與兩條引線。PDK 在 layer 22/0 上畫的 5 × 0.09 µm 十字是製程用的接面，不在模擬的層堆疊中。
+
+### 線路與彎道 {#lines-and-bends}
+
+這裡每條 CPW 的 gap 都是 6 µm，每個彎道的半徑都是 100 µm。
+
+::: {layout-ncol=2}
+![**13 圓弧 CPW 彎道。** R 100，每 90° 8 段弦，邊半徑 90.5 至 109.5。使用者：`bend_circular`、Purcell 繞線、`straight_to_circular_strip`。](assets/supported-geometry/cell-13.svg){fig-alt="以八段弦畫成的 90° CPW 彎道。"}
+
+![**14 Euler 90° 彎道。** p 0.5，最小半徑 70.61，14 段弦。使用者：`bend_euler`、`mtl_*`、`resonator_hanger`。](assets/supported-geometry/cell-14.svg){fig-alt="90° 的 CPW Euler 彎道。"}
+
+![**15 Euler 180° U 形彎。** 最小半徑 90.86，30 段弦，兩腳相距 200。使用者：`resonator`、`resonator_meander`、meander coupon。](assets/supported-geometry/cell-15.svg){fig-alt="經由 180° Euler 彎道折返的 CPW。"}
+
+![**16 夾接地肋條的耦合線對。** 走線 7、gap 6、肋條 3；走線以 Euler 彎道分開。使用者：`n_trace_mtl_section`、`mtl_*`、Purcell、meander coupon。](assets/supported-geometry/cell-16.svg){fig-alt="兩條平行 CPW 走線，中間隔著窄接地肋條，以 Euler 彎道分開。"}
+
+![**17 T 形接頭與短路末端。** 寬 10，gap 6。使用者：`cpw_t_junction`、Kosen Xmon、`resonator`。訊號線在末端接到接地、每個 gap 都成為封閉槽的短路末端，有自己的樣本。](assets/supported-geometry/cell-17.svg){fig-alt="具三塊接地的正交 CPW T 形接頭。"}
+
+![**18 平緩的線性漸縮。** 寬 10 至 7，邊的轉折 0.86° 與 1.72°。使用者：`taper`、`cpw_handoff`。](assets/supported-geometry/cell-18.svg){fig-alt="在 50 µm 內由寬 10 收窄到 7 的 CPW。"}
+:::
+
+### 焊墊、梳狀、條帶與立體結構 {#pads-and-parts}
+
+::: {layout-ncol=2}
+![**19 Launcher。** 150 × 150 焊墊，漸縮邊 25.0°（訊號）與 44.8°（開孔），85 × 150 的埠薄片緊貼焊墊與接地。使用者：`launcher`、airbridge 範例晶片、meander coupon。](assets/supported-geometry/cell-19.svg){fig-alt="方形 launcher 焊墊漸縮成 CPW，焊墊後方是埠薄片。"}
+
+![**20 指叉梳。** 20 指，寬 3.3、間距 3.3、長 100，由 21.6° 的漏斗饋入（開孔 42.7°）。使用者：`interdigital_capacitor`、Purcell。](assets/supported-geometry/cell-20.svg){fig-alt="兩組交錯的指狀梳，由漏斗形饋入，位於接地開孔內。"}
+
+![**21 重新取樣的 spline 條帶。** y 方向寬 10，重新取樣使每個頂點至少轉 2.8125°。使用者：`interpolation_spline_strip`、`bspline_strip`。](assets/supported-geometry/cell-21.svg){fig-alt="周圍沒有接地的彎曲條帶。"}
+
+![**22 中空 TSV。** 兩個 24 點圓（r 29.8 與 30）之間 0.2 µm 的壁，高 500；兩面各有 r 29.8 至 100 的 Al 著陸墊，位於 r 120 的開孔內。使用者：TSV coupon。](assets/supported-geometry/cell-22.svg){fig-alt="接地開孔內、圍繞 TSV 孔的環形著陸墊。"}
+
+![**23 Airbridge。** 12 × 84 的橋面架在兩個 14 × 14 的橋墩上，跨越寬 10、gap 6 的 CPW。使用者：`airbridge`、`cpw_airbridge_coupon`、meander coupon。](assets/supported-geometry/cell-23.svg){fig-alt="架在兩個橋墩上、跨越 CPW 的橋面。"}
+
+![**24 跨越 gap 的集總薄片。** 2 × 20 的薄片跨越 20 µm 的 gap，伸入焊墊與接地各 1 nm；方形焊墊 200，或 r 100 的 32 點焊墊。使用者：方形、圓形與覆晶焊墊 coupon。](assets/supported-geometry/cell-24.svg){fig-alt="跨越焊墊邊與接地之間 gap 的窄埠薄片。"}
+:::
+
+PDK 以 258 點畫 cell 21 的 spline 條帶。依原圖它們不符合下面的曲線規則而會被拒絕；樣本先將它們重新取樣（見[已知的幾何問題](known-geometry-problems.qmd#spline-258)）。
+
+cell 22 的壁厚 0.2 µm，比兩個 margin 都薄。壁面是垂直的，所以上面沒有 band，著陸墊的 band 只從 20 µm 的 gap 量起。
+
+cell 14、15 與 18 有少數頂點的轉角小於 2.8125°。它們依原圖在這些 cell 中受支援；[已知的幾何問題](known-geometry-problems.qmd#small-turn-runs)列出這些頂點，以及在其他地方哪些情況未經驗證。
+
 ## 曲線輪廓：每整圈最多 128 點 {#curve-rule}
 
 以多邊形畫成的曲線，若每整圈最多使用 128 點，即受支援；這時它的每個頂點都轉至少 360° / 128 = 2.8125°。這是關於每個頂點轉角的規則，與邊長無關：半徑 150 µm 的 256 點圓，邊長 3.68 µm，仍會被拒絕。
 
-OrcaPen SC PDK 的 `curve_sampling="simulation"` 設定每整圈畫 16、24 或 32 點，遠在規則之內。它預設的 `"fabrication"` 設定每整圈畫 256 點，會被拒絕。請以 `curve_sampling="simulation"` 建立用於模擬的元件。
+OrcaPen SC PDK 的 `curve_sampling="simulation"` 設定每整圈畫 16、24 或 32 點，遠在規則之內。
 
 規則以正多邊形圓、margin 0.5 與 1.0 µm 量測：
 
 | 每整圈點數 | 每個頂點的轉角 | 半徑 5、10、50 與 150 µm |
 | --- | --- | --- |
 | 16、24、32、64、128 | 22.5° 至 2.8125° | 可建立，band 精確 |
-| 多於 128、少於 256 | 2.8° 至 1.41° | 視情況而定；不受支援 |
-| 256 | 1.41° | 每個半徑都被拒絕 |
+| 多於 128 | 小於 2.8125° | 不受支援；見[更密的多邊形圓](known-geometry-problems.qmd#dense-circles) |
 
 128 點的圓在半徑 5、10、37.3、75 與 150 µm 時，圓心不在 grid 上（(0.3337, 0.1234) µm）、旋轉 0.73°、或兩者同時成立（圓心 (12.0004, −7.7771) µm、旋轉 1.7°），也都能建出精確的 band。
 
-被拒絕的曲線會以這則訊息停止建構：
+規則之外的曲線可能以這則訊息停止建構：
 
 ```text
 inset family '…': the inset curve at m = … um is not closed near (x, y) um: two
@@ -58,152 +133,8 @@ cannot be told apart. An outline whose vertices turn by less than 2.8125 degrees
 each, … does this: draw curved outlines with at most 128 points per full circle, …
 ```
 
-在這些量測中，沒有任何情況在沒有這則訊息的情形下產生錯誤的 band；這是觀察結果，不是保證。
-
-### Unit cell 中轉角較小的頂點
-
-有些 unit cell 含有轉角小於 2.8125° 的頂點，它們依原圖受支援。漸縮線在一處轉折 0.86° 或 1.72°（cell 18）。90° Euler 彎道的前兩個頂點轉 0.30° 與 1.8°，180° U 形彎的前四個頂點轉 0.15°、0.9°、1.8° 與 2.7°，弦長 11 至 14 µm（cell 14 與 15）。除此之外，連續多個轉角小於 2.8125° 的頂點未經驗證。
-
-在較長的邊之間，單一個轉角較小的頂點可以建出精確的 band。在半徑 50 µm 的 16 點圓上加入一個頂點、兩側邊長 9.8 µm，量測下列轉角：
-
-| 該頂點的轉角 | 結果 |
-| --- | --- |
-| 2.9°、2.7°、1.41°、0.3° 與 0.01°，凸角 | 可建立，band 精確 |
-| 2.7° 與 0.01°，凹角 | 可建立，band 精確 |
-| 0°（直邊上的一點） | 可建立，band 精確 |
-
-直邊上的一點不會改變軸向邊的 band。在斜邊上，兩半的 offset 會在該點結束於一個 grid 點，因此 band 面積會移動約 10⁻⁴ µm² 的量級，仍在 snap 界限之內。
-
 ### 畫出符合規則的曲線
 
-- 以 `curve_sampling="simulation"` 建立 PDK 元件。
-- 重新取樣 spline，使每個頂點都轉至少 2.8125°。spline 邊界曲線本身目前還不會被讀取（[scgsim#109](https://github.com/NCUPHY-LTLab/scgsim/issues/109)）。
-- 圓弧也可以宣告為精確圓弧，SGB 會直接攜帶它，不需取樣。
-
-## 受支援的 unit cell {#unit-cells}
-
-圖由測試樣本畫成。灰色是接地，其他顏色是各自獨立的導體，米色是裸露的 substrate，黃色是集總埠薄片。深灰色表示立在平面金屬之上的金屬：bump、airbridge 的橋墩與橋面。所有尺寸的單位都是 µm。
-
-### Disk Qubit 的 cell {#disk-qubit-cells}
-
-這些是覆晶 Disk Qubit 所用的圖形。
-
-::: {layout-ncol=3}
-![1 圓盤島](assets/supported-geometry/cell-01.svg){fig-alt="裸露 substrate 上的一個 32 點多邊形圓盤。"}
-
-![2 接地淨空圓](assets/supported-geometry/cell-02.svg){fig-alt="接地方塊中有一個 32 點的圓形開孔。"}
-
-![3 爪形弧](assets/supported-geometry/cell-03.svg){fig-alt="爪形：環扇形漸縮成窄 CPW，位於接地開孔內。"}
-
-![4 圓角內角](assets/supported-geometry/cell-04.svg){fig-alt="以四段弦修圓的爪形內角近照。"}
-
-![5 爪形至 CPW 的漸縮](assets/supported-geometry/cell-05.svg){fig-alt="從爪形收窄到 3 µm CPW 的直線漸縮邊。"}
-
-![6 正交 CPW 直線段](assets/supported-geometry/cell-06.svg){fig-alt="水平 CPW：訊號線位於兩條接地帶之間。"}
-
-![7 45° CPW 直線段](assets/supported-geometry/cell-07.svg){fig-alt="斜跨晶粒的 CPW。"}
-
-![8 圓頭 CPW 末端](assets/supported-geometry/cell-08.svg){fig-alt="CPW 以半圓頭結束，位於半圓形接地開孔內。"}
-
-![9 放射狀漸縮扇形](assets/supported-geometry/cell-09.svg){fig-alt="圓盤引線以扇形展開接到圓盤，對面是接地舌片。"}
-
-![10 接面區](assets/supported-geometry/cell-10.svg){fig-alt="兩個帶圓頭的引線末端，以及其間的窄集總薄片。"}
-
-![11 銦 bump 墊](assets/supported-geometry/cell-11.svg){fig-alt="淨空邊緣附近接地上的三個方形 bump。"}
-
-![12 帶開孔的接地](assets/supported-geometry/cell-12.svg){fig-alt="qubit 晶粒：圓盤、四個爪形、接面引線與帶開孔的接地。"}
-:::
-
-| Cell | 圖形 | 尺寸 | 使用者 |
-| --- | --- | --- | --- |
-| 1 | 圓盤島，32 點多邊形 | r 110.5（測試建置為 119.8），每個頂點 11.25° | 圓盤 |
-| 2 | 接地淨空圓，32 點開孔 | r 350 | 兩個晶粒 |
-| 3 | 爪形弧：內弧為 4 段弦的 45° 環扇形 | r 170.5 至 230.5，寬 60 | 四個爪形 |
-| 4 | 圓角內角 | r 5，4 段弦 | 八個角 |
-| 5 | 爪形至 CPW 的漸縮：任意角度的直邊 | 32.3°（測試建置為 35.1°），在 r 350 處 3 µm 頸部 | 四個爪形 |
-| 6 | 正交 CPW 直線段 | 寬 3，gap 40 | 爪形線路 |
-| 7 | 45° CPW 直線段 | 讀取線寬 7、gap 6；驅動線寬 4、gap 6 | 控制晶粒 |
-| 8 | 圓頭 CPW 末端，16 點圓頭 | 金屬 r 2 位於 r 8 的開孔內；讀取線末端 r 3.5 | 控制晶粒 |
-| 9 | 放射狀漸縮扇形 | 2 µm 頸部展開到 20° 弧；張角 ±8.30°、29.24°、26.17° | 接面引線 |
-| 10 | 接面區：集總薄片與帶圓頭的引線 | 薄片 0.27 × 5.66，引線圓頭 r 1 | 接面 |
-| 11 | 銦 bump 墊，軸向方形 | 20 與 40，在 r 400 上 24 個位置 | 覆晶 |
-| 12 | 接地：方形扣除遮罩開孔 | 1000 × 1000 | 兩個晶粒 |
-
-在 cell 10 中，模擬只看到集總薄片與兩條引線。PDK 在 layer 22/0 上畫的 5 × 0.09 µm 十字是製程用的接面，不在模擬的層堆疊中。
-
-### 線路與彎道 {#lines-and-bends}
-
-這裡每條 CPW 的 gap 都是 6 µm，每個彎道的半徑都是 100 µm。
-
-::: {layout-ncol=3}
-![13 圓弧 CPW 彎道](assets/supported-geometry/cell-13.svg){fig-alt="以八段弦畫成的 90° CPW 彎道。"}
-
-![14 Euler 90° 彎道](assets/supported-geometry/cell-14.svg){fig-alt="90° 的 CPW Euler 彎道。"}
-
-![15 Euler 180° U 形彎](assets/supported-geometry/cell-15.svg){fig-alt="經由 180° Euler 彎道折返的 CPW。"}
-
-![16 夾 3 µm 肋條的耦合線對](assets/supported-geometry/cell-16.svg){fig-alt="兩條平行 CPW 走線，中間隔著窄接地肋條，以 Euler 彎道分開。"}
-
-![17 T 形接頭](assets/supported-geometry/cell-17.svg){fig-alt="具三塊接地的正交 CPW T 形接頭。"}
-
-![18 平緩漸縮](assets/supported-geometry/cell-18.svg){fig-alt="在 50 µm 內由寬 10 收窄到 7 的 CPW。"}
-:::
-
-| Cell | 圖形 | 尺寸 | 使用者 |
-| --- | --- | --- | --- |
-| 13 | 圓弧 CPW 彎道 | R 100，每 90° 8 段弦，邊半徑 90.5 至 109.5 | `bend_circular`、Purcell 繞線、`straight_to_circular_strip` |
-| 14 | Euler 90° 彎道 | p 0.5，最小半徑 70.61，14 段弦；第一段弦轉 0.30° | `bend_euler`、`mtl_*`、`resonator_hanger` |
-| 15 | Euler 180° U 形彎 | 最小半徑 90.86，30 段弦，兩腳相距 200；第一段弦轉 0.15° | `resonator`、`resonator_meander`、meander coupon |
-| 16 | 夾接地肋條的耦合線對 | 走線 7、gap 6、肋條 3；走線以 Euler 彎道分開 | `n_trace_mtl_section`、`mtl_*`、Purcell、meander coupon |
-| 17 | 正交 T 形接頭；短路的 CPW 末端 | 寬 10，gap 6 | `cpw_t_junction`、Kosen Xmon、`resonator` |
-| 18 | 平緩的線性漸縮 | 寬 10 至 7；邊的轉折 0.86° 與 1.72° | `taper`、`cpw_handoff` |
-
-cell 17 的短路末端是訊號線在末端接到接地的 CPW，因此每個 gap 都是封閉的 6 µm 槽。它有自己的樣本。
-
-### 焊墊、梳狀、條帶與立體結構 {#pads-and-parts}
-
-::: {layout-ncol=3}
-![19 Launcher](assets/supported-geometry/cell-19.svg){fig-alt="方形 launcher 焊墊漸縮成 CPW，焊墊後方是埠薄片。"}
-
-![20 指叉梳](assets/supported-geometry/cell-20.svg){fig-alt="兩組交錯的指狀梳，由漏斗形饋入，位於接地開孔內。"}
-
-![21 重新取樣的 spline 條帶](assets/supported-geometry/cell-21.svg){fig-alt="周圍沒有接地的彎曲條帶。"}
-
-![22 中空 TSV 頂面](assets/supported-geometry/cell-22.svg){fig-alt="接地開孔內、圍繞 TSV 孔的環形著陸墊。"}
-
-![23 Airbridge](assets/supported-geometry/cell-23.svg){fig-alt="架在兩個橋墩上、跨越 CPW 的橋面。"}
-
-![24 跨越 gap 的集總薄片](assets/supported-geometry/cell-24.svg){fig-alt="跨越焊墊邊與接地之間 gap 的窄埠薄片。"}
-:::
-
-| Cell | 圖形 | 尺寸 | 使用者 |
-| --- | --- | --- | --- |
-| 19 | Launcher | 150 × 150 焊墊；漸縮邊 25.0°（訊號）與 44.8°（開孔）；85 × 150 埠薄片緊貼焊墊與接地 | `launcher`、airbridge 範例晶片、meander coupon |
-| 20 | 指叉梳 | 指寬與間距 3.3，長 100，20 指；漏斗 21.6°（開孔 42.7°） | `interdigital_capacitor`、Purcell |
-| 21 | Spline 條帶 | y 方向寬 10；重新取樣使每個頂點至少轉 2.8125° | `interpolation_spline_strip`、`bspline_strip` |
-| 22 | 中空 TSV | 兩個 24 點圓（r 29.8 與 30）之間 0.2 µm 的壁，高 500；兩面各有 r 29.8 至 100 的 Al 著陸墊，位於 r 120 的開孔內 | TSV coupon |
-| 23 | Airbridge | 12 × 84 橋面架在兩個 14 × 14 橋墩上，跨越寬 10、gap 6 的 CPW | `airbridge`、`cpw_airbridge_coupon`、meander coupon |
-| 24 | 跨越 gap 的集總薄片 | 2 × 20 薄片跨越 20 µm gap，伸入焊墊與接地各 1 nm；方形焊墊 200，或 r 100 的 32 點焊墊 | 方形、圓形與覆晶焊墊 coupon |
-
-PDK 以 258 點畫 cell 21 的 spline 條帶，最平的頂點只轉 0.012° 與 0.058°。依原圖它們不符合曲線規則而會被拒絕；樣本先將它們重新取樣。
-
-cell 22 的壁厚 0.2 µm，比兩個 margin 都薄。壁面是垂直的，所以上面沒有 band，著陸墊的 band 只從 20 µm 的 gap 量起。
-
-## 需要在 layout 中修正的繪圖缺陷 {#drawing-defects}
-
-對 OrcaPen SC PDK 的調查找到一些繪圖缺陷：畫出來的形狀與 PDK 程式碼原意不同。SCGSim 不會遷就這些缺陷。每一項都已回報給 PDK（[orcapen-sc-pdk#47](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/issues/47)、[orcapen-sc-pdk#58](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/issues/58)），同樣的檢查也適用於任何 layout。
-
-| 缺陷 | 在 SCGSim 中的結果 | 該如何修改 |
-| --- | --- | --- |
-| **C1.** Disk Qubit 的放射狀引線扇形與圓盤之間有裂縫：長 18.26 µm 的楔形，開口寬 0.21 µm，收攏成 9.9 nm 的階差 | 依原圖建立。裂縫兩側成為 gap edge，圓盤沿著它們多出 band：band 0 約增加 9 %（樣本中為 446 對 410 µm²） | 讓扇形的弧落在圓盤自己的頂點上，或在聯集之前把扇形延伸進圓盤，使聯集成為一條乾淨的輪廓 |
-| **C2、C3.** 爪形金屬中長 1.305 與 2.282 µm、底部 1 nm 的零寬度狹縫 | band 不受影響，但每條狹縫都留下 1 nm 的邊與 1 nm 寬的壁面給網格產生器。狹縫存在時，有一次量測的執行最後沒有得到可用的網格 | 在整個爪形輪廓上修圓角，而不是透過視窗把修圓的片段拼接進去 |
-| **C4.** 每個爪形外角被咬掉一塊：57.7° 的尖角，接著是 2.766 與 0.136 µm 的邊與殘留的圓角 | 可以建立，但這個角不是原本要的形狀，0.136 µm 的邊會迫使網格在該處變得很小 | 先加漸縮再修圓角，或只修剩下的角 |
-| **A1.** Purcell IDC 的指從距離漏斗 1 nm 處開始（指長不在 grid 上，梳子也沒有主幹），因此浮接 | 這些指成為各自獨立的導體。SGB 在第一條狹縫處以 `Imprint lost band boundaries … is in band 2, expected 1` 停止；即使能建立，電容也會是錯的 | 給梳子自己的主幹，並使用落在 grid 上的指長 |
-| **A6.** 蝕刻層有一圈晶片邊框，接地遮罩卻沒有 | SCGSim 由遮罩推導接地，所以它的接地會延伸到切割道上，而 PDK 以蝕刻層推導的金屬不會 | 也把邊框放進接地遮罩，或把它從蝕刻層移除 |
-
-## 未涵蓋的範圍 {#not-covered}
-
-- 0.5 與 1.0 µm 以外的 Surface-EPR margin。
-- 每整圈 129 至 255 點的多邊形曲線。
-- 以曲線形式讀取的 spline 邊界曲線。
-- 不屬於上述 24 個 unit cell 或其組合的圖形。
+- 以 `curve_sampling="simulation"` 建立用於模擬的 PDK 元件。
+- 重新取樣 spline，使每個頂點都轉至少 2.8125°，就像 cell 21 的樣本那樣。
+- 把圓弧宣告為精確圓弧，SGB 會直接攜帶它，不需取樣。
