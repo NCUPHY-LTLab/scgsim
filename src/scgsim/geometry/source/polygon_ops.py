@@ -20,7 +20,7 @@ from scgsim.geometry.primitives.grid import (
     polygon_boolean,
     split_gdstk_cutline_loop,
 )
-from scgsim.geometry.primitives.grid_regions import canonical_grid_point
+from scgsim.geometry.primitives.grid_regions import GridPoint, canonical_grid_point
 
 
 def _fused_boolean_candidates(candidates):
@@ -166,6 +166,11 @@ def realized_on_lattice(polygons: Sequence[Any]) -> Sequence[Any]:
     original geometry the source and contact audits compare against, and
     rounding can make two disjoint polygons touch. A polygon that rounds to no
     area is left out, so the audit reports the lost component or hole.
+
+    The lattice is in assembly XY. Inside an occurrence frame each point is
+    rounded where the frame places it and mapped back into the cell, so the
+    recipe keeps working in local coordinates; rounding the local point instead
+    would land on a different assembly node whenever the frame rotates.
     """
     context = current_grid_context()
     if context is None or SOURCE_INTENT.get():
@@ -173,15 +178,16 @@ def realized_on_lattice(polygons: Sequence[Any]) -> Sequence[Any]:
     import gdstk  # noqa: PLC0415 -- the optional native GDS kernel, needed only when realizing a bound source recipe
 
     def on_lattice(polygon: Any) -> list[tuple[float, float]]:
-        points: list[tuple[float, float]] = []
+        nodes: list[GridPoint] = []
         for point in polygon.points:
-            x, y = canonical_grid_point(point, context.grid_size_um)
+            node = canonical_grid_point(frame_point(point), context.grid_size_um)
             # Two points that round to one node become one vertex, not a zero-length edge.
-            if not points or points[-1] != (x, y):
-                points.append((x, y))
-        if len(points) > 1 and points[0] == points[-1]:
-            points.pop()
-        return points
+            if not nodes or nodes[-1] != node:
+                nodes.append(node)
+        if len(nodes) > 1 and nodes[0] == nodes[-1]:
+            nodes.pop()
+        local = (frame_point(node, inverse=True) for node in nodes)
+        return [(x, y) for x, y in local]
 
     rounded = (
         gdstk.Polygon(on_lattice(polygon), polygon.layer, polygon.datatype)
