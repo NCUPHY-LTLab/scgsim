@@ -561,13 +561,14 @@ class EigenmodeSim:
         return self._mesh_result.mesh_path
 
     @classmethod
-    def simulation_drc(
+    def simulation_drc(  # noqa: PLR0913 -- the layout, its PDK data, and the plan settings the simulation takes
         cls,
         component: Any,
         *,
         layer_stack: Any,
         material_records: Mapping[str, Mapping[str, Any]],
         instances: Mapping[str, Any] | None = None,
+        nets: Mapping[str, Sequence[str]] | None = None,
         surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> None:
         """Return ``None`` when an ``EigenmodeSim`` can model ``component``; otherwise raise the error ``mesh()`` raises.
@@ -579,7 +580,7 @@ class EigenmodeSim:
         would cut them.
 
         A pass means the layout can be modeled with these settings.  It does not promise that other
-        settings (Route A, nets, junctions, lumped supports, another vacuum region) will model; run that
+        settings (Route A, junctions, lumped supports, another vacuum region) will model; run that
         simulation's own ``mesh()`` for that.
 
         Args:
@@ -587,6 +588,9 @@ class EigenmodeSim:
             layer_stack: The PDK layer stack, as ``GeometryPlan`` takes it.
             material_records: The PDK material records, as ``GeometryPlan`` takes them.
             instances: ``{"chip/device": reference, ...}`` for an assembly, as ``GeometryPlan.register_instance``.
+            nets: ``{"Ground": ("chip/plane", ...), ...}``, the Net assignment the simulation's plan is given, as
+                ``GeometryPlan.set_nets`` takes it.  Without it no conductor has a Net, so any two conductors
+                that touch are refused as a different-Net contact.
             surface_epr_specs: The specs ``set_surface_epr`` takes; their margins become bands.
         """
         snapshot = prepare_layout_snapshot(
@@ -594,6 +598,7 @@ class EigenmodeSim:
             layer_stack=layer_stack,
             material_records=material_records,
             instances=instances,
+            nets=nets,
         )
         sim = cls()
         sim.set_plan(snapshot)

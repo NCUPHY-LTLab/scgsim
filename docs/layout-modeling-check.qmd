@@ -41,6 +41,7 @@ def test_the_layout_can_be_modeled():
             component,
             layer_stack=layer_stack,
             material_records=material_records,
+            nets=nets,
             surface_epr_specs=surface_epr_specs,
         )
 ```
@@ -55,6 +56,15 @@ a layout with no such face passes with no bands. For an assembly, pass
 `GeometryPlan.register_instance` takes them; the plan's root is named `chip`.
 They are registered in the mapping's order, so list a parent before its
 children (`chip/device` before `chip/device/pads`).
+
+Pass `nets` with the Net assignment the simulation's plan is given, in the form
+`GeometryPlan.set_nets` takes: `{"Ground": ("chip/D0_TOP_GROUND_PLANE", ...),
+...}`, with each member a qualified Entity ID under `chip`. The check then
+builds the model that simulation builds. Without `nets` no conductor has a Net,
+so any two conductors that touch are refused as a different-Net contact. That
+refuses every flip-chip layout whose indium bumps join the two ground planes,
+until both planes and every bump are given as one Ground net. A contact between
+conductors of two different Nets is refused with or without `nets`.
 
 The check builds the geometry and does not mesh or solve, so it can be repeated
 as the layout changes. It stops at the first refusal. Read the message, fix the
@@ -73,6 +83,7 @@ The settings are fixed:
   own, and the layout's own vacuum when it has one, so the metal has air faces
   for `MA` and `SA` bands;
 - zero coupon padding;
+- the Net assignment given as `nets`, and no Net when it is not given;
 - for `EigenmodeSim`, every authored port with a fixed inductance, which does
   not change the geometry;
 - for `ElectrostaticSim`, no terminals, and an empty Surface EPR when
@@ -85,7 +96,7 @@ rules of its own and no report type, so the error is the one that class's
 ::: {.callout-note title="What a pass means"}
 A pass means the model built with the fixed settings above was accepted; it
 does not say how many bands were cut. It does not promise that other settings will model: Route A,
-nets or Electrostatic terminals, junctions, lumped supports, indium bumps or a
+Electrostatic terminals, junctions, lumped supports, indium bumps or a
 different vacuum region. To check a specific set-up, run that simulation's own `mesh()`.
 :::
 

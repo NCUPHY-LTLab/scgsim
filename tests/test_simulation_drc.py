@@ -16,6 +16,7 @@ import scgsim.geometry.surface_epr.build as banded_build
 import scgsim.palace.mesh.build as build_module
 from scgsim.geometry import GeometryPlan
 from scgsim.geometry.models.physical import PhysicalLayerDeclaration
+from scgsim.geometry.sgb.errors import ContactError
 from scgsim.palace import EigenmodeSim, ElectrostaticSim
 
 MATERIALS = {
@@ -368,3 +369,37 @@ def test_a_layout_with_its_own_vacuum_gets_no_vacuum_region(monkeypatch, simulat
     assert added == []
     assert check(simulation, component, layer_stack=NO_VACUUM_STACK) is None
     assert added == [1.0]
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+def test_touching_conductors_of_one_net_pass(monkeypatch, simulation):
+    """Two abutting pads model when ``nets`` puts both in one Net, as the simulation's plan would (Issue #125)."""
+    component = two_pads(monkeypatch, gap_um=0.0)
+    nets = {"Ground": ("chip/pad", "chip/electrode")}
+    assert check(simulation, component, nets=nets) is None
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+@pytest.mark.parametrize(
+    "nets",
+    [None, {"Ground": ("chip/pad",), "Signal": ("chip/electrode",)}],
+    ids=["no-nets", "two-nets"],
+)
+def test_a_contact_between_two_nets_is_still_refused(monkeypatch, simulation, nets):
+    """Abutting pads without a shared Net are refused as a different-Net contact, with or without ``nets``."""
+    component = two_pads(monkeypatch, gap_um=0.0)
+    options = {} if nets is None else {"nets": nets}
+    with pytest.raises(
+        ContactError, match=r"different-Net contact .* at \(20\.0000, 0\.0000\) um"
+    ):
+        check(simulation, component, **options)
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+def test_nets_are_refused_as_set_nets_refuses_them(monkeypatch, simulation):
+    """A Net naming an Entity the plan does not have is refused by ``GeometryPlan.set_nets``."""
+    component = two_pads(monkeypatch, gap_um=0.0)
+    with pytest.raises(
+        ValueError, match="Net 'Ground' has unknown Entity ID 'chip/pads'"
+    ):
+        check(simulation, component, nets={"Ground": ("chip/pads",)})

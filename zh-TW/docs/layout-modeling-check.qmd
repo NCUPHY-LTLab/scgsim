@@ -27,11 +27,14 @@ def test_the_layout_can_be_modeled():
             component,
             layer_stack=layer_stack,
             material_records=material_records,
+            nets=nets,
             surface_epr_specs=surface_epr_specs,
         )
 ```
 
 請在儲存庫的測試中，以及繪製版圖的過程中呼叫它。請傳入模擬將使用的 `surface_epr_specs`：它與 [`set_surface_epr`](specs/palace-eigenmode.qmd#surface-epr-margins) 接受的規格相同，其邊界間距會作為條帶切入幾何，因此無法容納這些條帶的版圖在此也會被拒絕。條帶只切在規格所選的面上，所以沒有這類面的版圖會通過，但不會切出條帶。若是組裝件，請以 `{"chip/device": reference, ...}` 傳入 `instances`，格式與 `GeometryPlan.register_instance` 相同；計畫的根名稱為 `chip`。實例會依映射中的順序註冊，所以請先列父層、再列子層（`chip/device` 在 `chip/device/pads` 之前）。
+
+請以 `nets` 傳入模擬的計畫所設定的 Net 指派，格式與 `GeometryPlan.set_nets` 相同：`{"Ground": ("chip/D0_TOP_GROUND_PLANE", ...), ...}`，每個成員都是以 `chip` 開頭的完整 Entity ID。如此檢查所建出的模型，就是該模擬會建出的模型。未給 `nets` 時，任何導體都沒有 Net，因此相接觸的兩個導體都會被當作不同 Net 的接觸而拒絕。銦凸塊連接兩片接地面的覆晶版圖都會因此被拒絕，直到兩片接地面與所有凸塊以同一個 Ground net 傳入。不同 Net 的兩個導體相接觸時，無論是否給 `nets` 都會被拒絕。
 
 檢查只建構幾何，不建立網格也不求解，因此可在版圖變動時反覆執行。它會在第一個拒絕處停止：閱讀訊息、修正版圖，再執行一次。[錯誤封存](errors.qmd)記錄了實際遇到的診斷。
 
@@ -44,13 +47,14 @@ def test_the_layout_can_be_modeled():
 - Route B 與 Palace 預設的 airbox；
 - 版圖本身沒有真空時，在六個面各加 1 µm 的真空區域；版圖有自己的真空時，使用該真空。如此金屬才有空氣面可供切出 `MA` 與 `SA` 條帶；
 - coupon 填充為零；
+- 以 `nets` 傳入的 Net 指派；未給時不設任何 Net；
 - `EigenmodeSim`：所有已定義的端口，電感為固定值，不影響幾何；
 - `ElectrostaticSim`：不設端子；未給 `surface_epr_specs` 時使用空的 Surface EPR，因為 `mesh()` 要求 Surface EPR。
 
 `simulation_drc()` 寫入暫存資料夾並於結束後移除。它不加入自己的規則，也沒有報告型別，因此錯誤與相同版圖、相同設定下該類別 `mesh()` 所拋出的相同。
 
 ::: {.callout-note title="通過代表什麼"}
-通過代表以上述固定設定建出的模型被接受，但不代表切出了多少條帶。它不保證其他設定能夠建模：Route A、net 或 Electrostatic 端子、接面、集總支撐、銦凸塊或不同的真空區域。若要檢查特定設定，請執行該模擬自己的 `mesh()`。
+通過代表以上述固定設定建出的模型被接受，但不代表切出了多少條帶。它不保證其他設定能夠建模：Route A、Electrostatic 端子、接面、集總支撐、銦凸塊或不同的真空區域。若要檢查特定設定，請執行該模擬自己的 `mesh()`。
 :::
 
 AEDT 不在此檢查範圍內：其 STEP 匯入尚未涵蓋。

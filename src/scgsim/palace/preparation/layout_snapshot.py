@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from scgsim.geometry.source.plan import GeometryPlan, GeometryPlanSnapshot
@@ -21,10 +21,13 @@ def prepare_layout_snapshot(
     layer_stack: Any,
     material_records: Mapping[str, Mapping[str, Any]],
     instances: Mapping[str, Any] | None,
+    nets: Mapping[str, Sequence[str]] | None,
 ) -> GeometryPlanSnapshot:
     """The prepared snapshot a user would build from ``component`` for a simulation.
 
-    The plan's root is ``"chip"``, so ``instances`` keys read ``"chip/<name>"``.  Coupon padding is zero
+    The plan's root is ``"chip"``, so ``instances`` keys and ``nets`` members read ``"chip/<name>"``.
+    ``nets`` is given to ``GeometryPlan.set_nets`` after the instances are registered, as a simulation's
+    plan is built, so the check builds the model that simulation would build.  Coupon padding is zero
     because the check is about the drawn layout, not about a simulation's surroundings.
     """
     plan = GeometryPlan(
@@ -36,6 +39,8 @@ def prepare_layout_snapshot(
     )
     for path, reference in (instances or {}).items():
         plan.register_instance(path, reference)
+    if nets is not None:
+        plan.set_nets(nets)
     return plan.prepare()
 
 
