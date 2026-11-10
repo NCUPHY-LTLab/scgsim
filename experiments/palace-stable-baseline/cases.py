@@ -271,8 +271,16 @@ LAYOUTS: dict[str, Callable[[], Layout]] = {**ROSTER, **OTHERS}
 
 
 def scene_builders() -> dict[str, Callable[[], Any]]:
-    """The supported banded scenes of the test suite (``tests`` must be on ``sys.path``)."""
+    """The supported banded scenes of the test suite (``tests`` must be on ``sys.path``).
+
+    ``cell24_sheet_circular_pad`` left the supported list after the baseline (its files cannot be written);
+    it still builds, so it stays here and its fine-structure row can be measured again.
+    """
     import sgb_supported_cells
     import sgb_supported_pdk_cells
 
-    return {**sgb_supported_cells.SCENES, **sgb_supported_pdk_cells.SCENES}
+    return {
+        **sgb_supported_cells.SCENES,
+        **sgb_supported_pdk_cells.SCENES,
+        **sgb_supported_pdk_cells.NOT_WRITTEN,
+    }

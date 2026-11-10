@@ -5,10 +5,13 @@
     python run_case.py --scene SCENE OUT.json        # a supported test scene: SGB build and fine structure
 
 Each stage records ``pass`` or the exact error class and message, and its wall time.  The SGB build stage
-also records the fine structure of the built model (``fine_structure.summarize``); the mesh stage records
-tetrahedra, minSICN, rounds and the stop reason of the quality report.  A stage runs only when the stage
-before it passed.  ``simulation_drc`` and ``mesh()`` are public; the SGB build stage calls the geometry build
-those two share (``_build_geometry``), because no public call keeps the built files.
+also records the fine structure of the built model (``fine_structure.summarize``).  The ``simulation_drc``
+stage records the findings of its meshing stage: the warnings of a pass, or the refusals of the
+``SimulationDrcError`` it raises.  ``mesh()`` runs the same meshing stage before the mesher starts, so the
+mesh stage records either that refusal or the recipe, tetrahedra, minSICN, rounds, stop reason and stop
+places of the quality report.  A stage runs only when the stage before it passed.  ``simulation_drc`` and
+``mesh()`` are public; the SGB build stage calls the geometry build those two share (``_build_geometry``),
+because no public call keeps the built files.
 """
 
 from __future__ import annotations
@@ -101,25 +104,21 @@ def run_layout(name: str, bands: bool, notebook_vacuum: bool = False) -> dict[st
     if built is None:
         return record
     drc_class = _simulation_class(layout)
-    if (
-        _stage(
-            stages,
-            "simulation_drc",
-            lambda: (
-                drc_class.simulation_drc(
-                    layout.component,
-                    layer_stack=layout.layer_stack,
-                    material_records=get_material_records(),
-                    instances=dict(layout.instances) or None,
-                    nets=layout.nets,
-                    surface_epr_specs=specs,
-                )
-                or True
-            ),
-        )
-        is None
-    ):
+    drc_report = _stage(
+        stages,
+        "simulation_drc",
+        lambda: drc_class.simulation_drc(
+            layout.component,
+            layer_stack=layout.layer_stack,
+            material_records=get_material_records(),
+            instances=dict(layout.instances) or None,
+            nets=layout.nets,
+            surface_epr_specs=specs,
+        ),
+    )
+    if drc_report is None:
         return record
+    stages["simulation_drc"]["meshing_stage"] = _meshing_stage_findings(drc_report)
     with TemporaryDirectory(prefix="baseline-mesh-") as folder:
         sim = configured_simulation(layout, snapshot, specs)
         sim.set_output_dir(folder)
@@ -239,10 +238,38 @@ def _stage(stages: dict[str, Any], name: str, action):
         }
         report = getattr(error, "report", None)
         if isinstance(report, dict):
+            # MeshRepairError: the quality report of the run that stopped.
             stages[name]["quality_report"] = report
+        elif report is not None:
+            # SimulationDrcError, from simulation_drc or from mesh() before the mesher starts.
+            stages[name]["meshing_stage"] = _meshing_stage_findings(report)
     stages[name]["seconds"] = round(time.perf_counter() - started, 2)
     _checkpoint()
     return value
+
+
+def _meshing_stage_findings(report) -> dict[str, Any]:
+    """The meshing-stage findings of a ``SimulationDrcReport``: refusals and warnings, each with its place."""
+    findings = report.meshing.findings
+    return {
+        "passed": report.meshing.passed,
+        "refusing": sum(1 for finding in findings if finding.action == "refuse"),
+        "warning": sum(1 for finding in findings if finding.action == "warn"),
+        "findings": [
+            {
+                "rule": finding.rule,
+                "measure": finding.measure,
+                "action": finding.action,
+                "owner": finding.owner,
+                "value": finding.value,
+                "value_steps": finding.value_steps,
+                "location_um": finding.location_um,
+                "entity": finding.entity,
+                "sources": finding.sources[:4],
+            }
+            for finding in findings
+        ],
+    }
 
 
 def _mesh_outcome(stage: dict[str, Any], folder: Path) -> dict[str, Any]:
@@ -254,6 +281,7 @@ def _mesh_outcome(stage: dict[str, Any], folder: Path) -> dict[str, Any]:
         return {}
     mesh = report.get("mesh") or {}
     return {
+        "recipe": report.get("recipe"),
         "tetrahedra": mesh.get("tetrahedra"),
         "min_sicn": mesh.get("min_quality"),
         "bad_count": mesh.get("bad_count"),
@@ -263,6 +291,7 @@ def _mesh_outcome(stage: dict[str, Any], folder: Path) -> dict[str, Any]:
         "mesh_seconds": (report.get("timing") or {}).get("total_seconds"),
         "history": report.get("history"),
         "remaining_bad": report.get("remaining_bad"),
+        "stop_places": report.get("stop_places"),
     }
 
 
