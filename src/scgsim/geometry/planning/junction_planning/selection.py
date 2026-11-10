@@ -100,14 +100,16 @@ def grid_cut(index, step):
     return (requested, round(requested / PRECISION_UM))
 
 
-def end_candidate(sheet, own, foreign, section: EndSection):
-    """Cut the end piece from the drawn sheet and check it against exact contact conditions.
+def end_candidate(source, own, foreign, section: EndSection):
+    """Cut the end piece from ``source`` beyond the cut and check it against exact contact conditions.
 
-    The end piece is the drawn sheet from its own end to the cut, so it overlaps its terminal
-    where the sheet lands: joined to the terminal it reaches wherever SGB builds the terminal's
-    edge, also where an exactly rebuilt arc lies beyond the drawn polygon.  It is accepted when
-    it is one piece, meets its own terminal over an area or a length, touches no other net and
-    with its terminal covers the cut edge.
+    ``source`` is the drawn sheet where SGB rebuilds the terminal with exact arcs: the end
+    piece is then the sheet from its own end to the cut and overlaps its terminal where the
+    sheet lands, so it reaches the arc also where the arc lies beyond the drawn polygon.  For a
+    terminal SGB builds as drawn, ``source`` is the sheet's free part, and the end piece is what
+    the sheet adds to the terminal; joined to the terminal, the two are the same region.  It is
+    accepted when it is one piece, meets its own terminal over an area or a length, touches no
+    other net and with its terminal covers the cut edge.
     """
     clip = (
         rectangle(0, 0, section.cut, section.width)
@@ -115,7 +117,7 @@ def end_candidate(sheet, own, foreign, section: EndSection):
         else rectangle(section.cut, 0, section.span, section.width)
     )
     region = (
-        boolean(sheet, build_polygon_region(clip), "and")
+        boolean(source, build_polygon_region(clip), "and")
         if (section.cut > 0 if section.left else section.cut < section.span)
         else []
     )
@@ -170,19 +172,32 @@ class SideMeeting:
     along_side: bool
 
 
-def built_outline_meetings(
+@dataclass(frozen=True)
+class BuiltOutline:
+    """The outline SGB builds for a terminal, as the end-piece cut reads it.
+
+    ``meetings`` holds, per sheet side line (``0`` and ``width``), where the outline meets
+    it.  ``rebuilt_arcs`` says whether SGB builds any of the terminal's edges as an exact arc
+    instead of its drawn polygon.
+    """
+
+    meetings: dict[int, tuple[SideMeeting, ...]]
+    rebuilt_arcs: bool
+
+
+def built_outline(
     build_input: GeometryBuildInput,
     entity_ids: Iterable[str],
     frame: JunctionLocalFrame,
     width: int,
-) -> dict[int, tuple[SideMeeting, ...]]:
-    """Where the outline SGB builds for these conductors meets each sheet side line.
+) -> BuiltOutline:
+    """The outline SGB builds for these conductors, where it meets each sheet side line.
 
-    The keys are the two side lines, ``0`` and ``width``.  A ring with an authored boundary or
-    an arc reconstruction is built from its exact lines and circular arcs, bound here as the
-    construction path binds them; any other ring is its drawn polyline.  So a round terminal
-    meets a side where its arc does, not where its polyline chord does.  SGB rounds a crossing
-    to the model grid point whose cell holds it, so a meeting is taken at that grid point.
+    A ring with an authored boundary or an arc reconstruction is built from its exact lines and
+    circular arcs, bound here as the construction path binds them; any other ring is its drawn
+    polyline.  So a round terminal meets a side where its arc does, not where its polyline
+    chord does.  SGB rounds a crossing to the model grid point whose cell holds it, so a meeting
+    is taken at that grid point.
     """
     context = geometry_grid_context(build_input)
     grid_um = None if context is None else context.grid_size_um
@@ -209,7 +224,12 @@ def built_outline_meetings(
         for curve in chain:
             for side, found in meetings.items():
                 found.extend(_curve_meetings(curve, frame, side, grid_um))
-    return {side: tuple(found) for side, found in meetings.items()}
+    return BuiltOutline(
+        {side: tuple(found) for side, found in meetings.items()},
+        any(
+            curve.kind != "line_segment" for chain in chains.values() for curve in chain
+        ),
+    )
 
 
 def _curve_meetings(

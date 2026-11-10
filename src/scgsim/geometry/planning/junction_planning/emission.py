@@ -16,7 +16,6 @@ from scgsim.geometry.planning.junction_planning.exact_geometry import (
     inside_ring,
     region_edges,
 )
-from scgsim.geometry.planning.junction_planning.incidence import sheet_boundary
 from scgsim.geometry.planning.junction_planning.model_checks import (
     emitted_partition_coverage,
     fraction_area_overlap,
@@ -70,18 +69,23 @@ def rebuild_original_polygons(state: JunctionModel) -> None:
 def emit_partitions(state: JunctionModel) -> None:
     """Emit central and terminal pieces with their exact source provenance.
 
-    Each end piece emitted is the drawn sheet beyond its cut.  The free part of that piece,
-    between the sheet's terminals, is what rebuilds the terminal's support outline: the
-    terminal joined with either is the same region.
+    A landing end piece (its terminal is rebuilt with exact arcs) is the drawn sheet beyond
+    its cut; any other end piece is the free part of the sheet there.  The free part is what
+    rebuilds the terminal's support outline: the terminal joined with either is the same region.
     """
     state.additions, state.appended = ([], defaultdict(list))
     state.physical_ends = defaultdict(list)
     owners = {entity.semantic_id: entity for entity in state.build_input.entities}
     for jid, record in state.records.items():
         parts = [state.lower(state.refine(part)) for part in state.sliced[jid]]
+        chosen = [
+            state.sheet_sliced[jid][k] if end["landing"] else state.sliced[jid][k]
+            for k, end in ((0, record["ends"][0]), (2, record["ends"][1]))
+        ]
         ends = [
-            state.lower(state.refine(part), simplify=True)
-            for part in state.sheet_sliced[jid]
+            state.lower(state.refine(chosen[0]), simplify=record["ends"][0]["landing"]),
+            None,
+            state.lower(state.refine(chosen[1]), simplify=record["ends"][1]["landing"]),
         ]
         central = state.lower(state.refine(state.sliced[jid][1]), simplify=True)
         if len(central) != 1 or len(central[0]) != 1 or len(central[0][0]) != 4:
@@ -149,17 +153,17 @@ def emit_partitions(state: JunctionModel) -> None:
             raise ValueError(
                 "numerical junction emitted partition does not cover source free boundary"
             )
-        final_sheet = state.lower(
-            state.refine(sheet_boundary(state, record["authored_polygon_id"]))
+        final_partition = state.lower(
+            state.refine([*chosen[0], *state.sliced[jid][1], *chosen[1]])
         )
         if not emitted_partition_coverage(
-            final_sheet, [*ends[0], (corners,), *ends[2]]
+            final_partition, [*ends[0], (corners,), *ends[2]]
         ):
             raise ValueError(
-                "numerical junction emitted end pieces and rectangle do not cover the sheet"
+                "numerical junction emitted end pieces and rectangle differ from their slices"
             )
         record["free_model_regions"] = plain_record(final_free)
-        record["sheet_model_regions"] = plain_record(final_sheet)
+        record["partition_model_regions"] = plain_record(final_partition)
         record["central_model_regions"] = [[list(corners)]]
         record["proof_conditions"]["emitted_partition_coverage"] = True
         record["model_coordinate_method"] = "source_edge_incidence_and_two_cuts.v1"

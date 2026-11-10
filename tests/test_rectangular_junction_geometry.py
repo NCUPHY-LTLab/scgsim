@@ -133,12 +133,8 @@ def test_explicit_child_sheet_parent_terminals_and_request_codec():
     assert bound.metadata["rectangular_junctions"] == (spec.to_payload(),)
 
 
-def test_rectangle_and_terminal_owned_ends_cover_the_sheet_once():
-    """The rectangle and the two terminal-owned end pieces cover the drawn sheet once.
-
-    Each end piece is the sheet from its own end to the cut, so it overlaps its terminal; the
-    terminal joined with it is the terminal joined with the free part of the sheet.
-    """
+def test_rectangle_and_terminal_owned_ends_cover_free_region_once():
+    """Check rectangle and terminal owned ends cover free region once."""
     build, spec = fixture()
     result = derive_rectangular_junctions(with_rectangular_junctions(build, (spec,)))
     record = result.metadata["junction_partitions"]["junction"]
@@ -176,20 +172,10 @@ def test_rectangle_and_terminal_owned_ends_cover_the_sheet_once():
         "not",
         precision=1e-09,
     )
-    assert sum((poly.area() for poly in union)) == 20
-    assert not gdstk.boolean(union, [gdstk.Polygon(SHEET)], "xor", precision=1e-09)
-    assert not gdstk.boolean(free, union, "not", precision=1e-09)
+    assert sum((poly.area() for poly in union)) == 10
+    assert not gdstk.boolean(union, free, "xor", precision=1e-09)
     for i, j in ((0, 1), (0, 2), (1, 2)):
         assert not gdstk.boolean(parts[i], parts[j], "and", precision=1e-09)
-    for terminal, end in ((LEFT, parts[1]), (RIGHT, parts[2])):
-        joined = gdstk.boolean([gdstk.Polygon(terminal)], end, "or", precision=1e-09)
-        with_free = gdstk.boolean(
-            [gdstk.Polygon(terminal)],
-            gdstk.boolean(end, free, "and", precision=1e-09),
-            "or",
-            precision=1e-09,
-        )
-        assert not gdstk.boolean(joined, with_free, "xor", precision=1e-09)
     assert result.port_sheet_regions[0].exterior == central.exterior
     assert record["support_plane"]["source_z_um"] == record["z_um"] == 0
     assert build.polygons[0].exterior == LEFT

@@ -207,7 +207,12 @@ def end_piece(prepared, end):
 def test_a_port_on_a_round_pad_is_a_rectangle_whose_ends_join_their_conductors(
     monkeypatch, exact_arc
 ):
-    """The port face is the central rectangle; each end piece is the sheet beyond its cut, metal of its conductor."""
+    """The port face is the central rectangle; the end piece on the round pad is pad metal.
+
+    Where SGB rebuilds the pad as an exact circle the end piece is the drawn sheet from its start
+    to the cut, overlapping the pad; on the polygon pad it is the free part of the sheet up to
+    the cut.  The straight electrode edge is the cut itself, so its end piece is empty.
+    """
     component = pad_and_electrode(monkeypatch, round_pad=True, exact_arc=exact_arc)
     prepared, region, record = prepared_port(eigenmode_sim(component))
     start, end = assert_rectangle_along_x(region.exterior)
@@ -221,19 +226,18 @@ def test_a_port_on_a_round_pad_is_a_rectangle_whose_ends_join_their_conductors(
         "chip/electrode",
         "electrode",
     )
-    assert electrode_end["polygon_id"] in entities["chip/electrode"].polygon_ids
-    # Each end piece is the drawn sheet from its own end to the cut, overlapping its conductor.
+    assert electrode_end["empty_residual"]
+    assert not electrode_end["landing"]
+    assert pad_end["landing"] == exact_arc
     half = (-SHEET_HALF_WIDTH_UM, SHEET_HALF_WIDTH_UM)
-    assert end_piece(prepared, pad_end) == (
-        pytest.approx((PAD_RADIUS_UM - 0.1, start)),
-        half,
-        4,
-    )
-    assert end_piece(prepared, electrode_end) == (
-        pytest.approx((end, ELECTRODE_X_UM + 1.0)),
-        half,
-        4,
-    )
+    xs, ys, corners = end_piece(prepared, pad_end)
+    assert ys == half
+    assert xs[1] == pytest.approx(start)
+    if exact_arc:
+        assert (xs[0], corners) == (pytest.approx(PAD_RADIUS_UM - 0.1), 4)
+    else:
+        # The free part starts where the pad polygon leaves the sheet sides, near 99.995 um.
+        assert PAD_RADIUS_UM - 0.01 < xs[0] < PAD_RADIUS_UM
     # SGB builds the same rectangle as the port face: its area is the rectangle's.
     group = port_group(built_sidecar(monkeypatch, component))
     assert group["area_um2"] == pytest.approx(
@@ -284,11 +288,9 @@ def test_a_port_between_straight_edges_keeps_its_face_and_conductors(monkeypatch
     assert assert_rectangle_along_x(region.exterior) == pytest.approx(
         (100.0, ELECTRODE_X_UM)
     )
-    # The end pieces are the sheet's landings, wholly inside their conductors.
-    half = (-SHEET_HALF_WIDTH_UM, SHEET_HALF_WIDTH_UM)
-    assert [end_piece(prepared, end) for end in record["ends"]] == [
-        (pytest.approx((99.0, 100.0)), half, 4),
-        (pytest.approx((ELECTRODE_X_UM, ELECTRODE_X_UM + 1.0)), half, 4),
+    assert [(end["empty_residual"], end["landing"]) for end in record["ends"]] == [
+        (True, False),
+        (True, False),
     ]
     partitioned = built_sidecar(monkeypatch, component)
     monkeypatch.undo()
@@ -456,7 +458,10 @@ def test_a_port_ending_in_a_round_opening_meets_the_exact_arc(monkeypatch):
     assert (start, end) == pytest.approx(
         (99.995 + STEP_LIMIT_UM, 119.996 - STEP_LIMIT_UM)
     )
-    _, ground_end = record["ends"]
+    pad_end, ground_end = record["ends"]
+    assert pad_end["landing"] and ground_end["landing"]
+    # Both end pieces reach the sheet's own ends, inside the exact pad and the exact ground.
+    assert end_piece(prepared, pad_end)[0][1] == pytest.approx(start)
     assert end_piece(prepared, ground_end)[0] == pytest.approx(
         (end, ELECTRODE_X_UM + 0.001)
     )

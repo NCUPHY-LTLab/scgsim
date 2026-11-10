@@ -48,10 +48,10 @@ from scgsim.geometry.planning.junction_planning.model_checks import (
     emitted_partition_coverage,
 )
 from scgsim.geometry.planning.junction_planning.selection import (
+    BuiltOutline,
     EndSection,
-    SideMeeting,
     bound_decimal,
-    built_outline_meetings,
+    built_outline,
     candidate_indices,
     contacts,
     end_candidate,
@@ -92,7 +92,7 @@ class _EndSide:
     bound: int | Fraction
     own: list[tuple]
     foreign: list[tuple]
-    meetings: dict[int, tuple[SideMeeting, ...]]
+    outline: BuiltOutline
 
 
 @dataclass
@@ -123,8 +123,8 @@ class _JunctionPartitionPlanner:
     own_a: list[tuple] = field(init=False)
     own_b: list[tuple] = field(init=False)
     other: list[tuple] = field(init=False)
-    meetings_a: dict[int, tuple[SideMeeting, ...]] = field(init=False)
-    meetings_b: dict[int, tuple[SideMeeting, ...]] = field(init=False)
+    outline_a: BuiltOutline = field(init=False)
+    outline_b: BuiltOutline = field(init=False)
     lower: int | Fraction = field(init=False)
     upper: int | Fraction = field(init=False)
     sheet_region: Sequence[PolygonCoordinates] = field(init=False)
@@ -249,8 +249,8 @@ class _JunctionPartitionPlanner:
 
     def read_outline_meetings(self):
         """Find where each terminal's built outline meets the two sheet sides."""
-        self.meetings_a, self.meetings_b = (
-            built_outline_meetings(
+        self.outline_a, self.outline_b = (
+            built_outline(
                 self.build_input,
                 (
                     eid
@@ -310,10 +310,10 @@ class _JunctionPartitionPlanner:
         limit = round(WALL_COLUMN_LIMIT_STEPS * self.step / PRECISION_UM)
         for side in (
             _EndSide(
-                True, self.lower, self.own_a, self.own_b + self.other, self.meetings_a
+                True, self.lower, self.own_a, self.own_b + self.other, self.outline_a
             ),
             _EndSide(
-                False, self.upper, self.own_b, self.own_a + self.other, self.meetings_b
+                False, self.upper, self.own_b, self.own_a + self.other, self.outline_b
             ),
         ):
             first = self.first_valid_cut(side)
@@ -358,7 +358,7 @@ class _JunctionPartitionPlanner:
         left = side.left
         while not all(
             step == 0 or step >= limit
-            for step in side_steps(side.meetings, cut, self.span, left=left)
+            for step in side_steps(side.outline.meetings, cut, self.span, left=left)
         ):
             index += 1 if left else -1
             cut = grid_cut(index, self.step)[1]
@@ -379,7 +379,7 @@ class _JunctionPartitionPlanner:
         requested, cut = grid_cut(index, self.step)
         left = side.left
         end, evidence = end_candidate(
-            self.sheet_region,
+            self.sheet_region if side.outline.rebuilt_arcs else self.free,
             side.own,
             side.foreign,
             EndSection(cut, self.span, self.width, left=left),
@@ -387,7 +387,7 @@ class _JunctionPartitionPlanner:
         if end is not None:
             evidence["side_steps_um"] = [
                 step * PRECISION_UM
-                for step in side_steps(side.meetings, cut, self.span, left=left)
+                for step in side_steps(side.outline.meetings, cut, self.span, left=left)
             ]
         self.checks.append(
             {
@@ -404,8 +404,8 @@ class _JunctionPartitionPlanner:
     def check_partition(self):
         """Check closed endpoint contacts, open sides and that the three pieces partition the sheet.
 
-        The two end pieces and the central rectangle cover the drawn sheet once; the free part
-        of the sheet, between the two terminals, lies within them.
+        The two end pieces and the central rectangle have disjoint interiors, cover the free
+        part of the sheet between the two terminals, and lie within the drawn sheet.
         """
         for y in (0, self.width):
             for rings in [
@@ -434,7 +434,9 @@ class _JunctionPartitionPlanner:
             build_polygon_region(self.end_b),
         ]
         union = boolean([p for part in parts for p in part], [], "or")
-        if boolean(union, self.sheet_region, "xor") or any(
+        if (
+            boolean(self.free, union, "not") or boolean(union, self.sheet_region, "not")
+        ) or any(
             (boolean(parts[i], parts[j], "and") for i, j in ((0, 1), (0, 2), (1, 2)))
         ):
             raise ValueError(
@@ -444,9 +446,9 @@ class _JunctionPartitionPlanner:
     def record_ends(self):
         """Bind each end piece to its unique source Entity/material lineage."""
         self.end_records = []
-        for label, end, _own, cut, net in (
-            ("A", self.end_a, self.own_a, self.a, self.junction.terminal_a_net),
-            ("B", self.end_b, self.own_b, self.b, self.junction.terminal_b_net),
+        for label, end, outline, cut, net in (
+            ("A", self.end_a, self.outline_a, self.a, self.junction.terminal_a_net),
+            ("B", self.end_b, self.outline_b, self.b, self.junction.terminal_b_net),
         ):
             owners = [
                 eid
@@ -478,6 +480,7 @@ class _JunctionPartitionPlanner:
                     "representation": dict(owner.route_representations),
                     "polygon_id": polygon_id,
                     "empty_residual": not end,
+                    "landing": outline.rebuilt_arcs,
                     "local_regions": plain_record(end),
                 }
             )
@@ -585,7 +588,7 @@ class _JunctionPartitionPlanner:
                     emitted = [(p.exterior, *p.holes) for p in ends]
                     emitted.append((polygon.exterior, *polygon.holes))
                     if not emitted_partition_coverage(
-                        record["sheet_model_regions"], emitted
+                        record["partition_model_regions"], emitted
                     ):
                         raise ValueError(
                             "junction grid realization changes partition coverage"
@@ -624,18 +627,18 @@ class _JunctionPartitionPlanner:
 
 
 def _straight_end_pieces(result: GeometryBuildInput, records) -> GeometryBuildInput:
-    """The grid-realized input with every end piece cleared of collinear vertices.
+    """The grid-realized input with every landing end piece cleared of collinear vertices.
 
     The grid realization nodes a polygon wherever another polygon's vertex lies on its edge.
-    An end piece overlaps its terminal, so the drawn terminal's vertices on the sheet sides
-    land on the end piece's side edges.  SGB would keep each as a corner between two
+    A landing end piece overlaps its terminal, so the drawn terminal's vertices on the sheet
+    sides land on the end piece's side edges.  SGB would keep each as a corner between two
     carriers and split the side wall standing there; without them the region is the same.
     """
     ids = {
         end["polygon_id"]
         for record in records.values()
         for end in record["ends"]
-        if end["polygon_id"]
+        if end["polygon_id"] and end["landing"]
     }
     return replace(
         result,
