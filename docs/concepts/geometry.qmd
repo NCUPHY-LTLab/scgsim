@@ -17,7 +17,7 @@ SGB turns a declared layout and process into geometry that a solver backend can 
 This page follows one public example with a hole, two Nets, a substrate and vacuum, and an explicitly requested rectangular junction. It explains why each preparation step exists and what it passes to the next step. The worked geometric example stops at CAD construction; it is not a mesh or field-solution result.
 
 ::: {.callout-note title="Backend focus: Gmsh and Palace"}
-The construction path described here builds CAD with Gmsh/OCC, creates a mesh with Gmsh and supplies it to Palace. AEDT uses the same source meanings where supported, but constructs its project with the native AEDT Modeler; its construction steps therefore differ. See the [physical representation contract](../specs/physical-representation.qmd) and [geometry contract](../geometry-sgb.qmd) for the shared and backend-specific boundaries.
+The construction path described here writes the solid model as BREP and XAO files, creates a mesh with Gmsh and supplies it to Palace. AEDT uses the same source meanings where supported, but constructs its project with the native AEDT Modeler; its construction steps therefore differ. See the [physical representation contract](../specs/physical-representation.qmd) and [geometry contract](../geometry-sgb.qmd) for the shared and backend-specific boundaries.
 :::
 
 ## 1. Start with the facts that define the model {#source-stage}
@@ -162,7 +162,7 @@ Those crossings are represented by **atomic edges**: segments whose interiors co
 
 ![Schematic shared network of split A/M source edges.](../images/sgb-concept/en-method-shared-network.svg){#fig-sgb-method-network}
 
-`polygonize` uses the closed edge network to form candidate faces. Membership comes from a separate propagation step. Each directed ring carries a signed contribution: an outer boundary changes membership from outside to inside, while a hole boundary reverses that change. The planner seeds the unbounded face with $(0,0)$ and propagates these changes across each shared edge into its adjacent face. It repeats the calculation along different paths; if a face gets inconsistent values, or a value is not binary, preparation fails. This makes the result depend on the declared rings and their shared topology rather than a sampled center point.
+SGB nodes the closed edge network by snap rounding on the integer grid and forms candidate faces in a half-edge structure. Membership comes from a separate propagation step. Each directed ring carries a signed contribution: an outer boundary changes membership from outside to inside, while a hole boundary reverses that change. The planner seeds the unbounded face with $(0,0)$ and propagates these changes across each shared edge into its adjacent face. It repeats the calculation along different paths; if a face gets inconsistent values, or a value is not binary, preparation fails. This makes the result depend on the declared rings and their shared topology rather than a sampled center point.
 
 At $y=1.5$ µm, the path crosses the hole's left edge at $x=1$ and right edge at $x=2$. For A, the bit changes $1\rightarrow0\rightarrow1$: the region inside the outer ring but inside the hole has no A material, and A resumes on the far side. @fig-sgb-method-arrangement summarizes the resulting faces. The hole and unbounded exterior both have membership $(0,0)$, but they are different faces separated by the ring boundaries.
 
@@ -194,32 +194,32 @@ Each surface stores an ordered outer loop and, when present, ordered hole loops.
 
 ![Schematic cap and side wall share the same edge IDs with opposite orientations.](../images/sgb-concept/en-method-shared-edge.svg){#fig-sgb-method-shared-edge}
 
-The current topology key rounds each 3D coordinate, in µm, to nine decimal places so planned points can reuse one identity. This is a coordinate identity rule, not the source DBU and not a second XY snap. The XY grid belongs to each relevant planar preparation operation; the canonical key is applied when the planned 3D surface boundaries are collected.
+SGB places every XY coordinate on the integer grid of the declared step, so planned points share one identity exactly; there is no second XY snap. Z values are the exact levels of the authored stack.
 
-### OCC realizes the plan that SGB already owns
+### SGB writes the plan it already owns
 
-OCC (Open CASCADE) is the CAD kernel exposed through Gmsh. SGB passes it the planned points, lines, loops and surfaces, then uses those surfaces to form closed shells and solution volumes. The plan establishes ownership and adjacency first; CAD construction realizes those records. It does not depend on a global fragment operation to infer which material owns a newly discovered face.
+SGB writes the planned points, lines, loops and surfaces directly as BREP and XAO text, then forms closed shells and solution volumes from those surfaces. The plan establishes ownership and adjacency first; the writer records them. No CAD kernel call, Boolean or global fragment operation decides which material owns a face.
 
-The returned native entity tags can change when CAD is exported and reopened. SCGSim therefore binds native entities to the stable planned surface and volume identities and uses the planned tag records to create named physical groups. A native integer tag is local to that imported model; it is not the enduring identity of a source Entity or surface.
+The numbering of the written shapes follows the order Gmsh uses when it reopens the file, and the sidecar binds each number to its stable planned surface and volume identity, from which the named physical groups are made. A native integer tag is local to that imported model; it is not the enduring identity of a source Entity or surface.
 
-This section explains how the builder consumes a plan: it creates the planned CAD points, curves, loops, surfaces, shells and volumes, then binds exported native entities back to planned identities. The historical XAO view that showed the withdrawn distance-band children is retained on the [historical bands page](../history/sgb-geometric-bands.qmd).
+This section explains how the builder consumes a plan: it writes the planned points, curves, loops, surfaces, shells and volumes, and records how each written entity maps back to its planned identity.
 
 ### Meshing uses the built geometry and its own sizing recipe
 
-Palace builds its geometry with SGB and meshes the exported XAO, with the sidecar that pairs with it, using the `scgsim.meshing` module in a fresh Gmsh process. The module creates tetrahedra in solution volumes, repairs the curves that bad elements touch, and stops with an error if a tetrahedron stays below the quality threshold. Palace then lowers SGB's physical groups to solver attributes and writes the mesh input for Palace. The chosen sizing recipe belongs to the meshing step: it controls element sizing, while the source DBU and assembly XY grid control geometry coordinates. A finer mesh does not repair missing source meaning or change a junction's ownership.
+Palace builds its geometry with SGB and meshes the exported XAO, with the sidecar that pairs with it, using the `scgsim.meshing` module in a fresh Gmsh process. The module creates tetrahedra in solution volumes, gives each bad element a finer local size in a ball around it, and stops with an error if a tetrahedron stays below the quality threshold within its budgets. Palace then lowers SGB's physical groups to solver attributes and writes the mesh input for Palace. The chosen sizing recipe belongs to the meshing step: it controls element sizing, while the source DBU and assembly XY grid control geometry coordinates. A finer mesh does not repair missing source meaning or change a junction's ownership.
 
 For exact mesh controls, see the [Palace mesh controls](../specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
 
-## 4. Current capability and historical boundary {#distance-bands}
+## 4. Capability {#distance-bands}
 
 The current SGB path carries source shapes, material/physical interpretation, final Net declarations, explicit port and junction requests, interface ownership, shared planar membership and canonical three-dimensional boundaries into backend construction. Gmsh/Palace and AEDT share those source facts where each backend supports them, while their native construction and execution remain separate.
 
-::: {.callout-warning title="The GeometryPlan distance-band producer is withdrawn"}
-SCGSim does not currently provide the former GeometryPlan surface-distance-band producer. Those old partitions and their child CAD surfaces are described for historical context on the [SGB geometric-bands page](../history/sgb-geometric-bands.qmd). Palace Surface-EPR margins are a different path: `inset_margins_um` asks SGB to cut inset bands into the model when `mesh()` builds the geometry, and Palace integrates them as ordinary attributes. See the [Eigenmode contract](../specs/palace-eigenmode.qmd#surface-epr-margins) for the keys and limits.
+::: {.callout-note title="Surface-EPR bands"}
+Palace Surface-EPR margins: `inset_margins_um` asks SGB to cut inset bands into the model when `mesh()` builds the geometry, and Palace integrates them as ordinary attributes. See the [Eigenmode contract](../specs/palace-eigenmode.qmd#surface-epr-margins) for the keys and limits.
 :::
 
-Ordinary polygonal outlines remain polygon geometry. Explicitly declared curves use a separate OCC path and have their own route support; see the [curve contract](../geometry-sgb.qmd#source-curves). For the formal source, physical representation and backend contracts, continue to the [SGB geometry contract](../geometry-sgb.qmd).
+Ordinary polygonal outlines remain polygon geometry. Explicitly declared curves are line segments and circular arcs, which SGB carries itself; other curve kinds raise `UnsupportedCurveError`. See the [curve contract](../geometry-sgb.qmd#source-curves). For the formal source, physical representation and backend contracts, continue to the [SGB geometry contract](../geometry-sgb.qmd).
 
 ::: {.callout-note collapse="true" title="Public example source and scope"}
-The worked case is the public rectangular-junction and hole fixture in [`tests/test_rectangular_junction_geometry.py`](https://github.com/OrPenStrike/scgsim/blob/2ed85adc/tests/test_rectangular_junction_geometry.py#L230). The [case index](../images/sgb-concept/public-case-binding.json) records its source revision, units, selected profile and figure-stage mapping. The fixture's band and XAO observations belong to the historical design page; this current concept page uses its source, physical and junction views to explain the retained pipeline.
+The worked case is the public rectangular-junction and hole fixture in [`tests/test_rectangular_junction_geometry.py`](https://github.com/OrPenStrike/scgsim/blob/2ed85adc/tests/test_rectangular_junction_geometry.py#L230). The [case index](../images/sgb-concept/public-case-binding.json) records its source revision, units, selected profile and figure-stage mapping. This page uses its source, physical and junction views to explain the retained pipeline.
 :::

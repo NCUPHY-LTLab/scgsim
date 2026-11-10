@@ -59,9 +59,9 @@ $$
 對 v2 之前的 Palace 表面薄膜記錄，所記錄的零損耗正切值來源不明。讀取器會保留原始值，但將有效損耗視為未知，因此無法取得逆 Q 貢獻。
 :::
 
-## 內縮邊距與已撤回的距離帶 {#surface-distance-band-correction}
+## 內縮邊距 {#surface-distance-band-correction}
 
-GeometryPlan 的距離帶產生器及其 Palace 彙總流程已撤回，不屬於目前的套件。Palace Surface EPR 改以 `inset_margins_um` 提供內縮邊距：每個邊距 $m$ 會在整面基準列旁，多一列距最近 gap edge 至少 $m$ 的那部分表面。SGB 把這些部分切進幾何，一般的 Palace 對普通屬性積分；見[邊距契約](specs/palace-eigenmode.qmd#surface-epr-margins)。基準列一定存在。邊距列是同一表面的替代評估，不是互斥的帶，因此不可相加。
+Palace Surface EPR 以 `inset_margins_um` 提供內縮邊距：每個邊距 $m$ 會在整面基準列旁，多一列距最近 gap edge 至少 $m$ 的那部分表面。SGB 把這些部分切進幾何，一般的 Palace 對普通屬性積分；見[邊距契約](specs/palace-eigenmode.qmd#surface-epr-margins)。基準列一定存在。邊距列是同一表面的替代評估，不是互斥的帶，因此不可相加。
 
 ## 探索結果 {#explore-a-result}
 

@@ -43,7 +43,7 @@ config_path = sim.write_config()
 print(mesh_path, config_path)
 ```
 
-進行 Route-A 研究時，請在產生網格前，使用適當且明確的 `route_a_thin_film` 設定 `representation="A"`。`substrate_face` 會保留物理表面座標；`metal_gap_equivalent` 則是另一種受支援的雙面正規化方式。變更此近似前請參閱[幾何契約](../geometry-sgb.qmd)。表面薄膜是選用的後處理規格，須附上厚度／介電常數／損耗假設，不可推定為材料量測值。它們的內縮邊距會切進幾何，因此請在 `mesh()` 之前用 `set_surface_epr` 設定；見[邊距契約](../specs/palace-eigenmode.qmd#surface-epr-margins)。
+進行 Route-A 研究時，請在產生網格前設定 `representation="A"`，並提供帶有 `film_bindings` 的明確 `approximation_profile`；單靠 `route_a_thin_film` 不會建立這些綁定。`substrate_face` 會保留物理表面座標；`metal_gap_equivalent` 則是另一種受支援的雙面正規化方式。變更此近似前請參閱[幾何契約](../geometry-sgb.qmd)。表面薄膜是選用的後處理規格，須附上厚度／介電常數／損耗假設，不可推定為材料量測值。它們的內縮邊距會切進幾何，因此請在 `mesh()` 之前用 `set_surface_epr` 設定；見[邊距契約](../specs/palace-eigenmode.qmd#surface-epr-margins)。
 
 網格產生是真實的準備操作。它可能發生原生失敗，若有四面體持續低於品質門檻，也會以 `MeshRepairError` 中止。寫入設定時會將端子與 Ground 屬性綁定至該網格。請一併檢查確切索引對照與設定檔：schema v3 會區分物理 Ground 與外部 Ground，讓你辨識哪些導體與邊界政策已降階。產生網格後，`sim.mesh_summary()` 會提供分離的原生產生觀測，包括網格控制項、元素／區域數量及精確網格識別。這些紀錄描述網格，不能判定其離散程度是否符合研究需求。[來源摘要](source-observations.qmd)仍是獨立的輸入檢視；`ElectrostaticSim` 沒有 `input_summary()` 方法。
 

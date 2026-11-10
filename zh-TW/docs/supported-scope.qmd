@@ -72,6 +72,7 @@ scgsim-id: "docs/supported-scope"
 | 不同 Net 的導體互不重疊。 | 同上：兩個 Net 重疊的金屬沒有單一歸屬。 | 建構時 `OverlapError`，附位置 | [版圖建模檢查](layout-modeling-check.qmd) |
 | 同一 Net 中互相重疊的導體具有不同的優先序，由其中一個擁有重疊區。 | 同一 Net 的兩個 Entity 可以重疊，但重疊區必須恰好屬於其中一個。 | 建構時 `OverlapError`（「… overlap … with equal priority」） | [幾何契約](geometry-sgb.qmd) |
 | 任何區域都不只沿一條垂直邊與自己接觸。例如同一 Net 的兩塊金屬只在一個角點相接。 | 同一體積的兩個區塊只共用一個頂點時，會形成無法產生網格的非流形實體。 | 建構時 `NonManifoldError`，附位置 | 本頁 |
+| 每個 Entity 不是薄片（經物理解讀後厚度為零），就是 Z 範圍為正的實體。 | 有厚度的薄片或沒有厚度的實體，在堆疊中都沒有一致的位置。 | 建構時 `InputError`（「… is a sheet but its effective Z interval is …」、「… has a non-positive Z extent …」） | [物理表示](specs/physical-representation.qmd) |
 
 ### 埠 {#rules-ports}
 
@@ -92,6 +93,8 @@ scgsim-id: "docs/supported-scope"
 | 一個面只有一組邊距，即使有兩種 Surface-EPR 類型都涵蓋它。 | 一個面只容納一族條帶。 | 建構時 `InputError` | [Surface EPR 邊距](specs/palace-eigenmode.qmd#surface-epr-margins) |
 | 條帶從間隙邊量起。在 `inset_margins_by_entity_um` 中指名的導體，它要切條帶的每個面都需要有間隙邊。只經由 Surface-EPR 類型涵蓋、且沒有間隙邊的面，不會切出條帶。 | 沒有間隙邊，就沒有量距離的起點。 | 建構時 `NoGapEdgeError` | [Surface EPR 邊距](specs/palace-eigenmode.qmd#surface-epr-margins) |
 | 側壁永遠不切條帶；`face_kinds` 只能指名 `sheet`、`top`、`bottom` 或 `interface`。 | SGB 只在這四種面上切條帶。 | 建構時 `InputError` | [Surface EPR 邊距](specs/palace-eigenmode.qmd#surface-epr-margins) |
+
+Palace 模擬採用的兩種 Route 都支援條帶：Route A 的薄片，以及 Route B 金屬體的各個面。版圖不需要為條帶另做設定：網格器會依條帶的寬度為每一條條帶邊界曲線設尺寸，見[條帶邊界曲線](specs/palace-electrostatic-sgb.qmd#palace-mesh-band-edges)。
 
 ## SCGSim 保證的事項 {#scgsim-guarantees}
 

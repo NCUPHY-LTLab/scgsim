@@ -110,6 +110,7 @@ run on the built model; its error is `SimulationDrcError`, from
 | Conductors of different Nets do not overlap. | The same: overlapping metal of two Nets has no single owner. | `OverlapError` at build, with the location | [Layout modeling check](layout-modeling-check.qmd) |
 | Overlapping conductors of one Net carry different priorities, so one owns the overlap. | Two Entities of one Net may overlap, but the overlap must belong to exactly one of them. | `OverlapError` at build ("… overlap … with equal priority") | [Geometry contract](geometry-sgb.qmd) |
 | No region touches itself along a single vertical edge. Example: two pieces of one Net that meet only at a corner. | Two cells of one volume that share only a vertex give a non-manifold solid that cannot be meshed. | `NonManifoldError` at build, with the location | This page |
+| Each Entity is either a sheet, with zero thickness after the physical interpretation, or a body with a positive Z extent. | A sheet with thickness, or a body with none, has no consistent place in the stack. | `InputError` at build ("… is a sheet but its effective Z interval is …", "… has a non-positive Z extent …") | [Physical representation](specs/physical-representation.qmd) |
 
 ### Ports {#rules-ports}
 
@@ -130,6 +131,11 @@ run on the built model; its error is `SimulationDrcError`, from
 | One face gets one set of margins, even when two Surface-EPR types reach it. | A face holds one family of bands. | `InputError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
 | A band is measured from a gap edge. A conductor named in `inset_margins_by_entity_um` needs a gap edge on each face it bands. A face reached only through its Surface-EPR type that has no gap edge gets no bands. | Without a gap edge there is nothing to measure the distance from. | `NoGapEdgeError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
 | Side walls are never banded; `face_kinds` names only `sheet`, `top`, `bottom` or `interface`. | SGB cuts bands only on these four kinds of face. | `InputError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
+
+Bands are supported on both routes a Palace simulation takes: on the sheets of
+Route A and on the faces of the Route B volumes. A layout sets nothing else for
+them: the mesher sizes every band boundary curve from the width of its bands, as
+[Band boundary curves](specs/palace-electrostatic-sgb.qmd#palace-mesh-band-edges) describes.
 
 ## What SCGSim guarantees {#scgsim-guarantees}
 

@@ -28,6 +28,6 @@ scgsim-id: "docs/research/geometry-build/index"
 
 ## 量測的範圍 {#what-was-measured}
 
-量測使用 production 的 SGB core（`scgsim.geometry.sgb`；見 [GeometryPlan 與 SGB Route A／B](../../geometry-sgb.qmd)），對象是隨機 layout：一顆晶片上有 N 個小特徵，每個特徵位於自己的 ground cutout 中，以 Route B 建構。這些 layout 只有多邊形，沒有圓弧，也沒有 inset band，所以圓弧與 band 在大規模下的成本沒有量到，這些數字也不能外推到它們。pipeline 背後的設計理由，見 [SGB 設計：為什麼先規劃](../../design/sgb/why-plan-first.qmd)。
+量測使用 production 的 SGB core（`scgsim.geometry.sgb`；見 [GeometryPlan 與 SGB](../../geometry-sgb.qmd)），對象是隨機 layout：一顆晶片上有 N 個小特徵，每個特徵位於自己的 ground cutout 中，以 Route B 建構。這些 layout 只有多邊形，沒有圓弧，也沒有 inset band，所以圓弧與 band 在大規模下的成本沒有量到，這些數字也不能外推到它們。pipeline 背後的設計理由，見 [SGB 設計：為什麼先規劃](../../design/sgb/why-plan-first.qmd)。
 
 所有數字都來自同一台具有 64 個硬體執行緒與 503 GiB 記憶體的機器，每個 case 只跑一次。機器、軟體版本、資料檔與指令列在[重現方式](reproduction.qmd)。

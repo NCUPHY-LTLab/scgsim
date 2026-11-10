@@ -20,7 +20,7 @@ lang: zh-TW
 | 數值控制 | `set_numerical(...)` 保留明確的階數、線性求解器、AMR 與輸出選擇 |
 | 來源／設定檢視 | `input_summary()` 回傳獨立的來源與設定，不進行檔案或原生 I/O |
 | 表面模型 | `set_surface_epr(*, representation, specs, route_a_thin_film=None)`，須在 `mesh()` 之前 |
-| 來源指定的埠 | `add_port(qualified_name, *, layer, layout_sheet=True, inductance)` |
+| 來源指定的埠 | `add_port(name, *, layer, layout_sheet=True, inductance)`；`layout_sheet` 必須是 `True`（簽章上的預設值 `False` 會被拒絕） |
 | 輸出選取 | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |
 | 準備 | `mesh()`、`write_config()`，接著 `prepare_handoff(*, profile, executable, resources=None, setup_commands=(), petsc_options=())` |
 
@@ -28,7 +28,7 @@ lang: zh-TW
 
 ## 本徵模態網格與 AMR 預設值（CONVERGING） {#eigenmode-mesh-and-amr-defaults-converging}
 
-新的 `EigenmodeSim` 使用共用的預設網格控制（`FeatureRecipe()`、`MesherOptions()`、`Budgets()` 與 `0.01` 品質門檻），並寫入 `Model.Refinement.Nonconformal=true`。在 `write_config()` 之前，透過 `set_numerical(...)` 提供 `amr_max_passes`。若迭代上限為正值，也必須提供 `amr_tolerance` 與 `amr_update_fraction`；設定 `amr_max_passes=0` 會停用自適應細化，並允許另外兩值維持未設定。之後的 `set_numerical(...)` 呼叫若省略某值，就保留目前設定。這些是輸入控制，不是充分性建議。Electrostatic 保留共用契約中既有的 AMR 預設值。
+新的 `EigenmodeSim` 使用共用的預設網格控制（`FeatureRecipe()`、`MesherOptions()`、`Budgets()` 與 `0.01` 品質門檻），並寫入 `Model.Refinement.Nonconformal=true`。在 `write_config()` 之前，透過 `set_numerical(...)` 提供 `amr_max_passes`。若迭代上限為正值，也必須提供 `amr_tolerance` 與 `amr_update_fraction`；設定 `amr_max_passes=0` 會停用自適應細化，並允許另外兩值維持未設定。之後的 `set_numerical(...)` 呼叫若省略 `ksp_type`、`amr_max_passes`、`amr_nonconformal`、`amr_nc_levels`、`amr_tolerance`、`amr_update_fraction` 或 `save_adapt_diagnostics`，就保留目前設定；其餘省略的值（`order`、`tolerance`、`max_iterations`、`solver_type`、`preconditioner`、`device`、`save_adapt_iterations`、`save_adapt_mesh`、`estimator_mg`、`output_paraview` 與 `output_grid_function`）都採用預設值。這些是輸入控制，不是充分性建議。Electrostatic 保留共用契約中既有的 AMR 預設值。
 
 `mesh_summary()` 回報紀錄的網格控制、原生元素與區域數量及網格身分。其 Nédélec 自由度值是根據主角點四面體及設定的 FEM 階數所做的拓撲估計，不是求解器回報的 DOF 數量。變更 FEM 階數會更新此估計，不重新產生網格。這些網格紀錄不確立數值充分性。
 

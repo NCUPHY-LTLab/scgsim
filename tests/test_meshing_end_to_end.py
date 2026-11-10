@@ -83,7 +83,7 @@ def test_the_module_meshes_the_pad_in_ground_clean_and_keeps_the_xao_groups(
     assert result.report["stop"] == "clean"
     assert result.report["mesh"]["bad_count"] == 0
     assert result.report["mesh"]["min_quality"] >= THRESHOLD
-    assert result.report["recipe"]["version"] == "scgsim.meshing.features/1"
+    assert result.report["recipe"]["version"] == FeatureRecipe.version
     assert (
         result.report["mesh"]["sized_curves"] > 0
     )  # the 0.2 um film walls are sized a priori

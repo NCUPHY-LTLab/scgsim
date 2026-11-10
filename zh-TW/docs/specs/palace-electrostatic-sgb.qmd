@@ -77,17 +77,41 @@ prepare shared GeometryPlan snapshot
 
 ### 尺寸配方 {#palace-mesh-recipes}
 
-配方只決定初始元素尺寸。修復、門檻與報告對每種配方都相同。請從 `FeatureRecipe` 開始：它依幾何本身的事實為需要的曲線設尺寸，其預設值經量測，在 1 至 4 mm 晶片上能達到預設門檻。
+配方只決定初始元素尺寸。修復、門檻與報告對每種配方都相同。請從 `FeatureRecipe` 開始：它依幾何本身的事實為需要的曲線設尺寸，其預設值經量測，在 1 至 4 mm 晶片上，以及帶有 Surface-EPR 條帶的覆晶量子位元與 Route A 薄片上，都能達到預設門檻。
 
 ::: {.askr-table-compact}
 | 配方 | 尺寸 | 參數（預設值） |
 |---|---|---|
-| `FeatureRecipe` | 粗略最大尺寸為包圍盒對角線除以 `max_size_divisor`，並在薄膜側壁處用較細的元素（當膜厚的倍數小於粗略尺寸的一半時，取膜厚的倍數）。另有選用規則，為導體輪廓設尺寸。 | `max_size_divisor=20`、`gradation=1`、`film_sidewall_thickness_multiple=25`、`film_sidewall_ceiling_fraction=0.5`、`conductor_outline=False`、`conductor_edge_size_um=5`、`conductor_edge_grow_um=300` |
+| `FeatureRecipe` | 粗略最大尺寸為包圍盒對角線除以 `max_size_divisor`，並在薄膜側壁處（當膜厚的倍數小於粗略尺寸的一半時，取膜厚的倍數）與每一條 Surface-EPR 條帶邊界曲線上（取所在面最窄條帶寬度的倍數；見[條帶邊界曲線](#palace-mesh-band-edges)）用較細的元素。另有選用規則，為導體輪廓設尺寸。 | `max_size_divisor=20`、`gradation=1`、`film_sidewall_thickness_multiple=25`、`film_sidewall_ceiling_fraction=0.5`、`conductor_outline=False`、`conductor_edge_size_um=5`、`conductor_edge_grow_um=300`、`band_mesh_size_multiple=4` |
 | `GlobalSizeRecipe` | 只有粗略最大尺寸，即包圍盒對角線除以 `max_size_divisor`。這是便宜的對照組，會在薄金屬側壁留下近乎扁平的四面體，因此仰賴修復輪次。 | `max_size_divisor=20`、`gradation=1` |
 | `UniformBoundaryRecipe` | 模型中每條曲線都用 `near_um`，並在 `far_um` 微米的距離內成長到 `far_um`。它不分辨每條曲線是什麼。 | `near_um=5`、`far_um=300` |
 :::
 
-每個配方都有名稱與版本，連同參數一起記錄在網格清單中，因此每次執行都會說明是哪組尺寸規則產生了網格。
+每個配方都有名稱與版本，連同參數一起記錄在網格清單中，因此每次執行都會說明是哪組尺寸規則產生了網格。配方版本只在配方要求的尺寸改變時才改變；見[網格的版本識別](../mesh-quality.qmd#version-identities)。
+
+#### 條帶邊界曲線 {#palace-mesh-band-edges}
+
+設定 Surface-EPR 邊距時，每一條 Surface-EPR 條帶邊界曲線上最大的網格元素，是所在面最窄條帶寬度的 `band_mesh_size_multiple` 倍。這個尺寸和 `FeatureRecipe` 的其他尺寸一樣，會向下取到粗略尺寸除以 2 的次方；因此邊距為 0.5 與 1 µm（條帶寬 0.5 µm）時，預設值 4 要求 2 µm，依模型範圍實得 1.1 至 2.0 µm。沒有條帶的模型沒有條帶邊界曲線，這個倍數不影響它。
+
+寬 0.5 µm 的條帶緊鄰數十微米長的元素時，會留下修復也清不掉的近乎扁平四面體。Route A 的薄片邊緣沒有設尺寸的薄膜側壁，所以條帶邊界曲線沒有尺寸時，Route A 上的單晶片焊墊會停在門檻以下。Route B 的薄膜側壁已在條帶旁設了細尺寸；在覆晶量子位元上，這條規則讓第一次網格就沒有不合格元素，沒有它則需要一輪修復。
+
+請保留預設值 4：在量測過的倍數中，只有它在帶條帶的覆晶量子位元上達到時間目標，而且每個量測案例都產生合格網格。要改用其他倍數，請用 `set_mesh(recipe=FeatureRecipe(band_mesh_size_multiple=...))`：
+
+- **較小的倍數**（2）讓條帶處的元素形狀較好，焊墊與晶片上的 minSICN 為 0.08 至 0.23，但四面體數是 4 的 1.8 至 2.4 倍；帶條帶的覆晶量子位元因此無法在時間上限內完成網格。
+- **較大的倍數**（8）只在條帶邊界曲線決定尺寸之處節省元素。在 Route A 上元素約減半，但焊墊的 minSICN 降到 0.014 至 0.019，接近預設門檻。在 Route B 的薄膜側壁旁它省不了任何元素：覆晶量子位元得到的網格與沒有這條規則時相同，需要一輪修復，耗時是 4 的兩倍。
+
+以下以 Gmsh 4.15.2、預設門檻與預算量測，一次一個模型，在負載很輕的 64 核心工作站上執行（Gmsh 使用單一執行緒）；倍數 2 的各列是在有其他工作時量測的。機器忙碌時，同樣的執行最多多花一半時間：
+
+::: {.askr-table-compact}
+| 倍數 | 帶條帶的覆晶量子位元 | Route A 上帶條帶的單晶片焊墊 | 帶條帶的 1 至 4 mm 晶片 |
+|---|---|---|---|
+| 2 | 139 萬個四面體；在時間上限停止 | 合格；216,000 至 235,000 個四面體；14 s | 合格；23,000 至 37,000 個四面體；1.6 至 2.0 s |
+| 4（預設） | 第一次網格即合格；569,325 個四面體；53 s | 合格；89,000 至 115,000 個四面體；4.7 至 5.5 s | 合格；13,000 至 20,000 個四面體；1.0 至 1.2 s |
+| 8 | 一輪修復後合格；407,093 個四面體；105 s | 合格；49,000 至 52,000 個四面體；2.6 至 2.7 s | 合格；9,000 至 14,000 個四面體；0.7 至 0.8 s |
+| 條帶邊界曲線不設尺寸（對照） | 一輪修復後合格；407,093 個四面體；83 s | 停在 minSICN 0.003 至 0.004 | 合格；9,600 至 13,500 個四面體；0.7 至 0.8 s |
+:::
+
+覆晶量子位元是 OrcaPen SC PDK 的 `disk_flip_chip_qubit`，置於共用接地平面下，採 Route B；焊墊是 `square_pad_capacitor`（200 µm 焊墊、1 mm 晶片）。每個金屬－空氣、金屬－基板與基板－空氣面都切 0.5 與 1 µm 的條帶。案例、每次執行與當時的機器負載都在[條帶邊界量測](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/experiments/meshing-benchmark/band_edge.md)中。
 
 ### 網格器選項 {#palace-mesh-mesher}
 
@@ -139,4 +163,4 @@ Palace 在省略 `Nonconformal` 鍵時預設為 `true`。SCGSim 一律寫出此�
 
 外部 gsim 及歷史 SGB 版本只作為衍生資料。執行期幾何權威是樹內的 `scgsim.geometry.sgb` 及目前的 `scgsim.palace` 實作。
 
-周邊契約請見[幾何與 SGB Route A／B](../geometry-sgb.qmd)、[無顯示幾何預覽](../geometry-preview.qmd)、[執行設定與本機／手動 HPC 交接](../execution-profiles.qmd)，以及[來源與資料界線](../provenance.qmd)。
+周邊契約請見[GeometryPlan 與 SGB](../geometry-sgb.qmd)、[無顯示幾何預覽](../geometry-preview.qmd)、[執行設定與本機／手動 HPC 交接](../execution-profiles.qmd)，以及[來源與資料界線](../provenance.qmd)。
