@@ -1,4 +1,4 @@
-"""Each Palace simulation's ``simulation_drc`` runs its ``mesh()`` modeling stages on a layout and stops before meshing.
+"""Each Palace simulation's ``simulation_drc`` runs its ``mesh()`` modeling stages on a layout, then the meshing-stage check, and never meshes.
 
 No test here runs Gmsh or a solver: where ``mesh()`` is compared, its meshing stage is replaced by a
 marker error, so what is compared is the geometry stage both share.
@@ -186,17 +186,17 @@ def mesh_refusal(simulation, component, tmp_path, monkeypatch, specs=None):
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)
 @pytest.mark.parametrize("port", [False, True])
-def test_a_layout_that_models_returns_none(monkeypatch, simulation, port):
+def test_a_layout_that_models_passes_both_stages(monkeypatch, simulation, port):
     """Two separate pads on a substrate, with or without an authored port, model directly."""
     component = two_pads(monkeypatch, gap_um=10.0, port=port)
-    assert check(simulation, component) is None
+    assert check(simulation, component).passed
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)
-def test_a_layout_with_bands_returns_none(monkeypatch, simulation):
+def test_a_layout_with_bands_passes_both_stages(monkeypatch, simulation):
     """Bands cut from Surface-EPR margins fit the gap between the pads."""
     component = two_pads(monkeypatch, gap_um=10.0, port=True)
-    assert check(simulation, component, surface_epr_specs=BANDED) is None
+    assert check(simulation, component, surface_epr_specs=BANDED).passed
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)
@@ -247,7 +247,7 @@ def test_the_check_never_meshes_and_leaves_no_folder(monkeypatch, tmp_path, simu
     monkeypatch.setattr(build_module, "mesh_sgb", meshing_reached)
     monkeypatch.setattr("tempfile.tempdir", str(tmp_path))
     component = two_pads(monkeypatch, gap_um=10.0)
-    assert check(simulation, component, surface_epr_specs=BANDED) is None
+    assert check(simulation, component, surface_epr_specs=BANDED).passed
     assert list(tmp_path.iterdir()) == []
 
 
@@ -307,15 +307,12 @@ def test_a_layout_with_no_vacuum_is_wrapped_so_ma_bands_are_cut(
 def test_pads_touching_the_vacuum_at_a_point_pass(monkeypatch, simulation, pad):
     """The 1 um wrap leaves air around a polygon circle and a diamond, which a flush vacuum pinches."""
     component = two_pads(monkeypatch, gap_um=10.0, pad=pad)
-    assert (
-        check(
-            simulation,
-            component,
-            layer_stack=NO_VACUUM_STACK,
-            surface_epr_specs=BANDED,
-        )
-        is None
-    )
+    assert check(
+        simulation,
+        component,
+        layer_stack=NO_VACUUM_STACK,
+        surface_epr_specs=BANDED,
+    ).passed
 
 
 @pytest.mark.parametrize("radius_um", [10.0, 50.0])
@@ -350,7 +347,7 @@ def test_a_gdsfactory_circle_conductor_prepares_and_passes(monkeypatch, radius_u
         coupon_padding_um=0.0,
     ).prepare()
     assert len(snapshot.geometry_input.polygons) == 1
-    assert check(EigenmodeSim, component, layer_stack=NO_VACUUM_STACK) is None
+    assert check(EigenmodeSim, component, layer_stack=NO_VACUUM_STACK).passed
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)
@@ -365,9 +362,9 @@ def test_a_layout_with_its_own_vacuum_gets_no_vacuum_region(monkeypatch, simulat
 
     monkeypatch.setattr(simulation, "set_vacuum_region", recording)
     component = two_pads(monkeypatch, gap_um=10.0)
-    assert check(simulation, component, surface_epr_specs=BANDED) is None
+    assert check(simulation, component, surface_epr_specs=BANDED).passed
     assert added == []
-    assert check(simulation, component, layer_stack=NO_VACUUM_STACK) is None
+    assert check(simulation, component, layer_stack=NO_VACUUM_STACK).passed
     assert added == [1.0]
 
 
@@ -376,7 +373,7 @@ def test_touching_conductors_of_one_net_pass(monkeypatch, simulation):
     """Two abutting pads model when ``nets`` puts both in one Net, as the simulation's plan would (Issue #125)."""
     component = two_pads(monkeypatch, gap_um=0.0)
     nets = {"Ground": ("chip/pad", "chip/electrode")}
-    assert check(simulation, component, nets=nets) is None
+    assert check(simulation, component, nets=nets).passed
 
 
 @pytest.mark.parametrize("simulation", SIMULATIONS)

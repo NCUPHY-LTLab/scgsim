@@ -17,8 +17,8 @@ class MeshRepairError(MeshingError):
     """The repair loop stopped before the mesh met the quality threshold.
 
     ``report`` is the quality report as a JSON-serialisable mapping: the recipe, the repair policy, the
-    mesher options, the threshold, the stop reason and the remaining bad elements with their groups and
-    feature kinds.
+    mesher options, the threshold, the stop reason, the remaining bad elements with their groups and
+    feature kinds, and ``stop_places``: where those elements are and the fine structure recorded there.
     """
 
     def __init__(self, message: str, report: dict[str, Any]) -> None:
