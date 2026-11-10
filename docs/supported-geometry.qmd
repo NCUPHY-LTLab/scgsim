@@ -33,7 +33,10 @@ dimensions come from the PDK cells built with `curve_sampling="simulation"`.
 Every sample builds under Route B with MA, MS and SA bands at
 `inset_margins_um=(0.5, 1.0)`. Bands are measured from the
 [gap edges](specs/palace-eigenmode.qmd#surface-epr-margins), the edges of a
-conductor that face exposed substrate.
+conductor that face exposed substrate. The die edge is a dicing line: where it
+cuts a straight conductor edge, the conductor is treated as continuing past it,
+so the bands along that edge run straight to the die edge at any angle, with no
+rounded end.
 
 For every band, the test compares the built area with the exact erosion of the
 same polygons. The two agree within the grid's snap bound: half a grid diagonal

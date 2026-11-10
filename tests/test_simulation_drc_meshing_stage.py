@@ -6,9 +6,10 @@ substrate wrapped in the check's 1 um vacuum.  What changes is the pad's outline
 * ``clean`` -- a square;
 * ``jog`` -- a 1 nm step in the edge facing the electrode (layout fine structure: a wall face 1 grid step
   wide);
-* ``convex`` -- the top edge bent by 0.57 degrees at a convex vertex, so its left half is tilted by 0.29 degrees
-  (no fine structure in the source; where that half's bands end at the pad's left edge, x = 0, their cap
-  arcs are the margin times the tilt, 2 and 5 grid steps, an SGB defect);
+* ``convex`` -- the top edge bent by 0.57 degrees at a convex vertex, so its left half is tilted by 0.29 degrees,
+  with the electrode of the same Net against the pad's left edge, x = 0 (no fine structure in the source;
+  where that half's bands end at the contact, their cap arcs are the margin times the tilt, 2 and 5 grid
+  steps, an SGB defect.  On the die edge the same bands would run straight on, with no cap: Issue #138);
 * ``bar`` -- a bar 2.004 um wide inside a U-shaped electrode (with 1.0 um bands, the exact erosion leaves a
   core 4 nm wide).
 
@@ -91,6 +92,9 @@ U_ELECTRODE = (
 )
 # Where the jog's wall stands: the 1 nm step at y = 10 um on the pad's edge facing the electrode, across the 0.2 um film.
 JOG_WALL_UM = (20.0005, 10.0, 0.1)
+# The electrode of the convex scene: against the pad's whole left edge, and in the pad's Net.
+CONTACT_ELECTRODE = ((-30, 0), (0, 0), (0, 25), (-30, 25))
+ONE_NET = {"N": ("chip/pad", "chip/electrode")}
 
 
 def scene(monkeypatch, pad, electrode=ELECTRODE):
@@ -187,8 +191,9 @@ def test_an_sgb_caused_fine_edge_is_attributed_to_sgb(monkeypatch):
     """The source is not fine anywhere; the short cap arcs where the tilted half's bands end are SGB's, and only warn."""
     report = check(
         EigenmodeSim,
-        scene(monkeypatch, PADS["convex"]),
+        scene(monkeypatch, PADS["convex"], CONTACT_ELECTRODE),
         surface_epr_specs=BANDED,
+        nets=ONE_NET,
     )
     assert report.passed
     findings = report.meshing.findings
@@ -284,7 +289,7 @@ def stop_at_the_mesher(monkeypatch):
     return started
 
 
-def set_up_as_the_check(simulation, component, run_dir, specs=None):
+def set_up_as_the_check(simulation, component, run_dir, specs=None, nets=None):
     """A ``simulation`` set up as ``simulation_drc`` sets it up for ``component``, writing into ``run_dir``.
 
     The layout has no vacuum of its own, so it gets the check's vacuum region; ``ElectrostaticSim`` needs
@@ -295,7 +300,7 @@ def set_up_as_the_check(simulation, component, run_dir, specs=None):
         layer_stack=NO_VACUUM_STACK,
         material_records=MATERIALS,
         instances=None,
-        nets=None,
+        nets=nets,
     )
     sim = simulation()
     sim.set_plan(snapshot)
@@ -328,15 +333,18 @@ def test_mesh_refuses_layout_fine_structure_before_the_mesher_starts(
 @pytest.mark.parametrize("simulation", SIMULATIONS)
 def test_mesh_goes_on_to_the_mesher_past_warnings(monkeypatch, tmp_path, simulation):
     """The convex vertex leaves only class C warnings: ``simulation_drc`` passes with them, and ``mesh()`` meshes."""
-    report = check(
-        simulation, scene(monkeypatch, PADS["convex"]), surface_epr_specs=BANDED
-    )
+    convex = scene(monkeypatch, PADS["convex"], CONTACT_ELECTRODE)
+    report = check(simulation, convex, surface_epr_specs=BANDED, nets=ONE_NET)
     assert report.passed
     assert report.meshing.findings
     assert {f.action for f in report.meshing.findings} == {"warn"}
     started = stop_at_the_mesher(monkeypatch)
     sim = set_up_as_the_check(
-        simulation, scene(monkeypatch, PADS["convex"]), tmp_path / "run", BANDED
+        simulation,
+        scene(monkeypatch, PADS["convex"], CONTACT_ELECTRODE),
+        tmp_path / "run",
+        BANDED,
+        ONE_NET,
     )
     with pytest.raises(MesherStarted):
         sim.mesh()
@@ -348,7 +356,11 @@ def test_gmsh_meshes_a_model_with_only_warnings(monkeypatch, tmp_path):
     """With Gmsh, ``mesh()`` goes past the convex scene's class C warnings and returns a clean mesh."""
     pytest.importorskip("gmsh", reason="the meshing module needs Gmsh (extra: palace)")
     sim = set_up_as_the_check(
-        EigenmodeSim, scene(monkeypatch, PADS["convex"]), tmp_path / "run", BANDED
+        EigenmodeSim,
+        scene(monkeypatch, PADS["convex"], CONTACT_ELECTRODE),
+        tmp_path / "run",
+        BANDED,
+        ONE_NET,
     )
     assert sim.mesh().is_file()
     meshing = sim.mesh_summary()["meshing"]

@@ -67,17 +67,13 @@ def test_the_sample_set_covers_every_supported_unit_cell():
 
 
 # The emitted band edges shorter than SHORT_ARC_GRID_STEPS that remain, per scene (Issue #138); every other
-# scene has none.  They are exact geometry, left for a Human rule:
-# * a half-circle cap where a run of distance origins ends on the die edge at a non-right angle: the cap arc
-#   inside the die is the margin times the angle's deviation from 90 degrees long (cells 18 and 21);
+# scene has none.  They are exact geometry:
 # * the lead of the Disk Qubit junction, 2 um wide, at the 1 um margin: the eroded region closes where the lead
 #   is 2 m wide, and the two offsets meet within a grid step (Issue #128);
 # * an SA offset between a convex crossing and a reflex arc, 14 nm long, beside the ground tongue's 195 nm cap
 #   chord, which is shorter than the margin (junction_fan, d1_die_defaults).
+# A band that ends on the die edge leaves none: it runs straight to the die edge, with no cap (cells 18 and 21).
 SHORT_BAND_EDGES = {
-    "cell18_handoff": 6,
-    "cell21_interpolation_resampled": 6,
-    "cell21_bspline_resampled": 9,
     "junction_straight": 8,
     "d1_die_test_build": 8,
     "junction_fan": 5,
