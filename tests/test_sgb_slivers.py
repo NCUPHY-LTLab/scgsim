@@ -5,8 +5,10 @@ from __future__ import annotations
 import math
 
 import pytest
+import sgb_supported_cells as disk_qubit
 from sgb_inputs import gds_pad_in_ground
 from sgb_scenes import pad_in_ground, random_layout
+from sgb_supported_kit import catalogue, type_bands
 
 from scgsim.geometry.sgb.model import build_conformal_model, build_model_from_catalogue
 from scgsim.geometry.sgb.slivers.feature_size import Prim, prim_distance
@@ -50,6 +52,45 @@ def test_narrowest_face_width_is_the_local_feature_size_on_exact_carriers():
     assert math.isclose(
         port["width_2a_over_p_um"], 2 * (30 * 10) / (2 * (30 + 10)), rel_tol=1e-9
     )
+
+
+@pytest.mark.parametrize("name", ["cell07_cpw45_ro", "cell07_cpw45_xy"])
+def test_a_triangle_face_reports_its_smallest_altitude_not_zero(name):
+    """The 45-degree CPW leaves straight triangles in the die corners; each reports 2 A / longest side.
+
+    A loop runs some of a triangle's edges backwards; the width must still pair each end point
+    with its own vertex (issue #129: a reversed edge once measured a vertex against itself, 0.0).
+    """
+    model = build_model_from_catalogue(
+        catalogue(disk_qubit.SCENES[name]()), "B", insets=type_bands()
+    )
+    faces = sliver_report(model, top=len(model.topology.faces), drift=False)
+    widths = {row["id"]: row["value_um"] for row in faces["narrowest_faces"]}
+    assert all(width > 0 for width in widths.values())
+    triangles = _straight_triangles(model)
+    assert len(triangles) >= 4  # two ground corners, each at z = 0 and at the metal top
+    for fid, corners in triangles.items():
+        twice_area = abs(
+            (corners[1][0] - corners[0][0]) * (corners[2][1] - corners[0][1])
+            - (corners[2][0] - corners[0][0]) * (corners[1][1] - corners[0][1])
+        )
+        longest = max(math.dist(corners[i], corners[i - 1]) for i in range(3))
+        assert widths[fid] == pytest.approx(twice_area / longest, abs=1e-6)
+
+
+def _straight_triangles(model):
+    """Horizontal faces bounded by three straight edges, as their corners in micrometres."""
+    topo, g = model.topology, model.labelled.catalogue.grid.size_um
+    triangles = {}
+    for fid, face in topo.faces.items():
+        loop = face.loops[0]
+        if face.kind != "horizontal" or len(face.loops) != 1 or len(loop) != 3:
+            continue
+        edges = [(topo.edges[eid], sign) for eid, sign in loop]
+        if all(edge.curve is None for edge, _ in edges):
+            starts = [topo.vertices[e.v0 if s > 0 else e.v1] for e, s in edges]
+            triangles[fid] = [(v.x * g, v.y * g) for v in starts]
+    return triangles
 
 
 def test_feature_size_primitives_arc_to_arc_and_arc_to_line():
