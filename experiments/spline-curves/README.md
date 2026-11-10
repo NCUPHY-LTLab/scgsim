@@ -35,7 +35,8 @@ uv run --locked --no-sync python experiments/spline-curves/fit_table.py
 `OUT` receives, for each run, `<scene>__<mode>.json` and a folder of the same name with the model files and
 meshes; keep it outside the repository. The mode is `bands` or `nobands`, with `__nomesh` after it for
 `--no-mesh`, so the control without bands sits beside the run with bands. A run whose files already exist
-is refused before anything runs; choose another `OUT` to measure it again.
+is refused before anything runs; choose another `OUT` to measure it again. Run one `measure.py` per `OUT`
+at a time: two started together could both pass that check and then write the same run.
 A scene takes a few seconds to half a minute; the arc conversion itself is unoptimised Python
 (0.2 to 8 s per scene). The cheapest check that the polygon and the arc path both build and mesh is
 cell 13, about 10 s:
