@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -182,11 +183,74 @@ def test_an_element_outside_every_core_gets_its_own_local_size():
     refined = refine_locally(
         (), (first, inside, outside), 20.0, THRESHOLD, RepairPolicy()
     )
-    # The first core is 2.5 wide; element 2 (1 um away) is in it and asks 0.5 x 8 x 0.2 = 0.8 -> 0.625.
+    # The first core is 2.5 wide.  Element 2 (1 um away) is in it and asks 0.5 x 8 x 0.2 = 0.8 -> 0.625,
+    # which would shrink that needle core to 0.625 and leave element 2 outside: it gets its own size and
+    # the first keeps element 1's 2.5.  Element 3, 3 um away, was never in it.
     assert refined == (
-        LocalSize((0.0, 0.0, 0.0), 0.625),
+        LocalSize((0.0, 0.0, 0.0), 2.5),
         LocalSize((3.0, 0.0, 0.0), 2.5),
+        LocalSize((1.0, 0.0, 0.0), 0.625),
     )
+
+
+def field_at(local, point, max_size: float = 20.0, gradation: float = 1.0) -> float:
+    """The size Gmsh's Ball fields give at ``point``: the finest over the sizes, graded outside each core."""
+    return min(
+        (
+            min(
+                max_size,
+                ball.size
+                + gradation
+                * max(0.0, math.dist(ball.centre, point) - ball.core_radius),
+            )
+            for ball in local
+        ),
+        default=max_size,
+    )
+
+
+def test_a_needle_that_a_shrinking_core_leaves_gets_its_own_size():
+    """The review's case: needles at x = 0 and 1, longest edges 8, qualities 0.009 and 0.002.
+
+    Each location gets at least the size its element asked for, on the ladder: 2.5 at x = 0
+    (0.5 x 8 x 0.9 = 3.6) and 0.625 at x = 1 (0.5 x 8 x 0.2 = 0.8).
+    """
+    at_zero = bad_element(1, at=(0.0, 0.0, 0.0), edge_max=8.0, quality=0.009)
+    at_one = bad_element(2, at=(1.0, 0.0, 0.0), edge_max=8.0, quality=0.002)
+    for order in ((at_zero, at_one), (at_one, at_zero)):
+        refined = refine_locally((), order, 20.0, THRESHOLD, RepairPolicy())
+        assert field_at(refined, (0.0, 0.0, 0.0)) <= 2.5
+        assert field_at(refined, (1.0, 0.0, 0.0)) <= 0.625
+        for element in order:
+            spot = element.shortest_edge_midpoint
+            assert any(
+                math.dist(ball.centre, spot) <= ball.core_radius for ball in refined
+            )
+
+
+def test_an_existing_core_that_shrinks_away_from_its_elements_still_goes_finer():
+    """A needle size whose claimed elements all fall outside its halved core halves and lets them go."""
+    existing = LocalSize((0.0, 0.0, 0.0), 2.5)
+    near = bad_element(1, at=(2.0, 0.0, 0.0), edge_max=8.0, quality=0.009)  # inside 2.5
+    refined = refine_locally((existing,), (near,), 20.0, THRESHOLD, RepairPolicy())
+    assert refined == (
+        LocalSize((0.0, 0.0, 0.0), 1.25),
+        LocalSize((2.0, 0.0, 0.0), 2.5),
+    )
+
+
+def test_a_recipe_s_own_local_sizes_reach_every_round_unchanged(tmp_path, monkeypatch):
+    """Local sizes a recipe asks for come first in every job; the loop adds its own after them."""
+    recipe_size = LocalSize((5.0, 5.0, 5.0), 0.5, 2.0)
+    initial = SizeRequests(20.0, 1.0, MappingProxyType({}), (), (recipe_size,))
+    jobs = script_rounds(monkeypatch, bad_until_finer_than(2.5))
+    outcome = repair_mesh(inputs_for(tmp_path, initial=initial))
+    assert [job.sizes.local_sizes for job in jobs] == [
+        (recipe_size,),
+        (recipe_size, LocalSize(SPOT, 2.5)),
+    ]
+    assert outcome.stop == "clean"
+    assert outcome.local_sizes == (LocalSize(SPOT, 2.5),)
 
 
 def test_a_needle_is_refined_at_its_short_edge_and_a_sliver_over_its_extent():

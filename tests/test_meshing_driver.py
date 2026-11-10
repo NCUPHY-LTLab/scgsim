@@ -13,6 +13,7 @@ from meshing_support import audit_of, bad_element
 
 from scgsim.meshing import driver
 from scgsim.meshing.driver import (
+    ProbeTimeLimitError,
     WorkerExit,
     launch_worker,
     measure_bounding_box,
@@ -263,26 +264,50 @@ def test_a_stale_result_from_an_earlier_attempt_is_not_mistaken_for_the_new_one(
 def test_the_bounding_box_comes_back_from_a_probe_worker(tmp_path, monkeypatch):
     """The bounding box comes back from a probe worker."""
 
-    def probe(arguments):
+    limits = []
+
+    def probe(arguments, timeout_seconds=None):
         command, xao, result = arguments
         assert command == "probe" and xao.endswith("case.xao")
+        limits.append(timeout_seconds)
         Path(result).write_text(
             json.dumps({"minimum": [0, 0, -10], "maximum": [3, 4, 12]})
         )
         return WorkerExit(0, "")
 
     monkeypatch.setattr(driver, "launch_worker", probe)
-    box = measure_bounding_box(tmp_path / "case.xao", tmp_path)
+    box = measure_bounding_box(tmp_path / "case.xao", tmp_path, timeout_seconds=9.0)
     assert box.diagonal == pytest.approx((9 + 16 + 484) ** 0.5)
+    assert limits == [9.0]
 
 
 def test_a_probe_that_fails_names_the_file(tmp_path, monkeypatch):
     """A probe that fails names the file."""
     monkeypatch.setattr(
-        driver, "launch_worker", lambda arguments: WorkerExit(2, "no such file")
+        driver,
+        "launch_worker",
+        lambda arguments, timeout_seconds=None: WorkerExit(2, "no such file"),
     )
     with pytest.raises(MeshingError, match=r"case\.xao.*status 2"):
         measure_bounding_box(tmp_path / "case.xao", tmp_path)
+
+
+def test_a_probe_stopped_at_its_time_limit_raises_the_time_limit_error(
+    tmp_path, monkeypatch
+):
+    """A probe killed at its limit, or given no time at all, raises ``ProbeTimeLimitError``."""
+    started = []
+
+    def overrun(arguments, timeout_seconds=None):
+        started.append(timeout_seconds)
+        return WorkerExit(-9, "", timed_out=True)
+
+    monkeypatch.setattr(driver, "launch_worker", overrun)
+    with pytest.raises(ProbeTimeLimitError, match=r"case\.xao.*0\.5 s"):
+        measure_bounding_box(tmp_path / "case.xao", tmp_path, timeout_seconds=0.5)
+    with pytest.raises(ProbeTimeLimitError, match="no time left"):
+        measure_bounding_box(tmp_path / "case.xao", tmp_path, timeout_seconds=0.0)
+    assert started == [0.5]
 
 
 def test_the_local_sizes_travel_with_the_job(tmp_path, monkeypatch):

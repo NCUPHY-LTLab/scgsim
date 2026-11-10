@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import gdstk
@@ -30,6 +31,7 @@ from scgsim.meshing import (  # noqa: E402
     MeshResult,
     RepairPolicy,
     UniformBoundaryRecipe,
+    driver,  # noqa: E402
     mesh_sgb,
     repair,
 )
@@ -558,26 +560,44 @@ def test_geometry_the_mesher_cannot_repair_stops_on_a_stall_with_its_report(
     assert (tmp_path / f"{case.xao.stem}.rejected.msh").is_file()
 
 
-def test_a_time_limit_spent_before_the_first_round_fails_with_the_limit_in_the_report(
-    pad_in_ground_b, tmp_path
+def test_a_probe_that_overruns_the_limit_is_stopped_and_fails_with_the_budget(
+    pad_in_ground_b, tmp_path, monkeypatch
 ):
-    """Reading the model's extent alone outlasts a millisecond: no round runs and nothing is delivered."""
+    """The extent probe is bounded too: a real probe takes about 0.13 s, so one given 0.03 s is stopped."""
+    probes = []
+
+    def recorded(arguments, timeout_seconds=None):
+        finished = real_launch(arguments, timeout_seconds)
+        probes.append((arguments[0], timeout_seconds, finished.timed_out))
+        return finished
+
+    real_launch = driver.launch_worker
+    monkeypatch.setattr(driver, "launch_worker", recorded)
+    started = time.perf_counter()
     with pytest.raises(MeshRepairError, match="time_limit") as failure:
         mesh_sgb(
             pad_in_ground_b.xao,
             pad_in_ground_b.sidecar,
             tmp_path,
             threshold=THRESHOLD,
-            budgets=Budgets(time_limit_seconds=0.001),
+            budgets=Budgets(time_limit_seconds=0.03),
         )
+    elapsed = time.perf_counter() - started
+    [(command, limit, timed_out)] = probes
+    assert command == "probe" and 0 < limit <= 0.03 and timed_out
+    assert elapsed < 5.0
     report = failure.value.report
     assert report["stop"] == "time_limit"
-    assert report["time_budget"]["limit_seconds"] == 0.001
+    # The footprint was never read, so the budget is the unscaled one.
+    assert report["time_budget"] == {
+        "footprint_mm2": None,
+        "limit_seconds": 0.03,
+        "target_seconds": 60.0,
+    }
     assert (report["history"], report["mesh"]) == ([], None)
-    assert report["timing"]["total_seconds"] > 0.001
     assert not list(tmp_path.glob("*.msh"))
     summary = (tmp_path / f"{pad_in_ground_b.xao.stem}.quality.txt").read_text()
-    assert "time_limit" in summary and "limit 0 s" in summary
+    assert "time_limit" in summary and "an unread footprint" in summary
 
 
 def test_a_worker_still_running_at_its_time_limit_is_killed(pad_in_ground_b, tmp_path):

@@ -145,7 +145,7 @@ def render_text(report: QualityReport) -> str:
     budget = report["time_budget"]
     lines.append(
         f"  total {report['timing']['total_seconds']:.1f} s; limit {budget['limit_seconds']:.0f} s, "
-        f"target {budget['target_seconds']:.0f} s for {budget['footprint_mm2']:.3g} mm2"
+        f"target {budget['target_seconds']:.0f} s for {_footprint(budget['footprint_mm2'])}"
     )
     return "\n".join(lines) + "\n"
 
@@ -194,6 +194,12 @@ def _headline(report: QualityReport) -> str:
     if report["stop"] == "clean":
         return f"clean after {rounds} refinement round{plural}"
     return f"stopped without a clean mesh ({report['stop']}) after {rounds} refinement round{plural}"
+
+
+def _footprint(footprint_mm2: float | None) -> str:
+    return (
+        "an unread footprint" if footprint_mm2 is None else f"{footprint_mm2:.3g} mm2"
+    )
 
 
 def _size(size: float | None) -> str:

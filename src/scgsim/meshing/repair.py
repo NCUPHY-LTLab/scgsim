@@ -49,7 +49,7 @@ STALL_ROUNDS = 2
 class TimeBudget:
     """The time budget of one model: its footprint and the limit and target that footprint gives."""
 
-    footprint_mm2: float
+    footprint_mm2: float | None  # None when the extent could not be read in time
     limit_seconds: float
     target_seconds: float
 
@@ -87,9 +87,16 @@ class Budgets:
             ):
                 raise ValueError(f"{name} must be a positive number, got {value!r}.")
 
-    def time_budget(self, footprint_mm2: float) -> TimeBudget:
-        """The limit and target for a model of this footprint: the base values times max(1, A / A_ref)."""
-        scale = max(1.0, footprint_mm2 / self.time_reference_area_mm2)
+    def time_budget(self, footprint_mm2: float | None) -> TimeBudget:
+        """The limit and target for a model of this footprint: the base values times max(1, A / A_ref).
+
+        ``None`` (the footprint is not known) gives the base values, the smallest any model has.
+        """
+        scale = (
+            1.0
+            if footprint_mm2 is None
+            else max(1.0, footprint_mm2 / self.time_reference_area_mm2)
+        )
         return TimeBudget(
             footprint_mm2,
             self.time_limit_seconds * scale,
@@ -214,6 +221,24 @@ def repair_mesh(inputs: RepairInputs) -> RepairOutcome:
     return _outcome(stop, history, seconds, last, inputs)
 
 
+def unmeshed_outcome(stop: str, mesher: MesherOptions) -> RepairOutcome:
+    """The outcome of a call that stopped before its first round: no history and no mesh."""
+    return RepairOutcome(
+        stop=stop,
+        rounds=0,
+        history=(),
+        round_seconds=(),
+        last_audit=None,
+        last_mesh=None,
+        elevated_mesh=None,
+        geometry_order=1,
+        curve_sizes={},
+        local_sizes=(),
+        algorithm_3d=mesher.algorithm_3d,
+        fallback=None,
+    )
+
+
 def refine_locally(
     local: tuple[LocalSize, ...],
     bad: tuple[BadElement, ...],
@@ -243,32 +268,78 @@ def refine_locally(
     slivers along the band edges with bands on; the wide core cleaned the default recipe's mesh in 2.
 
     A local size takes the finest its elements ask for, on the ladder, and one that existed already goes
-    at least one ladder step finer.  Elements are taken in tag order and a local size is found by its
-    position in the list, so the same bad elements always give the same sizes.
+    at least one ladder step finer.  A needle core shrinks with its size, so an element it claimed at the
+    old width can fall outside the final core: such an element leaves it for a local size of its own,
+    and the size it left is sized again from the elements still inside.  Elements are taken in tag order
+    and a local size is found by its position in the list, so the same bad elements always give the same
+    sizes.
     """
     refined = list(local)
-    asked: dict[int, float] = {}
+    members: dict[int, list[_Claim]] = {}
     for element in sorted(bad, key=lambda e: e.element):
-        size = wanted_size(element, threshold, policy)
-        needle = element.edge_min < size
-        spot = element.shortest_edge_midpoint if needle else element.centroid
-        holder = _holding(refined, spot)
+        claim = _claim(element, threshold, policy)
+        holder = _holding(refined, claim.spot)
         if holder is None:
-            refined.append(
-                LocalSize(
-                    spot,
-                    ladder_size(size, max_size),
-                    None if needle else element.edge_max / 2,
-                )
-            )
+            refined.append(claim.own_size(max_size))
             holder = len(refined) - 1
-        asked[holder] = min(asked.get(holder, math.inf), size)
-    for index, size in sorted(asked.items()):
-        finer = ladder_size(size, max_size)
-        if index < len(local):
-            finer = min(finer, local[index].size / 2)
-        refined[index] = replace(refined[index], size=finer)
+        members.setdefault(holder, []).append(claim)
+    moved: list[_Claim] = []
+    for index, claims in sorted(members.items()):
+        previous = local[index] if index < len(local) else None
+        refined[index], left = _settle(refined[index], previous, claims, max_size)
+        moved.extend(left)
+    refined.extend(claim.own_size(max_size) for claim in moved)
     return tuple(refined)
+
+
+@dataclass(frozen=True)
+class _Claim:
+    """What one bad element asks of the local sizes: where, how fine, and how wide a core."""
+
+    spot: tuple[float, float, float]
+    size: float
+    radius: float | None  # None for a needle, whose core is as wide as its size
+
+    def own_size(self, max_size: float) -> LocalSize:
+        """A local size for this element alone."""
+        return LocalSize(self.spot, ladder_size(self.size, max_size), self.radius)
+
+
+def _claim(element: BadElement, threshold: float, policy: RepairPolicy) -> _Claim:
+    size = wanted_size(element, threshold, policy)
+    if element.edge_min < size:
+        return _Claim(element.shortest_edge_midpoint, size, None)
+    return _Claim(element.centroid, size, element.edge_max / 2)
+
+
+def _settle(
+    ball: LocalSize,
+    previous: LocalSize | None,
+    claims: list[_Claim],
+    max_size: float,
+) -> tuple[LocalSize, list[_Claim]]:
+    """The final size of one local size and the claims that fall outside its final core.
+
+    Removing a claim can only make the size coarser and a needle core wider, so the claims kept stay
+    inside; the loop ends when none falls outside.
+    """
+    kept = list(claims)
+    while True:
+        size = ladder_size(min(c.size for c in kept), max_size)
+        if previous is not None:
+            size = min(size, previous.size / 2)
+        settled = replace(ball, size=size)
+        outside = [
+            c for c in kept if math.dist(settled.centre, c.spot) > settled.core_radius
+        ]
+        if not outside:
+            return settled, [c for c in claims if c not in kept]
+        kept = [c for c in kept if c not in outside]
+        if not kept:
+            # Only an existing size can lose every claim (a new one keeps its creator, at the centre).
+            # It still goes one step finer, as every size that held a bad element does.
+            assert previous is not None
+            return replace(ball, size=previous.size / 2), list(claims)
 
 
 def wanted_size(element: BadElement, threshold: float, policy: RepairPolicy) -> float:
@@ -305,7 +376,8 @@ def _job(inputs: RepairInputs, local: tuple[LocalSize, ...], index: int) -> Mesh
             initial.gradation,
             MappingProxyType(dict(initial.curve_sizes)),
             initial.fields,
-            local,
+            # A recipe's own local sizes come first and stay as they are; the loop refines only its own.
+            (*initial.local_sizes, *local),
         ),
         threshold=inputs.threshold,
         mesher=inputs.mesher,

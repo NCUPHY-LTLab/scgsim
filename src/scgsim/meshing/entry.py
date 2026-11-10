@@ -12,18 +12,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .driver import measure_bounding_box
+from .driver import ProbeTimeLimitError, measure_bounding_box
 from .errors import MeshRepairError
 from .features import SidecarFeatures, load_features, read_features
 from .mesher import MesherOptions
 from .recipes import FeatureRecipe, SizingRecipe
 from .repair import (
     STOP_CLEAN,
+    STOP_TIME,
     Budgets,
     RepairInputs,
     RepairOutcome,
     RepairPolicy,
     repair_mesh,
+    unmeshed_outcome,
 )
 from .report import QualityReport, RunSettings, build_report, write_report
 
@@ -61,7 +63,8 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
     loop refines around bad elements, ``budgets`` when it gives up (``Budgets(max_rounds=0)`` meshes once
     without repair; the threshold still applies), and ``mesher`` the Gmsh algorithms and the order of the
     delivered mesh.  The time budget is measured from the start of this call and scales with the model's
-    footprint (its x by y extent, vacuum included): see :class:`~scgsim.meshing.repair.Budgets`.  The
+    footprint (its x by y extent, vacuum included): see :class:`~scgsim.meshing.repair.Budgets`.  Reading
+    that extent must finish within the unscaled limit, since the scaled one is not known before.  The
     threshold and the report's counts refer to the linear mesh: with ``mesher.geometry_order`` above 1
     the accepted mesh is raised to that order afterwards, in the worker that still has the CAD, and the
     file at ``<xao stem>.msh`` is the elevated one.
@@ -91,21 +94,30 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
     work_dir = Path(tempfile.mkdtemp(prefix=_WORK_DIR_PREFIX, dir=files.directory))
     try:
         sidecar_path, features = _resolve_sidecar(sidecar, work_dir)
-        bounding_box = measure_bounding_box(xao, work_dir)
-        time_budget = budgets.time_budget(bounding_box.footprint_mm2)
-        outcome = repair_mesh(
-            RepairInputs(
-                xao=xao,
-                sidecar=sidecar_path,
-                initial=recipe.size_requests(features, bounding_box),
-                threshold=threshold,
-                policy=repair,
-                budgets=budgets,
-                mesher=mesher,
-                work_dir=work_dir,
-                deadline=started + time_budget.limit_seconds,
+        # The scaled limit needs the footprint the probe reads, so the probe itself gets the unscaled
+        # limit: the smallest any model has.
+        unscaled = budgets.time_budget(None)
+        try:
+            bounding_box = measure_bounding_box(
+                xao, work_dir, started + unscaled.limit_seconds - time.perf_counter()
             )
-        )
+        except ProbeTimeLimitError:
+            time_budget, outcome = unscaled, unmeshed_outcome(STOP_TIME, mesher)
+        else:
+            time_budget = budgets.time_budget(bounding_box.footprint_mm2)
+            outcome = repair_mesh(
+                RepairInputs(
+                    xao=xao,
+                    sidecar=sidecar_path,
+                    initial=recipe.size_requests(features, bounding_box),
+                    threshold=threshold,
+                    policy=repair,
+                    budgets=budgets,
+                    mesher=mesher,
+                    work_dir=work_dir,
+                    deadline=started + time_budget.limit_seconds,
+                )
+            )
         report = build_report(
             outcome,
             RunSettings(threshold, recipe, repair, mesher, budgets, time_budget),

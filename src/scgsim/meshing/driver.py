@@ -53,12 +53,27 @@ class RoundOutcome:
     timed_out: bool = False  # the time limit expired before a worker finished
 
 
-def measure_bounding_box(xao: Path, work_dir: Path) -> BoundingBox:
-    """Bounding box of the model in ``xao``, read in a worker process so this process never loads Gmsh."""
+class ProbeTimeLimitError(MeshingError):
+    """Reading the model's extent did not finish within the time it was given."""
+
+
+def measure_bounding_box(
+    xao: Path, work_dir: Path, timeout_seconds: float | None = None
+) -> BoundingBox:
+    """Bounding box of the model in ``xao``, read in a worker process so this process never loads Gmsh.
+
+    A probe still running after ``timeout_seconds`` is killed and :class:`ProbeTimeLimitError` raised.
+    """
+    if timeout_seconds is not None and timeout_seconds <= 0:
+        raise ProbeTimeLimitError(f"no time left to read the model extent of {xao}.")
     work_dir.mkdir(parents=True, exist_ok=True)
     result_path = work_dir / "probe.json"
     result_path.unlink(missing_ok=True)
-    finished = launch_worker(["probe", str(xao), str(result_path)])
+    finished = launch_worker(["probe", str(xao), str(result_path)], timeout_seconds)
+    if finished.timed_out:
+        raise ProbeTimeLimitError(
+            f"reading the model extent of {xao} did not finish within {timeout_seconds:.3g} s."
+        )
     if finished.returncode != 0 or not result_path.is_file():
         raise MeshingError(
             f"could not read the model extent of {xao}: {_describe(finished)}"

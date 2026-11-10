@@ -119,7 +119,7 @@ here are those of the current geometry.
 | B_1mm | module, HXT | features/1 | default / 10 | 33,795 | 0.01716 | 0 | 0 | accepted | 24.6 | no |
 | B_1mm | R8 | global-size/1 | default / 10 | 9,664 | 0.002063 | 123 | 0 | rejected (rounds) | 2.3 | no |
 | B_1mm | RP | uniform-boundary/1 | 5 / 1 | 100,227 | 0.01607 | 0 | 0 | accepted | 4.9 | no |
-| B_1mm | module, repair only | features/1 | default / 1 | 26,310 | 0.009641 | 2 | 7 | rejected (stalled) | 6.5 | no |
+| B_1mm | module, repair only | features/1 | default / 1 | 27,425 | 0.009996 | 1 | 8 | rejected (rounds) | 6.8 | no |
 | circB_2mm | module | features/1 | default / 1 | 98,678 | 0.01878 | 0 | 0 | accepted | 5.2 | no |
 | circB_2mm | module + conductor-outline | features/1 | default / 1 | 127,251 | 0.0252 | 0 | 0 | accepted | 6.7 | no |
 | circB_2mm | module, HXT | features/1 | default / 10 | 61,787 | 0.01693 | 0 | 0 | accepted | 48.3 | no |
@@ -141,10 +141,10 @@ What the table shows:
   0, and takes 2.6 s (1 mm), 5.1 s (2 mm) and 11.1 s (4 mm). On the 4 mm chip the module has 45 % of the
   tetrahedra of RP (187,568 against 419,045) and half of its time.
 - **The local repair loop does not replace the film rule.** Without the film facts, the loop alone brings
-  `B_1mm` from 123 bad elements to 2 and stops after 7 rounds because the count stopped falling
-  (`stalled`). The loop before issue 124 refined each touched film wall along its whole length and
-  cleaned this case in 3 rounds; the local sizes refine around each element, and new near-flat elements
-  keep appearing further along the 0.2 um walls. With the film facts (the default) no repair is needed.
+  `B_1mm` from 123 bad elements to 1 (minimum 0.009996) and runs out of its 8 rounds. The loop before
+  issue 124 refined each touched film wall along its whole length and cleaned this case in 3 rounds; the
+  local sizes refine around each element, and new near-flat elements keep appearing further along the
+  0.2 um walls. With the film facts (the default) no repair is needed.
 - **The 4 mm minimum is close to the threshold.** Delaunay gives 0.01016 against 0.01 on `circB_4mm`, where
   HXT gives 0.01515. A stricter bound than 0.01 will make the loop work on the large chips.
 - **The module uses more tetrahedra than R8 on the small cases** (1.8 times on `B`), because film walls
