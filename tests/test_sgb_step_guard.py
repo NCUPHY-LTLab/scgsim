@@ -67,9 +67,9 @@ def planned_vertices(sidecar, face_id):
 
 
 def test_the_guard_is_written_next_to_the_step_and_reads_back_unchanged(banded):
-    """``m.guard.json`` sits beside ``m.step``; reading it checks the files and returns what was written."""
+    """``m.step.guard.json`` sits beside ``m.step``; reading it checks the files and returns what was written."""
     folder, _, exported = banded
-    assert exported.guard_path == folder / "m.guard.json"
+    assert exported.guard_path == folder / "m.step.guard.json"
     guard = read_step_guard(exported.guard_path)
     assert guard == exported.guard
     assert guard["schema"] == GUARD_SCHEMA and guard["unit"] == "UM"
@@ -129,7 +129,7 @@ def test_a_changed_bound_file_is_refused(tmp_path, banded, role):
     target = copy / exported.guard["files"][role]["path"]
     target.write_bytes(target.read_bytes() + b"\n")
     with pytest.raises(StepGuardError, match=f"the {role} file .* changed"):
-        read_step_guard(copy / "m.guard.json")
+        read_step_guard(copy / "m.step.guard.json")
 
 
 def test_a_missing_bound_file_is_refused(tmp_path, banded):
@@ -139,7 +139,7 @@ def test_a_missing_bound_file_is_refused(tmp_path, banded):
     shutil.copytree(folder, copy)
     (copy / "m.step").unlink()
     with pytest.raises(StepGuardError, match="the step file m.step is missing"):
-        read_step_guard(copy / "m.guard.json")
+        read_step_guard(copy / "m.step.guard.json")
 
 
 def test_a_sidecar_of_another_model_is_refused_even_with_its_own_hash(tmp_path, banded):
@@ -149,11 +149,11 @@ def test_a_sidecar_of_another_model_is_refused_even_with_its_own_hash(tmp_path, 
     shutil.copytree(folder, copy)
     other = {**sidecar, "model": {**sidecar["model"], "identity_digest": "0" * 64}}
     write_sidecar(copy / "m.sidecar.json", other)
-    guard = json.loads((copy / "m.guard.json").read_text())
+    guard = json.loads((copy / "m.step.guard.json").read_text())
     guard["files"]["sidecar"]["sha256"] = file_sha256(copy / "m.sidecar.json")
-    write_step_guard(copy / "m.guard.json", guard)
+    write_step_guard(copy / "m.step.guard.json", guard)
     with pytest.raises(StepGuardError, match="is not the guarded"):
-        read_step_guard(copy / "m.guard.json")
+        read_step_guard(copy / "m.step.guard.json")
 
 
 @pytest.mark.parametrize(
@@ -164,10 +164,132 @@ def test_a_sidecar_of_another_model_is_refused_even_with_its_own_hash(tmp_path, 
 def test_a_guard_of_another_schema_or_unit_is_refused(tmp_path, banded, change):
     """The reader accepts only the schema and the micrometre unit it was written with."""
     folder, _, _ = banded
-    guard = {**json.loads((folder / "m.guard.json").read_text()), **change}
-    write_step_guard(tmp_path / "m.guard.json", guard)
+    guard = {**json.loads((folder / "m.step.guard.json").read_text()), **change}
+    write_step_guard(tmp_path / "m.step.guard.json", guard)
     with pytest.raises(StepGuardError):
-        read_step_guard(tmp_path / "m.guard.json")
+        read_step_guard(tmp_path / "m.step.guard.json")
+
+
+def test_a_stp_and_a_step_of_one_stem_keep_separate_guards(tmp_path, emit_models):
+    """The guard keeps the STEP's full file name, so ``m.step`` and ``m.stp`` in one folder do not share one."""
+    _, first = export(emit_models["pad_c_bands"], tmp_path)
+    second = export_aedt_step(
+        tmp_path / "m.brep", tmp_path / "m.sidecar.json", tmp_path / "m.stp"
+    )
+    assert second.guard_path == tmp_path / "m.stp.guard.json"
+    assert read_step_guard(first.guard_path)["files"]["step"]["path"] == "m.step"
+    assert read_step_guard(second.guard_path)["files"]["step"]["path"] == "m.stp"
+
+
+def edit_guard(tmp_path, banded, change):
+    """A copy of the example's files whose guard ``change`` edited in place; the file hashes stay valid."""
+    folder, _, _ = banded
+    copy = tmp_path / "copy"
+    shutil.copytree(folder, copy)
+    guard = json.loads((copy / "m.step.guard.json").read_text())
+    change(guard)
+    write_step_guard(copy / "m.step.guard.json", guard)
+    return copy / "m.step.guard.json"
+
+
+def regroup_free_face(guard):
+    """Give the free port sheet another port's group."""
+    guard["free_faces"][0]["group"] = "PORT::other"
+
+
+def renumber_face(guard):
+    """Give a face of the first solid the planned id of a face of the last solid."""
+    faces = guard["solids"][0]["faces"]
+    faces[0]["face"] = guard["solids"][-1]["faces"][-1]["face"]
+
+
+def rename_solid(guard):
+    """Give the first solid a name the sidecar does not give it."""
+    guard["solids"][0]["aedt_name"] = guard["solids"][0]["aedt_name"] + "_x"
+
+
+def drop_face(guard):
+    """Leave the last face out of the first solid."""
+    del guard["solids"][0]["faces"][-1]
+
+
+def drop_free_face(guard):
+    """Leave the free port sheet out."""
+    del guard["free_faces"][0]
+
+
+def flip_curved(guard):
+    """Flip the curved flag of one face."""
+    face = guard["solids"][0]["faces"][0]
+    face["curved"] = not face["curved"]
+
+
+def swap_solid_ids(guard):
+    """Swap the planned ids of the first two solids, keeping their faces."""
+    first, second = guard["solids"][0], guard["solids"][1]
+    first["solid"], second["solid"] = second["solid"], first["solid"]
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (regroup_free_face, "free face .* has group 'PORT::other'"),
+        (renumber_face, "lists faces .* the sidecar plans"),
+        (rename_solid, "is named .* the sidecar names it"),
+        (drop_face, "lists faces .* the sidecar plans"),
+        (drop_free_face, "the free faces are"),
+        (flip_curved, "flags curved wrongly"),
+        (swap_solid_ids, "not distinct planned solids in tag order"),
+    ],
+    ids=lambda v: getattr(v, "__name__", None),
+)
+def test_a_guard_edited_against_its_sidecar_is_refused(
+    tmp_path, banded, change, message
+):
+    """Each edit leaves every file hash valid; the cross-check with the bound sidecar still refuses it."""
+    with pytest.raises(
+        StepGuardError, match=f"does not match its sidecar: .*{message}"
+    ):
+        read_step_guard(edit_guard(tmp_path, banded, change))
+
+
+def drop_key(guard):
+    """Remove the vertices of one face."""
+    del guard["solids"][0]["faces"][0]["vertices_um"]
+
+
+def add_key(guard):
+    """Add a key the schema does not have to a free face."""
+    guard["free_faces"][0]["note"] = "extra"
+
+
+def bad_point(guard):
+    """Give one face a two-coordinate centre."""
+    guard["solids"][0]["faces"][0]["centre_um"] = [0.0, 0.0]
+
+
+def bad_arc(guard):
+    """Replace a loop edge by an arc with two points."""
+    guard["free_faces"][0]["loops"][0][0] = {
+        "kind": "arc",
+        "points_um": [[0.0, 0.0, 0.0]] * 2,
+    }
+
+
+def no_solids(guard):
+    """List no solid."""
+    guard["solids"] = []
+
+
+@pytest.mark.parametrize(
+    "change",
+    [drop_key, add_key, bad_point, bad_arc, no_solids],
+    ids=lambda v: v.__name__,
+)
+def test_a_malformed_guard_is_refused(tmp_path, banded, change):
+    """A missing or extra key, or a value of the wrong shape, is refused before any file is read."""
+    with pytest.raises(StepGuardError, match="is malformed"):
+        read_step_guard(edit_guard(tmp_path, banded, change))
 
 
 def loop_points(loop, samples=4096):
@@ -249,6 +371,7 @@ def test_a_free_face_with_an_arc_keeps_the_arc_as_three_points(tmp_path):
     )
     free_faces = exported.guard["free_faces"]
     assert free_faces and {f["group"] for f in free_faces} == {"PORT::p1"}
+    assert read_step_guard(exported.guard_path) == exported.guard
     segments = [s for f in free_faces for loop in f["loops"] for s in loop]
     assert "arc" in {s["kind"] for s in segments}
     assert all(
@@ -263,6 +386,7 @@ def test_a_route_a_floating_sheet_is_a_free_face(tmp_path):
     sidecar, exported = export(
         build_model(FIXTURES["floating_conductor"], "A"), tmp_path
     )
+    assert read_step_guard(exported.guard_path) == exported.guard
     embedded = {e["face"] for e in sidecar["embedded_faces"]}
     assert {f["face"] for f in exported.guard["free_faces"]} == embedded
     for free in exported.guard["free_faces"]:

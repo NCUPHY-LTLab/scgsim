@@ -71,6 +71,9 @@ from scgsim.geometry.sgb.exchange.guard import (
     LoopSegment,
     SolidGuard,
     StepGuard,
+    exported_solid_ids,
+    free_face_ids,
+    guard_mismatches,
     guard_path_for,
     guarded_file,
     write_step_guard,
@@ -127,8 +130,15 @@ def export_aedt_step(
     creates its own Region from the same vacuum declaration.  Solids are matched to the sidecar in ``sidecar_file`` by tag order (the ``TopExp::MapShapes`` order of
     the file), so each gets the ``aedt_name`` of its planned volume.  A file that does not belong to the
     sidecar (counts, vertex positions, face areas or solid volumes differ from its ``expected`` block) raises
-    :class:`StepExportError` before any name, STEP or guard is written.  The guard
+    :class:`StepExportError` before any name, STEP or guard is written, and so does a file whose solids do
+    not carry exactly their planned faces (:func:`~scgsim.geometry.sgb.exchange.guard.guard_mismatches`,
+    the check the reader repeats).  The guard ``<STEP file name>.guard.json``
     (:mod:`~scgsim.geometry.sgb.exchange.guard`) is written last, binding the three files by SHA-256.
+
+    One call at a time per output target (``step_path``), which the caller keeps and nothing checks: the
+    guard hashes the STEP after writing it, so two calls at once for the same ``step_path`` may leave the
+    STEP of one bound by a guard that lists the faces of the other.  Calls with different ``step_path``
+    may run at once, also in one folder.
     """
     require_ocp()
     sidecar = read_sidecar(sidecar_file)
@@ -157,13 +167,18 @@ def export_aedt_step(
         }
         for (tag, vid), name in zip(exported, names, strict=True)
     ]
-    bounding = {f["face"] for solid in solid_guards for f in solid["faces"]}
-    rebuilt = _rebuilt_groups(sidecar)
+    free_ids = set(free_face_ids(sidecar, [vid for _, vid in exported]))
     free_faces = [
         faces.free_face(face, sidecar["faces"][fid]["group"])
         for face, fid in faces.in_tag_order()
-        if fid not in bounding and sidecar["faces"][fid]["group"] in rebuilt
+        if fid in free_ids
     ]
+    mismatches = guard_mismatches(solid_guards, free_faces, sidecar)
+    if mismatches:
+        raise StepExportError(
+            f"{geometry_file} does not carry its planned faces: "
+            + "; ".join(mismatches)
+        )
     _write_assembly([solids.FindKey(tag) for tag, _ in exported], names, step_path)
     guard_path = guard_path_for(step_path)
     guard: StepGuard = {
@@ -184,27 +199,12 @@ def export_aedt_step(
 
 
 def _exported_solids(sidecar: dict[str, Any]) -> list[tuple[int, str]]:
-    """``(native tag, planned id)`` of every solid AEDT imports: all but the vacuum, in tag order."""
-    return [
-        (tag, vid)
+    """``(native tag, planned id)`` of every solid AEDT imports (:func:`exported_solid_ids`), in tag order."""
+    tag_of = {
+        vid: tag
         for tag, vid in enumerate(sidecar["binding"]["ids_by_tag"]["3"], start=1)
-        if sidecar["volumes"][vid]["kind"] != "vacuum"
-    ]
-
-
-def _rebuilt_groups(sidecar: dict[str, Any]) -> set[str]:
-    """The groups whose faces AEDT needs as objects: conductor sheets and lumped-port sheets.
-
-    A face of these that bounds no exported solid (a sheet with vacuum on both sides) is rebuilt from its
-    loops.  Every other face that bounds no exported solid lies between vacuum and vacuum or on the
-    vacuum's outer boundary, which the native Region replaces.
-    """
-    sheets = {
-        name
-        for name, group in sidecar["physical_groups"].items()
-        if group.get("interface_type") == "SHEET"
     }
-    return sheets | {port["group"] for port in sidecar["ports"]}
+    return [(tag_of[vid], vid) for vid in exported_solid_ids(sidecar)]
 
 
 def _indexed(shape: Any, kind: Any) -> Any:

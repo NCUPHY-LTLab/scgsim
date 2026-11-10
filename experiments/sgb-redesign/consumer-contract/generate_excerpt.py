@@ -1,8 +1,9 @@
-"""Build a tiny SGB model with the sgb-core package and write its five files (source of the consumer-contract excerpts).
+"""Build a tiny SGB model with SGB and write its five files (source of the consumer-contract excerpts).
 
-Run with the sgb-core environment:
-  <sgb-core>/.artifacts/env/bin/python generate_excerpt.py <sgb-core>/tests <out_dir>
-It uses the sgb-core test helper ``sgb_inputs.gds_pad_in_ground`` (100 um die, ground plane, 20 um pad, one lumped port).
+Run from the repository root (gmsh comes with the ``palace`` extra, OCP with the ``occt`` group):
+  uv run --extra palace --group dev --group occt python experiments/sgb-redesign/consumer-contract/generate_excerpt.py \
+      tests experiments/sgb-redesign/consumer-contract/out
+It uses the test helper ``sgb_inputs.gds_pad_in_ground`` (100 um die, ground plane, 20 um pad, one lumped port).
 """
 
 import sys
@@ -57,6 +58,7 @@ import json  # noqa: E402
 
 import gmsh  # noqa: E402
 
+from scgsim.geometry.sgb.exchange.guard import read_step_guard  # noqa: E402
 from scgsim.geometry.sgb.exchange.step import export_aedt_step  # noqa: E402
 from scgsim.geometry.sgb.sidecar.files import read_sidecar  # noqa: E402
 from scgsim.geometry.sgb.verification.loaded import (  # noqa: E402
@@ -85,9 +87,10 @@ for route in "BC":
     # the AEDT-side export and its guard
     step = export_aedt_step(
         folder / f"semantic_geometry_route_{route.lower()}.brep",
-        sidecar,
+        folder / f"semantic_geometry_route_{route.lower()}.sidecar.json",
         folder / "aedt_model.step",
     )
+    guard = read_step_guard(step.guard_path)  # what the importer does first
     runs[route] = {
         "verify_loaded": {
             "ok": report.ok,
@@ -103,8 +106,14 @@ for route in "BC":
         "step_export": {
             "unit": step.unit,
             "object_names": sorted(step.object_names),
-            "faces_per_solid": {s.aedt_name: len(s.faces) for s in step.solids},
-            "first_guard_rows": {s.aedt_name: s.faces[:2] for s in step.solids},
+            "guard_file": step.guard_path.name,
+            "faces_per_solid": {
+                s["aedt_name"]: len(s["faces"]) for s in guard["solids"]
+            },
+            "first_guard_rows": {
+                s["aedt_name"]: s["faces"][:2] for s in guard["solids"]
+            },
+            "free_faces": [f["face"] for f in guard["free_faces"]],
         },
     }
 (out / "consumer_runs.json").write_text(

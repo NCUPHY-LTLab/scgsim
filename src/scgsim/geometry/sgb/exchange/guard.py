@@ -18,14 +18,23 @@ writes, beside the STEP, a guard file the importer reads again before it assigns
   importer to rebuild them from SGB output, never from the layout source.
 
 The guard is plain JSON: keys sorted, numbers rounded to twelve significant digits like the sidecar, file
-paths relative to the guard's folder, no timestamps.  Reading it needs no OCP.
+paths relative to the guard's folder, no timestamps.  Reading it needs no OCP.  :func:`read_step_guard`
+checks the whole structure and then the solids and free faces against the bound sidecar
+(:func:`guard_mismatches`): a guard edited by hand, even with valid file hashes, is refused rather than
+handing the importer a wrong face identity or boundary group.  The exporter runs the same check before it
+writes anything, so it never writes a guard the reader would refuse.
+
+The guard of ``model.step`` is ``model.step.guard.json``: the STEP's full file name is kept, so ``model.step``
+and ``model.stp`` in one folder have separate guards.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
@@ -96,8 +105,8 @@ class StepGuard(TypedDict):
 
 
 def guard_path_for(step_path: Path) -> Path:
-    """Where the guard of ``step_path`` lives: next to it, ``<stem>.guard.json``."""
-    return step_path.with_name(step_path.stem + GUARD_SUFFIX)
+    """Where the guard of ``step_path`` lives: next to it, ``<STEP file name>.guard.json``."""
+    return step_path.with_name(step_path.name + GUARD_SUFFIX)
 
 
 def guarded_file(path: Path, guard_dir: Path) -> GuardedFile:
@@ -120,12 +129,161 @@ def write_step_guard(path: Path, guard: StepGuard) -> None:
 
 
 def read_step_guard(path: Path) -> StepGuard:
-    """The guard in ``path``, after checking that every file it binds is unchanged and belongs to it.
+    """The guard in ``path``, after checking it is well formed, its files are unchanged and it matches its sidecar.
 
-    Raises :class:`StepGuardError` when the schema or unit is not the one written here, a bound file is
-    missing or its bytes changed, or the sidecar's model identity is not the one the guard was written for.
+    Raises :class:`StepGuardError` when the schema or unit is not the one written here, a key or value is
+    missing or of the wrong kind, a bound file is missing or its bytes changed, the sidecar's model identity is
+    not the one the guard was written for, or the solids and free faces disagree with the sidecar
+    (:func:`guard_mismatches`).
     """
     path = Path(path)
+    guard = _load_guard(path)
+    for role, record in sorted(guard["files"].items()):
+        _check_bound_file(path, role, record)
+    sidecar = _load_bound_sidecar(path, guard)
+    if sidecar.get("model") != guard["model"] or sidecar.get("route") != guard["route"]:
+        raise StepGuardError(
+            f"{path}: the sidecar's model {sidecar.get('model')!r} (route {sidecar.get('route')!r}) is not "
+            f"the guarded {guard['model']!r} (route {guard['route']!r})"
+        )
+    try:
+        mismatches = guard_mismatches(guard["solids"], guard["free_faces"], sidecar)
+    except (KeyError, IndexError, TypeError) as error:
+        raise StepGuardError(
+            f"{path}: the sidecar lacks a record the guard needs: {error!r}"
+        ) from error
+    if mismatches:
+        raise StepGuardError(
+            f"{path} does not match its sidecar: " + "; ".join(mismatches)
+        )
+    return guard
+
+
+def guard_mismatches(
+    solids: Sequence[SolidGuard],
+    free_faces: Sequence[FreeFace],
+    sidecar: dict[str, Any],
+) -> list[str]:
+    """How the guarded solids and free faces disagree with the sidecar they were exported from; empty when they agree.
+
+    The solids must be exactly :func:`exported_solid_ids`, distinct and in tag order, each with its sidecar ``aedt_name`` and exactly
+    its planned faces (``expected.solid_faces``), each face listed once and flagged ``curved`` exactly when it
+    is one of the sidecar's ``curved_wall_faces``.  The free faces must be exactly :func:`free_face_ids` of
+    those solids, in tag order, each with its sidecar group.  Positions and areas are measured, not planned,
+    so they are left to the importer's tolerances (#67 decision 3).
+    """
+    tag_of = _tags(sidecar["binding"]["ids_by_tag"]["3"])
+    unknown = [s["solid"] for s in solids if s["solid"] not in tag_of]
+    if unknown:
+        return [f"solids {unknown} are not planned solids of the sidecar"]
+    tags = [tag_of[s["solid"]] for s in solids]
+    mismatches = []
+    if tags != sorted(set(tags)):
+        mismatches.append("the solids are not distinct planned solids in tag order")
+    listed = [s["solid"] for s in solids]
+    if sorted(listed) != sorted(exported_solid_ids(sidecar)):
+        mismatches.append(
+            f"the solids are {listed}, the solids AEDT imports (all but the vacuum) are "
+            f"{exported_solid_ids(sidecar)}"
+        )
+    for solid in solids:
+        mismatches += _solid_mismatches(solid, sidecar)
+    mismatches += _free_face_mismatches(
+        free_faces, [s["solid"] for s in solids], sidecar
+    )
+    return mismatches
+
+
+def exported_solid_ids(sidecar: dict[str, Any]) -> list[str]:
+    """The planned solids the STEP carries, in tag order: every emitted solid but the vacuum.
+
+    AEDT creates its own Region from the same vacuum declaration, so the vacuum solid is not exported.
+    """
+    return [
+        vid
+        for vid in sidecar["binding"]["ids_by_tag"]["3"]
+        if sidecar["volumes"][vid]["kind"] != "vacuum"
+    ]
+
+
+def free_face_ids(sidecar: dict[str, Any], solid_ids: Sequence[str]) -> list[str]:
+    """The faces the guard keeps as loops, in tag order: conductor-sheet and lumped-port faces bounding none of ``solid_ids``.
+
+    Such a face (a sheet with vacuum on both sides) must be rebuilt by the importer.  Every other face that
+    bounds no exported solid lies between vacuum and vacuum or on the vacuum's outer boundary, which the
+    importer's native Region replaces, so it is not kept.
+    """
+    tag_of = _tags(sidecar["binding"]["ids_by_tag"]["3"])
+    solid_faces = sidecar["expected"]["solid_faces"]
+    bounding = {tag for vid in solid_ids for tag in solid_faces[tag_of[vid] - 1]}
+    face_ids = sidecar["binding"]["ids_by_tag"]["2"]
+    rebuilt = _rebuilt_groups(sidecar)
+    return [
+        fid
+        for tag, fid in enumerate(face_ids, start=1)
+        if tag not in bounding and sidecar["faces"][fid]["group"] in rebuilt
+    ]
+
+
+def _rebuilt_groups(sidecar: dict[str, Any]) -> set[str]:
+    """The groups whose faces AEDT needs as objects: conductor sheets and lumped-port sheets."""
+    sheets = {
+        name
+        for name, group in sidecar["physical_groups"].items()
+        if group.get("interface_type") == "SHEET"
+    }
+    return sheets | {port["group"] for port in sidecar["ports"]}
+
+
+def _solid_mismatches(solid: SolidGuard, sidecar: dict[str, Any]) -> list[str]:
+    vid = solid["solid"]
+    mismatches = []
+    planned_name = sidecar["volumes"][vid]["aedt_name"]
+    if solid["aedt_name"] != planned_name:
+        mismatches.append(
+            f"solid {vid} is named {solid['aedt_name']!r}, the sidecar names it {planned_name!r}"
+        )
+    face_ids = sidecar["binding"]["ids_by_tag"]["2"]
+    tag = _tags(sidecar["binding"]["ids_by_tag"]["3"])[vid]
+    planned = {face_ids[t - 1] for t in sidecar["expected"]["solid_faces"][tag - 1]}
+    listed = [f["face"] for f in solid["faces"]]
+    if len(set(listed)) != len(listed) or set(listed) != planned:
+        mismatches.append(
+            f"solid {vid} lists faces {sorted(listed)}, the sidecar plans {sorted(planned)}, each once"
+        )
+    curved = set(sidecar["curved_wall_faces"])
+    misflagged = sorted(
+        f["face"] for f in solid["faces"] if f["curved"] != (f["face"] in curved)
+    )
+    if misflagged:
+        mismatches.append(f"solid {vid} flags curved wrongly on faces {misflagged}")
+    return mismatches
+
+
+def _free_face_mismatches(
+    free_faces: Sequence[FreeFace], solid_ids: Sequence[str], sidecar: dict[str, Any]
+) -> list[str]:
+    expected = free_face_ids(sidecar, solid_ids)
+    listed = [f["face"] for f in free_faces]
+    if listed != expected:
+        return [
+            f"the free faces are {listed}, the faces bounding no guarded solid are {expected}"
+        ]
+    planned = sidecar["faces"]
+    return [
+        f"free face {f['face']} has group {f['group']!r}, the sidecar gives {planned[f['face']]['group']!r}"
+        for f in free_faces
+        if f["group"] != planned[f["face"]]["group"]
+    ]
+
+
+def _tags(ids: list[str]) -> dict[str, int]:
+    """Planned id to native tag (1 + position in ``ids_by_tag``)."""
+    return {planned_id: tag for tag, planned_id in enumerate(ids, start=1)}
+
+
+def _load_guard(path: Path) -> StepGuard:
+    """The parsed guard of ``path`` once its schema, unit and complete structure are the ones written here."""
     try:
         guard = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
@@ -134,20 +292,22 @@ def read_step_guard(path: Path) -> StepGuard:
         raise StepGuardError(f"{path} is not a {GUARD_SCHEMA} guard")
     if guard.get("unit") != "UM":
         raise StepGuardError(f"{path} has unit {guard.get('unit')!r}, not 'UM'")
-    files = guard.get("files")
-    if not isinstance(files, dict) or set(files) != {"step", "geometry", "sidecar"}:
-        raise StepGuardError(f"{path} must bind exactly a step, geometry and sidecar")
-    for role, record in sorted(files.items()):
-        _check_bound_file(path, role, record)
-    sidecar = read_sidecar(path.parent / files["sidecar"]["path"])
-    if sidecar.get("model") != guard.get("model") or sidecar.get("route") != guard.get(
-        "route"
-    ):
-        raise StepGuardError(
-            f"{path}: the sidecar's model {sidecar.get('model')!r} (route {sidecar.get('route')!r}) is not "
-            f"the guarded {guard.get('model')!r} (route {guard.get('route')!r})"
-        )
+    problems = _structure_problems(guard)
+    if problems:
+        raise StepGuardError(f"{path} is malformed: " + "; ".join(problems))
     return cast(StepGuard, guard)
+
+
+def _load_bound_sidecar(path: Path, guard: StepGuard) -> dict[str, Any]:
+    try:
+        sidecar = read_sidecar(path.parent / guard["files"]["sidecar"]["path"])
+    except ValueError as error:
+        raise StepGuardError(
+            f"{path}: the bound sidecar is not readable JSON: {error}"
+        ) from error
+    if not isinstance(sidecar, dict):
+        raise StepGuardError(f"{path}: the bound sidecar is not a JSON object")
+    return sidecar
 
 
 def _check_bound_file(guard_path: Path, role: str, record: Any) -> None:
@@ -164,3 +324,147 @@ def _check_bound_file(guard_path: Path, role: str, record: Any) -> None:
             f"{guard_path}: the {role} file {record['path']} changed "
             f"(sha256 {observed}, guarded {record['sha256']})"
         )
+
+
+# ---------------------------------------------------------------- the structure of a guard, key by key
+# Exact key sets, so a dropped or added key is refused rather than read as a default.
+
+
+def _structure_problems(guard: dict[str, Any]) -> list[str]:
+    if set(guard) != StepGuard.__required_keys__:
+        return [
+            f"the guard has keys {sorted(guard)}, expected {sorted(StepGuard.__required_keys__)}"
+        ]
+    problems = []
+    if not isinstance(guard["route"], str):
+        problems.append("route is not a string")
+    model = guard["model"]
+    if not isinstance(model, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in model.items()
+    ):
+        problems.append("model is not a mapping of strings")
+    files = guard["files"]
+    if not isinstance(files, dict) or set(files) != {"step", "geometry", "sidecar"}:
+        problems.append("files must bind exactly a step, geometry and sidecar")
+    else:
+        problems += [
+            f"files.{role} is not a path and a SHA-256"
+            for role, record in sorted(files.items())
+            if not _is_record(record, GuardedFile.__required_keys__)
+            or not all(isinstance(record[k], str) for k in ("path", "sha256"))
+        ]
+    problems += _list_problems("solids", guard["solids"], _solid_problems)
+    problems += _list_problems(
+        "free_faces", guard["free_faces"], _free_face_problems, allow_empty=True
+    )
+    return problems
+
+
+def _list_problems(
+    where: str,
+    items: Any,
+    check: Callable[[str, Any], list[str]],
+    *,
+    allow_empty: bool = False,
+) -> list[str]:
+    if not isinstance(items, list) or (not items and not allow_empty):
+        return [f"{where} is not a {'' if allow_empty else 'non-empty '}list"]
+    return [p for i, item in enumerate(items) for p in check(f"{where}[{i}]", item)]
+
+
+def _solid_problems(where: str, solid: Any) -> list[str]:
+    if not _is_record(solid, SolidGuard.__required_keys__):
+        return [
+            f"{where} does not have exactly the keys {sorted(SolidGuard.__required_keys__)}"
+        ]
+    problems = [
+        f"{where}.{key} is not a string"
+        for key in ("solid", "aedt_name")
+        if not isinstance(solid[key], str)
+    ]
+    return problems + _list_problems(f"{where}.faces", solid["faces"], _face_problems)
+
+
+def _face_problems(where: str, face: Any) -> list[str]:
+    if not _is_record(face, FaceGuard.__required_keys__):
+        return [
+            f"{where} does not have exactly the keys {sorted(FaceGuard.__required_keys__)}"
+        ]
+    vertices = face["vertices_um"]
+    checks = {
+        "face": isinstance(face["face"], str),
+        "area_um2": _is_positive(face["area_um2"]),
+        "centre_um": _is_point(face["centre_um"]),
+        "vertex_centroid_um": _is_point(face["vertex_centroid_um"]),
+        "vertices_um": isinstance(vertices, list)
+        and bool(vertices)
+        and all(map(_is_point, vertices)),
+        "curved": isinstance(face["curved"], bool),
+    }
+    return [f"{where}.{key} is malformed" for key, ok in checks.items() if not ok]
+
+
+def _free_face_problems(where: str, face: Any) -> list[str]:
+    if not _is_record(face, FreeFace.__required_keys__):
+        return [
+            f"{where} does not have exactly the keys {sorted(FreeFace.__required_keys__)}"
+        ]
+    checks = {
+        "face": isinstance(face["face"], str),
+        "group": face["group"] is None or isinstance(face["group"], str),
+        "area_um2": _is_positive(face["area_um2"]),
+        "normal": _is_point(face["normal"]),
+    }
+    problems = [f"{where}.{key} is malformed" for key, ok in checks.items() if not ok]
+    return problems + _list_problems(f"{where}.loops", face["loops"], _loop_problems)
+
+
+def _loop_problems(where: str, loop: Any) -> list[str]:
+    return _list_problems(where, loop, _segment_problems)
+
+
+_SEGMENT_POINTS = {
+    "line": 2,
+    "arc": 3,
+}  # a line by its ends, an arc by start, mid and end
+
+
+def _segment_problems(where: str, segment: Any) -> list[str]:
+    if not _is_record(segment, LoopSegment.__required_keys__):
+        return [
+            f"{where} does not have exactly the keys {sorted(LoopSegment.__required_keys__)}"
+        ]
+    count = (
+        _SEGMENT_POINTS.get(segment["kind"])
+        if isinstance(segment["kind"], str)
+        else None
+    )
+    points = segment["points_um"]
+    if (
+        count is None
+        or not isinstance(points, list)
+        or len(points) != count
+        or not all(map(_is_point, points))
+    ):
+        return [f"{where} is not a two-point line or a three-point arc"]
+    return []
+
+
+def _is_record(value: Any, keys: frozenset[str]) -> bool:
+    return isinstance(value, dict) and set(value) == keys
+
+
+def _is_number(value: Any) -> bool:
+    return (
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
+
+
+def _is_positive(value: Any) -> bool:
+    return _is_number(value) and value > 0
+
+
+def _is_point(value: Any) -> bool:
+    return isinstance(value, list) and len(value) == 3 and all(map(_is_number, value))
