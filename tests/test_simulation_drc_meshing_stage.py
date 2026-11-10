@@ -12,6 +12,10 @@ substrate wrapped in the check's 1 um vacuum.  What changes is the pad's outline
 * ``bar`` -- a bar 2.004 um wide inside a U-shaped electrode (with 1.0 um bands, the exact erosion leaves a
   core 4 nm wide).
 
+A curved wall is measured on the pad-in-ground die of ``sgb_inputs``, its pad corner rounded by an exact arc
+of a few grid steps.  Bands narrower than the face-width limit are refused before the SGB build, so those
+tests stop in place of it.
+
 ``mesh()`` runs the same meshing stage on the model it built before the mesher starts; its tests replace only
 the mesher, so the refusal comes from the real build and the real check.  The fast meshing-stop test stands in
 for the Gmsh worker; the located finding it reports comes from the real build's sidecar.  The slow ones mesh
@@ -21,20 +25,26 @@ with Gmsh.
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import pytest
 from meshing_support import audit_of, outcome_of
+from palace_sgb_support import sidecar_of
+from sgb_inputs import gds_pad_in_ground
 from test_simulation_drc import (
     BANDED,
+    FILM,
     MATERIALS,
     NO_VACUUM_STACK,
     SIMULATIONS,
 )
 
+import scgsim.geometry.surface_epr.build as banded_build
 import scgsim.meshing.entry as meshing_entry
 import scgsim.meshing.repair as meshing_repair
 import scgsim.palace.mesh.build as build_module
 import scgsim.palace.preparation.drc as drc_module
+from scgsim.geometry.models.input import BoundaryCurveChainSpec, SourceCurveSpec
 from scgsim.geometry.sgb.errors import OverlapError
 from scgsim.meshing import (
     Budgets,
@@ -380,6 +390,131 @@ def test_a_wall_of_exactly_the_limit_is_not_below_it(monkeypatch, tmp_path):
         if f.value_steps == 10.0
     ]
     assert len(walls) == 1
+
+
+def pad_with_a_rounded_corner(tmp_path, radius_um):
+    """The real sidecar of the pad-in-ground die whose 20 um pad has its north-east corner rounded.
+
+    The corner is one exact quarter arc of ``radius_um``, so the pad's wall there is a cylinder whose two
+    columns are the arc's chord apart while the outline edge it stands on is the arc.
+    """
+    pad = gds_pad_in_ground(tmp_path, with_port=False)
+    corner = 60.0 - radius_um
+    middle = corner + radius_um * math.cos(math.pi / 4)
+    curves = (
+        SourceCurveSpec("line_segment", ((40.0, 40.0), (60.0, 40.0))),
+        SourceCurveSpec("line_segment", ((60.0, 40.0), (60.0, corner))),
+        SourceCurveSpec(
+            "circular_arc", ((60.0, corner), (middle, middle), (corner, 60.0))
+        ),
+        SourceCurveSpec("line_segment", ((corner, 60.0), (40.0, 60.0))),
+        SourceCurveSpec("line_segment", ((40.0, 60.0), (40.0, 40.0))),
+    )
+    chain = BoundaryCurveChainSpec("pad_outline", "pad", (50.0, 50.0), curves)
+    rounded = replace(pad.build_input, boundary_curves=(chain,))
+    return sidecar_of(replace(pad, build_input=rounded), "B", tmp_path)
+
+
+@pytest.mark.parametrize("radius_nm", [7, 6])
+def test_a_curved_wall_is_measured_along_its_arc(tmp_path, radius_nm):
+    """Class A measures the outline edge a wall stands on, so a curved wall's gap is its arc, not its chord.
+
+    A quarter arc of 7 grid steps is 11.0 steps long (its chord 9.9) and meets the limit; one of 6 grid steps
+    is 9.4 steps long (its chord 8.5) and is refused, with the arc length as its size.
+    """
+    radius_um = radius_nm / 1000
+    report = check_fine_structure(pad_with_a_rounded_corner(tmp_path, radius_um))
+    walls = [f for f in report.findings if f.rule == "A"]
+    if radius_nm == 7:
+        assert walls == []
+        return
+    (wall,) = walls
+    assert wall.value == pytest.approx(math.pi / 2 * radius_um, rel=1e-6)
+    assert wall.groups == ("MA::pad__sidewall",)
+
+
+def ma_bands(margins=None, by_entity=None):
+    """Surface-EPR specs that band only MA, by type and, with ``by_entity``, per conductor."""
+    spec = {**FILM}
+    if margins is not None:
+        spec["inset_margins_um"] = margins
+    if by_entity is not None:
+        spec["inset_margins_by_entity_um"] = by_entity
+    return {"MA": spec}
+
+
+class GeometryBuildReached(Exception):
+    """Raised in place of the SGB build: the band widths were accepted."""
+
+
+def stop_at_the_sgb_build(monkeypatch):
+    """Replace the SGB build by one that raises :class:`GeometryBuildReached`."""
+
+    def build(*_args, **_kwargs):
+        raise GeometryBuildReached
+
+    monkeypatch.setattr(banded_build, "build_sgb_geometry", build)
+
+
+NARROW_BANDS = {
+    "first": (
+        ma_bands([0.005, 1.0]),
+        "MA inset_margins_um band=0 (0 to 0.005 um) is 0.005 um (5 grid steps) wide",
+    ),
+    "later": (
+        ma_bands([0.4, 0.409]),
+        "MA inset_margins_um band=1 (0.4 to 0.409 um) is 0.009 um (9 grid steps) wide",
+    ),
+    "per_conductor": (
+        ma_bands(by_entity={"chip/pad_0000": [0.5, 0.505]}),
+        "MA inset_margins_by_entity_um['chip/pad_0000'] band=1 (0.5 to 0.505 um) is 0.005 um "
+        "(5 grid steps) wide",
+    ),
+}
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+@pytest.mark.parametrize("case", NARROW_BANDS)
+def test_a_band_narrower_than_the_face_width_limit_is_refused_before_the_build(
+    monkeypatch, simulation, case
+):
+    """The request makes such a band narrow, so it is refused by name before SGB runs, not as an SGB defect."""
+    specs, named = NARROW_BANDS[case]
+    stop_at_the_sgb_build(monkeypatch)
+    with pytest.raises(ValueError) as raised:
+        check(simulation, scene(monkeypatch, PADS["clean"]), surface_epr_specs=specs)
+    message = str(raised.value)
+    assert named in message
+    assert "face-width limit of 10 grid steps (0.01 um)" in message
+    assert "Widen the margins in surface_epr_specs" in message
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+def test_mesh_refuses_a_narrow_band_before_writing_anything(
+    monkeypatch, tmp_path, simulation
+):
+    """``mesh()`` raises the same error, and its output folder holds no file."""
+    specs, named = NARROW_BANDS["first"]
+    stop_at_the_sgb_build(monkeypatch)
+    sim = set_up_as_the_check(
+        simulation, scene(monkeypatch, PADS["clean"]), tmp_path / "run", specs
+    )
+    with pytest.raises(ValueError) as raised:
+        sim.mesh()
+    assert named in str(raised.value)
+    assert [path for path in tmp_path.rglob("*") if path.is_file()] == []
+
+
+@pytest.mark.parametrize("margins", [[0.01, 1.0], [0.4, 0.41]], ids=["first", "noise"])
+def test_a_band_of_exactly_the_limit_goes_on_to_the_build(monkeypatch, margins):
+    """Ten grid steps is not below ten, also when the margins subtract to 0.009999999999999953 um."""
+    stop_at_the_sgb_build(monkeypatch)
+    with pytest.raises(GeometryBuildReached):
+        check(
+            EigenmodeSim,
+            scene(monkeypatch, PADS["clean"]),
+            surface_epr_specs=ma_bands(margins),
+        )
 
 
 def bad_at(element, point, *, edge_min, edge_max, quality=0.0005):

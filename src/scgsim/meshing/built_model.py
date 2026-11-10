@@ -20,6 +20,7 @@ SGB's sliver report takes them.  Nothing here decides what is fine: that is the 
 from __future__ import annotations
 
 import math
+from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -217,23 +218,28 @@ class Measured:
 
 
 def wall_gaps(model: BuiltModel) -> list[Measured]:
-    """The column gap of every wall face: the shortest distance in plan between two of its wall columns.
+    """The column gap of every wall face: the length of the outline edge it stands on, between its two columns.
 
-    This is SGB's wall measure without the height: a wall stands on a horizontal edge, so its column gap
-    is the length of the outline edge it stands on.
+    A wall stands on one outline edge, a line or an arc, and its bottom and top run along that edge from one
+    wall column to the other.  The gap is measured along the edge, so a curved wall's gap is its arc length,
+    not the chord between its columns.  Band seams that end on a wall split its top or bottom into pieces;
+    the pieces of one level together are still the whole edge, so the gap sums each level's pieces and takes
+    the shorter level.
     """
     measured = []
     for face, edges in enumerate(model.face_edges, start=1):
         if model.is_horizontal_face(face):
             continue
-        columns = sorted(
-            {model.ends(edge)[0][:2] for edge in edges if model.is_vertical(edge)}
-        )
+        columns = {model.ends(edge)[0][:2] for edge in edges if model.is_vertical(edge)}
         if len(columns) < 2:  # noqa: PLR2004 -- a gap needs two columns
             continue
-        gap = min(
-            math.dist(p, q) for i, p in enumerate(columns) for q in columns[i + 1 :]
-        )
+        length_at_level: dict[float, float] = defaultdict(float)
+        for edge in edges:
+            if not model.is_vertical(edge):
+                length_at_level[model.ends(edge)[0][2]] += model.edge_length(edge)
+        if not length_at_level:
+            continue
+        gap = min(length_at_level.values())
         bounds = model.bounds(edges)
         measured.append(
             Measured(

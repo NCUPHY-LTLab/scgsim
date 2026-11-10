@@ -17,12 +17,21 @@ from pathlib import Path
 from typing import Any
 
 from scgsim.diagnostics import diagnostic_stage
+from scgsim.geometry.models.grid import geometry_grid_context
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
 from scgsim.geometry.sgb import SgbArtifacts
 from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.surface_epr.build import build_banded_geometry
-from scgsim.meshing import Budgets, MesherOptions, MeshResult, SizingRecipe, mesh_sgb
+from scgsim.meshing import (
+    Budgets,
+    FineStructureLimits,
+    MesherOptions,
+    MeshResult,
+    SizingRecipe,
+    mesh_sgb,
+)
+from scgsim.meshing.fine_structure import below_steps
 from scgsim.preparation import native_preparation
 
 from .controls import MeshControls
@@ -218,7 +227,8 @@ def build_route_geometry(  # noqa: PLR0913 -- the keyword set of build_route_mes
     """Write the sources and build the Route-A/Route-B SGB geometry, the stages of a mesh before meshing.
 
     This is the modeling path ``build_route_mesh`` and the layout modeling check share: a layout SGB
-    cannot model is refused here, with the error SGB raises.
+    cannot model is refused here, with the error SGB raises.  A Surface-EPR band narrower than the
+    meshing stage's face-width limit is refused first, before anything is written or built.
     """
     if representation_context is None or source_geometry_input is None:
         raise ValueError(
@@ -228,6 +238,7 @@ def build_route_geometry(  # noqa: PLR0913 -- the keyword set of build_route_mes
         raise TypeError("stack must be a mapping after set_stack processing.")
     if route not in {"A", "B"}:
         raise ValueError("route must be either 'A' or 'B'.")
+    _refuse_bands_narrower_than_a_face(surface_epr_specs, source_geometry_input)
     thin_film = route_a_thin_film_provenance(stack, route)
     stack = with_port_sheet_metadata(stack, port_sheet_source_layers)
     paths = _prepare_paths(output_dir, route)
@@ -241,6 +252,62 @@ def build_route_geometry(  # noqa: PLR0913 -- the keyword set of build_route_mes
         output_dir=paths.geometry_dir,
     )
     return RouteGeometry(paths, artifacts, route, top_cell, thin_film)
+
+
+def _refuse_bands_narrower_than_a_face(
+    specs: Mapping[str, Mapping[str, Any]] | None, build_input: GeometryBuildInput
+) -> None:
+    """Refuse every requested band narrower than the face width the meshing stage accepts.
+
+    A band's width is set by its margins alone: band 0 is ``m1`` wide and band ``k`` is ``m(k+1) - m(k)``.
+    A band below the class B limit becomes a face the meshing stage refuses after the build, and its lineage
+    (one source edge, one band offset) would read as an SGB defect; the request made it narrow.  This is the
+    first point where both the margins and the model grid are known: the specs come with the simulation,
+    the grid with the prepared input, and nothing is built yet.  An input without a grid is left to SGB,
+    which refuses it.
+    """
+    margin_lists = _margin_lists(specs or {})
+    context = geometry_grid_context(build_input) if margin_lists else None
+    if context is None:
+        return
+    grid_um = context.grid_size_um
+    limit = FineStructureLimits().face_width_steps
+    narrow = [
+        f"{label} band={band} ({lower:g} to {upper:g} um) is {upper - lower:.6g} um "
+        f"({(upper - lower) / grid_um:.3g} grid steps) wide"
+        for label, margins in margin_lists
+        for band, (lower, upper) in enumerate(
+            zip((0.0, *margins), margins, strict=False)
+        )
+        if below_steps(upper - lower, limit, grid_um)
+    ]
+    if narrow:
+        raise ValueError(
+            "Surface EPR bands narrower than the meshing stage's face-width limit of "
+            f"{limit:g} grid steps ({limit * grid_um:g} um): {'; '.join(narrow)}. A band this narrow is a "
+            "face the mesher cannot use. Widen the margins in surface_epr_specs so that every band is at "
+            f"least {limit:g} grid steps wide."
+        )
+
+
+def _margin_lists(
+    specs: Mapping[str, Mapping[str, Any]],
+) -> list[tuple[str, tuple[float, ...]]]:
+    """Each margin list of the specs, named as the user wrote it: ``MA inset_margins_um`` or per conductor."""
+    lists = []
+    for interface_type, spec in specs.items():
+        if spec.get("inset_margins_um"):
+            lists.append(
+                (f"{interface_type} inset_margins_um", tuple(spec["inset_margins_um"]))
+            )
+        for entity, margins in (spec.get("inset_margins_by_entity_um") or {}).items():
+            lists.append(
+                (
+                    f"{interface_type} inset_margins_by_entity_um[{entity!r}]",
+                    tuple(margins),
+                )
+            )
+    return lists
 
 
 def _prepare_paths(output_dir: str | Path, route: str) -> BuildPaths:

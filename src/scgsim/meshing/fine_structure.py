@@ -58,11 +58,13 @@ class FineStructureLimits:
     beside them.
 
     * Class A (``wall_column_gap_steps``): a wall face whose column gap -- the length of the outline edge
-      it stands on, not its film height -- is below the limit.  Measured: the 1-step TC jogs of the
-      flip-chip Disk Qubit, and nothing else between 1 and 65 steps.
+      it stands on, along the edge (an arc's length for a curved wall), not its film height -- is below
+      the limit.  Measured: the 1-step TC jogs of the flip-chip Disk Qubit, and nothing else between 1 and
+      65 steps.
     * Class B (``face_width_steps``, ``wedge_angle_deg``): a horizontal face whose width ``2 A / P`` is below
       the limit, or one of whose corners is sharper than the angle.  Measured: the band sliver of
       ``junction_straight``; every other face had 2A/P of 20 nm or more and corners of 5.6 degrees or more.
+      Palace refuses a requested Surface-EPR band narrower than ``face_width_steps`` before it builds.
     * Class C (``free_edge_steps``): a horizontal edge that bounds no wall and is shorter than the limit:
       the arc a 0.5 um band leaves at a vertex that turns 2.8 degrees.  The repair loop cleans most of
       these at a cost, so the class warns.
@@ -234,8 +236,12 @@ class _Found:
 _FLOAT_NOISE_STEPS = 1e-6
 
 
-def _below_steps(value_um: float, limit_steps: float, grid_um: float) -> bool:
-    """Whether a length is below a limit given in grid steps, ignoring float noise at the limit itself."""
+def below_steps(value_um: float, limit_steps: float, grid_um: float) -> bool:
+    """Whether a length is below a limit given in grid steps, ignoring float noise at the limit itself.
+
+    The meshing stage compares every length this way; Palace refuses a Surface-EPR band narrower than the
+    face-width limit with the same comparison, so the two agree on a band of exactly the limit.
+    """
     return value_um / grid_um < limit_steps - _FLOAT_NOISE_STEPS
 
 
@@ -244,12 +250,12 @@ def _below_limits(model: BuiltModel, limits: FineStructureLimits) -> list[_Found
     found = [
         _Found(m, "A", limits.wall_action, limits.wall_column_gap_steps, "grid steps")
         for m in wall_gaps(model)
-        if _below_steps(m.value, limits.wall_column_gap_steps, g)
+        if below_steps(m.value, limits.wall_column_gap_steps, g)
     ]
     found += [
         _Found(m, "B", limits.face_action, limits.face_width_steps, "grid steps")
         for m in face_widths(model)
-        if _below_steps(m.value, limits.face_width_steps, g)
+        if below_steps(m.value, limits.face_width_steps, g)
     ]
     found += [
         _Found(m, "B", limits.face_action, limits.wedge_angle_deg, "deg")
@@ -259,7 +265,7 @@ def _below_limits(model: BuiltModel, limits: FineStructureLimits) -> list[_Found
     found += [
         _Found(m, "C", limits.free_edge_action, limits.free_edge_steps, "grid steps")
         for m in free_edges(model)
-        if _below_steps(m.value, limits.free_edge_steps, g)
+        if below_steps(m.value, limits.free_edge_steps, g)
     ]
     return found
 

@@ -99,13 +99,23 @@ sidecar of the built model and sorts each such edge or face into a class:
 
 | Class | What is measured | Found when | Action |
 |---|---|---|---|
-| A | the column gap of a wall face: the length of the outline edge it stands on, which is the gap between two side-wall columns | below 10 grid steps | refuse |
+| A | the column gap of a wall face: the length of the outline edge it stands on between its two side-wall columns, measured along the edge (an arc's length for a curved wall) | below 10 grid steps | refuse |
 | B | the width 2A/P of a horizontal face (A its area, P its perimeter), or its sharpest corner | below 10 grid steps, or sharper than 1° | refuse |
 | C | the length of a horizontal edge that bounds no wall | below 25 grid steps | warn |
 
 Limits are in grid steps, so they scale with the model grid: on a 1 nm grid,
 class A finds a wall face narrower than 10 nm. Findings give µm beside them.
 The limits and actions are held in `scgsim.meshing.FineStructureLimits`.
+
+Every band you request must be at least as wide as the class B limit, 10 grid
+steps. The first band is as wide as the first margin, and each next band is the
+difference of two margins: `[0.5, 1.0]` µm gives two bands of 0.5 µm. A
+narrower band is refused with `ValueError` before anything is built; the
+message names the spec (or the conductor of `inset_margins_by_entity_um`), the
+band, its width in µm and grid steps, and the limit. Widen the margins. A band
+right at the limit can still be refused as class B where it is cut open, for
+example at the die edge: the width 2A/P of a piece that ends is a little less
+than the band's width. Choose bands wider than the limit.
 
 Each finding names its stage, class, measure and size, the SGB entity and its
 physical group, the layout objects and band requests it comes from, its

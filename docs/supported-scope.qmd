@@ -124,6 +124,7 @@ run on the built model; its error is `SimulationDrcError`, from
 | Rule | Why SCGSim needs it | Reported as | Detail |
 |---|---|---|---|
 | The margins of each request are positive, strictly increasing multiples of the grid, such as `(0.5, 1.0)` µm. | Each margin is a band boundary cut on the grid. | `InputError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
+| Every band is at least 10 grid steps wide: the first band is the first margin, each next band the difference of two margins. | A narrower band is a face the mesher cannot use. | `ValueError` at build, before SGB runs, naming the spec, the band and its width | [What the meshing stage reports](layout-modeling-check.qmd#what-the-meshing-stage-reports) |
 | One face gets one set of margins, even when two Surface-EPR types reach it. | A face holds one family of bands. | `InputError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
 | A band is measured from a gap edge. A conductor named in `inset_margins_by_entity_um` needs a gap edge on each face it bands. A face reached only through its Surface-EPR type that has no gap edge gets no bands. | Without a gap edge there is nothing to measure the distance from. | `NoGapEdgeError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
 | Side walls are never banded; `face_kinds` names only `sheet`, `top`, `bottom` or `interface`. | SGB cuts bands only on these four kinds of face. | `InputError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
@@ -209,6 +210,7 @@ Find the error you see, then follow the owner's next action.
 | `OverlapError` "… with equal priority" | Declarations | Give the overlapping Entities of one Net different priorities. |
 | `NonManifoldError` | Layout | At the reported point, give the two pieces a shared edge or separate them. |
 | `InputError` about a port sheet, an Entity id, an arc or a margin | Layout and declarations | Read the message: it names the port, Entity or request. Fix the drawing or the setting it names. |
+| `ValueError` "Surface EPR bands narrower than the meshing stage's face-width limit …" | Declarations | Widen the margins it names so that every band is at least 10 grid steps wide. |
 | `NoGapEdgeError` | Declarations | The conductor named in `inset_margins_by_entity_um` has no gap edge on that face. Remove it there, or band the face by type. |
 | `ValidationError` "… invariant(s) failed" | SCGSim | A structural check of SGB failed on input it accepted. Report it to SCGSim with the layout. |
 | `SimulationDrcError` | The owner each finding names: layout, erosion or sgb | Each refusing finding gives its class, size, µm location and fix. `layout`: fix the drawing there. `erosion`: change the margins in `surface_epr_specs` or the conductor's width. `sgb`: report it to SCGSim with the finding. |

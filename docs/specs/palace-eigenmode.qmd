@@ -116,7 +116,7 @@ inputs:
 ::: {.askr-table-compact}
 | Key | Meaning |
 |---|---|
-| `inset_margins_um` | Strictly increasing positive margins in µm. `mesh()` asks SGB for bands at these margins on every face of the spec's type, in one geometry build. Omit it for baseline rows only. |
+| `inset_margins_um` | Strictly increasing positive margins in µm. `mesh()` asks SGB for bands at these margins on every face of the spec's type, in one geometry build. Every band must be at least 10 grid steps wide (the first band is the first margin, each next band the difference of two margins); a narrower band is refused with `ValueError` before the build. Omit it for baseline rows only. |
 | `inset_margins_by_entity_um` | `{entity_id: [margins]}` for `MA` and `MS`. Each named conductor takes its own margins, and the rest of the type keeps `inset_margins_um`, if given. It adds one extra, unbanded geometry build to find the conductors' faces. A named conductor with no face of that type raises `ValueError` from `mesh()`. It is rejected for `SA`, whose interface lies between solution regions and has no owning conductor. |
 | `face_kinds` | Restricts the spec to some of `"sheet"`, `"top"`, `"bottom"` and `"interface"`. When the spec asks for margins, `"sidewall"` is rejected because SGB never bands sidewalls. |
 :::
