@@ -1,11 +1,26 @@
-"""Bind authored layout ports to Palace lumped-port records, without Sim state."""
+"""Bind authored layout ports to Palace lumped-port records, without Sim state.
+
+Owns two steps of a lumped port's preparation: resolving the authored port of a Component
+(``resolve_layout_ports``), and asking the shared geometry for the rectangle Palace's lumped
+element needs (``with_rectangular_ports``).
+"""
 
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from numbers import Real
 from typing import Any, cast
+
+from scgsim.geometry import (
+    GeometryBuildInput,
+    JunctionTerminalBinding,
+    PortSheetRegionRecord,
+    RectangularJunctionSpec,
+    SemanticEntitySpec,
+    with_rectangular_junctions,
+)
 
 from .config import LayoutPortBinding
 
@@ -91,3 +106,87 @@ def _port_layer(port: Any) -> tuple[int, int]:
         return (int(info.layer), int(info.datatype))
     except (AttributeError, TypeError, ValueError) as exc:
         raise ValueError("layout_sheet port requires an exact GDS layer.") from exc
+
+
+def with_rectangular_ports(build_input: GeometryBuildInput) -> GeometryBuildInput:
+    """Request the shared rectangular partition for every lumped-port sheet of ``build_input``.
+
+    Palace's uniform lumped element (Lumped Port or Lumped RLC) must be a rectangle: it
+    compares the port's bounding-box length with its length projected on the port direction.
+    A sheet that lands on a round conductor ends on that conductor's arc, so SCGSim keeps only
+    the central rectangle of the drawn sheet as the port and gives the two end pieces to the
+    conductors the sheet lands on.  The partition itself, its cut rule and its refusals are
+    the shared geometry's (``scgsim.geometry.planning.junction_partition``); this step only
+    names the two terminals of each sheet.  Requests the plan already holds are kept.
+    """
+    existing = tuple(
+        RectangularJunctionSpec.from_payload(item)
+        for item in build_input.metadata.get("rectangular_junctions", ())
+    )
+    requested = {item.port_sheet_id for item in existing}
+    entities = {entity.semantic_id: entity for entity in build_input.entities}
+    added = tuple(
+        _port_request(region, entities)
+        for region in build_input.port_sheet_regions
+        if region.port_sheet_id not in requested
+    )
+    if not added:
+        return build_input
+    return with_rectangular_junctions(build_input, (*existing, *added))
+
+
+def _port_request(
+    region: PortSheetRegionRecord, entities: Mapping[str, SemanticEntitySpec]
+) -> RectangularJunctionSpec:
+    """The partition request of one port sheet: its own identity and its two host conductors.
+
+    Terminal A is the host at the start of the port direction and Terminal B the host it
+    points to, the order the partition cuts its two ends in.
+    """
+    name = region.metadata.get("source_name", region.port_sheet_id)
+    hosts = tuple(dict.fromkeys(item.host_semantic_id for item in region.overlaps))
+    if len(hosts) != 2:
+        raise ValueError(
+            f"lumped port {name!r} must land on two conductors to be made a rectangle; "
+            f"it lands on {len(hosts)}: {list(hosts)}."
+        )
+    terminals = [_terminal(name, host, entities) for host in hosts]
+    terminals.sort(key=lambda item: _along_direction(region, item.source_entity_id))
+    return RectangularJunctionSpec(
+        junction_id=region.port_sheet_id,
+        port_sheet_id=region.port_sheet_id,
+        source_polygon_id=region.source_polygon_id,
+        source_occurrence_path=str(region.metadata.get("source_occurrence_path")),
+        terminal_a=terminals[0],
+        terminal_b=terminals[1],
+    )
+
+
+def _terminal(
+    name: str, host: str, entities: Mapping[str, SemanticEntitySpec]
+) -> JunctionTerminalBinding:
+    """The terminal binding of one host conductor, which must belong to a Net."""
+    entity = entities[host]
+    if not entity.net_id:
+        # The partition gives each end piece to its terminal's Net; without one there is no owner.
+        raise ValueError(
+            f"lumped port {name!r} lands on {host!r}, which has no Net; give both conductors "
+            "of the port a Net (GeometryPlan.set_nets) so its rectangle's end pieces can join them."
+        )
+    return JunctionTerminalBinding(
+        source_entity_id=entity.semantic_id,
+        source_occurrence_path=str(entity.metadata.get("source_occurrence_path")),
+        net_id=entity.net_id,
+    )
+
+
+def _along_direction(region: PortSheetRegionRecord, host: str) -> float:
+    """The mean position of the sheet's landing on ``host``, measured along the port direction."""
+    dx, dy = region.metadata["direction"][:2]
+    points = [
+        point
+        for overlap in region.overlaps
+        if overlap.host_semantic_id == host
+        for point in overlap.overlap_loop
+    ]
+    return sum(x * dx + y * dy for x, y in points) / len(points)

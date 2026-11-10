@@ -30,6 +30,7 @@ from scgsim.geometry.planning.junction_planning.contact import (
 from scgsim.geometry.planning.junction_planning.core import (
     DEFAULT_FORMAT,
     PRECISION_UM,
+    WALL_COLUMN_LIMIT_STEPS,
     JunctionPartitionFormat,
     canonical_sha256,
     plain_record,
@@ -46,11 +47,14 @@ from scgsim.geometry.planning.junction_planning.model_checks import (
 )
 from scgsim.geometry.planning.junction_planning.selection import (
     EndSection,
+    SideMeeting,
     bound_decimal,
+    built_outline_meetings,
     candidate_indices,
     contacts,
     end_candidate,
     grid_cut,
+    side_steps,
 )
 from scgsim.geometry.planning.junction_planning.terminal import junction_terminal_line
 from scgsim.geometry.primitives.grid import polygon_world_frame, with_input_grid
@@ -75,6 +79,17 @@ def partition_junctions(
     return _JunctionPartitionPlanner(
         build_input, junctions, step, output_format
     ).build()
+
+
+@dataclass(frozen=True)
+class _EndSide:
+    """One end of a junction: its side, contact bound, own and foreign metal and side meetings."""
+
+    left: bool
+    bound: int | Fraction
+    own: list[tuple]
+    foreign: list[tuple]
+    meetings: dict[int, tuple[SideMeeting, ...]]
 
 
 @dataclass
@@ -105,6 +120,8 @@ class _JunctionPartitionPlanner:
     own_a: list[tuple] = field(init=False)
     own_b: list[tuple] = field(init=False)
     other: list[tuple] = field(init=False)
+    meetings_a: dict[int, tuple[SideMeeting, ...]] = field(init=False)
+    meetings_b: dict[int, tuple[SideMeeting, ...]] = field(init=False)
     lower: int | Fraction = field(init=False)
     upper: int | Fraction = field(init=False)
     free: Sequence[PolygonCoordinates] = field(init=False)
@@ -149,6 +166,7 @@ class _JunctionPartitionPlanner:
         )
         with polygon_world_frame(transform):
             self.read_conductors()
+            self.read_outline_meetings()
             self.find_corridor()
             self.choose_ends()
             self.check_partition()
@@ -225,6 +243,18 @@ class _JunctionPartitionPlanner:
             for p in polygons
         ]
 
+    def read_outline_meetings(self):
+        """Find where each terminal's built outline meets the two sheet sides."""
+        self.meetings_a, self.meetings_b = (
+            built_outline_meetings(
+                self.build_input,
+                (eid for eid in self.by_entity if self.entities[eid].net_id == net),
+                self.frame,
+                self.width,
+            )
+            for net in (self.junction.terminal_a_net, self.junction.terminal_b_net)
+        )
+
     def find_corridor(self):
         """Verify terminal ordering and complete clear-corridor containment."""
         if contacts(self.other, self.span, self.width) is not None:
@@ -259,59 +289,109 @@ class _JunctionPartitionPlanner:
             )
 
     def choose_ends(self):
-        """Select the existing verified grid candidates and central span."""
+        """Select each end's grid cut and the central span between them.
+
+        On each side the cut starts at the first verified grid candidate beside the
+        terminal contact (the largest rectangle) and moves one grid step into the gap until
+        the edge its end piece adds along each sheet side is zero or at least the class A
+        wall-column limit, so the terminal the end piece joins keeps no wall shorter than
+        that limit.
+        """
         self.choices = []
         self.checks = []
-        for left, bound, own, foreign in (
-            (True, self.lower, self.own_a, self.own_b + self.other),
-            (False, self.upper, self.own_b, self.own_a + self.other),
+        limit = round(WALL_COLUMN_LIMIT_STEPS * self.step / PRECISION_UM)
+        for side in (
+            _EndSide(
+                True, self.lower, self.own_a, self.own_b + self.other, self.meetings_a
+            ),
+            _EndSide(
+                False, self.upper, self.own_b, self.own_a + self.other, self.meetings_b
+            ),
         ):
-            chosen = None
-            for index in candidate_indices(bound, self.step, left=left):
-                requested, cut = grid_cut(index, self.step)
-                interior = (
-                    Decimal(index) * Decimal(str(self.step)) > bound_decimal(bound)
-                    if left
-                    else Decimal(index) * Decimal(str(self.step)) < bound_decimal(bound)
-                )
-                if interior and cut == bound:
-                    raise ValueError(
-                        "numerical junction geometry failure: interior grid cut collapses to boundary"
-                    )
-                if (
-                    cut < self.lower
-                    or cut > self.upper
-                    or (interior and (cut <= self.lower or cut >= self.upper))
-                ):
-                    continue
-                end, evidence = end_candidate(
-                    self.free,
-                    own,
-                    foreign,
-                    EndSection(cut, self.span, self.width, left=left),
-                )
-                self.checks.append(
-                    {
-                        "side": "A" if left else "B",
-                        "index": index,
-                        "requested_s_um": requested,
-                        "actual_s_um": cut * PRECISION_UM,
-                        "deviation_um": cut * PRECISION_UM - requested,
-                        **evidence,
-                    }
-                )
-                if end is not None:
-                    chosen = (cut, end, index)
-                    break
-            if chosen is None:
-                raise ValueError(
-                    "unsupported junction end topology on verified corridor/grid"
-                )
-            self.choices.append(chosen)
+            first = self.first_valid_cut(side)
+            self.choices.append(self.step_clear_cut(side, first, limit))
         (self.a, self.end_a, self.ka), (self.b, self.end_b, self.kb) = self.choices
         if self.a >= self.b:
             raise ValueError("junction DBU grid has no positive central span")
         self.central = rectangle(self.a, 0, self.b, self.width)
+
+    def first_valid_cut(self, side: _EndSide):
+        """The first grid candidate beside ``bound`` whose end piece passes every topology check."""
+        left, bound = side.left, side.bound
+        for index in candidate_indices(bound, self.step, left=left):
+            requested, cut = grid_cut(index, self.step)
+            interior = (
+                Decimal(index) * Decimal(str(self.step)) > bound_decimal(bound)
+                if left
+                else Decimal(index) * Decimal(str(self.step)) < bound_decimal(bound)
+            )
+            if interior and cut == bound:
+                raise ValueError(
+                    "numerical junction geometry failure: interior grid cut collapses to boundary"
+                )
+            if (
+                cut < self.lower
+                or cut > self.upper
+                or (interior and (cut <= self.lower or cut >= self.upper))
+            ):
+                continue
+            end = self.check_end(side, index)
+            if end is not None:
+                return (cut, end, index)
+        raise ValueError("unsupported junction end topology on verified corridor/grid")
+
+    def step_clear_cut(self, side: _EndSide, first, limit):
+        """Move a valid cut into the gap, one grid step at a time, until its side steps pass.
+
+        Inside the verified corridor the end piece only gains a clear rectangle, so it keeps
+        the topology ``first`` was accepted with; each step is checked again all the same.
+        """
+        cut, end, index = first
+        left = side.left
+        while not all(
+            step == 0 or step >= limit
+            for step in side_steps(side.meetings, cut, self.span, left=left)
+        ):
+            index += 1 if left else -1
+            cut = grid_cut(index, self.step)[1]
+            if (cut >= self.upper) if left else (cut <= self.lower):
+                raise ValueError(
+                    "junction corridor has no cut whose terminal steps are zero or at "
+                    f"least {WALL_COLUMN_LIMIT_STEPS} grid steps"
+                )
+            end = self.check_end(side, index)
+            if end is None:
+                raise ValueError(
+                    "unsupported junction end topology on verified corridor/grid"
+                )
+        return (cut, end, index)
+
+    def check_end(self, side: _EndSide, index):
+        """Check the end piece of one grid cut and keep the evidence, with its side steps."""
+        requested, cut = grid_cut(index, self.step)
+        left = side.left
+        end, evidence = end_candidate(
+            self.free,
+            side.own,
+            side.foreign,
+            EndSection(cut, self.span, self.width, left=left),
+        )
+        if end is not None:
+            evidence["side_steps_um"] = [
+                step * PRECISION_UM
+                for step in side_steps(side.meetings, cut, self.span, left=left)
+            ]
+        self.checks.append(
+            {
+                "side": "A" if left else "B",
+                "index": index,
+                "requested_s_um": requested,
+                "actual_s_um": cut * PRECISION_UM,
+                "deviation_um": cut * PRECISION_UM - requested,
+                **evidence,
+            }
+        )
+        return end
 
     def check_partition(self):
         """Check closed endpoint contacts, open sides and exact partition coverage."""
@@ -407,6 +487,7 @@ class _JunctionPartitionPlanner:
             "width_um": self.width * PRECISION_UM,
             "corridor_um": [self.lower * PRECISION_UM, self.upper * PRECISION_UM],
             "cut_indices": [self.ka, self.kb],
+            "terminal_step_limit_um": WALL_COLUMN_LIMIT_STEPS * self.step,
             "actual_cuts_um": [self.a * PRECISION_UM, self.b * PRECISION_UM],
             "candidate_checks": self.checks,
             "candidate_count": len(self.checks),

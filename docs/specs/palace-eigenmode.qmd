@@ -61,6 +61,18 @@ standalone geometry/stack or conflicting envelope setters. The
 preparation. The [Electrostatic/shared Palace contract](palace-electrostatic-sgb.qmd)
 owns the shared mesh controls and config controls.
 
+## Lumped ports {#lumped-ports}
+
+Each `add_port(..., layout_sheet=True)` becomes one `Boundaries.LumpedPort` row
+that carries its `inductance` as `L`. Palace's uniform lumped element must be a
+rectangle, so `mesh()` gives Palace the central rectangle of the drawn sheet as
+the port face and joins the two end pieces of the sheet to the conductors it
+lands on: the conductor at the start of the port `Direction` and the one it
+points to. [Lumped ports are made rectangles](../supported-geometry.qmd#lumped-port-rectangle)
+states how each cut is chosen. The sheet must land on exactly two conductors,
+and each needs a Net (`GeometryPlan.set_nets`); otherwise `mesh()` and
+`EigenmodeSim.simulation_drc` raise `ValueError` naming the port.
+
 ## Selection and physical meaning
 
 Surface selectors are `MA`, `MS`, `SA`. Bulk selectors are the SGB solution-volume

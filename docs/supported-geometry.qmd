@@ -143,6 +143,50 @@ Cells 14, 15 and 18 contain a few vertices that turn by less than 2.8125°;
 they build with exact bands as drawn (see [Curved outlines drawn as
 polygons](#curve-rule)).
 
+## Lumped ports are made rectangles {#lumped-port-rectangle}
+
+Palace accepts a Lumped Port or Lumped RLC only as a rectangle: it compares the
+port's bounding-box length with its length along the port direction. Each
+lumped port that an `EigenmodeSim` configures is therefore the central
+rectangle of its drawn sheet. The two pieces of the sheet outside that
+rectangle become metal of the conductors the sheet lands on: the piece at the
+start of the port direction joins that conductor and its Net, and the piece at
+the other end joins the other conductor. You draw the sheet as before, a
+rectangle that reaches into both conductors.
+
+On each end, SCGSim chooses the cut in two steps:
+
+1. It starts at the first grid step past the conductor that leaves one
+   connected end piece: the largest rectangle the sheet holds.
+2. The end piece adds an edge to its conductor along each long side of the
+   sheet, from where the conductor's outline meets that side to the cut. The
+   cut moves one grid step further into the gap at a time until each such edge
+   is zero or at least 10 grid steps long, so the side wall that stands on it
+   is not narrower than the fine-structure limit for side walls.
+
+The outline is the one SGB builds: a conductor declared with an exact arc meets
+the side where the arc does, on the grid point SGB rounds the crossing to, not
+where its polygon does. A sheet that ends on straight conductor edges at right
+angles to it keeps the face it had: its cuts lie on those edges and its end
+pieces are empty.
+
+For the circular pad coupon (pad radius 100 µm in a ground opening of radius
+120 µm, a 2 µm sheet, 1 nm grid):
+
+| End | The outline meets the sheet sides at | Largest rectangle | Cut taken | Edge added |
+| --- | --- | --- | --- | --- |
+| Pad, arc of radius 100 µm | x = 99.995 µm | x = 100.001 µm, edge 6 nm | x = 100.005 µm | 10 nm |
+| Ground opening, arc of radius 120 µm | x = 119.996 µm | x = 119.988 µm, edge 8 nm | x = 119.986 µm | 10 nm |
+
+The port is 19.981 µm long, 0.013 µm shorter than the largest rectangle.
+
+The end pieces are cut from the conductors' drawn polygons. Where a sheet ends
+inside a round opening declared as an exact arc, as on the ground of this
+coupon, the polygon's chords lie inside the opening, so the end piece meets the
+exact arc at a single point and the build stops with `NonManifoldError` at that
+point. A sheet that ends on an exact arc of a convex conductor, such as the pad,
+builds.
+
 ## Curved outlines drawn as polygons {#curve-rule}
 
 A curve drawn as a polygon builds with the bands of its exact erosion. SGB sets

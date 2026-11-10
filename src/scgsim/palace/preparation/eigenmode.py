@@ -590,7 +590,8 @@ class EigenmodeSim:
             instances: ``{"chip/device": reference, ...}`` for an assembly, as ``GeometryPlan.register_instance``.
             nets: ``{"Ground": ("chip/plane", ...), ...}``, the Net assignment the simulation's plan is given, as
                 ``GeometryPlan.set_nets`` takes it.  Without it no conductor has a Net, so any two conductors
-                that touch are refused as a different-Net contact.
+                that touch are refused as a different-Net contact, and so is every authored port: a lumped
+                port's end pieces join the Nets of the two conductors it lands on.
             surface_epr_specs: The specs ``set_surface_epr`` takes; their margins become bands.
         """
         snapshot = prepare_layout_snapshot(
