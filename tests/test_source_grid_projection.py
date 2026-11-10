@@ -27,7 +27,8 @@ def test_projection_preserves_complete_public_payload_hash():
 
     # The typed Route B fixture uses cutout_boundary_shell.
     assert _payload_sha256(projected) == (
-        "75eb111e38526bea2b1afd5b39dcd6b72b4efa53f08d8b6a850c348df634bd02"
+        # Issue #67 decision 8 removed the empty lumped_supports field; nothing else changed.
+        "990e2bef8cf54fc912a38e2c7ae4927cc192fd48383cc9730bb8a9502e5344db"
     )
 
 

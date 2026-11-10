@@ -167,6 +167,8 @@ python "$PACKAGE_DIR/run_batch.py" solve \
 
 在 SGB 流程中，HFSS 匯入把每個 `LumpedRlc` 放在它的埠面上，方式與接面相同：在匯入的 face 上建立一個 Lumped RLC，電流線沿 sidecar 的 `direction`，連接該 face 自身兩端 edge 的中點。每個埠片都必須帶有一個接面或一個 RLC。SGB 流程拒絕 Driven wave `TerminalPort` 與 Driven Modal 埠，訊息指向 NCUPHY-LTLab/scgsim#135；在該 Issue 完成之前，原生建構器移除後 AEDT 無法執行 Driven wave 與 modal。在 SGB 流程建立 Driven Terminal 設計之前，匯入也拒絕集總 Terminal 埠。
 
+在 AEDT 中，`modeling="thin_film"` 建立 Route A，並把有限 body（bump、post）保留為導體 solid（`ROUTE_A_RETAINED_BODIES`；sidecar 的 `route_policy.conductor_volumes` 為 `retained`），匯入時設為 PEC，與 Route B 請求以 Route C 建立的方式相同。這種 body 所站的 sheet face 會在 body 與 substrate 上各匯入一份；它的 Surface-EPR row 讀取 substrate 那一份，也就是 body 被排除時它唯一的那一份。
+
 `TerminalPort` 仍是既有 Wave 埠輸入。`LumpedTerminalPort` 是獨立的 Driven Terminal 輸入，明確指定埠片、終端與參考，且必須提供 `impedance_ohm`；它沒有 RLC 網路欄位。50 ohm 這類值是作業輸入，不是套件預設值。Lumped 要求不會轉換成 Wave 埠。
 
 目前 Wave Terminal 契約的來源有向點對註記，記錄 Wave 埠參考來源，不是 Modal `IntLine`。要求停用重新正規化，物理去嵌入位移為零。此時原生未啟用的 50-ohm 設定，不是來源負載、重新正規化目標或已解得的特性阻抗。實際原生去嵌入啟用旗標另外記錄；位移為零不表示旗標已停用。

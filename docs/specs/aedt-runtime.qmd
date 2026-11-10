@@ -431,6 +431,14 @@ wave and modal runs are not available once the native builder is removed. The
 import also refuses lumped Terminal ports until the SGB flow sets up a Driven
 Terminal design.
 
+In AEDT, `modeling="thin_film"` builds Route A with its finite bodies (bumps,
+posts) retained as conductor solids (`ROUTE_A_RETAINED_BODIES`; the sidecar's
+`route_policy.conductor_volumes` is `retained`), and the import makes them
+PEC, the same way a Route B request is built as Route C. A sheet face that
+such a body stands on imports on the body and on the substrate; its
+Surface-EPR rows read the substrate's copy, the copy it has when the body is
+excluded.
+
 `TerminalPort` remains the existing Wave-port input. `LumpedTerminalPort` is a
 separate Driven Terminal input with an explicit port sheet, terminal and
 reference assignment and a required `impedance_ohm`. It has no RLC-network field. A value
