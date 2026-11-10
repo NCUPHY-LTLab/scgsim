@@ -20,6 +20,8 @@ with Gmsh.
 
 from __future__ import annotations
 
+import math
+
 import pytest
 from meshing_support import audit_of, outcome_of
 from test_simulation_drc import (
@@ -42,7 +44,9 @@ from scgsim.meshing import (
     mesh_sgb,
 )
 from scgsim.meshing.findings import BadElement
+from scgsim.meshing.repair import RepairPolicy
 from scgsim.meshing.sizing import BoundingBox
+from scgsim.meshing.stop_places import stop_places
 from scgsim.palace import EigenmodeSim, ElectrostaticSim, SimulationDrcError
 from scgsim.palace.preparation.layout_snapshot import (
     DRC_VACUUM_PADDING_UM,
@@ -443,3 +447,46 @@ def test_gmsh_stops_at_the_jog_and_names_the_layout(monkeypatch, tmp_path):
         list(JOG_WALL_UM)
     )
     assert "layout must act" in str(raised.value)
+
+
+def _covers_every_reach(place) -> bool:
+    return all(
+        math.dist(place.centre, spot) + reach <= place.radius_um + 1e-12
+        for spot, reach in place.spots
+    )
+
+
+def test_a_chain_of_overlapping_reaches_is_one_place_that_covers_them_all():
+    """Each needle reaches 0.025 um; at 0.04 um apart they chain, and the place must hold the far end too."""
+    bad = tuple(
+        bad_at(tag, (x, 0.0, 0.0), edge_min=0.001, edge_max=1.0)
+        for tag, x in ((1, 0.0), (2, 0.04), (3, 0.08))
+    )
+    (place,) = stop_places(bad, (), 0.01, RepairPolicy(), ())
+    assert [e.element for e in place.elements] == [1, 2, 3]
+    assert _covers_every_reach(place)
+    assert place.radius_um == pytest.approx(0.065)
+
+
+def test_a_reach_that_bridges_two_places_joins_them():
+    """Elements 1 and 2 are apart; element 3 overlaps both, so all three are one place."""
+    bad = tuple(
+        bad_at(tag, (x, 0.0, 0.0), edge_min=0.001, edge_max=1.0)
+        for tag, x in ((1, 0.0), (2, 0.1), (3, 0.05))
+    )
+    (place,) = stop_places(bad, (), 0.01, RepairPolicy(), ())
+    assert sorted(e.element for e in place.elements) == [1, 2, 3]
+    assert _covers_every_reach(place)
+
+
+def test_a_place_of_one_element_keeps_its_own_reach():
+    """One needle is its own centre and reach, exactly."""
+    (place,) = stop_places(
+        (bad_at(7, (1.5, -2.0, 0.1), edge_min=0.001, edge_max=1.0),),
+        (),
+        0.01,
+        RepairPolicy(),
+        (),
+    )
+    assert place.centre == (1.5, -2.0, 0.1)
+    assert place.radius_um == pytest.approx(0.025)

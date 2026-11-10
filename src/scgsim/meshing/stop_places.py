@@ -3,7 +3,8 @@
 Owns the answer to "who must act, and where" when the repair loop stops without a clean mesh.  Each remaining
 bad element is placed where the loop refined it, with the reach of that refinement: the fine core of the local
 size that holds it, or the size it would ask for of its own (:func:`~scgsim.meshing.repair.refinement_reach`).
-Elements held by one local size, or whose own reaches overlap, are one place.  The meshing-stage findings
+Elements held by one local size, or whose own reaches overlap (directly or through a chain), are one place,
+and its centre and radius are a sphere that covers every element's reach.  The meshing-stage findings
 (``fine_structure``) whose box lies within that reach of an element are the fine structure at that place, each
 with its owner; a place with none is the mesher's to answer for.
 """
@@ -73,14 +74,12 @@ def stop_places(
         if holder is not None:
             place = held.setdefault(holder, StopPlace(centre, reach))
         else:
-            place = _overlapping(own, centre, reach)
-            if place is None:
-                place = StopPlace(centre, reach)
-                own.append(place)
+            place = _joined(own, centre, reach)
         place.elements.append(element)
         place.spots.append((centre, reach))
     places = [*held.values(), *own]
     for place in places:
+        place.centre, place.radius_um = _envelope(place.spots)
         place.findings = [
             finding
             for finding in findings
@@ -93,14 +92,37 @@ def stop_places(
     return places
 
 
-def _overlapping(
-    places: list[StopPlace], centre: Point3, reach: float
-) -> StopPlace | None:
-    """The first place one of whose elements' reaches overlaps this one."""
-    for place in places:
-        if any(math.dist(spot, centre) <= reach + r for spot, r in place.spots):
-            return place
-    return None
+def _joined(places: list[StopPlace], centre: Point3, reach: float) -> StopPlace:
+    """The place this reach belongs to: every place it overlaps becomes one, or a new place when none."""
+    touching = [
+        place
+        for place in places
+        if any(math.dist(spot, centre) <= reach + r for spot, r in place.spots)
+    ]
+    if not touching:
+        place = StopPlace(centre, reach)
+        places.append(place)
+        return place
+    first, *others = touching
+    for other in others:
+        first.elements.extend(other.elements)
+        first.spots.extend(other.spots)
+        places.remove(other)
+    return first
+
+
+def _envelope(spots: list[tuple[Point3, float]]) -> tuple[Point3, float]:
+    """A sphere around every reach: the centre of their bounding box, and the farthest reach from it."""
+    if len(set(spots)) == 1:
+        return spots[0]
+    low = [min(spot[k] - r for spot, r in spots) for k in range(3)]
+    high = [max(spot[k] + r for spot, r in spots) for k in range(3)]
+    centre = (
+        (low[0] + high[0]) / 2,
+        (low[1] + high[1]) / 2,
+        (low[2] + high[2]) / 2,
+    )
+    return centre, max(math.dist(centre, spot) + r for spot, r in spots)
 
 
 def _point_box_distance(point: Point3, box: tuple[Point3, Point3]) -> float:
