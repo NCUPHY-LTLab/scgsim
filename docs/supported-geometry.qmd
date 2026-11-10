@@ -12,7 +12,8 @@ that use it, and the rule for drawing curved outlines. A layout made of these
 patterns, within the ranges below, builds with Surface-EPR bands whose areas
 match the exact geometry. A pattern that is not listed is not verified. The
 cases known to fail or to need a layout change, with their causes, are on
-[Known Geometry Problems](known-geometry-problems.qmd).
+[Known Geometry Problems](known-geometry-problems.qmd). The rules every layout
+must follow, and who owns a failure, are on [Supported Scope](supported-scope.qmd).
 
 ## Check a layout before you simulate it
 

@@ -152,3 +152,5 @@ Both Nets use Q3D's `Signal` type so they remain in the matrix; `physical_ground
 | Resonance and EPR | [Palace or HFSS modes](docs/tutorials/resonance.qmd) · [Energy participation](docs/tutorials/resonance-epr.qmd) |
 | Driven S-parameters | [HFSS Modal or Terminal](docs/tutorials/scattering.qmd) |
 | Transmission-line parameters | [AEDT Q2D](docs/tutorials/transmission-line.qmd) |
+
+Before you simulate a layout of your own, read the [supported scope](docs/supported-scope.qmd): what the layout must guarantee, what SCGSim guarantees in return, and who owns a failure.

@@ -7,7 +7,7 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/known-geometry-problems"
 ---
 
-本頁列出已知在 SCGSim 中會失敗、或建出的結果與 layout 原意不同的幾何。每個情況都說明問題在哪裡、出了什麼錯與原因，以及 SCGSim 為何不遷就它。每個情況的修正方式都是修改 layout。SCGSim 支援的圖形列在[支援的幾何](supported-geometry.qmd)。
+本頁列出已知在 SCGSim 中會失敗、或建出的結果與 layout 原意不同的幾何。每個情況都說明問題在哪裡、出了什麼錯與原因，以及 SCGSim 為何不遷就它。每個情況的修正方式都是修改 layout。SCGSim 支援的圖形列在[支援的幾何](supported-geometry.qmd)；每個 layout 都必須遵守的規則，以及各種失敗由誰負責，見[支援範圍](supported-scope.qmd)。
 
 圖依各情況回報的尺寸，在 SGB 1 nm 的 grid 上重新畫成，不使用任何 PDK 程式碼。問題以紅色標示；右側的面板放大問題處，紅色虛線框標出放大的位置。
 
@@ -17,6 +17,8 @@ SCGSim 依照收到的輪廓建立幾何。它不會封閉奈米級的縫隙、�
 
 對 OrcaPen SC PDK cell 的調查找到一些畫出的形狀與 PDK 程式碼原意不同的地方。每一項都已連同 PDK 程式碼中的原因回報給 PDK：[orcapen-sc-pdk#47](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/issues/47)（C1 至 C4）與 [orcapen-sc-pdk#58](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/issues/58)（A1、A6）。它們是繪圖缺陷，因此修正屬於 PDK。
 
+OrcaPen SC PDK 已修正全部六項：C1 至 C4 由 [orcapen-sc-pdk#64](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/64) 修正，A1 與 A6 由 [orcapen-sc-pdk#61](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/61) 修正。只有以不含這些 pull request 的 PDK 版本建出的 layout 才會出現這些缺陷，因此用於模擬的 layout 請以包含它們的 PDK 版本建立。
+
 ### C1：圓盤與引線扇形之間的裂縫 {#c1-crack}
 
 ![接面座標中的圓盤（左）與其引線扇形；放大圖顯示裂縫 0.21 µm 的開口，以及裂縫收攏處約 10 nm 的階差。](assets/supported-geometry/problem-c1-crack.svg){fig-alt="圓盤與扇形，兩側各有一條以紅色標示的楔形細縫，以及裂縫的兩張放大圖。"}
@@ -24,6 +26,8 @@ SCGSim 依照收到的輪廓建立幾何。它不會封閉奈米級的縫隙、�
 **出了什麼錯。** 在 Disk Qubit 放射狀引線扇形的兩側，扇形與圓盤之間各留下一條長 18.26 µm 的楔形縫：開口寬 0.21 µm，收攏成 9.9 nm 的階差。SCGSim 依原圖建立它。裂縫兩側成為 gap edge，圓盤沿著它們多出 band：band 0 約增加 9 %（樣本中為 446 對 410 µm²）。原因在繪圖：扇形的三點弧與圓盤的 32 點多邊形只共用一個頂點，所以兩者的聯集留下縫隙（PDK 的 `_radial_taper` 與 `_disk_and_junction`）。
 
 **SCGSim 為何不修正。** 0.21 µm 的縫隙是合法的繪圖特徵，所以 SCGSim 保留它。請讓扇形的弧落在圓盤自己的頂點上，或在聯集之前把扇形延伸進圓盤，使聯集成為一條乾淨的輪廓。
+
+**PDK 的修正**：[orcapen-sc-pdk#64](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/64) 讓扇形的直邊延伸進圓盤。
 
 ### C2 與 C3：爪形中的零寬度狹縫 {#c2-c3-slits}
 
@@ -33,6 +37,8 @@ SCGSim 依照收到的輪廓建立幾何。它不會封閉奈米級的縫隙、�
 
 **SCGSim 為何不修正。** 1 nm 的邊落在 SCGSim 的 grid 上，是合法的幾何。請在整個爪形輪廓上修圓角，而不是透過視窗把修圓的片段拼接進去。
 
+**PDK 的修正**：[orcapen-sc-pdk#64](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/64) 把爪形畫成一條輪廓，只修一次圓角。
+
 ### C4：爪形外角的缺口 {#c4-corner-bite}
 
 ![爪形的外角；放大圖顯示尖角與殘留圓角之間的缺口。](assets/supported-geometry/problem-c4-corner-bite.svg){fig-alt="爪形外角，在尖角與圓角之間有一個以紅色勾勒的小缺口。"}
@@ -40,6 +46,8 @@ SCGSim 依照收到的輪廓建立幾何。它不會封閉奈米級的縫隙、�
 **出了什麼錯。** 每個爪形外角都有一個 57.7° 的尖角，接著是 2.766 與 0.136 µm 的邊，以及 r ≈ 5 的殘留圓角。它可以建立，但這個角不是原本要的形狀，0.136 µm 的邊會迫使網格在該處變得很小。原因在繪圖：先把角修圓（`_claw_segment`），漸縮又把尖角加回來（`_claw_taper`）。
 
 **SCGSim 為何不修正。** 這個輪廓是合法的幾何。請先加漸縮再修圓角，或只修剩下的角。
+
+**PDK 的修正**：[orcapen-sc-pdk#64](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/64) 在修圓角之前就把漸縮納入爪形輪廓。
 
 ### A1：Purcell IDC 的指因 1 nm 而分離 {#a1-detached-fingers}
 
@@ -49,6 +57,8 @@ SCGSim 依照收到的輪廓建立幾何。它不會封閉奈米級的縫隙、�
 
 **SCGSim 為何不修正。** 在繪圖中這些指是各自獨立的導體，SCGSim 無法得知它們原本應該相連。請給梳子自己的主幹，並使用落在 grid 上的指長。
 
+**PDK 的修正**：[orcapen-sc-pdk#61](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/61) 讓每個梳子都有自己的主幹，Purcell cell 的指長也落在 grid 上。
+
 ### A6：接地遮罩沒有的蝕刻邊框 {#a6-etch-frame}
 
 ![帶 CPW 的晶片；紅色實線是蝕刻層上 2300 × 1000 的邊框，虛線是 2200 × 900 的晶片邊。放大圖顯示一個角。](assets/supported-geometry/problem-a6-etch-frame.svg){fig-alt="有 CPW 穿過的接地平面，晶片周圍 50 µm 的邊框以紅色勾勒，以及一個角的放大圖。"}
@@ -56,6 +66,8 @@ SCGSim 依照收到的輪廓建立幾何。它不會封閉奈米級的縫隙、�
 **出了什麼錯。** 在 airbridge 範例晶片中，蝕刻層有一圈圍繞 2200 × 900 晶片、寬 50 µm 的邊框，接地遮罩卻沒有；兩層相差 320 000 µm²。SCGSim 由遮罩推導接地，所以它的接地會延伸到切割道上，而 PDK 以蝕刻層推導的金屬不會。切割道距 CPW 超過 400 µm，對 CPW 的影響很小。
 
 **SCGSim 為何不修正。** SCGSim 文件化的接地形式是平面扣除接地遮罩，它不讀取蝕刻層。請也把邊框放進接地遮罩，或把它從蝕刻層移除，使兩者給出相同的金屬。
+
+**PDK 的修正**：[orcapen-sc-pdk#61](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/61) 把邊框也畫在接地遮罩上。
 
 ## 超出 128 點範圍的曲線 {#curves-outside-scope}
 
