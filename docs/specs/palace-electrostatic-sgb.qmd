@@ -270,7 +270,7 @@ External gsim and historical SGB revisions are derivation evidence only. The
 runtime geometry authority is the in-tree `scgsim.geometry.sgb` and the
 current `scgsim.palace` implementation.
 
-See [Geometry and SGB Route A/B](../geometry-sgb.qmd),
+See [GeometryPlan and SGB](../geometry-sgb.qmd),
 [Headless Geometry Preview](../geometry-preview.qmd),
 [Execution Profiles and Local/Manual-HPC Handoff](../execution-profiles.qmd),
 and [Provenance and Data Boundaries](../provenance.qmd) for the surrounding

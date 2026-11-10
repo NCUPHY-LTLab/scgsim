@@ -27,6 +27,6 @@ The evidence, in the order the pages give it:
 
 ## What was measured
 
-The measurements run the production SGB core (`scgsim.geometry.sgb`; see [GeometryPlan and SGB Route A/B](../../geometry-sgb.qmd)) on random layouts: N small features on one chip, each in its own ground cutout, built with Route B. The layouts contain polygons only, with no circular arcs and no inset bands, so the cost of arcs and bands at large size is not measured and these numbers do not extend to them. The design reasoning behind the pipeline is written in Traditional Chinese: [Why plan first](../../../zh-TW/docs/design/sgb/why-plan-first.html).
+The measurements run the production SGB core (`scgsim.geometry.sgb`; see [GeometryPlan and SGB](../../geometry-sgb.qmd)) on random layouts: N small features on one chip, each in its own ground cutout, built with Route B. The layouts contain polygons only, with no circular arcs and no inset bands, so the cost of arcs and bands at large size is not measured and these numbers do not extend to them. The design reasoning behind the pipeline is written in Traditional Chinese: [Why plan first](../../../zh-TW/docs/design/sgb/why-plan-first.html).
 
 All numbers come from one machine with 64 hardware threads and 503 GiB of memory; each case ran once. [Reproduction](reproduction.qmd) lists the machine, the software versions, the data files and the commands.

@@ -95,7 +95,7 @@ scgsim-id: "docs/supported-geometry"
 
 ![**20 指叉梳。** 20 指，寬 3.3、間距 3.3、長 100，由 21.6° 的漏斗饋入（開孔 42.7°）。使用者：`interdigital_capacitor`、Purcell。](assets/supported-geometry/cell-20.svg){fig-alt="兩組交錯的指狀梳，由漏斗形饋入，位於接地開孔內。"}
 
-![**21 重新取樣的 spline 條帶。** y 方向寬 10，重新取樣使每個頂點至少轉 2.8125°。使用者：`interpolation_spline_strip`、`bspline_strip`。](assets/supported-geometry/cell-21.svg){fig-alt="周圍沒有接地的彎曲條帶。"}
+![**21 重新取樣的 spline 條帶。** y 方向寬 10，重新取樣為每個頂點約轉 3°。使用者：`interpolation_spline_strip`、`bspline_strip`。](assets/supported-geometry/cell-21.svg){fig-alt="周圍沒有接地的彎曲條帶。"}
 
 ![**22 中空 TSV。** 兩個 24 點圓（r 29.8 與 30）之間 0.2 µm 的壁，高 500；兩面各有 r 29.8 至 100 的 Al 著陸墊，位於 r 120 的開孔內。使用者：TSV coupon。](assets/supported-geometry/cell-22.svg){fig-alt="接地開孔內、圍繞 TSV 孔的環形著陸墊。"}
 

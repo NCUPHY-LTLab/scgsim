@@ -17,7 +17,6 @@ project:
   - docs/history/*.qmd
   - docs/concepts/*.qmd
   - docs/design/sgb/*.qmd
-  - '!docs/concepts/geometry-en.qmd'
 execute:
   enabled: false
 lang: zh-TW
@@ -120,7 +119,6 @@ website:
     - section: 歷史參考
       contents:
       - docs/history/aedt-capacitance-pre-v3.qmd
-      - docs/course/palace-surface-bands.qmd
   - id: concept
     title: 頁面
     style: floating
@@ -187,11 +185,6 @@ website:
       - docs/architecture.qmd
       - docs/goals-and-upstream.qmd
       - docs/provenance.qmd
-      - docs/roadmap.qmd
-    - section: 維護紀錄
-      contents:
-      - docs/errors.qmd
-      - docs/convergence-status.qmd
   - id: sgb-design
     title: SGB 設計
     style: floating
@@ -211,7 +204,6 @@ website:
     - docs/design/sgb/slivers.qmd
     - docs/design/sgb/validation.qmd
     - docs/design/sgb/emission.qmd
-    - docs/design/sgb/aedt-handoff.qmd
     - docs/design/sgb/brep-format.qmd
     - docs/design/sgb/consumer-contract.qmd
     - docs/design/sgb/consumer-mapping.qmd

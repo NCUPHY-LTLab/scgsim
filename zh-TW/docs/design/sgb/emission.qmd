@@ -7,7 +7,7 @@ scgsim-status: "CONVERGING"
 scgsim-id: "docs/design/sgb/emission"
 ---
 
-Emission 把已經決定好的 topology 變成 Gmsh 與 AEDT 能載入的檔案。它本身不做任何決定：不做 Boolean operation、不做 healing，也不搜尋幾何。它要保證三件事：每個共用的元素只寫一次，所以結果是 conformal；每個 Gmsh 元素都能用編號對回 planned id；檔案載入後與規劃相符。檔案內部的逐行格式見 [BREP 與 XAO 檔案格式](brep-format.qmd)，交給 AEDT 的部分見 [交給 AEDT](aedt-handoff.qmd)。emission 在 production 已實作（`scgsim.geometry.sgb.emission`、`sidecar`、`verification`、`exchange`，階段 1d 與 1e）；公開入口 `build_sgb_geometry` 寫出 BREP、XAO、sidecar、sliver report 與 validation report 五個檔案，呼叫與回傳見[使用契約](consumer-contract.qmd#call)。本頁的數字、檔案摘錄、id 與計時都是對 production 的計算與量測（`docs/design/sgb/_figures/emission.py`，計時是單次執行，見[補充：重現資料](#reproduction-data)）。
+Emission 把已經決定好的 topology 變成 Gmsh 與 AEDT 能載入的檔案。它本身不做任何決定：不做 Boolean operation、不做 healing，也不搜尋幾何。它要保證三件事：每個共用的元素只寫一次，所以結果是 conformal；每個 Gmsh 元素都能用編號對回 planned id；檔案載入後與規劃相符。檔案內部的逐行格式見 [BREP 與 XAO 檔案格式](brep-format.qmd)，交給 AEDT 的部分見[交給 AEDT](#handing-the-solids-to-aedt)。emission 在 production 已實作（`scgsim.geometry.sgb.emission`、`sidecar`、`verification`、`exchange`，階段 1d 與 1e）；公開入口 `build_sgb_geometry` 寫出 BREP、XAO、sidecar、sliver report 與 validation report 五個檔案，呼叫與回傳見[使用契約](consumer-contract.qmd#call)。本頁的數字、檔案摘錄、id 與計時都是對 production 的計算與量測（`docs/design/sgb/_figures/emission.py`，計時是單次執行，見[補充：重現資料](#reproduction-data)）。
 
 執行範例是 pad-in-ground 模型，metal 具有有限厚度（[Route B](routes.qmd)）：下方是 substrate，上方是 vacuum，ground plane 有一個 cutout，pad 有 chamfer、notch 與圓孔，pad 與 ground 之間有一片 lumped port。port 位於 host 的 support plane（z = 0，也就是 substrate 的表面）：它是 substrate 與 vacuum 之間的一個 face，由兩個 solid 共用，不是 free face（見 [Routes](routes.qmd#port-support-plane)）。這個範例是 production 測試端的 stage-level scene（`tests/sgb_scenes.py` 的 `pad_in_ground`）；那個 scene 為了測試 embedded sheet，把 Route B 的 port 放在金屬的中間平面，compiler 不會這樣放，所以這裡把它換成 z = 0 的同一片 sheet（細節見補充）。
 
@@ -310,7 +310,7 @@ HXT 在某些模型上會讓 Gmsh 4.15.2 的 process 直接中止（heap 損毀�
 
 ## 交給 AEDT {#handing-the-solids-to-aedt}
 
-AEDT 的交接已有結論：以 XDE assembly 的 STEP 匯入具名 solid，band 在寫檔時就切好，face identity 來自每個 solid 內的 face 順序，port 由 PyAEDT 依 sidecar 以原生方式重建。完整的事實、量測數字與未決事項見 [交給 AEDT](aedt-handoff.qmd)。
+SGB 以 `export_aedt_step` 把具名 solid 匯出成 XDE assembly 的 STEP：band 在寫檔時就切好，face identity 來自每個 solid 內的 face 順序，並另外寫出 guard 檔。AEDT 的方向是使用這份輸出；develop 上的 AEDT 流程尚未呼叫它。
 
 ## 限制與風險 {#limits-and-risks}
 
@@ -342,7 +342,6 @@ AEDT 的交接已有結論：以 XDE assembly 的 STEP 匯入具名 solid，band
 | Oracle 的 solid mass | `figures/why-scaling-oracle.json`（`_figures/why_scaling.py oracle`） |
 | 各 case 的載入後檢查、band | `verify_loaded` 與 `band_mesh_report`（`tests/sgb_gmsh_oracle.py`） |
 | OCCT 檢查報告、注入缺陷與 catalogue | `scgsim.geometry.sgb.verification.occt.check_file`；缺陷來自 `tests/sgb_occt_mutations.py` |
-| AEDT 路徑 | [交給 AEDT](aedt-handoff.qmd) |
 
 seed 2：seed 1 的隨機 layout 在 N = 20,000 時有兩個同 Net 的形狀只在一個 vertex 相接，build 以 `NonManifoldError` 拒絕，所以 scaling 使用 seed 2。
 

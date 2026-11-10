@@ -72,6 +72,7 @@ scgsim-id: "docs/supported-scope"
 | 不同 Net 的導體互不重疊。 | 同上：兩個 Net 重疊的金屬沒有單一歸屬。 | 建構時 `OverlapError`，附位置 | [版圖建模檢查](layout-modeling-check.qmd) |
 | 同一 Net 中互相重疊的導體具有不同的優先序，由其中一個擁有重疊區。 | 同一 Net 的兩個 Entity 可以重疊，但重疊區必須恰好屬於其中一個。 | 建構時 `OverlapError`（「… overlap … with equal priority」） | [幾何契約](geometry-sgb.qmd) |
 | 任何區域都不只沿一條垂直邊與自己接觸。例如同一 Net 的兩塊金屬只在一個角點相接。 | 同一體積的兩個區塊只共用一個頂點時，會形成無法產生網格的非流形實體。 | 建構時 `NonManifoldError`，附位置 | 本頁 |
+| 每個 Entity 不是薄片（經物理解讀後厚度為零），就是 Z 範圍為正的實體。 | 有厚度的薄片或沒有厚度的實體，在堆疊中都沒有一致的位置。 | 建構時 `InputError`（「… is a sheet but its effective Z interval is …」、「… has a non-positive Z extent …」） | [物理表示](specs/physical-representation.qmd) |
 
 ### 埠 {#rules-ports}
 

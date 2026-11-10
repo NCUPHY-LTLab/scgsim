@@ -16,10 +16,10 @@ The package connects geometry and material facts to explicit computations,
 then preserves the returned quantity's units, source and model context.
 See [supported calculations](backend-support.qmd) and the [tutorials](examples.qmd).
 
-The accepted 1.1.0 source model includes explicit authored curve boundaries
+The source model includes explicit authored curve boundaries
 and caller-selected GDS boundary reconstruction. Curves remain bound to source
 Entities and placed occurrences; polygon-only inputs retain their polygon
-boundaries. Palace builds curve intent through `scgsim.geometry.sgb`, while
+boundaries. Palace builds line and circular-arc curves through `scgsim.geometry.sgb`, while
 AEDT curve lowering remains unsupported. Palace also
 separates Gmsh geometric order from finite-element order and exposes
 mesh-generation records through a detached summary. The
@@ -41,9 +41,9 @@ The study author chooses physical assumptions and interprets the quantities.
 
 Historical starting-source identities are listed in the
 [repository maintainer record](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/MAINTAINING.md#implementation-and-project-references).
-They describe origin, not additional supported APIs. Current source geometry
-uses `scgsim.geometry` and its compiler surface, not a direct external SGB
-consumer.
+They describe origin, not additional supported APIs. Palace builds source
+geometry with the in-tree `scgsim.geometry.sgb`; `scgsim.geometry.compiler` is a
+separate advanced builder. No external SGB is used.
 
 ## Contributor references {#v1-acceptance-and-delivery}
 

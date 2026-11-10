@@ -139,4 +139,4 @@ Palace 在省略 `Nonconformal` 鍵時預設為 `true`。SCGSim 一律寫出此�
 
 外部 gsim 及歷史 SGB 版本只作為衍生資料。執行期幾何權威是樹內的 `scgsim.geometry.sgb` 及目前的 `scgsim.palace` 實作。
 
-周邊契約請見[幾何與 SGB Route A／B](../geometry-sgb.qmd)、[無顯示幾何預覽](../geometry-preview.qmd)、[執行設定與本機／手動 HPC 交接](../execution-profiles.qmd)，以及[來源與資料界線](../provenance.qmd)。
+周邊契約請見[GeometryPlan 與 SGB](../geometry-sgb.qmd)、[無顯示幾何預覽](../geometry-preview.qmd)、[執行設定與本機／手動 HPC 交接](../execution-profiles.qmd)，以及[來源與資料界線](../provenance.qmd)。

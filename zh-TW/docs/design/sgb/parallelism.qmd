@@ -172,7 +172,7 @@ N = 20 000 時，derivation 之後還有寫檔、報告、sidecar、Gmsh 載入�
 
 所以即使把 derivation 加速到實測最好的 1.17×（省 8.9 s），整條路徑從 209.8 s 變 200.8 s，端到端只有 1.04×；就算 derivation 達到單一 process 的上限 1.98×，端到端也只有 1.17×（179.3 s）。只看 derivation 加 BREP／XAO 檔案（75.4 s），1.17× 的 derivation 讓它變 66.5 s（1.13×）。sliver 與 validation report（49.7 s）和 Gmsh 載入（49.7 s）各自比整個 derivation 的平行部分更大，載入無論哪種格式都是下限。
 
-## 目前的限制與下一步
+## 限制
 
 - **加速很小。**最佳的 derivation 加速是 1.17×（N = 20 000）至 1.26×（N = 5 000），端到端約 1.04×；沒有證據顯示再增加 worker 或 tile 會有更大的收益（8、16、32 個 worker 的 build 時間相同）。
 - **限制加速的是序列 stage。**`assembly_faces`、`dissolution`、`dcel_faces` 與 `noding_driver`。縮短它們需要改這些 stage 本身，例如決策 [D9](decisions.qmd#d9) 的 compiled kernel；production 的階段 1 仍是純 Python，沒有 compiled kernel，D9 的收益不是本設計已量到的結果。

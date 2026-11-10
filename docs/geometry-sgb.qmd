@@ -1,5 +1,5 @@
 ---
-title: "GeometryPlan and SGB Route A/B"
+title: "GeometryPlan and SGB"
 description: "GeometryPlan source identity, occurrence and Net ownership, route lowering and input summary."
 scgsim-kind: "contract"
 scgsim-status: "ACCEPTED"
@@ -58,7 +58,7 @@ does not infer electrical connectivity or merge child net maps.
 
 ## Shared physical source and representation {#physical-representation}
 
-The shared physical-source/profile scope is **CONVERGING**. Its
+The
 [physical representation contract](specs/physical-representation.qmd) separates
 source physical classification from selected solver representation. One neutral
 plan binds each original Entity and physical layer to its effective geometry,
@@ -73,7 +73,7 @@ source and runtime cohorts retain their original interpretation and identity.
 
 ## Source curves and native shared topology {#source-curves}
 
-The curve scope is **ACCEPTED**. Polygon-only inputs retain their polygon
+Polygon-only inputs retain their polygon
 boundaries. Curves are explicit source declarations, not smoothing inferred
 from a rendered layout or a mesh.
 
@@ -124,53 +124,31 @@ three explicit anchors; an open arc uses start, on-arc and end anchors.
 Overlapping replacement chains or competing whole-boundary declarations
 cannot own the same source segments.
 
-For active declarations, the in-tree geometry builder builds one native OCC planar
-arrangement before assigning material interfaces. Native Boolean history
-retains source membership and trimmed parameter intervals. The same arranged
-curves bound metal, dielectric and vacuum complements and port partitions.
-The authored stack supplies Z; a collective native 1D-to-2D sweep of the shared arranged edges
-creates exact ruled walls and preserves trimmed curve geometry. It retains
-shared upper edges and one vertical edge per source vertex. Surface-first shells then form solution
-volumes, including inner PEC void shells. Native construction errors propagate;
-there is no straight-edge fallback, per-surface refit or global volume repair.
+SGB builds the declared lines and circular arcs into one exact planar
+arrangement on the integer grid, extrudes it over the authored stack, and writes
+the BREP and XAO files itself; it runs no OCC Boolean and no shell repair. Each
+face keeps its source identity in the sidecar, and Gmsh only opens the written
+XAO to check it before meshing. A construction error stops the build; there is
+no straight-edge fallback or volume repair.
 
-Stock Gmsh shell AutoFix can replace native face tags while correcting shell
-orientation. SGB binds each repaired face back to its source `SurfaceID` by
-complete native wire/edge correspondence, then carries that source mapping
-through export and backend construction. Source identity remains fixed while
-numeric Gmsh tags may change; tags, coordinates, area, and ordering are not
-used to guess replacements. In the observed Circle Route B construction, shared
-faces and metal-cutout boundaries remained source-bound, while port sheets
-stayed separately represented. If correspondence or required topology cannot be
-preserved, native construction fails instead of emitting a fallback geometry.
+The advanced builder `scgsim.geometry.compiler`, which Palace does not use,
+keeps its own records for curved input: an OCC planar arrangement, typed
+`MMContactRecord` contacts and `metadata.curved_arrangement`. Its route dispatch
+refuses active curves on Route C.
 
-Hidden same-Net contacts retain typed `MMContactRecord` ownership and never
-become MM physical groups. Its additive `geometry_ref` contains detached
-canonical point, curve and surface-loop definitions, with resolvable
-`outer_loop_ref` and `hole_loop_refs`. Shared live boundary curves use the same
-canonical IDs. Genuine polygon contacts retain `outer_loop`; genuinely curved
-contacts record it as `None`. A planar contact can record its plane normal;
-a curved wall records `normal=None` and its actual surface geometry instead
-of a fictitious constant direction. Actual contact geometry does not assign
-Nets, and different-Net contact remains a physical short error.
-
-The construction plan's `metadata.curved_arrangement` distinguishes requested
-source bindings/reconstruction from actual native intervals, memberships and
-Z sweep. Its detached boundary transport retains the shared native faces and
-edges; solver/mesh tags remain lowering evidence. Geometry order and finite
-element order are separate choices. Curved model geometry does not make a
-positive surface inset an exact curved-perimeter distance; see the
+Geometry order and finite element order are separate choices. Curved model
+geometry does not make a positive surface inset an exact curved-perimeter
+distance; see the
 [EPR interpretation](eigenmode-epr.qmd#surface-identity-masks-and-loss-assumptions).
 
-Palace Route A/B consumes active curve intent through its existing geometry entry paths.
-The existing route dispatch rejects active curve intent on retained-conductor
-Route C; polygon-only Route C behavior is unchanged.
-AEDT's current planar lowering explicitly rejects active declarations; it does
-not silently substitute the diagnostic polygon witness.
+Palace builds declared lines and circular arcs through SGB on Route A or
+Route B; other curve kinds raise `UnsupportedCurveError`. AEDT's current planar
+lowering explicitly rejects active declarations; it does not silently
+substitute the diagnostic polygon witness.
 
 ## Component-to-backend geometry contract
 
-The accepted contract makes local component geometry and hierarchy explicit
+The contract makes local component geometry and hierarchy explicit
 before Palace or AEDT preparation. The public `scgsim.geometry.GeometryPlan` is the
 mutable Notebook builder: it inventories expanded component entities and
 stores the final `Net -> Entity` assignment. Its `prepare()` method returns an
@@ -312,7 +290,7 @@ deriving another rectangle. Palace `add_port(...)` still binds inductance to an
 authored port name and does not choose the physical terminal owners.
 
 
-| Fact or operation | Accepted contract |
+| Fact or operation | Contract |
 |---|---|
 | Component definition | Holds local polygons, source Entity IDs, ports, topology selectors, and local component facts. Reusing a component does not rewrite its local IDs. Schema v2 does not assign final Nets or expose a public `Group` API inside the component. |
 | Component occurrence | `register_instance(path, reference)` binds a named path to the actual GDSFactory occurrence. Parent segments are registered before children. The path scopes entity and polygon identities before flattening; rotation and reflection apply consistently to geometry, selectors, and ports. |
@@ -325,15 +303,13 @@ authored port name and does not choose the physical terminal owners.
 | AEDT object names | New native names are readable and deterministic, sanitized and disambiguated as needed, and remain bound to the original qualified Entity ID. Historical prepared names keep their version-specific reader policy. |
 | Boundary defaults | Palace leaves an unspecified external vacuum boundary at its natural PMC condition. AEDT uses HFSS's default Perfect E. The shared input does not convert one policy into the other. |
 
-These are the accepted V1 semantics. Source preparation establishes
+Source preparation establishes
 the geometry input contract; it does not imply native geometry validation or
 solver execution.
 
-### Accepted Q3D source normalization
+### Q3D source normalization {#accepted-q3d-source-normalization}
 
-The Q3D GeometryPlan frontend is part of the accepted v2 implementation/API
-(accepted 2026-10-09, candidate
-`a932a173edb5c56ae14740ff5177190996255bdd`). Its recognized `airbridge_deck`
+The Q3D GeometryPlan frontend is part of the v2 API. Its recognized `airbridge_deck`
 and `airbridge_post` records remain role-neutral source
 geometry in the normalized snapshot; they are not given a Palace route
 representation or a native conductor role by normalization. A selected Palace
@@ -341,26 +317,24 @@ route continues to reject conductors it cannot represent. AEDT Q3D consumes
 the snapshot's final caller-authored Net membership and explicit physical
 ground roles through its separate finite C/G source frontend. Source curve
 intent is still rejected by current AEDT lowering rather than silently
-linearized. This accepted source contract does not assert completion of a Q3D
+linearized. This source contract does not assert completion of a Q3D
 solve or returned matrix observation.
 
-## Current Surface-EPR direction
+## Routes {#current-surface-epr-direction}
 
-| Route | Public intent | Current state |
-|---|---|---|
-| Route A | Zero-thickness face-metal PEC sheets with finite bump shells | Implemented, accepted |
-| Route B | The closed exterior boundary shell of a finite construction metal volume is PEC; its interior is excluded from Palace solution domains and receives no tetrahedra | Implemented, accepted |
+| Route | What it models | Built by SGB | Taken by Palace |
+|---|---|---|---|
+| Route A | Zero-thickness face-metal PEC sheets with finite bump shells | Yes | Yes |
+| Route B | The closed exterior boundary shell of a finite construction metal volume is PEC; its interior is excluded from Palace solution domains and receives no tetrahedra | Yes | Yes |
+| Route C | Each conductor volume stays in the model as a solution domain | Yes | No |
 
-SGB builds Route A, Route B and Route C. Route C keeps each conductor volume
-in the model, for backends that keep conductor volumes. The Palace simulations
-take Route A and Route B: `set_surface_epr` and `mesh()` refuse any other route
-with `ValueError`.
+The Palace simulations take Route A and Route B: `set_surface_epr` and `mesh()`
+refuse any other route with `ValueError`. Route C is for backends that keep
+conductor volumes. AEDT is to consume the same SGB output; its current
+preparation reads the GeometryPlan snapshot through its own planar path.
 
-## Historical SGB geometry distance bands (WITHDRAWN) {#surface-distance-bands}
-
-SCGSim no longer exposes the SGB geometry-level distance-band producer. This section preserves the former design boundary for readers of older material; its `GeometryPlan.set_surface_distance_bands(...)`, `SurfaceDistanceBandSpec`, and Palace aggregation APIs are not current interfaces.
-
-The withdrawn design partitioned an explicitly selected planar parent surface from its original exterior and hole edges, retained source lineage for each child, and passed those geometric regions into CAD and meshing. Its cumulative EPR aggregation depended on a completed Palace result and did not require Q2D. These historical regions were distinct from Palace's Surface-EPR margin rows, which `inset_margins_um` still requests: SGB cuts those bands into the model when `mesh()` builds the geometry. See the current [Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins) for that path.
+Surface-EPR margin bands are cut into the model by SGB when `mesh()` builds the
+geometry; see the [Eigenmode contract](specs/palace-eigenmode.qmd#surface-epr-margins).
 
 ## Internal semantic projection
 
@@ -481,7 +455,7 @@ profile normalization still happens once at the shared frontend boundary, and
 Route-B finite-body facts stay distinct from PEC approximation and the AEDT
 implementation that realizes them.
 
-## Preparation resources (CONVERGING) {#preparation-resources}
+## Preparation resources {#preparation-resources}
 
 Use `scgsim.preparation.preparation_resources(max_workers=...)` around source
 preparation and meshing to share one preparation worker budget. Without this

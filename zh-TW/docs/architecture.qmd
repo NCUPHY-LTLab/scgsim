@@ -11,7 +11,7 @@ lang: zh-TW
 
 SCGSim 區分 PDK 事實、元件意圖、語意幾何、求解器準備、執行、結果載入及呈現。求解器後端可以實作自己的物理模型，但不能重新定義幾何身分、執行身分或共用來源資訊。
 
-目前實作分開處理來源幾何、求解器準備、原生執行、結果收集及離線解析。Palace 與 AEDT 保留各自求解器生命週期；每個 Desktop 與憑證由單一 AEDT 交易負責。準備好的原生 HFSS EPR 可依要求的 AEDT 版本，經過本機準備、獨立求解器程序及收集。現行實作與交付狀態請見[收斂狀態](convergence-status.qmd)。
+目前實作分開處理來源幾何、求解器準備、原生執行、結果收集及離線解析。Palace 與 AEDT 保留各自求解器生命週期；每個 Desktop 與憑證由單一 AEDT 交易負責。準備好的原生 HFSS EPR 可依要求的 AEDT 版本，經過本機準備、獨立求解器程序及收集。
 
 ## 目前套件結構 {#accepted-scgsim-2.0-structure}
 
@@ -92,7 +92,7 @@ Palace 保有兩個不同的可變準備負責者：Electrostatic 與 Eigenmode 
 
 Palace 內部由 `results.report_data` 負責獨立報告紀錄與快照讀取器；`presentation.reports` 負責可信度／物理量檢視及圖形。套件外觀介面保留既有公開結果與報告名稱。
 
-已接受 v2 的起始產生器輸出 `scgsim.aedt.runtime-source.v13`，具有 61 個正規宣告模組路徑，包含 41 個 AEDT 模組。紀錄攜帶 `schema_version`、`stage`、`modules`、`content_sha256` 及 `revision_observation`；模組位元組及其摘要為必要，真實 Git 觀察則可能不可用。V13 沒有輔助函式雜湊映射，也不宣稱涵蓋全部遞移來源。歷史執行期來源清單繼續依原始模組路徑與身分解讀；搬移不重寫或重新解讀憑證。責任修正將先前 v17 產生器推進至 runtime-source v18，同時保留憑證 V3；宣告清單綁定搬移後的實作。
+已接受 v2 的起始產生器輸出 `scgsim.aedt.runtime-source.v13`，具有 61 個正規宣告模組路徑，包含 41 個 AEDT 模組。紀錄攜帶 `schema_version`、`stage`、`modules`、`content_sha256` 及 `revision_observation`；模組位元組及其摘要為必要，真實 Git 觀察則可能不可用。V13 沒有輔助函式雜湊映射，也不宣稱涵蓋全部遞移來源。歷史執行期來源清單繼續依原始模組路徑與身分解讀；搬移不重寫或重新解讀憑證。目前的產生器輸出 runtime-source v28，同時保留憑證 V3；宣告清單綁定搬移後的實作。
 
 下圖呈現目前的來源結構。幾何來源準備與編譯器規劃分別負責，兩個後端都不定義來源身分。
 
@@ -116,7 +116,7 @@ flowchart LR
   RESULTS --> REPORT["統一 Plotly 報告外層結構"]
 ```
 
-目前幾何實作由元件局部來源事實與具名出現實例開始。`GeometryPlan` 持有展開的實體清單及 Notebook 最終 `Net -> Entity` 映射，再為正規化 `GeometryBuildInput` 邊界準備單一不可變來源快照。已接受的 1.1.0 來源模型在快照中包含指定曲線宣告及明確 GDS 重建紀錄，同時保留 Entity／Net 歸屬。`scgsim.geometry` 負責面向來源的計畫及快照；`scgsim.geometry.compiler` 負責路徑規劃及衍生建構紀錄。Palace 透過 SGB（`scgsim.geometry.sgb`）使用曲線意圖；AEDT 不支援曲線轉換。[GeometryPlan 契約](geometry-sgb.qmd) 負責確切曲線身分及排列語意。原生觀察不取代來源身分，也不確立連通性。AEDT 綁定資料經過原生彙總後，仍保留來源成員與涵蓋範圍。
+目前幾何實作由元件局部來源事實與具名出現實例開始。`GeometryPlan` 持有展開的實體清單及 Notebook 最終 `Net -> Entity` 映射，再為正規化 `GeometryBuildInput` 邊界準備單一不可變來源快照。來源模型在快照中包含指定曲線宣告及明確 GDS 重建紀錄，同時保留 Entity／Net 歸屬。`scgsim.geometry` 負責面向來源的計畫及快照；`scgsim.geometry.compiler` 負責路徑規劃及衍生建構紀錄。Palace 透過 SGB（`scgsim.geometry.sgb`）建構線段與圓弧曲線；AEDT 不支援曲線轉換。[GeometryPlan 契約](geometry-sgb.qmd) 負責確切曲線身分及排列語意。原生觀察不取代來源身分，也不確立連通性。AEDT 綁定資料經過原生彙總後，仍保留來源成員與涵蓋範圍。
 
 在編譯器的 OCC 路徑，標準殼 AutoFix 修正殼方向時可能替換原生面標記。幾何建構透過完整原生線框／邊對應，將修復後的面映射至來源表面，並將此映射帶入匯出與後端建構。來源 `SurfaceID` 維持權威；數值 Gmsh 標記可以改變。在已觀察的 Circle Route B 建構中，共用面與金屬切口邊界仍綁定來源，埠薄片仍獨立。此觀察限於該幾何案例。若無法建立必要對應，建構會失敗。幾何契約負責確切行為及失敗邊界。
 
@@ -162,7 +162,7 @@ Palace 網格品質檢查是 `scgsim.palace.mesh.quality` 下、讀取產出 MSH
 
 `ElectrostaticSim` 與 `EigenmodeSim` 仍是各自可變網格、設定、已解析埠及交接狀態的公開負責者。共用私有流程只準備值並持久化呼叫端提供的 JSON 酬載；它不是模擬基底物件，也不接收回呼來操作模擬狀態。
 
-兩個公開 `mesh()` 方法都在檢查先決條件前使衍生狀態失效。幾何準備接著依序套用既有真空、Route-A 及銦凸塊轉換，在空氣盒轉換前回傳準備好的元件、堆疊、凸塊填充紀錄及選用材料映射。模擬在既有位置有條件地儲存該映射，因此較早的轉換失敗或非映射 `materials` 值會保留原映射；空氣盒或網格建構失敗則保留新準備的映射。Eigenmode 在這些轉換之前解析來源指定埠，且只有網格建構成功後才快取已解析埠。
+兩個公開 `mesh()` 方法都在檢查先決條件前使衍生狀態失效。幾何準備接著依序對堆疊套用真空區域、銦凸塊填充與空氣盒，再解讀物理幾何並記錄 Route-A 中繼資料，然後回傳準備好的元件、堆疊、凸塊填充紀錄及選用材料映射。模擬只在準備完成後儲存該映射，因此準備過程中的失敗或非映射 `materials` 值會保留原映射；網格建構失敗則保留新準備的映射。Eigenmode 在這些轉換之前解析來源指定埠，且只有網格建構成功後才快取已解析埠。
 
 兩個公開 `write_config()` 方法都在既有先決條件及網格存在檢查前，使設定與交接狀態失效。求解器專屬轉換仍在持久化之前發生。共用私有寫入器依呼叫端順序獨立替換每個中繼資料檔，最後才替換 `config.json`；因此後續寫入失敗時，較早檔案仍保留，只有最終替換成功才快取 `config_path`。記憶體失效處理不刪除磁碟上的舊設定檔，此逐檔行為也不保證整個流程具有交易原子性。
 
@@ -225,7 +225,3 @@ AEDT 交易在工作站準備並釋放每個原生 EPR 模型。`scgsim.aedt.bat
 歷史快取解析與最終已儲存場分析是獨立能力。歷史讀取器只回傳 AEDT 實際紀錄的迭代／模態值，保留軸與缺項。最終分析關閉並封存已求解專案與完整結果資料夾，在安裝求解防護的另一份工作副本重新開啟，評估最後儲存的場，不改動原始資料。缺少最終場時，不退回較早的快取迭代；新的求解後邊距是最終場計算，不是虛構的迭代歷史。
 
 儲存庫位置請見[資料夾樹與責任](ownership.qmd)；靜態及連線 Notebook 檢查契約請見[無顯示幾何預覽](geometry-preview.qmd)。
-
-## 歷史結案快照 {#historical-closeout-snapshot}
-
-較早的結案使用 `develop` 精簡後繼版本 `b46bcc7d64fbb8bab181c0da2b9234a003a20adf`（樹 `c99c670927e877fb407aa4c73de32793e86a4460`），以及遷移基準 `develop@3a52fb1`（樹 `96adcf8672b497a29dd0a6b43043cca11efc3043`）。在該快照中，Q3D body-v3 具有僅建構／讀回／儲存／釋放資料，尚未觀察到完成的 C／G 求解。Xmon Route A、CircularPad Route B，以及 HFSS Eigenmode／已儲存場 EPR／離線損耗，當時尚未觀察到完整原生至報告流程。這些是該快照的歷史觀察；目前工作追蹤於[收斂狀態頁](convergence-status.qmd)。

@@ -110,6 +110,7 @@ run on the built model; its error is `SimulationDrcError`, from
 | Conductors of different Nets do not overlap. | The same: overlapping metal of two Nets has no single owner. | `OverlapError` at build, with the location | [Layout modeling check](layout-modeling-check.qmd) |
 | Overlapping conductors of one Net carry different priorities, so one owns the overlap. | Two Entities of one Net may overlap, but the overlap must belong to exactly one of them. | `OverlapError` at build ("… overlap … with equal priority") | [Geometry contract](geometry-sgb.qmd) |
 | No region touches itself along a single vertical edge. Example: two pieces of one Net that meet only at a corner. | Two cells of one volume that share only a vertex give a non-manifold solid that cannot be meshed. | `NonManifoldError` at build, with the location | This page |
+| Each Entity is either a sheet, with zero thickness after the physical interpretation, or a body with a positive Z extent. | A sheet with thickness, or a body with none, has no consistent place in the stack. | `InputError` at build ("… is a sheet but its effective Z interval is …", "… has a non-positive Z extent …") | [Physical representation](specs/physical-representation.qmd) |
 
 ### Ports {#rules-ports}
 
