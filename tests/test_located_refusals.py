@@ -111,20 +111,25 @@ def test_two_declared_holes_that_close_are_both_located():
     assert on(second, (3, 2.5, 3.0002, 3.5))
 
 
-def test_a_physical_operand_whose_neck_snaps_apart_is_located_on_its_layer():
-    """A neck 0.4 nm wide at x = 2..3 um, y = 1 um splits the operand in two."""
+@pytest.mark.parametrize("left_x", (2, 2.0002))
+def test_a_physical_operand_whose_neck_snaps_apart_is_located_on_its_layer(left_x):
+    """A neck 0.4 nm wide at x = 2..3 um, y = 1 um splits the operand in two.
+
+    With ``left_x`` = 2.0002 the left block's edge also moves when it snaps; that
+    moved edge is not the neck and must not widen the reported place.
+    """
     neck = (
         (0, 0),
-        (2, 0),
-        (2, 1),
+        (left_x, 0),
+        (left_x, 1),
         (3, 1),
         (3, 0),
         (5, 0),
         (5, 2),
         (3, 2),
         (3, 1.0004),
-        (2, 1.0004),
-        (2, 2),
+        (left_x, 1.0004),
+        (left_x, 2),
         (0, 2),
     )
     with pytest.raises(ValueError) as error:
@@ -136,9 +141,32 @@ def test_a_physical_operand_whose_neck_snaps_apart_is_located_on_its_layer():
     assert message.startswith(
         "physical geometry collapsed or changed component/hole topology at grid: bridge on layer metal"
     )
-    assert "splits in two" in message and "0.4 nm = 0.4 grid steps" in message
+    assert "splits in two" in message and "narrower than the grid" in message
     (place,) = places(message)
     assert on(place, (2, 1, 3, 1.0004))
+
+
+@pytest.mark.parametrize("outer_x", (1, 0.9998))
+def test_two_holes_whose_wall_snaps_away_merge_at_the_wall(outer_x):
+    """Holes at x = 1..2 um and 2.0002..3 um, y = 1..2 um, lose the 0.2 nm wall between them.
+
+    With ``outer_x`` = 0.9998 the first hole's outer edge also moves when it
+    snaps; the merge is still reported at the wall only.
+    """
+    plate = GridOperand(
+        "plate",
+        rectangle(0, 0, 4, 3),
+        (rectangle(outer_x, 1, 2, 2), rectangle(2.0002, 1, 3, 2)),
+        contact=False,
+        layer="metal",
+    )
+    with pytest.raises(ValueError) as error:
+        build_grid_arrangement((plate,), GRID)
+    message = str(error.value)
+    assert "two drawn holes merge" in message
+    assert "narrowest drawn gap between the merged holes is 0.2 nm" in message
+    (place,) = places(message)
+    assert on(place, (2, 1, 2.0002, 2))
 
 
 def test_two_necks_that_snap_apart_are_both_located():
@@ -205,6 +233,46 @@ def test_two_physical_operands_that_snap_into_contact_are_located_at_each_place(
     lower, upper = places(message)
     assert on(lower, (1, 0, 1.0002, 1))
     assert on(upper, (1, 2, 1.0002, 3))
+
+
+def test_a_contained_conductor_that_snaps_onto_the_boundary_is_located():
+    """The inner rectangle 0.2 nm inside the outer one comes to lie on its edge y = 0.
+
+    Both intersections equal the inner rectangle; only the boundaries' relation
+    changes (212FF1FF2 to 212F11FF2), and that is the place reported.
+    """
+    build, _ = junction_fixture()
+    outer = replace(build.polygons[0], exterior=rectangle(-1, -0.0002, 2, 2))
+    inner = replace(build.polygons[1], exterior=rectangle(0, 0, 1, 1))
+    build = replace(build, polygons=(outer, inner), port_sheet_regions=())
+    with pytest.raises(ValueError) as error:
+        apply_geometry_grid(build, GRID)
+    message = str(error.value)
+    assert message.startswith(
+        "conductor contact changed at grid: chip/left, chip/right"
+    )
+    assert "they touch along an edge after snapping" in message
+    assert "could not be located" not in message
+    (place,) = places(message)
+    assert on(place, (0, -0.0002, 1, 0))
+
+
+def test_a_conductor_that_snaps_back_inside_another_is_located():
+    """The inner rectangle reaches 0.2 nm below the outer one; snapping pulls it back inside.
+
+    The part outside is lost and the boundaries come to touch along y = 0: every
+    place reported lies on that 0.2 nm strip.
+    """
+    build, _ = junction_fixture()
+    outer = replace(build.polygons[0], exterior=rectangle(-1, 0, 2, 2))
+    inner = replace(build.polygons[1], exterior=rectangle(0, -0.0002, 1, 1))
+    build = replace(build, polygons=(outer, inner), port_sheet_regions=())
+    with pytest.raises(ValueError) as error:
+        apply_geometry_grid(build, GRID)
+    message = str(error.value)
+    assert "the drawn part of the second outside the first" in message
+    found = places(message)
+    assert found and all(on(p, (0, -0.0002, 1, 0)) for p in found)
 
 
 def conductors_near_the_left_terminal(x0):

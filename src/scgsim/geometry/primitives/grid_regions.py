@@ -430,12 +430,13 @@ class PolygonRegion:
 #
 # The grid audits compare a requested (unsnapped) geometry with its realized
 # (snapped) one and refuse when a count or a contact relation differs.  These
-# helpers find the places behind that difference from the same two geometries, so
-# a refusal can name where in micrometres the layout must change.  They add no
-# tolerance: components and holes are matched by shared area, a merge is measured
-# as the shortest line between the drawn parts, and a split is the dropped piece
-# of the drawn part that joined the snapped parts.  Coordinates and lengths are
-# printed by the grid's own formatters (``models.grid``).
+# helpers find the places behind that difference, so a refusal can name where in
+# micrometres the layout must change.  They add no tolerance: a contact change is
+# read entry by entry from the point sets behind the DE-9IM relation; components
+# and holes are matched by shared area, and a merge or a split is located on the
+# drawn part snapped to the same grid.  Where a place cannot be isolated, the
+# finding says so and names only what is certainly true, never a nearby box.
+# Coordinates and lengths are printed by the grid's own formatters (``models.grid``).
 
 
 def topology_changes(
@@ -470,14 +471,15 @@ def contact_changes(
     realized: tuple[BaseGeometry, BaseGeometry],
     grid_um: float | None,
 ) -> tuple[str, ...]:
-    """Where the contact of two geometries differs before and after snapping.
+    """Where the contact relation of two polygonal geometries differs before and after snapping.
 
-    The contact relation can change only where the dimension of their
-    intersection changes: a gap closes into a touch or an overlap, a touch
-    becomes an overlap, or a contact is lost.  The parts of the higher-dimension
-    intersection that the other one lacks are reported; any other change falls
-    back to the parts the two intersections do not share.  A geometry GEOS
-    cannot process gives no finding; the refusal itself still stands.
+    Each entry of the DE-9IM relation, except exterior with exterior, is the
+    dimension of one point set: the interiors' overlap, the boundaries' contact,
+    one boundary inside or outside the other geometry, one interior outside the
+    other.  The relation differs only if one of these sets changes dimension, so
+    the parts of the higher-dimension side are the places, and every one of
+    them is reported.  A geometry GEOS cannot process gives no finding; the
+    refusal itself still stands.
     """
     from shapely.errors import GEOSException  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
 
@@ -492,30 +494,87 @@ def _contact_changes(
     realized: tuple[BaseGeometry, BaseGeometry],
     grid_um: float | None,
 ) -> tuple[str, ...]:
+    before, after = _relation_sets(*requested), _relation_sets(*realized)
+    findings: list[str] = []
+    for (appears, lost), drawn, snapped in zip(
+        _RELATION_WORDS, before, after, strict=True
+    ):
+        dim_before, dim_after = _dimension(drawn), _dimension(snapped)
+        if dim_after > dim_before:
+            findings.extend(
+                f"{appears or _TOUCH[_part_dimension(part)]} after snapping at "
+                f"{format_place(part, grid_um)}"
+                for part in _parts_above(snapped, dim_before)
+            )
+        elif dim_before > dim_after:
+            findings.extend(
+                f"{lost} at {format_place(part, grid_um)} is lost after snapping"
+                for part in _parts_above(drawn, dim_after)
+            )
     first, second = requested
-    before = first.intersection(second)
-    after = realized[0].intersection(realized[1])
-    dim_before, dim_after = _dimension(before), _dimension(after)
-    if dim_after > dim_before:
-        closed = tuple(
-            f"they {_CONTACT_WORDS[_part_dimension(part)]} after snapping at "
-            f"{format_place(part, grid_um)}"
-            for part in _parts_above(after, dim_before)
-        )
-        if dim_before >= 0:
-            return closed
+    if findings and not first.intersects(second):
         gap = format_length(first.distance(second), grid_um)
-        return (*closed, f"the narrowest drawn gap between them is {gap}")
-    if dim_before > dim_after:
-        return tuple(
-            f"their drawn {_CONTACT_NOUNS[_part_dimension(part)]} at "
-            f"{format_place(part, grid_um)} is lost after snapping"
-            for part in _parts_above(before, dim_after)
-        )
-    return tuple(
-        f"their contact differs after snapping at {format_place(part, grid_um)}"
-        for part in _parts_above(before.symmetric_difference(after), -1)
-    )
+        findings.append(f"the narrowest drawn gap between them is {gap}")
+    return tuple(findings)
+
+
+# What is said when a set of ``_relation_sets`` appears, and when it is lost, in
+# the order of that function; a new boundary contact is told by its dimension.
+_TOUCH = {0: "they touch at a point", 1: "they touch along an edge"}
+_RELATION_WORDS: tuple[tuple[str | None, str], ...] = (
+    ("they overlap", "their drawn overlap"),
+    (None, "the drawn contact of their boundaries"),
+    (
+        "the first one's boundary runs inside the second",
+        "the drawn run of the first one's boundary inside the second",
+    ),
+    (
+        "the second one's boundary runs inside the first",
+        "the drawn run of the second one's boundary inside the first",
+    ),
+    (
+        "the first reaches outside the second",
+        "the drawn part of the first outside the second",
+    ),
+    (
+        "the second reaches outside the first",
+        "the drawn part of the second outside the first",
+    ),
+    (
+        "the first one's boundary runs outside the second",
+        "the drawn run of the first one's boundary outside the second",
+    ),
+    (
+        "the second one's boundary runs outside the first",
+        "the drawn run of the second one's boundary outside the first",
+    ),
+)
+
+
+def _relation_sets(first: BaseGeometry, second: BaseGeometry) -> list[BaseGeometry]:
+    """The point sets whose dimensions are the DE-9IM entries II, BB, BI, IB, IE, EI, BE, EB.
+
+    An open interior is reached as the closed geometry minus its boundary; for
+    polygons an interior set is two-dimensional or empty, so its polygonal
+    parts stand for it.
+    """
+    edge_1, edge_2 = first.boundary, second.boundary
+    return [
+        _polygonal(first.intersection(second)),
+        edge_1.intersection(edge_2),
+        edge_1.intersection(second).difference(edge_2),
+        edge_2.intersection(first).difference(edge_1),
+        _polygonal(first.difference(second)),
+        _polygonal(second.difference(first)),
+        edge_1.difference(second),
+        edge_2.difference(first),
+    ]
+
+
+def _polygonal(geometry: BaseGeometry) -> BaseGeometry:
+    from shapely import MultiPolygon  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
+
+    return MultiPolygon(list(polygon_components(geometry)))
 
 
 FIX_SHAPE = "Fix the layout: draw each gap, neck and hole named here on the grid, widening or closing it."
@@ -537,10 +596,6 @@ def grid_change_message(
     return f"{lead}{on}{grid}: {where}. {action}"
 
 
-_CONTACT_WORDS = {0: "touch at a point", 1: "touch along an edge", 2: "overlap"}
-_CONTACT_NOUNS = {0: "point contact", 1: "edge contact", 2: "overlap"}
-
-
 def format_place(geometry: BaseGeometry, grid_um: float | None) -> str:
     """Where a geometry is: its point, or its bounding box."""
     return format_box(geometry.bounds, grid_um)
@@ -557,17 +612,13 @@ def _matching_changes(
     image = _largest_partner(shared)
     origin = _largest_partner({(j, i): a for (i, j), a in shared.items()})
     findings: list[str] = []
-    for _, group in _groups(image):
+    for j, group in _groups(image):
         findings.extend(
-            f"two drawn {kind}s merge at {format_place(line, grid_um)}: "
-            f"they are {format_length(line.length, grid_um)} apart"
-            for line in _closest_lines([before[i] for i in group])
+            _merge_findings(kind, [before[i] for i in group], after[j], grid_um)
         )
     for i, group in _groups(origin):
         findings.extend(
-            f"a drawn {kind} splits in two at {format_place(neck, grid_um)}: "
-            f"the drawn neck there is {_size(neck, grid_um)}"
-            for neck in _necks(before[i], [after[j] for j in group])
+            _split_findings(kind, before[i], [after[j] for j in group], grid_um)
         )
     findings.extend(
         f"a drawn {kind} disappears at {format_place(before[i], grid_um)} "
@@ -582,6 +633,85 @@ def _matching_changes(
         if j not in origin
     )
     return findings
+
+
+def _merge_findings(
+    kind: str, drawn: Sequence[Polygon], merged: Polygon, grid_um: float | None
+) -> list[str]:
+    """Where drawn parts meet once each is snapped to the grid on its own.
+
+    Where two snapped drawn parts intersect is where they merged.  The
+    narrowest drawn gap between them is a true measure, though not necessarily
+    of that place.
+    """
+    from shapely import union_all  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
+
+    gap = format_length(
+        min(a.distance(b) for k, a in enumerate(drawn) for b in drawn[k + 1 :]),
+        grid_um,
+    )
+    snapped = [_snapped(part, grid_um) for part in drawn]
+    meetings = _parts_above(
+        union_all(
+            [
+                a.intersection(b)
+                for k, a in enumerate(snapped)
+                for b in snapped[k + 1 :]
+                if a is not None and b is not None
+            ]
+        ),
+        -1,
+    )
+    if not meetings:
+        return [
+            f"{len(drawn)} drawn {kind}s merge into the one at "
+            f"{format_place(merged, grid_um)}, at a place that could not be isolated; "
+            f"the narrowest drawn gap between them is {gap}"
+        ]
+    return [
+        *(f"two drawn {kind}s merge at {format_place(m, grid_um)}" for m in meetings),
+        f"the narrowest drawn gap between the merged {kind}s is {gap}",
+    ]
+
+
+def _split_findings(
+    kind: str, drawn: Polygon, parts: Sequence[Polygon], grid_um: float | None
+) -> list[str]:
+    """Where a drawn part collapses between its snapped parts.
+
+    Snapped on its own, the drawn part keeps a neck narrower than the grid as a
+    line or a point; the ones that touch two of the snapped parts are where it
+    split.  An edge that snapping only moved leaves no such residue, so it is
+    never taken for the neck.
+    """
+    from shapely import union_all  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
+
+    snapped = _snapped(drawn, grid_um)
+    residues = [] if snapped is None else _flat_parts(snapped)
+    necks = [
+        residue
+        for residue in residues
+        if _part_dimension(residue) < 2
+        and sum(residue.intersects(part) for part in parts) > 1
+    ]
+    if not necks:
+        where = ", ".join(format_place(part, grid_um) for part in parts)
+        return [
+            f"a drawn {kind} splits into the parts at {where}, at a place that could "
+            "not be isolated"
+        ]
+    return [
+        f"a drawn {kind} splits in two at {format_place(neck, grid_um)}, where it is "
+        f"narrower than the grid along {format_length(neck.length, grid_um)}"
+        for neck in _parts_above(union_all(necks), -1)
+    ]
+
+
+def _snapped(part: Polygon, grid_um: float | None) -> BaseGeometry | None:
+    """The part snapped to the grid on its own, keeping collapsed pieces as lines and points."""
+    from shapely import intersection  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
+
+    return None if grid_um is None else intersection(part, part, grid_size=grid_um)
 
 
 def _shared_areas(
@@ -617,33 +747,6 @@ def _groups(partner: dict[int, int]) -> list[tuple[int, list[int]]]:
         by_partner[other].append(part)
     return [
         (other, parts) for other, parts in sorted(by_partner.items()) if len(parts) > 1
-    ]
-
-
-def _necks(drawn: Polygon, parts: Sequence[Polygon]) -> list[BaseGeometry]:
-    """The pieces of a drawn part that snapping dropped and that joined its snapped parts.
-
-    A piece of the drawn part outside every snapped part is either a sliver
-    along a moved edge, touching one part, or the neck that joined two of them.
-    Only the second kind is reported; without one, the closest line between the
-    parts stands for the place.
-    """
-    from shapely import union_all  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
-
-    dropped = polygon_components(drawn.difference(union_all(list(parts))))
-    necks = [
-        piece for piece in dropped if sum(piece.intersects(part) for part in parts) > 1
-    ]
-    return sorted(necks, key=lambda piece: piece.bounds) or _closest_lines(parts)
-
-
-def _closest_lines(parts: Sequence[Polygon]) -> list[BaseGeometry]:
-    """The shortest line from each part after the first to the parts before it."""
-    from shapely import shortest_line, union_all  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
-
-    return [
-        shortest_line(union_all(list(parts[:k])), parts[k])
-        for k in range(1, len(parts))
     ]
 
 
