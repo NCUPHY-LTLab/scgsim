@@ -30,6 +30,7 @@ from scgsim.aedt.preparation.sgb_model import PreparedSgbModel, SgbJunction
 from scgsim.aedt.runtime.families.sgb_faces import (
     ImportedFace,
     area_tolerance_um2,
+    import_tolerance_um,
     match_solid_faces,
 )
 from scgsim.aedt.runtime.native.common import (
@@ -82,9 +83,13 @@ def import_sgb_model(
     guard = read_step_guard(model.path("guard"))
     sidecar = read_sidecar(model.path("sidecar"))
     _check_ports(model, sidecar, family)
+    roles = q3d_net_roles(model, sidecar) if family == "q3d" else {}
+    # AEDT's readback is coarser than the sidecar's tolerance_um (decision 9), so every comparison with what
+    # AEDT reports uses a thousandth of the bound model's own grid.
+    tolerance_um = import_tolerance_um(float(sidecar["grid_um"]))
     _import_step(app, model, guard)
-    face_copies = _match_faces(app, guard, model.tolerance_um)
-    sheets = _rebuild_free_faces(app, guard["free_faces"], model.tolerance_um)
+    face_copies = _match_faces(app, guard, tolerance_um)
+    sheets = _rebuild_free_faces(app, guard["free_faces"], tolerance_um)
     for face_id, name in sheets.items():
         face_copies[face_id] = {name: int(app.modeler[name].faces[0].id)}
     objects = {solid["solid"]: solid["aedt_name"] for solid in guard["solids"]}
@@ -92,17 +97,20 @@ def import_sgb_model(
     imported.record["materials"] = _assign_materials(
         app, model, sidecar, objects, family
     )
-    imported.record["region"] = _create_region(app, model, sidecar, family)
+    imported.record["region"] = _create_region(
+        app, model, sidecar, family, tolerance_um
+    )
     if family == "hfss":
         imported.record["perfect_e"] = _assign_sheet_perfect_e(
             app, sidecar, face_copies
         )
         imported.record["junctions"] = [
-            _assign_junction_rlc(app, sidecar, face_copies, item, model.tolerance_um)
+            _assign_junction_rlc(app, sidecar, face_copies, item, tolerance_um)
             for item in model.junctions
         ]
     else:
-        imported.record["nets"] = _assign_q3d_nets(app, sidecar, objects)
+        imported.record["nets"] = _assign_q3d_nets(app, sidecar, objects, roles)
+    imported.record["readback_tolerance_um"] = tolerance_um
     imported.record["model_identity_sha256"] = model.identity_sha256
     return imported
 
@@ -112,8 +120,7 @@ def _check_supported(model: PreparedSgbModel, family: Family) -> None:
     if family not in ("hfss", "q3d"):
         raise ValueError(f"family must be 'hfss' or 'q3d', got {family!r}")
     if family == "q3d" and model.route == "A":
-        # TODO(human): a Q3D Route A sheet needs its thin-conductor thickness, which the SGB model does not
-        # carry yet; issue #67 step 2 leaves it open.
+        # A Q3D sheet conductor needs its thin-conductor thickness, which the SGB model does not carry yet.
         raise NotImplementedError("Q3D imports Route C models only for now")
     if family == "q3d" and model.junctions:
         raise ValueError("Q3D has no junctions; a junction belongs to HFSS Eigenmode")
@@ -331,7 +338,11 @@ def _assign_materials(
 
 
 def _create_region(
-    app: Any, model: PreparedSgbModel, sidecar: Mapping[str, Any], family: Family
+    app: Any,
+    model: PreparedSgbModel,
+    sidecar: Mapping[str, Any],
+    family: Family,
+    tolerance_um: float,
 ) -> dict[str, Any]:
     """The Region of the plan's ``VACUUM_REGION`` box, of the vacuum's material, and (HFSS) its outer boundary."""
     x_min, y_min, z_min, x_max, y_max, z_max = model.vacuum_bounds_um
@@ -344,7 +355,7 @@ def _create_region(
         raise SgbImportError("AEDT did not create the Region")
     observed = tuple(float(value) for value in region.bounding_box)
     if any(
-        abs(a - b) > model.tolerance_um
+        abs(a - b) > tolerance_um
         for a, b in zip(observed, model.vacuum_bounds_um, strict=True)
     ):
         raise SgbImportError(
@@ -530,10 +541,37 @@ def _port_end_midpoint(
 # ---------------------------------------------------------------- Q3D
 
 
+def q3d_net_roles(
+    model: PreparedSgbModel, sidecar: Mapping[str, Any]
+) -> dict[str, Literal["Signal", "Ground"]]:
+    """Each conductor Net's Q3D role from the model's ground declaration: Ground if declared, else Signal."""
+    if model.ground_net_ids is None:
+        raise ValueError(
+            "the SGB model declares no ground Nets, so the Q3D Net roles are unknown; pass "
+            "ground_net_ids to prepare_sgb_model (an empty sequence when no Net is ground)"
+        )
+    nets = {
+        volume["net"]
+        for volume in sidecar["volumes"].values()
+        if volume["kind"] == "conductor"
+    }
+    missing = sorted(set(model.ground_net_ids) - nets)
+    if missing:
+        raise ValueError(f"ground Nets {missing} have no conductor solid in the model")
+    return {
+        net: "Ground" if net in model.ground_net_ids else "Signal"
+        for net in sorted(nets)
+        if net is not None
+    }
+
+
 def _assign_q3d_nets(
-    app: Any, sidecar: Mapping[str, Any], objects: Mapping[str, str]
+    app: Any,
+    sidecar: Mapping[str, Any],
+    objects: Mapping[str, str],
+    roles: Mapping[str, Literal["Signal", "Ground"]],
 ) -> list[dict[str, Any]]:
-    """One Signal Net per sidecar Net over its conductor solids, in Net order."""
+    """One Net per sidecar Net over its conductor solids, in Net order, with its declared role."""
     by_net: dict[str, list[str]] = {}
     for solid_id, name in objects.items():
         volume = sidecar["volumes"][solid_id]
@@ -544,16 +582,16 @@ def _assign_q3d_nets(
     records = []
     for net, names in sorted(by_net.items()):
         net_name = sanitise_aedt_name(net)
-        # TODO(human): the Net's role (Signal, Ground, Floating) is not in the SGB model; every Net is Signal
-        # until the Q3D request names its roles (issue #67 step 1).
-        boundary = app.assign_net(names, net_name, "Signal")
+        boundary = app.assign_net(names, net_name, roles[net])
         assigned = sorted(
             int(value) for value in app.oboundary.GetExcitationAssignment(net_name)
         )
         expected = sorted(int(app.modeler[name].id) for name in names)
         if not boundary or assigned != expected:
             raise SgbImportError(f"AEDT did not assign Net {net!r} to {names}")
-        records.append({"net": net, "name": net_name, "objects": names})
+        records.append(
+            {"net": net, "name": net_name, "role": roles[net], "objects": names}
+        )
     return records
 
 

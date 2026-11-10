@@ -8,13 +8,27 @@ from scgsim.aedt.runtime.families.sgb_faces import (
     FaceMatchError,
     ImportedFace,
     area_tolerance_um2,
+    import_tolerance_um,
     match_solid_faces,
 )
 
-TOL = 1e-3  # um, the sidecar tolerance of these cases
+TOL = 1e-3  # um, the readback tolerance of these cases
 
 
-def _guard(face: str, centre, area=100.0, vertices=(), curved=False):
+def _square(centre):
+    """The corners of the 10 um cube face centred at ``centre`` (one coordinate 0 or 10, the others 5)."""
+    fixed = next(k for k in range(3) if centre[k] in (0, 10))
+    u, v = (k for k in range(3) if k != fixed)
+    corners = []
+    for a, b in ((0, 0), (10, 0), (10, 10), (0, 10)):
+        point = list(centre)
+        point[u], point[v] = a, b
+        corners.append(tuple(float(x) for x in point))
+    return tuple(corners)
+
+
+def _guard(face: str, centre, area=100.0, vertices=None, curved=False):
+    vertices = _square(centre) if vertices is None else vertices
     return {
         "face": face,
         "area_um2": area,
@@ -25,7 +39,8 @@ def _guard(face: str, centre, area=100.0, vertices=(), curved=False):
     }
 
 
-def _imported(face_id, centre, area=100.0, vertices=(), *, planar=True):
+def _imported(face_id, centre, area=100.0, vertices=None, *, planar=True):
+    vertices = _square(centre) if vertices is None else vertices
     return ImportedFace(face_id, area, tuple(centre), tuple(vertices), 40.0, planar)
 
 
@@ -68,7 +83,11 @@ def test_a_different_face_count_fails() -> None:
 def test_a_face_moved_beyond_the_tolerance_has_no_candidate() -> None:
     """A centre farther than tolerance_um from the planned one matches nothing."""
     guard = [_guard("F1", (5, 5, 0)), _guard("F2", (5, 5, 10))]
-    reported = [_imported(1, (5, 5, 0)), _imported(2, (5, 5, 10 + 2 * TOL))]
+    moved = (5, 5, 10 + 2 * TOL)
+    reported = [
+        _imported(1, (5, 5, 0)),
+        _imported(2, moved, vertices=_square((5, 5, 10))),
+    ]
     with pytest.raises(FaceMatchError, match="no AEDT face .* planned face F2"):
         match_solid_faces("cube", guard, reported, TOL)
 
@@ -89,8 +108,9 @@ def test_an_area_beyond_the_perimeter_tolerance_has_no_candidate() -> None:
 def test_two_candidates_inside_tolerance_are_an_ambiguity() -> None:
     """Two AEDT faces within tolerance of one planned face are refused, not picked between."""
     # Two coincident-looking faces: the matcher must refuse rather than pick one.
-    guard = [_guard("F1", (5, 5, 0)), _guard("F2", (5, 5, 0.0005))]
-    reported = [_imported(1, (5, 5, 0)), _imported(2, (5, 5, 0.0005))]
+    near = ((0, 0, 0.0005), (10, 0, 0.0005), (10, 10, 0.0005), (0, 10, 0.0005))
+    guard = [_guard("F1", (5, 5, 0)), _guard("F2", (5, 5, 0.0005), vertices=near)]
+    reported = [_imported(1, (5, 5, 0)), _imported(2, (5, 5, 0.0005), vertices=near)]
     with pytest.raises(FaceMatchError, match=r"AEDT faces \[1, 2\]"):
         match_solid_faces("s", guard, reported, TOL)
 
@@ -113,3 +133,35 @@ def test_a_curved_face_does_not_match_a_planar_one() -> None:
     reported = [_imported(7, (5, 0, 0), 31.4, vertices, planar=True)]
     with pytest.raises(FaceMatchError, match="curved"):
         match_solid_faces("pad", guard, reported, TOL)
+
+
+def test_swapped_centres_of_two_equal_planar_faces_are_refused() -> None:
+    """Two opposite faces of equal area whose guarded centres were swapped match nothing (#126 round 3 B1).
+
+    Area and centre alone would bind each id to the other face; the vertices keep each record on its face.
+    """
+    bottom, top = _guard("F1", CENTRES["F1"]), _guard("F2", CENTRES["F2"])
+    bottom["centre_um"], top["centre_um"] = top["centre_um"], bottom["centre_um"]
+    reported = [_imported(1, CENTRES["F1"]), _imported(2, CENTRES["F2"])]
+    with pytest.raises(FaceMatchError, match="no AEDT face .* planned face F1"):
+        match_solid_faces("cube", [bottom, top], reported, TOL)
+
+
+def test_a_planar_face_whose_vertices_moved_beyond_the_tolerance_has_no_candidate() -> (
+    None
+):
+    """A planar face at the planned centre and area but with a vertex elsewhere is not the planned face."""
+    guard = [_guard("F1", CENTRES["F1"])]
+    corners = list(_square(CENTRES["F1"]))
+    corners[0] = (corners[0][0] + 2 * TOL, corners[0][1], corners[0][2])
+    with pytest.raises(FaceMatchError, match="no AEDT face"):
+        match_solid_faces(
+            "cube", guard, [_imported(1, CENTRES["F1"], vertices=tuple(corners))], TOL
+        )
+
+
+def test_the_readback_tolerance_is_a_thousandth_of_the_grid() -> None:
+    """Decision 9: 5e-4 um on a 0.5 um grid; a non-positive grid is refused."""
+    assert import_tolerance_um(0.5) == pytest.approx(5e-4)
+    with pytest.raises(ValueError, match="grid_um"):
+        import_tolerance_um(0.0)

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import replace
 
 import pytest
 
@@ -33,6 +34,7 @@ from scgsim.aedt.runtime.families.sgb_import import (  # noqa: E402
     SgbImportError,
     current_line_um,
     polyline_of_loop,
+    q3d_net_roles,
     segment_length_um,
 )
 from scgsim.geometry.surface_epr import normalize_surface_epr_specs  # noqa: E402
@@ -158,7 +160,7 @@ def test_route_c_rows_read_ms_and_sa_on_the_substrate_and_ma_on_the_conductor(mo
     for binding in bindings.values():
         planned = sidecar["physical_groups"][binding.group]["ids"]
         assert len(binding.faces) == len(planned) == len(set(binding.faces))
-    names = [binding.face_list for binding in bindings.values()]
+    names = [binding.selection_name for binding in bindings.values()]
     assert len(set(names)) == len(names)
     assert all(name.replace("_", "").isalnum() for name in names)
 
@@ -195,3 +197,38 @@ def test_selectors_are_keyed_by_group_and_default_to_the_face_itself(models):
         surface_field_selections(bindings, {"MA::chip/left__sheet::band=0": "surface"})
     with pytest.raises(ValueError, match="'surface' or 'adjacent'"):
         surface_field_selections(bindings, {"chip/left::band=0": "below"})
+
+
+def test_q3d_net_roles_come_from_the_models_ground_declaration(tmp_path):
+    """A declared ground Net is Ground, every other conductor Net Signal; no declaration is refused."""
+    source, stack = rectangular_junction_source("VACUUM_REGION")
+    model = prepare_sgb_model(
+        source,
+        prepared_stack=stack,
+        modeling="solid",
+        output_dir=tmp_path / "grounded",
+        ground_net_ids=("B",),
+    )
+    sidecar = json.loads(model.path("sidecar").read_text(encoding="utf-8"))
+    assert q3d_net_roles(model, sidecar) == {"A": "Signal", "B": "Ground"}
+    assert type(model).from_payload(model.to_payload()) == model
+    undeclared = replace(model, ground_net_ids=None)
+    with pytest.raises(ValueError, match="declares no ground Nets"):
+        q3d_net_roles(undeclared, sidecar)
+    assert q3d_net_roles(replace(model, ground_net_ids=()), sidecar) == {
+        "A": "Signal",
+        "B": "Signal",
+    }
+
+
+def test_a_ground_net_the_model_does_not_have_is_refused(tmp_path):
+    """A ground declaration naming no Net of the model fails at preparation."""
+    source, stack = rectangular_junction_source("VACUUM_REGION")
+    with pytest.raises(ValueError, match=r"ground Nets \['GND'\] are not Nets"):
+        prepare_sgb_model(
+            source,
+            prepared_stack=stack,
+            modeling="solid",
+            output_dir=tmp_path / "bad",
+            ground_net_ids=("GND",),
+        )

@@ -82,6 +82,7 @@ class PreparedSgbModel:
     materials: Mapping[str, Mapping[str, Any]]
     junctions: tuple[SgbJunction, ...] = ()
     surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None
+    ground_net_ids: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         modeling_from_value(self.modeling)
@@ -99,6 +100,13 @@ class PreparedSgbModel:
         object.__setattr__(self, "model_identity", freeze(self.model_identity))
         object.__setattr__(self, "materials", freeze(self.materials))
         object.__setattr__(self, "junctions", tuple(self.junctions))
+        if self.ground_net_ids is not None:
+            ground = tuple(self.ground_net_ids)
+            if len(set(ground)) != len(ground) or not all(
+                isinstance(net, str) and net for net in ground
+            ):
+                raise ValueError("ground_net_ids must be distinct non-empty Net ids")
+            object.__setattr__(self, "ground_net_ids", ground)
         if self.surface_epr_specs is not None:
             object.__setattr__(
                 self, "surface_epr_specs", freeze(self.surface_epr_specs)
@@ -140,6 +148,9 @@ class PreparedSgbModel:
             "materials": detached(self.materials),
             "junctions": [item.to_payload() for item in self.junctions],
             "surface_epr_specs": detached(self.surface_epr_specs),
+            "ground_net_ids": None
+            if self.ground_net_ids is None
+            else list(self.ground_net_ids),
         }
 
     @classmethod
@@ -171,6 +182,9 @@ class PreparedSgbModel:
                 SgbJunction.from_payload(item) for item in value["junctions"]
             ),
             surface_epr_specs=value["surface_epr_specs"],
+            ground_net_ids=None
+            if value["ground_net_ids"] is None
+            else tuple(value["ground_net_ids"]),
         )
 
 
@@ -182,11 +196,14 @@ def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT mo
     output_dir: str | Path,
     junctions: Sequence[PlanarJunction] = (),
     surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None,
+    ground_net_ids: Sequence[str] | None = None,
 ) -> PreparedSgbModel:
     """Build the SGB model of ``build_input`` for AEDT into ``output_dir`` and bind its files.
 
     ``surface_epr_specs`` are Palace's ``MA``/``MS``/``SA`` specs after
     :func:`scgsim.geometry.surface_epr.normalize_surface_epr_specs`; their margins become bands.
+    ``ground_net_ids`` declares the Nets that are ground, as Palace's electrostatic ground does; Q3D reads
+    each Net's role from it and refuses a model without it.  Every one must be a Net of the model.
     """
     modeling = modeling_from_value(modeling)
     if not isinstance(build_input, GeometryBuildInput):
@@ -215,6 +232,7 @@ def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT mo
     sidecar = read_sidecar(artifacts.sidecar)
     check_region_box(sidecar, bounds)
     _check_junction_ports(sidecar, bound_junctions)
+    _check_ground_nets(sidecar, ground_net_ids)
     files = {
         role: {"path": path.name, "sha256": file_sha256(path)}
         for role, path in (
@@ -236,6 +254,7 @@ def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT mo
         materials=model_materials(sidecar, effective_stack),
         junctions=bound_junctions,
         surface_epr_specs=surface_epr_specs,
+        ground_net_ids=None if ground_net_ids is None else tuple(ground_net_ids),
     )
 
 
@@ -348,3 +367,15 @@ def _check_junction_ports(
     missing = [item.port_group for item in junctions if item.port_group not in groups]
     if missing:
         raise ValueError(f"the SGB model has no lumped-port group {missing}")
+
+
+def _check_ground_nets(
+    sidecar: Mapping[str, Any], ground_net_ids: Sequence[str] | None
+) -> None:
+    if ground_net_ids is None:
+        return
+    if isinstance(ground_net_ids, str):
+        raise TypeError("ground_net_ids must be a sequence of Net ids, not one string")
+    unknown = sorted(set(ground_net_ids) - set(sidecar["unions"]["nets"]))
+    if unknown:
+        raise ValueError(f"ground Nets {unknown} are not Nets of the SGB model")

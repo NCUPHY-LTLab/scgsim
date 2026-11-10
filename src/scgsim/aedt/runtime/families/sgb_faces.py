@@ -3,15 +3,20 @@
 AEDT keeps the per-solid OCC face order as its face-id order, but that is an observation (experiment E4),
 not a promise, so the import never relies on it.  Each imported face is matched by geometry instead:
 
-* **Planar face.**  Area and centre of mass.  PyAEDT reports a planar face's centre of mass.
-* **Curved face.**  Area and vertex set.  PyAEDT's ``face.center`` of a curved face is the vertex centroid,
-  not a centre of mass, so the vertices identify it and no centre is compared.
+* **Every face.**  Area and vertex set.  Two faces of equal area are told apart by where their vertices
+  are, so a guard record whose centre was swapped with another face's still finds no face.
+* **Planar face.**  Also its centre of mass, which PyAEDT's ``GetFaceCenter`` reports.
+* **Curved face.**  No centre: PyAEDT's ``face.center`` of a curved face is the vertex centroid, not a
+  centre of mass, so the vertices alone identify it.
 
-The coordinate tolerance is the sidecar's ``tolerance_um``.  The area tolerance is
-``1e-9 * area + perimeter * tolerance_um`` (issue #67, decision 3): the relative part covers
-floating-point noise, and the perimeter part bounds the area a boundary shifted by ``tolerance_um`` can
-add or remove.  A guard face with no candidate or with two candidates inside tolerance, or an imported
-face claimed by two guard faces, fails: the importer never guesses which face is which.
+The tolerances are those of the AEDT readback (issue #67, decision 9), not the sidecar's ``tolerance_um``:
+AEDT reports positions about 1e-6 um and vertices up to about 1e-4 um away from the exact STEP.  The
+coordinate tolerance is ``1e-3 * grid_um`` (:func:`import_tolerance_um`), three orders below the smallest
+feature SGB draws.  The area tolerance is ``1e-9 * area + perimeter * coordinate tolerance``: the relative
+part covers floating-point noise, and the perimeter part bounds the area a boundary shifted by the
+coordinate tolerance can add or remove.  A guard face with no candidate or with two candidates inside
+tolerance, or an imported face claimed by two guard faces, fails: the importer never guesses which face is
+which.
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ from dataclasses import dataclass
 from typing import Any
 
 RELATIVE_AREA_TOLERANCE = 1e-9
+IMPORT_TOLERANCE_PER_GRID = 1e-3
 
 
 class FaceMatchError(RuntimeError):
@@ -48,7 +54,8 @@ def match_solid_faces(
 ) -> dict[str, int]:
     """``{planned face id: AEDT face id}`` for one imported solid, or :class:`FaceMatchError`.
 
-    ``guard_faces`` are the solid's ``faces`` records from the STEP guard.
+    ``guard_faces`` are the solid's ``faces`` records from the STEP guard; ``tolerance_um`` is the
+    readback's coordinate tolerance (:func:`import_tolerance_um`).
     """
     if not math.isfinite(tolerance_um) or tolerance_um <= 0:
         raise ValueError("tolerance_um must be finite and positive")
@@ -69,10 +76,17 @@ def match_solid_faces(
     return matched
 
 
+def import_tolerance_um(grid_um: float) -> float:
+    """The coordinate tolerance of the AEDT readback of a model on ``grid_um`` (decision 9)."""
+    if not math.isfinite(grid_um) or grid_um <= 0:
+        raise ValueError("grid_um must be finite and positive")
+    return IMPORT_TOLERANCE_PER_GRID * grid_um
+
+
 def area_tolerance_um2(
     area_um2: float, perimeter_um: float, tolerance_um: float
 ) -> float:
-    """The area difference two faces of the same planned face may show (decision 3)."""
+    """The area difference two readings of the same planned face may show (decision 9)."""
     return RELATIVE_AREA_TOLERANCE * abs(area_um2) + perimeter_um * tolerance_um
 
 
@@ -102,9 +116,11 @@ def _same_face(
     limit = area_tolerance_um2(planned["area_um2"], face.perimeter_um, tolerance_um)
     if abs(face.area_um2 - planned["area_um2"]) > limit:
         return False
-    if planned["curved"]:
-        return _same_vertex_set(planned["vertices_um"], face.vertices_um, tolerance_um)
-    return math.dist(planned["centre_um"], face.centre_um) <= tolerance_um
+    if not _same_vertex_set(planned["vertices_um"], face.vertices_um, tolerance_um):
+        return False
+    return planned["curved"] or (
+        math.dist(planned["centre_um"], face.centre_um) <= tolerance_um
+    )
 
 
 def _same_vertex_set(
