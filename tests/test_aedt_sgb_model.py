@@ -48,6 +48,7 @@ def _guard(model):
 def test_solid_modeling_is_the_route_c_model_with_conductor_solids_and_no_vacuum(
     tmp_path,
 ):
+    """``solid`` is a Route B request built as Route C: substrate and conductor solids, no vacuum."""
     model = _prepare(tmp_path, "solid")
     assert (model.requested_route, model.route) == ("B", "C")
     names = {solid["aedt_name"] for solid in _guard(model)["solids"]}
@@ -57,6 +58,7 @@ def test_solid_modeling_is_the_route_c_model_with_conductor_solids_and_no_vacuum
 
 
 def test_thin_film_modeling_is_route_a_with_the_sheets_on_the_substrate(tmp_path):
+    """``thin_film`` is Route A: only the substrate is a solid, and the sheets are its faces."""
     model = _prepare(tmp_path, "thin_film")
     assert (model.requested_route, model.route) == ("A", "A")
     guard = _guard(model)
@@ -68,6 +70,7 @@ def test_thin_film_modeling_is_route_a_with_the_sheets_on_the_substrate(tmp_path
 
 
 def test_the_record_round_trips_and_checks_its_files(tmp_path):
+    """The payload round-trips, and a changed STEP fails the file check."""
     model = _prepare(tmp_path, "solid")
     assert PreparedSgbModel.from_payload(model.to_payload()) == model
     model.verify_files()
@@ -77,23 +80,27 @@ def test_the_record_round_trips_and_checks_its_files(tmp_path):
 
 
 def test_a_record_with_a_route_its_modeling_does_not_realize_is_refused(tmp_path):
+    """The record refuses a route its modeling does not realize."""
     model = _prepare(tmp_path, "solid")
     with pytest.raises(ValueError, match="realized as Route C"):
         replace(model, route="A")
 
 
 def test_a_model_without_the_plans_vacuum_region_is_refused(tmp_path):
+    """Without the plan's VACUUM_REGION there is no box for the AEDT Region."""
     with pytest.raises(ValueError, match="VACUUM_REGION"):
         _prepare(tmp_path, "solid", vacuum="upper_air")
 
 
 def test_a_junction_without_a_rectangular_junction_spec_is_refused(tmp_path):
+    """A junction is not partitioned again here; it needs its plan's spec."""
     other = replace(JUNCTION, junction_id="other")
     with pytest.raises(ValueError, match="no RectangularJunctionSpec"):
         _prepare(tmp_path, "solid", junctions=(other,))
 
 
 def test_a_junction_naming_other_nets_than_its_spec_is_refused(tmp_path):
+    """A junction whose Nets differ from its spec's is refused."""
     swapped = replace(JUNCTION, terminal_a_net="B", terminal_b_net="A")
     with pytest.raises(ValueError, match="RectangularJunctionSpec"):
         _prepare(tmp_path, "solid", junctions=(swapped,))
