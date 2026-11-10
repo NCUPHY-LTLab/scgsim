@@ -69,62 +69,10 @@ OrcaPen SC PDK 已修正全部六項：C1 至 C4 由 [orcapen-sc-pdk#64](https:/
 
 **PDK 的修正**：[orcapen-sc-pdk#61](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/61) 把邊框也畫在接地遮罩上。
 
-## 超出 128 點範圍的曲線 {#curves-outside-scope}
-
-曲線輪廓受支援的範圍是每整圈最多 128 點，也就是每個頂點至少轉 2.8125°（[曲線規則](supported-geometry.qmd#curve-rule)）。下面的情況都在範圍之外。
-
-### 每整圈多於 128 點的多邊形圓 {#dense-circles}
-
-![半徑 10 µm 的 256 點圓；放大圖顯示相距 0.245 µm、每個轉 1.41° 的頂點。](assets/supported-geometry/problem-dense-circle.svg){fig-alt="一個多邊形圓，以及放大後以紅點標出的幾個頂點。"}
-
-**出了什麼錯。** 以正多邊形圓、margin 0.5 與 1.0 µm 量測：
-
-| 每整圈點數 | 每個頂點的轉角 | 結果 |
-| --- | --- | --- |
-| 144 至 224 | 2.5° 至 1.6° | 視情況而定：180 與 224 點在 r = 10 µm 被拒絕，在 r = 75 µm 可建立 |
-| 256 | 1.41° | 在 r = 5、10、50 與 150 µm 都被拒絕 |
-
-被拒絕的曲線以 `the inset curve at m = … um is not closed near (x, y) um` 停止建構：相鄰兩條邊在 band margin 處的 offset 既不相接也不相交，因此無法分辨 band 區域。決定結果的不是邊長：半徑 150 µm 的 256 點圓邊長 3.68 µm，仍被拒絕。推測的原因（由量測推論，未單獨驗證）：在凸頂點之後，相鄰兩條邊的 offset 重疊約 $m\theta^2/2$（$\theta$ 為轉角），轉角小時這與每條 offset 端點捨入到 grid 的量（最多半個 grid 單位）相當，所以兩條 offset 可能錯開。PDK 預設的 `"fabrication"` 設定每整圈 256 點，就是這樣被拒絕。
-
-**SCGSim 為何不修正。** 支援範圍定為每整圈 128 點；曾嘗試在 SGB 的 band 建構中修正，但沒有採用。請以 `curve_sampling="simulation"` 建立用於模擬的元件。
-
-### 以 258 點畫成的 spline 條帶 {#spline-258}
-
-![PDK 所畫的插值 spline 條帶；放大圖顯示末端附近轉角最小的頂點。](assets/supported-geometry/problem-spline-258.svg){fig-alt="一條波浪狀條帶，以及其末端的放大圖，頂點以紅點標示。"}
-
-**出了什麼錯。** `interpolation_spline_strip` 與 `bspline_strip` 每條邊以 129 點畫成，依每段 span 取樣，而不是依 `curve_sampling`。它們最平的頂點只轉 0.058° 與 0.012°，建構以與密多邊形圓相同的 `inset curve … not closed` 訊息被拒絕。
-
-**SCGSim 為何不修正。** 這些條帶超出 128 點的範圍。請重新取樣每條條帶，使每個頂點都轉至少 2.8125°；重新取樣後的條帶能建出精確的 band（[支援的幾何](supported-geometry.qmd#pads-and-parts)中的 cell 21）。如何重新取樣由 PDK 決定（[orcapen-sc-pdk#52](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/issues/52)）。
-
-### Spline 曲線不會以曲線形式讀取 {#spline-curves}
+## Spline 曲線不會以曲線形式讀取 {#spline-curves}
 
 ![B-spline 條帶及其控制多邊形（紅色虛線）：spline 邊界所宣告的曲線。](assets/supported-geometry/problem-spline-curve.svg){fig-alt="一條彎曲條帶，五個控制點以紅色虛線多邊形相連。"}
 
 **出了什麼錯。** cell 把邊宣告為 spline 邊界曲線時，建構以 `UnsupportedCurveError: … 'bspline' curves are not supported yet (this version carries lines and circular arcs)` 停止，`interpolation_spline` 也一樣。
 
-**SCGSim 為何不修正。** SGB 能精確地為直線與圓弧做 offset；spline 的 offset 沒有精確形式，讀取 spline 需要一個尚未決定的容差。這由 [scgsim#109](https://github.com/NCUPHY-LTLab/scgsim/issues/109) 追蹤。在那之前，請把條帶畫成符合曲線規則的多邊形。
-
-## 連續多個轉角小於 2.8125° 的頂點 {#small-turn-runs}
-
-![cell 15 的 Euler U 形彎；放大圖標出中心線的前幾個頂點，轉角為 0.15°、0.9°、1.8° 與 2.7°。](assets/supported-geometry/problem-small-turn-runs.svg){fig-alt="CPW U 形彎，放大圖中以紅點標出中心線的前幾個頂點。"}
-
-曲線規則以每個頂點陳述，但有些受支援的 cell 含有轉角較小的頂點，而它們依原圖能建出精確的 band：
-
-- 90° Euler 彎道（cell 14）的前兩個頂點轉 0.30° 與 1.8°，180° U 形彎（cell 15）的前四個頂點轉 0.15°、0.9°、1.8° 與 2.7°，弦長 11 至 14 µm；
-- 漸縮（cell 18）分別轉折 0.86° 與 1.72°。
-
-除了這些 cell 之外，連續多個轉角小於 2.8125° 的頂點未經驗證：它們可能可以建立，也可能像密多邊形圓一樣被拒絕。
-
-![半徑 50 µm 的 16 點圓加上一個轉 0.3° 的頂點；放大圖把它與原本的邊（虛線）對照。](assets/supported-geometry/problem-single-vertex.svg){fig-alt="一個 16 邊形，標出一個多加的頂點，以及放大圖中該頂點略在虛線原邊之外。"}
-
-也量測了較長的邊之間單一個轉角較小的頂點：在半徑 50 µm 的 16 點圓上加入一個頂點，兩側邊長 9.8 µm。
-
-| 該頂點的轉角 | 結果 |
-| --- | --- |
-| 2.9°、2.7°、1.41°、0.3° 與 0.01°，凸角 | 可建立，band 精確 |
-| 2.7° 與 0.01°，凹角 | 可建立，band 精確 |
-| 0°（直邊上的一點） | 可建立，band 精確 |
-
-直邊上的一點不會改變軸向邊的 band。在斜邊上，兩半的 offset 會在該點結束於一個 grid 點，因此 band 面積會移動約 10⁻⁴ µm² 的量級，仍在 snap 界限之內。這些都是 margin 0.5 與 1.0 µm 下的觀察，不是保證。
-
-**SCGSim 為何不擴大規則。** 支援範圍是依量測的圓與 PDK cell 訂定的；要擴大範圍，需要量測新的圖形並另行決定。
+**SCGSim 為何不修正。** SGB 能精確地為直線與圓弧做 offset；spline 的 offset 沒有精確形式，讀取 spline 需要一個尚未決定的容差。這由 [scgsim#109](https://github.com/NCUPHY-LTLab/scgsim/issues/109) 追蹤。在那之前，請把條帶畫成多邊形。
