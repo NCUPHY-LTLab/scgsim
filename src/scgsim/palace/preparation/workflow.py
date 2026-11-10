@@ -21,10 +21,10 @@ from scgsim.geometry.models.physical import (
 from scgsim.geometry.planning.physical import interpret_physical_geometry
 from scgsim.geometry.source.adapter_records import solution_region_entity
 from scgsim.geometry.source.ground_bumps import prepare_indium_ground_bump_fill
+from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
 from scgsim.geometry.source.vacuum import apply_vacuum_region_to_stack
 from scgsim.semantics.snapshot import canonical_sha256, to_plain
 
-from ..mesh.source import with_port_sheet_metadata
 from .transforms import (
     RouteAThinFilm,
     apply_airbox_to_stack,

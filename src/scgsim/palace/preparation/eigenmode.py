@@ -18,6 +18,7 @@ from scgsim.geometry.models.input import VacuumRegionSpec
 from scgsim.geometry.models.physical import ApproximationProfile
 from scgsim.geometry.source.plan import GeometryPlanSnapshot
 from scgsim.geometry.source.summary import InputSummary, summarize_geometry_input
+from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
 from scgsim.meshing import Budgets, MesherOptions, SizingRecipe
 from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
 
@@ -49,7 +50,6 @@ from .layout_snapshot import (
     snapshot_owns_vacuum,
 )
 from .ports import RequestedPort, resolve_layout_ports
-from .surface_epr import normalize_surface_epr_specs
 from .transforms import (
     RouteAThinFilm,
     normalize_route_a_thin_film,

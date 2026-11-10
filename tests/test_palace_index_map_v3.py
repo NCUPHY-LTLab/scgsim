@@ -19,8 +19,8 @@ from palace_sgb_support import (
     surface_epr_specs,
 )
 
+from scgsim.geometry.surface_epr.insets import inset_requests
 from scgsim.palace import resolve_palace_result
-from scgsim.palace.mesh.insets import inset_requests
 from scgsim.palace.mesh.manifest import MANIFEST_SCHEMA_VERSION, build_mesh_manifest
 from scgsim.palace.mesh.physical_groups import groups_from_sidecar
 from scgsim.palace.preparation.config import (

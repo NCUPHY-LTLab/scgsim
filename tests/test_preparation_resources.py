@@ -144,6 +144,9 @@ def test_budget_is_required():
 
 def test_mesh_preparation_keeps_parallel_mapping_before_native(monkeypatch, tmp_path):
     """Run parallel mapping at the real mesh construction boundary before native work."""
+    from scgsim.geometry.surface_epr import (  # noqa: PLC0415 -- the module is needed only in this mesh orchestration test
+        build as banded_build,
+    )
     from scgsim.palace.mesh import (  # noqa: PLC0415 -- the module is needed only in this mesh orchestration test
         build as mesh_build,
     )
@@ -163,7 +166,7 @@ def test_mesh_preparation_keeps_parallel_mapping_before_native(monkeypatch, tmp_
         raise StopBeforeNative
 
     # Stop at the real construction call boundary: no fake XAO or native result.
-    monkeypatch.setattr(mesh_build, "build_sgb_geometry", construction)
+    monkeypatch.setattr(banded_build, "build_sgb_geometry", construction)
     source = b"file-only identity for construction wiring"
     stack = {
         "metadata": {

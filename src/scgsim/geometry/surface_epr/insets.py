@@ -1,9 +1,9 @@
 """Turn Surface-EPR inset margins into SGB inset requests.
 
-Bands are geometry: SGB cuts them into the model, so the margins of ``set_surface_epr`` must be known when
+Bands are geometry: SGB cuts them into the model, so the margins of the Surface-EPR specs must be known when
 the geometry is built.  SGB owns every rule about which faces can carry bands (a Route A sheet, the top or
-bottom of a finite conductor, the solution interface; never a sidewall; only where a gap edge exists), so
-Palace states what it wants and lets SGB find the faces.
+bottom of a finite conductor, the solution interface; never a sidewall; only where a gap edge exists), so a
+backend states what it wants and lets SGB find the faces.
 
 * **Default path, one build.**  A spec with ``inset_margins_um`` becomes one type-level request,
   ``InterfaceSurfaces(<type>, face_kinds=<the spec's face kinds>)``.
@@ -17,7 +17,7 @@ A Route A sheet carries both an ``MA`` and an ``MS`` row, so the requests of bot
 One face is one band family with one set of margins, so those requests must ask the same margins (compared on
 the model grid, so ``0.3`` and ``0.1 + 0.2`` agree); differing ones are an error, found here on the custom
 path and by SGB on the default path.  Each spec selects its margins from the family (see
-:mod:`.physical_groups` and ``preparation.surface_epr``).
+:func:`~scgsim.geometry.surface_epr.specs.margins_of`).
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ CONDUCTOR_FACE_KINDS: tuple[Side, ...] = ("sheet", "top", "bottom")
 def check_bandable_face_kinds(interface_type: str, face_kinds: list[str]) -> None:
     """Refuse a face kind SGB cannot band.
 
-    Palace names a face by the ``face_kind`` of the sidecar group it lies on, which is SGB's own vocabulary:
+    A spec names a face by the ``face_kind`` of the sidecar group it lies on, which is SGB's own vocabulary:
     ``sheet``, ``top``, ``bottom`` and ``interface`` map onto themselves.  The remaining kind a surface group
     has, ``sidewall``, has no SGB equivalent because SGB never bands sidewalls.
     """

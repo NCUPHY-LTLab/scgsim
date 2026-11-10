@@ -5,18 +5,19 @@ from __future__ import annotations
 import pytest
 from palace_sgb_support import effective_input, mesh_run, sidecar_of, surface_epr_specs
 
+import scgsim.geometry.surface_epr.build as banded_build
 import scgsim.palace.mesh.build as build_module
 from scgsim.geometry.sgb.cutfamilies.requests import (
     ConductorSurface,
     InsetRequest,
     InterfaceSurfaces,
 )
-from scgsim.palace.mesh.insets import (
+from scgsim.geometry.surface_epr.insets import (
     inset_requests,
     needs_unbanded_build,
     requests_wanted,
 )
-from scgsim.palace.preparation.surface_epr import normalize_surface_epr_specs
+from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
 
 FILM = {"film_thickness_m": 2e-9, "permittivity": 4}
 
@@ -28,7 +29,7 @@ class StopAfterGeometry(Exception):
 def geometry_builds(monkeypatch, route, directory, specs):
     """The ``insets`` of every SGB build ``build_route_mesh`` makes for ``specs`` before it would mesh."""
     builds: list[tuple[InsetRequest, ...]] = []
-    real = build_module.build_sgb_geometry
+    real = banded_build.build_sgb_geometry
 
     def recording(*args, **kwargs):
         builds.append(kwargs.get("insets", ()))
@@ -37,7 +38,7 @@ def geometry_builds(monkeypatch, route, directory, specs):
     def stop(*_args, **_kwargs):
         raise StopAfterGeometry
 
-    monkeypatch.setattr(build_module, "build_sgb_geometry", recording)
+    monkeypatch.setattr(banded_build, "build_sgb_geometry", recording)
     monkeypatch.setattr(build_module, "mesh_sgb", stop)
     with pytest.raises(StopAfterGeometry):
         mesh_run(effective_input(route, directory), route, directory, specs=specs)

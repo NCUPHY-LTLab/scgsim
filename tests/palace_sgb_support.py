@@ -18,8 +18,8 @@ from sgb_inputs import EffectiveInput, gds_pad_in_ground, thin_film_pair
 
 from scgsim.geometry.sgb import build_sgb_geometry
 from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest
+from scgsim.geometry.surface_epr.specs import normalize_surface_epr_specs
 from scgsim.palace.mesh.build import MeshBuildResult, build_route_mesh
-from scgsim.palace.preparation.surface_epr import normalize_surface_epr_specs
 
 MATERIALS = {
     "Si": {"kind": "dielectric", "permittivity": 11.45, "loss_tangent": 0.0},

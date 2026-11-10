@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shutil
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,13 +19,13 @@ from typing import Any
 from scgsim.diagnostics import diagnostic_stage
 from scgsim.geometry.models.input import GeometryBuildInput
 from scgsim.geometry.models.representation import RepresentationContext
-from scgsim.geometry.sgb import SgbArtifacts, build_sgb_geometry
-from scgsim.geometry.sgb.cutfamilies.requests import InsetRequest
+from scgsim.geometry.sgb import SgbArtifacts
+from scgsim.geometry.source.port_sheets import with_port_sheet_metadata
+from scgsim.geometry.surface_epr.build import build_banded_geometry
 from scgsim.meshing import Budgets, MesherOptions, MeshResult, SizingRecipe, mesh_sgb
 from scgsim.preparation import native_preparation
 
 from .controls import MeshControls
-from .insets import inset_requests, needs_unbanded_build, requests_wanted
 from .manifest import build_mesh_manifest
 from .physical_groups import Groups, groups_from_sidecar
 from .process import lower_mesh_in_worker
@@ -35,13 +34,10 @@ from .source import (
     component_gds_top_cell_name,
     route_a_thin_film_provenance,
     scgsim_version,
-    with_port_sheet_metadata,
     write_component_gds,
     write_indium_ground_bump_receipt,
     write_json,
 )
-
-_UNBANDED_DIR = ".unbanded"
 
 
 @dataclass(frozen=True)
@@ -223,12 +219,12 @@ def build_route_geometry(  # noqa: PLR0913 -- the keyword set of build_route_mes
     paths = _prepare_paths(output_dir, route)
     top_cell = _write_sources(component, stack, source_gds_bytes, paths)
     _write_optional_bump_receipt(indium_ground_bump_fill, paths)
-    artifacts = _build_geometry(
+    artifacts = build_banded_geometry(
         source_geometry_input,
         representation_context,
-        route,
-        surface_epr_specs,
-        paths,
+        route=route,
+        surface_epr_specs=surface_epr_specs,
+        output_dir=paths.geometry_dir,
     )
     return RouteGeometry(paths, artifacts, top_cell, thin_film)
 
@@ -305,54 +301,6 @@ def _write_optional_bump_receipt(
             gds_path=paths.gds_path,
             receipt=receipt,
         )
-
-
-def _build_geometry(
-    build_input: GeometryBuildInput,
-    representation: RepresentationContext,
-    route: str,
-    surface_epr_specs: Mapping[str, Mapping[str, Any]] | None,
-    paths: BuildPaths,
-) -> SgbArtifacts:
-    """Build the route's geometry with the Surface-EPR bands the specs ask for.
-
-    Normally SGB finds the faces to band from the type-level requests of the specs, in this one build.  Only
-    when a spec customises conductors (``inset_margins_by_entity_um``) are their faces needed first, so the
-    same input is built once without bands to read them (see :mod:`.insets`).
-    """
-    specs = surface_epr_specs or {}
-    insets: tuple[InsetRequest, ...] = ()
-    if requests_wanted(specs):
-        unbanded = (
-            _unbanded_sidecar(build_input, representation, route, paths)
-            if needs_unbanded_build(specs)
-            else None
-        )
-        insets = inset_requests(specs, unbanded)
-    return build_sgb_geometry(
-        build_input,
-        representation,
-        route=route,
-        insets=insets,
-        output_dir=paths.geometry_dir,
-    )
-
-
-def _unbanded_sidecar(
-    build_input: GeometryBuildInput,
-    representation: RepresentationContext,
-    route: str,
-    paths: BuildPaths,
-) -> dict[str, Any]:
-    """The sidecar of a build without bands; the build itself is a scratch folder that is removed."""
-    scratch = paths.geometry_dir / _UNBANDED_DIR
-    try:
-        unbanded = build_sgb_geometry(
-            build_input, representation, route=route, output_dir=scratch
-        )
-        return json.loads(unbanded.sidecar.read_text(encoding="utf-8"))
-    finally:
-        shutil.rmtree(scratch, ignore_errors=True)
 
 
 @diagnostic_stage("palace.mesh.module")
