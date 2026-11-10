@@ -316,6 +316,41 @@ def test_pads_touching_the_vacuum_at_a_point_pass(monkeypatch, simulation, pad):
     )
 
 
+@pytest.mark.parametrize("radius_um", [10.0, 50.0])
+def test_a_gdsfactory_circle_conductor_prepares_and_passes(monkeypatch, radius_um):
+    """One ``gf.components.circle`` conductor prepares and models (Issue #87).
+
+    gdsfactory stores the circle's closing point too, so the polygon repeats a
+    vertex; before the source reader dropped the repeat (Issue #107) its
+    zero-length edge reached the cutline split and ``prepare()`` divided by zero.
+    """
+    import gdsfactory as gf  # noqa: PLC0415 -- optional layout stack, imported only by the tests that need it
+
+    monkeypatch.setattr(
+        gf.pdk,
+        "_ACTIVE_PDK",
+        gf.pdk._ACTIVE_PDK,  # noqa: SLF001 -- preserve the active PDK during test setup
+    )
+    gf.gpdk.PDK.activate()
+    component = gf.Component()
+    component.add_ref(gf.components.circle(radius=radius_um, layer=(1, 0)))
+    component.info["component_semantics"] = {
+        "schema_version": 2,
+        "conductor_regions": [
+            {"semantic_id": "disk", "level": "metal", "gds_layer": [1, 0]}
+        ],
+    }
+    snapshot = GeometryPlan(
+        component,
+        root_id="chip",
+        layer_stack=NO_VACUUM_STACK,
+        material_records=MATERIALS,
+        coupon_padding_um=0.0,
+    ).prepare()
+    assert len(snapshot.geometry_input.polygons) == 1
+    assert check(EigenmodeSim, component, layer_stack=NO_VACUUM_STACK) is None
+
+
 @pytest.mark.parametrize("simulation", SIMULATIONS)
 def test_a_layout_with_its_own_vacuum_gets_no_vacuum_region(monkeypatch, simulation):
     """When the stack carries ``VACUUM_REGION`` the check adds none and does not raise."""
