@@ -92,6 +92,8 @@ scgsim-id: "docs/supported-scope"
 | 條帶從間隙邊量起。在 `inset_margins_by_entity_um` 中指名的導體，它要切條帶的每個面都需要有間隙邊。只經由 Surface-EPR 類型涵蓋、且沒有間隙邊的面，不會切出條帶。 | 沒有間隙邊，就沒有量距離的起點。 | 建構時 `NoGapEdgeError` | [Surface EPR 邊距](specs/palace-eigenmode.qmd#surface-epr-margins) |
 | 側壁永遠不切條帶；`face_kinds` 只能指名 `sheet`、`top`、`bottom` 或 `interface`。 | SGB 只在這四種面上切條帶。 | 建構時 `InputError` | [Surface EPR 邊距](specs/palace-eigenmode.qmd#surface-epr-margins) |
 
+Palace 模擬採用的兩種 Route 都支援條帶：Route A 的薄片，以及 Route B 金屬體的各個面。版圖不需要為條帶另做設定：網格器會依條帶的寬度為每一條條帶邊界曲線設尺寸，見[條帶邊界曲線](specs/palace-electrostatic-sgb.qmd#palace-mesh-band-edges)。
+
 ## SCGSim 保證的事項 {#scgsim-guarantees}
 
 對遵守上述所有規則的版圖，SCGSim 保證：

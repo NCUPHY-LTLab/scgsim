@@ -1,6 +1,6 @@
 ---
 title: "四面體網格品質"
-description: "已儲存四面體的診斷、數值狀態、單位及嚴格序列化。"
+description: "已儲存四面體的診斷、數值狀態、單位、嚴格序列化，以及網格的版本識別。"
 scgsim-kind: "contract"
 scgsim-status: "CONVERGING"
 scgsim-id: "docs/mesh-quality"
@@ -13,9 +13,37 @@ lang: zh-TW
 
 Palace 網格可儲存彎曲高階元素。此讀取器只對原生 Gmsh type-4 四節點四面體計算品質指標。高階元素另行計數並排除於這些指標之外，因此只有高階四面體的網格沒有 3D 品質指標。紀錄的幾何階數、原生元素類型及產生統計請見 Palace [網格摘要](specs/palace-electrostatic-sgb.qmd#mesh-manifest-and-detached-summary)。
 
-此讀取器與 `mesh()` 執行的品質稽核是分開的。該稽核在升階之前的線性網格上量測最小有號反條件數（minSICN），以網格的品質門檻檢查它，並寫出自己的報告；見 [Palace 網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。`check_mesh_quality()` 則在升階之後量測儲存的求解器網格，使用不同的指標，且不套用門檻。兩份報告彼此不能取代。
+此讀取器與 `mesh()` 執行的品質稽核是分開的。該稽核在升階之前的線性網格上量測最小有號反條件數（minSICN），以網格的品質門檻檢查它，並寫出自己的報告；見 [Palace 網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。受稽核的網格從哪些尺寸開始，包括薄膜側壁與 Surface-EPR 條帶邊界曲線上的尺寸，由尺寸配方決定（見[尺寸配方](specs/palace-electrostatic-sgb.qmd#palace-mesh-recipes)）。`check_mesh_quality()` 則在升階之後量測儲存的求解器網格，使用不同的指標，且不套用門檻。兩份報告彼此不能取代。
 
 產生階段的邊統計與 `MeshQualityReport` 分開。Palace 摘要記錄每個物理區域的唯一主角點邊數，以及直線弦長的最小值、平均值與最大值，單位為微米。在彎曲高階元素上，它們仍是弦長，不是曲線弧長或高階品質指標。點區域的邊數為零，沒有長度極值。
+
+## 網格的版本識別 {#version-identities}
+
+`mesh()` 寫出的網格帶有三種版本。比較兩個網格是否以相同方式產生時，請讀這三種版本。
+
+::: {.askr-table-compact}
+| 識別 | 範例 | 記錄位置 | 何時改變 |
+|---|---|---|---|
+| 套件版本 | `scgsim 2.0.0rc15` | 執行來源記錄中的 `scgsim_version`（`metadata/route_b_provenance.json`；Route A 為 `route_a_…`） | SCGSim 每次發行都會改變。 |
+| 配方版本 | `FeatureRecipe` 為 `scgsim.meshing.features/N`、`UniformBoundaryRecipe` 為 `scgsim.meshing.uniform-boundary/N`、`GlobalSizeRecipe` 為 `scgsim.meshing.global-size/N` | 每份品質報告與網格清單中的 `recipe.version`，與 `recipe.parameters` 並列 | 只在配方要求的尺寸改變時。 |
+| 報告格式 | `scgsim.meshing.report/N` | 每份品質報告中的 `report_version` | 品質報告的欄位改變時。 |
+:::
+
+配方版本只在配方要求的尺寸改變時才會提高。`FeatureRecipe` 開始為每一條 Surface-EPR 條帶邊界曲線設尺寸時，版本從 `features/1` 變成 `features/2`。因此，兩份報告的配方版本與參數都相同時，它們要求的初始尺寸就相同，即使出自不同的套件發行版；配方版本不同，代表兩個網格出自不同的尺寸規則。配方版本只涵蓋初始尺寸：修復策略記錄在每份報告中，Gmsh 版本記錄在網格清單中。
+
+這些版本彼此分開，是因為整個網格模組若只有一個版本，任何一個配方改變時它都會改變，卻無法說出是哪一個配方改了。`FeatureRecipe` 改變時，使用 `UniformBoundaryRecipe` 的執行仍保有原本的版本，因此它的報告在這次改變前後仍可互相比較。
+
+舉例來說，對帶有 0.5 與 1 µm 條帶的覆晶量子位元（OrcaPen SC PDK 的 `disk_flip_chip_qubit`，置於共用接地平面下，採 Route B），同樣使用預設的 `FeatureRecipe()`，在兩個版本下會得到不同的網格：
+
+::: {.askr-table-compact}
+| | `scgsim.meshing.features/1` | `scgsim.meshing.features/2` |
+|---|---|---|
+| 要求的尺寸 | 801 條薄膜側壁曲線上 1.30 µm | 3,104 條曲線上 1.30 µm：薄膜側壁與每一條條帶邊界曲線 |
+| 第一次網格 | 402,784 個四面體，1 個低於品質門檻 | 569,325 個四面體，沒有低於門檻者 |
+| 結果 | 一輪修復後合格：407,093 個四面體，82.5 s | 第一次網格即合格：569,325 個四面體，53.4 s |
+:::
+
+兩份品質報告記錄的配方版本不同，因此網格的差異來自尺寸規則，而不是這次執行的其他部分。
 
 ## 輸入與責任 {#input-and-ownership}
 
