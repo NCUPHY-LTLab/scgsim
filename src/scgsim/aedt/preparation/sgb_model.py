@@ -67,7 +67,8 @@ class PreparedSgbModel:
     ``model_dir`` holds the files; ``files`` names each relative to it with its SHA-256 (``step``,
     ``geometry`` the BREP the STEP was written from, ``sidecar`` and ``guard``).  ``model_identity`` is
     the sidecar's model record.  ``vacuum_bounds_um`` is ``(x_min, y_min, z_min, x_max, y_max, z_max)`` of
-    the plan's ``VACUUM_REGION``, the box SGB built and the box AEDT's Region takes.
+    the plan's ``VACUUM_REGION``, the box SGB built and the box AEDT's Region takes.  ``materials`` are the
+    stack's records of the materials the model's volumes name, which AEDT realizes on the imported objects.
     """
 
     modeling: Modeling
@@ -78,6 +79,7 @@ class PreparedSgbModel:
     model_identity: Mapping[str, str]
     tolerance_um: float
     vacuum_bounds_um: tuple[float, float, float, float, float, float]
+    materials: Mapping[str, Mapping[str, Any]]
     junctions: tuple[SgbJunction, ...] = ()
     surface_epr_specs: Mapping[str, Mapping[str, Any]] | None = None
 
@@ -95,6 +97,7 @@ class PreparedSgbModel:
             raise ValueError(f"a prepared SGB model binds exactly {_BOUND_FILES}")
         object.__setattr__(self, "files", freeze(self.files))
         object.__setattr__(self, "model_identity", freeze(self.model_identity))
+        object.__setattr__(self, "materials", freeze(self.materials))
         object.__setattr__(self, "junctions", tuple(self.junctions))
         if self.surface_epr_specs is not None:
             object.__setattr__(
@@ -134,6 +137,7 @@ class PreparedSgbModel:
             "model_identity": detached(self.model_identity),
             "tolerance_um": self.tolerance_um,
             "vacuum_bounds_um": list(self.vacuum_bounds_um),
+            "materials": detached(self.materials),
             "junctions": [item.to_payload() for item in self.junctions],
             "surface_epr_specs": detached(self.surface_epr_specs),
         }
@@ -162,6 +166,7 @@ class PreparedSgbModel:
                 bounds[4],
                 bounds[5],
             ),
+            materials=value["materials"],
             junctions=tuple(
                 SgbJunction.from_payload(item) for item in value["junctions"]
             ),
@@ -228,6 +233,7 @@ def prepare_sgb_model(  # noqa: PLR0913 -- the source, its stack and the AEDT mo
         model_identity=sidecar["model"],
         tolerance_um=float(sidecar["tolerance_um"]),
         vacuum_bounds_um=bounds,
+        materials=model_materials(sidecar, effective_stack),
         junctions=bound_junctions,
         surface_epr_specs=surface_epr_specs,
     )
@@ -257,6 +263,18 @@ def vacuum_bounds_um(
         float(xy["y_max_um"]),
         float(geometry["z_max_um"]),
     )
+
+
+def model_materials(
+    sidecar: Mapping[str, Any], stack: Mapping[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """The stack's record of each material a volume of the model names; a volume naming none is refused."""
+    catalog = stack.get("materials", {})
+    names = sorted({volume["material"] for volume in sidecar["volumes"].values()})
+    missing = [name for name in names if not isinstance(catalog.get(name), Mapping)]
+    if missing:
+        raise ValueError(f"the stack has no material record for {missing}")
+    return {name: dict(catalog[name]) for name in names}
 
 
 def check_region_box(sidecar: Mapping[str, Any], bounds: Sequence[float]) -> None:
