@@ -366,6 +366,26 @@ def wanted_size(element: BadElement, threshold: float, policy: RepairPolicy) -> 
     return policy.edge_fraction * element.edge_max * scale
 
 
+def refinement_reach(
+    element: BadElement,
+    local: tuple[LocalSize, ...],
+    threshold: float,
+    policy: RepairPolicy,
+) -> tuple[int | None, tuple[float, float, float], float]:
+    """Where the loop refines a bad element and how far that refinement reaches.
+
+    Returns the index of the local size whose fine core holds the element, with that core's centre and radius;
+    or, when none holds it, ``None`` with the place and reach the element would ask for: its point and the size
+    it wants for a needle (one element of that size), its centroid and half its longest edge for a sliver.
+    """
+    claim = _claim(element, threshold, policy)
+    holder = _holding(list(local), claim)
+    if holder is not None:
+        ball = local[holder]
+        return holder, ball.centre, ball.core_radius
+    return None, claim.spot, claim.size if claim.radius is None else claim.radius
+
+
 def _holding(local: list[LocalSize], claim: _Claim) -> int | None:
     """Index of the first local size whose fine core covers ``claim``; ``None`` when none does."""
     for index, ball in enumerate(local):

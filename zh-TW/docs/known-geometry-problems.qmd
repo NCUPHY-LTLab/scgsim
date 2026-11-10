@@ -11,7 +11,7 @@ scgsim-id: "docs/known-geometry-problems"
 
 圖依各情況回報的尺寸，在 SGB 1 nm 的 grid 上重新畫成，不使用任何 PDK 程式碼。問題以紅色標示；右側的面板放大問題處，紅色虛線框標出放大的位置。
 
-SCGSim 依照收到的輪廓建立幾何。它不會封閉奈米級的縫隙、刪除短邊或重新取樣曲線，因為它無法分辨繪圖缺陷與刻意畫出的特徵。以 `EigenmodeSim.simulation_drc` 或 `ElectrostaticSim.simulation_drc` 檢查 layout（[版圖建模檢查](layout-modeling-check.qmd)）能找出會停止建構的情況；其他情況則需要檢視 layout 本身。
+SCGSim 依照收到的輪廓建立幾何。它不會封閉奈米級的縫隙、刪除短邊或重新取樣曲線，因為它無法分辨繪圖缺陷與刻意畫出的特徵。以 `EigenmodeSim.simulation_drc` 或 `ElectrostaticSim.simulation_drc` 檢查 layout（[版圖建模檢查](layout-modeling-check.qmd)）能找出會停止建構的情況，並在其網格階段找出網格器無法使用的細微邊與面，各附上位置與負責方；其他情況則需要檢視 layout 本身。不是 SGB 造成的細微邊或面屬於 layout 問題：SCGSim 只回報，不修補。
 
 ## PDK cell 中的繪圖缺陷 {#drawing-defects}
 

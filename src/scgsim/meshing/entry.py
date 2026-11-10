@@ -15,6 +15,7 @@ from typing import Any
 from .driver import ProbeTimeLimitError, measure_bounding_box
 from .errors import MeshRepairError
 from .features import SidecarFeatures, load_features, read_features
+from .fine_structure import check_fine_structure
 from .mesher import MesherOptions
 from .recipes import FeatureRecipe, SizingRecipe
 from .repair import (
@@ -27,7 +28,14 @@ from .repair import (
     repair_mesh,
     unmeshed_outcome,
 )
-from .report import QualityReport, RunSettings, build_report, write_report
+from .report import (
+    QualityReport,
+    RunSettings,
+    build_report,
+    place_lines,
+    write_report,
+)
+from .stop_places import StopPlace, stop_places
 
 _WORK_DIR_PREFIX = ".meshing-work-"
 
@@ -81,7 +89,9 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
     without an accepted mesh (rounds spent, a mesh over the tetrahedron budget even when clean, the time
     limit reached, a bad count that stopped falling, a clean mesh whose order could not be raised, or a
     mesher crash).  The report is written then too, and the last mesh is kept as ``<stem>.rejected.msh``
-    when a round made one.
+    when a round made one.  The report and the error message then say where the remaining bad elements are,
+    in micrometres, and which fine edges and faces the meshing-stage check (:func:`check_fine_structure`)
+    records at those places, with their owner and fix.
     """
     if not math.isfinite(threshold):
         raise ValueError(f"threshold must be a finite number, got {threshold!r}.")
@@ -122,6 +132,7 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
             outcome,
             RunSettings(threshold, recipe, repair, mesher, budgets, time_budget),
             time.perf_counter() - started,
+            _places_of_stop(outcome, sidecar_path, threshold, repair),
         )
         write_report(report, files.report, files.summary)
         return _deliver(outcome, report, files)
@@ -164,6 +175,22 @@ def _resolve_sidecar(
     return Path(sidecar), load_features(Path(sidecar))
 
 
+def _places_of_stop(
+    outcome: RepairOutcome, sidecar: Path, threshold: float, policy: RepairPolicy
+) -> list[StopPlace]:
+    """Where the bad elements of a stop are, with the fine structure the sidecar records there; none for a clean stop."""
+    if outcome.stop == STOP_CLEAN or outcome.last_audit is None:
+        return []
+    fine = check_fine_structure(sidecar)
+    return stop_places(
+        outcome.last_audit.bad,
+        outcome.local_sizes,
+        threshold,
+        policy,
+        fine.findings,
+    )
+
+
 def _deliver(
     outcome: RepairOutcome, report: QualityReport, files: _Files
 ) -> MeshResult:
@@ -177,8 +204,10 @@ def _deliver(
         files.rejected.unlink(missing_ok=True)
         if outcome.last_mesh is not None:
             shutil.move(outcome.last_mesh, files.rejected)
+        where = "\n".join(place_lines(report))
         raise MeshRepairError(
-            f"meshing stopped without a clean mesh ({outcome.stop}); see {files.report}.",
+            f"meshing stopped without a clean mesh ({outcome.stop}); see {files.report}."
+            + (f"\n{where}" if where else ""),
             dict(report),
         )
     # A clean stop follows a round that made a mesh, and one that also made the elevated mesh when the

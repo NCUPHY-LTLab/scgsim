@@ -119,18 +119,43 @@ def test_invalid_mesh_controls_are_refused():
     assert sim.mesh_controls == before
 
 
+def stand_in_mesh_stages(monkeypatch, module, tmp_path):
+    """Replace the geometry build, the meshing-stage check and the mesher ``mesh()`` calls; record their order.
+
+    The record holds the geometry build's keywords, then the check, then the mesher with its controls.
+    """
+    calls = []
+    geometry = object()
+
+    def build(**kwargs):
+        calls.append(("geometry", kwargs))
+        return geometry
+
+    def check(built):
+        assert built is geometry
+        calls.append(("check", None))
+
+    def mesher(built, controls):
+        assert built is geometry
+        calls.append(("mesh", controls))
+        return SimpleNamespace(mesh_path=tmp_path / "palace.msh")
+
+    monkeypatch.setattr(module, "build_route_geometry", build)
+    monkeypatch.setattr(module, "check_meshing_stage", check)
+    monkeypatch.setattr(module, "mesh_route_geometry", mesher)
+    return calls
+
+
 @pytest.mark.parametrize("sim_type", [ElectrostaticSim, EigenmodeSim])
 def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
     sim_type, monkeypatch, tmp_path
 ):
-    """``mesh()`` hands the current Surface-EPR specs (their margins become bands) and the controls on."""
+    """``mesh()`` hands the Surface-EPR specs (their margins become bands) to the geometry and the controls to the mesher.
+
+    The meshing-stage check runs between the two.
+    """
     module = electrostatic if sim_type is ElectrostaticSim else eigenmode
-    seen = {}
-
-    def build(**kwargs):
-        seen.update(kwargs)
-        return SimpleNamespace(mesh_path=tmp_path / "palace.msh")
-
+    calls = stand_in_mesh_stages(monkeypatch, module, tmp_path)
     prepared = SimpleNamespace(
         component=object(),
         stack=STACK,
@@ -139,7 +164,6 @@ def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
         geometry_input=object(),
         physical_plan=SimpleNamespace(context=object()),
     )
-    monkeypatch.setattr(module, "build_route_mesh", build)
     monkeypatch.setattr(module, "prepare_mesh_input", lambda **kwargs: prepared)
     sim = sim_type()
     sim.set_stack(STACK)
@@ -150,11 +174,12 @@ def test_mesh_passes_the_controls_and_the_surface_epr_specs_to_the_builder(
     )
     sim.set_mesh(quality_threshold=0.02, budgets=Budgets(max_rounds=1))
     sim.mesh()
-    assert seen["surface_epr_specs"]["MA"]["inset_margins_um"] == [0.5]
-    assert seen["recipe"] == FeatureRecipe()
-    assert seen["mesher"] == MesherOptions()
-    assert seen["budgets"] == Budgets(max_rounds=1)
-    assert seen["quality_threshold"] == 0.02
+    assert [stage for stage, _ in calls] == ["geometry", "check", "mesh"]
+    (_, geometry), _, (_, controls) = calls
+    assert geometry["surface_epr_specs"]["MA"]["inset_margins_um"] == [0.5]
+    assert controls == MeshControls(
+        FeatureRecipe(), MesherOptions(), Budgets(max_rounds=1), 0.02
+    )
 
 
 def test_surface_epr_set_after_mesh_invalidates_it():
@@ -170,7 +195,7 @@ def test_surface_epr_set_after_mesh_invalidates_it():
 
 def test_eigenmode_without_surface_epr_requests_no_insets(monkeypatch, tmp_path):
     """Eigenmode may skip Surface EPR: ``mesh()`` then passes no specs, so no bands are requested."""
-    seen = {}
+    calls = stand_in_mesh_stages(monkeypatch, eigenmode, tmp_path)
     prepared = SimpleNamespace(
         component=object(),
         stack=STACK,
@@ -179,15 +204,11 @@ def test_eigenmode_without_surface_epr_requests_no_insets(monkeypatch, tmp_path)
         geometry_input=object(),
         physical_plan=SimpleNamespace(context=object()),
     )
-    monkeypatch.setattr(
-        eigenmode,
-        "build_route_mesh",
-        lambda **kw: seen.update(kw) or SimpleNamespace(mesh_path=tmp_path),
-    )
     monkeypatch.setattr(eigenmode, "prepare_mesh_input", lambda **kwargs: prepared)
     sim = EigenmodeSim()
     sim.set_stack(STACK)
     sim.set_geometry(SimpleNamespace(write_gds=lambda path: None))
     sim.set_output_dir(tmp_path)
     sim.mesh()
-    assert seen["surface_epr_specs"] is None
+    (_, geometry), *_ = calls
+    assert geometry["surface_epr_specs"] is None

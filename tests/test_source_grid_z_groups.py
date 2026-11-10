@@ -251,13 +251,13 @@ def d0_band_areas(monkeypatch, component):
         return geometry
 
     monkeypatch.setattr(EigenmodeSim, "_build_geometry", recording)
-    refusal = EigenmodeSim.simulation_drc(
+    report = EigenmodeSim.simulation_drc(
         component,
         layer_stack=FLIP_CHIP_STACK,
         material_records=MATERIALS,
         surface_epr_specs={"MA": FILM, "MS": FILM, "SA": FILM},
     )
-    assert refusal is None
+    assert report.passed
     (sidecar,) = sidecars
     return {
         name: group["area_um2"]

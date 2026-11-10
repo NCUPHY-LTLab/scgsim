@@ -26,7 +26,7 @@ each guarantees something to the next.
 |---|---|---|
 | Layout and its declarations | The PDK and whoever draws the layout, including whoever declares the Nets and the Surface-EPR margins for the simulation | Every rule in [What a layout must guarantee](#layout-rules) holds. |
 | Geometry building (SGB, SCGSim's geometry builder) | SCGSim | On such a layout: exactly the declared geometry on the grid, never repaired, and bands that match the exact geometry within the snap bound. A broken rule is refused with an error that names it. |
-| Meshing | SCGSim | On that geometry: a mesh whose every tetrahedron, measured on the linear mesh, meets the quality threshold you set (0.01 by default), or `MeshRepairError` with a report. Never a mesh that failed that check. |
+| Meshing | SCGSim | On that geometry: first the meshing-stage check, which refuses fine structure with `SimulationDrcError` before the mesher starts; then a mesh whose every tetrahedron, measured on the linear mesh, meets the quality threshold you set (0.01 by default), or `MeshRepairError` with a report. Never a mesh that failed that check. |
 
 **A failure belongs to the first stage whose guarantee is broken.** If a layout
 draws a 1 nm slit, the failure is the layout's, even when it first shows up as a
@@ -66,12 +66,15 @@ The words this page uses:
 
 ## What a layout must guarantee {#layout-rules}
 
-The errors are reported at one of two moments. **At plan** means while you build
+The errors are reported at one of three moments. **At plan** means while you build
 the `GeometryPlan` (its constructor, `register_instance`, `set_nets` or
 `prepare()`); these errors are `ValueError`. **At build** means when the
 geometry is built, inside `mesh()` or `simulation_drc()`; these errors are the
 SGB classes named in the table (`InputError`, `UnsupportedCurveError`,
-`ContactError` and the others), from `scgsim.geometry.sgb.errors`.
+`ContactError` and the others), from `scgsim.geometry.sgb.errors`. **Before
+meshing** means the meshing-stage check that `mesh()` and `simulation_drc()`
+run on the built model; its error is `SimulationDrcError`, from
+`scgsim.palace`.
 
 ### Declarations {#rules-declarations}
 
@@ -97,7 +100,7 @@ SGB classes named in the table (`InputError`, `UnsupportedCurveError`,
 |---|---|---|---|
 | The plan's `grid_size_um` equals the layout's database unit, or is left as `None` to take it. The end points of exact curves lie on the grid. | SCGSim computes on integer grid coordinates; a second grid would move points the layout did not move. | `ValueError` at plan; `InputError` at build for an off-grid curve end point | [Geometry contract](geometry-sgb.qmd#component-to-backend-geometry-contract) |
 | Snapping to the grid changes no topology: no neck, gap, hole or slit at or below one grid step. | SCGSim places every vertex on the grid. A 0.4 nm gap between two conductors closes on a 1 nm grid, and two separate pieces become one. | `ValueError` at plan: "… topology changed at grid", "… contact changed at grid" | [Geometry contract](geometry-sgb.qmd#component-to-backend-geometry-contract) |
-| The outline holds no fine structure. SCGSim keeps such structure as drawn and does not remove it. No size limit is set for this rule. | A 1 nm edge or slit is valid geometry, but the mesher must resolve it with elements of that size. | Today a meshing stop, `MeshRepairError`, not a refusal at plan or build | [Drawing defects](known-geometry-problems.qmd#drawing-defects) |
+| The outline holds no fine structure: no outline edge under a side wall shorter than 10 grid steps, and no horizontal face narrower than 10 grid steps or with a corner sharper than 1°. SCGSim keeps such structure as drawn and does not remove it. | A 1 nm edge or slit is valid geometry, but the mesher must resolve it with elements of that size. | `SimulationDrcError` before meshing, in `mesh()` and `simulation_drc()`, with the location; a free horizontal edge shorter than 25 grid steps is a warning | [What the meshing stage reports](layout-modeling-check.qmd#what-the-meshing-stage-reports) |
 
 ### Conductors {#rules-conductors}
 
@@ -122,6 +125,7 @@ SGB classes named in the table (`InputError`, `UnsupportedCurveError`,
 | Rule | Why SCGSim needs it | Reported as | Detail |
 |---|---|---|---|
 | The margins of each request are positive, strictly increasing multiples of the grid, such as `(0.5, 1.0)` µm. | Each margin is a band boundary cut on the grid. | `InputError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
+| Every band is at least 10 grid steps wide: the first band is the first margin, each next band the difference of two margins. | A narrower band is a face the mesher cannot use. | `ValueError` at build, before SGB runs, naming the spec, the band and its width | [What the meshing stage reports](layout-modeling-check.qmd#what-the-meshing-stage-reports) |
 | One face gets one set of margins, even when two Surface-EPR types reach it. | A face holds one family of bands. | `InputError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
 | A band is measured from a gap edge. A conductor named in `inset_margins_by_entity_um` needs a gap edge on each face it bands. A face reached only through its Surface-EPR type that has no gap edge gets no bands. | Without a gap edge there is nothing to measure the distance from. | `NoGapEdgeError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
 | Side walls are never banded; `face_kinds` names only `sheet`, `top`, `bottom` or `interface`. | SGB cuts bands only on these four kinds of face. | `InputError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
@@ -135,7 +139,9 @@ On a layout that follows every rule above, SCGSim guarantees:
 - **Bands that match the exact geometry.** Each band's area agrees with the exact
   erosion of the same polygons within the grid's snap bound, as
   [Supported Geometry](supported-geometry.qmd#what-supported-means) states it.
-- **A mesh that meets the quality threshold, or a report.** `mesh()` returns a mesh
+- **A mesh that meets the quality threshold, or a report.** Before it meshes,
+  `mesh()` runs the meshing-stage check on the model it built and raises
+  `SimulationDrcError` if a finding refuses it. `mesh()` then returns a mesh
   in which every tetrahedron reaches `quality_threshold`: a minimum signed
   inverse condition number (minSICN) of 0.01, unless you set another value
   with `set_mesh`. It does so within the limits of `Budgets`: by default 8
@@ -173,8 +179,9 @@ These are not supported today:
 Call `EigenmodeSim.simulation_drc`, `ElectrostaticSim.simulation_drc`, or both,
 from the layout's tests and while you draw. Each runs the plan and the geometry
 build that its class's `mesh()` runs, with your Nets and Surface-EPR margins,
-and raises the same error. The [layout modeling check](layout-modeling-check.qmd)
-shows the call.
+and then the meshing-stage check that `mesh()` also runs first; it raises the
+same errors. The [layout modeling check](layout-modeling-check.qmd) shows the
+call.
 
 A pass means that the model built for that check was accepted: Route B, the
 Nets and margins you passed, and the fixed settings listed under
@@ -185,8 +192,10 @@ establishes the rules that build checks, and no others:
   `EigenmodeSim.simulation_drc`.
   `ElectrostaticSim` selects no port sheets, so its check does not test them.
 
-The check stops before meshing, so it cannot see fine structure. It does not
-check Route A, other settings or AEDT.
+The check stops before meshing. Its meshing stage finds the fine structure of
+the [meshing-stage classes](layout-modeling-check.qmd#what-the-meshing-stage-reports),
+but a pass does not promise that the model meshes. It does not check Route A,
+other settings or AEDT.
 
 ## When something fails {#when-something-fails}
 
@@ -202,7 +211,9 @@ Find the error you see, then follow the owner's next action.
 | `OverlapError` "… with equal priority" | Declarations | Give the overlapping Entities of one Net different priorities. |
 | `NonManifoldError` | Layout | At the reported point, give the two pieces a shared edge or separate them. |
 | `InputError` about a port sheet, an Entity id, an arc or a margin | Layout and declarations | Read the message: it names the port, Entity or request. Fix the drawing or the setting it names. |
+| `ValueError` "Surface EPR bands narrower than the meshing stage's face-width limit …" | Declarations | Widen the margins it names so that every band is at least 10 grid steps wide. |
 | `NoGapEdgeError` | Declarations | The conductor named in `inset_margins_by_entity_um` has no gap edge on that face. Remove it there, or band the face by type. |
 | `ValidationError` "… invariant(s) failed" | SCGSim | A structural check of SGB failed on input it accepted. Report it to SCGSim with the layout. |
+| `SimulationDrcError` | The owner each finding names: layout, erosion or sgb | Each refusing finding gives its class, size, µm location and fix. `layout`: fix the drawing there. `erosion`: change the margins in `surface_epr_specs` or the conductor's width. `sgb`: report it to SCGSim with the finding. |
 | `MeshRepairError` | First check the layout, then SCGSim | Read the quality report: it names the stop reason and lists the remaining bad elements and the features they touch. If they sit on fine structure of the layout, fix the drawing. If the layout has none there, adjust the [mesh controls](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls), or report it to SCGSim when the bad elements sit on band edges. |
 | An error whose message does not match the layout you drew | SCGSim | Report it to SCGSim with the layout and the message. |

@@ -45,7 +45,7 @@ prepare shared GeometryPlan snapshot
 | 輸出身分 | `set_output_dir` | 綁定網格／設定／交接輸出位置。 |
 | 表面膜 | `set_surface_epr` | 宣告表面膜及其內縮邊距；須在 `mesh()` 之前執行。 |
 | 網格控制 | `set_mesh(...)` | 選取尺寸配方、網格器選項、修復預算與品質門檻。 |
-| 網格 | `mesh` | 以 SGB 建立幾何，用 `scgsim.meshing` 產生網格，並把群組降階為 Palace 屬性。 |
+| 網格 | `mesh` | 以 SGB 建立幾何，檢查其中的細微結構，用 `scgsim.meshing` 產生網格，並把群組降階為 Palace 屬性。 |
 | 設定 | `write_config` | 為已審閱網格身分寫入 Palace Electrostatic 設定。 |
 
 這些方法是已接受的公開 API。
@@ -55,6 +55,8 @@ prepare shared GeometryPlan snapshot
 ## Palace 網格控制 {#palace-mesh-controls}
 
 `mesh()` 以 SGB 建立幾何、用 `scgsim.meshing` 產生網格，再寫出 Palace 網格，因此網格控制就是該模組的控制。兩個 Palace 外觀介面都透過 `set_mesh(...)` 接受這些控制，預設值相同。省略的引數保留目前設定。實際改變任何設定的更新會使網格、設定檔及交接失效；無效的更新提案則保留原狀態。
+
+網格器啟動之前，`mesh()` 會對自己建出的幾何執行 `simulation_drc` 的網格階段。有拒絕項目時，拋出 `scgsim.palace.SimulationDrcError`，並附上列出每項發現的位置、負責方與修改方式的報告，且不產生網格；只有警告時，`mesh()` 不會停止。類別與界限見[網格階段回報什麼](../layout-modeling-check.qmd#what-the-meshing-stage-reports)。以下網格控制適用於通過檢查的模型。
 
 ::: {.askr-table-compact}
 | 控制 | 預設值 | 意義 |

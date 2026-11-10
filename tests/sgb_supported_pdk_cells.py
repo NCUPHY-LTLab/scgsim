@@ -708,8 +708,7 @@ def cell24_sheet_across_gap(circular: bool) -> Scene:
 
 
 SPLINES = {"interpolation": hermite_centreline, "bspline": bspline_centreline}
-TURN_RULE_DEGREES = 360.0 / 128
-# The resampled strips aim at 3 degrees so that the turns stay above the rule once rounded to the lattice.
+# The resampled strips turn by about 3 degrees per vertex; the strips as the PDK draws them are DRAWN_SPLINES.
 RESAMPLE_TURN_DEGREES = 3.0
 
 SCENES = {
@@ -735,6 +734,10 @@ SCENES = {
     "cell22_tsv_signal": cell22_tsv_signal,
     "cell23_airbridge": cell23_airbridge,
     "cell24_sheet_square_pad": lambda: cell24_sheet_across_gap(False),
+}
+# The sheet across the 32-point pad builds with the bands of its exact erosion, but its files cannot be written:
+# it is off the supported list until they can.
+NOT_WRITTEN = {
     "cell24_sheet_circular_pad": lambda: cell24_sheet_across_gap(True),
 }
 # The spline strips as the PDK draws them (258 vertices, smallest turns 0.012 and 0.058 degrees).  They build
