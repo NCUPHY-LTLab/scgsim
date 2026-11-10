@@ -212,10 +212,11 @@ Palace 現在寫出網格清單 `schema_version` 2 與索引映射 `schema_versi
 
 ## Palace 套件符號 {#palace-package-symbols}
 
-`scgsim.palace` 宣告 30 個套件門面名稱。下列清單依 v2 責任模組分組其中 25 個；AMR 與電容參考名稱（`analyze_amr`、`show_amr_analysis`、`PalaceAmrAnalysis`、`PalaceAmrReport`、`CapacitanceReference`）說明於 [AMR 分析](amr-analysis.qmd)。
+`scgsim.palace` 宣告 33 個套件門面名稱。下列清單依 v2 責任模組分組其中 28 個；AMR 與電容參考名稱（`analyze_amr`、`show_amr_analysis`、`PalaceAmrAnalysis`、`PalaceAmrReport`、`CapacitanceReference`）說明於 [AMR 分析](amr-analysis.qmd)。
 
 
 - **目前負責模組與責任：** `scgsim.palace.preparation`; 保留分開的可變準備狀態負責者。 **門面匯出：** `ElectrostaticSim`, `EigenmodeSim`.
+- **目前負責模組與責任：** `scgsim.palace.preparation.drc`; 兩階段 `simulation_drc` 的報告與拒絕，`mesh()` 在網格化之前也會丟出同一個拒絕。 **門面匯出：** `SimulationDrcError`, `SimulationDrcReport`, `StageResult`.
 - **目前負責模組與責任：** `scgsim.palace.results`; 依資料保管關係載入結果。 **門面匯出：** `PalaceCost`, `PalacePerformance`, `PalaceProvenance`, `PalaceReturnedReceipt`, `ParsedTable`, `ResolvedPalaceResult`, `resolve_palace_result`.
 - **目前負責模組與責任：** `scgsim.palace.results`; 獨立 EPR 數值與離線重新分析。 **門面匯出：** `PalaceEprResult`, `epr_result`, `reanalyze_epr`, `resolve_epr_result`.
 - **目前負責模組與責任：** `scgsim.palace.presentation`; 依求解器對獨立 EPR 繪圖。 **門面匯出：** `show_epr`.
