@@ -18,9 +18,9 @@ coded in `arcchain.py`, so the scripts need no PDK. On a later develop several o
 |---|---|
 | `arcchain.py` | The exact curves (the gdsfactory Euler bend of cells 14 and 15 and its CPW edge offsets; the PDK's Hermite and B-spline strips of cell 21), their biarc fit within a bound, and two ways to put the arcs on the 1 nm lattice: `naive` (round every joint) and `tangent` (every joint exactly tangent but the one before a prescribed end tangent). |
 | `scenes.py` | The polygon scenes of `tests/sgb_supported_pdk_cells.py` unchanged, and their arc-chain versions (`<cell>_arcs`, `_arcs_naive`, `_arcs_5nm`, `_arcs_50nm`). The arcs enter SGB through `arc_through_points`, the path authored `circular_arc` curves take today. |
-| `measure.py` | Builds a scene (Route B, MA/MS/SA bands at 0.5 and 1.0 um by type), counts boundary pieces, emitted entities and band edges under 25 grid steps, checks the band areas against the exact erosion, and meshes it with `mesh_sgb` defaults at the provisional minSICN threshold 0.01. `--no-bands` is the control without bands; `--no-mesh` stops after the build. |
-| `fit_table.py` | Arc counts and the largest deviation from the exact curve, per fitting bound, against the polygons the scenes draw. |
-| `summarize.py` | One table row per scene from the JSON files `measure.py` wrote. |
+| `measure.py` | Builds a scene (Route B, MA/MS/SA bands at 0.5 and 1.0 um by type), counts boundary pieces, emitted entities and band edges under 25 grid steps (an arc edge measured along its arc), checks the band areas against the exact erosion, and meshes it with `mesh_sgb` defaults at the provisional minSICN threshold 0.01. `--no-bands` is the control without bands; `--no-mesh` stops after the build. |
+| `fit_table.py` | Arc counts, the largest deviation from the exact curve, the smallest radius and the shortest chain piece (measured along its arc), per fitting bound, against the polygons the scenes draw. |
+| `summarize.py` | One table row per run from the JSON files `measure.py` wrote; a run without bands or without a mesh says so after the scene name. |
 
 ## Run
 
@@ -32,7 +32,10 @@ uv run --locked --no-sync python experiments/spline-curves/summarize.py OUT
 uv run --locked --no-sync python experiments/spline-curves/fit_table.py
 ```
 
-`OUT` receives one JSON file per scene plus the model files and meshes; keep it outside the repository.
+`OUT` receives, for each run, `<scene>__<mode>.json` and a folder of the same name with the model files and
+meshes; keep it outside the repository. The mode is `bands` or `nobands`, with `__nomesh` after it for
+`--no-mesh`, so the control without bands sits beside the run with bands. A run whose files already exist
+is refused before anything runs; choose another `OUT` to measure it again.
 A scene takes a few seconds to half a minute; the arc conversion itself is unoptimised Python
 (0.2 to 8 s per scene). The cheapest check that the polygon and the arc path both build and mesh is
 cell 13, about 10 s:
@@ -77,3 +80,26 @@ The naive scenes on develop `464ba5b`, before → after the correction (`kinks` 
 
 The comment on issue 109 gives the naive kinks as 2 to 16 × 10⁻⁴ rad and does not mention the lead
 joints. The four naive scenes it reports are still refused, and the largest kink of each is unchanged.
+
+## Correction: lengths along the arc
+
+Two counts used an arc edge's chord where its length along the arc was meant. `measure.py` now measures a
+curved band edge along its arc (`2 r asin(chord / 2r)`, as `tests/sgb_supported_kit.py` does) before it
+compares it with 25 grid steps, and `fit_table.py` reports the shortest chain piece as radius × sweep.
+
+No short-band-edge count moves. On develop `464ba5b`, all 27 scenes of `scenes.py` give the same counts
+before and after (`measure.py --no-mesh`). The band arcs are at least 0.5 um in radius, so an arc edge under
+25 grid steps is at most 6 × 10⁻⁴ grid steps longer than its chord.
+
+The shortest chain piece in `fit_table.py`, in um, chord → along the arc, at the bounds 0.71, 5, 50 and
+200 nm:
+
+| edge | 0.71 nm | 5 nm | 50 nm | 200 nm |
+|---|---|---|---|---|
+| cell 14 inner edge | 4.409 → 4.410 | 6.626 → 6.628 | 13.317 → 13.335 | 26.185 → 26.354 |
+| cell 15 inner edge | 6.757 → 6.759 | 11.282 → 11.290 | 22.618 → 22.676 | 33.959 → 34.145 |
+| interpolation strip edge | 2.038 → 2.039 | 3.971 → 3.978 | 7.630 → 7.663 | 12.275 → 12.383 |
+| B-spline strip edge | 3.444 → 3.445 | 6.379 → 6.384 | 13.351 → 13.386 | 16.904 → 16.969 |
+
+The comment on issue 109 quotes one of these, cell 14's shortest arc at the snap bound, as 4.4 um; it
+still rounds to 4.4 um.

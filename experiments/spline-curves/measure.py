@@ -7,7 +7,7 @@ circular arcs).  For each it records
   ``emit_model``, or the error that refused it;
 * the boundary: pieces of the conductor outlines as SGB receives them (straight edges, arc pieces);
 * the emitted topology: vertices, edges, faces, and the horizontal band edges shorter than 25 grid steps (the
-  count of issue 138);
+  count of issue 138), an arc edge measured along its arc;
 * the mesh: ``mesh_sgb`` with its defaults (``FeatureRecipe``, ``RepairPolicy``, ``Budgets``) and the provisional
   threshold 0.01 on minSICN: tetrahedra, minimum quality, rounds, stop reason and seconds.
 
@@ -15,7 +15,10 @@ Usage (repository root, locked environment)::
 
     uv run --locked --no-sync python experiments/spline-curves/measure.py OUT_DIR SCENE [SCENE ...]
 
-``OUT_DIR/<scene>.json`` receives the numbers; meshes and model files stay under ``OUT_DIR`` (not committed).
+``OUT_DIR/<run>.json`` receives the numbers and ``OUT_DIR/<run>/`` the model files and meshes (not committed),
+where ``<run>`` is the scene and its mode, for example ``cell14_arcs__bands`` or
+``cell14_euler_bend__nobands__nomesh``.  A run whose files already exist is refused before anything runs, so
+the control without bands never overwrites the run with bands.
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 import time
 import traceback
@@ -46,17 +50,25 @@ THRESHOLD = (
 SHORT_EDGE_STEPS = 25  # issue 138's count: band edges under 25 grid steps
 
 
+def run_name(scene: str, *, bands: bool, mesh: bool) -> str:
+    """The identity of one run: the scene and its mode, the stem of its JSON file and its folder."""
+    return f"{scene}__{'bands' if bands else 'nobands'}{'' if mesh else '__nomesh'}"
+
+
 def measure(
     name: str, out_dir: Path, *, mesh: bool = True, bands: bool = True
 ) -> dict[str, Any]:
     """Every number of one scene; a refused build or a rejected mesh is a result.
 
     ``bands=False`` builds without Surface-EPR bands: the control that separates the outline from its band seams.
+    The files go to ``out_dir / run_name(...)``.
     """
     scene = scenes.SCENES[name]()
+    run_dir = out_dir / run_name(name, bands=bands, mesh=mesh)
     result: dict[str, Any] = {
         "scene": name,
         "bands_requested": bands,
+        "mesh_requested": mesh,
         "boundary": scenes.boundary_pieces(scene),
     }
     started = time.perf_counter()
@@ -74,7 +86,7 @@ def measure(
         return result
     build_seconds = time.perf_counter() - started
     started = time.perf_counter()
-    artifacts = emit_model(model, out_dir / name)
+    artifacts = emit_model(model, run_dir)
     result["build"] = {
         "status": "built",
         "build_seconds": round(build_seconds, 2),
@@ -85,13 +97,17 @@ def measure(
         result["bands"] = band_check(scene, model)
     if mesh:
         result["mesh"] = mesh_numbers(
-            artifacts.xao, artifacts.sidecar, out_dir / name / "mesh"
+            artifacts.xao, artifacts.sidecar, run_dir / "mesh"
         )
     return result
 
 
 def topology_counts(model: Any) -> dict[str, Any]:
-    """Entity counts, and the horizontal band edges shorter than :data:`SHORT_EDGE_STEPS` with where they are."""
+    """Entity counts, and the horizontal band edges shorter than :data:`SHORT_EDGE_STEPS` with where they are.
+
+    An arc edge is measured along its arc, as ``sgb_supported_kit.short_band_edges`` measures it: its chord
+    is shorter, and would count a curved seam of 25 grid steps or more as short.
+    """
     topo = model.topology
     short: list[dict[str, Any]] = []
     band_edges = 0
@@ -106,6 +122,9 @@ def topology_counts(model: Any) -> dict[str, Any]:
         band_edges += 1
         a, b = topo.vertices[edge.v0], topo.vertices[edge.v1]
         length = math.hypot(b.x - a.x, b.y - a.y)
+        if edge.curve is not None:
+            radius = edge.curve.radius
+            length = 2 * radius * math.asin(min(1.0, length / (2 * radius)))
         if length < SHORT_EDGE_STEPS:
             short.append(
                 {
@@ -188,19 +207,41 @@ def main(argv: list[str] | None = None) -> int:
         help="build without Surface-EPR bands (the control)",
     )
     args = parser.parse_args(argv)
-    args.out_dir.mkdir(parents=True, exist_ok=True)
-    for name in args.scenes:
-        try:
-            result = measure(
-                name, args.out_dir, mesh=not args.no_mesh, bands=not args.no_bands
-            )
-        except Exception:  # noqa: BLE001 - record and go on with the next scene
-            result = {"scene": name, "crash": traceback.format_exc()[-2000:]}
-        (args.out_dir / f"{name}.json").write_text(
-            json.dumps(result, indent=1) + "\n", encoding="utf-8"
+    mesh, bands = not args.no_mesh, not args.no_bands
+    runs = {name: run_name(name, bands=bands, mesh=mesh) for name in args.scenes}
+    if len(runs) < len(args.scenes):
+        parser.error("a scene is named twice: both runs would write the same files")
+    taken = [
+        str(path)
+        for run in runs.values()
+        for path in (args.out_dir / f"{run}.json", args.out_dir / run)
+        if path.exists()
+    ]
+    if taken:
+        parser.error(
+            "these runs already have files; choose another OUT_DIR: " + ", ".join(taken)
         )
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    for name, run in runs.items():
+        try:
+            result = measure(name, args.out_dir, mesh=mesh, bands=bands)
+        except Exception:  # noqa: BLE001 - record and go on with the next scene
+            result = {
+                "scene": name,
+                "bands_requested": bands,
+                "mesh_requested": mesh,
+                "crash": traceback.format_exc()[-2000:],
+            }
+        _write_json(args.out_dir / f"{run}.json", result)
         print(json.dumps(result), flush=True)
     return 0
+
+
+def _write_json(path: Path, record: dict[str, Any]) -> None:
+    # Written whole or not at all: a run stopped mid-write leaves no half file for summarize.py to read.
+    partial = path.with_name(path.name + ".partial")
+    partial.write_text(json.dumps(record, indent=1) + "\n", encoding="utf-8")
+    os.replace(partial, path)
 
 
 if __name__ == "__main__":

@@ -19,15 +19,16 @@ COLUMNS = (
 
 def row(r: dict) -> str:
     """The table row of one scene's record."""
+    label = _label(r)
     if "crash" in r:
-        return f"{r['scene']} | crash: {r['crash'].splitlines()[-1][:120]}"
+        return f"{label} | crash: {r['crash'].splitlines()[-1][:120]}"
     pieces = [v for k, v in r["boundary"].items() if k != "fitting"]
     lines = sum(p["straight_edges"] for p in pieces)
     arcs = sum(p["arc_pieces"] for p in pieces)
     fit = r["boundary"].get("fitting", {})
     build = r["build"]
     if build["status"] != "built":
-        return f"{r['scene']} | {lines} / {arcs} | | | refused ({build['seconds']} s): {build['error'][:110]}"
+        return f"{label} | {lines} / {arcs} | | | refused ({build['seconds']} s): {build['error'][:110]}"
     t, b, m = r["topology"], r.get("bands", {}), r.get("mesh", {})
     bands = (
         "not asked"
@@ -40,7 +41,7 @@ def row(r: dict) -> str:
     return " | ".join(
         str(x)
         for x in (
-            r["scene"],
+            label,
             f"{lines} / {arcs}",
             fit.get("max_deviation_nm", ""),
             fit.get("kinks_over_1e-9_rad", ""),
@@ -55,6 +56,19 @@ def row(r: dict) -> str:
             m.get("seconds"),
         )
     )
+
+
+def _label(r: dict) -> str:
+    """The scene, and its mode when it is not the default (bands and a mesh)."""
+    mode = [
+        flag
+        for flag, asked in (
+            ("no bands", r.get("bands_requested", True)),
+            ("no mesh", r.get("mesh_requested", True)),
+        )
+        if not asked
+    ]
+    return f"{r['scene']} ({', '.join(mode)})" if mode else r["scene"]
 
 
 def main(argv: list[str]) -> int:

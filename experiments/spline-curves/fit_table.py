@@ -97,13 +97,22 @@ def main() -> int:
                     "arcs": len(fitted),
                     "chain_max_deviation_nm": round(chain.max_deviation_nm, 2),
                     "smallest_radius_um": round(min(_radius(a) for a in chain.arcs), 2),
-                    "shortest_arc_um": round(
-                        min(math.dist(a.start, a.end) for a in chain.arcs) / 1000, 3
-                    ),
+                    "shortest_arc_um": round(min(_length_um(a) for a in chain.arcs), 3),
                 }
             )
         print(json.dumps(record), flush=True)
     return 0
+
+
+def _length_um(arc: ac.LatticeArc) -> float:
+    """The length of a chain piece along itself: radius times sweep for an arc, the end distance for a line."""
+    if arc.centre is None:
+        return math.dist(arc.start, arc.end) / 1000
+    cx, cy = float(arc.centre[0]), float(arc.centre[1])
+    a0 = math.atan2(arc.start[1] - cy, arc.start[0] - cx)
+    a1 = math.atan2(arc.end[1] - cy, arc.end[0] - cx)
+    sweep = (a1 - a0) % (2 * math.pi) if arc.ccw else (a0 - a1) % (2 * math.pi)
+    return _radius(arc) * sweep
 
 
 def _radius(arc: ac.LatticeArc) -> float:
