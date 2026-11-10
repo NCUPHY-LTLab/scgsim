@@ -60,9 +60,11 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
     The pipeline is the same for every recipe: ``recipe`` chooses the initial sizes, ``repair`` how the
     loop refines around bad elements, ``budgets`` when it gives up (``Budgets(max_rounds=0)`` meshes once
     without repair; the threshold still applies), and ``mesher`` the Gmsh algorithms and the order of the
-    delivered mesh.  The threshold and the report's counts refer to the linear mesh: with
-    ``mesher.geometry_order`` above 1 the accepted mesh is raised to that order afterwards, in the worker
-    that still has the CAD, and the file at ``<xao stem>.msh`` is the elevated one.
+    delivered mesh.  The time budget is measured from the start of this call and scales with the model's
+    footprint (its x by y extent, vacuum included): see :class:`~scgsim.meshing.repair.Budgets`.  The
+    threshold and the report's counts refer to the linear mesh: with ``mesher.geometry_order`` above 1
+    the accepted mesh is raised to that order afterwards, in the worker that still has the CAD, and the
+    file at ``<xao stem>.msh`` is the elevated one.
 
     Two things are the caller's to keep, and are not checked:
 
@@ -73,10 +75,10 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
       beside the report of the other.
 
     Raises :class:`~scgsim.meshing.errors.MeshRepairError` carrying the report when the loop stops
-    without an accepted mesh (rounds spent, a mesh over the tetrahedron budget even when clean, bad
-    elements the repair loop cannot refine, a clean mesh whose order could not be raised, or a mesher
-    crash).  The report is written then too, and the last mesh is kept as ``<stem>.rejected.msh`` when a
-    round made one.
+    without an accepted mesh (rounds spent, a mesh over the tetrahedron budget even when clean, the time
+    limit reached, a bad count that stopped falling, a clean mesh whose order could not be raised, or a
+    mesher crash).  The report is written then too, and the last mesh is kept as ``<stem>.rejected.msh``
+    when a round made one.
     """
     if not math.isfinite(threshold):
         raise ValueError(f"threshold must be a finite number, got {threshold!r}.")
@@ -89,23 +91,24 @@ def mesh_sgb(  # noqa: PLR0913 -- the three paths, the required threshold and th
     work_dir = Path(tempfile.mkdtemp(prefix=_WORK_DIR_PREFIX, dir=files.directory))
     try:
         sidecar_path, features = _resolve_sidecar(sidecar, work_dir)
+        bounding_box = measure_bounding_box(xao, work_dir)
+        time_budget = budgets.time_budget(bounding_box.footprint_mm2)
         outcome = repair_mesh(
             RepairInputs(
                 xao=xao,
                 sidecar=sidecar_path,
-                initial=recipe.size_requests(
-                    features, measure_bounding_box(xao, work_dir)
-                ),
+                initial=recipe.size_requests(features, bounding_box),
                 threshold=threshold,
                 policy=repair,
                 budgets=budgets,
                 mesher=mesher,
                 work_dir=work_dir,
+                deadline=started + time_budget.limit_seconds,
             )
         )
         report = build_report(
             outcome,
-            RunSettings(threshold, recipe, repair, mesher, budgets),
+            RunSettings(threshold, recipe, repair, mesher, budgets, time_budget),
             time.perf_counter() - started,
         )
         write_report(report, files.report, files.summary)

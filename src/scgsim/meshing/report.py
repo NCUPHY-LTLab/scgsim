@@ -1,9 +1,10 @@
 """The quality report: a JSON document and a short text summary of one meshing run.
 
 Owns what a run says about itself: the recipe (name, version, parameters), the repair policy, the mesher
-options and the budgets, the threshold, how the loop stopped, the counts, and the bad elements that remain
-with their location, groups and feature kinds.  The counts and the minimum quality are measured on the
-linear mesh, before any elevation to a higher order; the report says so.  All timings sit under one
+options and the budgets, the time budget of the model, the threshold, how the loop stopped, the counts,
+and the bad elements that remain with their location, groups and feature kinds.  The counts and the
+minimum quality are measured on the linear mesh, before any elevation to a higher order; the report says
+so.  All timings sit under one
 ``timing`` key, so two runs of the same input compare equal without it.
 """
 
@@ -17,9 +18,9 @@ from typing import Any, TypedDict
 from .findings import QUALITY_MEASURE, BadElement
 from .mesher import MesherOptions
 from .recipes import SizingRecipe
-from .repair import Budgets, RepairOutcome, RepairPolicy
+from .repair import Budgets, RepairOutcome, RepairPolicy, TimeBudget
 
-REPORT_VERSION = "scgsim.meshing.report/2"
+REPORT_VERSION = "scgsim.meshing.report/3"
 MAX_LISTED_ELEMENTS = 200
 MEASURED_ON = "linear mesh before elevation"
 
@@ -36,6 +37,7 @@ class QualityReport(TypedDict):
     stop: str
     rounds: int
     budgets: dict[str, Any]
+    time_budget: dict[str, Any]
     mesh: dict[str, Any] | None
     history: list[dict[str, Any]]
     remaining_bad: dict[str, Any]
@@ -51,6 +53,7 @@ class RunSettings:
     repair: RepairPolicy
     mesher: MesherOptions
     budgets: Budgets
+    time_budget: TimeBudget  # the limit and target for this model's footprint
 
 
 def recipe_record(recipe: SizingRecipe) -> dict[str, Any]:
@@ -77,6 +80,7 @@ def build_report(
         stop=outcome.stop,
         rounds=outcome.rounds,
         budgets=asdict(settings.budgets),
+        time_budget=asdict(settings.time_budget),
         mesh=None
         if audit is None
         else {
@@ -89,8 +93,11 @@ def build_report(
             "geometry_order": outcome.geometry_order,
             "algorithm_3d": outcome.algorithm_3d,
             "fallback": outcome.fallback,
-            "refined_curves": len(outcome.curve_sizes),
-            "smallest_size_um": min(outcome.curve_sizes.values(), default=None),
+            "sized_curves": len(outcome.curve_sizes),
+            "local_sizes": len(outcome.local_sizes),
+            "smallest_local_size_um": min(
+                (ball.size for ball in outcome.local_sizes), default=None
+            ),
         },
         history=[asdict(record) for record in outcome.history],
         remaining_bad=_remaining_bad(
@@ -98,6 +105,7 @@ def build_report(
         ),
         timing={
             "total_seconds": total_seconds,
+            "target_met": total_seconds <= settings.time_budget.target_seconds,
             "round_seconds": list(outcome.round_seconds),
             "mesh_seconds": audit.mesh_seconds if audit else None,
             "audit_seconds": audit.audit_seconds if audit else None,
@@ -122,8 +130,8 @@ def render_text(report: QualityReport) -> str:
             f"algorithm {mesh['algorithm_3d']}{fallback}, geometry order {mesh['geometry_order']}"
         )
         lines.append(
-            f"  {mesh['refined_curves']} refined curves, smallest size "
-            f"{_size(mesh['smallest_size_um'])}"
+            f"  {mesh['sized_curves']} sized curves, {mesh['local_sizes']} local sizes, smallest "
+            f"{_size(mesh['smallest_local_size_um'])}"
         )
     remaining = report["remaining_bad"]
     for location, count in remaining["by_location"].items():
@@ -134,7 +142,11 @@ def render_text(report: QualityReport) -> str:
             f"{element['location']} groups {', '.join(element['groups']) or '-'} "
             f"features {', '.join(element['feature_kinds']) or '-'}"
         )
-    lines.append(f"  total {report['timing']['total_seconds']:.1f} s")
+    budget = report["time_budget"]
+    lines.append(
+        f"  total {report['timing']['total_seconds']:.1f} s; limit {budget['limit_seconds']:.0f} s, "
+        f"target {budget['target_seconds']:.0f} s for {budget['footprint_mm2']:.3g} mm2"
+    )
     return "\n".join(lines) + "\n"
 
 
@@ -164,6 +176,9 @@ def _listed(element: BadElement) -> dict[str, Any]:
         "element": element.element,
         "quality": element.quality,
         "centroid": list(element.centroid),
+        "shortest_edge_midpoint": list(element.shortest_edge_midpoint),
+        "edge_min": element.edge_min,
+        "edge_max": element.edge_max,
         "location": element.location,
         "curves": list(element.curves),
         "points": list(element.points),

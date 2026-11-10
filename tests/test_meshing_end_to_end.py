@@ -12,6 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import gdstk
 import pytest
 from sgb_inputs import gds_pad_in_ground
 from test_sgb_band_labels import PORT_CASES, all_interface_insets
@@ -82,8 +83,9 @@ def test_the_module_meshes_the_pad_in_ground_clean_and_keeps_the_xao_groups(
     assert result.report["mesh"]["min_quality"] >= THRESHOLD
     assert result.report["recipe"]["version"] == "scgsim.meshing.features/1"
     assert (
-        result.report["mesh"]["refined_curves"] > 0
+        result.report["mesh"]["sized_curves"] > 0
     )  # the 0.2 um film walls are sized a priori
+    assert result.report["mesh"]["local_sizes"] == 0
     assert physical_names(result.mesh) >= set(sidecar["physical_groups"])
     assert json.loads(result.report_path.read_text(encoding="utf-8")) == result.report
     assert "clean after 0 refinement rounds" in result.summary_path.read_text(
@@ -192,11 +194,11 @@ def test_a_repair_that_cannot_reach_the_threshold_fails_with_the_report_and_keep
             pad_in_ground_b.xao,
             pad_in_ground_b.sidecar,
             tmp_path,
-            threshold=0.9,  # beyond what any tetrahedral mesh of this model reaches
+            threshold=0.3,  # far above what one repair round brings this model to
             budgets=Budgets(max_rounds=1),
         )
     report = failure.value.report
-    assert report["stop"] in ("rounds", "unattributed")
+    assert report["stop"] == "rounds"
     assert report["mesh"]["bad_count"] > 0
     assert report["remaining_bad"]["count"] == report["mesh"]["bad_count"]
     assert report["remaining_bad"]["listed"][0]["groups"]
@@ -219,7 +221,7 @@ def test_a_rerun_leaves_only_the_mesh_its_report_describes(pad_in_ground_b, tmp_
             pad_in_ground_b.xao,
             pad_in_ground_b.sidecar,
             tmp_path,
-            threshold=0.9,
+            threshold=0.3,
             budgets=Budgets(max_rounds=1),
         )
     assert not (tmp_path / f"{stem}.msh").exists()
@@ -245,8 +247,8 @@ def test_overlapping_calls_sharing_an_output_directory_keep_their_own_files(
     inner: list[MeshResult] = []
     started_inner = []
 
-    def round_then_another_call(job, work_dir):
-        outcome = real_round(job, work_dir)
+    def round_then_another_call(job, work_dir, timeout_seconds=None):
+        outcome = real_round(job, work_dir, timeout_seconds)
         # The first call runs the second one to completion after its round.
         if not started_inner:
             started_inner.append(True)
@@ -275,21 +277,30 @@ def test_the_report_records_the_recipe_the_policies_and_what_the_quality_was_mea
         budgets=Budgets(max_rounds=3),
         mesher=MesherOptions(algorithm_2d=5),
     ).report
-    assert report["report_version"] == "scgsim.meshing.report/2"
+    assert report["report_version"] == "scgsim.meshing.report/3"
     assert report["recipe"]["name"] == "features"
     assert report["recipe"]["parameters"]["max_size_divisor"] == 20.0
-    assert report["repair"] == {
-        "edge_fraction": 0.4,
-        "culprit_fraction": 0.5,
-        "min_curve_length_um": 1.0,
-    }
+    assert report["repair"] == {"edge_fraction": 0.4}
     assert report["mesher"] == {
         "algorithm_2d": 5,
         "algorithm_3d": 1,
         "geometry_order": 1,
         "high_order_optimize": True,
     }
-    assert report["budgets"]["max_rounds"] == 3
+    assert report["budgets"] == {
+        "max_rounds": 3,
+        "max_tetrahedra": 2_000_000,
+        "time_limit_seconds": 180.0,
+        "time_target_seconds": 60.0,
+        "time_reference_area_mm2": 4.0,
+    }
+    # The 100 um die, vacuum padding included, is far below 4 mm2: the limits are not scaled.
+    assert report["time_budget"]["footprint_mm2"] < 4.0
+    assert (
+        report["time_budget"]["limit_seconds"],
+        report["time_budget"]["target_seconds"],
+    ) == (180.0, 60.0)
+    assert report["timing"]["target_met"] is True
     assert report["mesh"]["measured_on"] == "linear mesh before elevation"
     assert report["mesh"]["geometry_order"] == 1
 
@@ -351,10 +362,9 @@ def test_the_uniform_boundary_recipe_refines_every_curve_the_binding_names(
         budgets=Budgets(max_rounds=0),
     )
     sidecar = json.loads(pad_in_ground_b.sidecar.read_text(encoding="utf-8"))
-    assert result.report["mesh"]["refined_curves"] == len(
+    assert result.report["mesh"]["sized_curves"] == len(
         sidecar["binding"]["ids_by_tag"]["1"]
     )
-    assert result.report["mesh"]["smallest_size_um"] == 5.0
 
 
 ELEMENT_TYPES_OF_FILE = """
@@ -449,3 +459,140 @@ def test_hxt_can_be_chosen_through_the_mesher_options(pad_in_ground_b, tmp_path)
     )
     assert result.report["stop"] == "clean"
     assert result.report["mesh"]["algorithm_3d"] == HXT
+
+
+# The benchmark vacuum of issue 124: nothing beside the die, 1000 um above and below it.
+TALL_VACUUM = {"z_minus_um": 1000.0, "z_plus_um": 1000.0}
+
+
+def built_case(directory: Path, **inputs):
+    """``gds_pad_in_ground`` with ``inputs``, Route B, bands on every surface: the SGB artifacts."""
+    effective = gds_pad_in_ground(directory, **inputs)
+    insets = all_interface_insets(effective, "B", PORT_CASES["B"][1])
+    return build_sgb_geometry(
+        effective.build_input,
+        effective.representation,
+        route="B",
+        insets=insets,
+        output_dir=directory,
+    )
+
+
+@pytest.fixture(scope="module")
+def one_millimetre_tall_vacuum(tmp_path_factory):
+    """The 1 mm die under the benchmark vacuum: with only a global size, its film walls leave bad elements."""
+    return built_case(
+        tmp_path_factory.mktemp("one_mm"), die_um=1000.0, vacuum_padding=TALL_VACUUM
+    )
+
+
+@pytest.fixture(scope="module")
+def pad_with_a_spike(tmp_path_factory):
+    """The 100 um pad with a spike one grid step wide and 1.4 um long on its right edge.
+
+    It is the shape the PDK's transmon pads had under simulation sampling (orcapen-sc-pdk issue 47): a
+    face one nanometre wide at its base.
+    """
+    centre = 50.0
+    pad = gdstk.Polygon(
+        [
+            (centre - 10, centre - 10),
+            (centre + 10, centre - 10),
+            (centre + 10, centre),
+            (centre + 11.3, centre + 0.5),
+            (centre + 10, centre + 0.001),
+            (centre + 10, centre + 10),
+            (centre - 10, centre + 10),
+        ]
+    )
+    return built_case(tmp_path_factory.mktemp("spike"), pad_polygon=pad)
+
+
+def test_local_sizes_repair_a_real_mesh_whose_recipe_sized_no_curve(
+    one_millimetre_tall_vacuum, tmp_path
+):
+    """With only the global size the first mesh has bad elements at the film walls; local sizes clean it."""
+    case = one_millimetre_tall_vacuum
+    result = mesh_sgb(
+        case.xao, case.sidecar, tmp_path, threshold=THRESHOLD, recipe=GlobalSizeRecipe()
+    )
+    report = result.report
+    assert report["stop"] == "clean" and report["rounds"] >= 1
+    assert report["history"][0]["bad_count"] > 0
+    assert report["mesh"]["sized_curves"] == 0
+    assert report["mesh"]["local_sizes"] > 0
+    assert report["mesh"]["min_quality"] >= THRESHOLD
+    again = mesh_sgb(
+        case.xao,
+        case.sidecar,
+        tmp_path / "again",
+        threshold=THRESHOLD,
+        recipe=GlobalSizeRecipe(),
+    )
+    assert again.mesh.read_bytes() == result.mesh.read_bytes()
+    assert drop_timing(again.report) == drop_timing(report)
+
+
+def test_geometry_the_mesher_cannot_repair_stops_on_a_stall_with_its_report(
+    pad_with_a_spike, tmp_path
+):
+    """A spike one grid step wide: the bad count does not fall for two rounds, so the loop stops there."""
+    case = pad_with_a_spike
+    with pytest.raises(MeshRepairError) as failure:
+        mesh_sgb(
+            case.xao,
+            case.sidecar,
+            tmp_path,
+            threshold=THRESHOLD,
+            recipe=GlobalSizeRecipe(),
+        )
+    report = failure.value.report
+    counts = [record["bad_count"] for record in report["history"]]
+    assert report["stop"] == "stalled"
+    assert min(counts[-2:]) >= min(counts[:-2])
+    assert report["rounds"] < Budgets().max_rounds
+    # Every remaining element is at the spike, which runs from x = 60 to 61.3 um at y = 50 to 50.5 um.
+    for element in report["remaining_bad"]["listed"]:
+        x, y, _ = element["centroid"]
+        assert 59.0 < x < 62.5 and 49.0 < y < 51.5
+    assert (tmp_path / f"{case.xao.stem}.rejected.msh").is_file()
+
+
+def test_a_time_limit_spent_before_the_first_round_fails_with_the_limit_in_the_report(
+    pad_in_ground_b, tmp_path
+):
+    """Reading the model's extent alone outlasts a millisecond: no round runs and nothing is delivered."""
+    with pytest.raises(MeshRepairError, match="time_limit") as failure:
+        mesh_sgb(
+            pad_in_ground_b.xao,
+            pad_in_ground_b.sidecar,
+            tmp_path,
+            threshold=THRESHOLD,
+            budgets=Budgets(time_limit_seconds=0.001),
+        )
+    report = failure.value.report
+    assert report["stop"] == "time_limit"
+    assert report["time_budget"]["limit_seconds"] == 0.001
+    assert (report["history"], report["mesh"]) == ([], None)
+    assert report["timing"]["total_seconds"] > 0.001
+    assert not list(tmp_path.glob("*.msh"))
+    summary = (tmp_path / f"{pad_in_ground_b.xao.stem}.quality.txt").read_text()
+    assert "time_limit" in summary and "limit 0 s" in summary
+
+
+def test_a_worker_still_running_at_its_time_limit_is_killed(pad_in_ground_b, tmp_path):
+    """A real worker given a tenth of a second cannot start Gmsh, open the model and mesh it: it is stopped."""
+    features = load_features(pad_in_ground_b.sidecar)
+    job = MeshJob(
+        xao=pad_in_ground_b.xao,
+        sidecar=pad_in_ground_b.sidecar,
+        msh=tmp_path / "cut.msh",
+        sizes=FeatureRecipe().size_requests(
+            features, measure_bounding_box(pad_in_ground_b.xao, tmp_path)
+        ),
+        threshold=THRESHOLD,
+    )
+    outcome = run_round(job, tmp_path, timeout_seconds=0.1)
+    assert outcome.timed_out and outcome.audit is None and outcome.fallback is None
+    assert outcome.wall_seconds < 5.0
+    assert not job.msh.exists()

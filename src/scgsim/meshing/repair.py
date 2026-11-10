@@ -1,10 +1,14 @@
-"""The repair loop: mesh, audit, refine the curves that bad elements touch, repeat within a budget.
+"""The repair loop: mesh, audit, refine around the bad elements, repeat within a budget.
 
 Owns the deterministic decisions between rounds, whatever recipe chose the initial sizes.  Every round is
-a fresh worker process, so the loop's only state is the per-curve size table and the history; the same
-sidecar, XAO, initial sizes, policy and threshold give the same sequence of meshes.  The loop refines
-curves only: a bad element that touches no curve and no point (it lies in a face or the interior) is
-reported and counted, not refined, because the loop has no remedy for it.
+a fresh worker process, so the loop's only state is the list of local sizes and the history; the same
+sidecar, XAO, initial sizes, policy and threshold give the same sequence of meshes.  The recipe's sizes
+stay as they are.  Each bad element gets a local size, a ball around it (see :func:`refine_locally`),
+wherever it is: at a point, on a curve, in a face or in the interior.
+
+The loop stops when the mesh is clean, or when a budget ends it: the rounds, the tetrahedra, the time
+(:class:`Budgets`), or a bad count that no longer falls (``STALL_ROUNDS``).  Only a clean stop delivers a
+mesh.
 
 The audit and the threshold apply to the linear mesh.  When the mesher options ask for a higher order, the
 worker of the round that passes the audit raises the order and writes that mesh as well; the loop keeps
@@ -13,7 +17,9 @@ both files.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import math
+import time
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
 
@@ -21,43 +27,82 @@ from .driver import RoundOutcome, run_round
 from .findings import BadElement, MeshAudit
 from .job import Elevation, MeshJob
 from .mesher import MesherOptions
-from .sizing import SizeRequests, ladder_size
+from .sizing import LocalSize, SizeRequests, ladder_size
 
 # Why the loop stopped.  Only "clean" is success.
 STOP_CLEAN = "clean"
 STOP_ROUNDS = "rounds"  # the refinement-round budget is spent
 STOP_ELEMENTS = "elements"  # the mesh exceeds the tetrahedron budget
+STOP_TIME = "time_limit"  # the time budget ran out
+STOP_STALLED = "stalled"  # the bad count stopped falling (see STALL_ROUNDS)
 STOP_CRASH = "mesh_crash"  # no algorithm produced a mesh
-STOP_UNATTRIBUTED = (
-    "unattributed"  # bad elements remain but none touches a curve the loop may refine
-)
 # The linear mesh passed but its order could not be raised.
 STOP_ELEVATION = "elevation_failed"
+
+# The loop stops when this many rounds in a row leave more bad elements than the fewest any earlier round
+# had (Human, 2026-11-10, issue 124): refining further has stopped paying, which is what geometry the
+# mesher cannot repair (an edge of one grid step, a spike) looks like.
+STALL_ROUNDS = 2
+
+
+@dataclass(frozen=True)
+class TimeBudget:
+    """The time budget of one model: its footprint and the limit and target that footprint gives."""
+
+    footprint_mm2: float
+    limit_seconds: float
+    target_seconds: float
 
 
 @dataclass(frozen=True)
 class Budgets:
-    """Limits of the loop: refinement rounds after the first mesh, and tetrahedra in any accepted mesh.
+    """Limits of the loop: refinement rounds, tetrahedra in any accepted mesh, and wall-clock time.
 
     ``max_tetrahedra`` is a hard cap: a mesh above it is rejected even when its quality is clean.
+
+    The time budget is the Human's rule of 2026-11-10 (issue 124): a model whose footprint (its x by y
+    extent) is at most ``time_reference_area_mm2`` must mesh within ``time_limit_seconds``, and a larger
+    one gets proportionally more.  The clock covers the whole meshing call.  A round still running at the
+    limit is stopped and the call fails with its report; it never returns a mesh below the threshold.
+    ``time_target_seconds`` is the good-case target on the same scale; the report says whether it was met,
+    but it stops nothing.
     """
 
     max_rounds: int = 8
     max_tetrahedra: int = 2_000_000
+    time_limit_seconds: float = 180.0
+    time_target_seconds: float = 60.0
+    time_reference_area_mm2: float = 4.0
+
+    def __post_init__(self) -> None:
+        """Reject a time budget that is not a positive number."""
+        for name in (
+            "time_limit_seconds",
+            "time_target_seconds",
+            "time_reference_area_mm2",
+        ):
+            value = getattr(self, name)
+            if not (
+                isinstance(value, (int, float)) and math.isfinite(value) and value > 0
+            ):
+                raise ValueError(f"{name} must be a positive number, got {value!r}.")
+
+    def time_budget(self, footprint_mm2: float) -> TimeBudget:
+        """The limit and target for a model of this footprint: the base values times max(1, A / A_ref)."""
+        scale = max(1.0, footprint_mm2 / self.time_reference_area_mm2)
+        return TimeBudget(
+            footprint_mm2,
+            self.time_limit_seconds * scale,
+            self.time_target_seconds * scale,
+        )
 
 
 @dataclass(frozen=True)
 class RepairPolicy:
-    """How the loop refines the curves around bad elements.  It does not depend on the sizing recipe."""
+    """How the loop refines around bad elements.  It does not depend on the sizing recipe."""
 
-    # A bad element's longest edge, times this, is the first size tried for the curves around it.
+    # A bad element's longest edge, times this, is the size first asked for around it.
     edge_fraction: float = 0.5
-    # Only curves whose local edge is at least this fraction of the longest local edge of the element's
-    # candidates are refined; the others cannot shorten the element's long edge.
-    culprit_fraction: float = 0.5
-    # Shorter curves (the 0.2 um vertical edges of a film wall) are ignored, since refining a curve
-    # cannot shorten an element edge below its length.
-    min_curve_length_um: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -66,13 +111,15 @@ class RepairInputs:
 
     xao: Path
     sidecar: Path
-    # The recipe's sizes; the loop never makes a curve it sized coarser than that.
+    # The recipe's sizes; every round keeps them and adds the loop's local sizes.
     initial: SizeRequests
     threshold: float
     policy: RepairPolicy
     budgets: Budgets
     mesher: MesherOptions
     work_dir: Path
+    # time.perf_counter() reading at which the time budget runs out; infinite for no time limit.
+    deadline: float = math.inf
 
 
 @dataclass(frozen=True)
@@ -80,8 +127,8 @@ class RoundRecord:
     """One round as the report shows it (timing is kept apart so records compare equal across runs)."""
 
     index: int
-    refined_curves: int  # curves with a size request in this round
-    smallest_size: float | None
+    local_sizes: int  # local sizes the round was meshed with
+    smallest_local_size: float | None
     algorithm_3d: int
     fallback: str | None
     failure: str | None
@@ -89,6 +136,7 @@ class RoundRecord:
     min_quality: float | None
     bad_count: int | None
     elevation_error: str | None
+    timed_out: bool
 
 
 @dataclass(frozen=True)
@@ -105,111 +153,147 @@ class RepairOutcome:
     elevated_mesh: Path | None
     # Order of the mesh to deliver: the requested one when elevated, else 1.
     geometry_order: int
-    curve_sizes: dict[int, float]  # the size table of the last round that was meshed
+    curve_sizes: dict[int, float]  # the recipe's curve sizes, which every round used
+    local_sizes: tuple[
+        LocalSize, ...
+    ]  # the local sizes of the last round that was meshed
     algorithm_3d: int  # algorithm of the last mesh
     fallback: str | None  # why HXT was abandoned in the last round that made a mesh
 
 
 @dataclass(frozen=True)
 class _MadeMesh:
-    """The last round that produced a mesh: its outcome, audit, file and the size table it used."""
+    """The last round that produced a mesh: its outcome, audit, file and the local sizes it used."""
 
     outcome: RoundOutcome
     audit: MeshAudit
     mesh: Path
     elevated_mesh: Path | None
-    curve_sizes: dict[int, float]
+    local_sizes: tuple[LocalSize, ...]
 
 
 def repair_mesh(inputs: RepairInputs) -> RepairOutcome:
-    """Run the loop until the mesh is clean or a budget or a crash ends it."""
-    initial = inputs.initial
-    rule_sizes = dict(initial.curve_sizes)
-    curve_sizes = dict(initial.curve_sizes)
+    """Run the loop until the mesh is clean or a budget, a stall or a crash ends it."""
+    local: tuple[LocalSize, ...] = ()
     history: list[RoundRecord] = []
     seconds: list[float] = []
     last: _MadeMesh | None = None
     stop = STOP_ROUNDS
     for index in range(inputs.budgets.max_rounds + 1):
-        job = _job(inputs, curve_sizes, index)
-        outcome = run_round(job, inputs.work_dir)
-        history.append(_record(index, curve_sizes, outcome))
+        remaining = inputs.deadline - time.perf_counter()
+        if remaining <= 0:
+            stop = STOP_TIME
+            break
+        job = _job(inputs, local, index)
+        outcome = run_round(
+            job, inputs.work_dir, remaining if math.isfinite(remaining) else None
+        )
+        history.append(_record(index, local, outcome))
         seconds.append(outcome.wall_seconds)
         if outcome.audit is None:
-            stop = STOP_CRASH
+            stop = STOP_TIME if outcome.timed_out else STOP_CRASH
             break
         last = _MadeMesh(
             outcome,
             outcome.audit,
             job.msh,
             job.elevation.msh if job.elevation and outcome.elevated else None,
-            dict(curve_sizes),
+            local,
         )
-        stopped = _stop_reason(outcome.audit, outcome.elevation_error, index, inputs)
+        stopped = _stop_reason(outcome, history, inputs)
         if stopped is not None:
             stop = stopped
             break
-        refined = refine_sizes(
-            curve_sizes, outcome.audit.bad, rule_sizes, initial.max_size, inputs.policy
+        local = refine_locally(
+            local,
+            outcome.audit.bad,
+            inputs.initial.max_size,
+            inputs.threshold,
+            inputs.policy,
         )
-        if refined is None:
-            stop = STOP_UNATTRIBUTED
-            break
-        curve_sizes = refined
-    return _outcome(stop, history, seconds, last, inputs.mesher)
+    return _outcome(stop, history, seconds, last, inputs)
 
 
-def refine_sizes(
-    sizes: dict[int, float],
+def refine_locally(
+    local: tuple[LocalSize, ...],
     bad: tuple[BadElement, ...],
-    rule_sizes: dict[int, float],
     max_size: float,
+    threshold: float,
     policy: RepairPolicy,
-) -> dict[int, float] | None:
-    """The next size table, or ``None`` when no bad element offers a curve to refine.
+) -> tuple[LocalSize, ...]:
+    """The local sizes of the next round: each bad element refines the local size it lies in, or gets its own.
 
-    A curve's first size is the smaller of half the bad elements' long edge there and the size the recipe
-    asked for it (``rule_sizes``), rounded down the ladder; a curve that is still touched after it had a
-    size goes one ladder step finer than its current size.
+    Every bad element asks for a size (see :func:`wanted_size`), and where it is refined depends on its
+    shape:
+
+    * A *needle* has an edge shorter than that size: a model edge the mesher cannot lengthen (one grid
+      step at a spike or a band join).  It is refined where it is thinnest, at the midpoint of that edge,
+      with a fine core one element wide.  A core as wide as the element would cost (width / size)**3
+      elements, millions for a 5 um element refined to 0.04 um.
+    * A *sliver* has no such edge: it is flat because of where the mesher put its four points.  It is
+      refined over the region it covers: a fine core of half its longest edge around its centroid, which
+      costs at most about (longest / shortest edge)**3 elements.
+
+    An element lies in a local size when that point is inside the size's fine core: the core did not fix
+    it, so it must get finer.  An element outside every core gets a local size of its own.  Claiming only
+    by the core lets the refinement follow a thin feature along its length.  On the flip-chip Disk Qubit
+    (issue 124), whose transmon pads have spikes one nanometre wide and over a micrometre long, claiming
+    every element within the first element's longest edge left 4 elements there after 7 rounds; claiming
+    by the core cleaned them in 2.  Refining slivers at a point only, without the wide core, left 1 to 14
+    slivers along the band edges with bands on; the wide core cleaned the default recipe's mesh in 2.
+
+    A local size takes the finest its elements ask for, on the ladder, and one that existed already goes
+    at least one ladder step finer.  Elements are taken in tag order and a local size is found by its
+    position in the list, so the same bad elements always give the same sizes.
     """
-    touched = _touched_curves(bad, policy)
-    if not touched:
-        return None
-    refined = dict(sizes)
-    for tag, limit in sorted(touched.items()):
-        target = policy.edge_fraction * limit
-        if tag in rule_sizes:
-            target = min(target, rule_sizes[tag])
-        size = ladder_size(target, max_size)
-        refined[tag] = min(size, sizes[tag] / 2) if tag in sizes else size
-    return refined
+    refined = list(local)
+    asked: dict[int, float] = {}
+    for element in sorted(bad, key=lambda e: e.element):
+        size = wanted_size(element, threshold, policy)
+        needle = element.edge_min < size
+        spot = element.shortest_edge_midpoint if needle else element.centroid
+        holder = _holding(refined, spot)
+        if holder is None:
+            refined.append(
+                LocalSize(
+                    spot,
+                    ladder_size(size, max_size),
+                    None if needle else element.edge_max / 2,
+                )
+            )
+            holder = len(refined) - 1
+        asked[holder] = min(asked.get(holder, math.inf), size)
+    for index, size in sorted(asked.items()):
+        finer = ladder_size(size, max_size)
+        if index < len(local):
+            finer = min(finer, local[index].size / 2)
+        refined[index] = replace(refined[index], size=finer)
+    return tuple(refined)
 
 
-def _touched_curves(
-    bad: tuple[BadElement, ...], policy: RepairPolicy
-) -> dict[int, float]:
-    """Curve tag -> the longest edge next to it that a bad element has there, for the curves to refine.
+def wanted_size(element: BadElement, threshold: float, policy: RepairPolicy) -> float:
+    """The size one bad element asks for: ``edge_fraction`` of its longest edge, scaled by its quality deficit.
 
-    Of an element's candidate curves (its own curves and those meeting at its points), only the culprits
-    count: curves long enough to matter, whose local edge is a substantial part of the longest one.
+    An element whose quality is limited by one short edge it cannot lose (a model edge of a nanometre) has a
+    quality roughly proportional to its shortest over its longest edge, so its long edges must shrink by
+    quality / threshold to reach the threshold.  The scale never makes the size coarser
+    (``edge_fraction`` times the longest edge) nor finer than ``edge_fraction`` times the shortest edge,
+    which also covers an inverted element (quality at or below zero).
     """
-    touched: dict[int, float] = {}
-    for element in bad:
-        local = {
-            c.tag: c.local_edge
-            for c in element.candidates
-            if c.length >= policy.min_curve_length_um and c.local_edge > 0
-        }
-        if not local:
-            continue
-        longest = max(local.values())
-        for tag, edge in local.items():
-            if edge >= policy.culprit_fraction * longest:
-                touched[tag] = max(touched.get(tag, 0.0), min(element.edge_max, edge))
-    return touched
+    deficit = element.quality / threshold
+    scale = min(1.0, max(deficit, element.edge_min / element.edge_max))
+    return policy.edge_fraction * element.edge_max * scale
 
 
-def _job(inputs: RepairInputs, curve_sizes: dict[int, float], index: int) -> MeshJob:
+def _holding(local: list[LocalSize], point: tuple[float, float, float]) -> int | None:
+    """Index of the first local size whose fine core holds ``point``; ``None`` when none does."""
+    for index, ball in enumerate(local):
+        if math.dist(ball.centre, point) <= ball.core_radius:
+            return index
+    return None
+
+
+def _job(inputs: RepairInputs, local: tuple[LocalSize, ...], index: int) -> MeshJob:
     initial = inputs.initial
     msh = inputs.work_dir / f"round_{index:02d}.msh"
     return MeshJob(
@@ -219,8 +303,9 @@ def _job(inputs: RepairInputs, curve_sizes: dict[int, float], index: int) -> Mes
         sizes=SizeRequests(
             initial.max_size,
             initial.gradation,
-            MappingProxyType(dict(curve_sizes)),
+            MappingProxyType(dict(initial.curve_sizes)),
             initial.fields,
+            local,
         ),
         threshold=inputs.threshold,
         mesher=inputs.mesher,
@@ -238,30 +323,41 @@ def _elevation(inputs: RepairInputs, linear_msh: Path) -> Elevation | None:
 
 
 def _stop_reason(
-    audit: MeshAudit, elevation_error: str | None, index: int, inputs: RepairInputs
+    outcome: RoundOutcome, history: list[RoundRecord], inputs: RepairInputs
 ) -> str | None:
     """The reason to stop after a round that made a mesh; ``None`` to refine and go on.
 
     The tetrahedron budget caps every mesh the loop accepts, a clean one included.  A clean mesh whose
     order could not be raised is not delivered: the caller asked for a mesh of that order.
     """
+    audit = outcome.audit
+    assert audit is not None
     if audit.accepted(inputs.budgets.max_tetrahedra):
-        return STOP_ELEVATION if elevation_error else STOP_CLEAN
+        return STOP_ELEVATION if outcome.elevation_error else STOP_CLEAN
     if audit.tetrahedra > inputs.budgets.max_tetrahedra:
         return STOP_ELEMENTS
-    if index >= inputs.budgets.max_rounds:
+    if stalled([r.bad_count for r in history if r.bad_count is not None]):
+        return STOP_STALLED
+    if history[-1].index >= inputs.budgets.max_rounds:
         return STOP_ROUNDS
     return None
 
 
+def stalled(bad_counts: list[int]) -> bool:
+    """Whether the last ``STALL_ROUNDS`` counts all stayed at or above the fewest of the counts before them."""
+    if len(bad_counts) <= STALL_ROUNDS:
+        return False
+    return min(bad_counts[-STALL_ROUNDS:]) >= min(bad_counts[:-STALL_ROUNDS])
+
+
 def _record(
-    index: int, curve_sizes: dict[int, float], outcome: RoundOutcome
+    index: int, local: tuple[LocalSize, ...], outcome: RoundOutcome
 ) -> RoundRecord:
     audit = outcome.audit
     return RoundRecord(
         index=index,
-        refined_curves=len(curve_sizes),
-        smallest_size=min(curve_sizes.values()) if curve_sizes else None,
+        local_sizes=len(local),
+        smallest_local_size=min((ball.size for ball in local), default=None),
         algorithm_3d=outcome.algorithm_3d,
         fallback=outcome.fallback,
         failure=outcome.failure,
@@ -269,6 +365,7 @@ def _record(
         min_quality=audit.min_quality if audit else None,
         bad_count=audit.bad_count if audit else None,
         elevation_error=outcome.elevation_error,
+        timed_out=outcome.timed_out,
     )
 
 
@@ -277,19 +374,32 @@ def _outcome(
     history: list[RoundRecord],
     seconds: list[float],
     last: _MadeMesh | None,
-    mesher: MesherOptions,
+    inputs: RepairInputs,
 ) -> RepairOutcome:
     elevated_mesh = last.elevated_mesh if last and stop == STOP_CLEAN else None
+    final = last.outcome if last else None
     return RepairOutcome(
         stop=stop,
-        rounds=len(history) - 1,
+        rounds=max(len(history) - 1, 0),
         history=tuple(history),
         round_seconds=tuple(seconds),
         last_audit=last.audit if last else None,
         last_mesh=last.mesh if last else None,
         elevated_mesh=elevated_mesh,
-        geometry_order=mesher.geometry_order if elevated_mesh else 1,
-        curve_sizes=last.curve_sizes if last else {},
-        algorithm_3d=last.outcome.algorithm_3d if last else history[-1].algorithm_3d,
-        fallback=last.outcome.fallback if last else history[-1].fallback,
+        geometry_order=inputs.mesher.geometry_order if elevated_mesh else 1,
+        curve_sizes=dict(inputs.initial.curve_sizes),
+        local_sizes=last.local_sizes if last else (),
+        algorithm_3d=final.algorithm_3d
+        if final
+        else _last_algorithm(history, inputs.mesher),
+        fallback=final.fallback if final else _last_fallback(history),
     )
+
+
+def _last_algorithm(history: list[RoundRecord], mesher: MesherOptions) -> int:
+    """The algorithm of the last round tried; the requested one when the time ran out before any round."""
+    return history[-1].algorithm_3d if history else mesher.algorithm_3d
+
+
+def _last_fallback(history: list[RoundRecord]) -> str | None:
+    return history[-1].fallback if history else None

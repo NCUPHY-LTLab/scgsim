@@ -91,7 +91,7 @@ prior state intact.
 |---|---|---|
 | `recipe` | `FeatureRecipe()` | Chooses the initial element sizes: `FeatureRecipe`, `GlobalSizeRecipe` or `UniformBoundaryRecipe`. |
 | `mesher` | `MesherOptions()` | Gmsh algorithms and the order of the delivered mesh: `algorithm_2d` (Gmsh's default when `None`), `algorithm_3d` (Delaunay), `geometry_order` (1) and `high_order_optimize` (`True`). |
-| `budgets` | `Budgets()` | When the repair loop gives up: `max_rounds` (8 refinement rounds) and `max_tetrahedra` (2,000,000). |
+| `budgets` | `Budgets()` | When the repair loop gives up: `max_rounds` (8 refinement rounds), `max_tetrahedra` (2,000,000) and a time limit of `time_limit_seconds` (180 s) for a model of at most `time_reference_area_mm2` (4 mm²) in x by y, growing in proportion above that area. `time_target_seconds` (60 s, scaled the same way) is reported, not enforced. |
 | `quality_threshold` | `0.01` | The minimum signed inverse condition number (minSICN) every tetrahedron must reach. |
 :::
 
@@ -104,17 +104,22 @@ the module's default `RepairPolicy`.
 `mesh()` raises `scgsim.meshing.MeshRepairError`, carrying the quality report,
 when the repair loop cannot bring every tetrahedron to `quality_threshold`
 within `budgets`. It also raises when the mesh needs more than
-`max_tetrahedra`, when only elements the loop cannot refine remain, when the
-accepted mesh cannot be raised to `geometry_order`, or when Gmsh produces no mesh. No mesh path
-is returned, so config and handoff preparation cannot continue. The report is
-written to the run's `mesh` folder, and the last mesh, if a round made one, stays
-there as a `.rejected.msh` file.
+`max_tetrahedra`, when the time limit is reached (a round still running is
+stopped), when the count of bad elements has not fallen below its lowest for
+two rounds in a row (`stalled`), when the accepted mesh cannot be raised to
+`geometry_order`, or when Gmsh produces no mesh. No mesh path is returned, so
+config and handoff preparation cannot continue. The report names the stop
+reason, the time limit and the bad elements that remain; it is written to the
+run's `mesh` folder, and the last mesh, if a round made one, stays there as a
+`.rejected.msh` file.
 
-When this happens, read the report, then raise `Budgets.max_rounds`, choose a
-recipe that sizes the offending curves finer, or lower `quality_threshold` and
-record the lower value with the study. `Budgets(max_rounds=0)` runs a recipe
-once without repair; it turns off repair only, so a first mesh below the
-threshold is still rejected.
+When this happens, read where the remaining elements are. A stall usually
+points at geometry the mesher cannot repair, such as an edge or a face one grid
+step wide; fix it in the layout. Otherwise choose a recipe that sizes the
+offending region finer, raise `Budgets.max_rounds` or the time limit, or lower
+`quality_threshold` and record the lower value with the study.
+`Budgets(max_rounds=0)` runs a recipe once without repair; it turns off repair
+only, so a first mesh below the threshold is still rejected.
 :::
 
 ### Sizing recipes {#palace-mesh-recipes}

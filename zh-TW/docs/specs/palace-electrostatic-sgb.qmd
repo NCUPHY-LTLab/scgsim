@@ -61,16 +61,16 @@ prepare shared GeometryPlan snapshot
 |---|---|---|
 | `recipe` | `FeatureRecipe()` | 決定初始元素尺寸：`FeatureRecipe`、`GlobalSizeRecipe` 或 `UniformBoundaryRecipe`。 |
 | `mesher` | `MesherOptions()` | Gmsh 演算法與輸出網格的階數：`algorithm_2d`（為 `None` 時用 Gmsh 預設）、`algorithm_3d`（Delaunay）、`geometry_order`（1）與 `high_order_optimize`（`True`）。 |
-| `budgets` | `Budgets()` | 修復迴圈何時放棄：`max_rounds`（8 輪細化）與 `max_tetrahedra`（2,000,000）。 |
+| `budgets` | `Budgets()` | 修復迴圈何時放棄：`max_rounds`（8 輪細化）、`max_tetrahedra`（2,000,000），以及時間上限：x 乘 y 範圍不超過 `time_reference_area_mm2`（4 mm²）的模型為 `time_limit_seconds`（180 秒），面積更大時按比例增加。`time_target_seconds`（60 秒，以相同比例調整）只記錄在報告中，不會中止執行。 |
 | `quality_threshold` | `0.01` | 每個四面體必須達到的最小有號反條件數（minSICN）。 |
 :::
 
 請從 `scgsim.meshing` 匯入 `FeatureRecipe`、`GlobalSizeRecipe`、`UniformBoundaryRecipe`、`MesherOptions`、`Budgets`，以及演算法常數 `DELAUNAY` 與 `HXT`。修復策略不是 Palace 控制：Palace 一律使用模組預設的 `RepairPolicy`。
 
 ::: {.callout-important title="網格低於品質門檻時，執行會中止"}
-當修復迴圈在 `budgets` 內無法讓每個四面體達到 `quality_threshold` 時，`mesh()` 會拋出 `scgsim.meshing.MeshRepairError`，並附上品質報告。網格需要超過 `max_tetrahedra` 個四面體、剩下的只有迴圈無法細化的元素、已接受的網格無法升到 `geometry_order`，或 Gmsh 沒有產生網格時，同樣會拋出。此時不會回傳網格路徑，因此無法繼續準備設定檔與交接。報告會寫入執行資料夾的 `mesh` 目錄；若有某一輪產生了網格，最後一個網格會以 `.rejected.msh` 檔留在同一處。
+當修復迴圈在 `budgets` 內無法讓每個四面體達到 `quality_threshold` 時，`mesh()` 會拋出 `scgsim.meshing.MeshRepairError`，並附上品質報告。網格需要超過 `max_tetrahedra` 個四面體、到達時間上限（仍在執行的那一輪會被中止）、不良元素數連續兩輪都沒有低於先前的最低值（`stalled`）、已接受的網格無法升到 `geometry_order`，或 Gmsh 沒有產生網格時，同樣會拋出。此時不會回傳網格路徑，因此無法繼續準備設定檔與交接。報告會寫明停止原因、時間上限與剩下的不良元素，並寫入執行資料夾的 `mesh` 目錄；若有某一輪產生了網格，最後一個網格會以 `.rejected.msh` 檔留在同一處。
 
-遇到這種情況，請先讀報告，再提高 `Budgets.max_rounds`、改選對問題曲線給出更細尺寸的配方，或降低 `quality_threshold` 並把降低後的值記錄在研究中。`Budgets(max_rounds=0)` 讓配方只跑一次、不做修復；它只關閉修復，所以第一個網格若低於門檻，仍會被拒絕。
+遇到這種情況，請先看剩下的元素在哪裡。停滯通常表示網格器無法修復的幾何，例如只有一個格點寬的邊或面；請在佈局中修正。其他情況可改選對問題區域給出更細尺寸的配方、提高 `Budgets.max_rounds` 或時間上限，或降低 `quality_threshold` 並把降低後的值記錄在研究中。`Budgets(max_rounds=0)` 讓配方只跑一次、不做修復；它只關閉修復，所以第一個網格若低於門檻，仍會被拒絕。
 :::
 
 ### 尺寸配方 {#palace-mesh-recipes}

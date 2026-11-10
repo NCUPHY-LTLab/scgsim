@@ -112,11 +112,9 @@ class Attribution:
     ) -> BadElement:
         direct = self._entities_of_nodes(nodes)
         corners = self._node_xyz[nodes]
-        lengths = [
-            float(np.linalg.norm(corners[i] - corners[j]))
-            for i in range(4)
-            for j in range(i + 1, 4)
-        ]
+        edges = [(i, j) for i in range(4) for j in range(i + 1, 4)]
+        lengths = [float(np.linalg.norm(corners[i] - corners[j])) for i, j in edges]
+        shortest_i, shortest_j = edges[int(np.argmin(lengths))]
         curves_via_points = sorted(
             {c for p in direct[0] for c in self._point_curves.get(p, ())}
         )
@@ -127,6 +125,9 @@ class Attribution:
             edge_min=min(lengths),
             edge_max=max(lengths),
             centroid=_triple(corners.mean(axis=0)),
+            shortest_edge_midpoint=_triple(
+                (corners[shortest_i] + corners[shortest_j]) / 2
+            ),
             location=_location(direct),
             points=tuple(sorted(direct[0])),
             curves=tuple(sorted(direct[1])),
