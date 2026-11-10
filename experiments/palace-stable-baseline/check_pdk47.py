@@ -23,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import fine_structure  # noqa: E402
-from run_case import _prepare, _simulation, surface_epr_specs  # noqa: E402
+from run_case import configured_simulation, prepare_plan, surface_epr_specs  # noqa: E402
 
 TC_JOGS = [(212.424, 87.9885), (169.0415, 59.289)]
 C1_STEP = [(77.36, -78.78)]
@@ -93,11 +93,11 @@ def main() -> None:
         for row in polygon_edges:
             row["near_tc_jog"] = bool(_near(row["at_um"], jogs))
             row["near_c1_step"] = bool(_near(row["at_um"], step))
-        snapshot = _prepare(layout, get_material_records())
+        snapshot = prepare_plan(layout, get_material_records())
         with TemporaryDirectory() as folder, fine_structure.capture() as captured:
-            _simulation(layout, snapshot, surface_epr_specs(False))._build_geometry(  # noqa: SLF001 -- the build mesh() and simulation_drc share
-                folder
-            )
+            sim = configured_simulation(layout, snapshot, surface_epr_specs(False))
+            # The geometry build mesh() and simulation_drc share; no public call keeps its files.
+            sim._build_geometry(folder)  # noqa: SLF001
         report = captured[-1]["report"]
         g = report["grid_um"]
         model_edges = [

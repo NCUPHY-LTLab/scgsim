@@ -81,16 +81,14 @@ def run_layout(name: str, bands: bool, notebook_vacuum: bool = False) -> dict[st
     snapshot = _stage(
         stages,
         "plan",
-        lambda: _prepare(layout, get_material_records(), notebook_vacuum),
+        lambda: prepare_plan(layout, get_material_records(), notebook_vacuum),
     )
     if snapshot is None:
         return record
     with TemporaryDirectory(prefix="baseline-sgb-") as folder:
         with fine_structure.capture() as captured:
             built = _stage(
-                stages,
-                "sgb_build",
-                lambda: _simulation(layout, snapshot, specs)._build_geometry(folder),  # noqa: SLF001 -- the build mesh() and simulation_drc share
+                stages, "sgb_build", lambda: _sgb_build(layout, snapshot, specs, folder)
             )
         if built is not None:
             stages["sgb_build"]["sidecar_slivers"] = json.loads(
@@ -123,7 +121,7 @@ def run_layout(name: str, bands: bool, notebook_vacuum: bool = False) -> dict[st
     ):
         return record
     with TemporaryDirectory(prefix="baseline-mesh-") as folder:
-        sim = _simulation(layout, snapshot, specs)
+        sim = configured_simulation(layout, snapshot, specs)
         sim.set_output_dir(folder)
         _stage(stages, "mesh", sim.mesh)
         stages["mesh"].update(_mesh_outcome(stages["mesh"], Path(folder)))
@@ -163,7 +161,13 @@ def run_scene(name: str) -> dict[str, Any]:
     return record
 
 
-def _prepare(layout, material_records, notebook_vacuum: bool = False):
+def _sgb_build(layout, snapshot, specs, folder):
+    # The geometry build mesh() and simulation_drc share; no public call keeps its files.
+    return configured_simulation(layout, snapshot, specs)._build_geometry(folder)  # noqa: SLF001
+
+
+def prepare_plan(layout, material_records, notebook_vacuum: bool = False):
+    """The prepared plan as ``simulation_drc`` builds it (root ``chip``, no coupon padding), or with the notebook vacuum."""
     from scgsim.geometry import GeometryPlan
 
     plan = GeometryPlan(
@@ -189,7 +193,7 @@ def _simulation_class(layout):
     return EigenmodeSim if layout.simulation == "eigenmode" else ElectrostaticSim
 
 
-def _simulation(layout, snapshot, specs):
+def configured_simulation(layout, snapshot, specs):
     """The simulation as simulation_drc sets it up: 1 um vacuum, every authored port, Route B Surface EPR."""
     sim = _simulation_class(layout)()
     sim.set_plan(snapshot)
