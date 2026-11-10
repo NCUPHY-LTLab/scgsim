@@ -21,7 +21,10 @@ SCGSim builds the outline it is given. It does not close nanometre gaps, remove
 short edges or resample curves, because it cannot tell a drawing defect from a
 feature that was meant. A layout check with `EigenmodeSim.simulation_drc` or
 `ElectrostaticSim.simulation_drc` ([layout modeling check](layout-modeling-check.qmd))
-finds the cases that stop the build; the others need a look at the layout.
+finds the cases that stop the build and, in its meshing stage, the fine edges
+and faces the mesher cannot use, each with its location and owner; the others
+need a look at the layout. A fine edge or face that SGB did not cause is a
+layout problem: SCGSim reports it and does not repair it.
 
 ## Drawing defects in the PDK cells {#drawing-defects}
 

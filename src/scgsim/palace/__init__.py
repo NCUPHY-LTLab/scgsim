@@ -8,6 +8,7 @@ stored mesh and are not workflow failures or acceptance thresholds.
 
 from scgsim.palace.mesh.quality import MeshQualityReport, check_mesh_quality
 
+from .preparation.drc import SimulationDrcError, SimulationDrcReport, StageResult
 from .preparation.eigenmode import EigenmodeSim
 from .preparation.electrostatic import ElectrostaticSim
 from .presentation.amr import PalaceAmrReport, show_amr_analysis
@@ -63,6 +64,9 @@ __all__ = [
     "PhysicsQuantitiesReport",
     "ResolvedPalaceResult",
     "SimulationBenchmarkReport",
+    "SimulationDrcError",
+    "SimulationDrcReport",
+    "StageResult",
     "SurfaceMarginEprRecord",
     "SurfaceMarginEprSeriesSnapshot",
     "analyze_amr",
