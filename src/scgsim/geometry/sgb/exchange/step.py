@@ -69,6 +69,8 @@ from scgsim.geometry.sgb.exchange.guard import (
     LoopSegment,
     SolidGuard,
     StepGuard,
+    free_face_ids,
+    guard_mismatches,
     guard_path_for,
     guarded_file,
     write_step_guard,
@@ -119,8 +121,15 @@ def export_aedt_step(
     Solids are matched to the sidecar in ``sidecar_file`` by tag order (the ``TopExp::MapShapes`` order of
     the file), so each gets the ``aedt_name`` of its planned volume.  A file that does not belong to the
     sidecar (counts, vertex positions, face areas or solid volumes differ from its ``expected`` block) raises
-    :class:`StepExportError` before any name, STEP or guard is written.  The guard
+    :class:`StepExportError` before any name, STEP or guard is written, and so does a file whose solids do
+    not carry exactly their planned faces (:func:`~scgsim.geometry.sgb.exchange.guard.guard_mismatches`,
+    the check the reader repeats).  The guard ``<STEP file name>.guard.json``
     (:mod:`~scgsim.geometry.sgb.exchange.guard`) is written last, binding the three files by SHA-256.
+
+    One call at a time per output target (``step_path``), which the caller keeps and nothing checks: the
+    guard hashes the STEP after writing it, so two calls at once for the same ``step_path`` may leave the
+    STEP of one bound by a guard that lists the faces of the other.  Calls with different ``step_path``
+    may run at once, also in one folder.
     """
     require_ocp()
     sidecar = read_sidecar(sidecar_file)
@@ -144,12 +153,18 @@ def export_aedt_step(
         }
         for i, (vid, name) in enumerate(zip(solid_ids, names, strict=True))
     ]
-    bounding = {f["face"] for solid in solid_guards for f in solid["faces"]}
+    free_ids = set(free_face_ids(sidecar, solid_ids))
     free_faces = [
         faces.free_face(face, sidecar["faces"][fid]["group"])
         for face, fid in faces.in_tag_order()
-        if fid not in bounding
+        if fid in free_ids
     ]
+    mismatches = guard_mismatches(solid_guards, free_faces, sidecar)
+    if mismatches:
+        raise StepExportError(
+            f"{geometry_file} does not carry its planned faces: "
+            + "; ".join(mismatches)
+        )
     _write_assembly(
         [solids.FindKey(i + 1) for i in range(solids.Extent())], names, step_path
     )

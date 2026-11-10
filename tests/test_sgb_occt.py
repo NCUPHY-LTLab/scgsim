@@ -416,7 +416,7 @@ def test_a_brep_of_the_same_topology_at_another_scale_is_refused(tmp_path):
     ):
         assert what in str(refused.value)
     assert not (tmp_path / "x.step").exists()
-    assert not (tmp_path / "x.guard.json").exists()
+    assert not (tmp_path / "x.step.guard.json").exists()
 
 
 def test_a_brep_with_other_counts_than_the_sidecar_is_refused(
@@ -433,7 +433,7 @@ def test_a_brep_with_other_counts_than_the_sidecar_is_refused(
             folder / "m.brep", tmp_path / "m.sidecar.json", tmp_path / "x.step"
         )
     assert not (tmp_path / "x.step").exists()
-    assert not (tmp_path / "x.guard.json").exists()
+    assert not (tmp_path / "x.step.guard.json").exists()
     assert sidecar["binding"]["ids_by_tag"][
         "3"
     ]  # the matching pair is what ``exported`` already exports
