@@ -89,7 +89,6 @@ SGB classes named in the table (`InputError`, `UnsupportedCurveError`,
 | Rule | Why SCGSim needs it | Reported as | Detail |
 |---|---|---|---|
 | A curve declared exactly is a line segment or a circular arc. SGB refuses `interpolation_spline` and `bspline` declarations, and boundary reconstructions of any kind other than `circular_arc`. | SGB carries lines and circular arcs, which it offsets exactly; it does not carry spline curves. | `UnsupportedCurveError` at build | [Spline curves](known-geometry-problems.qmd#spline-curves) |
-| A curve drawn as a polygon has at most 128 points per full circle, so each vertex turns by at least 2.8125°. In the OrcaPen SC PDK, build with `curve_sampling="simulation"`. | Past a vertex that turns less, the offsets of its two edges can miss each other on the grid, and the bands cannot be told apart. Example: the PDK's default 256-point circle is refused. | `ValidationError` "the inset curve … is not closed", only when bands are requested | [Curve rule](supported-geometry.qmd#curve-rule) |
 | An exact arc is large enough that its pieces land on different grid points. | An arc whose pieces collapse onto one grid point has no shape left to build. | `InputError` at build ("the arc is too small for the grid") | This page |
 
 ### Grid {#rules-grid}
@@ -162,8 +161,7 @@ These are not supported today:
 
 | Not supported | Instead |
 |---|---|
-| Spline curves read as curves: SGB carries lines and circular arcs | Draw the spline as a polygon that follows the [curve rule](supported-geometry.qmd#curve-rule); see [Spline curves](known-geometry-problems.qmd#spline-curves). |
-| Polygon curves with more than 128 points per full circle | Build with `curve_sampling="simulation"`; see [Denser circles](known-geometry-problems.qmd#dense-circles). |
+| Spline curves read as curves: SGB carries lines and circular arcs | Draw the spline as a polygon; see [Spline curves](known-geometry-problems.qmd#spline-curves). |
 | Inferring Nets from geometry that touches | Declare every Net with `set_nets`. |
 | Expanding array references | Expand them into individual references before registering them. |
 | Route C in a Palace simulation | Use Route A or Route B. SGB builds Route C for backends that keep conductor volumes; see [GeometryPlan and SGB](geometry-sgb.qmd). |
@@ -182,9 +180,6 @@ Nets and margins you passed, and the fixed settings listed under
 [What the check uses](layout-modeling-check.qmd#what-the-check-uses). It
 establishes the rules that build checks, and no others:
 
-- The [128-point rule](#rules-curves) for polygon curves is checked only when
-  the build cuts bands. Pass the `surface_epr_specs` the simulation will use; a pass without
-  them says nothing about that rule.
 - The [port rules](#rules-ports) are checked only by
   `EigenmodeSim.simulation_drc`.
   `ElectrostaticSim` selects no port sheets, so its check does not test them.
@@ -200,8 +195,8 @@ Find the error you see, then follow the owner's next action.
 |---|---|---|
 | `ValueError` at plan about `component_semantics`, a registration, a Net, a selector point, a port or a ground contribution | Layout and declarations | Read the message: it names the occurrence or Entity. Fix that declaration in the component or in the notebook. |
 | `ValueError` "… topology changed at grid" or "… contact changed at grid" | Layout | A neck, gap, hole or slit is at or below one grid step. Widen it or close it in the drawing. |
-| `UnsupportedCurveError` | Layout | Declare the curve as lines and circular arcs, or draw it as a polygon that follows the curve rule. |
-| `ValidationError` "the inset curve … is not closed near (x, y)" | Layout | A curve near that point has more than 128 points per full circle. Build with `curve_sampling="simulation"` or resample the curve. |
+| `UnsupportedCurveError` | Layout | Declare the curve as lines and circular arcs, or draw it as a polygon. |
+| `ValidationError` "the inset curve … is not closed near (x, y)" | SCGSim | Two neighbouring band offsets near that point neither meet nor cross. Report it to SCGSim with the layout. |
 | `ContactError` or `OverlapError` between different Nets | Layout, or the Net declaration | If the two conductors should be one, put them in one Net. Otherwise separate them in the drawing, by more than one grid step. In `simulation_drc`, pass the `nets` the simulation uses. |
 | `OverlapError` "… with equal priority" | Declarations | Give the overlapping Entities of one Net different priorities. |
 | `NonManifoldError` | Layout | At the reported point, give the two pieces a shared edge or separate them. |

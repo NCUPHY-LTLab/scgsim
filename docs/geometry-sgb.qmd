@@ -92,8 +92,8 @@ parameter domain remain authoritative.
 The geometry builder that Palace uses (SGB) carries `line_segment` and
 `circular_arc`. It refuses an `interpolation_spline` or `bspline` declaration,
 and a boundary reconstruction of any kind other than `circular_arc`, with
-`UnsupportedCurveError`. A layout for SGB uses lines, circular arcs, or a
-polygon that follows the [curve rule](supported-geometry.qmd#curve-rule).
+`UnsupportedCurveError`. A layout for SGB uses lines, circular arcs, or
+[polygons](supported-geometry.qmd#curve-rule).
 
 A `BoundaryCurveChainSpec` binds an ordered closed boundary to `entity_id`,
 `boundary_id`, and `selector_point_um`. The selector lies in the selected

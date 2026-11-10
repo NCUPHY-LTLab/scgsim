@@ -23,6 +23,7 @@ from scgsim.geometry.sgb.records.prisms import (
 )
 
 LINEAGE = Lineage("polygon_edge", "e", 0, 0, 3)
+GRID = Grid(0.001)
 
 
 @pytest.mark.parametrize(
@@ -120,7 +121,13 @@ def test_witness_piece_ids_name_their_arc():
 def test_a_three_point_arc_is_cut_into_pieces_of_at_most_a_quarter_turn():
     """A half circle gives two quarter pieces with exact end points and one shared lattice cut."""
     pieces = arc_through_points(
-        "a", (1000, 0), (Fraction(0), Fraction(1000)), (-1000, 0), LINEAGE, "test arc"
+        "a",
+        (1000, 0),
+        (Fraction(0), Fraction(1000)),
+        (-1000, 0),
+        LINEAGE,
+        "test arc",
+        grid=GRID,
     )
     assert len(pieces) == 2
     assert pieces[0].start == (1000, 0) and pieces[1].end == (-1000, 0)
@@ -132,18 +139,18 @@ def test_a_three_point_arc_is_cut_into_pieces_of_at_most_a_quarter_turn():
 def test_a_full_circle_through_three_anchors_is_four_pieces_from_the_first_anchor():
     """The pieces chain end to start and close on the first anchor."""
     anchors = ((3000, 0), (0, 3000), (-3000, 0))
-    pieces = full_circle("c", anchors, True, LINEAGE, "test circle")
+    pieces = full_circle("c", anchors, True, LINEAGE, "test circle", grid=GRID)
     assert len(pieces) == 4
     assert pieces[0].start == pieces[-1].end == (3000, 0)
     assert all(a.end == b.start for a, b in zip(pieces, pieces[1:], strict=False))
-    clockwise = full_circle("c", anchors, False, LINEAGE, "test circle")
+    clockwise = full_circle("c", anchors, False, LINEAGE, "test circle", grid=GRID)
     assert all(not piece.ccw for piece in clockwise)
 
 
 def test_the_smallest_circle_on_the_lattice_still_has_four_distinct_pieces():
     """A one-unit circle (four lattice points) is the smallest arc the grid can carry."""
     pieces = full_circle(
-        "tiny", ((1, 0), (0, 1), (-1, 0)), True, LINEAGE, "tiny circle"
+        "tiny", ((1, 0), (0, 1), (-1, 0)), True, LINEAGE, "tiny circle", grid=GRID
     )
     assert [piece.end for piece in pieces] == [(0, 1), (-1, 0), (0, -1), (1, 0)]
 
@@ -154,7 +161,13 @@ def test_three_collinear_points_define_no_circle():
         InputError, match="test arc: the three arc points are collinear"
     ):
         arc_through_points(
-            "a", (0, 0), (Fraction(1), Fraction(0)), (2, 0), LINEAGE, "test arc"
+            "a",
+            (0, 0),
+            (Fraction(1), Fraction(0)),
+            (2, 0),
+            LINEAGE,
+            "test arc",
+            grid=GRID,
         )
 
 
@@ -174,13 +187,21 @@ def test_witness_points_are_pinned_so_ids_cannot_drift_with_the_platform_math_li
     large = circle_arcs("c", (3, -7), 8000, False, LINEAGE)[1].witness_points()
     assert (len(large), _digest(large)) == (101, "b5cc7ea9177cd68c")
     pieces = arc_through_points(
-        "a", (1000, 0), (Fraction(1), Fraction(1000)), (-1000, 1), LINEAGE, "x"
+        "a",
+        (1000, 0),
+        (Fraction(1), Fraction(1000)),
+        (-1000, 1),
+        LINEAGE,
+        "x",
+        grid=GRID,
     )
     assert [_digest(p.witness_points()) for p in pieces] == [
         "2b1da6546698bedd",
         "43614f7d84e0513e",
     ]
-    circle = full_circle("f", ((7001, 3), (0, 7003), (-7001, 5)), True, LINEAGE, "x")
+    circle = full_circle(
+        "f", ((7001, 3), (0, 7003), (-7001, 5)), True, LINEAGE, "x", grid=GRID
+    )
     assert [_digest(p.witness_points()) for p in circle] == [
         "eda2d83bf95164e9", "2d775ce19f759553", "1c3162d833ad6590", "ab34267c07cf84ac",
     ]  # fmt: skip

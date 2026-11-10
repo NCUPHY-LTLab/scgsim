@@ -103,21 +103,6 @@ configuration, and no special Palace build is needed. The
 [SGB design pages](../../zh-TW/docs/design/sgb/inset-imprint.html#band-measure)
 (Traditional Chinese) define how distance is measured.
 
-::: {.callout-warning title="Draw curves with at most 128 points per full circle"}
-A curved conductor outline drawn as a polygon is supported when it uses at most
-128 points per full circle, so that every vertex turns by at least 2.8125°.
-A denser outline, such as a 256-point circle or a finely sampled spline, can
-leave the inset curve open: two neighbouring edge offsets neither meet nor
-cross. SGB then refuses the layout with `inset family '…': the inset curve at
-m = … um is not closed near (x, y) um` rather than return wrong bands. What
-decides it is the turn at each vertex, not the edge length. Build PDK
-components with `curve_sampling="simulation"`, or declare true arcs.
-[Supported Geometry](../supported-geometry.qmd#curve-rule) gives the rule, the
-measurements and the layout fixes; the
-[band construction](../../zh-TW/docs/design/sgb/inset-imprint.html#band-regions)
-(Traditional Chinese) explains the cause.
-:::
-
 ::: {.callout-important title="Call set_surface_epr before mesh()"}
 Margins are geometry: `mesh()` hands them to SGB with the rest of the model.
 Configure `set_surface_epr` first. Calling it after `mesh()` invalidates the mesh,
