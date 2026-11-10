@@ -191,7 +191,7 @@ def run(request, tmp_path):
     return Run(route, problem, tmp_path)
 
 
-def _surface_q(run: Run, path: Path) -> None:
+def _surface_q(run: Run, path: Path, rows: int = 1) -> None:
     """A surface-Q table with one column pair for every Dielectric row, as Palace writes it."""
     count = count_index_entries(run.index)["surface"]
     name = "m" if run.problem == "Eigenmode" else "i"
@@ -199,7 +199,8 @@ def _surface_q(run: Run, path: Path) -> None:
         [name, *(f"p_surf[{k}],Q_surf[{k}]" for k in range(1, count + 1))]
     )
     cells = ",".join(f"{0.01 * k:g},+inf" for k in range(1, count + 1))
-    path.write_text(f"{header}\n1,{cells}\n", encoding="utf-8")
+    lines = "".join(f"{row},{cells}\n" for row in range(1, rows + 1))
+    path.write_text(f"{header}\n{lines}", encoding="utf-8")
 
 
 def test_a_producer_made_index_map_round_trips_through_the_readers(run, tmp_path):
@@ -235,6 +236,45 @@ def test_a_producer_made_index_map_round_trips_through_the_readers(run, tmp_path
     assert [r.index for r in margin_series.records] == [b["index"] for b in margins]
     assert all(r.entities and r.rows and r.attributes for r in series.records)
     assert all(r.participation == 0.01 * r.index for r in series.records)
+
+
+def test_surface_readers_keep_the_requested_modes_of_a_longer_table(run, tmp_path):
+    """Three rows are read as one series only when the requested mode count says so."""
+    wholes = read_surface_bindings(run.index)
+    margins = read_surface_margin_bindings(run.index)
+    table = tmp_path / "surface-Q.csv"
+    _surface_q(run, table, rows=3)
+    kwargs = {
+        "problem": run.problem,
+        "pass_index": 0,
+        "source": "final",
+        "expected_rows": 1,
+        "surface_count": len(wholes) + len(margins),
+    }
+
+    def read(mode_count: int | None):
+        return (
+            SurfaceEprReader(
+                table,
+                frequencies_ghz=None,
+                bindings=wholes,
+                mode_count=mode_count,
+                **kwargs,
+            ).read(),
+            SurfaceMarginEprReader(
+                table, bindings=margins, mode_count=mode_count, **kwargs
+            ).read(),
+        )
+
+    assert read(None) == (None, None)
+    series, margin_series = read(1)
+    if run.problem != "Eigenmode":
+        # An excitation table has no extra modes: the count changes nothing.
+        assert (series, margin_series) == (None, None)
+        return
+    assert [item.series_index for item in series] == [1]
+    assert [item.series_index for item in margin_series] == [1]
+    assert [r.index for r in series[0].records] == [b["index"] for b in wholes]
 
 
 def test_the_electrostatic_index_map_keeps_the_ground_evidence(tmp_path):

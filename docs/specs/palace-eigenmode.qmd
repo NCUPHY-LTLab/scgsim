@@ -168,6 +168,12 @@ return and the separately retained preparation ID. The resulting
 new detached result, and `show_epr(result, *, mode=None)` returns a Plotly Figure.
 Neither operation opens Palace.
 
+A result holds exactly the `num_modes` modes that `set_eigenmode` requested.
+Palace reports every mode that converged, so its mode tables can hold more rows
+than that. The readers keep modes 1 through `num_modes` in Palace's order and
+read nothing from the rest. A table with fewer rows than requested, or whose
+mode index is not 1, 2, … in order, is refused.
+
 ### Native Eigenmode Q availability {#native-eigenmode-q}
 
 The Human-accepted V1 contract permits this narrow behavior: only the native `eig.csv` `Q` column may retain
