@@ -23,7 +23,7 @@ band 把一個 **support face**（要被分段的面）依「離 **distance orig
 
 下列的邊**不是** origin：
 
-- **die／model 邊界上的邊。** 金屬一直延伸到 die 邊緣，邊的外側已經沒有 substrate 表面。在導體附著的平面上，這段邊的另一側沒有導體、也沒有 dielectric（在 model 外，或上下都只有 vacuum），而且經由這樣的 cell 連到 model 外部。die 內被包圍的 vacuum 孔洞、溝槽或空腔，其邊緣不是 die edge：停在那裡的 gap edge 仍畫半圓。die edge 是切割線，所以一段直的 gap edge 一路延伸到 die edge 時，導體視為越過 die edge 繼續延伸：距離從這條 gap edge 沿自己的直線延長之後量起，band 直直延伸到 die edge（見[以 disk 做 erosion](#erosion-rule)）。
+- **die／model 邊界上的邊。** 金屬一直延伸到 die 邊緣，邊的外側已經沒有 substrate 表面。在導體附著的平面上，這段邊的另一側沒有導體、也沒有 dielectric（在 model 外，或上下都只有 vacuum），而且經由這樣的 cell 連到 model 外部。die 內被包圍的 vacuum 孔洞、溝槽或空腔，其邊緣不是 die edge：停在那裡的 gap edge 仍畫半圓。die edge 是切割線，所以一段直的 gap edge 一路延伸到 die edge 時，導體視為越過 die edge 繼續延伸：距離從這條 gap edge 沿自己的直線延長之後量起，band 直直延伸到 die edge（見[以 disk 做 erosion](#erosion-rule)）。延伸從切點走到 die edge 切線外兩個最大 margin 處為止；die 的外框若在切線外、距這段延伸不到最大 margin 處又回來（例如凹口的側壁，或從 die 邊上一個頂點懸出的導體），或同一個 support 的兩段延伸相交，SGB 以 `InputError` 拒絕，指出導體與切點；不再往外延伸，也不改畫半圓。這些判斷都是精確的；die 外框的圓弧以其弦為直徑的圓包住，所以切點旁有彎曲的外框時一律拒絕。
 - **兩個導體相接的邊**（conductor–conductor contact）。
 - **另一側只有 vacuum 的邊。** 例如懸空的導體，其 footprint 的邊旁邊沒有 substrate。
 

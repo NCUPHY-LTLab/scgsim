@@ -36,7 +36,9 @@ Every sample builds under Route B with MA, MS and SA bands at
 conductor that face exposed substrate. The die edge is a dicing line: where it
 cuts a straight conductor edge, the conductor is treated as continuing past it,
 so the bands along that edge run straight to the die edge at any angle, with no
-rounded end.
+rounded end. A die outline that comes back within the largest band margin of
+that continuation, as beside a notch, is refused; see
+[Surface-EPR margins](supported-scope.qmd#rules-margins).
 
 For every band, the test compares the built area with the exact erosion of the
 same polygons. The two agree within the grid's snap bound: half a grid diagonal

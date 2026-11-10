@@ -143,35 +143,55 @@ class SupportRegion:
         )
 
     @cached_property
-    def continued_origins(self) -> dict[tuple[int, int], LineEdge]:
-        """The straight origins the die edge cuts, each continued past it: ``(ring, primitive)`` -> the longer edge.
+    def die_cuts(self) -> tuple[DieCut, ...]:
+        """Every end of a straight origin that the die edge cuts, with the origin continued past it there.
 
         A straight origin whose neighbour on the ring lies on the die edge is continued at that end, along its
-        own line, until the end lies twice the largest margin beyond the die edge's tangent there.  On a convex
-        die the disk of the largest margin about the new end then lies outside the die, so inside the die the
-        continued edge is as far from every point as the whole line is, and each offset of it ends at least one
-        margin outside the die, clear of snapping.  A longer continuation gives the same distances in the die.
+        own line, until the end lies twice the largest margin beyond the die edge's tangent there.  Where the
+        die is convex the disk of the largest margin about the new end then lies outside the die, so inside the
+        die the continued edge is as far from every point as the whole line is, and each offset of it ends at
+        least one margin outside the die, clear of snapping.  A longer continuation gives the same distances in
+        the die.  Where the die outline comes back beside a continuation, the build is refused when the support
+        is resolved (``cutfamilies.die_cuts``).
 
-        Not continued, so their end keeps the half circle of the bands about it: an arc origin, and a line where
-        the die edge turns back over it (a die that is not convex there), which has no straight way out.
+        Not cut, so their end keeps the half circle of the bands about it: an arc origin, and a line where the
+        die edge turns back over it (a die that is not convex there), which has no straight way out.
         """
         reach = 2 * self.margins[-1]
-        continued: dict[tuple[int, int], LineEdge] = {}
+        cuts: list[DieCut] = []
         for ri, ring in enumerate(self.rings):
             count = len(ring)
             for pi, prim in enumerate(ring):
                 if not (self.is_origin(ri, pi) and isinstance(prim, LineEdge)):
                     continue
-                after, before = (pi + 1) % count, (pi - 1) % count
-                p, q = prim.p, prim.q
-                if self.is_die_edge(ri, after):
-                    direction = _direction_at(ring[after], at_end=False)
-                    q = _past_the_die(prim.p, prim.q, direction, reach) or q
-                if self.is_die_edge(ri, before):
-                    direction = _direction_at(ring[before], at_end=True)
-                    p = _past_the_die(prim.q, prim.p, direction, reach) or p
-                if (p, q) != (prim.p, prim.q):
-                    continued[(ri, pi)] = LineEdge(p, q, prim.source_edge)
+                for at_end, neighbour, inner, vertex in (
+                    (True, (pi + 1) % count, prim.p, prim.q),
+                    (False, (pi - 1) % count, prim.q, prim.p),
+                ):
+                    if not self.is_die_edge(ri, neighbour):
+                        continue
+                    direction = _direction_at(ring[neighbour], at_end=not at_end)
+                    end = _past_the_die(inner, vertex, direction, reach)
+                    if end is not None:
+                        cuts.append(DieCut(ri, pi, at_end, vertex, end, direction))
+        return tuple(cuts)
+
+    @cached_property
+    def continued_origins(self) -> dict[tuple[int, int], LineEdge]:
+        """The straight origins the die edge cuts, each continued past it (:attr:`die_cuts`): ``(ring, primitive)`` -> edge."""
+        continued: dict[tuple[int, int], LineEdge] = {}
+        for cut in self.die_cuts:
+            key = (cut.ring, cut.primitive)
+            edge = continued.get(key)
+            if edge is None:
+                prim = self.rings[cut.ring][cut.primitive]
+                assert isinstance(prim, LineEdge), "only straight origins are cut"
+                edge = prim
+            continued[key] = (
+                LineEdge(edge.p, cut.end, edge.source_edge)
+                if cut.at_end
+                else LineEdge(cut.end, edge.q, edge.source_edge)
+            )
         return continued
 
     def origin(self, ring_index: int, primitive_index: int) -> RingPrimitive:
@@ -257,6 +277,23 @@ class SupportRegion:
     def band_count(self) -> int:
         """Number of bands: one more than the margins."""
         return len(self.margins) + 1
+
+
+@dataclass(frozen=True)
+class DieCut:
+    """One end of a straight distance origin that the die edge cuts, and the origin's continuation past it.
+
+    ``ring`` and ``primitive`` locate the origin and ``at_end`` says which of its ends is cut.  ``vertex`` is that
+    end, on the die edge; ``end`` is where the continuation stops, past the die edge; ``die_direction`` is the die
+    edge's direction of travel at the vertex, not normalised, with the die on its left.
+    """
+
+    ring: int
+    primitive: int
+    at_end: bool
+    vertex: Point
+    end: Point
+    die_direction: tuple[Fraction, Fraction]
 
 
 def _direction_at(prim: RingPrimitive, *, at_end: bool) -> tuple[Fraction, Fraction]:

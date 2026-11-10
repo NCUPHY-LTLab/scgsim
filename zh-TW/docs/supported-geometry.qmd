@@ -15,7 +15,7 @@ scgsim-id: "docs/supported-geometry"
 
 ## 「支援」的意思 {#what-supported-means}
 
-下面每個 unit cell 都是 SCGSim 測試集中的一個樣本 layout。樣本直接以 SGB 紀錄畫在 1 nm 的 grid 上，不使用任何 PDK 程式碼；尺寸取自以 `curve_sampling="simulation"` 建立的 PDK cell。每個樣本都以 Route B 建立，並在 `inset_margins_um=(0.5, 1.0)` 帶有 MA、MS 與 SA band。band 從 [gap edge](specs/palace-eigenmode.qmd#surface-epr-margins)量起，也就是導體上面向裸露 substrate 的邊。die edge 是切割線：die edge 切斷導體的直線邊時，導體視為越過 die edge 繼續延伸，所以沿這條邊的 band 不論交角多少，都直直延伸到 die edge，末端沒有圓頭。
+下面每個 unit cell 都是 SCGSim 測試集中的一個樣本 layout。樣本直接以 SGB 紀錄畫在 1 nm 的 grid 上，不使用任何 PDK 程式碼；尺寸取自以 `curve_sampling="simulation"` 建立的 PDK cell。每個樣本都以 Route B 建立，並在 `inset_margins_um=(0.5, 1.0)` 帶有 MA、MS 與 SA band。band 從 [gap edge](specs/palace-eigenmode.qmd#surface-epr-margins)量起，也就是導體上面向裸露 substrate 的邊。die edge 是切割線：die edge 切斷導體的直線邊時，導體視為越過 die edge 繼續延伸，所以沿這條邊的 band 不論交角多少，都直直延伸到 die edge，末端沒有圓頭。die 的外框若在這段延伸的最大 band margin 之內又回來（例如凹口旁），建構會被拒絕，見 [Surface-EPR 邊距](supported-scope.qmd#rules-margins)。
 
 測試把每個 band 建出的面積，與同一組多邊形的精確侵蝕（erosion）比較。兩者的差在 grid 的 snap 界限之內：半個 grid 對角線（0.71 nm）乘以 band 邊的長度，因此每 100 µm 的 band 邊最多容許 0.07 µm² 的差。
 

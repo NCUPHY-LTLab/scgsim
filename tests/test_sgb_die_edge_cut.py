@@ -18,6 +18,11 @@ Counterexamples: an end that the die edge does not cut keeps its half circle.
   and no metal, like the space beyond the die, but it does not reach the outside of the model: the rim is no
   dicing line, and the strip's bands round its corner there too.  Read as a die edge, the rim had the strip
   continued through the bore, and the SA curve beside it no longer closed.
+
+A strip that runs into a corner of the die continues past the corner like any other cut.  Where a continuation
+would put bands on the die from a conductor that is not drawn, the build is refused with the conductor and the
+cut point: a die outline that comes back within the band margin beside it (a notch, or the outline of a conductor
+that overhangs the die from a vertex on its edge), and two continuations that cross past the die edge.
 """
 
 from __future__ import annotations
@@ -31,6 +36,7 @@ from sgb_supported_kit import (
     Expectation,
     Scene,
     assert_exact_bands,
+    catalogue,
     conductor_shape,
     die_footprint,
     die_shape,
@@ -38,9 +44,11 @@ from sgb_supported_kit import (
     reference,
     shape,
     to_lattice,
+    type_bands,
 )
 
-from scgsim.geometry.sgb.model import ConformalModel
+from scgsim.geometry.sgb.errors import InputError
+from scgsim.geometry.sgb.model import ConformalModel, build_model_from_catalogue
 from scgsim.geometry.sgb.records.grid import exact_z
 from scgsim.geometry.sgb.records.prisms import Footprint, PrismRecord
 
@@ -230,3 +238,148 @@ def test_an_end_on_the_rim_of_an_enclosed_vacuum_bore_keeps_its_half_circle():
         assert centres == {(20_000.0, 15_000.0)}, family
     sa_centres = {float(arc.centre[0]) for arc in cap_arcs(model, SA_FAMILY)}
     assert sa_centres == {20_000.0}  # on the bore's rim; none on the die edge, x = 0
+
+
+def test_a_strip_cut_at_a_corner_of_the_die_continues_past_it():
+    """One side of the strip ends in the die's top-right corner, the other on its right edge, both at 45 degrees."""
+    corner = Scene(
+        "strip_into_corner",
+        (),
+        (0.0, -30.0, 40.0, 30.0),
+        [
+            Conductor(
+                "strip",
+                "strip",
+                to_lattice([(10.0, 0.0), (16.0, 0.0), (40.0, 24.0), (40.0, 30.0)]),
+            )
+        ],
+    )
+    model = assert_exact_bands(corner)
+    for family in (*STRIP_FAMILIES, SA_FAMILY):
+        # the only caps are those of the strip's end inside the die, at y = 0
+        assert {float(arc.centre[1]) for arc in cap_arcs(model, family)} <= {0.0}
+
+
+def refusal(scene: Scene) -> str:
+    """The message the build of ``scene`` is refused with."""
+    with pytest.raises(InputError) as raised:
+        build_model_from_catalogue(catalogue(scene), "B", insets=type_bands())
+    return str(raised.value)
+
+
+def test_a_die_outline_that_comes_back_beside_a_continuation_is_refused():
+    """A strip cut on the floor of a notch in the die's top edge: its right side's continuation ends 0.1 um from the notch wall."""
+    notched = Scene(
+        "strip_into_notch",
+        (),
+        (0.0, -30.0, 40.0, 30.0),
+        [
+            Conductor(
+                "strip",
+                "strip",
+                to_lattice([(8.4, -14.0), (11.4, -14.0), (21.4, 26.0), (18.4, 26.0)]),
+            )
+        ],
+    )
+    outline = [
+        (0, -30),
+        (40, -30),
+        (40, 30),
+        (22, 30),
+        (22, 26),
+        (14, 26),
+        (14, 30),
+        (0, 30),
+    ]
+    notched.prisms = [
+        PrismRecord(
+            "substrate",
+            Footprint.from_rings(to_lattice(outline)),
+            exact_z(-100),
+            exact_z(0),
+            "substrate",
+            "dielectric",
+        ),
+        PrismRecord(
+            "vacuum",
+            die_footprint(notched),
+            exact_z(0),
+            exact_z(100),
+            "vacuum",
+            "vacuum",
+        ),
+    ]
+    message = refusal(notched)
+    assert "the die outline comes back within the band margin (1 um)" in message
+    assert "of 'strip', cut by the die edge at (21.4000, 26.0000) um" in message
+    assert "SCGSim does not model it" in message
+
+
+def test_a_conductor_overhanging_the_die_from_a_vertex_on_its_edge_is_refused():
+    """A pad leaves the substrate at a vertex of its outline, (0, 4) um, and hangs 3 um past the die edge.
+
+    Its top edge is a gap edge up to that vertex, where the die edge cuts it; past the die edge the pad's own
+    outline turns down beside the continuation, so the outline comes back at the cut.
+    """
+    overhang = Scene(
+        "pad_overhang",
+        (),
+        (0.0, -30.0, 40.0, 30.0),
+        [
+            Conductor(
+                "pad",
+                "pad",
+                to_lattice([(10, -4), (10, 4), (0, 4), (-3, 1), (-3, -4)]),
+            )
+        ],
+    )
+    padded = to_lattice([(-10, -30), (40, -30), (40, 30), (-10, 30)])
+    overhang.prisms = [
+        PrismRecord(
+            "substrate",
+            die_footprint(overhang),
+            exact_z(-100),
+            exact_z(0),
+            "substrate",
+            "dielectric",
+        ),
+        PrismRecord(
+            "vacuum",
+            Footprint.from_rings(padded),
+            exact_z(0),
+            exact_z(100),
+            "vacuum",
+            "vacuum",
+        ),
+    ]
+    message = refusal(overhang)
+    assert "the die outline comes back within the band margin (1 um)" in message
+    assert "of 'pad', cut by the die edge at (0.0000, 4.0000) um" in message
+
+
+def test_two_continuations_that_cross_past_the_die_edge_are_refused():
+    """Two strips converge on the top edge with 0.2 um of substrate between them: their facing sides cross 0.3 um past it."""
+    converging = Scene(
+        "strips_converging",
+        (),
+        (0.0, -30.0, 40.0, 30.0),
+        [
+            Conductor(
+                "strip_left",
+                "left",
+                to_lattice([(7.0, 0.0), (10.0, 0.0), (19.9, 30.0), (16.9, 30.0)]),
+            ),
+            Conductor(
+                "strip_right",
+                "right",
+                to_lattice([(30.0, 0.0), (33.0, 0.0), (23.1, 30.0), (20.1, 30.0)]),
+            ),
+        ],
+    )
+    message = refusal(converging)
+    # The two cuts are named in the order of the SA support's ring.
+    assert "the continuations of 'strip_right' and 'strip_left'" in message
+    assert (
+        "cut by the die edge at (20.1000, 30.0000) and (19.9000, 30.0000) um" in message
+    )
+    assert "cross past the die edge" in message

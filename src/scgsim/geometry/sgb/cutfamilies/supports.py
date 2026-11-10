@@ -28,11 +28,12 @@ The die edge.  A boundary piece that is no origin lies on the die edge when, on 
 across it lies beyond the die: it holds no conductor and no dielectric (it is outside the model, or only vacuum
 lies on either side of the plane there), and such cells connect it to the unbounded face of the level.  That is
 the substrate's outer edge, a dicing line, and a gap edge that runs onto it belongs to a conductor the dicing
-cut: its distance origin continues straight past the die edge (``SupportRegion.continued_origins``).  The rim
-of a vacuum bore, trench or cavity that the die encloses is no dicing line, so a gap edge that ends there keeps
-the half circle of its bands.  A solution interface is read the same way on its own level.  The face of a
-finite conductor on its other plane takes the die edges of the attachment plane along the same source edges,
-as it takes the gap edges.
+cut: its distance origin continues straight past the die edge (``SupportRegion.die_cuts``).  The rim of a
+vacuum bore, trench or cavity that the die encloses is no dicing line, so a gap edge that ends there keeps the
+half circle of its bands.  A solution interface is read the same way on its own level.  The face of a finite
+conductor on its other plane takes the die edges of the attachment plane along the same source edges, as it
+takes the gap edges.  A support whose continuation the die outline comes back to is refused
+(``cutfamilies.die_cuts``).
 
 Arc edges of the boundary are expressed on the exact circle of their source arc (centre and radius of the
 carrier) through the snapped end points, so offsets stay concentric with the source circle.
@@ -48,11 +49,14 @@ has a gap edge is only known when it is resolved (:class:`NoGapEdgeError`).
 
 from __future__ import annotations
 
-from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from fractions import Fraction
 
+from scgsim.geometry.sgb.cutfamilies.die_cuts import (
+    cells_beyond_the_die,
+    check_die_cuts,
+)
 from scgsim.geometry.sgb.cutfamilies.gap_intervals import (
     ArcSpan,
     LineSpan,
@@ -158,7 +162,16 @@ def resolve_support(
     layer, selected = _select_cells(request, support, catalogue, labelled)
     if request.interface is not None:
         _check_interface(request, layer, selected)
-    pieces_of = _origin_pieces(support, catalogue, labelled, layer)
+    # The die edge is read on the plane the gap edges are: the attachment plane of a conductor face.
+    plane = (
+        layer
+        if isinstance(support, SolutionInterface)
+        else labelled.level_layers[
+            _attach_level(support.entity_id, catalogue, labelled)
+        ]
+    )
+    beyond = cells_beyond_the_die(plane)
+    pieces_of = _origin_pieces(support, labelled, layer, plane, beyond)
     rings, origin_mask, die_edge_mask = _boundary_rings(
         request.request_id, layer, selected, labelled, pieces_of
     )
@@ -167,11 +180,12 @@ def resolve_support(
             f"inset request {request.request_id!r}: {_describe(support)} has no gap edge to "
             "measure the bands from (a conductor edge counts only where exposed dielectric lies next to it)"
         )
-    return ResolvedSupport(
-        request,
-        layer.level_z,
-        SupportRegion(rings, margins, origin_mask, die_edge_mask),
+    region = SupportRegion(rings, margins, origin_mask, die_edge_mask)
+    conductor = support.entity_id if isinstance(support, ConductorSurface) else None
+    check_die_cuts(
+        request.request_id, region, plane, beyond, conductor, catalogue.grid.size_um
     )
+    return ResolvedSupport(request, layer.level_z, region)
 
 
 def concrete_support(request: InsetRequest) -> ConcreteSupport:
@@ -196,44 +210,39 @@ def _describe(support: ConcreteSupport) -> str:
 
 def _origin_pieces(
     support: ConcreteSupport,
-    catalogue: PrismCatalogue,
     labelled: LabelledArrangements,
     layer: Layer,
+    plane: Layer,
+    beyond: frozenset[int],
 ) -> Callable[[int], list[Piece]]:
-    """The pieces of a boundary half-edge of the support face: each a distance origin (a gap edge) or not, and on the die edge or not."""
+    """The pieces of a boundary half-edge of the support face: each a distance origin (a gap edge) or not, and on the die edge or not.
+
+    ``plane`` is the level the gap edges and the die edge are read on, and ``beyond`` its cells beyond the die.
+    """
     arr = layer.arr
 
-    def whole(h: int, *, origin: bool, beyond: frozenset[int]) -> list[Piece]:
+    def whole(h: int, *, origin: bool) -> list[Piece]:
         on_die_edge = not origin and arr.he_face[h ^ 1] in beyond
         return [Piece(arr.origin(h), arr.target(h), origin, on_die_edge)]
 
     if isinstance(support, SolutionInterface):
-        beyond = _cells_beyond_the_die(layer)
         return lambda h: whole(
             h,
             origin=_is_exposed_dielectric(layer.labels[arr.he_face[h]])
             and _is_conductor_cell(layer.labels[arr.he_face[h ^ 1]]),
-            beyond=beyond,
         )
-    attach = labelled.level_layers[
-        _attach_level(support.entity_id, catalogue, labelled)
-    ]
-    if attach is not layer:
-        beyond_attach = _cells_beyond_the_die(attach)
+    if plane is not layer:
         gaps = _conductor_edges_by_source(
-            attach, labelled, lambda face: _is_exposed_dielectric(attach.labels[face])
+            plane, labelled, lambda face: _is_exposed_dielectric(plane.labels[face])
         )
         die_edges = _conductor_edges_by_source(
-            attach, labelled, lambda face: face in beyond_attach
+            plane, labelled, lambda face: face in beyond
         )
         return lambda h: _pieces_along_gaps(layer, h, labelled, gaps, die_edges)
     # The support is on its own plane, whose arrangement is cut wherever the cell across a boundary edge
     # changes: a boundary edge is a gap edge as a whole, or not at all, and the same for the die edge.
-    beyond = _cells_beyond_the_die(layer)
     return lambda h: whole(
-        h,
-        origin=_is_exposed_dielectric(layer.labels[arr.he_face[h ^ 1]]),
-        beyond=beyond,
+        h, origin=_is_exposed_dielectric(layer.labels[arr.he_face[h ^ 1]])
     )
 
 
@@ -356,42 +365,6 @@ def _is_exposed_dielectric(label: LevelLabel | None) -> bool:
         return False
     kinds = {label.below.kind, label.above.kind}
     return "conductor" not in kinds and "dielectric" in kinds
-
-
-def _cells_beyond_the_die(layer: Layer) -> frozenset[int]:
-    """The cells of a level beyond the die's outer edge: off the die, and joined to the unbounded face through such cells.
-
-    A cell is off the die when no substrate and no metal meet the plane there (:func:`_is_off_the_die`).  Those
-    beside the die's outer edge reach the unbounded face (face 0, outside the model) across edges between off-die
-    cells; a vacuum bore, trench or cavity that the die encloses does not, whatever lies in it.  The search follows
-    the arrangement's edges, so it is exact.
-    """
-    arr = layer.arr
-    neighbours: list[list[int]] = [[] for _ in arr.faces]
-    for edge in range(len(arr.edges)):
-        left, right = arr.he_face[2 * edge], arr.he_face[2 * edge + 1]
-        neighbours[left].append(right)
-        neighbours[right].append(left)
-    beyond = {0}
-    queue: deque[int] = deque([0])
-    while queue:
-        for other in neighbours[queue.popleft()]:
-            if other not in beyond and _is_off_the_die(layer.labels[other]):
-                beyond.add(other)
-                queue.append(other)
-    return frozenset(beyond)
-
-
-def _is_off_the_die(label: LevelLabel | None) -> bool:
-    """Whether a level cell holds no substrate and no metal: outside the model, or only vacuum, or nothing, on each side."""
-    if label is None:
-        return True
-    if label.sheet is not None:
-        return False
-    return all(
-        domain is None or domain.kind == "vacuum"
-        for domain in (label.below, label.above)
-    )
 
 
 def lattice_margins(request: InsetRequest, grid: Grid) -> tuple[int, ...]:
