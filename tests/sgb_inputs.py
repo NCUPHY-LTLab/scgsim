@@ -536,6 +536,21 @@ def rectangular_junction_pair() -> EffectiveInput:
     The junction partition replaces the authored sheet by its central rectangle, which touches the
     two terminal-owned end polygons; the thin-film profile makes both terminals Route-A sheets.
     """
+    source, stack = rectangular_junction_source()
+    effective, _, plan = interpret_physical_geometry(
+        source, stack, ApproximationProfile("thin_film", "v1", {})
+    )
+    return EffectiveInput(effective, plan.context)
+
+
+def rectangular_junction_source(
+    vacuum: str = "upper_air",
+) -> tuple[GeometryBuildInput, dict[str, Any]]:
+    """The source and stack of :func:`rectangular_junction_pair` before physical interpretation.
+
+    ``vacuum`` names the vacuum region above the metals (``VACUUM_REGION`` for an AEDT model, whose
+    Region is that box).
+    """
     declaration = PhysicalLayerDeclaration(
         "film",
         "metal",
@@ -558,7 +573,7 @@ def rectangular_junction_pair() -> EffectiveInput:
             part_role="face_metal",
             net_id=net,
             polygon_ids=(name,),
-            host_void_semantic_id="upper_air",
+            host_void_semantic_id=vacuum,
             geometry={
                 "geometry_source": "gds_polygon",
                 "z_um": 0,
@@ -594,7 +609,12 @@ def rectangular_junction_pair() -> EffectiveInput:
     substrate = _solution_region(
         "substrate", "dielectric", "Si", (-4, 14, -2, 4, -2, 0)
     )
-    upper = _solution_region("upper_air", "vacuum", "air", (-4, 14, -2, 4, 0, 4.25))
+    upper = _solution_region(
+        vacuum,
+        "vacuum",
+        "air",
+        (-4, 14, -2, 4, -2 if vacuum == "VACUUM_REGION" else 0, 4.25),
+    )
     regions = {
         item.semantic_id: {
             "semantic_id": item.semantic_id,
@@ -638,9 +658,4 @@ def rectangular_junction_pair() -> EffectiveInput:
         JunctionTerminalBinding("chip/left", "chip", "A"),
         JunctionTerminalBinding("chip/right", "chip", "B"),
     )
-    effective, _, plan = interpret_physical_geometry(
-        with_rectangular_junctions(source, (request,)),
-        stack,
-        ApproximationProfile("thin_film", "v1", {}),
-    )
-    return EffectiveInput(effective, plan.context)
+    return with_rectangular_junctions(source, (request,)), stack
