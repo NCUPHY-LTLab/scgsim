@@ -414,8 +414,11 @@ def segment_pairs(lines: BaseGeometry) -> list[tuple[Um, Um]]:
     return pairs
 
 
-def assert_exact_bands(scene: Scene) -> None:
-    """The build has the reference's band families, each band within its snap bound of the exact erosion."""
+def assert_exact_bands(scene: Scene) -> ConformalModel:
+    """The build has the reference's band families, each band within its snap bound of the exact erosion.
+
+    Returns the built model, for checks of the same build.
+    """
     model = build_model_from_catalogue(catalogue(scene), "B", insets=type_bands())
     got = band_areas(model)
     expected = reference(scene)
@@ -432,6 +435,35 @@ def assert_exact_bands(scene: Scene) -> None:
                 exact,
                 bound,
             )
+    return model
+
+
+def short_band_edges(model: ConformalModel, steps: int) -> list[str]:
+    """The emitted horizontal edges that carry a band seam and are shorter than ``steps`` grid steps.
+
+    Each is given as its length in grid steps, its two end points in um and the carriers it comes from.  An arc
+    edge is measured along its arc.
+    """
+    topology = model.topology
+    um = topology.grid_um
+    found = []
+    for edge in topology.edges.values():
+        if edge.kind != "horizontal" or not any("@m" in s for s in edge.sources):
+            continue
+        a, b = topology.vertices[edge.v0], topology.vertices[edge.v1]
+        length = math.hypot(a.x - b.x, a.y - b.y)
+        if edge.curve is not None:
+            length = (
+                2
+                * edge.curve.radius
+                * math.asin(min(1.0, length / (2 * edge.curve.radius)))
+            )
+        if length < steps:
+            found.append(
+                f"{length:.1f} steps ({a.x * um:.4f}, {a.y * um:.4f})-"
+                f"({b.x * um:.4f}, {b.y * um:.4f}) um {sorted(edge.sources)}"
+            )
+    return found
 
 
 def shape(outer: list[Point], holes: Sequence[list[Point]] = ()) -> Polygon:

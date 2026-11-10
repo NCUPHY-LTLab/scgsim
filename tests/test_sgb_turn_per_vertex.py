@@ -2,8 +2,10 @@
 
 A curved outline is supported when every vertex turns by at least 360 / 128 = 2.8125 degrees.  Regular n-gon
 disks show the rule: up to n = 128 they build with the bands of their exact erosion at every radius, also off
-the lattice and rotated, and at n = 256 (1.41 degrees per vertex) they are refused at every radius, whatever
-the edge length.  Between 128 and 256 the outcome depends on the case, so that range is not tested as passing.
+the lattice and rotated.  At n = 256 (1.41 degrees per vertex) they were refused at every radius, because
+neighbouring offsets at such small turns could miss each other on the lattice; since the offsets of two lines
+end at their crossing on both sides of a vertex (Issue #138), they build exact bands too.  Whether the rule
+stays a layout rule is open on Issue #138; between 128 and 256 points nothing further is tested.
 
 The rule says nothing about a single vertex.  The counterexamples below record what SGB does with one vertex
 that turns less, on either side of 2.8125 degrees, in an otherwise coarse outline, and with a vertex that does
@@ -16,7 +18,6 @@ import math
 
 import pytest
 from sgb_supported_kit import (
-    TURN_REFUSAL,
     Conductor,
     Scene,
     Um,
@@ -29,7 +30,6 @@ from sgb_supported_kit import (
     type_bands,
 )
 
-from scgsim.geometry.sgb.errors import ValidationError
 from scgsim.geometry.sgb.model import build_model_from_catalogue
 
 RULE_DEGREES = 360 / 128
@@ -64,12 +64,9 @@ def test_a_128_point_circle_off_the_lattice_or_rotated_builds_exact_bands(
 
 
 @pytest.mark.parametrize("r", RADII)
-def test_a_256_point_circle_is_refused_at_every_radius(r):
-    """1.41 degrees per vertex: refused at r = 150 um too, where the edges are 3.68 um long."""
-    with pytest.raises(ValidationError, match=TURN_REFUSAL):
-        build_model_from_catalogue(
-            catalogue(disk(ngon(r, 256))), "B", insets=type_bands()
-        )
+def test_a_256_point_circle_builds_exact_bands_at_every_radius(r):
+    """1.41 degrees per vertex, outside the rule: the offsets meet at every vertex, so the bands are exact."""
+    assert_exact_bands(disk(ngon(r, 256)))
 
 
 def with_bumped_edge(r: float, turn: float) -> list[Um]:
@@ -93,7 +90,7 @@ def test_one_vertex_turning_less_than_the_rule_in_a_coarse_outline_builds_exact_
     turn,
 ):
     """Recorded behaviour: a single small turn between 9.8 um edges builds, convex or reflex, down to 0.01
-    degrees.  Outside the rule this is observed, not guaranteed; a run of such vertices is what is refused."""
+    degrees.  Outside the rule this is observed, not guaranteed."""
     points = with_bumped_edge(50.0, turn)
     lattice_turn = turns_degrees(to_lattice(points))[1]
     assert lattice_turn == pytest.approx(turn, abs=0.01)
