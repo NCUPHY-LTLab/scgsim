@@ -107,10 +107,6 @@ Limits are in grid steps, so they scale with the model grid: on a 1 nm grid,
 class A finds a wall face narrower than 10 nm. Findings give µm beside them.
 The limits and actions are held in `scgsim.meshing.FineStructureLimits`.
 
-The classes guard against fine structure; they do not predict every meshing
-stop. A model with no refusing finding can still stop in `mesh()` with
-`MeshRepairError`, which then names the places where it stopped (below).
-
 Each finding names its stage, class, measure and size, the SGB entity and its
 physical group, the layout objects and band requests it comes from, its
 location and box in µm, why the mesher fails on it, and the fix. Its owner
@@ -177,6 +173,9 @@ has no edge or face that a meshing-stage class refuses; it does not say how
 many bands were cut. It does not promise that other settings will model: Route A,
 Electrostatic terminals, junctions, lumped supports, indium bumps or a
 different vacuum region. To check a specific set-up, run that simulation's own `mesh()`.
+Nor does a pass promise a clean mesh: the meshing-stage classes guard against
+fine structure, and `mesh()` can still stop with `MeshRepairError`, which then
+names the places where it stopped.
 :::
 
 AEDT is outside this check: its STEP import is not covered yet.
