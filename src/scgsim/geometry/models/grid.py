@@ -10,6 +10,12 @@ from typing import Any, Mapping
 
 from scgsim.geometry.models.input import GeometryBuildInput
 
+# The class A wall-column limit, in grid steps (decided on issue 125): a side wall standing on an
+# outline edge shorter than this is refused by the meshing stage, and a junction partition keeps
+# every edge its end pieces add zero or at least this long.  The meshing stage's
+# FineStructureLimits reads this number; it is defined only here.
+WALL_COLUMN_LIMIT_STEPS = 10
+
 
 @dataclass(frozen=True)
 class GeometryGridContext:

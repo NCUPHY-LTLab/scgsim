@@ -10,7 +10,10 @@ from decimal import Decimal
 from fractions import Fraction
 from typing import Any
 
-from scgsim.geometry.models.grid import geometry_grid_context
+from scgsim.geometry.models.grid import (
+    WALL_COLUMN_LIMIT_STEPS,
+    geometry_grid_context,
+)
 from scgsim.geometry.models.input import (
     GeometryBuildInput,
     LayoutPolygonSpec,
@@ -30,7 +33,6 @@ from scgsim.geometry.planning.junction_planning.contact import (
 from scgsim.geometry.planning.junction_planning.core import (
     DEFAULT_FORMAT,
     PRECISION_UM,
-    WALL_COLUMN_LIMIT_STEPS,
     JunctionPartitionFormat,
     canonical_sha256,
     plain_record,

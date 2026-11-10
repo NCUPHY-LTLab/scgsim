@@ -45,9 +45,3 @@ def plain_record(value: Any) -> Any:
 DEFAULT_FORMAT = JunctionPartitionFormat()
 PRECISION_UM = 1e-09
 SUPPORT_PLANE_SCHEMA = DEFAULT_FORMAT.support_schema
-# The class A wall-column limit of the meshing-stage fine-structure check (issue 125), in grid
-# steps: a wall standing on an outline edge shorter than this is refused.  An end piece joined to
-# its terminal adds an outline edge along each sheet side, so each cut keeps that edge zero or at
-# least this long.  The meshing stage's FineStructureLimits.wall_column_gap_steps holds the same
-# decided value; the two must stay one number.
-WALL_COLUMN_LIMIT_STEPS = 10
