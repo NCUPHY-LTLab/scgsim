@@ -322,7 +322,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: NCUPHY-LTLab/orcapen-sc-pdk
-          ref: c75a1d4d2ee07e86a3b5d9b491609e5a1a5b850c
+          ref: 49e539fd59f3224ecda965d777c7ec3aadcc3b85
           path: .ci/orcapen
           persist-credentials: false
       - name: Install the exact test Python
@@ -340,16 +340,16 @@ jobs:
           sudo apt-get install --no-install-recommends -y libglu1-mesa
       - name: Verify the dependency inputs
         run: |
-          echo '3d092827f4480403b8276edad273a9a95ed506bed82a969e71c2f4162bde8d06  .ci/orcapen/pyproject.toml' | sha256sum --check
-          echo 'f1ba2e7f712d36a2ef363d300be86a22ed76f81e5474163fa858bae2a97e8f52  .ci/orcapen/uv.lock' | sha256sum --check
+          echo '1b41174d8659ae053ea4bb048b7f51268553301b3554afb8329dd3a0517d1f02  .ci/orcapen/pyproject.toml' | sha256sum --check
+          echo '389b5cd37beab1f91fe53cf9fa64a3587337bb4a265fba19f50a401751c1c757  .ci/orcapen/uv.lock' | sha256sum --check
       - name: Install the PDK's frozen dependencies with its test runner
         run: >-
-          uv sync --project .ci/orcapen --frozen --extra dev --group palace-notebooks
+          uv sync --project .ci/orcapen --frozen --group dev --group palace-notebooks
           --no-install-project --no-install-package scgsim --python 3.12.14
       - name: Build and install the pinned PDK without changing dependencies
         run: |
           uv build --python 3.12.14 --wheel --out-dir .ci/orcapen-wheel .ci/orcapen
-          uv pip install --python .venv-pdk/bin/python --no-deps .ci/orcapen-wheel/orcapen_sc_pdk-0.1.0.dev2-py3-none-any.whl
+          uv pip install --python .venv-pdk/bin/python --no-deps .ci/orcapen-wheel/orcapen_sc_pdk-1.0.0-py3-none-any.whl
       - name: Build and install the current SCGSim wheel after dependency sync
         run: |
           uv build --python 3.12.14 --wheel --out-dir .ci/scgsim-wheel .
