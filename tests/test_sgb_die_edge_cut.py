@@ -11,9 +11,13 @@ that band's snap bound.
 
 The same holds with vacuum beyond the substrate's edge, as the PDK's simulations pad the model.
 
-Counterexample: an end that the die edge does not cut keeps its half circle.  Where the strip runs into a pad of
-its own Net inside the die, the contact is no distance origin and no dicing line, and the bands of the strip
-round its corner there.
+Counterexamples: an end that the die edge does not cut keeps its half circle.
+* Where the strip runs into a pad of its own Net inside the die, the contact is no distance origin and no dicing
+  line, and the bands of the strip round its corner there.
+* Where the strip runs onto the rim of a vacuum bore that the die encloses, the cell across holds no substrate
+  and no metal, like the space beyond the die, but it does not reach the outside of the model: the rim is no
+  dicing line, and the strip's bands round its corner there too.  Read as a die edge, the rim had the strip
+  continued through the bore, and the SA curve beside it no longer closed.
 """
 
 from __future__ import annotations
@@ -29,8 +33,10 @@ from sgb_supported_kit import (
     assert_exact_bands,
     conductor_shape,
     die_footprint,
+    die_shape,
     planar_expectations,
     reference,
+    shape,
     to_lattice,
 )
 
@@ -159,3 +165,68 @@ def test_an_end_the_die_edge_does_not_cut_keeps_its_half_circle():
             for arc in cap_arcs(model, family)
         }
         assert centres == {(20_000.0, 15_000.0)}, family
+
+
+# A rectangular bore through the substrate, filled with vacuum, whose left side the strip's end lies on.
+BORE = [(20.0, -20.0), (30.0, -20.0), (30.0, 28.0), (20.0, 28.0)]
+
+
+def bore_scene() -> Scene:
+    """The strip from the die edge onto the rim of a vacuum bore inside a 40 x 60 um die."""
+    scene = Scene(
+        "strip_onto_bore",
+        (),
+        (0.0, -30.0, 40.0, 30.0),
+        [Conductor("strip", "strip", to_lattice(STRIP))],
+        expectations=bore_expectations,
+    )
+    die = die_footprint(scene)
+    bore = to_lattice(BORE)
+    scene.prisms = [
+        PrismRecord(
+            "substrate",
+            Footprint.from_rings(die.rings()[0], [bore[::-1]]),
+            exact_z(-100),
+            exact_z(0),
+            "substrate",
+            "dielectric",
+        ),
+        PrismRecord(
+            "bore",
+            Footprint.from_rings(bore),
+            exact_z(-100),
+            exact_z(0),
+            "vacuum",
+            "vacuum",
+        ),
+        PrismRecord("vacuum", die, exact_z(0), exact_z(100), "vacuum", "vacuum"),
+    ]
+    return scene
+
+
+def bore_expectations(scene: Scene) -> dict[str, Expectation]:
+    """The strip measured from its two sides only: its ends lie on the die edge and on the bore's rim.
+
+    The exposed substrate is the die less the bore and the strip; the bore's rim is no origin of it either.
+    """
+    die, bore = die_shape(scene), shape(to_lattice(BORE))
+    strip = conductor_shape(scene.conductors[0])
+    sides = strip.boundary.difference(die.boundary.union(bore.boundary))
+    return {
+        "ma::strip::top": (strip, sides),
+        "ms::strip::bottom": (strip, sides),
+        SA_FAMILY: (die.difference(bore).difference(strip), sides),
+    }
+
+
+def test_an_end_on_the_rim_of_an_enclosed_vacuum_bore_keeps_its_half_circle():
+    """The bore holds no substrate and no metal, but the die encloses it: only the die-edge end continues."""
+    model = assert_exact_bands(bore_scene())
+    for family in STRIP_FAMILIES:
+        centres = {
+            (float(arc.centre[0]), float(arc.centre[1]))
+            for arc in cap_arcs(model, family)
+        }
+        assert centres == {(20_000.0, 15_000.0)}, family
+    sa_centres = {float(arc.centre[0]) for arc in cap_arcs(model, SA_FAMILY)}
+    assert sa_centres == {20_000.0}  # on the bore's rim; none on the die edge, x = 0
