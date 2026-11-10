@@ -15,7 +15,14 @@ import pytest
 
 pytest.importorskip("OCP")
 
-from sgb_extreme_cases import FIXTURES, build_model  # noqa: E402
+from sgb_extreme_cases import (  # noqa: E402
+    FIXTURES,
+    build_model,
+    catalogue_of,
+    chip,
+    disk,
+    port,
+)
 
 from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: E402
 from scgsim.geometry.sgb.emission.writer import write_brep_file  # noqa: E402
@@ -27,6 +34,8 @@ from scgsim.geometry.sgb.exchange.guard import (  # noqa: E402
     write_step_guard,
 )
 from scgsim.geometry.sgb.exchange.step import export_aedt_step  # noqa: E402
+from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
+from scgsim.geometry.sgb.records.grid import exact_z  # noqa: E402
 from scgsim.geometry.sgb.sidecar.build import SidecarContext, build_sidecar  # noqa: E402
 from scgsim.geometry.sgb.sidecar.files import write_sidecar  # noqa: E402
 from scgsim.geometry.sgb.slivers.report import sliver_report  # noqa: E402
@@ -326,6 +335,50 @@ def test_swapped_ids_of_two_free_faces_are_refused(tmp_path):
         StepGuardError, match="free face .*: the recorded vertices are not those"
     ):
         read_step_guard(folder / "m.step.guard.json")
+
+
+def diameter_split_round_pad():
+    """Route C round pad whose top a port sheet covers up to a diameter: two mirror-image half-disks in one solid."""
+    lumped = port(
+        "p1", [(-6.0, 0.0), (6.0, 0.0), (6.0, 6.0), (-6.0, 6.0)], exact_z("0.2")
+    )
+    pad = disk("disk", "N", (0, 0), 5000, "C")
+    catalogue = catalogue_of("diameter_split_round_pad", "C", [*chip(), pad, lumped])
+    return build_model_from_catalogue(catalogue, "C")
+
+
+def test_the_halves_of_a_round_pad_split_along_a_diameter_keep_their_ids(tmp_path):
+    """Two congruent half-disks of one solid, equal in area and sharing the diameter's ends, are told apart.
+
+    The disk is four quarter arcs, so each half also has the quarter point on its own side as a vertex: the
+    export reads back, and swapping the halves' ids (measurements in place) is refused.
+    """
+    sidecar, exported = export(diameter_split_round_pad(), tmp_path)
+    assert read_step_guard(exported.guard_path) == exported.guard
+    (index, pad), *_ = [
+        (i, s)
+        for i, s in enumerate(exported.solids)
+        if sidecar["volumes"][s["solid"]]["kind"] == "conductor"
+    ]
+    halves = [
+        f
+        for f in pad["faces"]
+        if sidecar["faces"][f["face"]]["face_kind"] in ("top", "port")
+    ]
+    assert len(halves) == 2
+    assert halves[0]["area_um2"] == pytest.approx(halves[1]["area_um2"], rel=1e-9)
+    guard = json.loads(exported.guard_path.read_text())
+    first, second = (
+        f
+        for f in guard["solids"][index]["faces"]
+        if f["face"] in {h["face"] for h in halves}
+    )
+    first["face"], second["face"] = second["face"], first["face"]
+    write_step_guard(exported.guard_path, guard)
+    with pytest.raises(
+        StepGuardError, match="the recorded vertices are not those of planned face"
+    ):
+        read_step_guard(exported.guard_path)
 
 
 def test_faces_the_sidecar_cannot_tell_apart_are_refused(tmp_path, banded):
