@@ -118,22 +118,26 @@ def with_rectangular_ports(build_input: GeometryBuildInput) -> GeometryBuildInpu
     the central rectangle of the drawn sheet as the port and gives the two end pieces to the
     conductors the sheet lands on.  The partition itself, its cut rule and its refusals are
     the shared geometry's (``scgsim.geometry.planning.junction_partition``); this step only
-    names the two terminals of each sheet.  Requests the plan already holds are kept.
+    names the two terminals of each sheet.  Requests the plan already holds are kept for the
+    sheets this simulation selected; a request for a sheet it did not select is dropped with
+    that sheet, since only the selected sheets reach the build.
     """
+    selected = {region.port_sheet_id for region in build_input.port_sheet_regions}
     existing = tuple(
         RectangularJunctionSpec.from_payload(item)
         for item in build_input.metadata.get("rectangular_junctions", ())
     )
-    requested = {item.port_sheet_id for item in existing}
+    kept = tuple(item for item in existing if item.port_sheet_id in selected)
+    requested = {item.port_sheet_id for item in kept}
     entities = {entity.semantic_id: entity for entity in build_input.entities}
     added = tuple(
         _port_request(region, entities)
         for region in build_input.port_sheet_regions
         if region.port_sheet_id not in requested
     )
-    if not added:
+    if not added and len(kept) == len(existing):
         return build_input
-    return with_rectangular_junctions(build_input, (*existing, *added))
+    return with_rectangular_junctions(build_input, (*kept, *added))
 
 
 def _port_request(

@@ -7,6 +7,7 @@ solver runs.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import math
 
@@ -14,7 +15,7 @@ import pytest
 from test_simulation_drc import MATERIALS, NO_VACUUM_STACK, two_pads
 
 import scgsim.palace.preparation.workflow as workflow
-from scgsim.geometry import GeometryPlan
+from scgsim.geometry import GeometryPlan, RectangularJunctionSpec
 from scgsim.palace import EigenmodeSim
 
 PAD_RADIUS_UM = 100.0
@@ -489,3 +490,40 @@ def test_a_boundary_selector_inside_a_landing_end_binds_the_authored_ring(monkey
     assert "chip/pad/polygon0/ring0/arc" in carriers
     assert "chip/ground/polygon0/ring1/arc" in carriers
     assert "/polygon1/ring0/arc" not in carriers
+
+
+def test_a_plan_request_for_a_port_the_simulation_did_not_select_is_dropped(
+    monkeypatch,
+):
+    """The plan may name more port sheets than the simulation selects; only the selected ones are partitioned."""
+    component = pad_and_electrode(monkeypatch, round_pad=False)
+    inputs = []
+    real = workflow.with_rectangular_ports
+
+    def recording(build_input):
+        inputs.append(build_input)
+        return real(build_input)
+
+    monkeypatch.setattr(workflow, "with_rectangular_ports", recording)
+    prepared, region, _ = prepared_port(eigenmode_sim(component))
+    (selected,) = (
+        RectangularJunctionSpec.from_payload(item)
+        for item in prepared.metadata["rectangular_junctions"]
+    )
+    unselected = dataclasses.replace(
+        selected,
+        junction_id=f"{selected.junction_id}_unselected",
+        port_sheet_id="chip/P2",
+    )
+    (before,) = inputs
+    with_stale = dataclasses.replace(
+        before,
+        metadata={
+            **before.metadata,
+            "rectangular_junctions": (unselected.to_payload(),),
+        },
+    )
+    result = real(with_stale)
+    assert [
+        item["port_sheet_id"] for item in result.metadata["rectangular_junctions"]
+    ] == [region.port_sheet_id]
