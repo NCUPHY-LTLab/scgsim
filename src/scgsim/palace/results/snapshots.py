@@ -19,7 +19,7 @@ from scgsim.palace.results.surface_readers import (
     SurfaceEprReader,
     SurfaceMarginEprReader,
 )
-from scgsim.palace.results.tables import read_csv_table
+from scgsim.palace.results.tables import read_csv_table, requested_modes
 
 _ITERATION_DIR = re.compile(r"^iteration(\d+)$")
 
@@ -82,15 +82,21 @@ def _problem_size_conflicts(left: AmrPassSnapshot, right: AmrPassSnapshot) -> bo
     )
 
 
-def collect_amr_passes(
+def collect_amr_passes(  # noqa: PLR0913 -- the run, its problem, both surface bindings and two read conditions
     root: Path,
     problem: str,
     surface_bindings: tuple[dict[str, Any], ...] | None,
     surface_margin_bindings: tuple[dict[str, Any], ...] | None,
     *,
     failed_attempt: bool,
+    mode_count: int | None = None,
 ) -> CollectedSnapshots:
-    """Read ordered native iterations and retain the existing final-snapshot replacement rules."""
+    """Read ordered native iterations and retain the existing final-snapshot replacement rules.
+
+    ``mode_count`` is the requested Eigenmode count when the run's config is known.
+    Each pass then keeps those modes of the tables Palace wrote for every converged
+    eigenpair; without it a pass reports the rows it finds.
+    """
     results = root / "results" / "palace"
     if not results.is_dir():
         return CollectedSnapshots((), "missing")
@@ -109,6 +115,7 @@ def collect_amr_passes(
             problem=problem,
             surface_bindings=surface_bindings,
             surface_margin_bindings=surface_margin_bindings,
+            mode_count=mode_count,
         ).load_optional()
         if snapshot is not None:
             snapshots.append(snapshot)
@@ -121,6 +128,7 @@ def collect_amr_passes(
         problem=problem,
         surface_bindings=surface_bindings,
         surface_margin_bindings=surface_margin_bindings,
+        mode_count=mode_count,
     ).load_optional()
     if parent is None:
         return CollectedSnapshots(tuple(snapshots), "unreadable")
@@ -152,6 +160,7 @@ class SnapshotReader:
     problem: str
     surface_bindings: tuple[dict[str, Any], ...] | None
     surface_margin_bindings: tuple[dict[str, Any], ...] | None
+    mode_count: int | None = None
 
     def load_optional(self) -> AmrPassSnapshot | None:
         """Return no snapshot when native files are absent or unreadable."""
@@ -163,12 +172,12 @@ class SnapshotReader:
     def load(self) -> AmrPassSnapshot:
         """Read native electrical, surface, mesh and cost observations for this AMR pass."""
         eig_columns = (
-            _read_numeric_table_columns(self.path / "eig.csv")
+            _read_numeric_table_columns(self.path / "eig.csv", self.mode_count)
             if self.problem == "Eigenmode"
             else None
         )
         port_epr = (
-            _read_numeric_table_columns(self.path / "port-EPR.csv")
+            _read_numeric_table_columns(self.path / "port-EPR.csv", self.mode_count)
             if self.problem == "Eigenmode"
             else None
         )
@@ -199,6 +208,7 @@ class SnapshotReader:
             expected_rows=expected_rows,
             bindings=self.surface_bindings,
             surface_count=surface_count,
+            mode_count=self.mode_count,
         ).read()
         surface_margin_epr = SurfaceMarginEprReader(
             self.path / "surface-Q.csv",
@@ -208,6 +218,7 @@ class SnapshotReader:
             expected_rows=expected_rows,
             bindings=self.surface_margin_bindings,
             surface_count=surface_count,
+            mode_count=self.mode_count,
         ).read()
         error_norm = None if error_indicators is None else error_indicators.get("Norm")
         palace_payload = read_optional_json(self.path / "palace.json")
@@ -259,11 +270,15 @@ def _native_iteration(problem: Any) -> int | None:
     return value if type(value) is int and value > 0 else None
 
 
-def _read_numeric_table_columns(path: Path) -> dict[str, tuple[float, ...]] | None:
+def _read_numeric_table_columns(
+    path: Path, mode_count: int | None = None
+) -> dict[str, tuple[float, ...]] | None:
     """Read result columns as numeric traces while excluding index and solver-error columns."""
     if not path.is_file():
         return None
     table = read_csv_table(path)
+    if mode_count is not None:
+        table = requested_modes(table, mode_count)
     columns: dict[str, tuple[float, ...]] = {}
     for header in table.headers:
         if header in _INDEX_COLUMNS:

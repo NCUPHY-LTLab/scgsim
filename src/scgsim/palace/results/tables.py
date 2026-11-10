@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import math
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -306,6 +307,50 @@ def read_csv_table(path: Path) -> ParsedTable:
     return ParsedTable(
         name=path.stem, path=path, headers=raw_headers, rows=tuple(parsed_rows)
     )
+
+
+# Palace writes one row per converged eigenpair in these tables, in mode order.
+_MODE_FAMILIES = frozenset(
+    {"eig", "port-EPR", "port-I", "port-V", "domain-E", "surface-Q"}
+)
+
+
+def read_result_table(
+    path: Path,
+    problem: str,
+    index_counts: dict[str, int],
+    config: dict[str, Any],
+) -> ParsedTable:
+    """Read one native result table as the sealed config and index map describe it."""
+    table = read_csv_table(path)
+    if problem == "Eigenmode" and table.name in _MODE_FAMILIES:
+        table = requested_modes(table, eigenmode_count(config))
+    validate_table(problem, table, index_counts, config)
+    return table
+
+
+def requested_modes(table: ParsedTable, mode_count: int) -> ParsedTable:
+    """Keep the requested modes of an Eigenmode table that reports every converged one.
+
+    Palace solves for ``Solver.Eigenmode.N`` modes and reports each eigenpair that
+    converged, so a mode table may hold more rows than were requested.  Only modes
+    1..N belong to the result, so the rest are dropped unread.  The index must still
+    be the complete ordered sequence over every reported row: a table that repeats or
+    skips a mode is returned whole for the validator to refuse.
+    """
+    if len(table.rows) <= mode_count or table.headers[:1] != ("m",):
+        return table
+    if [row.get("m") for row in table.rows] != list(range(1, len(table.rows) + 1)):
+        return table
+    return replace(table, rows=table.rows[:mode_count])
+
+
+def configured_mode_count(config: Mapping[str, Any] | None) -> int | None:
+    """Read the requested mode count of a config that an inspection may lack."""
+    solver = config.get("Solver") if isinstance(config, Mapping) else None
+    eigenmode = solver.get("Eigenmode") if isinstance(solver, Mapping) else None
+    count = eigenmode.get("N") if isinstance(eigenmode, Mapping) else None
+    return count if type(count) is int and count >= 1 else None
 
 
 def count_index_entries(index_map: dict[str, Any]) -> dict[str, int]:
