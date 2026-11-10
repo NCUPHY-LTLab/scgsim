@@ -14,12 +14,12 @@ scgsim-id: "docs/design/sgb/decisions"
 ::: {.askr-table-compact}
 | ID | 問題 | 決定 | 決定者 | production 實作狀態 | 已知缺口 |
 |---|---|---|---|---|---|
-| [D1](#d1) | 是否支援 Route C（保留 conductor volume）？ | 納入 v1 | Human（範圍）；細節由 architecture review | 已實作：Route C 保留並 mesh 導體 volume（以裸的 entity id `<entity>` 命名），lumped port 位於 host 的 support plane（與 Route B 相同）；測試與 catalogue 涵蓋三種 route | Palace 端的 material domain 與 Surface EPR lowering 由階段 3 處理 |
+| [D1](#d1) | 是否支援 Route C（保留 conductor volume）？ | 納入 v1 | Human（範圍）；細節由 architecture review | 已實作：Route C 保留並 mesh 導體 volume（以裸的 entity id `<entity>` 命名），lumped port 位於 host 的 support plane（與 Route B 相同）；測試與 catalogue 涵蓋三種 route | Palace 不接受 Route C（`set_surface_epr` 與 `mesh()` 只接受 A 與 B） |
 | [D2](#d2) | sliver 的 threshold 與 derived-to-source snapping？ | v1 不設 threshold，只回報 | Human | 已實作：只回報；薄於 $g$ 的 slab 保留並以警告回報；catalogue 逐列記錄 mesh 品質與 drift | band 的 mesh 尺寸屬 Palace adopter（見 D2） |
 | [D3](#d3) | arc 如何做 noding？ | polyline witness 加 merge-back（暫定） | Lead，architecture review 中 | 已實作（1a） | witness 成本只在執行範例與 catalogue 量過，未在 scaling 量過 |
 | [D4](#d4) | AEDT 的 solid 交換與 face identity？ | XDE assembly 的 STEP、預先切好的 band | Lead，architecture review 中 | 匯出端已實作：`export_aedt_step`、sidecar 的 `aedt_name` 與 face 守衛清單；匯入端屬 AEDT adopter | production 的輸出尚未實際匯入 AEDT 測過 |
 | [D5](#d5) | surface 的 attribution 粒度？ | 預設 per Entity | Human | 已實作：命名 `<kind>::<entity>__<face kind>[::band=k]`、per-Entity 的 volume 與 seam、重疊的 priority 規則 | 大量 Entity 時 group 數的成本未重新量測 |
-| [D6](#d6) | 既有路徑的取代方式？ | 兩者移除，不留相容層 | Human，並經 architecture review | 待階段 4：舊路徑保留到 Palace 與 AEDT 切換（階段 3）之後 | 階段 3 尚未完成 |
+| [D6](#d6) | 既有路徑的取代方式？ | 兩者移除，不留相容層 | Human，並經 architecture review | 舊路徑仍在：Palace 已改用 SGB，AEDT 仍使用舊的 planning 路徑 | AEDT 尚未使用 SGB 輸出 |
 | [D7](#d7) | iterated snap rounding 的 drift 是否設上限？ | v1 只記錄 | Lead 建議，architecture review | 已實作（只記錄）；catalogue 逐列記錄，重新評估條件未被觸發 | drift 只在 catalogue 與測試的輸入上量過 |
 | [D8](#d8) | emission 用 Gmsh API 還是直接序列化？ | 直接 BREP/XAO 序列化 | Lead，architecture review 中 | 已實作（1d）；5-edge 圓柱 wall 以垂直 edge 切開，每一片是精確圓柱 | 跨平台逐位元組相同只是論證，未實測 |
 | [D9](#d9) | production kernel 的語言？ | Python orchestration 加 compiled kernel（建議） | Lead，architecture review | 否：production 目前是純 Python | compiled kernel 尚未量測 |
@@ -35,7 +35,7 @@ Route C 把有限厚度的金屬保留為 conductor volume，並在內部做 mes
 |---|---|
 | 決定 | Route C 納入 v1。它是 S7 的第三種 labelling 政策，不是另一條 pipeline。**production 已實作**（階段 1）：每個導體 Entity 的 volume 都被輸出並在內部 mesh，導體–dielectric 與導體–vacuum 的界面是共用 face；導體 sheet 被拒絕；lumped port 與 Route B 一樣位於 host 的 support plane，是 substrate 與 vacuum 之間、邊與導體 wall 共用的 face。 |
 | 選項 | （a）不支援。（b）當成第三種 labelling 政策支援（已選）。 |
-| 後果 | 會出現 conductor 內部的 volume group（以 `<entity>` 命名）；「Net X 的 PEC」的意義在 Route C 不再是一組 PEC face，因為界面是 conductor 與 dielectric 之間的共用 face；Palace 端的 material domain 與 Surface EPR 的 lowering 都要有對應規則（階段 3，見[欄位對應](consumer-mapping.qmd)）。Route A 與 Route B 的 contract 不變。 |
+| 後果 | 會出現 conductor 內部的 volume group（以 `<entity>` 命名）；「Net X 的 PEC」的意義在 Route C 不再是一組 PEC face，因為界面是 conductor 與 dielectric 之間的共用 face；Palace 端的 material domain 與 Surface EPR 的 lowering 都要有對應規則；Palace 目前不接受 Route C。Route A 與 Route B 的 contract 不變。 |
 | 決定者 | Human 已決定範圍；labelling 政策的細節由 architecture review。 |
 :::
 
@@ -122,7 +122,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | 決定 | 新 pipeline 上線時，既有的 polygon 與 curved 兩條幾何路徑都移除，**不保留相容層**；公開的 `GeometryPlan` API 維持不變。 |
 | 理由 | 設計是 fail-closed、沒有 fallback 幾何；第二條路徑等於對「這個 entity 是什麼」有第二個答案，並會同時維持兩套 identity 機制。 |
 | 後果 | handoff 的 ID 隨新的 content-addressed 機制改變，不保證切換前後可重現。S0 與 S1 沿用 develop 已有的固定 grid source preparation（在 declared grid 上做 source 正規化與 polygon Boolean）：它的 `GeometryGridContext` 攜帶 S4 使用的模型 grid $g$；從 S4 起才是新 pipeline。 |
-| 實作狀態 | **待階段 4。** 階段 1 的 SGB core 在 `scgsim.geometry.sgb`，與舊路徑（`compiler/`、`construction/`、被取代的 `planning/` 模組）並存：新 package 不 import 舊路徑（import-linter 契約 `sgb-core-independence` 強制），`src` 中也沒有任何舊路徑的程式 import 新 package。Palace 與 AEDT 仍呼叫舊路徑，切換是階段 3（Codex）；兩個 adopter 都切換之後，才在階段 4 一次移除舊的 `compiler/`、`construction/`、被取代的 `planning/`、它們的 model、測試與文件，不留相容層。階段 2 的[使用契約](consumer-contract.qmd)與[欄位對應](consumer-mapping.qmd)是給階段 3 的。S1 的抽出（把 `planning/` 中屬於 S1 的函式移到 S1 模組）也延到階段 4，因為 AEDT 的 `runtime_inventory.py` 把幾何模組路徑釘在名單裡。公開的 `GeometryPlan` 只新增一個方法：`set_entity_priorities`（assembly-level priority，見 [D5](#d5)）。 |
+| 實作狀態 | **舊路徑仍在，只剩 AEDT 使用。** SGB core 在 `scgsim.geometry.sgb`，與舊路徑（`compiler/`、`construction/`、被取代的 `planning/` 模組）並存：新 package 不 import 舊路徑（import-linter 契約 `sgb-core-independence` 強制），`src` 中也沒有任何舊路徑的程式 import 新 package。Palace 已改用 SGB（`scgsim.palace.mesh.build`）；AEDT 仍使用舊的 planning 路徑。AEDT 也切換之後，才一次移除舊的 `compiler/`、`construction/`、被取代的 `planning/`、它們的 model、測試與文件，不留相容層。階段 2 的[使用契約](consumer-contract.qmd)與[欄位對應](consumer-mapping.qmd)是給階段 3 的。S1 的抽出（把 `planning/` 中屬於 S1 的函式移到 S1 模組）也延到階段 4，因為 AEDT 的 `runtime_inventory.py` 把幾何模組路徑釘在名單裡。公開的 `GeometryPlan` 只新增一個方法：`set_entity_priorities`（assembly-level priority，見 [D5](#d5)）。 |
 | 決定者 | Human 已決定。 |
 :::
 
@@ -166,7 +166,7 @@ AEDT 要帶著語意消費 SGB 寫出的 solid。E4 實驗（AEDT 2024.2、PyAED
 | 理由 | （a）的成本隨規模成長得比線性快：同一個 Route B 隨機 layout，Gmsh API 的 oracle 在 N = 500、1 000、2 000 要 2.3 s、8.9 s、63.3 s（局部斜率 2.0 與 2.8），N = 5 000 超過 10 分鐘仍未完成；直接 writer 在 N = 1 000 要 0.49 s，N = 20 000 也只要 13.8 s。Gmsh API 也無法指定 solid 的 sense：oracle 重播出的 substrate solid 質量是負的（N = 500、1 000、2 000 都是，`figures/why-scaling-oracle.json`），也就是 solid 的內外顛倒。直接 writer 明確寫出每個 orientation。 |
 | 原型的限制 | **直接 writer 對 cylinder wall 並非「任意邊數都精確」。** 當一條宣告的 arc 帶著外來的 vertex（例如 port 的邊落在圓形 pad 上，或有一個 post 站在彎曲的邊上），wall 變成 5 條 boundary edge；arc 被切開的兩段各自經由 snapped 端點實現，落在略有不同的圓上，wall 的底邊與頂邊不在同一個圓柱面上，原型的直接 writer 因此拒絕這種 wall（Route B/C；Route A 的 sheet 沒有這個問題）。Gmsh API oracle 可以寫出它。 |
 | 修正（已實作） | 在外來 vertex 處以一條 vertical edge 把 wall 切開（頂部的 arc 在同一處切開）；每一段在自己的 realised 圓上是精確的圓柱，兩段共用那條 vertical edge。production 的 assembly 對 arc 上的每個外來 vertex 都加入這條垂直 edge，並反覆計算直到沒有新的 vertex 被迫加入；上下兩側的 horizontal face 與疊在上下的 wall 也看到同樣的切點，所以共用的 edge 仍然完整共用。驗證檢查 `curved_walls_are_single_cylinders` 斷言每面曲面 wall 都由同一個圓上的一條下 arc 與一條上 arc 圍成。 |
-| 範圍 | 只有宣告的 arc 會產生 cylinder wall；直線 wall 是平面，可以有任意多條邊界 edge，不需要切開。以 polygon 表示的圓（GDS 的 16–128 個點）永遠不會產生 cylinder wall，它們的 wall 是平面（見 [Assembly](assembly.qmd)）。 |
+| 範圍 | 只有宣告的 arc 會產生 cylinder wall；直線 wall 是平面，可以有任意多條邊界 edge，不需要切開。以 polygon 表示的圓（GDS 中以多邊形近似的圓）永遠不會產生 cylinder wall，它們的 wall 是平面（見 [Assembly](assembly.qmd)）。 |
 | 後果 | 去掉大部分寫出成本，但不去掉載入成本；writer 成為 topology contract 的第二個實作，必須與 API 路徑保持一致（E3 的檢查比對 group 內容與體積）。planned ID 對 native tag 的綁定由 writer 的建構順序決定，並記錄在 sidecar。 |
 | 實作狀態 | 已實作（1d）：直接寫出 BREP 與 XAO（含 pcurve、圓柱與明確的 orientation），輸出對 `workers`、`tiles` 與 hash seed 逐位元組相同（同一台機器上測過；跨作業系統、CPU 或 libm 相同只是論證，尚未在第二個平台比較，見[使用契約](consumer-contract.qmd#determinism)）。 |
 | 決定者 | Lead 決定，architecture review 中。 |

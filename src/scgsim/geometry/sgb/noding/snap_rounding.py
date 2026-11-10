@@ -116,6 +116,12 @@ def proper_crossing(a1: Point, b1: Point, a2: Point, b2: Point) -> Crossing | No
     return a1[0] * den + d1x * t_num, a1[1] * den + d1y * t_num, den
 
 
+def crossing_pixel(crossing: Crossing) -> Point:
+    """The hot pixel that holds an exact crossing point: each coordinate rounded half up."""
+    x_num, y_num, den = crossing
+    return (2 * x_num + den) // (2 * den), (2 * y_num + den) // (2 * den)
+
+
 def _clamped_cell(value: int, size: int) -> int:
     return max(-COORDINATE_LIMIT, min(COORDINATE_LIMIT, value)) // size
 
@@ -177,7 +183,7 @@ def _crossings_in_cell(
             # Each pair is processed only in the hash cell that contains its crossing point.
             if (x_num // (den * size), y_num // (den * size)) != cell:
                 continue
-            pixel = ((2 * x_num + den) // (2 * den), (2 * y_num + den) // (2 * den))
+            pixel = crossing_pixel(hit)
             if box is None or (
                 box[0] <= pixel[0] < box[2] and box[1] <= pixel[1] < box[3]
             ):

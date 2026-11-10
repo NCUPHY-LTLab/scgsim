@@ -80,8 +80,6 @@ SCGSim or starting a solver.
 - [Architecture and data flow](docs/architecture.qmd)
 - [Runtime and result provenance](docs/provenance.qmd)
 - [Project scope and derivation](docs/goals-and-upstream.qmd)
-- [Project direction](docs/roadmap.qmd)
-- [Historical diagnostic archive](docs/errors.qmd)
 
 The integrated derivation inputs were gsim downstream
 `0.2.0+scq.1`, revision `8f5dc6c05255d003a9c6d8959537bcf8068379d3`,
@@ -94,9 +92,8 @@ API and Palace no longer uses it.
 
 ## Engineering convergence
 
-The current engineering-convergence work remains `CONVERGING`. Track semantic
-state and repository delivery separately in
-[the convergence status page](docs/convergence-status.qmd).
+Track semantic state and repository delivery separately, in the GitHub Issues
+and pull requests of the work.
 
 The required delivery route is a pull request with required checks and no
 bypass. Each CI job is its own check, so a failure names the job that failed:
@@ -173,9 +170,8 @@ its data. Missing required manifest input is a usage error; a skipped test is
 `NOT RUN`, not a golden result. Public CI excludes the `private_golden` marker.
 Keep golden data outside the public repository. Tier B remains supported and
 is not reclassified by this convergence work. Use the
-[pull request template](.github/PULL_REQUEST_TEMPLATE.md) and the
-[convergence status page](docs/convergence-status.qmd) for current scope and
-open items.
+[pull request template](.github/PULL_REQUEST_TEMPLATE.md) and the linked Issue
+for current scope and open items.
 
 ## Larger proposals across projects
 

@@ -56,6 +56,7 @@ from scgsim.geometry.primitives.grid_overlay import (
     parts_overlay as parts_overlay,
 )
 from scgsim.geometry.primitives.grid_regions import (
+    FIX_SHAPE,
     GridArrangement,
     GridFace,
     GridOperand,
@@ -63,10 +64,12 @@ from scgsim.geometry.primitives.grid_regions import (
     GridRegion,
     GridRing,
     PolygonRegion,
+    grid_change_message,
     polygon_components,
     region_vertex_index,
     regions,
     regions_indexed,
+    topology_changes,
 )
 from scgsim.geometry.primitives.grid_regions import (
     GridOperandAudit as GridOperandAudit,
@@ -641,7 +644,14 @@ def _audit_declared_source(
         )
         if before != after:
             raise ValueError(
-                f"declared physical source component/hole topology changed at grid: {entity.semantic_id}"
+                grid_change_message(
+                    "declared physical source component/hole topology changed at grid: "
+                    f"{entity.semantic_id}",
+                    [p.layer for p in requested],
+                    context.grid_size_um,
+                    topology_changes(raw, final, context.grid_size_um),
+                    FIX_SHAPE,
+                )
             )
         raw_regions = regions(raw)
         requested_by_id = {p.polygon_id: p for p in requested}

@@ -58,14 +58,12 @@ python3 -m http.server 4321 --bind 0.0.0.0 --directory _site
 - [架構與資料流程](docs/architecture.qmd)
 - [執行環境與結果來源沿革](docs/provenance.qmd)
 - [專案範圍與衍生來源](docs/goals-and-upstream.qmd)
-- [專案方向](docs/roadmap.qmd)
-- [歷史診斷紀錄](docs/errors.qmd)
 
 整合時採用的衍生輸入為 gsim 下游版本 `0.2.0+scq.1`、修訂版本 `8f5dc6c05255d003a9c6d8959537bcf8068379d3`，以及歷史 SGB 修訂版本 `e74a343154c6b19b6ba32d6fb297e700cfe08ff2`。這些資料說明來源沿革，不代表執行階段相依性、支援範圍擴張或 API 相容性。目前來源幾何使用樹內的 `scgsim.geometry` API。Palace 以 `scgsim.geometry.sgb` 建立幾何，並用 `scgsim.meshing` 產生網格；`scgsim.geometry.compiler` 仍是進階的路徑建構 API，Palace 不再使用它。
 
 ## 工程收斂 {#engineering-convergence}
 
-目前工程收斂工作仍為 `CONVERGING`。請在[收斂狀態頁](docs/convergence-status.qmd)分別追蹤語意狀態與儲存庫交付狀態。
+請在各項工作的 GitHub Issue 與 pull request 中，分別追蹤語意狀態與儲存庫交付狀態。
 
 必要交付流程是建立拉取請求、通過必要檢查，且不得略過檢查。每個 CI 工作都是獨立的檢查，失敗時會直接顯示是哪一項：`change-scope`、`build-and-import (3.12)`、`build-and-import (3.13)`、`fast-tests`、`quality`、`docs-smoke` 與 `pdk-tests`。因條件而略過的工作（草稿拉取請求或純文件流程）會回報成功。分類失敗時其他工作也會略過，所以 `change-scope` 本身也是必要檢查。失敗或取消的工作都視為失敗。
 
@@ -81,7 +79,7 @@ python -m pytest tests/test_private_golden.py \
   --private-golden-manifest /path/to/authorized-manifest.json
 ```
 
-manifest 是讀取器的輸入，不代表有權存取或發布其資料。缺少必要 manifest 輸入屬於使用方式錯誤；略過的測試狀態是 `NOT RUN`，不是基準結果。公開 CI 會排除 `private_golden` 標記。基準資料必須保留在公開儲存庫之外。Tier B 仍受支援，不會因本次收斂工作而重新分類。目前範圍與待處理項目請參閱[拉取請求範本](../.github/PULL_REQUEST_TEMPLATE.md)及[收斂狀態頁](docs/convergence-status.qmd)。
+manifest 是讀取器的輸入，不代表有權存取或發布其資料。缺少必要 manifest 輸入屬於使用方式錯誤；略過的測試狀態是 `NOT RUN`，不是基準結果。公開 CI 會排除 `private_golden` 標記。基準資料必須保留在公開儲存庫之外。Tier B 仍受支援，不會因本次收斂工作而重新分類。目前範圍與待處理項目請參閱[拉取請求範本](../.github/PULL_REQUEST_TEMPLATE.md)與相關的 Issue。
 
 ## 跨專案的大型提案 {#larger-proposals-across-projects}
 
