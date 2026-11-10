@@ -152,3 +152,5 @@ uv run simplepad_q3d.py
 | 共振與 EPR | [Palace 或 HFSS 模態](docs/tutorials/resonance.qmd) · [能量參與率](docs/tutorials/resonance-epr.qmd) |
 | Driven S 參數 | [HFSS Modal 或 Terminal](docs/tutorials/scattering.qmd) |
 | 傳輸線參數 | [AEDT Q2D](docs/tutorials/transmission-line.qmd) |
+
+模擬自己的版圖之前，請先閱讀[支援範圍](docs/supported-scope.qmd)：版圖必須保證什麼、SCGSim 反過來保證什麼，以及失敗由誰負責。
