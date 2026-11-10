@@ -737,8 +737,8 @@ SCENES = {
     "cell24_sheet_square_pad": lambda: cell24_sheet_across_gap(False),
     "cell24_sheet_circular_pad": lambda: cell24_sheet_across_gap(True),
 }
-# The spline strips as the PDK draws them (258 vertices, smallest turns 0.012 and 0.058 degrees): outside the
-# turn-per-vertex rule, refused until resampled.
+# The spline strips as the PDK draws them (258 vertices, smallest turns 0.012 and 0.058 degrees).  They build
+# with exact bands as drawn; the supported roster above carries the resampled strips.
 DRAWN_SPLINES = {
     "cell21_interpolation_drawn": lambda: cell21_spline_strip(
         "cell21_interpolation_drawn", hermite_centreline()

@@ -99,12 +99,10 @@ def test_a_supported_cell_has_the_bands_of_its_exact_erosion(name):
 
 @pytest.mark.parametrize("name", sorted(pdk.DRAWN_SPLINES))
 def test_a_spline_strip_drawn_at_258_points_builds_exact_bands(name):
-    """The PDK's spline strips turn 0.012 and 0.058 degrees at their flattest vertices, outside the turn rule.
+    """The PDK's spline strips turn 0.012 and 0.058 degrees at their flattest vertices.
 
-    They were refused while neighbouring offsets at such small turns could miss each other on the lattice.  The
-    offsets of two lines now end at their crossing on both sides of a vertex (Issue #138), so the curve closes
-    and the bands are those of the exact erosion.  The Human removed the turn-per-vertex rule from the
-    supported scope (Issue #138).
+    The offsets of two lines end at their crossing on both sides of a vertex (Issue #138), so the curve closes
+    at turns this small and the bands are those of the exact erosion.
     """
     scene = pdk.DRAWN_SPLINES[name]()
     assert min(abs(t) for t in turns_degrees(scene.conductors[0].outer)) < 0.06

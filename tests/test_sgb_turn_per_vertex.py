@@ -60,13 +60,13 @@ def test_a_polygon_circle_of_16_to_128_points_builds_exact_bands(n, r):
 def test_a_128_point_circle_off_the_lattice_or_rotated_builds_exact_bands(
     centre, phase, r
 ):
-    """The vertices round to the lattice in every direction, and the rule still holds."""
+    """The vertices round to the lattice in every direction, and the bands stay exact."""
     assert_exact_bands(disk(ngon(r, 128, centre, phase), centre))
 
 
 @pytest.mark.parametrize("r", RADII)
 def test_a_256_point_circle_builds_exact_bands_at_every_radius(r):
-    """1.41 degrees per vertex, outside the rule: the offsets meet at every vertex, so the bands are exact."""
+    """1.41 degrees per vertex: the offsets meet at every vertex, so the bands are exact."""
     assert_exact_bands(disk(ngon(r, 256)))
 
 
@@ -90,8 +90,8 @@ def with_bumped_edge(r: float, turn: float) -> list[Um]:
 def test_one_vertex_turning_less_than_the_rule_in_a_coarse_outline_builds_exact_bands(
     turn,
 ):
-    """Recorded behaviour: a single small turn between 9.8 um edges builds, convex or reflex, down to 0.01
-    degrees.  Outside the rule this is observed, not guaranteed."""
+    """A single small turn between 9.8 um edges builds with exact bands, convex or reflex, down to 0.01
+    degrees.  These turns are measured cases, not a limit."""
     points = with_bumped_edge(50.0, turn)
     lattice_turn = turns_degrees(to_lattice(points))[1]
     assert lattice_turn == pytest.approx(turn, abs=0.01)
