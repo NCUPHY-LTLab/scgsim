@@ -462,7 +462,7 @@ class Chain:
     kinks_rad: tuple[float, ...]
 
 
-def tangent_chain(
+def tangent_chain(  # noqa: PLR0913 - the curve, its bound, both end tangents and the two search radii
     curve: Curve,
     bound_um: float,
     start_tangent: tuple[Fraction, Fraction],

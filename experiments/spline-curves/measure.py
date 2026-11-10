@@ -33,9 +33,9 @@ HERE = Path(__file__).resolve().parent
 REPOSITORY = HERE.parents[1]
 sys.path[:0] = [str(REPOSITORY / "tests"), str(HERE)]
 
+import scenes  # noqa: E402
 from sgb_supported_kit import Scene, band_areas, reference, type_bands  # noqa: E402
 
-import scenes  # noqa: E402
 from scgsim.geometry.sgb.build import emit_model  # noqa: E402
 from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
 from scgsim.meshing import MeshRepairError, mesh_sgb  # noqa: E402

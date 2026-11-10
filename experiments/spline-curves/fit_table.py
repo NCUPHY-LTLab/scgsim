@@ -3,7 +3,7 @@
 For one edge of each scene (cell 14 and 15: the inner signal edge, the Euler centreline offset by w / 2; cell 21:
 the upper strip edge), it prints
 
-* the polygon the test scenes draw (as the PDK samples it, or resampled to the 2.8125-degree rule): its chords
+* the polygon the test scenes draw (as the PDK samples it, or resampled to about 3 degrees per vertex): its chords
   and its largest distance from the exact curve;
 * for each fitting bound: the arcs of the biarc fit and of the lattice chain, and the chain's largest distance
   from the exact curve.
@@ -24,10 +24,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE.parents[1] / "tests"), str(HERE)]
 
+import arcchain as ac  # noqa: E402
 import sgb_supported_pdk_cells as pdk  # noqa: E402
 from sgb_supported_kit import offset_path  # noqa: E402
-
-import arcchain as ac  # noqa: E402
 
 BOUNDS_NM = (math.sqrt(2) / 2, 5.0, 50.0, 200.0)
 X, Y, MINUS_X = (

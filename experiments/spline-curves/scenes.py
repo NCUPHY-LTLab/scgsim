@@ -1,7 +1,7 @@
 """The scenes of the spline-curve study: the polygon scenes of the test suite and their arc-chain versions.
 
 Polygon scenes come unchanged from ``tests/sgb_supported_pdk_cells`` (cells 14, 15 and 21, the latter both resampled
-to the 2.8125-degree turn rule and as the PDK draws it with 258 points).  An arc-chain scene draws the same
+to about 3 degrees per vertex and as the PDK draws it with 258 points).  An arc-chain scene draws the same
 conductors with the exact curve converted, before SGB, into a chain of circular arcs (``arcchain``) between the
 same straight edges.  The arcs enter SGB through ``arc_through_points``, the function the authored ``circular_arc``
 boundary curves use today: no SGB code changes.
@@ -17,6 +17,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from fractions import Fraction
 
+import arcchain as ac
 import sgb_supported_pdk_cells as pdk
 from sgb_supported_kit import (
     GRID,
@@ -27,7 +28,6 @@ from sgb_supported_kit import (
     die_footprint,
 )
 
-import arcchain as ac
 from scgsim.geometry.sgb.prisms.arcs import arc_through_points
 from scgsim.geometry.sgb.records.carriers import ArcCarrier, Lineage, LineEdge
 from scgsim.geometry.sgb.records.grid import exact_z
@@ -122,6 +122,7 @@ def ring_primitives(
                     arc.end,
                     lineage(),
                     what,
+                    grid=GRID,
                 )
             )
     _check_closed(out)
