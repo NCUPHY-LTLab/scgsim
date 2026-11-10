@@ -23,7 +23,7 @@ from ..mesh.build import (
     MeshBuildResult,
     RouteGeometry,
     build_route_geometry,
-    build_route_mesh,
+    mesh_route_geometry,
 )
 from ..mesh.controls import MeshControls
 from ..mesh.summary import summary_from_files
@@ -34,7 +34,7 @@ from .config import (
     build_electrostatic_config,
     configure_numerical_controls,
 )
-from .drc import SimulationDrcReport, run_stages
+from .drc import SimulationDrcReport, check_meshing_stage, run_stages
 from .inputs import (
     load_stack,
     non_negative_number,
@@ -394,10 +394,14 @@ class ElectrostaticSim:
         self._invalidate_config()
 
     def mesh(self) -> Path:
-        """Invalidate prior derived state, prepare the source, and build a new mesh.
+        """Invalidate prior derived state, prepare the source, build the geometry, check it, and mesh it.
 
         Surface EPR is geometry: ``set_surface_epr`` runs before ``mesh()``, which cuts the inset
         margins of its specs into the model as bands.
+
+        Before the mesher starts, the built model goes through the meshing stage of ``simulation_drc``: a
+        refusing fine edge or face raises :class:`~scgsim.palace.SimulationDrcError` carrying the same
+        report, and the geometry stays in the output folder; warnings do not stop the mesh.
         """
         self._invalidate_mesh()
         if (
@@ -410,14 +414,11 @@ class ElectrostaticSim:
             )
         if self.surface_epr_specs is None:
             raise ValueError("set_surface_epr() must run before mesh().")
-        self._mesh_result = build_route_mesh(
-            **self._geometry_source(self.stack),
-            output_dir=self.output_dir,
-            recipe=self.mesh_controls.recipe,
-            mesher=self.mesh_controls.mesher,
-            budgets=self.mesh_controls.budgets,
-            quality_threshold=self.mesh_controls.quality_threshold,
+        geometry = build_route_geometry(
+            **self._geometry_source(self.stack), output_dir=self.output_dir
         )
+        check_meshing_stage(geometry)
+        self._mesh_result = mesh_route_geometry(geometry, self.mesh_controls)
         return self._mesh_result.mesh_path
 
     @classmethod
@@ -444,7 +445,8 @@ class ElectrostaticSim:
         edges and faces the mesher cannot use, each with its location, size, owner and fix.  A refusal there
         raises :class:`~scgsim.palace.SimulationDrcError` carrying both stages; otherwise the
         :class:`~scgsim.palace.SimulationDrcReport` is returned, warnings included.  Nothing is meshed, and
-        the geometry is written to a temporary folder that is removed.
+        the geometry is written to a temporary folder that is removed.  ``mesh()`` runs the same meshing
+        stage on the model it builds, before the mesher starts.
 
         A pass means the layout can be modeled with these settings.  It does not promise that other
         settings (Route A, terminals, junctions, lumped supports, another vacuum region) will model; run that

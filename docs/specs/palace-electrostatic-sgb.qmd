@@ -64,7 +64,7 @@ preflight and pipeline exit codes, and `solver_exit_code=null`. Receipts use
 | Output identity | `set_output_dir` | Bind the mesh/config/handoff output location. |
 | Surface films | `set_surface_epr` | Declare surface films and their inset margins; run it before `mesh()`. |
 | Mesh controls | `set_mesh(...)` | Select the sizing recipe, mesher options, repair budgets and quality threshold. |
-| Mesh | `mesh` | Build the SGB geometry, mesh it with `scgsim.meshing` and lower its groups to Palace attributes. |
+| Mesh | `mesh` | Build the SGB geometry, check it for fine structure, mesh it with `scgsim.meshing` and lower its groups to Palace attributes. |
 | Config | `write_config` | Write the Palace Electrostatic configuration for the reviewed mesh identities. |
 
 These methods are accepted public APIs.
@@ -85,6 +85,13 @@ Both Palace facades accept them through `set_mesh(...)`, with the same defaults.
 Omitted arguments retain their current settings. A change that alters a setting
 invalidates the mesh, config and handoff; an invalid proposed value leaves the
 prior state intact.
+
+Before the mesher starts, `mesh()` runs the meshing stage of `simulation_drc` on
+the geometry it built. A refusing finding raises `scgsim.palace.SimulationDrcError`,
+carrying the report with each finding's location, owner and fix, and no mesh is
+made; warnings do not stop `mesh()`. The classes and limits are in
+[What the meshing stage reports](../layout-modeling-check.qmd#what-the-meshing-stage-reports).
+The mesh controls below apply to a model that passed.
 
 ::: {.askr-table-compact}
 | Control | Default | Meaning |

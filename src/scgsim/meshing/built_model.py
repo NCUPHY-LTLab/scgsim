@@ -11,10 +11,10 @@ Owns reading the geometry and lineage that the meshing-stage check needs from an
 * ``lineage``: the carriers of every horizontal edge and what each carrier comes from (a source polygon edge
   or a member of a cut family), the Entities a wall column stands under, and the sources of every face.
 
-It measures the four sizes the meshing-stage classes are stated in (issue 125): the column gap of a wall
-face, the width ``2 A / P`` of a horizontal face, the corner (wedge) angle of a horizontal face, and the
-length of a horizontal edge that bounds no wall.  Corner angles are taken between the chords of the boundary
-edges, as SGB's sliver report takes them.  Nothing here decides what is fine: that is the limits' job.
+It measures the four sizes the meshing-stage classes are stated in: the column gap of a wall face, the
+width ``2 A / P`` of a horizontal face, the corner (wedge) angle of a horizontal face, and the length of a
+horizontal edge that bounds no wall.  Corner angles are taken between the chords of the boundary edges, as
+SGB's sliver report takes them.  Nothing here decides what is fine: that is the limits' job.
 """
 
 from __future__ import annotations

@@ -55,7 +55,6 @@ class MeshBuildResult:
     quality_report_path: Path
 
 
-@diagnostic_stage("palace.mesh.prepare")
 def build_route_mesh(  # noqa: PLR0913 -- preserve the supported mesh preparation API.
     *,
     component: Any,
@@ -77,7 +76,8 @@ def build_route_mesh(  # noqa: PLR0913 -- preserve the supported mesh preparatio
 
     ``surface_epr_specs`` supply the inset margins that SGB cuts into the geometry as bands.  A mesh the
     meshing module cannot bring to ``quality_threshold`` raises :class:`scgsim.meshing.MeshRepairError`
-    carrying the quality report.
+    carrying the quality report.  This is :func:`build_route_geometry` then :func:`mesh_route_geometry`;
+    the simulations' ``mesh()`` calls the two itself, so that its meshing-stage check runs between them.
     """
     controls = MeshControls().updated(
         recipe=recipe,
@@ -97,6 +97,19 @@ def build_route_mesh(  # noqa: PLR0913 -- preserve the supported mesh preparatio
         source_geometry_input=source_geometry_input,
         representation_context=representation_context,
     )
+    return mesh_route_geometry(built, controls)
+
+
+@diagnostic_stage("palace.mesh.prepare")
+def mesh_route_geometry(
+    built: RouteGeometry, controls: MeshControls
+) -> MeshBuildResult:
+    """Mesh a built SGB geometry to the quality threshold, lower it to Palace, and write the paired records.
+
+    ``built`` is what :func:`build_route_geometry` wrote into the run folder; the mesh, the manifest and the
+    provenance go into the same folder.  A mesh the meshing module cannot bring to the threshold of
+    ``controls`` raises :class:`scgsim.meshing.MeshRepairError` carrying the quality report.
+    """
     paths, artifacts = built.paths, built.artifacts
     sidecar_bytes = artifacts.sidecar.read_bytes()
     sidecar = json.loads(sidecar_bytes)
@@ -123,7 +136,7 @@ def build_route_mesh(  # noqa: PLR0913 -- preserve the supported mesh preparatio
             "sha256": hashlib.sha256(sidecar_bytes).hexdigest(),
         },
         mesh_name=paths.mesh_path.name,
-        route=route,
+        route=built.route,
         route_a_thin_film=built.route_a_thin_film,
         meshing=_meshing_record(meshed, observed, paths),
     )
@@ -132,7 +145,7 @@ def build_route_mesh(  # noqa: PLR0913 -- preserve the supported mesh preparatio
         paths.provenance_path,
         {
             "scgsim_version": scgsim_version(),
-            "route": route,
+            "route": built.route,
             **(
                 {"route_a_thin_film": built.route_a_thin_film}
                 if built.route_a_thin_film is not None
@@ -183,6 +196,7 @@ class RouteGeometry:
 
     paths: BuildPaths
     artifacts: SgbArtifacts
+    route: str
     top_cell: str
     route_a_thin_film: dict[str, Any] | None
 
@@ -226,7 +240,7 @@ def build_route_geometry(  # noqa: PLR0913 -- the keyword set of build_route_mes
         surface_epr_specs=surface_epr_specs,
         output_dir=paths.geometry_dir,
     )
-    return RouteGeometry(paths, artifacts, top_cell, thin_film)
+    return RouteGeometry(paths, artifacts, route, top_cell, thin_film)
 
 
 def _prepare_paths(output_dir: str | Path, route: str) -> BuildPaths:

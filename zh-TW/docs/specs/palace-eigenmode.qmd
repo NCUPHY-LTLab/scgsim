@@ -24,7 +24,7 @@ lang: zh-TW
 | 輸出選取 | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |
 | 準備 | `mesh()`、`write_config()`，接著 `prepare_handoff(*, profile, executable, resources=None, setup_commands=(), petsc_options=())` |
 
-幾何階數與透過 `set_numerical(...)` 設定的 FEM 階數不同；求解器設定會保留目前的網格控制。本徵模態與 Electrostatic 兩個外觀介面共用同一組網格控制與預設值，記載於 [Palace 網格控制](palace-electrostatic-sgb.qmd#palace-mesh-controls)，該節也說明網格低於品質門檻時 `mesh()` 會中止。
+幾何階數與透過 `set_numerical(...)` 設定的 FEM 階數不同；求解器設定會保留目前的網格控制。本徵模態與 Electrostatic 兩個外觀介面共用同一組網格控制與預設值，記載於 [Palace 網格控制](palace-electrostatic-sgb.qmd#palace-mesh-controls)，該節也說明細微結構會使 `mesh()` 在產生網格之前被拒絕，以及網格低於品質門檻時 `mesh()` 會中止。
 
 ## 本徵模態網格與 AMR 預設值（CONVERGING） {#eigenmode-mesh-and-amr-defaults-converging}
 

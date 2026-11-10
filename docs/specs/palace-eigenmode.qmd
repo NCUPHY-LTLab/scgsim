@@ -31,7 +31,8 @@ Geometric order is distinct from the FEM order configured through
 Eigenmode and Electrostatic facades share one set of mesh controls and
 defaults, described in the
 [Palace mesh controls](palace-electrostatic-sgb.qmd#palace-mesh-controls), which
-also state that a mesh below the quality threshold stops `mesh()`.
+also state that fine structure refuses `mesh()` before meshing and that a mesh
+below the quality threshold stops it.
 
 ## Eigenmode mesh and AMR defaults (CONVERGING)
 

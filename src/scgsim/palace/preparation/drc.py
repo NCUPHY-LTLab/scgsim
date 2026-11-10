@@ -1,11 +1,12 @@
 """The two stages of ``simulation_drc``: the geometry build, then the meshing-stage check of the built model.
 
-Owns the order of the stages and the report that keeps them apart.  The geometry stage is the preparation
-and SGB build that ``mesh()`` runs; a layout it refuses raises that stage's own error, unchanged.  Only a
-model the geometry stage built goes to the meshing stage (``scgsim.meshing.check_fine_structure``), which
-finds the fine edges and faces the mesher cannot use and says where they are and who owns them.  A
-meshing-stage refusal raises :class:`SimulationDrcError` carrying both stages; a pass returns the
-:class:`SimulationDrcReport`, warnings included.
+Owns the order of the stages, the report that keeps them apart, and the meshing-stage check that both
+``simulation_drc`` and ``mesh()`` run.  The geometry stage is the preparation and SGB build that ``mesh()``
+runs; a layout it refuses raises that stage's own error, unchanged.  Only a model the geometry stage built
+goes to the meshing stage (``scgsim.meshing.check_fine_structure``), which finds the fine edges and faces
+the mesher cannot use and says where they are and who owns them.  A meshing-stage refusal raises
+:class:`SimulationDrcError` carrying both stages; a pass returns the :class:`SimulationDrcReport`, warnings
+included.  ``mesh()`` runs the same check on the model it built, before the mesher starts.
 """
 
 from __future__ import annotations
@@ -60,8 +61,9 @@ class SimulationDrcReport:
 class SimulationDrcError(Exception):
     """The meshing stage refused a layout whose geometry stage passed.
 
-    ``report`` is the :class:`SimulationDrcReport` of both stages; its meshing findings say where each fine
-    edge or face is, who owns it and how to fix it.
+    ``simulation_drc`` raises it, and so does ``mesh()`` before it starts the mesher.  ``report`` is the
+    :class:`SimulationDrcReport` of both stages; its meshing findings say where each fine edge or face is,
+    who owns it and how to fix it.
     """
 
     def __init__(self, report: SimulationDrcReport) -> None:
@@ -83,7 +85,17 @@ def run_stages(build_geometry: Callable[[Path], RouteGeometry]) -> SimulationDrc
     with TemporaryDirectory(prefix="scgsim-simulation-drc-") as folder:
         # The geometry build requires an empty folder; the temporary one is, and goes away with the check.
         geometry = build_geometry(Path(folder))
-        meshing = check_fine_structure(geometry.artifacts.sidecar)
+        return check_meshing_stage(geometry)
+
+
+def check_meshing_stage(geometry: RouteGeometry) -> SimulationDrcReport:
+    """The meshing stage on a model the geometry stage built: its report, or :class:`SimulationDrcError`.
+
+    The geometry stage passed, since ``geometry`` exists.  A refusing finding raises the error carrying the
+    report of both stages; warnings alone return it.  ``simulation_drc`` and ``mesh()`` both call this, so a
+    model ``mesh()`` refuses is refused by ``simulation_drc`` with the same findings when the settings match.
+    """
+    meshing = check_fine_structure(geometry.artifacts.sidecar)
     report = SimulationDrcReport(
         geometry=StageResult("geometry", passed=True),
         meshing=StageResult("meshing", meshing.passed, meshing.findings),

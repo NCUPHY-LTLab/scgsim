@@ -6,13 +6,16 @@ substrate wrapped in the check's 1 um vacuum.  What changes is the pad's outline
 * ``clean`` -- a square;
 * ``jog`` -- a 1 nm step in the edge facing the electrode (layout fine structure: a wall face 1 grid step
   wide);
-* ``convex`` -- the top edge bent by 0.57 degrees at a convex vertex (no fine structure in the source; the
-  band offsets meeting there leave edges of 2 and 5 grid steps, an SGB defect);
+* ``convex`` -- the top edge bent by 0.57 degrees at a convex vertex, so its left half is tilted by 0.29 degrees
+  (no fine structure in the source; where that half's bands end at the pad's left edge, x = 0, their cap
+  arcs are the margin times the tilt, 2 and 5 grid steps, an SGB defect);
 * ``bar`` -- a bar 2.004 um wide inside a U-shaped electrode (with 1.0 um bands, the exact erosion leaves a
   core 4 nm wide).
 
-The fast meshing-stop test stands in for the Gmsh worker; the located finding it reports comes from the
-real build's sidecar.  The slow one meshes the jog with Gmsh.
+``mesh()`` runs the same meshing stage on the model it built before the mesher starts; its tests replace only
+the mesher, so the refusal comes from the real build and the real check.  The fast meshing-stop test stands in
+for the Gmsh worker; the located finding it reports comes from the real build's sidecar.  The slow ones mesh
+with Gmsh.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from test_simulation_drc import (
 
 import scgsim.meshing.entry as meshing_entry
 import scgsim.meshing.repair as meshing_repair
+import scgsim.palace.mesh.build as build_module
 import scgsim.palace.preparation.drc as drc_module
 from scgsim.geometry.sgb.errors import OverlapError
 from scgsim.meshing import (
@@ -39,8 +43,11 @@ from scgsim.meshing import (
 )
 from scgsim.meshing.findings import BadElement
 from scgsim.meshing.sizing import BoundingBox
-from scgsim.palace import EigenmodeSim, SimulationDrcError
-from scgsim.palace.preparation.layout_snapshot import prepare_layout_snapshot
+from scgsim.palace import EigenmodeSim, ElectrostaticSim, SimulationDrcError
+from scgsim.palace.preparation.layout_snapshot import (
+    DRC_VACUUM_PADDING_UM,
+    prepare_layout_snapshot,
+)
 
 ELECTRODE = ((30, 0), (60, 0), (60, 25), (30, 25))
 PADS = {
@@ -154,7 +161,7 @@ def test_the_bands_of_a_layout_jog_belong_to_the_layout(monkeypatch):
 
 
 def test_an_sgb_caused_fine_edge_is_attributed_to_sgb(monkeypatch):
-    """The convex vertex is not fine in the source; the short band seam pieces there are SGB's, and only warn."""
+    """The source is not fine anywhere; the short cap arcs where the tilted half's bands end are SGB's, and only warn."""
     report = check(
         EigenmodeSim,
         scene(monkeypatch, PADS["convex"]),
@@ -164,15 +171,17 @@ def test_an_sgb_caused_fine_edge_is_attributed_to_sgb(monkeypatch):
     findings = report.meshing.findings
     assert findings
     assert {(f.rule, f.action, f.owner) for f in findings} == {("C", "warn", "sgb")}
-    at_vertex = [f for f in findings if f.location_um[0] == pytest.approx(10, abs=0.01)]
-    assert at_vertex
+    at_band_ends = [
+        f for f in findings if f.location_um[0] == pytest.approx(0, abs=0.01)
+    ]
+    assert sorted(f.value_steps for f in at_band_ends) == pytest.approx([2, 5])
     assert all(f.value_steps is not None and f.value_steps < 25 for f in findings)
     assert all(
         f.sources
         and all(s.startswith("epr_MA::chip/pad_0000::top/") for s in f.sources)
         for f in findings
     )
-    assert "SGB defect" in at_vertex[0].fix
+    assert "SGB defect" in at_band_ends[0].fix
 
 
 def test_a_core_the_exact_erosion_leaves_is_attributed_to_the_erosion(monkeypatch):
@@ -216,8 +225,8 @@ def test_a_geometry_refusal_never_reaches_the_meshing_stage(monkeypatch, simulat
         check(simulation, scene(monkeypatch, PADS["clean"], overlapping))
 
 
-def test_limits_hold_the_proposed_values_and_reject_bad_ones():
-    """The one settings object holds the proposal of issue 125; a non-positive limit or an unknown action is refused."""
+def test_limits_hold_the_decided_values_and_reject_bad_ones():
+    """The one settings object holds the Human's values; a non-positive limit or an unknown action is refused."""
     limits = FineStructureLimits()
     assert (
         limits.wall_column_gap_steps,
@@ -234,6 +243,94 @@ def test_limits_hold_the_proposed_values_and_reject_bad_ones():
         FineStructureLimits(wall_column_gap_steps=0)
     with pytest.raises(ValueError, match="free_edge_action"):
         FineStructureLimits(free_edge_action="ignore")  # type: ignore[arg-type]
+
+
+class MesherStarted(Exception):
+    """Raised in place of the mesher: ``mesh()`` got past the meshing-stage check."""
+
+
+def stop_at_the_mesher(monkeypatch):
+    """Replace the mesher ``mesh()`` starts by one that records the call and raises :class:`MesherStarted`."""
+    started = []
+
+    def mesher(xao, *_args, **_kwargs):
+        started.append(xao)
+        raise MesherStarted
+
+    monkeypatch.setattr(build_module, "mesh_sgb", mesher)
+    return started
+
+
+def set_up_as_the_check(simulation, component, run_dir, specs=None):
+    """A ``simulation`` set up as ``simulation_drc`` sets it up for ``component``, writing into ``run_dir``.
+
+    The layout has no vacuum of its own, so it gets the check's vacuum region; ``ElectrostaticSim`` needs
+    Surface EPR, so none given means ``{}``.
+    """
+    snapshot = prepare_layout_snapshot(
+        component,
+        layer_stack=NO_VACUUM_STACK,
+        material_records=MATERIALS,
+        instances=None,
+        nets=None,
+    )
+    sim = simulation()
+    sim.set_plan(snapshot)
+    sim.set_vacuum_region(DRC_VACUUM_PADDING_UM)
+    if specs is not None or simulation is ElectrostaticSim:
+        sim.set_surface_epr(representation="B", specs=specs or {})
+    sim.set_output_dir(run_dir)
+    return sim
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+def test_mesh_refuses_layout_fine_structure_before_the_mesher_starts(
+    monkeypatch, tmp_path, simulation
+):
+    """``mesh()`` checks the model it built: the jog is refused with the report ``simulation_drc`` gives, unmeshed."""
+    expected = refusal(simulation, scene(monkeypatch, PADS["jog"])).report
+    started = stop_at_the_mesher(monkeypatch)
+    sim = set_up_as_the_check(
+        simulation, scene(monkeypatch, PADS["jog"]), tmp_path / "run"
+    )
+    with pytest.raises(SimulationDrcError) as raised:
+        sim.mesh()
+    assert started == []
+    assert raised.value.report == expected
+    assert "(20.0005, 10.0000, 0.1000) um" in str(raised.value)
+    with pytest.raises(RuntimeError, match="requires a generated mesh"):
+        sim.mesh_summary()
+
+
+@pytest.mark.parametrize("simulation", SIMULATIONS)
+def test_mesh_goes_on_to_the_mesher_past_warnings(monkeypatch, tmp_path, simulation):
+    """The convex vertex leaves only class C warnings: ``simulation_drc`` passes with them, and ``mesh()`` meshes."""
+    report = check(
+        simulation, scene(monkeypatch, PADS["convex"]), surface_epr_specs=BANDED
+    )
+    assert report.passed
+    assert report.meshing.findings
+    assert {f.action for f in report.meshing.findings} == {"warn"}
+    started = stop_at_the_mesher(monkeypatch)
+    sim = set_up_as_the_check(
+        simulation, scene(monkeypatch, PADS["convex"]), tmp_path / "run", BANDED
+    )
+    with pytest.raises(MesherStarted):
+        sim.mesh()
+    assert len(started) == 1
+
+
+@pytest.mark.slow
+def test_gmsh_meshes_a_model_with_only_warnings(monkeypatch, tmp_path):
+    """With Gmsh, ``mesh()`` goes past the convex scene's class C warnings and returns a clean mesh."""
+    pytest.importorskip("gmsh", reason="the meshing module needs Gmsh (extra: palace)")
+    sim = set_up_as_the_check(
+        EigenmodeSim, scene(monkeypatch, PADS["convex"]), tmp_path / "run", BANDED
+    )
+    assert sim.mesh().is_file()
+    meshing = sim.mesh_summary()["meshing"]
+    assert meshing["stop"] == "clean"
+    assert meshing["linear_mesh"]["bad_count"] == 0
 
 
 def built_jog(monkeypatch, tmp_path):

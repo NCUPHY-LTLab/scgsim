@@ -1,6 +1,6 @@
 """The meshing stage of ``simulation_drc``: fine edges and faces of a built model, where they are and who owns them.
 
-Owns the check that runs on a built SGB model before meshing (issue 125).  It reads only the sidecar
+Owns the check that runs on a built SGB model before meshing.  It reads only the sidecar
 (``built_model``), measures every wall face, horizontal face and free horizontal edge, keeps those below the
 limits of :class:`FineStructureLimits`, and attributes each to its owner by lineage:
 
@@ -52,9 +52,10 @@ _MEMBER_POSITION = re.compile(r"/ring(\d+)/(edge|corner|capend|capstart)(\d+)$")
 class FineStructureLimits:
     """The sizes below which an edge or face is a meshing-stage finding, and whether each class refuses or warns.
 
-    PROPOSED, AWAITING THE HUMAN (issue 125).  Every value is the proposal of the issue's measurement
-    comment; none is decided.  They are all here so the Human's choice changes this class only.  Lengths are
-    grid steps, so a limit scales with the model grid; findings give micrometres beside them.
+    The default values and actions are the Human's decision.  They are a guard against fine structure, not
+    a validated criterion for a failed mesh: no meshing stop of the measured baseline cases had a finding of
+    these classes.  Lengths are grid steps, so a limit scales with the model grid; findings give micrometres
+    beside them.
 
     * Class A (``wall_column_gap_steps``): a wall face whose column gap -- the length of the outline edge
       it stands on, not its film height -- is below the limit.  Measured: the 1-step TC jogs of the
@@ -62,18 +63,18 @@ class FineStructureLimits:
     * Class B (``face_width_steps``, ``wedge_angle_deg``): a horizontal face whose width ``2 A / P`` is below
       the limit, or one of whose corners is sharper than the angle.  Measured: the band sliver of
       ``junction_straight``; every other face had 2A/P of 20 nm or more and corners of 5.6 degrees or more.
-    * Class C (``free_edge_steps``): a horizontal edge that bounds no wall and is shorter than the limit
-      (0.5 um x 2.8 degrees, the 128-points-per-circle rule at the narrowest band).  The repair loop
-      cleans most of these at a cost, so the proposal warns.
+    * Class C (``free_edge_steps``): a horizontal edge that bounds no wall and is shorter than the limit:
+      the arc a 0.5 um band leaves at a vertex that turns 2.8 degrees.  The repair loop cleans most of
+      these at a cost, so the class warns.
     """
 
-    wall_column_gap_steps: float = 10.0  # PROPOSED, awaiting the Human (issue 125)
-    wall_action: Action = "refuse"  # PROPOSED, awaiting the Human (issue 125)
-    face_width_steps: float = 10.0  # PROPOSED, awaiting the Human (issue 125)
-    wedge_angle_deg: float = 1.0  # PROPOSED, awaiting the Human (issue 125)
-    face_action: Action = "refuse"  # PROPOSED, awaiting the Human (issue 125)
-    free_edge_steps: float = 25.0  # PROPOSED, awaiting the Human (issue 125)
-    free_edge_action: Action = "warn"  # PROPOSED, awaiting the Human (issue 125)
+    wall_column_gap_steps: float = 10.0
+    wall_action: Action = "refuse"
+    face_width_steps: float = 10.0
+    wedge_angle_deg: float = 1.0
+    face_action: Action = "refuse"
+    free_edge_steps: float = 25.0
+    free_edge_action: Action = "warn"
 
     def __post_init__(self) -> None:
         """Reject a limit that is not a positive number and an action other than refuse or warn."""
