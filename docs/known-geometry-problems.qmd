@@ -10,7 +10,8 @@ This page lists the geometry known to fail in SCGSim, or to build as something
 other than what the layout means. For each case it shows where the problem is,
 what goes wrong and why, and why SCGSim does not work around it. In each case
 the fix is a change to the layout. What SCGSim does support is on
-[Supported Geometry](supported-geometry.qmd).
+[Supported Geometry](supported-geometry.qmd), and the rules every layout must
+follow, with the owner of each failure, are on [Supported Scope](supported-scope.qmd).
 
 The figures redraw each case from its reported dimensions on SGB's 1 nm grid,
 with no PDK code. The problem is marked in red; the panels to the right zoom in
@@ -31,6 +32,12 @@ from what the PDK code means to draw. Each is reported to the PDK in
 (A1, A6), with the cause in the PDK code. They are drawing defects, so the fix
 belongs in the PDK.
 
+The OrcaPen SC PDK corrects all six: C1 to C4 in
+[orcapen-sc-pdk#64](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/64), A1 and A6 in
+[orcapen-sc-pdk#61](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/61). A layout shows them only when it is built from a
+PDK revision without those pull requests, so build layouts for simulation from
+a PDK revision that includes them.
+
 ### C1: a crack between the disk and its lead fan {#c1-crack}
 
 ![The disk (left) and its lead fan in the junction frame; the zooms show the crack's 0.21 µm mouth and the step of about 10 nm where it closes.](assets/supported-geometry/problem-c1-crack.svg){fig-alt="Disk and fan with a thin wedge-shaped crack on each side, marked in red, and two zoomed views of the crack."}
@@ -46,6 +53,9 @@ union leaves the gap (`_radial_taper` and `_disk_and_junction` in the PDK).
 **Why SCGSim does not fix it.** A 0.21 µm gap is a valid drawn feature, so
 SCGSim keeps it. Make the fan's arc land on the disk's own vertices, or extend
 the fan into the disk before the union, so that the union is one clean outline.
+
+**Corrected in the PDK** by [orcapen-sc-pdk#64](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/64): the fan's straight
+sides continue into the disk.
 
 ### C2 and C3: zero-width slits in the claw {#c2-c3-slits}
 
@@ -63,6 +73,9 @@ and the slit ends on a window vertex (`_claw_segment` in the PDK).
 geometry. Round the corners on the whole claw outline instead of splicing
 rounded pieces in through windows.
 
+**Corrected in the PDK** by [orcapen-sc-pdk#64](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/64): the claw is drawn as
+one outline and rounded once.
+
 ### C4: a bite at each claw's outer corner {#c4-corner-bite}
 
 ![A claw's outer corner; the zoom shows the bite between the sharp tip and the leftover rounding.](assets/supported-geometry/problem-c4-corner-bite.svg){fig-alt="The outer corner of a claw with a small notch, outlined in red, between a sharp tip and a rounded corner."}
@@ -75,6 +88,9 @@ elements. The cause is in the drawing: the corner is rounded first
 
 **Why SCGSim does not fix it.** The outline is valid geometry. Add the taper
 before rounding, or round only the corners that remain.
+
+**Corrected in the PDK** by [orcapen-sc-pdk#64](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/64): the taper is part of
+the claw outline before it is rounded.
 
 ### A1: Purcell IDC fingers detached by 1 nm {#a1-detached-fingers}
 
@@ -95,6 +111,9 @@ wrong.
 drawing, and SCGSim cannot know that they were meant to touch. Give the comb its
 own spine and use finger lengths on the grid.
 
+**Corrected in the PDK** by [orcapen-sc-pdk#61](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/61): each comb has its own
+spine, and the Purcell cell's finger length is on the grid.
+
 ### A6: an etch frame that the ground mask lacks {#a6-etch-frame}
 
 ![A chip with a CPW; the solid red outline is the 2300 × 1000 frame on the etch layer, the dashed one the 2200 × 900 chip edge. The zoom shows a corner.](assets/supported-geometry/problem-a6-etch-frame.svg){fig-alt="A ground plane with a CPW across it, the 50 µm frame round the chip outlined in red, and a zoom of one corner."}
@@ -108,6 +127,9 @@ is more than 400 µm from the CPW, so the effect on the CPW is small.
 **Why SCGSim does not fix it.** SCGSim's documented ground form is the plane
 less the ground mask; it does not read the etch layer. Put the frame in the
 ground mask too, or take it out of the etch layer, so both give the same metal.
+
+**Corrected in the PDK** by [orcapen-sc-pdk#61](https://github.com/NCUPHY-LTLab/orcapen-sc-pdk/pull/61): the frame is drawn on
+the ground mask as well.
 
 ## Curves outside the 128-point scope {#curves-outside-scope}
 

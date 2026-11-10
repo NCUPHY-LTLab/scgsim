@@ -14,7 +14,7 @@ scgsim-id: "docs/layout-modeling-check"
 
 兩個階段都通過的版圖會回傳 `SimulationDrcReport`，其中列出網格階段的警告。
 
-幾何階段能找出使建模失敗的版圖缺陷：形狀不正確、重疊、微小的錯位、錯誤的語意宣告、沒有落在應有位置的端口薄片，以及放不進所繪間隙的 Surface EPR 條帶。它不預測最終的模擬幾何。SCGSim 經過測試的圖形列在[支援的幾何](supported-geometry.qmd)，已知的失敗情況及版圖的修改方式列在[已知的幾何問題](known-geometry-problems.qmd)。
+幾何階段能找出使建模失敗的版圖缺陷：形狀不正確、重疊、微小的錯位、錯誤的語意宣告、沒有落在應有位置的端口薄片，以及放不進所繪間隙的 Surface EPR 條帶。它不預測最終的模擬幾何。SCGSim 經過測試的圖形列在[支援的幾何](supported-geometry.qmd)，已知的失敗情況及版圖的修改方式列在[已知的幾何問題](known-geometry-problems.qmd)。檢查所執行的規則，以及各種失敗由誰負責，見[支援範圍](supported-scope.qmd)。
 
 ## 呼叫版圖所要用的每個模擬的檢查 {#call-the-check-of-each-simulation-the-layout-is-for}
 

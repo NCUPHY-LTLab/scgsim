@@ -77,7 +77,7 @@ The curve scope is **ACCEPTED**. Polygon-only inputs retain their polygon
 boundaries. Curves are explicit source declarations, not smoothing inferred
 from a rendered layout or a mesh.
 
-`SourceCurveSpec` describes XY coordinates in micrometres. Supported kinds are
+`SourceCurveSpec` describes XY coordinates in micrometres. Its kinds are
 `line_segment` (two endpoints), `circular_arc` (start, on-arc, end),
 `interpolation_spline` (native interpolation through the supplied points), and
 `bspline` (control points with explicit degree, rational weights, distinct knots
@@ -88,6 +88,12 @@ exact composite rational B-spline on native domain `[0, 1]`; its internal knots
 separate the exact spans, and a trim may cross those knots. For a caller-authored
 `bspline`, the supplied degree, weights, knots, multiplicities, and native
 parameter domain remain authoritative.
+
+The geometry builder that Palace uses (SGB) carries `line_segment` and
+`circular_arc`. It refuses an `interpolation_spline` or `bspline` declaration,
+and a boundary reconstruction of any kind other than `circular_arc`, with
+`UnsupportedCurveError`. A layout for SGB uses lines, circular arcs, or a
+polygon that follows the [curve rule](supported-geometry.qmd#curve-rule).
 
 A `BoundaryCurveChainSpec` binds an ordered closed boundary to `entity_id`,
 `boundary_id`, and `selector_point_um`. The selector lies in the selected
@@ -345,7 +351,10 @@ solve or returned matrix observation.
 | Route A | Zero-thickness face-metal PEC sheets with finite bump shells | Implemented, accepted |
 | Route B | The closed exterior boundary shell of a finite construction metal volume is PEC; its interior is excluded from Palace solution domains and receives no tetrahedra | Implemented, accepted |
 
-Only Route A and Route B are in the current direction.
+SGB builds Route A, Route B and Route C. Route C keeps each conductor volume
+in the model, for backends that keep conductor volumes. The Palace simulations
+take Route A and Route B: `set_surface_epr` and `mesh()` refuse any other route
+with `ValueError`.
 
 ## Historical SGB geometry distance bands (WITHDRAWN) {#surface-distance-bands}
 
