@@ -122,7 +122,7 @@ Every CPW here has a 6 µm gap, and every bend a 100 µm radius.
 
 ![**20 Interdigitated comb.** 20 fingers, 3.3 wide with 3.3 gaps and 100 long, fed by a funnel at 21.6° (opening 42.7°). Used by `interdigital_capacitor` and Purcell.](assets/supported-geometry/cell-20.svg){fig-alt="Two interleaved finger combs fed by funnels, inside a ground opening."}
 
-![**21 Spline strip, resampled.** Width 10 in y, resampled so that every vertex turns at least 2.8125°. Used by `interpolation_spline_strip` and `bspline_strip`.](assets/supported-geometry/cell-21.svg){fig-alt="A curved strip with no ground around it."}
+![**21 Spline strip, resampled.** Width 10 in y, resampled to about 3° of turn per vertex. Used by `interpolation_spline_strip` and `bspline_strip`.](assets/supported-geometry/cell-21.svg){fig-alt="A curved strip with no ground around it."}
 
 ![**22 Hollow TSV.** A 0.2 µm wall between two 24-point circles (r 29.8 and 30), 500 tall, with an Al landing from r 29.8 to 100 in an opening of r 120 on both faces. Used by the TSV coupons.](assets/supported-geometry/cell-22.svg){fig-alt="A landing annulus around the TSV bore inside a ground opening."}
 
