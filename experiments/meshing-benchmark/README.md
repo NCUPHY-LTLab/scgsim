@@ -207,7 +207,9 @@ byte-identical and the quality reports (without the timing block) are equal.
 `band_edge.py` measures sizing rules for the edges of Surface-EPR bands against the two reference recipes,
 on the Disk Qubit and the 1, 2 and 4 mm chips of PR 132 (with and without bands) and on SimplePad on
 Route A with bands. The candidates and the table are in [band_edge.md](band_edge.md); every run record is
-in `band_edge.json`. The candidates are experiment code; `scgsim` is unchanged.
+in `band_edge.json`. The candidate `band4` became the default of `FeatureRecipe`
+(`band_mesh_size_multiple=4.0`, `scgsim.meshing.features/2`); the table was measured before, with
+`features/1` as `default`, and `band_edge.md` says how to read it now.
 
 `run` imports the OrcaPen SC PDK, which the locked environment does not hold: layer a PDK checkout at
 `8d18025` (the pin of PR 132) over it for the run only. `table` needs no PDK.

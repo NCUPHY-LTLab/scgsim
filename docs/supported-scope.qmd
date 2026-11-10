@@ -125,6 +125,11 @@ SGB classes named in the table (`InputError`, `UnsupportedCurveError`,
 | A band is measured from a gap edge. A conductor named in `inset_margins_by_entity_um` needs a gap edge on each face it bands. A face reached only through its Surface-EPR type that has no gap edge gets no bands. | Without a gap edge there is nothing to measure the distance from. | `NoGapEdgeError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
 | Side walls are never banded; `face_kinds` names only `sheet`, `top`, `bottom` or `interface`. | SGB cuts bands only on these four kinds of face. | `InputError` at build | [Surface-EPR margins](specs/palace-eigenmode.qmd#surface-epr-margins) |
 
+Bands are supported on both routes a Palace simulation takes: on the sheets of
+Route A and on the faces of the Route B volumes. A layout sets nothing else for
+them: the mesher sizes every band boundary curve from the width of its bands, as
+[Band boundary curves](specs/palace-electrostatic-sgb.qmd#palace-mesh-band-edges) describes.
+
 ## What SCGSim guarantees {#scgsim-guarantees}
 
 On a layout that follows every rule above, SCGSim guarantees:

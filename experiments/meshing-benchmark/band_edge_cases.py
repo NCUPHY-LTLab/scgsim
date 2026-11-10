@@ -7,14 +7,14 @@ budgets, 3D Delaunay, linear elements, one Gmsh thread.  This is the setup of PR
 * The pad-in-ground chips of the PR 132 benchmark (1, 2 and 4 mm), from the test input builders, with and
   without bands.
 * The OrcaPen SC PDK layouts: the flip-chip Disk Qubit as PR 132 assembled it, with and without bands, and
-  SimplePad on Route A with bands.  Their geometry is the one ``EigenmodeSim.mesh()`` builds before it
+  SimplePad with bands on Route A (and on Route B, for the check of the default).  Their geometry is the one ``EigenmodeSim.mesh()`` builds before it
   meshes (its ``_build_geometry`` step, the path ``simulation_drc`` uses too).  ``mesh()`` itself cannot
   be the harness: after a clean mesh it lowers the mesh for Palace, and on the Disk Qubit of PR 132 that
   step refuses the lumped-port sheet ``P1`` as non-conformal, so no recipe would get a row.
 
-Every case has the vacuum of PR 132 (XY 0, +-Z 1000 um from the geometry bounds) except
-``simplepad_A_bands_nb``, which has the (250, 250, 1000) um plan vacuum of the PDK notebooks, as in the Palace
-run of issue 84 that found the Route A failure.
+Every case has the vacuum of PR 132 (XY 0, +-Z 1000 um from the geometry bounds) except the
+``simplepad_*_nb`` cases, which have the (250, 250, 1000) um plan vacuum of the PDK notebooks, as in the
+Palace run of issue 84 that found the Route A failure.
 
 The PDK is imported at module scope: this module is loaded only by the runs, which need it.
 """
@@ -235,9 +235,9 @@ def _disk_qubit(
     return build
 
 
-def _simplepad_route_a(*, notebook_vacuum: bool) -> Callable[[], EigenmodeSim]:
+def _simplepad(route: str, *, notebook_vacuum: bool) -> Callable[[], EigenmodeSim]:
     def build() -> EigenmodeSim:
-        """SimplePad of issue 84 on Route A (pad and ground lowered to sheets) with bands 0.5 and 1 um."""
+        """SimplePad of issue 84 with bands 0.5 and 1 um, on Route A (pad and ground as sheets) or Route B."""
         orcapen_sc_pdk.activate()
         gf.clear_cache()
         component = gf.get_component(
@@ -263,9 +263,11 @@ def _simplepad_route_a(*, notebook_vacuum: bool) -> Callable[[], EigenmodeSim]:
         )
         # Route A lowers the pad and ground to sheets; the thin-film profile says so.
         sim.set_surface_epr(
-            representation="A",
+            representation=route,
             specs=_surface_epr_specs(bands=True),
-            approximation_profile=ApproximationProfile("thin_film", "v1", {}),
+            approximation_profile=ApproximationProfile("thin_film", "v1", {})
+            if route == "A"
+            else None,
         )
         return sim
 
@@ -289,7 +291,10 @@ LAYOUT_CASES: dict[str, Callable[[], EigenmodeSim]] = {
     # reaches and asks for explicit bounds: the site extent, as orcapen-sc-pdk#64 builds include_ground=False.
     "disk_site_nobands": _disk_qubit(bands=False, plane_bounds_um=DISK_SITE_BOUNDS_UM),
     "disk_site_bands": _disk_qubit(bands=True, plane_bounds_um=DISK_SITE_BOUNDS_UM),
-    "simplepad_A_bands": _simplepad_route_a(notebook_vacuum=False),
-    "simplepad_A_bands_nb": _simplepad_route_a(notebook_vacuum=True),
+    "simplepad_A_bands": _simplepad("A", notebook_vacuum=False),
+    "simplepad_A_bands_nb": _simplepad("A", notebook_vacuum=True),
+    # Route B, for the check of the default after band4 became it (band_edge.md).
+    "simplepad_B_bands": _simplepad("B", notebook_vacuum=False),
+    "simplepad_B_bands_nb": _simplepad("B", notebook_vacuum=True),
 }
 CASES = (*LAYOUT_CASES, *CHIP_CASES)

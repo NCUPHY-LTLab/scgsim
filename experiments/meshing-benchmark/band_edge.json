@@ -13357,5 +13357,650 @@
     }
    ]
   }
+ },
+ {
+  "case": "B_1mm_nobands",
+  "candidate": "default",
+  "label": "features2",
+  "started_utc": "2026-11-10T20:28:05+00:00",
+  "load_before": [
+   36.88,
+   29.4,
+   24.18
+  ],
+  "palace_before": 34,
+  "load_after": [
+   36.88,
+   29.4,
+   24.18
+  ],
+  "palace_after": 34,
+  "geometry": {
+   "xao_sha256": "f22dfdb41fe2fdb7f37bf62a66c6741def2bacc04462627e4d09490e63267fdc",
+   "sidecar_sha256": "8f004b51bfe98d0fdcaeef9d6795d8158d1b9c82934debe610de90b1c023cb0d"
+  },
+  "sizes": {
+   "max_size_um": 126.59818365245292,
+   "curves_by_size_um": {
+    "3.956": 36
+   },
+   "fields": []
+  },
+  "environment": {
+   "gmsh": "4.15.2",
+   "scgsim": "2.0.0rc15",
+   "orcapen-sc-pdk": "1.0.0",
+   "gdsfactory": "9.48.0",
+   "scgsim_revision": "f53cbdfd6eff29448caa0016b9cec5547c30198c + changes in docs/mesh-quality.qmd, docs/specs/palace-electrostatic-sgb.qmd, docs/supported-scope.qmd, experiments/meshing-benchmark/README.md, experiments/meshing-benchmark/band_edge.md, experiments/meshing-benchmark/band_edge.py, experiments/meshing-benchmark/band_edge_cases.py, src/scgsim/meshing/recipes/feature.py, tests/test_meshing_end_to_end.py, tests/test_meshing_recipes.py, tests/test_meshing_route_a_bands.py, zh-TW/docs/mesh-quality.qmd, zh-TW/docs/specs/palace-electrostatic-sgb.qmd, zh-TW/docs/supported-scope.qmd",
+   "orcapen_sc_pdk_revision": "49e539fd59f3224ecda965d777c7ec3aadcc3b85",
+   "python": "3.13.13",
+   "cpus": "64"
+  },
+  "recipe": {
+   "name": "features",
+   "version": "scgsim.meshing.features/2",
+   "parameters": {
+    "max_size_divisor": 20.0,
+    "gradation": 1.0,
+    "film_sidewall_thickness_multiple": 25.0,
+    "film_sidewall_ceiling_fraction": 0.5,
+    "conductor_outline": false,
+    "conductor_edge_size_um": 5.0,
+    "conductor_edge_grow_um": 300.0,
+    "band_mesh_size_multiple": 4.0
+   }
+  },
+  "stop": "clean",
+  "rounds": 0,
+  "tetrahedra": 7604,
+  "min_quality": 0.05528161321286967,
+  "bad_count": 0,
+  "sized_curves": 36,
+  "local_sizes": 0,
+  "smallest_local_size_um": null,
+  "history": [
+   {
+    "index": 0,
+    "local_sizes": 0,
+    "smallest_local_size": null,
+    "algorithm_3d": 1,
+    "fallback": null,
+    "failure": null,
+    "tetrahedra": 7604,
+    "min_quality": 0.05528161321286967,
+    "bad_count": 0,
+    "elevation_error": null,
+    "timed_out": false
+   }
+  ],
+  "time_budget": {
+   "footprint_mm2": 1.0000000003999998,
+   "limit_seconds": 180.0,
+   "target_seconds": 60.0
+  },
+  "seconds": 0.3982804600382224,
+  "round_seconds": [
+   0.2670820619678125
+  ],
+  "remaining_bad": {
+   "count": 0,
+   "by_location": {},
+   "listed": []
+  }
+ },
+ {
+  "case": "simplepad_A_bands",
+  "candidate": "default",
+  "label": "features2",
+  "started_utc": "2026-11-10T20:24:05+00:00",
+  "load_before": [
+   12.32,
+   21.97,
+   21.08
+  ],
+  "palace_before": 0,
+  "load_after": [
+   11.73,
+   21.69,
+   21.0
+  ],
+  "palace_after": 0,
+  "geometry": {
+   "xao_sha256": "58a454a92632bf26d9ca17bf57fd691dc515c869ff3ae808408ec86d3107ce1a",
+   "sidecar_sha256": "f30529e5dcc1253ff54bd8961e82d916aa054bd864f2efb7aaad15d131ad70f8"
+  },
+  "sizes": {
+   "max_size_um": 143.6140661791177,
+   "curves_by_size_um": {
+    "1.122": 60
+   },
+   "fields": []
+  },
+  "environment": {
+   "gmsh": "4.15.2",
+   "scgsim": "2.0.0rc15",
+   "orcapen-sc-pdk": "1.0.0",
+   "gdsfactory": "9.48.0",
+   "scgsim_revision": "f53cbdfd6eff29448caa0016b9cec5547c30198c + changes in docs/mesh-quality.qmd, docs/specs/palace-electrostatic-sgb.qmd, docs/supported-scope.qmd, experiments/meshing-benchmark/README.md, experiments/meshing-benchmark/band_edge.md, experiments/meshing-benchmark/band_edge.py, experiments/meshing-benchmark/band_edge_cases.py, src/scgsim/meshing/recipes/feature.py, tests/test_meshing_end_to_end.py, tests/test_meshing_recipes.py, tests/test_meshing_route_a_bands.py, zh-TW/docs/mesh-quality.qmd, zh-TW/docs/specs/palace-electrostatic-sgb.qmd, zh-TW/docs/supported-scope.qmd",
+   "orcapen_sc_pdk_revision": "49e539fd59f3224ecda965d777c7ec3aadcc3b85",
+   "python": "3.13.13",
+   "cpus": "64"
+  },
+  "recipe": {
+   "name": "features",
+   "version": "scgsim.meshing.features/2",
+   "parameters": {
+    "max_size_divisor": 20.0,
+    "gradation": 1.0,
+    "film_sidewall_thickness_multiple": 25.0,
+    "film_sidewall_ceiling_fraction": 0.5,
+    "conductor_outline": false,
+    "conductor_edge_size_um": 5.0,
+    "conductor_edge_grow_um": 300.0,
+    "band_mesh_size_multiple": 4.0
+   }
+  },
+  "stop": "clean",
+  "rounds": 0,
+  "tetrahedra": 115346,
+  "min_quality": 0.023540422685870702,
+  "bad_count": 0,
+  "sized_curves": 60,
+  "local_sizes": 0,
+  "smallest_local_size_um": null,
+  "history": [
+   {
+    "index": 0,
+    "local_sizes": 0,
+    "smallest_local_size": null,
+    "algorithm_3d": 1,
+    "fallback": null,
+    "failure": null,
+    "tetrahedra": 115346,
+    "min_quality": 0.023540422685870702,
+    "bad_count": 0,
+    "elevation_error": null,
+    "timed_out": false
+   }
+  ],
+  "time_budget": {
+   "footprint_mm2": 1.0000000004,
+   "limit_seconds": 180.0,
+   "target_seconds": 60.0
+  },
+  "seconds": 6.336656883009709,
+  "round_seconds": [
+   6.200396426022053
+  ],
+  "remaining_bad": {
+   "count": 0,
+   "by_location": {},
+   "listed": []
+  }
+ },
+ {
+  "case": "simplepad_A_bands_nb",
+  "candidate": "default",
+  "label": "features2",
+  "started_utc": "2026-11-10T20:27:01+00:00",
+  "load_before": [
+   40.32,
+   27.99,
+   23.37
+  ],
+  "palace_before": 34,
+  "load_after": [
+   39.9,
+   28.1,
+   23.43
+  ],
+  "palace_after": 34,
+  "geometry": {
+   "xao_sha256": "f4b504f222521a5ccb7a642c79490e33ff23ebfaff33e6a6a2a06999b1161082",
+   "sidecar_sha256": "c399bbc427784e66f4baccbc6b4ed086a8aa810e1f34a17da9de869a054dced8"
+  },
+  "sizes": {
+   "max_size_um": 163.93596312432487,
+   "curves_by_size_um": {
+    "1.281": 60
+   },
+   "fields": []
+  },
+  "environment": {
+   "gmsh": "4.15.2",
+   "scgsim": "2.0.0rc15",
+   "orcapen-sc-pdk": "1.0.0",
+   "gdsfactory": "9.48.0",
+   "scgsim_revision": "f53cbdfd6eff29448caa0016b9cec5547c30198c + changes in docs/mesh-quality.qmd, docs/specs/palace-electrostatic-sgb.qmd, docs/supported-scope.qmd, experiments/meshing-benchmark/README.md, experiments/meshing-benchmark/band_edge.md, experiments/meshing-benchmark/band_edge.py, experiments/meshing-benchmark/band_edge_cases.py, src/scgsim/meshing/recipes/feature.py, tests/test_meshing_end_to_end.py, tests/test_meshing_recipes.py, tests/test_meshing_route_a_bands.py, zh-TW/docs/mesh-quality.qmd, zh-TW/docs/specs/palace-electrostatic-sgb.qmd, zh-TW/docs/supported-scope.qmd",
+   "orcapen_sc_pdk_revision": "49e539fd59f3224ecda965d777c7ec3aadcc3b85",
+   "python": "3.13.13",
+   "cpus": "64"
+  },
+  "recipe": {
+   "name": "features",
+   "version": "scgsim.meshing.features/2",
+   "parameters": {
+    "max_size_divisor": 20.0,
+    "gradation": 1.0,
+    "film_sidewall_thickness_multiple": 25.0,
+    "film_sidewall_ceiling_fraction": 0.5,
+    "conductor_outline": false,
+    "conductor_edge_size_um": 5.0,
+    "conductor_edge_grow_um": 300.0,
+    "band_mesh_size_multiple": 4.0
+   }
+  },
+  "stop": "clean",
+  "rounds": 0,
+  "tetrahedra": 88628,
+  "min_quality": 0.03882376389739812,
+  "bad_count": 0,
+  "sized_curves": 60,
+  "local_sizes": 0,
+  "smallest_local_size_um": null,
+  "history": [
+   {
+    "index": 0,
+    "local_sizes": 0,
+    "smallest_local_size": null,
+    "algorithm_3d": 1,
+    "fallback": null,
+    "failure": null,
+    "tetrahedra": 88628,
+    "min_quality": 0.03882376389739812,
+    "bad_count": 0,
+    "elevation_error": null,
+    "timed_out": false
+   }
+  ],
+  "time_budget": {
+   "footprint_mm2": 2.2500000006,
+   "limit_seconds": 180.0,
+   "target_seconds": 60.0
+  },
+  "seconds": 4.865900257020257,
+  "round_seconds": [
+   4.75502422999125
+  ],
+  "remaining_bad": {
+   "count": 0,
+   "by_location": {},
+   "listed": []
+  }
+ },
+ {
+  "case": "simplepad_B_bands",
+  "candidate": "default",
+  "label": "features2",
+  "started_utc": "2026-11-10T20:27:12+00:00",
+  "load_before": [
+   39.5,
+   28.22,
+   23.5
+  ],
+  "palace_before": 34,
+  "load_after": [
+   38.9,
+   28.46,
+   23.63
+  ],
+  "palace_after": 34,
+  "geometry": {
+   "xao_sha256": "0c26371c2ab688700476f58496d5a93bb049109ce8c6068849af2508cdcdb32e",
+   "sidecar_sha256": "d6125920e353c4c7364a2465375b2cd6d2067d0bb2bfa4e164ff509a7f50c2e6"
+  },
+  "sizes": {
+   "max_size_um": 143.61841814161616,
+   "curves_by_size_um": {
+    "1.122": 92,
+    "2.244": 36
+   },
+   "fields": []
+  },
+  "environment": {
+   "gmsh": "4.15.2",
+   "scgsim": "2.0.0rc15",
+   "orcapen-sc-pdk": "1.0.0",
+   "gdsfactory": "9.48.0",
+   "scgsim_revision": "f53cbdfd6eff29448caa0016b9cec5547c30198c + changes in docs/mesh-quality.qmd, docs/specs/palace-electrostatic-sgb.qmd, docs/supported-scope.qmd, experiments/meshing-benchmark/README.md, experiments/meshing-benchmark/band_edge.md, experiments/meshing-benchmark/band_edge.py, experiments/meshing-benchmark/band_edge_cases.py, src/scgsim/meshing/recipes/feature.py, tests/test_meshing_end_to_end.py, tests/test_meshing_recipes.py, tests/test_meshing_route_a_bands.py, zh-TW/docs/mesh-quality.qmd, zh-TW/docs/specs/palace-electrostatic-sgb.qmd, zh-TW/docs/supported-scope.qmd",
+   "orcapen_sc_pdk_revision": "49e539fd59f3224ecda965d777c7ec3aadcc3b85",
+   "python": "3.13.13",
+   "cpus": "64"
+  },
+  "recipe": {
+   "name": "features",
+   "version": "scgsim.meshing.features/2",
+   "parameters": {
+    "max_size_divisor": 20.0,
+    "gradation": 1.0,
+    "film_sidewall_thickness_multiple": 25.0,
+    "film_sidewall_ceiling_fraction": 0.5,
+    "conductor_outline": false,
+    "conductor_edge_size_um": 5.0,
+    "conductor_edge_grow_um": 300.0,
+    "band_mesh_size_multiple": 4.0
+   }
+  },
+  "stop": "clean",
+  "rounds": 0,
+  "tetrahedra": 117168,
+  "min_quality": 0.03883969903984293,
+  "bad_count": 0,
+  "sized_curves": 128,
+  "local_sizes": 0,
+  "smallest_local_size_um": null,
+  "history": [
+   {
+    "index": 0,
+    "local_sizes": 0,
+    "smallest_local_size": null,
+    "algorithm_3d": 1,
+    "fallback": null,
+    "failure": null,
+    "tetrahedra": 117168,
+    "min_quality": 0.03883969903984293,
+    "bad_count": 0,
+    "elevation_error": null,
+    "timed_out": false
+   }
+  ],
+  "time_budget": {
+   "footprint_mm2": 1.0000000004,
+   "limit_seconds": 180.0,
+   "target_seconds": 60.0
+  },
+  "seconds": 9.442839383031242,
+  "round_seconds": [
+   9.335145059973001
+  ],
+  "remaining_bad": {
+   "count": 0,
+   "by_location": {},
+   "listed": []
+  }
+ },
+ {
+  "case": "simplepad_B_bands_nb",
+  "candidate": "default",
+  "label": "features2",
+  "started_utc": "2026-11-10T20:27:28+00:00",
+  "load_before": [
+   38.75,
+   28.6,
+   23.7
+  ],
+  "palace_before": 34,
+  "load_after": [
+   37.22,
+   29.34,
+   24.13
+  ],
+  "palace_after": 34,
+  "geometry": {
+   "xao_sha256": "bf7b4967e941a92eb4bb3f7a79af7a89b7e8ce71d78da3498973b04d088ee458",
+   "sidecar_sha256": "d70f221ad9778e9b9407c22fd79ed143445b19617a0048daff258aa676f5032f"
+  },
+  "sizes": {
+   "max_size_um": 163.93977562050065,
+   "curves_by_size_um": {
+    "1.281": 140
+   },
+   "fields": []
+  },
+  "environment": {
+   "gmsh": "4.15.2",
+   "scgsim": "2.0.0rc15",
+   "orcapen-sc-pdk": "1.0.0",
+   "gdsfactory": "9.48.0",
+   "scgsim_revision": "f53cbdfd6eff29448caa0016b9cec5547c30198c + changes in docs/mesh-quality.qmd, docs/specs/palace-electrostatic-sgb.qmd, docs/supported-scope.qmd, experiments/meshing-benchmark/README.md, experiments/meshing-benchmark/band_edge.md, experiments/meshing-benchmark/band_edge.py, experiments/meshing-benchmark/band_edge_cases.py, src/scgsim/meshing/recipes/feature.py, tests/test_meshing_end_to_end.py, tests/test_meshing_recipes.py, tests/test_meshing_route_a_bands.py, zh-TW/docs/mesh-quality.qmd, zh-TW/docs/specs/palace-electrostatic-sgb.qmd, zh-TW/docs/supported-scope.qmd",
+   "orcapen_sc_pdk_revision": "49e539fd59f3224ecda965d777c7ec3aadcc3b85",
+   "python": "3.13.13",
+   "cpus": "64"
+  },
+  "recipe": {
+   "name": "features",
+   "version": "scgsim.meshing.features/2",
+   "parameters": {
+    "max_size_divisor": 20.0,
+    "gradation": 1.0,
+    "film_sidewall_thickness_multiple": 25.0,
+    "film_sidewall_ceiling_fraction": 0.5,
+    "conductor_outline": false,
+    "conductor_edge_size_um": 5.0,
+    "conductor_edge_grow_um": 300.0,
+    "band_mesh_size_multiple": 4.0
+   }
+  },
+  "stop": "clean",
+  "rounds": 1,
+  "tetrahedra": 213634,
+  "min_quality": 0.034102565631197596,
+  "bad_count": 0,
+  "sized_curves": 140,
+  "local_sizes": 1,
+  "smallest_local_size_um": 1.2807794970351614,
+  "history": [
+   {
+    "index": 0,
+    "local_sizes": 0,
+    "smallest_local_size": null,
+    "algorithm_3d": 1,
+    "fallback": null,
+    "failure": null,
+    "tetrahedra": 213040,
+    "min_quality": 0.009838610554580355,
+    "bad_count": 1,
+    "elevation_error": null,
+    "timed_out": false
+   },
+   {
+    "index": 1,
+    "local_sizes": 1,
+    "smallest_local_size": 1.2807794970351614,
+    "algorithm_3d": 1,
+    "fallback": null,
+    "failure": null,
+    "tetrahedra": 213634,
+    "min_quality": 0.034102565631197596,
+    "bad_count": 0,
+    "elevation_error": null,
+    "timed_out": false
+   }
+  ],
+  "time_budget": {
+   "footprint_mm2": 2.2500000006,
+   "limit_seconds": 180.0,
+   "target_seconds": 60.0
+  },
+  "seconds": 31.5650139428908,
+  "round_seconds": [
+   15.376289471052587,
+   16.06321570405271
+  ],
+  "remaining_bad": {
+   "count": 0,
+   "by_location": {},
+   "listed": []
+  }
+ },
+ {
+  "case": "disk_site_nobands",
+  "candidate": "default",
+  "label": "features2",
+  "started_utc": "2026-11-10T20:28:12+00:00",
+  "load_before": [
+   36.57,
+   29.46,
+   24.22
+  ],
+  "palace_before": 34,
+  "load_after": [
+   35.79,
+   29.74,
+   24.43
+  ],
+  "palace_after": 34,
+  "geometry": {
+   "xao_sha256": "37373bfe8bf5989927c8d85147fec58e395913e53524d78a889c09e4f6730d49",
+   "sidecar_sha256": "08c53b1267e1d5671c35a5374f9e76dcc9c9379e97ac8f23c8a3c28e0e9f4dc0"
+  },
+  "sizes": {
+   "max_size_um": 166.20219043384537,
+   "curves_by_size_um": {
+    "1.298": 801
+   },
+   "fields": []
+  },
+  "environment": {
+   "gmsh": "4.15.2",
+   "scgsim": "2.0.0rc15",
+   "orcapen-sc-pdk": "1.0.0",
+   "gdsfactory": "9.48.0",
+   "scgsim_revision": "f53cbdfd6eff29448caa0016b9cec5547c30198c + changes in docs/mesh-quality.qmd, docs/specs/palace-electrostatic-sgb.qmd, docs/supported-scope.qmd, experiments/meshing-benchmark/README.md, experiments/meshing-benchmark/band_edge.md, experiments/meshing-benchmark/band_edge.py, experiments/meshing-benchmark/band_edge_cases.py, src/scgsim/meshing/recipes/feature.py, tests/test_meshing_end_to_end.py, tests/test_meshing_recipes.py, tests/test_meshing_route_a_bands.py, zh-TW/docs/mesh-quality.qmd, zh-TW/docs/specs/palace-electrostatic-sgb.qmd, zh-TW/docs/supported-scope.qmd",
+   "orcapen_sc_pdk_revision": "49e539fd59f3224ecda965d777c7ec3aadcc3b85",
+   "python": "3.13.13",
+   "cpus": "64"
+  },
+  "recipe": {
+   "name": "features",
+   "version": "scgsim.meshing.features/2",
+   "parameters": {
+    "max_size_divisor": 20.0,
+    "gradation": 1.0,
+    "film_sidewall_thickness_multiple": 25.0,
+    "film_sidewall_ceiling_fraction": 0.5,
+    "conductor_outline": false,
+    "conductor_edge_size_um": 5.0,
+    "conductor_edge_grow_um": 300.0,
+    "band_mesh_size_multiple": 4.0
+   }
+  },
+  "stop": "clean",
+  "rounds": 0,
+  "tetrahedra": 303440,
+  "min_quality": 0.01564669711140765,
+  "bad_count": 0,
+  "sized_curves": 801,
+  "local_sizes": 0,
+  "smallest_local_size_um": null,
+  "history": [
+   {
+    "index": 0,
+    "local_sizes": 0,
+    "smallest_local_size": null,
+    "algorithm_3d": 1,
+    "fallback": null,
+    "failure": null,
+    "tetrahedra": 303440,
+    "min_quality": 0.01564669711140765,
+    "bad_count": 0,
+    "elevation_error": null,
+    "timed_out": false
+   }
+  ],
+  "time_budget": {
+   "footprint_mm2": 1.0000000004,
+   "limit_seconds": 180.0,
+   "target_seconds": 60.0
+  },
+  "seconds": 17.549371195025742,
+  "round_seconds": [
+   17.385234929039143
+  ],
+  "remaining_bad": {
+   "count": 0,
+   "by_location": {},
+   "listed": []
+  }
+ },
+ {
+  "case": "disk_site_bands",
+  "candidate": "default",
+  "label": "features2",
+  "started_utc": "2026-11-10T20:23:03+00:00",
+  "load_before": [
+   7.26,
+   24.63,
+   21.86
+  ],
+  "palace_before": 0,
+  "load_after": [
+   4.58,
+   20.9,
+   20.74
+  ],
+  "palace_after": 0,
+  "geometry": {
+   "xao_sha256": "8b0f33b3b3d0b271d6bfdcad3b7d3643505ce03f02780938e427aead3d538ec6",
+   "sidecar_sha256": "5362b9467dd4b281dbac52f3c6f24b468299b3d44193cee4c5aeed6acec0a302"
+  },
+  "sizes": {
+   "max_size_um": 166.20219043384537,
+   "curves_by_size_um": {
+    "1.298": 3104
+   },
+   "fields": []
+  },
+  "environment": {
+   "gmsh": "4.15.2",
+   "scgsim": "2.0.0rc15",
+   "orcapen-sc-pdk": "1.0.0",
+   "gdsfactory": "9.48.0",
+   "scgsim_revision": "f53cbdfd6eff29448caa0016b9cec5547c30198c + changes in docs/mesh-quality.qmd, docs/specs/palace-electrostatic-sgb.qmd, docs/supported-scope.qmd, experiments/meshing-benchmark/README.md, experiments/meshing-benchmark/band_edge.md, experiments/meshing-benchmark/band_edge.py, experiments/meshing-benchmark/band_edge_cases.py, src/scgsim/meshing/recipes/feature.py, tests/test_meshing_end_to_end.py, tests/test_meshing_recipes.py, tests/test_meshing_route_a_bands.py, zh-TW/docs/mesh-quality.qmd, zh-TW/docs/specs/palace-electrostatic-sgb.qmd, zh-TW/docs/supported-scope.qmd",
+   "orcapen_sc_pdk_revision": "49e539fd59f3224ecda965d777c7ec3aadcc3b85",
+   "python": "3.13.13",
+   "cpus": "64"
+  },
+  "recipe": {
+   "name": "features",
+   "version": "scgsim.meshing.features/2",
+   "parameters": {
+    "max_size_divisor": 20.0,
+    "gradation": 1.0,
+    "film_sidewall_thickness_multiple": 25.0,
+    "film_sidewall_ceiling_fraction": 0.5,
+    "conductor_outline": false,
+    "conductor_edge_size_um": 5.0,
+    "conductor_edge_grow_um": 300.0,
+    "band_mesh_size_multiple": 4.0
+   }
+  },
+  "stop": "clean",
+  "rounds": 0,
+  "tetrahedra": 569325,
+  "min_quality": 0.05135960419683313,
+  "bad_count": 0,
+  "sized_curves": 3104,
+  "local_sizes": 0,
+  "smallest_local_size_um": null,
+  "history": [
+   {
+    "index": 0,
+    "local_sizes": 0,
+    "smallest_local_size": null,
+    "algorithm_3d": 1,
+    "fallback": null,
+    "failure": null,
+    "tetrahedra": 569325,
+    "min_quality": 0.05135960419683313,
+    "bad_count": 0,
+    "elevation_error": null,
+    "timed_out": false
+   }
+  ],
+  "time_budget": {
+   "footprint_mm2": 1.0000000004,
+   "limit_seconds": 180.0,
+   "target_seconds": 60.0
+  },
+  "seconds": 54.89151307300199,
+  "round_seconds": [
+   54.66776810796
+  ],
+  "remaining_bad": {
+   "count": 0,
+   "by_location": {},
+   "listed": []
+  }
  }
 ]

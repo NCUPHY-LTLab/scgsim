@@ -14,8 +14,11 @@ asked for on that case, the hashes of the geometry, the time, ``/proc/loadavg`` 
 on the machine before and after, and the SCGSim and PDK revisions.  ``table`` prints the tables of
 ``band_edge.md`` from those records, one per pass, and writes them, without local paths, to one JSON file.
 
-The candidates are experiment code: they use the public recipe interface (a dataclass with ``name``,
-``version`` and ``size_requests``) and change nothing in ``scgsim``.
+The table in ``band_edge.md`` was measured before ``FeatureRecipe`` had its band-edge rule: its ``default``
+rows are ``scgsim.meshing.features/1`` (no size on band edges), and its band rows came from an experiment
+recipe (``experiments.meshing-benchmark.band-edge/1``) that asked for the sizes ``FeatureRecipe`` now asks
+for with ``band_mesh_size_multiple``.  ``band4`` became the default (``features/2``), so here ``default``
+and ``band4`` are the same recipe, and ``features/1`` is no longer a candidate.
 """
 
 from __future__ import annotations
@@ -26,79 +29,28 @@ import os
 import subprocess
 import sys
 from collections import Counter
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, distribution, version
 from pathlib import Path
-from types import MappingProxyType
-from typing import Any, ClassVar
+from typing import Any
 
 from scgsim.meshing import FeatureRecipe, SizingRecipe, UniformBoundaryRecipe
-from scgsim.meshing.features import SidecarFeatures, load_features
-from scgsim.meshing.sizing import BoundingBox, SizeRequests, ladder_size
+from scgsim.meshing.features import load_features
 
 HERE = Path(__file__).resolve().parent
 # Bad elements named per stopped run in the table; the records keep every element the report lists.
 LISTED_PLACES = 3
 
-
-@dataclass(frozen=True)
-class BandEdgeRecipe:
-    """``FeatureRecipe``'s film-wall sizes, plus a size on every band boundary curve tied to its narrowest band.
-
-    A band boundary curve gets ``band_multiple`` times the ``narrowest_band_um`` fact of its band
-    feature, rounded down on the size ladder; a curve that also bounds a film wall keeps the finer size.
-    The faces between a band and a film wall have no size of their own: they are bands, so every point of
-    one lies within half a band width of its boundary curves, whose sizes reach it through the gradation
-    (1 um per um, as for every curve size of ``FeatureRecipe``).
-    """
-
-    name: ClassVar[str] = "band-edge"
-    version: ClassVar[str] = "experiments.meshing-benchmark.band-edge/1"
-
-    wall_multiple: float = 25.0  # FeatureRecipe.film_sidewall_thickness_multiple
-    band_multiple: float = 4.0
-
-    def size_requests(
-        self, features: SidecarFeatures, bounding_box: BoundingBox
-    ) -> SizeRequests:
-        """The wall sizes of ``FeatureRecipe`` with ``wall_multiple``, and the band curve sizes."""
-        walls = FeatureRecipe(
-            film_sidewall_thickness_multiple=self.wall_multiple
-        ).size_requests(features, bounding_box)
-        curve_sizes = dict(walls.curve_sizes)
-        for tag, size in self._band_sizes(features, walls.max_size).items():
-            curve_sizes[tag] = min(size, curve_sizes.get(tag, size))
-        return SizeRequests(
-            walls.max_size,
-            walls.gradation,
-            MappingProxyType(curve_sizes),
-            walls.fields,
-        )
-
-    def _band_sizes(
-        self, features: SidecarFeatures, max_size: float
-    ) -> dict[int, float]:
-        """The finest band size each band boundary curve is asked for."""
-        sizes: dict[int, float] = {}
-        for feature in features.features:
-            if feature.kind != "band_boundary":
-                continue
-            wanted = self.band_multiple * feature.fact("narrowest_band_um")
-            size = ladder_size(wanted, max_size)
-            for tag in feature.native_tags:
-                sizes[tag] = min(size, sizes.get(tag, size))
-        return sizes
-
-
 # The two references and four band-edge candidates; band_edge.md states each rule in one sentence.
 CANDIDATES: dict[str, SizingRecipe] = {
     "default": FeatureRecipe(),
     "uniform": UniformBoundaryRecipe(),
-    "band2": BandEdgeRecipe(band_multiple=2.0),
-    "band4": BandEdgeRecipe(band_multiple=4.0),
-    "band8": BandEdgeRecipe(band_multiple=8.0),
-    "wall100_band8": BandEdgeRecipe(wall_multiple=100.0, band_multiple=8.0),
+    "band2": FeatureRecipe(band_mesh_size_multiple=2.0),
+    "band4": FeatureRecipe(band_mesh_size_multiple=4.0),
+    "band8": FeatureRecipe(band_mesh_size_multiple=8.0),
+    "wall100_band8": FeatureRecipe(
+        film_sidewall_thickness_multiple=100.0, band_mesh_size_multiple=8.0
+    ),
 }
 
 
@@ -326,7 +278,7 @@ def _print_table(output_dirs: list[Path], write_json: Path | None) -> int:
 
 
 # Passes, cases and candidates in the order the table lists them.
-PASS_ORDER = ("first", "quiet", "pin49", "pin49-quiet")
+PASS_ORDER = ("first", "quiet", "pin49", "pin49-quiet", "features2")
 CASE_ORDER = (
     "disk_nobands",
     "disk_bands",
@@ -338,6 +290,8 @@ CASE_ORDER = (
     "circB_4mm_bands",
     "simplepad_A_bands",
     "simplepad_A_bands_nb",
+    "simplepad_B_bands",
+    "simplepad_B_bands_nb",
     "disk_site_nobands",
     "disk_site_bands",
 )

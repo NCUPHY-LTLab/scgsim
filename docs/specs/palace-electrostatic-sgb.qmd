@@ -127,18 +127,74 @@ only, so a first mesh below the threshold is still rejected.
 A recipe decides only the initial element sizes. Repair, the threshold and the
 report are the same for every recipe. Start with `FeatureRecipe`: it sizes the
 curves the geometry itself calls for, and its defaults were measured to reach the
-default threshold on 1 to 4 mm chips.
+default threshold on 1 to 4 mm chips and, with Surface-EPR bands, on a flip-chip
+qubit and on Route A sheets.
 
 ::: {.askr-table-compact}
 | Recipe | Sizes | Parameters (defaults) |
 |---|---|---|
-| `FeatureRecipe` | A coarse maximum size, the bounding-box diagonal over `max_size_divisor`, with finer elements at thin film sidewalls (a multiple of the film thickness when that is finer than half the coarse size). An optional rule sizes the outlines of the conductors. | `max_size_divisor=20`, `gradation=1`, `film_sidewall_thickness_multiple=25`, `film_sidewall_ceiling_fraction=0.5`, `conductor_outline=False`, `conductor_edge_size_um=5`, `conductor_edge_grow_um=300` |
+| `FeatureRecipe` | A coarse maximum size, the bounding-box diagonal over `max_size_divisor`, with finer elements at thin film sidewalls (a multiple of the film thickness when that is finer than half the coarse size) and on every Surface-EPR band boundary curve (a multiple of the narrowest band width of its face; see [Band boundary curves](#palace-mesh-band-edges)). An optional rule sizes the outlines of the conductors. | `max_size_divisor=20`, `gradation=1`, `film_sidewall_thickness_multiple=25`, `film_sidewall_ceiling_fraction=0.5`, `conductor_outline=False`, `conductor_edge_size_um=5`, `conductor_edge_grow_um=300`, `band_mesh_size_multiple=4` |
 | `GlobalSizeRecipe` | Only the coarse maximum size, the bounding-box diagonal over `max_size_divisor`. A cheap reference that leaves near-flat tetrahedra at thin metal sidewalls, so it relies on repair rounds. | `max_size_divisor=20`, `gradation=1` |
 | `UniformBoundaryRecipe` | Every curve of the model at `near_um`, growing to `far_um` over `far_um` micrometres. It ignores what each curve is. | `near_um=5`, `far_um=300` |
 :::
 
 Each recipe has a name and a version, recorded with its parameters in the mesh
-manifest, so a run states which sizing rules produced its mesh.
+manifest, so a run states which sizing rules produced its mesh. A recipe's
+version changes only when the sizes it asks for change; see
+[Version identities of a mesh](../mesh-quality.qmd#version-identities).
+
+#### Band boundary curves {#palace-mesh-band-edges}
+
+With Surface-EPR margins, the largest mesh element on each Surface-EPR band
+boundary curve is `band_mesh_size_multiple` times the narrowest band width of
+its face. Like every size of `FeatureRecipe`, that size is rounded down to the
+coarse size over a power of two, so with margins of 0.5 and 1 µm (bands 0.5 µm
+wide) the default of 4 asks for 2 µm and gets 1.1 to 2.0 µm, depending on the
+model's extent. A model without bands has no band boundary curves, and the
+multiple changes nothing there.
+
+Bands of 0.5 µm next to elements tens of micrometres long leave near-flat
+tetrahedra that repair does not clear. On Route A no film wall is sized near a
+sheet's edge, so without a size on the band boundary curves a single-die pad on
+Route A stalls below the threshold. On Route B the film walls already set fine
+sizes beside the bands; there the rule left no bad element in the first mesh of
+the flip-chip qubit, which needed a repair round without it.
+
+Keep the default of 4: of the measured multiples it is the only one that meets
+the time target on the banded flip-chip qubit, and it meshes every measured case
+clean. Set another multiple with
+`set_mesh(recipe=FeatureRecipe(band_mesh_size_multiple=...))`:
+
+- **A smaller multiple** (2) gives better-shaped elements at the bands, with a
+  minSICN of 0.08 to 0.23 on the pad and the chips, but 1.8 to 2.4 times the
+  tetrahedra of 4. The banded flip-chip qubit then does not mesh within the time
+  limit.
+- **A larger multiple** (8) saves elements only where band boundary curves set the size.
+  On Route A it about halves them, but the minSICN of the pad falls to 0.014
+  to 0.019, close to the default threshold. Next to Route B film walls it saves
+  nothing:
+  the flip-chip qubit gets the mesh it would have without the rule, needs a
+  repair round and takes twice as long as with 4.
+
+Measured with Gmsh 4.15.2, the default threshold and budgets, one model at a
+time on an otherwise lightly loaded 64-core workstation (Gmsh uses one thread);
+the rows of 2 were measured beside other work. On a busy machine the same runs
+took up to half as long again:
+
+::: {.askr-table-compact}
+| Multiple | Flip-chip qubit with bands | Single-die pad on Route A with bands | 1 to 4 mm chips with bands |
+|---|---|---|---|
+| 2 | 1.39 million tetrahedra; stopped at the time limit | clean; 216,000 to 235,000 tetrahedra; 14 s | clean; 23,000 to 37,000 tetrahedra; 1.6 to 2.0 s |
+| 4 (default) | clean in the first mesh; 569,325 tetrahedra; 53 s | clean; 89,000 to 115,000 tetrahedra; 4.7 to 5.5 s | clean; 13,000 to 20,000 tetrahedra; 1.0 to 1.2 s |
+| 8 | clean after one repair round; 407,093 tetrahedra; 105 s | clean; 49,000 to 52,000 tetrahedra; 2.6 to 2.7 s | clean; 9,000 to 14,000 tetrahedra; 0.7 to 0.8 s |
+| No size on band boundary curves, for comparison | clean after one repair round; 407,093 tetrahedra; 83 s | stalls at minSICN 0.003 to 0.004 | clean; 9,600 to 13,500 tetrahedra; 0.7 to 0.8 s |
+:::
+
+The flip-chip qubit is the OrcaPen SC PDK `disk_flip_chip_qubit` under common
+ground planes, Route B; the pad is `square_pad_capacitor` (200 µm pad, 1 mm
+die). Bands are 0.5 and 1 µm on every metal-air, metal-substrate and
+substrate-air face. The cases, every run and the machine load of each are in the
+[band-edge measurement](https://github.com/NCUPHY-LTLab/scgsim/blob/develop/experiments/meshing-benchmark/band_edge.md).
 
 ### Mesher options {#palace-mesh-mesher}
 

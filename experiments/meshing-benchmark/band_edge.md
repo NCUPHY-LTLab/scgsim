@@ -1,9 +1,17 @@
 # Band-edge sizing candidates (issue 136)
 
-A measured table from which the Human picks the default sizing recipe for Surface-EPR bands. It
-compares four band-edge rules with today's default `FeatureRecipe()` and `UniformBoundaryRecipe()` on
-the cases of PR 132 and on SimplePad on Route A. Nothing in `scgsim` changed: the candidates are
-experiment code in `band_edge.py`, and the default is still `scgsim.meshing.features/1`.
+The measured table from which the Human picked the default sizing rule for Surface-EPR band edges. It
+compares four band-edge rules with the default of the time, `FeatureRecipe()` at
+`scgsim.meshing.features/1` (no size on band edges), and `UniformBoundaryRecipe()`, on the cases of PR 132
+and on SimplePad on Route A.
+
+**Decision (the Human, 2026-11-11): `band4` is the default**, judged at PDK `49e539f`, and the multiple is
+a parameter. `FeatureRecipe` now sizes every band boundary curve at `band_mesh_size_multiple` (default 4)
+× the narrowest band width of its face, on the ladder, as the `band4` candidate did; its version is
+`scgsim.meshing.features/2`. `band2` and `band8` are `FeatureRecipe(band_mesh_size_multiple=2.0)` and
+`(8.0)`. The table below was measured before that change (at `f53cbdf`): its `default` rows are
+`features/1`, which no longer exists, and its band rows ran an experiment recipe that asked for the
+same sizes. [Check of the new default](#check-of-the-new-default) re-runs it on the current tree.
 
 ## Setup
 
@@ -54,9 +62,10 @@ wall keeps the finer of the two sizes. A rule tied to the band on each side of o
 narrowest band of the face) is not expressible: the sidecar states the margins and the narrowest band
 per banded face, not per curve. With equal bands, as here, it would ask for the same sizes.
 
-All candidates are dataclasses with `name`, `version` and `size_requests`, the public recipe interface.
-`SizeRequests`, `BoundingBox`, `SidecarFeatures` and `ladder_size` are not re-exported by
-`scgsim.meshing`; the experiment imports them from `scgsim.meshing.sizing` and `scgsim.meshing.features`.
+At the time of the table the band candidates were an experiment dataclass with `name`, `version` and
+`size_requests`, the public recipe interface; it imported `SizeRequests`, `BoundingBox`,
+`SidecarFeatures` and `ladder_size` from `scgsim.meshing.sizing` and `scgsim.meshing.features`, since
+`scgsim.meshing` does not re-export them.
 
 ## How to read the table
 
@@ -141,12 +150,37 @@ a scratch variant not kept in `band_edge.py`) gave a tetrahedron of minSICN 0.0 
 `simplepad_A_bands`, band curves at 16 × `b` (4.49 µm) left 5 bad elements, so `band8` is the coarsest
 clean band size there.
 
+## Check of the new default {#check-of-the-new-default}
+
+`FeatureRecipe()` at `scgsim.meshing.features/2` (`band_mesh_size_multiple=4.0`), PDK `49e539f`, one run at
+a time on 2026-11-11. The first two ran with no Palace process; the other five beside another agent's two
+16-rank Palace jobs (load 36–40), so their seconds are high.
+
+| case | s | tets (round 0 → last) | min SICN | rounds | stop | load 1 min | Palace |
+|---|---:|---|---:|---:|---|---|---|
+| Disk Qubit with bands (`disk_site_bands`) | 54.9 | 569,325 | 0.05136 | 0 | clean | 7.3–4.6 | no |
+| SimplePad on Route A with bands (`simplepad_A_bands`) | 6.3 | 115,346 | 0.02354 | 0 | clean | 12.3–11.7 | no |
+| the same, notebook vacuum (`simplepad_A_bands_nb`) | 4.9 | 88,628 | 0.03882 | 0 | clean | 40.3–39.9 | yes |
+| SimplePad on Route B with bands (`simplepad_B_bands`) | 9.4 | 117,168 | 0.03884 | 0 | clean | 39.5–38.9 | yes |
+| the same, notebook vacuum (`simplepad_B_bands_nb`) | 31.6 | 213,040 → 213,634 | 0.0341 | 1 | clean | 38.8–37.2 | yes |
+| 1 mm chip without bands (`B_1mm_nobands`) | 0.4 | 7,604 | 0.05528 | 0 | clean | 36.9–36.9 | yes |
+| Disk Qubit without bands (`disk_site_nobands`) | 17.5 | 303,440 | 0.01565 | 0 | clean | 36.6–35.8 | yes |
+
+- The banded Disk Qubit, both SimplePad Route A cases and the 1 mm chip have the meshes of the `band4`
+  rows of the table to the element (569,325, 115,346, 88,628 tetrahedra) or of `features/1` without bands
+  (7,604 and 303,440), so the new default asks for the sizes the `band4` candidate asked for, and nothing
+  changes without bands. The banded Disk Qubit is under a minute again (54.9 s against 53.4 s quiet).
+- SimplePad on Route B with bands is clean in both vacua. With the notebook vacuum it needs one repair
+  round (1 bad element in its first mesh); the Palace run of issue 84 meshed that case with `features/1`
+  clean in round 0 (188,254 tetrahedra, 18 s), on an earlier SGB revision and under its own load, so the
+  two are not directly comparable.
+
 ## All runs
 
 Every run of every pass, in the order of the cases above.
 
 The tables below are the output of `band_edge.py table` over the run folders of `first`/`quiet` and
-`pin49`/`pin49-quiet`; `band_edge.json` holds the same records.
+`pin49`/`pin49-quiet`/`features2`; `band_edge.json` holds the same records.
 
 ### Pass `first` (PDK 8d18025, every row, four runs at a time)
 
@@ -281,3 +315,15 @@ The tables below are the output of `band_edge.py table` over the run folders of 
 | disk_site_bands | band4 | 166.2; 1.298 ×3104 | 53.4 | 569,325 | 0.05136 | 0 | 0 | clean |  | 1.5–1.6 | no | pin49-quiet |
 | disk_site_bands | band8 | 166.2; 1.298 ×801, 2.597 ×2303 | 104.5 | 402,784 → 407,093 | 0.02024 | 1, 0 | 1 | clean |  | 1.5–1.5 | no | pin49-quiet |
 | disk_site_bands | wall100_band8 | 166.2; 2.597 ×2303, 5.194 ×801 | 180.0 | 279,127 → 413,124 | 0.00229 | 10, 5, 5, 4, killed | 4 | time_limit | 4 bad (4 curve): 0.0023 at (117.9, 17.4, 10.9) band_boundary/film_sidewall [MA::Disk__sidewall; MS::Disk__top::band=0] · 0.0064 at (-41.1, -413.3, 10.4) band_boundary/film_sidewall [MA::D1_BOTTOM_GROUND_PLANE__sidewall; MS::D1_BOTTOM_GROUND_PLANE__top::band=0] · 0.0071 at (41.4, -396.0, 6.1) band_boundary/film_sidewall [MA::D1_BOTTOM_GROUND_PLANE__bottom::band=0; MA::D1_BOTTOM_GROUND_PLANE__sidewall] | 1.4–1.1 | no | pin49-quiet |
+
+### Pass `features2` (PDK 49e539f, the new default, one at a time)
+
+| case | candidate | sizes µm (coarse; curves) | s | tets (round 0 → last) | min SICN | bad per round | rounds | stop | where (stopped runs) | load 1 min (before–after) | Palace | pass |
+|---|---|---|---:|---|---:|---|---:|---|---|---|---|---|
+| B_1mm_nobands | default | 126.6; 3.956 ×36 | 0.4 | 7,604 | 0.05528 | 0 | 0 | clean |  | 36.9–36.9 | yes | features2 |
+| simplepad_A_bands | default | 143.6; 1.122 ×60 | 6.3 | 115,346 | 0.02354 | 0 | 0 | clean |  | 12.3–11.7 | no | features2 |
+| simplepad_A_bands_nb | default | 163.9; 1.281 ×60 | 4.9 | 88,628 | 0.03882 | 0 | 0 | clean |  | 40.3–39.9 | yes | features2 |
+| simplepad_B_bands | default | 143.6; 1.122 ×92, 2.244 ×36 | 9.4 | 117,168 | 0.03884 | 0 | 0 | clean |  | 39.5–38.9 | yes | features2 |
+| simplepad_B_bands_nb | default | 163.9; 1.281 ×140 | 31.6 | 213,040 → 213,634 | 0.0341 | 1, 0 | 1 | clean |  | 38.8–37.2 | yes | features2 |
+| disk_site_nobands | default | 166.2; 1.298 ×801 | 17.5 | 303,440 | 0.01565 | 0 | 0 | clean |  | 36.6–35.8 | yes | features2 |
+| disk_site_bands | default | 166.2; 1.298 ×3104 | 54.9 | 569,325 | 0.05136 | 0 | 0 | clean |  | 7.3–4.6 | no | features2 |
