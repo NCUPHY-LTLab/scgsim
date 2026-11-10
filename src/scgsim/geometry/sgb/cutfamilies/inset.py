@@ -11,7 +11,10 @@ Construction (no polygonised disk), per margin:
    (centre on the interior side) becomes the concentric arc of radius ``rho - m`` (it vanishes to a sharp corner
    when ``m >= rho``); every concave arc (a hole) the concentric arc of radius ``r + m``; at every reflex vertex
    the offset curves leave a gap bridged by an arc of radius ``m`` centred at the vertex; at convex vertices the
-   offset lines overlap and simply cross -- convex corners stay sharp.
+   offset lines overlap and simply cross -- convex corners stay sharp.  A reflex vertex between two lines whose
+   arc would be shorter than :data:`SHORT_ARC_GRID_STEPS` gets no arc: both offsets end at their intersection
+   instead, which lies ``m (1 / cos(theta / 2) - 1)`` beyond the arc (``theta`` the turn) -- under one grid step,
+   or the arc stays.  An edge of a few grid steps is exact geometry that the mesher cannot use (Issue #125).
 2. **Region.**  The candidates, the support boundary and the port boundaries form a small arrangement; its cells
    lie in ``R_m`` or outside it, one sample point per cell deciding (``cutfamilies.inset_regions``).
 3. **Required seams.**  Only the candidate edges between a cell of ``R_m`` and a cell outside it become
@@ -87,6 +90,10 @@ PARALLEL_EPSILON = Decimal(
     "1e-9"
 )  # tangents closer to parallel than this are a straight or convex junction
 PIECE_SLACK = Decimal("1e-9")
+# A reflex arc shorter than this many grid steps (margin times turn) is replaced by the intersection of its two
+# offsets, when both are lines and the intersection lies under one grid step beyond the arc.  The value is the
+# Human's choice on Issue #125: 0.5 um times the 2.8125 degree turn of the 128-points-per-circle rule.
+SHORT_ARC_GRID_STEPS = 25
 
 
 def inset_family(
@@ -223,12 +230,15 @@ def _generate_candidates(
     with circle_math.working_precision():
         for ri, ring in enumerate(region.rings):
             count = len(ring)
+            joins = _short_corner_joins(region, ri, margin)
             for pi, prim in enumerate(ring):
                 if not region.is_origin(ri, pi):
                     continue
                 name = f"ring{ri}/edge{pi}"
-                start = _offset_point(prim, margin, at_end=False)
-                end = _offset_point(prim, margin, at_end=True)
+                start = joins.get((pi - 1) % count) or _offset_point(
+                    prim, margin, at_end=False
+                )
+                end = joins.get(pi) or _offset_point(prim, margin, at_end=True)
                 if isinstance(prim, LineEdge):
                     candidates.add_line(name, start, end)
                 else:
@@ -238,7 +248,13 @@ def _generate_candidates(
                             name, prim.centre, radius, prim.ccw, start, end
                         )
                 following = (pi + 1) % count
-                if region.is_origin(ri, following):
+                if not region.is_origin(ri, following):
+                    _cap_arcs(
+                        f"ring{ri}/capend{pi}", prim, margin, candidates, at_end=True
+                    )
+                elif (
+                    pi not in joins
+                ):  # a joined junction has its two offsets meet: no arc
                     _corner_arcs(
                         f"ring{ri}/corner{pi}",
                         prim,
@@ -246,15 +262,63 @@ def _generate_candidates(
                         margin,
                         candidates,
                     )
-                else:
-                    _cap_arcs(
-                        f"ring{ri}/capend{pi}", prim, margin, candidates, at_end=True
-                    )
                 if not region.is_origin(ri, (pi - 1) % count):
                     _cap_arcs(
                         f"ring{ri}/capstart{pi}", prim, margin, candidates, at_end=False
                     )
     return candidates
+
+
+def _short_corner_joins(
+    region: SupportRegion, ring_index: int, margin: int
+) -> dict[int, Point]:
+    """Where the offsets of two consecutive lines meet instead of an arc: junction index -> their intersection.
+
+    Junction ``k`` lies between primitives ``k`` and ``k + 1`` of the ring.  Only a reflex junction between two
+    origin lines qualifies, when its arc (``margin`` times the turn) is shorter than
+    :data:`SHORT_ARC_GRID_STEPS` and the intersection lies less than one grid step beyond the arc.
+    """
+    ring = region.rings[ring_index]
+    joins: dict[int, Point] = {}
+    for k, prim in enumerate(ring):
+        following = (k + 1) % len(ring)
+        if not (
+            region.is_origin(ring_index, k) and region.is_origin(ring_index, following)
+        ):
+            continue
+        join = _short_corner_join(prim, ring[following], margin)
+        if join is not None:
+            joins[k] = join
+    return joins
+
+
+def _short_corner_join(
+    prim: RingPrimitive, following: RingPrimitive, margin: int
+) -> Point | None:
+    """The intersection of the two offsets at a short reflex junction of two lines, or ``None`` to keep the arc."""
+    if not (isinstance(prim, LineEdge) and isinstance(following, LineEdge)):
+        return None
+    t0 = _unit_tangent(prim, at_end=True)
+    t1 = _unit_tangent(following, at_end=False)
+    cross = t0[0] * t1[1] - t0[1] * t1[0]
+    dot = t0[0] * t1[0] + t0[1] * t1[1]
+    if cross >= -PARALLEL_EPSILON:
+        return None  # straight, tangent or convex: there is no arc to replace
+    turn = circle_math.atan2(-cross, dot)
+    if margin * turn >= SHORT_ARC_GRID_STEPS:
+        return None
+    # The offsets meet at margin / cos(turn / 2) from the vertex, on the bisector of the two normals.
+    cos_half = circle_math.sqrt((1 + dot) / 2)
+    if margin / cos_half - margin >= 1:
+        return None  # the intersection would lie a grid step or more beyond the arc
+    n0 = _left_normal(prim, at_end=True)
+    n1 = _left_normal(following, at_end=False)
+    x, y = _ends(prim)[1]
+    scale = margin / (1 + dot)
+    return (
+        circle_math.round_half_up(x + scale * (n0[0] + n1[0])),
+        circle_math.round_half_up(y + scale * (n0[1] + n1[1])),
+    )
 
 
 def _cap_arcs(

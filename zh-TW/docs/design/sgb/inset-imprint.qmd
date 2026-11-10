@@ -295,6 +295,8 @@ $R_m$ 的邊界由 origin 依每種特徵各一條規則得出（下表以 $O = 
 | 半徑 $r$ 的 hole（concave arc） | 同心、半徑 $r + m$ 的圓 | hole，$r = 8$ µm |
 :::
 
+**短的 reflex arc 改成兩條 offset 的交點。** 轉角 $\theta$ 的 reflex vertex 上，arc 長 $m\theta$。兩側都是直線、且 $m\theta$ 不到 25 個 grid step（`SHORT_ARC_GRID_STEPS`）時，SGB 不畫 arc，而是把兩條 offset 直線延伸到交點。交點落在 vertex 的角平分線上、距 vertex $m / \cos(\theta/2)$，比 arc 遠 $m(1/\cos(\theta/2) - 1)$。只有這個差小於一個 grid step 時才替換，否則 arc 保留。這段幾步長的 arc 是精確的幾何，但 mesher 用不了（Issue #125）。25 步是 $0.5$ µm 乘上每整圈 128 點規則的 2.8125° 轉角；在 margin 0.5 µm 時，差最大約 0.16 grid step。
+
 實作（`scgsim.geometry.sgb.cutfamilies.inset`）並不畫出 disk。它寫出規則所給的 raw offset 曲線（候選 offset），與 support 邊界、port 邊界一起以相同的 snap rounding 做 noding，再依 cell 在 $R_m$ 的哪一側只留下分隔不同 band 的 seam（見[先建 band 區域，再切 seam](#band-regions)）。規則在 convex corner 產生的重疊兩側同一個 band，不會成為 seam，而 topology 變化（見下）不需要任何特殊程式。
 
 ![pad top 上 $m = 1.5, 3, 6$ µm 的 erosion 邊界（比範例的 margin 大，形狀才看得見）。請看繞 reflex vertex 的 arc、維持尖角的 convex corner、在 6 µm 時縮小並消失的 rounded corner arc，以及變大的 hole 圓。](figures/inset-erosion-construction.svg){#fig-construction fig-alt="四個面板：reflex corner 繞 vertex 的 arc、chamfer 的 convex corner offset 維持尖角、rounded corner 的 offset arc 縮小直到消失、hole 的同心圓。"}
