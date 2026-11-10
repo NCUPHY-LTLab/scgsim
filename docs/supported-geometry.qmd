@@ -100,6 +100,10 @@ In cell 10 the simulation sees only the lumped sheet and the two leads. The
 5 × 0.09 µm cross that the PDK draws on layer 22/0 is the fabrication junction;
 it is not in the simulation layer stack.
 
+The test build draws the disk's junction lead straight, 2 µm wide along its whole
+length. With a 1.0 µm margin that lead is refused before meshing; see
+[Surface-EPR margins](supported-scope.qmd#rules-margins).
+
 ### Lines and bends {#lines-and-bends}
 
 Every CPW here has a 6 µm gap, and every bend a 100 µm radius.
