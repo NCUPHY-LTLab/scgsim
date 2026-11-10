@@ -26,7 +26,7 @@ each guarantees something to the next.
 |---|---|---|
 | Layout and its declarations | The PDK and whoever draws the layout, including whoever declares the Nets and the Surface-EPR margins for the simulation | Every rule in [What a layout must guarantee](#layout-rules) holds. |
 | Geometry building (SGB, SCGSim's geometry builder) | SCGSim | On such a layout: exactly the declared geometry on the grid, never repaired, and bands that match the exact geometry within the snap bound. A broken rule is refused with an error that names it. |
-| Meshing | SCGSim | On that geometry: a mesh whose every tetrahedron meets the quality threshold, or `MeshRepairError` with a report. Never a mesh below the threshold. |
+| Meshing | SCGSim | On that geometry: a mesh whose every tetrahedron, measured on the linear mesh, meets the quality threshold you set (0.01 by default), or `MeshRepairError` with a report. Never a mesh that failed that check. |
 
 **A failure belongs to the first stage whose guarantee is broken.** If a layout
 draws a 1 nm slit, the failure is the layout's, even when it first shows up as a
@@ -136,12 +136,16 @@ On a layout that follows every rule above, SCGSim guarantees:
   erosion of the same polygons within the grid's snap bound, as
   [Supported Geometry](supported-geometry.qmd#what-supported-means) states it.
 - **A mesh that meets the quality threshold, or a report.** `mesh()` returns a mesh
-  whose every tetrahedron has a minimum signed inverse condition number (minSICN)
-  of at least 0.01, the default `quality_threshold`, within the limits of
-  `Budgets`: by default 8 refinement rounds, 2,000,000 tetrahedra and 180 s for
-  a model of at most 4 mm² in x by y, with more time in proportion for a larger
-  one. Otherwise it raises `MeshRepairError` with the quality report and
-  returns no mesh. The controls and their defaults are in
+  in which every tetrahedron reaches `quality_threshold`: a minimum signed
+  inverse condition number (minSICN) of 0.01, unless you set another value
+  with `set_mesh`. It does so within the limits of `Budgets`: by default 8
+  refinement rounds, 2,000,000 tetrahedra and 180 s for a model of at most
+  4 mm² in x by y, with more time in proportion for a larger one. Otherwise
+  it raises `MeshRepairError` with the quality report and returns no mesh.
+  The threshold is checked on the linear mesh. With `geometry_order` above 1,
+  the accepted mesh is then raised to that order and written without a second
+  check; the [mesh-quality reader](mesh-quality.qmd) measures the stored mesh.
+  The controls and their defaults are in
   [Palace mesh controls](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls).
 
 [Supported Geometry](supported-geometry.qmd) lists the layout patterns SCGSim is
@@ -173,10 +177,20 @@ build that its class's `mesh()` runs, with your Nets and Surface-EPR margins,
 and raises the same error. The [layout modeling check](layout-modeling-check.qmd)
 shows the call.
 
-A pass means that the declaration, curve, grid, conductor, port and margin
-rules hold for that build, under Route B, with the Nets and margins you passed.
-It stops before meshing, so it cannot see fine structure. It does not check
-Route A, other settings or AEDT.
+A pass means that the model built for that check was accepted: Route B, the
+Nets and margins you passed, and the fixed settings listed under
+[What the check uses](layout-modeling-check.qmd#what-the-check-uses). It
+establishes the rules that build checks, and no others:
+
+- The [128-point rule](#rules-curves) for polygon curves is checked only when
+  the build cuts bands. Pass the `surface_epr_specs` the simulation will use; a pass without
+  them says nothing about that rule.
+- The [port rules](#rules-ports) are checked only by
+  `EigenmodeSim.simulation_drc`.
+  `ElectrostaticSim` selects no port sheets, so its check does not test them.
+
+The check stops before meshing, so it cannot see fine structure. It does not
+check Route A, other settings or AEDT.
 
 ## When something fails {#when-something-fails}
 

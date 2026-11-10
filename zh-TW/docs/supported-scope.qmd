@@ -19,7 +19,7 @@ scgsim-id: "docs/supported-scope"
 |---|---|---|
 | 版圖及其宣告 | PDK 與繪製版圖的人，也包括為模擬宣告 Net 與 Surface-EPR 邊距的人 | [版圖必須保證的事項](#layout-rules)中的每條規則都成立。 |
 | 幾何建構（SGB，SCGSim 的幾何建構器） | SCGSim | 對這樣的版圖：在格點上建出與宣告完全相同的幾何，從不修補；條帶與精確幾何的差異在 snap 界限之內。違反規則時拒絕，並以錯誤指出是哪條規則。 |
-| 產生網格 | SCGSim | 對這樣的幾何：每個四面體都達到品質門檻的網格，否則拋出 `MeshRepairError` 並附上報告。絕不交出低於門檻的網格。 |
+| 產生網格 | SCGSim | 對這樣的幾何：在線性網格上量測，每個四面體都達到您設定的品質門檻（預設 0.01）的網格，否則拋出 `MeshRepairError` 並附上報告。絕不交出未通過這項檢查的網格。 |
 
 **失敗屬於第一個保證被打破的階段。** 若版圖畫出一條 1 nm 的狹縫，即使它在幾分鐘後才以網格產生中止的形式出現，這個失敗仍屬於版圖。若版圖遵守所有規則，建構或網格仍然失敗，那就是 SCGSim 的問題；請把版圖一併回報給 SCGSim。
 
@@ -97,7 +97,7 @@ scgsim-id: "docs/supported-scope"
 
 - **在格點上建出宣告的幾何。** 每個 Entity 都依宣告建出，頂點都在格點上。不新增、不合併、不刪除任何東西。
 - **條帶與精確幾何相符。** 每個條帶的面積與同一組多邊形的精確侵蝕（erosion）相比，差異在格點的 snap 界限之內，界限的定義見[支援的幾何](supported-geometry.qmd#what-supported-means)。
-- **達到品質門檻的網格，否則附上報告。** `mesh()` 回傳的網格中，每個四面體的最小有號反條件數（minSICN）都至少為 0.01，也就是 `quality_threshold` 的預設值，且在 `Budgets` 的限制之內完成：預設為 8 輪細化、2,000,000 個四面體，以及 x 乘 y 範圍不超過 4 mm² 的模型 180 秒，範圍更大的模型按比例給予更多時間。否則它拋出附有品質報告的 `MeshRepairError`，不回傳網格。這些控制項與預設值見 [Palace 網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
+- **達到品質門檻的網格，否則附上報告。** `mesh()` 回傳的網格中，每個四面體都達到 `quality_threshold`：最小有號反條件數（minSICN）至少為 0.01，除非您以 `set_mesh` 設定其他數值。它在 `Budgets` 的限制之內完成：預設為 8 輪細化、2,000,000 個四面體，以及 x 乘 y 範圍不超過 4 mm² 的模型 180 秒，範圍更大的模型按比例給予更多時間。否則它拋出附有品質報告的 `MeshRepairError`，不回傳網格。門檻是在線性網格上檢查的。`geometry_order` 大於 1 時，通過檢查的網格會再提升到該階數並寫出，不再檢查第二次；要量測儲存下來的網格，請用[四面體網格品質](mesh-quality.qmd)讀取器。這些控制項與預設值見 [Palace 網格控制](specs/palace-electrostatic-sgb.qmd#palace-mesh-controls)。
 
 [支援的幾何](supported-geometry.qmd)列出 SCGSim 測試過的版圖圖形。這份清單驗證的是每個圖形都能建構，且條帶與精確幾何相符；它本身並不表示版圖能產生網格或完成求解。
 
@@ -120,7 +120,12 @@ SCGSim 不修補版圖。它不封閉奈米級的縫隙、不刪除短邊、不�
 
 請在版圖的測試中、以及繪圖過程中，呼叫 `EigenmodeSim.simulation_drc`、`ElectrostaticSim.simulation_drc`，或兩者都呼叫。每個檢查都以您的 Net 與 Surface-EPR 邊距，執行該類別 `mesh()` 所執行的規劃與幾何建構，並拋出相同的錯誤。呼叫方式見[版圖建模檢查](layout-modeling-check.qmd)。
 
-通過檢查表示在 Route B、以您傳入的 Net 與邊距所做的這次建構中，宣告、曲線、格點、導體、埠與邊距的規則都成立。檢查在產生網格之前就停止，因此看不到微細結構。它也不檢查 Route A、其他設定或 AEDT。
+通過檢查表示這次檢查所建的模型被接受：Route B、您傳入的 Net 與邊距，以及[檢查使用的設定](layout-modeling-check.qmd#what-the-check-uses)所列的固定設定。它只確立這次建構實際檢查過的規則：
+
+- 多邊形曲線[每整圈最多 128 點的規則](#rules-curves)，只在建構切出條帶時才檢查。請傳入模擬將使用的 `surface_epr_specs`；沒有傳入時，通過檢查不代表這條規則成立。
+- [埠的規則](#rules-ports)只由 `EigenmodeSim.simulation_drc` 檢查。`ElectrostaticSim` 不選用埠薄片，所以它的檢查不會測到埠的規則。
+
+檢查在產生網格之前就停止，因此看不到微細結構。它也不檢查 Route A、其他設定或 AEDT。
 
 ## 失敗時怎麼辦 {#when-something-fails}
 
