@@ -12,7 +12,7 @@ from types import MappingProxyType
 from typing import Any
 
 from .mesher import MesherOptions
-from .sizing import SizeField, SizeRequests
+from .sizing import LocalSize, SizeField, SizeRequests
 
 
 @dataclass(frozen=True)
@@ -57,6 +57,14 @@ class MeshJob:
                 {"curves": list(f.curves), "size": f.size, "distance": f.distance}
                 for f in self.sizes.fields
             ],
+            "local_sizes": [
+                {
+                    "centre": list(local.centre),
+                    "size": local.size,
+                    "radius": local.radius,
+                }
+                for local in self.sizes.local_sizes
+            ],
             "threshold": self.threshold,
             "mesher": asdict(self.mesher),
             "attribute": self.attribute,
@@ -85,6 +93,14 @@ class MeshJob:
                 )
                 for f in raw["fields"]
             ),
+            local_sizes=tuple(
+                LocalSize(
+                    _triple(local["centre"]),
+                    float(local["size"]),
+                    None if local["radius"] is None else float(local["radius"]),
+                )
+                for local in raw["local_sizes"]
+            ),
         )
         return cls(
             xao=Path(raw["xao"]),
@@ -100,3 +116,7 @@ class MeshJob:
                 Path(raw["elevation"]["msh"]), int(raw["elevation"]["max_tetrahedra"])
             ),
         )
+
+
+def _triple(values: list[float]) -> tuple[float, float, float]:
+    return (float(values[0]), float(values[1]), float(values[2]))

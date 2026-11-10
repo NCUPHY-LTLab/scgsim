@@ -41,6 +41,8 @@ class BadElement:
     edge_min: float
     edge_max: float
     centroid: tuple[float, float, float]
+    # Midpoint of the element's shortest edge: where it is thinnest, which is where the repair loop refines.
+    shortest_edge_midpoint: tuple[float, float, float]
     location: str  # one of LOCATIONS
     points: tuple[int, ...]  # native tags of the entities the element's nodes sit on
     curves: tuple[int, ...]
@@ -63,6 +65,7 @@ class BadElement:
         """Rebuild an element from its JSON form (``asdict`` of the record)."""
         fields = dict(raw)
         fields["centroid"] = tuple(fields["centroid"])
+        fields["shortest_edge_midpoint"] = tuple(fields["shortest_edge_midpoint"])
         for name in (
             "points",
             "curves",

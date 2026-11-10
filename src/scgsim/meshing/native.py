@@ -19,7 +19,7 @@ from .audit import audit_current_mesh
 from .features import SidecarFeatures
 from .findings import MeshAudit
 from .job import MeshJob
-from .sizing import BoundingBox, SizeField, SizeRequests
+from .sizing import BoundingBox, LocalSize, SizeField, SizeRequests
 
 # Distance fields sample each curve; one sample per half element keeps the distance accurate to the
 # element size.  The bounds keep a 0.2 um sidewall edge and a 4 mm outline both affordable.
@@ -127,13 +127,14 @@ def _set_options(job: MeshJob) -> None:
 
 
 def _add_size_fields(sizes: SizeRequests) -> None:
-    """Background size field: each requested size near its curves, growing to ``max_size`` with distance."""
+    """Background size field: each requested size near its curves or around its centre, growing to ``max_size``."""
     wanted = [*_graded_fields(sizes), *sizes.fields]
-    if not wanted:
+    if not wanted and not sizes.local_sizes:
         return
     fields = [
         _size_field(list(w.curves), w.size, sizes.max_size, w.distance) for w in wanted
     ]
+    fields += [_ball_field(local, sizes) for local in sizes.local_sizes]
     background = fields[0] if len(fields) == 1 else _minimum_of(fields)
     gmsh.model.mesh.field.setAsBackgroundMesh(background)
     option = gmsh.option
@@ -175,6 +176,24 @@ def _size_field(
     field.setNumber(threshold, "DistMin", 0.0)
     field.setNumber(threshold, "DistMax", distance)
     return threshold
+
+
+def _ball_field(local: LocalSize, sizes: SizeRequests) -> int:
+    """``local.size`` within its core radius, growing linearly by the gradation to ``max_size`` beyond.
+
+    Gmsh's Ball field is a closed-form function of the point: unlike a Distance field it samples no curve.
+    """
+    field = gmsh.model.mesh.field
+    ball = field.add("Ball")
+    x, y, z = local.centre
+    field.setNumber(ball, "XCenter", x)
+    field.setNumber(ball, "YCenter", y)
+    field.setNumber(ball, "ZCenter", z)
+    field.setNumber(ball, "Radius", local.core_radius)
+    field.setNumber(ball, "VIn", local.size)
+    field.setNumber(ball, "VOut", sizes.max_size)
+    field.setNumber(ball, "Thickness", (sizes.max_size - local.size) / sizes.gradation)
+    return ball
 
 
 def _minimum_of(fields: list[int]) -> int:
