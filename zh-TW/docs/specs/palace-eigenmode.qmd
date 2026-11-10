@@ -24,7 +24,7 @@ lang: zh-TW
 | 輸出選取 | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |
 | 準備 | `mesh()`、`write_config()`，接著 `prepare_handoff(*, profile, executable, resources=None, setup_commands=(), petsc_options=())` |
 
-幾何階數與透過 `set_numerical(...)` 設定的 FEM 階數不同；求解器設定會保留目前的網格控制。本徵模態與 Electrostatic 兩個外觀介面共用同一組網格控制與預設值，記載於 [Palace 網格控制](palace-electrostatic-sgb.qmd#palace-mesh-controls)，該節也說明網格低於品質門檻時 `mesh()` 會中止。
+幾何階數與透過 `set_numerical(...)` 設定的 FEM 階數不同；求解器設定會保留目前的網格控制。本徵模態與 Electrostatic 兩個外觀介面共用同一組網格控制與預設值，記載於 [Palace 網格控制](palace-electrostatic-sgb.qmd#palace-mesh-controls)，該節也說明細微結構會使 `mesh()` 在產生網格之前被拒絕，以及網格低於品質門檻時 `mesh()` 會中止。
 
 ## 本徵模態網格與 AMR 預設值（CONVERGING） {#eigenmode-mesh-and-amr-defaults-converging}
 
@@ -61,7 +61,7 @@ Palace 0.18.1 根據設定類型及相鄰求解元素建立原生表面被積函
 ::: {.askr-table-compact}
 | 鍵 | 意義 |
 |---|---|
-| `inset_margins_um` | 嚴格遞增的正邊距，單位 µm。`mesh()` 會請 SGB 在這些邊距處，替規格類型的每個面切出帶，只需一次幾何建置。省略則只有基準列。 |
+| `inset_margins_um` | 嚴格遞增的正邊距，單位 µm。`mesh()` 會請 SGB 在這些邊距處，替規格類型的每個面切出帶，只需一次幾何建置。每條帶都必須至少 10 個網格步長寬（第一條帶寬度為第一個邊距，之後每條為相鄰兩個邊距的差）；較窄的帶會在建置之前以 `ValueError` 拒絕。省略則只有基準列。 |
 | `inset_margins_by_entity_um` | `{entity_id: [margins]}`，適用於 `MA` 與 `MS`。每個點名的導體使用自己的邊距，其餘面維持 `inset_margins_um`（若有給）。它會多一次不含帶的幾何建置，用來找出這些導體的面。點名的導體若沒有該類型的面，`mesh()` 會拋出 `ValueError`。`SA` 不接受此鍵，因為 SA 介面位於求解區域之間，沒有所屬導體。 |
 | `face_kinds` | 把規格限制在 `"sheet"`、`"top"`、`"bottom"` 與 `"interface"` 的某些種類。規格要求邊距時，`"sidewall"` 會被拒絕，因為 SGB 從不為側壁切帶。 |
 :::

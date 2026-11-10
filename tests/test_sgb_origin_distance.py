@@ -33,7 +33,7 @@ from scgsim.geometry.sgb.records.support import (  # private-import: the cells a
     distance_to_primitive,
 )
 
-SCENES = {**disk_qubit.SCENES, **pdk.SCENES}
+SCENES = {**disk_qubit.SCENES, **pdk.SCENES, **pdk.NOT_WRITTEN}
 
 
 def sparse_origins() -> tuple[PrismCatalogue, tuple[InsetRequest, ...]]:
