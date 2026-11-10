@@ -15,7 +15,14 @@ import pytest
 
 pytest.importorskip("OCP")
 
-from sgb_extreme_cases import FIXTURES, build_model  # noqa: E402
+from sgb_extreme_cases import (  # noqa: E402
+    FIXTURES,
+    build_model,
+    catalogue_of,
+    chip,
+    disk,
+    port,
+)
 
 from scgsim.geometry.sgb.emission.plan import plan_brep  # noqa: E402
 from scgsim.geometry.sgb.emission.writer import write_brep_file  # noqa: E402
@@ -27,6 +34,8 @@ from scgsim.geometry.sgb.exchange.guard import (  # noqa: E402
     write_step_guard,
 )
 from scgsim.geometry.sgb.exchange.step import export_aedt_step  # noqa: E402
+from scgsim.geometry.sgb.model import build_model_from_catalogue  # noqa: E402
+from scgsim.geometry.sgb.records.grid import exact_z  # noqa: E402
 from scgsim.geometry.sgb.sidecar.build import SidecarContext, build_sidecar  # noqa: E402
 from scgsim.geometry.sgb.sidecar.files import write_sidecar  # noqa: E402
 from scgsim.geometry.sgb.slivers.report import sliver_report  # noqa: E402
@@ -230,6 +239,21 @@ def swap_solid_ids(guard):
     first["solid"], second["solid"] = second["solid"], first["solid"]
 
 
+def swap_planar_face_ids(guard):
+    """Swap the planned ids of two planar faces of one solid, keeping every measurement in place."""
+    for solid in guard["solids"]:
+        planar = [f for f in solid["faces"] if not f["curved"]]
+        if len(planar) >= 2:
+            planar[0]["face"], planar[1]["face"] = planar[1]["face"], planar[0]["face"]
+            return
+    raise AssertionError("the example has no solid with two planar faces")
+
+
+def move_vertex_centroid(guard):
+    """Move one face's vertex centroid off the mean of its vertices."""
+    guard["solids"][0]["faces"][0]["vertex_centroid_um"][0] += 1.0
+
+
 @pytest.mark.parametrize(
     ("change", "message"),
     [
@@ -240,6 +264,8 @@ def swap_solid_ids(guard):
         (drop_free_face, "the free faces are"),
         (flip_curved, "flags curved wrongly"),
         (swap_solid_ids, "not distinct planned solids in tag order"),
+        (swap_planar_face_ids, "the recorded vertices are not those of planned face"),
+        (move_vertex_centroid, "the vertex centroid is not the mean"),
     ],
     ids=lambda v: getattr(v, "__name__", None),
 )
@@ -290,6 +316,96 @@ def test_a_malformed_guard_is_refused(tmp_path, banded, change):
     """A missing or extra key, or a value of the wrong shape, is refused before any file is read."""
     with pytest.raises(StepGuardError, match="is malformed"):
         read_step_guard(edit_guard(tmp_path, banded, change))
+
+
+def test_swapped_ids_of_two_free_faces_are_refused(tmp_path):
+    """Two free faces of one model swap ids, loops and areas unchanged: each record no longer fits its id.
+
+    The Route C port across a round pad leaves two port pieces off the support plane, both free.
+    """
+    folder = tmp_path / "model"
+    export(build_model(FIXTURES["port_crossing_round_pad"], "C"), folder)
+    guard = json.loads((folder / "m.step.guard.json").read_text())
+    first, second = guard["free_faces"][:2]
+    # the ids stay in tag order (a plain swap breaks that and is refused for it); the records swap under them
+    first["face"], second["face"] = second["face"], first["face"]
+    guard["free_faces"][:2] = [second, first]
+    write_step_guard(folder / "m.step.guard.json", guard)
+    with pytest.raises(
+        StepGuardError, match="free face .*: the recorded vertices are not those"
+    ):
+        read_step_guard(folder / "m.step.guard.json")
+
+
+def diameter_split_round_pad():
+    """Route C round pad whose top a port sheet covers up to a diameter: two mirror-image half-disks in one solid."""
+    lumped = port(
+        "p1", [(-6.0, 0.0), (6.0, 0.0), (6.0, 6.0), (-6.0, 6.0)], exact_z("0.2")
+    )
+    pad = disk("disk", "N", (0, 0), 5000, "C")
+    catalogue = catalogue_of("diameter_split_round_pad", "C", [*chip(), pad, lumped])
+    return build_model_from_catalogue(catalogue, "C")
+
+
+def test_the_halves_of_a_round_pad_split_along_a_diameter_keep_their_ids(tmp_path):
+    """Two congruent half-disks of one solid, equal in area and sharing the diameter's ends, are told apart.
+
+    The disk is four quarter arcs, so each half also has the quarter point on its own side as a vertex: the
+    export reads back, and swapping the halves' ids (measurements in place) is refused.
+    """
+    sidecar, exported = export(diameter_split_round_pad(), tmp_path)
+    assert read_step_guard(exported.guard_path) == exported.guard
+    (index, pad), *_ = [
+        (i, s)
+        for i, s in enumerate(exported.solids)
+        if sidecar["volumes"][s["solid"]]["kind"] == "conductor"
+    ]
+    halves = [
+        f
+        for f in pad["faces"]
+        if sidecar["faces"][f["face"]]["face_kind"] in ("top", "port")
+    ]
+    assert len(halves) == 2
+    assert halves[0]["area_um2"] == pytest.approx(halves[1]["area_um2"], rel=1e-9)
+    guard = json.loads(exported.guard_path.read_text())
+    first, second = (
+        f
+        for f in guard["solids"][index]["faces"]
+        if f["face"] in {h["face"] for h in halves}
+    )
+    first["face"], second["face"] = second["face"], first["face"]
+    write_step_guard(exported.guard_path, guard)
+    with pytest.raises(
+        StepGuardError, match="the recorded vertices are not those of planned face"
+    ):
+        read_step_guard(exported.guard_path)
+
+
+def test_faces_the_sidecar_cannot_tell_apart_are_refused(tmp_path, banded):
+    """If two faces of one solid had the same planned vertices and area, their ids could not be bound."""
+    folder, sidecar, exported = banded
+    copy = tmp_path / "copy"
+    shutil.copytree(folder, copy)
+    a, b = (f["face"] for f in exported.solids[0]["faces"][:2])
+    tag = sidecar["binding"]["ids_by_tag"]["2"].index
+    expected = sidecar["expected"]
+    twin = {
+        **expected,
+        "face_edges": [
+            expected["face_edges"][tag(a)] if i == tag(b) else edges
+            for i, edges in enumerate(expected["face_edges"])
+        ],
+        "face_area_um2": [
+            expected["face_area_um2"][tag(a)] if i == tag(b) else area
+            for i, area in enumerate(expected["face_area_um2"])
+        ],
+    }
+    write_sidecar(copy / "m.sidecar.json", {**sidecar, "expected": twin})
+    guard = json.loads((copy / "m.step.guard.json").read_text())
+    guard["files"]["sidecar"]["sha256"] = file_sha256(copy / "m.sidecar.json")
+    write_step_guard(copy / "m.step.guard.json", guard)
+    with pytest.raises(StepGuardError, match="cannot bind their ids"):
+        read_step_guard(copy / "m.step.guard.json")
 
 
 def loop_points(loop, samples=4096):
