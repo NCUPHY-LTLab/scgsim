@@ -69,8 +69,8 @@ conductors of two different Nets is refused with or without `nets`.
 
 The check builds the geometry and does not mesh or solve, so it can be repeated
 as the layout changes. It stops at the first refusal. Read the message, fix the
-layout, and run it again. The [error archive](errors.qmd) records diagnostics
-seen in practice.
+layout, and run it again. [When something fails](supported-scope.qmd#when-something-fails)
+gives the owner and the next action for each error.
 
 A refusal can also come from a defect in SGB rather than from the layout. If
 the message does not match the layout you drew, report it to SCGSim.
