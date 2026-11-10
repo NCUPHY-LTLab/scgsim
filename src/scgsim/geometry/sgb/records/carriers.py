@@ -17,6 +17,7 @@ import math
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from fractions import Fraction
+from functools import lru_cache
 from typing import Literal
 
 from scgsim.geometry.sgb.plane import Point
@@ -30,6 +31,12 @@ PIECE_SEPARATOR = "#"
 
 WITNESS_SAGITTA = 0.25
 """Largest sagitta of a witness chord, in grid units."""
+
+WITNESS_CACHE_SIZE = 1 << 14
+"""How many distinct arc geometries keep their witness: several stages ask for the witness of the same
+arc, and a banded die has a few thousand distinct arcs."""
+
+RationalPoint = tuple[Fraction, Fraction]
 
 
 @dataclass(frozen=True)
@@ -124,32 +131,58 @@ class ArcCarrier:
 
     def sweep(self) -> tuple[Decimal, Decimal]:
         """(start angle, signed sweep) in radians as decimals; the sweep is positive when ``ccw``."""
-        t0 = circle_math.vector_angle(self.centre, self.start)
-        t1 = circle_math.vector_angle(self.centre, self.end)
-        magnitude = circle_math.sweep_magnitude(t0, t1, ccw=self.ccw)
-        return t0, magnitude if self.ccw else -magnitude
+        t0, magnitude = _start_and_sweep(self.centre, self.start, self.end, self.ccw)
+        with circle_math.working_precision():
+            return t0, magnitude if self.ccw else -magnitude
 
     def witness_points(self) -> list[Point]:
         """Grid points ``start .. end`` of the polyline witness (chord sagitta at most g/4).
 
         Computed in fixed-precision decimals (``records.circle_math``), so the lattice
         points -- and with them every id downstream -- are identical on every platform.
+        The witness depends only on the arc's geometry, so it is computed once per geometry.
         """
-        radius = circle_math.to_decimal(self.radius)
-        _, signed_sweep = self.sweep()
-        magnitude = abs(signed_sweep)
+        return list(_witness(self.centre, self.radius, self.ccw, self.start, self.end))
+
+    def piece_ids(self) -> list[str]:
+        """Carrier ids of the witness chords, in order from start to end."""
+        witness = _witness(self.centre, self.radius, self.ccw, self.start, self.end)
+        return [f"{self.id}{PIECE_SEPARATOR}{k}" for k in range(len(witness) - 1)]
+
+
+def _start_and_sweep(
+    centre: RationalPoint, start: RationalPoint, end: RationalPoint, ccw: bool
+) -> tuple[Decimal, Decimal]:
+    """Start angle and unsigned sweep of the arc ``start -> end`` about ``centre``."""
+    t0 = circle_math.vector_angle(centre, start)
+    t1 = circle_math.vector_angle(centre, end)
+    return t0, circle_math.sweep_magnitude(t0, t1, ccw=ccw)
+
+
+@lru_cache(maxsize=WITNESS_CACHE_SIZE)
+def _witness(
+    centre: RationalPoint,
+    radius: Fraction,
+    ccw: bool,
+    start: RationalPoint,
+    end: RationalPoint,
+) -> tuple[Point, ...]:
+    """The witness of :meth:`ArcCarrier.witness_points`: equal steps of sagitta at most g/4, rounded."""
+    with circle_math.working_precision():
+        exact_radius = circle_math.to_decimal(radius)
+        _, magnitude = _start_and_sweep(centre, start, end, ccw)
         max_step = (
-            2 * circle_math.acos(1 - Decimal(WITNESS_SAGITTA) / radius)
-            if radius > Decimal(WITNESS_SAGITTA)
+            2 * circle_math.acos(1 - Decimal(WITNESS_SAGITTA) / exact_radius)
+            if exact_radius > Decimal(WITNESS_SAGITTA)
             else circle_math.PI
         )
         steps = max(1, circle_math.ceil_div(magnitude, max_step))
-        centre_x = circle_math.to_decimal(self.centre[0])
-        centre_y = circle_math.to_decimal(self.centre[1])
-        x = circle_math.to_decimal(self.start[0] - self.centre[0])
-        y = circle_math.to_decimal(self.start[1] - self.centre[1])
-        rotation = circle_math.Rotation(magnitude / steps, ccw=self.ccw)
-        points: list[Point] = [round_to_lattice(self.start)]
+        centre_x = circle_math.to_decimal(centre[0])
+        centre_y = circle_math.to_decimal(centre[1])
+        x = circle_math.to_decimal(start[0] - centre[0])
+        y = circle_math.to_decimal(start[1] - centre[1])
+        rotation = circle_math.Rotation(magnitude / steps, ccw=ccw)
+        points: list[Point] = [round_to_lattice(start)]
         for _ in range(1, steps):
             x, y = rotation.apply(x, y)
             point = (
@@ -158,15 +191,10 @@ class ArcCarrier:
             )
             if point != points[-1]:
                 points.append(point)
-        end = round_to_lattice(self.end)
-        if end != points[-1]:
-            points.append(end)
-        return points
-
-    def piece_ids(self) -> list[str]:
-        """Carrier ids of the witness chords, in order from start to end."""
-        count = len(self.witness_points()) - 1
-        return [f"{self.id}{PIECE_SEPARATOR}{k}" for k in range(count)]
+    last = round_to_lattice(end)
+    if last != points[-1]:
+        points.append(last)
+    return tuple(points)
 
 
 def circle_arcs(

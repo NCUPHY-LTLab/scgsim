@@ -117,24 +117,27 @@ def _pieces(
 ) -> list[ArcCarrier]:
     """Cut an arc of the given sweep into pieces of at most a quarter turn at lattice points."""
     start, end = ends
-    count = max(1, circle_math.ceil_div(magnitude - PIECE_ANGLE_SLACK, QUARTER_TURN))
     centre = circle.centre
-    x = circle_math.to_decimal(start[0] - centre[0])
-    y = circle_math.to_decimal(start[1] - centre[1])
-    rotation = circle_math.Rotation(magnitude / count, ccw=circle.ccw)
-    centre_x, centre_y = (
-        circle_math.to_decimal(centre[0]),
-        circle_math.to_decimal(centre[1]),
-    )
     points: list[Point] = [start]
-    for _ in range(1, count):
-        x, y = rotation.apply(x, y)
-        points.append(
-            (
-                circle_math.round_half_up(centre_x + x),
-                circle_math.round_half_up(centre_y + y),
-            )
+    with circle_math.working_precision():
+        count = max(
+            1, circle_math.ceil_div(magnitude - PIECE_ANGLE_SLACK, QUARTER_TURN)
         )
+        x = circle_math.to_decimal(start[0] - centre[0])
+        y = circle_math.to_decimal(start[1] - centre[1])
+        rotation = circle_math.Rotation(magnitude / count, ccw=circle.ccw)
+        centre_x, centre_y = (
+            circle_math.to_decimal(centre[0]),
+            circle_math.to_decimal(centre[1]),
+        )
+        for _ in range(1, count):
+            x, y = rotation.apply(x, y)
+            points.append(
+                (
+                    circle_math.round_half_up(centre_x + x),
+                    circle_math.round_half_up(centre_y + y),
+                )
+            )
     points.append(end)
     if any(p == q for p, q in zip(points, points[1:], strict=False)):
         raise InputError(

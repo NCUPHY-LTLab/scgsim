@@ -219,31 +219,41 @@ def _generate_candidates(
     family_id: str, region: SupportRegion, margin: int
 ) -> _Candidates:
     candidates = _Candidates(family_id, margin)
-    for ri, ring in enumerate(region.rings):
-        count = len(ring)
-        for pi, prim in enumerate(ring):
-            if not region.is_origin(ri, pi):
-                continue
-            name = f"ring{ri}/edge{pi}"
-            start = _offset_point(prim, margin, at_end=False)
-            end = _offset_point(prim, margin, at_end=True)
-            if isinstance(prim, LineEdge):
-                candidates.add_line(name, start, end)
-            else:
-                radius = prim.radius - margin if prim.ccw else prim.radius + margin
-                if radius >= 1:
-                    candidates.add_arc(name, prim.centre, radius, prim.ccw, start, end)
-            following = (pi + 1) % count
-            if region.is_origin(ri, following):
-                _corner_arcs(
-                    f"ring{ri}/corner{pi}", prim, ring[following], margin, candidates
-                )
-            else:
-                _cap_arcs(f"ring{ri}/capend{pi}", prim, margin, candidates, at_end=True)
-            if not region.is_origin(ri, (pi - 1) % count):
-                _cap_arcs(
-                    f"ring{ri}/capstart{pi}", prim, margin, candidates, at_end=False
-                )
+    # the offsets, normals and turns are decimal steps written with operators
+    with circle_math.working_precision():
+        for ri, ring in enumerate(region.rings):
+            count = len(ring)
+            for pi, prim in enumerate(ring):
+                if not region.is_origin(ri, pi):
+                    continue
+                name = f"ring{ri}/edge{pi}"
+                start = _offset_point(prim, margin, at_end=False)
+                end = _offset_point(prim, margin, at_end=True)
+                if isinstance(prim, LineEdge):
+                    candidates.add_line(name, start, end)
+                else:
+                    radius = prim.radius - margin if prim.ccw else prim.radius + margin
+                    if radius >= 1:
+                        candidates.add_arc(
+                            name, prim.centre, radius, prim.ccw, start, end
+                        )
+                following = (pi + 1) % count
+                if region.is_origin(ri, following):
+                    _corner_arcs(
+                        f"ring{ri}/corner{pi}",
+                        prim,
+                        ring[following],
+                        margin,
+                        candidates,
+                    )
+                else:
+                    _cap_arcs(
+                        f"ring{ri}/capend{pi}", prim, margin, candidates, at_end=True
+                    )
+                if not region.is_origin(ri, (pi - 1) % count):
+                    _cap_arcs(
+                        f"ring{ri}/capstart{pi}", prim, margin, candidates, at_end=False
+                    )
     return candidates
 
 

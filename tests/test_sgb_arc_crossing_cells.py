@@ -1,14 +1,17 @@
 """The broad phase of the sampled arc-crossing check: no crossing is lost, and a long segment costs its length.
 
-``sampled_crossings`` tests only the segment pairs that share one of its 256-unit cells.  These tests
-compare its pairs with an all-pairs exact reference over seeded random edge sets, and lock down that a long
-oblique segment is listed in O(length) cells, not in every cell of its bounding box.
+``sampled_crossings`` tests only the segment pairs that share one of its 256-unit cells and involve an arc;
+two straight edges are left to ``check_planar``, which proves in exact arithmetic that chords never cross.
+These tests compare its pairs with an all-pairs exact reference over seeded random edge sets, lock down that
+a long oblique segment is listed in O(length) cells, not in every cell of its bounding box, and that each
+kind of crossing is still refused by the check that owns it.
 """
 
 from __future__ import annotations
 
 import math
 import random
+from fractions import Fraction
 
 import pytest
 
@@ -20,7 +23,12 @@ from scgsim.geometry.sgb.arrangement.arcs import (  # private-import: the broad 
     sampled_crossings,
 )
 from scgsim.geometry.sgb.arrangement.dcel import Arrangement
+from scgsim.geometry.sgb.derivation.layer import Layer, RawMeasurements
+from scgsim.geometry.sgb.labelling.dissolve import Dissolved
 from scgsim.geometry.sgb.noding.snap_rounding import NodedEdge
+from scgsim.geometry.sgb.parallel import Runtime
+from scgsim.geometry.sgb.validation.arrangements import check_arcs, check_planar
+from scgsim.geometry.sgb.validation.report import ValidationReport
 
 CELL = 256  # the cell size sampled_crossings uses, in grid units
 STEP = 8.0  # its default arc sampling step
@@ -105,11 +113,13 @@ def random_layer(rng: random.Random):
 def all_pairs_crossings(
     arr: Arrangement, curves: list[RealisedArc | None]
 ) -> list[tuple[int, int]]:
-    """The reference: every segment of every edge against every segment of every later edge."""
+    """The reference: every segment of every edge against every segment of every later edge, one of them an arc."""
     polylines = [_edge_polyline(arr, curves, e, STEP) for e in range(len(arr.edges))]
     found = set()
     for i, first in enumerate(polylines):
         for j in range(i + 1, len(polylines)):
+            if curves[i] is None and curves[j] is None:
+                continue  # two chords: check_planar's exact test, not this one
             second = polylines[j]
             if any(
                 _segments_cross(p, q, r, s)
@@ -129,7 +139,8 @@ def test_the_cells_lose_no_crossing_of_the_all_pairs_reference():
         expected = all_pairs_crossings(arr, curves)
         assert sampled_crossings(arr, curves) == expected
         crossing_pairs += len(expected)
-    assert crossing_pairs > 1000  # the sets do cross, so the comparison is not vacuous
+    # the sets do cross an arc, so the comparison is not vacuous
+    assert crossing_pairs > 900
 
 
 @pytest.mark.parametrize(
@@ -151,7 +162,8 @@ def test_the_cells_lose_no_crossing_of_the_all_pairs_reference():
 )
 def test_a_crossing_on_a_cell_line_or_corner_is_found(first, second):
     """A crossing point on the boundary between cells is in a cell both segments are listed in."""
-    assert sampled_crossings(edges_only([first, second]), [None, None]) == [(0, 1)]
+    cells = _segment_cells([list(first), list(second)], float(CELL))
+    assert any({(0, 0), (1, 0)} <= set(members) for members in cells.values())
 
 
 @pytest.mark.parametrize("start", [(0, 0), (100, 37)])
@@ -164,3 +176,48 @@ def test_a_long_45_degree_segment_is_listed_in_cells_along_its_path(start):
     # each column holds the rows its clipped piece spans, plus at most one more on each side for the pad
     assert len(cells) <= rows + 3 * columns
     assert len(cells) < columns * rows / 300
+
+
+def layer_of(
+    segments: list[tuple[tuple[int, int], tuple[int, int]]],
+    curves: list[RealisedArc | None],
+) -> Layer:
+    """A level layer holding just these edges, for the arrangement checks."""
+    dissolved = Dissolved(edges_only(segments), [], [], [], {})
+    return Layer(
+        "level",
+        0,
+        "level[0]",
+        Fraction(0),
+        dissolved,
+        None,
+        RawMeasurements(0, 0),
+        edge_ids=[f"e{k}" for k in range(len(segments))],
+        edge_curve=curves,
+    )
+
+
+def outcome(report: ValidationReport, name: str) -> bool:
+    """Whether the named check passed."""
+    return next(c.passed for c in report.checks if c.name == name)
+
+
+def test_a_realised_arc_crossing_a_straight_edge_is_refused():
+    """The arc bulges across a chord between its end points' neighbours: the arc check refuses it."""
+    (a, b), curve = arc_through((0, 0), 500, 0.0, 90.0)
+    report = ValidationReport()
+    check_arcs(report, [layer_of([(a, b), ((0, 0), (700, 700))], [curve, None])])
+    assert not outcome(report, "arc_edges_do_not_cross")
+    assert "e0 x e1" in next(
+        c.detail for c in report.checks if c.name == "arc_edges_do_not_cross"
+    )
+
+
+def test_two_crossing_straight_edges_are_refused_by_the_planarity_check():
+    """Two chords that cross are not the arc check's to find; the exact planarity check refuses them."""
+    layer = layer_of([((0, 0), (512, 512)), ((0, 512), (512, 0))], [None, None])
+    report = ValidationReport()
+    check_arcs(report, [layer])
+    check_planar(report, [layer], Runtime())
+    assert outcome(report, "arc_edges_do_not_cross")
+    assert not outcome(report, "arrangements_planar")

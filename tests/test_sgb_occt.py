@@ -1,4 +1,4 @@
-"""Official OCCT validity checks (OCP) on written models, with negative controls, plus the AEDT STEP export.
+"""Official OCCT validity checks (OCP) on written emit_models, with negative controls, plus the AEDT STEP export.
 
 Positive fixtures must be clean; deliberate defects -- in a loaded shape and in the BREP *file* -- must be caught by
 the official checks.  The whole module is skipped where OCP (the ``occt`` dependency group) is not installed.
@@ -47,18 +47,12 @@ from scgsim.geometry.sgb.verification.occt import (
 pytestmark = pytest.mark.occt
 
 
-@pytest.fixture(scope="module")
-def models():
-    """Every named case, built once."""
-    return {name: build() for name, build in CASES.items()}
-
-
 @pytest.mark.parametrize("name", sorted(CASES))
 def test_written_brep_and_the_brep_inside_the_xao_pass_every_official_check(
-    tmp_path, models, name
+    tmp_path, emit_models, name
 ):
     """Written brep and the brep inside the xao pass every official check."""
-    model = models[name]
+    model = emit_models[name]
     plan = plan_brep(model.topology, model.routed)
     write_brep_file(plan, tmp_path / "m.brep")
     write_xao_file(plan, tmp_path / "m.xao", brep=tmp_path / "m.brep")
@@ -85,9 +79,9 @@ def test_written_brep_and_the_brep_inside_the_xao_pass_every_official_check(
 
 
 @pytest.fixture(scope="module")
-def pad(tmp_path_factory, models):
+def pad(tmp_path_factory, emit_models):
     """Route B pad: arcs, cylinder walls, holes and an embedded face -- written once."""
-    model = models["pad_b"]
+    model = emit_models["pad_b"]
     plan = plan_brep(model.topology, model.routed)
     path = tmp_path_factory.mktemp("occt") / "m.brep"
     write_brep_file(plan, path)
@@ -232,10 +226,10 @@ def test_the_uncorrupted_file_is_clean_so_the_controls_are_meaningful(pad):
 
 
 def test_refinement_curve_is_excluded_from_the_argument_analyzer_but_not_from_brepcheck(
-    tmp_path, models
+    tmp_path, emit_models
 ):
     """Refinement curve is excluded from the argument analyzer but not from brepcheck."""
-    model = models["pad_a_refinement"]
+    model = emit_models["pad_a_refinement"]
     plan = plan_brep(model.topology, model.routed)
     write_brep_file(plan, tmp_path / "m.brep")
     report = check_file(tmp_path / "m.brep", model.topology, plan)
@@ -246,10 +240,10 @@ def test_refinement_curve_is_excluded_from_the_argument_analyzer_but_not_from_br
 
 
 def test_embedded_free_faces_are_excluded_from_the_solid_analysis_and_analysed_on_their_own(
-    tmp_path, models
+    tmp_path, emit_models
 ):
     """Embedded free faces are excluded from the solid analysis and analysed on their own."""
-    model = models["floating_sheet_a"]
+    model = emit_models["floating_sheet_a"]
     plan = plan_brep(model.topology, model.routed)
     write_brep_file(plan, tmp_path / "m.brep")
     report = check_file(tmp_path / "m.brep", model.topology, plan)
@@ -257,10 +251,10 @@ def test_embedded_free_faces_are_excluded_from_the_solid_analysis_and_analysed_o
 
 
 def test_self_interference_is_a_switch_and_the_default_report_is_complete(
-    tmp_path, models
+    tmp_path, emit_models
 ):
     """Self interference is a switch and the default report is complete."""
-    model = models["pad_a"]
+    model = emit_models["pad_a"]
     plan = plan_brep(model.topology, model.routed)
     write_brep_file(plan, tmp_path / "m.brep")
     cheap = check_file(
@@ -286,9 +280,9 @@ def test_without_ocp_the_checks_name_the_dependency_group(monkeypatch):
 
 
 @pytest.fixture(scope="module")
-def exported(tmp_path_factory, models):
+def exported(tmp_path_factory, emit_models):
     """Route B pad with bands: BREP, sidecar and the STEP export."""
-    model = models["pad_b_bands"]
+    model = emit_models["pad_b_bands"]
     plan = plan_brep(model.topology, model.routed)
     folder = tmp_path_factory.mktemp("step")
     write_brep_file(plan, folder / "m.brep")
@@ -419,13 +413,15 @@ def test_a_brep_of_the_same_topology_at_another_scale_is_refused(tmp_path):
 
 
 def test_a_brep_with_other_counts_than_the_sidecar_is_refused(
-    exported, models, tmp_path
+    exported, emit_models, tmp_path
 ):
     """A sidecar of another model (other entity counts) is refused, naming what differs."""
     _, _, sidecar, folder, _ = exported
-    plan = plan_brep(models["pad_c"].topology, models["pad_c"].routed)
+    plan = plan_brep(emit_models["pad_c"].topology, emit_models["pad_c"].routed)
     other = build_sidecar(
-        models["pad_c"], plan, SidecarContext(sliver_report(models["pad_c"])["summary"])
+        emit_models["pad_c"],
+        plan,
+        SidecarContext(sliver_report(emit_models["pad_c"])["summary"]),
     )
     with pytest.raises(
         StepExportError,
@@ -440,10 +436,10 @@ def test_a_brep_with_other_counts_than_the_sidecar_is_refused(
 
 @pytest.mark.parametrize("name", sorted(CASES))
 def test_every_case_belongs_to_its_own_sidecar_within_the_load_check_tolerances(
-    tmp_path, models, name
+    tmp_path, emit_models, name
 ):
     """The BREP and the XAO of every named case match the expected block: the tolerances are loose enough for arcs and cylinders."""
-    model = models[name]
+    model = emit_models[name]
     brep, sidecar = written(model, tmp_path)
     plan = plan_brep(model.topology, model.routed)
     write_xao_file(plan, tmp_path / "m.xao", brep=brep)

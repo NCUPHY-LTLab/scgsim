@@ -1,4 +1,5 @@
-"""Explicit opt-in for owner-supplied, read-only private golden fixtures."""
+"""Shared test fixtures: the explicit opt-in for owner-supplied, read-only private golden fixtures, and
+the SGB emission cases built once per session."""
 
 from __future__ import annotations
 
@@ -6,6 +7,9 @@ import re
 from pathlib import Path
 
 import pytest
+from sgb_emit_cases import CASES
+
+from scgsim.geometry.sgb.model import ConformalModel
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -61,3 +65,12 @@ def private_golden_manifest(request: pytest.FixtureRequest) -> Path:
     if not value:
         pytest.skip("NOT_RUN: no owner-authorized private fixture manifest supplied")
     return Path(value).expanduser().resolve()
+
+
+@pytest.fixture(scope="session")
+def emit_models() -> dict[str, ConformalModel]:
+    """Every ``sgb_emit_cases.CASES`` model, built once for the whole session.
+
+    The emission, OCCT and sidecar tests only read these models; a test that damages a model builds its own.
+    """
+    return {name: build() for name, build in CASES.items()}

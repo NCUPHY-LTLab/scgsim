@@ -42,9 +42,9 @@ def sidecar_of(model, **context):
 
 
 @pytest.fixture(scope="module")
-def sidecars():
+def sidecars(emit_models):
     """The sidecar of every named case, built once."""
-    return {name: sidecar_of(build()) for name, build in CASES.items()}
+    return {name: sidecar_of(model) for name, model in emit_models.items()}
 
 
 # --------------------------------------------------------------------------- schema

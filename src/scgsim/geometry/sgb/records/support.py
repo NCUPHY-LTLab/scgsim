@@ -22,6 +22,9 @@ from functools import cached_property
 from scgsim.geometry.sgb.plane import Point, RepPoint, point_in_ring
 from scgsim.geometry.sgb.records.carriers import ArcCarrier, LineEdge, RingPrimitive
 
+ORIGIN_CELL = 64.0
+"""Smallest cell, in grid units, of the grid that finds the nearest distance origin of a point."""
+
 DISTANCE_SLACK = 1.5
 """How far, in grid units, a cut curve may lie from the exact offset it stands for: its end points are
 snapped to the lattice and arcs are cut along witness chords, so a distance within this of a margin
@@ -146,9 +149,13 @@ class SupportRegion:
             if not self.is_origin(ri, pi)
         )
 
+    @cached_property
+    def _origin_grid(self) -> _OriginGrid:
+        return _OriginGrid(self.origins)
+
     def distance(self, point: tuple[float, float]) -> float:
         """Distance from a point to the nearest distance origin."""
-        return min(distance_to_primitive(p, point[0], point[1]) for p in self.origins)
+        return self._origin_grid.nearest(point[0], point[1])
 
     def distance_to_free_boundary(self, point: tuple[float, float]) -> float:
         """Distance from a point to the boundary that is not an origin (infinite when every primitive is one)."""
@@ -199,3 +206,93 @@ class SupportRegion:
     def band_count(self) -> int:
         """Number of bands: one more than the margins."""
         return len(self.margins) + 1
+
+
+class _OriginGrid:
+    """The distance origins listed under every cell their bounding box covers, for nearest-origin queries.
+
+    A query visits the cells in square rings around its own cell, nearest ring first, and stops once
+    every primitive not yet met is farther away than the best distance found.  The result is the minimum
+    of :func:`distance_to_primitive` over a set that contains the nearest primitive, so it is the same
+    float as the minimum over all origins.
+    """
+
+    def __init__(self, origins: tuple[RingPrimitive, ...]) -> None:
+        if not origins:
+            raise ValueError(
+                "a support region without distance origins has no distances"
+            )
+        self.origins = origins
+        boxes = [_bounding_box(prim) for prim in origins]
+        extent = max(
+            max(box[2] for box in boxes) - min(box[0] for box in boxes),
+            max(box[3] for box in boxes) - min(box[1] for box in boxes),
+        )
+        # about sqrt(n) by sqrt(n) cells over n origins, never finer than ORIGIN_CELL
+        self.size = max(ORIGIN_CELL, extent / max(4, math.isqrt(len(origins))))
+        self.cells: dict[tuple[int, int], list[int]] = {}
+        for index, (x0, y0, x1, y1) in enumerate(boxes):
+            for column in range(self._cell(x0), self._cell(x1) + 1):
+                for row in range(self._cell(y0), self._cell(y1) + 1):
+                    self.cells.setdefault((column, row), []).append(index)
+        self.columns = (min(c for c, _ in self.cells), max(c for c, _ in self.cells))
+        self.rows = (min(r for _, r in self.cells), max(r for _, r in self.cells))
+
+    def _cell(self, coordinate: float) -> int:
+        return math.floor(coordinate / self.size)
+
+    def nearest(self, x: float, y: float) -> float:
+        """Distance from ``(x, y)`` to the nearest origin."""
+        column, row = self._cell(x), self._cell(y)
+        last_ring = max(
+            abs(column - self.columns[0]),
+            abs(column - self.columns[1]),
+            abs(row - self.rows[0]),
+            abs(row - self.rows[1]),
+        )
+        best = math.inf
+        met: set[int] = set()
+        for ring in range(last_ring + 1):
+            # A primitive first met in this ring lies in cells of this ring or farther out, so at least
+            # (ring - 1) cells from the point, wherever it sits in its own cell.  Stopping one ring later
+            # than that leaves a whole cell for float rounding of the boxes and the distances.
+            if (ring - 2) * self.size > best:
+                break
+            for cell in _ring_cells(column, row, ring):
+                for index in self.cells.get(cell, ()):
+                    if index not in met:
+                        met.add(index)
+                        best = min(
+                            best, distance_to_primitive(self.origins[index], x, y)
+                        )
+        return best
+
+
+def _bounding_box(prim: RingPrimitive) -> tuple[float, float, float, float]:
+    """Bounding box of a primitive: its end points, and for an arc the axis extremes it passes."""
+    start, end = primitive_ends(prim)
+    xs, ys = [start[0], end[0]], [start[1], end[1]]
+    if isinstance(prim, ArcCarrier):
+        cx, cy, r = float(prim.centre[0]), float(prim.centre[1]), float(prim.radius)
+        for extreme in ((cx + r, cy), (cx - r, cy), (cx, cy + r), (cx, cy - r)):
+            if _inside_span(prim, (cx, cy), start, end, extreme):
+                xs.append(extreme[0])
+                ys.append(extreme[1])
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _ring_cells(column: int, row: int, ring: int) -> list[tuple[int, int]]:
+    """The cells at Chebyshev distance ``ring`` from ``(column, row)``."""
+    if ring == 0:
+        return [(column, row)]
+    top_and_bottom = [
+        (c, r)
+        for c in range(column - ring, column + ring + 1)
+        for r in (row - ring, row + ring)
+    ]
+    sides = [
+        (c, r)
+        for r in range(row - ring + 1, row + ring)
+        for c in (column - ring, column + ring)
+    ]
+    return top_and_bottom + sides
