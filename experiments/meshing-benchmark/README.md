@@ -201,3 +201,28 @@ Variants of the same size field (seconds are the mesh generation):
 
 Each case is meshed twice by the module in separate directories. In all seven cases the MSH files are
 byte-identical and the quality reports (without the timing block) are equal.
+
+## Band-edge candidates (issue 136)
+
+`band_edge.py` measures sizing rules for the edges of Surface-EPR bands against the two reference recipes,
+on the Disk Qubit and the 1, 2 and 4 mm chips of PR 132 (with and without bands) and on SimplePad on
+Route A with bands. The candidates and the table are in [band_edge.md](band_edge.md); every run record is
+in `band_edge.json`. The candidates are experiment code; `scgsim` is unchanged.
+
+`run` imports the OrcaPen SC PDK, which the locked environment does not hold: layer a PDK checkout at
+`8d18025` (the pin of PR 132) over it for the run only. `table` needs no PDK.
+
+```bash
+uv run --locked --no-sync --with-editable PATH/TO/orcapen-sc-pdk \
+    python experiments/meshing-benchmark/band_edge.py run OUTPUT_DIR --label first
+uv run --locked --no-sync python experiments/meshing-benchmark/band_edge.py \
+    table OUTPUT_DIR [OUTPUT_DIR ...] --write-json experiments/meshing-benchmark/band_edge.json
+```
+
+`run` builds each case once under `OUTPUT_DIR/cases/` and meshes it with each candidate in a fresh
+process, one after another; `--cases` and `--candidates` select a subset, and `--label` names the pass
+(`first`, `quiet`, `pin49`, `pin49-quiet` in the table). Each record holds `/proc/loadavg`, the number of
+Palace processes before and after its run, and the SCGSim and PDK revisions. The `disk_site_*` cases need
+the PDK at `49e539f` instead, in an output folder of their own: pass
+`--with "orcapen-sc-pdk @ git+https://github.com/NCUPHY-LTLab/orcapen-sc-pdk.git@49e539fd59f3224ecda965d777c7ec3aadcc3b85"`
+in place of `--with-editable`. `table` takes both folders.
