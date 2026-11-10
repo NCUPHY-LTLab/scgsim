@@ -26,15 +26,16 @@ calculations.
 | Follow-on platform work | `AFTER TOOLCHAIN` | macOS voice/AI work follows completion of the shared toolchain. |
 | Tier B | `SUPPORTED` | This convergence work does not withdraw or reclassify Tier B support. |
 
-Pull request events, including drafts, pushes to `develop` or `main`, and
-manual dispatch run a Python 3.12/3.13 matrix that checks the package-version
-contract, builds the distribution, and verifies editable-source and wheel
-imports. The Python 3.12 offline job runs the full
-public non-native test suite, strict Pyright on the three configured modules,
-and Ruff F on tracked Python files. A separate Python 3.12 `docs-smoke` job
-runs current source examples through file-only preparation with the pinned
-public PDK. The required job fails unless all three jobs succeed. CI does not
-invoke AEDT or Palace native solvers or use private golden data. Pages
+Ready pull requests, pushes to `develop` or `main`, and manual dispatch run
+the fast tier as separate checks: `build-and-import` on Python 3.12 and 3.13
+checks the package-version contract, builds the distribution, and verifies
+editable-source and wheel imports; `fast-tests` runs the public non-native
+suite without `slow` tests; `quality` runs `scripts/check_quality.py`;
+`docs-smoke` runs current source examples through file-only preparation with
+the pinned public PDK; and `pdk-tests` runs the PDK-dependent tests against
+the pinned public OrcaPen SC PDK. A nightly workflow on `develop` runs the
+whole suite with `slow` tests and the Pages render without deploying. CI does
+not invoke AEDT or Palace native solvers or use private golden data. Pages
 rendering on `develop` and `main` pushes or manual dispatch is separate and
 has code execution disabled.
 

@@ -191,107 +191,35 @@ jobs:
           print(f"classified comparison as {lane}")
           PYTHON
 
-  build-and-import:
+  # Every job below is its own check so a failure names itself. A job skipped by
+  # its `if:` (draft PR, docs-only lane) reports success and does not block; a
+  # failed change-scope skips them too, which is why change-scope is required.
+  build-and-import-312:
     needs: change-scope
     if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && needs.change-scope.outputs.lane == 'product'
+    name: build-and-import (3.12)
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up UV and Python
-        uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d # v10.0.0
+      - uses: ./.github/actions/build-and-import
         with:
-          version: "0.12.4"
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
 
-      - name: Sync editable environment
-        run: uv sync --locked
-
-      - name: Verify package version contract
-        env:
-          TARGET_LINE: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
-          EVENT_NAME: ${{ github.event_name }}
-          PR_HEAD_BRANCH: ${{ github.head_ref }}
-          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-        run: |
-          # A same-repository develop -> main promotion reviews prerelease source.
-          # The resulting main push must still satisfy the stable version policy.
-          if [ "$EVENT_NAME" = pull_request ] && [ "$TARGET_LINE" = main ] &&
-             [ "$PR_HEAD_BRANCH" = develop ] && [ "$PR_HEAD_REPOSITORY" = "$GITHUB_REPOSITORY" ]; then
-            TARGET_LINE=develop
-          fi
-          case "$TARGET_LINE" in
-            develop|main) line="$TARGET_LINE" ;;
-            *) line=any ;;
-          esac
-          uv run --locked python scripts/check_version.py --line "$line"
-          uv run --locked python -m unittest discover -s tests -p 'test_version_policy.py'
-
-      - name: Verify editable import from src
-        run: |
-          uv run --locked python - <<'PY'
-          import os
-          import pathlib
-
-          import scgsim
-          import scgsim.geometry
-          import scgsim.geometry.compiler
-          from scgsim.palace import EigenmodeSim, ElectrostaticSim
-
-          repo_root = pathlib.Path(os.environ["GITHUB_WORKSPACE"]).resolve()
-          source = pathlib.Path(scgsim.__file__).resolve()
-          src_root = (repo_root / "src").resolve()
-          if not source.is_relative_to(src_root):
-              raise SystemExit(f"unexpected scgsim location: {source}")
-          print(scgsim.__version__)
-          print(scgsim.geometry.__name__, scgsim.geometry.compiler.__name__,
-                ElectrostaticSim.__name__, EigenmodeSim.__name__)
-          PY
-
-      - name: Build distribution artifacts
-        run: uv build --no-sources
-
-      - name: Inspect wheel contents
-        run: |
-          python - <<'PY'
-          import glob
-          import zipfile
-          from pathlib import Path
-
-          for path in glob.glob("dist/*.whl"):
-              wheel = Path(path).resolve()
-              print(wheel)
-              with zipfile.ZipFile(wheel) as zf:
-                  for name in zf.namelist():
-                      print(name)
-          PY
-
-      - name: Verify wheel import in isolated environment
-        run: |
-          uv venv --clear --python ${{ matrix.python-version }} .venv-wheel
-          uv pip install --python .venv-wheel/bin/python dist/*.whl
-          .venv-wheel/bin/python - <<'PY'
-          import scgsim
-          import scgsim.geometry
-          import scgsim.geometry.compiler
-          from importlib.metadata import version as metadata_version
-          import pathlib
-          from scgsim.palace import EigenmodeSim, ElectrostaticSim
-
-          print(scgsim.__version__)
-          if scgsim.__version__ != metadata_version("scgsim"):
-              raise SystemExit("version mismatch between package and metadata")
-          print(scgsim.geometry.__name__, scgsim.geometry.compiler.__name__,
-                ElectrostaticSim.__name__, EigenmodeSim.__name__)
-          print(pathlib.Path(scgsim.__file__).resolve())
-          PY
-  offline:
+  build-and-import-313:
     needs: change-scope
     if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && needs.change-scope.outputs.lane == 'product'
-    name: Offline tests and package quality (Python 3.12)
+    name: build-and-import (3.13)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/build-and-import
+        with:
+          python-version: "3.13"
+
+  fast-tests:
+    needs: change-scope
+    if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && needs.change-scope.outputs.lane == 'product'
+    name: fast-tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -304,17 +232,36 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y libglu1-mesa
-      - name: Install locked offline test and quality dependencies
+      - name: Install locked offline test dependencies
         run: uv sync --locked --group dev
-      - name: Run the complete public non-native suite
-        run: uv run --locked --no-sync python -m pytest tests -m 'not private_golden'
+      # `slow` runs in the nightly workflow and `pdk` in the pdk-tests job.
+      # --fail-on-skip: every dependency is installed here, so a skip is a fault.
+      - name: Run the public suite without slow and PDK tests
+        run: >-
+          uv run --locked --no-sync python -m pytest tests
+          -m 'not slow and not private_golden and not pdk' -rs --fail-on-skip
+
+  quality:
+    needs: change-scope
+    if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && needs.change-scope.outputs.lane == 'product'
+    name: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up UV and Python
+        uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d # v10.0.0
+        with:
+          version: "0.12.4"
+          python-version: "3.12"
+      - name: Install locked quality dependencies
+        run: uv sync --locked --group dev
       - name: Check format, lint, readable style, types, and import layers
         run: uv run --locked --no-sync python scripts/check_quality.py
 
   docs-smoke:
     needs: change-scope
     if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && needs.change-scope.outputs.lane == 'product'
-    name: Current documentation file-only preparation (Python 3.12)
+    name: docs-smoke
     runs-on: ubuntu-latest
     env:
       UV_PROJECT_ENVIRONMENT: ${{ github.workspace }}/.venv-docs
@@ -357,38 +304,65 @@ jobs:
       - name: Run installed SCGSim documentation through file-only preparation
         run: .venv-docs/bin/python -I -B scripts/check_docs_examples.py
 
-  required:
-    name: required
-    if: ${{ always() }}
-    needs: [change-scope, build-and-import, offline, docs-smoke]
+  # Tests marked `pdk` import the public OrcaPen SC PDK (`orcapen_sc_pdk`). They
+  # run against the PDK's own frozen lock at the commit README.md installs, with
+  # the current SCGSim wheel on top, pinned and verified the way docs-smoke is.
+  pdk-tests:
+    needs: change-scope
+    if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && needs.change-scope.outputs.lane == 'product'
+    name: pdk-tests
     runs-on: ubuntu-latest
+    env:
+      UV_PROJECT_ENVIRONMENT: ${{ github.workspace }}/.venv-pdk
+      UV_CACHE_DIR: ${{ github.workspace }}/.ci/scgsim-pdk-cache
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
-      - name: Require every necessary job to succeed
-        env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
-          EVENT_NAME: ${{ github.event_name }}
-          IS_DRAFT: ${{ github.event.pull_request.draft }}
-          LANE: ${{ needs.change-scope.outputs.lane }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out the pinned public OrcaPen SC PDK
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: NCUPHY-LTLab/orcapen-sc-pdk
+          ref: c75a1d4d2ee07e86a3b5d9b491609e5a1a5b850c
+          path: .ci/orcapen
+          persist-credentials: false
+      - name: Install the exact test Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12.14"
+      - name: Set up the PDK toolchain
+        uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d # v10.0.0
+        with:
+          version: "0.11.18"
+          python-version: "3.12.14"
+      - name: Install the Gmsh wheel system runtime
         run: |
-          python - <<'PYTHON'
-          import json
-          import os
-
-          results = json.loads(os.environ["NEEDS_JSON"])
-          expected = {"change-scope", "build-and-import", "offline", "docs-smoke"}
-          if set(results) != expected:
-              raise SystemExit("Required job result inventory differs")
-          if results["change-scope"]["result"] != "success":
-              raise SystemExit("Change classifier or prose-link validation did not succeed")
-          lane = os.environ["LANE"]
-          if lane not in {"docs", "product"}:
-              raise SystemExit(f"Invalid classified lane: {lane!r}")
-          jobs = {name: results[name]["result"] for name in ("build-and-import", "offline", "docs-smoke")}
-          if os.environ["EVENT_NAME"] == "pull_request" and os.environ["IS_DRAFT"] == "true":
-              expected_result = "skipped"
-          else:
-              expected_result = "skipped" if lane == "docs" else "success"
-          unexpected = {name: result for name, result in jobs.items() if result != expected_result}
-          if unexpected:
-              raise SystemExit(f"Required jobs did not match {lane}/{expected_result}: {unexpected}")
-          PYTHON
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libglu1-mesa
+      - name: Verify the dependency inputs
+        run: |
+          echo '3d092827f4480403b8276edad273a9a95ed506bed82a969e71c2f4162bde8d06  .ci/orcapen/pyproject.toml' | sha256sum --check
+          echo 'f1ba2e7f712d36a2ef363d300be86a22ed76f81e5474163fa858bae2a97e8f52  .ci/orcapen/uv.lock' | sha256sum --check
+      - name: Install the PDK's frozen dependencies with its test runner
+        run: >-
+          uv sync --project .ci/orcapen --frozen --extra dev --group palace-notebooks
+          --no-install-project --no-install-package scgsim --python 3.12.14
+      - name: Build and install the pinned PDK without changing dependencies
+        run: |
+          uv build --python 3.12.14 --wheel --out-dir .ci/orcapen-wheel .ci/orcapen
+          uv pip install --python .venv-pdk/bin/python --no-deps .ci/orcapen-wheel/orcapen_sc_pdk-0.1.0.dev2-py3-none-any.whl
+      - name: Build and install the current SCGSim wheel after dependency sync
+        run: |
+          uv build --python 3.12.14 --wheel --out-dir .ci/scgsim-wheel .
+          uv pip install --python .venv-pdk/bin/python --no-deps .ci/scgsim-wheel/scgsim-*.whl
+      - name: Check that the installed packages' requirements are met
+        run: uv pip check --python .venv-pdk/bin/python
+      # Only the files holding `pdk` tests are collected: the other modules need
+      # SCGSim's own dev environment and run in fast-tests.
+      - name: Run the PDK tests against the installed SCGSim wheel
+        run: |
+          mapfile -t files < <(grep -l -E '^ *(pytestmark *=.*|@)pytest\.mark\.pdk\b' tests/test_*.py)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "no test carries the pdk marker" >&2
+            exit 1
+          fi
+          .venv-pdk/bin/python -I -B -m pytest -p no:cacheprovider "${files[@]}" -m pdk -rs --fail-on-skip

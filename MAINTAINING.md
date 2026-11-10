@@ -99,9 +99,12 @@ state and repository delivery separately in
 [the convergence status page](docs/convergence-status.qmd).
 
 The required delivery route is a pull request with required checks and no
-bypass. The literal `required` check always reaches a terminal result and
-accepts only the results declared for the selected change scope. Failed or
-cancelled jobs and unexpected skips remain failures.
+bypass. Each CI job is its own check, so a failure names the job that failed:
+`change-scope`, `build-and-import (3.12)`, `build-and-import (3.13)`,
+`fast-tests`, `quality`, `docs-smoke` and `pdk-tests`. A job skipped by its
+condition (a Draft pull request or the docs-only lane) reports success. A
+failed classification also skips the other jobs, so `change-scope` is itself
+a required check. Failed or cancelled jobs remain failures.
 
 CI first classifies the exact event comparison. Draft pull requests run this
 classification and intentionally skip product jobs; marking a pull request
@@ -112,16 +115,27 @@ unsupported content, QMD/Notebook files, shared settings, dependencies and sourc
 changes also use the product checks. An unavailable comparison also uses
 the product checks.
 
-Non-Draft product changes and manual dispatch retain the Python 3.12/3.13
-package-version, distribution-build, editable-import and isolated-wheel-import
-checks. The Python 3.12 offline job runs the full public offline test suite,
-the unified `scripts/check_quality.py` command: Ruff formatting and lint,
-readable style, standard Pyright with the three retained strict scopes, and
-six import-layer contracts. That job also installs the `occt` dependency group, so Pyright
-resolves OCP and the `occt`-marked OCCT checks run instead of skipping. The separate Python 3.12 `docs-smoke` job runs current source examples
-through file-only preparation with the pinned public PDK. CI uses public
-inputs and excludes private golden data; it does not invoke AEDT or Palace
-solvers.
+Non-Draft product changes, pushes to `develop` or `main` and manual dispatch
+run the fast tier. `build-and-import` checks the package version,
+distribution build, editable import and isolated wheel import on Python 3.12
+and 3.13. `fast-tests` runs the public offline suite except the `slow`, `pdk`
+and `private_golden` tests. `quality` runs the unified
+`scripts/check_quality.py` command: Ruff formatting and lint, readable style,
+standard Pyright with the three retained strict scopes, and six import-layer
+contracts. Both install the `occt` dependency group, so Pyright resolves OCP
+and the `occt`-marked OCCT checks run. `docs-smoke` runs current source
+examples through file-only preparation with the pinned public PDK.
+`pdk-tests` runs the `pdk`-marked tests against the public OrcaPen SC PDK at
+the commit `README.md` installs, from that PDK's frozen lock with the current
+SCGSim wheel. The test jobs pass `--fail-on-skip`: they install every
+dependency their tests need, so a skip fails the run instead of passing
+unnoticed.
+
+The Nightly workflow runs the heavy tier at 18:30 UTC (02:30 in Taiwan) on
+`develop`, and on any branch by manual dispatch. `full-tests` runs the whole
+public suite with the `slow` tests, and `docs-render` runs the Pages render
+without deploying it. A failure fails the run. CI uses public inputs and
+excludes private golden data; it does not invoke AEDT or Palace solvers.
 
 Pages renders the frozen version catalogue, stable pages and history on
 `develop` and `main` pushes or manual dispatch, with code execution disabled.
