@@ -103,8 +103,8 @@ def test_a_spline_strip_drawn_at_258_points_builds_exact_bands(name):
 
     They were refused while neighbouring offsets at such small turns could miss each other on the lattice.  The
     offsets of two lines now end at their crossing on both sides of a vertex (Issue #138), so the curve closes
-    and the bands are those of the exact erosion.  Whether the 128-points rule stays a layout rule is open on
-    Issue #138.
+    and the bands are those of the exact erosion.  The Human removed the turn-per-vertex rule from the
+    supported scope (Issue #138).
     """
     scene = pdk.DRAWN_SPLINES[name]()
     assert min(abs(t) for t in turns_degrees(scene.conductors[0].outer)) < 0.06
@@ -114,14 +114,14 @@ def test_a_spline_strip_drawn_at_258_points_builds_exact_bands(name):
 @pytest.mark.parametrize(
     "name", ["cell21_interpolation_resampled", "cell21_bspline_resampled"]
 )
-def test_a_resampled_spline_strip_turns_at_least_the_rule_at_every_vertex(name):
+def test_a_resampled_spline_strip_turns_at_least_2_8125_degrees_at_every_vertex(name):
     """The resampled strips that build above keep every lattice vertex at 2.8125 degrees or more."""
     ring = SCENES[name]().conductors[0].outer
     assert min(abs(t) for t in turns_degrees(ring)) >= 360 / 128
 
 
-def test_the_long_meander_has_outlines_of_500_to_900_vertices_within_the_turn_rule():
-    """The stress case of 500 to 900 vertices in one outline, drawn inside the 128-points-per-circle rule.
+def test_the_long_meander_has_outlines_of_500_to_900_vertices():
+    """The stress case of 500 to 900 vertices in one outline, each vertex turning at least 2.8125 degrees.
 
     The scene builds with exact bands in the parametrised test above (``meander_long_outline``).
     """

@@ -100,7 +100,7 @@ PARALLEL_EPSILON = Decimal(
 PIECE_SLACK = Decimal("1e-9")
 # A reflex arc shorter than this many grid steps (margin times turn) is replaced by the intersection of its two
 # offsets, when both are lines and the intersection lies under one grid step beyond the arc.  The value is the
-# Human's choice on Issue #125: 0.5 um times the 2.8125 degree turn of the 128-points-per-circle rule.
+# Human's choice on Issue #125, derived as 0.5 um times a 2.8125 degree turn (one vertex of a 128-point circle).
 SHORT_ARC_GRID_STEPS = 25
 
 

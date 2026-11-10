@@ -45,10 +45,6 @@ SUBSTRATE_SA = "sa::substrate|vacuum::z=0.0"
 # band bounded by contours of total length L differs from the exact area by at most L * sqrt(2)/2 * grid
 # (the bound of test_oblique_edges_give_the_hand_calculated_bands_within_the_snap_bound).
 CONTOUR_SNAP_UM = math.sqrt(2) / 2 * GRID.size_um
-# The refusal of an outline whose vertices turn too little (``cutfamilies.inset_regions``).
-TURN_REFUSAL = (
-    r"turn by less than 2\.8125 degrees each.*at most 128 points per full circle"
-)
 # Double-precision sums of face areas: a band that vanishes comes out as +-4e-16 um^2 rather than 0, which a
 # zero snap bound (no contour) must still accept.  Relative to the area, far below any snap bound.
 FLOAT_ROUNDOFF = 1e-12
