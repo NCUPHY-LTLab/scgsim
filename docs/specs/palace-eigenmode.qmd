@@ -22,7 +22,7 @@ ordinary sequence; [Xmon EPR](../tutorial-xmon-palace.qmd) adds optional physics
 | Numerical controls | `set_numerical(...)` retains explicit order, linear solver, AMR and output choices |
 | Source/settings view | `input_summary()` returns detached source plus settings, no file/native I/O |
 | Surface model | `set_surface_epr(*, representation, specs, route_a_thin_film=None)`, before `mesh()` |
-| Authored port | `add_port(name, *, layer, layout_sheet=False, inductance)` |
+| Authored port | `add_port(name, *, layer, layout_sheet=True, inductance)`; `layout_sheet` must be `True` (its signature default `False` is refused) |
 | Output selection | `set_epr_request(*, surface_interfaces=None, bulk_domain_ids=None, port_names=None)` |
 | Preparation | `mesh()`, `write_config()`, then `prepare_handoff(*, profile, executable, resources=None, setup_commands=(), petsc_options=())` |
 
@@ -41,10 +41,13 @@ threshold) and writes `Model.Refinement.Nonconformal=true`. Before
 `write_config()`, provide `amr_max_passes` through `set_numerical(...)`. For a
 positive pass limit, also provide `amr_tolerance` and `amr_update_fraction`;
 setting `amr_max_passes=0` disables adaptive refinement and allows those two
-values to remain unset. Omitted AMR and `ksp_type` values in later
-`set_numerical(...)` calls retain their current settings; omitted `order`,
-`tolerance`, `max_iterations`, `solver_type`, `preconditioner` and `device`
-take their defaults. These are input controls, not adequacy
+values to remain unset. In later `set_numerical(...)` calls, omitted
+`ksp_type`, `amr_max_passes`, `amr_nonconformal`, `amr_nc_levels`,
+`amr_tolerance`, `amr_update_fraction` and `save_adapt_diagnostics` retain their
+current settings; every other omitted value (`order`, `tolerance`,
+`max_iterations`, `solver_type`, `preconditioner`, `device`,
+`save_adapt_iterations`, `save_adapt_mesh`, `estimator_mg`, `output_paraview`
+and `output_grid_function`) takes its default. These are input controls, not adequacy
 recommendations. Electrostatic retains its existing AMR defaults in the shared
 contract.
 
