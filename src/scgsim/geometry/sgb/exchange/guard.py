@@ -12,8 +12,8 @@ writes, beside the STEP, a guard file the importer reads again before it assigns
   face is identified by centre and area; a curved one by its vertices, because PyAEDT reports a vertex
   centroid, not a centre of mass, for a curved face.  Both centres are kept so neither stands in for the
   other.
-* **Free faces.**  Faces of the model that bound no exported solid (a Route A sheet with no solid on either
-  side, a port sheet that is not on a support plane).  STEP cannot carry them at micrometre scale (E4), so
+* **Free faces.**  Conductor-sheet and lumped-port faces that bound no exported solid (a Route A sheet with
+  vacuum on both sides, a port sheet that is not on a support plane; the vacuum itself is not exported).  STEP cannot carry them at micrometre scale (E4), so
   the guard keeps their loops as read from the written BREP -- lines and three-point circular arcs -- for the
   importer to rebuild them from SGB output, never from the layout source.
 

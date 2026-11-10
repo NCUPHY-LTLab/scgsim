@@ -50,9 +50,9 @@ def export(model, folder):
 
 @pytest.fixture(scope="module")
 def banded(tmp_path_factory, emit_models):
-    """Route B pad with bands: rounded corners give curved walls, and its port sheet is a free face."""
+    """Route C pad with bands: rounded corners give curved walls, and its port sheet is a free face."""
     folder = tmp_path_factory.mktemp("guard")
-    sidecar, exported = export(emit_models["pad_b_bands"], folder)
+    sidecar, exported = export(emit_models["pad_c_bands"], folder)
     return folder, sidecar, exported
 
 
@@ -87,7 +87,7 @@ def test_the_guard_binds_the_step_the_geometry_and_the_sidecar_by_hash(banded):
     for record in files.values():
         assert record["sha256"] == file_sha256(folder / record["path"])
     assert exported.guard["model"] == sidecar["model"]
-    assert exported.guard["route"] == sidecar["route"] == "B"
+    assert exported.guard["route"] == sidecar["route"] == "C"
 
 
 def test_every_guard_face_lists_the_planned_vertices_of_its_face(banded):
@@ -170,7 +170,7 @@ def test_a_guard_of_another_schema_or_unit_is_refused(tmp_path, banded, change):
         read_step_guard(tmp_path / "m.guard.json")
 
 
-def loop_points(loop, samples=256):
+def loop_points(loop, samples=4096):
     """The loop as a dense polygon: line ends, and each arc sampled on the circle through its three points."""
     points = []
     for segment in loop:
@@ -243,19 +243,19 @@ def test_a_free_port_sheet_is_recorded_with_its_loop_and_plane(banded):
 
 
 def test_a_free_face_with_an_arc_keeps_the_arc_as_three_points(tmp_path):
-    """A port across a round pad has an arc edge; the arc's three points rebuild the face's area."""
+    """A port across a round pad is cut by the pad's wall into faces with an arc edge; each face's loops rebuild its area."""
     _, exported = export(
-        build_model(FIXTURES["port_crossing_round_pad"], "B"), tmp_path
+        build_model(FIXTURES["port_crossing_round_pad"], "C"), tmp_path
     )
-    (free,) = exported.guard["free_faces"]
-    kinds = [s["kind"] for loop in free["loops"] for s in loop]
-    assert "arc" in kinds
+    free_faces = exported.guard["free_faces"]
+    assert free_faces and {f["group"] for f in free_faces} == {"PORT::p1"}
+    segments = [s for f in free_faces for loop in f["loops"] for s in loop]
+    assert "arc" in {s["kind"] for s in segments}
     assert all(
-        len(s["points_um"]) == (3 if s["kind"] == "arc" else 2)
-        for loop in free["loops"]
-        for s in loop
+        len(s["points_um"]) == (3 if s["kind"] == "arc" else 2) for s in segments
     )
-    check_loops(free)
+    for free in free_faces:
+        check_loops(free)
 
 
 def test_a_route_a_floating_sheet_is_a_free_face(tmp_path):

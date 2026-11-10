@@ -282,8 +282,8 @@ def test_without_ocp_the_checks_name_the_dependency_group(monkeypatch):
 
 @pytest.fixture(scope="module")
 def exported(tmp_path_factory, emit_models):
-    """Route B pad with bands: BREP, sidecar and the STEP export."""
-    model = emit_models["pad_b_bands"]
+    """Route C pad with bands (the AEDT form of a Route B request): BREP, sidecar and the STEP export."""
+    model = emit_models["pad_c_bands"]
     folder = tmp_path_factory.mktemp("step")
     brep, sidecar = written(model, folder)
     plan = plan_brep(model.topology, model.routed)
@@ -301,8 +301,16 @@ def test_the_step_is_an_assembly_of_named_solids_in_micrometres(exported):
     _, _, sidecar, folder, export = exported
     text = (folder / "m.step").read_text()
     products = re.findall(r"PRODUCT\('([^']*)'", text)
-    expected = {v["aedt_name"] for v in sidecar["volumes"].values() if v["emitted"]}
-    assert export.object_names == expected == {"substrate", "vacuum"}
+    expected = {
+        v["aedt_name"]
+        for v in sidecar["volumes"].values()
+        if v["emitted"] and v["kind"] != "vacuum"
+    }
+    assert export.object_names == expected
+    assert "substrate" in expected and "vacuum" not in expected
+    assert {"conductor"} <= {
+        v["kind"] for v in sidecar["volumes"].values() if v["aedt_name"] in expected
+    }
     assert set(products) == expected | {"SGB_MODEL"}
     assert export.unit == "UM" and "SI_UNIT(.MICRO.,.METRE.)" in text
     assert "SI_UNIT(.MILLI.,.METRE.)" not in text
@@ -324,7 +332,7 @@ def test_the_step_numbers_are_the_model_numbers_not_millimetres(exported):
 
 
 def test_the_step_reads_back_with_the_planned_volumes(exported):
-    """Re-read the STEP with OCP: two solids whose volumes equal the planned ones."""
+    """Re-read the STEP with OCP: the non-vacuum solids, with the planned volumes."""
 
     _, _, sidecar, folder, _ = exported
     Interface_Static.SetCVal_s(
@@ -343,7 +351,9 @@ def test_the_step_reads_back_with_the_planned_volumes(exported):
         for i in range(1, solids.Extent() + 1)
     )
     planned = sorted(
-        v["volume_um3"] for v in sidecar["volumes"].values() if v["emitted"]
+        v["volume_um3"]
+        for v in sidecar["volumes"].values()
+        if v["emitted"] and v["kind"] != "vacuum"
     )
     assert volumes == pytest.approx(planned, rel=1e-7)
 
@@ -354,7 +364,11 @@ def test_the_guard_lists_every_face_of_each_solid_in_occ_order_with_area_and_cen
     """The guard lists every face of each solid in occ order with area and centre."""
     model, plan, sidecar, _, export = exported
     ids = {s["solid"] for s in export.solids}
-    assert ids == {v for v, rec in sidecar["volumes"].items() if rec["emitted"]}
+    assert ids == {
+        v
+        for v, rec in sidecar["volumes"].items()
+        if rec["emitted"] and rec["kind"] != "vacuum"
+    }
     for solid in export.solids:
         planned_faces = {
             fid
@@ -366,9 +380,11 @@ def test_the_guard_lists_every_face_of_each_solid_in_occ_order_with_area_and_cen
         assert all(
             f["area_um2"] > 0 and len(f["centre_um"]) == 3 for f in solid["faces"]
         )
-    assert sum(len(s["faces"]) for s in export.solids) == sum(
-        len(plan.found.shells[i]) for i in range(len(plan.found.shells))
-    )
+    tags = sidecar["binding"]["ids_by_tag"]["3"]
+    for solid in export.solids:
+        expected_faces = sidecar["expected"]["solid_faces"][tags.index(solid["solid"])]
+        assert len(solid["faces"]) == len(expected_faces)
+    assert plan.solid_ids == tags
 
 
 def written(model, folder):
@@ -386,7 +402,7 @@ def same_lattice_models(grid_sizes_um):
     """One lattice at several physical grid sizes: the same ids and counts, different lengths."""
     catalogue = slab_model("B", [("pad", "P", (-4, -4, 4, 4))], half=10)
     return [
-        build_model_from_catalogue(replace(catalogue, grid=Grid(size)), "B")
+        build_model_from_catalogue(replace(catalogue, grid=Grid(size)), "C")
         for size in grid_sizes_um
     ]
 
@@ -450,6 +466,15 @@ def test_every_case_belongs_to_its_own_sidecar_within_the_load_check_tolerances(
     write_xao_file(plan, tmp_path / "m.xao", brep=brep)
     for path in (brep, tmp_path / "m.xao"):
         assert sidecar_mismatches(read_shape(path), sidecar) == []
+
+
+def test_a_route_b_model_is_refused_before_anything_is_written(emit_models, tmp_path):
+    """Route B keeps no conductor solids, so AEDT gets the Route C model instead; the export says so."""
+    brep, _ = written(emit_models["pad_b"], tmp_path)
+    with pytest.raises(StepExportError, match="not Route B.*Route C"):
+        export_aedt_step(brep, tmp_path / "m.sidecar.json", tmp_path / "x.step")
+    assert not (tmp_path / "x.step").exists()
+    assert not (tmp_path / "x.guard.json").exists()
 
 
 def test_the_export_works_from_an_xao_too(exported, tmp_path):
