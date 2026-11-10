@@ -521,32 +521,18 @@ def _contact_changes(
 # What is said when a set of ``_relation_sets`` appears, and when it is lost, in
 # the order of that function; a new boundary contact is told by its dimension.
 _TOUCH = {0: "they touch at a point", 1: "they touch along an edge"}
+_ONE_SIDED = (
+    ("the {a} one's boundary runs inside the {b}", "the drawn run of the {a} one's boundary inside the {b}"),
+    ("the {a} reaches outside the {b}", "the drawn part of the {a} outside the {b}"),
+    ("the {a} one's boundary runs outside the {b}", "the drawn run of the {a} one's boundary outside the {b}"),
+)  # fmt: skip
 _RELATION_WORDS: tuple[tuple[str | None, str], ...] = (
     ("they overlap", "their drawn overlap"),
     (None, "the drawn contact of their boundaries"),
-    (
-        "the first one's boundary runs inside the second",
-        "the drawn run of the first one's boundary inside the second",
-    ),
-    (
-        "the second one's boundary runs inside the first",
-        "the drawn run of the second one's boundary inside the first",
-    ),
-    (
-        "the first reaches outside the second",
-        "the drawn part of the first outside the second",
-    ),
-    (
-        "the second reaches outside the first",
-        "the drawn part of the second outside the first",
-    ),
-    (
-        "the first one's boundary runs outside the second",
-        "the drawn run of the first one's boundary outside the second",
-    ),
-    (
-        "the second one's boundary runs outside the first",
-        "the drawn run of the second one's boundary outside the first",
+    *(
+        (appears.format(a=a, b=b), lost.format(a=a, b=b))
+        for appears, lost in _ONE_SIDED
+        for a, b in (("first", "second"), ("second", "first"))
     ),
 )
 
@@ -556,8 +542,10 @@ def _relation_sets(first: BaseGeometry, second: BaseGeometry) -> list[BaseGeomet
 
     An open interior is reached as the closed geometry minus its boundary; for
     polygons an interior set is two-dimensional or empty, so its polygonal
-    parts stand for it.
+    parts stand for it.  Both are read as polygonal parts first: a geometry that
+    snapping collapsed entirely is an empty collection, which has no boundary.
     """
+    first, second = _polygonal(first), _polygonal(second)
     edge_1, edge_2 = first.boundary, second.boundary
     return [
         _polygonal(first.intersection(second)),
@@ -640,9 +628,11 @@ def _merge_findings(
 ) -> list[str]:
     """Where drawn parts meet once each is snapped to the grid on its own.
 
-    Where two snapped drawn parts intersect is where they merged.  The
-    narrowest drawn gap between them is a true measure, though not necessarily
-    of that place.
+    Where the polygonal parts of two snapped drawn parts share an edge or an
+    area is where they merged; parts that share only a point stay separate in
+    the union, so a point is no merge.  A collapsed line of one drawn part is
+    not area and joins nothing.  The narrowest drawn gap between them is a true
+    measure, though not necessarily of that place.
     """
     from shapely import union_all  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
 
@@ -651,16 +641,17 @@ def _merge_findings(
         grid_um,
     )
     snapped = [_snapped(part, grid_um) for part in drawn]
+    areas = [None if part is None else _polygonal(part) for part in snapped]
     meetings = _parts_above(
         union_all(
             [
                 a.intersection(b)
-                for k, a in enumerate(snapped)
-                for b in snapped[k + 1 :]
+                for k, a in enumerate(areas)
+                for b in areas[k + 1 :]
                 if a is not None and b is not None
             ]
         ),
-        -1,
+        0,
     )
     if not meetings:
         return [
@@ -679,20 +670,23 @@ def _split_findings(
 ) -> list[str]:
     """Where a drawn part collapses between its snapped parts.
 
-    Snapped on its own, the drawn part keeps a neck narrower than the grid as a
-    line or a point; the ones that touch two of the snapped parts are where it
-    split.  An edge that snapping only moved leaves no such residue, so it is
-    never taken for the neck.
+    Snapped on its own, the drawn part keeps a neck narrower than the grid as
+    lines and points.  GEOS may return one neck as several pieces (one per drawn
+    vertex, or per bend), so pieces that touch each other are first joined into
+    one connected residue; a residue that touches two of the snapped parts is
+    where the part split, and is reported once with its whole length.  An edge
+    that snapping only moved leaves no residue, so it is never taken for a neck.
     """
-    from shapely import union_all  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
-
     snapped = _snapped(drawn, grid_um)
-    residues = [] if snapped is None else _flat_parts(snapped)
+    pieces = (
+        []
+        if snapped is None
+        else [p for p in _flat_parts(snapped) if _part_dimension(p) < 2]
+    )
     necks = [
         residue
-        for residue in residues
-        if _part_dimension(residue) < 2
-        and sum(residue.intersects(part) for part in parts) > 1
+        for residue in _connected(pieces)
+        if sum(residue.intersects(part) for part in parts) > 1
     ]
     if not necks:
         where = ", ".join(format_place(part, grid_um) for part in parts)
@@ -701,10 +695,22 @@ def _split_findings(
             "not be isolated"
         ]
     return [
-        f"a drawn {kind} splits in two at {format_place(neck, grid_um)}, where it is "
+        f"a drawn {kind} splits apart at {format_place(neck, grid_um)}, where it is "
         f"narrower than the grid along {format_length(neck.length, grid_um)}"
-        for neck in _parts_above(union_all(necks), -1)
+        for neck in sorted(necks, key=lambda neck: neck.bounds)
     ]
+
+
+def _connected(pieces: Sequence[BaseGeometry]) -> list[BaseGeometry]:
+    """The unions of the pieces that touch each other, directly or through others."""
+    from shapely import union_all  # noqa: PLC0415 - optional geometry dependency, loaded on the refusal path only
+
+    groups: list[list[BaseGeometry]] = []
+    for piece in pieces:
+        touching = [g for g in groups if any(piece.intersects(m) for m in g)]
+        groups = [g for g in groups if g not in touching]
+        groups.append([piece, *(m for g in touching for m in g)])
+    return [union_all(group) for group in groups]
 
 
 def _snapped(part: Polygon, grid_um: float | None) -> BaseGeometry | None:

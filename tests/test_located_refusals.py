@@ -141,7 +141,7 @@ def test_a_physical_operand_whose_neck_snaps_apart_is_located_on_its_layer(left_
     assert message.startswith(
         "physical geometry collapsed or changed component/hole topology at grid: bridge on layer metal"
     )
-    assert "splits in two" in message and "narrower than the grid" in message
+    assert "splits apart" in message and "narrower than the grid" in message
     (place,) = places(message)
     assert on(place, (2, 1, 3, 1.0004))
 
@@ -200,6 +200,197 @@ def test_two_necks_that_snap_apart_are_both_located():
     first, second = places(str(error.value))
     assert on(first, (2, 1, 3, 1.0004))
     assert on(second, (5, 1, 6, 1.0004))
+
+
+# ------------------------------------------------- split and merge shapes, round 2
+
+
+def drawn_operand(boxes, name="part", **policy):
+    """One operand drawn as the union of boxes ``(x0, y0, x1, y1)``, optionally with collinear vertices."""
+    from shapely import box, union_all  # noqa: PLC0415 -- geometry is needed only to draw the fixture
+
+    shape = union_all([box(*b) for b in boxes])
+    return GridOperand(
+        name,
+        tuple(shape.exterior.coords[:-1]),
+        tuple(tuple(r.coords[:-1]) for r in shape.interiors),
+        layer="metal",
+        **{"contact": False, **policy},
+    )
+
+
+def refusal(*operands):
+    """The message of the grid refusal the operands raise."""
+    with pytest.raises(ValueError) as error:
+        build_grid_arrangement(operands, GRID)
+    return str(error.value)
+
+
+@pytest.mark.parametrize("extra_x", ((), (2.5,), (2.2, 2.5, 2.7)))
+def test_a_neck_drawn_with_collinear_vertices_is_one_place(extra_x):
+    """GEOS returns the collapsed neck as one line per drawn vertex; they are joined into one place."""
+    neck = (
+        (0, 0),
+        (2, 0),
+        (2, 1),
+        *((x, 1) for x in extra_x),
+        (3, 1),
+        (3, 0),
+        (5, 0),
+        (5, 2),
+        (3, 2),
+        (3, 1.0004),
+        *((x, 1.0004) for x in reversed(extra_x)),
+        (2, 1.0004),
+        (2, 2),
+        (0, 2),
+    )
+    message = refusal(GridOperand("bridge", neck, contact=False, layer="metal"))
+    assert "could not be isolated" not in message
+    assert "narrower than the grid along 1000 nm" in message
+    (place,) = places(message)
+    assert on(place, (2, 1, 3, 1.0004))
+
+
+def test_a_bent_neck_is_one_place_with_its_whole_length():
+    """A neck running 2 um right, then 3 um up, collapses to one bent line 5 um long."""
+    message = refusal(
+        drawn_operand(
+            [(0, 0, 2, 2), (2, 1, 4, 1.0004), (3.9996, 1, 4, 4), (3, 4, 5, 6)]
+        )
+    )
+    assert "narrower than the grid along 5000 nm" in message
+    (place,) = places(message)
+    assert on(place, (2, 1, 4, 4))
+
+
+def test_a_neck_that_collapses_to_a_point_is_honestly_not_isolated():
+    """Two blocks joined at a 0.4 nm corner square meet at one point; no box is guessed for it."""
+    message = refusal(
+        drawn_operand(
+            [
+                (0, 0, 2.0001, 2.0001),
+                (2.0, 2.0, 2.0004, 2.0004),
+                (2.0003, 2.0003, 4, 4),
+            ]
+        )
+    )
+    assert "could not be isolated" in message
+    blocks = places(message)
+    assert on(blocks[0], (0, 0, 2.0001, 2.0001))
+    assert on(blocks[1], (2.0, 2.0, 4, 4))
+
+
+def test_a_part_with_a_surviving_middle_reports_each_neck():
+    """Blocks at x = 0..2, 3..4 and 5..7 joined by two necks: three parts, two places."""
+    message = refusal(
+        drawn_operand(
+            [
+                (0, 0, 2, 2),
+                (2, 1, 3, 1.0004),
+                (3, 0, 4, 2),
+                (4, 1, 5, 1.0004),
+                (5, 0, 7, 2),
+            ]
+        )
+    )
+    first, second = places(message)
+    assert on(first, (2, 1, 3, 1.0004))
+    assert on(second, (4, 1, 5, 1.0004))
+
+
+def test_two_necks_between_the_same_blocks_are_both_reported():
+    """Necks at y = 0.5 and y = 1.5 um; the drawn hole between them closes as well."""
+    message = refusal(
+        drawn_operand(
+            [(0, 0, 2, 2), (2, 0.5, 3, 0.5004), (2, 1.5, 3, 1.5004), (3, 0, 5, 2)]
+        )
+    )
+    assert message.count("splits apart") == 2 and "a drawn hole disappears" in message
+    found = places(message)
+    assert on(found[0], (2, 0.5, 3, 0.5004))
+    assert on(found[1], (2, 1.5, 3, 1.5004))
+    assert on(found[2], (2, 0.5, 3, 1.5004))
+
+
+def test_a_part_that_splits_into_three_at_a_t_shaped_neck_is_one_place():
+    """Three blocks joined at one T-shaped neck: one connected residue reaches all three."""
+    message = refusal(
+        drawn_operand(
+            [
+                (0, 0, 2, 2),
+                (2, 1, 3, 1.0004),
+                (3, 0, 5, 2),
+                (2.5, 1, 2.5004, 4),
+                (1.5, 4, 3.5, 6),
+            ]
+        )
+    )
+    (place,) = places(message)
+    assert on(place, (2, 1, 3, 4))
+
+
+@pytest.mark.parametrize(
+    ("low", "high", "line_y"),
+    ((1, 1.0004, 1.0), (1.0001, 1.0004, 1.0), (1.0006, 1.0009, 1.001)),
+)
+def test_a_neck_on_or_off_a_grid_line_is_located_where_it_collapses(low, high, line_y):
+    """A neck drawn on a grid line, or between two, is reported on the grid line it snaps to."""
+    message = refusal(drawn_operand([(0, 0, 2, 2), (2, low, 3, high), (3, 0, 5, 2)]))
+    (place,) = places(message)
+    assert place == (2.0, line_y, 3.0, line_y)
+
+
+def test_two_rectangles_where_one_collapses_end_in_the_contact_refusal():
+    """The reviewer's case: (0, 0)..(0.0002, 1) collapses to nothing beside (0, 0)..(1, 1).
+
+    The collapsed operand is an empty collection with no boundary; the refusal is
+    still the contact ValueError, located on the drawn strip.
+    """
+    message = refusal(
+        GridOperand("thin", rectangle(0, 0, 0.0002, 1), physical=False),
+        GridOperand("full", rectangle(0, 0, 1, 1), physical=False),
+    )
+    assert message.startswith("physical contact changed at grid: thin, full")
+    found = places(message)
+    assert found and all(on(p, (0, 0, 0.0002, 1)) for p in found)
+
+
+@pytest.mark.parametrize(
+    ("physical", "contact"),
+    ((True, True), (True, False), (False, True), (False, False)),
+)
+def test_an_operand_that_collapses_completely_is_refused_by_its_policy(
+    physical, contact
+):
+    """A 0.2 nm strip beside a full square: each policy that audits it refuses with a place."""
+    operands = (
+        GridOperand(
+            "thin", rectangle(0, 0, 0.0002, 1), physical=physical, contact=contact
+        ),
+        GridOperand("full", rectangle(0, 0, 1, 1), physical=physical, contact=contact),
+    )
+    if not (physical or contact):
+        build_grid_arrangement(operands, GRID)
+        return
+    message = refusal(*operands)
+    found = places(message)
+    assert found and all(on(p, (0, 0, 0.0002, 1)) for p in found)
+
+
+def test_three_holes_merge_at_each_wall():
+    """Holes at x = 1..2, 2.0002..3 and 3.0002..4 um lose both 0.2 nm walls."""
+    plate = GridOperand(
+        "plate",
+        rectangle(-1, -1, 6, 4),
+        (rectangle(1, 1, 2, 2), rectangle(2.0002, 1, 3, 2), rectangle(3.0002, 1, 4, 2)),
+        contact=False,
+    )
+    message = refusal(plate)
+    assert message.count("two drawn holes merge") == 2
+    first, second = places(message)
+    assert on(first, (2, 1, 2.0002, 2))
+    assert on(second, (3, 1, 3.0002, 2))
 
 
 # -------------------------------------------------------------- contact changed at grid
