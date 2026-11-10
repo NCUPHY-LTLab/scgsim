@@ -20,8 +20,10 @@ writes, beside the STEP, a guard file the importer reads again before it assigns
 The guard is plain JSON: keys sorted, numbers rounded to twelve significant digits like the sidecar, file
 paths relative to the guard's folder, no timestamps.  Reading it needs no OCP.  :func:`read_step_guard`
 checks the whole structure and then the solids and free faces against the bound sidecar
-(:func:`guard_mismatches`): a guard edited by hand, even with valid file hashes, is refused rather than
-handing the importer a wrong face identity or boundary group.  The exporter runs the same check before it
+(:func:`guard_mismatches`), down to each face record being the record of the face its id names (its
+vertices and area are that planned face's, from the sidecar's ``expected`` block).  A guard edited by hand,
+even with valid file hashes, is refused rather than handing the importer a wrong face identity or boundary
+group.  The exporter runs the same check before it
 writes anything, so it never writes a guard the reader would refuse.
 
 The guard of ``model.step`` is ``model.step.guard.json``: the STEP's full file name is kept, so ``model.step``
@@ -35,6 +37,7 @@ import json
 import math
 import os
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
@@ -169,8 +172,14 @@ def guard_mismatches(
     The solids must be distinct planned solids in tag order, each with its sidecar ``aedt_name`` and exactly
     its planned faces (``expected.solid_faces``), each face listed once and flagged ``curved`` exactly when it
     is one of the sidecar's ``curved_wall_faces``.  The free faces must be exactly :func:`free_face_ids` of
-    those solids, in tag order, each with its sidecar group.  Positions and areas are measured, not planned,
-    so they are left to the importer's tolerances (#67 decision 3).
+    those solids, in tag order, each with its sidecar group.
+
+    Each face record must also be the record *of the face its id names*: its vertices (for a free face, the
+    ends of its loop edges) are that planned face's vertices and its area is that face's planned area, within
+    the #67 decision 3 tolerances.  So a guard whose face ids were swapped is refused although every id is in
+    its place.  Two faces the sidecar cannot tell apart that way (same planned vertices, areas within
+    tolerance) in one solid, or among the free faces, are refused too, because their ids could not be bound.
+    The centre of mass has no planned counterpart; the importer matches it against the imported face.
     """
     tag_of = _tags(sidecar["binding"]["ids_by_tag"]["3"])
     unknown = [s["solid"] for s in solids if s["solid"] not in tag_of]
@@ -180,10 +189,11 @@ def guard_mismatches(
     mismatches = []
     if tags != sorted(set(tags)):
         mismatches.append("the solids are not distinct planned solids in tag order")
+    planned = _PlannedFaces.of(sidecar)
     for solid in solids:
-        mismatches += _solid_mismatches(solid, sidecar)
+        mismatches += _solid_mismatches(solid, sidecar, planned)
     mismatches += _free_face_mismatches(
-        free_faces, [s["solid"] for s in solids], sidecar
+        free_faces, [s["solid"] for s in solids], sidecar, planned
     )
     return mismatches
 
@@ -197,7 +207,9 @@ def free_face_ids(sidecar: dict[str, Any], solid_ids: Sequence[str]) -> list[str
     return [fid for tag, fid in enumerate(face_ids, start=1) if tag not in bounding]
 
 
-def _solid_mismatches(solid: SolidGuard, sidecar: dict[str, Any]) -> list[str]:
+def _solid_mismatches(
+    solid: SolidGuard, sidecar: dict[str, Any], planned_faces: _PlannedFaces
+) -> list[str]:
     vid = solid["solid"]
     mismatches = []
     planned_name = sidecar["volumes"][vid]["aedt_name"]
@@ -210,20 +222,40 @@ def _solid_mismatches(solid: SolidGuard, sidecar: dict[str, Any]) -> list[str]:
     planned = {face_ids[t - 1] for t in sidecar["expected"]["solid_faces"][tag - 1]}
     listed = [f["face"] for f in solid["faces"]]
     if len(set(listed)) != len(listed) or set(listed) != planned:
-        mismatches.append(
+        return mismatches + [
             f"solid {vid} lists faces {sorted(listed)}, the sidecar plans {sorted(planned)}, each once"
-        )
+        ]
     curved = set(sidecar["curved_wall_faces"])
     misflagged = sorted(
         f["face"] for f in solid["faces"] if f["curved"] != (f["face"] in curved)
     )
     if misflagged:
         mismatches.append(f"solid {vid} flags curved wrongly on faces {misflagged}")
+    for face in solid["faces"]:
+        mismatches += planned_faces.binding_mismatches(
+            f"face {face['face']} of solid {vid}",
+            face["face"],
+            face["vertices_um"],
+            face["area_um2"],
+            each_vertex_once=True,
+        )
+        if not _within(
+            face["vertex_centroid_um"],
+            _mean(face["vertices_um"]),
+            planned_faces.tolerance_um,
+        ):
+            mismatches.append(
+                f"face {face['face']} of solid {vid}: the vertex centroid is not the mean of its vertices"
+            )
+    mismatches += planned_faces.indistinct(f"solid {vid}", listed)
     return mismatches
 
 
 def _free_face_mismatches(
-    free_faces: Sequence[FreeFace], solid_ids: Sequence[str], sidecar: dict[str, Any]
+    free_faces: Sequence[FreeFace],
+    solid_ids: Sequence[str],
+    sidecar: dict[str, Any],
+    planned_faces: _PlannedFaces,
 ) -> list[str]:
     expected = free_face_ids(sidecar, solid_ids)
     listed = [f["face"] for f in free_faces]
@@ -232,11 +264,127 @@ def _free_face_mismatches(
             f"the free faces are {listed}, the faces bounding no guarded solid are {expected}"
         ]
     planned = sidecar["faces"]
-    return [
+    mismatches = [
         f"free face {f['face']} has group {f['group']!r}, the sidecar gives {planned[f['face']]['group']!r}"
         for f in free_faces
         if f["group"] != planned[f["face"]]["group"]
     ]
+    for face in free_faces:
+        # the ends of the loop edges are the face's vertices; an arc's mid point is not a vertex
+        ends = [segment["points_um"][0] for loop in face["loops"] for segment in loop]
+        mismatches += planned_faces.binding_mismatches(
+            f"free face {face['face']}",
+            face["face"],
+            ends,
+            face["area_um2"],
+            each_vertex_once=False,  # a hole touching the outer loop passes one vertex twice
+        )
+    return mismatches + planned_faces.indistinct("the free faces", listed)
+
+
+@dataclass(frozen=True)
+class _PlannedFaces:
+    """The planned vertices and area of every face, from the sidecar's ``expected`` block, to bind face records to."""
+
+    tag_of: dict[str, int]  # planned face id -> face tag
+    face_vertices: list[frozenset[int]]  # per face tag - 1: its vertex tags
+    vertex_positions: list[list[float]]  # per vertex tag - 1
+    areas: list[float]  # per face tag - 1
+    chord_perimeters: list[float]  # per face tag - 1: the sum of its edges' chords
+    tolerance_um: float
+
+    @classmethod
+    def of(cls, sidecar: dict[str, Any]) -> _PlannedFaces:
+        expected = sidecar["expected"]
+        positions = expected["vertices_um"]
+        ends = expected["edge_vertices"]
+        chords = [math.dist(positions[a - 1], positions[b - 1]) for a, b in ends]
+        return cls(
+            tag_of=_tags(sidecar["binding"]["ids_by_tag"]["2"]),
+            face_vertices=[
+                frozenset(v for e in edges for v in ends[e - 1])
+                for edges in expected["face_edges"]
+            ],
+            vertex_positions=positions,
+            areas=expected["face_area_um2"],
+            chord_perimeters=[
+                sum(chords[e - 1] for e in edges) for edges in expected["face_edges"]
+            ],
+            tolerance_um=sidecar["tolerance_um"],
+        )
+
+    def binding_mismatches(
+        self,
+        where: str,
+        face_id: str,
+        vertices: list[list[float]],
+        area: float,
+        *,
+        each_vertex_once: bool,
+    ) -> list[str]:
+        """Why the record at ``where`` is not the record of planned face ``face_id``; empty when it is."""
+        tag = self.tag_of[face_id]
+        planned = self.face_vertices[tag - 1]
+        matched = [self._vertex_tag(point, planned) for point in vertices]
+        same = None not in matched and set(matched) == planned
+        if each_vertex_once:
+            same = same and len(matched) == len(planned)
+        mismatches = []
+        if not same:
+            mismatches.append(
+                f"{where}: the recorded vertices are not those of planned face {face_id}"
+            )
+        if abs(area - self.areas[tag - 1]) > self._area_tolerance(tag):
+            mismatches.append(
+                f"{where}: the recorded area {area} is not the planned {self.areas[tag - 1]} of {face_id}"
+            )
+        return mismatches
+
+    def indistinct(self, where: str, face_ids: Sequence[str]) -> list[str]:
+        """Pairs among ``face_ids`` with the same planned vertices and areas within tolerance, as refusals."""
+        tags = sorted(self.tag_of[fid] for fid in face_ids)
+        return [
+            f"{where}: faces {self._id(a)} and {self._id(b)} have the same planned vertices and area, "
+            "so the guard cannot bind their ids"
+            for i, a in enumerate(tags)
+            for b in tags[i + 1 :]
+            if self.face_vertices[a - 1] == self.face_vertices[b - 1]
+            and abs(self.areas[a - 1] - self.areas[b - 1])
+            <= max(self._area_tolerance(a), self._area_tolerance(b))
+        ]
+
+    def _vertex_tag(self, point: list[float], candidates: frozenset[int]) -> int | None:
+        # the vertices of a planned face lie far apart compared with the tolerance (an edge shorter than ten
+        # tolerances is refused), so in practice at most one matches
+        return next(
+            (
+                v
+                for v in sorted(candidates)
+                if _within(point, self.vertex_positions[v - 1], self.tolerance_um)
+            ),
+            None,
+        )
+
+    def _area_tolerance(self, tag: int) -> float:
+        # #67 decision 3: relative 1e-9 plus perimeter x tolerance_um.  The chord perimeter is at most the true
+        # perimeter, so this never accepts more than the decision does; the exporter already holds every area
+        # to relative 1e-9 of the plan, so a written guard always passes.
+        return (
+            1e-9 * abs(self.areas[tag - 1])
+            + self.chord_perimeters[tag - 1] * self.tolerance_um
+        )
+
+    def _id(self, tag: int) -> str:
+        return next(fid for fid, t in self.tag_of.items() if t == tag)
+
+
+def _within(point: Sequence[float], target: Sequence[float], tolerance: float) -> bool:
+    """Every coordinate of ``point`` within ``tolerance`` of ``target``."""
+    return all(abs(a - b) <= tolerance for a, b in zip(point, target, strict=True))
+
+
+def _mean(points: list[list[float]]) -> list[float]:
+    return [sum(p[k] for p in points) / len(points) for k in range(3)]
 
 
 def _tags(ids: list[str]) -> dict[str, int]:
