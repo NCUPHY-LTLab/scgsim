@@ -21,7 +21,8 @@ says which, and why.
 |---|---|
 | `cases.py` | How each layout is built: component, layer stack, instances, Net assignment, simulation class. Also the banded scenes of `tests/sgb_supported_*`. |
 | `run_case.py` | One layout through plan, SGB build, `simulation_drc` and `mesh()`, with Surface-EPR bands (Route B, MA/MS/SA at margins 0.5 and 1.0 um by type) or with `--no-bands`. `--scene` builds a test scene and measures its fine structure only. Writes one JSON record. |
-| `run_baseline.py` | Every case in its own process, at most `--jobs` at a time (default 8), each stopped after `--timeout` seconds (default 900). Then every layout that stopped with bands again without bands, and every layout whose banded `mesh()` failed again with the vacuum the PDK's Palace notebooks use (`run_case.py --notebook-vacuum`). |
+| `run_baseline.py` | Every case in its own process, at most `--jobs` at a time (default 8), each stopped after `--timeout` seconds (default 900). Then every layout that stopped with bands again without bands, and every layout whose banded `mesh()` failed again with the vacuum the PDK's Palace notebooks use (`run_case.py --notebook-vacuum`). It removes a case's earlier record before the case starts, so a rerun into the same folder never shows stages it did not run. |
+| `check_rerun.py` | Checks that removal: a case that stops before its first record, in a folder that holds an earlier record of the same name, leaves a record with no stage. Needs no PDK. |
 | `fine_structure.py` | Counts short edges, narrow faces and small angles from SGB's sliver report, split by whether a band curve is involved, and the classes A, B and C of issue 125. |
 | `check_pdk47.py` | Looks for the drawing artifacts of orcapen-sc-pdk#47 (the eight 1 nm claw jogs and the 9.9 nm lead-fan step) in the Disk Qubit builds. |
 | `tables.py` | Prints the stage, fine-structure and class tables of a records folder as Markdown. |

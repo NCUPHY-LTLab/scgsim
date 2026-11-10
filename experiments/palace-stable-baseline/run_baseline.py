@@ -48,7 +48,7 @@ def main() -> None:
     ]
     _run_all(first, args)
     banded = {
-        name: json.loads((args.records / _file(name, True, False)).read_text())
+        name: json.loads((args.records / record_file(name, True, False)).read_text())
         for name in layouts
     }
     _run_all(
@@ -67,7 +67,10 @@ def main() -> None:
     _run_all([(name, True, False, True) for name in mesh_failed], args)
 
 
-def _file(name: str, bands: bool, scene: bool, notebook_vacuum: bool = False) -> str:
+def record_file(
+    name: str, bands: bool, scene: bool, notebook_vacuum: bool = False
+) -> str:
+    """The file name of one case's record."""
     variant = ("bands" if bands else "nobands") + (
         "_notebookvacuum" if notebook_vacuum else ""
     )
@@ -84,15 +87,19 @@ def _stopped(record) -> bool:
 
 def _run_all(jobs, args) -> None:
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        for line in pool.map(lambda job: _run_one(*job, args), jobs):
+        for line in pool.map(lambda job: run_one(*job, args), jobs):
             print(line, flush=True)
 
 
-def _run_one(name: str, bands: bool, scene: bool, notebook_vacuum: bool, args) -> str:
-    out = args.records / _file(name, bands, scene, notebook_vacuum)
+def run_one(name: str, bands: bool, scene: bool, notebook_vacuum: bool, args) -> str:
+    """Run one case in its own process group, write its record to ``args.records`` and say how it ended."""
+    out = args.records / record_file(name, bands, scene, notebook_vacuum)
     command = [sys.executable, str(HERE / "run_case.py"), name, str(out)]
     command += ["--scene"] if scene else ([] if bands else ["--no-bands"])
     command += ["--notebook-vacuum"] if notebook_vacuum else []
+    # A rerun into the same folder must not show an earlier run's stages: a case that stops before its first
+    # record (an import error, say) would otherwise leave the old file in place.
+    out.unlink(missing_ok=True)
     log = out.with_suffix(".log").open("w")
     started = time.perf_counter()
     process = subprocess.Popen(
@@ -107,11 +114,17 @@ def _run_one(name: str, bands: bool, scene: bool, notebook_vacuum: bool, args) -
     seconds = round(time.perf_counter() - started, 1)
     if code != 0:
         # The case writes its record around every stage, so a stopped case keeps the stages it finished and
-        # names the one that was running.
+        # names the one that was running.  The file was removed above, so a record here is this run's.
         record = (
             json.loads(out.read_text())
             if out.exists()
-            else {"case": name, "bands": bands, "scene": scene, "stages": {}}
+            else {
+                "case": name,
+                "bands": bands,
+                "scene": scene,
+                "notebook_vacuum": notebook_vacuum,
+                "stages": {},
+            }
         )
         for stage in record["stages"].values():
             if stage["result"] == "running":
